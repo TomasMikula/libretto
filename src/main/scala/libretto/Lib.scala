@@ -221,20 +221,11 @@ class Lib(val dsl: DSL) { lib =>
         .in.right.map(elimFst)     .to[          A  |+|          B  ]
   }
 
-  def zip[A1, A2, B1, B2]: ((A1 |*| A2) |*| (B1 |*| B2)) -⚬ ((A1 |*| B1) |*| (A2 |*| B2)) = {
-    id                              [ (A1 |*|  A2) |*| (B1   |*| B2)]
-      .andThen(timesAssocRL)     .to[((A1 |*|  A2) |*|  B1)  |*| B2 ]
-      .in.fst.map(timesAssocLR)  .to[( A1 |*| (A2  |*|  B1)) |*| B2 ]
-      .in.fst.snd.map(swap)      .to[( A1 |*| (B1  |*|  A2)) |*| B2 ]
-      .in.fst.map(timesAssocRL)  .to[((A1 |*|  B1) |*|  A2)  |*| B2 ]
-      .andThen(timesAssocLR)     .to[ (A1 |*|  B1) |*| (A2   |*| B2)]
-    }
-
   def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
     id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
       .andThen(introSnd)         .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*|    One    ]
       .in.snd.map(ev.introduce)  .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
-      .andThen(zip)              .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
+      .andThen(IXI)              .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
       .andThen(par(eval, eval))  .to[        B         |*|        C         ]
   }
 
@@ -254,12 +245,12 @@ class Lib(val dsl: DSL) { lib =>
         id[One]                                   .to[           One           ]
           .andThen(introSnd)                      .to[    One    |*|    One    ]
           .andThen(par(a.introduce, b.introduce)) .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
-          .andThen(zip)                           .to[ (A |*| B) |*| (Ȧ |*| Ḃ) ]
+          .andThen(IXI)                           .to[ (A |*| B) |*| (Ȧ |*| Ḃ) ]
       }
 
       def eliminate: ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One = {
         id[(A |*| B) |*| (Ȧ |*| Ḃ)]               .to[ (A |*| B) |*| (Ȧ |*| Ḃ) ]
-          .andThen(zip)                           .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
+          .andThen(IXI)                           .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
           .andThen(par(a.eliminate, b.eliminate)) .to[    One    |*|    One    ]
           .andThen(elimSnd)                       .to[           One           ]
       }
