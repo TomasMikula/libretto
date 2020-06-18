@@ -7,31 +7,58 @@ conjunction, primitives for racing, and primitive operator for recursion.
 
 ## Design Goals
 
-- **Expressiveness.** The term is used to mean either of two things:
-  - a measure of what is possible to represent at all; or
-  - a measure of how naturally things are represented.
+- **Expressiveness.** Libretto aims to be expressive in both meanings of the word, namely in
+  - what is possible to represent at all; and
+  - how naturally things are represented.
 
-  Libretto aims to be expressive in both these meanings. Things like dynamic stream topologies, feedback loops,
+  Things like dynamic stream topologies, feedback loops,
   or session types are readily expressible in Libretto, without them being primitives.
 
-- **Declarativeness.**
- 
-  _“Progress is possible only if we train ourselves to think about programs
-  without thinking of them as pieces of executable code.”_ -- Edsger W. Dijkstra
+- **Ease of reasoning about programs.** Libretto aims to achieve this goal via:
+
+  - **Direct-style** programming, in which _all_ interaction of a component with its environment is stated by its
+    type signature (much like inputs and outputs of a pure function).
+    
+    This is in contrast to _callback-style,_ in which a component, instead of exposing its output via an interface,
+    executes foreign code (a callback) on the produced values. Such callbacks typically perform side-effects
+    on captured resources.
+    
+    <details>
+      <summary>Example</summary>
+      A common example of callback style is an HTTP server taking a request handler callback. The request handler
+      typically captures resources, such as a database connector, and performs side-effects on them. As a result,
+      if one encounters such HTTP server in code, it is hard to reason about what it does.
+      
+      The Libretto alternative is to state in the type signature of the HTTP server that it produces requests and
+      for each request eventually requires a response.
+    </details>
+    
+    Direct-style programming is possible thanks to Libretto's ability to express interaction protocols (session types)
+    in a component's interface.  
+
+  - **Declarativeness.**
+
+    _“Progress is possible only if we train ourselves to think about programs
+    without thinking of them as pieces of executable code.”_ -- Edsger W. Dijkstra
+    
+  - **Graphical notation.** We are often able to visualize the architecture of a system as a diagram, but there is
+    usually a big gap between the diagram and the code.
+    
+    Libretto primitives have graphical notation that composes into larger diagrams as we compose the program,
+    preserving close correspondence between code and graphical representation.
 
 - **Strong static guarantees.** It is guaranteed at compile time that every producer is connected to a consumer.
   Typed protocols (session types) are checked at compile time for type safety.
 
-- **Programs as data structures.** Libretto programs are just data structures.
-  As such, they can be inspected, manipulated, optimized, given different interpretations, and possibly even serialized
-  and sent over the wire.
+- **Programs as data.** Libretto programs are just data structures.
+  As such, they can be inspected, manipulated, optimized, given different interpretations, ...
   
 ## Why Another Stream Processing Library
 
 Existing libraries that I know of compromise some or all of the above stated design goals.
 
 Implementing custom dynamic dataflow topologies with existing libraries is either not possible at all or possible only
-through escaping to low-level imperative world. On the other hand, Libretto has no imperative concepts like
+through escaping to low-level imperative world. In contrast, Libretto has no imperative concepts like
 pre-materialization, fibers or signalling variables, yet things like merge, broadcast, feedback loop or even
 stream itself are not primitives, but are readily implemented on top of the expressive set of primitives.
 
@@ -39,7 +66,7 @@ Libretto strictly separates the (description of a) program from its execution.
 In particular, there are no "blueprints" that are in fact already running.
 Libretto programs are just pure values.
 Moreover, unlike monad-based programs-as-values, Libretto programs are not hidden inside an inscrutable Scala function
-after the first `flatMap`. This opens new possibilities for what can be done with a program (description).
+after the first `flatMap`. This opens new possibilities for what can be done with a program.
 
 ## Documentation
 
@@ -116,6 +143,6 @@ You are more likely to appreciate Libretto if you:
 | Describes a program. | Lives inside a program. |       |
 | Tangible: we create and manipulate _Scala_ values of this type. | Intangible: there are no _Scala_ values of this type. A type like `A =⚬ B` can appear only to the left or right of `-⚬`. |  |
 | Pure value. As such, it can be used any number of times (including zero). | Must be treated as a resource, i.e. consumed (evaluated) exactly once, because it might have captured other resources that are consumed on evaluation. |  |
-| Morphism | Exponential object | In category theory, one does not look inside objects. Everything is expressed in terms of morphisms. In particular, objects are not viewed as collections of elements. This is analogous to there being no values of type `=⚬`, or of types <code>&#124;*&#124;</code>, <code>&#124;+&#124;</code>, <code>&#124;&amp;&#124;</code>, `One`, `Val`, ..., which are all objects in a category. We express everything in terms of morphisms `-⚬`. |
+| Morphism | Exponential object | In category theory, one does not look inside objects. Everything is expressed in terms of morphisms. In particular, objects are not viewed as collections of elements. Analogously, there are no values of type `=⚬`, or of types <code>&#124;*&#124;</code>, <code>&#124;+&#124;</code>, <code>&#124;&amp;&#124;</code>, `One`, `Val`, ... These are all objects in a category and we do not view them as collections of elements. We express everything in terms of morphisms, `-⚬`. |
 
 **How do I type the `⚬` symbol used in `-⚬` and `=⚬`?**
