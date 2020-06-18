@@ -110,11 +110,35 @@ class Lib(val dsl: DSL) { lib =>
 
     def andThen[C](g: B -⚬ C): A -⚬ C = dsl.andThen(self, g)
 
-    def injectL[C]: A -⚬ (B |+| C) = dsl.andThen(self, dsl.injectL)
-    def injectR[C]: A -⚬ (C |+| B) = dsl.andThen(self, dsl.injectR)
+    /** Alias for [[andThen]]. */
+    def >>>[C](g: B -⚬ C): A -⚬ C = this andThen g
 
-    def curry[A1, A2](implicit ev: A =:= (A1 |*| A2)): A1 -⚬ (A2 =⚬ B) = dsl.curry(ev.substituteCo[* -⚬ B](self))
-    def uncurry[B1, B2](implicit ev: B =:= (B1 =⚬ B2)): (A |*| B1) -⚬ B2 = dsl.uncurry(ev.substituteCo(self))
+    def injectL[C]: A -⚬ (B |+| C) =
+      dsl.andThen(self, dsl.injectL)
+
+    def injectR[C]: A -⚬ (C |+| B) =
+      dsl.andThen(self, dsl.injectR)
+
+    def either[B1, B2, C](f: B1 -⚬ C, g: B2 -⚬ C)(implicit ev: B =:= (B1 |+| B2)): A -⚬ C =
+      dsl.andThen(ev.substituteCo(self), dsl.either(f, g))
+
+    def chooseL[B1, B2](implicit ev: B =:= (B1 |&| B2)): A -⚬ B1 =
+      ev.substituteCo(self) >>> dsl.chooseL
+
+    def chooseR[B1, B2](implicit ev: B =:= (B1 |&| B2)): A -⚬ B2 =
+      ev.substituteCo(self) >>> dsl.chooseR
+
+    def choice[C, D](f: B -⚬ C, g: B -⚬ D): A -⚬ (C |&| D) =
+      self >>> dsl.choice(f, g)
+
+    def par[B1, B2, C, D](f: B1 -⚬ C, g: B2 -⚬ D)(implicit ev: B =:= (B1 |*| B2)): A -⚬ (C |*| D) =
+      ev.substituteCo(self) >>> dsl.par(f, g)
+
+    def curry[A1, A2](implicit ev: A =:= (A1 |*| A2)): A1 -⚬ (A2 =⚬ B) =
+      dsl.curry(ev.substituteCo[* -⚬ B](self))
+
+    def uncurry[B1, B2](implicit ev: B =:= (B1 =⚬ B2)): (A |*| B1) -⚬ B2 =
+      dsl.uncurry(ev.substituteCo(self))
 
     def in: FocusedFunctionOutputCo[A, Id, B] = new FocusedFunctionOutputCo[A, Id, B](self)(idFunctor)
   }
