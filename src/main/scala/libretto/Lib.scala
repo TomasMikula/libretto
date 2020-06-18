@@ -206,6 +206,21 @@ class Lib(val dsl: DSL) { lib =>
       .in.left.fst.map(chooseL)    .to[( A        |*| C) |+| ((A |&| B) |*| D)]
       .in.right.fst.map(chooseR)   .to[( A        |*| C) |+| (       B  |*| D)]
 
+  type Bool = One |+| One
+  object Bool {
+    val constTrue: One -⚬ Bool =
+      injectL
+
+    val constFalse: One -⚬ Bool =
+      injectR
+
+    def ifThenElse[A, B]: (Bool |*| (A |&| B)) -⚬ (A |+| B) =
+      id                              [        Bool |*| (A |&| B)   ]
+        .andThen(matchingChoiceLR) .to[ (One |*| A) |+| (One |*| B) ]
+        .in.left.map(elimFst)      .to[          A  |+| (One |*| B) ]
+        .in.right.map(elimFst)     .to[          A  |+|          B  ]
+  }
+
   def zip[A1, A2, B1, B2]: ((A1 |*| A2) |*| (B1 |*| B2)) -⚬ ((A1 |*| B1) |*| (A2 |*| B2)) = {
     id                              [ (A1 |*|  A2) |*| (B1   |*| B2)]
       .andThen(timesAssocRL)     .to[((A1 |*|  A2) |*|  B1)  |*| B2 ]
