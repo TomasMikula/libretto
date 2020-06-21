@@ -243,6 +243,17 @@ class Lib(val dsl: DSL) { lib =>
         .andThen(matchingChoiceLR) .to[ (One |*| A) |+| (One |*| B) ]
         .in.left.map(elimFst)      .to[          A  |+| (One |*| B) ]
         .in.right.map(elimFst)     .to[          A  |+|          B  ]
+
+    def liftBoolean: Val[Boolean] -⚬ Bool = {
+      val toEither: Boolean => Either[Unit, Unit] = {
+        case true => Left(())
+        case false => Right(())
+      }
+      liftV(toEither)
+        .andThen(liftEither)
+        .in.left.map(discard)
+        .in.right.map(discard)
+    }
   }
 
   def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
