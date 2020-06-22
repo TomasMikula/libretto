@@ -320,11 +320,14 @@ class Lib(val dsl: DSL) { lib =>
       .as[ (((A =⚬ B) |*| C) |*| A) -⚬ (B |*| C) ]
       .curry
 
-  def liftOption[A]: Val[Option[A]] -⚬ (One |+| Val[A]) =
-    id[Val[Option[A]]]                .to[ Val[Option[      A]] ]
-      .andThen(liftV(_.toRight(())))  .to[ Val[Either[Unit, A]] ]
-      .andThen(liftEither)            .to[ Val[Unit] |+| Val[A] ]
-      .in.left.map(discard)           .to[   One     |+| Val[A] ]
+  type Maybe[A] = One |+| A
+  object Maybe {
+    def liftOption[A]: Val[Option[A]] -⚬ Maybe[Val[A]] =
+      id[Val[Option[A]]]                .to[ Val[Option[      A]] ]
+        .andThen(liftV(_.toRight(())))  .to[ Val[Either[Unit, A]] ]
+        .andThen(liftEither)            .to[ Val[Unit] |+| Val[A] ]
+        .in.left.map(discard)           .to[   One     |+| Val[A] ]
+  }
 
   def parFromOne[A, B](f: One -⚬ A, g: One -⚬ B): One -⚬ (A |*| B) =
     introSnd[One] andThen par(f, g)
@@ -489,7 +492,7 @@ class Lib(val dsl: DSL) { lib =>
 
       val poll: Val[List[A]] -⚬ Polled[A] =
         liftV(uncons)                           .to[ Val[Option[(A, List[A])]] ]
-          .andThen(liftOption)                  .to[ One |+| Val[(A, List[A])] ]
+          .andThen(Maybe.liftOption)            .to[ One |+| Val[(A, List[A])] ]
           .in.right.map(liftPair)               .to[ One |+| (Val[A] |*| Val[List[A]]) ]
           .in.right.snd.map(self)               .to[ One |+| (Val[A] |*| Pollable[A] ) ]
 
