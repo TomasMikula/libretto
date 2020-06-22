@@ -244,16 +244,30 @@ class Lib(val dsl: DSL) { lib =>
         .in.left.map(elimFst)      .to[          A  |+| (One |*| B) ]
         .in.right.map(elimFst)     .to[          A  |+|          B  ]
 
-    def liftBoolean: Val[Boolean] -⚬ Bool = {
-      val toEither: Boolean => Either[Unit, Unit] = {
-        case true => Left(())
-        case false => Right(())
-      }
-      liftV(toEither)
-        .andThen(liftEither)
-        .in.left.map(discard)
-        .in.right.map(discard)
+    private val eitherToBoolean: Either[Unit, Unit] => Boolean = {
+      case Left(())  => true
+      case Right(()) => false
     }
+
+    private val booleanToEither: Boolean => Either[Unit, Unit] = {
+      case true => Left(())
+      case false => Right(())
+    }
+
+    def liftBoolean: Val[Boolean] -⚬ Bool = {
+      id                                     [ Val[Boolean] ]
+        .andThen(liftV(booleanToEither))  .to[ Val[Either[Unit, Unit]] ]
+        .andThen(liftEither)              .to[ Val[Unit] |+| Val[Unit] ]
+        .in.left.map(discard)             .to[    One    |+| Val[Unit] ]
+        .in.right.map(discard)            .to[    One    |+|    One    ]
+    }
+
+    def unliftBoolean: Bool -⚬ Val[Boolean] =
+      id[Bool]                            .to[    One    |+|    One    ]
+      .in.left.map(const(()))             .to[ Val[Unit] |+|    One    ]
+      .in.right.map(const(()))            .to[ Val[Unit] |+| Val[Unit] ]
+      .andThen(unliftEither)              .to[ Val[Either[Unit, Unit]] ]
+      .andThen(liftV(eitherToBoolean))    .to[      Val[Boolean]       ]
   }
 
   def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
@@ -327,6 +341,12 @@ class Lib(val dsl: DSL) { lib =>
         .andThen(liftV(_.toRight(())))  .to[ Val[Either[Unit, A]] ]
         .andThen(liftEither)            .to[ Val[Unit] |+| Val[A] ]
         .in.left.map(discard)           .to[   One     |+| Val[A] ]
+
+    def unliftOption[A]: Maybe[Val[A]] -⚬ Val[Option[A]] =
+      id[Maybe[Val[A]]]             .to[    One    |+| Val[A] ]
+      .in.left.map(const(()))       .to[ Val[Unit] |+| Val[A] ]
+      .andThen(unliftEither)        .to[ Val[Either[Unit, A]] ]
+      .andThen(liftV(_.toOption))   .to[ Val[Option[A]]       ]
   }
 
   def parFromOne[A, B](f: One -⚬ A, g: One -⚬ B): One -⚬ (A |*| B) =
