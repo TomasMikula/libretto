@@ -336,6 +336,12 @@ class Lib(val dsl: DSL) { lib =>
 
   type Maybe[A] = One |+| A
   object Maybe {
+    def empty[A]: One -⚬ Maybe[A] =
+      injectL
+
+    def just[A]: A -⚬ Maybe[A] =
+      injectR
+
     def liftOption[A]: Val[Option[A]] -⚬ Maybe[Val[A]] =
       id[Val[Option[A]]]                .to[ Val[Option[      A]] ]
         .andThen(liftV(_.toRight(())))  .to[ Val[Either[Unit, A]] ]
