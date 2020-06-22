@@ -6,6 +6,9 @@ class Lib(val dsl: DSL) { lib =>
   /** Convenience method to summon implicit instances of [[dsl.Dual]]. */
   def Dual[A, B](implicit ev: Dual[A, B]): Dual[A, B] = ev
 
+  def zap[A, B](implicit ev: Dual[A, B]): (A |*| B) -⚬ One =
+    ev.eliminate
+
   /** Witnesses that `F` is a covariant endofunctor on the category `-⚬`. */
   trait CoFunctor[F[_]] { self =>
     def lift[A, B](f: A -⚬ B): F[A] -⚬ F[B]
@@ -211,6 +214,22 @@ class Lib(val dsl: DSL) { lib =>
       .in.snd.fst.map(swap)     .to[ A |*| ((C |*| B) |*| D) ]
       .in.snd.map(timesAssocLR) .to[ A |*| (C |*| (B |*| D)) ]
       .andThen(timesAssocRL)    .to[ (A |*| C) |*| (B |*| D) ]
+
+  def fakeDemand[A]: One -⚬ Neg[A] =
+    id                                           [        One        ]
+      .andThen(valNegDuality[A].introduce)    .to[ Val[A] |*| Neg[A] ]
+      .in.fst.map(discard)                    .to[   One  |*| Neg[A] ]
+      .andThen(elimFst)                       .to[            Neg[A] ]
+
+  def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
+    id                                             [   Neg[A] |*| Neg[A]                                       ]
+      .andThen(introSnd)                        .to[  (Neg[A] |*| Neg[A]) |*|                      One         ]
+      .in.snd.map(valNegDuality[A].introduce)   .to[  (Neg[A] |*| Neg[A]) |*| (     Val[A]         |*| Neg[A]) ]
+      .andThen(timesAssocRL)                    .to[ ((Neg[A] |*| Neg[A]) |*|       Val[A]       ) |*| Neg[A]  ]
+      .in.fst.snd.map(dup)                      .to[ ((Neg[A] |*| Neg[A]) |*| (Val[A] |*| Val[A])) |*| Neg[A]  ]
+      .in.fst.map(IXI)                          .to[ ((Neg[A] |*| Val[A]) |*| (Neg[A] |*| Val[A])) |*| Neg[A]  ]
+      .in.fst.map(parToOne(zap, zap))           .to[                      One                      |*| Neg[A]  ]
+      .andThen(elimFst)
 
   /** From the choice ''available'' on the right (`C |&| D`), choose the one corresponding to the choice ''made''
     * on the left (`A |+| B`): if on the left there is `A`, choose `C`, if on the left thre is `B`, choose `D`.
@@ -448,6 +467,18 @@ class Lib(val dsl: DSL) { lib =>
     def extract[A]   : F[A] -⚬ A
     def duplicate[A] : F[A] -⚬ F[F[A]]
   }
+
+  implicit def comonoidVal[A]: Comonoid[Val[A]] =
+    new Comonoid[Val[A]] {
+      def counit : Val[A] -⚬ One                 = discard
+      def split  : Val[A] -⚬ (Val[A] |*| Val[A]) = dup
+    }
+
+  implicit def monoidNeg[A]: Monoid[Neg[A]] =
+    new Monoid[Neg[A]] {
+      def unit    :                 One -⚬ Neg[A] = fakeDemand
+      def combine : (Neg[A] |*| Neg[A]) -⚬ Neg[A] = mergeDemands
+    }
 
   implicit def monoidMultiple[A]: Monoid[Multiple[A]] =
     new Monoid[Multiple[A]] {
