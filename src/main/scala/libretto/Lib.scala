@@ -158,30 +158,38 @@ class Lib(val dsl: DSL) { lib =>
 
     def injectL[C]: A -⚬ F[B |+| C] = f andThen F.lift(dsl.injectL)
     def injectR[C]: A -⚬ F[C |+| B] = f andThen F.lift(dsl.injectR)
+  }
 
-    def fst[B1, B2](implicit ev: B =:= (B1 |*| B2)): FocusedFunctionOutputCo[A, λ[x => F[x |*| B2]], B1] =
-      zoomCo(lib.fst[B2])
+  implicit class FocusedFunctionOutputOnTimesCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 |*| B2]) {
+    def fst: FocusedFunctionOutputCo[A, λ[x => F[x |*| B2]], B1] =
+      f.zoomCo(lib.fst[B2])
 
-    def snd[B1, B2](implicit ev: B =:= (B1 |*| B2)): FocusedFunctionOutputCo[A, λ[x => F[B1 |*| x]], B2] =
-      zoomCo(lib.snd[B1])
+    def snd: FocusedFunctionOutputCo[A, λ[x => F[B1 |*| x]], B2] =
+      f.zoomCo(lib.snd[B1])
+  }
 
-    def left[B1, B2](implicit ev: B =:= (B1 |+| B2)): FocusedFunctionOutputCo[A, λ[x => F[x |+| B2]], B1] =
-      zoomCo(lib.left[B2])
+  implicit class FocusedFunctionOutputOnPlusCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 |+| B2]) {
+    def left: FocusedFunctionOutputCo[A, λ[x => F[x |+| B2]], B1] =
+      f.zoomCo(lib.left[B2])
 
-    def right[B1, B2](implicit ev: B =:= (B1 |+| B2)): FocusedFunctionOutputCo[A, λ[x => F[B1 |+| x]], B2] =
-      zoomCo(lib.right[B1])
+    def right: FocusedFunctionOutputCo[A, λ[x => F[B1 |+| x]], B2] =
+      f.zoomCo(lib.right[B1])
+  }
 
-    def choiceL[B1, B2](implicit ev: B =:= (B1 |&| B2)): FocusedFunctionOutputCo[A, λ[x => F[x |&| B2]], B1] =
-      zoomCo(lib.choiceL[B2])
+  implicit class FocusedFunctionOutputOnChoiceCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 |&| B2]) {
+    def choiceL: FocusedFunctionOutputCo[A, λ[x => F[x |&| B2]], B1] =
+      f.zoomCo(lib.choiceL[B2])
 
-    def choiceR[B1, B2](implicit ev: B =:= (B1 |&| B2)): FocusedFunctionOutputCo[A, λ[x => F[B1 |&| x]], B2] =
-      zoomCo(lib.choiceR[B1])
+    def choiceR: FocusedFunctionOutputCo[A, λ[x => F[B1 |&| x]], B2] =
+      f.zoomCo(lib.choiceR[B1])
+  }
 
-    def input[B1, B2](implicit ev: B =:= (B1 =⚬ B2)): FocusedFunctionOutputContra[A, λ[x => F[x =⚬ B2]], B1] =
-      zoomContra(lib.input[B2])
+  implicit class FocusedFunctionOutputOnFunctionCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 =⚬ B2]) {
+    def input: FocusedFunctionOutputContra[A, λ[x => F[x =⚬ B2]], B1] =
+      f.zoomContra(lib.input[B2])
 
-    def output[B1, B2](implicit ev: B =:= (B1 =⚬ B2)): FocusedFunctionOutputCo[A, λ[x => F[B1 =⚬ x]], B2] =
-      zoomCo(lib.output[B1])
+    def output: FocusedFunctionOutputCo[A, λ[x => F[B1 =⚬ x]], B2] =
+      f.zoomCo(lib.output[B1])
   }
 
   /** Focused on `B` in the output `F[B]` of linear function `A -⚬ F[B]`, where `B` is in a contravariant position. */
@@ -193,24 +201,30 @@ class Lib(val dsl: DSL) { lib =>
 
     def zoomContra[G[_], C](G: ContraFunctor[G])(implicit ev: B =:= G[C]): FocusedFunctionOutputCo[A, λ[x => F[G[x]]], C] =
       new FocusedFunctionOutputCo[A, λ[x => F[G[x]]], C](ev.liftCo[F].substituteCo(f))(F ⚬ G)
+  }
 
-    def fst[B1, B2](implicit ev: B =:= (B1 |*| B2)): FocusedFunctionOutputContra[A, λ[x => F[x |*| B2]], B1] =
-      zoomCo(lib.fst[B2])
+  implicit class FocusedFunctionOutputOnTimesContra[A, F[_], B1, B2](f: FocusedFunctionOutputContra[A, F, B1 |*| B2]) {
+    def fst: FocusedFunctionOutputContra[A, λ[x => F[x |*| B2]], B1] =
+      f.zoomCo(lib.fst[B2])
 
-    def snd[B1, B2](implicit ev: B =:= (B1 |*| B2)): FocusedFunctionOutputContra[A, λ[x => F[B1 |*| x]], B2] =
-      zoomCo(lib.snd[B1])
+    def snd: FocusedFunctionOutputContra[A, λ[x => F[B1 |*| x]], B2] =
+      f.zoomCo(lib.snd[B1])
+  }
 
-    def left[B1, B2](implicit ev: B =:= (B1 |+| B2)): FocusedFunctionOutputContra[A, λ[x => F[x |+| B2]], B1] =
-      zoomCo(lib.left[B2])
+  implicit class FocusedFunctionOutputOnPlusContra[A, F[_], B1, B2](f: FocusedFunctionOutputContra[A, F, B1 |+| B2]) {
+    def left: FocusedFunctionOutputContra[A, λ[x => F[x |+| B2]], B1] =
+      f.zoomCo(lib.left[B2])
 
-    def right[B1, B2](implicit ev: B =:= (B1 |+| B2)): FocusedFunctionOutputContra[A, λ[x => F[B1 |+| x]], B2] =
-      zoomCo(lib.right[B1])
+    def right: FocusedFunctionOutputContra[A, λ[x => F[B1 |+| x]], B2] =
+      f.zoomCo(lib.right[B1])
+  }
 
-    def input[B1, B2](implicit ev: B =:= (B1 =⚬ B2)): FocusedFunctionOutputCo[A, λ[x => F[x =⚬ B2]], B1] =
-      zoomContra(lib.input[B2])
+  implicit class FocusedFunctionOutputOnFunctionContra[A, F[_], B1, B2](f: FocusedFunctionOutputContra[A, F, B1 =⚬ B2]) {
+    def input: FocusedFunctionOutputCo[A, λ[x => F[x =⚬ B2]], B1] =
+      f.zoomContra(lib.input[B2])
 
-    def output[B1, B2](implicit ev: B =:= (B1 =⚬ B2)): FocusedFunctionOutputContra[A, λ[x => F[B1 =⚬ x]], B2] =
-      zoomCo(lib.output[B1])
+    def output: FocusedFunctionOutputContra[A, λ[x => F[B1 =⚬ x]], B2] =
+      f.zoomCo(lib.output[B1])
   }
 
   def IXI[A, B, C, D]: ((A|*|B)|*|(C|*|D)) -⚬
