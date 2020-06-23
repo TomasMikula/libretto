@@ -504,6 +504,17 @@ class Lib(val dsl: DSL) { lib =>
       def duplicate[A] : Unlimited[A] -⚬ Unlimited[Unlimited[A]] = Unlimited.duplicate
     }
 
+  def getFst[A, B](implicit A: Comonoid[A]): (A |*| B) -⚬ (A |*| (A |*| B)) =
+    id                             [     A     |*| B  ]
+      .in.fst.map(A.split)      .to[ (A |*| A) |*| B  ]
+      .andThen(timesAssocLR)    .to[  A |*| (A |*| B) ]
+
+  def getSnd[A, B](implicit B: Comonoid[B]): (A |*| B) -⚬ (B |*| (A |*| B)) =
+    id                             [  A |*|     B     ]
+      .in.snd.map(B.split)      .to[  A |*| (B |*| B) ]
+      .andThen(timesAssocRL)    .to[ (A |*| B) |*| B  ]
+      .andThen(swap)            .to[  B |*| (A |*| B) ]
+
   type PollableF[A, X] = One |&| (One |+| (Val[A] |*| X))
   type Pollable[A] = Rec[PollableF[A, *]]
   type Polled[A] = One |+| (Val[A] |*| Pollable[A])
