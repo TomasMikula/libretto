@@ -194,7 +194,7 @@ class Lib(val dsl: DSL) { lib =>
 
   /** Focused on `B` in the output `F[B]` of linear function `A -⚬ F[B]`, where `B` is in a contravariant position. */
   class FocusedFunctionOutputContra[A, F[_], B](f: A -⚬ F[B])(F: ContraFunctor[F]) {
-    def contramap[B0](g: B0 -⚬ B): A -⚬ F[B0] = f andThen F.lift(g)
+    def unapply[B0](g: B0 -⚬ B): A -⚬ F[B0] = f andThen F.lift(g)
 
     def zoomCo[G[_], C](G: CoFunctor[G])(implicit ev: B =:= G[C]): FocusedFunctionOutputContra[A, λ[x => F[G[x]]], C] =
       new FocusedFunctionOutputContra[A, λ[x => F[G[x]]], C](ev.liftCo[F].substituteCo(f))(F ⚬ G)
