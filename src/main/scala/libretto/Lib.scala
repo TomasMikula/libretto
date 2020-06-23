@@ -219,6 +219,14 @@ class Lib(val dsl: DSL) { lib =>
       f.zoomCo(lib.right[B1])
   }
 
+  implicit class FocusedFunctionOutputOnChoiceContra[A, F[_], B1, B2](f: FocusedFunctionOutputContra[A, F, B1 |&| B2]) {
+    def choiceL: FocusedFunctionOutputContra[A, λ[x => F[x |&| B2]], B1] =
+      f.zoomCo(lib.choiceL[B2])
+
+    def choiceR: FocusedFunctionOutputContra[A, λ[x => F[B1 |&| x]], B2] =
+      f.zoomCo(lib.choiceR[B1])
+  }
+
   implicit class FocusedFunctionOutputOnFunctionContra[A, F[_], B1, B2](f: FocusedFunctionOutputContra[A, F, B1 =⚬ B2]) {
     def input: FocusedFunctionOutputCo[A, λ[x => F[x =⚬ B2]], B1] =
       f.zoomContra(lib.input[B2])
