@@ -39,6 +39,11 @@ class Lib(val dsl: DSL) { lib =>
     }
   }
 
+  /** Witnesses that `F` is a bifunctor (covariant in both variables). */
+  trait Bifunctor[F[_, _]] {
+    def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): F[A, C] -⚬ F[B, D]
+  }
+
   def liftFst[A, B, C](f: A -⚬ C): (A |*| B) -⚬ (C |*| B) = par(f, id)
   def liftSnd[A, B, C](f: B -⚬ C): (A |*| B) -⚬ (A |*| C) = par(id, f)
 
@@ -101,6 +106,21 @@ class Lib(val dsl: DSL) { lib =>
         .curry
   }
 
+  implicit val tensorBifunctor: Bifunctor[|*|]= new Bifunctor[|*|] {
+    def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |*| C) -⚬ (B |*| D) =
+      par(f, g)
+  }
+
+  implicit val eitherBifunctor: Bifunctor[|+|] = new Bifunctor[|+|] {
+    def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
+      either(f andThen injectL, g andThen injectR)
+  }
+
+  implicit val choiceBifunctor: Bifunctor[|&|]= new Bifunctor[|&|] {
+    def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
+      choice(chooseL andThen f, chooseR andThen g)
+  }
+
   implicit class LinearFunctionOps[A, B](self: A -⚬ B) {
     /** No-op used for documentation purposes: explicitly states the input type of this linear function. */
     def from[Z](implicit ev: A =:= Z): Z -⚬ B = ev.substituteCo[* -⚬ B](self)
@@ -112,6 +132,9 @@ class Lib(val dsl: DSL) { lib =>
     def as[C](implicit ev: (A -⚬ B) =:= C): C = ev(self)
 
     def andThen[C](g: B -⚬ C): A -⚬ C = dsl.andThen(self, g)
+
+    def bimap[F[_, _]]: BimapSyntax[F, A, B] =
+      new BimapSyntax[F, A, B](self)
 
     /** Alias for [[andThen]]. */
     def >>>[C](g: B -⚬ C): A -⚬ C = this andThen g
@@ -144,6 +167,17 @@ class Lib(val dsl: DSL) { lib =>
       dsl.uncurry(ev.substituteCo(self))
 
     def in: FocusedFunctionOutputCo[A, Id, B] = new FocusedFunctionOutputCo[A, Id, B](self)(idFunctor)
+  }
+
+  class BimapSyntax[F[_, _], A, B](self: A -⚬ B) {
+    def apply[B1, B2, C, D](
+      f: B1 -⚬ C,
+      g: B2 -⚬ D,
+    )(implicit
+      ev: B =:= F[B1, B2],
+      F: Bifunctor[F],
+    ): A -⚬ F[C, D] =
+      dsl.andThen(ev.substituteCo(self), F.lift(f, g))
   }
 
   /** Focused on `B` in the output `F[B]` of linear function `A -⚬ F[B]`, where `B` is in a covariant position. */
