@@ -71,8 +71,23 @@ trait DSL {
 
   def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C)
 
-  def distributeR[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C))
-  def distributeL[A, B, C]: ((A |+| B) |*| C) -⚬ ((A |*| C) |+| (B |*| C))
+  /** Factor out the factor `A` on the left of both summands. */
+  def factorL[A, B, C]: ((A |*| B) |+| (A |*| C)) -⚬ (A |*| (B |+| C)) =
+    either(par(id, injectL), par(id, injectR))
+
+  /** Factor out the factor `C` on the right of both summands. */
+  def factorR[A, B, C]: ((A |*| C) |+| (B |*| C)) -⚬ ((A |+| B) |*| C) =
+    either(par(injectL, id), par(injectR, id))
+
+  /** Distribute the factor on the left into the summands on the right.
+    * Inverse of [[factorL]].
+    */
+  def distributeLR[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C))
+
+  /** Distribute the factor on the right into the summands on the left.
+    * Inverse of [[factorR]].
+    */
+  def distributeRL[A, B, C]: ((A |+| B) |*| C) -⚬ ((A |*| C) |+| (B |*| C))
 
   def coDistributeL[A, B, C]: ((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C))
   def coDistributeR[A, B, C]: ((A |*| C) |&| (B |*| C)) -⚬ ((A |&| B) |*| C)
