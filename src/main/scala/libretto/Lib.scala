@@ -283,6 +283,24 @@ class Lib(val dsl: DSL) { lib =>
       .in.snd(timesAssocLR)     .to[ A |*| (C |*| (B |*| D)) ]
       .andThen(timesAssocRL)    .to[ (A |*| C) |*| (B |*| D) ]
 
+  def IX[A, B, C]: ((A|*|B)|*| C) -⚬
+    //               |    \   /
+    //               |     \ /
+    //               |      X
+    //               |     / \
+    //               |    /   \
+                   ((A|*|C)|*| B) =
+    timesAssocLR[A, B, C] >>> par(id, swap) >>> timesAssocRL
+
+  def XI[A, B, C]: (A |*|(B|*|C)) -⚬
+    //               \   /    |
+    //                \ /     |
+    //                 X      |
+    //                / \     |
+    //               /   \    |
+                   (B |*|(A|*|C)) =
+    timesAssocRL[A, B, C] >>> par(swap, id) >>> timesAssocLR
+
   def fakeDemand[A]: One -⚬ Neg[A] =
     id                                           [        One        ]
       .andThen(valNegDuality[A].introduce)    .to[ Val[A] |*| Neg[A] ]
