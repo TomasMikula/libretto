@@ -589,6 +589,16 @@ class Lib(val dsl: DSL) { lib =>
       .andThen(timesAssocRL)    .to[ (A |*| B) |*| B  ]
       .andThen(swap)            .to[  B |*| (A |*| B) ]
 
+  def discardFst[A, B](implicit A: Comonoid[A]): (A |*| B) -⚬ B =
+    id                             [  A  |*| B ]
+      .in.fst(A.counit)         .to[ One |*| B ]
+      .andThen(elimFst)         .to[         B ]
+
+  def discardSnd[A, B](implicit B: Comonoid[B]): (A |*| B) -⚬ A =
+    id                             [ A |*|  B  ]
+      .in.snd(B.counit)         .to[ A |*| One ]
+      .andThen(elimSnd)         .to[ A         ]
+
   type PollableF[A, X] = One |&| (One |+| (Val[A] |*| X))
   type Pollable[A] = Rec[PollableF[A, *]]
   type Polled[A] = One |+| (Val[A] |*| Pollable[A])
