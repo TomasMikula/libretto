@@ -331,6 +331,12 @@ class Lib(val dsl: DSL) { lib =>
         .in.left(elimFst)          .to[          A  |+| (One |*| B) ]
         .in.right(elimFst)         .to[          A  |+|          B  ]
 
+    def ifThenElse[A, B, C](ifTrue: A -⚬ B, ifFalse: A -⚬ C): (Bool |*| A) -⚬ (B |+| C) =
+      id                                   [         Bool |*| A          ]
+        .andThen(distributeRL)          .to[ (One |*| A) |+| (One |*| A) ]
+        .bimap(elimFst[A], elimFst[A])  .to[          A  |+|          A  ]
+        .bimap(ifTrue, ifFalse)         .to[          B  |+|          C  ]
+
     private val eitherToBoolean: Either[Unit, Unit] => Boolean = {
       case Left(())  => true
       case Right(()) => false
