@@ -381,6 +381,123 @@ class Lib(val dsl: DSL) { lib =>
       .andThen(liftV(eitherToBoolean))    .to[      Val[Boolean]       ]
   }
 
+  import Bool._
+
+  def liftBipredicate[A, B](p: (A, B) => Boolean): (Val[A] |*| Val[B]) -⚬ Bool =
+    id                                            [ Val[A] |*| Val[B] ]
+      .andThen(unliftPair)                     .to[   Val[(A, B)]     ]
+      .andThen(liftV(p.tupled))                .to[   Val[Boolean]    ]
+      .andThen(liftBoolean)                    .to[       Bool        ]
+
+  def lt[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
+    liftBipredicate(ord.lt)
+
+  def lteq[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
+    liftBipredicate(ord.lteq)
+
+  def gt[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
+    liftBipredicate(ord.gt)
+
+  def gteq[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
+    liftBipredicate(ord.gteq)
+
+  def equiv[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
+    liftBipredicate(ord.equiv)
+
+  private def testKeys[A, B, K](
+    aKey: A -⚬ (Val[K] |*| A),
+    bKey: B -⚬ (Val[K] |*| B),
+    pred: (K, K) => Boolean,
+  )(implicit
+    ord: Ordering[K],
+  ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
+    id[A |*| B]
+      .andThen(par(aKey, bKey))
+      .andThen(IXI)
+      .in.fst(liftBipredicate(pred))
+
+  def ltBy[A, B, K](
+    aKey: A -⚬ (Val[K] |*| A),
+    bKey: B -⚬ (Val[K] |*| B),
+  )(implicit
+    ord: Ordering[K],
+  ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
+    testKeys(aKey, bKey, ord.lt)
+
+  def lteqBy[A, B, K](
+    aKey: A -⚬ (Val[K] |*| A),
+    bKey: B -⚬ (Val[K] |*| B),
+  )(implicit
+    ord: Ordering[K],
+  ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
+    testKeys(aKey, bKey, ord.lteq)
+
+  def gtBy[A, B, K](
+    aKey: A -⚬ (Val[K] |*| A),
+    bKey: B -⚬ (Val[K] |*| B),
+  )(implicit
+    ord: Ordering[K],
+  ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
+    testKeys(aKey, bKey, ord.gt)
+
+  def gteqBy[A, B, K](
+    aKey: A -⚬ (Val[K] |*| A),
+    bKey: B -⚬ (Val[K] |*| B),
+  )(implicit
+    ord: Ordering[K],
+  ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
+    testKeys(aKey, bKey, ord.gteq)
+
+  def equivBy[A, B, K](
+    aKey: A -⚬ (Val[K] |*| A),
+    bKey: B -⚬ (Val[K] |*| B),
+  )(implicit
+    ord: Ordering[K],
+  ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
+    testKeys(aKey, bKey, ord.equiv)
+
+  def sortBy[A, B, K: Ordering](
+    aKey: A -⚬ (Val[K] |*| A),
+    bKey: B -⚬ (Val[K] |*| B),
+  )
+  : (A |*| B) -⚬ ((A |*| B) |+| (B |*| A)) =
+    lteqBy(aKey, bKey) >>> ifThenElse(id, swap)
+
+  sealed trait CompareModule {
+    type Compared[A, B]
+
+    def compareBy[A, B, K: Ordering](
+      aKey: A -⚬ (Val[K] |*| A),
+      bKey: B -⚬ (Val[K] |*| B),
+    )
+    : (A |*| B) -⚬ Compared[A, B]
+
+    def compared[A, B, C](
+      caseLt: (A |*| B) -⚬ C,
+      caseEq: (A |*| B) -⚬ C,
+      caseGt: (A |*| B) -⚬ C,
+    )
+    : Compared[A, B] -⚬ C
+  }
+
+  val Compare: CompareModule = new CompareModule {
+    type Compared[A, B] = (A |*| B) |+| ((A |*| B) |+| (A |*| B))
+
+    def compareBy[A, B, K: Ordering](aKey: A -⚬ (Val[K] |*| A), bKey: B -⚬ (Val[K] |*| B)): A |*| B -⚬ Compared[A, B] =
+      id                                   [           A |*| B                       ]
+        .andThen(ltBy(aKey, bKey))      .to[ Bool |*| (A |*| B)                      ]
+        .andThen(ifThenElse(id, id))    .to[ (A |*| B) |+| (A |*| B)                 ]
+        .in.right(equivBy(aKey, bKey))  .to[ (A |*| B) |+| (Bool |*| (A |*| B))      ]
+        .in.right(ifThenElse(id, id))   .to[ (A |*| B) |+| ((A |*| B) |+| (A |*| B)) ]
+
+    def compared[A, B, C](
+      caseLt: A |*| B -⚬ C,
+      caseEq: A |*| B -⚬ C,
+      caseGt: A |*| B -⚬ C,
+    ): Compared[A, B] -⚬ C =
+      either(caseLt, either(caseEq, caseGt))
+  }
+
   def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
     id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
       .andThen(introSnd)         .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*|    One    ]
