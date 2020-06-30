@@ -160,11 +160,50 @@ class Lib(val dsl: DSL) { lib =>
     def par[B1, B2, C, D](f: B1 -⚬ C, g: B2 -⚬ D)(implicit ev: B =:= (B1 |*| B2)): A -⚬ (C |*| D) =
       ev.substituteCo(self) >>> dsl.par(f, g)
 
+    def elimFst[B2](implicit ev: B =:= (One |*| B2)): A -⚬ B2 =
+      ev.substituteCo(self) >>> dsl.elimFst
+
+    def elimSnd[B1](implicit ev: B =:= (B1 |*| One)): A -⚬ B1 =
+      ev.substituteCo(self) >>> dsl.elimSnd
+
+    def introFst: A -⚬ (One |*| B) =
+      self >>> dsl.introFst
+
+    def introSnd: A -⚬ (B |*| One) =
+      self >>> dsl.introSnd
+
+    def swap[B1, B2](implicit ev: B =:= (B1 |*| B2)): A -⚬ (B2 |*| B1) =
+      ev.substituteCo(self) >>> dsl.swap
+
     def curry[A1, A2](implicit ev: A =:= (A1 |*| A2)): A1 -⚬ (A2 =⚬ B) =
       dsl.curry(ev.substituteCo[* -⚬ B](self))
 
     def uncurry[B1, B2](implicit ev: B =:= (B1 =⚬ B2)): (A |*| B1) -⚬ B2 =
       dsl.uncurry(ev.substituteCo(self))
+
+    def timesAssocLR[B1, B2, B3](implicit ev: B =:= ((B1 |*| B2) |*| B3)): A -⚬ (B1 |*| (B2 |*| B3)) =
+      ev.substituteCo(self) >>> dsl.timesAssocLR
+
+    def timesAssocRL[B1, B2, B3](implicit ev: B =:= (B1 |*| (B2 |*| B3))): A -⚬ ((B1 |*| B2) |*| B3) =
+      ev.substituteCo(self) >>> dsl.timesAssocRL
+
+    def plusAssocLR[B1, B2, B3](implicit ev: B =:= ((B1 |+| B2) |+| B3)): A -⚬ (B1 |+| (B2 |+| B3)) =
+      ev.substituteCo(self) >>> dsl.plusAssocLR
+
+    def plusAssocRL[B1, B2, B3](implicit ev: B =:= (B1 |+| (B2 |+| B3))): A -⚬ ((B1 |+| B2) |+| B3) =
+      ev.substituteCo(self) >>> dsl.plusAssocRL
+
+    def distributeLR[B1, B2, B3](implicit ev: B =:= (B1 |*| (B2 |+| B3))): A -⚬ ((B1 |*| B2) |+| (B1 |*| B3)) =
+      ev.substituteCo(self) >>> dsl.distributeLR
+
+    def distributeRL[B1, B2, B3](implicit ev: B =:= ((B1 |+| B2) |*| B3)): A -⚬ ((B1 |*| B3) |+| (B2 |*| B3)) =
+      ev.substituteCo(self) >>> dsl.distributeRL
+
+    def pack[F[_]](implicit ev: B =:= F[Rec[F]]): A -⚬ Rec[F] =
+      ev.substituteCo(self) >>> dsl.pack[F]
+
+    def unpack[F[_]](implicit ev: B =:= Rec[F]): A -⚬ F[Rec[F]] =
+      ev.substituteCo(self) >>> dsl.unpack[F]
 
     def in: FocusedFunctionOutputCo[A, Id, B] = new FocusedFunctionOutputCo[A, Id, B](self)(idFunctor)
   }
@@ -277,11 +316,11 @@ class Lib(val dsl: DSL) { lib =>
   //                     |    /   \    |
                        ((A|*|C)|*|(B|*|D)) =
     id                             [ (A |*| B) |*| (C |*| D) ]
-      .andThen(timesAssocLR)    .to[ A |*| (B |*| (C |*| D)) ]
+      .timesAssocLR             .to[ A |*| (B |*| (C |*| D)) ]
       .in.snd(timesAssocRL)     .to[ A |*| ((B |*| C) |*| D) ]
       .in.snd.fst(swap)         .to[ A |*| ((C |*| B) |*| D) ]
       .in.snd(timesAssocLR)     .to[ A |*| (C |*| (B |*| D)) ]
-      .andThen(timesAssocRL)    .to[ (A |*| C) |*| (B |*| D) ]
+      .timesAssocRL             .to[ (A |*| C) |*| (B |*| D) ]
 
   def IX[A, B, C]: ((A|*|B)|*| C) -⚬
     //               |    \   /
@@ -304,25 +343,24 @@ class Lib(val dsl: DSL) { lib =>
   def fakeDemand[A]: One -⚬ Neg[A] =
     id                                           [        One        ]
       .andThen(valNegDuality[A].introduce)    .to[ Val[A] |*| Neg[A] ]
-      .in.fst(discard)                        .to[   One  |*| Neg[A] ]
-      .andThen(elimFst)                       .to[            Neg[A] ]
+      .andThen(discardFst)                    .to[            Neg[A] ]
 
   def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
     id                                         [   Neg[A] |*| Neg[A]                                       ]
-      .andThen(introSnd)                    .to[  (Neg[A] |*| Neg[A]) |*|                      One         ]
+      .introSnd                             .to[  (Neg[A] |*| Neg[A]) |*|                      One         ]
       .in.snd(valNegDuality[A].introduce)   .to[  (Neg[A] |*| Neg[A]) |*| (     Val[A]         |*| Neg[A]) ]
-      .andThen(timesAssocRL)                .to[ ((Neg[A] |*| Neg[A]) |*|       Val[A]       ) |*| Neg[A]  ]
+      .timesAssocRL                         .to[ ((Neg[A] |*| Neg[A]) |*|       Val[A]       ) |*| Neg[A]  ]
       .in.fst.snd(dup)                      .to[ ((Neg[A] |*| Neg[A]) |*| (Val[A] |*| Val[A])) |*| Neg[A]  ]
       .in.fst(IXI)                          .to[ ((Neg[A] |*| Val[A]) |*| (Neg[A] |*| Val[A])) |*| Neg[A]  ]
       .in.fst(parToOne(zap, zap))           .to[                      One                      |*| Neg[A]  ]
-      .andThen(elimFst)
+      .elimFst                              .to[                                                   Neg[A]  ]
 
   /** From the choice ''available'' on the right (`C |&| D`), choose the one corresponding to the choice ''made''
     * on the left (`A |+| B`): if on the left there is `A`, choose `C`, if on the left thre is `B`, choose `D`.
     */
   def matchingChoiceLR[A, B, C, D]: ((A |+| B) |*| (C |&| D)) -⚬ ((A |*| C) |+| (B |*| D)) =
     id[(A |+| B) |*| (C |&| D)]
-      .andThen(distributeRL)   .to[(A |*| (C |&| D)) |+| (B |*| (C |&| D))]
+      .distributeRL            .to[(A |*| (C |&| D)) |+| (B |*| (C |&| D))]
       .in.left.snd(chooseL)    .to[(A |*|  C       ) |+| (B |*| (C |&| D))]
       .in.right.snd(chooseR)   .to[(A |*|  C       ) |+| (B |*|        D )]
 
@@ -331,7 +369,7 @@ class Lib(val dsl: DSL) { lib =>
     */
   def matchingChoiceRL[A, B, C, D]: ((A |&| B) |*| (C |+| D)) -⚬ ((A |*| C) |+| (B |*| D)) =
     id[(A |&| B) |*| (C |+| D)]
-      .andThen(distributeLR)   .to[((A |&| B) |*| C) |+| ((A |&| B) |*| D)]
+      .distributeLR            .to[((A |&| B) |*| C) |+| ((A |&| B) |*| D)]
       .in.left.fst(chooseL)    .to[( A        |*| C) |+| ((A |&| B) |*| D)]
       .in.right.fst(chooseR)   .to[( A        |*| C) |+| (       B  |*| D)]
 
@@ -351,7 +389,7 @@ class Lib(val dsl: DSL) { lib =>
 
     def ifThenElse[A, B, C](ifTrue: A -⚬ B, ifFalse: A -⚬ C): (Bool |*| A) -⚬ (B |+| C) =
       id                                   [         Bool |*| A          ]
-        .andThen(distributeRL)          .to[ (One |*| A) |+| (One |*| A) ]
+        .distributeRL                   .to[ (One |*| A) |+| (One |*| A) ]
         .bimap(elimFst[A], elimFst[A])  .to[          A  |+|          A  ]
         .bimap(ifTrue, ifFalse)         .to[          B  |+|          C  ]
 
@@ -412,7 +450,7 @@ class Lib(val dsl: DSL) { lib =>
     ord: Ordering[K],
   ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
     id[A |*| B]
-      .andThen(par(aKey, bKey))
+      .par(aKey, bKey)
       .andThen(IXI)
       .in.fst(liftBipredicate(pred))
 
@@ -500,7 +538,7 @@ class Lib(val dsl: DSL) { lib =>
 
   def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
     id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
-      .andThen(introSnd)         .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*|    One    ]
+      .introSnd                  .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*|    One    ]
       .in.snd(ev.introduce)      .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
       .andThen(IXI)              .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
       .andThen(par(eval, eval))  .to[        B         |*|        C         ]
@@ -520,16 +558,16 @@ class Lib(val dsl: DSL) { lib =>
     new Dual[A |*| B, Ȧ |*| Ḃ] {
       def introduce: One -⚬ ((A |*| B) |*| (Ȧ |*| Ḃ)) = {
         id[One]                                   .to[           One           ]
-          .andThen(introSnd)                      .to[    One    |*|    One    ]
-          .andThen(par(a.introduce, b.introduce)) .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
+          .andThen(parFromOne(id, id))            .to[    One    |*|    One    ]
+          .par(a.introduce, b.introduce)          .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
           .andThen(IXI)                           .to[ (A |*| B) |*| (Ȧ |*| Ḃ) ]
       }
 
       def eliminate: ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One = {
         id[(A |*| B) |*| (Ȧ |*| Ḃ)]               .to[ (A |*| B) |*| (Ȧ |*| Ḃ) ]
           .andThen(IXI)                           .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
-          .andThen(par(a.eliminate, b.eliminate)) .to[    One    |*|    One    ]
-          .andThen(elimSnd)                       .to[           One           ]
+          .par(a.eliminate, b.eliminate)          .to[    One    |*|    One    ]
+          .andThen(parToOne(id, id))              .to[           One           ]
       }
     }
 
@@ -544,20 +582,20 @@ class Lib(val dsl: DSL) { lib =>
     */
   def unveilSequentially[A, Ā, B](implicit ev: Dual[A, Ā]): (A |*| B) -⚬ (Ā =⚬ B) =
     id[(A |*| B) |*| Ā]           .to[ (A |*|  B) |*| Ā  ]
-      .andThen(timesAssocLR)      .to[  A |*| (B  |*| Ā) ]
+      .timesAssocLR               .to[  A |*| (B  |*| Ā) ]
       .in.snd(swap)               .to[  A |*| (Ā  |*| B) ]
-      .andThen(timesAssocRL)      .to[ (A |*|  Ā) |*| B  ]
+      .timesAssocRL               .to[ (A |*|  Ā) |*| B  ]
       .in.fst(ev.eliminate)       .to[    One     |*| B  ]
-      .andThen(elimFst)           .to[                B  ]
+      .elimFst                    .to[                B  ]
       .as[ ((A |*| B) |*| Ā) -⚬ B ]
       .curry
 
   /** Make the function on the left ''"absorb"'' the value on the right and return it as part of its output. */
   def absorbR[A, B, C]: ((A =⚬ B) |*| C) -⚬ (A =⚬ (B |*| C)) =
     id[((A =⚬ B) |*| C) |*| A]  .to[ ((A =⚬ B) |*| C) |*| A ]
-      .andThen(timesAssocLR)    .to[ (A =⚬ B) |*| (C |*| A) ]
+      .timesAssocLR             .to[ (A =⚬ B) |*| (C |*| A) ]
       .in.snd(swap)             .to[ (A =⚬ B) |*| (A |*| C) ]
-      .andThen(timesAssocRL)    .to[ ((A =⚬ B) |*| A) |*| C ]
+      .timesAssocRL             .to[ ((A =⚬ B) |*| A) |*| C ]
       .in.fst(eval)             .to[        B         |*| C ]
       .as[ (((A =⚬ B) |*| C) |*| A) -⚬ (B |*| C) ]
       .curry
@@ -597,19 +635,19 @@ class Lib(val dsl: DSL) { lib =>
     def zero[A]: One -⚬ Multiple[A] =
       id[One]
         .injectL[A |+| (Multiple[A] |*| Multiple[A])]
-        .andThen(pack[MultipleF[A, *]])
+        .pack[MultipleF[A, *]]
 
     def one[A]: A -⚬ Multiple[A] =
       id[A]
         .injectL[Multiple[A] |*| Multiple[A]]
         .injectR[One]
-        .andThen(pack[MultipleF[A, *]])
+        .pack[MultipleF[A, *]]
 
     def append[A]: (Multiple[A] |*| Multiple[A]) -⚬ Multiple[A] =
       id[Multiple[A] |*| Multiple[A]]
         .injectR[A]
         .injectR[One]
-        .andThen(pack[MultipleF[A, *]])
+        .pack[MultipleF[A, *]]
 
     def switch[A, R](
       case0: One -⚬ R,
@@ -716,23 +754,23 @@ class Lib(val dsl: DSL) { lib =>
   def getFst[A, B](implicit A: Comonoid[A]): (A |*| B) -⚬ (A |*| (A |*| B)) =
     id                             [     A     |*| B  ]
       .in.fst(A.split)          .to[ (A |*| A) |*| B  ]
-      .andThen(timesAssocLR)    .to[  A |*| (A |*| B) ]
+      .timesAssocLR             .to[  A |*| (A |*| B) ]
 
   def getSnd[A, B](implicit B: Comonoid[B]): (A |*| B) -⚬ (B |*| (A |*| B)) =
     id                             [  A |*|     B     ]
       .in.snd(B.split)          .to[  A |*| (B |*| B) ]
-      .andThen(timesAssocRL)    .to[ (A |*| B) |*| B  ]
-      .andThen(swap)            .to[  B |*| (A |*| B) ]
+      .timesAssocRL             .to[ (A |*| B) |*| B  ]
+      .swap                     .to[  B |*| (A |*| B) ]
 
   def discardFst[A, B](implicit A: Comonoid[A]): (A |*| B) -⚬ B =
     id                             [  A  |*| B ]
       .in.fst(A.counit)         .to[ One |*| B ]
-      .andThen(elimFst)         .to[         B ]
+      .elimFst                  .to[         B ]
 
   def discardSnd[A, B](implicit B: Comonoid[B]): (A |*| B) -⚬ A =
     id                             [ A |*|  B  ]
       .in.snd(B.counit)         .to[ A |*| One ]
-      .andThen(elimSnd)         .to[ A         ]
+      .elimSnd                  .to[ A         ]
 
   type PollableF[A, X] = One |&| (One |+| (Val[A] |*| X))
   type Pollable[A] = Rec[PollableF[A, *]]
@@ -750,13 +788,13 @@ class Lib(val dsl: DSL) { lib =>
   object Pollable {
     def close[A]: Pollable[A] -⚬ One =
       id                       [   Pollable[A]     ]
-        .andThen(unpack)    .to[ One |&| Polled[A] ]
-        .andThen(chooseL)   .to[ One               ]
+        .unpack             .to[ One |&| Polled[A] ]
+        .chooseL            .to[ One               ]
 
     def poll[A]: Pollable[A] -⚬ Polled[A] =
       id                       [   Pollable[A]     ]
-        .andThen(unpack)    .to[ One |&| Polled[A] ]
-        .andThen(chooseR)   .to[         Polled[A] ]
+        .unpack             .to[ One |&| Polled[A] ]
+        .chooseR            .to[         Polled[A] ]
 
     /** Polls and discards all elements. */
     def drain[A]: Pollable[A] -⚬ One = rec { self =>
@@ -784,7 +822,7 @@ class Lib(val dsl: DSL) { lib =>
           .in.right.snd(self)                   .to[ One |+| (Val[A] |*| Pollable[A] ) ]
 
       choice(close, poll)
-        .andThen(pack[PollableF[A, *]])
+        .pack[PollableF[A, *]]
     }
 
     def prepend[A]: (Val[A] |*| Pollable[A]) -⚬ Pollable[A] = {
@@ -795,7 +833,7 @@ class Lib(val dsl: DSL) { lib =>
         injectR
 
       choice(close, poll)
-        .andThen(pack[PollableF[A, *]])
+        .pack[PollableF[A, *]]
     }
 
     def concat[A]: (Pollable[A] |*| Pollable[A]) -⚬ Pollable[A] = rec { self =>
@@ -806,7 +844,7 @@ class Lib(val dsl: DSL) { lib =>
         id[Pollable[A] |*| Pollable[A]] .to[                               Pollable[A]    |*| Pollable[A] ]
           .in.fst(unpack)           .to[ (One |&| (One |+| (Val[A] |*| Pollable[A]))) |*| Pollable[A] ]
           .in.fst(chooseR)          .to[          (One |+| (Val[A] |*| Pollable[A]))  |*| Pollable[A] ]
-          .andThen(distributeRL)    .to[ (One |*| Pollable[A])  |+| ((Val[A] |*|  Pollable[A]) |*| Pollable[A])  ]
+          .distributeRL             .to[ (One |*| Pollable[A])  |+| ((Val[A] |*|  Pollable[A]) |*| Pollable[A])  ]
           .in.left(elimFst)         .to[          Pollable[A]   |+| ((Val[A] |*|  Pollable[A]) |*| Pollable[A])  ]
           .in.left(Pollable.poll)   .to[           Polled[A]    |+| ((Val[A] |*|  Pollable[A]) |*| Pollable[A])  ]
           .in.right(timesAssocLR)   .to[           Polled[A]    |+| ( Val[A] |*| (Pollable[A]  |*| Pollable[A])) ]
@@ -815,7 +853,7 @@ class Lib(val dsl: DSL) { lib =>
           .andThen(either(id, id))  .to[                     Polled[A]                                           ]
 
       choice(close, poll)
-        .andThen(pack[PollableF[A, *]])
+        .pack[PollableF[A, *]]
     }
 
     /** Merges two [[Pollable]]s into one. When there is a value available from both upstreams, favors the first one. */
@@ -828,13 +866,13 @@ class Lib(val dsl: DSL) { lib =>
           either(id, parToOne(discard, Pollable.close))
 
         choice(closePolled, id[Polled[A]])
-          .andThen(pack[PollableF[A, *]])
+          .pack[PollableF[A, *]]
       }
 
       // checks the first argument first, uses the given function for recursive calls
       def go(merge: (Pollable[A] |*| Pollable[A]) -⚬ Pollable[A]): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
         id[Polled[A] |*| Polled[A]]   .to[ (One |+| (Val[A] |*| Pollable[A])) |*| Polled[A]                   ]
-          .andThen(distributeRL)      .to[ (One |*| Polled[A]) |+| ((Val[A] |*| Pollable[A]) |*|  Polled[A] ) ]
+          .distributeRL               .to[ (One |*| Polled[A]) |+| ((Val[A] |*| Pollable[A]) |*|  Polled[A] ) ]
           .in.left(elimFst)           .to[          Polled[A]  |+| ((Val[A] |*| Pollable[A]) |*|  Polled[A] ) ]
           .in.right.snd(unpoll)       .to[          Polled[A]  |+| ((Val[A] |*| Pollable[A]) |*| Pollable[A]) ]
           .in.right(timesAssocLR)     .to[          Polled[A]  |+| (Val[A] |*| (Pollable[A] |*| Pollable[A])) ]
@@ -852,12 +890,12 @@ class Lib(val dsl: DSL) { lib =>
 
       val poll: (Pollable[A] |*| Pollable[A]) -⚬ Polled[A] =
         id[Pollable[A] |*| Pollable[A]]               .to[ Pollable[A] |*| Pollable[A]                               ]
-          .andThen(par(Pollable.poll, Pollable.poll)) .to[  Polled[A]  |*|  Polled[A]                                ]
+          .par(Pollable.poll[A], Pollable.poll[A])    .to[  Polled[A]  |*|  Polled[A]                                ]
           .andThen(race)                              .to[ (Polled[A]  |*|  Polled[A]) |+| (Polled[A] |*| Polled[A]) ]
-          .andThen(either(goFst, goSnd))              .to[                          Polled[A]                        ]
+          .either(goFst, goSnd)                       .to[                          Polled[A]                        ]
 
       choice(close, poll)
-        .andThen(pack[PollableF[A, *]])
+        .pack[PollableF[A, *]]
     }
 
     // TODO: polish
@@ -866,8 +904,8 @@ class Lib(val dsl: DSL) { lib =>
       val caseFst: Pollable[A] -⚬ ((One |&| Polled[A]) |*| (One |&| Polled[A])) = {
         val caseFstClosed: Pollable[A] -⚬ (One |*| (One |&| Polled[A])) =
           id[ Pollable[A] ]     .to[            Pollable[A]      ]
-            .andThen(unpack)    .to[          One |&| Polled[A]  ]
-            .andThen(introFst)  .to[ One |*| (One |&| Polled[A]) ]
+            .unpack             .to[          One |&| Polled[A]  ]
+            .introFst           .to[ One |*| (One |&| Polled[A]) ]
 
         val caseFstPolled: Pollable[A] -⚬ (Polled[A] |*| (One |&| Polled[A])) = {
           val caseUpstreamClosed: One -⚬ (Polled[A] |*| (One |&| Polled[A])) = {
@@ -885,9 +923,9 @@ class Lib(val dsl: DSL) { lib =>
               val sndPolled: (Val[A] |*| Pollable[A]) -⚬ (Pollable[A] |*| Polled[A]) =
                 id[ Val[A] |*| Pollable[A] ]
                   .in.snd(self)         .to[ Val[A] |*| (Pollable[A] |*| Pollable[A]) ]
-                  .andThen(timesAssocRL).to[ (Val[A] |*| Pollable[A]) |*| Pollable[A] ]
+                  .timesAssocRL         .to[ (Val[A] |*| Pollable[A]) |*| Pollable[A] ]
                   .in.fst(swap)         .to[ (Pollable[A] |*| Val[A]) |*| Pollable[A] ]
-                  .andThen(timesAssocLR).to[ Pollable[A] |*| (Val[A] |*| Pollable[A]) ]
+                  .timesAssocLR         .to[ Pollable[A] |*| (Val[A] |*| Pollable[A]) ]
                   .in.snd.injectR[One]  .to[ Pollable[A] |*|      Polled[A]           ]
 
               choice(sndClosed, sndPolled)  .from[ Val[A] |*| Pollable[A] ]
@@ -897,15 +935,15 @@ class Lib(val dsl: DSL) { lib =>
 
             id                               [        Val[A]       |*| Pollable[A]              ]
               .in.fst(dsl.dup)            .to[ (Val[A] |*| Val[A]) |*| Pollable[A]              ]
-              .andThen(timesAssocLR)      .to[ Val[A] |*| (Val[A] |*| Pollable[A])              ]
+              .timesAssocLR               .to[ Val[A] |*| (Val[A] |*| Pollable[A])              ]
               .in.snd(goSnd)              .to[ Val[A] |*| (Pollable[A] |*| (One |&| Polled[A])) ]
-              .andThen(timesAssocRL)      .to[ (Val[A] |*| Pollable[A]) |*| (One |&| Polled[A]) ]
+              .timesAssocRL               .to[ (Val[A] |*| Pollable[A]) |*| (One |&| Polled[A]) ]
               .in.fst.injectR[One]        .to[      Polled[A]           |*| (One |&| Polled[A]) ]
           }
 
-          Pollable.poll[A]                                          .from[          Pollable[A]              ]
-                                                                    .to  [ One |+| (Val[A] |*| Pollable[A])  ]
-            .andThen(either(caseUpstreamClosed, caseUpstreamValue)) .to  [ Polled[A] |*| (One |&| Polled[A]) ]
+          Pollable.poll[A]                                  .from[          Pollable[A]              ]
+                                                            .to  [ One |+| (Val[A] |*| Pollable[A])  ]
+            .either(caseUpstreamClosed, caseUpstreamValue)  .to  [ Polled[A] |*| (One |&| Polled[A]) ]
         }
 
         choice(caseFstClosed, caseFstPolled)  .from[                          Pollable[A]                                  ]
@@ -917,10 +955,10 @@ class Lib(val dsl: DSL) { lib =>
       val caseSnd: Pollable[A] -⚬ ((One |&| Polled[A]) |*| (One |&| Polled[A])) =
         caseFst andThen swap
 
-      id[Pollable[A]]                                               .to[                                           Pollable[A]                                           ]
-        .andThen(choice(caseFst, caseSnd))                          .to[ ((One |&| Polled[A]) |*| (One |&| Polled[A])) |&| ((One |&| Polled[A]) |*| (One |&| Polled[A])) ]
-        .andThen(select)                                            .to[                           (One |&| Polled[A]) |*| (One |&| Polled[A])                           ]
-        .andThen(par(pack[PollableF[A, *]], pack[PollableF[A, *]])) .to[                              Pollable[A]      |*|    Pollable[A]                                ]
+      id[Pollable[A]]                                       .to[                                           Pollable[A]                                           ]
+        .choice(caseFst, caseSnd)                           .to[ ((One |&| Polled[A]) |*| (One |&| Polled[A])) |&| ((One |&| Polled[A]) |*| (One |&| Polled[A])) ]
+        .andThen(select)                                    .to[                           (One |&| Polled[A]) |*| (One |&| Polled[A])                           ]
+        .par(pack[PollableF[A, *]], pack[PollableF[A, *]])  .to[                              Pollable[A]      |*|    Pollable[A]                                ]
     }
 
     def dropUntilFirstDemand[A]: Pollable[A] -⚬ Pollable[A] = {
@@ -933,9 +971,8 @@ class Lib(val dsl: DSL) { lib =>
 
         val caseNotRequestedYet: (Val[A] |*| Pollable[A]) -⚬ (One |&| Polled[A]) = {
           id[Val[A] |*| Pollable[A]]
-            .in.fst(discard)
-            .andThen(elimFst)
-            .andThen(unpack)
+            .andThen(discardFst)
+            .unpack
             .andThen(self)
         }
 
@@ -943,14 +980,14 @@ class Lib(val dsl: DSL) { lib =>
           choice(caseDownstreamRequested, caseNotRequestedYet)
             .andThen(selectRequestedOrNot)
 
-        id                                       [ One |&| Polled[A]                ]
-          .andThen(chooseR)                   .to[ One |+| (Val[A] |*| Pollable[A]) ]
-          .andThen(either(emptyF[A], goElem)) .to[ One |&| Polled[A]                ]
+        id                               [ One |&| Polled[A]                ]
+          .chooseR                    .to[ One |+| (Val[A] |*| Pollable[A]) ]
+          .either(emptyF[A], goElem)  .to[ One |&| Polled[A]                ]
       }
 
       unpack[PollableF[A, *]]
         .andThen(goUnpacked)
-        .andThen(pack[PollableF[A, *]])
+        .pack[PollableF[A, *]]
     }
 
     def broadcast[A]: Pollable[A] -⚬ Unlimited[Pollable[A]] = rec { self =>
@@ -959,8 +996,8 @@ class Lib(val dsl: DSL) { lib =>
       val caseN: Pollable[A] -⚬ (Unlimited[Pollable[A]] |*| Unlimited[Pollable[A]]) = dup andThen par(self, self)
 
       dropUntilFirstDemand
-        .andThen(choice(case0, (choice(case1, caseN))))
-        .andThen(pack[UnlimitedF[Pollable[A], *]])
+        .choice(case0, (choice(case1, caseN)))
+        .pack[UnlimitedF[Pollable[A], *]]
     }
   }
 
@@ -1012,20 +1049,20 @@ class Lib(val dsl: DSL) { lib =>
   def relayCompletion[A, B]: (Pollable[A] |*| Pulling[B]) -⚬ (One |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Pulling[B]))) =
     id                                [ Pollable[A] |*| (                    Pulling[B]                                  )]
       .in.snd(unpack)              .to[ Pollable[A] |*| (One     |+|                    (One |&| (Neg[B] |*| Pulling[B])))]
-      .andThen(distributeLR)       .to[(Pollable[A] |*|  One)    |+| (Pollable[A]   |*| (One |&| (Neg[B] |*| Pulling[B])))]
+      .distributeLR                .to[(Pollable[A] |*|  One)    |+| (Pollable[A]   |*| (One |&| (Neg[B] |*| Pulling[B])))]
       .in.left(elimSnd)            .to[ Pollable[A]              |+| (Pollable[A]   |*| (One |&| (Neg[B] |*| Pulling[B])))]
       .in.left(Pollable.close)     .to[ One |+|                      (Pollable[A]   |*| (One |&| (Neg[B] |*| Pulling[B])))]
       .in.right.fst(Pollable.poll) .to[ One |+| ((One |+| (Val[A] |*| Pollable[A])) |*| (One |&| (Neg[B] |*| Pulling[B])))]
       .in.right(matchingChoiceLR)  .to[ One |+| ((One |*| One) |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Pulling[B])))]
       .in.right.left(elimSnd)      .to[ One |+| (     One      |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Pulling[B])))]
-      .andThen(plusAssocRL)        .to[(One |+|       One    ) |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Pulling[B])) ]
+      .plusAssocRL                 .to[(One |+|       One    ) |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Pulling[B])) ]
       .in.left(either(id, id))     .to[     One                |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Pulling[B])) ]
 
   type Source[A] = One -⚬ Pollable[A]
   object Source {
     def empty[A]: Source[A] = {
       choice(id[One], injectL[One, Val[A] |*| Pollable[A]])
-        .andThen(pack[PollableF[A, *]])
+        .pack[PollableF[A, *]]
     }
 
     def singleton[A](a: A): Source[A] = {
@@ -1035,7 +1072,7 @@ class Lib(val dsl: DSL) { lib =>
           .injectR                            .to  [ One |+| (Val[A] |*| Pollable[A]) ]
 
       choice(id[One], poll)
-        .andThen(pack[PollableF[A, *]])
+        .pack[PollableF[A, *]]
     }
 
     def fromList[A](elems: List[A]): Source[A] = {
@@ -1055,10 +1092,10 @@ class Lib(val dsl: DSL) { lib =>
 
       rec(self =>
         id[Pollable[A]]                     .to[   Pollable[A]                              ]
-          .andThen(unpack)                  .to[ One |&| (One |+| (Val[A] |*| Pollable[A])) ]
+          .unpack                           .to[ One |&| (One |+| (Val[A] |*| Pollable[A])) ]
           .in.choiceR.right.fst(ff)         .to[ One |&| (One |+| (Val[B] |*| Pollable[A])) ]
           .in.choiceR.right.snd(self)       .to[ One |&| (One |+| (Val[B] |*| Pollable[B])) ]
-          .andThen(pack[PollableF[B, *]])   .to[                              Pollable[B]   ]
+          .pack[PollableF[B, *]]            .to[                              Pollable[B]   ]
       )
     }
 
@@ -1075,8 +1112,8 @@ class Lib(val dsl: DSL) { lib =>
         val poll:(Val[S] |*| Pollable[A]) -⚬ (One |+| (Val[B] |*| Pollable[B])) =
           id[Val[S] |*| Pollable[A]]          .to[ Val[S] |*|                      Pollable[A]   ]
             .in.snd(Pollable.poll)            .to[ Val[S] |*| (One |+| (Val[A] |*| Pollable[A])) ]
-            .andThen(distributeLR)            .to[ (Val[S] |*| One) |+| (Val[S] |*| (Val[A] |*| Pollable[A])) ]
-            .in.left(elimSnd andThen discard) .to[         One      |+| (Val[S] |*| (Val[A] |*| Pollable[A])) ]
+            .distributeLR                     .to[ (Val[S] |*| One) |+| (Val[S] |*| (Val[A] |*| Pollable[A])) ]
+            .in.left(parToOne(discard, id))   .to[         One      |+| (Val[S] |*| (Val[A] |*| Pollable[A])) ]
             .in.right(timesAssocRL)           .to[         One      |+| ((Val[S] |*| Val[A]) |*| Pollable[A]) ]
             .in.right.fst(ff)                 .to[         One      |+| ((Val[S] |*| Val[B]) |*| Pollable[A]) ]
             .in.right.fst(swap)               .to[         One      |+| ((Val[B] |*| Val[S]) |*| Pollable[A]) ]
@@ -1084,13 +1121,13 @@ class Lib(val dsl: DSL) { lib =>
             .in.right.snd(self)               .to[         One      |+| (Val[B] |*|     Pollable[B]         ) ]
 
         choice(close, poll)
-          .andThen(pack[PollableF[B, *]])
+          .pack[PollableF[B, *]]
       }
 
       id[Pollable[A]]                 .to[            Pollable[A] ]
-        .andThen(introFst)            .to[  One   |*| Pollable[A] ]
+        .introFst                     .to[  One   |*| Pollable[A] ]
         .in.fst(const(initialState))  .to[ Val[S] |*| Pollable[A] ]
-        .andThen(inner)
+        .andThen(inner)               .to[     Pollable[B]        ]
     }
   }
 }
