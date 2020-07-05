@@ -166,60 +166,78 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def maxKey[K, V]: NonEmptyTree[K, V] -⚬ (Val[K] |*| NonEmptyTree[K, V]) =
       summary[K, V] >>> par(Summary.maxKey, id)
 
-    def insert[K: Ordering, V]: ((Val[K] |*| V) |*| NonEmptyTree[K, V]) -⚬ (NonEmptyTree[K, V] |*| Maybe[V]) =
+    private[BinarySearchTree] def update_[K: Ordering, V, W, F[_]](
+      ins:         W -⚬ F[V],
+      upd: (W |*| V) -⚬ F[V],
+    )(implicit
+      F: Once[F],
+    ): ((Val[K] |*| W) |*| NonEmptyTree[K, V]) -⚬ F[NonEmptyTree[K, V]] = 
       rec { self =>
-        id                                             [           (Val[K] |*| V) |*|         NonEmptyTree[K, V]                      ]
-          .in.snd(unpack)                           .to[           (Val[K] |*| V) |*| (Singleton[K, V] |+| Branch[K, V])              ]
-          .distributeLR                             .to[ ((Val[K] |*| V) |*| Singleton[K, V])  |+|  ((Val[K] |*| V) |*| Branch[K, V]) ]
-          .either(sInsert[K, V], bInsert(self))     .to[                         NonEmptyTree[K, V] |*| Maybe[V]                      ]
+        id                                             [           (Val[K] |*| W) |*|         NonEmptyTree[K, V]                      ]
+          .in.snd(unpack)                           .to[           (Val[K] |*| W) |*| (Singleton[K, V] |+| Branch[K, V])              ]
+          .distributeLR                             .to[ ((Val[K] |*| W) |*| Singleton[K, V])  |+|  ((Val[K] |*| W) |*| Branch[K, V]) ]
+          .in.left(sUpdate(ins, upd))               .to[       F[NonEmptyTree[K, V]]           |+|  ((Val[K] |*| W) |*| Branch[K, V]) ]
+          .in.right(bUpdate(self))                  .to[       F[NonEmptyTree[K, V]]           |+|        F[NonEmptyTree[K, V]]       ]
+          .andThen(either(id, id))                  .to[                             F[NonEmptyTree[K, V]]                            ]
       }
 
-    /** Insert into singleton tree. */
-    private def sInsert[K: Ordering, V]: ((Val[K] |*| V) |*| Singleton[K, V]) -⚬ (NonEmptyTree[K, V] |*| Maybe[V]) = {
-      val intoR: ((Val[K] |*| V) |*| Singleton[K, V]) -⚬ (NonEmptyTree[K, V] |*| Maybe[V]) =
-        id                                                       [     (Val[K] |*| V) |*| Singleton[K, V]    ]
-          .swap                                               .to[    Singleton[K, V] |*|  (Val[K] |*| V)    ]
-          .andThen(par(injectSingleton, singleton))           .to[ NonEmptyTree[K, V] |*| NonEmptyTree[K, V] ]
-          .andThen(branch)                                    .to[            NonEmptyTree[K, V]             ]
-          .introSnd                                           .to[       NonEmptyTree[K, V] |*| One          ]
-          .in.snd(Maybe.empty[V])                             .to[       NonEmptyTree[K, V] |*| Maybe[V]     ]
+    /** Update singleton tree. */
+    private def sUpdate[K: Ordering, V, W, F[_]](
+      ins:         W -⚬ F[V],
+      upd: (W |*| V) -⚬ F[V],
+    )(implicit
+      F: Once[F],
+    ): ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] = {
+      val intoR: ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] =
+        id                                                       [     (Val[K] |*| W) |*|    Singleton[K, V]    ]
+          .swap                                               .to[    Singleton[K, V] |*|  (  Val[K] |*|   W  ) ]
+          .in.snd.snd(ins)                                    .to[    Singleton[K, V] |*|  (  Val[K] |*| F[V] ) ]
+          .in.snd(F.captureL)                                 .to[    Singleton[K, V] |*| F[  Val[K] |*|   V  ] ]
+          .andThen(par(injectSingleton, F.lift(singleton)))   .to[ NonEmptyTree[K, V] |*| F[NonEmptyTree[K, V]] ]
+          .andThen(F.captureL)                                .to[ F[NonEmptyTree[K, V] |*| NonEmptyTree[K, V]] ]
+          .andThen(F.lift(branch))                            .to[            F[NonEmptyTree[K, V]]             ]
 
-      val intoL: ((Val[K] |*| V) |*| Singleton[K, V]) -⚬ (NonEmptyTree[K, V] |*| Maybe[V]) =
-        id                                                       [   (Val[K] |*| V)   |*|   Singleton[K, V]  ]
-          .andThen(par(singleton, injectSingleton))           .to[ NonEmptyTree[K, V] |*| NonEmptyTree[K, V] ]
-          .andThen(branch)                                    .to[            NonEmptyTree[K, V]             ]
-          .introSnd                                           .to[       NonEmptyTree[K, V] |*| One          ]
-          .in.snd(Maybe.empty[V])                             .to[       NonEmptyTree[K, V] |*| Maybe[V]     ]
+      val intoL: ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] =
+        id                                                       [  (Val[K] |*|  W  )    |*|   Singleton[K, V]  ]
+          .in.fst.snd(ins)                                    .to[  (Val[K] |*| F[V])    |*|   Singleton[K, V]  ]
+          .in.fst(F.captureL)                                 .to[ F[Val[K] |*|   V ]    |*|   Singleton[K, V]  ]
+          .andThen(par(F.lift(singleton), injectSingleton))   .to[ F[NonEmptyTree[K, V]] |*| NonEmptyTree[K, V] ]
+          .andThen(F.captureR)                                .to[ F[NonEmptyTree[K, V] |*| NonEmptyTree[K, V]] ]
+          .andThen(F.lift(branch))                            .to[             F[NonEmptyTree[K, V]]            ]
 
-      val replace: ((Val[K] |*| V) |*| Singleton[K, V]) -⚬ (NonEmptyTree[K, V] |*| Maybe[V]) =
-        id                                                       [   (Val[K] |*| V)   |*| Singleton[K, V]    ]
-          .andThen(par(singleton, Singleton.deconstruct))     .to[ NonEmptyTree[K, V] |*|  (Val[K] |*| V)    ]
-          .in.snd(discardFst)                                 .to[ NonEmptyTree[K, V] |*|              V     ]
-          .in.snd(Maybe.just)                                 .to[ NonEmptyTree[K, V] |*|        Maybe[V]    ]
+      val replace: ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] =
+        id                                                       [ (Val[K] |*| W) |*| Singleton[K, V] ]
+          .andThen(par(discardFst, Singleton.deconstruct))    .to[             W  |*|  (Val[K] |*| V) ]
+          .andThen(XI)                                        .to[         Val[K] |*|       (W |*| V) ]
+          .in.snd(upd)                                        .to[         Val[K] |*|            F[V] ]
+          .andThen(F.captureL)                                .to[       F[Val[K] |*|              V] ]
+          .andThen(F.lift(singleton))                         .to[        F[NonEmptyTree[K, V]]       ]
 
-      id                                                         [   (Val[K] |*| V) |*| Singleton[K, V]      ]
-        .andThen(compareBy(getFst, Singleton.key))            .to[ Compared[Val[K] |*| V, Singleton[K, V]]   ]
-        .andThen(compared(intoL, replace, intoR))             .to[     NonEmptyTree[K, V] |*| Maybe[V]       ]
+      id                                                         [   (Val[K] |*| W) |*| Singleton[K, V]    ]
+        .andThen(compareBy(getFst, Singleton.key))            .to[ Compared[Val[K] |*| W, Singleton[K, V]] ]
+        .andThen(compared(intoL, replace, intoR))             .to[        F[NonEmptyTree[K, V]]            ]
     }
 
-    /** Insert into branch. */
-    private def bInsert[K: Ordering, V](
-      subInsert: ((Val[K] |*| V) |*| NonEmptyTree[K, V]) -⚬ (NonEmptyTree[K, V] |*| Maybe[V]),
-    ): ((Val[K] |*| V) |*| Branch[K, V]) -⚬ (NonEmptyTree[K, V] |*| Maybe[V]) = {
+    /** Update branch. */
+    private def bUpdate[K: Ordering, V, W, F[_]](
+      subUpdate: ((Val[K] |*| W) |*| NonEmptyTree[K, V]) -⚬ F[NonEmptyTree[K, V]],
+    )(implicit
+      F: Once[F],
+    ): ((Val[K] |*| W) |*| Branch[K, V]) -⚬ F[NonEmptyTree[K, V]] = {
       type Tree = NonEmptyTree[K, V]
-      type Elem = Val[K] |*| V
+      type Elem = Val[K] |*| W
 
-      val insertL: ((Elem |*| Tree) |*| Tree) -⚬ (Tree |*| Maybe[V]) =
-        id                                 [ (  Elem |*| Tree  ) |*| Tree ]
-          .in.fst(subInsert)            .to[ (Tree |*| Maybe[V]) |*| Tree ]
-          .andThen(IX)                  .to[ (Tree |*| Tree) |*| Maybe[V] ]
-          .in.fst(branch)               .to[       Tree      |*| Maybe[V] ]
+      val updateL: ((Elem |*| Tree) |*| Tree) -⚬ F[Tree] =
+        id                                 [ (Elem |*| Tree) |*| Tree  ]
+          .in.fst(subUpdate)            .to[    F[Tree]      |*| Tree  ]
+          .andThen(F.captureR)          .to[    F[Tree       |*| Tree] ]
+          .andThen(F.lift(branch))      .to[    F[          Tree     ] ]
 
-      val insertR: (Tree |*| (Elem |*| Tree)) -⚬ (Tree |*| Maybe[V]) =
-        id                                 [ Tree |*| (  Elem |*| Tree  ) ]
-          .in.snd(subInsert)            .to[ Tree |*| (Tree |*| Maybe[V]) ]
-          .timesAssocRL                 .to[ (Tree |*| Tree) |*| Maybe[V] ]
-          .in.fst(branch)               .to[       Tree      |*| Maybe[V] ]
+      val updateR: (Tree |*| (Elem |*| Tree)) -⚬ F[Tree] =
+        id                                 [   Tree |*| (Elem |*| Tree) ]
+          .in.snd(subUpdate)            .to[   Tree |*|     F[Tree]     ]
+          .andThen(F.captureL)          .to[ F[Tree |*|       Tree]     ]
+          .andThen(F.lift(branch))      .to[ F[     Tree          ]     ]
 
       id                                   [                  Elem |*|         Branch[K, V]            ]
         .in.snd(Branch.deconstruct)     .to[                  Elem |*| (Tree                 |*| Tree) ]
@@ -228,7 +246,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
         .in.fst(ifThenElse(id, swap))   .to[ ((Elem |*| Tree)           |+| (Tree |*| Elem)) |*| Tree  ]
         .distributeRL                   .to[ ((Elem |*| Tree) |*| Tree) |+| ((Tree |*| Elem) |*| Tree) ]
         .in.right(timesAssocLR)         .to[ ((Elem |*| Tree) |*| Tree) |+| (Tree |*| (Elem |*| Tree)) ]
-        .either(insertL, insertR)       .to[                     Tree |*| Maybe[V]                     ]
+        .either(updateL, updateR)       .to[                          F[Tree]                          ]
     }
   }
 
@@ -240,12 +258,71 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
   def singleton[K, V]: (Val[K] |*| V) -⚬ Tree[K, V] =
     NonEmptyTree.singleton[K, V] >>> injectR
 
-  def insert[K: Ordering, V]: ((Val[K] |*| V) |*| Tree[K, V]) -⚬ (Tree[K, V] |*| Maybe[V]) =
-    id[(Val[K] |*| V) |*| Tree[K, V]]   .to[          (Val[K] |*| V) |*| (One |+| NonEmptyTree[K, V])              ]
-      .distributeLR                     .to[ ((Val[K] |*| V) |*| One ) |+| ((Val[K] |*| V) |*| NonEmptyTree[K, V]) ]
-      .in.right(NonEmptyTree.insert)    .to[ ((Val[K] |*| V) |*| One ) |+| (NonEmptyTree[K, V] |*|    Maybe[V]   ) ]
-      .in.right.fst.injectR[One]        .to[ ((Val[K] |*| V) |*| One ) |+| (        Tree[K, V] |*|    Maybe[V]   ) ]
-      .in.left.fst(singleton)           .to[ (Tree[K, V]     |*| One ) |+| (        Tree[K, V] |*|    Maybe[V]   ) ]
-      .in.left.snd(Maybe.empty[V])      .to[ (Tree[K, V] |*| Maybe[V]) |+| (        Tree[K, V] |*|    Maybe[V]   ) ]
-      .andThen(either(id, id))          .to[                  Tree[K, V] |*| Maybe[V]                              ]
+  private def update_[K: Ordering, V, W, F[_]](
+    ins:         W -⚬ F[V],
+    upd: (W |*| V) -⚬ F[V],
+  )(implicit
+    F: Once[F],
+  ): ((Val[K] |*| W) |*| Tree[K, V]) -⚬ F[Tree[K, V]] = {
+    val NET = NonEmptyTree
+    type NET[K, V] = NonEmptyTree[K, V]
+
+    id[(Val[K] |*| W) |*| Tree[K, V]]   .to[          (Val[K] |*| W) |*| (One |+| NET[K, V])                ]
+      .distributeLR                     .to[ ((Val[K] |*|  W  ) |*| One) |+| ((Val[K] |*| W) |*| NET[K, V]) ]
+      .in.right(NET.update_(ins, upd))  .to[ ((Val[K] |*|  W  ) |*| One) |+|           F[ NET[K, V]]        ]
+      .in.right.co[F].injectR[One]      .to[ ((Val[K] |*|  W  ) |*| One) |+|           F[Tree[K, V]]        ]
+      .in.left(elimSnd)                 .to[  (Val[K] |*|  W  )          |+|           F[Tree[K, V]]        ]
+      .in.left.snd(ins)                 .to[  (Val[K] |*| F[V])          |+|           F[Tree[K, V]]        ]
+      .in.left(F.captureL)              .to[   F[Val[K] |*| V]           |+|           F[Tree[K, V]]        ]
+      .in.left(F.lift(singleton))       .to[   F[ Tree[K, V] ]           |+|           F[Tree[K, V]]        ]
+      .andThen(either(id, id))          .to[                        F[Tree[K, V]]                                    ]
+  }
+
+  def insert[K: Ordering, V]: ((Val[K] |*| V) |*| Tree[K, V]) -⚬ (Maybe[V] |*| Tree[K, V]) =
+    update_[K, V, V, Maybe[V] |*| *](
+      ins = id[V] >>> introFst >>> par(Maybe.empty[V], id),
+      upd = swap[V, V] >>> par(Maybe.just[V], id),
+    )
+
+  /**
+    *
+    * @param update function used to update the current value under the given key, if any.
+    *               The first argument of `update` is the new value, the second argument is
+    *               the current value stored in the tree.
+    */
+  def insertOrUpdate[K: Ordering, V](
+    update: (V |*| V) -⚬ V,
+  ): ((Val[K] |*| V) |*| Tree[K, V]) -⚬ Tree[K, V] =
+    update_[K, V, V, Id](
+      ins = id[V],
+      upd = update,
+    )
+
+  /** Witnesses that `F` is a functor such that `F[X]` has exactly one copy of `X`. */
+  private trait Once[F[_]] extends CoFunctor[F] {
+    def captureL[A, B]: (A |*| F[B]) -⚬ F[A |*| B]
+    def releaseL[A, B]: F[A |*| B] -⚬ (A |*| F[B])
+    def captureR[A, B]: (F[A] |*| B) -⚬ F[A |*| B]
+    def releaseR[A, B]: F[A |*| B] -⚬ (F[A] |*| B)
+  }
+
+  private object Once {
+    implicit def onceId[X]: Once[Id] =
+      new Once[Id] {
+        def lift[A, B](f: A -⚬ B): Id[A] -⚬ Id[B] = f
+        def captureL[A, B]: (A |*| Id[B]) -⚬ Id[A |*| B] = id
+        def captureR[A, B]: (Id[A] |*| B) -⚬ Id[A |*| B] = id
+        def releaseL[A, B]: Id[A |*| B] -⚬ (A |*| Id[B]) = id
+        def releaseR[A, B]: Id[A |*| B] -⚬ (Id[A] |*| B) = id
+      }
+
+    implicit def onceSnd[X]: Once[X |*| *] =
+      new Once[X |*| *] {
+        def lift[A, B](f: A -⚬ B): X |*| A -⚬ (X |*| B) = liftSnd(f)
+        def captureL[A, B]: (A |*| (X |*| B)) -⚬ (X |*| (A |*| B)) = XI
+        def captureR[A, B]: ((X |*| A) |*| B) -⚬ (X |*| (A |*| B)) = timesAssocLR
+        def releaseL[A, B]: (X |*| (A |*| B)) -⚬ (A |*| (X |*| B)) = XI
+        def releaseR[A, B]: (X |*| (A |*| B)) -⚬ ((X |*| A) |*| B) = timesAssocRL
+      }
+  }
 }
