@@ -53,6 +53,18 @@ trait DSL {
   def elimFst[B]: (One |*| B) -⚬ B
   def elimSnd[A]: (A |*| One) -⚬ A
 
+  def introFst[A, X](f: One -⚬ X): A -⚬ (X |*| A) =
+    andThen(introFst[A], par(f, id))
+
+  def introSnd[A, X](f: One -⚬ X): A -⚬ (A |*| X) =
+    andThen(introSnd[A], par(id, f))
+
+  def elimFst[A, B](f: A -⚬ One): (A |*| B) -⚬ B =
+    andThen(par(f, id), elimFst)
+
+  def elimSnd[A, B](f: B -⚬ One): (A |*| B) -⚬ A =
+    andThen(par(id, f), elimSnd)
+
   def timesAssocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C))
   def timesAssocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C)
 
