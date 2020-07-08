@@ -367,10 +367,9 @@ sealed trait Streams[DSL <: libretto.DSL] {
           .pack[PollableF[B, *]]
       }
 
-      id[Pollable[A]]                 .to[            Pollable[A] ]
-        .introFst                     .to[  One   |*| Pollable[A] ]
-        .in.fst(const(initialState))  .to[ Val[S] |*| Pollable[A] ]
-        .andThen(inner)               .to[     Pollable[B]        ]
+      id[Pollable[A]]                   .to[            Pollable[A] ]
+        .introFst(const(initialState))  .to[ Val[S] |*| Pollable[A] ]
+        .andThen(inner)                 .to[     Pollable[B]        ]
     }
   }
 }

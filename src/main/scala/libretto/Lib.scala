@@ -176,14 +176,26 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def elimFst[B2](implicit ev: B =:= (One |*| B2)): A -⚬ B2 =
       ev.substituteCo(self) >>> dsl.elimFst
 
+    def elimFst[B1, B2](f: B1 -⚬ One)(implicit ev: B =:= (B1 |*| B2)): A -⚬ B2 =
+      ev.substituteCo(self) >>> dsl.elimFst(f)
+
     def elimSnd[B1](implicit ev: B =:= (B1 |*| One)): A -⚬ B1 =
       ev.substituteCo(self) >>> dsl.elimSnd
+
+    def elimSnd[B1, B2](f: B2 -⚬ One)(implicit ev: B =:= (B1 |*| B2)): A -⚬ B1 =
+      ev.substituteCo(self) >>> dsl.elimSnd(f)
 
     def introFst: A -⚬ (One |*| B) =
       self >>> dsl.introFst
 
+    def introFst[C](f: One -⚬ C): A -⚬ (C |*| B) =
+      self >>> dsl.introFst(f)
+
     def introSnd: A -⚬ (B |*| One) =
       self >>> dsl.introSnd
+
+    def introSnd[C](f: One -⚬ C): A -⚬ (B |*| C) =
+      self >>> dsl.introSnd(f)
 
     def swap[B1, B2](implicit ev: B =:= (B1 |*| B2)): A -⚬ (B2 |*| B1) =
       ev.substituteCo(self) >>> dsl.swap
@@ -375,8 +387,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
     id                                         [   Neg[A] |*| Neg[A]                                       ]
-      .introSnd                             .to[  (Neg[A] |*| Neg[A]) |*|                      One         ]
-      .in.snd(valNegDuality[A].introduce)   .to[  (Neg[A] |*| Neg[A]) |*| (     Val[A]         |*| Neg[A]) ]
+      .introSnd(valNegDuality[A].introduce) .to[  (Neg[A] |*| Neg[A]) |*| (     Val[A]         |*| Neg[A]) ]
       .timesAssocRL                         .to[ ((Neg[A] |*| Neg[A]) |*|       Val[A]       ) |*| Neg[A]  ]
       .in.fst.snd(dup)                      .to[ ((Neg[A] |*| Neg[A]) |*| (Val[A] |*| Val[A])) |*| Neg[A]  ]
       .in.fst(IXI)                          .to[ ((Neg[A] |*| Val[A]) |*| (Neg[A] |*| Val[A])) |*| Neg[A]  ]
@@ -566,8 +577,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
     id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
-      .introSnd                  .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*|    One    ]
-      .in.snd(ev.introduce)      .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
+      .introSnd(ev.introduce)    .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
       .andThen(IXI)              .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
       .andThen(par(eval, eval))  .to[        B         |*|        C         ]
   }
@@ -613,8 +623,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       .timesAssocLR               .to[  A |*| (B  |*| Ā) ]
       .in.snd(swap)               .to[  A |*| (Ā  |*| B) ]
       .timesAssocRL               .to[ (A |*|  Ā) |*| B  ]
-      .in.fst(ev.eliminate)       .to[    One     |*| B  ]
-      .elimFst                    .to[                B  ]
+      .elimFst(ev.eliminate)      .to[                B  ]
       .as[ ((A |*| B) |*| Ā) -⚬ B ]
       .curry
 
@@ -792,11 +801,9 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   def discardFst[A, B](implicit A: Comonoid[A]): (A |*| B) -⚬ B =
     id                             [  A  |*| B ]
-      .in.fst(A.counit)         .to[ One |*| B ]
-      .elimFst                  .to[         B ]
+      .elimFst(A.counit)        .to[         B ]
 
   def discardSnd[A, B](implicit B: Comonoid[B]): (A |*| B) -⚬ A =
     id                             [ A |*|  B  ]
-      .in.snd(B.counit)         .to[ A |*| One ]
-      .elimSnd                  .to[ A         ]
+      .elimSnd(B.counit)        .to[ A         ]
 }
