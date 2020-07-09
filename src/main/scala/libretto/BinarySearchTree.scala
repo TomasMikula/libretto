@@ -294,11 +294,11 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       upd = update,
     )
 
-  private type DeleteResult[V, A] = Maybe[V] |*| Maybe[A]
+  private type BiMaybe[A, B] = Maybe[A] |*| Maybe[B]
 
   def delete[K: Ordering, V]: (Val[K] |*| Tree[K, V]) -⚬ (Maybe[V] |*| Tree[K, V]) = {
-    val go: ((Val[K] |*| One) |*| Tree[K, V]) -⚬ DeleteResult[V, Tree[K, V]] =
-      update_[K, V, One, DeleteResult[V, *]](
+    val go: ((Val[K] |*| One) |*| Tree[K, V]) -⚬ BiMaybe[V, Tree[K, V]] =
+      update_[K, V, One, BiMaybe[V, *]](
         ins = parFromOne(Maybe.empty[V], Maybe.empty[V]),
         upd = swap[One, V] >>> par(Maybe.just, Maybe.empty)
       )
@@ -308,6 +308,15 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       .andThen(go)                            .to[ Maybe[V] |*| Maybe[Tree[K, V]]  ]
       .in.snd(Maybe.getOrElse(empty[K, V]))   .to[ Maybe[V] |*|       Tree[K, V]   ]
   }
+
+  def update[K:Ordering, V, A](
+    f: A |*| V -⚬ Maybe[V],
+  ): (Val[K] |*| A) |*| Tree[K, V] -⚬ (Maybe[A] |*| Tree[K, V]) =
+    update_[K, V, A, BiMaybe[A, *]](
+      ins = Maybe.just[A] >>> introSnd(Maybe.empty[V]),
+      upd = f >>> introFst(Maybe.empty[A]),
+    )
+      .in.snd(Maybe.getOrElse(empty[K, V]))
 
   private trait Absorptive[F[_]] extends CoFunctor[F] {
     def absorbOrDiscardL[A: Comonoid, B]: (A |*| F[B]) -⚬ F[A |*| B]
@@ -342,36 +351,36 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
         def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): (X |*| A) |*| B -⚬ (X |*| C) = timesAssocLR.in.snd(combine)
       }
 
-    implicit def absorptiveDeleteResult[V]: Absorptive[DeleteResult[V, *]] =
-      new Absorptive[DeleteResult[V, *]] {
-        def lift[A, B](f: A -⚬ B): DeleteResult[V, A] -⚬ DeleteResult[V, B] =
-          (snd[Maybe[V]] ⚬ right[One]).lift(f)
+    implicit def absorptiveBiMaybe[X]: Absorptive[BiMaybe[X, *]] =
+      new Absorptive[BiMaybe[X, *]] {
+        def lift[A, B](f: A -⚬ B): BiMaybe[X, A] -⚬ BiMaybe[X, B] =
+          (snd[Maybe[X]] ⚬ right[One]).lift(f)
 
-        def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): (A |*| DeleteResult[V, B]) -⚬ DeleteResult[V, C] =
-          id[A |*| DeleteResult[V, B]]                      .to[ A |*| (Maybe[V] |*| Maybe[B])            ]
-            .andThen(XI)                                    .to[ Maybe[V] |*| (A |*| Maybe[B])            ]
-            .in.snd(distributeLR)                           .to[ Maybe[V] |*| ((A |*| One) |+| (A |*| B)) ]
-            .in.snd(either(elimSnd >>> recover, combine))   .to[ Maybe[V] |*|               C             ]
-            .in.snd(Maybe.just)                             .to[ Maybe[V] |*|            Maybe[C]         ]
+        def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): (A |*| BiMaybe[X, B]) -⚬ BiMaybe[X, C] =
+          id[A |*| BiMaybe[X, B]]                           .to[ A |*| (Maybe[X] |*| Maybe[B])            ]
+            .andThen(XI)                                    .to[ Maybe[X] |*| (A |*| Maybe[B])            ]
+            .in.snd(distributeLR)                           .to[ Maybe[X] |*| ((A |*| One) |+| (A |*| B)) ]
+            .in.snd(either(elimSnd >>> recover, combine))   .to[ Maybe[X] |*|               C             ]
+            .in.snd(Maybe.just)                             .to[ Maybe[X] |*|            Maybe[C]         ]
 
-        def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): (DeleteResult[V, A] |*| B) -⚬ DeleteResult[V, C] =
-          id[DeleteResult[V, A] |*| B]                      .to[ (Maybe[V] |*| Maybe[A]) |*| B            ]
-            .timesAssocLR                                   .to[ Maybe[V] |*| (Maybe[A] |*| B)            ]
-            .in.snd(distributeRL)                           .to[ Maybe[V] |*| ((One |*| B) |+| (A |*| B)) ]
-            .in.snd(either(elimFst >>> recover, combine))   .to[ Maybe[V] |*|               C             ]
-            .in.snd(Maybe.just)                             .to[ Maybe[V] |*|            Maybe[C]         ]
+        def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): (BiMaybe[X, A] |*| B) -⚬ BiMaybe[X, C] =
+          id[BiMaybe[X, A] |*| B]                           .to[ (Maybe[X] |*| Maybe[A]) |*| B            ]
+            .timesAssocLR                                   .to[ Maybe[X] |*| (Maybe[A] |*| B)            ]
+            .in.snd(distributeRL)                           .to[ Maybe[X] |*| ((One |*| B) |+| (A |*| B)) ]
+            .in.snd(either(elimFst >>> recover, combine))   .to[ Maybe[X] |*|               C             ]
+            .in.snd(Maybe.just)                             .to[ Maybe[X] |*|            Maybe[C]         ]
 
-        def absorbOrDiscardL[A: Comonoid, B]: (A |*| DeleteResult[V, B]) -⚬ DeleteResult[V, A |*| B] =
-          id[A |*| DeleteResult[V, B]]                      .to[ A |*| (Maybe[V] |*| Maybe[B])            ]
-            .andThen(XI)                                    .to[ Maybe[V] |*| (A |*| Maybe[B])            ]
-            .in.snd(distributeLR)                           .to[ Maybe[V] |*| ((A |*| One) |+| (A |*| B)) ]
-            .in.snd.left(discardFst)                        .to[ Maybe[V] |*| (       One  |+| (A |*| B)) ]
+        def absorbOrDiscardL[A: Comonoid, B]: (A |*| BiMaybe[X, B]) -⚬ BiMaybe[X, A |*| B] =
+          id[A |*| BiMaybe[X, B]]                           .to[ A |*| (Maybe[X] |*| Maybe[B])            ]
+            .andThen(XI)                                    .to[ Maybe[X] |*| (A |*| Maybe[B])            ]
+            .in.snd(distributeLR)                           .to[ Maybe[X] |*| ((A |*| One) |+| (A |*| B)) ]
+            .in.snd.left(discardFst)                        .to[ Maybe[X] |*| (       One  |+| (A |*| B)) ]
 
-        def absorbOrDiscardR[A, B: Comonoid]: (DeleteResult[V, A] |*| B) -⚬ DeleteResult[V, A |*| B] =
-          id[DeleteResult[V, A] |*| B]                      .to[ (Maybe[V] |*| Maybe[A]) |*| B            ]
-            .timesAssocLR                                   .to[ Maybe[V] |*| (Maybe[A] |*| B)            ]
-            .in.snd(distributeRL)                           .to[ Maybe[V] |*| ((One |*| B) |+| (A |*| B)) ]
-            .in.snd.left(discardSnd)                        .to[ Maybe[V] |*| ( One        |+| (A |*| B)) ]
+        def absorbOrDiscardR[A, B: Comonoid]: (BiMaybe[X, A] |*| B) -⚬ BiMaybe[X, A |*| B] =
+          id[BiMaybe[X, A] |*| B]                           .to[ (Maybe[X] |*| Maybe[A]) |*| B            ]
+            .timesAssocLR                                   .to[ Maybe[X] |*| (Maybe[A] |*| B)            ]
+            .in.snd(distributeRL)                           .to[ Maybe[X] |*| ((One |*| B) |+| (A |*| B)) ]
+            .in.snd.left(discardSnd)                        .to[ Maybe[X] |*| ( One        |+| (A |*| B)) ]
       }
   }
 }
