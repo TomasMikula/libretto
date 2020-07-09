@@ -170,7 +170,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       ins:         W -⚬ F[V],
       upd: (W |*| V) -⚬ F[V],
     )(implicit
-      F: Once[F],
+      F: Absorptive[F],
     ): ((Val[K] |*| W) |*| NonEmptyTree[K, V]) -⚬ F[NonEmptyTree[K, V]] = 
       rec { self =>
         id                                             [           (Val[K] |*| W) |*|         NonEmptyTree[K, V]                      ]
@@ -186,31 +186,29 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       ins:         W -⚬ F[V],
       upd: (W |*| V) -⚬ F[V],
     )(implicit
-      F: Once[F],
+      F: Absorptive[F],
     ): ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] = {
       val intoR: ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] =
         id                                                       [     (Val[K] |*| W) |*|    Singleton[K, V]    ]
           .swap                                               .to[    Singleton[K, V] |*|  (  Val[K] |*|   W  ) ]
           .in.snd.snd(ins)                                    .to[    Singleton[K, V] |*|  (  Val[K] |*| F[V] ) ]
-          .in.snd(F.captureL)                                 .to[    Singleton[K, V] |*| F[  Val[K] |*|   V  ] ]
+          .in.snd(F.absorbOrDiscardL)                         .to[    Singleton[K, V] |*| F[  Val[K] |*|   V  ] ]
           .andThen(par(injectSingleton, F.lift(singleton)))   .to[ NonEmptyTree[K, V] |*| F[NonEmptyTree[K, V]] ]
-          .andThen(F.captureL)                                .to[ F[NonEmptyTree[K, V] |*| NonEmptyTree[K, V]] ]
-          .andThen(F.lift(branch))                            .to[            F[NonEmptyTree[K, V]]             ]
+          .andThen(F.absorbL(branch, id))                     .to[            F[NonEmptyTree[K, V]]             ]
 
       val intoL: ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] =
         id                                                       [  (Val[K] |*|  W  )    |*|   Singleton[K, V]  ]
           .in.fst.snd(ins)                                    .to[  (Val[K] |*| F[V])    |*|   Singleton[K, V]  ]
-          .in.fst(F.captureL)                                 .to[ F[Val[K] |*|   V ]    |*|   Singleton[K, V]  ]
+          .in.fst(F.absorbOrDiscardL)                         .to[ F[Val[K] |*|   V ]    |*|   Singleton[K, V]  ]
           .andThen(par(F.lift(singleton), injectSingleton))   .to[ F[NonEmptyTree[K, V]] |*| NonEmptyTree[K, V] ]
-          .andThen(F.captureR)                                .to[ F[NonEmptyTree[K, V] |*| NonEmptyTree[K, V]] ]
-          .andThen(F.lift(branch))                            .to[             F[NonEmptyTree[K, V]]            ]
+          .andThen(F.absorbR(branch, id))                     .to[             F[NonEmptyTree[K, V]]            ]
 
       val replace: ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] =
         id                                                       [ (Val[K] |*| W) |*| Singleton[K, V] ]
           .andThen(par(discardFst, Singleton.deconstruct))    .to[             W  |*|  (Val[K] |*| V) ]
           .andThen(XI)                                        .to[         Val[K] |*|       (W |*| V) ]
           .in.snd(upd)                                        .to[         Val[K] |*|            F[V] ]
-          .andThen(F.captureL)                                .to[       F[Val[K] |*|              V] ]
+          .andThen(F.absorbOrDiscardL)                        .to[       F[Val[K] |*|              V] ]
           .andThen(F.lift(singleton))                         .to[        F[NonEmptyTree[K, V]]       ]
 
       id                                                         [   (Val[K] |*| W) |*| Singleton[K, V]    ]
@@ -222,22 +220,20 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     private def bUpdate[K: Ordering, V, W, F[_]](
       subUpdate: ((Val[K] |*| W) |*| NonEmptyTree[K, V]) -⚬ F[NonEmptyTree[K, V]],
     )(implicit
-      F: Once[F],
+      F: Absorptive[F],
     ): ((Val[K] |*| W) |*| Branch[K, V]) -⚬ F[NonEmptyTree[K, V]] = {
       type Tree = NonEmptyTree[K, V]
       type Elem = Val[K] |*| W
 
       val updateL: ((Elem |*| Tree) |*| Tree) -⚬ F[Tree] =
-        id                                 [ (Elem |*| Tree) |*| Tree  ]
-          .in.fst(subUpdate)            .to[    F[Tree]      |*| Tree  ]
-          .andThen(F.captureR)          .to[    F[Tree       |*| Tree] ]
-          .andThen(F.lift(branch))      .to[    F[          Tree     ] ]
+        id                                   [ (Elem |*| Tree) |*| Tree  ]
+          .in.fst(subUpdate)              .to[    F[Tree]      |*| Tree  ]
+          .andThen(F.absorbR(branch, id)) .to[    F[          Tree     ] ]
 
       val updateR: (Tree |*| (Elem |*| Tree)) -⚬ F[Tree] =
-        id                                 [   Tree |*| (Elem |*| Tree) ]
-          .in.snd(subUpdate)            .to[   Tree |*|     F[Tree]     ]
-          .andThen(F.captureL)          .to[ F[Tree |*|       Tree]     ]
-          .andThen(F.lift(branch))      .to[ F[     Tree          ]     ]
+        id                                   [   Tree |*| (Elem |*| Tree) ]
+          .in.snd(subUpdate)              .to[   Tree |*|     F[Tree]     ]
+          .andThen(F.absorbL(branch, id)) .to[ F[     Tree          ]     ]
 
       id                                   [                  Elem |*|         Branch[K, V]            ]
         .in.snd(Branch.deconstruct)     .to[                  Elem |*| (Tree                 |*| Tree) ]
@@ -262,7 +258,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     ins:         W -⚬ F[V],
     upd: (W |*| V) -⚬ F[V],
   )(implicit
-    F: Once[F],
+    F: Absorptive[F],
   ): ((Val[K] |*| W) |*| Tree[K, V]) -⚬ F[Tree[K, V]] = {
     val NET = NonEmptyTree
     type NET[K, V] = NonEmptyTree[K, V]
@@ -273,14 +269,14 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       .in.right.co[F].injectR[One]      .to[ ((Val[K] |*|  W  ) |*| One) |+|           F[Tree[K, V]]        ]
       .in.left(elimSnd)                 .to[  (Val[K] |*|  W  )          |+|           F[Tree[K, V]]        ]
       .in.left.snd(ins)                 .to[  (Val[K] |*| F[V])          |+|           F[Tree[K, V]]        ]
-      .in.left(F.captureL)              .to[   F[Val[K] |*| V]           |+|           F[Tree[K, V]]        ]
+      .in.left(F.absorbOrDiscardL)      .to[   F[Val[K] |*| V]           |+|           F[Tree[K, V]]        ]
       .in.left(F.lift(singleton))       .to[   F[ Tree[K, V] ]           |+|           F[Tree[K, V]]        ]
-      .andThen(either(id, id))          .to[                        F[Tree[K, V]]                                    ]
+      .andThen(either(id, id))          .to[                        F[Tree[K, V]]                           ]
   }
 
   def insert[K: Ordering, V]: ((Val[K] |*| V) |*| Tree[K, V]) -⚬ (Maybe[V] |*| Tree[K, V]) =
     update_[K, V, V, Maybe[V] |*| *](
-      ins = id[V] >>> introFst >>> par(Maybe.empty[V], id),
+      ins = id[V].introFst(Maybe.empty[V]),
       upd = swap[V, V] >>> par(Maybe.just[V], id),
     )
 
@@ -298,31 +294,84 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       upd = update,
     )
 
-  /** Witnesses that `F` is a functor such that `F[X]` has exactly one copy of `X`. */
-  private trait Once[F[_]] extends CoFunctor[F] {
-    def captureL[A, B]: (A |*| F[B]) -⚬ F[A |*| B]
-    def releaseL[A, B]: F[A |*| B] -⚬ (A |*| F[B])
-    def captureR[A, B]: (F[A] |*| B) -⚬ F[A |*| B]
-    def releaseR[A, B]: F[A |*| B] -⚬ (F[A] |*| B)
+  private type DeleteResult[V, A] = Maybe[V] |*| Maybe[A]
+
+  def delete[K: Ordering, V]: (Val[K] |*| Tree[K, V]) -⚬ (Maybe[V] |*| Tree[K, V]) = {
+    val go: ((Val[K] |*| One) |*| Tree[K, V]) -⚬ DeleteResult[V, Tree[K, V]] =
+      update_[K, V, One, DeleteResult[V, *]](
+        ins = parFromOne(Maybe.empty[V], Maybe.empty[V]),
+        upd = swap[One, V] >>> par(Maybe.just, Maybe.empty)
+      )
+
+    id                                           [  Val[K]          |*| Tree[K, V] ]
+      .in.fst(introSnd)                       .to[ (Val[K] |*| One) |*| Tree[K, V] ]
+      .andThen(go)                            .to[ Maybe[V] |*| Maybe[Tree[K, V]]  ]
+      .in.snd(Maybe.getOrElse(empty[K, V]))   .to[ Maybe[V] |*|       Tree[K, V]   ]
   }
 
-  private object Once {
-    implicit def onceId[X]: Once[Id] =
-      new Once[Id] {
+  private trait Absorptive[F[_]] extends CoFunctor[F] {
+    def absorbOrDiscardL[A: Comonoid, B]: (A |*| F[B]) -⚬ F[A |*| B]
+    def absorbOrDiscardR[A, B: Comonoid]: (F[A] |*| B) -⚬ F[A |*| B]
+
+    def absorbL[A, B, C](combine: (A |*| B) -⚬ C, recover: A -⚬ C): (A |*| F[B]) -⚬ F[C]
+    def absorbR[A, B, C](combine: (A |*| B) -⚬ C, recover: B -⚬ C): (F[A] |*| B) -⚬ F[C]
+
+    def absorbL[A, B]: (A |*| F[B]) -⚬ F[A |*| Maybe[B]] =
+      absorbL(par(id, Maybe.just), introSnd(Maybe.empty))
+
+    def absorbR[A, B]: (F[A] |*| B) -⚬ F[Maybe[A] |*| B] =
+      absorbR(par(Maybe.just, id), introFst(Maybe.empty))
+  }
+
+  private object Absorptive {
+    implicit def absorptiveId[X]: Absorptive[Id] =
+      new Absorptive[Id] {
         def lift[A, B](f: A -⚬ B): Id[A] -⚬ Id[B] = f
-        def captureL[A, B]: (A |*| Id[B]) -⚬ Id[A |*| B] = id
-        def captureR[A, B]: (Id[A] |*| B) -⚬ Id[A |*| B] = id
-        def releaseL[A, B]: Id[A |*| B] -⚬ (A |*| Id[B]) = id
-        def releaseR[A, B]: Id[A |*| B] -⚬ (Id[A] |*| B) = id
+        def absorbOrDiscardL[A: Comonoid, B]: A |*| Id[B] -⚬ Id[A |*| B] = id
+        def absorbOrDiscardR[A, B: Comonoid]: Id[A] |*| B -⚬ Id[A |*| B] = id
+        def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): A |*| Id[B] -⚬ Id[C] = combine
+        def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): Id[A] |*| B -⚬ Id[C] = combine
       }
 
-    implicit def onceSnd[X]: Once[X |*| *] =
-      new Once[X |*| *] {
+    implicit def absorptiveSnd[X]: Absorptive[X |*| *] =
+      new Absorptive[X |*| *] {
         def lift[A, B](f: A -⚬ B): X |*| A -⚬ (X |*| B) = liftSnd(f)
-        def captureL[A, B]: (A |*| (X |*| B)) -⚬ (X |*| (A |*| B)) = XI
-        def captureR[A, B]: ((X |*| A) |*| B) -⚬ (X |*| (A |*| B)) = timesAssocLR
-        def releaseL[A, B]: (X |*| (A |*| B)) -⚬ (A |*| (X |*| B)) = XI
-        def releaseR[A, B]: (X |*| (A |*| B)) -⚬ ((X |*| A) |*| B) = timesAssocRL
+        def absorbOrDiscardL[A: Comonoid, B]: A |*| (X |*| B) -⚬ (X |*| (A |*| B)) = XI
+        def absorbOrDiscardR[A, B: Comonoid]: (X |*| A) |*| B -⚬ (X |*| (A |*| B)) = timesAssocLR
+        def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): A |*| (X |*| B) -⚬ (X |*| C) = XI.in.snd(combine)
+        def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): (X |*| A) |*| B -⚬ (X |*| C) = timesAssocLR.in.snd(combine)
+      }
+
+    implicit def absorptiveDeleteResult[V]: Absorptive[DeleteResult[V, *]] =
+      new Absorptive[DeleteResult[V, *]] {
+        def lift[A, B](f: A -⚬ B): DeleteResult[V, A] -⚬ DeleteResult[V, B] =
+          (snd[Maybe[V]] ⚬ right[One]).lift(f)
+
+        def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): (A |*| DeleteResult[V, B]) -⚬ DeleteResult[V, C] =
+          id[A |*| DeleteResult[V, B]]                      .to[ A |*| (Maybe[V] |*| Maybe[B])            ]
+            .andThen(XI)                                    .to[ Maybe[V] |*| (A |*| Maybe[B])            ]
+            .in.snd(distributeLR)                           .to[ Maybe[V] |*| ((A |*| One) |+| (A |*| B)) ]
+            .in.snd(either(elimSnd >>> recover, combine))   .to[ Maybe[V] |*|               C             ]
+            .in.snd(Maybe.just)                             .to[ Maybe[V] |*|            Maybe[C]         ]
+
+        def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): (DeleteResult[V, A] |*| B) -⚬ DeleteResult[V, C] =
+          id[DeleteResult[V, A] |*| B]                      .to[ (Maybe[V] |*| Maybe[A]) |*| B            ]
+            .timesAssocLR                                   .to[ Maybe[V] |*| (Maybe[A] |*| B)            ]
+            .in.snd(distributeRL)                           .to[ Maybe[V] |*| ((One |*| B) |+| (A |*| B)) ]
+            .in.snd(either(elimFst >>> recover, combine))   .to[ Maybe[V] |*|               C             ]
+            .in.snd(Maybe.just)                             .to[ Maybe[V] |*|            Maybe[C]         ]
+
+        def absorbOrDiscardL[A: Comonoid, B]: (A |*| DeleteResult[V, B]) -⚬ DeleteResult[V, A |*| B] =
+          id[A |*| DeleteResult[V, B]]                      .to[ A |*| (Maybe[V] |*| Maybe[B])            ]
+            .andThen(XI)                                    .to[ Maybe[V] |*| (A |*| Maybe[B])            ]
+            .in.snd(distributeLR)                           .to[ Maybe[V] |*| ((A |*| One) |+| (A |*| B)) ]
+            .in.snd.left(discardFst)                        .to[ Maybe[V] |*| (       One  |+| (A |*| B)) ]
+
+        def absorbOrDiscardR[A, B: Comonoid]: (DeleteResult[V, A] |*| B) -⚬ DeleteResult[V, A |*| B] =
+          id[DeleteResult[V, A] |*| B]                      .to[ (Maybe[V] |*| Maybe[A]) |*| B            ]
+            .timesAssocLR                                   .to[ Maybe[V] |*| (Maybe[A] |*| B)            ]
+            .in.snd(distributeRL)                           .to[ Maybe[V] |*| ((One |*| B) |+| (A |*| B)) ]
+            .in.snd.left(discardSnd)                        .to[ Maybe[V] |*| ( One        |+| (A |*| B)) ]
       }
   }
 }
