@@ -656,6 +656,9 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       .in.left(const(()))           .to[ Val[Unit] |+| Val[A] ]
       .andThen(unliftEither)        .to[ Val[Either[Unit, A]] ]
       .andThen(liftV(_.toOption))   .to[ Val[Option[A]]       ]
+
+    def getOrElse[A](f: One -⚬ A): Maybe[A] -⚬ A =
+      either(f, id)
   }
 
   def parFromOne[A, B](f: One -⚬ A, g: One -⚬ B): One -⚬ (A |*| B) =
