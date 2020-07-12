@@ -23,11 +23,11 @@ sealed trait Streams[DSL <: libretto.DSL] {
   type Pollable[A] = LPollable[Val[A]]
   type Polled[A] = LPolled[Val[A]]
 
-  type LPullingF[A, X]  = One |+| (One |&| (A |*| X))
-  type LPulling[A] = Rec[LPullingF[A, *]]
+  type LSubscriberF[A, X]  = One |+| (One |&| (A |*| X))
+  type LSubscriber[A] = Rec[LSubscriberF[A, *]]
 
-  type PullingF[A, X]  = LPullingF[Neg[A], X]
-  type Pulling[A] = LPulling[Neg[A]]
+  type SubscriberF[A, X]  = LSubscriberF[Neg[A], X]
+  type Subscriber[A] = LSubscriber[Neg[A]]
 
   type ProducingF[A, X]  = One |+| (One |&| (Val[A] |*| X))
   type Producing[A] = Rec[ProducingF[A, *]]
@@ -294,10 +294,10 @@ sealed trait Streams[DSL <: libretto.DSL] {
   implicit def producingConsumerDuality[A]: Dual[Producing[A], Consumer[A]] =
     dualSymmetric(consumerProducingDuality[A])
 
-  implicit def pullingPollableDuality[A]: Dual[Pulling[A], Pollable[A]] =
-    dualRec[PullingF[A, *], PollableF[A, *]](
-      new Dual1[PullingF[A, *], PollableF[A, *]] {
-        def apply[x, y]: Dual[x, y] => Dual[PullingF[A, x], PollableF[A, y]] = { xy_dual =>
+  implicit def subscriberPollableDuality[A]: Dual[Subscriber[A], Pollable[A]] =
+    dualRec[SubscriberF[A, *], PollableF[A, *]](
+      new Dual1[SubscriberF[A, *], PollableF[A, *]] {
+        def apply[x, y]: Dual[x, y] => Dual[SubscriberF[A, x], PollableF[A, y]] = { xy_dual =>
           eitherChoiceDuality(
             Dual[One, One],
             choiceEitherDuality(
@@ -312,23 +312,23 @@ sealed trait Streams[DSL <: libretto.DSL] {
       }
     )
 
-  implicit def pollablePullingDuality[A]: Dual[Pollable[A], Pulling[A]] =
-    dualSymmetric(pullingPollableDuality[A])
+  implicit def pollableSubscriberDuality[A]: Dual[Pollable[A], Subscriber[A]] =
+    dualSymmetric(subscriberPollableDuality[A])
 
   /** If either the source or the sink is completed, complete the other one and be done.
     * Otherwise, expose their offer and demand, respectively.
     */
-  def relayCompletion[A, B]: (Pollable[A] |*| Pulling[B]) -⚬ (One |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Pulling[B]))) =
-    id                                [ Pollable[A] |*| (                    Pulling[B]                                  )]
-      .in.snd(unpack)              .to[ Pollable[A] |*| (One     |+|                    (One |&| (Neg[B] |*| Pulling[B])))]
-      .distributeLR                .to[(Pollable[A] |*|  One)    |+| (Pollable[A]   |*| (One |&| (Neg[B] |*| Pulling[B])))]
-      .in.left(elimSnd)            .to[ Pollable[A]              |+| (Pollable[A]   |*| (One |&| (Neg[B] |*| Pulling[B])))]
-      .in.left(Pollable.close)     .to[ One |+|                      (Pollable[A]   |*| (One |&| (Neg[B] |*| Pulling[B])))]
-      .in.right.fst(Pollable.poll) .to[ One |+| ((One |+| (Val[A] |*| Pollable[A])) |*| (One |&| (Neg[B] |*| Pulling[B])))]
-      .in.right(matchingChoiceLR)  .to[ One |+| ((One |*| One) |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Pulling[B])))]
-      .in.right.left(elimSnd)      .to[ One |+| (     One      |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Pulling[B])))]
-      .plusAssocRL                 .to[(One |+|       One    ) |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Pulling[B])) ]
-      .in.left(either(id, id))     .to[     One                |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Pulling[B])) ]
+  def relayCompletion[A, B]: (Pollable[A] |*| Subscriber[B]) -⚬ (One |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Subscriber[B]))) =
+    id                                [ Pollable[A] |*| (                    Subscriber[B]                                  )]
+      .in.snd(unpack)              .to[ Pollable[A] |*| (One     |+|                    (One |&| (Neg[B] |*| Subscriber[B])))]
+      .distributeLR                .to[(Pollable[A] |*|  One)    |+| (Pollable[A]   |*| (One |&| (Neg[B] |*| Subscriber[B])))]
+      .in.left(elimSnd)            .to[ Pollable[A]              |+| (Pollable[A]   |*| (One |&| (Neg[B] |*| Subscriber[B])))]
+      .in.left(Pollable.close)     .to[ One |+|                      (Pollable[A]   |*| (One |&| (Neg[B] |*| Subscriber[B])))]
+      .in.right.fst(Pollable.poll) .to[ One |+| ((One |+| (Val[A] |*| Pollable[A])) |*| (One |&| (Neg[B] |*| Subscriber[B])))]
+      .in.right(matchingChoiceLR)  .to[ One |+| ((One |*| One) |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Subscriber[B])))]
+      .in.right.left(elimSnd)      .to[ One |+| (     One      |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Subscriber[B])))]
+      .plusAssocRL                 .to[(One |+|       One    ) |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Subscriber[B])) ]
+      .in.left(either(id, id))     .to[     One                |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Subscriber[B])) ]
 
   type Source[A] = One -⚬ Pollable[A]
   object Source {
