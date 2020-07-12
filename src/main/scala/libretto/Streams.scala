@@ -15,12 +15,19 @@ sealed trait Streams[DSL <: libretto.DSL] {
   import dsl._
   import lib._
 
-  type PollableF[A, X] = One |&| (One |+| (Val[A] |*| X))
-  type Pollable[A] = Rec[PollableF[A, *]]
-  type Polled[A] = One |+| (Val[A] |*| Pollable[A])
+  type LPollableF[A, X] = One |&| (One |+| (A |*| X))
+  type LPollable[A] = Rec[LPollableF[A, *]]
+  type LPolled[A] = One |+| (A |*| LPollable[A])
 
-  type PullingF[A, X]  = One |+| (One |&| (Neg[A] |*| X))
-  type Pulling[A] = Rec[PullingF[A, *]]
+  type PollableF[A, X] = LPollableF[Val[A], X]
+  type Pollable[A] = LPollable[Val[A]]
+  type Polled[A] = LPolled[Val[A]]
+
+  type LPullingF[A, X]  = One |+| (One |&| (A |*| X))
+  type LPulling[A] = Rec[LPullingF[A, *]]
+
+  type PullingF[A, X]  = LPullingF[Neg[A], X]
+  type Pulling[A] = LPulling[Neg[A]]
 
   type ProducingF[A, X]  = One |+| (One |&| (Val[A] |*| X))
   type Producing[A] = Rec[ProducingF[A, *]]
@@ -28,27 +35,66 @@ sealed trait Streams[DSL <: libretto.DSL] {
   type ConsumerF[A, X] = One |&| (One |+| (Neg[A] |*| X))
   type Consumer[A] = Rec[ConsumerF[A, *]]
 
-  object Pollable {
-    def close[A]: Pollable[A] -⚬ One =
-      id                       [   Pollable[A]     ]
-        .unpack             .to[ One |&| Polled[A] ]
-        .chooseL            .to[ One               ]
+  object LPollable {
+    def close[A]: LPollable[A] -⚬ One =
+      id                       [   LPollable[A]     ]
+        .unpack             .to[ One |&| LPolled[A] ]
+        .chooseL            .to[ One                ]
 
-    def poll[A]: Pollable[A] -⚬ Polled[A] =
-      id                       [   Pollable[A]     ]
-        .unpack             .to[ One |&| Polled[A] ]
-        .chooseR            .to[         Polled[A] ]
+    def poll[A]: LPollable[A] -⚬ LPolled[A] =
+      id                       [   LPollable[A]     ]
+        .unpack             .to[ One |&| LPolled[A] ]
+        .chooseR            .to[         LPolled[A] ]
 
     /** Polls and discards all elements. */
-    def drain[A]: Pollable[A] -⚬ One = rec { self =>
-      poll[A] andThen either(id, parToOne(discard, self))
+    def drain[A](implicit A: Comonoid[A]): LPollable[A] -⚬ One =
+      rec { self =>
+        poll[A] andThen either(id, parToOne(A.counit, self))
+      }
+
+    def emptyF[A]: One -⚬ LPollableF[A, LPollable[A]] =
+      choice[One, One, LPolled[A]](id, injectL)
+
+    def empty[A]: One -⚬ LPollable[A] =
+      emptyF[A].pack
+
+    def concat[A]: (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A] = rec { self =>
+      val close: (LPollable[A] |*| LPollable[A]) -⚬ One =
+        parToOne(LPollable.close, LPollable.close)
+
+      val poll: (LPollable[A] |*| LPollable[A]) -⚬ LPolled[A] =
+        id                             [                               LPollable[A]    |*| LPollable[A]        ]
+          .in.fst(unpack)           .to[ (One |&| (One |+| (A |*| LPollable[A]))) |*| LPollable[A]             ]
+          .in.fst(chooseR)          .to[          (One |+| (A |*| LPollable[A]))  |*| LPollable[A]             ]
+          .distributeRL             .to[ (One |*| LPollable[A])  |+| ((A |*|  LPollable[A]) |*| LPollable[A])  ]
+          .in.left(elimFst)         .to[          LPollable[A]   |+| ((A |*|  LPollable[A]) |*| LPollable[A])  ]
+          .in.left(LPollable.poll)  .to[           LPolled[A]    |+| ((A |*|  LPollable[A]) |*| LPollable[A])  ]
+          .in.right(timesAssocLR)   .to[           LPolled[A]    |+| ( A |*| (LPollable[A]  |*| LPollable[A])) ]
+          .in.right.snd(self)       .to[           LPolled[A]    |+| ( A |*|            LPollable[A]         ) ]
+          .in.right.injectR[One]    .to[           LPolled[A]    |+|     LPolled[A]                            ]
+          .andThen(either(id, id))  .to[                     LPolled[A]                                        ]
+
+      choice(close, poll)
+        .pack[LPollableF[A, *]]
     }
+  }
+
+  object Pollable {
+    def close[A]: Pollable[A] -⚬ One =
+      LPollable.close[Val[A]]
+
+    def poll[A]: Pollable[A] -⚬ Polled[A] =
+      LPollable.poll[Val[A]]
+
+    /** Polls and discards all elements. */
+    def drain[A]: Pollable[A] -⚬ One =
+      LPollable.drain[Val[A]]
 
     def emptyF[A]: One -⚬ PollableF[A, Pollable[A]] =
-      choice[One, One, Polled[A]](id, injectL)
+      LPollable.emptyF[Val[A]]
 
     def empty[A]: One -⚬ Pollable[A] =
-      emptyF[A] andThen pack[PollableF[A, *]]
+      LPollable.empty[Val[A]]
 
     def fromList[A]: Val[List[A]] -⚬ Pollable[A] = rec { self =>
       val uncons: List[A] => Option[(A, List[A])] = _ match {
@@ -79,25 +125,8 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .pack[PollableF[A, *]]
     }
 
-    def concat[A]: (Pollable[A] |*| Pollable[A]) -⚬ Pollable[A] = rec { self =>
-      val close: (Pollable[A] |*| Pollable[A]) -⚬ One =
-        parToOne(Pollable.close, Pollable.close)
-
-      val poll: (Pollable[A] |*| Pollable[A]) -⚬ Polled[A] =
-        id[Pollable[A] |*| Pollable[A]] .to[                               Pollable[A]    |*| Pollable[A] ]
-          .in.fst(unpack)           .to[ (One |&| (One |+| (Val[A] |*| Pollable[A]))) |*| Pollable[A] ]
-          .in.fst(chooseR)          .to[          (One |+| (Val[A] |*| Pollable[A]))  |*| Pollable[A] ]
-          .distributeRL             .to[ (One |*| Pollable[A])  |+| ((Val[A] |*|  Pollable[A]) |*| Pollable[A])  ]
-          .in.left(elimFst)         .to[          Pollable[A]   |+| ((Val[A] |*|  Pollable[A]) |*| Pollable[A])  ]
-          .in.left(Pollable.poll)   .to[           Polled[A]    |+| ((Val[A] |*|  Pollable[A]) |*| Pollable[A])  ]
-          .in.right(timesAssocLR)   .to[           Polled[A]    |+| ( Val[A] |*| (Pollable[A]  |*| Pollable[A])) ]
-          .in.right.snd(self)       .to[           Polled[A]    |+| ( Val[A] |*|            Pollable[A]        ) ]
-          .in.right.injectR[One]    .to[           Polled[A]    |+|        Polled[A]                             ]
-          .andThen(either(id, id))  .to[                     Polled[A]                                           ]
-
-      choice(close, poll)
-        .pack[PollableF[A, *]]
-    }
+    def concat[A]: (Pollable[A] |*| Pollable[A]) -⚬ Pollable[A] =
+      LPollable.concat[Val[A]]
 
     /** Merges two [[Pollable]]s into one. When there is a value available from both upstreams, favors the first one. */
     def merge[A]: (Pollable[A] |*| Pollable[A]) -⚬ Pollable[A] = rec { self =>
