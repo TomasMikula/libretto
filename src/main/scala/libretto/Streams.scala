@@ -25,9 +25,11 @@ sealed trait Streams[DSL <: libretto.DSL] {
 
   type LSubscriberF[A, X]  = One |+| (One |&| (A |*| X))
   type LSubscriber[A] = Rec[LSubscriberF[A, *]]
+  type LDemanding[A] = One |&| (A |*| LSubscriber[A])
 
   type SubscriberF[A, X]  = LSubscriberF[Neg[A], X]
   type Subscriber[A] = LSubscriber[Neg[A]]
+  type Demanding[A] = LDemanding[Neg[A]]
 
   type ProducingF[A, X]  = One |+| (One |&| (Val[A] |*| X))
   type Producing[A] = Rec[ProducingF[A, *]]
@@ -170,6 +172,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
     }
 
     // TODO: polish
+    // TODO: wait until the second downstream consumes before polling again (otherwise there is a leak - unbounded buffer)
     def dup[A]: Pollable[A] -⚬ (Pollable[A] |*| Pollable[A]) = rec { self =>
       // the case when the first output polls or closes before the second output does
       val caseFst: Pollable[A] -⚬ ((One |&| Polled[A]) |*| (One |&| Polled[A])) = {
@@ -270,6 +273,50 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .pack[UnlimitedF[Pollable[A], *]]
     }
 
+  }
+
+  object Subscriber {
+    implicit def completiveSubscriberF[A]: Completive1[SubscriberF[A, *]] =
+      new Completive1[SubscriberF[A, *]] {
+        def apply[X]: Completive[SubscriberF[A, X]] = implicitly
+      }
+
+    def merge[A]: (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A] = rec { self =>
+      val mergeDemandings: (Demanding[A] |*| Demanding[A]) -⚬ Demanding[A] = {
+        val caseClosed: (Demanding[A] |*| Demanding[A]) -⚬ One =
+          parToOne(chooseL, chooseL)
+
+        val caseDemanding: (Demanding[A] |*| Demanding[A]) -⚬ (Neg[A] |*| Subscriber[A]) =
+          id                                     [     Demanding[A]           |*|     Demanding[A]           ]
+            .andThen(par(chooseR, chooseR))   .to[ (Neg[A] |*| Subscriber[A]) |*| (Neg[A] |*| Subscriber[A]) ]
+            .andThen(IXI)                     .to[ (Neg[A] |*| Neg[A]) |*| (Subscriber[A] |*| Subscriber[A]) ]
+            .par(mergeDemands[A], self)       .to[        Neg[A]       |*|            Subscriber[A]          ]
+
+        choice(caseClosed, caseDemanding)
+      }
+
+      val fstClosed: (One |*| Subscriber[A]) -⚬ Subscriber[A] =
+        elimFst
+
+      val fstDemanding: (Demanding[A] |*| Subscriber[A]) -⚬ Subscriber[A] =
+        id                                               [  Demanding[A] |*|      Subscriber[A]                       ]
+          .in.snd(unpack)                             .to[  Demanding[A] |*| (One |+|                   Demanding[A]) ]
+          .distributeLR                               .to[ (Demanding[A] |*| One) |+| (Demanding[A] |*| Demanding[A]) ]
+          .andThen(either(elimSnd, mergeDemandings))  .to[                    Demanding[A]                            ]
+          .injectR[One].pack[SubscriberF[A, *]]       .to[                   Subscriber[A]                            ]
+
+      val caseFstReady: (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A] =
+        id                                     [      Subscriber[A]                         |*| Subscriber[A]  ]
+          .in.fst(unpack)                   .to[ (One |+|                     Demanding[A]) |*| Subscriber[A]  ]
+          .distributeRL                     .to[ (One |*| Subscriber[A]) |+| (Demanding[A]  |*| Subscriber[A]) ]
+          .either(fstClosed, fstDemanding)  .to[                    Subscriber[A]                              ]
+
+      val caseSndReady: (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A] =
+        swap >>> caseFstReady
+
+      id                                         [ Subscriber[A] |*| Subscriber[A] ]
+        .race(caseFstReady, caseSndReady)     .to[           Subscriber[A]         ]
+    }
   }
 
   implicit def consumerProducingDuality[A]: Dual[Consumer[A], Producing[A]] =
