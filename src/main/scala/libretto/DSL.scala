@@ -214,4 +214,16 @@ trait DSL {
     caseSndWins: Z -⚬ (A |*| B),
   ): Z -⚬ (A |*| B) =
     andThen(choice(caseFstWins, caseSndWins), select[A, B])
+
+  trait Completive1[F[_]] {
+    def apply[A]: Completive[F[A]]
+  }
+
+  trait Requisitive1[F[_]] {
+    def apply[A]: Requisitive[F[A]]
+  }
+
+  implicit def completiveRec[F[_]](implicit ev: Completive1[F]): Completive[Rec[F]]
+
+  implicit def requisitiveRec[F[_]](implicit ev: Requisitive1[F]): Requisitive[Rec[F]]
 }
