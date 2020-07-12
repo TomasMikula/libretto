@@ -230,6 +230,20 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def unpack[F[_]](implicit ev: B =:= Rec[F]): A -⚬ F[Rec[F]] =
       ev.substituteCo(self) >>> dsl.unpack[F]
 
+    def race[B1: Completive, B2: Completive, C](
+      caseFstWins: (B1 |*| B2) -⚬ C,
+      caseSndWins: (B1 |*| B2) -⚬ C,
+    )(implicit
+      ev: B =:= (B1 |*| B2),
+    ): A -⚬ C =
+      ev.substituteCo(self) >>> dsl.race(caseFstWins, caseSndWins)
+
+    def select[C1: Requisitive, C2: Requisitive](
+      caseFstWins: B -⚬ (C1 |*| C2),
+      caseSndWins: B -⚬ (C1 |*| C2),
+    ): A -⚬ (C1 |*| C2) =
+      self >>> dsl.select(caseFstWins, caseSndWins)
+
     def in: FocusedFunctionOutputCo[A, Id, B] = new FocusedFunctionOutputCo[A, Id, B](self)(idFunctor)
   }
 

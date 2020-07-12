@@ -161,10 +161,9 @@ sealed trait Streams[DSL <: libretto.DSL] {
           .andThen(go(swap[Pollable[A], Pollable[A]] andThen self))
 
       val poll: (Pollable[A] |*| Pollable[A]) -⚬ Polled[A] =
-        id[Pollable[A] |*| Pollable[A]]               .to[ Pollable[A] |*| Pollable[A]                               ]
-          .par(Pollable.poll[A], Pollable.poll[A])    .to[  Polled[A]  |*|  Polled[A]                                ]
-          .andThen(race)                              .to[ (Polled[A]  |*|  Polled[A]) |+| (Polled[A] |*| Polled[A]) ]
-          .either(goFst, goSnd)                       .to[                          Polled[A]                        ]
+        id[Pollable[A] |*| Pollable[A]]               .to[ Pollable[A] |*| Pollable[A] ]
+          .par(Pollable.poll[A], Pollable.poll[A])    .to[  Polled[A]  |*|  Polled[A]  ]
+          .race(goFst, goSnd)                         .to[           Polled[A]         ]
 
       choice(close, poll)
         .pack[PollableF[A, *]]
@@ -227,10 +226,9 @@ sealed trait Streams[DSL <: libretto.DSL] {
       val caseSnd: Pollable[A] -⚬ ((One |&| Polled[A]) |*| (One |&| Polled[A])) =
         caseFst andThen swap
 
-      id[Pollable[A]]                                       .to[                                           Pollable[A]                                           ]
-        .choice(caseFst, caseSnd)                           .to[ ((One |&| Polled[A]) |*| (One |&| Polled[A])) |&| ((One |&| Polled[A]) |*| (One |&| Polled[A])) ]
-        .andThen(select)                                    .to[                           (One |&| Polled[A]) |*| (One |&| Polled[A])                           ]
-        .par(pack[PollableF[A, *]], pack[PollableF[A, *]])  .to[                              Pollable[A]      |*|    Pollable[A]                                ]
+      id[Pollable[A]]                                       .to[                 Pollable[A]                 ]
+        .select(caseFst, caseSnd)                           .to[ (One |&| Polled[A]) |*| (One |&| Polled[A]) ]
+        .par(pack[PollableF[A, *]], pack[PollableF[A, *]])  .to[    Pollable[A]      |*|    Pollable[A]      ]
     }
 
     def dropUntilFirstDemand[A]: Pollable[A] -⚬ Pollable[A] = {
@@ -271,6 +269,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .choice(case0, (choice(case1, caseN)))
         .pack[UnlimitedF[Pollable[A], *]]
     }
+
   }
 
   implicit def consumerProducingDuality[A]: Dual[Consumer[A], Producing[A]] =

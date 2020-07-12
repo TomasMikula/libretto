@@ -183,6 +183,12 @@ trait DSL {
     */
   def race[A: Completive, B: Completive]: (A |*| B) -⚬ ((A |*| B) |+| (A |*| B))
 
+  def race[A: Completive, B: Completive, C](
+    caseFstWins: (A |*| B) -⚬ C,
+    caseSndWins: (A |*| B) -⚬ C,
+  ): (A |*| B) -⚬ C =
+    andThen(race[A, B], either(caseFstWins, caseSndWins))
+
   /** Witnesses that `A` has an intrinsic notion of making a request request.
     * [[selectRequestedOrNot]] can be used to test whether a `Requisitive` object has made a request already.
     * [[select]] can be used to detect which of two `Selectable` objects made its request first.
@@ -202,4 +208,10 @@ trait DSL {
     * selects the left version of the input.
     */
   def select[A: Requisitive, B: Requisitive]: ((A |*| B) |&| (A |*| B)) -⚬ (A |*| B)
+
+  def select[Z, A: Requisitive, B: Requisitive](
+    caseFstWins: Z -⚬ (A |*| B),
+    caseSndWins: Z -⚬ (A |*| B),
+  ): Z -⚬ (A |*| B) =
+    andThen(choice(caseFstWins, caseSndWins), select[A, B])
 }
