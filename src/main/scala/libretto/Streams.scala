@@ -171,67 +171,48 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .pack[PollableF[A, *]]
     }
 
-    // TODO: polish
-    // TODO: wait until the second downstream consumes before polling again (otherwise there is a leak - unbounded buffer)
-    def dup[A]: Pollable[A] -⚬ (Pollable[A] |*| Pollable[A]) = rec { self =>
-      // the case when the first output polls or closes before the second output does
-      val caseFst: Pollable[A] -⚬ ((One |&| Polled[A]) |*| (One |&| Polled[A])) = {
-        val caseFstClosed: Pollable[A] -⚬ (One |*| (One |&| Polled[A])) =
-          id[ Pollable[A] ]     .to[            Pollable[A]      ]
-            .unpack             .to[          One |&| Polled[A]  ]
-            .introFst           .to[ One |*| (One |&| Polled[A]) ]
-
-        val caseFstPolled: Pollable[A] -⚬ (Polled[A] |*| (One |&| Polled[A])) = {
-          val caseUpstreamClosed: One -⚬ (Polled[A] |*| (One |&| Polled[A])) = {
-            val closedPolled: One -⚬ Polled[A] = injectL
-            parFromOne(closedPolled, choice(id, closedPolled))
-          }
-
-          val caseUpstreamValue:  (Val[A] |*| Pollable[A]) -⚬ (Polled[A] |*| (One |&| Polled[A])) = {
-            val goSnd: (Val[A] |*| Pollable[A]) -⚬ (Pollable[A] |*| (One |&| Polled[A])) = {
-              val sndClosed: (Val[A] |*| Pollable[A]) -⚬ (Pollable[A] |*| One) =
-                swap[Val[A], Pollable[A]]     .from[ Val[A] |*| Pollable[A] ]
-                  .to  [ Pollable[A] |*| Val[A] ]
-                  .in.snd(discard)            .to  [ Pollable[A] |*|  One   ]
-
-              val sndPolled: (Val[A] |*| Pollable[A]) -⚬ (Pollable[A] |*| Polled[A]) =
-                id[ Val[A] |*| Pollable[A] ]
-                  .in.snd(self)         .to[ Val[A] |*| (Pollable[A] |*| Pollable[A]) ]
-                  .timesAssocRL         .to[ (Val[A] |*| Pollable[A]) |*| Pollable[A] ]
-                  .in.fst(swap)         .to[ (Pollable[A] |*| Val[A]) |*| Pollable[A] ]
-                  .timesAssocLR         .to[ Pollable[A] |*| (Val[A] |*| Pollable[A]) ]
-                  .in.snd.injectR[One]  .to[ Pollable[A] |*|      Polled[A]           ]
-
-              choice(sndClosed, sndPolled)  .from[ Val[A] |*| Pollable[A] ]
-                .to  [ (Pollable[A] |*| One) |&| (Pollable[A] |*| Polled[A]) ]
-                .andThen(coDistributeL)     .to  [ Pollable[A] |*| (One |&| Polled[A])                   ]
-            }
-
-            id                               [        Val[A]       |*| Pollable[A]              ]
-              .in.fst(dsl.dup)            .to[ (Val[A] |*| Val[A]) |*| Pollable[A]              ]
-              .timesAssocLR               .to[ Val[A] |*| (Val[A] |*| Pollable[A])              ]
-              .in.snd(goSnd)              .to[ Val[A] |*| (Pollable[A] |*| (One |&| Polled[A])) ]
-              .timesAssocRL               .to[ (Val[A] |*| Pollable[A]) |*| (One |&| Polled[A]) ]
-              .in.fst.injectR[One]        .to[      Polled[A]           |*| (One |&| Polled[A]) ]
-          }
-
-          Pollable.poll[A]                                  .from[          Pollable[A]              ]
-            .to  [ One |+| (Val[A] |*| Pollable[A])  ]
-            .either(caseUpstreamClosed, caseUpstreamValue)  .to  [ Polled[A] |*| (One |&| Polled[A]) ]
-        }
-
-        choice(caseFstClosed, caseFstPolled)  .from[                          Pollable[A]                                  ]
-          .to  [ (One |*| (One |&| Polled[A])) |&| (Polled[A] |*| (One |&| Polled[A])) ]
-          .andThen(coDistributeR)             .to  [ (One |&| Polled[A]) |*| (One |&| Polled[A])                           ]
+    implicit def requisitivePollable[A]: Requisitive1[PollableF[A, *]] =
+      new Requisitive1[PollableF[A, *]] {
+        def apply[X]: Requisitive[PollableF[A, X]] = implicitly
       }
 
+    def dup[A]: Pollable[A] -⚬ (Pollable[A] |*| Pollable[A]) = rec { self =>
+      val dupPolled: Polled[A] -⚬ (Polled[A] |*| Polled[A]) = {
+        val caseClosed: One -⚬ (Polled[A] |*| Polled[A]) =
+          parFromOne(injectL, injectL)
+
+        val caseValue: (Val[A] |*| Pollable[A]) -⚬ (Polled[A] |*| Polled[A]) =
+          id                                             [        Val[A]       |*|          Pollable[A]          ]
+            .par(dsl.dup[A], self)                    .to[ (Val[A] |*| Val[A]) |*| (Pollable[A] |*| Pollable[A]) ]
+            .andThen(IXI)                             .to[ (Val[A] |*| Pollable[A]) |*| (Val[A] |*| Pollable[A]) ]
+            .in.fst.injectR[One].in.snd.injectR[One]  .to[       Polled[A]          |*|       Polled[A]          ]
+
+        either(caseClosed, caseValue)
+      }
+
+      val caseFstClosed: Pollable[A] -⚬ (One |*| Pollable[A]) =
+        introFst
+
+      val caseFstPolled: Pollable[A] -⚬ (Polled[A] |*| Pollable[A]) =
+        id                                           [                 Pollable[A]                       ]
+          .andThen(Pollable.poll[A])              .to[                  Polled[A]                        ]
+          .andThen(choice(introSnd, dupPolled))   .to[ (Polled[A] |*| One) |&| (Polled[A] |*| Polled[A]) ]
+          .andThen(coDistributeL)                 .to[  Polled[A] |*| (One |&|                Polled[A]) ]
+          .in.snd(pack[PollableF[A, *]])          .to[  Polled[A] |*|      Pollable[A]                   ]
+
+      // the case when the first output polls or closes before the second output does
+      val caseFst: Pollable[A] -⚬ (Pollable[A] |*| Pollable[A]) =
+        id                                           [                  Pollable[A]                           ]
+          .choice(caseFstClosed, caseFstPolled)   .to[ (One |*| Pollable[A]) |&| (Polled[A]  |*| Pollable[A]) ]
+          .andThen(coDistributeR)                 .to[ (One                  |&|  Polled[A]) |*| Pollable[A]  ]
+          .in.fst(pack[PollableF[A, *]])          .to[             Pollable[A]               |*| Pollable[A]  ]
+
       // the case when the second output polls or closes before the first output does
-      val caseSnd: Pollable[A] -⚬ ((One |&| Polled[A]) |*| (One |&| Polled[A])) =
+      val caseSnd: Pollable[A] -⚬ (Pollable[A] |*| Pollable[A]) =
         caseFst andThen swap
 
-      id[Pollable[A]]                                       .to[                 Pollable[A]                 ]
-        .select(caseFst, caseSnd)                           .to[ (One |&| Polled[A]) |*| (One |&| Polled[A]) ]
-        .par(pack[PollableF[A, *]], pack[PollableF[A, *]])  .to[    Pollable[A]      |*|    Pollable[A]      ]
+      id                                   [          Pollable[A]        ]
+        .select(caseFst, caseSnd)       .to[ Pollable[A] |*| Pollable[A] ]
     }
 
     def dropUntilFirstDemand[A]: Pollable[A] -⚬ Pollable[A] = {
