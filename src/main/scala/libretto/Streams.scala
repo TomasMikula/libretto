@@ -294,16 +294,16 @@ sealed trait Streams[DSL <: libretto.DSL] {
   implicit def producingConsumerDuality[A]: Dual[Producing[A], Consumer[A]] =
     dualSymmetric(consumerProducingDuality[A])
 
-  implicit def subscriberPollableDuality[A]: Dual[Subscriber[A], Pollable[A]] =
-    dualRec[SubscriberF[A, *], PollableF[A, *]](
-      new Dual1[SubscriberF[A, *], PollableF[A, *]] {
-        def apply[x, y]: Dual[x, y] => Dual[SubscriberF[A, x], PollableF[A, y]] = { xy_dual =>
+  implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[A], LPollable[B]] =
+    dualRec[LSubscriberF[A, *], LPollableF[B, *]](
+      new Dual1[LSubscriberF[A, *], LPollableF[B, *]] {
+        def apply[x, y]: Dual[x, y] => Dual[LSubscriberF[A, x], LPollableF[B, y]] = { xy_dual =>
           eitherChoiceDuality(
             Dual[One, One],
             choiceEitherDuality(
               Dual[One, One],
               productDuality(
-                Dual[Neg[A], Val[A]],
+                AB,
                 xy_dual
               )
             )
@@ -312,8 +312,8 @@ sealed trait Streams[DSL <: libretto.DSL] {
       }
     )
 
-  implicit def pollableSubscriberDuality[A]: Dual[Pollable[A], Subscriber[A]] =
-    dualSymmetric(subscriberPollableDuality[A])
+  implicit def pollableSubscriberDuality[A, B](implicit BA: Dual[B, A]): Dual[LPollable[A], LSubscriber[B]] =
+    dualSymmetric(subscriberPollableDuality[B, A])
 
   /** If either the source or the sink is completed, complete the other one and be done.
     * Otherwise, expose their offer and demand, respectively.
