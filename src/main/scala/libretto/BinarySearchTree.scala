@@ -69,6 +69,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def deconstruct[K, V]: Singleton[K, V] -⚬ (Val[K] |*| V)
     def key[K, V]: Singleton[K, V] -⚬ (Val[K] |*| Singleton[K, V])
     def summary[K, V]: Singleton[K, V] -⚬ (Summary[K] |*| Singleton[K, V])
+    def clear[K, V](f: V -⚬ One): Singleton[K, V] -⚬ One
   }
 
   val Singleton: SingletonModule = new SingletonModule {
@@ -88,6 +89,9 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
         .in.fst(dup)                .to[ ( Val[K]   |*|  Val[K]) |*| V  ]
         .timesAssocLR               .to[   Val[K]   |*| (Val[K]  |*| V) ]
         .in.fst(Summary.singleton)  .to[ Summary[K] |*| (Val[K]  |*| V) ]
+
+    def clear[K, V](f: V -⚬ One): Singleton[K, V] -⚬ One =
+      parToOne(dsl.discard, f)
   }
 
   import Singleton.Singleton
@@ -98,6 +102,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def of[K, X](summary: X -⚬ (Summary[K] |*| X)): (X |*| X) -⚬ BranchF[K, X]
     def deconstruct[K, X]: BranchF[K, X] -⚬ (X |*| X)
     def summary[K, X]: BranchF[K, X] -⚬ (Summary[K] |*| BranchF[K, X])
+    def clear[K, X](f: X -⚬ One): BranchF[K, X] -⚬ One
   }
 
   val BranchF: BranchFModule = new BranchFModule {
@@ -116,6 +121,9 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       id[BranchF[K, X]]            .to[          Summary[K]         |*| (X |*| X) ]
         .in.fst(Summary.dup)       .to[ (Summary[K] |*| Summary[K]) |*| (X |*| X) ]
         .timesAssocLR              .to[  Summary[K] |*|        BranchF[K, X]      ]
+
+    def clear[K, X](f: X -⚬ One): BranchF[K, X] -⚬ One =
+      parToOne(Summary.discard, parToOne(f, f))
   }
 
   import BranchF.BranchF
@@ -134,6 +142,9 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
 
     def summary[K, V]: Branch[K, V] -⚬ (Summary[K] |*| Branch[K, V]) =
       BranchF.summary
+
+    def clear[K, V](subClear: NonEmptyTree[K, V] -⚬ One): Branch[K, V] -⚬ One =
+      BranchF.clear(subClear)
   }
 
   object NonEmptyTree {
@@ -244,6 +255,11 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
         .in.right(timesAssocLR)         .to[ ((Elem |*| Tree) |*| Tree) |+| (Tree |*| (Elem |*| Tree)) ]
         .either(updateL, updateR)       .to[                          F[Tree]                          ]
     }
+
+    def clear[K, V](f: V -⚬ One): NonEmptyTree[K, V] -⚬ One =
+      rec { self =>
+        unpack[NonEmptyTreeF[K, V, *]] >>> either(Singleton.clear(f), Branch.clear(self))
+      }
   }
 
   type Tree[K, V] = One |+| NonEmptyTree[K, V]
@@ -309,7 +325,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       .in.snd(Maybe.getOrElse(empty[K, V]))   .to[ Maybe[V] |*|       Tree[K, V]   ]
   }
 
-  def update[K:Ordering, V, A](
+  def update[K: Ordering, V, A](
     f: A |*| V -⚬ Maybe[V],
   ): (Val[K] |*| A) |*| Tree[K, V] -⚬ (Maybe[A] |*| Tree[K, V]) =
     update_[K, V, A, BiMaybe[A, *]](
@@ -317,6 +333,9 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       upd = f >>> introFst(Maybe.empty[A]),
     )
       .in.snd(Maybe.getOrElse(empty[K, V]))
+
+  def clear[K, V](f: V -⚬ One): Tree[K, V] -⚬ One =
+    either(id, NonEmptyTree.clear(f))
 
   private trait Absorptive[F[_]] extends CoFunctor[F] {
     def absorbOrDiscardL[A: Comonoid, B]: (A |*| F[B]) -⚬ F[A |*| B]
