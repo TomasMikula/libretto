@@ -262,20 +262,9 @@ sealed trait Streams[DSL <: libretto.DSL] {
         def apply[X]: Completive[SubscriberF[A, X]] = implicitly
       }
 
-    def merge[A]: (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A] = rec { self =>
-      val mergeDemandings: (Demanding[A] |*| Demanding[A]) -⚬ Demanding[A] = {
-        val caseClosed: (Demanding[A] |*| Demanding[A]) -⚬ One =
-          parToOne(chooseL, chooseL)
-
-        val caseDemanding: (Demanding[A] |*| Demanding[A]) -⚬ (Neg[A] |*| Subscriber[A]) =
-          id                                     [     Demanding[A]           |*|     Demanding[A]           ]
-            .andThen(par(chooseR, chooseR))   .to[ (Neg[A] |*| Subscriber[A]) |*| (Neg[A] |*| Subscriber[A]) ]
-            .andThen(IXI)                     .to[ (Neg[A] |*| Neg[A]) |*| (Subscriber[A] |*| Subscriber[A]) ]
-            .par(mergeDemands[A], self)       .to[        Neg[A]       |*|            Subscriber[A]          ]
-
-        choice(caseClosed, caseDemanding)
-      }
-
+    private[Streams] def merge[A](
+      mergeDemandings: (Demanding[A] |*| Demanding[A]) -⚬ Demanding[A]
+    ): (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A] = {
       val fstClosed: (One |*| Subscriber[A]) -⚬ Subscriber[A] =
         elimFst
 
@@ -297,6 +286,31 @@ sealed trait Streams[DSL <: libretto.DSL] {
 
       id                                         [ Subscriber[A] |*| Subscriber[A] ]
         .race(caseFstReady, caseSndReady)     .to[           Subscriber[A]         ]
+    }
+
+    def merge[A]: (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A] = rec { self =>
+      merge(Demanding.merge(self))
+    }
+  }
+
+  object Demanding {
+    private[Streams] def merge[A](
+      mergeSubscribers: (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A]
+    ): (Demanding[A] |*| Demanding[A]) -⚬ Demanding[A] = {
+      val caseClosed: (Demanding[A] |*| Demanding[A]) -⚬ One =
+        parToOne(chooseL, chooseL)
+
+      val caseDemanding: (Demanding[A] |*| Demanding[A]) -⚬ (Neg[A] |*| Subscriber[A]) =
+        id                                             [     Demanding[A]           |*|     Demanding[A]           ]
+          .andThen(par(chooseR, chooseR))           .to[ (Neg[A] |*| Subscriber[A]) |*| (Neg[A] |*| Subscriber[A]) ]
+          .andThen(IXI)                             .to[ (Neg[A] |*| Neg[A]) |*| (Subscriber[A] |*| Subscriber[A]) ]
+          .par(mergeDemands[A], mergeSubscribers)   .to[        Neg[A]       |*|            Subscriber[A]          ]
+
+      choice(caseClosed, caseDemanding)
+    }
+
+    def merge[A]: (Demanding[A] |*| Demanding[A]) -⚬ Demanding[A] = rec { self =>
+      merge(Subscriber.merge(self))
     }
   }
 
