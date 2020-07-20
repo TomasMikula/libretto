@@ -663,7 +663,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       id[Val[Option[A]]]                .to[ Val[Option[      A]] ]
         .andThen(liftV(_.toRight(())))  .to[ Val[Either[Unit, A]] ]
         .andThen(liftEither)            .to[ Val[Unit] |+| Val[A] ]
-        .in.left(discard)               .to[   One     |+| Val[A] ]
+        .in.left(dsl.discard)           .to[   One     |+| Val[A] ]
 
     def unliftOption[A]: Maybe[Val[A]] -⚬ Val[Option[A]] =
       id[Maybe[Val[A]]]             .to[    One    |+| Val[A] ]
@@ -673,6 +673,9 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def getOrElse[A](f: One -⚬ A): Maybe[A] -⚬ A =
       either(f, id)
+
+    def discard[A](implicit A: Comonoid[A]): Maybe[A] -⚬ One =
+      either(id, A.counit)
   }
 
   def parFromOne[A, B](f: One -⚬ A, g: One -⚬ B): One -⚬ (A |*| B) =
