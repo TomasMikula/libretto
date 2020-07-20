@@ -256,6 +256,14 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
         .either(updateL, updateR)       .to[                          F[Tree]                          ]
     }
 
+    def update[K: Ordering, V, A](
+      f: A |*| V -⚬ Maybe[V],
+    ): (Val[K] |*| A) |*| NonEmptyTree[K, V] -⚬ (Maybe[A] |*| Maybe[NonEmptyTree[K, V]]) =
+      update_[K, V, A, BiMaybe[A, *]](
+        ins = Maybe.just[A] >>> introSnd(Maybe.empty[V]),
+        upd = f >>> introFst(Maybe.empty[A]),
+      )
+
     def clear[K, V](f: V -⚬ One): NonEmptyTree[K, V] -⚬ One =
       rec { self =>
         unpack[NonEmptyTreeF[K, V, *]] >>> either(Singleton.clear(f), Branch.clear(self))
