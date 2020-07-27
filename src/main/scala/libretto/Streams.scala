@@ -272,6 +272,9 @@ sealed trait Streams[DSL <: libretto.DSL] {
       val addDemanding: (Val[K] |*| Demanding[V]) |*| Tree[K, Demanding[V]] -⚬ Tree[K, Demanding[V]] =
         Tree.insertOrUpdate(Demanding.merge)
 
+      val clearTree: Tree[K, Demanding[V]] -⚬ One =
+        Tree.clear(Demanding.close)
+
       val addSubscriber: KSubs |*| Tree[K, Demanding[V]] -⚬ Tree[K, Demanding[V]] =
         id                                           [ ( Val[K] |*|       Subscriber[V]               ) |*| Tree[K, Demanding[V]] ]
           .in.fst.snd(unpack)                     .to[ ( Val[K] |*| (One |+|             Demanding[V])) |*| Tree[K, Demanding[V]] ]
@@ -281,7 +284,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
           .either(elimFst, addDemanding)
 
       val upstreamClosed: One |*| (LPolled[KSubs] |*| Tree[K, Demanding[V]]) -⚬ One =
-        elimFst >>> parToOne(LPolled.close(parToOne(dsl.discard, Subscriber.close)), Tree.clear(Demanding.close))
+        elimFst >>> parToOne(LPolled.close(parToOne(dsl.discard, Subscriber.close)), clearTree)
 
       def upstreamVal(
         goRec: (Polled[A] |*| LPolled[KSubs]) |*| Tree[K, Demanding[V]] -⚬ One,
@@ -302,29 +305,19 @@ sealed trait Streams[DSL <: libretto.DSL] {
           .distributeRL
           .either(upstreamClosed, upstreamVal(goRec))
 
-      val forward: Polled[A] |*| Tree[K, Demanding[V]] -⚬ One = rec { self =>
-        val upstreamClosed: One |*| NonEmptyTree[K, Demanding[V]] -⚬ One =
-          parToOne(id, NonEmptyTree.clear(Demanding.close))
-
-        val upstreamValue: (Val[A] |*| Pollable[A]) |*| NonEmptyTree[K, Demanding[V]] -⚬ One =
-          id                                   [ (      Val[A]        |*| Pollable[A]) |*| NonEmptyTree[K, Demanding[V]]   ]
-            .in.fst.fst(f)                  .to[ ((Val[K] |*| Val[V]) |*| Pollable[A]) |*| NonEmptyTree[K, Demanding[V]]   ]
-            .in.fst(swap)                   .to[ (Pollable[A] |*| (Val[K] |*| Val[V])) |*| NonEmptyTree[K, Demanding[V]]   ]
-            .timesAssocLR                   .to[  Pollable[A] |*| ((Val[K] |*| Val[V]) |*| NonEmptyTree[K, Demanding[V]])  ]
-            .in.snd(dispatchNE)             .to[  Pollable[A] |*| (Maybe[Val[V]] |*| Maybe[NonEmptyTree[K, Demanding[V]]]) ]
-            .in.snd(elimFst(Maybe.discard)) .to[  Pollable[A] |*|                    Maybe[NonEmptyTree[K, Demanding[V]]]  ]
-            .in.fst(poll)                   .to[    Polled[A] |*|                                  Tree[K, Demanding[V]]   ]
-            .andThen(self)                  .to[              One                                                          ]
-
-        val goNonEmpty: Polled[A] |*| NonEmptyTree[K, Demanding[V]] -⚬ One =
-          id[ (One |+| (Val[A] |*| Pollable[A])) |*| NonEmptyTree[K, Demanding[V]] ]
-            .distributeRL
-            .either(upstreamClosed, upstreamValue)
+      val forward: Polled[A] |*| Tree[K, Demanding[V]] -⚬ One = {
+        val add: Val[A] |*| NonEmptyTree[K, Demanding[V]] -⚬ Maybe[NonEmptyTree[K, Demanding[V]]] =
+          id                                     [       Val[A]        |*|       NonEmptyTree[K, Demanding[V]]  ]
+            .in.fst(f)                        .to[ (Val[K] |*| Val[V]) |*|       NonEmptyTree[K, Demanding[V]]  ]
+            .andThen(dispatchNE)              .to[       Maybe[Val[V]] |*| Maybe[NonEmptyTree[K, Demanding[V]]] ]
+            .andThen(elimFst(Maybe.discard))  .to[                         Maybe[NonEmptyTree[K, Demanding[V]]] ]
 
         id                                     [  Polled[A] |*| (One |+|                NonEmptyTree[K, Demanding[V]]) ]
           .distributeLR                     .to[ (Polled[A] |*| One) |+| (Polled[A] |*| NonEmptyTree[K, Demanding[V]]) ]
           .in.left(elimFst(Polled.close))   .to[            One      |+| (Polled[A] |*| NonEmptyTree[K, Demanding[V]]) ]
-          .andThen(either(id, goNonEmpty))  .to[                     One                                               ]
+          .in.right(LPolled.feedTo(add))    .to[            One      |+|          Maybe[NonEmptyTree[K, Demanding[V]]] ]
+          .in.right(clearTree)              .to[            One      |+|            One                                ]
+          .andThen(either(id, id))          .to[                     One                                               ]
       }
 
       val subsClosed: (Polled[A] |*| One) |*| Tree[K, Demanding[V]] -⚬ One =
@@ -366,6 +359,27 @@ sealed trait Streams[DSL <: libretto.DSL] {
   object LPolled {
     def close[A](discard: A -⚬ One): LPolled[A] -⚬ One =
       either(id, parToOne(discard, LPollable.close))
+
+    def feedTo[A, B](f: A |*| B -⚬ Maybe[B]): LPolled[A] |*| B -⚬ Maybe[B] = rec { self =>
+      val upstreamClosed: One |*| B -⚬ Maybe[B] =
+        elimFst[B] >>> Maybe.just
+
+      val upstreamValue: (A |*| LPollable[A]) |*| B -⚬ Maybe[B] =
+        id                                             [ (     A       |*| LPollable[A]) |*| B           ]
+          .in.fst(swap)                             .to[ (LPollable[A] |*|      A      ) |*| B           ]
+          .timesAssocLR                             .to[  LPollable[A] |*|     (A        |*| B)          ]
+          .in.snd(f)                                .to[  LPollable[A] |*|          Maybe[B]             ]
+          .distributeLR                             .to[ (LPollable[A] |*| One) |+| (LPollable[A] |*| B) ]
+          .in.left.fst(LPollable.close)             .to[ (         One |*| One) |+| (LPollable[A] |*| B) ]
+          .in.left(elimFst[One] >>> Maybe.empty[B]) .to[           Maybe[B]     |+| (LPollable[A] |*| B) ]
+          .in.right.fst(LPollable.poll)             .to[           Maybe[B]     |+| (  LPolled[A] |*| B) ]
+          .in.right(self)                           .to[           Maybe[B]     |+|           Maybe[B]   ]
+          .andThen(either(id, id))                  .to[                      Maybe[B]                   ]
+
+      id[ (One |+| (A |*| LPollable[A])) |*| B ]
+        .distributeRL
+        .either(upstreamClosed, upstreamValue)
+    }
   }
 
   object Polled {
