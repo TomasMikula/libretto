@@ -674,8 +674,11 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def getOrElse[A](f: One -⚬ A): Maybe[A] -⚬ A =
       either(f, id)
 
+    def discard[A](f: A -⚬ One): Maybe[A] -⚬ One =
+      either(id, f)
+
     def discard[A](implicit A: Comonoid[A]): Maybe[A] -⚬ One =
-      either(id, A.counit)
+      discard(A.counit)
   }
 
   def parFromOne[A, B](f: One -⚬ A, g: One -⚬ B): One -⚬ (A |*| B) =
