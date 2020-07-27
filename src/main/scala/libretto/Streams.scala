@@ -257,34 +257,49 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .pack[UnlimitedF[Pollable[A], *]]
     }
 
+    private[Pollable] type DemandingTree[K, V] = Tree[K, Demanding[V]]
+    private[Pollable] object DemandingTree {
+      type DT[K, V] = DemandingTree[K, V]
+      type NeDT[K, V] = NonEmptyTree[K, Demanding[V]]
+
+      def dispatch[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| DT[K, V]) -⚬ (Maybe[Val[V]] |*| DT[K, V]) =
+        Tree.update(Demanding.supply[V])
+
+      def dispatchNE[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| NeDT[K, V]) -⚬ (Maybe[NeDT[K, V]]) =
+        NonEmptyTree.update(Demanding.supply[V])
+          .elimFst(Maybe.discard[Val[V]])
+
+      def dispatchNE[A, K: Ordering, V](
+        f: Val[A] -⚬ (Val[K] |*| Val[V]),
+      ): Val[A] |*| NeDT[K, V] -⚬ Maybe[NeDT[K, V]] =
+        id                                     [       Val[A]        |*| NeDT[K, V]  ]
+          .in.fst(f)                        .to[ (Val[K] |*| Val[V]) |*| NeDT[K, V]  ]
+          .andThen(dispatchNE)              .to[                   Maybe[NeDT[K, V]] ]
+
+      def addDemanding[K: Ordering, V]: (Val[K] |*| Demanding[V]) |*| DT[K, V] -⚬ DT[K, V] =
+        Tree.insertOrUpdate(Demanding.merge)
+
+      def clear[K, V]: DT[K, V] -⚬ One =
+        Tree.clear(Demanding.close)
+
+      def addSubscriber[K: Ordering, V]: (Val[K] |*| Subscriber[V]) |*| DT[K, V] -⚬ DT[K, V] =
+        id                                           [ ( Val[K] |*|       Subscriber[V]               ) |*| DT[K, V] ]
+          .in.fst.snd(unpack)                     .to[ ( Val[K] |*| (One |+|             Demanding[V])) |*| DT[K, V] ]
+          .in.fst(distributeLR)                   .to[ ((Val[K] |*| One) |+| (Val[K] |*| Demanding[V])) |*| DT[K, V] ]
+          .in.fst.left(elimFst(discard))          .to[ (        One      |+| (Val[K] |*| Demanding[V])) |*| DT[K, V] ]
+          .distributeRL
+          .either(elimFst, addDemanding)
+    }
+
     // TODO: ensure backpressure on slow subscribers
     def subscribeByKey[A, K: Ordering, V](
       f: Val[A] -⚬ (Val[K] |*| Val[V])
     ): (Pollable[A] |*| LPollable[Val[K] |*| Subscriber[V]]) -⚬ One = {
+      import Pollable.{DemandingTree => DT}
       type KSubs = Val[K] |*| Subscriber[V]
 
-      val dispatch: ((Val[K] |*| Val[V]) |*| Tree[K, Demanding[V]]) -⚬ (Maybe[Val[V]] |*| Tree[K, Demanding[V]]) =
-        Tree.update(Demanding.supply[V])
-
-      val dispatchNE: ((Val[K] |*| Val[V]) |*| NonEmptyTree[K, Demanding[V]]) -⚬ (Maybe[Val[V]] |*| Maybe[NonEmptyTree[K, Demanding[V]]]) =
-        NonEmptyTree.update(Demanding.supply[V])
-
-      val addDemanding: (Val[K] |*| Demanding[V]) |*| Tree[K, Demanding[V]] -⚬ Tree[K, Demanding[V]] =
-        Tree.insertOrUpdate(Demanding.merge)
-
-      val clearTree: Tree[K, Demanding[V]] -⚬ One =
-        Tree.clear(Demanding.close)
-
-      val addSubscriber: KSubs |*| Tree[K, Demanding[V]] -⚬ Tree[K, Demanding[V]] =
-        id                                           [ ( Val[K] |*|       Subscriber[V]               ) |*| Tree[K, Demanding[V]] ]
-          .in.fst.snd(unpack)                     .to[ ( Val[K] |*| (One |+|             Demanding[V])) |*| Tree[K, Demanding[V]] ]
-          .in.fst(distributeLR)                   .to[ ((Val[K] |*| One) |+| (Val[K] |*| Demanding[V])) |*| Tree[K, Demanding[V]] ]
-          .in.fst.left(elimFst(discard))          .to[ (        One      |+| (Val[K] |*| Demanding[V])) |*| Tree[K, Demanding[V]] ]
-          .distributeRL
-          .either(elimFst, addDemanding)
-
       val upstreamClosed: One |*| (LPolled[KSubs] |*| Tree[K, Demanding[V]]) -⚬ One =
-        elimFst >>> parToOne(LPolled.close(parToOne(dsl.discard, Subscriber.close)), clearTree)
+        elimFst >>> parToOne(LPolled.close(parToOne(dsl.discard, Subscriber.close)), DT.clear)
 
       def upstreamVal(
         goRec: (Polled[A] |*| LPolled[KSubs]) |*| Tree[K, Demanding[V]] -⚬ One,
@@ -293,7 +308,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
           .in.fst(swap)                   .to[ (Pollable[A] |*| Val[A]) |*|              (LPolled[KSubs] |*| Tree[K, Demanding[V]]) ]
           .andThen(IXI)                   .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (      Val[A]        |*| Tree[K, Demanding[V]]) ]
           .in.snd.fst(f)                  .to[ (Pollable[A] |*| LPolled[KSubs]) |*| ((Val[K] |*| Val[V]) |*| Tree[K, Demanding[V]]) ]
-          .in.snd(dispatch)               .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (   Maybe[Val[V]]    |*| Tree[K, Demanding[V]]) ]
+          .in.snd(DT.dispatch)            .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (   Maybe[Val[V]]    |*| Tree[K, Demanding[V]]) ]
           .in.snd(elimFst(Maybe.discard)) .to[ (Pollable[A] |*| LPolled[KSubs]) |*|                          Tree[K, Demanding[V]]  ]
           .in.fst.fst(poll)               .to[ (  Polled[A] |*| LPolled[KSubs]) |*|                          Tree[K, Demanding[V]]  ]
           .andThen(goRec)                 .to[                                  One                                                 ]
@@ -306,18 +321,12 @@ sealed trait Streams[DSL <: libretto.DSL] {
           .either(upstreamClosed, upstreamVal(goRec))
 
       val forward: Polled[A] |*| Tree[K, Demanding[V]] -⚬ One = {
-        val add: Val[A] |*| NonEmptyTree[K, Demanding[V]] -⚬ Maybe[NonEmptyTree[K, Demanding[V]]] =
-          id                                     [       Val[A]        |*|       NonEmptyTree[K, Demanding[V]]  ]
-            .in.fst(f)                        .to[ (Val[K] |*| Val[V]) |*|       NonEmptyTree[K, Demanding[V]]  ]
-            .andThen(dispatchNE)              .to[       Maybe[Val[V]] |*| Maybe[NonEmptyTree[K, Demanding[V]]] ]
-            .andThen(elimFst(Maybe.discard))  .to[                         Maybe[NonEmptyTree[K, Demanding[V]]] ]
-
-        id                                     [  Polled[A] |*| (One |+|                NonEmptyTree[K, Demanding[V]]) ]
-          .distributeLR                     .to[ (Polled[A] |*| One) |+| (Polled[A] |*| NonEmptyTree[K, Demanding[V]]) ]
-          .in.left(elimFst(Polled.close))   .to[            One      |+| (Polled[A] |*| NonEmptyTree[K, Demanding[V]]) ]
-          .in.right(LPolled.feedTo(add))    .to[            One      |+|          Maybe[NonEmptyTree[K, Demanding[V]]] ]
-          .in.right(clearTree)              .to[            One      |+|            One                                ]
-          .andThen(either(id, id))          .to[                     One                                               ]
+        id                                               [  Polled[A] |*| (One |+|                NonEmptyTree[K, Demanding[V]]) ]
+          .distributeLR                               .to[ (Polled[A] |*| One) |+| (Polled[A] |*| NonEmptyTree[K, Demanding[V]]) ]
+          .in.left(elimFst(Polled.close))             .to[            One      |+| (Polled[A] |*| NonEmptyTree[K, Demanding[V]]) ]
+          .in.right(LPolled.feedTo(DT.dispatchNE(f))) .to[            One      |+|          Maybe[NonEmptyTree[K, Demanding[V]]] ]
+          .in.right(DT.clear)                         .to[            One      |+|            One                                ]
+          .andThen(either(id, id))                    .to[                     One                                               ]
       }
 
       val subsClosed: (Polled[A] |*| One) |*| Tree[K, Demanding[V]] -⚬ One =
@@ -330,7 +339,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .in.fst.snd(swap)             .to[ (Polled[A] |*| (LPollable[KSubs] |*| KSubs)) |*| Tree[K, Demanding[V]] ]
         .in.fst(timesAssocRL)         .to[ ((Polled[A] |*| LPollable[KSubs]) |*| KSubs) |*| Tree[K, Demanding[V]] ]
         .timesAssocLR                 .to[ (Polled[A] |*| LPollable[KSubs]) |*| (KSubs |*| Tree[K, Demanding[V]]) ]
-        .in.snd(addSubscriber)        .to[ (Polled[A] |*| LPollable[KSubs]) |*|            Tree[K, Demanding[V]]  ]
+        .in.snd(DT.addSubscriber)     .to[ (Polled[A] |*| LPollable[KSubs]) |*|            Tree[K, Demanding[V]]  ]
         .in.fst.snd(LPollable.poll)   .to[ (Polled[A] |*|   LPolled[KSubs]) |*|            Tree[K, Demanding[V]]  ]
         .andThen(goRec)
 
