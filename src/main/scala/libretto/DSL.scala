@@ -142,7 +142,7 @@ trait DSL {
   /** Lifts an ordinary Scala function to a linear function on demands, in opposite direction. */
   def liftN[A, B](f: A => B): Neg[B] -⚬ Neg[A]
 
-  def const[A](a: A): One -⚬ Val[A]
+  def const[A](a: A): Done -⚬ Val[A]
 
   def discard[A]: Val[A] -⚬ One
 

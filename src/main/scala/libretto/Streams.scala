@@ -543,16 +543,16 @@ sealed trait Streams[DSL <: libretto.DSL] {
 
     def singleton[A](a: A): Source[A] = {
       val poll: One -⚬ (One |+| (Val[A] |*| Pollable[A])) =
-        parFromOne(const(a), Source.empty[A]) .from[                 One              ]
-          .to  [          Val[A] |*| Pollable[A]  ]
-          .injectR                            .to  [ One |+| (Val[A] |*| Pollable[A]) ]
+        parFromOne(const_(a), Source.empty[A])  .from[                 One              ]
+                                                .to  [          Val[A] |*| Pollable[A]  ]
+          .injectR                              .to  [ One |+| (Val[A] |*| Pollable[A]) ]
 
       choice(id[One], poll)
         .pack[PollableF[A, *]]
     }
 
     def fromList[A](elems: List[A]): Source[A] = {
-      const(elems) andThen Pollable.fromList[A]
+      const_(elems) andThen Pollable.fromList[A]
     }
 
     def concat[A](src1: Source[A], src2: Source[A]): Source[A] = {
@@ -601,7 +601,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
       }
 
       id[Pollable[A]]                   .to[            Pollable[A] ]
-        .introFst(const(initialState))  .to[ Val[S] |*| Pollable[A] ]
+        .introFst(const_(initialState)) .to[ Val[S] |*| Pollable[A] ]
         .andThen(inner)                 .to[     Pollable[B]        ]
     }
   }

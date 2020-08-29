@@ -3,6 +3,9 @@ package libretto
 class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   import dsl._
 
+  def const_[A](a: A): One -⚬ Val[A] =
+    andThen(done, const(a))
+
   /** Convenience method to summon implicit instances of [[dsl.Dual]]. */
   def Dual[A, B](implicit ev: Dual[A, B]): Dual[A, B] = ev
 
@@ -570,10 +573,10 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   type Bool = Val[Unit] |+| Val[Unit]
   object Bool {
     val constTrue: One -⚬ Bool =
-      const(()) >>> injectL
+      const_(()) >>> injectL
 
     val constFalse: One -⚬ Bool =
-      const(()) >>> injectR
+      const_(()) >>> injectR
 
     def ifThenElse[A, B, C](ifTrue: Val[Unit] |*| A -⚬ B, ifFalse: Val[Unit] |*| A -⚬ C): (Bool |*| A) -⚬ (B |+| C) =
       id                                   [               Bool |*| A                ]
@@ -815,10 +818,10 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
         .in.left(dsl.discard)           .to[   One     |+| Val[A] ]
 
     def unliftOption[A]: Maybe[Val[A]] -⚬ Val[Option[A]] =
-      id[Maybe[Val[A]]]             .to[    One    |+| Val[A] ]
-      .in.left(const(()))           .to[ Val[Unit] |+| Val[A] ]
-      .andThen(unliftEither)        .to[ Val[Either[Unit, A]] ]
-      .andThen(liftV(_.toOption))   .to[ Val[Option[A]]       ]
+      id[Maybe[Val[A]]]               .to[    One    |+| Val[A] ]
+        .in.left(const_(()))          .to[ Val[Unit] |+| Val[A] ]
+        .andThen(unliftEither)        .to[ Val[Either[Unit, A]] ]
+        .andThen(liftV(_.toOption))   .to[ Val[Option[A]]       ]
 
     def getOrElse[A](f: One -⚬ A): Maybe[A] -⚬ A =
       either(f, id)
