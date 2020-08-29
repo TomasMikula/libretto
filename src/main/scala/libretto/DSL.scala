@@ -34,6 +34,12 @@ trait DSL {
   /** Demand for a value of type `A`. */
   type Neg[A]
 
+  /** Signals completion. Travels in the direction of [[-⚬]]. Equivalent to `Val[Unit]`. */
+  type Done
+
+  /** Signals demand. Travels in the direction opposite to [[-⚬]]. Equivalent to `Neg[Unit]`. */
+  type Need
+
   type Rec[F[_]]
 
   /** An element of type `A` is represented as a function `One -⚬ A`. */
@@ -82,6 +88,21 @@ trait DSL {
   def chooseR[A, B]: (A |&| B) -⚬ B
 
   def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C)
+
+  def done: One -⚬ Done
+  def need: Need -⚬ One
+
+  def fork: Done -⚬ (Done |*| Done)
+  def join: (Done |*| Done) -⚬ Done
+
+  def forkNeed: (Need |*| Need) -⚬ Need
+  def joinNeed: Need -⚬ (Need |*| Need)
+
+  def injectLWhenDone[A, B]: (Done |*| A) -⚬ (Done |*| (A |+| B))
+  def injectRWhenDone[A, B]: (Done |*| B) -⚬ (Done |*| (A |+| B))
+
+  def chooseLWhenNeed[A, B]: (Need |*| (A |&| B)) -⚬ (Need |*| A)
+  def chooseRWhenNeed[A, B]: (Need |*| (A |&| B)) -⚬ (Need |*| B)
 
   /** Factor out the factor `A` on the left of both summands. */
   def factorL[A, B, C]: ((A |*| B) |+| (A |*| C)) -⚬ (A |*| (B |+| C)) =
@@ -153,6 +174,8 @@ trait DSL {
   implicit def choiceEitherDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |&| B, Ȧ |+| Ḃ]
 
   implicit def valNegDuality[A]: Dual[Val[A], Neg[A]]
+
+  implicit def doneNeedDuality: Dual[Done, Need]
 
   // TODO: weaken to `(Dual[A, Ȧ], One -⚬ B, One -⚬ C) => One -⚬ (A =⚬ B |*| Ȧ =⚬ C)`?
   implicit def functionDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A =⚬ B, Ȧ =⚬ Ḃ]
