@@ -499,8 +499,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     aKey: A -⚬ (Val[K] |*| A),
     bKey: B -⚬ (Val[K] |*| B),
     pred: (K, K) => Boolean,
-  )(implicit
-    ord: Ordering[K],
   ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
     id[A |*| B]
       .par(aKey, bKey)
