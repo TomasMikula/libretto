@@ -345,7 +345,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
   def clear[K, V](f: V -⚬ One): Tree[K, V] -⚬ One =
     either(id, NonEmptyTree.clear(f))
 
-  private trait Absorptive[F[_]] extends CoFunctor[F] {
+  private trait Absorptive[F[_]] extends Functor[F] {
     def absorbOrDiscardL[A: Comonoid, B]: (A |*| F[B]) -⚬ F[A |*| B]
     def absorbOrDiscardR[A, B: Comonoid]: (F[A] |*| B) -⚬ F[A |*| B]
 

@@ -10,11 +10,11 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     ev.eliminate
 
   /** Witnesses that `F` is a covariant endofunctor on the category `-⚬`. */
-  trait CoFunctor[F[_]] { self =>
+  trait Functor[F[_]] { self =>
     def lift[A, B](f: A -⚬ B): F[A] -⚬ F[B]
 
     /** Composition with another covariant functor. */
-    def ⚬[G[_]](that: CoFunctor[G]): CoFunctor[λ[x => F[G[x]]]] = new CoFunctor[λ[x => F[G[x]]]] {
+    def ⚬[G[_]](that: Functor[G]): Functor[λ[x => F[G[x]]]] = new Functor[λ[x => F[G[x]]]] {
       def lift[A, B](f: A -⚬ B): F[G[A]] -⚬ F[G[B]] = self.lift(that.lift(f))
     }
 
@@ -29,12 +29,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def lift[A, B](f: A -⚬ B): F[B] -⚬ F[A]
 
     /** Composition with a covariant functor. Results in a contravariant functor. */
-    def ⚬[G[_]](that: CoFunctor[G]): ContraFunctor[λ[x => F[G[x]]]] = new ContraFunctor[λ[x => F[G[x]]]] {
+    def ⚬[G[_]](that: Functor[G]): ContraFunctor[λ[x => F[G[x]]]] = new ContraFunctor[λ[x => F[G[x]]]] {
       def lift[A, B](f: A -⚬ B): F[G[B]] -⚬ F[G[A]] = self.lift(that.lift(f))
     }
 
     /** Composition with another contravariant functor. Results in a covariant functor. */
-    def ⚬[G[_]](that: ContraFunctor[G]): CoFunctor[λ[x => F[G[x]]]] = new CoFunctor[λ[x => F[G[x]]]] {
+    def ⚬[G[_]](that: ContraFunctor[G]): Functor[λ[x => F[G[x]]]] = new Functor[λ[x => F[G[x]]]] {
       def lift[A, B](f: A -⚬ B): F[G[A]] -⚬ F[G[B]] = self.lift(that.lift(f))
     }
   }
@@ -65,37 +65,37 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   type Id[A] = A
 
-  val idFunctor: CoFunctor[Id] = new CoFunctor[Id] {
+  val idFunctor: Functor[Id] = new Functor[Id] {
     def lift[A, B](f: A -⚬ B): Id[A] -⚬ Id[B] = f
   }
 
   /** Product is covariant in the first argument. */
-  def fst[B]: CoFunctor[* |*| B] = new CoFunctor[* |*| B] {
+  def fst[B]: Functor[* |*| B] = new Functor[* |*| B] {
     def lift[A1, A2](f: A1 -⚬ A2): (A1 |*| B) -⚬ (A2 |*| B) = liftFst(f)
   }
 
   /** Product is covariant in the second argument. */
-  def snd[A]: CoFunctor[A |*| *] = new CoFunctor[A |*| *] {
+  def snd[A]: Functor[A |*| *] = new Functor[A |*| *] {
     def lift[B1, B2](f: B1 -⚬ B2): (A |*| B1) -⚬ (A |*| B2) = liftSnd(f)
   }
 
   /** Disjoint union is covariant in the left argument. */
-  def left[B]: CoFunctor[* |+| B] = new CoFunctor[* |+| B] {
+  def left[B]: Functor[* |+| B] = new Functor[* |+| B] {
     def lift[A1, A2](f: A1 -⚬ A2): (A1 |+| B) -⚬ (A2 |+| B) = liftL(f)
   }
 
   /** Disjoint union is covariant in the right argument. */
-  def right[A]: CoFunctor[A |+| *] = new CoFunctor[A |+| *] {
+  def right[A]: Functor[A |+| *] = new Functor[A |+| *] {
     def lift[B1, B2](f: B1 -⚬ B2): (A |+| B1) -⚬ (A |+| B2) = liftR(f)
   }
 
   /** Choice is covariant in the left argument. */
-  def choiceL[B]: CoFunctor[* |&| B] = new CoFunctor[* |&| B] {
+  def choiceL[B]: Functor[* |&| B] = new Functor[* |&| B] {
     def lift[A1, A2](f: A1 -⚬ A2): (A1 |&| B) -⚬ (A2 |&| B) = choice[A1 |&| B, A2, B](chooseL andThen f, chooseR)
   }
 
   /** Choice is covariant in the right argument. */
-  def choiceR[A]: CoFunctor[A |&| *] = new CoFunctor[A |&| *] {
+  def choiceR[A]: Functor[A |&| *] = new Functor[A |&| *] {
     def lift[B1, B2](f: B1 -⚬ B2): (A |&| B1) -⚬ (A |&| B2) = choice[A |&| B1, A, B2](chooseL, chooseR andThen f)
   }
 
@@ -110,7 +110,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   }
 
   /** Function object (exponential) is covariant in the output type. */
-  def output[A]: CoFunctor[A =⚬ *] = new CoFunctor[A =⚬ *] {
+  def output[A]: Functor[A =⚬ *] = new Functor[A =⚬ *] {
     def lift[B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
       id                       [(A =⚬ B) |*| A]
         .andThen(eval)      .to[B]
@@ -259,19 +259,19 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   }
 
   /** Focused on `B` in the output `F[B]` of linear function `A -⚬ F[B]`, where `B` is in a covariant position. */
-  class FocusedFunctionOutputCo[A, F[_], B](f: A -⚬ F[B])(F: CoFunctor[F]) {
+  class FocusedFunctionOutputCo[A, F[_], B](f: A -⚬ F[B])(F: Functor[F]) {
     def map[C](g: B -⚬ C): A -⚬ F[C] = f andThen F.lift(g)
 
     /** Alias for [[map]]. */
     def apply[C](g: B -⚬ C): A -⚬ F[C] = map(g)
 
-    def zoomCo[G[_], C](G: CoFunctor[G])(implicit ev: B =:= G[C]): FocusedFunctionOutputCo[A, λ[x => F[G[x]]], C] =
+    def zoomCo[G[_], C](G: Functor[G])(implicit ev: B =:= G[C]): FocusedFunctionOutputCo[A, λ[x => F[G[x]]], C] =
       new FocusedFunctionOutputCo[A, λ[x => F[G[x]]], C](ev.liftCo[F].substituteCo(f))(F ⚬ G)
 
     def zoomContra[G[_], C](G: ContraFunctor[G])(implicit ev: B =:= G[C]): FocusedFunctionOutputContra[A, λ[x => F[G[x]]], C] =
       new FocusedFunctionOutputContra[A, λ[x => F[G[x]]], C](ev.liftCo[F].substituteCo(f))(F ⚬ G)
 
-    def co[G[_]](implicit G: CoFunctor[G], U: Unapply[B, G]): FocusedFunctionOutputCo[A, λ[x => F[G[x]]], U.A] =
+    def co[G[_]](implicit G: Functor[G], U: Unapply[B, G]): FocusedFunctionOutputCo[A, λ[x => F[G[x]]], U.A] =
       zoomCo[G, U.A](G)(U.ev)
 
     def contra[G[_]](implicit G: ContraFunctor[G], U: Unapply[B, G]): FocusedFunctionOutputContra[A, λ[x => F[G[x]]], U.A] =
@@ -317,13 +317,13 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   class FocusedFunctionOutputContra[A, F[_], B](f: A -⚬ F[B])(F: ContraFunctor[F]) {
     def unapply[B0](g: B0 -⚬ B): A -⚬ F[B0] = f andThen F.lift(g)
 
-    def zoomCo[G[_], C](G: CoFunctor[G])(implicit ev: B =:= G[C]): FocusedFunctionOutputContra[A, λ[x => F[G[x]]], C] =
+    def zoomCo[G[_], C](G: Functor[G])(implicit ev: B =:= G[C]): FocusedFunctionOutputContra[A, λ[x => F[G[x]]], C] =
       new FocusedFunctionOutputContra[A, λ[x => F[G[x]]], C](ev.liftCo[F].substituteCo(f))(F ⚬ G)
 
     def zoomContra[G[_], C](G: ContraFunctor[G])(implicit ev: B =:= G[C]): FocusedFunctionOutputCo[A, λ[x => F[G[x]]], C] =
       new FocusedFunctionOutputCo[A, λ[x => F[G[x]]], C](ev.liftCo[F].substituteCo(f))(F ⚬ G)
 
-    def co[G[_]](implicit G: CoFunctor[G], U: Unapply[B, G]): FocusedFunctionOutputContra[A, λ[x => F[G[x]]], U.A] =
+    def co[G[_]](implicit G: Functor[G], U: Unapply[B, G]): FocusedFunctionOutputContra[A, λ[x => F[G[x]]], U.A] =
       zoomCo[G, U.A](G)(U.ev)
 
     def contra[G[_]](implicit G: ContraFunctor[G], U: Unapply[B, G]): FocusedFunctionOutputCo[A, λ[x => F[G[x]]], U.A] =
