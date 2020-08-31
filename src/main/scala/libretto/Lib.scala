@@ -265,6 +265,9 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     /** Alias for [[map]]. */
     def apply[C](g: B -⚬ C): A -⚬ F[C] = map(g)
 
+    def subst[C](implicit ev: B =:= C): A -⚬ F[C] =
+      ev.liftCo[F].substituteCo(f)
+
     def zoomCo[G[_], C](G: Functor[G])(implicit ev: B =:= G[C]): FocusedFunctionOutputCo[A, λ[x => F[G[x]]], C] =
       new FocusedFunctionOutputCo[A, λ[x => F[G[x]]], C](ev.liftCo[F].substituteCo(f))(F ⚬ G)
 
@@ -316,6 +319,9 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   /** Focused on `B` in the output `F[B]` of linear function `A -⚬ F[B]`, where `B` is in a contravariant position. */
   class FocusedFunctionOutputContra[A, F[_], B](f: A -⚬ F[B])(F: ContraFunctor[F]) {
     def unapply[B0](g: B0 -⚬ B): A -⚬ F[B0] = f andThen F.lift(g)
+
+    def subst[C](implicit ev: B =:= C): A -⚬ F[C] =
+      ev.liftCo[F].substituteCo(f)
 
     def zoomCo[G[_], C](G: Functor[G])(implicit ev: B =:= G[C]): FocusedFunctionOutputContra[A, λ[x => F[G[x]]], C] =
       new FocusedFunctionOutputContra[A, λ[x => F[G[x]]], C](ev.liftCo[F].substituteCo(f))(F ⚬ G)
