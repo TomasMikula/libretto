@@ -42,6 +42,16 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   /** Witnesses that `F` is a bifunctor (covariant in both variables). */
   trait Bifunctor[F[_, _]] {
     def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): F[A, C] -⚬ F[B, D]
+
+    def fst[B]: Functor[F[*, B]] = new Functor[F[*, B]] {
+      def lift[A1, A2](f: A1 -⚬ A2): F[A1, B] -⚬ F[A2, B] =
+        Bifunctor.this.lift[A1, A2, B, B](f, id[B])
+    }
+
+    def snd[A]: Functor[F[A, *]] = new Functor[F[A, *]] {
+      def lift[B1, B2](g: B1 -⚬ B2): F[A, B1] -⚬ F[A, B2] =
+        Bifunctor.this.lift[A, A, B1, B2](id[A], g)
+    }
   }
 
   object Bifunctor {
