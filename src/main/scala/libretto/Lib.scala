@@ -44,6 +44,10 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): F[A, C] -⚬ F[B, D]
   }
 
+  object Bifunctor {
+    def apply[F[_, _]](implicit ev: Bifunctor[F]): Bifunctor[F] = ev
+  }
+
   trait Unapply[FA, F[_]] {
     type A
     def ev: FA =:= F[A]
@@ -573,6 +577,8 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       caseGt: (A |*| B) -⚬ C,
     )
     : Compared[A, B] -⚬ C
+
+    implicit def bifunctorCompared: Bifunctor[Compared]
   }
 
   val Compare: CompareModule = new CompareModule {
@@ -591,6 +597,19 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       caseGt: A |*| B -⚬ C,
     ): Compared[A, B] -⚬ C =
       either(caseLt, either(caseEq, caseGt))
+
+    override def bifunctorCompared: Bifunctor[Compared] =
+      new Bifunctor[Compared] {
+        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): Compared[A, C] -⚬ Compared[B, D] = {
+          Bifunctor[|+|].lift(
+            par(f, g),
+            Bifunctor[|+|].lift(
+              par(f, g),
+              par(f, g),
+            )
+          )
+        }
+      }
   }
 
   def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
