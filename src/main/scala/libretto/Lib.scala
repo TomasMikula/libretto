@@ -64,6 +64,17 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def apply[F[_, _]](implicit ev: Bifunctor[F]): Bifunctor[F] = ev
   }
 
+  trait Transportive[F[_]] extends Functor[F] {
+    def inL[A, B]: (A |*| F[B]) -⚬ F[A |*| B]
+    def outL[A, B]: F[A |*| B] -⚬ (A |*| F[B])
+
+    def inR[A, B]: (F[A] |*| B) -⚬ F[A |*| B] =
+      swap[F[A], B] >>> inL >>> lift(swap[B, A])
+
+    def outR[A, B]: F[A |*| B] -⚬ (F[A] |*| B) =
+      lift(swap[A, B]) >>> outL >>> swap[B, F[A]]
+  }
+
   trait Unapply[FA, F[_]] {
     type A
     def ev: FA =:= F[A]
@@ -100,18 +111,26 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   type Id[A] = A
 
-  val idFunctor: Functor[Id] = new Functor[Id] {
+  implicit val idFunctor: Transportive[Id] = new Transportive[Id] {
     def lift[A, B](f: A -⚬ B): Id[A] -⚬ Id[B] = f
+    def inL[A, B]: (A |*| Id[B]) -⚬ Id[A |*| B] = id
+    def outL[A, B]: Id[A |*| B] -⚬ (A |*| Id[B]) = id
   }
 
   /** Product is covariant in the first argument. */
-  def fst[B]: Functor[* |*| B] = new Functor[* |*| B] {
+  implicit def fst[B]: Transportive[* |*| B] = new Transportive[* |*| B] {
     def lift[A1, A2](f: A1 -⚬ A2): (A1 |*| B) -⚬ (A2 |*| B) = liftFst(f)
+    def inL[A1, A2]: (A1 |*| (A2 |*| B)) -⚬ ((A1 |*| A2) |*| B) = timesAssocRL
+    def outL[A1, A2]: ((A1 |*| A2) |*| B) -⚬ (A1 |*| (A2 |*| B)) = timesAssocLR
   }
 
   /** Product is covariant in the second argument. */
-  def snd[A]: Functor[A |*| *] = new Functor[A |*| *] {
+  implicit def snd[A]: Transportive[A |*| *] = new Transportive[A |*| *] {
     def lift[B1, B2](f: B1 -⚬ B2): (A |*| B1) -⚬ (A |*| B2) = liftSnd(f)
+    def inL[B1, B2]: (B1 |*| (A |*| B2)) -⚬ (A |*| (B1 |*| B2)) =
+      timesAssocRL[B1, A, B2].in.fst(swap).timesAssocLR
+    def outL[B1, B2]: (A |*| (B1 |*| B2)) -⚬ (B1 |*| (A |*| B2)) =
+      timesAssocRL[A, B1, B2].in.fst(swap).timesAssocLR
   }
 
   /** Disjoint union is covariant in the left argument. */
@@ -303,6 +322,9 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def subst[C](implicit ev: B =:= C): A -⚬ F[C] =
       ev.liftCo[F].substituteCo(f)
 
+    def unsubst[C](implicit ev: C =:= B): A -⚬ F[C] =
+      ev.liftCo[F].substituteContra(f)
+
     def zoomCo[G[_], C](G: Functor[G])(implicit ev: B =:= G[C]): FocusedFunctionOutputCo[A, λ[x => F[G[x]]], C] =
       new FocusedFunctionOutputCo[A, λ[x => F[G[x]]], C](ev.liftCo[F].substituteCo(f))(F ⚬ G)
 
@@ -368,6 +390,9 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def subst[C](implicit ev: B =:= C): A -⚬ F[C] =
       ev.liftCo[F].substituteCo(f)
+
+    def unsubst[C](implicit ev: C =:= B): A -⚬ F[C] =
+      ev.liftCo[F].substituteContra(f)
 
     def zoomCo[G[_], C](G: Functor[G])(implicit ev: B =:= G[C]): FocusedFunctionOutputContra[A, λ[x => F[G[x]]], C] =
       new FocusedFunctionOutputContra[A, λ[x => F[G[x]]], C](ev.liftCo[F].substituteCo(f))(F ⚬ G)
@@ -607,11 +632,8 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   sealed trait CompareModule {
     type Compared[A, B]
 
-    def compareBy[A, B, K: Ordering](
-      aKey: A -⚬ (Val[K] |*| A),
-      bKey: B -⚬ (Val[K] |*| B),
-    )
-    : (A |*| B) -⚬ Compared[A, B]
+    def compareBy[F[_]: Transportive, G[_]: Transportive, K: Ordering]
+    : F[Val[K]] |*| G[Val[K]] -⚬ Compared[F[Val[K]], G[Val[K]]]
 
     def compared[A, B, C](
       caseLt: (A |*| B) -⚬ C,
@@ -626,12 +648,28 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   val Compare: CompareModule = new CompareModule {
     type Compared[A, B] = (A |*| B) |+| ((A |*| B) |+| (A |*| B))
 
-    def compareBy[A, B, K: Ordering](aKey: A -⚬ (Val[K] |*| A), bKey: B -⚬ (Val[K] |*| B)): A |*| B -⚬ Compared[A, B] =
+    def compareBy[F[_], G[_], K](implicit
+      F: Transportive[F],
+      G: Transportive[G],
+      K: Ordering[K],
+    ): F[Val[K]] |*| G[Val[K]] -⚬ Compared[F[Val[K]], G[Val[K]]] = {
+      def compareKeys(cmp: Val[K] |*| Val[K] -⚬ Bool): F[Val[K]] |*| G[Val[K]] -⚬ (Bool |*| (F[Val[K]] |*| G[Val[K]])) =
+        id                                   [  F[     Val[K]      ]  |*|  G[     Val[K]      ]  ]
+          .in.fst.co[F].map(dup)          .to[  F[Val[K] |*| Val[K]]  |*|  G[     Val[K]      ]  ]
+          .in.snd.co[G].map(dup)          .to[  F[Val[K] |*| Val[K]]  |*|  G[Val[K] |*| Val[K]]  ]
+          .in.fst(F.outL).in.snd(G.outL)  .to[ (Val[K] |*| F[Val[K]]) |*| (Val[K] |*| G[Val[K]]) ]
+          .andThen(IXI)                   .to[ (Val[K] |*| Val[K]) |*| (F[Val[K]] |*| G[Val[K]]) ]
+          .in.fst(cmp)                    .to[        Bool         |*| (F[Val[K]] |*| G[Val[K]]) ]
+
+      type A = F[Val[K]]
+      type B = G[Val[K]]
+
       id                                   [           A |*| B                       ]
-        .andThen(ltBy(aKey, bKey))      .to[ Bool |*| (A |*| B)                      ]
-        .andThen(ifThenElse(id, id))    .to[ (A |*| B) |+| (A |*| B)                 ]
-        .in.right(equivBy(aKey, bKey))  .to[ (A |*| B) |+| (Bool |*| (A |*| B))      ]
+        .andThen(compareKeys(lt))       .to[ Bool |*| (A |*| B)                      ]
+        .andThen(ifThenElse(id, id))    .to[ (A |*| B) |+|           (A |*| B)       ]
+        .in.right(compareKeys(equiv))   .to[ (A |*| B) |+| (Bool |*| (A |*| B))      ]
         .in.right(ifThenElse(id, id))   .to[ (A |*| B) |+| ((A |*| B) |+| (A |*| B)) ]
+    }
 
     def compared[A, B, C](
       caseLt: A |*| B -⚬ C,

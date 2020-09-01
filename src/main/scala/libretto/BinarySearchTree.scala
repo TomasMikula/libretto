@@ -64,16 +64,21 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
 
   sealed trait SingletonModule {
     type Singleton[K, V]
+    type KeyFocus[V, ValK]
 
     def of[K, V]: (Val[K] |*| V) -⚬ Singleton[K, V]
     def deconstruct[K, V]: Singleton[K, V] -⚬ (Val[K] |*| V)
     def key[K, V]: Singleton[K, V] -⚬ (Val[K] |*| Singleton[K, V])
     def summary[K, V]: Singleton[K, V] -⚬ (Summary[K] |*| Singleton[K, V])
     def clear[K, V](f: V -⚬ One): Singleton[K, V] -⚬ One
+
+    implicit def asKeyFocus[K, V]: Singleton[K, V] =:= KeyFocus[V, Val[K]]
+    implicit def keyTransport[V]: Transportive[KeyFocus[V, *]]
   }
 
   val Singleton: SingletonModule = new SingletonModule {
-    type Singleton[K, V] = Val[K] |*| V
+    type KeyFocus[V, ValK] = ValK |*| V
+    type Singleton[K, V] = KeyFocus[V, Val[K]]
 
     def of[K, V]: (Val[K] |*| V) -⚬ Singleton[K, V] =
       id
@@ -92,9 +97,13 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
 
     def clear[K, V](f: V -⚬ One): Singleton[K, V] -⚬ One =
       parToOne(dsl.discard, f)
+
+    def asKeyFocus[K, V]: Singleton[K, V] =:= KeyFocus[V, Val[K]] = implicitly
+
+    def keyTransport[V]: Transportive[KeyFocus[V, *]] = lib.fst
   }
 
-  import Singleton.Singleton
+  import Singleton.{Singleton, keyTransport}
 
   sealed trait BranchFModule {
     type BranchF[K, X]
@@ -222,9 +231,11 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
           .andThen(F.absorbOrDiscardL)                        .to[       F[Val[K] |*|              V] ]
           .andThen(F.lift(singleton))                         .to[        F[NonEmptyTree[K, V]]       ]
 
-      id                                                         [   (Val[K] |*| W) |*| Singleton[K, V]    ]
-        .andThen(compareBy(getFst, Singleton.key))            .to[ Compared[Val[K] |*| W, Singleton[K, V]] ]
-        .andThen(compared(intoL, replace, intoR))             .to[        F[NonEmptyTree[K, V]]            ]
+      id                                                             [     (Val[K] |*| W) |*|        Singleton[K, V]         ]
+        .in.snd.subst(Singleton.asKeyFocus)                       .to[     (Val[K] |*| W) |*| Singleton.KeyFocus[V, Val[K]]  ]
+        .andThen(compareBy[* |*| W, Singleton.KeyFocus[V, *], K]) .to[ Compared[Val[K] |*| W, Singleton.KeyFocus[V, Val[K]]] ]
+        .in.bi[Compared].snd.unsubst(Singleton.asKeyFocus)        .to[ Compared[Val[K] |*| W,        Singleton[K, V]       ] ]
+        .andThen(compared(intoL, replace, intoR))                 .to[        F[NonEmptyTree[K, V]]                          ]
     }
 
     /** Update branch. */
