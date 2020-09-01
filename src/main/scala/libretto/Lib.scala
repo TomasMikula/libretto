@@ -77,6 +77,21 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       }
   }
 
+  trait Unapply2[FAB, F[_, _]] {
+    type A
+    type B
+    def ev: FAB =:= F[A, B]
+  }
+
+  object Unapply2 {
+    implicit def unapply2Instance[F[_, _], X, Y]: Unapply2[F[X, Y], F] { type A = X; type B = Y } =
+      new Unapply2[F[X, Y], F] {
+        type A = X
+        type B = Y
+        val ev: F[X, Y] =:= F[A, B] = implicitly
+      }
+  }
+
   def liftFst[A, B, C](f: A -⚬ C): (A |*| B) -⚬ (C |*| B) = par(f, id)
   def liftSnd[A, B, C](f: B -⚬ C): (A |*| B) -⚬ (A |*| C) = par(id, f)
 
@@ -300,8 +315,19 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def contra[G[_]](implicit G: ContraFunctor[G], U: Unapply[B, G]): FocusedFunctionOutputContra[A, λ[x => F[G[x]]], U.A] =
       zoomContra[G, U.A](G)(U.ev)
 
+    def bi[G[_, _]](implicit G: Bifunctor[G], U: Unapply2[B, G]): FocusedFunctionOutputBi[A, λ[(x, y) => F[G[x, y]]], U.A, U.B] =
+      new FocusedFunctionOutputBi[A, λ[(x, y) => F[G[x, y]]], U.A, U.B](U.ev.liftCo[F].substituteCo(f))(G inside F)
+
     def injectL[C]: A -⚬ F[B |+| C] = f andThen F.lift(dsl.injectL)
     def injectR[C]: A -⚬ F[C |+| B] = f andThen F.lift(dsl.injectR)
+  }
+
+  class FocusedFunctionOutputBi[A, F[_, _], B1, B2](f: A -⚬ F[B1, B2])(F: Bifunctor[F]) {
+    def fst: FocusedFunctionOutputCo[A, F[*, B2], B1] =
+      new FocusedFunctionOutputCo[A, F[*, B2], B1](f)(F.fst)
+
+    def snd: FocusedFunctionOutputCo[A, F[B1, *], B2] =
+      new FocusedFunctionOutputCo[A, F[B1, *], B2](f)(F.snd)
   }
 
   implicit class FocusedFunctionOutputOnTimesCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 |*| B2]) {
