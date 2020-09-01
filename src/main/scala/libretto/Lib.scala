@@ -52,6 +52,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       def lift[B1, B2](g: B1 -⚬ B2): F[A, B1] -⚬ F[A, B2] =
         Bifunctor.this.lift[A, A, B1, B2](id[A], g)
     }
+
+    def inside[G[_]](implicit G: Functor[G]): Bifunctor[λ[(x, y) => G[F[x, y]]]] =
+      new Bifunctor[λ[(x, y) => G[F[x, y]]]] {
+        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): G[F[A, C]] -⚬ G[F[B, D]] =
+          G.lift(Bifunctor.this.lift(f, g))
+      }
   }
 
   object Bifunctor {
