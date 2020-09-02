@@ -73,6 +73,16 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def outR[A, B]: F[A |*| B] -⚬ (F[A] |*| B) =
       lift(swap[A, B]) >>> outL >>> swap[B, F[A]]
+
+    def getL[A](implicit
+      A: Comonoid[A], // TODO: Cosemigroup would be sufficient
+    ): F[A] -⚬ (A |*| F[A]) =
+      lift(A.split) >>> outL
+
+    def getR[A](implicit
+      A: Comonoid[A], // TODO: Cosemigroup would be sufficient
+    ): F[A] -⚬ (F[A] |*| A) =
+      getL[A] >>> swap
   }
 
   trait Unapply[FA, F[_]] {
@@ -654,10 +664,8 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       K: Ordering[K],
     ): F[Val[K]] |*| G[Val[K]] -⚬ Compared[F[Val[K]], G[Val[K]]] = {
       def compareKeys(cmp: Val[K] |*| Val[K] -⚬ Bool): F[Val[K]] |*| G[Val[K]] -⚬ (Bool |*| (F[Val[K]] |*| G[Val[K]])) =
-        id                                   [  F[     Val[K]      ]  |*|  G[     Val[K]      ]  ]
-          .in.fst.co[F].map(dup)          .to[  F[Val[K] |*| Val[K]]  |*|  G[     Val[K]      ]  ]
-          .in.snd.co[G].map(dup)          .to[  F[Val[K] |*| Val[K]]  |*|  G[Val[K] |*| Val[K]]  ]
-          .in.fst(F.outL).in.snd(G.outL)  .to[ (Val[K] |*| F[Val[K]]) |*| (Val[K] |*| G[Val[K]]) ]
+        id                                   [             F[Val[K]]  |*|             G[Val[K]]  ]
+          .in.fst(F.getL).in.snd(G.getL)  .to[ (Val[K] |*| F[Val[K]]) |*| (Val[K] |*| G[Val[K]]) ]
           .andThen(IXI)                   .to[ (Val[K] |*| Val[K]) |*| (F[Val[K]] |*| G[Val[K]]) ]
           .in.fst(cmp)                    .to[        Bool         |*| (F[Val[K]] |*| G[Val[K]]) ]
 
