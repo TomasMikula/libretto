@@ -575,9 +575,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     val constFalse: One -⚬ Bool =
       const(()) >>> injectR
 
-    def ifThenElse[A, B]: (Bool |*| (A |&| B)) -⚬ ((Val[Unit] |*| A) |+| (Val[Unit] |*| B)) =
-      matchingChoiceLR
-
     def ifThenElse[A, B, C](ifTrue: Val[Unit] |*| A -⚬ B, ifFalse: Val[Unit] |*| A -⚬ C): (Bool |*| A) -⚬ (B |+| C) =
       id                                   [               Bool |*| A                ]
         .distributeRL                   .to[ (Val[Unit] |*| A) |+| (Val[Unit] |*| A) ]
