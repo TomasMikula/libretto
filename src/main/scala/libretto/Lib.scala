@@ -85,11 +85,21 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
           Lens.this.modify(that.modify(f))
       }
 
+    def compose[T](that: Lens[T, S]): Lens[T, A] =
+      that andThen this
+
     def |+|[T](that: Lens[T, A]): Lens[S |+| T, A] =
       new Lens[S |+| T, A] {
         def modify[X, Y](f: (X |*| A) -⚬ (Y |*| A)): (X |*| (S |+| T)) -⚬ (Y |*| (S |+| T)) =
           distributeLR[X, S, T].bimap(Lens.this.modify(f), that.modify(f)) >>> factorL
       }
+
+    def awaitL[A0](implicit ev: A =:= Val[A0]): (Val[Unit] |*| S) -⚬ S =
+      ev.substituteCo(this)
+        .write[Val[Unit]](unliftPair >>> liftV(_._2))
+
+    def awaitR[A0](implicit ev: A =:= Val[A0]): (S |*| Val[Unit]) -⚬ S =
+      swap >>> awaitL
   }
 
   object Lens {
@@ -557,21 +567,21 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       .in.left.fst(chooseL)    .to[( A        |*| C) |+| ((A |&| B) |*| D)]
       .in.right.fst(chooseR)   .to[( A        |*| C) |+| (       B  |*| D)]
 
-  type Bool = One |+| One
+  type Bool = Val[Unit] |+| Val[Unit]
   object Bool {
     val constTrue: One -⚬ Bool =
-      injectL
+      const(()) >>> injectL
 
     val constFalse: One -⚬ Bool =
-      injectR
+      const(()) >>> injectR
 
-    def ifThenElse[A, B]: (Bool |*| (A |&| B)) -⚬ ((One |*| A) |+| (One |*| B)) =
+    def ifThenElse[A, B]: (Bool |*| (A |&| B)) -⚬ ((Val[Unit] |*| A) |+| (Val[Unit] |*| B)) =
       matchingChoiceLR
 
-    def ifThenElse[A, B, C](ifTrue: One |*| A -⚬ B, ifFalse: One |*| A -⚬ C): (Bool |*| A) -⚬ (B |+| C) =
-      id                                   [         Bool |*| A          ]
-        .distributeRL                   .to[ (One |*| A) |+| (One |*| A) ]
-        .bimap(ifTrue, ifFalse)         .to[       B     |+|       C     ]
+    def ifThenElse[A, B, C](ifTrue: Val[Unit] |*| A -⚬ B, ifFalse: Val[Unit] |*| A -⚬ C): (Bool |*| A) -⚬ (B |+| C) =
+      id                                   [               Bool |*| A                ]
+        .distributeRL                   .to[ (Val[Unit] |*| A) |+| (Val[Unit] |*| A) ]
+        .bimap(ifTrue, ifFalse)         .to[             B     |+|             C     ]
 
     private val eitherToBoolean: Either[Unit, Unit] => Boolean = {
       case Left(())  => true
@@ -584,17 +594,13 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     }
 
     def liftBoolean: Val[Boolean] -⚬ Bool = {
-      id                                     [ Val[Boolean] ]
+      id                                     [ Val[Boolean]            ]
         .andThen(liftV(booleanToEither))  .to[ Val[Either[Unit, Unit]] ]
         .andThen(liftEither)              .to[ Val[Unit] |+| Val[Unit] ]
-        .in.left(discard)                 .to[    One    |+| Val[Unit] ]
-        .in.right(discard)                .to[    One    |+|    One    ]
     }
 
     def unliftBoolean: Bool -⚬ Val[Boolean] =
-      id[Bool]                            .to[    One    |+|    One    ]
-      .in.left(const(()))                 .to[ Val[Unit] |+|    One    ]
-      .in.right(const(()))                .to[ Val[Unit] |+| Val[Unit] ]
+      id[Bool]                            .to[ Val[Unit] |+| Val[Unit] ]
       .andThen(unliftEither)              .to[ Val[Either[Unit, Unit]] ]
       .andThen(liftV(eitherToBoolean))    .to[      Val[Boolean]       ]
   }
@@ -676,8 +682,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     aLens: Lens[A, Val[K]],
     bLens: Lens[B, Val[K]],
   )
-  : (A |*| B) -⚬ ((A |*| B) |+| (B |*| A)) =
-    lteqBy(aLens, bLens) >>> ifThenElse(elimFst, elimFst >>> swap)
+  : (A |*| B) -⚬ ((A |*| B) |+| (B |*| A)) = {
+    val awaitL: Val[Unit] |*| (A |*| B) -⚬ (A |*| B) =
+      (aLens compose fst[B].lens).awaitL
+
+    lteqBy(aLens, bLens) >>> ifThenElse(awaitL, awaitL >>> swap)
+  }
 
   sealed trait CompareModule {
     type Compared[A, B]
@@ -703,12 +713,16 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def compareBy[A, B, K: Ordering](
       aLens: Lens[A, Val[K]],
       bLens: Lens[B, Val[K]],
-    ): A |*| B -⚬ Compared[A, B] =
+    ): A |*| B -⚬ Compared[A, B] = {
+      val awaitL: Val[Unit] |*| (A |*| B) -⚬ (A |*| B) =
+        (aLens compose fst[B].lens).awaitL
+
       id                                           [           A |*| B                       ]
         .andThen(ltBy(aLens, bLens))            .to[ Bool |*| (A |*| B)                      ]
-        .andThen(ifThenElse(elimFst, elimFst))  .to[ (A |*| B) |+|           (A |*| B)       ]
+        .andThen(ifThenElse(awaitL, awaitL))    .to[ (A |*| B) |+|           (A |*| B)       ]
         .in.right(equivBy(aLens, bLens))        .to[ (A |*| B) |+| (Bool |*| (A |*| B))      ]
-        .in.right(ifThenElse(elimFst, elimFst)) .to[ (A |*| B) |+| ((A |*| B) |+| (A |*| B)) ]
+        .in.right(ifThenElse(awaitL, awaitL))   .to[ (A |*| B) |+| ((A |*| B) |+| (A |*| B)) ]
+    }
 
     def compared[A, B, C](
       caseLt: A |*| B -⚬ C,
