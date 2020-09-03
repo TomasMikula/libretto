@@ -64,6 +64,45 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def apply[F[_, _]](implicit ev: Bifunctor[F]): Bifunctor[F] = ev
   }
 
+  trait Lens[S, A] {
+    def modify[X, Y](f: (X |*| A) -⚬ (Y |*| A)): (X |*| S) -⚬ (Y |*| S)
+
+    def read[Y](f: A -⚬ (Y |*| A)): S -⚬ (Y |*| S) =
+      introFst[S] >>> modify[One, Y](elimFst >>> f)
+
+    def write[X](f: (X |*| A) -⚬ A): (X |*| S) -⚬ S =
+      modify[X, One](f >>> introFst) >>> elimFst
+
+    def getL(implicit A: Comonoid[A]): S -⚬ (A |*| S) =
+      read[A](A.split)
+
+    def getR(implicit A: Comonoid[A]): S -⚬ (S |*| A) =
+      getL >>> swap
+
+    def andThen[B](that: Lens[A, B]): Lens[S, B] =
+      new Lens[S, B] {
+        def modify[X, Y](f: (X |*| B) -⚬ (Y |*| B)): (X |*| S) -⚬ (Y |*| S) =
+          Lens.this.modify(that.modify(f))
+      }
+
+    def |+|[T](that: Lens[T, A]): Lens[S |+| T, A] =
+      new Lens[S |+| T, A] {
+        def modify[X, Y](f: (X |*| A) -⚬ (Y |*| A)): (X |*| (S |+| T)) -⚬ (Y |*| (S |+| T)) =
+          distributeLR[X, S, T].bimap(Lens.this.modify(f), that.modify(f)) >>> factorL
+      }
+  }
+
+  object Lens {
+    def rec[F[_]]: Lens[Rec[F], F[Rec[F]]] =
+      new Lens[Rec[F], F[Rec[F]]] {
+        def modify[X, Y](f: (X |*| F[Rec[F]]) -⚬ (Y |*| F[Rec[F]])): (X |*| Rec[F]) -⚬ (Y |*| Rec[F]) =
+          id[X |*| Rec[F]]
+            .in.snd(unpack)
+            .andThen(f)
+            .in.snd(pack)
+      }
+  }
+
   trait Transportive[F[_]] extends Functor[F] {
     def inL[A, B]: (A |*| F[B]) -⚬ F[A |*| B]
     def outL[A, B]: F[A |*| B] -⚬ (A |*| F[B])
@@ -83,6 +122,11 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       A: Comonoid[A], // TODO: Cosemigroup would be sufficient
     ): F[A] -⚬ (F[A] |*| A) =
       getL[A] >>> swap
+
+    def lens[A]: Lens[F[A], A] = new Lens[F[A], A] {
+      def modify[X, Y](f: (X |*| A) -⚬ (Y |*| A)): (X |*| F[A]) -⚬ (Y |*| F[A]) =
+        inL >>> lift(f) >>> outL
+    }
   }
 
   trait Unapply[FA, F[_]] {
@@ -583,67 +627,69 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     liftBipredicate(ord.equiv)
 
   private def testKeys[A, B, K](
-    aKey: A -⚬ (Val[K] |*| A),
-    bKey: B -⚬ (Val[K] |*| B),
+    aLens: Lens[A, Val[K]],
+    bLens: Lens[B, Val[K]],
     pred: (K, K) => Boolean,
   ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
     id[A |*| B]
-      .par(aKey, bKey)
+      .par(aLens.getL, bLens.getL)
       .andThen(IXI)
       .in.fst(liftBipredicate(pred))
 
   def ltBy[A, B, K](
-    aKey: A -⚬ (Val[K] |*| A),
-    bKey: B -⚬ (Val[K] |*| B),
+    aLens: Lens[A, Val[K]],
+    bLens: Lens[B, Val[K]],
   )(implicit
     ord: Ordering[K],
   ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
-    testKeys(aKey, bKey, ord.lt)
+    testKeys(aLens, bLens, ord.lt)
 
   def lteqBy[A, B, K](
-    aKey: A -⚬ (Val[K] |*| A),
-    bKey: B -⚬ (Val[K] |*| B),
+    aLens: Lens[A, Val[K]],
+    bLens: Lens[B, Val[K]],
   )(implicit
     ord: Ordering[K],
   ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
-    testKeys(aKey, bKey, ord.lteq)
+    testKeys(aLens, bLens, ord.lteq)
 
   def gtBy[A, B, K](
-    aKey: A -⚬ (Val[K] |*| A),
-    bKey: B -⚬ (Val[K] |*| B),
+    aLens: Lens[A, Val[K]],
+    bLens: Lens[B, Val[K]],
   )(implicit
     ord: Ordering[K],
   ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
-    testKeys(aKey, bKey, ord.gt)
+    testKeys(aLens, bLens, ord.gt)
 
   def gteqBy[A, B, K](
-    aKey: A -⚬ (Val[K] |*| A),
-    bKey: B -⚬ (Val[K] |*| B),
+    aLens: Lens[A, Val[K]],
+    bLens: Lens[B, Val[K]],
   )(implicit
     ord: Ordering[K],
   ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
-    testKeys(aKey, bKey, ord.gteq)
+    testKeys(aLens, bLens, ord.gteq)
 
   def equivBy[A, B, K](
-    aKey: A -⚬ (Val[K] |*| A),
-    bKey: B -⚬ (Val[K] |*| B),
+    aLens: Lens[A, Val[K]],
+    bLens: Lens[B, Val[K]],
   )(implicit
     ord: Ordering[K],
   ): (A |*| B) -⚬ (Bool |*| (A |*| B)) =
-    testKeys(aKey, bKey, ord.equiv)
+    testKeys(aLens, bLens, ord.equiv)
 
   def sortBy[A, B, K: Ordering](
-    aKey: A -⚬ (Val[K] |*| A),
-    bKey: B -⚬ (Val[K] |*| B),
+    aLens: Lens[A, Val[K]],
+    bLens: Lens[B, Val[K]],
   )
   : (A |*| B) -⚬ ((A |*| B) |+| (B |*| A)) =
-    lteqBy(aKey, bKey) >>> ifThenElse(id, swap)
+    lteqBy(aLens, bLens) >>> ifThenElse(id, swap)
 
   sealed trait CompareModule {
     type Compared[A, B]
 
-    def compareBy[F[_]: Transportive, G[_]: Transportive, K: Ordering]
-    : F[Val[K]] |*| G[Val[K]] -⚬ Compared[F[Val[K]], G[Val[K]]]
+    def compareBy[A, B, K: Ordering](
+      aLens: Lens[A, Val[K]],
+      bLens: Lens[B, Val[K]],
+    ): A |*| B -⚬ Compared[A, B]
 
     def compared[A, B, C](
       caseLt: (A |*| B) -⚬ C,
@@ -658,26 +704,15 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   val Compare: CompareModule = new CompareModule {
     type Compared[A, B] = (A |*| B) |+| ((A |*| B) |+| (A |*| B))
 
-    def compareBy[F[_], G[_], K](implicit
-      F: Transportive[F],
-      G: Transportive[G],
-      K: Ordering[K],
-    ): F[Val[K]] |*| G[Val[K]] -⚬ Compared[F[Val[K]], G[Val[K]]] = {
-      def compareKeys(cmp: Val[K] |*| Val[K] -⚬ Bool): F[Val[K]] |*| G[Val[K]] -⚬ (Bool |*| (F[Val[K]] |*| G[Val[K]])) =
-        id                                   [             F[Val[K]]  |*|             G[Val[K]]  ]
-          .in.fst(F.getL).in.snd(G.getL)  .to[ (Val[K] |*| F[Val[K]]) |*| (Val[K] |*| G[Val[K]]) ]
-          .andThen(IXI)                   .to[ (Val[K] |*| Val[K]) |*| (F[Val[K]] |*| G[Val[K]]) ]
-          .in.fst(cmp)                    .to[        Bool         |*| (F[Val[K]] |*| G[Val[K]]) ]
-
-      type A = F[Val[K]]
-      type B = G[Val[K]]
-
+    def compareBy[A, B, K: Ordering](
+      aLens: Lens[A, Val[K]],
+      bLens: Lens[B, Val[K]],
+    ): A |*| B -⚬ Compared[A, B] =
       id                                   [           A |*| B                       ]
-        .andThen(compareKeys(lt))       .to[ Bool |*| (A |*| B)                      ]
+        .andThen(ltBy(aLens, bLens))    .to[ Bool |*| (A |*| B)                      ]
         .andThen(ifThenElse(id, id))    .to[ (A |*| B) |+|           (A |*| B)       ]
-        .in.right(compareKeys(equiv))   .to[ (A |*| B) |+| (Bool |*| (A |*| B))      ]
+        .in.right(equivBy(aLens, bLens)).to[ (A |*| B) |+| (Bool |*| (A |*| B))      ]
         .in.right(ifThenElse(id, id))   .to[ (A |*| B) |+| ((A |*| B) |+| (A |*| B)) ]
-    }
 
     def compared[A, B, C](
       caseLt: A |*| B -⚬ C,
