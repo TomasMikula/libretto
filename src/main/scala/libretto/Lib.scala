@@ -67,7 +67,85 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def apply[F[_, _]](implicit ev: Bifunctor[F]): Bifunctor[F] = ev
   }
 
-  trait Lens[S, A] {
+  /** Represents ''a'' way how `A` can await completion of a concurrent computation. */
+  trait Junction[A] {
+    def joinL: Done |*| A -⚬ A
+
+    def joinR: A |*| Done -⚬ A =
+      swap >>> joinL
+  }
+
+  object Junction {
+    def junctionDone: Junction[Done] =
+      new Junction[Done] {
+        override def joinL: Done |*| Done -⚬ Done =
+          join
+      }
+
+    def junctionVal[A]: Junction[Val[A]] =
+      new Junction[Val[A]] {
+        override def joinL: Done |*| Val[A] -⚬ Val[A] =
+          par(const(()), id[Val[A]]) >>> unliftPair >>> liftV(_._2)
+      }
+  }
+
+  trait Getter[S, A] { self =>
+    def getL[B](that: Getter[A, B])(implicit B: Cosemigroup[B]): S -⚬ (B |*| S)
+
+    def extendJunction(A: Junction[A]): Junction[S]
+
+    def getL(implicit A: Cosemigroup[A]): S -⚬ (A |*| S) =
+      getL(Getter.identity[A])
+
+    def getR(implicit A: Cosemigroup[A]): S -⚬ (S |*| A) =
+      getL >>> swap
+
+    def joinL(A: Junction[A]): (Done |*| S) -⚬ S =
+      extendJunction(A).joinL
+
+    def joinR(A: Junction[A]): (S |*| Done) -⚬ S =
+      swap >>> joinL(A)
+
+    def andThen[B](that: Getter[A, B]): Getter[S, B] =
+      new Getter[S, B] {
+        override def getL[C](next: Getter[B, C])(implicit C: Cosemigroup[C]): S -⚬ (C |*| S) =
+          self.getL(that andThen next)
+
+        override def extendJunction(B: Junction[B]): Junction[S] =
+          self.extendJunction(that.extendJunction(B))
+      }
+
+    def compose[T](that: Getter[T, S]): Getter[T, A] =
+      that andThen this
+
+    def |+|[T](that: Getter[T, A]): Getter[S |+| T, A] =
+      new Getter[S |+| T, A] {
+        override def getL[B](next: Getter[A, B])(implicit B: Cosemigroup[B]): (S |+| T) -⚬ (B |*| (S |+| T)) =
+          id[S |+| T].bimap(self.getL(next), that.getL(next)) >>> factorL
+
+        override def extendJunction(A: Junction[A]): Junction[S |+| T] =
+          new Junction[S |+| T] {
+            override def joinL: Done |*| (S |+| T) -⚬ (S |+| T) =
+              distributeLR.bimap(self.joinL(A), that.joinL(A))
+          }
+      }
+  }
+
+  object Getter {
+    def identity[A]: Getter[A, A] =
+      new Getter[A, A] {
+        override def getL[B](that: Getter[A, B])(implicit B: Cosemigroup[B]): A -⚬ (B |*| A) =
+          that.getL
+
+        override def getL(implicit A: Cosemigroup[A]): A -⚬ (A |*| A) =
+          A.split
+
+        override def extendJunction(A: Junction[A]): Junction[A] =
+          A
+      }
+  }
+
+  trait Lens[S, A] extends Getter[S, A] {
     def modify[X, Y](f: (X |*| A) -⚬ (Y |*| A)): (X |*| S) -⚬ (Y |*| S)
 
     def read[Y](f: A -⚬ (Y |*| A)): S -⚬ (Y |*| S) =
@@ -76,11 +154,13 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def write[X](f: (X |*| A) -⚬ A): (X |*| S) -⚬ S =
       modify[X, One](f >>> introFst) >>> elimFst
 
-    def getL(implicit A: Cosemigroup[A]): S -⚬ (A |*| S) =
-      read[A](A.split)
+    override def getL[B](that: Getter[A, B])(implicit B: Cosemigroup[B]): S -⚬ (B |*| S) =
+      read(that.getL)
 
-    def getR(implicit A: Cosemigroup[A]): S -⚬ (S |*| A) =
-      getL >>> swap
+    override def extendJunction(A: Junction[A]): Junction[S] =
+      new Junction[S] {
+        def joinL: Done |*| S -⚬ S = write(A.joinL)
+      }
 
     def andThen[B](that: Lens[A, B]): Lens[S, B] =
       new Lens[S, B] {
@@ -105,7 +185,8 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       swap >>> awaitL
 
     def awaitDoneL[A0](implicit ev: A =:= Val[A0]): (Done |*| S) -⚬ S =
-      par(const(()), id[S]) >>> awaitL
+      ev.substituteCo(this)
+        .joinL(Junction.junctionVal[A0])
 
     def awaitDoneR[A0](implicit ev: A =:= Val[A0]): (S |*| Done) -⚬ S =
       swap >>> awaitDoneL
@@ -636,7 +717,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     pred: (K, K) => Boolean,
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) = {
     val awaitL: (Val[Unit] |*| (A |*| B)) -⚬ (A |*| B) =
-      (aLens compose fst[B].lens).awaitL
+      (aLens compose fst[B].lens[A]).awaitL
 
     id[A |*| B]
       .par(aLens.getL, bLens.getL)
