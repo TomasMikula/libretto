@@ -76,10 +76,10 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def write[X](f: (X |*| A) -⚬ A): (X |*| S) -⚬ S =
       modify[X, One](f >>> introFst) >>> elimFst
 
-    def getL(implicit A: Comonoid[A]): S -⚬ (A |*| S) =
+    def getL(implicit A: Cosemigroup[A]): S -⚬ (A |*| S) =
       read[A](A.split)
 
-    def getR(implicit A: Comonoid[A]): S -⚬ (S |*| A) =
+    def getR(implicit A: Cosemigroup[A]): S -⚬ (S |*| A) =
       getL >>> swap
 
     def andThen[B](that: Lens[A, B]): Lens[S, B] =
@@ -132,14 +132,10 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def outR[A, B]: F[A |*| B] -⚬ (F[A] |*| B) =
       lift(swap[A, B]) >>> outL >>> swap[B, F[A]]
 
-    def getL[A](implicit
-      A: Comonoid[A], // TODO: Cosemigroup would be sufficient
-    ): F[A] -⚬ (A |*| F[A]) =
+    def getL[A](implicit A: Cosemigroup[A]): F[A] -⚬ (A |*| F[A]) =
       lift(A.split) >>> outL
 
-    def getR[A](implicit
-      A: Comonoid[A], // TODO: Cosemigroup would be sufficient
-    ): F[A] -⚬ (F[A] |*| A) =
+    def getR[A](implicit A: Cosemigroup[A]): F[A] -⚬ (F[A] |*| A) =
       getL[A] >>> swap
 
     def lens[A]: Lens[F[A], A] = new Lens[F[A], A] {
@@ -913,19 +909,25 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     }
   }
 
-  trait Monoid[A] {
-    def unit    :       One -⚬ A
-    def combine : (A |*| A) -⚬ A
+  trait Semigroup[A] {
+    def combine: (A |*| A) -⚬ A
+  }
+
+  trait Cosemigroup[A] {
+    def split: A -⚬ (A |*| A)
+  }
+
+  trait Monoid[A] extends Semigroup[A] {
+    def unit: One -⚬ A
+  }
+
+  trait Comonoid[A] extends Cosemigroup[A] {
+    def counit: A -⚬ One
   }
 
   trait Monad[F[_]] {
     def pure[A]    :       A -⚬ F[A]
     def flatten[A] : F[F[A]] -⚬ F[A]
-  }
-
-  trait Comonoid[A] {
-    def counit : A -⚬ One
-    def split  : A -⚬ (A |*| A)
   }
 
   trait Comonad[F[_]] {
@@ -969,12 +971,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       def duplicate[A] : Unlimited[A] -⚬ Unlimited[Unlimited[A]] = Unlimited.duplicate
     }
 
-  def getFst[A, B](implicit A: Comonoid[A]): (A |*| B) -⚬ (A |*| (A |*| B)) =
+  def getFst[A, B](implicit A: Cosemigroup[A]): (A |*| B) -⚬ (A |*| (A |*| B)) =
     id                             [     A     |*| B  ]
       .in.fst(A.split)          .to[ (A |*| A) |*| B  ]
       .timesAssocLR             .to[  A |*| (A |*| B) ]
 
-  def getSnd[A, B](implicit B: Comonoid[B]): (A |*| B) -⚬ (B |*| (A |*| B)) =
+  def getSnd[A, B](implicit B: Cosemigroup[B]): (A |*| B) -⚬ (B |*| (A |*| B)) =
     id                             [  A |*|     B     ]
       .in.snd(B.split)          .to[  A |*| (B |*| B) ]
       .timesAssocRL             .to[ (A |*| B) |*| B  ]
