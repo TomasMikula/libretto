@@ -77,7 +77,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def of[K, V]: (Val[K] |*| V) -⚬ Singleton[K, V]
     def deconstruct[K, V]: Singleton[K, V] -⚬ (Val[K] |*| V)
     def key[K, V]: Singleton[K, V] -⚬ (Val[K] |*| Singleton[K, V])
-    def summary[K, V]: Singleton[K, V] -⚬ (Summary[K] |*| Singleton[K, V])
+    def summary[K, V]: Getter[Singleton[K, V], Summary[K]]
     def clear[K, V](f: V -⚬ One): Singleton[K, V] -⚬ One
 
     def keyGetter[K, V]: Getter[Singleton[K, V], Val[K]]
@@ -95,11 +95,18 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def key[K, V]: Singleton[K, V] -⚬ (Val[K] |*| Singleton[K, V]) =
       getFst
 
-    def summary[K, V]: Singleton[K, V] -⚬ (Summary[K] |*| Singleton[K, V]) =
-      id[Singleton[K, V]]           .to[          Val[K]         |*| V  ]
-        .in.fst(dup)                .to[ ( Val[K]   |*|  Val[K]) |*| V  ]
-        .timesAssocLR               .to[   Val[K]   |*| (Val[K]  |*| V) ]
-        .in.fst(Summary.singleton)  .to[ Summary[K] |*| (Val[K]  |*| V) ]
+    def summary[K, V]: Getter[Singleton[K, V], Summary[K]] = {
+      val singletonSummary: Getter[Val[K], Summary[K]] =
+        new Getter[Val[K], Summary[K]] {
+          override def getL[B](that: Getter[Summary[K], B])(implicit B: Cosemigroup[B]): Val[K] -⚬ (B |*| Val[K]) =
+            (Summary.singleton[K] >>> that.getL).in.snd(Summary.minKey)
+
+          override def extendJunction(j: Junction[Summary[K]]): Junction[Val[K]] =
+            Junction.junctionVal[K]
+        }
+
+      singletonSummary compose fst[V].lens
+    }
 
     def clear[K, V](f: V -⚬ One): Singleton[K, V] -⚬ One =
       parToOne(dsl.discard, f)
@@ -112,12 +119,11 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
   sealed trait BranchFModule {
     type BranchF[K, X]
 
-    def of[K, X](summary: X -⚬ (Summary[K] |*| X)): (X |*| X) -⚬ BranchF[K, X]
+    def of[K, X](summary: Getter[X, Summary[K]]): (X |*| X) -⚬ BranchF[K, X]
     def deconstruct[K, X]: BranchF[K, X] -⚬ (X |*| X)
-    def summary[K, X]: BranchF[K, X] -⚬ (Summary[K] |*| BranchF[K, X])
     def clear[K, X](f: X -⚬ One): BranchF[K, X] -⚬ One
 
-    def summaryGetter[K, X]: Getter[BranchF[K, X], Summary[K]]
+    def summary[K, X]: Getter[BranchF[K, X], Summary[K]]
     def minKey[K, X]: Getter[BranchF[K, X], Val[K]]
     def maxKey[K, X]: Getter[BranchF[K, X], Val[K]]
   }
@@ -125,31 +131,26 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
   val BranchF: BranchFModule = new BranchFModule {
     type BranchF[K, X] = Summary[K] |*| (X |*| X)
 
-    def of[K, X](summary: X -⚬ (Summary[K] |*| X)): (X |*| X) -⚬ BranchF[K, X] =
-      id                              [                 X  |*|                 X  ]
-        .par(summary, summary)     .to[ (Summary[K] |*| X) |*| (Summary[K] |*| X) ]
-        .andThen(IXI)              .to[ (Summary[K] |*| Summary[K]) |*| (X |*| X) ]
-        .in.fst(Summary.merge)     .to[         Summary[K]          |*| (X |*| X) ]
+    def of[K, X](summary: Getter[X, Summary[K]]): (X |*| X) -⚬ BranchF[K, X] =
+      id                                     [                 X  |*|                 X  ]
+        .par(summary.getL, summary.getL)  .to[ (Summary[K] |*| X) |*| (Summary[K] |*| X) ]
+        .andThen(IXI)                     .to[ (Summary[K] |*| Summary[K]) |*| (X |*| X) ]
+        .in.fst(Summary.merge)            .to[         Summary[K]          |*| (X |*| X) ]
 
     def deconstruct[K, X]: BranchF[K, X] -⚬ (X |*| X) =
       discardFst
 
-    def summary[K, X]: BranchF[K, X] -⚬ (Summary[K] |*| BranchF[K, X]) =
-      id[BranchF[K, X]]            .to[          Summary[K]         |*| (X |*| X) ]
-        .in.fst(Summary.dup)       .to[ (Summary[K] |*| Summary[K]) |*| (X |*| X) ]
-        .timesAssocLR              .to[  Summary[K] |*|        BranchF[K, X]      ]
-
     def clear[K, X](f: X -⚬ One): BranchF[K, X] -⚬ One =
       parToOne(Summary.discard, parToOne(f, f))
 
-    def summaryGetter[K, X]: Getter[BranchF[K, X], Summary[K]] =
+    def summary[K, X]: Getter[BranchF[K, X], Summary[K]] =
       fst[X |*| X].lens[Summary[K]]
 
     def minKey[K, X]: Getter[BranchF[K, X], Val[K]] =
-      summaryGetter andThen Summary.minKeyGetter
+      summary andThen Summary.minKeyGetter
 
     def maxKey[K, X]: Getter[BranchF[K, X], Val[K]] =
-      summaryGetter andThen Summary.maxKeyGetter
+      summary andThen Summary.maxKeyGetter
   }
 
   import BranchF.BranchF
@@ -166,14 +167,11 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def deconstruct[K, V]: Branch[K, V] -⚬ (NonEmptyTree[K, V] |*| NonEmptyTree[K, V]) =
       BranchF.deconstruct
 
-    def summary[K, V]: Branch[K, V] -⚬ (Summary[K] |*| Branch[K, V]) =
-      BranchF.summary
-
     def clear[K, V](subClear: NonEmptyTree[K, V] -⚬ One): Branch[K, V] -⚬ One =
       BranchF.clear(subClear)
 
-    def summaryGetter[K, X]: Getter[BranchF[K, X], Summary[K]] =
-      BranchF.summaryGetter
+    def summary[K, V]: Getter[Branch[K, V], Summary[K]] =
+      BranchF.summary
 
     def minKey[K, V]: Getter[Branch[K, V], Val[K]] =
       BranchF.minKey
@@ -199,12 +197,8 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def branch[K, V]: (NonEmptyTree[K, V] |*| NonEmptyTree[K, V]) -⚬ NonEmptyTree[K, V] =
       Branch[K, V] >>> injectBranch
 
-    def summary[K, V]: NonEmptyTree[K, V] -⚬ (Summary[K] |*| NonEmptyTree[K, V]) =
-      id                                                          [                           NonEmptyTree[K, V]                       ]
-        .unpack[NonEmptyTreeF[K, V, *]]                        .to[                 Singleton[K, V]  |+|                 Branch[K, V]  ]
-        .bimap(Singleton.summary[K, V], Branch.summary[K, V])  .to[ (Summary[K] |*| Singleton[K, V]) |+| (Summary[K] |*| Branch[K, V]) ]
-        .andThen(factorL)                                      .to[  Summary[K] |*| (Singleton[K, V] |+|                 Branch[K, V]) ]
-        .in.snd(pack[NonEmptyTreeF[K, V, *]])                  .to[  Summary[K] |*|         NonEmptyTree[K, V]                         ]
+    def summary[K, V]: Getter[NonEmptyTree[K, V], Summary[K]] =
+      Lens.rec[NonEmptyTreeF[K, V, *]] andThen (Singleton.summary[K, V] |+| Branch.summary[K, V])
 
     def minKey[K, V]: Getter[NonEmptyTree[K, V], Val[K]] =
       Lens
