@@ -129,6 +129,19 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
               distributeLR.bimap(self.joinL(A), that.joinL(A))
           }
       }
+
+    def awaitL[A0](implicit ev: A =:= Val[A0]): (Val[Unit] |*| S) -⚬ S =
+      par(discard[Unit] >>> done, id[S]) >>> awaitDoneL[A0]
+
+    def awaitR[A0](implicit ev: A =:= Val[A0]): (S |*| Val[Unit]) -⚬ S =
+      swap >>> awaitL
+
+    def awaitDoneL[A0](implicit ev: A =:= Val[A0]): (Done |*| S) -⚬ S =
+      ev.substituteCo(this)
+        .joinL(Junction.junctionVal[A0])
+
+    def awaitDoneR[A0](implicit ev: A =:= Val[A0]): (S |*| Done) -⚬ S =
+      swap >>> awaitDoneL
   }
 
   object Getter {
@@ -176,20 +189,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
         def modify[X, Y](f: (X |*| A) -⚬ (Y |*| A)): (X |*| (S |+| T)) -⚬ (Y |*| (S |+| T)) =
           distributeLR[X, S, T].bimap(Lens.this.modify(f), that.modify(f)) >>> factorL
       }
-
-    def awaitL[A0](implicit ev: A =:= Val[A0]): (Val[Unit] |*| S) -⚬ S =
-      ev.substituteCo(this)
-        .write[Val[Unit]](unliftPair >>> liftV(_._2))
-
-    def awaitR[A0](implicit ev: A =:= Val[A0]): (S |*| Val[Unit]) -⚬ S =
-      swap >>> awaitL
-
-    def awaitDoneL[A0](implicit ev: A =:= Val[A0]): (Done |*| S) -⚬ S =
-      ev.substituteCo(this)
-        .joinL(Junction.junctionVal[A0])
-
-    def awaitDoneR[A0](implicit ev: A =:= Val[A0]): (S |*| Done) -⚬ S =
-      swap >>> awaitDoneL
   }
 
   object Lens {
