@@ -103,6 +103,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def awaitR[A0](implicit ev: A =:= Val[A0]): (S |*| Val[Unit]) -⚬ S =
       swap >>> awaitL
+
+    def awaitDoneL[A0](implicit ev: A =:= Val[A0]): (Done |*| S) -⚬ S =
+      par(const(()), id[S]) >>> awaitL
+
+    def awaitDoneR[A0](implicit ev: A =:= Val[A0]): (S |*| Done) -⚬ S =
+      swap >>> awaitDoneL
   }
 
   object Lens {
