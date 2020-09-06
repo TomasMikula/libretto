@@ -25,8 +25,8 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def minKey[K]: Summary[K] -⚬ Val[K]
     def maxKey[K]: Summary[K] -⚬ Val[K]
 
-    def minKeyLens[K]: Lens[Summary[K], Val[K]]
-    def maxKeyLens[K]: Lens[Summary[K], Val[K]]
+    def minKeyGetter[K]: Getter[Summary[K], Val[K]]
+    def maxKeyGetter[K]: Getter[Summary[K], Val[K]]
 
     def dup[K]: Summary[K] -⚬ (Summary[K] |*| Summary[K])
     def discard[K]: Summary[K] -⚬ One
@@ -47,10 +47,10 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def maxKey[K]: Summary[K] -⚬ Val[K] =
       discardFst
 
-    def minKeyLens[K]: Lens[Summary[K], Val[K]] =
+    def minKeyGetter[K]: Getter[Summary[K], Val[K]] =
       fst[Val[K]].lens[Val[K]]
 
-    def maxKeyLens[K]: Lens[Summary[K], Val[K]] =
+    def maxKeyGetter[K]: Getter[Summary[K], Val[K]] =
       snd[Val[K]].lens[Val[K]]
 
     def merge[K]: (Summary[K] |*| Summary[K]) -⚬ Summary[K] =
@@ -80,7 +80,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def summary[K, V]: Singleton[K, V] -⚬ (Summary[K] |*| Singleton[K, V])
     def clear[K, V](f: V -⚬ One): Singleton[K, V] -⚬ One
 
-    def keyLens[K, V]: Lens[Singleton[K, V], Val[K]]
+    def keyGetter[K, V]: Getter[Singleton[K, V], Val[K]]
   }
 
   val Singleton: SingletonModule = new SingletonModule {
@@ -104,7 +104,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def clear[K, V](f: V -⚬ One): Singleton[K, V] -⚬ One =
       parToOne(dsl.discard, f)
 
-    def keyLens[K, V]: Lens[Singleton[K, V], Val[K]] = lib.fst[V].lens[Val[K]]
+    def keyGetter[K, V]: Getter[Singleton[K, V], Val[K]] = lib.fst[V].lens[Val[K]]
   }
 
   import Singleton.Singleton
@@ -117,9 +117,9 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def summary[K, X]: BranchF[K, X] -⚬ (Summary[K] |*| BranchF[K, X])
     def clear[K, X](f: X -⚬ One): BranchF[K, X] -⚬ One
 
-    def summaryLens[K, X]: Lens[BranchF[K, X], Summary[K]]
-    def minKey[K, X]: Lens[BranchF[K, X], Val[K]]
-    def maxKey[K, X]: Lens[BranchF[K, X], Val[K]]
+    def summaryGetter[K, X]: Getter[BranchF[K, X], Summary[K]]
+    def minKey[K, X]: Getter[BranchF[K, X], Val[K]]
+    def maxKey[K, X]: Getter[BranchF[K, X], Val[K]]
   }
 
   val BranchF: BranchFModule = new BranchFModule {
@@ -142,14 +142,14 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def clear[K, X](f: X -⚬ One): BranchF[K, X] -⚬ One =
       parToOne(Summary.discard, parToOne(f, f))
 
-    def summaryLens[K, X]: Lens[BranchF[K, X], Summary[K]] =
+    def summaryGetter[K, X]: Getter[BranchF[K, X], Summary[K]] =
       fst[X |*| X].lens[Summary[K]]
 
-    def minKey[K, X]: Lens[BranchF[K, X], Val[K]] =
-      summaryLens andThen Summary.minKeyLens
+    def minKey[K, X]: Getter[BranchF[K, X], Val[K]] =
+      summaryGetter andThen Summary.minKeyGetter
 
-    def maxKey[K, X]: Lens[BranchF[K, X], Val[K]] =
-      summaryLens andThen Summary.maxKeyLens
+    def maxKey[K, X]: Getter[BranchF[K, X], Val[K]] =
+      summaryGetter andThen Summary.maxKeyGetter
   }
 
   import BranchF.BranchF
@@ -172,13 +172,13 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def clear[K, V](subClear: NonEmptyTree[K, V] -⚬ One): Branch[K, V] -⚬ One =
       BranchF.clear(subClear)
 
-    def summaryLens[K, X]: Lens[BranchF[K, X], Summary[K]] =
-      BranchF.summaryLens
+    def summaryGetter[K, X]: Getter[BranchF[K, X], Summary[K]] =
+      BranchF.summaryGetter
 
-    def minKey[K, V]: Lens[Branch[K, V], Val[K]] =
+    def minKey[K, V]: Getter[Branch[K, V], Val[K]] =
       BranchF.minKey
 
-    def maxKey[K, V]: Lens[Branch[K, V], Val[K]] =
+    def maxKey[K, V]: Getter[Branch[K, V], Val[K]] =
       BranchF.maxKey
   }
 
@@ -206,15 +206,15 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
         .andThen(factorL)                                      .to[  Summary[K] |*| (Singleton[K, V] |+|                 Branch[K, V]) ]
         .in.snd(pack[NonEmptyTreeF[K, V, *]])                  .to[  Summary[K] |*|         NonEmptyTree[K, V]                         ]
 
-    def minKey[K, V]: Lens[NonEmptyTree[K, V], Val[K]] =
+    def minKey[K, V]: Getter[NonEmptyTree[K, V], Val[K]] =
       Lens
         .rec[NonEmptyTreeF[K, V, *]]
-        .andThen(Singleton.keyLens[K, V] |+| Branch.minKey[K, V])
+        .andThen(Singleton.keyGetter[K, V] |+| Branch.minKey[K, V])
 
-    def maxKey[K, V]: Lens[NonEmptyTree[K, V], Val[K]] =
+    def maxKey[K, V]: Getter[NonEmptyTree[K, V], Val[K]] =
       Lens
         .rec[NonEmptyTreeF[K, V, *]]
-        .andThen(Singleton.keyLens[K, V] |+| Branch.maxKey[K, V])
+        .andThen(Singleton.keyGetter[K, V] |+| Branch.maxKey[K, V])
 
     private[BinarySearchTree] def update_[K: Ordering, V, W, F[_]](
       ins:         W -⚬ F[V],
@@ -262,7 +262,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
           .andThen(F.lift(singleton))                         .to[        F[NonEmptyTree[K, V]]       ]
 
       id                                                         [         (Val[K] |*| W) |*| Singleton[K, V]  ]
-        .andThen(compareBy(fst[W].lens, Singleton.keyLens))   .to[ Compared[Val[K] |*| W   ,  Singleton[K, V]] ]
+        .andThen(compareBy(fst[W].lens, Singleton.keyGetter)) .to[ Compared[Val[K] |*| W   ,  Singleton[K, V]] ]
         .andThen(compared(intoL, replace, intoR))             .to[          F[NonEmptyTree[K, V]]              ]
     }
 

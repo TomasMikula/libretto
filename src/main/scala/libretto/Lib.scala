@@ -711,15 +711,15 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     liftBipredicate(ord.equiv)
 
   private def testKeys[A, B, K](
-    aLens: Lens[A, Val[K]],
-    bLens: Lens[B, Val[K]],
+    aKey: Getter[A, Val[K]],
+    bKey: Getter[B, Val[K]],
     pred: (K, K) => Boolean,
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) = {
     val awaitL: (Val[Unit] |*| (A |*| B)) -⚬ (A |*| B) =
-      (aLens compose fst[B].lens[A]).awaitL
+      (aKey compose fst[B].lens[A]).awaitL
 
     id[A |*| B]
-      .par(aLens.getL, bLens.getL)
+      .par(aKey.getL, bKey.getL)
       .andThen(IXI)
       .in.fst(liftBipredicate(pred))
       .andThen(ifThenElse(awaitL, awaitL))
@@ -727,58 +727,58 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
 
   def ltBy[A, B, K](
-    aLens: Lens[A, Val[K]],
-    bLens: Lens[B, Val[K]],
+    aKey: Getter[A, Val[K]],
+    bKey: Getter[B, Val[K]],
   )(implicit
     ord: Ordering[K],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
-    testKeys(aLens, bLens, ord.lt)
+    testKeys(aKey, bKey, ord.lt)
 
   def lteqBy[A, B, K](
-    aLens: Lens[A, Val[K]],
-    bLens: Lens[B, Val[K]],
+    aKey: Getter[A, Val[K]],
+    bKey: Getter[B, Val[K]],
   )(implicit
     ord: Ordering[K],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
-    testKeys(aLens, bLens, ord.lteq)
+    testKeys(aKey, bKey, ord.lteq)
 
   def gtBy[A, B, K](
-    aLens: Lens[A, Val[K]],
-    bLens: Lens[B, Val[K]],
+    aKey: Getter[A, Val[K]],
+    bKey: Getter[B, Val[K]],
   )(implicit
     ord: Ordering[K],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
-    testKeys(aLens, bLens, ord.gt)
+    testKeys(aKey, bKey, ord.gt)
 
   def gteqBy[A, B, K](
-    aLens: Lens[A, Val[K]],
-    bLens: Lens[B, Val[K]],
+    aKey: Getter[A, Val[K]],
+    bKey: Getter[B, Val[K]],
   )(implicit
     ord: Ordering[K],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
-    testKeys(aLens, bLens, ord.gteq)
+    testKeys(aKey, bKey, ord.gteq)
 
   def equivBy[A, B, K](
-    aLens: Lens[A, Val[K]],
-    bLens: Lens[B, Val[K]],
+    aKey: Getter[A, Val[K]],
+    bKey: Getter[B, Val[K]],
   )(implicit
     ord: Ordering[K],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
-    testKeys(aLens, bLens, ord.equiv)
+    testKeys(aKey, bKey, ord.equiv)
 
   def sortBy[A, B, K: Ordering](
-    aLens: Lens[A, Val[K]],
-    bLens: Lens[B, Val[K]],
+    aKey: Getter[A, Val[K]],
+    bKey: Getter[B, Val[K]],
   )
   : (A |*| B) -⚬ ((A |*| B) |+| (B |*| A)) =
-    lteqBy(aLens, bLens).in.right(swap)
+    lteqBy(aKey, bKey).in.right(swap)
 
   sealed trait CompareModule {
     type Compared[A, B]
 
     def compareBy[A, B, K: Ordering](
-      aLens: Lens[A, Val[K]],
-      bLens: Lens[B, Val[K]],
+      aKey: Getter[A, Val[K]],
+      bKey: Getter[B, Val[K]],
     ): A |*| B -⚬ Compared[A, B]
 
     def compared[A, B, C](
@@ -795,12 +795,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     type Compared[A, B] = (A |*| B) |+| ((A |*| B) |+| (A |*| B))
 
     def compareBy[A, B, K: Ordering](
-      aLens: Lens[A, Val[K]],
-      bLens: Lens[B, Val[K]],
+      aKey: Getter[A, Val[K]],
+      bKey: Getter[B, Val[K]],
     ): A |*| B -⚬ Compared[A, B] =
       id                                           [           A |*| B                       ]
-        .andThen(ltBy(aLens, bLens))            .to[ (A |*| B) |+|           (A |*| B)       ]
-        .in.right(equivBy(aLens, bLens))        .to[ (A |*| B) |+| ((A |*| B) |+| (A |*| B)) ]
+        .andThen(ltBy(aKey, bKey))              .to[ (A |*| B) |+|           (A |*| B)       ]
+        .in.right(equivBy(aKey, bKey))          .to[ (A |*| B) |+| ((A |*| B) |+| (A |*| B)) ]
 
     def compared[A, B, C](
       caseLt: A |*| B -⚬ C,
