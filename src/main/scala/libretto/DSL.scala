@@ -177,9 +177,6 @@ trait DSL {
 
   implicit def doneNeedDuality: Dual[Done, Need]
 
-  // TODO: weaken to `(Dual[A, Ȧ], One -⚬ B, One -⚬ C) => One -⚬ (A =⚬ B |*| Ȧ =⚬ C)`?
-  implicit def functionDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A =⚬ B, Ȧ =⚬ Ḃ]
-
   /** If `A` is dual to `B`, then `F[A]` is dual to `G[B]`. */
   trait Dual1[F[_], G[_]] {
     def apply[A, Ā]: Dual[A, Ā] => Dual[F[A], G[Ā]]
