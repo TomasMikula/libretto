@@ -67,7 +67,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def apply[F[_, _]](implicit ev: Bifunctor[F]): Bifunctor[F] = ev
   }
 
-  /** Represents ''a'' way how `A` can await completion of a concurrent computation. */
+  /** Represents ''a'' way how `A` can await (join) completion of a concurrent computation. */
   trait Junction[A] {
     def joinL: Done |*| A -⚬ A
 

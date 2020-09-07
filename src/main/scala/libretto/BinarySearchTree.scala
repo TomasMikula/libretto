@@ -30,6 +30,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
 
     def dup[K]: Summary[K] -⚬ (Summary[K] |*| Summary[K])
     def discard[K]: Summary[K] -⚬ One
+    def neglect[K]: Summary[K] -⚬ Done
 
     implicit def summaryComonoid[K]: Comonoid[Summary[K]]
   }
@@ -42,10 +43,10 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       dsl.dup
 
     def minKey[K]: Summary[K] -⚬ Val[K] =
-      discardSnd
+      unliftPair >>> liftV(_._1)
 
     def maxKey[K]: Summary[K] -⚬ Val[K] =
-      discardFst
+      unliftPair >>> liftV(_._2)
 
     def minKeyGetter[K]: Getter[Summary[K], Val[K]] =
       fst[Val[K]].lens[Val[K]]
@@ -61,6 +62,9 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
 
     def discard[K]: Summary[K] -⚬ One =
       parToOne(dsl.discard, dsl.discard)
+
+    def neglect[K]: Summary[K] -⚬ Done =
+      discard >>> done
 
     def summaryComonoid[K]: Comonoid[Summary[K]] =
       new Comonoid[Summary[K]] {
@@ -120,7 +124,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     type BranchF[K, X]
 
     def of[K, X](summary: Getter[X, Summary[K]]): (X |*| X) -⚬ BranchF[K, X]
-    def deconstruct[K, X]: BranchF[K, X] -⚬ (X |*| X)
+    def deconstruct[K, X](j: Junction[X]): BranchF[K, X] -⚬ (X |*| X)
     def clear[K, X](f: X -⚬ One): BranchF[K, X] -⚬ One
 
     def summary[K, X]: Getter[BranchF[K, X], Summary[K]]
@@ -137,8 +141,10 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
         .andThen(IXI)                     .to[ (Summary[K] |*| Summary[K]) |*| (X |*| X) ]
         .in.fst(Summary.merge)            .to[         Summary[K]          |*| (X |*| X) ]
 
-    def deconstruct[K, X]: BranchF[K, X] -⚬ (X |*| X) =
-      discardFst
+    def deconstruct[K, X](j: Junction[X]): BranchF[K, X] -⚬ (X |*| X) =
+      id[BranchF[K, X]]                 .to[ Summary[K] |*| (X |*| X) ]
+        .in.fst(Summary.neglect)        .to[    Done    |*| (X |*| X) ]
+        .andThen(fst[X].lens.joinL(j))  .to[                 X |*| X  ]
 
     def clear[K, X](f: X -⚬ One): BranchF[K, X] -⚬ One =
       parToOne(Summary.discard, parToOne(f, f))
@@ -165,7 +171,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       BranchF.of(NonEmptyTree.summary)
 
     def deconstruct[K, V]: Branch[K, V] -⚬ (NonEmptyTree[K, V] |*| NonEmptyTree[K, V]) =
-      BranchF.deconstruct
+      BranchF.deconstruct(NonEmptyTree.minKey[K, V].extendJunction(Junction.junctionVal[K]))
 
     def clear[K, V](subClear: NonEmptyTree[K, V] -⚬ One): Branch[K, V] -⚬ One =
       BranchF.clear(subClear)
