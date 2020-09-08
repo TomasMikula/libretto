@@ -622,17 +622,17 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   def fakeDemand[A]: One -⚬ Neg[A] =
     id                                           [        One        ]
-      .andThen(valNegDuality[A].lInvert)      .to[ Val[A] |*| Neg[A] ]
-      .andThen(discardFst)                    .to[            Neg[A] ]
+      .andThen(valNegDuality[A].lInvert)      .to[ Neg[A] |*| Val[A] ]
+      .andThen(discardSnd)                    .to[ Neg[A]            ]
 
   def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
-    id                                         [   Neg[A] |*| Neg[A]                                       ]
-      .introSnd(valNegDuality[A].lInvert)   .to[  (Neg[A] |*| Neg[A]) |*| (     Val[A]         |*| Neg[A]) ]
-      .timesAssocRL                         .to[ ((Neg[A] |*| Neg[A]) |*|       Val[A]       ) |*| Neg[A]  ]
-      .in.fst.snd(dup)                      .to[ ((Neg[A] |*| Neg[A]) |*| (Val[A] |*| Val[A])) |*| Neg[A]  ]
-      .in.fst(IXI)                          .to[ ((Neg[A] |*| Val[A]) |*| (Neg[A] |*| Val[A])) |*| Neg[A]  ]
-      .in.fst(parToOne(zap, zap))           .to[                      One                      |*| Neg[A]  ]
-      .elimFst                              .to[                                                   Neg[A]  ]
+    id                                         [                                       Neg[A] |*| Neg[A]   ]
+      .introFst(valNegDuality[A].lInvert)   .to[ (Neg[A] |*|        Val[A]      ) |*| (Neg[A] |*| Neg[A])  ]
+      .timesAssocLR                         .to[  Neg[A] |*| (      Val[A]        |*| (Neg[A] |*| Neg[A])) ]
+      .in.snd.fst(dup)                      .to[  Neg[A] |*| ((Val[A] |*| Val[A]) |*| (Neg[A] |*| Neg[A])) ]
+      .in.snd(IXI)                          .to[  Neg[A] |*| ((Val[A] |*| Neg[A]) |*| (Val[A] |*| Neg[A])) ]
+      .in.snd(parToOne(zap, zap))           .to[  Neg[A] |*|                      One                      ]
+      .elimSnd                              .to[  Neg[A]                                                   ]
 
   /** From the choice ''available'' on the right (`C |&| D`), choose the one corresponding to the choice ''made''
     * on the left (`A |+| B`): if on the left there is `A`, choose `C`, if on the left thre is `B`, choose `D`.
@@ -825,13 +825,14 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
     id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
-      .introSnd(ev.lInvert)      .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
+      .introSnd(ev.lInvert)      .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (Ā |*| A) ]
+      .in.snd(swap)              .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
       .andThen(IXI)              .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
       .andThen(par(eval, eval))  .to[        B         |*|        C         ]
   }
 
   def dualSymmetric[A, B](ev: Dual[A, B]): Dual[B, A] = new Dual[B, A] {
-    def lInvert: One -⚬ (B |*| A) = andThen(ev.lInvert, swap)
+    def lInvert: One -⚬ (A |*| B) = andThen(ev.lInvert, swap)
     def rInvert: B |*| A -⚬ One = andThen(swap, ev.rInvert)
   }
 
@@ -842,11 +843,11 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   implicit def productDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |*| B, Ȧ |*| Ḃ] =
     new Dual[A |*| B, Ȧ |*| Ḃ] {
-      def lInvert: One -⚬ ((A |*| B) |*| (Ȧ |*| Ḃ)) = {
+      def lInvert: One -⚬ ((Ȧ |*| Ḃ) |*| (A |*| B)) = {
         id[One]                                   .to[           One           ]
           .andThen(parFromOne(id, id))            .to[    One    |*|    One    ]
-          .par(a.lInvert, b.lInvert)              .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
-          .andThen(IXI)                           .to[ (A |*| B) |*| (Ȧ |*| Ḃ) ]
+          .par(a.lInvert, b.lInvert)              .to[ (Ȧ |*| A) |*| (Ḃ |*| B) ]
+          .andThen(IXI)                           .to[ (Ȧ |*| Ḃ) |*| (A |*| B) ]
       }
 
       def rInvert: ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One = {

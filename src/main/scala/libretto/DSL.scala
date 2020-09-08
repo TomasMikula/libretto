@@ -211,7 +211,7 @@ trait DSL {
       *   ┗━━━━━┛
       * }}}
       */
-    def lInvert: One -⚬ (A |*| B)
+    def lInvert: One -⚬ (B |*| A)
   }
 
   implicit def choiceEitherDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |&| B, Ȧ |+| Ḃ]
