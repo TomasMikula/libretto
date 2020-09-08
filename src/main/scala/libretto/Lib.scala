@@ -10,7 +10,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   def Dual[A, B](implicit ev: Dual[A, B]): Dual[A, B] = ev
 
   def zap[A, B](implicit ev: Dual[A, B]): (A |*| B) -⚬ One =
-    ev.eliminate
+    ev.rInvert
 
   /** Witnesses that `F` is a covariant endofunctor on the category `-⚬`. */
   trait Functor[F[_]] { self =>
@@ -622,12 +622,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   def fakeDemand[A]: One -⚬ Neg[A] =
     id                                           [        One        ]
-      .andThen(valNegDuality[A].introduce)    .to[ Val[A] |*| Neg[A] ]
+      .andThen(valNegDuality[A].lInvert)      .to[ Val[A] |*| Neg[A] ]
       .andThen(discardFst)                    .to[            Neg[A] ]
 
   def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
     id                                         [   Neg[A] |*| Neg[A]                                       ]
-      .introSnd(valNegDuality[A].introduce) .to[  (Neg[A] |*| Neg[A]) |*| (     Val[A]         |*| Neg[A]) ]
+      .introSnd(valNegDuality[A].lInvert)   .to[  (Neg[A] |*| Neg[A]) |*| (     Val[A]         |*| Neg[A]) ]
       .timesAssocRL                         .to[ ((Neg[A] |*| Neg[A]) |*|       Val[A]       ) |*| Neg[A]  ]
       .in.fst.snd(dup)                      .to[ ((Neg[A] |*| Neg[A]) |*| (Val[A] |*| Val[A])) |*| Neg[A]  ]
       .in.fst(IXI)                          .to[ ((Neg[A] |*| Val[A]) |*| (Neg[A] |*| Val[A])) |*| Neg[A]  ]
@@ -825,34 +825,34 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
     id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
-      .introSnd(ev.introduce)    .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
+      .introSnd(ev.lInvert)      .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
       .andThen(IXI)              .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
       .andThen(par(eval, eval))  .to[        B         |*|        C         ]
   }
 
   def dualSymmetric[A, B](ev: Dual[A, B]): Dual[B, A] = new Dual[B, A] {
-    def introduce: One -⚬ (B |*| A) = andThen(ev.introduce, swap)
-    def eliminate: B |*| A -⚬ One = andThen(swap, ev.eliminate)
+    def lInvert: One -⚬ (B |*| A) = andThen(ev.lInvert, swap)
+    def rInvert: B |*| A -⚬ One = andThen(swap, ev.rInvert)
   }
 
   implicit def oneSelfDual: Dual[One, One] = new Dual[One, One] {
-    def introduce: One -⚬ (One |*| One) = introSnd
-    def eliminate: One |*| One -⚬ One = elimSnd
+    def lInvert: One -⚬ (One |*| One) = introSnd
+    def rInvert: One |*| One -⚬ One = elimSnd
   }
 
   implicit def productDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |*| B, Ȧ |*| Ḃ] =
     new Dual[A |*| B, Ȧ |*| Ḃ] {
-      def introduce: One -⚬ ((A |*| B) |*| (Ȧ |*| Ḃ)) = {
+      def lInvert: One -⚬ ((A |*| B) |*| (Ȧ |*| Ḃ)) = {
         id[One]                                   .to[           One           ]
           .andThen(parFromOne(id, id))            .to[    One    |*|    One    ]
-          .par(a.introduce, b.introduce)          .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
+          .par(a.lInvert, b.lInvert)              .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
           .andThen(IXI)                           .to[ (A |*| B) |*| (Ȧ |*| Ḃ) ]
       }
 
-      def eliminate: ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One = {
+      def rInvert: ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One = {
         id[(A |*| B) |*| (Ȧ |*| Ḃ)]               .to[ (A |*| B) |*| (Ȧ |*| Ḃ) ]
           .andThen(IXI)                           .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
-          .par(a.eliminate, b.eliminate)          .to[    One    |*|    One    ]
+          .par(a.rInvert, b.rInvert)              .to[    One    |*|    One    ]
           .andThen(parToOne(id, id))              .to[           One           ]
       }
     }
@@ -871,7 +871,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       .timesAssocLR               .to[  A |*| (B  |*| Ā) ]
       .in.snd(swap)               .to[  A |*| (Ā  |*| B) ]
       .timesAssocRL               .to[ (A |*|  Ā) |*| B  ]
-      .elimFst(ev.eliminate)      .to[                B  ]
+      .elimFst(ev.rInvert)        .to[                B  ]
       .as[ ((A |*| B) |*| Ā) -⚬ B ]
       .curry
 

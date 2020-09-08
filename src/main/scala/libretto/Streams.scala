@@ -446,7 +446,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
       id[ A |*| LDemanding[B] ]     .to[ A |*| (One |&| (B |*| LSubscriber[B])) ]
       .in.snd(chooseR)              .to[ A |*|          (B |*| LSubscriber[B])  ]
       .timesAssocRL                 .to[ (A |*| B)         |*| LSubscriber[B]   ]
-      .elimFst(ev.eliminate)        .to[                       LSubscriber[B]   ]
+      .elimFst(ev.rInvert)        .to[                       LSubscriber[B]   ]
       .unpack[LSubscriberF[B, *]]   .to[                   Maybe[LDemanding[B]] ]
   }
 

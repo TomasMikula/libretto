@@ -160,30 +160,58 @@ trait DSL {
   /** Hides one level of a recursive type definition. */
   def pack[F[_]]: F[Rec[F]] -⚬ Rec[F]
 
-  /** Evidence that `A` is dual to `B`.
+  /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
     * It must hold that
     * {{{
     *         ┏━━━━━┓                         ┏━━━━━┓
-    *         ┞─┐   ┃                         ┃     ┞─┐
-    *         ╎A│ e ┃                         ┃  i  ╎B│
-    *         ┟─┘ l ┃                         ┃  n  ┟─┘
-    *   ┏━━━━━┫   i ┃     ┏━━━━━━━━━┓         ┃  t  ┣━━━━━┓     ┏━━━━━━━━━┓
-    *   ┃     ┞─┐ m ┃     ┞─┐       ┞─┐       ┃  r  ┞─┐   ┃     ┞─┐       ┞─┐
-    *   ┃  i  ╎B│   ┃  =  ╎A│ id[A] ╎A│       ┃  o  ╎A│ e ┃  =  ╎B│ id[B] ╎B│
-    *   ┃  n  ┟─┘   ┃     ┟─┘       ┟─┘       ┃     ┟─┘ l ┃     ┟─┘       ┟─┘
-    *   ┃  t  ┣━━━━━┛     ┗━━━━━━━━━┛         ┗━━━━━┫   i ┃     ┗━━━━━━━━━┛
-    *   ┃  r  ┞─┐                                   ┞─┐ m ┃
-    *   ┃  o  ╎A│                                   ╎B│   ┃
-    *   ┃     ┟─┘                                   ┟─┘   ┃
+    *         ┞─┐ r ┃                         ┃  l  ┞─┐
+    *         ╎A│ I ┃                         ┃  I  ╎B│
+    *         ┟─┘ n ┃                         ┃  n  ┟─┘
+    *   ┏━━━━━┫   v ┃     ┏━━━━━━━━━┓         ┃  v  ┣━━━━━┓     ┏━━━━━━━━━┓
+    *   ┃  l  ┞─┐ e ┃     ┞─┐       ┞─┐       ┃  e  ┞─┐ r ┃     ┞─┐       ┞─┐
+    *   ┃  I  ╎B│ r ┃  =  ╎A│ id[A] ╎A│       ┃  r  ╎A│ I ┃  =  ╎B│ id[B] ╎B│
+    *   ┃  n  ┟─┘ t ┃     ┟─┘       ┟─┘       ┃  t  ┟─┘ n ┃     ┟─┘       ┟─┘
+    *   ┃  v  ┣━━━━━┛     ┗━━━━━━━━━┛         ┗━━━━━┫   v ┃     ┗━━━━━━━━━┛
+    *   ┃  e  ┞─┐                                   ┞─┐ e ┃
+    *   ┃  r  ╎A│                                   ╎B│ r ┃
+    *   ┃  t  ┟─┘                                   ┟─┘ t ┃
     *   ┗━━━━━┛                                     ┗━━━━━┛
     * }}}
     */
   trait Dual[A, B] {
-    /** Creates a pair of dual entities from nothing. */
-    def introduce: One -⚬ (A |*| B)
+    /** Reverses the input that flows along the `-⚬` arrow (say it is the `A` input) to its dual (`B`) flowing
+      * flowing against the direction of the arrow.
+      *
+      * {{{
+      *   ┏━━━━━━━┓
+      *   ┞─┐   r ┃
+      *   ╎A│─┐ I ┃
+      *   ┟─┘ ┆ n ┃
+      *   ┃   ┆ v ┃
+      *   ┞─┐ ┆ e ┃
+      *   ╎B│←┘ r ┃
+      *   ┟─┘   t ┃
+      *   ┗━━━━━━━┛
+      * }}}
+      */
+    def rInvert: (A |*| B) -⚬ One
 
-    /** Annihilates a pair of dual entities. */
-    def eliminate: (A |*| B) -⚬ One
+    /** Reverses the output that flows against the `-⚬` arrow (say it is the `B` output) to its dual (`A`) flowing
+      * in the direction of the arrow.
+      *
+      * {{{
+      *   ┏━━━━━┓
+      *   ┃ l   ┞─┐
+      *   ┃ I ┌─╎B│
+      *   ┃ n ┆ ┟─┘
+      *   ┃ v ┆ ┃
+      *   ┃ e ┆ ┞─┐
+      *   ┃ r └→╎A│
+      *   ┃ t   ┟─┘
+      *   ┗━━━━━┛
+      * }}}
+      */
+    def lInvert: One -⚬ (A |*| B)
   }
 
   implicit def choiceEitherDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |&| B, Ȧ |+| Ḃ]
