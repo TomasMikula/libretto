@@ -161,7 +161,22 @@ trait DSL {
   def pack[F[_]]: F[Rec[F]] -⚬ Rec[F]
 
   /** Evidence that `A` is dual to `B`.
-    * It must hold that `eliminate ⚬ introduce = id`.
+    * It must hold that
+    * {{{
+    *         ┏━━━━━┓                         ┏━━━━━┓
+    *         ┞─┐   ┃                         ┃     ┞─┐
+    *         ╎A│ e ┃                         ┃  i  ╎B│
+    *         ┟─┘ l ┃                         ┃  n  ┟─┘
+    *   ┏━━━━━┫   i ┃     ┏━━━━━━━━━┓         ┃  t  ┣━━━━━┓     ┏━━━━━━━━━┓
+    *   ┃     ┞─┐ m ┃     ┞─┐       ┞─┐       ┃  r  ┞─┐   ┃     ┞─┐       ┞─┐
+    *   ┃  i  ╎B│   ┃  =  ╎A│ id[A] ╎A│       ┃  o  ╎A│ e ┃  =  ╎B│ id[B] ╎B│
+    *   ┃  n  ┟─┘   ┃     ┟─┘       ┟─┘       ┃     ┟─┘ l ┃     ┟─┘       ┟─┘
+    *   ┃  t  ┣━━━━━┛     ┗━━━━━━━━━┛         ┗━━━━━┫   i ┃     ┗━━━━━━━━━┛
+    *   ┃  r  ┞─┐                                   ┞─┐ m ┃
+    *   ┃  o  ╎A│                                   ╎B│   ┃
+    *   ┃     ┟─┘                                   ┟─┘   ┃
+    *   ┗━━━━━┛                                     ┗━━━━━┛
+    * }}}
     */
   trait Dual[A, B] {
     /** Creates a pair of dual entities from nothing. */
@@ -177,7 +192,7 @@ trait DSL {
 
   implicit def doneNeedDuality: Dual[Done, Need]
 
-  /** If `A` is dual to `B`, then `F[A]` is dual to `G[B]`. */
+  /** Evidence that if `A` is dual to `B`, then `F[A]` is dual to `G[B]`. */
   trait Dual1[F[_], G[_]] {
     def apply[A, Ā]: Dual[A, Ā] => Dual[F[A], G[Ā]]
   }
