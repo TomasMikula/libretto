@@ -130,6 +130,14 @@ trait DSL {
   def uncurry[A, B, C](f: A -⚬ (B =⚬ C)): (A |*| B) -⚬ C =
     andThen(par(f, id[B]), eval[B, C])
 
+  /** Creates an entangled pair of demand ([[Neg]]) and supply ([[Val]]) such that when the demand is fulfilled
+    * with a value, that value will be produced by the supply.
+    */
+  def promise[A]: One -⚬ (Neg[A] |*| Val[A])
+
+  /** Uses the value (eventually) produced by [[Val]] to satisfy the demand of [[Neg]]. */
+  def fulfill[A]: (Val[A] |*| Neg[A]) -⚬ One
+
   def liftEither[A, B]: Val[Either[A, B]] -⚬ (Val[A] |+| Val[B])
   def unliftEither[A, B]: (Val[A] |+| Val[B]) -⚬ Val[Either[A, B]]
 
@@ -213,8 +221,6 @@ trait DSL {
       */
     def lInvert: One -⚬ (B |*| A)
   }
-
-  implicit def valNegDuality[A]: Dual[Val[A], Neg[A]]
 
   implicit def doneNeedDuality: Dual[Done, Need]
 

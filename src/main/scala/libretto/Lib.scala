@@ -876,6 +876,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   implicit def choiceEitherDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |&| B, Ȧ |+| Ḃ] =
     dualSymmetric(eitherChoiceDuality(dualSymmetric(a), dualSymmetric(b)))
 
+  implicit def valNegDuality[A]: Dual[Val[A], Neg[A]] =
+    new Dual[Val[A], Neg[A]] {
+      def lInvert: One -⚬ (Neg[A] |*| Val[A]) = promise[A]
+      def rInvert: (Val[A] |*| Neg[A]) -⚬ One = fulfill[A]
+    }
+
   implicit def negValDuality[A]: Dual[Neg[A], Val[A]] =
     dualSymmetric(valNegDuality)
 
