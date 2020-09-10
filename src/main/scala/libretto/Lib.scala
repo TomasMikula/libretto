@@ -858,23 +858,23 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       }
     }
 
-  implicit def choiceEitherDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |&| B, Ȧ |+| Ḃ] =
-    new Dual[A |&| B, Ȧ |+| Ḃ] {
-      def rInvert: (A |&| B) |*| (Ȧ |+| Ḃ) -⚬ One =
-        id                                 [ (A |&| B) |*| (Ȧ |+| Ḃ) ]
-          .andThen(matchingChoiceRL)    .to[ (A |*| Ȧ) |+| (B |*| Ḃ) ]
+  implicit def eitherChoiceDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |+| B, Ȧ |&| Ḃ] =
+    new Dual[A |+| B, Ȧ |&| Ḃ] {
+      def rInvert: (A |+| B) |*| (Ȧ |&| Ḃ) -⚬ One =
+        id                                 [ (A |+| B) |*| (Ȧ |&| Ḃ) ]
+          .andThen(matchingChoiceLR)    .to[ (A |*| Ȧ) |+| (B |*| Ḃ) ]
           .either(a.rInvert, b.rInvert) .to[           One           ]
 
-      def lInvert: One -⚬ ((Ȧ |+| Ḃ) |*| (A |&| B)) =
+      def lInvert: One -⚬ ((Ȧ |&| Ḃ) |*| (A |+| B)) =
         id                                 [                   One                   ]
-          .choice(a.lInvert, b.lInvert) .to[ ( Ȧ        |*| A) |&| (       Ḃ  |*| B) ]
-          .in.choiceL.fst.injectL[Ḃ]    .to[ ((Ȧ |+| Ḃ) |*| A) |&| (       Ḃ  |*| B) ]
-          .in.choiceR.fst.injectR[Ȧ]    .to[ ((Ȧ |+| Ḃ) |*| A) |&| ((Ȧ |+| Ḃ) |*| B) ]
-          .andThen(coDistributeL)       .to[  (Ȧ |+| Ḃ) |*| (A |&|                B) ]
+          .choice(a.lInvert, b.lInvert) .to[ (Ȧ |*|  A       ) |&| (Ḃ |*|        B ) ]
+          .in.choiceL.snd.injectL[B]    .to[ (Ȧ |*| (A |+| B)) |&| (Ḃ |*|        B ) ]
+          .in.choiceR.snd.injectR[A]    .to[ (Ȧ |*| (A |+| B)) |&| (Ḃ |*| (A |+| B)) ]
+          .andThen(coDistributeR)       .to[ (Ȧ |&|                Ḃ) |*| (A |+| B)  ]
     }
 
-  implicit def eitherChoiceDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |+| B, Ȧ |&| Ḃ] =
-    dualSymmetric(choiceEitherDuality(dualSymmetric(a), dualSymmetric(b)))
+  implicit def choiceEitherDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |&| B, Ȧ |+| Ḃ] =
+    dualSymmetric(eitherChoiceDuality(dualSymmetric(a), dualSymmetric(b)))
 
   implicit def negValDuality[A]: Dual[Neg[A], Val[A]] =
     dualSymmetric(valNegDuality)
