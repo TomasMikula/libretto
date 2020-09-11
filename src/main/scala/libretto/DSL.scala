@@ -202,7 +202,7 @@ trait DSL {
       *   ┗━━━━━━━┛
       * }}}
       */
-    def rInvert: (A |*| B) -⚬ One
+    val rInvert: (A |*| B) -⚬ One
 
     /** Reverses the output that flows against the `-⚬` arrow (say it is the `B` output) to its dual (`A`) flowing
       * in the direction of the arrow.
@@ -219,7 +219,7 @@ trait DSL {
       *   ┗━━━━━┛
       * }}}
       */
-    def lInvert: One -⚬ (B |*| A)
+    val lInvert: One -⚬ (B |*| A)
   }
 
   implicit def doneNeedDuality: Dual[Done, Need]

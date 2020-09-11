@@ -832,25 +832,25 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   }
 
   def dualSymmetric[A, B](ev: Dual[A, B]): Dual[B, A] = new Dual[B, A] {
-    def lInvert: One -⚬ (A |*| B) = andThen(ev.lInvert, swap)
-    def rInvert: B |*| A -⚬ One = andThen(swap, ev.rInvert)
+    val lInvert: One -⚬ (A |*| B) = andThen(ev.lInvert, swap)
+    val rInvert: B |*| A -⚬ One = andThen(swap, ev.rInvert)
   }
 
   implicit def oneSelfDual: Dual[One, One] = new Dual[One, One] {
-    def lInvert: One -⚬ (One |*| One) = introSnd
-    def rInvert: One |*| One -⚬ One = elimSnd
+    val lInvert: One -⚬ (One |*| One) = introSnd
+    val rInvert: One |*| One -⚬ One = elimSnd
   }
 
   implicit def productDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |*| B, Ȧ |*| Ḃ] =
     new Dual[A |*| B, Ȧ |*| Ḃ] {
-      def lInvert: One -⚬ ((Ȧ |*| Ḃ) |*| (A |*| B)) = {
+      val lInvert: One -⚬ ((Ȧ |*| Ḃ) |*| (A |*| B)) = {
         id[One]                                   .to[           One           ]
           .andThen(parFromOne(id, id))            .to[    One    |*|    One    ]
           .par(a.lInvert, b.lInvert)              .to[ (Ȧ |*| A) |*| (Ḃ |*| B) ]
           .andThen(IXI)                           .to[ (Ȧ |*| Ḃ) |*| (A |*| B) ]
       }
 
-      def rInvert: ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One = {
+      val rInvert: ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One = {
         id[(A |*| B) |*| (Ȧ |*| Ḃ)]               .to[ (A |*| B) |*| (Ȧ |*| Ḃ) ]
           .andThen(IXI)                           .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
           .par(a.rInvert, b.rInvert)              .to[    One    |*|    One    ]
@@ -860,12 +860,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   implicit def eitherChoiceDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |+| B, Ȧ |&| Ḃ] =
     new Dual[A |+| B, Ȧ |&| Ḃ] {
-      def rInvert: (A |+| B) |*| (Ȧ |&| Ḃ) -⚬ One =
+      val rInvert: (A |+| B) |*| (Ȧ |&| Ḃ) -⚬ One =
         id                                 [ (A |+| B) |*| (Ȧ |&| Ḃ) ]
           .andThen(matchingChoiceLR)    .to[ (A |*| Ȧ) |+| (B |*| Ḃ) ]
           .either(a.rInvert, b.rInvert) .to[           One           ]
 
-      def lInvert: One -⚬ ((Ȧ |&| Ḃ) |*| (A |+| B)) =
+      val lInvert: One -⚬ ((Ȧ |&| Ḃ) |*| (A |+| B)) =
         id                                 [                   One                   ]
           .choice(a.lInvert, b.lInvert) .to[ (Ȧ |*|  A       ) |&| (Ḃ |*|        B ) ]
           .in.choiceL.snd.injectL[B]    .to[ (Ȧ |*| (A |+| B)) |&| (Ḃ |*|        B ) ]
@@ -878,8 +878,8 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   implicit def valNegDuality[A]: Dual[Val[A], Neg[A]] =
     new Dual[Val[A], Neg[A]] {
-      def lInvert: One -⚬ (Neg[A] |*| Val[A]) = promise[A]
-      def rInvert: (Val[A] |*| Neg[A]) -⚬ One = fulfill[A]
+      val lInvert: One -⚬ (Neg[A] |*| Val[A]) = promise[A]
+      val rInvert: (Val[A] |*| Neg[A]) -⚬ One = fulfill[A]
     }
 
   implicit def negValDuality[A]: Dual[Neg[A], Val[A]] =
