@@ -477,16 +477,16 @@ sealed trait Streams[DSL <: libretto.DSL] {
     }
   }
 
-  implicit def consumerProducingDuality[A]: Dual[Consumer[A], Producing[A]] =
-    dualRec[ConsumerF[A, *], ProducingF[A, *]](
-      new Dual1[ConsumerF[A, *], ProducingF[A, *]] {
-        def apply[x, y]: Dual[x, y] => Dual[ConsumerF[A, x], ProducingF[A, y]] = { xy_dual =>
-          choiceEitherDuality(
+  implicit def producingConsumerDuality[A]: Dual[Producing[A], Consumer[A]] =
+    dualRec[ProducingF[A, *], ConsumerF[A, *]](
+      new Dual1[ProducingF[A, *], ConsumerF[A, *]] {
+        def apply[x, y]: Dual[x, y] => Dual[ProducingF[A, x], ConsumerF[A, y]] = { xy_dual =>
+          eitherChoiceDuality(
             Dual[One, One],
-            eitherChoiceDuality(
+            choiceEitherDuality(
               Dual[One, One],
               productDuality(
-                Dual[Neg[A], Val[A]],
+                Dual[Val[A], Neg[A]],
                 xy_dual
               )
             )
@@ -495,8 +495,8 @@ sealed trait Streams[DSL <: libretto.DSL] {
       }
     )
 
-  implicit def producingConsumerDuality[A]: Dual[Producing[A], Consumer[A]] =
-    dualSymmetric(consumerProducingDuality[A])
+  implicit def consumerProducingDuality[A]: Dual[Consumer[A], Producing[A]] =
+    dualSymmetric(producingConsumerDuality[A])
 
   implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[A], LPollable[B]] =
     dualRec[LSubscriberF[A, *], LPollableF[B, *]](
