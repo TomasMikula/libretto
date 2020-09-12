@@ -516,20 +516,44 @@ sealed trait Streams[DSL <: libretto.DSL] {
   implicit def consumerProducingDuality[A]: Dual[Consumer[A], Producing[A]] =
     dualSymmetric(producingConsumerDuality[A])
 
+  def rInvertLSubscriberF[A, B, x, y](
+    rInvertA: A |*| B -⚬ One,
+    rInvertSub: x |*| y -⚬ One,
+  ): (LSubscriberF[A, x] |*| LPollableF[B, y]) -⚬ One =
+    rInvertEither(
+      Dual[One, One].rInvert,
+      swap >>> rInvertEither(
+        Dual[One, One].rInvert,
+        rInvertTimes(
+          swap >>> rInvertA,
+          swap >>> rInvertSub
+        )
+      )
+    )
+
+  def lInvertLPollableF[A, B, x, y](
+    lInvertA: One -⚬ (B |*| A),
+    lInvertSub: One -⚬ (y |*| x),
+  ): One -⚬ (LPollableF[A, x] |*| LSubscriberF[B, y]) =
+    lInvertChoice(
+      Dual[One, One].lInvert,
+      lInvertChoice(
+        Dual[One, One].lInvert,
+        lInvertTimes(
+          lInvertA,
+          lInvertSub
+        )
+      ) >>> swap
+    )
+
   implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[A], LPollable[B]] =
     dualRec[LSubscriberF[A, *], LPollableF[B, *]](
       new Dual1[LSubscriberF[A, *], LPollableF[B, *]] {
         def apply[x, y]: Dual[x, y] => Dual[LSubscriberF[A, x], LPollableF[B, y]] = { xy_dual =>
-          eitherChoiceDuality(
-            Dual[One, One],
-            choiceEitherDuality(
-              Dual[One, One],
-              productDuality(
-                AB,
-                xy_dual
-              )
-            )
-          )
+          new Dual[LSubscriberF[A, x], LPollableF[B, y]] {
+            val rInvert: (LSubscriberF[A, x] |*| LPollableF[B, y]) -⚬ One = rInvertLSubscriberF(AB.rInvert, xy_dual.rInvert)
+            val lInvert: One -⚬ (LPollableF[B, y] |*| LSubscriberF[A, x]) = lInvertLPollableF  (AB.lInvert >>> swap, xy_dual.lInvert >>> swap)
+          }
         }
       }
     )
