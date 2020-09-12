@@ -504,12 +504,10 @@ sealed trait Streams[DSL <: libretto.DSL] {
   implicit def producingConsumerDuality[A]: Dual[Producing[A], Consumer[A]] =
     dualRec[ProducingF[A, *], ConsumerF[A, *]](
       new Dual1[ProducingF[A, *], ConsumerF[A, *]] {
-        def apply[x, y]: Dual[x, y] => Dual[ProducingF[A, x], ConsumerF[A, y]] = { xy_dual =>
-          new Dual[ProducingF[A, x], ConsumerF[A, y]] {
-            val rInvert: (ProducingF[A, x] |*| ConsumerF[A, y]) -⚬ One = rInvertProducingF(xy_dual.rInvert)
-            val lInvert: One -⚬ (ConsumerF[A, y] |*| ProducingF[A, x]) = lInvertConsumerF (xy_dual.lInvert)
-          }
-        }
+        def rInvert[x, y](rInvertSub: (x |*| y) -⚬ One): (ProducingF[A, x] |*| ConsumerF[A, y]) -⚬ One =
+          rInvertProducingF(rInvertSub)
+        def lInvert[x, y](lInvertSub: One -⚬ (y |*| x)): One -⚬ (ConsumerF[A, y] |*| ProducingF[A, x]) =
+          lInvertConsumerF(lInvertSub)
       }
     )
 
@@ -549,14 +547,10 @@ sealed trait Streams[DSL <: libretto.DSL] {
   implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[B], LPollable[A]] =
     dualRec[LSubscriberF[B, *], LPollableF[A, *]](
       new Dual1[LSubscriberF[B, *], LPollableF[A, *]] {
-        def apply[x, y]: Dual[x, y] => Dual[LSubscriberF[B, x], LPollableF[A, y]] = { xy_dual =>
-          new Dual[LSubscriberF[B, x], LPollableF[A, y]] {
-            val rInvert: (LSubscriberF[B, x] |*| LPollableF[A, y]) -⚬ One =
-              rInvertLSubscriberF(AB.rInvert, swap >>> xy_dual.rInvert)
-            val lInvert: One -⚬ (LPollableF[A, y] |*| LSubscriberF[B, x]) =
-              lInvertLPollableF  (AB.lInvert, xy_dual.lInvert >>> swap)
-          }
-        }
+        def rInvert[x, y](rInvertSub: (x |*| y) -⚬ One): (LSubscriberF[B, x] |*| LPollableF[A, y]) -⚬ One =
+          rInvertLSubscriberF(AB.rInvert, swap >>> rInvertSub)
+        def lInvert[x, y](lInvertSub: One -⚬ (y |*| x)): One -⚬ (LPollableF[A, y] |*| LSubscriberF[B, x]) =
+          lInvertLPollableF  (AB.lInvert, lInvertSub >>> swap)
       }
     )
 
