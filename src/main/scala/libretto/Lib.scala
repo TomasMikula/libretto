@@ -841,21 +841,30 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     val rInvert: One |*| One -⚬ One = elimSnd
   }
 
+  def rInvertTimes[A, B, Ȧ, Ḃ](
+    rInvertA: A |*| Ȧ -⚬ One,
+    rInvertB: B |*| Ḃ -⚬ One,
+  ): ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One =
+    id[(A |*| B) |*| (Ȧ |*| Ḃ)]               .to[ (A |*| B) |*| (Ȧ |*| Ḃ) ]
+      .andThen(IXI)                           .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
+      .andThen(parToOne(rInvertA, rInvertB))  .to[           One           ]
+
+  def lInvertTimes[A, B, Ȧ, Ḃ](
+    lInvertA: One -⚬ (Ȧ |*| A),
+    lInvertB: One -⚬ (Ḃ |*| B),
+  ): One -⚬ ((Ȧ |*| Ḃ) |*| (A |*| B)) =
+    id[One]                                   .to[           One           ]
+      .andThen(parFromOne(id, id))            .to[    One    |*|    One    ]
+      .par(lInvertA, lInvertB)                .to[ (Ȧ |*| A) |*| (Ḃ |*| B) ]
+      .andThen(IXI)                           .to[ (Ȧ |*| Ḃ) |*| (A |*| B) ]
+
   implicit def productDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |*| B, Ȧ |*| Ḃ] =
     new Dual[A |*| B, Ȧ |*| Ḃ] {
-      val lInvert: One -⚬ ((Ȧ |*| Ḃ) |*| (A |*| B)) = {
-        id[One]                                   .to[           One           ]
-          .andThen(parFromOne(id, id))            .to[    One    |*|    One    ]
-          .par(a.lInvert, b.lInvert)              .to[ (Ȧ |*| A) |*| (Ḃ |*| B) ]
-          .andThen(IXI)                           .to[ (Ȧ |*| Ḃ) |*| (A |*| B) ]
-      }
+      val lInvert: One -⚬ ((Ȧ |*| Ḃ) |*| (A |*| B)) =
+        lInvertTimes(a.lInvert, b.lInvert)
 
-      val rInvert: ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One = {
-        id[(A |*| B) |*| (Ȧ |*| Ḃ)]               .to[ (A |*| B) |*| (Ȧ |*| Ḃ) ]
-          .andThen(IXI)                           .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
-          .par(a.rInvert, b.rInvert)              .to[    One    |*|    One    ]
-          .andThen(parToOne(id, id))              .to[           One           ]
-      }
+      val rInvert: ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One =
+        rInvertTimes(a.rInvert, b.rInvert)
     }
 
   def rInvertEither[A, B, Ȧ, Ḃ](
