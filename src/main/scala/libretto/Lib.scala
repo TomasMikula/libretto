@@ -858,19 +858,31 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       }
     }
 
+  def rInvertEither[A, B, Ȧ, Ḃ](
+    rInvertA: A |*| Ȧ -⚬ One,
+    rInvertB: B |*| Ḃ -⚬ One,
+  ): (A |+| B) |*| (Ȧ |&| Ḃ) -⚬ One =
+    id                                 [ (A |+| B) |*| (Ȧ |&| Ḃ) ]
+      .andThen(matchingChoiceLR)    .to[ (A |*| Ȧ) |+| (B |*| Ḃ) ]
+      .either(rInvertA, rInvertB)   .to[           One           ]
+
+  def lInvertChoice[A, B, Ȧ, Ḃ](
+    lInvertA: One -⚬ (Ȧ |*| A),
+    lInvertB: One -⚬ (Ḃ |*| B),
+  ): One -⚬ ((Ȧ |&| Ḃ) |*| (A |+| B)) =
+    id                                 [                   One                   ]
+      .choice(lInvertA, lInvertB)   .to[ (Ȧ |*|  A       ) |&| (Ḃ |*|        B ) ]
+      .in.choiceL.snd.injectL[B]    .to[ (Ȧ |*| (A |+| B)) |&| (Ḃ |*|        B ) ]
+      .in.choiceR.snd.injectR[A]    .to[ (Ȧ |*| (A |+| B)) |&| (Ḃ |*| (A |+| B)) ]
+      .andThen(coDistributeR)       .to[ (Ȧ |&|                Ḃ) |*| (A |+| B)  ]
+
   implicit def eitherChoiceDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |+| B, Ȧ |&| Ḃ] =
     new Dual[A |+| B, Ȧ |&| Ḃ] {
       val rInvert: (A |+| B) |*| (Ȧ |&| Ḃ) -⚬ One =
-        id                                 [ (A |+| B) |*| (Ȧ |&| Ḃ) ]
-          .andThen(matchingChoiceLR)    .to[ (A |*| Ȧ) |+| (B |*| Ḃ) ]
-          .either(a.rInvert, b.rInvert) .to[           One           ]
+        rInvertEither(a.rInvert, b.rInvert)
 
       val lInvert: One -⚬ ((Ȧ |&| Ḃ) |*| (A |+| B)) =
-        id                                 [                   One                   ]
-          .choice(a.lInvert, b.lInvert) .to[ (Ȧ |*|  A       ) |&| (Ḃ |*|        B ) ]
-          .in.choiceL.snd.injectL[B]    .to[ (Ȧ |*| (A |+| B)) |&| (Ḃ |*|        B ) ]
-          .in.choiceR.snd.injectR[A]    .to[ (Ȧ |*| (A |+| B)) |&| (Ḃ |*| (A |+| B)) ]
-          .andThen(coDistributeR)       .to[ (Ȧ |&|                Ḃ) |*| (A |+| B)  ]
+        lInvertChoice(a.lInvert, b.lInvert)
     }
 
   implicit def choiceEitherDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |&| B, Ȧ |+| Ḃ] =
