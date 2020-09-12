@@ -519,14 +519,14 @@ sealed trait Streams[DSL <: libretto.DSL] {
   def rInvertLSubscriberF[A, B, x, y](
     rInvertA: A |*| B -⚬ One,
     rInvertSub: x |*| y -⚬ One,
-  ): (LSubscriberF[A, x] |*| LPollableF[B, y]) -⚬ One =
+  ): (LSubscriberF[B, y] |*| LPollableF[A, x]) -⚬ One =
     rInvertEither(
       Dual[One, One].rInvert,
       swap >>> rInvertEither(
         Dual[One, One].rInvert,
         rInvertTimes(
-          swap >>> rInvertA,
-          swap >>> rInvertSub
+          rInvertA,
+          rInvertSub
         )
       )
     )
@@ -546,19 +546,21 @@ sealed trait Streams[DSL <: libretto.DSL] {
       ) >>> swap
     )
 
-  implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[A], LPollable[B]] =
-    dualRec[LSubscriberF[A, *], LPollableF[B, *]](
-      new Dual1[LSubscriberF[A, *], LPollableF[B, *]] {
-        def apply[x, y]: Dual[x, y] => Dual[LSubscriberF[A, x], LPollableF[B, y]] = { xy_dual =>
-          new Dual[LSubscriberF[A, x], LPollableF[B, y]] {
-            val rInvert: (LSubscriberF[A, x] |*| LPollableF[B, y]) -⚬ One = rInvertLSubscriberF(AB.rInvert, xy_dual.rInvert)
-            val lInvert: One -⚬ (LPollableF[B, y] |*| LSubscriberF[A, x]) = lInvertLPollableF  (AB.lInvert >>> swap, xy_dual.lInvert >>> swap)
+  implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[B], LPollable[A]] =
+    dualRec[LSubscriberF[B, *], LPollableF[A, *]](
+      new Dual1[LSubscriberF[B, *], LPollableF[A, *]] {
+        def apply[x, y]: Dual[x, y] => Dual[LSubscriberF[B, x], LPollableF[A, y]] = { xy_dual =>
+          new Dual[LSubscriberF[B, x], LPollableF[A, y]] {
+            val rInvert: (LSubscriberF[B, x] |*| LPollableF[A, y]) -⚬ One =
+              rInvertLSubscriberF(AB.rInvert, swap >>> xy_dual.rInvert)
+            val lInvert: One -⚬ (LPollableF[A, y] |*| LSubscriberF[B, x]) =
+              lInvertLPollableF  (AB.lInvert, xy_dual.lInvert >>> swap)
           }
         }
       }
     )
 
-  implicit def pollableSubscriberDuality[A, B](implicit BA: Dual[B, A]): Dual[LPollable[A], LSubscriber[B]] =
+  implicit def pollableSubscriberDuality[A, B](implicit BA: Dual[B, A]): Dual[LPollable[B], LSubscriber[A]] =
     dualSymmetric(subscriberPollableDuality[B, A])
 
   /** If either the source or the sink is completed, complete the other one and be done.
