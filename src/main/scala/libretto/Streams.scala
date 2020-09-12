@@ -477,20 +477,38 @@ sealed trait Streams[DSL <: libretto.DSL] {
     }
   }
 
+  def rInvertProducingF[A, x, y](rInvertSub: (x |*| y) -⚬ One): (ProducingF[A, x] |*| ConsumerF[A, y]) -⚬ One =
+    rInvertEither(
+      Dual[One, One].rInvert,
+      swap >>> rInvertEither(
+        Dual[One, One].rInvert,
+        rInvertTimes(
+          swap >>> fulfill[A],
+          swap >>> rInvertSub
+        )
+      )
+    )
+
+  def lInvertConsumerF[A, x, y](lInvertSub: One -⚬ (y |*| x)): One -⚬ (ConsumerF[A, y] |*| ProducingF[A, x]) =
+    lInvertChoice(
+      Dual[One, One].lInvert,
+      lInvertChoice(
+        Dual[One, One].lInvert,
+        lInvertTimes(
+          promise[A] >>> swap,
+          lInvertSub >>> swap
+        )
+      ) >>> swap
+    )
+
   implicit def producingConsumerDuality[A]: Dual[Producing[A], Consumer[A]] =
     dualRec[ProducingF[A, *], ConsumerF[A, *]](
       new Dual1[ProducingF[A, *], ConsumerF[A, *]] {
         def apply[x, y]: Dual[x, y] => Dual[ProducingF[A, x], ConsumerF[A, y]] = { xy_dual =>
-          eitherChoiceDuality(
-            Dual[One, One],
-            choiceEitherDuality(
-              Dual[One, One],
-              productDuality(
-                Dual[Val[A], Neg[A]],
-                xy_dual
-              )
-            )
-          )
+          new Dual[ProducingF[A, x], ConsumerF[A, y]] {
+            val rInvert: (ProducingF[A, x] |*| ConsumerF[A, y]) -⚬ One = rInvertProducingF(xy_dual.rInvert)
+            val lInvert: One -⚬ (ConsumerF[A, y] |*| ProducingF[A, x]) = lInvertConsumerF (xy_dual.lInvert)
+          }
         }
       }
     )
