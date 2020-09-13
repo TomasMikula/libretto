@@ -34,10 +34,10 @@ trait DSL {
   /** Demand for a value of type `A`. */
   type Neg[A]
 
-  /** Signals completion. Travels in the direction of [[-⚬]]. Equivalent to `Val[Unit]`. */
+  /** Signal that travels in the direction of [[-⚬]]. Equivalent to `Val[Unit]`. */
   type Done
 
-  /** Signals demand. Travels in the direction opposite to [[-⚬]]. Equivalent to `Neg[Unit]`. */
+  /** Signal that travels in the direction opposite to [[-⚬]]. Equivalent to `Neg[Unit]`. */
   type Need
 
   type Rec[F[_]]
@@ -138,6 +138,9 @@ trait DSL {
   /** Uses the value (eventually) produced by [[Val]] to satisfy the demand of [[Neg]]. */
   def fulfill[A]: (Val[A] |*| Neg[A]) -⚬ One
 
+  def rInvertSignal: (Done |*| Need) -⚬ One
+  def lInvertSignal: One -⚬ (Need |*| Done)
+
   def liftEither[A, B]: Val[Either[A, B]] -⚬ (Val[A] |+| Val[B])
   def unliftEither[A, B]: (Val[A] |+| Val[B]) -⚬ Val[Either[A, B]]
 
@@ -221,8 +224,6 @@ trait DSL {
       */
     val lInvert: One -⚬ (B |*| A)
   }
-
-  implicit def doneNeedDuality: Dual[Done, Need]
 
   /** Witnesses that `A` has an intrinsic notion of completion.
     * [[checkCompleted]] can be used to test whether a `Completive` object has completed.

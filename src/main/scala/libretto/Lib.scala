@@ -903,6 +903,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   implicit def negValDuality[A]: Dual[Neg[A], Val[A]] =
     dualSymmetric(valNegDuality)
 
+  implicit def doneNeedDuality: Dual[Done, Need] =
+    new Dual[Done, Need] {
+      val rInvert: (Done |*| Need) -⚬ One = rInvertSignal
+      val lInvert: One -⚬ (Need |*| Done) = lInvertSignal
+    }
+
   /** Evidence that if `A` is dual to `B`, then `F[A]` is dual to `G[B]`. */
   trait Dual1[F[_], G[_]] {
     def rInvert[A, Ā](rInvert: (A |*| Ā) -⚬ One): (F[A] |*| G[Ā]) -⚬ One
