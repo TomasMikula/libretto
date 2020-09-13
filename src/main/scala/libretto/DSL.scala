@@ -42,9 +42,6 @@ trait DSL {
 
   type Rec[F[_]]
 
-  /** An element of type `A` is represented as a function `One -⚬ A`. */
-  type Elem[A] = One -⚬ A
-
   def id[A]: A -⚬ A
 
   def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C
