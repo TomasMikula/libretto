@@ -171,60 +171,6 @@ trait DSL {
   /** Hides one level of a recursive type definition. */
   def pack[F[_]]: F[Rec[F]] -⚬ Rec[F]
 
-  /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
-    * It must hold that
-    * {{{
-    *         ┏━━━━━┓                         ┏━━━━━┓
-    *         ┞─┐ r ┃                         ┃  l  ┞─┐
-    *         ╎A│ I ┃                         ┃  I  ╎B│
-    *         ┟─┘ n ┃                         ┃  n  ┟─┘
-    *   ┏━━━━━┫   v ┃     ┏━━━━━━━━━┓         ┃  v  ┣━━━━━┓     ┏━━━━━━━━━┓
-    *   ┃  l  ┞─┐ e ┃     ┞─┐       ┞─┐       ┃  e  ┞─┐ r ┃     ┞─┐       ┞─┐
-    *   ┃  I  ╎B│ r ┃  =  ╎A│ id[A] ╎A│       ┃  r  ╎A│ I ┃  =  ╎B│ id[B] ╎B│
-    *   ┃  n  ┟─┘ t ┃     ┟─┘       ┟─┘       ┃  t  ┟─┘ n ┃     ┟─┘       ┟─┘
-    *   ┃  v  ┣━━━━━┛     ┗━━━━━━━━━┛         ┗━━━━━┫   v ┃     ┗━━━━━━━━━┛
-    *   ┃  e  ┞─┐                                   ┞─┐ e ┃
-    *   ┃  r  ╎A│                                   ╎B│ r ┃
-    *   ┃  t  ┟─┘                                   ┟─┘ t ┃
-    *   ┗━━━━━┛                                     ┗━━━━━┛
-    * }}}
-    */
-  trait Dual[A, B] {
-    /** Reverses the input that flows along the `-⚬` arrow (say it is the `A` input) to its dual (`B`) flowing
-      * flowing against the direction of the arrow.
-      *
-      * {{{
-      *   ┏━━━━━━━┓
-      *   ┞─┐   r ┃
-      *   ╎A│─┐ I ┃
-      *   ┟─┘ ┆ n ┃
-      *   ┃   ┆ v ┃
-      *   ┞─┐ ┆ e ┃
-      *   ╎B│←┘ r ┃
-      *   ┟─┘   t ┃
-      *   ┗━━━━━━━┛
-      * }}}
-      */
-    val rInvert: (A |*| B) -⚬ One
-
-    /** Reverses the output that flows against the `-⚬` arrow (say it is the `B` output) to its dual (`A`) flowing
-      * in the direction of the arrow.
-      *
-      * {{{
-      *   ┏━━━━━┓
-      *   ┃ l   ┞─┐
-      *   ┃ I ┌─╎B│
-      *   ┃ n ┆ ┟─┘
-      *   ┃ v ┆ ┃
-      *   ┃ e ┆ ┞─┐
-      *   ┃ r └→╎A│
-      *   ┃ t   ┟─┘
-      *   ┗━━━━━┛
-      * }}}
-      */
-    val lInvert: One -⚬ (B |*| A)
-  }
-
   /** Witnesses that `A` has an intrinsic notion of completion.
     * [[checkCompleted]] can be used to test whether a `Completive` object has completed.
     * [[race]] can be used to watch for which of two `Completive` objects completes first.

@@ -6,8 +6,64 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   def const_[A](a: A): One -⚬ Val[A] =
     andThen(done, const(a))
 
-  /** Convenience method to summon implicit instances of [[dsl.Dual]]. */
-  def Dual[A, B](implicit ev: Dual[A, B]): Dual[A, B] = ev
+  /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
+    * It must hold that
+    * {{{
+    *         ┏━━━━━┓                         ┏━━━━━┓
+    *         ┞─┐ r ┃                         ┃  l  ┞─┐
+    *         ╎A│ I ┃                         ┃  I  ╎B│
+    *         ┟─┘ n ┃                         ┃  n  ┟─┘
+    *   ┏━━━━━┫   v ┃     ┏━━━━━━━━━┓         ┃  v  ┣━━━━━┓     ┏━━━━━━━━━┓
+    *   ┃  l  ┞─┐ e ┃     ┞─┐       ┞─┐       ┃  e  ┞─┐ r ┃     ┞─┐       ┞─┐
+    *   ┃  I  ╎B│ r ┃  =  ╎A│ id[A] ╎A│       ┃  r  ╎A│ I ┃  =  ╎B│ id[B] ╎B│
+    *   ┃  n  ┟─┘ t ┃     ┟─┘       ┟─┘       ┃  t  ┟─┘ n ┃     ┟─┘       ┟─┘
+    *   ┃  v  ┣━━━━━┛     ┗━━━━━━━━━┛         ┗━━━━━┫   v ┃     ┗━━━━━━━━━┛
+    *   ┃  e  ┞─┐                                   ┞─┐ e ┃
+    *   ┃  r  ╎A│                                   ╎B│ r ┃
+    *   ┃  t  ┟─┘                                   ┟─┘ t ┃
+    *   ┗━━━━━┛                                     ┗━━━━━┛
+    * }}}
+    */
+  trait Dual[A, B] {
+    /** Reverses the input that flows along the `-⚬` arrow (say it is the `A` input) to its dual (`B`) flowing
+      * flowing against the direction of the arrow.
+      *
+      * {{{
+      *   ┏━━━━━━━┓
+      *   ┞─┐   r ┃
+      *   ╎A│─┐ I ┃
+      *   ┟─┘ ┆ n ┃
+      *   ┃   ┆ v ┃
+      *   ┞─┐ ┆ e ┃
+      *   ╎B│←┘ r ┃
+      *   ┟─┘   t ┃
+      *   ┗━━━━━━━┛
+      * }}}
+      */
+    val rInvert: (A |*| B) -⚬ One
+
+    /** Reverses the output that flows against the `-⚬` arrow (say it is the `B` output) to its dual (`A`) flowing
+      * in the direction of the arrow.
+      *
+      * {{{
+      *   ┏━━━━━┓
+      *   ┃ l   ┞─┐
+      *   ┃ I ┌─╎B│
+      *   ┃ n ┆ ┟─┘
+      *   ┃ v ┆ ┃
+      *   ┃ e ┆ ┞─┐
+      *   ┃ r └→╎A│
+      *   ┃ t   ┟─┘
+      *   ┗━━━━━┛
+      * }}}
+      */
+    val lInvert: One -⚬ (B |*| A)
+  }
+
+  object Dual {
+    /** Convenience method to summon implicit instances of [[dsl.Dual]]. */
+    def apply[A, B](implicit ev: Dual[A, B]): Dual[A, B] = ev
+  }
 
   /** Witnesses that `F` is a covariant endofunctor on the category `-⚬`. */
   trait Functor[F[_]] { self =>
