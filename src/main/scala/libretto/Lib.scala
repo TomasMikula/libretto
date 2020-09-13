@@ -9,9 +9,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   /** Convenience method to summon implicit instances of [[dsl.Dual]]. */
   def Dual[A, B](implicit ev: Dual[A, B]): Dual[A, B] = ev
 
-  def zap[A, B](implicit ev:  Dual[A, B]): (A |*| B) -⚬ One =
-    ev.rInvert
-
   /** Witnesses that `F` is a covariant endofunctor on the category `-⚬`. */
   trait Functor[F[_]] { self =>
     def lift[A, B](f: A -⚬ B): F[A] -⚬ F[B]
@@ -622,16 +619,16 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   def fakeDemand[A]: One -⚬ Neg[A] =
     id                                           [        One        ]
-      .andThen(valNegDuality[A].lInvert)      .to[ Neg[A] |*| Val[A] ]
+      .andThen(promise[A])                    .to[ Neg[A] |*| Val[A] ]
       .andThen(discardSnd)                    .to[ Neg[A]            ]
 
   def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
     id                                         [                                       Neg[A] |*| Neg[A]   ]
-      .introFst(valNegDuality[A].lInvert)   .to[ (Neg[A] |*|        Val[A]      ) |*| (Neg[A] |*| Neg[A])  ]
+      .introFst(promise[A])                 .to[ (Neg[A] |*|        Val[A]      ) |*| (Neg[A] |*| Neg[A])  ]
       .timesAssocLR                         .to[  Neg[A] |*| (      Val[A]        |*| (Neg[A] |*| Neg[A])) ]
       .in.snd.fst(dup)                      .to[  Neg[A] |*| ((Val[A] |*| Val[A]) |*| (Neg[A] |*| Neg[A])) ]
       .in.snd(IXI)                          .to[  Neg[A] |*| ((Val[A] |*| Neg[A]) |*| (Val[A] |*| Neg[A])) ]
-      .in.snd(parToOne(zap, zap))           .to[  Neg[A] |*|                      One                      ]
+      .in.snd(parToOne(fulfill, fulfill))   .to[  Neg[A] |*|                      One                      ]
       .elimSnd                              .to[  Neg[A]                                                   ]
 
   /** From the choice ''available'' on the right (`C |&| D`), choose the one corresponding to the choice ''made''

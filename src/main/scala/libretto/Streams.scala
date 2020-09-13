@@ -442,11 +442,11 @@ sealed trait Streams[DSL <: libretto.DSL] {
   }
 
   object LDemanding {
-    def supply[A, B](implicit ev: Dual[A, B]): (A |*| LDemanding[B]) -⚬ Maybe[LDemanding[B]] =
+    def supply[A, B](rInvert: A |*| B -⚬ One): (A |*| LDemanding[B]) -⚬ Maybe[LDemanding[B]] =
       id[ A |*| LDemanding[B] ]     .to[ A |*| (One |&| (B |*| LSubscriber[B])) ]
       .in.snd(chooseR)              .to[ A |*|          (B |*| LSubscriber[B])  ]
       .timesAssocRL                 .to[ (A |*| B)         |*| LSubscriber[B]   ]
-      .elimFst(ev.rInvert)        .to[                       LSubscriber[B]   ]
+      .elimFst(rInvert)             .to[                       LSubscriber[B]   ]
       .unpack[LSubscriberF[B, *]]   .to[                   Maybe[LDemanding[B]] ]
   }
 
@@ -455,7 +455,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
       chooseL
 
     def supply[A]: (Val[A] |*| Demanding[A]) -⚬ Maybe[Demanding[A]] =
-      LDemanding.supply[Val[A], Neg[A]]
+      LDemanding.supply(fulfill[A])
 
     private[Streams] def merge[A](
       mergeSubscribers: (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A]
