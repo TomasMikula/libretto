@@ -224,21 +224,6 @@ trait DSL {
 
   implicit def doneNeedDuality: Dual[Done, Need]
 
-  /** Evidence that if `A` is dual to `B`, then `F[A]` is dual to `G[B]`. */
-  trait Dual1[F[_], G[_]] {
-    def rInvert[A, Ā](rInvert: (A |*| Ā) -⚬ One): (F[A] |*| G[Ā]) -⚬ One
-    def lInvert[A, Ā](lInvert: One -⚬ (Ā |*| A)): One -⚬ (G[Ā] |*| F[A])
-
-    def apply[A, Ā](ev: Dual[A, Ā]): Dual[F[A], G[Ā]] =
-      new Dual[F[A], G[Ā]] {
-        val rInvert: (F[A] |*| G[Ā]) -⚬ One = Dual1.this.rInvert(ev.rInvert)
-        val lInvert: One -⚬ (G[Ā] |*| F[A]) = Dual1.this.lInvert(ev.lInvert)
-      }
-  }
-
-  /** If `F[A]` is dual to `G[B]` for all dual pairs `A`, `B`, then `Rec[F]` is dual to `Rec[G]`. */
-  def dualRec[F[_], G[_]](ev: Dual1[F, G]): Dual[Rec[F], Rec[G]]
-
   /** Witnesses that `A` has an intrinsic notion of completion.
     * [[checkCompleted]] can be used to test whether a `Completive` object has completed.
     * [[race]] can be used to watch for which of two `Completive` objects completes first.

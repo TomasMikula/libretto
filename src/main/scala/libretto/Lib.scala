@@ -9,7 +9,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   /** Convenience method to summon implicit instances of [[dsl.Dual]]. */
   def Dual[A, B](implicit ev: Dual[A, B]): Dual[A, B] = ev
 
-  def zap[A, B](implicit ev: Dual[A, B]): (A |*| B) -⚬ One =
+  def zap[A, B](implicit ev:  Dual[A, B]): (A |*| B) -⚬ One =
     ev.rInvert
 
   /** Witnesses that `F` is a covariant endofunctor on the category `-⚬`. */
@@ -905,6 +905,34 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   implicit def negValDuality[A]: Dual[Neg[A], Val[A]] =
     dualSymmetric(valNegDuality)
+
+  /** Evidence that if `A` is dual to `B`, then `F[A]` is dual to `G[B]`. */
+  trait Dual1[F[_], G[_]] {
+    def rInvert[A, Ā](rInvert: (A |*| Ā) -⚬ One): (F[A] |*| G[Ā]) -⚬ One
+    def lInvert[A, Ā](lInvert: One -⚬ (Ā |*| A)): One -⚬ (G[Ā] |*| F[A])
+
+    def apply[A, Ā](ev: Dual[A, Ā]): Dual[F[A], G[Ā]] =
+      new Dual[F[A], G[Ā]] {
+        val rInvert: (F[A] |*| G[Ā]) -⚬ One = Dual1.this.rInvert(ev.rInvert)
+        val lInvert: One -⚬ (G[Ā] |*| F[A]) = Dual1.this.lInvert(ev.lInvert)
+      }
+  }
+
+  /** If `F[A]` is dual to `G[B]` for all dual pairs `A`, `B`, then `Rec[F]` is dual to `Rec[G]`. */
+  def dualRec[F[_], G[_]](ev: Dual1[F, G]): Dual[Rec[F], Rec[G]] =
+    new Dual[Rec[F], Rec[G]] {
+      val rInvert: (Rec[F] |*| Rec[G]) -⚬ One = rec { self =>
+        id                                   [   Rec[F]  |*|   Rec[G]  ]
+          .par(unpack[F], unpack[G])      .to[ F[Rec[F]] |*| G[Rec[G]] ]
+          .andThen(ev.rInvert(self))      .to[           One           ]
+      }
+
+      val lInvert: One -⚬ (Rec[G] |*| Rec[F]) = rec { self =>
+        id                                   [           One           ]
+          .andThen(ev.lInvert(self))      .to[ G[Rec[G]] |*| F[Rec[F]] ]
+          .par(pack[G], pack[F])          .to[   Rec[G]  |*|   Rec[F]  ]
+      }
+    }
 
   /** Given `A` and `B` concurrently (`A |*| B`), we can mandate that `A` be consumed before `B`
     * by turning it into `Ā =⚬ B`, where `Ā` is the dual of `A`.
