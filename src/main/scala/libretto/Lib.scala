@@ -705,6 +705,16 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       .in.left.fst(chooseL)    .to[( A        |*| C) |+| ((A |&| B) |*| D)]
       .in.right.fst(chooseR)   .to[( A        |*| C) |+| (       B  |*| D)]
 
+  /** Creates a pair of mutually recursive functions. */
+  def rec2[A, B, C, D](
+    f: (A -⚬ B, C -⚬ D) => A -⚬ B,
+    g: (A -⚬ B, C -⚬ D) => C -⚬ D,
+  ): (A -⚬ B, C -⚬ D) =
+    (
+      rec { (ab: A -⚬ B) => f(ab, rec { (cd: C -⚬ D) => g(ab, cd) }) },
+      rec { (cd: C -⚬ D) => g(rec { (ab: A -⚬ B) => f(ab, cd) }, cd) },
+    )
+
   type Bool = Val[Unit] |+| Val[Unit]
   object Bool {
     val constTrue: One -⚬ Bool =
