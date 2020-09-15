@@ -58,6 +58,26 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       * }}}
       */
     val lInvert: One -⚬ (B |*| A)
+
+    /** Law stating that [[rInvert]] followed by [[lInvert]] is identity. */
+    def law_rl_id: Equal[A -⚬ A] =
+      Equal(
+        id[A]                   .to[ A               ]
+          .introSnd(lInvert)    .to[ A |*| (B |*| A) ]
+          .timesAssocRL         .to[ (A |*| B) |*| A ]
+          .elimFst(rInvert)     .to[               A ],
+        id[A]
+      )
+
+    /** Law stating that [[lInvert]] followed by [[rInvert]] is identity. */
+    def law_lr_id: Equal[B -⚬ B] =
+      Equal(
+        id[B]                   .to[               B ]
+          .introFst(lInvert)    .to[ (B |*| A) |*| B ]
+          .timesAssocLR         .to[ B |*| (A |*| B) ]
+          .elimSnd(rInvert)     .to[ B               ],
+        id[B]
+      )
   }
 
   object Dual {
