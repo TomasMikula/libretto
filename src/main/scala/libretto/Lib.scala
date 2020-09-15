@@ -1151,18 +1151,54 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   trait Semigroup[A] {
     def combine: (A |*| A) -⚬ A
+
+    def law_associativity: Equal[ ((A |*| A) |*| A) -⚬ A ] =
+      Equal(
+        par(combine, id[A]) >>> combine,
+        timesAssocLR >>> par(id[A], combine) >>> combine,
+      )
   }
 
   trait Cosemigroup[A] {
     def split: A -⚬ (A |*| A)
+
+    def law_coAssociativity: Equal[ A -⚬ ((A |*| A) |*| A) ] =
+      Equal(
+        split >>> par(split, id[A]),
+        split >>> par(id[A], split) >>> timesAssocRL,
+      )
   }
 
   trait Monoid[A] extends Semigroup[A] {
     def unit: One -⚬ A
+
+    def law_leftUnit: Equal[ (One |*| A) -⚬ A ] =
+      Equal(
+        par(unit, id[A]) >>> combine,
+        elimFst,
+      )
+
+    def law_rightUnit: Equal[ (A |*| One) -⚬ A ] =
+      Equal(
+        par(id[A], unit) >>> combine,
+        elimSnd,
+      )
   }
 
   trait Comonoid[A] extends Cosemigroup[A] {
     def counit: A -⚬ One
+
+    def law_leftCounit: Equal[ A -⚬ (One |*| A) ] =
+      Equal(
+        split >>> par(counit, id[A]),
+        introFst,
+      )
+
+    def law_rightCounit: Equal[ A -⚬ (A |*| One) ] =
+      Equal(
+        split >>> par(id[A], counit),
+        introSnd,
+      )
   }
 
   trait Monad[F[_]] {
