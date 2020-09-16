@@ -89,6 +89,9 @@ trait DSL {
   def done: One -⚬ Done
   def need: Need -⚬ One
 
+  def delayIndefinitely: Done -⚬ Done
+  def regressInfinitely: Need -⚬ Need
+
   def fork: Done -⚬ (Done |*| Done)
   def join: (Done |*| Done) -⚬ Done
 
