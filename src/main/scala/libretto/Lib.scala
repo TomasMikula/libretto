@@ -1201,6 +1201,58 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       )
   }
 
+  /** A monoid whose [[unit]] can be chained after a signal flowing in the '''P'''ositive direction ([[Done]]),
+    * effectively taking on the responsibility to wait for completion of some computation.
+    *
+    * Its dual is [[NComonoid]].
+    */
+  trait PMonoid[A] extends Semigroup[A] {
+    def unit: Done -⚬ A
+
+    def monoid: Monoid[A] = new Monoid[A] {
+      def combine: (A |*| A) -⚬ A = PMonoid.this.combine
+      def unit: One -⚬ A = done >>> PMonoid.this.unit
+    }
+
+    def law_leftUnit: Equal[ (One |*| A) -⚬ A ] =
+      Equal(
+        par(done >>> unit, id[A]) >>> combine,
+        elimFst,
+      )
+
+    def law_rightUnit: Equal[ (A |*| One) -⚬ A ] =
+      Equal(
+        par(id[A], done >>> unit) >>> combine,
+        elimSnd,
+      )
+  }
+
+  /** A comonoid whose [[counit]] can be chained before a signal flowing in the '''N'''egative direction ([[Need]]),
+    * effectively taking on the responsibility to wait for completion of some computation.
+    *
+    * The dual of [[PMonoid]].
+    */
+  trait NComonoid[A] extends Cosemigroup[A] {
+    def counit: A -⚬ Need
+
+    def comonoid: Comonoid[A] = new Comonoid[A] {
+      def split: A -⚬ (A |*| A) = NComonoid.this.split
+      def counit: A -⚬ One = NComonoid.this.counit >>> need
+    }
+
+    def law_leftCounit: Equal[ A -⚬ (One |*| A) ] =
+      Equal(
+        split >>> par(counit >>> need, id[A]),
+        introFst,
+      )
+
+    def law_rightCounit: Equal[ A -⚬ (A |*| One) ] =
+      Equal(
+        split >>> par(id[A], counit >>> need),
+        introSnd,
+      )
+  }
+
   trait Monad[F[_]] {
     def pure[A]    :       A -⚬ F[A]
     def flatten[A] : F[F[A]] -⚬ F[A]
