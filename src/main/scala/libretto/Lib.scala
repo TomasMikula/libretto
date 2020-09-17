@@ -1201,7 +1201,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       )
   }
 
-  /** A monoid whose [[unit]] can be chained after a signal flowing in the '''P'''ositive direction ([[Done]]),
+  /** A [[Monoid]] whose [[unit]] can be chained after a signal flowing in the '''P'''ositive direction ([[Done]]),
     * effectively taking on the responsibility to wait for completion of some computation.
     *
     * Its dual is [[NComonoid]].
@@ -1227,8 +1227,8 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       )
   }
 
-  /** A comonoid whose [[counit]] can be chained before a signal flowing in the '''N'''egative direction ([[Need]]),
-    * effectively taking on the responsibility to wait for completion of some computation.
+  /** A [[Comonoid]] whose [[counit]] can be chained before a signal flowing in the '''N'''egative direction ([[Need]]),
+    * effectively taking on the responsibility to await completion of some computation.
     *
     * The dual of [[PMonoid]].
     */
@@ -1250,6 +1250,48 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       Equal(
         split >>> par(id[A], counit >>> need),
         introSnd,
+      )
+  }
+
+  /** A weaker version of [[Monoid]] whose [[unit]] creates a liability - a signal traveling in the '''N'''egative
+    * direction ([[Need]]) that eventually needs to be awaited.
+    *
+    * Its dual is [[PComonoid]].
+    */
+  trait NMonoid[A] extends Semigroup[A] {
+    def unit: Need -⚬ A
+
+    def law_leftUnit: Equal[ (Need |*| A) -⚬ A ] =
+      Equal(
+        par(regressInfinitely >>> unit, id[A]) >>> combine,
+        id[Need |*| A].elimFst(regressInfinitely >>> need),
+      )
+
+    def law_rightUnit: Equal[ (A |*| Need) -⚬ A ] =
+      Equal(
+        par(id[A], regressInfinitely >>> unit) >>> combine,
+        id[A |*| Need].elimSnd(regressInfinitely >>> need),
+      )
+  }
+
+  /** A weaker version of [[Comonoid]] whose [[counit]] cannot discard the input completely, but can reduce it to
+    * a signal traveling in the '''P'''ositive direction ([[Done]]) that eventually needs to be awaited.
+    *
+    * The dual of [[NMonoid]].
+    */
+  trait PComonoid[A] extends Cosemigroup[A] {
+    def counit: A -⚬ Done
+
+    def law_leftCounit: Equal[ A -⚬ (Done |*| A) ] =
+      Equal(
+        split >>> par(counit >>> delayIndefinitely, id[A]),
+        id[A].introFst(done >>> delayIndefinitely),
+      )
+
+    def law_rightCounit: Equal[ A -⚬ (A |*| Done) ] =
+      Equal(
+        split >>> par(id[A], counit >>> delayIndefinitely),
+        id[A].introSnd(done >>> delayIndefinitely),
       )
   }
 
