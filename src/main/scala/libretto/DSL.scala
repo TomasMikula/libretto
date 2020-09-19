@@ -155,7 +155,11 @@ trait DSL {
 
   def const[A](a: A): Done -⚬ Val[A]
 
+  @deprecated("Use neglect instead", since = "One does not simply ignore computations.")
   def discard[A]: Val[A] -⚬ One
+
+  def neglect[A]: Val[A] -⚬ Done
+  def inflate[A]: Need -⚬ Neg[A]
 
   def dup[A]: Val[A] -⚬ (Val[A] |*| Val[A]) =
     andThen(
