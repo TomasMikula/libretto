@@ -95,6 +95,12 @@ trait DSL {
   def fork: Done -⚬ (Done |*| Done)
   def join: (Done |*| Done) -⚬ Done
 
+  def fork[A, B](f: Done -⚬ A, g: Done -⚬ B): Done -⚬ (A |*| B) =
+    andThen(fork, par(f, g))
+
+  def join[A, B](f: A -⚬ Done, g: B -⚬ Done): (A |*| B) -⚬ Done =
+    andThen(par(f, g), join)
+
   def forkNeed: (Need |*| Need) -⚬ Need
   def joinNeed: Need -⚬ (Need |*| Need)
 
