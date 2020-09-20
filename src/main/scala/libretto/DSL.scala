@@ -128,7 +128,16 @@ trait DSL {
     */
   def distributeRL[A, B, C]: ((A |+| B) |*| C) -⚬ ((A |*| C) |+| (B |*| C))
 
+  def coFactorL[A, B, C]: (A |*| (B |&| C)) -⚬ ((A |*| B) |&| (A |*| C)) =
+    choice(par(id, chooseL), par(id, chooseR))
+
+  def coFactorR[A, B, C]: ((A |&| B) |*| C) -⚬ ((A |*| C) |&| (B |*| C)) =
+    choice(par(chooseL, id), par(chooseR, id))
+
+  /** Inverse of [[coFactorL]]. */
   def coDistributeL[A, B, C]: ((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C))
+
+  /** Inverse of [[coFactorR]]. */
   def coDistributeR[A, B, C]: ((A |*| C) |&| (B |*| C)) -⚬ ((A |&| B) |*| C)
 
   def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C)
