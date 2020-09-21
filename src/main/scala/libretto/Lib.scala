@@ -699,6 +699,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
                    (B |*|(A|*|C)) =
     timesAssocRL[A, B, C] >>> par(swap, id) >>> timesAssocLR
 
+  @deprecated("uses deprecated Comonoid[Val[A]]")
   def fakeDemand[A]: One -⚬ Neg[A] =
     id                                           [        One        ]
       .andThen(promise[A])                    .to[ Neg[A] |*| Val[A] ]
@@ -806,6 +807,8 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) = {
     val awaitL: (Val[Unit] |*| (A |*| B)) -⚬ (A |*| B) =
       (aKey compose fst[B].lens[A]).awaitL
+
+    import lib.comonoidVal
 
     id[A |*| B]
       .par(aKey.getL, bKey.getL)
@@ -1311,15 +1314,29 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def duplicate[A] : F[A] -⚬ F[F[A]]
   }
 
+  @deprecated("uses deprecated discard")
   implicit def comonoidVal[A]: Comonoid[Val[A]] =
     new Comonoid[Val[A]] {
       def counit : Val[A] -⚬ One                 = discard
       def split  : Val[A] -⚬ (Val[A] |*| Val[A]) = dup
     }
 
+  implicit def pComonoidVal[A]: PComonoid[Val[A]] =
+    new PComonoid[Val[A]] {
+      def counit : Val[A] -⚬ Done                = neglect
+      def split  : Val[A] -⚬ (Val[A] |*| Val[A]) = dup
+    }
+
+  @deprecated("uses deprecated fakeDemand")
   implicit def monoidNeg[A]: Monoid[Neg[A]] =
     new Monoid[Neg[A]] {
       def unit    :                 One -⚬ Neg[A] = fakeDemand
+      def combine : (Neg[A] |*| Neg[A]) -⚬ Neg[A] = mergeDemands
+    }
+
+  implicit def nMonoidNeg[A]: NMonoid[Neg[A]] =
+    new NMonoid[Neg[A]] {
+      def unit    :                Need -⚬ Neg[A] = inflate
       def combine : (Neg[A] |*| Neg[A]) -⚬ Neg[A] = mergeDemands
     }
 

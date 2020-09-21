@@ -97,7 +97,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       id
 
     def key[K, V]: Singleton[K, V] -⚬ (Val[K] |*| Singleton[K, V]) =
-      getFst
+      getFst(lib.comonoidVal)
 
     def summary[K, V]: Getter[Singleton[K, V], Summary[K]] = {
       val singletonSummary: Getter[Val[K], Summary[K]] =
