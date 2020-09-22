@@ -1158,6 +1158,34 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     }
   }
 
+  type PUnlimitedF[A, X] = Done |&| (A |&| (X |*| X))
+  type PUnlimited[A] = Rec[PUnlimitedF[A, *]]
+  object PUnlimited {
+    def neglect[A]: PUnlimited[A] -⚬ Done =
+      unpack[PUnlimitedF[A, *]] andThen chooseL
+
+    def single[A]: PUnlimited[A] -⚬ A =
+      unpack[PUnlimitedF[A, *]] andThen chooseR andThen chooseL
+
+    def double[A]: PUnlimited[A] -⚬ (PUnlimited[A] |*| PUnlimited[A]) =
+      unpack[PUnlimitedF[A, *]] andThen chooseR andThen chooseR
+
+    def create[X, A](
+      case0: X -⚬ Done,
+      case1: X -⚬ A,
+      caseN: X -⚬ (PUnlimited[A] |*| PUnlimited[A]),
+    ): X -⚬ PUnlimited[A] =
+      choice(case0, choice(case1, caseN)) andThen pack[PUnlimitedF[A, *]]
+
+    def duplicate[A]: PUnlimited[A] -⚬ PUnlimited[PUnlimited[A]] = rec { self =>
+      create(
+        case0 = neglect,
+        case1 = id,
+        caseN = double andThen par(self, self)
+      )
+    }
+  }
+
   trait Semigroup[A] {
     def combine: (A |*| A) -⚬ A
 
@@ -1358,10 +1386,22 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       def split  : Unlimited[A] -⚬ (Unlimited[A] |*| Unlimited[A]) = Unlimited.double
     }
 
+  implicit def pComonoidPUnlimited[A]: PComonoid[PUnlimited[A]] =
+    new PComonoid[PUnlimited[A]] {
+      def counit : PUnlimited[A] -⚬ Done                              = PUnlimited.neglect
+      def split  : PUnlimited[A] -⚬ (PUnlimited[A] |*| PUnlimited[A]) = PUnlimited.double
+    }
+
   implicit val comonadUnlimited: Comonad[Unlimited] =
     new Comonad[Unlimited] {
       def extract[A]   : Unlimited[A] -⚬ A                       = Unlimited.single
       def duplicate[A] : Unlimited[A] -⚬ Unlimited[Unlimited[A]] = Unlimited.duplicate
+    }
+
+  implicit val comonadPUnlimited: Comonad[PUnlimited] =
+    new Comonad[PUnlimited] {
+      def extract[A]   : PUnlimited[A] -⚬ A                         = PUnlimited.single
+      def duplicate[A] : PUnlimited[A] -⚬ PUnlimited[PUnlimited[A]] = PUnlimited.duplicate
     }
 
   def getFst[A, B](implicit A: Cosemigroup[A]): (A |*| B) -⚬ (A |*| (A |*| B)) =
