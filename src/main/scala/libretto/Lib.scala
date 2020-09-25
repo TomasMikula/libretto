@@ -1084,6 +1084,36 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       discard(A.counit)
   }
 
+  type PMaybe[A] = Done |+| A
+  object PMaybe {
+    def empty[A]: Done -⚬ PMaybe[A] =
+      injectL
+
+    def just[A]: A -⚬ PMaybe[A] =
+      injectR
+
+    def liftOption[A]: Val[Option[A]] -⚬ PMaybe[Val[A]] =
+      id[Val[Option[A]]]                .to[ Val[Option[      A]] ]
+        .andThen(liftV(_.toRight(())))  .to[ Val[Either[Unit, A]] ]
+        .andThen(liftEither)            .to[ Val[Unit] |+| Val[A] ]
+        .in.left(dsl.neglect)           .to[   Done    |+| Val[A] ]
+
+    def unliftOption[A]: PMaybe[Val[A]] -⚬ Val[Option[A]] =
+      id[PMaybe[Val[A]]]              .to[   Done    |+| Val[A] ]
+        .in.left(const(()))           .to[ Val[Unit] |+| Val[A] ]
+        .andThen(unliftEither)        .to[ Val[Either[Unit, A]] ]
+        .andThen(liftV(_.toOption))   .to[ Val[Option[A]]       ]
+
+    def getOrElse[A](f: Done -⚬ A): PMaybe[A] -⚬ A =
+      either(f, id)
+
+    def neglect[A](f: A -⚬ Done): PMaybe[A] -⚬ Done =
+      either(id, f)
+
+    def neglect[A](implicit A: PComonoid[A]): PMaybe[A] -⚬ Done =
+      neglect(A.counit)
+  }
+
   def parFromOne[A, B](f: One -⚬ A, g: One -⚬ B): One -⚬ (A |*| B) =
     introSnd[One] andThen par(f, g)
 
