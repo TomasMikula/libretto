@@ -1084,6 +1084,18 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       discard(A.counit)
   }
 
+  type Optional[A] = One |&| A
+  object Optional {
+    def optOut[A]: Optional[A] -⚬ One =
+      chooseL
+
+    def optIn[A]: Optional[A] -⚬ A =
+      chooseR
+
+    def fromDiscardable[A](discard: A -⚬ One): A -⚬ Optional[A] =
+      choice(discard, id)
+  }
+
   type PMaybe[A] = Done |+| A
   object PMaybe {
     def empty[A]: Done -⚬ PMaybe[A] =
