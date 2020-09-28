@@ -398,22 +398,22 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
   }
 
   private object Absorptive {
-    implicit def absorptiveId[X]: Absorptive[Id] =
-      new Absorptive[Id] {
-        def lift[A, B](f: A -⚬ B): Id[A] -⚬ Id[B] = f
-        def absorbOrDiscardL[A: Comonoid, B]: A |*| Id[B] -⚬ Id[A |*| B] = id
-        def absorbOrDiscardR[A, B: Comonoid]: Id[A] |*| B -⚬ Id[A |*| B] = id
-        def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): A |*| Id[B] -⚬ Id[C] = combine
-        def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): Id[A] |*| B -⚬ Id[C] = combine
-      }
+    implicit def fromTransportive[F[_]](implicit F: Transportive[F]): Absorptive[F] =
+      new Absorptive[F] {
+        def lift[A, B](f: A -⚬ B): F[A] -⚬ F[B] =
+          F.lift(f)
 
-    implicit def absorptiveSnd[X]: Absorptive[X |*| *] =
-      new Absorptive[X |*| *] {
-        def lift[A, B](f: A -⚬ B): X |*| A -⚬ (X |*| B) = liftSnd(f)
-        def absorbOrDiscardL[A: Comonoid, B]: A |*| (X |*| B) -⚬ (X |*| (A |*| B)) = XI
-        def absorbOrDiscardR[A, B: Comonoid]: (X |*| A) |*| B -⚬ (X |*| (A |*| B)) = timesAssocLR
-        def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): A |*| (X |*| B) -⚬ (X |*| C) = XI.in.snd(combine)
-        def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): (X |*| A) |*| B -⚬ (X |*| C) = timesAssocLR.in.snd(combine)
+        def absorbOrDiscardL[A, B](implicit A: Comonoid[A]): A |*| F[B] -⚬ F[A |*| B] =
+          F.inL
+
+        def absorbOrDiscardR[A, B](implicit B: Comonoid[B]): F[A] |*| B -⚬ F[A |*| B] =
+          F.inR
+
+        def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): A |*| F[B] -⚬ F[C] =
+          F.inL >>> F.lift(combine)
+
+        def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): F[A] |*| B -⚬ F[C] =
+          F.inR >>> F.lift(combine)
       }
 
     implicit def absorptiveBiMaybe[X]: Absorptive[BiMaybe[X, *]] =
