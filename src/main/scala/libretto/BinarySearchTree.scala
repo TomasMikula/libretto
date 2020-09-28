@@ -385,10 +385,13 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
 
   private trait Absorptive[F[_]] extends Functor[F] { F =>
     def absorbOrDiscardL[A: Comonoid, B]: (A |*| F[B]) -⚬ F[A |*| B]
-    def absorbOrDiscardR[A, B: Comonoid]: (F[A] |*| B) -⚬ F[A |*| B]
-
     def absorbL[A, B, C](combine: (A |*| B) -⚬ C, recover: A -⚬ C): (A |*| F[B]) -⚬ F[C]
-    def absorbR[A, B, C](combine: (A |*| B) -⚬ C, recover: B -⚬ C): (F[A] |*| B) -⚬ F[C]
+
+    def absorbOrDiscardR[A, B: Comonoid]: (F[A] |*| B) -⚬ F[A |*| B] =
+      swap >>> absorbOrDiscardL[B, A] >>> lift(swap)
+
+    def absorbR[A, B, C](combine: (A |*| B) -⚬ C, recover: B -⚬ C): (F[A] |*| B) -⚬ F[C] =
+      swap >>> absorbL(swap >>> combine, recover)
 
     def absorbL[A, B]: (A |*| F[B]) -⚬ F[A |*| Maybe[B]] =
       absorbL(par(id, Maybe.just), introSnd(Maybe.empty))
@@ -398,39 +401,39 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
 
     def >>>[G[_]](implicit G: Transportive[G]): Absorptive[λ[x => G[F[x]]]] =
       new Absorptive[λ[x => G[F[x]]]] {
-        def lift[A, B](f: A -⚬ B): G[F[A]] -⚬ G[F[B]] =
+        override def lift[A, B](f: A -⚬ B): G[F[A]] -⚬ G[F[B]] =
           G.lift(F.lift(f))
 
-          def absorbOrDiscardL[A, B](implicit A: Comonoid[A]): A |*| G[F[B]] -⚬ G[F[A |*| B]] =
-            G.inL >>> G.lift(F.absorbOrDiscardL)
+        override def absorbOrDiscardL[A, B](implicit A: Comonoid[A]): A |*| G[F[B]] -⚬ G[F[A |*| B]] =
+          G.inL >>> G.lift(F.absorbOrDiscardL)
 
-          def absorbOrDiscardR[A, B](implicit B: Comonoid[B]): G[F[A]] |*| B -⚬ G[F[A |*| B]] =
-            G.inR >>> G.lift(F.absorbOrDiscardR)
+        override def absorbOrDiscardR[A, B](implicit B: Comonoid[B]): G[F[A]] |*| B -⚬ G[F[A |*| B]] =
+          G.inR >>> G.lift(F.absorbOrDiscardR)
 
-          def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): A |*| G[F[B]] -⚬ G[F[C]] =
-            G.inL >>> G.lift(F.absorbL(combine, recover))
+        override def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): A |*| G[F[B]] -⚬ G[F[C]] =
+          G.inL >>> G.lift(F.absorbL(combine, recover))
 
-          def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): G[F[A]] |*| B -⚬ G[F[C]] =
-            G.inR >>> G.lift(F.absorbR(combine, recover))
+        override def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): G[F[A]] |*| B -⚬ G[F[C]] =
+          G.inR >>> G.lift(F.absorbR(combine, recover))
       }
   }
 
   private object Absorptive {
     implicit def fromTransportive[F[_]](implicit F: Transportive[F]): Absorptive[F] =
       new Absorptive[F] {
-        def lift[A, B](f: A -⚬ B): F[A] -⚬ F[B] =
+        override def lift[A, B](f: A -⚬ B): F[A] -⚬ F[B] =
           F.lift(f)
 
-        def absorbOrDiscardL[A, B](implicit A: Comonoid[A]): A |*| F[B] -⚬ F[A |*| B] =
+        override def absorbOrDiscardL[A, B](implicit A: Comonoid[A]): A |*| F[B] -⚬ F[A |*| B] =
           F.inL
 
-        def absorbOrDiscardR[A, B](implicit B: Comonoid[B]): F[A] |*| B -⚬ F[A |*| B] =
+        override def absorbOrDiscardR[A, B](implicit B: Comonoid[B]): F[A] |*| B -⚬ F[A |*| B] =
           F.inR
 
-        def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): A |*| F[B] -⚬ F[C] =
+        override def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): A |*| F[B] -⚬ F[C] =
           F.inL >>> F.lift(combine)
 
-        def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): F[A] |*| B -⚬ F[C] =
+        override def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): F[A] |*| B -⚬ F[C] =
           F.inR >>> F.lift(combine)
       }
 
@@ -446,24 +449,11 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
             .in.snd(either(elimSnd >>> recover, combine))   .to[ Maybe[X] |*|               C             ]
             .in.snd(Maybe.just)                             .to[ Maybe[X] |*|            Maybe[C]         ]
 
-        def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): (BiMaybe[X, A] |*| B) -⚬ BiMaybe[X, C] =
-          id[BiMaybe[X, A] |*| B]                           .to[ (Maybe[X] |*| Maybe[A]) |*| B            ]
-            .timesAssocLR                                   .to[ Maybe[X] |*| (Maybe[A] |*| B)            ]
-            .in.snd(distributeRL)                           .to[ Maybe[X] |*| ((One |*| B) |+| (A |*| B)) ]
-            .in.snd(either(elimFst >>> recover, combine))   .to[ Maybe[X] |*|               C             ]
-            .in.snd(Maybe.just)                             .to[ Maybe[X] |*|            Maybe[C]         ]
-
         def absorbOrDiscardL[A: Comonoid, B]: (A |*| BiMaybe[X, B]) -⚬ BiMaybe[X, A |*| B] =
           id[A |*| BiMaybe[X, B]]                           .to[ A |*| (Maybe[X] |*| Maybe[B])            ]
             .andThen(XI)                                    .to[ Maybe[X] |*| (A |*| Maybe[B])            ]
             .in.snd(distributeLR)                           .to[ Maybe[X] |*| ((A |*| One) |+| (A |*| B)) ]
             .in.snd.left(discardFst)                        .to[ Maybe[X] |*| (       One  |+| (A |*| B)) ]
-
-        def absorbOrDiscardR[A, B: Comonoid]: (BiMaybe[X, A] |*| B) -⚬ BiMaybe[X, A |*| B] =
-          id[BiMaybe[X, A] |*| B]                           .to[ (Maybe[X] |*| Maybe[A]) |*| B            ]
-            .timesAssocLR                                   .to[ Maybe[X] |*| (Maybe[A] |*| B)            ]
-            .in.snd(distributeRL)                           .to[ Maybe[X] |*| ((One |*| B) |+| (A |*| B)) ]
-            .in.snd.left(discardSnd)                        .to[ Maybe[X] |*| ( One        |+| (A |*| B)) ]
       }
   }
 }
