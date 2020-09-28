@@ -437,23 +437,25 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
           F.inR >>> F.lift(combine)
       }
 
-    implicit def absorptiveBiMaybe[X]: Absorptive[BiMaybe[X, *]] =
-      new Absorptive[BiMaybe[X, *]] {
-        def lift[A, B](f: A -⚬ B): BiMaybe[X, A] -⚬ BiMaybe[X, B] =
-          (snd[Maybe[X]] ⚬ right[One]).lift(f)
+    implicit val absorptiveMaybe: Absorptive[Maybe] =
+      new Absorptive[Maybe] {
+        def lift[A, B](f: A -⚬ B): Maybe[A] -⚬ Maybe[B] =
+          Bifunctor[|+|].lift(id, f)
 
-        def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): (A |*| BiMaybe[X, B]) -⚬ BiMaybe[X, C] =
-          id[A |*| BiMaybe[X, B]]                           .to[ A |*| (Maybe[X] |*| Maybe[B])            ]
-            .andThen(XI)                                    .to[ Maybe[X] |*| (A |*| Maybe[B])            ]
-            .in.snd(distributeLR)                           .to[ Maybe[X] |*| ((A |*| One) |+| (A |*| B)) ]
-            .in.snd(either(elimSnd >>> recover, combine))   .to[ Maybe[X] |*|               C             ]
-            .in.snd(Maybe.just)                             .to[ Maybe[X] |*|            Maybe[C]         ]
+        def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): A |*| Maybe[B] -⚬ Maybe[C] =
+          id[A |*| Maybe[B]]                      .to[ A |*| (One  |+|        B) ]
+            .distributeLR                         .to[ (A |*| One) |+| (A |*| B) ]
+            .in.left(elimSnd)                     .to[  A          |+| (A |*| B) ]
+            .either(recover, combine)             .to[              C            ]
+            .injectR                              .to[        Maybe[C]           ]
 
-        def absorbOrDiscardL[A: Comonoid, B]: (A |*| BiMaybe[X, B]) -⚬ BiMaybe[X, A |*| B] =
-          id[A |*| BiMaybe[X, B]]                           .to[ A |*| (Maybe[X] |*| Maybe[B])            ]
-            .andThen(XI)                                    .to[ Maybe[X] |*| (A |*| Maybe[B])            ]
-            .in.snd(distributeLR)                           .to[ Maybe[X] |*| ((A |*| One) |+| (A |*| B)) ]
-            .in.snd.left(discardFst)                        .to[ Maybe[X] |*| (       One  |+| (A |*| B)) ]
+        def absorbOrDiscardL[A, B](implicit A: Comonoid[A]): A |*| Maybe[B] -⚬ Maybe[A |*| B] =
+          id[A |*| Maybe[B]]                      .to[ A |*| (One  |+|        B) ]
+            .distributeLR                         .to[ (A |*| One) |+| (A |*| B) ]
+            .in.left(elimSnd >>> A.counit)        .to[    One      |+| (A |*| B) ]
       }
+
+    implicit def absorptiveBiMaybe[X]: Absorptive[BiMaybe[X, *]] =
+      absorptiveMaybe >>> snd
   }
 }
