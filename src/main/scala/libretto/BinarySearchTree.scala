@@ -383,7 +383,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
   def clear[K, V](f: V -⚬ One): Tree[K, V] -⚬ One =
     either(id, NonEmptyTree.clear(f))
 
-  private trait Absorptive[F[_]] extends Functor[F] {
+  private trait Absorptive[F[_]] extends Functor[F] { F =>
     def absorbOrDiscardL[A: Comonoid, B]: (A |*| F[B]) -⚬ F[A |*| B]
     def absorbOrDiscardR[A, B: Comonoid]: (F[A] |*| B) -⚬ F[A |*| B]
 
@@ -395,6 +395,24 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
 
     def absorbR[A, B]: (F[A] |*| B) -⚬ F[Maybe[A] |*| B] =
       absorbR(par(Maybe.just, id), introFst(Maybe.empty))
+
+    def >>>[G[_]](implicit G: Transportive[G]): Absorptive[λ[x => G[F[x]]]] =
+      new Absorptive[λ[x => G[F[x]]]] {
+        def lift[A, B](f: A -⚬ B): G[F[A]] -⚬ G[F[B]] =
+          G.lift(F.lift(f))
+
+          def absorbOrDiscardL[A, B](implicit A: Comonoid[A]): A |*| G[F[B]] -⚬ G[F[A |*| B]] =
+            G.inL >>> G.lift(F.absorbOrDiscardL)
+
+          def absorbOrDiscardR[A, B](implicit B: Comonoid[B]): G[F[A]] |*| B -⚬ G[F[A |*| B]] =
+            G.inR >>> G.lift(F.absorbOrDiscardR)
+
+          def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A -⚬ C): A |*| G[F[B]] -⚬ G[F[C]] =
+            G.inL >>> G.lift(F.absorbL(combine, recover))
+
+          def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: B -⚬ C): G[F[A]] |*| B -⚬ G[F[C]] =
+            G.inR >>> G.lift(F.absorbR(combine, recover))
+      }
   }
 
   private object Absorptive {
