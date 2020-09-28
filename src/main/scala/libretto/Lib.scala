@@ -149,13 +149,13 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   }
 
   object Junction {
-    def junctionDone: Junction[Done] =
+    implicit def junctionDone: Junction[Done] =
       new Junction[Done] {
         override def joinL: Done |*| Done -⚬ Done =
           join
       }
 
-    def junctionVal[A]: Junction[Val[A]] =
+    implicit def junctionVal[A]: Junction[Val[A]] =
       new Junction[Val[A]] {
         override def joinL: Done |*| Val[A] -⚬ Val[A] =
           par(const(()), id[Val[A]]) >>> unliftPair >>> liftV(_._2)
@@ -165,7 +165,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   trait Getter[S, A] { self =>
     def getL[B](that: Getter[A, B])(implicit B: Cosemigroup[B]): S -⚬ (B |*| S)
 
-    def extendJunction(A: Junction[A]): Junction[S]
+    def extendJunction(implicit A: Junction[A]): Junction[S]
 
     def getL(implicit A: Cosemigroup[A]): S -⚬ (A |*| S) =
       getL(Getter.identity[A])
@@ -184,7 +184,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
         override def getL[C](next: Getter[B, C])(implicit C: Cosemigroup[C]): S -⚬ (C |*| S) =
           self.getL(that andThen next)
 
-        override def extendJunction(B: Junction[B]): Junction[S] =
+        override def extendJunction(implicit B: Junction[B]): Junction[S] =
           self.extendJunction(that.extendJunction(B))
       }
 
@@ -196,7 +196,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
         override def getL[B](next: Getter[A, B])(implicit B: Cosemigroup[B]): (S |+| T) -⚬ (B |*| (S |+| T)) =
           id[S |+| T].bimap(self.getL(next), that.getL(next)) >>> factorL
 
-        override def extendJunction(A: Junction[A]): Junction[S |+| T] =
+        override def extendJunction(implicit A: Junction[A]): Junction[S |+| T] =
           new Junction[S |+| T] {
             override def joinL: Done |*| (S |+| T) -⚬ (S |+| T) =
               distributeLR.bimap(self.joinL(A), that.joinL(A))
@@ -226,7 +226,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
         override def getL(implicit A: Cosemigroup[A]): A -⚬ (A |*| A) =
           A.split
 
-        override def extendJunction(A: Junction[A]): Junction[A] =
+        override def extendJunction(implicit A: Junction[A]): Junction[A] =
           A
       }
   }
@@ -243,7 +243,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     override def getL[B](that: Getter[A, B])(implicit B: Cosemigroup[B]): S -⚬ (B |*| S) =
       read(that.getL)
 
-    override def extendJunction(A: Junction[A]): Junction[S] =
+    override def extendJunction(implicit A: Junction[A]): Junction[S] =
       new Junction[S] {
         def joinL: Done |*| S -⚬ S = write(A.joinL)
       }
@@ -586,6 +586,14 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def snd: FocusedFunctionOutputCo[A, λ[x => F[B1 |*| x]], B2] =
       f.zoomCo(lib.snd[B1])
+  }
+
+  implicit class FocusedFunctionOutputOnDoneTimesCo[A, F[_], B2](f: FocusedFunctionOutputCo[A, F, Done |*| B2])(implicit j: Junction[B2]) {
+    def joinL: A -⚬ F[B2] = f(j.joinL)
+  }
+
+  implicit class FocusedFunctionOutputOnTimesDoneCo[A, F[_], B1](f: FocusedFunctionOutputCo[A, F, B1 |*| Done])(implicit j: Junction[B1]) {
+    def joinR: A -⚬ F[B1] = f(j.joinR)
   }
 
   implicit class FocusedFunctionOutputOnPlusCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 |+| B2]) {

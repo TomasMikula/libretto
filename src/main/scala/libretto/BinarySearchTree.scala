@@ -105,7 +105,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
           override def getL[B](that: Getter[Summary[K], B])(implicit B: Cosemigroup[B]): Val[K] -⚬ (B |*| Val[K]) =
             (Summary.singleton[K] >>> that.getL).in.snd(Summary.minKey)
 
-          override def extendJunction(j: Junction[Summary[K]]): Junction[Val[K]] =
+          override def extendJunction(implicit j: Junction[Summary[K]]): Junction[Val[K]] =
             Junction.junctionVal[K]
         }
 
