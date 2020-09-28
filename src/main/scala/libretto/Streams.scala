@@ -572,33 +572,6 @@ sealed trait Streams[DSL <: libretto.DSL] {
       .plusAssocRL                 .to[(One |+|       One    ) |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Subscriber[B])) ]
       .in.left(either(id, id))     .to[     One                |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Subscriber[B])) ]
 
-  type Source[A] = One -⚬ Pollable[A]
-  object Source {
-    def empty[A]: Source[A] = {
-      choice(id[One], injectL[One, Val[A] |*| Pollable[A]])
-        .pack[PollableF[A, *]]
-    }
-
-    def singleton[A](a: A): Source[A] = {
-      val poll: One -⚬ (One |+| (Val[A] |*| Pollable[A])) =
-        parFromOne(const_(a), Source.empty[A])  .from[                 One              ]
-                                                .to  [          Val[A] |*| Pollable[A]  ]
-          .injectR                              .to  [ One |+| (Val[A] |*| Pollable[A]) ]
-
-      choice(id[One], poll)
-        .pack[PollableF[A, *]]
-    }
-
-    def fromList[A](elems: List[A]): Source[A] = {
-      const_(elems) andThen Pollable.fromList[A]
-    }
-
-    def concat[A](src1: Source[A], src2: Source[A]): Source[A] = {
-      parFromOne(src1, src2)
-        .andThen(Pollable.concat[A])
-    }
-  }
-
   type Pipe[A, B] = Pollable[A] -⚬ Pollable[B]
   object Pipe {
     def lift[A, B](f: A => B): Pipe[A, B] = {
