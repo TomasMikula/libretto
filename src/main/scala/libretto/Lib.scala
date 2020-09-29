@@ -746,6 +746,26 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       .in.left.fst(chooseL)    .to[( A        |*| C) |+| ((A |&| B) |*| D)]
       .in.right.fst(chooseR)   .to[( A        |*| C) |+| (       B  |*| D)]
 
+  /** Present a choice between two products (`(A |*| B) |&| (C |*| D)`) as a choice (`A |&| C`) between the first
+    * components of the respective products and provide the second component corresponding to the chosen first
+    * component on the side (as `B |+| D`).
+    */
+  def subordinateSnd[A, B, C, D]: ((A |*| B) |&| (C |*| D)) -⚬ ((A |&| C) |*| (B |+| D)) =
+    id                                 [ (A |*|  B       ) |&| (C |*|        D ) ]
+      .in.choiceL.snd.injectL[D]    .to[ (A |*| (B |+| D)) |&| (C |*|        D ) ]
+      .in.choiceR.snd.injectR[B]    .to[ (A |*| (B |+| D)) |&| (C |*| (B |+| D)) ]
+      .coDistributeR
+
+  /** Present a choice between two products (`(A |*| B) |&| (C |*| D)`) as a choice (`B |&| D`) between the second
+    * components of the respective products and provide the first component corresponding to the chosen second
+    * component on the side (as `A |+| C`).
+    */
+  def subordinateFst[A, B, C, D]: ((A |*| B) |&| (C |*| D)) -⚬ ((A |+| C) |*| (B |&| D)) =
+    id                                 [ ( A        |*|  B) |&| (       C  |*| D) ]
+      .in.choiceL.fst.injectL[C]    .to[ ((A |+| C) |*|  B) |&| (       C  |*| D) ]
+      .in.choiceR.fst.injectR[A]    .to[ ((A |+| C) |*|  B) |&| ((A |+| C) |*| D) ]
+      .coDistributeL                .to[  (A |+| C) |*| (B  |&|                D) ]
+
   /** Creates a pair of mutually recursive functions. */
   def rec2[A, B, C, D](
     f: (A -⚬ B, C -⚬ D) => A -⚬ B,
@@ -985,11 +1005,9 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     lInvertA: One -⚬ (Ȧ |*| A),
     lInvertB: One -⚬ (Ḃ |*| B),
   ): One -⚬ ((Ȧ |&| Ḃ) |*| (A |+| B)) =
-    id                                 [                   One                   ]
-      .choice(lInvertA, lInvertB)   .to[ (Ȧ |*|  A       ) |&| (Ḃ |*|        B ) ]
-      .in.choiceL.snd.injectL[B]    .to[ (Ȧ |*| (A |+| B)) |&| (Ḃ |*|        B ) ]
-      .in.choiceR.snd.injectR[A]    .to[ (Ȧ |*| (A |+| B)) |&| (Ḃ |*| (A |+| B)) ]
-      .andThen(coDistributeR)       .to[ (Ȧ |&|                Ḃ) |*| (A |+| B)  ]
+    id                                 [           One           ]
+      .choice(lInvertA, lInvertB)   .to[ (Ȧ |*| A) |&| (Ḃ |*| B) ]
+      .andThen(subordinateSnd)      .to[ (Ȧ |&| Ḃ) |*| (A |+| B) ]
 
   implicit def eitherChoiceDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |+| B, Ȧ |&| Ḃ] =
     new Dual[A |+| B, Ȧ |&| Ḃ] {
