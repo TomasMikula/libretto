@@ -262,12 +262,11 @@ sealed trait Streams[DSL <: libretto.DSL] {
       type DT[K, V] = DemandingTree[K, V]
       type NeDT[K, V] = NonEmptyTree[K, Demanding[V]]
 
-      def dispatch[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| DT[K, V]) -⚬ (Maybe[Val[V]] |*| DT[K, V]) =
-        Tree.update(Demanding.supply[V])
+      def dispatch[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| DT[K, V]) -⚬ DT[K, V] =
+        Tree.update(Demanding.supply[V], discard)
 
       def dispatchNE[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| NeDT[K, V]) -⚬ (Maybe[NeDT[K, V]]) =
-        NonEmptyTree.update(Demanding.supply[V])
-          .elimFst(Maybe.discard[Val[V]])
+        NonEmptyTree.update(Demanding.supply[V], discard)
 
       def dispatchNE[A, K: Ordering, V](
         f: Val[A] -⚬ (Val[K] |*| Val[V]),
@@ -308,8 +307,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
           .in.fst(swap)                   .to[ (Pollable[A] |*| Val[A]) |*|              (LPolled[KSubs] |*| Tree[K, Demanding[V]]) ]
           .andThen(IXI)                   .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (      Val[A]        |*| Tree[K, Demanding[V]]) ]
           .in.snd.fst(f)                  .to[ (Pollable[A] |*| LPolled[KSubs]) |*| ((Val[K] |*| Val[V]) |*| Tree[K, Demanding[V]]) ]
-          .in.snd(DT.dispatch)            .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (   Maybe[Val[V]]    |*| Tree[K, Demanding[V]]) ]
-          .in.snd(elimFst(Maybe.discard)) .to[ (Pollable[A] |*| LPolled[KSubs]) |*|                          Tree[K, Demanding[V]]  ]
+          .in.snd(DT.dispatch)            .to[ (Pollable[A] |*| LPolled[KSubs]) |*|                          Tree[K, Demanding[V]]  ]
           .in.fst.fst(poll)               .to[ (  Polled[A] |*| LPolled[KSubs]) |*|                          Tree[K, Demanding[V]]  ]
           .andThen(goRec)                 .to[                                  One                                                 ]
 
