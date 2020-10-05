@@ -766,6 +766,23 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       .in.choiceR.fst.injectR[A]    .to[ ((A |+| C) |*|  B) |&| ((A |+| C) |*| D) ]
       .coDistributeL                .to[  (A |+| C) |*| (B  |&|                D) ]
 
+  private def chooseWhenDone[A, B, C](
+    chooseWhenNeed: Need |*| (A |&| B) -⚬ (Need |*| C),
+  ): Done |*| (A |&| B) -⚬ (Done |*| C) =
+    id                                         [ Done |*|                      (A |&| B)  ]
+      .in.snd(introFst(lInvertSignal))      .to[ Done |*| ((Need |*| Done) |*| (A |&| B)) ]
+      .in.snd(IX)                           .to[ Done |*| ((Need |*| (A |&| B)) |*| Done) ]
+      .in.snd.fst(chooseWhenNeed)           .to[ Done |*| ((Need |*|     C    ) |*| Done) ]
+      .in.snd(timesAssocLR).timesAssocRL    .to[ (Done |*| Need) |*| (   C      |*| Done) ]
+      .elimFst(rInvertSignal)               .to[                         C      |*| Done  ]
+      .swap                                 .to[                        Done    |*|  C    ]
+
+  def chooseLWhenDone[A, B]: Done |*| (A |&| B) -⚬ (Done |*| A) =
+    chooseWhenDone(chooseLWhenNeed)
+
+  def chooseRWhenDone[A, B]: Done |*| (A |&| B) -⚬ (Done |*| B) =
+    chooseWhenDone(chooseRWhenNeed)
+
   /** Creates a pair of mutually recursive functions. */
   def rec2[A, B, C, D](
     f: (A -⚬ B, C -⚬ D) => A -⚬ B,
