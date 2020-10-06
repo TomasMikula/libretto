@@ -104,6 +104,12 @@ trait DSL {
   def forkNeed: (Need |*| Need) -⚬ Need
   def joinNeed: Need -⚬ (Need |*| Need)
 
+  def forkNeed[A, B](f: A -⚬ Need, g: B -⚬ Need): (A |*| B) -⚬ Need =
+    andThen(par(f, g), forkNeed)
+
+  def joinNeed[A, B](f: Need -⚬ A, g: Need -⚬ B): Need -⚬ (A |*| B) =
+    andThen(joinNeed, par(f, g))
+
   def injectLWhenDone[A, B]: (Done |*| A) -⚬ (Done |*| (A |+| B))
   def injectRWhenDone[A, B]: (Done |*| B) -⚬ (Done |*| (A |+| B))
 
