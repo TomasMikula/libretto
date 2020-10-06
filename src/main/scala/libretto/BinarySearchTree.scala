@@ -29,11 +29,9 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def maxKeyGetter[K]: Getter[Summary[K], Val[K]]
 
     def dup[K]: Summary[K] -⚬ (Summary[K] |*| Summary[K])
-    @deprecated
-    def discard[K]: Summary[K] -⚬ One
     def neglect[K]: Summary[K] -⚬ Done
 
-    implicit def summaryComonoid[K]: Comonoid[Summary[K]]
+    implicit def summaryCosemigroup[K]: Cosemigroup[Summary[K]]
   }
 
   val Summary: SummaryModule = new SummaryModule {
@@ -61,21 +59,16 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def dup[K]: Summary[K] -⚬ (Summary[K] |*| Summary[K]) =
       par(dsl.dup[K], dsl.dup[K]) >>> IXI
 
-    @deprecated
-    def discard[K]: Summary[K] -⚬ One =
-      parToOne(dsl.discard, dsl.discard)
-
     def neglect[K]: Summary[K] -⚬ Done =
       join(dsl.neglect, dsl.neglect)
 
-    def summaryComonoid[K]: Comonoid[Summary[K]] =
-      new Comonoid[Summary[K]] {
-        def counit: Summary[K] -⚬ One                         = discard
+    def summaryCosemigroup[K]: Cosemigroup[Summary[K]] =
+      new Cosemigroup[Summary[K]] {
         def split : Summary[K] -⚬ (Summary[K] |*| Summary[K]) = dup
       }
   }
 
-  import Summary.{Summary, summaryComonoid}
+  import Summary.{Summary, summaryCosemigroup}
 
   sealed trait SingletonModule {
     type Singleton[K, V]
@@ -105,7 +98,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       id
 
     def key[K, V]: Singleton[K, V] -⚬ (Val[K] |*| Singleton[K, V]) =
-      getFst(lib.comonoidVal)
+      getFst(lib.pComonoidVal)
 
     def summary[K, V]: Getter[Singleton[K, V], Summary[K]] = {
       val singletonSummary: Getter[Val[K], Summary[K]] =
@@ -277,8 +270,8 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
 
       val replace: ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] =
         id                                                       [ (Val[K] |*| W) |*| Singleton[K, V] ]
-          .andThen(par(discardFst, Singleton.deconstruct))    .to[             W  |*|  (Val[K] |*| V) ]
-          .andThen(XI)                                        .to[         Val[K] |*|       (W |*| V) ]
+          .in.snd(Singleton.deconstruct)                      .to[ (Val[K] |*| W) |*|  (Val[K] |*| V) ]
+          .andThen(IXI).in.fst.joinL(neglect)                 .to[         Val[K] |*|       (W |*| V) ]
           .in.snd(upd)                                        .to[         Val[K] |*|            F[V] ]
           .andThen(F.absorbOrNeglectL)                        .to[       F[Val[K] |*|              V] ]
           .andThen(F.lift(singleton))                         .to[        F[NonEmptyTree[K, V]]       ]

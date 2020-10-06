@@ -218,7 +218,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       }
 
     def awaitL[A0](implicit ev: A =:= Val[A0]): (Val[Unit] |*| S) -⚬ S =
-      par(discard[Unit] >>> done, id[S]) >>> awaitDoneL[A0]
+      par(neglect[Unit], id[S]) >>> awaitDoneL[A0]
 
     def awaitR[A0](implicit ev: A =:= Val[A0]): (S |*| Val[Unit]) -⚬ S =
       swap >>> awaitL
@@ -733,12 +733,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
                    (B |*|(A|*|C)) =
     timesAssocRL[A, B, C] >>> par(swap, id) >>> timesAssocLR
 
-  @deprecated("uses deprecated Comonoid[Val[A]]")
-  def fakeDemand[A]: One -⚬ Neg[A] =
-    id                                           [        One        ]
-      .andThen(promise[A])                    .to[ Neg[A] |*| Val[A] ]
-      .andThen(discardSnd)                    .to[ Neg[A]            ]
-
   def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
     id                                         [                                       Neg[A] |*| Neg[A]   ]
       .introFst(promise[A])                 .to[ (Neg[A] |*|        Val[A]      ) |*| (Neg[A] |*| Neg[A])  ]
@@ -906,15 +900,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     val awaitL: (Val[Unit] |*| (A |*| B)) -⚬ (A |*| B) =
       (aKey compose fst[B].lens[A]).awaitL
 
-    import lib.comonoidVal
-
     id[A |*| B]
       .par(aKey.getL, bKey.getL)
       .andThen(IXI)
       .in.fst(liftBipredicate(pred))
       .andThen(ifThenElse(awaitL, awaitL))
   }
-
 
   def ltBy[A, B, K](
     aKey: Getter[A, Val[K]],
@@ -1157,12 +1148,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def just[A]: A -⚬ Maybe[A] =
       injectR
-
-    def liftOption[A]: Val[Option[A]] -⚬ Maybe[Val[A]] =
-      id[Val[Option[A]]]                .to[ Val[Option[      A]] ]
-        .andThen(liftV(_.toRight(())))  .to[ Val[Either[Unit, A]] ]
-        .andThen(liftEither)            .to[ Val[Unit] |+| Val[A] ]
-        .in.left(dsl.discard)           .to[   One     |+| Val[A] ]
 
     def unliftOption[A]: Maybe[Val[A]] -⚬ Val[Option[A]] =
       id[Maybe[Val[A]]]               .to[    One    |+| Val[A] ]
@@ -1483,24 +1468,10 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def duplicate[A] : F[A] -⚬ F[F[A]]
   }
 
-  @deprecated("uses deprecated discard")
-  implicit def comonoidVal[A]: Comonoid[Val[A]] =
-    new Comonoid[Val[A]] {
-      def counit : Val[A] -⚬ One                 = discard
-      def split  : Val[A] -⚬ (Val[A] |*| Val[A]) = dup
-    }
-
   implicit def pComonoidVal[A]: PComonoid[Val[A]] =
     new PComonoid[Val[A]] {
       def counit : Val[A] -⚬ Done                = neglect
       def split  : Val[A] -⚬ (Val[A] |*| Val[A]) = dup
-    }
-
-  @deprecated("uses deprecated fakeDemand")
-  implicit def monoidNeg[A]: Monoid[Neg[A]] =
-    new Monoid[Neg[A]] {
-      def unit    :                 One -⚬ Neg[A] = fakeDemand
-      def combine : (Neg[A] |*| Neg[A]) -⚬ Neg[A] = mergeDemands
     }
 
   implicit def nMonoidNeg[A]: NMonoid[Neg[A]] =
