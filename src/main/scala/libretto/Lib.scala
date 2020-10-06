@@ -140,6 +140,20 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def apply[F[_, _]](implicit ev: Bifunctor[F]): Bifunctor[F] = ev
   }
 
+  /** A type alias expressing the ''intent'' that `A` is delayed (in some sense) until a signal ([[Need]]) is received.
+    * Equivalent to `Done =⚬ A`, but the formulation as `Need |*| A` does not rely on the more powerful concept
+    * of ''function types'' (internal hom objects). We could define `Delayed[A] = Need |*| A` even if `-⚬`
+    * was not a ''closed'' monoidal category.
+    */
+  type Delayed[A] = Need |*| A
+  object Delayed {
+    def triggerBy[A]: Done |*| Delayed[A] -⚬ A =
+      timesAssocRL >>> elimFst(rInvertSignal)
+
+    def force[A]: Delayed[A] -⚬ A =
+      elimFst(need)
+  }
+
   /** Represents ''a'' way how `A` can await (join) completion of a concurrent computation. */
   trait Junction[A] {
     def joinL: Done |*| A -⚬ A
@@ -1158,6 +1172,9 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def discard[A](implicit A: Comonoid[A]): Maybe[A] -⚬ One =
       discard(A.counit)
+
+    def neglect[A](f: A -⚬ Done): Maybe[A] -⚬ Done =
+      either(done, f)
   }
 
   type Optional[A] = One |&| A
