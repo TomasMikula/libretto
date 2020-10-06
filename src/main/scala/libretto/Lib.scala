@@ -783,6 +783,23 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   def chooseRWhenDone[A, B]: Done |*| (A |&| B) -⚬ (Done |*| B) =
     chooseWhenDone(chooseRWhenNeed)
 
+  private def injectWhenNeed[A, B, C](
+    injectWhenDone: Done |*| C -⚬ (Done |*| (A |+| B)),
+  ): Need |*| C -⚬ (Need |*| (A |+| B)) =
+    id                                         [                        Need    |*|  C    ]
+      .swap                                 .to[                         C      |*| Need  ]
+      .introFst(lInvertSignal)              .to[ (Need |*| Done) |*| (   C      |*| Need) ]
+      .timesAssocLR.in.snd(timesAssocRL)    .to[ Need |*| ((Done |*|     C    ) |*| Need) ]
+      .in.snd.fst(injectWhenDone)           .to[ Need |*| ((Done |*| (A |+| B)) |*| Need) ]
+      .in.snd(IX)                           .to[ Need |*| ((Done |*| Need) |*| (A |+| B)) ]
+      .in.snd(elimFst(rInvertSignal))       .to[ Need |*|                      (A |+| B)  ]
+
+  def injectLWhenNeed[A, B]: Need |*| A -⚬ (Need |*| (A |+| B)) =
+    injectWhenNeed(injectLWhenDone)
+
+  def injectRWhenNeed[A, B]: Need |*| B -⚬ (Need |*| (A |+| B)) =
+    injectWhenNeed(injectRWhenDone)
+
   /** Creates a pair of mutually recursive functions. */
   def rec2[A, B, C, D](
     f: (A -⚬ B, C -⚬ D) => A -⚬ B,
