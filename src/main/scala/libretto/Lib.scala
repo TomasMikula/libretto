@@ -606,6 +606,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def snd: FocusedFunctionOutputCo[A, λ[x => F[B1 |*| x]], B2] =
       f.zoomCo(lib.snd[B1])
+
+    def joinL(neglect: B1 -⚬ Done)(implicit j: Junction[B2]): A -⚬ F[B2] =
+      f(par(neglect, id[B2]) >>> j.joinL)
+
+    def joinR(neglect: B2 -⚬ Done)(implicit j: Junction[B1]): A -⚬ F[B1] =
+      f(par(id[B1], neglect) >>> j.joinR)
   }
 
   implicit class FocusedFunctionOutputOnDoneTimesCo[A, F[_], B2](f: FocusedFunctionOutputCo[A, F, Done |*| B2])(implicit j: Junction[B2]) {
