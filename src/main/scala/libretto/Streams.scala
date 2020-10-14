@@ -51,6 +51,12 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .unpack             .to[ Done |&| LPolled[A] ]
         .chooseR            .to[          LPolled[A] ]
 
+    def delayedPoll[A: Junction]: Done |*| LPollable[A] -⚬ LPolled[A] =
+      id                                       [ Done |*|     LPollable[A]      ]
+        .in.snd(unpack)                     .to[ Done |*| (Done |&| LPolled[A]) ]
+        .andThen(chooseRWhenDone)           .to[ Done |*|           LPolled[A]  ]
+        .andThen(LPolled.delayBy[A])        .to[                    LPolled[A]  ]
+
     /** Polls and discards all elements. */
     def drain[A](implicit A: PComonoid[A]): LPollable[A] -⚬ Done =
       rec { self =>
@@ -104,6 +110,9 @@ sealed trait Streams[DSL <: libretto.DSL] {
 
     def poll[A]: Pollable[A] -⚬ Polled[A] =
       LPollable.poll[Val[A]]
+
+    def delayedPoll[A]: Done |*| Pollable[A] -⚬ Polled[A] =
+      LPollable.delayedPoll[Val[A]]
 
     /** Polls and discards all elements. */
     def drain[A]: Pollable[A] -⚬ Done =
@@ -286,11 +295,9 @@ sealed trait Streams[DSL <: libretto.DSL] {
       type DT[K, V] = DemandingTree[K, V]
       type NeDT[K, V] = NonEmptyTree[K, Demanding[V]]
 
-      def dispatch[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| DT[K, V]) -⚬ DT[K, V] =
-        Tree.update(
-          Demanding.supply[V].in.left(need >>> done),
-          ifAbsent = neglect,
-        )
+      def dispatch[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| DT[K, V]) -⚬ (Done |*| DT[K, V]) =
+        Tree.update(Demanding.supply[V].in.left(need >>> done))
+          .in.fst(PMaybe.neglect)
 
       def dispatchNE[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| NeDT[K, V]) -⚬ PMaybe[NeDT[K, V]] =
         NonEmptyTree.update(
@@ -324,7 +331,6 @@ sealed trait Streams[DSL <: libretto.DSL] {
           .either(elimFst, addDemanding)
     }
 
-    // TODO: ensure backpressure on slow subscribers
     def subscribeByKey[A, K: Ordering, V](
       f: Val[A] -⚬ (Val[K] |*| Val[V])
     ): (Pollable[A] |*| LPollable[Val[K] |*| Subscriber[V]]) -⚬ Done = {
@@ -345,9 +351,11 @@ sealed trait Streams[DSL <: libretto.DSL] {
           .in.fst(swap)                   .to[ (Pollable[A] |*| Val[A]) |*|              (LPolled[KSubs] |*| DT[K, V]) ]
           .andThen(IXI)                   .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (      Val[A]        |*| DT[K, V]) ]
           .in.snd.fst(f)                  .to[ (Pollable[A] |*| LPolled[KSubs]) |*| ((Val[K] |*| Val[V]) |*| DT[K, V]) ]
-          .in.snd(DT.dispatch)            .to[ (Pollable[A] |*| LPolled[KSubs]) |*|                          DT[K, V]  ]
-          .in.fst.fst(poll)               .to[ (  Polled[A] |*| LPolled[KSubs]) |*|                          DT[K, V]  ]
-          .andThen(goRec)                 .to[                                 Done                                    ]
+          .in.snd(DT.dispatch)            .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (Done                |*| DT[K, V]) ]
+          .timesAssocRL                   .to[ ((Pollable[A] |*| LPolled[KSubs]) |*| Done)               |*| DT[K, V]  ]
+          .in.fst(swap >>> timesAssocRL)  .to[ ((Done |*| Pollable[A]) |*| LPolled[KSubs])               |*| DT[K, V]  ]
+          .in.fst.fst(delayedPoll)        .to[ (  Polled[A]            |*| LPolled[KSubs])               |*| DT[K, V]  ]
+          .andThen(goRec)                 .to[                                                          Done           ]
 
       def onUpstream(
         goRec: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done,
