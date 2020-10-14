@@ -329,72 +329,73 @@ sealed trait Streams[DSL <: libretto.DSL] {
       f: Val[A] -⚬ (Val[K] |*| Val[V])
     ): (Pollable[A] |*| LPollable[Val[K] |*| Subscriber[V]]) -⚬ Done = {
       import Pollable.{DemandingTree => DT}
+      import DemandingTree.NeDT
       type KSubs = Val[K] |*| Subscriber[V]
 
       val discardSubscriber: KSubs -⚬ One =
         par(dsl.neglect[K], Subscriber.close[V]) >>> rInvertSignal
 
-      val upstreamClosed: Done |*| (LPolled[KSubs] |*| Tree[K, Demanding[V]]) -⚬ Done =
+      val upstreamClosed: Done |*| (LPolled[KSubs] |*| DT[K, V]) -⚬ Done =
         join(id, join(LPolled.close(discardSubscriber >>> done), DT.clear))
 
       def upstreamVal(
-        goRec: (Polled[A] |*| LPolled[KSubs]) |*| Tree[K, Demanding[V]] -⚬ Done,
-      ): (Val[A] |*| Pollable[A]) |*| (LPolled[KSubs] |*| Tree[K, Demanding[V]]) -⚬ Done =
-        id                                   [ (Val[A] |*| Pollable[A]) |*|              (LPolled[KSubs] |*| Tree[K, Demanding[V]]) ]
-          .in.fst(swap)                   .to[ (Pollable[A] |*| Val[A]) |*|              (LPolled[KSubs] |*| Tree[K, Demanding[V]]) ]
-          .andThen(IXI)                   .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (      Val[A]        |*| Tree[K, Demanding[V]]) ]
-          .in.snd.fst(f)                  .to[ (Pollable[A] |*| LPolled[KSubs]) |*| ((Val[K] |*| Val[V]) |*| Tree[K, Demanding[V]]) ]
-          .in.snd(DT.dispatch)            .to[ (Pollable[A] |*| LPolled[KSubs]) |*|                          Tree[K, Demanding[V]]  ]
-          .in.fst.fst(poll)               .to[ (  Polled[A] |*| LPolled[KSubs]) |*|                          Tree[K, Demanding[V]]  ]
-          .andThen(goRec)                 .to[                                 Done                                                 ]
+        goRec: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done,
+      ): (Val[A] |*| Pollable[A]) |*| (LPolled[KSubs] |*| DT[K, V]) -⚬ Done =
+        id                                   [ (Val[A] |*| Pollable[A]) |*|              (LPolled[KSubs] |*| DT[K, V]) ]
+          .in.fst(swap)                   .to[ (Pollable[A] |*| Val[A]) |*|              (LPolled[KSubs] |*| DT[K, V]) ]
+          .andThen(IXI)                   .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (      Val[A]        |*| DT[K, V]) ]
+          .in.snd.fst(f)                  .to[ (Pollable[A] |*| LPolled[KSubs]) |*| ((Val[K] |*| Val[V]) |*| DT[K, V]) ]
+          .in.snd(DT.dispatch)            .to[ (Pollable[A] |*| LPolled[KSubs]) |*|                          DT[K, V]  ]
+          .in.fst.fst(poll)               .to[ (  Polled[A] |*| LPolled[KSubs]) |*|                          DT[K, V]  ]
+          .andThen(goRec)                 .to[                                 Done                                    ]
 
       def onUpstream(
-        goRec: (Polled[A] |*| LPolled[KSubs]) |*| Tree[K, Demanding[V]] -⚬ Done,
-      ): (Polled[A] |*| LPolled[KSubs]) |*| Tree[K, Demanding[V]] -⚬ Done =
-        timesAssocLR      .to[ Polled[A] |*| (LPolled[KSubs] |*| Tree[K, Demanding[V]]) ]
+        goRec: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done,
+      ): (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done =
+        timesAssocLR      .to[ Polled[A] |*| (LPolled[KSubs] |*| DT[K, V]) ]
           .distributeRL
           .either(upstreamClosed, upstreamVal(goRec))
 
-      val feedToNEDT: Polled[A] |*| NonEmptyTree[K, Demanding[V]] -⚬ Done =
+      val feedToNEDT: Polled[A] |*| NeDT[K, V] -⚬ Done =
         LPolled.feedTo(DT.dispatchNE(f)) >>> join(id, Maybe.neglect(DT.clearNE))
 
-      val forward: Polled[A] |*| Tree[K, Demanding[V]] -⚬ Done =
-        id                                               [  Polled[A] |*| (Done |+|                NonEmptyTree[K, Demanding[V]]) ]
-          .distributeLR                               .to[ (Polled[A] |*| Done) |+| (Polled[A] |*| NonEmptyTree[K, Demanding[V]]) ]
-          .in.left(join(Polled.close, id))            .to[           Done       |+| (Polled[A] |*| NonEmptyTree[K, Demanding[V]]) ]
-          .in.right(feedToNEDT)                       .to[           Done       |+|           Done                                ]
-          .andThen(either(id, id))                    .to[                     Done                                               ]
+      val forward: Polled[A] |*| DT[K, V] -⚬ Done =
+        id                                               [  Polled[A] |*| (Done |+|                NeDT[K, V]) ]
+          .distributeLR                               .to[ (Polled[A] |*| Done) |+| (Polled[A] |*| NeDT[K, V]) ]
+          .in.left(join(Polled.close, id))            .to[           Done       |+| (Polled[A] |*| NeDT[K, V]) ]
+          .in.right(feedToNEDT)                       .to[           Done       |+|           Done             ]
+          .andThen(either(id, id))                    .to[                     Done                            ]
 
-      val subsClosed: (Polled[A] |*| Done) |*| Tree[K, Demanding[V]] -⚬ Done =
-        id                             [ (Polled[A] |*| Done) |*| Tree[K, Demanding[V]] ]
-          .andThen(IX)              .to[ (Polled[A] |*| Tree[K, Demanding[V]]) |*| Done ]
-          .in.fst(forward)          .to[           Done                        |*| Done ]
-          .andThen(join)            .to[                                      Done      ]
+      val subsClosed: (Polled[A] |*| Done) |*| DT[K, V] -⚬ Done =
+        id                             [ (Polled[A] |*| Done) |*| DT[K, V] ]
+          .andThen(IX)              .to[ (Polled[A] |*| DT[K, V]) |*| Done ]
+          .in.fst(forward)          .to[           Done           |*| Done ]
+          .andThen(join)            .to[                         Done      ]
 
       def newSubscriber(
-        goRec: (Polled[A] |*| LPolled[KSubs]) |*| Tree[K, Demanding[V]] -⚬ Done,
-      ): (Polled[A] |*| (KSubs |*| LPollable[KSubs])) |*| Tree[K, Demanding[V]] -⚬ Done =
-        id                               [ (Polled[A] |*| (KSubs |*| LPollable[KSubs])) |*| Tree[K, Demanding[V]] ]
-        .in.fst.snd(swap)             .to[ (Polled[A] |*| (LPollable[KSubs] |*| KSubs)) |*| Tree[K, Demanding[V]] ]
-        .in.fst(timesAssocRL)         .to[ ((Polled[A] |*| LPollable[KSubs]) |*| KSubs) |*| Tree[K, Demanding[V]] ]
-        .timesAssocLR                 .to[ (Polled[A] |*| LPollable[KSubs]) |*| (KSubs |*| Tree[K, Demanding[V]]) ]
-        .in.snd(DT.addSubscriber)     .to[ (Polled[A] |*| LPollable[KSubs]) |*|            Tree[K, Demanding[V]]  ]
-        .in.fst.snd(LPollable.poll)   .to[ (Polled[A] |*|   LPolled[KSubs]) |*|            Tree[K, Demanding[V]]  ]
-        .andThen(goRec)               .to[                                 Done                                   ]
+        goRec: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done,
+      ): (Polled[A] |*| (KSubs |*| LPollable[KSubs])) |*| DT[K, V] -⚬ Done =
+        id                               [ ( Polled[A] |*| (KSubs  |*|  LPollable[KSubs])) |*| DT[K, V]  ]
+        .in.fst.snd(swap)             .to[ ( Polled[A] |*| (LPollable[KSubs]  |*|  KSubs)) |*| DT[K, V]  ]
+        .in.fst(timesAssocRL)         .to[ ((Polled[A] |*|  LPollable[KSubs]) |*|  KSubs ) |*| DT[K, V]  ]
+        .timesAssocLR                 .to[  (Polled[A] |*|  LPollable[KSubs]) |*| (KSubs   |*| DT[K, V]) ]
+        .in.snd(DT.addSubscriber)     .to[  (Polled[A] |*|  LPollable[KSubs]) |*|              DT[K, V]  ]
+        .in.fst.snd(LPollable.poll)   .to[  (Polled[A] |*|    LPolled[KSubs]) |*|              DT[K, V]  ]
+        .andThen(goRec)               .to[                                   Done                        ]
 
       def onSubs(
-        goRec: (Polled[A] |*| LPolled[KSubs]) |*| Tree[K, Demanding[V]] -⚬ Done,
-      ): (Polled[A] |*| LPolled[KSubs]) |*| Tree[K, Demanding[V]] -⚬ Done =
-        id[ (Polled[A] |*| LPolled[KSubs]) |*| Tree[K, Demanding[V]] ]
+        goRec: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done,
+      ): (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done =
+        id[ (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] ]
           .in.fst(distributeLR)
           .distributeRL
           .either(subsClosed, newSubscriber(goRec))
 
-      val go: (Polled[A] |*| LPolled[KSubs]) |*| Tree[K, Demanding[V]] -⚬ Done = rec { self =>
-        id                                           [ (Polled[A] |*| LPolled[KSubs]) |*| Tree[K, Demanding[V]] ]
+      val go: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done = rec { self =>
+        id                                           [ (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] ]
           .in.fst(race)
           .distributeRL
-          .either(onUpstream(self), onSubs(self)) .to[                               Done                       ]
+          .either(onUpstream(self), onSubs(self)) .to[                               Done          ]
       }
 
       id[Pollable[A] |*| LPollable[KSubs]]
