@@ -41,6 +41,12 @@ sealed trait Streams[DSL <: libretto.DSL] {
   type Consumer[A] = Rec[ConsumerF[A, *]]
 
   object LPollable {
+    def pack[A]: Done |&| LPolled[A] -⚬ LPollable[A] =
+      dsl.pack[LPollableF[A, *]]
+
+    def unpack[A]: LPollable[A] -⚬ (Done |&| LPolled[A]) =
+      dsl.unpack[LPollableF[A, *]]
+
     def close[A]: LPollable[A] -⚬ Done =
       id                       [    LPollable[A]     ]
         .unpack             .to[ Done |&| LPolled[A] ]
@@ -105,6 +111,51 @@ sealed trait Streams[DSL <: libretto.DSL] {
 
       choice(close, poll)
         .pack[LPollableF[A, *]]
+    }
+
+    /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
+      *
+      * Polls the upstream only after ''both'' downstreams poll.
+      * When either of the downstreams closes, the other downstream and the upstream are closed as well.
+      */
+    def partition[A, B]: LPollable[A |+| B] -⚬ (LPollable[A] |*| LPollable[B]) = rec { self =>
+      val fstClosed: LPollable[A |+| B] -⚬ (Done |*| LPollable[B]) =
+        close[A |+| B].introSnd(done >>> empty[B])
+
+      val sndClosed: LPollable[A |+| B] -⚬ (LPolled[A] |*| Done) =
+        close[A |+| B].introFst(done >>> LPolled.empty[A])
+
+      val bothPolled: LPollable[A |+| B] -⚬ (LPolled[A] |*| LPolled[B]) = {
+        val upClosed: Done -⚬ (LPolled[A] |*| LPolled[B]) =
+          fork(LPolled.empty[A], LPolled.empty[B])
+
+        val upValue: (A |+| B) |*| LPollable[A |+| B] -⚬ (LPolled[A] |*| LPolled[B]) =
+          id                                 [ (A                                      |+|  B) |*|         LPollable[A |+| B]       ]
+            .in.snd(self)                 .to[ (A                                      |+|  B) |*| (LPollable[A] |*| LPollable[B])  ]
+            .distributeRL                 .to[ (A |*| (LPollable[A] |*| LPollable[B])) |+| (B  |*| (LPollable[A] |*| LPollable[B])) ]
+            .in.left(timesAssocRL)        .to[ ((A |*| LPollable[A]) |*| LPollable[B]) |+| (B  |*| (LPollable[A] |*| LPollable[B])) ]
+            .in.right(XI)                 .to[ ((A |*| LPollable[A]) |*| LPollable[B]) |+| (LPollable[A] |*|  (B |*| LPollable[B])) ]
+            .in .left.fst(LPolled.cons)   .to[ (  LPolled[A]         |*| LPollable[B]) |+| (LPollable[A] |*|  (B |*| LPollable[B])) ]
+            .in.right.snd(LPolled.cons)   .to[ (  LPolled[A]         |*| LPollable[B]) |+| (LPollable[A] |*|    LPolled[B]        ) ]
+            .in .left.snd(poll)           .to[ (  LPolled[A]         |*|   LPolled[B]) |+| (LPollable[A] |*|    LPolled[B]        ) ]
+            .in.right.fst(poll)           .to[ (  LPolled[A]         |*|   LPolled[B]) |+| (  LPolled[A] |*|    LPolled[B]        ) ]
+            .either(id, id)
+
+        id                                   [   LPollable[A |+| B]                        ]
+          .andThen(poll)                  .to[ Done |+| ((A |+| B) |*| LPollable[A |+| B]) ]
+          .either(upClosed, upValue)      .to[         LPolled[A] |*| LPolled[B]           ]
+      }
+
+      val fstPolled: LPollable[A |+| B] -⚬ (LPolled[A] |*| LPollable[B]) =
+        id                                   [                 LPollable[A |+| B]                    ]
+          .choice(sndClosed, bothPolled)  .to[ (LPolled[A] |*| Done) |&| (LPolled[A] |*| LPolled[B]) ]
+          .coDistributeL                  .to[  LPolled[A] |*| (Done |&|                 LPolled[B]) ]
+          .in.snd(pack)                   .to[  LPolled[A] |*|   LPollable[B]                        ]
+
+      id                                 [                   LPollable[A |+| B]                      ]
+        .choice(fstClosed, fstPolled) .to[ (Done |*| LPollable[B]) |&| (LPolled[A] |*| LPollable[B]) ]
+        .coDistributeR                .to[ (Done                   |&| LPolled[A]) |*| LPollable[B]  ]
+        .in.fst(pack)                 .to[                     LPollable[A]        |*| LPollable[B]  ]
     }
   }
 
@@ -172,6 +223,14 @@ sealed trait Streams[DSL <: libretto.DSL] {
       id                                       [ Pollable[A] |*|         Pollable[A]  ]
         .in.snd(delay)                      .to[ Pollable[A] |*| Delayed[Pollable[A]] ]
         .andThen(LPollable.concat)          .to[         Pollable[A]                  ]
+
+    /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
+      *
+      * Polls the upstream only after ''both'' downstreams poll.
+      * When either of the downstreams closes, the other downstream and the upstream are closed as well.
+      */
+    def partition[A, B]: Pollable[Either[A, B]] -⚬ (Pollable[A] |*| Pollable[B]) =
+      LPollable.map(liftEither[A, B]) >>> LPollable.partition
 
     /** Merges two [[Pollable]]s into one. When there is a value available from both upstreams, favors the first one. */
     def merge[A]: (Pollable[A] |*| Pollable[A]) -⚬ Pollable[A] = rec { self =>
@@ -426,6 +485,12 @@ sealed trait Streams[DSL <: libretto.DSL] {
     def close[A](neglect: A -⚬ Done): LPolled[A] -⚬ Done =
       either(id, join(neglect, LPollable.close))
 
+    def empty[A]: Done -⚬ LPolled[A] =
+      injectL
+
+    def cons[A]: A |*| LPollable[A] -⚬ LPolled[A] =
+      injectR
+
     def delayBy[A](implicit ev: Junction[A]): (Done |*| LPolled[A]) -⚬ LPolled[A] =
       id[Done |*| LPolled[A]]         .to[  Done |*| (Done |+|           (A |*| LPollable[A])) ]
         .distributeLR                 .to[ (Done |*| Done) |+| (Done |*| (A |*| LPollable[A])) ]
@@ -460,6 +525,12 @@ sealed trait Streams[DSL <: libretto.DSL] {
   object Polled {
     def close[A]: Polled[A] -⚬ Done =
       LPolled.close(dsl.neglect[A])
+
+    def empty[A]: Done -⚬ Polled[A] =
+      LPolled.empty
+
+    def cons[A]: Val[A] |*| Pollable[A] -⚬ Polled[A] =
+      LPolled.cons
 
     def delayBy[A]: (Done |*| Polled[A]) -⚬ Polled[A] =
       LPolled.delayBy
