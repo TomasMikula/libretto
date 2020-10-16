@@ -83,6 +83,10 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .timesAssocLR                           .to[ Need |*| (Done |*| LPollable[A]) ]
         .in.snd(delayBy)                        .to[ Need |*|     LPollable[A]        ]
 
+    def map[A, B](f: A -⚬ B): LPollable[A] -⚬ LPollable[B] = rec { self =>
+      choice(close[A], poll[A].in.right(par(f, self))).pack
+    }
+
     def concat[A]: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ LPollable[A] = rec { self =>
       val close: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ Done =
         join(LPollable.close, Delayed.force >>> LPollable.close)
@@ -146,6 +150,11 @@ sealed trait Streams[DSL <: libretto.DSL] {
 
       choice(close, poll)
         .pack[PollableF[A, *]]
+    }
+
+    def map[A, B](f: A => B): Pollable[A] -⚬ Pollable[B] = {
+      val g: Val[A] -⚬ Val[B] = liftV(f)
+      LPollable.map(g)
     }
 
     def prepend[A]: (Val[A] |*| Pollable[A]) -⚬ Pollable[A] = {
