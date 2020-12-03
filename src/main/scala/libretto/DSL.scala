@@ -168,6 +168,9 @@ trait DSL {
   def liftPair[A, B]: Val[(A, B)] -⚬ (Val[A] |*| Val[B])
   def unliftPair[A, B]: (Val[A] |*| Val[B]) -⚬ Val[(A, B)]
 
+  def liftNegPair[A, B]: Neg[(A, B)] -⚬ (Neg[A] |*| Neg[B])
+  def unliftNegPair[A, B]: (Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)]
+
   /** Lifts an ordinary Scala function to a linear function on [[Val]]s. */
   def liftV[A, B](f: A => B): Val[A] -⚬ Val[B]
 
@@ -175,6 +178,7 @@ trait DSL {
   def liftN[A, B](f: A => B): Neg[B] -⚬ Neg[A]
 
   def const[A](a: A): Done -⚬ Val[A]
+  def constNeg[A](a: A): Neg[A] -⚬ Need
 
   def neglect[A]: Val[A] -⚬ Done
   def inflate[A]: Need -⚬ Neg[A]

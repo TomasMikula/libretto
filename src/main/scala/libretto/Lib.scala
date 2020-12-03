@@ -154,7 +154,9 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       elimFst(need)
   }
 
-  /** Represents ''a'' way how `A` can await (join) completion of a concurrent computation. */
+  /** Represents ''a'' way how `A` can await a [[Done]] signal (traveling in the direction of the `-⚬` arrow).
+    * The signal typically represents completion of a concurrent computation.
+    */
   trait Junction[A] {
     def joinL: Done |*| A -⚬ A
 
@@ -173,6 +175,28 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       new Junction[Val[A]] {
         override def joinL: Done |*| Val[A] -⚬ Val[A] =
           par(const(()), id[Val[A]]) >>> unliftPair >>> liftV(_._2)
+      }
+  }
+
+  /** Represents ''a'' way how 'A' can await a [[Need]] signal (traveling in the direction opposite the `-⚬` arrow). */
+  trait CoJunction[A] {
+    def cojoinL: A -⚬ (Need |*| A)
+
+    def cojoinR: A -⚬ (A |*| Need) =
+      cojoinL >>> swap
+  }
+
+  object CoJunction {
+    implicit def coJunctionNeed: CoJunction[Need] =
+      new CoJunction[Need] {
+        override def cojoinL: Need -⚬ (Need |*| Need) =
+          joinNeed
+      }
+
+    implicit def coJunctionNeg[A]: CoJunction[Neg[A]] =
+      new CoJunction[Neg[A]] {
+        override def cojoinL: Neg[A] -⚬ (Need |*| Neg[A]) =
+          liftN[(Unit, A), A](_._2) >>> liftNegPair >>> par(constNeg(()), id[Neg[A]])
       }
   }
 
