@@ -197,24 +197,34 @@ trait DSL {
   /** Hides one level of a recursive type definition. */
   def pack[F[_]]: F[Rec[F]] -⚬ Rec[F]
 
+  def raceCompletion: (Done |*| Done) -⚬ (Done |+| Done)
+
+  def selectRequest: (Need |&| Need) -⚬ (Need |*| Need)
+
   /** Witnesses that `A` has an intrinsic notion of completion.
     * [[checkCompleted]] can be used to test whether a `Completive` object has completed.
     * [[race]] can be used to watch for which of two `Completive` objects completes first.
     */
+  @deprecated("will become a library notion, not a primitive")
   type Completive[A]
 
+  @deprecated("depends on deprecated Completive")
   implicit def completiveVal[A]: Completive[Val[A]]
 
+  @deprecated("depends on deprecated Completive")
   implicit def completivePlus[A, B]: Completive[A |+| B]
 
+  @deprecated("depends on deprecated Completive")
   def checkCompleted[A: Completive]: A -⚬ (A |+| A)
 
   /** Waits for completion of either of the two components of the concurrent product `A |*| B`.
     * If `A` completes first, returns left, if `B` first, returns right.
     * It is biased to the left: if both `A` and `B` have been completed by the time of inquiry, returns left.
     */
+  @deprecated("depends on deprecated Completive")
   def race[A: Completive, B: Completive]: (A |*| B) -⚬ ((A |*| B) |+| (A |*| B))
 
+  @deprecated("depends on deprecated Completive")
   def race[A: Completive, B: Completive, C](
     caseFstWins: (A |*| B) -⚬ C,
     caseSndWins: (A |*| B) -⚬ C,
@@ -225,12 +235,16 @@ trait DSL {
     * [[selectRequestedOrNot]] can be used to test whether a `Requisitive` object has made a request already.
     * [[select]] can be used to detect which of two `Selectable` objects made its request first.
     */
+  @deprecated("will become a library notion, not a primitive")
   type Requisitive[A]
 
+  @deprecated("depends on deprecated Requisitive")
   implicit def requisitiveNeg[A]: Requisitive[Neg[A]]
 
+  @deprecated("depends on deprecated Requisitive")
   implicit def requisitiveChoice[A, B]: Requisitive[A |&| B]
 
+  @deprecated("depends on deprecated Requisitive")
   def selectRequestedOrNot[A: Requisitive]: (A |&| A) -⚬ A
 
   /** Given a choice of two versions of `A |*| B`, selects one based on which component of the returned concurrent
@@ -239,23 +253,29 @@ trait DSL {
     * It is biased to the left: if both components of the result have made their request by the time of inquiry,
     * selects the left version of the input.
     */
+  @deprecated("depends on deprecated Requisitive")
   def select[A: Requisitive, B: Requisitive]: ((A |*| B) |&| (A |*| B)) -⚬ (A |*| B)
 
+  @deprecated("depends on deprecated Requisitive")
   def select[Z, A: Requisitive, B: Requisitive](
     caseFstWins: Z -⚬ (A |*| B),
     caseSndWins: Z -⚬ (A |*| B),
   ): Z -⚬ (A |*| B) =
     andThen(choice(caseFstWins, caseSndWins), select[A, B])
 
+  @deprecated("depends on deprecated Completive")
   trait Completive1[F[_]] {
     def apply[A]: Completive[F[A]]
   }
 
+  @deprecated("depends on deprecated Requisitive")
   trait Requisitive1[F[_]] {
     def apply[A]: Requisitive[F[A]]
   }
 
+  @deprecated("depends on deprecated Completive")
   implicit def completiveRec[F[_]](implicit ev: Completive1[F]): Completive[Rec[F]]
 
+  @deprecated("depends on deprecated Requisitive")
   implicit def requisitiveRec[F[_]](implicit ev: Requisitive1[F]): Requisitive[Rec[F]]
 }
