@@ -154,47 +154,66 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       elimFst(need)
   }
 
-  /** Represents ''a'' way how `A` can await a [[Done]] signal (traveling in the direction of the `-⚬` arrow).
+  /** Represents ''a'' way how `A` can await (join) a signal.
     * The signal typically represents completion of a concurrent computation.
     */
   trait Junction[A] {
     def joinL: Done |*| A -⚬ A
 
+    def cojoinL: A -⚬ (Need |*| A)
+
     def joinR: A |*| Done -⚬ A =
       swap >>> joinL
-  }
-
-  object Junction {
-    implicit def junctionDone: Junction[Done] =
-      new Junction[Done] {
-        override def joinL: Done |*| Done -⚬ Done =
-          join
-      }
-
-    implicit def junctionVal[A]: Junction[Val[A]] =
-      new Junction[Val[A]] {
-        override def joinL: Done |*| Val[A] -⚬ Val[A] =
-          par(const(()), id[Val[A]]) >>> unliftPair >>> liftV(_._2)
-      }
-  }
-
-  /** Represents ''a'' way how 'A' can await a [[Need]] signal (traveling in the direction opposite the `-⚬` arrow). */
-  trait CoJunction[A] {
-    def cojoinL: A -⚬ (Need |*| A)
 
     def cojoinR: A -⚬ (A |*| Need) =
       cojoinL >>> swap
   }
 
-  object CoJunction {
-    implicit def coJunctionNeed: CoJunction[Need] =
-      new CoJunction[Need] {
+  object Junction {
+    /** Used to implement [[Junction]] instances for which it is more natural to await a signal that travels
+      * in the positive direction (i.e. along the `-⚬` arrow, i.e. a [[Done]] signal coming in the input of `-o`).
+      * Awaiting signal coming from the output of `-⚬` is a derived operation.
+      */
+    trait FromPos[A] extends Junction[A] {
+      override def cojoinL: A -⚬ (Need |*| A) =
+        id                                  [                      A  ]
+          .introFst(lInvertSignal)      .to [ (Need |*|  Done) |*| A  ]
+          .timesAssocLR                 .to [  Need |*| (Done  |*| A) ]
+          .in.snd(joinL)                .to [  Need |*|            A  ]
+    }
+
+    /** Used to implement [[Junction]] instances for which it is more natural to await a signal that travels
+      * in the negative direction (i.e. opposite the `-⚬` arrow, i.e. a [[Need]] signal coming from the input of `-o`).
+      * Awaiting signal coming in the input of `-⚬` is a derived operation.
+      */
+    trait FromNeg[A] extends Junction[A] {
+      override def joinL: (Done |*| A) -⚬ A =
+        id                                 [  Done |*|            A  ]
+          .in.snd(cojoinL)              .to[  Done |*| (Need  |*| A) ]
+          .timesAssocRL                 .to[ (Done |*|  Need) |*| A  ]
+          .elimFst(rInvertSignal)       .to[                      A  ]
+    }
+
+    implicit def junctionDone: Junction[Done] =
+      new Junction.FromPos[Done] {
+        override def joinL: Done |*| Done -⚬ Done =
+          join
+      }
+
+    implicit def junctionVal[A]: Junction[Val[A]] =
+      new Junction.FromPos[Val[A]] {
+        override def joinL: Done |*| Val[A] -⚬ Val[A] =
+          par(const(()), id[Val[A]]) >>> unliftPair >>> liftV(_._2)
+      }
+
+    implicit def junctionNeed: Junction[Need] =
+      new Junction.FromNeg[Need] {
         override def cojoinL: Need -⚬ (Need |*| Need) =
           joinNeed
       }
 
-    implicit def coJunctionNeg[A]: CoJunction[Neg[A]] =
-      new CoJunction[Neg[A]] {
+    implicit def junctionNeg[A]: Junction[Neg[A]] =
+      new Junction.FromNeg[Neg[A]] {
         override def cojoinL: Neg[A] -⚬ (Need |*| Neg[A]) =
           liftN[(Unit, A), A](_._2) >>> liftNegPair >>> par(constNeg(()), id[Neg[A]])
       }
@@ -235,7 +254,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
           id[S |+| T].bimap(self.getL(next), that.getL(next)) >>> factorL
 
         override def extendJunction(implicit A: Junction[A]): Junction[S |+| T] =
-          new Junction[S |+| T] {
+          new Junction.FromPos[S |+| T] {
             override def joinL: Done |*| (S |+| T) -⚬ (S |+| T) =
               distributeLR.bimap(self.joinL(A), that.joinL(A))
           }
@@ -282,7 +301,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       read(that.getL)
 
     override def extendJunction(implicit A: Junction[A]): Junction[S] =
-      new Junction[S] {
+      new Junction.FromPos[S] {
         def joinL: Done |*| S -⚬ S = write(A.joinL)
       }
 
