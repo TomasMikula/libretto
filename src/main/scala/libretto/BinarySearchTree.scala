@@ -82,10 +82,10 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     def keyGetter[K, V]: Getter[Singleton[K, V], Val[K]]
 
     def keyJoinL[K, V]: (Done |*| Singleton[K, V]) -⚬ Singleton[K, V] =
-      keyGetter[K, V].extendJunction.joinL
+      keyGetter[K, V].extendJunction.awaitPosFst
 
     def keyJoinR[K, V]: (Singleton[K, V] |*| Done) -⚬ Singleton[K, V] =
-      keyGetter[K, V].extendJunction.joinR
+      keyGetter[K, V].extendJunction.awaitPosSnd
   }
 
   val Singleton: SingletonModule = new SingletonModule {
@@ -218,10 +218,10 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
         .andThen(Singleton.keyGetter[K, V] |+| Branch.maxKey[K, V])
 
     private def minKeyJoinL[K, V]: Done |*| NonEmptyTree[K, V] -⚬ NonEmptyTree[K, V] =
-      minKey[K, V].extendJunction.joinL
+      minKey[K, V].extendJunction.awaitPosFst
 
     private def maxKeyJoinR[K, V]: NonEmptyTree[K, V] |*| Done -⚬ NonEmptyTree[K, V] =
-      maxKey[K, V].extendJunction.joinR
+      maxKey[K, V].extendJunction.awaitPosSnd
 
     private[BinarySearchTree] def update_[K: Ordering, V, W, F[_]](
       ins:         W -⚬ F[V],

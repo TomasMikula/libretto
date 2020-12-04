@@ -158,15 +158,15 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     * The signal typically represents completion of a concurrent computation.
     */
   trait Junction[A] {
-    def joinL: Done |*| A -⚬ A
+    def awaitPosFst: Done |*| A -⚬ A
 
-    def cojoinL: A -⚬ (Need |*| A)
+    def awaitNegFst: A -⚬ (Need |*| A)
 
-    def joinR: A |*| Done -⚬ A =
-      swap >>> joinL
+    def awaitPosSnd: A |*| Done -⚬ A =
+      swap >>> awaitPosFst
 
-    def cojoinR: A -⚬ (A |*| Need) =
-      cojoinL >>> swap
+    def awaitNegSnd: A -⚬ (A |*| Need) =
+      awaitNegFst >>> swap
   }
 
   object Junction {
@@ -175,11 +175,11 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       * Awaiting signal coming from the output of `-⚬` is a derived operation.
       */
     trait FromPos[A] extends Junction[A] {
-      override def cojoinL: A -⚬ (Need |*| A) =
-        id                                  [                      A  ]
-          .introFst(lInvertSignal)      .to [ (Need |*|  Done) |*| A  ]
-          .timesAssocLR                 .to [  Need |*| (Done  |*| A) ]
-          .in.snd(joinL)                .to [  Need |*|            A  ]
+      override def awaitNegFst: A -⚬ (Need |*| A) =
+        id                                 [                      A  ]
+          .introFst(lInvertSignal)      .to[ (Need |*|  Done) |*| A  ]
+          .timesAssocLR                 .to[  Need |*| (Done  |*| A) ]
+          .in.snd(awaitPosFst)          .to[  Need |*|            A  ]
     }
 
     /** Used to implement [[Junction]] instances for which it is more natural to await a signal that travels
@@ -187,34 +187,34 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       * Awaiting signal coming in the input of `-⚬` is a derived operation.
       */
     trait FromNeg[A] extends Junction[A] {
-      override def joinL: (Done |*| A) -⚬ A =
+      override def awaitPosFst: (Done |*| A) -⚬ A =
         id                                 [  Done |*|            A  ]
-          .in.snd(cojoinL)              .to[  Done |*| (Need  |*| A) ]
+          .in.snd(awaitNegFst)          .to[  Done |*| (Need  |*| A) ]
           .timesAssocRL                 .to[ (Done |*|  Need) |*| A  ]
           .elimFst(rInvertSignal)       .to[                      A  ]
     }
 
     implicit def junctionDone: Junction[Done] =
       new Junction.FromPos[Done] {
-        override def joinL: Done |*| Done -⚬ Done =
+        override def awaitPosFst: Done |*| Done -⚬ Done =
           join
       }
 
     implicit def junctionVal[A]: Junction[Val[A]] =
       new Junction.FromPos[Val[A]] {
-        override def joinL: Done |*| Val[A] -⚬ Val[A] =
+        override def awaitPosFst: Done |*| Val[A] -⚬ Val[A] =
           par(const(()), id[Val[A]]) >>> unliftPair >>> liftV(_._2)
       }
 
     implicit def junctionNeed: Junction[Need] =
       new Junction.FromNeg[Need] {
-        override def cojoinL: Need -⚬ (Need |*| Need) =
+        override def awaitNegFst: Need -⚬ (Need |*| Need) =
           joinNeed
       }
 
     implicit def junctionNeg[A]: Junction[Neg[A]] =
       new Junction.FromNeg[Neg[A]] {
-        override def cojoinL: Neg[A] -⚬ (Need |*| Neg[A]) =
+        override def awaitNegFst: Neg[A] -⚬ (Need |*| Neg[A]) =
           liftN[(Unit, A), A](_._2) >>> liftNegPair >>> par(constNeg(()), id[Neg[A]])
       }
   }
@@ -231,7 +231,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       getL >>> swap
 
     def joinL(A: Junction[A]): (Done |*| S) -⚬ S =
-      extendJunction(A).joinL
+      extendJunction(A).awaitPosFst
 
     def joinR(A: Junction[A]): (S |*| Done) -⚬ S =
       swap >>> joinL(A)
@@ -255,7 +255,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
         override def extendJunction(implicit A: Junction[A]): Junction[S |+| T] =
           new Junction.FromPos[S |+| T] {
-            override def joinL: Done |*| (S |+| T) -⚬ (S |+| T) =
+            override def awaitPosFst: Done |*| (S |+| T) -⚬ (S |+| T) =
               distributeLR.bimap(self.joinL(A), that.joinL(A))
           }
       }
@@ -302,7 +302,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     override def extendJunction(implicit A: Junction[A]): Junction[S] =
       new Junction.FromPos[S] {
-        def joinL: Done |*| S -⚬ S = write(A.joinL)
+        def awaitPosFst: Done |*| S -⚬ S = write(A.awaitPosFst)
       }
 
     def andThen[B](that: Lens[A, B]): Lens[S, B] =
@@ -651,18 +651,18 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       f.zoomCo(lib.snd[B1])
 
     def joinL(neglect: B1 -⚬ Done)(implicit j: Junction[B2]): A -⚬ F[B2] =
-      f(par(neglect, id[B2]) >>> j.joinL)
+      f(par(neglect, id[B2]) >>> j.awaitPosFst)
 
     def joinR(neglect: B2 -⚬ Done)(implicit j: Junction[B1]): A -⚬ F[B1] =
-      f(par(id[B1], neglect) >>> j.joinR)
+      f(par(id[B1], neglect) >>> j.awaitPosSnd)
   }
 
   implicit class FocusedFunctionOutputOnDoneTimesCo[A, F[_], B2](f: FocusedFunctionOutputCo[A, F, Done |*| B2])(implicit j: Junction[B2]) {
-    def joinL: A -⚬ F[B2] = f(j.joinL)
+    def joinL: A -⚬ F[B2] = f(j.awaitPosFst)
   }
 
   implicit class FocusedFunctionOutputOnTimesDoneCo[A, F[_], B1](f: FocusedFunctionOutputCo[A, F, B1 |*| Done])(implicit j: Junction[B1]) {
-    def joinR: A -⚬ F[B1] = f(j.joinR)
+    def joinR: A -⚬ F[B1] = f(j.awaitPosSnd)
   }
 
   implicit class FocusedFunctionOutputOnPlusCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 |+| B2]) {

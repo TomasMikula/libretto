@@ -496,7 +496,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .distributeLR                 .to[ (Done |*| Done) |+| (Done |*| (A |*| LPollable[A])) ]
         .in.left(join)                .to[      Done       |+| (Done |*| (A |*| LPollable[A])) ]
         .in.right(timesAssocRL)       .to[      Done       |+| ((Done |*| A) |*| LPollable[A]) ]
-        .in.right.fst(ev.joinL)       .to[      Done       |+| (          A  |*| LPollable[A]) ]
+        .in.right.fst(ev.awaitPosFst) .to[      Done       |+| (          A  |*| LPollable[A]) ]
 
     def feedTo[A, B](
       f: A |*| B -⚬ PMaybe[B],
