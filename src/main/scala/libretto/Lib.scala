@@ -219,6 +219,76 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       }
   }
 
+  /** Witnesses one specific way in which [[A]] can signal occurrence of some event
+    * (such as completion or reaching a certain stage).
+    */
+  trait Signaling[A] {
+    def signalPosFst: A -⚬ (Done |*| A)
+    def signalNegFst: (Need |*| A) -⚬ A
+
+    def signalPosSnd: A -⚬ (A |*| Done) =
+      signalPosFst >>> swap
+
+    def signalNegSnd: (A |*| Need) -⚬ A =
+      swap >>> signalNegFst
+
+    /** Alias for [[signalPosFst]]. */
+    def signalPos: A -⚬ (Done |*| A) =
+      signalPosFst
+
+    /** Alias for [[signalNegFst]]. */
+    def signalNeg: (Need |*| A) -⚬ A =
+      signalNegFst
+  }
+
+  object Signaling {
+    /** Used to implementat [[Signaling]] instances that signal naturally in the positive direction.
+      * Signaling in the negative direction is a derived operation.
+      */
+    trait FromPos[A] extends Signaling[A] {
+      override def signalNegFst: (Need |*| A) -⚬ A =
+        id                                     [  Need |*|            A  ]
+          .in.snd(signalPosFst)             .to[  Need |*| (Done  |*| A) ]
+          .timesAssocRL                     .to[ (Need |*|  Done) |*| A  ]
+          .elimFst(swap >>> rInvertSignal)  .to[                      A  ]
+    }
+
+    /** Used to implementat [[Signaling]] instances that signal naturally in the negative direction.
+      * Signaling in the positive direction is a derived operation.
+      */
+    trait FromNeg[A] extends Signaling[A] {
+      override def signalPosFst: A -⚬ (Done |*| A) =
+        id                                     [                      A  ]
+          .introFst(lInvertSignal >>> swap) .to[ (Done |*|  Need) |*| A  ]
+          .timesAssocLR                     .to[  Done |*| (Need  |*| A) ]
+          .in.snd(signalNegFst)             .to[  Done |*|            A  ]
+    }
+
+    implicit def signalingDone: Signaling[Done] =
+      new Signaling.FromPos[Done] {
+        override def signalPosFst: Done -⚬ (Done |*| Done) =
+          fork
+      }
+
+    implicit def signalingNeed: Signaling[Need] =
+      new Signaling.FromNeg[Need] {
+        override def signalNegFst: (Need |*| Need) -⚬ Need =
+          forkNeed
+      }
+
+    implicit def signalingVal[A]: Signaling[Val[A]] =
+      new Signaling.FromPos[Val[A]] {
+        override def signalPosFst: Val[A] -⚬ (Done |*| Val[A]) =
+          dup[A].in.fst(neglect)
+      }
+
+    implicit def signalingNeg[A]: Signaling[Neg[A]] =
+      new Signaling.FromNeg[Neg[A]] {
+        override def signalNegFst: (Need |*| Neg[A]) -⚬ Neg[A] =
+          par(inflate[A], id[Neg[A]]) >>> mergeDemands
+      }
+  }
+
   trait Getter[S, A] { self =>
     def getL[B](that: Getter[A, B])(implicit B: Cosemigroup[B]): S -⚬ (B |*| S)
 
