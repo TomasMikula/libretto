@@ -197,8 +197,25 @@ trait DSL {
   /** Hides one level of a recursive type definition. */
   def pack[F[_]]: F[Rec[F]] -⚬ Rec[F]
 
+  /** Races the two [[Done]] signals and
+    *  - produces left if the first signal wins, in which case it returns the second signal that still
+    *    has to be awaited;
+    *  - produces right if the second signal wins, in which case it returns the first signal that still
+    *    has to be awaited.
+    * It is biased to the left: if both signals have arrived by the time of inquiry, returns left.
+    */
   def raceCompletion: (Done |*| Done) -⚬ (Done |+| Done)
 
+  /** Races two [[Need]] signals, i.e. signals traveling in the negative direction (i.e. opposite the `-⚬` arrow).
+    * Selects one of the two [[Need]] signals in the function input based on which [[Need]] signal in the function
+    * output wins the race:
+    *  - If the first signal of the function output wins the race, selects the left input signal and pipes to it the
+    *    remaining (i.e. the second) output signal.
+    *  - If the second signal of the funciton output wins the race, selects the right input sigal and pipes to it the
+    *    reamining (i.e. the first) output signal.
+    * It is biased to the left: if both signals of the output have arrived by the time of inquiry,
+    * selects the left input.
+    */
   def selectRequest: (Need |&| Need) -⚬ (Need |*| Need)
 
   /** Witnesses that `A` has an intrinsic notion of completion.

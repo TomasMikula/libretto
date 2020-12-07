@@ -469,7 +469,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
 
       val go: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done = rec { self =>
         id                                           [ (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] ]
-          .in.fst(race)
+          .in.fst(dsl.race)
           .distributeRL
           .either(onUpstream(self), onSubs(self)) .to[                               Done          ]
       }

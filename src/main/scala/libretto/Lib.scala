@@ -337,6 +337,44 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     }
   }
 
+  def race[A, B](implicit
+    A: SignalingJunction.Positive[A],
+    B: SignalingJunction.Positive[B],
+  ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
+    id                                               [                   A  |*|           B          ]
+      .par(A.signalPos, B.signalPos)              .to[         (Done |*| A) |*| (Done |*| B)         ]
+      .andThen(IXI)                               .to[         (Done |*| Done) |*| (A |*| B)         ]
+      .in.fst(raceCompletion)                     .to[         (Done |+| Done) |*| (A |*| B)         ]
+      .distributeRL                               .to[ (Done |*| (A |*| B)) |+| (Done |*| (A |*| B)) ]
+      .in.left(XI.in.snd(B.awaitPos))             .to[           (A |*| B)  |+| (Done |*| (A |*| B)) ]
+      .in.right(timesAssocRL.in.fst(A.awaitPos))  .to[           (A |*| B) |+|            (A |*| B)  ]
+
+  def race[A: SignalingJunction.Positive, B: SignalingJunction.Positive, C](
+    caseFstWins: (A |*| B) -⚬ C,
+    caseSndWins: (A |*| B) -⚬ C,
+  ): (A |*| B) -⚬ C =
+    race[A, B] >>> either(caseFstWins, caseSndWins)
+
+  def select[A, B](implicit
+    A: SignalingJunction.Negative[A],
+    B: SignalingJunction.Negative[B],
+  ): ((A |*| B) |&| (A |*| B)) -⚬ (A |*| B) =
+    id                                   [ (A |*|           B ) |&|           (A |*| B)  ]
+      .in.choiceL.snd(B.awaitNeg)     .to[ (A |*| (Need |*| B)) |&|           (A |*| B)  ]
+      .in.choiceL(XI)                 .to[ (Need |*| (A |*| B)) |&|           (A |*| B)  ]
+      .in.choiceR.fst(A.awaitNeg)     .to[ (Need |*| (A |*| B)) |&| ((Need |*| A) |*| B) ]
+      .in.choiceR(timesAssocLR)       .to[ (Need |*| (A |*| B)) |&| (Need |*| (A |*| B)) ]
+      .coDistributeR                  .to[         (Need |&| Need) |*| (A |*| B)         ]
+      .in.fst(selectRequest)          .to[         (Need |*| Need) |*| (A |*| B)         ]
+      .andThen(IXI)                   .to[         (Need |*| A) |*| (Need |*| B)         ]
+      .par(A.signalNeg, B.signalNeg)  .to[                   A  |*|           B          ]
+
+  def select[Z, A: SignalingJunction.Negative, B: SignalingJunction.Negative](
+    caseFstWins: Z -⚬ (A |*| B),
+    caseSndWins: Z -⚬ (A |*| B),
+  ): Z -⚬ (A |*| B) =
+    choice(caseFstWins, caseSndWins) >>> select[A, B]
+
   trait Getter[S, A] { self =>
     def getL[B](that: Getter[A, B])(implicit B: Cosemigroup[B]): S -⚬ (B |*| S)
 
