@@ -167,6 +167,14 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def awaitNegSnd: A -⚬ (A |*| Need) =
       awaitNegFst >>> swap
+
+    /** Alias for [[awaitPosFst]]. */
+    def awaitPos: Done |*| A -⚬ A =
+      awaitPosFst
+
+    /** Alias for [[awaitNegFst]]. */
+    def awaitNeg: A -⚬ (Need |*| A) =
+      awaitNegFst
   }
 
   object Junction {
@@ -195,28 +203,16 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     }
 
     implicit def junctionDone: Junction[Done] =
-      new Junction.FromPos[Done] {
-        override def awaitPosFst: Done |*| Done -⚬ Done =
-          join
-      }
+      SignalingJunction.Positive.signalingJunctionPositiveDone
 
     implicit def junctionVal[A]: Junction[Val[A]] =
-      new Junction.FromPos[Val[A]] {
-        override def awaitPosFst: Done |*| Val[A] -⚬ Val[A] =
-          par(const(()), id[Val[A]]) >>> unliftPair >>> liftV(_._2)
-      }
+      SignalingJunction.Positive.signalingJunctionPositiveVal[A]
 
     implicit def junctionNeed: Junction[Need] =
-      new Junction.FromNeg[Need] {
-        override def awaitNegFst: Need -⚬ (Need |*| Need) =
-          joinNeed
-      }
+      SignalingJunction.Negative.signalingJunctionNegativeNeed
 
     implicit def junctionNeg[A]: Junction[Neg[A]] =
-      new Junction.FromNeg[Neg[A]] {
-        override def awaitNegFst: Neg[A] -⚬ (Need |*| Neg[A]) =
-          liftN[(Unit, A), A](_._2) >>> liftNegPair >>> par(constNeg(()), id[Neg[A]])
-      }
+      SignalingJunction.Negative.signalingJunctionNegativeNeg[A]
   }
 
   /** Witnesses one specific way in which [[A]] can signal occurrence of some event
@@ -265,28 +261,80 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     }
 
     implicit def signalingDone: Signaling[Done] =
-      new Signaling.FromPos[Done] {
-        override def signalPosFst: Done -⚬ (Done |*| Done) =
-          fork
-      }
+      SignalingJunction.Positive.signalingJunctionPositiveDone
 
     implicit def signalingNeed: Signaling[Need] =
-      new Signaling.FromNeg[Need] {
-        override def signalNegFst: (Need |*| Need) -⚬ Need =
-          forkNeed
-      }
+      SignalingJunction.Negative.signalingJunctionNegativeNeed
 
     implicit def signalingVal[A]: Signaling[Val[A]] =
-      new Signaling.FromPos[Val[A]] {
-        override def signalPosFst: Val[A] -⚬ (Done |*| Val[A]) =
-          dup[A].in.fst(neglect)
-      }
+      SignalingJunction.Positive.signalingJunctionPositiveVal[A]
 
     implicit def signalingNeg[A]: Signaling[Neg[A]] =
-      new Signaling.FromNeg[Neg[A]] {
-        override def signalNegFst: (Need |*| Neg[A]) -⚬ Neg[A] =
-          par(inflate[A], id[Neg[A]]) >>> mergeDemands
-      }
+      SignalingJunction.Negative.signalingJunctionNegativeNeg[A]
+  }
+
+  /** Witnesses that [[A]] can both produce and await a signal.
+    * Depending on the natural direction of the signal, the two subclasses,
+    * [[SignalingJuction.Positive]] and [SignalingJunction.Negative]], differ in the law that must hold.
+    */
+  sealed trait SignalingJunction[A] extends Signaling[A] with Junction[A]
+
+  object SignalingJunction {
+    trait Positive[A] extends SignalingJunction[A] with Signaling.FromPos[A] with Junction.FromPos[A] {
+      def law_positiveSignalThenAwaitIsId: Equal[A -⚬ A] =
+        Equal[A -⚬ A](
+          signalPos >>> awaitPos,
+          id[A],
+        )
+    }
+
+    trait Negative[A] extends SignalingJunction[A] with Signaling.FromNeg[A] with Junction.FromNeg[A] {
+      def law_negativeAwaitThenSignalIsId: Equal[A -⚬ A] =
+        Equal[A -⚬ A](
+          awaitNeg >>> signalNeg,
+          id[A],
+        )
+    }
+
+    object Positive {
+      implicit def signalingJunctionPositiveDone: SignalingJunction.Positive[Done] =
+        new SignalingJunction.Positive[Done] {
+          override def signalPosFst: Done -⚬ (Done |*| Done) =
+            fork
+
+          override def awaitPosFst: Done |*| Done -⚬ Done =
+            join
+        }
+
+      implicit def signalingJunctionPositiveVal[A]: SignalingJunction.Positive[Val[A]] =
+        new SignalingJunction.Positive[Val[A]] {
+          override def signalPosFst: Val[A] -⚬ (Done |*| Val[A]) =
+            dup[A].in.fst(neglect)
+
+          override def awaitPosFst: Done |*| Val[A] -⚬ Val[A] =
+            par(const(()), id[Val[A]]) >>> unliftPair >>> liftV(_._2)
+        }
+    }
+
+    object Negative {
+      implicit def signalingJunctionNegativeNeed: SignalingJunction.Negative[Need] =
+        new SignalingJunction.Negative[Need] {
+          override def signalNegFst: (Need |*| Need) -⚬ Need =
+            forkNeed
+
+          override def awaitNegFst: Need -⚬ (Need |*| Need) =
+            joinNeed
+        }
+
+      implicit def signalingJunctionNegativeNeg[A]: SignalingJunction.Negative[Neg[A]] =
+        new SignalingJunction.Negative[Neg[A]] {
+          override def signalNegFst: (Need |*| Neg[A]) -⚬ Neg[A] =
+            par(inflate[A], id[Neg[A]]) >>> mergeDemands
+
+          override def awaitNegFst: Neg[A] -⚬ (Need |*| Neg[A]) =
+            liftN[(Unit, A), A](_._2) >>> liftNegPair >>> par(constNeg(()), id[Neg[A]])
+        }
+    }
   }
 
   trait Getter[S, A] { self =>
