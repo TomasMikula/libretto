@@ -28,7 +28,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     */
   trait Dual[A, B] {
     /** Reverses the input that flows along the `-⚬` arrow (say it is the `A` input) to its dual (`B`) flowing
-      * flowing against the direction of the arrow.
+      * against the direction of the arrow.
       *
       * {{{
       *   ┏━━━━━━━┓

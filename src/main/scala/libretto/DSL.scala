@@ -165,7 +165,38 @@ trait DSL {
   /** Uses the value (eventually) produced by [[Val]] to satisfy the demand of [[Neg]]. */
   def fulfill[A]: (Val[A] |*| Neg[A]) -⚬ One
 
+  /** Reverses the [[Done]] signal (flowing in the positive direction, i.e. along the `-⚬` arrow)
+    * into a [[Need]] signal (flowing in the negative direciton, i.e. against the `-⚬` arrow).
+    *
+    * {{{
+    *   ┏━━━━━━━━━━━┓
+    *   ┞────┐      ┃
+    *   ╎Done│┄┄┐   ┃
+    *   ┟────┘  ┆   ┃
+    *   ┃       ┆   ┃
+    *   ┞────┐  ┆   ┃
+    *   ╎Need│←┄┘   ┃
+    *   ┟────┘      ┃
+    *   ┗━━━━━━━━━━━┛
+    * }}}
+    */
   def rInvertSignal: (Done |*| Need) -⚬ One
+
+  /** Reverses the [[Need]] signal (flowing in the negative direciton, i.e. against the `-⚬` arrow)
+    * into a [[Done]] signal (flowing in the positive direction, i.e. along the `-⚬` arrow).
+    *
+    * {{{
+    *   ┏━━━━━━┓
+    *   ┃      ┞────┐
+    *   ┃   ┌┄┄╎Need│
+    *   ┃   ┆  ┟────┘
+    *   ┃   ┆  ┃
+    *   ┃   ┆  ┞────┐
+    *   ┃   └┄→╎Done│
+    *   ┃      ┟────┘
+    *   ┗━━━━━━┛
+    * }}}
+    */
   def lInvertSignal: One -⚬ (Need |*| Done)
 
   def liftEither[A, B]: Val[Either[A, B]] -⚬ (Val[A] |+| Val[B])
