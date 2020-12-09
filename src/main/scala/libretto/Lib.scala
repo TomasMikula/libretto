@@ -713,6 +713,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def distributeRL[B1, B2, B3](implicit ev: B =:= ((B1 |+| B2) |*| B3)): A -⚬ ((B1 |*| B3) |+| (B2 |*| B3)) =
       ev.substituteCo(self) >>> dsl.distributeRL
 
+    def factorL[C, D1, D2](implicit ev: B =:= ((C |*| D1) |+| (C |*| D2))): A -⚬ (C |*| (D1 |+| D2)) =
+      ev.substituteCo(self) >>> dsl.factorL
+
+    def factorR[C1, C2, D](implicit ev: B =:= ((C1 |*| D) |+| (C2 |*| D))): A -⚬ ((C1 |+| C2) |*| D) =
+      ev.substituteCo(self) >>> dsl.factorR
+
     def coDistributeL[B1, B2, B3](implicit ev: B =:= ((B1 |*| B2) |&| (B1 |*| B3))): A -⚬ (B1 |*| (B2 |&| B3)) =
       ev.substituteCo(self) >>> dsl.coDistributeL
 
