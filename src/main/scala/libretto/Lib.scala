@@ -4,7 +4,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   import dsl._
 
   def const_[A](a: A): One -⚬ Val[A] =
-    andThen(done, const(a))
+    andThen(done, constVal(a))
 
   /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
     * It must hold that
@@ -447,7 +447,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
             dup[A].in.fst(neglect)
 
           override def awaitPosFst: Done |*| Val[A] -⚬ Val[A] =
-            par(const(()), id[Val[A]]) >>> unliftPair >>> liftV(_._2)
+            par(constVal(()), id[Val[A]]) >>> unliftPair >>> liftV(_._2)
         }
     }
 
@@ -1589,7 +1589,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def unliftOption[A]: PMaybe[Val[A]] -⚬ Val[Option[A]] =
       id[PMaybe[Val[A]]]              .to[   Done    |+| Val[A] ]
-        .in.left(const(()))           .to[ Val[Unit] |+| Val[A] ]
+        .in.left(constVal(()))        .to[ Val[Unit] |+| Val[A] ]
         .andThen(unliftEither)        .to[ Val[Either[Unit, A]] ]
         .andThen(liftV(_.toOption))   .to[ Val[Option[A]]       ]
 
