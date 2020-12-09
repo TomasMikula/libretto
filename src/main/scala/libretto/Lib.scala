@@ -1,5 +1,7 @@
 package libretto
 
+import libretto.unapply._
+
 class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   import dsl._
 
@@ -696,34 +698,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       def modify[X, Y](f: (X |*| A) -⚬ (Y |*| A)): (X |*| F[A]) -⚬ (Y |*| F[A]) =
         inL >>> lift(f) >>> outL
     }
-  }
-
-  trait Unapply[FA, F[_]] {
-    type A
-    def ev: FA =:= F[A]
-  }
-
-  object Unapply {
-    implicit def unapplyInstance[F[_], X]: Unapply[F[X], F] { type A = X } =
-      new Unapply[F[X], F] {
-        type A = X
-        val ev: F[X] =:= F[A] = implicitly
-      }
-  }
-
-  trait Unapply2[FAB, F[_, _]] {
-    type A
-    type B
-    def ev: FAB =:= F[A, B]
-  }
-
-  object Unapply2 {
-    implicit def unapply2Instance[F[_, _], X, Y]: Unapply2[F[X, Y], F] { type A = X; type B = Y } =
-      new Unapply2[F[X, Y], F] {
-        type A = X
-        type B = Y
-        val ev: F[X, Y] =:= F[A, B] = implicitly
-      }
   }
 
   def liftFst[A, B, C](f: A -⚬ C): (A |*| B) -⚬ (C |*| B) = par(f, id)
