@@ -154,133 +154,230 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       elimFst(need)
   }
 
-  /** Represents ''a'' way how `A` can await (join) a signal.
-    * The signal typically represents completion of a concurrent computation.
-    */
-  trait Junction[A] {
-    def awaitPosFst: Done |*| A -⚬ A
-
-    def awaitNegFst: A -⚬ (Need |*| A)
-
-    def awaitPosSnd: A |*| Done -⚬ A =
-      swap >>> awaitPosFst
-
-    def awaitNegSnd: A -⚬ (A |*| Need) =
-      awaitNegFst >>> swap
-
-    /** Alias for [[awaitPosFst]]. */
-    def awaitPos: Done |*| A -⚬ A =
-      awaitPosFst
-
-    /** Alias for [[awaitNegFst]]. */
-    def awaitNeg: A -⚬ (Need |*| A) =
-      awaitNegFst
-  }
-
   object Junction {
-    /** Used to implement [[Junction]] instances for which it is more natural to await a signal that travels
-      * in the positive direction (i.e. along the `-⚬` arrow, i.e. a [[Done]] signal coming in the input of `-o`).
-      * Awaiting signal coming from the output of `-⚬` is a derived operation.
-      */
-    trait FromPos[A] extends Junction[A] {
-      override def awaitNegFst: A -⚬ (Need |*| A) =
-        id                                 [                      A  ]
-          .introFst(lInvertSignal)      .to[ (Need |*|  Done) |*| A  ]
-          .timesAssocLR                 .to[  Need |*| (Done  |*| A) ]
-          .in.snd(awaitPosFst)          .to[  Need |*|            A  ]
+    /** Represents ''a'' way how `A` can await (join) a positive (i.e. [[Done]]) signal. */
+    trait Positive[A] {
+      def awaitPosFst: Done |*| A -⚬ A
+
+      def awaitPosSnd: A |*| Done -⚬ A =
+        swap >>> awaitPosFst
+
+      /** Alias for [[awaitPosFst]]. */
+      def awaitPos: Done |*| A -⚬ A =
+        awaitPosFst
     }
 
-    /** Used to implement [[Junction]] instances for which it is more natural to await a signal that travels
-      * in the negative direction (i.e. opposite the `-⚬` arrow, i.e. a [[Need]] signal coming from the input of `-o`).
-      * Awaiting signal coming in the input of `-⚬` is a derived operation.
-      */
-    trait FromNeg[A] extends Junction[A] {
-      override def awaitPosFst: (Done |*| A) -⚬ A =
-        id                                 [  Done |*|            A  ]
-          .in.snd(awaitNegFst)          .to[  Done |*| (Need  |*| A) ]
-          .timesAssocRL                 .to[ (Done |*|  Need) |*| A  ]
-          .elimFst(rInvertSignal)       .to[                      A  ]
+    /** Represents ''a'' way how `A` can await (join) a negative (i.e. [[Need]]) signal. */
+    trait Negative[A] {
+      def awaitNegFst: A -⚬ (Need |*| A)
+
+      def awaitNegSnd: A -⚬ (A |*| Need) =
+        awaitNegFst >>> swap
+
+      /** Alias for [[awaitNegFst]]. */
+      def awaitNeg: A -⚬ (Need |*| A) =
+        awaitNegFst
     }
 
-    implicit def junctionDone: Junction[Done] =
-      SignalingJunction.Positive.signalingJunctionPositiveDone
+    object Positive {
+      implicit def junctionDone: Junction.Positive[Done] =
+        SignalingJunction.Positive.signalingJunctionPositiveDone
 
-    implicit def junctionVal[A]: Junction[Val[A]] =
-      SignalingJunction.Positive.signalingJunctionPositiveVal[A]
+      implicit def junctionVal[A]: Junction.Positive[Val[A]] =
+        SignalingJunction.Positive.signalingJunctionPositiveVal[A]
 
-    implicit def junctionNeed: Junction[Need] =
-      SignalingJunction.Negative.signalingJunctionNegativeNeed
+      def byFst[A, B](implicit A: Junction.Positive[A]): Junction.Positive[A |*| B] =
+        new Junction.Positive[A |*| B] {
+          override def awaitPosFst: (Done |*| (A |*| B)) -⚬ (A |*| B) =
+            timesAssocRL.in.fst(A.awaitPosFst)
+        }
 
-    implicit def junctionNeg[A]: Junction[Neg[A]] =
-      SignalingJunction.Negative.signalingJunctionNegativeNeg[A]
-  }
+      def eitherInstance[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |+| B] =
+        new Junction.Positive[A |+| B] {
+          override def awaitPosFst: (Done |*| (A |+| B)) -⚬ (A |+| B) =
+            distributeLR[Done, A, B].bimap(A.awaitPosFst, B.awaitPosFst)
+        }
 
-  /** Witnesses one specific way in which [[A]] can signal occurrence of some event
-    * (such as completion or reaching a certain stage).
-    */
-  trait Signaling[A] {
-    def signalPosFst: A -⚬ (Done |*| A)
-    def signalNegFst: (Need |*| A) -⚬ A
+      def choiceInstance[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |&| B] =
+        new Junction.Positive[A |&| B] {
+          override def awaitPosFst: (Done |*| (A |&| B)) -⚬ (A |&| B) =
+            coFactorL[Done, A, B].bimap(A.awaitPosFst, B.awaitPosFst)
+        }
 
-    def signalPosSnd: A -⚬ (A |*| Done) =
-      signalPosFst >>> swap
+      def rec[F[_]](implicit F: ∀[λ[x => Junction.Positive[F[x]]]]): Junction.Positive[Rec[F]] =
+        new Junction.Positive[Rec[F]] {
+          override def awaitPosFst: (Done |*| Rec[F]) -⚬ Rec[F] =
+            par(id[Done], unpack[F]) >>> F[Rec[F]].awaitPosFst >>> pack[F]
+        }
+    }
 
-    def signalNegSnd: (A |*| Need) -⚬ A =
-      swap >>> signalNegFst
+    object Negative {
+      implicit def junctionNeed: Junction.Negative[Need] =
+        SignalingJunction.Negative.signalingJunctionNegativeNeed
 
-    /** Alias for [[signalPosFst]]. */
-    def signalPos: A -⚬ (Done |*| A) =
-      signalPosFst
+      implicit def junctionNeg[A]: Junction.Negative[Neg[A]] =
+        SignalingJunction.Negative.signalingJunctionNegativeNeg[A]
 
-    /** Alias for [[signalNegFst]]. */
-    def signalNeg: (Need |*| A) -⚬ A =
-      signalNegFst
+      def byFst[A, B](implicit A: Junction.Negative[A]): Junction.Negative[A |*| B] =
+        new Junction.Negative[A |*| B] {
+          override def awaitNegFst: (A |*| B) -⚬ (Need |*| (A |*| B)) =
+            par(A.awaitNegFst, id[B]).timesAssocLR
+        }
+
+      def eitherInstance[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |+| B] =
+        new Junction.Negative[A |+| B] {
+          override def awaitNegFst: (A |+| B) -⚬ (Need |*| (A |+| B)) =
+            id[A |+| B].bimap(A.awaitNegFst, B.awaitNegFst).factorL
+        }
+
+      def choiceInstance[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |&| B] =
+        new Junction.Negative[A |&| B] {
+          override def awaitNegFst: (A |&| B) -⚬ (Need |*| (A |&| B)) =
+            id[A |&| B].bimap(A.awaitNegFst, B.awaitNegFst).coDistributeL
+        }
+
+      def rec[F[_]](implicit F: ∀[λ[x => Junction.Negative[F[x]]]]): Junction.Negative[Rec[F]] =
+        new Junction.Negative[Rec[F]] {
+          override def awaitNegFst: Rec[F] -⚬ (Need |*| Rec[F]) =
+            (unpack[F] >>> F[Rec[F]].awaitNegFst).in.snd(pack[F])
+        }
+    }
+
+    /** [[Positive]] junction can be made to await a negative (i.e. [[Need]]) signal,
+      * by inverting the signal ([[lInvertSignal]]) and awaiting the inverted positive signal.
+      */
+    def invert[A](A: Positive[A]): Negative[A] =
+      new Negative[A] {
+        override def awaitNegFst: A -⚬ (Need |*| A) =
+          id                                 [                      A  ]
+            .introFst(lInvertSignal)      .to[ (Need |*|  Done) |*| A  ]
+            .timesAssocLR                 .to[  Need |*| (Done  |*| A) ]
+            .in.snd(A.awaitPosFst)        .to[  Need |*|            A  ]
+      }
+
+    /** [[Negative]] junction can be made to await a positive (i.e. [[Done]]) signal,
+      * by inverting the signal ([[rInvertSignal]]) and awaiting the inverted negative signal.
+      */
+    def invert[A](A: Negative[A]): Positive[A] =
+      new Positive[A] {
+        override def awaitPosFst: (Done |*| A) -⚬ A =
+          id                                 [  Done |*|            A  ]
+            .in.snd(A.awaitNegFst)        .to[  Done |*| (Need  |*| A) ]
+            .timesAssocRL                 .to[ (Done |*|  Need) |*| A  ]
+            .elimFst(rInvertSignal)       .to[                      A  ]
+      }
   }
 
   object Signaling {
-    /** Used to implementat [[Signaling]] instances that signal naturally in the positive direction.
-      * Signaling in the negative direction is a derived operation.
-      */
-    trait FromPos[A] extends Signaling[A] {
-      override def signalNegFst: (Need |*| A) -⚬ A =
-        id                                     [  Need |*|            A  ]
-          .in.snd(signalPosFst)             .to[  Need |*| (Done  |*| A) ]
-          .timesAssocRL                     .to[ (Need |*|  Done) |*| A  ]
-          .elimFst(swap >>> rInvertSignal)  .to[                      A  ]
+    /** Represents ''a'' way how `A` can produce a positive (i.e. [[Done]]) signal. */
+    trait Positive[A] {
+      def signalPosFst: A -⚬ (Done |*| A)
+
+      def signalPosSnd: A -⚬ (A |*| Done) =
+        signalPosFst >>> swap
+
+      /** Alias for [[signalPosFst]]. */
+      def signalPos: A -⚬ (Done |*| A) =
+        signalPosFst
     }
 
-    /** Used to implementat [[Signaling]] instances that signal naturally in the negative direction.
-      * Signaling in the positive direction is a derived operation.
-      */
-    trait FromNeg[A] extends Signaling[A] {
-      override def signalPosFst: A -⚬ (Done |*| A) =
-        id                                     [                      A  ]
-          .introFst(lInvertSignal >>> swap) .to[ (Done |*|  Need) |*| A  ]
-          .timesAssocLR                     .to[  Done |*| (Need  |*| A) ]
-          .in.snd(signalNegFst)             .to[  Done |*|            A  ]
+    /** Represents ''a'' way how `A` can produce a negative (i.e. [[Need]]) signal. */
+    trait Negative[A] {
+      def signalNegFst: (Need |*| A) -⚬ A
+
+      def signalNegSnd: (A |*| Need) -⚬ A =
+        swap >>> signalNegFst
+
+      /** Alias for [[signalNegFst]]. */
+      def signalNeg: (Need |*| A) -⚬ A =
+        signalNegFst
     }
 
-    implicit def signalingDone: Signaling[Done] =
-      SignalingJunction.Positive.signalingJunctionPositiveDone
+    object Positive {
+      implicit def signalingDone: Signaling.Positive[Done] =
+        SignalingJunction.Positive.signalingJunctionPositiveDone
 
-    implicit def signalingNeed: Signaling[Need] =
-      SignalingJunction.Negative.signalingJunctionNegativeNeed
+      implicit def signalingVal[A]: Signaling.Positive[Val[A]] =
+        SignalingJunction.Positive.signalingJunctionPositiveVal[A]
 
-    implicit def signalingVal[A]: Signaling[Val[A]] =
-      SignalingJunction.Positive.signalingJunctionPositiveVal[A]
+      def byFst[A, B](implicit A: Signaling.Positive[A]): Signaling.Positive[A |*| B] =
+        new Signaling.Positive[A |*| B] {
+          override def signalPosFst: (A |*| B) -⚬ (Done |*| (A |*| B)) =
+            par(A.signalPosFst, id[B]).timesAssocLR
+        }
 
-    implicit def signalingNeg[A]: Signaling[Neg[A]] =
-      SignalingJunction.Negative.signalingJunctionNegativeNeg[A]
+      /** Signals when it is decided which side of the [[|+|]] is present. */
+      def either[A, B]: Signaling.Positive[A |+| B] =
+        new Signaling.Positive[A |+| B] {
+          override def signalPosFst: (A |+| B) -⚬ (Done |*| (A |+| B)) =
+            dsl.signalEither[A, B]
+        }
+
+      def rec[F[_]](implicit F: ∀[λ[x => Positive[F[x]]]]): Positive[Rec[F]] =
+        new Positive[Rec[F]] {
+          override def signalPosFst: Rec[F] -⚬ (Done |*| Rec[F]) =
+            (unpack[F] >>> F[Rec[F]].signalPosFst).in.snd(pack[F])
+        }
+    }
+
+    object Negative {
+      implicit def signalingNeed: Signaling.Negative[Need] =
+        SignalingJunction.Negative.signalingJunctionNegativeNeed
+
+      implicit def signalingNeg[A]: Signaling.Negative[Neg[A]] =
+        SignalingJunction.Negative.signalingJunctionNegativeNeg[A]
+
+      def byFst[A, B](implicit A: Signaling.Negative[A]): Signaling.Negative[A |*| B] =
+        new Signaling.Negative[A |*| B] {
+          override def signalNegFst: (Need |*| (A |*| B)) -⚬ (A |*| B) =
+            timesAssocRL.in.fst(A.signalNegFst)
+        }
+
+      /** Signals when the choice is made between [[A]] and [[B]]. */
+      def choice[A, B]: Signaling.Negative[A |&| B] =
+        new Signaling.Negative[A |&| B] {
+          override def signalNegFst: (Need |*| (A |&| B)) -⚬ (A |&| B) =
+            dsl.signalChoice[A, B]
+        }
+
+      def rec[F[_]](implicit F: ∀[λ[x => Negative[F[x]]]]): Negative[Rec[F]] =
+        new Negative[Rec[F]] {
+          override def signalNegFst: Need |*| Rec[F] -⚬ Rec[F] =
+            id                                     [ Need |*|   Rec[F]  ]
+              .in.snd(unpack[F])                .to[ Need |*| F[Rec[F]] ]
+              .andThen(F[Rec[F]].signalNegFst)  .to[          F[Rec[F]] ]
+              .pack[F]                          .to[            Rec[F]  ]
+        }
+    }
+
+    /** [[Signaling.Positive]] can be made to produce a negative (i.e. [[Need]]) signal,
+      * by inverting the produced signal (via [[rInvertSignal]]).
+      */
+    def invert[A](A: Positive[A]): Negative[A] =
+      new Negative[A] {
+        override def signalNegFst: (Need |*| A) -⚬ A =
+          id                                     [  Need |*|            A  ]
+            .in.snd(A.signalPosFst)           .to[  Need |*| (Done  |*| A) ]
+            .timesAssocRL                     .to[ (Need |*|  Done) |*| A  ]
+            .elimFst(swap >>> rInvertSignal)  .to[                      A  ]
+      }
+
+    /** [[Signaling.Negative]] can be made to produce a positive (i.e. [[Done]]) signal,
+      * by inverting the produced signal (via [[lInvertSignal]]).
+      */
+    def invert[A](A: Negative[A]): Positive[A] =
+      new Positive[A] {
+        override def signalPosFst: A -⚬ (Done |*| A) =
+          id                                     [                      A  ]
+            .introFst(lInvertSignal >>> swap) .to[ (Done |*|  Need) |*| A  ]
+            .timesAssocLR                     .to[  Done |*| (Need  |*| A) ]
+            .in.snd(A.signalNegFst)           .to[  Done |*|            A  ]
+      }
   }
 
-  /** Witnesses that [[A]] can both produce and await a signal.
-    * Depending on the natural direction of the signal, the two subclasses,
-    * [[SignalingJuction.Positive]] and [SignalingJunction.Negative]], differ in the law that must hold.
-    */
-  sealed trait SignalingJunction[A] extends Signaling[A] with Junction[A]
-
   object SignalingJunction {
-    trait Positive[A] extends SignalingJunction[A] with Signaling.FromPos[A] with Junction.FromPos[A] {
+    /** Witnesses that [[A]] can both produce and await a positive (i.e. [[Done]]) signal. */
+    trait Positive[A] extends Signaling.Positive[A] with Junction.Positive[A] {
       def law_positiveSignalThenAwaitIsId: Equal[A -⚬ A] =
         Equal[A -⚬ A](
           signalPos >>> awaitPos,
@@ -288,7 +385,8 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
         )
     }
 
-    trait Negative[A] extends SignalingJunction[A] with Signaling.FromNeg[A] with Junction.FromNeg[A] {
+    /** Witnesses that [[A]] can both produce and await a negative (i.e. [[Need]]) signal. */
+    trait Negative[A] extends Signaling.Negative[A] with Junction.Negative[A] {
       def law_negativeAwaitThenSignalIsId: Equal[A -⚬ A] =
         Equal[A -⚬ A](
           awaitNeg >>> signalNeg,
@@ -297,6 +395,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     }
 
     object Positive {
+      def from[A](s: Signaling.Positive[A], j: Junction.Positive[A]): SignalingJunction.Positive[A] =
+        new SignalingJunction.Positive[A] {
+          override def signalPosFst: A -⚬ (Done |*| A) = s.signalPosFst
+          override def awaitPosFst: (Done |*| A) -⚬ A = j.awaitPosFst
+        }
+
       implicit def signalingJunctionPositiveDone: SignalingJunction.Positive[Done] =
         new SignalingJunction.Positive[Done] {
           override def signalPosFst: Done -⚬ (Done |*| Done) =
@@ -305,6 +409,37 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
           override def awaitPosFst: Done |*| Done -⚬ Done =
             join
         }
+
+      def byFst[A, B](implicit A: Positive[A]): Positive[A |*| B] =
+        Positive.from(
+          Signaling.Positive.byFst[A, B],
+          Junction.Positive.byFst[A, B],
+        )
+
+      /** Signals as soon as the `|+|` is decided, delegates awaiting to the respective side. */
+      def eitherPos[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Positive[A |+| B] =
+        Positive.from(
+          Signaling.Positive.either[A, B],
+          Junction.Positive.eitherInstance[A, B],
+        )
+
+      /** Signals as soon as the `|+|` is decided, delegates awaiting to the respective side,
+        * which awaits inversion of the signal.
+        */
+      def eitherNeg[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Positive[A |+| B] =
+        Positive.from(
+          Signaling.Positive.either[A, B],
+          Junction.Positive.eitherInstance(
+            Junction.invert(A),
+            Junction.invert(B),
+          ),
+        )
+
+      def rec[F[_]](implicit F: ∀[λ[x => Positive[F[x]]]]): Positive[Rec[F]] =
+        Positive.from(
+          Signaling.Positive.rec(F),
+          Junction.Positive.rec(F),
+        )
 
       implicit def signalingJunctionPositiveVal[A]: SignalingJunction.Positive[Val[A]] =
         new SignalingJunction.Positive[Val[A]] {
@@ -317,6 +452,12 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     }
 
     object Negative {
+      def from[A](s: Signaling.Negative[A], j: Junction.Negative[A]): SignalingJunction.Negative[A] =
+        new SignalingJunction.Negative[A] {
+          override def signalNegFst: (Need |*| A) -⚬ A = s.signalNegFst
+          override def awaitNegFst: A -⚬ (Need |*| A) = j.awaitNegFst
+        }
+
       implicit def signalingJunctionNegativeNeed: SignalingJunction.Negative[Need] =
         new SignalingJunction.Negative[Need] {
           override def signalNegFst: (Need |*| Need) -⚬ Need =
@@ -325,6 +466,37 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
           override def awaitNegFst: Need -⚬ (Need |*| Need) =
             joinNeed
         }
+
+      def byFst[A, B](implicit A: Negative[A]): Negative[A |*| B] =
+        Negative.from(
+          Signaling.Negative.byFst[A, B],
+          Junction.Negative.byFst[A, B],
+        )
+
+      /** Signals as soon as the choice (`|&|`) is made, delegates awaiting to the chosen side. */
+      def choiceNeg[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Negative[A |&| B] =
+        Negative.from(
+          Signaling.Negative.choice[A, B],
+          Junction.Negative.choiceInstance[A, B],
+        )
+
+      /** Signals as soon as the choice (`|&|`) is made, delegates awaiting to the chosen side,
+        * which awaits inversion of the signal.
+        */
+      def choicePos[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Negative[A |&| B] =
+        Negative.from(
+          Signaling.Negative.choice[A, B],
+          Junction.Negative.choiceInstance(
+            Junction.invert(A),
+            Junction.invert(B),
+          ),
+        )
+
+      def rec[F[_]](implicit F: ∀[λ[x => Negative[F[x]]]]): Negative[Rec[F]] =
+        Negative.from(
+          Signaling.Negative.rec(F),
+          Junction.Negative.rec(F),
+        )
 
       implicit def signalingJunctionNegativeNeg[A]: SignalingJunction.Negative[Neg[A]] =
         new SignalingJunction.Negative[Neg[A]] {
@@ -375,10 +547,26 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
   ): Z -⚬ (A |*| B) =
     choice(caseFstWins, caseSndWins) >>> select[A, B]
 
+  def raceSignaledOrNot[A](implicit A: SignalingJunction.Positive[A]): A -⚬ (A |+| A) =
+    id                                           [  A                             ]
+      .andThen(A.signalPosSnd)                .to[  A |*|  Done                   ]
+      .in.snd(introSnd(done))                 .to[  A |*| (Done  |*|        Done) ]
+      .in.snd(raceCompletion)                 .to[  A |*| (Done  |+|        Done) ]
+      .distributeLR                           .to[ (A |*|  Done) |+| (A |*| Done) ]
+      .bimap(A.awaitPosSnd, A.awaitPosSnd)    .to[  A           |+|  A            ]
+
+  def selectSignaledOrNot[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ A =
+    id                                           [  A            |&|  A           ]
+      .bimap(A.awaitNegSnd, A.awaitNegSnd)    .to[ (A |*|  Need) |&| (A |*| Need) ]
+      .coDistributeL                          .to[  A |*| (Need  |&|        Need) ]
+      .in.snd(selectRequest)                  .to[  A |*| (Need  |*|        Need) ]
+      .in.snd(elimSnd(need))                  .to[  A |*|  Need                   ]
+      .andThen(A.signalNegSnd)                .to[  A                             ]
+
   trait Getter[S, A] { self =>
     def getL[B](that: Getter[A, B])(implicit B: Cosemigroup[B]): S -⚬ (B |*| S)
 
-    def extendJunction(implicit A: Junction[A]): Junction[S]
+    def extendJunction(implicit A: Junction.Positive[A]): Junction.Positive[S]
 
     def getL(implicit A: Cosemigroup[A]): S -⚬ (A |*| S) =
       getL(Getter.identity[A])
@@ -386,10 +574,10 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def getR(implicit A: Cosemigroup[A]): S -⚬ (S |*| A) =
       getL >>> swap
 
-    def joinL(A: Junction[A]): (Done |*| S) -⚬ S =
+    def joinL(A: Junction.Positive[A]): (Done |*| S) -⚬ S =
       extendJunction(A).awaitPosFst
 
-    def joinR(A: Junction[A]): (S |*| Done) -⚬ S =
+    def joinR(A: Junction.Positive[A]): (S |*| Done) -⚬ S =
       swap >>> joinL(A)
 
     def andThen[B](that: Getter[A, B]): Getter[S, B] =
@@ -397,7 +585,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
         override def getL[C](next: Getter[B, C])(implicit C: Cosemigroup[C]): S -⚬ (C |*| S) =
           self.getL(that andThen next)
 
-        override def extendJunction(implicit B: Junction[B]): Junction[S] =
+        override def extendJunction(implicit B: Junction.Positive[B]): Junction.Positive[S] =
           self.extendJunction(that.extendJunction(B))
       }
 
@@ -409,8 +597,8 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
         override def getL[B](next: Getter[A, B])(implicit B: Cosemigroup[B]): (S |+| T) -⚬ (B |*| (S |+| T)) =
           id[S |+| T].bimap(self.getL(next), that.getL(next)) >>> factorL
 
-        override def extendJunction(implicit A: Junction[A]): Junction[S |+| T] =
-          new Junction.FromPos[S |+| T] {
+        override def extendJunction(implicit A: Junction.Positive[A]): Junction.Positive[S |+| T] =
+          new Junction.Positive[S |+| T] {
             override def awaitPosFst: Done |*| (S |+| T) -⚬ (S |+| T) =
               distributeLR.bimap(self.joinL(A), that.joinL(A))
           }
@@ -424,7 +612,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def awaitDoneL[A0](implicit ev: A =:= Val[A0]): (Done |*| S) -⚬ S =
       ev.substituteCo(this)
-        .joinL(Junction.junctionVal[A0])
+        .joinL(Junction.Positive.junctionVal[A0])
 
     def awaitDoneR[A0](implicit ev: A =:= Val[A0]): (S |*| Done) -⚬ S =
       swap >>> awaitDoneL
@@ -439,7 +627,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
         override def getL(implicit A: Cosemigroup[A]): A -⚬ (A |*| A) =
           A.split
 
-        override def extendJunction(implicit A: Junction[A]): Junction[A] =
+        override def extendJunction(implicit A: Junction.Positive[A]): Junction.Positive[A] =
           A
       }
   }
@@ -456,8 +644,8 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     override def getL[B](that: Getter[A, B])(implicit B: Cosemigroup[B]): S -⚬ (B |*| S) =
       read(that.getL)
 
-    override def extendJunction(implicit A: Junction[A]): Junction[S] =
-      new Junction.FromPos[S] {
+    override def extendJunction(implicit A: Junction.Positive[A]): Junction.Positive[S] =
+      new Junction.Positive[S] {
         def awaitPosFst: Done |*| S -⚬ S = write(A.awaitPosFst)
       }
 
@@ -737,19 +925,19 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def unpack[F[_]](implicit ev: B =:= Rec[F]): A -⚬ F[Rec[F]] =
       ev.substituteCo(self) >>> dsl.unpack[F]
 
-    def race[B1: Completive, B2: Completive, C](
+    def race[B1: SignalingJunction.Positive, B2: SignalingJunction.Positive, C](
       caseFstWins: (B1 |*| B2) -⚬ C,
       caseSndWins: (B1 |*| B2) -⚬ C,
     )(implicit
       ev: B =:= (B1 |*| B2),
     ): A -⚬ C =
-      ev.substituteCo(self) >>> dsl.race(caseFstWins, caseSndWins)
+      ev.substituteCo(self) >>> lib.race(caseFstWins, caseSndWins)
 
-    def select[C1: Requisitive, C2: Requisitive](
+    def select[C1: SignalingJunction.Negative, C2: SignalingJunction.Negative](
       caseFstWins: B -⚬ (C1 |*| C2),
       caseSndWins: B -⚬ (C1 |*| C2),
     ): A -⚬ (C1 |*| C2) =
-      self >>> dsl.select(caseFstWins, caseSndWins)
+      self >>> lib.select(caseFstWins, caseSndWins)
 
     def in: FocusedFunctionOutputCo[A, Id, B] = new FocusedFunctionOutputCo[A, Id, B](self)(idFunctor)
   }
@@ -812,18 +1000,18 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def snd: FocusedFunctionOutputCo[A, λ[x => F[B1 |*| x]], B2] =
       f.zoomCo(lib.snd[B1])
 
-    def joinL(neglect: B1 -⚬ Done)(implicit j: Junction[B2]): A -⚬ F[B2] =
+    def joinL(neglect: B1 -⚬ Done)(implicit j: Junction.Positive[B2]): A -⚬ F[B2] =
       f(par(neglect, id[B2]) >>> j.awaitPosFst)
 
-    def joinR(neglect: B2 -⚬ Done)(implicit j: Junction[B1]): A -⚬ F[B1] =
+    def joinR(neglect: B2 -⚬ Done)(implicit j: Junction.Positive[B1]): A -⚬ F[B1] =
       f(par(id[B1], neglect) >>> j.awaitPosSnd)
   }
 
-  implicit class FocusedFunctionOutputOnDoneTimesCo[A, F[_], B2](f: FocusedFunctionOutputCo[A, F, Done |*| B2])(implicit j: Junction[B2]) {
+  implicit class FocusedFunctionOutputOnDoneTimesCo[A, F[_], B2](f: FocusedFunctionOutputCo[A, F, Done |*| B2])(implicit j: Junction.Positive[B2]) {
     def joinL: A -⚬ F[B2] = f(j.awaitPosFst)
   }
 
-  implicit class FocusedFunctionOutputOnTimesDoneCo[A, F[_], B1](f: FocusedFunctionOutputCo[A, F, B1 |*| Done])(implicit j: Junction[B1]) {
+  implicit class FocusedFunctionOutputOnTimesDoneCo[A, F[_], B1](f: FocusedFunctionOutputCo[A, F, B1 |*| Done])(implicit j: Junction.Positive[B1]) {
     def joinR: A -⚬ F[B1] = f(j.awaitPosSnd)
   }
 

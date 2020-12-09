@@ -106,8 +106,8 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
           override def getL[B](that: Getter[Summary[K], B])(implicit B: Cosemigroup[B]): Val[K] -⚬ (B |*| Val[K]) =
             (Summary.singleton[K] >>> that.getL).in.snd(Summary.minKey)
 
-          override def extendJunction(implicit j: Junction[Summary[K]]): Junction[Val[K]] =
-            Junction.junctionVal[K]
+          override def extendJunction(implicit j: Junction.Positive[Summary[K]]): Junction.Positive[Val[K]] =
+            Junction.Positive.junctionVal[K]
         }
 
       singletonSummary compose fst[V].lens
@@ -125,7 +125,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
     type BranchF[K, X]
 
     def of[K, X](summary: Getter[X, Summary[K]]): (X |*| X) -⚬ BranchF[K, X]
-    def deconstruct[K, X](j: Junction[X]): BranchF[K, X] -⚬ (X |*| X)
+    def deconstruct[K, X](j: Junction.Positive[X]): BranchF[K, X] -⚬ (X |*| X)
     def clear[K, X](f: X -⚬ Done): BranchF[K, X] -⚬ Done
 
     def summary[K, X]: Getter[BranchF[K, X], Summary[K]]
@@ -142,7 +142,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
         .andThen(IXI)                     .to[ (Summary[K] |*| Summary[K]) |*| (X |*| X) ]
         .in.fst(Summary.merge)            .to[         Summary[K]          |*| (X |*| X) ]
 
-    def deconstruct[K, X](j: Junction[X]): BranchF[K, X] -⚬ (X |*| X) =
+    def deconstruct[K, X](j: Junction.Positive[X]): BranchF[K, X] -⚬ (X |*| X) =
       id[BranchF[K, X]]                 .to[ Summary[K] |*| (X |*| X) ]
         .in.fst(Summary.neglect)        .to[    Done    |*| (X |*| X) ]
         .andThen(fst[X].lens.joinL(j))  .to[                 X |*| X  ]
@@ -172,7 +172,7 @@ sealed trait BinarySearchTree[DSL <: libretto.DSL] {
       BranchF.of(NonEmptyTree.summary)
 
     def deconstruct[K, V]: Branch[K, V] -⚬ (NonEmptyTree[K, V] |*| NonEmptyTree[K, V]) =
-      BranchF.deconstruct(NonEmptyTree.minKey[K, V].extendJunction(Junction.junctionVal[K]))
+      BranchF.deconstruct(NonEmptyTree.minKey[K, V].extendJunction(Junction.Positive.junctionVal[K]))
 
     def clear[K, V](subClear: NonEmptyTree[K, V] -⚬ Done): Branch[K, V] -⚬ Done =
       BranchF.clear(subClear)

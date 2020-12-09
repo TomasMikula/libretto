@@ -57,7 +57,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .unpack             .to[ Done |&| LPolled[A] ]
         .chooseR            .to[          LPolled[A] ]
 
-    def delayedPoll[A: Junction]: Done |*| LPollable[A] -⚬ LPolled[A] =
+    def delayedPoll[A: Junction.Positive]: Done |*| LPollable[A] -⚬ LPolled[A] =
       id                                       [ Done |*|     LPollable[A]      ]
         .in.snd(unpack)                     .to[ Done |*| (Done |&| LPolled[A]) ]
         .andThen(chooseRWhenDone)           .to[ Done |*|           LPolled[A]  ]
@@ -75,7 +75,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
     def empty[A]: Done -⚬ LPollable[A] =
       emptyF[A].pack
 
-    def delayBy[A](implicit ev: Junction[A]): (Done |*| LPollable[A]) -⚬ LPollable[A] =
+    def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPollable[A]) -⚬ LPollable[A] =
       id                                           [  Done |*|     LPollable[A]                 ]
         .in.snd(unpack)                         .to[  Done |*| (Done  |&|           LPolled[A]) ]
         .andThen(delayChoiceUntilDone)          .to[  Done |*| (Done  |&|           LPolled[A]) ]
@@ -83,7 +83,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .bimap(join, LPolled.delayBy[A])        .to[      Done        |&|           LPolled[A]  ]
         .pack[LPollableF[A, *]]                 .to[              LPollable[A]                  ]
 
-    def delay[A: Junction]: LPollable[A] -⚬ Delayed[LPollable[A]] =
+    def delay[A: Junction.Positive]: LPollable[A] -⚬ Delayed[LPollable[A]] =
       id                                           [                     LPollable[A] ]
         .introFst(lInvertSignal)                .to[ (Need |*| Done) |*| LPollable[A] ]
         .timesAssocLR                           .to[ Need |*| (Done |*| LPollable[A]) ]
@@ -157,6 +157,24 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .coDistributeR                .to[ (Done                   |&| LPolled[A]) |*| LPollable[B]  ]
         .in.fst(pack)                 .to[                     LPollable[A]        |*| LPollable[B]  ]
     }
+
+    implicit def negativeLPollableF[A, X](implicit A: Junction.Positive[A]): SignalingJunction.Negative[LPollableF[A, X]] =
+      SignalingJunction.Negative.choicePos(
+        Junction.Positive.junctionDone,
+        Junction.Positive.eitherInstance(
+          Junction.Positive.junctionDone,
+          Junction.Positive.byFst(A),
+        ),
+      )
+
+    implicit def universalNegativeLPollableF[A](implicit A: Junction.Positive[A]): ∀[λ[x => SignalingJunction.Negative[LPollableF[A, x]]]] =
+      new ∀[λ[x => SignalingJunction.Negative[LPollableF[A, x]]]] {
+        def apply[X]: SignalingJunction.Negative[LPollableF[A, X]] =
+          negativeLPollableF[A, X]
+      }
+
+    implicit def negativeLPollable[A](implicit A: Junction.Positive[A]): SignalingJunction.Negative[LPollable[A]] =
+      SignalingJunction.Negative.rec[LPollableF[A, *]](universalNegativeLPollableF[A])
   }
 
   object Pollable {
@@ -264,19 +282,20 @@ sealed trait Streams[DSL <: libretto.DSL] {
         swap[Polled[A], Polled[A]]
           .andThen(go(swap[Pollable[A], Pollable[A]] andThen self))
 
-      val poll: (Pollable[A] |*| Pollable[A]) -⚬ Polled[A] =
+      val poll: (Pollable[A] |*| Pollable[A]) -⚬ Polled[A] = {
+        import Polled.positivePolled
+
         id[Pollable[A] |*| Pollable[A]]               .to[ Pollable[A] |*| Pollable[A] ]
           .par(Pollable.poll[A], Pollable.poll[A])    .to[  Polled[A]  |*|  Polled[A]  ]
           .race(goFst, goSnd)                         .to[           Polled[A]         ]
+      }
 
       choice(close, poll)
         .pack[PollableF[A, *]]
     }
 
-    implicit def requisitivePollable[A]: Requisitive1[PollableF[A, *]] =
-      new Requisitive1[PollableF[A, *]] {
-        def apply[X]: Requisitive[PollableF[A, X]] = implicitly
-      }
+    implicit def negativePollable[A]: SignalingJunction.Negative[Pollable[A]] =
+      LPollable.negativeLPollable[Val[A]]
 
     def dup[A]: Pollable[A] -⚬ (Pollable[A] |*| Pollable[A]) = rec { self =>
       val dupPolled: Polled[A] -⚬ (Polled[A] |*| Polled[A]) = {
@@ -336,7 +355,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
 
         val goElem: (Val[A] |*| Pollable[A]) -⚬ (Done |&| Polled[A]) =
           choice(caseDownstreamRequested, caseNotRequestedYet)
-            .andThen(selectRequestedOrNot)
+            .andThen(selectSignaledOrNot(LPollable.negativeLPollableF))
 
         id                               [ Done |&| Polled[A]                ]
           .chooseR                    .to[ Done |+| (Val[A] |*| Pollable[A]) ]
@@ -468,8 +487,13 @@ sealed trait Streams[DSL <: libretto.DSL] {
           .either(subsClosed, newSubscriber(goRec))
 
       val go: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done = rec { self =>
+        import LPolled.positiveLPolled
+
+        implicit def positiveKSubs: SignalingJunction.Positive[KSubs] =
+          SignalingJunction.Positive.byFst[Val[K], Subscriber[V]]
+
         id                                           [ (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] ]
-          .in.fst(dsl.race)
+          .in.fst(lib.race)
           .distributeRL
           .either(onUpstream(self), onSubs(self)) .to[                               Done          ]
       }
@@ -491,7 +515,7 @@ sealed trait Streams[DSL <: libretto.DSL] {
     def cons[A]: A |*| LPollable[A] -⚬ LPolled[A] =
       injectR
 
-    def delayBy[A](implicit ev: Junction[A]): (Done |*| LPolled[A]) -⚬ LPolled[A] =
+    def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPolled[A]) -⚬ LPolled[A] =
       id[Done |*| LPolled[A]]         .to[  Done |*| (Done |+|           (A |*| LPollable[A])) ]
         .distributeLR                 .to[ (Done |*| Done) |+| (Done |*| (A |*| LPollable[A])) ]
         .in.left(join)                .to[      Done       |+| (Done |*| (A |*| LPollable[A])) ]
@@ -520,6 +544,12 @@ sealed trait Streams[DSL <: libretto.DSL] {
         .distributeRL
         .either(upstreamClosed, upstreamValue)
     }
+
+    implicit def positiveLPolled[A](implicit A: Junction.Positive[A]): SignalingJunction.Positive[LPolled[A]] =
+      SignalingJunction.Positive.eitherPos(
+        SignalingJunction.Positive.signalingJunctionPositiveDone,
+        Junction.Positive.byFst(A),
+      )
   }
 
   object Polled {
@@ -534,18 +564,37 @@ sealed trait Streams[DSL <: libretto.DSL] {
 
     def delayBy[A]: (Done |*| Polled[A]) -⚬ Polled[A] =
       LPolled.delayBy
+
+    implicit def positivePolled[A]: SignalingJunction.Positive[Polled[A]] =
+      LPolled.positiveLPolled[Val[A]]
   }
 
   object LSubscriber {
     def close[A]: LSubscriber[A] -⚬ Need =
       unpack[LSubscriberF[A, *]] >>> either(id, chooseL)
+
+    implicit def positiveLSubscriberF[A, X](implicit A: Junction.Negative[A]): SignalingJunction.Positive[LSubscriberF[A, X]] =
+      SignalingJunction.Positive.eitherNeg(
+        Junction.Negative.junctionNeed,
+        Junction.Negative.choiceInstance(
+          Junction.Negative.junctionNeed,
+          Junction.Negative.byFst(A),
+        ),
+      )
+
+    implicit def universalPositiveLSubscriberF[A](implicit A: Junction.Negative[A]): ∀[λ[x => SignalingJunction.Positive[LSubscriberF[A, x]]]] =
+      new ∀[λ[x => SignalingJunction.Positive[LSubscriberF[A, x]]]] {
+        def apply[X]: SignalingJunction.Positive[LSubscriberF[A, X]] =
+          positiveLSubscriberF[A, X]
+      }
+
+    implicit def positiveLSubscriber[A](implicit A: Junction.Negative[A]): SignalingJunction.Positive[LSubscriber[A]] =
+      SignalingJunction.Positive.rec[LSubscriberF[A, *]](universalPositiveLSubscriberF)
   }
 
   object Subscriber {
-    implicit def completiveSubscriberF[A]: Completive1[SubscriberF[A, *]] =
-      new Completive1[SubscriberF[A, *]] {
-        def apply[X]: Completive[SubscriberF[A, X]] = implicitly
-      }
+    implicit def positiveSubscriber[A]: SignalingJunction.Positive[Subscriber[A]] =
+      LSubscriber.positiveLSubscriber[Neg[A]]
 
     def close[A]: Subscriber[A] -⚬ Need =
       LSubscriber.close
@@ -588,6 +637,12 @@ sealed trait Streams[DSL <: libretto.DSL] {
       .timesAssocRL                 .to[ (A |*| B)          |*| LSubscriber[B]   ]
       .elimFst(rInvert)             .to[                        LSubscriber[B]   ]
       .unpack[LSubscriberF[B, *]]   .to[                  Need |+| LDemanding[B] ]
+
+    implicit def negativeLDemanding[A](implicit A: Junction.Negative[A]): SignalingJunction.Negative[LDemanding[A]] =
+      SignalingJunction.Negative.choiceNeg(
+        SignalingJunction.Negative.signalingJunctionNegativeNeed,
+        Junction.Negative.byFst(A),
+      )
   }
 
   object Demanding {
@@ -615,6 +670,9 @@ sealed trait Streams[DSL <: libretto.DSL] {
     def merge[A]: (Demanding[A] |*| Demanding[A]) -⚬ Demanding[A] = rec { self =>
       merge(Subscriber.merge(self))
     }
+
+    implicit def negativeDemanding[A]: SignalingJunction.Negative[Demanding[A]] =
+      LDemanding.negativeLDemanding[Neg[A]]
   }
 
   def rInvertProducingF[A, x, y](rInvertSub: (x |*| y) -⚬ One): (ProducingF[A, x] |*| ConsumerF[A, y]) -⚬ One =
