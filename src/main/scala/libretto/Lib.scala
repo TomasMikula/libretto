@@ -144,8 +144,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
   /** A type alias expressing the ''intent'' that `A` is delayed (in some sense) until a signal ([[Need]]) is received.
     * Equivalent to `Done =⚬ A`, but the formulation as `Need |*| A` does not rely on the more powerful concept
-    * of ''function types'' (internal hom objects). We could define `Delayed[A] = Need |*| A` even if `-⚬`
-    * was not a ''closed'' monoidal category.
+    * of ''function types'' (internal hom objects), i.e. does not require [[ClosedDSL]].
     */
   type Delayed[A] = Need |*| A
   object Delayed {
@@ -762,26 +761,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def lift[B1, B2](f: B1 -⚬ B2): (A |&| B1) -⚬ (A |&| B2) = choice[A |&| B1, A, B2](chooseL, chooseR andThen f)
   }
 
-  /** Function object (internal hom) is contravariant in the input type. */
-  def input[C]: ContraFunctor[* =⚬ C] = new ContraFunctor[* =⚬ C] {
-    def lift[A, B](f: A -⚬ B): (B =⚬ C) -⚬ (A =⚬ C) =
-      id                       [(B =⚬ C) |*| A]
-        .in.snd(f)          .to[(B =⚬ C) |*| B]
-        .andThen(eval)      .to[C]
-        .as[((B =⚬ C) |*| A) -⚬ C]
-        .curry
-  }
-
-  /** Function object (internal hom) is covariant in the output type. */
-  def output[A]: Functor[A =⚬ *] = new Functor[A =⚬ *] {
-    def lift[B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
-      id                       [(A =⚬ B) |*| A]
-        .andThen(eval)      .to[B]
-        .andThen(f)         .to[C]
-        .as[((A =⚬ B) |*| A) -⚬ C]
-        .curry
-  }
-
   implicit val tensorBifunctor: Bifunctor[|*|]= new Bifunctor[|*|] {
     def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |*| C) -⚬ (B |*| D) =
       par(f, g)
@@ -862,12 +841,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def swap[B1, B2](implicit ev: B =:= (B1 |*| B2)): A -⚬ (B2 |*| B1) =
       ev.substituteCo(self) >>> dsl.swap
-
-    def curry[A1, A2](implicit ev: A =:= (A1 |*| A2)): A1 -⚬ (A2 =⚬ B) =
-      dsl.curry(ev.substituteCo[* -⚬ B](self))
-
-    def uncurry[B1, B2](implicit ev: B =:= (B1 =⚬ B2)): (A |*| B1) -⚬ B2 =
-      dsl.uncurry(ev.substituteCo(self))
 
     def timesAssocLR[B1, B2, B3](implicit ev: B =:= ((B1 |*| B2) |*| B3)): A -⚬ (B1 |*| (B2 |*| B3)) =
       ev.substituteCo(self) >>> dsl.timesAssocLR
@@ -1017,14 +990,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       f.zoomCo(lib.choiceR[B1])
   }
 
-  implicit class FocusedFunctionOutputOnFunctionCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 =⚬ B2]) {
-    def input: FocusedFunctionOutputContra[A, λ[x => F[x =⚬ B2]], B1] =
-      f.zoomContra(lib.input[B2])
-
-    def output: FocusedFunctionOutputCo[A, λ[x => F[B1 =⚬ x]], B2] =
-      f.zoomCo(lib.output[B1])
-  }
-
   /** Focused on `B` in the output `F[B]` of linear function `A -⚬ F[B]`, where `B` is in a contravariant position. */
   class FocusedFunctionOutputContra[A, F[_], B](f: A -⚬ F[B])(F: ContraFunctor[F]) {
     def unapply[B0](g: B0 -⚬ B): A -⚬ F[B0] = f andThen F.lift(g)
@@ -1070,14 +1035,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
 
     def choiceR: FocusedFunctionOutputContra[A, λ[x => F[B1 |&| x]], B2] =
       f.zoomCo(lib.choiceR[B1])
-  }
-
-  implicit class FocusedFunctionOutputOnFunctionContra[A, F[_], B1, B2](f: FocusedFunctionOutputContra[A, F, B1 =⚬ B2]) {
-    def input: FocusedFunctionOutputCo[A, λ[x => F[x =⚬ B2]], B1] =
-      f.zoomContra(lib.input[B2])
-
-    def output: FocusedFunctionOutputContra[A, λ[x => F[B1 =⚬ x]], B2] =
-      f.zoomCo(lib.output[B1])
   }
 
   def IXI[A, B, C, D]: ((A|*|B)|*|(C|*|D)) -⚬
@@ -1383,14 +1340,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
       }
   }
 
-  def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
-    id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
-      .introSnd(ev.lInvert)      .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (Ā |*| A) ]
-      .in.snd(swap)              .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
-      .andThen(IXI)              .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
-      .andThen(par(eval, eval))  .to[        B         |*|        C         ]
-  }
-
   def dualSymmetric[A, B](ev: Dual[A, B]): Dual[B, A] = new Dual[B, A] {
     val lInvert: One -⚬ (A |*| B) = andThen(ev.lInvert, swap)
     val rInvert: B |*| A -⚬ One = andThen(swap, ev.rInvert)
@@ -1497,28 +1446,6 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
           .par(pack[G], pack[F])          .to[   Rec[G]  |*|   Rec[F]  ]
       }
     }
-
-  /** Given `A` and `B` concurrently (`A |*| B`), we can mandate that `A` be consumed before `B`
-    * by turning it into `Ā =⚬ B`, where `Ā` is the dual of `A`.
-    */
-  def unveilSequentially[A, Ā, B](implicit ev: Dual[A, Ā]): (A |*| B) -⚬ (Ā =⚬ B) =
-    id[(A |*| B) |*| Ā]           .to[ (A |*|  B) |*| Ā  ]
-      .timesAssocLR               .to[  A |*| (B  |*| Ā) ]
-      .in.snd(swap)               .to[  A |*| (Ā  |*| B) ]
-      .timesAssocRL               .to[ (A |*|  Ā) |*| B  ]
-      .elimFst(ev.rInvert)        .to[                B  ]
-      .as[ ((A |*| B) |*| Ā) -⚬ B ]
-      .curry
-
-  /** Make the function on the left ''"absorb"'' the value on the right and return it as part of its output. */
-  def absorbR[A, B, C]: ((A =⚬ B) |*| C) -⚬ (A =⚬ (B |*| C)) =
-    id[((A =⚬ B) |*| C) |*| A]  .to[ ((A =⚬ B) |*| C) |*| A ]
-      .timesAssocLR             .to[ (A =⚬ B) |*| (C |*| A) ]
-      .in.snd(swap)             .to[ (A =⚬ B) |*| (A |*| C) ]
-      .timesAssocRL             .to[ ((A =⚬ B) |*| A) |*| C ]
-      .in.fst(eval)             .to[        B         |*| C ]
-      .as[ (((A =⚬ B) |*| C) |*| A) -⚬ (B |*| C) ]
-      .curry
 
   type Maybe[A] = One |+| A
   object Maybe {

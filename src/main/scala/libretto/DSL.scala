@@ -23,12 +23,6 @@ trait DSL {
   /** Choose `A` or `B`. The consumer chooses whether to get `A` or `B`, but can get only one of them. */
   type |&|[A, B]
 
-  /** Linear function as data, that is, one that can be part of an input or output of a linear function (`-⚬`).
-    * While `A -⚬ B` is a morphism in a category, `A =⚬ B` is an object called the internal hom of `A` and `B`
-    * in a closed monoidal category.
-    */
-  type =⚬[A, B]
-
   /** Available value of type `A`. */
   type Val[A]
 
@@ -152,11 +146,6 @@ trait DSL {
 
   /** Inverse of [[coFactorR]]. */
   def coDistributeR[A, B, C]: ((A |*| C) |&| (B |*| C)) -⚬ ((A |&| B) |*| C)
-
-  def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C)
-  def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B
-  def uncurry[A, B, C](f: A -⚬ (B =⚬ C)): (A |*| B) -⚬ C =
-    andThen(par(f, id[B]), eval[B, C])
 
   /** Creates an entangled pair of demand ([[Neg]]) and supply ([[Val]]) such that when the demand is fulfilled
     * with a value, that value will be produced by the supply.
