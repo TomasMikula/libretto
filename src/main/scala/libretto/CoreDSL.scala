@@ -1,6 +1,6 @@
 package libretto
 
-trait DSL {
+trait CoreDSL {
   /** `A -⚬ B` is a function that ''consumes'' a resource of type `A` and produces a resource of type `B`.
     * Also known as linear implication.
     */

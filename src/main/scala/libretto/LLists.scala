@@ -1,16 +1,16 @@
 package libretto
 
 object LLists {
-  def apply[DSL <: libretto.DSL](dsl0: DSL)(lib0: Lib[dsl0.type]): LLists[DSL] =
+  def apply[DSL <: CoreDSL](dsl0: DSL)(lib0: CoreLib[dsl0.type]): LLists[DSL] =
     new LLists[DSL] {
       val dsl: dsl0.type = dsl0
       val lib = lib0
     }
 }
 
-sealed trait LLists[DSL <: libretto.DSL] {
+sealed trait LLists[DSL <: CoreDSL] {
   val dsl: DSL
-  val lib: Lib[dsl.type]
+  val lib: CoreLib[dsl.type]
 
   import dsl._
   import lib._

@@ -1,16 +1,16 @@
 package libretto
 
 object BinarySearchTree {
-  def apply[DSL <: libretto.DSL](dsl0: DSL)(lib0: Lib[dsl0.type]): BinarySearchTree[DSL] =
+  def apply[DSL <: CoreDSL](dsl0: DSL)(lib0: CoreLib[dsl0.type]): BinarySearchTree[DSL] =
     new BinarySearchTree[DSL] {
       val dsl: dsl0.type = dsl0
       val lib = lib0
     }
 }
 
-sealed trait BinarySearchTree[DSL <: libretto.DSL] {
+sealed trait BinarySearchTree[DSL <: CoreDSL] {
   val dsl: DSL
-  val lib: Lib[dsl.type]
+  val lib: CoreLib[dsl.type]
 
   import dsl._
   import lib._
