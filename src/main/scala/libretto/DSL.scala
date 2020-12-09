@@ -110,6 +110,12 @@ trait DSL {
   def joinNeed[A, B](f: Need -⚬ A, g: Need -⚬ B): Need -⚬ (A |*| B) =
     andThen(joinNeed, par(f, g))
 
+  /** Signals when it is decided whether `A |+| B` actually contains the left side or the right side. */
+  def signalEither[A, B]: (A |+| B) -⚬ (Done |*| (A |+| B))
+
+  /** Signals (in the negative direction) when it is known which side of the choice (`A |&| B`) has been chosen. */
+  def signalChoice[A, B]: (Need |*| (A |&| B)) -⚬ (A |&| B)
+
   def injectLWhenDone[A, B]: (Done |*| A) -⚬ (Done |*| (A |+| B))
   def injectRWhenDone[A, B]: (Done |*| B) -⚬ (Done |*| (A |+| B))
 
