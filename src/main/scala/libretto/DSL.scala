@@ -24,7 +24,8 @@ trait DSL {
   type |&|[A, B]
 
   /** Linear function as data, that is, one that can be part of an input or output of a linear function (`-⚬`).
-    * While `A -⚬ B` is a morphism in a category, `A =⚬ B` is an exponential object.
+    * While `A -⚬ B` is a morphism in a category, `A =⚬ B` is an object called the internal hom of `A` and `B`
+    * in a closed monoidal category.
     */
   type =⚬[A, B]
 

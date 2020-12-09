@@ -762,7 +762,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
     def lift[B1, B2](f: B1 -⚬ B2): (A |&| B1) -⚬ (A |&| B2) = choice[A |&| B1, A, B2](chooseL, chooseR andThen f)
   }
 
-  /** Function object (exponential) is contravariant in the input type. */
+  /** Function object (internal hom) is contravariant in the input type. */
   def input[C]: ContraFunctor[* =⚬ C] = new ContraFunctor[* =⚬ C] {
     def lift[A, B](f: A -⚬ B): (B =⚬ C) -⚬ (A =⚬ C) =
       id                       [(B =⚬ C) |*| A]
@@ -772,7 +772,7 @@ class Lib[DSL <: libretto.DSL](val dsl: DSL) { lib =>
         .curry
   }
 
-  /** Function object (exponential) is covariant in the output type. */
+  /** Function object (internal hom) is covariant in the output type. */
   def output[A]: Functor[A =⚬ *] = new Functor[A =⚬ *] {
     def lift[B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
       id                       [(A =⚬ B) |*| A]
