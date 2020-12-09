@@ -1,6 +1,6 @@
 package libretto
 
-class ClosedLib[DSL <: ClosedDSL](dsl0: DSL) extends CoreLib[DSL](dsl0) { lib =>
+class ClosedLib[DSL <: ClosedDSL with ScalaDSL](dsl0: DSL) extends CoreLib[DSL](dsl0) { lib =>
   import dsl._
 
   /** Function object (internal hom) is contravariant in the input type. */

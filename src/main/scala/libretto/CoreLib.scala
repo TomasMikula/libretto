@@ -2,7 +2,7 @@ package libretto
 
 import libretto.unapply._
 
-class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
+class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   import dsl._
 
   def const_[A](a: A): One -⚬ Val[A] =
