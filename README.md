@@ -98,7 +98,7 @@ Please, [let us know](https://github.com/TomasMikula/libretto/issues/new?labels=
 Did not find an answer to your question?
 Do not hesitate to [ask us](https://github.com/TomasMikula/libretto/issues/new?labels=question).
 
-**Is Libretto for me?**
+### Is Libretto for me?
 
 Libretto is for anyone who needs to implement concurrent systems or stream processing in Scala.
 You are more likely to appreciate Libretto if you:
@@ -108,35 +108,33 @@ You are more likely to appreciate Libretto if you:
  - hate falling back to imperative code (like the `IO` monad) when it comes to concurrency;
  - have hit an expressiveness limit of an existing library when you needed a slightly non-trivial data-flow topology.
 
-**How can libretto _statically_ guarantee that each resource is consumed exactly once when Scala does not have linear type system features?**
+### How can libretto _statically_ guarantee that each resource is consumed exactly once when Scala does not have linear type system features?
 
-**Why do I have to write libretto programs in that strange point-free style?**
+### Why do I have to write libretto programs in that strange point-free style?
 
-**What exactly are the primitives of Libretto, from which everything else is derived?**
+### What exactly are the primitives of Libretto, from which everything else is derived?
 
-**Does libretto support dynamic stream topologies?**
+### Does libretto support dynamic stream topologies?
 
-**Do libretto streams support feedback loops?**
+### Do libretto streams support feedback loops?
 
-**Is there support for timers?**
+### Is there support for timers?
 
-**How do I communicate with the external world (I/O)?**
+### How do I communicate with the external world (I/O)?
 
-**Does libretto support supervision of a subsystem?**
+### Does libretto support supervision of a subsystem?
 
-**Can I execute different parts of the system on different execution contexts/thread pools?**
+### Can I execute different parts of the system on different execution contexts/thread pools?
 
-**Does libretto have fibers, as known from ZIO or Cats Effect?**
+### Does libretto have fibers, as known from ZIO or Cats Effect?
 
-**Where is the IO monad?**
+### Where is the IO monad?
 
-**You criticize monadic IO for hiding the program structure inside impenetrable Scala functions. However,
-  Libretto allows to incorporate Scala functions and dynamically computed Scala values into the system as well.
-  Are Libretto programs any more amenable to inspection than IO programs?**
+### You criticize monadic IO for hiding the program structure inside impenetrable Scala functions. However, Libretto allows to incorporate Scala functions and dynamically computed Scala values into the system as well. Are Libretto programs any more amenable to inspection than IO programs?
 
-**Does libretto support session types?**
+### Does libretto support session types?
 
-**Why are there two different function-like symbols? What is the difference between `-⚬` and  `=⚬`?**
+### Why are there two different function-like symbols? What is the difference between `-⚬` and  `=⚬`?
 
 |         `-⚬`         |          `=⚬`           | notes |
 |:--------------------:|:-----------------------:|-------|
@@ -145,4 +143,4 @@ You are more likely to appreciate Libretto if you:
 | Pure value. As such, it can be used any number of times (including zero). | Must be treated as a resource, i.e. consumed (evaluated) exactly once, because it might have captured other resources that are consumed on evaluation. |  |
 | Morphism | Object, Internal Hom | In category theory, one does not look inside objects. Everything is expressed in terms of morphisms. In particular, objects are not viewed as collections of elements. Analogously, there are no values of type `=⚬`, or of types <code>&#124;*&#124;</code>, <code>&#124;+&#124;</code>, <code>&#124;&amp;&#124;</code>, `One`, `Val`, ... These are all objects in a category and we do not view them as collections of elements. We express everything in terms of morphisms, `-⚬`. |
 
-**How do I type the `⚬` symbol used in `-⚬` and `=⚬`?**
+### How do I type the `⚬` symbol used in `-⚬` and `=⚬`?
