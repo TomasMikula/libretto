@@ -144,3 +144,41 @@ You are more likely to appreciate Libretto if you:
 | Morphism | Object, Internal Hom | In category theory, one does not look inside objects. Everything is expressed in terms of morphisms. In particular, objects are not viewed as collections of elements. Analogously, there are no values of type `=⚬`, or of types <code>&#124;*&#124;</code>, <code>&#124;+&#124;</code>, <code>&#124;&amp;&#124;</code>, `One`, `Val`, ... These are all objects in a category and we do not view them as collections of elements. We express everything in terms of morphisms, `-⚬`. |
 
 ### How do I type the `⚬` symbol used in `-⚬` and `=⚬`?
+
+### Does Libretto prevent deadlocks?
+
+No. It is easy to write a Libretto program that gets stuck because of cyclic dependencies.
+
+Some concurrency libraries that claim to prevent deadlocks use the word deadlock in a very specific sense,
+namely _system threads_ waiting on each other in a cycle. _Thread_ is not even a term from Libretto's vocabulary,
+but you can safely assume that any implementation of Libretto does not cause deadlocks on the level of threads, either.
+
+### Could deadlocks be prevented statically, in principle?
+
+Yes.
+
+Trivially, by restricting the DSL so that it is impossible to set up a loop in the data flow.
+However, the resulting loss of expressiveness would make it unusable for most applications.
+
+A sufficiently expressive deadlock-free DSL would certainly require more sophisticated types.
+We are leaving that for further research and most likely for a different host language than Scala.
+
+### Why do we need negative values?
+
+To avoid callbacks in bidirectional dataflows.
+
+A negative value `Neg[A]` could alternatively be expressed as a callback `Val[A] =⚬ One`, but we want to avoid callbacks.
+
+### What's the problem with callbacks?
+
+ - Indirection, resource capture, side-effects, non-local interaction.
+   * The consumer of a value, instead of stating in its interface the need for a value to be supplied, prepares
+     a function object that typically captures some resources (i.e. it is a closure) and performs side-effects on them.
+   * The producer of a value, instead of stating in its interface that it produces a value, is aksed to invoke
+     the callback, which from its perspective is some foreign code, on the produced value.
+   * Through the captured resources and side-effects on them, the invocation of a callback causes spooky action
+     at a distance, which negatively affects the ability to reason about programs.
+ - Moreover, components that produce or consume callbacks are _higher-order_ linear functions in Libretto.
+   Higher-order functions are more powerful than first-order functions. (In terms of category theory, higher-order
+   functions require closedness of the category.) By the principle of least power, we should avoid high-order functions,
+   and thus callbacks, when possible.
