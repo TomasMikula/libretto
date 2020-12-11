@@ -2,37 +2,89 @@
 
 Declarative concurrency and stream processing library for Scala.
 
-In a nutshell, Libretto took inspiration from linear logic and added concurrent semantics of the multiplicative
-conjunction, primitives for racing, and primitive operator for recursion.
+## Motivation
+
+... or why another concurrency and stream processing library.
+
+Libretto grew out of frustration with existing libraries. Here is an attempt to summarize the pain points.
+
+- **Dissatisfaction with effects being a prerequisite for concurrency.**
+
+  Existing libraries tend to build concurrency on top of effects:
+  completing a `Promise` is an effect,
+  spawning an actor or a fiber is an effect,
+  enqueueing a message in a queue is an effect.
+
+  Although stream processing libraries do provide some high-level operations for declarative concurrency that abstract
+  away from the underlying effects, we haven't found a library with a set of high-level operations that
+  is expressive enough for an intermediately complex application.
+
+- **Underdelivery on the promise of writing mere _descriptions_ or _blueprints_ of programs.**
+
+  (Even in an `IO` monad style program) we still manipulate live objects with identities, such as fibers, mutable
+  references, queues, "pre-materialized" blueprints, ...
+  
+  That does not fit our idea of writing mere descriptions of programs.
+
+- **The cogintive load of making sure all the wires are connected.**
+
+  In ensuring that
+
+    * each `Promise` is completed and completed only once,
+    * every spawned computation (`Future`, actor, fiber) is awaited,
+    * all streams are consumed, all sinks are fed,
+    * all messages from a queue are processed (or _intentionally_ discarded),
+
+  programmers are typically left on their own, with no help from the type system.
+
+- **Callbacks everywhere.**
+
+  It is disappointing how callback-ridden our programs, including functional programs, are when it comes to concurrency
+  and accessing resources.
+
+  By a _callback_ we mean a function object that performs effects (on resources it has captured) and is passed to
+  someone else to be executed.
+
+  The problem with callbacks is that they create non-local interaction, which makes it hard to reason about programs.
+
+  One common example of a callback-style interface is an HTTP server taking, during construction, a request handler
+  callback. The request handler has captured resources, such as a reference to mutable state or a database connector,
+  and performs side-effects on them.
+
+- **Lack of expressivity of the high-level stream operations.**
+
+  Building custom dataflow topologies, if at all possible, requires escaping to a different paradigm, one which is
+  more low-level and imperative.
+
+  We are talking about that case when you needed a slight variation on a stream operator and ended up "manually"
+  shoveling messages between queues, mutable references and promises.
+
+- **Inability to express protocols of interaction in types.**
+
+  In practice this leads to having to handle a lot of illegal state.
+
+  To give an example, consider a protocol between two components, Alice and Bob, according to which Alice sends `A`
+  to Bob, Bob replies with `B` or `C`, and then Alice replies with `D` if Bob sent `B` and with `E` if Bob sent `C`.
+
+  In a common (but unsatisfactory) implementation, Bob formally accepts any of `A`, `D`, `E` at all times and raises
+  a runtime error if the protocol is violated.
 
 ## Design Goals
 
-- **Expressiveness.** Libretto aims to be expressive in both meanings of the word, namely in
-  - what is possible to represent at all; and
-  - how naturally things are represented.
+- **Expressiveness.** Make many things representable and make the representations natural.
 
-  Things like dynamic stream topologies, feedback loops,
-  or session types are readily expressible in Libretto, without them being primitives.
+  Dynamic stream topologies are readily expressible, without needing built-in support.
+  Even a stream itself is not a primitive, but derived from the other primitives.
+  That gives confidence that when you need something other than what is provided out-of-the-box,
+  you will be able to build it out of the provided primitives, without escaping to a different paradigm.
 
 - **Ease of reasoning about programs.** Libretto aims to achieve this goal via:
 
   - **Direct-style** programming, in which _all_ interaction of a component with its environment is stated by its
     type signature (much like inputs and outputs of a pure function).
-    
-    This is in contrast to _callback-style,_ in which a component, instead of exposing its output via an interface,
-    executes foreign code (a callback) on the produced values. Such callbacks typically perform side-effects
-    on captured resources.
-    
-    <details>
-      <summary>Example</summary>
-      A common example of callback style is an HTTP server taking a request handler callback. The request handler
-      typically captures resources, such as a database connector, and performs side-effects on them. As a result,
-      if one encounters such HTTP server in code, it is hard to reason about what it does.
-      
-      The Libretto alternative is to state in the type signature of the HTTP server that it produces requests and
-      for each request eventually requires a response.
-    </details>
-    
+
+    This is in contrast to callback-style described above and leading to spooky action at a distance.
+
     Direct-style programming is possible thanks to Libretto's ability to express interaction protocols (session types)
     in a component's interface.  
 
@@ -51,22 +103,21 @@ conjunction, primitives for racing, and primitive operator for recursion.
   Typed protocols (session types) are checked at compile time for type safety.
 
 - **Programs as data.** Libretto programs are just data structures.
-  As such, they can be inspected, manipulated, optimized, given different interpretations, ...
   
-## Why Another Stream Processing Library
+  Note that unlike monad-based programs, which are also just values, Libretto programs are not hidden inside
+  an inscrutable Scala function after the first `flatMap`.
+  
+  As such, Libretto programs can be inspected, manipulated, optimized, given different interpretations, ...
 
-Existing libraries that I know of compromise some or all of the above stated design goals.
+## Libretto in a Nutshell
 
-Implementing custom dynamic dataflow topologies with existing libraries is either not possible at all or possible only
-through escaping to low-level imperative world. In contrast, Libretto has no imperative concepts like
-pre-materialization, fibers or signalling variables, yet things like merge, broadcast, feedback loop or even
-stream itself are not primitives, but are readily implemented on top of the expressive set of primitives.
+Libretto takes inspiration from linear logic, with a twist of interpreting the multiplicative conjunction
+in a concurrent fashion.
 
-Libretto strictly separates the (description of a) program from its execution.
-In particular, there are no "blueprints" that are in fact already running.
-Libretto programs are just pure values.
-Moreover, unlike monad-based programs-as-values, Libretto programs are not hidden inside an inscrutable Scala function
-after the first `flatMap`. This opens new possibilities for what can be done with a program.
+The correspondence of linear logic to certain monoidal categories led to a point-free notation that enforces linearity
+statically, despite the lack of linear types in the host language.
+
+Primitives for racing and recursion were added.
 
 ## Documentation
 
