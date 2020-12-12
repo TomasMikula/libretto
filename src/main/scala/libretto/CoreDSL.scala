@@ -65,8 +65,11 @@ trait CoreDSL {
 
   def either[A, B, C](f: A -⚬ C, g: B -⚬ C): (A |+| B) -⚬ C
 
-  def plusAssocLR[A, B, C]: ((A |+| B) |+| C) -⚬ (A |+| (B |+| C))
-  def plusAssocRL[A, B, C]: (A |+| (B |+| C)) -⚬ ((A |+| B) |+| C)
+  def plusAssocLR[A, B, C]: ((A |+| B) |+| C) -⚬ (A |+| (B |+| C)) =
+    either(either(injectL, andThen(injectL, injectR)), andThen(injectR, injectR))
+
+  def plusAssocRL[A, B, C]: (A |+| (B |+| C)) -⚬ ((A |+| B) |+| C) =
+    either(andThen(injectL, injectL), either(andThen(injectR, injectL), injectR))
 
   def swap[A, B]: (A |*| B) -⚬ (B |*| A)
 
