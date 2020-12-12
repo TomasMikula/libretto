@@ -148,7 +148,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     */
   type Delayed[A] = Need |*| A
   object Delayed {
-    def triggerBy[A]: Done |*| Delayed[A] -⚬ A =
+    def triggerBy[A]: (Done |*| Delayed[A]) -⚬ A =
       timesAssocRL >>> elimFst(rInvertSignal)
 
     def force[A]: Delayed[A] -⚬ A =
@@ -158,13 +158,13 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   object Junction {
     /** Represents ''a'' way how `A` can await (join) a positive (i.e. [[Done]]) signal. */
     trait Positive[A] {
-      def awaitPosFst: Done |*| A -⚬ A
+      def awaitPosFst: (Done |*| A) -⚬ A
 
-      def awaitPosSnd: A |*| Done -⚬ A =
+      def awaitPosSnd: (A |*| Done) -⚬ A =
         swap >>> awaitPosFst
 
       /** Alias for [[awaitPosFst]]. */
-      def awaitPos: Done |*| A -⚬ A =
+      def awaitPos: (Done |*| A) -⚬ A =
         awaitPosFst
     }
 
@@ -183,13 +183,13 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     object Positive {
       implicit def junctionDone: Junction.Positive[Done] =
         new Junction.Positive[Done] {
-          override def awaitPosFst: Done |*| Done -⚬ Done =
+          override def awaitPosFst: (Done |*| Done) -⚬ Done =
             join
         }
 
       implicit def junctionVal[A]: Junction.Positive[Val[A]] =
         new Junction.Positive[Val[A]] {
-          override def awaitPosFst: Done |*| Val[A] -⚬ Val[A] =
+          override def awaitPosFst: (Done |*| Val[A]) -⚬ Val[A] =
             par(constVal(()), id[Val[A]]) >>> unliftPair >>> liftV(_._2)
         }
 
@@ -367,7 +367,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
       def rec[F[_]](implicit F: ∀[λ[x => Negative[F[x]]]]): Negative[Rec[F]] =
         new Negative[Rec[F]] {
-          override def signalNegFst: Need |*| Rec[F] -⚬ Rec[F] =
+          override def signalNegFst: (Need |*| Rec[F]) -⚬ Rec[F] =
             id                                     [ Need |*|   Rec[F]  ]
               .in.snd(unpack[F])                .to[ Need |*| F[Rec[F]] ]
               .andThen(F[Rec[F]].signalNegFst)  .to[          F[Rec[F]] ]
@@ -612,7 +612,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
         override def extendJunction(implicit A: Junction.Positive[A]): Junction.Positive[S |+| T] =
           new Junction.Positive[S |+| T] {
-            override def awaitPosFst: Done |*| (S |+| T) -⚬ (S |+| T) =
+            override def awaitPosFst: (Done |*| (S |+| T)) -⚬ (S |+| T) =
               distributeLR.bimap(self.joinL(A), that.joinL(A))
           }
       }
@@ -659,7 +659,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
     override def extendJunction(implicit A: Junction.Positive[A]): Junction.Positive[S] =
       new Junction.Positive[S] {
-        def awaitPosFst: Done |*| S -⚬ S = write(A.awaitPosFst)
+        def awaitPosFst: (Done |*| S) -⚬ S = write(A.awaitPosFst)
       }
 
     def andThen[B](that: Lens[A, B]): Lens[S, B] =
@@ -1117,8 +1117,8 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       .coDistributeL                .to[  (A |+| C) |*| (B  |&|                D) ]
 
   private def chooseWhenDone[A, B, C](
-    chooseWhenNeed: Need |*| (A |&| B) -⚬ (Need |*| C),
-  ): Done |*| (A |&| B) -⚬ (Done |*| C) =
+    chooseWhenNeed: (Need |*| (A |&| B)) -⚬ (Need |*| C),
+  ): (Done |*| (A |&| B)) -⚬ (Done |*| C) =
     id                                         [ Done |*|                      (A |&| B)  ]
       .in.snd(introFst(lInvertSignal))      .to[ Done |*| ((Need |*| Done) |*| (A |&| B)) ]
       .in.snd(IX)                           .to[ Done |*| ((Need |*| (A |&| B)) |*| Done) ]
@@ -1127,15 +1127,15 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       .elimFst(rInvertSignal)               .to[                         C      |*| Done  ]
       .swap                                 .to[                        Done    |*|  C    ]
 
-  def chooseLWhenDone[A, B]: Done |*| (A |&| B) -⚬ (Done |*| A) =
+  def chooseLWhenDone[A, B]: (Done |*| (A |&| B)) -⚬ (Done |*| A) =
     chooseWhenDone(chooseLWhenNeed)
 
-  def chooseRWhenDone[A, B]: Done |*| (A |&| B) -⚬ (Done |*| B) =
+  def chooseRWhenDone[A, B]: (Done |*| (A |&| B)) -⚬ (Done |*| B) =
     chooseWhenDone(chooseRWhenNeed)
 
   private def injectWhenNeed[A, B, C](
-    injectWhenDone: Done |*| C -⚬ (Done |*| (A |+| B)),
-  ): Need |*| C -⚬ (Need |*| (A |+| B)) =
+    injectWhenDone: (Done |*| C) -⚬ (Done |*| (A |+| B)),
+  ): (Need |*| C) -⚬ (Need |*| (A |+| B)) =
     id                                         [                        Need    |*|  C    ]
       .swap                                 .to[                         C      |*| Need  ]
       .introFst(lInvertSignal)              .to[ (Need |*| Done) |*| (   C      |*| Need) ]
@@ -1144,18 +1144,18 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       .in.snd(IX)                           .to[ Need |*| ((Done |*| Need) |*| (A |+| B)) ]
       .in.snd(elimFst(rInvertSignal))       .to[ Need |*|                      (A |+| B)  ]
 
-  def injectLWhenNeed[A, B]: Need |*| A -⚬ (Need |*| (A |+| B)) =
+  def injectLWhenNeed[A, B]: (Need |*| A) -⚬ (Need |*| (A |+| B)) =
     injectWhenNeed(injectLWhenDone)
 
-  def injectRWhenNeed[A, B]: Need |*| B -⚬ (Need |*| (A |+| B)) =
+  def injectRWhenNeed[A, B]: (Need |*| B) -⚬ (Need |*| (A |+| B)) =
     injectWhenNeed(injectRWhenDone)
 
-  def delayEitherUntilDone[A, B]: Done |*| (A |+| B) -⚬ (Done |*| (A |+| B)) =
+  def delayEitherUntilDone[A, B]: (Done |*| (A |+| B)) -⚬ (Done |*| (A |+| B)) =
     id                                                               [  Done |*| (A  |+|           B) ]
       .distributeLR                                               .to[ (Done |*|  A) |+| (Done |*| B) ]
       .either(injectLWhenDone[A, B], injectRWhenDone[A, B])       .to[  Done |*| (A  |+|           B) ]
 
-  def delayChoiceUntilDone[A, B]: Done |*| (A |&| B) -⚬ (Done |*| (A |&| B)) =
+  def delayChoiceUntilDone[A, B]: (Done |*| (A |&| B)) -⚬ (Done |*| (A |&| B)) =
     id                                                               [  Done |*| (A  |&|           B) ]
       .choice(chooseLWhenDone[A, B], chooseRWhenDone[A, B])       .to[ (Done |*|  A) |&| (Done |*| B) ]
       .coDistributeL                                              .to[  Done |*| (A  |&|           B) ]
@@ -1178,7 +1178,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     val constFalse: One -⚬ Bool =
       const_(()) >>> injectR
 
-    def ifThenElse[A, B, C](ifTrue: Val[Unit] |*| A -⚬ B, ifFalse: Val[Unit] |*| A -⚬ C): (Bool |*| A) -⚬ (B |+| C) =
+    def ifThenElse[A, B, C](ifTrue: (Val[Unit] |*| A) -⚬ B, ifFalse: (Val[Unit] |*| A) -⚬ C): (Bool |*| A) -⚬ (B |+| C) =
       id                                   [               Bool |*| A                ]
         .distributeRL                   .to[ (Val[Unit] |*| A) |+| (Val[Unit] |*| A) ]
         .bimap(ifTrue, ifFalse)         .to[             B     |+|             C     ]
@@ -1296,7 +1296,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def compareBy[A, B, K: Ordering](
       aKey: Getter[A, Val[K]],
       bKey: Getter[B, Val[K]],
-    ): A |*| B -⚬ Compared[A, B]
+    ): (A |*| B) -⚬ Compared[A, B]
 
     def compared[A, B, C](
       caseLt: (A |*| B) -⚬ C,
@@ -1314,15 +1314,15 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def compareBy[A, B, K: Ordering](
       aKey: Getter[A, Val[K]],
       bKey: Getter[B, Val[K]],
-    ): A |*| B -⚬ Compared[A, B] =
+    ): (A |*| B) -⚬ Compared[A, B] =
       id                                           [           A |*| B                       ]
         .andThen(ltBy(aKey, bKey))              .to[ (A |*| B) |+|           (A |*| B)       ]
         .in.right(equivBy(aKey, bKey))          .to[ (A |*| B) |+| ((A |*| B) |+| (A |*| B)) ]
 
     def compared[A, B, C](
-      caseLt: A |*| B -⚬ C,
-      caseEq: A |*| B -⚬ C,
-      caseGt: A |*| B -⚬ C,
+      caseLt: (A |*| B) -⚬ C,
+      caseEq: (A |*| B) -⚬ C,
+      caseGt: (A |*| B) -⚬ C,
     ): Compared[A, B] -⚬ C =
       either(caseLt, either(caseEq, caseGt))
 
@@ -1342,17 +1342,17 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
   def dualSymmetric[A, B](ev: Dual[A, B]): Dual[B, A] = new Dual[B, A] {
     val lInvert: One -⚬ (A |*| B) = andThen(ev.lInvert, swap)
-    val rInvert: B |*| A -⚬ One = andThen(swap, ev.rInvert)
+    val rInvert: (B |*| A) -⚬ One = andThen(swap, ev.rInvert)
   }
 
   implicit def oneSelfDual: Dual[One, One] = new Dual[One, One] {
     val lInvert: One -⚬ (One |*| One) = introSnd
-    val rInvert: One |*| One -⚬ One = elimSnd
+    val rInvert: (One |*| One) -⚬ One = elimSnd
   }
 
   def rInvertTimes[A, B, Ȧ, Ḃ](
-    rInvertA: A |*| Ȧ -⚬ One,
-    rInvertB: B |*| Ḃ -⚬ One,
+    rInvertA: (A |*| Ȧ) -⚬ One,
+    rInvertB: (B |*| Ḃ) -⚬ One,
   ): ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One =
     id[(A |*| B) |*| (Ȧ |*| Ḃ)]               .to[ (A |*| B) |*| (Ȧ |*| Ḃ) ]
       .andThen(IXI)                           .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
@@ -1377,9 +1377,9 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     }
 
   def rInvertEither[A, B, Ȧ, Ḃ](
-    rInvertA: A |*| Ȧ -⚬ One,
-    rInvertB: B |*| Ḃ -⚬ One,
-  ): (A |+| B) |*| (Ȧ |&| Ḃ) -⚬ One =
+    rInvertA: (A |*| Ȧ) -⚬ One,
+    rInvertB: (B |*| Ḃ) -⚬ One,
+  ): ((A |+| B) |*| (Ȧ |&| Ḃ)) -⚬ One =
     id                                 [ (A |+| B) |*| (Ȧ |&| Ḃ) ]
       .andThen(matchingChoiceLR)    .to[ (A |*| Ȧ) |+| (B |*| Ḃ) ]
       .either(rInvertA, rInvertB)   .to[           One           ]
@@ -1394,7 +1394,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
   implicit def eitherChoiceDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |+| B, Ȧ |&| Ḃ] =
     new Dual[A |+| B, Ȧ |&| Ḃ] {
-      val rInvert: (A |+| B) |*| (Ȧ |&| Ḃ) -⚬ One =
+      val rInvert: ((A |+| B) |*| (Ȧ |&| Ḃ)) -⚬ One =
         rInvertEither(a.rInvert, b.rInvert)
 
       val lInvert: One -⚬ ((Ȧ |&| Ḃ) |*| (A |+| B)) =

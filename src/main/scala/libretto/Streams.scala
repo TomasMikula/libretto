@@ -41,7 +41,7 @@ sealed trait Streams[DSL <: ScalaDSL] {
   type Consumer[A] = Rec[ConsumerF[A, *]]
 
   object LPollable {
-    def pack[A]: Done |&| LPolled[A] -⚬ LPollable[A] =
+    def pack[A]: (Done |&| LPolled[A]) -⚬ LPollable[A] =
       dsl.pack[LPollableF[A, *]]
 
     def unpack[A]: LPollable[A] -⚬ (Done |&| LPolled[A]) =
@@ -57,7 +57,7 @@ sealed trait Streams[DSL <: ScalaDSL] {
         .unpack             .to[ Done |&| LPolled[A] ]
         .chooseR            .to[          LPolled[A] ]
 
-    def delayedPoll[A: Junction.Positive]: Done |*| LPollable[A] -⚬ LPolled[A] =
+    def delayedPoll[A: Junction.Positive]: (Done |*| LPollable[A]) -⚬ LPolled[A] =
       id                                       [ Done |*|     LPollable[A]      ]
         .in.snd(unpack)                     .to[ Done |*| (Done |&| LPolled[A]) ]
         .andThen(chooseRWhenDone)           .to[ Done |*|           LPolled[A]  ]
@@ -129,7 +129,7 @@ sealed trait Streams[DSL <: ScalaDSL] {
         val upClosed: Done -⚬ (LPolled[A] |*| LPolled[B]) =
           fork(LPolled.empty[A], LPolled.empty[B])
 
-        val upValue: (A |+| B) |*| LPollable[A |+| B] -⚬ (LPolled[A] |*| LPolled[B]) =
+        val upValue: ((A |+| B) |*| LPollable[A |+| B]) -⚬ (LPolled[A] |*| LPolled[B]) =
           id                                 [ (A                                      |+|  B) |*|         LPollable[A |+| B]       ]
             .in.snd(self)                 .to[ (A                                      |+|  B) |*| (LPollable[A] |*| LPollable[B])  ]
             .distributeRL                 .to[ (A |*| (LPollable[A] |*| LPollable[B])) |+| (B  |*| (LPollable[A] |*| LPollable[B])) ]
@@ -184,7 +184,7 @@ sealed trait Streams[DSL <: ScalaDSL] {
     def poll[A]: Pollable[A] -⚬ Polled[A] =
       LPollable.poll[Val[A]]
 
-    def delayedPoll[A]: Done |*| Pollable[A] -⚬ Polled[A] =
+    def delayedPoll[A]: (Done |*| Pollable[A]) -⚬ Polled[A] =
       LPollable.delayedPoll[Val[A]]
 
     /** Polls and discards all elements. */
@@ -394,12 +394,12 @@ sealed trait Streams[DSL <: ScalaDSL] {
 
       def dispatchNE[A, K: Ordering, V](
         f: Val[A] -⚬ (Val[K] |*| Val[V]),
-      ): Val[A] |*| NeDT[K, V] -⚬ PMaybe[NeDT[K, V]] =
+      ): (Val[A] |*| NeDT[K, V]) -⚬ PMaybe[NeDT[K, V]] =
         id                                     [       Val[A]        |*| NeDT[K, V]  ]
           .in.fst(f)                        .to[ (Val[K] |*| Val[V]) |*| NeDT[K, V]  ]
           .andThen(dispatchNE)              .to[                  PMaybe[NeDT[K, V]] ]
 
-      def addDemanding[K: Ordering, V]: (Val[K] |*| Demanding[V]) |*| DT[K, V] -⚬ DT[K, V] =
+      def addDemanding[K: Ordering, V]: ((Val[K] |*| Demanding[V]) |*| DT[K, V]) -⚬ DT[K, V] =
         Tree.insertOrUpdate(Demanding.merge)
 
       def clear[K, V]: DT[K, V] -⚬ Done =
@@ -408,7 +408,7 @@ sealed trait Streams[DSL <: ScalaDSL] {
       def clearNE[K, V]: NeDT[K, V] -⚬ Done =
         NonEmptyTree.clear(Demanding.close >>> need >>> done)
 
-      def addSubscriber[K: Ordering, V]: (Val[K] |*| Subscriber[V]) |*| DT[K, V] -⚬ DT[K, V] =
+      def addSubscriber[K: Ordering, V]: ((Val[K] |*| Subscriber[V]) |*| DT[K, V]) -⚬ DT[K, V] =
         id                                           [ ( Val[K] |*|       Subscriber[V]                ) |*| DT[K, V] ]
           .in.fst.snd(unpack)                     .to[ ( Val[K] |*| (Need |+|             Demanding[V])) |*| DT[K, V] ]
           .in.fst(distributeLR)                   .to[ ((Val[K] |*| Need) |+| (Val[K] |*| Demanding[V])) |*| DT[K, V] ]
@@ -428,12 +428,12 @@ sealed trait Streams[DSL <: ScalaDSL] {
       val discardSubscriber: KSubs -⚬ One =
         par(dsl.neglect[K], Subscriber.close[V]) >>> rInvertSignal
 
-      val upstreamClosed: Done |*| (LPolled[KSubs] |*| DT[K, V]) -⚬ Done =
+      val upstreamClosed: (Done |*| (LPolled[KSubs] |*| DT[K, V])) -⚬ Done =
         join(id, join(LPolled.close(discardSubscriber >>> done), DT.clear))
 
       def upstreamVal(
-        goRec: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done,
-      ): (Val[A] |*| Pollable[A]) |*| (LPolled[KSubs] |*| DT[K, V]) -⚬ Done =
+        goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
+      ): ((Val[A] |*| Pollable[A]) |*| (LPolled[KSubs] |*| DT[K, V])) -⚬ Done =
         id                                   [ (Val[A] |*| Pollable[A]) |*|              (LPolled[KSubs] |*| DT[K, V]) ]
           .in.fst(swap)                   .to[ (Pollable[A] |*| Val[A]) |*|              (LPolled[KSubs] |*| DT[K, V]) ]
           .andThen(IXI)                   .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (      Val[A]        |*| DT[K, V]) ]
@@ -445,31 +445,31 @@ sealed trait Streams[DSL <: ScalaDSL] {
           .andThen(goRec)                 .to[                                                          Done           ]
 
       def onUpstream(
-        goRec: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done,
-      ): (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done =
+        goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
+      ): ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done =
         timesAssocLR      .to[ Polled[A] |*| (LPolled[KSubs] |*| DT[K, V]) ]
           .distributeRL
           .either(upstreamClosed, upstreamVal(goRec))
 
-      val feedToNEDT: Polled[A] |*| NeDT[K, V] -⚬ Done =
+      val feedToNEDT: (Polled[A] |*| NeDT[K, V]) -⚬ Done =
         LPolled.feedTo(DT.dispatchNE(f)) >>> join(id, Maybe.neglect(DT.clearNE))
 
-      val forward: Polled[A] |*| DT[K, V] -⚬ Done =
+      val forward: (Polled[A] |*| DT[K, V]) -⚬ Done =
         id                                               [  Polled[A] |*| (Done |+|                NeDT[K, V]) ]
           .distributeLR                               .to[ (Polled[A] |*| Done) |+| (Polled[A] |*| NeDT[K, V]) ]
           .in.left(join(Polled.close, id))            .to[           Done       |+| (Polled[A] |*| NeDT[K, V]) ]
           .in.right(feedToNEDT)                       .to[           Done       |+|           Done             ]
           .andThen(either(id, id))                    .to[                     Done                            ]
 
-      val subsClosed: (Polled[A] |*| Done) |*| DT[K, V] -⚬ Done =
+      val subsClosed: ((Polled[A] |*| Done) |*| DT[K, V]) -⚬ Done =
         id                             [ (Polled[A] |*| Done) |*| DT[K, V] ]
           .andThen(IX)              .to[ (Polled[A] |*| DT[K, V]) |*| Done ]
           .in.fst(forward)          .to[           Done           |*| Done ]
           .andThen(join)            .to[                         Done      ]
 
       def newSubscriber(
-        goRec: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done,
-      ): (Polled[A] |*| (KSubs |*| LPollable[KSubs])) |*| DT[K, V] -⚬ Done =
+        goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
+      ): ((Polled[A] |*| (KSubs |*| LPollable[KSubs])) |*| DT[K, V]) -⚬ Done =
         id                               [ ( Polled[A] |*| (KSubs  |*|  LPollable[KSubs])) |*| DT[K, V]  ]
         .in.fst.snd(swap)             .to[ ( Polled[A] |*| (LPollable[KSubs]  |*|  KSubs)) |*| DT[K, V]  ]
         .in.fst(timesAssocRL)         .to[ ((Polled[A] |*|  LPollable[KSubs]) |*|  KSubs ) |*| DT[K, V]  ]
@@ -479,14 +479,14 @@ sealed trait Streams[DSL <: ScalaDSL] {
         .andThen(goRec)               .to[                                   Done                        ]
 
       def onSubs(
-        goRec: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done,
-      ): (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done =
+        goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
+      ): ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done =
         id[ (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] ]
           .in.fst(distributeLR)
           .distributeRL
           .either(subsClosed, newSubscriber(goRec))
 
-      val go: (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] -⚬ Done = rec { self =>
+      val go: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done = rec { self =>
         import LPolled.positiveLPolled
 
         implicit def positiveKSubs: SignalingJunction.Positive[KSubs] =
@@ -512,7 +512,7 @@ sealed trait Streams[DSL <: ScalaDSL] {
     def empty[A]: Done -⚬ LPolled[A] =
       injectL
 
-    def cons[A]: A |*| LPollable[A] -⚬ LPolled[A] =
+    def cons[A]: (A |*| LPollable[A]) -⚬ LPolled[A] =
       injectR
 
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPolled[A]) -⚬ LPolled[A] =
@@ -523,9 +523,9 @@ sealed trait Streams[DSL <: ScalaDSL] {
         .in.right.fst(ev.awaitPosFst) .to[      Done       |+| (          A  |*| LPollable[A]) ]
 
     def feedTo[A, B](
-      f: A |*| B -⚬ PMaybe[B],
-    ): LPolled[A] |*| B -⚬ (Done |*| Maybe[B]) = rec { self =>
-      val upstreamValue: (A |*| LPollable[A]) |*| B -⚬ (Done |*| Maybe[B]) =
+      f: (A |*| B) -⚬ PMaybe[B],
+    ): (LPolled[A] |*| B) -⚬ (Done |*| Maybe[B]) = rec { self =>
+      val upstreamValue: ((A |*| LPollable[A]) |*| B) -⚬ (Done |*| Maybe[B]) =
         id                                             [ (     A       |*| LPollable[A]) |*|           B  ]
           .in.fst(swap)                             .to[ (LPollable[A] |*|      A      ) |*|           B  ]
           .timesAssocLR                             .to[  LPollable[A] |*| (    A        |*|           B) ]
@@ -537,7 +537,7 @@ sealed trait Streams[DSL <: ScalaDSL] {
           .in.right(self)                           .to[   (Done |*| Maybe[B])   |+| ( Done |*| Maybe[B]) ]
           .andThen(either(id, id))                  .to[                 (Done |*| Maybe[B])              ]
 
-      val upstreamClosed: Done |*| B -⚬ (Done |*| Maybe[B]) =
+      val upstreamClosed: (Done |*| B) -⚬ (Done |*| Maybe[B]) =
         par(id, Maybe.just)
 
       id[ (Done |+| (A |*| LPollable[A])) |*| B ]
@@ -559,7 +559,7 @@ sealed trait Streams[DSL <: ScalaDSL] {
     def empty[A]: Done -⚬ Polled[A] =
       LPolled.empty
 
-    def cons[A]: Val[A] |*| Pollable[A] -⚬ Polled[A] =
+    def cons[A]: (Val[A] |*| Pollable[A]) -⚬ Polled[A] =
       LPolled.cons
 
     def delayBy[A]: (Done |*| Polled[A]) -⚬ Polled[A] =
@@ -631,7 +631,7 @@ sealed trait Streams[DSL <: ScalaDSL] {
   }
 
   object LDemanding {
-    def supply[A, B](rInvert: A |*| B -⚬ One): (A |*| LDemanding[B]) -⚬ (Need |+| LDemanding[B]) =
+    def supply[A, B](rInvert: (A |*| B) -⚬ One): (A |*| LDemanding[B]) -⚬ (Need |+| LDemanding[B]) =
       id[ A |*| LDemanding[B] ]     .to[ A |*| (Need |&| (B |*| LSubscriber[B])) ]
       .in.snd(chooseR)              .to[ A |*|           (B |*| LSubscriber[B])  ]
       .timesAssocRL                 .to[ (A |*| B)          |*| LSubscriber[B]   ]
@@ -713,8 +713,8 @@ sealed trait Streams[DSL <: ScalaDSL] {
     dualSymmetric(producingConsumerDuality[A])
 
   def rInvertLSubscriberF[A, B, x, y](
-    rInvertA: A |*| B -⚬ One,
-    rInvertSub: x |*| y -⚬ One,
+    rInvertA: (A |*| B) -⚬ One,
+    rInvertSub: (x |*| y) -⚬ One,
   ): (LSubscriberF[B, y] |*| LPollableF[A, x]) -⚬ One =
     rInvertEither(
       swap >>> rInvertSignal,

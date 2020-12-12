@@ -217,10 +217,10 @@ sealed trait BinarySearchTree[DSL <: ScalaDSL] {
         .rec[NonEmptyTreeF[K, V, *]]
         .andThen(Singleton.keyGetter[K, V] |+| Branch.maxKey[K, V])
 
-    private def minKeyJoinL[K, V]: Done |*| NonEmptyTree[K, V] -⚬ NonEmptyTree[K, V] =
+    private def minKeyJoinL[K, V]: (Done |*| NonEmptyTree[K, V]) -⚬ NonEmptyTree[K, V] =
       minKey[K, V].extendJunction.awaitPosFst
 
-    private def maxKeyJoinR[K, V]: NonEmptyTree[K, V] |*| Done -⚬ NonEmptyTree[K, V] =
+    private def maxKeyJoinR[K, V]: (NonEmptyTree[K, V] |*| Done) -⚬ NonEmptyTree[K, V] =
       maxKey[K, V].extendJunction.awaitPosSnd
 
     private[BinarySearchTree] def update_[K: Ordering, V, W, F[_]](
@@ -246,7 +246,7 @@ sealed trait BinarySearchTree[DSL <: ScalaDSL] {
       F: Absorptive[F],
     ): ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] = {
       val intoR: ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] = {
-        val absorbSingleton: Singleton[K, V] |*| F[NonEmptyTree[K, V]] -⚬ F[NonEmptyTree[K, V]] =
+        val absorbSingleton: (Singleton[K, V] |*| F[NonEmptyTree[K, V]]) -⚬ F[NonEmptyTree[K, V]] =
           F.absorbL(par(injectSingleton[K, V], id[NonEmptyTree[K, V]]) >>> branch, Singleton.keyJoinR >>> injectSingleton)
 
         id                                                       [     (Val[K] |*| W) |*|    Singleton[K, V]    ]
@@ -258,7 +258,7 @@ sealed trait BinarySearchTree[DSL <: ScalaDSL] {
       }
 
       val intoL: ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] = {
-        val absorbSingleton: F[NonEmptyTree[K, V]] |*| Singleton[K, V] -⚬ F[NonEmptyTree[K, V]] =
+        val absorbSingleton: (F[NonEmptyTree[K, V]] |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] =
           F.absorbR(par(id[NonEmptyTree[K, V]], injectSingleton[K, V]) >>> branch, Singleton.keyJoinL >>> injectSingleton)
 
         id                                                       [  (Val[K] |*|  W     ) |*|   Singleton[K, V]  ]
@@ -310,17 +310,17 @@ sealed trait BinarySearchTree[DSL <: ScalaDSL] {
     }
 
     def update[K: Ordering, V, A](
-      f: A |*| V -⚬ PMaybe[V],
-    ): (Val[K] |*| A) |*| NonEmptyTree[K, V] -⚬ (PMaybe[A] |*| PMaybe[NonEmptyTree[K, V]]) =
+      f: (A |*| V) -⚬ PMaybe[V],
+    ): ((Val[K] |*| A) |*| NonEmptyTree[K, V]) -⚬ (PMaybe[A] |*| PMaybe[NonEmptyTree[K, V]]) =
       update_[K, V, A, λ[x => PMaybe[A] |*| PMaybe[x]]](
         ins = PMaybe.just[A] >>> introSnd(done >>> PMaybe.empty[V]),
         upd = f >>> introFst(done >>> PMaybe.empty[A]),
       )
 
     def update[K: Ordering, V, A](
-      f: A |*| V -⚬ PMaybe[V],
+      f: (A |*| V) -⚬ PMaybe[V],
       ifAbsent: A -⚬ Done,
-    ): (Val[K] |*| A) |*| NonEmptyTree[K, V] -⚬ PMaybe[NonEmptyTree[K, V]] =
+    ): ((Val[K] |*| A) |*| NonEmptyTree[K, V]) -⚬ PMaybe[NonEmptyTree[K, V]] =
       update_[K, V, A, PMaybe](
         ins = ifAbsent >>> PMaybe.empty[V],
         upd = f,
@@ -395,8 +395,8 @@ sealed trait BinarySearchTree[DSL <: ScalaDSL] {
   }
 
   def update[K: Ordering, V, A](
-    f: A |*| V -⚬ PMaybe[V],
-  ): (Val[K] |*| A) |*| Tree[K, V] -⚬ (PMaybe[A] |*| Tree[K, V]) =
+    f: (A |*| V) -⚬ PMaybe[V],
+  ): ((Val[K] |*| A) |*| Tree[K, V]) -⚬ (PMaybe[A] |*| Tree[K, V]) =
     update_[K, V, A, λ[x => PMaybe[A] |*| PMaybe[x]]](
       ins = PMaybe.just[A] >>> introSnd(done >>> PMaybe.empty[V]),
       upd = f >>> introFst(done >>> PMaybe.empty[A]),
@@ -404,9 +404,9 @@ sealed trait BinarySearchTree[DSL <: ScalaDSL] {
       .in.snd(PMaybe.getOrElse(empty[K, V]))
 
   def update[K: Ordering, V, A](
-    f: A |*| V -⚬ PMaybe[V],
+    f: (A |*| V) -⚬ PMaybe[V],
     ifAbsent: A -⚬ Done,
-  ): (Val[K] |*| A) |*| Tree[K, V] -⚬ Tree[K, V] =
+  ): ((Val[K] |*| A) |*| Tree[K, V]) -⚬ Tree[K, V] =
     update_[K, V, A, PMaybe](
       ins = ifAbsent >>> PMaybe.empty[V],
       upd = f,
@@ -437,16 +437,16 @@ sealed trait BinarySearchTree[DSL <: ScalaDSL] {
         override def lift[A, B](f: A -⚬ B): G[F[A]] -⚬ G[F[B]] =
           G.lift(F.lift(f))
 
-        override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]): A |*| G[F[B]] -⚬ G[F[A |*| B]] =
+        override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]): (A |*| G[F[B]]) -⚬ G[F[A |*| B]] =
           G.inL >>> G.lift(F.absorbOrNeglectL)
 
-        override def absorbOrNeglectR[A, B](implicit B: PComonoid[B]): G[F[A]] |*| B -⚬ G[F[A |*| B]] =
+        override def absorbOrNeglectR[A, B](implicit B: PComonoid[B]): (G[F[A]] |*| B) -⚬ G[F[A |*| B]] =
           G.inR >>> G.lift(F.absorbOrNeglectR)
 
-        override def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A |*| Done -⚬ C): A |*| G[F[B]] -⚬ G[F[C]] =
+        override def absorbL[A, B, C](combine: (A |*| B) -⚬ C, recover: (A |*| Done) -⚬ C): (A |*| G[F[B]]) -⚬ G[F[C]] =
           G.inL >>> G.lift(F.absorbL(combine, recover))
 
-        override def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: Done |*| B -⚬ C): G[F[A]] |*| B -⚬ G[F[C]] =
+        override def absorbR[A, B, C](combine: (A |*| B) -⚬ C, recover: (Done |*| B) -⚬ C): (G[F[A]] |*| B) -⚬ G[F[C]] =
           G.inR >>> G.lift(F.absorbR(combine, recover))
       }
   }
@@ -457,16 +457,16 @@ sealed trait BinarySearchTree[DSL <: ScalaDSL] {
         override def lift[A, B](f: A -⚬ B): F[A] -⚬ F[B] =
           F.lift(f)
 
-        override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]): A |*| F[B] -⚬ F[A |*| B] =
+        override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]): (A |*| F[B]) -⚬ F[A |*| B] =
           F.inL
 
-        override def absorbOrNeglectR[A, B](implicit B: PComonoid[B]): F[A] |*| B -⚬ F[A |*| B] =
+        override def absorbOrNeglectR[A, B](implicit B: PComonoid[B]): (F[A] |*| B) -⚬ F[A |*| B] =
           F.inR
 
-        override def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A |*| Done -⚬ C): A |*| F[B] -⚬ F[C] =
+        override def absorbL[A, B, C](combine: (A |*| B) -⚬ C, recover: (A |*| Done) -⚬ C): (A |*| F[B]) -⚬ F[C] =
           F.inL >>> F.lift(combine)
 
-        override def absorbR[A, B, C](combine: A |*| B -⚬ C, recover: Done |*| B -⚬ C): F[A] |*| B -⚬ F[C] =
+        override def absorbR[A, B, C](combine: (A |*| B) -⚬ C, recover: (Done |*| B) -⚬ C): (F[A] |*| B) -⚬ F[C] =
           F.inR >>> F.lift(combine)
       }
 
@@ -478,13 +478,13 @@ sealed trait BinarySearchTree[DSL <: ScalaDSL] {
         override def lift[A, B](f: A -⚬ B): PMaybe[A] -⚬ PMaybe[B] =
           Bifunctor[|+|].lift(id, f)
 
-        override def absorbL[A, B, C](combine: A |*| B -⚬ C, recover: A |*| Done -⚬ C): A |*| PMaybe[B] -⚬ PMaybe[C] =
+        override def absorbL[A, B, C](combine: (A |*| B) -⚬ C, recover: (A |*| Done) -⚬ C): (A |*| PMaybe[B]) -⚬ PMaybe[C] =
           id[A |*| PMaybe[B]]                     .to[ A |*| (Done  |+|        B) ]
             .distributeLR                         .to[ (A |*| Done) |+| (A |*| B) ]
             .either(recover, combine)             .to[               C            ]
             .injectR                              .to[        PMaybe[C]           ]
 
-        override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]): A |*| PMaybe[B] -⚬ PMaybe[A |*| B] =
+        override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]):( A |*| PMaybe[B]) -⚬ PMaybe[A |*| B] =
           id[A |*| PMaybe[B]]                     .to[ A |*|    (Done  |+|        B) ]
             .distributeLR                         .to[ (A    |*| Done) |+| (A |*| B) ]
             .in.left.fst(A.counit)                .to[ (Done |*| Done) |+| (A |*| B) ]
