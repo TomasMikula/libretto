@@ -592,10 +592,10 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def getR(implicit A: Cosemigroup[A]): S -⚬ (S |*| A) =
       getL >>> swap
 
-    def joinL(A: Junction.Positive[A]): (Done |*| S) -⚬ S =
+    def joinL(implicit A: Junction.Positive[A]): (Done |*| S) -⚬ S =
       extendJunction(A).awaitPosFst
 
-    def joinR(A: Junction.Positive[A]): (S |*| Done) -⚬ S =
+    def joinR(implicit A: Junction.Positive[A]): (S |*| Done) -⚬ S =
       swap >>> joinL(A)
 
     def andThen[B](that: Getter[A, B]): Getter[S, B] =
@@ -621,19 +621,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
               distributeLR.bimap(self.joinL(A), that.joinL(A))
           }
       }
-
-    def awaitL[A0](implicit ev: A =:= Val[A0]): (Val[Unit] |*| S) -⚬ S =
-      par(neglect[Unit], id[S]) >>> awaitDoneL[A0]
-
-    def awaitR[A0](implicit ev: A =:= Val[A0]): (S |*| Val[Unit]) -⚬ S =
-      swap >>> awaitL
-
-    def awaitDoneL[A0](implicit ev: A =:= Val[A0]): (Done |*| S) -⚬ S =
-      ev.substituteCo(this)
-        .joinL(Junction.Positive.junctionVal[A0])
-
-    def awaitDoneR[A0](implicit ev: A =:= Val[A0]): (S |*| Done) -⚬ S =
-      swap >>> awaitDoneL
   }
 
   object Getter {
@@ -1239,7 +1226,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     pred: (K, K) => Boolean,
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) = {
     val awaitL: (Val[Unit] |*| (A |*| B)) -⚬ (A |*| B) =
-      (aKey compose fst[B].lens[A]).awaitL
+      par(neglect[Unit], id) >>> (aKey compose fst[B].lens[A]).joinL
 
     id[A |*| B]
       .par(aKey.getL, bKey.getL)
