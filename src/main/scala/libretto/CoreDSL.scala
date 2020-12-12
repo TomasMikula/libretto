@@ -78,6 +78,12 @@ trait CoreDSL {
 
   def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C)
 
+  def choiceAssocLR[A, B, C]: ((A |&| B) |&| C) -⚬ (A |&| (B |&| C)) =
+    choice(andThen(chooseL, chooseL), choice(andThen(chooseL, chooseR), chooseR))
+
+  def choiceAssocRL[A, B, C]: (A |&| (B |&| C)) -⚬ ((A |&| B) |&| C) =
+    choice(choice(chooseL, andThen(chooseR, chooseL)), andThen(chooseR, chooseR))
+
   def done: One -⚬ Done
   def need: Need -⚬ One
 
