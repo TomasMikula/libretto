@@ -1,6 +1,4 @@
-scalaVersion := "2.13.4"
-
-addCompilerPlugin("org.typelevel" % "kind-projector" % "0.11.2" cross CrossVersion.full)
+scalaVersion := "3.0.0-M2"
 
 lazy val libretto = project
 //  .settings(...)
@@ -17,4 +15,5 @@ lazy val docs = project
 
 scalacOptions ++= Seq(
   "-deprecation",
+  "-Ykind-projector", // support '*' as a placeholder in type lambdas
 )
