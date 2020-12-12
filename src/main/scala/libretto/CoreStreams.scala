@@ -13,11 +13,8 @@ class CoreStreams[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
   val dsl: DSL,
   val lib: Lib with CoreLib[dsl.type],
 ) {
-  private val Tree = BinarySearchTree(dsl, lib)
-
   import dsl._
   import lib._
-  import Tree._
 
   type LPollableF[A, X] = Done |&| (Done |+| (A |*| X))
   type LPollable[A] = Rec[LPollableF[A, *]]
