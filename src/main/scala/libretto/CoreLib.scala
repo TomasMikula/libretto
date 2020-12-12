@@ -1162,18 +1162,18 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       rec { (cd: C -⚬ D) => g(rec { (ab: A -⚬ B) => f(ab, cd) }, cd) },
     )
 
-  type Bool = Val[Unit] |+| Val[Unit]
+  type Bool = Done |+| Done
   object Bool {
     val constTrue: One -⚬ Bool =
-      const_(()) >>> injectL
+      done >>> injectL
 
     val constFalse: One -⚬ Bool =
-      const_(()) >>> injectR
+      done >>> injectR
 
-    def ifThenElse[A, B, C](ifTrue: (Val[Unit] |*| A) -⚬ B, ifFalse: (Val[Unit] |*| A) -⚬ C): (Bool |*| A) -⚬ (B |+| C) =
-      id                                   [               Bool |*| A                ]
-        .distributeRL                   .to[ (Val[Unit] |*| A) |+| (Val[Unit] |*| A) ]
-        .bimap(ifTrue, ifFalse)         .to[             B     |+|             C     ]
+    def ifThenElse[A, B, C](ifTrue: (Done |*| A) -⚬ B, ifFalse: (Done |*| A) -⚬ C): (Bool |*| A) -⚬ (B |+| C) =
+      id                                   [          Bool |*| A           ]
+        .distributeRL                   .to[ (Done |*| A) |+| (Done |*| A) ]
+        .bimap(ifTrue, ifFalse)         .to[        B     |+|        C     ]
 
     private val eitherToBoolean: Either[Unit, Unit] => Boolean = {
       case Left(())  => true
@@ -1189,12 +1189,14 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       id                                     [ Val[Boolean]            ]
         .andThen(liftV(booleanToEither))  .to[ Val[Either[Unit, Unit]] ]
         .andThen(liftEither)              .to[ Val[Unit] |+| Val[Unit] ]
+        .bimap(neglect, neglect)          .to[   Done    |+|   Done    ]
     }
 
     def unliftBoolean: Bool -⚬ Val[Boolean] =
-      id[Bool]                            .to[ Val[Unit] |+| Val[Unit] ]
-      .andThen(unliftEither)              .to[ Val[Either[Unit, Unit]] ]
-      .andThen(liftV(eitherToBoolean))    .to[      Val[Boolean]       ]
+      id[Bool]                              .to[   Done    |+|   Done    ]
+        .bimap(constVal(()), constVal(()))  .to[ Val[Unit] |+| Val[Unit] ]
+        .andThen(unliftEither)              .to[ Val[Either[Unit, Unit]] ]
+        .andThen(liftV(eitherToBoolean))    .to[      Val[Boolean]       ]
   }
 
   import Bool._
@@ -1225,8 +1227,8 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     bKey: Getter[B, Val[K]],
     pred: (K, K) => Boolean,
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) = {
-    val awaitL: (Val[Unit] |*| (A |*| B)) -⚬ (A |*| B) =
-      par(neglect[Unit], id) >>> (aKey compose fst[B].lens[A]).joinL
+    val awaitL: (Done |*| (A |*| B)) -⚬ (A |*| B) =
+      (aKey compose fst[B].lens[A]).joinL
 
     id[A |*| B]
       .par(aKey.getL, bKey.getL)
