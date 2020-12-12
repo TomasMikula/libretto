@@ -154,7 +154,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   type Delayed[A] = Need |*| A
   object Delayed {
     def triggerBy[A]: (Done |*| Delayed[A]) -⚬ A =
-      timesAssocRL >>> elimFst(rInvertSignal)
+      |*|.assocRL >>> elimFst(rInvertSignal)
 
     def force[A]: Delayed[A] -⚬ A =
       elimFst(need)
@@ -201,7 +201,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       def byFst[A, B](implicit A: Junction.Positive[A]): Junction.Positive[A |*| B] =
         new Junction.Positive[A |*| B] {
           override def awaitPosFst: (Done |*| (A |*| B)) -⚬ (A |*| B) =
-            timesAssocRL.in.fst(A.awaitPosFst)
+            |*|.assocRL.in.fst(A.awaitPosFst)
         }
 
       def eitherInstance[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |+| B] =
@@ -360,7 +360,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       def byFst[A, B](implicit A: Signaling.Negative[A]): Signaling.Negative[A |*| B] =
         new Signaling.Negative[A |*| B] {
           override def signalNegFst: (Need |*| (A |*| B)) -⚬ (A |*| B) =
-            timesAssocRL.in.fst(A.signalNegFst)
+            |*|.assocRL.in.fst(A.signalNegFst)
         }
 
       /** Signals when the choice is made between [[A]] and [[B]]. */
@@ -537,7 +537,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       .in.fst(raceCompletion)                     .to[         (Done |+| Done) |*| (A |*| B)         ]
       .distributeRL                               .to[ (Done |*| (A |*| B)) |+| (Done |*| (A |*| B)) ]
       .in.left(XI.in.snd(B.awaitPos))             .to[           (A |*| B)  |+| (Done |*| (A |*| B)) ]
-      .in.right(timesAssocRL.in.fst(A.awaitPos))  .to[           (A |*| B) |+|            (A |*| B)  ]
+      .in.right(|*|.assocRL.in.fst(A.awaitPos))   .to[           (A |*| B) |+|            (A |*| B)  ]
 
   def race[A: SignalingJunction.Positive, B: SignalingJunction.Positive, C](
     caseFstWins: (A |*| B) -⚬ C,
@@ -553,7 +553,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       .in.choiceL.snd(B.awaitNeg)     .to[ (A |*| (Need |*| B)) |&|           (A |*| B)  ]
       .in.choiceL(XI)                 .to[ (Need |*| (A |*| B)) |&|           (A |*| B)  ]
       .in.choiceR.fst(A.awaitNeg)     .to[ (Need |*| (A |*| B)) |&| ((Need |*| A) |*| B) ]
-      .in.choiceR(timesAssocLR)       .to[ (Need |*| (A |*| B)) |&| (Need |*| (A |*| B)) ]
+      .in.choiceR.assocLR             .to[ (Need |*| (A |*| B)) |&| (Need |*| (A |*| B)) ]
       .coDistributeR                  .to[         (Need |&| Need) |*| (A |*| B)         ]
       .in.fst(selectRequest)          .to[         (Need |*| Need) |*| (A |*| B)         ]
       .andThen(IXI)                   .to[         (Need |*| A) |*| (Need |*| B)         ]
@@ -703,12 +703,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     }
   }
 
-  def liftFst[A, B, C](f: A -⚬ C): (A |*| B) -⚬ (C |*| B) = par(f, id)
-  def liftSnd[A, B, C](f: B -⚬ C): (A |*| B) -⚬ (A |*| C) = par(id, f)
-
-  def liftL[A, B, C](f: A -⚬ C): (A |+| B) -⚬ (C |+| B) = either(f andThen injectL, injectR)
-  def liftR[A, B, C](f: B -⚬ C): (A |+| B) -⚬ (A |+| C) = either(injectL, f andThen injectR)
-
   type Id[A] = A
 
   implicit val idFunctor: Transportive[Id] = new Transportive[Id] {
@@ -717,56 +711,81 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def outL[A, B]: Id[A |*| B] -⚬ (A |*| Id[B]) = id
   }
 
-  /** Product is covariant in the first argument. */
-  implicit def fst[B]: Transportive[λ[x => x |*| B]] = new Transportive[λ[x => x |*| B]] {
-    def lift[A1, A2](f: A1 -⚬ A2): (A1 |*| B) -⚬ (A2 |*| B) = liftFst(f)
-    def inL[A1, A2]: (A1 |*| (A2 |*| B)) -⚬ ((A1 |*| A2) |*| B) = timesAssocRL
-    def outL[A1, A2]: ((A1 |*| A2) |*| B) -⚬ (A1 |*| (A2 |*| B)) = timesAssocLR
+  object |*| {
+    def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) = dsl.timesAssocLR
+    def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) = dsl.timesAssocRL
+
+    val bifunctor: Bifunctor[|*|] =
+      new Bifunctor[|*|] {
+        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |*| C) -⚬ (B |*| D) =
+          par(f, g)
+      }
+
+    /** Product is covariant in the first argument. */
+    def fst[B]: Transportive[λ[x => x |*| B]] =
+      new Transportive[λ[x => x |*| B]] {
+        def lift[A1, A2](f: A1 -⚬ A2): (A1 |*| B) -⚬ (A2 |*| B) = par(f, id)
+        def inL[A1, A2]: (A1 |*| (A2 |*| B)) -⚬ ((A1 |*| A2) |*| B) = assocRL
+        def outL[A1, A2]: ((A1 |*| A2) |*| B) -⚬ (A1 |*| (A2 |*| B)) = assocLR
+      }
+
+    /** Product is covariant in the second argument. */
+    def snd[A]: Transportive[λ[x => A |*| x]] =
+      new Transportive[λ[x => A |*| x]] {
+        def lift[B1, B2](f: B1 -⚬ B2): (A |*| B1) -⚬ (A |*| B2) = par(id, f)
+        def inL[B1, B2]: (B1 |*| (A |*| B2)) -⚬ (A |*| (B1 |*| B2)) =
+          assocRL[B1, A, B2].in.fst(swap).assocLR
+        def outL[B1, B2]: (A |*| (B1 |*| B2)) -⚬ (B1 |*| (A |*| B2)) =
+          assocRL[A, B1, B2].in.fst(swap).assocLR
+      }
   }
 
-  /** Product is covariant in the second argument. */
-  implicit def snd[A]: Transportive[λ[x => A |*| x]] = new Transportive[λ[x => A |*| x]] {
-    def lift[B1, B2](f: B1 -⚬ B2): (A |*| B1) -⚬ (A |*| B2) = liftSnd(f)
-    def inL[B1, B2]: (B1 |*| (A |*| B2)) -⚬ (A |*| (B1 |*| B2)) =
-      timesAssocRL[B1, A, B2].in.fst(swap).assocLR
-    def outL[B1, B2]: (A |*| (B1 |*| B2)) -⚬ (B1 |*| (A |*| B2)) =
-      timesAssocRL[A, B1, B2].in.fst(swap).assocLR
+  object |+| {
+    def assocLR[A, B, C]: ((A |+| B) |+| C) -⚬ (A |+| (B |+| C)) = dsl.plusAssocLR
+    def assocRL[A, B, C]: (A |+| (B |+| C)) -⚬ ((A |+| B) |+| C) = dsl.plusAssocRL
+
+    val bifunctor: Bifunctor[|+|] =
+      new Bifunctor[|+|] {
+        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
+          either(f andThen injectL, g andThen injectR)
+      }
+
+    /** Disjoint union is covariant in the left argument. */
+    def left[B]: Functor[λ[x => x |+| B]] =
+      bifunctor.fst[B]
+
+    /** Disjoint union is covariant in the right argument. */
+    def right[A]: Functor[λ[x => A |+| x]] =
+      bifunctor.snd[A]
   }
 
-  /** Disjoint union is covariant in the left argument. */
-  def left[B]: Functor[λ[x => x |+| B]] = new Functor[λ[x => x |+| B]] {
-    def lift[A1, A2](f: A1 -⚬ A2): (A1 |+| B) -⚬ (A2 |+| B) = liftL(f)
+  object |&| {
+    def assocLR[A, B, C]: ((A |&| B) |&| C) -⚬ (A |&| (B |&| C)) = dsl.choiceAssocLR
+    def assocRL[A, B, C]: (A |&| (B |&| C)) -⚬ ((A |&| B) |&| C) = dsl.choiceAssocRL
+
+    val bifunctor: Bifunctor[|&|] =
+      new Bifunctor[|&|] {
+        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
+          choice(chooseL andThen f, chooseR andThen g)
+      }
+
+    /** Choice is covariant in the left argument. */
+    def left[B]: Functor[λ[x => x |&| B]] =
+      bifunctor.fst[B]
+
+    /** Choice is covariant in the right argument. */
+    def right[A]: Functor[λ[x => A |&| x]] =
+      bifunctor.snd[A]
   }
 
-  /** Disjoint union is covariant in the right argument. */
-  def right[A]: Functor[λ[x => A |+| x]] = new Functor[λ[x => A |+| x]] {
-    def lift[B1, B2](f: B1 -⚬ B2): (A |+| B1) -⚬ (A |+| B2) = liftR(f)
-  }
+  implicit def fst[B]: Transportive[λ[x => x |*| B]] = |*|.fst[B]
+  implicit def snd[A]: Transportive[λ[x => A |*| x]] = |*|.snd[A]
 
-  /** Choice is covariant in the left argument. */
-  def choiceL[B]: Functor[λ[x => x |&| B]] = new Functor[λ[x => x |&| B]] {
-    def lift[A1, A2](f: A1 -⚬ A2): (A1 |&| B) -⚬ (A2 |&| B) = choice[A1 |&| B, A2, B](chooseL andThen f, chooseR)
-  }
+  implicit val tensorBifunctor: Bifunctor[|*|] = |*|.bifunctor
 
-  /** Choice is covariant in the right argument. */
-  def choiceR[A]: Functor[λ[x => A |&| x]] = new Functor[λ[x => A |&| x]] {
-    def lift[B1, B2](f: B1 -⚬ B2): (A |&| B1) -⚬ (A |&| B2) = choice[A |&| B1, A, B2](chooseL, chooseR andThen f)
-  }
+  implicit val eitherBifunctor: Bifunctor[|+|] = |+|.bifunctor
 
-  implicit val tensorBifunctor: Bifunctor[|*|]= new Bifunctor[|*|] {
-    def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |*| C) -⚬ (B |*| D) =
-      par(f, g)
-  }
-
-  implicit val eitherBifunctor: Bifunctor[|+|] = new Bifunctor[|+|] {
-    def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
-      either(f andThen injectL, g andThen injectR)
-  }
-
-  implicit val choiceBifunctor: Bifunctor[|&|]= new Bifunctor[|&|] {
-    def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
-      choice(chooseL andThen f, chooseR andThen g)
-  }
+  implicit val choiceBifunctor: Bifunctor[|&|] = |&|.bifunctor
 
   implicit class LinearFunctionOps[A, B](self: A -⚬ B) {
     /** No-op used for documentation purposes: explicitly states the input type of this linear function. */
@@ -883,18 +902,18 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
   implicit class LinearFunctionToTimesOps[A, B1, B2](self: A -⚬ (B1 |*| B2)) {
     def assocLR[X, Y](implicit ev: B1 =:= (X |*| Y)): A -⚬ (X |*| (Y |*| B2)) =
-      ev.substituteCo[λ[x => A -⚬ (x |*| B2)]](self) >>> dsl.timesAssocLR
+      ev.substituteCo[λ[x => A -⚬ (x |*| B2)]](self) >>> |*|.assocLR
 
     def assocRL[X, Y](implicit ev: B2 =:= (X |*| Y)): A -⚬ ((B1 |*| X) |*| Y) =
-      ev.substituteCo[λ[x => A -⚬ (B1 |*| x)]](self) >>> dsl.timesAssocRL
+      ev.substituteCo[λ[x => A -⚬ (B1 |*| x)]](self) >>> |*|.assocRL
   }
 
   implicit class LinearFunctionToPlusOps[A, B1, B2](self: A -⚬ (B1 |+| B2)) {
     def assocLR[X, Y](implicit ev: B1 =:= (X |+| Y)): A -⚬ (X |+| (Y |+| B2)) =
-      ev.substituteCo[λ[x => A -⚬ (x |+| B2)]](self) >>> dsl.plusAssocLR
+      ev.substituteCo[λ[x => A -⚬ (x |+| B2)]](self) >>> |+|.assocLR
 
     def assocRL[X, Y](implicit ev: B2 =:= (X |+| Y)): A -⚬ ((B1 |+| X) |+| Y) =
-      ev.substituteCo[λ[x => A -⚬ (B1 |+| x)]](self) >>> dsl.plusAssocRL
+      ev.substituteCo[λ[x => A -⚬ (B1 |+| x)]](self) >>> |+|.assocRL
   }
 
   class BimapSyntax[F[_, _], A, B](self: A -⚬ B) {
@@ -950,21 +969,21 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
   implicit class FocusedFunctionOutputOnTimesCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 |*| B2]) {
     def fst: FocusedFunctionOutputCo[A, λ[x => F[x |*| B2]], B1] =
-      f.zoomCo(lib.fst[B2])
+      f.zoomCo(|*|.fst[B2])
 
     def snd: FocusedFunctionOutputCo[A, λ[x => F[B1 |*| x]], B2] =
-      f.zoomCo(lib.snd[B1])
+      f.zoomCo(|*|.snd[B1])
 
     def assocLR[X, Y](implicit ev: B1 =:= (X |*| Y)): A -⚬ F[X |*| (Y |*| B2)] = {
       val g: FocusedFunctionOutputCo[A, F, (X |*| Y) |*| B2] =
         ev.substituteCo[λ[x => FocusedFunctionOutputCo[A, F, x |*| B2]]](f)
-      g(dsl.timesAssocLR)
+      g(|*|.assocLR)
     }
 
     def assocRL[X, Y](implicit ev: B2 =:= (X |*| Y)): A -⚬ F[(B1 |*| X) |*| Y] = {
       val g: FocusedFunctionOutputCo[A, F, B1 |*| (X |*| Y)] =
         ev.substituteCo[λ[x => FocusedFunctionOutputCo[A, F, B1 |*| x]]](f)
-      g(dsl.timesAssocRL)
+      g(|*|.assocRL)
     }
 
     def joinL(neglect: B1 -⚬ Done)(implicit j: Junction.Positive[B2]): A -⚬ F[B2] =
@@ -984,41 +1003,41 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
   implicit class FocusedFunctionOutputOnPlusCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 |+| B2]) {
     def left: FocusedFunctionOutputCo[A, λ[x => F[x |+| B2]], B1] =
-      f.zoomCo(lib.left[B2])
+      f.zoomCo(|+|.left[B2])
 
     def right: FocusedFunctionOutputCo[A, λ[x => F[B1 |+| x]], B2] =
-      f.zoomCo(lib.right[B1])
+      f.zoomCo(|+|.right[B1])
 
     def assocLR[X, Y](implicit ev: B1 =:= (X |+| Y)): A -⚬ F[X |+| (Y |+| B2)] = {
       val g: FocusedFunctionOutputCo[A, F, (X |+| Y) |+| B2] =
         ev.substituteCo[λ[x => FocusedFunctionOutputCo[A, F, x |+| B2]]](f)
-      g(dsl.plusAssocLR)
+      g(|+|.assocLR)
     }
 
     def assocRL[X, Y](implicit ev: B2 =:= (X |+| Y)): A -⚬ F[(B1 |+| X) |+| Y] = {
       val g: FocusedFunctionOutputCo[A, F, B1 |+| (X |+| Y)] =
         ev.substituteCo[λ[x => FocusedFunctionOutputCo[A, F, B1 |+| x]]](f)
-      g(dsl.plusAssocRL)
+      g(|+|.assocRL)
     }
   }
 
   implicit class FocusedFunctionOutputOnChoiceCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 |&| B2]) {
     def choiceL: FocusedFunctionOutputCo[A, λ[x => F[x |&| B2]], B1] =
-      f.zoomCo(lib.choiceL[B2])
+      f.zoomCo(|&|.left[B2])
 
     def choiceR: FocusedFunctionOutputCo[A, λ[x => F[B1 |&| x]], B2] =
-      f.zoomCo(lib.choiceR[B1])
+      f.zoomCo(|&|.right[B1])
 
     def assocLR[X, Y](implicit ev: B1 =:= (X |&| Y)): A -⚬ F[X |&| (Y |&| B2)] = {
       val g: FocusedFunctionOutputCo[A, F, (X |&| Y) |&| B2] =
         ev.substituteCo[λ[x => FocusedFunctionOutputCo[A, F, x |&| B2]]](f)
-      g(dsl.choiceAssocLR)
+      g(|&|.assocLR)
     }
 
     def assocRL[X, Y](implicit ev: B2 =:= (X |&| Y)): A -⚬ F[(B1 |&| X) |&| Y] = {
       val g: FocusedFunctionOutputCo[A, F, B1 |&| (X |&| Y)] =
         ev.substituteCo[λ[x => FocusedFunctionOutputCo[A, F, B1 |&| x]]](f)
-      g(dsl.choiceAssocRL)
+      g(|&|.assocRL)
     }
   }
 
@@ -1047,26 +1066,26 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
   implicit class FocusedFunctionOutputOnTimesContra[A, F[_], B1, B2](f: FocusedFunctionOutputContra[A, F, B1 |*| B2]) {
     def fst: FocusedFunctionOutputContra[A, λ[x => F[x |*| B2]], B1] =
-      f.zoomCo(lib.fst[B2])
+      f.zoomCo(|*|.fst[B2])
 
     def snd: FocusedFunctionOutputContra[A, λ[x => F[B1 |*| x]], B2] =
-      f.zoomCo(lib.snd[B1])
+      f.zoomCo(|*|.snd[B1])
   }
 
   implicit class FocusedFunctionOutputOnPlusContra[A, F[_], B1, B2](f: FocusedFunctionOutputContra[A, F, B1 |+| B2]) {
     def left: FocusedFunctionOutputContra[A, λ[x => F[x |+| B2]], B1] =
-      f.zoomCo(lib.left[B2])
+      f.zoomCo(|+|.left[B2])
 
     def right: FocusedFunctionOutputContra[A, λ[x => F[B1 |+| x]], B2] =
-      f.zoomCo(lib.right[B1])
+      f.zoomCo(|+|.right[B1])
   }
 
   implicit class FocusedFunctionOutputOnChoiceContra[A, F[_], B1, B2](f: FocusedFunctionOutputContra[A, F, B1 |&| B2]) {
     def choiceL: FocusedFunctionOutputContra[A, λ[x => F[x |&| B2]], B1] =
-      f.zoomCo(lib.choiceL[B2])
+      f.zoomCo(|&|.left[B2])
 
     def choiceR: FocusedFunctionOutputContra[A, λ[x => F[B1 |&| x]], B2] =
-      f.zoomCo(lib.choiceR[B1])
+      f.zoomCo(|&|.right[B1])
   }
 
   def IXI[A, B, C, D]: ((A|*|B)|*|(C|*|D)) -⚬
@@ -1090,7 +1109,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     //               |     / \
     //               |    /   \
                    ((A|*|C)|*| B) =
-    timesAssocLR[A, B, C] >>> par(id, swap) >>> timesAssocRL
+    |*|.assocLR[A, B, C] >>> par(id, swap) >>> |*|.assocRL
 
   def XI[A, B, C]: (A |*|(B|*|C)) -⚬
     //               \   /    |
@@ -1099,7 +1118,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     //                / \     |
     //               /   \    |
                    (B |*|(A|*|C)) =
-    timesAssocRL[A, B, C] >>> par(swap, id) >>> timesAssocLR
+    |*|.assocRL[A, B, C] >>> par(swap, id) >>> |*|.assocLR
 
   def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
     id                                         [                                       Neg[A] |*| Neg[A]   ]
@@ -1155,7 +1174,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       .in.snd(introFst(lInvertSignal))      .to[ Done |*| ((Need |*| Done) |*| (A |&| B)) ]
       .in.snd(IX)                           .to[ Done |*| ((Need |*| (A |&| B)) |*| Done) ]
       .in.snd.fst(chooseWhenNeed)           .to[ Done |*| ((Need |*|     C    ) |*| Done) ]
-      .in.snd(timesAssocLR).assocRL         .to[ (Done |*| Need) |*| (   C      |*| Done) ]
+      .in.snd(|*|.assocLR).assocRL          .to[ (Done |*| Need) |*| (   C      |*| Done) ]
       .elimFst(rInvertSignal)               .to[                         C      |*| Done  ]
       .swap                                 .to[                        Done    |*|  C    ]
 
@@ -1268,7 +1287,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     pred: (K, K) => Boolean,
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) = {
     val awaitL: (Done |*| (A |*| B)) -⚬ (A |*| B) =
-      (aKey compose fst[B].lens[A]).joinL
+      (aKey compose |*|.fst[B].lens[A]).joinL
 
     id[A |*| B]
       .par(aKey.getL, bKey.getL)
@@ -1658,7 +1677,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def law_associativity: Equal[ ((A |*| A) |*| A) -⚬ A ] =
       Equal(
         par(combine, id[A]) >>> combine,
-        timesAssocLR >>> par(id[A], combine) >>> combine,
+        |*|.assocLR >>> par(id[A], combine) >>> combine,
       )
   }
 
@@ -1668,7 +1687,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def law_coAssociativity: Equal[ A -⚬ ((A |*| A) |*| A) ] =
       Equal(
         split >>> par(split, id[A]),
-        split >>> par(id[A], split) >>> timesAssocRL,
+        split >>> par(id[A], split) >>> |*|.assocRL,
       )
   }
 
