@@ -726,14 +726,14 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   }
 
   /** Product is covariant in the first argument. */
-  implicit def fst[B]: Transportive[* |*| B] = new Transportive[* |*| B] {
+  implicit def fst[B]: Transportive[λ[x => x |*| B]] = new Transportive[λ[x => x |*| B]] {
     def lift[A1, A2](f: A1 -⚬ A2): (A1 |*| B) -⚬ (A2 |*| B) = liftFst(f)
     def inL[A1, A2]: (A1 |*| (A2 |*| B)) -⚬ ((A1 |*| A2) |*| B) = timesAssocRL
     def outL[A1, A2]: ((A1 |*| A2) |*| B) -⚬ (A1 |*| (A2 |*| B)) = timesAssocLR
   }
 
   /** Product is covariant in the second argument. */
-  implicit def snd[A]: Transportive[A |*| *] = new Transportive[A |*| *] {
+  implicit def snd[A]: Transportive[λ[x => A |*| x]] = new Transportive[λ[x => A |*| x]] {
     def lift[B1, B2](f: B1 -⚬ B2): (A |*| B1) -⚬ (A |*| B2) = liftSnd(f)
     def inL[B1, B2]: (B1 |*| (A |*| B2)) -⚬ (A |*| (B1 |*| B2)) =
       timesAssocRL[B1, A, B2].in.fst(swap).timesAssocLR
@@ -742,22 +742,22 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   }
 
   /** Disjoint union is covariant in the left argument. */
-  def left[B]: Functor[* |+| B] = new Functor[* |+| B] {
+  def left[B]: Functor[λ[x => x |+| B]] = new Functor[λ[x => x |+| B]] {
     def lift[A1, A2](f: A1 -⚬ A2): (A1 |+| B) -⚬ (A2 |+| B) = liftL(f)
   }
 
   /** Disjoint union is covariant in the right argument. */
-  def right[A]: Functor[A |+| *] = new Functor[A |+| *] {
+  def right[A]: Functor[λ[x => A |+| x]] = new Functor[λ[x => A |+| x]] {
     def lift[B1, B2](f: B1 -⚬ B2): (A |+| B1) -⚬ (A |+| B2) = liftR(f)
   }
 
   /** Choice is covariant in the left argument. */
-  def choiceL[B]: Functor[* |&| B] = new Functor[* |&| B] {
+  def choiceL[B]: Functor[λ[x => x |&| B]] = new Functor[λ[x => x |&| B]] {
     def lift[A1, A2](f: A1 -⚬ A2): (A1 |&| B) -⚬ (A2 |&| B) = choice[A1 |&| B, A2, B](chooseL andThen f, chooseR)
   }
 
   /** Choice is covariant in the right argument. */
-  def choiceR[A]: Functor[A |&| *] = new Functor[A |&| *] {
+  def choiceR[A]: Functor[λ[x => A |&| x]] = new Functor[λ[x => A |&| x]] {
     def lift[B1, B2](f: B1 -⚬ B2): (A |&| B1) -⚬ (A |&| B2) = choice[A |&| B1, A, B2](chooseL, chooseR andThen f)
   }
 
@@ -778,7 +778,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
   implicit class LinearFunctionOps[A, B](self: A -⚬ B) {
     /** No-op used for documentation purposes: explicitly states the input type of this linear function. */
-    def from[Z](implicit ev: A =:= Z): Z -⚬ B = ev.substituteCo[* -⚬ B](self)
+    def from[Z](implicit ev: A =:= Z): Z -⚬ B = ev.substituteCo[λ[x => x -⚬ B]](self)
 
     /** No-op used for documentation purposes: explicitly states the output type of this linear function. */
     def to[C](implicit ev: B =:= C): A -⚬ C = ev.substituteCo(self)

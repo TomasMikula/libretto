@@ -4,7 +4,7 @@ class ClosedLib[DSL <: ClosedDSL with ScalaDSL](dsl0: DSL) extends CoreLib[DSL](
   import dsl._
 
   /** Function object (internal hom) is contravariant in the input type. */
-  def input[C]: ContraFunctor[* =⚬ C] = new ContraFunctor[* =⚬ C] {
+  def input[C]: ContraFunctor[λ[x => x =⚬ C]] = new ContraFunctor[λ[x => x =⚬ C]] {
     def lift[A, B](f: A -⚬ B): (B =⚬ C) -⚬ (A =⚬ C) =
       id                       [(B =⚬ C) |*| A]
         .in.snd(f)          .to[(B =⚬ C) |*| B]
@@ -14,7 +14,7 @@ class ClosedLib[DSL <: ClosedDSL with ScalaDSL](dsl0: DSL) extends CoreLib[DSL](
   }
 
   /** Function object (internal hom) is covariant in the output type. */
-  def output[A]: Functor[A =⚬ *] = new Functor[A =⚬ *] {
+  def output[A]: Functor[λ[x => A =⚬ x]] = new Functor[λ[x => A =⚬ x]] {
     def lift[B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
       id                       [(A =⚬ B) |*| A]
         .andThen(eval)      .to[B]
@@ -25,7 +25,7 @@ class ClosedLib[DSL <: ClosedDSL with ScalaDSL](dsl0: DSL) extends CoreLib[DSL](
 
   implicit class ClosedLinearFunctionOps[A, B](self: A -⚬ B) {
     def curry[A1, A2](implicit ev: A =:= (A1 |*| A2)): A1 -⚬ (A2 =⚬ B) =
-      dsl.curry(ev.substituteCo[* -⚬ B](self))
+      dsl.curry(ev.substituteCo[λ[x => x -⚬ B]](self))
 
     def uncurry[B1, B2](implicit ev: B =:= (B1 =⚬ B2)): (A |*| B1) -⚬ B2 =
       dsl.uncurry(ev.substituteCo(self))

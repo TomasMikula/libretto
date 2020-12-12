@@ -362,7 +362,7 @@ sealed trait BinarySearchTree[DSL <: ScalaDSL] {
   }
 
   def insert[K: Ordering, V]: ((Val[K] |*| V) |*| Tree[K, V]) -⚬ (Maybe[V] |*| Tree[K, V]) =
-    update_[K, V, V, Maybe[V] |*| *](
+    update_[K, V, V, λ[x => Maybe[V] |*| x]](
       ins = id[V].introFst(Maybe.empty[V]),
       upd = swap[V, V] >>> par(Maybe.just[V], id),
     )
