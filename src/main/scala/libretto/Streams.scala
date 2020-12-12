@@ -1,19 +1,19 @@
 package libretto
 
 object Streams {
-  def apply[DSL <: ScalaDSL](dsl0: DSL)(lib0: CoreLib[dsl0.type]): Streams[DSL] =
-    new Streams[DSL] {
-      val dsl: dsl0.type = dsl0
-      val lib = lib0
-    }
+  def apply(
+    dsl: ScalaDSL,
+    lib: CoreLib[dsl.type],
+  )
+  : Streams[dsl.type, lib.type] =
+    new Streams(dsl, lib)
 }
 
-sealed trait Streams[DSL <: ScalaDSL] {
-  val dsl: DSL
-  val lib: CoreLib[dsl.type]
-
-  private val Tree: BinarySearchTree[dsl.type] =
-    BinarySearchTree[dsl.type](dsl)(lib)
+class Streams[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
+  val dsl: DSL,
+  val lib: Lib with CoreLib[dsl.type],
+) {
+  private val Tree = BinarySearchTree(dsl, lib)
 
   import dsl._
   import lib._

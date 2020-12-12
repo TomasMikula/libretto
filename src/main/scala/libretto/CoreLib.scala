@@ -2,6 +2,11 @@ package libretto
 
 import libretto.unapply._
 
+object CoreLib {
+  def apply(dsl: ScalaDSL): CoreLib[dsl.type] =
+    new CoreLib(dsl)
+}
+
 class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   import dsl._
 
