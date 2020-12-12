@@ -70,7 +70,7 @@ class CoreStreams[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
     def delay[A: Junction.Positive]: LPollable[A] -⚬ Delayed[LPollable[A]] =
       id                                           [                     LPollable[A] ]
         .introFst(lInvertSignal)                .to[ (Need |*| Done) |*| LPollable[A] ]
-        .timesAssocLR                           .to[ Need |*| (Done |*| LPollable[A]) ]
+        .assocLR                                .to[ Need |*| (Done |*| LPollable[A]) ]
         .in.snd(delayBy)                        .to[ Need |*|     LPollable[A]        ]
 
     def map[A, B](f: A -⚬ B): LPollable[A] -⚬ LPollable[B] = rec { self =>
@@ -184,7 +184,7 @@ class CoreStreams[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
       val upstreamValue: ((A |*| LPollable[A]) |*| B) -⚬ (Done |*| Maybe[B]) =
         id                                             [ (     A       |*| LPollable[A]) |*|           B  ]
           .in.fst(swap)                             .to[ (LPollable[A] |*|      A      ) |*|           B  ]
-          .timesAssocLR                             .to[  LPollable[A] |*| (    A        |*|           B) ]
+          .assocLR                                  .to[  LPollable[A] |*| (    A        |*|           B) ]
           .in.snd(f)                                .to[  LPollable[A] |*| (Done |+|                   B) ]
           .distributeLR                             .to[ (LPollable[A] |*| Done) |+| (LPollable[A] |*| B) ]
           .in.left(join(LPollable.close, id))       .to[              Done       |+| (LPollable[A] |*| B) ]
@@ -235,7 +235,7 @@ class CoreStreams[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
     def supply[A, B](rInvert: (A |*| B) -⚬ One): (A |*| LDemanding[B]) -⚬ (Need |+| LDemanding[B]) =
       id[ A |*| LDemanding[B] ]     .to[ A |*| (Need |&| (B |*| LSubscriber[B])) ]
       .in.snd(chooseR)              .to[ A |*|           (B |*| LSubscriber[B])  ]
-      .timesAssocRL                 .to[ (A |*| B)          |*| LSubscriber[B]   ]
+      .assocRL                      .to[ (A |*| B)          |*| LSubscriber[B]   ]
       .elimFst(rInvert)             .to[                        LSubscriber[B]   ]
       .unpack[LSubscriberF[B, *]]   .to[                  Need |+| LDemanding[B] ]
 

@@ -71,7 +71,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       Equal(
         id[A]                   .to[ A               ]
           .introSnd(lInvert)    .to[ A |*| (B |*| A) ]
-          .timesAssocRL         .to[ (A |*| B) |*| A ]
+          .assocRL              .to[ (A |*| B) |*| A ]
           .elimFst(rInvert)     .to[               A ],
         id[A]
       )
@@ -81,7 +81,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       Equal(
         id[B]                   .to[               B ]
           .introFst(lInvert)    .to[ (B |*| A) |*| B ]
-          .timesAssocLR         .to[ B |*| (A |*| B) ]
+          .assocLR              .to[ B |*| (A |*| B) ]
           .elimSnd(rInvert)     .to[ B               ],
         id[B]
       )
@@ -239,7 +239,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       def byFst[A, B](implicit A: Junction.Negative[A]): Junction.Negative[A |*| B] =
         new Junction.Negative[A |*| B] {
           override def awaitNegFst: (A |*| B) -⚬ (Need |*| (A |*| B)) =
-            par(A.awaitNegFst, id[B]).timesAssocLR
+            par(A.awaitNegFst, id[B]).assocLR
         }
 
       def eitherInstance[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |+| B] =
@@ -269,7 +269,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
         override def awaitNegFst: A -⚬ (Need |*| A) =
           id                                 [                      A  ]
             .introFst(lInvertSignal)      .to[ (Need |*|  Done) |*| A  ]
-            .timesAssocLR                 .to[  Need |*| (Done  |*| A) ]
+            .assocLR                      .to[  Need |*| (Done  |*| A) ]
             .in.snd(A.awaitPosFst)        .to[  Need |*|            A  ]
       }
 
@@ -281,7 +281,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
         override def awaitPosFst: (Done |*| A) -⚬ A =
           id                                 [  Done |*|            A  ]
             .in.snd(A.awaitNegFst)        .to[  Done |*| (Need  |*| A) ]
-            .timesAssocRL                 .to[ (Done |*|  Need) |*| A  ]
+            .assocRL                      .to[ (Done |*|  Need) |*| A  ]
             .elimFst(rInvertSignal)       .to[                      A  ]
       }
   }
@@ -327,7 +327,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       def byFst[A, B](implicit A: Signaling.Positive[A]): Signaling.Positive[A |*| B] =
         new Signaling.Positive[A |*| B] {
           override def signalPosFst: (A |*| B) -⚬ (Done |*| (A |*| B)) =
-            par(A.signalPosFst, id[B]).timesAssocLR
+            par(A.signalPosFst, id[B]).assocLR
         }
 
       /** Signals when it is decided which side of the [[|+|]] is present. */
@@ -388,7 +388,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
         override def signalNegFst: (Need |*| A) -⚬ A =
           id                                     [  Need |*|            A  ]
             .in.snd(A.signalPosFst)           .to[  Need |*| (Done  |*| A) ]
-            .timesAssocRL                     .to[ (Need |*|  Done) |*| A  ]
+            .assocRL                          .to[ (Need |*|  Done) |*| A  ]
             .elimFst(swap >>> rInvertSignal)  .to[                      A  ]
       }
 
@@ -400,7 +400,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
         override def signalPosFst: A -⚬ (Done |*| A) =
           id                                     [                      A  ]
             .introFst(lInvertSignal >>> swap) .to[ (Done |*|  Need) |*| A  ]
-            .timesAssocLR                     .to[  Done |*| (Need  |*| A) ]
+            .assocLR                          .to[  Done |*| (Need  |*| A) ]
             .in.snd(A.signalNegFst)           .to[  Done |*|            A  ]
       }
   }
@@ -728,9 +728,9 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   implicit def snd[A]: Transportive[λ[x => A |*| x]] = new Transportive[λ[x => A |*| x]] {
     def lift[B1, B2](f: B1 -⚬ B2): (A |*| B1) -⚬ (A |*| B2) = liftSnd(f)
     def inL[B1, B2]: (B1 |*| (A |*| B2)) -⚬ (A |*| (B1 |*| B2)) =
-      timesAssocRL[B1, A, B2].in.fst(swap).timesAssocLR
+      timesAssocRL[B1, A, B2].in.fst(swap).assocLR
     def outL[B1, B2]: (A |*| (B1 |*| B2)) -⚬ (B1 |*| (A |*| B2)) =
-      timesAssocRL[A, B1, B2].in.fst(swap).timesAssocLR
+      timesAssocRL[A, B1, B2].in.fst(swap).assocLR
   }
 
   /** Disjoint union is covariant in the left argument. */
@@ -834,18 +834,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def swap[B1, B2](implicit ev: B =:= (B1 |*| B2)): A -⚬ (B2 |*| B1) =
       ev.substituteCo(self) >>> dsl.swap
 
-    def timesAssocLR[B1, B2, B3](implicit ev: B =:= ((B1 |*| B2) |*| B3)): A -⚬ (B1 |*| (B2 |*| B3)) =
-      ev.substituteCo(self) >>> dsl.timesAssocLR
-
-    def timesAssocRL[B1, B2, B3](implicit ev: B =:= (B1 |*| (B2 |*| B3))): A -⚬ ((B1 |*| B2) |*| B3) =
-      ev.substituteCo(self) >>> dsl.timesAssocRL
-
-    def plusAssocLR[B1, B2, B3](implicit ev: B =:= ((B1 |+| B2) |+| B3)): A -⚬ (B1 |+| (B2 |+| B3)) =
-      ev.substituteCo(self) >>> dsl.plusAssocLR
-
-    def plusAssocRL[B1, B2, B3](implicit ev: B =:= (B1 |+| (B2 |+| B3))): A -⚬ ((B1 |+| B2) |+| B3) =
-      ev.substituteCo(self) >>> dsl.plusAssocRL
-
     def distributeLR[B1, B2, B3](implicit ev: B =:= (B1 |*| (B2 |+| B3))): A -⚬ ((B1 |*| B2) |+| (B1 |*| B3)) =
       ev.substituteCo(self) >>> dsl.distributeLR
 
@@ -891,6 +879,22 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       self >>> lib.select(caseFstWins, caseSndWins)
 
     def in: FocusedFunctionOutputCo[A, Id, B] = new FocusedFunctionOutputCo[A, Id, B](self)(idFunctor)
+  }
+
+  implicit class LinearFunctionToTimesOps[A, B1, B2](self: A -⚬ (B1 |*| B2)) {
+    def assocLR[X, Y](implicit ev: B1 =:= (X |*| Y)): A -⚬ (X |*| (Y |*| B2)) =
+      ev.substituteCo[λ[x => A -⚬ (x |*| B2)]](self) >>> dsl.timesAssocLR
+
+    def assocRL[X, Y](implicit ev: B2 =:= (X |*| Y)): A -⚬ ((B1 |*| X) |*| Y) =
+      ev.substituteCo[λ[x => A -⚬ (B1 |*| x)]](self) >>> dsl.timesAssocRL
+  }
+
+  implicit class LinearFunctionToPlusOps[A, B1, B2](self: A -⚬ (B1 |+| B2)) {
+    def assocLR[X, Y](implicit ev: B1 =:= (X |+| Y)): A -⚬ (X |+| (Y |+| B2)) =
+      ev.substituteCo[λ[x => A -⚬ (x |+| B2)]](self) >>> dsl.plusAssocLR
+
+    def assocRL[X, Y](implicit ev: B2 =:= (X |+| Y)): A -⚬ ((B1 |+| X) |+| Y) =
+      ev.substituteCo[λ[x => A -⚬ (B1 |+| x)]](self) >>> dsl.plusAssocRL
   }
 
   class BimapSyntax[F[_, _], A, B](self: A -⚬ B) {
@@ -1073,11 +1077,11 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   //                     |    /   \    |
                        ((A|*|C)|*|(B|*|D)) =
     id                             [ (A |*| B) |*| (C |*| D) ]
-      .timesAssocLR             .to[ A |*| (B |*| (C |*| D)) ]
+      .assocLR                  .to[ A |*| (B |*| (C |*| D)) ]
       .in.snd.assocRL           .to[ A |*| ((B |*| C) |*| D) ]
       .in.snd.fst(swap)         .to[ A |*| ((C |*| B) |*| D) ]
       .in.snd.assocLR           .to[ A |*| (C |*| (B |*| D)) ]
-      .timesAssocRL             .to[ (A |*| C) |*| (B |*| D) ]
+      .assocRL                  .to[ (A |*| C) |*| (B |*| D) ]
 
   def IX[A, B, C]: ((A|*|B)|*| C) -⚬
     //               |    \   /
@@ -1100,7 +1104,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
     id                                         [                                       Neg[A] |*| Neg[A]   ]
       .introFst(promise[A])                 .to[ (Neg[A] |*|        Val[A]      ) |*| (Neg[A] |*| Neg[A])  ]
-      .timesAssocLR                         .to[  Neg[A] |*| (      Val[A]        |*| (Neg[A] |*| Neg[A])) ]
+      .assocLR                              .to[  Neg[A] |*| (      Val[A]        |*| (Neg[A] |*| Neg[A])) ]
       .in.snd.fst(dup)                      .to[  Neg[A] |*| ((Val[A] |*| Val[A]) |*| (Neg[A] |*| Neg[A])) ]
       .in.snd(IXI)                          .to[  Neg[A] |*| ((Val[A] |*| Neg[A]) |*| (Val[A] |*| Neg[A])) ]
       .in.snd(parToOne(fulfill, fulfill))   .to[  Neg[A] |*|                      One                      ]
@@ -1151,7 +1155,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       .in.snd(introFst(lInvertSignal))      .to[ Done |*| ((Need |*| Done) |*| (A |&| B)) ]
       .in.snd(IX)                           .to[ Done |*| ((Need |*| (A |&| B)) |*| Done) ]
       .in.snd.fst(chooseWhenNeed)           .to[ Done |*| ((Need |*|     C    ) |*| Done) ]
-      .in.snd(timesAssocLR).timesAssocRL    .to[ (Done |*| Need) |*| (   C      |*| Done) ]
+      .in.snd(timesAssocLR).assocRL         .to[ (Done |*| Need) |*| (   C      |*| Done) ]
       .elimFst(rInvertSignal)               .to[                         C      |*| Done  ]
       .swap                                 .to[                        Done    |*|  C    ]
 
@@ -1167,7 +1171,7 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     id                                         [                        Need    |*|  C    ]
       .swap                                 .to[                         C      |*| Need  ]
       .introFst(lInvertSignal)              .to[ (Need |*| Done) |*| (   C      |*| Need) ]
-      .timesAssocLR.in.snd(timesAssocRL)    .to[ Need |*| ((Done |*|     C    ) |*| Need) ]
+      .assocLR.in.snd.assocRL               .to[ Need |*| ((Done |*|     C    ) |*| Need) ]
       .in.snd.fst(injectWhenDone)           .to[ Need |*| ((Done |*| (A |+| B)) |*| Need) ]
       .in.snd(IX)                           .to[ Need |*| ((Done |*| Need) |*| (A |+| B)) ]
       .in.snd(elimFst(rInvertSignal))       .to[ Need |*|                      (A |+| B)  ]
@@ -1855,12 +1859,12 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   def getFst[A, B](implicit A: Cosemigroup[A]): (A |*| B) -⚬ (A |*| (A |*| B)) =
     id                             [     A     |*| B  ]
       .in.fst(A.split)          .to[ (A |*| A) |*| B  ]
-      .timesAssocLR             .to[  A |*| (A |*| B) ]
+      .assocLR                  .to[  A |*| (A |*| B) ]
 
   def getSnd[A, B](implicit B: Cosemigroup[B]): (A |*| B) -⚬ (B |*| (A |*| B)) =
     id                             [  A |*|     B     ]
       .in.snd(B.split)          .to[  A |*| (B |*| B) ]
-      .timesAssocRL             .to[ (A |*| B) |*| B  ]
+      .assocRL                  .to[ (A |*| B) |*| B  ]
       .swap                     .to[  B |*| (A |*| B) ]
 
   def discardFst[A, B](implicit A: Comonoid[A]): (A |*| B) -⚬ B =

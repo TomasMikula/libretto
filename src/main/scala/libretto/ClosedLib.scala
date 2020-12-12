@@ -60,9 +60,9 @@ class ClosedLib[DSL <: ClosedDSL with ScalaDSL](dsl0: DSL) extends CoreLib[DSL](
     */
   def unveilSequentially[A, Ā, B](implicit ev: Dual[A, Ā]): (A |*| B) -⚬ (Ā =⚬ B) =
     id[(A |*| B) |*| Ā]           .to[ (A |*|  B) |*| Ā  ]
-      .timesAssocLR               .to[  A |*| (B  |*| Ā) ]
+      .assocLR                    .to[  A |*| (B  |*| Ā) ]
       .in.snd(swap)               .to[  A |*| (Ā  |*| B) ]
-      .timesAssocRL               .to[ (A |*|  Ā) |*| B  ]
+      .assocRL                    .to[ (A |*|  Ā) |*| B  ]
       .elimFst(ev.rInvert)        .to[                B  ]
       .as[ ((A |*| B) |*| Ā) -⚬ B ]
       .curry
@@ -70,9 +70,9 @@ class ClosedLib[DSL <: ClosedDSL with ScalaDSL](dsl0: DSL) extends CoreLib[DSL](
   /** Make a function `A =⚬ B` ''"absorb"'' a `C` and return it as part of its output, i.e. `A =⚬ (B |*| C)`. */
   def absorbR[A, B, C]: ((A =⚬ B) |*| C) -⚬ (A =⚬ (B |*| C)) =
     id[((A =⚬ B) |*| C) |*| A]  .to[ ((A =⚬ B) |*| C) |*| A ]
-      .timesAssocLR             .to[ (A =⚬ B) |*| (C |*| A) ]
+      .assocLR                  .to[ (A =⚬ B) |*| (C |*| A) ]
       .in.snd(swap)             .to[ (A =⚬ B) |*| (A |*| C) ]
-      .timesAssocRL             .to[ ((A =⚬ B) |*| A) |*| C ]
+      .assocRL                  .to[ ((A =⚬ B) |*| A) |*| C ]
       .in.fst(eval)             .to[        B         |*| C ]
       .as[ (((A =⚬ B) |*| C) |*| A) -⚬ (B |*| C) ]
       .curry

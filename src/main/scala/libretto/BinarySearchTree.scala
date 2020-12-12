@@ -303,10 +303,10 @@ class BinarySearchTree[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
 
       id                                     [                  Elem |*|         Branch[K, V]            ]
         .in.snd(Branch.deconstruct)       .to[                  Elem |*| (Tree                 |*| Tree) ]
-        .timesAssocRL                     .to[                 (Elem |*| Tree)                 |*| Tree  ]
+        .assocRL                          .to[                 (Elem |*| Tree)                 |*| Tree  ]
         .in.fst(sortBy(fst.lens, maxKey)) .to[ ((Elem |*| Tree)           |+| (Tree |*| Elem)) |*| Tree  ]
         .distributeRL                     .to[ ((Elem |*| Tree) |*| Tree) |+| ((Tree |*| Elem) |*| Tree) ]
-        .in.right(timesAssocLR)           .to[ ((Elem |*| Tree) |*| Tree) |+| (Tree |*| (Elem |*| Tree)) ]
+        .in.right.assocLR                 .to[ ((Elem |*| Tree) |*| Tree) |+| (Tree |*| (Elem |*| Tree)) ]
         .either(updateL, updateR)         .to[                          F[Tree]                          ]
     }
 
