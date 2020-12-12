@@ -715,10 +715,13 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) = dsl.timesAssocLR
     def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) = dsl.timesAssocRL
 
+    def bimap[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |*| C) -⚬ (B |*| D) =
+      par(f, g)
+
     val bifunctor: Bifunctor[|*|] =
       new Bifunctor[|*|] {
         def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |*| C) -⚬ (B |*| D) =
-          par(f, g)
+          bimap(f, g)
       }
 
     /** Product is covariant in the first argument. */
@@ -744,10 +747,13 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def assocLR[A, B, C]: ((A |+| B) |+| C) -⚬ (A |+| (B |+| C)) = dsl.plusAssocLR
     def assocRL[A, B, C]: (A |+| (B |+| C)) -⚬ ((A |+| B) |+| C) = dsl.plusAssocRL
 
+    def bimap[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
+      either(f andThen injectL, g andThen injectR)
+
     val bifunctor: Bifunctor[|+|] =
       new Bifunctor[|+|] {
         def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
-          either(f andThen injectL, g andThen injectR)
+          bimap(f, g)
       }
 
     /** Disjoint union is covariant in the left argument. */
@@ -763,10 +769,13 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def assocLR[A, B, C]: ((A |&| B) |&| C) -⚬ (A |&| (B |&| C)) = dsl.choiceAssocLR
     def assocRL[A, B, C]: (A |&| (B |&| C)) -⚬ ((A |&| B) |&| C) = dsl.choiceAssocRL
 
+    def bimap[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
+      choice(chooseL andThen f, chooseR andThen g)
+
     val bifunctor: Bifunctor[|&|] =
       new Bifunctor[|&|] {
         def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
-          choice(chooseL andThen f, chooseR andThen g)
+          bimap(f, g)
       }
 
     /** Choice is covariant in the left argument. */
