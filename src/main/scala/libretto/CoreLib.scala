@@ -951,6 +951,18 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def snd: FocusedFunctionOutputCo[A, λ[x => F[B1 |*| x]], B2] =
       f.zoomCo(lib.snd[B1])
 
+    def assocLR[X, Y](implicit ev: B1 =:= (X |*| Y)): A -⚬ F[X |*| (Y |*| B2)] = {
+      val g: FocusedFunctionOutputCo[A, F, (X |*| Y) |*| B2] =
+        ev.substituteCo[λ[x => FocusedFunctionOutputCo[A, F, x |*| B2]]](f)
+      g(dsl.timesAssocLR)
+    }
+
+    def assocRL[X, Y](implicit ev: B2 =:= (X |*| Y)): A -⚬ F[(B1 |*| X) |*| Y] = {
+      val g: FocusedFunctionOutputCo[A, F, B1 |*| (X |*| Y)] =
+        ev.substituteCo[λ[x => FocusedFunctionOutputCo[A, F, B1 |*| x]]](f)
+      g(dsl.timesAssocRL)
+    }
+
     def joinL(neglect: B1 -⚬ Done)(implicit j: Junction.Positive[B2]): A -⚬ F[B2] =
       f(par(neglect, id[B2]) >>> j.awaitPosFst)
 
@@ -972,6 +984,18 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
     def right: FocusedFunctionOutputCo[A, λ[x => F[B1 |+| x]], B2] =
       f.zoomCo(lib.right[B1])
+
+    def assocLR[X, Y](implicit ev: B1 =:= (X |+| Y)): A -⚬ F[X |+| (Y |+| B2)] = {
+      val g: FocusedFunctionOutputCo[A, F, (X |+| Y) |+| B2] =
+        ev.substituteCo[λ[x => FocusedFunctionOutputCo[A, F, x |+| B2]]](f)
+      g(dsl.plusAssocLR)
+    }
+
+    def assocRL[X, Y](implicit ev: B2 =:= (X |+| Y)): A -⚬ F[(B1 |+| X) |+| Y] = {
+      val g: FocusedFunctionOutputCo[A, F, B1 |+| (X |+| Y)] =
+        ev.substituteCo[λ[x => FocusedFunctionOutputCo[A, F, B1 |+| x]]](f)
+      g(dsl.plusAssocRL)
+    }
   }
 
   implicit class FocusedFunctionOutputOnChoiceCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 |&| B2]) {
@@ -980,6 +1004,18 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
     def choiceR: FocusedFunctionOutputCo[A, λ[x => F[B1 |&| x]], B2] =
       f.zoomCo(lib.choiceR[B1])
+
+    def assocLR[X, Y](implicit ev: B1 =:= (X |&| Y)): A -⚬ F[X |&| (Y |&| B2)] = {
+      val g: FocusedFunctionOutputCo[A, F, (X |&| Y) |&| B2] =
+        ev.substituteCo[λ[x => FocusedFunctionOutputCo[A, F, x |&| B2]]](f)
+      g(dsl.choiceAssocLR)
+    }
+
+    def assocRL[X, Y](implicit ev: B2 =:= (X |&| Y)): A -⚬ F[(B1 |&| X) |&| Y] = {
+      val g: FocusedFunctionOutputCo[A, F, B1 |&| (X |&| Y)] =
+        ev.substituteCo[λ[x => FocusedFunctionOutputCo[A, F, B1 |&| x]]](f)
+      g(dsl.choiceAssocRL)
+    }
   }
 
   /** Focused on `B` in the output `F[B]` of linear function `A -⚬ F[B]`, where `B` is in a contravariant position. */
@@ -1038,9 +1074,9 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
                        ((A|*|C)|*|(B|*|D)) =
     id                             [ (A |*| B) |*| (C |*| D) ]
       .timesAssocLR             .to[ A |*| (B |*| (C |*| D)) ]
-      .in.snd(timesAssocRL)     .to[ A |*| ((B |*| C) |*| D) ]
+      .in.snd.assocRL           .to[ A |*| ((B |*| C) |*| D) ]
       .in.snd.fst(swap)         .to[ A |*| ((C |*| B) |*| D) ]
-      .in.snd(timesAssocLR)     .to[ A |*| (C |*| (B |*| D)) ]
+      .in.snd.assocLR           .to[ A |*| (C |*| (B |*| D)) ]
       .timesAssocRL             .to[ (A |*| C) |*| (B |*| D) ]
 
   def IX[A, B, C]: ((A|*|B)|*| C) -⚬
