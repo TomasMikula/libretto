@@ -4,7 +4,7 @@ object ScalaStreams {
   def apply(
     dsl: ScalaDSL,
     lib: CoreLib[dsl.type],
-    coreStreams: Streams[dsl.type, lib.type],
+    coreStreams: CoreStreams[dsl.type, lib.type],
   )
   : ScalaStreams[dsl.type, lib.type, coreStreams.type] =
     new ScalaStreams(dsl, lib, coreStreams)
@@ -13,11 +13,11 @@ object ScalaStreams {
 class ScalaStreams[
   DSL <: ScalaDSL,
   Lib <: CoreLib[DSL],
-  Streams <: libretto.Streams[DSL, Lib],
+  Streams <: CoreStreams[DSL, Lib],
 ](
   val dsl: DSL,
   val lib: Lib with CoreLib[dsl.type],
-  val coreStreams: Streams with libretto.Streams[dsl.type, lib.type],
+  val coreStreams: Streams with CoreStreams[dsl.type, lib.type],
 ) {
   private val Tree = BinarySearchTree(dsl, lib)
 
