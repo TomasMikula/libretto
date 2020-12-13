@@ -16,7 +16,7 @@ class BinarySearchTree[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
   import dsl._
   import lib._
   import lib.Bool._
-  import lib.Compare._
+  import lib.Compared._
 
   sealed trait SummaryModule {
     type Summary[K]

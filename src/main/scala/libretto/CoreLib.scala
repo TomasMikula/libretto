@@ -1352,14 +1352,15 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   : (A |*| B) -⚬ ((A |*| B) |+| (B |*| A)) =
     lteqBy(aKey, bKey).in.right(swap)
 
-  sealed trait CompareModule {
+  sealed trait ComparedModule {
     type Compared[A, B]
 
-    def compareBy[A, B, K: Ordering](
-      aKey: Getter[A, Val[K]],
-      bKey: Getter[B, Val[K]],
-    ): (A |*| B) -⚬ Compared[A, B]
+    // constructors
+    def lt   [A, B]: (A |*| B) -⚬ Compared[A, B]
+    def equiv[A, B]: (A |*| B) -⚬ Compared[A, B]
+    def gt   [A, B]: (A |*| B) -⚬ Compared[A, B]
 
+    // destructor
     def compared[A, B, C](
       caseLt: (A |*| B) -⚬ C,
       caseEq: (A |*| B) -⚬ C,
@@ -1370,16 +1371,12 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     implicit def bifunctorCompared: Bifunctor[Compared]
   }
 
-  val Compare: CompareModule = new CompareModule {
+  val Compared: ComparedModule = new ComparedModule {
     type Compared[A, B] = (A |*| B) |+| ((A |*| B) |+| (A |*| B))
 
-    def compareBy[A, B, K: Ordering](
-      aKey: Getter[A, Val[K]],
-      bKey: Getter[B, Val[K]],
-    ): (A |*| B) -⚬ Compared[A, B] =
-      id                                           [           A |*| B                       ]
-        .andThen(ltBy(aKey, bKey))              .to[ (A |*| B) |+|           (A |*| B)       ]
-        .in.right(equivBy(aKey, bKey))          .to[ (A |*| B) |+| ((A |*| B) |+| (A |*| B)) ]
+    def lt   [A, B]: (A |*| B) -⚬ Compared[A, B] = injectL
+    def equiv[A, B]: (A |*| B) -⚬ Compared[A, B] = injectL >>> injectR
+    def gt   [A, B]: (A |*| B) -⚬ Compared[A, B] = injectR >>> injectR
 
     def compared[A, B, C](
       caseLt: (A |*| B) -⚬ C,
@@ -1400,6 +1397,21 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
           )
         }
       }
+  }
+  
+  import Compared._
+
+  def compareBy[A, B, K: Ordering](
+    aKey: Getter[A, Val[K]],
+    bKey: Getter[B, Val[K]],
+  ): (A |*| B) -⚬ Compared[A, B] = {
+    id                                           [           A |*| B                       ]
+      .andThen(ltBy(aKey, bKey))              .to[ (A |*| B) |+|           (A |*| B)       ]
+      .in.right(equivBy(aKey, bKey))          .to[ (A |*| B) |+| ((A |*| B) |+| (A |*| B)) ]
+      .in.left(Compared.lt)
+      .in.right.left(Compared.equiv)
+      .in.right.right(Compared.gt)
+      .either(id, either(id, id))             .to[             Compared[A, B]              ]
   }
 
   def dualSymmetric[A, B](ev: Dual[A, B]): Dual[B, A] = new Dual[B, A] {
