@@ -3,15 +3,12 @@ package libretto
 import libretto.unapply._
 
 object CoreLib {
-  def apply(dsl: ScalaDSL): CoreLib[dsl.type] =
+  def apply(dsl: CoreDSL): CoreLib[dsl.type] =
     new CoreLib(dsl)
 }
 
-class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
+class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   import dsl._
-
-  def const_[A](a: A): One -⚬ Val[A] =
-    andThen(done, constVal(a))
 
   /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
     * It must hold that
@@ -192,12 +189,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
             join
         }
 
-      implicit def junctionVal[A]: Junction.Positive[Val[A]] =
-        new Junction.Positive[Val[A]] {
-          override def awaitPosFst: (Done |*| Val[A]) -⚬ Val[A] =
-            par(constVal(()), id[Val[A]]) >>> unliftPair >>> liftV(_._2)
-        }
-
       def byFst[A, B](implicit A: Junction.Positive[A]): Junction.Positive[A |*| B] =
         new Junction.Positive[A |*| B] {
           override def awaitPosFst: (Done |*| (A |*| B)) -⚬ (A |*| B) =
@@ -228,12 +219,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
         new Junction.Negative[Need] {
           override def awaitNegFst: Need -⚬ (Need |*| Need) =
             joinNeed
-        }
-
-      implicit def junctionNeg[A]: Junction.Negative[Neg[A]] =
-        new Junction.Negative[Neg[A]] {
-          override def awaitNegFst: Neg[A] -⚬ (Need |*| Neg[A]) =
-            liftN[(Unit, A), A](_._2) >>> liftNegPair >>> par(constNeg(()), id[Neg[A]])
         }
 
       def byFst[A, B](implicit A: Junction.Negative[A]): Junction.Negative[A |*| B] =
@@ -318,12 +303,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
             fork
         }
 
-      implicit def signalingVal[A]: Signaling.Positive[Val[A]] =
-        new Signaling.Positive[Val[A]] {
-          override def signalPosFst: Val[A] -⚬ (Done |*| Val[A]) =
-            dup[A].in.fst(neglect)
-        }
-
       def byFst[A, B](implicit A: Signaling.Positive[A]): Signaling.Positive[A |*| B] =
         new Signaling.Positive[A |*| B] {
           override def signalPosFst: (A |*| B) -⚬ (Done |*| (A |*| B)) =
@@ -349,12 +328,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
         new Signaling.Negative[Need] {
           override def signalNegFst: (Need |*| Need) -⚬ Need =
             forkNeed
-        }
-
-      implicit def signalingNeg[A]: Signaling.Negative[Neg[A]] =
-        new Signaling.Negative[Neg[A]] {
-          override def signalNegFst: (Need |*| Neg[A]) -⚬ Neg[A] =
-            par(inflate[A], id[Neg[A]]) >>> mergeDemands
         }
 
       def byFst[A, B](implicit A: Signaling.Negative[A]): Signaling.Negative[A |*| B] =
@@ -467,12 +440,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
           Signaling.Positive.rec(F),
           Junction.Positive.rec(F),
         )
-
-      implicit def signalingJunctionPositiveVal[A]: SignalingJunction.Positive[Val[A]] =
-        Positive.from(
-          Signaling.Positive.signalingVal,
-          Junction.Positive.junctionVal,
-        )
     }
 
     object Negative {
@@ -517,12 +484,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
         Negative.from(
           Signaling.Negative.rec(F),
           Junction.Negative.rec(F),
-        )
-
-      implicit def signalingJunctionNegativeNeg[A]: SignalingJunction.Negative[Neg[A]] =
-        Negative.from(
-          Signaling.Negative.signalingNeg[A],
-          Junction.Negative.junctionNeg[A],
         )
     }
   }
@@ -1129,15 +1090,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
                    (B |*|(A|*|C)) =
     |*|.assocRL[A, B, C] >>> par(swap, id) >>> |*|.assocLR
 
-  def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
-    id                                         [                                       Neg[A] |*| Neg[A]   ]
-      .introFst(promise[A])                 .to[ (Neg[A] |*|        Val[A]      ) |*| (Neg[A] |*| Neg[A])  ]
-      .assocLR                              .to[  Neg[A] |*| (      Val[A]        |*| (Neg[A] |*| Neg[A])) ]
-      .in.snd.fst(dup)                      .to[  Neg[A] |*| ((Val[A] |*| Val[A]) |*| (Neg[A] |*| Neg[A])) ]
-      .in.snd(IXI)                          .to[  Neg[A] |*| ((Val[A] |*| Neg[A]) |*| (Val[A] |*| Neg[A])) ]
-      .in.snd(parToOne(fulfill, fulfill))   .to[  Neg[A] |*|                      One                      ]
-      .elimSnd                              .to[  Neg[A]                                                   ]
-
   /** From the choice ''available'' on the right (`C |&| D`), choose the one corresponding to the choice ''made''
     * on the left (`A |+| B`): if on the left there is `A`, choose `C`, if on the left thre is `B`, choose `D`.
     */
@@ -1242,58 +1194,14 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
       id                                   [          Bool |*| A           ]
         .distributeRL                   .to[ (Done |*| A) |+| (Done |*| A) ]
         .bimap(ifTrue, ifFalse)         .to[        B     |+|        C     ]
-
-    private val eitherToBoolean: Either[Unit, Unit] => Boolean = {
-      case Left(())  => true
-      case Right(()) => false
-    }
-
-    private val booleanToEither: Boolean => Either[Unit, Unit] = {
-      case true => Left(())
-      case false => Right(())
-    }
-
-    def liftBoolean: Val[Boolean] -⚬ Bool = {
-      id                                     [ Val[Boolean]            ]
-        .andThen(liftV(booleanToEither))  .to[ Val[Either[Unit, Unit]] ]
-        .andThen(liftEither)              .to[ Val[Unit] |+| Val[Unit] ]
-        .bimap(neglect, neglect)          .to[   Done    |+|   Done    ]
-    }
-
-    def unliftBoolean: Bool -⚬ Val[Boolean] =
-      id[Bool]                              .to[   Done    |+|   Done    ]
-        .bimap(constVal(()), constVal(()))  .to[ Val[Unit] |+| Val[Unit] ]
-        .andThen(unliftEither)              .to[ Val[Either[Unit, Unit]] ]
-        .andThen(liftV(eitherToBoolean))    .to[      Val[Boolean]       ]
   }
 
   import Bool._
 
-  def liftBipredicate[A, B](p: (A, B) => Boolean): (Val[A] |*| Val[B]) -⚬ Bool =
-    id                                            [ Val[A] |*| Val[B] ]
-      .andThen(unliftPair)                     .to[   Val[(A, B)]     ]
-      .andThen(liftV(p.tupled))                .to[   Val[Boolean]    ]
-      .andThen(liftBoolean)                    .to[       Bool        ]
-
-  def lt[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
-    liftBipredicate(ord.lt)
-
-  def lteq[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
-    liftBipredicate(ord.lteq)
-
-  def gt[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
-    liftBipredicate(ord.gt)
-
-  def gteq[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
-    liftBipredicate(ord.gteq)
-
-  def equiv[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
-    liftBipredicate(ord.equiv)
-
-  private def testKeys[A, B, K](
-    aKey: Getter[A, Val[K]],
-    bKey: Getter[B, Val[K]],
-    pred: (K, K) => Boolean,
+  def testBy[A, B, K: Cosemigroup: Junction.Positive](
+    aKey: Getter[A, K],
+    bKey: Getter[B, K],
+    pred: (K |*| K) -⚬ Bool,
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) = {
     val awaitL: (Done |*| (A |*| B)) -⚬ (A |*| B) =
       (aKey compose |*|.fst[B].lens[A]).joinL
@@ -1301,56 +1209,9 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     id[A |*| B]
       .par(aKey.getL, bKey.getL)
       .andThen(IXI)
-      .in.fst(liftBipredicate(pred))
+      .in.fst(pred)
       .andThen(ifThenElse(awaitL, awaitL))
   }
-
-  def ltBy[A, B, K](
-    aKey: Getter[A, Val[K]],
-    bKey: Getter[B, Val[K]],
-  )(implicit
-    ord: Ordering[K],
-  ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
-    testKeys(aKey, bKey, ord.lt)
-
-  def lteqBy[A, B, K](
-    aKey: Getter[A, Val[K]],
-    bKey: Getter[B, Val[K]],
-  )(implicit
-    ord: Ordering[K],
-  ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
-    testKeys(aKey, bKey, ord.lteq)
-
-  def gtBy[A, B, K](
-    aKey: Getter[A, Val[K]],
-    bKey: Getter[B, Val[K]],
-  )(implicit
-    ord: Ordering[K],
-  ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
-    testKeys(aKey, bKey, ord.gt)
-
-  def gteqBy[A, B, K](
-    aKey: Getter[A, Val[K]],
-    bKey: Getter[B, Val[K]],
-  )(implicit
-    ord: Ordering[K],
-  ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
-    testKeys(aKey, bKey, ord.gteq)
-
-  def equivBy[A, B, K](
-    aKey: Getter[A, Val[K]],
-    bKey: Getter[B, Val[K]],
-  )(implicit
-    ord: Ordering[K],
-  ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
-    testKeys(aKey, bKey, ord.equiv)
-
-  def sortBy[A, B, K: Ordering](
-    aKey: Getter[A, Val[K]],
-    bKey: Getter[B, Val[K]],
-  )
-  : (A |*| B) -⚬ ((A |*| B) |+| (B |*| A)) =
-    lteqBy(aKey, bKey).in.right(swap)
 
   sealed trait ComparedModule {
     type Compared[A, B]
@@ -1360,13 +1221,26 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def equiv[A, B]: (A |*| B) -⚬ Compared[A, B]
     def gt   [A, B]: (A |*| B) -⚬ Compared[A, B]
 
-    // destructor
+    /** Destructor. */
     def compared[A, B, C](
       caseLt: (A |*| B) -⚬ C,
       caseEq: (A |*| B) -⚬ C,
       caseGt: (A |*| B) -⚬ C,
     )
     : Compared[A, B] -⚬ C
+    
+    /** Destructor that allows to combine the compared values with another value. */
+    def elimWith[A, B, C, D](
+      caseLt: ((A |*| B) |*| C) -⚬ D,
+      caseEq: ((A |*| B) |*| C) -⚬ D,
+      caseGt: ((A |*| B) |*| C) -⚬ D,
+    )
+    : (Compared[A, B] |*| C) -⚬ D
+    
+    def enrichWith[A, B, C, S, T](
+      f: ((A |*| B) |*| C) -⚬ (S |*| T),
+    )
+    : (Compared[A, B] |*| C) -⚬ Compared[S, T]
 
     implicit def bifunctorCompared: Bifunctor[Compared]
   }
@@ -1385,6 +1259,23 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     ): Compared[A, B] -⚬ C =
       either(caseLt, either(caseEq, caseGt))
 
+    override def elimWith[A, B, C, D](
+      caseLt: ((A |*| B) |*| C) -⚬ D,
+      caseEq: ((A |*| B) |*| C) -⚬ D,
+      caseGt: ((A |*| B) |*| C) -⚬ D,
+    ): (Compared[A, B] |*| C) -⚬ D =
+      id[ Compared[A, B] |*| C ]                .to[ ((A |*| B)        |+| ( (A |*| B)        |+|  (A |*| B))) |*| C   ]
+        .distributeRL.in.right(distributeRL)    .to[ ((A |*| B) |*| C) |+| (((A |*| B) |*| C) |+| ((A |*| B)   |*| C)) ]
+        .either(caseLt, either(caseEq, caseGt)) .to[                    D                                              ]
+
+    override def enrichWith[A, B, C, S, T](
+      f: ((A |*| B) |*| C) -⚬ (S |*| T),
+    )
+    : (Compared[A, B] |*| C) -⚬ Compared[S, T] =
+      id[ Compared[A, B] |*| C ]                .to[ ((A |*| B)        |+| ( (A |*| B)        |+|  (A |*| B))) |*| C   ]
+        .distributeRL.in.right(distributeRL)    .to[ ((A |*| B) |*| C) |+| (((A |*| B) |*| C) |+| ((A |*| B)   |*| C)) ]
+        .bimap[|+|](f, |+|.bimap(f, f))         .to[     (S |*| T)     |+| (    (S |*| T)     |+|      (S |*| T)     ) ]
+
     override def bifunctorCompared: Bifunctor[Compared] =
       new Bifunctor[Compared] {
         def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): Compared[A, C] -⚬ Compared[B, D] = {
@@ -1401,17 +1292,43 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   
   import Compared._
 
-  def compareBy[A, B, K: Ordering](
-    aKey: Getter[A, Val[K]],
-    bKey: Getter[B, Val[K]],
+  def compareBy[A, B, K1 : PComonoid : Junction.Positive, K2 : PComonoid : Junction.Positive](
+    aKey: Getter[A, K1],
+    bKey: Getter[B, K2],
+  )(implicit
+    cmp: Comparable[K1, K2],
   ): (A |*| B) -⚬ Compared[A, B] = {
-    id                                           [           A |*| B                       ]
-      .andThen(ltBy(aKey, bKey))              .to[ (A |*| B) |+|           (A |*| B)       ]
-      .in.right(equivBy(aKey, bKey))          .to[ (A |*| B) |+| ((A |*| B) |+| (A |*| B)) ]
-      .in.left(Compared.lt)
-      .in.right.left(Compared.equiv)
-      .in.right.right(Compared.gt)
-      .either(id, either(id, id))             .to[             Compared[A, B]              ]
+    cmp.contramap(aKey, bKey).compare
+  }
+  
+  trait Comparable[A, B] { self =>
+    def compare: (A |*| B) -⚬ Compared[A, B]
+    
+    def contramap[S, T](
+      f: Getter[S, A],
+      g: Getter[T, B],
+    )(implicit
+      A: PComonoid[A],
+      B: PComonoid[B],
+      AJ: Junction.Positive[A],
+      BJ: Junction.Positive[B],
+    ): Comparable[S, T] =
+      new Comparable[S, T] {
+        private val absorb: ((A |*| B) |*| (S |*| T)) -⚬ (S |*| T) =
+          id                           [ (A    |*| B) |*| (S    |*| T) ]
+            .andThen(IXI)           .to[ (A    |*| S) |*| (B    |*| T) ]
+            .in.fst.fst(A.counit)   .to[ (Done |*| S) |*| (B    |*| T) ]
+            .in.snd.fst(B.counit)   .to[ (Done |*| S) |*| (Done |*| T) ]
+            .par(f.joinL, g.joinL)  .to[           S  |*|           T  ]
+        
+        override def compare: (S |*| T) -⚬ Compared[S, T] = {
+          id[ S |*| T ]
+            .par(f.getL, g.getL)
+            .andThen(IXI)
+            .in.fst(self.compare)
+            .andThen(Compared.enrichWith(absorb))
+        }
+      }
   }
 
   def dualSymmetric[A, B](ev: Dual[A, B]): Dual[B, A] = new Dual[B, A] {
@@ -1478,15 +1395,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
   implicit def choiceEitherDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |&| B, Ȧ |+| Ḃ] =
     dualSymmetric(eitherChoiceDuality(dualSymmetric(a), dualSymmetric(b)))
 
-  implicit def valNegDuality[A]: Dual[Val[A], Neg[A]] =
-    new Dual[Val[A], Neg[A]] {
-      val lInvert: One -⚬ (Neg[A] |*| Val[A]) = promise[A]
-      val rInvert: (Val[A] |*| Neg[A]) -⚬ One = fulfill[A]
-    }
-
-  implicit def negValDuality[A]: Dual[Neg[A], Val[A]] =
-    dualSymmetric(valNegDuality)
-
   implicit def doneNeedDuality: Dual[Done, Need] =
     new Dual[Done, Need] {
       val rInvert: (Done |*| Need) -⚬ One = rInvertSignal
@@ -1529,12 +1437,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def just[A]: A -⚬ Maybe[A] =
       injectR
 
-    def unliftOption[A]: Maybe[Val[A]] -⚬ Val[Option[A]] =
-      id[Maybe[Val[A]]]               .to[    One    |+| Val[A] ]
-        .in.left(const_(()))          .to[ Val[Unit] |+| Val[A] ]
-        .andThen(unliftEither)        .to[ Val[Either[Unit, A]] ]
-        .andThen(liftV(_.toOption))   .to[ Val[Option[A]]       ]
-
     def getOrElse[A](f: One -⚬ A): Maybe[A] -⚬ A =
       either(f, id)
 
@@ -1567,18 +1469,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
 
     def just[A]: A -⚬ PMaybe[A] =
       injectR
-
-    def liftOption[A]: Val[Option[A]] -⚬ PMaybe[Val[A]] =
-      id[Val[Option[A]]]                .to[ Val[Option[      A]] ]
-        .andThen(liftV(_.toRight(())))  .to[ Val[Either[Unit, A]] ]
-        .andThen(liftEither)            .to[ Val[Unit] |+| Val[A] ]
-        .in.left(dsl.neglect)           .to[   Done    |+| Val[A] ]
-
-    def unliftOption[A]: PMaybe[Val[A]] -⚬ Val[Option[A]] =
-      id[PMaybe[Val[A]]]              .to[   Done    |+| Val[A] ]
-        .in.left(constVal(()))        .to[ Val[Unit] |+| Val[A] ]
-        .andThen(unliftEither)        .to[ Val[Either[Unit, A]] ]
-        .andThen(liftV(_.toOption))   .to[ Val[Option[A]]       ]
 
     def getOrElse[A](f: Done -⚬ A): PMaybe[A] -⚬ A =
       either(f, id)
@@ -1847,18 +1737,6 @@ class CoreLib[DSL <: ScalaDSL](val dsl: DSL) { lib =>
     def extract[A]   : F[A] -⚬ A
     def duplicate[A] : F[A] -⚬ F[F[A]]
   }
-
-  implicit def pComonoidVal[A]: PComonoid[Val[A]] =
-    new PComonoid[Val[A]] {
-      def counit : Val[A] -⚬ Done                = neglect
-      def split  : Val[A] -⚬ (Val[A] |*| Val[A]) = dup
-    }
-
-  implicit def nMonoidNeg[A]: NMonoid[Neg[A]] =
-    new NMonoid[Neg[A]] {
-      def unit    :                Need -⚬ Neg[A] = inflate
-      def combine : (Neg[A] |*| Neg[A]) -⚬ Neg[A] = mergeDemands
-    }
 
   implicit def monoidMultiple[A]: Monoid[Multiple[A]] =
     new Monoid[Multiple[A]] {

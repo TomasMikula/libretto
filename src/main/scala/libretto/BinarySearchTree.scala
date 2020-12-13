@@ -3,20 +3,23 @@ package libretto
 object BinarySearchTree {
   def apply(
     dsl: ScalaDSL,
-    lib: CoreLib[dsl.type],
+    coreLib: CoreLib[dsl.type],
+    scalaLib: ScalaLib[dsl.type, coreLib.type],
   )
-  : BinarySearchTree[dsl.type, lib.type] =
-    new BinarySearchTree(dsl, lib)
+  : BinarySearchTree[dsl.type, coreLib.type, scalaLib.type] =
+    new BinarySearchTree(dsl, coreLib, scalaLib)
 }
 
-class BinarySearchTree[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
+class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[DSL, CLib]](
   val dsl: DSL,
-  val lib: Lib with CoreLib[dsl.type],
+  val coreLib: CLib with CoreLib[dsl.type],
+  val scalaLib: SLib with ScalaLib[dsl.type, coreLib.type],
 ) {
   import dsl._
-  import lib._
-  import lib.Bool._
-  import lib.Compared._
+  import coreLib._
+  import coreLib.Bool._
+  import coreLib.Compared._
+  import scalaLib._
 
   sealed trait SummaryModule {
     type Summary[K]
@@ -99,7 +102,7 @@ class BinarySearchTree[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
       id
 
     def key[K, V]: Singleton[K, V] -⚬ (Val[K] |*| Singleton[K, V]) =
-      getFst(lib.pComonoidVal)
+      getFst(scalaLib.pComonoidVal)
 
     def summary[K, V]: Getter[Singleton[K, V], Summary[K]] = {
       val singletonSummary: Getter[Val[K], Summary[K]] =
@@ -108,7 +111,7 @@ class BinarySearchTree[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
             (Summary.singleton[K] >>> that.getL).in.snd(Summary.minKey)
 
           override def extendJunction(implicit j: Junction.Positive[Summary[K]]): Junction.Positive[Val[K]] =
-            Junction.Positive.junctionVal[K]
+            scalaLib.junctionVal[K]
         }
 
       singletonSummary compose fst[V].lens
@@ -117,7 +120,7 @@ class BinarySearchTree[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
     def clear[K, V](f: V -⚬ Done): Singleton[K, V] -⚬ Done =
       join(dsl.neglect, f)
 
-    def keyGetter[K, V]: Getter[Singleton[K, V], Val[K]] = lib.fst[V].lens[Val[K]]
+    def keyGetter[K, V]: Getter[Singleton[K, V], Val[K]] = coreLib.fst[V].lens[Val[K]]
   }
 
   import Singleton.Singleton
@@ -173,7 +176,7 @@ class BinarySearchTree[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
       BranchF.of(NonEmptyTree.summary)
 
     def deconstruct[K, V]: Branch[K, V] -⚬ (NonEmptyTree[K, V] |*| NonEmptyTree[K, V]) =
-      BranchF.deconstruct(NonEmptyTree.minKey[K, V].extendJunction(Junction.Positive.junctionVal[K]))
+      BranchF.deconstruct(NonEmptyTree.minKey[K, V].extendJunction(scalaLib.junctionVal[K]))
 
     def clear[K, V](subClear: NonEmptyTree[K, V] -⚬ Done): Branch[K, V] -⚬ Done =
       BranchF.clear(subClear)

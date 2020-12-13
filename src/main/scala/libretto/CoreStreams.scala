@@ -2,14 +2,14 @@ package libretto
 
 object CoreStreams {
   def apply(
-    dsl: ScalaDSL,
+    dsl: CoreDSL,
     lib: CoreLib[dsl.type],
   )
   : CoreStreams[dsl.type, lib.type] =
     new CoreStreams(dsl, lib)
 }
 
-class CoreStreams[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
+class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   val dsl: DSL,
   val lib: Lib with CoreLib[dsl.type],
 ) {

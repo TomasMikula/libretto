@@ -3,26 +3,30 @@ package libretto
 object ScalaStreams {
   def apply(
     dsl: ScalaDSL,
-    lib: CoreLib[dsl.type],
-    coreStreams: CoreStreams[dsl.type, lib.type],
+    coreLib: CoreLib[dsl.type],
+    scalaLib: ScalaLib[dsl.type, coreLib.type],
+    coreStreams: CoreStreams[dsl.type, coreLib.type],
   )
-  : ScalaStreams[dsl.type, lib.type, coreStreams.type] =
-    new ScalaStreams(dsl, lib, coreStreams)
+  : ScalaStreams[dsl.type, coreLib.type, scalaLib.type, coreStreams.type] =
+    new ScalaStreams(dsl, coreLib, scalaLib, coreStreams)
 }
 
 class ScalaStreams[
   DSL <: ScalaDSL,
   Lib <: CoreLib[DSL],
+  SLib <: ScalaLib[DSL, Lib],
   Streams <: CoreStreams[DSL, Lib],
 ](
   val dsl: DSL,
-  val lib: Lib with CoreLib[dsl.type],
-  val coreStreams: Streams with CoreStreams[dsl.type, lib.type],
+  val coreLib: Lib with CoreLib[dsl.type],
+  val scalaLib: SLib with ScalaLib[dsl.type, coreLib.type],
+  val coreStreams: Streams with CoreStreams[dsl.type, coreLib.type],
 ) {
-  private val Tree = BinarySearchTree(dsl, lib)
+  private val Tree = BinarySearchTree(dsl, coreLib, scalaLib)
 
   import dsl._
-  import lib._
+  import coreLib._
+  import scalaLib._
   import coreStreams._
   import Tree._
 
@@ -76,7 +80,7 @@ class ScalaStreams[
 
       val poll: Val[List[A]] -⚬ Polled[A] =
         liftV(uncons)                           .to[      Val[Option[(A, List[A])]]     ]
-          .andThen(PMaybe.liftOption)           .to[ Done |+|    Val[(A, List[A])]      ]
+          .andThen(optionToPMaybe)              .to[ Done |+|    Val[(A, List[A])]      ]
           .in.right(liftPair)                   .to[ Done |+| (Val[A] |*| Val[List[A]]) ]
           .in.right.snd(self)                   .to[ Done |+| (Val[A] |*| Pollable[A] ) ]
 
