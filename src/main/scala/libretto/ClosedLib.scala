@@ -1,7 +1,23 @@
 package libretto
 
-class ClosedLib[DSL <: ClosedDSL with ScalaDSL](dsl0: DSL) extends CoreLib[DSL](dsl0) { lib =>
+object ClosedLib {
+  def apply(
+    dsl: ClosedDSL,
+    coreLib: CoreLib[dsl.type],
+  )
+  : ClosedLib[dsl.type, coreLib.type] =
+    new ClosedLib(dsl, coreLib)
+}
+
+class ClosedLib[
+  DSL <: ClosedDSL,
+  CLib <: CoreLib[DSL],
+](
+  val dsl: DSL,
+  val coreLib: CLib with CoreLib[dsl.type],
+) { lib =>
   import dsl._
+  import coreLib._
 
   /** Function object (internal hom) is contravariant in the input type. */
   def input[C]: ContraFunctor[λ[x => x =⚬ C]] = new ContraFunctor[λ[x => x =⚬ C]] {
