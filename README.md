@@ -14,10 +14,12 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
   completing a `Promise` is an effect,
   spawning an actor or a fiber is an effect,
   enqueueing a message in a queue is an effect.
+  
+  Libretto rejects the assumption that effects are a prerequisite for concurrency.
 
   Although stream processing libraries do provide some high-level operations for declarative concurrency that abstract
-  away from the underlying effects, we haven't found a library with a set of high-level operations that
-  is expressive enough for an intermediately complex application.
+  away from the underlying effects, we haven't come across a library with a set of high-level operations that
+  is expressive enough for a moderately complex application.
 
 - **Underdelivery on the promise of writing mere _descriptions_ or _blueprints_ of programs.**
 
@@ -45,16 +47,16 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
   By a _callback_ we mean a function object that performs effects (on resources it has captured) and is passed to
   someone else to be executed.
 
-  The problem with callbacks is that they create non-local interaction, which makes it hard to reason about programs.
-
   One common example of a callback-style interface is an HTTP server taking, during construction, a request handler
   callback. The request handler has captured resources, such as a reference to mutable state or a database connector,
   and performs side-effects on them.
 
+  The problem with callbacks is that they create non-local interaction, which makes it hard to reason about programs.
+
 - **Lack of expressivity of the high-level stream operations.**
 
-  Building custom dataflow topologies, if at all possible, requires escaping to a different paradigm, one which is
-  more low-level and imperative.
+  Building custom dataflow topologies with existing libraries, if at all possible,
+  requires escaping to a different paradigm, one which is more low-level and imperative.
 
   We are talking about that case when you needed a slight variation on a stream operator and ended up "manually"
   shoveling messages between queues, mutable references and promises.
@@ -67,7 +69,7 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
   to Bob, Bob replies with `B` or `C`, and then Alice replies with `D` if Bob sent `B` and with `E` if Bob sent `C`.
 
   In a common (but unsatisfactory) implementation, Bob formally accepts any of `A`, `D`, `E` at all times and raises
-  a runtime error if the protocol is violated.
+  or replies with an error if the protocol is violated, i.e. if it is not in a state in which it can accept the message.
 
 ## Design Goals
 
@@ -140,9 +142,13 @@ That's why we need your help.
 
 Do you find that libretto does not hold up to some of its promises?
 Do you find that the project description omits some important limitation?
-If you have invested significant time in libretto only to find out that it's not for you,
-what information would have saved your time?
 Please, [let us know](https://github.com/TomasMikula/libretto/issues/new?labels=criticism).
+
+We value your time and want you to get to the answers you might have about Libretto quickly.
+If you have invested significant time in Libretto only to find out that it is not suitable for your purposes,
+we are sorry that your time is lost.
+Please, [let us know](https://github.com/TomasMikula/libretto/issues/new?labels=criticism)
+what information would have saved you some time, so that we can save the time of people with needs similar to yours.
 
 ## FAQs
 
