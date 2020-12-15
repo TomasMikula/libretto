@@ -60,6 +60,8 @@ trait CoreDSL {
   def timesAssocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C))
   def timesAssocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C)
 
+  def swap[A, B]: (A |*| B) -⚬ (B |*| A)
+
   def injectL[A, B]: A -⚬ (A |+| B)
   def injectR[A, B]: B -⚬ (A |+| B)
 
@@ -70,8 +72,6 @@ trait CoreDSL {
 
   def plusAssocRL[A, B, C]: (A |+| (B |+| C)) -⚬ ((A |+| B) |+| C) =
     either(andThen(injectL, injectL), either(andThen(injectR, injectL), injectR))
-
-  def swap[A, B]: (A |*| B) -⚬ (B |*| A)
 
   def chooseL[A, B]: (A |&| B) -⚬ A
   def chooseR[A, B]: (A |&| B) -⚬ B
