@@ -186,11 +186,11 @@ trait CoreDSL {
 
   def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B
 
-  /** Unpacks one level of a recursive type definition. */
-  def unpack[F[_]]: Rec[F] -⚬ F[Rec[F]]
-
   /** Hides one level of a recursive type definition. */
   def pack[F[_]]: F[Rec[F]] -⚬ Rec[F]
+
+  /** Unpacks one level of a recursive type definition. */
+  def unpack[F[_]]: Rec[F] -⚬ F[Rec[F]]
 
   /** Races the two [[Done]] signals and
     *  - produces left if the first signal wins, in which case it returns the second signal that still

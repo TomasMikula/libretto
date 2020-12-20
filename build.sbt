@@ -1,7 +1,14 @@
 scalaVersion := "3.0.0-M2"
 
+resolvers += Resolver.mavenCentral
+
 lazy val libretto = project
-//  .settings(...)
+  .in(file("."))
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % "3.2.3" % "test",
+    ),
+  )
 
 // to compile documentation, run `sbt docs/mdoc`
 lazy val docs = project

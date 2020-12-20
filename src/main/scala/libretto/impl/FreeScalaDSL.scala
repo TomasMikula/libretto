@@ -3,7 +3,23 @@ package libretto.impl
 import libretto.ScalaDSL
 
 object FreeScalaDSL extends ScalaDSL {
-  sealed trait -⚬[A, B]
+  override sealed trait -⚬[A, B]
+  
+  // The following types are all "imaginary", never instantiated, but we declare them as classes,
+  // so that the Scala typechecker can infer that
+  //  1. they are injective (e.g. that if `(A |*| B) =:= (C |*| D)` then `A =:= C` and `B =:= D`;
+  //  2. they are all distinct types (e.g. `One` can never be unified with `Done`).
+  // Unfortunately, the Scala typechecker doesn't take advantage of this information anyway.
+  override final class One private()
+  override final class Done private()
+  override final class Need private()
+  override final class |*|[A, B] private()
+  override final class |+|[A, B] private()
+  override final class |&|[A, B] private()
+  override final class Rec[F[_]] private()
+  override final class Val[A] private()
+  override final class Neg[A] private()
+  
   object -⚬ {
     case class Id[A]() extends (A -⚬ A)
     case class AndThen[A, B, C](f: A -⚬ B, g: B -⚬ C) extends (A -⚬ C)
@@ -44,9 +60,11 @@ object FreeScalaDSL extends ScalaDSL {
     case class CoDistributeR[A, B, C]() extends (((A |*| C) |&| (B |*| C)) -⚬ ((A |&| B) |*| C))
     case class RInvertSignal() extends ((Done |*| Need) -⚬ One)
     case class LInvertSignal() extends (One -⚬ (Need |*| Done))
-    case class RecF[A, B](f: (A -⚬ B) => (A -⚬ B)) extends (A -⚬ B)
-    case class Unpack[F[_]]() extends (Rec[F] -⚬ F[Rec[F]])
+    case class RecF[A, B](f: (A -⚬ B) => (A -⚬ B)) extends (A -⚬ B) { self =>
+      val recursed: A -⚬ B = f(self)
+    }
     case class Pack[F[_]]() extends (F[Rec[F]] -⚬ Rec[F])
+    case class Unpack[F[_]]() extends (Rec[F] -⚬ F[Rec[F]])
     case class RaceCompletion() extends ((Done |*| Done) -⚬ (Done |+| Done))
     case class SelectRequest() extends ((Need |&| Need) -⚬ (Need |*| Need))
     
