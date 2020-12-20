@@ -136,7 +136,8 @@ trait CoreDSL {
   /** Distribute the factor on the right into the summands on the left.
     * Inverse of [[factorR]].
     */
-  def distributeRL[A, B, C]: ((A |+| B) |*| C) -⚬ ((A |*| C) |+| (B |*| C))
+  def distributeRL[A, B, C]: ((A |+| B) |*| C) -⚬ ((A |*| C) |+| (B |*| C)) =
+    andThen(andThen(swap, distributeLR), either(andThen(swap, injectL), andThen(swap, injectR)))
 
   def coFactorL[A, B, C]: (A |*| (B |&| C)) -⚬ ((A |*| B) |&| (A |*| C)) =
     choice(par(id, chooseL), par(id, chooseR))
@@ -148,7 +149,8 @@ trait CoreDSL {
   def coDistributeL[A, B, C]: ((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C))
 
   /** Inverse of [[coFactorR]]. */
-  def coDistributeR[A, B, C]: ((A |*| C) |&| (B |*| C)) -⚬ ((A |&| B) |*| C)
+  def coDistributeR[A, B, C]: ((A |*| C) |&| (B |*| C)) -⚬ ((A |&| B) |*| C) =
+    andThen(andThen(choice(andThen(chooseL, swap), andThen(chooseR, swap)), coDistributeL), swap)
 
   /** Reverses the [[Done]] signal (flowing in the positive direction, i.e. along the `-⚬` arrow)
     * into a [[Need]] signal (flowing in the negative direciton, i.e. against the `-⚬` arrow).

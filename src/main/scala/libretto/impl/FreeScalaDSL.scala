@@ -55,9 +55,7 @@ object FreeScalaDSL extends ScalaDSL {
     case class ChooseLWhenNeed[A, B]() extends ((Need |*| (A |&| B)) -⚬ (Need |*| A))
     case class ChooseRWhenNeed[A, B]() extends ((Need |*| (A |&| B)) -⚬ (Need |*| B))
     case class DistributeLR[A, B, C]() extends ((A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)))
-    case class DistributeRL[A, B, C]() extends (((A |+| B) |*| C) -⚬ ((A |*| C) |+| (B |*| C)))
     case class CoDistributeL[A, B, C]() extends (((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C)))
-    case class CoDistributeR[A, B, C]() extends (((A |*| C) |&| (B |*| C)) -⚬ ((A |&| B) |*| C))
     case class RInvertSignal() extends ((Done |*| Need) -⚬ One)
     case class LInvertSignal() extends (One -⚬ (Need |*| Done))
     case class RecF[A, B](f: (A -⚬ B) => (A -⚬ B)) extends (A -⚬ B) { self =>
@@ -182,14 +180,8 @@ object FreeScalaDSL extends ScalaDSL {
   def distributeLR[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)) =
     DistributeLR()
     
-  def distributeRL[A, B, C]: ((A |+| B) |*| C) -⚬ ((A |*| C) |+| (B |*| C)) =
-    DistributeRL()
-    
   def coDistributeL[A, B, C]: ((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C)) =
     CoDistributeL()
-    
-  def coDistributeR[A, B, C]: ((A |*| C) |&| (B |*| C)) -⚬ ((A |&| B) |*| C) =
-    CoDistributeR()
     
   def rInvertSignal: (Done |*| Need) -⚬ One =
     RInvertSignal()

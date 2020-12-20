@@ -148,15 +148,6 @@ class FreeScalaFutureRunner(implicit ec: ExecutionContext) extends ScalaRunner[F
               case Right(c) => Right(Pair(a, c))
             })                                                    .asInstanceOf[Frontier[B]]
           }
-        case -⚬.DistributeRL() =>
-          this match {
-            case Pair(InjectL(f), c) => InjectL(Pair(f, c))       .asInstanceOf[Frontier[B]]
-            case Pair(InjectR(g), c) => InjectR(Pair(g, c))       .asInstanceOf[Frontier[B]]
-            case Pair(AsyncEither(f), c) => AsyncEither(f.map {
-              case Left(a) => Left(Pair(a, c))
-              case Right(b) => Right(Pair(b, c))
-            })                                                    .asInstanceOf[Frontier[B]]
-          }
         case -⚬.CoDistributeL() =>
           // ((X |*| Y) |&| (X |*| Z)) -⚬ (X |*| (Y |&| Z))
           this match {
@@ -175,8 +166,6 @@ class FreeScalaFutureRunner(implicit ec: ExecutionContext) extends ScalaRunner[F
               }
               Pair(Deferred(px.future), Choice(chooseL, chooseR)) .asInstanceOf[Frontier[B]]
           }
-        case -⚬.CoDistributeR() =>
-          ???
         case -⚬.RInvertSignal() =>
           this match {
             case Pair(done, NeedAsync(p)) =>
