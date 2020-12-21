@@ -109,6 +109,36 @@ class ScalaStreams[
         .in.snd(delay)                      .to[ Pollable[A] |*| Delayed[Pollable[A]] ]
         .andThen(LPollable.concat)          .to[         Pollable[A]                  ]
 
+    def statefulMap[S, A, B](f: ((S, A)) => (S, B))(initialState: S): Pollable[A] -⚬ Pollable[B] = {
+      val ff: (Val[S] |*| Val[A]) -⚬ (Val[S] |*| Val[B]) =
+        unliftPair[S, A]
+          .andThen(liftV(f))
+          .andThen(liftPair[S, B])
+
+      val inner: (Val[S] |*| Pollable[A]) -⚬ Pollable[B] = rec { self =>
+        val close: (Val[S] |*| Pollable[A]) -⚬ Done =
+          join(neglect, Pollable.close)
+
+        val poll:(Val[S] |*| Pollable[A]) -⚬ (Done |+| (Val[B] |*| Pollable[B])) =
+          id[Val[S] |*| Pollable[A]]          .to[ Val[S] |*|                                    Pollable[A]   ]
+            .in.snd(Pollable.poll)            .to[ Val[S] |*| (Done  |+|             (Val[A] |*| Pollable[A])) ]
+            .distributeLR                     .to[ (Val[S] |*| Done) |+| (Val[S] |*| (Val[A] |*| Pollable[A])) ]
+            .in.left(join(neglect, id))       .to[        Done       |+| (Val[S] |*| (Val[A] |*| Pollable[A])) ]
+            .in.right.assocRL                 .to[        Done       |+| ((Val[S] |*| Val[A]) |*| Pollable[A]) ]
+            .in.right.fst(ff)                 .to[        Done       |+| ((Val[S] |*| Val[B]) |*| Pollable[A]) ]
+            .in.right.fst(swap)               .to[        Done       |+| ((Val[B] |*| Val[S]) |*| Pollable[A]) ]
+            .in.right.assocLR                 .to[        Done       |+| (Val[B] |*| (Val[S] |*| Pollable[A])) ]
+            .in.right.snd(self)               .to[        Done       |+| (Val[B] |*|     Pollable[B]         ) ]
+
+        choice(close, poll)
+          .pack[PollableF[B, *]]
+      }
+
+      id[Pollable[A]]                   .to[            Pollable[A] ]
+        .introFst(const_(initialState)) .to[ Val[S] |*| Pollable[A] ]
+        .andThen(inner)                 .to[     Pollable[B]        ]
+    }
+
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
       *
       * Polls the upstream only after ''both'' downstreams poll.
@@ -508,49 +538,4 @@ class ScalaStreams[
       .in.right.left(rInvertSignal).to[ One |+| (      One       |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Subscriber[B])))]
       .assocRL                     .to[(One |+|        One     ) |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Subscriber[B])) ]
       .in.left(either(id, id))     .to[     One                  |+| ((Val[A] |*| Pollable[A]) |*| (Neg[B] |*| Subscriber[B])) ]
-
-  type Pipe[A, B] = Pollable[A] -⚬ Pollable[B]
-  object Pipe {
-    def lift[A, B](f: A => B): Pipe[A, B] = {
-      val ff: Val[A] -⚬ Val[B] = liftV(f)
-
-      rec(self =>
-        id[Pollable[A]]                     .to[    Pollable[A]                               ]
-          .unpack                           .to[ Done |&| (Done |+| (Val[A] |*| Pollable[A])) ]
-          .in.choiceR.right.fst(ff)         .to[ Done |&| (Done |+| (Val[B] |*| Pollable[A])) ]
-          .in.choiceR.right.snd(self)       .to[ Done |&| (Done |+| (Val[B] |*| Pollable[B])) ]
-          .pack[PollableF[B, *]]            .to[                                Pollable[B]   ]
-      )
-    }
-
-    def statefulMap[S, A, B](f: ((S, A)) => (S, B))(initialState: S): Pipe[A, B] = {
-      val ff: (Val[S] |*| Val[A]) -⚬ (Val[S] |*| Val[B]) =
-        unliftPair[S, A]
-          .andThen(liftV(f))
-          .andThen(liftPair[S, B])
-
-      val inner: (Val[S] |*| Pollable[A]) -⚬ Pollable[B] = rec { self =>
-        val close: (Val[S] |*| Pollable[A]) -⚬ Done =
-          join(neglect, Pollable.close)
-
-        val poll:(Val[S] |*| Pollable[A]) -⚬ (Done |+| (Val[B] |*| Pollable[B])) =
-          id[Val[S] |*| Pollable[A]]          .to[ Val[S] |*|                                    Pollable[A]   ]
-            .in.snd(Pollable.poll)            .to[ Val[S] |*| (Done  |+|             (Val[A] |*| Pollable[A])) ]
-            .distributeLR                     .to[ (Val[S] |*| Done) |+| (Val[S] |*| (Val[A] |*| Pollable[A])) ]
-            .in.left(join(neglect, id))       .to[        Done       |+| (Val[S] |*| (Val[A] |*| Pollable[A])) ]
-            .in.right.assocRL                 .to[        Done       |+| ((Val[S] |*| Val[A]) |*| Pollable[A]) ]
-            .in.right.fst(ff)                 .to[        Done       |+| ((Val[S] |*| Val[B]) |*| Pollable[A]) ]
-            .in.right.fst(swap)               .to[        Done       |+| ((Val[B] |*| Val[S]) |*| Pollable[A]) ]
-            .in.right.assocLR                 .to[        Done       |+| (Val[B] |*| (Val[S] |*| Pollable[A])) ]
-            .in.right.snd(self)               .to[        Done       |+| (Val[B] |*|     Pollable[B]         ) ]
-
-        choice(close, poll)
-          .pack[PollableF[B, *]]
-      }
-
-      id[Pollable[A]]                   .to[            Pollable[A] ]
-        .introFst(const_(initialState)) .to[ Val[S] |*| Pollable[A] ]
-        .andThen(inner)                 .to[     Pollable[B]        ]
-    }
-  }
 }
