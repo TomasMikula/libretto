@@ -87,6 +87,26 @@ class ScalaStreams[
       choice(close, poll)
         .pack[PollableF[A, *]]
     }
+    
+    def toList[A]: Pollable[A] -⚬ Val[List[A]] = {
+      def go: (Pollable[A] |*| Val[List[A]]) -⚬ Val[List[A]] = rec { self =>
+        id                                   [                        Pollable[A]                    |*| Val[List[A]]  ]
+          .in.fst(poll)                   .to[ (Done                   |+| (Val[A] |*| Pollable[A])) |*| Val[List[A]]  ]
+          .distributeRL                   .to[ (Done |*| Val[List[A]]) |+| ((Val[A] |*| Pollable[A]) |*| Val[List[A]]) ]
+          .in.left.snd(liftV(_.reverse))  .to[ (Done |*| Val[List[A]]) |+| ((Val[A] |*| Pollable[A]) |*| Val[List[A]]) ]
+          .in.left.joinL                  .to[           Val[List[A]]  |+| ((Val[A] |*| Pollable[A]) |*| Val[List[A]]) ]
+          .in.right.fst(swap)             .to[           Val[List[A]]  |+| ((Pollable[A] |*| Val[A]) |*| Val[List[A]]) ]
+          .in.right.assocLR               .to[           Val[List[A]]  |+| (Pollable[A] |*| (Val[A] |*| Val[List[A]])) ]
+          .in.right.snd(unliftPair)       .to[           Val[List[A]]  |+| (Pollable[A] |*|    Val[(A, List[A])]     ) ]
+          .in.right.snd(liftV(_ :: _))    .to[           Val[List[A]]  |+| (Pollable[A] |*|      Val[List[A]]        ) ]
+          .in.right(self)                 .to[           Val[List[A]]  |+|          Val[List[A]]                       ]
+          .either(id, id)                 .to[                     Val[List[A]]                                        ]
+      }
+      
+      id[Pollable[A]]
+        .andThen(introSnd(const_(List.empty[A])))
+        .andThen(go)
+    }
 
     def map[A, B](f: A => B): Pollable[A] -⚬ Pollable[B] = {
       val g: Val[A] -⚬ Val[B] = liftV(f)
