@@ -71,6 +71,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         caseCons = par(id, self) >>> LPollable.cons[A],
       )
     }
+    
+    def of[A](as: (One -⚬ A)*)(implicit A: PComonoid[A]): One -⚬ LPollable[A] =
+      LList.of(as: _*) >>> fromLList
 
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPollable[A]) -⚬ LPollable[A] =
       id                                           [  Done |*|     LPollable[A]                 ]
