@@ -1,5 +1,7 @@
 package libretto
 
+import scala.annotation.tailrec
+
 object ScalaStreams {
   def apply(
     dsl: ScalaDSL,
@@ -93,13 +95,17 @@ class ScalaStreams[
       choice(close, poll)
         .pack[PollableF[A, *]]
     }
-    
-    def fromList[A](as: List[A]): One -⚬ Pollable[A] =
-      as match {
-        case head :: tail => const_(head).introSnd(fromList(tail)) >>> Pollable.cons
-        case Nil          => done                                  >>> Pollable.empty
-      }
-    
+
+    def fromList[A](as: List[A]): One -⚬ Pollable[A] = {
+      @tailrec def go(ras: List[A], acc: One -⚬ Pollable[A]): One -⚬ Pollable[A] =
+        ras match {
+          case head :: tail => go(tail, parFromOne(const_(head), acc) >>> Pollable.cons)
+          case Nil          => acc
+        }
+  
+      go(as.reverse, done >>> Pollable.empty[A])
+    }
+
     def of[A](as: A*): One -⚬ Pollable[A] =
       fromList(as.toList)
     

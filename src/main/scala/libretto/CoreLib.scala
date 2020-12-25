@@ -1,6 +1,7 @@
 package libretto
 
 import libretto.unapply._
+import scala.annotation.tailrec
 
 object CoreLib {
   def apply(dsl: CoreDSL): CoreLib[dsl.type] =
@@ -1810,12 +1811,16 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def uncons[T]: LList[T] -⚬ Maybe[T |*| LList[T]] =
       unpack[LListF[T, *]]
   
-    def fromList[T](ts: List[One -⚬ T]): One -⚬ LList[T] =
-      ts match {
-        case head :: tail => head.introSnd(fromList(tail)) >>> cons
-        case Nil => nil[T]
-      }
-  
+    def fromList[T](ts: List[One -⚬ T]): One -⚬ LList[T] = {
+      @tailrec def go(rts: List[One -⚬ T], acc: One -⚬ LList[T]): One -⚬ LList[T] =
+        rts match {
+          case head :: tail => go(tail, parFromOne(head, acc) >>> cons)
+          case Nil => acc
+        }
+
+      go(ts.reverse, nil[T])
+    }
+
     def of[T](ts: (One -⚬ T)*): One -⚬ LList[T] =
       fromList(ts.toList)
   
