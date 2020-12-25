@@ -1406,6 +1406,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   trait Dual1[F[_], G[_]] {
     def rInvert[A, Ā](rInvert: (A |*| Ā) -⚬ One): (F[A] |*| G[Ā]) -⚬ One
     def lInvert[A, Ā](lInvert: One -⚬ (Ā |*| A)): One -⚬ (G[Ā] |*| F[A])
+    
+    val rInvert: ForAll2[[x, y] =>> ((x |*| y) -⚬ One) => ((F[x] |*| G[y]) -⚬ One)] =
+      new ForAll2 { override def apply[A, B] = rInvert(_) }
+      
+    val lInvert: ForAll2[[x, y] =>> (One -⚬ (y |*| x)) => (One -⚬ (G[y] |*| F[x]))] =
+      new ForAll2 { override def apply[A, B] = lInvert(_) }
 
     def apply[A, Ā](ev: Dual[A, Ā]): Dual[F[A], G[Ā]] =
       new Dual[F[A], G[Ā]] {
@@ -1413,21 +1419,29 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         val lInvert: One -⚬ (G[Ā] |*| F[A]) = Dual1.this.lInvert(ev.lInvert)
       }
   }
+  
+  def rInvertRec[F[_], G[_]](
+    rInvertSub: ForAll2[[x, y] =>> ((x |*| y) -⚬ One) => ((F[x] |*| G[y]) -⚬ One)],
+  ): (Rec[F] |*| Rec[G]) -⚬ One =
+    rec { self =>
+      par(unpack, unpack) >>> rInvertSub(self)
+    }
+  
+  def lInvertRec[F[_], G[_]](
+    lInvertSub: ForAll2[[x, y] =>> (One -⚬ (x |*| y)) => (One -⚬ (F[x] |*| G[y]))],
+  ): One -⚬ (Rec[F] |*| Rec[G]) =
+    rec { self =>
+      lInvertSub(self) >>> par(pack, pack)
+    }
 
   /** If `F[A]` is dual to `G[B]` for all dual pairs `A`, `B`, then `Rec[F]` is dual to `Rec[G]`. */
   def dualRec[F[_], G[_]](ev: Dual1[F, G]): Dual[Rec[F], Rec[G]] =
     new Dual[Rec[F], Rec[G]] {
-      val rInvert: (Rec[F] |*| Rec[G]) -⚬ One = rec { self =>
-        id                                   [   Rec[F]  |*|   Rec[G]  ]
-          .par(unpack[F], unpack[G])      .to[ F[Rec[F]] |*| G[Rec[G]] ]
-          .andThen(ev.rInvert(self))      .to[           One           ]
-      }
+      val rInvert: (Rec[F] |*| Rec[G]) -⚬ One =
+        rInvertRec(ev.rInvert)
 
-      val lInvert: One -⚬ (Rec[G] |*| Rec[F]) = rec { self =>
-        id                                   [           One           ]
-          .andThen(ev.lInvert(self))      .to[ G[Rec[G]] |*| F[Rec[F]] ]
-          .par(pack[G], pack[F])          .to[   Rec[G]  |*|   Rec[F]  ]
-      }
+      val lInvert: One -⚬ (Rec[G] |*| Rec[F]) =
+        lInvertRec(ev.lInvert.flipTArgs)
     }
 
   type Maybe[A] = One |+| A
