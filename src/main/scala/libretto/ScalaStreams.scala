@@ -190,46 +190,9 @@ class ScalaStreams[
 
     /** Merges two [[Pollable]]s into one. When there is a value available from both upstreams, favors the first one. */
     def merge[A]: (Pollable[A] |*| Pollable[A]) -⚬ Pollable[A] = rec { self =>
-      val close: (Pollable[A] |*| Pollable[A]) -⚬ Done =
-        join(Pollable.close, Pollable.close)
-
-      val unpoll: Polled[A] -⚬ Pollable[A] = {
-        val closePolled: Polled[A] -⚬ Done =
-          either(id, join(neglect, Pollable.close))
-
-        choice(closePolled, id[Polled[A]])
-          .pack[PollableF[A, *]]
-      }
-
-      // checks the first argument first, uses the given function for recursive calls
-      def go(merge: (Pollable[A] |*| Pollable[A]) -⚬ Pollable[A]): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
-        id[Polled[A] |*| Polled[A]]   .to[ (Done |+| (Val[A] |*| Pollable[A])) |*| Polled[A]                   ]
-          .distributeRL               .to[ (Done |*| Polled[A]) |+| ((Val[A] |*| Pollable[A]) |*|  Polled[A] ) ]
-          .in.left(Polled.delayBy[A]) .to[           Polled[A]  |+| ((Val[A] |*| Pollable[A]) |*|  Polled[A] ) ]
-          .in.right.snd(unpoll)       .to[           Polled[A]  |+| ((Val[A] |*| Pollable[A]) |*| Pollable[A]) ]
-          .in.right.assocLR           .to[           Polled[A]  |+| (Val[A] |*| (Pollable[A] |*| Pollable[A])) ]
-          .in.right.snd(merge)        .to[           Polled[A]  |+| (Val[A] |*|          Pollable[A]         ) ]
-          .in.right.injectR[Done]     .to[           Polled[A]  |+|       Polled[A]                            ]
-          .andThen(either(id, id))    .to[                   Polled[A]                                         ]
-
-      // checks the first argument first
-      val goFst: (Polled[A] |*| Polled[A]) -⚬ Polled[A] = go(self)
-
-      // checks the second argument first
-      val goSnd: (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
-        swap[Polled[A], Polled[A]]
-          .andThen(go(swap[Pollable[A], Pollable[A]] andThen self))
-
-      val poll: (Pollable[A] |*| Pollable[A]) -⚬ Polled[A] = {
-        import Polled.positivePolled
-
-        id[Pollable[A] |*| Pollable[A]]               .to[ Pollable[A] |*| Pollable[A] ]
-          .par(Pollable.poll[A], Pollable.poll[A])    .to[  Polled[A]  |*|  Polled[A]  ]
-          .race(goFst, goSnd)                         .to[           Polled[A]         ]
-      }
-
-      choice(close, poll)
-        .pack[PollableF[A, *]]
+      val onClose: (Pollable[A] |*| Pollable[A]) -⚬ Done      = join(close, close)
+      val onPoll : (Pollable[A] |*| Pollable[A]) -⚬ Polled[A] = par(poll, poll) >>> Polled.merge(self)
+      choice(onClose, onPoll).pack
     }
 
     implicit def negativePollable[A]: SignalingJunction.Negative[Pollable[A]] =
@@ -452,12 +415,44 @@ class ScalaStreams[
 
     def cons[A]: (Val[A] |*| Pollable[A]) -⚬ Polled[A] =
       LPolled.cons
+      
+    def unpoll[A]: Polled[A] -⚬ Pollable[A] =
+      choice(close, id).pack
 
     def delayBy[A]: (Done |*| Polled[A]) -⚬ Polled[A] =
       LPolled.delayBy
 
     implicit def positivePolled[A]: SignalingJunction.Positive[Polled[A]] =
       LPolled.positiveLPolled[Val[A]]
+
+    /** Merges two [[Polled]]s into one.
+      * Left-biased: whenever there is a value available from both upstreams, favors the first one.
+      * 
+      * @param mergePollables left-biased merge of two [[Pollable]]s.
+      */
+    def merge[A](
+      mergePollables: (Pollable[A] |*| Pollable[A]) -⚬ Pollable[A],
+    ): (Polled[A] |*| Polled[A]) -⚬ Polled[A] = {
+      // checks the first argument first, uses the given function for recursive calls
+      def go(merge: (Pollable[A] |*| Pollable[A]) -⚬ Pollable[A]): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
+        id[Polled[A] |*| Polled[A]]   .to[ (Done |+| (Val[A] |*| Pollable[A])) |*| Polled[A]                   ]
+          .distributeRL               .to[ (Done |*| Polled[A]) |+| ((Val[A] |*| Pollable[A]) |*|  Polled[A] ) ]
+          .in.left(delayBy[A])        .to[           Polled[A]  |+| ((Val[A] |*| Pollable[A]) |*|  Polled[A] ) ]
+          .in.right.snd(unpoll)       .to[           Polled[A]  |+| ((Val[A] |*| Pollable[A]) |*| Pollable[A]) ]
+          .in.right.assocLR           .to[           Polled[A]  |+| (Val[A] |*| (Pollable[A] |*| Pollable[A])) ]
+          .in.right.snd(merge)        .to[           Polled[A]  |+| (Val[A] |*|          Pollable[A]         ) ]
+          .in.right(cons)             .to[           Polled[A]  |+|       Polled[A]                            ]
+          .andThen(either(id, id))    .to[                   Polled[A]                                         ]
+
+      // checks the first argument first
+      val goFst: (Polled[A] |*| Polled[A]) -⚬ Polled[A] = go(mergePollables)
+
+      // checks the second argument first
+      val goSnd: (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
+        swap >>> go(swap >>> mergePollables)
+      
+      race(goFst, goSnd)
+    }
   }
 
   object Subscriber {
