@@ -66,6 +66,9 @@ class ScalaStreams[
 
     def cons[A]: (Val[A] |*| Pollable[A]) -⚬ Pollable[A] =
       LPollable.cons
+      
+    def fromLList[A]: LList[Val[A]] -⚬ Pollable[A] =
+      LPollable.fromLList[Val[A]]
 
     def delay[A]: Pollable[A] -⚬ Delayed[Pollable[A]] =
       LPollable.delay[Val[A]]

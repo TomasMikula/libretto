@@ -64,6 +64,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       val onPoll:  (A |*| LPollable[A]) -⚬ LPolled[A] = LPolled.cons
       choice(onClose, onPoll).pack
     }
+    
+    def fromLList[A](implicit A: PComonoid[A]): LList[A] -⚬ LPollable[A] = rec { self =>
+      LList.switch(
+        caseNil  = done          >>> LPollable.empty[A],
+        caseCons = par(id, self) >>> LPollable.cons[A],
+      )
+    }
 
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPollable[A]) -⚬ LPollable[A] =
       id                                           [  Done |*|     LPollable[A]                 ]
