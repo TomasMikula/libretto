@@ -31,6 +31,15 @@ class LLists[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
   def uncons[T]: LList[T] -⚬ Maybe[T |*| LList[T]] =
     unpack[LListF[T, *]]
+    
+  def fromList[T](ts: List[One -⚬ T]): One -⚬ LList[T] =
+    ts match {
+      case head :: tail => head.introSnd(fromList(tail)) >>> cons
+      case Nil => nil[T]
+    }
+  
+  def of[T](ts: (One -⚬ T)*): One -⚬ LList[T] =
+    fromList(ts.toList)
 
   def map[T, U](f: T -⚬ U): LList[T] -⚬ LList[U] =
     rec { self =>
