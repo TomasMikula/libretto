@@ -40,11 +40,16 @@ class LLists[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   
   def of[T](ts: (One -⚬ T)*): One -⚬ LList[T] =
     fromList(ts.toList)
+    
+  def switch[T, R](
+    caseNil: One -⚬ R,
+    caseCons: (T |*| LList[T]) -⚬ R,
+  ): LList[T] -⚬ R =
+    uncons[T].either(caseNil, caseCons)
 
   def map[T, U](f: T -⚬ U): LList[T] -⚬ LList[U] =
     rec { self =>
-      uncons[T]
-        .either(nil[U], par(f, self) >>> cons)
+      switch(nil[U], par(f, self) >>> cons)
     }
 
   def consMaybe[T]: (Maybe[T] |*| LList[T]) -⚬ LList[T] =
@@ -54,8 +59,7 @@ class LLists[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
   def collect[T, U](f: T -⚬ Maybe[U]): LList[T] -⚬ LList[U] =
     rec { self =>
-      uncons[T]
-        .either(nil[U], par(f, self) >>> consMaybe)
+      switch(nil[U], par(f, self) >>> consMaybe)
     }
 
   def transform[T, A, U](f: (A |*| T) -⚬ U)(implicit A: Comonoid[A]): (A |*| LList[T]) -⚬ LList[U] =
