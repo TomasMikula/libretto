@@ -158,6 +158,18 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .in.fst(pack)                 .to[                     LPollable[A]        |*| LPollable[B]  ]
     }
 
+    /** Merges two [[LPollable]]s into one.
+      * Left-biased: when there is a value available from both upstreams, favors the first one.
+      */
+    def merge[A](implicit
+      A1: Junction.Positive[A],
+      A2: PComonoid[A],
+    ): (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A] = rec { self =>
+      val onClose: (LPollable[A] |*| LPollable[A]) -⚬ Done       = join(close, close)
+      val onPoll : (LPollable[A] |*| LPollable[A]) -⚬ LPolled[A] = par(poll, poll) >>> LPolled.merge(self)
+      choice(onClose, onPoll).pack
+    }
+
     implicit def negativeLPollableF[A, X](implicit A: Junction.Positive[A]): SignalingJunction.Negative[LPollableF[A, X]] =
       SignalingJunction.Negative.choicePos(
         Junction.Positive.junctionDone,
@@ -186,6 +198,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def cons[A]: (A |*| LPollable[A]) -⚬ LPolled[A] =
       injectR
+
+    def unpoll[A](implicit A: PComonoid[A]): LPolled[A] -⚬ LPollable[A] =
+      choice(close(A.counit), id).pack
 
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPolled[A]) -⚬ LPolled[A] =
       id[Done |*| LPolled[A]]         .to[  Done |*| (Done |+|           (A |*| LPollable[A])) ]
@@ -222,6 +237,38 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         SignalingJunction.Positive.signalingJunctionPositiveDone,
         Junction.Positive.byFst(A),
       )
+
+    /** Merges two [[LPolled]]s into one.
+      * Left-biased: whenever there is a value available from both upstreams, favors the first one.
+      *
+      * @param mergePollables left-biased merge of two [[LPollable]]s.
+      */
+    def merge[A](
+      mergePollables: (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A],
+    )(implicit
+      A1: Junction.Positive[A],
+      A2: PComonoid[A],
+    ): (LPolled[A] |*| LPolled[A]) -⚬ LPolled[A] = {
+      // checks the first argument first, uses the given function for recursive calls
+      def go(merge: (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A]): (LPolled[A] |*| LPolled[A]) -⚬ LPolled[A] =
+        id[LPolled[A] |*| LPolled[A]] .to[ (Done                 |+|  (A |*| LPollable[A])) |*| LPolled[A]     ]
+          .distributeRL               .to[ (Done |*| LPolled[A]) |+| ((A |*| LPollable[A])  |*| LPolled[A]   ) ]
+          .in.left(delayBy[A])        .to[           LPolled[A]  |+| ((A |*| LPollable[A])  |*| LPolled[A]   ) ]
+          .in.right.snd(unpoll)       .to[           LPolled[A]  |+| ((A |*| LPollable[A])  |*| LPollable[A] ) ]
+          .in.right.assocLR           .to[           LPolled[A]  |+| ( A |*| (LPollable[A]  |*| LPollable[A])) ]
+          .in.right.snd(merge)        .to[           LPolled[A]  |+| ( A |*|           LPollable[A]          ) ]
+          .in.right(cons)             .to[           LPolled[A]  |+|     LPolled[A]                            ]
+          .andThen(either(id, id))    .to[                   LPolled[A]                                        ]
+
+      // checks the first argument first
+      val goFst: (LPolled[A] |*| LPolled[A]) -⚬ LPolled[A] = go(mergePollables)
+
+      // checks the second argument first
+      val goSnd: (LPolled[A] |*| LPolled[A]) -⚬ LPolled[A] =
+        swap >>> go(swap >>> mergePollables)
+
+      race(goFst, goSnd)
+    }
   }
 
   object LSubscriber {
