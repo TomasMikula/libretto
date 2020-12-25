@@ -2,14 +2,14 @@ package libretto
 
 object LLists {
   def apply(
-    dsl: ScalaDSL,
+    dsl: CoreDSL,
     lib: CoreLib[dsl.type],
   )
   : LLists[dsl.type, lib.type] =
     new LLists(dsl, lib)
 }
 
-class LLists[DSL <: ScalaDSL, Lib <: CoreLib[DSL]](
+class LLists[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   val dsl: DSL,
   val lib: Lib with CoreLib[dsl.type],
 ) {
