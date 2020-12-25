@@ -85,4 +85,14 @@ class LLists[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .in.right(par(f, self))         .to[        One  |+| ( Maybe[U] |*|    LList[U]     ) ]
         .either(nil[U], consMaybe[U])   .to[            LList[U]                              ]
     }
+
+  def unzip[A, B]: LList[A |*| B] -⚬ (LList[A] |*| LList[B]) = rec { self =>
+    val caseNil: One -⚬ (LList[A] |*| LList[B]) =
+      parFromOne(nil[A], nil[B])
+
+    val caseCons: ((A |*| B) |*| LList[A |*| B]) -⚬ (LList[A] |*| LList[B]) =
+      par(id, self) >>> IXI >>> par(cons, cons)
+
+    switch(caseNil, caseCons)
+  }
 }
