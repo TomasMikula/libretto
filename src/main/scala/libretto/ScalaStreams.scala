@@ -194,6 +194,13 @@ class ScalaStreams[
     def merge[A]: (Pollable[A] |*| Pollable[A]) -⚬ Pollable[A] =
       LPollable.merge[Val[A]]
 
+    /** Merges a list of [[Pollable]]s into a single [[Pollable]].
+      * Head-biased: when there is an element available from multiple upstreams, favors the upstream closest to the
+      * head of the input list.
+      */
+    def mergeAll[A]: LList[Pollable[A]] -⚬ Pollable[A] =
+      LPollable.mergeAll[Val[A]]
+
     implicit def negativePollable[A]: SignalingJunction.Negative[Pollable[A]] =
       LPollable.negativeLPollable[Val[A]]
 

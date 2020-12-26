@@ -170,6 +170,21 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       choice(onClose, onPoll).pack
     }
 
+    /** Merges a list of [[LPollable]]s into a single [[LPollable]].
+      * Head-biased: when there is an element available from multiple upstreams, favors the upstream closest to the
+      * head of the input list.
+      */
+    def mergeAll[A](implicit
+      A1: Junction.Positive[A],
+      A2: PComonoid[A],
+    ): LList[LPollable[A]] -⚬ LPollable[A] =
+      rec { self =>
+        LList.switch(
+          caseNil = done >>> LPollable.empty,
+          caseCons = par(id, self) >>> merge,
+        )
+      }
+
     implicit def negativeLPollableF[A, X](implicit A: Junction.Positive[A]): SignalingJunction.Negative[LPollableF[A, X]] =
       SignalingJunction.Negative.choicePos(
         Junction.Positive.junctionDone,
