@@ -12,7 +12,7 @@ class StreamsTests extends TestSuite {
   
   test("toList ⚬ fromList = id") {
     assertResult(
-      const_(List(1, 2, 3, 4, 5, 6)) >>> Pollable.fromList >>> Pollable.toList,
+      Pollable.fromList(List(1, 2, 3, 4, 5, 6)) >>> Pollable.toList,
       List(1, 2, 3, 4, 5, 6),
     )
   }
