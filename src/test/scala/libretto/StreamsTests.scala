@@ -10,9 +10,10 @@ class StreamsTests extends TestSuite {
   
   import scalaStreams._
   
-  testResult("toList ⚬ fromList = id") {
-    const_(List(1, 2, 3, 4, 5, 6)) >>> Pollable.fromList >>> Pollable.toList
-  } (
-    List(1, 2, 3, 4, 5, 6)
-  )
+  test("toList ⚬ fromList = id") {
+    assertResult(
+      const_(List(1, 2, 3, 4, 5, 6)) >>> Pollable.fromList >>> Pollable.toList,
+      List(1, 2, 3, 4, 5, 6),
+    )
+  }
 }

@@ -1,23 +1,18 @@
 package libretto
 
-import scala.concurrent.{Await, ExecutionContext}
-import scala.concurrent.duration._
-
 class BasicTests extends TestSuite {
   import kit.dsl._
   import kit.coreLib._
-  
-  testCompletion("done") {
-    done
+
+  test("done") {
+    assertCompletes(done)
   }
-  
-  testCompletion("join ⚬ fork") {
-    done >>> fork >>> join
+
+  test("join ⚬ fork") {
+    assertCompletes(done >>> fork >>> join)
   }
-  
-  testResult("constVal") {
-    done >>> constVal(5)
-  } (
-    5
-  )
+
+  test("constVal") {
+    assertResult(done >>> constVal(5), 5)
+  }
 }

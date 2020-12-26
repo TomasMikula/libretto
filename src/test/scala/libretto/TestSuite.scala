@@ -11,18 +11,12 @@ abstract class TestSuite extends AnyFunSuite {
   
   val runner = StarterKit.runner(ExecutionContext.global)
 
-  def testCompletion(name: String)(prg: One -⚬ Done): Unit = {
-    test(name) {
-      Await.result(
-        runner.run(prg),
-        5.seconds,
-      )
-    }
-  }
+  def assertCompletes(prg: One -⚬ Done): Unit =
+    Await.result(
+      runner.run(prg),
+      5.seconds,
+    )
 
-  def testResult[A](name: String)(prg: One -⚬ Val[A])(expected: A): Unit = {
-    test(name) {
-      assert(Await.result(runner.runScala(prg), 5.seconds) == expected)
-    }
-  }
+  def assertResult[A](prg: One -⚬ Val[A], expected: A): Unit =
+    assert(Await.result(runner.runScala(prg), 5.seconds) == expected)
 }
