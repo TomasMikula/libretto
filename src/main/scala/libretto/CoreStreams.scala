@@ -323,6 +323,16 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         )
       )
     )
+    
+  def rInvertLSubscriber[A, B](
+    rInvertElem: (A |*| B) -⚬ One,
+  ): (LSubscriber[B] |*| LPollable[A]) -⚬ One =
+    rInvertRec[LSubscriberF[B, *], LPollableF[A, *]](
+      new ForAll2[[x, y] =>> ((x |*| y) -⚬ One) => ((LSubscriberF[B, x] |*| LPollableF[A, y]) -⚬ One)] {
+        override def apply[X, Y] =
+          rInvertSub => rInvertLSubscriberF(rInvertElem, swap >>> rInvertSub)
+      },
+    )
 
   def lInvertLPollableF[A, B, x, y](
     lInvertA: One -⚬ (B |*| A),
@@ -338,16 +348,24 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         )
       ) >>> swap
     )
+    
+  def lInvertLPollable[A, B](
+    lInvertElem: One -⚬ (B |*| A),
+  ): One -⚬ (LPollable[A] |*| LSubscriber[B]) =
+    lInvertRec[LPollableF[A, *], LSubscriberF[B, *]](
+      new ForAll2[[x, y] =>> (One -⚬ (x |*| y)) => (One -⚬ (LPollableF[A, x] |*| LSubscriberF[B, y]))] {
+        override def apply[X, Y] =
+          lInvertSub => lInvertLPollableF(lInvertElem, lInvertSub >>> swap)
+      },
+    )
 
   implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[B], LPollable[A]] =
-    dualRec[LSubscriberF[B, *], LPollableF[A, *]](
-      new Dual1[LSubscriberF[B, *], LPollableF[A, *]] {
-        def rInvert[x, y](rInvertSub: (x |*| y) -⚬ One): (LSubscriberF[B, x] |*| LPollableF[A, y]) -⚬ One =
-          rInvertLSubscriberF(AB.rInvert, swap >>> rInvertSub)
-        def lInvert[x, y](lInvertSub: One -⚬ (y |*| x)): One -⚬ (LPollableF[A, y] |*| LSubscriberF[B, x]) =
-          lInvertLPollableF  (AB.lInvert, lInvertSub >>> swap)
-      }
-    )
+    new Dual[LSubscriber[B], LPollable[A]] {
+      val rInvert: (LSubscriber[B] |*| LPollable[A]) -⚬ One =
+        rInvertLSubscriber(AB.rInvert)
+      val lInvert: One -⚬ (LPollable[A] |*| LSubscriber[B]) =
+        lInvertLPollable(AB.lInvert)
+    }
 
   implicit def pollableSubscriberDuality[A, B](implicit BA: Dual[B, A]): Dual[LPollable[B], LSubscriber[A]] =
     dualSymmetric(subscriberPollableDuality[B, A])
