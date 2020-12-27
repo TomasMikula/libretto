@@ -114,11 +114,11 @@ trait CoreDSL {
   /** Signals (in the negative direction) when it is known which side of the choice (`A |&| B`) has been chosen. */
   def signalChoice[A, B]: (Need |*| (A |&| B)) -⚬ (A |&| B)
 
-  def injectLWhenDone[A, B]: (Done |*| A) -⚬ (Done |*| (A |+| B))
-  def injectRWhenDone[A, B]: (Done |*| B) -⚬ (Done |*| (A |+| B))
+  def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B)
+  def injectRWhenDone[A, B]: (Done |*| B) -⚬ (A |+| (Done |*| B))
 
-  def chooseLWhenNeed[A, B]: (Need |*| (A |&| B)) -⚬ (Need |*| A)
-  def chooseRWhenNeed[A, B]: (Need |*| (A |&| B)) -⚬ (Need |*| B)
+  def chooseLWhenNeed[A, B]: ((Need |*| A) |&| B) -⚬ (Need |*| A)
+  def chooseRWhenNeed[A, B]: (A |&| (Need |*| B)) -⚬ (Need |*| B)
 
   /** Factor out the factor `A` on the left of both summands. */
   def factorL[A, B, C]: ((A |*| B) |+| (A |*| C)) -⚬ (A |*| (B |+| C)) =

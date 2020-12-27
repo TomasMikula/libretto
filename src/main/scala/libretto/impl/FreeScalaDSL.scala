@@ -50,10 +50,10 @@ object FreeScalaDSL extends ScalaDSL {
     case class JoinNeed() extends (Need -⚬ (Need |*| Need))
     case class SignalEither[A, B]() extends ((A |+| B) -⚬ (Done |*| (A |+| B)))
     case class SignalChoice[A, B]() extends ((Need |*| (A |&| B)) -⚬ (A |&| B))
-    case class InjectLWhenDone[A, B]() extends ((Done |*| A) -⚬ (Done |*| (A |+| B)))
-    case class InjectRWhenDone[A, B]() extends ((Done |*| B) -⚬ (Done |*| (A |+| B)))
-    case class ChooseLWhenNeed[A, B]() extends ((Need |*| (A |&| B)) -⚬ (Need |*| A))
-    case class ChooseRWhenNeed[A, B]() extends ((Need |*| (A |&| B)) -⚬ (Need |*| B))
+    case class InjectLWhenDone[A, B]() extends ((Done |*| A) -⚬ ((Done |*| A) |+| B))
+    case class InjectRWhenDone[A, B]() extends ((Done |*| B) -⚬ (A |+| (Done |*| B)))
+    case class ChooseLWhenNeed[A, B]() extends (((Need |*| A) |&| B) -⚬ (Need |*| A))
+    case class ChooseRWhenNeed[A, B]() extends ((A |&| (Need |*| B)) -⚬ (Need |*| B))
     case class DistributeLR[A, B, C]() extends ((A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)))
     case class CoDistributeL[A, B, C]() extends (((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C)))
     case class RInvertSignal() extends ((Done |*| Need) -⚬ One)
@@ -165,16 +165,16 @@ object FreeScalaDSL extends ScalaDSL {
   def signalChoice[A, B]: (Need |*| (A |&| B)) -⚬ (A |&| B) =
     SignalChoice()
     
-  def injectLWhenDone[A, B]: (Done |*| A) -⚬ (Done |*| (A |+| B)) =
+  def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B) =
     InjectLWhenDone()
     
-  def injectRWhenDone[A, B]: (Done |*| B) -⚬ (Done |*| (A |+| B)) =
+  def injectRWhenDone[A, B]: (Done |*| B) -⚬ (A |+| (Done |*| B)) =
     InjectRWhenDone()
 
-  def chooseLWhenNeed[A, B]: (Need |*| (A |&| B)) -⚬ (Need |*| A) =
+  def chooseLWhenNeed[A, B]: ((Need |*| A) |&| B) -⚬ (Need |*| A) =
     ChooseLWhenNeed()
     
-  def chooseRWhenNeed[A, B]: (Need |*| (A |&| B)) -⚬ (Need |*| B) =
+  def chooseRWhenNeed[A, B]: (A |&| (Need |*| B)) -⚬ (Need |*| B) =
     ChooseRWhenNeed()
     
   def distributeLR[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)) =

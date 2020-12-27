@@ -1130,46 +1130,32 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .coDistributeL                .to[  (A |+| C) |*| (B  |&|                D) ]
 
   def chooseLWhenDone[A, B]: (Done |*| (A |&| B)) -⚬ (Done |*| A) =
-    id                                         [ Done |*|                      (A |&| B)  ]
-      .in.snd(introFst(lInvertSignal))      .to[ Done |*| ((Need |*| Done) |*| (A |&| B)) ]
-      .in.snd(IX)                           .to[ Done |*| ((Need |*| (A |&| B)) |*| Done) ]
-      .in.snd.fst(chooseLWhenNeed)          .to[ Done |*| ((Need |*|     A    ) |*| Done) ]
-      .in.snd(|*|.assocLR).assocRL          .to[ (Done |*| Need) |*| (   A      |*| Done) ]
-      .elimFst(rInvertSignal)               .to[                         A      |*| Done  ]
-      .swap                                 .to[                        Done    |*|  A    ]
+    id                                                     [ Done |*| (                    A   |&| B) ]
+      .in.snd.choiceL(introFst(lInvertSignal).assocLR)  .to[ Done |*| ((Need |*| (Done |*| A)) |&| B) ]
+      .in.snd(chooseLWhenNeed)                          .to[ Done |*|  (Need |*| (Done |*| A))        ]
+      .assocRL.elimFst(rInvertSignal)                   .to[                      Done |*| A          ]
 
   def chooseRWhenDone[A, B]: (Done |*| (A |&| B)) -⚬ (Done |*| B) =
-    id                                         [ Done |*|                      (A |&| B)  ]
-      .in.snd(introFst(lInvertSignal))      .to[ Done |*| ((Need |*| Done) |*| (A |&| B)) ]
-      .in.snd(IX)                           .to[ Done |*| ((Need |*| (A |&| B)) |*| Done) ]
-      .in.snd.fst(chooseRWhenNeed)          .to[ Done |*| ((Need |*|     B    ) |*| Done) ]
-      .in.snd(|*|.assocLR).assocRL          .to[ (Done |*| Need) |*| (   B      |*| Done) ]
-      .elimFst(rInvertSignal)               .to[                         B      |*| Done  ]
-      .swap                                 .to[                        Done    |*|  B    ]
+    id                                                     [ Done |*| (A |&|                     B  ) ]
+      .in.snd.choiceR(introFst(lInvertSignal).assocLR)  .to[ Done |*| (A |&| (Need |*| (Done |*| B))) ]
+      .in.snd(chooseRWhenNeed)                          .to[ Done |*|        (Need |*| (Done |*| B))  ]
+      .assocRL.elimFst(rInvertSignal)                   .to[                            Done |*| B    ]
 
-  def injectLWhenNeed[A, B]: (Need |*| A) -⚬ (Need |*| (A |+| B)) =
-    id                                         [                        Need    |*|  A    ]
-      .swap                                 .to[                         A      |*| Need  ]
-      .introFst(lInvertSignal)              .to[ (Need |*| Done) |*| (   A      |*| Need) ]
-      .assocLR.in.snd.assocRL               .to[ Need |*| ((Done |*|     A    ) |*| Need) ]
-      .in.snd.fst(injectLWhenDone)          .to[ Need |*| ((Done |*| (A |+| B)) |*| Need) ]
-      .in.snd(IX)                           .to[ Need |*| ((Done |*| Need) |*| (A |+| B)) ]
-      .in.snd(elimFst(rInvertSignal))       .to[ Need |*|                      (A |+| B)  ]
+  def injectLWhenNeed[A, B]: A -⚬ (Need |*| ((Done |*| A) |+| B)) = {
+    id                                         [                     A         ]
+      .introFst(lInvertSignal).assocLR      .to[ Need |*|  (Done |*| A)        ]
+      .in.snd(injectLWhenDone)              .to[ Need |*| ((Done |*| A) |+| B) ]
+  }
 
-  def injectRWhenNeed[A, B]: (Need |*| B) -⚬ (Need |*| (A |+| B)) =
-    id                                         [                        Need    |*|  B    ]
-      .swap                                 .to[                         B      |*| Need  ]
-      .introFst(lInvertSignal)              .to[ (Need |*| Done) |*| (   B      |*| Need) ]
-      .assocLR.in.snd.assocRL               .to[ Need |*| ((Done |*|     B    ) |*| Need) ]
-      .in.snd.fst(injectRWhenDone)          .to[ Need |*| ((Done |*| (A |+| B)) |*| Need) ]
-      .in.snd(IX)                           .to[ Need |*| ((Done |*| Need) |*| (A |+| B)) ]
-      .in.snd(elimFst(rInvertSignal))       .to[ Need |*|                      (A |+| B)  ]
+  def injectRWhenNeed[A, B]: B -⚬ (Need |*| (A |+| (Done |*| B))) =
+    id                                         [                           B   ]
+      .introFst(lInvertSignal).assocLR      .to[ Need |*|        (Done |*| B)  ]
+      .in.snd(injectRWhenDone)              .to[ Need |*| (A |+| (Done |*| B)) ]
 
   def delayEitherUntilDone[A, B]: (Done |*| (A |+| B)) -⚬ ((Done |*| A) |+| (Done |*| B)) =
     id                                                               [  Done |*| (A  |+|           B) ]
       .distributeLR                                               .to[ (Done |*|  A) |+| (Done |*| B) ]
-      .either(injectLWhenDone[A, B], injectRWhenDone[A, B])       .to[  Done |*| (A  |+|           B) ]
-      .distributeLR                                               .to[ (Done |*|  A) |+| (Done |*| B) ]
+      .either(injectLWhenDone, injectRWhenDone)                   .to[ (Done |*|  A) |+| (Done |*| B) ]
 
   def delayChoiceUntilDone[A, B]: (Done |*| (A |&| B)) -⚬ ((Done |*| A) |&| (Done |*| B)) =
     id                                                               [  Done |*| (A  |&|           B) ]
