@@ -1,6 +1,7 @@
 package libretto.impl
 
 import libretto.ScalaDSL
+import scala.concurrent.duration.FiniteDuration
 
 object FreeScalaDSL extends ScalaDSL {
   override sealed trait -⚬[A, B]
@@ -65,7 +66,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class Unpack[F[_]]() extends (Rec[F] -⚬ F[Rec[F]])
     case class RaceCompletion() extends ((Done |*| Done) -⚬ (Done |+| Done))
     case class SelectRequest() extends ((Need |&| Need) -⚬ (Need |*| Need))
-    
+
+    case class Delay(d: FiniteDuration) extends (Done -⚬ Done)
     case class Promise[A]() extends (One -⚬ (Neg[A] |*| Val[A]))
     case class Fulfill[A]() extends ((Val[A] |*| Neg[A]) -⚬ One)
     case class LiftEither[A, B]() extends (Val[Either[A, B]] -⚬ (Val[A] |+| Val[B]))
@@ -203,6 +205,9 @@ object FreeScalaDSL extends ScalaDSL {
     
   def selectRequest: (Need |&| Need) -⚬ (Need |*| Need) =
     SelectRequest()
+    
+  def delay(d: FiniteDuration): Done -⚬ Done =
+    Delay(d)
 
   def promise[A]: One -⚬ (Neg[A] |*| Val[A]) =
     Promise()

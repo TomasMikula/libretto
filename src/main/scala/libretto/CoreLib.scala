@@ -1183,11 +1183,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def joinInjectR[A, B](implicit B: Junction.Positive[B]): (Done |*| B) -⚬ (A |+| B) =
     injectRWhenDone.in.right(B.awaitPos)
     
-  def joinChooseL[A, B](implicit A: Junction.Negative[A]): (A |&| B) -⚬ (Need |*| A) =
+  def cojoinChooseL[A, B](implicit A: Junction.Negative[A]): (A |&| B) -⚬ (Need |*| A) =
     id[A |&| B].in.choiceL(A.awaitNeg) >>> chooseLWhenNeed
     
-  def joinChooseR[A, B](implicit B: Junction.Negative[B]): (A |&| B) -⚬ (Need |*| B) =
+  def cojoinChooseR[A, B](implicit B: Junction.Negative[B]): (A |&| B) -⚬ (Need |*| B) =
     id[A |&| B].in.choiceR(B.awaitNeg) >>> chooseRWhenNeed
+    
+  def joinChooseL[A, B](implicit A: Junction.Positive[A]): (Done |*| (A |&| B)) -⚬ A =
+    par(id, cojoinChooseL(Junction.invert(A))).assocRL.elimFst(rInvertSignal)
+    
+  def joinChooseR[A, B](implicit B: Junction.Positive[B]): (Done |*| (A |&| B)) -⚬ B =
+    par(id, cojoinChooseR(Junction.invert(B))).assocRL.elimFst(rInvertSignal)
 
   /** Creates a pair of mutually recursive functions. */
   def rec2[A, B, C, D](

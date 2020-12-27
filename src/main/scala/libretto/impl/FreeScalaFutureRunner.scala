@@ -1,7 +1,10 @@
 package libretto.impl
 
+import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import libretto.ScalaRunner
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.util.{Failure, Success, Try}
 
 /** Runner of [[FreeScalaDSL]] that returns a [[Future]].
   * 
@@ -11,7 +14,10 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
   * On top of that, expect bugs, since the implementation is full of unsafe type casts, because Scala's (including
   * Dotty's) type inference cannot cope with the kind of pattern matches found here.
   */
-class FreeScalaFutureRunner(implicit ec: ExecutionContext) extends ScalaRunner[FreeScalaDSL.type, Future] {
+class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRunner[FreeScalaDSL.type, Future] {
+  private implicit val ec: ExecutionContext =
+    ExecutionContext.fromExecutor(scheduler)
+
   val dsl = FreeScalaDSL
   
   import dsl._
@@ -22,6 +28,12 @@ class FreeScalaFutureRunner(implicit ec: ExecutionContext) extends ScalaRunner[F
          |This is a bug, please report at https://github.com/TomasMikula/libretto/issues/new?labels=bug"""
         .stripMargin
     )
+    
+  private def schedule[A](d: FiniteDuration, f: () => A): Future[A] = {
+    val pa = Promise[A]()
+    scheduler.schedule(() => pa.success(f()), d.length, d.unit)
+    pa.future
+  }
 
   override def runScala[A](prg: One -⚬ Val[A]): Future[A] =
     Frontier.One.extendBy(prg).getFuture
@@ -63,12 +75,34 @@ class FreeScalaFutureRunner(implicit ec: ExecutionContext) extends ScalaRunner[F
                 case Pair(a, _) => a                                  .asInstanceOf[Frontier[B]]
               }
             case -⚬.TimesAssocLR() =>
+              // ((X |*| Y) |*| Z) -⚬ (X |*| (Y |*| Z))
+              type X; type Y
               this match {
-                case Pair(Pair(a, b), c) => Pair(a, Pair(b, c))       .asInstanceOf[Frontier[B]]
+                case Pair(Pair(x, y), z) =>
+                  Pair(x, Pair(y, z))                                 .asInstanceOf[Frontier[B]]
+                case Pair(Deferred(fxy), z) =>
+                  Deferred(
+                    fxy
+                      .asInstanceOf[Future[Frontier[X |*| Y]]]
+                      .map(xy => Pair(xy, z).extendBy(-⚬.TimesAssocLR()))
+                  )                                                   .asInstanceOf[Frontier[B]]
+                case other =>
+                  bug(s"Did not expect $other to represent ((? |*| ?) |*| ?)")
               }
             case -⚬.TimesAssocRL() =>
+              // (X |*| (Y |*| Z)) -⚬ ((X |*| Y) |*| Z)
+              type Y; type Z
               this match {
-                case Pair(a, Pair(b, c)) => Pair(Pair(a, b), c)       .asInstanceOf[Frontier[B]]
+                case Pair(x, Pair(y, z)) =>
+                  Pair(Pair(x, y), z)                                 .asInstanceOf[Frontier[B]]
+                case Pair(x, Deferred(fyz)) =>
+                  Deferred(
+                    fyz
+                      .asInstanceOf[Future[Frontier[Y |*| Z]]]
+                      .map(yz => Pair(x, yz).extendBy(-⚬.TimesAssocRL()))
+                  )                                                   .asInstanceOf[Frontier[B]]
+                case other =>
+                  bug(s"Did not expect $other to represent (? |*| (? |*| ?))")
               }
             case -⚬.Swap() =>
               this match {
@@ -150,11 +184,57 @@ class FreeScalaFutureRunner(implicit ec: ExecutionContext) extends ScalaRunner[F
             case -⚬.SignalChoice() =>
               ???
             case -⚬.InjectLWhenDone() =>
-              ???
+              // (Done |*| X) -⚬ ((Done |*| X) |+| Y)
+              type X
+              this match {
+                case Pair(d, x) =>
+                  d match {
+                    case DoneNow =>
+                      InjectL(Pair(DoneNow, x))                       .asInstanceOf[Frontier[B]]
+                    case DoneAsync(fut) =>
+                      AsyncEither(fut.map(_ => Left(Pair(DoneNow, x))))
+                                                                      .asInstanceOf[Frontier[B]]
+                    case Deferred(fut) =>
+                      Deferred(
+                        fut
+                          .asInstanceOf[Future[Frontier[Done]]]
+                          .map(d => Pair(d, x).extendBy(-⚬.InjectLWhenDone())))
+                                                                      .asInstanceOf[Frontier[B]]
+                  }
+                case other =>
+                  bug(s"Did not expect $other to represent (Done |*| ?)")
+              }
             case -⚬.InjectRWhenDone() =>
               ???
             case -⚬.ChooseLWhenNeed() =>
-              ???
+              // ((Need |*| X) |&| Y) -⚬ (Need |*| X)
+              type X
+              this match {
+                case Choice(nx, y) =>
+                  val pn = Promise[Any]()
+                  val px = Promise[Frontier[X]]()
+                  def go(nx: Frontier[Need |*| X], r: Try[Any]): Future[Frontier[X]] = {
+                    nx match {
+                      case Pair(n, x) =>
+                        Future {
+                          n match {
+                            case NeedAsync(pn) => pn.complete(r); x
+                            case other => bug(s"Did not expect $other to represent Need")
+                          }
+                        }
+                      case Deferred(fnx) =>
+                        fnx.flatMap(go(_, r))
+                      case other =>
+                        Future { bug(s"Did not expect $other to represent (? |*| ?)") }
+                    }
+                  }
+                  pn.future.onComplete { r =>
+                    px.completeWith(go(nx().asInstanceOf[Frontier[Need |*| X]], r))
+                  }
+                  Pair(NeedAsync(pn), Deferred(px.future))            .asInstanceOf[Frontier[B]]
+                case other =>
+                  bug(s"Did not expect $other to represent (? |&| ?)")
+              }
             case -⚬.ChooseRWhenNeed() =>
               ???
             case -⚬.DistributeLR() =>
@@ -216,9 +296,26 @@ class FreeScalaFutureRunner(implicit ec: ExecutionContext) extends ScalaRunner[F
                 case Pack(f) => f                                     .asInstanceOf[Frontier[B]]
               }
             case -⚬.RaceCompletion() =>
-              ???
+              this match {
+                case Pair(DoneNow, y) => InjectL(y)                   .asInstanceOf[Frontier[B]]
+                case Pair(x, DoneNow) => InjectR(x)                   .asInstanceOf[Frontier[B]]
+                case Pair(DoneAsync(fx), DoneAsync(fy)) =>
+                  val p = Promise[Either[Frontier[Done], Frontier[Done]]]
+                  fx.onComplete(r => p.tryComplete(r.map(_ => Left(DoneAsync(fy)))))
+                  fy.onComplete(r => p.tryComplete(r.map(_ => Right(DoneAsync(fx)))))
+                  AsyncEither(p.future)                               .asInstanceOf[Frontier[B]]
+              }
             case -⚬.SelectRequest() =>
               ???
+            case -⚬.Delay(d) =>
+              this match {
+                case DoneNow =>
+                  DoneAsync(schedule(d, () => ()))                    .asInstanceOf[Frontier[B]]
+                case DoneAsync(fut) =>
+                  DoneAsync(fut.flatMap(_ => schedule(d, () => ())))  .asInstanceOf[Frontier[B]]
+                case other =>
+                  bug(s"Did not expect $other to represent Done")
+              }
             case -⚬.Promise() =>
               this match {
                 case One =>
