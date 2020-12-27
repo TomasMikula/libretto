@@ -1160,6 +1160,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def delayChoiceUntilDone[A, B]: (Done |*| (A |&| B)) -⚬ ((Done |*| A) |&| (Done |*| B)) =
     id                                                               [  Done |*| (A  |&|           B) ]
       .choice(chooseLWhenDone[A, B], chooseRWhenDone[A, B])       .to[ (Done |*|  A) |&| (Done |*| B) ]
+      
+  def joinInjectL[A, B](implicit A: Junction.Positive[A]): (Done |*| A) -⚬ (A |+| B) =
+    injectLWhenDone.in.left(A.awaitPos)
+    
+  def joinInjectR[A, B](implicit B: Junction.Positive[B]): (Done |*| B) -⚬ (A |+| B) =
+    injectRWhenDone.in.right(B.awaitPos)
+    
+  def joinChooseL[A, B](implicit A: Junction.Negative[A]): (A |&| B) -⚬ (Need |*| A) =
+    id[A |&| B].in.choiceL(A.awaitNeg) >>> chooseLWhenNeed
+    
+  def joinChooseR[A, B](implicit B: Junction.Negative[B]): (A |&| B) -⚬ (Need |*| B) =
+    id[A |&| B].in.choiceR(B.awaitNeg) >>> chooseRWhenNeed
 
   /** Creates a pair of mutually recursive functions. */
   def rec2[A, B, C, D](
