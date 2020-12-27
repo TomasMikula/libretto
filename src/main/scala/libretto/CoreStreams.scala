@@ -71,16 +71,15 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         caseCons = par(id, self) >>> LPollable.cons[A],
       )
     }
-    
+
     def of[A](as: (One -⚬ A)*)(implicit A: PComonoid[A]): One -⚬ LPollable[A] =
       LList.of(as: _*) >>> fromLList
 
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPollable[A]) -⚬ LPollable[A] =
       id                                           [  Done |*|     LPollable[A]                 ]
         .in.snd(unpack)                         .to[  Done |*| (Done  |&|           LPolled[A]) ]
-        .andThen(delayChoiceUntilDone)          .to[  Done |*| (Done  |&|           LPolled[A]) ]
-        .coFactorL                              .to[ (Done |*| Done)  |&| (Done |*| LPolled[A]) ]
-        .bimap(join, LPolled.delayBy[A])        .to[      Done        |&|           LPolled[A]  ]
+        .andThen(delayChoiceUntilDone)          .to[ (Done |*|  Done) |&| (Done |*| LPolled[A]) ]
+        .bimap(join, LPolled.delayBy[A])        .to[       Done       |&|           LPolled[A]  ]
         .pack[LPollableF[A, *]]                 .to[              LPollable[A]                  ]
 
     def delay[A: Junction.Positive]: LPollable[A] -⚬ Delayed[LPollable[A]] =
@@ -338,7 +337,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         )
       )
     )
-    
+
   def rInvertLSubscriber[A, B](
     rInvertElem: (A |*| B) -⚬ One,
   ): (LSubscriber[B] |*| LPollable[A]) -⚬ One =
@@ -363,7 +362,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         )
       ) >>> swap
     )
-    
+
   def lInvertLPollable[A, B](
     lInvertElem: One -⚬ (B |*| A),
   ): One -⚬ (LPollable[A] |*| LSubscriber[B]) =

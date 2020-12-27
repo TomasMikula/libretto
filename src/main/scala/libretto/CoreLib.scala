@@ -1163,15 +1163,15 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def injectRWhenNeed[A, B]: (Need |*| B) -⚬ (Need |*| (A |+| B)) =
     injectWhenNeed(injectRWhenDone)
 
-  def delayEitherUntilDone[A, B]: (Done |*| (A |+| B)) -⚬ (Done |*| (A |+| B)) =
+  def delayEitherUntilDone[A, B]: (Done |*| (A |+| B)) -⚬ ((Done |*| A) |+| (Done |*| B)) =
     id                                                               [  Done |*| (A  |+|           B) ]
       .distributeLR                                               .to[ (Done |*|  A) |+| (Done |*| B) ]
       .either(injectLWhenDone[A, B], injectRWhenDone[A, B])       .to[  Done |*| (A  |+|           B) ]
+      .distributeLR                                               .to[ (Done |*|  A) |+| (Done |*| B) ]
 
-  def delayChoiceUntilDone[A, B]: (Done |*| (A |&| B)) -⚬ (Done |*| (A |&| B)) =
+  def delayChoiceUntilDone[A, B]: (Done |*| (A |&| B)) -⚬ ((Done |*| A) |&| (Done |*| B)) =
     id                                                               [  Done |*| (A  |&|           B) ]
       .choice(chooseLWhenDone[A, B], chooseRWhenDone[A, B])       .to[ (Done |*|  A) |&| (Done |*| B) ]
-      .coDistributeL                                              .to[  Done |*| (A  |&|           B) ]
 
   /** Creates a pair of mutually recursive functions. */
   def rec2[A, B, C, D](
