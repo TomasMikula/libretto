@@ -877,6 +877,22 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def assocRL[X, Y](implicit ev: B2 =:= (X |*| Y)): A -⚬ ((B1 |*| X) |*| Y) =
       ev.substituteCo[λ[x => A -⚬ (B1 |*| x)]](self) >>> |*|.assocRL
+
+    def joinL(neglect: B1 -⚬ Done)(implicit j: Junction.Positive[B2]): A -⚬ B2 =
+      self >>> par(neglect, id[B2]) >>> j.awaitPosFst
+
+    def joinR(neglect: B2 -⚬ Done)(implicit j: Junction.Positive[B1]): A -⚬ B1 =
+      self >>> par(id[B1], neglect) >>> j.awaitPosSnd
+
+    def joinL(implicit ev: B1 =:= Done, j: Junction.Positive[B2]): A -⚬ B2 = {
+      type F[X] = A -⚬ (X |*| B2)
+      ev.substituteCo[F](self) >>> j.awaitPosFst
+    }
+
+    def joinR(implicit ev: B2 =:= Done, j: Junction.Positive[B1]): A -⚬ B1 = {
+      type F[X] = A -⚬ (B1 |*| X)
+      ev.substituteCo[F](self) >>> j.awaitPosSnd
+    }
   }
 
   implicit class LinearFunctionToPlusOps[A, B1, B2](self: A -⚬ (B1 |+| B2)) {
