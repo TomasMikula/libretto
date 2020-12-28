@@ -60,4 +60,30 @@ class BasicTests extends TestSuite {
 
     assertResult(raceKeepWinner(a, b), 'A')    
   }
+  
+  test("crash") {
+    assertCrashes(done >>> crashd("boom!"), "boom!")
+  }
+  
+  test("crash - even if it loses a race, the program still crashes") {
+    val prg = done
+      .>>>( fork(id, delay(10.millis) >>> crashd("oops")) )
+      .>>>( raceCompletion )
+      .>>>( either(id, id) )
+    assertCrashes(prg, "oops")
+  }
+  
+  test("crash in non-executed |+| has no effect") {
+    val prg = done
+      .injectL[Done]
+      .either(id, crashd("bang!"))
+    assertCompletes(prg)
+  }
+  
+  test("crash in non-chosen |&| alternative has no effect") {
+    val prg = done
+      .choice(id, crashd("bang!"))
+      .chooseL
+    assertCompletes(prg)
+  }
 }

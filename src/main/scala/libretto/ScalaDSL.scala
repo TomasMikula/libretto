@@ -1,7 +1,9 @@
 package libretto
 
-/** Extension of [[CoreDSL]] and [[TimerDSL]] that adds support for manipulating Scala values via pure Scala functions. */
-trait ScalaDSL extends TimerDSL {
+/** Extension of [[CoreDSL]], [[TimerDSL]] and [[CrashDSL]] that adds support for manipulating Scala values via pure
+  * Scala functions.
+  */
+trait ScalaDSL extends TimerDSL with CrashDSL {
   /** Scala value of type `A`.
     *
     * Somewhat analogous to [[scala.concurrent.Future]].

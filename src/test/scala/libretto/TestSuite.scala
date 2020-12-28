@@ -5,6 +5,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.BeforeAndAfterAll
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
+import scala.util.{Failure, Success}
 
 abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
   val kit = StarterKit
@@ -31,4 +32,17 @@ abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
 
   def assertResult[A](prg: One -⚬ Val[A], expected: A): Unit =
     assert(Await.result(runner.runScala(prg), 5.seconds) == expected)
+    
+  def assertCrashes(prg: One -⚬ Done, expectedMsg: Option[String] = None): Unit =
+    Await.ready(runner.run(prg), 5.seconds).value.get match {
+      case Success(()) =>
+        assert(false, "Expected crash, but the program completed successfully.")
+      case Failure(e) =>
+        expectedMsg.foreach { msg =>
+          assert(e.getMessage == msg, s"Expected message $msg, actual exception: $e")
+        }
+    }
+
+  def assertCrashes(prg: One -⚬ Done, expectedMsg: String): Unit = 
+    assertCrashes(prg, Some(expectedMsg))
 }

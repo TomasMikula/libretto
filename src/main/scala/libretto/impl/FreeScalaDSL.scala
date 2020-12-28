@@ -67,6 +67,7 @@ object FreeScalaDSL extends ScalaDSL {
     case class RaceCompletion() extends ((Done |*| Done) -⚬ (Done |+| Done))
     case class SelectRequest() extends ((Need |&| Need) -⚬ (Need |*| Need))
 
+    case class Crash[A, B](msg: String) extends ((Done |*| A) -⚬ (Done |*| B))
     case class Delay(d: FiniteDuration) extends (Done -⚬ Done)
     case class Promise[A]() extends (One -⚬ (Neg[A] |*| Val[A]))
     case class Fulfill[A]() extends ((Val[A] |*| Neg[A]) -⚬ One)
@@ -205,6 +206,9 @@ object FreeScalaDSL extends ScalaDSL {
     
   def selectRequest: (Need |&| Need) -⚬ (Need |*| Need) =
     SelectRequest()
+    
+  def crash[A, B](msg: String): (Done |*| A) -⚬ (Done |*| B) =
+    Crash(msg)
     
   def delay(d: FiniteDuration): Done -⚬ Done =
     Delay(d)

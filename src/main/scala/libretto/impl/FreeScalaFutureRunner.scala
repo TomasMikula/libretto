@@ -131,16 +131,17 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
               }
             case -⚬.ChooseL() =>
               this match {
-                case Choice(f, g) => f()                              .asInstanceOf[Frontier[B]]
+                case Choice(f, _, _) => f()                           .asInstanceOf[Frontier[B]]
               }
             case -⚬.ChooseR() =>
               this match {
-                case Choice(f, g) => g()                              .asInstanceOf[Frontier[B]]
+                case Choice(_, g, _) => g()                           .asInstanceOf[Frontier[B]]
               }
             case -⚬.Choice(f, g) =>
               Choice(
                 () => this.extendBy(f),
                 () => this.extendBy(g),
+                onError = this.crash(_),
               )
             case -⚬.DoneF() =>
               // Ignore `this`. It ends in `One`, so it does not need to be taken care of.
@@ -210,26 +211,30 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
               // ((Need |*| X) |&| Y) -⚬ (Need |*| X)
               type X
               this match {
-                case Choice(nx, y) =>
+                case Choice(nx, y, onError) =>
                   val pn = Promise[Any]()
                   val px = Promise[Frontier[X]]()
-                  def go(nx: Frontier[Need |*| X], r: Try[Any]): Future[Frontier[X]] = {
+                  def go(nx: Frontier[Need |*| X]): Future[Frontier[X]] = {
                     nx match {
                       case Pair(n, x) =>
                         Future {
                           n match {
-                            case NeedAsync(pn) => pn.complete(r); x
+                            case NeedAsync(pn) => pn.success(()); x
                             case other => bug(s"Did not expect $other to represent Need")
                           }
                         }
                       case Deferred(fnx) =>
-                        fnx.flatMap(go(_, r))
+                        fnx.flatMap(go)
                       case other =>
                         Future { bug(s"Did not expect $other to represent (? |*| ?)") }
                     }
                   }
-                  pn.future.onComplete { r =>
-                    px.completeWith(go(nx().asInstanceOf[Frontier[Need |*| X]], r))
+                  pn.future.onComplete {
+                    case Failure(e) =>
+                      onError(e)
+                      px.failure(e)
+                    case Success(_) =>
+                      px.completeWith(go(nx().asInstanceOf[Frontier[Need |*| X]]))
                   }
                   Pair(NeedAsync(pn), Deferred(px.future))            .asInstanceOf[Frontier[B]]
                 case other =>
@@ -256,7 +261,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
             case -⚬.CoDistributeL() =>
               // ((X |*| Y) |&| (X |*| Z)) -⚬ (X |*| (Y |&| Z))
               this match {
-                case Choice(f, g) =>
+                case Choice(f, g, onError) =>
                   type X; type Y; type Z
                   val px = Promise[Frontier[X]]()
                   val chooseL: () => Frontier[Y] = { () =>
@@ -269,7 +274,11 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                       case Pair(a, c) => px.success(a.asInstanceOf[Frontier[X]]); c.asInstanceOf[Frontier[Z]]
                     }
                   }
-                  Pair(Deferred(px.future), Choice(chooseL, chooseR)) .asInstanceOf[Frontier[B]]
+                  val onError1: Throwable => Unit = { e =>
+                    onError(e)
+                    px.failure(e)
+                  }
+                  Pair(Deferred(px.future), Choice(chooseL, chooseR, onError1)) .asInstanceOf[Frontier[B]]
               }
             case -⚬.RInvertSignal() =>
               this match {
@@ -307,6 +316,10 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
               }
             case -⚬.SelectRequest() =>
               ???
+            case -⚬.Crash(msg) =>
+              val e = Crash(msg)
+              this.crash(e)
+              Deferred(Future.failed(e))
             case -⚬.Delay(d) =>
               this match {
                 case DoneNow =>
@@ -415,6 +428,32 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
         case Deferred(f) => f.flatMap(_.getFuture)
       }
     }
+    
+    private def crash(e: Throwable): Unit = {
+      this match {
+        case One | DoneNow | DoneAsync(_) | Fut(_) =>
+          // do nothing
+        case NeedAsync(promise) =>
+          promise.failure(e)
+        case Pair(a, b) =>
+          a.crash(e)
+          b.crash(e)
+        case InjectL(a) =>
+          a.crash(e)
+        case InjectR(b) =>
+          b.crash(e)
+        case AsyncEither(fab) =>
+          fab.map(_.fold(_.crash(e), _.crash(e)))
+        case Choice(_, _, onError) =>
+          onError(e)
+        case Deferred(fa) =>
+          fa.map(_.crash(e))
+        case Pack(f) =>
+          f.crash(e)
+        case Prom(promise) =>
+          promise.failure(e)
+      }
+    }
   }
   
   private object Frontier {
@@ -427,11 +466,13 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
     case class InjectR[A, B](b: Frontier[B]) extends Frontier[A |+| B]
     // TODO: Deferred[A |+| B] might be a sufficient replacement for AsyncEither[A, B]
     case class AsyncEither[A, B](f: Future[Either[Frontier[A], Frontier[B]]]) extends Frontier[A |+| B]
-    case class Choice[A, B](a: () => Frontier[A], b: () => Frontier[B]) extends Frontier[A |&| B]
+    case class Choice[A, B](a: () => Frontier[A], b: () => Frontier[B], onError: Throwable => Unit) extends Frontier[A |&| B]
     case class Deferred[A](f: Future[Frontier[A]]) extends Frontier[A]
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]
     
     case class Fut[A](f: Future[A]) extends Frontier[Val[A]]
     case class Prom[A](p: Promise[A]) extends Frontier[Neg[A]]
   }
+  
+  private case class Crash(msg: String) extends Exception(msg)
 }
