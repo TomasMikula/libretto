@@ -342,10 +342,8 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     rInvertElem: (A |*| B) -⚬ One,
   ): (LSubscriber[B] |*| LPollable[A]) -⚬ One =
     rInvertRec[LSubscriberF[B, *], LPollableF[A, *]](
-      new ForAll2[[x, y] =>> ((x |*| y) -⚬ One) => ((LSubscriberF[B, x] |*| LPollableF[A, y]) -⚬ One)] {
-        override def apply[X, Y] =
-          rInvertSub => rInvertLSubscriberF(rInvertElem, swap >>> rInvertSub)
-      },
+      [X, Y] => (rInvertSub: (X |*| Y) -⚬ One) =>
+        rInvertLSubscriberF(rInvertElem, swap >>> rInvertSub)
     )
 
   def lInvertLPollableF[A, B, x, y](
@@ -367,10 +365,8 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     lInvertElem: One -⚬ (B |*| A),
   ): One -⚬ (LPollable[A] |*| LSubscriber[B]) =
     lInvertRec[LPollableF[A, *], LSubscriberF[B, *]](
-      new ForAll2[[x, y] =>> (One -⚬ (x |*| y)) => (One -⚬ (LPollableF[A, x] |*| LSubscriberF[B, y]))] {
-        override def apply[X, Y] =
-          lInvertSub => lInvertLPollableF(lInvertElem, lInvertSub >>> swap)
-      },
+      [X, Y] => (lInvertSub: One -⚬ (X |*| Y)) =>
+        lInvertLPollableF(lInvertElem, lInvertSub >>> swap)
     )
 
   implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[B], LPollable[A]] =

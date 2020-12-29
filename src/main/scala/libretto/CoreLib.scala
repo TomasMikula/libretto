@@ -1428,12 +1428,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   trait Dual1[F[_], G[_]] {
     def rInvert[A, Ā](rInvert: (A |*| Ā) -⚬ One): (F[A] |*| G[Ā]) -⚬ One
     def lInvert[A, Ā](lInvert: One -⚬ (Ā |*| A)): One -⚬ (G[Ā] |*| F[A])
-    
-    val rInvert: ForAll2[[x, y] =>> ((x |*| y) -⚬ One) => ((F[x] |*| G[y]) -⚬ One)] =
-      new ForAll2 { override def apply[A, B] = rInvert(_) }
-      
-    val lInvert: ForAll2[[x, y] =>> (One -⚬ (y |*| x)) => (One -⚬ (G[y] |*| F[x]))] =
-      new ForAll2 { override def apply[A, B] = lInvert(_) }
+
+    val rInvertVal: [x, y] => ((x |*| y) -⚬ One) => ((F[x] |*| G[y]) -⚬ One) =
+      [A, B] => (rInvert: (A |*| B) -⚬ One) => Dual1.this.rInvert(rInvert)
+
+    val lInvertVal: [x, y] => (One -⚬ (y |*| x)) => (One -⚬ (G[y] |*| F[x])) =
+      [A, B] => (lInvert: One -⚬ (B |*| A)) => Dual1.this.lInvert(lInvert)
+
+    def rInvertFlippedTAgs: [Ā, A] => (rInvert: (A |*| Ā) -⚬ One) => ((F[A] |*| G[Ā]) -⚬ One) =
+      [Ā, A] => (rInvert: (A |*| Ā) -⚬ One) => Dual1.this.rInvert[A, Ā](rInvert)
+
+    def lInvertFlippedTArgs: [Ā, A] => (lInvert: One -⚬ (Ā |*| A)) => (One -⚬ (G[Ā] |*| F[A])) =
+      [Ā, A] => (lInvert: One -⚬ (Ā |*| A)) => Dual1.this.lInvert[A, Ā](lInvert)
 
     def apply[A, Ā](ev: Dual[A, Ā]): Dual[F[A], G[Ā]] =
       new Dual[F[A], G[Ā]] {
@@ -1443,14 +1449,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
   
   def rInvertRec[F[_], G[_]](
-    rInvertSub: ForAll2[[x, y] =>> ((x |*| y) -⚬ One) => ((F[x] |*| G[y]) -⚬ One)],
+    rInvertSub: [x, y] => ((x |*| y) -⚬ One) => ((F[x] |*| G[y]) -⚬ One),
   ): (Rec[F] |*| Rec[G]) -⚬ One =
     rec { self =>
       par(unpack, unpack) >>> rInvertSub(self)
     }
   
   def lInvertRec[F[_], G[_]](
-    lInvertSub: ForAll2[[x, y] =>> (One -⚬ (x |*| y)) => (One -⚬ (F[x] |*| G[y]))],
+    lInvertSub: [x, y] => (One -⚬ (x |*| y)) => (One -⚬ (F[x] |*| G[y])),
   ): One -⚬ (Rec[F] |*| Rec[G]) =
     rec { self =>
       lInvertSub(self) >>> par(pack, pack)
@@ -1460,10 +1466,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def dualRec[F[_], G[_]](ev: Dual1[F, G]): Dual[Rec[F], Rec[G]] =
     new Dual[Rec[F], Rec[G]] {
       val rInvert: (Rec[F] |*| Rec[G]) -⚬ One =
-        rInvertRec(ev.rInvert)
+        rInvertRec(ev.rInvertVal)
 
       val lInvert: One -⚬ (Rec[G] |*| Rec[F]) =
-        lInvertRec(ev.lInvert.flipTArgs)
+        lInvertRec(ev.lInvertFlippedTArgs)
     }
 
   type Maybe[A] = One |+| A
