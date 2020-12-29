@@ -21,26 +21,9 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
   import coreLib.Compared._
   import scalaLib._
 
-  sealed trait SummaryModule {
-    type Summary[K]
-
-    def singleton[K]: Val[K] -⚬ Summary[K]
-    def merge[K]: (Summary[K] |*| Summary[K]) -⚬ Summary[K]
-    def minKey[K]: Summary[K] -⚬ Val[K]
-    def maxKey[K]: Summary[K] -⚬ Val[K]
-
-    def minKeyGetter[K]: Getter[Summary[K], Val[K]]
-    def maxKeyGetter[K]: Getter[Summary[K], Val[K]]
-
-    def dup[K]: Summary[K] -⚬ (Summary[K] |*| Summary[K])
-    def neglect[K]: Summary[K] -⚬ Done
-
-    implicit def summaryCosemigroup[K]: Cosemigroup[Summary[K]]
-  }
-
-  val Summary: SummaryModule = new SummaryModule {
-    //                minKey |*| maxKey
-    type Summary[K] = Val[K] |*| Val[K]
+  object Summary {
+    //                       minKey |*| maxKey
+    opaque type Summary[K] = Val[K] |*| Val[K]
 
     def singleton[K]: Val[K] -⚬ Summary[K] =
       dsl.dup
@@ -66,7 +49,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
     def neglect[K]: Summary[K] -⚬ Done =
       join(dsl.neglect, dsl.neglect)
 
-    def summaryCosemigroup[K]: Cosemigroup[Summary[K]] =
+    implicit def summaryCosemigroup[K]: Cosemigroup[Summary[K]] =
       new Cosemigroup[Summary[K]] {
         def split : Summary[K] -⚬ (Summary[K] |*| Summary[K]) = dup
       }
@@ -74,26 +57,8 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
 
   import Summary.{Summary, summaryCosemigroup}
 
-  sealed trait SingletonModule {
-    type Singleton[K, V]
-
-    def of[K, V]: (Val[K] |*| V) -⚬ Singleton[K, V]
-    def deconstruct[K, V]: Singleton[K, V] -⚬ (Val[K] |*| V)
-    def key[K, V]: Singleton[K, V] -⚬ (Val[K] |*| Singleton[K, V])
-    def summary[K, V]: Getter[Singleton[K, V], Summary[K]]
-    def clear[K, V](f: V -⚬ Done): Singleton[K, V] -⚬ Done
-
-    def keyGetter[K, V]: Getter[Singleton[K, V], Val[K]]
-
-    def keyJoinL[K, V]: (Done |*| Singleton[K, V]) -⚬ Singleton[K, V] =
-      keyGetter[K, V].extendJunction.awaitPosFst
-
-    def keyJoinR[K, V]: (Singleton[K, V] |*| Done) -⚬ Singleton[K, V] =
-      keyGetter[K, V].extendJunction.awaitPosSnd
-  }
-
-  val Singleton: SingletonModule = new SingletonModule {
-    type Singleton[K, V] = Val[K] |*| V
+  object Singleton {
+    opaque type Singleton[K, V] = Val[K] |*| V
 
     def of[K, V]: (Val[K] |*| V) -⚬ Singleton[K, V] =
       id
@@ -121,24 +86,18 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       join(dsl.neglect, f)
 
     def keyGetter[K, V]: Getter[Singleton[K, V], Val[K]] = coreLib.fst[V].lens[Val[K]]
+
+    def keyJoinL[K, V]: (Done |*| Singleton[K, V]) -⚬ Singleton[K, V] =
+      keyGetter[K, V].extendJunction.awaitPosFst
+
+    def keyJoinR[K, V]: (Singleton[K, V] |*| Done) -⚬ Singleton[K, V] =
+      keyGetter[K, V].extendJunction.awaitPosSnd
   }
 
   import Singleton.Singleton
 
-  sealed trait BranchFModule {
-    type BranchF[K, X]
-
-    def of[K, X](summary: Getter[X, Summary[K]]): (X |*| X) -⚬ BranchF[K, X]
-    def deconstruct[K, X](j: Junction.Positive[X]): BranchF[K, X] -⚬ (X |*| X)
-    def clear[K, X](f: X -⚬ Done): BranchF[K, X] -⚬ Done
-
-    def summary[K, X]: Getter[BranchF[K, X], Summary[K]]
-    def minKey[K, X]: Getter[BranchF[K, X], Val[K]]
-    def maxKey[K, X]: Getter[BranchF[K, X], Val[K]]
-  }
-
-  val BranchF: BranchFModule = new BranchFModule {
-    type BranchF[K, X] = Summary[K] |*| (X |*| X)
+  object BranchF {
+    opaque type BranchF[K, X] = Summary[K] |*| (X |*| X)
 
     def of[K, X](summary: Getter[X, Summary[K]]): (X |*| X) -⚬ BranchF[K, X] =
       id                                     [                 X  |*|                 X  ]

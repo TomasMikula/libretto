@@ -1236,45 +1236,15 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .andThen(ifThenElse(awaitL, awaitL))
   }
 
-  sealed trait ComparedModule {
-    type Compared[A, B]
+  object Compared {
+    opaque type Compared[A, B] = (A |*| B) |+| ((A |*| B) |+| (A |*| B))
 
     // constructors
-    def lt   [A, B]: (A |*| B) -⚬ Compared[A, B]
-    def equiv[A, B]: (A |*| B) -⚬ Compared[A, B]
-    def gt   [A, B]: (A |*| B) -⚬ Compared[A, B]
-
-    /** Destructor. */
-    def compared[A, B, C](
-      caseLt: (A |*| B) -⚬ C,
-      caseEq: (A |*| B) -⚬ C,
-      caseGt: (A |*| B) -⚬ C,
-    )
-    : Compared[A, B] -⚬ C
-    
-    /** Destructor that allows to combine the compared values with another value. */
-    def elimWith[A, B, C, D](
-      caseLt: ((A |*| B) |*| C) -⚬ D,
-      caseEq: ((A |*| B) |*| C) -⚬ D,
-      caseGt: ((A |*| B) |*| C) -⚬ D,
-    )
-    : (Compared[A, B] |*| C) -⚬ D
-    
-    def enrichWith[A, B, C, S, T](
-      f: ((A |*| B) |*| C) -⚬ (S |*| T),
-    )
-    : (Compared[A, B] |*| C) -⚬ Compared[S, T]
-
-    implicit def bifunctorCompared: Bifunctor[Compared]
-  }
-
-  val Compared: ComparedModule = new ComparedModule {
-    type Compared[A, B] = (A |*| B) |+| ((A |*| B) |+| (A |*| B))
-
     def lt   [A, B]: (A |*| B) -⚬ Compared[A, B] = injectL
     def equiv[A, B]: (A |*| B) -⚬ Compared[A, B] = injectL >>> injectR
     def gt   [A, B]: (A |*| B) -⚬ Compared[A, B] = injectR >>> injectR
 
+    /** Destructor. */
     def compared[A, B, C](
       caseLt: (A |*| B) -⚬ C,
       caseEq: (A |*| B) -⚬ C,
@@ -1282,7 +1252,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     ): Compared[A, B] -⚬ C =
       either(caseLt, either(caseEq, caseGt))
 
-    override def elimWith[A, B, C, D](
+    /** Destructor that allows to combine the compared values with another value. */
+    def elimWith[A, B, C, D](
       caseLt: ((A |*| B) |*| C) -⚬ D,
       caseEq: ((A |*| B) |*| C) -⚬ D,
       caseGt: ((A |*| B) |*| C) -⚬ D,
@@ -1291,7 +1262,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         .distributeRL.in.right(distributeRL)    .to[ ((A |*| B) |*| C) |+| (((A |*| B) |*| C) |+| ((A |*| B)   |*| C)) ]
         .either(caseLt, either(caseEq, caseGt)) .to[                    D                                              ]
 
-    override def enrichWith[A, B, C, S, T](
+    def enrichWith[A, B, C, S, T](
       f: ((A |*| B) |*| C) -⚬ (S |*| T),
     )
     : (Compared[A, B] |*| C) -⚬ Compared[S, T] =
@@ -1299,7 +1270,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         .distributeRL.in.right(distributeRL)    .to[ ((A |*| B) |*| C) |+| (((A |*| B) |*| C) |+| ((A |*| B)   |*| C)) ]
         .bimap[|+|](f, |+|.bimap(f, f))         .to[     (S |*| T)     |+| (    (S |*| T)     |+|      (S |*| T)     ) ]
 
-    override def bifunctorCompared: Bifunctor[Compared] =
+    def bifunctorCompared: Bifunctor[Compared] =
       new Bifunctor[Compared] {
         def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): Compared[A, C] -⚬ Compared[B, D] = {
           Bifunctor[|+|].lift(
