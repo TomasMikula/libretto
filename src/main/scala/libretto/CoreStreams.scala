@@ -30,6 +30,12 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def unpack[A]: LPollable[A] -⚬ (Done |&| LPolled[A]) =
       dsl.unpack[LPollableF[A, *]]
+      
+    def from[A, B](
+      onClose: A -⚬ Done,
+      onPoll: A -⚬ LPolled[B],
+    ): A -⚬ LPollable[B] =
+      choice(onClose, onPoll) >>> pack
 
     def close[A]: LPollable[A] -⚬ Done =
       id                       [    LPollable[A]     ]
@@ -62,7 +68,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def cons[A](implicit A: PComonoid[A]): (A |*| LPollable[A]) -⚬ LPollable[A] = {
       val onClose: (A |*| LPollable[A]) -⚬ Done       = join(A.counit, LPollable.close)
       val onPoll:  (A |*| LPollable[A]) -⚬ LPolled[A] = LPolled.cons
-      choice(onClose, onPoll).pack
+      from(onClose, onPoll)
     }
     
     def fromLList[A](implicit A: PComonoid[A]): LList[A] -⚬ LPollable[A] = rec { self =>
@@ -89,7 +95,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .in.snd(delayBy)                        .to[ Need |*|     LPollable[A]        ]
 
     def map[A, B](f: A -⚬ B): LPollable[A] -⚬ LPollable[B] = rec { self =>
-      choice(close[A], poll[A].in.right(par(f, self))).pack
+      from(close[A], poll[A].in.right(par(f, self)))
     }
 
     def concat[A]: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ LPollable[A] = rec { self =>
@@ -108,8 +114,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           .in.right.injectR[Done]     .to[                     LPolled[A]   |+|     LPolled[A]                                       ]
           .andThen(either(id, id))    .to[                              LPolled[A]                                                   ]
 
-      choice(close, poll)
-        .pack[LPollableF[A, *]]
+      from(close, poll)
     }
 
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
@@ -166,7 +171,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     ): (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A] = rec { self =>
       val onClose: (LPollable[A] |*| LPollable[A]) -⚬ Done       = join(close, close)
       val onPoll : (LPollable[A] |*| LPollable[A]) -⚬ LPolled[A] = par(poll, poll) >>> LPolled.merge(self)
-      choice(onClose, onPoll).pack
+      from(onClose, onPoll)
     }
 
     /** Merges a list of [[LPollable]]s into a single [[LPollable]].
@@ -214,7 +219,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       injectR
 
     def unpoll[A](implicit A: PComonoid[A]): LPolled[A] -⚬ LPollable[A] =
-      choice(close(A.counit), id).pack
+      LPollable.from(close(A.counit), id)
 
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPolled[A]) -⚬ LPolled[A] =
       id[Done |*| LPolled[A]]         .to[  Done |*| (Done |+|           (A |*| LPollable[A])) ]
