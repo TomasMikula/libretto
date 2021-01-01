@@ -23,7 +23,7 @@ class ClosedLib[
   def input[C]: ContraFunctor[λ[x => x =⚬ C]] = new ContraFunctor[λ[x => x =⚬ C]] {
     def lift[A, B](f: A -⚬ B): (B =⚬ C) -⚬ (A =⚬ C) =
       id                       [(B =⚬ C) |*| A]
-        .in.snd(f)          .to[(B =⚬ C) |*| B]
+        .>.snd(f)           .to[(B =⚬ C) |*| B]
         .andThen(eval)      .to[C]
         .as[((B =⚬ C) |*| A) -⚬ C]
         .curry
@@ -66,7 +66,7 @@ class ClosedLib[
   def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
     id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
       .introSnd(ev.lInvert)      .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (Ā |*| A) ]
-      .in.snd(swap)              .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
+      .>.snd(swap)               .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
       .andThen(IXI)              .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
       .andThen(par(eval, eval))  .to[        B         |*|        C         ]
   }
@@ -77,7 +77,7 @@ class ClosedLib[
   def unveilSequentially[A, Ā, B](implicit ev: Dual[A, Ā]): (A |*| B) -⚬ (Ā =⚬ B) =
     id[(A |*| B) |*| Ā]           .to[ (A |*|  B) |*| Ā  ]
       .assocLR                    .to[  A |*| (B  |*| Ā) ]
-      .in.snd(swap)               .to[  A |*| (Ā  |*| B) ]
+      .>.snd(swap)                .to[  A |*| (Ā  |*| B) ]
       .assocRL                    .to[ (A |*|  Ā) |*| B  ]
       .elimFst(ev.rInvert)        .to[                B  ]
       .as[ ((A |*| B) |*| Ā) -⚬ B ]
@@ -87,9 +87,9 @@ class ClosedLib[
   def absorbR[A, B, C]: ((A =⚬ B) |*| C) -⚬ (A =⚬ (B |*| C)) =
     id[((A =⚬ B) |*| C) |*| A]  .to[ ((A =⚬ B) |*| C) |*| A ]
       .assocLR                  .to[ (A =⚬ B) |*| (C |*| A) ]
-      .in.snd(swap)             .to[ (A =⚬ B) |*| (A |*| C) ]
+      .>.snd(swap)              .to[ (A =⚬ B) |*| (A |*| C) ]
       .assocRL                  .to[ ((A =⚬ B) |*| A) |*| C ]
-      .in.fst(eval)             .to[        B         |*| C ]
+      .>.fst(eval)              .to[        B         |*| C ]
       .as[ (((A =⚬ B) |*| C) |*| A) -⚬ (B |*| C) ]
       .curry
 }

@@ -73,7 +73,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       val singletonSummary: Getter[Val[K], Summary[K]] =
         new Getter[Val[K], Summary[K]] {
           override def getL[B](that: Getter[Summary[K], B])(implicit B: Cosemigroup[B]): Val[K] -⚬ (B |*| Val[K]) =
-            (Summary.singleton[K] >>> that.getL).in.snd(Summary.minKey)
+            (Summary.singleton[K] >>> that.getL).>.snd(Summary.minKey)
 
           override def extendJunction(implicit j: Junction.Positive[Summary[K]]): Junction.Positive[Val[K]] =
             scalaLib.junctionVal[K]
@@ -103,11 +103,11 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       id                                     [                 X  |*|                 X  ]
         .par(summary.getL, summary.getL)  .to[ (Summary[K] |*| X) |*| (Summary[K] |*| X) ]
         .andThen(IXI)                     .to[ (Summary[K] |*| Summary[K]) |*| (X |*| X) ]
-        .in.fst(Summary.merge)            .to[         Summary[K]          |*| (X |*| X) ]
+        .>.fst(Summary.merge)             .to[         Summary[K]          |*| (X |*| X) ]
 
     def deconstruct[K, X](j: Junction.Positive[X]): BranchF[K, X] -⚬ (X |*| X) =
       id[BranchF[K, X]]                 .to[ Summary[K] |*| (X |*| X) ]
-        .in.fst(Summary.neglect)        .to[    Done    |*| (X |*| X) ]
+        .>.fst(Summary.neglect)         .to[    Done    |*| (X |*| X) ]
         .andThen(fst[X].lens.joinL(j))  .to[                 X |*| X  ]
 
     def clear[K, X](f: X -⚬ Done): BranchF[K, X] -⚬ Done =
@@ -194,10 +194,10 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
     ): ((Val[K] |*| W) |*| NonEmptyTree[K, V]) -⚬ F[NonEmptyTree[K, V]] = 
       rec { self =>
         id                                             [           (Val[K] |*| W) |*|         NonEmptyTree[K, V]                      ]
-          .in.snd(unpack)                           .to[           (Val[K] |*| W) |*| (Singleton[K, V] |+| Branch[K, V])              ]
+          .>.snd(unpack)                            .to[           (Val[K] |*| W) |*| (Singleton[K, V] |+| Branch[K, V])              ]
           .distributeLR                             .to[ ((Val[K] |*| W) |*| Singleton[K, V])  |+|  ((Val[K] |*| W) |*| Branch[K, V]) ]
-          .in.left(sUpdate(ins, upd))               .to[       F[NonEmptyTree[K, V]]           |+|  ((Val[K] |*| W) |*| Branch[K, V]) ]
-          .in.right(bUpdate(self))                  .to[       F[NonEmptyTree[K, V]]           |+|        F[NonEmptyTree[K, V]]       ]
+          .>.left(sUpdate(ins, upd))                .to[       F[NonEmptyTree[K, V]]           |+|  ((Val[K] |*| W) |*| Branch[K, V]) ]
+          .>.right(bUpdate(self))                   .to[       F[NonEmptyTree[K, V]]           |+|        F[NonEmptyTree[K, V]]       ]
           .andThen(either(id, id))                  .to[                             F[NonEmptyTree[K, V]]                            ]
       }
 
@@ -214,9 +214,9 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
 
         id                                                       [     (Val[K] |*| W) |*|    Singleton[K, V]    ]
           .swap                                               .to[    Singleton[K, V] |*|  (  Val[K] |*|   W  ) ]
-          .in.snd.snd(ins)                                    .to[    Singleton[K, V] |*|  (  Val[K] |*| F[V] ) ]
-          .in.snd(F.absorbOrNeglectL)                         .to[    Singleton[K, V] |*| F[  Val[K] |*|   V  ] ]
-          .in.snd(F.lift(singleton))                          .to[    Singleton[K, V] |*| F[NonEmptyTree[K, V]] ]
+          .>.snd.snd(ins)                                     .to[    Singleton[K, V] |*|  (  Val[K] |*| F[V] ) ]
+          .>.snd(F.absorbOrNeglectL)                          .to[    Singleton[K, V] |*| F[  Val[K] |*|   V  ] ]
+          .>.snd(F.lift(singleton))                           .to[    Singleton[K, V] |*| F[NonEmptyTree[K, V]] ]
           .andThen(absorbSingleton)                           .to[            F[NonEmptyTree[K, V]]             ]
       }
 
@@ -225,17 +225,17 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
           F.absorbR(par(id[NonEmptyTree[K, V]], injectSingleton[K, V]) >>> branch, Singleton.keyJoinL >>> injectSingleton)
 
         id                                                       [  (Val[K] |*|  W     ) |*|   Singleton[K, V]  ]
-          .in.fst.snd(ins)                                    .to[  (Val[K] |*| F[V]   ) |*|   Singleton[K, V]  ]
-          .in.fst(F.absorbOrNeglectL)                         .to[ F[Val[K] |*|   V    ] |*|   Singleton[K, V]  ]
-          .in.fst(F.lift(singleton))                          .to[ F[NonEmptyTree[K, V]] |*|   Singleton[K, V]  ]
+          .>.fst.snd(ins)                                     .to[  (Val[K] |*| F[V]   ) |*|   Singleton[K, V]  ]
+          .>.fst(F.absorbOrNeglectL)                          .to[ F[Val[K] |*|   V    ] |*|   Singleton[K, V]  ]
+          .>.fst(F.lift(singleton))                           .to[ F[NonEmptyTree[K, V]] |*|   Singleton[K, V]  ]
           .andThen(absorbSingleton)                           .to[             F[NonEmptyTree[K, V]]            ]
       }
 
       val replace: ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] =
         id                                                       [ (Val[K] |*| W) |*| Singleton[K, V] ]
-          .in.snd(Singleton.deconstruct)                      .to[ (Val[K] |*| W) |*|  (Val[K] |*| V) ]
-          .andThen(IXI).in.fst.joinL(neglect)                 .to[         Val[K] |*|       (W |*| V) ]
-          .in.snd(upd)                                        .to[         Val[K] |*|            F[V] ]
+          .>.snd(Singleton.deconstruct)                       .to[ (Val[K] |*| W) |*|  (Val[K] |*| V) ]
+          .andThen(IXI).>.fst.joinL(neglect)                  .to[         Val[K] |*|       (W |*| V) ]
+          .>.snd(upd)                                         .to[         Val[K] |*|            F[V] ]
           .andThen(F.absorbOrNeglectL)                        .to[       F[Val[K] |*|              V] ]
           .andThen(F.lift(singleton))                         .to[        F[NonEmptyTree[K, V]]       ]
 
@@ -255,20 +255,20 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
 
       val updateL: ((Elem |*| Tree) |*| Tree) -⚬ F[Tree] =
         id                                                 [ (Elem |*| Tree) |*| Tree  ]
-          .in.fst(subUpdate)                            .to[    F[Tree]      |*| Tree  ]
+          .>.fst(subUpdate)                             .to[    F[Tree]      |*| Tree  ]
           .andThen(F.absorbR(branch, minKeyJoinL))      .to[    F[          Tree     ] ]
 
       val updateR: (Tree |*| (Elem |*| Tree)) -⚬ F[Tree] =
         id                                                 [   Tree |*| (Elem |*| Tree) ]
-          .in.snd(subUpdate)                            .to[   Tree |*|     F[Tree]     ]
+          .>.snd(subUpdate)                             .to[   Tree |*|     F[Tree]     ]
           .andThen(F.absorbL(branch, maxKeyJoinR))      .to[ F[     Tree          ]     ]
 
       id                                     [                  Elem |*|         Branch[K, V]            ]
-        .in.snd(Branch.deconstruct)       .to[                  Elem |*| (Tree                 |*| Tree) ]
+        .>.snd(Branch.deconstruct)        .to[                  Elem |*| (Tree                 |*| Tree) ]
         .assocRL                          .to[                 (Elem |*| Tree)                 |*| Tree  ]
-        .in.fst(sortBy(fst.lens, maxKey)) .to[ ((Elem |*| Tree)           |+| (Tree |*| Elem)) |*| Tree  ]
+        .>.fst(sortBy(fst.lens, maxKey))  .to[ ((Elem |*| Tree)           |+| (Tree |*| Elem)) |*| Tree  ]
         .distributeRL                     .to[ ((Elem |*| Tree) |*| Tree) |+| ((Tree |*| Elem) |*| Tree) ]
-        .in.right.assocLR                 .to[ ((Elem |*| Tree) |*| Tree) |+| (Tree |*| (Elem |*| Tree)) ]
+        .>.right.assocLR                  .to[ ((Elem |*| Tree) |*| Tree) |+| (Tree |*| (Elem |*| Tree)) ]
         .either(updateL, updateR)         .to[                          F[Tree]                          ]
     }
 
@@ -314,13 +314,13 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
 
     id[(Val[K] |*| W) |*| Tree[K, V]]   .to[          (Val[K] |*| W) |*| (Done |+| NET[K, V])                ]
       .distributeLR                     .to[ ((Val[K] |*|  W  ) |*| Done) |+| ((Val[K] |*| W) |*| NET[K, V]) ]
-      .in.right(NET.update_(ins, upd))  .to[ ((Val[K] |*|  W  ) |*| Done) |+|           F[ NET[K, V]]        ]
-      .in.right.co[F].injectR[Done]     .to[ ((Val[K] |*|  W  ) |*| Done) |+|           F[Tree[K, V]]        ]
-      .in.left(IX)                      .to[ ((Val[K] |*| Done) |*|  W  ) |+|           F[Tree[K, V]]        ]
-      .in.left.fst.joinR                .to[ ( Val[K]           |*|  W  ) |+|           F[Tree[K, V]]        ]
-      .in.left.snd(ins)                 .to[ ( Val[K]           |*| F[V]) |+|           F[Tree[K, V]]        ]
-      .in.left(F.absorbOrNeglectL)      .to[ F[Val[K]           |*|  V  ] |+|           F[Tree[K, V]]        ]
-      .in.left(F.lift(singleton))       .to[ F[            Tree[K, V]   ] |+|           F[Tree[K, V]]        ]
+      .>.right(NET.update_(ins, upd))   .to[ ((Val[K] |*|  W  ) |*| Done) |+|           F[ NET[K, V]]        ]
+      .>.right.co[F].injectR[Done]      .to[ ((Val[K] |*|  W  ) |*| Done) |+|           F[Tree[K, V]]        ]
+      .>.left(IX)                       .to[ ((Val[K] |*| Done) |*|  W  ) |+|           F[Tree[K, V]]        ]
+      .>.left.fst.joinR                 .to[ ( Val[K]           |*|  W  ) |+|           F[Tree[K, V]]        ]
+      .>.left.snd(ins)                  .to[ ( Val[K]           |*| F[V]) |+|           F[Tree[K, V]]        ]
+      .>.left(F.absorbOrNeglectL)       .to[ F[Val[K]           |*|  V  ] |+|           F[Tree[K, V]]        ]
+      .>.left(F.lift(singleton))        .to[ F[            Tree[K, V]   ] |+|           F[Tree[K, V]]        ]
       .andThen(either(id, id))          .to[                         F[Tree[K, V]]                           ]
   }
 
@@ -352,9 +352,9 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       )
 
     id                                           [  Val[K]          |*| Tree[K, V] ]
-      .in.fst(introSnd)                       .to[ (Val[K] |*| One) |*| Tree[K, V] ]
+      .>.fst(introSnd)                        .to[ (Val[K] |*| One) |*| Tree[K, V] ]
       .andThen(go)                            .to[ Maybe[V] |*| PMaybe[Tree[K, V]] ]
-      .in.snd(PMaybe.getOrElse(empty[K, V]))  .to[ Maybe[V] |*|        Tree[K, V]  ]
+      .>.snd(PMaybe.getOrElse(empty[K, V]))   .to[ Maybe[V] |*|        Tree[K, V]  ]
   }
 
   def update[K: Ordering, V, A](
@@ -364,7 +364,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       ins = PMaybe.just[A] >>> introSnd(done >>> PMaybe.empty[V]),
       upd = f >>> introFst(done >>> PMaybe.empty[A]),
     )
-      .in.snd(PMaybe.getOrElse(empty[K, V]))
+      .>.snd(PMaybe.getOrElse(empty[K, V]))
 
   def update[K: Ordering, V, A](
     f: (A |*| V) -⚬ PMaybe[V],
@@ -450,8 +450,8 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
         override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]):( A |*| PMaybe[B]) -⚬ PMaybe[A |*| B] =
           id[A |*| PMaybe[B]]                     .to[ A |*|    (Done  |+|        B) ]
             .distributeLR                         .to[ (A    |*| Done) |+| (A |*| B) ]
-            .in.left.fst(A.counit)                .to[ (Done |*| Done) |+| (A |*| B) ]
-            .in.left(join)                        .to[      Done       |+| (A |*| B) ]
+            .>.left.fst(A.counit)                 .to[ (Done |*| Done) |+| (A |*| B) ]
+            .>.left(join)                         .to[      Done       |+| (A |*| B) ]
       }
   }
 }

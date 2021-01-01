@@ -37,7 +37,7 @@ class ScalaLib[
   implicit def signalingVal[A]: Signaling.Positive[Val[A]] =
     new Signaling.Positive[Val[A]] {
       override def signalPosFst: Val[A] -⚬ (Done |*| Val[A]) =
-        dup[A].in.fst(neglect)
+        dup[A].>.fst(neglect)
     }
 
   implicit def signalingNeg[A]: Signaling.Negative[Neg[A]] =
@@ -71,9 +71,9 @@ class ScalaLib[
     id                                         [                                       Neg[A] |*| Neg[A]   ]
       .introFst(promise[A])                 .to[ (Neg[A] |*|        Val[A]      ) |*| (Neg[A] |*| Neg[A])  ]
       .assocLR                              .to[  Neg[A] |*| (      Val[A]        |*| (Neg[A] |*| Neg[A])) ]
-      .in.snd.fst(dup)                      .to[  Neg[A] |*| ((Val[A] |*| Val[A]) |*| (Neg[A] |*| Neg[A])) ]
-      .in.snd(IXI)                          .to[  Neg[A] |*| ((Val[A] |*| Neg[A]) |*| (Val[A] |*| Neg[A])) ]
-      .in.snd(parToOne(fulfill, fulfill))   .to[  Neg[A] |*|                      One                      ]
+      .>.snd.fst(dup)                       .to[  Neg[A] |*| ((Val[A] |*| Val[A]) |*| (Neg[A] |*| Neg[A])) ]
+      .>.snd(IXI)                           .to[  Neg[A] |*| ((Val[A] |*| Neg[A]) |*| (Val[A] |*| Neg[A])) ]
+      .>.snd(parToOne(fulfill, fulfill))    .to[  Neg[A] |*|                      One                      ]
       .elimSnd                              .to[  Neg[A]                                                   ]
 
   implicit def pComonoidVal[A]: PComonoid[Val[A]] =
@@ -113,7 +113,7 @@ class ScalaLib[
 
   def maybeToOption[A]: Maybe[Val[A]] -⚬ Val[Option[A]] =
     id[Maybe[Val[A]]]               .to[    One    |+| Val[A] ]
-      .in.left(const_(()))          .to[ Val[Unit] |+| Val[A] ]
+      .>.left(const_(()))           .to[ Val[Unit] |+| Val[A] ]
       .andThen(unliftEither)        .to[ Val[Either[Unit, A]] ]
       .andThen(liftV(_.toOption))   .to[ Val[Option[A]]       ]
 
@@ -121,11 +121,11 @@ class ScalaLib[
     id[Val[Option[A]]]                .to[ Val[Option[      A]] ]
       .andThen(liftV(_.toRight(())))  .to[ Val[Either[Unit, A]] ]
       .andThen(liftEither)            .to[ Val[Unit] |+| Val[A] ]
-      .in.left(dsl.neglect)           .to[   Done    |+| Val[A] ]
+      .>.left(dsl.neglect)            .to[   Done    |+| Val[A] ]
 
   def pMaybeToOption[A]: PMaybe[Val[A]] -⚬ Val[Option[A]] =
     id[PMaybe[Val[A]]]              .to[   Done    |+| Val[A] ]
-      .in.left(constVal(()))        .to[ Val[Unit] |+| Val[A] ]
+      .>.left(constVal(()))         .to[ Val[Unit] |+| Val[A] ]
       .andThen(unliftEither)        .to[ Val[Either[Unit, A]] ]
       .andThen(liftV(_.toOption))   .to[ Val[Option[A]]       ]
 
@@ -203,7 +203,7 @@ class ScalaLib[
     bKey: Getter[B, Val[K]],
   )
   : (A |*| B) -⚬ ((A |*| B) |+| (B |*| A)) =
-    lteqBy(aKey, bKey).in.right(swap)
+    lteqBy(aKey, bKey).>.right(swap)
     
   implicit def comparableVal[A](implicit A: Ordering[A]): Comparable[Val[A], Val[A]] =
     new Comparable[Val[A], Val[A]] {
@@ -222,7 +222,7 @@ class ScalaLib[
         id                                                   [              Val[A] |*| Val[A]                                        ]
           .andThen(unliftPair)                            .to[ Val[               (A, A)                                           ] ]
           .andThen(liftV(scalaCompare))                   .to[ Val[(A   ,      A) Either (  (A   ,      A) Either   (A   ,      A))] ]
-          .andThen(liftEither).in.right(liftEither)       .to[ Val[(A   ,      A)] |+| (Val[(A   ,      A)] |+| Val[(A   ,      A)]) ]
+          .andThen(liftEither).>.right(liftEither)        .to[ Val[(A   ,      A)] |+| (Val[(A   ,      A)] |+| Val[(A   ,      A)]) ]
           .bimap(liftPair, |+|.bimap(liftPair, liftPair)) .to[ (Val[A] |*| Val[A]) |+| ((Val[A] |*| Val[A]) |+| (Val[A] |*| Val[A])) ]
           .either(lt, either(equiv, gt))                  .to[                Compared[Val[A], Val[A]]                               ]
     }

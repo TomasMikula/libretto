@@ -11,7 +11,7 @@ trait TimerDSL extends CoreDSL {
   def delayNeed(d: FiniteDuration): Need -⚬ Need = {
     id                           [                      Need  ]
       .introFst(lInvertSignal).to[ (Need |*|  Done) |*| Need  ]
-      .in.fst.snd(delay(d))   .to[ (Need |*|  Done) |*| Need  ]
+      .>.fst.snd(delay(d))    .to[ (Need |*|  Done) |*| Need  ]
       .assocLR                .to[  Need |*| (Done  |*| Need) ]
       .elimSnd(rInvertSignal) .to[  Need                      ]
   }
