@@ -145,6 +145,62 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def apply[F[_, _]](implicit ev: Bifunctor[F]): Bifunctor[F] = ev
   }
 
+  /** Functor from category [[-⚬]] to the category `=>` of Scala functions.
+    * It takes a morphism `A -⚬ B` internal to the DSL and maps it to a morphism `F[A] => F[B]` in the meta language
+    * (Scala), i.e. external to the DSL.
+    */
+  trait Externalizer[F[_]] { self =>
+    def lift[A, B](f: A -⚬ B): F[A] => F[B]
+
+    def ⚬[G[_]](that: Functor[G]): Externalizer[[x] =>> F[G[x]]] =
+      new Externalizer[[x] =>> F[G[x]]] {
+        def lift[A, B](f: A -⚬ B): F[G[A]] => F[G[B]] =
+          self.lift(that.lift(f))
+      }
+
+    def ⚬[G[_]](that: ContraFunctor[G]): ContraExternalizer[[x] =>> F[G[x]]] =
+      new ContraExternalizer[[x] =>> F[G[x]]] {
+        def lift[A, B](f: A -⚬ B): F[G[B]] => F[G[A]] =
+          self.lift(that.lift(f))
+      }
+  }
+
+  object Externalizer {
+    implicit def outportInstance[A]: Externalizer[[x] =>> A -⚬ x] =
+      new Externalizer[[x] =>> A -⚬ x] {
+        def lift[B, C](f: B -⚬ C): (A -⚬ B) => (A -⚬ C) =
+          _ >>> f
+      }
+  }
+
+  /** Contravariant functor from category [[-⚬]] to the category `=>` of Scala functions.
+    * It takes a morphism `A -⚬ B` internal to the DSL and maps it to a morphism `F[B] => F[A]` in the meta language
+    * (Scala), i.e. external to the DSL.
+    */
+  trait ContraExternalizer[F[_]] { self =>
+    def lift[A, B](f: A -⚬ B): F[B] => F[A]
+
+    def ⚬[G[_]](that: Functor[G]): ContraExternalizer[[x] =>> F[G[x]]] =
+      new ContraExternalizer[[x] =>> F[G[x]]] {
+        def lift[A, B](f: A -⚬ B): F[G[B]] => F[G[A]] =
+          self.lift(that.lift(f))
+      }
+
+    def ⚬[G[_]](that: ContraFunctor[G]): Externalizer[[x] =>> F[G[x]]] =
+      new Externalizer[[x] =>> F[G[x]]] {
+        def lift[A, B](f: A -⚬ B): F[G[A]] => F[G[B]] =
+          self.lift(that.lift(f))
+      }
+  }
+
+  object ContraExternalizer {
+    implicit def inportInstance[C]: ContraExternalizer[[x] =>> x -⚬ C] =
+      new ContraExternalizer[[x] =>> x -⚬ C] {
+        def lift[A, B](f: A -⚬ B): (B -⚬ C) => (A -⚬ C) =
+          f >>> _
+      }
+  }
+
   /** A type alias expressing the ''intent'' that `A` is delayed (in some sense) until a signal ([[Need]]) is received.
     * Equivalent to `Done =⚬ A`, but the formulation as `Need |*| A` does not rely on the more powerful concept
     * of ''function types'' (internal hom objects), i.e. does not require [[ClosedDSL]].
