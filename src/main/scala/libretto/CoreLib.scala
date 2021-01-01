@@ -163,6 +163,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         def lift[A, B](f: A -⚬ B): F[G[B]] => F[G[A]] =
           self.lift(that.lift(f))
       }
+      
+    def ⚬[G[_, _]](that: Bifunctor[G]): BiExternalizer[[x, y] =>> F[G[x, y]]] =
+      new BiExternalizer[[x, y] =>> F[G[x, y]]] {
+        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): F[G[A, C]] => F[G[B, D]] =
+          self.lift(that.lift(f, g))
+      }
   }
 
   object Externalizer {
@@ -170,6 +176,22 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       new Externalizer[[x] =>> A -⚬ x] {
         def lift[B, C](f: B -⚬ C): (A -⚬ B) => (A -⚬ C) =
           _ >>> f
+      }
+  }
+  
+  trait BiExternalizer[F[_, _]] { self =>
+    def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): F[A, C] => F[B, D]
+    
+    def fst[B]: Externalizer[F[*, B]] =
+      new Externalizer[F[*, B]] {
+        def lift[A1, A2](f: A1 -⚬ A2): F[A1, B] => F[A2, B] =
+          self.lift(f, id)
+      }
+      
+    def snd[A]: Externalizer[F[A, *]] =
+      new Externalizer[F[A, *]] {
+        def lift[B1, B2](g: B1 -⚬ B2): F[A, B1] => F[A, B2] =
+          self.lift(id, g)
       }
   }
 
