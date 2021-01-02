@@ -584,6 +584,16 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     caseSndWins: (A |*| B) -⚬ C,
   ): (A |*| B) -⚬ C =
     race[A, B] >>> either(caseFstWins, caseSndWins)
+    
+  def raceAgainstL[A](implicit A: SignalingJunction.Positive[A]): (Done |*| A) -⚬ (A |+| A) =
+    id                                               [  Done        |*|            A  ]
+      .>.snd(A.signalPos).assocRL                 .to[ (Done        |*|  Done) |*| A  ]
+      .>.fst(raceCompletion)                      .to[ (Done        |+|  Done) |*| A  ]
+      .distributeRL                               .to[ (Done |*| A) |+| (Done  |*| A) ]
+      .bimap(A.awaitPos, A.awaitPos)              .to[           A  |+|            A  ]
+      
+  def raceAgainstR[A](implicit A: SignalingJunction.Positive[A]): (A |*| Done) -⚬ (A |+| A) =
+    swap >>> raceAgainstL >>> |+|.swap
 
   def select[A, B](implicit
     A: SignalingJunction.Negative[A],
@@ -604,6 +614,16 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     caseSndWins: Z -⚬ (A |*| B),
   ): Z -⚬ (A |*| B) =
     choice(caseFstWins, caseSndWins) >>> select[A, B]
+    
+  def selectAgainstL[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (Need |*| A) =
+    id                                               [  Need        |*|            A  ]
+      .<.snd.un(A.signalNeg).<.un(|*|.assocLR)  .from[ (Need        |*|  Need) |*| A  ]
+      .<.fst.un(selectRequest)                  .from[ (Need        |&|  Need) |*| A  ]
+      .<.un(coDistributeR)                      .from[ (Need |*| A) |&| (Need  |*| A) ]
+      .<.un(|&|.bimap(A.awaitNeg, A.awaitNeg))  .from[           A  |&|            A  ]
+      
+  def selectAgainstR[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (A |*| Need) =
+    |&|.swap >>> selectAgainstL >>> swap
 
   def raceSignaledOrNot[A](implicit A: SignalingJunction.Positive[A]): A -⚬ (A |+| A) =
     id                                           [  A                             ]
