@@ -188,14 +188,29 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           caseCons = par(id, self) >>> merge,
         )
       }
-
-    implicit def negativeLPollableF[A, X](implicit A: Junction.Positive[A]): SignalingJunction.Negative[LPollableF[A, X]] =
-      SignalingJunction.Negative.choicePos(
+      
+    implicit def positiveLPollableF[A, X](implicit A: Junction.Positive[A]): Junction.Positive[LPollableF[A, X]] =
+      Junction.Positive.choiceInstance(
         Junction.Positive.junctionDone,
         Junction.Positive.eitherInstance(
           Junction.Positive.junctionDone,
           Junction.Positive.byFst(A),
-        ),
+        )
+      )
+      
+    implicit def universalPositiveLPollableF[A](implicit A: Junction.Positive[A]): ∀[[x] =>> Junction.Positive[LPollableF[A, x]]] =
+      new ∀[[x] =>> Junction.Positive[LPollableF[A, x]]] {
+        def apply[X]: Junction.Positive[LPollableF[A, X]] =
+          positiveLPollableF[A, X]
+      }
+      
+    implicit def positiveLPollable[A](implicit A: Junction.Positive[A]): Junction.Positive[LPollable[A]] =
+      Junction.Positive.rec[LPollableF[A, *]]
+
+    implicit def negativeLPollableF[A, X](implicit A: Junction.Positive[A]): SignalingJunction.Negative[LPollableF[A, X]] =
+      SignalingJunction.Negative.from(
+        Signaling.Negative.choice,
+        Junction.invert(positiveLPollableF),
       )
 
     implicit def universalNegativeLPollableF[A](implicit A: Junction.Positive[A]): ∀[λ[x => SignalingJunction.Negative[LPollableF[A, x]]]] =
