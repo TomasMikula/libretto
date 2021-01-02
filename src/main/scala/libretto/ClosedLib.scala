@@ -47,20 +47,20 @@ class ClosedLib[
       dsl.uncurry(ev.substituteCo(self))
   }
 
-  implicit class FocusedFunctionOutputOnFunctionCo[A, F[_], B1, B2](f: FocusedFunctionOutputCo[A, F, B1 =⚬ B2]) {
-    def input: FocusedFunctionOutputContra[A, λ[x => F[x =⚬ B2]], B1] =
-      f.zoomContra(lib.input[B2])
+  implicit class FocusedOnFunctionCo[F[_], A, B](f: FocusedCo[F, A =⚬ B]) {
+    def input: FocusedContra[λ[x => F[x =⚬ B]], A] =
+      f.zoomContra(lib.input[B])
 
-    def output: FocusedFunctionOutputCo[A, λ[x => F[B1 =⚬ x]], B2] =
-      f.zoomCo(lib.output[B1])
+    def output: FocusedCo[λ[x => F[A =⚬ x]], B] =
+      f.zoomCo(lib.output[A])
   }
 
-  implicit class FocusedFunctionOutputOnFunctionContra[A, F[_], B1, B2](f: FocusedFunctionOutputContra[A, F, B1 =⚬ B2]) {
-    def input: FocusedFunctionOutputCo[A, λ[x => F[x =⚬ B2]], B1] =
-      f.zoomContra(lib.input[B2])
+  implicit class FocusedOnFunctionContra[F[_], A, B](f: FocusedContra[F, A =⚬ B]) {
+    def input: FocusedCo[λ[x => F[x =⚬ B]], A] =
+      f.zoomContra(lib.input[B])
 
-    def output: FocusedFunctionOutputContra[A, λ[x => F[B1 =⚬ x]], B2] =
-      f.zoomCo(lib.output[B1])
+    def output: FocusedContra[λ[x => F[A =⚬ x]], B] =
+      f.zoomCo(lib.output[A])
   }
 
   def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
