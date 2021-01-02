@@ -957,6 +957,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Focuses on function's output. */
     def > : FocusedCo[[x] =>> A -⚬ x, B] =
       new FocusedCo[[x] =>> A -⚬ x, B](self)
+
+    /** Focuses on function's input. */
+    def < : FocusedContra[[x] =>> x -⚬ B, A] =
+      new FocusedContra[[x] =>> x -⚬ B, A](self)
   }
 
   implicit class LinearFunctionToTimesOps[A, B1, B2](self: A -⚬ (B1 |*| B2)) {
@@ -1117,8 +1121,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   /** Focused on `B` in the output `F[B]` of linear function `A -⚬ F[B]`, where `B` is in a contravariant position. */
-  class FocusedContra[F[_], B](f: F[B])(F: ContraExternalizer[F]) {
-    def unapply[A](g: A -⚬ B): F[A] = F.lift(g)(f)
+  class FocusedContra[F[_], B](f: F[B])(implicit F: ContraExternalizer[F]) {
+    def unapply[A](g: A -⚬ B): F[A] =
+      F.lift(g)(f)
+    
+    /** Alias for [[unapply]]. */
+    def un[A](g: A -⚬ B): F[A] =
+      unapply(g)
 
     def subst[C](implicit ev: B =:= C): F[C] =
       ev.substituteCo(f)
