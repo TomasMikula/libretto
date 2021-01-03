@@ -328,29 +328,25 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                 case One =>
                   type X
                   val px = Promise[X]()
-                  Pair(Prom(px), Fut(px.future))                      .asInstanceOf[Frontier[B]]
+                  Pair(Prom(px), px.future.toValFrontier)             .asInstanceOf[Frontier[B]]
               }
             case -⚬.Fulfill() =>
               this match {
-                case Pair(Fut(fa), Prom(pa)) =>
+                case Pair(a, Prom(pa)) =>
                   type X
                   val px = pa.asInstanceOf[Promise[X]]
-                  val fx = fa.asInstanceOf[Future[X]]
+                  val fx = a.asInstanceOf[Frontier[Val[X]]].toFutureValue
                   px.completeWith(fx)
                   One                                                 .asInstanceOf[Frontier[B]]
               }
             case -⚬.LiftEither() =>
               this match {
-                case Fut(fe) =>
+                case Value(e) =>
                   type A1; type A2
-                  Deferred(
-                    fe
-                      .asInstanceOf[Future[Either[A1, A2]]]
-                      .map {
-                        case Left(a1)  => InjectL(Fut(Future.successful(a1)))
-                        case Right(a2) => InjectR(Fut(Future.successful(a2)))
-                      }
-                  )                                                   .asInstanceOf[Frontier[B]]
+                  (e.asInstanceOf[Either[A1, A2]] match {
+                    case Left(a1)  => InjectL(Value(a1))
+                    case Right(a2) => InjectR(Value(a2))
+                  })                                                  .asInstanceOf[Frontier[B]]
                 case other =>
                   bug(s"Did not expect $other to represent a Val")
               }
@@ -358,36 +354,28 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
               ???
             case -⚬.LiftPair() =>
               this match {
-                case Fut(fa) =>
+                case Value(a) =>
                   type A1; type A2 // such that A = Val[(A1, A2)]
-                  val g = fa.asInstanceOf[Future[(A1, A2)]]
-                  Pair(Fut(g.map(_._1)), Fut(g.map(_._2)))            .asInstanceOf[Frontier[B]]
+                  val (a1, a2) = a.asInstanceOf[(A1, A2)]
+                  Pair(Value(a1), Value(a2))                          .asInstanceOf[Frontier[B]]
               }
             case -⚬.UnliftPair() =>
               //          A          -⚬    B
               // (Val[X] |*| Val[Y]) -⚬ Val[(X, Y)]
-              def go[X, Y](f: Frontier[Val[X] |*| Val[Y]]): Frontier[Val[(X, Y)]] =
-                f match {
-                  case Pair(Deferred(fa1), a2) =>
-                    Deferred(fa1.map(a1 => go(Pair(a1, a2))))
-                  case Pair(a1, Deferred(fa2)) =>
-                    Deferred(fa2.map(a2 => go(Pair(a1, a2))))
-                  case Pair(Fut(fa1), Fut(fa2)) =>
-                    Fut(fa1 zip fa2)
-                }
               type X; type Y
-              go(this.asInstanceOf[Frontier[Val[X] |*| Val[Y]]])      .asInstanceOf[Frontier[B]]
+              val (x, y) = Frontier.splitPair(this.asInstanceOf[Frontier[Val[X] |*| Val[Y]]])
+              (x.toFutureValue zip y.toFutureValue).toValFrontier     .asInstanceOf[Frontier[B]]
             case -⚬.LiftNegPair() =>
               ???
             case -⚬.UnliftNegPair() =>
               ???
             case -⚬.LiftV(f) =>
-              this match {
-                case Fut(fa) =>
-                  Fut(fa.map(f.asInstanceOf[Any => Nothing]))         .asInstanceOf[Frontier[B]]
-                case other =>
-                  bug(s"Did not expect $other to represent a Val")
-              }
+              type X; type Y
+              this
+                .asInstanceOf[Frontier[Val[X]]]
+                .toFutureValue
+                .map(f.asInstanceOf[X => Y])
+                .toValFrontier                                        .asInstanceOf[Frontier[B]]
             case -⚬.LiftN(f) =>
               this match {
                 case Prom(pa) =>
@@ -424,14 +412,8 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
       }
     }
 
-    def getFuture[R](implicit ev: A =:= Val[R]): Future[R] = {
-      val self: Frontier[Val[R]] = ev.substituteCo(this)
-      self match {
-        case Fut(f) => f
-        case Deferred(f) => f.flatMap(_.getFuture)
-        case other => bug(s"Did not expect $other to represent Val[?]")
-      }
-    }
+    def getFuture[R](implicit ev: A =:= Val[R]): Future[R] =
+      Frontier.toFutureValue(ev.substituteCo(this))
     
     def toFutureDone(implicit ev: A =:= Done): Future[DoneNow.type] =
       Frontier.toFutureDone(ev.substituteCo(this))
@@ -441,7 +423,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
     
     private def crash(e: Throwable): Unit = {
       this match {
-        case One | DoneNow | Fut(_) =>
+        case One | DoneNow | Value(_) =>
           // do nothing
         case NeedAsync(promise) =>
           promise.failure(e)
@@ -475,7 +457,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
     case class Deferred[A](f: Future[Frontier[A]]) extends Frontier[A]
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]
     
-    case class Fut[A](f: Future[A]) extends Frontier[Val[A]]
+    case class Value[A](a: A) extends Frontier[Val[A]]
     case class Prom[A](p: Promise[A]) extends Frontier[Neg[A]]
     
     def fulfillNeedWith(n: Frontier[Need], f: Future[Any]): Unit =
@@ -530,13 +512,14 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
       
     def toFutureValue[A](f: Frontier[Val[A]]): Future[A] =
       f match {
-        case Fut(f) => f
+        case Value(a) => Future.successful(a)
         case Deferred(fa) => fa.flatMap(toFutureValue)
+        case other => bug(s"Did not expect $other to represent Val[?]")
       }
       
     extension [A](fa: Future[A]) {
       def toValFrontier: Frontier[Val[A]] =
-        Fut(fa)
+        Deferred(fa.map(Value(_)))
     }
     
     extension [A](fa: Future[Frontier[A]]) {
