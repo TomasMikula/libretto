@@ -78,14 +78,9 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
               // ((X |*| Y) |*| Z) -⚬ (X |*| (Y |*| Z))
               type X; type Y
               this match {
-                case Pair(Pair(x, y), z) =>
+                case Pair(xy, z) =>
+                  val (x, y) = Frontier.splitPair(xy.asInstanceOf[Frontier[X |*| Y]])
                   Pair(x, Pair(y, z))                                 .asInstanceOf[Frontier[B]]
-                case Pair(Deferred(fxy), z) =>
-                  Deferred(
-                    fxy
-                      .asInstanceOf[Future[Frontier[X |*| Y]]]
-                      .map(xy => Pair(xy, z).extendBy(-⚬.TimesAssocLR()))
-                  )                                                   .asInstanceOf[Frontier[B]]
                 case other =>
                   bug(s"Did not expect $other to represent ((? |*| ?) |*| ?)")
               }
@@ -93,14 +88,9 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
               // (X |*| (Y |*| Z)) -⚬ ((X |*| Y) |*| Z)
               type Y; type Z
               this match {
-                case Pair(x, Pair(y, z)) =>
+                case Pair(x, yz) =>
+                  val (y, z) = Frontier.splitPair(yz.asInstanceOf[Frontier[Y |*| Z]])
                   Pair(Pair(x, y), z)                                 .asInstanceOf[Frontier[B]]
-                case Pair(x, Deferred(fyz)) =>
-                  Deferred(
-                    fyz
-                      .asInstanceOf[Future[Frontier[Y |*| Z]]]
-                      .map(yz => Pair(x, yz).extendBy(-⚬.TimesAssocRL()))
-                  )                                                   .asInstanceOf[Frontier[B]]
                 case other =>
                   bug(s"Did not expect $other to represent (? |*| (? |*| ?))")
               }
@@ -234,27 +224,14 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                 case Choice(nx, y, onError) =>
                   val pn = Promise[Any]()
                   val px = Promise[Frontier[X]]()
-                  def go(nx: Frontier[Need |*| X]): Future[Frontier[X]] = {
-                    nx match {
-                      case Pair(n, x) =>
-                        Future {
-                          n match {
-                            case NeedAsync(pn) => pn.success(()); x
-                            case other => bug(s"Did not expect $other to represent Need")
-                          }
-                        }
-                      case Deferred(fnx) =>
-                        fnx.flatMap(go)
-                      case other =>
-                        Future { bug(s"Did not expect $other to represent (? |*| ?)") }
-                    }
-                  }
                   pn.future.onComplete {
                     case Failure(e) =>
                       onError(e)
                       px.failure(e)
                     case Success(_) =>
-                      px.completeWith(go(nx().asInstanceOf[Frontier[Need |*| X]]))
+                      val (n, x) = Frontier.splitPair(nx().asInstanceOf[Frontier[Need |*| X]])
+                      Frontier.fulfillNeedWith(n, Future.successful(()))
+                      px.success(x)
                   }
                   Pair(NeedAsync(pn), Deferred(px.future))            .asInstanceOf[Frontier[B]]
                 case other =>
