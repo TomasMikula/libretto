@@ -286,14 +286,14 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                   type X; type Y; type Z
                   val px = Promise[Frontier[X]]()
                   val chooseL: () => Frontier[Y] = { () =>
-                    f() match {
-                      case Pair(a, b) => px.success(a.asInstanceOf[Frontier[X]]); b.asInstanceOf[Frontier[Y]]
-                    }
+                    val (x, y) = Frontier.splitPair(f().asInstanceOf[Frontier[X |*| Y]])
+                    px.success(x)
+                    y
                   }
                   val chooseR: () => Frontier[Z] = { () =>
-                    g() match {
-                      case Pair(a, c) => px.success(a.asInstanceOf[Frontier[X]]); c.asInstanceOf[Frontier[Z]]
-                    }
+                    val (x, z) = Frontier.splitPair(g().asInstanceOf[Frontier[X |*| Z]])
+                    px.success(x)
+                    z
                   }
                   val onError1: Throwable => Unit = { e =>
                     onError(e)
@@ -542,6 +542,14 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           case Success(f) => failChoice(f, e)
           case Failure(ex) => // do nothing, the error is already propagating
         }
+      }
+      
+    def splitPair[A, B](f: Frontier[A |*| B]): (Frontier[A], Frontier[B]) =
+      f match {
+        case Pair(a, b) => (a, b)
+        case Deferred(f) =>
+          val fab = f.map(splitPair)
+          (Deferred(fab.map(_._1)), Deferred(fab.map(_._2)))
       }
   }
   
