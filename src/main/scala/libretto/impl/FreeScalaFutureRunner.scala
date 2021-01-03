@@ -183,7 +183,28 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
             case -⚬.SignalEither() =>
               ???
             case -⚬.SignalChoice() =>
-              ???
+              //        A             -⚬     B
+              // (Need |*| (X |&| Y)) -⚬ (X |&| Y)
+              type X; type Y
+              this match {
+                case Pair(n0, c0) =>
+                  val n = n0.asInstanceOf[Frontier[Need]]
+                  val c = c0.asInstanceOf[Frontier[X |&| Y]]
+                  Choice(
+                    () => {
+                      Frontier.fulfillNeedWith(n, Future.successful(()))
+                      Frontier.chooseL(c)
+                    },
+                    () => {
+                      Frontier.fulfillNeedWith(n, Future.successful(()))
+                      Frontier.chooseR(c)
+                    },
+                    onError = { e =>
+                      Frontier.fulfillNeedWith(n, Future.failed(e))
+                      Frontier.failChoice(c, e)
+                    },
+                  )                                                   .asInstanceOf[Frontier[B]]
+              }
             case -⚬.InjectLWhenDone() =>
               // (Done |*| X) -⚬ ((Done |*| X) |+| Y)
               type X
@@ -315,7 +336,19 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                   AsyncEither(p.future)                               .asInstanceOf[Frontier[B]]
               }
             case -⚬.SelectRequest() =>
-              ???
+              this match {
+                case Choice(f, g, onError) =>
+                  val p1 = Promise[Any]()
+                  val p2 = Promise[Any]()
+                  val p = Promise[(() => Frontier[Need], Future[Any])]
+                  p1.future.onComplete(r => p.tryComplete(r.map(_ => (f.asInstanceOf[() => Frontier[Need]], p2.future))))
+                  p2.future.onComplete(r => p.tryComplete(r.map(_ => (g.asInstanceOf[() => Frontier[Need]], p1.future))))
+                  p.future.onComplete {
+                    case Success((n, fut)) => Frontier.fulfillNeedWith(n(), fut)
+                    case Failure(e) => onError(e)
+                  }
+                  Pair(NeedAsync(p1), NeedAsync(p2))                  .asInstanceOf[Frontier[B]]
+              }
             case -⚬.Crash(msg) =>
               val e = Crash(msg)
               this.crash(e)
@@ -472,6 +505,38 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
     
     case class Fut[A](f: Future[A]) extends Frontier[Val[A]]
     case class Prom[A](p: Promise[A]) extends Frontier[Neg[A]]
+    
+    def fulfillNeedWith(n: Frontier[Need], f: Future[Any]): Unit =
+      n match {
+        case NeedAsync(p) =>
+          p.completeWith(f)
+        case Deferred(fn) =>
+          fn.onComplete {
+            case Success(n) => fulfillNeedWith(n, f)
+            case Failure(e) => // do nothing, an error is already propagating
+          }
+      }
+      
+    def chooseL[A, B](f: Frontier[A |&| B]): Frontier[A] =
+      f match {
+        case Choice(a, b, onError) => a()
+        case Deferred(f) => Deferred(f.map(chooseL))
+      }
+      
+    def chooseR[A, B](f: Frontier[A |&| B]): Frontier[B] =
+      f match {
+        case Choice(a, b, onError) => b()
+        case Deferred(f) => Deferred(f.map(chooseR))
+      }
+
+    def failChoice[A, B](f: Frontier[A |&| B], e: Throwable): Unit =
+      f match {
+        case Choice(a, b, onError) => onError(e)
+        case Deferred(f) => f.onComplete {
+          case Success(f) => failChoice(f, e)
+          case Failure(ex) => // do nothing, the error is already propagating
+        }
+      }
   }
   
   private case class Crash(msg: String) extends Exception(msg)
