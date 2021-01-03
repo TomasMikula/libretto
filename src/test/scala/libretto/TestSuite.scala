@@ -11,6 +11,8 @@ abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
   val kit = StarterKit
   import kit.dsl._
   import kit.coreLib._
+  import kit.crashLib._
+  import kit.coreStreams._
   
   private var scheduler: ScheduledExecutorService = _
   private var runner: ScalaRunner[kit.dsl.type, Future] = _
@@ -45,4 +47,24 @@ abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
 
   def assertCrashes(prg: One -⚬ Done, expectedMsg: String): Unit = 
     assertCrashes(prg, Some(expectedMsg))
+
+  extension [A, B: Junction.Positive](f: A -⚬ LPollable[B]) {
+    def expectPoll: A -⚬ LPollable[B] =
+      f >>> LPollable.from(
+        onClose = LPollable.close >>> crashd("Expected poll, received close"),
+        onPoll = LPollable.poll,
+      )
+
+    def timeout(d: FiniteDuration): A -⚬ LPollable[B] = {
+      import LPollable._
+
+      val msg = s"No action (poll or close) within $d"
+      
+      f.from[A]                     .to[          LPollable[B]         ]
+        .choice(crashPos(msg), id)  .to[ LPollable[B] |&| LPollable[B] ]
+        .>(selectAgainstL)          .to[         Need |*| LPollable[B] ]
+        .>.fst(delayNeed(d))        .to[         Need |*| LPollable[B] ]
+        .elimFst(need)              .to[                  LPollable[B] ]
+    }
+  }
 }

@@ -5,8 +5,7 @@ class StreamsTests extends TestSuite {
   import kit.coreLib._
   import kit.scalaLib._
   
-  val streams = CoreStreams(kit.dsl, kit.coreLib)
-  val scalaStreams = ScalaStreams(kit.dsl, kit.coreLib, kit.scalaLib, streams)
+  val scalaStreams = ScalaStreams(kit.dsl, kit.coreLib, kit.scalaLib, kit.coreStreams)
   
   import scalaStreams._
   

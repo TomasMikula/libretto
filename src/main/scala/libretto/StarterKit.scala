@@ -16,6 +16,12 @@ abstract class StarterKit(
   val scalaLib: ScalaLib[dsl.type, coreLib.type] =
     ScalaLib(dsl, coreLib)
     
+  val crashLib: CrashLib[dsl.type, coreLib.type] =
+    CrashLib(dsl, coreLib)
+
+  val coreStreams: CoreStreams[dsl.type, coreLib.type] =
+    CoreStreams(dsl, coreLib)
+
   def runner(implicit scheduler: ScheduledExecutorService): ScalaRunner[dsl.type, Future] =
     runner0(scheduler)
 }
