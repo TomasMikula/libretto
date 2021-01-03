@@ -110,14 +110,6 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                 case InjectR(e) =>
                   type A2
                   e.asInstanceOf[Frontier[A2]].extendBy(g.asInstanceOf[A2 -⚬ B])
-                case AsyncEither(fe) =>
-                  type A1; type A2
-                  Deferred(
-                    fe.map {
-                      case Left(a1)  => a1.asInstanceOf[Frontier[A1]].extendBy(f.asInstanceOf[A1 -⚬ B])
-                      case Right(a2) => a2.asInstanceOf[Frontier[A2]].extendBy(g.asInstanceOf[A2 -⚬ B])
-                    }
-                  )
               }
             case -⚬.ChooseL() =>
               this match {
@@ -245,10 +237,6 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
               this match {
                 case Pair(a, InjectL(f)) => InjectL(Pair(a, f))       .asInstanceOf[Frontier[B]]
                 case Pair(a, InjectR(g)) => InjectR(Pair(a, g))       .asInstanceOf[Frontier[B]]
-                case Pair(a, AsyncEither(f)) => AsyncEither(f.map {
-                  case Left(b) => Left(Pair(a, b))
-                  case Right(c) => Right(Pair(a, c))
-                })                                                    .asInstanceOf[Frontier[B]]
                 case Pair(x, Deferred(fyz)) =>
                   Deferred(fyz.map(yz =>
                     Pair(x, yz)                                       .asInstanceOf[Frontier[X |*| (Y |+| Z)]]
@@ -306,10 +294,10 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                 case Pair(x, y) =>
                   val d1 = x.asInstanceOf[Frontier[Done]]
                   val d2 = y.asInstanceOf[Frontier[Done]]
-                  val p = Promise[Either[Frontier[Done], Frontier[Done]]]
-                  d1.toFutureDone.onComplete(r => p.tryComplete(r.map(_ => Left(d2))))
-                  d2.toFutureDone.onComplete(r => p.tryComplete(r.map(_ => Right(d1))))
-                  AsyncEither(p.future)                               .asInstanceOf[Frontier[B]]
+                  val p = Promise[Frontier[Done |+| Done]]
+                  d1.toFutureDone.onComplete(r => p.tryComplete(r.map(_ => InjectL(d2))))
+                  d2.toFutureDone.onComplete(r => p.tryComplete(r.map(_ => InjectR(d1))))
+                  Deferred(p.future)                                  .asInstanceOf[Frontier[B]]
               }
             case -⚬.SelectRequest() =>
               this match {
@@ -355,12 +343,12 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
               this match {
                 case Fut(fe) =>
                   type A1; type A2
-                  AsyncEither(
+                  Deferred(
                     fe
                       .asInstanceOf[Future[Either[A1, A2]]]
                       .map {
-                        case Left(a1)  => Left (Fut(Future.successful(a1)))
-                        case Right(a2) => Right(Fut(Future.successful(a2)))
+                        case Left(a1)  => InjectL(Fut(Future.successful(a1)))
+                        case Right(a2) => InjectR(Fut(Future.successful(a2)))
                       }
                   )                                                   .asInstanceOf[Frontier[B]]
                 case other =>
@@ -464,8 +452,6 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           a.crash(e)
         case InjectR(b) =>
           b.crash(e)
-        case AsyncEither(fab) =>
-          fab.map(_.fold(_.crash(e), _.crash(e)))
         case Choice(_, _, onError) =>
           onError(e)
         case Deferred(fa) =>
@@ -485,8 +471,6 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
     case class Pair[A, B](a: Frontier[A], b: Frontier[B]) extends Frontier[A |*| B]
     case class InjectL[A, B](a: Frontier[A]) extends Frontier[A |+| B]
     case class InjectR[A, B](b: Frontier[B]) extends Frontier[A |+| B]
-    // TODO: Deferred[A |+| B] might be a sufficient replacement for AsyncEither[A, B]
-    case class AsyncEither[A, B](f: Future[Either[Frontier[A], Frontier[B]]]) extends Frontier[A |+| B]
     case class Choice[A, B](a: () => Frontier[A], b: () => Frontier[B], onError: Throwable => Unit) extends Frontier[A |&| B]
     case class Deferred[A](f: Future[Frontier[A]]) extends Frontier[A]
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]
