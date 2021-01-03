@@ -403,14 +403,19 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                   Pair(Fut(g.map(_._1)), Fut(g.map(_._2)))            .asInstanceOf[Frontier[B]]
               }
             case -⚬.UnliftPair() =>
-              this match {
-                case Pair(Deferred(fa1), a2) =>
-                  Deferred(fa1.map(Pair(_, a2)))                      .asInstanceOf[Frontier[B]]
-                case Pair(a1, Deferred(fa2)) =>
-                  Deferred(fa2.map(Pair(a1, _)))                      .asInstanceOf[Frontier[B]]
-                case Pair(Fut(fa1), Fut(fa2)) =>
-                  Fut(fa1 zip fa2)                                    .asInstanceOf[Frontier[B]]
-              }
+              //          A          -⚬    B
+              // (Val[X] |*| Val[Y]) -⚬ Val[(X, Y)]
+              def go[X, Y](f: Frontier[Val[X] |*| Val[Y]]): Frontier[Val[(X, Y)]] =
+                f match {
+                  case Pair(Deferred(fa1), a2) =>
+                    Deferred(fa1.map(a1 => go(Pair(a1, a2))))
+                  case Pair(a1, Deferred(fa2)) =>
+                    Deferred(fa2.map(a2 => go(Pair(a1, a2))))
+                  case Pair(Fut(fa1), Fut(fa2)) =>
+                    Fut(fa1 zip fa2)
+                }
+              type X; type Y
+              go(this.asInstanceOf[Frontier[Val[X] |*| Val[Y]]])      .asInstanceOf[Frontier[B]]
             case -⚬.LiftNegPair() =>
               ???
             case -⚬.UnliftNegPair() =>
@@ -459,6 +464,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
       self match {
         case Fut(f) => f
         case Deferred(f) => f.flatMap(_.getFuture)
+        case other => bug(s"Did not expect $other to represent Val[?]")
       }
     }
     
