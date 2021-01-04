@@ -15,4 +15,22 @@ class StreamsTests extends TestSuite {
       List(1, 2, 3, 4, 5, 6),
     )
   }
+
+  test("Pollable.map") {
+    assertResult(
+      Pollable.fromList(List(1, 2, 3)) >>> Pollable.map(_.toString) >>> Pollable.toList,
+      List("1", "2", "3"),
+    )
+  }
+
+  test("partition") {
+    assertResult(
+      Pollable.of(1, 2, 3, 4, 5, 6)
+        .>>>(Pollable.map { i => if (i % 2 == 0) Left(i) else Right(i) })
+        .>>>(Pollable.partition)
+        .par(Pollable.toList, Pollable.toList)
+        .>>>(unliftPair),
+      (List(2, 4, 6), List(1, 3, 5)),
+    )
+  }
 }
