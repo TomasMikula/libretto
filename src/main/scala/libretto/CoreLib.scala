@@ -812,6 +812,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       
     def swap[A, B]: (A |+| B) -⚬ (B |+| A) =
       either(injectR, injectL)
+      
+    def IXI[A, B, C, D]: ((A |+| B) |+| (C |+| D)) -⚬ ((A |+| C) |+| (B |+| D)) =
+      either(
+        either(injectL ⚬ injectL, injectR ⚬ injectL),
+        either(injectL ⚬ injectR, injectR ⚬ injectR),
+      )
+      
 
     val bifunctor: Bifunctor[|+|] =
       new Bifunctor[|+|] {
@@ -837,6 +844,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       
     def swap[A, B]: (A |&| B) -⚬ (B |&| A) =
       choice(chooseR, chooseL)
+
+    def IXI[A, B, C, D]: ((A |&| B) |&| (C |&| D)) -⚬ ((A |&| C) |&| (B |&| D)) =
+      choice(
+        choice(chooseL >>> chooseL, chooseR >>> chooseL),
+        choice(chooseL >>> chooseR, chooseR >>> chooseR),
+      )
 
     val bifunctor: Bifunctor[|&|] =
       new Bifunctor[|&|] {
@@ -875,6 +888,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def andThen[C](g: B -⚬ C): A -⚬ C = dsl.andThen(self, g)
     
     def after[Z](g: Z -⚬ A): Z -⚬ B = dsl.andThen(g, self)
+    
+    /** Alias for [[after]]. */
+    def ⚬[Z](g: Z -⚬ A): Z -⚬ B = after(g)
 
     def bimap[F[_, _]]: BimapSyntax[F, A, B] =
       new BimapSyntax[F, A, B](self)
