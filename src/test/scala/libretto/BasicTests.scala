@@ -86,4 +86,65 @@ class BasicTests extends TestSuite {
       .chooseL
     assertCompletes(prg)
   }
+  
+  test("coDistribute") {
+    type B = Val[Boolean]
+    type C = Val[Char]
+    type I = Val[Int]
+    type S = Val[String]
+    
+    //               (false   1)    (true "foo")    ('a'    2)    ('b'  "bar")
+    val init: One -⚬ (((B |*| I) |&| (B |*| S)) |&| ((C |*| I) |&| (C |*| S))) =
+      choice(
+        choice(
+          parFromOne(const_(false), const_(1)),
+          parFromOne(const_(true), const_("foo")),
+        ),
+        choice(
+          parFromOne(const_('a'), const_(2)),
+          parFromOne(const_('b'), const_("bar")),
+        ),
+      )
+      
+    val coDistributed1: One -⚬ ((B |&| C) |*| (I |&| S)) =
+      init
+        .bimap(coDistributeL, coDistributeL)
+        .>(coDistributeR)
+    
+    val coDistributed2: One -⚬ ((B |&| C) |*| (I |&| S)) =
+      init                                          .to[ ((B |*| I) |&| (B  |*|  S)) |&| ((C |*| I) |&| (C  |*| S)) ]
+        .>(|&|.IXI)                                 .to[ ((B |*| I) |&| (C  |*|  I)) |&| ((B |*| S) |&| (C  |*| S)) ]
+        .bimap(coDistributeR, coDistributeR)        .to[ ((B        |&|  C) |*|  I ) |&| ((B        |&|  C) |*| S ) ]
+        .>(coDistributeL)                           .to[  (B        |&|  C) |*| (I   |&|                        S ) ]
+        
+    case class Combination[X, Y](
+      choose1: (B |&| C) -⚬ Val[X],
+      choose2: (I |&| S) -⚬ Val[Y],
+      expectedX: X,
+      expectedY: Y,
+    ) {
+      type T = X
+      type U = Y
+      
+      def go: ((B |&| C) |*| (I |&| S)) -⚬ Val[(T, U)] =
+        par(choose1, choose2) >>> unliftPair
+      
+      def expected: (T, U) =
+        (expectedX, expectedY)
+    }
+    
+    val combinations = Seq(
+      Combination(chooseL, chooseL, false, 1),
+      Combination(chooseL, chooseR, true, "foo"),
+      Combination(chooseR, chooseL, 'a', 2),
+      Combination(chooseR, chooseR, 'b', "bar"),
+    )
+    
+    for {
+      f <- Seq(coDistributed1, coDistributed2)
+      c <- combinations
+    } {
+      assertResult(f >>> c.go, c.expected)
+    } 
+  }
 }
