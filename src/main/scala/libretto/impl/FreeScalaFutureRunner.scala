@@ -35,9 +35,11 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
     pa.future
   }
 
-  override def runScala[A](prg: One -⚬ Val[A]): Future[A] =
-    Frontier.One.extendBy(prg).getFuture
-  
+  override def runScala[A](prg: One -⚬ Val[A]): Future[A] = {
+    import Frontier._
+    Frontier.One.extendBy(prg).toFutureValue
+  }
+
   private sealed trait Frontier[A] {
     import Frontier._
     
@@ -182,7 +184,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                 },
                 onError = { e =>
                   Frontier.fulfillNeedWith(n, Future.failed(e))
-                  Frontier.failChoice(c, e)
+                  c.asChoice.onError(e)
                 },
               )                                                   .asInstanceOf[Frontier[B]]
           }
@@ -416,27 +418,6 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
       }
     }
 
-    def getFuture[R](implicit ev: A =:= Val[R]): Future[R] =
-      Frontier.toFutureValue(ev.substituteCo(this))
-    
-    def toFutureDone(implicit ev: A =:= Done): Future[DoneNow.type] =
-      Frontier.toFutureDone(ev.substituteCo(this))
-      
-    def toFutureValue[X](implicit ev: A =:= Val[X]): Future[X] =
-      Frontier.toFutureValue(ev.substituteCo(this))
-      
-    def futurePromise[X](implicit ev: A =:= Neg[X]): Future[Promise[X]] =
-      Frontier.futurePromise(ev.substituteCo(this))
-      
-    def splitPair[X, Y](implicit ev: A =:= (X |*| Y)): (Frontier[X], Frontier[Y]) =
-      Frontier.splitPair(ev.substituteCo(this))
-      
-    def asChoice[X, Y](implicit ev: A =:= (X |&| Y)): Choice[X, Y] =
-      Frontier.asChoice(ev.substituteCo(this))
-      
-    def awaitIfDeferred(implicit ev: A =:= One): Unit =
-      Frontier.awaitIfDeferred(ev.substituteCo(this))
-    
     private def crash(e: Throwable): Unit = {
       this match {
         case One | DoneNow | Value(_) =>
@@ -491,84 +472,85 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
               }
           }
       }
-      
-    def chooseL[A, B](f: Frontier[A |&| B]): Frontier[A] =
-      f match {
-        case Choice(a, b, onError) => a()
-        case Deferred(f) => Deferred(f.map(chooseL))
-      }
-      
-    def chooseR[A, B](f: Frontier[A |&| B]): Frontier[B] =
-      f match {
-        case Choice(a, b, onError) => b()
-        case Deferred(f) => Deferred(f.map(chooseR))
-      }
 
-    def failChoice[A, B](f: Frontier[A |&| B], e: Throwable): Unit =
-      f match {
-        case Choice(a, b, onError) => onError(e)
-        case Deferred(f) => f.onComplete {
-          case Success(f) => failChoice(f, e)
-          case Failure(ex) =>
-            e.printStackTrace(System.err)
-            ex.printStackTrace(System.err)
+    extension [A, B](f: Frontier[A |&| B]) {
+      def chooseL: Frontier[A] =
+        f match {
+          case Choice(a, b, onError) => a()
+          case Deferred(f) => Deferred(f.map(_.chooseL))
         }
-      }
-      
-    def asChoice[A, B](f: Frontier[A |&| B]): Choice[A, B] =
-      f match {
-        case c @ Choice(_, _, _) => c
-        case Deferred(f) =>
-          Choice(
-            () => Deferred(f.map(asChoice(_).a())),
-            () => Deferred(f.map(asChoice(_).b())),
-            e => f.onComplete {
-              case Success(f) =>
-                asChoice(f).onError(e)
-              case Failure(ex) =>
-                e.printStackTrace(System.err)
-                ex.printStackTrace(System.err)
-            },
-          )
-      }
-      
-    def splitPair[A, B](f: Frontier[A |*| B]): (Frontier[A], Frontier[B]) =
-      f match {
-        case Pair(a, b) => (a, b)
-        case Deferred(f) =>
-          val fab = f.map(splitPair)
-          (Deferred(fab.map(_._1)), Deferred(fab.map(_._2)))
-      }
-      
-    def toFutureDone(f: Frontier[Done]): Future[DoneNow.type] =
-      f match {
-        case DoneNow =>
-          Future.successful(DoneNow)
-        case Deferred(f) =>
-          f.flatMap(toFutureDone)
-      }
-      
-    def toFutureValue[A](f: Frontier[Val[A]]): Future[A] =
-      f match {
-        case Value(a) => Future.successful(a)
-        case Deferred(fa) => fa.flatMap(toFutureValue)
-      }
 
-    def futurePromise[A](f: Frontier[Neg[A]]): Future[Promise[A]] =
-      f match {
-        case Prom(pa) => Future.successful(pa)
-        case Deferred(fa) => fa.flatMap(_.futurePromise)
-      }
-      
-    def awaitIfDeferred(f: Frontier[One]): Unit =
-      f match {
-        case One => // do nothing
-        case Deferred(f) =>
-          f.onComplete {
-            case Success(f) => awaitIfDeferred(f)
-            case Failure(e) => e.printStackTrace(System.err)
-          }
-      }
+      def chooseR: Frontier[B] =
+        f match {
+          case Choice(a, b, onError) => b()
+          case Deferred(f) => Deferred(f.map(_.chooseR))
+        }
+
+      def asChoice: Choice[A, B] =
+        f match {
+          case c @ Choice(_, _, _) => c
+          case Deferred(f) =>
+            Choice(
+              () => Deferred(f.map(_.asChoice.a())),
+              () => Deferred(f.map(_.asChoice.b())),
+              e => f.onComplete {
+                case Success(f) =>
+                  f.asChoice.onError(e)
+                case Failure(ex) =>
+                  e.printStackTrace(System.err)
+                  ex.printStackTrace(System.err)
+              },
+            )
+        }
+    }
+
+    extension [A, B](f: Frontier[A |*| B]) {
+      def splitPair: (Frontier[A], Frontier[B]) =
+        f match {
+          case Pair(a, b) => (a, b)
+          case Deferred(f) =>
+            val fab = f.map(_.splitPair)
+            (Deferred(fab.map(_._1)), Deferred(fab.map(_._2)))
+        }
+    }
+
+    extension (f: Frontier[Done]) {
+      def toFutureDone: Future[DoneNow.type] =
+        f match {
+          case DoneNow =>
+            Future.successful(DoneNow)
+          case Deferred(f) =>
+            f.flatMap(_.toFutureDone)
+        }
+    }
+
+    extension [A](f: Frontier[Val[A]]) {
+      def toFutureValue: Future[A] =
+        f match {
+          case Value(a) => Future.successful(a)
+          case Deferred(fa) => fa.flatMap(_.toFutureValue)
+        }
+    }
+
+    extension [A](f: Frontier[Neg[A]]) {
+      def futurePromise: Future[Promise[A]] =
+        f match {
+          case Prom(pa) => Future.successful(pa)
+          case Deferred(fa) => fa.flatMap(_.futurePromise)
+        }
+    }
+
+    extension (f: Frontier[One]) {
+      def awaitIfDeferred: Unit =
+        f match {
+          case One => // do nothing
+          case Deferred(f) =>
+            f.onComplete {
+              case Success(f) => f.awaitIfDeferred
+              case Failure(e) => e.printStackTrace(System.err)
+            }
+        }
+    }
       
     extension [A](fa: Future[A]) {
       def toValFrontier: Frontier[Val[A]] =
