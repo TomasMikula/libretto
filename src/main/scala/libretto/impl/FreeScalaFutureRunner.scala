@@ -476,7 +476,12 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
         case Deferred(fn) =>
           fn.onComplete {
             case Success(n) => fulfillNeedWith(n, f)
-            case Failure(e) => // do nothing, an error is already propagating
+            case Failure(e) =>
+              e.printStackTrace(System.err)
+              f.onComplete {
+                case Success(_) => // do nothing
+                case Failure(ex) => ex.printStackTrace(System.err)
+              }
           }
       }
       
@@ -497,7 +502,9 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
         case Choice(a, b, onError) => onError(e)
         case Deferred(f) => f.onComplete {
           case Success(f) => failChoice(f, e)
-          case Failure(ex) => // do nothing, the error is already propagating
+          case Failure(ex) =>
+            e.printStackTrace(System.err)
+            ex.printStackTrace(System.err)
         }
       }
       
