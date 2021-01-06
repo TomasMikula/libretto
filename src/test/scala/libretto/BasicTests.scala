@@ -26,7 +26,7 @@ class BasicTests extends TestSuite {
   }
 
   test("constVal") {
-    assertResult(done >>> constVal(5), 5)
+    assertVal(done >>> constVal(5), 5)
   }
   
   test("delayed injectL") {
@@ -45,7 +45,7 @@ class BasicTests extends TestSuite {
       )
     }
 
-    assertResult(raceKeepWinner(a, b), 'A')
+    assertVal(raceKeepWinner(a, b), 'A')
   }
   
   test("delayed chooseL") {
@@ -58,7 +58,7 @@ class BasicTests extends TestSuite {
     val b: One -⚬ Val[Char] =
       done >>> fork(delay(30.millis), choice(delay(20.millis), id)) >>> joinChooseL >>> constVal('B')
 
-    assertResult(raceKeepWinner(a, b), 'A')    
+    assertVal(raceKeepWinner(a, b), 'A')    
   }
   
   test("crash") {
@@ -144,7 +144,7 @@ class BasicTests extends TestSuite {
       f <- Seq(coDistributed1, coDistributed2)
       c <- combinations
     } {
-      assertResult(f >>> c.go, c.expected)
+      assertVal(f >>> c.go, c.expected)
     } 
   }
 }

@@ -32,9 +32,9 @@ abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
       5.seconds,
     )
 
-  def assertResult[A](prg: One -⚬ Val[A], expected: A): Unit =
+  def assertVal[A](prg: One -⚬ Val[A], expected: A): Unit =
     assert(Await.result(runner.runScala(prg), 5.seconds) == expected)
-    
+
   def assertCrashes(prg: One -⚬ Done, expectedMsg: Option[String] = None): Unit =
     Await.ready(runner.run(prg), 5.seconds).value.get match {
       case Success(()) =>
