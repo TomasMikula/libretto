@@ -146,9 +146,7 @@ class ScalaStreams[
     }
 
     def concat[A]: (Pollable[A] |*| Pollable[A]) -⚬ Pollable[A] =
-      id                                       [ Pollable[A] |*|         Pollable[A]  ]
-        .>.snd(delay)                       .to[ Pollable[A] |*| Delayed[Pollable[A]] ]
-        .andThen(LPollable.concat)          .to[         Pollable[A]                  ]
+      LPollable.concat
 
     def statefulMap[S, A, B](f: ((S, A)) => (S, B))(initialState: S): Pollable[A] -⚬ Pollable[B] = {
       val ff: (Val[S] |*| Val[A]) -⚬ (Val[S] |*| Val[B]) =

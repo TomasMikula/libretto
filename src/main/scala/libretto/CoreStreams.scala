@@ -81,6 +81,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def of[A](as: (One -⚬ A)*)(implicit A: PComonoid[A]): One -⚬ LPollable[A] =
       LList.of(as: _*) >>> fromLList
 
+    /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPollable[A]) -⚬ LPollable[A] =
       id                                           [  Done |*|     LPollable[A]                 ]
         .>.snd(unpack)                          .to[  Done |*| (Done  |&|           LPolled[A]) ]
@@ -88,17 +89,42 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .bimap(join, LPolled.delayBy[A])        .to[       Done       |&|           LPolled[A]  ]
         .pack[LPollableF[A, *]]                 .to[              LPollable[A]                  ]
 
-    def delay[A: Junction.Positive]: LPollable[A] -⚬ Delayed[LPollable[A]] =
+    /** Delays the final [[Done]] signal (signaling end of stream or completed [[close]]) until the given [[Done]]
+      * signal completes.
+      */
+    def delayClosedBy[A]: (Done |*| LPollable[A]) -⚬ LPollable[A] = rec { self =>
+      id                                               [  Done |*|     LPollable[A]                 ]
+        .>.snd(unpack)                              .to[  Done |*| (Done  |&|           LPolled[A]) ]
+        .andThen(coFactorL)                         .to[ (Done |*|  Done) |&| (Done |*| LPolled[A]) ]
+        .bimap(join, LPolled.delayClosedBy(self))   .to[       Done       |&|           LPolled[A]  ]
+        .pack[LPollableF[A, *]]                     .to[              LPollable[A]                  ]
+    }
+
+    private def delay[A](delayBy: (Done |*| LPollable[A]) -⚬ LPollable[A]): LPollable[A] -⚬ Delayed[LPollable[A]] =
       id                                           [                     LPollable[A] ]
         .introFst(lInvertSignal)                .to[ (Need |*| Done) |*| LPollable[A] ]
         .assocLR                                .to[ Need |*| (Done |*| LPollable[A]) ]
         .>.snd(delayBy)                         .to[ Need |*|     LPollable[A]        ]
 
+    /** Delays the first action ([[poll]] or [[close]]) on this [[LPollable]]. */
+    def delay[A: Junction.Positive]: LPollable[A] -⚬ Delayed[LPollable[A]] =
+      delay(delayBy)
+        
+    /** Delays the final [[Done]] signal resulting from [[close]] or end of stream. */
+    def delayClosed[A]: LPollable[A] -⚬ Delayed[LPollable[A]] =
+      delay(delayClosedBy)
+
     def map[A, B](f: A -⚬ B): LPollable[A] -⚬ LPollable[B] = rec { self =>
       from(close[A], poll[A].>.right(par(f, self)))
     }
 
-    def concat[A]: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ LPollable[A] = rec { self =>
+    /** The second [[LPollable]] is "delayed" because that gives flexibility in how the [[Done]] signal resulting from
+      * the exhaustion of the first [[LPollable]] is awaited. For example, if polling of the second [[LPollable]]
+      * should be delayed until the first [[LPollable]] is completely shut down, we can use [[delay]] to delay the
+      * second [[LPollable]]. If polling of the second [[LPollable]] should start as soon as it is known that there are
+      * no more elements in the first [[LPollable]], we can use [[delayClosed]] to delay the second [[LPollable]].
+      */
+    def concatenate[A]: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ LPollable[A] = rec { self =>
       val close: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ Done =
         join(LPollable.close, Delayed.force >>> LPollable.close)
 
@@ -116,6 +142,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
       from(close, poll)
     }
+    
+    def concat[A]: (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A] =
+      id.>.snd(delayClosed) >>> concatenate
 
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
       *
@@ -242,6 +271,15 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>.left(join)                 .to[      Done       |+| (Done |*| (A |*| LPollable[A])) ]
         .>.right(timesAssocRL)        .to[      Done       |+| ((Done |*| A) |*| LPollable[A]) ]
         .>.right.fst(ev.awaitPosFst)  .to[      Done       |+| (          A  |*| LPollable[A]) ]
+
+    def delayClosedBy[A](
+      delayLPollableClosed: (Done |*| LPollable[A]) -⚬ LPollable[A],
+    ): (Done |*| LPolled[A]) -⚬ LPolled[A] =
+      id[Done |*| LPolled[A]]               .to[  Done |*| (Done |+|           (A |*| LPollable[A])) ]
+        .distributeLR                       .to[ (Done |*| Done) |+| (Done |*| (A |*| LPollable[A])) ]
+        .>.left(join)                       .to[      Done       |+| (Done |*| (A |*| LPollable[A])) ]
+        .>.right(XI)                        .to[      Done       |+| (A |*| (Done |*| LPollable[A])) ]
+        .>.right.snd(delayLPollableClosed)  .to[      Done       |+| (A |*|           LPollable[A] ) ]
 
     def feedTo[A, B](
       f: (A |*| B) -⚬ PMaybe[B],
