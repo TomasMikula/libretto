@@ -242,34 +242,28 @@ class ScalaStreams[
         .select(caseFst, caseSnd)       .to[ Pollable[A] |*| Pollable[A] ]
     }
 
-    def dropUntilFirstDemand[A]: Pollable[A] -⚬ Pollable[A] = {
-      val goUnpacked: (Done |&| Polled[A]) -⚬ (Done |&| Polled[A]) = rec { self =>
-        val caseDownstreamRequested: (Val[A] |*| Pollable[A]) -⚬ (Done |&| Polled[A]) = {
+    def dropUntilFirstDemand[A]: Pollable[A] -⚬ Pollable[A] = rec { self =>
+        val caseDownstreamRequested: (Val[A] |*| Pollable[A]) -⚬ Pollable[A] = {
           val caseDownstreamClosed: (Val[A] |*| Pollable[A]) -⚬ Done      = join(neglect, Pollable.close)
           val caseDownstreamPulled: (Val[A] |*| Pollable[A]) -⚬ Polled[A] = injectR
-          choice(caseDownstreamClosed, caseDownstreamPulled)
+          choice(caseDownstreamClosed, caseDownstreamPulled).pack
         }
 
-        val caseNotRequestedYet: (Val[A] |*| Pollable[A]) -⚬ (Done |&| Polled[A]) = {
+        val caseNotRequestedYet: (Val[A] |*| Pollable[A]) -⚬ Pollable[A] = {
           id[Val[A] |*| Pollable[A]]
             .>.fst(neglect)
             .andThen(Pollable.delayBy)
-            .unpack
             .andThen(self)
         }
 
-        val goElem: (Val[A] |*| Pollable[A]) -⚬ (Done |&| Polled[A]) =
+        val goElem: (Val[A] |*| Pollable[A]) -⚬ Pollable[A] =
           choice(caseDownstreamRequested, caseNotRequestedYet)
-            .andThen(selectSignaledOrNot(LPollable.negativeLPollableF))
+            .andThen(selectSignaledOrNot(LPollable.negativeLPollable))
 
-        id                               [ Done |&| Polled[A]                ]
+        id                               [    Pollable[A]                    ]
+          .unpack                     .to[ Done |&| Polled[A]                ]
           .chooseR                    .to[ Done |+| (Val[A] |*| Pollable[A]) ]
-          .either(emptyF[A], goElem)  .to[ Done |&| Polled[A]                ]
-      }
-
-      unpack[PollableF[A, *]]
-        .andThen(goUnpacked)
-        .pack[PollableF[A, *]]
+          .either(empty[A], goElem)   .to[    Pollable[A]                    ]
     }
 
     def broadcast[A]: Pollable[A] -⚬ PUnlimited[Pollable[A]] = rec { self =>
