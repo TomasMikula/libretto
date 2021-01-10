@@ -81,6 +81,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def of[A](as: (One -⚬ A)*)(implicit A: PComonoid[A]): One -⚬ LPollable[A] =
       LList.of(as: _*) >>> fromLList
 
+    /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative (i.e. [[Need]]) signal. */
+    def signalAction[A]: (Need |*| LPollable[A]) -⚬ LPollable[A] =
+      id                             [             LPollable[A]       ]
+        .<.un(pack)             .from[           Done |&| LPolled[A]  ]
+        .<.un(signalChoice)     .from[ Need |*| (Done |&| LPolled[A]) ]
+        .<.snd.un(unpack)       .from[ Need |*|    LPollable[A]       ]
+
     /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPollable[A]) -⚬ LPollable[A] =
       id                                           [  Done |*|     LPollable[A]                 ]
@@ -217,39 +224,18 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           caseCons = par(id, self) >>> merge,
         )
       }
-      
-    implicit def positiveLPollableF[A, X](implicit A: Junction.Positive[A]): Junction.Positive[LPollableF[A, X]] =
-      Junction.Positive.choiceInstance(
-        Junction.Positive.junctionDone,
-        Junction.Positive.eitherInstance(
-          Junction.Positive.junctionDone,
-          Junction.Positive.byFst(A),
-        )
-      )
-      
-    implicit def universalPositiveLPollableF[A](implicit A: Junction.Positive[A]): ∀[[x] =>> Junction.Positive[LPollableF[A, x]]] =
-      new ∀[[x] =>> Junction.Positive[LPollableF[A, x]]] {
-        def apply[X]: Junction.Positive[LPollableF[A, X]] =
-          positiveLPollableF[A, X]
-      }
-      
-    implicit def positiveLPollable[A](implicit A: Junction.Positive[A]): Junction.Positive[LPollable[A]] =
-      Junction.Positive.rec[LPollableF[A, *]]
 
-    implicit def negativeLPollableF[A, X](implicit A: Junction.Positive[A]): SignalingJunction.Negative[LPollableF[A, X]] =
-      SignalingJunction.Negative.from(
-        Signaling.Negative.choice,
-        Junction.invert(positiveLPollableF),
-      )
-
-    implicit def universalNegativeLPollableF[A](implicit A: Junction.Positive[A]): ∀[λ[x => SignalingJunction.Negative[LPollableF[A, x]]]] =
-      new ∀[λ[x => SignalingJunction.Negative[LPollableF[A, x]]]] {
-        def apply[X]: SignalingJunction.Negative[LPollableF[A, X]] =
-          negativeLPollableF[A, X]
-      }
+    implicit def positiveJunction[A](implicit A: Junction.Positive[A]): Junction.Positive[LPollable[A]] =
+      Junction.Positive.from(LPollable.delayBy)
+      
+    implicit def negativeSignaling[A]: Signaling.Negative[LPollable[A]] =
+      Signaling.Negative.from(LPollable.signalAction[A])
 
     implicit def negativeLPollable[A](implicit A: Junction.Positive[A]): SignalingJunction.Negative[LPollable[A]] =
-      SignalingJunction.Negative.rec[LPollableF[A, *]](universalNegativeLPollableF[A])
+      SignalingJunction.Negative.from(
+        negativeSignaling,
+        Junction.invert(positiveJunction),
+      )
   }
 
   object LPolled {
