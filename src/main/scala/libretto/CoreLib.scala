@@ -286,6 +286,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
 
     object Positive {
+      def from[A](await: (Done |*| A) -⚬ A): Junction.Positive[A] =
+        new Junction.Positive[A] {
+          override def awaitPosFst: (Done |*| A) -⚬ A =
+            await
+        }
+
       implicit def junctionDone: Junction.Positive[Done] =
         new Junction.Positive[Done] {
           override def awaitPosFst: (Done |*| Done) -⚬ Done =
@@ -318,6 +324,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
 
     object Negative {
+      def from[A](await: A -⚬ (Need |*| A)): Junction.Negative[A] =
+        new Junction.Negative[A] {
+          override def awaitNegFst: A -⚬ (Need |*| A) =
+            await
+        }
+
       implicit def junctionNeed: Junction.Negative[Need] =
         new Junction.Negative[Need] {
           override def awaitNegFst: Need -⚬ (Need |*| Need) =
@@ -424,6 +436,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
 
     object Positive {
+      def from[A](signal: A -⚬ (Done |*| A)): Signaling.Positive[A] =
+        new Signaling.Positive[A] {
+          override def signalPosFst: A -⚬ (Done |*| A) =
+            signal
+        }
+
       implicit def signalingDone: Signaling.Positive[Done] =
         new Signaling.Positive[Done] {
           override def signalPosFst: Done -⚬ (Done |*| Done) =
@@ -451,6 +469,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
 
     object Negative {
+      def from[A](signal: (Need |*| A) -⚬ A): Signaling.Negative[A] =
+        new Signaling.Negative[A] {
+          override def signalNegFst: (Need |*| A) -⚬ A =
+            signal
+        }
+
       implicit def signalingNeed: Signaling.Negative[Need] =
         new Signaling.Negative[Need] {
           override def signalNegFst: (Need |*| Need) -⚬ Need =
