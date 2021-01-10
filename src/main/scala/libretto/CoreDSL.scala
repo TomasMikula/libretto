@@ -29,6 +29,16 @@ trait CoreDSL {
   /** Signal that travels in the direction opposite to [[-⚬]]. Equivalent to `Neg[Unit]`. */
   type Need
 
+  /** A black hole that can absorb (i.e. take over the responsibility to await) [[Done]] signals, but from which there
+    * is no escape.
+    */
+  type RTerminus
+
+  /** A black hole that can absorb (i.e. take over the responsibility to await) [[Need]] signals, but from which there
+    * is no escape.
+    */
+  type LTerminus
+
   type Rec[F[_]]
 
   def id[A]: A -⚬ A
@@ -87,8 +97,8 @@ trait CoreDSL {
   def done: One -⚬ Done
   def need: Need -⚬ One
 
-  def delayIndefinitely: Done -⚬ Done
-  def regressInfinitely: Need -⚬ Need
+  def delayIndefinitely: Done -⚬ RTerminus
+  def regressInfinitely: LTerminus -⚬ Need
 
   def fork: Done -⚬ (Done |*| Done)
   def join: (Done |*| Done) -⚬ Done
@@ -185,6 +195,12 @@ trait CoreDSL {
     * }}}
     */
   def lInvertSignal: One -⚬ (Need |*| Done)
+  
+  def joinRTermini: (RTerminus |*| RTerminus) -⚬ RTerminus
+  def joinLTermini: LTerminus -⚬ (LTerminus |*| LTerminus)
+  
+  def rInvertTerminus: (RTerminus |*| LTerminus) -⚬ One
+  def lInvertTerminus: One -⚬ (LTerminus |*| RTerminus) 
 
   def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B
 

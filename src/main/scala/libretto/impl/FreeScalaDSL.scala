@@ -14,6 +14,8 @@ object FreeScalaDSL extends ScalaDSL {
   override final class One private()
   override final class Done private()
   override final class Need private()
+  override final class RTerminus private()
+  override final class LTerminus private()
   override final class |*|[A, B] private()
   override final class |+|[A, B] private()
   override final class |&|[A, B] private()
@@ -43,12 +45,14 @@ object FreeScalaDSL extends ScalaDSL {
     case class Choice[A, B, C](f: A -⚬ B, g: A -⚬ C) extends (A -⚬ (B |&| C))
     case class DoneF() extends (One -⚬ Done)
     case class NeedF() extends (Need -⚬ One)
-    case class DelayIndefinitely() extends (Done -⚬ Done)
-    case class RegressInfinitely() extends (Need -⚬ Need)
+    case class DelayIndefinitely() extends (Done -⚬ RTerminus)
+    case class RegressInfinitely() extends (LTerminus -⚬ Need)
     case class Fork() extends (Done -⚬ (Done |*| Done))
     case class Join() extends ((Done |*| Done) -⚬ Done)
     case class ForkNeed() extends ((Need |*| Need) -⚬ Need)
     case class JoinNeed() extends (Need -⚬ (Need |*| Need))
+    case class JoinRTermini() extends ((RTerminus |*| RTerminus) -⚬ RTerminus)
+    case class JoinLTermini() extends (LTerminus -⚬ (LTerminus |*| LTerminus))
     case class SignalEither[A, B]() extends ((A |+| B) -⚬ (Done |*| (A |+| B)))
     case class SignalChoice[A, B]() extends ((Need |*| (A |&| B)) -⚬ (A |&| B))
     case class InjectLWhenDone[A, B]() extends ((Done |*| A) -⚬ ((Done |*| A) |+| B))
@@ -59,6 +63,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class CoDistributeL[A, B, C]() extends (((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C)))
     case class RInvertSignal() extends ((Done |*| Need) -⚬ One)
     case class LInvertSignal() extends (One -⚬ (Need |*| Done))
+    case class RInvertTerminus() extends ((RTerminus |*| LTerminus) -⚬ One)
+    case class LInvertTerminus() extends (One -⚬ (LTerminus |*| RTerminus))
     case class RecF[A, B](f: (A -⚬ B) => (A -⚬ B)) extends (A -⚬ B) { self =>
       val recursed: A -⚬ B = f(self)
     }
@@ -144,10 +150,10 @@ object FreeScalaDSL extends ScalaDSL {
   def need: Need -⚬ One =
     NeedF()
 
-  def delayIndefinitely: Done -⚬ Done =
+  def delayIndefinitely: Done -⚬ RTerminus =
     DelayIndefinitely()
     
-  def regressInfinitely: Need -⚬ Need =
+  def regressInfinitely: LTerminus -⚬ Need =
     RegressInfinitely()
 
   def fork: Done -⚬ (Done |*| Done) =
@@ -161,6 +167,12 @@ object FreeScalaDSL extends ScalaDSL {
     
   def joinNeed: Need -⚬ (Need |*| Need) =
     JoinNeed()
+
+  def joinRTermini: (RTerminus |*| RTerminus) -⚬ RTerminus =
+    JoinRTermini()
+    
+  def joinLTermini: LTerminus -⚬ (LTerminus |*| LTerminus) =
+    JoinLTermini()
 
   def signalEither[A, B]: (A |+| B) -⚬ (Done |*| (A |+| B)) =
     SignalEither()
@@ -191,6 +203,12 @@ object FreeScalaDSL extends ScalaDSL {
     
   def lInvertSignal: One -⚬ (Need |*| Done) =
     LInvertSignal()
+
+  def rInvertTerminus: (RTerminus |*| LTerminus) -⚬ One =
+    RInvertTerminus()
+
+  def lInvertTerminus: One -⚬ (LTerminus |*| RTerminus) =
+    LInvertTerminus()
 
   def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B =
     RecF(f)

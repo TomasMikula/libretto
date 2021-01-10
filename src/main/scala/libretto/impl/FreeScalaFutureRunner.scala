@@ -415,6 +415,14 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
             .asDeferredFrontier                                   .asInstanceOf[Frontier[B]]
         case -⚬.Inflate() =>
           ???
+        case -⚬.JoinRTermini() =>
+          ???
+        case -⚬.JoinLTermini() =>
+          ???
+        case -⚬.RInvertTerminus() =>
+          ???
+        case -⚬.LInvertTerminus() =>
+          ???
       }
     }
 

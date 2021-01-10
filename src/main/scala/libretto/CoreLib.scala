@@ -1841,16 +1841,16 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   trait NMonoid[A] extends Semigroup[A] {
     def unit: Need -⚬ A
 
-    def law_leftUnit: Equal[ (Need |*| A) -⚬ A ] =
+    def law_leftUnit: Equal[ (LTerminus |*| A) -⚬ A ] =
       Equal(
         par(regressInfinitely >>> unit, id[A]) >>> combine,
-        id[Need |*| A].elimFst(regressInfinitely >>> need),
+        id[LTerminus |*| A].elimFst(regressInfinitely >>> need),
       )
 
-    def law_rightUnit: Equal[ (A |*| Need) -⚬ A ] =
+    def law_rightUnit: Equal[ (A |*| LTerminus) -⚬ A ] =
       Equal(
         par(id[A], regressInfinitely >>> unit) >>> combine,
-        id[A |*| Need].elimSnd(regressInfinitely >>> need),
+        id[A |*| LTerminus].elimSnd(regressInfinitely >>> need),
       )
   }
 
@@ -1862,13 +1862,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   trait PComonoid[A] extends Cosemigroup[A] {
     def counit: A -⚬ Done
 
-    def law_leftCounit: Equal[ A -⚬ (Done |*| A) ] =
+    def law_leftCounit: Equal[ A -⚬ (RTerminus |*| A) ] =
       Equal(
         split >>> par(counit >>> delayIndefinitely, id[A]),
         id[A].introFst(done >>> delayIndefinitely),
       )
 
-    def law_rightCounit: Equal[ A -⚬ (A |*| Done) ] =
+    def law_rightCounit: Equal[ A -⚬ (A |*| RTerminus) ] =
       Equal(
         split >>> par(id[A], counit >>> delayIndefinitely),
         id[A].introSnd(done >>> delayIndefinitely),
