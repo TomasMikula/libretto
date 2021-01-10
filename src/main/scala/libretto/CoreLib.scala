@@ -247,13 +247,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Alias for [[awaitPosFst]]. */
       def awaitPos: (Done |*| A) -⚬ A =
         awaitPosFst
-        
+
       def law_awaitIdentity: Equal[(One |*| A) -⚬ A] =
         Equal(
           par(done, id) >>> awaitPosFst,
           elimFst,
         )
-        
+
       def law_AwaitComposition: Equal[(Done |*| (Done |*| A)) -⚬ A] =
         Equal(
           par(id, awaitPosFst) >>> awaitPosFst,
@@ -271,13 +271,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Alias for [[awaitNegFst]]. */
       def awaitNeg: A -⚬ (Need |*| A) =
         awaitNegFst
-        
+
       def law_awaitIdentity: Equal[A -⚬ (One |*| A)] =
         Equal(
           awaitNegFst >>> par(need, id),
           introFst,
         )
-        
+
       def law_awaitComposition: Equal[A -⚬ (Need |*| (Need |*| A))] =
         Equal(
           awaitNegFst >>> par(id, awaitNegFst),
@@ -293,34 +293,19 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         }
 
       implicit def junctionDone: Junction.Positive[Done] =
-        new Junction.Positive[Done] {
-          override def awaitPosFst: (Done |*| Done) -⚬ Done =
-            join
-        }
+        from(join)
 
       def byFst[A, B](implicit A: Junction.Positive[A]): Junction.Positive[A |*| B] =
-        new Junction.Positive[A |*| B] {
-          override def awaitPosFst: (Done |*| (A |*| B)) -⚬ (A |*| B) =
-            |*|.assocRL.>.fst(A.awaitPosFst)
-        }
+        from(|*|.assocRL.>.fst(A.awaitPosFst))
 
       def eitherInstance[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |+| B] =
-        new Junction.Positive[A |+| B] {
-          override def awaitPosFst: (Done |*| (A |+| B)) -⚬ (A |+| B) =
-            distributeLR[Done, A, B].bimap(A.awaitPosFst, B.awaitPosFst)
-        }
+        from( distributeLR[Done, A, B].bimap(A.awaitPosFst, B.awaitPosFst) )
 
       def choiceInstance[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |&| B] =
-        new Junction.Positive[A |&| B] {
-          override def awaitPosFst: (Done |*| (A |&| B)) -⚬ (A |&| B) =
-            coFactorL[Done, A, B].bimap(A.awaitPosFst, B.awaitPosFst)
-        }
+        from( coFactorL[Done, A, B].bimap(A.awaitPosFst, B.awaitPosFst) )
 
       def rec[F[_]](implicit F: ∀[λ[x => Junction.Positive[F[x]]]]): Junction.Positive[Rec[F]] =
-        new Junction.Positive[Rec[F]] {
-          override def awaitPosFst: (Done |*| Rec[F]) -⚬ Rec[F] =
-            par(id[Done], unpack[F]) >>> F[Rec[F]].awaitPosFst >>> pack[F]
-        }
+        from( par(id[Done], unpack[F]) >>> F[Rec[F]].awaitPosFst >>> pack[F] )
     }
 
     object Negative {
@@ -331,34 +316,19 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         }
 
       implicit def junctionNeed: Junction.Negative[Need] =
-        new Junction.Negative[Need] {
-          override def awaitNegFst: Need -⚬ (Need |*| Need) =
-            joinNeed
-        }
+        from(joinNeed)
 
       def byFst[A, B](implicit A: Junction.Negative[A]): Junction.Negative[A |*| B] =
-        new Junction.Negative[A |*| B] {
-          override def awaitNegFst: (A |*| B) -⚬ (Need |*| (A |*| B)) =
-            par(A.awaitNegFst, id[B]).assocLR
-        }
+        from(par(A.awaitNegFst, id[B]).assocLR)
 
       def eitherInstance[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |+| B] =
-        new Junction.Negative[A |+| B] {
-          override def awaitNegFst: (A |+| B) -⚬ (Need |*| (A |+| B)) =
-            id[A |+| B].bimap(A.awaitNegFst, B.awaitNegFst).factorL
-        }
+        from( id[A |+| B].bimap(A.awaitNegFst, B.awaitNegFst).factorL )
 
       def choiceInstance[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |&| B] =
-        new Junction.Negative[A |&| B] {
-          override def awaitNegFst: (A |&| B) -⚬ (Need |*| (A |&| B)) =
-            id[A |&| B].bimap(A.awaitNegFst, B.awaitNegFst).coDistributeL
-        }
+        from( id[A |&| B].bimap(A.awaitNegFst, B.awaitNegFst).coDistributeL )
 
       def rec[F[_]](implicit F: ∀[λ[x => Junction.Negative[F[x]]]]): Junction.Negative[Rec[F]] =
-        new Junction.Negative[Rec[F]] {
-          override def awaitNegFst: Rec[F] -⚬ (Need |*| Rec[F]) =
-            (unpack[F] >>> F[Rec[F]].awaitNegFst).>.snd(pack[F])
-        }
+        from( (unpack[F] >>> F[Rec[F]].awaitNegFst).>.snd(pack[F]) )
     }
 
     /** [[Positive]] junction can be made to await a negative (i.e. [[Need]]) signal,
@@ -397,13 +367,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Alias for [[signalPosFst]]. */
       def signalPos: A -⚬ (Done |*| A) =
         signalPosFst
-        
+
       def law_signalIdentity: Equal[A -⚬ (RTerminus |*| A)] =
         Equal(
           signalPosFst >>> par(delayIndefinitely, id),
           id[A] >>> introFst(done >>> delayIndefinitely),
         )
-        
+
       def law_awaitComposition: Equal[A -⚬ (Done |*| (Done |*| A))] =
         Equal(
           signalPosFst >>> par(id, signalPosFst),
@@ -421,13 +391,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Alias for [[signalNegFst]]. */
       def signalNeg: (Need |*| A) -⚬ A =
         signalNegFst
-        
+
       def law_signalIdentity: Equal[(LTerminus |*| A) -⚬ A] =
         Equal(
           par(regressInfinitely, id) >>> signalNegFst,
           id[LTerminus |*| A] >>> elimFst(regressInfinitely >>> need),
         )
-        
+
       def law_signalComposition: Equal[(Need |*| (Need |*| A)) -⚬ A] =
         Equal(
           par(id, signalNegFst) >>> signalNegFst,
@@ -443,29 +413,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         }
 
       implicit def signalingDone: Signaling.Positive[Done] =
-        new Signaling.Positive[Done] {
-          override def signalPosFst: Done -⚬ (Done |*| Done) =
-            fork
-        }
+        from(fork)
 
       def byFst[A, B](implicit A: Signaling.Positive[A]): Signaling.Positive[A |*| B] =
-        new Signaling.Positive[A |*| B] {
-          override def signalPosFst: (A |*| B) -⚬ (Done |*| (A |*| B)) =
-            par(A.signalPosFst, id[B]).assocLR
-        }
+        from(par(A.signalPosFst, id[B]).assocLR)
 
       /** Signals when it is decided which side of the [[|+|]] is present. */
       def either[A, B]: Signaling.Positive[A |+| B] =
-        new Signaling.Positive[A |+| B] {
-          override def signalPosFst: (A |+| B) -⚬ (Done |*| (A |+| B)) =
-            dsl.signalEither[A, B]
-        }
+        from(dsl.signalEither[A, B])
 
       def rec[F[_]](implicit F: ∀[λ[x => Positive[F[x]]]]): Positive[Rec[F]] =
-        new Positive[Rec[F]] {
-          override def signalPosFst: Rec[F] -⚬ (Done |*| Rec[F]) =
-            (unpack[F] >>> F[Rec[F]].signalPosFst).>.snd(pack[F])
-        }
+        from((unpack[F] >>> F[Rec[F]].signalPosFst).>.snd(pack[F]))
     }
 
     object Negative {
@@ -476,32 +434,22 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         }
 
       implicit def signalingNeed: Signaling.Negative[Need] =
-        new Signaling.Negative[Need] {
-          override def signalNegFst: (Need |*| Need) -⚬ Need =
-            forkNeed
-        }
+        from(forkNeed)
 
       def byFst[A, B](implicit A: Signaling.Negative[A]): Signaling.Negative[A |*| B] =
-        new Signaling.Negative[A |*| B] {
-          override def signalNegFst: (Need |*| (A |*| B)) -⚬ (A |*| B) =
-            |*|.assocRL.>.fst(A.signalNegFst)
-        }
+        from(|*|.assocRL.>.fst(A.signalNegFst))
 
       /** Signals when the choice is made between [[A]] and [[B]]. */
       def choice[A, B]: Signaling.Negative[A |&| B] =
-        new Signaling.Negative[A |&| B] {
-          override def signalNegFst: (Need |*| (A |&| B)) -⚬ (A |&| B) =
-            dsl.signalChoice[A, B]
-        }
+        from(dsl.signalChoice[A, B])
 
       def rec[F[_]](implicit F: ∀[λ[x => Negative[F[x]]]]): Negative[Rec[F]] =
-        new Negative[Rec[F]] {
-          override def signalNegFst: (Need |*| Rec[F]) -⚬ Rec[F] =
-            id                                     [ Need |*|   Rec[F]  ]
-              .>.snd(unpack[F])                 .to[ Need |*| F[Rec[F]] ]
-              .andThen(F[Rec[F]].signalNegFst)  .to[          F[Rec[F]] ]
-              .pack[F]                          .to[            Rec[F]  ]
-        }
+        from(
+          id                                     [ Need |*|   Rec[F]  ]
+            .>.snd(unpack[F])                 .to[ Need |*| F[Rec[F]] ]
+            .andThen(F[Rec[F]].signalNegFst)  .to[          F[Rec[F]] ]
+            .pack[F]                          .to[            Rec[F]  ]
+        )
     }
 
     /** [[Signaling.Positive]] can be made to produce a negative (i.e. [[Need]]) signal,
