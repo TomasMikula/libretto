@@ -247,6 +247,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Alias for [[awaitPosFst]]. */
       def awaitPos: (Done |*| A) -⚬ A =
         awaitPosFst
+        
+      def law_awaitIdentity: Equal[(One |*| A) -⚬ A] =
+        Equal(
+          par(done, id) >>> awaitPosFst,
+          elimFst,
+        )
+        
+      def law_AwaitComposition: Equal[(Done |*| (Done |*| A)) -⚬ A] =
+        Equal(
+          par(id, awaitPosFst) >>> awaitPosFst,
+          |*|.assocRL >>> par(join, id) >>> awaitPosFst,
+        )
     }
 
     /** Represents ''a'' way how `A` can await (join) a negative (i.e. [[Need]]) signal. */
@@ -259,6 +271,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Alias for [[awaitNegFst]]. */
       def awaitNeg: A -⚬ (Need |*| A) =
         awaitNegFst
+        
+      def law_awaitIdentity: Equal[A -⚬ (One |*| A)] =
+        Equal(
+          awaitNegFst >>> par(need, id),
+          introFst,
+        )
+        
+      def law_awaitComposition: Equal[A -⚬ (Need |*| (Need |*| A))] =
+        Equal(
+          awaitNegFst >>> par(id, awaitNegFst),
+          awaitNegFst >>> par(joinNeed, id) >>> |*|.assocLR,
+        )
     }
 
     object Positive {
@@ -361,6 +385,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Alias for [[signalPosFst]]. */
       def signalPos: A -⚬ (Done |*| A) =
         signalPosFst
+        
+      def law_signalIdentity: Equal[A -⚬ (RTerminus |*| A)] =
+        Equal(
+          signalPosFst >>> par(delayIndefinitely, id),
+          id[A] >>> introFst(done >>> delayIndefinitely),
+        )
+        
+      def law_awaitComposition: Equal[A -⚬ (Done |*| (Done |*| A))] =
+        Equal(
+          signalPosFst >>> par(id, signalPosFst),
+          signalPosFst >>> par(fork, id) >>> |*|.assocLR,
+        )
     }
 
     /** Represents ''a'' way how `A` can produce a negative (i.e. [[Need]]) signal. */
@@ -373,6 +409,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Alias for [[signalNegFst]]. */
       def signalNeg: (Need |*| A) -⚬ A =
         signalNegFst
+        
+      def law_signalIdentity: Equal[(LTerminus |*| A) -⚬ A] =
+        Equal(
+          par(regressInfinitely, id) >>> signalNegFst,
+          id[LTerminus |*| A] >>> elimFst(regressInfinitely >>> need),
+        )
+        
+      def law_signalComposition: Equal[(Need |*| (Need |*| A)) -⚬ A] =
+        Equal(
+          par(id, signalNegFst) >>> signalNegFst,
+          |*|.assocRL >>> par(forkNeed, id) >>> signalNegFst,
+        )
     }
 
     object Positive {
