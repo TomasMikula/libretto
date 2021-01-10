@@ -336,7 +336,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     implicit def positiveLSubscriberF[A, X](implicit A: Junction.Negative[A]): SignalingJunction.Positive[LSubscriberF[A, X]] =
       SignalingJunction.Positive.eitherNeg(
         Junction.Negative.junctionNeed,
-        Junction.Negative.choiceInstance(
+        Junction.Negative.delayChoice(
           Junction.Negative.junctionNeed,
           Junction.Negative.byFst(A),
         ),

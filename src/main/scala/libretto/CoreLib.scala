@@ -298,11 +298,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def byFst[A, B](implicit A: Junction.Positive[A]): Junction.Positive[A |*| B] =
         from(|*|.assocRL.>.fst(A.awaitPosFst))
 
-      def eitherInstance[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |+| B] =
+      def delegateToEither[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |+| B] =
         from( distributeLR[Done, A, B].bimap(A.awaitPosFst, B.awaitPosFst) )
+        
+      def delayEither[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |+| B] =
+        from( delayEitherUntilDone.bimap(A.awaitPosFst, B.awaitPosFst) )
 
-      def choiceInstance[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |&| B] =
+      def delegateToChosen[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |&| B] =
         from( coFactorL[Done, A, B].bimap(A.awaitPosFst, B.awaitPosFst) )
+        
+      def delayChoice[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |&| B] =
+        from( delayChoiceUntilDone.bimap(A.awaitPosFst, B.awaitPosFst) )
 
       def rec[F[_]](implicit F: ∀[λ[x => Junction.Positive[F[x]]]]): Junction.Positive[Rec[F]] =
         from( par(id[Done], unpack[F]) >>> F[Rec[F]].awaitPosFst >>> pack[F] )
@@ -321,11 +327,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def byFst[A, B](implicit A: Junction.Negative[A]): Junction.Negative[A |*| B] =
         from(par(A.awaitNegFst, id[B]).assocLR)
 
-      def eitherInstance[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |+| B] =
+      def delegateToEither[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |+| B] =
         from( id[A |+| B].bimap(A.awaitNegFst, B.awaitNegFst).factorL )
+        
+      def delayEither[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |+| B] =
+        from( id[A |+| B].bimap(A.awaitNegFst, B.awaitNegFst) >>> delayEitherUntilNeed )
 
-      def choiceInstance[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |&| B] =
+      def delegateToChosen[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |&| B] =
         from( id[A |&| B].bimap(A.awaitNegFst, B.awaitNegFst).coDistributeL )
+        
+      def delayChoice[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |&| B] =
+        from( id[A |&| B].bimap(A.awaitNegFst, B.awaitNegFst) >>> delayChoiceUntilNeed )
 
       def rec[F[_]](implicit F: ∀[λ[x => Junction.Negative[F[x]]]]): Junction.Negative[Rec[F]] =
         from( (unpack[F] >>> F[Rec[F]].awaitNegFst).>.snd(pack[F]) )
@@ -539,20 +551,22 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
           Junction.Positive.byFst[A, B],
         )
 
-      /** Signals as soon as the `|+|` is decided, delegates awaiting to the respective side. */
+      /** Signals when the `|+|` is decided, awaiting delays (the publication of) the decision and thed is delegated
+        * to the respective side.
+        */
       def eitherPos[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Positive[A |+| B] =
         Positive.from(
           Signaling.Positive.either[A, B],
-          Junction.Positive.eitherInstance[A, B],
+          Junction.Positive.delayEither[A, B],
         )
 
-      /** Signals as soon as the `|+|` is decided, delegates awaiting to the respective side,
-        * which awaits inversion of the signal.
+      /** Signals when the `|+|` is decided, awaiting delays (the publication of) the decision and then is delegated
+        * to the respective side, which awaits an inversion of the original signal.
         */
       def eitherNeg[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Positive[A |+| B] =
         Positive.from(
           Signaling.Positive.either[A, B],
-          Junction.Positive.eitherInstance(
+          Junction.Positive.delayEither(
             Junction.invert(A),
             Junction.invert(B),
           ),
@@ -584,20 +598,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
           Junction.Negative.byFst[A, B],
         )
 
-      /** Signals as soon as the choice (`|&|`) is made, delegates awaiting to the chosen side. */
+      /** Signals when the choice (`|&|`) is made, awaiting delays the choice and then is delegated to the chosen side. */
       def choiceNeg[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Negative[A |&| B] =
         Negative.from(
           Signaling.Negative.choice[A, B],
-          Junction.Negative.choiceInstance[A, B],
+          Junction.Negative.delayChoice[A, B],
         )
 
-      /** Signals as soon as the choice (`|&|`) is made, delegates awaiting to the chosen side,
-        * which awaits inversion of the signal.
+      /** Signals when the choice (`|&|`) is made, awaiting delays the choice and then is delegated to the chosen side,
+        * which awaits inversion of the original signal.
         */
       def choicePos[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Negative[A |&| B] =
         Negative.from(
           Signaling.Negative.choice[A, B],
-          Junction.Negative.choiceInstance(
+          Junction.Negative.delayChoice(
             Junction.invert(A),
             Junction.invert(B),
           ),
