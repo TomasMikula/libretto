@@ -508,19 +508,43 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   object SignalingJunction {
     /** Witnesses that [[A]] can both produce and await a positive (i.e. [[Done]]) signal. */
     trait Positive[A] extends Signaling.Positive[A] with Junction.Positive[A] {
+      /** Expresses that awaiting one's own signal does not introduce a new causal dependency, i.e. that
+        * the point of awaiting in [[A]] is causally dependent on the point of signaling in [[A]].
+        */
       def law_positiveSignalThenAwaitIsId: Equal[A -⚬ A] =
         Equal[A -⚬ A](
           signalPos >>> awaitPos,
           id[A],
         )
+
+      /** Expresses that awaiting a signal and then signaling does not speed up the original signal, i.e. that
+        * the point of signaling in [[A]] is causally dependent on the point of awaiting in [[A]].
+        */
+      def law_positiveAwaitThenSignal: Equal[(Done |*| A) -⚬ (Done |*| A)] =
+        Equal(
+          awaitPos >>> signalPos,
+          par(fork, id) >>> |*|.assocLR >>> par(id, awaitPos >>> signalPos) >>> |*|.assocRL >>> par(join, id),
+        )
     }
 
     /** Witnesses that [[A]] can both produce and await a negative (i.e. [[Need]]) signal. */
     trait Negative[A] extends Signaling.Negative[A] with Junction.Negative[A] {
+      /** Expresses that awaiting one's own signal does not introduce a new causal dependency, i.e. that
+        * the point of awaiting in [[A]] is causally dependent on the point of signaling in [[A]].
+        */
       def law_negativeAwaitThenSignalIsId: Equal[A -⚬ A] =
         Equal[A -⚬ A](
           awaitNeg >>> signalNeg,
           id[A],
+        )
+
+      /** Expresses that awaiting a signal and then signaling does not speed up the original signal, i.e. that
+        * the point of signaling in [[A]] is causally dependent on the point of awaiting in [[A]].
+        */
+      def law_negativeSignalThenAwait: Equal[(Need |*| A) -⚬ (Need |*| A)] =
+        Equal(
+          signalNeg >>> awaitNeg,
+          par(joinNeed, id) >>> |*|.assocLR >>> par(id, signalNeg >>> awaitNeg) >>> |*|.assocRL >>> par(forkNeed, id),
         )
     }
 
