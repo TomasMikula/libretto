@@ -166,7 +166,14 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           )
           Pair(NeedAsync(p1), NeedAsync(p2))                      .asInstanceOf[Frontier[B]]
         case -⚬.SignalEither() =>
-          ???
+          type X; type Y
+          this.asInstanceOf[Frontier[X |+| Y]] match {
+            case l @ InjectL(_) => Pair(DoneNow, l)               .asInstanceOf[Frontier[B]]
+            case r @ InjectR(_) => Pair(DoneNow, r)               .asInstanceOf[Frontier[B]]
+            case other =>
+              val decided = other.futureEither.map(_ => DoneNow).asDeferredFrontier
+              Pair(decided, other)                                .asInstanceOf[Frontier[B]]
+          }
         case -⚬.SignalChoice() =>
           //        A             -⚬     B
           // (Need |*| (X |&| Y)) -⚬ (X |&| Y)
@@ -191,40 +198,61 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
         case -⚬.InjectLWhenDone() =>
           // (Done |*| X) -⚬ ((Done |*| X) |+| Y)
           type X
-          this.asInstanceOf[Frontier[Done |*| X]].splitPair match {
-            case (d, x) =>
-              d match {
-                case DoneNow =>
-                  InjectL(Pair(DoneNow, x))                       .asInstanceOf[Frontier[B]]
-                case Deferred(fut) =>
-                  Deferred(fut.map(d => Pair(d, x).extendBy(-⚬.InjectLWhenDone())))
-                                                                  .asInstanceOf[Frontier[B]]
-              }
-          }
+          val (d, x) = this.asInstanceOf[Frontier[Done |*| X]].splitPair
+            d match {
+              case DoneNow =>
+                InjectL(Pair(DoneNow, x))                         .asInstanceOf[Frontier[B]]
+              case d =>
+                d
+                  .toFutureDone
+                  .map { doneNow => InjectL(Pair(doneNow, x)) }
+                  .asDeferredFrontier                             .asInstanceOf[Frontier[B]]
+            }
         case -⚬.InjectRWhenDone() =>
-          ???
+          // (Done |*| Y) -⚬ (X |+| (Done |*| Y))
+          type Y
+          val (d, y) = this.asInstanceOf[Frontier[Done |*| Y]].splitPair
+          d match {
+            case DoneNow =>
+              InjectR(Pair(DoneNow, y))                           .asInstanceOf[Frontier[B]]
+            case d =>
+              d
+                .toFutureDone
+                .map { doneNow => InjectR(Pair(doneNow, y)) }
+                .asDeferredFrontier                               .asInstanceOf[Frontier[B]]
+          }
         case -⚬.ChooseLWhenNeed() =>
           // ((Need |*| X) |&| Y) -⚬ (Need |*| X)
-          type X
-          this match {
-            case Choice(nx, y, onError) =>
-              val pn = Promise[Any]()
-              val px = Promise[Frontier[X]]()
-              pn.future.onComplete {
-                case Failure(e) =>
-                  onError(e)
-                  px.failure(e)
-                case Success(_) =>
-                  val (n, x) = Frontier.splitPair(nx().asInstanceOf[Frontier[Need |*| X]])
-                  Frontier.fulfillNeedWith(n, Future.successful(()))
-                  px.success(x)
-              }
-              Pair(NeedAsync(pn), Deferred(px.future))            .asInstanceOf[Frontier[B]]
-            case other =>
-              bug(s"Did not expect $other to represent (? |&| ?)")
+          type X; type Y
+          val Choice(nx, y, onError) = this.asInstanceOf[Frontier[(Need |*| X) |&| Y]].asChoice
+          val pn = Promise[Any]()
+          val px = Promise[Frontier[X]]()
+          pn.future.onComplete {
+            case Failure(e) =>
+              onError(e)
+              px.failure(e)
+            case Success(_) =>
+              val (n, x) = nx().splitPair
+              Frontier.fulfillNeedWith(n, Future.successful(()))
+              px.success(x)
           }
+          Pair(NeedAsync(pn), Deferred(px.future))                .asInstanceOf[Frontier[B]]
         case -⚬.ChooseRWhenNeed() =>
-          ???
+          // (X |&| (Need |*| Y)) -⚬ (Need |*| Y)
+          type X; type Y
+          val Choice(x, ny, onError) = this.asInstanceOf[Frontier[X |&| (Need |*| Y)]].asChoice
+          val pn = Promise[Any]()
+          val py = Promise[Frontier[Y]]()
+          pn.future.onComplete {
+            case Failure(e) =>
+              onError(e)
+              py.failure(e)
+            case Success(_) =>
+              val (n, y) = ny().splitPair
+              Frontier.fulfillNeedWith(n, Future.successful(()))
+              py.success(y)
+          }
+          Pair(NeedAsync(pn), Deferred(py.future))                .asInstanceOf[Frontier[B]]
         case -⚬.DistributeLR() =>
           // (X |*| (Y |+| Z)) -⚬ ((X |*| Y) |+| (X |*| Z))
           type X; type Y; type Z
@@ -480,6 +508,15 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
               }
           }
       }
+      
+    extension [A, B](f: Frontier[A |+| B]) {
+      def futureEither: Future[Either[Frontier[A], Frontier[B]]] =
+        f match {
+          case InjectL(a) => Future.successful(Left(a))
+          case InjectR(b) => Future.successful(Right(b))
+          case Deferred(fab) => fab.flatMap(_.futureEither)
+        }
+    }
 
     extension [A, B](f: Frontier[A |&| B]) {
       def chooseL: Frontier[A] =
