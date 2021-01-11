@@ -1,6 +1,7 @@
 package libretto
 
 import scala.annotation.tailrec
+import scala.concurrent.duration.FiniteDuration
 
 object ScalaStreams {
   def apply(
@@ -77,6 +78,13 @@ class ScalaStreams[
 
     def delayBy[A]: (Done |*| Pollable[A]) -⚬ Pollable[A] =
       LPollable.delayBy[Val[A]]
+      
+    def delay[A](d: FiniteDuration): Pollable[A] -⚬ Pollable[A] = {
+      id                                           [          Pollable[A] ]
+        .<.un(negativePollable[A].signalNeg)  .from[ Need |*| Pollable[A] ]
+        .<.fst.un(delayNeed(d))               .from[ Need |*| Pollable[A] ]
+        .<.un(negativePollable[A].awaitNeg)   .from[          Pollable[A] ]
+    }
 
     def fromList[A]: Val[List[A]] -⚬ Pollable[A] = rec { self =>
       val uncons: List[A] => Option[(A, List[A])] = _ match {
