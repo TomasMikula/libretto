@@ -84,9 +84,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative (i.e. [[Need]]) signal. */
     def signalAction[A]: (Need |*| LPollable[A]) -⚬ LPollable[A] =
       id                             [             LPollable[A]       ]
-        .<.un(pack)             .from[           Done |&| LPolled[A]  ]
-        .<.un(signalChoice)     .from[ Need |*| (Done |&| LPolled[A]) ]
-        .<.snd.un(unpack)       .from[ Need |*|    LPollable[A]       ]
+        .<(pack)                .from[           Done |&| LPolled[A]  ]
+        .<(signalChoice)        .from[ Need |*| (Done |&| LPolled[A]) ]
+        .<.snd(unpack)          .from[ Need |*|    LPollable[A]       ]
 
     /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPollable[A]) -⚬ LPollable[A] =

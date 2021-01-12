@@ -97,12 +97,12 @@ class BasicTests extends TestSuite {
     val init: One -⚬ (((B |*| I) |&| (B |*| S)) |&| ((C |*| I) |&| (C |*| S))) =
       choice(
         choice(
-          parFromOne(const_(false), const_(1)),
-          parFromOne(const_(true), const_("foo")),
+          parFromOne(const(false), const(1)),
+          parFromOne(const(true), const("foo")),
         ),
         choice(
-          parFromOne(const_('a'), const_(2)),
-          parFromOne(const_('b'), const_("bar")),
+          parFromOne(const('a'), const(2)),
+          parFromOne(const('b'), const("bar")),
         ),
       )
       

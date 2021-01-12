@@ -83,8 +83,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class UnliftPair[A, B]() extends ((Val[A] |*| Val[B]) -⚬ Val[(A, B)])
     case class LiftNegPair[A, B]() extends (Neg[(A, B)] -⚬ (Neg[A] |*| Neg[B]))
     case class UnliftNegPair[A, B]() extends ((Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)])
-    case class LiftV[A, B](f: A => B) extends (Val[A] -⚬ Val[B])
-    case class LiftN[A, B](f: A => B) extends (Neg[B] -⚬ Neg[A])
+    case class MapVal[A, B](f: A => B) extends (Val[A] -⚬ Val[B])
+    case class ContramapNeg[A, B](f: A => B) extends (Neg[B] -⚬ Neg[A])
     case class ConstVal[A](a: A) extends (Done -⚬ Val[A])
     case class ConstNeg[A](a: A) extends (Neg[A] -⚬ Need)
     case class Neglect[A]() extends (Val[A] -⚬ Done)
@@ -255,11 +255,11 @@ object FreeScalaDSL extends ScalaDSL {
   def unliftNegPair[A, B]: (Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)] =
     UnliftNegPair()
 
-  def liftV[A, B](f: A => B): Val[A] -⚬ Val[B] =
-    LiftV(f)
+  def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B] =
+    MapVal(f)
 
-  def liftN[A, B](f: A => B): Neg[B] -⚬ Neg[A] =
-    LiftN(f)
+  def contramapNeg[A, B](f: A => B): Neg[B] -⚬ Neg[A] =
+    ContramapNeg(f)
 
   def constVal[A](a: A): Done -⚬ Val[A] =
     ConstVal(a)

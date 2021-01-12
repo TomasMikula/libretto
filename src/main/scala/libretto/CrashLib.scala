@@ -23,7 +23,7 @@ class CrashLib[DSL <: CrashDSL, Lib <: CoreLib[DSL]](
       
   def crashNeg[A](msg: String)(implicit A: Junction.Negative[A]): A -⚬ A =
     id                                 [          A ]
-      .<.un(elimFst(need))        .from[ Need |*| A ]
-      .<.un(cocrash[A, A](msg))   .from[ Need |*| A ]
-      .<.un(A.awaitNeg)           .from[          A ]
+      .<(elimFst(need))           .from[ Need |*| A ]
+      .<(cocrash[A, A](msg))      .from[ Need |*| A ]
+      .<(A.awaitNeg)              .from[          A ]
 }

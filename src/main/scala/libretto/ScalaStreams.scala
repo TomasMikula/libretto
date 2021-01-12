@@ -81,9 +81,9 @@ class ScalaStreams[
       
     def delay[A](d: FiniteDuration): Pollable[A] -⚬ Pollable[A] = {
       id                                           [          Pollable[A] ]
-        .<.un(negativePollable[A].signalNeg)  .from[ Need |*| Pollable[A] ]
-        .<.fst.un(delayNeed(d))               .from[ Need |*| Pollable[A] ]
-        .<.un(negativePollable[A].awaitNeg)   .from[          Pollable[A] ]
+        .<(negativePollable[A].signalNeg)     .from[ Need |*| Pollable[A] ]
+        .<.fst(delayNeed(d))                  .from[ Need |*| Pollable[A] ]
+        .<(negativePollable[A].awaitNeg)      .from[          Pollable[A] ]
     }
 
     def fromList[A]: Val[List[A]] -⚬ Pollable[A] = rec { self =>
@@ -95,7 +95,7 @@ class ScalaStreams[
       val close: Val[List[A]] -⚬ Done = neglect
 
       val poll: Val[List[A]] -⚬ Polled[A] =
-        liftV(uncons)                           .to[      Val[Option[(A, List[A])]]     ]
+        mapVal(uncons)                          .to[      Val[Option[(A, List[A])]]     ]
           .>(optionToPMaybe)                    .to[ Done |+|    Val[(A, List[A])]      ]
           .>.right(liftPair)                    .to[ Done |+| (Val[A] |*| Val[List[A]]) ]
           .>.right.snd(self)                    .to[ Done |+| (Val[A] |*| Pollable[A] ) ]
@@ -107,7 +107,7 @@ class ScalaStreams[
     def fromList[A](as: List[A]): One -⚬ Pollable[A] = {
       @tailrec def go(ras: List[A], acc: One -⚬ Pollable[A]): One -⚬ Pollable[A] =
         ras match {
-          case head :: tail => go(tail, parFromOne(const_(head), acc) >>> Pollable.cons)
+          case head :: tail => go(tail, parFromOne(const(head), acc) >>> Pollable.cons)
           case Nil          => acc
         }
   
@@ -122,23 +122,23 @@ class ScalaStreams[
         id                                   [                        Pollable[A]                    |*| Val[List[A]]  ]
           .>.fst(poll)                    .to[ (Done                   |+| (Val[A] |*| Pollable[A])) |*| Val[List[A]]  ]
           .distributeRL                   .to[ (Done |*| Val[List[A]]) |+| ((Val[A] |*| Pollable[A]) |*| Val[List[A]]) ]
-          .>.left.snd(liftV(_.reverse))   .to[ (Done |*| Val[List[A]]) |+| ((Val[A] |*| Pollable[A]) |*| Val[List[A]]) ]
+          .>.left.snd(mapVal(_.reverse))  .to[ (Done |*| Val[List[A]]) |+| ((Val[A] |*| Pollable[A]) |*| Val[List[A]]) ]
           .>.left.joinL                   .to[           Val[List[A]]  |+| ((Val[A] |*| Pollable[A]) |*| Val[List[A]]) ]
           .>.right.fst(swap)              .to[           Val[List[A]]  |+| ((Pollable[A] |*| Val[A]) |*| Val[List[A]]) ]
           .>.right.assocLR                .to[           Val[List[A]]  |+| (Pollable[A] |*| (Val[A] |*| Val[List[A]])) ]
           .>.right.snd(unliftPair)        .to[           Val[List[A]]  |+| (Pollable[A] |*|    Val[(A, List[A])]     ) ]
-          .>.right.snd(liftV(_ :: _))     .to[           Val[List[A]]  |+| (Pollable[A] |*|      Val[List[A]]        ) ]
+          .>.right.snd(mapVal(_ :: _))    .to[           Val[List[A]]  |+| (Pollable[A] |*|      Val[List[A]]        ) ]
           .>.right(self)                  .to[           Val[List[A]]  |+|          Val[List[A]]                       ]
           .either(id, id)                 .to[                     Val[List[A]]                                        ]
       }
       
       id[Pollable[A]]
-        .>(introSnd(const_(List.empty[A])))
+        .>(introSnd(const(List.empty[A])))
         .>(go)
     }
 
     def map[A, B](f: A => B): Pollable[A] -⚬ Pollable[B] = {
-      val g: Val[A] -⚬ Val[B] = liftV(f)
+      val g: Val[A] -⚬ Val[B] = mapVal(f)
       LPollable.map(g)
     }
 
@@ -159,7 +159,7 @@ class ScalaStreams[
     def statefulMap[S, A, B](f: ((S, A)) => (S, B))(initialState: S): Pollable[A] -⚬ Pollable[B] = {
       val ff: (Val[S] |*| Val[A]) -⚬ (Val[S] |*| Val[B]) =
         unliftPair[S, A]
-          .>(liftV(f))
+          .>(mapVal(f))
           .>(liftPair[S, B])
 
       val inner: (Val[S] |*| Pollable[A]) -⚬ Pollable[B] = rec { self =>
@@ -182,7 +182,7 @@ class ScalaStreams[
       }
 
       id[Pollable[A]]                   .to[            Pollable[A] ]
-        .introFst(const_(initialState)) .to[ Val[S] |*| Pollable[A] ]
+        .introFst(const(initialState))  .to[ Val[S] |*| Pollable[A] ]
         .>(inner)                       .to[     Pollable[B]        ]
     }
 

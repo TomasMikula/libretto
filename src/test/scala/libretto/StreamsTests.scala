@@ -54,7 +54,7 @@ class StreamsTests extends TestSuite {
       )
         .>(Pollable.merge)
         .>(Pollable.toList)
-        .>(liftV(_.toSet)),
+        .>(mapVal(_.toSet)),
       Set(1, 2, 3, 4, 5, 6),
     )
   }
@@ -82,7 +82,7 @@ class StreamsTests extends TestSuite {
     import LSubscriber._
 
     val byLength: Val[String] -⚬ (Val[Int] |*| Val[String]) =
-      liftV[String, (Int, String)](s => (s.length, s)) >>> liftPair
+      mapVal[String, (Int, String)](s => (s.length, s)) >>> liftPair
       
     val input: One -⚬ Pollable[String] =
       Pollable.of("f", "fo", "foo", "fooo", "foooo", "pho", "phoo", "phooo", "bo", "boo")
@@ -90,7 +90,7 @@ class StreamsTests extends TestSuite {
     def subscription(k: Int): One -⚬ (Pollable[String] |*| (Val[Int] |*| Subscriber[String])) =
       id                                     [                  One                                   ]
         .>(lInvertPollable)               .to[ Pollable[String] |*|               Subscriber[String]  ]
-        .>.snd(introFst(const_(k)))       .to[ Pollable[String] |*| (Val[Int] |*| Subscriber[String]) ]
+        .>.snd(introFst(const(k)))        .to[ Pollable[String] |*| (Val[Int] |*| Subscriber[String]) ]
 
     val subscriptions: One -⚬ (LList[Val[Int] |*| Subscriber[String]] |*| LList[Pollable[String]]) =
       LList.of(subscription(3), subscription(4)) >>> LList.unzip >>> swap
@@ -105,7 +105,7 @@ class StreamsTests extends TestSuite {
         .>.joinL                          .to[                                                                             Val[List[String]]   ]
         
     assertVal(
-      prg >>> liftV(_.toSet),
+      prg >>> mapVal(_.toSet),
       Set("foo", "fooo", "pho", "phoo", "boo"),
     )
   }

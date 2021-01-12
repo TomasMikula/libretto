@@ -399,14 +399,14 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           ???
         case -⚬.UnliftNegPair() =>
           ???
-        case -⚬.LiftV(f) =>
+        case -⚬.MapVal(f) =>
           type X; type Y
           this
             .asInstanceOf[Frontier[Val[X]]]
             .toFutureValue
             .map(f.asInstanceOf[X => Y])
             .toValFrontier                                        .asInstanceOf[Frontier[B]]
-        case -⚬.LiftN(f) =>
+        case -⚬.ContramapNeg(f) =>
           this match {
             case Prom(pa) =>
               type B0

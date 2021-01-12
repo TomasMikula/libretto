@@ -29,10 +29,10 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       dsl.dup
 
     def minKey[K]: Summary[K] -⚬ Val[K] =
-      unliftPair >>> liftV(_._1)
+      unliftPair >>> mapVal(_._1)
 
     def maxKey[K]: Summary[K] -⚬ Val[K] =
-      unliftPair >>> liftV(_._2)
+      unliftPair >>> mapVal(_._2)
 
     def minKeyGetter[K]: Getter[Summary[K], Val[K]] =
       fst[Val[K]].lens[Val[K]]

@@ -34,10 +34,10 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
   def unliftNegPair[A, B]: (Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)]
 
   /** Lifts an ordinary Scala function to a linear function on [[Val]]s. */
-  def liftV[A, B](f: A => B): Val[A] -⚬ Val[B]
+  def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B]
 
   /** Lifts an ordinary Scala function to a linear function on demands, in opposite direction. */
-  def liftN[A, B](f: A => B): Neg[B] -⚬ Neg[A]
+  def contramapNeg[A, B](f: A => B): Neg[B] -⚬ Neg[A]
 
   def constVal[A](a: A): Done -⚬ Val[A]
   def constNeg[A](a: A): Neg[A] -⚬ Need
@@ -47,7 +47,7 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
 
   def dup[A]: Val[A] -⚬ (Val[A] |*| Val[A]) =
     andThen(
-      liftV[A, (A, A)](a => (a, a)),
+      mapVal[A, (A, A)](a => (a, a)),
       liftPair
     )
 }

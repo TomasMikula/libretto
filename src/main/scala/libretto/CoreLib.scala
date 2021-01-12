@@ -675,10 +675,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     
   def selectAgainstL[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (Need |*| A) =
     id                                               [  Need        |*|            A  ]
-      .<.snd.un(A.signalNeg).<.un(|*|.assocLR)  .from[ (Need        |*|  Need) |*| A  ]
-      .<.fst.un(selectRequest)                  .from[ (Need        |&|  Need) |*| A  ]
-      .<.un(coDistributeR)                      .from[ (Need |*| A) |&| (Need  |*| A) ]
-      .<.un(|&|.bimap(A.awaitNeg, A.awaitNeg))  .from[           A  |&|            A  ]
+      .<.snd(A.signalNeg).<(|*|.assocLR)        .from[ (Need        |*|  Need) |*| A  ]
+      .<.fst(selectRequest)                     .from[ (Need        |&|  Need) |*| A  ]
+      .<(coDistributeR)                         .from[ (Need |*| A) |&| (Need  |*| A) ]
+      .<(|&|.bimap(A.awaitNeg, A.awaitNeg))     .from[           A  |&|            A  ]
       
   def selectAgainstR[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (A |*| Need) =
     |&|.swap >>> selectAgainstL >>> swap
@@ -1214,12 +1214,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   /** Focused on `B` in the output `F[B]` of linear function `A -⚬ F[B]`, where `B` is in a contravariant position. */
   class FocusedContra[F[_], B](f: F[B])(implicit F: ContraExternalizer[F]) {
-    def unapply[A](g: A -⚬ B): F[A] =
+    def contramap[A](g: A -⚬ B): F[A] =
       F.lift(g)(f)
     
-    /** Alias for [[unapply]]. */
-    def un[A](g: A -⚬ B): F[A] =
-      unapply(g)
+    /** Alias for [[contramap]]. */
+    def apply[A](g: A -⚬ B): F[A] =
+      contramap(g)
 
     def subst[C](implicit ev: B =:= C): F[C] =
       ev.substituteCo(f)
