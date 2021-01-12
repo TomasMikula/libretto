@@ -510,6 +510,12 @@ class ScalaStreams[
       LDemanding.negativeLDemanding[Neg[A]]
   }
 
+  def rInvertSubscriber[A]: (Subscriber[A] |*| Pollable[A]) -⚬ One =
+    rInvertLSubscriber(fulfill)
+
+  def lInvertPollable[A]: One -⚬ (Pollable[A] |*| Subscriber[A]) =
+    lInvertLPollable(promise)
+
   def rInvertProducingF[A, x, y](rInvertSub: (x |*| y) -⚬ One): (ProducingF[A, x] |*| ConsumerF[A, y]) -⚬ One =
     rInvertEither(
       rInvertSignal,

@@ -89,7 +89,7 @@ class StreamsTests extends TestSuite {
       
     def subscription(k: Int): One -⚬ (Pollable[String] |*| (Val[Int] |*| Subscriber[String])) =
       id                                     [                  One                                   ]
-        .>(lInvertLPollable(promise))     .to[ Pollable[String] |*|               Subscriber[String]  ]
+        .>(lInvertPollable)               .to[ Pollable[String] |*|               Subscriber[String]  ]
         .>.snd(introFst(const_(k)))       .to[ Pollable[String] |*| (Val[Int] |*| Subscriber[String]) ]
 
     val subscriptions: One -⚬ (LList[Val[Int] |*| Subscriber[String]] |*| LList[Pollable[String]]) =
