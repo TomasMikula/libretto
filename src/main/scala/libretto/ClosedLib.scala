@@ -22,20 +22,20 @@ class ClosedLib[
   /** Function object (internal hom) is contravariant in the input type. */
   def input[C]: ContraFunctor[λ[x => x =⚬ C]] = new ContraFunctor[λ[x => x =⚬ C]] {
     def lift[A, B](f: A -⚬ B): (B =⚬ C) -⚬ (A =⚬ C) =
-      id                       [(B =⚬ C) |*| A]
-        .>.snd(f)           .to[(B =⚬ C) |*| B]
-        .andThen(eval)      .to[C]
-        .as[((B =⚬ C) |*| A) -⚬ C]
+      id                         [ (B =⚬ C) |*| A ]
+        .>.snd(f)             .to[ (B =⚬ C) |*| B ]
+        .>(eval)              .to[       C        ]
+        .as[ ((B =⚬ C) |*| A)  -⚬        C        ]
         .curry
   }
 
   /** Function object (internal hom) is covariant in the output type. */
   def output[A]: Functor[λ[x => A =⚬ x]] = new Functor[λ[x => A =⚬ x]] {
     def lift[B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
-      id                       [(A =⚬ B) |*| A]
-        .andThen(eval)      .to[B]
-        .andThen(f)         .to[C]
-        .as[((A =⚬ B) |*| A) -⚬ C]
+      id                         [ (A =⚬ B) |*| A ]
+        .>(eval)              .to[       B        ]
+        .>(f)                 .to[       C        ]
+        .as[ ((A =⚬ B) |*| A)  -⚬        C        ]
         .curry
   }
 
@@ -67,8 +67,8 @@ class ClosedLib[
     id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
       .introSnd(ev.lInvert)      .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (Ā |*| A) ]
       .>.snd(swap)               .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
-      .andThen(IXI)              .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
-      .andThen(par(eval, eval))  .to[        B         |*|        C         ]
+      .>(IXI)                    .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
+      .>(par(eval, eval))        .to[        B         |*|        C         ]
   }
 
   /** Given `A` and `B` concurrently (`A |*| B`), we can suggest that `A` be consumed before `B`

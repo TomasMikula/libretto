@@ -96,7 +96,7 @@ class ScalaStreams[
 
       val poll: Val[List[A]] -⚬ Polled[A] =
         liftV(uncons)                           .to[      Val[Option[(A, List[A])]]     ]
-          .andThen(optionToPMaybe)              .to[ Done |+|    Val[(A, List[A])]      ]
+          .>(optionToPMaybe)                    .to[ Done |+|    Val[(A, List[A])]      ]
           .>.right(liftPair)                    .to[ Done |+| (Val[A] |*| Val[List[A]]) ]
           .>.right.snd(self)                    .to[ Done |+| (Val[A] |*| Pollable[A] ) ]
 
@@ -133,8 +133,8 @@ class ScalaStreams[
       }
       
       id[Pollable[A]]
-        .andThen(introSnd(const_(List.empty[A])))
-        .andThen(go)
+        .>(introSnd(const_(List.empty[A])))
+        .>(go)
     }
 
     def map[A, B](f: A => B): Pollable[A] -⚬ Pollable[B] = {
@@ -159,8 +159,8 @@ class ScalaStreams[
     def statefulMap[S, A, B](f: ((S, A)) => (S, B))(initialState: S): Pollable[A] -⚬ Pollable[B] = {
       val ff: (Val[S] |*| Val[A]) -⚬ (Val[S] |*| Val[B]) =
         unliftPair[S, A]
-          .andThen(liftV(f))
-          .andThen(liftPair[S, B])
+          .>(liftV(f))
+          .>(liftPair[S, B])
 
       val inner: (Val[S] |*| Pollable[A]) -⚬ Pollable[B] = rec { self =>
         val close: (Val[S] |*| Pollable[A]) -⚬ Done =
@@ -183,7 +183,7 @@ class ScalaStreams[
 
       id[Pollable[A]]                   .to[            Pollable[A] ]
         .introFst(const_(initialState)) .to[ Val[S] |*| Pollable[A] ]
-        .andThen(inner)                 .to[     Pollable[B]        ]
+        .>(inner)                       .to[     Pollable[B]        ]
     }
 
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
@@ -218,7 +218,7 @@ class ScalaStreams[
         val caseValue: (Val[A] |*| Pollable[A]) -⚬ (Polled[A] |*| Polled[A]) =
           id                                             [        Val[A]       |*|          Pollable[A]          ]
             .par(dsl.dup[A], self)                    .to[ (Val[A] |*| Val[A]) |*| (Pollable[A] |*| Pollable[A]) ]
-            .andThen(IXI)                             .to[ (Val[A] |*| Pollable[A]) |*| (Val[A] |*| Pollable[A]) ]
+            .>(IXI)                                   .to[ (Val[A] |*| Pollable[A]) |*| (Val[A] |*| Pollable[A]) ]
             .>.fst.injectR[Done].>.snd.injectR[Done]  .to[       Polled[A]          |*|       Polled[A]          ]
 
         either(caseClosed, caseValue)
@@ -229,9 +229,9 @@ class ScalaStreams[
 
       val caseFstPolled: Pollable[A] -⚬ (Polled[A] |*| Pollable[A]) =
         id                                           [                  Pollable[A]                       ]
-          .andThen(Pollable.poll[A])              .to[                   Polled[A]                        ]
-          .andThen(choice(introSnd, dupPolled))   .to[ (Polled[A] |*| One)  |&| (Polled[A] |*| Polled[A]) ]
-          .andThen(coDistributeL)                 .to[  Polled[A] |*| (One  |&|                Polled[A]) ]
+          .>(Pollable.poll[A])                    .to[                   Polled[A]                        ]
+          .>(choice(introSnd, dupPolled))         .to[ (Polled[A] |*| One)  |&| (Polled[A] |*| Polled[A]) ]
+          .coDistributeL                          .to[  Polled[A] |*| (One  |&|                Polled[A]) ]
           .>.snd.choiceL(done)                    .to[  Polled[A] |*| (Done |&|                Polled[A]) ]
           .>.snd(pack[PollableF[A, *]])           .to[  Polled[A] |*|       Pollable[A]                   ]
 
@@ -239,12 +239,12 @@ class ScalaStreams[
       val caseFst: Pollable[A] -⚬ (Pollable[A] |*| Pollable[A]) =
         id                                           [                   Pollable[A]                           ]
           .choice(caseFstClosed, caseFstPolled)   .to[ (Done |*| Pollable[A]) |&| (Polled[A]  |*| Pollable[A]) ]
-          .andThen(coDistributeR)                 .to[ (Done                  |&|  Polled[A]) |*| Pollable[A]  ]
+          .coDistributeR                          .to[ (Done                  |&|  Polled[A]) |*| Pollable[A]  ]
           .>.fst(pack[PollableF[A, *]])           .to[              Pollable[A]               |*| Pollable[A]  ]
 
       // the case when the second output polls or closes before the first output does
       val caseSnd: Pollable[A] -⚬ (Pollable[A] |*| Pollable[A]) =
-        caseFst andThen swap
+        caseFst > swap
 
       id                                   [          Pollable[A]        ]
         .select(caseFst, caseSnd)       .to[ Pollable[A] |*| Pollable[A] ]
@@ -260,13 +260,13 @@ class ScalaStreams[
         val caseNotRequestedYet: (Val[A] |*| Pollable[A]) -⚬ Pollable[A] = {
           id[Val[A] |*| Pollable[A]]
             .>.fst(neglect)
-            .andThen(Pollable.delayBy)
-            .andThen(self)
+            .>(Pollable.delayBy)
+            .>(self)
         }
 
         val goElem: (Val[A] |*| Pollable[A]) -⚬ Pollable[A] =
           choice(caseDownstreamRequested, caseNotRequestedYet)
-            .andThen(selectSignaledOrNot(LPollable.negativeLPollable))
+            .>(selectSignaledOrNot(LPollable.negativeLPollable))
 
         id                               [    Pollable[A]                    ]
           .unpack                     .to[ Done |&| Polled[A]                ]
@@ -277,7 +277,7 @@ class ScalaStreams[
     def broadcast[A]: Pollable[A] -⚬ PUnlimited[Pollable[A]] = rec { self =>
       val case0: Pollable[A] -⚬ Done                                                  = Pollable.close
       val case1: Pollable[A] -⚬ Pollable[A]                                           = id
-      val caseN: Pollable[A] -⚬ (PUnlimited[Pollable[A]] |*| PUnlimited[Pollable[A]]) = dup andThen par(self, self)
+      val caseN: Pollable[A] -⚬ (PUnlimited[Pollable[A]] |*| PUnlimited[Pollable[A]]) = dup > par(self, self)
 
       dropUntilFirstDemand
         .choice(case0, (choice(case1, caseN)))
@@ -304,7 +304,7 @@ class ScalaStreams[
       ): (Val[A] |*| NeDT[K, V]) -⚬ PMaybe[NeDT[K, V]] =
         id                                     [       Val[A]        |*| NeDT[K, V]  ]
           .>.fst(f)                         .to[ (Val[K] |*| Val[V]) |*| NeDT[K, V]  ]
-          .andThen(dispatchNE)              .to[                  PMaybe[NeDT[K, V]] ]
+          .>(dispatchNE)                    .to[                  PMaybe[NeDT[K, V]] ]
 
       def addDemanding[K: Ordering, V]: ((Val[K] |*| Demanding[V]) |*| DT[K, V]) -⚬ DT[K, V] =
         Tree.insertOrUpdate(Demanding.merge)
@@ -343,13 +343,13 @@ class ScalaStreams[
       ): ((Val[A] |*| Pollable[A]) |*| (LPolled[KSubs] |*| DT[K, V])) -⚬ Done =
         id                                   [ (Val[A] |*| Pollable[A]) |*|              (LPolled[KSubs] |*| DT[K, V]) ]
           .>.fst(swap)                    .to[ (Pollable[A] |*| Val[A]) |*|              (LPolled[KSubs] |*| DT[K, V]) ]
-          .andThen(IXI)                   .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (      Val[A]        |*| DT[K, V]) ]
+          .>(IXI)                         .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (      Val[A]        |*| DT[K, V]) ]
           .>.snd.fst(f)                   .to[ (Pollable[A] |*| LPolled[KSubs]) |*| ((Val[K] |*| Val[V]) |*| DT[K, V]) ]
           .>.snd(DT.dispatch)             .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (Done                |*| DT[K, V]) ]
           .assocRL                        .to[ ((Pollable[A] |*| LPolled[KSubs]) |*| Done)               |*| DT[K, V]  ]
           .>.fst(swap >>> timesAssocRL)   .to[ ((Done |*| Pollable[A]) |*| LPolled[KSubs])               |*| DT[K, V]  ]
           .>.fst.fst(delayedPoll)         .to[ (  Polled[A]            |*| LPolled[KSubs])               |*| DT[K, V]  ]
-          .andThen(goRec)                 .to[                                                          Done           ]
+          .>(goRec)                       .to[                                                          Done           ]
 
       def onUpstream(
         goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
@@ -366,13 +366,13 @@ class ScalaStreams[
           .distributeLR                               .to[ (Polled[A] |*| Done) |+| (Polled[A] |*| NeDT[K, V]) ]
           .>.left(join(Polled.close, id))             .to[           Done       |+| (Polled[A] |*| NeDT[K, V]) ]
           .>.right(feedToNEDT)                        .to[           Done       |+|           Done             ]
-          .andThen(either(id, id))                    .to[                     Done                            ]
+          .>(either(id, id))                          .to[                     Done                            ]
 
       val subsClosed: ((Polled[A] |*| Done) |*| DT[K, V]) -⚬ Done =
         id                             [ (Polled[A] |*| Done) |*| DT[K, V] ]
-          .andThen(IX)              .to[ (Polled[A] |*| DT[K, V]) |*| Done ]
+          .>(IX)                    .to[ (Polled[A] |*| DT[K, V]) |*| Done ]
           .>.fst(forward)           .to[           Done           |*| Done ]
-          .andThen(join)            .to[                         Done      ]
+          .>(join)                  .to[                         Done      ]
 
       def newSubscriber(
         goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
@@ -383,7 +383,7 @@ class ScalaStreams[
           .assocLR                      .to[  (Polled[A] |*|  LPollable[KSubs]) |*| (KSubs   |*| DT[K, V]) ]
           .>.snd(DT.addSubscriber)      .to[  (Polled[A] |*|  LPollable[KSubs]) |*|              DT[K, V]  ]
           .>.fst.snd(LPollable.poll)    .to[  (Polled[A] |*|    LPolled[KSubs]) |*|              DT[K, V]  ]
-          .andThen(goRec)               .to[                                   Done                        ]
+          .>(goRec)                     .to[                                   Done                        ]
 
       def onSubs(
         goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
@@ -406,9 +406,9 @@ class ScalaStreams[
       }
 
       id[Pollable[A] |*| LPollable[KSubs]]
-        .andThen(par(poll, LPollable.poll))
+        .>(par(poll, LPollable.poll))
         .introSnd(done >>> Tree.empty[K, Demanding[V]])
-        .andThen(go)
+        .>(go)
     }
   }
 
@@ -456,11 +456,11 @@ class ScalaStreams[
         elimFst(need)
 
       val fstDemanding: (Demanding[A] |*| Subscriber[A]) -⚬ Subscriber[A] =
-        id                                                     [  Demanding[A] |*|       Subscriber[A]                       ]
-          .>.snd(unpack)                                    .to[  Demanding[A] |*| (Need |+|                   Demanding[A]) ]
-          .distributeLR                                     .to[ (Demanding[A] |*| Need) |+| (Demanding[A] |*| Demanding[A]) ]
-          .andThen(either(elimSnd(need), mergeDemandings))  .to[                     Demanding[A]                            ]
-          .injectR[Need].pack[SubscriberF[A, *]]            .to[                    Subscriber[A]                            ]
+        id                                               [  Demanding[A] |*|       Subscriber[A]                       ]
+          .>.snd(unpack)                              .to[  Demanding[A] |*| (Need |+|                   Demanding[A]) ]
+          .distributeLR                               .to[ (Demanding[A] |*| Need) |+| (Demanding[A] |*| Demanding[A]) ]
+          .>(either(elimSnd(need), mergeDemandings))  .to[                     Demanding[A]                            ]
+          .injectR[Need].pack[SubscriberF[A, *]]      .to[                    Subscriber[A]                            ]
 
       val caseFstReady: (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A] =
         id                                     [       Subscriber[A]                         |*| Subscriber[A]  ]
@@ -495,8 +495,8 @@ class ScalaStreams[
 
       val caseDemanding: (Demanding[A] |*| Demanding[A]) -⚬ (Neg[A] |*| Subscriber[A]) =
         id                                             [     Demanding[A]           |*|     Demanding[A]           ]
-          .andThen(par(chooseR, chooseR))           .to[ (Neg[A] |*| Subscriber[A]) |*| (Neg[A] |*| Subscriber[A]) ]
-          .andThen(IXI)                             .to[ (Neg[A] |*| Neg[A]) |*| (Subscriber[A] |*| Subscriber[A]) ]
+          .>(par(chooseR, chooseR))                 .to[ (Neg[A] |*| Subscriber[A]) |*| (Neg[A] |*| Subscriber[A]) ]
+          .>(IXI)                                   .to[ (Neg[A] |*| Neg[A]) |*| (Subscriber[A] |*| Subscriber[A]) ]
           .par(mergeDemands[A], mergeSubscribers)   .to[        Neg[A]       |*|            Subscriber[A]          ]
 
       choice(caseClosed, caseDemanding)

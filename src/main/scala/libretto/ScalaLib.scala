@@ -99,41 +99,41 @@ class ScalaLib[
   }
 
   def liftBoolean: Val[Boolean] -⚬ Bool = {
-    id                                     [ Val[Boolean]            ]
-      .andThen(liftV(booleanToEither))  .to[ Val[Either[Unit, Unit]] ]
-      .andThen(liftEither)              .to[ Val[Unit] |+| Val[Unit] ]
-      .bimap(neglect, neglect)          .to[   Done    |+|   Done    ]
+    id                                       [ Val[Boolean]            ]
+      .>(liftV(booleanToEither))          .to[ Val[Either[Unit, Unit]] ]
+      .>(liftEither)                      .to[ Val[Unit] |+| Val[Unit] ]
+      .bimap(neglect, neglect)            .to[   Done    |+|   Done    ]
   }
 
   def unliftBoolean: Bool -⚬ Val[Boolean] =
     id[Bool]                              .to[   Done    |+|   Done    ]
       .bimap(constVal(()), constVal(()))  .to[ Val[Unit] |+| Val[Unit] ]
-      .andThen(unliftEither)              .to[ Val[Either[Unit, Unit]] ]
-      .andThen(liftV(eitherToBoolean))    .to[      Val[Boolean]       ]
+      .>(unliftEither)                    .to[ Val[Either[Unit, Unit]] ]
+      .>(liftV(eitherToBoolean))          .to[      Val[Boolean]       ]
 
   def maybeToOption[A]: Maybe[Val[A]] -⚬ Val[Option[A]] =
-    id[Maybe[Val[A]]]               .to[    One    |+| Val[A] ]
-      .>.left(const_(()))           .to[ Val[Unit] |+| Val[A] ]
-      .andThen(unliftEither)        .to[ Val[Either[Unit, A]] ]
-      .andThen(liftV(_.toOption))   .to[ Val[Option[A]]       ]
+    id[Maybe[Val[A]]]                     .to[    One    |+| Val[A] ]
+      .>.left(const_(()))                 .to[ Val[Unit] |+| Val[A] ]
+      .>(unliftEither)                    .to[ Val[Either[Unit, A]] ]
+      .>(liftV(_.toOption))               .to[ Val[Option[A]]       ]
 
   def optionToPMaybe[A]: Val[Option[A]] -⚬ PMaybe[Val[A]] =
-    id[Val[Option[A]]]                .to[ Val[Option[      A]] ]
-      .andThen(liftV(_.toRight(())))  .to[ Val[Either[Unit, A]] ]
-      .andThen(liftEither)            .to[ Val[Unit] |+| Val[A] ]
-      .>.left(dsl.neglect)            .to[   Done    |+| Val[A] ]
+    id[Val[Option[A]]]                    .to[ Val[Option[      A]] ]
+      .>(liftV(_.toRight(())))            .to[ Val[Either[Unit, A]] ]
+      .>(liftEither)                      .to[ Val[Unit] |+| Val[A] ]
+      .>.left(dsl.neglect)                .to[   Done    |+| Val[A] ]
 
   def pMaybeToOption[A]: PMaybe[Val[A]] -⚬ Val[Option[A]] =
-    id[PMaybe[Val[A]]]              .to[   Done    |+| Val[A] ]
-      .>.left(constVal(()))         .to[ Val[Unit] |+| Val[A] ]
-      .andThen(unliftEither)        .to[ Val[Either[Unit, A]] ]
-      .andThen(liftV(_.toOption))   .to[ Val[Option[A]]       ]
+    id[PMaybe[Val[A]]]                    .to[   Done    |+| Val[A] ]
+      .>.left(constVal(()))               .to[ Val[Unit] |+| Val[A] ]
+      .>(unliftEither)                    .to[ Val[Either[Unit, A]] ]
+      .>(liftV(_.toOption))               .to[ Val[Option[A]]       ]
 
   def liftBipredicate[A, B](p: (A, B) => Boolean): (Val[A] |*| Val[B]) -⚬ Bool =
-    id                                            [ Val[A] |*| Val[B] ]
-      .andThen(unliftPair)                     .to[   Val[(A, B)]     ]
-      .andThen(liftV(p.tupled))                .to[   Val[Boolean]    ]
-      .andThen(liftBoolean)                    .to[       Bool        ]
+    id                                       [ Val[A] |*| Val[B] ]
+      .>(unliftPair)                      .to[   Val[(A, B)]     ]
+      .>(liftV(p.tupled))                 .to[   Val[Boolean]    ]
+      .>(liftBoolean)                     .to[       Bool        ]
 
   def isLt[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
     liftBipredicate(ord.lt)
@@ -220,9 +220,9 @@ class ScalaLib[
       
       override def compare: (Val[A] |*| Val[A]) -⚬ Compared[Val[A], Val[A]] =
         id                                                   [              Val[A] |*| Val[A]                                        ]
-          .andThen(unliftPair)                            .to[ Val[               (A, A)                                           ] ]
-          .andThen(liftV(scalaCompare))                   .to[ Val[(A   ,      A) Either (  (A   ,      A) Either   (A   ,      A))] ]
-          .andThen(liftEither).>.right(liftEither)        .to[ Val[(A   ,      A)] |+| (Val[(A   ,      A)] |+| Val[(A   ,      A)]) ]
+          .>(unliftPair)                                  .to[ Val[               (A, A)                                           ] ]
+          .>(liftV(scalaCompare))                         .to[ Val[(A   ,      A) Either (  (A   ,      A) Either   (A   ,      A))] ]
+          .>(liftEither).>.right(liftEither)              .to[ Val[(A   ,      A)] |+| (Val[(A   ,      A)] |+| Val[(A   ,      A)]) ]
           .bimap(liftPair, |+|.bimap(liftPair, liftPair)) .to[ (Val[A] |*| Val[A]) |+| ((Val[A] |*| Val[A]) |+| (Val[A] |*| Val[A])) ]
           .either(lt, either(equiv, gt))                  .to[                Compared[Val[A], Val[A]]                               ]
     }
