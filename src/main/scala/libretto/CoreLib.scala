@@ -750,6 +750,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         override def getL(implicit A: Cosemigroup[A]): A -⚬ (A |*| A) =
           A.split
 
+        override def andThen[B](that: Getter[A, B]): Getter[A, B] =
+          that
+
         override def extendJunction(implicit A: Junction.Positive[A]): Junction.Positive[A] =
           A
       }
