@@ -78,7 +78,7 @@ class ScalaLib[
 
   implicit def pComonoidVal[A]: PComonoid[Val[A]] =
     new PComonoid[Val[A]] {
-      def counit : Val[A] -⚬ Done                = neglect
+      def counit : Val[A] -⚬ Done                = dsl.neglect
       def split  : Val[A] -⚬ (Val[A] |*| Val[A]) = dup
     }
 

@@ -1796,6 +1796,63 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
     }
   }
+  
+  trait NAffine[A] {
+    def deflate: A -⚬ Need
+  }
+  
+  object NAffine {
+    def from[A](f: A -⚬ Need): NAffine[A] =
+      new NAffine[A] {
+        override def deflate: A -⚬ Need =
+          f
+      }
+
+    implicit val nAffineNeed: NAffine[Need] =
+      from(id)
+
+    implicit def nAffineTimes[A, B](implicit A: NAffine[A], B: NAffine[B]): NAffine[A |*| B] =
+      from(par(A.deflate, B.deflate) >>> forkNeed)
+  }
+
+  trait Affine[A] {
+    def discard: A -⚬ One
+  }
+  
+  object Affine {
+    def from[A](f: A -⚬ One): Affine[A] =
+      new Affine[A] {
+        override def discard: A -⚬ One =
+          f
+      }
+
+    implicit def fromNAffine[A](implicit A: NAffine[A]): Affine[A] =
+      from(A.deflate >>> need)
+
+    implicit def affineTimes[A, B](implicit A: Affine[A], B: Affine[B]): Affine[A |*| B] =
+      from(parToOne(A.discard, B.discard))
+  }
+  
+  trait PAffine[A] {
+    def neglect: A -⚬ Done
+  }
+  
+  object PAffine {
+    def from[A](f: A -⚬ Done): PAffine[A] =
+      new PAffine[A] {
+        override def neglect: A -⚬ Done =
+          f
+      }
+      
+    implicit def fromAffine[A](implicit A: Affine[A]): PAffine[A] =
+      from(A.discard >>> done)
+
+    implicit val pAffineDone: PAffine[Done] =
+      from(id)
+
+    implicit def pAffineTimes[A, B](implicit A: PAffine[A], B: PAffine[B]): PAffine[A |*| B] =
+      from(par(A.neglect, B.neglect) >>> join)
+  }
 
   trait Semigroup[A] {
     def combine: (A |*| A) -⚬ A
@@ -1833,8 +1890,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
   }
 
-  trait Comonoid[A] extends Cosemigroup[A] {
+  trait Comonoid[A] extends Cosemigroup[A] with Affine[A] {
     def counit: A -⚬ One
+    
+    override def discard: A -⚬ One =
+      counit
 
     def law_leftCounit: Equal[ A -⚬ (One |*| A) ] =
       Equal(
@@ -1880,8 +1940,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     *
     * The dual of [[PMonoid]].
     */
-  trait NComonoid[A] extends Cosemigroup[A] {
+  trait NComonoid[A] extends Cosemigroup[A]  with NAffine[A] {
     def counit: A -⚬ Need
+    
+    override def deflate: A -⚬ Need =
+      counit
 
     def comonoid: Comonoid[A] = new Comonoid[A] {
       def split: A -⚬ (A |*| A) = NComonoid.this.split
@@ -1927,8 +1990,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     *
     * The dual of [[NMonoid]].
     */
-  trait PComonoid[A] extends Cosemigroup[A] {
+  trait PComonoid[A] extends Cosemigroup[A] with PAffine[A] {
     def counit: A -⚬ Done
+    
+    override def neglect: A -⚬ Done =
+      counit
 
     def law_leftCounit: Equal[ A -⚬ (RTerminus |*| A) ] =
       Equal(

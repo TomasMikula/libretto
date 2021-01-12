@@ -65,20 +65,20 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def empty[A]: Done -⚬ LPollable[A] =
       emptyF[A].pack
       
-    def cons[A](implicit A: PComonoid[A]): (A |*| LPollable[A]) -⚬ LPollable[A] = {
-      val onClose: (A |*| LPollable[A]) -⚬ Done       = join(A.counit, LPollable.close)
+    def cons[A](implicit A: PAffine[A]): (A |*| LPollable[A]) -⚬ LPollable[A] = {
+      val onClose: (A |*| LPollable[A]) -⚬ Done       = join(A.neglect, LPollable.close)
       val onPoll:  (A |*| LPollable[A]) -⚬ LPolled[A] = LPolled.cons
       from(onClose, onPoll)
     }
     
-    def fromLList[A](implicit A: PComonoid[A]): LList[A] -⚬ LPollable[A] = rec { self =>
+    def fromLList[A](implicit A: PAffine[A]): LList[A] -⚬ LPollable[A] = rec { self =>
       LList.switch(
         caseNil  = done          >>> LPollable.empty[A],
         caseCons = par(id, self) >>> LPollable.cons[A],
       )
     }
 
-    def of[A](as: (One -⚬ A)*)(implicit A: PComonoid[A]): One -⚬ LPollable[A] =
+    def of[A](as: (One -⚬ A)*)(implicit A: PAffine[A]): One -⚬ LPollable[A] =
       LList.of(as: _*) >>> fromLList
 
     /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative (i.e. [[Need]]) signal. */
@@ -236,6 +236,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         negativeSignaling,
         Junction.invert(positiveJunction),
       )
+
+    implicit def pAffineLPollable[A]: PAffine[LPollable[A]] =
+      PAffine.from(LPollable.close)
   }
 
   object LPolled {
@@ -350,6 +353,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     implicit def positiveLSubscriber[A](implicit A: Junction.Negative[A]): SignalingJunction.Positive[LSubscriber[A]] =
       SignalingJunction.Positive.rec[LSubscriberF[A, *]](universalPositiveLSubscriberF)
+      
+    implicit def nAffineLSubscriber[A]: NAffine[LSubscriber[A]] =
+      NAffine.from(LSubscriber.close)
   }
 
   object LDemanding {
