@@ -314,27 +314,32 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
             case (DoneNow, y) => InjectL(y)                       .asInstanceOf[Frontier[B]]
             case (x, DoneNow) => InjectR(x)                       .asInstanceOf[Frontier[B]]
             case (x, y) =>
-              val d1 = x.asInstanceOf[Frontier[Done]]
-              val d2 = y.asInstanceOf[Frontier[Done]]
-              val p = Promise[Frontier[Done |+| Done]]
-              d1.toFutureDone.onComplete(r => p.tryComplete(r.map(_ => InjectL(d2))))
-              d2.toFutureDone.onComplete(r => p.tryComplete(r.map(_ => InjectR(d1))))
-              Deferred(p.future)                                  .asInstanceOf[Frontier[B]]
+              // check the first for completion in order to be (somewhat) left-biased
+              val fx = x.toFutureDone
+              fx.value match {
+                case Some(Success(DoneNow)) => InjectL(y)         .asInstanceOf[Frontier[B]]
+                case Some(Failure(e))       => Deferred(Future.failed(e))
+                case None =>
+                  val fy = y.toFutureDone
+                  val p = Promise[Frontier[Done |+| Done]]
+                  fx.onComplete(r => p.tryComplete(r.map(_ => InjectL(y))))
+                  fy.onComplete(r => p.tryComplete(r.map(_ => InjectR(x))))
+                  Deferred(p.future)                              .asInstanceOf[Frontier[B]]
+              }
           }
         case -⚬.SelectRequest() =>
-          this.asInstanceOf[Frontier[Need |&| Need]].asChoice match {
-            case Choice(f, g, onError) =>
-              val p1 = Promise[Any]()
-              val p2 = Promise[Any]()
-              val p = Promise[(() => Frontier[Need], Future[Any])]
-              p1.future.onComplete(r => p.tryComplete(r.map(_ => (f.asInstanceOf[() => Frontier[Need]], p2.future))))
-              p2.future.onComplete(r => p.tryComplete(r.map(_ => (g.asInstanceOf[() => Frontier[Need]], p1.future))))
-              p.future.onComplete {
-                case Success((n, fut)) => Frontier.fulfillNeedWith(n(), fut)
-                case Failure(e) => onError(e)
-              }
-              Pair(NeedAsync(p1), NeedAsync(p2))                  .asInstanceOf[Frontier[B]]
+          // XXX: not left-biased. What does it even mean, precisely, for a racing operator to be biased?
+          val Choice(f, g, onError) = this.asInstanceOf[Frontier[Need |&| Need]].asChoice
+          val p1 = Promise[Any]()
+          val p2 = Promise[Any]()
+          val p = Promise[(() => Frontier[Need], Future[Any])]
+          p1.future.onComplete(r => p.tryComplete(r.map(_ => (f.asInstanceOf[() => Frontier[Need]], p2.future))))
+          p2.future.onComplete(r => p.tryComplete(r.map(_ => (g.asInstanceOf[() => Frontier[Need]], p1.future))))
+          p.future.onComplete {
+            case Success((n, fut)) => Frontier.fulfillNeedWith(n(), fut)
+            case Failure(e) => onError(e)
           }
+          Pair(NeedAsync(p1), NeedAsync(p2))                      .asInstanceOf[Frontier[B]]
         case -⚬.Crash(msg) =>
           val e = Crash(msg)
           this.crash(e)
