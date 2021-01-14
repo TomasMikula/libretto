@@ -333,8 +333,17 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   }
 
   object LSubscriber {
+    def unsubscribed[A]: Need -⚬ LSubscriber[A] =
+      injectL > pack[LSubscriberF[A, *]]
+
     def close[A]: LSubscriber[A] -⚬ Need =
       unpack[LSubscriberF[A, *]] >>> either(id, chooseL)
+      
+    def switch[A, R](
+      onDemand      : LDemanding[A] -⚬ R,
+      onUnsubscribe :          Need -⚬ R,
+    ): LSubscriber[A] -⚬ R =
+      unpack >>> either(onUnsubscribe, onDemand)
 
     implicit def positiveLSubscriberF[A, X](implicit A: Junction.Negative[A]): SignalingJunction.Positive[LSubscriberF[A, X]] =
       SignalingJunction.Positive.eitherNeg(
@@ -359,12 +368,15 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   }
 
   object LDemanding {
+    def exposeDemand[A]: LDemanding[A] -⚬ (A |*| LSubscriber[A]) =
+      chooseR
+
     def supply[A, B](rInvert: (A |*| B) -⚬ One): (A |*| LDemanding[B]) -⚬ (Need |+| LDemanding[B]) =
-      id[ A |*| LDemanding[B] ]       .to[ A |*| (Need |&| (B |*| LSubscriber[B])) ]
-        .>.snd(chooseR)               .to[ A |*|           (B |*| LSubscriber[B])  ]
-        .assocRL                      .to[ (A |*| B)          |*| LSubscriber[B]   ]
-        .elimFst(rInvert)             .to[                        LSubscriber[B]   ]
-        .unpack[LSubscriberF[B, *]]   .to[                  Need |+| LDemanding[B] ]
+      id                                 [  A |*|  LDemanding[B]           ]
+        .>.snd(exposeDemand)          .to[  A |*| (B  |*| LSubscriber[B])  ]
+        .assocRL                      .to[ (A |*|  B) |*| LSubscriber[B]   ]
+        .elimFst(rInvert)             .to[                LSubscriber[B]   ]
+        .unpack[LSubscriberF[B, *]]   .to[          Need |+| LDemanding[B] ]
 
     implicit def negativeLDemanding[A](implicit A: Junction.Negative[A]): SignalingJunction.Negative[LDemanding[A]] =
       SignalingJunction.Negative.choiceNeg(
