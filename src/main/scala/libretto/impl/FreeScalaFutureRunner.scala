@@ -358,15 +358,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
         case -⚬.Fulfill() =>
           type X
           val (x, nx) = this.asInstanceOf[Frontier[Val[X] |*| Neg[X]]].splitPair
-          nx.futurePromise.onComplete {
-            case Success(px) => px.completeWith(x.toFutureValue)
-            case Failure(e) =>
-              e.printStackTrace(System.err)
-              x.toFutureValue.onComplete {
-                case Success(_) => // do nothing
-                case Failure(e) => e.printStackTrace(System.err)
-              }
-          }
+          nx.completeWith(x.toFutureValue)
           One                                                     .asInstanceOf[Frontier[B]]
         case -⚬.LiftEither() =>
           def go[X, Y](xy: Either[X, Y]): Frontier[Val[X] |+| Val[Y]] =
@@ -432,12 +424,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           val pu = Promise[Any]()
           this
             .asInstanceOf[Frontier[Neg[X]]]
-            .futurePromise
-            .zip(pu.future)
-            .onComplete {
-              case Success((px, _)) => px.success(a.asInstanceOf[X])
-              case Failure(e) => e.printStackTrace(System.err)
-            }
+            .completeWith(pu.future.map(_ => a.asInstanceOf[X]))
           NeedAsync(pu)                                           .asInstanceOf[Frontier[B]]
         case -⚬.Neglect() =>
           type X
@@ -583,10 +570,18 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
     }
 
     extension [A](f: Frontier[Neg[A]]) {
-      def futurePromise: Future[Promise[A]] =
+      def completeWith(fa: Future[A]): Unit =
         f match {
-          case Prom(pa) => Future.successful(pa)
-          case Deferred(fa) => fa.flatMap(_.futurePromise)
+          case Prom(pa) => pa.completeWith(fa)
+          case Deferred(f) => f.onComplete {
+            case Success(f) => f.completeWith(fa)
+            case Failure(e) =>
+              e.printStackTrace(System.err)
+              fa.onComplete {
+                case Success(_) => // do nothing
+                case Failure(e) => e.printStackTrace(System.err)
+              }
+          }
         }
     }
 
