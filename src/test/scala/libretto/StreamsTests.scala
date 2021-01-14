@@ -76,34 +76,27 @@ class StreamsTests extends TestSuite {
       assert(res2 == List(4, 5, 6))
     }
   }
-  
-  test("subscribeByKey") {
-    import Pollable.subscribeByKey
-    import LSubscriber._
+
+  test("broadcastByKey") {
+    import Pollable.broadcastByKey
+    import Pollable.BroadcastByKey.{close => closeBroadcast, subscribe}
 
     val byLength: Val[String] -⚬ (Val[Int] |*| Val[String]) =
       mapVal[String, (Int, String)](s => (s.length, s)) >>> liftPair
-      
+
     val input: One -⚬ Pollable[String] =
       Pollable.of("f", "fo", "foo", "fooo", "foooo", "pho", "phoo", "phooo", "bo", "boo")
       
-    def subscription(k: Int): One -⚬ (Pollable[String] |*| (Val[Int] |*| Subscriber[String])) =
-      id                                     [                  One                                   ]
-        .>(lInvertPollable)               .to[ Pollable[String] |*|               Subscriber[String]  ]
-        .>.snd(introFst(const(k)))        .to[ Pollable[String] |*| (Val[Int] |*| Subscriber[String]) ]
-
-    val subscriptions: One -⚬ (LList[Val[Int] |*| Subscriber[String]] |*| LList[Pollable[String]]) =
-      LList.of(subscription(3), subscription(4)) >>> LList.unzip >>> swap
-
     val prg: One -⚬ Val[List[String]] =
-      parFromOne(input, subscriptions)    .to[  Pollable[String] |*| (    LList[Val[Int] |*| Subscriber[String]]  |*| LList[Pollable[String]]) ]
-        .>(|*|.assocRL)                   .to[ (Pollable[String] |*|      LList[Val[Int] |*| Subscriber[String]]) |*| LList[Pollable[String]]  ]
-        .>.fst.snd(LPollable.fromLList)   .to[ (Pollable[String] |*|  LPollable[Val[Int] |*| Subscriber[String]]) |*| LList[Pollable[String]]  ]
-        .>.fst(subscribeByKey(byLength))  .to[                   Done                                             |*| LList[Pollable[String]]  ]
-        .>.snd(Pollable.mergeAll)         .to[                   Done                                             |*|       Pollable[String]   ]
-        .>.snd(Pollable.toList)           .to[                   Done                                             |*|      Val[List[String]]   ]
-        .>.joinL                          .to[                                                                             Val[List[String]]   ]
-        
+      input
+        .>(Pollable.delay(10.millis)) // delay so that subscribers have some time to subscribe
+        .>(broadcastByKey(byLength))
+        .>(subscribe(3))
+        .>.fst(subscribe(4))
+        .assocLR.>.snd(Pollable.merge)
+        .par(closeBroadcast, Pollable.toList)
+        .joinL
+
     assertVal(
       prg >>> mapVal(_.toSet),
       Set("foo", "fooo", "pho", "phoo", "boo"),

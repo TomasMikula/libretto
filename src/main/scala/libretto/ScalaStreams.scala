@@ -325,7 +325,28 @@ class ScalaStreams[
           .either(elimFst, addDemanding)
     }
 
-    def subscribeByKey[A, K: Ordering, V](
+    opaque type BroadcastByKey[K, V] = LSubscriber[Neg[K] |*| Pollable[V]] |*| Done
+    object BroadcastByKey {
+      def close[K, V]: BroadcastByKey[K, V] -⚬ Done =
+        elimFst(LSubscriber.close > need)
+
+      def subscribe[K, V](k: K): BroadcastByKey[K, V] -⚬ (BroadcastByKey[K, V] |*| Pollable[V]) = {
+        val onDemand: LDemanding[Neg[K] |*| Pollable[V]] -⚬ (LSubscriber[Neg[K] |*| Pollable[V]] |*| Pollable[V]) =
+          id                                       [          LDemanding[Neg[K] |*| Pollable[V]]                      ]
+            .>(LDemanding.exposeDemand)         .to[ (Neg[K] |*| Pollable[V]) |*| LSubscriber[Neg[K] |*| Pollable[V]] ]
+            .>.fst(elimFst(constNeg(k) > need)) .to[             Pollable[V]  |*| LSubscriber[Neg[K] |*| Pollable[V]] ]
+            .swap                               .to[ LSubscriber[Neg[K] |*| Pollable[V]]     |*|     Pollable[V]      ]
+
+        val onUnsubscribed: Need -⚬ (LSubscriber[Neg[K] |*| Pollable[V]] |*| Pollable[V]) =
+          id[Need] > LSubscriber.unsubscribed > introSnd(done >>> Pollable.empty[V])
+
+        id[ LSubscriber[Neg[K] |*| Pollable[V]] |*| Done ]
+          .>.fst(LSubscriber.switch(onDemand, onUnsubscribed))
+          .>(IX)
+      }
+    }
+
+    private def subscribeByKey[A, K: Ordering, V](
       f: Val[A] -⚬ (Val[K] |*| Val[V])
     ): (Pollable[A] |*| LPollable[Val[K] |*| Subscriber[V]]) -⚬ Done = {
       import Pollable.{DemandingTree => DT}
@@ -377,7 +398,7 @@ class ScalaStreams[
       def newSubscriber(
         goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
       ): ((Polled[A] |*| (KSubs |*| LPollable[KSubs])) |*| DT[K, V]) -⚬ Done =
-        id                               [ ( Polled[A] |*| (KSubs  |*|  LPollable[KSubs])) |*| DT[K, V]  ]
+        id                                 [ ( Polled[A] |*| (KSubs  |*|  LPollable[KSubs])) |*| DT[K, V]  ]
           .>.fst.snd(swap)              .to[ ( Polled[A] |*| (LPollable[KSubs]  |*|  KSubs)) |*| DT[K, V]  ]
           .>.fst.assocRL                .to[ ((Polled[A] |*|  LPollable[KSubs]) |*|  KSubs ) |*| DT[K, V]  ]
           .assocLR                      .to[  (Polled[A] |*|  LPollable[KSubs]) |*| (KSubs   |*| DT[K, V]) ]
@@ -409,6 +430,18 @@ class ScalaStreams[
         .>(par(poll, LPollable.poll))
         .introSnd(done >>> Tree.empty[K, Demanding[V]])
         .>(go)
+    }
+
+    def broadcastByKey[A, K: Ordering, V](
+      f: Val[A] -⚬ (Val[K] |*| Val[V])
+    ): Pollable[A] -⚬ BroadcastByKey[K, V] = {
+      val lInvert: One -⚬ (LPollable[Val[K] |*| Subscriber[V]] |*| LSubscriber[Neg[K] |*| Pollable[V]]) =
+        subscriberPollableDuality.lInvert
+
+      id                                [  Pollable[A]                                                                                  ]
+        .introSnd(lInvert).assocRL   .to[ (Pollable[A] |*| LPollable[Val[K] |*| Subscriber[V]]) |*| LSubscriber[Neg[K] |*| Pollable[V]] ]
+        .>.fst(subscribeByKey(f))    .to[             Done                                      |*| LSubscriber[Neg[K] |*| Pollable[V]] ]
+        .swap                        .to[                                        BroadcastByKey[K, V]                                   ]
     }
   }
 
