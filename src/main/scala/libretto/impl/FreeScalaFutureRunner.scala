@@ -133,10 +133,10 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
             Future.successful(()),
           )
           One                                                     .asInstanceOf[Frontier[B]]
-        case -⚬.DelayIndefinitely() =>
-          ???
-        case -⚬.RegressInfinitely() =>
-          ???
+        case f @ -⚬.DelayIndefinitely() =>
+          bug(s"Did not expect to be able to construct a program that uses $f")
+        case f @ -⚬.RegressInfinitely() =>
+          bug(s"Did not expect to be able to construct a program that uses $f")
         case -⚬.Fork() =>
           Pair(this, this)                                        .asInstanceOf[Frontier[B]]
         case -⚬.Join() =>
@@ -372,15 +372,26 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
             case a => a.toFutureValue.map(go).asDeferredFrontier  .asInstanceOf[Frontier[B]]
           }
         case -⚬.UnliftEither() =>
-          ???
+          // (Val[X] |+| Val[Y]) -⚬ Val[Either[X, Y]]
+          type X; type Y
+          this.asInstanceOf[Frontier[Val[X] |+| Val[Y]]] match {
+            case InjectL(x) => x.mapVal(Left(_))                  .asInstanceOf[Frontier[B]]
+            case InjectR(y) => y.mapVal(Right(_))                 .asInstanceOf[Frontier[B]]
+            case f => f
+              .futureEither
+              .map {
+                case Left(x)  => x.mapVal(Left(_))
+                case Right(y) => y.mapVal(Right(_))
+              }
+              .asDeferredFrontier                                 .asInstanceOf[Frontier[B]]
+          }
         case -⚬.LiftPair() =>
           type A1; type A2 // such that A = Val[(A1, A2)]
-          this match {
-            case Value(a) =>
-              val (a1, a2) = a.asInstanceOf[(A1, A2)]
+          this.asInstanceOf[Frontier[Val[(A1, A2)]]] match {
+            case Value((a1, a2)) =>
               Pair(Value(a1), Value(a2))                          .asInstanceOf[Frontier[B]]
             case a =>
-              val fa12 = a.asInstanceOf[Frontier[Val[(A1, A2)]]].toFutureValue
+              val fa12 = a.toFutureValue
               Pair(
                 fa12.map(_._1).toValFrontier,
                 fa12.map(_._2).toValFrontier,
@@ -393,9 +404,22 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           val (x, y) = Frontier.splitPair(this.asInstanceOf[Frontier[Val[X] |*| Val[Y]]])
           (x.toFutureValue zip y.toFutureValue).toValFrontier     .asInstanceOf[Frontier[B]]
         case -⚬.LiftNegPair() =>
-          ???
+          // Neg[(X, Y)] -⚬ (Neg[X] |*| Neg[Y])
+          type X; type Y
+          val px = Promise[X]()
+          val py = Promise[Y]()
+          this
+            .asInstanceOf[Frontier[Neg[(X, Y)]]]
+            .completeWith(px.future zip py.future)
+          Pair(Prom(px), Prom(py))                                .asInstanceOf[Frontier[B]]
         case -⚬.UnliftNegPair() =>
-          ???
+          // (Neg[X] |*| Neg[Y]) -⚬ Neg[(A, B)]
+          type X; type Y
+          val p = Promise[(X, Y)]()
+          val (nx, ny) = this.asInstanceOf[Frontier[Neg[X] |*| Neg[Y]]].splitPair
+          nx.completeWith(p.future.map(_._1))
+          ny.completeWith(p.future.map(_._2))
+          Prom(p)                                                 .asInstanceOf[Frontier[B]]
         case -⚬.MapVal(f) =>
           type X; type Y
           this
@@ -434,15 +458,19 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
             .map(_ => DoneNow)
             .asDeferredFrontier                                   .asInstanceOf[Frontier[B]]
         case -⚬.Inflate() =>
-          ???
-        case -⚬.JoinRTermini() =>
-          ???
-        case -⚬.JoinLTermini() =>
-          ???
-        case -⚬.RInvertTerminus() =>
-          ???
-        case -⚬.LInvertTerminus() =>
-          ???
+          // Need -⚬ Neg[X]
+          type X
+          val p = Promise[X]()
+          fulfillNeedWith(this.asInstanceOf[Frontier[Need]], p.future)
+          Prom(p)                                                 .asInstanceOf[Frontier[B]]
+        case f @ -⚬.JoinRTermini() =>
+          bug(s"Did not expect to be able to construct a program that uses $f")
+        case f @ -⚬.JoinLTermini() =>
+          bug(s"Did not expect to be able to construct a program that uses $f")
+        case f @ -⚬.RInvertTerminus() =>
+          bug(s"Did not expect to be able to construct a program that uses $f")
+        case f @ -⚬.LInvertTerminus() =>
+          bug(s"Did not expect to be able to construct a program that uses $f")
       }
     }
 
@@ -566,6 +594,15 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
         f match {
           case Value(a) => Future.successful(a)
           case Deferred(fa) => fa.flatMap(_.toFutureValue)
+        }
+    }
+
+    // using implicit class because extension methods may not have type parameters 
+    implicit class FrontierValOps[A](f: Frontier[Val[A]]) {
+      def mapVal[B](g: A => B): Frontier[Val[B]] =
+        f match {
+          case Value(a) => Value(g(a))
+          case Deferred(fa) => Deferred(fa.map(_.mapVal(g)))
         }
     }
 

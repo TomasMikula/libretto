@@ -89,6 +89,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Convenience method to summon implicit instances of [[dsl.Dual]]. */
     def apply[A, B](implicit ev: Dual[A, B]): Dual[A, B] = ev
   }
+  
+  def rInvert[A, B](implicit ev: Dual[A, B]): (A |*| B) -⚬ One =
+    ev.rInvert
+    
+  def lInvert[A, B](implicit ev: Dual[A, B]): One -⚬ (B |*| A) =
+    ev.lInvert
 
   /** Witnesses that `F` is a covariant endofunctor on the category `-⚬`. */
   trait Functor[F[_]] { self =>

@@ -29,6 +29,50 @@ class BasicTests extends TestSuite {
     assertVal(done >>> constVal(5), 5)
   }
   
+  test("unliftEither") {
+    assertVal(const(42) >>> injectR >>> unliftEither, Right(42))
+  }
+  
+  test("liftPair, liftNegPair") {
+    val prg: One -⚬ Val[(String, Int)] =
+      id                                       [       One                                                                            ]
+        .>(const(("foo", 42)))              .to[     Val[(String, Int)]                                                               ]
+        .introSnd(promise)                  .to[     Val[(String, Int)]      |*| (   Neg[(String, Int)]       |*| Val[(String, Int)]) ]
+        .assocRL                            .to[ (   Val[(String, Int)]      |*|     Neg[(String, Int)]     ) |*| Val[(String, Int)]  ]
+        .>.fst(par(liftPair, liftNegPair))  .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| Val[(String, Int)]  ]
+        .>.fst(rInvert).elimFst             .to[                                                                  Val[(String, Int)]  ]
+        
+    assertVal(prg, ("foo", 42))
+  }
+  
+  test("unliftPair, unliftNegPair") {
+    val lInvert: One -⚬ ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) =
+      coreLib.lInvert
+
+    val prg: One -⚬ Val[(String, Int)] =
+      id                                           [               One                                                                            ]
+        .>(parFromOne(const("foo"), const(42))) .to[   Val[String] |*| Val[Int]                                                                   ]
+        .introSnd.>.snd(lInvert)                .to[  (Val[String] |*| Val[Int]) |*| ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) ]
+        .assocRL                                .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| (Val[String] |*| Val[Int])  ]
+        .>.fst(par(unliftPair, unliftNegPair))  .to[ (    Val[(String, Int)]     |*|      Neg[(String, Int)]    ) |*| (Val[String] |*| Val[Int])  ]
+        .elimFst(fulfill)                       .to[                                                                   Val[String] |*| Val[Int]   ]
+        .>(unliftPair)                          .to[                                                                      Val[(String, Int)]      ]
+        
+    assertVal(prg, ("foo", 42))
+  }
+  
+  test("inflate") {
+    val prg: One -⚬ Done =
+      id                                 [    One                            ]
+        .>(const(42))                 .to[  Val[Int]                         ]
+        .>(introSnd(lInvertSignal))   .to[  Val[Int] |*| ( Need    |*| Done) ]
+        .assocRL                      .to[ (Val[Int] |*|   Need  ) |*| Done  ]
+        .>.fst.snd(inflate)           .to[ (Val[Int] |*| Neg[Int]) |*| Done  ]
+        .elimFst(fulfill)             .to[                             Done  ]
+        
+    assertCompletes(prg)
+  }
+  
   test("delayed injectL") {
     // 'A' delayed by 40 millis
     val a: One -⚬ Val[Char] =
