@@ -253,13 +253,16 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           // (X |*| (Y |+| Z)) -⚬ ((X |*| Y) |+| (X |*| Z))
           type X; type Y; type Z
           this.asInstanceOf[Frontier[X |*| (Y |+| Z)]].splitPair match {
-            case (a, InjectL(f)) => InjectL(Pair(a, f))           .asInstanceOf[Frontier[B]]
-            case (a, InjectR(g)) => InjectR(Pair(a, g))           .asInstanceOf[Frontier[B]]
-            case (x, Deferred(fyz)) =>
-              Deferred(fyz.map(yz =>
-                Pair(x, yz)
-                  .extendBy(-⚬.DistributeLR[X, Y, Z]())           .asInstanceOf[Frontier[B]]
-              ))
+            case (x, InjectL(y)) => InjectL(Pair(x, y))           .asInstanceOf[Frontier[B]]
+            case (x, InjectR(z)) => InjectR(Pair(x, z))           .asInstanceOf[Frontier[B]]
+            case (x, fyz) =>
+              fyz
+                .futureEither
+                .map[Frontier[(X |*| Y) |+| (X |*| Z)]] {
+                  case Left(y) => InjectL(Pair(x, y))
+                  case Right(z) => InjectR(Pair(x, z))
+                }
+                .asDeferredFrontier                               .asInstanceOf[Frontier[B]]
           }
         case -⚬.CoDistributeL() =>
           // ((X |*| Y) |&| (X |*| Z)) -⚬ (X |*| (Y |&| Z))
