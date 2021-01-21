@@ -571,31 +571,28 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                 .asDeferredFrontier                               .asInstanceOf[Frontier[B]]
           }
 
-        case -⚬.TryAcquireAsync(acquire, release) =>
+        case -⚬.TryAcquireAsync(acquire, release0) =>
           // Val[X] -⚬ (Val[E] |+| (Res[R] |*| Val[Y]))
           type X; type E; type R; type Y
 
-          def tryRegister[Q](resource: Q, release: Q => Async[Unit]): Either[Future[Unit], ResourceRegistry.ResId] = {
-            import ResourceRegistry.RegisterResult._
-
-            resourceRegistry.registerResource(resource, release) match {
-              case Registered(id) => Right(id)
-              case RegistryClosed => Left(Async.toFuture(release(resource)))
-            }
-          }
+          val release: R => Async[Unit] =
+            release0.asInstanceOf
 
           def go(x: X): Frontier[Val[E] |+| (Res[R] |*| Val[Y])] = {
             def go1(res: Either[E, (R, Y)]): Frontier[Val[E] |+| (Res[R] |*| Val[Y])] =
               res match {
-                case Left(e) => InjectL(Value(e))
+                case Left(e) =>
+                  InjectL(Value(e))
                 case Right((r, y)) =>
+                  import ResourceRegistry.RegisterResult._
                   val fr: Frontier[Res[R] |*| Val[Y]] =
-                    tryRegister(r, release.asInstanceOf[R => Async[Unit]]) match {
-                      case Right(resId) => Pair(Resource(resId, r), Value(y))
-                      case Left(futureReleased) =>
-                        futureReleased
-                          .flatMap[Frontier[Res[R] |*| Val[Y]]](_ => Future.failed(new Exception("resource allocation not allowed because the program has ended or crashed")))
-                          .asDeferredFrontier
+                    resourceRegistry.registerResource(r, release) match {
+                      case Registered(resId) =>
+                        Pair(Resource(resId, r), Value(y))
+                      case RegistryClosed =>
+                        release(r)
+                          .map[Frontier[Res[R] |*| Val[Y]]](_ => Frontier.failure("resource allocation not allowed because the program has ended or crashed"))
+                          .asAsyncFrontier
                     }
                   InjectR(fr)
               }
