@@ -1,5 +1,6 @@
 package libretto
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 
 class BasicTests extends TestSuite {
@@ -190,5 +191,54 @@ class BasicTests extends TestSuite {
     } {
       assertVal(f >>> c.go, c.expected)
     } 
+  }
+  
+  test("acquire - effect - transform - release") {
+    class MVar[A](var value: A) {
+      def set(a: A): MVar[A] = {
+        this.value = a
+        this
+      }
+    }
+
+    val acquireFuns = Seq[Val[Int] -⚬ Res[MVar[Int]]](
+      mVal(new MVar(_)),
+      acquire0(new MVar(_), release = _ => ???),
+      acquireAsync0(i => Async.defer(new MVar(i)), release = _ => ???),
+    )
+    
+    val incFuns = Seq[Res[MVar[Int]] -⚬ Res[MVar[Int]]](
+      effect0(i => i.set(i.value + 1)),
+      effectAsync0(i => Async.defer(i.set(i.value + 1))),
+    )
+    
+    val toStringTrans = Seq[Res[MVar[Int]] -⚬ Res[MVar[String]]](
+      transformResource0(i => new MVar(Integer.toString(i.value)), release = _ => ???),
+      transformResourceAsync0(i => Async.defer(new MVar(Integer.toString(i.value))), release = _ => ???),
+    )
+    
+    val releaseFuns = Seq[Res[MVar[String]] -⚬ Val[String]](
+      release0(_.value),
+      releaseAsync0(s => Async.defer(s.value)),
+    )
+      
+    val prgs: Seq[One -⚬ Val[String]] = {
+      for {
+        acquireMVar <- acquireFuns
+        incMVar <- incFuns
+        mvarToString <- toStringTrans
+        releaseMVar <- releaseFuns
+      } yield {
+        const(0)
+          .>(acquireMVar)
+          .>(incMVar)
+          .>(mvarToString)
+          .>(releaseMVar)
+      }
+    }
+
+    for (prg <- prgs) {
+      assertVal(prg, "1")
+    }
   }
 }

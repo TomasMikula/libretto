@@ -1,6 +1,6 @@
 package libretto.impl
 
-import libretto.ScalaDSL
+import libretto.{Async, ScalaDSL}
 import scala.concurrent.duration.FiniteDuration
 
 object FreeScalaDSL extends ScalaDSL {
@@ -22,6 +22,7 @@ object FreeScalaDSL extends ScalaDSL {
   override final class Rec[F[_]] private()
   override final class Val[A] private()
   override final class Neg[A] private()
+  override final class Res[A] private()
   
   object -⚬ {
     case class Id[A]() extends (A -⚬ A)
@@ -89,6 +90,19 @@ object FreeScalaDSL extends ScalaDSL {
     case class ConstNeg[A](a: A) extends (Neg[A] -⚬ Need)
     case class Neglect[A]() extends (Val[A] -⚬ Done)
     case class Inflate[A]() extends (Need -⚬ Neg[A])
+
+    case class MVal[A, B](init: A => B) extends (Val[A] -⚬ Res[B])
+    case class TryAcquireAsync[A, R, B, E](
+      acquire: A => Async[Either[E, (R, B)]],
+      release: R => Async[Unit],
+    ) extends (Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])))
+    case class ReleaseAsync[R, A, B](f: (R, A) => Async[B]) extends ((Res[R] |*| Val[A]) -⚬ Val[B])
+    case class EffectAsync[R, A, B](f: (R, A) => Async[(R, B)]) extends ((Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]))
+    case class EffectWrAsync[R, A](f: (R, A) => Async[R]) extends ((Res[R] |*| Val[A]) -⚬ Res[R])
+    case class TryTransformResourceAsync[R, A, S, B, E](
+      f: (R, A) => Async[Either[E, (S, B)]],
+      release: S => Async[Unit],
+    ) extends ((Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])))
   }
   
   import -⚬._
@@ -272,4 +286,28 @@ object FreeScalaDSL extends ScalaDSL {
     
   def inflate[A]: Need -⚬ Neg[A] =
     Inflate()
+    
+  def mVal[A, B](init: A => B): Val[A] -⚬ Res[B] =
+    MVal(init)
+
+  def tryAcquireAsync[A, R, B, E](
+    acquire: A => Async[Either[E, (R, B)]],
+    release: R => Async[Unit],
+  ): Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])) =
+    TryAcquireAsync(acquire, release)
+
+  def releaseAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ Val[B] =
+    ReleaseAsync(f)
+
+  def effectAsync[R, A, B](f: (R, A) => Async[(R, B)]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]) =
+    EffectAsync(f)
+
+  def effectWrAsync[R, A](f: (R, A) => Async[R]): (Res[R] |*| Val[A]) -⚬ Res[R] =
+    EffectWrAsync(f)
+
+  def tryTransformResourceAsync[R, A, S, B, E](
+    f: (R, A) => Async[Either[E, (S, B)]],
+    release: S => Async[Unit],
+  ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])) =
+    TryTransformResourceAsync(f, release)
 }

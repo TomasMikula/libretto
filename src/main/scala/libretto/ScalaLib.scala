@@ -226,4 +226,42 @@ class ScalaLib[
           .bimap(liftPair, |+|.bimap(liftPair, liftPair)) .to[ (Val[A] |*| Val[A]) |+| ((Val[A] |*| Val[A]) |+| (Val[A] |*| Val[A])) ]
           .either(lt, either(equiv, gt))                  .to[                Compared[Val[A], Val[A]]                               ]
     }
+    
+  /** Variant of [[acquire]] that does not produce extra output in addition to the resource. */
+  def acquire0[A, R](
+    acquire: A => R,
+    release: R => Unit,
+  ): Val[A] -⚬ Res[R] =
+    dsl.acquire[A, R, Unit](a => (acquire(a), ()), release) > effectWr((r, _) => r)
+
+  /** Variant of [[acquireAsync]] that does not produce extra output in addition to the resource. */
+  def acquireAsync0[A, R](
+    acquire: A => Async[R],
+    release: R => Async[Unit],
+  ): Val[A] -⚬ Res[R] =
+    dsl.acquireAsync[A, R, Unit](a => acquire(a).map((_, ())), release) > effectWr((r, _) => r)
+    
+  /** Variant of [[release]] that does not take additional input. */
+  def release0[R, B](release: R => B): Res[R] -⚬ Val[B] =
+    id[Res[R]].introSnd(const(())) > dsl.release((r, _) => release(r))
+
+  /** Variant of [[releaseAsync]] that does not take additional input. */
+  def releaseAsync0[R, B](release: R => Async[B]): Res[R] -⚬ Val[B] =
+    id[Res[R]].introSnd(const(())) > dsl.releaseAsync((r, _) => release(r))
+    
+  /** Variant of [[effect]] that does not take additional input and does not produce additional output. */
+  def effect0[R](f: R => R): Res[R] -⚬ Res[R] =
+    id[Res[R]].introSnd(const(())) > effectWr((r, _) => f(r))
+
+  /** Variant of [[effectAsync]] that does not take additional input and does not produce additional output. */
+  def effectAsync0[R](f: R => Async[R]): Res[R] -⚬ Res[R] =
+    id[Res[R]].introSnd(const(())) > effectWrAsync((r, _) => f(r))
+    
+  /** Variant of [[transformResource]] that does not take additional input and does not produce additional output. */
+  def transformResource0[R, S](f: R => S, release: S => Unit): Res[R] -⚬ Res[S] =
+    id[Res[R]].introSnd(const(())) > transformResource((r, u) => (f(r), u), release) > effectWr((r, _) => r)
+
+  /** Variant of [[transformResourceAsync]] that does not take additional input and does not produce additional output. */
+  def transformResourceAsync0[R, S](f: R => Async[S], release: S => Async[Unit]): Res[R] -⚬ Res[S] =
+    id[Res[R]].introSnd(const(())) > transformResourceAsync((r, u) => f(r).map((_, u)), release) > effectWr((r, _) => r)
 }

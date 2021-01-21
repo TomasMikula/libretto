@@ -1,7 +1,9 @@
 package libretto.impl
 
-import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
-import libretto.ScalaRunner
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, ConcurrentNavigableMap, ConcurrentSkipListMap, ScheduledExecutorService, TimeUnit}
+import libretto.{Async, ScalaRunner}
+import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}
@@ -15,6 +17,8 @@ import scala.util.{Failure, Success, Try}
   * Dotty's) type inference cannot cope with the kind of pattern matches found here.
   */
 class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRunner[FreeScalaDSL.type, Future] {
+  import ResourceRegistry._
+
   private implicit val ec: ExecutionContext =
     ExecutionContext.fromExecutor(scheduler)
 
@@ -37,24 +41,48 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
 
   override def runScala[A](prg: One -⚬ Val[A]): Future[A] = {
     import Frontier._
-    Frontier.One.extendBy(prg).toFutureValue
+    val resourceRegistry = new ResourceRegistry
+    val fa = Frontier.One.extendBy(prg, resourceRegistry).toFutureValue
+    
+    def closeResources(openResources: Seq[AcquiredResource[_]]): Future[Any] =
+      Future.traverse(openResources) { r => Async.toFuture(r.releaseAsync(r.resource)) }
+
+    fa.transformWith {
+      case Success(a) =>
+        val openResources = resourceRegistry.close()
+        if (openResources.isEmpty) {
+          Future.successful(a)
+        } else {
+          System.err.println(s"Execution completed successfully, but there are ${openResources.size} unclosed resources left. Going to closie them.")
+          closeResources(openResources).map { _ => a }
+        }
+      case Failure(e) =>
+        val openResources = resourceRegistry.close()
+        closeResources(openResources)
+          .transformWith(_ => Future.failed[A](e)) // return the original error
+    }
   }
 
   private sealed trait Frontier[A] {
     import Frontier._
     
-    def extendBy[B](f: A -⚬ B): Frontier[B] = {
+    def extendBy[B](f: A -⚬ B, resourceRegistry: ResourceRegistry): Frontier[B] = {
+      implicit class FrontierOps[X](fx: Frontier[X]) {
+        def extend[Y](f: X -⚬ Y): Frontier[Y] =
+        fx.extendBy(f, resourceRegistry)
+      }
+
       f match {
         case -⚬.Id() =>
           this
         case -⚬.AndThen(f, g) =>
-          extendBy(f).extendBy(g)
+          this.extend(f).extend(g)
         case -⚬.Par(f, g) =>
           type A1; type A2
           val (a1, a2) = this.asInstanceOf[Frontier[A1 |*| A2]].splitPair
           Pair(
-            a1.extendBy(f.asInstanceOf[A1 -⚬ Nothing]),
-            a2.extendBy(g.asInstanceOf[A2 -⚬ Nothing]),
+            a1.extend(f.asInstanceOf[A1 -⚬ Nothing]),
+            a2.extend(g.asInstanceOf[A2 -⚬ Nothing]),
           )                                                       .asInstanceOf[Frontier[B]]
         case -⚬.IntroFst() =>
           Pair(One, this)
@@ -105,9 +133,9 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           def go(a12: Frontier[A1 |+| A2]): Frontier[B] =
             a12 match {
               case InjectL(a1) =>
-                a1.extendBy(f.asInstanceOf[A1 -⚬ B])
+                a1.extend(f.asInstanceOf[A1 -⚬ B])
               case InjectR(a2) =>
-                a2.extendBy(g.asInstanceOf[A2 -⚬ B])
+                a2.extend(g.asInstanceOf[A2 -⚬ B])
               case Deferred(fa12) =>
                 Deferred(fa12.map(go))
             }
@@ -120,8 +148,8 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           Frontier.chooseR(this.asInstanceOf[Frontier[A1 |&| A2]]).asInstanceOf[Frontier[B]]
         case -⚬.Choice(f, g) =>
           Choice(
-            () => this.extendBy(f),
-            () => this.extendBy(g),
+            () => this.extend(f),
+            () => this.extend(g),
             onError = this.crash(_),
           )
         case -⚬.DoneF() =>
@@ -295,7 +323,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           val p = Promise[Any]()
           Pair(NeedAsync(p), Deferred(p.future.map(_ => DoneNow))).asInstanceOf[Frontier[B]]
         case r @ -⚬.RecF(_) =>
-          this.extendBy(r.recursed)
+          this.extend(r.recursed)
         case -⚬.Pack() =>
           type F[_]
           Pack(this.asInstanceOf[Frontier[F[Rec[F]]]])            .asInstanceOf[Frontier[B]]
@@ -470,12 +498,169 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           bug(s"Did not expect to be able to construct a program that uses $f")
         case f @ -⚬.LInvertTerminus() =>
           bug(s"Did not expect to be able to construct a program that uses $f")
+          
+        case -⚬.MVal(init) =>
+          // Val[X] -⚬ Res[Y]
+          type X; type Y
+          val initY = init.asInstanceOf[X => Y]
+          this.asInstanceOf[Frontier[Val[X]]] match {
+            case Value(x) =>
+              MVal(initY(x))                                      .asInstanceOf[Frontier[B]]
+            case other =>
+              other
+                .toFutureValue
+                .map(x => MVal(initY(x)))
+                .asDeferredFrontier                               .asInstanceOf[Frontier[B]]
+          }
+          
+        case -⚬.TryAcquireAsync(acquire, release) =>
+          // Val[X] -⚬ (Val[E] |+| (Res[R] |*| Val[Y]))
+          type X; type E; type R; type Y
+          
+          def tryRegister[Q](resource: Q, release: Q => Async[Unit]): Either[Future[Unit], ResourceRegistry.ResId] = {
+            import ResourceRegistry.RegisterResult._
+            
+            resourceRegistry.registerResource(resource, release) match {
+              case Registered(id) => Right(id)
+              case RegistryClosed => Left(Async.toFuture(release(resource)))
+            }
+          }
+          
+          def go(x: X): Frontier[Val[E] |+| (Res[R] |*| Val[Y])] = {
+            def go1(res: Either[E, (R, Y)]): Frontier[Val[E] |+| (Res[R] |*| Val[Y])] =
+              res match {
+                case Left(e) => InjectL(Value(e))
+                case Right((r, y)) =>
+                  val fr: Frontier[Res[R] |*| Val[Y]] =
+                    tryRegister(r, release.asInstanceOf[R => Async[Unit]]) match {
+                      case Right(resId) => Pair(Resource(resId, r), Value(y))
+                      case Left(futureReleased) =>
+                        futureReleased
+                          .flatMap[Frontier[Res[R] |*| Val[Y]]](_ => Future.failed(new Exception("resource allocation not allowed because the program has ended or crashed")))
+                          .asDeferredFrontier
+                    }
+                  InjectR(fr)
+              }
+              
+            acquire.asInstanceOf[X => Async[Either[E, (R, Y)]]](x) match {
+              case Async.Now(value) => go1(value)
+              case other => Async.toFuture(other).map(go1).asDeferredFrontier
+            }
+          }
+          
+          this.asInstanceOf[Frontier[Val[X]]] match {
+            case Value(x) => go(x)                                .asInstanceOf[Frontier[B]]
+            case x => x.toFutureValue.map(go).asDeferredFrontier  .asInstanceOf[Frontier[B]]
+          }
+          
+        case -⚬.EffectWrAsync(f0) =>
+          // (Res[R] |*| Val[X]) -⚬ Res[R]
+          type R; type X
+          
+          val f: (R, X) => Async[R] =
+            f0.asInstanceOf
+          
+          def go(r: ResFrontier[R], x: X): Frontier[Res[R]] =
+            r match {
+              case MVal(r) => f(r, x).map(MVal(_)).asAsyncFrontier
+              case Resource(id, r) => f(r, x).map(Resource(id, _)).asAsyncFrontier
+            }
+
+          val res: Frontier[Res[R]] =
+            this.asInstanceOf[Frontier[Res[R] |*| Val[X]]].splitPair match {
+              case (r: ResFrontier[R], Value(x)) => go(r, x)
+              case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
+            }
+          
+          res                                                     .asInstanceOf[Frontier[B]]
+          
+        case -⚬.TryTransformResourceAsync(f0, release0) =>
+          // (Res[R] |*| Val[X]) -⚬ (Val[E] |+| (Res[S] |*| Val[Y]))
+          type R; type X; type E; type S; type Y
+          
+          val f: (R, X) => Async[Either[E, (S, Y)]] =
+            f0.asInstanceOf
+          val release: S => Async[Unit] =
+            release0.asInstanceOf
+          
+          def go(r: ResFrontier[R], x: X): Frontier[Val[E] |+| (Res[S] |*| Val[Y])] = {
+            def go1(r: R, x: X): Frontier[Val[E] |+| (Res[S] |*| Val[Y])] =
+              f(r, x)
+                .map[Frontier[Val[E] |+| (Res[S] |*| Val[Y])]] {
+                  case Left(e) =>
+                    InjectL(Value(e))
+                  case Right((s, y)) =>
+                    val sy: Frontier[Res[S] |*| Val[Y]] =
+                      resourceRegistry.registerResource(s, release) match {
+                        case RegisterResult.Registered(id) =>
+                          Pair(Resource(id, s), Value(y))
+                        case RegisterResult.RegistryClosed =>
+                          release(s)
+                            .map(_ => Frontier.failure("Transformed not registered because shutting down"))
+                            .asAsyncFrontier
+                      }
+                    InjectR(sy)
+                }
+                .asAsyncFrontier
+                
+            r match {
+              case MVal(r) =>
+                go1(r, x)
+              case Resource(id, r) =>
+                resourceRegistry.unregisterResource(id) match {
+                  case UnregisterResult.Unregistered =>
+                    go1(r, x)
+                  case UnregisterResult.NotFound =>
+                    bug(s"Previously registered resource $id not found in resource registry")  
+                  case UnregisterResult.RegistryClosed =>
+                    Frontier.failure("Not transforming resource because shutting down")
+                }
+            }
+          }
+
+          val res: Frontier[Val[E] |+| (Res[S] |*| Val[Y])] =
+            this.asInstanceOf[Frontier[Res[R] |*| Val[X]]].splitPair match {
+              case (r: ResFrontier[R], Value(x)) => go(r, x)
+              case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
+            }
+            
+          res                                                     .asInstanceOf[Frontier[B]]
+
+        case -⚬.ReleaseAsync(release0) =>
+          // (Res[R] |*| Val[X]) -⚬ Val[Y]
+          type R; type X; type Y
+          
+          val release: (R, X) => Async[Y] =
+            release0.asInstanceOf
+
+          def go(r: ResFrontier[R], x: X): Frontier[Val[Y]] =
+            r match {
+              case MVal(r) =>
+                release(r, x).map(Value(_)).asAsyncFrontier
+              case Resource(id, r) =>
+                resourceRegistry.unregisterResource(id) match {
+                  case UnregisterResult.Unregistered =>
+                    release(r, x).map(Value(_)).asAsyncFrontier
+                  case UnregisterResult.NotFound =>
+                    bug(s"Previously registered resource $id not found in resource registry")
+                  case UnregisterResult.RegistryClosed =>
+                    Frontier.failure("Not releasing resource because shutting down. It was or will be released as part of the shutdown")
+                }
+            }
+          
+          val res: Frontier[Val[Y]] =
+            this.asInstanceOf[Frontier[Res[R] |*| Val[X]]].splitPair match {
+              case (r: ResFrontier[R], Value(x)) => go(r, x)
+              case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
+            }
+            
+          res                                                     .asInstanceOf[Frontier[B]]
       }
     }
 
     private def crash(e: Throwable): Unit = {
       this match {
-        case One | DoneNow | Value(_) =>
+        case One | DoneNow | Value(_) | MVal(_) | Resource(_, _) =>
           // do nothing
         case NeedAsync(promise) =>
           promise.failure(e)
@@ -511,6 +696,13 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
     
     case class Value[A](a: A) extends Frontier[Val[A]]
     case class Prom[A](p: Promise[A]) extends Frontier[Neg[A]]
+
+    sealed trait ResFrontier[A] extends Frontier[Res[A]]
+    case class MVal[A](value: A) extends ResFrontier[A]
+    case class Resource[A](id: ResId, obj: A) extends ResFrontier[A]
+    
+    def failure[A](msg: String): Frontier[A] =
+      Deferred(Future.failed(new Exception(msg)))
 
     extension (n: Frontier[Need]) {
       def fulfillWith(f: Future[Any]): Unit =
@@ -597,6 +789,15 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           case Deferred(fa) => fa.flatMap(_.toFutureValue)
         }
     }
+    
+    extension [A](f: Frontier[Res[A]]) {
+      def toFutureRes: Future[ResFrontier[A]] =
+        f match {
+          case f @ MVal(_) => Future.successful(f)
+          case f @ Resource(_, _) => Future.successful(f)
+          case Deferred(f) => f.flatMap(_.toFutureRes)
+        }
+    }
 
     // using implicit class because extension methods may not have type parameters 
     implicit class FrontierValOps[A](f: Frontier[Val[A]]) {
@@ -644,6 +845,87 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
       def asDeferredFrontier: Frontier[A] =
         Deferred(fa)
     }
+    
+    extension [A](a: Async[Frontier[A]]) {
+      def asAsyncFrontier: Frontier[A] =
+        a match {
+          case Async.Now(fa) => fa
+          case a @ Async.Later(_) => Async.toFuture(a).asDeferredFrontier
+        }
+    }
+  }
+  
+  private class ResourceRegistry {
+    import ResourceRegistry._
+
+    // negative value indicates registry closed
+    private var lastResId: Long =
+      0L
+    
+    private val resourceMap: mutable.Map[Long, AcquiredResource[_]] =
+      mutable.Map()
+    
+    def registerResource[R](resource: R, releaseAsync: R => Async[Unit]): RegisterResult =
+      synchronized {
+        if (lastResId < 0L) {
+          assert(resourceMap.isEmpty)
+          RegisterResult.RegistryClosed
+        } else {
+          lastResId += 1
+          val id = lastResId
+          resourceMap.put(id, AcquiredResource(resource, releaseAsync))
+          RegisterResult.Registered(resId(id))
+        }
+      }
+    
+    def unregisterResource(id: ResId): UnregisterResult =
+      synchronized {
+        if (lastResId < 0l) {
+          assert(resourceMap.isEmpty)
+          UnregisterResult.RegistryClosed
+        } else {
+          resourceMap.remove(id.value) match {
+            case null => UnregisterResult.NotFound
+            case _ => UnregisterResult.Unregistered
+          }
+        }
+      }
+      
+    def close(): Seq[AcquiredResource[_]] =
+      synchronized {
+        if (lastResId < 0L) {
+          assert(resourceMap.isEmpty)
+          Seq.empty
+        } else {
+          lastResId = Long.MinValue
+          val result = resourceMap.values.toSeq
+          resourceMap.clear()
+          result
+        }
+      }
+  }
+  
+  private object ResourceRegistry {
+    opaque type ResId = Long
+    private def resId(value: Long): ResId = value
+    extension (resId: ResId) {
+      def value: Long = resId
+    }
+
+    sealed trait RegisterResult
+    object RegisterResult {
+      case class Registered(id: ResId) extends RegisterResult
+      case object RegistryClosed extends RegisterResult
+    }
+
+    sealed trait UnregisterResult
+    object UnregisterResult {
+      case object Unregistered extends UnregisterResult
+      case object NotFound extends UnregisterResult
+      case object RegistryClosed extends UnregisterResult
+    }
+
+    case class AcquiredResource[A](resource: A, releaseAsync: A => Async[Unit])
   }
   
   private case class Crash(msg: String) extends Exception(msg)
