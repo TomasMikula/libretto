@@ -5,7 +5,7 @@ import scala.concurrent.duration.FiniteDuration
 
 object FreeScalaDSL extends ScalaDSL {
   override sealed trait -⚬[A, B]
-  
+
   // The following types are all "imaginary", never instantiated, but we declare them as classes,
   // so that the Scala typechecker can infer that
   //  1. they are injective (e.g. that if `(A |*| B) =:= (C |*| D)` then `A =:= C` and `B =:= D`;
@@ -23,7 +23,7 @@ object FreeScalaDSL extends ScalaDSL {
   override final class Val[A] private()
   override final class Neg[A] private()
   override final class Res[A] private()
-  
+
   object -⚬ {
     case class Id[A]() extends (A -⚬ A)
     case class AndThen[A, B, C](f: A -⚬ B, g: B -⚬ C) extends (A -⚬ C)
@@ -104,208 +104,208 @@ object FreeScalaDSL extends ScalaDSL {
       release: S => Async[Unit],
     ) extends ((Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])))
   }
-  
+
   import -⚬._
 
-  def id[A]: A -⚬ A =
+  override def id[A]: A -⚬ A =
     Id()
 
-  def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C =
+  override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C =
     AndThen(f, g)
 
-  def par[A, B, C, D](
+  override def par[A, B, C, D](
     f: A -⚬ B,
     g: C -⚬ D,
   ): (A |*| C) -⚬ (B |*| D) =
     Par(f, g)
 
-  def introFst[B]: B -⚬ (One |*| B) =
+  override def introFst[B]: B -⚬ (One |*| B) =
     IntroFst()
-    
-  def introSnd[A]: A -⚬ (A |*| One) =
+
+  override def introSnd[A]: A -⚬ (A |*| One) =
     IntroSnd()
-    
-  def elimFst[B]: (One |*| B) -⚬ B =
+
+  override def elimFst[B]: (One |*| B) -⚬ B =
     ElimFst()
-    
-  def elimSnd[A]: (A |*| One) -⚬ A =
+
+  override def elimSnd[A]: (A |*| One) -⚬ A =
     ElimSnd()
 
-  def timesAssocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) =
+  override def timesAssocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) =
     TimesAssocLR()
-    
-  def timesAssocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) =
+
+  override def timesAssocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) =
     TimesAssocRL()
 
-  def swap[A, B]: (A |*| B) -⚬ (B |*| A) =
+  override def swap[A, B]: (A |*| B) -⚬ (B |*| A) =
     Swap()
 
-  def injectL[A, B]: A -⚬ (A |+| B) =
+  override def injectL[A, B]: A -⚬ (A |+| B) =
     InjectL()
-    
-  def injectR[A, B]: B -⚬ (A |+| B) =
+
+  override def injectR[A, B]: B -⚬ (A |+| B) =
     InjectR()
 
-  def either[A, B, C](f: A -⚬ C, g: B -⚬ C): (A |+| B) -⚬ C =
+  override def either[A, B, C](f: A -⚬ C, g: B -⚬ C): (A |+| B) -⚬ C =
     EitherF(f, g)
 
-  def chooseL[A, B]: (A |&| B) -⚬ A =
+  override def chooseL[A, B]: (A |&| B) -⚬ A =
     ChooseL()
-    
-  def chooseR[A, B]: (A |&| B) -⚬ B =
+
+  override def chooseR[A, B]: (A |&| B) -⚬ B =
     ChooseR()
 
-  def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C) =
+  override def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C) =
     Choice(f, g)
 
-  def done: One -⚬ Done =
+  override def done: One -⚬ Done =
     DoneF()
-  
-  def need: Need -⚬ One =
+
+  override def need: Need -⚬ One =
     NeedF()
 
-  def delayIndefinitely: Done -⚬ RTerminus =
+  override def delayIndefinitely: Done -⚬ RTerminus =
     DelayIndefinitely()
-    
-  def regressInfinitely: LTerminus -⚬ Need =
+
+  override def regressInfinitely: LTerminus -⚬ Need =
     RegressInfinitely()
 
-  def fork: Done -⚬ (Done |*| Done) =
+  override def fork: Done -⚬ (Done |*| Done) =
     Fork()
-    
-  def join: (Done |*| Done) -⚬ Done =
+
+  override def join: (Done |*| Done) -⚬ Done =
     Join()
 
-  def forkNeed: (Need |*| Need) -⚬ Need =
+  override def forkNeed: (Need |*| Need) -⚬ Need =
     ForkNeed()
-    
-  def joinNeed: Need -⚬ (Need |*| Need) =
+
+  override def joinNeed: Need -⚬ (Need |*| Need) =
     JoinNeed()
 
-  def joinRTermini: (RTerminus |*| RTerminus) -⚬ RTerminus =
+  override def joinRTermini: (RTerminus |*| RTerminus) -⚬ RTerminus =
     JoinRTermini()
-    
-  def joinLTermini: LTerminus -⚬ (LTerminus |*| LTerminus) =
+
+  override def joinLTermini: LTerminus -⚬ (LTerminus |*| LTerminus) =
     JoinLTermini()
 
-  def signalEither[A, B]: (A |+| B) -⚬ (Done |*| (A |+| B)) =
+  override def signalEither[A, B]: (A |+| B) -⚬ (Done |*| (A |+| B)) =
     SignalEither()
-    
-  def signalChoice[A, B]: (Need |*| (A |&| B)) -⚬ (A |&| B) =
+
+  override def signalChoice[A, B]: (Need |*| (A |&| B)) -⚬ (A |&| B) =
     SignalChoice()
-    
-  def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B) =
+
+  override def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B) =
     InjectLWhenDone()
-    
-  def injectRWhenDone[A, B]: (Done |*| B) -⚬ (A |+| (Done |*| B)) =
+
+  override def injectRWhenDone[A, B]: (Done |*| B) -⚬ (A |+| (Done |*| B)) =
     InjectRWhenDone()
 
-  def chooseLWhenNeed[A, B]: ((Need |*| A) |&| B) -⚬ (Need |*| A) =
+  override def chooseLWhenNeed[A, B]: ((Need |*| A) |&| B) -⚬ (Need |*| A) =
     ChooseLWhenNeed()
-    
-  def chooseRWhenNeed[A, B]: (A |&| (Need |*| B)) -⚬ (Need |*| B) =
+
+  override def chooseRWhenNeed[A, B]: (A |&| (Need |*| B)) -⚬ (Need |*| B) =
     ChooseRWhenNeed()
-    
-  def distributeLR[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)) =
+
+  override def distributeLR[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)) =
     DistributeLR()
-    
-  def coDistributeL[A, B, C]: ((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C)) =
+
+  override def coDistributeL[A, B, C]: ((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C)) =
     CoDistributeL()
-    
-  def rInvertSignal: (Done |*| Need) -⚬ One =
+
+  override def rInvertSignal: (Done |*| Need) -⚬ One =
     RInvertSignal()
-    
-  def lInvertSignal: One -⚬ (Need |*| Done) =
+
+  override def lInvertSignal: One -⚬ (Need |*| Done) =
     LInvertSignal()
 
-  def rInvertTerminus: (RTerminus |*| LTerminus) -⚬ One =
+  override def rInvertTerminus: (RTerminus |*| LTerminus) -⚬ One =
     RInvertTerminus()
 
-  def lInvertTerminus: One -⚬ (LTerminus |*| RTerminus) =
+  override def lInvertTerminus: One -⚬ (LTerminus |*| RTerminus) =
     LInvertTerminus()
 
-  def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B =
+  override def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B =
     RecF(f)
-    
-  def unpack[F[_]]: Rec[F] -⚬ F[Rec[F]] =
+
+  override def unpack[F[_]]: Rec[F] -⚬ F[Rec[F]] =
     Unpack()
-    
-  def pack[F[_]]: F[Rec[F]] -⚬ Rec[F] =
+
+  override def pack[F[_]]: F[Rec[F]] -⚬ Rec[F] =
     Pack()
-    
-  def raceCompletion: (Done |*| Done) -⚬ (Done |+| Done) =
+
+  override def raceCompletion: (Done |*| Done) -⚬ (Done |+| Done) =
     RaceCompletion()
-    
-  def selectRequest: (Need |&| Need) -⚬ (Need |*| Need) =
+
+  override def selectRequest: (Need |&| Need) -⚬ (Need |*| Need) =
     SelectRequest()
-    
-  def crash[A, B](msg: String): (Done |*| A) -⚬ (Done |*| B) =
+
+  override def crash[A, B](msg: String): (Done |*| A) -⚬ (Done |*| B) =
     Crash(msg)
-    
-  def delay(d: FiniteDuration): Done -⚬ Done =
+
+  override def delay(d: FiniteDuration): Done -⚬ Done =
     Delay(d)
 
-  def promise[A]: One -⚬ (Neg[A] |*| Val[A]) =
+  override def promise[A]: One -⚬ (Neg[A] |*| Val[A]) =
     Promise()
-    
-  def fulfill[A]: (Val[A] |*| Neg[A]) -⚬ One =
+
+  override def fulfill[A]: (Val[A] |*| Neg[A]) -⚬ One =
     Fulfill()
 
-  def liftEither[A, B]: Val[Either[A, B]] -⚬ (Val[A] |+| Val[B]) =
+  override def liftEither[A, B]: Val[Either[A, B]] -⚬ (Val[A] |+| Val[B]) =
     LiftEither()
-    
-  def unliftEither[A, B]: (Val[A] |+| Val[B]) -⚬ Val[Either[A, B]] =
+
+  override def unliftEither[A, B]: (Val[A] |+| Val[B]) -⚬ Val[Either[A, B]] =
     UnliftEither()
 
-  def liftPair[A, B]: Val[(A, B)] -⚬ (Val[A] |*| Val[B]) =
+  override def liftPair[A, B]: Val[(A, B)] -⚬ (Val[A] |*| Val[B]) =
     LiftPair()
-    
-  def unliftPair[A, B]: (Val[A] |*| Val[B]) -⚬ Val[(A, B)] =
+
+  override def unliftPair[A, B]: (Val[A] |*| Val[B]) -⚬ Val[(A, B)] =
     UnliftPair()
 
-  def liftNegPair[A, B]: Neg[(A, B)] -⚬ (Neg[A] |*| Neg[B]) =
+  override def liftNegPair[A, B]: Neg[(A, B)] -⚬ (Neg[A] |*| Neg[B]) =
     LiftNegPair()
-    
-  def unliftNegPair[A, B]: (Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)] =
+
+  override def unliftNegPair[A, B]: (Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)] =
     UnliftNegPair()
 
-  def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B] =
+  override def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B] =
     MapVal(f)
 
-  def contramapNeg[A, B](f: A => B): Neg[B] -⚬ Neg[A] =
+  override def contramapNeg[A, B](f: A => B): Neg[B] -⚬ Neg[A] =
     ContramapNeg(f)
 
-  def constVal[A](a: A): Done -⚬ Val[A] =
+  override def constVal[A](a: A): Done -⚬ Val[A] =
     ConstVal(a)
-    
-  def constNeg[A](a: A): Neg[A] -⚬ Need =
+
+  override def constNeg[A](a: A): Neg[A] -⚬ Need =
     ConstNeg(a)
 
-  def neglect[A]: Val[A] -⚬ Done =
+  override def neglect[A]: Val[A] -⚬ Done =
     Neglect()
-    
-  def inflate[A]: Need -⚬ Neg[A] =
+
+  override def inflate[A]: Need -⚬ Neg[A] =
     Inflate()
-    
-  def mVal[A, B](init: A => B): Val[A] -⚬ Res[B] =
+
+  override def mVal[A, B](init: A => B): Val[A] -⚬ Res[B] =
     MVal(init)
 
-  def tryAcquireAsync[A, R, B, E](
+  override def tryAcquireAsync[A, R, B, E](
     acquire: A => Async[Either[E, (R, B)]],
     release: R => Async[Unit],
   ): Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])) =
     TryAcquireAsync(acquire, release)
 
-  def releaseAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ Val[B] =
+  override def releaseAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ Val[B] =
     ReleaseAsync(f)
 
-  def effectAsync[R, A, B](f: (R, A) => Async[(R, B)]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]) =
+  override def effectAsync[R, A, B](f: (R, A) => Async[(R, B)]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]) =
     EffectAsync(f)
 
-  def effectWrAsync[R, A](f: (R, A) => Async[R]): (Res[R] |*| Val[A]) -⚬ Res[R] =
+  override def effectWrAsync[R, A](f: (R, A) => Async[R]): (Res[R] |*| Val[A]) -⚬ Res[R] =
     EffectWrAsync(f)
 
-  def tryTransformResourceAsync[R, A, S, B, E](
+  override def tryTransformResourceAsync[R, A, S, B, E](
     f: (R, A) => Async[Either[E, (S, B)]],
     release: S => Async[Unit],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])) =
