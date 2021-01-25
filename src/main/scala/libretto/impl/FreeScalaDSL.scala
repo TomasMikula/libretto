@@ -97,8 +97,8 @@ object FreeScalaDSL extends ScalaDSL {
       release: R => Async[Unit],
     ) extends (Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])))
     case class ReleaseAsync[R, A, B](f: (R, A) => Async[B]) extends ((Res[R] |*| Val[A]) -⚬ Val[B])
-    case class EffectAsync[R, A, B](f: (R, A) => Async[(R, B)]) extends ((Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]))
-    case class EffectWrAsync[R, A](f: (R, A) => Async[R]) extends ((Res[R] |*| Val[A]) -⚬ Res[R])
+    case class EffectAsync[R, A, B](f: (R, A) => Async[B]) extends ((Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]))
+    case class EffectWrAsync[R, A](f: (R, A) => Async[Unit]) extends ((Res[R] |*| Val[A]) -⚬ Res[R])
     case class TryTransformResourceAsync[R, A, S, B, E](
       f: (R, A) => Async[Either[E, (S, B)]],
       release: S => Async[Unit],
@@ -299,10 +299,10 @@ object FreeScalaDSL extends ScalaDSL {
   override def releaseAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ Val[B] =
     ReleaseAsync(f)
 
-  override def effectAsync[R, A, B](f: (R, A) => Async[(R, B)]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]) =
+  override def effectAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]) =
     EffectAsync(f)
 
-  override def effectWrAsync[R, A](f: (R, A) => Async[R]): (Res[R] |*| Val[A]) -⚬ Res[R] =
+  override def effectWrAsync[R, A](f: (R, A) => Async[Unit]): (Res[R] |*| Val[A]) -⚬ Res[R] =
     EffectWrAsync(f)
 
   override def tryTransformResourceAsync[R, A, S, B, E](

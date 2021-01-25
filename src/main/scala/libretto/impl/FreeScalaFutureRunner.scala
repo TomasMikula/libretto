@@ -612,13 +612,13 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           // (Res[R] |*| Val[X]) -⚬ Res[R]
           type R; type X
 
-          val f: (R, X) => Async[R] =
+          val f: (R, X) => Async[Unit] =
             f0.asInstanceOf
 
-          def go(r: ResFrontier[R], x: X): Frontier[Res[R]] =
-            r match {
-              case MVal(r) => f(r, x).map(MVal(_)).asAsyncFrontier
-              case Resource(id, r) => f(r, x).map(Resource(id, _)).asAsyncFrontier
+          def go(fr: ResFrontier[R], x: X): Frontier[Res[R]] =
+            fr match {
+              case fr @ MVal(r) => f(r, x).map(_ => fr).asAsyncFrontier
+              case fr @ Resource(id, r) => f(r, x).map(_ => fr).asAsyncFrontier
             }
 
           val res: Frontier[Res[R]] =

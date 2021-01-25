@@ -15,13 +15,13 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
     * Somewhat analogous to [[scala.concurrent.Promise]]
     */
   type Neg[A]
-  
+
   /** Resource that is a Scala object of type [[A]].
     * Unlike [[Val]], a resource can be mutable, cannot in general be [[neglect]]ed or [[dup]]licated, and is
     * automatically cleaned-up in case of crash.
-    * 
+    *
     * It is recommended to define custom opaque type aliases of resources, such as
-    * 
+    *
     * {{{
     * opaque type Input = Res[java.io.InputStream]
     * }}}
@@ -67,14 +67,14 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
     )
 
   /** Create a resource that is just a (potentially) mutable value which does not need any cleanup.
-    * 
+    *
     * @param init function that initializes the (potentially) mutable value from an immutable one.
     */
   def mVal[A, B](init: A => B): Val[A] -⚬ Res[B]
 
   /** Acquires a resource of type [[R]].
-    * 
-    * @param acquire 
+    *
+    * @param acquire
     * @param release called to release the resource in case of a crash
     * @tparam A parameters of the `acquire` function
     * @tparam R type of the resource
@@ -88,7 +88,7 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
       acquire andThen Async.now,
       release andThen Async.now,
     )
-  
+
   def acquireAsync[A, R, B](
     acquire: A => Async[(R, B)],
     release: R => Async[Unit],
@@ -116,14 +116,14 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
       acquire andThen Async.now,
       release andThen Async.now,
     )
-  
+
   def tryAcquireAsync[A, R, B, E](
     acquire: A => Async[Either[E, (R, B)]],
     release: R => Async[Unit],
   ): Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B]))
 
   /** Releases a resource.
-    * 
+    *
     * @param f the release function
     * @tparam R type of the resource
     * @tparam A additional parameter of the release function
@@ -134,29 +134,28 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
 
   def releaseAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ Val[B]
 
-  /** Performs a (potentially) effectful operation on a resource. In addition to having an effect, the operation
-    * produces additional output.
-    * 
+  /** Performs a (potentially) effectful operation on a resource, producing some output.
+    *
     * @param f the effectful operation
     * @tparam R type of the resource
     * @tparam A additional parameter of the operation
     * @tparam B additional output of the operation
     */
-  def effect[R, A, B](f: (R, A) => (R, B)): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]) =
+  def effect[R, A, B](f: (R, A) => B): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]) =
     effectAsync((r, a) => Async.now(f(r, a)))
 
-  def effectAsync[R, A, B](f: (R, A) => Async[(R, B)]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B])
-  
+  def effectAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B])
+
   /** Variant of [[effect]] that does not produce output in addition to performing the effect.
     * Can be viewed as ''wr''iting an [[A]] into the resource.
     */
-  def effectWr[R, A](f: (R, A) => R): (Res[R] |*| Val[A]) -⚬ Res[R] =
+  def effectWr[R, A](f: (R, A) => Unit): (Res[R] |*| Val[A]) -⚬ Res[R] =
     effectWrAsync((r, a) => Async.now(f(r, a)))
-  
-  def effectWrAsync[R, A](f: (R, A) => Async[R]): (Res[R] |*| Val[A]) -⚬ Res[R]
+
+  def effectWrAsync[R, A](f: (R, A) => Async[Unit]): (Res[R] |*| Val[A]) -⚬ Res[R]
 
   /** Transforms a resource into a resource of (possibly) different type.
-    * 
+    *
     * @param f the transformation function. It receives the input resource and additional input of type [[A]].
     *          It returns the new resource and additional output of type [[B]].
     * @param release called to release the new resource in case of a crash
