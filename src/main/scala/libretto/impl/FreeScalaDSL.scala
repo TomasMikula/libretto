@@ -91,10 +91,13 @@ object FreeScalaDSL extends ScalaDSL {
     case class Neglect[A]() extends (Val[A] -⚬ Done)
     case class Inflate[A]() extends (Need -⚬ Neg[A])
 
-    case class MVal[A, B](init: A => B) extends (Val[A] -⚬ Res[B])
+    case class Acquire[A, R, B](
+      acquire: A => (R, B),
+      release: Option[R => Unit],
+    ) extends (Val[A] -⚬ (Res[R] |*| Val[B]))
     case class TryAcquireAsync[A, R, B, E](
       acquire: A => Async[Either[E, (R, B)]],
-      release: R => Async[Unit],
+      release: Option[R => Async[Unit]],
     ) extends (Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])))
     case class Release[R]() extends (Res[R] -⚬ Done)
     case class ReleaseAsync[R, A, B](f: (R, A) => Async[B]) extends ((Res[R] |*| Val[A]) -⚬ Val[B])
@@ -102,7 +105,7 @@ object FreeScalaDSL extends ScalaDSL {
     case class EffectWrAsync[R, A](f: (R, A) => Async[Unit]) extends ((Res[R] |*| Val[A]) -⚬ Res[R])
     case class TryTransformResourceAsync[R, A, S, B, E](
       f: (R, A) => Async[Either[E, (S, B)]],
-      release: S => Async[Unit],
+      release: Option[S => Async[Unit]],
     ) extends ((Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])))
   }
 
@@ -288,12 +291,15 @@ object FreeScalaDSL extends ScalaDSL {
   override def inflate[A]: Need -⚬ Neg[A] =
     Inflate()
 
-  override def mVal[A, B](init: A => B): Val[A] -⚬ Res[B] =
-    MVal(init)
+  override def acquire[A, R, B](
+    acquire: A => (R, B),
+    release: Option[R => Unit],
+  ): Val[A] -⚬ (Res[R] |*| Val[B]) =
+    Acquire(acquire, release)
 
   override def tryAcquireAsync[A, R, B, E](
     acquire: A => Async[Either[E, (R, B)]],
-    release: R => Async[Unit],
+    release: Option[R => Async[Unit]],
   ): Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])) =
     TryAcquireAsync(acquire, release)
 
@@ -311,7 +317,7 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def tryTransformResourceAsync[R, A, S, B, E](
     f: (R, A) => Async[Either[E, (S, B)]],
-    release: S => Async[Unit],
+    release: Option[S => Async[Unit]],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])) =
     TryTransformResourceAsync(f, release)
 }

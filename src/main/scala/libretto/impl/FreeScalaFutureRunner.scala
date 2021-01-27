@@ -557,25 +557,47 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
         case f @ -⚬.LInvertTerminus() =>
           bug(s"Did not expect to be able to construct a program that uses $f")
 
-        case -⚬.MVal(init) =>
-          // Val[X] -⚬ Res[Y]
-          type X; type Y
-          val initY = init.asInstanceOf[X => Y]
-          this.asInstanceOf[Frontier[Val[X]]] match {
-            case Value(x) =>
-              MVal(initY(x))                                      .asInstanceOf[Frontier[B]]
-            case other =>
-              other
-                .toFutureValue
-                .map(x => MVal(initY(x)))
-                .asDeferredFrontier                               .asInstanceOf[Frontier[B]]
+        case -⚬.Acquire(acquire0, release0) =>
+          // Val[X] -⚬ (Res[R] |*| Val[Y])
+          type X; type R; type Y
+
+          val acquire: X => (R, Y) =
+            acquire0.asInstanceOf
+          val release: Option[R => Unit] =
+            release0.asInstanceOf
+
+          def go(x: X): Frontier[Res[R] |*| Val[Y]] = {
+            def go1(r: R, y: Y): Frontier[Res[R] |*| Val[Y]] =
+              release match {
+                case None =>
+                  Pair(MVal(r), Value(y))
+                case Some(release) =>
+                  resourceRegistry.registerResource(r, release andThen Async.now) match {
+                    case RegisterResult.Registered(resId) =>
+                      Pair(Resource(resId, r), Value(y))
+                    case RegisterResult.RegistryClosed =>
+                      release(r)
+                      Frontier.failure("resource allocation not allowed because the program has ended or crashed")
+                  }
+              }
+
+            val (r, y) = acquire(x)
+            go1(r, y)
           }
+
+          val res: Frontier[Res[R] |*| Val[Y]] =
+            this.asInstanceOf[Frontier[Val[X]]] match {
+              case Value(x) => go(x)
+              case x => x.toFutureValue.map(go).asDeferredFrontier
+            }
+
+          res                                                     .asInstanceOf[Frontier[B]]
 
         case -⚬.TryAcquireAsync(acquire, release0) =>
           // Val[X] -⚬ (Val[E] |+| (Res[R] |*| Val[Y]))
           type X; type E; type R; type Y
 
-          val release: R => Async[Unit] =
+          val release: Option[R => Async[Unit]] =
             release0.asInstanceOf
 
           def go(x: X): Frontier[Val[E] |+| (Res[R] |*| Val[Y])] = {
@@ -586,14 +608,19 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                 case Right((r, y)) =>
                   import ResourceRegistry.RegisterResult._
                   val fr: Frontier[Res[R] |*| Val[Y]] =
-                    resourceRegistry.registerResource(r, release) match {
-                      case Registered(resId) =>
-                        Pair(Resource(resId, r), Value(y))
-                      case RegistryClosed =>
-                        release(r)
-                          .map[Frontier[Res[R] |*| Val[Y]]](_ => Frontier.failure("resource allocation not allowed because the program has ended or crashed"))
-                          .asAsyncFrontier
-                    }
+                    release match {
+                      case None =>
+                        Pair(MVal(r), Value(y))
+                      case Some(release) =>
+                        resourceRegistry.registerResource(r, release) match {
+                          case Registered(resId) =>
+                            Pair(Resource(resId, r), Value(y))
+                          case RegistryClosed =>
+                            release(r)
+                              .map[Frontier[Res[R] |*| Val[Y]]](_ => Frontier.failure("resource allocation not allowed because the program has ended or crashed"))
+                              .asAsyncFrontier
+                        }
+                      }
                   InjectR(fr)
               }
 
@@ -656,7 +683,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
 
           val f: (R, X) => Async[Either[E, (S, Y)]] =
             f0.asInstanceOf
-          val release: S => Async[Unit] =
+          val release: Option[S => Async[Unit]] =
             release0.asInstanceOf
 
           def go(r: ResFrontier[R], x: X): Frontier[Val[E] |+| (Res[S] |*| Val[Y])] = {
@@ -667,13 +694,18 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                     InjectL(Value(e))
                   case Right((s, y)) =>
                     val sy: Frontier[Res[S] |*| Val[Y]] =
-                      resourceRegistry.registerResource(s, release) match {
-                        case RegisterResult.Registered(id) =>
-                          Pair(Resource(id, s), Value(y))
-                        case RegisterResult.RegistryClosed =>
-                          release(s)
-                            .map(_ => Frontier.failure("Transformed not registered because shutting down"))
-                            .asAsyncFrontier
+                      release match {
+                        case None =>
+                          Pair(MVal(s), Value(y))
+                        case Some(release) =>
+                          resourceRegistry.registerResource(s, release) match {
+                            case RegisterResult.Registered(id) =>
+                              Pair(Resource(id, s), Value(y))
+                            case RegisterResult.RegistryClosed =>
+                              release(s)
+                                .map(_ => Frontier.failure("Transformed not registered because shutting down"))
+                                .asAsyncFrontier
+                          }
                       }
                     InjectR(sy)
                 }

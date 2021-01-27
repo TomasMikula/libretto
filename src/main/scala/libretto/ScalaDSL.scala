@@ -66,32 +66,22 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
       liftPair
     )
 
-  /** Create a resource that is just a (potentially) mutable value which does not need any cleanup.
-    *
-    * @param init function that initializes the (potentially) mutable value from an immutable one.
-    */
-  def mVal[A, B](init: A => B): Val[A] -⚬ Res[B]
-
   /** Acquires a resource of type [[R]].
     *
     * @param acquire
-    * @param release called to release the resource in case of a crash
+    * @param release called to release the resource in case of a crash. `None` means no cleanup is needed
     * @tparam A parameters of the `acquire` function
     * @tparam R type of the resource
     * @tparam B additional data produced by acquiring the resource
     */
   def acquire[A, R, B](
     acquire: A => (R, B),
-    release: R => Unit,
-  ): Val[A] -⚬ (Res[R] |*| Val[B]) =
-    acquireAsync(
-      acquire andThen Async.now,
-      release andThen Async.now,
-    )
+    release: Option[R => Unit],
+  ): Val[A] -⚬ (Res[R] |*| Val[B])
 
   def acquireAsync[A, R, B](
     acquire: A => Async[(R, B)],
-    release: R => Async[Unit],
+    release: Option[R => Async[Unit]],
   ): Val[A] -⚬ (Res[R] |*| Val[B]) =
     tryAcquireAsync[A, R, B, Nothing](
       a => acquire(a).map(Right(_)),
@@ -102,7 +92,7 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
   /** Acquires a resource of type [[R]]. Might fail with an error of type [[E]].
     *
     * @param acquire
-    * @param release called to release the resource in case of a crash
+    * @param release called to release the resource in case of a crash. `None` means no cleanup is needed
     * @tparam A parameters of the `acquire` function
     * @tparam R type of the resource
     * @tparam B additional data produced by acquiring the resource
@@ -110,16 +100,16 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
     */
   def tryAcquire[A, R, B, E](
     acquire: A => Either[E, (R, B)],
-    release: R => Unit,
+    release: Option[R => Unit],
   ): Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])) =
     tryAcquireAsync(
       acquire andThen Async.now,
-      release andThen Async.now,
+      release.map(_ andThen Async.now),
     )
 
   def tryAcquireAsync[A, R, B, E](
     acquire: A => Async[Either[E, (R, B)]],
-    release: R => Async[Unit],
+    release: Option[R => Async[Unit]],
   ): Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B]))
 
   /** Releases a resource using the `release` function registered during resource acquisition. */
@@ -162,7 +152,7 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
     *
     * @param f the transformation function. It receives the input resource and additional input of type [[A]].
     *          It returns the new resource and additional output of type [[B]].
-    * @param release called to release the new resource in case of a crash
+    * @param release called to release the new resource in case of a crash. `None` means no cleanup is needed
     * @tparam R type of the input resource
     * @tparam A additional parameter of the transformation
     * @tparam S type of the output resource
@@ -170,16 +160,16 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
     */
   def transformResource[R, A, S, B](
     f: (R, A) => (S, B),
-    release: S => Unit,
+    release: Option[S => Unit],
   ): (Res[R] |*| Val[A]) -⚬ (Res[S] |*| Val[B]) =
     transformResourceAsync(
       (r, a) => Async.now(f(r, a)),
-      s => Async.now(release(s)),
+      release.map(_ andThen Async.now),
     )
 
   def transformResourceAsync[R, A, S, B](
     f: (R, A) => Async[(S, B)],
-    release: S => Async[Unit],
+    release: Option[S => Async[Unit]],
   ): (Res[R] |*| Val[A]) -⚬ (Res[S] |*| Val[B]) =
     tryTransformResourceAsync[R, A, S, B, Nothing](
       (r, a) => f(r, a).map(Right(_)),
@@ -194,7 +184,7 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
     *          In case the transformation results in an error, the original resource is ''not'' released automatically—
     *          the passing of the original resource `R` to the transformation function `f` indicates transfer of
     *          responsibility for the resource to the function `f`.
-    * @param release called to release the new resource in case of a crash
+    * @param release called to release the new resource in case of a crash. `None` means no cleanup is needed
     * @tparam R type of the input resource
     * @tparam A additional parameter of the transformation
     * @tparam S type of the output resource
@@ -203,22 +193,19 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
     */
   def tryTransformResource[R, A, S, B, E](
     f: (R, A) => Either[E, (S, B)],
-    release: S => Unit,
+    release: Option[S => Unit],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])) =
     tryTransformResourceAsync(
       (r, a) => Async.now(f(r, a)),
-      s => Async.now(release(s)),
+      release.map(_ andThen Async.now),
     )
 
   def tryTransformResourceAsync[R, A, S, B, E](
     f: (R, A) => Async[Either[E, (S, B)]],
-    release: S => Async[Unit],
+    release: Option[S => Async[Unit]],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B]))
 
 
   private def anyResourceFromNothing[R, B]: Val[Nothing] -⚬ (Res[R] |*| Val[B])=
-    id                           [ Val[Nothing] ]
-      .>(mapVal(x => x))      .to[ Val[(R, B)] ]
-      .>(liftPair)            .to[ Val[R] |*| Val[B] ]
-      .>.fst(mVal(identity))  .to[ Res[R] |*| Val[B] ]
+    acquire(x => x, release = None)
 }

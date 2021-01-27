@@ -227,17 +227,24 @@ class ScalaLib[
           .either(lt, either(equiv, gt))                  .to[                Compared[Val[A], Val[A]]                               ]
     }
 
+  /** Create a resource that is just a (potentially) mutable value which does not need any cleanup.
+    *
+    * @param init function that initializes the (potentially) mutable value from an immutable one.
+    */
+  def mVal[A, R](init: A => R): Val[A] -⚬ Res[R] =
+    acquire[A, R, Unit](a => (init(a), ()), release = None) > effectWr((_, _) => ())
+
   /** Variant of [[acquire]] that does not produce extra output in addition to the resource. */
   def acquire0[A, R](
     acquire: A => R,
-    release: R => Unit,
+    release: Option[R => Unit],
   ): Val[A] -⚬ Res[R] =
     dsl.acquire[A, R, Unit](a => (acquire(a), ()), release) > effectWr((_, _) => ())
 
   /** Variant of [[acquireAsync]] that does not produce extra output in addition to the resource. */
   def acquireAsync0[A, R](
     acquire: A => Async[R],
-    release: R => Async[Unit],
+    release: Option[R => Async[Unit]],
   ): Val[A] -⚬ Res[R] =
     dsl.acquireAsync[A, R, Unit](a => acquire(a).map((_, ())), release) > effectWr((_, _) => ())
 
@@ -258,10 +265,10 @@ class ScalaLib[
     id[Res[R]].introSnd(const(())) > effectWrAsync((r, _) => f(r))
 
   /** Variant of [[transformResource]] that does not take additional input and does not produce additional output. */
-  def transformResource0[R, S](f: R => S, release: S => Unit): Res[R] -⚬ Res[S] =
+  def transformResource0[R, S](f: R => S, release: Option[S => Unit]): Res[R] -⚬ Res[S] =
     id[Res[R]].introSnd(const(())) > transformResource((r, u) => (f(r), u), release) > effectWr((_, _) => ())
 
   /** Variant of [[transformResourceAsync]] that does not take additional input and does not produce additional output. */
-  def transformResourceAsync0[R, S](f: R => Async[S], release: S => Async[Unit]): Res[R] -⚬ Res[S] =
+  def transformResourceAsync0[R, S](f: R => Async[S], release: Option[S => Async[Unit]]): Res[R] -⚬ Res[S] =
     id[Res[R]].introSnd(const(())) > transformResourceAsync((r, u) => f(r).map((_, u)), release) > effectWr((_, _) => ())
 }

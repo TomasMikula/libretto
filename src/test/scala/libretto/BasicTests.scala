@@ -203,8 +203,8 @@ class BasicTests extends TestSuite {
 
     val acquireFuns = Seq[Val[Int] -⚬ Res[MVar[Int]]](
       mVal(new MVar(_)),
-      acquire0(new MVar(_), release = _ => ???),
-      acquireAsync0(i => Async.defer(new MVar(i)), release = _ => ???),
+      acquire0(new MVar(_), release = None),
+      acquireAsync0(i => Async.defer(new MVar(i)), release = None),
     )
 
     val incFuns = Seq[Res[MVar[Int]] -⚬ Res[MVar[Int]]](
@@ -215,8 +215,8 @@ class BasicTests extends TestSuite {
     )
 
     val toStringTrans = Seq[Res[MVar[Int]] -⚬ Res[MVar[String]]](
-      transformResource0(i => new MVar(Integer.toString(i.value)), release = _ => ???),
-      transformResourceAsync0(i => Async.defer(new MVar(Integer.toString(i.value))), release = _ => ???),
+      transformResource0(i => new MVar(Integer.toString(i.value)), release = None),
+      transformResourceAsync0(i => Async.defer(new MVar(Integer.toString(i.value))), release = None),
     )
 
     val releaseFuns = Seq[Res[MVar[String]] -⚬ Val[String]](
@@ -248,7 +248,7 @@ class BasicTests extends TestSuite {
     val ref = new java.util.concurrent.atomic.AtomicReference[String]("init")
 
     val prg: One -⚬ Done =
-      const(()) > acquire0(identity, release = _ => ref.set("released")) > release
+      const(()) > acquire0(identity, release = Some(_ => ref.set("released"))) > release
 
     assertCompletes(prg)
     assert(ref.get() == "released")
