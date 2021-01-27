@@ -210,6 +210,8 @@ class BasicTests extends TestSuite {
     val incFuns = Seq[Res[MVar[Int]] -⚬ Res[MVar[Int]]](
       effect0(i => i.set(i.value + 1)),
       effectAsync0(i => Async.defer(i.set(i.value + 1))),
+      introSnd(const(())) > effect     [MVar[Int], Unit, Unit]((i, _) =>             i.set(i.value + 1) ) > effectWrAsync((_, _) => Async.defer(())),
+      introSnd(const(())) > effectAsync[MVar[Int], Unit, Unit]((i, _) => Async.defer(i.set(i.value + 1))) > effectWr     ((_, _) =>             () ),
     )
 
     val toStringTrans = Seq[Res[MVar[Int]] -⚬ Res[MVar[String]]](
