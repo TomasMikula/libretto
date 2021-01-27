@@ -663,7 +663,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                 go1(r, x)
               case Resource(id, r) =>
                 resourceRegistry.unregisterResource(id) match {
-                  case UnregisterResult.Unregistered =>
+                  case UnregisterResult.Unregistered(_) =>
                     go1(r, x)
                   case UnregisterResult.NotFound =>
                     bug(s"Previously registered resource $id not found in resource registry")
@@ -694,7 +694,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                 release(r, x).map(Value(_)).asAsyncFrontier
               case Resource(id, r) =>
                 resourceRegistry.unregisterResource(id) match {
-                  case UnregisterResult.Unregistered =>
+                  case UnregisterResult.Unregistered(_) =>
                     release(r, x).map(Value(_)).asAsyncFrontier
                   case UnregisterResult.NotFound =>
                     bug(s"Previously registered resource $id not found in resource registry")
@@ -707,6 +707,34 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
             this.asInstanceOf[Frontier[Res[R] |*| Val[X]]].splitPair match {
               case (r: ResFrontier[R], Value(x)) => go(r, x)
               case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
+            }
+
+          res                                                     .asInstanceOf[Frontier[B]]
+
+        case -⚬.Release() =>
+          // Res[R] -⚬ Done
+          type R
+
+          def go(r: ResFrontier[R]): Frontier[Done] =
+            r match {
+              case MVal(r) =>
+                // no release needed, done
+                DoneNow
+              case Resource(id, r) =>
+                resourceRegistry.unregisterResource(id) match {
+                  case UnregisterResult.Unregistered(r) =>
+                    r.releaseAsync(r.resource).map(_ => DoneNow).asAsyncFrontier
+                  case UnregisterResult.NotFound =>
+                    bug(s"Previously registered resource $id not found in resource registry")
+                  case UnregisterResult.RegistryClosed =>
+                    Frontier.failure("Not releasing resource because shutting down. It was or will be released as part of the shutdown")
+                }
+            }
+
+          val res: Frontier[Done] =
+            this.asInstanceOf[Frontier[Res[R]]] match {
+              case r: ResFrontier[R] => go(r)
+              case r => r.toFutureRes.map(go).asDeferredFrontier
             }
 
           res                                                     .asInstanceOf[Frontier[B]]
@@ -940,8 +968,8 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           UnregisterResult.RegistryClosed
         } else {
           resourceMap.remove(id.value) match {
-            case null => UnregisterResult.NotFound
-            case _ => UnregisterResult.Unregistered
+            case None => UnregisterResult.NotFound
+            case Some(r) => UnregisterResult.Unregistered(r)
           }
         }
       }
@@ -975,7 +1003,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
 
     sealed trait UnregisterResult
     object UnregisterResult {
-      case object Unregistered extends UnregisterResult
+      case class Unregistered(value: AcquiredResource[_]) extends UnregisterResult
       case object NotFound extends UnregisterResult
       case object RegistryClosed extends UnregisterResult
     }

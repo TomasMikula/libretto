@@ -96,6 +96,7 @@ object FreeScalaDSL extends ScalaDSL {
       acquire: A => Async[Either[E, (R, B)]],
       release: R => Async[Unit],
     ) extends (Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])))
+    case class Release[R]() extends (Res[R] -⚬ Done)
     case class ReleaseAsync[R, A, B](f: (R, A) => Async[B]) extends ((Res[R] |*| Val[A]) -⚬ Val[B])
     case class EffectAsync[R, A, B](f: (R, A) => Async[B]) extends ((Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]))
     case class EffectWrAsync[R, A](f: (R, A) => Async[Unit]) extends ((Res[R] |*| Val[A]) -⚬ Res[R])
@@ -295,6 +296,9 @@ object FreeScalaDSL extends ScalaDSL {
     release: R => Async[Unit],
   ): Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])) =
     TryAcquireAsync(acquire, release)
+
+  override def release[R]: Res[R] -⚬ Done =
+    Release()
 
   override def releaseAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ Val[B] =
     ReleaseAsync(f)

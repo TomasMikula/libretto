@@ -122,7 +122,11 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
     release: R => Async[Unit],
   ): Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B]))
 
-  /** Releases a resource.
+  /** Releases a resource using the `release` function registered during resource acquisition. */
+  def release[R]: Res[R] -⚬ Done
+
+  /** Releases a resource using the given function. The `release` function previously registered during resource
+    * acquisition is not used.
     *
     * @param f the release function
     * @tparam R type of the resource
