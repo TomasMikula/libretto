@@ -110,6 +110,34 @@ class BasicTests extends TestSuite {
     assertCrashes(done >>> crashd("boom!"), "boom!")
   }
 
+  test("crash waits for its trigger") {
+    val x = new java.util.concurrent.atomic.AtomicBoolean(false)
+
+    val eff: Unit => Unit =
+      _ => x.set(true)
+
+    def prg(delayCrash: Boolean): One -⚬ Done = {
+      val beforeCrash: Done -⚬ Done =
+        if (delayCrash) delay(10.millis) else id
+
+      done
+        .>( fork )
+        .par( beforeCrash     , delay(5.millis) )
+        .par( crashd("Boom!"),  constVal(())    )
+        .>( race )
+        .>.right.snd(mapVal(eff))
+        .either(id, id)
+        .>.snd(neglect)
+        .>(join)
+    }
+
+    assertCrashes(prg(delayCrash = false), "Boom!")
+    assert(x.get() == false) // if the crash is not delayed, it wins the race and there's no effect
+
+    assertCrashes(prg(delayCrash = true), "Boom!")
+    assert(x.get() == true) // if the crash is delayed, there's time for the effect
+  }
+
   test("crash - even if it loses a race, the program still crashes") {
     val prg = done
       .>>>( fork(id, delay(10.millis) >>> crashd("oops")) )

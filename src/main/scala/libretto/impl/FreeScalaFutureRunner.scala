@@ -407,9 +407,21 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           Pair(NeedAsync(p1), NeedAsync(p2))                      .asInstanceOf[Frontier[B]]
 
         case -⚬.Crash(msg) =>
-          val e = Crash(msg)
-          this.crash(e)
-          Deferred(Future.failed(e))
+          // (Done |*| X) -⚬ (Done |*| Y)
+          type X
+
+          val (d, x) = this.asInstanceOf[Frontier[Done |*| X]].splitPair
+          d
+            .toFutureDone
+            .transformWith[Frontier[B]] { res =>
+              val e = res match {
+                case Success(DoneNow) => Crash(msg)
+                case Failure(e) => e
+              }
+              x.crash(e)
+              Future.failed(e)
+            }
+            .asDeferredFrontier
 
         case -⚬.Delay(d) =>
           this
