@@ -205,7 +205,53 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
     release: Option[S => Async[Unit]],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B]))
 
+  def splitResource[R, A, S, T, B](
+    f: (R, A) => (S, T, B),
+    release1: Option[S => Unit],
+    release2: Option[T => Unit],
+  ): (Res[R] |*| Val[A]) -⚬ ((Res[S] |*| Res[T]) |*| Val[B]) =
+    splitResourceAsync(
+      (r, a) => Async.now(f(r, a)),
+      release1.map(_ andThen Async.now),
+      release2.map(_ andThen Async.now),
+    )
+
+  def splitResourceAsync[R, A, S, T, B](
+    f: (R, A) => Async[(S, T, B)],
+    release1: Option[S => Async[Unit]],
+    release2: Option[T => Async[Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ ((Res[S] |*| Res[T]) |*| Val[B]) =
+      trySplitResourceAsync[R, A, S, T, B, Nothing](
+        (r, a) => f(r, a).map(Right(_)),
+        release1,
+        release2,
+      )                                         .to[ Val[Nothing] |+| ((Res[S] |*| Res[T]) |*| Val[B]) ]
+        .either(anyTwoResourcesFronNothing, id) .to[                   (Res[S] |*| Res[T]) |*| Val[B]  ]
+
+  def trySplitResource[R, A, S, T, B, E](
+    f: (R, A) => Either[E, (S, T, B)],
+    release1: Option[S => Unit],
+    release2: Option[T => Unit],
+  ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])) =
+    trySplitResourceAsync(
+      (r, a) => Async.now(f(r, a)),
+      release1.map(_ andThen Async.now),
+      release2.map(_ andThen Async.now),
+    )
+
+  def trySplitResourceAsync[R, A, S, T, B, E](
+    f: (R, A) => Async[Either[E, (S, T, B)]],
+    release1: Option[S => Async[Unit]],
+    release2: Option[T => Async[Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B]))
+
 
   private def anyResourceFromNothing[R, B]: Val[Nothing] -⚬ (Res[R] |*| Val[B])=
     acquire(x => x, release = None)
+
+  private def anyTwoResourcesFronNothing[S, T, B]: Val[Nothing] -⚬ ((Res[S] |*| Res[T]) |*| Val[B]) =
+    dup[Nothing]                                                                          .to[       Val[Nothing]        |*|          Val[Nothing]           ]
+      .>( par(anyResourceFromNothing[S, Nothing], anyResourceFromNothing[T, Nothing]) )   .to[ (Res[S] |*| Val[Nothing]) |*| (   Res[T]    |*| Val[Nothing]) ]
+      .>( IXI )                                                                           .to[ (Res[S] |*|    Res[T]   ) |*| (Val[Nothing] |*| Val[Nothing]) ]
+      .>( par(id, unliftPair > mapVal(_._1)) )                                            .to[ (Res[S] |*|    Res[T]   ) |*|             Val[B]              ]
 }

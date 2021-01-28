@@ -107,6 +107,11 @@ object FreeScalaDSL extends ScalaDSL {
       f: (R, A) => Async[Either[E, (S, B)]],
       release: Option[S => Async[Unit]],
     ) extends ((Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])))
+    case class TrySplitResourceAsync[R, A, S, T, B, E](
+      f: (R, A) => Async[Either[E, (S, T, B)]],
+      release1: Option[S => Async[Unit]],
+      release2: Option[T => Async[Unit]],
+    ) extends ((Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])))
   }
 
   import -⚬._
@@ -320,4 +325,11 @@ object FreeScalaDSL extends ScalaDSL {
     release: Option[S => Async[Unit]],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])) =
     TryTransformResourceAsync(f, release)
+
+  override def trySplitResourceAsync[R, A, S, T, B, E](
+    f: (R, A) => Async[Either[E, (S, T, B)]],
+    release1: Option[S => Async[Unit]],
+    release2: Option[T => Async[Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])) =
+    TrySplitResourceAsync(f, release1, release2)
 }

@@ -271,4 +271,27 @@ class ScalaLib[
   /** Variant of [[transformResourceAsync]] that does not take additional input and does not produce additional output. */
   def transformResourceAsync0[R, S](f: R => Async[S], release: Option[S => Async[Unit]]): Res[R] -⚬ Res[S] =
     id[Res[R]].introSnd(const(())) > transformResourceAsync((r, u) => f(r).map((_, u)), release) > effectWr((_, _) => ())
+
+  def splitResource0[R, S, T](
+    f: R => (S, T),
+    release1: Option[S => Unit],
+    release2: Option[T => Unit],
+  ): Res[R] -⚬ (Res[S] |*| Res[T]) =
+    id[Res[R]]
+      .introSnd(const(()))
+      .>(splitResource((r, u) => { val (s, t) = f(r); (s, t, u) }, release1, release2))
+      .assocLR
+      .>.snd(effectWr((_, _) => ()))
+
+
+  def splitResourceAsync0[R, S, T](
+    f: R => Async[(S, T)],
+    release1: Option[S => Async[Unit]],
+    release2: Option[T => Async[Unit]],
+  ): Res[R] -⚬ (Res[S] |*| Res[T]) =
+    id[Res[R]]
+      .introSnd(const(()))
+      .>(splitResourceAsync((r, u) => { f(r) map { case (s, t) => (s, t, u) } }, release1, release2))
+      .assocLR
+      .>.snd(effectWr((_, _) => ()))
 }

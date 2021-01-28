@@ -109,25 +109,17 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
 
         case -⚬.TimesAssocLR() =>
           // ((X |*| Y) |*| Z) -⚬ (X |*| (Y |*| Z))
-          type X; type Y
-          this match {
-            case Pair(xy, z) =>
-              val (x, y) = Frontier.splitPair(xy.asInstanceOf[Frontier[X |*| Y]])
-              Pair(x, Pair(y, z))                                 .asInstanceOf[Frontier[B]]
-            case other =>
-              bug(s"Did not expect $other to represent ((? |*| ?) |*| ?)")
-          }
+          type X; type Y; type Z
+          val (xy, z) = this.asInstanceOf[Frontier[(X |*| Y) |*| Z]].splitPair
+          val (x, y) = xy.splitPair
+          Pair(x, Pair(y, z))                                     .asInstanceOf[Frontier[B]]
 
         case -⚬.TimesAssocRL() =>
           // (X |*| (Y |*| Z)) -⚬ ((X |*| Y) |*| Z)
-          type Y; type Z
-          this match {
-            case Pair(x, yz) =>
-              val (y, z) = Frontier.splitPair(yz.asInstanceOf[Frontier[Y |*| Z]])
-              Pair(Pair(x, y), z)                                 .asInstanceOf[Frontier[B]]
-            case other =>
-              bug(s"Did not expect $other to represent (? |*| (? |*| ?))")
-          }
+          type X; type Y; type Z
+          val (x, yz) = this.asInstanceOf[Frontier[X |*| (Y |*| Z)]].splitPair
+          val (y, z) = yz.splitPair
+          Pair(Pair(x, y), z)                                     .asInstanceOf[Frontier[B]]
 
         case -⚬.Swap() =>
           type X; type Y
@@ -715,7 +707,7 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
                               Pair(Resource(id, s), Value(y))
                             case RegisterResult.RegistryClosed =>
                               release(s)
-                                .map(_ => Frontier.failure("Transformed not registered because shutting down"))
+                                .map(_ => Frontier.failure("Transformed resource not registered because shutting down"))
                                 .asAsyncFrontier
                           }
                       }
@@ -739,6 +731,79 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
           }
 
           val res: Frontier[Val[E] |+| (Res[S] |*| Val[Y])] =
+            this.asInstanceOf[Frontier[Res[R] |*| Val[X]]].splitPair match {
+              case (r: ResFrontier[R], Value(x)) => go(r, x)
+              case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
+            }
+
+          res                                                     .asInstanceOf[Frontier[B]]
+
+        case -⚬.TrySplitResourceAsync(f0, rel1, rel2) =>
+          // (Res[R] |*| Val[X]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[Y]))
+          type R; type X; type E; type S; type T; type Y
+
+          val f: (R, X) => Async[Either[E, (S, T, Y)]] =
+            f0.asInstanceOf
+          val releaseS: Option[S => Async[Unit]] =
+            rel1.asInstanceOf
+          val releaseT: Option[T => Async[Unit]] =
+            rel2.asInstanceOf
+
+          def go(r: ResFrontier[R], x: X): Frontier[Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[Y])] = {
+            def go1(r: R, x: X): Frontier[Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[Y])] =
+              f(r, x)
+                .map[Frontier[Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[Y])]] {
+                  case Left(e) =>
+                    InjectL(Value(e))
+                  case Right((s, t, y)) =>
+                    val fs: Frontier[Res[S]] =
+                      releaseS match {
+                        case None =>
+                          MVal(s)
+                        case Some(releaseS) =>
+                          resourceRegistry.registerResource(s, releaseS) match {
+                            case RegisterResult.Registered(id) =>
+                              Resource(id, s)
+                            case RegisterResult.RegistryClosed =>
+                              releaseS(s)
+                                .map(_ => Frontier.failure("Post-split resource not registered because shutting down"))
+                                .asAsyncFrontier
+                          }
+                      }
+                    val ft: Frontier[Res[T]] =
+                      releaseT match {
+                        case None =>
+                          MVal(t)
+                        case Some(releaseT) =>
+                          resourceRegistry.registerResource(t, releaseT) match {
+                            case RegisterResult.Registered(id) =>
+                              Resource(id, t)
+                            case RegisterResult.RegistryClosed =>
+                              releaseT(t)
+                                .map(_ => Frontier.failure("Post-split resource not registered because shutting down"))
+                                .asAsyncFrontier
+                          }
+                      }
+                    InjectR(Pair(Pair(fs, ft), Value(y)))
+                }
+                .asAsyncFrontier
+
+            r match {
+              case MVal(r) =>
+                go1(r, x)
+              case Resource(id, r) =>
+                resourceRegistry.unregisterResource(id) match {
+                  case UnregisterResult.Unregistered(_) =>
+                    go1(r, x)
+                  case UnregisterResult.NotFound =>
+                    bug(s"Previously registered resource $id not found in resource registry")
+                  case UnregisterResult.RegistryClosed =>
+                    Frontier.failure("Not going to split the resource because shutting down")
+                }
+            }
+          }
+
+          val res: Frontier[Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[Y])] =
             this.asInstanceOf[Frontier[Res[R] |*| Val[X]]].splitPair match {
               case (r: ResFrontier[R], Value(x)) => go(r, x)
               case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier

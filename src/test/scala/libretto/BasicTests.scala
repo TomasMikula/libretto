@@ -1,12 +1,32 @@
 package libretto
 
+import java.util.concurrent.{Executors, ScheduledExecutorService}
 import scala.collection.mutable
+import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 
 class BasicTests extends TestSuite {
   import kit.dsl._
   import kit.coreLib._
   import kit.scalaLib._
+
+  private var scheduler: ScheduledExecutorService = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    scheduler = Executors.newScheduledThreadPool(2)
+  }
+
+  override def afterAll(): Unit = {
+    scheduler.shutdown()
+    super.afterAll()
+  }
+
+  private def delayedAsync[A](d: FiniteDuration)(a: => A): Async[A] = {
+    val p = Promise[A]()
+    scheduler.schedule({ () => p.success(a) }: Runnable, d.length, d.unit)
+    Async.fromFuture(p.future).map(_.get)
+  }
 
   private def raceKeepWinner[A](
     prg1: One -⚬ Val[A],
@@ -280,5 +300,81 @@ class BasicTests extends TestSuite {
 
     assertCompletes(prg)
     assert(ref.get() == "released")
+  }
+
+  test("splitResource") {
+    val store = new java.util.concurrent.atomic.AtomicReference[List[String]](Nil)
+
+    def log(s: String): Unit =
+      store.updateAndGet(s :: _)
+
+    val prg: One -⚬ Done =
+      const(())
+        .>(acquire0[Unit, Unit](
+          acquire = _ => log("acquire A"),
+          release = Some(_ => log("release A")), // this release function should never be invoked
+        ))
+        .>(splitResource0(
+          _ => { log("split A -> (B, C)"); ((), ()) },
+          release1 = Some(_ => log("release B")),
+          release2 = Some(_ => log("release C")),
+        ))
+        .par(release, release)
+        .>(join)
+
+    assertCompletes(prg)
+
+    val logEntries: List[String] = store.get().reverse
+
+    assert(logEntries.take(2) == List("acquire A", "split A -> (B, C)"))
+    assert(logEntries.drop(2).toSet == Set("release B", "release C"))
+    assert(logEntries.size == 4)
+  }
+
+  test("splitResourceAsync: check that resources are released if program crashes during their asynch acquisition") {
+    val store = new java.util.concurrent.atomic.AtomicReference[List[String]](Nil)
+
+    def log(s: String): Unit =
+      store.updateAndGet(s :: _)
+
+    val pb, pc = Promise[Unit]()
+
+    val mainThread: One -⚬ Done =
+      const(())
+        .>(acquire0[Unit, Unit](
+          acquire = _ => log("acquire A"),
+          release = Some(_ => log("release A")), // this release function should never be invoked
+        ))
+        .>(splitResourceAsync0(
+          _ => delayedAsync(10.millis) { // there will be a crash within these 10ms it takes to split the resource into two
+            log("split A -> (B, C)")
+            ((), ())
+          },
+          release1 = Some({ _ => log("release B"); pb.success(()); Async.now(()) }),
+          release2 = Some({ _ => log("release C"); pc.success(()); Async.now(()) }),
+        ))
+        .par(
+          release0[Unit, Unit](_ => log("release B XXX")) > neglect, // this release function should never be invoked
+          release0[Unit, Unit](_ => log("release C XXX")) > neglect, // this release function should never be invoked
+        )
+        .>(join)
+
+    val crashThread: One -⚬ Done =
+      done > delay(5.millis) > crashd("Boom!") // delay crash to give chance for resource split to begin
+
+    val prg: One -⚬ Done =
+      parFromOne(crashThread, mainThread) > join
+
+    assertCrashes(prg, "Boom!")
+
+    // The current implementation based on Futures does not guarantee that all processing has finished by the time
+    // the program returns an error. Therefore, explicitly await completion of the release functions.
+    Await.result(pb.future zip pc.future, 1.second)
+
+    val logEntries: List[String] = store.get().reverse
+
+    assert(logEntries.take(2) == List("acquire A", "split A -> (B, C)"))
+    assert(logEntries.drop(2).toSet == Set("release B", "release C"))
+    assert(logEntries.size == 4)
   }
 }
