@@ -1,5 +1,7 @@
 package libretto
 
+import java.util.concurrent.atomic.AtomicLong
+
 object ScalaLib {
   def apply(
     dsl: ScalaDSL,
@@ -256,6 +258,9 @@ class ScalaLib[
   def releaseAsync0[R, B](release: R => Async[B]): Res[R] -⚬ Val[B] =
     id[Res[R]].introSnd(const(())) > dsl.releaseAsync((r, _) => release(r))
 
+  def effectRd[R, B](f: R => B): Res[R] -⚬ (Res[R] |*| Val[B]) =
+    id[Res[R]].introSnd(const(())) > effect((r, _) => f(r))
+
   /** Variant of [[effect]] that does not take additional input and does not produce additional output. */
   def effect0[R](f: R => Unit): Res[R] -⚬ Res[R] =
     id[Res[R]].introSnd(const(())) > effectWr((r, _) => f(r))
@@ -294,4 +299,52 @@ class ScalaLib[
       .>(splitResourceAsync((r, u) => { f(r) map { case (s, t) => (s, t, u) } }, release1, release2))
       .assocLR
       .>.snd(effectWr((_, _) => ()))
+
+  opaque type RefCounted[R] = Res[(R, R => Unit, AtomicLong)]
+
+  object RefCounted {
+    def acquire[A, R, B](acquire: A => (R, B), release: R => Unit): Val[A] -⚬ (RefCounted[R] |*| Val[B]) =
+      dsl.acquire[A, (R, R => Unit, AtomicLong), B](
+        acquire = { a =>
+          val (r, b) = acquire(a)
+          ((r, release, new AtomicLong(1L)), b)
+        },
+        release = Some(releaseFn[R]),
+      )
+
+    def acquire0[A, R](acquire: A => R, release: R => Unit): Val[A] -⚬ RefCounted[R] =
+      RefCounted.acquire[A, R, Unit](a => (acquire(a), ()), release) > effectWr((_, _) => ())
+
+    def release[R]: RefCounted[R] -⚬ Done =
+      dsl.release
+
+    def dupRef[R]: RefCounted[R] -⚬ (RefCounted[R] |*| RefCounted[R]) =
+      splitResource0(
+        { case rc @ (_, _, n) =>
+          n.incrementAndGet()
+          (rc, rc)
+        },
+        Some(releaseFn[R]),
+        Some(releaseFn[R]),
+      )
+
+    def effect[R, A, B](f: (R, A) => B): (RefCounted[R] |*| Val[A]) -⚬ (RefCounted[R] |*| Val[B]) =
+      dsl.effect((rn, a) => f(rn._1, a))
+
+    def effectAsync[R, A, B](f: (R, A) => Async[B]): (RefCounted[R] |*| Val[A]) -⚬ (RefCounted[R] |*| Val[B]) =
+      dsl.effectAsync((rn, a) => f(rn._1, a))
+
+    private def releaseFn[R]: ((R, R => Unit, AtomicLong)) => Unit =
+      { case (r, release, n) =>
+        n.decrementAndGet match {
+          case 0 =>
+            // no more references exist, release
+            release(r)
+          case i if i > 0 =>
+            // there are remaining references, do nothing
+          case i =>
+            assert(false, s"Bug: reached negative number ($i) of references to $r")
+        }
+      }
+  }
 }

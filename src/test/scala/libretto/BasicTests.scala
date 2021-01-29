@@ -377,4 +377,26 @@ class BasicTests extends TestSuite {
     assert(logEntries.drop(2).toSet == Set("release B", "release C"))
     assert(logEntries.size == 4)
   }
+
+  test("RefCounted") {
+    import java.util.concurrent.atomic.AtomicInteger
+
+    val releaseCounter = new AtomicInteger(0)
+    val incGetClose: RefCounted[AtomicInteger] -⚬ Val[Int] =
+      introSnd(const(()))                                       .to[ RefCounted[AtomicInteger] |*| Val[Unit] ]
+        .>( RefCounted.effect((i, _) => i.incrementAndGet) )    .to[ RefCounted[AtomicInteger] |*| Val[Int]  ]
+        .joinL(RefCounted.release)                              .to[                               Val[Int]  ]
+
+    val prg: One -⚬ Val[Int] =
+      const(0)
+        .>(RefCounted.acquire0(new AtomicInteger(_), _ => releaseCounter.incrementAndGet))
+        .>(RefCounted.dupRef)
+        .>.snd(RefCounted.dupRef)
+        .par(incGetClose, par(incGetClose, incGetClose))
+        .>.snd(unliftPair > mapVal(t => t._1 + t._2))
+        .>(unliftPair > mapVal(t => t._1 + t._2))
+
+    assertVal(prg, 6)
+    assert(releaseCounter.get() == 1)
+  }
 }
