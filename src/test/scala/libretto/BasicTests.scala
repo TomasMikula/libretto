@@ -241,6 +241,13 @@ class BasicTests extends TestSuite {
     }
   }
 
+  test("LList.splitEvenOdd") {
+    val prg: One -⚬ Val[(List[Int], List[Int])] =
+      constListOf((0 to 100): _*) > LList.splitEvenOdd > par(toScalaList, toScalaList) > unliftPair
+
+    assertVal(prg, (0 to 100).toList.partition(_ % 2 == 0))
+  }
+
   test("acquire - effect - transform - release") {
     class MVar[A](var value: A) {
       def set(a: A): MVar[A] = {

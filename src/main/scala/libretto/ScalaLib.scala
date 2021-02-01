@@ -229,6 +229,19 @@ class ScalaLib[
           .either(lt, either(equiv, gt))                  .to[                Compared[Val[A], Val[A]]                               ]
     }
 
+  def constList[A](as: List[A]): One -⚬ LList[Val[A]] =
+    LList.fromList(as.map(const(_)))
+
+  def constListOf[A](as: A*): One -⚬ LList[Val[A]] =
+    constList(as.toList)
+
+  def toScalaList[A]: LList[Val[A]] -⚬ Val[List[A]] = rec { self =>
+    LList.switch(
+      caseNil  = const(List.empty[A]),
+      caseCons = par(id, self) > unliftPair > mapVal(_ :: _),
+    )
+  }
+
   /** Create a resource that is just a (potentially) mutable value which does not need any cleanup.
     *
     * @param init function that initializes the (potentially) mutable value from an immutable one.
