@@ -254,4 +254,10 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
       .>( par(anyResourceFromNothing[S, Nothing], anyResourceFromNothing[T, Nothing]) )   .to[ (Res[S] |*| Val[Nothing]) |*| (   Res[T]    |*| Val[Nothing]) ]
       .>( IXI )                                                                           .to[ (Res[S] |*|    Res[T]   ) |*| (Val[Nothing] |*| Val[Nothing]) ]
       .>( par(id, unliftPair > mapVal(_._1)) )                                            .to[ (Res[S] |*|    Res[T]   ) |*|             Val[B]              ]
+
+  /** Executes a potentially blocking operation.
+   *  The implementation must ensure that the blocking operation does not impede
+   *  any of the concurrently happening non-blocking computations.
+   */
+  def blocking[A, B](f: A => B): Val[A] -⚬ Val[B]
 }

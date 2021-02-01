@@ -406,4 +406,41 @@ class BasicTests extends TestSuite {
     assertVal(prg, 6)
     assert(releaseCounter.get() == 1)
   }
+
+  test("blocking") {
+    val n = 10
+    val sleepMillis = 10
+
+    case class Millis(value: Long)
+
+    val currentTimeMillis: Done -⚬ Val[Millis] =
+      constVal(()) > mapVal(_ => Millis(System.currentTimeMillis()))
+
+    val sleep: Done -⚬ Val[Millis] =
+      constVal(()) > blocking(_ => Thread.sleep(sleepMillis)) > mapVal(_ => Millis(System.currentTimeMillis()))
+
+    val timed: One -⚬ Val[(List[Millis], List[Millis])] = {
+      // true, false, true, false, ...
+      val alternating: List[Boolean] = (0 until (2*n)).map(_ % 2 == 0).toList
+
+      constList(alternating)
+        .>(LList.map(liftBoolean))
+        .>(LList.map(Bool.switch(caseTrue = sleep, caseFalse = currentTimeMillis)))
+        .>(LList.splitEvenOdd)
+        .>(par(toScalaList, toScalaList))
+        .>(unliftPair)
+    }
+
+    val prg: One -⚬ Val[(Millis, (List[Millis], List[Millis]))] =
+      parFromOne(done > currentTimeMillis, timed) > unliftPair
+
+    testVal(prg) { case (startMillis, (sleepEnds, pureEnds)) =>
+      // sanity check: check that the blocking computations take the amount of time they are supposed to
+      assert(sleepEnds.map(_.value).min >= startMillis.value + sleepMillis)
+
+      // check that none of the non-blocking computations is blocked by any of the blocking computations,
+      // by checking that it completed before any of the blocking computations could
+      assert(pureEnds.map(_.value).max < startMillis.value + (sleepMillis / 2))
+    }
+  }
 }

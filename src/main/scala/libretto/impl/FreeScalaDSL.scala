@@ -112,6 +112,8 @@ object FreeScalaDSL extends ScalaDSL {
       release1: Option[S => Async[Unit]],
       release2: Option[T => Async[Unit]],
     ) extends ((Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])))
+
+    case class Blocking[A, B](f: A => B) extends (Val[A] -⚬ Val[B])
   }
 
   import -⚬._
@@ -332,4 +334,7 @@ object FreeScalaDSL extends ScalaDSL {
     release2: Option[T => Async[Unit]],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])) =
     TrySplitResourceAsync(f, release1, release2)
+
+  override def blocking[A, B](f: A => B): Val[A] -⚬ Val[B] =
+    Blocking(f)
 }

@@ -1,7 +1,7 @@
 package libretto.impl
 
 import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, ConcurrentNavigableMap, ConcurrentSkipListMap, ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.{Executor, ScheduledExecutorService, TimeUnit}
 import libretto.{Async, ScalaRunner}
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
@@ -16,7 +16,10 @@ import scala.util.{Failure, Success, Try}
   * On top of that, expect bugs, since the implementation is full of unsafe type casts, because Scala's (including
   * Dotty's) type inference cannot cope with the kind of pattern matches found here.
   */
-class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRunner[FreeScalaDSL.type, Future] {
+class FreeScalaFutureRunner(
+  scheduler: ScheduledExecutorService,
+  blockingExecutor: Executor,
+) extends ScalaRunner[FreeScalaDSL.type, Future] {
   import ResourceRegistry._
 
   private implicit val ec: ExecutionContext =
@@ -865,6 +868,31 @@ class FreeScalaFutureRunner(scheduler: ScheduledExecutorService) extends ScalaRu
             this.asInstanceOf[Frontier[Res[R]]] match {
               case r: ResFrontier[R] => go(r)
               case r => r.toFutureRes.map(go).asDeferredFrontier
+            }
+
+          res                                                     .asInstanceOf[Frontier[B]]
+
+        case -⚬.Blocking(f0) =>
+          // Val[X] -⚬ Val[Y]
+          type X; type Y
+
+          val f: X => Y =
+            f0.asInstanceOf
+
+          def go(x: X): Frontier[Val[Y]] = {
+            val py = Promise[Y]()
+
+            blockingExecutor.execute { () =>
+              py.complete(Try(f(x)))
+            }
+
+            py.future.toValFrontier
+          }
+
+          val res: Frontier[Val[Y]] =
+            this.asInstanceOf[Frontier[Val[X]]] match {
+              case Value(x) => go(x)
+              case other => other.toFutureValue.map(go).asDeferredFrontier
             }
 
           res                                                     .asInstanceOf[Frontier[B]]
