@@ -2190,5 +2190,49 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         caseCons = caseCons,
       )
     }
+
+    private def waveL[A, S, B](
+      init: A -⚬ S,
+      f: (S |*| A) -⚬ (B |*| S),
+      last: S -⚬ B,
+    ): LList[A] -⚬ LList[B] = {
+      def go: (S |*| LList[A]) -⚬ LList[B] = rec { self =>
+        switchWithL(
+          caseNil  = last > singleton,
+          caseCons = |*|.assocRL > par(f, id) > |*|.assocLR > par(id, self) > cons,
+        )
+      }
+
+      switch(
+        caseNil  = nil[B],
+        caseCons = par(init, id) > go,
+      )
+    }
+
+    /** Shifts all the elements of a list by "half" to the left,
+     *  moving the first half of the first element to the end of the list.
+     *
+     *  Example:
+     *
+     *  Before:
+     *  {{{
+     *  (a1, b1), (a2, b2), (a3, b3)
+     *  }}}
+     *
+     *  After:
+     *  {{{
+     *  (b1, a2), (b2, a3), (b3, a1)
+     *  }}}
+     */
+    def halfRotateL[A, B]: LList[A |*| B] -⚬ LList[B |*| A] = {
+      val f: ((B |*| A) |*| (A |*| B)) -⚬ ((B |*| A) |*| (B |*| A)) =
+        IXI.>.snd(swap)
+
+      waveL[A |*| B, B |*| A, B |*| A](
+        init = swap,
+        f    = f,
+        last = id,
+      )
+    }
   }
 }

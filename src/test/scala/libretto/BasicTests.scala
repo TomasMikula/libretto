@@ -248,6 +248,17 @@ class BasicTests extends TestSuite {
     assertVal(prg, (0 to 100).toList.partition(_ % 2 == 0))
   }
 
+  test("LList.halfRotateL") {
+    val prg: One -⚬ Val[List[(Int, Int)]] =
+      constList(List((0, 1), (2, 3), (4, 5)))
+        .>(LList.map(liftPair))
+        .>(LList.halfRotateL)
+        .>(LList.map(unliftPair))
+        .>(toScalaList)
+
+    assertVal(prg, List((1, 2), (3, 4), (5, 0)))
+  }
+
   test("acquire - effect - transform - release") {
     class MVar[A](var value: A) {
       def set(a: A): MVar[A] = {
