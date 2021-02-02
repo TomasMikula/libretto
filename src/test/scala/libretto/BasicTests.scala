@@ -446,12 +446,15 @@ class BasicTests extends TestSuite {
       parFromOne(done > currentTimeMillis, timed) > unliftPair
 
     testVal(prg) { case (startMillis, (sleepEnds, pureEnds)) =>
+      val sleepDurations = sleepEnds.map(_.value - startMillis.value)
+      val pureDurations = pureEnds.map(_.value - startMillis.value)
+
       // sanity check: check that the blocking computations take the amount of time they are supposed to
-      assert(sleepEnds.map(_.value).min >= startMillis.value + sleepMillis)
+      assert(sleepDurations.min >= sleepMillis)
 
       // check that none of the non-blocking computations is blocked by any of the blocking computations,
       // by checking that it completed before any of the blocking computations could
-      assert(pureEnds.map(_.value).max < startMillis.value + (sleepMillis / 2))
+      assert(pureDurations.max < sleepMillis / 2)
     }
   }
 }
