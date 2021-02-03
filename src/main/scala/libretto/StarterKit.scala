@@ -4,9 +4,11 @@ import java.util.concurrent.{Executor, ScheduledExecutorService}
 import libretto.impl.{FreeScalaDSL, FreeScalaFutureRunner}
 import scala.concurrent.Future
 
-object StarterKit extends StarterKit(FreeScalaDSL, (scheduler, blockingExecutor) => new FreeScalaFutureRunner(scheduler, blockingExecutor))
+object StarterKit extends StarterKit
 
-abstract class StarterKit(
+class StarterKit extends AbstractStarterKit(FreeScalaDSL, (scheduler, blockingExecutor) => new FreeScalaFutureRunner(scheduler, blockingExecutor))
+
+abstract class AbstractStarterKit(
   val dsl: ScalaDSL,
   val runner0: (ScheduledExecutorService, Executor) => ScalaRunner[dsl.type, Future],
 ) {
