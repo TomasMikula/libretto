@@ -1,5 +1,7 @@
 package libretto
 
+import scala.concurrent.duration.FiniteDuration
+
 /** Extension of [[CoreDSL]], [[TimerDSL]] and [[CrashDSL]] that adds support for manipulating Scala values via pure
   * Scala functions.
   */
@@ -65,6 +67,11 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
       mapVal[A, (A, A)](a => (a, a)),
       liftPair
     )
+
+  def delay: Val[FiniteDuration] -⚬ Done
+
+  override def delay(d: FiniteDuration): Done -⚬ Done =
+    constVal(d) > delay
 
   /** Acquires a resource of type [[R]].
     *

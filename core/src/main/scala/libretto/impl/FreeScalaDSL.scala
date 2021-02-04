@@ -75,7 +75,7 @@ object FreeScalaDSL extends ScalaDSL {
     case class SelectRequest() extends ((Need |&| Need) -⚬ (Need |*| Need))
 
     case class Crash[A, B](msg: String) extends ((Done |*| A) -⚬ (Done |*| B))
-    case class Delay(d: FiniteDuration) extends (Done -⚬ Done)
+    case class Delay() extends (Val[FiniteDuration] -⚬ Done)
     case class Promise[A]() extends (One -⚬ (Neg[A] |*| Val[A]))
     case class Fulfill[A]() extends ((Val[A] |*| Neg[A]) -⚬ One)
     case class LiftEither[A, B]() extends (Val[Either[A, B]] -⚬ (Val[A] |+| Val[B]))
@@ -253,8 +253,8 @@ object FreeScalaDSL extends ScalaDSL {
   override def crash[A, B](msg: String): (Done |*| A) -⚬ (Done |*| B) =
     Crash(msg)
 
-  override def delay(d: FiniteDuration): Done -⚬ Done =
-    Delay(d)
+  override def delay: Val[FiniteDuration] -⚬ Done =
+    Delay()
 
   override def promise[A]: One -⚬ (Neg[A] |*| Val[A]) =
     Promise()

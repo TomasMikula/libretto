@@ -418,11 +418,11 @@ class FreeScalaFutureRunner(
             }
             .asDeferredFrontier
 
-        case -⚬.Delay(d) =>
+        case -⚬.Delay() =>
           this
-            .asInstanceOf[Frontier[Done]]
-            .toFutureDone
-            .flatMap(doneNow => schedule(d, () => doneNow))
+            .asInstanceOf[Frontier[Val[FiniteDuration]]]
+            .toFutureValue
+            .flatMap(d => schedule(d, () => DoneNow))
             .asDeferredFrontier                                   .asInstanceOf[Frontier[B]]
 
         case -⚬.Promise() =>
