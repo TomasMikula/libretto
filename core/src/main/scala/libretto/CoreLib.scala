@@ -1424,6 +1424,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     ): Bool -⚬ R =
       either(caseTrue, caseFalse)
 
+    def switchWithL[A, R](
+      caseTrue : (A |*| Done) -⚬ R,
+      caseFalse: (A |*| Done) -⚬ R,
+    ): (A |*| Bool) -⚬ R =
+      distributeLR.either(caseTrue, caseFalse)
+
+    def switchWithR[A, R](
+      caseTrue : (Done |*| A) -⚬ R,
+      caseFalse: (Done |*| A) -⚬ R,
+    ): (Bool |*| A) -⚬ R =
+      distributeRL.either(caseTrue, caseFalse)
+
     def ifThenElse[A, B, C](ifTrue: (Done |*| A) -⚬ B, ifFalse: (Done |*| A) -⚬ C): (Bool |*| A) -⚬ (B |+| C) =
       id                                   [          Bool |*| A           ]
         .distributeRL                   .to[ (Done |*| A) |+| (Done |*| A) ]
