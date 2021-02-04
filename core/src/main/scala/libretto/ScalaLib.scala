@@ -360,4 +360,7 @@ class ScalaLib[
         }
       }
   }
+
+  def printLine: Val[String] -⚬ Done =
+    blocking[String, Unit](println(_)) > neglect
 }
