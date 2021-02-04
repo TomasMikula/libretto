@@ -363,4 +363,7 @@ class ScalaLib[
 
   def printLine: Val[String] -⚬ Done =
     blocking[String, Unit](println(_)) > neglect
+
+  def printLine(s: String): Done -⚬ Done =
+    constVal(s) > printLine
 }
