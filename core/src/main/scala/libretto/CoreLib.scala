@@ -240,6 +240,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def force[A]: Delayed[A] -⚬ A =
       elimFst(need)
+
+    /** Signals when it is triggered, awaiting delays the trigger. */
+    def signalingJunction[A]: SignalingJunction.Negative[Delayed[A]] =
+      SignalingJunction.Negative.byFst
   }
 
   object Junction {
@@ -498,6 +502,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   object SignalingJunction {
     /** Witnesses that [[A]] can both produce and await a positive (i.e. [[Done]]) signal. */
     trait Positive[A] extends Signaling.Positive[A] with Junction.Positive[A] {
+      def delayUsing(f: Done -⚬ Done): A -⚬ A =
+        signalPos > par(f, id) > awaitPos
+
       /** Expresses that awaiting one's own signal does not introduce a new causal dependency, i.e. that
         * the point of awaiting in [[A]] is causally dependent on the point of signaling in [[A]].
         */
@@ -519,6 +526,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     /** Witnesses that [[A]] can both produce and await a negative (i.e. [[Need]]) signal. */
     trait Negative[A] extends Signaling.Negative[A] with Junction.Negative[A] {
+      def delayUsing(f: Need -⚬ Need): A -⚬ A =
+        awaitNeg > par(f, id) > signalNeg
+
       /** Expresses that awaiting one's own signal does not introduce a new causal dependency, i.e. that
         * the point of awaiting in [[A]] is causally dependent on the point of signaling in [[A]].
         */
@@ -630,6 +640,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         )
     }
   }
+
+  def delayUsing[A](f: Done -⚬ Done)(implicit A: SignalingJunction.Positive[A]): A -⚬ A =
+    A.delayUsing(f)
+
+  def delayUsing[A](f: Need -⚬ Need)(implicit A: SignalingJunction.Negative[A]): A -⚬ A =
+    A.delayUsing(f)
 
   def race[A, B](implicit
     A: SignalingJunction.Positive[A],
