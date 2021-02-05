@@ -70,6 +70,13 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
 
   def delay: Val[FiniteDuration] -⚬ Done
 
+  def delayNeed: Need -⚬ Neg[FiniteDuration] =
+    id                                       [                                                    Need  ]
+      .introFst(promise[FiniteDuration])  .to[ (Neg[FiniteDuration] |*|  Val[FiniteDuration]) |*| Need  ]
+      .assocLR                            .to[  Neg[FiniteDuration] |*| (Val[FiniteDuration]  |*| Need) ]
+      .>.snd.fst(delay)                   .to[  Neg[FiniteDuration] |*| (  Done               |*| Need) ]
+      .elimSnd(rInvertSignal)             .to[  Neg[FiniteDuration]                                     ]
+
   override def delay(d: FiniteDuration): Done -⚬ Done =
     constVal(d) > delay
 
