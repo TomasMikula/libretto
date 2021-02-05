@@ -1989,6 +1989,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
   }
 
+  object Monoid {
+    implicit val monoidDone: Monoid[Done] =
+      new Monoid[Done] {
+        override def unit   :             One -⚬ Done = done
+        override def combine: (Done |*| Done) -⚬ Done = join
+      }
+  }
+
   trait Comonoid[A] extends Cosemigroup[A] with Affine[A] {
     def counit: A -⚬ One
 
@@ -2227,6 +2235,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def map[T, U](f: T -⚬ U): LList[T] -⚬ LList[U] =
       rec { self =>
         switch(nil[U], par(f, self) >>> cons)
+      }
+
+    def fold[T](implicit T: Monoid[T]): LList[T] -⚬ T =
+      rec { self =>
+        switch(T.unit, par(id, self) > T.combine)
       }
 
     def consMaybe[T]: (Maybe[T] |*| LList[T]) -⚬ LList[T] =
