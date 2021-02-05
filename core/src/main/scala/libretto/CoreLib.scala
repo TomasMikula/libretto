@@ -308,6 +308,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def byFst[A, B](implicit A: Junction.Positive[A]): Junction.Positive[A |*| B] =
         from(|*|.assocRL.>.fst(A.awaitPosFst))
 
+      def bySnd[A, B](implicit B: Junction.Positive[B]): Junction.Positive[A |*| B] =
+        from(XI > par(id[A], B.awaitPosFst))
+
       def delegateToEither[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |+| B] =
         from( distributeLR[Done, A, B].bimap(A.awaitPosFst, B.awaitPosFst) )
 
@@ -342,6 +345,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       def byFst[A, B](implicit A: Junction.Negative[A]): Junction.Negative[A |*| B] =
         from(par(A.awaitNegFst, id[B]).assocLR)
+
+      def bySnd[A, B](implicit B: Junction.Negative[B]): Junction.Negative[A |*| B] =
+        from(par(id[A], B.awaitNegFst) > XI)
 
       def delegateToEither[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |+| B] =
         from( id[A |+| B].bimap(A.awaitNegFst, B.awaitNegFst).factorL )
@@ -452,6 +458,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def byFst[A, B](implicit A: Signaling.Positive[A]): Signaling.Positive[A |*| B] =
         from(par(A.signalPosFst, id[B]).assocLR)
 
+      def bySnd[A, B](implicit B: Signaling.Positive[B]): Signaling.Positive[A |*| B] =
+        from(par(id[A], B.signalPosFst) > XI)
+
       /** Signals when it is decided which side of the [[|+|]] is present. */
       def either[A, B]: Signaling.Positive[A |+| B] =
         from(dsl.signalEither[A, B])
@@ -478,6 +487,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       def byFst[A, B](implicit A: Signaling.Negative[A]): Signaling.Negative[A |*| B] =
         from(|*|.assocRL.>.fst(A.signalNegFst))
+
+      def bySnd[A, B](implicit B: Signaling.Negative[B]): Signaling.Negative[A |*| B] =
+        from(XI > par(id[A], B.signalNegFst))
 
       /** Signals when the choice is made between [[A]] and [[B]]. */
       def choice[A, B]: Signaling.Negative[A |&| B] =
@@ -586,6 +598,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
           Junction.Positive.byFst[A, B],
         )
 
+      def bySnd[A, B](implicit B: Positive[B]): Positive[A |*| B] =
+        Positive.from(
+          Signaling.Positive.bySnd[A, B],
+          Junction.Positive.bySnd[A, B],
+        )
+
       /** Signals when the `|+|` is decided, awaiting delays (the publication of) the decision and thed is delegated
         * to the respective side.
         */
@@ -640,6 +658,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         Negative.from(
           Signaling.Negative.byFst[A, B],
           Junction.Negative.byFst[A, B],
+        )
+
+      def bySnd[A, B](implicit B: Negative[B]): Negative[A |*| B] =
+        Negative.from(
+          Signaling.Negative.bySnd[A, B],
+          Junction.Negative.bySnd[A, B],
         )
 
       /** Signals when the choice (`|&|`) is made, awaiting delays the choice and then is delegated to the chosen side. */
