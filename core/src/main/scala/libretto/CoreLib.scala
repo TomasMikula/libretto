@@ -320,8 +320,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def delayChoice[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |&| B] =
         from( delayChoiceUntilDone.bimap(A.awaitPosFst, B.awaitPosFst) )
 
+      def rec[F[_]](implicit F: Junction.Positive[F[Rec[F]]]): Junction.Positive[Rec[F]] =
+        from(par(id, unpack) > F.awaitPosFst > pack)
+
       def rec[F[_]](implicit F: ∀[λ[x => Junction.Positive[F[x]]]]): Junction.Positive[Rec[F]] =
-        from( par(id[Done], unpack[F]) >>> F[Rec[F]].awaitPosFst >>> pack[F] )
+        rec(F[Rec[F]])
+
+      def rec[F[_]](f: Junction.Positive[Rec[F]] => Junction.Positive[F[Rec[F]]]): Junction.Positive[Rec[F]] =
+        from(dsl.rec(g => par(id, unpack) > f(from(g)).awaitPosFst > pack))
     }
 
     object Negative {
@@ -349,8 +355,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def delayChoice[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |&| B] =
         from( id[A |&| B].bimap(A.awaitNegFst, B.awaitNegFst) >>> delayChoiceUntilNeed )
 
+      def rec[F[_]](implicit F: Junction.Negative[F[Rec[F]]]): Junction.Negative[Rec[F]] =
+        from(unpack[F] > F.awaitNegFst > par(id, pack[F]))
+
       def rec[F[_]](implicit F: ∀[λ[x => Junction.Negative[F[x]]]]): Junction.Negative[Rec[F]] =
-        from( (unpack[F] >>> F[Rec[F]].awaitNegFst).>.snd(pack[F]) )
+        rec(F[Rec[F]])
+
+      def rec[F[_]](f: Junction.Negative[Rec[F]] => Junction.Negative[F[Rec[F]]]): Junction.Negative[Rec[F]] =
+        from(dsl.rec(g => unpack > f(from(g)).awaitNegFst > par(id, pack)))
     }
 
     /** [[Positive]] junction can be made to await a negative (i.e. [[Need]]) signal,
@@ -444,8 +456,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def either[A, B]: Signaling.Positive[A |+| B] =
         from(dsl.signalEither[A, B])
 
+      def rec[F[_]](implicit F: Positive[F[Rec[F]]]): Positive[Rec[F]] =
+        from(unpack > F.signalPosFst > par(id, pack))
+
       def rec[F[_]](implicit F: ∀[λ[x => Positive[F[x]]]]): Positive[Rec[F]] =
-        from((unpack[F] >>> F[Rec[F]].signalPosFst).>.snd(pack[F]))
+        rec(F[Rec[F]])
+
+      def rec[F[_]](f: Positive[Rec[F]] => Positive[F[Rec[F]]]): Positive[Rec[F]] =
+        from(dsl.rec(g => unpack > f(from(g)).signalPosFst > par(id, pack)))
     }
 
     object Negative {
@@ -465,13 +483,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def choice[A, B]: Signaling.Negative[A |&| B] =
         from(dsl.signalChoice[A, B])
 
+      def rec[F[_]](implicit F: Negative[F[Rec[F]]]): Negative[Rec[F]] =
+        from(par(id, unpack) > F.signalNegFst > pack)
+
       def rec[F[_]](implicit F: ∀[λ[x => Negative[F[x]]]]): Negative[Rec[F]] =
-        from(
-          id                                     [ Need |*|   Rec[F]  ]
-            .>.snd(unpack[F])                 .to[ Need |*| F[Rec[F]] ]
-            .>(F[Rec[F]].signalNegFst)        .to[          F[Rec[F]] ]
-            .pack[F]                          .to[            Rec[F]  ]
-        )
+        rec(F[Rec[F]])
+
+      def rec[F[_]](f: Negative[Rec[F]] => Negative[F[Rec[F]]]): Negative[Rec[F]] =
+        from(dsl.rec(g => par(id, unpack) > f(from(g)).signalNegFst > pack))
     }
 
     /** [[Signaling.Positive]] can be made to produce a negative (i.e. [[Need]]) signal,
@@ -588,11 +607,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
           ),
         )
 
-      def rec[F[_]](implicit F: ∀[λ[x => Positive[F[x]]]]): Positive[Rec[F]] =
+      def rec[F[_]](implicit F: Positive[F[Rec[F]]]): Positive[Rec[F]] =
         Positive.from(
           Signaling.Positive.rec(F),
           Junction.Positive.rec(F),
         )
+
+      def rec[F[_]](implicit F: ∀[λ[x => Positive[F[x]]]]): Positive[Rec[F]] =
+        rec(F[Rec[F]])
+
+      def rec[F[_]](
+        f: Signaling.Positive[Rec[F]] => Signaling.Positive[F[Rec[F]]],
+        g: Junction.Positive[Rec[F]] => Junction.Positive[F[Rec[F]]],
+      ): SignalingJunction.Positive[Rec[F]] =
+        from(Signaling.Positive.rec(f), Junction.Positive.rec(g))
     }
 
     object Negative {
@@ -633,11 +661,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
           ),
         )
 
-      def rec[F[_]](implicit F: ∀[λ[x => Negative[F[x]]]]): Negative[Rec[F]] =
+      def rec[F[_]](implicit F: Negative[F[Rec[F]]]): Negative[Rec[F]] =
         Negative.from(
           Signaling.Negative.rec(F),
           Junction.Negative.rec(F),
         )
+
+      def rec[F[_]](implicit F: ∀[λ[x => Negative[F[x]]]]): Negative[Rec[F]] =
+        rec(F[Rec[F]])
+
+      def rec[F[_]](
+        f: Signaling.Negative[Rec[F]] => Signaling.Negative[F[Rec[F]]],
+        g: Junction.Negative[Rec[F]] => Junction.Negative[F[Rec[F]]],
+      ): SignalingJunction.Negative[Rec[F]] =
+        from(Signaling.Negative.rec(f), Junction.Negative.rec(g))
     }
   }
 
