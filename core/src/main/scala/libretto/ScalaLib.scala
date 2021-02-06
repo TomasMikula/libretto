@@ -362,8 +362,11 @@ class ScalaLib[
   }
 
   def printLine: Val[String] -⚬ Done =
-    blocking[String, Unit](println(_)) > neglect
+    blocking[String, Unit](Console.out.println(_)) > neglect
 
   def printLine(s: String): Done -⚬ Done =
     constVal(s) > printLine
+
+  def readLine: Done -⚬ Val[String] =
+    constVal(()) > blocking[Unit, String](_ => Console.in.readLine())
 }
