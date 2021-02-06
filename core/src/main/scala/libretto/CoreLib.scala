@@ -233,8 +233,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     * Equivalent to `Done =⚬ A`, but the formulation as `Need |*| A` does not rely on the more powerful concept
     * of ''function types'' (internal hom objects), i.e. does not require [[ClosedDSL]].
     */
-  type Delayed[A] = Need |*| A
+  opaque type Delayed[A] = Need |*| A
   object Delayed {
+    def apply[A](f: Done -⚬ A): One -⚬ Delayed[A] =
+      lInvertSignal > par(id, f)
+
+    def fst[A, B](f: Done -⚬ (A |*| B)): One -⚬ (Delayed[A] |*| B) =
+      apply(f).assocRL
+
+    def snd[A, B](f: Done -⚬ (A |*| B)): One -⚬ (A |*| Delayed[B]) =
+      apply(f) > XI
+
+    def from[A, B](f: (Done |*| A) -⚬ B): A -⚬ Delayed[B] =
+      id[A] > introFst(lInvertSignal) > |*|.assocLR > par(id, f)
+
     def triggerBy[A]: (Done |*| Delayed[A]) -⚬ A =
       |*|.assocRL >>> elimFst(rInvertSignal)
 
@@ -242,7 +254,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       elimFst(need)
 
     /** Signals when it is triggered, awaiting delays the trigger. */
-    def signalingJunction[A]: SignalingJunction.Negative[Delayed[A]] =
+    implicit def signalingJunction[A]: SignalingJunction.Negative[Delayed[A]] =
       SignalingJunction.Negative.byFst
   }
 

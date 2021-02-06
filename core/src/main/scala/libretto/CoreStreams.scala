@@ -114,19 +114,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .pack[LPollableF[A, *]]                     .to[              LPollable[A]                  ]
     }
 
-    private def delay[A](delayBy: (Done |*| LPollable[A]) -⚬ LPollable[A]): LPollable[A] -⚬ Delayed[LPollable[A]] =
-      id                                           [                     LPollable[A] ]
-        .introFst(lInvertSignal)                .to[ (Need |*| Done) |*| LPollable[A] ]
-        .assocLR                                .to[ Need |*| (Done |*| LPollable[A]) ]
-        .>.snd(delayBy)                         .to[ Need |*|     LPollable[A]        ]
-
     /** Delays the first action ([[poll]] or [[close]]) on this [[LPollable]]. */
     def delay[A: Junction.Positive]: LPollable[A] -⚬ Delayed[LPollable[A]] =
-      delay(delayBy)
+      Delayed.from(delayBy)
 
     /** Delays the final [[Done]] signal resulting from [[close]] or end of stream. */
     def delayClosed[A]: LPollable[A] -⚬ Delayed[LPollable[A]] =
-      delay(delayClosedBy)
+      Delayed.from(delayClosedBy)
 
     def map[A, B](f: A -⚬ B): LPollable[A] -⚬ LPollable[B] = rec { self =>
       from(close[A], poll[A].>.right(par(f, self)))

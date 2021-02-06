@@ -57,7 +57,7 @@ object DiningPhilosophers extends StarterApp {
 
     private def singleOwnerFork: Done -⚬ SharedFork = rec { self =>
       val pickUp: Done -⚬ HeldFork =
-        introSnd(lInvertSignal.>.snd(self))
+        introSnd(Delayed(self))
 
       choice(id, pickUp > injectL) > pack[SharedForkF]
     }
@@ -69,19 +69,16 @@ object DiningPhilosophers extends StarterApp {
       val caseFstPicksUp: Done -⚬ ((HeldFork |+| SharedFork) |*| SharedFork) = {
         val go: One -⚬ (Delayed[SharedFork] |*| SharedFork) = rec { go =>
           val caseFstPutsDown: One -⚬ (Delayed[SharedFork] |*| SharedFork) =
-            lInvertSignal > par(id, makeSharedFork) > |*|.assocRL
+            Delayed.fst(makeSharedFork)
 
           val caseSndReleases: One -⚬ (Delayed[SharedFork] |*| Done) =
-            lInvertSignal > par(id, singleOwnerFork > introSnd(done)) > |*|.assocRL
+            Delayed(singleOwnerFork) > introSnd(done)
 
           val caseSndPicksUp: One -⚬ (Delayed[SharedFork] |*| (HeldFork |+| SharedFork)) =
             go > par(id, injectR)
 
           val caseSndActs: One -⚬ (Delayed[SharedFork] |*| SharedFork) =
             choice(caseSndReleases, caseSndPicksUp) > coDistributeL > par(id, pack[SharedForkF])
-
-          implicit def delayedSharedForkSignalingJunction: SignalingJunction.Negative[Delayed[SharedFork]] =
-            Delayed.signalingJunction // TODO should be implicit once Delayed is opaque
 
           choice(caseFstPutsDown, caseSndActs) > select
         }
