@@ -21,13 +21,3 @@ lazy val examples = project
   .settings(
     scalaVersion := scalaVersionString,
   )
-
-// to compile documentation, run `sbt docs/mdoc`
-lazy val docs = project
-  .in(file("docs-project"))
-  .dependsOn(core)
-  .enablePlugins(MdocPlugin)
-  .settings(
-    mdocIn := file("mdoc-src"),
-    mdocOut := file("docs"),
-  )
