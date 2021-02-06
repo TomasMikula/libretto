@@ -69,7 +69,7 @@ class ScalaStreams[
 
     def cons[A]: (Val[A] |*| Pollable[A]) -⚬ Pollable[A] =
       LPollable.cons
-      
+
     def fromLList[A]: LList[Val[A]] -⚬ Pollable[A] =
       LPollable.fromLList[Val[A]]
 
@@ -78,7 +78,7 @@ class ScalaStreams[
 
     def delayBy[A]: (Done |*| Pollable[A]) -⚬ Pollable[A] =
       LPollable.delayBy[Val[A]]
-      
+
     def delay[A](d: FiniteDuration): Pollable[A] -⚬ Pollable[A] = {
       id                                           [          Pollable[A] ]
         .<(negativePollable[A].signalNeg)     .from[ Need |*| Pollable[A] ]
@@ -110,13 +110,13 @@ class ScalaStreams[
           case head :: tail => go(tail, parFromOne(const(head), acc) >>> Pollable.cons)
           case Nil          => acc
         }
-  
+
       go(as.reverse, done >>> Pollable.empty[A])
     }
 
     def of[A](as: A*): One -⚬ Pollable[A] =
       fromList(as.toList)
-    
+
     def toList[A]: Pollable[A] -⚬ Val[List[A]] = {
       def go: (Pollable[A] |*| Val[List[A]]) -⚬ Val[List[A]] = rec { self =>
         id                                   [                        Pollable[A]                    |*| Val[List[A]]  ]
@@ -131,16 +131,22 @@ class ScalaStreams[
           .>.right(self)                  .to[           Val[List[A]]  |+|          Val[List[A]]                       ]
           .either(id, id)                 .to[                     Val[List[A]]                                        ]
       }
-      
+
       id[Pollable[A]]
         .>(introSnd(const(List.empty[A])))
         .>(go)
     }
 
+    def repeatedly[A](f: Done -⚬ Val[A]): Done -⚬ Pollable[A] =
+      LPollable.repeatedly[Val[A]](f)
+
     def map[A, B](f: A => B): Pollable[A] -⚬ Pollable[B] = {
       val g: Val[A] -⚬ Val[B] = mapVal(f)
       LPollable.map(g)
     }
+
+    def forEachSequentially[A](f: Val[A] -⚬ Done): Pollable[A] -⚬ Done =
+      LPollable.forEachSequentially[Val[A]](f)
 
     def prepend[A]: (Val[A] |*| Pollable[A]) -⚬ Pollable[A] = {
       val close: (Val[A] |*| Pollable[A]) -⚬ Done =
@@ -454,7 +460,7 @@ class ScalaStreams[
 
     def cons[A]: (Val[A] |*| Pollable[A]) -⚬ Polled[A] =
       LPolled.cons
-      
+
     def unpoll[A]: Polled[A] -⚬ Pollable[A] =
       LPolled.unpoll[Val[A]]
 
@@ -466,7 +472,7 @@ class ScalaStreams[
 
     /** Merges two [[Polled]]s into one.
       * Left-biased: whenever there is a value available from both upstreams, favors the first one.
-      * 
+      *
       * @param mergePollables left-biased merge of two [[Pollable]]s.
       */
     def merge[A](

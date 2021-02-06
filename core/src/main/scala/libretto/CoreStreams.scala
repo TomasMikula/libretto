@@ -30,7 +30,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def unpack[A]: LPollable[A] -⚬ (Done |&| LPolled[A]) =
       dsl.unpack[LPollableF[A, *]]
-      
+
     def from[A, B](
       onClose: A -⚬ Done,
       onPoll: A -⚬ LPolled[B],
@@ -64,13 +64,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def empty[A]: Done -⚬ LPollable[A] =
       emptyF[A].pack
-      
+
     def cons[A](implicit A: PAffine[A]): (A |*| LPollable[A]) -⚬ LPollable[A] = {
       val onClose: (A |*| LPollable[A]) -⚬ Done       = join(A.neglect, LPollable.close)
       val onPoll:  (A |*| LPollable[A]) -⚬ LPolled[A] = LPolled.cons
       from(onClose, onPoll)
     }
-    
+
     def fromLList[A](implicit A: PAffine[A]): LList[A] -⚬ LPollable[A] = rec { self =>
       LList.switch(
         caseNil  = done          >>> LPollable.empty[A],
@@ -80,6 +80,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def of[A](as: (One -⚬ A)*)(implicit A: PAffine[A]): One -⚬ LPollable[A] =
       LList.of(as: _*) >>> fromLList
+
+    def repeatedly[A](f: Done -⚬ A): Done -⚬ LPollable[A] = rec { self =>
+      from(
+        onClose = id[Done],
+        onPoll = fork(f, self) > LPolled.cons,
+      )
+    }
 
     /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative (i.e. [[Need]]) signal. */
     def signalAction[A]: (Need |*| LPollable[A]) -⚬ LPollable[A] =
@@ -116,13 +123,20 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     /** Delays the first action ([[poll]] or [[close]]) on this [[LPollable]]. */
     def delay[A: Junction.Positive]: LPollable[A] -⚬ Delayed[LPollable[A]] =
       delay(delayBy)
-        
+
     /** Delays the final [[Done]] signal resulting from [[close]] or end of stream. */
     def delayClosed[A]: LPollable[A] -⚬ Delayed[LPollable[A]] =
       delay(delayClosedBy)
 
     def map[A, B](f: A -⚬ B): LPollable[A] -⚬ LPollable[B] = rec { self =>
       from(close[A], poll[A].>.right(par(f, self)))
+    }
+
+    def forEachSequentially[A: Junction.Positive](f: A -⚬ Done): LPollable[A] -⚬ Done = rec { self =>
+      val caseCons: (A |*| LPollable[A]) -⚬ Done =
+        par(f, id) > LPollable.delayBy[A] > self
+
+      poll[A] > LPolled.switch(caseEmpty = id[Done], caseCons)
     }
 
     /** The second [[LPollable]] is "delayed" because that gives flexibility in how the [[Done]] signal resulting from
@@ -149,7 +163,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
       from(close, poll)
     }
-    
+
     def concat[A]: (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A] =
       id.>.snd(delayClosed) >>> concatenate
 
@@ -227,7 +241,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     implicit def positiveJunction[A](implicit A: Junction.Positive[A]): Junction.Positive[LPollable[A]] =
       Junction.Positive.from(LPollable.delayBy)
-      
+
     implicit def negativeSignaling[A]: Signaling.Negative[LPollable[A]] =
       Signaling.Negative.from(LPollable.signalAction[A])
 
@@ -250,6 +264,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def cons[A]: (A |*| LPollable[A]) -⚬ LPolled[A] =
       injectR
+
+    def switch[A, R](
+      caseEmpty: Done -⚬ R,
+      caseCons: (A |*| LPollable[A]) -⚬ R,
+    ): LPolled[A] -⚬ R = {
+      either(caseEmpty, caseCons)
+    }
 
     def unpoll[A](implicit A: PComonoid[A]): LPolled[A] -⚬ LPollable[A] =
       LPollable.from(close(A.counit), id)
@@ -338,7 +359,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def close[A]: LSubscriber[A] -⚬ Need =
       unpack[LSubscriberF[A, *]] >>> either(id, chooseL)
-      
+
     def switch[A, R](
       onDemand      : LDemanding[A] -⚬ R,
       onUnsubscribe :          Need -⚬ R,
@@ -362,7 +383,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     implicit def positiveLSubscriber[A](implicit A: Junction.Negative[A]): SignalingJunction.Positive[LSubscriber[A]] =
       SignalingJunction.Positive.rec[LSubscriberF[A, *]](universalPositiveLSubscriberF)
-      
+
     implicit def nAffineLSubscriber[A]: NAffine[LSubscriber[A]] =
       NAffine.from(LSubscriber.close)
   }
