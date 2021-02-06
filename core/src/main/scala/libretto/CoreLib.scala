@@ -1181,7 +1181,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       dsl.andThen(ev.substituteCo(self), F.lift(f, g))
   }
 
-  /** Focused on `B` in the output `F[B]` of linear function `A -⚬ F[B]`, where `B` is in a covariant position. */
+  /** Focused on `B` in `F[B]`, where `B` is in a covariant position. */
   class FocusedCo[F[_], B](f: F[B])(implicit F: Externalizer[F]) {
     def map[C](g: B -⚬ C): F[C] = F.lift(g)(f)
 
@@ -1211,6 +1211,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def injectL[C]: F[B |+| C] = F.lift(dsl.injectL)(f)
     def injectR[C]: F[C |+| B] = F.lift(dsl.injectR)(f)
+
+    def signalFst(implicit B: Signaling.Positive[B]): F[Done |*| B] =
+      map(B.signalPosFst)
+
+    def signalSnd(implicit B: Signaling.Positive[B]): F[B |*| Done] =
+      map(B.signalPosSnd)
   }
 
   class FocusedBi[F[_, _], B1, B2](f: F[B1, B2])(F: BiExternalizer[F]) {
