@@ -343,3 +343,54 @@ like this
 val f2: (B |*| A) -⚬ ((E |*| D) |*| C) =
   swap[B, A] > f1 > swap[C, D |*| E] > par(swap[D, E], id[C])
 ```
+
+## The no-flow port, `One`
+
+Sometimes we want a block with no in-ports or no out-ports, such as these ones
+
+```
+┏━━━━━━━━━━━━┓            ┏━━━━━━━━━━━━┓  
+┃            ┞─┐          ┞─┐          ┃
+┃      f     ╎A│          ╎B│    g     ┃
+┃            ┟─┘          ┟─┘          ┃
+┗━━━━━━━━━━━━┛            ┗━━━━━━━━━━━━┛  
+```
+
+In Scala representation, however, we have to specify the type of in-port and the type of outport.
+There is a special fake port type, `One`, through which there is no flow of information in either direction.
+
+We can declare the above two blocks as
+
+```scala
+val f: One -⚬ A
+val g: B -⚬ One
+```
+
+We can freely add and remove `One` to/from in-ports and/or out-ports using the following primitives:
+
+```scala
+//  ┏━━━━━━━━━━━━━┓           ┏━━━━━━━━━━━━━━━━┓    
+//  ┃             ┞───┐       ┞───┐            ┃
+//  ┃             ╎One│       ╎One│            ┃
+//  ┃ introFst[A] ┟───┘       ┟───┘ elimFst[A] ┃
+//  ┞───┐         ┞───┐       ┞───┐            ┞───┐
+//  ╎ A │         ╎ A │       ╎ A │            ╎ A │
+//  ┟───┘         ┟───┘       ┟───┘            ┟───┘
+//  ┗━━━━━━━━━━━━━┛           ┗━━━━━━━━━━━━━━━━┛    
+//
+//  ┏━━━━━━━━━━━━━┓           ┏━━━━━━━━━━━━━━━━┓    
+//  ┞───┐         ┞───┐       ┞───┐            ┞───┐
+//  ╎ A │         ╎ A │       ╎ A │            ╎ A │
+//  ┟───┘         ┟───┘       ┟───┘            ┟───┘
+//  ┃ introSnd[A] ┞───┐       ┞───┐ elimSnd[A] ┃
+//  ┃             ╎One│       ╎One│            ┃
+//  ┃             ┟───┘       ┟───┘            ┃
+//  ┗━━━━━━━━━━━━━┛           ┗━━━━━━━━━━━━━━━━┛    
+
+def introFst[A]: A -⚬ (One |*| A)
+def introSnd[A]: A -⚬ (A |*| One)
+def elimFst[A]: (One |*| A) -⚬ A
+def elimSnd[A]: (A |*| One) -⚬ A
+```
+
+Soon we are going to see useful cases of adding and removing `One`s.
