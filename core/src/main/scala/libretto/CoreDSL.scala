@@ -9,6 +9,9 @@ trait CoreDSL {
   /** Both `A` and `B`, concurrently. */
   type |*|[A, B]
 
+  /** Alias for [[|*|]]. */
+  type ⊗[A, B] = A |*| B
+
   /** No resource. Analogous to [[Unit]]. It is the identity element for [[|*|]]. */
   type One
 
@@ -16,6 +19,9 @@ trait CoreDSL {
     * The producer decides which one it is, the consumer can check which one it is.
     */
   type |+|[A, B]
+
+  /** Alias for [[|+|]]. */
+  type ⊕[A, B] = A |+| B
 
   /** Impossible resource. Analogous to [[Nothing]]. It is the identity element for [[|+|]]. */
   type Zero
