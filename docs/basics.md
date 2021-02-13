@@ -36,6 +36,18 @@ of the block. That may or may not be the case. In general, information may flow 
 directions through an in-port as well as through an out-port. However, the distinction between in-ports and out-ports
 is important for composition, see below.
 
+## Maximum concurrency
+
+We can be sure that event _e<sub>2</sub>_ happens after event _e<sub>1</sub>_ only if _e<sub>2</sub>_
+**causally depends** on _e<sub>1</sub>_. If there is no causal dependence between _e<sub>1</sub>_ and _e<sub>2</sub>_,
+then they happen concurrently (☝️ but not necessarily in parallel).
+
+This is different from what most people are used to. It usually takes some work to make things happen concurrently.
+In Libretto, it takes some work to make things happen sequentially if there is no natural causal dependence between
+them.
+
+As we proceed, we will get an idea of what does and what does not introduce a causal dependence.
+
 ## Sequential composition
 
 We can connect an out-port to an in-port (but not to another out-port) of the same type on another block. For example,
@@ -60,7 +72,8 @@ can be composed into a composite block `g ⚬ f`
 ```
 
 ☝️ Although we call it _sequential_ composition, do _not_ assume that`g` takes place "after" `f`, in a temporal or
-ocausal sense. That may or may not be the case and we would need know the interface type `B` and possibly the inner
+causal sense. There may or may not be causal dependence in either direction, or even both directions simultaneously.
+We would need know the interface type `B` and possibly the inner
 workings of the blocks to make judgments about causal dependence. In general, processing can take place in `g` even
 before any information passes through the `B` interface.
 
@@ -159,9 +172,9 @@ def par[A, B, C, D](
 ): (A |*| C) -⚬ (B |*| D)
 ```
 
-## The identity function
+## The identity block
 
-For any type `A` there is an _identity_ function
+For any type `A` there is an _identity_ function (block)
 
 ```scala
 /*  ┏━━━━━━━━━━━━┓
@@ -353,7 +366,7 @@ Sometimes we want a block with no in-ports or no out-ports, such as these ones
 ┃            ┞─┐          ┞─┐          ┃
 ┃      f     ╎A│          ╎B│    g     ┃
 ┃            ┟─┘          ┟─┘          ┃
-┗━━━━━━━━━━━━┛            ┗━━━━━━━━━━━━┛  
+┗━━━━━━━━━━━━┛            ┗━━━━━━━━━━━━┛
 ```
 
 In Scala representation, however, we have to specify the type of in-port and the type of outport.
@@ -365,6 +378,9 @@ We can declare the above two blocks as
 val f: One -⚬ A
 val g: B -⚬ One
 ```
+
+In graphical notation, we omit `One`-typed ports if they do not add any value (such as above), but keep them if they do
+(such as below).
 
 We can freely add and remove `One` to/from in-ports and/or out-ports using the following primitives:
 
@@ -394,3 +410,194 @@ def elimSnd[A]: (A |*| One) -⚬ A
 ```
 
 Soon we are going to see useful cases of adding and removing `One`s.
+
+Since there is no flow of information through `One`, there is also _no causal dependency through `One`-typed ports._
+This means, for example, that in
+
+```
+┏━━━━━━━━━┯━━━━━━━━━━━━━┯━━━━━━━━━━━┓    
+┃         ╎             ├───┐       ┞───┐
+┃         ╎             ╎One│   g   ╎ B │
+┃         ╎             ├───┘       ┟───┘
+┃    f    ╎ introFst[C] ├╌╌╌╌╌╌╌╌╌╌╌┨
+┞───┐     ├───┐         ├───┐       ┞───┐
+╎ A │     ╎ C │         ╎ C │ id[C] ╎ C │
+┟───┘     ├───┘         ├───┘       ┟───┘
+┗━━━━━━━━━┷━━━━━━━━━━━━━┷━━━━━━━━━━━┛    
+```
+
+there is no causal dependence of `g` on anything in `f` going through the `introFst[C]` block.
+
+## Signals, `Done` and `Need`
+
+By a signal we mean a notification that some event has occurred. The signal itself carries no information about the
+event, though, it only signals that the event has occurred.
+
+There are two types for signals, differing in the direction in which they travel:
+ - `Done`, which travels in the direction of `-⚬`, i.e. from left to right.
+   We also call the direction of `-⚬` the _positive direction._
+ - `Need`, which travels in the direction opposite to `-⚬`, i.e. from right to left.
+   We also call the direction opposite to `-⚬` the _negative direction._
+   
+Signals are useful for creating causal dependencies: one block might wait for a signal from another block
+before proceeding with further processing. For example, the signal might signal completion of a request and further
+processing might be accepting another request, effectively sequencing request processing.
+
+For someone used to `Future` and `Promise`, it might be helpful, _despite important differences,_ to initially view
+ - `Done` as `Future[Unit]`,
+ - `Need` as `Promise[Unit]`.
+
+### Immediate signals
+
+There are primitive blocks that fire a signal immediately. More precisely, as soon as the branch containing the block
+becomes active, but we haven't seen any branching operators yet. These are
+
+```scala
+//  ┏━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━┓
+//  ┃            ┞────┐          ┞────┐         ┃
+//  ┃    done    ╎Done│          ╎Need│  need   ┃
+//  ┃            ┟────┘          ┟────┘         ┃
+//  ┗━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━┛
+
+def done: One -⚬ Done
+def need: Need -⚬ One
+```
+
+### Signals cannot be ignored
+
+We have just seen that we can easily fire a signal without any prerequisites using `done` or `need`.
+On the other hand, a signal cannot be ignored. Once created, a signal has to be propagated, typically serving as
+a trigger for another action.
+
+Ignoring a signal would be analogous to ignoring a fired `Future`, which means losing track of a running task and thus
+a potential resource leak.
+
+### Forking and joining signals
+
+_Forking_ a signal means that as soon as the signal arrives, two new signals are fired.
+
+```scala
+//  ┏━━━━━━━━━━━━━┓                 ┏━━━━━━━━━━━━━━━━┓
+//  ┃             ┞────┐            ┞────┐           ┃
+//  ┃             ╎Done│            ╎Need│           ┃
+//  ┞────┐        ┟────┘            ┟────┘           ┞────┐
+//  ╎Done│ fork   ┃                 ┃      forkNeed  ╎Need│
+//  ┟────┘        ┞────┐            ┞────┐           ┟────┘
+//  ┃             ╎Done│            ╎Need│           ┃
+//  ┃             ┟────┘            ┟────┘           ┃
+//  ┗━━━━━━━━━━━━━┛                 ┗━━━━━━━━━━━━━━━━┛
+
+def fork     : Done -⚬ (Done |*| Done)
+def forkNeed : (Need |*| Need) -⚬ Need
+```
+
+Remember that `Need` travels from right to left, so `forkNeed` has one `Need` signal on the right and two `Need` signals
+on the left.
+
+_Joining_ two signals means to fire a signal as soon as both signals arrive.
+
+```scala
+//  ┏━━━━━━━━━━━━━━━━┓                 ┏━━━━━━━━━━━━━━━━┓     
+//  ┞────┐           ┃                 ┃                ┞────┐
+//  ╎Done│           ┃                 ┃                ╎Need│
+//  ┟────┘           ┞────┐            ┞────┐           ┟────┘
+//  ┃       join     ╎Done│            ╎Need│ joinNeed  ┃     
+//  ┞────┐           ┟────┘            ┟────┘           ┞────┐
+//  ╎Done│           ┃                 ┃                ╎Need│
+//  ┟────┘           ┃                 ┃                ┟────┘
+//  ┗━━━━━━━━━━━━━━━━┛                 ┗━━━━━━━━━━━━━━━━┛     
+
+def join     : (Done |*| Done) -⚬ Done
+def joinNeed : Need -⚬ (Need |*| Need)
+```
+
+### Inverting signals
+
+There are primitives to invert the direction of a signal.
+A `Need` signal traveling to the left can be changed to a `Done` signal traveling to the right.
+A `Done` signal traveling to the right can be changed to a `Need` signal traveling to the left.
+
+```scala
+//  ┏━━━━━━━━━━━━━━━┓                 ┏━━━━━━━━━━━━━━━┓
+//  ┃ lInvertSignal ┃                 ┃ rInvertSignal ┃
+//  ┃               ┞────┐            ┞────┐          ┃
+//  ┃            ┌┄┄╎Need│←┄        ┄→╎Done│┄┄┐       ┃
+//  ┃            ┆  ┟────┘            ┟────┘  ┆       ┃
+//  ┃            ┆  ┃                 ┃       ┆       ┃
+//  ┃            ┆  ┞────┐            ┞────┐  ┆       ┃
+//  ┃            └┄→╎Done│┄→        ←┄╎Need│←┄┘       ┃
+//  ┃               ┟────┘            ┟────┘          ┃
+//  ┗━━━━━━━━━━━━━━━┛                 ┗━━━━━━━━━━━━━━━┛
+
+
+def lInvertSignal: One -⚬ (Need |*| Done)
+def rInvertSignal: (Done |*| Need) -⚬ One
+```
+
+Using these, we can always move a signal to the other side of the `-⚬` arrow while changing its direction.
+For example, given
+
+```scala
+/*  ┏━━━━━━━━━━━━┓
+ *  ┞────┐       ┃
+ *  ╎Done│       ┃
+ *  ┟────┘   f   ┃
+ *  ┞────┐       ┞────┐
+ *  ╎ A  │       ╎ B  │
+ *  ┟────┘       ┟────┘
+ *  ┗━━━━━━━━━━━━┛
+ */
+val f: (Done |*| A) -⚬ B
+```
+
+we can always obtain
+
+```scala
+/*  ┏━━━━━━━━━━━━━┓    
+ *  ┃             ┞────┐
+ *  ┃             ╎Need│
+ *  ┃       g     ┟────┘
+ *  ┞────┐        ┞────┐
+ *  ╎ A  │        ╎ B  │
+ *  ┟────┘        ┟────┘
+ *  ┗━━━━━━━━━━━━━┛    
+ */
+val g: A -⚬ (Need |*| B)
+```
+
+roughly like this
+
+```
+┏━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┓     
+┃ lInvertSignal ├────┐ id[Need] ┞────┐
+┃          ┌┄┄┄┄╎Need│←┄┄┄┄┄┄┄┄┄╎Need│←┄
+┃          ┆    ├────┘          ┟────┘
+┃          ┆    ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨     
+┃          ┆    ├────┐          ┃     
+┃          └┄┄┄→╎Done│          ┃     
+┃               ├────┘          ┃ 
+┠╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤       f       ┃ 
+┞───┐           ├───┐           ┞───┐ 
+╎ A │   id[A]   ╎ A │           ╎ B │ 
+┟───┘           ├───┘           ┟───┘
+┗━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛    
+```
+
+and precisely (including all the necessary glue) like this
+
+```scala
+/*  ┏━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┓     
+ *  ┃             ╎ lInvertSignal ├────┐         ├────┐          ┞────┐
+ *  ┃ introFst[A] ├───┐           ╎Need│         ╎Need│ id[Need] ╎Need│
+ *  ┃             ╎One│           ╎ ⊗  │         ├────┘          ┟────┘
+ *  ┃             ├───┘           ╎Done│         ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨     
+ *  ┃             ╎               ├────┘         ├────┐          ┃    
+ *  ┃             ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤ timesAssocLR ╎Done│          ┃    
+ *  ┞───┐         ├───┐           ├───┐          ╎ ⊗  │    f     ┞───┐
+ *  ╎ A │         ╎ A │   id[A]   ╎ A │          ╎ A  │          ╎ B │
+ *  ┟───┘         ├───┘           ├───┘          ├────┘          ┟───┘
+ *  ┗━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛    
+ */
+val g: A -⚬ (Need |*| B) =
+  introFst[A] > par(lInvertSignal, id[A]) > timesAssocLR > par(id[Need], f)
+```
