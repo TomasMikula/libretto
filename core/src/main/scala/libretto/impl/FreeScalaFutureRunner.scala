@@ -302,7 +302,7 @@ class FreeScalaFutureRunner(
           }
           Pair(NeedAsync(pn), Deferred(py.future))                .asInstanceOf[Frontier[B]]
 
-        case -⚬.DistributeLR() =>
+        case -⚬.DistributeL() =>
           // (X |*| (Y |+| Z)) -⚬ ((X |*| Y) |+| (X |*| Z))
           type X; type Y; type Z
           this.asInstanceOf[Frontier[X |*| (Y |+| Z)]].splitPair match {

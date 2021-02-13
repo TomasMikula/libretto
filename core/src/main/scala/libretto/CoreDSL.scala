@@ -141,13 +141,13 @@ trait CoreDSL {
   /** Distribute the factor on the left into the summands on the right.
     * Inverse of [[factorL]].
     */
-  def distributeLR[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C))
+  def distributeL[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C))
 
   /** Distribute the factor on the right into the summands on the left.
     * Inverse of [[factorR]].
     */
-  def distributeRL[A, B, C]: ((A |+| B) |*| C) -⚬ ((A |*| C) |+| (B |*| C)) =
-    andThen(andThen(swap, distributeLR), either(andThen(swap, injectL), andThen(swap, injectR)))
+  def distributeR[A, B, C]: ((A |+| B) |*| C) -⚬ ((A |*| C) |+| (B |*| C)) =
+    andThen(andThen(swap, distributeL), either(andThen(swap, injectL), andThen(swap, injectR)))
 
   def coFactorL[A, B, C]: (A |*| (B |&| C)) -⚬ ((A |*| B) |&| (A |*| C)) =
     choice(par(id, chooseL), par(id, chooseR))
@@ -195,12 +195,12 @@ trait CoreDSL {
     * }}}
     */
   def lInvertSignal: One -⚬ (Need |*| Done)
-  
+
   def joinRTermini: (RTerminus |*| RTerminus) -⚬ RTerminus
   def joinLTermini: LTerminus -⚬ (LTerminus |*| LTerminus)
-  
+
   def rInvertTerminus: (RTerminus |*| LTerminus) -⚬ One
-  def lInvertTerminus: One -⚬ (LTerminus |*| RTerminus) 
+  def lInvertTerminus: One -⚬ (LTerminus |*| RTerminus)
 
   def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B
 

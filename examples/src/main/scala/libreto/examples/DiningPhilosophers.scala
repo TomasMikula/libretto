@@ -126,16 +126,16 @@ object DiningPhilosophers extends StarterApp {
       val go1: (Name |*| (HeldFork |*| SharedFork)) -⚬ ((Name |*| (SharedFork |*| SharedFork)) |+| (Name |*| (SharedFork |*| SharedFork))) =
         id                                       [  Name |*| ( HeldFork   |*|         SharedFork                                    ) ]
           .>.snd.snd(pickUp)                  .to[  Name |*| ( HeldFork   |*| (HeldFork    |+|                           SharedFork)) ]
-          .>.snd(distributeLR)                .to[  Name |*| ((HeldFork   |*| HeldFork  )  |+|           (HeldFork   |*| SharedFork)) ]
-          .distributeLR                       .to[ (Name |*|  (HeldFork   |*| HeldFork  )) |+| (Name |*| (HeldFork   |*| SharedFork)) ]
+          .>.snd(distributeL)                 .to[  Name |*| ((HeldFork   |*| HeldFork  )  |+|           (HeldFork   |*| SharedFork)) ]
+          .distributeL                        .to[ (Name |*|  (HeldFork   |*| HeldFork  )) |+| (Name |*| (HeldFork   |*| SharedFork)) ]
           .>.left(eat)                        .to[ (Name |*|  (HeldFork   |*| HeldFork  )) |+| (Name |*| (HeldFork   |*| SharedFork)) ]
           .>.left.snd(par(putDown, putDown))  .to[ (Name |*|  (SharedFork |*| SharedFork)) |+| (Name |*| (HeldFork   |*| SharedFork)) ]
           .>.right.snd.fst(putDown)           .to[ (Name |*|  (SharedFork |*| SharedFork)) |+| (Name |*| (SharedFork |*| SharedFork)) ]
 
       id                                         [  Name |*| (                         SharedFork                    |*| SharedFork ) ]
         .>.snd.fst(pickUp)                    .to[  Name |*| ((HeldFork                    |+|           SharedFork) |*| SharedFork ) ]
-        .>.snd(distributeRL)                  .to[  Name |*| ((HeldFork   |*| SharedFork)  |+|           (SharedFork |*| SharedFork)) ]
-        .distributeLR                         .to[ (Name |*|  (HeldFork   |*| SharedFork)) |+| (Name |*| (SharedFork |*| SharedFork)) ]
+        .>.snd(distributeR)                   .to[  Name |*| ((HeldFork   |*| SharedFork)  |+|           (SharedFork |*| SharedFork)) ]
+        .distributeL                          .to[ (Name |*|  (HeldFork   |*| SharedFork)) |+| (Name |*| (SharedFork |*| SharedFork)) ]
         .either(go1, injectR)                 .to[ (Name |*|  (SharedFork |*| SharedFork)) |+| (Name |*| (SharedFork |*| SharedFork)) ]
     }
 
@@ -153,7 +153,7 @@ object DiningPhilosophers extends StarterApp {
 
         id                           [                                                 Val[Int]         |*| (Name |*| (SharedFork |*| SharedFork))  ]
           .>.fst(dec)             .to[ (Done                                             |+|  Val[Int]) |*| (Name |*| (SharedFork |*| SharedFork))  ]
-          .distributeRL           .to[ (Done |*| (Name |*| (SharedFork |*| SharedFork))) |+| (Val[Int]  |*| (Name |*| (SharedFork |*| SharedFork))) ]
+          .distributeR            .to[ (Done |*| (Name |*| (SharedFork |*| SharedFork))) |+| (Val[Int]  |*| (Name |*| (SharedFork |*| SharedFork))) ]
           .either(complete, eatThinkAndRepeat)
       }
 

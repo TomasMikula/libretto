@@ -191,11 +191,11 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       upd: (W |*| V) -⚬ F[V],
     )(implicit
       F: Absorptive[F],
-    ): ((Val[K] |*| W) |*| NonEmptyTree[K, V]) -⚬ F[NonEmptyTree[K, V]] = 
+    ): ((Val[K] |*| W) |*| NonEmptyTree[K, V]) -⚬ F[NonEmptyTree[K, V]] =
       rec { self =>
         id                                             [           (Val[K] |*| W) |*|         NonEmptyTree[K, V]                      ]
           .>.snd(unpack)                            .to[           (Val[K] |*| W) |*| (Singleton[K, V] |+| Branch[K, V])              ]
-          .distributeLR                             .to[ ((Val[K] |*| W) |*| Singleton[K, V])  |+|  ((Val[K] |*| W) |*| Branch[K, V]) ]
+          .distributeL                              .to[ ((Val[K] |*| W) |*| Singleton[K, V])  |+|  ((Val[K] |*| W) |*| Branch[K, V]) ]
           .>.left(sUpdate(ins, upd))                .to[       F[NonEmptyTree[K, V]]           |+|  ((Val[K] |*| W) |*| Branch[K, V]) ]
           .>.right(bUpdate(self))                   .to[       F[NonEmptyTree[K, V]]           |+|        F[NonEmptyTree[K, V]]       ]
           .either(id, id)                           .to[                             F[NonEmptyTree[K, V]]                            ]
@@ -267,7 +267,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
         .>.snd(Branch.deconstruct)        .to[                  Elem |*| (Tree                 |*| Tree) ]
         .assocRL                          .to[                 (Elem |*| Tree)                 |*| Tree  ]
         .>.fst(sortBy(fst.lens, maxKey))  .to[ ((Elem |*| Tree)           |+| (Tree |*| Elem)) |*| Tree  ]
-        .distributeRL                     .to[ ((Elem |*| Tree) |*| Tree) |+| ((Tree |*| Elem) |*| Tree) ]
+        .distributeR                      .to[ ((Elem |*| Tree) |*| Tree) |+| ((Tree |*| Elem) |*| Tree) ]
         .>.right.assocLR                  .to[ ((Elem |*| Tree) |*| Tree) |+| (Tree |*| (Elem |*| Tree)) ]
         .either(updateL, updateR)         .to[                          F[Tree]                          ]
     }
@@ -313,7 +313,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
     type NET[K, V] = NonEmptyTree[K, V]
 
     id[(Val[K] |*| W) |*| Tree[K, V]]   .to[          (Val[K] |*| W) |*| (Done |+| NET[K, V])                ]
-      .distributeLR                     .to[ ((Val[K] |*|  W  ) |*| Done) |+| ((Val[K] |*| W) |*| NET[K, V]) ]
+      .distributeL                      .to[ ((Val[K] |*|  W  ) |*| Done) |+| ((Val[K] |*| W) |*| NET[K, V]) ]
       .>.right(NET.update_(ins, upd))   .to[ ((Val[K] |*|  W  ) |*| Done) |+|           F[ NET[K, V]]        ]
       .>.right.co[F].injectR[Done]      .to[ ((Val[K] |*|  W  ) |*| Done) |+|           F[Tree[K, V]]        ]
       .>.left(IX)                       .to[ ((Val[K] |*| Done) |*|  W  ) |+|           F[Tree[K, V]]        ]
@@ -443,13 +443,13 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
 
         override def absorbL[A, B, C](combine: (A |*| B) -⚬ C, recover: (A |*| Done) -⚬ C): (A |*| PMaybe[B]) -⚬ PMaybe[C] =
           id[A |*| PMaybe[B]]                     .to[ A |*| (Done  |+|        B) ]
-            .distributeLR                         .to[ (A |*| Done) |+| (A |*| B) ]
+            .distributeL                          .to[ (A |*| Done) |+| (A |*| B) ]
             .either(recover, combine)             .to[               C            ]
             .injectR                              .to[        PMaybe[C]           ]
 
         override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]):( A |*| PMaybe[B]) -⚬ PMaybe[A |*| B] =
           id[A |*| PMaybe[B]]                     .to[ A |*|    (Done  |+|        B) ]
-            .distributeLR                         .to[ (A    |*| Done) |+| (A |*| B) ]
+            .distributeL                          .to[ (A    |*| Done) |+| (A |*| B) ]
             .>.left.fst(A.counit)                 .to[ (Done |*| Done) |+| (A |*| B) ]
             .>.left(join)                         .to[      Done       |+| (A |*| B) ]
       }

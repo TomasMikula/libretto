@@ -327,7 +327,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         from(par(fork, id) > IXI > par(A.awaitPosFst, B.awaitPosFst))
 
       def delegateToEither[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |+| B] =
-        from( distributeLR[Done, A, B].bimap(A.awaitPosFst, B.awaitPosFst) )
+        from( distributeL[Done, A, B].bimap(A.awaitPosFst, B.awaitPosFst) )
 
       def delayEither[A, B](implicit A: Junction.Positive[A], B: Junction.Positive[B]): Junction.Positive[A |+| B] =
         from( delayEitherUntilDone.bimap(A.awaitPosFst, B.awaitPosFst) )
@@ -752,7 +752,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .par(A.signalPos, B.signalPos)              .to[         (Done |*| A) |*| (Done |*| B)         ]
       .>(IXI)                                     .to[         (Done |*| Done) |*| (A |*| B)         ]
       .>.fst(raceCompletion)                      .to[         (Done |+| Done) |*| (A |*| B)         ]
-      .distributeRL                               .to[ (Done |*| (A |*| B)) |+| (Done |*| (A |*| B)) ]
+      .distributeR                                .to[ (Done |*| (A |*| B)) |+| (Done |*| (A |*| B)) ]
       .>.left(XI.>.snd(B.awaitPos))               .to[           (A |*| B)  |+| (Done |*| (A |*| B)) ]
       .>.right(|*|.assocRL.>.fst(A.awaitPos))     .to[           (A |*| B) |+|            (A |*| B)  ]
 
@@ -766,7 +766,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     id                                               [  Done        |*|            A  ]
       .>.snd(A.signalPos).assocRL                 .to[ (Done        |*|  Done) |*| A  ]
       .>.fst(raceCompletion)                      .to[ (Done        |+|  Done) |*| A  ]
-      .distributeRL                               .to[ (Done |*| A) |+| (Done  |*| A) ]
+      .distributeR                                .to[ (Done |*| A) |+| (Done  |*| A) ]
       .bimap(A.awaitPos, A.awaitPos)              .to[           A  |+|            A  ]
 
   def raceAgainstR[A](implicit A: SignalingJunction.Positive[A]): (A |*| Done) -⚬ (A |+| A) =
@@ -807,7 +807,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>(A.signalPosSnd)                      .to[  A |*|  Done                   ]
       .>.snd(introSnd(done))                  .to[  A |*| (Done  |*|        Done) ]
       .>.snd(raceCompletion)                  .to[  A |*| (Done  |+|        Done) ]
-      .distributeLR                           .to[ (A |*|  Done) |+| (A |*| Done) ]
+      .distributeL                            .to[ (A |*|  Done) |+| (A |*| Done) ]
       .bimap(A.awaitPosSnd, A.awaitPosSnd)    .to[  A           |+|  A            ]
 
   def selectSignaledOrNot[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ A =
@@ -855,7 +855,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         override def extendJunction(implicit A: Junction.Positive[A]): Junction.Positive[S |+| T] =
           new Junction.Positive[S |+| T] {
             override def awaitPosFst: (Done |*| (S |+| T)) -⚬ (S |+| T) =
-              distributeLR.bimap(self.joinL(A), that.joinL(A))
+              distributeL.bimap(self.joinL(A), that.joinL(A))
           }
       }
   }
@@ -906,7 +906,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def |+|[T](that: Lens[T, A]): Lens[S |+| T, A] =
       new Lens[S |+| T, A] {
         def modify[X, Y](f: (X |*| A) -⚬ (Y |*| A)): (X |*| (S |+| T)) -⚬ (Y |*| (S |+| T)) =
-          distributeLR[X, S, T].bimap(Lens.this.modify(f), that.modify(f)) >>> factorL
+          distributeL[X, S, T].bimap(Lens.this.modify(f), that.modify(f)) >>> factorL
       }
   }
 
@@ -1121,11 +1121,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def swap[B1, B2](implicit ev: B =:= (B1 |*| B2)): A -⚬ (B2 |*| B1) =
       ev.substituteCo(self) >>> dsl.swap
 
-    def distributeLR[B1, B2, B3](implicit ev: B =:= (B1 |*| (B2 |+| B3))): A -⚬ ((B1 |*| B2) |+| (B1 |*| B3)) =
-      ev.substituteCo(self) >>> dsl.distributeLR
+    def distributeL[B1, B2, B3](implicit ev: B =:= (B1 |*| (B2 |+| B3))): A -⚬ ((B1 |*| B2) |+| (B1 |*| B3)) =
+      ev.substituteCo(self) >>> dsl.distributeL
 
-    def distributeRL[B1, B2, B3](implicit ev: B =:= ((B1 |+| B2) |*| B3)): A -⚬ ((B1 |*| B3) |+| (B2 |*| B3)) =
-      ev.substituteCo(self) >>> dsl.distributeRL
+    def distributeR[B1, B2, B3](implicit ev: B =:= ((B1 |+| B2) |*| B3)): A -⚬ ((B1 |*| B3) |+| (B2 |*| B3)) =
+      ev.substituteCo(self) >>> dsl.distributeR
 
     def factorL[C, D1, D2](implicit ev: B =:= ((C |*| D1) |+| (C |*| D2))): A -⚬ (C |*| (D1 |+| D2)) =
       ev.substituteCo(self) >>> dsl.factorL
@@ -1426,7 +1426,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     */
   def matchingChoiceLR[A, B, C, D]: ((A |+| B) |*| (C |&| D)) -⚬ ((A |*| C) |+| (B |*| D)) =
     id[(A |+| B) |*| (C |&| D)]
-      .distributeRL            .to[(A |*| (C |&| D)) |+| (B |*| (C |&| D))]
+      .distributeR             .to[(A |*| (C |&| D)) |+| (B |*| (C |&| D))]
       .>.left.snd(chooseL)     .to[(A |*|  C       ) |+| (B |*| (C |&| D))]
       .>.right.snd(chooseR)    .to[(A |*|  C       ) |+| (B |*|        D )]
 
@@ -1435,7 +1435,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     */
   def matchingChoiceRL[A, B, C, D]: ((A |&| B) |*| (C |+| D)) -⚬ ((A |*| C) |+| (B |*| D)) =
     id[(A |&| B) |*| (C |+| D)]
-      .distributeLR            .to[((A |&| B) |*| C) |+| ((A |&| B) |*| D)]
+      .distributeL             .to[((A |&| B) |*| C) |+| ((A |&| B) |*| D)]
       .>.left.fst(chooseL)     .to[( A        |*| C) |+| ((A |&| B) |*| D)]
       .>.right.fst(chooseR)    .to[( A        |*| C) |+| (       B  |*| D)]
 
@@ -1485,7 +1485,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   def delayEitherUntilDone[A, B]: (Done |*| (A |+| B)) -⚬ ((Done |*| A) |+| (Done |*| B)) =
     id                                                               [  Done |*| (A  |+|           B) ]
-      .distributeLR                                               .to[ (Done |*|  A) |+| (Done |*| B) ]
+      .distributeL                                                .to[ (Done |*|  A) |+| (Done |*| B) ]
       .either(injectLWhenDone, injectRWhenDone)                   .to[ (Done |*|  A) |+| (Done |*| B) ]
 
   def delayChoiceUntilNeed[A, B]: ((Need |*| A) |&| (Need |*| B)) -⚬ (Need |*| (A |&| B)) =
@@ -1547,17 +1547,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       caseTrue : (A |*| Done) -⚬ R,
       caseFalse: (A |*| Done) -⚬ R,
     ): (A |*| Bool) -⚬ R =
-      distributeLR.either(caseTrue, caseFalse)
+      distributeL.either(caseTrue, caseFalse)
 
     def switchWithR[A, R](
       caseTrue : (Done |*| A) -⚬ R,
       caseFalse: (Done |*| A) -⚬ R,
     ): (Bool |*| A) -⚬ R =
-      distributeRL.either(caseTrue, caseFalse)
+      distributeR.either(caseTrue, caseFalse)
 
     def ifThenElse[A, B, C](ifTrue: (Done |*| A) -⚬ B, ifFalse: (Done |*| A) -⚬ C): (Bool |*| A) -⚬ (B |+| C) =
       id                                   [          Bool |*| A           ]
-        .distributeRL                   .to[ (Done |*| A) |+| (Done |*| A) ]
+        .distributeR                    .to[ (Done |*| A) |+| (Done |*| A) ]
         .bimap(ifTrue, ifFalse)         .to[        B     |+|        C     ]
   }
 
@@ -1601,7 +1601,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       caseGt: ((A |*| B) |*| C) -⚬ D,
     ): (Compared[A, B] |*| C) -⚬ D =
       id[ Compared[A, B] |*| C ]                .to[ ((A |*| B)        |+| ( (A |*| B)        |+|  (A |*| B))) |*| C   ]
-        .distributeRL.>.right(distributeRL)     .to[ ((A |*| B) |*| C) |+| (((A |*| B) |*| C) |+| ((A |*| B)   |*| C)) ]
+        .distributeR.>.right(distributeR)       .to[ ((A |*| B) |*| C) |+| (((A |*| B) |*| C) |+| ((A |*| B)   |*| C)) ]
         .either(caseLt, either(caseEq, caseGt)) .to[                    D                                              ]
 
     def enrichWith[A, B, C, S, T](
@@ -1609,7 +1609,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     )
     : (Compared[A, B] |*| C) -⚬ Compared[S, T] =
       id[ Compared[A, B] |*| C ]                .to[ ((A |*| B)        |+| ( (A |*| B)        |+|  (A |*| B))) |*| C   ]
-        .distributeRL.>.right(distributeRL)     .to[ ((A |*| B) |*| C) |+| (((A |*| B) |*| C) |+| ((A |*| B)   |*| C)) ]
+        .distributeR.>.right(distributeR)       .to[ ((A |*| B) |*| C) |+| (((A |*| B) |*| C) |+| ((A |*| B)   |*| C)) ]
         .bimap[|+|](f, |+|.bimap(f, f))         .to[     (S |*| T)     |+| (    (S |*| T)     |+|      (S |*| T)     ) ]
 
     def bifunctorCompared: Bifunctor[Compared] =
@@ -2266,7 +2266,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       caseNil: A -⚬ R,
       caseCons: (A |*| (T |*| LList[T])) -⚬ R,
     ): (A |*| LList[T]) -⚬ R =
-      par(id, uncons[T]) > distributeLR > either(elimSnd > caseNil, caseCons)
+      par(id, uncons[T]) > distributeL > either(elimSnd > caseNil, caseCons)
 
     def switchWithR[A, T, R](
       caseNil: A -⚬ R,
@@ -2286,7 +2286,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def consMaybe[T]: (Maybe[T] |*| LList[T]) -⚬ LList[T] =
       id[Maybe[T] |*| LList[T]]             .to[ (One |+|                T) |*| LList[T] ]
-        .distributeRL                       .to[ (One |*| LList[T]) |+| (T |*| LList[T]) ]
+        .distributeR                        .to[ (One |*| LList[T]) |+| (T |*| LList[T]) ]
         .>(either(elimFst, cons))           .to[                 LList[T]                ]
 
     def collect[T, U](f: T -⚬ Maybe[U]): LList[T] -⚬ LList[U] =

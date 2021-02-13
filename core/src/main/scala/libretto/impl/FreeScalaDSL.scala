@@ -60,7 +60,7 @@ object FreeScalaDSL extends ScalaDSL {
     case class InjectRWhenDone[A, B]() extends ((Done |*| B) -⚬ (A |+| (Done |*| B)))
     case class ChooseLWhenNeed[A, B]() extends (((Need |*| A) |&| B) -⚬ (Need |*| A))
     case class ChooseRWhenNeed[A, B]() extends ((A |&| (Need |*| B)) -⚬ (Need |*| B))
-    case class DistributeLR[A, B, C]() extends ((A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)))
+    case class DistributeL[A, B, C]() extends ((A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)))
     case class CoDistributeL[A, B, C]() extends (((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C)))
     case class RInvertSignal() extends ((Done |*| Need) -⚬ One)
     case class LInvertSignal() extends (One -⚬ (Need |*| Done))
@@ -217,8 +217,8 @@ object FreeScalaDSL extends ScalaDSL {
   override def chooseRWhenNeed[A, B]: (A |&| (Need |*| B)) -⚬ (Need |*| B) =
     ChooseRWhenNeed()
 
-  override def distributeLR[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)) =
-    DistributeLR()
+  override def distributeL[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)) =
+    DistributeL()
 
   override def coDistributeL[A, B, C]: ((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C)) =
     CoDistributeL()
