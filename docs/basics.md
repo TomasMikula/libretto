@@ -601,3 +601,107 @@ and precisely (including all the necessary glue) like this
 val g: A -⚬ (Need |*| B) =
   introFst[A] > par(lInvertSignal, id[A]) > timesAssocLR > par(id[Need], f)
 ```
+
+## Either (⊕)
+
+Type `A ⊕ B` (in code we use `A |+| B` for easier typing and better intelligibility) means either `A` or `B` (but
+not both), and which one it is is decided by the block on the left. In other words, a block that has `A ⊕ B` as an
+out-port decides whether the interaction will continue as `A` or as `B`, while a block that has `A ⊕ B` as an in-port
+can test whether `A` or `B` was chosen and continue accordingly.
+
+Primitives for making the decision (introducing `|+|`) are
+
+```scala
+//  ┏━━━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━┓
+//  ┞───┐          ┞───┐           ┃              ┞───┐
+//  ╎ A │          ╎ A │           ┃ injectR[A,B] ╎ A │
+//  ┟───┘          ╎ ⊕ │           ┞───┐          ╎ ⊕ │
+//  ┃ injectL[A,B] ╎ B │           ╎ B │          ╎ B │
+//  ┃              ┟───┘           ┟───┘          ┟───┘
+//  ┗━━━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━┛
+
+def injectL[A, B]: A -⚬ (A |+| B)
+def injectR[A, B]: B -⚬ (A |+| B)
+```
+
+These are analogous to Scala's `Left(a)` and `Right(b)` constructors of `Either[A, B]`.
+
+The primitive for handling the actually chosen side (eliminating `|+|`) is
+
+```scala
+/**  ┏━━━━━━━━━━━━━━┓
+  *  ┞───┬──────────┨
+  *  ╎ A ╷    f     ┞───┐
+  *  ╎ ⊕ ├──────────╎ C │
+  *  ╎ B ╵    g     ┟───┘
+  *  ┟───┴──────────┨
+  *  ┗━━━━━━━━━━━━━━┛
+  */
+def either[A, B, C](f: A -⚬ C, g: B -⚬ C): (A |+| B) -⚬ C
+```
+
+It is analogous to Scala's `Either#fold(f: A => C, g: B => C): C`.
+
+Once it is decided which branch it is going to be, the corresponding block, `f` or `g`, is executed:
+
+```
+  ┏━━━━━━━━━━━━━━┓                          ┏━━━━━━━━━━━━━━┓
+  ┞───┬────────╮ ┃                          ┞───┐          ┃
+  ╎*A*╎   f    ╰─╀───┐                      ╎ A │     ╭────╀───┐
+  ╎ ⊕ ├─────╮    ╎ C │                      ╎ ⊕ ├─────╯    ╎ C │
+  ╎ B │     ╰────╁───┘                      ╎*B*╎   g    ╭─╁───┘
+  ┟───┘          ┃                          ┟───┴────────╯ ┃
+  ┗━━━━━━━━━━━━━━┛                          ┗━━━━━━━━━━━━━━┛
+```
+
+## Choice (&)
+
+Type `A & B` (we use `A |&| B` in code to avoid confusion with the bitwise and operator in Scala, and for consistency
+with `|*|` and `|+|`) means an _exclusive_ choice between `A` and `B`. Which one it is going to be is decided by the
+block on the right. In other words, a block that has `A & B` as an in-port decides whether the interaction will
+continue as `A` or as `B`, while a block that has `A & B` as an out-port can test whether `A` or `B` was chosen and
+continue accordingly.
+
+Primitives for choosing one of the branches (eliminating `|&|`) are
+
+```scala
+//  ┏━━━━━━━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━━━━━┓
+//  ┞───┐              ┞───┐           ┞───┐              ┃
+//  ╎ A │              ╎ A │           ╎ A │              ┃
+//  ╎ & │ chooseL[A,B] ┟───┘           ╎ & │ chooseR[A,B] ┞───┐
+//  ╎ B │              ┃               ╎ B │              ╎ B │
+//  ┟───┘              ┃               ┟───┘              ┟───┘
+//  ┗━━━━━━━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━━━━━┛
+
+def chooseL[A, B]: (A |&| B) -⚬ A
+def chooseR[A, B]: (A |&| B) -⚬ B
+```
+
+They are somewhat analogous to `_1`, `_2` methods on Scala's 2-tuple, except as if by using `_1` you give up the chance
+to ever access `_2`, and vice versa.
+
+The primitive for offering a choice (introducing `|&|`) is
+
+```scala
+/**  ┏━━━━━━━━━━━━━━┓    
+  *  ┃   ┌──────────╀───┐
+  *  ┞───┤    f     ╷ B │
+  *  ╎ A ├──────────┤ & │
+  *  ┟───┤    g     ╵ C │
+  *  ┃   └──────────┟───┘
+  *  ┗━━━━━━━━━━━━━━┛    
+  */
+def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C)
+```
+
+Once the choice is made from the right, the corresponding block, `f` or `g`, is executed:
+
+```
+  ┏━━━━━━━━━━━━━━┓                      ┏━━━━━━━━━━━━━━┓
+  ┃     ╭────────╀───┐                  ┃              ┞───┐
+  ┞───┬─╯   f    ╎*B*│                  ┞───┬─────╮    ╎ B │
+  ╎ A ╎    ╭─────┤ & │                  ╎ A ╎     ╰────┤ & │
+  ┟───┴────╯     │ C │                  ┟───┴─╮   g    │*C*│
+  ┃              ┟───┘                  ┃     ╰────────╁───┘
+  ┗━━━━━━━━━━━━━━┛                      ┗━━━━━━━━━━━━━━┛
+```
