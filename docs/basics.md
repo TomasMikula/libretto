@@ -54,21 +54,21 @@ We can connect an out-port to an in-port (but not to another out-port) of the sa
 these two blocks `f` and `g`
 
 ```
-┏━━━━━━━━━━━━┓    ┏━━━━━━━━━━━━┓   
-┞─┐          ┞─┐  ┞─┐          ┞─┐ 
-╎A│    f     ╎B│  ╎B│    g     ╎C│ 
-┟─┘          ┟─┘  ┟─┘          ┟─┘ 
-┗━━━━━━━━━━━━┛    ┗━━━━━━━━━━━━┛   
+┏━━━━━━━━━━━━┓    ┏━━━━━━━━━━━━┓
+┞─┐          ┞─┐  ┞─┐          ┞─┐
+╎A│    f     ╎B│  ╎B│    g     ╎C│
+┟─┘          ┟─┘  ┟─┘          ┟─┘
+┗━━━━━━━━━━━━┛    ┗━━━━━━━━━━━━┛
 ```
 
 can be composed into a composite block `g ⚬ f`
 
 ```
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┞─┐                            ┞─┐
 ╎A│           g ⚬ f            ╎C│
 ┟─┘                            ┟─┘
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛  
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
 ☝️ Although we call it _sequential_ composition, do _not_ assume that`g` takes place "after" `f`, in a temporal or
@@ -208,30 +208,30 @@ But how would we do it in Scala using only what we already know, namely sequenti
 We can first place `id[B]` parallel to `g`, obtaining
 
 ```
-                    ┏━━━━━━━━━━━┓              
+                    ┏━━━━━━━━━━━┓
                     ┞─┐         ┞─┐
                     ╎B│  id[B]  ╎B│
                     ┟─┘         ┟─┘
-par(id[B], g)   =   ┠╌╌╌╌╌╌╌╌╌╌╌┨  
+par(id[B], g)   =   ┠╌╌╌╌╌╌╌╌╌╌╌┨
                     ┞─┐         ┞─┐
                     ╎C│    g    ╎D│
                     ┟─┘         ┟─┘
-                    ┗━━━━━━━━━━━┛  
+                    ┗━━━━━━━━━━━┛
 ```
 
 and then place it after `f`, obtaining
 
 ```
-                        ┏━━━━━━━━━━━┯━━━━━━━━━━━┓  
+                        ┏━━━━━━━━━━━┯━━━━━━━━━━━┓
                         ┃           ├─┐         ┞─┐
                         ┃           ╎B│  id[B]  ╎B│
                         ┞─┐         ├─┘         ┟─┘
-f > par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌┨  
+f > par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌┨
                         ┟─┘         ├─┐         ┞─┐
                         ┃           ╎C│    g    ╎D│
                         ┃           ├─┘         ┟─┘
-                        ┗━━━━━━━━━━━┷━━━━━━━━━━━┛  
-``` 
+                        ┗━━━━━━━━━━━┷━━━━━━━━━━━┛
+```
 
 ## Associativity of ⊗
 
@@ -269,7 +269,7 @@ def timesAssocRL[X, Y, Z]: (X |*| (Y |*| Z)) -⚬ ((X |*| Y) |*| Z)
 ```
 
 ```
-┏━━━━━━━━━━━━━━━━┓             ┏━━━━━━━━━━━━━━━━┓  
+┏━━━━━━━━━━━━━━━━┓             ┏━━━━━━━━━━━━━━━━┓
 ┞─┐              ┞─┐           ┞─┐              ┞─┐
 ╎X│              ╎X│           ╎X│              ╎X│
 ╎⊗│              ┟─┘           ┟─┘              ╎⊗│
@@ -278,7 +278,7 @@ def timesAssocRL[X, Y, Z]: (X |*| (Y |*| Z)) -⚬ ((X |*| Y) |*| Z)
 ┞─┐              ╎⊗│           ╎⊗│              ┞─┐
 ╎Z│              ╎Z│           ╎Z│              ╎Z│
 ┟─┘              ┟─┘           ┟─┘              ┟─┘
-┗━━━━━━━━━━━━━━━━┛             ┗━━━━━━━━━━━━━━━━┛  
+┗━━━━━━━━━━━━━━━━┛             ┗━━━━━━━━━━━━━━━━┛
 ```
 
 Thus, if we have
@@ -301,7 +301,7 @@ The relative order of ports does not matter, either.
 If, for example, we have a block
 
 ```scala
-/*  ┏━━━━━━━━━━━━━━━━┓  
+/*  ┏━━━━━━━━━━━━━━━━┓
  *  ┞─┐              ┞─┐
  *  ╎A│              ╎C│
  *  ┟─┘              ┟─┘
@@ -310,8 +310,8 @@ If, for example, we have a block
  *  ┞─┐              ╎⊗│
  *  ╎B│              ╎E│
  *  ┟─┘              ┟─┘
- *  ┗━━━━━━━━━━━━━━━━┛  
- *  
+ *  ┗━━━━━━━━━━━━━━━━┛
+ *
  */
 val f1: (A |*| B) -⚬ (C |*| (D |*| E))
 ```
@@ -325,15 +325,15 @@ val f2: (B |*| A) -⚬ ((E |*| D) |*| C) = ???
 we can easily get it using `swap`
 
 ```scala
-/*  ┏━━━━━━━━━━━━━━━━┓  
+/*  ┏━━━━━━━━━━━━━━━━┓
  *  ┞─┐              ┞─┐
  *  ╎X│              ╎Y│
  *  ┟─┘  swap[X,Y]   ┟─┘
  *  ┞─┐              ┞─┐
  *  ╎Y│              ╎X│
  *  ┟─┘              ┟─┘
- *  ┗━━━━━━━━━━━━━━━━┛  
- *  
+ *  ┗━━━━━━━━━━━━━━━━┛
+ *
  */
 def swap[X, Y]: (X |*| Y) -⚬ (Y |*| X)
 ```
@@ -341,17 +341,17 @@ def swap[X, Y]: (X |*| Y) -⚬ (Y |*| X)
 like this
 
 ```scala
-/*  ┏━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┓  
+/*  ┏━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┓
  *  ┞─┐          ├─┐              ├─┐              ├─┐             ┞─┐
  *  ╎B│          ╎A│              ╎C│              ╎D│             ╎E│
  *  ┟─┘          ├─┘              ├─┘              ╎⊗│  swap[D, E] ╎⊗│
  *  ┃            ╎                ╎ swap[C, D ⊗ E] ╎E│             ╎D│
  *  ┃ swap[B, A] ╎       f1       ├─┐              ├─┘             ┟─┘
- *  ┃            ╎                ╎D│              ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨  
+ *  ┃            ╎                ╎D│              ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨
  *  ┞─┐          ├─┐              ╎⊗│              ├─┐             ┞─┐
  *  ╎A│          ╎B│              ╎E│              ╎C│    id[C]    ╎C│
  *  ┟─┘          ├─┘              ├─┘              ├─┘             ┟─┘
- *  ┗━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛  
+ *  ┗━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛
  */
 val f2: (B |*| A) -⚬ ((E |*| D) |*| C) =
   swap[B, A] > f1 > swap[C, D |*| E] > par(swap[D, E], id[C])
@@ -362,7 +362,7 @@ val f2: (B |*| A) -⚬ ((E |*| D) |*| C) =
 Sometimes we want a block with no in-ports or no out-ports, such as these ones
 
 ```
-┏━━━━━━━━━━━━┓            ┏━━━━━━━━━━━━┓  
+┏━━━━━━━━━━━━┓            ┏━━━━━━━━━━━━┓
 ┃            ┞─┐          ┞─┐          ┃
 ┃      f     ╎A│          ╎B│    g     ┃
 ┃            ┟─┘          ┟─┘          ┃
@@ -385,23 +385,23 @@ In graphical notation, we omit `One`-typed ports if they do not add any value (s
 We can freely add and remove `One` to/from in-ports and/or out-ports using the following primitives:
 
 ```scala
-//  ┏━━━━━━━━━━━━━┓           ┏━━━━━━━━━━━━━━━━┓    
+//  ┏━━━━━━━━━━━━━┓           ┏━━━━━━━━━━━━━━━━┓
 //  ┃             ┞───┐       ┞───┐            ┃
 //  ┃             ╎One│       ╎One│            ┃
 //  ┃ introFst[A] ┟───┘       ┟───┘ elimFst[A] ┃
 //  ┞───┐         ┞───┐       ┞───┐            ┞───┐
 //  ╎ A │         ╎ A │       ╎ A │            ╎ A │
 //  ┟───┘         ┟───┘       ┟───┘            ┟───┘
-//  ┗━━━━━━━━━━━━━┛           ┗━━━━━━━━━━━━━━━━┛    
+//  ┗━━━━━━━━━━━━━┛           ┗━━━━━━━━━━━━━━━━┛
 //
-//  ┏━━━━━━━━━━━━━┓           ┏━━━━━━━━━━━━━━━━┓    
+//  ┏━━━━━━━━━━━━━┓           ┏━━━━━━━━━━━━━━━━┓
 //  ┞───┐         ┞───┐       ┞───┐            ┞───┐
 //  ╎ A │         ╎ A │       ╎ A │            ╎ A │
 //  ┟───┘         ┟───┘       ┟───┘            ┟───┘
 //  ┃ introSnd[A] ┞───┐       ┞───┐ elimSnd[A] ┃
 //  ┃             ╎One│       ╎One│            ┃
 //  ┃             ┟───┘       ┟───┘            ┃
-//  ┗━━━━━━━━━━━━━┛           ┗━━━━━━━━━━━━━━━━┛    
+//  ┗━━━━━━━━━━━━━┛           ┗━━━━━━━━━━━━━━━━┛
 
 def introFst[A]: A -⚬ (One |*| A)
 def introSnd[A]: A -⚬ (A |*| One)
@@ -415,7 +415,7 @@ Since there is no flow of information through `One`, there is also _no causal de
 This means, for example, that in
 
 ```
-┏━━━━━━━━━┯━━━━━━━━━━━━━┯━━━━━━━━━━━┓    
+┏━━━━━━━━━┯━━━━━━━━━━━━━┯━━━━━━━━━━━┓
 ┃         ╎             ├───┐       ┞───┐
 ┃         ╎             ╎One│   g   ╎ B │
 ┃         ╎             ├───┘       ┟───┘
@@ -423,7 +423,7 @@ This means, for example, that in
 ┞───┐     ├───┐         ├───┐       ┞───┐
 ╎ A │     ╎ C │         ╎ C │ id[C] ╎ C │
 ┟───┘     ├───┘         ├───┘       ┟───┘
-┗━━━━━━━━━┷━━━━━━━━━━━━━┷━━━━━━━━━━━┛    
+┗━━━━━━━━━┷━━━━━━━━━━━━━┷━━━━━━━━━━━┛
 ```
 
 there is no causal dependence of `g` on anything in `f` going through the `introFst[C]` block.
@@ -438,7 +438,7 @@ There are two types for signals, differing in the direction in which they travel
    We also call the direction of `-⚬` the _positive direction._
  - `Need`, which travels in the direction opposite to `-⚬`, i.e. from right to left.
    We also call the direction opposite to `-⚬` the _negative direction._
-   
+
 Signals are useful for creating causal dependencies: one block might wait for a signal from another block
 before proceeding with further processing. For example, the signal might signal completion of a request and further
 processing might be accepting another request, effectively sequencing request processing.
@@ -497,15 +497,15 @@ on the left.
 _Joining_ two signals means to fire a signal as soon as both signals arrive.
 
 ```scala
-//  ┏━━━━━━━━━━━━━━━━┓                 ┏━━━━━━━━━━━━━━━━┓     
+//  ┏━━━━━━━━━━━━━━━━┓                 ┏━━━━━━━━━━━━━━━━┓
 //  ┞────┐           ┃                 ┃                ┞────┐
 //  ╎Done│           ┃                 ┃                ╎Need│
 //  ┟────┘           ┞────┐            ┞────┐           ┟────┘
-//  ┃       join     ╎Done│            ╎Need│ joinNeed  ┃     
+//  ┃       join     ╎Done│            ╎Need│ joinNeed  ┃
 //  ┞────┐           ┟────┘            ┟────┘           ┞────┐
 //  ╎Done│           ┃                 ┃                ╎Need│
 //  ┟────┘           ┃                 ┃                ┟────┘
-//  ┗━━━━━━━━━━━━━━━━┛                 ┗━━━━━━━━━━━━━━━━┛     
+//  ┗━━━━━━━━━━━━━━━━┛                 ┗━━━━━━━━━━━━━━━━┛
 
 def join     : (Done |*| Done) -⚬ Done
 def joinNeed : Need -⚬ (Need |*| Need)
@@ -553,14 +553,14 @@ val f: (Done |*| A) -⚬ B
 we can always obtain
 
 ```scala
-/*  ┏━━━━━━━━━━━━━┓    
+/*  ┏━━━━━━━━━━━━━┓
  *  ┃             ┞────┐
  *  ┃             ╎Need│
  *  ┃       g     ┟────┘
  *  ┞────┐        ┞────┐
  *  ╎ A  │        ╎ B  │
  *  ┟────┘        ┟────┘
- *  ┗━━━━━━━━━━━━━┛    
+ *  ┗━━━━━━━━━━━━━┛
  */
 val g: A -⚬ (Need |*| B)
 ```
@@ -568,35 +568,35 @@ val g: A -⚬ (Need |*| B)
 roughly like this
 
 ```
-┏━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┓     
+┏━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┓
 ┃ lInvertSignal ├────┐ id[Need] ┞────┐
 ┃          ┌┄┄┄┄╎Need│←┄┄┄┄┄┄┄┄┄╎Need│←┄
 ┃          ┆    ├────┘          ┟────┘
-┃          ┆    ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨     
-┃          ┆    ├────┐          ┃     
-┃          └┄┄┄→╎Done│          ┃     
-┃               ├────┘          ┃ 
-┠╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤       f       ┃ 
-┞───┐           ├───┐           ┞───┐ 
-╎ A │   id[A]   ╎ A │           ╎ B │ 
+┃          ┆    ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨
+┃          ┆    ├────┐          ┃
+┃          └┄┄┄→╎Done│          ┃
+┃               ├────┘          ┃
+┠╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤       f       ┃
+┞───┐           ├───┐           ┞───┐
+╎ A │   id[A]   ╎ A │           ╎ B │
 ┟───┘           ├───┘           ┟───┘
-┗━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛    
+┗━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛
 ```
 
 and precisely (including all the necessary glue) like this
 
 ```scala
-/*  ┏━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┓     
+/*  ┏━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┓
  *  ┃             ╎ lInvertSignal ├────┐         ├────┐          ┞────┐
  *  ┃ introFst[A] ├───┐           ╎Need│         ╎Need│ id[Need] ╎Need│
  *  ┃             ╎One│           ╎ ⊗  │         ├────┘          ┟────┘
- *  ┃             ├───┘           ╎Done│         ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨     
- *  ┃             ╎               ├────┘         ├────┐          ┃    
- *  ┃             ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤ timesAssocLR ╎Done│          ┃    
+ *  ┃             ├───┘           ╎Done│         ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨
+ *  ┃             ╎               ├────┘         ├────┐          ┃
+ *  ┃             ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤ timesAssocLR ╎Done│          ┃
  *  ┞───┐         ├───┐           ├───┐          ╎ ⊗  │    f     ┞───┐
  *  ╎ A │         ╎ A │   id[A]   ╎ A │          ╎ A  │          ╎ B │
  *  ┟───┘         ├───┘           ├───┘          ├────┘          ┟───┘
- *  ┗━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛    
+ *  ┗━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛
  */
 val g: A -⚬ (Need |*| B) =
   introFst[A] > par(lInvertSignal, id[A]) > timesAssocLR > par(id[Need], f)
