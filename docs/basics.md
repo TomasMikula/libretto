@@ -125,9 +125,10 @@ A block `f` with one in-port of type `A` and one out-port of type `B`
 is a value `f` of type `A -⚬ B`.
 
 The funny arrow-like symbol, `-⚬`, also called a _lollipop_, is borrowed from linear logic where it denotes _linear
-implication_ and in Libretto we also call it a _linear function._
+implication_ and in Libretto we similarly call it a _linear function._ We will also call it simply an _arrow_ if there
+is no risk of confusion with other things called arrows.
 
-☝️ Although we call `-⚬` a linear _fuction,_ some intuitions one might have about Scala functions (`=>`) do not
+☝️ Although we call `-⚬` a linear _function,_ some intuitions one might have about Scala functions (`=>`) do not
 transfer to `-⚬`. With a Scala function, there is nothing going on inside it until we pass all the inputs to it.
 Once we get the output (and we get the whole output all at once), the Scala function is done. Remember, however,
 that Libretto's linear function is a block, a part of the system that runs on its own and perhaps communicates
@@ -605,9 +606,9 @@ val g: A -⚬ (Need |*| B) =
 ## Either (⊕)
 
 Type `A ⊕ B` (in code we use `A |+| B` for easier typing and better intelligibility) means either `A` or `B` (but
-not both), and which one it is is decided by the block on the left. In other words, a block that has `A ⊕ B` as an
-out-port decides whether the interaction will continue as `A` or as `B`, while a block that has `A ⊕ B` as an in-port
-can test whether `A` or `B` was chosen and continue accordingly.
+not both), and which one it is going to be is decided by the block on the left. In other words, a block that has `A ⊕ B`
+as an out-port decides whether the interaction will continue as `A` or as `B`, while a block that has `A ⊕ B` as an
+in-port has to be able to handle either case. That is, the decision flows from left to right (the positive direction).
 
 Primitives for making the decision (introducing `|+|`) are
 
@@ -657,10 +658,12 @@ Once it is decided which branch it is going to be, the corresponding block, `f` 
 ## Choice (&)
 
 Type `A & B` (we use `A |&| B` in code to avoid confusion with the bitwise and operator in Scala, and for consistency
-with `|*|` and `|+|`) means an _exclusive_ choice between `A` and `B`. Which one it is going to be is decided by the
-block on the right. In other words, a block that has `A & B` as an in-port decides whether the interaction will
-continue as `A` or as `B`, while a block that has `A & B` as an out-port can test whether `A` or `B` was chosen and
-continue accordingly.
+with `|*|` and `|+|`) means an _exclusive_ choice between `A` and `B`.
+The block to the right of `A & B`, i.e. the one that has `A & B` as an in-port, gets to choose whether the interaction
+with the block to the left will continue as `A` or as `B`.
+The block to the left of `A & B`, i.e. the one that has `A & B` as an out-port, has to be able to provide either of them
+(but not both of them simultaneously).
+That is, the decision flows from right to left (the negative direction).
 
 Primitives for choosing one of the branches (eliminating `|&|`) are
 
@@ -704,4 +707,75 @@ Once the choice is made from the right, the corresponding block, `f` or `g`, is 
   ┟───┴────╯     │ C │                  ┟───┴─╮   g    │*C*│
   ┃              ┟───┘                  ┃     ╰────────╁───┘
   ┗━━━━━━━━━━━━━━┛                      ┗━━━━━━━━━━━━━━┛
+```
+
+## Distributivity of ⊗ over ⊕
+
+The tensor product ⊗ distributes over ⊕:
+
+```scala
+//  ┏━━━━━━━━━━━━━━━━┓                        ┏━━━━━━━━━━━━━━━━┓
+//  ┞─┐              ┞───┐                    ┞─┐              ┞───┐
+//  ╎A│              ╎⎛A⎞│                    ╎A│              ╎⎛A⎞│
+//  ┟─┘              ╎⎜⊗⎟│                    ╎⊕│              ╎⎜⊗⎟│
+//  ┃                ╎⎝B⎠│                    ╎B│              ╎⎝C⎠│
+//  ┞─┐ distributeL  ╎ ⊕ │                    ┟─┘ distributeR  ╎ ⊕ │
+//  ╎B│              ╎⎛A⎞│                    ┃                ╎⎛B⎞│
+//  ╎⊕│              ╎⎜⊗⎟│                    ┞─┐              ╎⎜⊗⎟│
+//  ╎C│              ╎⎝C⎠│                    ╎C│              ╎⎝C⎠│
+//  ┟─┘              ┟───┘                    ┟─┘              ┟───┘
+//  ┗━━━━━━━━━━━━━━━━┛                        ┗━━━━━━━━━━━━━━━━┛
+
+def distributeL[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C))
+def distributeR[A, B, C]: ((A |+| B) |*| C) -⚬ ((A |*| C) |+| (B |*| C))
+```
+
+These are primitives (actually, one of them is sufficient thanks to symmetry of ⊗).
+Note that arrows in the opposite direction need not be primitives, as they are always available:
+
+```scala
+def factorL[A, B, C]: ((A |*| B) |+| (A |*| C)) -⚬ (A |*| (B |+| C)) =
+  either(par(id, injectL), par(id, injectR))
+
+def factorR[A, B, C]: ((A |*| C) |+| (B |*| C)) -⚬ ((A |+| B) |*| C) =
+  either(par(injectL, id), par(injectR, id))
+```
+
+## Co-distributivity of ⊗ over &
+
+The tensor product ⊗ distributes over & as well, only in the opposite (right-to-left) direction.
+This is consistent with the choice being made on the right of `A |&| B` and being propagated to the left.
+It is therefore helpful to read the following blocks from right to left to see how one out-port is being distributed
+over the choice in the other out-port.
+
+```scala
+//  ┏━━━━━━━━━━━━━━━━━━━┓                        ┏━━━━━━━━━━━━━━━━━━━┓
+//  ┞───┐               ┞─┐                      ┞───┐               ┞─┐
+//  ╎⎛A⎞│               ╎A│                      ╎⎛A⎞│               ╎A│
+//  ╎⎜⊗⎟│               ┟─┘                      ╎⎜⊗⎟│               ╎&│
+//  ╎⎝B⎠│               ┃                        ╎⎝C⎠│               ╎B│
+//  ╎ & │ coDistributeL ┞─┐                      ╎ & │ coDistributeR ┟─┘
+//  ╎⎛A⎞│               ╎B│                      ╎⎛B⎞│               ┃  
+//  ╎⎜⊗⎟│               ╎&│                      ╎⎜⊗⎟│               ┞─┐
+//  ╎⎝C⎠│               ╎C│                      ╎⎝C⎠│               ╎C│
+//  ┟───┘               ┟─┘                      ┟───┘               ┟─┘
+//  ┗━━━━━━━━━━━━━━━━━━━┛                        ┗━━━━━━━━━━━━━━━━━━━┛
+
+def coDistributeL[A, B, C]: ((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C))
+def coDistributeR[A, B, C]: ((A |*| C) |&| (B |*| C)) -⚬ ((A |&| B) |*| C)
+```
+
+The intuition behind `coDistributeL` above is this: Only after the choice between `B` and `C` is made (from the right)
+is it decided how the `A` on the other out-port is produced, namely, whether it is the `A` from `A ⊗ B` or the `A` from
+`A ⊗ C`.
+
+At least one of these needs to be a primitive (the other one can be obtained thanks to symmetry of ⊗).
+Note that arrows in the opposite direction need not be primitives, as they are always available:
+
+```scala
+def coFactorL[A, B, C]: (A |*| (B |&| C)) -⚬ ((A |*| B) |&| (A |*| C)) =
+  choice(par(id, chooseL), par(id, chooseR))
+
+def coFactorR[A, B, C]: ((A |&| B) |*| C) -⚬ ((A |*| C) |&| (B |*| C)) =
+  choice(par(chooseL, id), par(chooseR, id))
 ```
