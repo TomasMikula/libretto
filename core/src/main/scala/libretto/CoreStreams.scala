@@ -288,17 +288,17 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def feedTo[A, B](
       f: (A |*| B) -⚬ PMaybe[B],
     ): (LPolled[A] |*| B) -⚬ (Done |*| Maybe[B]) = rec { self =>
-      val upstreamValue: ((A |*| LPollable[A]) |*| B) -⚬ (Done |*| Maybe[B]) =
-        id                                             [ (     A       |*| LPollable[A]) |*|           B  ]
-          .>.fst(swap)                              .to[ (LPollable[A] |*|      A      ) |*|           B  ]
-          .assocLR                                  .to[  LPollable[A] |*| (    A        |*|           B) ]
-          .>.snd(f)                                 .to[  LPollable[A] |*| (Done |+|                   B) ]
-          .distributeL                              .to[ (LPollable[A] |*| Done) |+| (LPollable[A] |*| B) ]
-          .>.left(join(LPollable.close, id))        .to[              Done       |+| (LPollable[A] |*| B) ]
-          .>.left(introSnd(Maybe.empty[B]))         .to[   (Done |*| Maybe[B])   |+| (LPollable[A] |*| B) ]
-          .>.right.fst(LPollable.poll)              .to[   (Done |*| Maybe[B])   |+| (  LPolled[A] |*| B) ]
-          .>.right(self)                            .to[   (Done |*| Maybe[B])   |+| ( Done |*| Maybe[B]) ]
-          .either(id, id)                           .to[                 (Done |*| Maybe[B])              ]
+      val upstreamValue: ((A |*| LPollable[A]) |*| B) -⚬ (Done |*| Maybe[B]) = {
+        val caseStop: (LPollable[A] |*| Done) -⚬ (Done |*| Maybe[B]) =
+          join(LPollable.close, id) > introSnd(Maybe.empty[B])
+        val caseCont: (LPollable[A] |*| B) -⚬ (Done |*| Maybe[B]) =
+          par(LPollable.poll, id) > self
+        id                                             [ (     A       |*| LPollable[A]) |*| B  ]
+          .>.fst(swap)                              .to[ (LPollable[A] |*|      A      ) |*| B  ]
+          .assocLR                                  .to[  LPollable[A] |*| (    A        |*| B) ]
+          .>.snd(f)                                 .to[  LPollable[A] |*|           PMaybe[B]  ]
+          .>(PMaybe.switchWithL(caseStop, caseCont)).to[             Done |*| Maybe[B]          ]
+      }
 
       val upstreamClosed: (Done |*| B) -⚬ (Done |*| Maybe[B]) =
         par(id, Maybe.just)

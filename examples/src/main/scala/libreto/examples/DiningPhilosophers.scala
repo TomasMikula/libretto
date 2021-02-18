@@ -151,10 +151,9 @@ object DiningPhilosophers extends StarterApp {
         val eatThinkAndRepeat: (Val[Int] |*| (Name |*| (SharedFork |*| SharedFork))) -⚬ Done =
           par(id, eatOnce > think) > go
 
-        id                           [                                                 Val[Int]         |*| (Name |*| (SharedFork |*| SharedFork))  ]
-          .>.fst(dec)             .to[ (Done                                             |+|  Val[Int]) |*| (Name |*| (SharedFork |*| SharedFork))  ]
-          .distributeR            .to[ (Done |*| (Name |*| (SharedFork |*| SharedFork))) |+| (Val[Int]  |*| (Name |*| (SharedFork |*| SharedFork))) ]
-          .either(complete, eatThinkAndRepeat)
+        id                                                           [        Val[Int]  |*| (Name |*| (SharedFork |*| SharedFork))  ]
+          .>.fst(dec)                                             .to[ PMaybe[Val[Int]] |*| (Name |*| (SharedFork |*| SharedFork))  ]
+          .>(PMaybe.switchWithR(complete, eatThinkAndRepeat))     .to[                 Done                                         ]
       }
 
       introFst(const(cycles)) > go
@@ -166,7 +165,7 @@ object DiningPhilosophers extends StarterApp {
     /** Decrements an integer. If the result would be negative, results in [[Done]] on the left,
      *  otherwise results in the decremented integer on the right.
      */
-    private val dec: Val[Int] -⚬ (Done |+| Val[Int]) =
+    private val dec: Val[Int] -⚬ PMaybe[Val[Int]] =
       mapVal[Int, Option[Int]] {
         case i if i > 0 => Some(i - 1)
         case _          => None

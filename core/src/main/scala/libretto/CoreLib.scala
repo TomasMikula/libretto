@@ -1785,13 +1785,16 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         lInvertRec(ev.lInvertFlippedTArgs)
     }
 
-  type Maybe[A] = One |+| A
+  opaque type Maybe[A] = One |+| A
   object Maybe {
     def empty[A]: One -⚬ Maybe[A] =
       injectL
 
     def just[A]: A -⚬ Maybe[A] =
       injectR
+
+    def toEither[A]: Maybe[A] -⚬ (One |+| A) =
+      id
 
     def getOrElse[A](f: One -⚬ A): Maybe[A] -⚬ A =
       either(f, id)
@@ -1806,7 +1809,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       either(done, f)
   }
 
-  type Optional[A] = One |&| A
+  opaque type Optional[A] = One |&| A
   object Optional {
     def optOut[A]: Optional[A] -⚬ One =
       chooseL
@@ -1818,13 +1821,37 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       choice(discard, id)
   }
 
-  type PMaybe[A] = Done |+| A
+  opaque type PMaybe[A] = Done |+| A
   object PMaybe {
     def empty[A]: Done -⚬ PMaybe[A] =
       injectL
 
     def just[A]: A -⚬ PMaybe[A] =
       injectR
+
+    def fromEither[A]: (Done |+| A) -⚬ PMaybe[A] =
+      id
+
+    def toEither[A]: PMaybe[A] -⚬ (Done |+| A) =
+      id
+
+    def switch[A, R](
+      caseNone: Done -⚬ R,
+      caseSome: A -⚬ R,
+    ): PMaybe[A] -⚬ R =
+      either(caseNone, caseSome)
+
+    def switchWithL[A, B, R](
+      caseNone: (A |*| Done) -⚬ R,
+      caseSome: (A |*| B) -⚬ R,
+    ): (A |*| PMaybe[B]) -⚬ R =
+      distributeL > either(caseNone, caseSome)
+
+    def switchWithR[A, B, R](
+      caseNone: (Done |*| B) -⚬ R,
+      caseSome: (A |*| B) -⚬ R,
+    ): (PMaybe[A] |*| B) -⚬ R =
+      distributeR > either(caseNone, caseSome)
 
     def getOrElse[A](f: Done -⚬ A): PMaybe[A] -⚬ A =
       either(f, id)
@@ -1834,6 +1861,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def neglect[A](implicit A: PComonoid[A]): PMaybe[A] -⚬ Done =
       neglect(A.counit)
+
+    def lift[A, B](f: A -⚬ B): PMaybe[A] -⚬ PMaybe[B] =
+      Bifunctor[|+|].lift(id, f)
   }
 
   def parFromOne[A, B](f: One -⚬ A, g: One -⚬ B): One -⚬ (A |*| B) =

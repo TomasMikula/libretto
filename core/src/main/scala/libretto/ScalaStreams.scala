@@ -94,11 +94,13 @@ class ScalaStreams[
 
       val close: Val[List[A]] -⚬ Done = neglect
 
-      val poll: Val[List[A]] -⚬ Polled[A] =
+      val poll: Val[List[A]] -⚬ Polled[A] = {
+        val caseNil :              Done -⚬ Polled[A] = Polled.empty[A]
+        val caseCons: Val[(A, List[A])] -⚬ Polled[A] = liftPair > par(id, self) > Polled.cons
         mapVal(uncons)                          .to[      Val[Option[(A, List[A])]]     ]
-          .>(optionToPMaybe)                    .to[ Done |+|    Val[(A, List[A])]      ]
-          .>.right(liftPair)                    .to[ Done |+| (Val[A] |*| Val[List[A]]) ]
-          .>.right.snd(self)                    .to[ Done |+| (Val[A] |*| Pollable[A] ) ]
+          .>(optionToPMaybe)                    .to[      PMaybe[Val[(A, List[A])]]     ]
+          .>(PMaybe.switch(caseNil, caseCons))  .to[             Polled[A]              ]
+      }
 
       choice(close, poll)
         .pack[PollableF[A, *]]
@@ -296,12 +298,12 @@ class ScalaStreams[
       type NeDT[K, V] = NonEmptyTree[K, Demanding[V]]
 
       def dispatch[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| DT[K, V]) -⚬ (Done |*| DT[K, V]) =
-        Tree.update(Demanding.supply[V].>.left(need >>> done))
+        Tree.update(Demanding.supply[V].>.left(need > done) > PMaybe.fromEither)
           .>.fst(PMaybe.neglect)
 
       def dispatchNE[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| NeDT[K, V]) -⚬ PMaybe[NeDT[K, V]] =
         NonEmptyTree.update(
-          Demanding.supply[V].>.left(need >>> done),
+          Demanding.supply[V].>.left(need >>> done) > PMaybe.fromEither,
           ifAbsent = neglect,
         )
 

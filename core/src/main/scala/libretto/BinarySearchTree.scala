@@ -439,19 +439,17 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
     implicit val absorptivePMaybe: Absorptive[PMaybe] =
       new Absorptive[PMaybe] {
         override def lift[A, B](f: A -⚬ B): PMaybe[A] -⚬ PMaybe[B] =
-          Bifunctor[|+|].lift(id, f)
+          PMaybe.lift(f)
 
         override def absorbL[A, B, C](combine: (A |*| B) -⚬ C, recover: (A |*| Done) -⚬ C): (A |*| PMaybe[B]) -⚬ PMaybe[C] =
-          id[A |*| PMaybe[B]]                     .to[ A |*| (Done  |+|        B) ]
-            .distributeL                          .to[ (A |*| Done) |+| (A |*| B) ]
-            .either(recover, combine)             .to[               C            ]
-            .injectR                              .to[        PMaybe[C]           ]
+          PMaybe.switchWithL(recover, combine)    .to[               C            ]
+            .>(PMaybe.just)                       .to[        PMaybe[C]           ]
 
-        override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]):( A |*| PMaybe[B]) -⚬ PMaybe[A |*| B] =
-          id[A |*| PMaybe[B]]                     .to[ A |*|    (Done  |+|        B) ]
-            .distributeL                          .to[ (A    |*| Done) |+| (A |*| B) ]
-            .>.left.fst(A.counit)                 .to[ (Done |*| Done) |+| (A |*| B) ]
-            .>.left(join)                         .to[      Done       |+| (A |*| B) ]
+        override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]): (A |*| PMaybe[B]) -⚬ PMaybe[A |*| B] =
+          PMaybe.switchWithL(
+            caseNone = join(A.counit, id) > PMaybe.empty,
+            caseSome = PMaybe.just,
+          )
       }
   }
 }

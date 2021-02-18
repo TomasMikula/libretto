@@ -114,22 +114,23 @@ class ScalaLib[
       .>(mapVal(eitherToBoolean))         .to[      Val[Boolean]       ]
 
   def maybeToOption[A]: Maybe[Val[A]] -⚬ Val[Option[A]] =
-    id[Maybe[Val[A]]]                     .to[    One    |+| Val[A] ]
+    Maybe.toEither[Val[A]]                .to[    One    |+| Val[A] ]
       .>.left(const(()))                  .to[ Val[Unit] |+| Val[A] ]
       .>(unliftEither)                    .to[ Val[Either[Unit, A]] ]
       .>(mapVal(_.toOption))              .to[ Val[Option[A]]       ]
 
   def optionToPMaybe[A]: Val[Option[A]] -⚬ PMaybe[Val[A]] =
-    id[Val[Option[A]]]                    .to[ Val[Option[      A]] ]
+    id                                       [ Val[Option[      A]] ]
       .>(mapVal(_.toRight(())))           .to[ Val[Either[Unit, A]] ]
       .>(liftEither)                      .to[ Val[Unit] |+| Val[A] ]
       .>.left(dsl.neglect)                .to[   Done    |+| Val[A] ]
+      .either(PMaybe.empty, PMaybe.just)  .to[     PMaybe[Val[A]]   ]
 
   def pMaybeToOption[A]: PMaybe[Val[A]] -⚬ Val[Option[A]] =
-    id[PMaybe[Val[A]]]                    .to[   Done    |+| Val[A] ]
-      .>.left(constVal(()))               .to[ Val[Unit] |+| Val[A] ]
-      .>(unliftEither)                    .to[ Val[Either[Unit, A]] ]
-      .>(mapVal(_.toOption))              .to[ Val[Option[A]]       ]
+    PMaybe.switch(
+      caseNone = constVal(None),
+      caseSome = mapVal(Some(_)),
+    )
 
   def liftBipredicate[A, B](p: (A, B) => Boolean): (Val[A] |*| Val[B]) -⚬ Bool =
     id                                       [ Val[A] |*| Val[B] ]
