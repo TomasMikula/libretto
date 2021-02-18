@@ -42,7 +42,8 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
   def fulfill[A]: (Val[A] |*| Neg[A]) -⚬ One
 
   def liftEither[A, B]: Val[Either[A, B]] -⚬ (Val[A] |+| Val[B])
-  def unliftEither[A, B]: (Val[A] |+| Val[B]) -⚬ Val[Either[A, B]]
+  def unliftEither[A, B]: (Val[A] |+| Val[B]) -⚬ Val[Either[A, B]] =
+    either(mapVal(Left(_)), mapVal(Right(_)))
 
   def liftPair[A, B]: Val[(A, B)] -⚬ (Val[A] |*| Val[B])
   def unliftPair[A, B]: (Val[A] |*| Val[B]) -⚬ Val[(A, B)]

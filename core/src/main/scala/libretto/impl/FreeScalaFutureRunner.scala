@@ -449,21 +449,6 @@ class FreeScalaFutureRunner(
             case a => a.toFutureValue.map(go).asDeferredFrontier  .asInstanceOf[Frontier[B]]
           }
 
-        case -⚬.UnliftEither() =>
-          // (Val[X] |+| Val[Y]) -⚬ Val[Either[X, Y]]
-          type X; type Y
-          this.asInstanceOf[Frontier[Val[X] |+| Val[Y]]] match {
-            case InjectL(x) => x.mapVal(Left(_))                  .asInstanceOf[Frontier[B]]
-            case InjectR(y) => y.mapVal(Right(_))                 .asInstanceOf[Frontier[B]]
-            case f => f
-              .futureEither
-              .map {
-                case Left(x)  => x.mapVal(Left(_))
-                case Right(y) => y.mapVal(Right(_))
-              }
-              .asDeferredFrontier                                 .asInstanceOf[Frontier[B]]
-          }
-
         case -⚬.LiftPair() =>
           type A1; type A2 // such that A = Val[(A1, A2)]
           this.asInstanceOf[Frontier[Val[(A1, A2)]]] match {

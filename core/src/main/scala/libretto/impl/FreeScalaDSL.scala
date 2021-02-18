@@ -79,7 +79,6 @@ object FreeScalaDSL extends ScalaDSL {
     case class Promise[A]() extends (One -⚬ (Neg[A] |*| Val[A]))
     case class Fulfill[A]() extends ((Val[A] |*| Neg[A]) -⚬ One)
     case class LiftEither[A, B]() extends (Val[Either[A, B]] -⚬ (Val[A] |+| Val[B]))
-    case class UnliftEither[A, B]() extends ((Val[A] |+| Val[B]) -⚬ Val[Either[A, B]])
     case class LiftPair[A, B]() extends (Val[(A, B)] -⚬ (Val[A] |*| Val[B]))
     case class UnliftPair[A, B]() extends ((Val[A] |*| Val[B]) -⚬ Val[(A, B)])
     case class LiftNegPair[A, B]() extends (Neg[(A, B)] -⚬ (Neg[A] |*| Neg[B]))
@@ -264,9 +263,6 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def liftEither[A, B]: Val[Either[A, B]] -⚬ (Val[A] |+| Val[B]) =
     LiftEither()
-
-  override def unliftEither[A, B]: (Val[A] |+| Val[B]) -⚬ Val[Either[A, B]] =
-    UnliftEither()
 
   override def liftPair[A, B]: Val[(A, B)] -⚬ (Val[A] |*| Val[B]) =
     LiftPair()
