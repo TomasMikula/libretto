@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-val scalaVersionString = "3.0.0-M3"
+val scalaVersionString = "3.0.0-RC1"
 
 lazy val core = project
   .in(file("core"))
@@ -11,7 +11,7 @@ lazy val core = project
       "-Ykind-projector", // support '*' as a placeholder in type lambdas
     ),
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.3" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.4" % "test",
     ),
   )
 
