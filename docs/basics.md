@@ -126,13 +126,15 @@ is a value `f` of type `A -⚬ B`.
 
 The funny arrow-like symbol, `-⚬`, also called a _lollipop_, is borrowed from linear logic where it denotes _linear
 implication_ and in Libretto we similarly call it a _linear function._ We will also call it simply an _arrow_ if there
-is no risk of confusion with other things called arrows.
+is no risk of confusion with other things called arrows. So we use the terms block, linear function and arrow as
+synonyms.
 
 ☝️ Although we call `-⚬` a linear _function,_ some intuitions one might have about Scala functions (`=>`) do not
 transfer to `-⚬`. With a Scala function, there is nothing going on inside it until we pass all the inputs to it.
 Once we get the output (and we get the whole output all at once), the Scala function is done. Remember, however,
 that Libretto's linear function is a block, a part of the system that runs on its own and perhaps communicates
 with its environment through the ports.
+However, composition of Libretto's linear functions works just like composition of Scala functions.. 
 
 In Scala, we model multiple in-ports as a single in-port of a composite type, and similarly for out-ports.
 As an example, a block `f` with two in-ports of types `A` and `B` and two out-ports of types `C` and `D`
@@ -779,3 +781,22 @@ def coFactorL[A, B, C]: (A |*| (B |&| C)) -⚬ ((A |*| B) |&| (A |*| C)) =
 def coFactorR[A, B, C]: ((A |&| B) |*| C) -⚬ ((A |*| C) |&| (B |*| C)) =
   choice(par(chooseL, id), par(chooseR, id))
 ```
+
+## Linearity and point-free style
+
+When composing blocks into larger blocks, it cannot happen that somewhere inside a composite block some ports remain
+unconnected. The way composition works, all ports of a component block that the composition operator does not connect
+to other ports become ports of the composite block. It also cannot happen that some port is connected twice.
+The property of each port being connected exactly once is called _linearity_—data and resources flow through the system
+in a linear fashion, without being duplicated or ignored (except via explicit operators for precisely that purpose).
+
+Notice that building Libretto blocks is like composing Scala functions in _point-free style._ For a moment, forget the
+differences between `-⚬` and `=>` and view in-ports as function inputs. In Libretto, we define the (linear) function
+without ever having access to the inputs as Scala values. Indeed, user code will never have access to values of types
+like `One`, `Done`, `Need`, `A |*| B`, `A |+| B`, `A & B` or others that we will encounter later. If it did, it would
+break linearity, because Scala functions can freely ignore or duplicate (referencec to) values.
+
+Moreover, not only are values of the above types not accessible to a user, there need not be any values of these
+types at all. In fact, they are all uninhabited types in the proof-of-concept implementation. This should not be
+surprising when you realize that Libretto's linear functions are mere blueprints. What then flows in a running system
+when the blueprint is executed need not be values of the auxiliary formal types used in blueprints.
