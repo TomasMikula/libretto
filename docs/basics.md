@@ -800,3 +800,109 @@ Moreover, not only are values of the above types not accessible to a user, there
 types at all. In fact, they are all uninhabited types in the proof-of-concept implementation. This should not be
 surprising when you realize that Libretto's linear functions are mere blueprints. What then flows in a running system
 when the blueprint is executed need not be values of the auxiliary formal types used in blueprints.
+
+## Recursion
+
+### Recursive types
+
+To define recursive port-types, there is `Rec[F[_]]` type constructor provided as a primitive:
+
+```scala
+type Rec[F[_]]
+
+/** Hides one level of a recursive type definition. */
+def pack[F[_]]: F[Rec[F]] -⚬ Rec[F]
+
+/** Unpacks one level of a recursive type definition. */
+def unpack[F[_]]: Rec[F] -⚬ F[Rec[F]]
+```
+
+(Note that `Rec` is analogous to the [Fix](https://hackage.haskell.org/package/data-fix-0.3.1/docs/Data-Fix.html) type
+constructor.)
+
+You can roughly think of the abstract type `Rec[F[_]]` as if it was a recursive type alias `type Rec[F[_]] = F[Rec[F]]`.
+We just have to do the substitution in either direction explicitly via `pack` and `unpack`.
+
+As an example, let's define a `List` type:
+
+```scala
+//         +-------- element type
+//         |    +--- marks occurrences of recursive substructure(s), in this case the tail sub-list 
+//         |    |     +-- nil     +-- cons
+//         |    |     | head --+  |   +-- tail
+//         |    |     |        |  |   |
+//         V    V     V        V  V   V
+type ListF[A, Self] = One |+| (A |*| Self)
+type List[A] = Rec[ListF[A, *]] // the * is kind-projector syntax for type lambdas,
+                                // in Scala 3 enabled by the -Ykind-projector compiler option.
+                                // ListF[A, *] is a shorthand for `X =>> ListF[A, X]`
+```
+
+and the `nil` and `cons` constructors:
+
+```scala
+object List {
+  def nil[A]: One -⚬ List[A] =
+    injectL > pack
+
+  //     head --+       +-- tail
+  //            |       |       
+  //            V       V       
+  def cons[A]: (A |*| List[A]) -⚬ List[A] =
+    injectR > pack
+}
+```
+
+Notes:
+ - Such a `List` may be produced gradually. For example, one may use the `cons` constructor where the tail is not yet
+   known to be either empty or non-empty. Consequently, the head of a list can already be accessed and consumed (e.g.
+   by the `map` function defined below) while the tail is still being constructed.
+   This is different from `scala.List` where in `val xs = head :: tail` the `tail` is fully constructed before `xs`
+   is constructed and its head made accessible for further processing.
+ - Consequently, `List`s may be infinite and it is not a problem if the elements are consumed at a faster rate than
+   they are produced.
+ - Note that unlike infinite lazy lists in Haskell, the construction of further elements is driven by the `List`
+   producer, not by the `List` consumer.
+
+### Recursive functions
+
+To work with recursive structures we need recursive functions.
+
+The general recipe for handling a recursive type `Rec[F]` is
+ 1. "Pretend" we already know how to handle the nested `Rec[F]` substructure(s).
+ 2. Unpack one level of the recursive definition to obtain `F[Rec[F]`.
+ 3. Write code to handle `F[Rec[F]]`, using the made up linear function to handle nested occurrences of `Rec[F]`.
+
+The "pretending" is done by taking a linear function as an argument. More concretely, instead of constructing a linear
+function `Rec[F] -⚬ B` directly, we write a Scala function `(Rec[F] -⚬ B) => (Rec[F] -⚬ B)` that constructs the desired
+linear function given a linear function of the same signature that it can use to handle substructures. Such Scala
+function can then be passed to the primitive `rec` function that "ties the loop" and produces the desired linear
+function `Rec[F] -⚬ B`:
+
+```scala
+def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B
+```
+
+As an example, let's define a linear function that applies a given linear function to each element of a `List`
+(defined above).
+
+```scala
+object List {
+  def map[A, B](f: A -⚬ B): List[A] -⚬ List[B] = {
+    //                         +-- pretending we already know how to map the tail
+    //                         |
+    //                         V
+    rec[List[A], List[B]] { (mapTail: List[A] -⚬ List[B]) =>
+      unpack > either(
+        nil[B],
+        par(f, mapTail) > cons[B],
+      )
+    }
+  }
+}
+```
+
+Notes:
+ - `par(f, mapTail)` maps the head and the tail of the list concurrently.
+ - The `cons[B]` constructor may execute as soon as the input list is known to be non-empty.
+   In particular, it does not wait for `par(f, mapTail)` to finish.
