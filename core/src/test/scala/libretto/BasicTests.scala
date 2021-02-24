@@ -161,7 +161,7 @@ class BasicTests extends TestSuite {
   test("crash - even if it loses a race, the program still crashes") {
     val prg = done
       .>>>( fork(id, delay(10.millis) >>> crashd("oops")) )
-      .>>>( raceCompletion )
+      .>>>( raceDone )
       .>>>( either(id, id) )
     assertCrashes(prg, "oops")
   }

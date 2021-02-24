@@ -751,7 +751,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     id                                               [                   A  |*|           B          ]
       .par(A.signalPos, B.signalPos)              .to[         (Done |*| A) |*| (Done |*| B)         ]
       .>(IXI)                                     .to[         (Done |*| Done) |*| (A |*| B)         ]
-      .>.fst(raceCompletion)                      .to[         (Done |+| Done) |*| (A |*| B)         ]
+      .>.fst(raceDone)                            .to[         (Done |+| Done) |*| (A |*| B)         ]
       .distributeR                                .to[ (Done |*| (A |*| B)) |+| (Done |*| (A |*| B)) ]
       .>.left(XI.>.snd(B.awaitPos))               .to[           (A |*| B)  |+| (Done |*| (A |*| B)) ]
       .>.right(|*|.assocRL.>.fst(A.awaitPos))     .to[           (A |*| B) |+|            (A |*| B)  ]
@@ -765,7 +765,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def raceAgainstL[A](implicit A: SignalingJunction.Positive[A]): (Done |*| A) -⚬ (A |+| A) =
     id                                               [  Done        |*|            A  ]
       .>.snd(A.signalPos).assocRL                 .to[ (Done        |*|  Done) |*| A  ]
-      .>.fst(raceCompletion)                      .to[ (Done        |+|  Done) |*| A  ]
+      .>.fst(raceDone)                            .to[ (Done        |+|  Done) |*| A  ]
       .distributeR                                .to[ (Done |*| A) |+| (Done  |*| A) ]
       .bimap(A.awaitPos, A.awaitPos)              .to[           A  |+|            A  ]
 
@@ -782,7 +782,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>.choiceR.fst(A.awaitNeg)      .to[ (Need |*| (A |*| B)) |&| ((Need |*| A) |*| B) ]
       .>.choiceR.assocLR              .to[ (Need |*| (A |*| B)) |&| (Need |*| (A |*| B)) ]
       .coDistributeR                  .to[         (Need |&| Need) |*| (A |*| B)         ]
-      .>.fst(selectRequest)           .to[         (Need |*| Need) |*| (A |*| B)         ]
+      .>.fst(selectNeed)              .to[         (Need |*| Need) |*| (A |*| B)         ]
       .>(IXI)                         .to[         (Need |*| A) |*| (Need |*| B)         ]
       .par(A.signalNeg, B.signalNeg)  .to[                   A  |*|           B          ]
 
@@ -795,7 +795,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def selectAgainstL[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (Need |*| A) =
     id                                               [  Need        |*|            A  ]
       .<.snd(A.signalNeg).<(|*|.assocLR)        .from[ (Need        |*|  Need) |*| A  ]
-      .<.fst(selectRequest)                     .from[ (Need        |&|  Need) |*| A  ]
+      .<.fst(selectNeed)                        .from[ (Need        |&|  Need) |*| A  ]
       .<(coDistributeR)                         .from[ (Need |*| A) |&| (Need  |*| A) ]
       .<(|&|.bimap(A.awaitNeg, A.awaitNeg))     .from[           A  |&|            A  ]
 
@@ -806,7 +806,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     id                                           [  A                             ]
       .>(A.signalPosSnd)                      .to[  A |*|  Done                   ]
       .>.snd(introSnd(done))                  .to[  A |*| (Done  |*|        Done) ]
-      .>.snd(raceCompletion)                  .to[  A |*| (Done  |+|        Done) ]
+      .>.snd(raceDone)                        .to[  A |*| (Done  |+|        Done) ]
       .distributeL                            .to[ (A |*|  Done) |+| (A |*| Done) ]
       .bimap(A.awaitPosSnd, A.awaitPosSnd)    .to[  A           |+|  A            ]
 
@@ -814,7 +814,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     id                                           [  A            |&|  A           ]
       .bimap(A.awaitNegSnd, A.awaitNegSnd)    .to[ (A |*|  Need) |&| (A |*| Need) ]
       .coDistributeL                          .to[  A |*| (Need  |&|        Need) ]
-      .>.snd(selectRequest)                   .to[  A |*| (Need  |*|        Need) ]
+      .>.snd(selectNeed)                      .to[  A |*| (Need  |*|        Need) ]
       .>.snd(elimSnd(need))                   .to[  A |*|  Need                   ]
       .>(A.signalNegSnd)                      .to[  A                             ]
 

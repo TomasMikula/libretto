@@ -367,7 +367,7 @@ class FreeScalaFutureRunner(
             }
           go(this.asInstanceOf[Frontier[Rec[F]]])                 .asInstanceOf[Frontier[B]]
 
-        case -⚬.RaceCompletion() =>
+        case -⚬.RaceDone() =>
           val (x, y) = this.asInstanceOf[Frontier[Done |*| Done]].splitPair
           (x, y) match {
             case (DoneNow, y) => InjectL(y)                       .asInstanceOf[Frontier[B]]
@@ -387,7 +387,7 @@ class FreeScalaFutureRunner(
               }
           }
 
-        case -⚬.SelectRequest() =>
+        case -⚬.SelectNeed() =>
           // XXX: not left-biased. What does it even mean, precisely, for a racing operator to be biased?
           val Choice(f, g, onError) = this.asInstanceOf[Frontier[Need |&| Need]].asChoice
           val p1 = Promise[Any]()
