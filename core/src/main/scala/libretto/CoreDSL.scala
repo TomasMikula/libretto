@@ -1,22 +1,38 @@
 package libretto
 
 trait CoreDSL {
-  /** `A -⚬ B` is a function that ''consumes'' a resource of type `A` and produces a resource of type `B`.
-    * Also known as linear implication.
+  /** Libretto arrow, also called a ''linear function'' or, in the context of graphical notation, a ''block''.
+    *
+    * {{{
+    * ┏━━━━━━━━━━┓
+    * ┞───┐      ┞───┐
+    * ╎ A │      ╎ B │
+    * ┟───┘      ┟───┘
+    * ┗━━━━━━━━━━┛
+    * }}}
+    *
+    * In `A -⚬ B`, we say that the ''in-port'' is of type `A` and the ''out-port'' is of type `B`.
+    * Note that the distinction between the in-port and the out-port is only formal. Information or resources
+    * may flow in and out through both the in-port and the out-port.
+    *
+    * "Linear" means that each input is ''consumed'' exactly once, in particular, it cannot be ignored or used twice.
     */
   type -⚬[A, B]
 
-  /** Both `A` and `B`, concurrently. */
+  /** Concurrent pair. Also called a ''tensor product''. */
   type |*|[A, B]
 
   /** Alias for [[|*|]]. */
   type ⊗[A, B] = A |*| B
 
-  /** No resource. Analogous to [[Unit]]. It is the identity element for [[|*|]]. */
+  /** No resource. It is the identity element for [[|*|]].
+    * There is no flow of information through a `One`-typed port.
+    */
   type One
 
-  /** Either `A` or `B`. Analogous to [[Either]].
-    * The producer decides which one it is, the consumer can check which one it is.
+  /** Either `A` or `B`. Analogous to [[scala.Either]].
+    * Whether it is going to be `A` or `B` is decided by the producer.
+    * The consumer has to be ready to handle either of the two cases.
     */
   type |+|[A, B]
 
@@ -26,13 +42,16 @@ trait CoreDSL {
   /** Impossible resource. Analogous to [[Nothing]]. It is the identity element for [[|+|]]. */
   type Zero
 
-  /** Choose `A` or `B`. The consumer chooses whether to get `A` or `B`, but can get only one of them. */
+  /** Choice between `A` and `B`.
+    * The consumer chooses whether to get `A` or `B` (but can get only one of them).
+    * The producer has to be ready to provide either of them.
+    */
   type |&|[A, B]
 
-  /** Signal that travels in the direction of [[-⚬]]. Equivalent to `Val[Unit]`. */
+  /** Signal that travels in the direction of [[-⚬]], i.e. the positive direction. */
   type Done
 
-  /** Signal that travels in the direction opposite to [[-⚬]]. Equivalent to `Neg[Unit]`. */
+  /** Signal that travels in the direction opposite to [[-⚬]], i.e. the negative direction. */
   type Need
 
   /** A black hole that can absorb (i.e. take over the responsibility to await) [[Done]] signals, but from which there
@@ -226,14 +245,14 @@ trait CoreDSL {
   def raceCompletion: (Done |*| Done) -⚬ (Done |+| Done)
 
   /** Races two [[Need]] signals, i.e. signals traveling in the negative direction (i.e. opposite the `-⚬` arrow).
-    * Selects one of the two [[Need]] signals in the function input based on which [[Need]] signal in the function
-    * output wins the race:
-    *  - If the first signal of the function output wins the race, selects the left input signal and pipes to it the
-    *    remaining (i.e. the second) output signal.
-    *  - If the second signal of the funciton output wins the race, selects the right input sigal and pipes to it the
-    *    reamining (i.e. the first) output signal.
-    * It is biased to the left: if both signals of the output have arrived by the time of inquiry,
-    * selects the left input.
+    * Based on which [[Need]] signal from the out-port wins the race,
+    * selects one of the two [[Need]] signals from the in-port:
+    *  - If the first signal from the out-port wins the race, selects the left signal from the in-port
+    *    and pipes to it the remaining (i.e. the right) signal from the out-port.
+    *  - If the second signal from the out-port wins the race, selects the right signal from the in-port
+    *    and pipes to it the reamining (i.e. the left) signal from the out-port.
+    * It is biased to the left: if both signals from the out-port have arrived by the time of inquiry,
+    * selects the left signal from the in-port.
     */
   def selectRequest: (Need |&| Need) -⚬ (Need |*| Need)
 }
