@@ -906,3 +906,33 @@ Notes:
  - `par(f, mapTail)` maps the head and the tail of the list concurrently.
  - The `cons[B]` constructor may execute as soon as the input list is known to be non-empty.
    In particular, it does not wait for `par(f, mapTail)` to finish.
+   
+## Racing
+
+Libretto provides primitives for testing which of two concurrent signals arrived first. There is one version for
+`Done` signals and one for `Need` signals (although it is possible to implement one in terms of the other via
+signal inversions discussed above).
+
+```scala
+def raceDone   : (Done |*| Done) -⚬ (Done |+| Done)
+def selectNeed : (Need |&| Need) -⚬ (Need |*| Need)
+```
+
+In `raceDone`, the two `Done` signals from the in-port race against each other.
+In `selectNeed`, the two `Need` signals from the out-port race against each other.
+
+In both cases, the winning signal is consumed by the racing operation. The slower signal still has to be awaited
+at some point (remember that signals cannot be ignored), so it is propagated to the other side of `-⚬`:
+ - In `raceDone`, if the first `Done` signal of the in-port wins, the second one is returned on the left of the `|+|`
+   in the out-port. The case of second signal winning is analogous.
+ - In `selectNeed`, if the first `Need` signal of the out-port wins, the left side of the `|&|` in the in-port is
+   chosen and the second `Need` signal of the out-port is forwarded to it.
+   
+These are the only primitives for racing, but there are other library methods built on top of these provided for
+convenience.
+
+### Racing is a source of non-determinism
+
+The order of two concurrently occurring events is undefined. The outcome of a racing operation on two concurrent events
+will therefore be non-deterministic. The non-determinism is propagated by proceeding differently for different winners
+of the race.
