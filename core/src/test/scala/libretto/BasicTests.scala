@@ -454,7 +454,7 @@ class BasicTests extends TestSuite {
 
       // check that none of the non-blocking computations is blocked by any of the blocking computations,
       // by checking that it completed before any of the blocking computations could
-      assert(pureDurations.max < sleepMillis / 2)
+      assert(pureDurations.max < sleepMillis)
     }
   }
 }
