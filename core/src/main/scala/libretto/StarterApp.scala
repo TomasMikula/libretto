@@ -1,7 +1,8 @@
 package libretto
 
 import java.util.concurrent.Executors
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success}
 
 abstract class StarterApp extends StarterKit {
@@ -10,14 +11,6 @@ abstract class StarterApp extends StarterKit {
   def blueprint: One -⚬ Done
 
   def main(args: Array[String]): Unit = {
-    import ExecutionContext.Implicits.global
-
-    runAsync(blueprint)
-      .onComplete { res =>
-        res match {
-          case Success(_) => // do nothing
-          case Failure(e) => e.printStackTrace
-        }
-      }
+    Await.result(runAsync(blueprint), Duration.Inf)
   }
 }
