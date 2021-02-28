@@ -473,7 +473,8 @@ On the other hand, a signal cannot be ignored. Once created, a signal has to be 
 a trigger for another action.
 
 Ignoring a signal would be analogous to ignoring a fired `Future`, which means losing track of a running task and thus
-a potential resource leak.
+a potential resource leak. In a way, an incoming signal, whether `Done` incoming from the left or `Need` incoming from
+the right, is a liability.
 
 ### Forking and joining signals
 
@@ -936,3 +937,88 @@ convenience.
 The order of two concurrently occurring events is undefined. The outcome of a racing operation on two concurrent events
 will therefore be non-deterministic. The non-determinism is propagated by proceeding differently for different winners
 of the race.
+
+## Using Scala values and functions
+
+Libretto provides means to use _immutable_ Scala values and _total_ Scala functions in Libretto programs.
+
+The type `Val[A]` represents a Scala value of type `A` flowing in the positive direction (i.e. along the `-⚬`).
+Similarly, the type `Neg[A]` represents a Scala value of type `A` flowing in the negative direction
+(i.e. against the `-⚬`).
+
+For a first approximation, `Val[A]` can be thought of as `Future[A]` and `Neg[A]` can be thought of as `Promise[A]`. 
+
+To initially get some Scala values into a Libretto program, we bake them in during assembly using the primitives
+
+```scala
+def constVal[A](a: A): Done -⚬ Val[A]
+def constNeg[A](a: A): Neg[A] -⚬ Need
+```
+
+Notice the incoming signals, `Done` and `Need`, respectively. Given that signals cannot be ignored, the responsibility
+to handle a signal is transformed into a responsibility to handle a Scala value. This is OK, because Scala values cannot
+be completely ignored, either. Doing so would mean to lose track of an ongoing potentially expensive computation and
+thus a resource leak.
+
+However, the particular value inside `Val` or `Neg` can be ignored; we just have to keep the liability to await the
+computation. For this purpose, there are primitives to convert Scala values into signals:
+
+```scala
+def neglect[A]: Val[A] -⚬ Done
+def inflate[A]: Need -⚬ Neg[A]
+```
+
+On the other hand, values can be duplicated, using
+
+```scala
+def dup   [A]: Val[A] -⚬ (Val[A] |*| Val[A])
+def dupNeg[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A]
+```
+
+Because of this ability to duplicate values, it is preferable to use only _immutable_ values.
+
+To apply a Scala function to a Scala value inside a Libretto program, we can use one of the primitives
+
+```scala
+def       mapVal[A, B](f: A => B): Val[A] -⚬ Val[B]
+def contramapNeg[A, B](f: A => B): Neg[B] -⚬ Neg[A]
+```
+
+Note that the Scala functions used must be _total,_ that is they must always terminate and never throw an exception.
+
+It is preferable that the used functions also be _pure,_ but benign side-effects are OK. Just note that it is undefined
+on which thread the function will execute, and that it may as well not execute at all.
+
+We can convert between Scala pairs and Libretto concurrent pairs using
+
+```scala
+def   liftPair[A, B]: Val[(A, B)] -⚬ (Val[A] |*| Val[B])
+def unliftPair[A, B]: (Val[A] |*| Val[B]) -⚬ Val[(A, B)]
+
+def   liftNegPair[A, B]: Neg[(A, B)] -⚬ (Neg[A] |*| Neg[B])
+def unliftNegPair[A, B]: (Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)]
+```
+
+We can lift a decision made by Scala code into Libretto via
+
+```scala
+def liftEither[A, B]: Val[Either[A, B]] -⚬ (Val[A] |+| Val[B])
+```
+
+Just like signals, the direction of Scala values can be inverted:
+
+```scala
+//  ┏━━━━━━━━━━━━━━━┓                   ┏━━━━━━━━━━━━━━━┓
+//  ┃  promise[A]   ┃                   ┃  fulfill[A]   ┃
+//  ┃               ┞──────┐            ┞──────┐        ┃
+//  ┃            ┌┄┄╎Neg[A]│←┄        ┄→╎Val[A]│┄┄┐     ┃
+//  ┃            ┆  ┟──────┘            ┟──────┘  ┆     ┃
+//  ┃            ┆  ┃                   ┃         ┆     ┃
+//  ┃            ┆  ┞──────┐            ┞──────┐  ┆     ┃
+//  ┃            └┄→╎Val[A]│┄→        ←┄╎Neg[A]│←┄┘     ┃
+//  ┃               ┟──────┘            ┟──────┘        ┃
+//  ┗━━━━━━━━━━━━━━━┛                   ┗━━━━━━━━━━━━━━━┛
+
+def promise[A]: One -⚬ (Neg[A] |*| Val[A])
+def fulfill[A]: (Val[A] |*| Neg[A]) -⚬ One
+```
