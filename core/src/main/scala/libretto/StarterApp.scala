@@ -10,7 +10,7 @@ abstract class StarterApp extends StarterKit {
   def blueprint: One -⚬ Done
 
   def main(args: Array[String]): Unit = {
-    val mainExecutor = Executors.newScheduledThreadPool(8)
+    val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())
     val blockingExecutor = Executors.newCachedThreadPool()
     implicit val ec = ExecutionContext.fromExecutor(mainExecutor)
 
