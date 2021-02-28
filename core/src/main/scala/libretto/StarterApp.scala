@@ -10,19 +10,14 @@ abstract class StarterApp extends StarterKit {
   def blueprint: One -⚬ Done
 
   def main(args: Array[String]): Unit = {
-    val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())
-    val blockingExecutor = Executors.newCachedThreadPool()
-    implicit val ec = ExecutionContext.fromExecutor(mainExecutor)
+    import ExecutionContext.Implicits.global
 
-    runner(blockingExecutor)(mainExecutor)
-      .run(blueprint)
+    runAsync(blueprint)
       .onComplete { res =>
         res match {
           case Success(_) => // do nothing
           case Failure(e) => e.printStackTrace
         }
-        blockingExecutor.shutdown()
-        mainExecutor.shutdown()
       }
   }
 }

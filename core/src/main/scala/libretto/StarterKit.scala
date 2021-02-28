@@ -1,8 +1,9 @@
 package libretto
 
-import java.util.concurrent.{Executor, ScheduledExecutorService}
+import java.util.concurrent.{Executor, Executors, ScheduledExecutorService}
 import libretto.impl.{FreeScalaDSL, FreeScalaFutureRunner}
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 object StarterKit extends StarterKit
 
@@ -12,6 +13,9 @@ abstract class AbstractStarterKit(
   val dsl: ScalaDSL,
   val runner0: (ScheduledExecutorService, Executor) => ScalaRunner[dsl.type, Future],
 ) {
+  import dsl._
+  import coreLib._
+
   val coreLib: CoreLib[dsl.type] =
     CoreLib(dsl)
 
@@ -29,4 +33,21 @@ abstract class AbstractStarterKit(
 
   def runner(blockingExecutor: Executor)(implicit scheduler: ScheduledExecutorService): ScalaRunner[dsl.type, Future] =
     runner0(scheduler, blockingExecutor)
+    
+  def runScalaAsync[A](blueprint: One -⚬ Val[A]): Future[A] = {
+    val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())
+    val blockingExecutor = Executors.newCachedThreadPool()
+    implicit val ec = ExecutionContext.fromExecutor(mainExecutor)
+
+    runner(blockingExecutor)(mainExecutor)
+      .runScala(blueprint)
+      .map { res =>
+        blockingExecutor.shutdown()
+        mainExecutor.shutdown()
+        res
+      }
+  }
+  
+  def runAsync(blueprint: One -⚬ Done): Future[Unit] =
+    runScalaAsync(blueprint > constVal(()))
 }
