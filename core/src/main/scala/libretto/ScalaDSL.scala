@@ -64,10 +64,10 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
   def inflate[A]: Need -⚬ Neg[A]
 
   def dup[A]: Val[A] -⚬ (Val[A] |*| Val[A]) =
-    andThen(
-      mapVal[A, (A, A)](a => (a, a)),
-      liftPair
-    )
+    mapVal[A, (A, A)](a => (a, a)) > liftPair
+
+  def dupNeg[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
+    unliftNegPair[A, A] > contramapNeg(a => (a, a))
 
   def delay: Val[FiniteDuration] -⚬ Done
 
