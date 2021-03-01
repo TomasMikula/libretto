@@ -1,13 +1,12 @@
 package libretto
 
 import java.util.concurrent.Executors
-import scala.concurrent.{Await, ExecutionContext}
+import libretto.StarterKit.runScalaAsync
 import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext}
 import scala.util.{Failure, Success}
 
-abstract class StarterAppScala[A] extends StarterKit {
-  import dsl._
-
+abstract class StarterAppScala[A] extends StarterAppBase {
   def blueprint: One -⚬ Val[A]
 
   def main(args: Array[String]): Unit = {

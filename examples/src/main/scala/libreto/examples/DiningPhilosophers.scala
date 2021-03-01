@@ -5,10 +5,6 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 object DiningPhilosophers extends StarterApp {
-  import dsl._
-  import coreLib._
-  import scalaLib._
-
   object Forks {
     private type HeldForkF[SharedFork] = Done |*| Delayed[SharedFork]
 
