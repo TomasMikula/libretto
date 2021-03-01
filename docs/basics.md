@@ -1,12 +1,31 @@
 # Libretto Basics
 
-A concurrent program in Libretto DSL is a _pure value_ of a certain type (such as the type `One -⚬ Done`).
+A concurrent program in Libretto DSL is a _pure value_ of a certain type (such as the type `One -⚬ Done` or
+`One -⚬ Val[String]`).
 Such a value is a mere _description,_ or _blueprint,_ of a program to be executed.
 The blueprint can then be passed to an interpreter for execution.
 
 Programmer's task is then to write Scala code that first assembles a blueprint and then
 passes is to an interpreter for execution. We thus think of run-time as split into
 **assembly time** and **execution time**.
+
+## Setup
+
+You will need Scala 3 in order to use Libretto.
+
+To follow this tutorial with code, you can play within the context of a `StarterAppScala`:
+
+```scala
+import libretto.StarterAppScala
+
+object HelloWorld extends StarterAppScala[String] {
+
+  // place your code experiments here
+
+  override def blueprint: One -⚬ Val[String] =
+    done > constVal("Hello world!")
+}
+```
 
 ## Building blocks
 
