@@ -1041,3 +1041,82 @@ Just like signals, the direction of Scala values can be inverted:
 def promise[A]: One -⚬ (Neg[A] |*| Val[A])
 def fulfill[A]: (Val[A] |*| Neg[A]) -⚬ One
 ```
+
+## Equality of Libretto programs
+
+There are equations (laws) that hold about Libretto arrows, such as
+
+```scala
+// given
+val f: A -⚬ B
+val g: B -⚬ C
+val h: C -⚬ D
+
+// then
+
+(f > g) > h = f > (g > h)
+
+id[A] > f = f = f > id[B]
+```
+
+```scala
+par(id[A], id[B]) = id[A |*| B]
+```
+
+```scala
+// given
+val f: A -⚬ C
+val g: B -⚬ C
+
+// then
+injectL[A, B] > either(f, g) = f
+```
+
+```scala
+// given
+val f: A => B
+
+// then
+mapVal[A, B](f) > neglect[B] = neglect[A]
+```
+
+and many more.
+
+_But what does it mean for two Libretto programs to be equal?_
+
+Obviously, the sides of the equations above have different source code, so they are not equal at the source code level.
+
+_We say that two Libretto programs are equal if their causal dependency graphs are equivalent<sup>(*)</sup>._
+
+<sup>(*)</sup> For now let's settle for some intuitive understanding of _causal dependency graphs_ and a suitable
+equivalence on them. Precise definition is left for further work.
+
+Note that in the presence of non-determinism arising from concurrency, a single program can have multiple possible
+execution traces. (Again, precise definition of an execution trace is left for further work.)
+
+A particular implementation of Libretto then determines a probability distribution of the possible execution traces
+of a program.
+
+Note that it is not required of a Libretto implementation that two equal Libretto programs have the same probability
+distribution of execution traces, only that they have the same set of possible execution traces. In practice this means
+that although two programs are equal, they might exhibit statistically different behaviors.
+
+Finally, let's give an example of two programs that look the same on the outside, but are not equal:
+
+```scala
+//  ┏━━━━━━━━━━━━━┯━━━━━━━━━━━━━━┓              ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┓     
+//  ┞────┐        ╎              ┞────┐         ┞────┐      id[Done]        ┞────┐
+//  ╎Done│→┄┄┄┄┐  ╎       ┌┄┄┄┄┄→╎Done│         ╎Done│→┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄→╎Done│
+//  ┟────┘     ┆  ├────┐  ┆      ┟────┘         ┟────┘                      ┟────┘
+//  ┃    join  ├┄→╎Done│→┄┤ fork ┃         ≠    ┠╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨     
+//  ┞────┐     ┆  ├────┘  ┆      ┞────┐         ┞────┐      id[Done]        ┞────┐
+//  ╎Done│→┄┄┄┄┘  ╎       └┄┄┄┄┄→╎Done│         ╎Done│→┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄→╎Done│
+//  ┟────┘        ╎              ┟────┘         ┟────┘                      ┟────┘
+//  ┗━━━━━━━━━━━━━┷━━━━━━━━━━━━━━┛              ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━┛     
+
+join > fork ≠ par(id[Done], id[Done])
+```
+
+In the program on the left, each of the output signals depends on both input signals, whereas in the program on the
+right, each output signal depends only on the respective input signal. Clearly, their causal dependency graphs are
+different, and thus the programs are not equal.
