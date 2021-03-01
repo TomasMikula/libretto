@@ -239,3 +239,9 @@ A negative value `Neg[A]` could alternatively be expressed as a callback `Val[A]
    Higher-order functions are more powerful than first-order functions. (In terms of category theory, higher-order
    functions require closedness of the category.) By the principle of least power, we should avoid high-order functions,
    and thus callbacks, when possible.
+
+## Copyright and License
+
+Copyright 2020–2021 Tomas Mikula
+
+This software is distributed under the Mozilla Public License 2.0, see the LICENSE file for details.
