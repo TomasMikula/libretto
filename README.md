@@ -137,18 +137,36 @@ Found something undocumented or not documented clearly? We should do better. Do 
 ## Caveats
 
 It is all too common for software projects to highlight only the good parts or to overstate their features.
-We want to do better and be absolutely honest about the limitations. However, it is hard to know what we are missing.
+We value your time and want to be absolutely honest about the limitations.
+However, it is hard to know what we are missing.
 That's why we need your help.
 
 Do you find that libretto does not hold up to some of its promises?
 Do you find that the project description omits some important limitation?
+Do you feel that you have spent too much time to find out something that could have been presented more readily?
 Please, [let us know](https://github.com/TomasMikula/libretto/issues/new?labels=criticism).
 
-We value your time and want you to get to the answers you might have about Libretto quickly.
-If you have invested significant time in Libretto only to find out that it is not suitable for your purposes,
-we are sorry that your time is lost.
-Please, [let us know](https://github.com/TomasMikula/libretto/issues/new?labels=criticism)
-what information would have saved you some time, so that we can save the time of people with needs similar to yours.
+**Batteries not included.** The streams library is under-developed. I/O library (file, network) is non-existent
+at the moment. There are currently no connectors or wrappers for things like HTTP servers, DB connectors,
+message brokers, ...
+
+**Not yet a good story for supervision/error recovery.**
+
+**Flawed proof-of-concept implementation.**
+The current implementation [is leaky](https://github.com/TomasMikula/libretto/issues/46). It is not a design flaw,
+just an implementation flaw.
+
+**Point-free style _is_ cumbersome.**
+This is the price for statically checked linearity, but there's no hiding it is a pain.
+
+**Best practices not established.**
+Programming in Libretto is quite different from conventional concurrency libraries. It is not clear what the best
+practices should be.
+
+**Not used to this level of concurrency.**
+In conventional programming languages and libraries, concurrency is a scarce special thing. In Libretto, concurrency
+is the default and sequentiality is a special thing. The consequences might be surprising.
+
 
 ## FAQs
 
