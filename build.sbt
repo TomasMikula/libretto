@@ -1,11 +1,57 @@
 resolvers += Resolver.mavenCentral
 
-val scalaVersionString = "3.0.0-RC1"
+scalaVersion in ThisBuild := "3.0.0-RC1"
+
+organization in ThisBuild := "com.github.tomasmikula"
+
+licenses in ThisBuild += ("MPL 2.0", url("https://opensource.org/licenses/MPL-2.0"))
+homepage in ThisBuild := Some(url("https://github.com/TomasMikula/libretto"))
+scmInfo in ThisBuild := Some(
+  ScmInfo(
+    url("https://github.com/TomasMikula/libretto"),
+    "scm:git:git@github.com:TomasMikula/libretto.git"
+  )
+)
+
+publishTo in ThisBuild := {
+  val nexus = "https://oss.sonatype.org/"
+  if (isSnapshot.value)
+    Some("snapshots" at nexus + "content/repositories/snapshots")
+  else
+    Some("releases"  at nexus + "service/local/staging/deploy/maven2")
+}
+
+pomExtra in ThisBuild := (
+  <developers>
+    <developer>
+      <id>TomasMikula</id>
+      <name>Tomas Mikula</name>
+      <url>http://github.com/TomasMikula/</url>
+    </developer>
+  </developers>
+)
+
+import ReleaseTransformations._
+
+releaseProcess := Seq[ReleaseStep](
+  checkSnapshotDependencies,
+  inquireVersions,
+  runClean,
+  runTest,
+  setReleaseVersion,
+  commitReleaseVersion,
+  tagRelease,
+  releaseStepCommand("publishSigned"),
+  releaseStepCommand("sonatypeRelease"),
+  setNextVersion,
+  commitNextVersion,
+  pushChanges,
+)
 
 lazy val core = project
   .in(file("core"))
   .settings(
-    scalaVersion := scalaVersionString,
+    name := "libretto",
     scalacOptions ++= Seq(
       "-deprecation",
       "-Ykind-projector", // support '*' as a placeholder in type lambdas
@@ -19,5 +65,15 @@ lazy val examples = project
   .in(file("examples"))
   .dependsOn(core)
   .settings(
-    scalaVersion := scalaVersionString,
+    name := "libretto-examples",
+  )
+
+lazy val root = project
+  .in(file("."))
+  .settings(
+    publish / skip := true,
+  )
+  .aggregate(
+    core,
+    examples,
   )
