@@ -11,7 +11,29 @@ passes is to an interpreter for execution. We thus think of run-time as split in
 
 ## Setup
 
-You will need Scala 3 in order to use Libretto.
+### sbt project setup
+
+You will need Scala 3 in order to use Libretto. Add the Scala 3 plugin to your `project/plugins.sbt` file:
+
+```sbt
+addSbtPlugin("ch.epfl.lamp" % "sbt-dotty" % "0.5.3")
+```
+
+The plugin requires a fairly recent version of sbt. Specify the sbt version in your `project/build.properties` file:
+
+```properties
+sbt.version=1.4.7
+```
+
+In your `build.sbt`, set Scala version to Scala 3 and add the dependency on Libretto:
+
+```sbt
+scalaVersion := "3.0.0-RC1"
+
+libraryDependencies += "com.github.tomasmikula" %% "libretto" % "0.1.0"
+```
+
+### Your first Libretto application
 
 To follow this tutorial with code, you can play within the context of a `StarterAppScala`:
 
