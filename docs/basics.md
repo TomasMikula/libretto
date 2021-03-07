@@ -25,13 +25,16 @@ The plugin requires a fairly recent version of sbt. Specify the sbt version in y
 sbt.version=1.4.7
 ```
 
-In your `build.sbt`, set Scala version to Scala 3 and add the dependency on Libretto:
+In your `build.sbt`, set the Scala version to Scala 3 and add the dependency on Libretto:
 
 ```sbt
 scalaVersion := "3.0.0-RC1"
 
 libraryDependencies += "com.github.tomasmikula" %% "libretto" % "0.1.0"
 ```
+
+Check [search.maven.org](https://search.maven.org/search?q=com.github.tomasmikula%20libretto) for the latest version of
+Libretto.
 
 ### Your first Libretto application
 
