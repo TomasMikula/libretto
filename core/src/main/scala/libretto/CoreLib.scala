@@ -1513,9 +1513,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     id                                                               [  Done |*| (A  |&|           B) ]
       .choice(chooseLWhenDone[A, B], chooseRWhenDone[A, B])       .to[ (Done |*|  A) |&| (Done |*| B) ]
 
+  /** Injects `A` from the the second in-port to the left side of the `|+|` in the out-port, but only after
+    * the `Done` signal from the first in-port arrives. That means that the consumer of `A |+| B` will see it
+    * as undecided until the `Done` signal arrives. This is different from `awaitPosFst[A] > injectL[A, B]`,
+    * in which the consumer of `A |+| B` knows immediately that it is the left case.
+    * 
+    * This is a convenience method on top of [[injectLWhenDone]] that which absorbs the `Done` signal using
+    * the given [[Junction.Positive]].
+    */
   def joinInjectL[A, B](implicit A: Junction.Positive[A]): (Done |*| A) -⚬ (A |+| B) =
     injectLWhenDone.>.left(A.awaitPos)
 
+  /** Analogous to [[joinInjectL]], but injects to the right. */
   def joinInjectR[A, B](implicit B: Junction.Positive[B]): (Done |*| B) -⚬ (A |+| B) =
     injectRWhenDone.>.right(B.awaitPos)
 
