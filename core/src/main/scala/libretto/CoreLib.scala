@@ -1528,15 +1528,23 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def awaitInjectR[A, B](implicit B: Junction.Positive[B]): (Done |*| B) -⚬ (A |+| B) =
     injectRWhenDone.>.right(B.awaitPos)
 
+  /** Chooses the left alternative `A` of the choice `A |&| B`, but only after the `Need` signal from the first
+    * out-port arrives. Until then, the producer of `A |&| B` will see it as undecided. This is different from
+    * `chooseL[A, B] > awaitNegFst[A]`, in which the producer of `A |&| B` knows immediately that the left side
+    * is chosen.
+    */
   def awaitChooseL[A, B](implicit A: Junction.Negative[A]): (A |&| B) -⚬ (Need |*| A) =
     id[A |&| B].>.choiceL(A.awaitNeg) >>> chooseLWhenNeed
 
+  /** Analogous to [[awaitChooseL]], but chooses the right side. */
   def awaitChooseR[A, B](implicit B: Junction.Negative[B]): (A |&| B) -⚬ (Need |*| B) =
     id[A |&| B].>.choiceR(B.awaitNeg) >>> chooseRWhenNeed
 
+  /** Analogous to [[awaitChooseL]], but awaits a positive (i.e. [[Done]]) signal. */
   def awaitPosChooseL[A, B](implicit A: Junction.Positive[A]): (Done |*| (A |&| B)) -⚬ A =
     par(id, awaitChooseL(Junction.invert(A))).assocRL.elimFst(rInvertSignal)
 
+  /** Analogous to [[awaitChooseR]], but awaits a positive (i.e. [[Done]]) signal. */
   def awaitPosChooseR[A, B](implicit B: Junction.Positive[B]): (Done |*| (A |&| B)) -⚬ B =
     par(id, awaitChooseR(Junction.invert(B))).assocRL.elimFst(rInvertSignal)
 
