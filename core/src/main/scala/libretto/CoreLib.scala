@@ -738,6 +738,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
   }
 
+  def awaitPosFst[A](implicit A: Junction.Positive[A]): (Done |*| A) -⚬ A =
+    A.awaitPosFst
+
+  def awaitPosSnd[A](implicit A: Junction.Positive[A]): (A |*| Done) -⚬ A =
+    A.awaitPosSnd
+
+  def awaitNegFst[A](implicit A: Junction.Negative[A]): A -⚬ (Need |*| A) =
+    A.awaitNegFst
+
+  def awaitNegSnd[A](implicit A: Junction.Negative[A]): A -⚬ (A |*| Need) =
+    A.awaitNegSnd
+
   def delayUsing[A](f: Done -⚬ Done)(implicit A: SignalingJunction.Positive[A]): A -⚬ A =
     A.delayUsing(f)
 
