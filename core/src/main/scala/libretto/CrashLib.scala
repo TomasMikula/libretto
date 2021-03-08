@@ -19,8 +19,8 @@ class CrashLib[DSL <: CrashDSL, Lib <: CoreLib[DSL]](
     id                                 [          A ]
       .introFst(done)               .to[ Done |*| A ]
       .>(crash[A, A](msg))          .to[ Done |*| A ]
-      .joinL                        .to[          A ]
-      
+      .awaitFst                     .to[          A ]
+
   def crashNeg[A](msg: String)(implicit A: Junction.Negative[A]): A -⚬ A =
     id                                 [          A ]
       .<(elimFst(need))           .from[ Need |*| A ]

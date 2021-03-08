@@ -841,11 +841,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def getR(implicit A: Cosemigroup[A]): S -⚬ (S |*| A) =
       getL >>> swap
 
-    def joinL(implicit A: Junction.Positive[A]): (Done |*| S) -⚬ S =
+    def awaitFst(implicit A: Junction.Positive[A]): (Done |*| S) -⚬ S =
       extendJunction(A).awaitPosFst
 
-    def joinR(implicit A: Junction.Positive[A]): (S |*| Done) -⚬ S =
-      swap >>> joinL(A)
+    def awaitSnd(implicit A: Junction.Positive[A]): (S |*| Done) -⚬ S =
+      swap >>> awaitFst(A)
 
     def andThen[B](that: Getter[A, B]): Getter[S, B] =
       new Getter[S, B] {
@@ -867,7 +867,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         override def extendJunction(implicit A: Junction.Positive[A]): Junction.Positive[S |+| T] =
           new Junction.Positive[S |+| T] {
             override def awaitPosFst: (Done |*| (S |+| T)) -⚬ (S |+| T) =
-              distributeL.bimap(self.joinL(A), that.joinL(A))
+              distributeL.bimap(self.awaitFst(A), that.awaitFst(A))
           }
       }
   }
@@ -1193,18 +1193,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def assocRL[X, Y](implicit ev: B2 =:= (X |*| Y)): A -⚬ ((B1 |*| X) |*| Y) =
       ev.substituteCo[λ[x => A -⚬ (B1 |*| x)]](self) >>> |*|.assocRL
 
-    def joinL(neglect: B1 -⚬ Done)(implicit j: Junction.Positive[B2]): A -⚬ B2 =
+    def awaitFst(neglect: B1 -⚬ Done)(implicit j: Junction.Positive[B2]): A -⚬ B2 =
       self >>> par(neglect, id[B2]) >>> j.awaitPosFst
 
-    def joinR(neglect: B2 -⚬ Done)(implicit j: Junction.Positive[B1]): A -⚬ B1 =
+    def awaitSnd(neglect: B2 -⚬ Done)(implicit j: Junction.Positive[B1]): A -⚬ B1 =
       self >>> par(id[B1], neglect) >>> j.awaitPosSnd
 
-    def joinL(implicit ev: B1 =:= Done, j: Junction.Positive[B2]): A -⚬ B2 = {
+    def awaitFst(implicit ev: B1 =:= Done, j: Junction.Positive[B2]): A -⚬ B2 = {
       type F[X] = A -⚬ (X |*| B2)
       ev.substituteCo[F](self) >>> j.awaitPosFst
     }
 
-    def joinR(implicit ev: B2 =:= Done, j: Junction.Positive[B1]): A -⚬ B1 = {
+    def awaitSnd(implicit ev: B2 =:= Done, j: Junction.Positive[B1]): A -⚬ B1 = {
       type F[X] = A -⚬ (B1 |*| X)
       ev.substituteCo[F](self) >>> j.awaitPosSnd
     }
@@ -1294,19 +1294,19 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       g(|*|.assocRL)
     }
 
-    def joinL(neglect: B1 -⚬ Done)(implicit j: Junction.Positive[B2]): F[B2] =
+    def awaitFst(neglect: B1 -⚬ Done)(implicit j: Junction.Positive[B2]): F[B2] =
       f(par(neglect, id[B2]) >>> j.awaitPosFst)
 
-    def joinR(neglect: B2 -⚬ Done)(implicit j: Junction.Positive[B1]): F[B1] =
+    def awaitSnd(neglect: B2 -⚬ Done)(implicit j: Junction.Positive[B1]): F[B1] =
       f(par(id[B1], neglect) >>> j.awaitPosSnd)
   }
 
   implicit class FocusedOnDoneTimesCo[F[_], B2](f: FocusedCo[F, Done |*| B2])(implicit j: Junction.Positive[B2]) {
-    def joinL: F[B2] = f(j.awaitPosFst)
+    def awaitFst: F[B2] = f(j.awaitPosFst)
   }
 
   implicit class FocusedOnTimesDoneCo[F[_], B1](f: FocusedCo[F, B1 |*| Done])(implicit j: Junction.Positive[B1]) {
-    def joinR: F[B1] = f(j.awaitPosSnd)
+    def awaitSnd: F[B1] = f(j.awaitPosSnd)
   }
 
   implicit class FocusedOnPlusCo[F[_], B1, B2](f: FocusedCo[F, B1 |+| B2]) {
@@ -1517,28 +1517,28 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     * the `Done` signal from the first in-port arrives. That means that the consumer of `A |+| B` will see it
     * as undecided until the `Done` signal arrives. This is different from `awaitPosFst[A] > injectL[A, B]`,
     * in which the consumer of `A |+| B` knows immediately that it is the left case.
-    * 
+    *
     * This is a convenience method on top of [[injectLWhenDone]] that which absorbs the `Done` signal using
     * the given [[Junction.Positive]].
     */
-  def joinInjectL[A, B](implicit A: Junction.Positive[A]): (Done |*| A) -⚬ (A |+| B) =
+  def awaitInjectL[A, B](implicit A: Junction.Positive[A]): (Done |*| A) -⚬ (A |+| B) =
     injectLWhenDone.>.left(A.awaitPos)
 
   /** Analogous to [[joinInjectL]], but injects to the right. */
-  def joinInjectR[A, B](implicit B: Junction.Positive[B]): (Done |*| B) -⚬ (A |+| B) =
+  def awaitInjectR[A, B](implicit B: Junction.Positive[B]): (Done |*| B) -⚬ (A |+| B) =
     injectRWhenDone.>.right(B.awaitPos)
 
-  def cojoinChooseL[A, B](implicit A: Junction.Negative[A]): (A |&| B) -⚬ (Need |*| A) =
+  def awaitChooseL[A, B](implicit A: Junction.Negative[A]): (A |&| B) -⚬ (Need |*| A) =
     id[A |&| B].>.choiceL(A.awaitNeg) >>> chooseLWhenNeed
 
-  def cojoinChooseR[A, B](implicit B: Junction.Negative[B]): (A |&| B) -⚬ (Need |*| B) =
+  def awaitChooseR[A, B](implicit B: Junction.Negative[B]): (A |&| B) -⚬ (Need |*| B) =
     id[A |&| B].>.choiceR(B.awaitNeg) >>> chooseRWhenNeed
 
-  def joinChooseL[A, B](implicit A: Junction.Positive[A]): (Done |*| (A |&| B)) -⚬ A =
-    par(id, cojoinChooseL(Junction.invert(A))).assocRL.elimFst(rInvertSignal)
+  def awaitPosChooseL[A, B](implicit A: Junction.Positive[A]): (Done |*| (A |&| B)) -⚬ A =
+    par(id, awaitChooseL(Junction.invert(A))).assocRL.elimFst(rInvertSignal)
 
-  def joinChooseR[A, B](implicit B: Junction.Positive[B]): (Done |*| (A |&| B)) -⚬ B =
-    par(id, cojoinChooseR(Junction.invert(B))).assocRL.elimFst(rInvertSignal)
+  def awaitPosChooseR[A, B](implicit B: Junction.Positive[B]): (Done |*| (A |&| B)) -⚬ B =
+    par(id, awaitChooseR(Junction.invert(B))).assocRL.elimFst(rInvertSignal)
 
   /** Creates a pair of mutually recursive functions. */
   def rec2[A, B, C, D](
@@ -1590,7 +1590,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     pred: (K |*| K) -⚬ Bool,
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) = {
     val awaitL: (Done |*| (A |*| B)) -⚬ (A |*| B) =
-      (aKey compose |*|.fst[B].lens[A]).joinL
+      (aKey compose |*|.fst[B].lens[A]).awaitFst
 
     id[A |*| B]
       .par(aKey.getL, bKey.getL)
@@ -1672,11 +1672,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     ): Comparable[S, T] =
       new Comparable[S, T] {
         private val absorb: ((A |*| B) |*| (S |*| T)) -⚬ (S |*| T) =
-          id                           [ (A    |*| B) |*| (S    |*| T) ]
-            .>(IXI)                 .to[ (A    |*| S) |*| (B    |*| T) ]
-            .>.fst.fst(A.counit)    .to[ (Done |*| S) |*| (B    |*| T) ]
-            .>.snd.fst(B.counit)    .to[ (Done |*| S) |*| (Done |*| T) ]
-            .par(f.joinL, g.joinL)  .to[           S  |*|           T  ]
+          id                                 [ (A    |*| B) |*| (S    |*| T) ]
+            .>(IXI)                       .to[ (A    |*| S) |*| (B    |*| T) ]
+            .>.fst.fst(A.counit)          .to[ (Done |*| S) |*| (B    |*| T) ]
+            .>.snd.fst(B.counit)          .to[ (Done |*| S) |*| (Done |*| T) ]
+            .par(f.awaitFst, g.awaitFst)  .to[           S  |*|           T  ]
 
         override def compare: (S |*| T) -⚬ Compared[S, T] = {
           id[ S |*| T ]

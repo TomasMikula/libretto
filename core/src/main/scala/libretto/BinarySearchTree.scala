@@ -108,7 +108,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
     def deconstruct[K, X](j: Junction.Positive[X]): BranchF[K, X] -⚬ (X |*| X) =
       id[BranchF[K, X]]                 .to[ Summary[K] |*| (X |*| X) ]
         .>.fst(Summary.neglect)         .to[    Done    |*| (X |*| X) ]
-        .>(fst[X].lens.joinL(j))        .to[                 X |*| X  ]
+        .>(fst[X].lens.awaitFst(j))     .to[                 X |*| X  ]
 
     def clear[K, X](f: X -⚬ Done): BranchF[K, X] -⚬ Done =
       join(Summary.neglect, join(f, f))
@@ -234,7 +234,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       val replace: ((Val[K] |*| W) |*| Singleton[K, V]) -⚬ F[NonEmptyTree[K, V]] =
         id                                                       [ (Val[K] |*| W) |*| Singleton[K, V] ]
           .>.snd(Singleton.deconstruct)                       .to[ (Val[K] |*| W) |*|  (Val[K] |*| V) ]
-          .>(IXI).>.fst.joinL(neglect)                        .to[         Val[K] |*|       (W |*| V) ]
+          .>(IXI).>.fst.awaitFst(neglect)                     .to[         Val[K] |*|       (W |*| V) ]
           .>.snd(upd)                                         .to[         Val[K] |*|            F[V] ]
           .>(F.absorbOrNeglectL)                              .to[       F[Val[K] |*|              V] ]
           .>(F.lift(singleton))                               .to[        F[NonEmptyTree[K, V]]       ]
@@ -317,7 +317,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       .>.right(NET.update_(ins, upd))   .to[ ((Val[K] |*|  W  ) |*| Done) |+|           F[ NET[K, V]]        ]
       .>.right.co[F].injectR[Done]      .to[ ((Val[K] |*|  W  ) |*| Done) |+|           F[Tree[K, V]]        ]
       .>.left(IX)                       .to[ ((Val[K] |*| Done) |*|  W  ) |+|           F[Tree[K, V]]        ]
-      .>.left.fst.joinR                 .to[ ( Val[K]           |*|  W  ) |+|           F[Tree[K, V]]        ]
+      .>.left.fst.awaitSnd              .to[ ( Val[K]           |*|  W  ) |+|           F[Tree[K, V]]        ]
       .>.left.snd(ins)                  .to[ ( Val[K]           |*| F[V]) |+|           F[Tree[K, V]]        ]
       .>.left(F.absorbOrNeglectL)       .to[ F[Val[K]           |*|  V  ] |+|           F[Tree[K, V]]        ]
       .>.left(F.lift(singleton))        .to[ F[            Tree[K, V]   ] |+|           F[Tree[K, V]]        ]

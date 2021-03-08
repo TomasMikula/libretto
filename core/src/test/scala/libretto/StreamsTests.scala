@@ -95,7 +95,7 @@ class StreamsTests extends TestSuite {
         .>.fst(subscribe(4))
         .assocLR.>.snd(Pollable.merge)
         .par(closeBroadcast, Pollable.toList)
-        .joinL
+        .awaitFst
 
     assertVal(
       prg >>> mapVal(_.toSet),

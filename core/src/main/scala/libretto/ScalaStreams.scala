@@ -125,7 +125,7 @@ class ScalaStreams[
           .>.fst(poll)                    .to[ (Done                   |+| (Val[A] |*| Pollable[A])) |*| Val[List[A]]  ]
           .distributeR                    .to[ (Done |*| Val[List[A]]) |+| ((Val[A] |*| Pollable[A]) |*| Val[List[A]]) ]
           .>.left.snd(mapVal(_.reverse))  .to[ (Done |*| Val[List[A]]) |+| ((Val[A] |*| Pollable[A]) |*| Val[List[A]]) ]
-          .>.left.joinL                   .to[           Val[List[A]]  |+| ((Val[A] |*| Pollable[A]) |*| Val[List[A]]) ]
+          .>.left.awaitFst                .to[           Val[List[A]]  |+| ((Val[A] |*| Pollable[A]) |*| Val[List[A]]) ]
           .>.right.fst(swap)              .to[           Val[List[A]]  |+| ((Pollable[A] |*| Val[A]) |*| Val[List[A]]) ]
           .>.right.assocLR                .to[           Val[List[A]]  |+| (Pollable[A] |*| (Val[A] |*| Val[List[A]])) ]
           .>.right.snd(unliftPair)        .to[           Val[List[A]]  |+| (Pollable[A] |*|    Val[(A, List[A])]     ) ]

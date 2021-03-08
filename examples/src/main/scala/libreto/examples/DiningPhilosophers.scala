@@ -98,7 +98,7 @@ object DiningPhilosophers extends StarterApp {
     type Name = Val[String]
 
     private def log(f: String => String): Name -⚬ Name =
-      dup[String].joinR(mapVal[String, String](f) > printLine)
+      dup[String].awaitSnd(mapVal[String, String](f) > printLine)
 
     def think: (Name |*| (SharedFork |*| SharedFork)) -⚬ (Name |*| (SharedFork |*| SharedFork)) = {
       implicit val bothForksJunction: Junction.Positive[SharedFork |*| SharedFork] =
@@ -110,7 +110,7 @@ object DiningPhilosophers extends StarterApp {
         .>.fst(log(name => s"🔔 $name wakes up"))
         .>.fst.signalSnd
         .assocLR
-        .>.snd.joinL
+        .>.snd.awaitFst
     }
 
     def eat: (Name |*| (HeldFork |*| HeldFork)) -⚬ (Name |*| (HeldFork |*| HeldFork)) =

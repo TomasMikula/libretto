@@ -34,8 +34,8 @@ class BasicTests extends TestSuite {
   ): One -⚬ Val[A] =
     parFromOne(prg1, prg2)
       .race(
-        caseFstWins = id.joinR(neglect),
-        caseSndWins = id.joinL(neglect),
+        caseFstWins = id.awaitSnd(neglect),
+        caseSndWins = id.awaitFst(neglect),
       )
 
   test("done") {
@@ -103,9 +103,9 @@ class BasicTests extends TestSuite {
     // We are testing that the second timer starts ticking only after the delayed inject (joinInjectL).
     val b: One -⚬ Val[Char] = {
       val delayedInjectL: One -⚬ (Val[Char] |+| Val[Char]) =
-        done >>> fork(delay(30.millis), constVal('B')) >>> joinInjectL
+        done >>> fork(delay(30.millis), constVal('B')) >>> awaitInjectL
       delayedInjectL >>> either(
-        introFst[Val[Char], Done](done >>> delay(20.millis)).joinL,
+        introFst[Val[Char], Done](done >>> delay(20.millis)).awaitFst,
         id,
       )
     }
@@ -121,7 +121,7 @@ class BasicTests extends TestSuite {
     // 'B' delayed by 30 + 20 = 50 millis.
     // We are testing that the second timer starts ticking only after the delayed choice is made.
     val b: One -⚬ Val[Char] =
-      done >>> fork(delay(30.millis), choice(delay(20.millis), id)) >>> joinChooseL >>> constVal('B')
+      done >>> fork(delay(30.millis), choice(delay(20.millis), id)) >>> awaitPosChooseL >>> constVal('B')
 
     assertVal(raceKeepWinner(a, b), 'A')
   }
@@ -403,7 +403,7 @@ class BasicTests extends TestSuite {
     val incGetClose: RefCounted[AtomicInteger] -⚬ Val[Int] =
       introSnd(const(()))                                       .to[ RefCounted[AtomicInteger] |*| Val[Unit] ]
         .>( RefCounted.effect((i, _) => i.incrementAndGet) )    .to[ RefCounted[AtomicInteger] |*| Val[Int]  ]
-        .joinL(RefCounted.release)                              .to[                               Val[Int]  ]
+        .awaitFst(RefCounted.release)                           .to[                               Val[Int]  ]
 
     val prg: One -⚬ Val[Int] =
       const(0)
