@@ -1564,13 +1564,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       rec { (cd: C -⚬ D) => g(rec { (ab: A -⚬ B) => f(ab, cd) }, cd) },
     )
 
-  type Bool = Done |+| Done
+  opaque type Bool = Done |+| Done
   object Bool {
-    val constTrue: One -⚬ Bool =
-      done >>> injectL
+    val constTrue: Done -⚬ Bool =
+      injectL
 
-    val constFalse: One -⚬ Bool =
-      done >>> injectR
+    val constFalse: Done -⚬ Bool =
+      injectR
 
     def switch[R](
       caseTrue : Done -⚬ R,

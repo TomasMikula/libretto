@@ -104,14 +104,17 @@ class ScalaLib[
     id                                       [ Val[Boolean]            ]
       .>(mapVal(booleanToEither))         .to[ Val[Either[Unit, Unit]] ]
       .>(liftEither)                      .to[ Val[Unit] |+| Val[Unit] ]
-      .bimap(neglect, neglect)            .to[   Done    |+|   Done    ]
+      .either(
+        neglect > Bool.constTrue,
+        neglect > Bool.constFalse,
+      )                                   .to [          Bool          ]
   }
 
   def unliftBoolean: Bool -⚬ Val[Boolean] =
-    id[Bool]                              .to[   Done    |+|   Done    ]
-      .bimap(constVal(()), constVal(()))  .to[ Val[Unit] |+| Val[Unit] ]
-      .>(unliftEither)                    .to[ Val[Either[Unit, Unit]] ]
-      .>(mapVal(eitherToBoolean))         .to[      Val[Boolean]       ]
+    Bool.switch(
+      caseTrue = constVal(true),
+      caseFalse = constVal(false),
+    )
 
   def maybeToOption[A]: Maybe[Val[A]] -⚬ Val[Option[A]] =
     Maybe.toEither[Val[A]]                .to[    One    |+| Val[A] ]
