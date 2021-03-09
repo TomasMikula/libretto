@@ -1909,7 +1909,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   private type MultipleF[A, X] = One |+| (A |+| (X |*| X))
 
-  /** Zero or more instances of `A`. The exact multiplicity is determined by the producer. */
+  /** Zero or more instances of `A`. The exact multiplicity is determined by the producer.
+    *
+    * Similar to [[LList]], but unlike [[LList]], the producer of [[Multiple]] is not required to unveil
+    * the elements sequentially. There are many different representations (in fact an infinite number)
+    * of the same sequence of elements of type `A` as `Multiple[A]`, while there is only one representation
+    * of that sequence as `LList[A]`.
+    */
   opaque type Multiple[A] = Rec[MultipleF[A, *]]
   object Multiple {
     def zero[A]: One -⚬ Multiple[A] =
