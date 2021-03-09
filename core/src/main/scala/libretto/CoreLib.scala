@@ -996,8 +996,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   object |+| {
-    def assocLR[A, B, C]: ((A |+| B) |+| C) -⚬ (A |+| (B |+| C)) = dsl.plusAssocLR
-    def assocRL[A, B, C]: (A |+| (B |+| C)) -⚬ ((A |+| B) |+| C) = dsl.plusAssocRL
+    def assocLR[A, B, C]: ((A |+| B) |+| C) -⚬ (A |+| (B |+| C)) =
+      either(either(injectL, andThen(injectL, injectR)), andThen(injectR, injectR))
+
+    def assocRL[A, B, C]: (A |+| (B |+| C)) -⚬ ((A |+| B) |+| C) =
+      either(andThen(injectL, injectL), either(andThen(injectR, injectL), injectR))
 
     def bimap[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
       either(f > injectL, g > injectR)
@@ -1028,8 +1031,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   object |&| {
-    def assocLR[A, B, C]: ((A |&| B) |&| C) -⚬ (A |&| (B |&| C)) = dsl.choiceAssocLR
-    def assocRL[A, B, C]: (A |&| (B |&| C)) -⚬ ((A |&| B) |&| C) = dsl.choiceAssocRL
+    def assocLR[A, B, C]: ((A |&| B) |&| C) -⚬ (A |&| (B |&| C)) =
+      choice(andThen(chooseL, chooseL), choice(andThen(chooseL, chooseR), chooseR))
+
+    def assocRL[A, B, C]: (A |&| (B |&| C)) -⚬ ((A |&| B) |&| C) =
+      choice(choice(chooseL, andThen(chooseR, chooseL)), andThen(chooseR, chooseR))
 
     def bimap[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
       choice(chooseL > f, chooseR > g)

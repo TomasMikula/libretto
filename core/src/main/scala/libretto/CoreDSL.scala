@@ -102,22 +102,10 @@ trait CoreDSL {
 
   def either[A, B, C](f: A -⚬ C, g: B -⚬ C): (A |+| B) -⚬ C
 
-  def plusAssocLR[A, B, C]: ((A |+| B) |+| C) -⚬ (A |+| (B |+| C)) =
-    either(either(injectL, andThen(injectL, injectR)), andThen(injectR, injectR))
-
-  def plusAssocRL[A, B, C]: (A |+| (B |+| C)) -⚬ ((A |+| B) |+| C) =
-    either(andThen(injectL, injectL), either(andThen(injectR, injectL), injectR))
-
   def chooseL[A, B]: (A |&| B) -⚬ A
   def chooseR[A, B]: (A |&| B) -⚬ B
 
   def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C)
-
-  def choiceAssocLR[A, B, C]: ((A |&| B) |&| C) -⚬ (A |&| (B |&| C)) =
-    choice(andThen(chooseL, chooseL), choice(andThen(chooseL, chooseR), chooseR))
-
-  def choiceAssocRL[A, B, C]: (A |&| (B |&| C)) -⚬ ((A |&| B) |&| C) =
-    choice(choice(chooseL, andThen(chooseR, chooseL)), andThen(chooseR, chooseR))
 
   def done: One -⚬ Done
   def need: Need -⚬ One
