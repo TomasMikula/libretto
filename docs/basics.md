@@ -54,7 +54,7 @@ object HelloWorld extends StarterAppScala[String] {
 
 ## Building blocks
 
-Libretto programs are composed of blocks with typed **in-ports** and **out-ports**,
+Libretto programs are composed of **components** with typed **in-ports** and **out-ports**,
 such as this one:
 
 ```
@@ -70,13 +70,13 @@ such as this one:
 
 We draw in-ports on the left and out-ports on the right.
 
-The in-ports and out-ports define the _interface_ of a block.
+The in-ports and out-ports define the _interface_ of a component.
 
-We can think of a block as a part of a system that runs autonomously and communicates with the rest of the system
+We can think of a component as a part of a system that runs autonomously and communicates with the rest of the system
 through its in-ports and out-ports.
 
-☝️ Do _not_ assume that through in-ports information flows into the block and through out-ports information flows out
-of the block. That may or may not be the case. In general, information may flow in either direction or even in both
+☝️ Do _not_ assume that through in-ports information flows into the component and through out-ports information flows out
+of the component. That may or may not be the case. In general, information may flow in either direction or even in both
 directions through an in-port as well as through an out-port. However, the distinction between in-ports and out-ports
 is important for composition, see below.
 
@@ -94,8 +94,8 @@ As we proceed, we will get an idea of what does and what does not introduce a ca
 
 ## Sequential composition
 
-We can connect an out-port to an in-port (but not to another out-port) of the same type on another block. For example,
-these two blocks `f` and `g`
+We can connect an out-port to an in-port (but not to another out-port) of the same type on another component.
+For example, these two components `f` and `g`
 
 ```
 ┏━━━━━━━━━━━━┓    ┏━━━━━━━━━━━━┓
@@ -105,7 +105,7 @@ these two blocks `f` and `g`
 ┗━━━━━━━━━━━━┛    ┗━━━━━━━━━━━━┛
 ```
 
-can be composed into a composite block `g ⚬ f`
+can be composed into a composite component `g ⚬ f`
 
 ```
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
@@ -118,12 +118,12 @@ can be composed into a composite block `g ⚬ f`
 ☝️ Although we call it _sequential_ composition, do _not_ assume that`g` takes place "after" `f`, in a temporal or
 causal sense. There may or may not be causal dependence in either direction, or even both directions simultaneously.
 We would need know the interface type `B` and possibly the inner
-workings of the blocks to make judgments about causal dependence. In general, processing can take place in `g` even
+workings of the components to make judgments about causal dependence. In general, processing can take place in `g` even
 before any information passes through the `B` interface.
 
 ## Parallel composition
 
-Any two blocks `f`, `g`
+Any two components `f`, `g`
 
 ```
 ┏━━━━━━━━━━━━┓
@@ -156,7 +156,7 @@ can be put alongside each other (parallel to each other) to form their _parallel
 The graphical notation is useful for a human, but eventually we have to express our Libretto program by means of the
 host language, Scala.
 
-A block `f` with one in-port of type `A` and one out-port of type `B`
+A component `f` with one in-port of type `A` and one out-port of type `B`
 
 ```
 ┏━━━━━━━━━━━━┓
@@ -170,18 +170,18 @@ is a value `f` of type `A -⚬ B`.
 
 The funny arrow-like symbol, `-⚬`, also called a _lollipop_, is borrowed from linear logic where it denotes _linear
 implication_ and in Libretto we similarly call it a _linear function._ We will also call it simply an _arrow_ if there
-is no risk of confusion with other things called arrows. So we use the terms block, linear function and arrow as
+is no risk of confusion with other things called arrows. So we use the terms component, linear function and arrow as
 synonyms.
 
 ☝️ Although we call `-⚬` a linear _function,_ some intuitions one might have about Scala functions (`=>`) do not
 transfer to `-⚬`. With a Scala function, there is nothing going on inside it until we pass all the inputs to it.
 Once we get the output (and we get the whole output all at once), the Scala function is done. Remember, however,
-that Libretto's linear function is a block, a part of the system that runs on its own and perhaps communicates
+that Libretto's linear function is a component, a part of the system that runs on its own and perhaps communicates
 with its environment through the ports.
-However, composition of Libretto's linear functions works just like composition of Scala functions.. 
+However, composition of Libretto's linear functions works just like composition of Scala functions.
 
 In Scala, we model multiple in-ports as a single in-port of a composite type, and similarly for out-ports.
-As an example, a block `f` with two in-ports of types `A` and `B` and two out-ports of types `C` and `D`
+As an example, a component `f` with two in-ports of types `A` and `B` and two out-ports of types `C` and `D`
 
 ```
 ┏━━━━━━━━━━━━┓
@@ -199,7 +199,8 @@ The expression _X ⊗ Y_ represents a **concurrent pair** of _X_ and _Y_, someti
 It is also called a _tensor product_ or a _monoidal product_ (of a monoidal category). 
 
 Because the ⊗ symbol is usually not very intelligible in monospace fonts (e.g. hardly distinguishable from ⊕, compare
-`⊗` vs. `⊕`), in code we usually use `|*|` for the concurrent pair. The above block is then `f: (A |*| B) -⚬ (C |*| D)`.
+`⊗` vs. `⊕`), in code we usually use `|*|` for the concurrent pair.
+The above component is then `f: (A |*| B) -⚬ (C |*| D)`.
 
 The operator for sequential composition introduced above is `andThen` (again, do not assume any temporal meaning):
 
@@ -220,9 +221,9 @@ def par[A, B, C, D](
 ): (A |*| C) -⚬ (B |*| D)
 ```
 
-## The identity block
+## The identity component
 
-For any type `A` there is an _identity_ function (block)
+For any type `A` there is an _identity_ function (component)
 
 ```scala
 /*  ┏━━━━━━━━━━━━┓
@@ -283,7 +284,7 @@ f > par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌┨
 
 ## Associativity of ⊗
 
-If we are designing a block with more than two in-ports or out-ports, such as this one,
+If we are designing a component with more than two in-ports or out-ports, such as this one,
 
 ```
 ┏━━━━━━━━━━━━┓
@@ -300,7 +301,7 @@ If we are designing a block with more than two in-ports or out-ports, such as th
 ```
 
 we need to choose how to group the ports using ⊗ (`|*|`) in the Scala representation.
-For the above block, there are two possibilities:
+For the above component, there are two possibilities:
 
 ```scala
 f1: A -⚬ ((B |*| C) |*| D)
@@ -346,7 +347,7 @@ val f2: A -⚬ (B |*| (C |*| D)) =
 
 The relative order of ports does not matter, either.
 
-If, for example, we have a block
+If, for example, we have a component
 
 ```scala
 /*  ┏━━━━━━━━━━━━━━━━┓
@@ -407,7 +408,7 @@ val f2: (B |*| A) -⚬ ((E |*| D) |*| C) =
 
 ## The no-flow port, `One`
 
-Sometimes we want a block with no in-ports or no out-ports, such as these ones
+Sometimes we want a component with no in-ports or no out-ports, such as these ones
 
 ```
 ┏━━━━━━━━━━━━┓            ┏━━━━━━━━━━━━┓
@@ -420,7 +421,7 @@ Sometimes we want a block with no in-ports or no out-ports, such as these ones
 In Scala representation, however, we have to specify the type of in-port and the type of outport.
 There is a special fake port type, `One`, through which there is no flow of information in either direction.
 
-We can declare the above two blocks as
+We can declare the above two components as
 
 ```scala
 val f: One -⚬ A
@@ -474,7 +475,7 @@ This means, for example, that in
 ┗━━━━━━━━━┷━━━━━━━━━━━━━┷━━━━━━━━━━━┛
 ```
 
-there is no causal dependence of `g` on anything in `f` going through the `introFst[C]` block.
+there is no causal dependence of `g` on anything in `f` going through the `introFst[C]` component.
 
 ## Signals, `Done` and `Need`
 
@@ -487,7 +488,7 @@ There are two types for signals, differing in the direction in which they travel
  - `Need`, which travels in the direction opposite to `-⚬`, i.e. from right to left.
    We also call the direction opposite to `-⚬` the _negative direction._
 
-Signals are useful for creating causal dependencies: one block might wait for a signal from another block
+Signals are useful for creating causal dependencies: one component might wait for a signal from another component
 before proceeding with further processing. For example, the signal might signal completion of a request and further
 processing might be accepting another request, effectively sequencing request processing.
 
@@ -497,8 +498,8 @@ For someone used to `Future` and `Promise`, it might be helpful, _despite import
 
 ### Immediate signals
 
-There are primitive blocks that fire a signal immediately. More precisely, as soon as the branch containing the block
-becomes active, but we haven't seen any branching operators yet. These are
+There are primitive components that fire a signal immediately. More precisely, as soon as the branch containing
+the component becomes active, but we haven't seen any branching operators yet. These are
 
 ```scala
 //  ┏━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━┓
@@ -654,9 +655,10 @@ val g: A -⚬ (Need |*| B) =
 ## Either (⊕)
 
 Type `A ⊕ B` (in code we use `A |+| B` for easier typing and better intelligibility) means either `A` or `B` (but
-not both), and which one it is going to be is decided by the block on the left. In other words, a block that has `A ⊕ B`
-as an out-port decides whether the interaction will continue as `A` or as `B`, while a block that has `A ⊕ B` as an
-in-port has to be able to handle either case. That is, the decision flows from left to right (the positive direction).
+not both), and which one it is going to be is decided by the component on the left.
+In other words, a component that has `A ⊕ B` as an out-port decides whether the interaction will continue as `A` or
+as `B`, while a component that has `A ⊕ B` as an in-port has to be able to handle either case.
+That is, the decision flows from left to right (the positive direction).
 
 Primitives for making the decision (introducing `|+|`) are
 
@@ -691,7 +693,7 @@ def either[A, B, C](f: A -⚬ C, g: B -⚬ C): (A |+| B) -⚬ C
 
 It is analogous to Scala's `Either#fold(f: A => C, g: B => C): C`.
 
-Once it is decided which branch it is going to be, the corresponding block, `f` or `g`, is executed:
+Once it is decided which branch it is going to be, the corresponding component, `f` or `g`, is executed:
 
 ```
   ┏━━━━━━━━━━━━━━┓                          ┏━━━━━━━━━━━━━━┓
@@ -707,10 +709,10 @@ Once it is decided which branch it is going to be, the corresponding block, `f` 
 
 Type `A & B` (we use `A |&| B` in code to avoid confusion with the bitwise and operator in Scala, and for consistency
 with `|*|` and `|+|`) means an _exclusive_ choice between `A` and `B`.
-The block to the right of `A & B`, i.e. the one that has `A & B` as an in-port, gets to choose whether the interaction
-with the block to the left will continue as `A` or as `B`.
-The block to the left of `A & B`, i.e. the one that has `A & B` as an out-port, has to be able to provide either of them
-(but not both of them simultaneously).
+The component to the right of `A & B`, i.e. the one that has `A & B` as an in-port, gets to choose whether
+the interaction with the component to the left will continue as `A` or as `B`.
+The component to the left of `A & B`, i.e. the one that has `A & B` as an out-port, has to be able to provide
+either of them (but not both of them simultaneously).
 That is, the decision flows from right to left (the negative direction).
 
 Primitives for choosing one of the branches (eliminating `|&|`) are
@@ -745,7 +747,7 @@ The primitive for offering a choice (introducing `|&|`) is
 def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C)
 ```
 
-Once the choice is made from the right, the corresponding block, `f` or `g`, is executed:
+Once the choice is made from the right, the corresponding component, `f` or `g`, is executed:
 
 ```
   ┏━━━━━━━━━━━━━━┓                      ┏━━━━━━━━━━━━━━┓
@@ -793,7 +795,7 @@ def factorR[A, B, C]: ((A |*| C) |+| (B |*| C)) -⚬ ((A |+| B) |*| C) =
 
 The tensor product ⊗ distributes over & as well, only in the opposite (right-to-left) direction.
 This is consistent with the choice being made on the right of `A |&| B` and being propagated to the left.
-It is therefore helpful to read the following blocks from right to left to see how one out-port is being distributed
+It is therefore helpful to read the following components from right to left to see how one out-port is being distributed
 over the choice in the other out-port.
 
 ```scala
@@ -830,17 +832,19 @@ def coFactorR[A, B, C]: ((A |&| B) |*| C) -⚬ ((A |*| C) |&| (B |*| C)) =
 
 ## Linearity and point-free style
 
-When composing blocks into larger blocks, it cannot happen that somewhere inside a composite block some ports remain
-unconnected. The way composition works, all ports of a component block that the composition operator does not connect
-to other ports become ports of the composite block. It also cannot happen that some port is connected twice.
+When composing components into larger components, it cannot happen that somewhere inside a composite component
+some ports remain unconnected. The way composition works, all ports of a constituent component that the composition
+operator does not connect to other ports become ports of the composite component.
+It also cannot happen that some port is connected twice.
 The property of each port being connected exactly once is called _linearity_—data and resources flow through the system
 in a linear fashion, without being duplicated or ignored (except via explicit operators for precisely that purpose).
 
-Notice that building Libretto blocks is like composing Scala functions in _point-free style._ For a moment, forget the
-differences between `-⚬` and `=>` and view in-ports as function inputs. In Libretto, we define the (linear) function
-without ever having access to the inputs as Scala values. Indeed, user code will never have access to values of types
-like `One`, `Done`, `Need`, `A |*| B`, `A |+| B`, `A & B` or others that we will encounter later. If it did, it would
-break linearity, because Scala functions can freely ignore or duplicate (referencec to) values.
+Notice that building Libretto components is like composing Scala functions in _point-free style._
+For a moment, forget the differences between `-⚬` and `=>` and view in-ports as function inputs.
+In Libretto, we define the (linear) function without ever having access to the inputs as Scala values.
+Indeed, user code will never have access to values of types like `One`, `Done`, `Need`, `A |*| B`, `A |+| B`, `A & B`
+or others that we will encounter later. If it did, it would break linearity,
+because Scala functions can freely ignore or duplicate (references to) values.
 
 Moreover, not only are values of the above types not accessible to a user, there need not be any values of these
 types at all. In fact, they are all uninhabited types in the proof-of-concept implementation. This should not be

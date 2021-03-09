@@ -1,7 +1,7 @@
 package libretto
 
 trait CoreDSL {
-  /** Libretto arrow, also called a ''linear function'' or, in the context of graphical notation, a ''block''.
+  /** Libretto arrow, also called a ''component'' or a ''linear function''.
     *
     * {{{
     * ┏━━━━━━━━━━┓
