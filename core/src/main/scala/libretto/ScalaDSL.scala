@@ -24,9 +24,9 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
     *
     * It is recommended to define custom opaque type aliases of resources, such as
     *
-    * {{{
+    * ```
     * opaque type Input = Res[java.io.InputStream]
-    * }}}
+    * ```
     */
   type Res[A]
 

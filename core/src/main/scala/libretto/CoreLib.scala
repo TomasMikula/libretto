@@ -13,7 +13,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
     * It must hold that
-    * {{{
+    * ```
     *         ┏━━━━━┓                         ┏━━━━━┓
     *         ┞─┐ r ┃                         ┃  l  ┞─┐
     *         ╎A│ I ┃                         ┃  I  ╎B│
@@ -27,13 +27,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     *   ┃  r  ╎A│                                   ╎B│ r ┃
     *   ┃  t  ┟─┘                                   ┟─┘ t ┃
     *   ┗━━━━━┛                                     ┗━━━━━┛
-    * }}}
+    * ```
     */
   trait Dual[A, B] {
     /** Reverses the input that flows along the `-⚬` arrow (say it is the `A` input) to its dual (`B`) flowing
       * against the direction of the arrow.
       *
-      * {{{
+      * ```
       *   ┏━━━━━━━┓
       *   ┞─┐   r ┃
       *   ╎A│─┐ I ┃
@@ -43,14 +43,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       *   ╎B│←┘ r ┃
       *   ┟─┘   t ┃
       *   ┗━━━━━━━┛
-      * }}}
+      * ```
       */
     val rInvert: (A |*| B) -⚬ One
 
     /** Reverses the output that flows against the `-⚬` arrow (say it is the `B` output) to its dual (`A`) flowing
       * in the direction of the arrow.
       *
-      * {{{
+      * ```
       *   ┏━━━━━┓
       *   ┃ l   ┞─┐
       *   ┃ I ┌─╎B│
@@ -60,7 +60,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       *   ┃ r └→╎A│
       *   ┃ t   ┟─┘
       *   ┗━━━━━┛
-      * }}}
+      * ```
       */
     val lInvert: One -⚬ (B |*| A)
 
@@ -2430,14 +2430,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
      *  Example:
      *
      *  Before:
-     *  {{{
+     *  ```
      *  (a1, b1), (a2, b2), (a3, b3)
-     *  }}}
+     *  ```
      *
      *  After:
-     *  {{{
+     *  ```
      *  (b1, a2), (b2, a3), (b3, a1)
-     *  }}}
+     *  ```
      */
     def halfRotateL[A, B]: LList[A |*| B] -⚬ LList[B |*| A] = {
       val f: ((B |*| A) |*| (A |*| B)) -⚬ ((B |*| A) |*| (B |*| A)) =

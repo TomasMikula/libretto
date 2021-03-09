@@ -3,13 +3,13 @@ package libretto
 trait CoreDSL {
   /** Libretto arrow, also called a ''component'' or a ''linear function''.
     *
-    * {{{
+    * ```
     * ┏━━━━━━━━━━┓
     * ┞───┐      ┞───┐
     * ╎ A │      ╎ B │
     * ┟───┘      ┟───┘
     * ┗━━━━━━━━━━┛
-    * }}}
+    * ```
     *
     * In `A -⚬ B`, we say that the ''in-port'' is of type `A` and the ''out-port'' is of type `B`.
     * Note that the distinction between the in-port and the out-port is only formal. Information or resources
@@ -178,7 +178,7 @@ trait CoreDSL {
   /** Reverses the [[Done]] signal (flowing in the positive direction, i.e. along the `-⚬` arrow)
     * into a [[Need]] signal (flowing in the negative direciton, i.e. against the `-⚬` arrow).
     *
-    * {{{
+    * ```
     *   ┏━━━━━━━━━━━┓
     *   ┞────┐      ┃
     *   ╎Done│┄┄┐   ┃
@@ -188,14 +188,14 @@ trait CoreDSL {
     *   ╎Need│←┄┘   ┃
     *   ┟────┘      ┃
     *   ┗━━━━━━━━━━━┛
-    * }}}
+    * ```
     */
   def rInvertSignal: (Done |*| Need) -⚬ One
 
   /** Reverses the [[Need]] signal (flowing in the negative direciton, i.e. against the `-⚬` arrow)
     * into a [[Done]] signal (flowing in the positive direction, i.e. along the `-⚬` arrow).
     *
-    * {{{
+    * ```
     *   ┏━━━━━━┓
     *   ┃      ┞────┐
     *   ┃   ┌┄┄╎Need│
@@ -205,7 +205,7 @@ trait CoreDSL {
     *   ┃   └┄→╎Done│
     *   ┃      ┟────┘
     *   ┗━━━━━━┛
-    * }}}
+    * ```
     */
   def lInvertSignal: One -⚬ (Need |*| Done)
 
