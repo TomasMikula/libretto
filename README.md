@@ -123,16 +123,10 @@ Primitives for racing and recursion were added.
 
 ## Documentation
 
-### Scaladoc
+[Scaladoc](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/) (Found something undocumented or not documented clearly? We should do better. Do not hesitate to
+[submit a documentation request](https://github.com/TomasMikula/libretto/issues/new?labels=documentation).)
 
-**(TODO)**
-
-Found something undocumented or not documented clearly? We should do better. Do not hesitate to
-[submit a documentation request](https://github.com/TomasMikula/libretto/issues/new?labels=documentation).
-
-### Tutorial
-
-**(TODO)**
+[Tutorial](tutorial/basics.md)
 
 ## Caveats
 
