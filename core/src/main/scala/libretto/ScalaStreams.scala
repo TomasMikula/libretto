@@ -562,7 +562,7 @@ class ScalaStreams[
       rInvertSignal,
       swap >>> rInvertEither(
         swap >>> rInvertSignal,
-        rInvertTimes(
+        rInvertPair(
           swap >>> fulfill[A],
           swap >>> rInvertSub
         )
@@ -574,7 +574,7 @@ class ScalaStreams[
       lInvertSignal,
       lInvertChoice(
         lInvertSignal >>> swap,
-        lInvertTimes(
+        lInvertPair(
           promise[A] >>> swap,
           lInvertSub >>> swap
         )

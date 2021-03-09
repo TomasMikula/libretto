@@ -194,11 +194,12 @@ As an example, a block `f` with two in-ports of types `A` and `B` and two out-po
 ┗━━━━━━━━━━━━┛
 ```
 
-is represented as a value `f: (A ⊗ B) -⚬ (C ⊗ D)`. As one would guess, _X ⊗ Y_ represents a _pair_ of _X_ and _Y_.
-The operator _⊗_ is called a _tensor product,_ sometimes referred to as _times_.
+is represented as a value `f: (A ⊗ B) -⚬ (C ⊗ D)`.
+The expression _X ⊗ Y_ represents a **concurrent pair** of _X_ and _Y_, sometimes referred to simply as _X times Y_.
+It is also called a _tensor product_ or a _monoidal product_ (of a monoidal category). 
 
 Because the ⊗ symbol is usually not very intelligible in monospace fonts (e.g. hardly distinguishable from ⊕, compare
-`⊗` vs. `⊕`), in code we usually use `|*|` for tensor product. The above block is then `f: (A |*| B) -⚬ (C |*| D)`.
+`⊗` vs. `⊕`), in code we usually use `|*|` for the concurrent pair. The above block is then `f: (A |*| B) -⚬ (C |*| D)`.
 
 The operator for sequential composition introduced above is `andThen` (again, do not assume any temporal meaning):
 

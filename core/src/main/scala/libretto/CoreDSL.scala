@@ -19,7 +19,7 @@ trait CoreDSL {
     */
   type -⚬[A, B]
 
-  /** Concurrent pair. Also called a ''tensor product''. */
+  /** Concurrent pair. Also called a ''tensor product'' or simply ''times''. */
   type |*|[A, B]
 
   /** Alias for [[|*|]]. */

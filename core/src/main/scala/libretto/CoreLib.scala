@@ -976,7 +976,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
           bimap(f, g)
       }
 
-    /** Product is covariant in the first argument. */
+    /** Pair is covariant in the first argument. */
     def fst[B]: Transportive[λ[x => x |*| B]] =
       new Transportive[λ[x => x |*| B]] {
         def lift[A1, A2](f: A1 -⚬ A2): (A1 |*| B) -⚬ (A2 |*| B) = par(f, id)
@@ -984,7 +984,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         def outL[A1, A2]: ((A1 |*| A2) |*| B) -⚬ (A1 |*| (A2 |*| B)) = assocLR
       }
 
-    /** Product is covariant in the second argument. */
+    /** Pair is covariant in the second argument. */
     def snd[A]: Transportive[λ[x => A |*| x]] =
       new Transportive[λ[x => A |*| x]] {
         def lift[B1, B2](f: B1 -⚬ B2): (A |*| B1) -⚬ (A |*| B2) = par(id, f)
@@ -1067,7 +1067,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   implicit def fst[B]: Transportive[λ[x => x |*| B]] = |*|.fst[B]
   implicit def snd[A]: Transportive[λ[x => A |*| x]] = |*|.snd[A]
 
-  implicit val tensorBifunctor: Bifunctor[|*|] = |*|.bifunctor
+  implicit val pairBifunctor: Bifunctor[|*|] = |*|.bifunctor
 
   implicit val eitherBifunctor: Bifunctor[|+|] = |+|.bifunctor
 
@@ -1192,7 +1192,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       new FocusedContra[[x] =>> x -⚬ B, A](self)
   }
 
-  implicit class LinearFunctionToTimesOps[A, B1, B2](self: A -⚬ (B1 |*| B2)) {
+  implicit class LinearFunctionToPairOps[A, B1, B2](self: A -⚬ (B1 |*| B2)) {
     def assocLR[X, Y](implicit ev: B1 =:= (X |*| Y)): A -⚬ (X |*| (Y |*| B2)) =
       ev.substituteCo[λ[x => A -⚬ (x |*| B2)]](self) >>> |*|.assocLR
 
@@ -1281,7 +1281,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       new FocusedCo[F[B1, *], B2](f)(F.snd)
   }
 
-  implicit class FocusedOnTimesCo[F[_], B1, B2](f: FocusedCo[F, B1 |*| B2]) {
+  implicit class FocusedOnPairCo[F[_], B1, B2](f: FocusedCo[F, B1 |*| B2]) {
     def fst: FocusedCo[λ[x => F[x |*| B2]], B1] =
       f.zoomCo(|*|.fst[B2])
 
@@ -1383,7 +1383,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       zoomContra[G, U.A](G)(U.ev)
   }
 
-  implicit class FocusedOnTimesContra[A, F[_], B1, B2](f: FocusedContra[F, B1 |*| B2]) {
+  implicit class FocusedOnPairContra[A, F[_], B1, B2](f: FocusedContra[F, B1 |*| B2]) {
     def fst: FocusedContra[λ[x => F[x |*| B2]], B1] =
       f.zoomCo(|*|.fst[B2])
 
@@ -1457,8 +1457,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>.left.fst(chooseL)     .to[( A        |*| C) |+| ((A |&| B) |*| D)]
       .>.right.fst(chooseR)    .to[( A        |*| C) |+| (       B  |*| D)]
 
-  /** Present a choice between two products (`(A |*| B) |&| (C |*| D)`) as a choice (`A |&| C`) between the first
-    * components of the respective products and provide the second component corresponding to the chosen first
+  /** Present a choice between two pairs (`(A |*| B) |&| (C |*| D)`) as a choice (`A |&| C`) between the first
+    * components of the respective pairs and provide the second component corresponding to the chosen first
     * component on the side (as `B |+| D`).
     */
   def subordinateSnd[A, B, C, D]: ((A |*| B) |&| (C |*| D)) -⚬ ((A |&| C) |*| (B |+| D)) =
@@ -1467,8 +1467,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>.choiceR.snd.injectR[B]     .to[ (A |*| (B |+| D)) |&| (C |*| (B |+| D)) ]
       .coDistributeR
 
-  /** Present a choice between two products (`(A |*| B) |&| (C |*| D)`) as a choice (`B |&| D`) between the second
-    * components of the respective products and provide the first component corresponding to the chosen second
+  /** Present a choice between two pairs (`(A |*| B) |&| (C |*| D)`) as a choice (`B |&| D`) between the second
+    * components of the respective pairs and provide the first component corresponding to the chosen second
     * component on the side (as `A |+| C`).
     */
   def subordinateFst[A, B, C, D]: ((A |*| B) |&| (C |*| D)) -⚬ ((A |+| C) |*| (B |&| D)) =
@@ -1712,7 +1712,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     val rInvert: (One |*| One) -⚬ One = elimSnd
   }
 
-  def rInvertTimes[A, B, Ȧ, Ḃ](
+  def rInvertPair[A, B, Ȧ, Ḃ](
     rInvertA: (A |*| Ȧ) -⚬ One,
     rInvertB: (B |*| Ḃ) -⚬ One,
   ): ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One =
@@ -1720,7 +1720,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>(IXI)                                 .to[ (A |*| Ȧ) |*| (B |*| Ḃ) ]
       .>(parToOne(rInvertA, rInvertB))        .to[           One           ]
 
-  def lInvertTimes[A, B, Ȧ, Ḃ](
+  def lInvertPair[A, B, Ȧ, Ḃ](
     lInvertA: One -⚬ (Ȧ |*| A),
     lInvertB: One -⚬ (Ḃ |*| B),
   ): One -⚬ ((Ȧ |*| Ḃ) |*| (A |*| B)) =
@@ -1729,13 +1729,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .par(lInvertA, lInvertB)                .to[ (Ȧ |*| A) |*| (Ḃ |*| B) ]
       .>(IXI)                                 .to[ (Ȧ |*| Ḃ) |*| (A |*| B) ]
 
-  implicit def productDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |*| B, Ȧ |*| Ḃ] =
+  implicit def pairDuality[A, B, Ȧ, Ḃ](implicit a: Dual[A, Ȧ], b: Dual[B, Ḃ]): Dual[A |*| B, Ȧ |*| Ḃ] =
     new Dual[A |*| B, Ȧ |*| Ḃ] {
       val lInvert: One -⚬ ((Ȧ |*| Ḃ) |*| (A |*| B)) =
-        lInvertTimes(a.lInvert, b.lInvert)
+        lInvertPair(a.lInvert, b.lInvert)
 
       val rInvert: ((A |*| B) |*| (Ȧ |*| Ḃ)) -⚬ One =
-        rInvertTimes(a.rInvert, b.rInvert)
+        rInvertPair(a.rInvert, b.rInvert)
     }
 
   def rInvertEither[A, B, Ȧ, Ḃ](
@@ -2017,7 +2017,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     implicit val nAffineNeed: NAffine[Need] =
       from(id)
 
-    implicit def nAffineTimes[A, B](implicit A: NAffine[A], B: NAffine[B]): NAffine[A |*| B] =
+    implicit def nAffinePair[A, B](implicit A: NAffine[A], B: NAffine[B]): NAffine[A |*| B] =
       from(par(A.deflate, B.deflate) >>> forkNeed)
   }
 
@@ -2035,7 +2035,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     implicit def fromNAffine[A](implicit A: NAffine[A]): Affine[A] =
       from(A.deflate >>> need)
 
-    implicit def affineTimes[A, B](implicit A: Affine[A], B: Affine[B]): Affine[A |*| B] =
+    implicit def affinePair[A, B](implicit A: Affine[A], B: Affine[B]): Affine[A |*| B] =
       from(parToOne(A.discard, B.discard))
   }
 
@@ -2056,7 +2056,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     implicit val pAffineDone: PAffine[Done] =
       from(id)
 
-    implicit def pAffineTimes[A, B](implicit A: PAffine[A], B: PAffine[B]): PAffine[A |*| B] =
+    implicit def pAffinePair[A, B](implicit A: PAffine[A], B: PAffine[B]): PAffine[A |*| B] =
       from(par(A.neglect, B.neglect) >>> join)
   }
 

@@ -408,7 +408,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       swap >>> rInvertSignal,
       swap >>> rInvertEither(
         rInvertSignal,
-        rInvertTimes(
+        rInvertPair(
           rInvertA,
           rInvertSub
         )
@@ -431,7 +431,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       lInvertSignal >>> swap,
       lInvertChoice(
         lInvertSignal,
-        lInvertTimes(
+        lInvertPair(
           lInvertA,
           lInvertSub
         )
