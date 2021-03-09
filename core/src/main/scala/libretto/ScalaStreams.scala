@@ -287,9 +287,7 @@ class ScalaStreams[
       val case1: Pollable[A] -⚬ Pollable[A]                                           = id
       val caseN: Pollable[A] -⚬ (PUnlimited[Pollable[A]] |*| PUnlimited[Pollable[A]]) = dup > par(self, self)
 
-      dropUntilFirstDemand
-        .choice(case0, (choice(case1, caseN)))
-        .pack[PUnlimitedF[Pollable[A], *]]
+      dropUntilFirstDemand > PUnlimited.create(case0, case1, caseN)
     }
 
     private[Pollable] type DemandingTree[K, V] = Tree[K, Demanding[V]]

@@ -1907,10 +1907,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def parToOne[A, B](f: A -⚬ One, g: B -⚬ One): (A |*| B) -⚬ One =
     par(f, g) > elimSnd[One]
 
-  type MultipleF[A, X] = One |+| (A |+| (X |*| X))
+  private type MultipleF[A, X] = One |+| (A |+| (X |*| X))
 
   /** Zero or more instances of `A`. The exact multiplicity is determined by the producer. */
-  type Multiple[A] = Rec[MultipleF[A, *]]
+  opaque type Multiple[A] = Rec[MultipleF[A, *]]
   object Multiple {
     def zero[A]: One -⚬ Multiple[A] =
       id[One]
@@ -1945,10 +1945,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
   }
 
-  type UnlimitedF[A, X] = One |&| (A |&| (X |*| X))
+  private type UnlimitedF[A, X] = One |&| (A |&| (X |*| X))
 
   /** Unlimited supply of `A`s. The consumer chooses how many `A`s to consume. */
-  type Unlimited[A] = Rec[UnlimitedF[A, *]]
+  opaque type Unlimited[A] = Rec[UnlimitedF[A, *]]
   object Unlimited {
     def discard[A]: Unlimited[A] -⚬ One =
       unpack[UnlimitedF[A, *]] > chooseL
@@ -1975,8 +1975,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
   }
 
-  type PUnlimitedF[A, X] = Done |&| (A |&| (X |*| X))
-  type PUnlimited[A] = Rec[PUnlimitedF[A, *]]
+  private type PUnlimitedF[A, X] = Done |&| (A |&| (X |*| X))
+  opaque type PUnlimited[A] = Rec[PUnlimitedF[A, *]]
   object PUnlimited {
     def neglect[A]: PUnlimited[A] -⚬ Done =
       unpack[PUnlimitedF[A, *]] > chooseL
