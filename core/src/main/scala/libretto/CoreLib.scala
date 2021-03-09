@@ -2294,8 +2294,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     id                             [ A |*|  B  ]
       .elimSnd(B.counit)        .to[ A         ]
 
-  type LListF[T, X] = One |+| (T |*| X)
-  type LList[T] = Rec[LListF[T, *]]
+  private type LListF[T, X] = One |+| (T |*| X)
+  opaque type LList[T] = Rec[LListF[T, *]]
 
   object LList {
     def nil[T]: One -⚬ LList[T] =
