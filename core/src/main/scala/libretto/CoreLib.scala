@@ -964,8 +964,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   object |*| {
-    def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) = dsl.timesAssocLR
-    def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) = dsl.timesAssocRL
+    def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) = dsl.assocLR
+    def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) = dsl.assocRL
 
     def bimap[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |*| C) -⚬ (B |*| D) =
       par(f, g)

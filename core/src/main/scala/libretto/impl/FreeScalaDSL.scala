@@ -35,8 +35,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class IntroSnd[A]() extends (A -⚬ (A |*| One))
     case class ElimFst[B]() extends ((One |*| B) -⚬ B)
     case class ElimSnd[A]() extends ((A |*| One) -⚬ A)
-    case class TimesAssocLR[A, B, C]() extends (((A |*| B) |*| C) -⚬ (A |*| (B |*| C)))
-    case class TimesAssocRL[A, B, C]() extends ((A |*| (B |*| C)) -⚬ ((A |*| B) |*| C))
+    case class AssocLR[A, B, C]() extends (((A |*| B) |*| C) -⚬ (A |*| (B |*| C)))
+    case class AssocRL[A, B, C]() extends ((A |*| (B |*| C)) -⚬ ((A |*| B) |*| C))
     case class Swap[A, B]() extends ((A |*| B) -⚬ (B |*| A))
     case class InjectL[A, B]() extends (A -⚬ (A |+| B))
     case class InjectR[A, B]() extends (B -⚬ (A |+| B))
@@ -141,11 +141,11 @@ object FreeScalaDSL extends ScalaDSL {
   override def elimSnd[A]: (A |*| One) -⚬ A =
     ElimSnd()
 
-  override def timesAssocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) =
-    TimesAssocLR()
+  override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) =
+    AssocLR()
 
-  override def timesAssocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) =
-    TimesAssocRL()
+  override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) =
+    AssocRL()
 
   override def swap[A, B]: (A |*| B) -⚬ (B |*| A) =
     Swap()

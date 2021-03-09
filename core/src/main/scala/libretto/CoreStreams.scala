@@ -150,7 +150,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           .distributeR                .to[ (Done |*| Delayed[LPollable[A]]) |+| ((A |*|  LPollable[A])   |*| Delayed[LPollable[A]] ) ]
           .>.left(Delayed.triggerBy)  .to[                   LPollable[A]   |+| ((A |*|  LPollable[A])   |*| Delayed[LPollable[A]] ) ]
           .>.left(LPollable.poll)     .to[                     LPolled[A]   |+| ((A |*|  LPollable[A])   |*| Delayed[LPollable[A]] ) ]
-          .>.right(timesAssocLR)      .to[                     LPolled[A]   |+| ( A |*| (LPollable[A]    |*| Delayed[LPollable[A]])) ]
+          .>.right(assocLR)           .to[                     LPolled[A]   |+| ( A |*| (LPollable[A]    |*| Delayed[LPollable[A]])) ]
           .>.right.snd(self)          .to[                     LPolled[A]   |+| ( A |*|            LPollable[A]                    ) ]
           .>.right.injectR[Done]      .to[                     LPolled[A]   |+|     LPolled[A]                                       ]
           .>(either(id, id))          .to[                              LPolled[A]                                                   ]
@@ -181,7 +181,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           id                                 [ (A                                      |+|  B) |*|         LPollable[A |+| B]       ]
             .>.snd(self)                  .to[ (A                                      |+|  B) |*| (LPollable[A] |*| LPollable[B])  ]
             .distributeR                  .to[ (A |*| (LPollable[A] |*| LPollable[B])) |+| (B  |*| (LPollable[A] |*| LPollable[B])) ]
-            .>.left(timesAssocRL)         .to[ ((A |*| LPollable[A]) |*| LPollable[B]) |+| (B  |*| (LPollable[A] |*| LPollable[B])) ]
+            .>.left(assocRL)              .to[ ((A |*| LPollable[A]) |*| LPollable[B]) |+| (B  |*| (LPollable[A] |*| LPollable[B])) ]
             .>.right(XI)                  .to[ ((A |*| LPollable[A]) |*| LPollable[B]) |+| (LPollable[A] |*|  (B |*| LPollable[B])) ]
             .> .left.fst(LPolled.cons)    .to[ (  LPolled[A]         |*| LPollable[B]) |+| (LPollable[A] |*|  (B |*| LPollable[B])) ]
             .>.right.snd(LPolled.cons)    .to[ (  LPolled[A]         |*| LPollable[B]) |+| (LPollable[A] |*|    LPolled[B]        ) ]
@@ -273,7 +273,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       id[Done |*| LPolled[A]]         .to[  Done |*| (Done |+|           (A |*| LPollable[A])) ]
         .distributeL                  .to[ (Done |*| Done) |+| (Done |*| (A |*| LPollable[A])) ]
         .>.left(join)                 .to[      Done       |+| (Done |*| (A |*| LPollable[A])) ]
-        .>.right(timesAssocRL)        .to[      Done       |+| ((Done |*| A) |*| LPollable[A]) ]
+        .>.right(assocRL)             .to[      Done       |+| ((Done |*| A) |*| LPollable[A]) ]
         .>.right.fst(ev.awaitPosFst)  .to[      Done       |+| (          A  |*| LPollable[A]) ]
 
     def delayClosedBy[A](

@@ -311,8 +311,8 @@ We need not worry about it too much, though, because the grouping does not matte
 we can always regroup the ports using
 
 ```scala
-def timesAssocLR[X, Y, Z]: ((X |*| Y) |*| Z) -⚬ (X |*| (Y |*| Z))
-def timesAssocRL[X, Y, Z]: (X |*| (Y |*| Z)) -⚬ ((X |*| Y) |*| Z)
+def assocLR[X, Y, Z]: ((X |*| Y) |*| Z) -⚬ (X |*| (Y |*| Z))
+def assocRL[X, Y, Z]: (X |*| (Y |*| Z)) -⚬ ((X |*| Y) |*| Z)
 ```
 
 ```
@@ -320,7 +320,7 @@ def timesAssocRL[X, Y, Z]: (X |*| (Y |*| Z)) -⚬ ((X |*| Y) |*| Z)
 ┞─┐              ┞─┐           ┞─┐              ┞─┐
 ╎X│              ╎X│           ╎X│              ╎X│
 ╎⊗│              ┟─┘           ┟─┘              ╎⊗│
-╎Y│ timesAssocLR ┞─┐           ┞─┐ timesAssocRL ╎Y│
+╎Y│   assocLR    ┞─┐           ┞─┐   assocRL    ╎Y│
 ┟─┘              ╎Y│           ╎Y│              ┟─┘
 ┞─┐              ╎⊗│           ╎⊗│              ┞─┐
 ╎Z│              ╎Z│           ╎Z│              ╎Z│
@@ -338,7 +338,7 @@ we can always get
 
 ```scala
 val f2: A -⚬ (B |*| (C |*| D)) =
-  f1 > timesAssocLR
+  f1 > assocLR
 ```
 
 ## Symmetry of ⊗
@@ -640,14 +640,14 @@ and precisely (including all the necessary glue) like this
  *  ┃             ╎One│           ╎ ⊗  │         ├────┘          ┟────┘
  *  ┃             ├───┘           ╎Done│         ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨
  *  ┃             ╎               ├────┘         ├────┐          ┃
- *  ┃             ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤ timesAssocLR ╎Done│          ┃
+ *  ┃             ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤    assocLR   ╎Done│          ┃
  *  ┞───┐         ├───┐           ├───┐          ╎ ⊗  │    f     ┞───┐
  *  ╎ A │         ╎ A │   id[A]   ╎ A │          ╎ A  │          ╎ B │
  *  ┟───┘         ├───┘           ├───┘          ├────┘          ┟───┘
  *  ┗━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛
  */
 val g: A -⚬ (Need |*| B) =
-  introFst[A] > par(lInvertSignal, id[A]) > timesAssocLR > par(id[Need], f)
+  introFst[A] > par(lInvertSignal, id[A]) > assocLR > par(id[Need], f)
 ```
 
 ## Either (⊕)

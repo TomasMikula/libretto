@@ -376,14 +376,14 @@ class ScalaStreams[
           .>.snd.fst(f)                   .to[ (Pollable[A] |*| LPolled[KSubs]) |*| ((Val[K] |*| Val[V]) |*| DT[K, V]) ]
           .>.snd(DT.dispatch)             .to[ (Pollable[A] |*| LPolled[KSubs]) |*| (Done                |*| DT[K, V]) ]
           .assocRL                        .to[ ((Pollable[A] |*| LPolled[KSubs]) |*| Done)               |*| DT[K, V]  ]
-          .>.fst(swap >>> timesAssocRL)   .to[ ((Done |*| Pollable[A]) |*| LPolled[KSubs])               |*| DT[K, V]  ]
+          .>.fst(swap > assocRL)          .to[ ((Done |*| Pollable[A]) |*| LPolled[KSubs])               |*| DT[K, V]  ]
           .>.fst.fst(delayedPoll)         .to[ (  Polled[A]            |*| LPolled[KSubs])               |*| DT[K, V]  ]
           .>(goRec)                       .to[                                                          Done           ]
 
       def onUpstream(
         goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
       ): ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done =
-        timesAssocLR      .to[ Polled[A] |*| (LPolled[KSubs] |*| DT[K, V]) ]
+        assocLR           .to[ Polled[A] |*| (LPolled[KSubs] |*| DT[K, V]) ]
           .distributeR
           .either(upstreamClosed, upstreamVal(goRec))
 

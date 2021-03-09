@@ -92,8 +92,8 @@ trait CoreDSL {
   def elimSnd[A, B](f: B -⚬ One): (A |*| B) -⚬ A =
     andThen(par(id, f), elimSnd)
 
-  def timesAssocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C))
-  def timesAssocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C)
+  def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C))
+  def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C)
 
   def swap[A, B]: (A |*| B) -⚬ (B |*| A)
 

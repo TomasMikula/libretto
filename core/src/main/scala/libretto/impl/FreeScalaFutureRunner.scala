@@ -110,14 +110,14 @@ class FreeScalaFutureRunner(
             .splitPair
             ._1                                                   .asInstanceOf[Frontier[B]]
 
-        case -⚬.TimesAssocLR() =>
+        case -⚬.AssocLR() =>
           // ((X |*| Y) |*| Z) -⚬ (X |*| (Y |*| Z))
           type X; type Y; type Z
           val (xy, z) = this.asInstanceOf[Frontier[(X |*| Y) |*| Z]].splitPair
           val (x, y) = xy.splitPair
           Pair(x, Pair(y, z))                                     .asInstanceOf[Frontier[B]]
 
-        case -⚬.TimesAssocRL() =>
+        case -⚬.AssocRL() =>
           // (X |*| (Y |*| Z)) -⚬ ((X |*| Y) |*| Z)
           type X; type Y; type Z
           val (x, yz) = this.asInstanceOf[Frontier[X |*| (Y |*| Z)]].splitPair
