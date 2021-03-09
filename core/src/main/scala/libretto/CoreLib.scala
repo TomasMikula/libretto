@@ -1458,8 +1458,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>.right.fst(chooseR)    .to[( A        |*| C) |+| (       B  |*| D)]
 
   /** Present a choice between two pairs (`(A |*| B) |&| (C |*| D)`) as a choice (`A |&| C`) between the first
-    * components of the respective pairs and provide the second component corresponding to the chosen first
-    * component on the side (as `B |+| D`).
+    * parts of the respective pairs and on the side provide the other part of the chosen input pair, i.e. either
+    * `B` or `D` (`B |+| D`).
     */
   def subordinateSnd[A, B, C, D]: ((A |*| B) |&| (C |*| D)) -⚬ ((A |&| C) |*| (B |+| D)) =
     id                                 [ (A |*|  B       ) |&| (C |*|        D ) ]
@@ -1468,8 +1468,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .coDistributeR
 
   /** Present a choice between two pairs (`(A |*| B) |&| (C |*| D)`) as a choice (`B |&| D`) between the second
-    * components of the respective pairs and provide the first component corresponding to the chosen second
-    * component on the side (as `A |+| C`).
+    * parts of the respective pairs and on the side provide the other part of the chosen input pair, i.e. either
+    * `A` or `C` (`A |+| C`).
     */
   def subordinateFst[A, B, C, D]: ((A |*| B) |&| (C |*| D)) -⚬ ((A |+| C) |*| (B |&| D)) =
     id                                 [ ( A        |*|  B) |&| (       C  |*| D) ]
