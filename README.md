@@ -162,20 +162,88 @@ In conventional programming languages and libraries, concurrency is a scarce spe
 is the default and sequentiality is a special thing. The consequences might be surprising.
 
 
-## FAQs
+## Q&A
 
 Did not find an answer to your question?
 Do not hesitate to [ask us](https://github.com/TomasMikula/libretto/issues/new?labels=question).
 
-### Is Libretto for me?
+### What is Libretto for?
 
-Libretto is for anyone who needs to implement concurrent systems or stream processing in Scala.
+Libretto is a library for implementing concurrent systems and stream processing in Scala.
+Its focus is on the programming model, i.e. the generic glue to structure concurrent programs,
+rather than any specific use cases.
+
+### Who is Libretto for?
+
 You are more likely to appreciate Libretto if you:
  - cannot function without static types;
- - are into functional/declarative programming;
+ - are into functional and/or declarative programming;
  - like when the compiler is guiding you (type-driven development);
  - hate falling back to imperative code (like the `IO` monad) when it comes to concurrency;
  - have hit an expressiveness limit of an existing library when you needed a slightly non-trivial data-flow topology.
+
+### Is Libretto production-ready?
+
+No. See also [Caveats](#caveats).
+
+The goal for now is to present a different approach to concurrent programming
+and to excite a small number of enthusiasts to play with it, explore it and push it further.
+
+The expectaion is that people will find the Libretto approach worthwhile regardless of
+unstable API, non-existent ecosystem of libraries, flawed proof-of-concept implementation,
+cumbersome point-free notation, or unknown performance characteristics.
+
+### What do you mean by _declarative,_ anyway?
+
+Declarative programming is a programming paradigm in which we _describe_ the computation
+without giving instructions to the underlying execution model.
+Examples of such instructions are updating a shared mutable variable or spawning or joining a thread/fiber/actor.
+
+Instructions to the underlying execution model are _side-effects,_ so we can say that
+declarative programs are programs without side-effects.
+In particular, all expressions in a declarative program must be _referentially transparent._
+
+### Aren't `IO` monad-style programs referentially transparent as well?
+
+Not really.
+
+They _are_ referentially transparent from the point of view of the host language (Scala).
+The expression `IO { println("Hi!") }` is referentially transparent in that given
+
+```scala
+val x = IO { println("Hi!") }
+```
+
+we can freely replace occurences of `x` by `IO { println("Hi!") }` (and vice versa)
+without changing the meaning of the program.
+There is no denying that this already has great benefits for compositionality and reasoning about programs.
+
+However, if we view the `IO` monad as a new semantic level and having to wrap some expressions in `IO { ... }`
+as just a syntactic annoyance for the sake of embedding `IO` programs in Scala, then referential transparency
+at this new `IO` level would require the following two programs to have the same meaning
+
+```scala
+for {
+  x <- IO { println("Hi!") }
+  y <- IO { println("Hi!") }
+} yield y
+```
+
+```scala
+for {
+  x <- IO { println("Hi!") }
+  y <- IO { x }
+} yield y
+```
+
+but they do not.
+
+Saying that (the expressions in) these programs are referentially transparent (even though at the Scala level they are)
+is somewhat like saying that any program is referentially transparent when viewed as a text file in a file system.
+
+Note: The way Libretto circumvents the issue of programs like these having different behavior is _linearity:_
+If, by some stretch of the imagination, these were Libretto programs, the first one would not typecheck,
+because `x` is unused.
 
 ### How can libretto _statically_ guarantee that each resource is consumed exactly once when Scala does not have linear type system features?
 
@@ -197,7 +265,7 @@ You are more likely to appreciate Libretto if you:
 
 ### Does libretto have fibers, as known from ZIO or Cats Effect?
 
-### Where is the IO monad?
+### Where is the monadic structure in Libretto?
 
 ### You criticize monadic IO for hiding the program structure inside impenetrable Scala functions. However, Libretto allows to incorporate Scala functions and dynamically computed Scala values into the system as well. Are Libretto programs any more amenable to inspection than IO programs?
 
