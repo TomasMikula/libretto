@@ -245,31 +245,111 @@ Note: The way Libretto circumvents the issue of programs like these having diffe
 If, by some stretch of the imagination, these were Libretto programs, the first one would not typecheck,
 because `x` is unused.
 
-### How can libretto _statically_ guarantee that each resource is consumed exactly once when Scala does not have linear type system features?
+### How can Libretto _statically_ guarantee that each resource is consumed exactly once when Scala does not have linear type system features?
 
-### Why do I have to write libretto programs in that strange point-free style?
+Libretto programs are not composed of Scala functions `A => B`.
+They are composed of Libretto's linear functions `A -⚬ B`, which are linear by construction.
+
+### Why are Libretto programs written in point-free style?
+
+Scala functions can be written using point-full (lambdas) or point-free style.
+However, Libretto programs are not composed of Scala functions.
+Scala functions are opaque (cannot be inspected) and do not enforce linearity.
+Libretto programs are composed of Libretto's linear functions (`A -⚬ B`).
+These are just data structures and as such can be inspected by the implementation.
+Also, they are designed to ensure linearity by construction.
+However, unlike native Scala functions, we don't get the nice lambda syntax
+and have to resort to building up linear functions using point-free combinators.
 
 ### What exactly are the primitives of Libretto, from which everything else is derived?
 
+There is a hierarchy of DSLs, partially ordered by their power. At the bottom, i.e. the weakest, is currently
+[CoreDSL](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/libretto/CoreDSL.html).
+
+An extension of `CoreDSL` tha is of particular interest is
+[ScalaDSL](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/libretto/ScalaDSL.html).
+It adds support for using Scala values and pure Scala functions, managing resources that are Scala objects,
+performing effects on those resources, and marking thread-blocking Scala calls.
+
 ### Does libretto support dynamic stream topologies?
+
+Yes.
+
+By dynamic stream topologies we mean data flows that do not have a rigid structure predetermined at compile-time,
+but depend on runtime values or runtime load.
 
 ### Do libretto streams support feedback loops?
 
+Yes, [loops can be implemented](https://github.com/TomasMikula/libretto/issues/19).
+
 ### Is there support for timers?
+
+Yes, the basic operation is
+[delay](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/libretto/TimerDSL.html#delay-fffffb21):
+
+```scala
+def delay(d: FiniteDuration): Done -⚬ Done
+```
 
 ### How do I communicate with the external world (I/O)?
 
+[CoreDSL](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/libretto/CoreDSL.html)
+does not have any means of I/O.
+
+Its extension, [ScalaDSL](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/libretto/ScalaDSL.html),
+has means to wrap Scala resources and perform effects on them.
+
+Another approach, although much more involved, is to
+ - define a custom extension of `CoreDSL` that provides all the primitives necessary for a particular problem domain,
+ - provide implementation of that custom DSL,
+ - write programs against the custom DSL.
+
 ### Does libretto support supervision of a subsystem?
+
+Not yet.
+
+See [#8](https://github.com/TomasMikula/libretto/issues/8).
 
 ### Can I execute different parts of the system on different execution contexts/thread pools?
 
+Not yet.
+
+The current implementation uses one main thread pool and another one for blocking operations.
+This is sufficient for most applications.
+
+See [#6](https://github.com/TomasMikula/libretto/issues/6).
+
 ### Does libretto have fibers, as known from ZIO or Cats Effect?
 
-### Where is the monadic structure in Libretto?
+No.
 
-### You criticize monadic IO for hiding the program structure inside impenetrable Scala functions. However, Libretto allows to incorporate Scala functions and dynamically computed Scala values into the system as well. Are Libretto programs any more amenable to inspection than IO programs?
+Fibers are used to manually control concurrency. In Libretto, any two computations that do not causally depend on
+each other take place concurrently, without any explicit instructions like `spawn`-ing a fiber.
+
+### Are Libretto programs any more amenable to inspection than `IO` monad programs?
+
+`IO` monad programs are hidden inside an impenetrable Scala function after the first `flatMap`.
+However, Libretto allows to incorporate Scala functions into the program as well.
+One might therefore ask whether Libretto programs are any more amenable to inspection than `IO` monad programs.
+
+The answer is _yes._
+
+The difference is that in Libretto, uses of opaque Scala functions are local.
+This is unlike `IO` monad programs, where a Scala function passed to `flatMap` produces _all_ the rest of the program,
+_at runtime,_ thus making it impossible to inspect the program before it is run.
+
+Given a Libretto program
+
+```scala
+f > mapVal(g) > h
+```
+
+where `g` is a Scala function and `f`, `h` are Libretto arrows, the content of `g` is opaque, but both `f` and `h`
+can be inspected before the program is run.
 
 ### Does libretto support session types?
+
+Yes.
 
 ### Why are there two different function-like symbols? What is the difference between `-⚬` and  `=⚬`?
 
