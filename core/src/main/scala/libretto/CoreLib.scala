@@ -101,12 +101,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def lift[A, B](f: A -⚬ B): F[A] -⚬ F[B]
 
     /** Composition with another covariant functor. */
-    def ⚬[G[_]](that: Functor[G]): Functor[λ[x => F[G[x]]]] = new Functor[λ[x => F[G[x]]]] {
+    def ∘[G[_]](that: Functor[G]): Functor[λ[x => F[G[x]]]] = new Functor[λ[x => F[G[x]]]] {
       def lift[A, B](f: A -⚬ B): F[G[A]] -⚬ F[G[B]] = self.lift(that.lift(f))
     }
 
     /** Composition with a contravariant functor. Results in a contravariant functor. */
-    def ⚬[G[_]](that: ContraFunctor[G]): ContraFunctor[λ[x => F[G[x]]]] = new ContraFunctor[λ[x => F[G[x]]]] {
+    def ∘[G[_]](that: ContraFunctor[G]): ContraFunctor[λ[x => F[G[x]]]] = new ContraFunctor[λ[x => F[G[x]]]] {
       def lift[A, B](f: A -⚬ B): F[G[B]] -⚬ F[G[A]] = self.lift(that.lift(f))
     }
   }
@@ -116,12 +116,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def lift[A, B](f: A -⚬ B): F[B] -⚬ F[A]
 
     /** Composition with a covariant functor. Results in a contravariant functor. */
-    def ⚬[G[_]](that: Functor[G]): ContraFunctor[λ[x => F[G[x]]]] = new ContraFunctor[λ[x => F[G[x]]]] {
+    def ∘[G[_]](that: Functor[G]): ContraFunctor[λ[x => F[G[x]]]] = new ContraFunctor[λ[x => F[G[x]]]] {
       def lift[A, B](f: A -⚬ B): F[G[B]] -⚬ F[G[A]] = self.lift(that.lift(f))
     }
 
     /** Composition with another contravariant functor. Results in a covariant functor. */
-    def ⚬[G[_]](that: ContraFunctor[G]): Functor[λ[x => F[G[x]]]] = new Functor[λ[x => F[G[x]]]] {
+    def ∘[G[_]](that: ContraFunctor[G]): Functor[λ[x => F[G[x]]]] = new Functor[λ[x => F[G[x]]]] {
       def lift[A, B](f: A -⚬ B): F[G[A]] -⚬ F[G[B]] = self.lift(that.lift(f))
     }
   }
@@ -158,19 +158,19 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   trait Externalizer[F[_]] { self =>
     def lift[A, B](f: A -⚬ B): F[A] => F[B]
 
-    def ⚬[G[_]](that: Functor[G]): Externalizer[[x] =>> F[G[x]]] =
+    def ∘[G[_]](that: Functor[G]): Externalizer[[x] =>> F[G[x]]] =
       new Externalizer[[x] =>> F[G[x]]] {
         def lift[A, B](f: A -⚬ B): F[G[A]] => F[G[B]] =
           self.lift(that.lift(f))
       }
 
-    def ⚬[G[_]](that: ContraFunctor[G]): ContraExternalizer[[x] =>> F[G[x]]] =
+    def ∘[G[_]](that: ContraFunctor[G]): ContraExternalizer[[x] =>> F[G[x]]] =
       new ContraExternalizer[[x] =>> F[G[x]]] {
         def lift[A, B](f: A -⚬ B): F[G[B]] => F[G[A]] =
           self.lift(that.lift(f))
       }
 
-    def ⚬[G[_, _]](that: Bifunctor[G]): BiExternalizer[[x, y] =>> F[G[x, y]]] =
+    def ∘[G[_, _]](that: Bifunctor[G]): BiExternalizer[[x, y] =>> F[G[x, y]]] =
       new BiExternalizer[[x, y] =>> F[G[x, y]]] {
         def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): F[G[A, C]] => F[G[B, D]] =
           self.lift(that.lift(f, g))
@@ -208,13 +208,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   trait ContraExternalizer[F[_]] { self =>
     def lift[A, B](f: A -⚬ B): F[B] => F[A]
 
-    def ⚬[G[_]](that: Functor[G]): ContraExternalizer[[x] =>> F[G[x]]] =
+    def ∘[G[_]](that: Functor[G]): ContraExternalizer[[x] =>> F[G[x]]] =
       new ContraExternalizer[[x] =>> F[G[x]]] {
         def lift[A, B](f: A -⚬ B): F[G[B]] => F[G[A]] =
           self.lift(that.lift(f))
       }
 
-    def ⚬[G[_]](that: ContraFunctor[G]): Externalizer[[x] =>> F[G[x]]] =
+    def ∘[G[_]](that: ContraFunctor[G]): Externalizer[[x] =>> F[G[x]]] =
       new Externalizer[[x] =>> F[G[x]]] {
         def lift[A, B](f: A -⚬ B): F[G[A]] => F[G[B]] =
           self.lift(that.lift(f))
@@ -1010,8 +1010,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def IXI[A, B, C, D]: ((A |+| B) |+| (C |+| D)) -⚬ ((A |+| C) |+| (B |+| D)) =
       either(
-        either(injectL ⚬ injectL, injectR ⚬ injectL),
-        either(injectL ⚬ injectR, injectR ⚬ injectR),
+        either(injectL ∘ injectL, injectR ∘ injectL),
+        either(injectL ∘ injectR, injectR ∘ injectR),
       )
 
 
@@ -1083,7 +1083,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** No-op used for documentation purposes: explicitly states the full type of this linear function. */
     def as[C](implicit ev: (A -⚬ B) =:= C): C = ev(self)
 
-    def ⚬[Z](g: Z -⚬ A): Z -⚬ B = dsl.andThen(g, self)
+    def ∘[Z](g: Z -⚬ A): Z -⚬ B = dsl.andThen(g, self)
 
     def bimap[F[_, _]]: BimapSyntax[F, A, B] =
       new BimapSyntax[F, A, B](self)
@@ -1249,10 +1249,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       ev.substituteContra(f)
 
     def zoomCo[G[_], C](G: Functor[G])(implicit ev: B =:= G[C]): FocusedCo[λ[x => F[G[x]]], C] =
-      new FocusedCo[λ[x => F[G[x]]], C](ev.substituteCo(f))(F ⚬ G)
+      new FocusedCo[λ[x => F[G[x]]], C](ev.substituteCo(f))(F ∘ G)
 
     def zoomContra[G[_], C](G: ContraFunctor[G])(implicit ev: B =:= G[C]): FocusedContra[λ[x => F[G[x]]], C] =
-      new FocusedContra[λ[x => F[G[x]]], C](ev.substituteCo(f))(F ⚬ G)
+      new FocusedContra[λ[x => F[G[x]]], C](ev.substituteCo(f))(F ∘ G)
 
     def co[G[_]](implicit G: Functor[G], U: Unapply[B, G]): FocusedCo[λ[x => F[G[x]]], U.A] =
       zoomCo[G, U.A](G)(U.ev)
@@ -1261,7 +1261,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       zoomContra[G, U.A](G)(U.ev)
 
     def bi[G[_, _]](implicit G: Bifunctor[G], U: Unapply2[B, G]): FocusedBi[λ[(x, y) => F[G[x, y]]], U.A, U.B] =
-      new FocusedBi[λ[(x, y) => F[G[x, y]]], U.A, U.B](U.ev.substituteCo(f))(F ⚬ G)
+      new FocusedBi[λ[(x, y) => F[G[x, y]]], U.A, U.B](U.ev.substituteCo(f))(F ∘ G)
 
     def injectL[C]: F[B |+| C] = F.lift(dsl.injectL)(f)
     def injectR[C]: F[C |+| B] = F.lift(dsl.injectR)(f)
@@ -1371,10 +1371,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       ev.substituteContra(f)
 
     def zoomCo[G[_], C](G: Functor[G])(implicit ev: B =:= G[C]): FocusedContra[λ[x => F[G[x]]], C] =
-      new FocusedContra[λ[x => F[G[x]]], C](ev.substituteCo(f))(F ⚬ G)
+      new FocusedContra[λ[x => F[G[x]]], C](ev.substituteCo(f))(F ∘ G)
 
     def zoomContra[G[_], C](G: ContraFunctor[G])(implicit ev: B =:= G[C]): FocusedCo[λ[x => F[G[x]]], C] =
-      new FocusedCo[λ[x => F[G[x]]], C](ev.substituteCo(f))(F ⚬ G)
+      new FocusedCo[λ[x => F[G[x]]], C](ev.substituteCo(f))(F ∘ G)
 
     def co[G[_]](implicit G: Functor[G], U: Unapply[B, G]): FocusedContra[λ[x => F[G[x]]], U.A] =
       zoomCo[G, U.A](G)(U.ev)
