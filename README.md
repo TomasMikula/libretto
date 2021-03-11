@@ -23,8 +23,10 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
 
 - **Underdelivery on the promise of writing mere _descriptions_ or _blueprints_ of programs.**
 
-  (Even in an `IO` monad style program) we still manipulate live objects with identities, such as fibers, mutable
-  references, queues, "pre-materialized" blueprints, ...
+  Substantial parts of such "descriptions" are opaque Scala functions.
+
+  Moreover, even in an `IO` monad-style program, we still manipulate live objects with identities,
+  such as fibers, mutable references, queues, "pre-materialized" blueprints, ...
   
   That does not fit our idea of writing mere descriptions of programs.
 
@@ -71,45 +73,49 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
   In a common (but unsatisfactory) implementation, Bob formally accepts any of `A`, `D`, `E` at all times and raises
   or replies with an error if the protocol is violated, i.e. if it is not in a state in which it can accept the message.
 
-## Design Goals
+## Features
 
-- **Expressiveness.** Make many things representable and make the representations natural.
+- **Concurrent by design**
 
-  Dynamic stream topologies are readily expressible, without needing built-in support.
-  Even a stream itself is not a primitive, but derived from the other primitives.
-  That gives confidence that when you need something other than what is provided out-of-the-box,
-  you will be able to build it out of the provided primitives, without escaping to a different paradigm.
+  Libretto programs are naturally concurrent, without special control-flow operators.
 
-- **Ease of reasoning about programs.** Libretto aims to achieve this goal via:
+- **Session types**
 
-  - **Direct-style** programming, in which _all_ interaction of a component with its environment is stated by its
-    type signature (much like inputs and outputs of a pure function).
+- **Statically checked linearity**
 
-    This is in contrast to callback-style described above and leading to spooky action at a distance.
+  It is guaranteed at compile time that every producer is connected to a consumer, etc.
 
-    Direct-style programming is possible thanks to Libretto's ability to express interaction protocols (session types)
-    in a component's interface.  
+- **Direct-style programming**
 
-  - **Declarativeness.**
+  _All_ interaction of a component with its environment is stated by its type signature
+  (much like inputs and outputs of a pure function).
 
-    _“Progress is possible only if we train ourselves to think about programs
-    without thinking of them as pieces of executable code.”_ -- Edsger W. Dijkstra
-    
-  - **Graphical notation.** We are often able to visualize the architecture of a system as a diagram, but there is
-    usually a big gap between the diagram and the code.
-    
-    Libretto primitives have graphical notation that composes into larger diagrams as we compose the program,
-    preserving close correspondence between code and graphical representation.
+  This is in contrast to callback-style which leads to spooky action at a distance.
+  See also [What's the problem with callbacks?](#whats-the-problem-with-callbacks).
 
-- **Strong static guarantees.** It is guaranteed at compile time that every producer is connected to a consumer.
-  Typed protocols (session types) are checked at compile time for type safety.
+- **Expressiveness**
 
-- **Programs as data.** Libretto programs are just data structures.
-  
-  Note that unlike monad-based programs, which are also just values, Libretto programs are not hidden inside
-  an inscrutable Scala function after the first `flatMap`.
-  
-  As such, Libretto programs can be inspected, manipulated, optimized, given different interpretations, ...
+  Libretto provides a self-contained DSL that is powerful enough to express many different concepts
+  without using escape hatches to the underlying layer. 
+
+  Streams themselves and dynamic stream topologies are expressible without needing built-in support.
+
+- **Graphical notation**
+
+  We are often able to visualize the architecture of a system as a diagram, but there is
+  usually a big gap between the diagram and the code.
+
+  Libretto primitives have graphical notation that composes into larger diagrams as we compose the program,
+  preserving close correspondence between code and graphical representation.
+
+- **Programs as data**
+
+  Libretto programs are just data structures.
+  This opens new possibilities: they can be inspected, manipulated, optimized, given different interpretations,
+  used for code generation, sent over the network, ... It also means that many different Libretto implementations
+  are possible.
+
+  See also [Are Libretto programs any more amenable to inspection than IO monad programs?](#are-libretto-programs-any-more-amenable-to-inspection-than-io-monad-programs)
 
 ## Libretto in a Nutshell
 
@@ -396,9 +402,9 @@ A negative value `Neg[A]` could alternatively be expressed as a callback `Val[A]
    * Through the captured resources and side-effects on them, the invocation of a callback causes spooky action
      at a distance, which negatively affects the ability to reason about programs.
  - Moreover, components that produce or consume callbacks are _higher-order_ linear functions in Libretto.
-   Higher-order functions are more powerful than first-order functions. (In terms of category theory, higher-order
-   functions require closedness of the category.) By the principle of least power, we should avoid high-order functions,
-   and thus callbacks, when possible.
+   Higher-order functions are more powerful than first-order functions.
+   (In terms of category theory, higher-order functions require closedness of the category.)
+   By the principle of least power, we should avoid higher-order functions, and thus callbacks, when possible.
 
 ## Copyright and License
 
