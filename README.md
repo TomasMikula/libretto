@@ -366,7 +366,47 @@ Yes.
 | Pure value. As such, it can be used any number of times (including zero). | Must be treated as a resource, i.e. consumed (evaluated) exactly once, because it might have captured other resources that are consumed on evaluation. |  |
 | Morphism | Object, Internal Hom | In category theory, one does not look inside objects. Everything is expressed in terms of morphisms. In particular, objects are not viewed as collections of elements. Analogously, there are no values of type `=⚬`, or of types <code>&#124;*&#124;</code>, <code>&#124;+&#124;</code>, <code>&#124;&amp;&#124;</code>, `One`, `Val`, ... These are all objects in a category and we do not view them as collections of elements. We express everything in terms of morphisms, `-⚬`. |
 
-### How do I type the `⚬` symbol used in `-⚬` and `=⚬`?
+### How to type the `⚬` symbol used in `-⚬` and `=⚬`?
+
+`⚬` is Unicode code point U+26AC (medium small white circle).
+
+You can use any input method that let's you enter a Unicode symbol via its code.
+For example, on macOS you can add _Unicode Hex Input_ to your _System Preferences > Keyboard > Input Sources._
+Using this input source, you can type `⚬` by pressing <kbd>Alt</kbd>+<kbd>2</kbd><kbd>6</kbd><kbd>a</kbd><kbd>c</kbd>.
+
+#### IntelliJ IDEA
+
+In IntelilJ IDEA, we can define a _Live Template_ that expands `-o` (where `o` is the Latin letter 'o') to `-⚬`:
+
+ 1. Go to `Preferences > Editor > Live Templates > scala`.
+ 2. Click the _Add_ button and choose _Live Template._
+ 3. Fill out the definition:
+    - Abbreviation: `-o` (with the Latin letter 'o')
+    - Description: e.g. `lollipop`
+    - Template text: `-⚬` (with the Unicode code point U+26AC)
+    - Expand with: e.g. <kbd>Space</kbd>
+
+Now, when you type `-o␣` in a Scala file, the editor expands it to `-⚬`.
+
+#### Visual Studio Code
+
+In Visual Studio Code, we can add a user snippet triggered by `-o` (where `o` is the Latin letter 'o') which expands to `-⚬`:
+
+ 1. In _Preferences > User Snippets_ click on _New Global Snippets file..._
+ 2. Enter file name, e.g. `libretto`.
+ 3. In the pre-generated JSON file, add the field
+    ```json
+      "lollipop": {
+        "prefix": "-o",
+        "body": "-⚬",
+        "description": "types the lollipop arrow (-⚬)"
+      }
+    ```
+    and save.
+
+Now, when you type `-o` in the editor, a popup should appear with a suggestion to insert `-⚬`,
+which you confirm by pressing <kbd>Enter</kbd>.
+(Sometimes you might need to press <kbd>Ctrl</kbd>+<kbd>Space</kbd> for the suggestion popup to appear.)
 
 ### Does Libretto prevent deadlocks?
 
