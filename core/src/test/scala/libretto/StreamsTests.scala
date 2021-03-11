@@ -7,21 +7,21 @@ class StreamsTests extends TestSuite {
   import kit.coreLib._
   import kit.coreStreams._
   import kit.scalaLib._
-  
+
   val scalaStreams = ScalaStreams(kit.dsl, kit.coreLib, kit.scalaLib, kit.coreStreams)
-  
+
   import scalaStreams._
-  
+
   test("toList ⚬ fromList = id") {
     assertVal(
-      Pollable.fromList(List(1, 2, 3, 4, 5, 6)) >>> Pollable.toList,
+      Pollable.fromList(List(1, 2, 3, 4, 5, 6)) > Pollable.toList,
       List(1, 2, 3, 4, 5, 6),
     )
   }
 
   test("Pollable.map") {
     assertVal(
-      Pollable.fromList(List(1, 2, 3)) >>> Pollable.map(_.toString) >>> Pollable.toList,
+      Pollable.fromList(List(1, 2, 3)) > Pollable.map(_.toString) > Pollable.toList,
       List("1", "2", "3"),
     )
   }
@@ -29,10 +29,10 @@ class StreamsTests extends TestSuite {
   test("partition") {
     assertVal(
       Pollable.of(1, 2, 3, 4, 5, 6)
-        .>>>(Pollable.map { i => if (i % 2 == 0) Left(i) else Right(i) })
-        .>>>(Pollable.partition)
+        .>(Pollable.map { i => if (i % 2 == 0) Left(i) else Right(i) })
+        .>(Pollable.partition)
         .par(Pollable.toList, Pollable.toList)
-        .>>>(unliftPair),
+        .>(unliftPair),
       (List(2, 4, 6), List(1, 3, 5)),
     )
   }
@@ -64,7 +64,7 @@ class StreamsTests extends TestSuite {
       LList
         .of(
           Pollable.of(1, 2, 3),
-          Pollable.of(4, 5, 6) >>> Pollable.delay(10.millis),
+          Pollable.of(4, 5, 6) > Pollable.delay(10.millis),
           Pollable.of(7, 8, 9),
         )
         .>(Pollable.mergeAll)
@@ -82,11 +82,11 @@ class StreamsTests extends TestSuite {
     import Pollable.BroadcastByKey.{close => closeBroadcast, subscribe}
 
     val byLength: Val[String] -⚬ (Val[Int] |*| Val[String]) =
-      mapVal[String, (Int, String)](s => (s.length, s)) >>> liftPair
+      mapVal[String, (Int, String)](s => (s.length, s)) > liftPair
 
     val input: One -⚬ Pollable[String] =
       Pollable.of("f", "fo", "foo", "fooo", "foooo", "pho", "phoo", "phooo", "bo", "boo")
-      
+
     val prg: One -⚬ Val[List[String]] =
       input
         .>(Pollable.delay(10.millis)) // delay so that subscribers have some time to subscribe
@@ -98,7 +98,7 @@ class StreamsTests extends TestSuite {
         .awaitFst
 
     assertVal(
-      prg >>> mapVal(_.toSet),
+      prg > mapVal(_.toSet),
       Set("foo", "fooo", "pho", "phoo", "boo"),
     )
   }

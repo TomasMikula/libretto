@@ -109,11 +109,11 @@ class ScalaStreams[
     def fromList[A](as: List[A]): One -⚬ Pollable[A] = {
       @tailrec def go(ras: List[A], acc: One -⚬ Pollable[A]): One -⚬ Pollable[A] =
         ras match {
-          case head :: tail => go(tail, parFromOne(const(head), acc) >>> Pollable.cons)
+          case head :: tail => go(tail, parFromOne(const(head), acc) > Pollable.cons)
           case Nil          => acc
         }
 
-      go(as.reverse, done >>> Pollable.empty[A])
+      go(as.reverse, done > Pollable.empty[A])
     }
 
     def of[A](as: A*): One -⚬ Pollable[A] =
@@ -200,7 +200,7 @@ class ScalaStreams[
       * When either of the downstreams closes, the other downstream and the upstream are closed as well.
       */
     def partition[A, B]: Pollable[Either[A, B]] -⚬ (Pollable[A] |*| Pollable[B]) =
-      LPollable.map(liftEither[A, B]) >>> LPollable.partition
+      LPollable.map(liftEither[A, B]) > LPollable.partition
 
     /** Merges two [[Pollable]]s into one.
       * Left-biased: when there is a value available from both upstreams, favors the first one.
@@ -233,7 +233,7 @@ class ScalaStreams[
       }
 
       val caseFstClosed: Pollable[A] -⚬ (Done |*| Pollable[A]) =
-        introFst >>> par(done, id)
+        introFst > par(done, id)
 
       val caseFstPolled: Pollable[A] -⚬ (Polled[A] |*| Pollable[A]) =
         id                                           [                  Pollable[A]                       ]
@@ -301,7 +301,7 @@ class ScalaStreams[
 
       def dispatchNE[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| NeDT[K, V]) -⚬ PMaybe[NeDT[K, V]] =
         NonEmptyTree.update(
-          Demanding.supply[V].>.left(need >>> done) > PMaybe.fromEither,
+          Demanding.supply[V].>.left(need > done) > PMaybe.fromEither,
           ifAbsent = neglect,
         )
 
@@ -316,10 +316,10 @@ class ScalaStreams[
         Tree.insertOrUpdate(Demanding.merge)
 
       def clear[K, V]: DT[K, V] -⚬ Done =
-        Tree.clear(Demanding.close >>> need >>> done)
+        Tree.clear(Demanding.close > need > done)
 
       def clearNE[K, V]: NeDT[K, V] -⚬ Done =
-        NonEmptyTree.clear(Demanding.close >>> need >>> done)
+        NonEmptyTree.clear(Demanding.close > need > done)
 
       def addSubscriber[K: Ordering, V]: ((Val[K] |*| Subscriber[V]) |*| DT[K, V]) -⚬ DT[K, V] =
         id                                           [ ( Val[K] |*|       Subscriber[V]                ) |*| DT[K, V] ]
@@ -344,7 +344,7 @@ class ScalaStreams[
             .swap                               .to[ LSubscriber[Neg[K] |*| Pollable[V]]     |*|     Pollable[V]      ]
 
         val onUnsubscribed: Need -⚬ (LSubscriber[Neg[K] |*| Pollable[V]] |*| Pollable[V]) =
-          id[Need] > LSubscriber.unsubscribed > introSnd(done >>> Pollable.empty[V])
+          id[Need] > LSubscriber.unsubscribed > introSnd(done > Pollable.empty[V])
 
         id[ LSubscriber[Neg[K] |*| Pollable[V]] |*| Done ]
           .>.fst(LSubscriber.switch(onDemand, onUnsubscribed))
@@ -360,10 +360,10 @@ class ScalaStreams[
       type KSubs = Val[K] |*| Subscriber[V]
 
       val discardSubscriber: KSubs -⚬ One =
-        par(dsl.neglect[K], Subscriber.close[V]) >>> rInvertSignal
+        par(dsl.neglect[K], Subscriber.close[V]) > rInvertSignal
 
       val upstreamClosed: (Done |*| (LPolled[KSubs] |*| DT[K, V])) -⚬ Done =
-        join(id, join(LPolled.close(discardSubscriber >>> done), DT.clear))
+        join(id, join(LPolled.close(discardSubscriber > done), DT.clear))
 
       def upstreamVal(
         goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
@@ -386,7 +386,7 @@ class ScalaStreams[
           .either(upstreamClosed, upstreamVal(goRec))
 
       val feedToNEDT: (Polled[A] |*| NeDT[K, V]) -⚬ Done =
-        LPolled.feedTo(DT.dispatchNE(f)) >>> join(id, Maybe.neglect(DT.clearNE))
+        LPolled.feedTo(DT.dispatchNE(f)) > join(id, Maybe.neglect(DT.clearNE))
 
       val forward: (Polled[A] |*| DT[K, V]) -⚬ Done =
         id                                               [  Polled[A] |*| (Done |+|                NeDT[K, V]) ]
@@ -434,7 +434,7 @@ class ScalaStreams[
 
       id[Pollable[A] |*| LPollable[KSubs]]
         .>(par(poll, LPollable.poll))
-        .introSnd(done >>> Tree.empty[K, Demanding[V]])
+        .introSnd(done > Tree.empty[K, Demanding[V]])
         .>(go)
     }
 
@@ -508,7 +508,7 @@ class ScalaStreams[
           .either(fstClosed, fstDemanding)  .to[                     Subscriber[A]                              ]
 
       val caseSndReady: (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A] =
-        swap >>> caseFstReady
+        swap > caseFstReady
 
       id                                         [ Subscriber[A] |*| Subscriber[A] ]
         .race(caseFstReady, caseSndReady)     .to[           Subscriber[A]         ]
@@ -558,11 +558,11 @@ class ScalaStreams[
   def rInvertProducingF[A, x, y](rInvertSub: (x |*| y) -⚬ One): (ProducingF[A, x] |*| ConsumerF[A, y]) -⚬ One =
     rInvertEither(
       rInvertSignal,
-      swap >>> rInvertEither(
-        swap >>> rInvertSignal,
+      swap > rInvertEither(
+        swap > rInvertSignal,
         rInvertPair(
-          swap >>> fulfill[A],
-          swap >>> rInvertSub
+          swap > fulfill[A],
+          swap > rInvertSub
         )
       )
     )
@@ -571,12 +571,12 @@ class ScalaStreams[
     lInvertChoice(
       lInvertSignal,
       lInvertChoice(
-        lInvertSignal >>> swap,
+        lInvertSignal > swap,
         lInvertPair(
-          promise[A] >>> swap,
-          lInvertSub >>> swap
+          promise[A] > swap,
+          lInvertSub > swap
         )
-      ) >>> swap
+      ) > swap
     )
 
   implicit def producingConsumerDuality[A]: Dual[Producing[A], Consumer[A]] =

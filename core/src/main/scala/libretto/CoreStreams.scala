@@ -35,7 +35,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       onClose: A -⚬ Done,
       onPoll: A -⚬ LPolled[B],
     ): A -⚬ LPollable[B] =
-      choice(onClose, onPoll) >>> pack
+      choice(onClose, onPoll) > pack
 
     def close[A]: LPollable[A] -⚬ Done =
       id                       [    LPollable[A]     ]
@@ -73,13 +73,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def fromLList[A](implicit A: PAffine[A]): LList[A] -⚬ LPollable[A] = rec { self =>
       LList.switch(
-        caseNil  = done          >>> LPollable.empty[A],
-        caseCons = par(id, self) >>> LPollable.cons[A],
+        caseNil  = done          > LPollable.empty[A],
+        caseCons = par(id, self) > LPollable.cons[A],
       )
     }
 
     def of[A](as: (One -⚬ A)*)(implicit A: PAffine[A]): One -⚬ LPollable[A] =
-      LList.of(as: _*) >>> fromLList
+      LList.of(as: _*) > fromLList
 
     def repeatedly[A](f: Done -⚬ A): Done -⚬ LPollable[A] = rec { self =>
       from(
@@ -141,7 +141,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       */
     def concatenate[A]: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ LPollable[A] = rec { self =>
       val close: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ Done =
-        join(LPollable.close, Delayed.force >>> LPollable.close)
+        join(LPollable.close, Delayed.force > LPollable.close)
 
       val poll: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ LPolled[A] =
         id                               [                                               LPollable[A]    |*| Delayed[LPollable[A]]   ]
@@ -159,7 +159,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     }
 
     def concat[A]: (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A] =
-      id.>.snd(delayClosed) >>> concatenate
+      id.>.snd(delayClosed) > concatenate
 
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
       *
@@ -168,10 +168,10 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       */
     def partition[A, B]: LPollable[A |+| B] -⚬ (LPollable[A] |*| LPollable[B]) = rec { self =>
       val fstClosed: LPollable[A |+| B] -⚬ (Done |*| LPollable[B]) =
-        close[A |+| B].introSnd(done >>> empty[B])
+        close[A |+| B].introSnd(done > empty[B])
 
       val sndClosed: LPollable[A |+| B] -⚬ (LPolled[A] |*| Done) =
-        close[A |+| B].introFst(done >>> LPolled.empty[A])
+        close[A |+| B].introFst(done > LPolled.empty[A])
 
       val bothPolled: LPollable[A |+| B] -⚬ (LPolled[A] |*| LPolled[B]) = {
         val upClosed: Done -⚬ (LPolled[A] |*| LPolled[B]) =
@@ -214,7 +214,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       A2: PComonoid[A],
     ): (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A] = rec { self =>
       val onClose: (LPollable[A] |*| LPollable[A]) -⚬ Done       = join(close, close)
-      val onPoll : (LPollable[A] |*| LPollable[A]) -⚬ LPolled[A] = par(poll, poll) >>> LPolled.merge(self)
+      val onPoll : (LPollable[A] |*| LPollable[A]) -⚬ LPolled[A] = par(poll, poll) > LPolled.merge(self)
       from(onClose, onPoll)
     }
 
@@ -228,8 +228,8 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     ): LList[LPollable[A]] -⚬ LPollable[A] =
       rec { self =>
         LList.switch(
-          caseNil = done >>> LPollable.empty,
-          caseCons = par(id, self) >>> merge,
+          caseNil = done > LPollable.empty,
+          caseCons = par(id, self) > merge,
         )
       }
 
@@ -341,7 +341,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
       // checks the second argument first
       val goSnd: (LPolled[A] |*| LPolled[A]) -⚬ LPolled[A] =
-        swap >>> go(swap >>> mergePollables)
+        swap > go(swap > mergePollables)
 
       race(goFst, goSnd)
     }
@@ -352,13 +352,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       injectL > pack[LSubscriberF[A, *]]
 
     def close[A]: LSubscriber[A] -⚬ Need =
-      unpack[LSubscriberF[A, *]] >>> either(id, chooseL)
+      unpack[LSubscriberF[A, *]] > either(id, chooseL)
 
     def switch[A, R](
       onDemand      : LDemanding[A] -⚬ R,
       onUnsubscribe :          Need -⚬ R,
     ): LSubscriber[A] -⚬ R =
-      unpack >>> either(onUnsubscribe, onDemand)
+      unpack > either(onUnsubscribe, onDemand)
 
     implicit def positiveLSubscriberF[A, X](implicit A: Junction.Negative[A]): SignalingJunction.Positive[LSubscriberF[A, X]] =
       SignalingJunction.Positive.eitherNeg(
@@ -405,8 +405,8 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     rInvertSub: (x |*| y) -⚬ One,
   ): (LSubscriberF[B, y] |*| LPollableF[A, x]) -⚬ One =
     rInvertEither(
-      swap >>> rInvertSignal,
-      swap >>> rInvertEither(
+      swap > rInvertSignal,
+      swap > rInvertEither(
         rInvertSignal,
         rInvertPair(
           rInvertA,
@@ -420,7 +420,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   ): (LSubscriber[B] |*| LPollable[A]) -⚬ One =
     rInvertRec[LSubscriberF[B, *], LPollableF[A, *]](
       [X, Y] => (rInvertSub: (X |*| Y) -⚬ One) =>
-        rInvertLSubscriberF(rInvertElem, swap >>> rInvertSub)
+        rInvertLSubscriberF(rInvertElem, swap > rInvertSub)
     )
 
   def lInvertLPollableF[A, B, x, y](
@@ -428,14 +428,14 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     lInvertSub: One -⚬ (y |*| x),
   ): One -⚬ (LPollableF[A, x] |*| LSubscriberF[B, y]) =
     lInvertChoice(
-      lInvertSignal >>> swap,
+      lInvertSignal > swap,
       lInvertChoice(
         lInvertSignal,
         lInvertPair(
           lInvertA,
           lInvertSub
         )
-      ) >>> swap
+      ) > swap
     )
 
   def lInvertLPollable[A, B](
@@ -443,7 +443,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   ): One -⚬ (LPollable[A] |*| LSubscriber[B]) =
     lInvertRec[LPollableF[A, *], LSubscriberF[B, *]](
       [X, Y] => (lInvertSub: One -⚬ (X |*| Y)) =>
-        lInvertLPollableF(lInvertElem, lInvertSub >>> swap)
+        lInvertLPollableF(lInvertElem, lInvertSub > swap)
     )
 
   implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[B], LPollable[A]] =

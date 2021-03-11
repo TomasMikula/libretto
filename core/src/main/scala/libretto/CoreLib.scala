@@ -181,7 +181,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     implicit def outportInstance[A]: Externalizer[[x] =>> A -⚬ x] =
       new Externalizer[[x] =>> A -⚬ x] {
         def lift[B, C](f: B -⚬ C): (A -⚬ B) => (A -⚬ C) =
-          _ >>> f
+          dsl.andThen(_, f)
       }
   }
 
@@ -225,7 +225,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     implicit def inportInstance[C]: ContraExternalizer[[x] =>> x -⚬ C] =
       new ContraExternalizer[[x] =>> x -⚬ C] {
         def lift[A, B](f: A -⚬ B): (B -⚬ C) => (A -⚬ C) =
-          f >>> _
+          f > _
       }
   }
 
@@ -248,7 +248,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       id[A] > introFst(lInvertSignal) > |*|.assocLR > par(id, f)
 
     def triggerBy[A]: (Done |*| Delayed[A]) -⚬ A =
-      |*|.assocRL >>> elimFst(rInvertSignal)
+      |*|.assocRL > elimFst(rInvertSignal)
 
     def force[A]: Delayed[A] -⚬ A =
       elimFst(need)
@@ -264,7 +264,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def awaitPosFst: (Done |*| A) -⚬ A
 
       def awaitPosSnd: (A |*| Done) -⚬ A =
-        swap >>> awaitPosFst
+        swap > awaitPosFst
 
       /** Alias for [[awaitPosFst]]. */
       def awaitPos: (Done |*| A) -⚬ A =
@@ -272,14 +272,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       def law_awaitIdentity: Equal[(One |*| A) -⚬ A] =
         Equal(
-          par(done, id) >>> awaitPosFst,
+          par(done, id) > awaitPosFst,
           elimFst,
         )
 
       def law_AwaitComposition: Equal[(Done |*| (Done |*| A)) -⚬ A] =
         Equal(
-          par(id, awaitPosFst) >>> awaitPosFst,
-          |*|.assocRL >>> par(join, id) >>> awaitPosFst,
+          par(id, awaitPosFst) > awaitPosFst,
+          |*|.assocRL > par(join, id) > awaitPosFst,
         )
     }
 
@@ -288,7 +288,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def awaitNegFst: A -⚬ (Need |*| A)
 
       def awaitNegSnd: A -⚬ (A |*| Need) =
-        awaitNegFst >>> swap
+        awaitNegFst > swap
 
       /** Alias for [[awaitNegFst]]. */
       def awaitNeg: A -⚬ (Need |*| A) =
@@ -296,14 +296,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       def law_awaitIdentity: Equal[A -⚬ (One |*| A)] =
         Equal(
-          awaitNegFst >>> par(need, id),
+          awaitNegFst > par(need, id),
           introFst,
         )
 
       def law_awaitComposition: Equal[A -⚬ (Need |*| (Need |*| A))] =
         Equal(
-          awaitNegFst >>> par(id, awaitNegFst),
-          awaitNegFst >>> par(joinNeed, id) >>> |*|.assocLR,
+          awaitNegFst > par(id, awaitNegFst),
+          awaitNegFst > par(joinNeed, id) > |*|.assocLR,
         )
     }
 
@@ -371,13 +371,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         from( id[A |+| B].bimap(A.awaitNegFst, B.awaitNegFst).factorL )
 
       def delayEither[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |+| B] =
-        from( id[A |+| B].bimap(A.awaitNegFst, B.awaitNegFst) >>> delayEitherUntilNeed )
+        from( id[A |+| B].bimap(A.awaitNegFst, B.awaitNegFst) > delayEitherUntilNeed )
 
       def delegateToChosen[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |&| B] =
         from( id[A |&| B].bimap(A.awaitNegFst, B.awaitNegFst).coDistributeL )
 
       def delayChoice[A, B](implicit A: Junction.Negative[A], B: Junction.Negative[B]): Junction.Negative[A |&| B] =
-        from( id[A |&| B].bimap(A.awaitNegFst, B.awaitNegFst) >>> delayChoiceUntilNeed )
+        from( id[A |&| B].bimap(A.awaitNegFst, B.awaitNegFst) > delayChoiceUntilNeed )
 
       def rec[F[_]](implicit F: Junction.Negative[F[Rec[F]]]): Junction.Negative[Rec[F]] =
         from(unpack[F] > F.awaitNegFst > par(id, pack[F]))
@@ -420,7 +420,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def signalPosFst: A -⚬ (Done |*| A)
 
       def signalPosSnd: A -⚬ (A |*| Done) =
-        signalPosFst >>> swap
+        signalPosFst > swap
 
       /** Alias for [[signalPosFst]]. */
       def signalPos: A -⚬ (Done |*| A) =
@@ -428,14 +428,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       def law_signalIdentity: Equal[A -⚬ (RTerminus |*| A)] =
         Equal(
-          signalPosFst >>> par(delayIndefinitely, id),
-          id[A] >>> introFst(done >>> delayIndefinitely),
+          signalPosFst > par(delayIndefinitely, id),
+          id[A] > introFst(done > delayIndefinitely),
         )
 
       def law_awaitComposition: Equal[A -⚬ (Done |*| (Done |*| A))] =
         Equal(
-          signalPosFst >>> par(id, signalPosFst),
-          signalPosFst >>> par(fork, id) >>> |*|.assocLR,
+          signalPosFst > par(id, signalPosFst),
+          signalPosFst > par(fork, id) > |*|.assocLR,
         )
     }
 
@@ -444,7 +444,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def signalNegFst: (Need |*| A) -⚬ A
 
       def signalNegSnd: (A |*| Need) -⚬ A =
-        swap >>> signalNegFst
+        swap > signalNegFst
 
       /** Alias for [[signalNegFst]]. */
       def signalNeg: (Need |*| A) -⚬ A =
@@ -452,14 +452,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       def law_signalIdentity: Equal[(LTerminus |*| A) -⚬ A] =
         Equal(
-          par(regressInfinitely, id) >>> signalNegFst,
-          id[LTerminus |*| A] >>> elimFst(regressInfinitely >>> need),
+          par(regressInfinitely, id) > signalNegFst,
+          id[LTerminus |*| A] > elimFst(regressInfinitely > need),
         )
 
       def law_signalComposition: Equal[(Need |*| (Need |*| A)) -⚬ A] =
         Equal(
-          par(id, signalNegFst) >>> signalNegFst,
-          |*|.assocRL >>> par(forkNeed, id) >>> signalNegFst,
+          par(id, signalNegFst) > signalNegFst,
+          |*|.assocRL > par(forkNeed, id) > signalNegFst,
         )
     }
 
@@ -538,7 +538,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
           id                                     [  Need |*|            A  ]
             .>.snd(A.signalPosFst)            .to[  Need |*| (Done  |*| A) ]
             .assocRL                          .to[ (Need |*|  Done) |*| A  ]
-            .elimFst(swap >>> rInvertSignal)  .to[                      A  ]
+            .elimFst(swap > rInvertSignal)    .to[                      A  ]
       }
 
     /** [[Signaling.Negative]] can be made to produce a positive (i.e. [[Done]]) signal,
@@ -548,7 +548,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       new Positive[A] {
         override def signalPosFst: A -⚬ (Done |*| A) =
           id                                     [                      A  ]
-            .introFst(lInvertSignal >>> swap) .to[ (Done |*|  Need) |*| A  ]
+            .introFst(lInvertSignal > swap)   .to[ (Done |*|  Need) |*| A  ]
             .assocLR                          .to[  Done |*| (Need  |*| A) ]
             .>.snd(A.signalNegFst)            .to[  Done |*|            A  ]
       }
@@ -565,7 +565,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         */
       def law_positiveSignalThenAwaitIsId: Equal[A -⚬ A] =
         Equal[A -⚬ A](
-          signalPos >>> awaitPos,
+          signalPos > awaitPos,
           id[A],
         )
 
@@ -574,8 +574,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         */
       def law_positiveAwaitThenSignal: Equal[(Done |*| A) -⚬ (Done |*| A)] =
         Equal(
-          awaitPos >>> signalPos,
-          par(fork, id) >>> |*|.assocLR >>> par(id, awaitPos >>> signalPos) >>> |*|.assocRL >>> par(join, id),
+          awaitPos > signalPos,
+          par(fork, id) > |*|.assocLR > par(id, awaitPos > signalPos) > |*|.assocRL > par(join, id),
         )
     }
 
@@ -589,7 +589,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         */
       def law_negativeAwaitThenSignalIsId: Equal[A -⚬ A] =
         Equal[A -⚬ A](
-          awaitNeg >>> signalNeg,
+          awaitNeg > signalNeg,
           id[A],
         )
 
@@ -598,8 +598,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         */
       def law_negativeSignalThenAwait: Equal[(Need |*| A) -⚬ (Need |*| A)] =
         Equal(
-          signalNeg >>> awaitNeg,
-          par(joinNeed, id) >>> |*|.assocLR >>> par(id, signalNeg >>> awaitNeg) >>> |*|.assocRL >>> par(forkNeed, id),
+          signalNeg > awaitNeg,
+          par(joinNeed, id) > |*|.assocLR > par(id, signalNeg > awaitNeg) > |*|.assocRL > par(forkNeed, id),
         )
     }
 
@@ -772,7 +772,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     caseFstWins: (A |*| B) -⚬ C,
     caseSndWins: (A |*| B) -⚬ C,
   ): (A |*| B) -⚬ C =
-    race[A, B] >>> either(caseFstWins, caseSndWins)
+    race[A, B] > either(caseFstWins, caseSndWins)
 
   def raceAgainstL[A](implicit A: SignalingJunction.Positive[A]): (Done |*| A) -⚬ (A |+| A) =
     id                                               [  Done        |*|            A  ]
@@ -782,7 +782,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .bimap(A.awaitPos, A.awaitPos)              .to[           A  |+|            A  ]
 
   def raceAgainstR[A](implicit A: SignalingJunction.Positive[A]): (A |*| Done) -⚬ (A |+| A) =
-    swap >>> raceAgainstL >>> |+|.swap
+    swap > raceAgainstL > |+|.swap
 
   def select[A, B](implicit
     A: SignalingJunction.Negative[A],
@@ -802,7 +802,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     caseFstWins: Z -⚬ (A |*| B),
     caseSndWins: Z -⚬ (A |*| B),
   ): Z -⚬ (A |*| B) =
-    choice(caseFstWins, caseSndWins) >>> select[A, B]
+    choice(caseFstWins, caseSndWins) > select[A, B]
 
   def selectAgainstL[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (Need |*| A) =
     id                                               [  Need        |*|            A  ]
@@ -812,7 +812,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .<(|&|.bimap(A.awaitNeg, A.awaitNeg))     .from[           A  |&|            A  ]
 
   def selectAgainstR[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (A |*| Need) =
-    |&|.swap >>> selectAgainstL >>> swap
+    |&|.swap > selectAgainstL > swap
 
   def raceSignaledOrNot[A](implicit A: SignalingJunction.Positive[A]): A -⚬ (A |+| A) =
     id                                           [  A                             ]
@@ -839,13 +839,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       getL(Getter.identity[A])
 
     def getR(implicit A: Cosemigroup[A]): S -⚬ (S |*| A) =
-      getL >>> swap
+      getL > swap
 
     def awaitFst(implicit A: Junction.Positive[A]): (Done |*| S) -⚬ S =
       extendJunction(A).awaitPosFst
 
     def awaitSnd(implicit A: Junction.Positive[A]): (S |*| Done) -⚬ S =
-      swap >>> awaitFst(A)
+      swap > awaitFst(A)
 
     def andThen[B](that: Getter[A, B]): Getter[S, B] =
       new Getter[S, B] {
@@ -862,7 +862,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def |+|[T](that: Getter[T, A]): Getter[S |+| T, A] =
       new Getter[S |+| T, A] {
         override def getL[B](next: Getter[A, B])(implicit B: Cosemigroup[B]): (S |+| T) -⚬ (B |*| (S |+| T)) =
-          id[S |+| T].bimap(self.getL(next), that.getL(next)) >>> factorL
+          id[S |+| T].bimap(self.getL(next), that.getL(next)) > factorL
 
         override def extendJunction(implicit A: Junction.Positive[A]): Junction.Positive[S |+| T] =
           new Junction.Positive[S |+| T] {
@@ -893,10 +893,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def modify[X, Y](f: (X |*| A) -⚬ (Y |*| A)): (X |*| S) -⚬ (Y |*| S)
 
     def read[Y](f: A -⚬ (Y |*| A)): S -⚬ (Y |*| S) =
-      introFst[S] >>> modify[One, Y](elimFst >>> f)
+      introFst[S] > modify[One, Y](elimFst > f)
 
     def write[X](f: (X |*| A) -⚬ A): (X |*| S) -⚬ S =
-      modify[X, One](f >>> introFst) >>> elimFst
+      modify[X, One](f > introFst) > elimFst
 
     override def getL[B](that: Getter[A, B])(implicit B: Cosemigroup[B]): S -⚬ (B |*| S) =
       read(that.getL)
@@ -918,7 +918,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def |+|[T](that: Lens[T, A]): Lens[S |+| T, A] =
       new Lens[S |+| T, A] {
         def modify[X, Y](f: (X |*| A) -⚬ (Y |*| A)): (X |*| (S |+| T)) -⚬ (Y |*| (S |+| T)) =
-          distributeL[X, S, T].bimap(Lens.this.modify(f), that.modify(f)) >>> factorL
+          distributeL[X, S, T].bimap(Lens.this.modify(f), that.modify(f)) > factorL
       }
   }
 
@@ -938,20 +938,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def outL[A, B]: F[A |*| B] -⚬ (A |*| F[B])
 
     def inR[A, B]: (F[A] |*| B) -⚬ F[A |*| B] =
-      swap[F[A], B] >>> inL >>> lift(swap[B, A])
+      swap[F[A], B] > inL > lift(swap[B, A])
 
     def outR[A, B]: F[A |*| B] -⚬ (F[A] |*| B) =
-      lift(swap[A, B]) >>> outL >>> swap[B, F[A]]
+      lift(swap[A, B]) > outL > swap[B, F[A]]
 
     def getL[A](implicit A: Cosemigroup[A]): F[A] -⚬ (A |*| F[A]) =
-      lift(A.split) >>> outL
+      lift(A.split) > outL
 
     def getR[A](implicit A: Cosemigroup[A]): F[A] -⚬ (F[A] |*| A) =
-      getL[A] >>> swap
+      getL[A] > swap
 
     def lens[A]: Lens[F[A], A] = new Lens[F[A], A] {
       def modify[X, Y](f: (X |*| A) -⚬ (Y |*| A)): (X |*| F[A]) -⚬ (Y |*| F[A]) =
-        inL >>> lift(f) >>> outL
+        inL > lift(f) > outL
     }
   }
 
@@ -1045,8 +1045,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def IXI[A, B, C, D]: ((A |&| B) |&| (C |&| D)) -⚬ ((A |&| C) |&| (B |&| D)) =
       choice(
-        choice(chooseL >>> chooseL, chooseR >>> chooseL),
-        choice(chooseL >>> chooseR, chooseR >>> chooseR),
+        choice(chooseL > chooseL, chooseR > chooseL),
+        choice(chooseL > chooseR, chooseR > chooseR),
       )
 
     val bifunctor: Bifunctor[|&|] =
@@ -1088,9 +1088,6 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def bimap[F[_, _]]: BimapSyntax[F, A, B] =
       new BimapSyntax[F, A, B](self)
 
-    def >>>[C](g: B -⚬ C): A -⚬ C =
-      dsl.andThen(self, g)
-
     def injectL[C]: A -⚬ (B |+| C) =
       dsl.andThen(self, dsl.injectL)
 
@@ -1101,73 +1098,73 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       dsl.andThen(ev.substituteCo(self), dsl.either(f, g))
 
     def chooseL[B1, B2](implicit ev: B =:= (B1 |&| B2)): A -⚬ B1 =
-      ev.substituteCo(self) >>> dsl.chooseL
+      ev.substituteCo(self) > dsl.chooseL
 
     def chooseR[B1, B2](implicit ev: B =:= (B1 |&| B2)): A -⚬ B2 =
-      ev.substituteCo(self) >>> dsl.chooseR
+      ev.substituteCo(self) > dsl.chooseR
 
     def choice[C, D](f: B -⚬ C, g: B -⚬ D): A -⚬ (C |&| D) =
-      self >>> dsl.choice(f, g)
+      self > dsl.choice(f, g)
 
     def par[B1, B2, C, D](f: B1 -⚬ C, g: B2 -⚬ D)(implicit ev: B =:= (B1 |*| B2)): A -⚬ (C |*| D) =
-      ev.substituteCo(self) >>> dsl.par(f, g)
+      ev.substituteCo(self) > dsl.par(f, g)
 
     def elimFst[B2](implicit ev: B =:= (One |*| B2)): A -⚬ B2 =
-      ev.substituteCo(self) >>> dsl.elimFst
+      ev.substituteCo(self) > dsl.elimFst
 
     def elimFst[B1, B2](f: B1 -⚬ One)(implicit ev: B =:= (B1 |*| B2)): A -⚬ B2 =
-      ev.substituteCo(self) >>> dsl.elimFst(f)
+      ev.substituteCo(self) > dsl.elimFst(f)
 
     def elimSnd[B1](implicit ev: B =:= (B1 |*| One)): A -⚬ B1 =
-      ev.substituteCo(self) >>> dsl.elimSnd
+      ev.substituteCo(self) > dsl.elimSnd
 
     def elimSnd[B1, B2](f: B2 -⚬ One)(implicit ev: B =:= (B1 |*| B2)): A -⚬ B1 =
-      ev.substituteCo(self) >>> dsl.elimSnd(f)
+      ev.substituteCo(self) > dsl.elimSnd(f)
 
     def introFst: A -⚬ (One |*| B) =
-      self >>> dsl.introFst
+      self > dsl.introFst
 
     def introFst[C](f: One -⚬ C): A -⚬ (C |*| B) =
-      self >>> dsl.introFst(f)
+      self > dsl.introFst(f)
 
     def introSnd: A -⚬ (B |*| One) =
-      self >>> dsl.introSnd
+      self > dsl.introSnd
 
     def introSnd[C](f: One -⚬ C): A -⚬ (B |*| C) =
-      self >>> dsl.introSnd(f)
+      self > dsl.introSnd(f)
 
     def swap[B1, B2](implicit ev: B =:= (B1 |*| B2)): A -⚬ (B2 |*| B1) =
-      ev.substituteCo(self) >>> dsl.swap
+      ev.substituteCo(self) > dsl.swap
 
     def distributeL[B1, B2, B3](implicit ev: B =:= (B1 |*| (B2 |+| B3))): A -⚬ ((B1 |*| B2) |+| (B1 |*| B3)) =
-      ev.substituteCo(self) >>> dsl.distributeL
+      ev.substituteCo(self) > dsl.distributeL
 
     def distributeR[B1, B2, B3](implicit ev: B =:= ((B1 |+| B2) |*| B3)): A -⚬ ((B1 |*| B3) |+| (B2 |*| B3)) =
-      ev.substituteCo(self) >>> dsl.distributeR
+      ev.substituteCo(self) > dsl.distributeR
 
     def factorL[C, D1, D2](implicit ev: B =:= ((C |*| D1) |+| (C |*| D2))): A -⚬ (C |*| (D1 |+| D2)) =
-      ev.substituteCo(self) >>> dsl.factorL
+      ev.substituteCo(self) > dsl.factorL
 
     def factorR[C1, C2, D](implicit ev: B =:= ((C1 |*| D) |+| (C2 |*| D))): A -⚬ ((C1 |+| C2) |*| D) =
-      ev.substituteCo(self) >>> dsl.factorR
+      ev.substituteCo(self) > dsl.factorR
 
     def coDistributeL[B1, B2, B3](implicit ev: B =:= ((B1 |*| B2) |&| (B1 |*| B3))): A -⚬ (B1 |*| (B2 |&| B3)) =
-      ev.substituteCo(self) >>> dsl.coDistributeL
+      ev.substituteCo(self) > dsl.coDistributeL
 
     def coDistributeR[B1, B2, B3](implicit ev: B =:= ((B1 |*| B3) |&| (B2 |*| B3))): A -⚬ ((B1 |&| B2) |*| B3) =
-      ev.substituteCo(self) >>> dsl.coDistributeR
+      ev.substituteCo(self) > dsl.coDistributeR
 
     def coFactorL[B1, B2, B3](implicit ev: B =:= (B1 |*| (B2 |&| B3))): A -⚬ ((B1 |*| B2) |&| (B1 |*| B3)) =
-      ev.substituteCo(self) >>> dsl.coFactorL
+      ev.substituteCo(self) > dsl.coFactorL
 
     def coFactorR[B1, B2, B3](implicit ev: B =:= ((B1 |&| B2) |*| B3)): A -⚬ ((B1 |*| B3) |&| (B2 |*| B3)) =
-      ev.substituteCo(self) >>> dsl.coFactorR
+      ev.substituteCo(self) > dsl.coFactorR
 
     def pack[F[_]](implicit ev: B =:= F[Rec[F]]): A -⚬ Rec[F] =
-      ev.substituteCo(self) >>> dsl.pack[F]
+      ev.substituteCo(self) > dsl.pack[F]
 
     def unpack[F[_]](implicit ev: B =:= Rec[F]): A -⚬ F[Rec[F]] =
-      ev.substituteCo(self) >>> dsl.unpack[F]
+      ev.substituteCo(self) > dsl.unpack[F]
 
     def race[B1: SignalingJunction.Positive, B2: SignalingJunction.Positive, C](
       caseFstWins: (B1 |*| B2) -⚬ C,
@@ -1175,13 +1172,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     )(implicit
       ev: B =:= (B1 |*| B2),
     ): A -⚬ C =
-      ev.substituteCo(self) >>> lib.race(caseFstWins, caseSndWins)
+      ev.substituteCo(self) > lib.race(caseFstWins, caseSndWins)
 
     def select[C1: SignalingJunction.Negative, C2: SignalingJunction.Negative](
       caseFstWins: B -⚬ (C1 |*| C2),
       caseSndWins: B -⚬ (C1 |*| C2),
     ): A -⚬ (C1 |*| C2) =
-      self >>> lib.select(caseFstWins, caseSndWins)
+      self > lib.select(caseFstWins, caseSndWins)
 
     /** Focuses on function's output. */
     def > : FocusedCo[[x] =>> A -⚬ x, B] =
@@ -1194,34 +1191,34 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   implicit class LinearFunctionToPairOps[A, B1, B2](self: A -⚬ (B1 |*| B2)) {
     def assocLR[X, Y](implicit ev: B1 =:= (X |*| Y)): A -⚬ (X |*| (Y |*| B2)) =
-      ev.substituteCo[λ[x => A -⚬ (x |*| B2)]](self) >>> |*|.assocLR
+      ev.substituteCo[λ[x => A -⚬ (x |*| B2)]](self) > |*|.assocLR
 
     def assocRL[X, Y](implicit ev: B2 =:= (X |*| Y)): A -⚬ ((B1 |*| X) |*| Y) =
-      ev.substituteCo[λ[x => A -⚬ (B1 |*| x)]](self) >>> |*|.assocRL
+      ev.substituteCo[λ[x => A -⚬ (B1 |*| x)]](self) > |*|.assocRL
 
     def awaitFst(neglect: B1 -⚬ Done)(implicit j: Junction.Positive[B2]): A -⚬ B2 =
-      self >>> par(neglect, id[B2]) >>> j.awaitPosFst
+      self > par(neglect, id[B2]) > j.awaitPosFst
 
     def awaitSnd(neglect: B2 -⚬ Done)(implicit j: Junction.Positive[B1]): A -⚬ B1 =
-      self >>> par(id[B1], neglect) >>> j.awaitPosSnd
+      self > par(id[B1], neglect) > j.awaitPosSnd
 
     def awaitFst(implicit ev: B1 =:= Done, j: Junction.Positive[B2]): A -⚬ B2 = {
       type F[X] = A -⚬ (X |*| B2)
-      ev.substituteCo[F](self) >>> j.awaitPosFst
+      ev.substituteCo[F](self) > j.awaitPosFst
     }
 
     def awaitSnd(implicit ev: B2 =:= Done, j: Junction.Positive[B1]): A -⚬ B1 = {
       type F[X] = A -⚬ (B1 |*| X)
-      ev.substituteCo[F](self) >>> j.awaitPosSnd
+      ev.substituteCo[F](self) > j.awaitPosSnd
     }
   }
 
   implicit class LinearFunctionToPlusOps[A, B1, B2](self: A -⚬ (B1 |+| B2)) {
     def assocLR[X, Y](implicit ev: B1 =:= (X |+| Y)): A -⚬ (X |+| (Y |+| B2)) =
-      ev.substituteCo[λ[x => A -⚬ (x |+| B2)]](self) >>> |+|.assocLR
+      ev.substituteCo[λ[x => A -⚬ (x |+| B2)]](self) > |+|.assocLR
 
     def assocRL[X, Y](implicit ev: B2 =:= (X |+| Y)): A -⚬ ((B1 |+| X) |+| Y) =
-      ev.substituteCo[λ[x => A -⚬ (B1 |+| x)]](self) >>> |+|.assocRL
+      ev.substituteCo[λ[x => A -⚬ (B1 |+| x)]](self) > |+|.assocRL
   }
 
   class BimapSyntax[F[_, _], A, B](self: A -⚬ B) {
@@ -1301,10 +1298,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
 
     def awaitFst(neglect: B1 -⚬ Done)(implicit j: Junction.Positive[B2]): F[B2] =
-      f(par(neglect, id[B2]) >>> j.awaitPosFst)
+      f(par(neglect, id[B2]) > j.awaitPosFst)
 
     def awaitSnd(neglect: B2 -⚬ Done)(implicit j: Junction.Positive[B1]): F[B1] =
-      f(par(id[B1], neglect) >>> j.awaitPosSnd)
+      f(par(id[B1], neglect) > j.awaitPosSnd)
   }
 
   implicit class FocusedOnDoneTimesCo[F[_], B2](f: FocusedCo[F, Done |*| B2])(implicit j: Junction.Positive[B2]) {
@@ -1428,7 +1425,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     //               |     / \
     //               |    /   \
                    ((A|*|C)|*| B) =
-    |*|.assocLR[A, B, C] >>> par(id, swap) >>> |*|.assocRL
+    |*|.assocLR[A, B, C] > par(id, swap) > |*|.assocRL
 
   def XI[A, B, C]: (A |*|(B|*|C)) -⚬
     //               \   /    |
@@ -1437,7 +1434,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     //                / \     |
     //               /   \    |
                    (B |*|(A|*|C)) =
-    |*|.assocRL[A, B, C] >>> par(swap, id) >>> |*|.assocLR
+    |*|.assocRL[A, B, C] > par(swap, id) > |*|.assocLR
 
   /** From the choice ''available'' on the right (`C |&| D`), choose the one corresponding to the choice ''made''
     * on the left (`A |+| B`): if on the left there is `A`, choose `C`, if on the left thre is `B`, choose `D`.
@@ -1540,11 +1537,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     * is chosen.
     */
   def awaitChooseL[A, B](implicit A: Junction.Negative[A]): (A |&| B) -⚬ (Need |*| A) =
-    id[A |&| B].>.choiceL(A.awaitNeg) >>> chooseLWhenNeed
+    id[A |&| B].>.choiceL(A.awaitNeg) > chooseLWhenNeed
 
   /** Analogous to [[awaitChooseL]], but chooses the right side. */
   def awaitChooseR[A, B](implicit B: Junction.Negative[B]): (A |&| B) -⚬ (Need |*| B) =
-    id[A |&| B].>.choiceR(B.awaitNeg) >>> chooseRWhenNeed
+    id[A |&| B].>.choiceR(B.awaitNeg) > chooseRWhenNeed
 
   /** Analogous to [[awaitChooseL]], but awaits a positive (i.e. [[Done]]) signal. */
   def awaitPosChooseL[A, B](implicit A: Junction.Positive[A]): (Done |*| (A |&| B)) -⚬ A =
@@ -1618,8 +1615,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     // constructors
     def lt   [A, B]: (A |*| B) -⚬ Compared[A, B] = injectL
-    def equiv[A, B]: (A |*| B) -⚬ Compared[A, B] = injectL >>> injectR
-    def gt   [A, B]: (A |*| B) -⚬ Compared[A, B] = injectR >>> injectR
+    def equiv[A, B]: (A |*| B) -⚬ Compared[A, B] = injectL > injectR
+    def gt   [A, B]: (A |*| B) -⚬ Compared[A, B] = injectR > injectR
 
     /** Destructor. */
     def compared[A, B, C](
@@ -1800,14 +1797,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     rInvertSub: [x, y] => ((x |*| y) -⚬ One) => ((F[x] |*| G[y]) -⚬ One),
   ): (Rec[F] |*| Rec[G]) -⚬ One =
     rec { self =>
-      par(unpack, unpack) >>> rInvertSub(self)
+      par(unpack, unpack) > rInvertSub(self)
     }
 
   def lInvertRec[F[_], G[_]](
     lInvertSub: [x, y] => (One -⚬ (x |*| y)) => (One -⚬ (F[x] |*| G[y])),
   ): One -⚬ (Rec[F] |*| Rec[G]) =
     rec { self =>
-      lInvertSub(self) >>> par(pack, pack)
+      lInvertSub(self) > par(pack, pack)
     }
 
   /** If `F[A]` is dual to `G[B]` for all dual pairs `A`, `B`, then `Rec[F]` is dual to `Rec[G]`. */
@@ -2024,7 +2021,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       from(id)
 
     implicit def nAffinePair[A, B](implicit A: NAffine[A], B: NAffine[B]): NAffine[A |*| B] =
-      from(par(A.deflate, B.deflate) >>> forkNeed)
+      from(par(A.deflate, B.deflate) > forkNeed)
   }
 
   trait Affine[A] {
@@ -2039,7 +2036,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
 
     implicit def fromNAffine[A](implicit A: NAffine[A]): Affine[A] =
-      from(A.deflate >>> need)
+      from(A.deflate > need)
 
     implicit def affinePair[A, B](implicit A: Affine[A], B: Affine[B]): Affine[A |*| B] =
       from(parToOne(A.discard, B.discard))
@@ -2057,13 +2054,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
 
     implicit def fromAffine[A](implicit A: Affine[A]): PAffine[A] =
-      from(A.discard >>> done)
+      from(A.discard > done)
 
     implicit val pAffineDone: PAffine[Done] =
       from(id)
 
     implicit def pAffinePair[A, B](implicit A: PAffine[A], B: PAffine[B]): PAffine[A |*| B] =
-      from(par(A.neglect, B.neglect) >>> join)
+      from(par(A.neglect, B.neglect) > join)
   }
 
   trait Semigroup[A] {
@@ -2071,8 +2068,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def law_associativity: Equal[ ((A |*| A) |*| A) -⚬ A ] =
       Equal(
-        par(combine, id[A]) >>> combine,
-        |*|.assocLR >>> par(id[A], combine) >>> combine,
+        par(combine, id[A]) > combine,
+        |*|.assocLR > par(id[A], combine) > combine,
       )
   }
 
@@ -2081,8 +2078,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def law_coAssociativity: Equal[ A -⚬ ((A |*| A) |*| A) ] =
       Equal(
-        split >>> par(split, id[A]),
-        split >>> par(id[A], split) >>> |*|.assocRL,
+        split > par(split, id[A]),
+        split > par(id[A], split) > |*|.assocRL,
       )
   }
 
@@ -2091,13 +2088,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def law_leftUnit: Equal[ (One |*| A) -⚬ A ] =
       Equal(
-        par(unit, id[A]) >>> combine,
+        par(unit, id[A]) > combine,
         elimFst,
       )
 
     def law_rightUnit: Equal[ (A |*| One) -⚬ A ] =
       Equal(
-        par(id[A], unit) >>> combine,
+        par(id[A], unit) > combine,
         elimSnd,
       )
   }
@@ -2118,13 +2115,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def law_leftCounit: Equal[ A -⚬ (One |*| A) ] =
       Equal(
-        split >>> par(counit, id[A]),
+        split > par(counit, id[A]),
         introFst,
       )
 
     def law_rightCounit: Equal[ A -⚬ (A |*| One) ] =
       Equal(
-        split >>> par(id[A], counit),
+        split > par(id[A], counit),
         introSnd,
       )
   }
@@ -2139,18 +2136,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def monoid: Monoid[A] = new Monoid[A] {
       def combine: (A |*| A) -⚬ A = PMonoid.this.combine
-      def unit: One -⚬ A = done >>> PMonoid.this.unit
+      def unit: One -⚬ A = done > PMonoid.this.unit
     }
 
     def law_leftUnit: Equal[ (One |*| A) -⚬ A ] =
       Equal(
-        par(done >>> unit, id[A]) >>> combine,
+        par(done > unit, id[A]) > combine,
         elimFst,
       )
 
     def law_rightUnit: Equal[ (A |*| One) -⚬ A ] =
       Equal(
-        par(id[A], done >>> unit) >>> combine,
+        par(id[A], done > unit) > combine,
         elimSnd,
       )
   }
@@ -2168,18 +2165,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def comonoid: Comonoid[A] = new Comonoid[A] {
       def split: A -⚬ (A |*| A) = NComonoid.this.split
-      def counit: A -⚬ One = NComonoid.this.counit >>> need
+      def counit: A -⚬ One = NComonoid.this.counit > need
     }
 
     def law_leftCounit: Equal[ A -⚬ (One |*| A) ] =
       Equal(
-        split >>> par(counit >>> need, id[A]),
+        split > par(counit > need, id[A]),
         introFst,
       )
 
     def law_rightCounit: Equal[ A -⚬ (A |*| One) ] =
       Equal(
-        split >>> par(id[A], counit >>> need),
+        split > par(id[A], counit > need),
         introSnd,
       )
   }
@@ -2194,14 +2191,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def law_leftUnit: Equal[ (LTerminus |*| A) -⚬ A ] =
       Equal(
-        par(regressInfinitely >>> unit, id[A]) >>> combine,
-        id[LTerminus |*| A].elimFst(regressInfinitely >>> need),
+        par(regressInfinitely > unit, id[A]) > combine,
+        id[LTerminus |*| A].elimFst(regressInfinitely > need),
       )
 
     def law_rightUnit: Equal[ (A |*| LTerminus) -⚬ A ] =
       Equal(
-        par(id[A], regressInfinitely >>> unit) >>> combine,
-        id[A |*| LTerminus].elimSnd(regressInfinitely >>> need),
+        par(id[A], regressInfinitely > unit) > combine,
+        id[A |*| LTerminus].elimSnd(regressInfinitely > need),
       )
   }
 
@@ -2218,14 +2215,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def law_leftCounit: Equal[ A -⚬ (RTerminus |*| A) ] =
       Equal(
-        split >>> par(counit >>> delayIndefinitely, id[A]),
-        id[A].introFst(done >>> delayIndefinitely),
+        split > par(counit > delayIndefinitely, id[A]),
+        id[A].introFst(done > delayIndefinitely),
       )
 
     def law_rightCounit: Equal[ A -⚬ (A |*| RTerminus) ] =
       Equal(
-        split >>> par(id[A], counit >>> delayIndefinitely),
-        id[A].introSnd(done >>> delayIndefinitely),
+        split > par(id[A], counit > delayIndefinitely),
+        id[A].introSnd(done > delayIndefinitely),
       )
   }
 
@@ -2317,7 +2314,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def fromList[T](ts: List[One -⚬ T]): One -⚬ LList[T] = {
       @tailrec def go(rts: List[One -⚬ T], acc: One -⚬ LList[T]): One -⚬ LList[T] =
         rts match {
-          case head :: tail => go(tail, parFromOne(head, acc) >>> cons)
+          case head :: tail => go(tail, parFromOne(head, acc) > cons)
           case Nil => acc
         }
 
@@ -2347,7 +2344,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def map[T, U](f: T -⚬ U): LList[T] -⚬ LList[U] =
       rec { self =>
-        switch(nil[U], par(f, self) >>> cons)
+        switch(nil[U], par(f, self) > cons)
       }
 
     def fold[T](implicit T: Monoid[T]): LList[T] -⚬ T =
@@ -2362,7 +2359,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def collect[T, U](f: T -⚬ Maybe[U]): LList[T] -⚬ LList[U] =
       rec { self =>
-        switch(nil[U], par(f, self) >>> consMaybe)
+        switch(nil[U], par(f, self) > consMaybe)
       }
 
     def transform[T, A, U](f: (A |*| T) -⚬ U)(implicit A: Comonoid[A]): (A |*| LList[T]) -⚬ LList[U] =
@@ -2388,7 +2385,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         parFromOne(nil[A], nil[B])
 
       val caseCons: ((A |*| B) |*| LList[A |*| B]) -⚬ (LList[A] |*| LList[B]) =
-        par(id, self) >>> IXI >>> par(cons, cons)
+        par(id, self) > IXI > par(cons, cons)
 
       switch(caseNil, caseCons)
     }

@@ -43,15 +43,15 @@ class BasicTests extends TestSuite {
   }
 
   test("join ⚬ fork") {
-    assertCompletes(done >>> fork >>> join)
+    assertCompletes(done > fork > join)
   }
 
   test("constVal") {
-    assertVal(done >>> constVal(5), 5)
+    assertVal(done > constVal(5), 5)
   }
 
   test("unliftEither") {
-    assertVal(const(42) >>> injectR >>> unliftEither, Right(42))
+    assertVal(const(42) > injectR > unliftEither, Right(42))
   }
 
   test("liftPair, liftNegPair") {
@@ -97,15 +97,15 @@ class BasicTests extends TestSuite {
   test("delayed injectL") {
     // 'A' delayed by 40 millis
     val a: One -⚬ Val[Char] =
-      done >>> delay(40.millis) >>> constVal('A')
+      done > delay(40.millis) > constVal('A')
 
     // 'B' delayed by 30 + 20 = 50 millis.
     // We are testing that the second timer starts ticking only after the delayed inject (joinInjectL).
     val b: One -⚬ Val[Char] = {
       val delayedInjectL: One -⚬ (Val[Char] |+| Val[Char]) =
-        done >>> fork(delay(30.millis), constVal('B')) >>> awaitInjectL
-      delayedInjectL >>> either(
-        introFst[Val[Char], Done](done >>> delay(20.millis)).awaitFst,
+        done > fork(delay(30.millis), constVal('B')) > awaitInjectL
+      delayedInjectL > either(
+        introFst[Val[Char], Done](done > delay(20.millis)).awaitFst,
         id,
       )
     }
@@ -116,18 +116,18 @@ class BasicTests extends TestSuite {
   test("delayed chooseL") {
     // 'A' delayed by 40 millis
     val a: One -⚬ Val[Char] =
-      done >>> delay(40.millis) >>> constVal('A')
+      done > delay(40.millis) > constVal('A')
 
     // 'B' delayed by 30 + 20 = 50 millis.
     // We are testing that the second timer starts ticking only after the delayed choice is made.
     val b: One -⚬ Val[Char] =
-      done >>> fork(delay(30.millis), choice(delay(20.millis), id)) >>> awaitPosChooseL >>> constVal('B')
+      done > fork(delay(30.millis), choice(delay(20.millis), id)) > awaitPosChooseL > constVal('B')
 
     assertVal(raceKeepWinner(a, b), 'A')
   }
 
   test("crash") {
-    assertCrashes(done >>> crashd("boom!"), "boom!")
+    assertCrashes(done > crashd("boom!"), "boom!")
   }
 
   test("crash waits for its trigger") {
@@ -160,9 +160,9 @@ class BasicTests extends TestSuite {
 
   test("crash - even if it loses a race, the program still crashes") {
     val prg = done
-      .>>>( fork(id, delay(10.millis) >>> crashd("oops")) )
-      .>>>( raceDone )
-      .>>>( either(id, id) )
+      .>( fork(id, delay(10.millis) > crashd("oops")) )
+      .>( raceDone )
+      .>( either(id, id) )
     assertCrashes(prg, "oops")
   }
 
@@ -220,7 +220,7 @@ class BasicTests extends TestSuite {
       type U = Y
 
       def go: ((B |&| C) |*| (I |&| S)) -⚬ Val[(T, U)] =
-        par(choose1, choose2) >>> unliftPair
+        par(choose1, choose2) > unliftPair
 
       def expected: (T, U) =
         (expectedX, expectedY)
@@ -237,7 +237,7 @@ class BasicTests extends TestSuite {
       f <- Seq(coDistributed1, coDistributed2)
       c <- combinations
     } {
-      assertVal(f >>> c.go, c.expected)
+      assertVal(f > c.go, c.expected)
     }
   }
 

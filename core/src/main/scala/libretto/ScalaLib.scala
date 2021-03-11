@@ -27,13 +27,13 @@ class ScalaLib[
   implicit def junctionVal[A]: Junction.Positive[Val[A]] =
     new Junction.Positive[Val[A]] {
       override def awaitPosFst: (Done |*| Val[A]) -⚬ Val[A] =
-        par(constVal(()), id[Val[A]]) >>> unliftPair >>> mapVal(_._2)
+        par(constVal(()), id[Val[A]]) > unliftPair > mapVal(_._2)
     }
 
   implicit def junctionNeg[A]: Junction.Negative[Neg[A]] =
     new Junction.Negative[Neg[A]] {
       override def awaitNegFst: Neg[A] -⚬ (Need |*| Neg[A]) =
-        contramapNeg[(Unit, A), A](_._2) >>> liftNegPair >>> par(constNeg(()), id[Neg[A]])
+        contramapNeg[(Unit, A), A](_._2) > liftNegPair > par(constNeg(()), id[Neg[A]])
     }
 
   implicit def signalingVal[A]: Signaling.Positive[Val[A]] =
@@ -45,7 +45,7 @@ class ScalaLib[
   implicit def signalingNeg[A]: Signaling.Negative[Neg[A]] =
     new Signaling.Negative[Neg[A]] {
       override def signalNegFst: (Need |*| Neg[A]) -⚬ Neg[A] =
-        par(inflate[A], id[Neg[A]]) >>> mergeDemands
+        par(inflate[A], id[Neg[A]]) > mergeDemands
     }
 
   implicit def signalingJunctionPositiveVal[A]: SignalingJunction.Positive[Val[A]] =

@@ -56,8 +56,8 @@ abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
 
   extension [A, B: Junction.Positive](f: A -⚬ LPollable[B]) {
     def expectPoll: A -⚬ LPollable[B] =
-      f >>> LPollable.from(
-        onClose = LPollable.close >>> crashd("Expected poll, received close"),
+      f > LPollable.from(
+        onClose = LPollable.close > crashd("Expected poll, received close"),
         onPoll = LPollable.poll,
       )
 
