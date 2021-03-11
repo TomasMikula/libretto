@@ -359,12 +359,43 @@ Yes.
 
 ### Why are there two different function-like symbols? What is the difference between `-⚬` and  `=⚬`?
 
-|         `-⚬`         |          `=⚬`           | notes |
-|:--------------------:|:-----------------------:|-------|
-| Describes a program. | Lives inside a program. |       |
-| Tangible: we create and manipulate _Scala_ values of this type. | Intangible: there are no _Scala_ values of this type. A type like `A =⚬ B` can appear only to the left or right of `-⚬`. |  |
-| Pure value. As such, it can be used any number of times (including zero). | Must be treated as a resource, i.e. consumed (evaluated) exactly once, because it might have captured other resources that are consumed on evaluation. |  |
-| Morphism | Object, Internal Hom | In category theory, one does not look inside objects. Everything is expressed in terms of morphisms. In particular, objects are not viewed as collections of elements. Analogously, there are no values of type `=⚬`, or of types <code>&#124;*&#124;</code>, <code>&#124;+&#124;</code>, <code>&#124;&amp;&#124;</code>, `One`, `Val`, ... These are all objects in a category and we do not view them as collections of elements. We express everything in terms of morphisms, `-⚬`. |
+|         `-⚬`         |            `=⚬`             |
+|:--------------------:|:---------------------------:|
+|   Function as code   |     Function as data        |
+| Describes a program. | Lives in a running program. |
+| Tangible: we create and manipulate _Scala_ values of this type. | Intangible: there are no _Scala_ values of this type. A type like `A =⚬ B` can appear only to the left or right of `-⚬`.
+| Value in the meta language (Scala). As such, it can be used any number of times (including zero) by Scala code. | Resource in a Libretto program. As such, it must be consumed (evaluated) exactly once, because it might have captured other resources that are consumed on evaluation.
+| Morphism | Object, Internal Hom |
+
+In category theory, one does not look inside objects. Everything is expressed in terms of morphisms.
+In particular, objects in a category, which in our case are types like `=⚬`, `|*|`, `|+|`, `|&|`, `One`, `Val`, ...,
+are not viewed as collections of elements. Indeed, there are no values of these types.
+We express everything in terms of morphisms, `-⚬`.
+We manipulate morphisms as values in the underlying meta language (Scala).
+
+Note that when we view the Scala language as a category with types as objects and functions as morphisms,
+Scala functions (`=>`) appear in three different roles:
+morphisms, exponential objects (or more generally, internal homs), and mappings of the underlying meta theory
+(e.g. set theory).
+This can be quite confusing. For example, when you are instructed to reverse all the morphisms, it does not mean
+to simply reverse all the `=>` arrows.
+
+Notice how the distinction between a morphism (`-⚬`), an internal hom (`=⚬`)
+and a mapping of the underlying meta theory (`=>`) avoids a lot of confusion.
+In the category of Scala functions, all three of these roles are played by `=>`.
+
+In the signature of `curry` on Scala functions, `=>` appears in all three of these roles.
+Can you tell which occurrences play which roles?
+
+```scala
+def curry[A, B, C]: ((A, B) => C) => (A => (B => C))
+```
+
+The Libretto version of `curry` makes the roles clear:
+
+```scala
+def curry[A, B, C]: ((A |*| B) -⚬ C) => (A -⚬ (B =⚬ C))
+```
 
 ### How to type the `⚬` symbol used in `-⚬` and `=⚬`?
 
