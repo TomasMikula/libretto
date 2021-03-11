@@ -1841,15 +1841,15 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       either(done, f)
   }
 
-  opaque type Optional[A] = One |&| A
-  object Optional {
-    def optOut[A]: Optional[A] -⚬ One =
+  opaque type Optionally[A] = One |&| A
+  object Optionally {
+    def optOut[A]: Optionally[A] -⚬ One =
       chooseL
 
-    def optIn[A]: Optional[A] -⚬ A =
+    def optIn[A]: Optionally[A] -⚬ A =
       chooseR
 
-    def fromDiscardable[A](discard: A -⚬ One): A -⚬ Optional[A] =
+    def fromDiscardable[A](discard: A -⚬ One): A -⚬ Optionally[A] =
       choice(discard, id)
   }
 
