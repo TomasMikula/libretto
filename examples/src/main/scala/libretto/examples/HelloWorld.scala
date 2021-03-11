@@ -1,4 +1,4 @@
-package libreto.examples
+package libretto.examples
 
 import libretto.StarterAppScala
 
