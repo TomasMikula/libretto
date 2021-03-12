@@ -373,13 +373,6 @@ are not viewed as collections of elements. Indeed, there are no values of these 
 We express everything in terms of morphisms, `-⚬`.
 We manipulate morphisms as values in the underlying meta language (Scala).
 
-Note that when we view the Scala language as a category with types as objects and functions as morphisms,
-Scala functions (`=>`) appear in three different roles:
-morphisms, exponential objects (or more generally, internal homs), and mappings of the underlying meta theory
-(e.g. set theory).
-This can be quite confusing. For example, when you are instructed to reverse all the morphisms, it does not mean
-to simply reverse all the `=>` arrows.
-
 Notice how the distinction between a morphism (`-⚬`), an internal hom (`=⚬`)
 and a mapping of the underlying meta theory (`=>`) avoids a lot of confusion.
 In the category of Scala functions, all three of these roles are played by `=>`.
