@@ -14,6 +14,8 @@ object FreeScalaDSL extends ScalaDSL {
   override final class One private()
   override final class Done private()
   override final class Need private()
+  override final class WeakDone private()
+  override final class WeakNeed private()
   override final class RTerminus private()
   override final class LTerminus private()
   override final class |*|[A, B] private()
@@ -52,6 +54,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class Join() extends ((Done |*| Done) -⚬ Done)
     case class ForkNeed() extends ((Need |*| Need) -⚬ Need)
     case class JoinNeed() extends (Need -⚬ (Need |*| Need))
+    case class SignalDoneL() extends (Done -⚬ (WeakDone |*| Done))
+    case class SignalNeedL() extends ((WeakNeed |*| Need) -⚬ Need)
     case class JoinRTermini() extends ((RTerminus |*| RTerminus) -⚬ RTerminus)
     case class JoinLTermini() extends (LTerminus -⚬ (LTerminus |*| LTerminus))
     case class SignalEither[A, B]() extends ((A |+| B) -⚬ (Done |*| (A |+| B)))
@@ -71,6 +75,8 @@ object FreeScalaDSL extends ScalaDSL {
     }
     case class Pack[F[_]]() extends (F[Rec[F]] -⚬ Rec[F])
     case class Unpack[F[_]]() extends (Rec[F] -⚬ F[Rec[F]])
+    case class RacePair() extends ((WeakDone |*| WeakDone) -⚬ (One |+| One))
+    case class SelectPair() extends ((One |&| One) -⚬ (WeakNeed |*| WeakNeed))
     case class RaceDone() extends ((Done |*| Done) -⚬ (Done |+| Done))
     case class SelectNeed() extends ((Need |&| Need) -⚬ (Need |*| Need))
 
@@ -192,6 +198,12 @@ object FreeScalaDSL extends ScalaDSL {
   override def joinNeed: Need -⚬ (Need |*| Need) =
     JoinNeed()
 
+  override def signalDoneL: Done -⚬ (WeakDone |*| Done) =
+    SignalDoneL()
+
+  override def signalNeedL: (WeakNeed |*| Need) -⚬ Need =
+    SignalNeedL()
+
   override def joinRTermini: (RTerminus |*| RTerminus) -⚬ RTerminus =
     JoinRTermini()
 
@@ -242,6 +254,12 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def pack[F[_]]: F[Rec[F]] -⚬ Rec[F] =
     Pack()
+
+  override def racePair: (WeakDone |*| WeakDone) -⚬ (One |+| One) =
+    RacePair()
+
+  override def selectPair: (One |&| One) -⚬ (WeakNeed |*| WeakNeed) =
+    SelectPair()
 
   override def raceDone: (Done |*| Done) -⚬ (Done |+| Done) =
     RaceDone()

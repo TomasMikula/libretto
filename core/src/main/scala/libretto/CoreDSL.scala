@@ -48,11 +48,31 @@ trait CoreDSL {
     */
   type |&|[A, B]
 
-  /** Signal that travels in the direction of [[-⚬]], i.e. the positive direction. */
+  /** Signal that travels in the direction of [[-⚬]], i.e. the positive direction.
+    * It may signal completion of a (potentially effectful) computation.
+    * It cannot be ignored. (If this signal was the only handle to an (effectful) computation,
+    * ignoring it would mean losing track of that computation, which is considered to be a resource leak.)
+    */
   type Done
 
-  /** Signal that travels in the direction opposite to [[-⚬]], i.e. the negative direction. */
+  /** Signal that travels in the direction opposite to [[-⚬]], i.e. the negative direction.
+    * It may signal completion of a (potentially effectful) computation.
+    * It cannot be ignored. (If this signal was the only handle to an (effectful) computation,
+    * ignoring it would mean losing track of that computation, which is considered to be a resource leak.)
+    */
   type Need
+
+  /** Signal that travels in the direction of [[-⚬]], i.e. the positive direction.
+    * [Unlike [[Done]], it cannot be the only handle to an effectful computation.
+    * As such, it can be ignored, e.g. as the losing contestant in [[racePair]].
+    */
+  type WeakDone
+
+  /** Signal that travels in the direction opposite to [[-⚬]], i.e. the negative direction.
+    * Unlike [[Need]], it cannot be the only handle to an effectful computation.
+    * As such, it can be ignored, e.g. as the losing contestant in [[selectPair]].
+    */
+  type WeakNeed
 
   /** A black hole that can absorb (i.e. take over the responsibility to await) [[Done]] signals, but from which there
     * is no escape.
@@ -130,6 +150,14 @@ trait CoreDSL {
 
   def joinNeed[A, B](f: Need -⚬ A, g: Need -⚬ B): Need -⚬ (A |*| B) =
     andThen(joinNeed, par(f, g))
+
+  def signalDoneL: Done -⚬ (WeakDone |*| Done)
+  def signalDoneR: Done -⚬ (Done |*| WeakDone) =
+    andThen(signalDoneL, swap)
+
+  def signalNeedL: (WeakNeed |*| Need) -⚬ Need
+  def signalNeedR: (Need |*| WeakNeed) -⚬ Need =
+    andThen(swap, signalNeedL)
 
   /** Signals when it is decided whether `A |+| B` actually contains the left side or the right side. */
   def signalEither[A, B]: (A |+| B) -⚬ (Done |*| (A |+| B))
@@ -222,6 +250,18 @@ trait CoreDSL {
 
   /** Unpacks one level of a recursive type definition. */
   def unpack[F[_]]: Rec[F] -⚬ F[Rec[F]]
+
+  /** Races the two [[WeakDone]] signals.
+    * Produces left if the first signal wins and right if the second signal wins.
+    * It is biased to the left: if both signals have arrived by the time of inquiry, returns left.
+    */
+  def racePair: (WeakDone |*| WeakDone) -⚬ (One |+| One)
+
+  /** Races the two [[WeakNeed]] signals (traveling from right to left).
+    * Chooses left if the first signal wins and right if the second signal wins.
+    * It is biased to the left: if both signals have arrived by the time of inquiry, chooses left.
+    */
+  def selectPair: (One |&| One) -⚬ (WeakNeed |*| WeakNeed)
 
   /** Races the two [[Done]] signals and
     *  - produces left if the first signal wins, in which case it returns the second signal that still

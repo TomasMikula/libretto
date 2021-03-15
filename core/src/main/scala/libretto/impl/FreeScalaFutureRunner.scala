@@ -182,6 +182,15 @@ class FreeScalaFutureRunner(
         case -⚬.Fork() =>
           Pair(this, this)                                        .asInstanceOf[Frontier[B]]
 
+        case -⚬.SignalDoneL() =>
+          // Done -⚬ (WeakDone |*| Done)
+          val d: Frontier[Done] = this.asInstanceOf
+          val wd: Frontier[WeakDone] = d match {
+            case DoneNow => WeakDoneNow
+            case d => d.toFutureDone.map(_ => WeakDoneNow).asDeferredFrontier
+          }
+          Pair(wd, d)                                             .asInstanceOf[Frontier[B]]
+
         case -⚬.Join() =>
           def go(f1: Frontier[Done], f2: Frontier[Done]): Frontier[Done] =
             (f1, f2) match {
@@ -198,6 +207,14 @@ class FreeScalaFutureRunner(
           val (n1, n2) = this.asInstanceOf[Frontier[Need |*| Need]].splitPair
           n1 fulfillWith p.future
           n2 fulfillWith p.future
+          NeedAsync(p)                                            .asInstanceOf[Frontier[B]]
+
+        case -⚬.SignalNeedL() =>
+          // (WeakNeed |*| Need) -⚬ Need
+          val (wn, n) = this.asInstanceOf[Frontier[WeakNeed |*| Need]].splitPair
+          val p = Promise[Any]()
+          wn fulfillWeakWith p.future
+          n fulfillWith p.future
           NeedAsync(p)                                            .asInstanceOf[Frontier[B]]
 
         case -⚬.JoinNeed() =>
@@ -367,6 +384,33 @@ class FreeScalaFutureRunner(
             }
           go(this.asInstanceOf[Frontier[Rec[F]]])                 .asInstanceOf[Frontier[B]]
 
+        case -⚬.RacePair() =>
+          def go(x: Frontier[WeakDone], y: Frontier[WeakDone]): Frontier[One |+| One] =
+            (x, y) match {
+              case (WeakDoneNow, y) => InjectL(One) // y is ignored
+              case (x, WeakDoneNow) => InjectR(One) // x is ignored
+              case (x, y) =>
+                // check the first one for completion in order to be (somewhat) left-biased
+                val fx = x.toFutureWeakDone
+                fx.value match {
+                  case Some(res) =>
+                    // x completed, y is ignored
+                    res match {
+                      case Success(WeakDoneNow) => InjectL(One)
+                      case Failure(e)           => Deferred(Future.failed(e))
+                    }
+                  case None =>
+                    val fy = y.toFutureWeakDone
+                    val p = Promise[Frontier[One |+| One]]
+                    fx.onComplete(r => p.tryComplete(r.map(_ => InjectL(One))))
+                    fy.onComplete(r => p.tryComplete(r.map(_ => InjectR(One))))
+                    Deferred(p.future)
+                }
+            }
+
+          val (x, y) = this.asInstanceOf[Frontier[WeakDone |*| WeakDone]].splitPair
+          go(x, y)                                                .asInstanceOf[Frontier[B]]
+
         case -⚬.RaceDone() =>
           val (x, y) = this.asInstanceOf[Frontier[Done |*| Done]].splitPair
           (x, y) match {
@@ -387,14 +431,28 @@ class FreeScalaFutureRunner(
               }
           }
 
+        case -⚬.SelectPair() =>
+          // XXX: not left-biased. What does it even mean, precisely, for a racing operator to be biased?
+          val Choice(f, g, onError) = this.asInstanceOf[Frontier[One |&| One]].asChoice
+          val p1 = Promise[Any]()
+          val p2 = Promise[Any]()
+          val p = Promise[() => Frontier[One]]
+          p1.future.onComplete(r => p.tryComplete(r.map(_ => f)))
+          p2.future.onComplete(r => p.tryComplete(r.map(_ => g)))
+          p.future.onComplete {
+            case Success(one) => one(): Frontier[One] // can be ignored
+            case Failure(e) => onError(e)
+          }
+          Pair(WeakNeedAsync(p1), WeakNeedAsync(p2))              .asInstanceOf[Frontier[B]]
+
         case -⚬.SelectNeed() =>
           // XXX: not left-biased. What does it even mean, precisely, for a racing operator to be biased?
           val Choice(f, g, onError) = this.asInstanceOf[Frontier[Need |&| Need]].asChoice
           val p1 = Promise[Any]()
           val p2 = Promise[Any]()
           val p = Promise[(() => Frontier[Need], Future[Any])]
-          p1.future.onComplete(r => p.tryComplete(r.map(_ => (f.asInstanceOf[() => Frontier[Need]], p2.future))))
-          p2.future.onComplete(r => p.tryComplete(r.map(_ => (g.asInstanceOf[() => Frontier[Need]], p1.future))))
+          p1.future.onComplete(r => p.tryComplete(r.map(_ => (f, p2.future))))
+          p2.future.onComplete(r => p.tryComplete(r.map(_ => (g, p1.future))))
           p.future.onComplete {
             case Success((n, fut)) => n() fulfillWith fut
             case Failure(e) => onError(e)
@@ -886,9 +944,11 @@ class FreeScalaFutureRunner(
 
     private def crash(e: Throwable): Unit = {
       this match {
-        case One | DoneNow | Value(_) | MVal(_) | Resource(_, _) =>
+        case One | DoneNow | WeakDoneNow | Value(_) | MVal(_) | Resource(_, _) =>
           // do nothing
         case NeedAsync(promise) =>
+          promise.failure(e)
+        case WeakNeedAsync(promise) =>
           promise.failure(e)
         case Pair(a, b) =>
           a.crash(e)
@@ -912,7 +972,9 @@ class FreeScalaFutureRunner(
   private object Frontier {
     case object One extends Frontier[dsl.One]
     case object DoneNow extends Frontier[Done]
+    case object WeakDoneNow extends Frontier[WeakDone]
     case class NeedAsync(promise: Promise[Any]) extends Frontier[Need]
+    case class WeakNeedAsync(promise: Promise[Any]) extends Frontier[WeakNeed]
     case class Pair[A, B](a: Frontier[A], b: Frontier[B]) extends Frontier[A |*| B]
     case class InjectL[A, B](a: Frontier[A]) extends Frontier[A |+| B]
     case class InjectR[A, B](b: Frontier[B]) extends Frontier[A |+| B]
@@ -938,6 +1000,24 @@ class FreeScalaFutureRunner(
           case Deferred(fn) =>
             fn.onComplete {
               case Success(n) => n fulfillWith f
+              case Failure(e) =>
+                e.printStackTrace(System.err)
+                f.onComplete {
+                  case Success(_) => // do nothing
+                  case Failure(ex) => ex.printStackTrace(System.err)
+                }
+            }
+        }
+    }
+
+    extension (n: Frontier[WeakNeed]) {
+      def fulfillWeakWith(f: Future[Any]): Unit =
+        n match {
+          case WeakNeedAsync(p) =>
+            p.completeWith(f)
+          case Deferred(fn) =>
+            fn.onComplete {
+              case Success(n) => n fulfillWeakWith f
               case Failure(e) =>
                 e.printStackTrace(System.err)
                 f.onComplete {
@@ -1005,6 +1085,16 @@ class FreeScalaFutureRunner(
             Future.successful(DoneNow)
           case Deferred(f) =>
             f.flatMap(_.toFutureDone)
+        }
+    }
+
+    extension (f: Frontier[WeakDone]) {
+      def toFutureWeakDone: Future[WeakDoneNow.type] =
+        f match {
+          case WeakDoneNow =>
+            Future.successful(WeakDoneNow)
+          case Deferred(f) =>
+            f.flatMap(_.toFutureWeakDone)
         }
     }
 
