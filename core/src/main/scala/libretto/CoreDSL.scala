@@ -159,6 +159,9 @@ trait CoreDSL {
   def signalNeedR: (Need |*| WeakNeed) -⚬ Need =
     andThen(swap, signalNeedL)
 
+  def strengthenDone: WeakDone -⚬ Done
+  def strengthenNeed: Need -⚬ WeakNeed
+
   /** Signals when it is decided whether `A |+| B` actually contains the left side or the right side. */
   def signalEither[A, B]: (A |+| B) -⚬ (Done |*| (A |+| B))
 

@@ -225,6 +225,19 @@ class FreeScalaFutureRunner(
             .fulfillWith(p1.future zip p2.future)
           Pair(NeedAsync(p1), NeedAsync(p2))                      .asInstanceOf[Frontier[B]]
 
+        case -⚬.StrengthenDone() =>
+          // WeakDone -⚬ Done
+          this.asInstanceOf[Frontier[WeakDone]] match {
+            case WeakDoneNow => DoneNow
+            case other => other.toFutureWeakDone.map { case WeakDoneNow => DoneNow }.asDeferredFrontier
+          }
+
+        case -⚬.StrengthenNeed() =>
+          // Need -⚬ WeakNeed
+          val p = Promise[Any]()
+          this.asInstanceOf[Frontier[Need]].fulfillWith(p.future)
+          WeakNeedAsync(p)
+
         case -⚬.SignalEither() =>
           type X; type Y
           this.asInstanceOf[Frontier[X |+| Y]] match {

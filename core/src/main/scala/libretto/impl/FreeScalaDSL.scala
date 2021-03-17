@@ -56,6 +56,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class JoinNeed() extends (Need -⚬ (Need |*| Need))
     case class SignalDoneL() extends (Done -⚬ (WeakDone |*| Done))
     case class SignalNeedL() extends ((WeakNeed |*| Need) -⚬ Need)
+    case class StrengthenDone() extends (WeakDone -⚬ Done)
+    case class StrengthenNeed() extends (Need -⚬ WeakNeed)
     case class JoinRTermini() extends ((RTerminus |*| RTerminus) -⚬ RTerminus)
     case class JoinLTermini() extends (LTerminus -⚬ (LTerminus |*| LTerminus))
     case class SignalEither[A, B]() extends ((A |+| B) -⚬ (Done |*| (A |+| B)))
@@ -203,6 +205,12 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def signalNeedL: (WeakNeed |*| Need) -⚬ Need =
     SignalNeedL()
+
+  override def strengthenDone: WeakDone -⚬ Done =
+    StrengthenDone()
+
+  override def strengthenNeed: Need -⚬ WeakNeed =
+    StrengthenNeed()
 
   override def joinRTermini: (RTerminus |*| RTerminus) -⚬ RTerminus =
     JoinRTermini()
