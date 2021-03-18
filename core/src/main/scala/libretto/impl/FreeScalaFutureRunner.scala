@@ -182,7 +182,7 @@ class FreeScalaFutureRunner(
         case -⚬.Fork() =>
           Pair(this, this)                                        .asInstanceOf[Frontier[B]]
 
-        case -⚬.SignalDoneL() =>
+        case -⚬.NotifyDoneL() =>
           // Done -⚬ (WeakDone |*| Done)
           val d: Frontier[Done] = this.asInstanceOf
           val wd: Frontier[WeakDone] = d match {
@@ -209,7 +209,7 @@ class FreeScalaFutureRunner(
           n2 fulfillWith p.future
           NeedAsync(p)                                            .asInstanceOf[Frontier[B]]
 
-        case -⚬.SignalNeedL() =>
+        case -⚬.NotifyNeedL() =>
           // (WeakNeed |*| Need) -⚬ Need
           val (wn, n) = this.asInstanceOf[Frontier[WeakNeed |*| Need]].splitPair
           val p = Promise[Any]()
@@ -238,7 +238,7 @@ class FreeScalaFutureRunner(
           this.asInstanceOf[Frontier[Need]].fulfillWith(p.future)
           WeakNeedAsync(p)
 
-        case -⚬.SignalEither() =>
+        case -⚬.NotifyEither() =>
           // (X |+| Y) -⚬ (WeakDone |*| (X |+| Y))
           type X; type Y
 
@@ -253,7 +253,7 @@ class FreeScalaFutureRunner(
 
           go(this.asInstanceOf[Frontier[X |+| Y]])                .asInstanceOf[Frontier[B]]
 
-        case -⚬.SignalChoice() =>
+        case -⚬.NotifyChoice() =>
           //            A             -⚬     B
           // (WeakNeed |*| (X |&| Y)) -⚬ (X |&| Y)
           type X; type Y

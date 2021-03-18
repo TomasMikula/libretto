@@ -54,14 +54,14 @@ object FreeScalaDSL extends ScalaDSL {
     case class Join() extends ((Done |*| Done) -⚬ Done)
     case class ForkNeed() extends ((Need |*| Need) -⚬ Need)
     case class JoinNeed() extends (Need -⚬ (Need |*| Need))
-    case class SignalDoneL() extends (Done -⚬ (WeakDone |*| Done))
-    case class SignalNeedL() extends ((WeakNeed |*| Need) -⚬ Need)
+    case class NotifyDoneL() extends (Done -⚬ (WeakDone |*| Done))
+    case class NotifyNeedL() extends ((WeakNeed |*| Need) -⚬ Need)
     case class StrengthenDone() extends (WeakDone -⚬ Done)
     case class StrengthenNeed() extends (Need -⚬ WeakNeed)
     case class JoinRTermini() extends ((RTerminus |*| RTerminus) -⚬ RTerminus)
     case class JoinLTermini() extends (LTerminus -⚬ (LTerminus |*| LTerminus))
-    case class SignalEither[A, B]() extends ((A |+| B) -⚬ (WeakDone |*| (A |+| B)))
-    case class SignalChoice[A, B]() extends ((WeakNeed |*| (A |&| B)) -⚬ (A |&| B))
+    case class NotifyEither[A, B]() extends ((A |+| B) -⚬ (WeakDone |*| (A |+| B)))
+    case class NotifyChoice[A, B]() extends ((WeakNeed |*| (A |&| B)) -⚬ (A |&| B))
     case class InjectLWhenDone[A, B]() extends ((Done |*| A) -⚬ ((Done |*| A) |+| B))
     case class InjectRWhenDone[A, B]() extends ((Done |*| B) -⚬ (A |+| (Done |*| B)))
     case class ChooseLWhenNeed[A, B]() extends (((Need |*| A) |&| B) -⚬ (Need |*| A))
@@ -198,11 +198,11 @@ object FreeScalaDSL extends ScalaDSL {
   override def joinNeed: Need -⚬ (Need |*| Need) =
     JoinNeed()
 
-  override def signalDoneL: Done -⚬ (WeakDone |*| Done) =
-    SignalDoneL()
+  override def notifyDoneL: Done -⚬ (WeakDone |*| Done) =
+    NotifyDoneL()
 
-  override def signalNeedL: (WeakNeed |*| Need) -⚬ Need =
-    SignalNeedL()
+  override def notifyNeedL: (WeakNeed |*| Need) -⚬ Need =
+    NotifyNeedL()
 
   override def strengthenDone: WeakDone -⚬ Done =
     StrengthenDone()
@@ -216,11 +216,11 @@ object FreeScalaDSL extends ScalaDSL {
   override def joinLTermini: LTerminus -⚬ (LTerminus |*| LTerminus) =
     JoinLTermini()
 
-  override def signalEither[A, B]: (A |+| B) -⚬ (WeakDone |*| (A |+| B)) =
-    SignalEither()
+  override def notifyEither[A, B]: (A |+| B) -⚬ (WeakDone |*| (A |+| B)) =
+    NotifyEither()
 
-  override def signalChoice[A, B]: (WeakNeed |*| (A |&| B)) -⚬ (A |&| B) =
-    SignalChoice()
+  override def notifyChoice[A, B]: (WeakNeed |*| (A |&| B)) -⚬ (A |&| B) =
+    NotifyChoice()
 
   override def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B) =
     InjectLWhenDone()

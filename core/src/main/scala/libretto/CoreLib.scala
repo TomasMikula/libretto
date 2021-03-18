@@ -484,7 +484,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       /** Signals when it is decided which side of the [[|+|]] is present. */
       def either[A, B]: Signaling.Positive[A |+| B] =
-        from(dsl.signalEither[A, B] > par(strengthenDone, id))
+        from(dsl.notifyEither[A, B] > par(strengthenDone, id))
 
       def rec[F[_]](implicit F: Positive[F[Rec[F]]]): Positive[Rec[F]] =
         from(unpack > F.signalPosFst > par(id, pack))
@@ -517,7 +517,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       /** Signals when the choice is made between [[A]] and [[B]]. */
       def choice[A, B]: Signaling.Negative[A |&| B] =
-        from(par(strengthenNeed, id) > dsl.signalChoice[A, B])
+        from(par(strengthenNeed, id) > dsl.notifyChoice[A, B])
 
       def rec[F[_]](implicit F: Negative[F[Rec[F]]]): Negative[Rec[F]] =
         from(par(id, unpack) > F.signalNegFst > pack)
@@ -765,7 +765,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     */
   def raceDone: (Done |*| Done) -⚬ (Done |+| Done) =
     id                                     [               Done  |*|               Done  ]
-      .>(par(signalDoneL, signalDoneL)) .to[ (WeakDone |*| Done) |*| (WeakDone |*| Done) ]
+      .>(par(notifyDoneL, notifyDoneL)) .to[ (WeakDone |*| Done) |*| (WeakDone |*| Done) ]
       .>(IXI)                           .to[ (WeakDone |*| WeakDone) |*| (Done |*| Done) ]
       .>(par(racePair, join))           .to[ (     One |+| One     ) |*|      Done       ]
       .>(distributeR)                   .to[      (One |*| Done) |+| (One |*| Done)      ]
@@ -783,7 +783,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     */
   def selectNeed: (Need |&| Need) -⚬ (Need |*| Need) =
     id                                       [               Need  |*|               Need  ]
-      .<(par(signalNeedL, signalNeedL)) .from[ (WeakNeed |*| Need) |*| (WeakNeed |*| Need) ]
+      .<(par(notifyNeedL, notifyNeedL)) .from[ (WeakNeed |*| Need) |*| (WeakNeed |*| Need) ]
       .<(IXI)                           .from[ (WeakNeed |*| WeakNeed) |*| (Need |*| Need) ]
       .<(par(selectPair, joinNeed))     .from[ (     One |&| One     ) |*|      Need       ]
       .<(coDistributeR)                 .from[      (One |*| Need) |&| (One |*| Need)      ]

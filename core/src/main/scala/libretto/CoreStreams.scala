@@ -92,7 +92,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def signalAction[A]: (Need |*| LPollable[A]) -⚬ LPollable[A] =
       id                                     [                 LPollable[A]       ]
         .<(pack)                        .from[               Done |&| LPolled[A]  ]
-        .<(signalChoice)                .from[ WeakNeed |*| (Done |&| LPolled[A]) ]
+        .<(notifyChoice)                .from[ WeakNeed |*| (Done |&| LPolled[A]) ]
         .<(par(strengthenNeed, unpack)) .from[     Need |*|    LPollable[A]       ]
 
     /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */

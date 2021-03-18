@@ -151,22 +151,22 @@ trait CoreDSL {
   def joinNeed[A, B](f: Need -⚬ A, g: Need -⚬ B): Need -⚬ (A |*| B) =
     andThen(joinNeed, par(f, g))
 
-  def signalDoneL: Done -⚬ (WeakDone |*| Done)
-  def signalDoneR: Done -⚬ (Done |*| WeakDone) =
-    andThen(signalDoneL, swap)
+  def notifyDoneL: Done -⚬ (WeakDone |*| Done)
+  def notifyDoneR: Done -⚬ (Done |*| WeakDone) =
+    andThen(notifyDoneL, swap)
 
-  def signalNeedL: (WeakNeed |*| Need) -⚬ Need
-  def signalNeedR: (Need |*| WeakNeed) -⚬ Need =
-    andThen(swap, signalNeedL)
+  def notifyNeedL: (WeakNeed |*| Need) -⚬ Need
+  def notifyNeedR: (Need |*| WeakNeed) -⚬ Need =
+    andThen(swap, notifyNeedL)
 
   def strengthenDone: WeakDone -⚬ Done
   def strengthenNeed: Need -⚬ WeakNeed
 
   /** Signals when it is decided whether `A |+| B` actually contains the left side or the right side. */
-  def signalEither[A, B]: (A |+| B) -⚬ (WeakDone |*| (A |+| B))
+  def notifyEither[A, B]: (A |+| B) -⚬ (WeakDone |*| (A |+| B))
 
   /** Signals (in the negative direction) when it is known which side of the choice (`A |&| B`) has been chosen. */
-  def signalChoice[A, B]: (WeakNeed |*| (A |&| B)) -⚬ (A |&| B)
+  def notifyChoice[A, B]: (WeakNeed |*| (A |&| B)) -⚬ (A |&| B)
 
   def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B)
   def injectRWhenDone[A, B]: (Done |*| B) -⚬ (A |+| (Done |*| B))
