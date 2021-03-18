@@ -79,8 +79,6 @@ object FreeScalaDSL extends ScalaDSL {
     case class Unpack[F[_]]() extends (Rec[F] -⚬ F[Rec[F]])
     case class RacePair() extends ((WeakDone |*| WeakDone) -⚬ (One |+| One))
     case class SelectPair() extends ((One |&| One) -⚬ (WeakNeed |*| WeakNeed))
-    case class RaceDone() extends ((Done |*| Done) -⚬ (Done |+| Done))
-    case class SelectNeed() extends ((Need |&| Need) -⚬ (Need |*| Need))
 
     case class Crash[A, B](msg: String) extends ((Done |*| A) -⚬ (Done |*| B))
     case class Delay() extends (Val[FiniteDuration] -⚬ Done)
@@ -268,12 +266,6 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def selectPair: (One |&| One) -⚬ (WeakNeed |*| WeakNeed) =
     SelectPair()
-
-  override def raceDone: (Done |*| Done) -⚬ (Done |+| Done) =
-    RaceDone()
-
-  override def selectNeed: (Need |&| Need) -⚬ (Need |*| Need) =
-    SelectNeed()
 
   override def crash[A, B](msg: String): (Done |*| A) -⚬ (Done |*| B) =
     Crash(msg)

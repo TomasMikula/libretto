@@ -959,7 +959,7 @@ Notes:
    
 ## Racing
 
-Libretto provides primitives for testing which of two concurrent signals arrived first. There is one version for
+Libretto provides functions for testing which of two concurrent signals arrived first. There is one version for
 `Done` signals and one for `Need` signals (although it is possible to implement one in terms of the other via
 signal inversions discussed above).
 
@@ -978,8 +978,7 @@ at some point (remember that signals cannot be ignored), so it is propagated to 
  - In `selectNeed`, if the first `Need` signal of the out-port wins, the left side of the `|&|` in the in-port is
    chosen and the second `Need` signal of the out-port is forwarded to it.
    
-These are the only primitives for racing, but there are other library methods built on top of these provided for
-convenience.
+There are additional library functions for racing built on top of these provided for convenience.
 
 ### Racing is a source of non-determinism
 

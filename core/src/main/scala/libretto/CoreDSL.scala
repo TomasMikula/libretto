@@ -265,25 +265,4 @@ trait CoreDSL {
     * It is biased to the left: if both signals have arrived by the time of inquiry, chooses left.
     */
   def selectPair: (One |&| One) -⚬ (WeakNeed |*| WeakNeed)
-
-  /** Races the two [[Done]] signals and
-    *  - produces left if the first signal wins, in which case it returns the second signal that still
-    *    has to be awaited;
-    *  - produces right if the second signal wins, in which case it returns the first signal that still
-    *    has to be awaited.
-    * It is biased to the left: if both signals have arrived by the time of inquiry, returns left.
-    */
-  def raceDone: (Done |*| Done) -⚬ (Done |+| Done)
-
-  /** Races two [[Need]] signals, i.e. signals traveling in the negative direction (i.e. opposite the `-⚬` arrow).
-    * Based on which [[Need]] signal from the out-port wins the race,
-    * selects one of the two [[Need]] signals from the in-port:
-    *  - If the first signal from the out-port wins the race, selects the left signal from the in-port
-    *    and pipes to it the remaining (i.e. the right) signal from the out-port.
-    *  - If the second signal from the out-port wins the race, selects the right signal from the in-port
-    *    and pipes to it the reamining (i.e. the left) signal from the out-port.
-    * It is biased to the left: if both signals from the out-port have arrived by the time of inquiry,
-    * selects the left signal from the in-port.
-    */
-  def selectNeed: (Need |&| Need) -⚬ (Need |*| Need)
 }

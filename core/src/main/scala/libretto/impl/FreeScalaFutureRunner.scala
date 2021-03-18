@@ -429,26 +429,6 @@ class FreeScalaFutureRunner(
           val (x, y) = this.asInstanceOf[Frontier[WeakDone |*| WeakDone]].splitPair
           go(x, y)                                                .asInstanceOf[Frontier[B]]
 
-        case -⚬.RaceDone() =>
-          val (x, y) = this.asInstanceOf[Frontier[Done |*| Done]].splitPair
-          (x, y) match {
-            case (DoneNow, y) => InjectL(y)                       .asInstanceOf[Frontier[B]]
-            case (x, DoneNow) => InjectR(x)                       .asInstanceOf[Frontier[B]]
-            case (x, y) =>
-              // check the first for completion in order to be (somewhat) left-biased
-              val fx = x.toFutureDone
-              fx.value match {
-                case Some(Success(DoneNow)) => InjectL(y)         .asInstanceOf[Frontier[B]]
-                case Some(Failure(e))       => Deferred(Future.failed(e))
-                case None =>
-                  val fy = y.toFutureDone
-                  val p = Promise[Frontier[Done |+| Done]]
-                  fx.onComplete(r => p.tryComplete(r.map(_ => InjectL(y))))
-                  fy.onComplete(r => p.tryComplete(r.map(_ => InjectR(x))))
-                  Deferred(p.future)                              .asInstanceOf[Frontier[B]]
-              }
-          }
-
         case -⚬.SelectPair() =>
           // XXX: not left-biased. What does it even mean, precisely, for a racing operator to be biased?
           val Choice(f, g, onError) = this.asInstanceOf[Frontier[One |&| One]].asChoice
@@ -462,20 +442,6 @@ class FreeScalaFutureRunner(
             case Failure(e) => onError(e)
           }
           Pair(WeakNeedAsync(p1), WeakNeedAsync(p2))              .asInstanceOf[Frontier[B]]
-
-        case -⚬.SelectNeed() =>
-          // XXX: not left-biased. What does it even mean, precisely, for a racing operator to be biased?
-          val Choice(f, g, onError) = this.asInstanceOf[Frontier[Need |&| Need]].asChoice
-          val p1 = Promise[Any]()
-          val p2 = Promise[Any]()
-          val p = Promise[(() => Frontier[Need], Future[Any])]
-          p1.future.onComplete(r => p.tryComplete(r.map(_ => (f, p2.future))))
-          p2.future.onComplete(r => p.tryComplete(r.map(_ => (g, p1.future))))
-          p.future.onComplete {
-            case Success((n, fut)) => n() fulfillWith fut
-            case Failure(e) => onError(e)
-          }
-          Pair(NeedAsync(p1), NeedAsync(p2))                      .asInstanceOf[Frontier[B]]
 
         case -⚬.Crash(msg) =>
           // (Done |*| X) -⚬ (Done |*| Y)
