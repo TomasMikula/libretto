@@ -239,32 +239,37 @@ class FreeScalaFutureRunner(
           WeakNeedAsync(p)
 
         case -⚬.SignalEither() =>
+          // (X |+| Y) -⚬ (WeakDone |*| (X |+| Y))
           type X; type Y
-          this.asInstanceOf[Frontier[X |+| Y]] match {
-            case l @ InjectL(_) => Pair(DoneNow, l)               .asInstanceOf[Frontier[B]]
-            case r @ InjectR(_) => Pair(DoneNow, r)               .asInstanceOf[Frontier[B]]
-            case other =>
-              val decided = other.futureEither.map(_ => DoneNow).asDeferredFrontier
-              Pair(decided, other)                                .asInstanceOf[Frontier[B]]
-          }
+
+          def go(xy: Frontier[X |+| Y]): Frontier[WeakDone |*| (X |+| Y)] =
+            xy match {
+              case l @ InjectL(_) => Pair(WeakDoneNow, l)
+              case r @ InjectR(_) => Pair(WeakDoneNow, r)
+              case other =>
+                val decided = other.futureEither.map(_ => WeakDoneNow).asDeferredFrontier
+                Pair(decided, other)
+            }
+
+          go(this.asInstanceOf[Frontier[X |+| Y]])                .asInstanceOf[Frontier[B]]
 
         case -⚬.SignalChoice() =>
-          //        A             -⚬     B
-          // (Need |*| (X |&| Y)) -⚬ (X |&| Y)
+          //            A             -⚬     B
+          // (WeakNeed |*| (X |&| Y)) -⚬ (X |&| Y)
           type X; type Y
-          this.asInstanceOf[Frontier[Need |*| (X |&| Y)]].splitPair match {
+          this.asInstanceOf[Frontier[WeakNeed |*| (X |&| Y)]].splitPair match {
             case (n, c) =>
               Choice(
                 () => {
-                  n fulfillWith Future.successful(())
+                  n fulfillWeakWith Future.successful(())
                   Frontier.chooseL(c)
                 },
                 () => {
-                  n fulfillWith Future.successful(())
+                  n fulfillWeakWith Future.successful(())
                   Frontier.chooseR(c)
                 },
                 onError = { e =>
-                  n fulfillWith Future.failed(e)
+                  n fulfillWeakWith Future.failed(e)
                   c.asChoice.onError(e)
                 },
               )                                                   .asInstanceOf[Frontier[B]]

@@ -60,8 +60,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class StrengthenNeed() extends (Need -⚬ WeakNeed)
     case class JoinRTermini() extends ((RTerminus |*| RTerminus) -⚬ RTerminus)
     case class JoinLTermini() extends (LTerminus -⚬ (LTerminus |*| LTerminus))
-    case class SignalEither[A, B]() extends ((A |+| B) -⚬ (Done |*| (A |+| B)))
-    case class SignalChoice[A, B]() extends ((Need |*| (A |&| B)) -⚬ (A |&| B))
+    case class SignalEither[A, B]() extends ((A |+| B) -⚬ (WeakDone |*| (A |+| B)))
+    case class SignalChoice[A, B]() extends ((WeakNeed |*| (A |&| B)) -⚬ (A |&| B))
     case class InjectLWhenDone[A, B]() extends ((Done |*| A) -⚬ ((Done |*| A) |+| B))
     case class InjectRWhenDone[A, B]() extends ((Done |*| B) -⚬ (A |+| (Done |*| B)))
     case class ChooseLWhenNeed[A, B]() extends (((Need |*| A) |&| B) -⚬ (Need |*| A))
@@ -218,10 +218,10 @@ object FreeScalaDSL extends ScalaDSL {
   override def joinLTermini: LTerminus -⚬ (LTerminus |*| LTerminus) =
     JoinLTermini()
 
-  override def signalEither[A, B]: (A |+| B) -⚬ (Done |*| (A |+| B)) =
+  override def signalEither[A, B]: (A |+| B) -⚬ (WeakDone |*| (A |+| B)) =
     SignalEither()
 
-  override def signalChoice[A, B]: (Need |*| (A |&| B)) -⚬ (A |&| B) =
+  override def signalChoice[A, B]: (WeakNeed |*| (A |&| B)) -⚬ (A |&| B) =
     SignalChoice()
 
   override def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B) =

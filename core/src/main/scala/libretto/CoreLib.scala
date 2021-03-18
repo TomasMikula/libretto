@@ -484,7 +484,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       /** Signals when it is decided which side of the [[|+|]] is present. */
       def either[A, B]: Signaling.Positive[A |+| B] =
-        from(dsl.signalEither[A, B])
+        from(dsl.signalEither[A, B] > par(strengthenDone, id))
 
       def rec[F[_]](implicit F: Positive[F[Rec[F]]]): Positive[Rec[F]] =
         from(unpack > F.signalPosFst > par(id, pack))
@@ -517,7 +517,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       /** Signals when the choice is made between [[A]] and [[B]]. */
       def choice[A, B]: Signaling.Negative[A |&| B] =
-        from(dsl.signalChoice[A, B])
+        from(par(strengthenNeed, id) > dsl.signalChoice[A, B])
 
       def rec[F[_]](implicit F: Negative[F[Rec[F]]]): Negative[Rec[F]] =
         from(par(id, unpack) > F.signalNegFst > pack)
