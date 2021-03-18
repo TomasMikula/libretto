@@ -415,9 +415,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   object Signaling {
-    /** Represents ''a'' way how `A` can produce a positive (i.e. [[Done]]) signal. */
+    /** Represents ''a'' way how `A` can produce a positive signal (i.e. [[WeakDone]] or [[Done]]). */
     trait Positive[A] {
-      def signalPosFst: A -⚬ (Done |*| A)
+      def notifyPosFst: A -⚬ (WeakDone |*| A)
+
+      def signalPosFst: A -⚬ (Done |*| A) =
+        notifyPosFst > par(strengthenDone, id)
 
       def signalPosSnd: A -⚬ (A |*| Done) =
         signalPosFst > swap
@@ -439,9 +442,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         )
     }
 
-    /** Represents ''a'' way how `A` can produce a negative (i.e. [[Need]]) signal. */
+    /** Represents ''a'' way how `A` can produce a negative signal (i.e. [[WeakNeed]] or [[Need]]). */
     trait Negative[A] {
-      def signalNegFst: (Need |*| A) -⚬ A
+      def notifyNegFst: (WeakNeed |*| A) -⚬ A
+
+      def signalNegFst: (Need |*| A) -⚬ A =
+        par(strengthenNeed, id) > notifyNegFst
 
       def signalNegSnd: (A |*| Need) -⚬ A =
         swap > signalNegFst
@@ -464,69 +470,69 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
 
     object Positive {
-      def from[A](signal: A -⚬ (Done |*| A)): Signaling.Positive[A] =
+      def from[A](notifyFst: A -⚬ (WeakDone |*| A)): Signaling.Positive[A] =
         new Signaling.Positive[A] {
-          override def signalPosFst: A -⚬ (Done |*| A) =
-            signal
+          override def notifyPosFst: A -⚬ (WeakDone |*| A) =
+            notifyFst
         }
 
       implicit def signalingDone: Signaling.Positive[Done] =
-        from(fork)
+        from(notifyDoneL)
 
       def byFst[A, B](implicit A: Signaling.Positive[A]): Signaling.Positive[A |*| B] =
-        from(par(A.signalPosFst, id[B]).assocLR)
+        from(par(A.notifyPosFst, id[B]).assocLR)
 
       def bySnd[A, B](implicit B: Signaling.Positive[B]): Signaling.Positive[A |*| B] =
-        from(par(id[A], B.signalPosFst) > XI)
+        from(par(id[A], B.notifyPosFst) > XI)
 
       def both[A, B](implicit A: Signaling.Positive[A], B: Signaling.Positive[B]): Signaling.Positive[A |*| B] =
-        from(par(A.signalPosFst, B.signalPosFst) > IXI > par(join, id))
+        from(par(A.notifyPosFst, B.notifyPosFst) > IXI > par(joinWeakDone, id))
 
       /** Signals when it is decided which side of the [[|+|]] is present. */
       def either[A, B]: Signaling.Positive[A |+| B] =
-        from(dsl.notifyEither[A, B] > par(strengthenDone, id))
+        from(dsl.notifyEither[A, B])
 
       def rec[F[_]](implicit F: Positive[F[Rec[F]]]): Positive[Rec[F]] =
-        from(unpack > F.signalPosFst > par(id, pack))
+        from(unpack > F.notifyPosFst > par(id, pack))
 
       def rec[F[_]](implicit F: ∀[λ[x => Positive[F[x]]]]): Positive[Rec[F]] =
         rec(F[Rec[F]])
 
       def rec[F[_]](f: Positive[Rec[F]] => Positive[F[Rec[F]]]): Positive[Rec[F]] =
-        from(dsl.rec(g => unpack > f(from(g)).signalPosFst > par(id, pack)))
+        from(dsl.rec(g => unpack > f(from(g)).notifyPosFst > par(id, pack)))
     }
 
     object Negative {
-      def from[A](signal: (Need |*| A) -⚬ A): Signaling.Negative[A] =
+      def from[A](notifyFst: (WeakNeed |*| A) -⚬ A): Signaling.Negative[A] =
         new Signaling.Negative[A] {
-          override def signalNegFst: (Need |*| A) -⚬ A =
-            signal
+          override def notifyNegFst: (WeakNeed |*| A) -⚬ A =
+            notifyFst
         }
 
       implicit def signalingNeed: Signaling.Negative[Need] =
-        from(forkNeed)
+        from(notifyNeedL)
 
       def byFst[A, B](implicit A: Signaling.Negative[A]): Signaling.Negative[A |*| B] =
-        from(|*|.assocRL.>.fst(A.signalNegFst))
+        from(|*|.assocRL.>.fst(A.notifyNegFst))
 
       def bySnd[A, B](implicit B: Signaling.Negative[B]): Signaling.Negative[A |*| B] =
-        from(XI > par(id[A], B.signalNegFst))
+        from(XI > par(id[A], B.notifyNegFst))
 
       def both[A, B](implicit A: Signaling.Negative[A], B: Signaling.Negative[B]): Signaling.Negative[A |*| B] =
-        from(par(joinNeed, id) > IXI > par(A.signalNegFst, B.signalNegFst))
+        from(par(joinWeakNeed, id) > IXI > par(A.notifyNegFst, B.notifyNegFst))
 
       /** Signals when the choice is made between [[A]] and [[B]]. */
       def choice[A, B]: Signaling.Negative[A |&| B] =
-        from(par(strengthenNeed, id) > dsl.notifyChoice[A, B])
+        from(dsl.notifyChoice[A, B])
 
       def rec[F[_]](implicit F: Negative[F[Rec[F]]]): Negative[Rec[F]] =
-        from(par(id, unpack) > F.signalNegFst > pack)
+        from(par(id, unpack) > F.notifyNegFst > pack)
 
       def rec[F[_]](implicit F: ∀[λ[x => Negative[F[x]]]]): Negative[Rec[F]] =
         rec(F[Rec[F]])
 
       def rec[F[_]](f: Negative[Rec[F]] => Negative[F[Rec[F]]]): Negative[Rec[F]] =
-        from(dsl.rec(g => par(id, unpack) > f(from(g)).signalNegFst > pack))
+        from(dsl.rec(g => par(id, unpack) > f(from(g)).notifyNegFst > pack))
     }
 
     /** [[Signaling.Positive]] can be made to produce a negative (i.e. [[Need]]) signal,
@@ -534,11 +540,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       */
     def invert[A](A: Positive[A]): Negative[A] =
       new Negative[A] {
-        override def signalNegFst: (Need |*| A) -⚬ A =
-          id                                     [  Need |*|            A  ]
-            .>.snd(A.signalPosFst)            .to[  Need |*| (Done  |*| A) ]
-            .assocRL                          .to[ (Need |*|  Done) |*| A  ]
-            .elimFst(swap > rInvertSignal)    .to[                      A  ]
+        override def notifyNegFst: (WeakNeed |*| A) -⚬ A =
+          id                                         [  WeakNeed |*|                A  ]
+            .>.snd(A.notifyPosFst)                .to[  WeakNeed |*| (WeakDone  |*| A) ]
+            .assocRL                              .to[ (WeakNeed |*|  WeakDone) |*| A  ]
+            .elimFst(swap > rInvertWeakSignal)    .to[                              A  ]
       }
 
     /** [[Signaling.Negative]] can be made to produce a positive (i.e. [[Done]]) signal,
@@ -546,11 +552,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       */
     def invert[A](A: Negative[A]): Positive[A] =
       new Positive[A] {
-        override def signalPosFst: A -⚬ (Done |*| A) =
-          id                                     [                      A  ]
-            .introFst(lInvertSignal > swap)   .to[ (Done |*|  Need) |*| A  ]
-            .assocLR                          .to[  Done |*| (Need  |*| A) ]
-            .>.snd(A.signalNegFst)            .to[  Done |*|            A  ]
+        override def notifyPosFst: A -⚬ (WeakDone |*| A) =
+          id                                         [                              A  ]
+            .introFst(lInvertWeakSignal > swap)   .to[ (WeakDone |*|  WeakNeed) |*| A  ]
+            .assocLR                              .to[  WeakDone |*| (WeakNeed  |*| A) ]
+            .>.snd(A.notifyNegFst)                .to[  WeakDone |*|                A  ]
       }
   }
 
@@ -606,7 +612,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     object Positive {
       def from[A](s: Signaling.Positive[A], j: Junction.Positive[A]): SignalingJunction.Positive[A] =
         new SignalingJunction.Positive[A] {
-          override def signalPosFst: A -⚬ (Done |*| A) = s.signalPosFst
+          override def notifyPosFst: A -⚬ (WeakDone |*| A) = s.notifyPosFst
           override def awaitPosFst: (Done |*| A) -⚬ A = j.awaitPosFst
         }
 
@@ -674,7 +680,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     object Negative {
       def from[A](s: Signaling.Negative[A], j: Junction.Negative[A]): SignalingJunction.Negative[A] =
         new SignalingJunction.Negative[A] {
-          override def signalNegFst: (Need |*| A) -⚬ A = s.signalNegFst
+          override def notifyNegFst: (WeakNeed |*| A) -⚬ A = s.notifyNegFst
           override def awaitNegFst: A -⚬ (Need |*| A) = j.awaitNegFst
         }
 

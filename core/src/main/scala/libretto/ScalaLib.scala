@@ -38,14 +38,14 @@ class ScalaLib[
 
   implicit def signalingVal[A]: Signaling.Positive[Val[A]] =
     new Signaling.Positive[Val[A]] {
-      override def signalPosFst: Val[A] -⚬ (Done |*| Val[A]) =
-        dup[A].>.fst(neglect)
+      override def notifyPosFst: Val[A] -⚬ (WeakDone |*| Val[A]) =
+        notifyVal
     }
 
   implicit def signalingNeg[A]: Signaling.Negative[Neg[A]] =
     new Signaling.Negative[Neg[A]] {
-      override def signalNegFst: (Need |*| Neg[A]) -⚬ Neg[A] =
-        par(inflate[A], id[Neg[A]]) > mergeDemands
+      override def notifyNegFst: (WeakNeed |*| Neg[A]) -⚬ Neg[A] =
+        notifyNeg
     }
 
   implicit def signalingJunctionPositiveVal[A]: SignalingJunction.Positive[Val[A]] =

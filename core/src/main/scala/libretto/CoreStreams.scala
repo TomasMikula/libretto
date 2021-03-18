@@ -88,12 +88,12 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       )
     }
 
-    /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative (i.e. [[Need]]) signal. */
-    def signalAction[A]: (Need |*| LPollable[A]) -⚬ LPollable[A] =
+    /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative ([[WeakNeed]]) signal. */
+    def notifyAction[A]: (WeakNeed |*| LPollable[A]) -⚬ LPollable[A] =
       id                                     [                 LPollable[A]       ]
         .<(pack)                        .from[               Done |&| LPolled[A]  ]
         .<(notifyChoice)                .from[ WeakNeed |*| (Done |&| LPolled[A]) ]
-        .<(par(strengthenNeed, unpack)) .from[     Need |*|    LPollable[A]       ]
+        .<(par(id, unpack))             .from[ WeakNeed |*|    LPollable[A]       ]
 
     /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPollable[A]) -⚬ LPollable[A] =
@@ -237,7 +237,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       Junction.Positive.from(LPollable.delayBy)
 
     implicit def negativeSignaling[A]: Signaling.Negative[LPollable[A]] =
-      Signaling.Negative.from(LPollable.signalAction[A])
+      Signaling.Negative.from(LPollable.notifyAction[A])
 
     implicit def negativeLPollable[A](implicit A: Junction.Positive[A]): SignalingJunction.Negative[LPollable[A]] =
       SignalingJunction.Negative.from(
