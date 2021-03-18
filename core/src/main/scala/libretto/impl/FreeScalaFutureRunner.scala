@@ -399,14 +399,34 @@ class FreeScalaFutureRunner(
           }
 
         case -⚬.RInvertSignal() =>
+          // (Done |*| Need) -⚬ One
           val (d, n) = this.asInstanceOf[Frontier[Done |*| Need]].splitPair
           n fulfillWith d.toFutureDone
           One                                                     .asInstanceOf[Frontier[B]]
 
+        case -⚬.RInvertWeakSignal() =>
+          // (WeakDone |*| WeakNeed) -⚬ One
+          val (d, n) = this.asInstanceOf[Frontier[WeakDone |*| WeakNeed]].splitPair
+          n fulfillWeakWith d.toFutureWeakDone
+          One                                                     .asInstanceOf[Frontier[B]]
+
         case -⚬.LInvertSignal() =>
+          // One -⚬ (Need |*| Done)
           this.asInstanceOf[Frontier[One]].awaitIfDeferred
           val p = Promise[Any]()
-          Pair(NeedAsync(p), Deferred(p.future.map(_ => DoneNow))).asInstanceOf[Frontier[B]]
+          Pair(
+            NeedAsync(p),
+            Deferred(p.future.map(_ => DoneNow)),
+          )                                                       .asInstanceOf[Frontier[B]]
+
+        case -⚬.LInvertWeakSignal() =>
+          // One -⚬ (WeakNeed |*| WeakDone)
+          this.asInstanceOf[Frontier[One]].awaitIfDeferred
+          val p = Promise[Any]()
+          Pair(
+            WeakNeedAsync(p),
+            Deferred(p.future.map(_ => WeakDoneNow)),
+          )                                                       .asInstanceOf[Frontier[B]]
 
         case r @ -⚬.RecF(_) =>
           this.extend(r.recursed)

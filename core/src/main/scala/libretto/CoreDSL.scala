@@ -243,6 +243,9 @@ trait CoreDSL {
     */
   def lInvertSignal: One -⚬ (Need |*| Done)
 
+  def rInvertWeakSignal: (WeakDone |*| WeakNeed) -⚬ One
+  def lInvertWeakSignal: One -⚬ (WeakNeed |*| WeakDone)
+
   def joinRTermini: (RTerminus |*| RTerminus) -⚬ RTerminus
   def joinLTermini: LTerminus -⚬ (LTerminus |*| LTerminus)
 

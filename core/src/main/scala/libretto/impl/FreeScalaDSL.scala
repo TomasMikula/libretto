@@ -72,6 +72,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class CoDistributeL[A, B, C]() extends (((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C)))
     case class RInvertSignal() extends ((Done |*| Need) -⚬ One)
     case class LInvertSignal() extends (One -⚬ (Need |*| Done))
+    case class RInvertWeakSignal() extends ((WeakDone |*| WeakNeed) -⚬ One)
+    case class LInvertWeakSignal() extends (One -⚬ (WeakNeed |*| WeakDone))
     case class RInvertTerminus() extends ((RTerminus |*| LTerminus) -⚬ One)
     case class LInvertTerminus() extends (One -⚬ (LTerminus |*| RTerminus))
     case class RecF[A, B](f: (A -⚬ B) => (A -⚬ B)) extends (A -⚬ B) { self =>
@@ -253,6 +255,12 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def lInvertSignal: One -⚬ (Need |*| Done) =
     LInvertSignal()
+
+  override def rInvertWeakSignal: (WeakDone |*| WeakNeed) -⚬ One =
+    RInvertWeakSignal()
+
+  override def lInvertWeakSignal: One -⚬ (WeakNeed |*| WeakDone) =
+    LInvertWeakSignal()
 
   override def rInvertTerminus: (RTerminus |*| LTerminus) -⚬ One =
     RInvertTerminus()
