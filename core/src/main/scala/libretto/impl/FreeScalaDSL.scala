@@ -99,6 +99,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class ConstNeg[A](a: A) extends (Neg[A] -⚬ Need)
     case class Neglect[A]() extends (Val[A] -⚬ Done)
     case class Inflate[A]() extends (Need -⚬ Neg[A])
+    case class NotifyVal[A]() extends (Val[A] -⚬ (WeakDone |*| Val[A]))
+    case class NotifyNeg[A]() extends ((WeakNeed |*| Neg[A]) -⚬ Neg[A])
 
     case class Acquire[A, R, B](
       acquire: A => (R, B),
@@ -327,6 +329,12 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def inflate[A]: Need -⚬ Neg[A] =
     Inflate()
+
+  override def notifyVal[A]: Val[A] -⚬ (WeakDone |*| Val[A]) =
+    NotifyVal()
+
+  override def notifyNeg[A]: (WeakNeed |*| Neg[A]) -⚬ Neg[A] =
+    NotifyNeg()
 
   override def acquire[A, R, B](
     acquire: A => (R, B),

@@ -621,6 +621,25 @@ class FreeScalaFutureRunner(
           this.asInstanceOf[Frontier[Need]] fulfillWith p.future
           Prom(p)                                                 .asInstanceOf[Frontier[B]]
 
+        case -⚬.NotifyVal() =>
+          // Val[X] -⚬ (WeakDone |*| Val[X])
+          type X
+          val (fd: Frontier[WeakDone], fx: Frontier[Val[X]]) =
+            this.asInstanceOf[Frontier[Val[X]]] match {
+              case x @ Value(_) =>
+                (WeakDoneNow, x)
+              case fx =>
+                (fx.toFutureValue.map(_ => WeakDoneNow).asDeferredFrontier, fx)
+            }
+          Pair(fd, fx)                                            .asInstanceOf[Frontier[B]]
+
+        case -⚬.NotifyNeg() =>
+          // (WeakNeed |*| Neg[X]) -⚬ Neg[X]
+          type X
+          val (n, x) = this.asInstanceOf[Frontier[WeakNeed |*| Neg[X]]].splitPair
+          n fulfillWeakWith x.future
+          x                                                       .asInstanceOf[Frontier[B]]
+
         case f @ -⚬.JoinRTermini() =>
           bug(s"Did not expect to be able to construct a program that uses $f")
 
@@ -1163,6 +1182,12 @@ class FreeScalaFutureRunner(
                 case Failure(e) => e.printStackTrace(System.err)
               }
           }
+        }
+
+      def future: Future[A] =
+        f match {
+          case Prom(pa) => pa.future
+          case Deferred(f) => f.flatMap(_.future)
         }
     }
 
