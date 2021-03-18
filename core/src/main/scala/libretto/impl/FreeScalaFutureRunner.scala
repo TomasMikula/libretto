@@ -202,6 +202,20 @@ class FreeScalaFutureRunner(
           val (d1, d2) = Frontier.splitPair(this.asInstanceOf[Frontier[Done |*| Done]])
           go(d1, d2)                                              .asInstanceOf[Frontier[B]]
 
+        case -⚬.JoinWeakDone() =>
+          // (WeakDone |*| WeakDone) -⚬ WeakDone
+
+          def go(f1: Frontier[WeakDone], f2: Frontier[WeakDone]): Frontier[WeakDone] =
+            (f1, f2) match {
+              case (WeakDoneNow, d2) => d2
+              case (d1, WeakDoneNow) => d1
+              case (Deferred(f1), Deferred(f2)) =>
+                Deferred((f1 zipWith f2)(go))
+            }
+
+          val (d1, d2) = Frontier.splitPair(this.asInstanceOf[Frontier[WeakDone |*| WeakDone]])
+          go(d1, d2)                                              .asInstanceOf[Frontier[B]]
+
         case -⚬.ForkNeed() =>
           val p = Promise[Any]()
           val (n1, n2) = this.asInstanceOf[Frontier[Need |*| Need]].splitPair
@@ -224,6 +238,14 @@ class FreeScalaFutureRunner(
             .asInstanceOf[Frontier[Need]]
             .fulfillWith(p1.future zip p2.future)
           Pair(NeedAsync(p1), NeedAsync(p2))                      .asInstanceOf[Frontier[B]]
+
+        case -⚬.JoinWeakNeed() =>
+          val p1 = Promise[Any]()
+          val p2 = Promise[Any]()
+          this
+            .asInstanceOf[Frontier[WeakNeed]]
+            .fulfillWeakWith(p1.future zip p2.future)
+          Pair(WeakNeedAsync(p1), WeakNeedAsync(p2))              .asInstanceOf[Frontier[B]]
 
         case -⚬.StrengthenDone() =>
           // WeakDone -⚬ Done

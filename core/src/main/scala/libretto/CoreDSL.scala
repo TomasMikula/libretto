@@ -159,6 +159,9 @@ trait CoreDSL {
   def notifyNeedR: (Need |*| WeakNeed) -⚬ Need =
     andThen(swap, notifyNeedL)
 
+  def joinWeakDone: (WeakDone |*| WeakDone) -⚬ WeakDone
+  def joinWeakNeed: WeakNeed -⚬ (WeakNeed |*| WeakNeed)
+
   def strengthenDone: WeakDone -⚬ Done
   def strengthenNeed: Need -⚬ WeakNeed
 
