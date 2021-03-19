@@ -172,10 +172,12 @@ trait CoreDSL {
   def notifyChoice[A, B]: (WeakNeed |*| (A |&| B)) -⚬ (A |&| B)
 
   def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B)
-  def injectRWhenDone[A, B]: (Done |*| B) -⚬ (A |+| (Done |*| B))
+  def injectRWhenDone[A, B]: (Done |*| B) -⚬ (A |+| (Done |*| B)) =
+    andThen(injectLWhenDone, either(injectR, injectL))
 
   def chooseLWhenNeed[A, B]: ((Need |*| A) |&| B) -⚬ (Need |*| A)
-  def chooseRWhenNeed[A, B]: (A |&| (Need |*| B)) -⚬ (Need |*| B)
+  def chooseRWhenNeed[A, B]: (A |&| (Need |*| B)) -⚬ (Need |*| B) =
+    andThen(choice(chooseR, chooseL), chooseLWhenNeed)
 
   /** Factor out the factor `A` on the left of both summands. */
   def factorL[A, B, C]: ((A |*| B) |+| (A |*| C)) -⚬ (A |*| (B |+| C)) =

@@ -311,20 +311,6 @@ class FreeScalaFutureRunner(
                   .asDeferredFrontier                             .asInstanceOf[Frontier[B]]
             }
 
-        case -⚬.InjectRWhenDone() =>
-          // (Done |*| Y) -⚬ (X |+| (Done |*| Y))
-          type Y
-          val (d, y) = this.asInstanceOf[Frontier[Done |*| Y]].splitPair
-          d match {
-            case DoneNow =>
-              InjectR(Pair(DoneNow, y))                           .asInstanceOf[Frontier[B]]
-            case d =>
-              d
-                .toFutureDone
-                .map { doneNow => InjectR(Pair(doneNow, y)) }
-                .asDeferredFrontier                               .asInstanceOf[Frontier[B]]
-          }
-
         case -⚬.ChooseLWhenNeed() =>
           // ((Need |*| X) |&| Y) -⚬ (Need |*| X)
           type X; type Y
@@ -341,23 +327,6 @@ class FreeScalaFutureRunner(
               px.success(x)
           }
           Pair(NeedAsync(pn), Deferred(px.future))                .asInstanceOf[Frontier[B]]
-
-        case -⚬.ChooseRWhenNeed() =>
-          // (X |&| (Need |*| Y)) -⚬ (Need |*| Y)
-          type X; type Y
-          val Choice(x, ny, onError) = this.asInstanceOf[Frontier[X |&| (Need |*| Y)]].asChoice
-          val pn = Promise[Any]()
-          val py = Promise[Frontier[Y]]()
-          pn.future.onComplete {
-            case Failure(e) =>
-              onError(e)
-              py.failure(e)
-            case Success(_) =>
-              val (n, y) = ny().splitPair
-              n fulfillWith Future.successful(())
-              py.success(y)
-          }
-          Pair(NeedAsync(pn), Deferred(py.future))                .asInstanceOf[Frontier[B]]
 
         case -⚬.DistributeL() =>
           // (X |*| (Y |+| Z)) -⚬ ((X |*| Y) |+| (X |*| Z))
