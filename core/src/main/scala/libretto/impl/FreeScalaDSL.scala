@@ -66,8 +66,6 @@ object FreeScalaDSL extends ScalaDSL {
     case class NotifyChoice[A, B]() extends ((Pong |*| (A |&| B)) -⚬ (A |&| B))
     case class InjectLOnPing[A, B]() extends ((Ping |*| A) -⚬ (A |+| B))
     case class ChooseLOnPong[A, B]() extends ((A |&| B) -⚬ (Pong |*| A))
-    case class InjectLWhenDone[A, B]() extends ((Done |*| A) -⚬ ((Done |*| A) |+| B))
-    case class ChooseLWhenNeed[A, B]() extends (((Need |*| A) |&| B) -⚬ (Need |*| A))
     case class DistributeL[A, B, C]() extends ((A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)))
     case class CoDistributeL[A, B, C]() extends (((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C)))
     case class RInvertSignal() extends ((Done |*| Need) -⚬ One)
@@ -239,12 +237,6 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def chooseLOnPong[A, B]: (A |&| B) -⚬ (Pong |*| A) =
     ChooseLOnPong()
-
-  override def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B) =
-    InjectLWhenDone()
-
-  override def chooseLWhenNeed[A, B]: ((Need |*| A) |&| B) -⚬ (Need |*| A) =
-    ChooseLWhenNeed()
 
   override def distributeL[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)) =
     DistributeL()

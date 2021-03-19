@@ -1513,6 +1513,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>.choiceR.fst.injectR[A]     .to[ ((A |+| C) |*|  B) |&| ((A |+| C) |*| D) ]
       .coDistributeL                .to[  (A |+| C) |*| (B  |&|                D) ]
 
+  def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B) =
+    par(notifyDoneL, id) > assocLR > injectLOnPing
+
+  def injectRWhenDone[A, B]: (Done |*| B) -⚬ (A |+| (Done |*| B)) =
+    par(notifyDoneL, id) > assocLR > injectROnPing
+
+  def chooseLWhenNeed[A, B]: ((Need |*| A) |&| B) -⚬ (Need |*| A) =
+    chooseLOnPong > assocRL > par(notifyNeedL, id)
+
+  def chooseRWhenNeed[A, B]: (A |&| (Need |*| B)) -⚬ (Need |*| B) =
+    chooseROnPong > assocRL > par(notifyNeedL, id)
+
   def chooseLWhenDone[A, B]: (Done |*| (A |&| B)) -⚬ (Done |*| A) =
     id                                                     [ Done |*| (                    A   |&| B) ]
       .>.snd.choiceL(introFst(lInvertSignal).assocLR)   .to[ Done |*| ((Need |*| (Done |*| A)) |&| B) ]
