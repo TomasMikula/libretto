@@ -183,11 +183,11 @@ class FreeScalaFutureRunner(
           Pair(this, this)                                        .asInstanceOf[Frontier[B]]
 
         case -⚬.NotifyDoneL() =>
-          // Done -⚬ (WeakDone |*| Done)
+          // Done -⚬ (Ping |*| Done)
           val d: Frontier[Done] = this.asInstanceOf
-          val wd: Frontier[WeakDone] = d match {
-            case DoneNow => WeakDoneNow
-            case d => d.toFutureDone.map(_ => WeakDoneNow).asDeferredFrontier
+          val wd: Frontier[Ping] = d match {
+            case DoneNow => PingNow
+            case d => d.toFutureDone.map(_ => PingNow).asDeferredFrontier
           }
           Pair(wd, d)                                             .asInstanceOf[Frontier[B]]
 
@@ -202,18 +202,18 @@ class FreeScalaFutureRunner(
           val (d1, d2) = Frontier.splitPair(this.asInstanceOf[Frontier[Done |*| Done]])
           go(d1, d2)                                              .asInstanceOf[Frontier[B]]
 
-        case -⚬.JoinWeakDone() =>
-          // (WeakDone |*| WeakDone) -⚬ WeakDone
+        case -⚬.JoinPing() =>
+          // (Ping |*| Ping) -⚬ Ping
 
-          def go(f1: Frontier[WeakDone], f2: Frontier[WeakDone]): Frontier[WeakDone] =
+          def go(f1: Frontier[Ping], f2: Frontier[Ping]): Frontier[Ping] =
             (f1, f2) match {
-              case (WeakDoneNow, d2) => d2
-              case (d1, WeakDoneNow) => d1
+              case (PingNow, d2) => d2
+              case (d1, PingNow) => d1
               case (Deferred(f1), Deferred(f2)) =>
                 Deferred((f1 zipWith f2)(go))
             }
 
-          val (d1, d2) = Frontier.splitPair(this.asInstanceOf[Frontier[WeakDone |*| WeakDone]])
+          val (d1, d2) = Frontier.splitPair(this.asInstanceOf[Frontier[Ping |*| Ping]])
           go(d1, d2)                                              .asInstanceOf[Frontier[B]]
 
         case -⚬.ForkNeed() =>
@@ -224,8 +224,8 @@ class FreeScalaFutureRunner(
           NeedAsync(p)                                            .asInstanceOf[Frontier[B]]
 
         case -⚬.NotifyNeedL() =>
-          // (WeakNeed |*| Need) -⚬ Need
-          val (wn, n) = this.asInstanceOf[Frontier[WeakNeed |*| Need]].splitPair
+          // (Pong |*| Need) -⚬ Need
+          val (wn, n) = this.asInstanceOf[Frontier[Pong |*| Need]].splitPair
           val p = Promise[Any]()
           wn fulfillWeakWith p.future
           n fulfillWith p.future
@@ -239,47 +239,47 @@ class FreeScalaFutureRunner(
             .fulfillWith(p1.future zip p2.future)
           Pair(NeedAsync(p1), NeedAsync(p2))                      .asInstanceOf[Frontier[B]]
 
-        case -⚬.JoinWeakNeed() =>
+        case -⚬.JoinPong() =>
           val p1 = Promise[Any]()
           val p2 = Promise[Any]()
           this
-            .asInstanceOf[Frontier[WeakNeed]]
+            .asInstanceOf[Frontier[Pong]]
             .fulfillWeakWith(p1.future zip p2.future)
-          Pair(WeakNeedAsync(p1), WeakNeedAsync(p2))              .asInstanceOf[Frontier[B]]
+          Pair(PongAsync(p1), PongAsync(p2))                      .asInstanceOf[Frontier[B]]
 
-        case -⚬.StrengthenDone() =>
-          // WeakDone -⚬ Done
-          this.asInstanceOf[Frontier[WeakDone]] match {
-            case WeakDoneNow => DoneNow
-            case other => other.toFutureWeakDone.map { case WeakDoneNow => DoneNow }.asDeferredFrontier
+        case -⚬.StrengthenPing() =>
+          // Ping -⚬ Done
+          this.asInstanceOf[Frontier[Ping]] match {
+            case PingNow => DoneNow
+            case other => other.toFuturePing.map { case PingNow => DoneNow }.asDeferredFrontier
           }
 
-        case -⚬.StrengthenNeed() =>
-          // Need -⚬ WeakNeed
+        case -⚬.StrengthenPong() =>
+          // Need -⚬ Pong
           val p = Promise[Any]()
           this.asInstanceOf[Frontier[Need]].fulfillWith(p.future)
-          WeakNeedAsync(p)
+          PongAsync(p)
 
         case -⚬.NotifyEither() =>
-          // (X |+| Y) -⚬ (WeakDone |*| (X |+| Y))
+          // (X |+| Y) -⚬ (Ping |*| (X |+| Y))
           type X; type Y
 
-          def go(xy: Frontier[X |+| Y]): Frontier[WeakDone |*| (X |+| Y)] =
+          def go(xy: Frontier[X |+| Y]): Frontier[Ping |*| (X |+| Y)] =
             xy match {
-              case l @ InjectL(_) => Pair(WeakDoneNow, l)
-              case r @ InjectR(_) => Pair(WeakDoneNow, r)
+              case l @ InjectL(_) => Pair(PingNow, l)
+              case r @ InjectR(_) => Pair(PingNow, r)
               case other =>
-                val decided = other.futureEither.map(_ => WeakDoneNow).asDeferredFrontier
+                val decided = other.futureEither.map(_ => PingNow).asDeferredFrontier
                 Pair(decided, other)
             }
 
           go(this.asInstanceOf[Frontier[X |+| Y]])                .asInstanceOf[Frontier[B]]
 
         case -⚬.NotifyChoice() =>
-          //            A             -⚬     B
-          // (WeakNeed |*| (X |&| Y)) -⚬ (X |&| Y)
+          //        A             -⚬     B
+          // (Pong |*| (X |&| Y)) -⚬ (X |&| Y)
           type X; type Y
-          this.asInstanceOf[Frontier[WeakNeed |*| (X |&| Y)]].splitPair match {
+          this.asInstanceOf[Frontier[Pong |*| (X |&| Y)]].splitPair match {
             case (n, c) =>
               Choice(
                 () => {
@@ -373,10 +373,10 @@ class FreeScalaFutureRunner(
           n fulfillWith d.toFutureDone
           One                                                     .asInstanceOf[Frontier[B]]
 
-        case -⚬.RInvertWeakSignal() =>
-          // (WeakDone |*| WeakNeed) -⚬ One
-          val (d, n) = this.asInstanceOf[Frontier[WeakDone |*| WeakNeed]].splitPair
-          n fulfillWeakWith d.toFutureWeakDone
+        case -⚬.RInvertPingPong() =>
+          // (Ping |*| Pong) -⚬ One
+          val (d, n) = this.asInstanceOf[Frontier[Ping |*| Pong]].splitPair
+          n fulfillWeakWith d.toFuturePing
           One                                                     .asInstanceOf[Frontier[B]]
 
         case -⚬.LInvertSignal() =>
@@ -388,13 +388,13 @@ class FreeScalaFutureRunner(
             Deferred(p.future.map(_ => DoneNow)),
           )                                                       .asInstanceOf[Frontier[B]]
 
-        case -⚬.LInvertWeakSignal() =>
-          // One -⚬ (WeakNeed |*| WeakDone)
+        case -⚬.LInvertPongPing() =>
+          // One -⚬ (Pong |*| Ping)
           this.asInstanceOf[Frontier[One]].awaitIfDeferred
           val p = Promise[Any]()
           Pair(
-            WeakNeedAsync(p),
-            Deferred(p.future.map(_ => WeakDoneNow)),
+            PongAsync(p),
+            Deferred(p.future.map(_ => PingNow)),
           )                                                       .asInstanceOf[Frontier[B]]
 
         case r @ -⚬.RecF(_) =>
@@ -414,22 +414,22 @@ class FreeScalaFutureRunner(
           go(this.asInstanceOf[Frontier[Rec[F]]])                 .asInstanceOf[Frontier[B]]
 
         case -⚬.RacePair() =>
-          def go(x: Frontier[WeakDone], y: Frontier[WeakDone]): Frontier[One |+| One] =
+          def go(x: Frontier[Ping], y: Frontier[Ping]): Frontier[One |+| One] =
             (x, y) match {
-              case (WeakDoneNow, y) => InjectL(One) // y is ignored
-              case (x, WeakDoneNow) => InjectR(One) // x is ignored
+              case (PingNow, y) => InjectL(One) // y is ignored
+              case (x, PingNow) => InjectR(One) // x is ignored
               case (x, y) =>
                 // check the first one for completion in order to be (somewhat) left-biased
-                val fx = x.toFutureWeakDone
+                val fx = x.toFuturePing
                 fx.value match {
                   case Some(res) =>
                     // x completed, y is ignored
                     res match {
-                      case Success(WeakDoneNow) => InjectL(One)
+                      case Success(PingNow) => InjectL(One)
                       case Failure(e)           => Deferred(Future.failed(e))
                     }
                   case None =>
-                    val fy = y.toFutureWeakDone
+                    val fy = y.toFuturePing
                     val p = Promise[Frontier[One |+| One]]
                     fx.onComplete(r => p.tryComplete(r.map(_ => InjectL(One))))
                     fy.onComplete(r => p.tryComplete(r.map(_ => InjectR(One))))
@@ -437,7 +437,7 @@ class FreeScalaFutureRunner(
                 }
             }
 
-          val (x, y) = this.asInstanceOf[Frontier[WeakDone |*| WeakDone]].splitPair
+          val (x, y) = this.asInstanceOf[Frontier[Ping |*| Ping]].splitPair
           go(x, y)                                                .asInstanceOf[Frontier[B]]
 
         case -⚬.SelectPair() =>
@@ -452,7 +452,7 @@ class FreeScalaFutureRunner(
             case Success(one) => one(): Frontier[One] // can be ignored
             case Failure(e) => onError(e)
           }
-          Pair(WeakNeedAsync(p1), WeakNeedAsync(p2))              .asInstanceOf[Frontier[B]]
+          Pair(PongAsync(p1), PongAsync(p2))                      .asInstanceOf[Frontier[B]]
 
         case -⚬.Crash(msg) =>
           // (Done |*| X) -⚬ (Done |*| Y)
@@ -591,21 +591,21 @@ class FreeScalaFutureRunner(
           Prom(p)                                                 .asInstanceOf[Frontier[B]]
 
         case -⚬.NotifyVal() =>
-          // Val[X] -⚬ (WeakDone |*| Val[X])
+          // Val[X] -⚬ (Ping |*| Val[X])
           type X
-          val (fd: Frontier[WeakDone], fx: Frontier[Val[X]]) =
+          val (fd: Frontier[Ping], fx: Frontier[Val[X]]) =
             this.asInstanceOf[Frontier[Val[X]]] match {
               case x @ Value(_) =>
-                (WeakDoneNow, x)
+                (PingNow, x)
               case fx =>
-                (fx.toFutureValue.map(_ => WeakDoneNow).asDeferredFrontier, fx)
+                (fx.toFutureValue.map(_ => PingNow).asDeferredFrontier, fx)
             }
           Pair(fd, fx)                                            .asInstanceOf[Frontier[B]]
 
         case -⚬.NotifyNeg() =>
-          // (WeakNeed |*| Neg[X]) -⚬ Neg[X]
+          // (Pong |*| Neg[X]) -⚬ Neg[X]
           type X
-          val (n, x) = this.asInstanceOf[Frontier[WeakNeed |*| Neg[X]]].splitPair
+          val (n, x) = this.asInstanceOf[Frontier[Pong |*| Neg[X]]].splitPair
           n fulfillWeakWith x.future
           x                                                       .asInstanceOf[Frontier[B]]
 
@@ -958,11 +958,11 @@ class FreeScalaFutureRunner(
 
     private def crash(e: Throwable): Unit = {
       this match {
-        case One | DoneNow | WeakDoneNow | Value(_) | MVal(_) | Resource(_, _) =>
+        case One | DoneNow | PingNow | Value(_) | MVal(_) | Resource(_, _) =>
           // do nothing
         case NeedAsync(promise) =>
           promise.failure(e)
-        case WeakNeedAsync(promise) =>
+        case PongAsync(promise) =>
           promise.failure(e)
         case Pair(a, b) =>
           a.crash(e)
@@ -986,9 +986,9 @@ class FreeScalaFutureRunner(
   private object Frontier {
     case object One extends Frontier[dsl.One]
     case object DoneNow extends Frontier[Done]
-    case object WeakDoneNow extends Frontier[WeakDone]
+    case object PingNow extends Frontier[Ping]
     case class NeedAsync(promise: Promise[Any]) extends Frontier[Need]
-    case class WeakNeedAsync(promise: Promise[Any]) extends Frontier[WeakNeed]
+    case class PongAsync(promise: Promise[Any]) extends Frontier[Pong]
     case class Pair[A, B](a: Frontier[A], b: Frontier[B]) extends Frontier[A |*| B]
     case class InjectL[A, B](a: Frontier[A]) extends Frontier[A |+| B]
     case class InjectR[A, B](b: Frontier[B]) extends Frontier[A |+| B]
@@ -1024,10 +1024,10 @@ class FreeScalaFutureRunner(
         }
     }
 
-    extension (n: Frontier[WeakNeed]) {
+    extension (n: Frontier[Pong]) {
       def fulfillWeakWith(f: Future[Any]): Unit =
         n match {
-          case WeakNeedAsync(p) =>
+          case PongAsync(p) =>
             p.completeWith(f)
           case Deferred(fn) =>
             fn.onComplete {
@@ -1102,13 +1102,13 @@ class FreeScalaFutureRunner(
         }
     }
 
-    extension (f: Frontier[WeakDone]) {
-      def toFutureWeakDone: Future[WeakDoneNow.type] =
+    extension (f: Frontier[Ping]) {
+      def toFuturePing: Future[PingNow.type] =
         f match {
-          case WeakDoneNow =>
-            Future.successful(WeakDoneNow)
+          case PingNow =>
+            Future.successful(PingNow)
           case Deferred(f) =>
-            f.flatMap(_.toFutureWeakDone)
+            f.flatMap(_.toFuturePing)
         }
     }
 

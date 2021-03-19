@@ -66,13 +66,13 @@ trait CoreDSL {
     * [Unlike [[Done]], it cannot be the only handle to an effectful computation.
     * As such, it can be ignored, e.g. as the losing contestant in [[racePair]].
     */
-  type WeakDone
+  type Ping
 
   /** Signal that travels in the direction opposite to [[-⚬]], i.e. the negative direction.
     * Unlike [[Need]], it cannot be the only handle to an effectful computation.
     * As such, it can be ignored, e.g. as the losing contestant in [[selectPair]].
     */
-  type WeakNeed
+  type Pong
 
   /** A black hole that can absorb (i.e. take over the responsibility to await) [[Done]] signals, but from which there
     * is no escape.
@@ -151,25 +151,25 @@ trait CoreDSL {
   def joinNeed[A, B](f: Need -⚬ A, g: Need -⚬ B): Need -⚬ (A |*| B) =
     andThen(joinNeed, par(f, g))
 
-  def notifyDoneL: Done -⚬ (WeakDone |*| Done)
-  def notifyDoneR: Done -⚬ (Done |*| WeakDone) =
+  def notifyDoneL: Done -⚬ (Ping |*| Done)
+  def notifyDoneR: Done -⚬ (Done |*| Ping) =
     andThen(notifyDoneL, swap)
 
-  def notifyNeedL: (WeakNeed |*| Need) -⚬ Need
-  def notifyNeedR: (Need |*| WeakNeed) -⚬ Need =
+  def notifyNeedL: (Pong |*| Need) -⚬ Need
+  def notifyNeedR: (Need |*| Pong) -⚬ Need =
     andThen(swap, notifyNeedL)
 
-  def joinWeakDone: (WeakDone |*| WeakDone) -⚬ WeakDone
-  def joinWeakNeed: WeakNeed -⚬ (WeakNeed |*| WeakNeed)
+  def joinPing: (Ping |*| Ping) -⚬ Ping
+  def joinPong: Pong -⚬ (Pong |*| Pong)
 
-  def strengthenDone: WeakDone -⚬ Done
-  def strengthenNeed: Need -⚬ WeakNeed
+  def strengthenPing: Ping -⚬ Done
+  def strengthenPong: Need -⚬ Pong
 
   /** Signals when it is decided whether `A |+| B` actually contains the left side or the right side. */
-  def notifyEither[A, B]: (A |+| B) -⚬ (WeakDone |*| (A |+| B))
+  def notifyEither[A, B]: (A |+| B) -⚬ (Ping |*| (A |+| B))
 
   /** Signals (in the negative direction) when it is known which side of the choice (`A |&| B`) has been chosen. */
-  def notifyChoice[A, B]: (WeakNeed |*| (A |&| B)) -⚬ (A |&| B)
+  def notifyChoice[A, B]: (Pong |*| (A |&| B)) -⚬ (A |&| B)
 
   def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B)
   def injectRWhenDone[A, B]: (Done |*| B) -⚬ (A |+| (Done |*| B)) =
@@ -245,8 +245,8 @@ trait CoreDSL {
     */
   def lInvertSignal: One -⚬ (Need |*| Done)
 
-  def rInvertWeakSignal: (WeakDone |*| WeakNeed) -⚬ One
-  def lInvertWeakSignal: One -⚬ (WeakNeed |*| WeakDone)
+  def rInvertPingPong: (Ping |*| Pong) -⚬ One
+  def lInvertPongPing: One -⚬ (Pong |*| Ping)
 
   def joinRTermini: (RTerminus |*| RTerminus) -⚬ RTerminus
   def joinLTermini: LTerminus -⚬ (LTerminus |*| LTerminus)
@@ -262,15 +262,15 @@ trait CoreDSL {
   /** Unpacks one level of a recursive type definition. */
   def unpack[F[_]]: Rec[F] -⚬ F[Rec[F]]
 
-  /** Races the two [[WeakDone]] signals.
+  /** Races the two [[Ping]] signals.
     * Produces left if the first signal wins and right if the second signal wins.
     * It is biased to the left: if both signals have arrived by the time of inquiry, returns left.
     */
-  def racePair: (WeakDone |*| WeakDone) -⚬ (One |+| One)
+  def racePair: (Ping |*| Ping) -⚬ (One |+| One)
 
-  /** Races the two [[WeakNeed]] signals (traveling from right to left).
+  /** Races the two [[Pong]] signals (traveling from right to left).
     * Chooses left if the first signal wins and right if the second signal wins.
     * It is biased to the left: if both signals have arrived by the time of inquiry, chooses left.
     */
-  def selectPair: (One |&| One) -⚬ (WeakNeed |*| WeakNeed)
+  def selectPair: (One |&| One) -⚬ (Pong |*| Pong)
 }

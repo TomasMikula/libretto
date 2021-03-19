@@ -14,8 +14,8 @@ object FreeScalaDSL extends ScalaDSL {
   override final class One private()
   override final class Done private()
   override final class Need private()
-  override final class WeakDone private()
-  override final class WeakNeed private()
+  override final class Ping private()
+  override final class Pong private()
   override final class RTerminus private()
   override final class LTerminus private()
   override final class |*|[A, B] private()
@@ -54,24 +54,24 @@ object FreeScalaDSL extends ScalaDSL {
     case class Join() extends ((Done |*| Done) -⚬ Done)
     case class ForkNeed() extends ((Need |*| Need) -⚬ Need)
     case class JoinNeed() extends (Need -⚬ (Need |*| Need))
-    case class NotifyDoneL() extends (Done -⚬ (WeakDone |*| Done))
-    case class NotifyNeedL() extends ((WeakNeed |*| Need) -⚬ Need)
-    case class JoinWeakDone() extends ((WeakDone |*| WeakDone) -⚬ WeakDone)
-    case class JoinWeakNeed() extends (WeakNeed -⚬ (WeakNeed |*| WeakNeed))
-    case class StrengthenDone() extends (WeakDone -⚬ Done)
-    case class StrengthenNeed() extends (Need -⚬ WeakNeed)
+    case class NotifyDoneL() extends (Done -⚬ (Ping |*| Done))
+    case class NotifyNeedL() extends ((Pong |*| Need) -⚬ Need)
+    case class JoinPing() extends ((Ping |*| Ping) -⚬ Ping)
+    case class JoinPong() extends (Pong -⚬ (Pong |*| Pong))
+    case class StrengthenPing() extends (Ping -⚬ Done)
+    case class StrengthenPong() extends (Need -⚬ Pong)
     case class JoinRTermini() extends ((RTerminus |*| RTerminus) -⚬ RTerminus)
     case class JoinLTermini() extends (LTerminus -⚬ (LTerminus |*| LTerminus))
-    case class NotifyEither[A, B]() extends ((A |+| B) -⚬ (WeakDone |*| (A |+| B)))
-    case class NotifyChoice[A, B]() extends ((WeakNeed |*| (A |&| B)) -⚬ (A |&| B))
+    case class NotifyEither[A, B]() extends ((A |+| B) -⚬ (Ping |*| (A |+| B)))
+    case class NotifyChoice[A, B]() extends ((Pong |*| (A |&| B)) -⚬ (A |&| B))
     case class InjectLWhenDone[A, B]() extends ((Done |*| A) -⚬ ((Done |*| A) |+| B))
     case class ChooseLWhenNeed[A, B]() extends (((Need |*| A) |&| B) -⚬ (Need |*| A))
     case class DistributeL[A, B, C]() extends ((A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)))
     case class CoDistributeL[A, B, C]() extends (((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C)))
     case class RInvertSignal() extends ((Done |*| Need) -⚬ One)
     case class LInvertSignal() extends (One -⚬ (Need |*| Done))
-    case class RInvertWeakSignal() extends ((WeakDone |*| WeakNeed) -⚬ One)
-    case class LInvertWeakSignal() extends (One -⚬ (WeakNeed |*| WeakDone))
+    case class RInvertPingPong() extends ((Ping |*| Pong) -⚬ One)
+    case class LInvertPongPing() extends (One -⚬ (Pong |*| Ping))
     case class RInvertTerminus() extends ((RTerminus |*| LTerminus) -⚬ One)
     case class LInvertTerminus() extends (One -⚬ (LTerminus |*| RTerminus))
     case class RecF[A, B](f: (A -⚬ B) => (A -⚬ B)) extends (A -⚬ B) { self =>
@@ -79,8 +79,8 @@ object FreeScalaDSL extends ScalaDSL {
     }
     case class Pack[F[_]]() extends (F[Rec[F]] -⚬ Rec[F])
     case class Unpack[F[_]]() extends (Rec[F] -⚬ F[Rec[F]])
-    case class RacePair() extends ((WeakDone |*| WeakDone) -⚬ (One |+| One))
-    case class SelectPair() extends ((One |&| One) -⚬ (WeakNeed |*| WeakNeed))
+    case class RacePair() extends ((Ping |*| Ping) -⚬ (One |+| One))
+    case class SelectPair() extends ((One |&| One) -⚬ (Pong |*| Pong))
 
     case class Crash[A, B](msg: String) extends ((Done |*| A) -⚬ (Done |*| B))
     case class Delay() extends (Val[FiniteDuration] -⚬ Done)
@@ -97,8 +97,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class ConstNeg[A](a: A) extends (Neg[A] -⚬ Need)
     case class Neglect[A]() extends (Val[A] -⚬ Done)
     case class Inflate[A]() extends (Need -⚬ Neg[A])
-    case class NotifyVal[A]() extends (Val[A] -⚬ (WeakDone |*| Val[A]))
-    case class NotifyNeg[A]() extends ((WeakNeed |*| Neg[A]) -⚬ Neg[A])
+    case class NotifyVal[A]() extends (Val[A] -⚬ (Ping |*| Val[A]))
+    case class NotifyNeg[A]() extends ((Pong |*| Neg[A]) -⚬ Neg[A])
 
     case class Acquire[A, R, B](
       acquire: A => (R, B),
@@ -202,23 +202,23 @@ object FreeScalaDSL extends ScalaDSL {
   override def joinNeed: Need -⚬ (Need |*| Need) =
     JoinNeed()
 
-  override def notifyDoneL: Done -⚬ (WeakDone |*| Done) =
+  override def notifyDoneL: Done -⚬ (Ping |*| Done) =
     NotifyDoneL()
 
-  override def notifyNeedL: (WeakNeed |*| Need) -⚬ Need =
+  override def notifyNeedL: (Pong |*| Need) -⚬ Need =
     NotifyNeedL()
 
-  override def joinWeakDone: (WeakDone |*| WeakDone) -⚬ WeakDone =
-    JoinWeakDone()
+  override def joinPing: (Ping |*| Ping) -⚬ Ping =
+    JoinPing()
 
-  override def joinWeakNeed: WeakNeed -⚬ (WeakNeed |*| WeakNeed) =
-    JoinWeakNeed()
+  override def joinPong: Pong -⚬ (Pong |*| Pong) =
+    JoinPong()
 
-  override def strengthenDone: WeakDone -⚬ Done =
-    StrengthenDone()
+  override def strengthenPing: Ping -⚬ Done =
+    StrengthenPing()
 
-  override def strengthenNeed: Need -⚬ WeakNeed =
-    StrengthenNeed()
+  override def strengthenPong: Need -⚬ Pong =
+    StrengthenPong()
 
   override def joinRTermini: (RTerminus |*| RTerminus) -⚬ RTerminus =
     JoinRTermini()
@@ -226,10 +226,10 @@ object FreeScalaDSL extends ScalaDSL {
   override def joinLTermini: LTerminus -⚬ (LTerminus |*| LTerminus) =
     JoinLTermini()
 
-  override def notifyEither[A, B]: (A |+| B) -⚬ (WeakDone |*| (A |+| B)) =
+  override def notifyEither[A, B]: (A |+| B) -⚬ (Ping |*| (A |+| B)) =
     NotifyEither()
 
-  override def notifyChoice[A, B]: (WeakNeed |*| (A |&| B)) -⚬ (A |&| B) =
+  override def notifyChoice[A, B]: (Pong |*| (A |&| B)) -⚬ (A |&| B) =
     NotifyChoice()
 
   override def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B) =
@@ -250,11 +250,11 @@ object FreeScalaDSL extends ScalaDSL {
   override def lInvertSignal: One -⚬ (Need |*| Done) =
     LInvertSignal()
 
-  override def rInvertWeakSignal: (WeakDone |*| WeakNeed) -⚬ One =
-    RInvertWeakSignal()
+  override def rInvertPingPong: (Ping |*| Pong) -⚬ One =
+    RInvertPingPong()
 
-  override def lInvertWeakSignal: One -⚬ (WeakNeed |*| WeakDone) =
-    LInvertWeakSignal()
+  override def lInvertPongPing: One -⚬ (Pong |*| Ping) =
+    LInvertPongPing()
 
   override def rInvertTerminus: (RTerminus |*| LTerminus) -⚬ One =
     RInvertTerminus()
@@ -271,10 +271,10 @@ object FreeScalaDSL extends ScalaDSL {
   override def pack[F[_]]: F[Rec[F]] -⚬ Rec[F] =
     Pack()
 
-  override def racePair: (WeakDone |*| WeakDone) -⚬ (One |+| One) =
+  override def racePair: (Ping |*| Ping) -⚬ (One |+| One) =
     RacePair()
 
-  override def selectPair: (One |&| One) -⚬ (WeakNeed |*| WeakNeed) =
+  override def selectPair: (One |&| One) -⚬ (Pong |*| Pong) =
     SelectPair()
 
   override def crash[A, B](msg: String): (Done |*| A) -⚬ (Done |*| B) =
@@ -322,10 +322,10 @@ object FreeScalaDSL extends ScalaDSL {
   override def inflate[A]: Need -⚬ Neg[A] =
     Inflate()
 
-  override def notifyVal[A]: Val[A] -⚬ (WeakDone |*| Val[A]) =
+  override def notifyVal[A]: Val[A] -⚬ (Ping |*| Val[A]) =
     NotifyVal()
 
-  override def notifyNeg[A]: (WeakNeed |*| Neg[A]) -⚬ Neg[A] =
+  override def notifyNeg[A]: (Pong |*| Neg[A]) -⚬ Neg[A] =
     NotifyNeg()
 
   override def acquire[A, R, B](

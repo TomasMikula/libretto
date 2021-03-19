@@ -88,12 +88,12 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       )
     }
 
-    /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative ([[WeakNeed]]) signal. */
-    def notifyAction[A]: (WeakNeed |*| LPollable[A]) -⚬ LPollable[A] =
-      id                                     [                 LPollable[A]       ]
-        .<(pack)                        .from[               Done |&| LPolled[A]  ]
-        .<(notifyChoice)                .from[ WeakNeed |*| (Done |&| LPolled[A]) ]
-        .<(par(id, unpack))             .from[ WeakNeed |*|    LPollable[A]       ]
+    /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative ([[Pong]]) signal. */
+    def notifyAction[A]: (Pong |*| LPollable[A]) -⚬ LPollable[A] =
+      id                                     [             LPollable[A]       ]
+        .<(pack)                        .from[           Done |&| LPolled[A]  ]
+        .<(notifyChoice)                .from[ Pong |*| (Done |&| LPolled[A]) ]
+        .<(par(id, unpack))             .from[ Pong |*|    LPollable[A]       ]
 
     /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPollable[A]) -⚬ LPollable[A] =

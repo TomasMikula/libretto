@@ -63,8 +63,8 @@ trait ScalaDSL extends TimerDSL with CrashDSL {
   def neglect[A]: Val[A] -⚬ Done
   def inflate[A]: Need -⚬ Neg[A]
 
-  def notifyVal[A]: Val[A] -⚬ (WeakDone |*| Val[A])
-  def notifyNeg[A]: (WeakNeed |*| Neg[A]) -⚬ Neg[A]
+  def notifyVal[A]: Val[A] -⚬ (Ping |*| Val[A])
+  def notifyNeg[A]: (Pong |*| Neg[A]) -⚬ Neg[A]
 
   def dup[A]: Val[A] -⚬ (Val[A] |*| Val[A]) =
     mapVal[A, (A, A)](a => (a, a)) > liftPair
