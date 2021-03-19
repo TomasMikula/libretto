@@ -297,6 +297,20 @@ class FreeScalaFutureRunner(
               )                                                   .asInstanceOf[Frontier[B]]
           }
 
+        case -⚬.InjectLOnPing() =>
+          // (Ping |*| X) -⚬ (X |+| Y)
+          type X
+          val (p, x) = this.asInstanceOf[Frontier[Ping |*| X]].splitPair
+          p match {
+            case PingNow =>
+              InjectL(x)                                          .asInstanceOf[Frontier[B]]
+            case p =>
+              p
+                .toFuturePing
+                .map { case PingNow => InjectL(x) }
+                .asDeferredFrontier                               .asInstanceOf[Frontier[B]]
+          }
+
         case -⚬.InjectLWhenDone() =>
           // (Done |*| X) -⚬ ((Done |*| X) |+| Y)
           type X
@@ -310,6 +324,21 @@ class FreeScalaFutureRunner(
                   .map { doneNow => InjectL(Pair(doneNow, x)) }
                   .asDeferredFrontier                             .asInstanceOf[Frontier[B]]
             }
+
+        case -⚬.ChooseLOnPong() =>
+          // (X |&| Y) -⚬ (Pong |*| X)
+          type X; type Y
+          val Choice(fx, fy, onError) = this.asInstanceOf[Frontier[X |&| Y]].asChoice
+          val pp = Promise[Any]()
+          val px = Promise[Frontier[X]]()
+          pp.future.onComplete {
+            case Failure(e) =>
+              onError(e)
+              px.failure(e)
+            case Success(_) =>
+              px.success(fx())
+          }
+          Pair(PongAsync(pp), Deferred(px.future))                .asInstanceOf[Frontier[B]]
 
         case -⚬.ChooseLWhenNeed() =>
           // ((Need |*| X) |&| Y) -⚬ (Need |*| X)

@@ -64,6 +64,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class JoinLTermini() extends (LTerminus -⚬ (LTerminus |*| LTerminus))
     case class NotifyEither[A, B]() extends ((A |+| B) -⚬ (Ping |*| (A |+| B)))
     case class NotifyChoice[A, B]() extends ((Pong |*| (A |&| B)) -⚬ (A |&| B))
+    case class InjectLOnPing[A, B]() extends ((Ping |*| A) -⚬ (A |+| B))
+    case class ChooseLOnPong[A, B]() extends ((A |&| B) -⚬ (Pong |*| A))
     case class InjectLWhenDone[A, B]() extends ((Done |*| A) -⚬ ((Done |*| A) |+| B))
     case class ChooseLWhenNeed[A, B]() extends (((Need |*| A) |&| B) -⚬ (Need |*| A))
     case class DistributeL[A, B, C]() extends ((A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)))
@@ -231,6 +233,12 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def notifyChoice[A, B]: (Pong |*| (A |&| B)) -⚬ (A |&| B) =
     NotifyChoice()
+
+  override def injectLOnPing[A, B]: (Ping |*| A) -⚬ (A |+| B) =
+    InjectLOnPing()
+
+  override def chooseLOnPong[A, B]: (A |&| B) -⚬ (Pong |*| A) =
+    ChooseLOnPong()
 
   override def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B) =
     InjectLWhenDone()

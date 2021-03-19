@@ -171,6 +171,14 @@ trait CoreDSL {
   /** Signals (in the negative direction) when it is known which side of the choice (`A |&| B`) has been chosen. */
   def notifyChoice[A, B]: (Pong |*| (A |&| B)) -⚬ (A |&| B)
 
+  def injectLOnPing[A, B]: (Ping |*| A) -⚬ (A |+| B)
+  def injectROnPing[A, B]: (Ping |*| B) -⚬ (A |+| B) =
+    andThen(injectLOnPing, either(injectR, injectL))
+
+  def chooseLOnPong[A, B]: (A |&| B) -⚬ (Pong |*| A)
+  def chooseROnPong[A, B]: (A |&| B) -⚬ (Pong |*| B) =
+    andThen(choice(chooseR, chooseL), chooseLOnPong)
+
   def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B)
   def injectRWhenDone[A, B]: (Done |*| B) -⚬ (A |+| (Done |*| B)) =
     andThen(injectLWhenDone, either(injectR, injectL))
