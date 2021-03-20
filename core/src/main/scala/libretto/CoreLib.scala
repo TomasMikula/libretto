@@ -2342,6 +2342,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   opaque type LList[T] = Rec[LListF[T, *]]
 
   object LList {
+    private def unpack[T]: LList[T] -⚬ LListF[T, LList[T]] = dsl.unpack
+    private def pack[T]  : LListF[T, LList[T]] -⚬ LList[T] = dsl.pack
+
     def nil[T]: One -⚬ LList[T] =
       id[One]
         .injectL[T |*| LList[T]]
@@ -2356,7 +2359,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       introSnd(nil[T]) > cons[T]
 
     def uncons[T]: LList[T] -⚬ Maybe[T |*| LList[T]] =
-      unpack[LListF[T, *]]
+      unpack
+
+    /** Signals when it is decided whether the list is empty (nil) or has an element (cons). */
+    implicit def signalingLList[T]: Signaling.Positive[LList[T]] =
+      Signaling.Positive.from(unpack > notifyEither > par(id, pack))
 
     def fromList[T](ts: List[One -⚬ T]): One -⚬ LList[T] = {
       @tailrec def go(rts: List[One -⚬ T], acc: One -⚬ LList[T]): One -⚬ LList[T] =
