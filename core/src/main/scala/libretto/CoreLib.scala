@@ -796,18 +796,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .<(|&|.bimap(introFst, introFst)) .from[           Need  |&|          Need   ]
 
   def race[A, B](implicit
-    A: SignalingJunction.Positive[A],
-    B: SignalingJunction.Positive[B],
+    A: Signaling.Positive[A],
+    B: Signaling.Positive[B],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
-    id                                               [                   A  |*|           B          ]
-      .par(A.signalPos, B.signalPos)              .to[         (Done |*| A) |*| (Done |*| B)         ]
-      .>(IXI)                                     .to[         (Done |*| Done) |*| (A |*| B)         ]
-      .>.fst(raceDone)                            .to[         (Done |+| Done) |*| (A |*| B)         ]
-      .distributeR                                .to[ (Done |*| (A |*| B)) |+| (Done |*| (A |*| B)) ]
-      .>.left(XI.>.snd(B.awaitPos))               .to[           (A |*| B)  |+| (Done |*| (A |*| B)) ]
-      .>.right(|*|.assocRL.>.fst(A.awaitPos))     .to[           (A |*| B) |+|            (A |*| B)  ]
+    id                                               [                  A  |*|           B         ]
+      .>(par(A.notifyPosFst, B.notifyPosFst))     .to[        (Ping |*| A) |*| (Ping |*| B)        ]
+      .>(IXI)                                     .to[        (Ping |*| Ping) |*| (A |*| B)        ]
+      .>.fst(racePair)                            .to[        ( One |+| One ) |*| (A |*| B)        ]
+      .>(distributeR)                             .to[ (One |*| (A |*| B)) |+| (One |*| (A |*| B)) ]
+      .>(|+|.bimap(elimFst, elimFst))             .to[          (A |*| B)  |+|          (A |*| B)  ]
 
-  def race[A: SignalingJunction.Positive, B: SignalingJunction.Positive, C](
+  def race[A: Signaling.Positive, B: Signaling.Positive, C](
     caseFstWins: (A |*| B) -⚬ C,
     caseSndWins: (A |*| B) -⚬ C,
   ): (A |*| B) -⚬ C =
@@ -824,20 +823,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     swap > raceAgainstL > |+|.swap
 
   def select[A, B](implicit
-    A: SignalingJunction.Negative[A],
-    B: SignalingJunction.Negative[B],
+    A: Signaling.Negative[A],
+    B: Signaling.Negative[B],
   ): ((A |*| B) |&| (A |*| B)) -⚬ (A |*| B) =
-    id                                   [ (A |*|           B ) |&|           (A |*| B)  ]
-      .>.choiceL.snd(B.awaitNeg)      .to[ (A |*| (Need |*| B)) |&|           (A |*| B)  ]
-      .>.choiceL(XI)                  .to[ (Need |*| (A |*| B)) |&|           (A |*| B)  ]
-      .>.choiceR.fst(A.awaitNeg)      .to[ (Need |*| (A |*| B)) |&| ((Need |*| A) |*| B) ]
-      .>.choiceR.assocLR              .to[ (Need |*| (A |*| B)) |&| (Need |*| (A |*| B)) ]
-      .coDistributeR                  .to[         (Need |&| Need) |*| (A |*| B)         ]
-      .>.fst(selectNeed)              .to[         (Need |*| Need) |*| (A |*| B)         ]
-      .>(IXI)                         .to[         (Need |*| A) |*| (Need |*| B)         ]
-      .par(A.signalNeg, B.signalNeg)  .to[                   A  |*|           B          ]
+    id                                               [          (A |*| B)  |&|          (A |*| B)  ]
+      .>(|&|.bimap(introFst, introFst))           .to[ (One |*| (A |*| B)) |&| (One |*| (A |*| B)) ]
+      .>(coDistributeR)                           .to[        ( One |&| One ) |*| (A |*| B)        ]
+      .>.fst(selectPair)                          .to[        (Pong |*| Pong) |*| (A |*| B)        ]
+      .>(IXI)                                     .to[        (Pong |*| A) |*| (Pong |*| B)        ]
+      .par(A.notifyNegFst, B.notifyNegFst)        .to[                  A  |*|           B         ]
 
-  def select[Z, A: SignalingJunction.Negative, B: SignalingJunction.Negative](
+  def select[Z, A: Signaling.Negative, B: Signaling.Negative](
     caseFstWins: Z -⚬ (A |*| B),
     caseSndWins: Z -⚬ (A |*| B),
   ): Z -⚬ (A |*| B) =
@@ -1205,7 +1201,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def unpack[F[_]](implicit ev: B =:= Rec[F]): A -⚬ F[Rec[F]] =
       ev.substituteCo(self) > dsl.unpack[F]
 
-    def race[B1: SignalingJunction.Positive, B2: SignalingJunction.Positive, C](
+    def race[B1: Signaling.Positive, B2: Signaling.Positive, C](
       caseFstWins: (B1 |*| B2) -⚬ C,
       caseSndWins: (B1 |*| B2) -⚬ C,
     )(implicit
@@ -1213,7 +1209,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     ): A -⚬ C =
       ev.substituteCo(self) > lib.race(caseFstWins, caseSndWins)
 
-    def select[C1: SignalingJunction.Negative, C2: SignalingJunction.Negative](
+    def select[C1: Signaling.Negative, C2: Signaling.Negative](
       caseFstWins: B -⚬ (C1 |*| C2),
       caseSndWins: B -⚬ (C1 |*| C2),
     ): A -⚬ (C1 |*| C2) =
