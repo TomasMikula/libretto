@@ -2173,6 +2173,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
   }
 
+  object Comonoid {
+    implicit val comonoidOne: Comonoid[One] =
+      new Comonoid[One] {
+        override def counit: One -⚬ One = id[One]
+        override def split: One -⚬ (One |*| One) = introSnd[One]
+      }
+  }
+
   /** A [[Monoid]] whose [[unit]] can be chained after a signal flowing in the '''P'''ositive direction ([[Done]]),
     * effectively taking on the responsibility to wait for completion of some computation.
     *
