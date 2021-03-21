@@ -2373,14 +2373,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     implicit def signalingLList[T]: Signaling.Positive[LList[T]] =
       Signaling.Positive.from(unpack > notifyEither > par(id, pack))
 
-    def fromList[T](ts: List[One -⚬ T]): One -⚬ LList[T] = {
-      @tailrec def go(rts: List[One -⚬ T], acc: One -⚬ LList[T]): One -⚬ LList[T] =
-        rts match {
-          case head :: tail => go(tail, parFromOne(head, acc) > cons)
+    def fromList[S, T](fs: List[S -⚬ T])(using S: Comonoid[S]): S -⚬ LList[T] = {
+      @tailrec def go(rfs: List[S -⚬ T], acc: S -⚬ LList[T]): S -⚬ LList[T] =
+        rfs match {
+          case head :: tail => go(tail, S.split > par(head, acc) > cons)
           case Nil => acc
         }
 
-      go(ts.reverse, nil[T])
+      go(fs.reverse, S.discard > nil[T])
     }
 
     def of[T](ts: (One -⚬ T)*): One -⚬ LList[T] =
