@@ -2500,5 +2500,49 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         last = id,
       )
     }
+
+    /** Creates a singleton list that will appear as undecided (between nil and cons)
+     *  until the element signals.
+     */
+    def singletonOnSignal[T](using T: Signaling.Positive[T]): T -⚬ LList[T] =
+      id                                   [            T                ]
+        .>(T.notifyPosFst)              .to[  Ping |*|  T                ]
+        .>(par(id, introSnd(nil[T])))   .to[  Ping |*| (T  |*| LList[T]) ]
+        .>(injectROnPing)               .to[   One |+| (T  |*| LList[T]) ]
+        .>(pack)                        .to[     LList[T]                ]
+
+    /** Merges the two lists as they unfold, i.e. as soon as the next element becomes available in one of the lists,
+     *  it also becomes available as the next element of the result list.
+     */
+    def merge[T]: (LList[T] |*| LList[T]) -⚬ LList[T] = rec { self =>
+      race(
+        caseFstWins = switchWithR(
+          caseNil = id[LList[T]],
+          caseCons = assocLR > par(id, self) > cons,
+        ),
+        caseSndWins = switchWithL(
+          caseNil = id[LList[T]],
+          caseCons = XI > par(id, self) > cons,
+        ),
+      )
+    }
+
+    /** Inserts an element to a list as soon as the element signals.
+     *  If _m_ elements of the input list become available before the new element signals,
+     *  the new element will appear as the _(m+1)_-th element in the output list.
+     */
+    def insertBySignal[T: Signaling.Positive]: (T |*| LList[T]) -⚬ LList[T] =
+      par(singletonOnSignal[T], id) > merge[T]
+
+    /** Make the elements of the input list available in the output list in the order in which they signal. */
+    def sortBySignal[T: Signaling.Positive]: LList[T] -⚬ LList[T] = rec { self =>
+      // XXX O(n^2) complexity: if the element at the end of the list signals first, it will take O(n) steps for it
+      // to bubble to the front. Could be improved to O(log(n)) steps to bubble any element and O(n*log(n)) total
+      // complexity by using a heap data structure.
+      switch(
+        caseNil = nil[T],
+        caseCons = par(id[T], self) > insertBySignal[T],
+      )
+    }
   }
 }

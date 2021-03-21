@@ -457,4 +457,20 @@ class BasicTests extends TestSuite {
       assert(pureDurations.max < sleepMillis)
     }
   }
+
+  test("LList.sortBySignal") {
+    val delays =
+     List(30, 20, 10, 50, 40)
+
+    val elems: List[One -⚬ Val[Int]] =
+      delays.map(n => done > delay(n.millis) > constVal(n))
+
+    val prg: One -⚬ Val[List[Int]] =
+      id                               [       One       ]
+        .>(LList.fromList(elems))   .to[ LList[Val[Int]] ]
+        .>(LList.sortBySignal)      .to[ LList[Val[Int]] ]
+        .>(toScalaList)             .to[  Val[List[Int]] ]
+
+    assertVal(prg, delays.sorted)
+  }
 }
