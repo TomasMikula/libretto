@@ -1993,6 +1993,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         caseN = par(self, self) > append
       )
     }
+
+    implicit def monoidMultiple[A]: Monoid[Multiple[A]] =
+      new Monoid[Multiple[A]] {
+        def unit    :                           One -⚬ Multiple[A] = Multiple.zero
+        def combine : (Multiple[A] |*| Multiple[A]) -⚬ Multiple[A] = Multiple.append
+      }
+
+    implicit val monadMultiple: Monad[Multiple] =
+      new Monad[Multiple] {
+        def pure[A]    :                     A -⚬ Multiple[A] = Multiple.one
+        def flatten[A] : Multiple[Multiple[A]] -⚬ Multiple[A] = Multiple.flatten
+      }
   }
 
   private type UnlimitedF[A, X] = One |&| (A |&| (X |*| X))
@@ -2023,6 +2035,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         caseN = double > par(self, self)
       )
     }
+
+    implicit def comonoidUnlimited[A]: Comonoid[Unlimited[A]] =
+      new Comonoid[Unlimited[A]] {
+        def counit : Unlimited[A] -⚬ One                             = Unlimited.discard
+        def split  : Unlimited[A] -⚬ (Unlimited[A] |*| Unlimited[A]) = Unlimited.double
+      }
+
+    implicit val comonadUnlimited: Comonad[Unlimited] =
+      new Comonad[Unlimited] {
+        def extract[A]   : Unlimited[A] -⚬ A                       = Unlimited.single
+        def duplicate[A] : Unlimited[A] -⚬ Unlimited[Unlimited[A]] = Unlimited.duplicate
+      }
   }
 
   private type PUnlimitedF[A, X] = Done |&| (A |&| (X |*| X))
@@ -2051,6 +2075,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         caseN = double > par(self, self)
       )
     }
+
+    implicit def pComonoidPUnlimited[A]: PComonoid[PUnlimited[A]] =
+      new PComonoid[PUnlimited[A]] {
+        def counit : PUnlimited[A] -⚬ Done                              = PUnlimited.neglect
+        def split  : PUnlimited[A] -⚬ (PUnlimited[A] |*| PUnlimited[A]) = PUnlimited.double
+      }
+
+    implicit val comonadPUnlimited: Comonad[PUnlimited] =
+      new Comonad[PUnlimited] {
+        def extract[A]   : PUnlimited[A] -⚬ A                         = PUnlimited.single
+        def duplicate[A] : PUnlimited[A] -⚬ PUnlimited[PUnlimited[A]] = PUnlimited.duplicate
+      }
   }
 
   trait NAffine[A] {
@@ -2290,42 +2326,6 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def extract[A]   : F[A] -⚬ A
     def duplicate[A] : F[A] -⚬ F[F[A]]
   }
-
-  implicit def monoidMultiple[A]: Monoid[Multiple[A]] =
-    new Monoid[Multiple[A]] {
-      def unit    :                           One -⚬ Multiple[A] = Multiple.zero
-      def combine : (Multiple[A] |*| Multiple[A]) -⚬ Multiple[A] = Multiple.append
-    }
-
-  implicit val monadMultiple: Monad[Multiple] =
-    new Monad[Multiple] {
-      def pure[A]    :                     A -⚬ Multiple[A] = Multiple.one
-      def flatten[A] : Multiple[Multiple[A]] -⚬ Multiple[A] = Multiple.flatten
-    }
-
-  implicit def comonoidUnlimited[A]: Comonoid[Unlimited[A]] =
-    new Comonoid[Unlimited[A]] {
-      def counit : Unlimited[A] -⚬ One                             = Unlimited.discard
-      def split  : Unlimited[A] -⚬ (Unlimited[A] |*| Unlimited[A]) = Unlimited.double
-    }
-
-  implicit def pComonoidPUnlimited[A]: PComonoid[PUnlimited[A]] =
-    new PComonoid[PUnlimited[A]] {
-      def counit : PUnlimited[A] -⚬ Done                              = PUnlimited.neglect
-      def split  : PUnlimited[A] -⚬ (PUnlimited[A] |*| PUnlimited[A]) = PUnlimited.double
-    }
-
-  implicit val comonadUnlimited: Comonad[Unlimited] =
-    new Comonad[Unlimited] {
-      def extract[A]   : Unlimited[A] -⚬ A                       = Unlimited.single
-      def duplicate[A] : Unlimited[A] -⚬ Unlimited[Unlimited[A]] = Unlimited.duplicate
-    }
-
-  implicit val comonadPUnlimited: Comonad[PUnlimited] =
-    new Comonad[PUnlimited] {
-      def extract[A]   : PUnlimited[A] -⚬ A                         = PUnlimited.single
-      def duplicate[A] : PUnlimited[A] -⚬ PUnlimited[PUnlimited[A]] = PUnlimited.duplicate
-    }
 
   def getFst[A, B](implicit A: Cosemigroup[A]): (A |*| B) -⚬ (A |*| (A |*| B)) =
     id                             [     A     |*| B  ]
