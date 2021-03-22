@@ -744,6 +744,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
   }
 
+  def signalPosFst[A](implicit A: Signaling.Positive[A]): A -⚬ (Done |*| A) =
+    A.signalPosFst
+
+  def signalPosSnd[A](implicit A: Signaling.Positive[A]): A -⚬ (A |*| Done) =
+    A.signalPosSnd
+
+  def signalNegFst[A](implicit A: Signaling.Negative[A]): (Need |*| A) -⚬ A =
+    A.signalNegFst
+
+  def signalNegSnd[A](implicit A: Signaling.Negative[A]): (A |*| Need) -⚬ A =
+    A.signalNegSnd
+
   def awaitPosFst[A](implicit A: Junction.Positive[A]): (Done |*| A) -⚬ A =
     A.awaitPosFst
 
@@ -761,6 +773,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   def delayUsing[A](f: Need -⚬ Need)(implicit A: SignalingJunction.Negative[A]): A -⚬ A =
     A.delayUsing(f)
+
+  def sequence[A: Signaling.Positive, B: Junction.Positive]: (A |*| B) -⚬ (A |*| B) =
+    id                             [  A            |*| B  ]
+      .>.fst(signalPosSnd)      .to[ (A |*|  Done) |*| B  ]
+      .>(assocLR)               .to[  A |*| (Done  |*| B) ]
+      .>.snd(awaitPosFst)       .to[  A |*|            B  ]
 
   /** Races the two [[Done]] signals and
     *  - produces left if the first signal wins, in which case it returns the second signal that still
