@@ -227,7 +227,7 @@ class FreeScalaFutureRunner(
           // (Pong |*| Need) -⚬ Need
           val (wn, n) = this.asInstanceOf[Frontier[Pong |*| Need]].splitPair
           val p = Promise[Any]()
-          wn fulfillWeakWith p.future
+          wn fulfillPongWith p.future
           n fulfillWith p.future
           NeedAsync(p)                                            .asInstanceOf[Frontier[B]]
 
@@ -244,7 +244,7 @@ class FreeScalaFutureRunner(
           val p2 = Promise[Any]()
           this
             .asInstanceOf[Frontier[Pong]]
-            .fulfillWeakWith(p1.future zip p2.future)
+            .fulfillPongWith(p1.future zip p2.future)
           Pair(PongAsync(p1), PongAsync(p2))                      .asInstanceOf[Frontier[B]]
 
         case -⚬.StrengthenPing() =>
@@ -283,15 +283,15 @@ class FreeScalaFutureRunner(
             case (n, c) =>
               Choice(
                 () => {
-                  n fulfillWeakWith Future.successful(())
+                  n fulfillPongWith Future.successful(())
                   Frontier.chooseL(c)
                 },
                 () => {
-                  n fulfillWeakWith Future.successful(())
+                  n fulfillPongWith Future.successful(())
                   Frontier.chooseR(c)
                 },
                 onError = { e =>
-                  n fulfillWeakWith Future.failed(e)
+                  n fulfillPongWith Future.failed(e)
                   c.asChoice.onError(e)
                 },
               )                                                   .asInstanceOf[Frontier[B]]
@@ -374,7 +374,7 @@ class FreeScalaFutureRunner(
         case -⚬.RInvertPingPong() =>
           // (Ping |*| Pong) -⚬ One
           val (d, n) = this.asInstanceOf[Frontier[Ping |*| Pong]].splitPair
-          n fulfillWeakWith d.toFuturePing
+          n fulfillPongWith d.toFuturePing
           One                                                     .asInstanceOf[Frontier[B]]
 
         case -⚬.LInvertSignal() =>
@@ -604,7 +604,7 @@ class FreeScalaFutureRunner(
           // (Pong |*| Neg[X]) -⚬ Neg[X]
           type X
           val (n, x) = this.asInstanceOf[Frontier[Pong |*| Neg[X]]].splitPair
-          n fulfillWeakWith x.future
+          n fulfillPongWith x.future
           x                                                       .asInstanceOf[Frontier[B]]
 
         case f @ -⚬.JoinRTermini() =>
@@ -1023,13 +1023,13 @@ class FreeScalaFutureRunner(
     }
 
     extension (n: Frontier[Pong]) {
-      def fulfillWeakWith(f: Future[Any]): Unit =
+      def fulfillPongWith(f: Future[Any]): Unit =
         n match {
           case PongAsync(p) =>
             p.completeWith(f)
           case Deferred(fn) =>
             fn.onComplete {
-              case Success(n) => n fulfillWeakWith f
+              case Success(n) => n fulfillPongWith f
               case Failure(e) =>
                 e.printStackTrace(System.err)
                 f.onComplete {
