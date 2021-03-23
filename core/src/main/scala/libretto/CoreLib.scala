@@ -2562,6 +2562,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Inserts an element to a list as soon as the element signals.
      *  If _m_ elements of the input list become available before the new element signals,
      *  the new element will appear as the _(m+1)_-th element in the output list.
+     *  Note: The _m_ elements from the input list are not awaited to signal;
+     *  their timely appearence in the input list is sufficient for them to come before
+     *  the inserted element.
      */
     def insertBySignal[T: Signaling.Positive]: (T |*| LList[T]) -⚬ LList[T] =
       par(singletonOnSignal[T], id) > merge[T]
@@ -2574,6 +2577,44 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       switch(
         caseNil = nil[T],
         caseCons = par(id[T], self) > insertBySignal[T],
+      )
+    }
+  }
+
+  /** Non-empty list, i.e. a list with at least one element. */
+  opaque type LList1[T] = T |*| LList[T]
+  object LList1 {
+    def cons[T]: (T |*| LList[T]) -⚬ LList1[T] =
+      id
+
+    def toLList[T]: LList1[T] -⚬ LList[T] =
+      LList.cons[T]
+
+    def cons1[T]: (T |*| LList1[T]) -⚬ LList1[T] =
+      par(id, toLList)
+
+    def singleton[T]: T -⚬ LList1[T] =
+      introSnd(LList.nil[T])
+
+    def uncons[T]: LList1[T] -⚬ (T |*| LList[T]) =
+      id
+
+    /** Inserts an element to a list as soon as the element signals.
+     *  If _m_ elements of the input list become available before the new element signals,
+     *  the new element will appear as the _(m+1)_-th element in the output list.
+     *  Note: The _m_ elements from the input list are not awaited to signal;
+     *  their timely appearence in the input list is sufficient for them to come before
+     *  the inserted element.
+     */
+    def insertBySignal[T: Signaling.Positive]: (T |*| LList[T]) -⚬ LList1[T] = {
+      import LList.signalingLList
+
+      race(
+        caseFstWins = cons[T],
+        caseSndWins = LList.switchWithL(
+          caseNil = singleton[T],
+          caseCons = XI > par(id, LList.insertBySignal[T]),
+        ),
       )
     }
   }
