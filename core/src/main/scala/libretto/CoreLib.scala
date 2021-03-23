@@ -2049,6 +2049,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     ): X -⚬ Unlimited[A] =
       choice(case0, choice(case1, caseN)) > pack[UnlimitedF[A, *]]
 
+    def createWith[X, A, Y](
+      case0: X -⚬ Y,
+      case1: X -⚬ (A |*| Y),
+      caseN: X -⚬ ((Unlimited[A] |*| Unlimited[A]) |*| Y),
+    ): X -⚬ (Unlimited[A] |*| Y) =
+      choice(case0 > introFst, choice(case1, caseN) > coDistributeR) > coDistributeR > par(pack[UnlimitedF[A, *]], id)
+
     def duplicate[A]: Unlimited[A] -⚬ Unlimited[Unlimited[A]] = rec { self =>
       create(
         case0 = discard,
@@ -2091,6 +2098,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       caseN: X -⚬ (PUnlimited[A] |*| PUnlimited[A]),
     ): X -⚬ PUnlimited[A] =
       choice(case0, choice(case1, caseN)) > pack[PUnlimitedF[A, *]]
+
+    def createWith[X, A, Y](
+      case0: X -⚬ (Done |*| Y),
+      case1: X -⚬ (A |*| Y),
+      caseN: X -⚬ ((PUnlimited[A] |*| PUnlimited[A]) |*| Y),
+    ): X -⚬ (PUnlimited[A] |*| Y) =
+      choice(case0, choice(case1, caseN) > coDistributeR) > coDistributeR > par(pack[PUnlimitedF[A, *]], id)
 
     def duplicate[A]: PUnlimited[A] -⚬ PUnlimited[PUnlimited[A]] = rec { self =>
       create(
