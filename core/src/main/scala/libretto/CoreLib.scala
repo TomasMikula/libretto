@@ -2039,6 +2039,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def double[A]: Unlimited[A] -⚬ (Unlimited[A] |*| Unlimited[A]) =
       unpack[UnlimitedF[A, *]] > chooseR > chooseR
 
+    def getOne[A]: Unlimited[A] -⚬ (A |*| Unlimited[A]) =
+      double > par(single, id)
+
     def create[X, A](
       case0: X -⚬ One,
       case1: X -⚬ A,
@@ -2078,6 +2081,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def double[A]: PUnlimited[A] -⚬ (PUnlimited[A] |*| PUnlimited[A]) =
       unpack[PUnlimitedF[A, *]] > chooseR > chooseR
+
+    def getOne[A]: PUnlimited[A] -⚬ (A |*| PUnlimited[A]) =
+      double > par(single, id)
 
     def create[X, A](
       case0: X -⚬ Done,
