@@ -1324,6 +1324,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   class FocusedBi[F[_, _], B1, B2](f: F[B1, B2])(F: BiExternalizer[F]) {
+    def map[C1, C2](g: B1 -⚬ C1, h: B2 -⚬ C2): F[C1, C2] =
+      F.lift(g, h)(f)
+
     def fst: FocusedCo[F[*, B2], B1] =
       new FocusedCo[F[*, B2], B1](f)(F.fst)
 
@@ -1526,6 +1529,92 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>.choiceL.fst.injectL[C]     .to[ ((A |+| C) |*|  B) |&| (       C  |*| D) ]
       .>.choiceR.fst.injectR[A]     .to[ ((A |+| C) |*|  B) |&| ((A |+| C) |*| D) ]
       .coDistributeL                .to[  (A |+| C) |*| (B  |&|                D) ]
+
+  /** Notifies when the [[|+|]] is decided _and_ the present side notifies using the respective given function. */
+  def notifyEitherAndSides[A, B](
+    notifyL: A -⚬ (Ping |*| A),
+    notifyR: B -⚬ (Ping |*| B),
+  ): (A |+| B) -⚬ (Ping |*| (A |+| B)) =
+    id                                           [                      A  |+|           B   ]
+      .>(|+|.bimap(notifyL, notifyR))         .to[            (Ping |*| A) |+| (Ping |*| B)  ]
+      .>(notifyEither)                        .to[  Ping |*| ((Ping |*| A) |+| (Ping |*| B)) ]
+      .>.snd(factorL)                         .to[  Ping |*| (Ping  |*| (A |+|           B)) ]
+      .>(assocRL)                             .to[ (Ping |*|  Ping) |*| (A |+|           B)  ]
+      .>.fst(joinPing)                        .to[      Ping        |*| (A |+|           B)  ]
+
+  /** Notifies when the [[|+|]] is decided _and_ the present side notifies. */
+  def notifyEitherAndSides[A, B](using
+    A: Signaling.Positive[A],
+    B: Signaling.Positive[B],
+  ): (A |+| B) -⚬ (Ping |*| (A |+| B)) =
+    notifyEitherAndSides(A.notifyPosFst, B.notifyPosFst)
+
+  /** Notifies when the [[|+|]] is decided _and_ if it is left, the left side notifies using the given function. */
+  def notifyEitherAndLeft[A, B](
+    notifyL: A -⚬ (Ping |*| A),
+  ): (A |+| B) -⚬ (Ping |*| (A |+| B)) =
+    notifyEitherAndSides(notifyL, introFst(ping))
+
+  /** Notifies when the [[|+|]] is decided _and_ if it is left, the left side notifies. */
+  def notifyEitherAndLeft[A, B](using
+    A: Signaling.Positive[A],
+  ): (A |+| B) -⚬ (Ping |*| (A |+| B)) =
+    notifyEitherAndLeft(A.notifyPosFst)
+
+  /** Notifies when the [[|+|]] is decided _and_ if it is right, the right side notifies using the given function. */
+  def notifyEitherAndRight[A, B](
+    notifyR: B -⚬ (Ping |*| B),
+  ): (A |+| B) -⚬ (Ping |*| (A |+| B)) =
+    notifyEitherAndSides(introFst(ping), notifyR)
+
+  /** Notifies when the [[|+|]] is decided _and_ if it is right, the right side notifies. */
+  def notifyEitherAndRight[A, B](using
+    B: Signaling.Positive[B],
+  ): (A |+| B) -⚬ (Ping |*| (A |+| B)) =
+   notifyEitherAndRight(B.notifyPosFst)
+
+  /** Notifies when the choice ([[|&|]]) is made _and_ the chosen side notifies using the respective given function. */
+  def notifyChoiceAndSides[A, B](
+    notifyL: (Pong |*| A) -⚬ A,
+    notifyR: (Pong |*| B) -⚬ B,
+  ): (Pong |*| (A |&| B)) -⚬ (A |&| B) =
+    id                                       [                      A  |&|           B   ]
+      .<(|&|.bimap(notifyL, notifyR))   .from[            (Pong |*| A) |&| (Pong |*| B)  ]
+      .<(notifyChoice)                  .from[  Pong |*| ((Pong |*| A) |&| (Pong |*| B)) ]
+      .<.snd(coFactorL)                 .from[  Pong |*| (Pong  |*| (A |&|           B)) ]
+      .<(assocLR)                       .from[ (Pong |*|  Pong) |*| (A |&|           B)  ]
+      .<.fst(joinPong)                  .from[      Pong        |*| (A |&|           B)  ]
+
+  /** Notifies when the choice ([[|&|]]) is made _and_ the chosen side notifies. */
+  def notifyChoiceAndSides[A, B](using
+    A: Signaling.Negative[A],
+    B: Signaling.Negative[B],
+  ): (Pong |*| (A |&| B)) -⚬ (A |&| B) =
+    notifyChoiceAndSides(A.notifyNegFst, B.notifyNegFst)
+
+  /** Notifies when the choice ([[|&|]]) is made _and_ if it is left, the left side notifies using the given function. */
+  def notifyChoiceAndLeft[A, B](
+    notifyL: (Pong |*| A) -⚬ A,
+  ): (Pong |*| (A |&| B)) -⚬ (A |&| B) =
+    notifyChoiceAndSides(notifyL, elimFst(pong))
+
+  /** Notifies when the choice ([[|&|]]) is made _and_ if it is left, the left side notifies. */
+  def notifyChoiceAndLeft[A, B](using
+    A: Signaling.Negative[A],
+  ): (Pong |*| (A |&| B)) -⚬ (A |&| B) =
+    notifyChoiceAndLeft(A.notifyNegFst)
+
+  /** Notifies when the choice ([[|&|]]) is made _and_ if it is right, the right side notifies using the given function. */
+  def notifyChoiceAndRight[A, B](
+    notifyR: (Pong |*| B) -⚬ B,
+  ): (Pong |*| (A |&| B)) -⚬ (A |&| B) =
+    notifyChoiceAndSides(elimFst(pong), notifyR)
+
+  /** Notifies when the choice ([[|&|]]) is made _and_ if it is right, the right side notifies. */
+  def notifyChoiceAndRight[A, B](using
+    B: Signaling.Negative[B],
+  ): (Pong |*| (A |&| B)) -⚬ (A |&| B) =
+    notifyChoiceAndRight(B.notifyNegFst)
 
   def injectLWhenDone[A, B]: (Done |*| A) -⚬ ((Done |*| A) |+| B) =
     par(notifyDoneL, id) > assocLR > injectLOnPing
