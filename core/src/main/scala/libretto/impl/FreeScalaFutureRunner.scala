@@ -163,15 +163,13 @@ class FreeScalaFutureRunner(
             onError = this.crash(_),
           )
 
-        case -⚬.DoneF() =>
+        case -⚬.PingF() =>
           // Ignore `this`. It ends in `One`, so it does not need to be taken care of.
-          DoneNow                                                 .asInstanceOf[Frontier[B]]
+          PingNow
 
-        case -⚬.NeedF() =>
-          this
-            .asInstanceOf[Frontier[Need]]
-            .fulfillWith(Future.successful(()))
-          One                                                     .asInstanceOf[Frontier[B]]
+        case -⚬.PongF() =>
+          this.fulfillPongWith(Future.successful(()))
+          One
 
         case f @ -⚬.DelayIndefinitely() =>
           bug(s"Did not expect to be able to construct a program that uses $f")

@@ -127,9 +127,6 @@ trait CoreDSL {
 
   def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C)
 
-  def done: One -⚬ Done
-  def need: Need -⚬ One
-
   def delayIndefinitely: Done -⚬ RTerminus
   def regressInfinitely: LTerminus -⚬ Need
 
@@ -164,6 +161,12 @@ trait CoreDSL {
 
   def strengthenPing: Ping -⚬ Done
   def strengthenPong: Need -⚬ Pong
+
+  def ping: One -⚬ Ping
+  def pong: Pong -⚬ One
+
+  def done: One -⚬ Done = andThen(ping, strengthenPing)
+  def need: Need -⚬ One = andThen(strengthenPong, pong)
 
   /** Signals when it is decided whether `A |+| B` actually contains the left side or the right side. */
   def notifyEither[A, B]: (A |+| B) -⚬ (Ping |*| (A |+| B))

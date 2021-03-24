@@ -46,8 +46,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class ChooseL[A, B]() extends ((A |&| B) -⚬ A)
     case class ChooseR[A, B]() extends ((A |&| B) -⚬ B)
     case class Choice[A, B, C](f: A -⚬ B, g: A -⚬ C) extends (A -⚬ (B |&| C))
-    case class DoneF() extends (One -⚬ Done)
-    case class NeedF() extends (Need -⚬ One)
+    case class PingF() extends (One -⚬ Ping)
+    case class PongF() extends (Pong -⚬ One)
     case class DelayIndefinitely() extends (Done -⚬ RTerminus)
     case class RegressInfinitely() extends (LTerminus -⚬ Need)
     case class Fork() extends (Done -⚬ (Done |*| Done))
@@ -178,11 +178,11 @@ object FreeScalaDSL extends ScalaDSL {
   override def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C) =
     Choice(f, g)
 
-  override def done: One -⚬ Done =
-    DoneF()
+  override def ping: One -⚬ Ping =
+    PingF()
 
-  override def need: Need -⚬ One =
-    NeedF()
+  override def pong: Pong -⚬ One =
+    PongF()
 
   override def delayIndefinitely: Done -⚬ RTerminus =
     DelayIndefinitely()
