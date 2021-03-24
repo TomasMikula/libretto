@@ -830,6 +830,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   ): (A |*| B) -⚬ C =
     race[A, B] > either(caseFstWins, caseSndWins)
 
+  def raceWithL[X, A: Signaling.Positive, B: Signaling.Positive, C](
+    caseFstWins: (X |*| (A |*| B)) -⚬ C,
+    caseSndWins: (X |*| (A |*| B)) -⚬ C,
+  ): (X |*| (A |*| B)) -⚬ C =
+    par(id, race[A, B]) > distributeL > either(caseFstWins, caseSndWins)
+
+  def raceWithR[A: Signaling.Positive, B: Signaling.Positive, Y, C](
+    caseFstWins: ((A |*| B) |*| Y) -⚬ C,
+    caseSndWins: ((A |*| B) |*| Y) -⚬ C,
+  ): ((A |*| B) |*| Y) -⚬ C =
+    par(race[A, B], id) > distributeR > either(caseFstWins, caseSndWins)
+
   def raceAgainstL[A](implicit A: SignalingJunction.Positive[A]): (Done |*| A) -⚬ (A |+| A) =
     id                                               [  Done        |*|            A  ]
       .>.snd(A.signalPos).assocRL                 .to[ (Done        |*|  Done) |*| A  ]
@@ -850,6 +862,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>.fst(selectPair)                          .to[        (Pong |*| Pong) |*| (A |*| B)        ]
       .>(IXI)                                     .to[        (Pong |*| A) |*| (Pong |*| B)        ]
       .par(A.notifyNegFst, B.notifyNegFst)        .to[                  A  |*|           B         ]
+
+  def selectWithL[Z, X, A: Signaling.Negative, B: Signaling.Negative](
+    caseFstWins: Z -⚬ (X |*| (A |*| B)),
+    caseSndWins: Z -⚬ (X |*| (A |*| B)),
+  ): Z -⚬ (X |*| (A |*| B)) =
+    choice(caseFstWins, caseSndWins) > coDistributeL > par(id, select[A, B])
+
+  def selectWithR[Z, A: Signaling.Negative, B: Signaling.Negative, Y](
+    caseFstWins: Z -⚬ ((A |*| B) |*| Y),
+    caseSndWins: Z -⚬ ((A |*| B) |*| Y),
+  ): Z -⚬ ((A |*| B) |*| Y) =
+    choice(caseFstWins, caseSndWins) > coDistributeR > par(select[A, B], id)
 
   def select[Z, A: Signaling.Negative, B: Signaling.Negative](
     caseFstWins: Z -⚬ (A |*| B),
