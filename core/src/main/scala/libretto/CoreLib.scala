@@ -2164,6 +2164,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         def extract[A]   : Unlimited[A] -⚬ A                       = Unlimited.single
         def duplicate[A] : Unlimited[A] -⚬ Unlimited[Unlimited[A]] = Unlimited.duplicate
       }
+
+    /** Signals when the choice is made between [[discard]], [[single]] and [[double]]. */
+    implicit def signalingUnlimited[A]: Signaling.Negative[Unlimited[A]] = {
+      val notifyFst: (Pong |*| Unlimited[A]) -⚬ Unlimited[A] =
+        par(id, unpack[UnlimitedF[A, *]]) > notifyChoiceAndRight > pack[UnlimitedF[A, *]]
+
+      Signaling.Negative.from(notifyFst)
+    }
   }
 
   private type PUnlimitedF[A, X] = Done |&| (A |&| (X |*| X))
