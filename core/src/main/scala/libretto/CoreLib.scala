@@ -489,7 +489,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         from(par(A.notifyPosFst, B.notifyPosFst) > IXI > par(joinPing, id))
 
       /** Signals when it is decided which side of the [[|+|]] is present. */
-      def either[A, B]: Signaling.Positive[A |+| B] =
+      implicit def either[A, B]: Signaling.Positive[A |+| B] =
         from(dsl.notifyEither[A, B])
 
       def rec[F[_]](implicit F: Positive[F[Rec[F]]]): Positive[Rec[F]] =
@@ -522,7 +522,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         from(par(joinPong, id) > IXI > par(A.notifyNegFst, B.notifyNegFst))
 
       /** Signals when the choice is made between [[A]] and [[B]]. */
-      def choice[A, B]: Signaling.Negative[A |&| B] =
+      implicit def choice[A, B]: Signaling.Negative[A |&| B] =
         from(dsl.notifyChoice[A, B])
 
       def rec[F[_]](implicit F: Negative[F[Rec[F]]]): Negative[Rec[F]] =
