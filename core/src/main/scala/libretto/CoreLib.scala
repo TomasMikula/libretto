@@ -2177,6 +2177,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
     }
 
+    def unfold[S, A](f: S -⚬ (A |*| S)): S -⚬ (Unlimited[A] |*| S) =
+      id                                     [                  S ]
+        .>(Endless.unfold(f))             .to[  Endless[A]  |*| S ]
+        .>.fst(Endless.toUnlimited[A])    .to[ Unlimited[A] |*| S ]
+
     implicit def comonoidUnlimited[A]: Comonoid[Unlimited[A]] =
       new Comonoid[Unlimited[A]] {
         def counit : Unlimited[A] -⚬ One                             = Unlimited.discard
