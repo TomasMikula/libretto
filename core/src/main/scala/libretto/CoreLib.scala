@@ -2320,6 +2320,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
   }
 
+  object Semigroup {
+    implicit val semigroupNeed: Semigroup[Need] =
+      new Semigroup[Need] {
+        override def combine: (Need |*| Need) -⚬ Need = forkNeed
+      }
+  }
+
   trait Cosemigroup[A] {
     def split: A -⚬ (A |*| A)
 
@@ -2328,6 +2335,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         split > par(split, id[A]),
         split > par(id[A], split) > |*|.assocRL,
       )
+  }
+
+  object Cosemigroup {
+    implicit val cosemigroupDone: Cosemigroup[Done] =
+      new Cosemigroup[Done] {
+        override def split: Done -⚬ (Done |*| Done) = fork
+      }
   }
 
   trait Monoid[A] extends Semigroup[A] {
@@ -2457,6 +2471,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
   }
 
+  object NMonoid {
+    implicit val nMonoidNeed: NMonoid[Need] =
+      new NMonoid[Need] {
+        override def combine : (Need |*| Need) -⚬ Need = forkNeed
+        override def unit    :            Need -⚬ Need = id
+      }
+  }
+
   /** A weaker version of [[Comonoid]] whose [[counit]] cannot discard the input completely, but can reduce it to
     * a signal traveling in the '''P'''ositive direction ([[Done]]) that eventually needs to be awaited.
     *
@@ -2479,6 +2501,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         split > par(id[A], counit > delayIndefinitely),
         id[A].introSnd(done > delayIndefinitely),
       )
+  }
+
+  object PComonoid {
+    implicit val pComonoidDone: PComonoid[Done] =
+      new PComonoid[Done] {
+        override def split  : Done -⚬ (Done |*| Done) = fork
+        override def counit : Done -⚬ Done            = id
+      }
   }
 
   trait Monad[F[_]] {
