@@ -2753,4 +2753,94 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
     }
   }
+
+  /** An endless source of elements, where the consumer decides whether to pull one more element or close.
+    * Dual to [[LList]], in which the producer decides how many elements will be produced.
+    */
+  opaque type Endless[A] = Rec[[X] =>> One |&| (A |*| X)]
+  object Endless {
+    private def pack[A]: (One |&| (A |*| Endless[A])) -⚬ Endless[A] =
+      dsl.pack[[X] =>> One |&| (A |*| X)]
+
+    private def unpack[A]: Endless[A] -⚬ (One |&| (A |*| Endless[A])) =
+      dsl.unpack
+
+    def close[A]: Endless[A] -⚬ One =
+      unpack > chooseL
+
+    def pull[A]: Endless[A] -⚬ (A |*| Endless[A]) =
+      unpack > chooseR
+
+    def create[X, A](
+      onClose: X -⚬ One,
+      onPull: X -⚬ (A |*| Endless[A]),
+    ): X -⚬ Endless[A] =
+      choice(onClose, onPull) > pack[A]
+
+    def createWith[X, A, Y](
+      onClose: X -⚬ Y,
+      onPull: X -⚬ ((A |*| Endless[A]) |*| Y),
+    ): X -⚬ (Endless[A] |*| Y) =
+      choice(onClose > introFst, onPull) > coDistributeR > par(pack, id)
+
+    def unfold[S, A](f: S -⚬ (A |*| S)): S -⚬ (Endless[A] |*| S) = rec { self =>
+      createWith[S, A, S](
+        onClose = id[S],
+        onPull = f > par(id, self) > assocRL,
+      )
+    }
+
+    /** Signals when the consumer makes a choice, i.e. [[close]] or [[pull]]. */
+    implicit def signalingEndless[A]: Signaling.Negative[Endless[A]] =
+      Signaling.Negative.from(par(id, unpack) > notifyChoice > pack)
+
+    def split[A]: Endless[A] -⚬ (Endless[A] |*| Endless[A]) = rec { self =>
+      val onFstAction: Endless[A] -⚬ (Endless[A] |*| Endless[A]) = {
+        val onClose: Endless[A] -⚬ (One |*| Endless[A]) =
+          introFst
+        val onPull: Endless[A] -⚬ ((A |*| Endless[A]) |*| Endless[A]) =
+          pull > par(id, self) > assocRL
+
+        id                                   [                    Endless[A]                 |*| Endless[A]  ]
+          .<.fst(pack)                  .from[ (One                 |&|  (A |*| Endless[A])) |*| Endless[A]  ]
+          .<(coDistributeR)             .from[ (One |*| Endless[A]) |&| ((A |*| Endless[A])  |*| Endless[A]) ]
+          .<(choice(onClose, onPull))   .from[                   Endless[A]                                  ]
+      }
+
+      val onSndAction: Endless[A] -⚬ (Endless[A] |*| Endless[A]) =
+        onFstAction > swap
+
+      select(
+        caseFstWins = onFstAction,
+        caseSndWins = onSndAction,
+      )
+    }
+
+    implicit def comonoidEndless[A]: Comonoid[Endless[A]] =
+      new Comonoid[Endless[A]] {
+        override def counit: Endless[A] -⚬ One                         = Endless.close
+        override def split : Endless[A] -⚬ (Endless[A] |*| Endless[A]) = Endless.split
+      }
+
+    def toUnlimited[A]: Endless[A] -⚬ Unlimited[A] = rec { self =>
+      Unlimited.create(
+        case0 = close,
+        case1 = pull > elimSnd(close),
+        caseN = split > par(self, self),
+      )
+    }
+
+    /** Pulls the given amount of elements and returns them in a list.
+      *
+      * **Note:** This method assembles a program whose size is proportional to _n_.
+      */
+    def take[A](n: Int): Endless[A] -⚬ LList[A] = {
+      require(n >= 0, s"n must be non-negative, got $n")
+
+      if (n > 0)
+        pull > par(id, take(n - 1)) > LList.cons
+      else
+        close > LList.nil[A]
+    }
+  }
 }

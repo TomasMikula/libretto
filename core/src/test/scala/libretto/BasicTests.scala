@@ -473,4 +473,31 @@ class BasicTests extends TestSuite {
 
     assertVal(prg, delays.sorted)
   }
+
+  test("endless fibonacci") {
+    val next: Val[(Int, Int)] -⚬ (Val[Int] |*| Val[(Int, Int)]) =
+      id[Val[(Int, Int)]] > mapVal { case (n0, n1) => (n0, (n1, n0 + n1)) } > liftPair
+
+    val fibonacci: Done -⚬ (Endless[Val[Int]] |*| Done) =
+      constVal((0, 1)) > Endless.unfold(next) > par(id, neglect)
+
+    def take[A](n: Int): Endless[Val[A]] -⚬ Val[List[A]] =
+      Endless.take(n) > toScalaList
+
+    val prg: One -⚬ Val[List[Int]] =
+      done > fibonacci > par(take(20), id) > awaitPosSnd
+
+    val expected = List(0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181)
+
+    assertVal(prg, expected)
+
+    val prg2: One -⚬ Val[(List[Int], List[Int])] =
+      done > fibonacci > par(Endless.split > par(take(10), take(10)) > unliftPair, id) > awaitPosSnd
+
+    testVal(prg2) { case (fibs1, fibs2) =>
+      assert(fibs1.sorted == fibs1)
+      assert(fibs2.sorted == fibs2)
+      assert((fibs1 ++ fibs2).sorted == expected)
+    }
+  }
 }
