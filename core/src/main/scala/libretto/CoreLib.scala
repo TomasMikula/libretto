@@ -2578,6 +2578,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         switch(T.unit, par(id, self) > T.combine)
       }
 
+    def concat[T]: (LList[T] |*| LList[T]) -⚬ LList[T] = rec { self =>
+      switchWithR(
+        caseNil  = id[LList[T]],
+        caseCons = assocLR > par(id, self) > cons,
+      )
+    }
+
     def consMaybe[T]: (Maybe[T] |*| LList[T]) -⚬ LList[T] =
       id[Maybe[T] |*| LList[T]]             .to[ (One |+|                T) |*| LList[T] ]
         .distributeR                        .to[ (One |*| LList[T]) |+| (T |*| LList[T]) ]
@@ -2719,6 +2726,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         caseCons = par(id[T], self) > insertBySignal[T],
       )
     }
+
+    implicit def monoidLList[A]: Monoid[LList[A]] =
+      new Monoid[LList[A]] {
+        def unit    :                     One -⚬ LList[A] = nil
+        def combine : (LList[A] |*| LList[A]) -⚬ LList[A] = concat
+      }
   }
 
   /** Non-empty list, i.e. a list with at least one element. */
