@@ -2537,14 +2537,23 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     implicit def signalingLList[T]: Signaling.Positive[LList[T]] =
       Signaling.Positive.from(unpack > notifyEither > par(id, pack))
 
-    def fromList[S, T](fs: List[S -⚬ T])(using S: Comonoid[S]): S -⚬ LList[T] = {
-      @tailrec def go(rfs: List[S -⚬ T], acc: S -⚬ LList[T]): S -⚬ LList[T] =
+    def fromList0[S, T](fs: List[S -⚬ T])(using S: Cosemigroup[S]): S -⚬ (S |*| LList[T]) = {
+      @tailrec def go(rfs: List[S -⚬ T], acc: S -⚬ (S |*| LList[T])): S -⚬ (S |*| LList[T]) =
         rfs match {
-          case head :: tail => go(tail, S.split > par(head, acc) > cons)
+          case head :: tail => go(tail, S.split > par(id, acc > par(head, id) > cons))
           case Nil => acc
         }
 
-      go(fs.reverse, S.discard > nil[T])
+      go(fs.reverse, id[S] > introSnd(nil[T]))
+    }
+
+    def fromList[S, T](fs: List[S -⚬ T])(using S: Comonoid[S]): S -⚬ LList[T] =
+      fromList0(fs) > discardFst
+
+    def fromListU[S, T](fs: List[S -⚬ T]): Unlimited[S] -⚬ LList[T] = {
+      import Unlimited.comonoidUnlimited
+
+      fromList(fs map (Unlimited.single > _))
     }
 
     def of[T](ts: (One -⚬ T)*): One -⚬ LList[T] =
@@ -2751,6 +2760,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def uncons[T]: LList1[T] -⚬ (T |*| LList[T]) =
       id
+
+    def from[S, T](head: S -⚬ T, tail: List[S -⚬ T])(using S: Cosemigroup[S]): S -⚬ LList1[T] =
+      LList.fromList0(tail) > par(head, id) > cons
 
     /** Inserts an element to a list as soon as the element signals.
      *  If _m_ elements of the input list become available before the new element signals,
