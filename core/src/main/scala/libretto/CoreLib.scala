@@ -2612,10 +2612,29 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         switch(nil[U], par(f, self) > cons)
       }
 
-    def fold[T](implicit T: Monoid[T]): LList[T] -⚬ T =
+    def actOn[S, A](act: (S |*| A) -⚬ S): (S |*| LList[A]) -⚬ S = rec { self =>
+      switchWithL(
+        caseNil  = id[S],
+        caseCons = assocRL > par(act, id) > self
+      )
+    }
+
+    def foldMap0[T, U](f: T -⚬ U)(implicit U: Semigroup[U]): LList[T] -⚬ Maybe[U] =
+      switch(
+        caseNil  = Maybe.empty[U],
+        caseCons = par(f, id) > actOn[U, T](par(id, f) > U.combine) > Maybe.just[U],
+      )
+
+    def foldMap[T, U](f: T -⚬ U)(implicit U: Monoid[U]): LList[T] -⚬ U =
       rec { self =>
-        switch(T.unit, par(id, self) > T.combine)
+        switch(U.unit, par(f, self) > U.combine)
       }
+
+    def fold0[T](implicit T: Semigroup[T]): LList[T] -⚬ Maybe[T] =
+      foldMap0(id[T])
+
+    def fold[T](implicit T: Monoid[T]): LList[T] -⚬ T =
+      foldMap(id[T])
 
     def concat[T]: (LList[T] |*| LList[T]) -⚬ LList[T] = rec { self =>
       switchWithR(
@@ -2793,6 +2812,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def from[S, T](head: S -⚬ T, tail: List[S -⚬ T])(using S: Cosemigroup[S]): S -⚬ LList1[T] =
       LList.fromList0(tail) > par(head, id) > cons
+
+    def foldMap[T, U](f: T -⚬ U)(using U: Semigroup[U]): LList1[T] -⚬ U =
+      par(f, id) > LList.actOn[U, T](par(id, f) > U.combine)
+
+    def fold[T](using T: Semigroup[T]): LList1[T] -⚬ T =
+      LList.actOn[T, T](T.combine)
 
     /** Inserts an element to a list as soon as the element signals.
      *  If _m_ elements of the input list become available before the new element signals,
