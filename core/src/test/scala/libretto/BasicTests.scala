@@ -500,4 +500,49 @@ class BasicTests extends TestSuite {
       assert((fibs1 ++ fibs2).sorted == expected)
     }
   }
+
+  test("pool") {
+    case class ClientId(value: Int)
+    case class ResourceId(value: Int)
+
+    val nResources = 3
+    val nClients = 12
+
+    def client(cid: ClientId): (Val[ResourceId] |*| Neg[ResourceId]) -⚬ Val[(ClientId, ResourceId)] =
+      id                             [                            Val[ResourceId]             |*| Neg[ResourceId]  ]
+        .>.fst(dup).assocLR       .to[                   Val[ResourceId] |*| (Val[ResourceId] |*| Neg[ResourceId]) ]
+        .>(elimSnd(fulfill))      .to[                   Val[ResourceId]                                           ]
+        .>(introFst(const(cid)))  .to[ Val[ClientId] |*| Val[ResourceId]                                           ]
+        .>(unliftPair)            .to[ Val[(ClientId, ResourceId)]                                                 ]
+
+    val clients: List[(Val[ResourceId] |*| Neg[ResourceId]) -⚬ Val[(ClientId, ResourceId)]] =
+      (1 to nClients)
+        .map { i => client(ClientId(i)) }
+        .toList
+
+    val clientsPrg: Unlimited[Val[ResourceId] |*| Neg[ResourceId]] -⚬ Val[List[(ClientId, ResourceId)]] =
+      LList.fromListU(clients) > toScalaList
+
+    val resources: Done -⚬ LList1[Val[ResourceId]] =
+      LList1.from(
+        head = constVal(ResourceId(1)),
+        tail = (2 to nResources)
+          .map { i => constVal(ResourceId(i)) }
+          .toList,
+      )
+
+    val prg: One -⚬ Val[List[(ClientId, ResourceId)]] =
+      done > resources > pool(promise) > par(clientsPrg, LList1.foldMap(neglect)) > awaitPosSnd
+
+    testVal(prg) { pairs =>
+      // each client appears exactly once
+      assert(pairs.size == nClients)
+      assert(pairs.map(_._1).toSet.size == nClients)
+
+      // each resource is used by multiple clients
+      pairs.groupMapReduce(key = _._2)(_ => 1)(_ + _).foreach { case (rId, n) =>
+        assert(n >= nClients / nResources / 2, s"unbalanced resource usage: $pairs")
+      }
+    }
+  }
 }

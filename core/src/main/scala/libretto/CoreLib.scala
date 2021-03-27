@@ -2950,4 +2950,26 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         close > LList.nil[A]
     }
   }
+
+  /** Present a non-empty list of resources `A` as an unlimited supply of "borrowed" resources `A ⊗ Ā`,
+    * where `Ā` is the dual of `A`. A borrowed resource `A ⊗ Ā` must be "returned" by "annihilating"
+    * `A` and its dual `Ā`, namely via an inversion on the right `A ⊗ Ā -⚬ One`.
+    * A returned resource will become available for further use when it signals readiness using the
+    * [[Signaling.Positive]] instance.
+    *
+    * When all accesses to the pooled resources (obtained via the `Unlimited[A |*| Ā]` in the first
+    * out-port) are closed, the resources are returned in the second out-port.
+    */
+  def pool[A: Signaling.Positive, Ā](
+    lInvert: One -⚬ (Ā |*| A),
+  ): LList1[A] -⚬ (Unlimited[A |*| Ā] |*| LList1[A]) = rec { self =>
+    val borrow: LList1[A] -⚬ ((A |*| Ā) |*| LList1[A]) =
+      id                                         [     LList1[A]                   ]
+        .>(LList1.uncons)                     .to[   A |*|               LList[A]  ]
+        .>.fst(introSnd(lInvert) > assocRL)   .to[ ((A |*| Ā) |*| A) |*| LList[A]  ]
+        .>(assocLR)                           .to[  (A |*| Ā) |*| (A |*| LList[A]) ]
+        .>.snd(LList1.insertBySignal)         .to[  (A |*| Ā) |*|    LList1[A]     ]
+
+    Unlimited.unfold(borrow)
+  }
 }
