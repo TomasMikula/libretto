@@ -2321,6 +2321,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   object Semigroup {
+    implicit val semigroupDone: Semigroup[Done] =
+      new Semigroup[Done] {
+        override def combine: (Done |*| Done) -⚬ Done = join
+      }
+
     implicit val semigroupNeed: Semigroup[Need] =
       new Semigroup[Need] {
         override def combine: (Need |*| Need) -⚬ Need = forkNeed
@@ -2342,6 +2347,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       new Cosemigroup[Done] {
         override def split: Done -⚬ (Done |*| Done) = fork
       }
+
+    implicit val cosemigroupNeed: Cosemigroup[Need] =
+      new Cosemigroup[Need] {
+        override def split: Need -⚬ (Need |*| Need) = joinNeed
+      }
   }
 
   trait Monoid[A] extends Semigroup[A] {
@@ -2361,6 +2371,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   object Monoid {
+    implicit val monoidOne: Monoid[One] =
+      new Monoid[One] {
+        override def unit   :           One -⚬ One = id
+        override def combine: (One |*| One) -⚬ One = elimSnd[One]
+      }
+
     implicit val monoidDone: Monoid[Done] =
       new Monoid[Done] {
         override def unit   :             One -⚬ Done = done
@@ -2392,6 +2408,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       new Comonoid[One] {
         override def counit: One -⚬ One = id[One]
         override def split: One -⚬ (One |*| One) = introSnd[One]
+      }
+
+    implicit val comonoidNeed: Comonoid[Need] =
+      new Comonoid[Need] {
+        override def split  : Need -⚬ (Need |*| Need) = joinNeed
+        override def counit : Need -⚬ One             = need
       }
   }
 
