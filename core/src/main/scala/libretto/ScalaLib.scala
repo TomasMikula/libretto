@@ -1,6 +1,7 @@
 package libretto
 
 import java.util.concurrent.atomic.AtomicLong
+import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 
 object ScalaLib {
@@ -78,6 +79,12 @@ class ScalaLib[
       .>.snd(IXI)                           .to[  Neg[A] |*| ((Val[A] |*| Neg[A]) |*| (Val[A] |*| Neg[A])) ]
       .>.snd(parToOne(fulfill, fulfill))    .to[  Neg[A] |*|                      One                      ]
       .elimSnd                              .to[  Neg[A]                                                   ]
+
+  def delayVal[A](by: Done -⚬ Done): Val[A] -⚬ Val[A] =
+    signalPosFst > par(by, id) > awaitPosFst
+
+  def delayVal[A](by: FiniteDuration): Val[A] -⚬ Val[A] =
+    delayVal(delay(by))
 
   implicit def pComonoidVal[A]: PComonoid[Val[A]] =
     new PComonoid[Val[A]] {
@@ -365,6 +372,12 @@ class ScalaLib[
         }
       }
   }
+
+  def putStr: Val[String] -⚬ Done =
+    blocking[String, Unit](Console.out.print(_)) > neglect
+
+  def putStr(s: String): Done -⚬ Done =
+    constVal(s) > putStr
 
   def printLine: Val[String] -⚬ Done =
     blocking[String, Unit](Console.out.println(_)) > neglect
