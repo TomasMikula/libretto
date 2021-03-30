@@ -1,6 +1,7 @@
 package libretto
 
 import java.util.concurrent.atomic.AtomicLong
+import scala.reflect.TypeTest
 
 object ScalaLib {
   def apply(
@@ -373,4 +374,92 @@ class ScalaLib[
 
   def readLine: Done -⚬ Val[String] =
     constVal(()) > blocking[Unit, String](_ => Console.in.readLine())
+
+  /** Utility to construct a Libretto program that branches based on a Scala value inside a [[Val]]. */
+  sealed trait ValMatcher[-U >: V, V, A, R] { thiz =>
+    def typeTest: TypeTest[U, V]
+
+    def get: (Val[V] |*| A) -⚬ R
+
+    def map[S](f: R -⚬ S): ValMatcher[U, V, A, S] =
+      new ValMatcher[U, V, A, S] {
+        override def typeTest: TypeTest[U, V] = thiz.typeTest
+        override def get: (Val[V] |*| A) -⚬ S = thiz.get > f
+      }
+
+    def contramap[Z](f: Z -⚬ A): ValMatcher[U, V, Z, R] =
+      new ValMatcher[U, V, Z, R] {
+        override def typeTest: TypeTest[U, V] = thiz.typeTest
+        override def get: (Val[V] |*| Z) -⚬ R = par(id, f) > thiz.get
+      }
+
+    def |[W >: V <: U, V2 <: W](that: ValMatcher[W, V2, A, R]): ValMatcher[W, V | V2, A, R] =
+      new ValMatcher[W, V | V2, A, R] {
+        override def get: (Val[V | V2] |*| A) -⚬ R = {
+          def split(v: V | V2): Either[V, V2] =
+            v match {
+              case thiz.typeTest(v) => Left(v)
+              case that.typeTest(v) => Right(v)
+              case _ => sys.error("impossible")
+            }
+
+          id                                   [        Val[V | V2]          |*| A  ]
+            .>.fst(mapVal(split))           .to[     Val[Either[V, V2]]      |*| A  ]
+            .>.fst(liftEither)              .to[ (Val[V]        |+| Val[V2]) |*| A  ]
+            .>(distributeR)                 .to[ (Val[V] |*| A) |+| (Val[V2] |*| A) ]
+            .>(either(thiz.get, that.get))  .to[                 R                  ]
+        }
+
+        override def typeTest: TypeTest[W, V | V2] =
+          new TypeTest[W, V | V2] {
+            override def unapply(w: W): Option[w.type & (V | V2)] =
+              (thiz: ValMatcher[W, V, A, R]).typeTest.unapply(w) orElse that.typeTest.unapply(w)
+          }
+      }
+
+    def &[W >: V <: U, V2 <: W, B](that: ValMatcher[W, V2, B, R]): ValMatcher[W, V | V2, A |&| B, R] =
+      thiz.contramap[A |&| B](chooseL) | that.contramap[A |&| B](chooseR)
+
+    def otherwise[W >: V <: U](f: (Val[W] |*| A) -⚬ R): ValMatcher[W, W, A, R] =
+      new ValMatcher[W, W, A, R] {
+        override def typeTest: TypeTest[W, W] = TypeTest.identity
+
+        override def get: (Val[W] |*| A) -⚬ R = {
+          def split(w: W): Either[V, W] =
+            thiz.typeTest.unapply(w).toLeft(right = w)
+
+          id                             [      Val[      W     ]     |*| A  ]
+            .>.fst(mapVal(split))     .to[      Val[Either[V, W]]     |*| A  ]
+            .>.fst(liftEither)        .to[ (Val[V]        |+| Val[W]) |*| A  ]
+            .>(distributeR)           .to[ (Val[V] |*| A) |+| (Val[W] |*| A) ]
+            .>(either(thiz.get, f))   .to[                 R                 ]
+        }
+      }
+  }
+
+  object ValMatcher {
+    def caseEq[V, A, R](v: V)(f: (Val[v.type] |*| A) -⚬ R): ValMatcher[Any, v.type, A, R] =
+      new ValMatcher[Any, v.type, A, R] {
+        override def get: (Val[v.type] |*| A) -⚬ R =
+          f
+
+        override def typeTest: TypeTest[Any, v.type] =
+          new TypeTest[Any, v.type] {
+            override def unapply(x: Any): Option[x.type & v.type] =
+              x match {
+                case y: v.type => Some(y.asInstanceOf[x.type & v.type])
+                case _ => None
+              }
+          }
+      }
+
+    def caseAny[V, A, R](f: (Val[V] |*| A) -⚬ R): ValMatcher[V, V, A, R] =
+      new ValMatcher[V, V, A, R] {
+        override def get: (Val[V] |*| A) -⚬ R =
+          f
+
+        override def typeTest: TypeTest[V, V] =
+          TypeTest.identity[V]
+      }
+  }
 }
