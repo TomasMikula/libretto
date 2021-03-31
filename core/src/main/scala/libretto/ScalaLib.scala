@@ -406,6 +406,12 @@ class ScalaLib[
         override def get: (Val[V] |*| Z) -⚬ R = par(id, f) > thiz.get
       }
 
+    def contramapVal[W](f: W => V): ValMatcher[W, W, A, R] =
+      new ValMatcher[W, W, A, R] {
+        override def typeTest: TypeTest[W, W] = TypeTest.identity
+        override def get: (Val[W] |*| A) -⚬ R = par(mapVal(f), id) > thiz.get
+      }
+
     def |[W >: V <: U, V2 <: W](that: ValMatcher[W, V2, A, R]): ValMatcher[W, V | V2, A, R] =
       new ValMatcher[W, V | V2, A, R] {
         override def get: (Val[V | V2] |*| A) -⚬ R = {
