@@ -1141,8 +1141,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       bifunctor.snd[A]
   }
 
-  implicit def fst[B]: Transportive[λ[x => x |*| B]] = |*|.fst[B]
-  implicit def snd[A]: Transportive[λ[x => A |*| x]] = |*|.snd[A]
+  implicit def fstFunctor[B]: Transportive[λ[x => x |*| B]] = |*|.fst[B]
+  implicit def sndFunctor[A]: Transportive[λ[x => A |*| x]] = |*|.snd[A]
 
   implicit val pairBifunctor: Bifunctor[|*|] = |*|.bifunctor
 
