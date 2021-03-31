@@ -1522,6 +1522,36 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
                    (B |*|(A|*|C)) =
     |*|.assocRL[A, B, C] > par(swap, id) > |*|.assocLR
 
+  def IV[A, B, C, D](f: (B |*| C) -⚬ D): ( ( A |*| B ) |*| C ) -⚬
+    //                                       |      \     /
+    //                                       |       \   /
+    //                                       |        \ /
+                                           ( A   |*|   D ) =
+    assocLR > snd(f)
+
+  def VI[A, B, C, D](f: (A |*| B) -⚬ D): ( A |*| ( B |*| C ) ) -⚬
+    //                                      \     /      |
+    //                                       \   /       |
+    //                                        \ /        |
+                                             ( D   |*|   C ) =
+    assocRL > fst(f)
+
+  /** Λ is the uppercase Greek letter lambda. */
+  def IΛ[A, B, C, D](f: B -⚬ (C |*| D)): ( A   |*|   B ) -⚬
+    //                                     |        / \
+    //                                     |       /   \
+    //                                     |      /     \
+                                       ( ( A |*| C ) |*| D ) =
+    snd(f) > assocRL
+
+  /** Λ is the uppercase Greek letter lambda. */
+  def ΛI[A, B, C, D](f: A -⚬ (B |*| C)): ( A   |*|   D ) -⚬
+    //                                    / \        |
+    //                                   /   \       |
+    //                                  /     \      |
+                                     ( B |*| ( C |*| D ) ) =
+    fst(f) > assocLR
+
   /** From the choice ''available'' on the right (`C |&| D`), choose the one corresponding to the choice ''made''
     * on the left (`A |+| B`): if on the left there is `A`, choose `C`, if on the left thre is `B`, choose `D`.
     */
