@@ -14,21 +14,22 @@ class StreamsTests extends TestSuite {
 
   test("toList ⚬ fromList = id") {
     assertVal(
-      Pollable.fromList(List(1, 2, 3, 4, 5, 6)) > Pollable.toList,
+      done > Pollable.fromList(List(1, 2, 3, 4, 5, 6)) > Pollable.toList,
       List(1, 2, 3, 4, 5, 6),
     )
   }
 
   test("Pollable.map") {
     assertVal(
-      Pollable.fromList(List(1, 2, 3)) > Pollable.map(_.toString) > Pollable.toList,
+      done > Pollable.fromList(List(1, 2, 3)) > Pollable.map(_.toString) > Pollable.toList,
       List("1", "2", "3"),
     )
   }
 
   test("partition") {
     assertVal(
-      Pollable.of(1, 2, 3, 4, 5, 6)
+      done
+        .>(Pollable.of(1, 2, 3, 4, 5, 6))
         .>(Pollable.map { i => if (i % 2 == 0) Left(i) else Right(i) })
         .>(Pollable.partition)
         .par(Pollable.toList, Pollable.toList)
@@ -39,7 +40,8 @@ class StreamsTests extends TestSuite {
 
   test("concat") {
     assertVal(
-      parFromOne(Pollable.of(1, 2, 3), Pollable.of(4, 5, 6))
+      done
+        .>(fork(Pollable.of(1, 2, 3), Pollable.of(4, 5, 6)))
         .>(Pollable.concat)
         .>(Pollable.toList),
       List(1, 2, 3 ,4, 5, 6),
@@ -49,8 +51,8 @@ class StreamsTests extends TestSuite {
   test("merge") {
     assertVal(
       parFromOne(
-        Pollable.of(1, 2, 3),
-        Pollable.of(4, 5, 6),
+        done > Pollable.of(1, 2, 3),
+        done > Pollable.of(4, 5, 6),
       )
         .>(Pollable.merge)
         .>(Pollable.toList)
@@ -63,9 +65,9 @@ class StreamsTests extends TestSuite {
     testVal(
       LList
         .of(
-          Pollable.of(1, 2, 3),
-          Pollable.of(4, 5, 6) > Pollable.delay(10.millis),
-          Pollable.of(7, 8, 9),
+          done > Pollable.of(1, 2, 3),
+          done > Pollable.of(4, 5, 6) > Pollable.delay(10.millis),
+          done > Pollable.of(7, 8, 9),
         )
         .>(Pollable.mergeAll)
         .>(Pollable.toList)
@@ -85,7 +87,7 @@ class StreamsTests extends TestSuite {
       mapVal[String, (Int, String)](s => (s.length, s)) > liftPair
 
     val input: One -⚬ Pollable[String] =
-      Pollable.of("f", "fo", "foo", "fooo", "foooo", "pho", "phoo", "phooo", "bo", "boo")
+      done > Pollable.of("f", "fo", "foo", "fooo", "foooo", "pho", "phoo", "phooo", "bo", "boo")
 
     val prg: One -⚬ Val[List[String]] =
       input

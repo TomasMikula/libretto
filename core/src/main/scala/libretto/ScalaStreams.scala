@@ -106,17 +106,17 @@ class ScalaStreams[
         .pack[PollableF[A, *]]
     }
 
-    def fromList[A](as: List[A]): One -⚬ Pollable[A] = {
-      @tailrec def go(ras: List[A], acc: One -⚬ Pollable[A]): One -⚬ Pollable[A] =
+    def fromList[A](as: List[A]): Done -⚬ Pollable[A] = {
+      @tailrec def go(ras: List[A], acc: Done -⚬ Pollable[A]): Done -⚬ Pollable[A] =
         ras match {
-          case head :: tail => go(tail, parFromOne(const(head), acc) > Pollable.cons)
+          case head :: tail => go(tail, fork(constVal(head), acc) > Pollable.cons)
           case Nil          => acc
         }
 
-      go(as.reverse, done > Pollable.empty[A])
+      go(as.reverse, Pollable.empty[A])
     }
 
-    def of[A](as: A*): One -⚬ Pollable[A] =
+    def of[A](as: A*): Done -⚬ Pollable[A] =
       fromList(as.toList)
 
     def toList[A]: Pollable[A] -⚬ Val[List[A]] = {
