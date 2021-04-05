@@ -171,13 +171,15 @@ object DiningPhilosophers extends StarterApp {
   import Philosopher.Name
 
   override def blueprint: One -⚬ Done = {
-    val names = List("Aristotle", "Bolzano", "Confucius", "Descartes", "Epictetus")
+    val names: Done -⚬ LList1[Val[String]] =
+      constList1Of("Aristotle", "Bolzano", "Confucius", "Descartes", "Epictetus")
 
-    constList(names)                                          .to[ LList[                               Name ] ]
-      .>(LList.map(introFst(done > makeSharedFork).assocLR))  .to[ LList[SharedFork |*| (SharedFork |*| Name)] ]
-      .>(LList.halfRotateL)                                   .to[ LList[(SharedFork |*| Name) |*| SharedFork] ]
-      .>(LList.map(par(swap, id).assocLR))                    .to[ LList[Name |*| (SharedFork |*| SharedFork)] ]
-      .>(LList.map(Philosopher.run(cycles = 5)))              .to[ LList[     Done                           ] ]
-      .>(LList.fold)                                          .to[     Done                                    ]
+    done
+      .>(names)                                               .to[ LList1[                               Name ] ]
+      .>(LList1.map(introFst(done > makeSharedFork).assocLR)) .to[ LList1[SharedFork |*| (SharedFork |*| Name)] ]
+      .>(LList1.halfRotateL)                                  .to[ LList1[(SharedFork |*| Name) |*| SharedFork] ]
+      .>(LList1.map(par(swap, id).assocLR))                   .to[ LList1[Name |*| (SharedFork |*| SharedFork)] ]
+      .>(LList1.map(Philosopher.run(cycles = 5)))             .to[ LList1[     Done                           ] ]
+      .>(LList1.fold)                                         .to[      Done                                    ]
   }
 }
