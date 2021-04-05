@@ -2670,6 +2670,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         switch(nil[U], par(f, self) > cons)
       }
 
+    def mapS[S, T, U](f: (S |*| T) -⚬ (S |*| U)): (S |*| LList[T]) -⚬ (S |*| LList[U]) = rec { self =>
+      switchWithL(
+        caseNil = id[S] > introSnd(nil[U]),
+        caseCons = assocRL > fst(f > swap) > assocLR > snd(self) > XI > snd(cons[U]),
+      )
+    }
+
     def actOn[S, A](act: (S |*| A) -⚬ S): (S |*| LList[A]) -⚬ S = rec { self =>
       switchWithL(
         caseNil  = id[S],
@@ -2870,6 +2877,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def from[S, T](head: S -⚬ T, tail: List[S -⚬ T])(using S: Cosemigroup[S]): S -⚬ LList1[T] =
       LList.fromList0(tail) > par(head, id) > cons
+
+    def map[T, U](f: T -⚬ U): LList1[T] -⚬ LList1[U] =
+      par(f, LList.map(f))
+
+    def mapS[S, T, U](f: (S |*| T) -⚬ (S |*| U)): (S |*| LList1[T]) -⚬ (S |*| LList1[U]) =
+      assocRL > fst(f > swap) > assocLR > snd(LList.mapS(f)) > XI
 
     def foldMap[T, U](f: T -⚬ U)(using U: Semigroup[U]): LList1[T] -⚬ U =
       par(f, id) > LList.actOn[U, T](par(id, f) > U.combine)
