@@ -254,6 +254,17 @@ class ScalaLib[
     )
   }
 
+  def constList1[A](a: A, as: List[A]): Done -⚬ LList1[Val[A]] =
+    LList1.from(constVal(a), as.map(constVal))
+
+  def constList1[A](as: ::[A]): Done -⚬ LList1[Val[A]] = {
+    val h :: t = as
+    constList1(h, t)
+  }
+
+  def constList1Of[A](a: A, as: A*): Done -⚬ LList1[Val[A]] =
+    constList1(a, as.toList)
+
   /** Create a resource that is just a (potentially) mutable value which does not need any cleanup.
     *
     * @param init function that initializes the (potentially) mutable value from an immutable one.
