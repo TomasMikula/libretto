@@ -135,7 +135,8 @@ class FreeScalaFutureRunner(
         case -⚬.InjectR() =>
           InjectR(this)                                           .asInstanceOf[Frontier[B]]
 
-        case -⚬.EitherF(f, g) =>
+        case e: -⚬.EitherF[_, _, _] =>
+          val -⚬.EitherF(f, g) = e // workaround for https://github.com/lampepfl/dotty/issues/7524
           type A1; type A2
           def go(a12: Frontier[A1 |+| A2]): Frontier[B] =
             a12 match {
@@ -156,7 +157,8 @@ class FreeScalaFutureRunner(
           type A1; type A2
           Frontier.chooseR(this.asInstanceOf[Frontier[A1 |&| A2]]).asInstanceOf[Frontier[B]]
 
-        case -⚬.Choice(f, g) =>
+        case c: -⚬.Choice[_, _, _] =>
+          val -⚬.Choice(f, g) = c // workaround for https://github.com/lampepfl/dotty/issues/7524
           Choice(
             () => this.extend(f),
             () => this.extend(g),
