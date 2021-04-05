@@ -2874,6 +2874,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def uncons[T]: LList1[T] -⚬ (T |*| LList[T]) =
       id
 
+    def switch[T, R](
+      case1: T -⚬ R,
+      caseN: (T |*| LList1[T]) -⚬ R,
+    ): LList1[T] -⚬ R =
+      LList.switchWithL(case1, caseN)
+
     def from[S, T](head: S -⚬ T, tail: List[S -⚬ T])(using S: Cosemigroup[S]): S -⚬ LList1[T] =
       LList.fromList0(tail) > par(head, id) > cons
 
@@ -2891,6 +2897,31 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def fold[T](using T: Semigroup[T]): LList1[T] -⚬ T =
       LList.actOn[T, T](T.combine)
+
+    /** Shifts all the elements of a list by "half" to the left,
+     *  moving the first half of the first element to the end of the list.
+     *
+     *  Example:
+     *
+     *  Before:
+     *  ```
+     *  (a1, b1), (a2, b2), (a3, b3)
+     *  ```
+     *
+     *  After:
+     *  ```
+     *  (b1, a2), (b2, a3), (b3, a1)
+     *  ```
+     */
+    def halfRotateL[A, B]: LList1[A |*| B] -⚬ LList1[B |*| A] = {
+      val f: ((A |*| B) |*| (A |*| B)) -⚬ ((A |*| B) |*| (B |*| A)) =
+        snd(swap) > IXI
+
+      switch(
+        case1 = swap > singleton[B |*| A],
+        caseN = mapSAppend[A |*| B, A |*| B, B |*| A](f, swap[A, B] > LList.singleton),
+      )
+    }
 
     /** Inserts an element to a list as soon as the element signals.
      *  If _m_ elements of the input list become available before the new element signals,
