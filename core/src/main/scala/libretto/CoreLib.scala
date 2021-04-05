@@ -2644,8 +2644,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       fromList(fs map (Unlimited.single > _))
     }
 
-    def of[T](ts: (One -⚬ T)*): One -⚬ LList[T] =
-      fromList(ts.toList)
+    def of[S, T](fs: (S -⚬ T)*)(using S: Comonoid[S]): S -⚬ LList[T] =
+      fromList(fs.toList)
 
     def switch[T, R](
       caseNil: One -⚬ R,
