@@ -42,10 +42,10 @@ class FreeScalaFutureRunner(
     pa.future
   }
 
-  override def runScala[A](prg: One -⚬ Val[A]): Future[A] = {
+  override def runScala[A](prg: Done -⚬ Val[A]): Future[A] = {
     import Frontier._
     val resourceRegistry = new ResourceRegistry
-    val fa = Frontier.One.extendBy(prg, resourceRegistry).toFutureValue
+    val fa = Frontier.DoneNow.extendBy(prg, resourceRegistry).toFutureValue
 
     def closeResources(openResources: Seq[AcquiredResource[_]]): Future[Any] =
       Future.traverse(openResources) { r => Async.toFuture(r.releaseAsync(r.resource)) }

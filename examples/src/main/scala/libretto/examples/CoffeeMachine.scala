@@ -40,8 +40,8 @@ object CoffeeMachine extends StarterApp { app =>
 
   type LatteParams = (Size, ShotCount, Option[Flavor])
 
-  override def blueprint: One -⚬ Done =
-    done > makeCoffeeMachine > useCoffeeMachine
+  override def blueprint: Done -⚬ Done =
+    makeCoffeeMachine > useCoffeeMachine
 
   def espresso(shots: ShotCount): Beverage =
     Beverage("Espresso" + (shots match {

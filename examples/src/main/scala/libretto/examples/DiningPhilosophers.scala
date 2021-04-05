@@ -170,12 +170,11 @@ object DiningPhilosophers extends StarterApp {
 
   import Philosopher.Name
 
-  override def blueprint: One -⚬ Done = {
+  override def blueprint: Done -⚬ Done = {
     val names: Done -⚬ LList1[Val[String]] =
       constList1Of("Aristotle", "Bolzano", "Confucius", "Descartes", "Epictetus")
 
-    done
-      .>(names)                                               .to[ LList1[                               Name ] ]
+    names                                                     .to[ LList1[                               Name ] ]
       .>(LList1.map(introFst(done > makeSharedFork).assocLR)) .to[ LList1[SharedFork |*| (SharedFork |*| Name)] ]
       .>(LList1.halfRotateL)                                  .to[ LList1[(SharedFork |*| Name) |*| SharedFork] ]
       .>(LList1.map(par(swap, id).assocLR))                   .to[ LList1[Name |*| (SharedFork |*| SharedFork)] ]

@@ -34,7 +34,7 @@ abstract class AbstractStarterKit(
   import dsl._
   import coreLib._
 
-  def runScalaAsync[A](blueprint: One -⚬ Val[A]): Future[A] = {
+  def runScalaAsync[A](blueprint: Done -⚬ Val[A]): Future[A] = {
     val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())
     val blockingExecutor = Executors.newCachedThreadPool()
     implicit val ec = ExecutionContext.fromExecutor(mainExecutor)
@@ -47,7 +47,7 @@ abstract class AbstractStarterKit(
         res
       }
   }
-  
-  def runAsync(blueprint: One -⚬ Done): Future[Unit] =
+
+  def runAsync(blueprint: Done -⚬ Done): Future[Unit] =
     runScalaAsync(blueprint > constVal(()))
 }

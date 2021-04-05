@@ -1,7 +1,7 @@
 # Libretto Basics
 
-A concurrent program in Libretto DSL is a _pure value_ of a certain type (such as the type `One -⚬ Done` or
-`One -⚬ Val[String]`).
+A concurrent program in Libretto DSL is a _pure value_ of a certain type (such as the type `Done -⚬ Done` or
+`Done -⚬ Val[String]`).
 Such a value is a mere _description,_ or _blueprint,_ of a program to be executed.
 The blueprint can then be passed to an interpreter for execution.
 
@@ -47,8 +47,8 @@ object HelloWorld extends StarterAppScala[String] {
 
   // place your code experiments here
 
-  override def blueprint: One -⚬ Val[String] =
-    done > constVal("Hello world!")
+  override def blueprint: Done -⚬ Val[String] =
+    constVal("Hello world!")
 }
 ```
 
@@ -196,7 +196,7 @@ As an example, a component `f` with two in-ports of types `A` and `B` and two ou
 
 is represented as a value `f: (A ⊗ B) -⚬ (C ⊗ D)`.
 The expression _X ⊗ Y_ represents a **concurrent pair** of _X_ and _Y_, sometimes referred to simply as _X times Y_.
-It is also called a _tensor product_ or a _monoidal product_ (of a monoidal category). 
+It is also called a _tensor product_ or a _monoidal product_ (of a monoidal category).
 
 Because the ⊗ symbol is usually not very intelligible in monospace fonts (e.g. hardly distinguishable from ⊕, compare
 `⊗` vs. `⊕`), in code we usually use `|*|` for the concurrent pair.
@@ -736,13 +736,13 @@ to ever access `_2`, and vice versa.
 The primitive for offering a choice (introducing `|&|`) is
 
 ```scala
-/**  ┏━━━━━━━━━━━━━━┓    
+/**  ┏━━━━━━━━━━━━━━┓
   *  ┃   ┌──────────╀───┐
   *  ┞───┤    f     ╷ B │
   *  ╎ A ├──────────┤ & │
   *  ┟───┤    g     ╵ C │
   *  ┃   └──────────┟───┘
-  *  ┗━━━━━━━━━━━━━━┛    
+  *  ┗━━━━━━━━━━━━━━┛
   */
 def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C)
 ```
@@ -805,7 +805,7 @@ over the choice in the other out-port.
 //  ╎⎜⊗⎟│               ┟─┘                      ╎⎜⊗⎟│               ╎&│
 //  ╎⎝B⎠│               ┃                        ╎⎝C⎠│               ╎B│
 //  ╎ & │ coDistributeL ┞─┐                      ╎ & │ coDistributeR ┟─┘
-//  ╎⎛A⎞│               ╎B│                      ╎⎛B⎞│               ┃  
+//  ╎⎛A⎞│               ╎B│                      ╎⎛B⎞│               ┃
 //  ╎⎜⊗⎟│               ╎&│                      ╎⎜⊗⎟│               ┞─┐
 //  ╎⎝C⎠│               ╎C│                      ╎⎝C⎠│               ╎C│
 //  ┟───┘               ┟─┘                      ┟───┘               ┟─┘
@@ -877,7 +877,7 @@ As an example, let's define a `List` type:
 
 ```scala
 //         +-------- element type
-//         |    +--- marks occurrences of recursive substructure(s), in this case the tail sub-list 
+//         |    +--- marks occurrences of recursive substructure(s), in this case the tail sub-list
 //         |    |     +-- nil     +-- cons
 //         |    |     | head --+  |   +-- tail
 //         |    |     |        |  |   |
@@ -896,8 +896,8 @@ object List {
     injectL > pack
 
   //     head --+       +-- tail
-  //            |       |       
-  //            V       V       
+  //            |       |
+  //            V       V
   def cons[A]: (A |*| List[A]) -⚬ List[A] =
     injectR > pack
 }
@@ -956,7 +956,7 @@ Notes:
  - `par(f, mapTail)` maps the head and the tail of the list concurrently.
  - The `cons[B]` constructor may execute as soon as the input list is known to be non-empty.
    In particular, it does not wait for `par(f, mapTail)` to finish.
-   
+
 ## Racing
 
 Libretto provides functions for testing which of two concurrent signals arrived first. There is one version for
@@ -977,7 +977,7 @@ at some point (remember that signals cannot be ignored), so it is propagated to 
    in the out-port. The case of second signal winning is analogous.
  - In `selectNeed`, if the first `Need` signal of the out-port wins, the left side of the `|&|` in the in-port is
    chosen and the second `Need` signal of the out-port is forwarded to it.
-   
+
 There are additional library functions for racing built on top of these provided for convenience.
 
 ### Racing is a source of non-determinism
@@ -994,7 +994,7 @@ The type `Val[A]` represents a Scala value of type `A` flowing in the positive d
 Similarly, the type `Neg[A]` represents a Scala value of type `A` flowing in the negative direction
 (i.e. against the `-⚬`).
 
-For a first approximation, `Val[A]` can be thought of as `Future[A]` and `Neg[A]` can be thought of as `Promise[A]`. 
+For a first approximation, `Val[A]` can be thought of as `Future[A]` and `Neg[A]` can be thought of as `Promise[A]`.
 
 To initially get some Scala values into a Libretto program, we bake them in during assembly using the primitives
 
@@ -1133,15 +1133,15 @@ that although two programs are equal, they might exhibit statistically different
 Finally, let's give an example of two programs that look the same on the outside, but are not equal:
 
 ```scala
-//  ┏━━━━━━━━━━━━━┯━━━━━━━━━━━━━━┓              ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┓     
+//  ┏━━━━━━━━━━━━━┯━━━━━━━━━━━━━━┓              ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 //  ┞────┐        ╎              ┞────┐         ┞────┐      id[Done]        ┞────┐
 //  ╎Done│→┄┄┄┄┐  ╎       ┌┄┄┄┄┄→╎Done│         ╎Done│→┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄→╎Done│
 //  ┟────┘     ┆  ├────┐  ┆      ┟────┘         ┟────┘                      ┟────┘
-//  ┃    join  ├┄→╎Done│→┄┤ fork ┃         ≠    ┠╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨     
+//  ┃    join  ├┄→╎Done│→┄┤ fork ┃         ≠    ┠╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨
 //  ┞────┐     ┆  ├────┘  ┆      ┞────┐         ┞────┐      id[Done]        ┞────┐
 //  ╎Done│→┄┄┄┄┘  ╎       └┄┄┄┄┄→╎Done│         ╎Done│→┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄→╎Done│
 //  ┟────┘        ╎              ┟────┘         ┟────┘                      ┟────┘
-//  ┗━━━━━━━━━━━━━┷━━━━━━━━━━━━━━┛              ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━┛     
+//  ┗━━━━━━━━━━━━━┷━━━━━━━━━━━━━━┛              ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 join > fork ≠ par(id[Done], id[Done])
 ```

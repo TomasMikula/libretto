@@ -29,19 +29,19 @@ abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
     scheduler.shutdown()
   }
 
-  def assertCompletes(prg: One -⚬ Done): Unit =
+  def assertCompletes(prg: Done -⚬ Done): Unit =
     Await.result(
       runner.run(prg),
       5.seconds,
     )
 
-  def assertVal[A](prg: One -⚬ Val[A], expected: A): Unit =
+  def assertVal[A](prg: Done -⚬ Val[A], expected: A): Unit =
     assert(Await.result(runner.runScala(prg), 5.seconds) == expected)
 
-  def testVal[A](prg: One -⚬ Val[A])(f: A => Unit): Unit =
+  def testVal[A](prg: Done -⚬ Val[A])(f: A => Unit): Unit =
     f(Await.result(runner.runScala(prg), 5.seconds))
 
-  def assertCrashes(prg: One -⚬ Done, expectedMsg: Option[String] = None): Unit =
+  def assertCrashes(prg: Done -⚬ Done, expectedMsg: Option[String] = None): Unit =
     Await.ready(runner.run(prg), 5.seconds).value.get match {
       case Success(()) =>
         assert(false, "Expected crash, but the program completed successfully.")
@@ -51,7 +51,7 @@ abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
         }
     }
 
-  def assertCrashes(prg: One -⚬ Done, expectedMsg: String): Unit =
+  def assertCrashes(prg: Done -⚬ Done, expectedMsg: String): Unit =
     assertCrashes(prg, Some(expectedMsg))
 
   extension [A, B: Junction.Positive](f: A -⚬ LPollable[B]) {

@@ -29,35 +29,35 @@ class BasicTests extends TestSuite {
   }
 
   private def raceKeepWinner[A](
-    prg1: One -⚬ Val[A],
-    prg2: One -⚬ Val[A],
-  ): One -⚬ Val[A] =
-    parFromOne(prg1, prg2)
+    prg1: Done -⚬ Val[A],
+    prg2: Done -⚬ Val[A],
+  ): Done -⚬ Val[A] =
+    fork(prg1, prg2)
       .race(
         caseFstWins = id.awaitSnd(neglect),
         caseSndWins = id.awaitFst(neglect),
       )
 
   test("done") {
-    assertCompletes(done)
+    assertCompletes(introFst(done) > join)
   }
 
   test("join ⚬ fork") {
-    assertCompletes(done > fork > join)
+    assertCompletes(fork > join)
   }
 
   test("constVal") {
-    assertVal(done > constVal(5), 5)
+    assertVal(constVal(5), 5)
   }
 
   test("unliftEither") {
-    assertVal(const(42) > injectR > unliftEither, Right(42))
+    assertVal(constVal(42) > injectR > unliftEither, Right(42))
   }
 
   test("liftPair, liftNegPair") {
-    val prg: One -⚬ Val[(String, Int)] =
-      id                                       [       One                                                                            ]
-        .>(const(("foo", 42)))              .to[     Val[(String, Int)]                                                               ]
+    val prg: Done -⚬ Val[(String, Int)] =
+      id                                       [       Done                                                                           ]
+        .>(constVal(("foo", 42)))           .to[     Val[(String, Int)]                                                               ]
         .introSnd(promise)                  .to[     Val[(String, Int)]      |*| (   Neg[(String, Int)]       |*| Val[(String, Int)]) ]
         .assocRL                            .to[ (   Val[(String, Int)]      |*|     Neg[(String, Int)]     ) |*| Val[(String, Int)]  ]
         .>.fst(par(liftPair, liftNegPair))  .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| Val[(String, Int)]  ]
@@ -70,9 +70,9 @@ class BasicTests extends TestSuite {
     val lInvert: One -⚬ ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) =
       coreLib.lInvert
 
-    val prg: One -⚬ Val[(String, Int)] =
-      id                                           [               One                                                                            ]
-        .>(parFromOne(const("foo"), const(42))) .to[   Val[String] |*| Val[Int]                                                                   ]
+    val prg: Done -⚬ Val[(String, Int)] =
+      id                                           [               Done                                                                           ]
+        .>(fork(constVal("foo"), constVal(42))) .to[   Val[String] |*| Val[Int]                                                                   ]
         .introSnd.>.snd(lInvert)                .to[  (Val[String] |*| Val[Int]) |*| ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) ]
         .assocRL                                .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| (Val[String] |*| Val[Int])  ]
         .>.fst(par(unliftPair, unliftNegPair))  .to[ (    Val[(String, Int)]     |*|      Neg[(String, Int)]    ) |*| (Val[String] |*| Val[Int])  ]
@@ -83,9 +83,9 @@ class BasicTests extends TestSuite {
   }
 
   test("inflate") {
-    val prg: One -⚬ Done =
-      id                                 [    One                            ]
-        .>(const(42))                 .to[  Val[Int]                         ]
+    val prg: Done -⚬ Done =
+      id                                 [    Done                           ]
+        .>(constVal(42))              .to[  Val[Int]                         ]
         .>(introSnd(lInvertSignal))   .to[  Val[Int] |*| ( Need    |*| Done) ]
         .assocRL                      .to[ (Val[Int] |*|   Need  ) |*| Done  ]
         .>.fst.snd(inflate)           .to[ (Val[Int] |*| Neg[Int]) |*| Done  ]
@@ -96,14 +96,14 @@ class BasicTests extends TestSuite {
 
   test("delayed injectL") {
     // 'A' delayed by 40 millis
-    val a: One -⚬ Val[Char] =
-      done > delay(40.millis) > constVal('A')
+    val a: Done -⚬ Val[Char] =
+      delay(40.millis) > constVal('A')
 
     // 'B' delayed by 30 + 20 = 50 millis.
     // We are testing that the second timer starts ticking only after the delayed inject (joinInjectL).
-    val b: One -⚬ Val[Char] = {
-      val delayedInjectL: One -⚬ (Val[Char] |+| Val[Char]) =
-        done > fork(delay(30.millis), constVal('B')) > awaitInjectL
+    val b: Done -⚬ Val[Char] = {
+      val delayedInjectL: Done -⚬ (Val[Char] |+| Val[Char]) =
+        fork(delay(30.millis), constVal('B')) > awaitInjectL
       delayedInjectL > either(
         introFst[Val[Char], Done](done > delay(20.millis)).awaitFst,
         id,
@@ -115,19 +115,19 @@ class BasicTests extends TestSuite {
 
   test("delayed chooseL") {
     // 'A' delayed by 40 millis
-    val a: One -⚬ Val[Char] =
-      done > delay(40.millis) > constVal('A')
+    val a: Done -⚬ Val[Char] =
+      delay(40.millis) > constVal('A')
 
     // 'B' delayed by 30 + 20 = 50 millis.
     // We are testing that the second timer starts ticking only after the delayed choice is made.
-    val b: One -⚬ Val[Char] =
-      done > fork(delay(30.millis), choice(delay(20.millis), id)) > awaitPosChooseL > constVal('B')
+    val b: Done -⚬ Val[Char] =
+      fork(delay(30.millis), choice(delay(20.millis), id)) > awaitPosChooseL > constVal('B')
 
     assertVal(raceKeepWinner(a, b), 'A')
   }
 
   test("crash") {
-    assertCrashes(done > crashd("boom!"), "boom!")
+    assertCrashes(crashd("boom!"), "boom!")
   }
 
   test("crash waits for its trigger") {
@@ -136,12 +136,11 @@ class BasicTests extends TestSuite {
     val eff: Unit => Unit =
       _ => x.set(true)
 
-    def prg(delayCrash: Boolean): One -⚬ Done = {
+    def prg(delayCrash: Boolean): Done -⚬ Done = {
       val beforeCrash: Done -⚬ Done =
         if (delayCrash) delay(10.millis) else id
 
-      done
-        .>( fork )
+      fork
         .par( beforeCrash     , delay(5.millis) )
         .par( crashd("Boom!"),  constVal(())    )
         .>( race )
@@ -159,7 +158,7 @@ class BasicTests extends TestSuite {
   }
 
   test("crash - even if it loses a race, the program still crashes") {
-    val prg = done
+    val prg = id[Done]
       .>( fork(id, delay(10.millis) > crashd("oops")) )
       .>( raceDone )
       .>( either(id, id) )
@@ -167,16 +166,12 @@ class BasicTests extends TestSuite {
   }
 
   test("crash in non-executed |+| has no effect") {
-    val prg = done
-      .injectL[Done]
-      .either(id, crashd("bang!"))
+    val prg = injectL[Done, Done] > either(id, crashd("bang!"))
     assertCompletes(prg)
   }
 
   test("crash in non-chosen |&| alternative has no effect") {
-    val prg = done
-      .choice(id, crashd("bang!"))
-      .chooseL
+    val prg = choice(id, crashd("bang!")) > chooseL
     assertCompletes(prg)
   }
 
@@ -186,25 +181,25 @@ class BasicTests extends TestSuite {
     type I = Val[Int]
     type S = Val[String]
 
-    //               (false   1)    (true "foo")    ('a'    2)    ('b'  "bar")
-    val init: One -⚬ (((B |*| I) |&| (B |*| S)) |&| ((C |*| I) |&| (C |*| S))) =
+    //                (false   1)    (true "foo")    ('a'    2)    ('b'  "bar")
+    val init: Done -⚬ (((B |*| I) |&| (B |*| S)) |&| ((C |*| I) |&| (C |*| S))) =
       choice(
         choice(
-          parFromOne(const(false), const(1)),
-          parFromOne(const(true), const("foo")),
+          fork(constVal(false), constVal(1)),
+          fork(constVal(true), constVal("foo")),
         ),
         choice(
-          parFromOne(const('a'), const(2)),
-          parFromOne(const('b'), const("bar")),
+          fork(constVal('a'), constVal(2)),
+          fork(constVal('b'), constVal("bar")),
         ),
       )
 
-    val coDistributed1: One -⚬ ((B |&| C) |*| (I |&| S)) =
+    val coDistributed1: Done -⚬ ((B |&| C) |*| (I |&| S)) =
       init
         .bimap(coDistributeL, coDistributeL)
         .>(coDistributeR)
 
-    val coDistributed2: One -⚬ ((B |&| C) |*| (I |&| S)) =
+    val coDistributed2: Done -⚬ ((B |&| C) |*| (I |&| S)) =
       init                                          .to[ ((B |*| I) |&| (B  |*|  S)) |&| ((C |*| I) |&| (C  |*| S)) ]
         .>(|&|.IXI)                                 .to[ ((B |*| I) |&| (C  |*|  I)) |&| ((B |*| S) |&| (C  |*| S)) ]
         .bimap(coDistributeR, coDistributeR)        .to[ ((B        |&|  C) |*|  I ) |&| ((B        |&|  C) |*| S ) ]
@@ -242,15 +237,16 @@ class BasicTests extends TestSuite {
   }
 
   test("LList.splitEvenOdd") {
-    val prg: One -⚬ Val[(List[Int], List[Int])] =
-      constListOf((0 to 100): _*) > LList.splitEvenOdd > par(toScalaList, toScalaList) > unliftPair
+    val prg: Done -⚬ Val[(List[Int], List[Int])] =
+      constList1Of(0, (1 to 100): _*) > LList1.toLList > LList.splitEvenOdd > par(toScalaList, toScalaList) > unliftPair
 
     assertVal(prg, (0 to 100).toList.partition(_ % 2 == 0))
   }
 
   test("LList.halfRotateL") {
-    val prg: One -⚬ Val[List[(Int, Int)]] =
-      constList(List((0, 1), (2, 3), (4, 5)))
+    val prg: Done -⚬ Val[List[(Int, Int)]] =
+      constList1Of((0, 1), (2, 3), (4, 5))
+        .>(LList1.toLList)
         .>(LList.map(liftPair))
         .>(LList.halfRotateL)
         .>(LList.map(unliftPair))
@@ -290,14 +286,14 @@ class BasicTests extends TestSuite {
       releaseAsync0(s => Async.defer(s.value)),
     )
 
-    val prgs: Seq[One -⚬ Val[String]] = {
+    val prgs: Seq[Done -⚬ Val[String]] = {
       for {
         acquireMVar <- acquireFuns
         incMVar <- incFuns
         mvarToString <- toStringTrans
         releaseMVar <- releaseFuns
       } yield {
-        const(0)
+        constVal(0)
           .>(acquireMVar)
           .>(incMVar)
           .>(mvarToString)
@@ -313,8 +309,8 @@ class BasicTests extends TestSuite {
   test("release via registered function") {
     val ref = new java.util.concurrent.atomic.AtomicReference[String]("init")
 
-    val prg: One -⚬ Done =
-      const(()) > acquire0(identity, release = Some(_ => ref.set("released"))) > release
+    val prg: Done -⚬ Done =
+      constVal(()) > acquire0(identity, release = Some(_ => ref.set("released"))) > release
 
     assertCompletes(prg)
     assert(ref.get() == "released")
@@ -326,8 +322,8 @@ class BasicTests extends TestSuite {
     def log(s: String): Unit =
       store.updateAndGet(s :: _)
 
-    val prg: One -⚬ Done =
-      const(())
+    val prg: Done -⚬ Done =
+      constVal(())
         .>(acquire0[Unit, Unit](
           acquire = _ => log("acquire A"),
           release = Some(_ => log("release A")), // this release function should never be invoked
@@ -357,8 +353,8 @@ class BasicTests extends TestSuite {
 
     val pb, pc = Promise[Unit]()
 
-    val mainThread: One -⚬ Done =
-      const(())
+    val mainThread: Done -⚬ Done =
+      constVal(())
         .>(acquire0[Unit, Unit](
           acquire = _ => log("acquire A"),
           release = Some(_ => log("release A")), // this release function should never be invoked
@@ -377,11 +373,11 @@ class BasicTests extends TestSuite {
         )
         .>(join)
 
-    val crashThread: One -⚬ Done =
-      done > delay(5.millis) > crashd("Boom!") // delay crash to give chance for resource split to begin
+    val crashThread: Done -⚬ Done =
+      delay(5.millis) > crashd("Boom!") // delay crash to give chance for resource split to begin
 
-    val prg: One -⚬ Done =
-      parFromOne(crashThread, mainThread) > join
+    val prg: Done -⚬ Done =
+      fork(crashThread, mainThread) > join
 
     assertCrashes(prg, "Boom!")
 
@@ -405,8 +401,8 @@ class BasicTests extends TestSuite {
         .>( RefCounted.effect((i, _) => i.incrementAndGet) )    .to[ RefCounted[AtomicInteger] |*| Val[Int]  ]
         .awaitFst(RefCounted.release)                           .to[                               Val[Int]  ]
 
-    val prg: One -⚬ Val[Int] =
-      const(0)
+    val prg: Done -⚬ Val[Int] =
+      constVal(0)
         .>(RefCounted.acquire0(new AtomicInteger(_), _ => releaseCounter.incrementAndGet))
         .>(RefCounted.dupRef)
         .>.snd(RefCounted.dupRef)
@@ -430,11 +426,12 @@ class BasicTests extends TestSuite {
     val sleep: Done -⚬ Val[Millis] =
       constVal(()) > blocking(_ => Thread.sleep(sleepMillis)) > mapVal(_ => Millis(System.currentTimeMillis()))
 
-    val timed: One -⚬ Val[(List[Millis], List[Millis])] = {
+    val timed: Done -⚬ Val[(List[Millis], List[Millis])] = {
       // true, false, true, false, ...
-      val alternating: List[Boolean] = (0 until (2*n)).map(_ % 2 == 0).toList
+      val alternating: ::[Boolean] = (0 until (2*n)).map(_ % 2 == 0).toList.asInstanceOf[::[Boolean]]
 
-      constList(alternating)
+      constList1(alternating)
+        .>(LList1.toLList)
         .>(LList.map(liftBoolean))
         .>(LList.map(Bool.switch(caseTrue = sleep, caseFalse = currentTimeMillis)))
         .>(LList.splitEvenOdd)
@@ -442,8 +439,8 @@ class BasicTests extends TestSuite {
         .>(unliftPair)
     }
 
-    val prg: One -⚬ Val[(Millis, (List[Millis], List[Millis]))] =
-      parFromOne(done > currentTimeMillis, timed) > unliftPair
+    val prg: Done -⚬ Val[(Millis, (List[Millis], List[Millis]))] =
+      fork(currentTimeMillis, timed) > unliftPair
 
     testVal(prg) { case (startMillis, (sleepEnds, pureEnds)) =>
       val sleepDurations = sleepEnds.map(_.value - startMillis.value)
@@ -460,16 +457,19 @@ class BasicTests extends TestSuite {
 
   test("LList.sortBySignal") {
     val delays =
-     List(30, 20, 10, 50, 40)
+      List(30, 20, 10, 50, 40)
 
-    val elems: List[One -⚬ Val[Int]] =
-      delays.map(n => done > delay(n.millis) > constVal(n))
+    val elems: ::[Done -⚬ Val[Int]] =
+      delays
+        .map(n => delay(n.millis) > constVal(n))
+        .asInstanceOf[::[Done -⚬ Val[Int]]]
 
-    val prg: One -⚬ Val[List[Int]] =
-      id                               [       One       ]
-        .>(LList.fromList(elems))   .to[ LList[Val[Int]] ]
-        .>(LList.sortBySignal)      .to[ LList[Val[Int]] ]
-        .>(toScalaList)             .to[  Val[List[Int]] ]
+    val prg: Done -⚬ Val[List[Int]] =
+      id                               [       Done       ]
+        .>(LList1.from(elems))      .to[ LList1[Val[Int]] ]
+        .>(LList1.toLList)          .to[  LList[Val[Int]] ]
+        .>(LList.sortBySignal)      .to[  LList[Val[Int]] ]
+        .>(toScalaList)             .to[   Val[List[Int]] ]
 
     assertVal(prg, delays.sorted)
   }
@@ -484,15 +484,15 @@ class BasicTests extends TestSuite {
     def take[A](n: Int): Endless[Val[A]] -⚬ Val[List[A]] =
       Endless.take(n) > toScalaList
 
-    val prg: One -⚬ Val[List[Int]] =
-      done > fibonacci > par(take(20), id) > awaitPosSnd
+    val prg: Done -⚬ Val[List[Int]] =
+      fibonacci > par(take(20), id) > awaitPosSnd
 
     val expected = List(0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181)
 
     assertVal(prg, expected)
 
-    val prg2: One -⚬ Val[(List[Int], List[Int])] =
-      done > fibonacci > par(Endless.split > par(take(10), take(10)) > unliftPair, id) > awaitPosSnd
+    val prg2: Done -⚬ Val[(List[Int], List[Int])] =
+      fibonacci > par(Endless.split > par(take(10), take(10)) > unliftPair, id) > awaitPosSnd
 
     testVal(prg2) { case (fibs1, fibs2) =>
       assert(fibs1.sorted == fibs1)
@@ -531,8 +531,8 @@ class BasicTests extends TestSuite {
           .toList,
       )
 
-    val prg: One -⚬ Val[List[(ClientId, ResourceId)]] =
-      done > resources > pool(promise) > par(clientsPrg, LList1.foldMap(neglect)) > awaitPosSnd
+    val prg: Done -⚬ Val[List[(ClientId, ResourceId)]] =
+      resources > pool(promise) > par(clientsPrg, LList1.foldMap(neglect)) > awaitPosSnd
 
     testVal(prg) { pairs =>
       // each client appears exactly once

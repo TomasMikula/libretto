@@ -14,22 +14,21 @@ class StreamsTests extends TestSuite {
 
   test("toList ⚬ fromList = id") {
     assertVal(
-      done > Pollable.fromList(List(1, 2, 3, 4, 5, 6)) > Pollable.toList,
+      Pollable.fromList(List(1, 2, 3, 4, 5, 6)) > Pollable.toList,
       List(1, 2, 3, 4, 5, 6),
     )
   }
 
   test("Pollable.map") {
     assertVal(
-      done > Pollable.fromList(List(1, 2, 3)) > Pollable.map(_.toString) > Pollable.toList,
+      Pollable.fromList(List(1, 2, 3)) > Pollable.map(_.toString) > Pollable.toList,
       List("1", "2", "3"),
     )
   }
 
   test("partition") {
     assertVal(
-      done
-        .>(Pollable.of(1, 2, 3, 4, 5, 6))
+      Pollable.of(1, 2, 3, 4, 5, 6)
         .>(Pollable.map { i => if (i % 2 == 0) Left(i) else Right(i) })
         .>(Pollable.partition)
         .par(Pollable.toList, Pollable.toList)
@@ -40,8 +39,7 @@ class StreamsTests extends TestSuite {
 
   test("concat") {
     assertVal(
-      done
-        .>(fork(Pollable.of(1, 2, 3), Pollable.of(4, 5, 6)))
+      fork(Pollable.of(1, 2, 3), Pollable.of(4, 5, 6))
         .>(Pollable.concat)
         .>(Pollable.toList),
       List(1, 2, 3 ,4, 5, 6),
@@ -50,9 +48,9 @@ class StreamsTests extends TestSuite {
 
   test("merge") {
     assertVal(
-      parFromOne(
-        done > Pollable.of(1, 2, 3),
-        done > Pollable.of(4, 5, 6),
+      fork(
+        Pollable.of(1, 2, 3),
+        Pollable.of(4, 5, 6),
       )
         .>(Pollable.merge)
         .>(Pollable.toList)
@@ -63,12 +61,13 @@ class StreamsTests extends TestSuite {
 
   test("mergeAll") {
     testVal(
-      LList
+      LList1
         .of(
-          done > Pollable.of(1, 2, 3),
-          done > Pollable.of(4, 5, 6) > Pollable.delay(10.millis),
-          done > Pollable.of(7, 8, 9),
+          Pollable.of(1, 2, 3),
+          Pollable.of(4, 5, 6) > Pollable.delay(10.millis),
+          Pollable.of(7, 8, 9),
         )
+        .>(LList1.toLList)
         .>(Pollable.mergeAll)
         .>(Pollable.toList)
     ) { (res: List[Int]) =>
@@ -86,10 +85,10 @@ class StreamsTests extends TestSuite {
     val byLength: Val[String] -⚬ (Val[Int] |*| Val[String]) =
       mapVal[String, (Int, String)](s => (s.length, s)) > liftPair
 
-    val input: One -⚬ Pollable[String] =
-      done > Pollable.of("f", "fo", "foo", "fooo", "foooo", "pho", "phoo", "phooo", "bo", "boo")
+    val input: Done -⚬ Pollable[String] =
+      Pollable.of("f", "fo", "foo", "fooo", "foooo", "pho", "phoo", "phooo", "bo", "boo")
 
-    val prg: One -⚬ Val[List[String]] =
+    val prg: Done -⚬ Val[List[String]] =
       input
         .>(Pollable.delay(10.millis)) // delay so that subscribers have some time to subscribe
         .>(broadcastByKey(byLength))
