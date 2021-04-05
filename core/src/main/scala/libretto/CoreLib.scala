@@ -2770,19 +2770,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       init: A -⚬ S,
       f: (S |*| A) -⚬ (B |*| S),
       last: S -⚬ B,
-    ): LList[A] -⚬ LList[B] = {
-      def go: (S |*| LList[A]) -⚬ LList[B] = rec { self =>
-        switchWithL(
-          caseNil  = last > singleton,
-          caseCons = |*|.assocRL > par(f, id) > |*|.assocLR > par(id, self) > cons,
-        )
-      }
-
+    ): LList[A] -⚬ LList[B] =
       switch(
         caseNil  = nil[B],
-        caseCons = par(init, id) > go,
+        caseCons = fst(init) > mapSAppend(f > swap, last > singleton),
       )
-    }
 
     /** Shifts all the elements of a list by "half" to the left,
      *  moving the first half of the first element to the end of the list.
