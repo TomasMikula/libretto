@@ -2677,6 +2677,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
     }
 
+    def mapSAppend[S, T, U](f: (S |*| T) -⚬ (S |*| U), tail: S -⚬ LList[U]): (S |*| LList[T]) -⚬ LList[U] = rec { self =>
+      switchWithL(
+        caseNil = tail,
+        caseCons = assocRL > fst(f > swap) > assocLR > snd(self)> cons[U],
+      )
+    }
+
     def actOn[S, A](act: (S |*| A) -⚬ S): (S |*| LList[A]) -⚬ S = rec { self =>
       switchWithL(
         caseNil  = id[S],
@@ -2883,6 +2890,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def mapS[S, T, U](f: (S |*| T) -⚬ (S |*| U)): (S |*| LList1[T]) -⚬ (S |*| LList1[U]) =
       assocRL > fst(f > swap) > assocLR > snd(LList.mapS(f)) > XI
+
+    def mapSAppend[S, T, U](f: (S |*| T) -⚬ (S |*| U), tail: S -⚬ LList[U]): (S |*| LList1[T]) -⚬ LList1[U] =
+      assocRL > fst(f > swap) > assocLR > snd(LList.mapSAppend(f, tail))
 
     def foldMap[T, U](f: T -⚬ U)(using U: Semigroup[U]): LList1[T] -⚬ U =
       par(f, id) > LList.actOn[U, T](par(id, f) > U.combine)
