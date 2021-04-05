@@ -2883,6 +2883,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def from[S, T](head: S -⚬ T, tail: List[S -⚬ T])(using S: Cosemigroup[S]): S -⚬ LList1[T] =
       LList.fromList0(tail) > par(head, id) > cons
 
+    def from[S, T](fs: ::[S -⚬ T])(using S: Cosemigroup[S]): S -⚬ LList1[T] =
+      from(fs.head, fs.tail)
+
     def of[S, T](head: S -⚬ T, tail: (S -⚬ T)*)(using S: Cosemigroup[S]): S -⚬ LList1[T] =
       from(head, tail.toList)
 
