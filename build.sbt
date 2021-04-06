@@ -1,19 +1,19 @@
 resolvers += Resolver.mavenCentral
 
-scalaVersion in ThisBuild := "3.0.0-RC1"
+ThisBuild / scalaVersion := "3.0.0-RC1"
 
-organization in ThisBuild := "com.github.tomasmikula"
+ThisBuild / organization := "com.github.tomasmikula"
 
-licenses in ThisBuild += ("MPL 2.0", url("https://opensource.org/licenses/MPL-2.0"))
-homepage in ThisBuild := Some(url("https://github.com/TomasMikula/libretto"))
-scmInfo in ThisBuild := Some(
+ThisBuild / licenses += ("MPL 2.0", url("https://opensource.org/licenses/MPL-2.0"))
+ThisBuild / homepage := Some(url("https://github.com/TomasMikula/libretto"))
+ThisBuild / scmInfo := Some(
   ScmInfo(
     url("https://github.com/TomasMikula/libretto"),
     "scm:git:git@github.com:TomasMikula/libretto.git"
   )
 )
 
-publishTo in ThisBuild := {
+ThisBuild / publishTo := {
   val nexus = "https://oss.sonatype.org/"
   if (isSnapshot.value)
     Some("snapshots" at nexus + "content/repositories/snapshots")
@@ -21,7 +21,7 @@ publishTo in ThisBuild := {
     Some("releases"  at nexus + "service/local/staging/deploy/maven2")
 }
 
-pomExtra in ThisBuild := (
+ThisBuild / pomExtra := (
   <developers>
     <developer>
       <id>TomasMikula</id>
