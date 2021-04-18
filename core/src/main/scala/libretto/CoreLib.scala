@@ -2179,14 +2179,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   /** Unlimited supply of `A`s. The consumer chooses how many `A`s to consume. */
   opaque type Unlimited[A] = Rec[UnlimitedF[A, *]]
   object Unlimited {
+    private def unpack[A]: Unlimited[A] -⚬ UnlimitedF[A, Unlimited[A]] =
+      dsl.unpack
+
     def discard[A]: Unlimited[A] -⚬ One =
-      unpack[UnlimitedF[A, *]] > chooseL
+      unpack > chooseL
 
     def single[A]: Unlimited[A] -⚬ A =
-      unpack[UnlimitedF[A, *]] > chooseR > chooseL
+      unpack > chooseR > chooseL
 
     def double[A]: Unlimited[A] -⚬ (Unlimited[A] |*| Unlimited[A]) =
-      unpack[UnlimitedF[A, *]] > chooseR > chooseR
+      unpack > chooseR > chooseR
 
     def getOne[A]: Unlimited[A] -⚬ (A |*| Unlimited[A]) =
       double > par(single, id)
@@ -2218,6 +2221,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         .>(Endless.unfold(f))             .to[  Endless[A]  |*| S ]
         .>.fst(Endless.toUnlimited[A])    .to[ Unlimited[A] |*| S ]
 
+    def discardWhenDone[A]: (Done |*| Unlimited[A]) -⚬ Done =
+      snd(unpack) > chooseLWhenDone > elimSnd
+
+    def singleWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| A) =
+      snd(unpack) > chooseRWhenDone > snd(chooseL)
+
+    def doubleWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| (Unlimited[A] |*| Unlimited[A])) =
+      snd(unpack) > chooseRWhenDone > snd(chooseR)
+
+    def getOneWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| (A |*| Unlimited[A])) =
+      doubleWhenDone > snd(fst(single))
+
     implicit def comonoidUnlimited[A]: Comonoid[Unlimited[A]] =
       new Comonoid[Unlimited[A]] {
         def counit : Unlimited[A] -⚬ One                             = Unlimited.discard
@@ -2233,7 +2248,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Signals when the choice is made between [[discard]], [[single]] and [[double]]. */
     implicit def signalingUnlimited[A]: Signaling.Negative[Unlimited[A]] = {
       val notifyFst: (Pong |*| Unlimited[A]) -⚬ Unlimited[A] =
-        par(id, unpack[UnlimitedF[A, *]]) > notifyChoiceAndRight > pack[UnlimitedF[A, *]]
+        par(id, unpack) > notifyChoiceAndRight > pack[UnlimitedF[A, *]]
 
       Signaling.Negative.from(notifyFst)
     }
