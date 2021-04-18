@@ -2708,6 +2708,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def fold[T](implicit T: Monoid[T]): LList[T] -⚬ T =
       foldMap(id[T])
 
+    def foldL[S, T](f: (S |*| T) -⚬ S): (S |*| LList[T]) -⚬ S = rec { self =>
+      switchWithL(
+        caseNil = id[S],
+        caseCons = assocRL > fst(f) > self
+      )
+    }
+
     def concat[T]: (LList[T] |*| LList[T]) -⚬ LList[T] = rec { self =>
       switchWithR(
         caseNil  = id[LList[T]],
