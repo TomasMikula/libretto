@@ -2191,8 +2191,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def split[A]: Unlimited[A] -⚬ (Unlimited[A] |*| Unlimited[A]) =
       unpack > chooseR > chooseR
 
-    def getOne[A]: Unlimited[A] -⚬ (A |*| Unlimited[A]) =
-      split > par(single, id)
+    def getFst[A]: Unlimited[A] -⚬ (A |*| Unlimited[A]) =
+      split > fst(single)
+
+    def getSnd[A]: Unlimited[A] -⚬ (Unlimited[A] |*| A) =
+      split > snd(single)
 
     def create[X, A](
       case0: X -⚬ One,
@@ -2230,8 +2233,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def splitWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| (Unlimited[A] |*| Unlimited[A])) =
       snd(unpack) > chooseRWhenDone > snd(chooseR)
 
-    def getOneWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| (A |*| Unlimited[A])) =
+    def getFstWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| (A |*| Unlimited[A])) =
       splitWhenDone > snd(fst(single))
+
+    def getSndWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| (Unlimited[A] |*| A)) =
+      splitWhenDone > snd(snd(single))
 
     implicit def comonoidUnlimited[A]: Comonoid[Unlimited[A]] =
       new Comonoid[Unlimited[A]] {
@@ -2266,8 +2272,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def split[A]: PUnlimited[A] -⚬ (PUnlimited[A] |*| PUnlimited[A]) =
       unpack[PUnlimitedF[A, *]] > chooseR > chooseR
 
-    def getOne[A]: PUnlimited[A] -⚬ (A |*| PUnlimited[A]) =
-      split > par(single, id)
+    def getFst[A]: PUnlimited[A] -⚬ (A |*| PUnlimited[A]) =
+      split > fst(single)
+
+    def getSnd[A]: PUnlimited[A] -⚬ (PUnlimited[A] |*| A) =
+      split > snd(single)
 
     def create[X, A](
       case0: X -⚬ Done,
