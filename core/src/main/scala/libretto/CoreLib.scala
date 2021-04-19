@@ -2188,11 +2188,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def single[A]: Unlimited[A] -⚬ A =
       unpack > chooseR > chooseL
 
-    def double[A]: Unlimited[A] -⚬ (Unlimited[A] |*| Unlimited[A]) =
+    def split[A]: Unlimited[A] -⚬ (Unlimited[A] |*| Unlimited[A]) =
       unpack > chooseR > chooseR
 
     def getOne[A]: Unlimited[A] -⚬ (A |*| Unlimited[A]) =
-      double > par(single, id)
+      split > par(single, id)
 
     def create[X, A](
       case0: X -⚬ One,
@@ -2212,7 +2212,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       create(
         case0 = discard,
         case1 = id,
-        caseN = double > par(self, self)
+        caseN = split > par(self, self)
       )
     }
 
@@ -2227,16 +2227,16 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def singleWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| A) =
       snd(unpack) > chooseRWhenDone > snd(chooseL)
 
-    def doubleWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| (Unlimited[A] |*| Unlimited[A])) =
+    def splitWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| (Unlimited[A] |*| Unlimited[A])) =
       snd(unpack) > chooseRWhenDone > snd(chooseR)
 
     def getOneWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| (A |*| Unlimited[A])) =
-      doubleWhenDone > snd(fst(single))
+      splitWhenDone > snd(fst(single))
 
     implicit def comonoidUnlimited[A]: Comonoid[Unlimited[A]] =
       new Comonoid[Unlimited[A]] {
         def counit : Unlimited[A] -⚬ One                             = Unlimited.discard
-        def split  : Unlimited[A] -⚬ (Unlimited[A] |*| Unlimited[A]) = Unlimited.double
+        def split  : Unlimited[A] -⚬ (Unlimited[A] |*| Unlimited[A]) = Unlimited.split
       }
 
     implicit val comonadUnlimited: Comonad[Unlimited] =
@@ -2245,7 +2245,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         def duplicate[A] : Unlimited[A] -⚬ Unlimited[Unlimited[A]] = Unlimited.duplicate
       }
 
-    /** Signals when the choice is made between [[discard]], [[single]] and [[double]]. */
+    /** Signals when the choice is made between [[discard]], [[single]] and [[split]]. */
     implicit def signalingUnlimited[A]: Signaling.Negative[Unlimited[A]] = {
       val notifyFst: (Pong |*| Unlimited[A]) -⚬ Unlimited[A] =
         par(id, unpack) > notifyChoiceAndRight > pack[UnlimitedF[A, *]]
@@ -2263,11 +2263,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def single[A]: PUnlimited[A] -⚬ A =
       unpack[PUnlimitedF[A, *]] > chooseR > chooseL
 
-    def double[A]: PUnlimited[A] -⚬ (PUnlimited[A] |*| PUnlimited[A]) =
+    def split[A]: PUnlimited[A] -⚬ (PUnlimited[A] |*| PUnlimited[A]) =
       unpack[PUnlimitedF[A, *]] > chooseR > chooseR
 
     def getOne[A]: PUnlimited[A] -⚬ (A |*| PUnlimited[A]) =
-      double > par(single, id)
+      split > par(single, id)
 
     def create[X, A](
       case0: X -⚬ Done,
@@ -2287,14 +2287,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       create(
         case0 = neglect,
         case1 = id,
-        caseN = double > par(self, self)
+        caseN = split > par(self, self)
       )
     }
 
     implicit def pComonoidPUnlimited[A]: PComonoid[PUnlimited[A]] =
       new PComonoid[PUnlimited[A]] {
         def counit : PUnlimited[A] -⚬ Done                              = PUnlimited.neglect
-        def split  : PUnlimited[A] -⚬ (PUnlimited[A] |*| PUnlimited[A]) = PUnlimited.double
+        def split  : PUnlimited[A] -⚬ (PUnlimited[A] |*| PUnlimited[A]) = PUnlimited.split
       }
 
     implicit val comonadPUnlimited: Comonad[PUnlimited] =
