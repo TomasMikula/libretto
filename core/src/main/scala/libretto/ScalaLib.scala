@@ -396,6 +396,15 @@ class ScalaLib[
   def printLine(s: String): Done -⚬ Done =
     constVal(s) > printLine
 
+  def printLine[A](f: A => String): Val[A] -⚬ Done =
+    mapVal(f) > printLine
+
+  def alsoPrintLine: Val[String] -⚬ Val[String] =
+    dup > fst(printLine) > awaitPosFst
+
+  def alsoPrintLine[A](f: A => String): Val[A] -⚬ Val[A] =
+    dup > fst(mapVal(f) > printLine) > awaitPosFst
+
   def readLine: Done -⚬ Val[String] =
     constVal(()) > blocking[Unit, String](_ => Console.in.readLine())
 
