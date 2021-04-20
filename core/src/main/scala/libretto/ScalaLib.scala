@@ -247,6 +247,9 @@ class ScalaLib[
   def constListOf[A](as: A*): One -⚬ LList[Val[A]] =
     constList(as.toList)
 
+  def constListOf1[A](a: A, as: A*): Done -⚬ LList[Val[A]] =
+    constList1(a, as.toList) > LList1.toLList
+
   def toScalaList[A]: LList[Val[A]] -⚬ Val[List[A]] = rec { self =>
     LList.switch(
       caseNil  = const(List.empty[A]),
