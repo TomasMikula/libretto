@@ -211,7 +211,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       */
     def merge[A](implicit
       A1: Junction.Positive[A],
-      A2: PComonoid[A],
+      A2: PAffine[A],
     ): (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A] = rec { self =>
       val onClose: (LPollable[A] |*| LPollable[A]) -⚬ Done       = join(close, close)
       val onPoll : (LPollable[A] |*| LPollable[A]) -⚬ LPolled[A] = par(poll, poll) > LPolled.merge(self)
@@ -224,7 +224,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       */
     def mergeAll[A](implicit
       A1: Junction.Positive[A],
-      A2: PComonoid[A],
+      A2: PAffine[A],
     ): LList[LPollable[A]] -⚬ LPollable[A] =
       rec { self =>
         LList.switch(
@@ -266,8 +266,8 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       either(caseEmpty, caseCons)
     }
 
-    def unpoll[A](implicit A: PComonoid[A]): LPolled[A] -⚬ LPollable[A] =
-      LPollable.from(close(A.counit), id)
+    def unpoll[A](implicit A: PAffine[A]): LPolled[A] -⚬ LPollable[A] =
+      LPollable.from(close(A.neglect), id)
 
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPolled[A]) -⚬ LPolled[A] =
       id[Done |*| LPolled[A]]         .to[  Done |*| (Done |+|           (A |*| LPollable[A])) ]
@@ -323,7 +323,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       mergePollables: (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A],
     )(implicit
       A1: Junction.Positive[A],
-      A2: PComonoid[A],
+      A2: PAffine[A],
     ): (LPolled[A] |*| LPolled[A]) -⚬ LPolled[A] = {
       // checks the first argument first, uses the given function for recursive calls
       def go(merge: (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A]): (LPolled[A] |*| LPolled[A]) -⚬ LPolled[A] =
