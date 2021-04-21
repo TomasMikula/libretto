@@ -1688,6 +1688,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def chooseRWhenNeed[A, B]: (A |&| (Need |*| B)) -⚬ (Need |*| B) =
     chooseROnPong > assocRL > par(notifyNeedL, id)
 
+  def injectLOnPong[A, B]: A -⚬ (Pong |*| (A |+| B)) =
+    id[A] > introFst(lInvertPongPing) > assocLR > snd(injectLOnPing)
+
+  def injectROnPong[A, B]: B -⚬ (Pong |*| (A |+| B)) =
+    id[B] > introFst(lInvertPongPing) > assocLR > snd(injectROnPing)
+
+  def chooseLOnPing[A, B]: (Ping |*| (A |&| B)) -⚬ A =
+    snd(chooseLOnPong) > assocRL > elimFst(rInvertPingPong)
+
+  def chooseROnPing[A, B]: (Ping |*| (A |&| B)) -⚬ B =
+    snd(chooseROnPong) > assocRL > elimFst(rInvertPingPong)
+
   def chooseLWhenDone[A, B]: (Done |*| (A |&| B)) -⚬ (Done |*| A) =
     id                                                     [ Done |*| (                    A   |&| B) ]
       .>.snd.choiceL(introFst(lInvertSignal).assocLR)   .to[ Done |*| ((Need |*| (Done |*| A)) |&| B) ]
@@ -1711,6 +1723,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .introFst(lInvertSignal).assocLR                  .to[ Need |*|        (Done |*| (Need |*| B))  ]
       .>.snd(injectRWhenDone)                           .to[ Need |*| (A |+| (Done |*| (Need |*| B))) ]
       .>.snd.right(|*|.assocRL.elimFst(rInvertSignal))  .to[ Need |*| (A |+|                     B  ) ]
+
+  def delayEitherUntilPing[A, B]: (Ping |*| (A |+| B)) -⚬ (A |+| B) =
+    distributeL > either(injectLOnPing, injectROnPing)
+
+  def delayChoiceUntilPong[A, B]: (A |&| B) -⚬ (Pong |*| (A |&| B)) =
+    choice(chooseLOnPong, chooseROnPong) > coDistributeL
+
+  def delayEitherUntilPong[A, B]: (A |+| B) -⚬ (Pong |*| (A |+| B)) =
+    either(injectLOnPong, injectROnPong)
+
+  def delayChoiceUntilPing[A, B]: (Ping |*| (A |&| B)) -⚬ (A |&| B) =
+    choice(chooseLOnPing, chooseROnPing)
 
   def delayEitherUntilDone[A, B]: (Done |*| (A |+| B)) -⚬ ((Done |*| A) |+| (Done |*| B)) =
     id                                                               [  Done |*| (A  |+|           B) ]
