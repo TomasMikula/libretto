@@ -2211,11 +2211,46 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     ): X -⚬ (Unlimited[A] |*| Y) =
       choice(case0 > introFst, choice(case1, caseN) > coDistributeR) > coDistributeR > par(pack[UnlimitedF[A, *]], id)
 
+    def createWith[X: Cosemigroup, A, Y: Semigroup](
+      case0: X -⚬ Y,
+      case1: X -⚬ (A |*| Y),
+    ): X -⚬ (Unlimited[A] |*| Y) = rec { self =>
+      createWith[X, A, Y](
+        case0 = case0,
+        case1 = case1,
+        caseN = summon[Cosemigroup[X]].split > par(self, self) > IXI > snd(summon[Semigroup[Y]].combine),
+      )
+    }
+
+    def fromComonoid[A](using A: Comonoid[A]): A -⚬ Unlimited[A] = rec { self =>
+      create(
+        case0 = A.discard,
+        case1 = id[A],
+        caseN = A.split > par(self, self),
+      )
+    }
+
     def duplicate[A]: Unlimited[A] -⚬ Unlimited[Unlimited[A]] = rec { self =>
       create(
         case0 = discard,
         case1 = id,
         caseN = split > par(self, self)
+      )
+    }
+
+    def map[A, B](f: A -⚬ B): Unlimited[A] -⚬ Unlimited[B] = rec { self =>
+      create(
+        case0 = discard,
+        case1 = single[A] > f,
+        caseN = split[A] > par(self, self),
+      )
+    }
+
+    def zip[A, B]: (Unlimited[A] |*| Unlimited[B]) -⚬ Unlimited[A |*| B] = rec { self =>
+      create(
+        case0 = parToOne(discard[A], discard[B]),
+        case1 = par(single[A], single[B]),
+        caseN = par(split[A], split[B]) > IXI > par(self, self),
       )
     }
 
