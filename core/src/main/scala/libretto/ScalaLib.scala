@@ -408,6 +408,9 @@ class ScalaLib[
   def alsoPrintLine[A](f: A => String): Val[A] -⚬ Val[A] =
     dup > fst(mapVal(f) > printLine) > awaitPosFst
 
+  def alsoPrintLine[A](s: String)(implicit S: Signaling.Positive[A], J: Junction.Positive[A]): A -⚬ A =
+    S.signalPosFst > fst(printLine(s)) > J.awaitPosFst
+
   def readLine: Done -⚬ Val[String] =
     constVal(()) > blocking[Unit, String](_ => Console.in.readLine())
 
