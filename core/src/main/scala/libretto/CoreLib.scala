@@ -2415,6 +2415,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       Signaling.Negative.from(notifyFst)
     }
+
+    implicit def deferrableUnlimited[A]: Deferrable.Negative[Unlimited[A]] =
+      new Deferrable.Negative[Unlimited[A]] {
+        override def awaitPongFst: Unlimited[A] -⚬ (Pong |*| Unlimited[A]) =
+          unpack > delayChoiceUntilPong > snd(pack[UnlimitedF[A, *]])
+      }
   }
 
   private type PUnlimitedF[A, X] = Done |&| (A |&| (X |*| X))
