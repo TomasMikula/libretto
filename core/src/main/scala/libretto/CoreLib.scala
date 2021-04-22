@@ -878,11 +878,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def delayUsing[A](f: Need -⚬ Need)(implicit A: SignalingJunction.Negative[A]): A -⚬ A =
     A.delayUsing(f)
 
-  def sequence[A: Signaling.Positive, B: Junction.Positive]: (A |*| B) -⚬ (A |*| B) =
+  def sequence[A: Signaling.Positive, B: Deferrable.Positive]: (A |*| B) -⚬ (A |*| B) =
     id                             [  A            |*| B  ]
-      .>.fst(signalPosSnd)      .to[ (A |*|  Done) |*| B  ]
-      .>(assocLR)               .to[  A |*| (Done  |*| B) ]
-      .>.snd(awaitPosFst)       .to[  A |*|            B  ]
+      .>.fst(notifyPosSnd)      .to[ (A |*|  Ping) |*| B  ]
+      .>(assocLR)               .to[  A |*| (Ping  |*| B) ]
+      .>.snd(awaitPingFst)      .to[  A |*|            B  ]
 
   /** Races the two [[Done]] signals and
     *  - produces left if the first signal wins, in which case it returns the second signal that still
