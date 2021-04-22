@@ -264,10 +264,75 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       SignalingJunction.Negative.byFst
   }
 
+  object Deferrable {
+    /** Represents ''a'' way how (part of) `A` can be deferred until a [[Ping]]. */
+    trait Positive[A] {
+      def awaitPingFst: (Ping |*| A) -⚬ A
+
+      def awaitPingSnd: (A |*| Ping) -⚬ A =
+        swap > awaitPingFst
+
+      /** Alias for [[awaitPingFst]]. */
+      def awaitPing: (Ping |*| A) -⚬ A =
+        awaitPingFst
+
+      def law_awaitPingIdentity: Equal[(One |*| A) -⚬ A] =
+        Equal(
+          fst(ping) > awaitPingFst,
+          elimFst,
+        )
+
+      def law_awaitPingComposition: Equal[(Ping |*| (Ping |*| A)) -⚬ A] =
+        Equal(
+          snd(awaitPingFst) > awaitPingFst,
+          assocRL > fst(joinPing) > awaitPingFst,
+        )
+    }
+
+    /** Represents ''a'' way how (part of) `A` can be deferred until a [[Pong]]. */
+    trait Negative[A] {
+      def awaitPongFst: A -⚬ (Pong |*| A)
+
+      def awaitPongSnd: A -⚬ (A |*| Pong) =
+        awaitPongFst > swap
+
+      /** Alias for [[awaitPongFst]]. */
+      def awaitPong: A -⚬ (Pong |*| A) =
+        awaitPongFst
+
+      def law_awaitPongIdentity: Equal[A -⚬ (One |*| A)] =
+        Equal(
+          awaitPongFst > fst(pong),
+          introFst,
+        )
+
+      def law_awaitPongComposition: Equal[A -⚬ (Pong |*| (Pong |*| A))] =
+        Equal(
+          awaitPongFst > snd(awaitPongFst),
+          awaitPongFst > fst(joinPong) > assocLR,
+        )
+    }
+
+    def invert[A](d: Deferrable.Positive[A]): Deferrable.Negative[A] =
+      new Deferrable.Negative[A] {
+        override def awaitPongFst: A -⚬ (Pong |*| A) =
+          introFst(lInvertPongPing) > assocLR > snd(d.awaitPingFst)
+      }
+
+    def invert[A](d: Deferrable.Negative[A]): Deferrable.Positive[A] =
+      new Deferrable.Positive[A] {
+        override def awaitPingFst: (Ping |*| A) -⚬ A =
+          snd(d.awaitPongFst) > assocRL > elimFst(rInvertPingPong)
+      }
+  }
+
   object Junction {
     /** Represents ''a'' way how `A` can await (join) a positive (i.e. [[Done]]) signal. */
-    trait Positive[A] {
+    trait Positive[A] extends Deferrable.Positive[A] {
       def awaitPosFst: (Done |*| A) -⚬ A
+
+      override def awaitPingFst: (Ping |*| A) -⚬ A =
+       fst(strengthenPing) > awaitPosFst
 
       def awaitPosSnd: (A |*| Done) -⚬ A =
         swap > awaitPosFst
@@ -290,8 +355,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
 
     /** Represents ''a'' way how `A` can await (join) a negative (i.e. [[Need]]) signal. */
-    trait Negative[A] {
+    trait Negative[A] extends Deferrable.Negative[A] {
       def awaitNegFst: A -⚬ (Need |*| A)
+
+      override def awaitPongFst: A -⚬ (Pong |*| A) =
+        awaitNegFst > fst(strengthenPong)
 
       def awaitNegSnd: A -⚬ (A |*| Need) =
         awaitNegFst > swap
