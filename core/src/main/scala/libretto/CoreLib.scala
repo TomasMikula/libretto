@@ -493,6 +493,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     trait Positive[A] {
       def notifyPosFst: A -⚬ (Ping |*| A)
 
+      def notifyPosSnd: A -⚬ (A |*| Ping) =
+        notifyPosFst > swap
+
       def signalPosFst: A -⚬ (Done |*| A) =
         notifyPosFst > par(strengthenPing, id)
 
@@ -519,6 +522,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Represents ''a'' way how `A` can produce a negative signal (i.e. [[Pong]] or [[Need]]). */
     trait Negative[A] {
       def notifyNegFst: (Pong |*| A) -⚬ A
+
+      def notifyNegSnd: (A |*| Pong) -⚬ A =
+        swap > notifyNegFst
 
       def signalNegFst: (Need |*| A) -⚬ A =
         par(strengthenPong, id) > notifyNegFst
@@ -818,6 +824,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
   }
 
+  def notifyPosFst[A](implicit A: Signaling.Positive[A]): A -⚬ (Ping |*| A) =
+    A.notifyPosFst
+
+  def notifyPosSnd[A](implicit A: Signaling.Positive[A]): A -⚬ (A |*| Ping) =
+    A.notifyPosSnd
+
+  def notifyNegFst[A](implicit A: Signaling.Negative[A]): (Pong |*| A) -⚬ A =
+    A.notifyNegFst
+
+  def notifyNegSnd[A](implicit A: Signaling.Negative[A]): (A |*| Pong) -⚬ A =
+    A.notifyNegSnd
+
   def signalPosFst[A](implicit A: Signaling.Positive[A]): A -⚬ (Done |*| A) =
     A.signalPosFst
 
@@ -829,6 +847,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   def signalNegSnd[A](implicit A: Signaling.Negative[A]): (A |*| Need) -⚬ A =
     A.signalNegSnd
+
+  def awaitPingFst[A](implicit A: Deferrable.Positive[A]): (Ping |*| A) -⚬ A =
+    A.awaitPingFst
+
+  def awaitPingSnd[A](implicit A: Deferrable.Positive[A]): (A |*| Ping) -⚬ A =
+    A.awaitPingSnd
+
+  def awaitPongFst[A](implicit A: Deferrable.Negative[A]): A -⚬ (Pong |*| A) =
+    A.awaitPongFst
+
+  def awaitPongSnd[A](implicit A: Deferrable.Negative[A]): A -⚬ (A |*| Pong) =
+    A.awaitPongSnd
 
   def awaitPosFst[A](implicit A: Junction.Positive[A]): (Done |*| A) -⚬ A =
     A.awaitPosFst
