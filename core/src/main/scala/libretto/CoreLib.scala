@@ -878,11 +878,21 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def delayUsing[A](f: Need -⚬ Need)(implicit A: SignalingJunction.Negative[A]): A -⚬ A =
     A.delayUsing(f)
 
+  /** Alias for [[sequence_PP]]. */
   def sequence[A: Signaling.Positive, B: Deferrable.Positive]: (A |*| B) -⚬ (A |*| B) =
-    id                             [  A            |*| B  ]
-      .>.fst(notifyPosSnd)      .to[ (A |*|  Ping) |*| B  ]
-      .>(assocLR)               .to[  A |*| (Ping  |*| B) ]
-      .>.snd(awaitPingFst)      .to[  A |*|            B  ]
+    sequence_PP
+
+  def sequence_PP[A, B](using A: Signaling.Positive[A], B: Deferrable.Positive[B]): (A |*| B) -⚬ (A |*| B) =
+    fst(notifyPosSnd) > assocLR > snd(awaitPingFst)
+
+  def sequence_PN[A, B](using A: Signaling.Positive[A], B: Deferrable.Negative[B]): (A |*| B) -⚬ (A |*| B) =
+    fst(notifyPosSnd) > assocLR > snd(Deferrable.invert(B).awaitPingFst)
+
+  def sequence_NP[A, B](using A: Signaling.Negative[A], B: Deferrable.Positive[B]): (A |*| B) -⚬ (A |*| B) =
+    fst(Signaling.invert(A).notifyPosSnd) > assocLR > snd(awaitPingFst)
+
+  def sequence_NN[A, B](using A: Signaling.Negative[A], B: Deferrable.Negative[B]): (A |*| B) -⚬ (A |*| B) =
+    snd(awaitPongFst) > assocRL > fst(notifyNegSnd)
 
   /** Races the two [[Done]] signals and
     *  - produces left if the first signal wins, in which case it returns the second signal that still
