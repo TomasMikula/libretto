@@ -2,10 +2,11 @@ package libretto
 
 import scala.concurrent.duration.FiniteDuration
 
-/** Extension of [[CoreDSL]], [[TimerDSL]] and [[CrashDSL]] that adds support for manipulating Scala values via pure
-  * Scala functions.
+/** Supports manipulating Scala values via pure Scala functions.
+  * Also extends [[InvertDSL]] (and thus [[ClosedDSL]]), [[TimerDSL]] and [[CrashDSL]],
+  * since these are expected to be possible on a target platform that already supports Scala functions.
   */
-trait ScalaDSL extends TimerDSL with CrashDSL {
+trait ScalaDSL extends TimerDSL with CrashDSL with InvertDSL {
   /** Scala value of type `A`.
     *
     * Somewhat analogous to [[scala.concurrent.Future]].

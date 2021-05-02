@@ -22,6 +22,7 @@ object FreeScalaDSL extends ScalaDSL {
   override final class |+|[A, B] private()
   override final class |&|[A, B] private()
   override final class Rec[F[_]] private()
+  override final class -[A] private()
   override final class Val[A] private()
   override final class Neg[A] private()
   override final class Res[A] private()
@@ -81,6 +82,9 @@ object FreeScalaDSL extends ScalaDSL {
     case class Unpack[F[_]]() extends (Rec[F] -⚬ F[Rec[F]])
     case class RacePair() extends ((Ping |*| Ping) -⚬ (One |+| One))
     case class SelectPair() extends ((One |&| One) -⚬ (Pong |*| Pong))
+
+    case class Forevert[A]() extends (One -⚬ (-[A] |*| A))
+    case class Backvert[A]() extends ((A |*| -[A]) -⚬ One)
 
     case class Crash[A, B](msg: String) extends ((Done |*| A) -⚬ (Done |*| B))
     case class Delay() extends (Val[FiniteDuration] -⚬ Done)
@@ -367,4 +371,10 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def blocking[A, B](f: A => B): Val[A] -⚬ Val[B] =
     Blocking(f)
+
+  override def forevert[A]: One -⚬ (-[A] |*| A) =
+    Forevert()
+
+  override def backvert[A]: (A |*| -[A]) -⚬ One =
+    Backvert()
 }

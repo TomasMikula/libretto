@@ -544,4 +544,11 @@ class BasicTests extends TestSuite {
       }
     }
   }
+
+  test("backvert then forevert") {
+    val prg: Done -⚬ Val[String] =
+      constVal("abc") > introSnd(forevert[Val[String]]) > assocRL > elimFst(backvert[Val[String]])
+
+    assertVal(prg, "abc")
+  }
 }

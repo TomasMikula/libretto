@@ -955,6 +955,28 @@ class FreeScalaFutureRunner(
             }
 
           res                                                     .asInstanceOf[Frontier[B]]
+
+        case -⚬.Backvert() =>
+          // (X |*| -[X]) -⚬ One
+          type X
+
+          val (fw, bw) = this.asInstanceOf[Frontier[X |*| -[X]]].splitPair
+          bw.fulfill(fw)
+          One
+
+        case -⚬.Forevert() =>
+          // One -⚬ (-[X] |*| X)
+
+          def go[X]: Frontier[-[X] |*| X] = {
+            val pfx = Promise[Frontier[X]]()
+            Pair(
+              Backwards(pfx),
+              Deferred(pfx.future),
+            )
+          }
+
+          type X
+          go[X]                                                   .asInstanceOf[Frontier[B]]
       }
     }
 
@@ -965,6 +987,8 @@ class FreeScalaFutureRunner(
         case NeedAsync(promise) =>
           promise.failure(e)
         case PongAsync(promise) =>
+          promise.failure(e)
+        case Backwards(promise) =>
           promise.failure(e)
         case Pair(a, b) =>
           a.crash(e)
@@ -1004,6 +1028,8 @@ class FreeScalaFutureRunner(
     sealed trait ResFrontier[A] extends Frontier[Res[A]]
     case class MVal[A](value: A) extends ResFrontier[A]
     case class Resource[A](id: ResId, obj: A) extends ResFrontier[A]
+
+    case class Backwards[A](promise: Promise[Frontier[A]]) extends Frontier[-[A]]
 
     def failure[A](msg: String): Frontier[A] =
       Deferred(Future.failed(new Exception(msg)))
@@ -1169,6 +1195,19 @@ class FreeScalaFutureRunner(
           case Deferred(f) =>
             f.onComplete {
               case Success(f) => f.awaitIfDeferred
+              case Failure(e) => e.printStackTrace(System.err)
+            }
+        }
+    }
+
+    extension [A](fna: Frontier[-[A]]) {
+      def fulfill(fa: Frontier[A]): Unit =
+        fna match {
+          case Backwards(pfa) =>
+            pfa.success(fa)
+          case Deferred(ffna) =>
+            ffna.onComplete {
+              case Success(fna) => fna.fulfill(fa)
               case Failure(e) => e.printStackTrace(System.err)
             }
         }
