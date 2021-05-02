@@ -11,6 +11,8 @@ abstract class StarterAppBase {
   export StarterKit.dsl._
   export StarterKit.coreLib.{dsl => _, _}
   export StarterKit.scalaLib.{dsl => _, _}
+  export StarterKit.closedLib.{dsl => _, coreLib => _, _}
+  export StarterKit.invertLib.{coreLib => _, _}
   export StarterKit.coreStreams.{dsl => _, _}
   export StarterKit.scalaStreams.{dsl => _, coreLib => _, _}
 }

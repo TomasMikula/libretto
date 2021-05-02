@@ -22,6 +22,12 @@ abstract class AbstractStarterKit(
   val crashLib: CrashLib[dsl.type, coreLib.type] =
     CrashLib(dsl, coreLib)
 
+  val closedLib: ClosedLib[dsl.type, coreLib.type] =
+    ClosedLib(dsl, coreLib)
+
+  val invertLib: InvertLib[coreLib.type] =
+    InvertLib(coreLib)
+
   val coreStreams: CoreStreams[dsl.type, coreLib.type] =
     CoreStreams(dsl, coreLib)
 

@@ -16,8 +16,7 @@ object PoolingMicroscopes extends StarterApp {
     case class Name(value: String)
 
     opaque type Microscope = Val[Name]
-    opaque type AntiMicroscope = Neg[Name]
-    type BorrowedMicroscope = Microscope |*| AntiMicroscope
+    type BorrowedMicroscope = Microscope |*| -[Microscope]
 
     def newMicroscope: Val[Name] -⚬ Microscope =
       id
@@ -25,17 +24,14 @@ object PoolingMicroscopes extends StarterApp {
     def destroyMicroscope: Microscope -⚬ Done =
       neglect
 
-    def recycleReturnedMicroscope: One -⚬ (AntiMicroscope |*| Microscope) =
-      promise
-
     object BorrowedMicroscope {
       def use(f: Val[Name] -⚬ Done): BorrowedMicroscope -⚬ Done =
-        id[BorrowedMicroscope]              .to[         Val[Name]         |*| Neg[Name] ]
-          .>(fst(dup))                      .to[ (Val[Name] |*| Val[Name]) |*| Neg[Name] ]
-          .>(fst(fst(f)))                   .to[ (  Done    |*| Val[Name]) |*| Neg[Name] ]
-          .>(fst(awaitPosFst))              .to[                Val[Name]  |*| Neg[Name] ]
-          .>(fst(signalPosFst))             .to[ (  Done    |*| Val[Name]) |*| Neg[Name] ]
-          .>(assocLR > elimSnd(fulfill))    .to[    Done                                 ]
+        id[BorrowedMicroscope]              .to[         Val[Name]         |*| -[Val[Name]] ]
+          .>(fst(dup))                      .to[ (Val[Name] |*| Val[Name]) |*| -[Val[Name]] ]
+          .>(fst(fst(f)))                   .to[ (  Done    |*| Val[Name]) |*| -[Val[Name]] ]
+          .>(fst(awaitPosFst))              .to[                Val[Name]  |*| -[Val[Name]] ]
+          .>(fst(signalPosFst))             .to[ (  Done    |*| Val[Name]) |*| -[Val[Name]] ]
+          .>(assocLR > elimSnd(backvert))   .to[    Done                                    ]
     }
 
     implicit def signalMicroscopeReadiness: Signaling.Positive[Microscope] =
@@ -99,7 +95,7 @@ object PoolingMicroscopes extends StarterApp {
   override def blueprint: Done -⚬ Done =
     id[Done]
       .>(createMicroscopes)
-      .>(pool(recycleReturnedMicroscope))
+      .>(pool)
       .>(fst(LList.fromList(scientists)))
       .>(fst(LList.fold))
       .>(snd(destroyMicroscopes))

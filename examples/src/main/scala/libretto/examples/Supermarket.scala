@@ -14,17 +14,16 @@ object Supermarket extends StarterApp {
 
   object money {
     opaque type Coin = Done
-    opaque type AntiCoin = Need
     opaque type CashDrawer = Val[Int] // number of coins
 
     def forgeCoin(who: String): Done -⚬ Coin =
       printLine(s"🪙 $who is forging a coin")
 
-    def sendCoin: (Coin |*| AntiCoin) -⚬ One =
-      rInvertSignal
+    def sendCoin: (Coin |*| -[Coin]) -⚬ One =
+      backvert
 
-    def receiveCoin: One -⚬ (AntiCoin |*| Coin) =
-      lInvertSignal
+    def receiveCoin: One -⚬ (-[Coin] |*| Coin) =
+      forevert
 
     def newCashDrawer: Done -⚬ CashDrawer =
       constVal(0)
@@ -52,7 +51,6 @@ object Supermarket extends StarterApp {
 
   object baskets {
     opaque type Basket = Done
-    opaque type AntiBasket = Need
 
     def makeBasket: Done -⚬ Basket =
       id
@@ -60,11 +58,11 @@ object Supermarket extends StarterApp {
     def destroyBasket: Basket -⚬ Done =
       id
 
-    def returnBasket: (Basket |*| AntiBasket) -⚬ One =
-      rInvertSignal
+    def returnBasket: (Basket |*| -[Basket]) -⚬ One =
+      backvert
 
-    def receiveBasket: One -⚬ (AntiBasket |*| Basket) =
-      lInvertSignal
+    def receiveBasket: One -⚬ (-[Basket] |*| Basket) =
+      forevert
 
     def makeBaskets(n: Int): Done -⚬ LList1[Basket] = {
       require(n >= 1)
@@ -109,10 +107,10 @@ object Supermarket extends StarterApp {
   import goods._
 
   object supermarket {
-    private type BorrowedBasket = Basket |*| AntiBasket
+    private type BorrowedBasket = Basket |*| -[Basket]
     private type ItemSelection = Beer |&| ToiletPaper
     private type GoodsSupply = Unlimited[ItemSelection]
-    private type CoinSink = Unlimited[AntiCoin]
+    private type CoinSink = Unlimited[-[Coin]]
 
     opaque type Shopping[ItemsInBasket] =
       ItemsInBasket |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink))
@@ -240,7 +238,7 @@ object Supermarket extends StarterApp {
     }
 
     def coinsToDrawer: One -⚬ (CoinSink |*| CashDrawer) =
-      done > Unlimited.createWith[Done, AntiCoin, CashDrawer](
+      done > Unlimited.createWith[Done, -[Coin], CashDrawer](
         case0 = newCashDrawer,
         case1 = newCashDrawer > introFst(receiveCoin) > assocLR > snd(depositCoin),
       )
@@ -249,7 +247,7 @@ object Supermarket extends StarterApp {
       id                                   [                                                Done                                                         ]
         .>(fork)                        .to[                          Done                  |*|               Done                                       ]
         .>(fst(makeBaskets(capacity)))  .to[                      LList1[Basket]            |*|               Done                                       ]
-        .>(fst(pool(receiveBasket)))    .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*|               Done                                       ]
+        .>(fst(pool))                   .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*|               Done                                       ]
         .>(snd(makeGoodsSupply))        .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*|  (GoodsSupply |*| Done)                                  ]
         .>(snd(introSnd(coinsToDrawer))).to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*| ((GoodsSupply |*| Done)  |*|  (CoinSink |*| CashDrawer)) ]
         .>(snd(IXI > snd(awaitPosFst))) .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*| ((GoodsSupply |*| CoinSink)   |*|           CashDrawer ) ]
