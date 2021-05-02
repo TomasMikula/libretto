@@ -3,6 +3,26 @@ package libretto.examples
 import libretto.StarterApp
 import scala.concurrent.duration._
 
+/**
+ * In a pandemic, supermarkets are required to limit the number of customers in the store.
+ * A way to do this is to provide a limited number of shopping baskets and require that
+ * each customer entering the store has a shopping basket. When there are no more baskets,
+ * an incoming customre has to wait for a previous customer to leave (and return their basket).
+ *
+ * This example demonstrates:
+ *  - concurrency
+ *    - customers come and shop concurrently
+ *  - sequencing
+ *    - a customer can shop only _after_ obtaining a basket
+ *    - a customer can use an item only _after_ paying for it
+ *    - ...
+ *  - mutual exclusion
+ *    - limited number of concurrently shopping customers
+ *      - without side-effects on shared synchronization objects (such as semaphores)
+ *  - linear & session types
+ *    - obligation to return a basket enforced by the type-system
+ *    - the type `Shopping` is a protocol between the store and the customer
+ */
 object Supermarket extends StarterApp {
   override def blueprint: Done -⚬ Done =
     supermarket.makeSupermarket(capacity = 3)
@@ -82,6 +102,8 @@ object Supermarket extends StarterApp {
   import baskets._
 
   object goods {
+    // Our supermarket specializes on the most wanted items in a pandemic,
+    // namely toilet paper and beer.
     opaque type ToiletPaper = Done
     opaque type Beer = Done
 
