@@ -377,4 +377,17 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def backvert[A]: (A |*| -[A]) -⚬ One =
     Backvert()
+
+  override val $: $Ops =
+    new $Ops {
+      def map[A, B](a: $[A])(f: A -⚬ B): $[B] = ???
+
+      def zip[A, B](a: $[A], b: $[B]): $[A |*| B] = ???
+
+      def unzip[A, B](ab: $[A |*| B]): ($[A], $[B]) = ???
+
+      def applyArrow[A, B](f: A -⚬ B, a: $[A]): $[B] = ???
+    }
+
+  override def λ[A, B](f: $[A] => $[B]): A -⚬ B = ???
 }

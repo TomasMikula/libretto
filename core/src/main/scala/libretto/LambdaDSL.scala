@@ -26,6 +26,8 @@ trait LambdaDSL extends CoreDSL {
   val $: $Ops
 
   trait $Ops {
+    def map[A, B](a: $[A])(f: A -⚬ B): $[B]
+
     def zip[A, B](a: $[A], b: $[B]): $[A |*| B]
 
     def unzip[A, B](ab: $[A |*| B]): ($[A], $[B])
@@ -43,6 +45,9 @@ trait LambdaDSL extends CoreDSL {
     extension [A, B](a: $[A]) {
       def |*|(b: $[B]): $[A |*| B] =
         $.zip(a, b)
+
+      def >(f: A -⚬ B): $[B] =
+        $.map(a)(f)
     }
   }
 }
