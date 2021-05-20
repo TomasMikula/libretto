@@ -175,12 +175,31 @@ class BasicTests extends TestSuite {
     assertCompletes(prg)
   }
 
-  test("coDistribute") {
+  {
+    // temporarily moved outside the next `test` body due to https://github.com/lampepfl/dotty/issues/12508
+
     type B = Val[Boolean]
     type C = Val[Char]
     type I = Val[Int]
     type S = Val[String]
 
+    case class Combination[X, Y](
+      choose1: (B |&| C) -⚬ Val[X],
+      choose2: (I |&| S) -⚬ Val[Y],
+      expectedX: X,
+      expectedY: Y,
+    ) {
+      type T = X
+      type U = Y
+
+      def go: ((B |&| C) |*| (I |&| S)) -⚬ Val[(T, U)] =
+        par(choose1, choose2) > unliftPair
+
+      def expected: (T, U) =
+        (expectedX, expectedY)
+    }
+
+  test("coDistribute") {
     //                (false   1)    (true "foo")    ('a'    2)    ('b'  "bar")
     val init: Done -⚬ (((B |*| I) |&| (B |*| S)) |&| ((C |*| I) |&| (C |*| S))) =
       choice(
@@ -205,22 +224,6 @@ class BasicTests extends TestSuite {
         .bimap(coDistributeR, coDistributeR)        .to[ ((B        |&|  C) |*|  I ) |&| ((B        |&|  C) |*| S ) ]
         .>(coDistributeL)                           .to[  (B        |&|  C) |*| (I   |&|                        S ) ]
 
-    case class Combination[X, Y](
-      choose1: (B |&| C) -⚬ Val[X],
-      choose2: (I |&| S) -⚬ Val[Y],
-      expectedX: X,
-      expectedY: Y,
-    ) {
-      type T = X
-      type U = Y
-
-      def go: ((B |&| C) |*| (I |&| S)) -⚬ Val[(T, U)] =
-        par(choose1, choose2) > unliftPair
-
-      def expected: (T, U) =
-        (expectedX, expectedY)
-    }
-
     val combinations = Seq(
       Combination(chooseL, chooseL, false, 1),
       Combination(chooseL, chooseR, true, "foo"),
@@ -234,6 +237,7 @@ class BasicTests extends TestSuite {
     } {
       assertVal(f > c.go, c.expected)
     }
+  }
   }
 
   test("LList.splitEvenOdd") {
@@ -254,7 +258,8 @@ class BasicTests extends TestSuite {
     assertVal(prg, List((1, 2), (3, 4), (5, 0)))
   }
 
-  test("acquire - effect - transform - release") {
+  {
+    // temporarily moved outside the next `test` body due to https://github.com/lampepfl/dotty/issues/12508
     class MVar[A](var value: A) {
       def set(a: A): MVar[A] = {
         this.value = a
@@ -262,6 +267,7 @@ class BasicTests extends TestSuite {
       }
     }
 
+  test("acquire - effect - transform - release") {
     val acquireFuns = Seq[Val[Int] -⚬ Res[MVar[Int]]](
       mVal(new MVar(_)),
       acquire0(new MVar(_), release = None),
@@ -303,6 +309,7 @@ class BasicTests extends TestSuite {
     for (prg <- prgs) {
       assertVal(prg, "1")
     }
+  }
   }
 
   test("release via registered function") {

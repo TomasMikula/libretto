@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-ThisBuild / scalaVersion := "3.0.0-RC3"
+ThisBuild / scalaVersion := "3.0.0"
 
 ThisBuild / organization := "com.github.tomasmikula"
 
@@ -57,7 +57,7 @@ lazy val core = project
       "-Ykind-projector", // support '*' as a placeholder in type lambdas
     ),
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.8" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.9" % "test",
     ),
   )
 
