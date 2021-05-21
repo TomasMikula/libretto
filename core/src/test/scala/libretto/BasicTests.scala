@@ -242,9 +242,9 @@ class BasicTests extends TestSuite {
 
   test("LList.splitEvenOdd") {
     val prg: Done -⚬ Val[(List[Int], List[Int])] =
-      constListOf1(0, (1 to 100): _*) > LList.splitEvenOdd > par(toScalaList, toScalaList) > unliftPair
+      constListOf1(0, (1 to 20): _*) > LList.splitEvenOdd > par(toScalaList, toScalaList) > unliftPair
 
-    assertVal(prg, (0 to 100).toList.partition(_ % 2 == 0))
+    assertVal(prg, (0 to 20).toList.partition(_ % 2 == 0))
   }
 
   test("LList.halfRotateL") {
