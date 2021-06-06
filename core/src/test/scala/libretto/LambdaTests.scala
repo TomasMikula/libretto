@@ -8,10 +8,20 @@ class LambdaTests extends TestSuite {
   test("λ-expression compilation") {
     import $._
 
-    def f = λ { (t: $[Ping |*| (Done |*| Val[String])]) =>
+    val f = λ { (t: $[Ping |*| (Done |*| Val[String])]) =>
       val (p |*| (d |*| s)) = t
       val i = (s |*| p) > awaitPingSnd > mapVal(_.length)
       d |*| i
     }
+
+    val prg: Done -⚬ Val[Int] =
+      λ { (d: $[Done]) =>
+        val (p |*| d1) = d > notifyPosFst
+        val (d2 |*| d3) = d1 > fork
+        val s = constVal("foo")(d2)
+        f(p |*| (d3 |*| s)) > awaitPosFst
+      }
+
+    assertVal(prg, 3)
   }
 }

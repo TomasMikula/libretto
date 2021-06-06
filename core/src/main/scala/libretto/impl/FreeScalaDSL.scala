@@ -1,6 +1,6 @@
 package libretto.impl
 
-import libretto.{Async, ScalaDSL}
+import libretto.{Async, BiInjective, ScalaDSL}
 import scala.concurrent.duration.FiniteDuration
 
 object FreeScalaDSL extends ScalaDSL {
@@ -26,6 +26,12 @@ object FreeScalaDSL extends ScalaDSL {
   override final class Val[A] private()
   override final class Neg[A] private()
   override final class Res[A] private()
+
+  implicit val biInjectivePair: BiInjective[|*|] =
+    new BiInjective[|*|] {
+      override def unapply[A, B, X, Y](ev: (A |*| B) =:= (X |*| Y)): (A =:= X, B =:= Y) =
+        (ev.asInstanceOf, ev.asInstanceOf)
+    }
 
   object -⚬ {
     case class Id[A]() extends (A -⚬ A)
@@ -378,16 +384,43 @@ object FreeScalaDSL extends ScalaDSL {
   override def backvert[A]: (A |*| -[A]) -⚬ One =
     Backvert()
 
-  override val $: $Ops =
-    new $Ops {
-      def map[A, B](a: $[A])(f: A -⚬ B): $[B] = ???
-
-      def zip[A, B](a: $[A], b: $[B]): $[A |*| B] = ???
-
-      def unzip[A, B](ab: $[A |*| B]): ($[A], $[B]) = ???
-
-      def applyArrow[A, B](f: A -⚬ B, a: $[A]): $[B] = ???
+  implicit val ssc: SymmetricSemigroupalCategory[-⚬, |*|] =
+    new SymmetricSemigroupalCategory[-⚬, |*|] {
+      override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C                              = FreeScalaDSL.this.andThen(f, g)
+      override def id[A]: A -⚬ A                                                               = FreeScalaDSL.this.id[A]
+      override def par[A1, A2, B1, B2](f1: A1 -⚬ B1, f2: A2 -⚬ B2): (A1 |*| A2) -⚬ (B1 |*| B2) = FreeScalaDSL.this.par(f1, f2)
+      override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C))                    = FreeScalaDSL.this.assocLR[A, B, C]
+      override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C)                    = FreeScalaDSL.this.assocRL[A, B, C]
+      override def swap[A, B]: (A |*| B) -⚬ (B |*| A)                                          = FreeScalaDSL.this.swap[A, B]
     }
 
-  override def λ[A, B](f: $[A] => $[B]): A -⚬ B = ???
+  val lambda = new Lambda[-⚬, |*|]
+
+  override type $[A] = lambda.Expr[A]
+
+  override val `$`: $Ops  = new $Ops {
+    override def map[A, B](a: $[A])(f: A -⚬ B): $[B] =
+      a.map(f)
+
+    override def zip[A, B](a: $[A], b: $[B]): $[A |*| B] =
+      a zip b
+
+    override def unzip[A, B](ab: $[A |*| B]): ($[A], $[B]) =
+      lambda.Expr.unzip(ab)
+  }
+
+  override def λ[A, B](f: $[A] => $[B]): A -⚬ B =
+    lambda.abs(f) match {
+      case Right(f) => f
+      case Left(e) =>
+        import lambda.Error._
+        e match {
+          case Overused(v) => throw new NotLinearException(s"Variable $v used more than once")
+          case Underused(v) => throw new NotLinearException(s"Variable $v not fully consumed")
+          case Undefined(v) => throw new UnboundVariableException(v)
+        }
+    }
+
+  override class NotLinearException(msg: String) extends Exception(msg)
+  override class UnboundVariableException(v: lambda.Expr.Var[?]) extends Exception
 }
