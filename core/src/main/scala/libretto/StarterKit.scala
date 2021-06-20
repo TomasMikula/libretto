@@ -37,8 +37,13 @@ abstract class AbstractStarterKit(
   def runner(blockingExecutor: Executor)(implicit scheduler: ScheduledExecutorService): ScalaRunner[dsl.type, Future] =
     runner0(scheduler, blockingExecutor)
 
-  import dsl._
-  import coreLib._
+  export dsl._
+  export coreLib.{dsl => _, _}
+  export scalaLib.{dsl => _, coreLib => _, _}
+  export closedLib.{dsl => _, coreLib => _, _}
+  export invertLib.{coreLib => _, _}
+  export coreStreams.{dsl => _, _}
+  export scalaStreams.{dsl => _, coreLib => _, scalaLib => _, coreStreams => _, _}
 
   def runScalaAsync[A](blueprint: Done -⚬ Val[A]): Future[A] = {
     val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())
