@@ -8,6 +8,7 @@ import scala.concurrent.duration._
  */
 object CoffeeMachineClient {
   import Protocol._
+  import $._
 
   val useCoffeeMachine: CoffeeMachine -⚬ Done = {
     def go: (Done |*| CoffeeMachine) -⚬ Done = rec { go =>
@@ -60,26 +61,26 @@ object CoffeeMachineClient {
         .contramapVal(Item.asUnion)
         .get
 
-    id                               [   Done    |*| (((EspressoMenu |*| CoffeeMachine) |&| (LatteMenu |*| CoffeeMachine)) |&| Done) ]
-      .>.fst(prompt(msg, parse))  .to[ Val[Item] |*| (((EspressoMenu |*| CoffeeMachine) |&| (LatteMenu |*| CoffeeMachine)) |&| Done) ]
-      .>(chooseItem)              .to[           Done                                                                                ]
+    λ { case (trigger |*| options) =>
+      val item = trigger > prompt(msg, parse)
+      chooseItem(item |*| options)
+    }
   }
 
   private def getEspresso: (Done |*| EspressoMenu) -⚬ Done =
-    id                                 [  Done |*|             EspressoMenu            ]
-                                    .to[  Done |*| (ShotCountChoice |*| Val[Beverage]) ]
-      .>(assocRL)                   .to[ (Done |*| ShotCountChoice) |*| Val[Beverage]  ]
-      .>.fst(promptShot)            .to[       Done                 |*| Val[Beverage]  ]
-      .>(join(id, serve))           .to[                           Done                ]
+    λ { case (trigger |*| espressoMenu) =>
+      val (shotCountChoice |*| beverage) = espressoMenu
+      (promptShot(trigger |*| shotCountChoice) |*| serve(beverage)) > join
+    }
 
   private def getLatte: (Done |*| LatteMenu) -⚬ Done =
-    id                               [ Done |*|                                               LatteMenu                 ]
-                                  .to[ Done |*| (((SizeChoice |*| ShotCountChoice) |*| FlavorChoice) |*| Val[Beverage]) ]
-      .>.snd(assocLR > assocLR)   .to[ Done |*| (SizeChoice |*| (ShotCountChoice |*| (FlavorChoice |*| Val[Beverage]))) ]
-      .>(VI(promptSize))          .to[      Done            |*| (ShotCountChoice |*| (FlavorChoice |*| Val[Beverage]))  ]
-      .>(VI(promptShot))          .to[                      Done                 |*| (FlavorChoice |*| Val[Beverage])   ]
-      .>(VI(promptFlavor))        .to[                                           Done              |*| Val[Beverage]    ]
-      .>(join(id, serve))         .to[                                                            Done                  ]
+    λ { case (trigger |*| latteMenu) =>
+      val (((sizeChoice |*| shotCountChoice) |*| flavorChoice) |*| beverage) = latteMenu
+      val done1 = promptSize(trigger |*| sizeChoice)
+      val done2 = promptShot(done1 |*| shotCountChoice)
+      val done3 = promptFlavor(done2 |*| flavorChoice)
+      (done3 |*| serve(beverage)) > join
+    }
 
   private def promptShot: (Done |*| ShotCountChoice) -⚬ Done = {
     val msg =

@@ -232,14 +232,16 @@ class Shuffle[->[_, _], |*|[_, _]] {
 
     def afterBi[X1, X2](f1: X1 ~⚬ A1, f2: X2 ~⚬ A2)(using inj: BiInjective[|*|], ev: Semigroupoid[->]): Transfer[X1, X2, B1, B2] =
       this match {
-        case Swap(g1, g2) => Swap(f1 > g1, f2 > g2)
+        case Swap(g1, g2)  => Swap(f1 > g1, f2 > g2)
+        case AssocRL(f, g) => AssocRL(f2 > f, fst(f1) > g)
         // TODO
       }
 
     def thenBi[C1, C2](g1: B1 ~⚬ C1, g2: B2 ~⚬ C2)(using inj: BiInjective[|*|], ev: Semigroupoid[->]): Transfer[A1, A2, C1, C2] =
       this match {
-        case Swap(f1, f2) => Swap(f1 > g2, f2 > g1)
-        case XI(f, g) => XI(f > fst(g1), g > g2)
+        case Swap(f1, f2)  => Swap(f1 > g2, f2 > g1)
+        case XI(f, g)      => XI(f > fst(g1), g > g2)
+        case AssocRL(f, g) => AssocRL(f > snd(g2), g > g1)
         // TODO
       }
 
@@ -278,6 +280,14 @@ class Shuffle[->[_, _], |*|[_, _]] {
                     // TODO
                   }
               }
+            // TODO
+          }
+        case AssocRL(f, g) =>
+          that match {
+            case Swap(h1, h2) =>
+              Xfer(XI(f > snd(h2) > swap, g > h1))
+            case AssocRL(h, i) =>
+              Xfer(AssocRL(f > snd(h) > assocRL, assocRL > fst(g) > i))
             // TODO
           }
         // TODO

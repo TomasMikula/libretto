@@ -30,7 +30,7 @@ object FreeScalaDSL extends ScalaDSL {
   implicit val biInjectivePair: BiInjective[|*|] =
     new BiInjective[|*|] {
       override def unapply[A, B, X, Y](ev: (A |*| B) =:= (X |*| Y)): (A =:= X, B =:= Y) =
-        (ev.asInstanceOf, ev.asInstanceOf)
+        (ev.asInstanceOf[A =:= X], ev.asInstanceOf[B =:= Y])
     }
 
   object -⚬ {
