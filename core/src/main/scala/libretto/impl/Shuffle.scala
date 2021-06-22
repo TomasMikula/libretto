@@ -112,6 +112,15 @@ class Shuffle[->[_, _], |*|[_, _]] {
         case f: Composed[Y, Z] => Bimap(Par.Snd(f))
       }
 
+    def xi[X, Y, Z]: (X |*| (Y |*| Z)) ~⚬ (Y |*| (X |*| Z)) =
+      Xfer(Transfer.XI(Id(), Id()))
+
+    def ix[X, Y, Z]: ((X |*| Y) |*| Z) ~⚬ ((X |*| Z) |*| Y) =
+      Xfer(Transfer.IX(Id(), Id()))
+
+    def ixi[W, X, Y, Z]: ((W |*| X) |*| (Y |*| Z)) ~⚬ ((W |*| Y) |*| (X |*| Z)) =
+      Xfer(Transfer.IXI(Id(), Id(), Id(), Id()))
+
     def lift[X, Y](f: X -> Y): X ~⚬ Y =
       HCompose(Id(), Interspersed.Single(f), Id())
 
@@ -233,7 +242,9 @@ class Shuffle[->[_, _], |*|[_, _]] {
     def afterBi[X1, X2](f1: X1 ~⚬ A1, f2: X2 ~⚬ A2)(using inj: BiInjective[|*|], ev: Semigroupoid[->]): Transfer[X1, X2, B1, B2] =
       this match {
         case Swap(g1, g2)  => Swap(f1 > g1, f2 > g2)
-        case AssocRL(f, g) => AssocRL(f2 > f, fst(f1) > g)
+        case AssocLR(g, h) => AssocLR(f1 > g, snd(f2) > h)
+        case AssocRL(g, h) => AssocRL(f2 > g, fst(f1) > h)
+        case XI(g, h)      => XI(f2 > g, fst(f1) > h)
         // TODO
       }
 
@@ -241,6 +252,8 @@ class Shuffle[->[_, _], |*|[_, _]] {
       this match {
         case Swap(f1, f2)  => Swap(f1 > g2, f2 > g1)
         case XI(f, g)      => XI(f > fst(g1), g > g2)
+        case IX(f, g)      => IX(f > snd(g2), g > g1)
+        case AssocLR(f, g) => AssocLR(f > fst(g1), g > g2)
         case AssocRL(f, g) => AssocRL(f > snd(g2), g > g1)
         // TODO
       }
@@ -260,6 +273,8 @@ class Shuffle[->[_, _], |*|[_, _]] {
               par0(f1 > g2, f2 > g1)
             case AssocLR(g, h) =>
               Xfer(XI(f2 > g, fst(f1) > swap > h))
+            case AssocRL(g, h) =>
+              Xfer(IX(f1 > g, snd(f2) > swap > h))
             // TODO
           }
         case AssocLR(f, g) =>
@@ -270,7 +285,7 @@ class Shuffle[->[_, _], |*|[_, _]] {
               Xfer(AssocLR(f > fst(h) > assocLR, assocLR > snd(g) > i))
             case AssocRL(h, i) =>
               tryUntangle(g > h) match {
-                case Right(g1, g2) =>
+                case Right((g1, g2)) =>
                   par0(f > snd(g1) > i, g2)
                 case Left(gh) =>
                   gh match {
@@ -279,6 +294,12 @@ class Shuffle[->[_, _], |*|[_, _]] {
                     case AssocRL(g, h) => Xfer(AssocRL(g, fst(f) > assocLR > snd(h) > i))
                     // TODO
                   }
+              }
+            case XI(h, i) =>
+              tryUntangle(g > h) match {
+                case Right((g1, g2)) =>
+                  Xfer(AssocLR(f > swap > fst(g1), snd(g2) > i))
+                // TODO
               }
             // TODO
           }
@@ -289,6 +310,43 @@ class Shuffle[->[_, _], |*|[_, _]] {
             case AssocRL(h, i) =>
               Xfer(AssocRL(f > snd(h) > assocRL, assocRL > fst(g) > i))
             // TODO
+          }
+        case XI(f, g) =>
+          that match {
+            case Swap(h1, h2) =>
+              Xfer(AssocRL(f > swap > snd(h1), g > h2))
+            case AssocLR(h, i) =>
+              Xfer(XI(f > fst(h) > assocLR, Xfer(XI(Id(), g)) > i))
+            case AssocRL(h, i) =>
+              tryUntangle(g > h) match {
+                case Right((g1, g2)) =>
+                  Xfer(AssocRL(f > snd(g2), fst(g1) > swap > i))
+                case Left(gh) =>
+                  gh match {
+                    case Swap(g1, g2) => Xfer(Swap(g1, f > snd(g2) > i))
+                    case AssocRL(g, h) => Xfer(AssocRL(f > snd(g) > assocRL, xi > snd(h) > i))
+                    case XI(g, h) => Xfer(XI(f > snd(g) > assocRL > fst(i), h))
+                    case IX(g, h) => Xfer(IX(g, snd(f) > xi > snd(h) > i))
+                    // TODO
+                  }
+              }
+            case XI(h, i) =>
+              tryUntangle(g > h) match {
+                case Right((g1, g2)) =>
+                  par0(g1, f > snd(g2) > i)
+                case Left(gh) =>
+                  gh match {
+                    case Swap(g1, g2) => Xfer(XI(f > swap > fst(g2), fst(g1) > swap > i))
+                    case AssocRL(g, h) => Xfer(AssocRL(f > snd(g) > xi > snd(i), h))
+                    case XI(g, h) => Xfer(XI(f > snd(g) > xi, xi > snd(h) > i))
+                    // TODO
+                  }
+              }
+            // TODO
+          }
+        case IX(f, g) =>
+          that match {
+            case AssocRL(h, i) => Xfer(IX(f > snd(h) > assocRL, ix > fst(g) > i))
           }
         // TODO
       }

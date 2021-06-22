@@ -24,4 +24,33 @@ class LambdaTests extends TestSuite {
 
     assertVal(prg, 3)
   }
+
+  test("shuffle 8 inputs") {
+    import $._
+
+    type C = Val[Char]
+
+    val f: (((C |*| C) |*| C) |*| ((C |*| ((C |*| C) |*| C)) |*| C)) -⚬ ((((C |*| C) |*| (C |*| ((C |*| C) |*| C))) |*| C) |*| C) =
+      λ { case (((a |*| b) |*| c) |*| ((d |*| ((e |*| f) |*| g)) |*| h)) =>
+        (((g |*| d) |*| (b |*| ((f |*| h) |*| e))) |*| c) |*| a
+      }
+
+    val prg: Done -⚬ Val[((((Char, Char), (Char, ((Char, Char), Char))), Char), Char)] =
+      constVal(((('a', 'b'), 'c'), (('d', (('e', 'f'), 'g')), 'h')))
+        > liftPair > par(
+          liftPair > fst(liftPair),
+          liftPair > fst(liftPair > snd(liftPair > fst(liftPair))),
+        )
+        > f
+        > fst(
+          fst(
+            par(
+              unliftPair,
+              snd(fst(unliftPair) > unliftPair) > unliftPair,
+            ) > unliftPair
+          ) > unliftPair
+        ) > unliftPair
+
+    assertVal(prg, (((('g', 'd'), ('b', (('f', 'h'), 'e'))), 'c'), 'a'))
+  }
 }

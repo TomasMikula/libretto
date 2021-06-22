@@ -53,7 +53,7 @@ class Lambda[-⚬[_, _], |*|[_, _]] {
   import Expr._
 
   val shuffle = new Shuffle[-⚬, |*|]
-  import shuffle.~⚬
+  import shuffle.{~⚬, Transfer}
 
   sealed trait Vars[A] {
     def lookup[B](vb: Var[B]): Option[Vars.Contains[A, B]]
@@ -81,7 +81,7 @@ class Lambda[-⚬[_, _], |*|[_, _]] {
               case Some(contains) =>
                 contains match {
                   case Contains.Id() => Some(Contains.Super(~⚬.swap, _1))
-                  // TODO
+                  case Contains.Super(f, remaining) => Some(Contains.Super(~⚬.Xfer(Transfer.XI(f, ~⚬.Id())), _1 zip remaining))
                 }
               case None =>
                 None
