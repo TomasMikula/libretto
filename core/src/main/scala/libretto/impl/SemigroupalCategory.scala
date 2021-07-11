@@ -5,4 +5,7 @@ trait SemigroupalCategory[->[_, _], |*|[_, _]] extends Category[->] {
 
   def assocLR[A, B, C]: ((A |*| B) |*| C) -> (A |*| (B |*| C))
   def assocRL[A, B, C]: (A |*| (B |*| C)) -> ((A |*| B) |*| C)
+
+  def fst[X, Y, Z](f: X -> Y): (X |*| Z) -> (Y |*| Z) = par(f, id)
+  def snd[X, Y, Z](f: Y -> Z): (X |*| Y) -> (X |*| Z) = par(id, f)
 }

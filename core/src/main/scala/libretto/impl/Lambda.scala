@@ -2,7 +2,10 @@ package libretto.impl
 
 import libretto.BiInjective
 
-class Lambda[-⚬[_, _], |*|[_, _]] {
+class Lambda[-⚬[_, _], |*|[_, _]](using
+  inj: BiInjective[|*|],
+  ev: Semigroupoid[-⚬], // TODO: don't require Semigroupoid here, only in fold
+) {
 
   sealed trait Expr[A] {
     import Expr._
@@ -52,8 +55,9 @@ class Lambda[-⚬[_, _], |*|[_, _]] {
   }
   import Expr._
 
-  val shuffle = new Shuffle[-⚬, |*|]
-  import shuffle.{~⚬, Transfer}
+  val shuffled = new Shuffled[-⚬, |*|]
+  import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
+  import shuffled.{Shuffled => ≈⚬}
 
   sealed trait Vars[A] {
     def lookup[B](vb: Var[B]): Option[Vars.Contains[A, B]]
@@ -81,7 +85,7 @@ class Lambda[-⚬[_, _], |*|[_, _]] {
               case Some(contains) =>
                 contains match {
                   case Contains.Id() => Some(Contains.Super(~⚬.swap, _1))
-                  case Contains.Super(f, remaining) => Some(Contains.Super(~⚬.Xfer(Transfer.XI(f, ~⚬.Id())), _1 zip remaining))
+                  case Contains.Super(f, remaining) => Some(Contains.Super(~⚬.Xfer(~⚬.Id(), f, Transfer.XI(TransferOpt.None())), _1 zip remaining))
                 }
               case None =>
                 None
@@ -100,21 +104,19 @@ class Lambda[-⚬[_, _], |*|[_, _]] {
   def abs[A, B](
     f: Expr[A] => Expr[B],
   )(using
-    inj: BiInjective[|*|],
     ev: SymmetricSemigroupalCategory[-⚬, |*|],
   ): Either[Error, A -⚬ B] = {
     val a = new Var[A]()
     val b = f(a)
-    abs(a, b).map(_.lift)
+    abs(a, b).map(_.fold)
   }
 
   def abs[A, B](
     a: Var[A],
     b: Expr[B],
   )(using
-    inj: BiInjective[|*|],
     ev: Semigroupoid[-⚬],
-  ): Either[Error, A ~⚬ B] =
+  ): Either[Error, A ≈⚬ B] =
     abs[A, B](
       vars = Vars.Single(a),
       expr = b,
@@ -130,7 +132,6 @@ class Lambda[-⚬[_, _], |*|[_, _]] {
     expr: Expr[B],
     consumed: Set[Var[_]],
   )(using
-    inj: BiInjective[|*|],
     ev: Semigroupoid[-⚬],
   ): AbsRes[A, B] = {
     def goPrj[Z, X](z: VarDefining[Z], s: Z ~⚬ (B |*| X), b: Var[B], x: Var[X]): AbsRes[A, B] =
@@ -143,14 +144,14 @@ class Lambda[-⚬[_, _], |*|[_, _]] {
               AbsRes.Failure(Error.Overused(z.variable))
             case Some(contains) =>
               contains match {
-                case Vars.Contains.Id() => AbsRes.Full(~⚬.Id(), consumed + b)
-                case Vars.Contains.Super(f, vars) => AbsRes.Partial(f, vars, consumed + b)
+                case Vars.Contains.Id() => AbsRes.Full(shuffled.id, consumed + b)
+                case Vars.Contains.Super(f, vars) => AbsRes.Partial(shuffled.pure(f), vars, consumed + b)
               }
           }
       } else {
         abs(vars, z, consumed) match {
-          case AbsRes.Full(f, consumed) => AbsRes.Partial(f > s, Vars.Single(x), consumed + b)
-          case AbsRes.Partial(f, vars, consumed) => AbsRes.Partial(f > ~⚬.fst(s) > ~⚬.assocLR, Vars.Single(x) zip vars, consumed + b)
+          case AbsRes.Full(f, consumed) => AbsRes.Partial(f > shuffled.pure(s), Vars.Single(x), consumed + b)
+          case AbsRes.Partial(f, vars, consumed) => AbsRes.Partial(f > shuffled.pure(~⚬.fst(s) > ~⚬.assocLR), Vars.Single(x) zip vars, consumed + b)
           case AbsRes.Failure(e) => AbsRes.Failure(e)
         }
       }
@@ -165,16 +166,16 @@ class Lambda[-⚬[_, _], |*|[_, _]] {
             }
           case Some(res) =>
             res match {
-              case Vars.Contains.Id() => AbsRes.Full(~⚬.Id(), consumed + v)
-              case Vars.Contains.Super(f, vars) => AbsRes.Partial(f, vars, consumed + v)
+              case Vars.Contains.Id() => AbsRes.Full(shuffled.id, consumed + v)
+              case Vars.Contains.Super(f, vars) => AbsRes.Partial(shuffled.pure(f), vars, consumed + v)
             }
         }
       case Zip(b1, b2) =>
         abs(vars, b1, consumed) match {
           case AbsRes.Partial(f, vars, consumed) =>
             abs(vars, b2, consumed) match {
-              case AbsRes.Full(g, consumed) => AbsRes.Full(f > ~⚬.snd(g), consumed)
-              case AbsRes.Partial(g, vars, consumed) => AbsRes.Partial(f > ~⚬.snd(g) > ~⚬.assocRL, vars, consumed)
+              case AbsRes.Full(g, consumed) => AbsRes.Full(f > shuffled.snd(g), consumed)
+              case AbsRes.Partial(g, vars, consumed) => AbsRes.Partial(f > shuffled.snd(g) > shuffled.assocRL, vars, consumed)
               case AbsRes.Failure(e) => AbsRes.Failure(e)
             }
           // TODO
@@ -186,13 +187,13 @@ class Lambda[-⚬[_, _], |*|[_, _]] {
           vars.lookup(b) match {
             case Some(contains) =>
               contains match {
-                case Vars.Contains.Id() => AbsRes.Full(~⚬.Id(), consumed + b)
-                case Vars.Contains.Super(f, vars) => AbsRes.Partial(f, vars, consumed + b)
+                case Vars.Contains.Id() => AbsRes.Full(shuffled.id, consumed + b)
+                case Vars.Contains.Super(f, vars) => AbsRes.Partial(shuffled.pure(f), vars, consumed + b)
               }
             case None =>
               abs(vars, x, consumed) match {
-                case AbsRes.Full(g, consumed) => AbsRes.Full(g > ~⚬.lift(f), consumed + b)
-                case AbsRes.Partial(g, vars, consumed) => AbsRes.Partial(g > ~⚬.fst(~⚬.lift(f)), vars, consumed + b)
+                case AbsRes.Full(g, consumed) => AbsRes.Full(g > shuffled.lift(f), consumed + b)
+                case AbsRes.Partial(g, vars, consumed) => AbsRes.Partial(g > shuffled.fst(shuffled.lift(f)), vars, consumed + b)
                 case AbsRes.Failure(e) => AbsRes.Failure(e)
               }
           }
@@ -206,8 +207,8 @@ class Lambda[-⚬[_, _], |*|[_, _]] {
 
   sealed trait AbsRes[A, B]
   object AbsRes {
-    case class Full[A, B](f: A ~⚬ B, consumed: Set[Var[_]]) extends AbsRes[A, B]
-    case class Partial[A, Y, B](f: A ~⚬ (B |*| Y), vars: Vars[Y], consumed: Set[Var[_]]) extends AbsRes[A, B]
+    case class Full[A, B](f: A ≈⚬ B, consumed: Set[Var[_]]) extends AbsRes[A, B]
+    case class Partial[A, Y, B](f: A ≈⚬ (B |*| Y), vars: Vars[Y], consumed: Set[Var[_]]) extends AbsRes[A, B]
     case class Failure[A, B](e: Error) extends AbsRes[A, B]
   }
 
