@@ -10,7 +10,7 @@ class ShuffleTests extends AnyFunSuite {
 
   given BiInjective[Tuple2] = new BiInjective[Tuple2] {
     override def unapply[A, B, X, Y](ev: (A, B) =:= (X, Y)): (A =:= X, B =:= Y) =
-      (ev.asInstanceOf, ev.asInstanceOf)
+      (ev.asInstanceOf[A =:= X], ev.asInstanceOf[B =:= Y])
   }
 
   test("normalization: fst(snd(f)) > assocLR = assocLR > snd(fst(f))") {
@@ -36,5 +36,16 @@ class ShuffleTests extends AnyFunSuite {
 
   test("normalization: ixi = assocRL > fst(assocLR > snd(swap) > assocRL) > assocLR") {
     assert(ixi == assocRL > fst(assocLR > snd(swap) > assocRL) > assocLR)
+  }
+
+  test("normalization: ixi > par(ixi, ixi) > ixi = par(ixi, ixi) > ixi > par(ixi, ixi)") {
+    val f = ixi > par(ixi, ixi) > ixi
+    val g = par(ixi, ixi) > ixi > par(ixi, ixi)
+    assert(f == g)
+  }
+
+  test("normalization: f > f.invert = id, where f = par(ixi, ixi) > ixi > par(ixi, ixi)") {
+    val f = par(ixi, ixi) > ixi > par(ixi, ixi)
+    assert(f > f.invert == id)
   }
 }

@@ -181,6 +181,16 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
   sealed trait TransferOpt[A, B] {
     def fold[->[_, _]](using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B
 
+    def pairWith[X1, X2, X3, X4, Z](that: TransferOpt[X3 |*| X4, Z])(implicit ev: A =:= (X1 |*| X2)): BiTransferOpt[X1, X2, X3, X4, B, Z]
+
+    def nonePairWith_:[X1, X2, X3, X4](that: TransferOpt.None[X1 |*| X2])(implicit ev: A =:= (X3 |*| X4)): BiTransferOpt[X1, X2, X3, X4, X1 |*| X2, B]
+
+    def ixiPairWith_:[X1, X2, X3, X4, X5, X6, Y1, Y2](
+      that: Transfer.IXI[X1, X2, X3, X4, Y1, Y2],
+    )(implicit
+      ev: A =:= (X5 |*| X6),
+    ): BiTransferOpt[X1 |*| X2, X3 |*| X4, X5, X6, Y1 |*| Y2, B]
+
     def asShuffle: A ~⚬ B =
       this match {
         case x: Transfer[_, _, _, _] => Xfer(Id(), Id(), x)
@@ -198,6 +208,19 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def ev: X =:= X =
         summon[X =:= X]
+
+      override def pairWith[A1, A2, A3, A4, C](that: TransferOpt[A3 |*| A4, C])(implicit ev: X =:= (A1 |*| A2)): BiTransferOpt[A1, A2, A3, A4, X, C] =
+        ev.substituteContra[[x] =>> BiTransferOpt[A1, A2, A3, A4, x, C]](ev.substituteCo(this) nonePairWith_: that)
+
+      override def nonePairWith_:[X1, X2, X3, X4](that: TransferOpt.None[X1 |*| X2])(implicit ev: X =:= (X3 |*| X4)): BiTransferOpt[X1, X2, X3, X4, X1 |*| X2, X] =
+        ev.substituteContra[[x] =>> BiTransferOpt[X1, X2, X3, X4, X1 |*| X2, x]](BiTransferOpt.None_None[X1, X2, X3, X4]())
+
+      override def ixiPairWith_:[X1, X2, X3, X4, X5, X6, Y1, Y2](
+        that: Transfer.IXI[X1, X2, X3, X4, Y1, Y2],
+      )(implicit
+        ev: X =:= (X5 |*| X6),
+      ): BiTransferOpt[X1 |*| X2, X3 |*| X4, X5, X6, Y1 |*| Y2, X] =
+        ???
     }
 
     def decompose[A1, A2, B1, B2](f: TransferOpt[A1 |*| A2, B1 |*| B2]): Either[Transfer[A1, A2, B1, B2], (Id0[A1, B1], Id0[A2, B2])] =
@@ -336,6 +359,19 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def invert: Xfer[X2, X1, _, _, X1, X2] =
         Xfer(Id(), Id(), Swap())
+
+      override def ixiPairWith_:[A1, A2, A3, A4, A5, A6, B1, B2](
+        that: Transfer.IXI[A1, A2, A3, A4, B1, B2],
+      )(implicit
+        ev: (X1 |*| X2) =:= (A5 |*| A6),
+      ): BiTransferOpt[A1 |*| A2, A3 |*| A4, A5, A6, B1 |*| B2, X2 |*| X1] =
+        ???
+
+      override def nonePairWith_:[A1, A2, A3, A4](that: TransferOpt.None[A1 |*| A2])(implicit ev: (X1 |*| X2) =:= (A3 |*| A4)): BiTransferOpt[A1, A2, A3, A4, A1 |*| A2, X2 |*| X1] =
+        ???
+
+      override def pairWith[A1, A2, A3, A4, C](that: TransferOpt[A3 |*| A4, C])(implicit ev: (X1 |*| X2) =:= (A1 |*| A2)): BiTransferOpt[A1, A2, A3, A4, X2 |*| X1, C] =
+        ???
     }
 
     case class AssocLR[A1, A2, A3, B2](g: TransferOpt[A2 |*| A3, B2]) extends Transfer[A1 |*| A2, A3, A1, B2] {
@@ -394,6 +430,19 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         ???
 
       override def invert: Xfer[A1, B2, _, _, A1 |*| A2, A3] =
+        ???
+
+      override def ixiPairWith_:[X1, X2, X3, X4, X5, X6, Y1, Y2](
+        that: Transfer.IXI[X1, X2, X3, X4, Y1, Y2],
+      )(implicit
+        ev: ((A1 |*| A2) |*| A3) =:= (X5 |*| X6),
+      ): BiTransferOpt[X1 |*| X2, X3 |*| X4, X5, X6, Y1 |*| Y2, A1 |*| B2] =
+        ???
+
+      override def nonePairWith_:[X1, X2, X3, X4](that: TransferOpt.None[X1 |*| X2])(implicit ev: ((A1 |*| A2) |*| A3) =:= (X3 |*| X4)): BiTransferOpt[X1, X2, X3, X4, X1 |*| X2, A1 |*| B2] =
+        ???
+
+      override def pairWith[X1, X2, X3, X4, Z](that: TransferOpt[X3 |*| X4, Z])(implicit ev: ((A1 |*| A2) |*| A3) =:= (X1 |*| X2)): BiTransferOpt[X1, X2, X3, X4, A1 |*| B2, Z] =
         ???
     }
 
@@ -454,6 +503,19 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def invert: Xfer[B, A3, _, _, A1, A2 |*| A3] =
         ???
+
+      override def ixiPairWith_:[X1, X2, X3, X4, X5, X6, Y1, Y2](
+        that: Transfer.IXI[X1, X2, X3, X4, Y1, Y2],
+      )(implicit
+        ev: (A1 |*| (A2 |*| A3)) =:= (X5 |*| X6),
+      ): BiTransferOpt[X1 |*| X2, X3 |*| X4, X5, X6, Y1 |*| Y2, B |*| A3] =
+        ???
+
+      override def nonePairWith_:[X1, X2, X3, X4](that: TransferOpt.None[X1 |*| X2])(implicit ev: (A1 |*| (A2 |*| A3)) =:= (X3 |*| X4)): BiTransferOpt[X1, X2, X3, X4, X1 |*| X2, B |*| A3] =
+        ???
+
+      override def pairWith[X1, X2, X3, X4, Z](that: TransferOpt[X3 |*| X4, Z])(implicit ev: (A1 |*| (A2 |*| A3)) =:= (X1 |*| X2)): BiTransferOpt[X1, X2, X3, X4, B |*| A3, Z] =
+        ???
     }
 
     case class IX[A1, A2, A3, B](g: TransferOpt[A1 |*| A3, B]) extends Transfer[A1 |*| A2, A3, B, A2] {
@@ -512,6 +574,23 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         ???
 
       override def invert: Xfer[B, A2, _, _, A1 |*| A2, A3] =
+        ???
+
+      override def ixiPairWith_:[X1, X2, X3, X4, X5, X6, Y1, Y2](
+        that: Transfer.IXI[X1, X2, X3, X4, Y1, Y2],
+      )(implicit
+        ev: ((A1 |*| A2) |*| A3) =:= (X5 |*| X6),
+      ): BiTransferOpt[X1 |*| X2, X3 |*| X4, X5, X6, Y1 |*| Y2, B |*| A2] =
+        ???
+
+      override def nonePairWith_:[X1, X2, X3, X4](
+        that: TransferOpt.None[X1 |*| X2],
+      )(implicit
+        ev: ((A1 |*| A2) |*| A3) =:= (X3 |*| X4),
+      ): BiTransferOpt[X1, X2, X3, X4, X1 |*| X2, B |*| A2] =
+        ???
+
+      override def pairWith[X1, X2, X3, X4, Z](that: TransferOpt[X3 |*| X4, Z])(implicit ev: ((A1 |*| A2) |*| A3) =:= (X1 |*| X2)): BiTransferOpt[X1, X2, X3, X4, B |*| A2, Z] =
         ???
     }
 
@@ -574,6 +653,19 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def invert: Xfer[A2, B2, _, _, A1, A2 |*| A3] =
         ???
+
+      override def ixiPairWith_:[X1, X2, X3, X4, X5, X6, Y1, Y2](
+        that: Transfer.IXI[X1, X2, X3, X4, Y1, Y2],
+      )(implicit
+        ev: (A1 |*| (A2 |*| A3)) =:= (X5 |*| X6),
+      ): BiTransferOpt[X1 |*| X2, X3 |*| X4, X5, X6, Y1 |*| Y2, A2 |*| B2] =
+        ???
+
+      override def nonePairWith_:[X1, X2, X3, X4](that: TransferOpt.None[X1 |*| X2])(implicit ev: (A1 |*| (A2 |*| A3)) =:= (X3 |*| X4)): BiTransferOpt[X1, X2, X3, X4, X1 |*| X2, (A2 |*| B2)] =
+        ???
+
+      override def pairWith[X1, X2, X3, X4, Z](that: TransferOpt[X3 |*| X4, Z])(implicit ev: (A1 |*| (A2 |*| A3)) =:= (X1 |*| X2)): BiTransferOpt[X1, X2, X3, X4, A2 |*| B2, Z] =
+        ???
     }
 
     case class IXI[A1, A2, A3, A4, B1, B2](
@@ -619,7 +711,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         ev1: B1 =:= (B11 |*| B12),
         ev2: B2 =:= (B21 |*| B22),
       ): ((A1 |*| A2) |*| (A3 |*| A4)) ~⚬ (C |*| D) =
-        ???
+        BiTransferOpt(g1, g2).ixi_this_ixi(that)
 
       override def assocLR_this_assocRL[X, Y](h: AssocRL[X, B1, B2, Y]): ((X |*| (A1 |*| A2)) |*| (A3 |*| A4)) ~⚬ (Y |*| B2) =
         ???
@@ -637,6 +729,39 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def invert: Xfer[B1, B2, _, _, A1 |*| A2, A3 |*| A4] =
         Xfer(g1.asShuffle.invert, g2.asShuffle.invert, IXI(TransferOpt.None(), TransferOpt.None()))
+
+      override def ixiPairWith_:[X1, X2, X3, X4, X5, X6, Y1, Y2](
+        that: Transfer.IXI[X1, X2, X3, X4, Y1, Y2],
+      )(implicit
+        ev: ((A1 |*| A2) |*| (A3 |*| A4)) =:= (X5 |*| X6),
+      ): BiTransferOpt[X1 |*| X2, X3 |*| X4, X5, X6, Y1 |*| Y2, B1 |*| B2] = {
+        val (ev1, ev2) = inj.unapply(ev)
+        ev2.substituteCo[[x] =>> BiTransferOpt[X1 |*| X2, X3 |*| X4, X5, x, Y1 |*| Y2, B1 |*| B2]](
+          ev1.substituteCo[[x] =>> BiTransferOpt[X1 |*| X2, X3 |*| X4, x, A3 |*| A4, Y1 |*| Y2, B1 |*| B2]](
+            BiTransferOpt.IXI_IXI(that, this)
+          )
+        )
+      }
+
+      override def nonePairWith_:[X1, X2, X3, X4](
+        that: TransferOpt.None[X1 |*| X2],
+      )(implicit
+        ev: ((A1 |*| A2) |*| (A3 |*| A4)) =:= (X3 |*| X4),
+      ): BiTransferOpt[X1, X2, X3, X4, X1 |*| X2, B1 |*| B2] =
+        ???
+
+      override def pairWith[X1, X2, X3, X4, Z](
+        that: TransferOpt[X3 |*| X4, Z],
+      )(implicit
+        ev: ((A1 |*| A2) |*| (A3 |*| A4)) =:= (X1 |*| X2),
+      ): BiTransferOpt[X1, X2, X3, X4, B1 |*| B2, Z] = {
+        val (ev1, ev2) = inj.unapply(ev)
+        ev2.substituteCo[[x] =>> BiTransferOpt[X1, x, X3, X4, B1 |*| B2, Z]](
+          ev1.substituteCo[[x] =>> BiTransferOpt[x, A3 |*| A4, X3, X4, B1 |*| B2, Z]](
+            this ixiPairWith_: that
+          )
+        )
+      }
     }
 
     def swap_then_assocLR[X1, X2, X3, Y](
@@ -732,5 +857,71 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           t.xi_this_xi(g)
       }
 
+  }
+
+  sealed trait BiTransferOpt[A1, A2, A3, A4, B1, B2] {
+    import Transfer.IXI
+
+    def ixi_this_ixi[B11, B12, B21, B22, C, D](
+      h: IXI[B11, B12, B21, B22, C, D],
+    )(implicit
+      ev1: B1 =:= (B11 |*| B12),
+      ev2: B2 =:= (B21 |*| B22),
+    ): ((A1 |*| A3) |*| (A2 |*| A4)) ~⚬ (C |*| D)
+  }
+
+  object BiTransferOpt {
+    import Transfer.IXI
+
+    extension[A, B, C, D](ev1: A =:= C) {
+      def zip(ev2: B =:= D): (A |*| B) =:= (C |*| D) =
+        ev2.substituteCo[[x] =>> (A |*| B) =:= (C |*| x)](
+          ev1.substituteCo[[x] =>> (A |*| B) =:= (x |*| B)](
+            implicitly[(A |*| B) =:= (A |*| B)]
+          )
+        )
+    }
+
+    case class None_None[A1, A2, A3, A4]() extends BiTransferOpt[A1, A2, A3, A4, A1 |*| A2, A3 |*| A4] {
+      override def ixi_this_ixi[B11, B12, B21, B22, C, D](
+        h: IXI[B11, B12, B21, B22, C, D],
+      )(implicit
+        ev1: (A1 |*| A2) =:= (B11 |*| B12),
+        ev2: (A3 |*| A4) =:= (B21 |*| B22),
+      ): ((A1 |*| A3) |*| (A2 |*| A4)) ~⚬ (C |*| D) = {
+        val (a1_eq_b11, a2_eq_b12) = inj.unapply(ev1)
+        val (a3_eq_b21, a4_eq_b22) = inj.unapply(ev2)
+        val f1: (A1 |*| A3) ~⚬ C = (a1_eq_b11 zip a3_eq_b21).substituteContra[[x] =>> x ~⚬ C](h.g1.asShuffle)
+        val f2: (A2 |*| A4) ~⚬ D = (a2_eq_b12 zip a4_eq_b22).substituteContra[[x] =>> x ~⚬ D](h.g2.asShuffle)
+        par(f1, f2)
+      }
+    }
+
+    case class IXI_IXI[A1, A2, A3, A4, A5, A6, A7, A8, B1, B2, C1, C2](
+      ixi1: IXI[A1, A2, A3, A4, B1, B2],
+      ixi2: IXI[A5, A6, A7, A8, C1, C2],
+    ) extends BiTransferOpt[(A1 |*| A2), (A3 |*| A4), (A5 |*| A6), (A7 |*| A8), (B1 |*| B2), (C1 |*| C2)] {
+
+      override def ixi_this_ixi[B11, B12, B21, B22, C, D](
+        h: IXI[B11, B12, B21, B22, C, D],
+      )(implicit
+        ev1: (B1 |*| B2) =:= (B11 |*| B12),
+        ev2: (C1 |*| C2) =:= (B21 |*| B22),
+      ): (((A1 |*| A2) |*| (A5 |*| A6)) |*| ((A3 |*| A4) |*| (A7 |*| A8))) ~⚬ (C |*| D) = {
+        val (b1_eq_b11, b2_eq_b12) = inj.unapply(ev1)
+        val (c1_eq_b21, c2_eq_b22) = inj.unapply(ev2)
+
+        par(ixi, ixi) > ixi > par(ixi, ixi) > par(
+          par(ixi1.g1.asShuffle, ixi2.g1.asShuffle) > (b1_eq_b11 zip c1_eq_b21).substituteContra[[x] =>> x ~⚬ C](h.g1.asShuffle),
+          par(ixi1.g2.asShuffle, ixi2.g2.asShuffle) > (b2_eq_b12 zip c2_eq_b22).substituteContra[[x] =>> x ~⚬ D](h.g2.asShuffle),
+        )
+      }
+    }
+
+    def apply[A1, A2, A3, A4, B1, B2](
+      t1: TransferOpt[A1 |*| A2, B1],
+      t2: TransferOpt[A3 |*| A4, B2],
+    ): BiTransferOpt[A1, A2, A3, A4, B1, B2] =
+      t1 pairWith t2
   }
 }
