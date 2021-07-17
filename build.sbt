@@ -66,6 +66,9 @@ lazy val examples = project
   .dependsOn(core)
   .settings(
     name := "libretto-examples",
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % "3.2.9" % "test",
+    ),
   )
 
 lazy val root = project

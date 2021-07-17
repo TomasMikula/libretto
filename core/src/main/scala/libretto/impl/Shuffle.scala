@@ -48,6 +48,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       def ev: A =:= B
     }
 
+    object Id0 {
+      def apply[A, B](ev: A =:= B): Id0[A, B] =
+        ev.substituteCo(Id[A]())
+    }
+
     case class Id[X]() extends Id0[X, X] {
       override def invert: X ~⚬ X =
         this
@@ -151,7 +156,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         case Xfer(f1, f2, xfer) => Decomposition(f1, f2, xfer)
       }
 
-    case class Decomposition[X1, X2, Y1, Y2, Z](f1: X1 ~⚬ Y1, f2: X2 ~⚬ Y2, g: TransferOpt[Y1 |*| Y2, Z])
+    case class Decomposition[X1, X2, Y1, Y2, Z](
+      f1: X1 ~⚬ Y1,
+      f2: X2 ~⚬ Y2,
+      g: TransferOpt[Y1 |*| Y2, Z],
+    )
   }
   import ~⚬._
 
@@ -196,10 +205,20 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         case x: Transfer[_, _, _, _] => Xfer(Id(), Id(), x)
         case TransferOpt.None() => Id()
       }
+
+    def splitOutput[A1, A2](implicit ev: A =:= (A1 |*| A2)): TransferOpt.SplitOutput[A1, A2, _, _, B]
   }
   object TransferOpt {
     sealed trait None0[A, B] extends TransferOpt[A, B] {
       def ev: A =:= B
+
+      override def splitOutput[A1, A2](implicit ev1: A =:= (A1 |*| A2)): TransferOpt.SplitOutput[A1, A2, _, _, B] =
+        SplitOutput(None[A1 |*| A2](), ev1.flip.andThen(ev))
+    }
+
+    object None0 {
+      def apply[A, B](ev: A =:= B): None0[A, B] =
+        ev.substituteCo(None[A]())
     }
 
     case class None[X]() extends None0[X, X] {
@@ -231,6 +250,14 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           val (ev1, ev2) = inj.unapply(n.ev)
           Right((ev1.substituteCo(Id()), ev2.substituteCo(Id())))
       }
+
+    def splitOutput[A1, A2, B](f: TransferOpt[A1 |*| A2, B]): SplitOutput[A1, A2, _, _, B] =
+      f.splitOutput[A1, A2]
+
+    case class SplitOutput[A1, A2, B1, B2, B](
+      f: TransferOpt[A1 |*| A2, B1 |*| B2],
+      ev: (B1 |*| B2) =:= B,
+    )
   }
 
   sealed trait Transfer[A1, A2, B1, B2] extends TransferOpt[A1 |*| A2, B1 |*| B2] {
@@ -267,9 +294,15 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ev2: B2 =:= (B21 |*| B22),
     ): (A1 |*| A2) ~⚬ (C |*| D)
 
+    def assocLR_this_swap[X]: ((X |*| A1) |*| A2) ~⚬ ((B1 |*| B2) |*| X)
+
     def assocLR_this_assocRL[X, Y](h: AssocRL[X, B1, B2, Y]): ((X |*| A1) |*| A2) ~⚬ (Y |*| B2)
 
     def assocRL_this_assocLR[X, Y](h: AssocLR[B1, B2, X, Y]): (A1 |*| (A2 |*| X)) ~⚬ (B1 |*| Y)
+
+    def ix_this_swap[X]: ((A1 |*| X) |*| A2) ~⚬ (X |*| (B1 |*| B2))
+
+    def ix_this_assocLR[X, Y](that: AssocLR[B1, B2, X, Y]): ((A1 |*| X) |*| A2) ~⚬ (B1 |*| Y)
 
     def xi_this_assocRL[X, Y](g: AssocRL[X, B1, B2, Y]): (A1 |*| (X |*| A2)) ~⚬ (Y |*| B2)
 
@@ -297,6 +330,12 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         case f: IXI[x1, x2, x3, x4, y1, y2] => ixi[x1, x2, x3, x4] > par(f.g1.fold, f.g2.fold)
       }
     }
+
+    override def splitOutput[X1, X2](implicit ev: (A1 |*| A2) =:= (X1 |*| X2)): TransferOpt.SplitOutput[X1, X2, _, _, B1 |*| B2] =
+      TransferOpt.SplitOutput(
+        ev.substituteCo[[x] =>> TransferOpt[x, B1 |*| B2]](this),
+        implicitly[(B1 |*| B2) =:= (B1 |*| B2)],
+      )
   }
 
   object Transfer {
@@ -343,11 +382,20 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ): (X1 |*| X2) ~⚬ (C |*| D) =
         ???
 
+      override def assocLR_this_swap[X]: ((X |*| X1) |*| X2) ~⚬ ((X2 |*| X1) |*| X) =
+        ???
+
       override def assocLR_this_assocRL[X, Y](h: AssocRL[X, X2, X1, Y]): ((X |*| X1) |*| X2) ~⚬ (Y |*| X1) =
         IX[X, X1, X2, Y](h.g).asShuffle
 
       override def assocRL_this_assocLR[X, Y](h: AssocLR[X2, X1, X, Y]): (X1 |*| (X2 |*| X)) ~⚬ (X2 |*| Y) =
         XI(h.g).asShuffle
+
+      override def ix_this_swap[X]: ((X1 |*| X) |*| X2) ~⚬ (X |*| (X2 |*| X1)) =
+        Xfer(swap, id, AssocLR(Swap()))
+
+      override def ix_this_assocLR[X, Y](that: AssocLR[X2, X1, X, Y]): ((X1 |*| X) |*| X2) ~⚬ (X2 |*| Y) =
+        Xfer(that.g.asShuffle, id, Swap())
 
       override def xi_this_assocRL[X, Y](g: AssocRL[X, X2, X1, Y]): (X1 |*| (X |*| X2)) ~⚬ (Y |*| X1) =
         Xfer(Id(), g.g.asShuffle, Swap())
@@ -384,7 +432,13 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         }
 
       override def thenSwap: ((A1 |*| A2) |*| A3) ~⚬ (B2 |*| A1) =
-        ???
+        TransferOpt.splitOutput(g) match {
+          case TransferOpt.SplitOutput(g, ev) =>
+            TransferOpt.decompose(g) match {
+              case Right((i, j)) => par(snd(i) > swap, j) > ix > ~⚬.fst(~⚬.Id0(ev))
+              case Left(t) => t.assocLR_this_swap > ~⚬.fst(~⚬.Id0(ev))
+            }
+        }
 
       override def thenAssocLR[A11, A12, C2](
         that: AssocLR[A11, A12, B2, C2],
@@ -417,10 +471,19 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ): ((A1 |*| A2) |*| A3) ~⚬ (C |*| D) =
         ???
 
+      override def assocLR_this_swap[X]: ((X |*| (A1 |*| A2)) |*| A3) ~⚬ ((A1 |*| B2) |*| X) =
+        Xfer(swap, id, IX(AssocLR(g)))
+
       override def assocLR_this_assocRL[X, Y](h: AssocRL[X, A1, B2, Y]): ((X |*| (A1 |*| A2)) |*| A3) ~⚬ (Y |*| B2) =
         Xfer(AssocRL(h.g).asShuffle, Id(), AssocLR(g))
 
       override def assocRL_this_assocLR[X, Y](h: AssocLR[A1, B2, X, Y]): ((A1 |*| A2) |*| (A3 |*| X)) ~⚬ (A1 |*| Y) =
+        ???
+
+      override def ix_this_swap[X]: (((A1 |*| A2) |*| X) |*| A3) ~⚬ (X |*| (A1 |*| B2)) =
+        ???
+
+      override def ix_this_assocLR[X, Y](that: AssocLR[A1, B2, X, Y]): (((A1 |*| A2) |*| X) |*| A3) ~⚬ (A1 |*| Y) =
         ???
 
       override def xi_this_assocRL[X, Y](g: AssocRL[X, A1, B2, Y]): ((A1 |*| A2) |*| (X |*| A3)) ~⚬ (Y |*| B2) =
@@ -456,7 +519,13 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         }
 
       override def thenSwap: (A1 |*| (A2 |*| A3)) ~⚬ (A3 |*| B) =
-        ???
+        TransferOpt.splitOutput(g) match {
+          case TransferOpt.SplitOutput(g, ev) =>
+            TransferOpt.decompose(g) match {
+              case Right((i, j)) => Xfer(i, fst(j) > swap, XI(TransferOpt.None0(ev)))
+              case Left(t)       => ???
+            }
+        }
 
       override def thenAssocLR[D1, D2, C2](
         that: AssocLR[D1, D2, A3, C2],
@@ -487,6 +556,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ): (A1 |*| (A2 |*| A3)) ~⚬ (C |*| D) =
         ???
 
+      override def assocLR_this_swap[X]: ((X |*| A1) |*| (A2 |*| A3)) ~⚬ ((B |*| A3) |*| X) =
+        ???
+
       override def assocLR_this_assocRL[X, Y](h: AssocRL[X, B, A3, Y]): ((X |*| A1) |*| (A2 |*| A3)) ~⚬ (Y |*| A3) =
         ???
 
@@ -497,6 +569,12 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         decompose(XI(g).asShuffle > h.g.asShuffle) match {
           case Decomposition(h1, h2, h) => Xfer(h1, assocRL > fst(h2), AssocRL(h))
         }
+
+      override def ix_this_swap[X]: ((A1 |*| X) |*| (A2 |*| A3)) ~⚬ (X |*| (B |*| A3)) =
+        ???
+
+      override def ix_this_assocLR[X, Y](that: AssocLR[B, A3, X, Y]): ((A1 |*| X) |*| (A2 |*| A3)) ~⚬ (B |*| Y) =
+        ???
 
       override def xi_this_xi[X, C](h: XI[X, B, A3, C]): (A1 |*| (X |*| (A2 |*| A3))) ~⚬ (B |*| C) =
         Xfer(Id(), XI(h.g).asShuffle, AssocRL(g))
@@ -528,14 +606,27 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         }
 
       override def thenSwap: ((A1 |*| A2) |*| A3) ~⚬ (A2 |*| B) =
-        ???
+        TransferOpt.splitOutput(g) match {
+          case TransferOpt.SplitOutput(g, ev) =>
+            TransferOpt.decompose(g) match {
+              case Right((i, j)) => Xfer(fst(i) > swap, j, AssocLR(TransferOpt.None0(ev)))
+              case Left(t)       => t.ix_this_swap > snd(Id0(ev))
+            }
+        }
 
       override def thenAssocLR[D1, D2, C2](
         that: AssocLR[D1, D2, A2, C2],
       )(implicit
         ev: B =:= (D1 |*| D2),
       ): ((A1 |*| A2) |*| A3) ~⚬ (D1 |*| C2) =
-        ???
+        TransferOpt.decompose(ev.substituteCo(g)) match {
+          case Right((i, j)) =>
+            decompose(swap > that.g.asShuffle) match {
+              case Decomposition(f1, f2, h) => Xfer(par(i, f1), j > f2, AssocLR(h))
+            }
+          case Left(t) =>
+            t.ix_this_assocLR(that)
+        }
 
       override def thenAssocRL[X1, X2, C](
         that: AssocRL[B, X1, X2, C],
@@ -561,11 +652,20 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ): ((A1 |*| A2) |*| A3) ~⚬ (C |*| D) =
         ???
 
+      override def assocLR_this_swap[X]: ((X |*| (A1 |*| A2)) |*| A3) ~⚬ ((B |*| A2) |*| X) =
+        ???
+
       override def assocLR_this_assocRL[X, Y](h: AssocRL[X, B, A2, Y]): ((X |*| (A1 |*| A2)) |*| A3) ~⚬ (Y |*| A2) =
         ???
 
       override def assocRL_this_assocLR[X, Y](h: AssocLR[B, A2, X, Y]): ((A1 |*| A2) |*| (A3 |*| X)) ~⚬ (B |*| Y) =
         IXI[A1, A2, A3, X, B, Y](g, h.g).asShuffle
+
+      override def ix_this_swap[X]: (((A1 |*| A2) |*| X) |*| A3) ~⚬ (X |*| (B |*| A2)) =
+        ???
+
+      override def ix_this_assocLR[X, Y](that: AssocLR[B, A2, X, Y]): (((A1 |*| A2) |*| X) |*| A3) ~⚬ (B |*| Y) =
+        Xfer(AssocLR(that.g).asShuffle, id, IX(g))
 
       override def xi_this_assocRL[X, Y](h: AssocRL[X, B, A2, Y]): ((A1 |*| A2) |*| (X |*| A3)) ~⚬ (Y |*| A2) =
         ix(XI(g).asShuffle > h.g.asShuffle)
@@ -637,10 +737,19 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ): (A1 |*| (A2 |*| A3)) ~⚬ (C |*| D) =
         ???
 
+      override def assocLR_this_swap[X]: ((X |*| A1) |*| (A2 |*| A3)) ~⚬ ((A2 |*| B2) |*| X) =
+        ???
+
       override def assocLR_this_assocRL[X, Y](h: AssocRL[X, A2, B2, Y]): ((X |*| A1) |*| (A2 |*| A3)) ~⚬ (Y |*| B2) =
         IXI(h.g, g).asShuffle
 
       override def assocRL_this_assocLR[X, Y](h: AssocLR[A2, B2, X, Y]): (A1 |*| ((A2 |*| A3) |*| X)) ~⚬ (A2 |*| Y) =
+        ???
+
+      override def ix_this_swap[X]: ((A1 |*| X) |*| (A2 |*| A3)) ~⚬ (X |*| (A2 |*| B2)) =
+        ???
+
+      override def ix_this_assocLR[X, Y](that: AssocLR[A2, B2, X, Y]): ((A1 |*| X) |*| (A2 |*| A3)) ~⚬ (A2 |*| Y) =
         ???
 
       override def xi_this_assocRL[X, Y](h: AssocRL[X, A2, B2, Y]): (A1 |*| (X |*| (A2 |*| A3))) ~⚬ (Y |*| B2) =
@@ -713,10 +822,19 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ): ((A1 |*| A2) |*| (A3 |*| A4)) ~⚬ (C |*| D) =
         BiTransferOpt(g1, g2).ixi_this_ixi(that)
 
+      override def assocLR_this_swap[X]: ((X |*| (A1 |*| A2)) |*| (A3 |*| A4)) ~⚬ ((B1 |*| B2) |*| X) =
+        ???
+
       override def assocLR_this_assocRL[X, Y](h: AssocRL[X, B1, B2, Y]): ((X |*| (A1 |*| A2)) |*| (A3 |*| A4)) ~⚬ (Y |*| B2) =
         ???
 
       override def assocRL_this_assocLR[X, Y](h: AssocLR[B1, B2, X, Y]): ((A1 |*| A2) |*| ((A3 |*| A4) |*| X)) ~⚬ (B1 |*| Y) =
+        ???
+
+      override def ix_this_swap[X]: (((A1 |*| A2) |*| X) |*| (A3 |*| A4)) ~⚬ (X |*| (B1 |*| B2)) =
+        ???
+
+      override def ix_this_assocLR[X, Y](that: AssocLR[B1, B2, X, Y]): (((A1 |*| A2) |*| X) |*| (A3 |*| A4)) ~⚬ (B1 |*| Y) =
         ???
 
       override def xi_this_assocRL[X, Y](g: AssocRL[X, B1, B2, Y]): ((A1 |*| A2) |*| (X |*| (A3 |*| A4))) ~⚬ (Y |*| B2) =
