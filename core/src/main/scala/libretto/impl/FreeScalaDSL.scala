@@ -413,7 +413,8 @@ object FreeScalaDSL extends ScalaDSL {
     lambda.abs(f) match {
       case Right(f) => f
       case Left(e) =>
-        import lambda.Error._
+        import lambda.Error.Undefined
+        import lambda.LinearityViolation.{Overused, Underused}
         e match {
           case Overused(v) => throw new NotLinearException(s"Variable $v used more than once")
           case Underused(v) => throw new NotLinearException(s"Variable $v not fully consumed")
@@ -422,5 +423,5 @@ object FreeScalaDSL extends ScalaDSL {
     }
 
   override class NotLinearException(msg: String) extends Exception(msg)
-  override class UnboundVariableException(v: lambda.Expr.Var[?]) extends Exception
+  override class UnboundVariableException(v: Set[lambda.Expr.Var[?]]) extends Exception
 }

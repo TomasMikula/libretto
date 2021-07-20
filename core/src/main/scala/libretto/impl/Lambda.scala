@@ -4,7 +4,6 @@ import libretto.BiInjective
 
 class Lambda[-⚬[_, _], |*|[_, _]](using
   inj: BiInjective[|*|],
-  ev: Semigroupoid[-⚬], // TODO: don't require Semigroupoid here, only in fold
 ) {
 
   sealed trait Expr[A] {
@@ -57,7 +56,7 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
 
   val shuffled = new Shuffled[-⚬, |*|]
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
-  import shuffled.{Shuffled => ≈⚬}
+  import shuffled.{Shuffled => ≈⚬, assocLR, assocRL, fst, id, lift, pure, snd, swap}
 
   sealed trait Vars[A] {
     def lookup[B](vb: Var[B]): Option[Vars.Contains[A, B]]
@@ -122,8 +121,8 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
       expr = b,
       consumed = Set.empty,
     ) match {
-      case AbsRes.Full(f, _) => Right(f)
-      case AbsRes.Partial(_, _, _) => Left(Error.Underused(a))
+      case AbsRes.Exact(f, _) => Right(f)
+      case AbsRes.Partial(_, _, _) => Left(LinearityViolation.Underused(a))
       case AbsRes.Failure(e) => Left(e)
     }
 
@@ -137,21 +136,21 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     def goPrj[Z, X](z: VarDefining[Z], s: Z ~⚬ (B |*| X), b: Var[B], x: Var[X]): AbsRes[A, B] =
       if (consumed.contains(z.variable)) {
         if (consumed.contains(b))
-          AbsRes.Failure(Error.Overused(b))
+          AbsRes.Failure(LinearityViolation.Overused(b))
         else
           vars.lookup(b) match {
             case None =>
-              AbsRes.Failure(Error.Overused(z.variable))
+              AbsRes.Failure(LinearityViolation.Overused(z.variable))
             case Some(contains) =>
               contains match {
-                case Vars.Contains.Id() => AbsRes.Full(shuffled.id, consumed + b)
-                case Vars.Contains.Super(f, vars) => AbsRes.Partial(shuffled.pure(f), vars, consumed + b)
+                case Vars.Contains.Id() => AbsRes.Exact(id, consumed + b)
+                case Vars.Contains.Super(f, vars) => AbsRes.Partial(pure(f), vars, consumed + b)
               }
           }
       } else {
         abs(vars, z, consumed) match {
-          case AbsRes.Full(f, consumed) => AbsRes.Partial(f > shuffled.pure(s), Vars.Single(x), consumed + b)
-          case AbsRes.Partial(f, vars, consumed) => AbsRes.Partial(f > shuffled.pure(~⚬.fst(s) > ~⚬.assocLR), Vars.Single(x) zip vars, consumed + b)
+          case AbsRes.Exact(f, consumed) => AbsRes.Partial(f > pure(s), Vars.Single(x), consumed + b)
+          case AbsRes.Partial(f, vars, consumed) => AbsRes.Partial(f > pure(~⚬.fst(s) > ~⚬.assocLR), Vars.Single(x) zip vars, consumed + b)
           case AbsRes.Failure(e) => AbsRes.Failure(e)
         }
       }
@@ -161,39 +160,46 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
         vars.lookup(v) match {
           case None =>
             consumed.contains(v) match {
-              case true => AbsRes.Failure(Error.Overused(v))
-              case false => AbsRes.Failure(Error.Undefined(v))
+              case true =>
+                AbsRes.Failure(LinearityViolation.Overused(v))
+              case false =>
+                AbsRes.PartialClosure(
+                  id[B |*| A],
+                  undefined = Vars.Single(v),
+                  remaining = vars,
+                  consumed = consumed + v,
+                )
             }
           case Some(res) =>
             res match {
-              case Vars.Contains.Id() => AbsRes.Full(shuffled.id, consumed + v)
-              case Vars.Contains.Super(f, vars) => AbsRes.Partial(shuffled.pure(f), vars, consumed + v)
+              case Vars.Contains.Id() => AbsRes.Exact(id, consumed + v)
+              case Vars.Contains.Super(f, vars) => AbsRes.Partial(pure(f), vars, consumed + v)
             }
         }
       case Zip(b1, b2) =>
         abs(vars, b1, consumed) match {
           case AbsRes.Partial(f, vars, consumed) =>
             abs(vars, b2, consumed) match {
-              case AbsRes.Full(g, consumed) => AbsRes.Full(f > shuffled.snd(g), consumed)
-              case AbsRes.Partial(g, vars, consumed) => AbsRes.Partial(f > shuffled.snd(g) > shuffled.assocRL, vars, consumed)
+              case AbsRes.Exact(g, consumed) => AbsRes.Exact(f > snd(g), consumed)
+              case AbsRes.Partial(g, vars, consumed) => AbsRes.Partial(f > snd(g) > assocRL, vars, consumed)
               case AbsRes.Failure(e) => AbsRes.Failure(e)
             }
           // TODO
         }
       case Mapped(x, f, b) =>
         if (consumed.contains(b)) {
-          AbsRes.Failure(Error.Overused(b))
+          AbsRes.Failure(LinearityViolation.Overused(b))
         } else {
           vars.lookup(b) match {
             case Some(contains) =>
               contains match {
-                case Vars.Contains.Id() => AbsRes.Full(shuffled.id, consumed + b)
-                case Vars.Contains.Super(f, vars) => AbsRes.Partial(shuffled.pure(f), vars, consumed + b)
+                case Vars.Contains.Id() => AbsRes.Exact(id, consumed + b)
+                case Vars.Contains.Super(f, vars) => AbsRes.Partial(pure(f), vars, consumed + b)
               }
             case None =>
               abs(vars, x, consumed) match {
-                case AbsRes.Full(g, consumed) => AbsRes.Full(g > shuffled.lift(f), consumed + b)
-                case AbsRes.Partial(g, vars, consumed) => AbsRes.Partial(g > shuffled.fst(shuffled.lift(f)), vars, consumed + b)
+                case AbsRes.Exact(g, consumed) => AbsRes.Exact(g > lift(f), consumed + b)
+                case AbsRes.Partial(g, vars, consumed) => AbsRes.Partial(g > fst(lift(f)), vars, consumed + b)
                 case AbsRes.Failure(e) => AbsRes.Failure(e)
               }
           }
@@ -207,15 +213,56 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
 
   sealed trait AbsRes[A, B]
   object AbsRes {
-    case class Full[A, B](f: A ≈⚬ B, consumed: Set[Var[_]]) extends AbsRes[A, B]
-    case class Partial[A, Y, B](f: A ≈⚬ (B |*| Y), vars: Vars[Y], consumed: Set[Var[_]]) extends AbsRes[A, B]
-    case class Failure[A, B](e: Error) extends AbsRes[A, B]
+    /**
+     * @param consumed keeps track of _all_ variables consumed so far
+     */
+    case class Exact[A, B](
+      f: A ≈⚬ B,
+      consumed: Set[Var[_]],
+    ) extends AbsRes[A, B]
+
+    /**
+     * @param remaining non-consumed subset of `A`
+     * @param consumed keeps track of _all_ variables consumed so far
+     */
+    case class Partial[A, B, Y](
+      f: A ≈⚬ (B |*| Y),
+      remaining: Vars[Y],
+      consumed: Set[Var[_]],
+    ) extends AbsRes[A, B]
+
+    /**
+     * @param undefined variables not defined in the given context (to be captured from an outer context)
+     * @param consumed keeps track of _all_ variables consumed so far
+     */
+    case class Closure[X, A, B](
+      f: (X |*| A) ≈⚬ B,
+      undefined: Vars[X],
+      consumed: Set[Var[_]],
+    ) extends AbsRes[A, B]
+
+    /**
+     * @param undefined variables not defined in the given context (to be captured from an outer context)
+     * @param remaining non-consumed subset of `A`
+     * @param consumed keeps track of _all_ variables consumed so far
+     */
+    case class PartialClosure[X, A, B, Y](
+      f: (X |*| A) ≈⚬ (B |*| Y),
+      undefined: Vars[X],
+      remaining: Vars[Y],
+      consumed: Set[Var[_]],
+    ) extends AbsRes[A, B]
+
+    case class Failure[A, B](e: LinearityViolation) extends AbsRes[A, B]
   }
 
   sealed trait Error
   object Error {
-    case class Overused(v: Var[_]) extends Error
-    case class Underused(v: Var[_]) extends Error
-    case class Undefined(v: Var[_]) extends Error
+    case class Undefined(vars: Set[Var[_]]) extends Error
+  }
+
+  enum LinearityViolation extends Error {
+    case Overused(v: Var[_])
+    case Underused(v: Var[_])
   }
 }
