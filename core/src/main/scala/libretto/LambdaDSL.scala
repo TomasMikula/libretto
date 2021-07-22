@@ -39,15 +39,15 @@ trait LambdaDSL extends CoreDSL {
 
     extension [A, B](f: A -⚬ B) {
       def apply(a: $[A]): $[B] =
-        $.map(a)(f)
+        map(a)(f)
     }
 
     extension [A, B](a: $[A]) {
       def |*|(b: $[B]): $[A |*| B] =
-        $.zip(a, b)
+        zip(a, b)
 
       def >(f: A -⚬ B): $[B] =
-        $.map(a)(f)
+        map(a)(f)
     }
   }
 }

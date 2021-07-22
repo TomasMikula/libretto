@@ -197,6 +197,15 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   def swap[X, Y]: Shuffled[X |*| Y, Y |*| X] =
     Pure(~⚬.swap)
 
+  def ix[X, Y, Z]: Shuffled[(X |*| Y) |*| Z, (X |*| Z) |*| Y] =
+    Pure(~⚬.ix)
+
+  def xi[X, Y, Z]: Shuffled[X |*| (Y |*| Z), Y |*| (X |*| Z)] =
+    Pure(~⚬.xi)
+
+  def ixi[W, X, Y, Z]: Shuffled[(W |*| X) |*| (Y |*| Z), (W |*| Y) |*| (X |*| Z)] =
+    Pure(~⚬.ixi)
+
   def lift[X, Y](f: X -> Y): Shuffled[X, Y] =
     Impermeable(~⚬.id, Solid(f), ~⚬.id)
 

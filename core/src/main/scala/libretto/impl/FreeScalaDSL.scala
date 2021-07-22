@@ -416,7 +416,7 @@ object FreeScalaDSL extends ScalaDSL {
         import lambda.Error.Undefined
         import lambda.LinearityViolation.{Overused, Underused}
         e match {
-          case Overused(v) => throw new NotLinearException(s"Variable $v used more than once")
+          case Overused(vs) => throw new NotLinearException(s"Variables ${vs.mkString(", ")} used more than once")
           case Underused(v) => throw new NotLinearException(s"Variable $v not fully consumed")
           case Undefined(v) => throw new UnboundVariableException(v)
         }
