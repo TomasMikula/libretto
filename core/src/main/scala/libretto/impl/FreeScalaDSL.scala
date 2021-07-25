@@ -396,21 +396,21 @@ object FreeScalaDSL extends ScalaDSL {
 
   val lambda = new Lambda[-⚬, |*|]
 
-  override type $[A] = lambda.Expr[A]
+  override type $[A] = lambda.Expr0[A]
 
   override val `$`: $Ops  = new $Ops {
     override def map[A, B](a: $[A])(f: A -⚬ B): $[B] =
       a.map(f)
 
     override def zip[A, B](a: $[A], b: $[B]): $[A |*| B] =
-      a zip b
+      lambda.Expr0.zip(a, b)
 
     override def unzip[A, B](ab: $[A |*| B]): ($[A], $[B]) =
-      lambda.Expr.unzip(ab)
+      lambda.Expr0.unzip(ab)
   }
 
   override def λ[A, B](f: $[A] => $[B]): A -⚬ B =
-    lambda.abs(f) match {
+    lambda.abs0(f) match {
       case Right(f) => f
       case Left(e) =>
         import lambda.Error.Undefined

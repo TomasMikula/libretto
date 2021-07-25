@@ -6,53 +6,70 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
   inj: BiInjective[|*|],
 ) {
 
-  sealed trait Expr[A] {
+  sealed trait Expr[+F[_], A] {
     import Expr._
 
-    def map[B](f: A -⚬ B): Expr[B] =
+    def map[B](f: A -⚬ B): Expr[F, B] =
       Mapped(this, f, new Var[B]())
-
-    def zip[B](that: Expr[B]): Expr[A |*| B] =
-      Zip(this, that)
   }
 
   object Expr {
-    sealed trait VarDefining[A] extends Expr[A] {
+    sealed trait VarDefining[+F[_], A] extends Expr[F, A] {
       def variable: Var[A] =
         this match {
           case v: Var[A] => v
           case Mapped(_, _, v) => v
-          case Prj1(Split(_, v, _)) => v
-          case Prj2(Split(_, _, v)) => v
+          case Prj1(Split(_, _, v, _)) => v
+          case Prj2(Split(_, _, _, v)) => v
         }
     }
 
-    class Var[A]() extends VarDefining[A] {
+    class Var[A]() extends VarDefining[Nothing, A] {
       def testEqual[B](that: Var[B]): Option[A =:= B] =
         if (this eq that) Some(summon[A =:= A].asInstanceOf[A =:= B])
         else None
     }
 
-    case class Mapped[A, B](a: Expr[A], f: A -⚬ B, b: Var[B]) extends VarDefining[B]
+    case class Mapped[+F[_], A, B](a: Expr[F, A], f: A -⚬ B, b: Var[B]) extends VarDefining[F, B]
 
-    case class Zip[A, B](a: Expr[A], b: Expr[B]) extends Expr[A |*| B]
+    case class Zip[+F[_], A, B](a: Expr[F, A], b: Expr[F, B]) extends Expr[F, A |*| B]
 
-    case class Prj1[A, B](p: Split[A, B]) extends VarDefining[A]
+    case class Prj1[+F[_], A, B](p: Split[F, A, B]) extends VarDefining[F, A]
 
-    case class Prj2[A, B](p: Split[A, B]) extends VarDefining[B]
+    case class Prj2[+F[_], A, B](p: Split[F, A, B]) extends VarDefining[F, B]
 
-    case class Split[X, Y](p: VarDefining[X |*| Y], p1: Var[X], p2: Var[Y])
+    /** Extension point. */
+    case class Ext[F[_], B](expr: F[B]) extends Expr[F, B]
 
-    def unzip[A, B](p: Expr[A |*| B]): (Expr[A], Expr[B]) =
+    case class Split[+F[_], X, Y](p: Expr[F, X |*| Y], pv: Var[X |*| Y], p1: Var[X], p2: Var[Y])
+
+    def unzip[F[_], A, B](p: Expr[F, A |*| B])(resultVar: [x] => F[x] => Var[x]): (Expr[F, A], Expr[F, B]) =
       p match {
         case Zip(a, b) =>
           (a, b)
-        case p: VarDefining[A |*| B] =>
-          val split = Split(p, new Var[A](), new Var[B]())
+        case p: VarDefining[F, A |*| B] =>
+          val split = Split(p, p.variable, new Var[A](), new Var[B]())
+          (Prj1(split), Prj2(split))
+        case p @ Ext(fab) =>
+          val split = Split(p, resultVar(fab), new Var[A](), new Var[B]())
           (Prj1(split), Prj2(split))
       }
   }
   import Expr._
+
+  sealed trait Uninhabited[A] {
+    def as[B]: B
+  }
+
+  type Expr0[A] = Expr[Uninhabited, A]
+
+  object Expr0 {
+    def zip[A, B](a: Expr0[A], b: Expr0[B]): Expr0[A |*| B] =
+      Zip(a, b)
+
+    def unzip[A, B](p: Expr0[A |*| B]): (Expr0[A], Expr0[B]) =
+      Expr.unzip[Uninhabited, A, B](p)([x] => (fx: Uninhabited[x]) => fx.as[Var[x]])
+  }
 
   val shuffled = new Shuffled[-⚬, |*|]
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
@@ -106,14 +123,27 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     }
   }
 
-  def abs[A, B](
-    f: Expr[A] => Expr[B],
+  trait Abstractable[F[_]] {
+    def abs[A, B](vars: Vars[A], expr: F[B], consumed: Set[Var[_]]): AbsRes[A, B]
+  }
+
+  object Abstractable {
+    implicit val abstractableUninhabited: Abstractable[Uninhabited] =
+      new Abstractable[Uninhabited] {
+        override def abs[A, B](vars: Vars[A], expr: Uninhabited[B], consumed: Set[Var[_]]): AbsRes[A, B] =
+          expr.as[AbsRes[A, B]]
+      }
+  }
+
+  def abs[F[_], A, B](
+    f: Expr[F, A] => Expr[F, B],
   )(using
+    F: Abstractable[F],
     ev: SymmetricSemigroupalCategory[-⚬, |*|],
   ): Either[Error, A -⚬ B] = {
     val a = new Var[A]()
     val b = f(a)
-    abs[A, B](
+    abs[F, A, B](
       vars = Vars.Single(a),
       expr = b,
       consumed = Set.empty,
@@ -126,23 +156,31 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     }
   }
 
-  private def abs[A, B](
+  def abs0[A, B](
+    f: Expr0[A] => Expr0[B],
+  )(using
+    ev: SymmetricSemigroupalCategory[-⚬, |*|],
+  ): Either[Error, A -⚬ B] =
+    abs[Uninhabited, A, B](f)
+
+  private def abs[F[_], A, B](
     vars: Vars[A],
-    expr: Expr[B],
+    expr: Expr[F, B],
     consumed: Set[Var[_]],
   )(using
+    F: Abstractable[F],
     ev: Semigroupoid[-⚬],
   ): AbsRes[A, B] = {
     import AbsRes._
 
-    def goPrj[Z, X](z: VarDefining[Z], s: Z ~⚬ (B |*| X), b: Var[B], x: Var[X]): AbsRes[A, B] =
-      if (consumed.contains(z.variable)) {
+    def goPrj[Z, X](z: Expr[F, Z], vz: Var[Z], s: Z ~⚬ (B |*| X), b: Var[B], x: Var[X]): AbsRes[A, B] =
+      if (consumed.contains(vz)) {
         if (consumed.contains(b))
           Failure(LinearityViolation.overused(b))
         else
           vars.lookup(b) match {
             case None =>
-              Failure(LinearityViolation.overused(z.variable))
+              Failure(LinearityViolation.overused(vz))
             case Some(contains) =>
               contains match {
                 case Vars.Contains.Id()           => Exact(id, consumed + b)
@@ -150,7 +188,7 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
               }
           }
       } else {
-        abs[A, Z](vars, z, consumed) match {
+        abs[F, A, Z](vars, z, consumed) match {
           case Exact(f, consumed) =>
             Partial(f > pure(s), Vars.Single(x), consumed + b)
           case Partial(f, vars, consumed) =>
@@ -254,10 +292,13 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
               }
           }
         }
-      case Prj1(Split(bx, b, x)) =>
-        goPrj(bx, ~⚬.Id(), b, x)
-      case Prj2(Split(xb, x, b)) =>
-        goPrj(xb, ~⚬.swap, b, x)
+      case Prj1(Split(bx, v, b, x)) =>
+        goPrj(bx, v, ~⚬.Id(), b, x)
+      case Prj2(Split(xb, v, x, b)) =>
+        goPrj(xb, v, ~⚬.swap, b, x)
+      case Ext(fb) =>
+        F.abs(vars, fb, consumed)
+
     }
   }
 
