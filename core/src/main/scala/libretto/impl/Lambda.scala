@@ -43,6 +43,9 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
 
     case class Split[+F[_], X, Y](p: Expr[F, X |*| Y], pv: Var[X |*| Y], p1: Var[X], p2: Var[Y])
 
+    def zip[F[_], A, B](a: Expr[F, A], b: Expr[F, B]): Expr[F, A |*| B] =
+      Zip(a, b)
+
     def unzip[F[_], A, B](p: Expr[F, A |*| B])(resultVar: [x] => F[x] => Var[x]): (Expr[F, A], Expr[F, B]) =
       p match {
         case Zip(a, b) =>
@@ -56,20 +59,6 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
       }
   }
   import Expr._
-
-  sealed trait Uninhabited[A] {
-    def as[B]: B
-  }
-
-  type Expr0[A] = Expr[Uninhabited, A]
-
-  object Expr0 {
-    def zip[A, B](a: Expr0[A], b: Expr0[B]): Expr0[A |*| B] =
-      Zip(a, b)
-
-    def unzip[A, B](p: Expr0[A |*| B]): (Expr0[A], Expr0[B]) =
-      Expr.unzip[Uninhabited, A, B](p)([x] => (fx: Uninhabited[x]) => fx.as[Var[x]])
-  }
 
   val shuffled = new Shuffled[-⚬, |*|]
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
@@ -124,14 +113,33 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
   }
 
   trait Abstractable[F[_]] {
+    // TODO: Don't take previously consumed variables.
+    // Instead, return a precise description of the variables consumed by _this_ invocation,
+    // so that such descriptions can be merged.
     def abs[A, B](vars: Vars[A], expr: F[B], consumed: Set[Var[_]]): AbsRes[A, B]
   }
 
   object Abstractable {
+    def apply[F[_]](implicit ev: Abstractable[F]): Abstractable[F] =
+      ev
+
     implicit val abstractableUninhabited: Abstractable[Uninhabited] =
       new Abstractable[Uninhabited] {
         override def abs[A, B](vars: Vars[A], expr: Uninhabited[B], consumed: Set[Var[_]]): AbsRes[A, B] =
           expr.as[AbsRes[A, B]]
+      }
+
+    implicit def abstractableExpr[F[_]](using
+      Abstractable[F],
+      Semigroupoid[-⚬],
+    ): Abstractable[Expr[F, *]] =
+      new Abstractable[Expr[F, *]] {
+        override def abs[A, B](
+          vars: Vars[A],
+          expr: Expr[F, B],
+          consumed: Set[Var[?]],
+        ): AbsRes[A, B] =
+          Lambda.this.abs(vars, expr, consumed)
       }
   }
 
@@ -156,14 +164,7 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     }
   }
 
-  def abs0[A, B](
-    f: Expr0[A] => Expr0[B],
-  )(using
-    ev: SymmetricSemigroupalCategory[-⚬, |*|],
-  ): Either[Error, A -⚬ B] =
-    abs[Uninhabited, A, B](f)
-
-  private def abs[F[_], A, B](
+  def abs[F[_], A, B](
     vars: Vars[A],
     expr: Expr[F, B],
     consumed: Set[Var[_]],
@@ -364,5 +365,93 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
   object LinearityViolation {
     def overused(v: Var[_]): LinearityViolation.Overused =
       LinearityViolation.Overused(Set(v))
+  }
+
+  sealed trait Uninhabited[A] {
+    def as[B]: B
+  }
+
+  type Expr0[A] = Expr[Uninhabited, A]
+
+  object Expr0 {
+    def zip[A, B](a: Expr0[A], b: Expr0[B]): Expr0[A |*| B] =
+      Zip(a, b)
+
+    def unzip[A, B](p: Expr0[A |*| B]): (Expr0[A], Expr0[B]) =
+      Expr.unzip[Uninhabited, A, B](p)([x] => (fx: Uninhabited[x]) => fx.as[Var[x]])
+
+    def abs[A, B](
+      f: Expr0[A] => Expr0[B],
+    )(using
+      ev: SymmetricSemigroupalCategory[-⚬, |*|],
+    ): Either[Error, A -⚬ B] =
+      Lambda.this.abs[Uninhabited, A, B](f)
+  }
+
+  trait AbsTrans[G[_[_], _]] {
+    def apply[F[_]: Abstractable]: Abstractable[G[F, *]]
+  }
+
+  case class ExprF[G[_[_], _], A](unfix: Expr[G[ExprF[G, *], *], A])
+
+  object ExprF {
+    def fix[G[_[_], _], A](value: Expr[G[ExprF[G, *], *], A]): ExprF[G, A] =
+      ExprF(value)
+
+    def lift[G[_[_], _], A](ga: G[ExprF[G, *], A]): ExprF[G, A] =
+      fix(Ext(ga))
+
+    def map[G[_[_], _], A, B](a: ExprF[G, A], f: A -⚬ B): ExprF[G, B] =
+      fix(Mapped(a.unfix, f, new Var[B]))
+
+    def zip[G[_[_], _], A, B](a: ExprF[G, A], b: ExprF[G, B]): ExprF[G, A |*| B] =
+      fix(Zip(a.unfix, b.unfix))
+
+    def unzip[G[_[_], _], A, B](
+      ab: ExprF[G, A |*| B],
+    )(
+      resultVar: [x] => G[ExprF[G, *], x] => Var[x],
+    ): (ExprF[G, A], ExprF[G, B]) = {
+      val (a, b) = Expr.unzip(ab.unfix)(resultVar)
+      (fix(a), fix(b))
+    }
+
+    implicit def abstractableExprF[G[_[_], _]](implicit
+      G: AbsTrans[G],
+      ev: Semigroupoid[-⚬],
+    ): Abstractable[ExprF[G, *]] =
+      new Abstractable[ExprF[G, *]] { self =>
+        implicit val abstractableG: Abstractable[G[ExprF[G, *], *]] =
+          G.apply[ExprF[G, *]](self)
+
+        override def abs[A, B](
+          vars: Vars[A],
+          expr: ExprF[G, B],
+          consumed: Set[Var[_]],
+        ): AbsRes[A, B] =
+          Lambda.this.abs[G[ExprF[G, *], *], A, B](vars, expr.unfix, consumed)
+      }
+
+    def abs[G[_[_], _], A, B](
+      vars: Vars[A],
+      expr: ExprF[G, B],
+      consumed: Set[Var[_]],
+    )(using
+      G: AbsTrans[G],
+      ev: SymmetricSemigroupalCategory[-⚬, |*|],
+    ): AbsRes[A, B] =
+      Abstractable[ExprF[G, *]].abs(vars, expr, consumed)
+
+    def abs[G[_[_], _], A, B](
+      f: ExprF[G, A] => ExprF[G, B],
+    )(using
+      G: AbsTrans[G],
+      ev: SymmetricSemigroupalCategory[-⚬, |*|],
+    ): Either[Error, A -⚬ B] = {
+      implicit val abstractableG: Abstractable[G[ExprF[G, *], *]] =
+        G.apply[ExprF[G, *]]
+
+      Lambda.this.abs[G[ExprF[G, *], *], A, B](fa => f(ExprF.fix(fa)).unfix)
+    }
   }
 }

@@ -384,37 +384,43 @@ object FreeScalaDSL extends ScalaDSL {
   override def backvert[A]: (A |*| -[A]) -⚬ One =
     Backvert()
 
-  implicit val ssc: SymmetricSemigroupalCategory[-⚬, |*|] =
-    new SymmetricSemigroupalCategory[-⚬, |*|] {
+  implicit val cssc: ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬] =
+    new ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬] {
       override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C                              = FreeScalaDSL.this.andThen(f, g)
       override def id[A]: A -⚬ A                                                               = FreeScalaDSL.this.id[A]
       override def par[A1, A2, B1, B2](f1: A1 -⚬ B1, f2: A2 -⚬ B2): (A1 |*| A2) -⚬ (B1 |*| B2) = FreeScalaDSL.this.par(f1, f2)
       override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C))                    = FreeScalaDSL.this.assocLR[A, B, C]
       override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C)                    = FreeScalaDSL.this.assocRL[A, B, C]
       override def swap[A, B]: (A |*| B) -⚬ (B |*| A)                                          = FreeScalaDSL.this.swap[A, B]
+      override def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C)                            = FreeScalaDSL.this.curry(f)
+      override def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B                                           = FreeScalaDSL.this.eval[A, B]
     }
 
-  val lambda = new Lambda[-⚬, |*|]
+  val closures = new Closures[-⚬, |*|, =⚬]
+  val lambdas = closures.lambdas
 
-  override type $[A] = lambda.Expr0[A]
+  override type $[A] = closures.Expr[A]
 
-  override val `$`: $Ops  = new $Ops {
+  override val `$`: ClosureOps  = new ClosureOps {
     override def map[A, B](a: $[A])(f: A -⚬ B): $[B] =
-      a.map(f)
+      closures.Expr.map(a, f)
 
     override def zip[A, B](a: $[A], b: $[B]): $[A |*| B] =
-      lambda.Expr0.zip(a, b)
+      closures.Expr.zip(a, b)
 
     override def unzip[A, B](ab: $[A |*| B]): ($[A], $[B]) =
-      lambda.Expr0.unzip(ab)
+      closures.Expr.unzip(ab)
+
+    override def app[A, B](f: $[A =⚬ B], a: $[A]): $[B] =
+      closures.Expr.app(f, a)
   }
 
   override def λ[A, B](f: $[A] => $[B]): A -⚬ B =
-    lambda.abs0(f) match {
+    closures.abs(f) match {
       case Right(f) => f
       case Left(e) =>
-        import lambda.Error.Undefined
-        import lambda.LinearityViolation.{Overused, Underused}
+        import lambdas.Error.Undefined
+        import lambdas.LinearityViolation.{Overused, Underused}
         e match {
           case Overused(vs) => throw new NotLinearException(s"Variables ${vs.mkString(", ")} used more than once")
           case Underused(v) => throw new NotLinearException(s"Variable $v not fully consumed")
@@ -422,6 +428,25 @@ object FreeScalaDSL extends ScalaDSL {
         }
     }
 
+  override def Λ[A, B](f: $[A] => $[B]): $[A =⚬ B] =
+    closures.closure[A, B, =⚬](f) match {
+      case Right(f) =>
+        f
+      case Left(e) =>
+        import closures.ClosureError
+        e match {
+          case ClosureError.NonLinear(e) =>
+            import lambdas.LinearityViolation.{Overused, Underused}
+            e match {
+              case Overused(v) => throw new NotLinearException(s"Variable $v used more than once")
+              case Underused(v) => throw new NotLinearException(s"Variable $v not fully consumed")
+            }
+          case ClosureError.NoCapture(msg) =>
+            throw new NoCaptureException(msg)
+        }
+    }
+
   override class NotLinearException(msg: String) extends Exception(msg)
-  override class UnboundVariableException(v: Set[lambda.Expr.Var[?]]) extends Exception
+  override class UnboundVariableException(v: Set[lambdas.Expr.Var[?]]) extends Exception
+  override class NoCaptureException(msg: String) extends Exception
 }
