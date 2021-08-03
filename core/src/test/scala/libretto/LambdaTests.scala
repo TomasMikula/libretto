@@ -5,7 +5,7 @@ class LambdaTests extends TestSuite {
   import kit.coreLib._
   import kit.scalaLib._
 
-  test("λ-expression compilation") {
+  test("some λ-expressions") {
     import $._
 
     val f = λ { (t: $[Ping |*| (Done |*| Val[String])]) =>

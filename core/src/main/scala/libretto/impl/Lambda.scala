@@ -70,6 +70,8 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     def zip[B](that: Vars[B]): Vars[A |*| B] =
       Vars.Zip(this, that)
 
+    def compare[B](that: Vars[B]): Vars.Cmp[A, B]
+
     def toSet: Set[Var[_]] =
       this match {
         case Vars.Single(v) => Set(v)
@@ -81,6 +83,17 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     case class Single[A](v: Var[A]) extends Vars[A] {
       override def lookup[B](w: Var[B]): Option[Contains[A, B]] =
         v.testEqual(w).map(_.substituteCo[Contains[A, *]](Contains.Id[A]()))
+
+      override def compare[B](that: Vars[B]): Cmp[A, B] =
+        that match {
+          case Single(w) =>
+            (v testEqual w) match {
+              case Some(ev) => Cmp.Iso(~⚬.Id0(ev))
+              case None     => Cmp.Disjoint()
+            }
+          case other =>
+            (other compare this).invert
+        }
     }
 
     case class Zip[X, Y](_1: Vars[X], _2: Vars[Y]) extends Vars[X |*| Y] {
@@ -102,6 +115,32 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
                 None
             }
         }
+
+      override def compare[B](that: Vars[B]): Cmp[X |*| Y, B] = {
+        import Cmp._
+
+        (_1 compare that) match {
+          case Disjoint() =>
+            (_2 compare that) match {
+              case Disjoint() => Disjoint()
+              case other => ??? // TODO
+            }
+          case Iso(s) =>
+            Superset(~⚬.fst(s), _2)
+          case Superset(s, unused) =>
+            Superset(~⚬.fst(s) > ~⚬.assocLR, unused zip _2)
+          case Subset(missing, s) =>
+            (_2 compare missing) match {
+              case Disjoint() => SymDiff(missing, ~⚬.assocRL > ~⚬.fst(s), _2)
+              case other => ??? // TODO
+            }
+          case SymDiff(missing, s, unused) =>
+            (_2 compare missing) match {
+              case Disjoint() => SymDiff(missing, ~⚬.assocRL > ~⚬.fst(s) > ~⚬.assocLR, unused zip _2)
+              case other => ??? // TODO
+            }
+        }
+      }
     }
 
     /** Witnesses that `Vars[A]` contains a variable `Var[B]`. */
@@ -109,6 +148,27 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     object Contains {
       case class Id[X]() extends Contains[X, X]
       case class Super[A, B, X](f: A ~⚬ (B |*| X), remaining: Vars[X]) extends Contains[A, B]
+    }
+
+    sealed trait Cmp[A, B] {
+      import Cmp._
+
+      def invert: Cmp[B, A] =
+        this match {
+          case Disjoint()       => Disjoint()
+          case Iso(s)           => Iso(s.invert)
+          case Superset(s, v)   => Subset(v, ~⚬.swap > s.invert)
+          case Subset(v, s)     => Superset(s.invert > ~⚬.swap, v)
+          case SymDiff(v, s, w) => SymDiff(w, ~⚬.swap > s.invert > ~⚬.swap, v)
+        }
+    }
+
+    object Cmp {
+      case class Disjoint[A, B]() extends Cmp[A, B]
+      case class Iso[A, B](s: A ~⚬ B) extends Cmp[A, B]
+      case class Superset[A, B, Y](s: A ~⚬ (B |*| Y), unused: Vars[Y]) extends Cmp[A, B]
+      case class Subset[X, A, B](missing: Vars[X], s: (X |*| A) ~⚬ B) extends Cmp[A, B]
+      case class SymDiff[X, A, B, Y](missing: Vars[X], s: (X |*| A) ~⚬ (B |*| Y), unused: Vars[Y]) extends Cmp[A, B]
     }
   }
 
@@ -157,9 +217,9 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
       consumed = Set.empty,
     ) match {
       case AbsRes.Exact(f, _)                => Right(f.fold)
-      case AbsRes.Partial(_, _, _)           => Left(LinearityViolation.Underused(a))
+      case AbsRes.Partial(_, _, _)           => Left(LinearityViolation.underused(a))
       case AbsRes.Closure(_, undefined, _)   => Left(Error.Undefined(undefined.toSet))
-      case AbsRes.PartialClosure(_, _, _, _) => Left(LinearityViolation.Underused(a))
+      case AbsRes.PartialClosure(_, _, _, _) => Left(LinearityViolation.underused(a))
       case AbsRes.Failure(e)                 => Left(e)
     }
   }
@@ -349,6 +409,9 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     object Failure {
       def overused[A, B](vars: Set[Var[_]]): Failure[A, B] =
         Failure(LinearityViolation.Overused(vars))
+
+      def underused[A, B](vars: Set[Var[_]]): Failure[A, B] =
+        Failure(LinearityViolation.Underused(vars))
     }
   }
 
@@ -357,14 +420,22 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     case class Undefined(vars: Set[Var[_]]) extends Error
   }
 
-  enum LinearityViolation extends Error {
-    case Overused(vars: Set[Var[_]])
-    case Underused(v: Var[_])
-  }
+  sealed trait LinearityViolation extends Error
 
   object LinearityViolation {
+    case class Overused(vars: Set[Var[_]]) extends LinearityViolation {
+      require(vars.nonEmpty)
+    }
+
+    case class Underused(vars: Set[Var[_]]) extends LinearityViolation {
+      require(vars.nonEmpty)
+    }
+
     def overused(v: Var[_]): LinearityViolation.Overused =
       LinearityViolation.Overused(Set(v))
+
+    def underused(v: Var[_]): LinearityViolation.Underused =
+      LinearityViolation.Underused(Set(v))
   }
 
   sealed trait Uninhabited[A] {

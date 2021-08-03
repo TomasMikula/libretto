@@ -167,6 +167,25 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         ev.andThen(init.fold, ev.andThen(t.fold, ev.snd(ev.andThen(s.fold, semiLast.fold))))
     }
 
+    case class XI[A1, A2, P, Q, R, S, B1, B2](
+      l: Plated[A2, P],
+      lt: RevTransferOpt[P, B1 |*| Q],
+      b: Q ~⚬ R,
+      rt: TransferOpt[A1 |*| R, S],
+      r: Plated[S, B2],
+    ) extends Plated[A1 |*| A2, B1 |*| B2] {
+      override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2) = {
+        import ev.andThen
+        andThen(
+          ev.snd(andThen(l.fold, andThen(lt.fold, ev.snd(b.fold)))),
+          andThen(
+            ev.xi,
+            ev.snd(andThen(rt.fold, r.fold)),
+          ),
+        )
+      }
+    }
+
     case class Preshuffled[A, X, B](s: A ~⚬ X, t: Plated[X, B])
   }
   import Plated._
@@ -310,7 +329,10 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f2: X2 ~⚬ (P2 |*| P3),
         r: Plated[Q2, Z2],
       ): Shuffled[A1 |*| A2, P2 |*| Z2] =
-        ???
+        revDecompose(f2) match {
+          case RevDecomposition(g, h1, h2) =>
+            Impermeable(~⚬.fst(f1), Plated.XI(l, g, h2, value.g, r), ~⚬.fst(h1))
+        }
 
     }
 

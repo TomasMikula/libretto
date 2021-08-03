@@ -429,7 +429,7 @@ object FreeScalaDSL extends ScalaDSL {
     }
 
   override def Λ[A, B](f: $[A] => $[B]): $[A =⚬ B] =
-    closures.closure[A, B, =⚬](f) match {
+    closures.closure[A, B](f) match {
       case Right(f) =>
         f
       case Left(e) =>

@@ -519,12 +519,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         }
 
       override def thenSwap: (A1 |*| (A2 |*| A3)) ~⚬ (A3 |*| B) =
-        TransferOpt.splitOutput(g) match {
-          case TransferOpt.SplitOutput(g, ev) =>
-            TransferOpt.decompose(g) match {
-              case Right((i, j)) => Xfer(i, fst(j) > swap, XI(TransferOpt.None0(ev)))
-              case Left(t)       => ???
-            }
+        decompose(g.asShuffle) match {
+          case Decomposition(f1, f2, h) => Xfer(f1, fst(f2) > swap, XI(h))
         }
 
       override def thenAssocLR[D1, D2, C2](
