@@ -30,6 +30,14 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
         else None
     }
 
+    object Var {
+      given Unique[Var] =
+        new Unique[Var] {
+          override def testEqual[A, B](a: Var[A], b: Var[B]): Option[A =:= B] =
+            a testEqual b
+        }
+    }
+
     case class Mapped[+F[_], A, B](a: Expr[F, A], f: A -⚬ B, b: Var[B]) extends VarDefining[F, B]
 
     case class Zip[+F[_], A, B](a: Expr[F, A], b: Expr[F, B]) extends Expr[F, A |*| B]
@@ -64,30 +72,41 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
   import shuffled.{Shuffled => ≈⚬, assocLR, assocRL, fst, id, ix, lift, pure, snd, swap, xi}
 
-  sealed trait Vars[A] {
-    def lookup[B](vb: Var[B]): Option[Vars.Contains[A, B]]
+  sealed trait Tupled[F[_], A] {
+    def lookup[B](fb: F[B])(using Unique[F]): Option[Tupled.Contains[F, A, B]]
 
-    def zip[B](that: Vars[B]): Vars[A |*| B] =
-      Vars.Zip(this, that)
+    def compare[B](that: Tupled[F, B])(using Unique[F]): Tupled.Cmp[F, A, B]
 
-    def compare[B](that: Vars[B]): Vars.Cmp[A, B]
+    def zip[B](that: Tupled[F, B]): Tupled[F, A |*| B] =
+      Tupled.Zip(this, that)
 
-    def toSet: Set[Var[_]] =
+    def mapReduce[G[_]](
+      map: [x] => F[x] => G[x],
+      zip: [x, y] => (G[x], G[y]) => G[x |*| y],
+    ): G[A] =
       this match {
-        case Vars.Single(v) => Set(v)
-        case Vars.Zip(a, b) => a.toSet union b.toSet
+        case Tupled.Single(a) => map(a)
+        case Tupled.Zip(x, y) => zip(x.mapReduce(map, zip), y.mapReduce(map, zip))
       }
+
+    def mapReduce0[B](
+      map: [x] => F[x] => B,
+      reduce: (B, B) => B,
+    ): B = {
+      type G[x] = B
+      mapReduce[G](map, [x, y] => (x: G[x], y: G[y]) => reduce(x, y))
+    }
   }
 
-  object Vars {
-    case class Single[A](v: Var[A]) extends Vars[A] {
-      override def lookup[B](w: Var[B]): Option[Contains[A, B]] =
-        v.testEqual(w).map(_.substituteCo[Contains[A, *]](Contains.Id[A]()))
+  object Tupled {
+    case class Single[F[_], A](v: F[A]) extends Tupled[F, A] {
+      override def lookup[B](w: F[B])(using F: Unique[F]): Option[Contains[F, A, B]] =
+        F.testEqual(v, w).map(_.substituteCo[Contains[F, A, *]](Contains.Id[F, A]()))
 
-      override def compare[B](that: Vars[B]): Cmp[A, B] =
+      override def compare[B](that: Tupled[F, B])(using F: Unique[F]): Cmp[F, A, B] =
         that match {
           case Single(w) =>
-            (v testEqual w) match {
+            F.testEqual(v, w) match {
               case Some(ev) => Cmp.Iso(~⚬.Id0(ev))
               case None     => Cmp.Disjoint()
             }
@@ -96,8 +115,8 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
         }
     }
 
-    case class Zip[X, Y](_1: Vars[X], _2: Vars[Y]) extends Vars[X |*| Y] {
-      override def lookup[B](w: Var[B]): Option[Contains[X |*| Y, B]] =
+    case class Zip[F[_], X, Y](_1: Tupled[F, X], _2: Tupled[F, Y]) extends Tupled[F, X |*| Y] {
+      override def lookup[B](w: F[B])(using Unique[F]): Option[Contains[F, X |*| Y, B]] =
         _1.lookup(w) match {
           case Some(contains) =>
             contains match {
@@ -116,7 +135,7 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
             }
         }
 
-      override def compare[B](that: Vars[B]): Cmp[X |*| Y, B] = {
+      override def compare[B](that: Tupled[F, B])(using Unique[F]): Cmp[F, X |*| Y, B] = {
         import Cmp._
 
         (_1 compare that) match {
@@ -143,17 +162,17 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
       }
     }
 
-    /** Witnesses that `Vars[A]` contains a variable `Var[B]`. */
-    sealed trait Contains[A, B]
+    /** Witnesses that `Tupled[F, A]` contains a variable `Var[B]`. */
+    sealed trait Contains[F[_], A, B]
     object Contains {
-      case class Id[X]() extends Contains[X, X]
-      case class Super[A, B, X](f: A ~⚬ (B |*| X), remaining: Vars[X]) extends Contains[A, B]
+      case class Id[F[_], X]() extends Contains[F, X, X]
+      case class Super[F[_], A, B, X](f: A ~⚬ (B |*| X), remaining: Tupled[F, X]) extends Contains[F, A, B]
     }
 
-    sealed trait Cmp[A, B] {
+    sealed trait Cmp[F[_], A, B] {
       import Cmp._
 
-      def invert: Cmp[B, A] =
+      def invert: Cmp[F, B, A] =
         this match {
           case Disjoint()       => Disjoint()
           case Iso(s)           => Iso(s.invert)
@@ -164,12 +183,32 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     }
 
     object Cmp {
-      case class Disjoint[A, B]() extends Cmp[A, B]
-      case class Iso[A, B](s: A ~⚬ B) extends Cmp[A, B]
-      case class Superset[A, B, Y](s: A ~⚬ (B |*| Y), unused: Vars[Y]) extends Cmp[A, B]
-      case class Subset[X, A, B](missing: Vars[X], s: (X |*| A) ~⚬ B) extends Cmp[A, B]
-      case class SymDiff[X, A, B, Y](missing: Vars[X], s: (X |*| A) ~⚬ (B |*| Y), unused: Vars[Y]) extends Cmp[A, B]
+      case class Disjoint[F[_], A, B]() extends Cmp[F, A, B]
+      case class Iso[F[_], A, B](s: A ~⚬ B) extends Cmp[F, A, B]
+      case class Superset[F[_], A, B, Y](s: A ~⚬ (B |*| Y), unused: Tupled[F, Y]) extends Cmp[F, A, B]
+      case class Subset[F[_], X, A, B](missing: Tupled[F, X], s: (X |*| A) ~⚬ B) extends Cmp[F, A, B]
+      case class SymDiff[F[_], X, A, B, Y](missing: Tupled[F, X], s: (X |*| A) ~⚬ (B |*| Y), unused: Tupled[F, Y]) extends Cmp[F, A, B]
     }
+  }
+
+  type Vars[A] = Tupled[Var, A]
+  object Vars {
+    type Cmp[A, B] = Tupled.Cmp[Var, A, B]
+    val Cmp = Tupled.Cmp
+
+    def single[A](a: Var[A]): Vars[A] =
+      Tupled.Single(a)
+
+    def toSet[A](vars: Vars[A]): Set[Var[?]] =
+      vars.mapReduce0(
+        map    = [x] => (v: Var[x]) => Set[Var[?]](v),
+        reduce = _ union _,
+      )
+  }
+
+  extension [A](vars: Vars[A]) {
+    def toSet: Set[Var[?]] =
+      Vars.toSet(vars)
   }
 
   trait Abstractable[F[_]] {
@@ -212,7 +251,7 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     val a = new Var[A]()
     val b = f(a)
     abs[F, A, B](
-      vars = Vars.Single(a),
+      vars = Vars.single(a),
       expr = b,
       consumed = Set.empty,
     ) match {
@@ -244,20 +283,20 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
               Failure(LinearityViolation.overused(vz))
             case Some(contains) =>
               contains match {
-                case Vars.Contains.Id()           => Exact(id, consumed + b)
-                case Vars.Contains.Super(f, vars) => Partial(pure(f), vars, consumed + b)
+                case Tupled.Contains.Id()           => Exact(id, consumed + b)
+                case Tupled.Contains.Super(f, vars) => Partial(pure(f), vars, consumed + b)
               }
           }
       } else {
         abs[F, A, Z](vars, z, consumed) match {
           case Exact(f, consumed) =>
-            Partial(f > pure(s), Vars.Single(x), consumed + b)
+            Partial(f > pure(s), Vars.single(x), consumed + b)
           case Partial(f, vars, consumed) =>
-            Partial(f > pure(~⚬.fst(s) > ~⚬.assocLR), Vars.Single(x) zip vars, consumed + b)
+            Partial(f > pure(~⚬.fst(s) > ~⚬.assocLR), Vars.single(x) zip vars, consumed + b)
           case Closure(f, undefined, consumed) =>
-            PartialClosure(f thenShuffle s, undefined, Vars.Single(x), consumed + b)
+            PartialClosure(f thenShuffle s, undefined, Vars.single(x), consumed + b)
           case PartialClosure(f, undefined, remaining, consumed) =>
-            PartialClosure(f > pure(~⚬.fst(s) > ~⚬.assocLR), undefined, Vars.Single(x) zip remaining, consumed + b)
+            PartialClosure(f > pure(~⚬.fst(s) > ~⚬.assocLR), undefined, Vars.single(x) zip remaining, consumed + b)
           case Failure(e) =>
             Failure(e)
         }
@@ -273,15 +312,15 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
               case false =>
                 PartialClosure(
                   id[B |*| A],
-                  undefined = Vars.Single(v),
+                  undefined = Vars.single(v),
                   remaining = vars,
                   consumed = consumed + v,
                 )
             }
           case Some(res) =>
             res match {
-              case Vars.Contains.Id()           => Exact(id, consumed + v)
-              case Vars.Contains.Super(f, vars) => Partial(pure(f), vars, consumed + v)
+              case Tupled.Contains.Id()           => Exact(id, consumed + v)
+              case Tupled.Contains.Super(f, vars) => Partial(pure(f), vars, consumed + v)
             }
         }
       case Zip(b1, b2) =>
@@ -340,8 +379,8 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
           vars.lookup(b) match {
             case Some(contains) =>
               contains match {
-                case Vars.Contains.Id()           => Exact(id, consumed + b)
-                case Vars.Contains.Super(f, vars) => Partial(pure(f), vars, consumed + b)
+                case Tupled.Contains.Id()           => Exact(id, consumed + b)
+                case Tupled.Contains.Super(f, vars) => Partial(pure(f), vars, consumed + b)
               }
             case None =>
               abs(vars, x, consumed) match {

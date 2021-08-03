@@ -93,7 +93,7 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _]](using
     val a = new Var[A]()
     val b = f(a)
     lambdas.abs(
-      Vars.Single(a),
+      Vars.single(a),
       b,
       consumed = Set.empty,
     ) match {
