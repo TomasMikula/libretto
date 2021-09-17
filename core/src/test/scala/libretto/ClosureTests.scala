@@ -13,7 +13,7 @@ class ClosureTests extends TestSuite {
       }
   }
 
-  ignore("some closure 0") {
+  test("some closure 0") {
     val f: (Done |*| Done) -⚬ (Done |*| Done) =
       λ { d =>
         val (d1 |*| d2) = d
@@ -25,7 +25,7 @@ class ClosureTests extends TestSuite {
       }
   }
 
-  ignore("some closure 1") {
+  test("some closure 1") {
     val f: Done -⚬ (Done |*| Done) =
       λ { d =>
         val (d1 |*| d2) = d > fork
@@ -54,7 +54,7 @@ class ClosureTests extends TestSuite {
     assertVal(prg, "abcabc")
   }
 
-  ignore("some closure 3") {
+  test("some closure 3") {
     val prg = λ { (d: $[Done]) =>
       val (d1 |*| d2) = d > fork
       val n: $[Val[Int]] = d1 > constVal(2)

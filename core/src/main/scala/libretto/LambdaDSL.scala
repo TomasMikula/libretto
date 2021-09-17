@@ -16,12 +16,12 @@ trait LambdaDSL extends CoreDSL {
     *
     * @throws NotLinearException if the given function violates linearity, i.e. if the input variable
     *   is not used exactly once.
-    * @throws UnboundVariableException if the result expression contains free variables (from outer [[λ]]s).
+    * @throws UnboundVariablesException if the result expression contains free variables (from outer [[λ]]s).
     */
   def λ[A, B](f: $[A] => $[B]): A -⚬ B
 
   type NotLinearException <: Throwable
-  type UnboundVariableException <: Throwable
+  type UnboundVariablesException <: Throwable
 
   val $: $Ops
 

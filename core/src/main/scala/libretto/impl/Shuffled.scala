@@ -198,6 +198,9 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   def id[X]: Shuffled[X, X] =
     Permeable.id
 
+  def id[X, Y](implicit ev: X =:= Y): Shuffled[X, Y] =
+    ev.substituteCo(Permeable.id[X])
+
   def pure[X, Y](f: X ~⚬ Y): Shuffled[X, Y] =
     Pure(f)
 
@@ -206,6 +209,9 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
   def snd[X, Y, Z](f: Shuffled[Y, Z]): Shuffled[X |*| Y, X |*| Z] =
     f.inSnd[X]
+
+  def par[X1, X2, Y1, Y2](f1: Shuffled[X1, Y1], f2: Shuffled[X2, Y2]): Shuffled[X1 |*| X2, Y1 |*| Y2] =
+    fst(f1) > snd(f2)
 
   def assocLR[X, Y, Z]: Shuffled[(X |*| Y) |*| Z, X |*| (Y |*| Z)] =
     Pure(~⚬.assocLR)

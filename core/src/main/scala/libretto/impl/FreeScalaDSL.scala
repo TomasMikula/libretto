@@ -397,34 +397,35 @@ object FreeScalaDSL extends ScalaDSL {
     }
 
   val closures = new Closures[-⚬, |*|, =⚬]
-  val lambdas = closures.lambdas
+  val lambdas: closures.lambdas.type = closures.lambdas
 
-  override type $[A] = closures.Expr[A]
+  override type $[A] = lambdas.Expr[A]
 
   override val `$`: ClosureOps  = new ClosureOps {
     override def map[A, B](a: $[A])(f: A -⚬ B): $[B] =
-      closures.Expr.map(a, f)
+      a map f
 
     override def zip[A, B](a: $[A], b: $[B]): $[A |*| B] =
-      closures.Expr.zip(a, b)
+      a zip b
 
     override def unzip[A, B](ab: $[A |*| B]): ($[A], $[B]) =
-      closures.Expr.unzip(ab)
+      lambdas.Expr.unzip(ab)
 
     override def app[A, B](f: $[A =⚬ B], a: $[A]): $[B] =
-      closures.Expr.app(f, a)
+      closures.app(f, a)
   }
 
   override def λ[A, B](f: $[A] => $[B]): A -⚬ B =
-    closures.abs(f) match {
-      case Right(f) => f
+    lambdas.compile(f) match {
+      case Right(f) =>
+        f
       case Left(e) =>
         import lambdas.Error.Undefined
         import lambdas.LinearityViolation.{Overused, Underused}
         e match {
-          case Overused(vs) => throw new NotLinearException(s"Variables ${vs.mkString(", ")} used more than once")
-          case Underused(v) => throw new NotLinearException(s"Variable $v not fully consumed")
-          case Undefined(v) => throw new UnboundVariableException(v)
+          case Overused(vs)  => throw new NotLinearException(s"Variables ${vs.mkString(", ")} used more than once")
+          case Underused(vs) => throw new NotLinearException(s"Variables ${vs.mkString(", ")} not fully consumed")
+          case Undefined(vs) => throw new UnboundVariablesException(vs)
         }
     }
 
@@ -438,8 +439,8 @@ object FreeScalaDSL extends ScalaDSL {
           case ClosureError.NonLinear(e) =>
             import lambdas.LinearityViolation.{Overused, Underused}
             e match {
-              case Overused(v) => throw new NotLinearException(s"Variable $v used more than once")
-              case Underused(v) => throw new NotLinearException(s"Variable $v not fully consumed")
+              case Overused(vs)  => throw new NotLinearException(s"Variables ${vs.mkString(", ")} used more than once")
+              case Underused(vs) => throw new NotLinearException(s"Variables ${vs.mkString(", ")} not fully consumed")
             }
           case ClosureError.NoCapture(msg) =>
             throw new NoCaptureException(msg)
@@ -447,6 +448,6 @@ object FreeScalaDSL extends ScalaDSL {
     }
 
   override class NotLinearException(msg: String) extends Exception(msg)
-  override class UnboundVariableException(v: Set[lambdas.Expr.Var[?]]) extends Exception
+  override class UnboundVariablesException(vs: Set[lambdas.Var[?]]) extends Exception
   override class NoCaptureException(msg: String) extends Exception
 }

@@ -6,77 +6,271 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
   inj: BiInjective[|*|],
 ) {
 
-  sealed trait Expr[+F[_], A] {
-    import Expr._
-
-    def map[B](f: A -⚬ B): Expr[F, B] =
-      Mapped(this, f, new Var[B]())
-  }
-
-  object Expr {
-    sealed trait VarDefining[+F[_], A] extends Expr[F, A] {
-      def variable: Var[A] =
-        this match {
-          case v: Var[A] => v
-          case Mapped(_, _, v) => v
-          case Prj1(Split(_, _, v, _)) => v
-          case Prj2(Split(_, _, _, v)) => v
-        }
-    }
-
-    class Var[A]() extends VarDefining[Nothing, A] {
-      def testEqual[B](that: Var[B]): Option[A =:= B] =
-        if (this eq that) Some(summon[A =:= A].asInstanceOf[A =:= B])
-        else None
-    }
-
-    object Var {
-      given Unique[Var] =
-        new Unique[Var] {
-          override def testEqual[A, B](a: Var[A], b: Var[B]): Option[A =:= B] =
-            a testEqual b
-        }
-    }
-
-    case class Mapped[+F[_], A, B](a: Expr[F, A], f: A -⚬ B, b: Var[B]) extends VarDefining[F, B]
-
-    case class Zip[+F[_], A, B](a: Expr[F, A], b: Expr[F, B]) extends Expr[F, A |*| B]
-
-    case class Prj1[+F[_], A, B](p: Split[F, A, B]) extends VarDefining[F, A]
-
-    case class Prj2[+F[_], A, B](p: Split[F, A, B]) extends VarDefining[F, B]
-
-    /** Extension point. */
-    case class Ext[F[_], B](expr: F[B]) extends Expr[F, B]
-
-    case class Split[+F[_], X, Y](p: Expr[F, X |*| Y], pv: Var[X |*| Y], p1: Var[X], p2: Var[Y])
-
-    def zip[F[_], A, B](a: Expr[F, A], b: Expr[F, B]): Expr[F, A |*| B] =
-      Zip(a, b)
-
-    def unzip[F[_], A, B](p: Expr[F, A |*| B])(resultVar: [x] => F[x] => Var[x]): (Expr[F, A], Expr[F, B]) =
-      p match {
-        case Zip(a, b) =>
-          (a, b)
-        case p: VarDefining[F, A |*| B] =>
-          val split = Split(p, p.variable, new Var[A](), new Var[B]())
-          (Prj1(split), Prj2(split))
-        case p @ Ext(fab) =>
-          val split = Split(p, resultVar(fab), new Var[A](), new Var[B]())
-          (Prj1(split), Prj2(split))
-      }
-  }
-  import Expr._
-
   val shuffled = new Shuffled[-⚬, |*|]
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
-  import shuffled.{Shuffled => ≈⚬, assocLR, assocRL, fst, id, ix, lift, pure, snd, swap, xi}
+  import shuffled.{Shuffled => ≈⚬, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
+
+  class Var[A]() {
+    def testEqual[B](that: Var[B]): Option[A =:= B] =
+      if (this eq that) Some(summon[A =:= A].asInstanceOf[A =:= B])
+      else None
+  }
+
+  object Var {
+    given Unique[Var] =
+      new Unique[Var] {
+        override def testEqual[A, B](a: Var[A], b: Var[B]): Option[A =:= B] =
+          a testEqual b
+      }
+  }
+
+  /**
+   * Arrow interspersed with intermediate [[Var]]s.
+   * Non-linear: includes projections and multiple occurrences of the same variable.
+   */
+  sealed trait VArr[A, B] {
+    import VArr._
+
+    def resultVar: Var[B]
+
+    def initialVars: Vars[A] =
+      this match {
+        case Id(a) => Vars.single(a)
+        // TODO
+      }
+
+    def map[C](f: B -⚬ C): VArr[A, C] =
+      Map(this, f, new Var[C])
+
+    def zip[C, D](that: VArr[C, D]): VArr[A |*| C, B |*| D] =
+      Zip(this, that, new Var[B |*| D])
+
+    def elimStep[V](v: Var[V]): ElimStep[V, B] =
+      (v testEqual resultVar) match {
+        case Some(ev) =>
+          ElimStep.Exact(ev.substituteContra(this), id(ev))
+        case None =>
+          this match {
+            case Id(b) =>
+              ElimStep.NotFound()
+            case Map(f, g, b) =>
+              f.elimStep(v).map(g)
+            case Prj1(f, b1, b2) =>
+              ElimStep.halfUsed1(f.elimStep(v), b2)
+            case Prj2(f, b1, b2) =>
+              ElimStep.halfUsed2(f.elimStep(v), b1)
+            case Zip(f1: Expr[b1], f2: Expr[b2], b) =>
+              ElimStep.ofZip[Expr, V, b1, b2](
+                v,
+                f1,
+                f2,
+                [w, b] => (w: Var[w], b: Expr[b]) => b elimStep w,
+                [b] => (b: Expr[b]) => Exprs(b),
+              )
+          }
+      }
+
+    def elim[V](v: Var[V]): ElimRes[V, B] =
+      this.elimStep(v) match {
+        case ElimStep.NotFound()       => ElimRes.unused(v)
+        case ElimStep.Exact(e, f)      => ElimRes.Exact(e, f)
+        case ElimStep.Closure(x, e, f) => ElimRes.Closure(x, e, f)
+        case ElimStep.HalfUsed(_, u)   => ElimRes.Unused(Set(u)) // TODO: report all half-used vars
+      }
+  }
+
+  object VArr {
+    case class Id[A](variable: Var[A]) extends VArr[A, A] {
+      override def resultVar: Var[A] =
+        variable
+    }
+
+    case class Map[A, B, C](
+      f: VArr[A, B],
+      g: B -⚬ C,
+      resultVar: Var[C],
+    ) extends VArr[A, C]
+
+    case class Zip[A1, A2, B1, B2](
+      f1: VArr[A1, B1],
+      f2: VArr[A2, B2],
+      resultVar: Var[B1 |*| B2],
+    ) extends VArr[A1 |*| A2, B1 |*| B2]
+
+    case class Prj1[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VArr[A, B1] {
+      override def resultVar: Var[B1] =
+        b1
+    }
+
+    case class Prj2[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VArr[A, B2] {
+      override def resultVar: Var[B2] =
+        b2
+    }
+
+    sealed trait ElimStep[V, B] {
+      import ElimStep._
+
+      def map[C](f: B ≈⚬ C): ElimStep[V, C]
+
+      def map[C](f: B -⚬ C): ElimStep[V, C] =
+        map(shuffled.lift(f))
+    }
+
+    object ElimStep {
+      case class NotFound[V, B]() extends ElimStep[V, B] {
+        override def map[C](f: B ≈⚬ C): ElimStep[V, C] =
+          NotFound()
+      }
+
+      sealed trait Found[V, B] extends ElimStep[V, B] {
+        override def map[C](f: B ≈⚬ C): Found[V, C] =
+          this match {
+            case Exact(e, g)      => Exact(e, g > f)
+            case Closure(x, e, g) => Closure(x, e, g > f)
+            case HalfUsed(g, u)   => HalfUsed(g map fst(f), u)
+            // TODO
+          }
+
+        def withCaptured[X](captured: Exprs[X]): Found[V, X |*| B] = {
+          import Exprs.elimStep
+
+          this match {
+            case Exact(e, f) =>
+              captured.elimStep(e.resultVar) match {
+                case NotFound() => Closure(captured, e, snd(f))
+                // TODO
+              }
+            case HalfUsed(f, u) =>
+              captured.elimStep(u) match {
+                case NotFound()               => HalfUsed(f.withCaptured(captured).map(assocRL), u)
+                case Exact(_, h)              => f.map(snd(h) > swap)
+                case Closure(captured1, _, h) => f.withCaptured(captured1).map(snd(swap) > assocRL > fst(h))
+                case HalfUsed(g, w)           => HalfUsed(ElimStep.thenSnd(f, g) map (assocRL > fst(swap)), w)
+              }
+            // TODO
+          }
+        }
+      }
+
+      case class Exact[V, B](expr: Expr[V], f: V ≈⚬ B) extends Found[V, B]
+      case class Closure[X, V, B](captured: Exprs[X], expr: Expr[V], f: (X |*| V) ≈⚬ B) extends Found[V, B]
+      case class HalfUsed[V, B, U](f: Found[V, B |*| U], unused: Var[U]) extends Found[V, B]
+
+      def halfUsed1[V, B, U](step: ElimStep[V, B |*| U], u: Var[U]): ElimStep[V, B] =
+        step match {
+          case NotFound()               => NotFound()
+          case found: Found[V, B |*| U] => HalfUsed(found, u)
+        }
+
+      def halfUsed2[V, U, B](step: ElimStep[V, U |*| B], u: Var[U]): ElimStep[V, B] =
+        halfUsed1(step.map(swap[U, B]), u)
+
+      def closure[X, V, W, B](captured: Exprs[X], f: Found[V, W], g: (X |*| W) ≈⚬ B): ElimStep[V, B] =
+        f.withCaptured(captured).map(g)
+
+      def ofZip[F[_], V, B1, B2](
+        v: Var[V],
+        f1: F[B1],
+        f2: F[B2],
+        elimStep: [v, b] => (Var[v], F[b]) => ElimStep[v, b],
+        exprs: [b] => F[b] => Exprs[b],
+      ): ElimStep[V, B1 |*| B2] =
+        elimStep(v, f1) match {
+          case ElimStep.NotFound() =>
+            elimStep(v, f2) match {
+              case ElimStep.NotFound() =>
+                ElimStep.NotFound()
+              case ElimStep.Exact(e2, g2) =>
+                ElimStep.Closure(exprs(f1), e2, snd(g2))
+              case ElimStep.Closure(x, e2, g2) =>
+                ElimStep.Closure(exprs(f1) zip x, e2, assocLR > snd(g2))
+              // TODO
+            }
+          case ElimStep.Exact(e1, g1) =>
+            elimStep(v, f2) match {
+              case ElimStep.NotFound() =>
+                ElimStep.Closure(exprs(f2), e1, snd(g1) > swap)
+              // TODO
+            }
+          case ElimStep.HalfUsed(h1, u) =>
+            elimStep(u, f2) match {
+              case ElimStep.NotFound() =>
+                halfUsed1(h1.withCaptured(exprs(f2)).map(assocRL > fst(swap)), u)
+              case ElimStep.Exact(g2, h2) =>
+                h1 map snd(h2)
+              case ElimStep.Closure(captured, g2, h2) =>
+                h1.withCaptured(captured).map(xi > snd(h2))
+              case ElimStep.HalfUsed(g2, w) =>
+                ElimStep.halfUsed1(ElimStep.thenSnd(h1, g2).map(assocRL), w)
+            }
+          // TODO
+        }
+
+      def thenSnd[V, B1, X, B2](f: Found[V, B1 |*| X], g: Found[X, B2]): Found[V, B1 |*| B2] =
+        g match {
+          case Exact(g0, g1)   => f.map(snd(g1))
+          case HalfUsed(g0, u) => HalfUsed(thenSnd(f, g0).map(assocRL), u)
+          // TODO
+        }
+    }
+
+    sealed trait ElimRes[V, B]
+    object ElimRes {
+      case class Exact[V, B](expr: Expr[V], f: V ≈⚬ B) extends ElimRes[V, B]
+      case class Closure[X, V, B](captured: Exprs[X], expr: Expr[V], f: (X |*| V) ≈⚬ B) extends ElimRes[V, B]
+      case class Unused[V, B](vars: Set[Var[?]]) extends ElimRes[V, B]
+
+      def unused[V, B](unusedVar: Var[?]): ElimRes[V, B] =
+        Unused(Set(unusedVar))
+    }
+
+    def unzip[A, B1, B2](f: VArr[A, B1 |*| B2]): (VArr[A, B1], VArr[A, B2]) = {
+      val b1 = new Var[B1]
+      val b2 = new Var[B2]
+      (Prj1(f, b1, b2), Prj2(f, b1, b2))
+    }
+  }
+
+  type Expr[A] = VArr[?, A]
+
+  object Expr {
+    def variable[A](a: Var[A]): Expr[A] =
+      VArr.Id(a)
+
+    def zip[A, B](a: Expr[A], b: Expr[B]): Expr[A |*| B] =
+      a zip b
+
+    def unzip[A, B](p: Expr[A |*| B]): (Expr[A], Expr[B]) =
+      VArr.unzip(p)
+  }
+
+  type Exprs[A] = Tupled[Expr, A]
+
+  object Exprs {
+    def apply[A](a: Expr[A]): Exprs[A] =
+      Tupled.Single(a)
+
+    extension [A](es: Exprs[A]) {
+      def initialVars: Vars[?] =
+        es.mapReduce0[Vars[?]]([x] => (ex: Expr[x]) => ex.initialVars, _ zip _)
+
+      def elimStep[V](v: Var[V]): VArr.ElimStep[V, A] =
+        es match {
+          case Tupled.Single(a) =>
+            a.elimStep(v)
+          case Tupled.Zip(a1, a2) =>
+            VArr.ElimStep.ofZip(
+              v,
+              a1,
+              a2,
+              [w, b] => (w: Var[w], b: Exprs[b]) => b elimStep w,
+              [b] => (b: Exprs[b]) => b,
+            )
+        }
+    }
+  }
 
   sealed trait Tupled[F[_], A] {
-    def lookup[B](fb: F[B])(using Unique[F]): Option[Tupled.Contains[F, A, B]]
-
-    def compare[B](that: Tupled[F, B])(using Unique[F]): Tupled.Cmp[F, A, B]
-
     def zip[B](that: Tupled[F, B]): Tupled[F, A |*| B] =
       Tupled.Zip(this, that)
 
@@ -96,108 +290,45 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
       type G[x] = B
       mapReduce[G](map, [x, y] => (x: G[x], y: G[y]) => reduce(x, y))
     }
+
+    def fold(zip: [x, y] => (F[x], F[y]) => F[x |*| y]): F[A] =
+      mapReduce[F]([x] => (fx: F[x]) => fx, zip)
+
+    def trans[G[_]](f: [x] => F[x] => G[x]): Tupled[G, A] =
+      this match {
+        case Tupled.Single(a) => Tupled.Single(f(a))
+        case Tupled.Zip(x, y) => Tupled.Zip(x.trans(f), y.trans(f))
+      }
   }
 
   object Tupled {
-    case class Single[F[_], A](v: F[A]) extends Tupled[F, A] {
-      override def lookup[B](w: F[B])(using F: Unique[F]): Option[Contains[F, A, B]] =
-        F.testEqual(v, w).map(_.substituteCo[Contains[F, A, *]](Contains.Id[F, A]()))
+    case class Single[F[_], A](v: F[A]) extends Tupled[F, A]
+    case class Zip[F[_], X, Y](_1: Tupled[F, X], _2: Tupled[F, Y]) extends Tupled[F, X |*| Y]
 
-      override def compare[B](that: Tupled[F, B])(using F: Unique[F]): Cmp[F, A, B] =
-        that match {
-          case Single(w) =>
-            F.testEqual(v, w) match {
-              case Some(ev) => Cmp.Iso(~⚬.Id0(ev))
-              case None     => Cmp.Disjoint()
-            }
-          case other =>
-            (other compare this).invert
-        }
-    }
-
-    case class Zip[F[_], X, Y](_1: Tupled[F, X], _2: Tupled[F, Y]) extends Tupled[F, X |*| Y] {
-      override def lookup[B](w: F[B])(using Unique[F]): Option[Contains[F, X |*| Y, B]] =
-        _1.lookup(w) match {
-          case Some(contains) =>
-            contains match {
-              case Contains.Id()                => Some(Contains.Super(~⚬.Id(), _2))
-              case Contains.Super(f, remaining) => Some(Contains.Super(~⚬.fst(f) > ~⚬.assocLR, remaining zip _2))
-            }
-          case None =>
-            _2.lookup(w) match {
-              case Some(contains) =>
-                contains match {
-                  case Contains.Id()                => Some(Contains.Super(~⚬.swap, _1))
-                  case Contains.Super(f, remaining) => Some(Contains.Super(~⚬.snd(f) > ~⚬.xi, _1 zip remaining))
-                }
-              case None =>
-                None
-            }
-        }
-
-      override def compare[B](that: Tupled[F, B])(using Unique[F]): Cmp[F, X |*| Y, B] = {
-        import Cmp._
-
-        (_1 compare that) match {
-          case Disjoint() =>
-            (_2 compare that) match {
-              case Disjoint() => Disjoint()
-              case other => ??? // TODO
-            }
-          case Iso(s) =>
-            Superset(~⚬.fst(s), _2)
-          case Superset(s, unused) =>
-            Superset(~⚬.fst(s) > ~⚬.assocLR, unused zip _2)
-          case Subset(missing, s) =>
-            (_2 compare missing) match {
-              case Disjoint() => SymDiff(missing, ~⚬.assocRL > ~⚬.fst(s), _2)
-              case other => ??? // TODO
-            }
-          case SymDiff(missing, s, unused) =>
-            (_2 compare missing) match {
-              case Disjoint() => SymDiff(missing, ~⚬.assocRL > ~⚬.fst(s) > ~⚬.assocLR, unused zip _2)
-              case other => ??? // TODO
-            }
-        }
+    def unzip[F[_], A, B](ab: Tupled[F, A |*| B]): Option[(Tupled[F, A], Tupled[F, B])] =
+      ab match {
+        case Zip(a, b) => Some((a, b))
+        case Single(_) => None
       }
-    }
-
-    /** Witnesses that `Tupled[F, A]` contains a variable `Var[B]`. */
-    sealed trait Contains[F[_], A, B]
-    object Contains {
-      case class Id[F[_], X]() extends Contains[F, X, X]
-      case class Super[F[_], A, B, X](f: A ~⚬ (B |*| X), remaining: Tupled[F, X]) extends Contains[F, A, B]
-    }
-
-    sealed trait Cmp[F[_], A, B] {
-      import Cmp._
-
-      def invert: Cmp[F, B, A] =
-        this match {
-          case Disjoint()       => Disjoint()
-          case Iso(s)           => Iso(s.invert)
-          case Superset(s, v)   => Subset(v, ~⚬.swap > s.invert)
-          case Subset(v, s)     => Superset(s.invert > ~⚬.swap, v)
-          case SymDiff(v, s, w) => SymDiff(w, ~⚬.swap > s.invert > ~⚬.swap, v)
-        }
-    }
-
-    object Cmp {
-      case class Disjoint[F[_], A, B]() extends Cmp[F, A, B]
-      case class Iso[F[_], A, B](s: A ~⚬ B) extends Cmp[F, A, B]
-      case class Superset[F[_], A, B, Y](s: A ~⚬ (B |*| Y), unused: Tupled[F, Y]) extends Cmp[F, A, B]
-      case class Subset[F[_], X, A, B](missing: Tupled[F, X], s: (X |*| A) ~⚬ B) extends Cmp[F, A, B]
-      case class SymDiff[F[_], X, A, B, Y](missing: Tupled[F, X], s: (X |*| A) ~⚬ (B |*| Y), unused: Tupled[F, Y]) extends Cmp[F, A, B]
-    }
   }
 
   type Vars[A] = Tupled[Var, A]
   object Vars {
-    type Cmp[A, B] = Tupled.Cmp[Var, A, B]
-    val Cmp = Tupled.Cmp
 
     def single[A](a: Var[A]): Vars[A] =
       Tupled.Single(a)
+
+    def bi[A, B](a: Var[A], b: Var[B]): Vars[A |*| B] =
+      zip(single(a), single(b))
+
+    def zip[A, B](a: Vars[A], b: Vars[B]): Vars[A |*| B] =
+      Tupled.Zip(a, b)
+
+    def unzip[A, B](ab: Vars[A |*| B]): Option[(Vars[A], Vars[B])] =
+      Tupled.unzip(ab)
+
+    def sameVars[A](a: Vars[A], b: Vars[A]): Boolean =
+      a == b
 
     def toSet[A](vars: Vars[A]): Set[Var[?]] =
       vars.mapReduce0(
@@ -211,240 +342,59 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
       Vars.toSet(vars)
   }
 
-  trait Abstractable[F[_]] {
-    // TODO: Don't take previously consumed variables.
-    // Instead, return a precise description of the variables consumed by _this_ invocation,
-    // so that such descriptions can be merged.
-    def abs[A, B](vars: Vars[A], expr: F[B], consumed: Set[Var[_]]): AbsRes[A, B]
-  }
-
-  object Abstractable {
-    def apply[F[_]](implicit ev: Abstractable[F]): Abstractable[F] =
-      ev
-
-    implicit val abstractableUninhabited: Abstractable[Uninhabited] =
-      new Abstractable[Uninhabited] {
-        override def abs[A, B](vars: Vars[A], expr: Uninhabited[B], consumed: Set[Var[_]]): AbsRes[A, B] =
-          expr.as[AbsRes[A, B]]
-      }
-
-    implicit def abstractableExpr[F[_]](using
-      Abstractable[F],
-      Semigroupoid[-⚬],
-    ): Abstractable[Expr[F, *]] =
-      new Abstractable[Expr[F, *]] {
-        override def abs[A, B](
-          vars: Vars[A],
-          expr: Expr[F, B],
-          consumed: Set[Var[?]],
-        ): AbsRes[A, B] =
-          Lambda.this.abs(vars, expr, consumed)
-      }
-  }
-
-  def abs[F[_], A, B](
-    f: Expr[F, A] => Expr[F, B],
+  def abs[A, B](
+    f: Expr[A] => Expr[B],
   )(using
-    F: Abstractable[F],
+    ev: SymmetricSemigroupalCategory[-⚬, |*|],
+  ): Abstracted[A, B] = {
+    import VArr.ElimRes
+
+    val v = new Var[A]()
+    val b = f(Expr.variable(v))
+
+    b.elim(v) match {
+      case ElimRes.Exact(e, f) =>
+        e match {
+          case VArr.Id(`v`) => Abstracted.Exact(f)
+          case other        => bug(s"Expected ${Expr.variable(v)}, got $other")
+        }
+      case ElimRes.Closure(captured, e, f) =>
+        e match {
+          case VArr.Id(`v`) => Abstracted.Closure(captured, f)
+          case other        => bug(s"Expected ${Expr.variable(v)}, got $other")
+        }
+      case ElimRes.Unused(vars) =>
+        Abstracted.Failure.underused(vars)
+    }
+  }
+
+  def compile[A, B](
+    f: Expr[A] => Expr[B],
+  )(using
     ev: SymmetricSemigroupalCategory[-⚬, |*|],
   ): Either[Error, A -⚬ B] = {
-    val a = new Var[A]()
-    val b = f(a)
-    abs[F, A, B](
-      vars = Vars.single(a),
-      expr = b,
-      consumed = Set.empty,
-    ) match {
-      case AbsRes.Exact(f, _)                => Right(f.fold)
-      case AbsRes.Partial(_, _, _)           => Left(LinearityViolation.underused(a))
-      case AbsRes.Closure(_, undefined, _)   => Left(Error.Undefined(undefined.toSet))
-      case AbsRes.PartialClosure(_, _, _, _) => Left(LinearityViolation.underused(a))
-      case AbsRes.Failure(e)                 => Left(e)
+    import Abstracted._
+    import Exprs.initialVars
+
+    abs(f) match {
+      case Exact(f)             => Right(f.fold)
+      case Closure(captured, _) => Left(Error.Undefined(captured.initialVars.toSet))
+      case Failure(e)           => Left(e)
     }
   }
 
-  def abs[F[_], A, B](
-    vars: Vars[A],
-    expr: Expr[F, B],
-    consumed: Set[Var[_]],
-  )(using
-    F: Abstractable[F],
-    ev: Semigroupoid[-⚬],
-  ): AbsRes[A, B] = {
-    import AbsRes._
-
-    def goPrj[Z, X](z: Expr[F, Z], vz: Var[Z], s: Z ~⚬ (B |*| X), b: Var[B], x: Var[X]): AbsRes[A, B] =
-      if (consumed.contains(vz)) {
-        if (consumed.contains(b))
-          Failure(LinearityViolation.overused(b))
-        else
-          vars.lookup(b) match {
-            case None =>
-              Failure(LinearityViolation.overused(vz))
-            case Some(contains) =>
-              contains match {
-                case Tupled.Contains.Id()           => Exact(id, consumed + b)
-                case Tupled.Contains.Super(f, vars) => Partial(pure(f), vars, consumed + b)
-              }
-          }
-      } else {
-        abs[F, A, Z](vars, z, consumed) match {
-          case Exact(f, consumed) =>
-            Partial(f > pure(s), Vars.single(x), consumed + b)
-          case Partial(f, vars, consumed) =>
-            Partial(f > pure(~⚬.fst(s) > ~⚬.assocLR), Vars.single(x) zip vars, consumed + b)
-          case Closure(f, undefined, consumed) =>
-            PartialClosure(f thenShuffle s, undefined, Vars.single(x), consumed + b)
-          case PartialClosure(f, undefined, remaining, consumed) =>
-            PartialClosure(f > pure(~⚬.fst(s) > ~⚬.assocLR), undefined, Vars.single(x) zip remaining, consumed + b)
-          case Failure(e) =>
-            Failure(e)
-        }
-      }
-
-    expr match {
-      case v: Var[B] =>
-        vars.lookup(v) match {
-          case None =>
-            consumed.contains(v) match {
-              case true =>
-                Failure(LinearityViolation.overused(v))
-              case false =>
-                PartialClosure(
-                  id[B |*| A],
-                  undefined = Vars.single(v),
-                  remaining = vars,
-                  consumed = consumed + v,
-                )
-            }
-          case Some(res) =>
-            res match {
-              case Tupled.Contains.Id()           => Exact(id, consumed + v)
-              case Tupled.Contains.Super(f, vars) => Partial(pure(f), vars, consumed + v)
-            }
-        }
-      case Zip(b1, b2) =>
-        abs(vars, b1, consumed) match {
-          case Partial(f, remaining, consumed) =>
-            abs(remaining, b2, consumed) match {
-              case Exact(g, consumed) =>
-                Exact(f > snd(g), consumed)
-              case Partial(g, remaining, consumed) =>
-                Partial(f > snd(g) > assocRL, remaining, consumed)
-              case Closure(g, undefined, consumed) =>
-                Closure(snd(f) > xi > snd(g), undefined, consumed)
-              case PartialClosure(g, undefined, remaining, consumed) =>
-                PartialClosure(snd(f) > xi > snd(g) > assocRL, undefined, remaining, consumed)
-              case Failure(e) =>
-                Failure(e)
-            }
-          case PartialClosure(f, undefined, remaining, consumed) =>
-            abs(remaining, b2, consumed) match {
-              case Exact(g, consumed) =>
-                Closure(f > snd(g), undefined, consumed)
-              case Closure(g, undefined1, consumed) =>
-                Closure(ix > fst(f) > assocLR > snd(swap > g), undefined zip undefined1, consumed)
-              case Partial(g, remaining, consumed) =>
-                PartialClosure(f > snd(g)> assocRL, undefined, remaining, consumed)
-              case PartialClosure(g, undefined1, remaining, consumed) =>
-                PartialClosure(ix > fst(f) > assocLR > snd(swap > g) > assocRL, undefined zip undefined1, remaining, consumed)
-              case Failure(e) =>
-                Failure(e)
-            }
-          case Exact(_, consumed) =>
-            // This is already an error: no vars left for b2.
-            // Run with the original vars for b2 just to construct a more precise error.
-            abs(vars, b2, consumed) match {
-              case Exact(_, _) | Closure(_, _, _)     => Failure.overused(vars.toSet)
-              case Partial(_, remaining, _)           => Failure.overused(vars.toSet diff remaining.toSet)
-              case PartialClosure(_, _, remaining, _) => Failure.overused(vars.toSet diff remaining.toSet)
-              case Failure(e)                         => Failure(e)
-            }
-          case Closure(_, _, consumed) =>
-            // This is already an error: no vars left for b2.
-            // Run with the original vars for b2 just to construct a more precise error.
-            abs(vars, b2, consumed) match {
-              case Exact(_, _) | Closure(_, _, _)     => Failure.overused(vars.toSet)
-              case Partial(_, remaining, _)           => Failure.overused(vars.toSet diff remaining.toSet)
-              case PartialClosure(_, _, remaining, _) => Failure.overused(vars.toSet diff remaining.toSet)
-              case Failure(e)                         => Failure(e)
-            }
-          case Failure(e) =>
-            Failure(e)
-        }
-      case Mapped(x, f, b) =>
-        if (consumed.contains(b)) {
-          Failure(LinearityViolation.overused(b))
-        } else {
-          vars.lookup(b) match {
-            case Some(contains) =>
-              contains match {
-                case Tupled.Contains.Id()           => Exact(id, consumed + b)
-                case Tupled.Contains.Super(f, vars) => Partial(pure(f), vars, consumed + b)
-              }
-            case None =>
-              abs(vars, x, consumed) match {
-                case Exact(g, consumed)                                => Exact(g > lift(f), consumed + b)
-                case Partial(g, remaining, consumed)                   => Partial(g > fst(lift(f)), remaining, consumed + b)
-                case Closure(g, undefined, consumed)                   => Closure(g > lift(f), undefined, consumed + b)
-                case PartialClosure(g, undefined, remaining, consumed) => PartialClosure(g > fst(lift(f)), undefined, remaining, consumed + b)
-                case Failure(e)                                        => Failure(e)
-              }
-          }
-        }
-      case Prj1(Split(bx, v, b, x)) =>
-        goPrj(bx, v, ~⚬.Id(), b, x)
-      case Prj2(Split(xb, v, x, b)) =>
-        goPrj(xb, v, ~⚬.swap, b, x)
-      case Ext(fb) =>
-        F.abs(vars, fb, consumed)
-
-    }
-  }
-
-  sealed trait AbsRes[A, B]
-  object AbsRes {
-    /**
-     * @param consumed keeps track of _all_ variables consumed so far
-     */
+  sealed trait Abstracted[A, B]
+  object Abstracted {
     case class Exact[A, B](
       f: A ≈⚬ B,
-      consumed: Set[Var[_]],
-    ) extends AbsRes[A, B]
+    ) extends Abstracted[A, B]
 
-    /**
-     * @param remaining non-consumed subset of `A`
-     * @param consumed keeps track of _all_ variables consumed so far
-     */
-    case class Partial[A, B, Y](
-      f: A ≈⚬ (B |*| Y),
-      remaining: Vars[Y],
-      consumed: Set[Var[_]],
-    ) extends AbsRes[A, B]
-
-    /**
-     * @param undefined variables not defined in the given context (to be captured from an outer context)
-     * @param consumed keeps track of _all_ variables consumed so far
-     */
     case class Closure[X, A, B](
+      captured: Exprs[X],
       f: (X |*| A) ≈⚬ B,
-      undefined: Vars[X],
-      consumed: Set[Var[_]],
-    ) extends AbsRes[A, B]
+    ) extends Abstracted[A, B]
 
-    /**
-     * @param undefined variables not defined in the given context (to be captured from an outer context)
-     * @param remaining non-consumed subset of `A`
-     * @param consumed keeps track of _all_ variables consumed so far
-     */
-    case class PartialClosure[X, A, B, Y](
-      f: (X |*| A) ≈⚬ (B |*| Y),
-      undefined: Vars[X],
-      remaining: Vars[Y],
-      consumed: Set[Var[_]],
-    ) extends AbsRes[A, B]
-
-    case class Failure[A, B](e: LinearityViolation) extends AbsRes[A, B]
+    case class Failure[A, B](e: LinearityViolation) extends Abstracted[A, B]
     object Failure {
       def overused[A, B](vars: Set[Var[_]]): Failure[A, B] =
         Failure(LinearityViolation.Overused(vars))
@@ -477,91 +427,6 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
       LinearityViolation.Underused(Set(v))
   }
 
-  sealed trait Uninhabited[A] {
-    def as[B]: B
-  }
-
-  type Expr0[A] = Expr[Uninhabited, A]
-
-  object Expr0 {
-    def zip[A, B](a: Expr0[A], b: Expr0[B]): Expr0[A |*| B] =
-      Zip(a, b)
-
-    def unzip[A, B](p: Expr0[A |*| B]): (Expr0[A], Expr0[B]) =
-      Expr.unzip[Uninhabited, A, B](p)([x] => (fx: Uninhabited[x]) => fx.as[Var[x]])
-
-    def abs[A, B](
-      f: Expr0[A] => Expr0[B],
-    )(using
-      ev: SymmetricSemigroupalCategory[-⚬, |*|],
-    ): Either[Error, A -⚬ B] =
-      Lambda.this.abs[Uninhabited, A, B](f)
-  }
-
-  trait AbsTrans[G[_[_], _]] {
-    def apply[F[_]: Abstractable]: Abstractable[G[F, *]]
-  }
-
-  case class ExprF[G[_[_], _], A](unfix: Expr[G[ExprF[G, *], *], A])
-
-  object ExprF {
-    def fix[G[_[_], _], A](value: Expr[G[ExprF[G, *], *], A]): ExprF[G, A] =
-      ExprF(value)
-
-    def lift[G[_[_], _], A](ga: G[ExprF[G, *], A]): ExprF[G, A] =
-      fix(Ext(ga))
-
-    def map[G[_[_], _], A, B](a: ExprF[G, A], f: A -⚬ B): ExprF[G, B] =
-      fix(Mapped(a.unfix, f, new Var[B]))
-
-    def zip[G[_[_], _], A, B](a: ExprF[G, A], b: ExprF[G, B]): ExprF[G, A |*| B] =
-      fix(Zip(a.unfix, b.unfix))
-
-    def unzip[G[_[_], _], A, B](
-      ab: ExprF[G, A |*| B],
-    )(
-      resultVar: [x] => G[ExprF[G, *], x] => Var[x],
-    ): (ExprF[G, A], ExprF[G, B]) = {
-      val (a, b) = Expr.unzip(ab.unfix)(resultVar)
-      (fix(a), fix(b))
-    }
-
-    implicit def abstractableExprF[G[_[_], _]](implicit
-      G: AbsTrans[G],
-      ev: Semigroupoid[-⚬],
-    ): Abstractable[ExprF[G, *]] =
-      new Abstractable[ExprF[G, *]] { self =>
-        implicit val abstractableG: Abstractable[G[ExprF[G, *], *]] =
-          G.apply[ExprF[G, *]](self)
-
-        override def abs[A, B](
-          vars: Vars[A],
-          expr: ExprF[G, B],
-          consumed: Set[Var[_]],
-        ): AbsRes[A, B] =
-          Lambda.this.abs[G[ExprF[G, *], *], A, B](vars, expr.unfix, consumed)
-      }
-
-    def abs[G[_[_], _], A, B](
-      vars: Vars[A],
-      expr: ExprF[G, B],
-      consumed: Set[Var[_]],
-    )(using
-      G: AbsTrans[G],
-      ev: SymmetricSemigroupalCategory[-⚬, |*|],
-    ): AbsRes[A, B] =
-      Abstractable[ExprF[G, *]].abs(vars, expr, consumed)
-
-    def abs[G[_[_], _], A, B](
-      f: ExprF[G, A] => ExprF[G, B],
-    )(using
-      G: AbsTrans[G],
-      ev: SymmetricSemigroupalCategory[-⚬, |*|],
-    ): Either[Error, A -⚬ B] = {
-      implicit val abstractableG: Abstractable[G[ExprF[G, *], *]] =
-        G.apply[ExprF[G, *]]
-
-      Lambda.this.abs[G[ExprF[G, *], *], A, B](fa => f(ExprF.fix(fa)).unfix)
-    }
-  }
+  private def bug(msg: String): Nothing =
+    throw new AssertionError(msg)
 }
