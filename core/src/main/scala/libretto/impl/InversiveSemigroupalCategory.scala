@@ -1,9 +1,8 @@
 package libretto.impl
 
 trait InversiveSemigroupalCategory[->[_, _], |*|[_, _], `-`[_]]
-  extends
-    ClosedSymmetricSemigroupalCategory[->, |*|, [x, y] =>> -[x] |*| y] {
-
+  extends ClosedSymmetricSemigroupalCategory[->, |*|, [x, y] =>> -[x] |*| y]
+{
   def contrapositive[A, B](f: A -> B): -[B] -> -[A]
 
   /** Double inversion introduction. */
