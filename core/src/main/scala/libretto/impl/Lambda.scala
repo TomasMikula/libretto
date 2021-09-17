@@ -36,7 +36,7 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     def initialVars: Vars[A] =
       this match {
         case Id(a) => Vars.single(a)
-        // TODO
+        case other => UnhandledCase.raise(s"$other")
       }
 
     def map[C](f: B -⚬ C): VArr[A, C] =
@@ -138,7 +138,7 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
             case Exact(e, f) =>
               captured.elimStep(e.resultVar) match {
                 case NotFound() => Closure(captured, e, snd(f))
-                // TODO
+                case other => UnhandledCase.raise(s"$other")
               }
             case HalfUsed(f, u) =>
               captured.elimStep(u) match {
@@ -147,7 +147,8 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
                 case Closure(captured1, _, h) => f.withCaptured(captured1).map(snd(swap) > assocRL > fst(h))
                 case HalfUsed(g, w)           => HalfUsed(ElimStep.thenSnd(f, g) map (assocRL > fst(swap)), w)
               }
-            // TODO
+            case other @ Closure(_, _, _) =>
+              UnhandledCase.raise(s"$other")
           }
         }
       }
@@ -184,14 +185,18 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
                 ElimStep.Closure(exprs(f1), e2, snd(g2))
               case ElimStep.Closure(x, e2, g2) =>
                 ElimStep.Closure(exprs(f1) zip x, e2, assocLR > snd(g2))
-              // TODO
+              case other @ ElimStep.HalfUsed(_, _) =>
+                UnhandledCase.raise(s"$other")
             }
           case ElimStep.Exact(e1, g1) =>
             elimStep(v, f2) match {
               case ElimStep.NotFound() =>
                 ElimStep.Closure(exprs(f2), e1, snd(g1) > swap)
-              // TODO
+              case other =>
+                UnhandledCase.raise(s"$other")
             }
+          case other @ ElimStep.Closure(_, _, _) =>
+            UnhandledCase.raise(s"$other")
           case ElimStep.HalfUsed(h1, u) =>
             elimStep(u, f2) match {
               case ElimStep.NotFound() =>
@@ -203,14 +208,13 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
               case ElimStep.HalfUsed(g2, w) =>
                 ElimStep.halfUsed1(ElimStep.thenSnd(h1, g2).map(assocRL), w)
             }
-          // TODO
         }
 
       def thenSnd[V, B1, X, B2](f: Found[V, B1 |*| X], g: Found[X, B2]): Found[V, B1 |*| B2] =
         g match {
           case Exact(g0, g1)   => f.map(snd(g1))
           case HalfUsed(g0, u) => HalfUsed(thenSnd(f, g0).map(assocRL), u)
-          // TODO
+          case other @ Closure(_, _, _) => UnhandledCase.raise(s"$other")
         }
     }
 
