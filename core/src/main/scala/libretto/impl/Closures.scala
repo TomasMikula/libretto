@@ -2,10 +2,11 @@ package libretto.impl
 
 import libretto.BiInjective
 
-class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _]](using
+class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet](using
   inj: BiInjective[|*|],
+  variables: Variable[Var, VarSet],
 ) {
-  val lambdas = new Lambda[-⚬, |*|]
+  val lambdas = new Lambda[-⚬, |*|, Var, VarSet]
   import lambdas.{Abstracted, Expr, Var, shuffled}
   import shuffled.{Shuffled => ≈⚬}
 
@@ -38,16 +39,5 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _]](using
   enum ClosureError {
     case NonLinear(e: lambdas.LinearityViolation)
     case NoCapture(msg: String)
-  }
-
-  object ClosureError {
-    def overused(v: Var[_]): ClosureError.NonLinear =
-      NonLinear(lambdas.LinearityViolation.overused(v))
-
-    def underused(v: Var[_]): ClosureError.NonLinear =
-      NonLinear(lambdas.LinearityViolation.underused(v))
-
-    def underused(vars: Set[Var[?]]): ClosureError.NonLinear =
-      NonLinear(lambdas.LinearityViolation.Underused(vars))
   }
 }

@@ -2,27 +2,15 @@ package libretto.impl
 
 import libretto.BiInjective
 
-class Lambda[-⚬[_, _], |*|[_, _]](using
+class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
   inj: BiInjective[|*|],
+  variables: Variable[Var, VarSet],
 ) {
+  import variables.{newVar, testEqual}
 
   val shuffled = new Shuffled[-⚬, |*|]
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
   import shuffled.{Shuffled => ≈⚬, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
-
-  class Var[A]() {
-    def testEqual[B](that: Var[B]): Option[A =:= B] =
-      if (this eq that) Some(summon[A =:= A].asInstanceOf[A =:= B])
-      else None
-  }
-
-  object Var {
-    given Unique[Var] =
-      new Unique[Var] {
-        override def testEqual[A, B](a: Var[A], b: Var[B]): Option[A =:= B] =
-          a testEqual b
-      }
-  }
 
   /**
    * Arrow interspersed with intermediate [[Var]]s.
@@ -40,13 +28,13 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
       }
 
     def map[C](f: B -⚬ C): VArr[A, C] =
-      Map(this, f, new Var[C])
+      Map(this, f, newVar[C]())
 
     def zip[C, D](that: VArr[C, D]): VArr[A |*| C, B |*| D] =
-      Zip(this, that, new Var[B |*| D])
+      Zip(this, that, newVar[B |*| D]())
 
     def elimStep[V](v: Var[V]): ElimStep[V, B] =
-      (v testEqual resultVar) match {
+      testEqual(v, resultVar) match {
         case Some(ev) =>
           ElimStep.Exact(ev.substituteContra(this), id(ev))
         case None =>
@@ -72,10 +60,10 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
 
     def elim[V](v: Var[V]): ElimRes[V, B] =
       this.elimStep(v) match {
-        case ElimStep.NotFound()       => ElimRes.unused(v)
+        case ElimStep.NotFound()       => ElimRes.Unused(variables.singleton(v))
         case ElimStep.Exact(e, f)      => ElimRes.Exact(e, f)
         case ElimStep.Closure(x, e, f) => ElimRes.Closure(x, e, f)
-        case ElimStep.HalfUsed(_, u)   => ElimRes.Unused(Set(u)) // TODO: report all half-used vars
+        case ElimStep.HalfUsed(_, u)   => ElimRes.Unused(variables.singleton(u)) // TODO: also report all half-used vars
       }
   }
 
@@ -222,15 +210,12 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     object ElimRes {
       case class Exact[V, B](expr: Expr[V], f: V ≈⚬ B) extends ElimRes[V, B]
       case class Closure[X, V, B](captured: Exprs[X], expr: Expr[V], f: (X |*| V) ≈⚬ B) extends ElimRes[V, B]
-      case class Unused[V, B](vars: Set[Var[?]]) extends ElimRes[V, B]
-
-      def unused[V, B](unusedVar: Var[?]): ElimRes[V, B] =
-        Unused(Set(unusedVar))
+      case class Unused[V, B](vars: VarSet) extends ElimRes[V, B]
     }
 
     def unzip[A, B1, B2](f: VArr[A, B1 |*| B2]): (VArr[A, B1], VArr[A, B2]) = {
-      val b1 = new Var[B1]
-      val b2 = new Var[B2]
+      val b1 = newVar[B1]()
+      val b2 = newVar[B2]()
       (Prj1(f, b1, b2), Prj2(f, b1, b2))
     }
   }
@@ -294,15 +279,15 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
     def sameVars[A](a: Vars[A], b: Vars[A]): Boolean =
       a == b
 
-    def toSet[A](vars: Vars[A]): Set[Var[?]] =
+    def toSet[A](vars: Vars[A]): VarSet =
       vars.mapReduce0(
-        map    = [x] => (v: Var[x]) => Set[Var[?]](v),
-        reduce = _ union _,
+        map    = [x] => (v: Var[x]) => variables.singleton(v),
+        reduce = variables.union(_, _),
       )
   }
 
   extension [A](vars: Vars[A]) {
-    def toSet: Set[Var[?]] =
+    def toSet: VarSet =
       Vars.toSet(vars)
   }
 
@@ -313,7 +298,7 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
   ): Abstracted[A, B] = {
     import VArr.ElimRes
 
-    val v = new Var[A]()
+    val v = newVar[A]()
     val b = f(Expr.variable(v))
 
     b.elim(v) match {
@@ -360,35 +345,31 @@ class Lambda[-⚬[_, _], |*|[_, _]](using
 
     case class Failure[A, B](e: LinearityViolation) extends Abstracted[A, B]
     object Failure {
-      def overused[A, B](vars: Set[Var[_]]): Failure[A, B] =
+      def overused[A, B](vars: VarSet): Failure[A, B] =
         Failure(LinearityViolation.Overused(vars))
 
-      def underused[A, B](vars: Set[Var[_]]): Failure[A, B] =
+      def underused[A, B](vars: VarSet): Failure[A, B] =
         Failure(LinearityViolation.Underused(vars))
     }
   }
 
   sealed trait Error
   object Error {
-    case class Undefined(vars: Set[Var[_]]) extends Error
+    case class Undefined(vars: VarSet) extends Error
   }
 
   sealed trait LinearityViolation extends Error
 
   object LinearityViolation {
-    case class Overused(vars: Set[Var[_]]) extends LinearityViolation {
-      require(vars.nonEmpty)
-    }
+    case class Overused(vars: VarSet) extends LinearityViolation
 
-    case class Underused(vars: Set[Var[_]]) extends LinearityViolation {
-      require(vars.nonEmpty)
-    }
+    case class Underused(vars: VarSet) extends LinearityViolation
 
-    def overused(v: Var[_]): LinearityViolation.Overused =
-      LinearityViolation.Overused(Set(v))
+    def overused[A](v: Var[A]): LinearityViolation.Overused =
+      LinearityViolation.Overused(variables.singleton(v))
 
-    def underused(v: Var[_]): LinearityViolation.Underused =
-      LinearityViolation.Underused(Set(v))
+    def underused[A](v: Var[A]): LinearityViolation.Underused =
+      LinearityViolation.Underused(variables.singleton(v))
   }
 
   private def bug(msg: String): Nothing =

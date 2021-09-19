@@ -396,7 +396,7 @@ object FreeScalaDSL extends ScalaDSL {
       override def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B                                           = FreeScalaDSL.this.eval[A, B]
     }
 
-  val closures = new Closures[-⚬, |*|, =⚬]
+  val closures = new Closures[-⚬, |*|, =⚬, Var, Set[Var[?]]]
   val lambdas: closures.lambdas.type = closures.lambdas
 
   override type $[A] = lambdas.Expr[A]
@@ -448,6 +448,6 @@ object FreeScalaDSL extends ScalaDSL {
     }
 
   override class NotLinearException(msg: String) extends Exception(msg)
-  override class UnboundVariablesException(vs: Set[lambdas.Var[?]]) extends Exception
+  override class UnboundVariablesException(vs: Set[Var[?]]) extends Exception
   override class NoCaptureException(msg: String) extends Exception
 }
