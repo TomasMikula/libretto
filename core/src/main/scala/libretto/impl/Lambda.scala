@@ -6,7 +6,7 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
   inj: BiInjective[|*|],
   variables: Variable[Var, VarSet],
 ) {
-  import variables.{newVar, testEqual}
+  import variables.testEqual
 
   val shuffled = new Shuffled[-⚬, |*|]
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
@@ -25,11 +25,14 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
         case other => UnhandledCase.raise(s"$other")
       }
 
-    def map[C](f: B -⚬ C): VArr[A, C] =
-      Map(this, f, newVar[C]())
+    def map[C](f: B -⚬ C)(resultVar: Var[C]): VArr[A, C] =
+      Map(this, f, resultVar)
 
-    def zip[C, D](that: VArr[C, D]): VArr[A |*| C, B |*| D] =
-      Zip(this, that, newVar[B |*| D]())
+    def par[C, D](that: VArr[C, D]): VArr[A |*| C, B |*| D] =
+      Par(this, that)
+
+    def zip[C, D](that: VArr[C, D])(resultVar: Var[B |*| D]): VArr[A |*| C, B |*| D] =
+      Zip(this, that, resultVar)
 
     def elimStep[V](v: Var[V]): ElimStep[V, B] =
       this match {
@@ -174,7 +177,7 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
               case ElimStep.Exact(e2, g2) =>
                 ElimStep.Closure(f1, e2, snd(g2))
               case ElimStep.Closure(x, e2, g2) =>
-                ElimStep.Closure(f1 zip x, e2, assocLR > snd(g2))
+                ElimStep.Closure(f1 par x, e2, assocLR > snd(g2))
               case other @ ElimStep.HalfUsed(_, _) =>
                 UnhandledCase.raise(s"$other")
             }
@@ -215,11 +218,8 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
       case class Unused[V, B](vars: VarSet) extends ElimRes[V, B]
     }
 
-    def unzip[A, B1, B2](f: VArr[A, B1 |*| B2]): (VArr[A, B1], VArr[A, B2]) = {
-      val b1 = newVar[B1]()
-      val b2 = newVar[B2]()
-      (Prj1(f, b1, b2), Prj2(f, b1, b2))
-    }
+    def unzip[A, B1, B2](f: VArr[A, B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (VArr[A, B1], VArr[A, B2]) =
+      (Prj1(f, resultVar1, resultVar2), Prj2(f, resultVar1, resultVar2))
   }
 
   type Expr[A] = VArr[?, A]
@@ -230,11 +230,11 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
     def variable[A](a: Var[A]): Expr[A] =
       VArr.Id(a)
 
-    def zip[A, B](a: Expr[A], b: Expr[B]): Expr[A |*| B] =
-      a zip b
+    def zip[A, B](a: Expr[A], b: Expr[B])(resultVar: Var[A |*| B]): Expr[A |*| B] =
+      (a zip b)(resultVar)
 
-    def unzip[A, B](p: Expr[A |*| B]): (Expr[A], Expr[B]) =
-      VArr.unzip(p)
+    def unzip[A, B](p: Expr[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (Expr[A], Expr[B]) =
+      VArr.unzip(p)(resultVar1, resultVar2)
   }
 
   type Tupled[F[_], A] = libretto.impl.Tupled[|*|, F, A]
@@ -270,24 +270,24 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
 
   def abs[A, B](
     f: Expr[A] => Expr[B],
+    boundVar: Var[A],
   )(using
     ev: SymmetricSemigroupalCategory[-⚬, |*|],
   ): Abstracted[A, B] = {
     import VArr.ElimRes
 
-    val v = newVar[A]()
-    val b = f(Expr.variable(v))
+    val b = f(Expr.variable(boundVar))
 
-    b.elim(v) match {
+    b.elim(boundVar) match {
       case ElimRes.Exact(e, f) =>
         e match {
-          case VArr.Id(`v`) => Abstracted.Exact(f)
-          case other        => bug(s"Expected ${Expr.variable(v)}, got $other")
+          case VArr.Id(`boundVar`) => Abstracted.Exact(f)
+          case other        => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
         }
       case ElimRes.Closure(captured, e, f) =>
         e match {
-          case VArr.Id(`v`) => Abstracted.Closure(captured, f)
-          case other        => bug(s"Expected ${Expr.variable(v)}, got $other")
+          case VArr.Id(`boundVar`) => Abstracted.Closure(captured, f)
+          case other        => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
         }
       case ElimRes.Unused(vars) =>
         Abstracted.Failure.underused(vars)
@@ -296,12 +296,13 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
 
   def compile[A, B](
     f: Expr[A] => Expr[B],
+    boundVar: Var[A],
   )(using
     ev: SymmetricSemigroupalCategory[-⚬, |*|],
   ): Either[Error, A -⚬ B] = {
     import Abstracted._
 
-    abs(f) match {
+    abs(f, boundVar) match {
       case Exact(f)             => Right(f.fold)
       case Closure(captured, _) => Left(Error.Undefined(captured.initialVars.toSet))
       case Failure(e)           => Left(e)

@@ -9,9 +9,6 @@ class Var[A]() {
 object Var {
   given Variable[Var, Set[Var[?]]] =
     new Variable[Var, Set[Var[?]]] {
-      override def newVar[A](): Var[A] =
-        new Var[A]()
-
       override def testEqual[A, B](a: Var[A], b: Var[B]): Option[A =:= B] =
         a testEqual b
 

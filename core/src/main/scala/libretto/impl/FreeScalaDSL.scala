@@ -403,20 +403,20 @@ object FreeScalaDSL extends ScalaDSL {
 
   override val `$`: ClosureOps  = new ClosureOps {
     override def map[A, B](a: $[A])(f: A -⚬ B): $[B] =
-      a map f
+      (a map f)(new Var[B])
 
     override def zip[A, B](a: $[A], b: $[B]): $[A |*| B] =
-      a zip b
+      (a zip b)(new Var[A |*| B])
 
     override def unzip[A, B](ab: $[A |*| B]): ($[A], $[B]) =
-      lambdas.Expr.unzip(ab)
+      lambdas.Expr.unzip(ab)(new Var[A], new Var[B])
 
     override def app[A, B](f: $[A =⚬ B], a: $[A]): $[B] =
-      closures.app(f, a)
+      closures.app(f, a)(new Var[B])
   }
 
   override def λ[A, B](f: $[A] => $[B]): A -⚬ B =
-    lambdas.compile(f) match {
+    lambdas.compile(f, boundVar = new Var[A]) match {
       case Right(f) =>
         f
       case Left(e) =>
@@ -430,7 +430,7 @@ object FreeScalaDSL extends ScalaDSL {
     }
 
   override def Λ[A, B](f: $[A] => $[B]): $[A =⚬ B] =
-    closures.closure[A, B](f) match {
+    closures.closure[A, B](f, boundVar = new Var[A], resultVar = new Var[A =⚬ B]) match {
       case Right(f) =>
         f
       case Left(e) =>
