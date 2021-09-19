@@ -29,8 +29,7 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet](using
       case Abstracted.Exact(_) =>
         Left(NoCapture("The closure does not capture any variables. Use an ordinary lambda instead"))
       case Abstracted.Closure(captured, f) =>
-        val captured1 = captured.fold([x, y] => (ex: Expr[x], ey: Expr[y]) => ex zip ey)
-        Right(captured1 map ev.curry(f.fold))
+        Right(captured map ev.curry(f.fold))
       case Abstracted.Failure(e) =>
         Left(NonLinear(e))
     }

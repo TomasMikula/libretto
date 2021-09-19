@@ -19,8 +19,6 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
   sealed trait VArr[A, B] {
     import VArr._
 
-    def resultVar: Var[B]
-
     def initialVars: Vars[A] =
       this match {
         case Id(a) => Vars.single(a)
@@ -34,27 +32,26 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
       Zip(this, that, newVar[B |*| D]())
 
     def elimStep[V](v: Var[V]): ElimStep[V, B] =
-      testEqual(v, resultVar) match {
-        case Some(ev) =>
-          ElimStep.Exact(ev.substituteContra(this), id(ev))
-        case None =>
-          this match {
-            case Id(b) =>
-              ElimStep.NotFound()
-            case Map(f, g, b) =>
-              f.elimStep(v).map(g)
-            case Prj1(f, b1, b2) =>
-              ElimStep.halfUsed1(f.elimStep(v), b2)
-            case Prj2(f, b1, b2) =>
-              ElimStep.halfUsed2(f.elimStep(v), b1)
-            case Zip(f1: Expr[b1], f2: Expr[b2], b) =>
-              ElimStep.ofZip[Expr, V, b1, b2](
-                v,
-                f1,
-                f2,
-                [w, b] => (w: Var[w], b: Expr[b]) => b elimStep w,
-                [b] => (b: Expr[b]) => Exprs(b),
-              )
+      this match {
+        case Par(f1, f2) =>
+          ElimStep.ofPar(v, f1, f2)
+        case thiz: VarDefining[A, B] =>
+          testEqual(v, thiz.resultVar) match {
+            case Some(ev) =>
+              ElimStep.Exact(ev.substituteContra(thiz), id(ev))
+            case None =>
+              thiz match {
+                case Id(b) =>
+                  ElimStep.NotFound()
+                case Map(f, g, b) =>
+                  f.elimStep(v).map(g)
+                case Prj1(f, b1, b2) =>
+                  ElimStep.halfUsed1(f.elimStep(v), b2)
+                case Prj2(f, b1, b2) =>
+                  ElimStep.halfUsed2(f.elimStep(v), b1)
+                case Zip(f1, f2, _) =>
+                  ElimStep.ofPar(v, f1, f2)
+              }
           }
       }
 
@@ -68,7 +65,11 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
   }
 
   object VArr {
-    case class Id[A](variable: Var[A]) extends VArr[A, A] {
+    sealed trait VarDefining[A, B] extends VArr[A, B] {
+      def resultVar: Var[B]
+    }
+
+    case class Id[A](variable: Var[A]) extends VarDefining[A, A] {
       override def resultVar: Var[A] =
         variable
     }
@@ -77,20 +78,26 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
       f: VArr[A, B],
       g: B -⚬ C,
       resultVar: Var[C],
-    ) extends VArr[A, C]
+    ) extends VarDefining[A, C]
 
+    case class Par[A1, A2, B1, B2](
+      f1: VArr[A1, B1],
+      f2: VArr[A2, B2],
+    ) extends VArr[A1 |*| A2, B1 |*| B2]
+
+    /** Like [[Par]], but defines a new variable to store the result */
     case class Zip[A1, A2, B1, B2](
       f1: VArr[A1, B1],
       f2: VArr[A2, B2],
       resultVar: Var[B1 |*| B2],
-    ) extends VArr[A1 |*| A2, B1 |*| B2]
+    ) extends VarDefining[A1 |*| A2, B1 |*| B2]
 
-    case class Prj1[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VArr[A, B1] {
+    case class Prj1[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VarDefining[A, B1] {
       override def resultVar: Var[B1] =
         b1
     }
 
-    case class Prj2[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VArr[A, B2] {
+    case class Prj2[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VarDefining[A, B2] {
       override def resultVar: Var[B2] =
         b2
     }
@@ -119,9 +126,7 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
             // TODO
           }
 
-        def withCaptured[X](captured: Exprs[X]): Found[V, X |*| B] = {
-          import Exprs.elimStep
-
+        def withCaptured[X](captured: Expr[X]): Found[V, X |*| B] =
           this match {
             case Exact(e, f) =>
               captured.elimStep(e.resultVar) match {
@@ -138,11 +143,10 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
             case other @ Closure(_, _, _) =>
               UnhandledCase.raise(s"$other")
           }
-        }
       }
 
-      case class Exact[V, B](expr: Expr[V], f: V ≈⚬ B) extends Found[V, B]
-      case class Closure[X, V, B](captured: Exprs[X], expr: Expr[V], f: (X |*| V) ≈⚬ B) extends Found[V, B]
+      case class Exact[V, B](expr: Expr.VarDefining[V], f: V ≈⚬ B) extends Found[V, B]
+      case class Closure[X, V, B](captured: Expr[X], expr: Expr[V], f: (X |*| V) ≈⚬ B) extends Found[V, B]
       case class HalfUsed[V, B, U](f: Found[V, B |*| U], unused: Var[U]) extends Found[V, B]
 
       def halfUsed1[V, B, U](step: ElimStep[V, B |*| U], u: Var[U]): ElimStep[V, B] =
@@ -154,41 +158,39 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
       def halfUsed2[V, U, B](step: ElimStep[V, U |*| B], u: Var[U]): ElimStep[V, B] =
         halfUsed1(step.map(swap[U, B]), u)
 
-      def closure[X, V, W, B](captured: Exprs[X], f: Found[V, W], g: (X |*| W) ≈⚬ B): ElimStep[V, B] =
+      def closure[X, V, W, B](captured: Expr[X], f: Found[V, W], g: (X |*| W) ≈⚬ B): ElimStep[V, B] =
         f.withCaptured(captured).map(g)
 
-      def ofZip[F[_], V, B1, B2](
+      def ofPar[V, B1, B2](
         v: Var[V],
-        f1: F[B1],
-        f2: F[B2],
-        elimStep: [v, b] => (Var[v], F[b]) => ElimStep[v, b],
-        exprs: [b] => F[b] => Exprs[b],
+        f1: Expr[B1],
+        f2: Expr[B2],
       ): ElimStep[V, B1 |*| B2] =
-        elimStep(v, f1) match {
+        f1.elimStep(v) match {
           case ElimStep.NotFound() =>
-            elimStep(v, f2) match {
+            f2.elimStep(v) match {
               case ElimStep.NotFound() =>
                 ElimStep.NotFound()
               case ElimStep.Exact(e2, g2) =>
-                ElimStep.Closure(exprs(f1), e2, snd(g2))
+                ElimStep.Closure(f1, e2, snd(g2))
               case ElimStep.Closure(x, e2, g2) =>
-                ElimStep.Closure(exprs(f1) zip x, e2, assocLR > snd(g2))
+                ElimStep.Closure(f1 zip x, e2, assocLR > snd(g2))
               case other @ ElimStep.HalfUsed(_, _) =>
                 UnhandledCase.raise(s"$other")
             }
           case ElimStep.Exact(e1, g1) =>
-            elimStep(v, f2) match {
+            f2.elimStep(v) match {
               case ElimStep.NotFound() =>
-                ElimStep.Closure(exprs(f2), e1, snd(g1) > swap)
+                ElimStep.Closure(f2, e1, snd(g1) > swap)
               case other =>
                 UnhandledCase.raise(s"$other")
             }
           case other @ ElimStep.Closure(_, _, _) =>
             UnhandledCase.raise(s"$other")
           case ElimStep.HalfUsed(h1, u) =>
-            elimStep(u, f2) match {
+            f2.elimStep(u) match {
               case ElimStep.NotFound() =>
-                halfUsed1(h1.withCaptured(exprs(f2)).map(assocRL > fst(swap)), u)
+                halfUsed1(h1.withCaptured(f2).map(assocRL > fst(swap)), u)
               case ElimStep.Exact(g2, h2) =>
                 h1 map snd(h2)
               case ElimStep.Closure(captured, g2, h2) =>
@@ -209,7 +211,7 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
     sealed trait ElimRes[V, B]
     object ElimRes {
       case class Exact[V, B](expr: Expr[V], f: V ≈⚬ B) extends ElimRes[V, B]
-      case class Closure[X, V, B](captured: Exprs[X], expr: Expr[V], f: (X |*| V) ≈⚬ B) extends ElimRes[V, B]
+      case class Closure[X, V, B](captured: Expr[X], expr: Expr[V], f: (X |*| V) ≈⚬ B) extends ElimRes[V, B]
       case class Unused[V, B](vars: VarSet) extends ElimRes[V, B]
     }
 
@@ -223,6 +225,8 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
   type Expr[A] = VArr[?, A]
 
   object Expr {
+    type VarDefining[A] = VArr.VarDefining[?, A]
+
     def variable[A](a: Var[A]): Expr[A] =
       VArr.Id(a)
 
@@ -235,35 +239,8 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
 
   type Tupled[F[_], A] = libretto.impl.Tupled[|*|, F, A]
 
-  type Exprs[A] = Tupled[Expr, A]
-
-  object Exprs {
-    def apply[A](a: Expr[A]): Exprs[A] =
-      Tupled.Single(a)
-
-    extension [A](es: Exprs[A]) {
-      def initialVars: Vars[?] =
-        es.mapReduce0[Vars[?]]([x] => (ex: Expr[x]) => ex.initialVars, _ zip _)
-
-      def elimStep[V](v: Var[V]): VArr.ElimStep[V, A] =
-        es match {
-          case Tupled.Single(a) =>
-            a.elimStep(v)
-          case Tupled.Zip(a1, a2) =>
-            VArr.ElimStep.ofZip(
-              v,
-              a1,
-              a2,
-              [w, b] => (w: Var[w], b: Exprs[b]) => b elimStep w,
-              [b] => (b: Exprs[b]) => b,
-            )
-        }
-    }
-  }
-
   type Vars[A] = Tupled[Var, A]
   object Vars {
-
     def single[A](a: Var[A]): Vars[A] =
       Tupled.Single(a)
 
@@ -323,7 +300,6 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
     ev: SymmetricSemigroupalCategory[-⚬, |*|],
   ): Either[Error, A -⚬ B] = {
     import Abstracted._
-    import Exprs.initialVars
 
     abs(f) match {
       case Exact(f)             => Right(f.fold)
@@ -339,7 +315,7 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
     ) extends Abstracted[A, B]
 
     case class Closure[X, A, B](
-      captured: Exprs[X],
+      captured: Expr[X],
       f: (X |*| A) ≈⚬ B,
     ) extends Abstracted[A, B]
 
