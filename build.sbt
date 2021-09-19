@@ -57,6 +57,7 @@ lazy val core = project
       "-Ykind-projector", // support '*' as a placeholder in type lambdas
     ),
     libraryDependencies ++= Seq(
+      "com.lihaoyi" %% "sourcecode" % "0.2.7",
       "org.scalatest" %% "scalatest" % "3.2.9" % "test",
     ),
   )

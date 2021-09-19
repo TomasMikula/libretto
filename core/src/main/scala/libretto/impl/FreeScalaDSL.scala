@@ -396,27 +396,47 @@ object FreeScalaDSL extends ScalaDSL {
       override def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B                                           = FreeScalaDSL.this.eval[A, B]
     }
 
+  type Var[A] = libretto.impl.Var[VarOrigin, A]
+
   val closures = new Closures[-⚬, |*|, =⚬, Var, Set[Var[?]]]
   val lambdas: closures.lambdas.type = closures.lambdas
 
   override type $[A] = lambdas.Expr[A]
 
   override val `$`: ClosureOps  = new ClosureOps {
-    override def map[A, B](a: $[A])(f: A -⚬ B): $[B] =
-      (a map f)(new Var[B])
+    override def map[A, B](a: $[A])(f: A -⚬ B)(
+      file: String,
+      line: Int,
+    ): $[B] =
+      (a map f)(new Var[B](VarOrigin.FunApp(file, line)))
 
-    override def zip[A, B](a: $[A], b: $[B]): $[A |*| B] =
-      (a zip b)(new Var[A |*| B])
+    override def zip[A, B](a: $[A], b: $[B])(
+      file: String,
+      line: Int,
+    ): $[A |*| B] =
+      (a zip b)(new Var[A |*| B](VarOrigin.Pairing(file, line)))
 
-    override def unzip[A, B](ab: $[A |*| B]): ($[A], $[B]) =
-      lambdas.Expr.unzip(ab)(new Var[A], new Var[B])
+    override def unzip[A, B](ab: $[A |*| B])(
+      file: String,
+      line: Int,
+    ): ($[A], $[B]) =
+      lambdas.Expr.unzip(ab)(
+        new Var[A](VarOrigin.Prj1(file, line)),
+        new Var[B](VarOrigin.Prj2(file, line)),
+      )
 
-    override def app[A, B](f: $[A =⚬ B], a: $[A]): $[B] =
-      closures.app(f, a)(new Var[B])
+    override def app[A, B](f: $[A =⚬ B], a: $[A])(
+      file: String,
+      line: Int,
+    ): $[B] =
+      closures.app(f, a)(new Var[B](VarOrigin.FunApp(file, line)))
   }
 
-  override def λ[A, B](f: $[A] => $[B]): A -⚬ B =
-    lambdas.compile(f, boundVar = new Var[A]) match {
+  override def λ[A, B](f: $[A] => $[B])(implicit
+    file: sourcecode.File,
+    line: sourcecode.Line,
+  ): A -⚬ B =
+    lambdas.compile(f, boundVar = new Var[A](VarOrigin.Lambda(file.value, line.value))) match {
       case Right(f) =>
         f
       case Left(e) =>
@@ -429,8 +449,15 @@ object FreeScalaDSL extends ScalaDSL {
         }
     }
 
-  override def Λ[A, B](f: $[A] => $[B]): $[A =⚬ B] =
-    closures.closure[A, B](f, boundVar = new Var[A], resultVar = new Var[A =⚬ B]) match {
+  override def Λ[A, B](f: $[A] => $[B])(implicit
+    file: sourcecode.File,
+    line: sourcecode.Line,
+  ): $[A =⚬ B] =
+    closures.closure[A, B](
+      f,
+      boundVar = new Var[A](VarOrigin.Lambda(file.value, line.value)),
+      resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(file.value, line.value)),
+    ) match {
       case Right(f) =>
         f
       case Left(e) =>

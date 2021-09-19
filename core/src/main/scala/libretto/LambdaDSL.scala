@@ -18,7 +18,10 @@ trait LambdaDSL extends CoreDSL {
     *   is not used exactly once.
     * @throws UnboundVariablesException if the result expression contains free variables (from outer [[λ]]s).
     */
-  def λ[A, B](f: $[A] => $[B]): A -⚬ B
+  def λ[A, B](f: $[A] => $[B])(implicit
+    file: sourcecode.File,
+    line: sourcecode.Line,
+  ): A -⚬ B
 
   type NotLinearException <: Throwable
   type UnboundVariablesException <: Throwable
@@ -26,28 +29,49 @@ trait LambdaDSL extends CoreDSL {
   val $: $Ops
 
   trait $Ops {
-    def map[A, B](a: $[A])(f: A -⚬ B): $[B]
+    def map[A, B](a: $[A])(f: A -⚬ B)(
+      file: String,
+      line: Int,
+    ): $[B]
 
-    def zip[A, B](a: $[A], b: $[B]): $[A |*| B]
+    def zip[A, B](a: $[A], b: $[B])(
+      file: String,
+      line: Int,
+    ): $[A |*| B]
 
-    def unzip[A, B](ab: $[A |*| B]): ($[A], $[B])
+    def unzip[A, B](ab: $[A |*| B])(
+      file: String,
+      line: Int,
+    ): ($[A], $[B])
 
     object |*| {
-      def unapply[A, B](ab: $[A |*| B]): ($[A], $[B]) =
-        unzip(ab)
+      def unapply[A, B](ab: $[A |*| B])(implicit
+        file: sourcecode.File,
+        line: sourcecode.Line,
+      ): ($[A], $[B]) =
+        unzip(ab)(file.value, line.value)
     }
 
     extension [A, B](f: A -⚬ B) {
-      def apply(a: $[A]): $[B] =
-        map(a)(f)
+      def apply(a: $[A])(implicit
+        file: sourcecode.File,
+        line: sourcecode.Line,
+      ): $[B] =
+        map(a)(f)(file.value, line.value)
     }
 
     extension [A, B](a: $[A]) {
-      def |*|(b: $[B]): $[A |*| B] =
-        zip(a, b)
+      def |*|(b: $[B])(implicit
+        file: sourcecode.File,
+        line: sourcecode.Line,
+      ): $[A |*| B] =
+        zip(a, b)(file.value, line.value)
 
-      def >(f: A -⚬ B): $[B] =
-        map(a)(f)
+      def >(f: A -⚬ B)(implicit
+        file: sourcecode.File,
+        line: sourcecode.Line,
+      ): $[B] =
+        map(a)(f)(file.value, line.value)
     }
   }
 }
