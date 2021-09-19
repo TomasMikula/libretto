@@ -207,7 +207,7 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
         g match {
           case Exact(g0, g1)   => f.map(snd(g1))
           case HalfUsed(g0, u) => HalfUsed(thenSnd(f, g0).map(assocRL), u)
-          case other @ Closure(_, _, _) => UnhandledCase.raise(s"$other")
+          case Closure(captured, g, h) => f.withCaptured(captured).map(xi > snd(h))
         }
     }
 

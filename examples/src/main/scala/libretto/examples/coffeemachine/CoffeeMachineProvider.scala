@@ -5,6 +5,7 @@ import libretto.StarterKit._
 
 object CoffeeMachineProvider {
   import Protocol._
+  import $._
 
   val makeCoffeeMachine: Done -⚬ CoffeeMachine = rec { self =>
     val beverage: Done -⚬ (
@@ -23,22 +24,22 @@ object CoffeeMachineProvider {
   }
 
   private def onEspresso: Done -⚬ (EspressoMenu |*| Done) =
-    id                                       [                                           Done  ]
-      .>(introFst(promise[ShotCount]))    .to[ (Neg[ShotCount]  |*|  Val[ShotCount]) |*| Done  ]
-      .>(assocLR)                         .to[  Neg[ShotCount]  |*| (Val[ShotCount]  |*| Done) ]
-      .>.snd(makeBeverage(espresso))      .to[  Neg[ShotCount]  |*| (Val[Beverage]   |*| Done) ]
-                                          .to[  ShotCountChoice |*| (Val[Beverage]   |*| Done) ]
-      .>(assocRL)                         .to[ (ShotCountChoice |*|  Val[Beverage])  |*| Done  ]
-                                          .to[             EspressoMenu              |*| Done  ]
+    λ { ready =>
+      val (ready1 |*| (negShotCount |*| shotCount)) =
+        introSnd(promise[ShotCount])(ready)
+      val (beverage |*| done) =
+        makeBeverage(espresso)(shotCount |*| ready1)
+      (negShotCount |*| beverage) |*| done
+    }
 
   private def onLatte: Done -⚬ (LatteMenu |*| Done) =
-    id                                       [                                              Done  ]
-      .>(introFst(promise[LatteParams]))  .to[ (Neg[LatteParams] |*|  Val[LatteParams]) |*| Done  ]
-      .>(assocLR)                         .to[  Neg[LatteParams] |*| (Val[LatteParams]  |*| Done) ]
-      .>.fst(collectLatteParams)          .to[    LatteOptions   |*| (Val[LatteParams]  |*| Done) ]
-      .>.snd(makeBeverage(latte))         .to[    LatteOptions   |*| (Val[Beverage]     |*| Done) ]
-      .>(assocRL)                         .to[   (LatteOptions   |*|  Val[Beverage])    |*| Done  ]
-                                          .to[                LatteMenu                 |*| Done  ]
+    λ { ready =>
+      val (ready1 |*| (negLatteParams |*| latteParams)) =
+        introSnd(promise[LatteParams])(ready)
+      val (beverage |*| done) =
+        makeBeverage(latte)(latteParams |*| ready1)
+      (collectLatteParams(negLatteParams) |*| beverage) |*| done
+    }
 
   private object CoffeeMachine {
     // Hides one level of recursive definition of CoffeeMachine.
