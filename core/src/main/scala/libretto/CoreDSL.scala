@@ -95,6 +95,12 @@ trait CoreDSL {
     g: C -⚬ D,
   ): (A |*| C) -⚬ (B |*| D)
 
+  def fst[A, B, C](f: A -⚬ B): (A |*| C) -⚬ (B |*| C) =
+    par(f, id[C])
+
+  def snd[A, B, C](f: B -⚬ C): (A |*| B) -⚬ (A |*| C) =
+    par(id[A], f)
+
   def introFst[B]: B -⚬ (One |*| B)
   def introSnd[A]: A -⚬ (A |*| One)
   def elimFst[B]: (One |*| B) -⚬ B

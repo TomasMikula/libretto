@@ -11,12 +11,6 @@ object CoreLib {
 class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   import dsl._
 
-  def fst[A, B, C](f: A -⚬ B): (A |*| C) -⚬ (B |*| C) =
-    par(f, id[C])
-
-  def snd[A, B, C](f: B -⚬ C): (A |*| B) -⚬ (A |*| C) =
-    par(id[A], f)
-
   /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
     * It must hold that
     * ```
