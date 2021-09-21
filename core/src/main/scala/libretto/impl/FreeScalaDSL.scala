@@ -24,7 +24,6 @@ object FreeScalaDSL extends ScalaDSL {
   override final class Rec[F[_]] private()
   override final class -[A] private()
   override final class Val[A] private()
-  override final class Neg[A] private()
   override final class Res[A] private()
 
   implicit val biInjectivePair: BiInjective[|*|] =

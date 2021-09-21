@@ -17,7 +17,7 @@ trait ScalaDSL extends TimerDSL with CrashDSL with InvertDSL with ClosureDSL {
     *
     * Somewhat analogous to [[scala.concurrent.Promise]]
     */
-  type Neg[A]
+  type Neg[A] = -[Val[A]]
 
   /** Resource that is a Scala object of type [[A]].
     * Unlike [[Val]], a resource can be mutable, cannot in general be [[neglect]]ed or [[dup]]licated, and is
@@ -37,10 +37,12 @@ trait ScalaDSL extends TimerDSL with CrashDSL with InvertDSL with ClosureDSL {
   /** Creates an entangled pair of demand ([[Neg]]) and supply ([[Val]]) such that when the demand is fulfilled
     * with a value, that value will be produced by the supply.
     */
-  def promise[A]: One -⚬ (Neg[A] |*| Val[A])
+  def promise[A]: One -⚬ (Neg[A] |*| Val[A]) =
+    forevert[Val[A]]
 
   /** Uses the value (eventually) produced by [[Val]] to satisfy the demand of [[Neg]]. */
-  def fulfill[A]: (Val[A] |*| Neg[A]) -⚬ One
+  def fulfill[A]: (Val[A] |*| Neg[A]) -⚬ One =
+    backvert[Val[A]]
 
   def liftEither[A, B]: Val[Either[A, B]] -⚬ (Val[A] |+| Val[B])
   def unliftEither[A, B]: (Val[A] |+| Val[B]) -⚬ Val[Either[A, B]] =
@@ -56,7 +58,8 @@ trait ScalaDSL extends TimerDSL with CrashDSL with InvertDSL with ClosureDSL {
   def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B]
 
   /** Lifts an ordinary Scala function to a linear function on demands, in opposite direction. */
-  def contramapNeg[A, B](f: A => B): Neg[B] -⚬ Neg[A]
+  def contramapNeg[A, B](f: A => B): Neg[B] -⚬ Neg[A] =
+    contrapositive(mapVal(f))
 
   def constVal[A](a: A): Done -⚬ Val[A]
   def constNeg[A](a: A): Neg[A] -⚬ Need
