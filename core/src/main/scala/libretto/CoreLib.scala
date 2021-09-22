@@ -2179,6 +2179,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def neglect[A](f: A -⚬ Done): Maybe[A] -⚬ Done =
       either(done, f)
+
+    def switchWithL[A, B, R](
+      caseNone: A -⚬ R,
+      caseJust: (A |*| B) -⚬ R,
+    ): (A |*| Maybe[B]) -⚬ R =
+      distributeL > either(elimSnd > caseNone, caseJust)
+
+    def switchWithR[A, B, R](
+      caseNone: B -⚬ R,
+      caseJust: (A |*| B) -⚬ R,
+    ): (Maybe[A] |*| B) -⚬ R =
+      distributeR > either(elimFst > caseNone, caseJust)
   }
 
   opaque type Optionally[A] = One |&| A
