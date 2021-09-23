@@ -23,6 +23,25 @@ class ScalaLib[
   import dsl._
   import coreLib._
 
+  object Val {
+    def isEq[A](a: A): Val[A] -⚬ (Val[a.type] |+| Val[A]) =
+      mapVal[A, Either[a.type, A]] {
+        case `a` => Left(a: a.type)
+        case x   => Right(x)
+      } > liftEither
+
+    def switch[A, B](cases: List[(A, Done -⚬ B)]): Val[A] -⚬ PMaybe[B] =
+      cases match {
+        case Nil =>
+          neglect > PMaybe.empty
+        case (a, f) :: tail =>
+          Val.isEq(a) > either(
+            neglect > f > PMaybe.just,
+            switch(tail),
+          )
+      }
+  }
+
   def const[A](a: A): One -⚬ Val[A] =
     andThen(done, constVal(a))
 
