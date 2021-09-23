@@ -481,18 +481,6 @@ class FreeScalaFutureRunner(
             .flatMap(d => schedule(d, () => DoneNow))
             .asDeferredFrontier
 
-        case -⚬.Promise() =>
-          this.awaitIfDeferred
-          type X
-          val px = Promise[X]()
-          Pair(Prom(px), px.future.toValFrontier)                 .asInstanceOf[Frontier[B]]
-
-        case -⚬.Fulfill() =>
-          type X
-          val (x, nx) = this.asInstanceOf[Frontier[Val[X] |*| Neg[X]]].splitPair
-          nx.completeWith(x.toFutureValue)
-          One
-
         case -⚬.LiftEither() =>
           def go[X, Y](xy: Either[X, Y]): Frontier[Val[X] |+| Val[Y]] =
             xy match {
@@ -523,26 +511,7 @@ class FreeScalaFutureRunner(
           // (Val[X] |*| Val[Y]) -⚬ Val[(X, Y)]
           type X; type Y
           val (x, y) = Frontier.splitPair(this.asInstanceOf[Frontier[Val[X] |*| Val[Y]]])
-          (x.toFutureValue zip y.toFutureValue).toValFrontier     .asInstanceOf[Frontier[B]]
-
-        case -⚬.LiftNegPair() =>
-          // Neg[(X, Y)] -⚬ (Neg[X] |*| Neg[Y])
-          type X; type Y
-          val px = Promise[X]()
-          val py = Promise[Y]()
-          this
-            .asInstanceOf[Frontier[Neg[(X, Y)]]]
-            .completeWith(px.future zip py.future)
-          Pair(Prom(px), Prom(py))                                .asInstanceOf[Frontier[B]]
-
-        case -⚬.UnliftNegPair() =>
-          // (Neg[X] |*| Neg[Y]) -⚬ Neg[(A, B)]
-          type X; type Y
-          val p = Promise[(X, Y)]()
-          val (nx, ny) = this.asInstanceOf[Frontier[Neg[X] |*| Neg[Y]]].splitPair
-          nx.completeWith(p.future.map(_._1))
-          ny.completeWith(p.future.map(_._2))
-          Prom(p)                                                 .asInstanceOf[Frontier[B]]
+          (x.toFutureValue zip y.toFutureValue).toValFrontier     .asInstanceOf[Frontier[B]]                                                .asInstanceOf[Frontier[B]]
 
         case -⚬.MapVal(f) =>
           type X; type Y
@@ -551,17 +520,6 @@ class FreeScalaFutureRunner(
             .toFutureValue
             .map(f.asInstanceOf[X => Y])
             .toValFrontier                                        .asInstanceOf[Frontier[B]]
-
-        case -⚬.ContramapNeg(f) =>
-          this match {
-            case Prom(pa) =>
-              type B0
-              val pb = Promise[B0]()
-              pa.completeWith(pb.future.map(f.asInstanceOf[B0 => Nothing]))
-              Prom(pb)                                            .asInstanceOf[Frontier[B]]
-            case other =>
-              bug(s"Did not expect $other to represent a Neg")
-          }
 
         case -⚬.ConstVal(a) =>
           this
@@ -584,13 +542,6 @@ class FreeScalaFutureRunner(
             .toFutureValue
             .map(_ => DoneNow)
             .asDeferredFrontier
-
-        case -⚬.Inflate() =>
-          // Need -⚬ Neg[X]
-          type X
-          val p = Promise[X]()
-          this fulfillWith p.future
-          Prom(p)                                                 .asInstanceOf[Frontier[B]]
 
         case -⚬.NotifyVal() =>
           // Val[X] -⚬ (Ping |*| Val[X])
@@ -967,6 +918,8 @@ class FreeScalaFutureRunner(
         case -⚬.Forevert() =>
           // One -⚬ (-[X] |*| X)
 
+          this.awaitIfDeferred
+
           def go[X]: Frontier[-[X] |*| X] = {
             val pfx = Promise[Frontier[X]]()
             Pair(
@@ -1003,8 +956,6 @@ class FreeScalaFutureRunner(
           fa.map(_.crash(e))
         case Pack(f) =>
           f.crash(e)
-        case Prom(promise) =>
-          promise.failure(e)
       }
     }
   }
@@ -1023,7 +974,6 @@ class FreeScalaFutureRunner(
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]
 
     case class Value[A](a: A) extends Frontier[Val[A]]
-    case class Prom[A](p: Promise[A]) extends Frontier[Neg[A]]
 
     sealed trait ResFrontier[A] extends Frontier[Res[A]]
     case class MVal[A](value: A) extends ResFrontier[A]
@@ -1169,7 +1119,7 @@ class FreeScalaFutureRunner(
     extension [A](f: Frontier[Neg[A]]) {
       def completeWith(fa: Future[A]): Unit =
         f match {
-          case Prom(pa) => pa.completeWith(fa)
+          case Backwards(pfa) => pfa.success(fa.toValFrontier)
           case Deferred(f) => f.onComplete {
             case Success(f) => f.completeWith(fa)
             case Failure(e) =>
@@ -1183,7 +1133,7 @@ class FreeScalaFutureRunner(
 
       def future: Future[A] =
         f match {
-          case Prom(pa) => pa.future
+          case Backwards(pfa) => pfa.future.flatMap(_.toFutureValue)
           case Deferred(f) => f.flatMap(_.future)
         }
     }

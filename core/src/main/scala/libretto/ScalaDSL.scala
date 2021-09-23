@@ -51,8 +51,11 @@ trait ScalaDSL extends TimerDSL with CrashDSL with InvertDSL with ClosureDSL {
   def liftPair[A, B]: Val[(A, B)] -⚬ (Val[A] |*| Val[B])
   def unliftPair[A, B]: (Val[A] |*| Val[B]) -⚬ Val[(A, B)]
 
-  def liftNegPair[A, B]: Neg[(A, B)] -⚬ (Neg[A] |*| Neg[B])
-  def unliftNegPair[A, B]: (Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)]
+  def liftNegPair[A, B]: Neg[(A, B)] -⚬ (Neg[A] |*| Neg[B]) =
+    introFst(parFromOne(promise[A], promise[B]) > IXI > snd(unliftPair)) > assocLR > elimSnd(fulfill)
+
+  def unliftNegPair[A, B]: (Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)] =
+    introFst(promise[(A, B)] > snd(liftPair)) > assocLR > elimSnd(IXI > parToOne(fulfill, fulfill))
 
   /** Lifts an ordinary Scala function to a linear function on [[Val]]s. */
   def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B]
@@ -65,7 +68,8 @@ trait ScalaDSL extends TimerDSL with CrashDSL with InvertDSL with ClosureDSL {
   def constNeg[A](a: A): Neg[A] -⚬ Need
 
   def neglect[A]: Val[A] -⚬ Done
-  def inflate[A]: Need -⚬ Neg[A]
+  def inflate[A]: Need -⚬ Neg[A] =
+    introFst(promise[A] > snd(neglect)) > assocLR > elimSnd(rInvertSignal)
 
   def notifyVal[A]: Val[A] -⚬ (Ping |*| Val[A])
   def notifyNeg[A]: (Pong |*| Neg[A]) -⚬ Neg[A]

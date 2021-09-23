@@ -93,19 +93,13 @@ object FreeScalaDSL extends ScalaDSL {
 
     case class Crash[A, B](msg: String) extends ((Done |*| A) -⚬ (Done |*| B))
     case class Delay() extends (Val[FiniteDuration] -⚬ Done)
-    case class Promise[A]() extends (One -⚬ (Neg[A] |*| Val[A]))
-    case class Fulfill[A]() extends ((Val[A] |*| Neg[A]) -⚬ One)
     case class LiftEither[A, B]() extends (Val[Either[A, B]] -⚬ (Val[A] |+| Val[B]))
     case class LiftPair[A, B]() extends (Val[(A, B)] -⚬ (Val[A] |*| Val[B]))
     case class UnliftPair[A, B]() extends ((Val[A] |*| Val[B]) -⚬ Val[(A, B)])
-    case class LiftNegPair[A, B]() extends (Neg[(A, B)] -⚬ (Neg[A] |*| Neg[B]))
-    case class UnliftNegPair[A, B]() extends ((Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)])
     case class MapVal[A, B](f: A => B) extends (Val[A] -⚬ Val[B])
-    case class ContramapNeg[A, B](f: A => B) extends (Neg[B] -⚬ Neg[A])
     case class ConstVal[A](a: A) extends (Done -⚬ Val[A])
     case class ConstNeg[A](a: A) extends (Neg[A] -⚬ Need)
     case class Neglect[A]() extends (Val[A] -⚬ Done)
-    case class Inflate[A]() extends (Need -⚬ Neg[A])
     case class NotifyVal[A]() extends (Val[A] -⚬ (Ping |*| Val[A]))
     case class NotifyNeg[A]() extends ((Pong |*| Neg[A]) -⚬ Neg[A])
 
@@ -292,12 +286,6 @@ object FreeScalaDSL extends ScalaDSL {
   override def delay: Val[FiniteDuration] -⚬ Done =
     Delay()
 
-  override def promise[A]: One -⚬ (Neg[A] |*| Val[A]) =
-    Promise()
-
-  override def fulfill[A]: (Val[A] |*| Neg[A]) -⚬ One =
-    Fulfill()
-
   override def liftEither[A, B]: Val[Either[A, B]] -⚬ (Val[A] |+| Val[B]) =
     LiftEither()
 
@@ -307,17 +295,8 @@ object FreeScalaDSL extends ScalaDSL {
   override def unliftPair[A, B]: (Val[A] |*| Val[B]) -⚬ Val[(A, B)] =
     UnliftPair()
 
-  override def liftNegPair[A, B]: Neg[(A, B)] -⚬ (Neg[A] |*| Neg[B]) =
-    LiftNegPair()
-
-  override def unliftNegPair[A, B]: (Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)] =
-    UnliftNegPair()
-
   override def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B] =
     MapVal(f)
-
-  override def contramapNeg[A, B](f: A => B): Neg[B] -⚬ Neg[A] =
-    ContramapNeg(f)
 
   override def constVal[A](a: A): Done -⚬ Val[A] =
     ConstVal(a)
@@ -327,9 +306,6 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def neglect[A]: Val[A] -⚬ Done =
     Neglect()
-
-  override def inflate[A]: Need -⚬ Neg[A] =
-    Inflate()
 
   override def notifyVal[A]: Val[A] -⚬ (Ping |*| Val[A]) =
     NotifyVal()
