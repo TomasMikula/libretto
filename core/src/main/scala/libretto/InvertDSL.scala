@@ -14,6 +14,9 @@ trait InvertDSL extends ClosedDSL {
   override def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C) =
     andThen(introFst(forevert[B]), andThen(assocLR, par(id, andThen(swap, f))))
 
+  override def out[A, B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
+    snd(f)
+
   def contrapositive[A, B](f: A -⚬ B): -[B] -⚬ -[A] =
     andThen(introFst(andThen(forevert[A], snd(f))), andThen(assocLR, elimSnd(backvert[B])))
 

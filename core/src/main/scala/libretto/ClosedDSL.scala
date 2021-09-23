@@ -16,4 +16,7 @@ trait ClosedDSL extends CoreDSL {
 
   def uncurry[A, B, C](f: A -⚬ (B =⚬ C)): (A |*| B) -⚬ C =
     andThen(par(f, id[B]), eval[B, C])
+
+  def out[A, B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
+    curry(andThen(eval[A, B], f))
 }

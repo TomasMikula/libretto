@@ -32,11 +32,7 @@ class ClosedLib[
   /** Function object (internal hom) is covariant in the output type. */
   def output[A]: Functor[λ[x => A =⚬ x]] = new Functor[λ[x => A =⚬ x]] {
     def lift[B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
-      id                         [ (A =⚬ B) |*| A ]
-        .>(eval)              .to[       B        ]
-        .>(f)                 .to[       C        ]
-        .as[ ((A =⚬ B) |*| A)  -⚬        C        ]
-        .curry
+      out(f)
   }
 
   implicit class ClosedLinearFunctionOps[A, B](self: A -⚬ B) {
