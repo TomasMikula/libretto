@@ -86,6 +86,9 @@ trait CoreDSL {
 
   type Rec[F[_]]
 
+  /** The type of auxiliary placeholder variables used in construction of [[λ]]-expressions. */
+  type $[A]
+
   def id[A]: A -⚬ A
 
   def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C
@@ -282,4 +285,73 @@ trait CoreDSL {
     * It is biased to the left: if both signals have arrived by the time of inquiry, chooses left.
     */
   def selectPair: (One |&| One) -⚬ (Pong |*| Pong)
+
+  /** Used to define a linear function `A -⚬ B` in a point-full style, i.e. as a lambda expression.
+    *
+    * Recall that when defining `A -⚬ B`, we never get a hold of `a: A` as a Scala value. However,
+    * by using this method we get a hold of `a: $[A]`, a placeholder variable, and construct the result
+    * expression `$[B]`.
+    * This method then inspects how the input variable `a: $[A]` is used in the result `$[B]` and
+    * infers a (point-free) construction of `A -⚬ B`.
+    *
+    * @throws NotLinearException if the given function violates linearity, i.e. if the input variable
+    *   is not used exactly once.
+    * @throws UnboundVariablesException if the result expression contains free variables (from outer [[λ]]s).
+    */
+  def λ[A, B](f: $[A] => $[B])(implicit
+    file: sourcecode.File,
+    line: sourcecode.Line,
+  ): A -⚬ B
+
+  type NotLinearException <: Throwable
+  type UnboundVariablesException <: Throwable
+
+  val $: $Ops
+
+  trait $Ops {
+    def map[A, B](a: $[A])(f: A -⚬ B)(
+      file: String,
+      line: Int,
+    ): $[B]
+
+    def zip[A, B](a: $[A], b: $[B])(
+      file: String,
+      line: Int,
+    ): $[A |*| B]
+
+    def unzip[A, B](ab: $[A |*| B])(
+      file: String,
+      line: Int,
+    ): ($[A], $[B])
+
+    object |*| {
+      def unapply[A, B](ab: $[A |*| B])(implicit
+        file: sourcecode.File,
+        line: sourcecode.Line,
+      ): ($[A], $[B]) =
+        unzip(ab)(file.value, line.value)
+    }
+
+    extension [A, B](f: A -⚬ B) {
+      def apply(a: $[A])(implicit
+        file: sourcecode.File,
+        line: sourcecode.Line,
+      ): $[B] =
+        map(a)(f)(file.value, line.value)
+    }
+
+    extension [A, B](a: $[A]) {
+      def |*|(b: $[B])(implicit
+        file: sourcecode.File,
+        line: sourcecode.Line,
+      ): $[A |*| B] =
+        zip(a, b)(file.value, line.value)
+
+      def >(f: A -⚬ B)(implicit
+        file: sourcecode.File,
+        line: sourcecode.Line,
+      ): $[B] =
+        map(a)(f)(file.value, line.value)
+    }
+  }
 }

@@ -19,4 +19,31 @@ trait ClosedDSL extends CoreDSL {
 
   def out[A, B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
     curry(andThen(eval[A, B], f))
+
+  /** Creates a closure (`A =⚬ B`), i.e. a function that captures variables from the outer scope,
+    * as an expression (`$[A =⚬ B]`) that can be used in outer [[λ]] or [[Λ]].
+    */
+  def Λ[A, B](f: $[A] => $[B])(implicit
+    file: sourcecode.File,
+    line: sourcecode.Line,
+  ): $[A =⚬ B]
+
+  type NoCaptureException <: Throwable
+
+  trait ClosureOps extends $Ops {
+    def app[A, B](f: $[A =⚬ B], a: $[A])(
+      file: String,
+      line: Int,
+    ): $[B]
+
+    implicit class ClosureOps[A, B](f: $[A =⚬ B]) {
+      def apply(a: $[A])(implicit
+        file: sourcecode.File,
+        line: sourcecode.Line,
+      ): $[B] =
+        app(f, a)(file.value, line.value)
+    }
+  }
+
+  override val $: ClosureOps
 }
