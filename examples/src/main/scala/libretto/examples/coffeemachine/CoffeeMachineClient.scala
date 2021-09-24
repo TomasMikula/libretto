@@ -11,28 +11,38 @@ object CoffeeMachineClient {
   import $._
 
   val useCoffeeMachine: CoffeeMachine -⚬ Done = {
-    def go: (Done |*| CoffeeMachine) -⚬ Done = rec { go =>
-      snd(unpack) > mainMenu(go)
+    def go: (Done |*| CoffeeMachine) -⚬ Done = rec { repeat =>
+      mainMenu > either(
+        fst(serve) > repeat,
+        id,
+      )
     }
 
     introFst(done) > go
   }
 
-  private def mainMenu(
-    repeat: (Done |*| CoffeeMachine) -⚬ Done,
-  ): (Done |*| (((EspressoMenu |*| CoffeeMachine) |&| (LatteMenu |*| CoffeeMachine)) |&| Done)) -⚬ Done = {
-
-    enum Item { case Espresso, Latte, Quit }
+  private def mainMenu: (Done |*| CoffeeMachine) -⚬ ((Val[Beverage] |*| CoffeeMachine) |+| Done) = {
+    type Item = (Done |+| Done) |+| Done
     object Item {
-      // ¯\_(ツ)_/¯ Why doesn't the compiler know that Item =:= (Espresso.type | Latte.type | Quit.type)?
-      def asUnion(i: Item): (Espresso.type | Latte.type | Quit.type) =
-        i match {
-          case Espresso => Espresso
-          case Latte => Latte
-          case Quit => Quit
-        }
+      // constructors
+      def espresso: Done -⚬ Item = injectL > injectL
+      def latte:    Done -⚬ Item = injectR > injectL
+      def quit:     Done -⚬ Item = injectR
+
+      // destructor
+      def switchWithR[A, R](
+        caseEspresso: (Done |*| A) -⚬ R,
+        caseLatte:    (Done |*| A) -⚬ R,
+        caseQuit:     (Done |*| A) -⚬ R,
+      ): (Item |*| A) -⚬ R =
+        distributeR > either(
+          distributeR > either(
+            caseEspresso,
+            caseLatte,
+          ),
+          caseQuit,
+        )
     }
-    import Item._
 
     val msg =
       """Choose your beverage:
@@ -41,48 +51,47 @@ object CoffeeMachineClient {
         | q - quit
         |""".stripMargin
 
-    val parse: String => Option[Item] = {
-      case "e" => Some(Item.Espresso)
-      case "l" => Some(Item.Latte)
-      case "q" => Some(Item.Quit)
-      case _   => None
-    }
+    val dict = List(
+      "e" -> Item.espresso,
+      "l" -> Item.latte,
+      "q" -> Item.quit,
+    )
 
-    val goEspresso: (Val[Espresso.type] |*| (EspressoMenu |*| CoffeeMachine)) -⚬ Done = fst(neglect) > VI(getEspresso) > repeat
-    val goLatte:    (Val[Latte.type   ] |*| (LatteMenu    |*| CoffeeMachine)) -⚬ Done = fst(neglect) > VI(getLatte   ) > repeat
-    val quit:       (Val[Quit.type    ] |*|              Done               ) -⚬ Done = fst(neglect) > join
-
-    import ValMatcher.caseEq
-    val chooseItem: (Val[Item] |*| (((EspressoMenu |*| CoffeeMachine) |&| (LatteMenu |*| CoffeeMachine)) |&| Done)) -⚬ Done =
-      ( caseEq(Espresso) { goEspresso }
-      & caseEq(Latte)    { goLatte    }
-      & caseEq(Quit)     { quit       }
+    λ { case (trigger |*| machine) =>
+      val item: $[Item] = trigger > prompt(msg, dict)
+      (item |*| machine) > Item.switchWithR(
+        caseEspresso = getEspresso > injectL,
+        caseLatte    = getLatte    > injectL,
+        caseQuit     = quit        > injectR,
       )
-        .contramapVal(Item.asUnion)
-        .get
-
-    λ { case (trigger |*| options) =>
-      val item = trigger > prompt(msg, parse)
-      chooseItem(item |*| options)
     }
   }
 
-  private def getEspresso: (Done |*| EspressoMenu) -⚬ Done =
-    λ { case (trigger |*| espressoMenu) =>
-      val (shotCountChoice |*| beverage) = espressoMenu
-      (promptShot(trigger |*| shotCountChoice) |*| serve(beverage)) > join
+  private def getEspresso: (Done |*| CoffeeMachine) -⚬ (Val[Beverage] |*| CoffeeMachine) =
+    λ { case (trigger |*| machine) =>
+      CoffeeMachine.chooseEspresso(machine).apply(promptShot(trigger))
     }
 
-  private def getLatte: (Done |*| LatteMenu) -⚬ Done =
-    λ { case (trigger |*| latteMenu) =>
-      val (((sizeChoice |*| shotCountChoice) |*| flavorChoice) |*| beverage) = latteMenu
-      val done1 = promptSize(trigger |*| sizeChoice)
-      val done2 = promptShot(done1 |*| shotCountChoice)
-      val done3 = promptFlavor(done2 |*| flavorChoice)
-      (done3 |*| serve(beverage)) > join
+  private def getLatte: (Done |*| CoffeeMachine) -⚬ (Val[Beverage] |*| CoffeeMachine) =
+    λ { case (trigger |*| machine) =>
+      CoffeeMachine.chooseLatte(machine).apply(promptLatteOptions(trigger))
     }
 
-  private def promptShot: (Done |*| ShotCountChoice) -⚬ Done = {
+  private def quit: (Done |*| CoffeeMachine) -⚬ Done =
+    λ { case (trigger |*| machine) =>
+      (trigger |*| CoffeeMachine.chooseQuit(machine)) > join
+    }
+
+  private def promptLatteOptions: Done -⚬ LatteOptions =
+    λ { trigger =>
+      val (size      |*| trigger1) = promptSize(trigger)  > signalPosSnd
+      val (shotCount |*| trigger2) = promptShot(trigger1) > signalPosSnd
+      val flavor                   = promptFlavor(trigger2)
+
+      size |*| shotCount |*| flavor
+    }
+
+  private def promptShot: Done -⚬ Val[ShotCount] = {
     val msg =
       """Choose strength:
         | s - single espresso shot
@@ -95,12 +104,10 @@ object CoffeeMachineClient {
       case _   => None
     }
 
-    id[Done |*| ShotCountChoice]    .to[    Done        |*| Neg[ShotCount] ]
-      .>.fst(prompt(msg, parse))    .to[ Val[ShotCount] |*| Neg[ShotCount] ]
-      .>(fulfillAndSignal)          .to[                Done               ]
+    prompt(msg, parse)
   }
 
-  private def promptSize: (Done |*| SizeChoice) -⚬ Done = {
+  private def promptSize: Done -⚬ Val[Size] = {
     val msg =
       """Choose your size:
         | s - small
@@ -115,12 +122,10 @@ object CoffeeMachineClient {
       case _   => None
     }
 
-    id[Done |*| SizeChoice]         .to[    Done   |*| Neg[Size] ]
-      .>.fst(prompt(msg, parse))    .to[ Val[Size] |*| Neg[Size] ]
-      .>(fulfillAndSignal)          .to[           Done          ]
+    prompt(msg, parse)
   }
 
-  private def promptFlavor: (Done |*| FlavorChoice) -⚬ Done = {
+  private def promptFlavor: Done -⚬ Val[Option[Flavor]] = {
     val msg =
       """Do you want to add extra flavor to your latte?
         | v - vanilla
@@ -135,31 +140,31 @@ object CoffeeMachineClient {
       case _   => None
     }
 
-    id[Done |*| FlavorChoice]       .to[    Done             |*| Neg[Option[Flavor]] ]
-      .>.fst(prompt(msg, parse))    .to[ Val[Option[Flavor]] |*| Neg[Option[Flavor]] ]
-      .>(fulfillAndSignal)          .to[                     Done                    ]
+    prompt(msg, parse)
   }
 
   private def prompt[A](msg: String, parse: String => Option[A]): Done -⚬ Val[A] =
+    prompt(msg, mapVal(parse) > optionToPMaybe)
+
+  private def prompt[A](msg: String, dictionary: List[(String, Done -⚬ A)]): Done -⚬ A =
+    prompt(msg, Val.switch(dictionary))
+
+  private def prompt[A](msg: String, parse: Val[String] -⚬ PMaybe[A]): Done -⚬ A =
     rec { tryAgain =>
       printLine(msg)
         > readLine
-        > mapVal { s => parse(s).toRight(()) }
-        > liftEither
-        > either(neglect > tryAgain, id)
+        > parse
+        > PMaybe.switch(tryAgain, id)
     }
-
-  private def fulfillAndSignal[A]: (Val[A] |*| Neg[A]) -⚬ Done =
-    ΛI(signalPosFst) > elimSnd(fulfill)
 
   private def serve: Val[Beverage] -⚬ Done = {
     val dot: Done -⚬ Done = putStr(".") > delay(500.millis)
     val etc: Done -⚬ Done = dot > dot > dot > printLine("")
 
     delayVal(etc)
-      .>(mapVal((b: Beverage) => s"☕ Here goes your ${b.description}."))
-      .>(printLine)
-      .>(etc)
-      .>(printLine(""))
+      > mapVal((b: Beverage) => s"☕ Here goes your ${b.description}.")
+      > printLine
+      > etc
+      > printLine("")
   }
 }

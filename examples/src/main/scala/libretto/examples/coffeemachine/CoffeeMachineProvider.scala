@@ -8,79 +8,46 @@ object CoffeeMachineProvider {
   import $._
 
   val makeCoffeeMachine: Done -⚬ CoffeeMachine = rec { self =>
-    val beverage: Done -⚬ (
-      (EspressoMenu |*| CoffeeMachine) |&|
-      (LatteMenu    |*| CoffeeMachine)
-    ) =
-      choice(
-        onEspresso > snd(self),
-        onLatte    > snd(self),
-      )
+    val returnAndRepeat: Val[Beverage] -⚬ (Val[Beverage] |*| CoffeeMachine) =
+      signalPosSnd > snd(self)
 
-    val end: Done -⚬ Done =
-      id[Done]
-
-    choice(beverage, end) > CoffeeMachine.pack
+    CoffeeMachine.create(
+      serveEspresso > out(returnAndRepeat),
+      serveLatte    > out(returnAndRepeat),
+    )
   }
 
-  private def onEspresso: Done -⚬ (EspressoMenu |*| Done) =
+  private def serveEspresso: Done -⚬ (EspressoOptions =⚬ Val[Beverage]) =
     λ { ready =>
-      val (ready1 |*| (negShotCount |*| shotCount)) =
-        introSnd(promise[ShotCount])(ready)
-      val (beverage |*| done) =
-        makeBeverage(espresso)(shotCount |*| ready1)
-      (negShotCount |*| beverage) |*| done
+      Λ { espressoOptions =>
+        makeBeverage(espresso)(espressoOptions |*| ready)
+      }
     }
 
-  private def onLatte: Done -⚬ (LatteMenu |*| Done) =
+  private def serveLatte: Done -⚬ (LatteOptions =⚬ Val[Beverage]) =
     λ { ready =>
-      val (ready1 |*| (negLatteParams |*| latteParams)) =
-        introSnd(promise[LatteParams])(ready)
-      val (beverage |*| done) =
-        makeBeverage(latte)(latteParams |*| ready1)
-      (collectLatteParams(negLatteParams) |*| beverage) |*| done
+      Λ { latteOptions =>
+        makeBeverage(latte)(latteSpec(latteOptions) |*| ready)
+      }
     }
 
-  private object CoffeeMachine {
-    // Hides one level of recursive definition of CoffeeMachine.
-    // It is just `pack` from the DSL applied to a type argument, in order to help type inference.
-    def pack: (
-      (EspressoMenu |*| CoffeeMachine) |&|
-      (LatteMenu    |*| CoffeeMachine) |&|
-      Done
-    ) -⚬ CoffeeMachine =
-      StarterKit.pack[[X] =>> (EspressoMenu |*| X) |&| (LatteMenu |*| X) |&| Done]
-  }
+  type LatteSpec = (Size, ShotCount, Option[Flavor])
 
   /**
-   * ```
-   * ┏━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━┓
-   * ┞─────────┐      ╎               ╎                       ┞─────────────┐
-   * ╎Val[Spec]│→┄┄┐  ╎               ╎                   ┌┄┄→╎Val[Beverage]│
-   * ┟─────────┘   ┆  ├─────────┐     ├─────────────┐     ┆   ┟─────────────┘
-   * ┃             ├┄→╎Val[Spec]│→┄┄┄→╎Val[Beverage]│→┄┄┄→┤   ┨
-   * ┞─────────┐   ┆  ├─────────┘     ├─────────────┘     ┆   ┞─────────────┐
-   * ╎  Done   │→┄┄┘  ╎               ╎                   └┄┄→╎    Done     │
-   * ┟─────────┘      ╎               ╎                       ┟─────────────┘
-   * ┗━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━┛
-   *
-   * ```
-   *
    * The [[Done]] on the in-port signals readiness to make this beverage.
-   * The [[Done]] on the out-port signals this beverage has been made.
+   * I.e., the output value will not be produced until the signal arrives
    */
   private def makeBeverage[Spec](
     f: Spec => Beverage,
-  ): (Val[Spec] |*| Done) -⚬ (Val[Beverage] |*| Done) =
-    awaitPosSnd > mapVal(f) > signalPosSnd
+  ): (Val[Spec] |*| Done) -⚬ Val[Beverage] =
+    awaitPosSnd > mapVal(f)
 
-  private def collectLatteParams: Neg[LatteParams] -⚬ LatteOptions =
-    id                                                           [                       LatteOptions                      ]
-                                                            .from[ (Neg[Size] |*| Neg[ShotCount]) |*| Neg[Option[Flavor]]  ]
-      .<.fst(liftNegPair)                                   .from[ Neg[ (Size   ,     ShotCount)] |*| Neg[Option[Flavor]]  ]
-      .<(liftNegPair)                                       .from[ Neg[((Size   ,     ShotCount)   ,      Option[Flavor])] ]
-      .<(contramapNeg { case ((a, b), c) => (a, b, c) })    .from[ Neg[( Size   ,     ShotCount    ,      Option[Flavor])] ]
-                                                            .from[ Neg[              LatteParams                         ] ]
+  private def latteSpec: LatteOptions -⚬ Val[LatteSpec] =
+    λ { case size |*| shotCount |*| flavor =>
+      unliftPair(unliftPair(size |*| shotCount) |*| flavor) > mapVal {
+        case ((a, b), c) => (a, b, c)
+      }
+    }
 
   private def espresso(shots: ShotCount): Beverage =
     Beverage("Espresso" + (shots match {
@@ -88,7 +55,7 @@ object CoffeeMachineProvider {
       case ShotCount.Single => ""
     }))
 
-  private def latte(params: LatteParams): Beverage = {
+  private def latte(params: LatteSpec): Beverage = {
     val (size, shots, flavor) = params
     val flavorStr = flavor.map(_.toString.toLowerCase + " ").getOrElse("")
     val shotsStr = shots match {
