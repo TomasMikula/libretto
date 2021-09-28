@@ -40,7 +40,7 @@ Libretto.
 
 To follow this tutorial with code, you can play within the context of a `StarterAppScala`:
 
-```scala
+```scala mdoc
 import libretto.StarterAppScala
 
 object HelloWorld extends StarterAppScala[String] {
@@ -50,6 +50,21 @@ object HelloWorld extends StarterAppScala[String] {
   override def blueprint: Done -⚬ Val[String] =
     constVal("Hello world!")
 }
+```
+
+```scala mdoc:invisible
+// imports and types used in below code snippets
+
+import libretto.StarterKit.dsl._
+
+object Types {
+  type A
+  type B
+  type C
+  type D
+  type E
+}
+import Types._
 ```
 
 ## Building blocks
@@ -332,14 +347,15 @@ def assocRL[X, Y, Z]: (X |*| (Y |*| Z)) -⚬ ((X |*| Y) |*| Z)
 
 Thus, if we have
 
-```scala
-val f1: A -⚬ ((B |*| C) |*| D)
+```scala mdoc
+def f1: A -⚬ ((B |*| C) |*| D) =
+  ???
 ```
 
 we can always get
 
-```scala
-val f2: A -⚬ (B |*| (C |*| D)) =
+```scala mdoc:compile-only
+def f2: A -⚬ (B |*| (C |*| D)) =
   f1 > assocLR
 ```
 
@@ -349,12 +365,12 @@ The relative order of ports does not matter, either.
 
 If, for example, we have a component
 
-```scala
+```scala mdoc
 /*  ┏━━━━━━━━━━━━━━━━┓
  *  ┞─┐              ┞─┐
  *  ╎A│              ╎C│
  *  ┟─┘              ┟─┘
- *  ┃       f1       ┞─┐
+ *  ┃       g1       ┞─┐
  *  ┃                ╎D│
  *  ┞─┐              ╎⊗│
  *  ╎B│              ╎E│
@@ -362,13 +378,15 @@ If, for example, we have a component
  *  ┗━━━━━━━━━━━━━━━━┛
  *
  */
-val f1: (A |*| B) -⚬ (C |*| (D |*| E))
+def g1: (A |*| B) -⚬ (C |*| (D |*| E)) =
+  ???
 ```
 
 and need
 
-```scala
-val f2: (B |*| A) -⚬ ((E |*| D) |*| C) = ???
+```scala mdoc:compile-only
+def g2: (B |*| A) -⚬ ((E |*| D) |*| C) =
+  ???
 ```
 
 we can easily get it using `swap`
@@ -389,21 +407,21 @@ def swap[X, Y]: (X |*| Y) -⚬ (Y |*| X)
 
 like this
 
-```scala
+```scala mdoc:compile-only
 /*  ┏━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┓
  *  ┞─┐          ├─┐              ├─┐              ├─┐             ┞─┐
  *  ╎B│          ╎A│              ╎C│              ╎D│             ╎E│
  *  ┟─┘          ├─┘              ├─┘              ╎⊗│  swap[D, E] ╎⊗│
  *  ┃            ╎                ╎ swap[C, D ⊗ E] ╎E│             ╎D│
- *  ┃ swap[B, A] ╎       f1       ├─┐              ├─┘             ┟─┘
+ *  ┃ swap[B, A] ╎       g1       ├─┐              ├─┘             ┟─┘
  *  ┃            ╎                ╎D│              ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨
  *  ┞─┐          ├─┐              ╎⊗│              ├─┐             ┞─┐
  *  ╎A│          ╎B│              ╎E│              ╎C│    id[C]    ╎C│
  *  ┟─┘          ├─┘              ├─┘              ├─┘             ┟─┘
  *  ┗━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛
  */
-val f2: (B |*| A) -⚬ ((E |*| D) |*| C) =
-  swap[B, A] > f1 > swap[C, D |*| E] > par(swap[D, E], id[C])
+val g2: (B |*| A) -⚬ ((E |*| D) |*| C) =
+  swap[B, A] > g1 > swap[C, D |*| E] > par(swap[D, E], id[C])
 ```
 
 ## The no-flow port, `One`
@@ -587,7 +605,7 @@ def rInvertSignal: (Done |*| Need) -⚬ One
 Using these, we can always move a signal to the other side of the `-⚬` arrow while changing its direction.
 For example, given
 
-```scala
+```scala mdoc
 /*  ┏━━━━━━━━━━━━┓
  *  ┞────┐       ┃
  *  ╎Done│       ┃
@@ -597,12 +615,13 @@ For example, given
  *  ┟────┘       ┟────┘
  *  ┗━━━━━━━━━━━━┛
  */
-val f: (Done |*| A) -⚬ B
+def f: (Done |*| A) -⚬ B =
+  ???
 ```
 
 we can always obtain
 
-```scala
+```scala mdoc:compile-only
 /*  ┏━━━━━━━━━━━━━┓
  *  ┃             ┞────┐
  *  ┃             ╎Need│
@@ -612,7 +631,8 @@ we can always obtain
  *  ┟────┘        ┟────┘
  *  ┗━━━━━━━━━━━━━┛
  */
-val g: A -⚬ (Need |*| B)
+def g: A -⚬ (Need |*| B) =
+  ???
 ```
 
 roughly like this
@@ -635,7 +655,7 @@ roughly like this
 
 and precisely (including all the necessary glue) like this
 
-```scala
+```scala mdoc
 /*  ┏━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┓
  *  ┃             ╎ lInvertSignal ├────┐         ├────┐          ┞────┐
  *  ┃ introFst[A] ├───┐           ╎Need│         ╎Need│ id[Need] ╎Need│
@@ -648,7 +668,7 @@ and precisely (including all the necessary glue) like this
  *  ┟───┘         ├───┘           ├───┘          ├────┘          ┟───┘
  *  ┗━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛
  */
-val g: A -⚬ (Need |*| B) =
+def g: A -⚬ (Need |*| B) =
   introFst[A] > par(lInvertSignal, id[A]) > assocLR > par(id[Need], f)
 ```
 
@@ -822,7 +842,7 @@ is it decided how the `A` on the other out-port is produced, namely, whether it 
 At least one of these needs to be a primitive (the other one can be obtained thanks to symmetry of ⊗).
 Note that arrows in the opposite direction need not be primitives, as they are always available:
 
-```scala
+```scala mdoc
 def coFactorL[A, B, C]: (A |*| (B |&| C)) -⚬ ((A |*| B) |&| (A |*| C)) =
   choice(par(id, chooseL), par(id, chooseR))
 
@@ -875,7 +895,7 @@ We just have to do the substitution in either direction explicitly via `pack` an
 
 As an example, let's define a `List` type:
 
-```scala
+```scala mdoc
 //         +-------- element type
 //         |    +--- marks occurrences of recursive substructure(s), in this case the tail sub-list
 //         |    |     +-- nil     +-- cons
@@ -890,16 +910,16 @@ type List[A] = Rec[ListF[A, *]] // the * is kind-projector syntax for type lambd
 
 and the `nil` and `cons` constructors:
 
-```scala
+```scala mdoc
 object List {
   def nil[A]: One -⚬ List[A] =
-    injectL > pack
+    injectL > pack[ListF[A, *]]
 
   //     head --+       +-- tail
   //            |       |
   //            V       V
   def cons[A]: (A |*| List[A]) -⚬ List[A] =
-    injectR > pack
+    injectR > pack[ListF[A, *]]
 }
 ```
 
@@ -936,7 +956,10 @@ def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B
 As an example, let's define a linear function that applies a given linear function to each element of a `List`
 (defined above).
 
-```scala
+```scala mdoc:invisible
+import List.{nil, cons}
+```
+```scala mdoc:nest
 object List {
   def map[A, B](f: A -⚬ B): List[A] -⚬ List[B] = {
     //                         +-- pretending we already know how to map the tail

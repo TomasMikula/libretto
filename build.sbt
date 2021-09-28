@@ -87,9 +87,15 @@ lazy val docsSite  = taskKey[File]("prepares generated documentation (Scaladoc, 
 
 lazy val docs = project
   .in(file("docs-project")) // must not be the same as mdocIn
-  .dependsOn(root)
+  .dependsOn(core)
   .enablePlugins(MdocPlugin)
   .settings(
+    scalacOptions += "-Ykind-projector", // so that we can use '*' placeholder in the tutorial
+    // mdoc (transitively) depends on sourcecode_2.13,
+    // which conflicts with core's dependency on sourcecode_3
+    libraryDependencies := libraryDependencies.value.map(_ excludeAll (
+      ExclusionRule(organization = "com.lihaoyi", name = "sourcecode_2.13"),
+    )),
     mdocIn := file("tutorial"),
     laikaSite := {
       import cats.effect.IO
