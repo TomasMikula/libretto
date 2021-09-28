@@ -1,0 +1,1 @@
+libraryDependencies += "org.planet42" %% "laika-io" % "0.18.0"

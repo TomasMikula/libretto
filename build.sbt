@@ -81,3 +81,73 @@ lazy val root = project
     core,
     examples,
   )
+
+lazy val laikaSite = taskKey[File]("generates HTML from Markdown using Laika")
+lazy val docsSite  = taskKey[File]("prepares generated documentation (Scaladoc, tutorial) for publishing")
+
+lazy val docs = project
+  .in(file("docs-project")) // must not be the same as mdocIn
+  .dependsOn(root)
+  .enablePlugins(MdocPlugin)
+  .settings(
+    mdocIn := file("tutorial"),
+    laikaSite := {
+      import cats.effect.IO
+      import cats.effect.unsafe.implicits.global
+      import laika.api.Transformer
+      import laika.format.{HTML, Markdown}
+      import laika.helium.Helium
+      import laika.helium.config.TextLink
+      import laika.io.implicits._
+      import laika.markdown.github.GitHubFlavor
+      import laika.parse.code.SyntaxHighlighting
+      import laika.theme.Theme
+
+      // add a dependency on mdoc
+      mdoc.toTask("").value
+      val srcDir = mdocOut.value
+      val tgtDir = target.value / "laika-site"
+
+      Transformer
+        .from(Markdown)
+        .to(HTML)
+        .using(GitHubFlavor, SyntaxHighlighting)
+        .parallel[IO]
+        .withTheme(
+          Helium.defaults
+            .site.topNavigationBar(
+              homeLink = TextLink.external("https://github.com/TomasMikula/libretto", "GitHub"),
+            )
+            // Change the code font, since Helium's default "Fira Code" lacks some symbols used in tutorial
+            // and the fallback font is not monospace. See https://github.com/planet42/Laika/issues/218.
+            .all.fontFamilies(
+              body = "Lato",      // just repeating the default
+              headlines = "Lato", // just repeating the default
+              code = "Menlo",
+            )
+            .build
+        )
+        .build
+        .use { transformer =>
+          transformer
+            .fromDirectory(srcDir)
+            .toDirectory(tgtDir)
+            .transform
+        }
+        .unsafeRunSync()
+
+      tgtDir
+    },
+    docsSite := {
+      val scaladocDir  = (core / Compile / doc).value
+      val laikaSiteDir = laikaSite.value
+
+      val outputDir = target.value / "docs-site"
+
+      IO.delete(outputDir)
+      IO.copyDirectory(scaladocDir,  outputDir / "scaladoc")
+      IO.copyDirectory(laikaSiteDir, outputDir / "tutorial")
+
+      outputDir
+    }
+  )
