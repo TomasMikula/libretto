@@ -319,9 +319,10 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
 ┟─┘              ┟─┘           ┟─┘              ┟─┘
 ┗━━━━━━━━━━━━━━━━┛             ┗━━━━━━━━━━━━━━━━┛</code></pre>
         <p>Thus, if we have</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">f1</span><span>: </span><span class="type-name">A</span><span> -⚬ ((</span><span class="type-name">B</span><span> |*| </span><span class="type-name">C</span><span>) |*| </span><span class="type-name">D</span><span>)</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">f1</span><span>: </span><span class="type-name">A</span><span> -⚬ ((</span><span class="type-name">B</span><span> |*| </span><span class="type-name">C</span><span>) |*| </span><span class="type-name">D</span><span>) =
+  ???</span></code></pre>
         <p>we can always get</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">f2</span><span>: </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">B</span><span> |*| (</span><span class="type-name">C</span><span> |*| </span><span class="type-name">D</span><span>)) =
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">f2</span><span>: </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">B</span><span> |*| (</span><span class="type-name">C</span><span> |*| </span><span class="type-name">D</span><span>)) =
   </span><span class="identifier">f1</span><span> &gt; </span><span class="identifier">assocLR</span></code></pre>
         
         <h2 id="symmetry-of" class="section"><a class="anchor-link left" href="#symmetry-of"><i class="icofont-laika">&#xef71;</i></a>Symmetry of ⊗</h2>
@@ -331,7 +332,7 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
  *  ┞─┐              ┞─┐
  *  ╎A│              ╎C│
  *  ┟─┘              ┟─┘
- *  ┃       f1       ┞─┐
+ *  ┃       g1       ┞─┐
  *  ┃                ╎D│
  *  ┞─┐              ╎⊗│
  *  ╎B│              ╎E│
@@ -339,9 +340,11 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
  *  ┗━━━━━━━━━━━━━━━━┛
  *
  */</span><span>
-</span><span class="keyword">val</span><span> </span><span class="identifier">f1</span><span>: (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) -⚬ (</span><span class="type-name">C</span><span> |*| (</span><span class="type-name">D</span><span> |*| </span><span class="type-name">E</span><span>))</span></code></pre>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">g1</span><span>: (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) -⚬ (</span><span class="type-name">C</span><span> |*| (</span><span class="type-name">D</span><span> |*| </span><span class="type-name">E</span><span>)) =
+  ???</span></code></pre>
         <p>and need</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">f2</span><span>: (</span><span class="type-name">B</span><span> |*| </span><span class="type-name">A</span><span>) -⚬ ((</span><span class="type-name">E</span><span> |*| </span><span class="type-name">D</span><span>) |*| </span><span class="type-name">C</span><span>) = ???</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">g2</span><span>: (</span><span class="type-name">B</span><span> |*| </span><span class="type-name">A</span><span>) -⚬ ((</span><span class="type-name">E</span><span> |*| </span><span class="type-name">D</span><span>) |*| </span><span class="type-name">C</span><span>) =
+  ???</span></code></pre>
         <p>we can easily get it using <code>swap</code></p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">/*  ┏━━━━━━━━━━━━━━━━┓
  *  ┞─┐              ┞─┐
@@ -360,15 +363,15 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
  *  ╎B│          ╎A│              ╎C│              ╎D│             ╎E│
  *  ┟─┘          ├─┘              ├─┘              ╎⊗│  swap[D, E] ╎⊗│
  *  ┃            ╎                ╎ swap[C, D ⊗ E] ╎E│             ╎D│
- *  ┃ swap[B, A] ╎       f1       ├─┐              ├─┘             ┟─┘
+ *  ┃ swap[B, A] ╎       g1       ├─┐              ├─┘             ┟─┘
  *  ┃            ╎                ╎D│              ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨
  *  ┞─┐          ├─┐              ╎⊗│              ├─┐             ┞─┐
  *  ╎A│          ╎B│              ╎E│              ╎C│    id[C]    ╎C│
  *  ┟─┘          ├─┘              ├─┘              ├─┘             ┟─┘
  *  ┗━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛
  */</span><span>
-</span><span class="keyword">val</span><span> </span><span class="identifier">f2</span><span>: (</span><span class="type-name">B</span><span> |*| </span><span class="type-name">A</span><span>) -⚬ ((</span><span class="type-name">E</span><span> |*| </span><span class="type-name">D</span><span>) |*| </span><span class="type-name">C</span><span>) =
-  </span><span class="identifier">swap</span><span>[</span><span class="type-name">B</span><span>, </span><span class="type-name">A</span><span>] &gt; </span><span class="identifier">f1</span><span> &gt; </span><span class="identifier">swap</span><span>[</span><span class="type-name">C</span><span>, </span><span class="type-name">D</span><span> |*| </span><span class="type-name">E</span><span>] &gt; </span><span class="identifier">par</span><span>(</span><span class="identifier">swap</span><span>[</span><span class="type-name">D</span><span>, </span><span class="type-name">E</span><span>], </span><span class="identifier">id</span><span>[</span><span class="type-name">C</span><span>])</span></code></pre>
+</span><span class="keyword">val</span><span> </span><span class="identifier">g2</span><span>: (</span><span class="type-name">B</span><span> |*| </span><span class="type-name">A</span><span>) -⚬ ((</span><span class="type-name">E</span><span> |*| </span><span class="type-name">D</span><span>) |*| </span><span class="type-name">C</span><span>) =
+  </span><span class="identifier">swap</span><span>[</span><span class="type-name">B</span><span>, </span><span class="type-name">A</span><span>] &gt; </span><span class="identifier">g1</span><span> &gt; </span><span class="identifier">swap</span><span>[</span><span class="type-name">C</span><span>, </span><span class="type-name">D</span><span> |*| </span><span class="type-name">E</span><span>] &gt; </span><span class="identifier">par</span><span>(</span><span class="identifier">swap</span><span>[</span><span class="type-name">D</span><span>, </span><span class="type-name">E</span><span>], </span><span class="identifier">id</span><span>[</span><span class="type-name">C</span><span>])</span></code></pre>
         
         <h2 id="the-no-flow-port-one" class="section"><a class="anchor-link left" href="#the-no-flow-port-one"><i class="icofont-laika">&#xef71;</i></a>The no-flow port, <code>One</code></h2>
         <p>Sometimes we want a component with no in-ports or no out-ports, such as these ones</p>
@@ -515,7 +518,8 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
  *  ┟────┘       ┟────┘
  *  ┗━━━━━━━━━━━━┛
  */</span><span>
-</span><span class="keyword">val</span><span> </span><span class="identifier">f</span><span>: (</span><span class="type-name">Done</span><span> |*| </span><span class="type-name">A</span><span>) -⚬ </span><span class="type-name">B</span></code></pre>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">f</span><span>: (</span><span class="type-name">Done</span><span> |*| </span><span class="type-name">A</span><span>) -⚬ </span><span class="type-name">B</span><span> =
+  ???</span></code></pre>
         <p>we can always obtain</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">/*  ┏━━━━━━━━━━━━━┓
  *  ┃             ┞────┐
@@ -526,7 +530,8 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
  *  ┟────┘        ┟────┘
  *  ┗━━━━━━━━━━━━━┛
  */</span><span>
-</span><span class="keyword">val</span><span> </span><span class="identifier">g</span><span>: </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">B</span><span>)</span></code></pre>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">g</span><span>: </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">B</span><span>) =
+  ???</span></code></pre>
         <p>roughly like this</p>
         <pre><code>┏━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━┓
 ┃ lInvertSignal ├────┐ id[Need] ┞────┐
@@ -554,7 +559,7 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
  *  ┟───┘         ├───┘           ├───┘          ├────┘          ┟───┘
  *  ┗━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━┛
  */</span><span>
-</span><span class="keyword">val</span><span> </span><span class="identifier">g</span><span>: </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">B</span><span>) =
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">g</span><span>: </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">B</span><span>) =
   </span><span class="identifier">introFst</span><span>[</span><span class="type-name">A</span><span>] &gt; </span><span class="identifier">par</span><span>(</span><span class="identifier">lInvertSignal</span><span>, </span><span class="identifier">id</span><span>[</span><span class="type-name">A</span><span>]) &gt; </span><span class="identifier">assocLR</span><span> &gt; </span><span class="identifier">par</span><span>(</span><span class="identifier">id</span><span>[</span><span class="type-name">Need</span><span>], </span><span class="identifier">f</span><span>)</span></code></pre>
         
         <h2 id="either" class="section"><a class="anchor-link left" href="#either"><i class="icofont-laika">&#xef71;</i></a>Either (⊕)</h2>
@@ -730,19 +735,17 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
 //         |    |     |        |  |   |
 //         V    V     V        V  V   V
 </span><span class="keyword">type</span><span> </span><span class="type-name">ListF</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">Self</span><span>] = </span><span class="type-name">One</span><span> |+| (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">Self</span><span>)
-</span><span class="keyword">type</span><span> </span><span class="type-name">List</span><span>[</span><span class="type-name">A</span><span>] = </span><span class="type-name">Rec</span><span>[</span><span class="type-name">ListF</span><span>[</span><span class="type-name">A</span><span>, *]] </span><span class="comment">// the * is kind-projector syntax for type lambdas,
-</span><span>                                </span><span class="comment">// in Scala 3 enabled by the -Ykind-projector compiler option.
-</span><span>                                </span><span class="comment">// ListF[A, *] is a shorthand for `X =&gt;&gt; ListF[A, X]`</span></code></pre>
+</span><span class="keyword">type</span><span> </span><span class="type-name">List</span><span>[</span><span class="type-name">A</span><span>] = </span><span class="type-name">Rec</span><span>[</span><span class="type-name">ListF</span><span>[</span><span class="type-name">A</span><span>, *]] </span><span class="comment">// the * is kind-projector syntax for type lambdas,</span></code></pre>
         <p>and the <code>nil</code> and <code>cons</code> constructors:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">object</span><span> </span><span class="type-name">List</span><span> {
   </span><span class="keyword">def</span><span> </span><span class="declaration-name">nil</span><span>[</span><span class="type-name">A</span><span>]: </span><span class="type-name">One</span><span> -⚬ </span><span class="type-name">List</span><span>[</span><span class="type-name">A</span><span>] =
-    </span><span class="identifier">injectL</span><span> &gt; </span><span class="identifier">pack</span><span>
+    </span><span class="identifier">injectL</span><span> &gt; </span><span class="identifier">pack</span><span>[</span><span class="type-name">ListF</span><span>[</span><span class="type-name">A</span><span>, *]]
 
   </span><span class="comment">//     head --+       +-- tail
 </span><span>  </span><span class="comment">//            |       |
 </span><span>  </span><span class="comment">//            V       V
 </span><span>  </span><span class="keyword">def</span><span> </span><span class="declaration-name">cons</span><span>[</span><span class="type-name">A</span><span>]: (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">List</span><span>[</span><span class="type-name">A</span><span>]) -⚬ </span><span class="type-name">List</span><span>[</span><span class="type-name">A</span><span>] =
-    </span><span class="identifier">injectR</span><span> &gt; </span><span class="identifier">pack</span><span>
+    </span><span class="identifier">injectR</span><span> &gt; </span><span class="identifier">pack</span><span>[</span><span class="type-name">ListF</span><span>[</span><span class="type-name">A</span><span>, *]]
 }</span></code></pre>
         <p>Notes:
          - Such a <code>List</code> may be produced gradually. For example, one may use the <code>cons</code> constructor where the tail is not yet
