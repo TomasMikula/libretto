@@ -82,8 +82,10 @@ lazy val root = project
     examples,
   )
 
-lazy val laikaSite = taskKey[File]("generates HTML from Markdown using Laika")
-lazy val docsSite  = taskKey[File]("prepares generated documentation (Scaladoc, tutorial) for publishing")
+lazy val laikaSite         = taskKey[File]("generates HTML from Markdown using Laika")
+lazy val docsSite          = taskKey[File]("generates doc site")
+lazy val prepareDocsLatest = taskKey[File]("generates doc site to the publishing directory (docs/latest)")
+lazy val commitDocsLatest  = taskKey[Unit]("generates and commits the current docs")
 
 lazy val docs = project
   .in(file("docs-project")) // must not be the same as mdocIn
@@ -155,5 +157,26 @@ lazy val docs = project
       IO.copyDirectory(laikaSiteDir, outputDir / "tutorial")
 
       outputDir
-    }
+    },
+    prepareDocsLatest := {
+      val baseDir = (root / baseDirectory).value
+      val srcDir = docsSite.value
+      val tgtDir = baseDir / "docs" / "latest"
+
+      val git = sbtrelease.Git.mkVcs(baseDir)
+
+      git.cmd("rm", "-rf", "--ignore-unmatch", tgtDir) ! ;
+      IO.copyDirectory(srcDir, tgtDir)
+      git.cmd("add", tgtDir) ! ;
+
+      tgtDir
+    },
+    commitDocsLatest := {
+      val latestDocsDir = prepareDocsLatest.value
+
+      val git = sbtrelease.Git.mkVcs((root / baseDirectory).value)
+
+      streams.value.log.info(s"Commiting latest docs in $latestDocsDir")
+      git.cmd("commit", "-m", "Publish latest docs.", latestDocsDir) ! ;
+    },
   )
