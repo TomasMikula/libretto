@@ -14,7 +14,7 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
   completing a `Promise` is an effect,
   spawning an actor or a fiber is an effect,
   enqueueing a message in a queue is an effect.
-  
+
   Libretto rejects the assumption that effects are a prerequisite for concurrency.
 
   Although stream processing libraries do provide some high-level operations for declarative concurrency that abstract
@@ -27,7 +27,7 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
 
   Moreover, even in an `IO` monad-style program, we still manipulate live objects with identities,
   such as fibers, mutable references, queues, "pre-materialized" blueprints, ...
-  
+
   That does not fit our idea of writing mere descriptions of programs.
 
 - **The cognitive load of making sure all the wires are connected.**
@@ -43,7 +43,7 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
 
 - **Callbacks everywhere.**
 
-  It is disappointing how callback-ridden our programs, including functional programs, are when it comes to concurrency
+  It is disappointing how callback-ridden our programs, including our functional programs, are when it comes to concurrency
   and accessing resources.
 
   By a _callback_ we mean a function object that performs effects (on resources it has captured) and is passed to
@@ -61,7 +61,7 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
   requires escaping to a different paradigm, one which is more low-level and imperative.
 
   We are talking about that case when you needed a slight variation on a stream operator and ended up "manually"
-  shoveling messages between queues, mutable references and promises.
+  shoveling messages between queues, mutable references and/or promises.
 
 - **Inability to express protocols of interaction in types.**
 
@@ -96,7 +96,7 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
 - **Expressiveness**
 
   Libretto provides a self-contained DSL that is powerful enough to express many different concepts
-  without using escape hatches to the underlying layer. 
+  without using escape hatches to the underlying layer.
 
   Streams themselves and dynamic stream topologies are expressible without needing built-in support.
 
@@ -195,7 +195,7 @@ No. See also [Caveats](#caveats).
 The goal for now is to present a different approach to concurrent programming
 and to excite a small number of enthusiasts to play with it, explore it and push it further.
 
-The expectaion is that people will find the Libretto approach worthwhile regardless of
+The expectation is that people will find the Libretto approach worthwhile regardless of
 unstable API, non-existent ecosystem of libraries, flawed proof-of-concept implementation,
 cumbersome point-free notation, or unknown performance characteristics.
 
@@ -272,7 +272,7 @@ and have to resort to building up linear functions using point-free combinators.
 There is a hierarchy of DSLs, partially ordered by their power. At the bottom, i.e. the weakest, is currently
 [CoreDSL](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/libretto/CoreDSL.html).
 
-An extension of `CoreDSL` tha is of particular interest is
+An extension of `CoreDSL` that is of particular interest is
 [ScalaDSL](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/libretto/ScalaDSL.html).
 It adds support for using Scala values and pure Scala functions, managing resources that are Scala objects,
 performing effects on those resources, and marking thread-blocking Scala calls.
@@ -334,8 +334,9 @@ each other take place concurrently, without any explicit instructions like `spaw
 
 ### Are Libretto programs any more amenable to inspection than `IO` monad programs?
 
-`IO` monad programs are hidden inside an impenetrable Scala function after the first `flatMap`.
-However, Libretto allows to incorporate Scala functions into the program as well.
+`IO` monad programs are hidden inside an impenetrable Scala function after the first `flatMap`,
+and thus not accessible to any kind of inspection.
+Libretto, too, allows to incorporate Scala functions into the program.
 One might therefore ask whether Libretto programs are any more amenable to inspection than `IO` monad programs.
 
 The answer is _yes._
