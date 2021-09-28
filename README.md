@@ -30,7 +30,7 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
   
   That does not fit our idea of writing mere descriptions of programs.
 
-- **The cogintive load of making sure all the wires are connected.**
+- **The cognitive load of making sure all the wires are connected.**
 
   In ensuring that
 
