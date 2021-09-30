@@ -231,9 +231,11 @@ libraryDependencies += &quot;com.github.tomasmikula&quot; %% &quot;libretto&quot
         The above component is then <code>f: (A |*| B) -⚬ (C |*| D)</code>.</p>
         <p>The operator for sequential composition introduced above is <code>andThen</code> (again, do not assume any temporal meaning):</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">andThen</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">C</span><span>](</span><span class="identifier">f</span><span>: </span><span class="type-name">A</span><span> -⚬ </span><span class="type-name">B</span><span>, </span><span class="identifier">g</span><span>: </span><span class="type-name">B</span><span> -⚬ </span><span class="type-name">C</span><span>): </span><span class="type-name">A</span><span> -⚬ </span><span class="type-name">C</span></code></pre>
-        <p>There are syntactic extensions that let us write
-         - <code>f &gt; g</code> instead of <code>andThen(f, g)</code>,
-         - <code>f ⚬ g</code> (read <em>f after g</em>) instead of <code>andThen(g, f)</code>.</p>
+        <p>There are syntactic extensions that let us write</p>
+        <ul>
+          <li><code>f &gt; g</code> instead of <code>andThen(f, g)</code>,</li>
+          <li><code>f ⚬ g</code> (read <em>f after g</em>) instead of <code>andThen(g, f)</code>.</li>
+        </ul>
         <p>The operator for parallel composition is <code>par</code>:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">par</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">C</span><span>, </span><span class="type-name">D</span><span>](
   </span><span class="identifier">f</span><span>: </span><span class="type-name">A</span><span> -⚬ </span><span class="type-name">B</span><span>,
@@ -425,17 +427,21 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
         <h2 id="signals-done-and-need" class="section"><a class="anchor-link left" href="#signals-done-and-need"><i class="icofont-laika">&#xef71;</i></a>Signals, <code>Done</code> and <code>Need</code></h2>
         <p>By a signal we mean a notification that some event has occurred. The signal itself carries no information about the
         event, though, it only signals that the event has occurred.</p>
-        <p>There are two types for signals, differing in the direction in which they travel:
-         - <code>Done</code>, which travels in the direction of <code>-⚬</code>, i.e. from left to right.
-           We also call the direction of <code>-⚬</code> the <em>positive direction.</em>
-         - <code>Need</code>, which travels in the direction opposite to <code>-⚬</code>, i.e. from right to left.
-           We also call the direction opposite to <code>-⚬</code> the <em>negative direction.</em></p>
+        <p>There are two types for signals, differing in the direction in which they travel:</p>
+        <ul>
+          <li><code>Done</code>, which travels in the direction of <code>-⚬</code>, i.e. from left to right.
+          We also call the direction of <code>-⚬</code> the <em>positive direction.</em></li>
+          <li><code>Need</code>, which travels in the direction opposite to <code>-⚬</code>, i.e. from right to left.
+          We also call the direction opposite to <code>-⚬</code> the <em>negative direction.</em></li>
+        </ul>
         <p>Signals are useful for creating causal dependencies: one component might wait for a signal from another component
         before proceeding with further processing. For example, the signal might signal completion of a request and further
         processing might be accepting another request, effectively sequencing request processing.</p>
-        <p>For someone used to <code>Future</code> and <code>Promise</code>, it might be helpful, <em>despite important differences,</em> to initially view
-         - <code>Done</code> as <code>Future[Unit]</code>,
-         - <code>Need</code> as <code>Promise[Unit]</code>.</p>
+        <p>For someone used to <code>Future</code> and <code>Promise</code>, it might be helpful, <em>despite important differences,</em> to initially view</p>
+        <ul>
+          <li><code>Done</code> as <code>Future[Unit]</code>,</li>
+          <li><code>Need</code> as <code>Promise[Unit]</code>.</li>
+        </ul>
         
         <h3 id="immediate-signals" class="section"><a class="anchor-link left" href="#immediate-signals"><i class="icofont-laika">&#xef71;</i></a>Immediate signals</h3>
         <p>There are primitive components that fire a signal immediately. More precisely, as soon as the branch containing
@@ -488,9 +494,9 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
 </span><span class="keyword">def</span><span> </span><span class="declaration-name">joinNeed</span><span> : </span><span class="type-name">Need</span><span> -⚬ (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">Need</span><span>)</span></code></pre>
         
         <h3 id="inverting-signals" class="section"><a class="anchor-link left" href="#inverting-signals"><i class="icofont-laika">&#xef71;</i></a>Inverting signals</h3>
-        <p>There are primitives to invert the direction of a signal.
-        A <code>Need</code> signal traveling to the left can be changed to a <code>Done</code> signal traveling to the right.
-        A <code>Done</code> signal traveling to the right can be changed to a <code>Need</code> signal traveling to the left.</p>
+        <p>There are primitives to invert the direction of a signal.</p>
+        <p>A <code>Need</code> signal traveling to the left can be changed to a <code>Done</code> signal traveling to the right.</p>
+        <p>A <code>Done</code> signal traveling to the right can be changed to a <code>Need</code> signal traveling to the left.</p>
         <pre><code class="nohighlight"><span class="comment">//  ┏━━━━━━━━━━━━━━━┓                 ┏━━━━━━━━━━━━━━━┓
 //  ┃ lInvertSignal ┃                 ┃ rInvertSignal ┃
 //  ┃               ┞────┐            ┞────┐          ┃
@@ -745,23 +751,27 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
 </span><span>  </span><span class="keyword">def</span><span> </span><span class="declaration-name">cons</span><span>[</span><span class="type-name">A</span><span>]: (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">List</span><span>[</span><span class="type-name">A</span><span>]) -⚬ </span><span class="type-name">List</span><span>[</span><span class="type-name">A</span><span>] =
     </span><span class="identifier">injectR</span><span> &gt; </span><span class="identifier">pack</span><span>[</span><span class="type-name">ListF</span><span>[</span><span class="type-name">A</span><span>, *]]
 }</span></code></pre>
-        <p>Notes:
-         - Such a <code>List</code> may be produced gradually. For example, one may use the <code>cons</code> constructor where the tail is not yet
-           known to be either empty or non-empty. Consequently, the head of a list can already be accessed and consumed (e.g.
-           by the <code>map</code> function defined below) while the tail is still being constructed.
-           This is different from <code>scala.List</code> where in <code>val xs = head :: tail</code> the <code>tail</code> is fully constructed before <code>xs</code>
-           is constructed and its head made accessible for further processing.
-         - Consequently, <code>List</code>s may be infinite and it is not a problem if the elements are consumed at a faster rate than
-           they are produced.
-         - Note that unlike infinite lazy lists in Haskell, the construction of further elements is driven by the <code>List</code>
-           producer, not by the <code>List</code> consumer.</p>
+        <p>Notes:</p>
+        <ul>
+          <li>Such a <code>List</code> may be produced gradually. For example, one may use the <code>cons</code> constructor where the tail is not yet
+          known to be either empty or non-empty. Consequently, the head of a list can already be accessed and consumed (e.g.
+          by the <code>map</code> function defined below) while the tail is still being constructed.
+          This is different from <code>scala.List</code> where in <code>val xs = head :: tail</code> the <code>tail</code> is fully constructed before <code>xs</code>
+          is constructed and its head made accessible for further processing.</li>
+          <li>Consequently, <code>List</code>s may be infinite and it is not a problem if the elements are consumed at a faster rate than
+          they are produced.</li>
+          <li>Note that unlike infinite lazy lists in Haskell, the construction of further elements is driven by the <code>List</code>
+          producer, not by the <code>List</code> consumer.</li>
+        </ul>
         
         <h3 id="recursive-functions" class="section"><a class="anchor-link left" href="#recursive-functions"><i class="icofont-laika">&#xef71;</i></a>Recursive functions</h3>
         <p>To work with recursive structures we need recursive functions.</p>
-        <p>The general recipe for handling a recursive type <code>Rec[F]</code> is
-         1. &quot;Pretend&quot; we already know how to handle the nested <code>Rec[F]</code> substructure(s).
-         2. Unpack one level of the recursive definition to obtain <code>F[Rec[F]</code>.
-         3. Write code to handle <code>F[Rec[F]]</code>, using the made up linear function to handle nested occurrences of <code>Rec[F]</code>.</p>
+        <p>The general recipe for handling a recursive type <code>Rec[F]</code> is</p>
+        <ol class="arabic">
+          <li>&quot;Pretend&quot; we already know how to handle the nested <code>Rec[F]</code> substructure(s).</li>
+          <li>Unpack one level of the recursive definition to obtain <code>F[Rec[F]</code>.</li>
+          <li>Write code to handle <code>F[Rec[F]]</code>, using the made up linear function to handle nested occurrences of <code>Rec[F]</code>.</li>
+        </ol>
         <p>The &quot;pretending&quot; is done by taking a linear function as an argument. More concretely, instead of constructing a linear
         function <code>Rec[F] -⚬ B</code> directly, we write a Scala function <code>(Rec[F] -⚬ B) =&gt; (Rec[F] -⚬ B)</code> that constructs the desired
         linear function given a linear function of the same signature that it can use to handle substructures. Such Scala
@@ -783,10 +793,12 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
     }
   }
 }</span></code></pre>
-        <p>Notes:
-         - <code>par(f, mapTail)</code> maps the head and the tail of the list concurrently.
-         - The <code>cons[B]</code> constructor may execute as soon as the input list is known to be non-empty.
-           In particular, it does not wait for <code>par(f, mapTail)</code> to finish.</p>
+        <p>Notes:</p>
+        <ul>
+          <li><code>par(f, mapTail)</code> maps the head and the tail of the list concurrently.</li>
+          <li>The <code>cons[B]</code> constructor may execute as soon as the input list is known to be non-empty.
+          In particular, it does not wait for <code>par(f, mapTail)</code> to finish.</li>
+        </ul>
         
         <h2 id="racing" class="section"><a class="anchor-link left" href="#racing"><i class="icofont-laika">&#xef71;</i></a>Racing</h2>
         <p>Libretto provides functions for testing which of two concurrent signals arrived first. There is one version for
@@ -797,11 +809,13 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
         <p>In <code>raceDone</code>, the two <code>Done</code> signals from the in-port race against each other.
         In <code>selectNeed</code>, the two <code>Need</code> signals from the out-port race against each other.</p>
         <p>In both cases, the winning signal is consumed by the racing operation. The slower signal still has to be awaited
-        at some point (remember that signals cannot be ignored), so it is propagated to the other side of <code>-⚬</code>:
-         - In <code>raceDone</code>, if the first <code>Done</code> signal of the in-port wins, the second one is returned on the left of the <code>|+|</code>
-           in the out-port. The case of second signal winning is analogous.
-         - In <code>selectNeed</code>, if the first <code>Need</code> signal of the out-port wins, the left side of the <code>|&amp;|</code> in the in-port is
-           chosen and the second <code>Need</code> signal of the out-port is forwarded to it.</p>
+        at some point (remember that signals cannot be ignored), so it is propagated to the other side of <code>-⚬</code>:</p>
+        <ul>
+          <li>In <code>raceDone</code>, if the first <code>Done</code> signal of the in-port wins, the second one is returned on the left of the <code>|+|</code>
+          in the out-port. The case of second signal winning is analogous.</li>
+          <li>In <code>selectNeed</code>, if the first <code>Need</code> signal of the out-port wins, the left side of the <code>|&amp;|</code> in the in-port is
+          chosen and the second <code>Need</code> signal of the out-port is forwarded to it.</li>
+        </ul>
         <p>There are additional library functions for racing built on top of these provided for convenience.</p>
         
         <h3 id="racing-is-a-source-of-non-determinism" class="section"><a class="anchor-link left" href="#racing-is-a-source-of-non-determinism"><i class="icofont-laika">&#xef71;</i></a>Racing is a source of non-determinism</h3>

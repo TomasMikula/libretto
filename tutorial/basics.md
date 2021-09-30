@@ -218,8 +218,9 @@ def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C
 ```
 
 There are syntactic extensions that let us write
- - `f > g` instead of `andThen(f, g)`,
- - `f ⚬ g` (read _f after g_) instead of `andThen(g, f)`.
+
+- `f > g` instead of `andThen(f, g)`,
+- `f ⚬ g` (read _f after g_) instead of `andThen(g, f)`.
 
 The operator for parallel composition is `par`:
 
@@ -495,18 +496,20 @@ By a signal we mean a notification that some event has occurred. The signal itse
 event, though, it only signals that the event has occurred.
 
 There are two types for signals, differing in the direction in which they travel:
- - `Done`, which travels in the direction of `-⚬`, i.e. from left to right.
-   We also call the direction of `-⚬` the _positive direction._
- - `Need`, which travels in the direction opposite to `-⚬`, i.e. from right to left.
-   We also call the direction opposite to `-⚬` the _negative direction._
+
+- `Done`, which travels in the direction of `-⚬`, i.e. from left to right.
+  We also call the direction of `-⚬` the _positive direction._
+- `Need`, which travels in the direction opposite to `-⚬`, i.e. from right to left.
+  We also call the direction opposite to `-⚬` the _negative direction._
 
 Signals are useful for creating causal dependencies: one component might wait for a signal from another component
 before proceeding with further processing. For example, the signal might signal completion of a request and further
 processing might be accepting another request, effectively sequencing request processing.
 
 For someone used to `Future` and `Promise`, it might be helpful, _despite important differences,_ to initially view
- - `Done` as `Future[Unit]`,
- - `Need` as `Promise[Unit]`.
+
+- `Done` as `Future[Unit]`,
+- `Need` as `Promise[Unit]`.
 
 ### Immediate signals
 
@@ -576,7 +579,9 @@ def joinNeed : Need -⚬ (Need |*| Need)
 ### Inverting signals
 
 There are primitives to invert the direction of a signal.
+
 A `Need` signal traveling to the left can be changed to a `Done` signal traveling to the right.
+
 A `Done` signal traveling to the right can be changed to a `Need` signal traveling to the left.
 
 ```scala
@@ -918,14 +923,15 @@ object List {
 ```
 
 Notes:
- - Such a `List` may be produced gradually. For example, one may use the `cons` constructor where the tail is not yet
+
+- Such a `List` may be produced gradually. For example, one may use the `cons` constructor where the tail is not yet
    known to be either empty or non-empty. Consequently, the head of a list can already be accessed and consumed (e.g.
    by the `map` function defined below) while the tail is still being constructed.
    This is different from `scala.List` where in `val xs = head :: tail` the `tail` is fully constructed before `xs`
    is constructed and its head made accessible for further processing.
- - Consequently, `List`s may be infinite and it is not a problem if the elements are consumed at a faster rate than
+- Consequently, `List`s may be infinite and it is not a problem if the elements are consumed at a faster rate than
    they are produced.
- - Note that unlike infinite lazy lists in Haskell, the construction of further elements is driven by the `List`
+- Note that unlike infinite lazy lists in Haskell, the construction of further elements is driven by the `List`
    producer, not by the `List` consumer.
 
 ### Recursive functions
@@ -933,9 +939,10 @@ Notes:
 To work with recursive structures we need recursive functions.
 
 The general recipe for handling a recursive type `Rec[F]` is
- 1. "Pretend" we already know how to handle the nested `Rec[F]` substructure(s).
- 2. Unpack one level of the recursive definition to obtain `F[Rec[F]`.
- 3. Write code to handle `F[Rec[F]]`, using the made up linear function to handle nested occurrences of `Rec[F]`.
+
+1. "Pretend" we already know how to handle the nested `Rec[F]` substructure(s).
+2. Unpack one level of the recursive definition to obtain `F[Rec[F]`.
+3. Write code to handle `F[Rec[F]]`, using the made up linear function to handle nested occurrences of `Rec[F]`.
 
 The "pretending" is done by taking a linear function as an argument. More concretely, instead of constructing a linear
 function `Rec[F] -⚬ B` directly, we write a Scala function `(Rec[F] -⚬ B) => (Rec[F] -⚬ B)` that constructs the desired
@@ -970,8 +977,9 @@ object List {
 ```
 
 Notes:
- - `par(f, mapTail)` maps the head and the tail of the list concurrently.
- - The `cons[B]` constructor may execute as soon as the input list is known to be non-empty.
+
+- `par(f, mapTail)` maps the head and the tail of the list concurrently.
+- The `cons[B]` constructor may execute as soon as the input list is known to be non-empty.
    In particular, it does not wait for `par(f, mapTail)` to finish.
 
 ## Racing
@@ -990,10 +998,11 @@ In `selectNeed`, the two `Need` signals from the out-port race against each othe
 
 In both cases, the winning signal is consumed by the racing operation. The slower signal still has to be awaited
 at some point (remember that signals cannot be ignored), so it is propagated to the other side of `-⚬`:
- - In `raceDone`, if the first `Done` signal of the in-port wins, the second one is returned on the left of the `|+|`
-   in the out-port. The case of second signal winning is analogous.
- - In `selectNeed`, if the first `Need` signal of the out-port wins, the left side of the `|&|` in the in-port is
-   chosen and the second `Need` signal of the out-port is forwarded to it.
+
+- In `raceDone`, if the first `Done` signal of the in-port wins, the second one is returned on the left of the `|+|`
+  in the out-port. The case of second signal winning is analogous.
+- In `selectNeed`, if the first `Need` signal of the out-port wins, the left side of the `|&|` in the in-port is
+  chosen and the second `Need` signal of the out-port is forwarded to it.
 
 There are additional library functions for racing built on top of these provided for convenience.
 
