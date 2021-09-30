@@ -30,27 +30,16 @@ libraryDependencies += "com.github.tomasmikula" %% "libretto" % "0.1.5"
 Check [search.maven.org](https://search.maven.org/search?q=com.github.tomasmikula%20libretto) for the latest version of
 Libretto.
 
-### Your first Libretto application
+### Imports
 
-To follow this tutorial with code, you can play within the context of a `StarterAppScala`:
+The code snippets below use these imports:
 
 ```scala mdoc
-import libretto.StarterAppScala
-
-object HelloWorld extends StarterAppScala[String] {
-
-  // place your code experiments here
-
-  override def blueprint: Done -⚬ Val[String] =
-    constVal("Hello world!")
-}
+import libretto.StarterKit.dsl._
 ```
 
 ```scala mdoc:invisible
-// imports and types used in below code snippets
-
-import libretto.StarterKit.dsl._
-
+// types used in the code snippets below
 object Types {
   type A
   type B

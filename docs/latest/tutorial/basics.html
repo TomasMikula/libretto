@@ -55,7 +55,7 @@
         <ul class="nav-list">
           <li class="level1"><a href="#setup">Setup</a></li>
           <li class="level2"><a href="#sbt-project-setup">sbt project setup</a></li>
-          <li class="level2"><a href="#your-first-libretto-application">Your first Libretto application</a></li>
+          <li class="level2"><a href="#imports">Imports</a></li>
           <li class="level1"><a href="#building-blocks">Building blocks</a></li>
           <li class="level1"><a href="#maximum-concurrency">Maximum concurrency</a></li>
           <li class="level1"><a href="#sequential-composition">Sequential composition</a></li>
@@ -110,17 +110,9 @@ libraryDependencies += &quot;com.github.tomasmikula&quot; %% &quot;libretto&quot
         <p>Check <a href="https://search.maven.org/search?q=com.github.tomasmikula%20libretto">search.maven.org</a> for the latest version of
         Libretto.</p>
         
-        <h3 id="your-first-libretto-application" class="section"><a class="anchor-link left" href="#your-first-libretto-application"><i class="icofont-laika">&#xef71;</i></a>Your first Libretto application</h3>
-        <p>To follow this tutorial with code, you can play within the context of a <code>StarterAppScala</code>:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">libretto</span><span>.</span><span class="type-name">StarterAppScala</span><span>
-
-</span><span class="keyword">object</span><span> </span><span class="type-name">HelloWorld</span><span> </span><span class="keyword">extends</span><span> </span><span class="type-name">StarterAppScala</span><span>[</span><span class="type-name">String</span><span>] {
-
-  </span><span class="comment">// place your code experiments here
-</span><span>
-  </span><span class="keyword">override</span><span> </span><span class="keyword">def</span><span> </span><span class="declaration-name">blueprint</span><span>: </span><span class="type-name">Done</span><span> -⚬ </span><span class="type-name">Val</span><span>[</span><span class="type-name">String</span><span>] =
-    </span><span class="identifier">constVal</span><span>(</span><span class="string-literal">&quot;Hello world!&quot;</span><span>)
-}</span></code></pre>
+        <h3 id="imports" class="section"><a class="anchor-link left" href="#imports"><i class="icofont-laika">&#xef71;</i></a>Imports</h3>
+        <p>The code snippets below use these imports:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">libretto</span><span>.</span><span class="type-name">StarterKit</span><span>.</span><span class="identifier">dsl</span><span>.</span><span class="identifier">_</span></code></pre>
         
         <h2 id="building-blocks" class="section"><a class="anchor-link left" href="#building-blocks"><i class="icofont-laika">&#xef71;</i></a>Building blocks</h2>
         <p>Libretto programs are composed of <strong>components</strong> with typed <strong>in-ports</strong> and <strong>out-ports</strong>,
