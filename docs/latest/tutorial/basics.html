@@ -436,8 +436,8 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
         </ul>
         
         <h3 id="immediate-signals" class="section"><a class="anchor-link left" href="#immediate-signals"><i class="icofont-laika">&#xef71;</i></a>Immediate signals</h3>
-        <p>There are primitive components that fire a signal immediately. More precisely, as soon as the branch containing
-        the component becomes active, but we haven&#39;t seen any branching operators yet. These are</p>
+        <p>There are primitive components that fire a signal immediately. More precisely, as soon as it is certain that
+        they will be executed (but we haven&#39;t seen any conditional operators yet). These are</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">//  ┏━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━┓
 //  ┃            ┞────┐          ┞────┐         ┃
 //  ┃    done    ╎Done│          ╎Need│  need   ┃
@@ -587,7 +587,7 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
   */</span><span>
 </span><span class="keyword">def</span><span> </span><span class="declaration-name">either</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">C</span><span>](</span><span class="identifier">f</span><span>: </span><span class="type-name">A</span><span> -⚬ </span><span class="type-name">C</span><span>, </span><span class="identifier">g</span><span>: </span><span class="type-name">B</span><span> -⚬ </span><span class="type-name">C</span><span>): (</span><span class="type-name">A</span><span> |+| </span><span class="type-name">B</span><span>) -⚬ </span><span class="type-name">C</span></code></pre>
         <p>It is analogous to Scala&#39;s <code>Either#fold(f: A =&gt; C, g: B =&gt; C): C</code>.</p>
-        <p>Once it is decided which branch it is going to be, the corresponding component, <code>f</code> or <code>g</code>, is executed:</p>
+        <p>Once it is decided which case it is going to be, the corresponding component, <code>f</code> or <code>g</code>, is executed:</p>
         <pre><code>  ┏━━━━━━━━━━━━━━┓                          ┏━━━━━━━━━━━━━━┓
   ┞───┬────────╮ ┃                          ┞───┐          ┃
   ╎*A*╎   f    ╰─╀───┐                      ╎ A │     ╭────╀───┐
@@ -595,6 +595,9 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
   ╎ B │     ╰────╁───┘                      ╎*B*╎   g    ╭─╁───┘
   ┟───┘          ┃                          ┟───┴────────╯ ┃
   ┗━━━━━━━━━━━━━━┛                          ┗━━━━━━━━━━━━━━┛</code></pre>
+        <p>☝️ Note, however, that in <code>either(f &gt; h, g &gt; h)</code>, the common part, <code>h</code>, is certain to be executed in either case,
+        and thus may start executing even before the <code>|+|</code> is decided. Indeed, it must hold that</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">either</span><span>(</span><span class="identifier">f</span><span> &gt; </span><span class="identifier">h</span><span>, </span><span class="identifier">g</span><span> &gt; </span><span class="identifier">h</span><span>) = </span><span class="identifier">either</span><span>(</span><span class="identifier">f</span><span>, </span><span class="identifier">g</span><span>) &gt; </span><span class="identifier">h</span></code></pre>
         
         <h2 id="choice" class="section"><a class="anchor-link left" href="#choice"><i class="icofont-laika">&#xef71;</i></a>Choice (&amp;)</h2>
         <p>Type <code>A &amp; B</code> (we use <code>A |&amp;| B</code> in code to avoid confusion with the bitwise and operator in Scala, and for consistency
@@ -604,7 +607,7 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
         The component to the left of <code>A &amp; B</code>, i.e. the one that has <code>A &amp; B</code> as an out-port, has to be able to provide
         either of them (but not both of them simultaneously).
         That is, the decision flows from right to left (the negative direction).</p>
-        <p>Primitives for choosing one of the branches (eliminating <code>|&amp;|</code>) are</p>
+        <p>Primitives for choosing one of the options (eliminating <code>|&amp;|</code>) are</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">//  ┏━━━━━━━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━━━━━┓
 //  ┞───┐              ┞───┐           ┞───┐              ┃
 //  ╎ A │              ╎ A │           ╎ A │              ┃
@@ -635,6 +638,9 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
   ┟───┴────╯     │ C │                  ┟───┴─╮   g    │*C*│
   ┃              ┟───┘                  ┃     ╰────────╁───┘
   ┗━━━━━━━━━━━━━━┛                      ┗━━━━━━━━━━━━━━┛</code></pre>
+        <p>☝️ Note, however, that in <code>choice(h &gt; f, h &gt; g)</code>, the common part, <code>h</code>, is certain to be executed in either case,
+        and thus may start executing even before the <code>|&amp;|</code> is decided. Indeed, it must hold that</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">choice</span><span>(</span><span class="identifier">h</span><span> &gt; </span><span class="identifier">f</span><span>, </span><span class="identifier">h</span><span> &gt; </span><span class="identifier">g</span><span>) = </span><span class="identifier">h</span><span> &gt; </span><span class="identifier">choice</span><span>(</span><span class="identifier">f</span><span>, </span><span class="identifier">g</span><span>)</span></code></pre>
         
         <h2 id="distributivity-of-over" class="section"><a class="anchor-link left" href="#distributivity-of-over"><i class="icofont-laika">&#xef71;</i></a>Distributivity of ⊗ over ⊕</h2>
         <p>The tensor product ⊗ distributes over ⊕:</p>

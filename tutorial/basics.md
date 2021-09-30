@@ -502,8 +502,8 @@ For someone used to `Future` and `Promise`, it might be helpful, _despite import
 
 ### Immediate signals
 
-There are primitive components that fire a signal immediately. More precisely, as soon as the branch containing
-the component becomes active, but we haven't seen any branching operators yet. These are
+There are primitive components that fire a signal immediately. More precisely, as soon as it is certain that
+they will be executed (but we haven't seen any conditional operators yet). These are
 
 ```scala
 //  ┏━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━┓
@@ -701,7 +701,7 @@ def either[A, B, C](f: A -⚬ C, g: B -⚬ C): (A |+| B) -⚬ C
 
 It is analogous to Scala's `Either#fold(f: A => C, g: B => C): C`.
 
-Once it is decided which branch it is going to be, the corresponding component, `f` or `g`, is executed:
+Once it is decided which case it is going to be, the corresponding component, `f` or `g`, is executed:
 
 ```
   ┏━━━━━━━━━━━━━━┓                          ┏━━━━━━━━━━━━━━┓
@@ -711,6 +711,13 @@ Once it is decided which branch it is going to be, the corresponding component, 
   ╎ B │     ╰────╁───┘                      ╎*B*╎   g    ╭─╁───┘
   ┟───┘          ┃                          ┟───┴────────╯ ┃
   ┗━━━━━━━━━━━━━━┛                          ┗━━━━━━━━━━━━━━┛
+```
+
+☝️ Note, however, that in `either(f > h, g > h)`, the common part, `h`, is certain to be executed in either case,
+and thus may start executing even before the `|+|` is decided. Indeed, it must hold that
+
+```scala
+either(f > h, g > h) = either(f, g) > h
 ```
 
 ## Choice (&)
@@ -723,7 +730,7 @@ The component to the left of `A & B`, i.e. the one that has `A & B` as an out-po
 either of them (but not both of them simultaneously).
 That is, the decision flows from right to left (the negative direction).
 
-Primitives for choosing one of the branches (eliminating `|&|`) are
+Primitives for choosing one of the options (eliminating `|&|`) are
 
 ```scala
 //  ┏━━━━━━━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━━━━━┓
@@ -765,6 +772,13 @@ Once the choice is made from the right, the corresponding component, `f` or `g`,
   ┟───┴────╯     │ C │                  ┟───┴─╮   g    │*C*│
   ┃              ┟───┘                  ┃     ╰────────╁───┘
   ┗━━━━━━━━━━━━━━┛                      ┗━━━━━━━━━━━━━━┛
+```
+
+☝️ Note, however, that in `choice(h > f, h > g)`, the common part, `h`, is certain to be executed in either case,
+and thus may start executing even before the `|&|` is decided. Indeed, it must hold that
+
+```scala
+choice(h > f, h > g) = h > choice(f, g)
 ```
 
 ## Distributivity of ⊗ over ⊕
