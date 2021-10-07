@@ -65,9 +65,10 @@
           <li class="level1"><a href="#associativity-of">Associativity of ⊗</a></li>
           <li class="level1"><a href="#symmetry-of">Symmetry of ⊗</a></li>
           <li class="level1"><a href="#the-no-flow-port-one">The no-flow port, <code>One</code></a></li>
-          <li class="level1"><a href="#signals-done-and-need">Signals, <code>Done</code> and <code>Need</code></a></li>
+          <li class="level1"><a href="#signals">Signals</a></li>
           <li class="level2"><a href="#immediate-signals">Immediate signals</a></li>
-          <li class="level2"><a href="#signals-cannot-be-ignored">Signals cannot be ignored</a></li>
+          <li class="level2"><a href="#non-dismissible-signals">Non-dismissible signals</a></li>
+          <li class="level2"><a href="#dismissible-signals">Dismissible signals</a></li>
           <li class="level2"><a href="#forking-and-joining-signals">Forking and joining signals</a></li>
           <li class="level2"><a href="#inverting-signals">Inverting signals</a></li>
           <li class="level1"><a href="#either">Either (⊕)</a></li>
@@ -416,93 +417,131 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
 ┗━━━━━━━━━┷━━━━━━━━━━━━━┷━━━━━━━━━━━┛</code></pre>
         <p>there is no causal dependence of <code>g</code> on anything in <code>f</code> going through the <code>introFst[C]</code> component.</p>
         
-        <h2 id="signals-done-and-need" class="section"><a class="anchor-link left" href="#signals-done-and-need"><i class="icofont-laika">&#xef71;</i></a>Signals, <code>Done</code> and <code>Need</code></h2>
+        <h2 id="signals" class="section"><a class="anchor-link left" href="#signals"><i class="icofont-laika">&#xef71;</i></a>Signals</h2>
         <p>By a signal we mean a notification that some event has occurred. The signal itself carries no information about the
         event, though, it only signals that the event has occurred.</p>
-        <p>There are two types for signals, differing in the direction in which they travel:</p>
+        <p>There are 4 types of signals, differing in the direction of travel and/or whether they can be dismissed:</p>
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Non-dismissible</th>
+              <th>Dismissible</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Positive (left-to-right)</td>
+              <td><code>Done</code></td>
+              <td><code>Ping</code></td>
+            </tr>
+            <tr>
+              <td>Negative (right-to-left)</td>
+              <td><code>Need</code></td>
+              <td><code>Pong</code></td>
+            </tr>
+          </tbody>
+        </table>
         <ul>
-          <li><code>Done</code>, which travels in the direction of <code>-⚬</code>, i.e. from left to right.
-          We also call the direction of <code>-⚬</code> the <em>positive direction.</em></li>
-          <li><code>Need</code>, which travels in the direction opposite to <code>-⚬</code>, i.e. from right to left.
-          We also call the direction opposite to <code>-⚬</code> the <em>negative direction.</em></li>
+          <li>Positive signals (<code>Done</code>, <code>Ping</code>) travel in the direction of <code>-⚬</code>.</li>
+          <li>Negative signals (<code>Need</code>, <code>Pong</code>) travel in the direction opposite to <code>-⚬</code>.</li>
         </ul>
         <p>Signals are useful for creating causal dependencies: one component might wait for a signal from another component
         before proceeding with further processing. For example, the signal might signal completion of a request and further
         processing might be accepting another request, effectively sequencing request processing.</p>
         <p>For someone used to <code>Future</code> and <code>Promise</code>, it might be helpful, <em>despite important differences,</em> to initially view</p>
         <ul>
-          <li><code>Done</code> as <code>Future[Unit]</code>,</li>
-          <li><code>Need</code> as <code>Promise[Unit]</code>.</li>
+          <li><code>Done</code> and <code>Ping</code> as <code>Future[Unit]</code>,</li>
+          <li><code>Need</code> and <code>Pong</code> as <code>Promise[Unit]</code>.</li>
         </ul>
         
         <h3 id="immediate-signals" class="section"><a class="anchor-link left" href="#immediate-signals"><i class="icofont-laika">&#xef71;</i></a>Immediate signals</h3>
         <p>There are primitive components that fire a signal immediately. More precisely, as soon as it is certain that
         they will be executed (but we haven&#39;t seen any conditional operators yet). These are</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">//  ┏━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━┓
-//  ┃            ┞────┐          ┞────┐         ┃
-//  ┃    done    ╎Done│          ╎Need│  need   ┃
-//  ┃            ┟────┘          ┟────┘         ┃
-//  ┗━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━┛
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">//  ┏━━━━━━━━━━━━┓         ┏━━━━━━━━━━━━━━┓     ┏━━━━━━━━━━━━┓         ┏━━━━━━━━━━━━━━┓
+//  ┃            ┞────┐    ┞────┐         ┃     ┃            ┞────┐    ┞────┐         ┃
+//  ┃    done    ╎Done│    ╎Need│  need   ┃     ┃    ping    ╎Ping│    ╎Pong│  pong   ┃
+//  ┃            ┟────┘    ┟────┘         ┃     ┃            ┟────┘    ┟────┘         ┃
+//  ┗━━━━━━━━━━━━┛         ┗━━━━━━━━━━━━━━┛     ┗━━━━━━━━━━━━┛         ┗━━━━━━━━━━━━━━┛
 </span><span>
 </span><span class="keyword">def</span><span> </span><span class="declaration-name">done</span><span>: </span><span class="type-name">One</span><span> -⚬ </span><span class="type-name">Done</span><span>
-</span><span class="keyword">def</span><span> </span><span class="declaration-name">need</span><span>: </span><span class="type-name">Need</span><span> -⚬ </span><span class="type-name">One</span></code></pre>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">need</span><span>: </span><span class="type-name">Need</span><span> -⚬ </span><span class="type-name">One</span><span>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">ping</span><span>: </span><span class="type-name">One</span><span> -⚬ </span><span class="type-name">Ping</span><span>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">pong</span><span>: </span><span class="type-name">Pong</span><span> -⚬ </span><span class="type-name">One</span></code></pre>
         
-        <h3 id="signals-cannot-be-ignored" class="section"><a class="anchor-link left" href="#signals-cannot-be-ignored"><i class="icofont-laika">&#xef71;</i></a>Signals cannot be ignored</h3>
-        <p>We have just seen that we can easily fire a signal without any prerequisites using <code>done</code> or <code>need</code>.
-        On the other hand, a signal cannot be ignored. Once created, a signal has to be propagated, typically serving as
-        a trigger for another action.</p>
-        <p>Ignoring a signal would be analogous to ignoring a fired <code>Future</code>, which means losing track of a running task and thus
-        a potential resource leak. In a way, an incoming signal, whether <code>Done</code> incoming from the left or <code>Need</code> incoming from
-        the right, is a liability.</p>
+        <h3 id="non-dismissible-signals" class="section"><a class="anchor-link left" href="#non-dismissible-signals"><i class="icofont-laika">&#xef71;</i></a>Non-dismissible signals</h3>
+        <p><code>Done</code> and <code>Need</code> are non-dismissible: once created, they have to be used
+        (typically as a trigger for another action).
+        In this way, an incoming non-dismissible signal, whether <code>Done</code> incoming from the left
+        or <code>Need</code> incoming from the right, is a liability.</p>
+        <p><code>Done</code> and <code>Need</code> are used to transfer the obligation to wait for a running task.
+        Ignoring such a signal would mean losing track of the running task, which is a resource leak,
+        and thus is prohibited.</p>
+        
+        <h3 id="dismissible-signals" class="section"><a class="anchor-link left" href="#dismissible-signals"><i class="icofont-laika">&#xef71;</i></a>Dismissible signals</h3>
+        <p><code>Ping</code> and <code>Pong</code> are used to signal completion of a task, but do not transfer the obligation
+        to await that task, because someone else is already keeping track of it.</p>
+        <p>The receiver of <code>Ping</code> or <code>Pong</code> may ignore the signal using</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">dismissPing</span><span>: </span><span class="type-name">Ping</span><span> -⚬ </span><span class="type-name">One</span><span>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">dismissPong</span><span>: </span><span class="type-name">One</span><span> -⚬ </span><span class="type-name">Pong</span></code></pre>
         
         <h3 id="forking-and-joining-signals" class="section"><a class="anchor-link left" href="#forking-and-joining-signals"><i class="icofont-laika">&#xef71;</i></a>Forking and joining signals</h3>
         <p><em>Forking</em> a signal means that as soon as the signal arrives, two new signals are fired.</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">//  ┏━━━━━━━━━━━━━┓                 ┏━━━━━━━━━━━━━━━━┓
-//  ┃             ┞────┐            ┞────┐           ┃
-//  ┃             ╎Done│            ╎Need│           ┃
-//  ┞────┐        ┟────┘            ┟────┘           ┞────┐
-//  ╎Done│ fork   ┃                 ┃      forkNeed  ╎Need│
-//  ┟────┘        ┞────┐            ┞────┐           ┟────┘
-//  ┃             ╎Done│            ╎Need│           ┃
-//  ┃             ┟────┘            ┟────┘           ┃
-//  ┗━━━━━━━━━━━━━┛                 ┗━━━━━━━━━━━━━━━━┛
+        <pre><code class="nohighlight"><span class="comment">//  ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓
+//  ┃   fork   ┞────┐    ┃ forkPing ┞────┐    ┞────┐     ┃         ┞────┐     ┃
+//  ┃          ╎Done│    ┃          ╎Ping│    ╎Need│     ┃         ╎Pong│     ┃
+//  ┞────┐     ┟────┘    ┞────┐     ┟────┘    ┟────┘     ┞────┐    ┟────┘     ┞────┐
+//  ╎Done│     ┃         ╎Ping│     ┃         ┃ forkNeed ╎Need│    ┃ forkPong ╎Pong│
+//  ┟────┘     ┞────┐    ┟────┘     ┞────┐    ┞────┐     ┟────┘    ┞────┐     ┟────┘
+//  ┃          ╎Done│    ┃          ╎Ping│    ╎Need│     ┃         ╎Pong│     ┃
+//  ┃          ┟────┘    ┃          ┟────┘    ┟────┘     ┃         ┟────┘     ┃
+//  ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛
 </span><span>
 </span><span class="keyword">def</span><span> </span><span class="declaration-name">fork</span><span>     : </span><span class="type-name">Done</span><span> -⚬ (</span><span class="type-name">Done</span><span> |*| </span><span class="type-name">Done</span><span>)
-</span><span class="keyword">def</span><span> </span><span class="declaration-name">forkNeed</span><span> : (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">Need</span><span>) -⚬ </span><span class="type-name">Need</span></code></pre>
-        <p>Remember that <code>Need</code> travels from right to left, so <code>forkNeed</code> has one <code>Need</code> signal on the right and two <code>Need</code> signals
-        on the left.</p>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">forkPing</span><span> : </span><span class="type-name">Ping</span><span> -⚬ (</span><span class="type-name">Ping</span><span> |*| </span><span class="type-name">Ping</span><span>)
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">forkNeed</span><span> : (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">Need</span><span>) -⚬ </span><span class="type-name">Need</span><span>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">forkPong</span><span> : (</span><span class="type-name">Pong</span><span> |*| </span><span class="type-name">Pong</span><span>) -⚬ </span><span class="type-name">Pong</span></code></pre>
+        <p>Remember that <code>Need</code> and <code>Pong</code> travel from right to left, so <code>forkNeed</code> and <code>forkPong</code> have
+        one signal coming in from the right and two signals coming out on the left.</p>
         <p><em>Joining</em> two signals means to fire a signal as soon as both signals arrive.</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">//  ┏━━━━━━━━━━━━━━━━┓                 ┏━━━━━━━━━━━━━━━━┓
-//  ┞────┐           ┃                 ┃                ┞────┐
-//  ╎Done│           ┃                 ┃                ╎Need│
-//  ┟────┘           ┞────┐            ┞────┐           ┟────┘
-//  ┃       join     ╎Done│            ╎Need│ joinNeed  ┃
-//  ┞────┐           ┟────┘            ┟────┘           ┞────┐
-//  ╎Done│           ┃                 ┃                ╎Need│
-//  ┟────┘           ┃                 ┃                ┟────┘
-//  ┗━━━━━━━━━━━━━━━━┛                 ┗━━━━━━━━━━━━━━━━┛
+        <pre><code class="nohighlight"><span class="comment">//  ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓
+//  ┞────┐     ┃         ┞────┐     ┃         ┃ joinNeed ┞────┐    ┃ joinPong ┞────┐
+//  ╎Done│     ┃         ╎Ping│     ┃         ┃          ╎Need│    ┃          ╎Pong│
+//  ┟────┘     ┞────┐    ┟────┘     ┞────┐    ┞────┐     ┟────┘    ┞────┐     ┟────┘
+//  ┃   join   ╎Done│    ┃ joinPing ╎Ping│    ╎Need│     ┃         ╎Pong│     ┃
+//  ┞────┐     ┟────┘    ┞────┐     ┟────┘    ┟────┘     ┞────┐    ┟────┘     ┞────┐
+//  ╎Done│     ┃         ╎Ping│     ┃         ┃          ╎Need│    ┃          ╎Pong│
+//  ┟────┘     ┃         ┟────┘     ┃         ┃          ┟────┘    ┃          ┟────┘
+//  ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛
 </span><span>
 </span><span class="keyword">def</span><span> </span><span class="declaration-name">join</span><span>     : (</span><span class="type-name">Done</span><span> |*| </span><span class="type-name">Done</span><span>) -⚬ </span><span class="type-name">Done</span><span>
-</span><span class="keyword">def</span><span> </span><span class="declaration-name">joinNeed</span><span> : </span><span class="type-name">Need</span><span> -⚬ (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">Need</span><span>)</span></code></pre>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">joinPing</span><span> : (</span><span class="type-name">Ping</span><span> |*| </span><span class="type-name">Ping</span><span>) -⚬ </span><span class="type-name">Ping</span><span>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">joinNeed</span><span> : </span><span class="type-name">Need</span><span> -⚬ (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">Need</span><span>)
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">joinPong</span><span> : </span><span class="type-name">Pong</span><span> -⚬ (</span><span class="type-name">Pong</span><span> |*| </span><span class="type-name">Pong</span><span>)</span></code></pre>
+        <p>Again, since <code>Need</code> and <code>Pong</code> travel from right to left, <code>joinNeed</code> and <code>joinPong</code> have
+        two signals coming in from the right and one signal coming out on the left</p>
         
         <h3 id="inverting-signals" class="section"><a class="anchor-link left" href="#inverting-signals"><i class="icofont-laika">&#xef71;</i></a>Inverting signals</h3>
         <p>There are primitives to invert the direction of a signal.</p>
-        <p>A <code>Need</code> signal traveling to the left can be changed to a <code>Done</code> signal traveling to the right.</p>
-        <p>A <code>Done</code> signal traveling to the right can be changed to a <code>Need</code> signal traveling to the left.</p>
-        <pre><code class="nohighlight"><span class="comment">//  ┏━━━━━━━━━━━━━━━┓                 ┏━━━━━━━━━━━━━━━┓
-//  ┃ lInvertSignal ┃                 ┃ rInvertSignal ┃
-//  ┃               ┞────┐            ┞────┐          ┃
-//  ┃            ┌┄┄╎Need│←┄        ┄→╎Done│┄┄┐       ┃
-//  ┃            ┆  ┟────┘            ┟────┘  ┆       ┃
-//  ┃            ┆  ┃                 ┃       ┆       ┃
-//  ┃            ┆  ┞────┐            ┞────┐  ┆       ┃
-//  ┃            └┄→╎Done│┄→        ←┄╎Need│←┄┘       ┃
-//  ┃               ┟────┘            ┟────┘          ┃
-//  ┗━━━━━━━━━━━━━━━┛                 ┗━━━━━━━━━━━━━━━┛
+        <p>A signal traveling to the left (<code>Need</code>, <code>Pong</code>) can be changed to the respective signal traveling to the right (<code>Done</code>, <code>Ping</code>).</p>
+        <p>A signal traveling to the right (<code>Done</code>, <code>Ping</code>) can be changed to the respective signal traveling to the left (<code>Need</code>, <code>Pong</code>).</p>
+        <pre><code class="nohighlight"><span class="comment">//  lInvertSignal           rInvertSignal      lInvertPongPing        rInvertPingPong
+//  ┏━━━━━━━━━━┓             ┏━━━━━━━━━━┓      ┏━━━━━━━━━━┓             ┏━━━━━━━━━━┓
+//  ┃          ┃             ┃          ┃      ┃          ┃             ┃          ┃
+//  ┃          ┞────┐        ┞────┐     ┃      ┃          ┞────┐        ┞────┐     ┃
+//  ┃       ┌┄┄╎Need│←┄    ┄→╎Done│┄┄┐  ┃      ┃       ┌┄┄╎Pong│←┄    ┄→╎Ping│┄┄┐  ┃
+//  ┃       ┆  ┟────┘        ┟────┘  ┆  ┃      ┃       ┆  ┟────┘        ┟────┘  ┆  ┃
+//  ┃       ┆  ┃             ┃       ┆  ┃      ┃       ┆  ┃             ┃       ┆  ┃
+//  ┃       ┆  ┞────┐        ┞────┐  ┆  ┃      ┃       ┆  ┞────┐        ┞────┐  ┆  ┃
+//  ┃       └┄→╎Done│┄→    ←┄╎Need│←┄┘  ┃      ┃       └┄→╎Ping│┄→    ←┄╎Pong│←┄┘  ┃
+//  ┃          ┟────┘        ┟────┘     ┃      ┃          ┟────┘        ┟────┘     ┃
+//  ┗━━━━━━━━━━┛             ┗━━━━━━━━━━┛      ┗━━━━━━━━━━┛             ┗━━━━━━━━━━┛
 </span><span>
 
-</span><span class="keyword">def</span><span> </span><span class="declaration-name">lInvertSignal</span><span>: </span><span class="type-name">One</span><span> -⚬ (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">Done</span><span>)
-</span><span class="keyword">def</span><span> </span><span class="declaration-name">rInvertSignal</span><span>: (</span><span class="type-name">Done</span><span> |*| </span><span class="type-name">Need</span><span>) -⚬ </span><span class="type-name">One</span></code></pre>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">lInvertSignal</span><span>   : </span><span class="type-name">One</span><span> -⚬ (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">Done</span><span>)
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">rInvertSignal</span><span>   : (</span><span class="type-name">Done</span><span> |*| </span><span class="type-name">Need</span><span>) -⚬ </span><span class="type-name">One</span><span>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">rInvertPingPong</span><span> : (</span><span class="type-name">Ping</span><span> |*| </span><span class="type-name">Pong</span><span>) -⚬ </span><span class="type-name">One</span><span>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">lInvertPongPing</span><span> : </span><span class="type-name">One</span><span> -⚬ (</span><span class="type-name">Pong</span><span> |*| </span><span class="type-name">Ping</span><span>)</span></code></pre>
         <p>Using these, we can always move a signal to the other side of the <code>-⚬</code> arrow while changing its direction.
         For example, given</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">/*  ┏━━━━━━━━━━━━┓
@@ -799,22 +838,30 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
         </ul>
         
         <h2 id="racing" class="section"><a class="anchor-link left" href="#racing"><i class="icofont-laika">&#xef71;</i></a>Racing</h2>
-        <p>Libretto provides functions for testing which of two concurrent signals arrived first. There is one version for
-        <code>Done</code> signals and one for <code>Need</code> signals (although it is possible to implement one in terms of the other via
-        signal inversions discussed above).</p>
+        <p>Libretto provides functions for testing which of two concurrent signals arrived first.</p>
+        <p>The two basic racing operations are on dismissible signals, <code>Ping</code> and <code>Pong</code>:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">racePair</span><span>   : (</span><span class="type-name">Ping</span><span> |*| </span><span class="type-name">Ping</span><span>) -⚬ (</span><span class="type-name">One</span><span> |+| </span><span class="type-name">One</span><span>)
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">selectPair</span><span> : (</span><span class="type-name">One</span><span> |&amp;| </span><span class="type-name">One</span><span>) -⚬ (</span><span class="type-name">Pong</span><span> |*| </span><span class="type-name">Pong</span><span>)</span></code></pre>
+        <p>In <code>racePair</code>, the two <code>Ping</code> signals from the in-port race against each other.
+        If the first signal wins, the output will be left.
+        If the second signal wins, the output will be right.</p>
+        <p>In <code>selectPair</code>, the two <code>Pong</code> signals from the <em>out</em>-port race against each other.
+        If the first signal wins, left will be chosen from the input.
+        If the second signal wins, right will be chosen from the input.</p>
+        <p>In both cases, both signals are consumed: the winning one has fired, the slower one is dismissed.</p>
+        <p>Only one of these operations needs to be a primitive, the other one is derivable using signal inversions discussed above.</p>
+        <p>There are also versions for non-dismissible signals (<code>Done</code> and <code>Need</code>):</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">raceDone</span><span>   : (</span><span class="type-name">Done</span><span> |*| </span><span class="type-name">Done</span><span>) -⚬ (</span><span class="type-name">Done</span><span> |+| </span><span class="type-name">Done</span><span>)
 </span><span class="keyword">def</span><span> </span><span class="declaration-name">selectNeed</span><span> : (</span><span class="type-name">Need</span><span> |&amp;| </span><span class="type-name">Need</span><span>) -⚬ (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">Need</span><span>)</span></code></pre>
-        <p>In <code>raceDone</code>, the two <code>Done</code> signals from the in-port race against each other.
-        In <code>selectNeed</code>, the two <code>Need</code> signals from the out-port race against each other.</p>
-        <p>In both cases, the winning signal is consumed by the racing operation. The slower signal still has to be awaited
-        at some point (remember that signals cannot be ignored), so it is propagated to the other side of <code>-⚬</code>:</p>
+        <p>The main difference is that only the winning signal is consumed by the race.
+        The slower signal still has to be awaited at some point, so it is propagated to the other side of <code>-⚬</code>:</p>
         <ul>
           <li>In <code>raceDone</code>, if the first <code>Done</code> signal of the in-port wins, the second one is returned on the left of the <code>|+|</code>
           in the out-port. The case of second signal winning is analogous.</li>
-          <li>In <code>selectNeed</code>, if the first <code>Need</code> signal of the out-port wins, the left side of the <code>|&amp;|</code> in the in-port is
+          <li>In <code>selectNeed</code>, if the first <code>Need</code> signal of the <em>out</em>-port wins, the left side of the <code>|&amp;|</code> in the in-port is
           chosen and the second <code>Need</code> signal of the out-port is forwarded to it.</li>
         </ul>
-        <p>There are additional library functions for racing built on top of these provided for convenience.</p>
+        <p>There are additional library functions for racing built on top of these, provided for convenience.</p>
         
         <h3 id="racing-is-a-source-of-non-determinism" class="section"><a class="anchor-link left" href="#racing-is-a-source-of-non-determinism"><i class="icofont-laika">&#xef71;</i></a>Racing is a source of non-determinism</h3>
         <p>The order of two concurrently occurring events is undefined. The outcome of a racing operation on two concurrent events

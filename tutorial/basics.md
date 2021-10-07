@@ -479,17 +479,20 @@ This means, for example, that in
 
 there is no causal dependence of `g` on anything in `f` going through the `introFst[C]` component.
 
-## Signals, `Done` and `Need`
+## Signals
 
 By a signal we mean a notification that some event has occurred. The signal itself carries no information about the
 event, though, it only signals that the event has occurred.
 
-There are two types for signals, differing in the direction in which they travel:
+There are 4 types of signals, differing in the direction of travel and/or whether they can be dismissed:
 
-- `Done`, which travels in the direction of `-⚬`, i.e. from left to right.
-  We also call the direction of `-⚬` the _positive direction._
-- `Need`, which travels in the direction opposite to `-⚬`, i.e. from right to left.
-  We also call the direction opposite to `-⚬` the _negative direction._
+|                          | Non-dismissible | Dismissible |
+| ------------------------ | --------------- | ----------- |
+| Positive (left-to-right) |     `Done`      |   `Ping`    |
+| Negative (right-to-left) |     `Need`      |   `Pong`    |
+
+- Positive signals (`Done`, `Ping`) travel in the direction of `-⚬`.
+- Negative signals (`Need`, `Pong`) travel in the direction opposite to `-⚬`.
 
 Signals are useful for creating causal dependencies: one component might wait for a signal from another component
 before proceeding with further processing. For example, the signal might signal completion of a request and further
@@ -497,8 +500,8 @@ processing might be accepting another request, effectively sequencing request pr
 
 For someone used to `Future` and `Promise`, it might be helpful, _despite important differences,_ to initially view
 
-- `Done` as `Future[Unit]`,
-- `Need` as `Promise[Unit]`.
+- `Done` and `Ping` as `Future[Unit]`,
+- `Need` and `Pong` as `Promise[Unit]`.
 
 ### Immediate signals
 
@@ -506,88 +509,113 @@ There are primitive components that fire a signal immediately. More precisely, a
 they will be executed (but we haven't seen any conditional operators yet). These are
 
 ```scala
-//  ┏━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━┓
-//  ┃            ┞────┐          ┞────┐         ┃
-//  ┃    done    ╎Done│          ╎Need│  need   ┃
-//  ┃            ┟────┘          ┟────┘         ┃
-//  ┗━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━┛
+//  ┏━━━━━━━━━━━━┓         ┏━━━━━━━━━━━━━━┓     ┏━━━━━━━━━━━━┓         ┏━━━━━━━━━━━━━━┓
+//  ┃            ┞────┐    ┞────┐         ┃     ┃            ┞────┐    ┞────┐         ┃
+//  ┃    done    ╎Done│    ╎Need│  need   ┃     ┃    ping    ╎Ping│    ╎Pong│  pong   ┃
+//  ┃            ┟────┘    ┟────┘         ┃     ┃            ┟────┘    ┟────┘         ┃
+//  ┗━━━━━━━━━━━━┛         ┗━━━━━━━━━━━━━━┛     ┗━━━━━━━━━━━━┛         ┗━━━━━━━━━━━━━━┛
 
 def done: One -⚬ Done
 def need: Need -⚬ One
+def ping: One -⚬ Ping
+def pong: Pong -⚬ One
 ```
 
-### Signals cannot be ignored
+### Non-dismissible signals
 
-We have just seen that we can easily fire a signal without any prerequisites using `done` or `need`.
-On the other hand, a signal cannot be ignored. Once created, a signal has to be propagated, typically serving as
-a trigger for another action.
+`Done` and `Need` are non-dismissible: once created, they have to be used
+(typically as a trigger for another action).
+In this way, an incoming non-dismissible signal, whether `Done` incoming from the left
+or `Need` incoming from the right, is a liability.
 
-Ignoring a signal would be analogous to ignoring a fired `Future`, which means losing track of a running task and thus
-a potential resource leak. In a way, an incoming signal, whether `Done` incoming from the left or `Need` incoming from
-the right, is a liability.
+`Done` and `Need` are used to transfer the obligation to wait for a running task.
+Ignoring such a signal would mean losing track of the running task, which is a resource leak,
+and thus is prohibited.
+
+### Dismissible signals
+
+`Ping` and `Pong` are used to signal completion of a task, but do not transfer the obligation
+to await that task, because someone else is already keeping track of it.
+
+The receiver of `Ping` or `Pong` may ignore the signal using
+
+```scala
+def dismissPing: Ping -⚬ One
+def dismissPong: One -⚬ Pong
+```
 
 ### Forking and joining signals
 
 _Forking_ a signal means that as soon as the signal arrives, two new signals are fired.
 
 ```scala
-//  ┏━━━━━━━━━━━━━┓                 ┏━━━━━━━━━━━━━━━━┓
-//  ┃             ┞────┐            ┞────┐           ┃
-//  ┃             ╎Done│            ╎Need│           ┃
-//  ┞────┐        ┟────┘            ┟────┘           ┞────┐
-//  ╎Done│ fork   ┃                 ┃      forkNeed  ╎Need│
-//  ┟────┘        ┞────┐            ┞────┐           ┟────┘
-//  ┃             ╎Done│            ╎Need│           ┃
-//  ┃             ┟────┘            ┟────┘           ┃
-//  ┗━━━━━━━━━━━━━┛                 ┗━━━━━━━━━━━━━━━━┛
+//  ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓
+//  ┃   fork   ┞────┐    ┃ forkPing ┞────┐    ┞────┐     ┃         ┞────┐     ┃
+//  ┃          ╎Done│    ┃          ╎Ping│    ╎Need│     ┃         ╎Pong│     ┃
+//  ┞────┐     ┟────┘    ┞────┐     ┟────┘    ┟────┘     ┞────┐    ┟────┘     ┞────┐
+//  ╎Done│     ┃         ╎Ping│     ┃         ┃ forkNeed ╎Need│    ┃ forkPong ╎Pong│
+//  ┟────┘     ┞────┐    ┟────┘     ┞────┐    ┞────┐     ┟────┘    ┞────┐     ┟────┘
+//  ┃          ╎Done│    ┃          ╎Ping│    ╎Need│     ┃         ╎Pong│     ┃
+//  ┃          ┟────┘    ┃          ┟────┘    ┟────┘     ┃         ┟────┘     ┃
+//  ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛
 
 def fork     : Done -⚬ (Done |*| Done)
+def forkPing : Ping -⚬ (Ping |*| Ping)
 def forkNeed : (Need |*| Need) -⚬ Need
+def forkPong : (Pong |*| Pong) -⚬ Pong
 ```
 
-Remember that `Need` travels from right to left, so `forkNeed` has one `Need` signal on the right and two `Need` signals
-on the left.
+Remember that `Need` and `Pong` travel from right to left, so `forkNeed` and `forkPong` have
+one signal coming in from the right and two signals coming out on the left.
 
 _Joining_ two signals means to fire a signal as soon as both signals arrive.
 
 ```scala
-//  ┏━━━━━━━━━━━━━━━━┓                 ┏━━━━━━━━━━━━━━━━┓
-//  ┞────┐           ┃                 ┃                ┞────┐
-//  ╎Done│           ┃                 ┃                ╎Need│
-//  ┟────┘           ┞────┐            ┞────┐           ┟────┘
-//  ┃       join     ╎Done│            ╎Need│ joinNeed  ┃
-//  ┞────┐           ┟────┘            ┟────┘           ┞────┐
-//  ╎Done│           ┃                 ┃                ╎Need│
-//  ┟────┘           ┃                 ┃                ┟────┘
-//  ┗━━━━━━━━━━━━━━━━┛                 ┗━━━━━━━━━━━━━━━━┛
+//  ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓
+//  ┞────┐     ┃         ┞────┐     ┃         ┃ joinNeed ┞────┐    ┃ joinPong ┞────┐
+//  ╎Done│     ┃         ╎Ping│     ┃         ┃          ╎Need│    ┃          ╎Pong│
+//  ┟────┘     ┞────┐    ┟────┘     ┞────┐    ┞────┐     ┟────┘    ┞────┐     ┟────┘
+//  ┃   join   ╎Done│    ┃ joinPing ╎Ping│    ╎Need│     ┃         ╎Pong│     ┃
+//  ┞────┐     ┟────┘    ┞────┐     ┟────┘    ┟────┘     ┞────┐    ┟────┘     ┞────┐
+//  ╎Done│     ┃         ╎Ping│     ┃         ┃          ╎Need│    ┃          ╎Pong│
+//  ┟────┘     ┃         ┟────┘     ┃         ┃          ┟────┘    ┃          ┟────┘
+//  ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛
 
 def join     : (Done |*| Done) -⚬ Done
+def joinPing : (Ping |*| Ping) -⚬ Ping
 def joinNeed : Need -⚬ (Need |*| Need)
+def joinPong : Pong -⚬ (Pong |*| Pong)
 ```
+
+Again, since `Need` and `Pong` travel from right to left, `joinNeed` and `joinPong` have
+two signals coming in from the right and one signal coming out on the left
 
 ### Inverting signals
 
 There are primitives to invert the direction of a signal.
 
-A `Need` signal traveling to the left can be changed to a `Done` signal traveling to the right.
+A signal traveling to the left (`Need`, `Pong`) can be changed to the respective signal traveling to the right (`Done`, `Ping`).
 
-A `Done` signal traveling to the right can be changed to a `Need` signal traveling to the left.
+A signal traveling to the right (`Done`, `Ping`) can be changed to the respective signal traveling to the left (`Need`, `Pong`).
 
 ```scala
-//  ┏━━━━━━━━━━━━━━━┓                 ┏━━━━━━━━━━━━━━━┓
-//  ┃ lInvertSignal ┃                 ┃ rInvertSignal ┃
-//  ┃               ┞────┐            ┞────┐          ┃
-//  ┃            ┌┄┄╎Need│←┄        ┄→╎Done│┄┄┐       ┃
-//  ┃            ┆  ┟────┘            ┟────┘  ┆       ┃
-//  ┃            ┆  ┃                 ┃       ┆       ┃
-//  ┃            ┆  ┞────┐            ┞────┐  ┆       ┃
-//  ┃            └┄→╎Done│┄→        ←┄╎Need│←┄┘       ┃
-//  ┃               ┟────┘            ┟────┘          ┃
-//  ┗━━━━━━━━━━━━━━━┛                 ┗━━━━━━━━━━━━━━━┛
+//  lInvertSignal           rInvertSignal      lInvertPongPing        rInvertPingPong
+//  ┏━━━━━━━━━━┓             ┏━━━━━━━━━━┓      ┏━━━━━━━━━━┓             ┏━━━━━━━━━━┓
+//  ┃          ┃             ┃          ┃      ┃          ┃             ┃          ┃
+//  ┃          ┞────┐        ┞────┐     ┃      ┃          ┞────┐        ┞────┐     ┃
+//  ┃       ┌┄┄╎Need│←┄    ┄→╎Done│┄┄┐  ┃      ┃       ┌┄┄╎Pong│←┄    ┄→╎Ping│┄┄┐  ┃
+//  ┃       ┆  ┟────┘        ┟────┘  ┆  ┃      ┃       ┆  ┟────┘        ┟────┘  ┆  ┃
+//  ┃       ┆  ┃             ┃       ┆  ┃      ┃       ┆  ┃             ┃       ┆  ┃
+//  ┃       ┆  ┞────┐        ┞────┐  ┆  ┃      ┃       ┆  ┞────┐        ┞────┐  ┆  ┃
+//  ┃       └┄→╎Done│┄→    ←┄╎Need│←┄┘  ┃      ┃       └┄→╎Ping│┄→    ←┄╎Pong│←┄┘  ┃
+//  ┃          ┟────┘        ┟────┘     ┃      ┃          ┟────┘        ┟────┘     ┃
+//  ┗━━━━━━━━━━┛             ┗━━━━━━━━━━┛      ┗━━━━━━━━━━┛             ┗━━━━━━━━━━┛
 
 
-def lInvertSignal: One -⚬ (Need |*| Done)
-def rInvertSignal: (Done |*| Need) -⚬ One
+def lInvertSignal   : One -⚬ (Need |*| Done)
+def rInvertSignal   : (Done |*| Need) -⚬ One
+def rInvertPingPong : (Ping |*| Pong) -⚬ One
+def lInvertPongPing : One -⚬ (Pong |*| Ping)
 ```
 
 Using these, we can always move a signal to the other side of the `-⚬` arrow while changing its direction.
@@ -987,27 +1015,43 @@ Notes:
 
 ## Racing
 
-Libretto provides functions for testing which of two concurrent signals arrived first. There is one version for
-`Done` signals and one for `Need` signals (although it is possible to implement one in terms of the other via
-signal inversions discussed above).
+Libretto provides functions for testing which of two concurrent signals arrived first.
+
+The two basic racing operations are on dismissible signals, `Ping` and `Pong`:
+
+```scala
+def racePair   : (Ping |*| Ping) -⚬ (One |+| One)
+def selectPair : (One |&| One) -⚬ (Pong |*| Pong)
+```
+
+In `racePair`, the two `Ping` signals from the in-port race against each other.
+If the first signal wins, the output will be left.
+If the second signal wins, the output will be right.
+
+In `selectPair`, the two `Pong` signals from the _out_-port race against each other.
+If the first signal wins, left will be chosen from the input.
+If the second signal wins, right will be chosen from the input.
+
+In both cases, both signals are consumed: the winning one has fired, the slower one is dismissed.
+
+Only one of these operations needs to be a primitive, the other one is derivable using signal inversions discussed above.
+
+There are also versions for non-dismissible signals (`Done` and `Need`):
 
 ```scala
 def raceDone   : (Done |*| Done) -⚬ (Done |+| Done)
 def selectNeed : (Need |&| Need) -⚬ (Need |*| Need)
 ```
 
-In `raceDone`, the two `Done` signals from the in-port race against each other.
-In `selectNeed`, the two `Need` signals from the out-port race against each other.
-
-In both cases, the winning signal is consumed by the racing operation. The slower signal still has to be awaited
-at some point (remember that signals cannot be ignored), so it is propagated to the other side of `-⚬`:
+The main difference is that only the winning signal is consumed by the race.
+The slower signal still has to be awaited at some point, so it is propagated to the other side of `-⚬`:
 
 - In `raceDone`, if the first `Done` signal of the in-port wins, the second one is returned on the left of the `|+|`
   in the out-port. The case of second signal winning is analogous.
-- In `selectNeed`, if the first `Need` signal of the out-port wins, the left side of the `|&|` in the in-port is
+- In `selectNeed`, if the first `Need` signal of the _out_-port wins, the left side of the `|&|` in the in-port is
   chosen and the second `Need` signal of the out-port is forwarded to it.
 
-There are additional library functions for racing built on top of these provided for convenience.
+There are additional library functions for racing built on top of these, provided for convenience.
 
 ### Racing is a source of non-determinism
 
