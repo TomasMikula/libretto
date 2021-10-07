@@ -35,6 +35,9 @@ abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
       5.seconds,
     )
 
+  def assertCocompletes(prg: Need -⚬ Need): Unit =
+    assertCompletes(introSnd(lInvertSignal > fst(prg)) > assocRL > elimFst(rInvertSignal))
+
   def assertVal[A](prg: Done -⚬ Val[A], expected: A): Unit =
     assert(Await.result(runner.runScala(prg), 5.seconds) == expected)
 

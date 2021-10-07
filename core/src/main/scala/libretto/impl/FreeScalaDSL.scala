@@ -62,6 +62,8 @@ object FreeScalaDSL extends ScalaDSL {
     case class JoinNeed() extends (Need -⚬ (Need |*| Need))
     case class NotifyDoneL() extends (Done -⚬ (Ping |*| Done))
     case class NotifyNeedL() extends ((Pong |*| Need) -⚬ Need)
+    case class ForkPing() extends (Ping -⚬ (Ping |*| Ping))
+    case class ForkPong() extends ((Pong |*| Pong) -⚬ Pong)
     case class JoinPing() extends ((Ping |*| Ping) -⚬ Ping)
     case class JoinPong() extends (Pong -⚬ (Pong |*| Pong))
     case class StrengthenPing() extends (Ping -⚬ Done)
@@ -210,6 +212,12 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def notifyNeedL: (Pong |*| Need) -⚬ Need =
     NotifyNeedL()
+
+  override def forkPing: Ping -⚬ (Ping |*| Ping) =
+    ForkPing()
+
+  override def forkPong: (Pong |*| Pong) -⚬ Pong =
+    ForkPong()
 
   override def joinPing: (Ping |*| Ping) -⚬ Ping =
     JoinPing()

@@ -46,6 +46,14 @@ class BasicTests extends TestSuite {
     assertCompletes(fork > join)
   }
 
+  test("notifyDoneR, forkPing, joinPing, strengthenPing, join") {
+    assertCompletes(notifyDoneR > snd(forkPing > joinPing > strengthenPing) > join)
+  }
+
+  test("joinNeed, strengthenPong, joinPong, forkPong, notifyNeedR") {
+    assertCocompletes(joinNeed > snd(strengthenPong > joinPong > forkPong) > notifyNeedR)
+  }
+
   test("constVal") {
     assertVal(constVal(5), 5)
   }

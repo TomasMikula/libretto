@@ -182,6 +182,9 @@ class FreeScalaFutureRunner(
         case -⚬.Fork() =>
           Pair(this, this)
 
+        case -⚬.ForkPing() =>
+          Pair(this, this)
+
         case -⚬.NotifyDoneL() =>
           // Done -⚬ (Ping |*| Done)
           val d: Frontier[Done] = this
@@ -222,6 +225,13 @@ class FreeScalaFutureRunner(
           n1 fulfillWith p.future
           n2 fulfillWith p.future
           NeedAsync(p)
+
+        case -⚬.ForkPong() =>
+          val p = Promise[Any]()
+          val (p1, p2) = this.asInstanceOf[Frontier[Pong |*| Pong]].splitPair
+          p1 fulfillPongWith p.future
+          p2 fulfillPongWith p.future
+          PongAsync(p)
 
         case -⚬.NotifyNeedL() =>
           // (Pong |*| Need) -⚬ Need

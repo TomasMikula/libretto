@@ -165,6 +165,8 @@ trait CoreDSL {
   def notifyNeedR: (Need |*| Pong) -⚬ Need =
     andThen(swap, notifyNeedL)
 
+  def forkPing: Ping -⚬ (Ping |*| Ping)
+  def forkPong: (Pong |*| Pong) -⚬ Pong
   def joinPing: (Ping |*| Ping) -⚬ Ping
   def joinPong: Pong -⚬ (Pong |*| Pong)
 
@@ -190,6 +192,12 @@ trait CoreDSL {
   def chooseLOnPong[A, B]: (A |&| B) -⚬ (Pong |*| A)
   def chooseROnPong[A, B]: (A |&| B) -⚬ (Pong |*| B) =
     andThen(choice(chooseR, chooseL), chooseLOnPong)
+
+  def dismissPing: Ping -⚬ One =
+    andThen(andThen(introSnd, injectLOnPing[One, One]), either(id, id))
+
+  def dismissPong: One -⚬ Pong =
+    andThen(choice(id, id), andThen(chooseLOnPong[One, One], elimSnd))
 
   /** Factor out the factor `A` on the left of both summands. */
   def factorL[A, B, C]: ((A |*| B) |+| (A |*| C)) -⚬ (A |*| (B |+| C)) =
