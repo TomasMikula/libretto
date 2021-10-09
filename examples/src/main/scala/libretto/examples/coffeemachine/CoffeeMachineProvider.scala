@@ -24,27 +24,24 @@ object CoffeeMachineProvider {
   private def serveEspresso: Done -⚬ (EspressoOptions =⚬ Val[Beverage]) =
     λ { ready =>
       Λ { espressoOptions =>
-        makeBeverage(espresso)(espressoOptions |*| ready)
+        (espressoOptions waitFor ready) > makeEspresso
       }
     }
 
   private def serveLatte: Done -⚬ (LatteOptions =⚬ Val[Beverage]) =
     λ { ready =>
       Λ { latteOptions =>
-        makeBeverage(latte)(latteSpec(latteOptions) |*| ready)
+        (latteSpec(latteOptions) waitFor ready) > makeLatte
       }
     }
 
-  type LatteSpec = (Size, ShotCount, Option[Flavor])
+  private type LatteSpec = (Size, ShotCount, Option[Flavor])
 
-  /**
-   * The [[Done]] on the in-port signals readiness to make this beverage.
-   * I.e., the output value will not be produced until the signal arrives
-   */
-  private def makeBeverage[Spec](
-    f: Spec => Beverage,
-  ): (Val[Spec] |*| Done) -⚬ Val[Beverage] =
-    awaitPosSnd > mapVal(f)
+  private def makeEspresso: EspressoOptions -⚬ Val[Beverage] =
+    mapVal(espresso)
+
+  private def makeLatte: Val[LatteSpec] -⚬ Val[Beverage] =
+    mapVal(latte)
 
   private def latteSpec: LatteOptions -⚬ Val[LatteSpec] =
     λ { case size |*| shotCount |*| flavor =>
