@@ -11,7 +11,7 @@ object UnhandledCase {
        |
        |Please, report it at https://github.com/TomasMikula/libretto/issues/new?labels=bug
        |and include a minimized example.
-     """
+     """.stripMargin
 }
 
 class UnhandledCase(desc: String) extends Exception(UnhandledCase.message(desc))

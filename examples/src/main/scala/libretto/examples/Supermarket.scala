@@ -5,9 +5,9 @@ import scala.concurrent.duration._
 
 /**
  * In a pandemic, supermarkets are required to limit the number of customers in the store.
- * A way to do this is to provide a limited number of shopping baskets and require that
+ * A way to achieve it is to provide a limited number of shopping baskets and require that
  * each customer entering the store has a shopping basket. When there are no more baskets,
- * an incoming customre has to wait for a previous customer to leave (and return their basket).
+ * an incoming customer has to wait for a previous customer to leave (and return their basket).
  *
  * This example demonstrates:
  *  - concurrency
@@ -24,17 +24,40 @@ import scala.concurrent.duration._
  *    - the type `Shopping` is a protocol between the store and the customer
  */
 object Supermarket extends StarterApp {
+  import $._
+  import money._
+  import storekeeper._
+
   override def blueprint: Done -⚬ Done =
-    supermarket.makeSupermarket(capacity = 3)
-      .>( fst(LList.fromList(customers)) )
-      .>( fst(LList.fold) )
-      .>( awaitPosFst )
-      .>( money.destroyCashDrawer )
-      .>( printLine(n => s"Made $n coins") )
+    λ { (start: $[Done]) =>
+      val (supermarket |*| coinBank) = storekeeper.openSupermarket(capacity = 3)(start)
+
+      // The Supermarket type is just an *interface* to a supermarket. As such, it can be
+      // shared arbitrarily (it is indeed a comonoid), and thus can serve any number of customers.
+      val accessSupermarketByCustomers: Supermarket -⚬ LList[Done] =
+        LList.fromList(customers)
+
+      val customerHandles: $[LList[Done]] =
+        accessSupermarketByCustomers(supermarket)
+
+      // await all customers
+      // (`Done` signal is a monoid, so a list of `Done` can be combined into a single `Done`)
+      val customersDone: $[Done] =
+        customerHandles > LList.fold
+
+      // wait for all customers to finish shopping before opening the coin bank
+      val finalCoinBank: $[CoinBank] =
+        coinBank waitFor customersDone
+
+      val revenue: $[Val[Int]] =
+        money.openCoinBank(finalCoinBank)
+
+      revenue > printLine(n => s"Made $n coins")
+    }
 
   object money {
     opaque type Coin = Done
-    opaque type CashDrawer = Val[Int] // number of coins
+    opaque type CoinBank = Val[Int] // number of coins
 
     def forgeCoin(who: String): Done -⚬ Coin =
       printLine(s"🪙 $who is forging a coin")
@@ -45,29 +68,27 @@ object Supermarket extends StarterApp {
     def receiveCoin: One -⚬ (-[Coin] |*| Coin) =
       forevert
 
-    def newCashDrawer: Done -⚬ CashDrawer =
+    def newCoinBank: Done -⚬ CoinBank =
       constVal(0)
 
-    def destroyCashDrawer: CashDrawer -⚬ Val[Int] =
+    def openCoinBank: CoinBank -⚬ Val[Int] =
       id
 
-    def depositCoin: (Coin |*| CashDrawer) -⚬ CashDrawer =
-      awaitPosFst[CashDrawer] > mapVal(_ + 1)
+    def depositCoin: (Coin |*| CoinBank) -⚬ CoinBank =
+      awaitPosFst[CoinBank] > mapVal(_ + 1)
 
     implicit def signalingJunctionCoin: SignalingJunction.Positive[Coin] =
       SignalingJunction.Positive. signalingJunctionPositiveDone
 
-    implicit def junctionCashDrawer: Junction.Positive[CashDrawer] =
+    implicit def junctionCoinBank: Junction.Positive[CoinBank] =
       junctionVal
 
-    implicit def semigroupCashDrawer: Semigroup[CashDrawer] =
-      new Semigroup[CashDrawer] {
-        override def combine: (CashDrawer |*| CashDrawer) -⚬ CashDrawer =
+    implicit def semigroupCoinBank: Semigroup[CoinBank] =
+      new Semigroup[CoinBank] {
+        override def combine: (CoinBank |*| CoinBank) -⚬ CoinBank =
           unliftPair > mapVal { case (a, b) => a + b }
       }
   }
-
-  import money._
 
   object baskets {
     opaque type Basket = Done
@@ -128,7 +149,7 @@ object Supermarket extends StarterApp {
 
   import goods._
 
-  object supermarket {
+  object storekeeper {
     private type BorrowedBasket = Basket |*| -[Basket]
     private type ItemSelection = Beer |&| ToiletPaper
     private type GoodsSupply = Unlimited[ItemSelection]
@@ -178,13 +199,12 @@ object Supermarket extends StarterApp {
         IXI > fst(swap > sequence > swap) > IXI > assocLR
 
       def ingestCoin[Items]: (Coin |*| Shopping[Items]) -⚬ Shopping[Items] =
-        id[Coin |*| Shopping[Items]]      .to[ Coin |*| (Items |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink))) ]
-          .>(XI)                          .to[ Items |*| (Coin |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink))) ]
-          .>.snd(assocRL)                 .to[ Items |*| ((Coin |*| BorrowedBasket) |*| (GoodsSupply |*| CoinSink)) ]
-          .>.snd.fst(sequence)            .to[ Items |*| ((Coin |*| BorrowedBasket) |*| (GoodsSupply |*| CoinSink)) ] // sequence to prevent returning basket before purchase is paid
-          .>.snd(par(swap, id) > assocLR) .to[ Items |*| (BorrowedBasket |*| (Coin |*| (GoodsSupply |*| CoinSink))) ]
-          .>.snd.snd(XI)                  .to[ Items |*| (BorrowedBasket |*| (GoodsSupply |*| (Coin |*| CoinSink))) ]
-          .>.snd.snd.snd(sendCoin)        .to[ Items |*| (BorrowedBasket |*| (GoodsSupply |*|           CoinSink )) ]
+        λ { case (coin |*| (items |*| (borrowedBasket |*| (goodsSupply |*| coinSink)))) =>
+          // sequence basket after coin to prevent returning basket before purchase is paid
+          val (borrowedBasket1 |*| coin1) = borrowedBasket sequenceAfter coin
+          val coinSink1 = sendCoin(coin1 |*| coinSink)
+          items |*| (borrowedBasket1 |*| (goodsSupply |*| coinSink1))
+        }
     }
 
     implicit def comonoidSupermarket: Comonoid[Supermarket] =
@@ -259,36 +279,35 @@ object Supermarket extends StarterApp {
       )
     }
 
-    def coinsToDrawer: One -⚬ (CoinSink |*| CashDrawer) =
-      done > Unlimited.createWith[Done, -[Coin], CashDrawer](
-        case0 = newCashDrawer,
-        case1 = newCashDrawer > introFst(receiveCoin) > assocLR > snd(depositCoin),
+    def coinsToDrawer: One -⚬ (CoinSink |*| CoinBank) =
+      done > Unlimited.createWith[Done, -[Coin], CoinBank](
+        case0 = newCoinBank,
+        case1 = newCoinBank > introFst(receiveCoin) > assocLR > snd(depositCoin),
       )
 
-    def makeSupermarket(capacity: Int): Done -⚬ (Supermarket |*| CashDrawer) =
-      id                                   [                                                Done                                                         ]
-        .>(fork)                        .to[                          Done                  |*|               Done                                       ]
-        .>(fst(makeBaskets(capacity)))  .to[                      LList1[Basket]            |*|               Done                                       ]
-        .>(fst(pool))                   .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*|               Done                                       ]
-        .>(snd(makeGoodsSupply))        .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*|  (GoodsSupply |*| Done)                                  ]
-        .>(snd(introSnd(coinsToDrawer))).to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*| ((GoodsSupply |*| Done)  |*|  (CoinSink |*| CashDrawer)) ]
-        .>(snd(IXI > snd(awaitPosFst))) .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*| ((GoodsSupply |*| CoinSink)   |*|           CashDrawer ) ]
-        .>(IXI)                         .to[ (Unlimited[BorrowedBasket] |*| (GoodsSupply |*| CoinSink)) |*| (LList1[Basket]   |*|           CashDrawer ) ]
-        .>(snd(fst(destroyBaskets)))    .to[ (Unlimited[BorrowedBasket] |*| (GoodsSupply |*| CoinSink)) |*| (     Done        |*|           CashDrawer ) ]
-        .>(snd(awaitPosFst))            .to[ (Unlimited[BorrowedBasket] |*| (GoodsSupply |*| CoinSink)) |*|                                 CashDrawer   ]
+    def openSupermarket(capacity: Int): Done -⚬ (Supermarket |*| CoinBank) =
+      id                                   [                                                Done                                                       ]
+        .>(fork)                        .to[                          Done                  |*|               Done                                     ]
+        .>(fst(makeBaskets(capacity)))  .to[                      LList1[Basket]            |*|               Done                                     ]
+        .>(fst(pool))                   .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*|               Done                                     ]
+        .>(snd(makeGoodsSupply))        .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*|  (GoodsSupply |*| Done)                                ]
+        .>(snd(introSnd(coinsToDrawer))).to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*| ((GoodsSupply |*| Done)  |*|  (CoinSink |*| CoinBank)) ]
+        .>(snd(IXI > snd(awaitPosFst))) .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*| ((GoodsSupply |*| CoinSink)   |*|           CoinBank ) ]
+        .>(IXI)                         .to[ (Unlimited[BorrowedBasket] |*| (GoodsSupply |*| CoinSink)) |*| (LList1[Basket]   |*|           CoinBank ) ]
+        .>(snd(fst(destroyBaskets)))    .to[ (Unlimited[BorrowedBasket] |*| (GoodsSupply |*| CoinSink)) |*| (     Done        |*|           CoinBank ) ]
+        .>(snd(awaitPosFst))            .to[ (Unlimited[BorrowedBasket] |*| (GoodsSupply |*| CoinSink)) |*|                                 CoinBank   ]
         .>(fst(snd(id                                                      [ GoodsSupply |*| CoinSink                       ]
           .>(par(Unlimited.fromComonoid, Unlimited.fromComonoid))      .to [ Unlimited[GoodsSupply] |*| Unlimited[CoinSink] ]
-        )))                             .to[ (Unlimited[BorrowedBasket] |*| (Unlimited[GoodsSupply] |*| Unlimited[CoinSink])) |*|           CashDrawer   ]
-        .>(fst(snd(Unlimited.zip)))     .to[ (Unlimited[BorrowedBasket] |*| (Unlimited[GoodsSupply  |*|           CoinSink])) |*|           CashDrawer   ]
-        .>(fst(Unlimited.zip))          .to[  Unlimited[BorrowedBasket  |*| (          GoodsSupply  |*|           CoinSink )] |*|           CashDrawer   ]
-        .>(fst(Unlimited.map(introFst))).to[  Unlimited[One |*| (BorrowedBasket |*| (  GoodsSupply  |*|           CoinSink))] |*|           CashDrawer   ]
+        )))                             .to[ (Unlimited[BorrowedBasket] |*| (Unlimited[GoodsSupply] |*| Unlimited[CoinSink])) |*|           CoinBank   ]
+        .>(fst(snd(Unlimited.zip)))     .to[ (Unlimited[BorrowedBasket] |*| (Unlimited[GoodsSupply  |*|           CoinSink])) |*|           CoinBank   ]
+        .>(fst(Unlimited.zip))          .to[  Unlimited[BorrowedBasket  |*| (          GoodsSupply  |*|           CoinSink )] |*|           CoinBank   ]
+        .>(fst(Unlimited.map(introFst))).to[  Unlimited[One |*| (BorrowedBasket |*| (  GoodsSupply  |*|           CoinSink))] |*|           CoinBank   ]
   }
-
-  import supermarket._
 
   private def randomDelay: Done -⚬ Done =
     constVal(()) > mapVal(_ => (scala.util.Random.nextDouble * 100 + 10).toInt.millis) > delay
 
+  /** Blueprint for customer behavior. A customer has access to a supermarket and runs to completion ([[Done]]). */
   def customer(who: String): Supermarket -⚬ Done = {
     def payForBeerWithForgedMoney[Items]: Shopping[Beer |*| Items] -⚬ (Beer |*| Shopping[Items]) =
       introFst(done > forgeCoin(who)) > payForBeer(who)
@@ -312,7 +331,8 @@ object Supermarket extends StarterApp {
       .>(join(id, join))                              .to[             Done                                    ]
   }
 
-  def customers: List[Supermarket -⚬ Done] =
+  /** Blueprints for customer behaviors. */
+  private def customers: List[Supermarket -⚬ Done] =
     List(
       customer("Alice"),
       customer("Bryan"),

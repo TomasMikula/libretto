@@ -121,6 +121,13 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
       }
 
       sealed trait Found[V, B] extends ElimStep[V, B] {
+        def foundVar: Var[V] =
+          this match {
+            case Exact(e, _)      => e.resultVar
+            case Closure(_, e, _) => e.resultVar
+            case HalfUsed(f, _)   => f.foundVar
+          }
+
         override def map[C](f: B ≈⚬ C): Found[V, C] =
           this match {
             case Exact(e, g)      => Exact(e, g > f)
@@ -129,27 +136,41 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
             // TODO
           }
 
-        def withCaptured[X](captured: Expr[X]): Found[V, X |*| B] =
+        /** Along the way tries to resolve captured vars of `expr` to unused variables of `this`. */
+        def withExpr[X](expr: Expr[X]): Found[V, X |*| B] =
           this match {
             case Exact(e, f) =>
-              captured.elimStep(e.resultVar) match {
-                case NotFound() => Closure(captured, e, snd(f))
+              expr.elimStep(e.resultVar) match {
+                case NotFound() => Closure(expr, e, snd(f))
                 case other => UnhandledCase.raise(s"$other")
               }
             case HalfUsed(f, u) =>
-              captured.elimStep(u) match {
-                case NotFound()               => HalfUsed(f.withCaptured(captured).map(assocRL), u)
+              expr.elimStep(u) match {
+                case NotFound()               => HalfUsed(f.withExpr(expr).map(assocRL), u)
                 case Exact(_, h)              => f.map(snd(h) > swap)
-                case Closure(captured1, _, h) => f.withCaptured(captured1).map(snd(swap) > assocRL > fst(h))
+                case Closure(captured1, _, h) => f.withExpr(captured1).map(snd(swap) > assocRL > fst(h))
                 case HalfUsed(g, w)           => HalfUsed(ElimStep.thenSnd(f, g) map (assocRL > fst(swap)), w)
               }
+            case other @ Closure(_, _, _) =>
+              UnhandledCase.raise(s"$other")
+          }
+
+        /** Assumes `captured` does not contain [[foundVar]] (and thus neither any vars derived from it).
+         *  Since `captured` uses only external variables, a closure will be created.
+         */
+        def withCaptured[X](captured: Expr[X]): Found[V, X |*| B] =
+          this match {
+            case Exact(e, f) =>
+              Closure(captured, e, snd(f))
+            case HalfUsed(f, u) =>
+              HalfUsed(f.withCaptured(captured).map(assocRL), u)
             case other @ Closure(_, _, _) =>
               UnhandledCase.raise(s"$other")
           }
       }
 
       case class Exact[V, B](expr: Expr.VarDefining[V], f: V ≈⚬ B) extends Found[V, B]
-      case class Closure[X, V, B](captured: Expr[X], expr: Expr[V], f: (X |*| V) ≈⚬ B) extends Found[V, B]
+      case class Closure[X, V, B](captured: Expr[X], expr: Expr.VarDefining[V], f: (X |*| V) ≈⚬ B) extends Found[V, B]
       case class HalfUsed[V, B, U](f: Found[V, B |*| U], unused: Var[U]) extends Found[V, B]
 
       def halfUsed1[V, B, U](step: ElimStep[V, B |*| U], u: Var[U]): ElimStep[V, B] =
@@ -162,7 +183,7 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
         halfUsed1(step.map(swap[U, B]), u)
 
       def closure[X, V, W, B](captured: Expr[X], f: Found[V, W], g: (X |*| W) ≈⚬ B): ElimStep[V, B] =
-        f.withCaptured(captured).map(g)
+        f.withExpr(captured).map(g)
 
       def ofPar[V, B1, B2](
         v: Var[V],
@@ -178,8 +199,8 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
                 ElimStep.Closure(f1, e2, snd(g2))
               case ElimStep.Closure(x, e2, g2) =>
                 ElimStep.Closure(f1 par x, e2, assocLR > snd(g2))
-              case other @ ElimStep.HalfUsed(_, _) =>
-                UnhandledCase.raise(s"$other")
+              case ElimStep.HalfUsed(f2, u) =>
+                ElimStep.HalfUsed(f2.withCaptured(f1).map(assocRL), u)
             }
           case ElimStep.Exact(e1, g1) =>
             f2.elimStep(v) match {
@@ -193,11 +214,11 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
           case ElimStep.HalfUsed(h1, u) =>
             f2.elimStep(u) match {
               case ElimStep.NotFound() =>
-                halfUsed1(h1.withCaptured(f2).map(assocRL > fst(swap)), u)
+                halfUsed1(h1.withExpr(f2).map(assocRL > fst(swap)), u)
               case ElimStep.Exact(g2, h2) =>
                 h1 map snd(h2)
               case ElimStep.Closure(captured, g2, h2) =>
-                h1.withCaptured(captured).map(xi > snd(h2))
+                h1.withExpr(captured).map(xi > snd(h2))
               case ElimStep.HalfUsed(g2, w) =>
                 ElimStep.halfUsed1(ElimStep.thenSnd(h1, g2).map(assocRL), w)
             }
@@ -207,7 +228,7 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
         g match {
           case Exact(g0, g1)   => f.map(snd(g1))
           case HalfUsed(g0, u) => HalfUsed(thenSnd(f, g0).map(assocRL), u)
-          case Closure(captured, g, h) => f.withCaptured(captured).map(xi > snd(h))
+          case Closure(captured, g, h) => f.withExpr(captured).map(xi > snd(h))
         }
     }
 

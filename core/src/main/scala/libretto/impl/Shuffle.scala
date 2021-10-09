@@ -544,8 +544,10 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def ix_this_ix[X, Y](h: IX[A1, B2, X, Y]): (((A1 |*| A2) |*| X) |*| A3) ~⚬ (Y |*| B2) =
         Xfer(IX(h.g).asShuffle, id, AssocLR(g))
 
-      override def xi_this_assocRL[X, Y](g: AssocRL[X, A1, B2, Y]): ((A1 |*| A2) |*| (X |*| A3)) ~⚬ (Y |*| B2) =
-        UnhandledCase.raise(s"${this.getClass.getSimpleName}.xi_this_assocRL($g)")
+      override def xi_this_assocRL[X, Y](h: AssocRL[X, A1, B2, Y]): ((A1 |*| A2) |*| (X |*| A3)) ~⚬ (Y |*| B2) =
+        decompose(swap > h.g.asShuffle) match {
+          case Decomposition(f1, f2, h) => Xfer(fst(f1), fst(f2), IXI(h, g))
+        }
 
       override def xi_this_xi[X, C](g: XI[X, A1, B2, C]): ((A1 |*| A2) |*| (X |*| A3)) ~⚬ (A1 |*| C) =
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.xi_this_xi($g)")
