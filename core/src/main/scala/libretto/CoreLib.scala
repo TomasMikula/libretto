@@ -10,6 +10,7 @@ object CoreLib {
 
 class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   import dsl._
+  import dsl.$._
 
   /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
     * It must hold that
@@ -836,6 +837,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def signalPosSnd[A](implicit A: Signaling.Positive[A]): A -⚬ (A |*| Done) =
     A.signalPosSnd
 
+  def signalDone[A](implicit A: Signaling.Positive[A]): A -⚬ (A |*| Done) =
+    signalPosSnd
+
   def signalNegFst[A](implicit A: Signaling.Negative[A]): (Need |*| A) -⚬ A =
     A.signalNegFst
 
@@ -887,6 +891,23 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   def sequence_NN[A, B](using A: Signaling.Negative[A], B: Deferrable.Negative[B]): (A |*| B) -⚬ (A |*| B) =
     snd(awaitPongFst) > assocRL > fst(notifyNegSnd)
+
+  extension [A, B](a: $[A]) {
+    def sequence(b: $[B])(implicit A: Signaling.Positive[A], B: Deferrable.Positive[B]): $[A |*| B] =
+      (a |*| b) > sequence_PP
+
+    def sequence(f: Done -⚬ B)(implicit A: Signaling.Positive[A]): $[A |*| B] =
+      a > signalPosSnd > snd(f)
+
+    def sequenceAfter(b: $[B])(implicit A: Deferrable.Positive[A], B: Signaling.Positive[B]): $[A |*| B] =
+      (b |*| a) > sequence_PP[B, A] > swap
+
+    def waitFor(b: $[Done])(implicit A: Junction.Positive[A]): $[A] =
+      (a |*| b) > awaitPosSnd
+  }
+
+  def when[A](trigger: $[Done])(f: Done -⚬ A): $[A] =
+    trigger > f
 
   /** Races the two [[Done]] signals and
     *  - produces left if the first signal wins, in which case it returns the second signal that still
@@ -1149,6 +1170,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   object |*| {
+    def unapply[A, B](ab: $[A |*| B])(implicit
+      file: sourcecode.File,
+      line: sourcecode.Line,
+    ): ($[A], $[B]) =
+      $.|*|.unapply(ab)(file, line)
+
     def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) = dsl.assocLR
     def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) = dsl.assocRL
 

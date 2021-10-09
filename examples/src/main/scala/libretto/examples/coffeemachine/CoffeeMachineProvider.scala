@@ -9,7 +9,11 @@ object CoffeeMachineProvider {
 
   val makeCoffeeMachine: Done -⚬ CoffeeMachine = rec { self =>
     val returnAndRepeat: Val[Beverage] -⚬ (Val[Beverage] |*| CoffeeMachine) =
-      signalPosSnd > snd(self)
+      signalDone >
+        λ { case (beverage |*| beverageDone) =>
+          val nextMachine: $[CoffeeMachine] = when(beverageDone) { self }
+          beverage |*| nextMachine
+        }
 
     CoffeeMachine.create(
       serveEspresso > out(returnAndRepeat),

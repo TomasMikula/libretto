@@ -83,10 +83,10 @@ object CoffeeMachineClient {
     }
 
   private def promptLatteOptions: Done -⚬ LatteOptions =
-    λ { trigger =>
-      val (size      |*| trigger1) = promptSize(trigger)  > signalPosSnd
-      val (shotCount |*| trigger2) = promptShot(trigger1) > signalPosSnd
-      val flavor                   = promptFlavor(trigger2)
+    λ { (trigger: $[Done]) =>
+      val (size      |*| sizeDone)  = when(trigger)   { promptSize > signalDone }
+      val (shotCount |*| shotsDone) = when(sizeDone)  { promptShot > signalDone }
+      val flavor                    = when(shotsDone) { promptFlavor }
 
       size |*| shotCount |*| flavor
     }
