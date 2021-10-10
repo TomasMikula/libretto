@@ -59,8 +59,8 @@ object Supermarket extends StarterApp {
     opaque type Coin = Done
     opaque type CoinBank = Val[Int] // number of coins
 
-    def forgeCoin(who: String): Done -⚬ Coin =
-      printLine(s"🪙 $who is forging a coin")
+    def forgeCoin: Done -⚬ Coin =
+      id[Done]
 
     def sendCoin: (Coin |*| -[Coin]) -⚬ One =
       backvert
@@ -134,11 +134,11 @@ object Supermarket extends StarterApp {
     def produceBeer: Done -⚬ Beer =
       id[Done]
 
-    def useToiletPaper(who: String): ToiletPaper -⚬ Done =
-      printLine(s"🧻 $who is using toilet paper")
+    def useToiletPaper: ToiletPaper -⚬ Done =
+      id[Done]
 
-    def drinkBeer(who: String): Beer -⚬ Done =
-      printLine(s"🍺 $who is drinking beer")
+    def drinkBeer: Beer -⚬ Done =
+      id[Done]
 
     implicit def signalingJunctionToiletPaper: SignalingJunction.Positive[ToiletPaper] =
       SignalingJunction.Positive.signalingJunctionPositiveDone
@@ -149,16 +149,41 @@ object Supermarket extends StarterApp {
 
   import goods._
 
-  object storekeeper {
+  trait Protocol {
+    type Supermarket
+    type Shopping[Items]
+
+    implicit def comonoidSupermarket: Comonoid[Supermarket]
+    implicit def basketReadiness[Items]: Signaling.Positive[Shopping[Items]]
+
+    def enterAndObtainBasket: Supermarket -⚬ Shopping[One]
+
+    def addBeerToBasket       [Items]: Shopping[Items] -⚬ Shopping[Beer        |*| Items]
+    def addToiletPaperToBasket[Items]: Shopping[Items] -⚬ Shopping[ToiletPaper |*| Items]
+
+    def payForBeer       [Items]: (Coin |*| Shopping[Beer        |*| Items]) -⚬ (Beer        |*| Shopping[Items])
+    def payForToiletPaper[Items]: (Coin |*| Shopping[ToiletPaper |*| Items]) -⚬ (ToiletPaper |*| Shopping[Items])
+
+    def returnBasketAndLeave: Shopping[One] -⚬ One
+  }
+
+  object storekeeper extends Protocol {
     private type BorrowedBasket = Basket |*| -[Basket]
     private type ItemSelection = Beer |&| ToiletPaper
     private type GoodsSupply = Unlimited[ItemSelection]
     private type CoinSink = Unlimited[-[Coin]]
 
-    opaque type Shopping[ItemsInBasket] =
+    override opaque type Shopping[ItemsInBasket] =
       ItemsInBasket |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink))
 
-    opaque type Supermarket = Unlimited[Shopping[One]]
+    override opaque type Supermarket =
+      Unlimited[Shopping[One]]
+
+    override implicit def comonoidSupermarket: Comonoid[Supermarket] =
+      Unlimited.comonoidUnlimited
+
+    override def basketReadiness[Items]: Signaling.Positive[Shopping[Items]] =
+      Signaling.Positive.bySnd(Signaling.Positive.byFst(signalingJunctionBorrowedBasket))
 
     private implicit def signalingJunctionBorrowedBasket: SignalingJunction.Positive[BorrowedBasket] =
       SignalingJunction.Positive.byFst
@@ -177,23 +202,17 @@ object Supermarket extends StarterApp {
 
     private object Shopping {
       def addItemToBasket[Item: SignalingJunction.Positive, Items](
-        who: String,
-        itemName: String,
         pick: ItemSelection -⚬ Item,
-      ): Shopping[Items] -⚬ Shopping[Item |*| Items] = {
-        val log: Item -⚬ Item =
-          alsoPrintLine[Item](s"$who is adding $itemName to the basket")
-
+      ): Shopping[Items] -⚬ Shopping[Item |*| Items] =
         id                                           [ Items |*| ( BorrowedBasket |*| (          GoodsSupply   |*| CoinSink) ) ]
           .>(snd(assocRL))                        .to[ Items |*| ((BorrowedBasket |*|            GoodsSupply ) |*| CoinSink  ) ]
-          .>(snd(fst(sequence_PN)))               .to[ Items |*| ((BorrowedBasket |*|            GoodsSupply ) |*| CoinSink  ) ]
+          .>(snd(fst(sequence_PN)))               .to[ Items |*| ((BorrowedBasket |*|            GoodsSupply ) |*| CoinSink  ) ] // sequence to prevent picking item before basket is ready
           .>(snd(fst(snd(supplyItem(pick)))))     .to[ Items |*| ((BorrowedBasket |*| (Item  |*| GoodsSupply)) |*| CoinSink  ) ]
           .>(snd(fst(assocRL) > assocLR))         .to[ Items |*| ((BorrowedBasket |*|  Item) |*| (GoodsSupply  |*| CoinSink) ) ]
-          .>(snd(fst(snd(log) > swap)))           .to[ Items |*| ((Item |*|  BorrowedBasket) |*| (GoodsSupply  |*| CoinSink) ) ]
+          .>(snd(fst(swap)))                      .to[ Items |*| ((Item |*|  BorrowedBasket) |*| (GoodsSupply  |*| CoinSink) ) ]
           .>(snd(fst(sequence)))                  .to[ Items |*| ((Item |*|  BorrowedBasket) |*| (GoodsSupply  |*| CoinSink) ) ]
           .>(snd(assocLR))                        .to[ Items |*| (Item  |*| (BorrowedBasket  |*| (GoodsSupply  |*| CoinSink))) ]
           .>(assocRL > fst(swap))                 .to[ (Item |*| Items) |*| (BorrowedBasket  |*| (GoodsSupply  |*| CoinSink))  ]
-      }
 
       def extractItem[Item: Deferrable.Positive, Items]: Shopping[Item |*| Items] -⚬ (Item |*| Shopping[Items]) =
         IXI > fst(swap > sequence > swap) > IXI > assocLR
@@ -207,13 +226,7 @@ object Supermarket extends StarterApp {
         }
     }
 
-    implicit def comonoidSupermarket: Comonoid[Supermarket] =
-      Unlimited.comonoidUnlimited
-
-    def enterAndObtainBasket(who: String): Supermarket -⚬ Shopping[One] = {
-      val log: Basket -⚬ Basket =
-        alsoPrintLine(s"$who obtained a shopping basket")
-
+    override def enterAndObtainBasket: Supermarket -⚬ Shopping[One] = {
       val delaySupply: (BorrowedBasket |*| GoodsSupply) -⚬ (BorrowedBasket |*| GoodsSupply) =
         fst(swap) > assocLR > snd(sequence_PN[Basket, GoodsSupply]) > assocRL > fst(swap)
 
@@ -221,55 +234,41 @@ object Supermarket extends StarterApp {
                                   .to[ Unlimited[Shopping[One]]                                ]
         .>(Unlimited.single)      .to[           Shopping[One]                                 ]
                                   .to[ One |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink)) ]
-        .>(snd(fst(fst(log))))    .to[ One |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink)) ]
         .>(snd(assocRL))          .to[ One |*| ((BorrowedBasket |*| GoodsSupply) |*| CoinSink) ]
         .>(snd(fst(delaySupply))) .to[ One |*| ((BorrowedBasket |*| GoodsSupply) |*| CoinSink) ]
         .>(snd(assocLR))          .to[ One |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink)) ]
     }
 
-    def returnBasketAndLeave(who: String): Shopping[One] -⚬ One = {
-      val log: Basket -⚬ Basket =
-        alsoPrintLine(s"$who returned the basket")
-
+    override def returnBasketAndLeave: Shopping[One] -⚬ One =
       id                             [ One |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink)) ]
         .>(elimFst)               .to[          BorrowedBasket |*| (GoodsSupply |*| CoinSink)  ]
-        .>(fst(fst(log)))         .to[          BorrowedBasket |*| (GoodsSupply |*| CoinSink)  ]
         .>(elimFst(returnBasket)) .to[                              GoodsSupply |*| CoinSink   ]
         .>(elimFst(closeSupply))  .to[                                              CoinSink   ]
         .>(closeCoinSink)         .to[                                              One        ]
-    }
 
-    def addToiletPaperToBasket[Items](who: String): Shopping[Items] -⚬ Shopping[ToiletPaper |*| Items] =
-      Shopping.addItemToBasket(who, "toilet paper", chooseToiletPaper)
+    override def addToiletPaperToBasket[Items]: Shopping[Items] -⚬ Shopping[ToiletPaper |*| Items] =
+      Shopping.addItemToBasket(chooseToiletPaper)
 
-    def addBeerToBasket[Items](who: String): Shopping[Items] -⚬ Shopping[Beer |*| Items] =
-      Shopping.addItemToBasket(who, "beer", chooseBeer)
+    override def addBeerToBasket[Items]: Shopping[Items] -⚬ Shopping[Beer |*| Items] =
+      Shopping.addItemToBasket(chooseBeer)
 
-    def payForToiletPaper[Items](customer: String): (Coin |*| Shopping[ToiletPaper |*| Items]) -⚬ (ToiletPaper |*| Shopping[Items]) =
-      payForItem[ToiletPaper, Items](customer, "toilet paper")
+    override def payForToiletPaper[Items]: (Coin |*| Shopping[ToiletPaper |*| Items]) -⚬ (ToiletPaper |*| Shopping[Items]) =
+      payForItem[ToiletPaper, Items]
 
-    def payForBeer[Items](customer: String): (Coin |*| Shopping[Beer |*| Items]) -⚬ (Beer |*| Shopping[Items]) =
-      payForItem[Beer, Items](customer, "beer")
+    override def payForBeer[Items]: (Coin |*| Shopping[Beer |*| Items]) -⚬ (Beer |*| Shopping[Items]) =
+      payForItem[Beer, Items]
 
     private def payForItem[
       Item: SignalingJunction.Positive,
       Items,
-    ](
-      who: String,
-      itemName: String,
-    ): (Coin |*| Shopping[Item |*| Items]) -⚬ (Item |*| Shopping[Items]) = {
-      val log: Item -⚬ Item =
-        alsoPrintLine[Item](s"$who paid for $itemName")
-
+    ]: (Coin |*| Shopping[Item |*| Items]) -⚬ (Item |*| Shopping[Items]) =
       id                                         [  Coin |*|  Shopping[Item |*| Items]   ]
         .>.snd(Shopping.extractItem)          .to[  Coin |*| (Item  |*| Shopping[Items]) ]
         .>(assocRL)                           .to[ (Coin |*|  Item) |*| Shopping[Items]  ]
         .>(fst(sequence[Coin, Item]))         .to[ (Coin |*|  Item) |*| Shopping[Items]  ] // sequence to prevent using the item before Coin is provided
-        .>(fst(snd(log)))                     .to[ (Coin |*|  Item) |*| Shopping[Items]  ]
-        .>(fst(swap > sequence[Item, Coin]))  .to[ (Item |*|  Coin) |*| Shopping[Items]  ] // sequence to delay the Basket (via Coin in ingestCoin) after the "paid" log message
+        .>(fst(swap))                         .to[ (Item |*|  Coin) |*| Shopping[Items]  ]
         .>(assocLR)                           .to[  Item |*| (Coin  |*| Shopping[Items]) ]
         .>.snd(Shopping.ingestCoin)           .to[  Item |*|            Shopping[Items]  ]
-    }
 
     def makeGoodsSupply: Done -⚬ (GoodsSupply |*| Done) = rec { self =>
       Unlimited.createWith[Done, ItemSelection, Done](
@@ -279,7 +278,7 @@ object Supermarket extends StarterApp {
       )
     }
 
-    def coinsToDrawer: One -⚬ (CoinSink |*| CoinBank) =
+    def coinsToBank: One -⚬ (CoinSink |*| CoinBank) =
       done > Unlimited.createWith[Done, -[Coin], CoinBank](
         case0 = newCoinBank,
         case1 = newCoinBank > introFst(receiveCoin) > assocLR > snd(depositCoin),
@@ -291,7 +290,7 @@ object Supermarket extends StarterApp {
         .>(fst(makeBaskets(capacity)))  .to[                      LList1[Basket]            |*|               Done                                     ]
         .>(fst(pool))                   .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*|               Done                                     ]
         .>(snd(makeGoodsSupply))        .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*|  (GoodsSupply |*| Done)                                ]
-        .>(snd(introSnd(coinsToDrawer))).to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*| ((GoodsSupply |*| Done)  |*|  (CoinSink |*| CoinBank)) ]
+        .>(snd(introSnd(coinsToBank)))  .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*| ((GoodsSupply |*| Done)  |*|  (CoinSink |*| CoinBank)) ]
         .>(snd(IXI > snd(awaitPosFst))) .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*| ((GoodsSupply |*| CoinSink)   |*|           CoinBank ) ]
         .>(IXI)                         .to[ (Unlimited[BorrowedBasket] |*| (GoodsSupply |*| CoinSink)) |*| (LList1[Basket]   |*|           CoinBank ) ]
         .>(snd(fst(destroyBaskets)))    .to[ (Unlimited[BorrowedBasket] |*| (GoodsSupply |*| CoinSink)) |*| (     Done        |*|           CoinBank ) ]
@@ -305,30 +304,76 @@ object Supermarket extends StarterApp {
   }
 
   private def randomDelay: Done -⚬ Done =
-    constVal(()) > mapVal(_ => (scala.util.Random.nextDouble * 100 + 10).toInt.millis) > delay
+    constVal(()) > mapVal(_ => (scala.util.Random.nextDouble * 1000 + 100).toInt.millis) > delay
 
   /** Blueprint for customer behavior. A customer has access to a supermarket and runs to completion ([[Done]]). */
   def customer(who: String): Supermarket -⚬ Done = {
+    def getCoin: One -⚬ Coin =
+      done > printLine(s"🪙 $who is forging a coin") > forgeCoin
+
     def payForBeerWithForgedMoney[Items]: Shopping[Beer |*| Items] -⚬ (Beer |*| Shopping[Items]) =
-      introFst(done > forgeCoin(who)) > payForBeer(who)
+      introFst(getCoin) > payForBeer
 
     def payForToiletPaperWithForgedMoney[Items]: Shopping[ToiletPaper |*| Items] -⚬ (ToiletPaper |*| Shopping[Items]) =
-      introFst(done > forgeCoin(who)) > payForToiletPaper(who)
+      introFst(getCoin) > payForToiletPaper
 
-    def useTP = delayUsing[ToiletPaper](randomDelay) > useToiletPaper(who)
-    def drink = delayUsing[Beer       ](randomDelay) > drinkBeer(who)
+    def useTP = delayUsing[ToiletPaper](randomDelay) > useToiletPaper
+    def drink = delayUsing[Beer       ](randomDelay) > drinkBeer
 
-    id                                                   [             Supermarket                             ]
-      .>(enterAndObtainBasket(who))                   .to[ Shopping[                                    One  ] ]
-      .>(addBeerToBasket(who))                        .to[ Shopping[                           Beer |*| One  ] ]
-      .>(addBeerToBasket(who))                        .to[ Shopping[                 Beer |*| (Beer |*| One) ] ]
-      .>(addToiletPaperToBasket(who))                 .to[ Shopping[ToiletPaper |*| (Beer |*| (Beer |*| One))] ]
-      .>(payForToiletPaperWithForgedMoney)            .to[ ToiletPaper |*| Shopping[ Beer |*| (Beer |*| One) ] ]
-      .>.snd(payForBeerWithForgedMoney)               .to[ ToiletPaper |*| (Beer |*| Shopping[ Beer |*| One ]) ]
-      .>.snd.snd(payForBeerWithForgedMoney)           .to[ ToiletPaper |*| (Beer |*| (Beer |*| Shopping[One])) ]
-      .>.snd.snd(elimSnd(returnBasketAndLeave(who)))  .to[ ToiletPaper |*| (Beer |*|  Beer                   ) ]
-      .>(par(useTP, (par(drink, drink))))             .to[    Done     |*| (Done |*|  Done                   ) ]
-      .>(joinMap(id, join))                           .to[             Done                                    ]
+    λ { (supermarket: $[Supermarket]) =>
+      val ((shopping: $[Shopping[One]]) |*| (basketObtained: $[Done])) =
+        enterAndObtainBasket(supermarket) > basketReadiness.signalDone
+
+      val logged: $[Done] =
+        when(basketObtained) {
+          printLine(s"${Console.RED}+1${Console.RESET} $who obtained a shopping basket")
+        }
+
+      val (shopping1 |*| beerAdded) =
+        shopping > addBeerToBasket > addBeerToBasket > basketReadiness.signalDone
+
+      val logged1: $[Done] =
+        when(join(logged |*| beerAdded)) {
+          printLine(s"$who added 2 beers to the basket")
+        }
+
+      val (shopping2 |*| tpAdded) =
+        shopping1 > addToiletPaperToBasket > basketReadiness.signalDone
+
+      val logged2: $[Done] =
+        when(join(logged1 |*| tpAdded)) {
+          printLine(s"$who added toilet paper to the basket")
+        }
+
+      val (tp |*| shopping3) =
+        payForToiletPaperWithForgedMoney(shopping2)
+
+      val (beer1 |*| shopping4) =
+        payForBeerWithForgedMoney(shopping3)
+
+      val (beer2 |*| shopping5) =
+        payForBeerWithForgedMoney(shopping4)
+
+      val (shopping6 |*| paid) =
+        shopping5 > basketReadiness.signalDone
+
+      val logged3: $[Done] =
+        when(join(logged2 |*| paid)) {
+          printLine(s"$who paid for the purchase")
+        }
+
+      val shoppingFinished: $[Done] =
+        (returnBasketAndLeave(shopping6) |*| logged3) > elimFst >
+          printLine(s"${Console.GREEN}-1${Console.RESET} $who returned the basket")
+
+      val beer1Drunk: $[Done] =
+        drink(beer1 waitFor shoppingFinished) > printLine(s"🍺 $who drank the 1st beer")
+
+      val beer2Drunk: $[Done] =
+        drink(beer2 waitFor beer1Drunk) > printLine(s"🍺 $who drank the 2nd beer")
+
+      useTP(tp waitFor beer2Drunk) > printLine(s"🧻 $who used the toilet paper")
+    }
   }
 
   /** Blueprints for customer behaviors. */

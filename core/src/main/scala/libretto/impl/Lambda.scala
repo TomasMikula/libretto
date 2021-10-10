@@ -164,8 +164,8 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
               Closure(captured, e, snd(f))
             case HalfUsed(f, u) =>
               HalfUsed(f.withCaptured(captured).map(assocRL), u)
-            case other @ Closure(_, _, _) =>
-              UnhandledCase.raise(s"$other")
+            case Closure(y, e, f) =>
+              Closure(captured par y, e, assocLR > snd(f))
           }
       }
 

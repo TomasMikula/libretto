@@ -658,7 +658,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.ix_this_assocLR($that)")
 
       override def ix_this_ix[X, Y](that: IX[B, A3, X, Y]): ((A1 |*| X) |*| (A2 |*| A3)) ~⚬ (Y |*| A3) =
-        UnhandledCase.raise(s"${this.getClass.getSimpleName}.ix_this_ix($that)")
+        decompose(IX(g).asShuffle > that.g.asShuffle) match {
+          case Decomposition(f1, f2, h) => Xfer(f1, fst(f2), AssocRL(h))
+        }
 
       override def xi_this_xi[X, C](h: XI[X, B, A3, C]): (A1 |*| (X |*| (A2 |*| A3))) ~⚬ (B |*| C) =
         Xfer(Id(), XI(h.g).asShuffle, AssocRL(g))
@@ -791,7 +793,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.xi_this_xi($h)")
 
       override def invert: Xfer[B, A2, _, _, A1 |*| A2, A3] =
-        UnhandledCase.raise(s"${this.getClass.getSimpleName}.invert")
+        Xfer(g.asShuffle.invert, id, IX(TransferOpt.None()))
 
       override def ixiPairWith_:[X1, X2, X3, X4, X5, X6, Y1, Y2](
         that: Transfer.IXI[X1, X2, X3, X4, Y1, Y2],
@@ -883,7 +885,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.ix_this_assocLR($that)")
 
       override def ix_this_ix[X, Y](that: IX[A2, B2, X, Y]): ((A1 |*| X) |*| (A2 |*| A3)) ~⚬ (Y |*| B2) =
-        UnhandledCase.raise(s"${this.getClass.getSimpleName}.ix_this_ix($that)")
+        decompose(swap > that.g.asShuffle) match {
+          case Decomposition(f1, f2, h) => Xfer(swap > fst(f1), fst(f2), IXI(h, g))
+        }
 
       override def xi_this_assocRL[X, Y](h: AssocRL[X, A2, B2, Y]): (A1 |*| (X |*| (A2 |*| A3))) ~⚬ (Y |*| B2) =
         Xfer(Id(), AssocRL(h.g).asShuffle, XI(g))
@@ -984,7 +988,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.ix_this_assocLR($that)")
 
       override def ix_this_ix[X, Y](that: IX[B1, B2, X, Y]): (((A1 |*| A2) |*| X) |*| (A3 |*| A4)) ~⚬ (Y |*| B2) =
-        UnhandledCase.raise(s"${this.getClass.getSimpleName}.ix_this_ix($that)")
+        decompose(IX(g1).asShuffle > that.g.asShuffle) match {
+          case Decomposition(f1, f2, h) => Xfer(ix > fst(f1), fst(f2), IXI(h, g2))
+        }
 
       override def xi_this_assocRL[X, Y](g: AssocRL[X, B1, B2, Y]): ((A1 |*| A2) |*| (X |*| (A3 |*| A4))) ~⚬ (Y |*| B2) =
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.xi_this_assocRL($g)")

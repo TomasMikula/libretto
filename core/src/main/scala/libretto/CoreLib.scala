@@ -501,6 +501,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def signalPos: A -⚬ (Done |*| A) =
         signalPosFst
 
+      /** Alias for [[signalPosSnd]]. */
+      def signalDone: A -⚬ (A |*| Done) =
+        signalPosSnd
+
       def law_signalIdentity: Equal[A -⚬ (RTerminus |*| A)] =
         Equal(
           signalPosFst > par(delayIndefinitely, id),
