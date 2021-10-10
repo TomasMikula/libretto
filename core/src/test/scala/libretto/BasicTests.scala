@@ -32,7 +32,7 @@ class BasicTests extends TestSuite {
     prg1: Done -⚬ Val[A],
     prg2: Done -⚬ Val[A],
   ): Done -⚬ Val[A] =
-    fork(prg1, prg2)
+    forkMap(prg1, prg2)
       .race(
         caseFstWins = id.awaitSnd(neglect),
         caseSndWins = id.awaitFst(neglect),
@@ -79,13 +79,13 @@ class BasicTests extends TestSuite {
       coreLib.lInvert
 
     val prg: Done -⚬ Val[(String, Int)] =
-      id                                           [               Done                                                                           ]
-        .>(fork(constVal("foo"), constVal(42))) .to[   Val[String] |*| Val[Int]                                                                   ]
-        .introSnd.>.snd(lInvert)                .to[  (Val[String] |*| Val[Int]) |*| ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) ]
-        .assocRL                                .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| (Val[String] |*| Val[Int])  ]
-        .>.fst(par(unliftPair, unliftNegPair))  .to[ (    Val[(String, Int)]     |*|      Neg[(String, Int)]    ) |*| (Val[String] |*| Val[Int])  ]
-        .elimFst(fulfill)                       .to[                                                                   Val[String] |*| Val[Int]   ]
-        .>(unliftPair)                          .to[                                                                      Val[(String, Int)]      ]
+      id                                              [               Done                                                                           ]
+        .>(forkMap(constVal("foo"), constVal(42))) .to[   Val[String] |*| Val[Int]                                                                   ]
+        .introSnd.>.snd(lInvert)                   .to[  (Val[String] |*| Val[Int]) |*| ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) ]
+        .assocRL                                   .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| (Val[String] |*| Val[Int])  ]
+        .>.fst(par(unliftPair, unliftNegPair))     .to[ (    Val[(String, Int)]     |*|      Neg[(String, Int)]    ) |*| (Val[String] |*| Val[Int])  ]
+        .elimFst(fulfill)                          .to[                                                                   Val[String] |*| Val[Int]   ]
+        .>(unliftPair)                             .to[                                                                      Val[(String, Int)]      ]
 
     assertVal(prg, ("foo", 42))
   }
@@ -111,7 +111,7 @@ class BasicTests extends TestSuite {
     // We are testing that the second timer starts ticking only after the delayed inject (joinInjectL).
     val b: Done -⚬ Val[Char] = {
       val delayedInjectL: Done -⚬ (Val[Char] |+| Val[Char]) =
-        fork(delay(30.millis), constVal('B')) > awaitInjectL
+        forkMap(delay(30.millis), constVal('B')) > awaitInjectL
       delayedInjectL > either(
         introFst[Val[Char], Done](done > delay(20.millis)).awaitFst,
         id,
@@ -129,7 +129,7 @@ class BasicTests extends TestSuite {
     // 'B' delayed by 30 + 20 = 50 millis.
     // We are testing that the second timer starts ticking only after the delayed choice is made.
     val b: Done -⚬ Val[Char] =
-      fork(delay(30.millis), choice(delay(20.millis), id)) > awaitPosChooseL > constVal('B')
+      forkMap(delay(30.millis), choice(delay(20.millis), id)) > awaitPosChooseL > constVal('B')
 
     assertVal(raceKeepWinner(a, b), 'A')
   }
@@ -167,7 +167,7 @@ class BasicTests extends TestSuite {
 
   test("crash - even if it loses a race, the program still crashes") {
     val prg = id[Done]
-      .>( fork(id, delay(10.millis) > crashd("oops")) )
+      .>( forkMap(id, delay(10.millis) > crashd("oops")) )
       .>( raceDone )
       .>( either(id, id) )
     assertCrashes(prg, "oops")
@@ -212,12 +212,12 @@ class BasicTests extends TestSuite {
     val init: Done -⚬ (((B |*| I) |&| (B |*| S)) |&| ((C |*| I) |&| (C |*| S))) =
       choice(
         choice(
-          fork(constVal(false), constVal(1)),
-          fork(constVal(true), constVal("foo")),
+          forkMap(constVal(false), constVal(1)),
+          forkMap(constVal(true), constVal("foo")),
         ),
         choice(
-          fork(constVal('a'), constVal(2)),
-          fork(constVal('b'), constVal("bar")),
+          forkMap(constVal('a'), constVal(2)),
+          forkMap(constVal('b'), constVal("bar")),
         ),
       )
 
@@ -391,7 +391,7 @@ class BasicTests extends TestSuite {
       delay(5.millis) > crashd("Boom!") // delay crash to give chance for resource split to begin
 
     val prg: Done -⚬ Done =
-      fork(crashThread, mainThread) > join
+      forkMap(crashThread, mainThread) > join
 
     assertCrashes(prg, "Boom!")
 
@@ -454,7 +454,7 @@ class BasicTests extends TestSuite {
     }
 
     val prg: Done -⚬ Val[(Millis, (List[Millis], List[Millis]))] =
-      fork(currentTimeMillis, timed) > unliftPair
+      forkMap(currentTimeMillis, timed) > unliftPair
 
     testVal(prg) { case (startMillis, (sleepEnds, pureEnds)) =>
       val sleepDurations = sleepEnds.map(_.value - startMillis.value)

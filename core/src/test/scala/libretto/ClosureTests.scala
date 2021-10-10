@@ -49,7 +49,7 @@ class ClosureTests extends TestSuite {
       }
 
     val prg: Done -⚬ Val[String] =
-      fork(f, constVal("abc")) > eval
+      forkMap(f, constVal("abc")) > eval
 
     assertVal(prg, "abcabc")
   }

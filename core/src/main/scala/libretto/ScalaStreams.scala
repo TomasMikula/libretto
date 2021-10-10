@@ -109,7 +109,7 @@ class ScalaStreams[
     def fromList[A](as: List[A]): Done -⚬ Pollable[A] = {
       @tailrec def go(ras: List[A], acc: Done -⚬ Pollable[A]): Done -⚬ Pollable[A] =
         ras match {
-          case head :: tail => go(tail, fork(constVal(head), acc) > Pollable.cons)
+          case head :: tail => go(tail, forkMap(constVal(head), acc) > Pollable.cons)
           case Nil          => acc
         }
 
@@ -152,7 +152,7 @@ class ScalaStreams[
 
     def prepend[A]: (Val[A] |*| Pollable[A]) -⚬ Pollable[A] = {
       val close: (Val[A] |*| Pollable[A]) -⚬ Done =
-        join(neglect, Pollable.close)
+        joinMap(neglect, Pollable.close)
 
       val poll: (Val[A] |*| Pollable[A]) -⚬ Polled[A] =
         injectR
@@ -172,13 +172,13 @@ class ScalaStreams[
 
       val inner: (Val[S] |*| Pollable[A]) -⚬ Pollable[B] = rec { self =>
         val close: (Val[S] |*| Pollable[A]) -⚬ Done =
-          join(neglect, Pollable.close)
+          joinMap(neglect, Pollable.close)
 
         val poll:(Val[S] |*| Pollable[A]) -⚬ (Done |+| (Val[B] |*| Pollable[B])) =
           id[Val[S] |*| Pollable[A]]          .to[ Val[S] |*|                                    Pollable[A]   ]
             .>.snd(Pollable.poll)             .to[ Val[S] |*| (Done  |+|             (Val[A] |*| Pollable[A])) ]
             .distributeL                      .to[ (Val[S] |*| Done) |+| (Val[S] |*| (Val[A] |*| Pollable[A])) ]
-            .>.left(join(neglect, id))        .to[        Done       |+| (Val[S] |*| (Val[A] |*| Pollable[A])) ]
+            .>.left(joinMap(neglect, id))     .to[        Done       |+| (Val[S] |*| (Val[A] |*| Pollable[A])) ]
             .>.right.assocRL                  .to[        Done       |+| ((Val[S] |*| Val[A]) |*| Pollable[A]) ]
             .>.right.fst(ff)                  .to[        Done       |+| ((Val[S] |*| Val[B]) |*| Pollable[A]) ]
             .>.right.fst(swap)                .to[        Done       |+| ((Val[B] |*| Val[S]) |*| Pollable[A]) ]
@@ -221,7 +221,7 @@ class ScalaStreams[
     def dup[A]: Pollable[A] -⚬ (Pollable[A] |*| Pollable[A]) = rec { self =>
       val dupPolled: Polled[A] -⚬ (Polled[A] |*| Polled[A]) = {
         val caseClosed: Done -⚬ (Polled[A] |*| Polled[A]) =
-          fork(injectL, injectL)
+          forkMap(injectL, injectL)
 
         val caseValue: (Val[A] |*| Pollable[A]) -⚬ (Polled[A] |*| Polled[A]) =
           id                                             [        Val[A]       |*|          Pollable[A]          ]
@@ -260,7 +260,7 @@ class ScalaStreams[
 
     def dropUntilFirstDemand[A]: Pollable[A] -⚬ Pollable[A] = rec { self =>
         val caseDownstreamRequested: (Val[A] |*| Pollable[A]) -⚬ Pollable[A] = {
-          val caseDownstreamClosed: (Val[A] |*| Pollable[A]) -⚬ Done      = join(neglect, Pollable.close)
+          val caseDownstreamClosed: (Val[A] |*| Pollable[A]) -⚬ Done      = joinMap(neglect, Pollable.close)
           val caseDownstreamPulled: (Val[A] |*| Pollable[A]) -⚬ Polled[A] = injectR
           choice(caseDownstreamClosed, caseDownstreamPulled).pack
         }
@@ -363,7 +363,7 @@ class ScalaStreams[
         par(dsl.neglect[K], Subscriber.close[V]) > rInvertSignal
 
       val upstreamClosed: (Done |*| (LPolled[KSubs] |*| DT[K, V])) -⚬ Done =
-        join(id, join(LPolled.close(discardSubscriber > done), DT.clear))
+        joinMap(id, joinMap(LPolled.close(discardSubscriber > done), DT.clear))
 
       def upstreamVal(
         goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
@@ -386,12 +386,12 @@ class ScalaStreams[
           .either(upstreamClosed, upstreamVal(goRec))
 
       val feedToNEDT: (Polled[A] |*| NeDT[K, V]) -⚬ Done =
-        LPolled.feedTo(DT.dispatchNE(f)) > join(id, Maybe.neglect(DT.clearNE))
+        LPolled.feedTo(DT.dispatchNE(f)) > joinMap(id, Maybe.neglect(DT.clearNE))
 
       val forward: (Polled[A] |*| DT[K, V]) -⚬ Done =
         id                                               [  Polled[A] |*| (Done |+|                NeDT[K, V]) ]
           .distributeL                                .to[ (Polled[A] |*| Done) |+| (Polled[A] |*| NeDT[K, V]) ]
-          .>.left(join(Polled.close, id))             .to[           Done       |+| (Polled[A] |*| NeDT[K, V]) ]
+          .>.left(joinMap(Polled.close, id))          .to[           Done       |+| (Polled[A] |*| NeDT[K, V]) ]
           .>.right(feedToNEDT)                        .to[           Done       |+|           Done             ]
           .>(either(id, id))                          .to[                     Done                            ]
 
@@ -530,7 +530,7 @@ class ScalaStreams[
       mergeSubscribers: (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A]
     ): (Demanding[A] |*| Demanding[A]) -⚬ Demanding[A] = {
       val caseClosed: (Demanding[A] |*| Demanding[A]) -⚬ Need =
-        forkNeed(chooseL, chooseL)
+        forkMapNeed(chooseL, chooseL)
 
       val caseDemanding: (Demanding[A] |*| Demanding[A]) -⚬ (Neg[A] |*| Subscriber[A]) =
         id                                             [     Demanding[A]           |*|     Demanding[A]           ]

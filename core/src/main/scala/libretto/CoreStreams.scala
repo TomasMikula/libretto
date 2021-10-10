@@ -56,7 +56,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     /** Polls and discards all elements. */
     def drain[A](implicit A: PComonoid[A]): LPollable[A] -⚬ Done =
       rec { self =>
-        poll[A] > either(id, join(A.counit, self))
+        poll[A] > either(id, joinMap(A.counit, self))
       }
 
     def emptyF[A]: Done -⚬ LPollableF[A, LPollable[A]] =
@@ -66,7 +66,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       emptyF[A].pack
 
     def cons[A](implicit A: PAffine[A]): (A |*| LPollable[A]) -⚬ LPollable[A] = {
-      val onClose: (A |*| LPollable[A]) -⚬ Done       = join(A.neglect, LPollable.close)
+      val onClose: (A |*| LPollable[A]) -⚬ Done       = joinMap(A.neglect, LPollable.close)
       val onPoll:  (A |*| LPollable[A]) -⚬ LPolled[A] = LPolled.cons
       from(onClose, onPoll)
     }
@@ -84,7 +84,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def repeatedly[A](f: Done -⚬ A): Done -⚬ LPollable[A] = rec { self =>
       from(
         onClose = id[Done],
-        onPoll = fork(f, self) > LPolled.cons,
+        onPoll = forkMap(f, self) > LPolled.cons,
       )
     }
 
@@ -141,7 +141,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       */
     def concatenate[A]: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ LPollable[A] = rec { self =>
       val close: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ Done =
-        join(LPollable.close, Delayed.force > LPollable.close)
+        joinMap(LPollable.close, Delayed.force > LPollable.close)
 
       val poll: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ LPolled[A] =
         id                               [                                               LPollable[A]    |*| Delayed[LPollable[A]]   ]
@@ -175,7 +175,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
       val bothPolled: LPollable[A |+| B] -⚬ (LPolled[A] |*| LPolled[B]) = {
         val upClosed: Done -⚬ (LPolled[A] |*| LPolled[B]) =
-          fork(LPolled.empty[A], LPolled.empty[B])
+          forkMap(LPolled.empty[A], LPolled.empty[B])
 
         val upValue: ((A |+| B) |*| LPollable[A |+| B]) -⚬ (LPolled[A] |*| LPolled[B]) =
           id                                 [ (A                                      |+|  B) |*|         LPollable[A |+| B]       ]
@@ -213,7 +213,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       A1: Junction.Positive[A],
       A2: PAffine[A],
     ): (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A] = rec { self =>
-      val onClose: (LPollable[A] |*| LPollable[A]) -⚬ Done       = join(close, close)
+      val onClose: (LPollable[A] |*| LPollable[A]) -⚬ Done       = joinMap(close, close)
       val onPoll : (LPollable[A] |*| LPollable[A]) -⚬ LPolled[A] = par(poll, poll) > LPolled.merge(self)
       from(onClose, onPoll)
     }
@@ -251,7 +251,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
   object LPolled {
     def close[A](neglect: A -⚬ Done): LPolled[A] -⚬ Done =
-      either(id, join(neglect, LPollable.close))
+      either(id, joinMap(neglect, LPollable.close))
 
     def empty[A]: Done -⚬ LPolled[A] =
       injectL
@@ -290,7 +290,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     ): (LPolled[A] |*| B) -⚬ (Done |*| Maybe[B]) = rec { self =>
       val upstreamValue: ((A |*| LPollable[A]) |*| B) -⚬ (Done |*| Maybe[B]) = {
         val caseStop: (LPollable[A] |*| Done) -⚬ (Done |*| Maybe[B]) =
-          join(LPollable.close, id) > introSnd(Maybe.empty[B])
+          joinMap(LPollable.close, id) > introSnd(Maybe.empty[B])
         val caseCont: (LPollable[A] |*| B) -⚬ (Done |*| Maybe[B]) =
           par(LPollable.poll, id) > self
         id                                             [ (     A       |*| LPollable[A]) |*| B  ]

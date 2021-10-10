@@ -109,7 +109,7 @@ object Supermarket extends StarterApp {
       require(n >= 1)
       n match {
         case 1 => makeBasket > LList1.singleton[Done]
-        case _ => fork(makeBasket, makeBaskets(n - 1)) > LList1.cons1
+        case _ => forkMap(makeBasket, makeBaskets(n - 1)) > LList1.cons1
       }
     }
 
@@ -275,7 +275,7 @@ object Supermarket extends StarterApp {
       Unlimited.createWith[Done, ItemSelection, Done](
         case0 = id[Done],
         case1 = fork > fst(choice(produceBeer, produceToiletPaper)),
-        caseN = fork(self, self) > IXI > snd(join),
+        caseN = forkMap(self, self) > IXI > snd(join),
       )
     }
 
@@ -328,7 +328,7 @@ object Supermarket extends StarterApp {
       .>.snd.snd(payForBeerWithForgedMoney)           .to[ ToiletPaper |*| (Beer |*| (Beer |*| Shopping[One])) ]
       .>.snd.snd(elimSnd(returnBasketAndLeave(who)))  .to[ ToiletPaper |*| (Beer |*|  Beer                   ) ]
       .>(par(useTP, (par(drink, drink))))             .to[    Done     |*| (Done |*|  Done                   ) ]
-      .>(join(id, join))                              .to[             Done                                    ]
+      .>(joinMap(id, join))                           .to[             Done                                    ]
   }
 
   /** Blueprints for customer behaviors. */

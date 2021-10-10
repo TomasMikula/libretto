@@ -60,7 +60,7 @@ object DiningPhilosophers extends StarterApp {
 
     def makeSharedFork: Done -⚬ (SharedFork |*| SharedFork) = rec { makeSharedFork =>
       val caseFstReleases: Done -⚬ (Done |*| SharedFork) =
-        fork(id, singleOwnerFork)
+        forkMap(id, singleOwnerFork)
 
       val caseFstPicksUp: Done -⚬ ((HeldFork |+| SharedFork) |*| SharedFork) = {
         val go: One -⚬ (Delayed[SharedFork] |*| SharedFork) = rec { go =>

@@ -39,7 +39,7 @@ class StreamsTests extends TestSuite {
 
   test("concat") {
     assertVal(
-      fork(Pollable.of(1, 2, 3), Pollable.of(4, 5, 6))
+      forkMap(Pollable.of(1, 2, 3), Pollable.of(4, 5, 6))
         .>(Pollable.concat)
         .>(Pollable.toList),
       List(1, 2, 3 ,4, 5, 6),
@@ -48,7 +48,7 @@ class StreamsTests extends TestSuite {
 
   test("merge") {
     assertVal(
-      fork(
+      forkMap(
         Pollable.of(1, 2, 3),
         Pollable.of(4, 5, 6),
       )

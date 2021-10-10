@@ -47,7 +47,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       par(dsl.dup[K], dsl.dup[K]) > IXI
 
     def neglect[K]: Summary[K] -⚬ Done =
-      join(dsl.neglect, dsl.neglect)
+      joinMap(dsl.neglect, dsl.neglect)
 
     implicit def summaryCosemigroup[K]: Cosemigroup[Summary[K]] =
       new Cosemigroup[Summary[K]] {
@@ -83,7 +83,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
     }
 
     def clear[K, V](f: V -⚬ Done): Singleton[K, V] -⚬ Done =
-      join(dsl.neglect, f)
+      joinMap(dsl.neglect, f)
 
     def keyGetter[K, V]: Getter[Singleton[K, V], Val[K]] =
       |*|.fst[V].lens[Val[K]]
@@ -112,7 +112,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
         .>(|*|.fst[X].lens.awaitFst(j)) .to[                 X |*| X  ]
 
     def clear[K, X](f: X -⚬ Done): BranchF[K, X] -⚬ Done =
-      join(Summary.neglect, join(f, f))
+      joinMap(Summary.neglect, joinMap(f, f))
 
     def summary[K, X]: Getter[BranchF[K, X], Summary[K]] =
       |*|.fst[X |*| X].lens[Summary[K]]
@@ -448,7 +448,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
 
         override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]): (A |*| PMaybe[B]) -⚬ PMaybe[A |*| B] =
           PMaybe.switchWithL(
-            caseNone = join(A.counit, id) > PMaybe.empty,
+            caseNone = joinMap(A.counit, id) > PMaybe.empty,
             caseSome = PMaybe.just,
           )
       }

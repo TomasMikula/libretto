@@ -142,19 +142,19 @@ trait CoreDSL {
   def fork: Done -⚬ (Done |*| Done)
   def join: (Done |*| Done) -⚬ Done
 
-  def fork[A, B](f: Done -⚬ A, g: Done -⚬ B): Done -⚬ (A |*| B) =
+  def forkMap[A, B](f: Done -⚬ A, g: Done -⚬ B): Done -⚬ (A |*| B) =
     andThen(fork, par(f, g))
 
-  def join[A, B](f: A -⚬ Done, g: B -⚬ Done): (A |*| B) -⚬ Done =
+  def joinMap[A, B](f: A -⚬ Done, g: B -⚬ Done): (A |*| B) -⚬ Done =
     andThen(par(f, g), join)
 
   def forkNeed: (Need |*| Need) -⚬ Need
   def joinNeed: Need -⚬ (Need |*| Need)
 
-  def forkNeed[A, B](f: A -⚬ Need, g: B -⚬ Need): (A |*| B) -⚬ Need =
+  def forkMapNeed[A, B](f: A -⚬ Need, g: B -⚬ Need): (A |*| B) -⚬ Need =
     andThen(par(f, g), forkNeed)
 
-  def joinNeed[A, B](f: Need -⚬ A, g: Need -⚬ B): Need -⚬ (A |*| B) =
+  def joinMapNeed[A, B](f: Need -⚬ A, g: Need -⚬ B): Need -⚬ (A |*| B) =
     andThen(joinNeed, par(f, g))
 
   def notifyDoneL: Done -⚬ (Ping |*| Done)

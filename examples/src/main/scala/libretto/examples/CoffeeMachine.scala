@@ -195,7 +195,7 @@ object CoffeeMachine extends StarterApp { app =>
                                     .to[  Done |*| (ShotCountChoice |*| Val[Beverage]) ]
       .>(assocRL)                   .to[ (Done |*| ShotCountChoice) |*| Val[Beverage]  ]
       .>.fst(promptShot)            .to[       Done                 |*| Val[Beverage]  ]
-      .>(join(id, serve))           .to[                           Done                ]
+      .>(joinMap(id, serve))        .to[                           Done                ]
 
   def getLatte: (Done |*| LatteMenu) -⚬ Done =
     id                               [ Done |*|                                               LatteMenu                 ]
@@ -204,7 +204,7 @@ object CoffeeMachine extends StarterApp { app =>
       .>(VI(promptSize))          .to[      Done            |*| (ShotCountChoice |*| (FlavorChoice |*| Val[Beverage]))  ]
       .>(VI(promptShot))          .to[                      Done                 |*| (FlavorChoice |*| Val[Beverage])   ]
       .>(VI(promptFlavor))        .to[                                           Done              |*| Val[Beverage]    ]
-      .>(join(id, serve))         .to[                                                            Done                  ]
+      .>(joinMap(id, serve))      .to[                                                            Done                  ]
 
   def promptShot: (Done |*| ShotCountChoice) -⚬ Done = {
     val msg =
