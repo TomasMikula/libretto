@@ -15,6 +15,6 @@ class AssemblyTests extends AnyFunSuite {
 
   test("Supermarket") {
     val prg =
-      Supermarket.blueprint
+      supermarket.Supermarket.blueprint
   }
 }
