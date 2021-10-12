@@ -323,7 +323,9 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f2: X2 ~⚬ P3,
         r: Plated[P2, Z2],
       ): Shuffled[A1 |*| A2, Q1 |*| Z2] =
-        UnhandledCase.raise(s"$l, $f1, $f2, $r")
+        Pure(~⚬.fst(f1) > ~⚬.assocLR) >
+          snd(Impermeable(~⚬.swap, Plated.Stacked(l, r), ~⚬.fst(f2))) >
+          Pure(~⚬.assocRL > ~⚬.fst(value.g.asShuffle))
 
     }
 

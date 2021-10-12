@@ -3,25 +3,22 @@ package libretto.examples.supermarket
 import libretto.StarterKit._
 
 object baskets {
-  opaque type Basket = Done
+  opaque type Basket = Val[Int]
 
-  def makeBasket: Done -⚬ Basket =
-    id
+  def makeBasket(sn: Int): Done -⚬ Basket =
+    constVal(sn)
+
+  def serialNumber: Basket -⚬ (Val[Int] |*| Basket) =
+    dup
 
   def destroyBasket: Basket -⚬ Done =
-    id
-
-  def returnBasket: (Basket |*| -[Basket]) -⚬ One =
-    backvert
-
-  def receiveBasket: One -⚬ (-[Basket] |*| Basket) =
-    forevert
+    neglect
 
   def makeBaskets(n: Int): Done -⚬ LList1[Basket] = {
     require(n >= 1)
     n match {
-      case 1 => makeBasket > LList1.singleton[Done]
-      case _ => forkMap(makeBasket, makeBaskets(n - 1)) > LList1.cons1
+      case 1 => makeBasket(1) > LList1.singleton[Basket]
+      case n => forkMap(makeBasket(n), makeBaskets(n - 1)) > LList1.cons1
     }
   }
 
@@ -29,5 +26,5 @@ object baskets {
     LList1.foldMap(destroyBasket)
 
   implicit def signalingJunctionBasket: SignalingJunction.Positive[Basket] =
-    SignalingJunction.Positive.signalingJunctionPositiveDone
+    signalingJunctionPositiveVal
 }

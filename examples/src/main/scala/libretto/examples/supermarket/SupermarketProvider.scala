@@ -25,25 +25,38 @@ object SupermarketProvider extends SupermarketInterface {
   override def basketReadiness[Items]: Signaling.Positive[Shopping[Items]] =
     Signaling.Positive.bySnd(Signaling.Positive.byFst(signalingJunctionBorrowedBasket))
 
-  override def enterAndObtainBasket: Supermarket -⚬ Shopping[One] = {
-    val delaySupply: (BorrowedBasket |*| GoodsSupply) -⚬ (BorrowedBasket |*| GoodsSupply) =
-      fst(swap) > assocLR > snd(sequence_PN[Basket, GoodsSupply]) > assocRL > fst(swap)
+  override def enterAndObtainBasket: Supermarket -⚬ Shopping[One] =
+    λ { supermarket =>
+      val shopping: $[Shopping[One]] =
+        Unlimited.single(supermarket)
 
-    id                             [      Supermarket                                        ]
-                                .to[ Unlimited[Shopping[One]]                                ]
-      .>(Unlimited.single)      .to[           Shopping[One]                                 ]
-                                .to[ One |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink)) ]
-      .>(snd(assocRL))          .to[ One |*| ((BorrowedBasket |*| GoodsSupply) |*| CoinSink) ]
-      .>(snd(fst(delaySupply))) .to[ One |*| ((BorrowedBasket |*| GoodsSupply) |*| CoinSink) ]
-      .>(snd(assocLR))          .to[ One |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink)) ]
-  }
+      val (empty |*| ((basket |*| negBasket) |*| (goodsSupply |*| coinSink))) =
+        shopping
+
+      // delay supply of goods until basket is obtained
+      val (basket1 |*| goodsSupply1) =
+        (basket |*| goodsSupply) > sequence_PN[Basket, GoodsSupply]
+
+      val (basketNumber |*| basket2) = serialNumber(basket1)
+      val basket3 = basket2 waitFor {
+        basketNumber > printLine(n => s"${Console.RED}+1${Console.RESET} basket $n is now in use")
+      }
+
+      (empty |*| ((basket3 |*| negBasket) |*| (goodsSupply1 |*| coinSink)))
+    }
 
   override def returnBasketAndLeave: Shopping[One] -⚬ One =
-    id                             [ One |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink)) ]
-      .>(elimFst)               .to[          BorrowedBasket |*| (GoodsSupply |*| CoinSink)  ]
-      .>(elimFst(returnBasket)) .to[                              GoodsSupply |*| CoinSink   ]
-      .>(elimFst(closeSupply))  .to[                                              CoinSink   ]
-      .>(closeCoinSink)         .to[                                              One        ]
+    λ { case (one |*| ((basket |*| negBasket) |*| (goodsSupply |*| coinSink))) =>
+      val (basketNumber |*| basket1) = serialNumber(basket)
+      val basket2 = basket1 waitFor {
+        basketNumber > printLine(n => s"${Console.GREEN}-1${Console.RESET} basket $n is now available")
+      }
+      List(
+        returnBasket(basket2 |*| negBasket),
+        closeSupply(goodsSupply),
+        closeCoinSink(coinSink),
+      ).foldLeft(one)((x, y) => (x |*| y) > elimFst)
+    }
 
   override def addToiletPaperToBasket[Items]: Shopping[Items] -⚬ Shopping[ToiletPaper |*| Items] =
     addItemToBasket(chooseToiletPaper)
@@ -59,6 +72,9 @@ object SupermarketProvider extends SupermarketInterface {
 
   private implicit def signalingJunctionBorrowedBasket: SignalingJunction.Positive[BorrowedBasket] =
     SignalingJunction.Positive.byFst
+
+  private def returnBasket  : (Basket |*| -[Basket]) -⚬ One = backvert
+  private def receiveBasket : One -⚬ (-[Basket] |*| Basket) = forevert
 
   private def chooseBeer        : ItemSelection -⚬ Beer        = chooseL
   private def chooseToiletPaper : ItemSelection -⚬ ToiletPaper = chooseR

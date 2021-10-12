@@ -36,7 +36,7 @@ class Customers[SupermarketImpl <: SupermarketInterface](
 
       val logged: $[Done] =
         when(basketObtained) {
-          printLine(s"${Console.RED}+1${Console.RESET} $who obtained a shopping basket")
+          printLine(s"$who obtained a shopping basket")
         }
 
       val (shopping1 |*| beerAdded) =
@@ -74,7 +74,7 @@ class Customers[SupermarketImpl <: SupermarketInterface](
 
       val shoppingFinished: $[Done] =
         (returnBasketAndLeave(shopping6) |*| logged3) > elimFst >
-          printLine(s"${Console.GREEN}-1${Console.RESET} $who returned the basket")
+          printLine(s"$who returned the basket")
 
       val beer1Drunk: $[Done] =
         drink(beer1 waitFor shoppingFinished) > printLine(s"🍺 $who drank the 1st beer")
