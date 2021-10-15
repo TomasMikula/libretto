@@ -91,15 +91,20 @@ object SupermarketProvider extends SupermarketInterface {
   private def addItemToBasket[Item: SignalingJunction.Positive, Items](
     pick: ItemSelection -⚬ Item,
   ): Shopping[Items] -⚬ Shopping[Item |*| Items] =
-    id                                           [ Items |*| ( BorrowedBasket |*| (          GoodsSupply   |*| CoinSink) ) ]
-      .>(snd(assocRL))                        .to[ Items |*| ((BorrowedBasket |*|            GoodsSupply ) |*| CoinSink  ) ]
-      .>(snd(fst(sequence_PN)))               .to[ Items |*| ((BorrowedBasket |*|            GoodsSupply ) |*| CoinSink  ) ] // sequence to prevent picking item before basket is ready
-      .>(snd(fst(snd(supplyItem(pick)))))     .to[ Items |*| ((BorrowedBasket |*| (Item  |*| GoodsSupply)) |*| CoinSink  ) ]
-      .>(snd(fst(assocRL) > assocLR))         .to[ Items |*| ((BorrowedBasket |*|  Item) |*| (GoodsSupply  |*| CoinSink) ) ]
-      .>(snd(fst(swap)))                      .to[ Items |*| ((Item |*|  BorrowedBasket) |*| (GoodsSupply  |*| CoinSink) ) ]
-      .>(snd(fst(sequence)))                  .to[ Items |*| ((Item |*|  BorrowedBasket) |*| (GoodsSupply  |*| CoinSink) ) ]
-      .>(snd(assocLR))                        .to[ Items |*| (Item  |*| (BorrowedBasket  |*| (GoodsSupply  |*| CoinSink))) ]
-      .>(assocRL > fst(swap))                 .to[ (Item |*| Items) |*| (BorrowedBasket  |*| (GoodsSupply  |*| CoinSink))  ]
+    λ { case (items |*| (basket |*| (goodsSupply |*| coinSink))) =>
+      // don't let the customer pick an item before basket is ready
+      val (basket1 |*| goodsSupply1) =
+        (basket |*| goodsSupply) > sequence_PN
+
+      val (item |*| goodsSupply2) =
+        goodsSupply1 > supplyItem(pick)
+
+      // don't make basket ready again before item is obtained
+      val (item1 |*| basket2) =
+        item sequence basket1
+
+      (item1 |*| items) |*| (basket2 |*| (goodsSupply2 |*| coinSink))
+    }
 
   private def extractItem[Item: Deferrable.Positive, Items]: Shopping[Item |*| Items] -⚬ (Item |*| Shopping[Items]) =
     IXI > fst(swap > sequence > swap) > IXI > assocLR
