@@ -18,14 +18,11 @@ class Customers[SupermarketImpl <: SupermarketInterface](
 
   /** Blueprint for customer behavior. A customer gets access to a supermarket and runs to completion ([[Done]]). */
   def behavior(who: String): Supermarket -⚬ Done = {
-    def getCoin: One -⚬ Coin =
-      done > printLine(s"🪙 $who is forging a coin") > forgeCoin
-
-    def payForBeerWithForgedMoney[Items]: Shopping[Beer |*| Items] -⚬ (Beer |*| Shopping[Items]) =
-      introFst(getCoin) > payForBeer
-
-    def payForToiletPaperWithForgedMoney[Items]: Shopping[ToiletPaper |*| Items] -⚬ (ToiletPaper |*| Shopping[Items]) =
-      introFst(getCoin) > payForToiletPaper
+    def getCoins: Done -⚬ (Coin |*| (Coin |*| Coin)) =
+      printLine(s"🪙 $who is forging 3 coins") > λ { trigger =>
+        val (trigger1 |*| (trigger2 |*| trigger3)) = forkMap(id, fork)(trigger)
+        forgeCoin(trigger1) |*| (forgeCoin(trigger2) |*| forgeCoin(trigger3))
+      }
 
     def useTP = delayUsing[ToiletPaper](randomDelay) > useToiletPaper
     def drink = delayUsing[Beer       ](randomDelay) > drinkBeer
@@ -55,20 +52,23 @@ class Customers[SupermarketImpl <: SupermarketInterface](
           printLine(s"$who added toilet paper to the basket")
         }
 
+      val (coin1 |*| (coin2 |*| coin3)) =
+        when(logged2) { getCoins }
+
       val (tp |*| shopping3) =
-        payForToiletPaperWithForgedMoney(shopping2)
+        payForToiletPaper(coin1 |*| shopping2)
 
       val (beer1 |*| shopping4) =
-        payForBeerWithForgedMoney(shopping3)
+        payForBeer(coin2 |*| shopping3)
 
       val (beer2 |*| shopping5) =
-        payForBeerWithForgedMoney(shopping4)
+        payForBeer(coin3 |*| shopping4)
 
       val (shopping6 |*| paid) =
         shopping5 > basketReadiness.signalDone
 
       val logged3: $[Done] =
-        when(join(logged2 |*| paid)) {
+        when(paid) {
           printLine(s"$who paid for the purchase")
         }
 

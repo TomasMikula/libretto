@@ -111,16 +111,13 @@ object SupermarketProvider extends SupermarketInterface {
     Items,
   ]: (Coin |*| Shopping[Item |*| Items]) -⚬ (Item |*| Shopping[Items]) =
     λ { case (coin |*| ((item |*| items) |*| (basket |*| (goodsSupply |*| coinSink)))) =>
-      // don't let the user take out an item before basket ready
-      val (item1 |*| basket1) = item sequenceAfter basket
-
       // prevent customer from using the item before Coin is provided
-      val (item2 |*| coin1) = item1 sequenceAfter coin
+      val (item1 |*| coin1) = item sequenceAfter coin
 
       // prevent returning basket before purchase is paid
-      val (basket2 |*| coin2) = basket1 sequenceAfter coin1
+      val (basket1 |*| coin2) = basket sequenceAfter coin1
 
-      item2 |*| (items |*| (basket2 |*| (goodsSupply |*| sendCoin(coin2 |*| coinSink))))
+      item1 |*| (items |*| (basket1 |*| (goodsSupply |*| sendCoin(coin2 |*| coinSink))))
     }
 
   private def makeGoodsSupply: Done -⚬ (GoodsSupply |*| Done) = rec { self =>
