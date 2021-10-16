@@ -135,20 +135,48 @@ object SupermarketProvider extends SupermarketInterface {
     )
 
   def openSupermarket(capacity: Int): Done -⚬ (Supermarket |*| CoinBank) =
-    id                                   [                                                Done                                                       ]
-      .>(fork)                        .to[                          Done                  |*|               Done                                     ]
-      .>(fst(makeBaskets(capacity)))  .to[                      LList1[Basket]            |*|               Done                                     ]
-      .>(fst(pool))                   .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*|               Done                                     ]
-      .>(snd(makeGoodsSupply))        .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*|  (GoodsSupply |*| Done)                                ]
-      .>(snd(introSnd(coinsToBank)))  .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*| ((GoodsSupply |*| Done)  |*|  (CoinSink |*| CoinBank)) ]
-      .>(snd(IXI > snd(awaitPosFst))) .to[ (Unlimited[BorrowedBasket] |*| LList1[Basket]) |*| ((GoodsSupply |*| CoinSink)   |*|           CoinBank ) ]
-      .>(IXI)                         .to[ (Unlimited[BorrowedBasket] |*| (GoodsSupply |*| CoinSink)) |*| (LList1[Basket]   |*|           CoinBank ) ]
-      .>(snd(fst(destroyBaskets)))    .to[ (Unlimited[BorrowedBasket] |*| (GoodsSupply |*| CoinSink)) |*| (     Done        |*|           CoinBank ) ]
-      .>(snd(awaitPosFst))            .to[ (Unlimited[BorrowedBasket] |*| (GoodsSupply |*| CoinSink)) |*|                                 CoinBank   ]
-      .>(fst(snd(id                                                      [ GoodsSupply |*| CoinSink                       ]
-        .>(par(Unlimited.fromComonoid, Unlimited.fromComonoid))      .to [ Unlimited[GoodsSupply] |*| Unlimited[CoinSink] ]
-      )))                             .to[ (Unlimited[BorrowedBasket] |*| (Unlimited[GoodsSupply] |*| Unlimited[CoinSink])) |*|           CoinBank   ]
-      .>(fst(snd(Unlimited.zip)))     .to[ (Unlimited[BorrowedBasket] |*| (Unlimited[GoodsSupply  |*|           CoinSink])) |*|           CoinBank   ]
-      .>(fst(Unlimited.zip))          .to[  Unlimited[BorrowedBasket  |*| (          GoodsSupply  |*|           CoinSink )] |*|           CoinBank   ]
-      .>(fst(Unlimited.map(introFst))).to[  Unlimited[One |*| (BorrowedBasket |*| (  GoodsSupply  |*|           CoinSink))] |*|           CoinBank   ]
+    λ { trigger =>
+      val ((trigger1 |*| trigger2) |*| one) = fork(trigger) > introSnd
+
+      // make only as many baskets as there are permitted concurrently shopping customers
+      val baskets: $[LList1[Basket]] =
+        makeBaskets(capacity)(trigger1)
+
+      // Pretend there is an infinite supply of baskets, via pooling.
+      // When the pool is empty, next customer will not obtain a basket until a basket is returned to the pool.
+      // `collectedBaskets` will become available once there's no chance that anyone will still use them.
+      val ((basketSupply: $[Unlimited[BorrowedBasket]]) |*| (collectedBaskets: $[LList1[Basket]])) =
+        baskets > pool
+
+      // `goodsSupplyClosed` will signal once there's no chance that anyone still needs it.
+      val ((goodsSupply: $[GoodsSupply]) |*| (goodsSupplyClosed: $[Done])) =
+        makeGoodsSupply(trigger2)
+
+      // Any coins sent to `coinSink` will appear in `coinBank`.
+      val ((coinSink: $[CoinSink]) |*| (coinBank: $[CoinBank])) =
+        coinsToBank(one)
+
+      // Since `GoodsSupply` is a comonoid, it can be split arbitrarily
+      // and given to an unlimited number of customers
+      val unlimitedGoodsSupply: $[Unlimited[GoodsSupply]] =
+        goodsSupply > Unlimited.fromComonoid
+
+      // Since `CoinSink` is a comonoid, it can be split arbitrarily
+      // and given to an unlimited number of customers
+      val unlimitedCoinSinks: $[Unlimited[CoinSink]] =
+        coinSink > Unlimited.fromComonoid
+
+      val unlimitedShopping: $[Unlimited[One |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink))]] = {
+        import Unlimited.{zip, map}
+        zip(basketSupply |*| zip(unlimitedGoodsSupply |*| unlimitedCoinSinks)) > map(introFst)
+      }
+
+      // wait for goods supply to shut down and all baskets returned before returning today's revenue
+      val finalCoinBank: $[CoinBank] =
+        coinBank
+          .waitFor(goodsSupplyClosed)
+          .waitFor(destroyBaskets(collectedBaskets))
+
+      unlimitedShopping |*| finalCoinBank
+    }
 }

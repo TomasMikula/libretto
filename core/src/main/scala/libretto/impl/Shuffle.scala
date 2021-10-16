@@ -819,7 +819,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         }
 
       override def assocLR_this_xi[X, Y](h: XI[X, B, A2, Y]): ((X |*| (A1 |*| A2)) |*| A3) ~⚬ (B |*| Y) =
-        UnhandledCase.raise(s"$h")
+        Xfer(XI(h.g).asShuffle, id, IX(g))
 
       override def assocRL_this_assocLR[X, Y](h: AssocLR[B, A2, X, Y]): ((A1 |*| A2) |*| (A3 |*| X)) ~⚬ (B |*| Y) =
         IXI[A1, A2, A3, X, B, Y](g, h.g).asShuffle
