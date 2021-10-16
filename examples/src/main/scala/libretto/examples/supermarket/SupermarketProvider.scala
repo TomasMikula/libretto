@@ -106,28 +106,22 @@ object SupermarketProvider extends SupermarketInterface {
       (item1 |*| items) |*| (basket2 |*| (goodsSupply2 |*| coinSink))
     }
 
-  private def extractItem[Item: Deferrable.Positive, Items]: Shopping[Item |*| Items] -⚬ (Item |*| Shopping[Items]) =
-    IXI > fst(swap > sequence > swap) > IXI > assocLR
-
-  private def ingestCoin[Items]: (Coin |*| Shopping[Items]) -⚬ Shopping[Items] =
-    λ { case (coin |*| (items |*| (borrowedBasket |*| (goodsSupply |*| coinSink)))) =>
-      // sequence basket after coin to prevent returning basket before purchase is paid
-      val (borrowedBasket1 |*| coin1) = borrowedBasket sequenceAfter coin
-      val coinSink1 = sendCoin(coin1 |*| coinSink)
-      items |*| (borrowedBasket1 |*| (goodsSupply |*| coinSink1))
-    }
-
   private def payForItem[
     Item: SignalingJunction.Positive,
     Items,
   ]: (Coin |*| Shopping[Item |*| Items]) -⚬ (Item |*| Shopping[Items]) =
-    id                                         [  Coin |*|  Shopping[Item |*| Items]   ]
-      .>.snd(extractItem)                   .to[  Coin |*| (Item  |*| Shopping[Items]) ]
-      .>(assocRL)                           .to[ (Coin |*|  Item) |*| Shopping[Items]  ]
-      .>(fst(sequence[Coin, Item]))         .to[ (Coin |*|  Item) |*| Shopping[Items]  ] // sequence to prevent using the item before Coin is provided
-      .>(fst(swap))                         .to[ (Item |*|  Coin) |*| Shopping[Items]  ]
-      .>(assocLR)                           .to[  Item |*| (Coin  |*| Shopping[Items]) ]
-      .>.snd(ingestCoin)                    .to[  Item |*|            Shopping[Items]  ]
+    λ { case (coin |*| ((item |*| items) |*| (basket |*| (goodsSupply |*| coinSink)))) =>
+      // don't let the user take out an item before basket ready
+      val (item1 |*| basket1) = item sequenceAfter basket
+
+      // prevent customer from using the item before Coin is provided
+      val (item2 |*| coin1) = item1 sequenceAfter coin
+
+      // prevent returning basket before purchase is paid
+      val (basket2 |*| coin2) = basket1 sequenceAfter coin1
+
+      item2 |*| (items |*| (basket2 |*| (goodsSupply |*| sendCoin(coin2 |*| coinSink))))
+    }
 
   private def makeGoodsSupply: Done -⚬ (GoodsSupply |*| Done) = rec { self =>
     Unlimited.createWith[Done, ItemSelection, Done](

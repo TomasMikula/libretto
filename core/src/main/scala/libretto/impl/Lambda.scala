@@ -151,8 +151,11 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
                 case Closure(captured1, _, h) => f.withExpr(captured1).map(snd(swap) > assocRL > fst(h))
                 case HalfUsed(g, w)           => HalfUsed(ElimStep.thenSnd(f, g) map (assocRL > fst(swap)), w)
               }
-            case other @ Closure(_, _, _) =>
-              UnhandledCase.raise(s"$other")
+            case Closure(captured, e, f) =>
+              expr.elimStep(e.resultVar) match {
+                case NotFound() => Closure(expr par captured, e, assocLR > snd(f))
+                case other      => UnhandledCase.raise(s"$other")
+              }
           }
 
         /** Assumes `captured` does not contain [[foundVar]] (and thus neither any vars derived from it).
