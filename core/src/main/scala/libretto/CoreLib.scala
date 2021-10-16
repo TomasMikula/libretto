@@ -2366,6 +2366,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def getSnd[A]: Unlimited[A] -⚬ (Unlimited[A] |*| A) =
       split > snd(single)
 
+    def getSome[A]: Unlimited[A] -⚬ (A |*| Unlimited[A]) =
+      getFst[A]
+
     def create[X, A](
       case0: X -⚬ One,
       case1: X -⚬ A,

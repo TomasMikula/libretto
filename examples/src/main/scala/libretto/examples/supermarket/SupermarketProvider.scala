@@ -4,6 +4,7 @@ import libretto.StarterKit._
 import libretto.examples.supermarket.baskets._
 import libretto.examples.supermarket.goods._
 import libretto.examples.supermarket.money._
+import scala.concurrent.duration._
 
 object SupermarketProvider extends SupermarketInterface {
   import libretto.StarterKit.$._
@@ -85,8 +86,17 @@ object SupermarketProvider extends SupermarketInterface {
   private def sendCoin: (Coin |*| CoinSink) -⚬ CoinSink =
     par(id, Unlimited.getFst) > assocRL > elimFst(money.sendCoin)
 
-  private def supplyItem[Item](chooseItem: ItemSelection -⚬ Item): GoodsSupply -⚬ (Item |*| GoodsSupply) =
-    Unlimited.getFst > fst(chooseItem)
+  private def supplyItem[Item: SignalingJunction.Positive](
+    chooseItem: ItemSelection -⚬ Item,
+  ): GoodsSupply -⚬ (Item |*| GoodsSupply) =
+    λ { goodsSupply =>
+      val (itemSelection |*| goodsSupply1) = Unlimited.getSome(goodsSupply)
+      val item: $[Item]                    = chooseItem(itemSelection)
+      (item > delayUsing(randomDelay)) |*| goodsSupply1
+    }
+
+  private def randomDelay: Done -⚬ Done =
+    constVal(()) > mapVal(_ => (scala.util.Random.nextDouble * 1000 + 100).toInt.millis) > delay
 
   private def addItemToBasket[Item: SignalingJunction.Positive, Items](
     pick: ItemSelection -⚬ Item,
