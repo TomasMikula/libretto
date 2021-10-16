@@ -131,7 +131,7 @@ object SupermarketProvider extends SupermarketInterface {
   private def coinsToBank: One -⚬ (CoinSink |*| CoinBank) =
     done > Unlimited.createWith[Done, -[Coin], CoinBank](
       case0 = newCoinBank,
-      case1 = newCoinBank > introFst(receiveCoin) > assocLR > snd(depositCoin),
+      case1 = newCoinBank > λ { bank => Λ { coin => depositCoin(coin |*| bank) } },
     )
 
   def openSupermarket(capacity: Int): Done -⚬ (Supermarket |*| CoinBank) =
