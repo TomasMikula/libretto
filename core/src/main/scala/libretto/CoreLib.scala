@@ -2605,6 +2605,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
   }
 
+  def combine[A: Semigroup]: (A |*| A) -⚬ A =
+    summon[Semigroup[A]].combine
+
+  def combineMap[A, B, C: Semigroup](f: A -⚬ C, g: B -⚬ C): (A |*| B) -⚬ C =
+    par(f, g) > combine[C]
+
+  extension [A, C](f: A -⚬ C) {
+    /** Combines the outputs of left and right operand. */
+    def \/[B](g: B -⚬ C)(using Semigroup[C]): (A |*| B) -⚬ C =
+      combineMap(f, g)
+  }
+
   trait Cosemigroup[A] {
     def split: A -⚬ (A |*| A)
 
@@ -2627,18 +2639,30 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
   }
 
+  def split[A: Cosemigroup]: A -⚬ (A |*| A) =
+    summon[Cosemigroup[A]].split
+
+  def splitMap[A: Cosemigroup, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |*| C) =
+    split[A] > par(f, g)
+
+  extension [A, B](f: A -⚬ B) {
+    /** Splits the input and pipes the two halves to the left and right operand. */
+    def /\[C](g: A -⚬ C)(using Cosemigroup[A]): A -⚬ (B |*| C) =
+      splitMap(f, g)
+  }
+
   trait Monoid[A] extends Semigroup[A] {
     def unit: One -⚬ A
 
     def law_leftUnit: Equal[ (One |*| A) -⚬ A ] =
       Equal(
-        par(unit, id[A]) > combine,
+        par(unit, id[A]) > this.combine,
         elimFst,
       )
 
     def law_rightUnit: Equal[ (A |*| One) -⚬ A ] =
       Equal(
-        par(id[A], unit) > combine,
+        par(id[A], unit) > this.combine,
         elimSnd,
       )
   }
@@ -2665,13 +2689,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def law_leftCounit: Equal[ A -⚬ (One |*| A) ] =
       Equal(
-        split > par(counit, id[A]),
+        this.split > par(counit, id[A]),
         introFst,
       )
 
     def law_rightCounit: Equal[ A -⚬ (A |*| One) ] =
       Equal(
-        split > par(id[A], counit),
+        this.split > par(id[A], counit),
         introSnd,
       )
   }
@@ -2705,13 +2729,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def law_leftUnit: Equal[ (One |*| A) -⚬ A ] =
       Equal(
-        par(done > unit, id[A]) > combine,
+        par(done > unit, id[A]) > this.combine,
         elimFst,
       )
 
     def law_rightUnit: Equal[ (A |*| One) -⚬ A ] =
       Equal(
-        par(id[A], done > unit) > combine,
+        par(id[A], done > unit) > this.combine,
         elimSnd,
       )
   }
@@ -2734,13 +2758,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def law_leftCounit: Equal[ A -⚬ (One |*| A) ] =
       Equal(
-        split > par(counit > need, id[A]),
+        this.split > par(counit > need, id[A]),
         introFst,
       )
 
     def law_rightCounit: Equal[ A -⚬ (A |*| One) ] =
       Equal(
-        split > par(id[A], counit > need),
+        this.split > par(id[A], counit > need),
         introSnd,
       )
   }
@@ -2755,13 +2779,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def law_leftUnit: Equal[ (LTerminus |*| A) -⚬ A ] =
       Equal(
-        par(regressInfinitely > unit, id[A]) > combine,
+        par(regressInfinitely > unit, id[A]) > this.combine,
         id[LTerminus |*| A].elimFst(regressInfinitely > need),
       )
 
     def law_rightUnit: Equal[ (A |*| LTerminus) -⚬ A ] =
       Equal(
-        par(id[A], regressInfinitely > unit) > combine,
+        par(id[A], regressInfinitely > unit) > this.combine,
         id[A |*| LTerminus].elimSnd(regressInfinitely > need),
       )
   }
@@ -2787,13 +2811,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def law_leftCounit: Equal[ A -⚬ (RTerminus |*| A) ] =
       Equal(
-        split > par(counit > delayIndefinitely, id[A]),
+        this.split > par(counit > delayIndefinitely, id[A]),
         id[A].introFst(done > delayIndefinitely),
       )
 
     def law_rightCounit: Equal[ A -⚬ (A |*| RTerminus) ] =
       Equal(
-        split > par(id[A], counit > delayIndefinitely),
+        this.split > par(id[A], counit > delayIndefinitely),
         id[A].introSnd(done > delayIndefinitely),
       )
   }
