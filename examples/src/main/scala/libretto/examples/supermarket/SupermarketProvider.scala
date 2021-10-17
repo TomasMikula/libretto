@@ -47,16 +47,15 @@ object SupermarketProvider extends SupermarketInterface {
     }
 
   override def returnBasketAndLeave: Shopping[One] -⚬ One =
-    λ { case (one |*| ((basket |*| negBasket) |*| (goodsSupply |*| coinSink))) =>
+    λ { case (unit |*| ((basket |*| negBasket) |*| (goodsSupply |*| coinSink))) =>
       val (basketNumber |*| basket1) = serialNumber(basket)
       val basket2 = basket1 waitFor {
         basketNumber > printLine(n => s"${Console.GREEN}-1${Console.RESET} basket $n is now available")
       }
-      List(
-        returnBasket(basket2 |*| negBasket),
-        closeSupply(goodsSupply),
-        closeCoinSink(coinSink),
-      ).foldLeft(one)((x, y) => (x |*| y) > elimFst)
+      unit
+        .alsoElim(returnBasket(basket2 |*| negBasket))
+        .alsoElim(closeSupply(goodsSupply))
+        .alsoElim(closeCoinSink(coinSink))
     }
 
   override def addToiletPaperToBasket[Items]: Shopping[Items] -⚬ Shopping[ToiletPaper |*| Items] =

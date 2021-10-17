@@ -348,18 +348,21 @@ trait CoreDSL {
         map(a)(f)(file.value, line.value)
     }
 
-    extension [A, B](a: $[A]) {
-      def |*|(b: $[B])(implicit
+    extension [A](a: $[A]) {
+      def |*|[B](b: $[B])(implicit
         file: sourcecode.File,
         line: sourcecode.Line,
       ): $[A |*| B] =
         zip(a, b)(file.value, line.value)
 
-      def >(f: A -⚬ B)(implicit
+      def >[B](f: A -⚬ B)(implicit
         file: sourcecode.File,
         line: sourcecode.Line,
       ): $[B] =
         map(a)(f)(file.value, line.value)
+
+      def alsoElim(unit: $[One]): $[A] =
+        (unit |*| a) > elimFst
     }
   }
 }
