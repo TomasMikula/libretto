@@ -1,7 +1,6 @@
 package libretto.examples.supermarket
 
 import libretto.StarterKit._
-import libretto.examples.supermarket.goods._
 import libretto.examples.supermarket.money._
 import scala.concurrent.duration._
 
@@ -15,6 +14,7 @@ class Customers[SupermarketImpl <: SupermarketInterface](
 ) {
   import libretto.StarterKit.$._
   import supermarket._
+  import supermarket.goods._
 
   /** Blueprint for customer behavior. A customer gets access to a supermarket and runs to completion ([[Done]]). */
   def behavior(who: String): Supermarket -⚬ Done = {

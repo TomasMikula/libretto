@@ -1,12 +1,15 @@
 package libretto.examples.supermarket
 
 import libretto.StarterKit._
-import libretto.examples.supermarket.goods._
 import libretto.examples.supermarket.money._
 
 trait SupermarketInterface {
   type Supermarket
   type Shopping[Items]
+
+  val goods: GoodsConsumer
+
+  import goods.{Beer, ToiletPaper}
 
   implicit def comonoidSupermarket: Comonoid[Supermarket]
   implicit def basketReadiness[Items]: Signaling.Positive[Shopping[Items]]
