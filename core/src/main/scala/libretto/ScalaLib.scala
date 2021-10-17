@@ -21,6 +21,7 @@ class ScalaLib[
   val coreLib: CoreLib with libretto.CoreLib[dsl.type],
 ) {
   import dsl._
+  import dsl.$._
   import coreLib._
 
   object Val {
@@ -525,5 +526,10 @@ class ScalaLib[
         override def typeTest: TypeTest[V, V] =
           TypeTest.identity[V]
       }
+  }
+
+  extension [A](a: $[Val[A]]) {
+    def *[B](b: $[Val[B]]): $[Val[(A, B)]] =
+      unliftPair(a |*| b)
   }
 }
