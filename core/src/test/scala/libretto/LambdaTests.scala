@@ -99,4 +99,31 @@ class LambdaTests extends TestSuite {
 
     assertVal(prg, (((('h', 'f'), 'c'), 'd'), ((('a', 'g'), 'b'), 'e')))
   }
+
+  test("unused variable") {
+    import kit.dsl.$._
+
+    val e =
+      intercept[Throwable] {
+        λ { (trigger: $[Done]) =>
+          val (d1 |*| d2) = fork(trigger)
+          d1
+        }
+      }
+
+    assert(e.getMessage contains "not fully consumed")
+  }
+
+  test("overused variable") {
+    import kit.dsl.$._
+
+    val e =
+      intercept[Throwable] {
+        λ { (trigger: $[Done]) =>
+          join(trigger |*| trigger)
+        }
+      }
+
+    assert(e.getMessage contains "used more than once")
+  }
 }

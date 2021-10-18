@@ -60,10 +60,11 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
 
     def elim[V](v: Var[V]): ElimRes[V, B] =
       this.elimStep(v) match {
-        case ElimStep.NotFound()       => ElimRes.Unused(variables.singleton(v))
+        case ElimStep.NotFound()       => ElimRes.unused(v)
         case ElimStep.Exact(e, f)      => ElimRes.Exact(e, f)
         case ElimStep.Closure(x, e, f) => ElimRes.Closure(x, e, f)
-        case ElimStep.HalfUsed(_, u)   => ElimRes.Unused(variables.singleton(u)) // TODO: also report all half-used vars
+        case ElimStep.HalfUsed(_, u)   => ElimRes.unused(u) // TODO: also report all half-used vars
+        case ElimStep.Overused(u)      => ElimRes.overused(u)
       }
   }
 
@@ -120,6 +121,11 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
           NotFound()
       }
 
+      case class Overused[U, V, B](u: Var[U]) extends ElimStep[V, B] {
+        override def map[C](f: B ≈⚬ C): ElimStep[V, C] =
+          Overused(u)
+      }
+
       sealed trait Found[V, B] extends ElimStep[V, B] {
         def foundVar: Var[V] =
           this match {
@@ -137,7 +143,7 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
           }
 
         /** Along the way tries to resolve captured vars of `expr` to unused variables of `this`. */
-        def withExpr[X](expr: Expr[X]): Found[V, X |*| B] =
+        def withExpr[X](expr: Expr[X]): ElimStep[V, X |*| B] =
           this match {
             case Exact(e, f) =>
               expr.elimStep(e.resultVar) match {
@@ -146,10 +152,11 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
               }
             case HalfUsed(f, u) =>
               expr.elimStep(u) match {
-                case NotFound()               => HalfUsed(f.withExpr(expr).map(assocRL), u)
+                case NotFound()               => halfUsed1(f.withExpr(expr).map(assocRL), u)
                 case Exact(_, h)              => f.map(snd(h) > swap)
                 case Closure(captured1, _, h) => f.withExpr(captured1).map(snd(swap) > assocRL > fst(h))
-                case HalfUsed(g, w)           => HalfUsed(ElimStep.thenSnd(f, g) map (assocRL > fst(swap)), w)
+                case HalfUsed(g, w)           => halfUsed1(ElimStep.thenSnd(f, g) map (assocRL > fst(swap)), w)
+                case Overused(w)              => Overused(w)
               }
             case Closure(captured, e, f) =>
               expr.elimStep(e.resultVar) match {
@@ -176,9 +183,13 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
       case class Closure[X, V, B](captured: Expr[X], expr: Expr.VarDefining[V], f: (X |*| V) ≈⚬ B) extends Found[V, B]
       case class HalfUsed[V, B, U](f: Found[V, B |*| U], unused: Var[U]) extends Found[V, B]
 
+      def overused[U, V, B](u: Var[U]): ElimStep[V, B] =
+        Overused(u)
+
       def halfUsed1[V, B, U](step: ElimStep[V, B |*| U], u: Var[U]): ElimStep[V, B] =
         step match {
           case NotFound()               => NotFound()
+          case Overused(w)              => Overused(w)
           case found: Found[V, B |*| U] => HalfUsed(found, u)
         }
 
@@ -204,13 +215,17 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
                 ElimStep.Closure(f1 par x, e2, assocLR > snd(g2))
               case ElimStep.HalfUsed(f2, u) =>
                 ElimStep.HalfUsed(f2.withCaptured(f1).map(assocRL), u)
+              case ElimStep.Overused(w) =>
+                ElimStep.Overused(w)
             }
           case ElimStep.Exact(e1, g1) =>
             f2.elimStep(v) match {
               case ElimStep.NotFound() =>
                 ElimStep.Closure(f2, e1, snd(g1) > swap)
-              case other =>
-                UnhandledCase.raise(s"$other")
+              case found: Found[V, B2] =>
+                ElimStep.overused(v)
+              case ElimStep.Overused(w) =>
+                ElimStep.Overused(w)
             }
           case ElimStep.Closure(captured, e, f) =>
             f2.elimStep(v) match {
@@ -229,13 +244,17 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
                 h1.withExpr(captured).map(xi > snd(h2))
               case ElimStep.HalfUsed(g2, w) =>
                 ElimStep.halfUsed1(ElimStep.thenSnd(h1, g2).map(assocRL), w)
+              case ElimStep.Overused(w) =>
+                ElimStep.Overused(w)
             }
+          case ElimStep.Overused(w) =>
+            ElimStep.Overused(w)
         }
 
-      def thenSnd[V, B1, X, B2](f: Found[V, B1 |*| X], g: Found[X, B2]): Found[V, B1 |*| B2] =
+      def thenSnd[V, B1, X, B2](f: Found[V, B1 |*| X], g: Found[X, B2]): ElimStep[V, B1 |*| B2] =
         g match {
           case Exact(g0, g1)   => f.map(snd(g1))
-          case HalfUsed(g0, u) => HalfUsed(thenSnd(f, g0).map(assocRL), u)
+          case HalfUsed(g0, u) => halfUsed1(thenSnd(f, g0).map(assocRL), u)
           case Closure(captured, g, h) => f.withExpr(captured).map(xi > snd(h))
         }
     }
@@ -244,7 +263,13 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
     object ElimRes {
       case class Exact[V, B](expr: Expr[V], f: V ≈⚬ B) extends ElimRes[V, B]
       case class Closure[X, V, B](captured: Expr[X], expr: Expr[V], f: (X |*| V) ≈⚬ B) extends ElimRes[V, B]
-      case class Unused[V, B](vars: VarSet) extends ElimRes[V, B]
+      case class Error[V, B](e: LinearityViolation) extends ElimRes[V, B]
+
+      def unused[U, V, B](u: Var[U]): ElimRes[V, B] =
+        Error(LinearityViolation.underused(u))
+
+      def overused[U, V, B](u: Var[U]): ElimRes[V, B] =
+        Error(LinearityViolation.overused(u))
     }
 
     def unzip[A, B1, B2](f: VArr[A, B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (VArr[A, B1], VArr[A, B2]) =
@@ -318,8 +343,8 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
           case VArr.Id(`boundVar`) => Abstracted.Closure(captured, f)
           case other        => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
         }
-      case ElimRes.Unused(vars) =>
-        Abstracted.Failure.underused(vars)
+      case ElimRes.Error(e) =>
+        Abstracted.Failure(e)
     }
   }
 
