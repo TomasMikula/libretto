@@ -227,16 +227,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         case x: Transfer[_, _, _, _] => Xfer(Id(), Id(), x)
         case TransferOpt.None() => Id()
       }
-
-    def splitOutput[A1, A2](implicit ev: A =:= (A1 |*| A2)): TransferOpt.SplitOutput[A1, A2, _, _, B]
   }
 
   object TransferOpt {
     sealed trait None0[A, B] extends TransferOpt[A, B] {
       def ev: A =:= B
-
-      override def splitOutput[A1, A2](implicit ev1: A =:= (A1 |*| A2)): TransferOpt.SplitOutput[A1, A2, _, _, B] =
-        SplitOutput(None[A1 |*| A2](), ev1.flip.andThen(ev))
     }
 
     object None0 {
@@ -292,9 +287,6 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           val (ev1, ev2) = inj.unapply(n.ev)
           Right((Id0(ev1)), Id0(ev2))
       }
-
-    def splitOutput[A1, A2, B](f: TransferOpt[A1 |*| A2, B]): SplitOutput[A1, A2, _, _, B] =
-      f.splitOutput[A1, A2]
 
     case class SplitOutput[A1, A2, B1, B2, B](
       f: TransferOpt[A1 |*| A2, B1 |*| B2],
@@ -404,13 +396,6 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         case f: IXI[x1, x2, x3, x4, y1, y2] => ixi[x1, x2, x3, x4] > par(f.g1.fold, f.g2.fold)
       }
     }
-
-    override def splitOutput[X1, X2](implicit ev: (A1 |*| A2) =:= (X1 |*| X2)): TransferOpt.SplitOutput[X1, X2, _, _, B1 |*| B2] =
-      TransferOpt.SplitOutput(
-        ev.substituteCo[[x] =>> TransferOpt[x, B1 |*| B2]](this),
-        implicitly[(B1 |*| B2) =:= (B1 |*| B2)],
-      )
-
 
     final override def pairWith[X1, X2, X3, X4, Y1, Y2, Z1, Z2](
       that: TransferOpt[X3 |*| X4, Z1 |*| Z2],
