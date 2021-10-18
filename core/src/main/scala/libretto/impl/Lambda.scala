@@ -212,8 +212,13 @@ class Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet](using
               case other =>
                 UnhandledCase.raise(s"$other")
             }
-          case other @ ElimStep.Closure(_, _, _) =>
-            UnhandledCase.raise(s"$other")
+          case ElimStep.Closure(captured, e, f) =>
+            f2.elimStep(v) match {
+              case ElimStep.NotFound() =>
+                ElimStep.Closure(f2 par captured, e, assocLR > snd(f) > swap)
+              case other =>
+                UnhandledCase.raise(s"$other")
+            }
           case ElimStep.HalfUsed(h1, u) =>
             f2.elimStep(u) match {
               case ElimStep.NotFound() =>
