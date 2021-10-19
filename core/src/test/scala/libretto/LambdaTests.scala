@@ -2,12 +2,11 @@ package libretto
 
 class LambdaTests extends TestSuite {
   import kit.dsl._
+  import kit.dsl.$._
   import kit.coreLib._
   import kit.scalaLib._
 
   test("some λ-expressions") {
-    import kit.dsl.$._
-
     val f = λ { (t: $[Ping |*| (Done |*| Val[String])]) =>
       val (p |*| (d |*| s)) = t
       val i = (s |*| p) > awaitPingSnd > mapVal(_.length)
@@ -29,8 +28,6 @@ class LambdaTests extends TestSuite {
     constVal(c)
 
   test("shuffle 8 inputs (#1)") {
-    import kit.dsl.$._
-
     val prg: Done -⚬ Val[((((Char, Char), (Char, ((Char, Char), Char))), Char), Char)] =
       (((c('a') /\ c('b')) /\ c('c')) /\ ((c('d') /\ ((c('e') /\ c('f')) /\ c('g'))) /\ c('h')))
         > λ { case (((a |*| b) |*| c) |*| ((d |*| ((e |*| f) |*| g)) |*| h)) =>
@@ -41,8 +38,6 @@ class LambdaTests extends TestSuite {
   }
 
   test("shuffle 8 inputs (#2)") {
-    import kit.dsl.$._
-
     val prg: Done -⚬ Val[((Char, (Char, (Char, Char))), ((Char, Char), (Char, Char)))] =
       ((c('a') /\ c('b')) /\ (c('c') /\ c('d'))) /\ (c('e') /\ (c('f') /\ (c('g') /\ c('h'))))
         > λ { case (((a |*| b) |*| (c |*| d)) |*| (e |*| (f |*| (g |*| h)))) =>
@@ -53,8 +48,6 @@ class LambdaTests extends TestSuite {
   }
 
   test("shuffle 8 inputs (#3)") {
-    import kit.dsl.$._
-
     val prg: Done -⚬ Val[(Char, (Char, (Char, (Char, (Char, (Char, (Char, Char)))))))] =
       (c('a') /\ (c('b') /\ (c('c') /\ (c('d') /\ (c('e') /\ (c('f') /\ (c('g') /\ c('h'))))))))
         > λ { case (a |*| (b |*| (c |*| (d |*| (e |*| (f |*| (g |*| h))))))) =>
@@ -65,8 +58,6 @@ class LambdaTests extends TestSuite {
   }
 
   test("shuffle 8 inputs (#4)") {
-    import kit.dsl.$._
-
     val prg: Done -⚬ Val[((Char, (Char, (Char, Char))), ((Char, Char), (Char, Char)))] =
       ((c('a') /\ c('b')) /\ ((((c('c') /\ (c('d') /\ c('e'))) /\ c('f')) /\ c('g')) /\ c('h')))
         > λ { case ((a |*| b) |*| ((((c |*| (d |*| e)) |*| f) |*| g) |*| h)) =>
@@ -77,8 +68,6 @@ class LambdaTests extends TestSuite {
   }
 
   test("shuffle 8 inputs (#5)") {
-    import kit.dsl.$._
-
     val prg: Done -⚬ Val[((Char, Char), ((((Char, Char), Char), (Char, Char)), Char))] =
       ((c('a') /\ ((c('b') /\ ((c('c') /\ c('d')) /\ c('e'))) /\ c('f'))) /\ (c('g') /\ c('h')))
         > λ { case ((a |*| ((b |*| ((c |*| d) |*| e)) |*| f)) |*| (g |*| h)) =>
@@ -89,8 +78,6 @@ class LambdaTests extends TestSuite {
   }
 
   test("shuffle 8 inputs (#6)") {
-    import kit.dsl.$._
-
     val prg: Done -⚬ Val[((((Char, Char), Char), Char), (((Char, Char), Char), Char))] =
       ((c('a') /\ (c('b') /\ c('c'))) /\ ((c('d') /\ (c('e') /\ c('f'))) /\ (c('g') /\ c('h'))))
         > λ { case ((a |*| (b |*| c)) |*| ((d |*| (e |*| f)) |*| (g |*| h))) =>
@@ -101,8 +88,6 @@ class LambdaTests extends TestSuite {
   }
 
   test("unused variable") {
-    import kit.dsl.$._
-
     val e =
       intercept[Throwable] {
         λ { (trigger: $[Done]) =>
@@ -113,12 +98,10 @@ class LambdaTests extends TestSuite {
 
     assert(e.getMessage contains "not fully consumed")
     assert(e.getMessage contains "Second half of untupling")
-    assert(e.getMessage contains "LambdaTests.scala:109")
+    assert(e.getMessage contains "LambdaTests.scala:94")
   }
 
   test("overused variable") {
-    import kit.dsl.$._
-
     val e =
       intercept[Throwable] {
         λ { (trigger: $[Done]) =>
@@ -128,6 +111,6 @@ class LambdaTests extends TestSuite {
 
     assert(e.getMessage contains "used more than once")
     assert(e.getMessage contains "Introduced by lambda expression ending at")
-    assert(e.getMessage contains "LambdaTests.scala:126")
+    assert(e.getMessage contains "LambdaTests.scala:109")
   }
 }

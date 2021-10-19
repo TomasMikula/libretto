@@ -21,6 +21,12 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
   import coreLib.Compared._
   import scalaLib._
 
+  private def fstLens[A, B]: Lens[A |*| B, A] =
+    Transportive.fst[B].lens[A]
+
+  private def sndLens[A, B]: Lens[A |*| B, B] =
+    Transportive.snd[A].lens[B]
+
   object Summary {
     //                       minKey |*| maxKey
     opaque type Summary[K] = Val[K] |*| Val[K]
@@ -35,10 +41,10 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       unliftPair > mapVal(_._2)
 
     def minKeyGetter[K]: Getter[Summary[K], Val[K]] =
-      |*|.fst[Val[K]].lens[Val[K]]
+      fstLens[Val[K], Val[K]]
 
     def maxKeyGetter[K]: Getter[Summary[K], Val[K]] =
-      |*|.snd[Val[K]].lens[Val[K]]
+      sndLens[Val[K], Val[K]]
 
     def merge[K]: (Summary[K] |*| Summary[K]) -⚬ Summary[K] =
       par(minKey, maxKey)
@@ -79,14 +85,14 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
             scalaLib.junctionVal[K]
         }
 
-      singletonSummary compose |*|.fst[V].lens
+      singletonSummary compose fstLens
     }
 
     def clear[K, V](f: V -⚬ Done): Singleton[K, V] -⚬ Done =
       joinMap(dsl.neglect, f)
 
     def keyGetter[K, V]: Getter[Singleton[K, V], Val[K]] =
-      |*|.fst[V].lens[Val[K]]
+      fstLens[Val[K], V]
 
     def keyJoinL[K, V]: (Done |*| Singleton[K, V]) -⚬ Singleton[K, V] =
       keyGetter[K, V].extendJunction.awaitPosFst
@@ -109,13 +115,13 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
     def deconstruct[K, X](j: Junction.Positive[X]): BranchF[K, X] -⚬ (X |*| X) =
       id[BranchF[K, X]]                 .to[ Summary[K] |*| (X |*| X) ]
         .>.fst(Summary.neglect)         .to[    Done    |*| (X |*| X) ]
-        .>(|*|.fst[X].lens.awaitFst(j)) .to[                 X |*| X  ]
+        .>(fstLens.awaitFst(j))         .to[                 X |*| X  ]
 
     def clear[K, X](f: X -⚬ Done): BranchF[K, X] -⚬ Done =
       joinMap(Summary.neglect, joinMap(f, f))
 
     def summary[K, X]: Getter[BranchF[K, X], Summary[K]] =
-      |*|.fst[X |*| X].lens[Summary[K]]
+      fstLens[Summary[K], X |*| X]
 
     def minKey[K, X]: Getter[BranchF[K, X], Val[K]] =
       summary andThen Summary.minKeyGetter
@@ -241,7 +247,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
           .>(F.lift(singleton))                               .to[        F[NonEmptyTree[K, V]]       ]
 
       id                                                         [         (Val[K] |*| W) |*| Singleton[K, V]  ]
-        .>(compareBy(|*|.fst[W].lens, Singleton.keyGetter))   .to[ Compared[Val[K] |*| W   ,  Singleton[K, V]] ]
+        .>(compareBy(fstLens, Singleton.keyGetter))           .to[ Compared[Val[K] |*| W   ,  Singleton[K, V]] ]
         .>(compared(intoL, replace, intoR))                   .to[          F[NonEmptyTree[K, V]]              ]
     }
 
@@ -267,7 +273,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       id                                         [                  Elem |*|         Branch[K, V]            ]
         .>.snd(Branch.deconstruct)            .to[                  Elem |*| (Tree                 |*| Tree) ]
         .assocRL                              .to[                 (Elem |*| Tree)                 |*| Tree  ]
-        .>.fst(sortBy(|*|.fst.lens, maxKey))  .to[ ((Elem |*| Tree)           |+| (Tree |*| Elem)) |*| Tree  ]
+        .>.fst(sortBy(fstLens, maxKey))       .to[ ((Elem |*| Tree)           |+| (Tree |*| Elem)) |*| Tree  ]
         .distributeR                          .to[ ((Elem |*| Tree) |*| Tree) |+| ((Tree |*| Elem) |*| Tree) ]
         .>.right.assocLR                      .to[ ((Elem |*| Tree) |*| Tree) |+| (Tree |*| (Elem |*| Tree)) ]
         .either(updateL, updateR)             .to[                          F[Tree]                          ]

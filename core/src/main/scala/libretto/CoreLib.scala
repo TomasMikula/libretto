@@ -112,6 +112,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
   }
 
+  object Functor {
+    def apply[F[_]](implicit ev: Functor[F]): Functor[F] =
+      ev
+  }
+
   /** Witnesses that `F` is a contravariant endofunctor on the category `-⚬`. */
   trait ContraFunctor[F[_]] { self =>
     def lift[A, B](f: A -⚬ B): F[B] -⚬ F[A]
@@ -150,6 +155,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   object Bifunctor {
     def apply[F[_, _]](implicit ev: Bifunctor[F]): Bifunctor[F] = ev
+
+    implicit val pair: Bifunctor[|*|] =
+      new Bifunctor[|*|] {
+        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |*| C) -⚬ (B |*| D) =
+          par(f, g)
+      }
   }
 
   /** Functor from category [[-⚬]] to the category `=>` of Scala functions.
@@ -246,10 +257,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       apply(f) > XI
 
     def from[A, B](f: (Done |*| A) -⚬ B): A -⚬ Delayed[B] =
-      id[A] > introFst(lInvertSignal) > |*|.assocLR > par(id, f)
+      id[A] > introFst(lInvertSignal) > assocLR > par(id, f)
 
     def triggerBy[A]: (Done |*| Delayed[A]) -⚬ A =
-      |*|.assocRL > elimFst(rInvertSignal)
+      assocRL > elimFst(rInvertSignal)
 
     def force[A]: Delayed[A] -⚬ A =
       elimFst(need)
@@ -345,7 +356,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def law_AwaitComposition: Equal[(Done |*| (Done |*| A)) -⚬ A] =
         Equal(
           par(id, awaitPosFst) > awaitPosFst,
-          |*|.assocRL > par(join, id) > awaitPosFst,
+          assocRL > par(join, id) > awaitPosFst,
         )
     }
 
@@ -372,7 +383,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def law_awaitComposition: Equal[A -⚬ (Need |*| (Need |*| A))] =
         Equal(
           awaitNegFst > par(id, awaitNegFst),
-          awaitNegFst > par(joinNeed, id) > |*|.assocLR,
+          awaitNegFst > par(joinNeed, id) > assocLR,
         )
     }
 
@@ -387,7 +398,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         from(join)
 
       def byFst[A, B](implicit A: Junction.Positive[A]): Junction.Positive[A |*| B] =
-        from(|*|.assocRL.>.fst(A.awaitPosFst))
+        from(assocRL.>.fst(A.awaitPosFst))
 
       def bySnd[A, B](implicit B: Junction.Positive[B]): Junction.Positive[A |*| B] =
         from(XI > par(id[A], B.awaitPosFst))
@@ -514,7 +525,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def law_awaitComposition: Equal[A -⚬ (Done |*| (Done |*| A))] =
         Equal(
           signalPosFst > par(id, signalPosFst),
-          signalPosFst > par(fork, id) > |*|.assocLR,
+          signalPosFst > par(fork, id) > assocLR,
         )
     }
 
@@ -544,7 +555,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def law_signalComposition: Equal[(Need |*| (Need |*| A)) -⚬ A] =
         Equal(
           par(id, signalNegFst) > signalNegFst,
-          |*|.assocRL > par(forkNeed, id) > signalNegFst,
+          assocRL > par(forkNeed, id) > signalNegFst,
         )
     }
 
@@ -592,7 +603,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         from(notifyNeedL)
 
       def byFst[A, B](implicit A: Signaling.Negative[A]): Signaling.Negative[A |*| B] =
-        from(|*|.assocRL.>.fst(A.notifyNegFst))
+        from(assocRL.>.fst(A.notifyNegFst))
 
       def bySnd[A, B](implicit B: Signaling.Negative[B]): Signaling.Negative[A |*| B] =
         from(XI > par(id[A], B.notifyNegFst))
@@ -660,7 +671,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def law_positiveAwaitThenSignal: Equal[(Done |*| A) -⚬ (Done |*| A)] =
         Equal(
           awaitPos > signalPos,
-          par(fork, id) > |*|.assocLR > par(id, awaitPos > signalPos) > |*|.assocRL > par(join, id),
+          par(fork, id) > assocLR > par(id, awaitPos > signalPos) > assocRL > par(join, id),
         )
     }
 
@@ -684,7 +695,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def law_negativeSignalThenAwait: Equal[(Need |*| A) -⚬ (Need |*| A)] =
         Equal(
           signalNeg > awaitNeg,
-          par(joinNeed, id) > |*|.assocLR > par(id, signalNeg > awaitNeg) > |*|.assocRL > par(forkNeed, id),
+          par(joinNeed, id) > assocLR > par(id, signalNeg > awaitNeg) > assocRL > par(forkNeed, id),
         )
     }
 
@@ -1016,7 +1027,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   def selectAgainstL[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (Need |*| A) =
     id                                               [  Need        |*|            A  ]
-      .<.snd(A.signalNeg).<(|*|.assocLR)        .from[ (Need        |*|  Need) |*| A  ]
+      .<.snd(A.signalNeg).<(assocLR)            .from[ (Need        |*|  Need) |*| A  ]
       .<.fst(selectNeed)                        .from[ (Need        |&|  Need) |*| A  ]
       .<(coDistributeR)                         .from[ (Need |*| A) |&| (Need  |*| A) ]
       .<(|&|.bimap(A.awaitNeg, A.awaitNeg))     .from[           A  |&|            A  ]
@@ -1165,33 +1176,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
   }
 
-  type Id[A] = A
-
-  implicit val idFunctor: Transportive[Id] = new Transportive[Id] {
-    def lift[A, B](f: A -⚬ B): Id[A] -⚬ Id[B] = f
-    def inL[A, B]: (A |*| Id[B]) -⚬ Id[A |*| B] = id
-    def outL[A, B]: Id[A |*| B] -⚬ (A |*| Id[B]) = id
-  }
-
-  object |*| {
-    def unapply[A, B](ab: $[A |*| B])(implicit
-      file: sourcecode.File,
-      line: sourcecode.Line,
-    ): ($[A], $[B]) =
-      $.|*|.unapply(ab)(file, line)
-
-    def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) = dsl.assocLR
-    def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) = dsl.assocRL
-
-    def bimap[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |*| C) -⚬ (B |*| D) =
-      par(f, g)
-
-    val bifunctor: Bifunctor[|*|] =
-      new Bifunctor[|*|] {
-        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |*| C) -⚬ (B |*| D) =
-          bimap(f, g)
-      }
-
+  object Transportive {
     /** Pair is covariant in the first argument. */
     def fst[B]: Transportive[λ[x => x |*| B]] =
       new Transportive[λ[x => x |*| B]] {
@@ -1209,6 +1194,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         def outL[B1, B2]: (A |*| (B1 |*| B2)) -⚬ (B1 |*| (A |*| B2)) =
           assocRL[A, B1, B2].>.fst(swap).assocLR
       }
+  }
+
+  type Id[A] = A
+
+  implicit val idFunctor: Transportive[Id] = new Transportive[Id] {
+    def lift[A, B](f: A -⚬ B): Id[A] -⚬ Id[B] = f
+    def inL[A, B]: (A |*| Id[B]) -⚬ Id[A |*| B] = id
+    def outL[A, B]: Id[A |*| B] -⚬ (A |*| Id[B]) = id
   }
 
   object |+| {
@@ -1280,10 +1273,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       bifunctor.snd[A]
   }
 
-  implicit def fstFunctor[B]: Transportive[λ[x => x |*| B]] = |*|.fst[B]
-  implicit def sndFunctor[A]: Transportive[λ[x => A |*| x]] = |*|.snd[A]
-
-  implicit val pairBifunctor: Bifunctor[|*|] = |*|.bifunctor
+  implicit def fstFunctor[B]: Transportive[[x] =>> x |*| B] = Transportive.fst[B]
+  implicit def sndFunctor[A]: Transportive[[x] =>> A |*| x] = Transportive.snd[A]
 
   implicit val eitherBifunctor: Bifunctor[|+|] = |+|.bifunctor
 
@@ -1407,10 +1398,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   implicit class LinearFunctionToPairOps[A, B1, B2](self: A -⚬ (B1 |*| B2)) {
     def assocLR[X, Y](implicit ev: B1 =:= (X |*| Y)): A -⚬ (X |*| (Y |*| B2)) =
-      ev.substituteCo[λ[x => A -⚬ (x |*| B2)]](self) > |*|.assocLR
+      ev.substituteCo[[x] =>> A -⚬ (x |*| B2)](self) > dsl.assocLR
 
     def assocRL[X, Y](implicit ev: B2 =:= (X |*| Y)): A -⚬ ((B1 |*| X) |*| Y) =
-      ev.substituteCo[λ[x => A -⚬ (B1 |*| x)]](self) > |*|.assocRL
+      ev.substituteCo[[x] =>> A -⚬ (B1 |*| x)](self) > dsl.assocRL
 
     def awaitFst(neglect: B1 -⚬ Done)(implicit j: Junction.Positive[B2]): A -⚬ B2 =
       self > par(neglect, id[B2]) > j.awaitPosFst
@@ -1498,22 +1489,22 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   implicit class FocusedOnPairCo[F[_], B1, B2](f: FocusedCo[F, B1 |*| B2]) {
-    def fst: FocusedCo[λ[x => F[x |*| B2]], B1] =
-      f.zoomCo(|*|.fst[B2])
+    def fst: FocusedCo[[x] =>> F[x |*| B2], B1] =
+      f.zoomCo(Functor[[x] =>> x |*| B2])
 
-    def snd: FocusedCo[λ[x => F[B1 |*| x]], B2] =
-      f.zoomCo(|*|.snd[B1])
+    def snd: FocusedCo[[x] =>> F[B1 |*| x], B2] =
+      f.zoomCo(Functor[[x] =>> B1 |*| x])
 
     def assocLR[X, Y](implicit ev: B1 =:= (X |*| Y)): F[X |*| (Y |*| B2)] = {
       val g: FocusedCo[F, (X |*| Y) |*| B2] =
         ev.substituteCo[λ[x => FocusedCo[F, x |*| B2]]](f)
-      g(|*|.assocLR)
+      g(dsl.assocLR)
     }
 
     def assocRL[X, Y](implicit ev: B2 =:= (X |*| Y)): F[(B1 |*| X) |*| Y] = {
       val g: FocusedCo[F, B1 |*| (X |*| Y)] =
         ev.substituteCo[λ[x => FocusedCo[F, B1 |*| x]]](f)
-      g(|*|.assocRL)
+      g(dsl.assocRL)
     }
 
     def awaitFst(neglect: B1 -⚬ Done)(implicit j: Junction.Positive[B2]): F[B2] =
@@ -1600,11 +1591,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   implicit class FocusedOnPairContra[A, F[_], B1, B2](f: FocusedContra[F, B1 |*| B2]) {
-    def fst: FocusedContra[λ[x => F[x |*| B2]], B1] =
-      f.zoomCo(|*|.fst[B2])
+    def fst: FocusedContra[[x] =>> F[x |*| B2], B1] =
+      f.zoomCo(Functor[[x] =>> x |*| B2])
 
-    def snd: FocusedContra[λ[x => F[B1 |*| x]], B2] =
-      f.zoomCo(|*|.snd[B1])
+    def snd: FocusedContra[[x] =>> F[B1 |*| x], B2] =
+      f.zoomCo(Functor[[x] =>> B1 |*| x])
   }
 
   implicit class FocusedOnPlusContra[A, F[_], B1, B2](f: FocusedContra[F, B1 |+| B2]) {
@@ -1644,7 +1635,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     //               |     / \
     //               |    /   \
                    ((A|*|C)|*| B) =
-    |*|.assocLR[A, B, C] > par(id, swap) > |*|.assocRL
+    assocLR[A, B, C] > par(id, swap) > assocRL
 
   def XI[A, B, C]: (A |*|(B|*|C)) -⚬
     //               \   /    |
@@ -1653,7 +1644,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     //                / \     |
     //               /   \    |
                    (B |*|(A|*|C)) =
-    |*|.assocRL[A, B, C] > par(swap, id) > |*|.assocLR
+    assocRL[A, B, C] > par(swap, id) > assocLR
 
   def IV[A, B, C, D](f: (B |*| C) -⚬ D): ( ( A |*| B ) |*| C ) -⚬
     //                                       |      \     /
@@ -1849,13 +1840,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     id                                                     [                      Need |*| A   ]
       .introFst(lInvertSignal).assocLR                  .to[ Need |*|  (Done |*| (Need |*| A)) ]
       .>.snd(injectLWhenDone)                           .to[ Need |*| ((Done |*| (Need |*| A)) |+| B) ]
-      .>.snd.left(|*|.assocRL.elimFst(rInvertSignal))   .to[ Need |*| (                    A   |+| B) ]
+      .>.snd.left(assocRL.elimFst(rInvertSignal))       .to[ Need |*| (                    A   |+| B) ]
 
   def injectRWhenNeed[A, B]: (Need |*| B) -⚬ (Need |*| (A |+| B)) =
     id                                                     [                            Need |*| B    ]
       .introFst(lInvertSignal).assocLR                  .to[ Need |*|        (Done |*| (Need |*| B))  ]
       .>.snd(injectRWhenDone)                           .to[ Need |*| (A |+| (Done |*| (Need |*| B))) ]
-      .>.snd.right(|*|.assocRL.elimFst(rInvertSignal))  .to[ Need |*| (A |+|                     B  ) ]
+      .>.snd.right(assocRL.elimFst(rInvertSignal))      .to[ Need |*| (A |+|                     B  ) ]
 
   def delayEitherUntilPing[A, B]: (Ping |*| (A |+| B)) -⚬ (A |+| B) =
     distributeL > either(injectLOnPing, injectROnPing)
@@ -1972,7 +1963,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     pred: (K |*| K) -⚬ Bool,
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) = {
     val awaitL: (Done |*| (A |*| B)) -⚬ (A |*| B) =
-      (aKey compose |*|.fst[B].lens[A]).awaitFst
+      (aKey compose Transportive.fst[B].lens[A]).awaitFst
 
     id[A |*| B]
       .par(aKey.getL, bKey.getL)
@@ -2589,7 +2580,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def law_associativity: Equal[ ((A |*| A) |*| A) -⚬ A ] =
       Equal(
         par(combine, id[A]) > combine,
-        |*|.assocLR > par(id[A], combine) > combine,
+        assocLR > par(id[A], combine) > combine,
       )
   }
 
@@ -2623,7 +2614,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def law_coAssociativity: Equal[ A -⚬ ((A |*| A) |*| A) ] =
       Equal(
         split > par(split, id[A]),
-        split > par(id[A], split) > |*|.assocRL,
+        split > par(id[A], split) > assocRL,
       )
   }
 
@@ -3025,7 +3016,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       val caseCons: (A |*| LList[A]) -⚬ (LList[A] |*| LList[A]) =
         switchWithL(
           caseNil  = singleton[A] > introSnd(nil[A]),
-          caseCons = |*|.assocRL > par(id, self) > IXI > par(cons, cons),
+          caseCons = assocRL > par(id, self) > IXI > par(cons, cons),
         )
 
       switch(
