@@ -426,8 +426,8 @@ object FreeScalaDSL extends ScalaDSL {
         import lambdas.Error.Undefined
         import lambdas.LinearityViolation.{Overused, Underused}
         e match {
-          case Overused(vs)  => throw new NotLinearException(s"Variables ${vs.mkString(", ")} used more than once")
-          case Underused(vs) => throw new NotLinearException(s"Variables ${vs.mkString(", ")} not fully consumed")
+          case Overused(vs)  => throw new NotLinearException(s"Variables used more than once: ${vs.toList.map(_.origin.print).mkString("\n", ", ", "\n")}")
+          case Underused(vs) => throw new NotLinearException(s"Variables not fully consumed: ${vs.toList.map(_.origin.print).mkString("\n", ", ", "\n")}")
           case Undefined(vs) => throw new UnboundVariablesException(vs)
         }
     }
@@ -449,8 +449,8 @@ object FreeScalaDSL extends ScalaDSL {
           case ClosureError.NonLinear(e) =>
             import lambdas.LinearityViolation.{Overused, Underused}
             e match {
-              case Overused(vs)  => throw new NotLinearException(s"Variables ${vs.mkString(", ")} used more than once")
-              case Underused(vs) => throw new NotLinearException(s"Variables ${vs.mkString(", ")} not fully consumed")
+              case Overused(vs)  => throw new NotLinearException(s"Variables used more than once: ${vs.toList.map(_.origin.print).mkString("\n", ", ", "\n")}")
+              case Underused(vs) => throw new NotLinearException(s"Variables not fully consumed: ${vs.toList.map(_.origin.print).mkString("\n", ", ", "\n")}")
             }
           case ClosureError.NoCapture(msg) =>
             throw new NoCaptureException(msg)
