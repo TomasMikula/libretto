@@ -278,13 +278,13 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     }
 
-    case class AssocLR[P1, P2, P3, Q2](value: Transfer.AssocLR[P1, P2, P3, Q2]) extends Tr[P1 |*| P2, P3, P1, Q2] {
+    case class AssocLR[P1, P2, P3, Q2, Q3](value: Transfer.AssocLR[P1, P2, P3, Q2, Q3]) extends Tr[P1 |*| P2, P3, P1, Q2 |*| Q3] {
 
       override def `▄░_this_▄`[A1, A2, X2, Z2](
         l: Plated[A2, X2],
         f1: A1 ~⚬ (P1 |*| P2),
         f2: X2 ~⚬ P3,
-        r: Plated[Q2, Z2],
+        r: Plated[Q2 |*| Q3, Z2],
       ): Shuffled[A1 |*| A2, P1 |*| Z2] =
         SemiObstructed(
           ~⚬.fst(f1) > ~⚬.assocLR,
@@ -295,14 +295,14 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     }
 
-    case class AssocRL[P1, P2, P3, Q1](value: Transfer.AssocRL[P1, P2, P3, Q1]) extends Tr[P1, P2 |*| P3, Q1, P3] {
+    case class AssocRL[P1, P2, P3, Q1, Q2](value: Transfer.AssocRL[P1, P2, P3, Q1, Q2]) extends Tr[P1, P2 |*| P3, Q1 |*| Q2, P3] {
 
       override def `▄░_this_▄`[A1, A2, X2, Z2](
         l: Plated[A2, X2],
         f1: A1 ~⚬ P1,
         f2: X2 ~⚬ (P2 |*| P3),
         r: Plated[P3, Z2],
-      ): Shuffled[A1 |*| A2, Q1 |*| Z2] =
+      ): Shuffled[A1 |*| A2, (Q1 |*| Q2) |*| Z2] =
         revDecompose(f2) match {
           case RevDecomposition(t, g1, g2) =>
             SemiObstructed(
@@ -315,27 +315,27 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     }
 
-    case class IX[P1, P2, P3, Q1](value: Transfer.IX[P1, P2, P3, Q1]) extends Tr[P1 |*| P2, P3, Q1, P2] {
+    case class IX[P1, P2, P3, Q1, Q2](value: Transfer.IX[P1, P2, P3, Q1, Q2]) extends Tr[P1 |*| P2, P3, Q1 |*| Q2, P2] {
 
       override def `▄░_this_▄`[A1, A2, X2, Z2](
         l: Plated[A2, X2],
         f1: A1 ~⚬ (P1 |*| P2),
         f2: X2 ~⚬ P3,
         r: Plated[P2, Z2],
-      ): Shuffled[A1 |*| A2, Q1 |*| Z2] =
+      ): Shuffled[A1 |*| A2, (Q1 |*| Q2) |*| Z2] =
         Pure(~⚬.fst(f1) > ~⚬.assocLR) >
           snd(Impermeable(~⚬.swap, Plated.Stacked(l, r), ~⚬.fst(f2))) >
           Pure(~⚬.assocRL > ~⚬.fst(value.g.asShuffle))
 
     }
 
-    case class XI[P1, P2, P3, Q2](value: Transfer.XI[P1, P2, P3, Q2]) extends Tr[P1, P2 |*| P3, P2, Q2] {
+    case class XI[P1, P2, P3, Q2, Q3](value: Transfer.XI[P1, P2, P3, Q2, Q3]) extends Tr[P1, P2 |*| P3, P2, Q2 |*| Q3] {
 
       override def `▄░_this_▄`[A1, A2, X2, Z2](
         l: Plated[A2, X2],
         f1: A1 ~⚬ P1,
         f2: X2 ~⚬ (P2 |*| P3),
-        r: Plated[Q2, Z2],
+        r: Plated[Q2 |*| Q3, Z2],
       ): Shuffled[A1 |*| A2, P2 |*| Z2] =
         revDecompose(f2) match {
           case RevDecomposition(g, h1, h2) =>
@@ -344,14 +344,14 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     }
 
-    case class IXI[P1, P2, P3, P4, Q1, Q2](value: Transfer.IXI[P1, P2, P3, P4, Q1, Q2]) extends Tr[P1 |*| P2, P3 |*| P4, Q1, Q2] {
+    case class IXI[P1, P2, P3, P4, Q1, Q2, Q3, Q4](value: Transfer.IXI[P1, P2, P3, P4, Q1, Q2, Q3, Q4]) extends Tr[P1 |*| P2, P3 |*| P4, Q1 |*| Q2, Q3 |*| Q4] {
 
       override def `▄░_this_▄`[A1, A2, X2, Z2](
         l: Plated[A2, X2],
         f1: A1 ~⚬ (P1 |*| P2),
         f2: X2 ~⚬ (P3 |*| P4),
-        r: Plated[Q2, Z2],
-      ): Shuffled[A1 |*| A2, Q1 |*| Z2] =
+        r: Plated[(Q3 |*| Q4), Z2],
+      ): Shuffled[A1 |*| A2, (Q1 |*| Q2) |*| Z2] =
         revDecompose(f2) match {
           case RevDecomposition(lt, f21, f22) =>
             ~⚬.decompose(value.g2.asShuffle) match {
@@ -366,12 +366,12 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     def apply[P1, P2, Q1, Q2](t: Transfer[P1, P2, Q1, Q2]): Tr[P1, P2, Q1, Q2] =
       t match {
-        case t: Transfer.Swap[_, _]            => Swap(t)
-        case t: Transfer.AssocLR[_, _, _, _]   => AssocLR(t)
-        case t: Transfer.AssocRL[_, _, _, _]   => AssocRL(t)
-        case t: Transfer.IX[_, _, _, _]        => IX(t)
-        case t: Transfer.XI[_, _, _, _]        => XI(t)
-        case t: Transfer.IXI[_, _, _, _, _, _] => IXI(t)
+        case t: Transfer.Swap[_, _]                  => Swap(t)
+        case t: Transfer.AssocLR[_, _, _, _, _]      => AssocLR(t)
+        case t: Transfer.AssocRL[_, _, _, _, _]      => AssocRL(t)
+        case t: Transfer.IX[_, _, _, _, _]           => IX(t)
+        case t: Transfer.XI[_, _, _, _, _]           => XI(t)
+        case t: Transfer.IXI[_, _, _, _, _, _, _, _] => IXI(t)
       }
 
     def revDecompose[X, Z1, Z2](f: X ~⚬ (Z1 |*| Z2)): RevDecomposition[X, _, _, Z1, Z2] =
