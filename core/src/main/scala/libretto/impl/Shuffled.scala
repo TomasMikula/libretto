@@ -67,20 +67,20 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       Pure(~⚬.snd(s))
   }
 
-  case class SemiObstructed[A, X1, X2, Y2, Z2, B](
+  case class SemiObstructed[A, X1, X2, Y2, Z2, B1, B2](
     left    : A ~⚬ (X1 |*| X2),
     bottom1 : Plated[X2, Y2],
     bottom2 : Y2 ~⚬ Z2,
-    right   : TransferOpt[X1 |*| Z2, B],
-  ) extends Permeable[A, B] {
-    override def after[Z](that: Shuffled[Z, A]): Shuffled[Z, B] =
+    right   : TransferOpt[X1, Z2, B1, B2],
+  ) extends Permeable[A, B1 |*| B2] {
+    override def after[Z](that: Shuffled[Z, A]): Shuffled[Z, B1 |*| B2] =
       that match {
         case Pure(s) =>
           SemiObstructed(s > left, bottom1, bottom2, right)
         case Impermeable(l, m, r) =>
-          ~⚬.decompose((r > left).invert) match {
-            case ~⚬.Decomposition(f1, f2, g) =>
-              val m1 = Plated.SemiSnoc(m, RevTransferOpt(g), f2.invert, bottom1)
+          ~⚬.decompose1((r > left).invert) match {
+            case ~⚬.Decomposition1(f1, f2, g, ev) =>
+              val m1 = Plated.SemiSnoc(ev.flip.substituteCo(m), RevTransferOpt(g), f2.invert, bottom1)
               Impermeable(l, m1, ~⚬.par(f1.invert, bottom2) > right.asShuffle)
           }
         case SemiObstructed(l, b1, b2, r) =>
@@ -89,24 +89,24 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
             .thenShuffle(~⚬.snd(bottom2) > right.asShuffle)
       }
 
-    override def thenShuffle[C](s: B ~⚬ C): SemiObstructed[A, _, X2, Y2, _, C] =
-      ~⚬.decompose(right.asShuffle > s) match {
-        case ~⚬.Decomposition(g1, g2, h) => SemiObstructed(left > ~⚬.fst(g1), bottom1, bottom2 > g2, h)
+    override def thenShuffle[C](s: (B1 |*| B2) ~⚬ C): Permeable[A, C] =
+      ~⚬.decompose1(right.asShuffle > s) match {
+        case ~⚬.Decomposition1(g1, g2, h, ev) => ev.substituteCo[Permeable[A, *]](SemiObstructed(left > ~⚬.fst(g1), bottom1, bottom2 > g2, h))
       }
 
-    override def afterShuffle[Z](that: Z ~⚬ A): Shuffled[Z, B] =
+    override def afterShuffle[Z](that: Z ~⚬ A): Shuffled[Z, B1 |*| B2] =
       SemiObstructed(that > left, bottom1, bottom2, right)
 
-    override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B = {
+    override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> (B1 |*| B2) = {
       val (f, g, h, i) = (left.fold, bottom1.fold, bottom2.fold, right.fold)
       ev.andThen(f, ev.andThen(ev.snd(ev.andThen(g, h)), i))
     }
 
-    override def inFst[Q]: Shuffled[A |*| Q, B |*| Q] =
+    override def inFst[Q]: Shuffled[A |*| Q, (B1 |*| B2) |*| Q] =
       swap > inSnd[Q] > swap
 
-    override def inSnd[P]: Shuffled[P |*| A, P |*| B] =
-      ~⚬.decompose[P |*| X1, Y2, P |*| B](~⚬.snd(bottom2) > ~⚬.assocLR > ~⚬.snd(right.asShuffle)) match {
+    override def inSnd[P]: Shuffled[P |*| A, P |*| (B1 |*| B2)] =
+      ~⚬.decompose[P |*| X1, Y2, P, B1 |*| B2](~⚬.snd(bottom2) > ~⚬.assocLR > ~⚬.snd(right.asShuffle)) match {
         case ~⚬.Decomposition(f1, f2, h) =>
           SemiObstructed(~⚬.snd(left) > ~⚬.assocRL > ~⚬.fst(f1), bottom1, f2, h)
       }
@@ -147,19 +147,19 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         ev.andThen(l.fold, ev.andThen(m.fold, r.fold))
     }
 
-    case class SemiCons[A1, A2, X2, Y2, Z, B](
+    case class SemiCons[A1, A2, X2, Y2, Z1, Z2, B](
       semiHead: Plated[A2, X2],
       s: X2 ~⚬ Y2,
-      t: TransferOpt[A1 |*| Y2, Z],
-      tail: Plated[Z, B],
+      t: TransferOpt[A1, Y2, Z1, Z2],
+      tail: Plated[Z1 |*| Z2, B],
     ) extends Plated[A1 |*| A2, B] {
       override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> B =
         ev.andThen(ev.andThen(ev.snd(ev.andThen(semiHead.fold, s.fold)), t.fold), tail.fold)
     }
 
-    case class SemiSnoc[A, X, Y2, Z2, B1, B2](
-      init: Plated[A, X],
-      t: RevTransferOpt[X, B1 |*| Y2],
+    case class SemiSnoc[A, X1, X2, Y2, Z2, B1, B2](
+      init: Plated[A, X1 |*| X2],
+      t: RevTransferOpt[X1, X2, B1, Y2],
       s: Y2 ~⚬ Z2,
       semiLast: Plated[Z2, B2],
     ) extends Plated[A, B1 |*| B2] {
@@ -167,12 +167,12 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         ev.andThen(init.fold, ev.andThen(t.fold, ev.snd(ev.andThen(s.fold, semiLast.fold))))
     }
 
-    case class XI[A1, A2, P, Q, R, S, B1, B2](
-      l: Plated[A2, P],
-      lt: RevTransferOpt[P, B1 |*| Q],
+    case class XI[A1, A2, P1, P2, Q, R, S1, S2, B1, B2](
+      l: Plated[A2, P1 |*| P2],
+      lt: RevTransferOpt[P1, P2, B1, Q],
       b: Q ~⚬ R,
-      rt: TransferOpt[A1 |*| R, S],
-      r: Plated[S, B2],
+      rt: TransferOpt[A1, R, S1, S2],
+      r: Plated[S1 |*| S2, B2],
     ) extends Plated[A1 |*| A2, B1 |*| B2] {
       override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2) = {
         import ev.andThen
@@ -190,8 +190,8 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   }
   import Plated._
 
-  case class RevTransferOpt[A, B](t: TransferOpt[B, A]) {
-    def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B =
+  case class RevTransferOpt[A1, A2, B1, B2](t: TransferOpt[B1, B2, A1, A2]) {
+    def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2) =
       t.asShuffle.invert.fold
   }
 
@@ -303,11 +303,11 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f2: X2 ~⚬ (P2 |*| P3),
         r: Plated[P3, Z2],
       ): Shuffled[A1 |*| A2, (Q1 |*| Q2) |*| Z2] =
-        revDecompose(f2) match {
-          case RevDecomposition(t, g1, g2) =>
+        revDecompose1(f2) match {
+          case RevDecomposition1(ev, t, g1, g2) =>
             SemiObstructed(
               ~⚬.fst(f1),
-              Plated.SemiSnoc(l, t, g2, r),
+              Plated.SemiSnoc(ev.substituteCo(l), t, g2, r),
               ~⚬.fst(g1),
               Transfer.AssocRL(value.g),
             )
@@ -337,9 +337,9 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f2: X2 ~⚬ (P2 |*| P3),
         r: Plated[Q2 |*| Q3, Z2],
       ): Shuffled[A1 |*| A2, P2 |*| Z2] =
-        revDecompose(f2) match {
-          case RevDecomposition(g, h1, h2) =>
-            Impermeable(~⚬.fst(f1), Plated.XI(l, g, h2, value.g, r), ~⚬.fst(h1))
+        revDecompose1(f2) match {
+          case RevDecomposition1(ev, g, h1, h2) =>
+            Impermeable(~⚬.fst(f1), Plated.XI(ev.substituteCo(l), g, h2, value.g, r), ~⚬.fst(h1))
         }
 
     }
@@ -352,12 +352,12 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f2: X2 ~⚬ (P3 |*| P4),
         r: Plated[(Q3 |*| Q4), Z2],
       ): Shuffled[A1 |*| A2, (Q1 |*| Q2) |*| Z2] =
-        revDecompose(f2) match {
-          case RevDecomposition(lt, f21, f22) =>
+        revDecompose1(f2) match {
+          case RevDecomposition1(ev, lt, f21, f22) =>
             ~⚬.decompose(value.g2.asShuffle) match {
               case ~⚬.Decomposition(g21, g22, rt) =>
                 Pure(~⚬.fst(f1) > ~⚬.assocLR) >
-                  snd(Impermeable(~⚬.fst(g21), Plated.XI(l, lt, f22 > g22, rt, r), ~⚬.fst(f21))) >
+                  snd(Impermeable(~⚬.fst(g21), Plated.XI(ev.substituteCo(l), lt, f22 > g22, rt, r), ~⚬.fst(f21))) >
                   Pure(~⚬.assocRL > ~⚬.fst(value.g1.asShuffle))
             }
         }
@@ -374,14 +374,15 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         case t: Transfer.IXI[_, _, _, _, _, _, _, _] => IXI(t)
       }
 
-    def revDecompose[X, Z1, Z2](f: X ~⚬ (Z1 |*| Z2)): RevDecomposition[X, _, _, Z1, Z2] =
-      ~⚬.decompose(f.invert) match {
-        case ~⚬.Decomposition(f1, f2, g) =>
-          RevDecomposition(RevTransferOpt(g), f1.invert, f2.invert)
+    def revDecompose1[X, Z1, Z2](f: X ~⚬ (Z1 |*| Z2)): RevDecomposition1[X, _, _, _, _, Z1, Z2] =
+      ~⚬.decompose1(f.invert) match {
+        case ~⚬.Decomposition1(f1, f2, g, ev) =>
+          RevDecomposition1(ev.flip, RevTransferOpt(g), f1.invert, f2.invert)
       }
 
-    case class RevDecomposition[X, Y1, Y2, Z1, Z2](
-      t: RevTransferOpt[X, Y1 |*| Y2],
+    case class RevDecomposition1[X, X1, X2, Y1, Y2, Z1, Z2](
+      ev: X =:= (X1 |*| X2),
+      t: RevTransferOpt[X1, X2, Y1, Y2],
       g1: Y1 ~⚬ Z1,
       g2: Y2 ~⚬ Z2,
     )
