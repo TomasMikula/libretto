@@ -6,7 +6,7 @@ import scala.util.Random
 
 object DiningPhilosophers extends StarterApp {
   object Forks {
-    private type HeldForkF[SharedFork] = Done |*| Delayed[SharedFork]
+    private type HeldForkF[SharedFork] = Done |*| Detained[SharedFork]
 
     private type SharedForkF[X] = Done |&| (HeldForkF[X] |+| X)
 
@@ -27,7 +27,7 @@ object DiningPhilosophers extends StarterApp {
       )
 
     def putDown: HeldFork -⚬ SharedFork =
-      Delayed.triggerBy
+      Detained.releaseBy
 
     def releaseFork: SharedFork -⚬ Done =
       unpack > chooseL
@@ -44,16 +44,16 @@ object DiningPhilosophers extends StarterApp {
       A: Junction.Positive[A],
       B: Signaling.Positive[B],
     ): (A |*| (HeldFork |*| HeldFork)) -⚬ (B |*| (HeldFork |*| HeldFork)) =
-      id[ A |*| (HeldFork |*| HeldFork) ]           .to[  A |*| ((Done |*| Delayed[SharedFork])  |*| (Done |*| Delayed[SharedFork])) ]
-        .>.snd(IXI)                                 .to[  A |*| ((Done |*| Done)  |*| (Delayed[SharedFork] |*| Delayed[SharedFork])) ]
-        .>.snd.fst(join).assocRL                    .to[ (A |*|       Done      ) |*| (Delayed[SharedFork] |*| Delayed[SharedFork])  ]
-        .>.fst(A.awaitPosSnd > f > B.signalPosSnd)  .to[ (B |*|       Done      ) |*| (Delayed[SharedFork] |*| Delayed[SharedFork])  ]
-        .assocLR.>.snd.fst(fork)                    .to[  B |*| ((Done |*| Done)  |*| (Delayed[SharedFork] |*| Delayed[SharedFork])) ]
-        .>.snd(IXI)                                 .to[  B |*| ((Done |*| Delayed[SharedFork])  |*| (Done |*| Delayed[SharedFork])) ]
+      id[ A |*| (HeldFork |*| HeldFork) ]           .to[  A |*| ((Done |*| Detained[SharedFork])  |*| (Done |*| Detained[SharedFork])) ]
+        .>.snd(IXI)                                 .to[  A |*| ((Done |*| Done)  |*| (Detained[SharedFork] |*| Detained[SharedFork])) ]
+        .>.snd.fst(join).assocRL                    .to[ (A |*|       Done      ) |*| (Detained[SharedFork] |*| Detained[SharedFork])  ]
+        .>.fst(A.awaitPosSnd > f > B.signalPosSnd)  .to[ (B |*|       Done      ) |*| (Detained[SharedFork] |*| Detained[SharedFork])  ]
+        .assocLR.>.snd.fst(fork)                    .to[  B |*| ((Done |*| Done)  |*| (Detained[SharedFork] |*| Detained[SharedFork])) ]
+        .>.snd(IXI)                                 .to[  B |*| ((Done |*| Detained[SharedFork])  |*| (Done |*| Detained[SharedFork])) ]
 
     private def singleOwnerFork: Done -⚬ SharedFork = rec { self =>
       val pickUp: Done -⚬ HeldFork =
-        introSnd(Delayed(self))
+        introSnd(Detained.thunk(self))
 
       choice(id, pickUp > injectL) > pack[SharedForkF]
     }
@@ -63,17 +63,17 @@ object DiningPhilosophers extends StarterApp {
         forkMap(id, singleOwnerFork)
 
       val caseFstPicksUp: Done -⚬ ((HeldFork |+| SharedFork) |*| SharedFork) = {
-        val go: One -⚬ (Delayed[SharedFork] |*| SharedFork) = rec { go =>
-          val caseFstPutsDown: One -⚬ (Delayed[SharedFork] |*| SharedFork) =
-            Delayed.fst(makeSharedFork)
+        val go: One -⚬ (Detained[SharedFork] |*| SharedFork) = rec { go =>
+          val caseFstPutsDown: One -⚬ (Detained[SharedFork] |*| SharedFork) =
+            Detained.fst(makeSharedFork)
 
-          val caseSndReleases: One -⚬ (Delayed[SharedFork] |*| Done) =
-            Delayed(singleOwnerFork) > introSnd(done)
+          val caseSndReleases: One -⚬ (Detained[SharedFork] |*| Done) =
+            Detained.thunk(singleOwnerFork) > introSnd(done)
 
-          val caseSndPicksUp: One -⚬ (Delayed[SharedFork] |*| (HeldFork |+| SharedFork)) =
+          val caseSndPicksUp: One -⚬ (Detained[SharedFork] |*| (HeldFork |+| SharedFork)) =
             go > par(id, injectR)
 
-          val caseSndActs: One -⚬ (Delayed[SharedFork] |*| SharedFork) =
+          val caseSndActs: One -⚬ (Detained[SharedFork] |*| SharedFork) =
             choice(caseSndReleases, caseSndPicksUp) > coDistributeL > par(id, pack[SharedForkF])
 
           choice(caseFstPutsDown, caseSndActs) > select

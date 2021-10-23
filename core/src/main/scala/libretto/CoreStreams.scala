@@ -114,13 +114,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .pack[LPollableF[A, *]]                     .to[              LPollable[A]                  ]
     }
 
-    /** Delays the first action ([[poll]] or [[close]]) on this [[LPollable]]. */
-    def delay[A: Junction.Positive]: LPollable[A] -⚬ Delayed[LPollable[A]] =
-      Delayed.from(delayBy)
+    /** Blocks the first action ([[poll]] or [[close]]) on this [[LPollable]] until released. */
+    def detain[A: Junction.Positive]: LPollable[A] -⚬ Detained[LPollable[A]] =
+      Detained(delayBy)
 
     /** Delays the final [[Done]] signal resulting from [[close]] or end of stream. */
-    def delayClosed[A]: LPollable[A] -⚬ Delayed[LPollable[A]] =
-      Delayed.from(delayClosedBy)
+    def detainClosed[A]: LPollable[A] -⚬ Detained[LPollable[A]] =
+      Detained(delayClosedBy)
 
     def map[A, B](f: A -⚬ B): LPollable[A] -⚬ LPollable[B] = rec { self =>
       from(close[A], poll[A].>.right(par(f, self)))
@@ -133,33 +133,33 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       poll[A] > LPolled.switch(caseEmpty = id[Done], caseCons)
     }
 
-    /** The second [[LPollable]] is "delayed" because that gives flexibility in how the [[Done]] signal resulting from
+    /** The second [[LPollable]] is "detained" because that gives the client flexibility in how the [[Done]] signal resulting from
       * the exhaustion of the first [[LPollable]] is awaited. For example, if polling of the second [[LPollable]]
-      * should be delayed until the first [[LPollable]] is completely shut down, we can use [[delay]] to delay the
+      * should be delayed until the first [[LPollable]] is completely shut down, the client can use [[detain]] to delay the
       * second [[LPollable]]. If polling of the second [[LPollable]] should start as soon as it is known that there are
-      * no more elements in the first [[LPollable]], we can use [[delayClosed]] to delay the second [[LPollable]].
+      * no more elements in the first [[LPollable]], the client can use [[detainClosed]] to delay the second [[LPollable]].
       */
-    def concatenate[A]: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ LPollable[A] = rec { self =>
-      val close: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ Done =
-        joinMap(LPollable.close, Delayed.force > LPollable.close)
+    def concatenate[A]: (LPollable[A] |*| Detained[LPollable[A]]) -⚬ LPollable[A] = rec { self =>
+      val close: (LPollable[A] |*| Detained[LPollable[A]]) -⚬ Done =
+        joinMap(LPollable.close, Detained.forceRelease > LPollable.close)
 
-      val poll: (LPollable[A] |*| Delayed[LPollable[A]]) -⚬ LPolled[A] =
-        id                               [                                               LPollable[A]    |*| Delayed[LPollable[A]]   ]
-          .>.fst(unpack)              .to[ (Done |&| (Done                  |+|  (A |*|  LPollable[A]))) |*| Delayed[LPollable[A]]   ]
-          .>.fst(chooseR)             .to[           (Done                  |+|  (A |*|  LPollable[A]))  |*| Delayed[LPollable[A]]   ]
-          .distributeR                .to[ (Done |*| Delayed[LPollable[A]]) |+| ((A |*|  LPollable[A])   |*| Delayed[LPollable[A]] ) ]
-          .>.left(Delayed.triggerBy)  .to[                   LPollable[A]   |+| ((A |*|  LPollable[A])   |*| Delayed[LPollable[A]] ) ]
-          .>.left(LPollable.poll)     .to[                     LPolled[A]   |+| ((A |*|  LPollable[A])   |*| Delayed[LPollable[A]] ) ]
-          .>.right(assocLR)           .to[                     LPolled[A]   |+| ( A |*| (LPollable[A]    |*| Delayed[LPollable[A]])) ]
-          .>.right.snd(self)          .to[                     LPolled[A]   |+| ( A |*|            LPollable[A]                    ) ]
-          .>.right.injectR[Done]      .to[                     LPolled[A]   |+|     LPolled[A]                                       ]
-          .>(either(id, id))          .to[                              LPolled[A]                                                   ]
+      val poll: (LPollable[A] |*| Detained[LPollable[A]]) -⚬ LPolled[A] =
+        id                               [                                                LPollable[A]    |*| Detained[LPollable[A]]   ]
+          .>.fst(unpack)              .to[ (Done |&| (Done                   |+|  (A |*|  LPollable[A]))) |*| Detained[LPollable[A]]   ]
+          .>.fst(chooseR)             .to[           (Done                   |+|  (A |*|  LPollable[A]))  |*| Detained[LPollable[A]]   ]
+          .distributeR                .to[ (Done |*| Detained[LPollable[A]]) |+| ((A |*|  LPollable[A])   |*| Detained[LPollable[A]] ) ]
+          .>.left(Detained.releaseBy) .to[                    LPollable[A]   |+| ((A |*|  LPollable[A])   |*| Detained[LPollable[A]] ) ]
+          .>.left(LPollable.poll)     .to[                      LPolled[A]   |+| ((A |*|  LPollable[A])   |*| Detained[LPollable[A]] ) ]
+          .>.right(assocLR)           .to[                      LPolled[A]   |+| ( A |*| (LPollable[A]    |*| Detained[LPollable[A]])) ]
+          .>.right.snd(self)          .to[                      LPolled[A]   |+| ( A |*|            LPollable[A]                     ) ]
+          .>.right.injectR[Done]      .to[                      LPolled[A]   |+|     LPolled[A]                                        ]
+          .>(either(id, id))          .to[                               LPolled[A]                                                    ]
 
       from(close, poll)
     }
 
     def concat[A]: (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A] =
-      id.>.snd(delayClosed) > concatenate
+      id.>.snd(detainClosed) > concatenate
 
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
       *

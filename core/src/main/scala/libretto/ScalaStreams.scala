@@ -73,8 +73,8 @@ class ScalaStreams[
     def fromLList[A]: LList[Val[A]] -⚬ Pollable[A] =
       LPollable.fromLList[Val[A]]
 
-    def delay[A]: Pollable[A] -⚬ Delayed[Pollable[A]] =
-      LPollable.delay[Val[A]]
+    def detain[A]: Pollable[A] -⚬ Detained[Pollable[A]] =
+      LPollable.detain[Val[A]]
 
     def delayBy[A]: (Done |*| Pollable[A]) -⚬ Pollable[A] =
       LPollable.delayBy[Val[A]]

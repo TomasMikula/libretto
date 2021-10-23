@@ -241,33 +241,39 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
   }
 
-  /** A type alias expressing the ''intent'' that `A` is delayed (in some sense) until a signal ([[Need]]) is received.
-    * Equivalent to `Done =⚬ A`, but the formulation as `Need |*| A` does not rely on the more powerful concept
-    * of ''function types'' (internal hom objects), i.e. does not require [[ClosedDSL]].
+  /** Expresses that interaction with `A` is (at least partially) obstructed.
+    * The detention can be ended by receiving a signal.
+    *
+    * Equivalent to `Need |*| A` (or `Done =⚬ A` if the DSL extends [[ClosedDSL]]).
     */
-  opaque type Delayed[A] = Need |*| A
-  object Delayed {
-    def apply[A](f: Done -⚬ A): One -⚬ Delayed[A] =
-      lInvertSignal > par(id, f)
+  opaque type Detained[A] = Need |*| A
+  object Detained {
+    def apply[A, B](f: (Done |*| A) -⚬ B): A -⚬ Detained[B] =
+      id[A] > introFst(lInvertSignal) > assocLR > dsl.snd(f)
 
-    def fst[A, B](f: Done -⚬ (A |*| B)): One -⚬ (Delayed[A] |*| B) =
-      apply(f).assocRL
+    def thunk[A](f: Done -⚬ A): One -⚬ Detained[A] =
+      lInvertSignal > dsl.snd(f)
 
-    def snd[A, B](f: Done -⚬ (A |*| B)): One -⚬ (A |*| Delayed[B]) =
-      apply(f) > XI
+    def fst[A, B](f: Done -⚬ (A |*| B)): One -⚬ (Detained[A] |*| B) =
+      thunk(f).assocRL
 
-    def from[A, B](f: (Done |*| A) -⚬ B): A -⚬ Delayed[B] =
-      id[A] > introFst(lInvertSignal) > assocLR > par(id, f)
+    def snd[A, B](f: Done -⚬ (A |*| B)): One -⚬ (A |*| Detained[B]) =
+      thunk(f) > XI
 
-    def triggerBy[A]: (Done |*| Delayed[A]) -⚬ A =
+    def releaseBy[A]: (Done |*| Detained[A]) -⚬ A =
       assocRL > elimFst(rInvertSignal)
 
-    def force[A]: Delayed[A] -⚬ A =
+    def forceRelease[A]: Detained[A] -⚬ A =
       elimFst(need)
 
     /** Signals when it is triggered, awaiting delays the trigger. */
-    implicit def signalingJunction[A]: SignalingJunction.Negative[Delayed[A]] =
+    implicit def signalingJunction[A]: SignalingJunction.Negative[Detained[A]] =
       SignalingJunction.Negative.byFst
+  }
+
+  extension [A](a: $[Detained[A]]) {
+    def releaseWhen(trigger: $[Done]): $[A] =
+      Detained.releaseBy(trigger |*| a)
   }
 
   object Deferrable {
