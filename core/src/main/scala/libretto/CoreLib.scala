@@ -1220,6 +1220,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def bimap[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
       either(f > injectL, g > injectR)
 
+    def lmap[A, B, A1](f: A -⚬ A1): (A |+| B) -⚬ (A1 |+| B) =
+      either(f > injectL, injectR)
+
+    def rmap[A, B, B1](f: B -⚬ B1): (A |+| B) -⚬ (A |+| B1) =
+      either(injectL, f > injectR)
+
     def swap[A, B]: (A |+| B) -⚬ (B |+| A) =
       either(injectR, injectL)
 
@@ -1229,6 +1235,31 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         either(injectL ∘ injectR, injectR ∘ injectR),
       )
 
+    /** Alias for [[notifyEither]]:
+      * Adds a [[Ping]] that fires when it is decided whether `A |+| B` actually contains the left side or the right side.
+      */
+    def notify[A, B]: (A |+| B) -⚬ (Ping |*| (A |+| B)) =
+      notifyEither
+
+    /** Adds a [[Done]] that completes when it is decided whether `A |+| B` actually contains the left side or the right side. */
+    def signal[A, B]: (A |+| B) -⚬ (Done |*| (A |+| B)) =
+      notify > fst(strengthenPing)
+
+    /** Adds a [[Ping]] to the left case that fires when the [[|+|]] is decided. */
+    def notifyL[A, B]: (A |+| B) -⚬ ((Ping |*| A) |+| B) =
+      notify > distributeL > rmap(elimFst(dismissPing))
+
+    /** Adds a [[Ping]] to the right case that fires when the [[|+|]] is decided. */
+    def notifyR[A, B]: (A |+| B) -⚬ (A |+| (Ping |*| B)) =
+      notify > distributeL > lmap(elimFst(dismissPing))
+
+    /** Adds a [[Done]] to the left case that completes when the [[|+|]] is decided. */
+    def signalL[A, B]: (A |+| B) -⚬ ((Done |*| A) |+| B) =
+      notify > distributeL > bimap(fst(strengthenPing), elimFst(dismissPing))
+
+    /** Adds a [[Done]] to the right case that completes when the [[|+|]] is decided. */
+    def signalR[A, B]: (A |+| B) -⚬ (A |+| (Done |*| B)) =
+      notify > distributeL > bimap(elimFst(dismissPing), fst(strengthenPing))
 
     val bifunctor: Bifunctor[|+|] =
       new Bifunctor[|+|] {
@@ -1255,6 +1286,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def bimap[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
       choice(chooseL > f, chooseR > g)
 
+    def lmap[A, B, A1](f: A -⚬ A1): (A |&| B) -⚬ (A1 |&| B) =
+      choice(chooseL > f, chooseR)
+
+    def rmap[A, B, B1](f: B -⚬ B1): (A |&| B) -⚬ (A |&| B1) =
+      choice(chooseL, chooseR > f)
+
     def swap[A, B]: (A |&| B) -⚬ (B |&| A) =
       choice(chooseR, chooseL)
 
@@ -1263,6 +1300,32 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         choice(chooseL > chooseL, chooseR > chooseL),
         choice(chooseL > chooseR, chooseR > chooseR),
       )
+
+    /** Alias for [[notifyChoice]]:
+      * Adds a [[Pong]] that fires when it is known which side of the choice (`A |&| B`) has been chosen.
+      */
+    def notify[A, B]: (Pong |*| (A |&| B)) -⚬ (A |&| B) =
+      notifyChoice
+
+    /** Adds a [[Need]] that completes when it is known which side of the choice (`A |&| B`) has been chosen. */
+    def signal[A, B]: (Need |*| (A |&| B)) -⚬ (A |&| B) =
+      fst(strengthenPong) > notify
+
+    /** Adds a [[Pong]] to the left case that fires when the choice is made. */
+    def notifyL[A, B]: ((Pong |*| A) |&| B) -⚬ (A |&| B) =
+      rmap(introFst(dismissPong)) > coDistributeL > notify
+
+    /** Adds a [[Pong]] to the right case that fires when the choice is made. */
+    def notifyR[A, B]: (A |&| (Pong |*| B)) -⚬ (A |&| B) =
+      lmap(introFst(dismissPong)) > coDistributeL > notify
+
+    /** Adds a [[Need]] to the left case that completes when the choice is made. */
+    def signalL[A, B]: ((Need |*| A) |&| B) -⚬ (A |&| B) =
+      bimap(fst(strengthenPong), introFst(dismissPong)) > coDistributeL > notify
+
+    /** Adds a [[Need]] to the right case that completes when the choice is made. */
+    def signalR[A, B]: (A |&| (Need |*| B)) -⚬ (A |&| B) =
+      bimap(introFst(dismissPong), fst(strengthenPong)) > coDistributeL > notify
 
     val bifunctor: Bifunctor[|&|] =
       new Bifunctor[|&|] {

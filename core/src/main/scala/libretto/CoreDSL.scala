@@ -129,12 +129,18 @@ trait CoreDSL {
   def injectL[A, B]: A -⚬ (A |+| B)
   def injectR[A, B]: B -⚬ (A |+| B)
 
-  def either[A, B, C](f: A -⚬ C, g: B -⚬ C): (A |+| B) -⚬ C
+  def either[A, B, C](
+    caseLeft:  A -⚬ C,
+    caseRight: B -⚬ C,
+  ): (A |+| B) -⚬ C
 
   def chooseL[A, B]: (A |&| B) -⚬ A
   def chooseR[A, B]: (A |&| B) -⚬ B
 
-  def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C)
+  def choice[A, B, C](
+    caseLeft:  A -⚬ B,
+    caseRight: A -⚬ C,
+  ): A -⚬ (B |&| C)
 
   def delayIndefinitely: Done -⚬ RTerminus
   def regressInfinitely: LTerminus -⚬ Need
@@ -360,6 +366,9 @@ trait CoreDSL {
         line: sourcecode.Line,
       ): $[B] =
         map(a)(f)(file.value, line.value)
+
+      def also[B](f: One -⚬ B): $[A |*| B] =
+        a > introSnd(f)
 
       def alsoElim(unit: $[One]): $[A] =
         (unit |*| a) > elimFst
