@@ -1235,6 +1235,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         either(injectL ∘ injectR, injectR ∘ injectR),
       )
 
+    def switchWithL[A, B, L, C](
+      caseLeft:  (L |*| A) -⚬ C,
+      caseRight: (L |*| B) -⚬ C,
+    ): (L |*| (A |+| B)) -⚬ C =
+      distributeL > either(caseLeft, caseRight)
+
+    def switchWithR[A, B, R, C](
+      caseLeft:  (A |*| R) -⚬ C,
+      caseRight: (B |*| R) -⚬ C,
+    ): ((A |+| B) |*| R) -⚬ C =
+      distributeR > either(caseLeft, caseRight)
+
     /** Alias for [[notifyEither]]:
       * Adds a [[Ping]] that fires when it is decided whether `A |+| B` actually contains the left side or the right side.
       */
