@@ -248,8 +248,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     */
   opaque type Detained[A] = Need |*| A
   object Detained {
-    def apply[A, B](f: (Done |*| A) -⚬ B): A -⚬ Detained[B] =
+    def untilNeed[A, B](f: A -⚬ (Need |*| B)): A -⚬ Detained[B] =
+      f
+
+    def untilDone[A, B](f: (Done |*| A) -⚬ B): A -⚬ Detained[B] =
       id[A] > introFst(lInvertSignal) > assocLR > dsl.snd(f)
+
+    def apply[A, B](f: (Done |*| A) -⚬ B): A -⚬ Detained[B] =
+      Detained.untilDone(f)
 
     def thunk[A](f: Done -⚬ A): One -⚬ Detained[A] =
       lInvertSignal > dsl.snd(f)
@@ -266,7 +272,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def forceRelease[A]: Detained[A] -⚬ A =
       elimFst(need)
 
-    /** Signals when it is triggered, awaiting delays the trigger. */
+    def notifyReleaseNeg[A]: (Pong |*| Detained[A]) -⚬ Detained[A] =
+      assocRL > dsl.fst(notifyNeedL)
+
+    def notifyReleasePos[A]: Detained[A] -⚬ (Ping |*| Detained[A]) =
+      introFst(lInvertPongPing > swap) > assocLR > dsl.snd(notifyReleaseNeg)
+
+    /** Signals when it is released, awaiting delays the release. */
     implicit def signalingJunction[A]: SignalingJunction.Negative[Detained[A]] =
       SignalingJunction.Negative.byFst
   }
@@ -274,6 +286,50 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   extension [A](a: $[Detained[A]]) {
     def releaseWhen(trigger: $[Done]): $[A] =
       Detained.releaseBy(trigger |*| a)
+  }
+
+  /** Like [[Detained]], expresses that interaction with `A` is (at least partially) obstructed,
+    * but does not have the ability to absorb a non-dismissible signal (namely [[Done]])—the signal
+    * to resume must be dismissible (namely [[Ping]]).
+    */
+  opaque type Deferred[A] = Pong |*| A
+  object Deferred {
+    def untilPong[A, B](f: A -⚬ (Pong |*| B)): A -⚬ Deferred[B] =
+      f
+
+    def untilPing[A, B](f: (Ping |*| A) -⚬ B): A -⚬ Deferred[B] =
+      id[A] > introFst(lInvertPongPing) > assocLR > snd(f)
+
+    def apply[A, B](f: (Ping |*| A) -⚬ B): A -⚬ Deferred[B] =
+      Deferred.untilPing(f)
+
+    def thunk[A](f: Ping -⚬ A): One -⚬ Deferred[A] =
+      lInvertPongPing > snd(f)
+
+    def resumeBy[A]: (Ping |*| Deferred[A]) -⚬ A =
+      assocRL > elimFst(rInvertPingPong)
+
+    def forceResume[A]: Deferred[A] -⚬ A =
+      elimFst(pong)
+
+    def notifyResumeNeg[A]: (Pong |*| Deferred[A]) -⚬ Deferred[A] =
+      assocRL > fst(forkPong)
+
+    def notifyResumePos[A]: Deferred[A] -⚬ (Ping |*| Deferred[A]) =
+      introFst(lInvertPongPing > swap) > assocLR > snd(notifyResumeNeg)
+
+    /** Signals resumption. */
+    implicit def signalingDeferred[A]: Signaling.Negative[Deferred[A]] =
+      Signaling.Negative.byFst
+
+    /** Defers resumption. */
+    implicit def deferrableDeferred[A]: Deferrable.Negative[Deferred[A]] =
+      Deferrable.Negative.byFst
+  }
+
+  extension [A](a: $[Deferred[A]]) {
+    def resumeWhen(trigger: $[Ping]): $[A] =
+      Deferred.resumeBy(trigger |*| a)
   }
 
   object Deferrable {
@@ -287,6 +343,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Alias for [[awaitPingFst]]. */
       def awaitPing: (Ping |*| A) -⚬ A =
         awaitPingFst
+
+      def defer: A -⚬ Deferred[A] =
+        Deferred.untilPing(awaitPingFst)
 
       def law_awaitPingIdentity: Equal[(One |*| A) -⚬ A] =
         Equal(
@@ -312,6 +371,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def awaitPong: A -⚬ (Pong |*| A) =
         awaitPongFst
 
+      def defer: A -⚬ Deferred[A] =
+        Deferred.untilPong(awaitPongFst)
+
       def law_awaitPongIdentity: Equal[A -⚬ (One |*| A)] =
         Equal(
           awaitPongFst > fst(pong),
@@ -323,6 +385,40 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
           awaitPongFst > snd(awaitPongFst),
           awaitPongFst > fst(joinPong) > assocLR,
         )
+    }
+
+    object Positive {
+      def from[A](f: (Ping |*| A) -⚬ A): Deferrable.Positive[A] =
+        new Deferrable.Positive[A] {
+          override def awaitPingFst: (Ping |*| A) -⚬ A =
+            f
+        }
+
+      implicit def deferrablePing: Deferrable.Positive[Ping] =
+        from(joinPing)
+
+      def byFst[A, B](implicit A: Deferrable.Positive[A]): Deferrable.Positive[A |*| B] =
+        from(assocRL > fst(A.awaitPingFst))
+
+      def bySnd[A, B](implicit B: Deferrable.Positive[B]): Deferrable.Positive[A |*| B] =
+        from(XI > snd(B.awaitPingFst))
+    }
+
+    object Negative {
+      def from[A](f: A -⚬ (Pong |*| A)): Deferrable.Negative[A] =
+        new Deferrable.Negative[A] {
+          override def awaitPongFst: A -⚬ (Pong |*| A) =
+            f
+        }
+
+      implicit def deferrablePong: Deferrable.Negative[Pong] =
+        from(joinPong)
+
+      def byFst[A, B](implicit A: Deferrable.Negative[A]): Deferrable.Negative[A |*| B] =
+        from(fst(A.awaitPongFst) > assocLR)
+
+      def bySnd[A, B](implicit B: Deferrable.Negative[B]): Deferrable.Negative[A |*| B] =
+        from(snd(B.awaitPongFst) > XI)
     }
 
     def invert[A](d: Deferrable.Positive[A]): Deferrable.Negative[A] =
@@ -353,6 +449,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def awaitPos: (Done |*| A) -⚬ A =
         awaitPosFst
 
+      def detain: A -⚬ Detained[A] =
+        Detained.untilDone(awaitPosFst)
+
       def law_awaitIdentity: Equal[(One |*| A) -⚬ A] =
         Equal(
           par(done, id) > awaitPosFst,
@@ -379,6 +478,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Alias for [[awaitNegFst]]. */
       def awaitNeg: A -⚬ (Need |*| A) =
         awaitNegFst
+
+      def detain: A -⚬ Detained[A] =
+        Detained.untilNeed(awaitNegFst)
 
       def law_awaitIdentity: Equal[A -⚬ (One |*| A)] =
         Equal(
@@ -575,6 +677,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       implicit def signalingDone: Signaling.Positive[Done] =
         from(notifyDoneL)
 
+      implicit def signalingPing: Signaling.Positive[Ping] =
+        from(forkPing)
+
       def byFst[A, B](implicit A: Signaling.Positive[A]): Signaling.Positive[A |*| B] =
         from(par(A.notifyPosFst, id[B]).assocLR)
 
@@ -607,6 +712,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       implicit def signalingNeed: Signaling.Negative[Need] =
         from(notifyNeedL)
+
+      implicit def signalingPong: Signaling.Negative[Pong] =
+        from(forkPong)
 
       def byFst[A, B](implicit A: Signaling.Negative[A]): Signaling.Negative[A |*| B] =
         from(assocRL.>.fst(A.notifyNegFst))
@@ -891,6 +999,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def awaitNegSnd[A](implicit A: Junction.Negative[A]): A -⚬ (A |*| Need) =
     A.awaitNegSnd
 
+  def detain[A](implicit A: Junction.Positive[A]): A -⚬ Detained[A] =
+    A.detain
+
+  def defer[A](implicit A: Deferrable.Positive[A]): A -⚬ Deferred[A] =
+    A.defer
+
   def delayUsing[A](f: Done -⚬ Done)(implicit A: SignalingJunction.Positive[A]): A -⚬ A =
     A.delayUsing(f)
 
@@ -925,6 +1039,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def waitFor(b: $[Done])(implicit A: Junction.Positive[A]): $[A] =
       (a |*| b) > awaitPosSnd
+
+    def deferUntil(b: $[Ping])(implicit A: Deferrable.Positive[A]): $[A] =
+      (a |*| b) > awaitPingSnd
   }
 
   def when[A](trigger: $[Done])(f: Done -⚬ A): $[A] =
@@ -963,16 +1080,22 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .<(coDistributeR)                 .from[  (One |*| Need) |&| (One |*| Need)  ]
       .<(|&|.bimap(introFst, introFst)) .from[           Need  |&|          Need   ]
 
-  def race[A, B](implicit
-    A: Signaling.Positive[A],
-    B: Signaling.Positive[B],
+  def raceBy[A, B](
+    notifyA: A -⚬ (Ping |*| A),
+    notifyB: B -⚬ (Ping |*| B),
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
     id                                               [                  A  |*|           B         ]
-      .>(par(A.notifyPosFst, B.notifyPosFst))     .to[        (Ping |*| A) |*| (Ping |*| B)        ]
+      .>(par(notifyA, notifyB))                   .to[        (Ping |*| A) |*| (Ping |*| B)        ]
       .>(IXI)                                     .to[        (Ping |*| Ping) |*| (A |*| B)        ]
       .>.fst(racePair)                            .to[        ( One |+| One ) |*| (A |*| B)        ]
       .>(distributeR)                             .to[ (One |*| (A |*| B)) |+| (One |*| (A |*| B)) ]
       .>(|+|.bimap(elimFst, elimFst))             .to[          (A |*| B)  |+|          (A |*| B)  ]
+
+  def race[A, B](implicit
+    A: Signaling.Positive[A],
+    B: Signaling.Positive[B],
+  ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
+    raceBy(A.notifyPosFst, B.notifyPosFst)
 
   def race[A: Signaling.Positive, B: Signaling.Positive, C](
     caseFstWins: (A |*| B) -⚬ C,
@@ -1002,16 +1125,22 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def raceAgainstR[A](implicit A: SignalingJunction.Positive[A]): (A |*| Done) -⚬ (A |+| A) =
     swap > raceAgainstL > |+|.swap
 
-  def select[A, B](implicit
-    A: Signaling.Negative[A],
-    B: Signaling.Negative[B],
+  def selectBy[A, B](
+    notifyA: ((Pong |*| A) -⚬ A),
+    notifyB: ((Pong |*| B) -⚬ B),
   ): ((A |*| B) |&| (A |*| B)) -⚬ (A |*| B) =
     id                                               [          (A |*| B)  |&|          (A |*| B)  ]
       .>(|&|.bimap(introFst, introFst))           .to[ (One |*| (A |*| B)) |&| (One |*| (A |*| B)) ]
       .>(coDistributeR)                           .to[        ( One |&| One ) |*| (A |*| B)        ]
       .>.fst(selectPair)                          .to[        (Pong |*| Pong) |*| (A |*| B)        ]
       .>(IXI)                                     .to[        (Pong |*| A) |*| (Pong |*| B)        ]
-      .par(A.notifyNegFst, B.notifyNegFst)        .to[                  A  |*|           B         ]
+      .par(notifyA, notifyB)                      .to[                  A  |*|           B         ]
+
+  def select[A, B](implicit
+    A: Signaling.Negative[A],
+    B: Signaling.Negative[B],
+  ): ((A |*| B) |&| (A |*| B)) -⚬ (A |*| B) =
+    selectBy(A.notifyNegFst, B.notifyNegFst)
 
   def selectWithL[Z, X, A: Signaling.Negative, B: Signaling.Negative](
     caseFstWins: Z -⚬ (X |*| (A |*| B)),
@@ -1946,18 +2075,42 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .distributeL                                                .to[ (Done |*|  A) |+| (Done |*| B) ]
       .either(injectLWhenDone, injectRWhenDone)                   .to[ (Done |*|  A) |+| (Done |*| B) ]
 
+  def delayEitherAndSidesUntilDone[A, B](implicit
+    A: Junction.Positive[A],
+    B: Junction.Positive[B],
+  ): (Done |*| (A |+| B)) -⚬ (A |+| B) =
+    delayEitherUntilDone[A, B] > |+|.bimap(A.awaitPosFst, B.awaitPosFst)
+
   def delayChoiceUntilNeed[A, B]: ((Need |*| A) |&| (Need |*| B)) -⚬ (Need |*| (A |&| B)) =
     id                                                               [ (Need |*|  A) |&| (Need |*| B) ]
       .choice(chooseLWhenNeed, chooseRWhenNeed)                   .to[ (Need |*|  A) |&| (Need |*| B) ]
       .coDistributeL                                              .to[  Need |*| (A  |&|           B) ]
 
+  def delayChoiceAndSidesUntilNeed[A, B](implicit
+    A: Junction.Negative[A],
+    B: Junction.Negative[B],
+  ): (A |&| B) -⚬ (Need |*| (A |&| B)) =
+    |&|.bimap(A.awaitNegFst, B.awaitNegFst) > delayChoiceUntilNeed[A, B]
+
   def delayEitherUntilNeed[A, B]: ((Need |*| A) |+| (Need |*| B)) -⚬ (Need |*| (A |+| B)) =
     id                                                               [ (Need |*|  A) |+| (Need |*| B) ]
       .either(injectLWhenNeed, injectRWhenNeed)                   .to[  Need |*| (A  |+|           B) ]
 
+  def delayEitherAndSidesUntilNeed[A, B](implicit
+    A: Junction.Negative[A],
+    B: Junction.Negative[B],
+  ): (A |+| B) -⚬ (Need |*| (A |+| B)) =
+    |+|.bimap(A.awaitNegFst, B.awaitNegFst) > delayEitherUntilNeed[A, B]
+
   def delayChoiceUntilDone[A, B]: (Done |*| (A |&| B)) -⚬ ((Done |*| A) |&| (Done |*| B)) =
     id                                                               [  Done |*| (A  |&|           B) ]
       .choice(chooseLWhenDone[A, B], chooseRWhenDone[A, B])       .to[ (Done |*|  A) |&| (Done |*| B) ]
+
+  def delayChoiceAndSidesUntilDone[A, B](implicit
+    A: Junction.Positive[A],
+    B: Junction.Positive[B],
+  ): (Done |*| (A |&| B)) -⚬ (A |&| B) =
+    delayChoiceUntilDone[A, B] > |&|.bimap(A.awaitPosFst, B.awaitPosFst)
 
   /** Injects `A` from the the second in-port to the left side of the `|+|` in the out-port, but only after
     * the `Done` signal from the first in-port arrives. That means that the consumer of `A |+| B` will see it
@@ -2671,9 +2824,19 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         override def combine: (Done |*| Done) -⚬ Done = join
       }
 
+    implicit val semigroupPing: Semigroup[Ping] =
+      new Semigroup[Ping] {
+        override def combine: (Ping |*| Ping) -⚬ Ping = joinPing
+      }
+
     implicit val semigroupNeed: Semigroup[Need] =
       new Semigroup[Need] {
         override def combine: (Need |*| Need) -⚬ Need = forkNeed
+      }
+
+    implicit val semigroupPong: Semigroup[Pong] =
+      new Semigroup[Pong] {
+        override def combine: (Pong |*| Pong) -⚬ Pong = forkPong
       }
   }
 
@@ -2705,9 +2868,19 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         override def split: Done -⚬ (Done |*| Done) = fork
       }
 
+    implicit val cosemigroupPing: Cosemigroup[Ping] =
+      new Cosemigroup[Ping] {
+        override def split: Ping -⚬ (Ping |*| Ping) = forkPing
+      }
+
     implicit val cosemigroupNeed: Cosemigroup[Need] =
       new Cosemigroup[Need] {
         override def split: Need -⚬ (Need |*| Need) = joinNeed
+      }
+
+    implicit val cosemigroupPong: Cosemigroup[Pong] =
+      new Cosemigroup[Pong] {
+        override def split: Pong -⚬ (Pong |*| Pong) = joinPong
       }
   }
 
@@ -2751,6 +2924,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         override def unit   :             One -⚬ Done = done
         override def combine: (Done |*| Done) -⚬ Done = join
       }
+
+    implicit val monoidPing: Monoid[Ping] =
+      new Monoid[Ping] {
+        override def unit   :             One -⚬ Ping = ping
+        override def combine: (Ping |*| Ping) -⚬ Ping = joinPing
+      }
   }
 
   trait Comonoid[A] extends Cosemigroup[A] with Affine[A] {
@@ -2783,6 +2962,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       new Comonoid[Need] {
         override def split  : Need -⚬ (Need |*| Need) = joinNeed
         override def counit : Need -⚬ One             = need
+      }
+
+    implicit val comonoidPong: Comonoid[Pong] =
+      new Comonoid[Pong] {
+        override def split  : Pong -⚬ (Pong |*| Pong) = joinPong
+        override def counit : Pong -⚬ One             = pong
       }
   }
 
@@ -3199,6 +3384,15 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   /** Non-empty list, i.e. a list with at least one element. */
   opaque type LList1[T] = T |*| LList[T]
   object LList1 {
+    def apply[T](x: $[T], xs: $[T]*): $[LList1[T]] =
+      fromExprList(x, xs.toList)
+
+    def fromExprList[T](h: $[T], t: List[$[T]]): $[LList1[T]] =
+      t match {
+        case Nil => singleton(h)
+        case (x :: xs) => cons1(h |*| fromExprList(x, xs))
+      }
+
     def cons[T]: (T |*| LList[T]) -⚬ LList1[T] =
       id
 
