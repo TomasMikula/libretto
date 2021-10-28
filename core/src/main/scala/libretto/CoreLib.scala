@@ -1011,6 +1011,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def delayUsing[A](f: Need -⚬ Need)(implicit A: SignalingJunction.Negative[A]): A -⚬ A =
     A.delayUsing(f)
 
+  /** Obstructs interaction on the out-port (i.e. from the right) until [[Ping]] is received. */
+  def blockOutportUntilPing[A]: (Ping |*| A) -⚬ A =
+    injectLOnPing > either(id, id)
+
+  /** Obstructs interaction on the in-port (i.e. from the left) until [[Pong]] is received. */
+  def blockInportUntilPong[A]: A -⚬ (Pong |*| A) =
+    choice(id, id) > chooseLOnPong
+
   /** Alias for [[sequence_PP]]. */
   def sequence[A: Signaling.Positive, B: Deferrable.Positive]: (A |*| B) -⚬ (A |*| B) =
     sequence_PP
@@ -1042,6 +1050,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def deferUntil(b: $[Ping])(implicit A: Deferrable.Positive[A]): $[A] =
       (a |*| b) > awaitPingSnd
+
+    /** Obstructs further interaction until a [[Ping]] is received. */
+    def blockUntil(b: $[Ping]): $[A] =
+      blockOutportUntilPing(b |*| a)
   }
 
   def when[A](trigger: $[Done])(f: Done -⚬ A): $[A] =
