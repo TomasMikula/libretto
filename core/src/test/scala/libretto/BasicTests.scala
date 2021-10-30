@@ -566,4 +566,11 @@ class BasicTests extends TestSuite {
 
     assertVal(prg, "abc")
   }
+
+  test("distributeInversion, factorOutInversion") {
+    val prg: Done -⚬ Val[(String, Int)] =
+      fork > par(constVal("1") > dii, constVal(1) > dii) > factorOutInversion > contrapositive(distributeInversion) > die > unliftPair
+
+    assertVal(prg, ("1", 1))
+  }
 }

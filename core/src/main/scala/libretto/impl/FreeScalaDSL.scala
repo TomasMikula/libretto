@@ -92,6 +92,8 @@ object FreeScalaDSL extends ScalaDSL {
 
     case class Forevert[A]() extends (One -⚬ (-[A] |*| A))
     case class Backvert[A]() extends ((A |*| -[A]) -⚬ One)
+    case class DistributeInversion[A, B]() extends (-[A |*| B] -⚬ (-[A] |*| -[B]))
+    case class FactorOutInversion[A, B]() extends ((-[A] |*| -[B]) -⚬ -[A |*| B])
 
     case class Crash[A, B](msg: String) extends ((Done |*| A) -⚬ (Done |*| B))
     case class Delay() extends (Val[FiniteDuration] -⚬ Done)
@@ -366,6 +368,12 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def backvert[A]: (A |*| -[A]) -⚬ One =
     Backvert()
+
+  override def distributeInversion[A, B]: -[A |*| B] -⚬ (-[A] |*| -[B]) =
+    DistributeInversion()
+
+  override def factorOutInversion[A, B]: (-[A] |*| -[B]) -⚬ -[A |*| B] =
+    FactorOutInversion()
 
   implicit val cssc: ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬] =
     new ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬] {

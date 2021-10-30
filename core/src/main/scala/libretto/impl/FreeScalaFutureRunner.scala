@@ -940,6 +940,32 @@ class FreeScalaFutureRunner(
 
           type X
           go[X]                                                   .asInstanceOf[Frontier[B]]
+
+        case -⚬.DistributeInversion() =>
+          // -[X |*| Y] -⚬ (-[X] |*| -[Y])
+          type X
+          type Y
+
+          val px = Promise[Frontier[X]]()
+          val py = Promise[Frontier[Y]]()
+
+          this.asInstanceOf[Frontier[-[X |*| Y]]]
+            .fulfill((px.future zipWith py.future)(Pair(_, _)))
+
+          Pair(Backwards(px), Backwards(py))                      .asInstanceOf[Frontier[B]]
+
+        case -⚬.FactorOutInversion() =>
+          // (-[X] |*| -[Y]) -⚬ -[X |*| Y]
+          type X
+          type Y
+
+          val (fpx, fpy) = this.asInstanceOf[Frontier[-[X] |*| -[Y]]].splitPair
+          val pfxy = Promise[Frontier[X |*| Y]]()
+          val ffxfy = pfxy.future.map(_.splitPair)
+          fpx.fulfill(ffxfy.map(_._1))
+          fpy.fulfill(ffxfy.map(_._2))
+
+          Backwards(pfxy)                                         .asInstanceOf[Frontier[B]]
       }
     }
 
@@ -1171,6 +1197,9 @@ class FreeScalaFutureRunner(
               case Failure(e) => e.printStackTrace(System.err)
             }
         }
+
+      def fulfill(fa: Future[Frontier[A]]): Unit =
+        fulfill(Deferred(fa))
     }
 
     extension [A](fa: Future[A]) {

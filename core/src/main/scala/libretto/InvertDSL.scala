@@ -6,25 +6,58 @@ trait InvertDSL extends ClosedDSL {
   def backvert[A]: (A |*| -[A]) -⚬ One
   def forevert[A]: One -⚬ (-[A] |*| A)
 
+  def distributeInversion[A, B]: -[A |*| B] -⚬ (-[A] |*| -[B])
+  def factorOutInversion[A, B]: (-[A] |*| -[B]) -⚬ -[A |*| B]
+
+  private val coreLib = CoreLib(this)
+  import coreLib._
+
   override type =⚬[A, B] = -[A] |*| B
 
   override def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B =
-    andThen(swap, andThen(assocRL, elimFst(backvert)))
+    swap > assocRL > elimFst(backvert)
 
   override def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C) =
-    andThen(introFst(forevert[B]), andThen(assocLR, par(id, andThen(swap, f))))
+    introFst(forevert[B]) > assocLR > snd(swap > f)
 
   override def out[A, B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
     snd(f)
 
-  def contrapositive[A, B](f: A -⚬ B): -[B] -⚬ -[A] =
-    andThen(introFst(andThen(forevert[A], snd(f))), andThen(assocLR, elimSnd(backvert[B])))
-
   /** Double-inversion elimination. */
   def die[A]: -[-[A]] -⚬ A =
-    andThen(introSnd(forevert[A]), andThen(assocRL, elimFst(andThen(swap, backvert[-[A]]))))
+    introSnd(forevert[A]) > assocRL > elimFst(swap > backvert[-[A]])
 
   /** Double-inversion introduction. */
   def dii[A]: A -⚬ -[-[A]] =
-    andThen(introFst(forevert[-[A]]), andThen(assocLR, elimSnd(andThen(swap, backvert[A]))))
+    introFst(forevert[-[A]]) > assocLR > elimSnd(swap > backvert[A])
+
+  def contrapositive[A, B](f: A -⚬ B): -[B] -⚬ -[A] =
+    introFst(forevert[A] > snd(f)) > assocLR > elimSnd(backvert[B])
+
+  def unContrapositive[A, B](f: -[A] -⚬ -[B]): B -⚬ A =
+    dii[B] > contrapositive(f) > die[A]
+
+  def distributeInversionInto_|+|[A, B]: -[A |+| B] -⚬ (-[A] |&| -[B]) =
+    choice(
+      contrapositive(injectL[A, B]),
+      contrapositive(injectR[A, B]),
+    )
+
+  def factorInversionOutOf_|+|[A, B]: (-[A] |+| -[B]) -⚬ -[A |&| B] =
+    either(
+      contrapositive(chooseL[A, B]),
+      contrapositive(chooseR[A, B]),
+    )
+
+  def distributeInversionInto_|&|[A, B]: -[A |&| B] -⚬ (-[A] |+| -[B]) =
+    unContrapositive(distributeInversionInto_|+| > |&|.bimap(die, die) > dii)
+
+  def factorInversionOutOf_|&|[A, B]: (-[A] |&| -[B]) -⚬ -[A |+| B] =
+    unContrapositive(die > |+|.bimap(dii, dii) > factorInversionOutOf_|+|)
+
+  def invertClosure[A, B]: -[A =⚬ B] -⚬ (B =⚬ A) =
+    distributeInversion > swap > snd(die)
+
+  def unInvertClosure[A, B]: (A =⚬ B) -⚬ -[B =⚬ A] =
+    snd(dii) > swap > factorOutInversion
 }
