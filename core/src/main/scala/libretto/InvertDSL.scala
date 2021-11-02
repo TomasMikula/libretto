@@ -1,6 +1,11 @@
 package libretto
 
 trait InvertDSL extends ClosedDSL {
+  /** `-[A]` is a demand for `A`.
+    *
+    * Inverts the flow of information: whatever travels through `A` in one direction,
+    * travels through `-[A]` in the opposite direction.
+    */
   type -[A]
 
   def backvert[A]: (A |*| -[A]) -⚬ One
@@ -60,4 +65,56 @@ trait InvertDSL extends ClosedDSL {
 
   def unInvertClosure[A, B]: (A =⚬ B) -⚬ -[B =⚬ A] =
     snd(dii) > swap > factorOutInversion
+
+  /** Uses the resource from the first in-port to satisfy the demand from the second in-port.
+    * Alias for [[backvert]].
+    */
+  def supply[A]: (A |*| -[A]) -⚬ One =
+    backvert[A]
+
+  /** Creates a demand on the first out-port, channeling the provided resource to the second out-port.
+    * Alias for [[forevert]].
+    */
+  def demand[A]: One -⚬ (-[A] |*| A) =
+    forevert[A]
+
+  /** Alias for [[die]]. */
+  def doubleDemandElimination[A]: -[-[A]] -⚬ A =
+    die[A]
+
+  /** Alias for [[dii]]. */
+  def doubleDemandIntroduction[A]: A -⚬ -[-[A]] =
+    dii[A]
+
+  /** Alias for [[distributeInversion]] */
+  def demandSeparately[A, B]: -[A |*| B] -⚬ (-[A] |*| -[B]) =
+    distributeInversion[A, B]
+
+  /** Alias for [[factorOutInversion]]. */
+  def demandTogether[A, B]: (-[A] |*| -[B]) -⚬ -[A |*| B] =
+    factorOutInversion[A, B]
+
+  /** Converts a demand for choice to a demand of the chosen side.
+    * Alias for [[distributeInversionInto_|&|]].
+    */
+  def demandChosen[A, B]: -[A |&| B] -⚬ (-[A] |+| -[B]) =
+    distributeInversionInto_|&|[A, B]
+
+  /** Converts an obligation to handle either demand to an obligation to supply a choice.
+    * Alias for [[factorInversionOutOf_|+|]].
+    */
+  def demandChoice[A, B]: (-[A] |+| -[B]) -⚬ -[A |&| B] =
+    factorInversionOutOf_|+|[A, B]
+
+  /** Converts demand for either to a choice of which side to supply.
+    * Alias for [[distributeInversionInto_|+|]].
+    */
+  def toChoiceOfDemands[A, B]: -[A |+| B] -⚬ (-[A] |&| -[B]) =
+    distributeInversionInto_|+|[A, B]
+
+  /** Converts choice of demands to demand of either.
+    * Alias for [[factorInversionOutOf_|&|]].
+    */
+  def demandEither[A, B]: (-[A] |&| -[B]) -⚬ -[A |+| B] =
+    factorInversionOutOf_|&|[A, B]
 }
