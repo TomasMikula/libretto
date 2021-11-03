@@ -389,8 +389,11 @@ object FreeScalaDSL extends ScalaDSL {
 
   type Var[A] = libretto.impl.Var[VarOrigin, A]
 
-  val closures = new Closures[-⚬, |*|, =⚬, Var, Set[Var[?]]]
-  val lambdas: closures.lambdas.type = closures.lambdas
+  val closures: Closures[-⚬, |*|, =⚬, Var, Set[Var[?]]] =
+    new Closures[-⚬, |*|, =⚬, Var, Set[Var[?]]]
+
+  val lambdas: closures.lambdas.type =
+    closures.lambdas
 
   override type $[A] = lambdas.Expr[A]
 

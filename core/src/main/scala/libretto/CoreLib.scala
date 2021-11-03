@@ -192,7 +192,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   object Externalizer {
     implicit def outportInstance[A]: Externalizer[[x] =>> A -⚬ x] =
       new Externalizer[[x] =>> A -⚬ x] {
-        def lift[B, C](f: B -⚬ C): (A -⚬ B) => (A -⚬ C) =
+        override def lift[B, C](f: B -⚬ C): (A -⚬ B) => (A -⚬ C) =
           dsl.andThen(_, f)
       }
   }
@@ -1784,7 +1784,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
   }
 
-  /** Focused on `B` in the output `F[B]` of linear function `A -⚬ F[B]`, where `B` is in a contravariant position. */
+  /** Focused on `B` in `F[B]`, where `B` is in a contravariant position. */
   class FocusedContra[F[_], B](f: F[B])(implicit F: ContraExternalizer[F]) {
     def contramap[A](g: A -⚬ B): F[A] =
       F.lift(g)(f)

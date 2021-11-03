@@ -117,4 +117,12 @@ trait InvertDSL extends ClosedDSL {
     */
   def demandEither[A, B]: (-[A] |&| -[B]) -⚬ -[A |+| B] =
     factorInversionOutOf_|&|[A, B]
+
+  implicit class DemandExprOps[B](expr: $[-[B]]) {
+    def contramap[A](f: A -⚬ B)(implicit
+      file: sourcecode.File,
+      line: sourcecode.Line,
+    ): $[-[A]] =
+      $.map(expr)(contrapositive(f))(file.value, line.value)
+  }
 }

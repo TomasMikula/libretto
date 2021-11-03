@@ -15,6 +15,12 @@ class InvertLib[
   import coreLib.dsl._
   import coreLib._
 
+  implicit val contraFunctoDemand: ContraFunctor[-] =
+    new ContraFunctor[-] {
+      override def lift[A, B](f: A -⚬ B): -[B] -⚬ -[A] =
+        contrapositive(f)
+    }
+
   def pool[A: Signaling.Positive]: LList1[A] -⚬ (Unlimited[A |*| -[A]] |*| LList1[A]) =
     coreLib.pool[A, -[A]](forevert[A])
 }
