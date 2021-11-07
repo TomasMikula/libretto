@@ -118,6 +118,30 @@ trait InvertDSL extends ClosedDSL {
   def demandEither[A, B]: (-[A] |&| -[B]) -⚬ -[A |+| B] =
     factorInversionOutOf_|&|[A, B]
 
+  def invertedPingAsPong: -[Ping] -⚬ Pong =
+    introFst(lInvertPongPing) > assocLR > elimSnd(supply[Ping])
+
+  def pongAsInvertedPing: Pong -⚬ -[Ping] =
+    introFst(demand[Ping]) > assocLR > elimSnd(rInvertPingPong)
+
+  def invertedPongAsPing: -[Pong] -⚬ Ping =
+    introSnd(lInvertPongPing) > assocRL > elimFst(swap > supply[Pong])
+
+  def pingAsInvertedPong: Ping -⚬ -[Pong] =
+    introSnd(demand[Pong] > swap) > assocRL > elimFst(rInvertPingPong)
+
+  def invertedDoneAsNeed: -[Done] -⚬ Need =
+    introFst(lInvertSignal) > assocLR > elimSnd(supply[Done])
+
+  def needAsInvertedDone: Need -⚬ -[Done] =
+    introFst(demand[Done]) > assocLR > elimSnd(rInvertSignal)
+
+  def invertedNeedAsDone: -[Need] -⚬ Done =
+    introSnd(lInvertSignal) > assocRL > elimFst(swap > supply[Need])
+
+  def doneAsInvertedNeed: Done -⚬ -[Need] =
+    introSnd(demand[Need] > swap) > assocRL > elimFst(rInvertSignal)
+
   implicit class DemandExprOps[B](expr: $[-[B]]) {
     def contramap[A](f: A -⚬ B)(implicit
       file: sourcecode.File,
