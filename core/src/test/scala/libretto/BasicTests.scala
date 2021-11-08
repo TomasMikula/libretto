@@ -598,6 +598,34 @@ class BasicTests extends TestSuite {
     assertCompletes(prg)
   }
 
+  test("notifyChoice in reverse") {
+    def notifyInvChoice[A, B]: -[A |&| B] -⚬ (Ping |*| -[A |&| B]) =
+      contrapositive(notifyChoice) > demandSeparately > fst(invertedPongAsPing)
+
+    val prg: Done -⚬ Val[Int] =
+      λ { start =>
+        val (start1 |*| (demand1 |*| offer1)) =
+          start.also(demand[Val[String] |&| Val[Int]])
+
+        val (ping |*| demand2) =
+          demand1 > notifyInvChoice
+
+        val one: $[One] =
+          (start1 |*| demandChosen(demand2)) > |+|.switchWithL(
+            caseLeft  = λ { case (start1 |*| strDemand) => supply(constVal("x")(start1) |*| strDemand) },
+            caseRight = λ { case (start1 |*| intDemand) => supply(constVal(100)(start1) |*| intDemand) },
+          )
+
+        val res: $[Val[Int]] =
+          offer1 > chooseR
+
+        ((ping |*| res) > awaitPingFst)
+          .alsoElim(one)
+      }
+
+    assertVal(prg, 100)
+  }
+
   test("unContrapositive") {
     val prg: Done -⚬ Done =
       unContrapositive(id[-[Done]])
