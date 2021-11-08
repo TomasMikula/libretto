@@ -370,6 +370,9 @@ trait CoreDSL {
       def also[B](f: One -⚬ B): $[A |*| B] =
         a > introSnd(f)
 
+      def alsoFst[X](f: One -⚬ X): $[X |*| A] =
+        a > introFst(f)
+
       def alsoElim(unit: $[One]): $[A] =
         (unit |*| a) > elimFst
     }

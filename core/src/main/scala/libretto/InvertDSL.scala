@@ -142,6 +142,12 @@ trait InvertDSL extends ClosedDSL {
   def doneAsInvertedNeed: Done -⚬ -[Need] =
     introSnd(demand[Need] > swap) > assocRL > elimFst(rInvertSignal)
 
+  def packDemand[F[_]]: -[F[Rec[F]]] -⚬ -[Rec[F]] =
+    contrapositive(unpack[F])
+
+  def unpackDemand[F[_]]: -[Rec[F]] -⚬ -[F[Rec[F]]] =
+    contrapositive(pack[F])
+
   implicit class DemandExprOps[B](expr: $[-[B]]) {
     def contramap[A](f: A -⚬ B)(implicit
       file: sourcecode.File,

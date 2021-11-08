@@ -572,6 +572,14 @@ class FreeScalaFutureRunner(
           n fulfillPongWith x.future
           x                                                       .asInstanceOf[Frontier[B]]
 
+        case -⚬.DebugPrint(msg) =>
+          // Ping -⚬ One
+          this.toFuturePing.onComplete {
+            case Success(PingNow) => println(msg)
+            case Failure(e)       => e.printStackTrace(System.err)
+          }
+          One
+
         case f @ -⚬.JoinRTermini() =>
           bug(s"Did not expect to be able to construct a program that uses $f")
 

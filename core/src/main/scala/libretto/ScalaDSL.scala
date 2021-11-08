@@ -286,4 +286,7 @@ trait ScalaDSL extends TimerDSL with CrashDSL with InvertDSL {
    *  any of the concurrently happening non-blocking computations.
    */
   def blocking[A, B](f: A => B): Val[A] -⚬ Val[B]
+
+  /** Prints the given message to the console, without creating an obligation to await. */
+  def debugPrint(msg: String): Ping -⚬ One
 }

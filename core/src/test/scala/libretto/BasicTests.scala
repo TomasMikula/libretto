@@ -573,4 +573,24 @@ class BasicTests extends TestSuite {
 
     assertVal(prg, ("1", 1))
   }
+
+  test("unContrapositive") {
+    val prg: Done -⚬ Done =
+      unContrapositive(id[-[Done]])
+
+    assertCompletes(prg)
+  }
+
+  test("demandChosen") {
+    val supplyChosen: -[Val[String] |&| Val[Int]] -⚬ -[Done] =
+      demandChosen > either(
+        contrapositive(constVal("foo")),
+        contrapositive(constVal(42)),
+      )
+
+    val prg: Done -⚬ Val[Int] =
+      introSnd(demand[Val[String] |&| Val[Int]] > par(supplyChosen, chooseR)) > assocRL > elimFst(supply)
+
+    assertVal(prg, 42)
+  }
 }

@@ -106,6 +106,7 @@ object FreeScalaDSL extends ScalaDSL {
     case class Neglect[A]() extends (Val[A] -⚬ Done)
     case class NotifyVal[A]() extends (Val[A] -⚬ (Ping |*| Val[A]))
     case class NotifyNeg[A]() extends ((Pong |*| Neg[A]) -⚬ Neg[A])
+    case class DebugPrint(msg: String) extends (Ping -⚬ One)
 
     case class Acquire[A, R, B](
       acquire: A => (R, B),
@@ -322,6 +323,9 @@ object FreeScalaDSL extends ScalaDSL {
 
   override def notifyNeg[A]: (Pong |*| Neg[A]) -⚬ Neg[A] =
     NotifyNeg()
+
+  override def debugPrint(msg: String): Ping -⚬ One =
+    DebugPrint(msg)
 
   override def acquire[A, R, B](
     acquire: A => (R, B),
