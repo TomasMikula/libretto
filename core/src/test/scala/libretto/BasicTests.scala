@@ -7,6 +7,7 @@ import scala.concurrent.duration._
 
 class BasicTests extends TestSuite {
   import kit.dsl._
+  import kit.dsl.$._
   import kit.coreLib._
   import kit.scalaLib._
 
@@ -574,6 +575,29 @@ class BasicTests extends TestSuite {
     assertVal(prg, ("1", 1))
   }
 
+  test("demandTogether > demandSeparately = id") {
+    // namely, check that demandTogether does not delay processing until both demands are supplied
+
+    val joinThenSplitDemands: (-[Done] |*| -[Done]) -⚬ (-[Done] |*| -[Done]) =
+      demandTogether > demandSeparately
+
+    val prg: Done -⚬ Done =
+      λ { start =>
+        val ((start1 |*| (nDone1 |*| done1)) |*| (nDone2 |*| done2)) =
+          start
+            .also(demand[Done])
+            .also(demand[Done])
+
+        val (nDone3 |*| nDone4) = joinThenSplitDemands(nDone1 |*| nDone2)
+
+        done2
+          .alsoElim(supply(start1 |*| nDone3))
+          .alsoElim(supply(done1 |*| nDone4))
+      }
+
+    assertCompletes(prg)
+  }
+
   test("unContrapositive") {
     val prg: Done -⚬ Done =
       unContrapositive(id[-[Done]])
@@ -592,5 +616,43 @@ class BasicTests extends TestSuite {
       introSnd(demand[Val[String] |&| Val[Int]] > par(supplyChosen, chooseR)) > assocRL > elimFst(supply)
 
     assertVal(prg, 42)
+  }
+
+  test("doneAsInvertedNeed") {
+    val prg: Done -⚬ Done =
+      doneAsInvertedNeed > invertedNeedAsDone
+
+    assertCompletes(prg)
+  }
+
+  test("pingAsInvertedPong") {
+    val f: Ping -⚬ Ping =
+      pingAsInvertedPong > invertedPongAsPing
+
+    val prg: Done -⚬ Done =
+      notifyDoneL > fst(f) > awaitPingFst
+
+    assertCompletes(prg)
+  }
+
+  test("needAsInvertedDone") {
+    val f: Need -⚬ Need =
+      needAsInvertedDone > invertedDoneAsNeed
+
+    val prg: Done -⚬ Done =
+      introSnd(lInvertSignal > fst(f)) > assocRL > elimFst(rInvertSignal)
+
+    assertCompletes(prg)
+  }
+
+  test("pongAsInvertedPing") {
+    val f: Pong -⚬ Pong =
+      pongAsInvertedPing > invertedPingAsPong
+
+    val g: Ping -⚬ Ping =
+      introSnd(lInvertPongPing > fst(f)) > assocRL > elimFst(rInvertPingPong)
+
+    val prg: Done -⚬ Done =
+      notifyDoneL > fst(g) > awaitPingFst
   }
 }

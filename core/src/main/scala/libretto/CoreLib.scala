@@ -397,6 +397,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       implicit def deferrablePing: Deferrable.Positive[Ping] =
         from(joinPing)
 
+      implicit def deferrableDone: Deferrable.Positive[Done] =
+        Junction.Positive.junctionDone
+
       def byFst[A, B](implicit A: Deferrable.Positive[A]): Deferrable.Positive[A |*| B] =
         from(assocRL > fst(A.awaitPingFst))
 
@@ -413,6 +416,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       implicit def deferrablePong: Deferrable.Negative[Pong] =
         from(joinPong)
+
+      implicit def deferrableNeed: Deferrable.Negative[Need] =
+        Junction.Negative.junctionNeed
 
       def byFst[A, B](implicit A: Deferrable.Negative[A]): Deferrable.Negative[A |*| B] =
         from(fst(A.awaitPongFst) > assocLR)
