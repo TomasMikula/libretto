@@ -12,7 +12,6 @@ abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
   val kit = StarterKit
   import kit.dsl._
   import kit.coreLib._
-  import kit.crashLib._
   import kit.coreStreams._
 
   private var scheduler: ScheduledExecutorService = _
@@ -71,7 +70,7 @@ abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
       val msg = s"No action (poll or close) within $d"
 
       f.from[A]                     .to[          LPollable[B]         ]
-        .choice(crashPos(msg), id)  .to[ LPollable[B] |&| LPollable[B] ]
+        .choice(crashNow(msg), id)  .to[ LPollable[B] |&| LPollable[B] ]
         .>(selectAgainstL)          .to[         Need |*| LPollable[B] ]
         .>.fst(delayNeed(d))        .to[         Need |*| LPollable[B] ]
         .elimFst(need)              .to[                  LPollable[B] ]

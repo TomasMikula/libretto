@@ -95,7 +95,7 @@ object FreeScalaDSL extends ScalaDSL {
     case class DistributeInversion[A, B]() extends (-[A |*| B] -⚬ (-[A] |*| -[B]))
     case class FactorOutInversion[A, B]() extends ((-[A] |*| -[B]) -⚬ -[A |*| B])
 
-    case class Crash[A, B](msg: String) extends ((Done |*| A) -⚬ (Done |*| B))
+    case class CrashWhenDone[A, B](msg: String) extends ((Done |*| A) -⚬ B)
     case class Delay() extends (Val[FiniteDuration] -⚬ Done)
     case class LiftEither[A, B]() extends (Val[Either[A, B]] -⚬ (Val[A] |+| Val[B]))
     case class LiftPair[A, B]() extends (Val[(A, B)] -⚬ (Val[A] |*| Val[B]))
@@ -291,8 +291,8 @@ object FreeScalaDSL extends ScalaDSL {
   override def selectPair: (One |&| One) -⚬ (Pong |*| Pong) =
     SelectPair()
 
-  override def crash[A, B](msg: String): (Done |*| A) -⚬ (Done |*| B) =
-    Crash(msg)
+  override def crashWhenDone[A, B](msg: String): (Done |*| A) -⚬ B =
+    CrashWhenDone(msg)
 
   override def delay: Val[FiniteDuration] -⚬ Done =
     Delay()

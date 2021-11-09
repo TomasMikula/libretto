@@ -19,9 +19,6 @@ abstract class AbstractStarterKit(
   val scalaLib: ScalaLib[dsl.type, coreLib.type] =
     ScalaLib(dsl, coreLib)
 
-  val crashLib: CrashLib[dsl.type, coreLib.type] =
-    CrashLib(dsl, coreLib)
-
   val closedLib: ClosedLib[dsl.type, coreLib.type] =
     ClosedLib(dsl, coreLib)
 

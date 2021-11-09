@@ -136,11 +136,11 @@ class BasicTests extends TestSuite {
     assertVal(raceKeepWinner(a, b), 'A')
   }
 
-  test("crash") {
+  test("crashd") {
     assertCrashes(crashd("boom!"), "boom!")
   }
 
-  test("crash waits for its trigger") {
+  test("crashd waits for its trigger") {
     val x = new java.util.concurrent.atomic.AtomicBoolean(false)
 
     val eff: Unit => Unit =
@@ -167,7 +167,7 @@ class BasicTests extends TestSuite {
     assert(x.get() == true) // if the crash is delayed, there's time for the effect
   }
 
-  test("crash - even if it loses a race, the program still crashes") {
+  test("crashd - even if it loses a race, the program still crashes") {
     val prg = id[Done]
       .>( forkMap(id, delay(10.millis) > crashd("oops")) )
       .>( raceDone )
@@ -175,12 +175,12 @@ class BasicTests extends TestSuite {
     assertCrashes(prg, "oops")
   }
 
-  test("crash in non-executed |+| has no effect") {
+  test("crashd in non-executed |+| has no effect") {
     val prg = injectL[Done, Done] > either(id, crashd("bang!"))
     assertCompletes(prg)
   }
 
-  test("crash in non-chosen |&| alternative has no effect") {
+  test("crashd in non-chosen |&| alternative has no effect") {
     val prg = choice(id, crashd("bang!")) > chooseL
     assertCompletes(prg)
   }

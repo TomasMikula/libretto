@@ -466,8 +466,8 @@ class FreeScalaFutureRunner(
           }
           Pair(PongAsync(p1), PongAsync(p2))
 
-        case -⚬.Crash(msg) =>
-          // (Done |*| X) -⚬ (Done |*| Y)
+        case -⚬.CrashWhenDone(msg) =>
+          // (Done |*| X) -⚬ B
           type X
 
           val (d, x) = this.asInstanceOf[Frontier[Done |*| X]].splitPair
