@@ -73,19 +73,16 @@ lazy val testing = project
 
 lazy val coreTests = project
   .in(file("core-tests"))
-  .dependsOn(testing)
+  .dependsOn(core, testing)
   .settings(
     name := "core-tests",
   )
 
 lazy val examples = project
   .in(file("examples"))
-  .dependsOn(core)
+  .dependsOn(core, testing)
   .settings(
     name := "libretto-examples",
-    libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.9" % "test",
-    ),
   )
 
 lazy val root = project

@@ -57,6 +57,12 @@ abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
   def assertCrashes(prg: Done -⚬ Done, expectedMsg: String): Unit =
     assertCrashes(prg, Some(expectedMsg))
 
+  def assertLeft[A, B]: (A |+| B) -⚬ A =
+    either(id, crashNow("Expected left, was right"))
+
+  def assertRight[A, B]: (A |+| B) -⚬ B =
+    either(crashNow("Expected right, was left"), id)
+
   extension [A, B: Junction.Positive](f: A -⚬ LPollable[B]) {
     def expectPoll: A -⚬ LPollable[B] =
       f > LPollable.from(
