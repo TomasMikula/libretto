@@ -58,8 +58,24 @@ lazy val core = project
     ),
     libraryDependencies ++= Seq(
       "com.lihaoyi" %% "sourcecode" % "0.2.7",
-      "org.scalatest" %% "scalatest" % "3.2.9" % "test",
     ),
+  )
+
+lazy val testing = project
+  .in(file("testing"))
+  .dependsOn(core)
+  .settings(
+    name := "libretto-testing",
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % "3.2.9",
+    ),
+  )
+
+lazy val coreTests = project
+  .in(file("core-tests"))
+  .dependsOn(testing)
+  .settings(
+    name := "core-tests",
   )
 
 lazy val examples = project
@@ -79,6 +95,8 @@ lazy val root = project
   )
   .aggregate(
     core,
+    testing,
+    coreTests,
     examples,
   )
 

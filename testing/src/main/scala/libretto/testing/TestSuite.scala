@@ -1,6 +1,7 @@
-package libretto
+package libretto.testing
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
+import libretto.{ScalaRunner, StarterKit}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.BeforeAndAfterAll
 import scala.concurrent.{Await, Future}

@@ -1,6 +1,7 @@
 package libretto
 
 import java.util.concurrent.{Executors, ScheduledExecutorService}
+import libretto.testing.TestSuite
 import scala.collection.mutable
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._

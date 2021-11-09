@@ -1,5 +1,6 @@
 package libretto
 
+import libretto.testing.TestSuite
 import scala.concurrent.duration._
 
 class StreamsTests extends TestSuite {
