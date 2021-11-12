@@ -683,5 +683,35 @@ class BasicTests extends TestSuite {
 
     val prg: Done -⚬ Done =
       notifyDoneL > fst(g) > awaitPingFst
+
+    assertCompletes(prg)
+  }
+
+  test("triple inversion") {
+    val prg: Done -⚬ Done =
+      λ { d =>
+        val (d1 |*| (nnd |*| nd)) = d.also(demand[-[Done]])
+        val (nnnd |*| nnd2) = supply(d1 |*| nd) > demand[-[-[Done]]]
+        die(nnd2)
+          .alsoElim(supply(nnd |*| nnnd))
+      }
+
+    assertCompletes(prg)
+  }
+
+  ignore("on the demand side, demandSeparately, then supply one to the other") {
+    val prg: Done -⚬ Done =
+      λ { d =>
+        val (d1 |*| ((n_nd_d: $[-[-[Done] |*| Done]]) |*| (nd |*| d2))) =
+          d.also(demand[-[Done] |*| Done])
+
+        val (nnd |*| nd1) = demandSeparately(n_nd_d)
+
+        d2
+          .alsoElim(supply(nd1 |*| nnd))
+          .alsoElim(supply(d1 |*| nd))
+      }
+
+    assertCompletes(prg)
   }
 }
