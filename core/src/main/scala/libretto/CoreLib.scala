@@ -1327,6 +1327,22 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def outR[A, B]: F[A |*| B] -⚬ (F[A] |*| B) =
       lift(swap[A, B]) > outL > swap[B, F[A]]
 
+    /** Alias for [[outL]]. */
+    def excludeFst[A, B]: F[A |*| B] -⚬ (A |*| F[B]) =
+      outL
+
+    /** Alias for [[outR]]. */
+    def excludeSnd[A, B]: F[A |*| B] -⚬ (F[A] |*| B) =
+      outR
+
+    /** Alias for [[inL]]. */
+    def includeFst[A, B]: (A |*| F[B]) -⚬ F[A |*| B] =
+      inL
+
+    /** Alias for [[inR]]. */
+    def includeSnd[A, B]: (F[A] |*| B) -⚬ F[A |*| B] =
+      inR
+
     def getL[A](implicit A: Cosemigroup[A]): F[A] -⚬ (A |*| F[A]) =
       lift(A.split) > outL
 
