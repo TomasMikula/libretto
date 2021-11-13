@@ -954,67 +954,67 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
   }
 
-  def notifyPosFst[A](implicit A: Signaling.Positive[A]): A -⚬ (Ping |*| A) =
+  def notifyPosFst[A](using A: Signaling.Positive[A]): A -⚬ (Ping |*| A) =
     A.notifyPosFst
 
-  def notifyPosSnd[A](implicit A: Signaling.Positive[A]): A -⚬ (A |*| Ping) =
+  def notifyPosSnd[A](using A: Signaling.Positive[A]): A -⚬ (A |*| Ping) =
     A.notifyPosSnd
 
-  def notifyNegFst[A](implicit A: Signaling.Negative[A]): (Pong |*| A) -⚬ A =
+  def notifyNegFst[A](using A: Signaling.Negative[A]): (Pong |*| A) -⚬ A =
     A.notifyNegFst
 
-  def notifyNegSnd[A](implicit A: Signaling.Negative[A]): (A |*| Pong) -⚬ A =
+  def notifyNegSnd[A](using A: Signaling.Negative[A]): (A |*| Pong) -⚬ A =
     A.notifyNegSnd
 
-  def signalPosFst[A](implicit A: Signaling.Positive[A]): A -⚬ (Done |*| A) =
+  def signalPosFst[A](using A: Signaling.Positive[A]): A -⚬ (Done |*| A) =
     A.signalPosFst
 
-  def signalPosSnd[A](implicit A: Signaling.Positive[A]): A -⚬ (A |*| Done) =
+  def signalPosSnd[A](using A: Signaling.Positive[A]): A -⚬ (A |*| Done) =
     A.signalPosSnd
 
-  def signalDone[A](implicit A: Signaling.Positive[A]): A -⚬ (A |*| Done) =
+  def signalDone[A](using A: Signaling.Positive[A]): A -⚬ (A |*| Done) =
     signalPosSnd
 
-  def signalNegFst[A](implicit A: Signaling.Negative[A]): (Need |*| A) -⚬ A =
+  def signalNegFst[A](using A: Signaling.Negative[A]): (Need |*| A) -⚬ A =
     A.signalNegFst
 
-  def signalNegSnd[A](implicit A: Signaling.Negative[A]): (A |*| Need) -⚬ A =
+  def signalNegSnd[A](using A: Signaling.Negative[A]): (A |*| Need) -⚬ A =
     A.signalNegSnd
 
-  def awaitPingFst[A](implicit A: Deferrable.Positive[A]): (Ping |*| A) -⚬ A =
+  def awaitPingFst[A](using A: Deferrable.Positive[A]): (Ping |*| A) -⚬ A =
     A.awaitPingFst
 
-  def awaitPingSnd[A](implicit A: Deferrable.Positive[A]): (A |*| Ping) -⚬ A =
+  def awaitPingSnd[A](using A: Deferrable.Positive[A]): (A |*| Ping) -⚬ A =
     A.awaitPingSnd
 
-  def awaitPongFst[A](implicit A: Deferrable.Negative[A]): A -⚬ (Pong |*| A) =
+  def awaitPongFst[A](using A: Deferrable.Negative[A]): A -⚬ (Pong |*| A) =
     A.awaitPongFst
 
-  def awaitPongSnd[A](implicit A: Deferrable.Negative[A]): A -⚬ (A |*| Pong) =
+  def awaitPongSnd[A](using A: Deferrable.Negative[A]): A -⚬ (A |*| Pong) =
     A.awaitPongSnd
 
-  def awaitPosFst[A](implicit A: Junction.Positive[A]): (Done |*| A) -⚬ A =
+  def awaitPosFst[A](using A: Junction.Positive[A]): (Done |*| A) -⚬ A =
     A.awaitPosFst
 
-  def awaitPosSnd[A](implicit A: Junction.Positive[A]): (A |*| Done) -⚬ A =
+  def awaitPosSnd[A](using A: Junction.Positive[A]): (A |*| Done) -⚬ A =
     A.awaitPosSnd
 
-  def awaitNegFst[A](implicit A: Junction.Negative[A]): A -⚬ (Need |*| A) =
+  def awaitNegFst[A](using A: Junction.Negative[A]): A -⚬ (Need |*| A) =
     A.awaitNegFst
 
-  def awaitNegSnd[A](implicit A: Junction.Negative[A]): A -⚬ (A |*| Need) =
+  def awaitNegSnd[A](using A: Junction.Negative[A]): A -⚬ (A |*| Need) =
     A.awaitNegSnd
 
-  def detain[A](implicit A: Junction.Positive[A]): A -⚬ Detained[A] =
+  def detain[A](using A: Junction.Positive[A]): A -⚬ Detained[A] =
     A.detain
 
-  def defer[A](implicit A: Deferrable.Positive[A]): A -⚬ Deferred[A] =
+  def defer[A](using A: Deferrable.Positive[A]): A -⚬ Deferred[A] =
     A.defer
 
-  def delayUsing[A](f: Done -⚬ Done)(implicit A: SignalingJunction.Positive[A]): A -⚬ A =
+  def delayUsing[A](f: Done -⚬ Done)(using A: SignalingJunction.Positive[A]): A -⚬ A =
     A.delayUsing(f)
 
-  def delayUsing[A](f: Need -⚬ Need)(implicit A: SignalingJunction.Negative[A]): A -⚬ A =
+  def delayUsing[A](f: Need -⚬ Need)(using A: SignalingJunction.Negative[A]): A -⚬ A =
     A.delayUsing(f)
 
   /** Obstructs interaction on the out-port (i.e. from the right) until [[Ping]] is received. */
