@@ -3800,10 +3800,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def deferRelease: (Ping |*| AcquiredLock) -⚬ AcquiredLock =
       fst(strengthenPing) > detainRelease
 
-    given Signaling.Positive[AcquiredLock] =
-      new Signaling.Positive[AcquiredLock] {
+    given acquisition: SignalingJunction.Positive[AcquiredLock] =
+      new SignalingJunction.Positive[AcquiredLock] {
         override def notifyPosFst: AcquiredLock -⚬ (Ping |*| AcquiredLock) =
           notifyAcquisition
+
+        override def awaitPosFst: (Done |*| AcquiredLock) -⚬ AcquiredLock =
+          detainAcquisition
       }
   }
 
