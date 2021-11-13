@@ -269,8 +269,16 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def releaseBy[A]: (Done |*| Detained[A]) -⚬ A =
       assocRL > elimFst(rInvertSignal)
 
-    def forceRelease[A]: Detained[A] -⚬ A =
+    def releaseAsap[A]: Detained[A] -⚬ A =
       elimFst(need)
+
+    /** Subsequent [[releaseBy]] won't have effect until also the given [[Need]] signal arrives. */
+    def extendDetentionUntilNeed[A]: Detained[A] -⚬ (Need |*| Detained[A]) =
+      dsl.fst(joinNeed) > assocLR
+
+    /** Subsequent [[releaseBy]] won't have effect until also the given [[Done]] signal arrives. */
+    def extendDetentionUntil[A]: (Done |*| Detained[A]) -⚬ Detained[A] =
+      dsl.snd(extendDetentionUntilNeed) > assocRL > elimFst(rInvertSignal)
 
     def notifyReleaseNeg[A]: (Pong |*| Detained[A]) -⚬ Detained[A] =
       assocRL > dsl.fst(notifyNeedL)
@@ -1330,6 +1338,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   object Transportive {
+    def apply[F[_]](implicit F: Transportive[F]): Transportive[F] =
+      F
+
     /** Pair is covariant in the first argument. */
     def fst[B]: Transportive[λ[x => x |*| B]] =
       new Transportive[λ[x => x |*| B]] {
@@ -3611,5 +3622,166 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         .>.snd(LList1.insertBySignal)         .to[  (A |*| Ā) |*|    LList1[A]     ]
 
     Unlimited.unfold(borrow)
+  }
+
+  /** Represents an acquired "token".
+    * @tparam X how the interaction continues after returning the acquired token
+    */
+  private type Acquired[X] =
+    // the acquired token
+    Done |*|
+    // continuation after returning the token
+    Detained[X]
+
+  private type LockF[X] =
+      // result of the close action
+      ( Done |&|
+      // result of the acquire action
+      ( Acquired[X] |&|
+      // result of the tryAcquire action
+      ( Acquired[X] |+| X
+      )))
+
+  opaque type Lock =
+    Rec[LockF]
+
+  opaque type AcquiredLock =
+    Acquired[Lock]
+
+  object Lock {
+    def acquire: Lock -⚬ AcquiredLock =
+      unpack[LockF] > chooseR > chooseL
+
+    def tryAcquire: Lock -⚬ (AcquiredLock |+| Lock) =
+      unpack[LockF] > chooseR > chooseR
+
+    def close: Lock -⚬ Done =
+      unpack[LockF] > chooseL
+
+    def newLock: Done -⚬ Lock =
+      rec { newLock =>
+        choice(
+          id[Done],
+          choice(
+            introSnd(Detained.thunk(newLock)),
+            introSnd(Detained.thunk(newLock)) > injectL,
+          ),
+        ) > pack[LockF]
+      }
+
+    def share: Lock -⚬ (Lock |*| Lock) =
+      rec { share =>
+        val branchByFst: Lock -⚬ (Lock |*| Lock) = {
+
+          val caseClose: Lock -⚬ (Done |*| Lock) =
+            introFst(done)
+
+          val acquiredByFst: AcquiredLock -⚬ (AcquiredLock |*| Lock) = rec { acquiredByFst =>
+            val go: Detained[Lock] -⚬ (Detained[Lock] |*| Lock) = rec { go =>
+              // when the acquired lock is released before action is taken on the other lock handle
+              val expectRelease: Detained[Lock] -⚬ (Detained[Lock] |*| Lock) =
+                Detained(Detained.releaseBy > share) > Transportive[Detained].outR
+
+              // when action is taken on the other lock handle while lock is acquired by the first handle
+              val branchBySnd: Detained[Lock] -⚬ (Detained[Lock] |*| Lock) = {
+                val caseClose: Detained[Lock] -⚬ (Detained[Lock] |*| Done) =
+                    introSnd(done)
+
+                val caseAcquire: Detained[Lock] -⚬ (Detained[Lock] |*| AcquiredLock) =
+                    // release and re-acquire, to give chance to others
+                    Detained(Detained.releaseBy > Lock.acquire > acquiredByFst > swap) > Transportive[Detained].outR
+
+                val caseTryAcquire: Detained[Lock] -⚬ (Detained[Lock] |*| (AcquiredLock |+| Lock)) =
+                    go > snd(injectR)
+
+                choice(
+                  caseClose,
+                  choice(
+                    caseAcquire,
+                    caseTryAcquire,
+                  ) > coDistributeL
+                ) > coDistributeL > snd(pack[LockF])
+              }
+
+              choice(expectRelease, branchBySnd) > selectBy(Detained.notifyReleaseNeg, notifyAction)
+            }
+
+            snd(go) > assocRL
+          }
+
+          val caseAcquire: Lock -⚬ (AcquiredLock |*| Lock) =
+            Lock.acquire > acquiredByFst
+
+          val caseTryAcquire: Lock -⚬ ((AcquiredLock |+| Lock) |*| Lock) =
+            Lock.tryAcquire > either(
+              acquiredByFst > fst(injectL),
+              share > fst(injectR),
+            )
+
+          choice(
+            caseClose,
+            choice(
+              caseAcquire,
+              caseTryAcquire,
+            ) > coDistributeR,
+          ) > coDistributeR > fst(pack[LockF])
+        }
+
+        val branchBySnd: Lock -⚬ (Lock |*| Lock) =
+          branchByFst > swap
+
+        choice(branchByFst, branchBySnd) > selectBy(notifyAction, notifyAction)
+      }
+
+    private def notifyAction: (Pong |*| Lock) -⚬ Lock =
+      snd(unpack[LockF]) > notifyChoiceAndRight(notifyChoice) > pack[LockF]
+
+    given PComonoid[Lock] =
+      new PComonoid[Lock] {
+        override def split: Lock -⚬ (Lock |*| Lock) =
+          Lock.share
+
+        override def counit: Lock -⚬ Done =
+          Lock.close
+      }
+  }
+
+  object AcquiredLock {
+    def release: AcquiredLock -⚬ Lock =
+      Detained.releaseBy
+
+    /** Acquisition will not be complete until also the given [[Done]] signal arrives. */
+    def detainAcquisition: (Done |*| AcquiredLock) -⚬ AcquiredLock =
+      assocRL > fst(join)
+
+    /** Acquisition will not be complete until also the given [[Ping]] signal arrives. */
+    def deferAcquisition: (Ping |*| AcquiredLock) -⚬ AcquiredLock =
+      fst(strengthenPing) > detainAcquisition
+
+    /** Notifies when the lock is acquired. */
+    def notifyAcquisition: AcquiredLock -⚬ (Ping |*| AcquiredLock) =
+      fst(notifyDoneL) > assocLR
+
+    /** Subsequent [[release]] won't have effect until also the given [[Done]] signal arrives. */
+    def detainRelease: (Done |*| AcquiredLock) -⚬ AcquiredLock =
+      XI > snd(Detained.extendDetentionUntil)
+
+    /** Subsequent [[release]] won't have effect until also the given [[Ping]] signal arrives. */
+    def deferRelease: (Ping |*| AcquiredLock) -⚬ AcquiredLock =
+      fst(strengthenPing) > detainRelease
+
+    given Signaling.Positive[AcquiredLock] =
+      new Signaling.Positive[AcquiredLock] {
+        override def notifyPosFst: AcquiredLock -⚬ (Ping |*| AcquiredLock) =
+          notifyAcquisition
+      }
+  }
+
+  extension (acquiredLock: $[AcquiredLock]) {
+    def deferReleaseUntil(ping: $[Ping]): $[AcquiredLock] =
+      AcquiredLock.deferRelease(ping |*| acquiredLock)
+
+    def detainReleaseUntil(done: $[Done]): $[AcquiredLock] =
+      AcquiredLock.detainRelease(done |*| acquiredLock)
   }
 }

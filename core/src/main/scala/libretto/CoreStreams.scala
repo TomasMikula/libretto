@@ -141,7 +141,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       */
     def concatenate[A]: (LPollable[A] |*| Detained[LPollable[A]]) -⚬ LPollable[A] = rec { self =>
       val close: (LPollable[A] |*| Detained[LPollable[A]]) -⚬ Done =
-        joinMap(LPollable.close, Detained.forceRelease > LPollable.close)
+        joinMap(LPollable.close, Detained.releaseAsap > LPollable.close)
 
       val poll: (LPollable[A] |*| Detained[LPollable[A]]) -⚬ LPolled[A] =
         id                               [                                                LPollable[A]    |*| Detained[LPollable[A]]   ]

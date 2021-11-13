@@ -714,4 +714,51 @@ class BasicTests extends TestSuite {
 
     assertCompletes(prg)
   }
+
+  test("Lock: successful acquire and release") {
+    val prg: Done -⚬ Done =
+      Lock.newLock > Lock.tryAcquire > assertLeft > AcquiredLock.release > Lock.close
+
+    assertCompletes(prg)
+  }
+
+  test("Lock: only 1 client can acquire at a time") {
+    val prg: Done -⚬ Done =
+      λ { start =>
+        val (lLock |*| rLock) =
+          start > Lock.newLock > Lock.share
+
+        // one lock can be acquired
+        val (acquiredRLock |*| acquiredRNotification) =
+          Lock.tryAcquire(rLock) > assertLeft > notifyPosSnd
+
+        // second acquisition attempt fails
+        val (lLock1 |*| pingOnAttempted) =
+          (lLock blockUntil acquiredRNotification) > Lock.tryAcquire > notifyPosSnd > fst(assertRight)
+
+        // release the acquired lock, but only after the second acquisition attempt
+        val rLock1 =
+          AcquiredLock.release(acquiredRLock deferReleaseUntil pingOnAttempted)
+
+        join( Lock.close(lLock1) |*| Lock.close(rLock1) )
+      }
+
+    assertCompletes(prg)
+  }
+
+  test("Lock: Everyone acquires the lock eventually") {
+    val prg: Done -⚬ Done =
+      Lock.newLock > Lock.share > par(
+        Lock.share > par(
+          Lock.acquire > AcquiredLock.release > Lock.close,
+          Lock.acquire > AcquiredLock.release > Lock.close,
+        ),
+        Lock.share > par(
+          Lock.acquire > AcquiredLock.release > Lock.close,
+          Lock.acquire > AcquiredLock.release > Lock.close,
+        ),
+      ) > joinMap(join, join)
+
+    assertCompletes(prg)
+  }
 }
