@@ -252,19 +252,21 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       f
 
     def untilDone[A, B](f: (Done |*| A) -⚬ B): A -⚬ Detained[B] =
-      id[A] > introFst(lInvertSignal) > assocLR > dsl.snd(f)
+      id[A] > introFst(lInvertSignal) > assocLR > snd(f)
 
     def apply[A, B](f: (Done |*| A) -⚬ B): A -⚬ Detained[B] =
       Detained.untilDone(f)
 
     def thunk[A](f: Done -⚬ A): One -⚬ Detained[A] =
-      lInvertSignal > dsl.snd(f)
+      lInvertSignal > snd(f)
 
-    def fst[A, B](f: Done -⚬ (A |*| B)): One -⚬ (Detained[A] |*| B) =
-      thunk(f).assocRL
+    /** Present the first part of a [[Detained]] pair as non-detained. */
+    def excludeFst[A, B]: Detained[A |*| B] -⚬ (A |*| Detained[B]) =
+      XI
 
-    def snd[A, B](f: Done -⚬ (A |*| B)): One -⚬ (A |*| Detained[B]) =
-      thunk(f) > XI
+    /** Present the second part of a [[Detained]] pair as non-detained. */
+    def excludeSnd[A, B]: Detained[A |*| B] -⚬ (Detained[A] |*| B) =
+      assocRL
 
     def releaseBy[A]: (Done |*| Detained[A]) -⚬ A =
       assocRL > elimFst(rInvertSignal)
@@ -274,17 +276,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     /** Subsequent [[releaseBy]] won't have effect until also the given [[Need]] signal arrives. */
     def extendDetentionUntilNeed[A]: Detained[A] -⚬ (Need |*| Detained[A]) =
-      dsl.fst(joinNeed) > assocLR
+      fst(joinNeed) > assocLR
 
     /** Subsequent [[releaseBy]] won't have effect until also the given [[Done]] signal arrives. */
     def extendDetentionUntil[A]: (Done |*| Detained[A]) -⚬ Detained[A] =
-      dsl.snd(extendDetentionUntilNeed) > assocRL > elimFst(rInvertSignal)
+      snd(extendDetentionUntilNeed) > assocRL > elimFst(rInvertSignal)
 
     def notifyReleaseNeg[A]: (Pong |*| Detained[A]) -⚬ Detained[A] =
-      assocRL > dsl.fst(notifyNeedL)
+      assocRL > fst(notifyNeedL)
 
     def notifyReleasePos[A]: Detained[A] -⚬ (Ping |*| Detained[A]) =
-      introFst(lInvertPongPing > swap) > assocLR > dsl.snd(notifyReleaseNeg)
+      introFst(lInvertPongPing > swap) > assocLR > snd(notifyReleaseNeg)
 
     /** Signals when it is released, awaiting delays the release. */
     implicit def signalingJunction[A]: SignalingJunction.Negative[Detained[A]] =

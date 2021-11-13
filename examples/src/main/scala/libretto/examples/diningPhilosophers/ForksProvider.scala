@@ -32,7 +32,7 @@ object ForksProvider extends Forks {
       val caseFstPicksUp: Done -⚬ ((HeldFork |+| SharedFork) |*| SharedFork) = {
         val go: One -⚬ (Detained[SharedFork] |*| SharedFork) = rec { go =>
           val caseFstPutsDown: One -⚬ (Detained[SharedFork] |*| SharedFork) =
-            Detained.fst(makeSharedFork)
+            Detained.thunk(makeSharedFork) > Detained.excludeSnd
 
           val caseSndReleases: One -⚬ (Detained[SharedFork] |*| Done) =
             Detained.thunk(singleOwnerFork) > introSnd(done)
