@@ -66,7 +66,7 @@ class Philosophers[ForksImpl <: Forks](val forks: ForksImpl) {
           val (thought |*| thoughtPing) = when(failed) { think(name) > notifyDoneR }
           val (lPing |*| rPing) = thoughtPing > split
           val (eaten |*| forks) =
-            eatOnce((lFork deferUntil lPing) |*| (rFork deferUntil rPing))
+            eatOnce((lFork blockUntil lPing) |*| (rFork blockUntil rPing))
           join(thought |*| eaten) |*| forks
         }
     )

@@ -10,11 +10,8 @@ class DiningPhilosophersTests extends TestSuite {
 
   import ForksProvider.{HeldFork, letGo, mkSharedFork, putDown, tryPickUp}
 
-  given Signaling.Positive[HeldFork] =
-    ForksProvider.signalingHeldFork
-
-  given deferrableHeldFork: Deferrable.Positive[HeldFork] =
-    ForksProvider.junctionHeldFork
+  given heldForkReadiness: SignalingJunction.Positive[HeldFork] =
+    ForksProvider.heldForkReadiness
 
   test("SharedFork: successful pick up (left)") {
     val prg: Done -⚬ Done =

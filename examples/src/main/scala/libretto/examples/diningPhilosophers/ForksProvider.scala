@@ -21,18 +21,8 @@ object ForksProvider extends Forks {
   override def putDown: HeldFork -⚬ SharedFork =
     Detained.releaseBy
 
-  override def signalingHeldFork: Signaling.Positive[HeldFork] =
-    Signaling.Positive.byFst
-
-  override def junctionHeldFork: Junction.Positive[HeldFork] =
-    Junction.Positive.byFst
-
-  override def deferrableSharedFork: Deferrable.Positive[SharedFork] =
-    Deferrable.Positive.from(
-      λ { case (ping |*| fork) =>
-        delayChoiceUntilPing(ping |*| unpack[SharedForkF](fork)) > pack[SharedForkF]
-      }
-    )
+  override def heldForkReadiness: SignalingJunction.Positive[HeldFork] =
+    SignalingJunction.Positive.byFst
 
   def mkSharedFork: Done -⚬ (SharedFork |*| SharedFork) =
     rec { makeSharedFork =>

@@ -26,12 +26,9 @@ trait Forks {
   /** Gives up access to the fork. */
   def letGo: SharedFork -⚬ Done
 
-  /** Ability to signal when [[HeldFork]] is ready (picked up or done being used). */
-  implicit def signalingHeldFork: Signaling.Positive[HeldFork]
-
-  /** Ability of [[HeldFork]] to await a [[Done]] signal, thereby deferring [[HeldFork]]'s readiness. */
-  implicit def junctionHeldFork: Junction.Positive[HeldFork]
-
-  /** Ability to defer the next action ([[tryPickUp]] or [[letGo]]) on [[SharedFork]]. */
-  implicit def deferrableSharedFork: Deferrable.Positive[SharedFork]
+  /** Ability of [[HeldFork]] to
+    *  - signal readiness (when picked up or done being used).
+    *  - defer readiness by awaiting a [[Done]] signal.
+    */
+  implicit def heldForkReadiness: SignalingJunction.Positive[HeldFork]
 }
