@@ -291,6 +291,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Signals when it is released, awaiting delays the release. */
     implicit def signalingJunction[A]: SignalingJunction.Negative[Detained[A]] =
       SignalingJunction.Negative.byFst
+
+    implicit def transportiveDetained: Transportive[Detained] =
+      new Transportive[Detained] {
+        override def lift[A, B](f: A -⚬ B): Detained[A] -⚬ Detained[B] =
+          snd(f)
+
+        override def inL[A, B]: (A |*| Detained[B]) -⚬ Detained[A |*| B] =
+          XI
+
+        override def outL[A, B]: Detained[A |*| B] -⚬ (A |*| Detained[B]) =
+          XI
+      }
   }
 
   extension [A](a: $[Detained[A]]) {
