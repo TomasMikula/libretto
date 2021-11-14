@@ -22,9 +22,9 @@ sbt.version=1.5.5
 In your `build.sbt`, set the Scala version to Scala 3 and add the dependency on Libretto:
 
 ```sbt
-scalaVersion := "3.0.2"
+scalaVersion := "@SCALA_VERSION@"
 
-libraryDependencies += "com.github.tomasmikula" %% "libretto" % "0.1.5"
+libraryDependencies += "com.github.tomasmikula" %% "libretto" % "0.2-M2"
 ```
 
 Check [search.maven.org](https://search.maven.org/search?q=com.github.tomasmikula%20libretto) for the latest version of

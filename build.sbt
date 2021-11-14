@@ -114,6 +114,9 @@ lazy val docs = project
       ExclusionRule(organization = "com.lihaoyi", name = "sourcecode_2.13"),
     )),
     mdocIn := file("tutorial"),
+    mdocVariables := Map(
+      "SCALA_VERSION" -> (ThisBuild / scalaVersion).value,
+    ),
     laikaSite := {
       import cats.effect.IO
       import cats.effect.unsafe.implicits.global
