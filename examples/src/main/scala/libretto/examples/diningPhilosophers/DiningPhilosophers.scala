@@ -10,14 +10,18 @@ object DiningPhilosophers extends StarterApp {
   import ForksProvider.mkSharedFork
 
   override def blueprint: Done -⚬ Done =
-    λ { start =>
+    λ { (start: $[Done]) =>
       // make 5 forks, with two accessor interfaces each
       val ((f1l |*| f1r) |*| ((f2l |*| f2r) |*| ((f3l |*| f3r) |*| ((f4l |*| f4r) |*| (f5l |*| f5r))))) =
         when(start) {
+          // the `f /\ g` operator splits the incoming `Done` signal into two
+          // and applies `f` to the left one and `g` to the right one
           mkSharedFork /\ (mkSharedFork /\ (mkSharedFork /\ (mkSharedFork /\ mkSharedFork)))
         }
 
-      // start 5 philosophers, giving each one access to two different forks
+      // Start 5 philosophers, giving each one access to two different forks.
+      // Each philosopher outputs a `Done` signal when finished.
+      // (`LList1` is a non-empty list of linear resources.)
       val philosopherProcesses: $[LList1[Done]] =
         LList1(
           philosopher("Aristotle")(cycles = 5)(f1r |*| f2l),
@@ -27,7 +31,9 @@ object DiningPhilosophers extends StarterApp {
           philosopher("Epictetus")(cycles = 5)(f5r |*| f1l),
         )
 
-      // wait for all philosophers to complete
+      // Wait for all philosophers to complete.
+      // (`Done` signal forms a semigroup (via `join`-ing the signals) and thus
+      // a non-empty list of them can be folded into a single `Done` signal.)
       philosopherProcesses > LList1.fold
     }
 }

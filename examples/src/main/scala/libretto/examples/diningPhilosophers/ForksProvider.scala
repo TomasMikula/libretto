@@ -3,6 +3,12 @@ package libretto.examples.diningPhilosophers
 import libretto.StarterKit._
 import libretto.StarterKit.$._
 
+/** Implements `Forks`.
+  * Internally, it represents a fork as a lock from the core library.
+  * (Note that the [[Lock]] from the core library is not a primitive itself,
+  * but is implemented using other primitives. Racing plays a key role
+  * in that implementation.)
+  */
 object ForksProvider extends Forks {
   opaque override type SharedFork = Lock
 

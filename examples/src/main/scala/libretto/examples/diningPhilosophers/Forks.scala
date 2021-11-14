@@ -5,8 +5,10 @@ import libretto.StarterKit.$._
 
 trait Forks {
   /** Interface to a fork. The fork itself may be shared among multiple philosophers,
-    * in which case multiple [[SharedFork]]s coordinate to access a single "physical" fork.
-    * [[SharedFork]] must be successfully picked up (see [[tryPickUp]]) before it can be used to eat.
+    * in which case multiple [[SharedFork]] interfaces are created for one "physical" fork.
+    * These [[SharedFork]]s then have to coordinate when accessing the underlying "physical" fork.
+    * Once [[SharedFork]] is successfully picked up from the table (see [[tryPickUp]]), the holder
+    * of the resulting [[HeldFork]] can use it to eat.
     */
   type SharedFork
 
@@ -16,7 +18,8 @@ trait Forks {
   type HeldFork
 
   /** Attempts to pick up a shared fork. If successful, outputs [[HeldFork]] on the left.
-    * Does not wait for the shared fork to become available.
+    * Does not wait for the shared fork to become available. If it is unavailable,
+    * outputs [[SharedFork]] on the right.
     */
   def tryPickUp: SharedFork -⚬ (HeldFork |+| SharedFork)
 
