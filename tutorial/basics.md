@@ -1144,6 +1144,121 @@ def promise[A]: One -⚬ (Neg[A] |*| Val[A])
 def fulfill[A]: (Val[A] |*| Neg[A]) -⚬ One
 ```
 
+## Inverse Types
+
+We have seen that some types of interaction come in pairs, where one is the inverse of the other,
+meaning that the information flow in one is exactly opposite the information flow in the other.
+
+Examples that we have encountered so far:
+
+|  type  | inverse type |
+| ------ | ------------ |
+| `Done` | `Need` |
+| `Ping` | `Pong` |
+| `Val[A]` | `Neg[A]` |
+| `One` | `One` |
+
+We can obtain bigger types that are inverses of each other by forming concurrent pairs:
+
+|  type  | inverse type |
+| ------ | ------------ |
+| `Done \|*\| Ping` | `Need \|*\| Pong` |
+| `Val[A] \|*\| (Neg[B] \|*\| Need)` | `Neg[A] \|*\| (Val[B] \|*\| Done)` |
+| ... | ... |
+
+### Duality of ⊕ and &
+
+⊕ and & are also inverses of each other:
+ - in `A |+| B`, the decision of which branch will proceed is passed from left to right;
+ - in `A |&| B`, the decision is passed from right to left.
+
+|  type  | inverse type |
+| ------ | ------------ |
+| `Done \|+\| Val[A]` | `Need \|&\| Neg[A]` |
+| ... | ... |
+
+### Universal Inversions
+
+There is a special type constructor, `-[_]`, whose meaning is that `-[A]` is the inverse of `A`.
+We also say that `-[A]` is a _demand_ for `A`.
+
+It works universally for all types `A`.
+This is convenient, as to talk about the inverse of some complex type `A`
+we don't have to manually spell out what its inverse would be.
+We can just use `-[A]` to refer to the inverse of `A`.
+
+The downside is that types now have two inverses.
+For example, both `Need` and `-[Done]` are inverses of `Done`.
+However, these are isomorphic and one can go back and forth between these
+without changing the semantics of the program.
+
+There are some primitive operations for working with inverses.
+
+```
+  ┏━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━┓
+  ┃ demand[A] ┃               ┃  supply[A]  ┃
+  ┃           ┞────┐          ┞────┐        ┃
+  ┃        ┌┄┄╎-[A]│          ╎  A │┄┄┐     ┃
+  ┃        ┆  ┟────┘          ┟────┘  ┆     ┃
+  ┃        ┆  ┃               ┃       ┆     ┃
+  ┃        ┆  ┞────┐          ┞────┐  ┆     ┃
+  ┃        └┄→╎  A │          ╎-[A]│←┄┘     ┃
+  ┃           ┟────┘          ┟────┘        ┃
+  ┗━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━┛
+```
+
+```scala
+def demand[A]: One -⚬ (-[A] |*| A)
+def supply[A]: (A |*| -[A]) -⚬ One
+```
+
+Notice the similarity with the inverting operations that we have seen before:
+
+```
+  demand[A]            promise[A]             lInvertSignal        lInvertPongPing
+┏━━━━━━━━━━━┓        ┏━━━━━━━━━━━┓            ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓
+┃           ┞────┐   ┃           ┞──────┐     ┃          ┞────┐    ┃          ┞────┐
+┃        ┌┄┄╎-[A]│   ┃        ┌┄┄╎Neg[A]│←┄   ┃       ┌┄┄╎Need│←┄  ┃       ┌┄┄╎Pong│←┄
+┃        ┆  ┟────┘   ┃        ┆  ┟──────┘     ┃       ┆  ┟────┘    ┃       ┆  ┟────┘
+┃        ┆  ┃        ┃        ┆  ┃            ┃       ┆  ┃         ┃       ┆  ┃
+┃        ┆  ┞────┐   ┃        ┆  ┞──────┐     ┃       ┆  ┞────┐    ┃       ┆  ┞────┐
+┃        └┄→╎  A │   ┃        └┄→╎Val[A]│┄→   ┃       └┄→╎Done│┄→  ┃       └┄→╎Ping│┄→
+┃           ┟────┘   ┃           ┟──────┘     ┃          ┟────┘    ┃          ┟────┘
+┗━━━━━━━━━━━┛        ┗━━━━━━━━━━━┛            ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛
+
+
+   supply[A]            fulfill[A]            rInvertSignal       rInvertPingPong
+┏━━━━━━━━━━━━━┓      ┏━━━━━━━━━━━━━━┓         ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓
+┞────┐        ┃      ┞──────┐       ┃         ┞────┐     ┃         ┞────┐     ┃
+╎  A │┄┄┐     ┃    ┄→╎Val[A]│┄┄┐    ┃       ┄→╎Done│┄┄┐  ┃       ┄→╎Ping│┄┄┐  ┃
+┟────┘  ┆     ┃      ┟──────┘  ┆    ┃         ┟────┘  ┆  ┃         ┟────┘  ┆  ┃
+┃       ┆     ┃      ┃         ┆    ┃         ┃       ┆  ┃         ┃       ┆  ┃
+┞────┐  ┆     ┃      ┞──────┐  ┆    ┃         ┞────┐  ┆  ┃         ┞────┐  ┆  ┃
+╎-[A]│←┄┘     ┃    ←┄╎Neg[A]│←┄┘    ┃       ←┄╎Need│←┄┘  ┃       ←┄╎Pong│←┄┘  ┃
+┟────┘        ┃      ┟──────┘       ┃         ┟────┘     ┃         ┟────┘     ┃
+┗━━━━━━━━━━━━━┛      ┗━━━━━━━━━━━━━━┛         ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛
+```
+
+Then there are primitives for splitting and joining inversions:
+
+```
+  demandSeparately        demandTogether
+  ┏━━━━━━━━━━━┓           ┏━━━━━━━━━━━┓
+  ┃           ┞────┐      ┞────┐      ┃
+  ┞────┐      ╎-[A]│      ╎-[A]│      ┞────┐
+  ╎ ⎡A⎤│      ┟────┘      ┟────┘      ╎ ⎡A⎤│
+  ╎-⎢⊗⎥│      ┃           ┃           ╎-⎢⊗⎥│
+  ╎ ⎣B⎦│      ┞────┐      ┞────┐      ╎ ⎣B⎦│
+  ┟────┘      ╎-[B]│      ╎-[B]│      ┟────┘
+  ┃           ┟────┘      ┟────┘      ┃
+  ┗━━━━━━━━━━━┛           ┗━━━━━━━━━━━┛
+```
+
+```scala
+def demandSeparately[A, B] : -[A |*| B] -⚬ (-[A] |*| -[B])
+def demandTogether[A, B]   : (-[A] |*| -[B]) -⚬ -[A |*| B]
+```
+
 ## Equality of Libretto programs
 
 There are equations (laws) that hold about Libretto arrows, such as

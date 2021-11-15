@@ -82,6 +82,9 @@
           <li class="level1"><a href="#racing">Racing</a></li>
           <li class="level2"><a href="#racing-is-a-source-of-non-determinism">Racing is a source of non-determinism</a></li>
           <li class="level1"><a href="#using-scala-values-and-functions">Using Scala values and functions</a></li>
+          <li class="level1"><a href="#inverse-types">Inverse Types</a></li>
+          <li class="level2"><a href="#duality-of-and">Duality of ⊕ and &amp;</a></li>
+          <li class="level2"><a href="#universal-inversions">Universal Inversions</a></li>
           <li class="level1"><a href="#equality-of-libretto-programs">Equality of Libretto programs</a></li>
         </ul>
         
@@ -917,6 +920,144 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
 </span><span>
 </span><span class="keyword">def</span><span> </span><span class="declaration-name">promise</span><span>[</span><span class="type-name">A</span><span>]: </span><span class="type-name">One</span><span> -⚬ (</span><span class="type-name">Neg</span><span>[</span><span class="type-name">A</span><span>] |*| </span><span class="type-name">Val</span><span>[</span><span class="type-name">A</span><span>])
 </span><span class="keyword">def</span><span> </span><span class="declaration-name">fulfill</span><span>[</span><span class="type-name">A</span><span>]: (</span><span class="type-name">Val</span><span>[</span><span class="type-name">A</span><span>] |*| </span><span class="type-name">Neg</span><span>[</span><span class="type-name">A</span><span>]) -⚬ </span><span class="type-name">One</span></code></pre>
+        
+        <h2 id="inverse-types" class="section"><a class="anchor-link left" href="#inverse-types"><i class="icofont-laika">&#xef71;</i></a>Inverse Types</h2>
+        <p>We have seen that some types of interaction come in pairs, where one is the inverse of the other,
+        meaning that the information flow in one is exactly opposite the information flow in the other.</p>
+        <p>Examples that we have encountered so far:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>type</th>
+              <th>inverse type</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Done</code></td>
+              <td><code>Need</code></td>
+            </tr>
+            <tr>
+              <td><code>Ping</code></td>
+              <td><code>Pong</code></td>
+            </tr>
+            <tr>
+              <td><code>Val[A]</code></td>
+              <td><code>Neg[A]</code></td>
+            </tr>
+            <tr>
+              <td><code>One</code></td>
+              <td><code>One</code></td>
+            </tr>
+          </tbody>
+        </table>
+        <p>We can obtain bigger types that are inverses of each other by forming concurrent pairs:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>type</th>
+              <th>inverse type</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Done |*| Ping</code></td>
+              <td><code>Need |*| Pong</code></td>
+            </tr>
+            <tr>
+              <td><code>Val[A] |*| (Neg[B] |*| Need)</code></td>
+              <td><code>Neg[A] |*| (Val[B] |*| Done)</code></td>
+            </tr>
+            <tr>
+              <td>...</td>
+              <td>...</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <h3 id="duality-of-and" class="section"><a class="anchor-link left" href="#duality-of-and"><i class="icofont-laika">&#xef71;</i></a>Duality of ⊕ and &amp;</h3>
+        <p>⊕ and &amp; are also inverses of each other:
+         - in <code>A |+| B</code>, the decision of which branch will proceed is passed from left to right;
+         - in <code>A |&amp;| B</code>, the decision is passed from right to left.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>type</th>
+              <th>inverse type</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Done |+| Val[A]</code></td>
+              <td><code>Need |&amp;| Neg[A]</code></td>
+            </tr>
+            <tr>
+              <td>...</td>
+              <td>...</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <h3 id="universal-inversions" class="section"><a class="anchor-link left" href="#universal-inversions"><i class="icofont-laika">&#xef71;</i></a>Universal Inversions</h3>
+        <p>There is a special type constructor, <code>-[_]</code>, whose meaning is that <code>-[A]</code> is the inverse of <code>A</code>.
+        We also say that <code>-[A]</code> is a <em>demand</em> for <code>A</code>.</p>
+        <p>It works universally for all types <code>A</code>.
+        This is convenient, as to talk about the inverse of some complex type <code>A</code>
+        we don&#39;t have to manually spell out what its inverse would be.
+        We can just use <code>-[A]</code> to refer to the inverse of <code>A</code>.</p>
+        <p>The downside is that types now have two inverses.
+        For example, both <code>Need</code> and <code>-[Done]</code> are inverses of <code>Done</code>.
+        However, these are isomorphic and one can go back and forth between these
+        without changing the semantics of the program.</p>
+        <p>There are some primitive operations for working with inverses.</p>
+        <pre><code>  ┏━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━┓
+  ┃ demand[A] ┃               ┃  supply[A]  ┃
+  ┃           ┞────┐          ┞────┐        ┃
+  ┃        ┌┄┄╎-[A]│          ╎  A │┄┄┐     ┃
+  ┃        ┆  ┟────┘          ┟────┘  ┆     ┃
+  ┃        ┆  ┃               ┃       ┆     ┃
+  ┃        ┆  ┞────┐          ┞────┐  ┆     ┃
+  ┃        └┄→╎  A │          ╎-[A]│←┄┘     ┃
+  ┃           ┟────┘          ┟────┘        ┃
+  ┗━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━┛</code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">demand</span><span>[</span><span class="type-name">A</span><span>]: </span><span class="type-name">One</span><span> -⚬ (-[</span><span class="type-name">A</span><span>] |*| </span><span class="type-name">A</span><span>)
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">supply</span><span>[</span><span class="type-name">A</span><span>]: (</span><span class="type-name">A</span><span> |*| -[</span><span class="type-name">A</span><span>]) -⚬ </span><span class="type-name">One</span></code></pre>
+        <p>Notice the similarity with the inverting operations that we have seen before:</p>
+        <pre><code>  demand[A]            promise[A]             lInvertSignal        lInvertPongPing
+┏━━━━━━━━━━━┓        ┏━━━━━━━━━━━┓            ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓
+┃           ┞────┐   ┃           ┞──────┐     ┃          ┞────┐    ┃          ┞────┐
+┃        ┌┄┄╎-[A]│   ┃        ┌┄┄╎Neg[A]│←┄   ┃       ┌┄┄╎Need│←┄  ┃       ┌┄┄╎Pong│←┄
+┃        ┆  ┟────┘   ┃        ┆  ┟──────┘     ┃       ┆  ┟────┘    ┃       ┆  ┟────┘
+┃        ┆  ┃        ┃        ┆  ┃            ┃       ┆  ┃         ┃       ┆  ┃
+┃        ┆  ┞────┐   ┃        ┆  ┞──────┐     ┃       ┆  ┞────┐    ┃       ┆  ┞────┐
+┃        └┄→╎  A │   ┃        └┄→╎Val[A]│┄→   ┃       └┄→╎Done│┄→  ┃       └┄→╎Ping│┄→
+┃           ┟────┘   ┃           ┟──────┘     ┃          ┟────┘    ┃          ┟────┘
+┗━━━━━━━━━━━┛        ┗━━━━━━━━━━━┛            ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛
+
+
+   supply[A]            fulfill[A]            rInvertSignal       rInvertPingPong
+┏━━━━━━━━━━━━━┓      ┏━━━━━━━━━━━━━━┓         ┏━━━━━━━━━━┓         ┏━━━━━━━━━━┓
+┞────┐        ┃      ┞──────┐       ┃         ┞────┐     ┃         ┞────┐     ┃
+╎  A │┄┄┐     ┃    ┄→╎Val[A]│┄┄┐    ┃       ┄→╎Done│┄┄┐  ┃       ┄→╎Ping│┄┄┐  ┃
+┟────┘  ┆     ┃      ┟──────┘  ┆    ┃         ┟────┘  ┆  ┃         ┟────┘  ┆  ┃
+┃       ┆     ┃      ┃         ┆    ┃         ┃       ┆  ┃         ┃       ┆  ┃
+┞────┐  ┆     ┃      ┞──────┐  ┆    ┃         ┞────┐  ┆  ┃         ┞────┐  ┆  ┃
+╎-[A]│←┄┘     ┃    ←┄╎Neg[A]│←┄┘    ┃       ←┄╎Need│←┄┘  ┃       ←┄╎Pong│←┄┘  ┃
+┟────┘        ┃      ┟──────┘       ┃         ┟────┘     ┃         ┟────┘     ┃
+┗━━━━━━━━━━━━━┛      ┗━━━━━━━━━━━━━━┛         ┗━━━━━━━━━━┛         ┗━━━━━━━━━━┛</code></pre>
+        <p>Then there are primitives for splitting and joining inversions:</p>
+        <pre><code>  demandSeparately        demandTogether
+  ┏━━━━━━━━━━━┓           ┏━━━━━━━━━━━┓
+  ┃           ┞────┐      ┞────┐      ┃
+  ┞────┐      ╎-[A]│      ╎-[A]│      ┞────┐
+  ╎ ⎡A⎤│      ┟────┘      ┟────┘      ╎ ⎡A⎤│
+  ╎-⎢⊗⎥│      ┃           ┃           ╎-⎢⊗⎥│
+  ╎ ⎣B⎦│      ┞────┐      ┞────┐      ╎ ⎣B⎦│
+  ┟────┘      ╎-[B]│      ╎-[B]│      ┟────┘
+  ┃           ┟────┘      ┟────┘      ┃
+  ┗━━━━━━━━━━━┛           ┗━━━━━━━━━━━┛</code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">demandSeparately</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>] : -[</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>] -⚬ (-[</span><span class="type-name">A</span><span>] |*| -[</span><span class="type-name">B</span><span>])
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">demandTogether</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>]   : (-[</span><span class="type-name">A</span><span>] |*| -[</span><span class="type-name">B</span><span>]) -⚬ -[</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>]</span></code></pre>
         
         <h2 id="equality-of-libretto-programs" class="section"><a class="anchor-link left" href="#equality-of-libretto-programs"><i class="icofont-laika">&#xef71;</i></a>Equality of Libretto programs</h2>
         <p>There are equations (laws) that hold about Libretto arrows, such as</p>
