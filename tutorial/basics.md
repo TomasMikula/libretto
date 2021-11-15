@@ -1259,6 +1259,105 @@ def demandSeparately[A, B] : -[A |*| B] -⚬ (-[A] |*| -[B])
 def demandTogether[A, B]   : (-[A] |*| -[B]) -⚬ -[A |*| B]
 ```
 
+We can then derive other operations, like
+
+```scala mdoc:nest
+/**
+  * ┏━━━━━━━━━━━┯━━━━━━━━━┯━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━┓
+  * ┞───┐       ├───┐     ├────┐      ├────┐              ┃
+  * ╎--A│       ╎--A│     ╎--A │      ╎ -A │              ┃
+  * ┟───┘       ├───┘     ╎  ⊗ │ swap ╎  ⊗ │ supply[-[A]] ┃
+  * ┠╌╌╌╌╌╌╌╌╌╌╌┤ assocRL ╎ -A │      ╎--A │              ┃
+  * ┃           ├───┐     ├────┘      ├────┘              ┃
+  * ┃           ╎-A │     ├╌╌╌╌╌╌╌╌╌╌╌┴╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨
+  * ┃ demand[A] ╎ ⊗ │     ├───┐                           ┞───┐
+  * ┃           ╎ A │     ╎ A │                           ╎ A │
+  * ┃           ├───┘     ├───┘                           ┟───┘
+  * ┗━━━━━━━━━━━┷━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+  */
+def doubleDemandElimination[A]: -[-[A]] -⚬ A =
+  introSnd(demand[A]) > assocRL > elimFst(swap > supply[-[A]])
+```
+
+or the isomorphisms between `Need` and `-[Done]`, etc.
+
+## Function Objects and Higher-Order Functions
+
+In modern programming languages we are used to functions being first-class objects
+that can be passed to or returned from other functions, so-called _higher-order functions._
+
+In Libretto, there, too, are function objects and higher-order functions.
+Unlike most functional programming languages, though, there is a syntactic distinction
+between
+
+ - _function as code,_ `-⚬`, which is a blueprint of a program, a value of the host language, and
+ - _function object,_ `=⚬`, which is a resource in a _running_ program.
+
+It makes sense to distinguish between the two, as they exist at different stages.
+
+Note that `A =⚬ B` is _not_ a value. Even in other languages, it may have captured
+resources (i.e. it is a closure),
+and therefore must itself be treated as a resource that has to be consumed exactly once.
+
+Function objects are introduced by `curry` and eliminated by `eval`:
+
+```scala
+def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C)
+def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B
+```
+
+Or we could have chosen `uncurry` instead of `eval`, but they are reducible to each other:
+
+```scala mdoc:nest
+def uncurry[A, B, C](f: A -⚬ (B =⚬ C)): (A |*| B) -⚬ C =
+  par(f, id[B]) > eval[B, C]
+
+def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B =
+  uncurry(id[A =⚬ B])
+```
+
+### Function Objects via Inversions
+
+Interestingly, function objects in Libretto are expressible via inversions, namely
+
+```scala
+type =⚬[A, B] = -[A] |*| B
+```
+
+That's right, a function object `A =⚬ B` is just an interface of interaction which
+demands `A` and (eventually) supplies `B`.
+
+In particular, it is not a callback given to someone else to execute.
+Instead, each side of the interface does its respective part, namely
+the producer of `A =⚬ B` receives `A` and produces `B`, whereas
+the consumer of `A =⚬ B` produces `A` and receives `B`:
+
+```
+    A =⚬ B
+  ━━━━┯━━━━━━━━
+      ├───┐
+    ←┄╎-A │←┄
+      ├───┘
+      ├───┐
+    ┄→╎ B │┄→
+      ├───┘
+  ━━━━┷━━━━━━━━
+```
+
+Note that there is no requirement that `B` is produced only after `A` is supplied.
+The plain Scala analogue would be a pair `(Promise[A], Future[B])`. There
+is no requirement that the future completes only after the promise has been fulfilled.
+
+`curry` and `eval` are expressible in terms of `demand` and `supply`:
+
+```scala mdoc:nest
+def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C) =
+  introFst(demand[B]) > assocLR > par(id[-[B]], swap > f)
+
+def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B =
+  swap > assocRL > elimFst(supply[A])
+```
+
 ## Equality of Libretto programs
 
 There are equations (laws) that hold about Libretto arrows, such as

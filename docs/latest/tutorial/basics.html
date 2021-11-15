@@ -85,6 +85,8 @@
           <li class="level1"><a href="#inverse-types">Inverse Types</a></li>
           <li class="level2"><a href="#duality-of-and">Duality of ⊕ and &amp;</a></li>
           <li class="level2"><a href="#universal-inversions">Universal Inversions</a></li>
+          <li class="level1"><a href="#function-objects-and-higher-order-functions">Function Objects and Higher-Order Functions</a></li>
+          <li class="level2"><a href="#function-objects-via-inversions">Function Objects via Inversions</a></li>
           <li class="level1"><a href="#equality-of-libretto-programs">Equality of Libretto programs</a></li>
         </ul>
         
@@ -1058,6 +1060,77 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
   ┗━━━━━━━━━━━┛           ┗━━━━━━━━━━━┛</code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">demandSeparately</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>] : -[</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>] -⚬ (-[</span><span class="type-name">A</span><span>] |*| -[</span><span class="type-name">B</span><span>])
 </span><span class="keyword">def</span><span> </span><span class="declaration-name">demandTogether</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>]   : (-[</span><span class="type-name">A</span><span>] |*| -[</span><span class="type-name">B</span><span>]) -⚬ -[</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>]</span></code></pre>
+        <p>We can then derive other operations, like</p>
+        <pre><code class="nohighlight"><span class="comment">/**
+  * ┏━━━━━━━━━━━┯━━━━━━━━━┯━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━┓
+  * ┞───┐       ├───┐     ├────┐      ├────┐              ┃
+  * ╎--A│       ╎--A│     ╎--A │      ╎ -A │              ┃
+  * ┟───┘       ├───┘     ╎  ⊗ │ swap ╎  ⊗ │ supply[-[A]] ┃
+  * ┠╌╌╌╌╌╌╌╌╌╌╌┤ assocRL ╎ -A │      ╎--A │              ┃
+  * ┃           ├───┐     ├────┘      ├────┘              ┃
+  * ┃           ╎-A │     ├╌╌╌╌╌╌╌╌╌╌╌┴╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┨
+  * ┃ demand[A] ╎ ⊗ │     ├───┐                           ┞───┐
+  * ┃           ╎ A │     ╎ A │                           ╎ A │
+  * ┃           ├───┘     ├───┘                           ┟───┘
+  * ┗━━━━━━━━━━━┷━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+  */</span><span>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">doubleDemandElimination</span><span>[</span><span class="type-name">A</span><span>]: -[-[</span><span class="type-name">A</span><span>]] -⚬ </span><span class="type-name">A</span><span> =
+  </span><span class="identifier">introSnd</span><span>(</span><span class="identifier">demand</span><span>[</span><span class="type-name">A</span><span>]) &gt; </span><span class="identifier">assocRL</span><span> &gt; </span><span class="identifier">elimFst</span><span>(</span><span class="identifier">swap</span><span> &gt; </span><span class="identifier">supply</span><span>[-[</span><span class="type-name">A</span><span>]])</span></code></pre>
+        <p>or the isomorphisms between <code>Need</code> and <code>-[Done]</code>, etc.</p>
+        
+        <h2 id="function-objects-and-higher-order-functions" class="section"><a class="anchor-link left" href="#function-objects-and-higher-order-functions"><i class="icofont-laika">&#xef71;</i></a>Function Objects and Higher-Order Functions</h2>
+        <p>In modern programming languages we are used to functions being first-class objects
+        that can be passed to or returned from other functions, so-called <em>higher-order functions.</em></p>
+        <p>In Libretto, there, too, are function objects and higher-order functions.
+        Unlike most functional programming languages, though, there is a syntactic distinction
+        between</p>
+        <ul>
+          <li><em>function as code,</em> <code>-⚬</code>, which is a blueprint of a program, a value of the host language, and</li>
+        </ul>
+        <ul>
+          <li><em>function object,</em> <code>=⚬</code>, which is a resource in a <em>running</em> program.</li>
+        </ul>
+        <p>It makes sense to distinguish between the two, as they exist at different stages.</p>
+        <p>Note that <code>A =⚬ B</code> is <em>not</em> a value. Even in other languages, it may have captured
+        resources (i.e. it is a closure),
+        and therefore must itself be treated as a resource that has to be consumed exactly once.</p>
+        <p>Function objects are introduced by <code>curry</code> and eliminated by <code>eval</code>:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">curry</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">C</span><span>](</span><span class="identifier">f</span><span>: (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) -⚬ </span><span class="type-name">C</span><span>): </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">B</span><span> =⚬ </span><span class="type-name">C</span><span>)
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">eval</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>]: ((</span><span class="type-name">A</span><span> =⚬ </span><span class="type-name">B</span><span>) |*| </span><span class="type-name">A</span><span>) -⚬ </span><span class="type-name">B</span></code></pre>
+        <p>Or we could have chosen <code>uncurry</code> instead of <code>eval</code>, but they are reducible to each other:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">uncurry</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">C</span><span>](</span><span class="identifier">f</span><span>: </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">B</span><span> =⚬ </span><span class="type-name">C</span><span>)): (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) -⚬ </span><span class="type-name">C</span><span> =
+  </span><span class="identifier">par</span><span>(</span><span class="identifier">f</span><span>, </span><span class="identifier">id</span><span>[</span><span class="type-name">B</span><span>]) &gt; </span><span class="identifier">eval</span><span>[</span><span class="type-name">B</span><span>, </span><span class="type-name">C</span><span>]
+
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">eval</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>]: ((</span><span class="type-name">A</span><span> =⚬ </span><span class="type-name">B</span><span>) |*| </span><span class="type-name">A</span><span>) -⚬ </span><span class="type-name">B</span><span> =
+  </span><span class="identifier">uncurry</span><span>(</span><span class="identifier">id</span><span>[</span><span class="type-name">A</span><span> =⚬ </span><span class="type-name">B</span><span>])</span></code></pre>
+        
+        <h3 id="function-objects-via-inversions" class="section"><a class="anchor-link left" href="#function-objects-via-inversions"><i class="icofont-laika">&#xef71;</i></a>Function Objects via Inversions</h3>
+        <p>Interestingly, function objects in Libretto are expressible via inversions, namely</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">type</span><span> =⚬[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>] = -[</span><span class="type-name">A</span><span>] |*| </span><span class="type-name">B</span></code></pre>
+        <p>That&#39;s right, a function object <code>A =⚬ B</code> is just an interface of interaction which
+        demands <code>A</code> and (eventually) supplies <code>B</code>.</p>
+        <p>In particular, it is not a callback given to someone else to execute.
+        Instead, each side of the interface does its respective part, namely
+        the producer of <code>A =⚬ B</code> receives <code>A</code> and produces <code>B</code>, whereas
+        the consumer of <code>A =⚬ B</code> produces <code>A</code> and receives <code>B</code>:</p>
+        <pre><code>    A =⚬ B
+  ━━━━┯━━━━━━━━
+      ├───┐
+    ←┄╎-A │←┄
+      ├───┘
+      ├───┐
+    ┄→╎ B │┄→
+      ├───┘
+  ━━━━┷━━━━━━━━</code></pre>
+        <p>Note that there is no requirement that <code>B</code> is produced only after <code>A</code> is supplied.
+        The plain Scala analogue would be a pair <code>(Promise[A], Future[B])</code>. There
+        is no requirement that the future completes only after the promise has been fulfilled.</p>
+        <p><code>curry</code> and <code>eval</code> are expressible in terms of <code>demand</code> and <code>supply</code>:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">curry</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">C</span><span>](</span><span class="identifier">f</span><span>: (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) -⚬ </span><span class="type-name">C</span><span>): </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">B</span><span> =⚬ </span><span class="type-name">C</span><span>) =
+  </span><span class="identifier">introFst</span><span>(</span><span class="identifier">demand</span><span>[</span><span class="type-name">B</span><span>]) &gt; </span><span class="identifier">assocLR</span><span> &gt; </span><span class="identifier">par</span><span>(</span><span class="identifier">id</span><span>[-[</span><span class="type-name">B</span><span>]], </span><span class="identifier">swap</span><span> &gt; </span><span class="identifier">f</span><span>)
+
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">eval</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>]: ((</span><span class="type-name">A</span><span> =⚬ </span><span class="type-name">B</span><span>) |*| </span><span class="type-name">A</span><span>) -⚬ </span><span class="type-name">B</span><span> =
+  </span><span class="identifier">swap</span><span> &gt; </span><span class="identifier">assocRL</span><span> &gt; </span><span class="identifier">elimFst</span><span>(</span><span class="identifier">supply</span><span>[</span><span class="type-name">A</span><span>])</span></code></pre>
         
         <h2 id="equality-of-libretto-programs" class="section"><a class="anchor-link left" href="#equality-of-libretto-programs"><i class="icofont-laika">&#xef71;</i></a>Equality of Libretto programs</h2>
         <p>There are equations (laws) that hold about Libretto arrows, such as</p>
