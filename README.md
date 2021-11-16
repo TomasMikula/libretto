@@ -391,6 +391,18 @@ The Libretto version of `curry` makes the roles clear:
 def curry[A, B, C]: ((A |*| B) -⚬ C) => (A -⚬ (B =⚬ C))
 ```
 
+### Is the Libretto function `-⚬` an `Arrow`?
+
+No.
+
+By `Arrow` we mean the [Arrow typeclass](https://www.haskell.org/arrows/).
+
+`-⚬` is not an `Arrow`, because
+ - Libretto's concurrent pair `|*|` is not Scala's pair `(_, _)`, or even a categorical product.
+   It is only a monoidal product (tensor product), which is weaker.
+ - Lifting arbitrary Scala function `A => B` to Libretto function `A -⚬ B` (the `arr` operation)
+   is not supported.
+
 ### How to type the `⚬` symbol used in `-⚬` and `=⚬`?
 
 `⚬` is Unicode code point U+26AC (medium small white circle).
