@@ -7,12 +7,12 @@ sealed trait VarOrigin {
 
   def print: String =
     this match {
-      case FunApp(Position(f, l))     => s"Result of function application at $f:$l"
-      case Pairing(Position(f, l))    => s"Pair created at $f:$l"
-      case Prj1(Position(f, l))       => s"First half of untupling at $f:$l"
-      case Prj2(Position(f, l))       => s"Second half of untupling at $f:$l"
-      case Lambda(Position(f, l))     => s"Introduced by lambda expression ending at $f:$l"
-      case ClosureVal(Position(f, l)) => s"Value of closure expression at $f:$l"
+      case FunApp(Position(f, l))     => s"The result of function application at $f:$l"
+      case Pairing(Position(f, l))    => s"The pair created at $f:$l"
+      case Prj1(Position(f, l))       => s"The first half of untupling at $f:$l"
+      case Prj2(Position(f, l))       => s"The second half of untupling at $f:$l"
+      case Lambda(Position(f, l))     => s"The input of lambda expression ending at $f:$l"
+      case ClosureVal(Position(f, l)) => s"The value of closure expression at $f:$l"
     }
 }
 

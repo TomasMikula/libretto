@@ -129,6 +129,7 @@ lazy val docs = project
       Transformer
         .from(Markdown)
         .to(HTML)
+        .withRawContent // support html content in input markdown documents
         .using(GitHubFlavor, SyntaxHighlighting)
         .parallel[IO]
         .withTheme(

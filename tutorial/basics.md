@@ -36,6 +36,7 @@ The code snippets below use these imports:
 
 ```scala mdoc
 import libretto.StarterKit.dsl._
+import libretto.StarterKit.dsl.$._
 ```
 
 ```scala mdoc:invisible
@@ -220,7 +221,7 @@ def par[A, B, C, D](
 ): (A |*| C) -⚬ (B |*| D)
 ```
 
-## The identity component
+## Identity
 
 For any type `A` there is an _identity_ function (component)
 
@@ -279,6 +280,19 @@ f > par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌┨
                         ┃           ╎C│    g    ╎D│
                         ┃           ├─┘         ┟─┘
                         ┗━━━━━━━━━━━┷━━━━━━━━━━━┛
+```
+
+There are shortcuts for transforming just one part of a concrrent pair, like above,
+using identity in the other part:
+
+```scala mdoc
+/** Applies `f` to the first part of a concurrent pair. */
+def fst[A, B, C](f: A -⚬ C): (A |*| B) -⚬ (C |*| B) =
+  par(f, id[B])
+
+/** Applies `g` to the second part of a concurrent pair. */
+def snd[A, B, C](g: B -⚬ C): (A |*| B) -⚬ (A |*| C) =
+  par(id[A], g)
 ```
 
 ## Associativity of ⊗
@@ -373,7 +387,7 @@ def g2: (B |*| A) -⚬ ((E |*| D) |*| C) =
   ???
 ```
 
-we can easily get it using `swap`
+we can "easily" get it using `swap`
 
 ```scala
 /*  ┏━━━━━━━━━━━━━━━━┓
@@ -407,6 +421,21 @@ like this
 val g2: (B |*| A) -⚬ ((E |*| D) |*| C) =
   swap[B, A] > g1 > swap[C, D |*| E] > par(swap[D, E], id[C])
 ```
+
+Okay, that was a lot of glue code to wrap around the function `g1`.
+Having to explicitly put in the glue code can be quite distracting from what is going on.
+Let's just foreshadow here that alternatively, we can use λ-syntax,
+which generates the glue code automatically:
+
+```scala mdoc:compile-only
+val g2: (B |*| A) -⚬ ((E |*| D) |*| C) =
+  λ { case (b |*| a) =>
+    val (c |*| (d |*| e)) = g1(a |*| b)
+    (e |*| d) |*| c
+  }
+```
+
+More on λ-syntax later.
 
 ## The no-flow port, `One`
 
@@ -688,6 +717,17 @@ def g: A -⚬ (Need |*| B) =
   introFst[A] > par(lInvertSignal, id[A]) > assocLR > par(id[Need], f)
 ```
 
+We can also use λ-syntax:
+
+```scala mdoc:compile-only
+def g: A -⚬ (Need |*| B) =
+  λ { a =>
+    val (a1 |*| (need |*| done)) =
+      a also lInvertSignal
+    need |*| f(done |*| a1)
+  }
+```
+
 ## Either (⊕)
 
 Type `A ⊕ B` (in code we use `A |+| B` for easier typing and better intelligibility) means either `A` or `B` (but
@@ -882,24 +922,177 @@ def coFactorR[A, B, C]: ((A |&| B) |*| C) -⚬ ((A |*| C) |&| (B |*| C)) =
 
 ## Linearity and point-free style
 
-When composing components into larger components, it cannot happen that somewhere inside a composite component
-some ports remain unconnected. The way composition works, all ports of a constituent component that the composition
-operator does not connect to other ports become ports of the composite component.
-It also cannot happen that some port is connected twice.
+When composing components into larger components, it would be undesirable if somewhere inside a composite component
+some ports remained unconnected or accidentally connected multiple times.
+
 The property of each port being connected exactly once is called _linearity_—data and resources flow through the system
 in a linear fashion, without being duplicated or ignored (except via explicit operators for precisely that purpose).
 
-Notice that building Libretto components is like composing Scala functions in _point-free style._
+_In Libretto, linearity is ensured by construction._
+Data types used to represent Libretto programs are simply unable to represent non-linear programs.
+Notice how in composition operations, each port of a sub-program either is connected (and thus absent
+from the resulting program's interface) or becomes a port of the resulting composite program.
+
+Notice how the way we have been composing Libretto programs so far is like composing Scala functions in _point-free style,_
+i.e. when one defines functions by composing smaller functions, without ever referring to the function's input variables.
 For a moment, forget the differences between `-⚬` and `=>` and view in-ports as function inputs.
 In Libretto, we define the (linear) function without ever having access to the inputs as Scala values.
 Indeed, user code will never have access to values of types like `One`, `Done`, `Need`, `A |*| B`, `A |+| B`, `A & B`
-or others that we will encounter later. If it did, it would break linearity,
+or others that we will encounter later<sup>(*)</sup>. If it did, it would break linearity,
 because Scala functions can freely ignore or duplicate (references to) values.
 
-Moreover, not only are values of the above types not accessible to a user, there need not be any values of these
-types at all. In fact, they are all uninhabited types in the proof-of-concept implementation. This should not be
+_Using point-free composition guarantees linearity at compile-time._
+
+<sup>(*)</sup> Moreover, not only are values of the above types not accessible to a user, the types themselves may be uninhabited.
+Indeed, they are all uninhabited in the proof-of-concept implementation. This should not be
 surprising when you realize that Libretto's linear functions are mere blueprints. What then flows in a running system
 when the blueprint is executed need not be values of the auxiliary formal types used in blueprints.
+
+## λ-Syntax
+
+Although point-free composition has the desirable property of ensuring linearity at compile-time,
+it can be quite cumbersome. It takes a lot of effort to just say which out-port should be connected
+to which in-port.
+
+That is something that would be easier in a point-full style: just name the ports and "pass"
+them to functions to obtain new ports. No explicit `swap`s or re-associations that obscure the essence
+of the program. That is what _lambda expressions_ are for.
+
+Let's illustrate lambda expressions on an example.
+
+Suppose we want to implement a function `reorg` that just reorganizes its in-ports:
+
+```scala mdoc:compile-only
+val reorg: ((A |*| B) |*| (C |*| D)) -⚬ (((C |*| A) |*| D) |*| B) =
+  ???
+```
+
+For comparison, let's first do it in point-free style:
+
+```scala mdoc:compile-only
+val reorg: ((A |*| B) |*| (C |*| D)) -⚬ (((C |*| A) |*| D) |*| B) =
+  fst(swap) > assocLR > swap > fst(assocRL > fst(swap))
+```
+
+Well, it is a one-liner, but it is not immediately clear what it does.
+
+Let's now use a λ-expression instead:
+
+```scala mdoc:compile-only
+val reorg: ((A |*| B) |*| (C |*| D)) -⚬ (((C |*| A) |*| D) |*| B) =
+  λ { case ((a |*| b) |*| (c |*| d)) => (((c |*| a) |*| d) |*| b) }
+```
+
+Opinions may vary, but I would say the λ version is more readable.
+
+### How it works
+
+But what is going on here? A moment ago we said that we don't ever access inputs
+of a Libretto function as Scala values, yet here we construct a Libretto function
+
+```scala
+((A |*| B) |*| (C |*| D)) -⚬ (((C |*| A) |*| D) |*| B)
+```
+
+from a Scala function
+
+```scala
+{ case ((a |*| b) |*| (c |*| d)) => (((c |*| a) |*| d) |*| b) }
+```
+
+Let's look at the type signature of `λ`:
+
+```scala
+def λ[A, B](f: $[A] => $[B]): A -⚬ B
+```
+
+Indeed, it takes a Scala function and returns a Libretto function.
+Notice, however, that to create a Libretto function `A -⚬ B`,
+it takes a Scala function `$[A] => $[B]`. In particular, the Scala function
+does not have access to a value of type `A`. It has access to `$[A]`, which
+is an auxiliary type that exists at the meta level only.
+
+The programmer's task is to construct an expression of type `$[B]` from an expression of type `$[A]`.
+The implementation of `λ` then analyzes the resulting `$[B]` expression (which contains occurrences
+of the input variable `$[A]`) and infers a (point-free) Libretto function `A -⚬ B`.
+
+### Operations on $-expressions
+
+```scala mdoc:compile-only
+// given
+val a: $[A]     = ???
+val b: $[B]     = ???
+val f: A -⚬ C   = ???
+val g: One -⚬ D = ???
+val h: B -⚬ One = ???
+
+// pair
+val ab: $[A |*| B] = a |*| b
+
+// unpair
+val ((a1: $[A]) |*| (b1: $[B])) = ab
+
+// pass to a Libretto function
+val c1: $[C] = a > f
+// or equivalently
+val c2: $[C] = f(a)
+
+// shortcut for introducing something constructed from `One`
+val ((a2: $[A]) |*| (d: $[D])) = a also g
+// equivalent to
+a > introSnd > snd(g)
+
+// shortcut for eliminating `$[One]`
+val a3: $[A] = a alsoElim h(b)
+// equivalent to
+(a |*| h(b)) > elimSnd
+```
+
+### Linearity checking
+
+The Scala function `$[A] => $[B]` passed to `λ` is not guaranteed to be linear,
+i.e. it may use some part of input more than once or not at all.
+
+Remember that a Libretto function `A -⚬ B` can represent only linear functions.
+If a non-linear Scala function is passed to `λ`, it throws an error.
+Notice that this error is thrown at assembly time, i.e. when constructing
+the Libretto program, in particular, _before_ running the Libretto program.
+
+```scala mdoc:nest:crash
+val overusedInput: A -⚬ (A |*| A) =
+  λ { a => a |*| a }
+```
+
+```scala mdoc:nest:crash
+val unusedInput: (A |*| B) -⚬ A =
+  λ { case (a |*| b) => a }
+```
+
+It is trivial to do linearity checking of programs constructed using λ-expressions in tests.
+The test just needs to assemble the program without throwing an exception.
+
+If this is the main program
+
+```scala mdoc
+object MyApp {
+  import scala.concurrent.duration._
+
+  val prg: Done -⚬ Done =
+    λ { start =>
+      // some complex program composed of many sub-programs
+      start > delay(1.hour)
+    }
+}
+```
+
+then in tests it is sufficient to just access the `val` holding the program to check that
+it can be successfully constructed.
+
+```scala mdoc:compile-only
+MyApp.prg
+```
+
+If the program is constructed at all, it will not throw a linearity error at runtime.
 
 ## Recursion
 

@@ -437,8 +437,8 @@ object FreeScalaDSL extends ScalaDSL {
         import lambdas.Error.Undefined
         import lambdas.LinearityViolation.{Overused, Underused}
         e match {
-          case Overused(vs)  => throw new NotLinearException(s"Variables used more than once: ${vs.toList.map(_.origin.print).mkString("\n", ", ", "\n")}")
-          case Underused(vs) => throw new NotLinearException(s"Variables not fully consumed: ${vs.toList.map(_.origin.print).mkString("\n", ", ", "\n")}")
+          case Overused(vs)  => throw new NotLinearException(s"Variables used more than once: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", ", ", "\n")}")
+          case Underused(vs) => throw new NotLinearException(s"Variables not fully consumed: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}")
           case Undefined(vs) => throw new UnboundVariablesException(vs)
         }
     }
