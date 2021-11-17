@@ -56,9 +56,6 @@ lazy val core = project
       "-deprecation",
       "-Ykind-projector", // support '*' as a placeholder in type lambdas
     ),
-    libraryDependencies ++= Seq(
-      "com.lihaoyi" %% "sourcecode" % "0.2.7",
-    ),
   )
 
 lazy val testing = project
@@ -108,11 +105,6 @@ lazy val docs = project
   .enablePlugins(MdocPlugin)
   .settings(
     scalacOptions += "-Ykind-projector", // so that we can use '*' placeholder in the tutorial
-    // mdoc (transitively) depends on sourcecode_2.13,
-    // which conflicts with core's dependency on sourcecode_3
-    libraryDependencies := libraryDependencies.value.map(_ excludeAll (
-      ExclusionRule(organization = "com.lihaoyi", name = "sourcecode_2.13"),
-    )),
     mdocIn := file("tutorial"),
     mdocVariables := Map(
       "SCALA_VERSION" -> (ThisBuild / scalaVersion).value,

@@ -313,8 +313,7 @@ trait CoreDSL {
     * @throws UnboundVariablesException if the result expression contains free variables (from outer [[λ]]s).
     */
   def λ[A, B](f: $[A] => $[B])(implicit
-    file: sourcecode.File,
-    line: sourcecode.Line,
+    pos: scalasource.Position,
   ): A -⚬ B
 
   type NotLinearException <: Throwable
@@ -324,48 +323,41 @@ trait CoreDSL {
 
   trait $Ops {
     def map[A, B](a: $[A])(f: A -⚬ B)(
-      file: String,
-      line: Int,
+      pos: scalasource.Position,
     ): $[B]
 
     def zip[A, B](a: $[A], b: $[B])(
-      file: String,
-      line: Int,
+      pos: scalasource.Position,
     ): $[A |*| B]
 
     def unzip[A, B](ab: $[A |*| B])(
-      file: String,
-      line: Int,
+      pos: scalasource.Position,
     ): ($[A], $[B])
 
     object |*| {
       def unapply[A, B](ab: $[A |*| B])(implicit
-        file: sourcecode.File,
-        line: sourcecode.Line,
+        pos: scalasource.Position,
       ): ($[A], $[B]) =
-        unzip(ab)(file.value, line.value)
+        unzip(ab)(pos)
     }
 
     extension [A, B](f: A -⚬ B) {
       def apply(a: $[A])(implicit
-        file: sourcecode.File,
-        line: sourcecode.Line,
+        pos: scalasource.Position,
       ): $[B] =
-        map(a)(f)(file.value, line.value)
+        map(a)(f)(pos)
     }
 
     extension [A](a: $[A]) {
       def |*|[B](b: $[B])(implicit
-        file: sourcecode.File,
-        line: sourcecode.Line,
+        pos: scalasource.Position,
       ): $[A |*| B] =
-        zip(a, b)(file.value, line.value)
+        zip(a, b)(pos)
 
       def >[B](f: A -⚬ B)(implicit
-        file: sourcecode.File,
-        line: sourcecode.Line,
+        pos: scalasource.Position,
       ): $[B] =
-        map(a)(f)(file.value, line.value)
+        map(a)(f)(pos)
 
       def also[B](f: One -⚬ B): $[A |*| B] =
         a > introSnd(f)

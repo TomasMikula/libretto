@@ -1,6 +1,7 @@
 package libretto.impl
 
 import libretto.{Async, BiInjective, ScalaDSL}
+import libretto.scalasource
 import scala.concurrent.duration.FiniteDuration
 
 object FreeScalaDSL extends ScalaDSL {
@@ -403,38 +404,33 @@ object FreeScalaDSL extends ScalaDSL {
 
   override val `$`: ClosureOps  = new ClosureOps {
     override def map[A, B](a: $[A])(f: A -⚬ B)(
-      file: String,
-      line: Int,
+      pos: scalasource.Position,
     ): $[B] =
-      (a map f)(new Var[B](VarOrigin.FunApp(file, line)))
+      (a map f)(new Var[B](VarOrigin.FunApp(pos)))
 
     override def zip[A, B](a: $[A], b: $[B])(
-      file: String,
-      line: Int,
+      pos: scalasource.Position,
     ): $[A |*| B] =
-      (a zip b)(new Var[A |*| B](VarOrigin.Pairing(file, line)))
+      (a zip b)(new Var[A |*| B](VarOrigin.Pairing(pos)))
 
     override def unzip[A, B](ab: $[A |*| B])(
-      file: String,
-      line: Int,
+      pos: scalasource.Position,
     ): ($[A], $[B]) =
       lambdas.Expr.unzip(ab)(
-        new Var[A](VarOrigin.Prj1(file, line)),
-        new Var[B](VarOrigin.Prj2(file, line)),
+        new Var[A](VarOrigin.Prj1(pos)),
+        new Var[B](VarOrigin.Prj2(pos)),
       )
 
     override def app[A, B](f: $[A =⚬ B], a: $[A])(
-      file: String,
-      line: Int,
+      pos: scalasource.Position,
     ): $[B] =
-      closures.app(f, a)(new Var[B](VarOrigin.FunApp(file, line)))
+      closures.app(f, a)(new Var[B](VarOrigin.FunApp(pos)))
   }
 
   override def λ[A, B](f: $[A] => $[B])(implicit
-    file: sourcecode.File,
-    line: sourcecode.Line,
+    pos: scalasource.Position,
   ): A -⚬ B =
-    lambdas.compile(f, boundVar = new Var[A](VarOrigin.Lambda(file.value, line.value))) match {
+    lambdas.compile(f, boundVar = new Var[A](VarOrigin.Lambda(pos))) match {
       case Right(f) =>
         f
       case Left(e) =>
@@ -448,13 +444,12 @@ object FreeScalaDSL extends ScalaDSL {
     }
 
   override def Λ[A, B](f: $[A] => $[B])(implicit
-    file: sourcecode.File,
-    line: sourcecode.Line,
+    pos: scalasource.Position,
   ): $[A =⚬ B] =
     closures.closure[A, B](
       f,
-      boundVar = new Var[A](VarOrigin.Lambda(file.value, line.value)),
-      resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(file.value, line.value)),
+      boundVar = new Var[A](VarOrigin.Lambda(pos)),
+      resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(pos)),
     ) match {
       case Right(f) =>
         f

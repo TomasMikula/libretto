@@ -29,24 +29,21 @@ trait ClosedDSL extends CoreDSL {
     * as an expression (`$[A =⚬ B]`) that can be used in outer [[λ]] or [[Λ]].
     */
   def Λ[A, B](f: $[A] => $[B])(implicit
-    file: sourcecode.File,
-    line: sourcecode.Line,
+    pos: scalasource.Position,
   ): $[A =⚬ B]
 
   type NoCaptureException <: Throwable
 
   trait ClosureOps extends $Ops {
     def app[A, B](f: $[A =⚬ B], a: $[A])(
-      file: String,
-      line: Int,
+      pos: scalasource.Position,
     ): $[B]
 
     implicit class ClosureOps[A, B](f: $[A =⚬ B]) {
       def apply(a: $[A])(implicit
-        file: sourcecode.File,
-        line: sourcecode.Line,
+        pos: scalasource.Position,
       ): $[B] =
-        app(f, a)(file.value, line.value)
+        app(f, a)(pos)
     }
   }
 
