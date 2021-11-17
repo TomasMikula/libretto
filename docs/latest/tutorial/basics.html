@@ -61,7 +61,7 @@
           <li class="level1"><a href="#sequential-composition">Sequential composition</a></li>
           <li class="level1"><a href="#parallel-composition">Parallel composition</a></li>
           <li class="level1"><a href="#scala-notation">Scala notation</a></li>
-          <li class="level1"><a href="#the-identity-component">The identity component</a></li>
+          <li class="level1"><a href="#identity">Identity</a></li>
           <li class="level1"><a href="#associativity-of">Associativity of ⊗</a></li>
           <li class="level1"><a href="#symmetry-of">Symmetry of ⊗</a></li>
           <li class="level1"><a href="#the-no-flow-port-one">The no-flow port, <code>One</code></a></li>
@@ -76,6 +76,10 @@
           <li class="level1"><a href="#distributivity-of-over">Distributivity of ⊗ over ⊕</a></li>
           <li class="level1"><a href="#co-distributivity-of-over">Co-distributivity of ⊗ over &amp;</a></li>
           <li class="level1"><a href="#linearity-and-point-free-style">Linearity and point-free style</a></li>
+          <li class="level1"><a href="#λ-syntax">λ-Syntax</a></li>
+          <li class="level2"><a href="#how-it-works">How it works</a></li>
+          <li class="level2"><a href="#operations-on-expressions">Operations on $-expressions</a></li>
+          <li class="level2"><a href="#linearity-checking">Linearity checking</a></li>
           <li class="level1"><a href="#recursion">Recursion</a></li>
           <li class="level2"><a href="#recursive-types">Recursive types</a></li>
           <li class="level2"><a href="#recursive-functions">Recursive functions</a></li>
@@ -118,7 +122,8 @@ libraryDependencies += &quot;com.github.tomasmikula&quot; %% &quot;libretto&quot
         
         <h3 id="imports" class="section"><a class="anchor-link left" href="#imports"><i class="icofont-laika">&#xef71;</i></a>Imports</h3>
         <p>The code snippets below use these imports:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">libretto</span><span>.</span><span class="type-name">StarterKit</span><span>.</span><span class="identifier">dsl</span><span>.</span><span class="identifier">_</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">libretto</span><span>.</span><span class="type-name">StarterKit</span><span>.</span><span class="identifier">dsl</span><span>.</span><span class="identifier">_</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">libretto</span><span>.</span><span class="type-name">StarterKit</span><span>.</span><span class="identifier">dsl</span><span>.</span><span class="identifier">$</span><span>.</span><span class="identifier">_</span></code></pre>
         
         <h2 id="building-blocks" class="section"><a class="anchor-link left" href="#building-blocks"><i class="icofont-laika">&#xef71;</i></a>Building blocks</h2>
         <p>Libretto programs are composed of <strong>components</strong> with typed <strong>in-ports</strong> and <strong>out-ports</strong>,
@@ -141,8 +146,8 @@ libraryDependencies += &quot;com.github.tomasmikula&quot; %% &quot;libretto&quot
         is important for composition, see below.</p>
         
         <h2 id="maximum-concurrency" class="section"><a class="anchor-link left" href="#maximum-concurrency"><i class="icofont-laika">&#xef71;</i></a>Maximum concurrency</h2>
-        <p>We can be sure that event <em>e&lt;sub&gt;2&lt;/sub&gt;</em> happens after event <em>e&lt;sub&gt;1&lt;/sub&gt;</em> only if <em>e&lt;sub&gt;2&lt;/sub&gt;</em>
-        <strong>causally depends</strong> on <em>e&lt;sub&gt;1&lt;/sub&gt;</em>. If there is no causal dependence between <em>e&lt;sub&gt;1&lt;/sub&gt;</em> and <em>e&lt;sub&gt;2&lt;/sub&gt;</em>,
+        <p>We can be sure that event <em>e<sub>2</sub></em> happens after event <em>e<sub>1</sub></em> only if <em>e<sub>2</sub></em>
+        <strong>causally depends</strong> on <em>e<sub>1</sub></em>. If there is no causal dependence between <em>e<sub>1</sub></em> and <em>e<sub>2</sub></em>,
         then they happen concurrently (☝️ but not necessarily in parallel).</p>
         <p>This is different from what most people are used to. It usually takes some work to make things happen concurrently.
         In Libretto, it takes some work to make things happen sequentially if there is no natural causal dependence between
@@ -240,7 +245,7 @@ libraryDependencies += &quot;com.github.tomasmikula&quot; %% &quot;libretto&quot
   </span><span class="identifier">g</span><span>: </span><span class="type-name">C</span><span> -⚬ </span><span class="type-name">D</span><span>,
 ): (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">C</span><span>) -⚬ (</span><span class="type-name">B</span><span> |*| </span><span class="type-name">D</span><span>)</span></code></pre>
         
-        <h2 id="the-identity-component" class="section"><a class="anchor-link left" href="#the-identity-component"><i class="icofont-laika">&#xef71;</i></a>The identity component</h2>
+        <h2 id="identity" class="section"><a class="anchor-link left" href="#identity"><i class="icofont-laika">&#xef71;</i></a>Identity</h2>
         <p>For any type <code>A</code> there is an <em>identity</em> function (component)</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">/*  ┏━━━━━━━━━━━━┓
  *  ┞─┐          ┞─┐
@@ -283,6 +288,15 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
                         ┃           ╎C│    g    ╎D│
                         ┃           ├─┘         ┟─┘
                         ┗━━━━━━━━━━━┷━━━━━━━━━━━┛</code></pre>
+        <p>There are shortcuts for transforming just one part of a concrrent pair, like above,
+        using identity in the other part:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">/** Applies `f` to the first part of a concurrent pair. */</span><span>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">fst</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">C</span><span>](</span><span class="identifier">f</span><span>: </span><span class="type-name">A</span><span> -⚬ </span><span class="type-name">C</span><span>): (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) -⚬ (</span><span class="type-name">C</span><span> |*| </span><span class="type-name">B</span><span>) =
+  </span><span class="identifier">par</span><span>(</span><span class="identifier">f</span><span>, </span><span class="identifier">id</span><span>[</span><span class="type-name">B</span><span>])
+
+</span><span class="comment">/** Applies `g` to the second part of a concurrent pair. */</span><span>
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">snd</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">C</span><span>](</span><span class="identifier">g</span><span>: </span><span class="type-name">B</span><span> -⚬ </span><span class="type-name">C</span><span>): (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) -⚬ (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">C</span><span>) =
+  </span><span class="identifier">par</span><span>(</span><span class="identifier">id</span><span>[</span><span class="type-name">A</span><span>], </span><span class="identifier">g</span><span>)</span></code></pre>
         
         <h2 id="associativity-of" class="section"><a class="anchor-link left" href="#associativity-of"><i class="icofont-laika">&#xef71;</i></a>Associativity of ⊗</h2>
         <p>If we are designing a component with more than two in-ports or out-ports, such as this one,</p>
@@ -343,7 +357,7 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
         <p>and need</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">g2</span><span>: (</span><span class="type-name">B</span><span> |*| </span><span class="type-name">A</span><span>) -⚬ ((</span><span class="type-name">E</span><span> |*| </span><span class="type-name">D</span><span>) |*| </span><span class="type-name">C</span><span>) =
   ???</span></code></pre>
-        <p>we can easily get it using <code>swap</code></p>
+        <p>we can &quot;easily&quot; get it using <code>swap</code></p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">/*  ┏━━━━━━━━━━━━━━━━┓
  *  ┞─┐              ┞─┐
  *  ╎X│              ╎Y│
@@ -370,6 +384,16 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
  */</span><span>
 </span><span class="keyword">val</span><span> </span><span class="identifier">g2</span><span>: (</span><span class="type-name">B</span><span> |*| </span><span class="type-name">A</span><span>) -⚬ ((</span><span class="type-name">E</span><span> |*| </span><span class="type-name">D</span><span>) |*| </span><span class="type-name">C</span><span>) =
   </span><span class="identifier">swap</span><span>[</span><span class="type-name">B</span><span>, </span><span class="type-name">A</span><span>] &gt; </span><span class="identifier">g1</span><span> &gt; </span><span class="identifier">swap</span><span>[</span><span class="type-name">C</span><span>, </span><span class="type-name">D</span><span> |*| </span><span class="type-name">E</span><span>] &gt; </span><span class="identifier">par</span><span>(</span><span class="identifier">swap</span><span>[</span><span class="type-name">D</span><span>, </span><span class="type-name">E</span><span>], </span><span class="identifier">id</span><span>[</span><span class="type-name">C</span><span>])</span></code></pre>
+        <p>Okay, that was a lot of glue code to wrap around the function <code>g1</code>.
+        Having to explicitly put in the glue code can be quite distracting from what is going on.
+        Let&#39;s just foreshadow here that alternatively, we can use λ-syntax,
+        which generates the glue code automatically:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">g2</span><span>: (</span><span class="type-name">B</span><span> |*| </span><span class="type-name">A</span><span>) -⚬ ((</span><span class="type-name">E</span><span> |*| </span><span class="type-name">D</span><span>) |*| </span><span class="type-name">C</span><span>) =
+  λ { </span><span class="keyword">case</span><span> (</span><span class="identifier">b</span><span> |*| </span><span class="identifier">a</span><span>) =&gt;
+    </span><span class="keyword">val</span><span> (</span><span class="identifier">c</span><span> |*| (</span><span class="identifier">d</span><span> |*| </span><span class="identifier">e</span><span>)) = </span><span class="identifier">g1</span><span>(</span><span class="identifier">a</span><span> |*| </span><span class="identifier">b</span><span>)
+    (</span><span class="identifier">e</span><span> |*| </span><span class="identifier">d</span><span>) |*| </span><span class="identifier">c</span><span>
+  }</span></code></pre>
+        <p>More on λ-syntax later.</p>
         
         <h2 id="the-no-flow-port-one" class="section"><a class="anchor-link left" href="#the-no-flow-port-one"><i class="icofont-laika">&#xef71;</i></a>The no-flow port, <code>One</code></h2>
         <p>Sometimes we want a component with no in-ports or no out-ports, such as these ones</p>
@@ -601,6 +625,13 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
  */</span><span>
 </span><span class="keyword">def</span><span> </span><span class="declaration-name">g</span><span>: </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">B</span><span>) =
   </span><span class="identifier">introFst</span><span>[</span><span class="type-name">A</span><span>] &gt; </span><span class="identifier">par</span><span>(</span><span class="identifier">lInvertSignal</span><span>, </span><span class="identifier">id</span><span>[</span><span class="type-name">A</span><span>]) &gt; </span><span class="identifier">assocLR</span><span> &gt; </span><span class="identifier">par</span><span>(</span><span class="identifier">id</span><span>[</span><span class="type-name">Need</span><span>], </span><span class="identifier">f</span><span>)</span></code></pre>
+        <p>We can also use λ-syntax:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">g</span><span>: </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">Need</span><span> |*| </span><span class="type-name">B</span><span>) =
+  λ { </span><span class="identifier">a</span><span> =&gt;
+    </span><span class="keyword">val</span><span> (</span><span class="identifier">a1</span><span> |*| (</span><span class="identifier">need</span><span> |*| </span><span class="identifier">done</span><span>)) =
+      </span><span class="identifier">a</span><span> </span><span class="identifier">also</span><span> </span><span class="identifier">lInvertSignal</span><span>
+    </span><span class="identifier">need</span><span> |*| </span><span class="identifier">f</span><span>(</span><span class="identifier">done</span><span> |*| </span><span class="identifier">a1</span><span>)
+  }</span></code></pre>
         
         <h2 id="either" class="section"><a class="anchor-link left" href="#either"><i class="icofont-laika">&#xef71;</i></a>Either (⊕)</h2>
         <p>Type <code>A ⊕ B</code> (in code we use <code>A |+| B</code> for easier typing and better intelligibility) means either <code>A</code> or <code>B</code> (but
@@ -741,22 +772,134 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
   </span><span class="identifier">choice</span><span>(</span><span class="identifier">par</span><span>(</span><span class="identifier">chooseL</span><span>, </span><span class="identifier">id</span><span>), </span><span class="identifier">par</span><span>(</span><span class="identifier">chooseR</span><span>, </span><span class="identifier">id</span><span>))</span></code></pre>
         
         <h2 id="linearity-and-point-free-style" class="section"><a class="anchor-link left" href="#linearity-and-point-free-style"><i class="icofont-laika">&#xef71;</i></a>Linearity and point-free style</h2>
-        <p>When composing components into larger components, it cannot happen that somewhere inside a composite component
-        some ports remain unconnected. The way composition works, all ports of a constituent component that the composition
-        operator does not connect to other ports become ports of the composite component.
-        It also cannot happen that some port is connected twice.
-        The property of each port being connected exactly once is called <em>linearity</em>—data and resources flow through the system
+        <p>When composing components into larger components, it would be undesirable if somewhere inside a composite component
+        some ports remained unconnected or accidentally connected multiple times.</p>
+        <p>The property of each port being connected exactly once is called <em>linearity</em>—data and resources flow through the system
         in a linear fashion, without being duplicated or ignored (except via explicit operators for precisely that purpose).</p>
-        <p>Notice that building Libretto components is like composing Scala functions in <em>point-free style.</em>
+        <p><em>In Libretto, linearity is ensured by construction.</em>
+        Data types used to represent Libretto programs are simply unable to represent non-linear programs.
+        Notice how in composition operations, each port of a sub-program either is connected (and thus absent
+        from the resulting program&#39;s interface) or becomes a port of the resulting composite program.</p>
+        <p>Notice how the way we have been composing Libretto programs so far is like composing Scala functions in <em>point-free style,</em>
+        i.e. when one defines functions by composing smaller functions, without ever referring to the function&#39;s input variables.
         For a moment, forget the differences between <code>-⚬</code> and <code>=&gt;</code> and view in-ports as function inputs.
         In Libretto, we define the (linear) function without ever having access to the inputs as Scala values.
         Indeed, user code will never have access to values of types like <code>One</code>, <code>Done</code>, <code>Need</code>, <code>A |*| B</code>, <code>A |+| B</code>, <code>A &amp; B</code>
-        or others that we will encounter later. If it did, it would break linearity,
+        or others that we will encounter later<sup>(*)</sup>. If it did, it would break linearity,
         because Scala functions can freely ignore or duplicate (references to) values.</p>
-        <p>Moreover, not only are values of the above types not accessible to a user, there need not be any values of these
-        types at all. In fact, they are all uninhabited types in the proof-of-concept implementation. This should not be
+        <p><em>Using point-free composition guarantees linearity at compile-time.</em></p>
+        <p><sup>(*)</sup> Moreover, not only are values of the above types not accessible to a user, the types themselves may be uninhabited.
+        Indeed, they are all uninhabited in the proof-of-concept implementation. This should not be
         surprising when you realize that Libretto&#39;s linear functions are mere blueprints. What then flows in a running system
         when the blueprint is executed need not be values of the auxiliary formal types used in blueprints.</p>
+        
+        <h2 id="λ-syntax" class="section"><a class="anchor-link left" href="#λ-syntax"><i class="icofont-laika">&#xef71;</i></a>λ-Syntax</h2>
+        <p>Although point-free composition has the desirable property of ensuring linearity at compile-time,
+        it can be quite cumbersome. It takes a lot of effort to just say which out-port should be connected
+        to which in-port.</p>
+        <p>That is something that would be easier in a point-full style: just name the ports and &quot;pass&quot;
+        them to functions to obtain new ports. No explicit <code>swap</code>s or re-associations that obscure the essence
+        of the program. That is what <em>lambda expressions</em> are for.</p>
+        <p>Let&#39;s illustrate lambda expressions on an example.</p>
+        <p>Suppose we want to implement a function <code>reorg</code> that just reorganizes its in-ports:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">reorg</span><span>: ((</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) |*| (</span><span class="type-name">C</span><span> |*| </span><span class="type-name">D</span><span>)) -⚬ (((</span><span class="type-name">C</span><span> |*| </span><span class="type-name">A</span><span>) |*| </span><span class="type-name">D</span><span>) |*| </span><span class="type-name">B</span><span>) =
+  ???</span></code></pre>
+        <p>For comparison, let&#39;s first do it in point-free style:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">reorg</span><span>: ((</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) |*| (</span><span class="type-name">C</span><span> |*| </span><span class="type-name">D</span><span>)) -⚬ (((</span><span class="type-name">C</span><span> |*| </span><span class="type-name">A</span><span>) |*| </span><span class="type-name">D</span><span>) |*| </span><span class="type-name">B</span><span>) =
+  </span><span class="identifier">fst</span><span>(</span><span class="identifier">swap</span><span>) &gt; </span><span class="identifier">assocLR</span><span> &gt; </span><span class="identifier">swap</span><span> &gt; </span><span class="identifier">fst</span><span>(</span><span class="identifier">assocRL</span><span> &gt; </span><span class="identifier">fst</span><span>(</span><span class="identifier">swap</span><span>))</span></code></pre>
+        <p>Well, it is a one-liner, but it is not immediately clear what it does.</p>
+        <p>Let&#39;s now use a λ-expression instead:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">reorg</span><span>: ((</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) |*| (</span><span class="type-name">C</span><span> |*| </span><span class="type-name">D</span><span>)) -⚬ (((</span><span class="type-name">C</span><span> |*| </span><span class="type-name">A</span><span>) |*| </span><span class="type-name">D</span><span>) |*| </span><span class="type-name">B</span><span>) =
+  λ { </span><span class="keyword">case</span><span> ((</span><span class="identifier">a</span><span> |*| </span><span class="identifier">b</span><span>) |*| (</span><span class="identifier">c</span><span> |*| </span><span class="identifier">d</span><span>)) =&gt; (((</span><span class="identifier">c</span><span> |*| </span><span class="identifier">a</span><span>) |*| </span><span class="identifier">d</span><span>) |*| </span><span class="identifier">b</span><span>) }</span></code></pre>
+        <p>Opinions may vary, but I would say the λ version is more readable.</p>
+        
+        <h3 id="how-it-works" class="section"><a class="anchor-link left" href="#how-it-works"><i class="icofont-laika">&#xef71;</i></a>How it works</h3>
+        <p>But what is going on here? A moment ago we said that we don&#39;t ever access inputs
+        of a Libretto function as Scala values, yet here we construct a Libretto function</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span>((</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) |*| (</span><span class="type-name">C</span><span> |*| </span><span class="type-name">D</span><span>)) -⚬ (((</span><span class="type-name">C</span><span> |*| </span><span class="type-name">A</span><span>) |*| </span><span class="type-name">D</span><span>) |*| </span><span class="type-name">B</span><span>)</span></code></pre>
+        <p>from a Scala function</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span>{ </span><span class="keyword">case</span><span> ((</span><span class="identifier">a</span><span> |*| </span><span class="identifier">b</span><span>) |*| (</span><span class="identifier">c</span><span> |*| </span><span class="identifier">d</span><span>)) =&gt; (((</span><span class="identifier">c</span><span> |*| </span><span class="identifier">a</span><span>) |*| </span><span class="identifier">d</span><span>) |*| </span><span class="identifier">b</span><span>) }</span></code></pre>
+        <p>Let&#39;s look at the type signature of <code>λ</code>:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> λ[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>](</span><span class="identifier">f</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">A</span><span>] =&gt; </span><span class="identifier">$</span><span>[</span><span class="type-name">B</span><span>]): </span><span class="type-name">A</span><span> -⚬ </span><span class="type-name">B</span></code></pre>
+        <p>Indeed, it takes a Scala function and returns a Libretto function.
+        Notice, however, that to create a Libretto function <code>A -⚬ B</code>,
+        it takes a Scala function <code>$[A] =&gt; $[B]</code>. In particular, the Scala function
+        does not have access to a value of type <code>A</code>. It has access to <code>$[A]</code>, which
+        is an auxiliary type that exists at the meta level only.</p>
+        <p>The programmer&#39;s task is to construct an expression of type <code>$[B]</code> from an expression of type <code>$[A]</code>.
+        The implementation of <code>λ</code> then analyzes the resulting <code>$[B]</code> expression (which contains occurrences
+        of the input variable <code>$[A]</code>) and infers a (point-free) Libretto function <code>A -⚬ B</code>.</p>
+        
+        <h3 id="operations-on-expressions" class="section"><a class="anchor-link left" href="#operations-on-expressions"><i class="icofont-laika">&#xef71;</i></a>Operations on $-expressions</h3>
+        <pre><code class="nohighlight"><span class="comment">// given
+</span><span class="keyword">val</span><span> </span><span class="identifier">a</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">A</span><span>]     = ???
+</span><span class="keyword">val</span><span> </span><span class="identifier">b</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">B</span><span>]     = ???
+</span><span class="keyword">val</span><span> </span><span class="identifier">f</span><span>: </span><span class="type-name">A</span><span> -⚬ </span><span class="type-name">C</span><span>   = ???
+</span><span class="keyword">val</span><span> </span><span class="identifier">g</span><span>: </span><span class="type-name">One</span><span> -⚬ </span><span class="type-name">D</span><span> = ???
+</span><span class="keyword">val</span><span> </span><span class="identifier">h</span><span>: </span><span class="type-name">B</span><span> -⚬ </span><span class="type-name">One</span><span> = ???
+
+</span><span class="comment">// pair
+</span><span class="keyword">val</span><span> </span><span class="identifier">ab</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>] = </span><span class="identifier">a</span><span> |*| </span><span class="identifier">b</span><span>
+
+</span><span class="comment">// unpair
+</span><span class="keyword">val</span><span> ((</span><span class="identifier">a1</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">A</span><span>]) |*| (</span><span class="identifier">b1</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">B</span><span>])) = </span><span class="identifier">ab</span><span>
+
+</span><span class="comment">// pass to a Libretto function
+</span><span class="keyword">val</span><span> </span><span class="identifier">c1</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">C</span><span>] = </span><span class="identifier">a</span><span> &gt; </span><span class="identifier">f</span><span>
+</span><span class="comment">// or equivalently
+</span><span class="keyword">val</span><span> </span><span class="identifier">c2</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">C</span><span>] = </span><span class="identifier">f</span><span>(</span><span class="identifier">a</span><span>)
+
+</span><span class="comment">// shortcut for introducing something constructed from `One`
+</span><span class="keyword">val</span><span> ((</span><span class="identifier">a2</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">A</span><span>]) |*| (</span><span class="identifier">d</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">D</span><span>])) = </span><span class="identifier">a</span><span> </span><span class="identifier">also</span><span> </span><span class="identifier">g</span><span>
+</span><span class="comment">// equivalent to
+</span><span class="identifier">a</span><span> &gt; </span><span class="identifier">introSnd</span><span> &gt; </span><span class="identifier">snd</span><span>(</span><span class="identifier">g</span><span>)
+
+</span><span class="comment">// shortcut for eliminating `$[One]`
+</span><span class="keyword">val</span><span> </span><span class="identifier">a3</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">A</span><span>] = </span><span class="identifier">a</span><span> </span><span class="identifier">alsoElim</span><span> </span><span class="identifier">h</span><span>(</span><span class="identifier">b</span><span>)
+</span><span class="comment">// equivalent to
+</span><span>(</span><span class="identifier">a</span><span> |*| </span><span class="identifier">h</span><span>(</span><span class="identifier">b</span><span>)) &gt; </span><span class="identifier">elimSnd</span></code></pre>
+        
+        <h3 id="linearity-checking" class="section"><a class="anchor-link left" href="#linearity-checking"><i class="icofont-laika">&#xef71;</i></a>Linearity checking</h3>
+        <p>The Scala function <code>$[A] =&gt; $[B]</code> passed to <code>λ</code> is not guaranteed to be linear,
+        i.e. it may use some part of input more than once or not at all.</p>
+        <p>Remember that a Libretto function <code>A -⚬ B</code> can represent only linear functions.
+        If a non-linear Scala function is passed to <code>λ</code>, it throws an error.
+        Notice that this error is thrown at assembly time, i.e. when constructing
+        the Libretto program, in particular, <em>before</em> running the Libretto program.</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">overusedInput</span><span>: </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">A</span><span>) =
+  λ { </span><span class="identifier">a</span><span> =&gt; </span><span class="identifier">a</span><span> |*| </span><span class="identifier">a</span><span> }
+</span><span class="comment">// libretto.impl.FreeScalaDSL$NotLinearException: Variables used more than once: 
+//  - The input of lambda expression ending at basics.md:233
+// 
+// 	at libretto.impl.FreeScalaDSL$.λ(FreeScalaDSL.scala:440)
+// 	at libretto.impl.FreeScalaDSL$.λ(FreeScalaDSL.scala:430)
+// 	at repl.MdocSession$App.$init$$$anonfun$1(basics.md:233)
+// 	at scala.runtime.java8.JFunction0$mcV$sp.apply(JFunction0$mcV$sp.scala:18)</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">unusedInput</span><span>: (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) -⚬ </span><span class="type-name">A</span><span> =
+  λ { </span><span class="keyword">case</span><span> (</span><span class="identifier">a</span><span> |*| </span><span class="identifier">b</span><span>) =&gt; </span><span class="identifier">a</span><span> }
+</span><span class="comment">// libretto.impl.FreeScalaDSL$NotLinearException: Variables not fully consumed: 
+//  - The second half of untupling at basics.md:244
+// 
+// 	at libretto.impl.FreeScalaDSL$.λ(FreeScalaDSL.scala:441)
+// 	at libretto.impl.FreeScalaDSL$.λ(FreeScalaDSL.scala:430)
+// 	at repl.MdocSession$App.$init$$$anonfun$2(basics.md:244)
+// 	at scala.runtime.java8.JFunction0$mcV$sp.apply(JFunction0$mcV$sp.scala:18)</span></code></pre>
+        <p>It is trivial to do linearity checking of programs constructed using λ-expressions in tests.
+        The test just needs to assemble the program without throwing an exception.</p>
+        <p>If this is the main program</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">object</span><span> </span><span class="type-name">MyApp</span><span> {
+  </span><span class="keyword">import</span><span> </span><span class="identifier">scala</span><span>.</span><span class="identifier">concurrent</span><span>.</span><span class="identifier">duration</span><span>.</span><span class="identifier">_</span><span>
+
+  </span><span class="keyword">val</span><span> </span><span class="identifier">prg</span><span>: </span><span class="type-name">Done</span><span> -⚬ </span><span class="type-name">Done</span><span> =
+    λ { </span><span class="identifier">start</span><span> =&gt;
+      </span><span class="comment">// some complex program composed of many sub-programs
+</span><span>      </span><span class="identifier">start</span><span> &gt; </span><span class="identifier">delay</span><span>(</span><span class="number-literal">1</span><span>.</span><span class="identifier">hour</span><span>)
+    }
+}</span></code></pre>
+        <p>then in tests it is sufficient to just access the <code>val</code> holding the program to check that
+        it can be successfully constructed.</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="type-name">MyApp</span><span>.</span><span class="identifier">prg</span></code></pre>
+        <p>If the program is constructed at all, it will not throw a linearity error at runtime.</p>
         
         <h2 id="recursion" class="section"><a class="anchor-link left" href="#recursion"><i class="icofont-laika">&#xef71;</i></a>Recursion</h2>
         
@@ -1159,8 +1302,8 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
         <p>and many more.</p>
         <p><em>But what does it mean for two Libretto programs to be equal?</em></p>
         <p>Obviously, the sides of the equations above have different source code, so they are not equal at the source code level.</p>
-        <p><em>We say that two Libretto programs are equal if their causal dependency graphs are equivalent&lt;sup&gt;(*)&lt;/sup&gt;.</em></p>
-        <p>&lt;sup&gt;(*)&lt;/sup&gt; For now let&#39;s settle for some intuitive understanding of <em>causal dependency graphs</em> and a suitable
+        <p><em>We say that two Libretto programs are equal if their causal dependency graphs are equivalent<sup>(*)</sup>.</em></p>
+        <p><sup>(*)</sup> For now let&#39;s settle for some intuitive understanding of <em>causal dependency graphs</em> and a suitable
         equivalence on them. Precise definition is left for further work.</p>
         <p>Note that in the presence of non-determinism arising from concurrency, a single program can have multiple possible
         execution traces. (Again, precise definition of an execution trace is left for further work.)</p>
