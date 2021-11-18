@@ -91,6 +91,7 @@
           <li class="level2"><a href="#universal-inversions">Universal Inversions</a></li>
           <li class="level1"><a href="#function-objects-and-higher-order-functions">Function Objects and Higher-Order Functions</a></li>
           <li class="level2"><a href="#function-objects-via-inversions">Function Objects via Inversions</a></li>
+          <li class="level2"><a href="#λ-expressions">Λ-expressions</a></li>
           <li class="level1"><a href="#equality-of-libretto-programs">Equality of Libretto programs</a></li>
         </ul>
         
@@ -1234,9 +1235,18 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
           <li><em>function object,</em> <code>=⚬</code>, which is a resource in a <em>running</em> program.</li>
         </ul>
         <p>It makes sense to distinguish between the two, as they exist at different stages.</p>
-        <p>Note that <code>A =⚬ B</code> is <em>not</em> a value. Even in other languages, it may have captured
-        resources (i.e. it is a closure),
-        and therefore must itself be treated as a resource that has to be consumed exactly once.</p>
+        <p>Note that <code>A =⚬ B</code> is <em>not</em> a value that can be freely used any number of times.
+        It may have captured resources (i.e. it is a closure), and therefore must itself
+        be treated as a resource that has to be consumed exactly once.</p>
+        <p>Note that function <em>objects</em> are not objects in the OOP sense. We call them
+        objects because</p>
+        <ul>
+          <li>they exist at the <em>object-level</em> (as opposed to the meta-level,
+          where functions as code, <code>A -⚬ B</code>, exist);</li>
+        </ul>
+        <ul>
+          <li>they are the <em>internal hom objects</em> in a monoidal category.</li>
+        </ul>
         <p>Function objects are introduced by <code>curry</code> and eliminated by <code>eval</code>:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">curry</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">C</span><span>](</span><span class="identifier">f</span><span>: (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) -⚬ </span><span class="type-name">C</span><span>): </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">B</span><span> =⚬ </span><span class="type-name">C</span><span>)
 </span><span class="keyword">def</span><span> </span><span class="declaration-name">eval</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>]: ((</span><span class="type-name">A</span><span> =⚬ </span><span class="type-name">B</span><span>) |*| </span><span class="type-name">A</span><span>) -⚬ </span><span class="type-name">B</span></code></pre>
@@ -1274,6 +1284,24 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
 
 </span><span class="keyword">def</span><span> </span><span class="declaration-name">eval</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>]: ((</span><span class="type-name">A</span><span> =⚬ </span><span class="type-name">B</span><span>) |*| </span><span class="type-name">A</span><span>) -⚬ </span><span class="type-name">B</span><span> =
   </span><span class="identifier">swap</span><span> &gt; </span><span class="identifier">assocRL</span><span> &gt; </span><span class="identifier">elimFst</span><span>(</span><span class="identifier">supply</span><span>[</span><span class="type-name">A</span><span>])</span></code></pre>
+        
+        <h3 id="λ-expressions" class="section"><a class="anchor-link left" href="#λ-expressions"><i class="icofont-laika">&#xef71;</i></a>Λ-expressions</h3>
+        <p>Function objects can also be created using Λ-expressions (uppercase Greek letter Lambda),
+        which are similar to λ-expressions introduced above.</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> Λ[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>](</span><span class="identifier">f</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">A</span><span>] =&gt; </span><span class="identifier">$</span><span>[</span><span class="type-name">B</span><span>]): </span><span class="identifier">$</span><span>[</span><span class="type-name">A</span><span> =⚬ </span><span class="type-name">B</span><span>]</span></code></pre>
+        <p>For comparison, here is the <code>λ</code> signature again:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> λ[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>](</span><span class="identifier">f</span><span>: </span><span class="identifier">$</span><span>[</span><span class="type-name">A</span><span>] =&gt; </span><span class="identifier">$</span><span>[</span><span class="type-name">B</span><span>]): </span><span class="type-name">A</span><span> -⚬ </span><span class="type-name">B</span></code></pre>
+        <p>While <code>λ</code> creates a Libretto function, <code>Λ</code> creates just an auxiliary expression <code>$[A =⚬ B]</code>
+        that can be used from the outer <code>λ</code> expression.</p>
+        <p>For example, we could reimplement <code>curry</code> like this:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">myCurry</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">C</span><span>](</span><span class="identifier">f</span><span>: (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) -⚬ </span><span class="type-name">C</span><span>): </span><span class="type-name">A</span><span> -⚬ (</span><span class="type-name">B</span><span> =⚬ </span><span class="type-name">C</span><span>) =
+  λ { </span><span class="identifier">a</span><span> =&gt;
+    Λ { </span><span class="identifier">b</span><span> =&gt;
+      </span><span class="identifier">f</span><span>(</span><span class="identifier">a</span><span> |*| </span><span class="identifier">b</span><span>)
+    }
+  }</span></code></pre>
+        <p>Notice how the <code>Λ</code>-expression captures the variable <code>a</code> from the outer scope, i.e. it is a closure.</p>
+        <p>Note that capturing outer variables is not allowed for <code>λ</code>-expressions.</p>
         
         <h2 id="equality-of-libretto-programs" class="section"><a class="anchor-link left" href="#equality-of-libretto-programs"><i class="icofont-laika">&#xef71;</i></a>Equality of Libretto programs</h2>
         <p>There are equations (laws) that hold about Libretto arrows, such as</p>

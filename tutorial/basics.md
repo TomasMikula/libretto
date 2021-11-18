@@ -1488,9 +1488,16 @@ between
 
 It makes sense to distinguish between the two, as they exist at different stages.
 
-Note that `A =⚬ B` is _not_ a value. Even in other languages, it may have captured
-resources (i.e. it is a closure),
-and therefore must itself be treated as a resource that has to be consumed exactly once.
+Note that `A =⚬ B` is _not_ a value that can be freely used any number of times.
+It may have captured resources (i.e. it is a closure), and therefore must itself
+be treated as a resource that has to be consumed exactly once.
+
+Note that function _objects_ are not objects in the OOP sense. We call them
+objects because
+
+ - they exist at the _object-level_ (as opposed to the meta-level,
+   where functions as code, `A -⚬ B`, exist);
+ - they are the _internal hom objects_ in a monoidal category.
 
 Function objects are introduced by `curry` and eliminated by `eval`:
 
@@ -1550,6 +1557,39 @@ def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C) =
 def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B =
   swap > assocRL > elimFst(supply[A])
 ```
+
+### Λ-expressions
+
+Function objects can also be created using Λ-expressions (uppercase Greek letter Lambda),
+which are similar to λ-expressions introduced above.
+
+```scala
+def Λ[A, B](f: $[A] => $[B]): $[A =⚬ B]
+```
+
+For comparison, here is the `λ` signature again:
+
+```scala
+def λ[A, B](f: $[A] => $[B]): A -⚬ B
+```
+
+While `λ` creates a Libretto function, `Λ` creates just an auxiliary expression `$[A =⚬ B]`
+that can be used from the outer `λ` expression.
+
+For example, we could reimplement `curry` like this:
+
+```scala mdoc
+def myCurry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C) =
+  λ { a =>
+    Λ { b =>
+      f(a |*| b)
+    }
+  }
+```
+
+Notice how the `Λ`-expression captures the variable `a` from the outer scope, i.e. it is a closure.
+
+Note that capturing outer variables is not allowed for `λ`-expressions.
 
 ## Equality of Libretto programs
 
