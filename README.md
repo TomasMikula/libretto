@@ -119,11 +119,13 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
 
 ## Libretto in a Nutshell
 
-Libretto takes inspiration from linear logic, with a twist of interpreting the multiplicative conjunction
-in a concurrent fashion.
+Libretto takes inspiration from linear logic, with a twist of interpreting the multiplicative conjunction,
+⊗, in a concurrent fashion.
 
 The correspondence of linear logic to certain monoidal categories led to a point-free notation that enforces linearity
 statically, despite the lack of linear types in the host language.
+
+There is also lambda syntax, whose linearity is checked at assembly time (i.e. when constructing the Libretto blueprint, before execution).
 
 Primitives for racing and recursion were added.
 
@@ -155,9 +157,6 @@ message brokers, ...
 **Flawed proof-of-concept implementation.**
 The current implementation [is leaky](https://github.com/TomasMikula/libretto/issues/46). It is not a design flaw,
 just an implementation flaw.
-
-**Point-free style _is_ cumbersome.**
-This is the price for statically checked linearity, but there's no hiding it is a pain.
 
 **Best practices not established.**
 Programming in Libretto is quite different from conventional concurrency libraries. It is not clear what the best
@@ -197,7 +196,7 @@ and to excite a small number of enthusiasts to play with it, explore it and push
 
 The expectation is that people will find the Libretto approach worthwhile regardless of
 unstable API, non-existent ecosystem of libraries, flawed proof-of-concept implementation,
-cumbersome point-free notation, or unknown performance characteristics.
+or unknown performance characteristics.
 
 ### What do you mean by _declarative,_ anyway?
 
@@ -255,17 +254,6 @@ because `x` is unused.
 
 Libretto programs are not composed of Scala functions `A => B`.
 They are composed of Libretto's linear functions `A -⚬ B`, which are linear by construction.
-
-### Why are Libretto programs written in point-free style?
-
-Scala functions can be written using point-full (lambdas) or point-free style.
-However, Libretto programs are not composed of Scala functions.
-Scala functions are opaque (cannot be inspected) and do not enforce linearity.
-Libretto programs are composed of Libretto's linear functions (`A -⚬ B`).
-These are just data structures and as such can be inspected by the implementation.
-Also, they are designed to ensure linearity by construction.
-However, unlike native Scala functions, we don't get the nice lambda syntax
-and have to resort to building up linear functions using point-free combinators.
 
 ### What exactly are the primitives of Libretto, from which everything else is derived?
 
