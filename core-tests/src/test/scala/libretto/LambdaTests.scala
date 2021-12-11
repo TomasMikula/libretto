@@ -99,7 +99,7 @@ class LambdaTests extends TestSuite {
       }
 
     assert(e.getMessage contains "not fully consumed")
-    assert(e.getMessage contains "Second half of untupling")
+    assert(e.getMessage contains "The second half of untupling")
     assert(e.getMessage contains "LambdaTests.scala:96")
   }
 
@@ -112,7 +112,7 @@ class LambdaTests extends TestSuite {
       }
 
     assert(e.getMessage contains "used more than once")
-    assert(e.getMessage contains "Introduced by lambda expression ending at")
+    assert(e.getMessage contains "The input of lambda expression ending at")
     assert(e.getMessage contains "LambdaTests.scala:111")
   }
 }
