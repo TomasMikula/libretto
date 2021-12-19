@@ -4,28 +4,34 @@ import libretto.{Async, BiInjective, ScalaDSL}
 import libretto.scalasource
 import scala.concurrent.duration.FiniteDuration
 
-object FreeScalaDSL extends ScalaDSL {
-  override sealed trait -⚬[A, B]
+/**
+ * @tparam T transformer of nested arrows: nested arrows are of type `T[-⚬, A, B]` instead of `A -⚬ B`.
+ *   For example, `T[-⚬, A, B]` can be an enrichment of `-⚬`, or not use `-⚬` at all.
+ */
+class FreeScalaDSL[T[_[_, _], _, _]] {
+  sealed trait -⚬[A, B]
+
+  type ->[A, B] = T[-⚬, A, B]
 
   // The following types are all "imaginary", never instantiated, but we declare them as classes,
   // so that the Scala typechecker can infer that
   //  1. they are injective (e.g. that if `(A |*| B) =:= (C |*| D)` then `A =:= C` and `B =:= D`;
   //  2. they are all distinct types (e.g. `One` can never be unified with `Done`).
   // Unfortunately, the Scala typechecker doesn't take advantage of this information anyway.
-  override final class One private()
-  override final class Done private()
-  override final class Need private()
-  override final class Ping private()
-  override final class Pong private()
-  override final class RTerminus private()
-  override final class LTerminus private()
-  override final class |*|[A, B] private()
-  override final class |+|[A, B] private()
-  override final class |&|[A, B] private()
-  override final class Rec[F[_]] private()
-  override final class -[A] private()
-  override final class Val[A] private()
-  override final class Res[A] private()
+  final class One private()
+  final class Done private()
+  final class Need private()
+  final class Ping private()
+  final class Pong private()
+  final class RTerminus private()
+  final class LTerminus private()
+  final class |*|[A, B] private()
+  final class |+|[A, B] private()
+  final class |&|[A, B] private()
+  final class Rec[F[_]] private()
+  final class -[A] private()
+  final class Val[A] private()
+  final class Res[A] private()
 
   implicit val biInjectivePair: BiInjective[|*|] =
     new BiInjective[|*|] {
@@ -35,10 +41,10 @@ object FreeScalaDSL extends ScalaDSL {
 
   object -⚬ {
     case class Id[A]() extends (A -⚬ A)
-    case class AndThen[A, B, C](f: A -⚬ B, g: B -⚬ C) extends (A -⚬ C)
+    case class AndThen[A, B, C](f: A -> B, g: B -> C) extends (A -⚬ C)
     case class Par[A, B, C, D](
-      f: A -⚬ B,
-      g: C -⚬ D,
+      f: A -> B,
+      g: C -> D,
     ) extends ((A |*| C) -⚬ (B |*| D))
     case class IntroFst[B]() extends (B -⚬ (One |*| B))
     case class IntroSnd[A]() extends (A -⚬ (A |*| One))
@@ -49,10 +55,10 @@ object FreeScalaDSL extends ScalaDSL {
     case class Swap[A, B]() extends ((A |*| B) -⚬ (B |*| A))
     case class InjectL[A, B]() extends (A -⚬ (A |+| B))
     case class InjectR[A, B]() extends (B -⚬ (A |+| B))
-    case class EitherF[A, B, C](f: A -⚬ C, g: B -⚬ C) extends ((A |+| B) -⚬ C)
+    case class EitherF[A, B, C](f: A -> C, g: B -> C) extends ((A |+| B) -⚬ C)
     case class ChooseL[A, B]() extends ((A |&| B) -⚬ A)
     case class ChooseR[A, B]() extends ((A |&| B) -⚬ B)
-    case class Choice[A, B, C](f: A -⚬ B, g: A -⚬ C) extends (A -⚬ (B |&| C))
+    case class Choice[A, B, C](f: A -> B, g: A -> C) extends (A -⚬ (B |&| C))
     case class PingF() extends (One -⚬ Ping)
     case class PongF() extends (Pong -⚬ One)
     case class DelayIndefinitely() extends (Done -⚬ RTerminus)
@@ -103,10 +109,10 @@ object FreeScalaDSL extends ScalaDSL {
     case class UnliftPair[A, B]() extends ((Val[A] |*| Val[B]) -⚬ Val[(A, B)])
     case class MapVal[A, B](f: A => B) extends (Val[A] -⚬ Val[B])
     case class ConstVal[A](a: A) extends (Done -⚬ Val[A])
-    case class ConstNeg[A](a: A) extends (Neg[A] -⚬ Need)
+    case class ConstNeg[A](a: A) extends (-[Val[A]] -⚬ Need)
     case class Neglect[A]() extends (Val[A] -⚬ Done)
     case class NotifyVal[A]() extends (Val[A] -⚬ (Ping |*| Val[A]))
-    case class NotifyNeg[A]() extends ((Pong |*| Neg[A]) -⚬ Neg[A])
+    case class NotifyNeg[A]() extends ((Pong |*| -[Val[A]]) -⚬ -[Val[A]])
     case class DebugPrint(msg: String) extends (Ping -⚬ One)
 
     case class Acquire[A, R, B](
@@ -133,7 +139,9 @@ object FreeScalaDSL extends ScalaDSL {
 
     case class Blocking[A, B](f: A => B) extends (Val[A] -⚬ Val[B])
   }
+}
 
+object FreeScalaDSL extends FreeScalaDSL[[-⚬[_, _], A, B] =>> A -⚬ B] with ScalaDSL {
   import -⚬._
 
   override def id[A]: A -⚬ A =
