@@ -699,7 +699,7 @@ class BasicTests extends TestSuite {
     assertCompletes(prg)
   }
 
-  ignore("on the demand side, demandSeparately, then supply one to the other") {
+  test("on the demand side, demandSeparately, then supply one to the other") {
     val prg: Done -⚬ Done =
       λ { d =>
         val (d1 |*| ((n_nd_d: $[-[-[Done] |*| Done]]) |*| (nd |*| d2))) =

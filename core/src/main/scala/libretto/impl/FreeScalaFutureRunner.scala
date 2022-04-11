@@ -521,7 +521,7 @@ class FreeScalaFutureRunner(
           // (Val[X] |*| Val[Y]) -⚬ Val[(X, Y)]
           type X; type Y
           val (x, y) = Frontier.splitPair(this.asInstanceOf[Frontier[Val[X] |*| Val[Y]]])
-          (x.toFutureValue zip y.toFutureValue).toValFrontier     .asInstanceOf[Frontier[B]]                                                .asInstanceOf[Frontier[B]]
+          (x.toFutureValue zip y.toFutureValue).toValFrontier     .asInstanceOf[Frontier[B]]
 
         case -⚬.MapVal(f) =>
           type X; type Y
@@ -958,7 +958,7 @@ class FreeScalaFutureRunner(
           val py = Promise[Frontier[Y]]()
 
           this.asInstanceOf[Frontier[-[X |*| Y]]]
-            .fulfill((px.future zipWith py.future)(Pair(_, _)))
+            .fulfill(Pair(px.future.asDeferredFrontier, py.future.asDeferredFrontier))
 
           Pair(Backwards(px), Backwards(py))                      .asInstanceOf[Frontier[B]]
 
