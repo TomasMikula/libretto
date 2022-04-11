@@ -4,14 +4,11 @@ import libretto.{Async, BiInjective, ScalaDSL}
 import libretto.scalasource
 import scala.concurrent.duration.FiniteDuration
 
-/**
- * @tparam T transformer of nested arrows: nested arrows are of type `T[-⚬, A, B]` instead of `A -⚬ B`.
- *   For example, `T[-⚬, A, B]` can be an enrichment of `-⚬`, or not use `-⚬` at all.
- */
-class FreeScalaDSL[T[_[_, _], _, _]] {
+abstract class FreeScalaDSL {
   sealed trait -⚬[A, B]
 
-  type ->[A, B] = T[-⚬, A, B]
+  /** Type of nested arrows. */
+  type ->[A, B]
 
   // The following types are all "imaginary", never instantiated, but we declare them as classes,
   // so that the Scala typechecker can infer that
@@ -141,8 +138,10 @@ class FreeScalaDSL[T[_[_, _], _, _]] {
   }
 }
 
-object FreeScalaDSL extends FreeScalaDSL[[-⚬[_, _], A, B] =>> A -⚬ B] with ScalaDSL {
+object FreeScalaDSL extends FreeScalaDSL with ScalaDSL {
   import -⚬._
+
+  override type ->[A, B] = A -⚬ B
 
   override def id[A]: A -⚬ A =
     Id()
