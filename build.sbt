@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-ThisBuild / scalaVersion := "3.1.1"
+ThisBuild / scalaVersion := "3.1.2"
 
 ThisBuild / organization := "com.github.tomasmikula"
 
