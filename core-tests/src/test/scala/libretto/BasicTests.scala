@@ -1,10 +1,26 @@
 package libretto
 
 import java.util.concurrent.{Executors, ScheduledExecutorService}
-import libretto.testing.TestSuite
+import libretto.testing.{ScalatestSuite, TestSuite}
 import scala.collection.mutable
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
+
+import libretto.testing.{ScalaTestDsl, ScalaTestExecutor, ScalatestSuite, Tests}
+import libretto.testing.TestDsl.{dsl, success}
+
+class BasicTestsNew extends ScalatestSuite {
+  override def tests: Tests =
+    Tests
+      .use[ScalaTestDsl]
+      .executedBy(ScalaTestExecutor.global)
+      .in(
+        "done" -> {
+          import dsl.{Done, id, andThen}
+          andThen(id[Done], success)
+        }
+      )
+}
 
 class BasicTests extends TestSuite {
   import kit.dsl._
