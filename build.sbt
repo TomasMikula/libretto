@@ -2,7 +2,7 @@ resolvers += Resolver.mavenCentral
 
 ThisBuild / scalaVersion := "3.1.2"
 
-ThisBuild / organization := "com.github.tomasmikula"
+ThisBuild / organization := "dev.continuously"
 
 ThisBuild / licenses += ("MPL 2.0", url("https://opensource.org/licenses/MPL-2.0"))
 ThisBuild / homepage := Some(url("https://github.com/TomasMikula/libretto"))
@@ -13,20 +13,15 @@ ThisBuild / scmInfo := Some(
   )
 )
 
-ThisBuild / publishTo := {
-  val nexus = "https://oss.sonatype.org/"
-  if (isSnapshot.value)
-    Some("snapshots" at nexus + "content/repositories/snapshots")
-  else
-    Some("releases"  at nexus + "service/local/staging/deploy/maven2")
-}
+ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
+ThisBuild / publishTo := sonatypePublishTo.value
 
 ThisBuild / pomExtra := (
   <developers>
     <developer>
       <id>TomasMikula</id>
       <name>Tomas Mikula</name>
-      <url>http://github.com/TomasMikula/</url>
+      <url>https://continuously.dev</url>
     </developer>
   </developers>
 )
