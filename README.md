@@ -131,7 +131,7 @@ Primitives for racing and recursion were added.
 
 ## Documentation
 
-[Scaladoc](https://tomasmikula.github.io/libretto/latest/scaladoc/api/) (Found something undocumented or not documented clearly? We should do better. Do not hesitate to
+[Scaladoc](https://tomasmikula.github.io/libretto/latest/scaladoc/) (Found something undocumented or not documented clearly? We should do better. Do not hesitate to
 [submit a documentation request](https://github.com/TomasMikula/libretto/issues/new?labels=documentation).)
 
 [Tutorial](https://tomasmikula.github.io/libretto/latest/tutorial/basics.html)
@@ -473,6 +473,6 @@ A negative value `Neg[A]` could alternatively be expressed as a callback `Val[A]
 
 ## Copyright and License
 
-Copyright 2020–2021 Tomas Mikula
+Copyright 2020–2022 Tomas Mikula
 
 This software is distributed under the Mozilla Public License 2.0, see the LICENSE file for details.
