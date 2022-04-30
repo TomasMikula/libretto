@@ -73,6 +73,7 @@ lazy val coreTests = project
   .dependsOn(core, testing)
   .settings(
     name := "core-tests",
+    publish / skip := true,
   )
 
 lazy val examples = project
