@@ -16,7 +16,7 @@ passes is to an interpreter for execution. We thus think of run-time as split in
 You will need Scala 3 in order to use Libretto. Scala 3 requires a fairly recent version of sbt. Specify the sbt version in your `project/build.properties` file:
 
 ```properties
-sbt.version=1.5.5
+sbt.version=1.6.2
 ```
 
 In your `build.sbt`, set the Scala version to Scala 3 and add the dependency on Libretto:
@@ -24,10 +24,10 @@ In your `build.sbt`, set the Scala version to Scala 3 and add the dependency on 
 ```sbt
 scalaVersion := "@SCALA_VERSION@"
 
-libraryDependencies += "com.github.tomasmikula" %% "libretto" % "0.2-M2"
+libraryDependencies += "dev.continuously" %% "libretto" % "0.2-M3"
 ```
 
-Check [search.maven.org](https://search.maven.org/search?q=com.github.tomasmikula%20libretto) for the latest version of
+Check [search.maven.org](https://search.maven.org/search?q=dev.continuously%20libretto) for the latest version of
 Libretto.
 
 ### Imports
