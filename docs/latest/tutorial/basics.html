@@ -113,12 +113,12 @@
         
         <h3 id="sbt-project-setup" class="section"><a class="anchor-link left" href="#sbt-project-setup"><i class="icofont-laika">&#xef71;</i></a>sbt project setup</h3>
         <p>You will need Scala 3 in order to use Libretto. Scala 3 requires a fairly recent version of sbt. Specify the sbt version in your <code>project/build.properties</code> file:</p>
-        <pre class="keep-together pdf epub"><code class="properties">sbt.version=1.5.5</code></pre>
+        <pre class="keep-together pdf epub"><code class="properties">sbt.version=1.6.2</code></pre>
         <p>In your <code>build.sbt</code>, set the Scala version to Scala 3 and add the dependency on Libretto:</p>
-        <pre class="keep-together pdf epub"><code class="sbt">scalaVersion := &quot;3.1.0&quot;
+        <pre class="keep-together pdf epub"><code class="sbt">scalaVersion := &quot;3.1.2&quot;
 
-libraryDependencies += &quot;com.github.tomasmikula&quot; %% &quot;libretto&quot; % &quot;0.2-M2&quot;</code></pre>
-        <p>Check <a href="https://search.maven.org/search?q=com.github.tomasmikula%20libretto">search.maven.org</a> for the latest version of
+libraryDependencies += &quot;dev.continuously&quot; %% &quot;libretto&quot; % &quot;0.2-M3&quot;</code></pre>
+        <p>Check <a href="https://search.maven.org/search?q=dev.continuously%20libretto">search.maven.org</a> for the latest version of
         Libretto.</p>
         
         <h3 id="imports" class="section"><a class="anchor-link left" href="#imports"><i class="icofont-laika">&#xef71;</i></a>Imports</h3>
@@ -872,8 +872,8 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
 </span><span class="comment">// libretto.impl.FreeScalaDSL$NotLinearException: Variables used more than once: 
 //  - The input of lambda expression ending at basics.md:233
 // 
-// 	at libretto.impl.FreeScalaDSL$.λ(FreeScalaDSL.scala:440)
-// 	at libretto.impl.FreeScalaDSL$.λ(FreeScalaDSL.scala:430)
+// 	at libretto.impl.FreeScalaDSL$.λ(FreeScalaDSL.scala:447)
+// 	at libretto.impl.FreeScalaDSL$.λ(FreeScalaDSL.scala:437)
 // 	at repl.MdocSession$App.$init$$$anonfun$1(basics.md:233)
 // 	at scala.runtime.java8.JFunction0$mcV$sp.apply(JFunction0$mcV$sp.scala:18)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">unusedInput</span><span>: (</span><span class="type-name">A</span><span> |*| </span><span class="type-name">B</span><span>) -⚬ </span><span class="type-name">A</span><span> =
@@ -881,8 +881,8 @@ f &gt; par(id[B], g)   =   ╎A│   f     ├╌╌╌╌╌╌╌╌╌╌╌�
 </span><span class="comment">// libretto.impl.FreeScalaDSL$NotLinearException: Variables not fully consumed: 
 //  - The second half of untupling at basics.md:244
 // 
-// 	at libretto.impl.FreeScalaDSL$.λ(FreeScalaDSL.scala:441)
-// 	at libretto.impl.FreeScalaDSL$.λ(FreeScalaDSL.scala:430)
+// 	at libretto.impl.FreeScalaDSL$.λ(FreeScalaDSL.scala:448)
+// 	at libretto.impl.FreeScalaDSL$.λ(FreeScalaDSL.scala:437)
 // 	at repl.MdocSession$App.$init$$$anonfun$2(basics.md:244)
 // 	at scala.runtime.java8.JFunction0$mcV$sp.apply(JFunction0$mcV$sp.scala:18)</span></code></pre>
         <p>It is trivial to do linearity checking of programs constructed using λ-expressions in tests.
