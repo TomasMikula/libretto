@@ -1,5 +1,7 @@
 # Libretto
 
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/dev.continuously/libretto_3/badge.svg?style=flat-square)](https://search.maven.org/search?q=g:dev.continuously%20AND%20a:libretto*)
+
 Declarative concurrency and stream processing library for Scala.
 
 ## Motivation
