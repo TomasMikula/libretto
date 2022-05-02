@@ -1,9 +1,10 @@
 package libretto.testing
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
-import libretto.StarterKit
+import libretto.{CoreLib, StarterKit}
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
+import scala.util.{Failure, Success, Try}
 
 object ScalaTestExecutor {
   lazy val global: TestExecutor[ScalaTestDsl] =
@@ -14,22 +15,35 @@ object ScalaTestExecutor {
       val runner =
         StarterKit.runner(blockingExecutor)(scheduler)
 
-      override def runTestCase(testCase: (tdsl: ScalaTestDsl) ?=> tdsl.TestCase): TestResult = {
-        val prg =
-          testCase(using testDsl) > testDsl.resultToScala
+      override val testDsl: TestDslImpl.type =
+        TestDslImpl
 
-        Await.result(
-          runner.runScala(prg),
-          5.seconds,
-        )
+      import testDsl.dsl.{-⚬, Done}
+
+      override def runTestCase(testCase: Done -⚬ testDsl.TestResult): TestResult = {
+        val prg =
+          testCase > testDsl.resultToScala
+
+        Try {
+          Await.result(
+            runner.runScala(prg),
+            5.seconds,
+          )
+        } match {
+          case Success(r) => r
+          case Failure(e) => TestResult.Crash(e)
+        }
       }
     }
 
-  private object testDsl extends ScalaTestDsl {
+  private object TestDslImpl extends ScalaTestDsl {
     override val dsl: StarterKit.dsl.type =
       StarterKit.dsl
 
-    import dsl.{-⚬, |+|, Done, Val, constVal, either, injectL, injectR}
+    private val coreLib = CoreLib(dsl)
+
+    import dsl.{-⚬, |+|, Done, Val, constVal, either, injectL, injectR, mapVal, neglect}
+    import coreLib.|+|
 
     override type TestResult =
       Done |+| Done
@@ -40,10 +54,15 @@ object ScalaTestExecutor {
     override def failure: Done -⚬ TestResult =
       injectR
 
+    override def assertEquals[A](expected: A): Val[A] -⚬ TestResult =
+      mapVal[A, Either[Unit, Unit]](a => if (a == expected) Left(()) else Right(()))
+        .>( dsl.liftEither )
+        .>( |+|.bimap(neglect, neglect) )
+
     def resultToScala: TestResult -⚬ Val[libretto.testing.TestResult] =
       either(
         constVal(libretto.testing.TestResult.Success),
-        constVal(libretto.testing.TestResult.Failure)
+        constVal(libretto.testing.TestResult.Failure("KO"))
       )
   }
 }

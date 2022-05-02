@@ -16,7 +16,7 @@ trait TestDsl {
 }
 
 object TestDsl {
-  transparent inline def apply()(using testDsl: TestDsl): testDsl.type =
+  transparent inline def givenInstance(using testDsl: TestDsl): testDsl.type =
     testDsl
 
   transparent inline def dsl(using testDsl: TestDsl): testDsl.dsl.type =

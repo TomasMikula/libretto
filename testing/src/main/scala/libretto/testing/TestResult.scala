@@ -2,5 +2,6 @@ package libretto.testing
 
 enum TestResult {
   case Success
-  case Failure
+  case Failure(msg: String)
+  case Crash(error: Throwable)
 }

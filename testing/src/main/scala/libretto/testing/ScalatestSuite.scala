@@ -9,14 +9,16 @@ abstract class ScalatestSuite extends AnyFunSuite {
     val tests = this.tests
     for {
       testExecutor <- tests.testExecutors
-      (testName, testCase) <- tests.testCases
+      (testName, testCase) <- tests.testCases(using testExecutor.testDsl)
     } {
       test(testName) {
-        testExecutor.runTestCase(testCase) match {
+        testCase.resultTrans(testExecutor.runTestCase(testCase.body)) match {
           case TestResult.Success =>
             // do nothing
-          case TestResult.Failure =>
-            fail()
+          case TestResult.Failure(msg) =>
+            fail(msg)
+          case TestResult.Crash(e) =>
+            fail(e)
         }
       }
     }

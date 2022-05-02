@@ -6,20 +6,138 @@ import scala.collection.mutable
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 
-import libretto.testing.{ScalaTestDsl, ScalaTestExecutor, ScalatestSuite, Tests}
+import libretto.testing.{ScalaTestDsl, ScalaTestExecutor, ScalatestSuite, TestDsl, Tests}
 import libretto.testing.TestDsl.{dsl, success}
+import libretto.testing.Tests.Case.{>>, assertCrashesWith}
 
 class BasicTestsNew extends ScalatestSuite {
   override def tests: Tests =
     Tests
       .use[ScalaTestDsl]
       .executedBy(ScalaTestExecutor.global)
-      .in(
-        "done" -> {
-          import dsl.{Done, id, andThen}
-          andThen(id[Done], success)
-        }
-      )
+      .in {
+        import TestDsl.givenInstance.assertEquals
+        import dsl._
+        val coreLib = CoreLib(dsl)
+        val scalaLib = ScalaLib(dsl: dsl.type, coreLib)
+        import coreLib._
+        import scalaLib._
+
+        def raceKeepWinner[A](
+          prg1: Done -⚬ Val[A],
+          prg2: Done -⚬ Val[A],
+        ): Done -⚬ Val[A] =
+          forkMap(prg1, prg2)
+            .race(
+              caseFstWins = id.awaitSnd(neglect),
+              caseSndWins = id.awaitFst(neglect),
+            )
+
+        Tests.Cases(
+          "done" >> {
+            introFst(done) > join > success
+          },
+
+          "join ⚬ fork" >> {
+            fork > join > success
+          },
+
+          "notifyDoneR, forkPing, joinPing, strengthenPing, join" >> {
+            notifyDoneR > snd(forkPing > joinPing > strengthenPing) > join > success
+          },
+
+          "joinNeed, strengthenPong, joinPong, forkPong, notifyNeedR" >> {
+            def unreverse(prg: Need -⚬ Need): Done -⚬ Done =
+              introSnd(lInvertSignal > fst(prg)) > assocRL > elimFst(rInvertSignal)
+
+            unreverse(joinNeed > snd(strengthenPong > joinPong > forkPong) > notifyNeedR) > success
+          },
+
+          "constVal" >> {
+            constVal(5) > assertEquals(5)
+          },
+
+          "unliftEither" >> {
+            constVal(42) > injectR > unliftEither > assertEquals(Right(42))
+          },
+
+          "liftPair, liftNegPair" >> {
+            val prg: Done -⚬ Val[(String, Int)] =
+              id                                       [       Done                                                                           ]
+                .>(constVal(("foo", 42)))           .to[     Val[(String, Int)]                                                               ]
+                .introSnd(promise)                  .to[     Val[(String, Int)]      |*| (   Neg[(String, Int)]       |*| Val[(String, Int)]) ]
+                .assocRL                            .to[ (   Val[(String, Int)]      |*|     Neg[(String, Int)]     ) |*| Val[(String, Int)]  ]
+                .>.fst(par(liftPair, liftNegPair))  .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| Val[(String, Int)]  ]
+                .>.fst(rInvert).elimFst             .to[                                                                  Val[(String, Int)]  ]
+
+            prg > assertEquals(("foo", 42))
+          },
+
+          "unliftPair, unliftNegPair" >> {
+            val lInvert: One -⚬ ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) =
+              coreLib.lInvert
+
+            val prg: Done -⚬ Val[(String, Int)] =
+              id                                              [               Done                                                                           ]
+                .>(forkMap(constVal("foo"), constVal(42))) .to[   Val[String] |*| Val[Int]                                                                   ]
+                .introSnd.>.snd(lInvert)                   .to[  (Val[String] |*| Val[Int]) |*| ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) ]
+                .assocRL                                   .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| (Val[String] |*| Val[Int])  ]
+                .>.fst(par(unliftPair, unliftNegPair))     .to[ (    Val[(String, Int)]     |*|      Neg[(String, Int)]    ) |*| (Val[String] |*| Val[Int])  ]
+                .elimFst(fulfill)                          .to[                                                                   Val[String] |*| Val[Int]   ]
+                .>(unliftPair)                             .to[                                                                      Val[(String, Int)]      ]
+
+            prg > assertEquals(("foo", 42))
+          },
+
+          "inflate" >> {
+            val prg: Done -⚬ Done =
+              id                                 [    Done                           ]
+                .>(constVal(42))              .to[  Val[Int]                         ]
+                .>(introSnd(lInvertSignal))   .to[  Val[Int] |*| ( Need    |*| Done) ]
+                .assocRL                      .to[ (Val[Int] |*|   Need  ) |*| Done  ]
+                .>.fst.snd(inflate)           .to[ (Val[Int] |*| Neg[Int]) |*| Done  ]
+                .elimFst(fulfill)             .to[                             Done  ]
+
+            prg > success
+          },
+
+          "delayed injectL" >> {
+            // 'A' delayed by 40 millis
+            val a: Done -⚬ Val[Char] =
+              delay(40.millis) > constVal('A')
+
+            // 'B' delayed by 30 + 20 = 50 millis.
+            // We are testing that the second timer starts ticking only after the delayed inject (joinInjectL).
+            val b: Done -⚬ Val[Char] = {
+              val delayedInjectL: Done -⚬ (Val[Char] |+| Val[Char]) =
+                forkMap(delay(30.millis), constVal('B')) > awaitInjectL
+              delayedInjectL > either(
+                introFst[Val[Char], Done](done > delay(20.millis)).awaitFst,
+                id,
+              )
+            }
+
+            raceKeepWinner(a, b) > assertEquals('A')
+          },
+
+          "delayed chooseL" >> {
+            // 'A' delayed by 40 millis
+            val a: Done -⚬ Val[Char] =
+              delay(40.millis) > constVal('A')
+
+            // 'B' delayed by 30 + 20 = 50 millis.
+            // We are testing that the second timer starts ticking only after the delayed choice is made.
+            val b: Done -⚬ Val[Char] =
+              forkMap(delay(30.millis), choice(delay(20.millis), id)) > awaitPosChooseL > constVal('B')
+
+            raceKeepWinner(a, b) > assertEquals('A')
+          },
+
+          "crashd" -> assertCrashesWith("boom!") {
+            crashd("boom!") > success,
+          },
+        )
+      }
 }
 
 class BasicTests extends TestSuite {
@@ -44,116 +162,6 @@ class BasicTests extends TestSuite {
     val p = Promise[A]()
     scheduler.schedule({ () => p.success(a) }: Runnable, d.length, d.unit)
     Async.fromFuture(p.future).map(_.get)
-  }
-
-  private def raceKeepWinner[A](
-    prg1: Done -⚬ Val[A],
-    prg2: Done -⚬ Val[A],
-  ): Done -⚬ Val[A] =
-    forkMap(prg1, prg2)
-      .race(
-        caseFstWins = id.awaitSnd(neglect),
-        caseSndWins = id.awaitFst(neglect),
-      )
-
-  test("done") {
-    assertCompletes(introFst(done) > join)
-  }
-
-  test("join ⚬ fork") {
-    assertCompletes(fork > join)
-  }
-
-  test("notifyDoneR, forkPing, joinPing, strengthenPing, join") {
-    assertCompletes(notifyDoneR > snd(forkPing > joinPing > strengthenPing) > join)
-  }
-
-  test("joinNeed, strengthenPong, joinPong, forkPong, notifyNeedR") {
-    assertCocompletes(joinNeed > snd(strengthenPong > joinPong > forkPong) > notifyNeedR)
-  }
-
-  test("constVal") {
-    assertVal(constVal(5), 5)
-  }
-
-  test("unliftEither") {
-    assertVal(constVal(42) > injectR > unliftEither, Right(42))
-  }
-
-  test("liftPair, liftNegPair") {
-    val prg: Done -⚬ Val[(String, Int)] =
-      id                                       [       Done                                                                           ]
-        .>(constVal(("foo", 42)))           .to[     Val[(String, Int)]                                                               ]
-        .introSnd(promise)                  .to[     Val[(String, Int)]      |*| (   Neg[(String, Int)]       |*| Val[(String, Int)]) ]
-        .assocRL                            .to[ (   Val[(String, Int)]      |*|     Neg[(String, Int)]     ) |*| Val[(String, Int)]  ]
-        .>.fst(par(liftPair, liftNegPair))  .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| Val[(String, Int)]  ]
-        .>.fst(rInvert).elimFst             .to[                                                                  Val[(String, Int)]  ]
-
-    assertVal(prg, ("foo", 42))
-  }
-
-  test("unliftPair, unliftNegPair") {
-    val lInvert: One -⚬ ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) =
-      coreLib.lInvert
-
-    val prg: Done -⚬ Val[(String, Int)] =
-      id                                              [               Done                                                                           ]
-        .>(forkMap(constVal("foo"), constVal(42))) .to[   Val[String] |*| Val[Int]                                                                   ]
-        .introSnd.>.snd(lInvert)                   .to[  (Val[String] |*| Val[Int]) |*| ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) ]
-        .assocRL                                   .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| (Val[String] |*| Val[Int])  ]
-        .>.fst(par(unliftPair, unliftNegPair))     .to[ (    Val[(String, Int)]     |*|      Neg[(String, Int)]    ) |*| (Val[String] |*| Val[Int])  ]
-        .elimFst(fulfill)                          .to[                                                                   Val[String] |*| Val[Int]   ]
-        .>(unliftPair)                             .to[                                                                      Val[(String, Int)]      ]
-
-    assertVal(prg, ("foo", 42))
-  }
-
-  test("inflate") {
-    val prg: Done -⚬ Done =
-      id                                 [    Done                           ]
-        .>(constVal(42))              .to[  Val[Int]                         ]
-        .>(introSnd(lInvertSignal))   .to[  Val[Int] |*| ( Need    |*| Done) ]
-        .assocRL                      .to[ (Val[Int] |*|   Need  ) |*| Done  ]
-        .>.fst.snd(inflate)           .to[ (Val[Int] |*| Neg[Int]) |*| Done  ]
-        .elimFst(fulfill)             .to[                             Done  ]
-
-    assertCompletes(prg)
-  }
-
-  test("delayed injectL") {
-    // 'A' delayed by 40 millis
-    val a: Done -⚬ Val[Char] =
-      delay(40.millis) > constVal('A')
-
-    // 'B' delayed by 30 + 20 = 50 millis.
-    // We are testing that the second timer starts ticking only after the delayed inject (joinInjectL).
-    val b: Done -⚬ Val[Char] = {
-      val delayedInjectL: Done -⚬ (Val[Char] |+| Val[Char]) =
-        forkMap(delay(30.millis), constVal('B')) > awaitInjectL
-      delayedInjectL > either(
-        introFst[Val[Char], Done](done > delay(20.millis)).awaitFst,
-        id,
-      )
-    }
-
-    assertVal(raceKeepWinner(a, b), 'A')
-  }
-
-  test("delayed chooseL") {
-    // 'A' delayed by 40 millis
-    val a: Done -⚬ Val[Char] =
-      delay(40.millis) > constVal('A')
-
-    // 'B' delayed by 30 + 20 = 50 millis.
-    // We are testing that the second timer starts ticking only after the delayed choice is made.
-    val b: Done -⚬ Val[Char] =
-      forkMap(delay(30.millis), choice(delay(20.millis), id)) > awaitPosChooseL > constVal('B')
-
-    assertVal(raceKeepWinner(a, b), 'A')
-  }
-
-  test("crashd") {
-    assertCrashes(crashd("boom!"), "boom!")
   }
 
   test("crashd waits for its trigger") {
