@@ -1,42 +1,44 @@
 package libretto.testing
 
-import libretto.Executor
+import libretto.{CoreDSL, Executor}
 import libretto.util.Monad
 import libretto.util.Monad.syntax._
 
-trait TestExecutor[TDSL <: TestDsl] {
+trait TestExecutor[+TDSL <: TestDsl] {
   val testDsl: TDSL
 
+  import testDsl.F
   import testDsl.dsl._
+  import testDsl.probes.OutPort
 
-  def runTestCase(testCase: Done -⚬ testDsl.TestResult): TestResult
+  def runTestCase[O](
+    body: Done -⚬ O,
+    conduct: OutPort[O] => F[TestResult],
+  ): TestResult
 }
 
-trait TestExecutorFromExecutor[TDSL <: TestDsl] extends TestExecutor[TDSL] {
-  type F[_]
+object TestExecutor {
+  def usingExecutor[F[_]](executor: Executor[F]): UsingExecutor[F, executor.type] =
+    new UsingExecutor[F, executor.type](executor)
 
-  val executor: Executor[testDsl.dsl.type, F]
+  class UsingExecutor[F[_], E <: Executor[F]](val executor: E) {
+    import executor.OutPort
+    import executor.dsl._
 
-  given F: Monad[F]
-
-  import testDsl.dsl._
-  import executor._
-
-  def extractTestResult(resultPort: OutPort[testDsl.TestResult]): F[TestResult]
-
-  override def runTestCase(testCase: Done -⚬ testDsl.TestResult): TestResult = {
-    val (inPort, outPort, execution) = executor.execute(testCase)
-    try {
-      executor.runAwait {
-        for {
-          _   <- executor.signalDone(inPort)
-          res <- extractTestResult(outPort)
-        } yield res
+    def runTestCase[O](
+      body: Done -⚬ O,
+      conduct: OutPort[O] => F[TestResult],
+    ): TestResult = {
+      val (outPort, execution) = executor.execute(body)
+      try {
+        executor.runAwait {
+          conduct(outPort)
+        }
+      } catch {
+        case e => libretto.testing.TestResult.Crash(e)
+      } finally {
+        executor.cancel(execution)
       }
-    } catch {
-      case e => TestResult.Crash(e)
-    } finally {
-      executor.cancel(execution)
     }
   }
 }

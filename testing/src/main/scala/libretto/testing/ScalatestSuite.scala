@@ -12,7 +12,7 @@ abstract class ScalatestSuite extends AnyFunSuite {
       (testName, testCase) <- tests.testCases(using testExecutor.testDsl)
     } {
       test(testName) {
-        testCase.resultTrans(testExecutor.runTestCase(testCase.body)) match {
+        testExecutor.runTestCase(testCase.body, testCase.conductor) match {
           case TestResult.Success =>
             // do nothing
           case TestResult.Failure(msg) =>

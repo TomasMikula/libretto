@@ -1,12 +1,13 @@
 package libretto.impl
 
 import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.{Executor, ScheduledExecutorService, TimeUnit}
-import libretto.{Async, ScalaRunner}
+import java.util.concurrent.{Executor => JExecutor, ScheduledExecutorService, TimeUnit}
+import libretto.{Async, ScalaExecutor, ScalaRunner}
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}
+import scala.concurrent.duration.Duration
 
 /** Runner of [[FreeScalaDSL]] that returns a [[Future]].
   *
@@ -18,9 +19,13 @@ import scala.util.{Failure, Success, Try}
   */
 class FreeScalaFutureRunner(
   scheduler: ScheduledExecutorService,
-  blockingExecutor: Executor,
-) extends ScalaRunner[FreeScalaDSL.type, Future] {
+  blockingExecutor: JExecutor,
+) extends ScalaRunner[FreeScalaDSL.type, Future] with ScalaExecutor[Future] {
   import ResourceRegistry._
+
+  override type Dsl = FreeScalaDSL.type
+  override opaque type Execution = ResourceRegistry
+  override opaque type OutPort[A] = Frontier[A]
 
   private implicit val ec: ExecutionContext =
     ExecutionContext.fromExecutor(scheduler)
@@ -42,6 +47,12 @@ class FreeScalaFutureRunner(
     pa.future
   }
 
+  override def execute[B](prg: Done -⚬ B): (OutPort[B], Execution) = {
+    val resourceRegistry = new ResourceRegistry
+    val fa = Frontier.DoneNow.extendBy(prg, resourceRegistry)
+    (fa, resourceRegistry)
+  }
+
   override def runScala[A](prg: Done -⚬ Val[A]): Future[A] = {
     import Frontier._
     val resourceRegistry = new ResourceRegistry
@@ -56,13 +67,46 @@ class FreeScalaFutureRunner(
         if (openResources.isEmpty) {
           Future.successful(a)
         } else {
-          System.err.println(s"Execution completed successfully, but there are ${openResources.size} unclosed resources left. Going to closie them.")
+          System.err.println(s"Execution completed successfully, but there are ${openResources.size} unclosed resources left. Going to close them.")
           closeResources(openResources).map { _ => a }
         }
       case Failure(e) =>
         val openResources = resourceRegistry.close()
         closeResources(openResources)
           .transformWith(_ => Future.failed[A](e)) // return the original error
+    }
+  }
+
+  override def awaitDone(port: OutPort[Done]): Future[Either[Throwable, Unit]] =
+    port.toFutureDone.transform {
+      case Success(Frontier.DoneNow) => Success(Right(()))
+      case Failure(e)                => Success(Left(e))
+    }
+
+  override def awaitEither[A, B](port: OutPort[A |+| B]): Future[Either[Throwable, Either[OutPort[A], OutPort[B]]]] =
+    port.futureEither.transform {
+      case Success(res) => Success(Right(res))
+      case Failure(e)   => Success(Left(e))
+    }
+
+  override def awaitVal[A](port: OutPort[Val[A]]): Future[Either[Throwable, A]] =
+    port.toFutureValue.transform {
+      case Success(a) => Success(Right(a))
+      case Failure(e) => Success(Left(e))
+    }
+
+  override def runAwait[A](fa: Future[A]): A =
+    Await.result(fa, Duration.Inf)
+
+  override def cancel(execution: Execution): Future[Unit] =
+    closeRegistry(execution).map(_ => ())
+
+  private def closeRegistry(resourceRegistry: ResourceRegistry): Future[Any] = {
+    val openResources: Seq[AcquiredResource[_]] =
+      resourceRegistry.close()
+
+    Future.traverse(openResources) { r =>
+      Async.toFuture(r.releaseAsync(r.resource))
     }
   }
 

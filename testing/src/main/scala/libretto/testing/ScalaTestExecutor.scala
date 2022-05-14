@@ -1,68 +1,81 @@
 package libretto.testing
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
-import libretto.{CoreLib, StarterKit}
-import scala.concurrent.{Await, Future}
+import libretto.{CoreLib, ScalaBridge, ScalaExecutor, ScalaDSL, StarterKit}
+import libretto.util.Monad
+import libretto.util.Monad.syntax._
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 object ScalaTestExecutor {
-  lazy val global: TestExecutor[ScalaTestDsl] =
-    new TestExecutor[ScalaTestDsl] {
-      val scheduler: ScheduledExecutorService = Executors.newScheduledThreadPool(2)
-      val blockingExecutor: ExecutorService   = Executors.newCachedThreadPool()
 
-      val runner =
-        StarterKit.runner(blockingExecutor)(scheduler)
+  private trait ScalaTestDslFromExecutor[F0[_]: Monad, DSL <: ScalaDSL, Exec <: ScalaExecutor.Of[DSL, F0]](
+    val dsl0: DSL,
+    val exec: Exec & ScalaExecutor.Of[dsl0.type, F0],
+  ) extends ScalaTestDsl {
+      override type F[A] = F0[A]
+      override val dsl: exec.dsl.type = exec.dsl
+      override val probes: exec.type = exec
+      import dsl._
 
-      override val testDsl: TestDslImpl.type =
-        TestDslImpl
+      override type TestResult = Val[String] |+| Done
 
-      import testDsl.dsl.{-⚬, Done}
+      private val coreLib = CoreLib(this.dsl)
+      import coreLib._
 
-      override def runTestCase(testCase: Done -⚬ testDsl.TestResult): TestResult = {
-        val prg =
-          testCase > testDsl.resultToScala
+      override def F: libretto.util.Monad[F0] =
+        summon[libretto.util.Monad[F0]]
 
-        Try {
-          Await.result(
-            runner.runScala(prg),
-            5.seconds,
-          )
-        } match {
-          case Success(r) => r
-          case Failure(e) => TestResult.Crash(e)
-        }
+      override def success: Done -⚬ TestResult =
+        injectR
+
+      override def failure: Done -⚬ TestResult =
+        constVal("Failed") > injectL
+
+      override def extractTestResult(outPort: exec.OutPort[TestResult]): F0[libretto.testing.TestResult] = {
+        import libretto.testing.TestResult.{Crash, Success, Failure}
+        exec
+          .awaitEither[Val[String], Done](outPort)
+          .flatMap {
+            case Left(e) =>
+              F.pure(Crash(e))
+            case Right(Left(msg)) =>
+              exec.awaitVal(msg).map {
+                case Left(e)    => Crash(e)
+                case Right(msg) => Failure(msg)
+              }
+            case Right(Right(d)) =>
+              exec.awaitDone(d).map {
+                case Left(e)   => Crash(e)
+                case Right(()) => Success
+              }
+          }
       }
+  }
+
+  def fromExecutor[F0[_]: Monad](dsl: ScalaDSL, exec: ScalaExecutor.Of[dsl.type, F0]): TestExecutor[ScalaTestDsl] =
+    new TestExecutor[ScalaTestDsl] {
+      override val testDsl: ScalaTestDslFromExecutor[F0, dsl.type, exec.type] =
+        new ScalaTestDslFromExecutor[F0, dsl.type, exec.type](dsl, exec) {}
+
+      import testDsl.dsl._
+      import testDsl.probes.OutPort
+
+      override def runTestCase[O](
+        body: Done -⚬ O,
+        conduct: OutPort[O] => F0[TestResult],
+      ): TestResult =
+        TestExecutor.usingExecutor(exec).runTestCase[O](body, conduct)
     }
 
-  private object TestDslImpl extends ScalaTestDsl {
-    override val dsl: StarterKit.dsl.type =
-      StarterKit.dsl
+  lazy val global: TestExecutor[ScalaTestDsl] = {
+    val scheduler: ScheduledExecutorService = Executors.newScheduledThreadPool(2)
+    val blockingExecutor: ExecutorService   = Executors.newCachedThreadPool()
 
-    private val coreLib = CoreLib(dsl)
+    val executor0: libretto.ScalaExecutor.Of[StarterKit.dsl.type, Future] =
+      StarterKit.executor(blockingExecutor)(scheduler)
 
-    import dsl.{-⚬, |+|, Done, Val, constVal, either, injectL, injectR, mapVal, neglect}
-    import coreLib.|+|
-
-    override type TestResult =
-      Done |+| Done
-
-    override def success: Done -⚬ TestResult =
-      injectL
-
-    override def failure: Done -⚬ TestResult =
-      injectR
-
-    override def assertEquals[A](expected: A): Val[A] -⚬ TestResult =
-      mapVal[A, Either[Unit, Unit]](a => if (a == expected) Left(()) else Right(()))
-        .>( dsl.liftEither )
-        .>( |+|.bimap(neglect, neglect) )
-
-    def resultToScala: TestResult -⚬ Val[libretto.testing.TestResult] =
-      either(
-        constVal(libretto.testing.TestResult.Success),
-        constVal(libretto.testing.TestResult.Failure("KO"))
-      )
+    fromExecutor(StarterKit.dsl, executor0)(using Monad.monadFuture(using ExecutionContext.fromExecutor(scheduler)))
   }
 }

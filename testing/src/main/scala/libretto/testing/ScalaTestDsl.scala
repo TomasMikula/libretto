@@ -1,11 +1,17 @@
 package libretto.testing
 
-import libretto.ScalaDSL
+import libretto.{CoreLib, ScalaDSL}
 
 trait ScalaTestDsl extends TestDsl {
   override val dsl: ScalaDSL
 
-  import dsl.{-⚬, Val}
+  import dsl._
 
-  def assertEquals[A](expected: A): Val[A] -⚬ TestResult
+  private lazy val coreLib = CoreLib(dsl)
+  import coreLib._
+
+  def assertEquals[A](expected: A): Val[A] -⚬ TestResult =
+    mapVal[A, Either[Unit, Unit]](a => if (a == expected) Right(()) else Left(()))
+      .>( dsl.liftEither )
+      .>( either(neglect > failure, neglect > success) )
 }

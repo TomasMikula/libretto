@@ -1,5 +1,7 @@
 package libretto.util
 
+import scala.concurrent.{ExecutionContext, Future}
+
 trait Monad[F[_]] {
   def flatMap[A, B](fa: F[A], f: A => F[B]): F[B]
 
@@ -19,4 +21,12 @@ object Monad {
         F.flatMap(fa, f)
     }
   }
+
+  given monadFuture(using ec: ExecutionContext): Monad[Future] with {
+      override def pure[A](a: A): Future[A] =
+        Future.successful(a)
+
+      override def flatMap[A, B](fa: Future[A], f: A => Future[B]): Future[B] =
+        fa.flatMap(f)(using ec)
+    }
 }

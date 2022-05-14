@@ -1,5 +1,7 @@
 package libretto.testing
 
+import libretto.testing.TestDsl.dsl
+import libretto.util.Monad.syntax._
 import scala.{:: => NonEmptyList}
 
 sealed trait Tests {
@@ -52,14 +54,35 @@ object Tests {
       }
   }
 
-  class Case[TDSL <: TestDsl] private (using val tdsl: TDSL)(
-    val body: tdsl.TestCase,
-    val resultTrans: TestResult => TestResult,
-  )
+  sealed trait Case[TDSL <: TestDsl] {
+    val testDsl: TDSL
+    import testDsl.F
+    import testDsl.dsl._
+    import testDsl.probes.OutPort
+
+    type O
+
+    val body: Done -⚬ O
+
+    val conductor: OutPort[O] => F[TestResult]
+  }
 
   object Case {
+    private def make[A](using
+      tdsl: TestDsl,
+    )(
+      body0: dsl.-⚬[dsl.Done, A],
+      conductor0: tdsl.probes.OutPort[A] => tdsl.F[TestResult],
+    ): Case[tdsl.type] =
+      new Case[tdsl.type] {
+        override type O = A
+        override val testDsl = tdsl
+        override val body = body0
+        override val conductor = conductor0
+      }
+
     def apply(using tdsl: TestDsl)(body: tdsl.TestCase): Case[tdsl.type] =
-      new Case[tdsl.type]()(body, identity[TestResult])
+      make(body, tdsl.extractTestResult)
 
     def assertCrashes(using tdsl: TestDsl)(body: tdsl.TestCase): Case[tdsl.type] =
       assertCrashes_(body, None)
@@ -67,10 +90,12 @@ object Tests {
     def assertCrashesWith(using tdsl: TestDsl)(expectedErrorMessage: String)(body: tdsl.TestCase): Case[tdsl.type] =
       assertCrashes_(body, Some(expectedErrorMessage))
 
-    private def assertCrashes_(using tdsl: TestDsl)(body: tdsl.TestCase, withMessage: Option[String]): Case[tdsl.type] =
-      new Case[tdsl.type]()(
+    private def assertCrashes_(using tdsl: TestDsl)(body: tdsl.TestCase, withMessage: Option[String]): Case[tdsl.type] = {
+      import tdsl.F
+
+      make(
         body,
-        {
+        tdsl.extractTestResult(_).map {
           case TestResult.Crash(e) =>
             withMessage match {
               case None =>
@@ -87,6 +112,7 @@ object Tests {
             TestResult.Failure(s"Expected crash, but the program completed with failure: $msg.")
         },
       )
+    }
 
     extension (name: String) {
       def >>(using tdsl: TestDsl)(body: tdsl.TestCase): (String, Case[tdsl.type]) =

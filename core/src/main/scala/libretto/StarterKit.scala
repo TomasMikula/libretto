@@ -1,6 +1,6 @@
 package libretto
 
-import java.util.concurrent.{Executor, Executors, ScheduledExecutorService}
+import java.util.concurrent.{Executor => JExecutor, Executors, ScheduledExecutorService}
 import libretto.impl.{FreeScalaDSL, FreeScalaFutureRunner}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -11,7 +11,7 @@ class StarterKit extends AbstractStarterKit(FreeScalaDSL, (scheduler, blockingEx
 
 abstract class AbstractStarterKit(
   val dsl: ScalaDSL,
-  val runner0: (ScheduledExecutorService, Executor) => ScalaRunner[dsl.type, Future],
+  val executor0: (ScheduledExecutorService, JExecutor) => ScalaExecutor.Of[dsl.type, Future],
 ) {
   val coreLib: CoreLib[dsl.type] =
     CoreLib(dsl)
@@ -31,8 +31,19 @@ abstract class AbstractStarterKit(
   val scalaStreams: ScalaStreams[dsl.type, coreLib.type, scalaLib.type, coreStreams.type] =
     ScalaStreams(dsl, coreLib, scalaLib, coreStreams)
 
-  def runner(blockingExecutor: Executor)(implicit scheduler: ScheduledExecutorService): ScalaRunner[dsl.type, Future] =
-    runner0(scheduler, blockingExecutor)
+  def executor(blockingExecutor: JExecutor)(implicit scheduler: ScheduledExecutorService): ScalaExecutor.Of[dsl.type, Future] =
+    executor0(scheduler, blockingExecutor)
+
+  def runner(blockingExecutor: JExecutor)(implicit scheduler: ScheduledExecutorService): ScalaRunner[dsl.type, Future] = {
+    val ec = ExecutionContext.fromExecutor(scheduler)
+
+    ScalaRunner.fromExecutor(
+      executor(blockingExecutor),
+      raiseError = [a] => (e: Throwable) => Future.failed[a](e),
+    )(using
+      libretto.util.Monad.monadFuture(using ec)
+    )
+  }
 
   export dsl._
   export coreLib.{dsl => _, _}
