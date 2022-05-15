@@ -113,10 +113,5 @@ object Tests {
         },
       )
     }
-
-    extension (name: String) {
-      def >>(using tdsl: TestDsl)(body: tdsl.TestCase): (String, Case[tdsl.type]) =
-        (name, Case(body))
-    }
   }
 }

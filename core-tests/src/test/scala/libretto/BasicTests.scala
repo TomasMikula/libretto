@@ -8,7 +8,7 @@ import scala.concurrent.duration._
 
 import libretto.testing.{ScalaTestDsl, ScalaTestExecutor, ScalatestSuite, TestDsl, Tests}
 import libretto.testing.TestDsl.{dsl, success}
-import libretto.testing.Tests.Case.{>>, assertCrashesWith}
+import libretto.testing.Tests.Case.assertCrashesWith
 
 class BasicTestsNew extends ScalatestSuite {
   override def tests: Tests =
@@ -34,34 +34,34 @@ class BasicTestsNew extends ScalatestSuite {
             )
 
         Tests.Cases(
-          "done" >> {
+          "done" -> Tests.Case {
             introFst(done) > join > success
           },
 
-          "join ⚬ fork" >> {
+          "join ⚬ fork" -> Tests.Case {
             fork > join > success
           },
 
-          "notifyDoneR, forkPing, joinPing, strengthenPing, join" >> {
+          "notifyDoneR, forkPing, joinPing, strengthenPing, join" -> Tests.Case {
             notifyDoneR > snd(forkPing > joinPing > strengthenPing) > join > success
           },
 
-          "joinNeed, strengthenPong, joinPong, forkPong, notifyNeedR" >> {
+          "joinNeed, strengthenPong, joinPong, forkPong, notifyNeedR" -> Tests.Case {
             def unreverse(prg: Need -⚬ Need): Done -⚬ Done =
               introSnd(lInvertSignal > fst(prg)) > assocRL > elimFst(rInvertSignal)
 
             unreverse(joinNeed > snd(strengthenPong > joinPong > forkPong) > notifyNeedR) > success
           },
 
-          "constVal" >> {
+          "constVal" -> Tests.Case {
             constVal(5) > assertEquals(5)
           },
 
-          "unliftEither" >> {
+          "unliftEither" -> Tests.Case {
             constVal(42) > injectR > unliftEither > assertEquals(Right(42))
           },
 
-          "liftPair, liftNegPair" >> {
+          "liftPair, liftNegPair" -> Tests.Case {
             val prg: Done -⚬ Val[(String, Int)] =
               id                                       [       Done                                                                           ]
                 .>(constVal(("foo", 42)))           .to[     Val[(String, Int)]                                                               ]
@@ -73,7 +73,7 @@ class BasicTestsNew extends ScalatestSuite {
             prg > assertEquals(("foo", 42))
           },
 
-          "unliftPair, unliftNegPair" >> {
+          "unliftPair, unliftNegPair" -> Tests.Case {
             val lInvert: One -⚬ ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) =
               coreLib.lInvert
 
@@ -89,7 +89,7 @@ class BasicTestsNew extends ScalatestSuite {
             prg > assertEquals(("foo", 42))
           },
 
-          "inflate" >> {
+          "inflate" -> Tests.Case {
             val prg: Done -⚬ Done =
               id                                 [    Done                           ]
                 .>(constVal(42))              .to[  Val[Int]                         ]
@@ -101,7 +101,7 @@ class BasicTestsNew extends ScalatestSuite {
             prg > success
           },
 
-          "delayed injectL" >> {
+          "delayed injectL" -> Tests.Case {
             // 'A' delayed by 40 millis
             val a: Done -⚬ Val[Char] =
               delay(40.millis) > constVal('A')
@@ -120,7 +120,7 @@ class BasicTestsNew extends ScalatestSuite {
             raceKeepWinner(a, b) > assertEquals('A')
           },
 
-          "delayed chooseL" >> {
+          "delayed chooseL" -> Tests.Case {
             // 'A' delayed by 40 millis
             val a: Done -⚬ Val[Char] =
               delay(40.millis) > constVal('A')
