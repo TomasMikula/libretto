@@ -56,6 +56,9 @@ object ScalaTestExecutor {
 
   def fromExecutor[F0[_]: Monad](dsl: ScalaDSL, exec: ScalaExecutor.Of[dsl.type, F0]): TestExecutor[ScalaTestDsl] =
     new TestExecutor[ScalaTestDsl] {
+      override val name: String =
+        ScalaTestExecutor.getClass.getCanonicalName
+
       override val testDsl: ScalaTestDslFromExecutor[F0, dsl.type, exec.type] =
         new ScalaTestDslFromExecutor[F0, dsl.type, exec.type](dsl, exec) {}
 
@@ -76,6 +79,9 @@ object ScalaTestExecutor {
     val executor0: libretto.ScalaExecutor.Of[StarterKit.dsl.type, Future] =
       StarterKit.executor(blockingExecutor)(scheduler)
 
-    fromExecutor(StarterKit.dsl, executor0)(using Monad.monadFuture(using ExecutionContext.fromExecutor(scheduler)))
+    given monadFuture: Monad[Future] =
+      Monad.monadFuture(using ExecutionContext.fromExecutor(scheduler))
+
+    fromExecutor(StarterKit.dsl, executor0)
   }
 }

@@ -54,27 +54,34 @@ object Tests {
       }
   }
 
-  sealed trait Case[TDSL <: TestDsl] {
-    val testDsl: TDSL
-    import testDsl.F
-    import testDsl.dsl._
-    import testDsl.probes.OutPort
-
-    type O
-
-    val body: Done -⚬ O
-
-    val conductor: OutPort[O] => F[TestResult]
-  }
+  sealed trait Case[TDSL <: TestDsl]
 
   object Case {
+
+    sealed trait Single[TDSL <: TestDsl] extends Case[TDSL] {
+      val testDsl: TDSL
+      import testDsl.F
+      import testDsl.dsl._
+      import testDsl.probes.OutPort
+
+      type O
+
+      val body: Done -⚬ O
+
+      val conductor: OutPort[O] => F[TestResult]
+    }
+
+    case class Multiple[TDSL <: TestDsl](
+      cases: NonEmptyList[(String, Case[TDSL])],
+    ) extends Case[TDSL]
+
     private def make[A](using
       tdsl: TestDsl,
     )(
       body0: dsl.-⚬[dsl.Done, A],
       conductor0: tdsl.probes.OutPort[A] => tdsl.F[TestResult],
     ): Case[tdsl.type] =
-      new Case[tdsl.type] {
+      new Single[tdsl.type] {
         override type O = A
         override val testDsl = tdsl
         override val body = body0

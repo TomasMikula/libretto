@@ -11,6 +11,8 @@ trait TestExecutor[+TDSL <: TestDsl] {
   import testDsl.dsl._
   import testDsl.probes.OutPort
 
+  def name: String
+
   def runTestCase[O](
     body: Done -⚬ O,
     conduct: OutPort[O] => F[TestResult],
