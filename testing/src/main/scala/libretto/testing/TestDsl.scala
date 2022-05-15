@@ -1,7 +1,9 @@
 package libretto.testing
 
 import libretto.{CoreBridge, CoreDSL}
+import libretto.{testing => lt}
 import libretto.util.Monad
+import libretto.util.Monad.syntax._
 
 trait TestDsl {
   val dsl: CoreDSL
@@ -10,11 +12,35 @@ trait TestDsl {
 
   given F: Monad[F]
 
+  opaque type Outcome[A] = F[lt.TestResult[A]]
+  object Outcome {
+    def apply[A](fa: F[lt.TestResult[A]]): Outcome[A] =
+      fa
+
+    def unwrap[A](outcome: Outcome[A]): F[lt.TestResult[A]] =
+      outcome
+
+    def fromTestResult[A](res: lt.TestResult[A]): Outcome[A] =
+      Outcome(F.pure(res))
+
+    def success[A](a: A): Outcome[A] =
+      fromTestResult(lt.TestResult.success(a))
+
+    def failure[A](msg: String): Outcome[A] =
+      fromTestResult(lt.TestResult.failure(msg))
+
+    def crash[A](e: Throwable): Outcome[A] =
+      fromTestResult(lt.TestResult.crash(e))
+
+    def successF[A](fa: F[A]): Outcome[A] =
+      Outcome(fa.map(lt.TestResult.success))
+  }
+
   val probes: CoreBridge.Of[dsl.type, F]
 
   type TestResult
 
-  import dsl.{-⚬, Done}
+  import dsl.{-⚬, |*|, |+|, Done}
   import probes.OutPort
 
   type TestCase = Done -⚬ TestResult
@@ -22,7 +48,48 @@ trait TestDsl {
   def success: Done -⚬ TestResult
   def failure: Done -⚬ TestResult
 
-  def extractTestResult(outPort: OutPort[TestResult]): F[libretto.testing.TestResult]
+  def extractTestResult(outPort: OutPort[TestResult]): Outcome[Unit]
+
+  given monadOutcome: Monad[Outcome] with {
+    override def pure[A](a: A): Outcome[A] =
+      F.pure(TestResult.success(a))
+
+    override def flatMap[A, B](fa: Outcome[A])(f: A => Outcome[B]): Outcome[B] =
+      F.flatMap(fa) {
+        case lt.TestResult.Success(a)   => f(a)
+        case lt.TestResult.Failure(msg) => F.pure(lt.TestResult.Failure(msg))
+        case lt.TestResult.Crash(e)     => F.pure(lt.TestResult.Crash(e))
+      }
+  }
+
+  def splitOut[A, B](port: OutPort[A |*| B]): Outcome[(OutPort[A], OutPort[B])] =
+    Outcome.successF(probes.splitOut(port))
+
+  def expectDone(port: OutPort[Done]): Outcome[Unit] =
+    probes.awaitDone(port).map {
+      case Left(e)   => lt.TestResult.crash(e)
+      case Right(()) => lt.TestResult.success(())
+    }
+
+  def expectCrashDone(port: OutPort[Done]): Outcome[Throwable] =
+    probes.awaitDone(port).map {
+      case Left(e)   => lt.TestResult.success(e)
+      case Right(()) => lt.TestResult.failure("Expected crash, but got Done")
+    }
+
+  def expectLeft[A, B](port: OutPort[A |+| B]): Outcome[OutPort[A]] =
+    probes.awaitEither(port).map {
+      case Left(e)         => lt.TestResult.crash(e)
+      case Right(Left(p))  => lt.TestResult.success(p)
+      case Right(Right(_)) => lt.TestResult.failure("Expected Left, but got Right")
+    }
+
+  def expectRight[A, B](port: OutPort[A |+| B]): Outcome[OutPort[B]] =
+    probes.awaitEither(port).map {
+      case Left(e)         => lt.TestResult.crash(e)
+      case Right(Left(_))  => lt.TestResult.failure("Expected Right, but got Left")
+      case Right(Right(p)) => lt.TestResult.success(p)
+    }
 }
 
 object TestDsl {

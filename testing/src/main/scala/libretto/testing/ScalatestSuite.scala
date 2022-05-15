@@ -27,7 +27,7 @@ abstract class ScalatestSuite extends AnyFunSuite {
         case c: Tests.Case.Single[testExecutor.testDsl.type] =>
           test(s"$prefix$testName (executed by ${testExecutor.name})") {
             testExecutor.runTestCase(c.body, c.conductor) match {
-              case TestResult.Success =>
+              case TestResult.Success(_) =>
                 // do nothing
               case TestResult.Failure(msg) =>
                 fail(msg)

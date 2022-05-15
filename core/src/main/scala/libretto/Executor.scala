@@ -9,6 +9,8 @@ trait CoreBridge[F[_]] {
 
   type OutPort[A]
 
+  def splitOut[A, B](port: OutPort[A |*| B]): F[(OutPort[A], OutPort[B])]
+
   def awaitDone(port: OutPort[Done]): F[Either[Throwable, Unit]]
 
   def awaitEither[A, B](port: OutPort[A |+| B]): F[Either[Throwable, Either[OutPort[A], OutPort[B]]]]

@@ -4,11 +4,12 @@ import java.util.concurrent.{Executors, ScheduledExecutorService}
 import libretto.testing.{ScalatestSuite, TestSuite}
 import scala.collection.mutable
 import scala.concurrent.{Await, Promise}
-import scala.concurrent.duration._
 
-import libretto.testing.{ScalaTestDsl, ScalaTestExecutor, ScalatestSuite, TestDsl, Tests}
+import libretto.testing.{ScalaTestDsl, ScalaTestExecutor, ScalatestSuite, TestDsl, TestResult, Tests}
 import libretto.testing.TestDsl.{dsl, success}
 import libretto.testing.Tests.Case.assertCrashesWith
+import libretto.util.Monad.syntax._
+import scala.concurrent.duration._
 
 class BasicTestsNew extends ScalatestSuite {
   override def tests: Tests =
@@ -16,7 +17,7 @@ class BasicTestsNew extends ScalatestSuite {
       .use[ScalaTestDsl]
       .executedBy(ScalaTestExecutor.global)
       .in {
-        import TestDsl.givenInstance.assertEquals
+        import TestDsl.givenInstance.{F, Outcome, assertEquals, expectCrashDone, expectDone, expectRight, monadOutcome, splitOut}
         import dsl._
         val coreLib = CoreLib(dsl)
         val scalaLib = ScalaLib(dsl: dsl.type, coreLib)
@@ -136,6 +137,25 @@ class BasicTestsNew extends ScalatestSuite {
           "crashd" -> assertCrashesWith("boom!") {
             crashd("boom!") > success,
           },
+
+          "crashd waits for its trigger" -> {
+            val prg: Done -⚬ ((Done |*| Done) |+| (Done |*| Done)) =
+              fork
+                .>.fst(delay(10.millis) > crashd("Boom!"))
+                .>( race )
+
+            Tests.Case
+              .interactWith(prg)
+              .via { port =>
+                for {
+                  rightPort       <- expectRight(port)
+                  ports           <- splitOut(rightPort)
+                  (pCrash, pDone) = ports
+                  _               <- expectDone(pDone)
+                  _               <- expectCrashDone(pCrash)
+                } yield ()
+              }
+          },
         )
       }
 }
@@ -162,33 +182,6 @@ class BasicTests extends TestSuite {
     val p = Promise[A]()
     scheduler.schedule({ () => p.success(a) }: Runnable, d.length, d.unit)
     Async.fromFuture(p.future).map(_.get)
-  }
-
-  test("crashd waits for its trigger") {
-    val x = new java.util.concurrent.atomic.AtomicBoolean(false)
-
-    val eff: Unit => Unit =
-      _ => x.set(true)
-
-    def prg(delayCrash: Boolean): Done -⚬ Done = {
-      val beforeCrash: Done -⚬ Done =
-        if (delayCrash) delay(10.millis) else id
-
-      fork
-        .par( beforeCrash     , delay(5.millis) )
-        .par( crashd("Boom!"),  constVal(())    )
-        .>( race )
-        .>.right.snd(mapVal(eff))
-        .either(id, id)
-        .>.snd(neglect)
-        .>(join)
-    }
-
-    assertCrashes(prg(delayCrash = false), "Boom!")
-    assert(x.get() == false) // if the crash is not delayed, it wins the race and there's no effect
-
-    assertCrashes(prg(delayCrash = true), "Boom!")
-    assert(x.get() == true) // if the crash is delayed, there's time for the effect
   }
 
   test("crashd - even if it loses a race, the program still crashes") {

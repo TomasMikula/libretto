@@ -60,7 +60,7 @@ object Tests {
 
     sealed trait Single[TDSL <: TestDsl] extends Case[TDSL] {
       val testDsl: TDSL
-      import testDsl.F
+      import testDsl.Outcome
       import testDsl.dsl._
       import testDsl.probes.OutPort
 
@@ -68,7 +68,7 @@ object Tests {
 
       val body: Done -⚬ O
 
-      val conductor: OutPort[O] => F[TestResult]
+      val conductor: OutPort[O] => Outcome[Unit]
     }
 
     case class Multiple[TDSL <: TestDsl](
@@ -79,7 +79,7 @@ object Tests {
       tdsl: TestDsl,
     )(
       body0: dsl.-⚬[dsl.Done, A],
-      conductor0: tdsl.probes.OutPort[A] => tdsl.F[TestResult],
+      conductor0: tdsl.probes.OutPort[A] => tdsl.Outcome[Unit],
     ): Case[tdsl.type] =
       new Single[tdsl.type] {
         override type O = A
@@ -91,6 +91,28 @@ object Tests {
     def apply(using tdsl: TestDsl)(body: tdsl.TestCase): Case[tdsl.type] =
       make(body, tdsl.extractTestResult)
 
+    def apply[O](using tdsl: TestDsl)(
+      body: tdsl.dsl.-⚬[tdsl.dsl.Done, O],
+      conduct: tdsl.probes.OutPort[O] => tdsl.Outcome[Unit],
+    ): Case[tdsl.type] =
+      make[O](body, conduct)
+
+    def interactWith[O](using tdsl: TestDsl)(body: tdsl.dsl.-⚬[tdsl.dsl.Done, O]): InteractWith[tdsl.type, O] =
+      InteractWith(tdsl, body)
+
+    object InteractWith {
+      def apply[O](tdsl: TestDsl, body: tdsl.dsl.-⚬[tdsl.dsl.Done, O]): InteractWith[tdsl.type, O] =
+        new InteractWith(tdsl, body)
+    }
+
+    class InteractWith[TDSL <: TestDsl, O](
+      val tdsl: TDSL,
+      val body: tdsl.dsl.-⚬[tdsl.dsl.Done, O],
+    ) {
+      def via(conductor: tdsl.probes.OutPort[O] => tdsl.Outcome[Unit]): Case[tdsl.type] =
+        Case(using tdsl)(body, conductor)
+    }
+
     def assertCrashes(using tdsl: TestDsl)(body: tdsl.TestCase): Case[tdsl.type] =
       assertCrashes_(body, None)
 
@@ -98,26 +120,28 @@ object Tests {
       assertCrashes_(body, Some(expectedErrorMessage))
 
     private def assertCrashes_(using tdsl: TestDsl)(body: tdsl.TestCase, withMessage: Option[String]): Case[tdsl.type] = {
-      import tdsl.F
+      import tdsl.{F, Outcome}
 
       make(
         body,
-        tdsl.extractTestResult(_).map {
-          case TestResult.Crash(e) =>
-            withMessage match {
-              case None =>
-                TestResult.Success
-              case Some(msg) =>
-                if (e.getMessage == msg)
-                  TestResult.Success
-                else
-                  TestResult.Failure(s"Expected message $msg, actual exception: $e")
-            }
-          case TestResult.Success =>
-            TestResult.Failure("Expected crash, but the program completed successfully.")
-          case TestResult.Failure(msg) =>
-            TestResult.Failure(s"Expected crash, but the program completed with failure: $msg.")
-        },
+        port => Outcome(
+          Outcome.unwrap(tdsl.extractTestResult(port)).map {
+            case TestResult.Crash(e) =>
+              withMessage match {
+                case None =>
+                  TestResult.Success(())
+                case Some(msg) =>
+                  if (e.getMessage == msg)
+                    TestResult.Success(())
+                  else
+                    TestResult.Failure(s"Expected message $msg, actual exception: $e")
+              }
+            case TestResult.Success(_) =>
+              TestResult.Failure("Expected crash, but the program completed successfully.")
+            case TestResult.Failure(msg) =>
+              TestResult.Failure(s"Expected crash, but the program completed with failure: $msg.")
+          }
+        ),
       )
     }
   }

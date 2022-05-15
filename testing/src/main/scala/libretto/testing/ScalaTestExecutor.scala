@@ -33,24 +33,26 @@ object ScalaTestExecutor {
       override def failure: Done -⚬ TestResult =
         constVal("Failed") > injectL
 
-      override def extractTestResult(outPort: exec.OutPort[TestResult]): F0[libretto.testing.TestResult] = {
+      override def extractTestResult(outPort: exec.OutPort[TestResult]): Outcome[Unit] = {
         import libretto.testing.TestResult.{Crash, Success, Failure}
-        exec
-          .awaitEither[Val[String], Done](outPort)
-          .flatMap {
-            case Left(e) =>
-              F.pure(Crash(e))
-            case Right(Left(msg)) =>
-              exec.awaitVal(msg).map {
-                case Left(e)    => Crash(e)
-                case Right(msg) => Failure(msg)
-              }
-            case Right(Right(d)) =>
-              exec.awaitDone(d).map {
-                case Left(e)   => Crash(e)
-                case Right(()) => Success
-              }
-          }
+        Outcome(
+          exec
+            .awaitEither[Val[String], Done](outPort)
+            .flatMap {
+              case Left(e) =>
+                F.pure(Crash(e))
+              case Right(Left(msg)) =>
+                exec.awaitVal(msg).map {
+                  case Left(e)    => Crash(e)
+                  case Right(msg) => Failure(msg)
+                }
+              case Right(Right(d)) =>
+                exec.awaitDone(d).map {
+                  case Left(e)   => Crash(e)
+                  case Right(()) => Success(())
+                }
+            }
+        )
       }
   }
 
@@ -62,14 +64,15 @@ object ScalaTestExecutor {
       override val testDsl: ScalaTestDslFromExecutor[F0, dsl.type, exec.type] =
         new ScalaTestDslFromExecutor[F0, dsl.type, exec.type](dsl, exec) {}
 
+      import testDsl.Outcome
       import testDsl.dsl._
       import testDsl.probes.OutPort
 
       override def runTestCase[O](
         body: Done -⚬ O,
-        conduct: OutPort[O] => F0[TestResult],
-      ): TestResult =
-        TestExecutor.usingExecutor(exec).runTestCase[O](body, conduct)
+        conduct: OutPort[O] => Outcome[Unit],
+      ): TestResult[Unit] =
+        TestExecutor.usingExecutor(exec).runTestCase[O](body, conduct andThen Outcome.unwrap)
     }
 
   lazy val global: TestExecutor[ScalaTestDsl] = {

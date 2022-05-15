@@ -7,7 +7,7 @@ import libretto.util.Monad.syntax._
 trait TestExecutor[+TDSL <: TestDsl] {
   val testDsl: TDSL
 
-  import testDsl.F
+  import testDsl.Outcome
   import testDsl.dsl._
   import testDsl.probes.OutPort
 
@@ -15,8 +15,8 @@ trait TestExecutor[+TDSL <: TestDsl] {
 
   def runTestCase[O](
     body: Done -⚬ O,
-    conduct: OutPort[O] => F[TestResult],
-  ): TestResult
+    conduct: OutPort[O] => Outcome[Unit],
+  ): TestResult[Unit]
 }
 
 object TestExecutor {
@@ -29,8 +29,8 @@ object TestExecutor {
 
     def runTestCase[O](
       body: Done -⚬ O,
-      conduct: OutPort[O] => F[TestResult],
-    ): TestResult = {
+      conduct: OutPort[O] => F[TestResult[Unit]],
+    ): TestResult[Unit] = {
       val (outPort, execution) = executor.execute(body)
       try {
         executor.runAwait {

@@ -77,6 +77,9 @@ class FreeScalaFutureRunner(
     }
   }
 
+  override def splitOut[A, B](port: OutPort[A |*| B]): Future[(OutPort[A], OutPort[B])] =
+    Future.successful(port.splitPair)
+
   override def awaitDone(port: OutPort[Done]): Future[Either[Throwable, Unit]] =
     port.toFutureDone.transform {
       case Success(Frontier.DoneNow) => Success(Right(()))
