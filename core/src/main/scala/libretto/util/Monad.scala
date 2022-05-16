@@ -23,6 +23,9 @@ object Monad {
       def *>[B](fb: F[B]): F[B] =
         flatMap(_ => fb)
 
+      def >>[B](fb: => F[B]): F[B] =
+        flatMap(_ => fb)
+
       def void: F[Unit] =
         map(_ => ())
     }

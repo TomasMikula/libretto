@@ -72,7 +72,7 @@ object Tests {
     }
 
     case class Multiple[TDSL <: TestDsl](
-      cases: NonEmptyList[(String, Case[TDSL])],
+      cases: List[(String, Case[TDSL])],
     ) extends Case[TDSL]
 
     private def make[A](using
@@ -97,6 +97,11 @@ object Tests {
     ): Case[tdsl.type] =
       make[O](body, conduct)
 
+    def multiple[TDSL <: TestDsl](
+      cases: (String, Case[TDSL])*,
+    ): Case[TDSL] =
+      Multiple[TDSL](cases.toList)
+
     def interactWith[O](using tdsl: TestDsl)(body: tdsl.dsl.-⚬[tdsl.dsl.Done, O]): InteractWith[tdsl.type, O] =
       InteractWith(tdsl, body)
 
@@ -113,35 +118,24 @@ object Tests {
         Case(using tdsl)(body, conductor)
     }
 
-    def assertCrashes(using tdsl: TestDsl)(body: tdsl.TestCase): Case[tdsl.type] =
-      assertCrashes_(body, None)
+    def assertCrashes(using tdsl: TestDsl)(body: dsl.-⚬[dsl.Done, dsl.Done]): Case[tdsl.type] = {
+      make(
+        body,
+        port => tdsl.expectCrashDone(port).void,
+      )
+    }
 
-    def assertCrashesWith(using tdsl: TestDsl)(expectedErrorMessage: String)(body: tdsl.TestCase): Case[tdsl.type] =
-      assertCrashes_(body, Some(expectedErrorMessage))
-
-    private def assertCrashes_(using tdsl: TestDsl)(body: tdsl.TestCase, withMessage: Option[String]): Case[tdsl.type] = {
-      import tdsl.{F, Outcome}
+    def assertCrashesWith(using tdsl: TestDsl)(expectedErrorMessage: String)(body: dsl.-⚬[dsl.Done, dsl.Done]): Case[tdsl.type] = {
+      import tdsl.Outcome
 
       make(
         body,
-        port => Outcome(
-          Outcome.unwrap(tdsl.extractTestResult(port)).map {
-            case TestResult.Crash(e) =>
-              withMessage match {
-                case None =>
-                  TestResult.Success(())
-                case Some(msg) =>
-                  if (e.getMessage == msg)
-                    TestResult.Success(())
-                  else
-                    TestResult.Failure(s"Expected message $msg, actual exception: $e")
-              }
-            case TestResult.Success(_) =>
-              TestResult.Failure("Expected crash, but the program completed successfully.")
-            case TestResult.Failure(msg) =>
-              TestResult.Failure(s"Expected crash, but the program completed with failure: $msg.")
-          }
-        ),
+        port => tdsl.expectCrashDone(port).flatMap {
+          case e if expectedErrorMessage == e.getMessage =>
+            Outcome.success(())
+          case e =>
+            Outcome.failure(s"Expected message $expectedErrorMessage, actual exception: $e")
+        },
       )
     }
   }

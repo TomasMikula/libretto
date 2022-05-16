@@ -1,7 +1,6 @@
 package libretto.testing
 
 import org.scalatest.funsuite.AnyFunSuite
-import scala.{:: => NonEmptyList}
 
 abstract class ScalatestSuite extends AnyFunSuite {
   def tests: Tests
@@ -18,7 +17,7 @@ abstract class ScalatestSuite extends AnyFunSuite {
   private def registerTests[TDSL <: TestDsl](
     testExecutor: TestExecutor[TDSL],
     prefix: String,
-    cases: NonEmptyList[(String, Tests.Case[testExecutor.testDsl.type])],
+    cases: List[(String, Tests.Case[testExecutor.testDsl.type])],
   ): Unit = {
     for {
       (testName, testCase) <- cases

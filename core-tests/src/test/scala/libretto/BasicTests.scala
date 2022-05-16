@@ -135,7 +135,7 @@ class BasicTestsNew extends ScalatestSuite {
           },
 
           "crashd" -> assertCrashesWith("boom!") {
-            crashd("boom!") > success,
+            crashd("boom!")
           },
 
           "crashd waits for its trigger" -> {
@@ -155,6 +155,172 @@ class BasicTestsNew extends ScalatestSuite {
                   _               <- expectCrashDone(pCrash)
                 } yield ()
               }
+          },
+
+          "crashd - even if it loses a race, the program still crashes" -> assertCrashesWith("oops") {
+            id[Done]
+              .>( forkMap(id, delay(10.millis) > crashd("oops")) )
+              .>( raceDone )
+              .>( either(id, id) )
+          },
+
+          "crashd in non-executed |+| has no effect" -> Tests.Case {
+            injectL[Done, Done] > either(id, crashd("bang!")) > success
+          },
+
+          "crashd in non-chosen |&| alternative has no effect" -> Tests.Case {
+            choice(id, crashd("bang!")) > chooseL > success
+          },
+
+          "coDistribute" -> {
+            type B = Val[Boolean]
+            type C = Val[Char]
+            type I = Val[Int]
+            type S = Val[String]
+
+            case class Combination[X, Y](
+              choose1: (B |&| C) -⚬ Val[X],
+              choose2: (I |&| S) -⚬ Val[Y],
+              expectedX: X,
+              expectedY: Y,
+            ) {
+              type T = X
+              type U = Y
+
+              def go: ((B |&| C) |*| (I |&| S)) -⚬ Val[(T, U)] =
+                par(choose1, choose2) > unliftPair
+
+              def expected: (T, U) =
+                (expectedX, expectedY)
+            }
+
+            //                (false   1)    (true "foo")    ('a'    2)    ('b'  "bar")
+            val init: Done -⚬ (((B |*| I) |&| (B |*| S)) |&| ((C |*| I) |&| (C |*| S))) =
+              choice(
+                choice(
+                  forkMap(constVal(false), constVal(1)),
+                  forkMap(constVal(true), constVal("foo")),
+                ),
+                choice(
+                  forkMap(constVal('a'), constVal(2)),
+                  forkMap(constVal('b'), constVal("bar")),
+                ),
+              )
+
+            val coDistributed1: Done -⚬ ((B |&| C) |*| (I |&| S)) =
+              init
+                .bimap(coDistributeL, coDistributeL)
+                .>(coDistributeR)
+
+            val coDistributed2: Done -⚬ ((B |&| C) |*| (I |&| S)) =
+              init                                          .to[ ((B |*| I) |&| (B  |*|  S)) |&| ((C |*| I) |&| (C  |*| S)) ]
+                .>(|&|.IXI)                                 .to[ ((B |*| I) |&| (C  |*|  I)) |&| ((B |*| S) |&| (C  |*| S)) ]
+                .bimap(coDistributeR, coDistributeR)        .to[ ((B        |&|  C) |*|  I ) |&| ((B        |&|  C) |*| S ) ]
+                .>(coDistributeL)                           .to[  (B        |&|  C) |*| (I   |&|                        S ) ]
+
+            val combinations = Seq(
+              Combination(chooseL, chooseL, false, 1),
+              Combination(chooseL, chooseR, true, "foo"),
+              Combination(chooseR, chooseL, 'a', 2),
+              Combination(chooseR, chooseR, 'b', "bar"),
+            )
+
+            val cases =
+              for {
+                (f, i) <- Seq(coDistributed1, coDistributed2).zipWithIndex
+                c <- combinations
+              } yield {
+                s"${i+1}.$c" -> Tests.Case { f > c.go > assertEquals(c.expected) }
+              }
+
+            Tests.Case.multiple(cases: _*)
+          },
+
+          "LList.splitEvenOdd" -> Tests.Case {
+            val prg: Done -⚬ Val[(List[Int], List[Int])] =
+              constListOf1(0, (1 to 20): _*) > LList.splitEvenOdd > par(toScalaList, toScalaList) > unliftPair
+
+            prg > assertEquals((0 to 20).toList.partition(_ % 2 == 0))
+          },
+
+          "LList.halfRotateL" -> Tests.Case {
+            val prg: Done -⚬ Val[List[(Int, Int)]] =
+              constListOf1((0, 1), (2, 3), (4, 5))
+                .>(LList.map(liftPair))
+                .>(LList.halfRotateL)
+                .>(LList.map(unliftPair))
+                .>(toScalaList)
+
+            prg > assertEquals(List((1, 2), (3, 4), (5, 0)))
+          },
+
+          "acquire - effect - transform - release" -> {
+            class MVar[A](var value: A) {
+              def set(a: A): MVar[A] = {
+                this.value = a
+                this
+              }
+            }
+
+            val acquireFuns = Seq[Val[Int] -⚬ Res[MVar[Int]]](
+              mVal(new MVar(_)),
+              acquire0(new MVar(_), release = None),
+              acquireAsync0(i => Async.defer(new MVar(i)), release = None),
+            )
+
+            val incFuns = Seq[Res[MVar[Int]] -⚬ Res[MVar[Int]]](
+              effect0(i => i.set(i.value + 1)),
+              effectAsync0(i => Async.defer(i.set(i.value + 1))),
+              introSnd(const(())) > effect     [MVar[Int], Unit, Unit]((i, _) =>             i.set(i.value + 1) ) > effectWrAsync((_, _) => Async.defer(())),
+              introSnd(const(())) > effectAsync[MVar[Int], Unit, Unit]((i, _) => Async.defer(i.set(i.value + 1))) > effectWr     ((_, _) =>             () ),
+            )
+
+            val toStringTrans = Seq[Res[MVar[Int]] -⚬ Res[MVar[String]]](
+              transformResource0(i => new MVar(Integer.toString(i.value)), release = None),
+              transformResourceAsync0(i => Async.defer(new MVar(Integer.toString(i.value))), release = None),
+            )
+
+            val releaseFuns = Seq[Res[MVar[String]] -⚬ Val[String]](
+              release0(_.value),
+              releaseAsync0(s => Async.defer(s.value)),
+            )
+
+            val cases =
+              for {
+                (acquireMVar,  i) <- acquireFuns   .zipWithIndex
+                (incMVar,      j) <- incFuns       .zipWithIndex
+                (mvarToString, k) <- toStringTrans .zipWithIndex
+                (releaseMVar,  l) <- releaseFuns   .zipWithIndex
+              } yield {
+                val prg: Done -⚬ Val[String] =
+                  constVal(0)
+                    .>(acquireMVar)
+                    .>(incMVar)
+                    .>(mvarToString)
+                    .>(releaseMVar)
+
+                s"$i.$j.$k.$l" -> Tests.Case { prg > assertEquals("1") }
+              }
+
+            Tests.Case.multiple(cases: _*)
+          },
+
+          "release via registered function" -> {
+            val ref = new java.util.concurrent.atomic.AtomicReference[String]("init")
+
+            Tests.Case.interactWith {
+              val prg: Done -⚬ Done =
+                constVal(()) > acquire0(identity, release = Some(_ => ref.set("released"))) > release
+
+              prg
+            }.via { port =>
+              expectDone(port) >> {
+                ref.get() match {
+                  case "released" => Outcome.success(())
+                  case other      => Outcome.failure(s"Unexpected value: '$other'")
+                }
+              }
+            }
           },
         )
       }
@@ -182,171 +348,6 @@ class BasicTests extends TestSuite {
     val p = Promise[A]()
     scheduler.schedule({ () => p.success(a) }: Runnable, d.length, d.unit)
     Async.fromFuture(p.future).map(_.get)
-  }
-
-  test("crashd - even if it loses a race, the program still crashes") {
-    val prg = id[Done]
-      .>( forkMap(id, delay(10.millis) > crashd("oops")) )
-      .>( raceDone )
-      .>( either(id, id) )
-    assertCrashes(prg, "oops")
-  }
-
-  test("crashd in non-executed |+| has no effect") {
-    val prg = injectL[Done, Done] > either(id, crashd("bang!"))
-    assertCompletes(prg)
-  }
-
-  test("crashd in non-chosen |&| alternative has no effect") {
-    val prg = choice(id, crashd("bang!")) > chooseL
-    assertCompletes(prg)
-  }
-
-  {
-    // temporarily moved outside the next `test` body due to https://github.com/lampepfl/dotty/issues/12508
-
-    type B = Val[Boolean]
-    type C = Val[Char]
-    type I = Val[Int]
-    type S = Val[String]
-
-    case class Combination[X, Y](
-      choose1: (B |&| C) -⚬ Val[X],
-      choose2: (I |&| S) -⚬ Val[Y],
-      expectedX: X,
-      expectedY: Y,
-    ) {
-      type T = X
-      type U = Y
-
-      def go: ((B |&| C) |*| (I |&| S)) -⚬ Val[(T, U)] =
-        par(choose1, choose2) > unliftPair
-
-      def expected: (T, U) =
-        (expectedX, expectedY)
-    }
-
-  test("coDistribute") {
-    //                (false   1)    (true "foo")    ('a'    2)    ('b'  "bar")
-    val init: Done -⚬ (((B |*| I) |&| (B |*| S)) |&| ((C |*| I) |&| (C |*| S))) =
-      choice(
-        choice(
-          forkMap(constVal(false), constVal(1)),
-          forkMap(constVal(true), constVal("foo")),
-        ),
-        choice(
-          forkMap(constVal('a'), constVal(2)),
-          forkMap(constVal('b'), constVal("bar")),
-        ),
-      )
-
-    val coDistributed1: Done -⚬ ((B |&| C) |*| (I |&| S)) =
-      init
-        .bimap(coDistributeL, coDistributeL)
-        .>(coDistributeR)
-
-    val coDistributed2: Done -⚬ ((B |&| C) |*| (I |&| S)) =
-      init                                          .to[ ((B |*| I) |&| (B  |*|  S)) |&| ((C |*| I) |&| (C  |*| S)) ]
-        .>(|&|.IXI)                                 .to[ ((B |*| I) |&| (C  |*|  I)) |&| ((B |*| S) |&| (C  |*| S)) ]
-        .bimap(coDistributeR, coDistributeR)        .to[ ((B        |&|  C) |*|  I ) |&| ((B        |&|  C) |*| S ) ]
-        .>(coDistributeL)                           .to[  (B        |&|  C) |*| (I   |&|                        S ) ]
-
-    val combinations = Seq(
-      Combination(chooseL, chooseL, false, 1),
-      Combination(chooseL, chooseR, true, "foo"),
-      Combination(chooseR, chooseL, 'a', 2),
-      Combination(chooseR, chooseR, 'b', "bar"),
-    )
-
-    for {
-      f <- Seq(coDistributed1, coDistributed2)
-      c <- combinations
-    } {
-      assertVal(f > c.go, c.expected)
-    }
-  }
-  }
-
-  test("LList.splitEvenOdd") {
-    val prg: Done -⚬ Val[(List[Int], List[Int])] =
-      constListOf1(0, (1 to 20): _*) > LList.splitEvenOdd > par(toScalaList, toScalaList) > unliftPair
-
-    assertVal(prg, (0 to 20).toList.partition(_ % 2 == 0))
-  }
-
-  test("LList.halfRotateL") {
-    val prg: Done -⚬ Val[List[(Int, Int)]] =
-      constListOf1((0, 1), (2, 3), (4, 5))
-        .>(LList.map(liftPair))
-        .>(LList.halfRotateL)
-        .>(LList.map(unliftPair))
-        .>(toScalaList)
-
-    assertVal(prg, List((1, 2), (3, 4), (5, 0)))
-  }
-
-  {
-    // temporarily moved outside the next `test` body due to https://github.com/lampepfl/dotty/issues/12508
-    class MVar[A](var value: A) {
-      def set(a: A): MVar[A] = {
-        this.value = a
-        this
-      }
-    }
-
-  test("acquire - effect - transform - release") {
-    val acquireFuns = Seq[Val[Int] -⚬ Res[MVar[Int]]](
-      mVal(new MVar(_)),
-      acquire0(new MVar(_), release = None),
-      acquireAsync0(i => Async.defer(new MVar(i)), release = None),
-    )
-
-    val incFuns = Seq[Res[MVar[Int]] -⚬ Res[MVar[Int]]](
-      effect0(i => i.set(i.value + 1)),
-      effectAsync0(i => Async.defer(i.set(i.value + 1))),
-      introSnd(const(())) > effect     [MVar[Int], Unit, Unit]((i, _) =>             i.set(i.value + 1) ) > effectWrAsync((_, _) => Async.defer(())),
-      introSnd(const(())) > effectAsync[MVar[Int], Unit, Unit]((i, _) => Async.defer(i.set(i.value + 1))) > effectWr     ((_, _) =>             () ),
-    )
-
-    val toStringTrans = Seq[Res[MVar[Int]] -⚬ Res[MVar[String]]](
-      transformResource0(i => new MVar(Integer.toString(i.value)), release = None),
-      transformResourceAsync0(i => Async.defer(new MVar(Integer.toString(i.value))), release = None),
-    )
-
-    val releaseFuns = Seq[Res[MVar[String]] -⚬ Val[String]](
-      release0(_.value),
-      releaseAsync0(s => Async.defer(s.value)),
-    )
-
-    val prgs: Seq[Done -⚬ Val[String]] = {
-      for {
-        acquireMVar <- acquireFuns
-        incMVar <- incFuns
-        mvarToString <- toStringTrans
-        releaseMVar <- releaseFuns
-      } yield {
-        constVal(0)
-          .>(acquireMVar)
-          .>(incMVar)
-          .>(mvarToString)
-          .>(releaseMVar)
-      }
-    }
-
-    for (prg <- prgs) {
-      assertVal(prg, "1")
-    }
-  }
-  }
-
-  test("release via registered function") {
-    val ref = new java.util.concurrent.atomic.AtomicReference[String]("init")
-
-    val prg: Done -⚬ Done =
-      constVal(()) > acquire0(identity, release = Some(_ => ref.set("released"))) > release
-
-    assertCompletes(prg)
-    assert(ref.get() == "released")
   }
 
   test("splitResource") {
