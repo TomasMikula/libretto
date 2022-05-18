@@ -28,6 +28,10 @@ trait ScalaBridge[F[_]] extends CoreBridge[F] {
   def awaitVal[A](port: OutPort[Val[A]]): F[Either[Throwable, A]]
 }
 
+object ScalaBridge {
+  type Of[DSL <: ScalaDSL, F[_]] = ScalaBridge[F] { type Dsl = DSL }
+}
+
 trait Executor[F[_]] extends CoreBridge[F] {
   import dsl._
 

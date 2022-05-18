@@ -26,7 +26,7 @@ class BasicTestsNew extends ScalatestSuite {
       .use[ScalaTestDsl]
       .executedBy(ScalaTestExecutor.global)
       .in {
-        import TestDsl.givenInstance.{F, Outcome, assertEquals, expectCrashDone, expectDone, expectRight, monadOutcome, splitOut}
+        import TestDsl.givenInstance.{F, Outcome, assertEquals, expectCrashDone, expectDone, expectRight, expectVal, monadOutcome, splitOut}
         import dsl._
         val coreLib = CoreLib(dsl)
         val scalaLib = ScalaLib(dsl: dsl.type, coreLib)
@@ -424,6 +424,35 @@ class BasicTestsNew extends ScalatestSuite {
                 },
               )
           },
+
+          "RefCounted" -> {
+            import java.util.concurrent.atomic.AtomicInteger
+
+            val releaseCounter = new AtomicInteger(0)
+            val incGetClose: RefCounted[AtomicInteger] -⚬ Val[Int] =
+              introSnd(const(()))                                       .to[ RefCounted[AtomicInteger] |*| Val[Unit] ]
+                .>( RefCounted.effect((i, _) => i.incrementAndGet) )    .to[ RefCounted[AtomicInteger] |*| Val[Int]  ]
+                .awaitFst(RefCounted.release)                           .to[                               Val[Int]  ]
+
+            val prg: Done -⚬ Val[Int] =
+              constVal(0)
+                .>(RefCounted.acquire0(new AtomicInteger(_), _ => releaseCounter.incrementAndGet))
+                .>(RefCounted.dupRef)
+                .>.snd(RefCounted.dupRef)
+                .par(incGetClose, par(incGetClose, incGetClose))
+                .>.snd(unliftPair > mapVal(t => t._1 + t._2))
+                .>(unliftPair > mapVal(t => t._1 + t._2))
+
+            Tests.Case
+              .interactWith(prg)
+              .via { port =>
+                for {
+                  res <- expectVal(port)
+                  _   <- Outcome.assertEquals(res, 6)
+                  _   <- Outcome.assertEquals(releaseCounter.get(), 1)
+                } yield ()
+              }
+          },
         )
       }
 }
@@ -433,28 +462,6 @@ class BasicTests extends TestSuite {
   import kit.dsl.$._
   import kit.coreLib._
   import kit.scalaLib._
-
-  test("RefCounted") {
-    import java.util.concurrent.atomic.AtomicInteger
-
-    val releaseCounter = new AtomicInteger(0)
-    val incGetClose: RefCounted[AtomicInteger] -⚬ Val[Int] =
-      introSnd(const(()))                                       .to[ RefCounted[AtomicInteger] |*| Val[Unit] ]
-        .>( RefCounted.effect((i, _) => i.incrementAndGet) )    .to[ RefCounted[AtomicInteger] |*| Val[Int]  ]
-        .awaitFst(RefCounted.release)                           .to[                               Val[Int]  ]
-
-    val prg: Done -⚬ Val[Int] =
-      constVal(0)
-        .>(RefCounted.acquire0(new AtomicInteger(_), _ => releaseCounter.incrementAndGet))
-        .>(RefCounted.dupRef)
-        .>.snd(RefCounted.dupRef)
-        .par(incGetClose, par(incGetClose, incGetClose))
-        .>.snd(unliftPair > mapVal(t => t._1 + t._2))
-        .>(unliftPair > mapVal(t => t._1 + t._2))
-
-    assertVal(prg, 6)
-    assert(releaseCounter.get() == 1)
-  }
 
   test("blocking") {
     val n = 10
