@@ -65,37 +65,50 @@ object Tests {
       import testDsl.probes.OutPort
 
       type O
+      type X
 
       val body: Done -⚬ O
 
-      val conductor: OutPort[O] => Outcome[Unit]
+      val conductor: OutPort[O] => Outcome[X]
+
+      val postStop: X => Outcome[Unit]
     }
 
     case class Multiple[TDSL <: TestDsl](
       cases: List[(String, Case[TDSL])],
     ) extends Case[TDSL]
 
-    private def make[A](using
+    private def make[A, B](using
       tdsl: TestDsl,
     )(
       body0: dsl.-⚬[dsl.Done, A],
-      conductor0: tdsl.probes.OutPort[A] => tdsl.Outcome[Unit],
+      conductor0: tdsl.probes.OutPort[A] => tdsl.Outcome[B],
+      postStop0: B => tdsl.Outcome[Unit],
     ): Case[tdsl.type] =
       new Single[tdsl.type] {
         override type O = A
+        override type X = B
         override val testDsl = tdsl
         override val body = body0
         override val conductor = conductor0
+        override val postStop = postStop0
       }
 
     def apply(using tdsl: TestDsl)(body: tdsl.TestCase): Case[tdsl.type] =
-      make(body, tdsl.extractTestResult)
+      make(body, tdsl.extractTestResult, tdsl.monadOutcome.pure)
 
     def apply[O](using tdsl: TestDsl)(
       body: tdsl.dsl.-⚬[tdsl.dsl.Done, O],
       conduct: tdsl.probes.OutPort[O] => tdsl.Outcome[Unit],
     ): Case[tdsl.type] =
-      make[O](body, conduct)
+      make[O, Unit](body, conduct, tdsl.monadOutcome.pure)
+
+    def apply[A, B](using tdsl: TestDsl)(
+      body: tdsl.dsl.-⚬[tdsl.dsl.Done, A],
+      conduct: tdsl.probes.OutPort[A] => tdsl.Outcome[B],
+      postStop: B => tdsl.Outcome[Unit],
+    ): Case[tdsl.type] =
+      make[A, B](body, conduct, postStop)
 
     def multiple[TDSL <: TestDsl](
       cases: (String, Case[TDSL])*,
@@ -116,10 +129,16 @@ object Tests {
     ) {
       def via(conductor: tdsl.probes.OutPort[O] => tdsl.Outcome[Unit]): Case[tdsl.type] =
         Case(using tdsl)(body, conductor)
+
+      def via[X](
+        conductor: tdsl.probes.OutPort[O] => tdsl.Outcome[X],
+        postStop: X => tdsl.Outcome[Unit],
+      ): Case[tdsl.type] =
+        Case(using tdsl)(body, conductor, postStop)
     }
 
     def assertCrashes(using tdsl: TestDsl)(body: dsl.-⚬[dsl.Done, dsl.Done]): Case[tdsl.type] = {
-      make(
+      Case[dsl.Done](
         body,
         port => tdsl.expectCrashDone(port).void,
       )
@@ -128,7 +147,7 @@ object Tests {
     def assertCrashesWith(using tdsl: TestDsl)(expectedErrorMessage: String)(body: dsl.-⚬[dsl.Done, dsl.Done]): Case[tdsl.type] = {
       import tdsl.Outcome
 
-      make(
+      Case[dsl.Done](
         body,
         port => tdsl.expectCrashDone(port).flatMap {
           case e if expectedErrorMessage == e.getMessage =>

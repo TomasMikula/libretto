@@ -12,6 +12,15 @@ import libretto.util.Monad.syntax._
 import scala.concurrent.duration._
 
 class BasicTestsNew extends ScalatestSuite {
+  // TODO: shutdown after tests
+  private lazy val scheduler = Executors.newScheduledThreadPool(1)
+
+  private def delayedAsync[A](d: FiniteDuration)(a: => A): Async[A] = {
+    val p = Promise[A]()
+    scheduler.schedule({ () => p.success(a) }: Runnable, d.length, d.unit)
+    Async.fromFuture(p.future).map(_.get)
+  }
+
   override def tests: Tests =
     Tests
       .use[ScalaTestDsl]
@@ -322,6 +331,99 @@ class BasicTestsNew extends ScalatestSuite {
               }
             }
           },
+
+          "splitResource" -> {
+            val store = new java.util.concurrent.atomic.AtomicReference[List[String]](Nil)
+
+            def log(s: String): Unit =
+              store.updateAndGet(s :: _)
+
+            Tests.Case
+              .interactWith {
+                val prg: Done -⚬ Done =
+                  constVal(())
+                    .>(acquire0[Unit, Unit](
+                      acquire = _ => log("acquire A"),
+                      release = Some(_ => log("release A")), // this release function should never be invoked
+                    ))
+                    .>(splitResource0(
+                      _ => { log("split A -> (B, C)"); ((), ()) },
+                      release1 = Some(_ => log("release B")),
+                      release2 = Some(_ => log("release C")),
+                    ))
+                    .par(release, release)
+                    .>(join)
+
+                prg
+              }
+              .via { port =>
+                expectDone(port) >> {
+                  val logEntries: List[String] = store.get().reverse
+
+                  Outcome.assertEquals(logEntries.take(2),       List("acquire A", "split A -> (B, C)")) >>
+                  Outcome.assertEquals(logEntries.drop(2).toSet, Set("release B", "release C")) >>
+                  Outcome.assertEquals(logEntries.size,          4)
+                }
+              }
+          },
+
+          "splitResourceAsync: check that resources are released if program crashes during their async acquisition" -> {
+            val store = new java.util.concurrent.atomic.AtomicReference[List[String]](Nil)
+
+            def log(s: String): Unit =
+              store.updateAndGet(s :: _)
+
+            val pb, pc = Promise[Unit]()
+
+            val mainThread: Done -⚬ Done =
+              constVal(())
+                .>(acquire0[Unit, Unit](
+                  acquire = _ => log("acquire A"),
+                  release = Some(_ => log("release A")), // this release function should never be invoked
+                ))
+                .>(splitResourceAsync0(
+                  _ => delayedAsync(10.millis) { // there will be a crash within these 10ms it takes to split the resource into two
+                    log("split A -> (B, C)")
+                    ((), ())
+                  },
+                  release1 = Some({ _ => log("release B"); pb.success(()); Async.now(()) }),
+                  release2 = Some({ _ => log("release C"); pc.success(()); Async.now(()) }),
+                ))
+                .par(
+                  release0[Unit, Unit](_ => log("release B XXX")) > neglect, // this release function should never be invoked
+                  release0[Unit, Unit](_ => log("release C XXX")) > neglect, // this release function should never be invoked
+                )
+                .>(join)
+
+            val crashThread: Done -⚬ Done =
+              delay(5.millis) > crashd("Boom!") // delay crash to give chance for resource split to begin
+
+            val prg: Done -⚬ Done =
+              forkMap(crashThread, mainThread) > join
+
+            Tests.Case
+              .interactWith(prg)
+              .via(
+                port =>
+                  for {
+                    e <- expectCrashDone(port)
+                    _ <- Outcome.assertEquals(e.getMessage, "Boom!")
+                  } yield (),
+                postStop = _ => {
+                  // The current implementation based on Futures does not guarantee that all processing has finished by the time
+                  // the program returns an error. Therefore, explicitly await completion of the release functions.
+                  Await.ready(pb.future zip pc.future, 1.second)
+
+                  val logEntries: List[String] = store.get().reverse
+
+                  for {
+                    _ <- Outcome.assertEquals(logEntries.take(2), List("acquire A", "split A -> (B, C)"))
+                    _ <- Outcome.assertEquals(logEntries.drop(2).toSet, Set("release B", "release C"))
+                    _ <- Outcome.assertEquals(logEntries.size, 4)
+                  } yield ()
+                },
+              )
+          },
         )
       }
 }
@@ -331,100 +433,6 @@ class BasicTests extends TestSuite {
   import kit.dsl.$._
   import kit.coreLib._
   import kit.scalaLib._
-
-  private var scheduler: ScheduledExecutorService = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    scheduler = Executors.newScheduledThreadPool(2)
-  }
-
-  override def afterAll(): Unit = {
-    scheduler.shutdown()
-    super.afterAll()
-  }
-
-  private def delayedAsync[A](d: FiniteDuration)(a: => A): Async[A] = {
-    val p = Promise[A]()
-    scheduler.schedule({ () => p.success(a) }: Runnable, d.length, d.unit)
-    Async.fromFuture(p.future).map(_.get)
-  }
-
-  test("splitResource") {
-    val store = new java.util.concurrent.atomic.AtomicReference[List[String]](Nil)
-
-    def log(s: String): Unit =
-      store.updateAndGet(s :: _)
-
-    val prg: Done -⚬ Done =
-      constVal(())
-        .>(acquire0[Unit, Unit](
-          acquire = _ => log("acquire A"),
-          release = Some(_ => log("release A")), // this release function should never be invoked
-        ))
-        .>(splitResource0(
-          _ => { log("split A -> (B, C)"); ((), ()) },
-          release1 = Some(_ => log("release B")),
-          release2 = Some(_ => log("release C")),
-        ))
-        .par(release, release)
-        .>(join)
-
-    assertCompletes(prg)
-
-    val logEntries: List[String] = store.get().reverse
-
-    assert(logEntries.take(2) == List("acquire A", "split A -> (B, C)"))
-    assert(logEntries.drop(2).toSet == Set("release B", "release C"))
-    assert(logEntries.size == 4)
-  }
-
-  test("splitResourceAsync: check that resources are released if program crashes during their asynch acquisition") {
-    val store = new java.util.concurrent.atomic.AtomicReference[List[String]](Nil)
-
-    def log(s: String): Unit =
-      store.updateAndGet(s :: _)
-
-    val pb, pc = Promise[Unit]()
-
-    val mainThread: Done -⚬ Done =
-      constVal(())
-        .>(acquire0[Unit, Unit](
-          acquire = _ => log("acquire A"),
-          release = Some(_ => log("release A")), // this release function should never be invoked
-        ))
-        .>(splitResourceAsync0(
-          _ => delayedAsync(10.millis) { // there will be a crash within these 10ms it takes to split the resource into two
-            log("split A -> (B, C)")
-            ((), ())
-          },
-          release1 = Some({ _ => log("release B"); pb.success(()); Async.now(()) }),
-          release2 = Some({ _ => log("release C"); pc.success(()); Async.now(()) }),
-        ))
-        .par(
-          release0[Unit, Unit](_ => log("release B XXX")) > neglect, // this release function should never be invoked
-          release0[Unit, Unit](_ => log("release C XXX")) > neglect, // this release function should never be invoked
-        )
-        .>(join)
-
-    val crashThread: Done -⚬ Done =
-      delay(5.millis) > crashd("Boom!") // delay crash to give chance for resource split to begin
-
-    val prg: Done -⚬ Done =
-      forkMap(crashThread, mainThread) > join
-
-    assertCrashes(prg, "Boom!")
-
-    // The current implementation based on Futures does not guarantee that all processing has finished by the time
-    // the program returns an error. Therefore, explicitly await completion of the release functions.
-    Await.result(pb.future zip pc.future, 1.second)
-
-    val logEntries: List[String] = store.get().reverse
-
-    assert(logEntries.take(2) == List("acquire A", "split A -> (B, C)"))
-    assert(logEntries.drop(2).toSet == Set("release B", "release C"))
-    assert(logEntries.size == 4)
-  }
 
   test("RefCounted") {
     import java.util.concurrent.atomic.AtomicInteger

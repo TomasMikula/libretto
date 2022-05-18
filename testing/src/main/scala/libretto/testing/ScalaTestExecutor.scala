@@ -68,17 +68,24 @@ object ScalaTestExecutor {
       import testDsl.dsl._
       import testDsl.probes.OutPort
 
-      override def runTestCase[O](
+      override def runTestCase[O, X](
         body: Done -⚬ O,
-        conduct: OutPort[O] => Outcome[Unit],
+        conduct: OutPort[O] => Outcome[X],
+        postStop: X => Outcome[Unit],
       ): TestResult[Unit] =
-        TestExecutor.usingExecutor(exec).runTestCase[O](body, conduct andThen Outcome.unwrap)
+        TestExecutor
+          .usingExecutor(exec)
+          .runTestCase[O, X](
+            body,
+            conduct andThen Outcome.unwrap,
+            postStop andThen Outcome.unwrap,
+          )
     }
 
-  lazy val global: TestExecutor[ScalaTestDsl] = {
-    val scheduler: ScheduledExecutorService = Executors.newScheduledThreadPool(2)
-    val blockingExecutor: ExecutorService   = Executors.newCachedThreadPool()
-
+  def fromJavaExecutors(
+    scheduler: ScheduledExecutorService,
+    blockingExecutor: ExecutorService,
+  ): TestExecutor[ScalaTestDsl] = {
     val executor0: libretto.ScalaExecutor.Of[StarterKit.dsl.type, Future] =
       StarterKit.executor(blockingExecutor)(scheduler)
 
@@ -87,4 +94,10 @@ object ScalaTestExecutor {
 
     fromExecutor(StarterKit.dsl, executor0)
   }
+
+  lazy val global: TestExecutor[ScalaTestDsl] =
+    fromJavaExecutors(
+      scheduler        = Executors.newScheduledThreadPool(4),
+      blockingExecutor = Executors.newCachedThreadPool(),
+    )
 }

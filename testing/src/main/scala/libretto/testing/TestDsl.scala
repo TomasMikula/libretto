@@ -34,6 +34,18 @@ trait TestDsl {
 
     def successF[A](fa: F[A]): Outcome[A] =
       Outcome(fa.map(lt.TestResult.success))
+
+    def assert(condition: Boolean, failMsg: String = "Assertion failed"): Outcome[Unit] =
+      if (condition)
+        success(())
+      else
+        failure(failMsg)
+
+    def assertEquals[A](actual: A, expected: A): Outcome[Unit] =
+      assert(
+        actual == expected,
+        failMsg = s"$actual did not equal $expected",
+      )
   }
 
   val probes: CoreBridge.Of[dsl.type, F]
