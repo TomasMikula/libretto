@@ -774,14 +774,14 @@ class BasicTests extends ScalatestSuite {
           },
 
           "Lock: successful acquire and release" -> Tests.Case {
-            val prg: Done -⚬ TestResult[Done] =
+            val prg: Done -⚬ Assertion[Done] =
               Lock.newLock > Lock.tryAcquire > assertLeft(ifRight = Lock.close) >- AcquiredLock.release >- Lock.close
 
             prg
           },
 
           "Lock: only 1 client can acquire at a time" -> Tests.Case {
-            val prg: Done -⚬ TestResult[Done] =
+            val prg: Done -⚬ Assertion[Done] =
               λ { start =>
                 val (lLock |*| rLock) =
                   start > Lock.newLock > Lock.share

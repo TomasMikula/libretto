@@ -19,7 +19,7 @@ object ScalaTestExecutor {
       override val probes: exec.type = exec
       import dsl._
 
-      override type TestResult[A] = Val[String] |+| A
+      override type Assertion[A] = Val[String] |+| A
 
       private val coreLib = CoreLib(this.dsl)
       import coreLib.{Monad => _, _}
@@ -27,20 +27,20 @@ object ScalaTestExecutor {
       override def F: libretto.util.Monad[F0] =
         summon[libretto.util.Monad[F0]]
 
-      override def success[A]: A -⚬ TestResult[A] =
+      override def success[A]: A -⚬ Assertion[A] =
         injectR
 
-      override def failure[A]: Done -⚬ TestResult[A] =
+      override def failure[A]: Done -⚬ Assertion[A] =
         failure("Failed")
 
-      override def failure[A](msg: String): Done -⚬ TestResult[A] =
+      override def failure[A](msg: String): Done -⚬ Assertion[A] =
         constVal(msg) > injectL
 
-      override def monadTestResult: Monad[-⚬, TestResult] =
+      override def monadAssertion: Monad[-⚬, Assertion] =
         |+|.right[Val[String]]
 
-      override def extractTestResult(outPort: exec.OutPort[TestResult[Done]]): Outcome[Unit] = {
-        import libretto.testing.TestResult.{Crash, Success, Failure}
+      override def extractOutcome(outPort: exec.OutPort[Assertion[Done]]): Outcome[Unit] = {
+        import TestResult.{Crash, Success, Failure}
         Outcome(
           exec
             .awaitEither[Val[String], Done](outPort)

@@ -1,7 +1,6 @@
 package libretto.testing
 
 import libretto.{CoreBridge, CoreDSL, Monad}
-import libretto.{testing => lt}
 import libretto.util.{Monad => ScalaMonad}
 import libretto.util.Monad.syntax._
 
@@ -12,28 +11,28 @@ trait TestDsl {
 
   given F: ScalaMonad[F]
 
-  opaque type Outcome[A] = F[lt.TestResult[A]]
+  opaque type Outcome[A] = F[TestResult[A]]
   object Outcome {
-    def apply[A](fa: F[lt.TestResult[A]]): Outcome[A] =
+    def apply[A](fa: F[TestResult[A]]): Outcome[A] =
       fa
 
-    def unwrap[A](outcome: Outcome[A]): F[lt.TestResult[A]] =
+    def unwrap[A](outcome: Outcome[A]): F[TestResult[A]] =
       outcome
 
-    def fromTestResult[A](res: lt.TestResult[A]): Outcome[A] =
+    def fromTestResult[A](res: TestResult[A]): Outcome[A] =
       Outcome(F.pure(res))
 
     def success[A](a: A): Outcome[A] =
-      fromTestResult(lt.TestResult.success(a))
+      fromTestResult(TestResult.success(a))
 
     def failure[A](msg: String): Outcome[A] =
-      fromTestResult(lt.TestResult.failure(msg))
+      fromTestResult(TestResult.failure(msg))
 
     def crash[A](e: Throwable): Outcome[A] =
-      fromTestResult(lt.TestResult.crash(e))
+      fromTestResult(TestResult.crash(e))
 
     def successF[A](fa: F[A]): Outcome[A] =
-      Outcome(fa.map(lt.TestResult.success))
+      Outcome(fa.map(TestResult.success))
 
     def assert(condition: Boolean, failMsg: String = "Assertion failed"): Outcome[Unit] =
       if (condition)
@@ -69,14 +68,14 @@ trait TestDsl {
   import dsl.{-⚬, |*|, |+|, Done}
   import probes.OutPort
 
-  type TestResult[A]
+  type Assertion[A]
 
-  def success[A]: A -⚬ TestResult[A]
-  def failure[A]: Done -⚬ TestResult[A]
+  def success[A]: A -⚬ Assertion[A]
+  def failure[A]: Done -⚬ Assertion[A]
 
-  given monadTestResult: Monad[-⚬, TestResult]
+  given monadAssertion: Monad[-⚬, Assertion]
 
-  def extractTestResult(outPort: OutPort[TestResult[Done]]): Outcome[Unit]
+  def extractOutcome(outPort: OutPort[Assertion[Done]]): Outcome[Unit]
 
   given monadOutcome: ScalaMonad[Outcome] with {
     override def pure[A](a: A): Outcome[A] =
@@ -84,9 +83,9 @@ trait TestDsl {
 
     override def flatMap[A, B](fa: Outcome[A])(f: A => Outcome[B]): Outcome[B] =
       F.flatMap(fa) {
-        case lt.TestResult.Success(a)   => f(a)
-        case lt.TestResult.Failure(msg) => F.pure(lt.TestResult.Failure(msg))
-        case lt.TestResult.Crash(e)     => F.pure(lt.TestResult.Crash(e))
+        case TestResult.Success(a)   => f(a)
+        case TestResult.Failure(msg) => F.pure(TestResult.Failure(msg))
+        case TestResult.Crash(e)     => F.pure(TestResult.Crash(e))
       }
   }
 
@@ -95,28 +94,28 @@ trait TestDsl {
 
   def expectDone(port: OutPort[Done]): Outcome[Unit] =
     probes.awaitDone(port).map {
-      case Left(e)   => lt.TestResult.crash(e)
-      case Right(()) => lt.TestResult.success(())
+      case Left(e)   => TestResult.crash(e)
+      case Right(()) => TestResult.success(())
     }
 
   def expectCrashDone(port: OutPort[Done]): Outcome[Throwable] =
     probes.awaitDone(port).map {
-      case Left(e)   => lt.TestResult.success(e)
-      case Right(()) => lt.TestResult.failure("Expected crash, but got Done")
+      case Left(e)   => TestResult.success(e)
+      case Right(()) => TestResult.failure("Expected crash, but got Done")
     }
 
   def expectLeft[A, B](port: OutPort[A |+| B]): Outcome[OutPort[A]] =
     probes.awaitEither(port).map {
-      case Left(e)         => lt.TestResult.crash(e)
-      case Right(Left(p))  => lt.TestResult.success(p)
-      case Right(Right(_)) => lt.TestResult.failure("Expected Left, but got Right")
+      case Left(e)         => TestResult.crash(e)
+      case Right(Left(p))  => TestResult.success(p)
+      case Right(Right(_)) => TestResult.failure("Expected Left, but got Right")
     }
 
   def expectRight[A, B](port: OutPort[A |+| B]): Outcome[OutPort[B]] =
     probes.awaitEither(port).map {
-      case Left(e)         => lt.TestResult.crash(e)
-      case Right(Left(_))  => lt.TestResult.failure("Expected Right, but got Left")
-      case Right(Right(p)) => lt.TestResult.success(p)
+      case Left(e)         => TestResult.crash(e)
+      case Right(Left(_))  => TestResult.failure("Expected Right, but got Left")
+      case Right(Right(p)) => TestResult.success(p)
     }
 }
 
@@ -127,6 +126,6 @@ object TestDsl {
   transparent inline def dsl(using testDsl: TestDsl): testDsl.dsl.type =
     testDsl.dsl
 
-  def success(using testDsl: TestDsl): testDsl.dsl.-⚬[testDsl.dsl.Done, testDsl.TestResult[dsl.Done]] =
+  def success(using testDsl: TestDsl): testDsl.dsl.-⚬[testDsl.dsl.Done, testDsl.Assertion[dsl.Done]] =
     testDsl.success
 }
