@@ -14,7 +14,7 @@ trait ScalaTestDsl extends TestDsl {
   private lazy val coreLib = CoreLib(dsl)
   import coreLib._
 
-  def assertEquals[A](expected: A): Val[A] -⚬ TestResult =
+  def assertEquals[A](expected: A): Val[A] -⚬ TestResult[Done] =
     mapVal[A, Either[Unit, Unit]](a => if (a == expected) Right(()) else Left(()))
       .>( dsl.liftEither )
       .>( either(neglect > failure, neglect > success) )

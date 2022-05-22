@@ -1,8 +1,8 @@
 package libretto.testing
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
-import libretto.{CoreLib, ScalaBridge, ScalaExecutor, ScalaDSL, StarterKit}
-import libretto.util.Monad
+import libretto.{CoreLib, Monad, ScalaBridge, ScalaExecutor, ScalaDSL, StarterKit}
+import libretto.util.{Monad => ScalaMonad}
 import libretto.util.Monad.syntax._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
@@ -10,7 +10,7 @@ import scala.util.{Failure, Success, Try}
 
 object ScalaTestExecutor {
 
-  private trait ScalaTestDslFromExecutor[F0[_]: Monad, DSL <: ScalaDSL, Exec <: ScalaExecutor.Of[DSL, F0]](
+  private trait ScalaTestDslFromExecutor[F0[_]: ScalaMonad, DSL <: ScalaDSL, Exec <: ScalaExecutor.Of[DSL, F0]](
     val dsl0: DSL,
     val exec: Exec & ScalaExecutor.Of[dsl0.type, F0],
   ) extends ScalaTestDsl {
@@ -19,21 +19,24 @@ object ScalaTestExecutor {
       override val probes: exec.type = exec
       import dsl._
 
-      override type TestResult = Val[String] |+| Done
+      override type TestResult[A] = Val[String] |+| A
 
       private val coreLib = CoreLib(this.dsl)
-      import coreLib._
+      import coreLib.{Monad => _, _}
 
       override def F: libretto.util.Monad[F0] =
         summon[libretto.util.Monad[F0]]
 
-      override def success: Done -⚬ TestResult =
+      override def success: Done -⚬ TestResult[Done] =
         injectR
 
-      override def failure: Done -⚬ TestResult =
+      override def failure: Done -⚬ TestResult[Done] =
         constVal("Failed") > injectL
 
-      override def extractTestResult(outPort: exec.OutPort[TestResult]): Outcome[Unit] = {
+      override def monadTestResult: Monad[-⚬, TestResult] =
+        |+|.right[Val[String]]
+
+      override def extractTestResult(outPort: exec.OutPort[TestResult[Done]]): Outcome[Unit] = {
         import libretto.testing.TestResult.{Crash, Success, Failure}
         Outcome(
           exec
@@ -56,7 +59,10 @@ object ScalaTestExecutor {
       }
   }
 
-  def fromExecutor[F0[_]: Monad](dsl: ScalaDSL, exec: ScalaExecutor.Of[dsl.type, F0]): TestExecutor[ScalaTestDsl] =
+  def fromExecutor[F0[_]: ScalaMonad](
+    dsl: ScalaDSL,
+    exec: ScalaExecutor.Of[dsl.type, F0],
+  ): TestExecutor[ScalaTestDsl] =
     new TestExecutor[ScalaTestDsl] {
       override val name: String =
         ScalaTestExecutor.getClass.getCanonicalName
@@ -89,8 +95,8 @@ object ScalaTestExecutor {
     val executor0: libretto.ScalaExecutor.Of[StarterKit.dsl.type, Future] =
       StarterKit.executor(blockingExecutor)(scheduler)
 
-    given monadFuture: Monad[Future] =
-      Monad.monadFuture(using ExecutionContext.fromExecutor(scheduler))
+    given monadFuture: ScalaMonad[Future] =
+      ScalaMonad.monadFuture(using ExecutionContext.fromExecutor(scheduler))
 
     fromExecutor(StarterKit.dsl, executor0)
   }

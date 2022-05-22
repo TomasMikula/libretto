@@ -1435,12 +1435,21 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
 
     /** Disjoint union is covariant in the left argument. */
-    def left[B]: Functor[λ[x => x |+| B]] =
+    def left[B]: Functor[[x] =>> x |+| B] =
       bifunctor.fst[B]
 
     /** Disjoint union is covariant in the right argument. */
-    def right[A]: Functor[λ[x => A |+| x]] =
-      bifunctor.snd[A]
+    def right[A]: Monad[[x] =>> A |+| x] =
+      new Monad[[x] =>> A |+| x](using category) {
+        override def pure[B]: B -⚬ (A |+| B) =
+          injectR
+
+        override def lift[B, C](f: B -⚬ C): (A |+| B) -⚬ (A |+| C) =
+          rmap(f)
+
+        override def flatten[B]: (A |+| (A |+| B)) -⚬ (A |+| B) =
+          either(injectL, id)
+      }
   }
 
   object |&| {
@@ -2596,7 +2605,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
 
     implicit val monadMultiple: Monad[Multiple] =
-      new Monad[Multiple] {
+      new Monad[Multiple](using category) {
         override def lift[A, B](f: A -⚬ B): Multiple[A] -⚬ Multiple[B] =
           Multiple.map(f)
 

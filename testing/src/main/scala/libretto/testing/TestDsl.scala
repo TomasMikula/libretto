@@ -1,8 +1,8 @@
 package libretto.testing
 
-import libretto.{CoreBridge, CoreDSL}
+import libretto.{CoreBridge, CoreDSL, Monad}
 import libretto.{testing => lt}
-import libretto.util.Monad
+import libretto.util.{Monad => ScalaMonad}
 import libretto.util.Monad.syntax._
 
 trait TestDsl {
@@ -10,7 +10,7 @@ trait TestDsl {
 
   type F[_]
 
-  given F: Monad[F]
+  given F: ScalaMonad[F]
 
   opaque type Outcome[A] = F[lt.TestResult[A]]
   object Outcome {
@@ -66,17 +66,19 @@ trait TestDsl {
 
   val probes: CoreBridge.Of[dsl.type, F]
 
-  type TestResult
-
   import dsl.{-⚬, |*|, |+|, Done}
   import probes.OutPort
 
-  def success: Done -⚬ TestResult
-  def failure: Done -⚬ TestResult
+  type TestResult[A]
 
-  def extractTestResult(outPort: OutPort[TestResult]): Outcome[Unit]
+  def success: Done -⚬ TestResult[Done]
+  def failure: Done -⚬ TestResult[Done]
 
-  given monadOutcome: Monad[Outcome] with {
+  given monadTestResult: Monad[-⚬, TestResult]
+
+  def extractTestResult(outPort: OutPort[TestResult[Done]]): Outcome[Unit]
+
+  given monadOutcome: ScalaMonad[Outcome] with {
     override def pure[A](a: A): Outcome[A] =
       F.pure(TestResult.success(a))
 
@@ -125,6 +127,6 @@ object TestDsl {
   transparent inline def dsl(using testDsl: TestDsl): testDsl.dsl.type =
     testDsl.dsl
 
-  def success(using testDsl: TestDsl): testDsl.dsl.-⚬[testDsl.dsl.Done, testDsl.TestResult] =
+  def success(using testDsl: TestDsl): testDsl.dsl.-⚬[testDsl.dsl.Done, testDsl.TestResult[dsl.Done]] =
     testDsl.success
 }

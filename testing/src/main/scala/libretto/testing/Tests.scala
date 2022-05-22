@@ -94,7 +94,7 @@ object Tests {
         override val postStop = postStop0
       }
 
-    def apply(using tdsl: TestDsl)(body: dsl.-⚬[dsl.Done, tdsl.TestResult]): Case[tdsl.type] =
+    def apply(using tdsl: TestDsl)(body: dsl.-⚬[dsl.Done, tdsl.TestResult[dsl.Done]]): Case[tdsl.type] =
       make(body, tdsl.extractTestResult, tdsl.monadOutcome.pure)
 
     def apply[O](using tdsl: TestDsl)(
