@@ -3,7 +3,6 @@ package libretto
 import java.util.concurrent.Executors
 import libretto.Functor._
 import libretto.testing.{ScalaTestDsl, ScalaTestExecutor, ScalatestSuite, TestDsl, Tests}
-import libretto.testing.Tests.Case.assertCrashesWith
 import libretto.util.Monad.syntax._
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
@@ -141,9 +140,14 @@ class BasicTests extends ScalatestSuite {
             raceKeepWinner(a, b) > assertEquals('A')
           },
 
-          "crashd" -> assertCrashesWith("boom!") {
-            crashd("boom!")
-          },
+          "crashd" -> Tests.Case
+            .interactWith(crashd("boom!"))
+            .via { port =>
+              for {
+                e <- expectCrashDone(port)
+                _ <- Outcome.assertEquals(e.getMessage, "boom!")
+              } yield ()
+            },
 
           "crashd waits for its trigger" -> {
             val prg: Done -⚬ ((Done |*| Done) |+| (Done |*| Done)) =
@@ -164,12 +168,19 @@ class BasicTests extends ScalatestSuite {
               }
           },
 
-          "crashd - even if it loses a race, the program still crashes" -> assertCrashesWith("oops") {
-            id[Done]
-              .>( forkMap(id, delay(10.millis) > crashd("oops")) )
-              .>( raceDone )
-              .>( either(id, id) )
-          },
+          "crashd - even if it loses a race, the program still crashes" -> Tests.Case
+            .interactWith {
+              id[Done]
+                .>( forkMap(id, delay(10.millis) > crashd("oops")) )
+                .>( raceDone )
+                .>( either(id, id) )
+            }
+            .via { port =>
+              for {
+                e <- expectCrashDone(port)
+                _ <- Outcome.assertEquals(e.getMessage, "oops")
+              } yield ()
+            },
 
           "crashd in non-executed |+| has no effect" -> Tests.Case {
             injectL[Done, Done] > either(id, crashd("bang!")) > success

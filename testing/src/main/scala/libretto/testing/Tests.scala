@@ -136,26 +136,5 @@ object Tests {
       ): Case[tdsl.type] =
         Case(using tdsl)(body, conductor, postStop)
     }
-
-    def assertCrashes(using tdsl: TestDsl)(body: dsl.-⚬[dsl.Done, dsl.Done]): Case[tdsl.type] = {
-      Case[dsl.Done](
-        body,
-        port => tdsl.expectCrashDone(port).void,
-      )
-    }
-
-    def assertCrashesWith(using tdsl: TestDsl)(expectedErrorMessage: String)(body: dsl.-⚬[dsl.Done, dsl.Done]): Case[tdsl.type] = {
-      import tdsl.Outcome
-
-      Case[dsl.Done](
-        body,
-        port => tdsl.expectCrashDone(port).flatMap {
-          case e if expectedErrorMessage == e.getMessage =>
-            Outcome.success(())
-          case e =>
-            Outcome.failure(s"Expected message $expectedErrorMessage, actual exception: $e")
-        },
-      )
-    }
   }
 }
