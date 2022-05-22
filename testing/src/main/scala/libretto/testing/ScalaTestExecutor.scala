@@ -27,11 +27,14 @@ object ScalaTestExecutor {
       override def F: libretto.util.Monad[F0] =
         summon[libretto.util.Monad[F0]]
 
-      override def success: Done -⚬ TestResult[Done] =
+      override def success[A]: A -⚬ TestResult[A] =
         injectR
 
-      override def failure: Done -⚬ TestResult[Done] =
-        constVal("Failed") > injectL
+      override def failure[A]: Done -⚬ TestResult[A] =
+        failure("Failed")
+
+      override def failure[A](msg: String): Done -⚬ TestResult[A] =
+        constVal(msg) > injectL
 
       override def monadTestResult: Monad[-⚬, TestResult] =
         |+|.right[Val[String]]

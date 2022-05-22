@@ -20,20 +20,28 @@ class ClosedLib[
   import coreLib._
 
   /** Function object (internal hom) is contravariant in the input type. */
-  def input[C]: ContraFunctor[λ[x => x =⚬ C]] = new ContraFunctor[λ[x => x =⚬ C]] {
-    def lift[A, B](f: A -⚬ B): (B =⚬ C) -⚬ (A =⚬ C) =
-      id                         [ (B =⚬ C) |*| A ]
-        .>.snd(f)             .to[ (B =⚬ C) |*| B ]
-        .>(eval)              .to[       C        ]
-        .as[ ((B =⚬ C) |*| A)  -⚬        C        ]
-        .curry
-  }
+  def input[C]: ContraFunctor[[x] =>> x =⚬ C] =
+    new ContraFunctor[[x] =>> x =⚬ C] {
+      override val category =
+        coreLib.category
+
+      override def lift[A, B](f: A -⚬ B): (B =⚬ C) -⚬ (A =⚬ C) =
+        id                         [ (B =⚬ C) |*| A ]
+          .>.snd(f)             .to[ (B =⚬ C) |*| B ]
+          .>(eval)              .to[       C        ]
+          .as[ ((B =⚬ C) |*| A)  -⚬        C        ]
+          .curry
+    }
 
   /** Function object (internal hom) is covariant in the output type. */
-  def output[A]: Functor[λ[x => A =⚬ x]] = new Functor[λ[x => A =⚬ x]] {
-    def lift[B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
-      out(f)
-  }
+  def output[A]: Functor[[x] =>> A =⚬ x] =
+    new Functor[[x] =>> A =⚬ x] {
+      override val category =
+        coreLib.category
+
+      override def lift[B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
+        out(f)
+    }
 
   implicit class ClosedLinearFunctionOps[A, B](self: A -⚬ B) {
     def curry[A1, A2](implicit ev: A =:= (A1 |*| A2)): A1 -⚬ (A2 =⚬ B) =

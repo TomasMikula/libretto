@@ -368,5 +368,13 @@ trait CoreDSL {
       def alsoElim(unit: $[One]): $[A] =
         (unit |*| a) > elimFst
     }
+
+    implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
+      def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F]): $[F[B]] =
+        fa > F.lift(λ(f))
+
+      def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F]): $[F[B]] =
+        fa > F.liftF(λ(f))
+    }
   }
 }

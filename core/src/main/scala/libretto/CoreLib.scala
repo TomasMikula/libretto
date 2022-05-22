@@ -261,6 +261,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     implicit def transportiveDetained: Transportive[Detained] =
       new Transportive[Detained] {
+        override val category: Category[-⚬] =
+          lib.category
+
         override def lift[A, B](f: A -⚬ B): Detained[A] -⚬ Detained[B] =
           snd(f)
 
@@ -1341,6 +1344,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Pair is covariant in the first argument. */
     def fst[B]: Transportive[λ[x => x |*| B]] =
       new Transportive[λ[x => x |*| B]] {
+        override val category: Category[-⚬] = lib.category
         def lift[A1, A2](f: A1 -⚬ A2): (A1 |*| B) -⚬ (A2 |*| B) = par(f, id)
         def inL[A1, A2]: (A1 |*| (A2 |*| B)) -⚬ ((A1 |*| A2) |*| B) = assocRL
         def outL[A1, A2]: ((A1 |*| A2) |*| B) -⚬ (A1 |*| (A2 |*| B)) = assocLR
@@ -1349,6 +1353,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Pair is covariant in the second argument. */
     def snd[A]: Transportive[λ[x => A |*| x]] =
       new Transportive[λ[x => A |*| x]] {
+        override val category: Category[-⚬] = lib.category
         def lift[B1, B2](f: B1 -⚬ B2): (A |*| B1) -⚬ (A |*| B2) = par(id, f)
         def inL[B1, B2]: (B1 |*| (A |*| B2)) -⚬ (A |*| (B1 |*| B2)) =
           assocRL[B1, A, B2].>.fst(swap).assocLR
@@ -1360,6 +1365,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   type Id[A] = A
 
   implicit val idFunctor: Transportive[Id] = new Transportive[Id] {
+    override val category: Category[-⚬] = lib.category
     def lift[A, B](f: A -⚬ B): Id[A] -⚬ Id[B] = f
     def inL[A, B]: (A |*| Id[B]) -⚬ Id[A |*| B] = id
     def outL[A, B]: Id[A |*| B] -⚬ (A |*| Id[B]) = id
@@ -1429,8 +1435,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       notify > distributeL > bimap(elimFst(dismissPing), fst(strengthenPing))
 
     val bifunctor: Bifunctor[|+|] =
-      new Bifunctor[|+|](category) {
-        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
+      new Bifunctor[|+|] {
+        override val category =
+          lib.category
+
+        override def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
           bimap(f, g)
       }
 
@@ -1440,7 +1449,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     /** Disjoint union is covariant in the right argument. */
     def right[A]: Monad[[x] =>> A |+| x] =
-      new Monad[[x] =>> A |+| x](using category) {
+      new Monad[[x] =>> A |+| x] {
+        override val category: Category[-⚬] =
+          lib.category
+
         override def pure[B]: B -⚬ (A |+| B) =
           injectR
 
@@ -1504,8 +1516,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       bimap(introFst(dismissPong), fst(strengthenPong)) > coDistributeL > notify
 
     val bifunctor: Bifunctor[|&|] =
-      new Bifunctor[|&|](category) {
-        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
+      new Bifunctor[|&|] {
+        override val category =
+          lib.category
+
+        override def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
           bimap(f, g)
       }
 
@@ -2276,7 +2291,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         .bimap[|+|](f, |+|.bimap(f, f))         .to[     (S |*| T)     |+| (    (S |*| T)     |+|      (S |*| T)     ) ]
 
     def bifunctorCompared: Bifunctor[Compared] =
-      new Bifunctor[Compared](category) {
+      new Bifunctor[Compared] {
+        override val category =
+          lib.category
+
         def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): Compared[A, C] -⚬ Compared[B, D] = {
           Bifunctor[|+|].lift(
             par(f, g),
@@ -2605,7 +2623,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
 
     implicit val monadMultiple: Monad[Multiple] =
-      new Monad[Multiple](using category) {
+      new Monad[Multiple] {
+        override val category: Category[-⚬] =
+          lib.category
+
         override def lift[A, B](f: A -⚬ B): Multiple[A] -⚬ Multiple[B] =
           Multiple.map(f)
 
@@ -2728,6 +2749,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     implicit val comonadUnlimited: Comonad[Unlimited] =
       new Comonad[Unlimited] {
+        override val category: Category[-⚬] =
+          lib.category
+
         override def lift[A, B](f: A -⚬ B): Unlimited[A] -⚬ Unlimited[B] =
           Unlimited.map(f)
 
@@ -2809,6 +2833,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     implicit val comonadPUnlimited: Comonad[PUnlimited] =
       new Comonad[PUnlimited] {
+        override val category: Category[-⚬] =
+          lib.category
+
         override def lift[A, B](f: A -⚬ B): PUnlimited[A] -⚬ PUnlimited[B] =
           PUnlimited.map(f)
 

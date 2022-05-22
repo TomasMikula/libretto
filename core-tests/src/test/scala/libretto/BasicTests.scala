@@ -1,17 +1,14 @@
 package libretto
 
-import java.util.concurrent.{Executors, ScheduledExecutorService}
-import libretto.testing.{ScalatestSuite, TestSuite}
-import scala.collection.mutable
-import scala.concurrent.{Await, Promise}
-
-import libretto.testing.{ScalaTestDsl, ScalaTestExecutor, ScalatestSuite, TestDsl, TestResult, Tests}
-import libretto.testing.TestDsl.{dsl, success}
+import java.util.concurrent.Executors
+import libretto.Functor._
+import libretto.testing.{ScalaTestDsl, ScalaTestExecutor, ScalatestSuite, TestDsl, Tests}
 import libretto.testing.Tests.Case.assertCrashesWith
 import libretto.util.Monad.syntax._
+import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 
-class BasicTestsNew extends ScalatestSuite {
+class BasicTests extends ScalatestSuite {
   // TODO: shutdown after tests
   private lazy val scheduler = Executors.newScheduledThreadPool(1)
 
@@ -26,7 +23,7 @@ class BasicTestsNew extends ScalatestSuite {
       .use[ScalaTestDsl]
       .executedBy(ScalaTestExecutor.global)
       .in {
-        import TestDsl.givenInstance.{F, Outcome, assertEquals, expectCrashDone, expectDone, expectRight, expectVal, monadOutcome, splitOut}
+        import TestDsl.givenInstance._
         import dsl._
         import dsl.$._
         val coreLib = CoreLib(dsl)
@@ -764,60 +761,53 @@ class BasicTestsNew extends ScalatestSuite {
 
             prg > success
           },
+
+          "Lock: successful acquire and release" -> Tests.Case {
+            val prg: Done -⚬ TestResult[Done] =
+              Lock.newLock > Lock.tryAcquire > assertLeft(ifRight = Lock.close) >- AcquiredLock.release >- Lock.close
+
+            prg
+          },
+
+          "Lock: only 1 client can acquire at a time" -> Tests.Case {
+            val prg: Done -⚬ TestResult[Done] =
+              λ { start =>
+                val (lLock |*| rLock) =
+                  start > Lock.newLock > Lock.share
+
+                // one lock can be acquired
+                val (acquiredRLock |*| acquiredRNotification) =
+                  Lock.tryAcquire(rLock) > leftOrCrash() > notifyPosSnd
+
+                // second acquisition attempt fails
+                val (lLock1 |*| pingOnAttempted) =
+                  (lLock blockUntil acquiredRNotification) > Lock.tryAcquire > notifyPosSnd > fst(rightOrCrash())
+
+                // release the acquired lock, but only after the second acquisition attempt
+                val rLock1 =
+                  AcquiredLock.release(acquiredRLock deferReleaseUntil pingOnAttempted)
+
+                join( Lock.close(lLock1) |*| Lock.close(rLock1) ) > success
+              }
+
+            prg
+          },
+
+          "Lock: Everyone acquires the lock eventually" -> Tests.Case {
+            val prg: Done -⚬ Done =
+              Lock.newLock > Lock.share > par(
+                Lock.share > par(
+                  Lock.acquire > AcquiredLock.release > Lock.close,
+                  Lock.acquire > AcquiredLock.release > Lock.close,
+                ),
+                Lock.share > par(
+                  Lock.acquire > AcquiredLock.release > Lock.close,
+                  Lock.acquire > AcquiredLock.release > Lock.close,
+                ),
+              ) > joinMap(join, join)
+
+            prg > success
+          },
         )
       }
-}
-
-class BasicTests extends TestSuite {
-  import kit.dsl._
-  import kit.dsl.$._
-  import kit.coreLib._
-  import kit.scalaLib._
-
-  test("Lock: successful acquire and release") {
-    val prg: Done -⚬ Done =
-      Lock.newLock > Lock.tryAcquire > assertLeft > AcquiredLock.release > Lock.close
-
-    assertCompletes(prg)
-  }
-
-  test("Lock: only 1 client can acquire at a time") {
-    val prg: Done -⚬ Done =
-      λ { start =>
-        val (lLock |*| rLock) =
-          start > Lock.newLock > Lock.share
-
-        // one lock can be acquired
-        val (acquiredRLock |*| acquiredRNotification) =
-          Lock.tryAcquire(rLock) > assertLeft > notifyPosSnd
-
-        // second acquisition attempt fails
-        val (lLock1 |*| pingOnAttempted) =
-          (lLock blockUntil acquiredRNotification) > Lock.tryAcquire > notifyPosSnd > fst(assertRight)
-
-        // release the acquired lock, but only after the second acquisition attempt
-        val rLock1 =
-          AcquiredLock.release(acquiredRLock deferReleaseUntil pingOnAttempted)
-
-        join( Lock.close(lLock1) |*| Lock.close(rLock1) )
-      }
-
-    assertCompletes(prg)
-  }
-
-  test("Lock: Everyone acquires the lock eventually") {
-    val prg: Done -⚬ Done =
-      Lock.newLock > Lock.share > par(
-        Lock.share > par(
-          Lock.acquire > AcquiredLock.release > Lock.close,
-          Lock.acquire > AcquiredLock.release > Lock.close,
-        ),
-        Lock.share > par(
-          Lock.acquire > AcquiredLock.release > Lock.close,
-          Lock.acquire > AcquiredLock.release > Lock.close,
-        ),
-      ) > joinMap(join, join)
-
-    assertCompletes(prg)
-  }
 }

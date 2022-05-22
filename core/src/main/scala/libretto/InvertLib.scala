@@ -17,6 +17,9 @@ class InvertLib[
 
   implicit val contraFunctoDemand: ContraFunctor[-] =
     new ContraFunctor[-] {
+      override val category =
+        coreLib.category
+
       override def lift[A, B](f: A -⚬ B): -[B] -⚬ -[A] =
         contrapositive(f)
     }

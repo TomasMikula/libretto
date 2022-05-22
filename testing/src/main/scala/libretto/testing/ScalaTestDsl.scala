@@ -14,6 +14,26 @@ trait ScalaTestDsl extends TestDsl {
   private lazy val coreLib = CoreLib(dsl)
   import coreLib._
 
+  def failure[A](msg: String): Done -⚬ TestResult[A]
+
+  def assertLeft[A, B](
+    ifRight: B -⚬ Done,
+    msg: String = "Expected Left, was Right",
+  ): (A |+| B) -⚬ TestResult[A] =
+    either(success[A], ifRight > failure(msg))
+
+  def assertRight[A, B](
+    ifLeft: A -⚬ Done,
+    msg: String = "Expected Right, was Left",
+  ): (A |+| B) -⚬ TestResult[B] =
+    either(ifLeft > failure(msg), success[B])
+
+  def leftOrCrash[A, B](msg: String = "Expected Left, was Right"): (A |+| B) -⚬ A =
+    |+|.signalR > either(id[A], crashWhenDone[B, A](msg))
+
+  def rightOrCrash[A, B](msg: String = "Expected Right, was Left"): (A |+| B) -⚬ B =
+    |+|.signalL > either(crashWhenDone[A, B](msg), id[B])
+
   def assertEquals[A](expected: A): Val[A] -⚬ TestResult[Done] =
     mapVal[A, Either[Unit, Unit]](a => if (a == expected) Right(()) else Left(()))
       .>( dsl.liftEither )

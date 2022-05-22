@@ -71,8 +71,8 @@ trait TestDsl {
 
   type TestResult[A]
 
-  def success: Done -⚬ TestResult[Done]
-  def failure: Done -⚬ TestResult[Done]
+  def success[A]: A -⚬ TestResult[A]
+  def failure[A]: Done -⚬ TestResult[A]
 
   given monadTestResult: Monad[-⚬, TestResult]
 
