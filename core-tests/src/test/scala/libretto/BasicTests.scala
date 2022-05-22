@@ -28,6 +28,7 @@ class BasicTestsNew extends ScalatestSuite {
       .in {
         import TestDsl.givenInstance.{F, Outcome, assertEquals, expectCrashDone, expectDone, expectRight, expectVal, monadOutcome, splitOut}
         import dsl._
+        import dsl.$._
         val coreLib = CoreLib(dsl)
         val scalaLib = ScalaLib(dsl: dsl.type, coreLib)
         import coreLib._
@@ -453,6 +454,316 @@ class BasicTestsNew extends ScalatestSuite {
                 } yield ()
               }
           },
+
+          "blocking" -> {
+            val n = 10
+            val sleepMillis = 10
+
+            case class Millis(value: Long)
+
+            val currentTimeMillis: Done -⚬ Val[Millis] =
+              constVal(()) > mapVal(_ => Millis(System.currentTimeMillis()))
+
+            val sleep: Done -⚬ Val[Millis] =
+              constVal(()) > blocking(_ => Thread.sleep(sleepMillis)) > mapVal(_ => Millis(System.currentTimeMillis()))
+
+            val timed: Done -⚬ Val[(List[Millis], List[Millis])] = {
+              // true, false, true, false, ...
+              val alternating: ::[Boolean] = (0 until (2*n)).map(_ % 2 == 0).toList.asInstanceOf[::[Boolean]]
+
+              constList1(alternating)
+                .>(LList1.toLList)
+                .>(LList.map(liftBoolean))
+                .>(LList.map(Bool.switch(caseTrue = sleep, caseFalse = currentTimeMillis)))
+                .>(LList.splitEvenOdd)
+                .>(par(toScalaList, toScalaList))
+                .>(unliftPair)
+            }
+
+            val prg: Done -⚬ Val[(Millis, (List[Millis], List[Millis]))] =
+              forkMap(currentTimeMillis, timed) > unliftPair
+
+            Tests.Case
+              .interactWith(prg)
+              .via { port =>
+                for {
+                  results <- expectVal(port)
+
+                  (startMillis, (sleepEnds, pureEnds)) = results
+                  sleepDurations = sleepEnds.map(_.value - startMillis.value)
+                  pureDurations = pureEnds.map(_.value - startMillis.value)
+
+                  _ <- Outcome.assert(
+                         sleepDurations.min >= sleepMillis,
+                         "sanity check: check that the blocking computations take the amount of time they are supposed to",
+                       )
+
+                  // check that none of the non-blocking computations is blocked by any of the blocking computations,
+                  // by checking that it completed before any of the blocking computations could
+                  _ <- Outcome.assert(pureDurations.max < sleepMillis)
+                } yield ()
+              }
+          },
+
+          "LList.sortBySignal" -> {
+            val delays =
+              List(30, 20, 10, 50, 40)
+
+            val elems: ::[Done -⚬ Val[Int]] =
+              delays
+                .map(n => delay(n.millis) > constVal(n))
+                .asInstanceOf[::[Done -⚬ Val[Int]]]
+
+            val prg: Done -⚬ Val[List[Int]] =
+              id                               [       Done       ]
+                .>(LList1.from(elems))      .to[ LList1[Val[Int]] ]
+                .>(LList1.toLList)          .to[  LList[Val[Int]] ]
+                .>(LList.sortBySignal)      .to[  LList[Val[Int]] ]
+                .>(toScalaList)             .to[   Val[List[Int]] ]
+
+            Tests.Case {
+              prg > assertEquals(delays.sorted)
+            }
+          },
+
+          "endless fibonacci" -> {
+            val next: Val[(Int, Int)] -⚬ (Val[Int] |*| Val[(Int, Int)]) =
+              id[Val[(Int, Int)]] > mapVal { case (n0, n1) => (n0, (n1, n0 + n1)) } > liftPair
+
+            val fibonacci: Done -⚬ (Endless[Val[Int]] |*| Done) =
+              constVal((0, 1)) > Endless.unfold(next) > par(id, neglect)
+
+            def take[A](n: Int): Endless[Val[A]] -⚬ Val[List[A]] =
+              Endless.take(n) > toScalaList
+
+            val expected =
+              List(0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181)
+
+            Tests.Case.multiple(
+              "take 20" ->
+                Tests.Case {
+                  fibonacci > par(take(20), id) > awaitPosSnd > assertEquals(expected)
+                },
+              "split & take 10 from each" ->
+                Tests.Case.interactWith[Val[(List[Int], List[Int])]] {
+                  fibonacci > par(Endless.split > par(take(10), take(10)) > unliftPair, id) > awaitPosSnd
+                }.via { port =>
+                  for {
+                    results <- expectVal(port)
+                    (fibs1, fibs2) = results
+                    _ <- Outcome.assert(fibs1.sorted == fibs1)
+                    _ <- Outcome.assert(fibs2.sorted == fibs2)
+                    _ <- Outcome.assert((fibs1 ++ fibs2).sorted == expected)
+                  } yield ()
+                },
+            )
+          },
+
+          "pool" -> {
+            case class ClientId(value: Int)
+            case class ResourceId(value: Int)
+
+            val nResources = 3
+            val nClients = 12
+
+            def client(cid: ClientId): (Val[ResourceId] |*| Neg[ResourceId]) -⚬ Val[(ClientId, ResourceId)] =
+              id                             [                            Val[ResourceId]             |*| Neg[ResourceId]  ]
+                .>.fst(dup).assocLR       .to[                   Val[ResourceId] |*| (Val[ResourceId] |*| Neg[ResourceId]) ]
+                .>(elimSnd(fulfill))      .to[                   Val[ResourceId]                                           ]
+                .>(introFst(const(cid)))  .to[ Val[ClientId] |*| Val[ResourceId]                                           ]
+                .>(unliftPair)            .to[ Val[(ClientId, ResourceId)]                                                 ]
+
+            val clients: List[(Val[ResourceId] |*| Neg[ResourceId]) -⚬ Val[(ClientId, ResourceId)]] =
+              (1 to nClients)
+                .map { i => client(ClientId(i)) }
+                .toList
+
+            val clientsPrg: Unlimited[Val[ResourceId] |*| Neg[ResourceId]] -⚬ Val[List[(ClientId, ResourceId)]] =
+              LList.fromListU(clients) > toScalaList
+
+            val resources: Done -⚬ LList1[Val[ResourceId]] =
+              LList1.from(
+                head = constVal(ResourceId(1)),
+                tail = (2 to nResources)
+                  .map { i => constVal(ResourceId(i)) }
+                  .toList,
+              )
+
+            val prg: Done -⚬ Val[List[(ClientId, ResourceId)]] =
+              resources > pool(promise) > par(clientsPrg, LList1.foldMap(neglect)) > awaitPosSnd
+
+            Tests.Case
+              .interactWith(prg)
+              .via { port =>
+                for {
+                  pairs <- expectVal(port)
+
+                  // each client appears exactly once
+                  _ <- Outcome.assert(pairs.size == nClients)
+                  _ <- Outcome.assert(pairs.map(_._1).toSet.size == nClients)
+
+                  // each resource is used by multiple clients
+                  _ <- Outcome.traverse(
+                         pairs.groupMapReduce(key = _._2)(_ => 1)(_ + _)
+                       ) { case (rId, n) =>
+                         Outcome.assert(n >= nClients / nResources / 2, s"unbalanced resource usage: $pairs")
+                       }
+                } yield ()
+              }
+          },
+
+          "backvert then forevert" -> Tests.Case {
+            val prg: Done -⚬ Val[String] =
+              constVal("abc") > introSnd(forevert[Val[String]]) > assocRL > elimFst(backvert[Val[String]])
+
+            prg > assertEquals("abc")
+          },
+
+          "distributeInversion, factorOutInversion" -> Tests.Case {
+            val prg: Done -⚬ Val[(String, Int)] =
+              fork > par(constVal("1") > dii, constVal(1) > dii) > factorOutInversion > contrapositive(distributeInversion) > die > unliftPair
+
+            prg > assertEquals(("1", 1))
+          },
+
+          "demandTogether > demandSeparately = id" -> Tests.Case {
+            // namely, check that demandTogether does not delay processing until both demands are supplied
+
+            val joinThenSplitDemands: (-[Done] |*| -[Done]) -⚬ (-[Done] |*| -[Done]) =
+              demandTogether > demandSeparately
+
+            val prg: Done -⚬ Done =
+              λ { start =>
+                val ((start1 |*| (nDone1 |*| done1)) |*| (nDone2 |*| done2)) =
+                  start
+                    .also(demand[Done])
+                    .also(demand[Done])
+
+                val (nDone3 |*| nDone4) = joinThenSplitDemands(nDone1 |*| nDone2)
+
+                done2
+                  .alsoElim(supply(start1 |*| nDone3))
+                  .alsoElim(supply(done1 |*| nDone4))
+              }
+
+            prg > success
+          },
+
+          "notifyChoice in reverse" -> Tests.Case {
+            def notifyInvChoice[A, B]: -[A |&| B] -⚬ (Ping |*| -[A |&| B]) =
+              contrapositive(notifyChoice) > demandSeparately > fst(invertedPongAsPing)
+
+            val prg: Done -⚬ Val[Int] =
+              λ { start =>
+                val (start1 |*| (demand1 |*| offer1)) =
+                  start.also(demand[Val[String] |&| Val[Int]])
+
+                val (ping |*| demand2) =
+                  demand1 > notifyInvChoice
+
+                val one: $[One] =
+                  (start1 |*| demandChosen(demand2)) > |+|.switchWithL(
+                    caseLeft  = λ { case (start1 |*| strDemand) => supply(constVal("x")(start1) |*| strDemand) },
+                    caseRight = λ { case (start1 |*| intDemand) => supply(constVal(100)(start1) |*| intDemand) },
+                  )
+
+                val res: $[Val[Int]] =
+                  offer1 > chooseR
+
+                ((ping |*| res) > awaitPingFst)
+                  .alsoElim(one)
+              }
+
+            prg > assertEquals(100)
+          },
+
+          "unContrapositive" -> Tests.Case {
+            val prg: Done -⚬ Done =
+              unContrapositive(id[-[Done]])
+
+            prg > success
+          },
+
+          "demandChosen" -> Tests.Case {
+            val supplyChosen: -[Val[String] |&| Val[Int]] -⚬ -[Done] =
+              demandChosen > either(
+                contrapositive(constVal("foo")),
+                contrapositive(constVal(42)),
+              )
+
+            val prg: Done -⚬ Val[Int] =
+              introSnd(demand[Val[String] |&| Val[Int]] > par(supplyChosen, chooseR)) > assocRL > elimFst(supply)
+
+            prg > assertEquals(42)
+          },
+
+          "doneAsInvertedNeed" -> Tests.Case {
+            val prg: Done -⚬ Done =
+              doneAsInvertedNeed > invertedNeedAsDone
+
+            prg > success
+          },
+
+          "pingAsInvertedPong" -> Tests.Case {
+            val f: Ping -⚬ Ping =
+              pingAsInvertedPong > invertedPongAsPing
+
+            val prg: Done -⚬ Done =
+              notifyDoneL > fst(f) > awaitPingFst
+
+            prg > success
+          },
+
+          "needAsInvertedDone" -> Tests.Case {
+            val f: Need -⚬ Need =
+              needAsInvertedDone > invertedDoneAsNeed
+
+            val prg: Done -⚬ Done =
+              introSnd(lInvertSignal > fst(f)) > assocRL > elimFst(rInvertSignal)
+
+            prg > success
+          },
+
+          "pongAsInvertedPing" -> Tests.Case {
+            val f: Pong -⚬ Pong =
+              pongAsInvertedPing > invertedPingAsPong
+
+            val g: Ping -⚬ Ping =
+              introSnd(lInvertPongPing > fst(f)) > assocRL > elimFst(rInvertPingPong)
+
+            val prg: Done -⚬ Done =
+              notifyDoneL > fst(g) > awaitPingFst
+
+            prg > success
+          },
+
+          "triple inversion" -> Tests.Case {
+            val prg: Done -⚬ Done =
+              λ { d =>
+                val (d1 |*| (nnd |*| nd)) = d.also(demand[-[Done]])
+                val (nnnd |*| nnd2) = supply(d1 |*| nd) > demand[-[-[Done]]]
+                die(nnd2)
+                  .alsoElim(supply(nnd |*| nnnd))
+              }
+
+            prg > success
+          },
+
+          "on the demand side, demandSeparately, then supply one to the other" -> Tests.Case {
+            val prg: Done -⚬ Done =
+              λ { d =>
+                val (d1 |*| ((n_nd_d: $[-[-[Done] |*| Done]]) |*| (nd |*| d2))) =
+                  d.also(demand[-[Done] |*| Done])
+
+                val (nnd |*| nd1) = demandSeparately(n_nd_d)
+
+                d2
+                  .alsoElim(supply(nd1 |*| nnd))
+                  .alsoElim(supply(d1 |*| nd))
+              }
+
+            prg > success
+          },
         )
       }
 }
@@ -462,291 +773,6 @@ class BasicTests extends TestSuite {
   import kit.dsl.$._
   import kit.coreLib._
   import kit.scalaLib._
-
-  test("blocking") {
-    val n = 10
-    val sleepMillis = 10
-
-    case class Millis(value: Long)
-
-    val currentTimeMillis: Done -⚬ Val[Millis] =
-      constVal(()) > mapVal(_ => Millis(System.currentTimeMillis()))
-
-    val sleep: Done -⚬ Val[Millis] =
-      constVal(()) > blocking(_ => Thread.sleep(sleepMillis)) > mapVal(_ => Millis(System.currentTimeMillis()))
-
-    val timed: Done -⚬ Val[(List[Millis], List[Millis])] = {
-      // true, false, true, false, ...
-      val alternating: ::[Boolean] = (0 until (2*n)).map(_ % 2 == 0).toList.asInstanceOf[::[Boolean]]
-
-      constList1(alternating)
-        .>(LList1.toLList)
-        .>(LList.map(liftBoolean))
-        .>(LList.map(Bool.switch(caseTrue = sleep, caseFalse = currentTimeMillis)))
-        .>(LList.splitEvenOdd)
-        .>(par(toScalaList, toScalaList))
-        .>(unliftPair)
-    }
-
-    val prg: Done -⚬ Val[(Millis, (List[Millis], List[Millis]))] =
-      forkMap(currentTimeMillis, timed) > unliftPair
-
-    testVal(prg) { case (startMillis, (sleepEnds, pureEnds)) =>
-      val sleepDurations = sleepEnds.map(_.value - startMillis.value)
-      val pureDurations = pureEnds.map(_.value - startMillis.value)
-
-      // sanity check: check that the blocking computations take the amount of time they are supposed to
-      assert(sleepDurations.min >= sleepMillis)
-
-      // check that none of the non-blocking computations is blocked by any of the blocking computations,
-      // by checking that it completed before any of the blocking computations could
-      assert(pureDurations.max < sleepMillis)
-    }
-  }
-
-  test("LList.sortBySignal") {
-    val delays =
-      List(30, 20, 10, 50, 40)
-
-    val elems: ::[Done -⚬ Val[Int]] =
-      delays
-        .map(n => delay(n.millis) > constVal(n))
-        .asInstanceOf[::[Done -⚬ Val[Int]]]
-
-    val prg: Done -⚬ Val[List[Int]] =
-      id                               [       Done       ]
-        .>(LList1.from(elems))      .to[ LList1[Val[Int]] ]
-        .>(LList1.toLList)          .to[  LList[Val[Int]] ]
-        .>(LList.sortBySignal)      .to[  LList[Val[Int]] ]
-        .>(toScalaList)             .to[   Val[List[Int]] ]
-
-    assertVal(prg, delays.sorted)
-  }
-
-  test("endless fibonacci") {
-    val next: Val[(Int, Int)] -⚬ (Val[Int] |*| Val[(Int, Int)]) =
-      id[Val[(Int, Int)]] > mapVal { case (n0, n1) => (n0, (n1, n0 + n1)) } > liftPair
-
-    val fibonacci: Done -⚬ (Endless[Val[Int]] |*| Done) =
-      constVal((0, 1)) > Endless.unfold(next) > par(id, neglect)
-
-    def take[A](n: Int): Endless[Val[A]] -⚬ Val[List[A]] =
-      Endless.take(n) > toScalaList
-
-    val prg: Done -⚬ Val[List[Int]] =
-      fibonacci > par(take(20), id) > awaitPosSnd
-
-    val expected = List(0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181)
-
-    assertVal(prg, expected)
-
-    val prg2: Done -⚬ Val[(List[Int], List[Int])] =
-      fibonacci > par(Endless.split > par(take(10), take(10)) > unliftPair, id) > awaitPosSnd
-
-    testVal(prg2) { case (fibs1, fibs2) =>
-      assert(fibs1.sorted == fibs1)
-      assert(fibs2.sorted == fibs2)
-      assert((fibs1 ++ fibs2).sorted == expected)
-    }
-  }
-
-  test("pool") {
-    case class ClientId(value: Int)
-    case class ResourceId(value: Int)
-
-    val nResources = 3
-    val nClients = 12
-
-    def client(cid: ClientId): (Val[ResourceId] |*| Neg[ResourceId]) -⚬ Val[(ClientId, ResourceId)] =
-      id                             [                            Val[ResourceId]             |*| Neg[ResourceId]  ]
-        .>.fst(dup).assocLR       .to[                   Val[ResourceId] |*| (Val[ResourceId] |*| Neg[ResourceId]) ]
-        .>(elimSnd(fulfill))      .to[                   Val[ResourceId]                                           ]
-        .>(introFst(const(cid)))  .to[ Val[ClientId] |*| Val[ResourceId]                                           ]
-        .>(unliftPair)            .to[ Val[(ClientId, ResourceId)]                                                 ]
-
-    val clients: List[(Val[ResourceId] |*| Neg[ResourceId]) -⚬ Val[(ClientId, ResourceId)]] =
-      (1 to nClients)
-        .map { i => client(ClientId(i)) }
-        .toList
-
-    val clientsPrg: Unlimited[Val[ResourceId] |*| Neg[ResourceId]] -⚬ Val[List[(ClientId, ResourceId)]] =
-      LList.fromListU(clients) > toScalaList
-
-    val resources: Done -⚬ LList1[Val[ResourceId]] =
-      LList1.from(
-        head = constVal(ResourceId(1)),
-        tail = (2 to nResources)
-          .map { i => constVal(ResourceId(i)) }
-          .toList,
-      )
-
-    val prg: Done -⚬ Val[List[(ClientId, ResourceId)]] =
-      resources > pool(promise) > par(clientsPrg, LList1.foldMap(neglect)) > awaitPosSnd
-
-    testVal(prg) { pairs =>
-      // each client appears exactly once
-      assert(pairs.size == nClients)
-      assert(pairs.map(_._1).toSet.size == nClients)
-
-      // each resource is used by multiple clients
-      pairs.groupMapReduce(key = _._2)(_ => 1)(_ + _).foreach { case (rId, n) =>
-        assert(n >= nClients / nResources / 2, s"unbalanced resource usage: $pairs")
-      }
-    }
-  }
-
-  test("backvert then forevert") {
-    val prg: Done -⚬ Val[String] =
-      constVal("abc") > introSnd(forevert[Val[String]]) > assocRL > elimFst(backvert[Val[String]])
-
-    assertVal(prg, "abc")
-  }
-
-  test("distributeInversion, factorOutInversion") {
-    val prg: Done -⚬ Val[(String, Int)] =
-      fork > par(constVal("1") > dii, constVal(1) > dii) > factorOutInversion > contrapositive(distributeInversion) > die > unliftPair
-
-    assertVal(prg, ("1", 1))
-  }
-
-  test("demandTogether > demandSeparately = id") {
-    // namely, check that demandTogether does not delay processing until both demands are supplied
-
-    val joinThenSplitDemands: (-[Done] |*| -[Done]) -⚬ (-[Done] |*| -[Done]) =
-      demandTogether > demandSeparately
-
-    val prg: Done -⚬ Done =
-      λ { start =>
-        val ((start1 |*| (nDone1 |*| done1)) |*| (nDone2 |*| done2)) =
-          start
-            .also(demand[Done])
-            .also(demand[Done])
-
-        val (nDone3 |*| nDone4) = joinThenSplitDemands(nDone1 |*| nDone2)
-
-        done2
-          .alsoElim(supply(start1 |*| nDone3))
-          .alsoElim(supply(done1 |*| nDone4))
-      }
-
-    assertCompletes(prg)
-  }
-
-  test("notifyChoice in reverse") {
-    def notifyInvChoice[A, B]: -[A |&| B] -⚬ (Ping |*| -[A |&| B]) =
-      contrapositive(notifyChoice) > demandSeparately > fst(invertedPongAsPing)
-
-    val prg: Done -⚬ Val[Int] =
-      λ { start =>
-        val (start1 |*| (demand1 |*| offer1)) =
-          start.also(demand[Val[String] |&| Val[Int]])
-
-        val (ping |*| demand2) =
-          demand1 > notifyInvChoice
-
-        val one: $[One] =
-          (start1 |*| demandChosen(demand2)) > |+|.switchWithL(
-            caseLeft  = λ { case (start1 |*| strDemand) => supply(constVal("x")(start1) |*| strDemand) },
-            caseRight = λ { case (start1 |*| intDemand) => supply(constVal(100)(start1) |*| intDemand) },
-          )
-
-        val res: $[Val[Int]] =
-          offer1 > chooseR
-
-        ((ping |*| res) > awaitPingFst)
-          .alsoElim(one)
-      }
-
-    assertVal(prg, 100)
-  }
-
-  test("unContrapositive") {
-    val prg: Done -⚬ Done =
-      unContrapositive(id[-[Done]])
-
-    assertCompletes(prg)
-  }
-
-  test("demandChosen") {
-    val supplyChosen: -[Val[String] |&| Val[Int]] -⚬ -[Done] =
-      demandChosen > either(
-        contrapositive(constVal("foo")),
-        contrapositive(constVal(42)),
-      )
-
-    val prg: Done -⚬ Val[Int] =
-      introSnd(demand[Val[String] |&| Val[Int]] > par(supplyChosen, chooseR)) > assocRL > elimFst(supply)
-
-    assertVal(prg, 42)
-  }
-
-  test("doneAsInvertedNeed") {
-    val prg: Done -⚬ Done =
-      doneAsInvertedNeed > invertedNeedAsDone
-
-    assertCompletes(prg)
-  }
-
-  test("pingAsInvertedPong") {
-    val f: Ping -⚬ Ping =
-      pingAsInvertedPong > invertedPongAsPing
-
-    val prg: Done -⚬ Done =
-      notifyDoneL > fst(f) > awaitPingFst
-
-    assertCompletes(prg)
-  }
-
-  test("needAsInvertedDone") {
-    val f: Need -⚬ Need =
-      needAsInvertedDone > invertedDoneAsNeed
-
-    val prg: Done -⚬ Done =
-      introSnd(lInvertSignal > fst(f)) > assocRL > elimFst(rInvertSignal)
-
-    assertCompletes(prg)
-  }
-
-  test("pongAsInvertedPing") {
-    val f: Pong -⚬ Pong =
-      pongAsInvertedPing > invertedPingAsPong
-
-    val g: Ping -⚬ Ping =
-      introSnd(lInvertPongPing > fst(f)) > assocRL > elimFst(rInvertPingPong)
-
-    val prg: Done -⚬ Done =
-      notifyDoneL > fst(g) > awaitPingFst
-
-    assertCompletes(prg)
-  }
-
-  test("triple inversion") {
-    val prg: Done -⚬ Done =
-      λ { d =>
-        val (d1 |*| (nnd |*| nd)) = d.also(demand[-[Done]])
-        val (nnnd |*| nnd2) = supply(d1 |*| nd) > demand[-[-[Done]]]
-        die(nnd2)
-          .alsoElim(supply(nnd |*| nnnd))
-      }
-
-    assertCompletes(prg)
-  }
-
-  test("on the demand side, demandSeparately, then supply one to the other") {
-    val prg: Done -⚬ Done =
-      λ { d =>
-        val (d1 |*| ((n_nd_d: $[-[-[Done] |*| Done]]) |*| (nd |*| d2))) =
-          d.also(demand[-[Done] |*| Done])
-
-        val (nnd |*| nd1) = demandSeparately(n_nd_d)
-
-        d2
-          .alsoElim(supply(nd1 |*| nnd))
-          .alsoElim(supply(d1 |*| nd))
-      }
-
-    assertCompletes(prg)
-  }
 
   test("Lock: successful acquire and release") {
     val prg: Done -⚬ Done =

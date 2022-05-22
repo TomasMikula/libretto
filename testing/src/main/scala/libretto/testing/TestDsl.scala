@@ -46,6 +46,22 @@ trait TestDsl {
         actual == expected,
         failMsg = s"$actual did not equal $expected",
       )
+
+    def traverseIterator[A, B](it: Iterator[A])(f: A => Outcome[B]): Outcome[List[B]] =
+      if (it.hasNext) {
+        f(it.next()).flatMap(b => traverseIterator(it)(f).map(b :: _))
+      } else {
+        success(Nil)
+      }
+
+    def traverse[A, B](as: Iterable[A])(f: A => Outcome[B]): Outcome[List[B]] =
+      traverseIterator(as.iterator)(f)
+
+    def traverseList[A, B](as: List[A])(f: A => Outcome[B]): Outcome[List[B]] =
+      as match {
+        case Nil => success(Nil)
+        case h :: t => f(h).flatMap(b => traverseList(t)(f).map(b :: _))
+      }
   }
 
   val probes: CoreBridge.Of[dsl.type, F]
