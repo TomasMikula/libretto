@@ -12,6 +12,15 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   import dsl._
   import dsl.$._
 
+  val category: Category[-⚬] =
+    new Category[-⚬] {
+      override def id[A]: A -⚬ A =
+        dsl.id[A]
+
+      override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C =
+        dsl.andThen(f, g)
+    }
+
   /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
     * It must hold that
     * ```
@@ -97,70 +106,28 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def lInvert[A, B](implicit ev: Dual[A, B]): One -⚬ (B |*| A) =
     ev.lInvert
 
-  /** Witnesses that `F` is a covariant endofunctor on the category `-⚬`. */
-  trait Functor[F[_]] { self =>
-    def lift[A, B](f: A -⚬ B): F[A] -⚬ F[B]
-
-    /** Composition with another covariant functor. */
-    def ∘[G[_]](that: Functor[G]): Functor[λ[x => F[G[x]]]] = new Functor[λ[x => F[G[x]]]] {
-      def lift[A, B](f: A -⚬ B): F[G[A]] -⚬ F[G[B]] = self.lift(that.lift(f))
-    }
-
-    /** Composition with a contravariant functor. Results in a contravariant functor. */
-    def ∘[G[_]](that: ContraFunctor[G]): ContraFunctor[λ[x => F[G[x]]]] = new ContraFunctor[λ[x => F[G[x]]]] {
-      def lift[A, B](f: A -⚬ B): F[G[B]] -⚬ F[G[A]] = self.lift(that.lift(f))
-    }
-  }
+  type Functor[F[_]] =
+    libretto.Functor[-⚬, F]
 
   object Functor {
-    def apply[F[_]](implicit ev: Functor[F]): Functor[F] =
-      ev
+    def apply[F[_]: Functor]: Functor[F] =
+      libretto.Functor[-⚬, F]
   }
 
-  /** Witnesses that `F` is a contravariant endofunctor on the category `-⚬`. */
-  trait ContraFunctor[F[_]] { self =>
-    def lift[A, B](f: A -⚬ B): F[B] -⚬ F[A]
+  type ContraFunctor[F[_]] =
+    libretto.ContraFunctor[-⚬, F]
 
-    /** Composition with a covariant functor. Results in a contravariant functor. */
-    def ∘[G[_]](that: Functor[G]): ContraFunctor[λ[x => F[G[x]]]] = new ContraFunctor[λ[x => F[G[x]]]] {
-      def lift[A, B](f: A -⚬ B): F[G[B]] -⚬ F[G[A]] = self.lift(that.lift(f))
-    }
-
-    /** Composition with another contravariant functor. Results in a covariant functor. */
-    def ∘[G[_]](that: ContraFunctor[G]): Functor[λ[x => F[G[x]]]] = new Functor[λ[x => F[G[x]]]] {
-      def lift[A, B](f: A -⚬ B): F[G[A]] -⚬ F[G[B]] = self.lift(that.lift(f))
-    }
+  object ContraFunctor {
+    def apply[F[_]: ContraFunctor]: ContraFunctor[F] =
+      libretto.ContraFunctor[-⚬, F]
   }
 
-  /** Witnesses that `F` is a bifunctor (covariant in both variables). */
-  trait Bifunctor[F[_, _]] {
-    def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): F[A, C] -⚬ F[B, D]
-
-    def fst[B]: Functor[F[*, B]] = new Functor[F[*, B]] {
-      def lift[A1, A2](f: A1 -⚬ A2): F[A1, B] -⚬ F[A2, B] =
-        Bifunctor.this.lift[A1, A2, B, B](f, id[B])
-    }
-
-    def snd[A]: Functor[F[A, *]] = new Functor[F[A, *]] {
-      def lift[B1, B2](g: B1 -⚬ B2): F[A, B1] -⚬ F[A, B2] =
-        Bifunctor.this.lift[A, A, B1, B2](id[A], g)
-    }
-
-    def inside[G[_]](implicit G: Functor[G]): Bifunctor[λ[(x, y) => G[F[x, y]]]] =
-      new Bifunctor[λ[(x, y) => G[F[x, y]]]] {
-        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): G[F[A, C]] -⚬ G[F[B, D]] =
-          G.lift(Bifunctor.this.lift(f, g))
-      }
-  }
+  type Bifunctor[F[_, _]] =
+    libretto.Bifunctor[-⚬, F]
 
   object Bifunctor {
-    def apply[F[_, _]](implicit ev: Bifunctor[F]): Bifunctor[F] = ev
-
-    implicit val pair: Bifunctor[|*|] =
-      new Bifunctor[|*|] {
-        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |*| C) -⚬ (B |*| D) =
-          par(f, g)
-      }
+    def apply[F[_, _]: Bifunctor]: Bifunctor[F] =
+      libretto.Bifunctor[-⚬, F]
   }
 
   /** Functor from category [[-⚬]] to the category `=>` of Scala functions.
@@ -1462,7 +1429,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       notify > distributeL > bimap(elimFst(dismissPing), fst(strengthenPing))
 
     val bifunctor: Bifunctor[|+|] =
-      new Bifunctor[|+|] {
+      new Bifunctor[|+|](category) {
         def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
           bimap(f, g)
       }
@@ -1528,7 +1495,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       bimap(introFst(dismissPong), fst(strengthenPong)) > coDistributeL > notify
 
     val bifunctor: Bifunctor[|&|] =
-      new Bifunctor[|&|] {
+      new Bifunctor[|&|](category) {
         def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
           bimap(f, g)
       }
@@ -2300,7 +2267,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         .bimap[|+|](f, |+|.bimap(f, f))         .to[     (S |*| T)     |+| (    (S |*| T)     |+|      (S |*| T)     ) ]
 
     def bifunctorCompared: Bifunctor[Compared] =
-      new Bifunctor[Compared] {
+      new Bifunctor[Compared](category) {
         def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): Compared[A, C] -⚬ Compared[B, D] = {
           Bifunctor[|+|].lift(
             par(f, g),
