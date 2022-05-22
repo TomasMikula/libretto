@@ -2,6 +2,7 @@ package libretto.util
 
 import scala.concurrent.{ExecutionContext, Future}
 
+/** Witnesses that `F` is a monad in the category of Scala functions. */
 trait Monad[F[_]] {
   def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B]
 

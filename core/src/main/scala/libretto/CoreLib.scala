@@ -2573,6 +2573,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     ): Multiple[A] -⚬ R =
       unpack[MultipleF[A, *]] > either(case0, either(case1, caseN))
 
+    def map[A, B](f: A -⚬ B): Multiple[A] -⚬ Multiple[B] = rec { self =>
+      switch(
+        case0 = zero,
+        case1 = f > one,
+        caseN = par(self, self) > append,
+      )
+    }
+
     def flatten[A]: Multiple[Multiple[A]] -⚬ Multiple[A] = rec { self =>
       switch(
         case0 = zero,
@@ -2589,8 +2597,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     implicit val monadMultiple: Monad[Multiple] =
       new Monad[Multiple] {
-        def pure[A]    :                     A -⚬ Multiple[A] = Multiple.one
-        def flatten[A] : Multiple[Multiple[A]] -⚬ Multiple[A] = Multiple.flatten
+        override def lift[A, B](f: A -⚬ B): Multiple[A] -⚬ Multiple[B] =
+          Multiple.map(f)
+
+        override def pure[A]: A -⚬ Multiple[A] =
+          Multiple.one
+
+        override def flatten[A]: Multiple[Multiple[A]] -⚬ Multiple[A] =
+          Multiple.flatten
       }
   }
 
@@ -2705,8 +2719,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     implicit val comonadUnlimited: Comonad[Unlimited] =
       new Comonad[Unlimited] {
-        def extract[A]   : Unlimited[A] -⚬ A                       = Unlimited.single
-        def duplicate[A] : Unlimited[A] -⚬ Unlimited[Unlimited[A]] = Unlimited.duplicate
+        override def lift[A, B](f: A -⚬ B): Unlimited[A] -⚬ Unlimited[B] =
+          Unlimited.map(f)
+
+        override def extract[A]: Unlimited[A] -⚬ A =
+          Unlimited.single
+
+        override def duplicate[A]: Unlimited[A] -⚬ Unlimited[Unlimited[A]] =
+          Unlimited.duplicate
       }
 
     /** Signals when the choice is made between [[discard]], [[single]] and [[split]]. */
@@ -2756,6 +2776,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     ): X -⚬ (PUnlimited[A] |*| Y) =
       choice(case0, choice(case1, caseN) > coDistributeR) > coDistributeR > par(pack[PUnlimitedF[A, *]], id)
 
+    def map[A, B](f: A -⚬ B): PUnlimited[A] -⚬ PUnlimited[B] = rec { self =>
+      create(
+        case0 = neglect,
+        case1 = single > f,
+        caseN = split > par(self, self)
+      )
+    }
+
     def duplicate[A]: PUnlimited[A] -⚬ PUnlimited[PUnlimited[A]] = rec { self =>
       create(
         case0 = neglect,
@@ -2772,8 +2800,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     implicit val comonadPUnlimited: Comonad[PUnlimited] =
       new Comonad[PUnlimited] {
-        def extract[A]   : PUnlimited[A] -⚬ A                         = PUnlimited.single
-        def duplicate[A] : PUnlimited[A] -⚬ PUnlimited[PUnlimited[A]] = PUnlimited.duplicate
+        override def lift[A, B](f: A -⚬ B): PUnlimited[A] -⚬ PUnlimited[B] =
+          PUnlimited.map(f)
+
+        override def extract[A]: PUnlimited[A] -⚬ A =
+          PUnlimited.single
+
+        override def duplicate[A]: PUnlimited[A] -⚬ PUnlimited[PUnlimited[A]] =
+          PUnlimited.duplicate
       }
   }
 
@@ -3113,15 +3147,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
   }
 
-  trait Monad[F[_]] {
-    def pure[A]    :       A -⚬ F[A]
-    def flatten[A] : F[F[A]] -⚬ F[A]
-  }
+  type Monad[F[_]] =
+    libretto.Monad[-⚬, F]
 
-  trait Comonad[F[_]] {
-    def extract[A]   : F[A] -⚬ A
-    def duplicate[A] : F[A] -⚬ F[F[A]]
-  }
+  type Comonad[F[_]] =
+    libretto.Comonad[-⚬, F]
 
   def getFst[A, B](implicit A: Cosemigroup[A]): (A |*| B) -⚬ (A |*| (A |*| B)) =
     id                             [     A     |*| B  ]
