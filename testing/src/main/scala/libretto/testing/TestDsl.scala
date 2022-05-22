@@ -71,8 +71,6 @@ trait TestDsl {
   import dsl.{-⚬, |*|, |+|, Done}
   import probes.OutPort
 
-  type TestCase = Done -⚬ TestResult
-
   def success: Done -⚬ TestResult
   def failure: Done -⚬ TestResult
 
