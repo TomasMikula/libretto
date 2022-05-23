@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.testing.TestSuite
+import libretto.testing.scalatest.TestSuite
 
 class ClosureTests extends TestSuite {
   import kit.dsl._

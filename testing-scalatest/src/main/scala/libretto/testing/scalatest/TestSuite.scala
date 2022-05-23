@@ -1,4 +1,4 @@
-package libretto.testing
+package libretto.testing.scalatest
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
 import libretto.{ScalaRunner, StarterKit}

@@ -1,6 +1,6 @@
 package libretto.examples.diningPhilosophers
 
-import libretto.testing.TestSuite
+import libretto.testing.scalatest.TestSuite
 
 class DiningPhilosophersTests extends TestSuite {
   import kit.dsl._

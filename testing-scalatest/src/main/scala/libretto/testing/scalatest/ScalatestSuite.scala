@@ -1,5 +1,6 @@
-package libretto.testing
+package libretto.testing.scalatest
 
+import libretto.testing.{TestCase, TestExecutor, TestKit, TestResult, Tests}
 import org.scalatest.funsuite.AnyFunSuite
 
 abstract class ScalatestSuite extends AnyFunSuite {

@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.testing.TestSuite
+import libretto.testing.scalatest.TestSuite
 
 class LambdaTests extends TestSuite {
   import kit.dsl._

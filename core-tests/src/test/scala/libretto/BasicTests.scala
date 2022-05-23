@@ -2,7 +2,8 @@ package libretto
 
 import java.util.concurrent.Executors
 import libretto.Functor._
-import libretto.testing.{ScalaTestExecutor, ScalaTestKit, ScalatestSuite, TestCase, TestKit, Tests}
+import libretto.testing.{ScalaTestExecutor, ScalaTestKit, TestCase, TestKit, Tests}
+import libretto.testing.scalatest.ScalatestSuite
 import libretto.util.Monad.syntax._
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
