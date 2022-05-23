@@ -10,7 +10,7 @@ import scala.util.{Failure, Success, Try}
 
 object ScalaTestExecutor {
 
-  private trait ScalaTestKitFromExecutor[F0[_]: ScalaMonad, DSL <: ScalaDSL, Exec <: ScalaExecutor.Of[DSL, F0]](
+  class ScalaTestKitFromExecutor[F0[_]: ScalaMonad, DSL <: ScalaDSL, Exec <: ScalaExecutor.Of[DSL, F0]](
     val dsl0: DSL,
     val exec: Exec & ScalaExecutor.Of[dsl0.type, F0],
   ) extends ScalaTestKit {
@@ -39,21 +39,21 @@ object ScalaTestExecutor {
       override def monadAssertion: Monad[-⚬, Assertion] =
         |+|.right[Val[String]]
 
-      override def extractOutcome(outPort: exec.OutPort[Assertion[Done]]): Outcome[Unit] = {
+      override def extractOutcome(outPort: probes.OutPort[Assertion[Done]]): Outcome[Unit] = {
         import TestResult.{Crash, Success, Failure}
         Outcome(
-          exec
+          probes
             .awaitEither[Val[String], Done](outPort)
             .flatMap {
               case Left(e) =>
                 F.pure(Crash(e))
               case Right(Left(msg)) =>
-                exec.awaitVal(msg).map {
+                probes.awaitVal(msg).map {
                   case Left(e)    => Crash(e)
                   case Right(msg) => Failure(msg)
                 }
               case Right(Right(d)) =>
-                exec.awaitDone(d).map {
+                probes.awaitDone(d).map {
                   case Left(e)   => Crash(e)
                   case Right(()) => Success(())
                 }
@@ -71,7 +71,7 @@ object ScalaTestExecutor {
         ScalaTestExecutor.getClass.getCanonicalName
 
       override val testKit: ScalaTestKitFromExecutor[F0, dsl.type, exec.type] =
-        new ScalaTestKitFromExecutor[F0, dsl.type, exec.type](dsl, exec) {}
+        new ScalaTestKitFromExecutor[F0, dsl.type, exec.type](dsl, exec)
 
       import testKit.Outcome
       import testKit.dsl._

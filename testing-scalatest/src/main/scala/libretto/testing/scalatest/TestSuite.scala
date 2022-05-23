@@ -8,6 +8,7 @@ import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
+@deprecated("Migrate to ScalatestStarterTestSuite", since = "0.2-M4")
 abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
   val kit = StarterKit
   import kit.dsl._
