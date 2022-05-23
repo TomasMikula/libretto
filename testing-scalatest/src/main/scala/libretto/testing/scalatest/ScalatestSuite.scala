@@ -3,8 +3,7 @@ package libretto.testing.scalatest
 import libretto.testing.{TestCase, TestExecutor, TestKit, TestResult, Tests}
 import org.scalatest.funsuite.AnyFunSuite
 
-abstract class ScalatestSuite extends AnyFunSuite {
-  def tests: Tests
+abstract class ScalatestSuite extends AnyFunSuite with libretto.testing.TestSuite {
 
   private def registerTests(): Unit = {
     val tests = this.tests
