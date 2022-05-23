@@ -13,11 +13,11 @@ sealed trait Tests {
 }
 
 object Tests {
-  def use[TK <: TestKit]: Builder.Use[TK] =
-    new Builder.Use[TK]()
+  def writtenUsing[TK <: TestKit]: Builder.WrittenUsing[TK] =
+    new Builder.WrittenUsing[TK]()
 
   object Builder {
-    class Use[TK <: TestKit]() {
+    class WrittenUsing[TK <: TestKit]() {
       def executedBy(
         executor: TestExecutor[TK],
         executors: TestExecutor[TK]*,

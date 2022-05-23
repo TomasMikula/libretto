@@ -19,7 +19,7 @@ class BasicTests extends ScalatestSuite {
 
   override def tests: Tests =
     Tests
-      .use[ScalaTestKit]
+      .writtenUsing[ScalaTestKit]
       .executedBy(ScalaTestExecutor.global)
       .in {
         import TestKit.givenInstance._
