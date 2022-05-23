@@ -17,13 +17,13 @@ abstract class ScalatestSuite extends AnyFunSuite {
   private def registerTests[TK <: TestKit](
     testExecutor: TestExecutor[TK],
     prefix: String,
-    cases: List[(String, Tests.Case[testExecutor.testKit.type])],
+    cases: List[(String, TestCase[testExecutor.testKit.type])],
   ): Unit = {
     for {
       (testName, testCase) <- cases
     } {
       testCase match {
-        case c: Tests.Case.Single[testExecutor.testKit.type] =>
+        case c: TestCase.Single[testExecutor.testKit.type] =>
           test(s"$prefix$testName (executed by ${testExecutor.name})") {
             testExecutor.runTestCase(c.body, c.conductor, c.postStop) match {
               case TestResult.Success(_) =>
@@ -34,7 +34,7 @@ abstract class ScalatestSuite extends AnyFunSuite {
                 fail(s"Crashed with ${e.getClass.getCanonicalName}: ${e.getMessage}", e)
             }
           }
-        case Tests.Case.Multiple(cases) =>
+        case TestCase.Multiple(cases) =>
           registerTests(testExecutor, s"$prefix$testName.", cases)
       }
     }

@@ -2,7 +2,7 @@ package libretto
 
 import java.util.concurrent.Executors
 import libretto.Functor._
-import libretto.testing.{ScalaTestExecutor, ScalaTestKit, ScalatestSuite, TestKit, Tests}
+import libretto.testing.{ScalaTestExecutor, ScalaTestKit, ScalatestSuite, TestCase, TestKit, Tests}
 import libretto.util.Monad.syntax._
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
@@ -41,34 +41,34 @@ class BasicTests extends ScalatestSuite {
             )
 
         Tests.Cases(
-          "done" -> Tests.Case {
+          "done" -> TestCase {
             introFst(done) > join > success
           },
 
-          "join ⚬ fork" -> Tests.Case {
+          "join ⚬ fork" -> TestCase {
             fork > join > success
           },
 
-          "notifyDoneR, forkPing, joinPing, strengthenPing, join" -> Tests.Case {
+          "notifyDoneR, forkPing, joinPing, strengthenPing, join" -> TestCase {
             notifyDoneR > snd(forkPing > joinPing > strengthenPing) > join > success
           },
 
-          "joinNeed, strengthenPong, joinPong, forkPong, notifyNeedR" -> Tests.Case {
+          "joinNeed, strengthenPong, joinPong, forkPong, notifyNeedR" -> TestCase {
             def unreverse(prg: Need -⚬ Need): Done -⚬ Done =
               introSnd(lInvertSignal > fst(prg)) > assocRL > elimFst(rInvertSignal)
 
             unreverse(joinNeed > snd(strengthenPong > joinPong > forkPong) > notifyNeedR) > success
           },
 
-          "constVal" -> Tests.Case {
+          "constVal" -> TestCase {
             constVal(5) > assertEquals(5)
           },
 
-          "unliftEither" -> Tests.Case {
+          "unliftEither" -> TestCase {
             constVal(42) > injectR > unliftEither > assertEquals(Right(42))
           },
 
-          "liftPair, liftNegPair" -> Tests.Case {
+          "liftPair, liftNegPair" -> TestCase {
             val prg: Done -⚬ Val[(String, Int)] =
               id                                       [       Done                                                                           ]
                 .>(constVal(("foo", 42)))           .to[     Val[(String, Int)]                                                               ]
@@ -80,7 +80,7 @@ class BasicTests extends ScalatestSuite {
             prg > assertEquals(("foo", 42))
           },
 
-          "unliftPair, unliftNegPair" -> Tests.Case {
+          "unliftPair, unliftNegPair" -> TestCase {
             val lInvert: One -⚬ ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) =
               coreLib.lInvert
 
@@ -96,7 +96,7 @@ class BasicTests extends ScalatestSuite {
             prg > assertEquals(("foo", 42))
           },
 
-          "inflate" -> Tests.Case {
+          "inflate" -> TestCase {
             val prg: Done -⚬ Done =
               id                                 [    Done                           ]
                 .>(constVal(42))              .to[  Val[Int]                         ]
@@ -108,7 +108,7 @@ class BasicTests extends ScalatestSuite {
             prg > success
           },
 
-          "delayed injectL" -> Tests.Case {
+          "delayed injectL" -> TestCase {
             // 'A' delayed by 40 millis
             val a: Done -⚬ Val[Char] =
               delay(40.millis) > constVal('A')
@@ -127,7 +127,7 @@ class BasicTests extends ScalatestSuite {
             raceKeepWinner(a, b) > assertEquals('A')
           },
 
-          "delayed chooseL" -> Tests.Case {
+          "delayed chooseL" -> TestCase {
             // 'A' delayed by 40 millis
             val a: Done -⚬ Val[Char] =
               delay(40.millis) > constVal('A')
@@ -140,7 +140,7 @@ class BasicTests extends ScalatestSuite {
             raceKeepWinner(a, b) > assertEquals('A')
           },
 
-          "crashd" -> Tests.Case
+          "crashd" -> TestCase
             .interactWith(crashd("boom!"))
             .via { port =>
               for {
@@ -155,7 +155,7 @@ class BasicTests extends ScalatestSuite {
                 .>.fst(delay(10.millis) > crashd("Boom!"))
                 .>( race )
 
-            Tests.Case
+            TestCase
               .interactWith(prg)
               .via { port =>
                 for {
@@ -168,7 +168,7 @@ class BasicTests extends ScalatestSuite {
               }
           },
 
-          "crashd - even if it loses a race, the program still crashes" -> Tests.Case
+          "crashd - even if it loses a race, the program still crashes" -> TestCase
             .interactWith {
               id[Done]
                 .>( forkMap(id, delay(10.millis) > crashd("oops")) )
@@ -182,11 +182,11 @@ class BasicTests extends ScalatestSuite {
               } yield ()
             },
 
-          "crashd in non-executed |+| has no effect" -> Tests.Case {
+          "crashd in non-executed |+| has no effect" -> TestCase {
             injectL[Done, Done] > either(id, crashd("bang!")) > success
           },
 
-          "crashd in non-chosen |&| alternative has no effect" -> Tests.Case {
+          "crashd in non-chosen |&| alternative has no effect" -> TestCase {
             choice(id, crashd("bang!")) > chooseL > success
           },
 
@@ -248,20 +248,20 @@ class BasicTests extends ScalatestSuite {
                 (f, i) <- Seq(coDistributed1, coDistributed2).zipWithIndex
                 c <- combinations
               } yield {
-                s"${i+1}.$c" -> Tests.Case { f > c.go > assertEquals(c.expected) }
+                s"${i+1}.$c" -> TestCase { f > c.go > assertEquals(c.expected) }
               }
 
-            Tests.Case.multiple(cases: _*)
+            TestCase.multiple(cases: _*)
           },
 
-          "LList.splitEvenOdd" -> Tests.Case {
+          "LList.splitEvenOdd" -> TestCase {
             val prg: Done -⚬ Val[(List[Int], List[Int])] =
               constListOf1(0, (1 to 20): _*) > LList.splitEvenOdd > par(toScalaList, toScalaList) > unliftPair
 
             prg > assertEquals((0 to 20).toList.partition(_ % 2 == 0))
           },
 
-          "LList.halfRotateL" -> Tests.Case {
+          "LList.halfRotateL" -> TestCase {
             val prg: Done -⚬ Val[List[(Int, Int)]] =
               constListOf1((0, 1), (2, 3), (4, 5))
                 .>(LList.map(liftPair))
@@ -317,16 +317,16 @@ class BasicTests extends ScalatestSuite {
                     .>(mvarToString)
                     .>(releaseMVar)
 
-                s"$i.$j.$k.$l" -> Tests.Case { prg > assertEquals("1") }
+                s"$i.$j.$k.$l" -> TestCase { prg > assertEquals("1") }
               }
 
-            Tests.Case.multiple(cases: _*)
+            TestCase.multiple(cases: _*)
           },
 
           "release via registered function" -> {
             val ref = new java.util.concurrent.atomic.AtomicReference[String]("init")
 
-            Tests.Case.interactWith {
+            TestCase.interactWith {
               val prg: Done -⚬ Done =
                 constVal(()) > acquire0(identity, release = Some(_ => ref.set("released"))) > release
 
@@ -347,7 +347,7 @@ class BasicTests extends ScalatestSuite {
             def log(s: String): Unit =
               store.updateAndGet(s :: _)
 
-            Tests.Case
+            TestCase
               .interactWith {
                 val prg: Done -⚬ Done =
                   constVal(())
@@ -410,7 +410,7 @@ class BasicTests extends ScalatestSuite {
             val prg: Done -⚬ Done =
               forkMap(crashThread, mainThread) > join
 
-            Tests.Case
+            TestCase
               .interactWith(prg)
               .via(
                 port =>
@@ -452,7 +452,7 @@ class BasicTests extends ScalatestSuite {
                 .>.snd(unliftPair > mapVal(t => t._1 + t._2))
                 .>(unliftPair > mapVal(t => t._1 + t._2))
 
-            Tests.Case
+            TestCase
               .interactWith(prg)
               .via { port =>
                 for {
@@ -491,7 +491,7 @@ class BasicTests extends ScalatestSuite {
             val prg: Done -⚬ Val[(Millis, (List[Millis], List[Millis]))] =
               forkMap(currentTimeMillis, timed) > unliftPair
 
-            Tests.Case
+            TestCase
               .interactWith(prg)
               .via { port =>
                 for {
@@ -529,7 +529,7 @@ class BasicTests extends ScalatestSuite {
                 .>(LList.sortBySignal)      .to[  LList[Val[Int]] ]
                 .>(toScalaList)             .to[   Val[List[Int]] ]
 
-            Tests.Case {
+            TestCase {
               prg > assertEquals(delays.sorted)
             }
           },
@@ -547,13 +547,13 @@ class BasicTests extends ScalatestSuite {
             val expected =
               List(0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181)
 
-            Tests.Case.multiple(
+            TestCase.multiple(
               "take 20" ->
-                Tests.Case {
+                TestCase {
                   fibonacci > par(take(20), id) > awaitPosSnd > assertEquals(expected)
                 },
               "split & take 10 from each" ->
-                Tests.Case.interactWith[Val[(List[Int], List[Int])]] {
+                TestCase.interactWith[Val[(List[Int], List[Int])]] {
                   fibonacci > par(Endless.split > par(take(10), take(10)) > unliftPair, id) > awaitPosSnd
                 }.via { port =>
                   for {
@@ -600,7 +600,7 @@ class BasicTests extends ScalatestSuite {
             val prg: Done -⚬ Val[List[(ClientId, ResourceId)]] =
               resources > pool(promise) > par(clientsPrg, LList1.foldMap(neglect)) > awaitPosSnd
 
-            Tests.Case
+            TestCase
               .interactWith(prg)
               .via { port =>
                 for {
@@ -620,21 +620,21 @@ class BasicTests extends ScalatestSuite {
               }
           },
 
-          "backvert then forevert" -> Tests.Case {
+          "backvert then forevert" -> TestCase {
             val prg: Done -⚬ Val[String] =
               constVal("abc") > introSnd(forevert[Val[String]]) > assocRL > elimFst(backvert[Val[String]])
 
             prg > assertEquals("abc")
           },
 
-          "distributeInversion, factorOutInversion" -> Tests.Case {
+          "distributeInversion, factorOutInversion" -> TestCase {
             val prg: Done -⚬ Val[(String, Int)] =
               fork > par(constVal("1") > dii, constVal(1) > dii) > factorOutInversion > contrapositive(distributeInversion) > die > unliftPair
 
             prg > assertEquals(("1", 1))
           },
 
-          "demandTogether > demandSeparately = id" -> Tests.Case {
+          "demandTogether > demandSeparately = id" -> TestCase {
             // namely, check that demandTogether does not delay processing until both demands are supplied
 
             val joinThenSplitDemands: (-[Done] |*| -[Done]) -⚬ (-[Done] |*| -[Done]) =
@@ -657,7 +657,7 @@ class BasicTests extends ScalatestSuite {
             prg > success
           },
 
-          "notifyChoice in reverse" -> Tests.Case {
+          "notifyChoice in reverse" -> TestCase {
             def notifyInvChoice[A, B]: -[A |&| B] -⚬ (Ping |*| -[A |&| B]) =
               contrapositive(notifyChoice) > demandSeparately > fst(invertedPongAsPing)
 
@@ -685,14 +685,14 @@ class BasicTests extends ScalatestSuite {
             prg > assertEquals(100)
           },
 
-          "unContrapositive" -> Tests.Case {
+          "unContrapositive" -> TestCase {
             val prg: Done -⚬ Done =
               unContrapositive(id[-[Done]])
 
             prg > success
           },
 
-          "demandChosen" -> Tests.Case {
+          "demandChosen" -> TestCase {
             val supplyChosen: -[Val[String] |&| Val[Int]] -⚬ -[Done] =
               demandChosen > either(
                 contrapositive(constVal("foo")),
@@ -705,14 +705,14 @@ class BasicTests extends ScalatestSuite {
             prg > assertEquals(42)
           },
 
-          "doneAsInvertedNeed" -> Tests.Case {
+          "doneAsInvertedNeed" -> TestCase {
             val prg: Done -⚬ Done =
               doneAsInvertedNeed > invertedNeedAsDone
 
             prg > success
           },
 
-          "pingAsInvertedPong" -> Tests.Case {
+          "pingAsInvertedPong" -> TestCase {
             val f: Ping -⚬ Ping =
               pingAsInvertedPong > invertedPongAsPing
 
@@ -722,7 +722,7 @@ class BasicTests extends ScalatestSuite {
             prg > success
           },
 
-          "needAsInvertedDone" -> Tests.Case {
+          "needAsInvertedDone" -> TestCase {
             val f: Need -⚬ Need =
               needAsInvertedDone > invertedDoneAsNeed
 
@@ -732,7 +732,7 @@ class BasicTests extends ScalatestSuite {
             prg > success
           },
 
-          "pongAsInvertedPing" -> Tests.Case {
+          "pongAsInvertedPing" -> TestCase {
             val f: Pong -⚬ Pong =
               pongAsInvertedPing > invertedPingAsPong
 
@@ -745,7 +745,7 @@ class BasicTests extends ScalatestSuite {
             prg > success
           },
 
-          "triple inversion" -> Tests.Case {
+          "triple inversion" -> TestCase {
             val prg: Done -⚬ Done =
               λ { d =>
                 val (d1 |*| (nnd |*| nd)) = d.also(demand[-[Done]])
@@ -757,7 +757,7 @@ class BasicTests extends ScalatestSuite {
             prg > success
           },
 
-          "on the demand side, demandSeparately, then supply one to the other" -> Tests.Case {
+          "on the demand side, demandSeparately, then supply one to the other" -> TestCase {
             val prg: Done -⚬ Done =
               λ { d =>
                 val (d1 |*| ((n_nd_d: $[-[-[Done] |*| Done]]) |*| (nd |*| d2))) =
@@ -773,14 +773,14 @@ class BasicTests extends ScalatestSuite {
             prg > success
           },
 
-          "Lock: successful acquire and release" -> Tests.Case {
+          "Lock: successful acquire and release" -> TestCase {
             val prg: Done -⚬ Assertion[Done] =
               Lock.newLock > Lock.tryAcquire > assertLeft(ifRight = Lock.close) >- AcquiredLock.release >- Lock.close
 
             prg
           },
 
-          "Lock: only 1 client can acquire at a time" -> Tests.Case {
+          "Lock: only 1 client can acquire at a time" -> TestCase {
             val prg: Done -⚬ Assertion[Done] =
               λ { start =>
                 val (lLock |*| rLock) =
@@ -804,7 +804,7 @@ class BasicTests extends ScalatestSuite {
             prg
           },
 
-          "Lock: Everyone acquires the lock eventually" -> Tests.Case {
+          "Lock: Everyone acquires the lock eventually" -> TestCase {
             val prg: Done -⚬ Done =
               Lock.newLock > Lock.share > par(
                 Lock.share > par(
