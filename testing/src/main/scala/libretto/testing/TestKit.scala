@@ -4,7 +4,7 @@ import libretto.{CoreBridge, CoreDSL, Monad}
 import libretto.util.{Monad => ScalaMonad}
 import libretto.util.Monad.syntax._
 
-trait TestDsl {
+trait TestKit {
   val dsl: CoreDSL
 
   type F[_]
@@ -119,13 +119,13 @@ trait TestDsl {
     }
 }
 
-object TestDsl {
-  transparent inline def givenInstance(using testDsl: TestDsl): testDsl.type =
-    testDsl
+object TestKit {
+  transparent inline def givenInstance(using kit: TestKit): kit.type =
+    kit
 
-  transparent inline def dsl(using testDsl: TestDsl): testDsl.dsl.type =
-    testDsl.dsl
+  transparent inline def dsl(using kit: TestKit): kit.dsl.type =
+    kit.dsl
 
-  def success(using testDsl: TestDsl): testDsl.dsl.-⚬[testDsl.dsl.Done, testDsl.Assertion[dsl.Done]] =
-    testDsl.success
+  def success(using kit: TestKit): kit.dsl.-⚬[kit.dsl.Done, kit.Assertion[dsl.Done]] =
+    kit.success
 }

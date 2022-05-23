@@ -4,12 +4,12 @@ import libretto.{CoreDSL, Executor}
 import libretto.util.Monad
 import libretto.util.Monad.syntax._
 
-trait TestExecutor[+TDSL <: TestDsl] {
-  val testDsl: TDSL
+trait TestExecutor[+TK <: TestKit] {
+  val testKit: TK
 
-  import testDsl.Outcome
-  import testDsl.dsl._
-  import testDsl.probes.OutPort
+  import testKit.Outcome
+  import testKit.dsl._
+  import testKit.probes.OutPort
 
   def name: String
 
@@ -23,7 +23,7 @@ trait TestExecutor[+TDSL <: TestDsl] {
     body: Done -⚬ O,
     conduct: OutPort[O] => Outcome[Unit],
   ): TestResult[Unit] =
-    runTestCase[O, Unit](body, conduct, testDsl.monadOutcome.pure)
+    runTestCase[O, Unit](body, conduct, testKit.monadOutcome.pure)
 }
 
 object TestExecutor {

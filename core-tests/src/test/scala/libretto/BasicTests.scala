@@ -2,7 +2,7 @@ package libretto
 
 import java.util.concurrent.Executors
 import libretto.Functor._
-import libretto.testing.{ScalaTestDsl, ScalaTestExecutor, ScalatestSuite, TestDsl, Tests}
+import libretto.testing.{ScalaTestExecutor, ScalaTestKit, ScalatestSuite, TestKit, Tests}
 import libretto.util.Monad.syntax._
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
@@ -19,10 +19,10 @@ class BasicTests extends ScalatestSuite {
 
   override def tests: Tests =
     Tests
-      .use[ScalaTestDsl]
+      .use[ScalaTestKit]
       .executedBy(ScalaTestExecutor.global)
       .in {
-        import TestDsl.givenInstance._
+        import TestKit.givenInstance._
         import dsl._
         import dsl.$._
         val coreLib = CoreLib(dsl)

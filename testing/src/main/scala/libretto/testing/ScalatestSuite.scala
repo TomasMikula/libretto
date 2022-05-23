@@ -10,20 +10,20 @@ abstract class ScalatestSuite extends AnyFunSuite {
     for {
       testExecutor <- tests.testExecutors
     } {
-      registerTests[tests.TDSL](testExecutor, prefix = "", tests.testCases(using testExecutor.testDsl))
+      registerTests[tests.Kit](testExecutor, prefix = "", tests.testCases(using testExecutor.testKit))
     }
   }
 
-  private def registerTests[TDSL <: TestDsl](
-    testExecutor: TestExecutor[TDSL],
+  private def registerTests[TK <: TestKit](
+    testExecutor: TestExecutor[TK],
     prefix: String,
-    cases: List[(String, Tests.Case[testExecutor.testDsl.type])],
+    cases: List[(String, Tests.Case[testExecutor.testKit.type])],
   ): Unit = {
     for {
       (testName, testCase) <- cases
     } {
       testCase match {
-        case c: Tests.Case.Single[testExecutor.testDsl.type] =>
+        case c: Tests.Case.Single[testExecutor.testKit.type] =>
           test(s"$prefix$testName (executed by ${testExecutor.name})") {
             testExecutor.runTestCase(c.body, c.conductor, c.postStop) match {
               case TestResult.Success(_) =>

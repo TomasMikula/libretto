@@ -10,10 +10,10 @@ import scala.util.{Failure, Success, Try}
 
 object ScalaTestExecutor {
 
-  private trait ScalaTestDslFromExecutor[F0[_]: ScalaMonad, DSL <: ScalaDSL, Exec <: ScalaExecutor.Of[DSL, F0]](
+  private trait ScalaTestKitFromExecutor[F0[_]: ScalaMonad, DSL <: ScalaDSL, Exec <: ScalaExecutor.Of[DSL, F0]](
     val dsl0: DSL,
     val exec: Exec & ScalaExecutor.Of[dsl0.type, F0],
-  ) extends ScalaTestDsl {
+  ) extends ScalaTestKit {
       override type F[A] = F0[A]
       override val dsl: exec.dsl.type = exec.dsl
       override val probes: exec.type = exec
@@ -65,17 +65,17 @@ object ScalaTestExecutor {
   def fromExecutor[F0[_]: ScalaMonad](
     dsl: ScalaDSL,
     exec: ScalaExecutor.Of[dsl.type, F0],
-  ): TestExecutor[ScalaTestDsl] =
-    new TestExecutor[ScalaTestDsl] {
+  ): TestExecutor[ScalaTestKit] =
+    new TestExecutor[ScalaTestKit] {
       override val name: String =
         ScalaTestExecutor.getClass.getCanonicalName
 
-      override val testDsl: ScalaTestDslFromExecutor[F0, dsl.type, exec.type] =
-        new ScalaTestDslFromExecutor[F0, dsl.type, exec.type](dsl, exec) {}
+      override val testKit: ScalaTestKitFromExecutor[F0, dsl.type, exec.type] =
+        new ScalaTestKitFromExecutor[F0, dsl.type, exec.type](dsl, exec) {}
 
-      import testDsl.Outcome
-      import testDsl.dsl._
-      import testDsl.probes.OutPort
+      import testKit.Outcome
+      import testKit.dsl._
+      import testKit.probes.OutPort
 
       override def runTestCase[O, X](
         body: Done -⚬ O,
@@ -94,7 +94,7 @@ object ScalaTestExecutor {
   def fromJavaExecutors(
     scheduler: ScheduledExecutorService,
     blockingExecutor: ExecutorService,
-  ): TestExecutor[ScalaTestDsl] = {
+  ): TestExecutor[ScalaTestKit] = {
     val executor0: libretto.ScalaExecutor.Of[StarterKit.dsl.type, Future] =
       StarterKit.executor(blockingExecutor)(scheduler)
 
@@ -104,7 +104,7 @@ object ScalaTestExecutor {
     fromExecutor(StarterKit.dsl, executor0)
   }
 
-  lazy val global: TestExecutor[ScalaTestDsl] =
+  lazy val global: TestExecutor[ScalaTestKit] =
     fromJavaExecutors(
       scheduler        = Executors.newScheduledThreadPool(4),
       blockingExecutor = Executors.newCachedThreadPool(),

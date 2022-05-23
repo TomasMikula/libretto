@@ -1,68 +1,66 @@
 package libretto.testing
 
-import libretto.testing.TestDsl.dsl
+import libretto.testing.TestKit.dsl
 import libretto.util.Monad.syntax._
 import scala.{:: => NonEmptyList}
 
 sealed trait Tests {
-  type TDSL <: TestDsl
+  type Kit <: TestKit
 
-  def testCases(using tdsl: TDSL): NonEmptyList[(String, Tests.Case[tdsl.type])]
+  def testCases(using kit: Kit): NonEmptyList[(String, Tests.Case[kit.type])]
 
-  val testExecutors: NonEmptyList[TestExecutor[TDSL]]
+  val testExecutors: NonEmptyList[TestExecutor[Kit]]
 }
 
 object Tests {
-  def use[TDSL <: TestDsl]: Builder.Use[TDSL] =
-    new Builder.Use[TDSL]()
+  def use[TK <: TestKit]: Builder.Use[TK] =
+    new Builder.Use[TK]()
 
   object Builder {
-    class Use[TDSL <: TestDsl]() {
+    class Use[TK <: TestKit]() {
       def executedBy(
-        executor: TestExecutor[TDSL],
-        executors: TestExecutor[TDSL]*,
-      ): ExecutedBy[TDSL] =
-        new ExecutedBy[TDSL](NonEmptyList(executor, executors.toList))
+        executor: TestExecutor[TK],
+        executors: TestExecutor[TK]*,
+      ): ExecutedBy[TK] =
+        new ExecutedBy[TK](NonEmptyList(executor, executors.toList))
     }
 
-    class ExecutedBy[TDSL <: TestDsl](executors: NonEmptyList[TestExecutor[TDSL]]) {
+    class ExecutedBy[TK <: TestKit](executors: NonEmptyList[TestExecutor[TK]]) {
       def in(
-        cases: (tdsl: TDSL) ?=> Cases[tdsl.type],
-      ): Tests = {
-        type TDSL0 = TDSL
+        cases: (kit: TK) ?=> Cases[kit.type],
+      ): Tests =
         new Tests {
-          override type TDSL = TDSL0
-          override def testCases(using tdsl: TDSL) = cases.values
+          override type Kit = TK
+          override def testCases(using kit: TK) = cases.values
           override val testExecutors = executors
         }
-      }
     }
   }
 
-  sealed trait Cases[TDSL <: TestDsl] {
-    def values(using tdsl: TDSL): NonEmptyList[(String, Case[tdsl.type])]
+  sealed trait Cases[TK <: TestKit] {
+    def values(using kit: TK): NonEmptyList[(String, Case[kit.type])]
   }
 
   object Cases {
-    def apply(using tdsl: TestDsl)(
-      testCase: (String, Case[tdsl.type]),
-      moreCases: (String, Case[tdsl.type])*,
-    ): Cases[tdsl.type] =
-      new Cases[tdsl.type] {
-        override def values(using testDsl: tdsl.type): NonEmptyList[(String, Case[testDsl.type])] =
+    def apply(using kit: TestKit)(
+      testCase: (String, Case[kit.type]),
+      moreCases: (String, Case[kit.type])*,
+    ): Cases[kit.type] =
+      new Cases[kit.type] {
+        override def values(using testKit: kit.type): NonEmptyList[(String, Case[testKit.type])] =
           NonEmptyList(testCase, moreCases.toList)
       }
   }
 
-  sealed trait Case[TDSL <: TestDsl]
+  sealed trait Case[TK <: TestKit]
 
   object Case {
 
-    sealed trait Single[TDSL <: TestDsl] extends Case[TDSL] {
-      val testDsl: TDSL
-      import testDsl.Outcome
-      import testDsl.dsl._
-      import testDsl.probes.OutPort
+    sealed trait Single[TK <: TestKit] extends Case[TK] {
+      val testKit: TK
+      import testKit.Outcome
+      import testKit.dsl._
+      import testKit.probes.OutPort
 
       type O
       type X
@@ -74,67 +72,67 @@ object Tests {
       val postStop: X => Outcome[Unit]
     }
 
-    case class Multiple[TDSL <: TestDsl](
-      cases: List[(String, Case[TDSL])],
-    ) extends Case[TDSL]
+    case class Multiple[TK <: TestKit](
+      cases: List[(String, Case[TK])],
+    ) extends Case[TK]
 
     private def make[A, B](using
-      tdsl: TestDsl,
+      kit: TestKit,
     )(
       body0: dsl.-⚬[dsl.Done, A],
-      conductor0: tdsl.probes.OutPort[A] => tdsl.Outcome[B],
-      postStop0: B => tdsl.Outcome[Unit],
-    ): Case[tdsl.type] =
-      new Single[tdsl.type] {
+      conductor0: kit.probes.OutPort[A] => kit.Outcome[B],
+      postStop0: B => kit.Outcome[Unit],
+    ): Case[kit.type] =
+      new Single[kit.type] {
         override type O = A
         override type X = B
-        override val testDsl = tdsl
+        override val testKit = kit
         override val body = body0
         override val conductor = conductor0
         override val postStop = postStop0
       }
 
-    def apply(using tdsl: TestDsl)(body: dsl.-⚬[dsl.Done, tdsl.Assertion[dsl.Done]]): Case[tdsl.type] =
-      make(body, tdsl.extractOutcome, tdsl.monadOutcome.pure)
+    def apply(using kit: TestKit)(body: dsl.-⚬[dsl.Done, kit.Assertion[dsl.Done]]): Case[kit.type] =
+      make(body, kit.extractOutcome, kit.monadOutcome.pure)
 
-    def apply[O](using tdsl: TestDsl)(
-      body: tdsl.dsl.-⚬[tdsl.dsl.Done, O],
-      conduct: tdsl.probes.OutPort[O] => tdsl.Outcome[Unit],
-    ): Case[tdsl.type] =
-      make[O, Unit](body, conduct, tdsl.monadOutcome.pure)
+    def apply[O](using kit: TestKit)(
+      body: kit.dsl.-⚬[kit.dsl.Done, O],
+      conduct: kit.probes.OutPort[O] => kit.Outcome[Unit],
+    ): Case[kit.type] =
+      make[O, Unit](body, conduct, kit.monadOutcome.pure)
 
-    def apply[A, B](using tdsl: TestDsl)(
-      body: tdsl.dsl.-⚬[tdsl.dsl.Done, A],
-      conduct: tdsl.probes.OutPort[A] => tdsl.Outcome[B],
-      postStop: B => tdsl.Outcome[Unit],
-    ): Case[tdsl.type] =
+    def apply[A, B](using kit: TestKit)(
+      body: kit.dsl.-⚬[kit.dsl.Done, A],
+      conduct: kit.probes.OutPort[A] => kit.Outcome[B],
+      postStop: B => kit.Outcome[Unit],
+    ): Case[kit.type] =
       make[A, B](body, conduct, postStop)
 
-    def multiple[TDSL <: TestDsl](
-      cases: (String, Case[TDSL])*,
-    ): Case[TDSL] =
-      Multiple[TDSL](cases.toList)
+    def multiple[TK <: TestKit](
+      cases: (String, Case[TK])*,
+    ): Case[TK] =
+      Multiple[TK](cases.toList)
 
-    def interactWith[O](using tdsl: TestDsl)(body: tdsl.dsl.-⚬[tdsl.dsl.Done, O]): InteractWith[tdsl.type, O] =
-      InteractWith(tdsl, body)
+    def interactWith[O](using kit: TestKit)(body: kit.dsl.-⚬[kit.dsl.Done, O]): InteractWith[kit.type, O] =
+      InteractWith(kit, body)
 
     object InteractWith {
-      def apply[O](tdsl: TestDsl, body: tdsl.dsl.-⚬[tdsl.dsl.Done, O]): InteractWith[tdsl.type, O] =
-        new InteractWith(tdsl, body)
+      def apply[O](kit: TestKit, body: kit.dsl.-⚬[kit.dsl.Done, O]): InteractWith[kit.type, O] =
+        new InteractWith(kit, body)
     }
 
-    class InteractWith[TDSL <: TestDsl, O](
-      val tdsl: TDSL,
-      val body: tdsl.dsl.-⚬[tdsl.dsl.Done, O],
+    class InteractWith[TK <: TestKit, O](
+      val kit: TK,
+      val body: kit.dsl.-⚬[kit.dsl.Done, O],
     ) {
-      def via(conductor: tdsl.probes.OutPort[O] => tdsl.Outcome[Unit]): Case[tdsl.type] =
-        Case(using tdsl)(body, conductor)
+      def via(conductor: kit.probes.OutPort[O] => kit.Outcome[Unit]): Case[kit.type] =
+        Case(using kit)(body, conductor)
 
       def via[X](
-        conductor: tdsl.probes.OutPort[O] => tdsl.Outcome[X],
-        postStop: X => tdsl.Outcome[Unit],
-      ): Case[tdsl.type] =
-        Case(using tdsl)(body, conductor, postStop)
+        conductor: kit.probes.OutPort[O] => kit.Outcome[X],
+        postStop: X => kit.Outcome[Unit],
+      ): Case[kit.type] =
+        Case(using kit)(body, conductor, postStop)
     }
   }
 }

@@ -3,7 +3,7 @@ package libretto.testing
 import libretto.{CoreLib, ScalaBridge, ScalaDSL}
 import libretto.util.Monad.syntax._
 
-trait ScalaTestDsl extends TestDsl {
+trait ScalaTestKit extends TestKit {
   override val dsl: ScalaDSL
   override val probes: ScalaBridge.Of[dsl.type, F]
 
