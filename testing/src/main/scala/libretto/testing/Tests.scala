@@ -30,23 +30,23 @@ object Tests {
       ): Tests =
         new Tests {
           override type Kit = TK
-          override def testCases(using kit: TK) = cases.values
+          override def testCases(using kit: TK) = cases.get
           override val testExecutors = executors
         }
     }
   }
 
   sealed trait Cases[TK <: TestKit] {
-    def values(using kit: TK): NonEmptyList[(String, TestCase[kit.type])]
+    def get: NonEmptyList[(String, TestCase[TK])]
   }
 
   object Cases {
-    def apply(using kit: TestKit)(
-      testCase: (String, TestCase[kit.type]),
-      moreCases: (String, TestCase[kit.type])*,
-    ): Cases[kit.type] =
-      new Cases[kit.type] {
-        override def values(using testKit: kit.type): NonEmptyList[(String, TestCase[testKit.type])] =
+    def apply[TK <: TestKit](
+      testCase: (String, TestCase[TK]),
+      moreCases: (String, TestCase[TK])*,
+    ): Cases[TK] =
+      new Cases[TK] {
+        override def get: NonEmptyList[(String, TestCase[TK])] =
           NonEmptyList(testCase, moreCases.toList)
       }
   }
