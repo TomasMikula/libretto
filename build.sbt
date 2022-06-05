@@ -78,6 +78,25 @@ lazy val examples = project
     name := "libretto-examples",
   )
 
+lazy val mashupExamples = project
+  .in(file("mashup-examples"))
+  .dependsOn(mashup)
+  .settings(
+    name := "libretto-mashup-examples",
+    publish / skip := true, // experimental project, do not publish
+  )
+
+lazy val mashup = project
+  .in(file("mashup"))
+  .dependsOn(core)
+  .settings(
+    name := "libretto-mashup",
+    publish / skip := true, // experimental project, do not publish
+    libraryDependencies ++= Seq(
+      "dev.zio" %% "zio" % "2.0.0-RC6",
+    ),
+  )
+
 lazy val root = project
   .in(file("."))
   .settings(
@@ -88,6 +107,8 @@ lazy val root = project
     testing,
     coreTests,
     examples,
+    mashup,
+    mashupExamples,
   )
 
 lazy val laikaSite         = taskKey[File]("generates HTML from Markdown using Laika")
