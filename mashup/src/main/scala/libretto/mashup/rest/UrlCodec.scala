@@ -1,17 +1,17 @@
 package libretto.mashup.rest
 
-import libretto.mashup.dsl.Fun
-import libretto.mashup.dsl.Fun.or
+import libretto.mashup.dsl
+import libretto.mashup.dsl.{Fun, Text, or}
 
 final case class UrlCodec[A](
-  encode: Fun[A, String],
-  decode: Fun[String, String or A],
+  encode: Fun[A, Text],
+  decode: Fun[Text, Text or A],
 )
 
 object UrlCodec {
-  given UrlCodec[String] =
+  given UrlCodec[Text] =
     UrlCodec(
-      Fun.id[String],
-      Fun.left[String, String],
+      dsl.id[Text],
+      dsl.left[Text, Text],
     )
 }

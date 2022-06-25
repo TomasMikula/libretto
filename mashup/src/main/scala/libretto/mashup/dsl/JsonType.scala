@@ -4,20 +4,20 @@ package libretto.mashup.dsl
 sealed trait JsonType[A]
 
 object JsonType {
-  case object JsonTypeString extends JsonType[String]
+  case object JsonTypeText extends JsonType[Text]
 
   case object JsonTypeFloat64 extends JsonType[Float64]
 
   case object JsonTypeEmptyRecord extends JsonType[Record]
 
-  case class JsonTypeRecord[A <: AbstractRecord, Name <: String, T](
+  case class JsonTypeRecord[A, Name <: String, T](
     init: JsonType[A],
     name: Name,
     typ: JsonType[T],
   ) extends JsonType[A ## (Name of T)]
 
-  given jsonTypeString: JsonType[String] =
-    JsonTypeString
+  given jsonTypeText: JsonType[Text] =
+    JsonTypeText
 
   given jsonTypeFloat64: JsonType[Float64] =
     JsonTypeFloat64
@@ -25,7 +25,7 @@ object JsonType {
   given jsonTypeEmptyRecord: JsonType[Record] =
     JsonTypeEmptyRecord
 
-  given jsonTypeRecord[A <: AbstractRecord, Name <: String, T](using
+  given jsonTypeRecord[A, Name <: String, T](using
     A: JsonType[A],
     N: ConstValue[Name],
     T: JsonType[T],

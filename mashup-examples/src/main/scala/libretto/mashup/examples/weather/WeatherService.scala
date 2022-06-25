@@ -2,8 +2,7 @@ package libretto.mashup.examples.weather
 
 import zio.ZIO
 import libretto.mashup.{Input, Output, Service}
-import libretto.mashup.dsl.{##, Float64, Fun, Record, of}
-import libretto.mashup.dsl.Fun.-->
+import libretto.mashup.dsl.{-->, ##, EmptyResource, Expr, Float64, Fun, Record, Text, closure, fun, of}
 import libretto.mashup.rest.{Endpoint, RestApi}
 import libretto.mashup.rest.RelativeUrl._
 
@@ -19,25 +18,44 @@ object WeatherService {
       blueprint,
     )
 
-  type Location =
-    String
+  type City =
+    Text
 
   type Celsius =
     Record ## ("celsius" of Float64)
 
+  object Celsius {
+    def apply(value: Expr[Float64]): Expr[Celsius] =
+      Record().##["celsius"](value)
+
+    def apply(value: Double): Expr[Celsius] =
+      Celsius(Float64(value))
+  }
+
   type WeatherReport = (
     Record
-      ## ("location"    of String)
+      ## ("city"        of City)
       ## ("temperature" of Celsius)
   )
 
-  def blueprint: Fun[Unit, Location --> WeatherReport] =
-    ???
+  object WeatherReport {
+    def apply(city: Expr[City], temperature: Expr[Celsius]): Expr[WeatherReport] =
+      Record()
+        .##["city"](city)
+        .##["temperature"](temperature)
+  }
 
-  def restApi: RestApi[Location --> WeatherReport] =
+  def blueprint: Fun[EmptyResource, City --> WeatherReport] =
+    fun { emptyResource =>
+      closure { city =>
+        WeatherReport(city, Celsius(23.5))
+      }
+    }
+
+  def restApi: RestApi[City --> WeatherReport] =
     RestApi(endpoint)
 
-  def endpoint: Endpoint[Location, WeatherReport] =
+  def endpoint: Endpoint[City, WeatherReport] =
     Endpoint
-      .get(path[Location])
+      .get(path[City])
 }

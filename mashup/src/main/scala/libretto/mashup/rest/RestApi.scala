@@ -1,6 +1,6 @@
 package libretto.mashup.rest
 
-import libretto.mashup.dsl.Fun.-->
+import libretto.mashup.dsl.-->
 
 sealed trait RestApi[A]
 
