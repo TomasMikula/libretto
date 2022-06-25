@@ -1,10 +1,12 @@
 package libretto.mashup.rest
 
-import libretto.mashup.dsl.Expr
+import libretto.mashup.dsl.{Expr, JsonType}
 
 sealed trait Endpoint[I, O]
 
 object Endpoint {
-  def get[I, O](f: Expr[I] => Expr[RelativeUrl]): Endpoint[I, O] =
-    ???
+  case class Get[I, O](url: RelativeUrl[I], outputType: JsonType[O]) extends Endpoint[I, O]
+
+  def get[I, O: JsonType](f: RelativeUrl[I]): Endpoint[I, O] =
+    Get(f, summon[JsonType[O]])
 }

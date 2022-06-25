@@ -5,6 +5,7 @@ import libretto.mashup.{Input, Output, Service}
 import libretto.mashup.dsl.{##, Float64, Fun, Record, of}
 import libretto.mashup.dsl.Fun.-->
 import libretto.mashup.rest.{Endpoint, RestApi}
+import libretto.mashup.rest.RelativeUrl._
 
 object WeatherService {
   def start(host: String, port: Int): ZIO[Any, Nothing, Unit] =
@@ -37,5 +38,6 @@ object WeatherService {
     RestApi(endpoint)
 
   def endpoint: Endpoint[Location, WeatherReport] =
-    Endpoint.get(location => / location)
+    Endpoint
+      .get(path[Location])
 }
