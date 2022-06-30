@@ -20,13 +20,12 @@ class Philosophers[ForksImpl <: Forks](val forks: ForksImpl) {
     * @param cycles number of times the philosopher will eat
     */
   def behavior(name: String)(cycles: Int): (SharedFork |*| SharedFork) -⚬ Done = {
-    // bring the meta-level value `cycles` into the libretto program
-    // by turning it into a (constant) libretto function
-    val constCycles: One -⚬ Val[Int] =
-      const(cycles)
+    // turn the meta-level value `cycles` into a constant libretto expression
+    val constCycles: $[Val[Int]] =
+      one > const(cycles)
 
     λ { (forks: $[SharedFork |*| SharedFork]) =>
-      run(name)(forks also constCycles)
+      run(name)(forks |*| constCycles)
     }
   }
 

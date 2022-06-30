@@ -13,6 +13,8 @@ sealed trait VarOrigin {
       case Prj2(Position(f, l))       => s"The second half of untupling at $f:$l"
       case Lambda(Position(f, l))     => s"The input of lambda expression ending at $f:$l"
       case ClosureVal(Position(f, l)) => s"The value of closure expression at $f:$l"
+      case OneIntro(Position(f, l))   => s"The unit introduced at $f:$l"
+      case Synthetic(desc)            => s"Synthetic variable: $desc"
     }
 }
 
@@ -23,4 +25,6 @@ object VarOrigin {
   case class Prj2(pos: Position) extends VarOrigin
   case class Lambda(pos: Position) extends VarOrigin
   case class ClosureVal(pos: Position) extends VarOrigin
+  case class OneIntro(pos: Position) extends VarOrigin
+  case class Synthetic(description: String) extends VarOrigin
 }

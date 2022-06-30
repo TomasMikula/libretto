@@ -322,6 +322,8 @@ trait CoreDSL {
   val $: $Ops
 
   trait $Ops {
+    def one(implicit pos: scalasource.Position): $[One]
+
     def map[A, B](a: $[A])(f: A -⚬ B)(
       pos: scalasource.Position,
     ): $[B]
