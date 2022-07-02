@@ -2,12 +2,40 @@ package libretto.impl
 
 import libretto.BiInjective
 import libretto.impl.Lambda.Error.LinearityViolation
-import libretto.util.Exists
 import scala.annotation.targetName
 
 trait Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
-  type Tupled[F[_], A] = libretto.impl.Tupled[|*|, F, A]
-  type Vars[A] = Tupled[Var, A]
+  final type Tupled[F[_], A] = libretto.impl.Tupled[|*|, F, A]
+
+  final type Vars[A] = Tupled[Var, A]
+
+  object Vars {
+    def single[A](a: Var[A]): Vars[A] =
+      Tupled.Single(a)
+
+    def bi[A, B](a: Var[A], b: Var[B]): Vars[A |*| B] =
+      zip(single(a), single(b))
+
+    def zip[A, B](a: Vars[A], b: Vars[B]): Vars[A |*| B] =
+      Tupled.Zip(a, b)
+
+    def unzip[A, B](ab: Vars[A |*| B]): Option[(Vars[A], Vars[B])] =
+      Tupled.unzip(ab)
+
+    def sameVars[A](a: Vars[A], b: Vars[A]): Boolean =
+      (a isEqualTo b)([X] => (x: Var[X], y: Var[X]) => x == y)
+
+    def toSet[A](vars: Vars[A])(using variables: Variable[Var, VarSet]): VarSet =
+      vars.mapReduce0(
+        map    = [x] => (v: Var[x]) => variables.singleton(v),
+        reduce = variables.union(_, _),
+      )
+  }
+
+  extension [A](vars: Vars[A]) {
+    def toSet(using variables: Variable[Var, VarSet]): VarSet =
+      Vars.toSet(vars)
+  }
 
   type VArr[A, B]
   val VArr: VArrs
@@ -18,8 +46,6 @@ trait Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     def zip[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2], resultVar: Var[B1 |*| B2]): VArr[A1 |*| A2, B1 |*| B2]
     def par[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2]): VArr[A1 |*| A2, B1 |*| B2]
     def unzip[A, B1, B2](f: VArr[A, B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (VArr[A, B1], VArr[A, B2])
-    def bimap[A, B1, B2, C1, C2](f: VArr[A, B1 |*| B2], g1: VArr[B1, C1], g2: VArr[B2, C2]): VArr[A, C1 |*| C2]
-    def bimapZip[A, B1, B2, C1, C2](f: VArr[A, B1 |*| B2], g1: VArr[B1, C1], g2: VArr[B2, C2], resultVar: Var[C1 |*| C2]): VArr[A, C1 |*| C2]
     def initialVars[A, B](f: VArr[A, B]): Vars[A]
     def terminalVars[A, B](f: VArr[A, B]): Vars[B]
     def toExpr[A, B](f: VArr[A, B]): Expr[B]
@@ -56,8 +82,6 @@ trait Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[A |*| B]): Expr[A |*| B]
     def par[A, B](a: Expr[A], b: Expr[B]): Expr[A |*| B]
     def unzip[A, B](ab: Expr[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (Expr[A], Expr[B])
-    def bimap[A1, A2, B1, B2](a: Expr[A1 |*| A2], f1: VArr[A1, B1], f2: VArr[A2, B2]): Expr[B1 |*| B2]
-    def bimapZip[A1, A2, B1, B2](a: Expr[A1 |*| A2], f1: VArr[A1, B1], f2: VArr[A2, B2], resultVar: Var[B1 |*| B2]): Expr[B1 |*| B2]
     def terminalVars[A](a: Expr[A]): Vars[A]
   }
 
@@ -485,21 +509,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     override def unzip[A, B1, B2](f: VArr[A, B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (VArr[A, B1], VArr[A, B2]) =
       (Prj1(f, resultVar1, resultVar2), Prj2(f, resultVar1, resultVar2))
 
-    override def bimap[A, B1, B2, C1, C2](
-      f: VArr[A, B1 |*| B2],
-      g1: VArr[B1, C1],
-      g2: VArr[B2, C2],
-    ): VArr[A, C1 |*| C2] =
-      ???
-
-    override def bimapZip[A, B1, B2, C1, C2](
-      f: VArr[A, B1 |*| B2],
-      g1: VArr[B1, C1],
-      g2: VArr[B2, C2],
-      resultVar: Var[C1 |*| C2]
-    ): VArr[A, C1 |*| C2] =
-      ???
-
     override def initialVars[A, B](f: VArr[A, B]): Vars[A] =
       f.initialVars
 
@@ -530,45 +539,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     override def unzip[A, B](p: Expr[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (Expr[A], Expr[B]) =
       VArr.unzip(p)(resultVar1, resultVar2)
 
-    override def bimap[A1, A2, B1, B2](a: Expr[A1 |*| A2], f1: VArr[A1, B1], f2: VArr[A2, B2]): Expr[B1 |*| B2] =
-      VArr.bimap(a, f1, f2)
-
-    override def bimapZip[A1, A2, B1, B2](a: Expr[A1 |*| A2], f1: VArr[A1, B1], f2: VArr[A2, B2], resultVar: Var[B1 |*| B2]): Expr[B1 |*| B2] =
-      VArr.bimapZip(a, f1, f2, resultVar)
-
     override def terminalVars[A](a: Expr[A]): Vars[A] =
       VArr.terminalVars(a)
-  }
-
-  type Tupled[F[_], A] = libretto.impl.Tupled[|*|, F, A]
-
-  type Vars[A] = Tupled[Var, A]
-  object Vars {
-    def single[A](a: Var[A]): Vars[A] =
-      Tupled.Single(a)
-
-    def bi[A, B](a: Var[A], b: Var[B]): Vars[A |*| B] =
-      zip(single(a), single(b))
-
-    def zip[A, B](a: Vars[A], b: Vars[B]): Vars[A |*| B] =
-      Tupled.Zip(a, b)
-
-    def unzip[A, B](ab: Vars[A |*| B]): Option[(Vars[A], Vars[B])] =
-      Tupled.unzip(ab)
-
-    def sameVars[A](a: Vars[A], b: Vars[A]): Boolean =
-      a == b
-
-    def toSet[A](vars: Vars[A]): VarSet =
-      vars.mapReduce0(
-        map    = [x] => (v: Var[x]) => variables.singleton(v),
-        reduce = variables.union(_, _),
-      )
-  }
-
-  extension [A](vars: Vars[A]) {
-    def toSet: VarSet =
-      Vars.toSet(vars)
   }
 
   override def abs[A, B](expr: Expr[B], boundVar: Var[A]): Abstracted[A, B] = {
