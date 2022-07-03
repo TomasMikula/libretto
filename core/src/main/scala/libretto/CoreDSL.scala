@@ -336,6 +336,16 @@ trait CoreDSL {
       pos: scalasource.Position,
     ): ($[A], $[B])
 
+    def eliminateFirst[A](unit: $[One], a: $[A])(
+      pos: scalasource.Position,
+    ): $[A] =
+      map(zip(unit, a)(pos))(elimFst)(pos)
+
+    def eliminateSecond[A](a: $[A], unit: $[One])(
+      pos: scalasource.Position,
+    ): $[A] =
+      map(zip(a, unit)(pos))(elimSnd)(pos)
+
     object |*| {
       def unapply[A, B](ab: $[A |*| B])(implicit
         pos: scalasource.Position,
@@ -361,14 +371,18 @@ trait CoreDSL {
       ): $[B] =
         map(a)(f)(pos)
 
+      // TODO: source position
       def also[B](f: One -⚬ B): $[A |*| B] =
         a > introSnd(f)
 
+      // TODO: source position
       def alsoFst[X](f: One -⚬ X): $[X |*| A] =
         a > introFst(f)
 
-      def alsoElim(unit: $[One]): $[A] =
-        (unit |*| a) > elimFst
+      def alsoElim(unit: $[One])(using
+        pos: scalasource.Position,
+      ): $[A] =
+        eliminateFirst(unit, a)(pos)
     }
   }
 }

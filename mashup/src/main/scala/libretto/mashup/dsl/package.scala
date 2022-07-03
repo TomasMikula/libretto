@@ -2,6 +2,7 @@ package libretto.mashup
 
 import libretto.StarterKit.{dsl => StarterDsl}
 import libretto.StarterKit.dsl.{-⚬, =⚬, |*|, |+|, One, Val}
+import libretto.scalasource
 
 package object dsl {
   opaque type Fun[A, B] = A -⚬ B // for now, let's just use libretto's linear functions
@@ -43,26 +44,30 @@ package object dsl {
 
   import StarterDsl.$._
 
-  private def one: Expr[One] =
-    ???
-
   object Record {
-    def apply(): Expr[Record] =
-      one
+    def apply()(using pos: scalasource.Position): Expr[Record] =
+      one(using pos)
   }
 
   object Float64 {
-    def apply(value: Double): Expr[Float64] =
-      one > StarterDsl.done > StarterDsl.constVal(value)
+    def apply(value: Double)(using pos: scalasource.Position): Expr[Float64] =
+      one(using pos) > StarterDsl.done > StarterDsl.constVal(value)
   }
 
   extension [A](a: Expr[A]) {
     def ##[N <: String](using name: ConstValue[N]): RecordExtender[A, N] =
       new RecordExtender(a, name)
+
+    def alsoElim(empty: Expr[EmptyResource])(using
+      pos: scalasource.Position,
+    ): Expr[A] =
+      StarterDsl.$.eliminateSecond(a, empty)(pos)
   }
 
   class RecordExtender[A, N <: String](initial: Expr[A], fieldName: ConstValue[N]) {
-    def apply[T](value: Expr[T]): Expr[A ## (N of T)] =
-      initial |*| value
+    def apply[T](value: Expr[T])(using
+      pos: scalasource.Position,
+    ): Expr[A ## (N of T)] =
+      StarterDsl.$.zip(initial, value)(pos)
   }
 }

@@ -2,7 +2,7 @@ package libretto.mashup.examples.weather
 
 import zio.ZIO
 import libretto.mashup.{Input, Output, Service}
-import libretto.mashup.dsl.{-->, ##, EmptyResource, Expr, Float64, Fun, Record, Text, closure, fun, of}
+import libretto.mashup.dsl.{-->, ##, EmptyResource, Expr, Float64, Fun, Record, Text, alsoElim, closure, fun, of}
 import libretto.mashup.rest.{Endpoint, RestApi}
 import libretto.mashup.rest.RelativeUrl._
 
@@ -49,6 +49,7 @@ object WeatherService {
     fun { emptyResource =>
       closure { city =>
         WeatherReport(city, Celsius(23.5))
+          .alsoElim(emptyResource) // artifact of linearity: have to handle all inputs
       }
     }
 
