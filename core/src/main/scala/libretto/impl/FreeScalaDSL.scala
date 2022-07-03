@@ -490,5 +490,5 @@ object FreeScalaDSL extends FreeScalaDSL with ScalaDSL {
 
   override class NotLinearException(msg: String) extends Exception(msg)
   override class UnboundVariablesException(vs: Set[Var[?]]) extends Exception
-  override class NoCaptureException(msg: String) extends Exception
+  override class NoCaptureException(msg: String) extends Exception(msg)
 }

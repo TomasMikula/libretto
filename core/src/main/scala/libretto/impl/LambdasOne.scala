@@ -62,12 +62,12 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
           case t: OneTail1[A] => t(init)
         }
 
-      def terminalVarsOpt: Option[Vars[A]]
+      def terminalVarsOpt: Either[One =:= A, Vars[A]]
     }
     private[Expr] object OneTail {
       case object Id extends OneTail[One] {
         override def apply(t: OneTail[One]): OneTail[One] = t
-        override def terminalVarsOpt = None
+        override def terminalVarsOpt = Left(summon[One =:= One])
       }
       sealed trait OneTail1[A] extends OneTail[A] {
         override def apply(t: OneTail[One]): OneTail1[A] =
@@ -88,8 +88,8 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
             case Prj2(_, _, v) => Vars.single(v)
           }
 
-        override def terminalVarsOpt: Option[Vars[A]] =
-          Some(terminalVars)
+        override def terminalVarsOpt: Either[One =:= A, Vars[A]] =
+          Right(terminalVars)
       }
       case class Map[A, B](init: OneTail[A], f: A -⚬ B, resultVar: Var[B]) extends OneTail1[B]
       case class Zip[A1, A2](t1: OneTail1[A1], t2: OneTail1[A2], resultVar: Var[A1 |*| A2]) extends OneTail1[A1 |*| A2]
@@ -171,7 +171,11 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
     override def terminalVars[A](a: Expr[A]): Vars[A] =
       a match {
         case LambdasExpr(a) => a.terminalVars
-        case OneExpr(v, f)  => a.terminalVars
+        case OneExpr(v, f)  =>
+          f.terminalVarsOpt match {
+            case Right(va) => va
+            case Left(ev)  => Vars.single(ev.substituteCo(v))
+          }
       }
 
     def lift[A](expr: lambdas.Expr[A]): Expr[A] =
