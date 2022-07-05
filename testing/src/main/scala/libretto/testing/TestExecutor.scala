@@ -27,11 +27,11 @@ trait TestExecutor[+TK <: TestKit] {
 }
 
 object TestExecutor {
-  def usingExecutor[F[_]](executor: Executor[F]): UsingExecutor[F, executor.type] =
+  def usingExecutor[F[_]: Monad](executor: Executor[F]): UsingExecutor[F, executor.type] =
     new UsingExecutor[F, executor.type](executor)
 
-  class UsingExecutor[F[_], E <: Executor[F]](val executor: E) {
-    import executor.OutPort
+  class UsingExecutor[F[_]: Monad, E <: Executor[F]](val executor: E) {
+    import executor.{InPort, OutPort}
     import executor.dsl._
 
     def runTestCase[O, X](
@@ -39,13 +39,16 @@ object TestExecutor {
       conduct: OutPort[O] => F[TestResult[X]],
       postStop: X => F[TestResult[Unit]],
     ): TestResult[Unit] = {
-      val (outPort, execution) =
+      val (inPort, outPort, execution) =
         executor.execute(body)
 
       val res0: TestResult[X] =
         try {
           executor.runAwait {
-            conduct(outPort)
+            for {
+              _   <- InPort.supplyDone(inPort)
+              res <- conduct(outPort)
+            } yield res
           }
         } catch {
           case e => libretto.testing.TestResult.Crash(e)

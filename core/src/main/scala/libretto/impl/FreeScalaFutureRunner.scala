@@ -27,6 +27,7 @@ class FreeScalaFutureRunner(
   override type Dsl = FreeScalaDSL.type
   override opaque type Execution = ResourceRegistry
   override opaque type OutPort[A] = Frontier[A]
+  override opaque type InPort[A] = Frontier[A] => Unit
 
   private implicit val ec: ExecutionContext =
     ExecutionContext.fromExecutor(scheduler)
@@ -48,10 +49,12 @@ class FreeScalaFutureRunner(
     pa.future
   }
 
-  override def execute[B](prg: Done -⚬ B): (OutPort[B], Execution) = {
+  override def execute[A, B](prg: A -⚬ B): (InPort[A], OutPort[B], Execution) = {
     val resourceRegistry = new ResourceRegistry
-    val fa = Frontier.DoneNow.extendBy(prg, resourceRegistry)
-    (fa, resourceRegistry)
+    val input = Promise[Frontier[A]]
+    val in:  InPort[A]  = fa => input.success(fa)
+    val out: OutPort[B] = Frontier.Deferred(input.future).extendBy(prg, resourceRegistry)
+    (in, out, resourceRegistry)
   }
 
   override def runScala[A](prg: Done -⚬ Val[A]): Future[A] = {
@@ -78,7 +81,7 @@ class FreeScalaFutureRunner(
     }
   }
 
-  object OutPort extends ScalaOutPorts {
+  override object OutPort extends ScalaOutPorts {
     override def split[A, B](port: OutPort[A |*| B]): Future[(OutPort[A], OutPort[B])] =
       Future.successful(port.splitPair)
 
@@ -94,11 +97,69 @@ class FreeScalaFutureRunner(
         case Failure(e)   => Success(Left(e))
       }
 
+    override def chooseLeft[A, B](port: OutPort[A |&| B]): Future[OutPort[A]] =
+      Future.successful(port.chooseL)
+
+    override def chooseRight[A, B](port: OutPort[A |&| B]): Future[OutPort[B]] =
+      Future.successful(port.chooseR)
+
     override def awaitVal[A](port: OutPort[Val[A]]): Future[Either[Throwable, A]] =
       port.toFutureValue.transform {
         case Success(a) => Success(Right(a))
         case Failure(e) => Success(Left(e))
       }
+  }
+
+  override object InPort extends ScalaInPorts {
+    override def split[A, B](port: InPort[A |*| B]): Future[(InPort[A], InPort[B])] = {
+      val (fna, fa) = Frontier.promise[A]
+      val (fnb, fb) = Frontier.promise[B]
+      port(Frontier.Pair(fa, fb))
+      Future.successful((
+        fa => fna.fulfill(fa),
+        fb => fnb.fulfill(fb)
+      ))
+    }
+
+    override def supplyDone(port: InPort[Done]): Future[Unit] = {
+      Future.successful(port(Frontier.DoneNow))
+    }
+
+    override def supplyLeft[A, B](port: InPort[A |+| B]): Future[InPort[A]] = {
+      val (fna, fa) = Frontier.promise[A]
+      port(Frontier.InjectL(fa))
+      Future.successful(fa => fna.fulfill(fa))
+    }
+
+    override def supplyRight[A, B](port: InPort[A |+| B]): Future[InPort[B]] = {
+      val (fnb, fb) = Frontier.promise[B]
+      port(Frontier.InjectR(fb))
+      Future.successful(fb => fnb.fulfill(fb))
+    }
+
+    override def supplyChoice[A, B](port: InPort[A |&| B]): Future[Either[Throwable, Either[InPort[A], InPort[B]]]] = {
+      val res = Promise[Either[Throwable, Either[InPort[A], InPort[B]]]]
+      port(Frontier.Choice(
+        { () =>
+          val (fna, fa) = Frontier.promise[A]
+          res.success(Right(Left(fa => fna.fulfill(fa))))
+          fa
+        },
+        { () =>
+          val (fnb, fb) = Frontier.promise[B]
+          res.success(Right(Right(fb => fnb.fulfill(fb))))
+          fb
+        },
+        e => res.success(Left(e))
+      ))
+
+      res.future
+    }
+
+    override def supplyVal[A](port: InPort[Val[A]], value: A): Future[Unit] = {
+      port(Frontier.Value(value))
+      Future.successful(())
+    }
   }
 
   override def runAwait[A](fa: Future[A]): A =
@@ -1074,6 +1135,11 @@ class FreeScalaFutureRunner(
     case class Resource[A](id: ResId, obj: A) extends ResFrontier[A]
 
     case class Backwards[A](promise: Promise[Frontier[A]]) extends Frontier[-[A]]
+
+    def promise[A]: (Frontier[-[A]], Frontier[A]) = {
+      val pa = Promise[Frontier[A]]
+      (Backwards(pa), Deferred(pa.future))
+    }
 
     def failure[A](msg: String): Frontier[A] =
       Deferred(Future.failed(new Exception(msg)))
