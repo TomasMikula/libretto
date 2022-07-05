@@ -1,45 +1,52 @@
 package libretto.examples.diningPhilosophers
 
-import libretto.testing.TestSuite
+import libretto.StarterKit.dsl._
+import libretto.StarterKit.dsl.$._
+import libretto.StarterKit.coreLib._
+import libretto.testing.{StarterTestKit, Tests}
+import libretto.testing.scalatest.ScalatestStarterTestSuite
+import libretto.testing.TestCase
 
-class DiningPhilosophersTests extends TestSuite {
-  import kit.dsl._
-  import kit.dsl.$._
-  import kit.coreLib._
-  import kit.scalaLib._
+class DiningPhilosophersTests extends ScalatestStarterTestSuite {
 
   import ForksProvider.{HeldFork, letGo, mkSharedFork, putDown, tryPickUp}
 
   given heldForkReadiness: SignalingJunction.Positive[HeldFork] =
     ForksProvider.heldForkReadiness
 
-  test("SharedFork: successful pick up (left)") {
-    val prg: Done -⚬ Done =
-      mkSharedFork > par(
-        tryPickUp > assertLeft > putDown > letGo,
-        letGo,
-      ) > join
+  override def testCases(using kit: StarterTestKit): Tests.Cases[kit.type] = {
+    import kit.{leftOrCrash, rightOrCrash, success}
 
-    assertCompletes(prg)
-  }
+    Tests.Cases(
+      "SharedFork: successful pick up (left)" -> TestCase {
+        val prg: Done -⚬ Done =
+          mkSharedFork > par(
+            tryPickUp > leftOrCrash("Failed to pick up the fork.") > putDown > letGo,
+            letGo,
+          ) > join
 
-  test("SharedFork cannot be picked up twice") {
-    val prg: Done -⚬ Done =
-      λ { start =>
-        val (lFork |*| rFork) =
-          mkSharedFork(start)
+        prg > success
+      },
 
-        val (heldRFork |*| rAcquired) =
-          tryPickUp(rFork) > assertLeft > notifyPosSnd
+      "SharedFork cannot be picked up twice" -> TestCase {
+        val prg: Done -⚬ Done =
+          λ { start =>
+            val (lFork |*| rFork) =
+              mkSharedFork(start)
 
-        val (lFork1 |*| lAttempted) =
-          (lFork blockUntil rAcquired) > tryPickUp > notifyPosSnd > fst(assertRight)
+            val (heldRFork |*| rAcquired) =
+              tryPickUp(rFork) > leftOrCrash("Failed to pick up the fork.") > notifyPosSnd
 
-        join( letGo(lFork1)
-          |*| letGo(putDown(heldRFork deferUntil lAttempted))
-        )
-      }
+            val (lFork1 |*| lAttempted) =
+              (lFork blockUntil rAcquired) > tryPickUp > notifyPosSnd > fst(rightOrCrash("Succeeded in picking up shared fork twice simultaneously"))
 
-    assertCompletes(prg)
+            join( letGo(lFork1)
+              |*| letGo(putDown(heldRFork deferUntil lAttempted))
+            )
+          }
+
+        prg > success
+      },
+    )
   }
 }

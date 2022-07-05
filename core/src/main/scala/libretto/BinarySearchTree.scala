@@ -387,6 +387,9 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
     either(id, NonEmptyTree.clear(f))
 
   private trait Absorptive[F[_]] extends Functor[F] { F =>
+    override val category: Category[-⚬] =
+      coreLib.category
+
     def absorbOrNeglectL[A: PComonoid, B]: (A |*| F[B]) -⚬ F[A |*| B]
     def absorbL[A, B, C](combine: (A |*| B) -⚬ C, recover: (A |*| Done) -⚬ C): (A |*| F[B]) -⚬ F[C]
 

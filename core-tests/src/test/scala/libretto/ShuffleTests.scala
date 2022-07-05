@@ -1,6 +1,7 @@
 package libretto
 
-import libretto.impl.{Semigroupoid, Shuffle}
+import libretto.Semigroupoid
+import libretto.impl.Shuffle
 import org.scalatest.funsuite.AnyFunSuite
 
 class ShuffleTests extends AnyFunSuite {

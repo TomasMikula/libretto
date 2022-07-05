@@ -12,6 +12,15 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   import dsl._
   import dsl.$._
 
+  val category: Category[-⚬] =
+    new Category[-⚬] {
+      override def id[A]: A -⚬ A =
+        dsl.id[A]
+
+      override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C =
+        dsl.andThen(f, g)
+    }
+
   /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
     * It must hold that
     * ```
@@ -97,70 +106,28 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def lInvert[A, B](implicit ev: Dual[A, B]): One -⚬ (B |*| A) =
     ev.lInvert
 
-  /** Witnesses that `F` is a covariant endofunctor on the category `-⚬`. */
-  trait Functor[F[_]] { self =>
-    def lift[A, B](f: A -⚬ B): F[A] -⚬ F[B]
-
-    /** Composition with another covariant functor. */
-    def ∘[G[_]](that: Functor[G]): Functor[λ[x => F[G[x]]]] = new Functor[λ[x => F[G[x]]]] {
-      def lift[A, B](f: A -⚬ B): F[G[A]] -⚬ F[G[B]] = self.lift(that.lift(f))
-    }
-
-    /** Composition with a contravariant functor. Results in a contravariant functor. */
-    def ∘[G[_]](that: ContraFunctor[G]): ContraFunctor[λ[x => F[G[x]]]] = new ContraFunctor[λ[x => F[G[x]]]] {
-      def lift[A, B](f: A -⚬ B): F[G[B]] -⚬ F[G[A]] = self.lift(that.lift(f))
-    }
-  }
+  type Functor[F[_]] =
+    libretto.Functor[-⚬, F]
 
   object Functor {
-    def apply[F[_]](implicit ev: Functor[F]): Functor[F] =
-      ev
+    def apply[F[_]: Functor]: Functor[F] =
+      libretto.Functor[-⚬, F]
   }
 
-  /** Witnesses that `F` is a contravariant endofunctor on the category `-⚬`. */
-  trait ContraFunctor[F[_]] { self =>
-    def lift[A, B](f: A -⚬ B): F[B] -⚬ F[A]
+  type ContraFunctor[F[_]] =
+    libretto.ContraFunctor[-⚬, F]
 
-    /** Composition with a covariant functor. Results in a contravariant functor. */
-    def ∘[G[_]](that: Functor[G]): ContraFunctor[λ[x => F[G[x]]]] = new ContraFunctor[λ[x => F[G[x]]]] {
-      def lift[A, B](f: A -⚬ B): F[G[B]] -⚬ F[G[A]] = self.lift(that.lift(f))
-    }
-
-    /** Composition with another contravariant functor. Results in a covariant functor. */
-    def ∘[G[_]](that: ContraFunctor[G]): Functor[λ[x => F[G[x]]]] = new Functor[λ[x => F[G[x]]]] {
-      def lift[A, B](f: A -⚬ B): F[G[A]] -⚬ F[G[B]] = self.lift(that.lift(f))
-    }
+  object ContraFunctor {
+    def apply[F[_]: ContraFunctor]: ContraFunctor[F] =
+      libretto.ContraFunctor[-⚬, F]
   }
 
-  /** Witnesses that `F` is a bifunctor (covariant in both variables). */
-  trait Bifunctor[F[_, _]] {
-    def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): F[A, C] -⚬ F[B, D]
-
-    def fst[B]: Functor[F[*, B]] = new Functor[F[*, B]] {
-      def lift[A1, A2](f: A1 -⚬ A2): F[A1, B] -⚬ F[A2, B] =
-        Bifunctor.this.lift[A1, A2, B, B](f, id[B])
-    }
-
-    def snd[A]: Functor[F[A, *]] = new Functor[F[A, *]] {
-      def lift[B1, B2](g: B1 -⚬ B2): F[A, B1] -⚬ F[A, B2] =
-        Bifunctor.this.lift[A, A, B1, B2](id[A], g)
-    }
-
-    def inside[G[_]](implicit G: Functor[G]): Bifunctor[λ[(x, y) => G[F[x, y]]]] =
-      new Bifunctor[λ[(x, y) => G[F[x, y]]]] {
-        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): G[F[A, C]] -⚬ G[F[B, D]] =
-          G.lift(Bifunctor.this.lift(f, g))
-      }
-  }
+  type Bifunctor[F[_, _]] =
+    libretto.Bifunctor[-⚬, F]
 
   object Bifunctor {
-    def apply[F[_, _]](implicit ev: Bifunctor[F]): Bifunctor[F] = ev
-
-    implicit val pair: Bifunctor[|*|] =
-      new Bifunctor[|*|] {
-        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |*| C) -⚬ (B |*| D) =
-          par(f, g)
-      }
+    def apply[F[_, _]: Bifunctor]: Bifunctor[F] =
+      libretto.Bifunctor[-⚬, F]
   }
 
   /** Functor from category [[-⚬]] to the category `=>` of Scala functions.
@@ -294,6 +261,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     implicit def transportiveDetained: Transportive[Detained] =
       new Transportive[Detained] {
+        override val category: Category[-⚬] =
+          lib.category
+
         override def lift[A, B](f: A -⚬ B): Detained[A] -⚬ Detained[B] =
           snd(f)
 
@@ -1374,6 +1344,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Pair is covariant in the first argument. */
     def fst[B]: Transportive[λ[x => x |*| B]] =
       new Transportive[λ[x => x |*| B]] {
+        override val category: Category[-⚬] = lib.category
         def lift[A1, A2](f: A1 -⚬ A2): (A1 |*| B) -⚬ (A2 |*| B) = par(f, id)
         def inL[A1, A2]: (A1 |*| (A2 |*| B)) -⚬ ((A1 |*| A2) |*| B) = assocRL
         def outL[A1, A2]: ((A1 |*| A2) |*| B) -⚬ (A1 |*| (A2 |*| B)) = assocLR
@@ -1382,6 +1353,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Pair is covariant in the second argument. */
     def snd[A]: Transportive[λ[x => A |*| x]] =
       new Transportive[λ[x => A |*| x]] {
+        override val category: Category[-⚬] = lib.category
         def lift[B1, B2](f: B1 -⚬ B2): (A |*| B1) -⚬ (A |*| B2) = par(id, f)
         def inL[B1, B2]: (B1 |*| (A |*| B2)) -⚬ (A |*| (B1 |*| B2)) =
           assocRL[B1, A, B2].>.fst(swap).assocLR
@@ -1393,6 +1365,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   type Id[A] = A
 
   implicit val idFunctor: Transportive[Id] = new Transportive[Id] {
+    override val category: Category[-⚬] = lib.category
     def lift[A, B](f: A -⚬ B): Id[A] -⚬ Id[B] = f
     def inL[A, B]: (A |*| Id[B]) -⚬ Id[A |*| B] = id
     def outL[A, B]: Id[A |*| B] -⚬ (A |*| Id[B]) = id
@@ -1463,17 +1436,32 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     val bifunctor: Bifunctor[|+|] =
       new Bifunctor[|+|] {
-        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
+        override val category =
+          lib.category
+
+        override def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
           bimap(f, g)
       }
 
     /** Disjoint union is covariant in the left argument. */
-    def left[B]: Functor[λ[x => x |+| B]] =
+    def left[B]: Functor[[x] =>> x |+| B] =
       bifunctor.fst[B]
 
     /** Disjoint union is covariant in the right argument. */
-    def right[A]: Functor[λ[x => A |+| x]] =
-      bifunctor.snd[A]
+    def right[A]: Monad[[x] =>> A |+| x] =
+      new Monad[[x] =>> A |+| x] {
+        override val category: Category[-⚬] =
+          lib.category
+
+        override def pure[B]: B -⚬ (A |+| B) =
+          injectR
+
+        override def lift[B, C](f: B -⚬ C): (A |+| B) -⚬ (A |+| C) =
+          rmap(f)
+
+        override def flatten[B]: (A |+| (A |+| B)) -⚬ (A |+| B) =
+          either(injectL, id)
+      }
   }
 
   object |&| {
@@ -1529,7 +1517,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     val bifunctor: Bifunctor[|&|] =
       new Bifunctor[|&|] {
-        def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
+        override val category =
+          lib.category
+
+        override def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
           bimap(f, g)
       }
 
@@ -2301,6 +2292,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def bifunctorCompared: Bifunctor[Compared] =
       new Bifunctor[Compared] {
+        override val category =
+          lib.category
+
         def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): Compared[A, C] -⚬ Compared[B, D] = {
           Bifunctor[|+|].lift(
             par(f, g),
@@ -2606,6 +2600,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     ): Multiple[A] -⚬ R =
       unpack[MultipleF[A, *]] > either(case0, either(case1, caseN))
 
+    def map[A, B](f: A -⚬ B): Multiple[A] -⚬ Multiple[B] = rec { self =>
+      switch(
+        case0 = zero,
+        case1 = f > one,
+        caseN = par(self, self) > append,
+      )
+    }
+
     def flatten[A]: Multiple[Multiple[A]] -⚬ Multiple[A] = rec { self =>
       switch(
         case0 = zero,
@@ -2622,8 +2624,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     implicit val monadMultiple: Monad[Multiple] =
       new Monad[Multiple] {
-        def pure[A]    :                     A -⚬ Multiple[A] = Multiple.one
-        def flatten[A] : Multiple[Multiple[A]] -⚬ Multiple[A] = Multiple.flatten
+        override val category: Category[-⚬] =
+          lib.category
+
+        override def lift[A, B](f: A -⚬ B): Multiple[A] -⚬ Multiple[B] =
+          Multiple.map(f)
+
+        override def pure[A]: A -⚬ Multiple[A] =
+          Multiple.one
+
+        override def flatten[A]: Multiple[Multiple[A]] -⚬ Multiple[A] =
+          Multiple.flatten
       }
   }
 
@@ -2738,8 +2749,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     implicit val comonadUnlimited: Comonad[Unlimited] =
       new Comonad[Unlimited] {
-        def extract[A]   : Unlimited[A] -⚬ A                       = Unlimited.single
-        def duplicate[A] : Unlimited[A] -⚬ Unlimited[Unlimited[A]] = Unlimited.duplicate
+        override val category: Category[-⚬] =
+          lib.category
+
+        override def lift[A, B](f: A -⚬ B): Unlimited[A] -⚬ Unlimited[B] =
+          Unlimited.map(f)
+
+        override def extract[A]: Unlimited[A] -⚬ A =
+          Unlimited.single
+
+        override def duplicate[A]: Unlimited[A] -⚬ Unlimited[Unlimited[A]] =
+          Unlimited.duplicate
       }
 
     /** Signals when the choice is made between [[discard]], [[single]] and [[split]]. */
@@ -2789,6 +2809,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     ): X -⚬ (PUnlimited[A] |*| Y) =
       choice(case0, choice(case1, caseN) > coDistributeR) > coDistributeR > par(pack[PUnlimitedF[A, *]], id)
 
+    def map[A, B](f: A -⚬ B): PUnlimited[A] -⚬ PUnlimited[B] = rec { self =>
+      create(
+        case0 = neglect,
+        case1 = single > f,
+        caseN = split > par(self, self)
+      )
+    }
+
     def duplicate[A]: PUnlimited[A] -⚬ PUnlimited[PUnlimited[A]] = rec { self =>
       create(
         case0 = neglect,
@@ -2805,8 +2833,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     implicit val comonadPUnlimited: Comonad[PUnlimited] =
       new Comonad[PUnlimited] {
-        def extract[A]   : PUnlimited[A] -⚬ A                         = PUnlimited.single
-        def duplicate[A] : PUnlimited[A] -⚬ PUnlimited[PUnlimited[A]] = PUnlimited.duplicate
+        override val category: Category[-⚬] =
+          lib.category
+
+        override def lift[A, B](f: A -⚬ B): PUnlimited[A] -⚬ PUnlimited[B] =
+          PUnlimited.map(f)
+
+        override def extract[A]: PUnlimited[A] -⚬ A =
+          PUnlimited.single
+
+        override def duplicate[A]: PUnlimited[A] -⚬ PUnlimited[PUnlimited[A]] =
+          PUnlimited.duplicate
       }
   }
 
@@ -3146,15 +3183,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
   }
 
-  trait Monad[F[_]] {
-    def pure[A]    :       A -⚬ F[A]
-    def flatten[A] : F[F[A]] -⚬ F[A]
-  }
+  type Monad[F[_]] =
+    libretto.Monad[-⚬, F]
 
-  trait Comonad[F[_]] {
-    def extract[A]   : F[A] -⚬ A
-    def duplicate[A] : F[A] -⚬ F[F[A]]
-  }
+  type Comonad[F[_]] =
+    libretto.Comonad[-⚬, F]
 
   def getFst[A, B](implicit A: Cosemigroup[A]): (A |*| B) -⚬ (A |*| (A |*| B)) =
     id                             [     A     |*| B  ]
