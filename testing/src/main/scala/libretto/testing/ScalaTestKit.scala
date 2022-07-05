@@ -8,7 +8,7 @@ trait ScalaTestKit extends TestKit {
   override val probes: ScalaBridge.Of[dsl.type, F]
 
   import dsl._
-  import probes.{OutPort}
+  import probes.OutPort
 
   private lazy val coreLib = CoreLib(dsl)
   import coreLib._
@@ -40,7 +40,7 @@ trait ScalaTestKit extends TestKit {
 
   def expectVal[A](port: OutPort[Val[A]]): Outcome[A] =
     Outcome(
-      probes.awaitVal(port).map {
+      OutPort.awaitVal(port).map {
         case Left(e)  => TestResult.crash(e)
         case Right(a) => TestResult.success(a)
       }

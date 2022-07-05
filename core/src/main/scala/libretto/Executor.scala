@@ -8,12 +8,34 @@ trait CoreBridge[F[_]] {
   import dsl._
 
   type OutPort[A]
+  val OutPort: OutPorts
 
-  def splitOut[A, B](port: OutPort[A |*| B]): F[(OutPort[A], OutPort[B])]
+  type InPort[A]
+  val InPort: InPorts
 
-  def awaitDone(port: OutPort[Done]): F[Either[Throwable, Unit]]
+  trait OutPorts {
+    def split[A, B](port: OutPort[A |*| B]): F[(OutPort[A], OutPort[B])]
 
-  def awaitEither[A, B](port: OutPort[A |+| B]): F[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
+    def awaitDone(port: OutPort[Done]): F[Either[Throwable, Unit]]
+
+    def awaitEither[A, B](port: OutPort[A |+| B]): F[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
+
+    def chooseLeft[A, B](port: OutPort[A |&| B]): F[OutPort[A]]
+
+    def chooseRight[A, B](port: OutPort[A |&| B]): F[OutPort[B]]
+  }
+
+  trait InPorts {
+    def split[A, B](port: InPort[A |*| B]): F[(InPort[A], InPort[B])]
+
+    def supplyDone(port: InPort[Done]): F[Unit]
+
+    def supplyLeft[A, B](port: InPort[A |+| B]): F[InPort[A]]
+
+    def supplyRight[A, B](port: InPort[A |+| B]): F[InPort[B]]
+
+    def supplyChoice[A, B](port: InPort[A |&| B]): F[Either[Throwable, Either[InPort[A], InPort[B]]]]
+  }
 }
 
 object CoreBridge {
@@ -25,7 +47,16 @@ trait ScalaBridge[F[_]] extends CoreBridge[F] {
 
   import dsl.Val
 
-  def awaitVal[A](port: OutPort[Val[A]]): F[Either[Throwable, A]]
+  override val OutPort: ScalaOutPorts
+  override val InPort:  ScalaInPorts
+
+  trait ScalaOutPorts extends OutPorts {
+    def awaitVal[A](port: OutPort[Val[A]]): F[Either[Throwable, A]]
+  }
+
+  trait ScalaInPorts extends InPorts {
+    def supplyVal[A](port: InPort[Val[A]], value: A): F[Unit]
+  }
 }
 
 object ScalaBridge {
@@ -37,7 +68,7 @@ trait Executor[F[_]] extends CoreBridge[F] {
 
   type Execution
 
-  def execute[B](prg: Done -⚬ B): (OutPort[B], Execution)
+  def execute[A, B](prg: A -⚬ B): (InPort[A], OutPort[B], Execution)
 
   def runAwait[A](fa: F[A]): A
 
