@@ -1,10 +1,10 @@
 package libretto.impl
 
-import libretto.impl.Lambda.Error.LinearityViolation
+import libretto.impl.Lambdas.Error.LinearityViolation
 import libretto.util.BiInjective
 import scala.annotation.targetName
 
-trait Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
+trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
   final type Tupled[F[_], A] = libretto.impl.Tupled[|*|, F, A]
 
   final type Vars[A] = Tupled[Var, A]
@@ -115,7 +115,7 @@ trait Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
       AbstractFun.fold(f)
   }
 
-  type Abstracted[A, B] = Lambda.Abstracted[Expr, |*|, AbstractFun, LE, A, B]
+  type Abstracted[A, B] = Lambdas.Abstracted[Expr, |*|, AbstractFun, LE, A, B]
 
   def abs[A, B](
     expr: Expr[B],
@@ -134,13 +134,13 @@ trait Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     compile(f(Expr.variable(boundVar)), boundVar)
 }
 
-object Lambda {
+object Lambdas {
   def apply[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
     variables: Variable[Var, VarSet],
     errors: ErrorFactory[E, LE, VarSet],
-  ): Lambda[-⚬, |*|, Var, VarSet, E, LE] =
+  ): Lambdas[-⚬, |*|, Var, VarSet, E, LE] =
     new LambdasImpl[-⚬, |*|, Var, VarSet, E, LE]
 
   sealed trait Error[VarSet]

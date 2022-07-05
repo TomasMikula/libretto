@@ -8,15 +8,15 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
   inj: BiInjective[|*|],
   variables: Variable[Var, VarSet],
   smc: SymmetricMonoidalCategory[-⚬, |*|, One],
-) extends Lambda[-⚬, |*|, Var, VarSet, Lambda.Error[VarSet], Lambda.Error.LinearityViolation[VarSet]] {
+) extends Lambdas[-⚬, |*|, Var, VarSet, Lambdas.Error[VarSet], Lambdas.Error.LinearityViolation[VarSet]] {
   import varSynthesizer.newSyntheticVar
 
-  type Error              = Lambda.Error[VarSet]
-  val  Error              = Lambda.Error
-  type LinearityViolation = Lambda.Error.LinearityViolation[VarSet]
-  val  LinearityViolation = Lambda.Error.LinearityViolation
+  type Error              = Lambdas.Error[VarSet]
+  val  Error              = Lambdas.Error
+  type LinearityViolation = Lambdas.Error.LinearityViolation[VarSet]
+  val  LinearityViolation = Lambdas.Error.LinearityViolation
 
-  val lambdas = Lambda[-⚬, |*|, Var, VarSet, Error, LinearityViolation]
+  val lambdas = Lambdas[-⚬, |*|, Var, VarSet, Error, LinearityViolation]
 
   override type AbstractFun[A, B] = lambdas.AbstractFun[A, B]
   override object AbstractFun extends AbstractFuns {
@@ -191,7 +191,7 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
         lambdas.abs(b, boundVar)
           .mapExpr[Expr]([X] => (x: lambdas.Expr[X]) => Expr.lift(x))
       case Expr.OneExpr(v, f) =>
-        import Lambda.Abstracted._
+        import Lambdas.Abstracted._
         val b = f(lambdas.Expr.variable(v))
 
         // boundVar will not be found,

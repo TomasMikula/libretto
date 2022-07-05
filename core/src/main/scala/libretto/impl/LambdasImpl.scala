@@ -1,7 +1,7 @@
 package libretto.impl
 
-import libretto.impl.Lambda.Error.LinearityViolation
-import libretto.impl.Lambda.ErrorFactory
+import libretto.impl.Lambdas.Error.LinearityViolation
+import libretto.impl.Lambdas.ErrorFactory
 import libretto.util.BiInjective
 import scala.annotation.targetName
 
@@ -10,7 +10,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   inj: BiInjective[|*|],
   variables: Variable[Var, VarSet],
   errors: ErrorFactory[E, LE, VarSet],
-) extends Lambda[-⚬, |*|, Var, VarSet, E, LE] {
+) extends Lambdas[-⚬, |*|, Var, VarSet, E, LE] {
   import variables.testEqual
 
   val shuffled = new Shuffled[-⚬, |*|]
@@ -349,21 +349,21 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     expr.elim(boundVar) match {
       case ElimRes.Exact(e, f) =>
         e match {
-          case VArr.Id(`boundVar`) => Lambda.Abstracted.Exact(f)
+          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Exact(f)
           case other               => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
         }
       case ElimRes.Closure(captured, e, f) =>
         e match {
-          case VArr.Id(`boundVar`) => Lambda.Abstracted.Closure(captured, f)
+          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Closure(captured, f)
           case other               => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
         }
       case ElimRes.Error(e) =>
-        Lambda.Abstracted.Failure(e)
+        Lambdas.Abstracted.Failure(e)
     }
   }
 
   override def compile[A, B](expr: Expr[B], boundVar: Var[A]): Either[E, A -⚬ B] = {
-    import Lambda.Abstracted._
+    import Lambdas.Abstracted._
 
     abs(expr, boundVar) match {
       case Exact(f)             => Right(f.fold)
