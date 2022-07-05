@@ -1,6 +1,6 @@
 package libretto.impl
 
-import libretto.BiInjective
+import libretto.util.BiInjective
 
 class ClosuresOne[-⚬[_, _], |*|[_, _], One, =⚬[_, _], Var[_], VarSet](using
   smc: SymmetricMonoidalCategory[-⚬, |*|, One],

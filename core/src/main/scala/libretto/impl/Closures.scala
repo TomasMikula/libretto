@@ -1,6 +1,6 @@
 package libretto.impl
 
-import libretto.BiInjective
+import libretto.util.BiInjective
 
 object Closures {
   def apply[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE](

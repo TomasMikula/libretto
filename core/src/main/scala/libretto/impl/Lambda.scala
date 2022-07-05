@@ -1,7 +1,7 @@
 package libretto.impl
 
-import libretto.BiInjective
 import libretto.impl.Lambda.Error.LinearityViolation
+import libretto.util.BiInjective
 import scala.annotation.targetName
 
 trait Lambda[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {

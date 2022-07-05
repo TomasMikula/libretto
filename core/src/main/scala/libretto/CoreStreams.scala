@@ -1,5 +1,7 @@
 package libretto
 
+import libretto.util.∀
+
 object CoreStreams {
   def apply(
     dsl: CoreDSL,

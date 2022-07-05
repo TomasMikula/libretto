@@ -1,6 +1,6 @@
 package libretto.impl
 
-import libretto.BiInjective
+import libretto.util.BiInjective
 
 class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   val shuffle = new Shuffle[|*|]

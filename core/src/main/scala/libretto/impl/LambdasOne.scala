@@ -1,6 +1,6 @@
 package libretto.impl
 
-import libretto.BiInjective
+import libretto.util.BiInjective
 
 class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
   varSynthesizer: LambdasOne.VarSynthesizer[Var, |*|],

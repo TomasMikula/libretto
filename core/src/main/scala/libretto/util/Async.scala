@@ -1,4 +1,4 @@
-package libretto
+package libretto.util
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.Try

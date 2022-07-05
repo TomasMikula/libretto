@@ -4,6 +4,7 @@ import java.util.concurrent.Executors
 import libretto.Functor._
 import libretto.testing.{ScalaTestExecutor, ScalaTestKit, TestCase, TestKit, Tests}
 import libretto.testing.scalatest.ScalatestSuite
+import libretto.util.Async
 import libretto.util.Monad.syntax._
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
