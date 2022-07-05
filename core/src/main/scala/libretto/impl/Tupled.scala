@@ -1,16 +1,18 @@
 package libretto.impl
 
 sealed trait Tupled[|*|[_, _], F[_], A] {
+  import Tupled._
+
   def zip[B](that: Tupled[|*|, F, B]): Tupled[|*|, F, A |*| B] =
-    Tupled.Zip(this, that)
+    Zip(this, that)
 
   def mapReduce[G[_]](
     map: [x] => F[x] => G[x],
     zip: [x, y] => (G[x], G[y]) => G[x |*| y],
   ): G[A] =
     this match {
-      case Tupled.Single(a) => map(a)
-      case Tupled.Zip(x, y) => zip(x.mapReduce(map, zip), y.mapReduce(map, zip))
+      case Single(a) => map(a)
+      case Zip(x, y) => zip(x.mapReduce(map, zip), y.mapReduce(map, zip))
     }
 
   def mapReduce0[B](
@@ -26,8 +28,18 @@ sealed trait Tupled[|*|[_, _], F[_], A] {
 
   def trans[G[_]](f: [x] => F[x] => G[x]): Tupled[|*|, G, A] =
     this match {
-      case Tupled.Single(a) => Tupled.Single(f(a))
-      case Tupled.Zip(x, y) => Tupled.Zip(x.trans(f), y.trans(f))
+      case Single(a) => Single(f(a))
+      case Zip(x, y) => Zip(x.trans(f), y.trans(f))
+    }
+
+  def isEqualTo(that: Tupled[|*|, F, A])(equal: [X] => (F[X], F[X]) => Boolean): Boolean =
+    (this, that) match {
+      case (Single(fa) , Single(fb)) =>
+        equal(fa, fb)
+      case (Zip(a1, a2), Zip(b1, b2)) =>
+        (a1 isEqualTo b1)(equal) && (a2 isEqualTo b2)(equal)
+      case _ =>
+        false
     }
 }
 

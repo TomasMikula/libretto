@@ -5,6 +5,7 @@ import libretto.testing.scalatest.TestSuite
 class ClosureTests extends TestSuite {
   import kit.dsl._
   import kit.dsl.$._
+  import kit.coreLib._
 
   test("simplest closure") {
     val f: Done -⚬ (Done =⚬ (Done |*| Done)) =
@@ -69,5 +70,24 @@ class ClosureTests extends TestSuite {
     }
 
     assertVal(prg, "abcabc")
+  }
+
+  test("`one` expression in a closure") {
+    val p1: Done -⚬ (-[Val[Int]] |*| Val[Int]) =
+      λ { d =>
+        Λ { (i: $[Val[Int]]) =>
+          val j = one > done > constVal(1)
+          val res = (i * j) > mapVal(_ + _)
+          (res |*| d) > awaitPosSnd
+        }
+      }
+
+    val p2: Done -⚬ Val[Int] =
+      p1 > λ { case (out |*| in) =>
+        val x = one > done > constVal(42)
+        in alsoElim supply(x |*| out)
+      }
+
+    assertVal(p2, 43)
   }
 }

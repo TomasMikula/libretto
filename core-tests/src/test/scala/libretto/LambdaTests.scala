@@ -115,4 +115,41 @@ class LambdaTests extends TestSuite {
     assert(e.getMessage contains "The input of lambda expression ending at")
     assert(e.getMessage contains "LambdaTests.scala:111")
   }
+
+  test("`one` expression") {
+    val prg: Done -⚬ Val[(Int, String)] =
+      λ { d =>
+        (d > constVal(1)) * (one > done > constVal("x"))
+      }
+
+    assertVal(prg, (1, "x"))
+  }
+
+  test("multiple `one` expressions") {
+    val prg: Done -⚬ Val[((String, String), String)] =
+      λ { d =>
+        val x = one > done > constVal("x")
+        val y = one > done > constVal("y")
+        val z = one > done > constVal("z")
+
+        val xyz = (x * y) * z
+
+        (xyz |*| d) > awaitPosSnd
+      }
+
+    assertVal(prg, (("x", "y"), "z"))
+  }
+
+  test("unused variable, `one`-based result") {
+    val e =
+      intercept[Throwable] {
+        λ { d =>
+          one > done
+        }
+      }
+
+    assert(e.getMessage contains "not fully consumed")
+    assert(e.getMessage contains "The input of lambda expression ending at")
+    assert(e.getMessage contains "LambdaTests.scala:148")
+  }
 }

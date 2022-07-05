@@ -2,13 +2,24 @@ package libretto.impl
 
 import libretto.BiInjective
 
-class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet](using
+object Closures {
+  def apply[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE](
+    lambdas: Lambda[-⚬, |*|, Var, VarSet, E, LE],
+  )(using
+    inj: BiInjective[|*|],
+    variables: Variable[Var, VarSet],
+  ): Closures[-⚬, |*|, =⚬, Var, VarSet, E, LE, lambdas.type] =
+    new Closures(lambdas)
+}
+
+class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS <: Lambda[-⚬, |*|, Var, VarSet, E, LE]](
+  val lambdas: LAMBDAS,
+)(using
   inj: BiInjective[|*|],
   variables: Variable[Var, VarSet],
 ) {
-  val lambdas = new Lambda[-⚬, |*|, Var, VarSet]
-  import lambdas.{Abstracted, Expr, Var, shuffled}
-  import shuffled.{Shuffled => ≈⚬}
+  import Lambda.Abstracted
+  import lambdas.{Abstracted, Expr, Var}
 
   def app[A, B](
     f: Expr[A =⚬ B],
@@ -26,10 +37,10 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet](using
     resultVar: Var[A =⚬ B],
   )(using
     ev: ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬],
-  ): Either[ClosureError, Expr[A =⚬ B]] = {
+  ): Either[ClosureError[LE], Expr[A =⚬ B]] = {
     import ClosureError._
 
-    lambdas.abs(f, boundVar) match {
+    lambdas.abs(f(Expr.variable(boundVar)), boundVar) match {
       case Abstracted.Exact(_) =>
         Left(NoCapture("The closure does not capture any variables. Use an ordinary lambda instead"))
       case Abstracted.Closure(captured, f) =>
@@ -39,8 +50,11 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet](using
     }
   }
 
-  enum ClosureError {
-    case NonLinear(e: lambdas.LinearityViolation)
+  /**
+   * @tparam LE type that represents linearity violation
+   */
+  enum ClosureError[LE] {
+    case NonLinear(e: LE)
     case NoCapture(msg: String)
   }
 }

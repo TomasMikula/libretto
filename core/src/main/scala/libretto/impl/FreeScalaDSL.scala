@@ -387,29 +387,43 @@ object FreeScalaDSL extends FreeScalaDSL with ScalaDSL {
   override def factorOutInversion[A, B]: (-[A] |*| -[B]) -⚬ -[A |*| B] =
     FactorOutInversion()
 
-  implicit val cssc: ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬] =
-    new ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬] {
+  implicit val csmc: ClosedSymmetricMonoidalCategory[-⚬, |*|, One, =⚬] =
+    new ClosedSymmetricMonoidalCategory[-⚬, |*|, One, =⚬] {
       override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C                              = FreeScalaDSL.this.andThen(f, g)
       override def id[A]: A -⚬ A                                                               = FreeScalaDSL.this.id[A]
       override def par[A1, A2, B1, B2](f1: A1 -⚬ B1, f2: A2 -⚬ B2): (A1 |*| A2) -⚬ (B1 |*| B2) = FreeScalaDSL.this.par(f1, f2)
       override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C))                    = FreeScalaDSL.this.assocLR[A, B, C]
       override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C)                    = FreeScalaDSL.this.assocRL[A, B, C]
       override def swap[A, B]: (A |*| B) -⚬ (B |*| A)                                          = FreeScalaDSL.this.swap[A, B]
+      override def elimFst[A]: (One |*| A) -⚬ A                                                = FreeScalaDSL.this.elimFst[A]
+      override def elimSnd[A]: (A |*| One) -⚬ A                                                = FreeScalaDSL.this.elimSnd[A]
+      override def introFst[A]: A -⚬ (One |*| A)                                               = FreeScalaDSL.this.introFst[A]
+      override def introSnd[A]: A -⚬ (A |*| One)                                               = FreeScalaDSL.this.introSnd[A]
       override def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C)                            = FreeScalaDSL.this.curry(f)
       override def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B                                           = FreeScalaDSL.this.eval[A, B]
     }
 
   type Var[A] = libretto.impl.Var[VarOrigin, A]
 
-  val closures: Closures[-⚬, |*|, =⚬, Var, Set[Var[?]]] =
-    new Closures[-⚬, |*|, =⚬, Var, Set[Var[?]]]
+  val lambdas: LambdasOne[-⚬, |*|, One, Var, Set[Var[?]]] =
+    new LambdasOne[-⚬, |*|, One, Var, Set[Var[?]]](
+      new LambdasOne.VarSynthesizer[Var, |*|] {
+        override def newSyntheticVar[A](hint: Tupled[|*|, Var, ?]): Var[A] = {
+          val desc = hint.mapReduce0([x] => (vx: Var[x]) => vx.origin.print, (x, y) => s"($x, $y)")
+          new Var[A](VarOrigin.Synthetic(s"Combination of $desc"))
+        }
+      }
+    )
 
-  val lambdas: closures.lambdas.type =
-    closures.lambdas
+  val closures: Closures[-⚬, |*|, =⚬, Var, Set[Var[?]], lambdas.Error, lambdas.LinearityViolation, lambdas.type] =
+    Closures[-⚬, |*|, =⚬, Var, Set[Var[?]], lambdas.Error, lambdas.LinearityViolation](lambdas)
 
   override type $[A] = lambdas.Expr[A]
 
   override val `$`: ClosureOps  = new ClosureOps {
+    override def one(implicit pos: scalasource.Position): $[One] =
+      lambdas.Expr.one(new Var[One](VarOrigin.OneIntro(pos)))
+
     override def map[A, B](a: $[A])(f: A -⚬ B)(
       pos: scalasource.Position,
     ): $[B] =
@@ -476,5 +490,5 @@ object FreeScalaDSL extends FreeScalaDSL with ScalaDSL {
 
   override class NotLinearException(msg: String) extends Exception(msg)
   override class UnboundVariablesException(vs: Set[Var[?]]) extends Exception
-  override class NoCaptureException(msg: String) extends Exception
+  override class NoCaptureException(msg: String) extends Exception(msg)
 }
