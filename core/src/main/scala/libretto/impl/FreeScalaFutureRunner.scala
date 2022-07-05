@@ -2,7 +2,8 @@ package libretto.impl
 
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.{Executor => JExecutor, ScheduledExecutorService, TimeUnit}
-import libretto.{Async, ScalaExecutor, ScalaRunner}
+import libretto.{ScalaExecutor, ScalaRunner}
+import libretto.util.Async
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}

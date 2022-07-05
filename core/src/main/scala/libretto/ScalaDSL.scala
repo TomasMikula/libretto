@@ -1,5 +1,6 @@
 package libretto
 
+import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 
 /** Supports manipulating Scala values via pure Scala functions.

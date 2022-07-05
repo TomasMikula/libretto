@@ -1,7 +1,8 @@
 package libretto.impl
 
-import libretto.{Async, BiInjective, ScalaDSL}
+import libretto.ScalaDSL
 import libretto.scalasource
+import libretto.util.{Async, BiInjective}
 import scala.concurrent.duration.FiniteDuration
 
 abstract class FreeScalaDSL {

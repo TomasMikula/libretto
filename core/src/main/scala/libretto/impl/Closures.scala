@@ -1,10 +1,10 @@
 package libretto.impl
 
-import libretto.BiInjective
+import libretto.util.BiInjective
 
 object Closures {
   def apply[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE](
-    lambdas: Lambda[-⚬, |*|, Var, VarSet, E, LE],
+    lambdas: Lambdas[-⚬, |*|, Var, VarSet, E, LE],
   )(using
     inj: BiInjective[|*|],
     variables: Variable[Var, VarSet],
@@ -12,13 +12,13 @@ object Closures {
     new Closures(lambdas)
 }
 
-class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS <: Lambda[-⚬, |*|, Var, VarSet, E, LE]](
+class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS <: Lambdas[-⚬, |*|, Var, VarSet, E, LE]](
   val lambdas: LAMBDAS,
 )(using
   inj: BiInjective[|*|],
   variables: Variable[Var, VarSet],
 ) {
-  import Lambda.Abstracted
+  import Lambdas.Abstracted
   import lambdas.{Abstracted, Expr, Var}
 
   def app[A, B](

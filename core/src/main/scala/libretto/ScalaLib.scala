@@ -1,6 +1,7 @@
 package libretto
 
 import java.util.concurrent.atomic.AtomicLong
+import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 

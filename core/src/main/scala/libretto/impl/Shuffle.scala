@@ -1,7 +1,7 @@
 package libretto.impl
 
-import libretto.BiInjective
-import libretto.BiInjective._
+import libretto.util.BiInjective
+import libretto.util.BiInjective._
 
 class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
   sealed trait ~⚬[A, B] {

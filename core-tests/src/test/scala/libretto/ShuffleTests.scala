@@ -2,6 +2,7 @@ package libretto
 
 import libretto.Semigroupoid
 import libretto.impl.Shuffle
+import libretto.util.BiInjective
 import org.scalatest.funsuite.AnyFunSuite
 
 class ShuffleTests extends AnyFunSuite {

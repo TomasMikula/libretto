@@ -1,4 +1,4 @@
-package libretto
+package libretto.util
 
 object unapply {
   trait Unapply[FA, F[_]] {

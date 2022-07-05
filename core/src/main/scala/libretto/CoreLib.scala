@@ -1,6 +1,7 @@
 package libretto
 
-import libretto.unapply._
+import libretto.util.unapply._
+import libretto.util.∀
 import scala.annotation.tailrec
 
 object CoreLib {
