@@ -8,12 +8,15 @@ trait CoreBridge[F[_]] {
   import dsl._
 
   type OutPort[A]
+  val OutPort: OutPorts
 
-  def splitOut[A, B](port: OutPort[A |*| B]): F[(OutPort[A], OutPort[B])]
+  trait OutPorts {
+    def split[A, B](port: OutPort[A |*| B]): F[(OutPort[A], OutPort[B])]
 
-  def awaitDone(port: OutPort[Done]): F[Either[Throwable, Unit]]
+    def awaitDone(port: OutPort[Done]): F[Either[Throwable, Unit]]
 
-  def awaitEither[A, B](port: OutPort[A |+| B]): F[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
+    def awaitEither[A, B](port: OutPort[A |+| B]): F[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
+  }
 }
 
 object CoreBridge {
@@ -25,7 +28,11 @@ trait ScalaBridge[F[_]] extends CoreBridge[F] {
 
   import dsl.Val
 
-  def awaitVal[A](port: OutPort[Val[A]]): F[Either[Throwable, A]]
+  override val OutPort: ScalaOutPorts
+
+  trait ScalaOutPorts extends OutPorts {
+    def awaitVal[A](port: OutPort[Val[A]]): F[Either[Throwable, A]]
+  }
 }
 
 object ScalaBridge {

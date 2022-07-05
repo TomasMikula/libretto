@@ -27,11 +27,13 @@ object ScalaRunner {
       import dsl._
 
       override def runScala[A](prg: Done -⚬ Val[A]): F[A] =
+        import executor.OutPort
+
         val (port, execution) =
           executor.execute(prg)
 
         for {
-          res <- executor.awaitVal(port)
+          res <- OutPort.awaitVal(port)
           _   <- executor.cancel(execution)
           a   <- res match {
                    case Right(a) => F.pure(a)

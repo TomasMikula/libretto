@@ -90,29 +90,29 @@ trait TestKit {
   }
 
   def splitOut[A, B](port: OutPort[A |*| B]): Outcome[(OutPort[A], OutPort[B])] =
-    Outcome.successF(probes.splitOut(port))
+    Outcome.successF(OutPort.split(port))
 
   def expectDone(port: OutPort[Done]): Outcome[Unit] =
-    probes.awaitDone(port).map {
+    OutPort.awaitDone(port).map {
       case Left(e)   => TestResult.crash(e)
       case Right(()) => TestResult.success(())
     }
 
   def expectCrashDone(port: OutPort[Done]): Outcome[Throwable] =
-    probes.awaitDone(port).map {
+    OutPort.awaitDone(port).map {
       case Left(e)   => TestResult.success(e)
       case Right(()) => TestResult.failure("Expected crash, but got Done")
     }
 
   def expectLeft[A, B](port: OutPort[A |+| B]): Outcome[OutPort[A]] =
-    probes.awaitEither(port).map {
+    OutPort.awaitEither(port).map {
       case Left(e)         => TestResult.crash(e)
       case Right(Left(p))  => TestResult.success(p)
       case Right(Right(_)) => TestResult.failure("Expected Left, but got Right")
     }
 
   def expectRight[A, B](port: OutPort[A |+| B]): Outcome[OutPort[B]] =
-    probes.awaitEither(port).map {
+    OutPort.awaitEither(port).map {
       case Left(e)         => TestResult.crash(e)
       case Right(Left(_))  => TestResult.failure("Expected Right, but got Left")
       case Right(Right(p)) => TestResult.success(p)

@@ -78,26 +78,28 @@ class FreeScalaFutureRunner(
     }
   }
 
-  override def splitOut[A, B](port: OutPort[A |*| B]): Future[(OutPort[A], OutPort[B])] =
-    Future.successful(port.splitPair)
+  object OutPort extends ScalaOutPorts {
+    override def split[A, B](port: OutPort[A |*| B]): Future[(OutPort[A], OutPort[B])] =
+      Future.successful(port.splitPair)
 
-  override def awaitDone(port: OutPort[Done]): Future[Either[Throwable, Unit]] =
-    port.toFutureDone.transform {
-      case Success(Frontier.DoneNow) => Success(Right(()))
-      case Failure(e)                => Success(Left(e))
-    }
+    override def awaitDone(port: OutPort[Done]): Future[Either[Throwable, Unit]] =
+      port.toFutureDone.transform {
+        case Success(Frontier.DoneNow) => Success(Right(()))
+        case Failure(e)                => Success(Left(e))
+      }
 
-  override def awaitEither[A, B](port: OutPort[A |+| B]): Future[Either[Throwable, Either[OutPort[A], OutPort[B]]]] =
-    port.futureEither.transform {
-      case Success(res) => Success(Right(res))
-      case Failure(e)   => Success(Left(e))
-    }
+    override def awaitEither[A, B](port: OutPort[A |+| B]): Future[Either[Throwable, Either[OutPort[A], OutPort[B]]]] =
+      port.futureEither.transform {
+        case Success(res) => Success(Right(res))
+        case Failure(e)   => Success(Left(e))
+      }
 
-  override def awaitVal[A](port: OutPort[Val[A]]): Future[Either[Throwable, A]] =
-    port.toFutureValue.transform {
-      case Success(a) => Success(Right(a))
-      case Failure(e) => Success(Left(e))
-    }
+    override def awaitVal[A](port: OutPort[Val[A]]): Future[Either[Throwable, A]] =
+      port.toFutureValue.transform {
+        case Success(a) => Success(Right(a))
+        case Failure(e) => Success(Left(e))
+      }
+  }
 
   override def runAwait[A](fa: Future[A]): A =
     Await.result(fa, Duration.Inf)
