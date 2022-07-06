@@ -29,6 +29,8 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override type of[Name <: String, T] = T
 
+    override type Unlimited[A] = StarterKit.coreLib.Unlimited[A]
+
     override def fun[A, B](f: Expr[A] => Expr[B]): Fun[A, B] =
       StarterKit.dsl.λ(f)
 
@@ -60,6 +62,10 @@ object MashupKitImpl extends MashupKit { kit =>
 
       override def extendRecord[A, N <: String, T](init: Expr[A], last: (N, Expr[T]))(pos: scalasource.Position): Expr[A ## (N of T)] =
         StarterKit.dsl.$.zip(init, last._2)(pos)
+    }
+
+    override object Unlimited extends Unlimiteds {
+      export StarterKit.coreLib.Unlimited.map
     }
   }
 

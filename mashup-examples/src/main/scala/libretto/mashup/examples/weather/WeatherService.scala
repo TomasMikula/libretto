@@ -1,14 +1,14 @@
 package libretto.mashup.examples.weather
 
 import zio.ZIO
-import libretto.mashup.{Input, Output, Service}
+import libretto.mashup.{Input, Output, Runtime, Service}
 import libretto.mashup.dsl.{-->, ##, EmptyResource, Expr, Float64, Fun, Record, Text, alsoElim, closure, fun, of}
 import libretto.mashup.rest.{Endpoint, RestApi}
 import libretto.mashup.rest.RelativeUrl._
 
 object WeatherService {
-  def start(host: String, port: Int): ZIO[Any, Nothing, Unit] =
-    Service.run(
+  def start(host: String, port: Int)(using Runtime): ZIO[Any, Throwable, Unit] =
+    Service.runStateless(
       Input.empty,
       Output.restApiAt(
         restApi,

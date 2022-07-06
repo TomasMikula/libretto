@@ -7,6 +7,10 @@ package object mashup {
 
   val dsl: kit.dsl.type = kit.dsl
 
-  def createRuntime(executor: ScheduledExecutorService): MashupRuntime[dsl.type] =
-    kit.createRuntime(executor)
+  type Runtime = MashupRuntime[dsl.type]
+
+  object Runtime {
+    def create(executor: ScheduledExecutorService): Runtime =
+      kit.createRuntime(executor)
+  }
 }

@@ -26,6 +26,8 @@ trait MashupDsl {
 
   type of[Name <: String, T]
 
+  type Unlimited[A]
+
 
   def fun[A, B](f: Expr[A] => Expr[B]): Fun[A, B]
 
@@ -57,6 +59,12 @@ trait MashupDsl {
     def eliminateSecond[A](a: Expr[A], empty: Expr[EmptyResource])(pos: scalasource.Position): Expr[A]
 
     def extendRecord[A, N <: String, T](init: Expr[A], last: (N, Expr[T]))(pos: scalasource.Position): Expr[A ## (N of T)]
+  }
+
+  val Unlimited: Unlimiteds
+
+  trait Unlimiteds {
+    def map[A, B](f: Fun[A, B]): Fun[Unlimited[A], Unlimited[B]]
   }
 
   extension [A](a: Expr[A]) {
