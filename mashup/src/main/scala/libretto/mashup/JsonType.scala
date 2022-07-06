@@ -1,4 +1,6 @@
-package libretto.mashup.dsl
+package libretto.mashup
+
+import libretto.mashup.dsl._
 
 /** Witnesses that values of type [[A]] are directly representable in JSON. */
 sealed trait JsonType[A]

@@ -1,6 +1,7 @@
 package libretto.mashup.rest
 
-import libretto.mashup.dsl.{Expr, JsonType}
+import libretto.mashup.JsonType
+import libretto.mashup.dsl.Expr
 
 sealed trait Endpoint[I, O]
 

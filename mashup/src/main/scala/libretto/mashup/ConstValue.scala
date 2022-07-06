@@ -1,4 +1,4 @@
-package libretto.mashup.dsl
+package libretto.mashup
 
 final case class ConstValue[T](value: T)
 
