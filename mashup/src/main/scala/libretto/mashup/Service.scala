@@ -29,10 +29,10 @@ object Service {
   private def runInput[A](using rt: Runtime)(
     input: Input[A],
     inPort: rt.InPort[Unlimited[A]],
-  ): ZIO[Any, Throwable, Nothing] =
+  ): ZIO[Any, Throwable, Unit] =
     ZIO.scoped {
       for {
-        service <- InputService.initialize(input)
+        service <- ServiceInput.initialize(input)
         nothing <- service.handleRequestsFrom(inPort)
       } yield nothing
     }
@@ -43,7 +43,7 @@ object Service {
   ): ZIO[Any, Throwable, Unit] =
     ZIO.scoped {
       for {
-        service <- OutputService.initialize(output)
+        service <- ServiceOutput.initialize(output)
         nothing <- service.forwardRequestsTo(outPort)
       } yield nothing
     }
