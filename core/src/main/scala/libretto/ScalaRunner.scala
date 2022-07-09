@@ -31,8 +31,8 @@ object ScalaRunner {
         import executing.{execution, inPort, outPort}
         import execution.{InPort, OutPort}
 
+        val () = InPort.supplyDone(inPort)
         for {
-          _   <- InPort.supplyDone(inPort)
           res <- OutPort.awaitVal(outPort)
           _   <- executor.cancel(execution)
           a   <- res match {

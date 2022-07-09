@@ -28,7 +28,7 @@ trait MashupRuntime[DSL <: MashupDsl] {
     trait InPorts {
       def emptyResourceIgnore(port: InPort[EmptyResource]): Unit
 
-      def functionInputOutput[I, O](port: InPort[I --> O]): Async[(OutPort[I], InPort[O])]
+      def functionInputOutput[I, O](port: InPort[I --> O]): (OutPort[I], InPort[O])
 
       def unlimitedAwaitChoice[A](
         port: InPort[Unlimited[A]],
@@ -38,11 +38,11 @@ trait MashupRuntime[DSL <: MashupDsl] {
     trait OutPorts {
       def emptyResourceIgnore(port: OutPort[EmptyResource]): Unit
 
-      def functionInputOutput[I, O](port: OutPort[I --> O]): Async[(InPort[I], OutPort[O])]
+      def functionInputOutput[I, O](port: OutPort[I --> O]): (InPort[I], OutPort[O])
 
       def unlimitedIgnore[A](port: OutPort[Unlimited[A]]): Unit
-      def unlimitedGetSingle[A](port: OutPort[Unlimited[A]]): Async[OutPort[A]]
-      def unlimitedSplit[A](port: OutPort[Unlimited[A]]): Async[(OutPort[Unlimited[A]], OutPort[Unlimited[A]])]
+      def unlimitedGetSingle[A](port: OutPort[Unlimited[A]]): OutPort[A]
+      def unlimitedSplit[A](port: OutPort[Unlimited[A]]): (OutPort[Unlimited[A]], OutPort[Unlimited[A]])
     }
   }
 }

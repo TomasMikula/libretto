@@ -52,7 +52,7 @@ object ServiceInput {
       port: exn.InPort[I --> O],
     ): ZIO[Any, Throwable, Unit] =
       ZIO
-        .suspend { exn.InPort.functionInputOutput(port).toZIO }
+        .succeed { exn.InPort.functionInputOutput(port) }
         .flatMap {
           case (argsPort, resultPort) =>
             endpoint match {

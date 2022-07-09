@@ -19,33 +19,33 @@ trait CoreBridge[F[_]] {
     val InPort: InPorts
 
     trait OutPorts {
-      def map[A, B](port: OutPort[A])(f: A -⚬ B): F[OutPort[B]]
+      def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B]
 
-      def split[A, B](port: OutPort[A |*| B]): F[(OutPort[A], OutPort[B])]
+      def split[A, B](port: OutPort[A |*| B]): (OutPort[A], OutPort[B])
 
-      def discardOne(port: OutPort[One]): F[Unit]
+      def discardOne(port: OutPort[One]): Unit
 
       def awaitDone(port: OutPort[Done]): F[Either[Throwable, Unit]]
 
       def awaitEither[A, B](port: OutPort[A |+| B]): F[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
 
-      def chooseLeft[A, B](port: OutPort[A |&| B]): F[OutPort[A]]
+      def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A]
 
-      def chooseRight[A, B](port: OutPort[A |&| B]): F[OutPort[B]]
+      def chooseRight[A, B](port: OutPort[A |&| B]): OutPort[B]
     }
 
     trait InPorts {
-      def contramap[A, B](port: InPort[B])(f: A -⚬ B): F[InPort[A]]
+      def contramap[A, B](port: InPort[B])(f: A -⚬ B): InPort[A]
 
-      def split[A, B](port: InPort[A |*| B]): F[(InPort[A], InPort[B])]
+      def split[A, B](port: InPort[A |*| B]): (InPort[A], InPort[B])
 
-      def discardOne(port: InPort[One]): F[Unit]
+      def discardOne(port: InPort[One]): Unit
 
-      def supplyDone(port: InPort[Done]): F[Unit]
+      def supplyDone(port: InPort[Done]): Unit
 
-      def supplyLeft[A, B](port: InPort[A |+| B]): F[InPort[A]]
+      def supplyLeft[A, B](port: InPort[A |+| B]): InPort[A]
 
-      def supplyRight[A, B](port: InPort[A |+| B]): F[InPort[B]]
+      def supplyRight[A, B](port: InPort[A |+| B]): InPort[B]
 
       def supplyChoice[A, B](port: InPort[A |&| B]): F[Either[Throwable, Either[InPort[A], InPort[B]]]]
     }
@@ -68,11 +68,11 @@ trait ClosedBridge[F[_]] extends CoreBridge[F] {
     override val InPort:  ClosedInPorts
 
     trait ClosedOutPorts extends OutPorts {
-      def functionInputOutput[I, O](port: OutPort[I =⚬ O]): F[(InPort[I], OutPort[O])]
+      def functionInputOutput[I, O](port: OutPort[I =⚬ O]): (InPort[I], OutPort[O])
     }
 
     trait ClosedInPorts extends InPorts {
-      def functionInputOutput[I, O](port: InPort[I =⚬ O]): F[(OutPort[I], InPort[O])]
+      def functionInputOutput[I, O](port: InPort[I =⚬ O]): (OutPort[I], InPort[O])
     }
   }
 }
@@ -97,7 +97,7 @@ trait ScalaBridge[F[_]] extends ClosedBridge[F] {
     }
 
     trait ScalaInPorts extends ClosedInPorts {
-      def supplyVal[A](port: InPort[Val[A]], value: A): F[Unit]
+      def supplyVal[A](port: InPort[Val[A]], value: A): Unit
     }
   }
 }

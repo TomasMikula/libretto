@@ -44,11 +44,9 @@ object TestExecutor {
 
       val res0: TestResult[X] =
         try {
+          execution.InPort.supplyDone(inPort)
           executor.runAwait {
-            for {
-              _   <- execution.InPort.supplyDone(inPort)
-              res <- conduct(using execution)(outPort)
-            } yield res
+            conduct(using execution)(outPort)
           }
         } catch {
           case e => libretto.testing.TestResult.Crash(e)

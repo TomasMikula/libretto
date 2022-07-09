@@ -90,7 +90,7 @@ trait TestKit {
   }
 
   def splitOut[A, B](using exn: Execution)(port: exn.OutPort[A |*| B]): Outcome[(exn.OutPort[A], exn.OutPort[B])] =
-    Outcome.successF(exn.OutPort.split(port))
+    Outcome.success(exn.OutPort.split(port))
 
   def expectDone(using exn: Execution)(port: exn.OutPort[Done]): Outcome[Unit] =
     exn.OutPort.awaitDone(port).map {
