@@ -4,7 +4,7 @@ import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorServic
 import libretto.{ScalaRunner, StarterKit}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.BeforeAndAfterAll
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
@@ -17,7 +17,7 @@ abstract class TestSuite extends AnyFunSuite with BeforeAndAfterAll {
 
   private var scheduler: ScheduledExecutorService = _
   private var blockingExecutor: ExecutorService = _
-  private var runner: ScalaRunner[kit.dsl.type, Future] = _
+  private var runner: ScalaRunner[kit.dsl.type] = _
 
   override def beforeAll(): Unit = {
     scheduler = Executors.newScheduledThreadPool(2)

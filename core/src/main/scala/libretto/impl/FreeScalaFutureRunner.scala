@@ -21,7 +21,7 @@ import scala.concurrent.duration.Duration
 class FreeScalaFutureRunner(
   scheduler: ScheduledExecutorService,
   blockingExecutor: JExecutor,
-) extends ScalaRunner[FreeScalaDSL.type, Future] with ScalaExecutor[Future] {
+) extends ScalaRunner[FreeScalaDSL.type] with ScalaExecutor {
   import ResourceRegistry._
 
   override type Dsl = FreeScalaDSL.type
@@ -102,17 +102,23 @@ class FreeScalaFutureRunner(
         // do nothing
       }
 
-      override def awaitDone(port: OutPort[Done]): Future[Either[Throwable, Unit]] =
-        port.toFutureDone.transform {
-          case Success(Frontier.DoneNow) => Success(Right(()))
-          case Failure(e)                => Success(Left(e))
+      override def awaitDone(port: OutPort[Done]): Async[Either[Throwable, Unit]] = {
+        val (complete, res) = Async.promise[Either[Throwable, Unit]]
+        port.toFutureDone.onComplete {
+          case Success(Frontier.DoneNow) => complete(Right(()))
+          case Failure(e)                => complete(Left(e))
         }
+        res
+      }
 
-      override def awaitEither[A, B](port: OutPort[A |+| B]): Future[Either[Throwable, Either[OutPort[A], OutPort[B]]]] =
-        port.futureEither.transform {
-          case Success(res) => Success(Right(res))
-          case Failure(e)   => Success(Left(e))
+      override def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]] = {
+        val (complete, res) = Async.promise[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
+        port.futureEither.onComplete {
+          case Success(res) => complete(Right(res))
+          case Failure(e)   => complete(Left(e))
         }
+        res
+      }
 
       override def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A] =
         port.chooseL
@@ -126,11 +132,14 @@ class FreeScalaFutureRunner(
         (in2, out)
       }
 
-      override def awaitVal[A](port: OutPort[Val[A]]): Future[Either[Throwable, A]] =
-        port.toFutureValue.transform {
-          case Success(a) => Success(Right(a))
-          case Failure(e) => Success(Left(e))
+      override def awaitVal[A](port: OutPort[Val[A]]): Async[Either[Throwable, A]] = {
+        val (complete, res) = Async.promise[Either[Throwable, A]]
+        port.toFutureValue.onComplete {
+          case Success(a) => complete(Right(a))
+          case Failure(e) => complete(Left(e))
         }
+        res
+      }
     }
 
     override object InPort extends ScalaInPorts {
@@ -166,23 +175,24 @@ class FreeScalaFutureRunner(
         fb => fnb.fulfill(fb)
       }
 
-      override def supplyChoice[A, B](port: InPort[A |&| B]): Future[Either[Throwable, Either[InPort[A], InPort[B]]]] = {
-        val res = Promise[Either[Throwable, Either[InPort[A], InPort[B]]]]
+      override def supplyChoice[A, B](port: InPort[A |&| B]): Async[Either[Throwable, Either[InPort[A], InPort[B]]]] = {
+        val (complete, res) = Async.promise[Either[Throwable, Either[InPort[A], InPort[B]]]]
+
         port(Frontier.Choice(
           { () =>
             val (fna, fa) = Frontier.promise[A]
-            res.success(Right(Left(fa => fna.fulfill(fa))))
+            complete(Right(Left(fa => fna.fulfill(fa))))
             fa
           },
           { () =>
             val (fnb, fb) = Frontier.promise[B]
-            res.success(Right(Right(fb => fnb.fulfill(fb))))
+            complete(Right(Right(fb => fnb.fulfill(fb))))
             fb
           },
-          e => res.success(Left(e))
+          e => complete(Left(e))
         ))
 
-        res.future
+        res
       }
 
       override def functionInputOutput[I, O](port: InPort[I =⚬ O]): (OutPort[I], InPort[O]) = {
@@ -197,11 +207,8 @@ class FreeScalaFutureRunner(
     }
   }
 
-  override def runAwait[A](fa: Future[A]): A =
-    Await.result(fa, Duration.Inf)
-
-  override def cancel(execution: Execution): Future[Unit] =
-    execution.cancel()
+  override def cancel(execution: Execution): Async[Unit] =
+    Async.fromFuture(execution.cancel()).map(_ => ())
 
   private def closeRegistry(resourceRegistry: ResourceRegistry): Future[Any] = {
     val openResources: Seq[AcquiredResource[_]] =

@@ -1,7 +1,7 @@
 package libretto.testing
 
 import libretto.{CoreDSL, Executor}
-import libretto.util.Monad
+import libretto.util.{Async, Monad}
 import libretto.util.Monad.syntax._
 
 trait TestExecutor[+TK <: TestKit] {
@@ -27,17 +27,17 @@ trait TestExecutor[+TK <: TestKit] {
 }
 
 object TestExecutor {
-  def usingExecutor[F[_]: Monad](executor: Executor[F]): UsingExecutor[F, executor.type] =
-    new UsingExecutor[F, executor.type](executor)
+  def usingExecutor(executor: Executor): UsingExecutor[executor.type] =
+    new UsingExecutor[executor.type](executor)
 
-  class UsingExecutor[F[_]: Monad, E <: Executor[F]](val executor: E) {
+  class UsingExecutor[E <: Executor](val executor: E) {
     import executor.Execution
     import executor.dsl._
 
     def runTestCase[O, X](
       body: Done -⚬ O,
-      conduct: (exn: Execution) ?=> exn.OutPort[O] => F[TestResult[X]],
-      postStop: X => F[TestResult[Unit]],
+      conduct: (exn: Execution) ?=> exn.OutPort[O] => Async[TestResult[X]],
+      postStop: X => Async[TestResult[Unit]],
     ): TestResult[Unit] = {
       val executing = executor.execute(body)
       import executing.{execution, inPort, outPort}
@@ -45,7 +45,7 @@ object TestExecutor {
       val res0: TestResult[X] =
         try {
           execution.InPort.supplyDone(inPort)
-          executor.runAwait {
+          Async.await {
             conduct(using execution)(outPort)
           }
         } catch {
@@ -57,7 +57,7 @@ object TestExecutor {
       res0 match {
         case TestResult.Success(x) =>
           try {
-            executor.runAwait {
+            Async.await {
               postStop(x)
             }
           } catch {

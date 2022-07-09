@@ -10,14 +10,14 @@ import scala.util.{Failure, Success, Try}
 
 object StarterTestExecutor {
 
-  private class StarterTestKitFromExecutor[Exec <: ScalaExecutor.Of[StarterKit.dsl.type, Future]](
+  private class StarterTestKitFromExecutor[Exec <: ScalaExecutor.Of[StarterKit.dsl.type]](
     exec: Exec,
   )(using
     ScalaMonad[Future],
-  ) extends ScalaTestExecutor.ScalaTestKitFromExecutor[Future, StarterKit.dsl.type, Exec](StarterKit.dsl, exec) with StarterTestKit
+  ) extends ScalaTestExecutor.ScalaTestKitFromExecutor[StarterKit.dsl.type, Exec](StarterKit.dsl, exec) with StarterTestKit
 
   def fromExecutor(
-    exec: ScalaExecutor.Of[StarterKit.dsl.type, Future],
+    exec: ScalaExecutor.Of[StarterKit.dsl.type],
   )(using
     ScalaMonad[Future],
   ): TestExecutor[StarterTestKit] =
@@ -41,8 +41,8 @@ object StarterTestExecutor {
           .usingExecutor(exec)
           .runTestCase[O, X](
             body,
-            conduct andThen Outcome.unwrap,
-            postStop andThen Outcome.unwrap,
+            conduct andThen Outcome.toAsyncTestResult,
+            postStop andThen Outcome.toAsyncTestResult,
           )
     }
 
@@ -50,7 +50,7 @@ object StarterTestExecutor {
     scheduler: ScheduledExecutorService,
     blockingExecutor: ExecutorService,
   ): TestExecutor[StarterTestKit] = {
-    val executor0: libretto.ScalaExecutor.Of[StarterKit.dsl.type, Future] =
+    val executor0: libretto.ScalaExecutor.Of[StarterKit.dsl.type] =
       StarterKit.executor(blockingExecutor)(scheduler)
 
     given monadFuture: ScalaMonad[Future] =

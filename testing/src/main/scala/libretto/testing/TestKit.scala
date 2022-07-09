@@ -1,26 +1,30 @@
 package libretto.testing
 
 import libretto.{CoreBridge, CoreDSL, Monad}
-import libretto.util.{Monad => ScalaMonad}
+import libretto.util.{Async, Monad => ScalaMonad}
 import libretto.util.Monad.syntax._
 
 trait TestKit {
   val dsl: CoreDSL
 
-  type F[_]
-
-  given F: ScalaMonad[F]
+  opaque type F[A] = Async[A]
 
   opaque type Outcome[A] = F[TestResult[A]]
   object Outcome {
     def apply[A](fa: F[TestResult[A]]): Outcome[A] =
       fa
 
+    def asyncTestResult[A](fa: Async[TestResult[A]]): Outcome[A] =
+      fa
+
     def unwrap[A](outcome: Outcome[A]): F[TestResult[A]] =
       outcome
 
+    def toAsyncTestResult[A](outcome: Outcome[A]): Async[TestResult[A]] =
+      outcome
+
     def fromTestResult[A](res: TestResult[A]): Outcome[A] =
-      Outcome(F.pure(res))
+      Outcome(Async.now(res))
 
     def success[A](a: A): Outcome[A] =
       fromTestResult(TestResult.success(a))
@@ -48,7 +52,7 @@ trait TestKit {
 
     def traverseIterator[A, B](it: Iterator[A])(f: A => Outcome[B]): Outcome[List[B]] =
       if (it.hasNext) {
-        f(it.next()).flatMap(b => traverseIterator(it)(f).map(b :: _))
+        monadOutcome.flatMap(f(it.next()))(b => monadOutcome.map(traverseIterator(it)(f))(b :: _))
       } else {
         success(Nil)
       }
@@ -59,11 +63,11 @@ trait TestKit {
     def traverseList[A, B](as: List[A])(f: A => Outcome[B]): Outcome[List[B]] =
       as match {
         case Nil => success(Nil)
-        case h :: t => f(h).flatMap(b => traverseList(t)(f).map(b :: _))
+        case h :: t => monadOutcome.flatMap(f(h))(b => monadOutcome.map(traverseList(t)(f))(b :: _))
       }
   }
 
-  val probes: CoreBridge.Of[dsl.type, F]
+  val probes: CoreBridge.Of[dsl.type]
 
   import dsl.{-⚬, |*|, |+|, Done}
   import probes.Execution
@@ -79,13 +83,13 @@ trait TestKit {
 
   given monadOutcome: ScalaMonad[Outcome] with {
     override def pure[A](a: A): Outcome[A] =
-      F.pure(TestResult.success(a))
+      Async.now(TestResult.success(a))
 
     override def flatMap[A, B](fa: Outcome[A])(f: A => Outcome[B]): Outcome[B] =
-      F.flatMap(fa) {
+      fa.flatMap {
         case TestResult.Success(a)   => f(a)
-        case TestResult.Failure(msg) => F.pure(TestResult.Failure(msg))
-        case TestResult.Crash(e)     => F.pure(TestResult.Crash(e))
+        case TestResult.Failure(msg) => Async.now(TestResult.Failure(msg))
+        case TestResult.Crash(e)     => Async.now(TestResult.Crash(e))
       }
   }
 

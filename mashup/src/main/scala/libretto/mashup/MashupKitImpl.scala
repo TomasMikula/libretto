@@ -77,7 +77,7 @@ object MashupKitImpl extends MashupKit { kit =>
   }
 
   private class RuntimeImpl(
-    executor: ScalaExecutor.Of[StarterKit.dsl.type, Future],
+    executor: ScalaExecutor.Of[StarterKit.dsl.type],
   ) extends MashupRuntime[dsl.type] {
     override val dsl: kit.dsl.type = kit.dsl
     import dsl.{-->, EmptyResource, Unlimited}
@@ -107,30 +107,25 @@ object MashupKitImpl extends MashupKit { kit =>
           port: InPort[Unlimited[A]],
         ): Async[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]] = {
           val port1 = underlying.InPort.contramap(port)(StarterKit.coreLib.Unlimited.fromChoice[A])
-          val ft: Future[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]] =
-            underlying.InPort.supplyChoice(port1)
-              .flatMap {
-                case Left(e) =>
-                  Future.successful(Failure(e))
-                case Right(Left(empty)) =>
-                  underlying.InPort.discardOne(empty)
-                  Future.successful(Success(None))
-                case Right(Right(port)) =>
-                  underlying.InPort.supplyChoice(port)
-                    .flatMap {
-                      case Left(e) =>
-                        Future.successful(Failure(e))
-                      case Right(Left(portSingle)) =>
-                        Future.successful(Success(Some(Left(portSingle))))
-                      case Right(Right(portSplit)) =>
-                        val (port1, port2) = underlying.InPort.split(portSplit)
-                        Future.successful(Success(Some(Right((port1, port2)))))
-                    } (ExecutionContext.parasitic) // XXX
-              } (ExecutionContext.parasitic) // XXX
-          Async.unsafeFromFuture(
-            ft,
-            e => Console.err.println(s"Unexpected failure of InPort.supplyChoice: $e"), // XXX
-          )
+          underlying.InPort.supplyChoice(port1)
+            .flatMap {
+              case Left(e) =>
+                Async.now(Failure(e))
+              case Right(Left(empty)) =>
+                underlying.InPort.discardOne(empty)
+                Async.now(Success(None))
+              case Right(Right(port)) =>
+                underlying.InPort.supplyChoice(port)
+                  .flatMap {
+                    case Left(e) =>
+                      Async.now(Failure(e))
+                    case Right(Left(portSingle)) =>
+                      Async.now(Success(Some(Left(portSingle))))
+                    case Right(Right(portSplit)) =>
+                      val (port1, port2) = underlying.InPort.split(portSplit)
+                      Async.now(Success(Some(Right((port1, port2)))))
+                  }
+            }
         }
       }
 

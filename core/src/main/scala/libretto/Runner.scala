@@ -1,9 +1,11 @@
 package libretto
 
-trait Runner[DSL <: CoreDSL, F[_]] {
+import scala.concurrent.Future
+
+trait Runner[DSL <: CoreDSL] {
   val dsl: DSL
 
   import dsl._
 
-  def run(prg: Done -⚬ Done): F[Unit]
+  def run(prg: Done -⚬ Done): Future[Unit]
 }

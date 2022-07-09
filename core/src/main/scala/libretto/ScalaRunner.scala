@@ -1,44 +1,43 @@
 package libretto
 
-import libretto.util.Monad
-import libretto.util.Monad.syntax._
+import libretto.util.Async
+import scala.concurrent.Future
 
-trait ScalaRunner[DSL <: ScalaDSL, F[_]] extends Runner[DSL, F] {
+trait ScalaRunner[DSL <: ScalaDSL] extends Runner[DSL] {
   val dsl: DSL
 
   import dsl._
 
-  def runScala[A](prg: Done -⚬ Val[A]): F[A]
+  def runScala[A](prg: Done -⚬ Val[A]): Future[A]
 
-  override def run(prg: Done -⚬ Done): F[Unit] =
+  override def run(prg: Done -⚬ Done): Future[Unit] =
     runScala(dsl.andThen(prg, dsl.constVal(())))
 }
 
 object ScalaRunner {
-  def fromExecutor[DSL <: ScalaDSL, F[_]](
-    executor: ScalaExecutor.Of[DSL, F],
-    raiseError: [a] => Throwable => F[a],
-  )(using
-    F: Monad[F],
-  ): ScalaRunner[DSL, F] =
-    new ScalaRunner[DSL, F] {
+  def fromExecutor[DSL <: ScalaDSL](
+    executor: ScalaExecutor.Of[DSL],
+  ): ScalaRunner[DSL] =
+    new ScalaRunner[DSL] {
       override val dsl: executor.dsl.type = executor.dsl
 
       import dsl._
 
-      override def runScala[A](prg: Done -⚬ Val[A]): F[A] =
+      override def runScala[A](prg: Done -⚬ Val[A]): Future[A] =
         val executing = executor.execute(prg)
         import executing.{execution, inPort, outPort}
         import execution.{InPort, OutPort}
 
         val () = InPort.supplyDone(inPort)
-        for {
-          res <- OutPort.awaitVal(outPort)
-          _   <- executor.cancel(execution)
-          a   <- res match {
-                   case Right(a) => F.pure(a)
-                   case Left(e)  => raiseError(e)
-                 }
-        } yield a
+        Async.toFuture {
+          for {
+            res <- OutPort.awaitVal(outPort)
+            _   <- executor.cancel(execution)
+          } yield
+            res match {
+              case Right(a) => Future.successful(a)
+              case Left(e)  => Future.failed(e)
+            }
+        }.flatten
     }
 }

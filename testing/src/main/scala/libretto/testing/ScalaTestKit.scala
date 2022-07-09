@@ -5,7 +5,7 @@ import libretto.util.Monad.syntax._
 
 trait ScalaTestKit extends TestKit {
   override val dsl: ScalaDSL
-  override val probes: ScalaBridge.Of[dsl.type, F]
+  override val probes: ScalaBridge.Of[dsl.type]
 
   import dsl._
   import probes.Execution
@@ -39,7 +39,7 @@ trait ScalaTestKit extends TestKit {
       .>( either(neglect > failure, neglect > success) )
 
   def expectVal[A](using exn: Execution)(port: exn.OutPort[Val[A]]): Outcome[A] =
-    Outcome(
+    Outcome.asyncTestResult(
       exn.OutPort.awaitVal(port).map {
         case Left(e)  => TestResult.crash(e)
         case Right(a) => TestResult.success(a)

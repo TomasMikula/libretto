@@ -1,7 +1,9 @@
 package libretto
 
+import libretto.util.Async
+
 /** Defines interface to interact with a running Libretto program. */
-trait CoreBridge[F[_]] {
+trait CoreBridge {
   type Dsl <: CoreDSL
 
   val dsl: Dsl
@@ -25,9 +27,9 @@ trait CoreBridge[F[_]] {
 
       def discardOne(port: OutPort[One]): Unit
 
-      def awaitDone(port: OutPort[Done]): F[Either[Throwable, Unit]]
+      def awaitDone(port: OutPort[Done]): Async[Either[Throwable, Unit]]
 
-      def awaitEither[A, B](port: OutPort[A |+| B]): F[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
+      def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
 
       def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A]
 
@@ -47,16 +49,16 @@ trait CoreBridge[F[_]] {
 
       def supplyRight[A, B](port: InPort[A |+| B]): InPort[B]
 
-      def supplyChoice[A, B](port: InPort[A |&| B]): F[Either[Throwable, Either[InPort[A], InPort[B]]]]
+      def supplyChoice[A, B](port: InPort[A |&| B]): Async[Either[Throwable, Either[InPort[A], InPort[B]]]]
     }
   }
 }
 
 object CoreBridge {
-  type Of[DSL <: CoreDSL, F[_]] = CoreBridge[F] { type Dsl = DSL }
+  type Of[DSL <: CoreDSL] = CoreBridge { type Dsl = DSL }
 }
 
-trait ClosedBridge[F[_]] extends CoreBridge[F] {
+trait ClosedBridge extends CoreBridge {
   override type Dsl <: ClosedDSL
 
   import dsl.=⚬
@@ -78,10 +80,10 @@ trait ClosedBridge[F[_]] extends CoreBridge[F] {
 }
 
 object ClosedBridge {
-  type Of[DSL <: ClosedDSL, F[_]] = ClosedBridge[F] { type Dsl = DSL }
+  type Of[DSL <: ClosedDSL] = ClosedBridge { type Dsl = DSL }
 }
 
-trait ScalaBridge[F[_]] extends ClosedBridge[F] {
+trait ScalaBridge extends ClosedBridge {
   override type Dsl <: ScalaDSL
 
   import dsl.Val
@@ -93,7 +95,7 @@ trait ScalaBridge[F[_]] extends ClosedBridge[F] {
     override val InPort:  ScalaInPorts
 
     trait ScalaOutPorts extends ClosedOutPorts {
-      def awaitVal[A](port: OutPort[Val[A]]): F[Either[Throwable, A]]
+      def awaitVal[A](port: OutPort[Val[A]]): Async[Either[Throwable, A]]
     }
 
     trait ScalaInPorts extends ClosedInPorts {
@@ -103,10 +105,10 @@ trait ScalaBridge[F[_]] extends ClosedBridge[F] {
 }
 
 object ScalaBridge {
-  type Of[DSL <: ScalaDSL, F[_]] = ScalaBridge[F] { type Dsl = DSL }
+  type Of[DSL <: ScalaDSL] = ScalaBridge { type Dsl = DSL }
 }
 
-trait Executor[F[_]] extends CoreBridge[F] {
+trait Executor extends CoreBridge {
   import dsl._
 
   final class Executing[A, B](
@@ -117,17 +119,15 @@ trait Executor[F[_]] extends CoreBridge[F] {
 
   def execute[A, B](prg: A -⚬ B): Executing[A, B]
 
-  def runAwait[A](fa: F[A]): A
-
-  def cancel(execution: Execution): F[Unit]
+  def cancel(execution: Execution): Async[Unit]
 }
 
 object Executor {
-  type Of[DSL <: CoreDSL, F[_]] = Executor[F] { type Dsl = DSL }
+  type Of[DSL <: CoreDSL] = Executor { type Dsl = DSL }
 }
 
-trait ScalaExecutor[F[_]] extends Executor[F] with ScalaBridge[F]
+trait ScalaExecutor extends Executor with ScalaBridge
 
 object ScalaExecutor {
-  type Of[DSL <: ScalaDSL, F[_]] = ScalaExecutor[F] { type Dsl = DSL }
+  type Of[DSL <: ScalaDSL] = ScalaExecutor { type Dsl = DSL }
 }
