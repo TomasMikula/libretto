@@ -9,11 +9,11 @@ import zhttp.http.Method
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 
 sealed trait ServiceInput[A] {
-  def handleRequestFrom(using rt: Runtime)(port: rt.InPort[A]): ZIO[Any, Throwable, Unit]
+  def handleRequestFrom(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Any, Throwable, Unit]
 
-  def handleRequestsFrom(using rt: Runtime)(port: rt.InPort[Unlimited[A]])(exn: rt.Execution): ZIO[Any, Throwable, Unit] =
+  def handleRequestsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[Unlimited[A]]): ZIO[Any, Throwable, Unit] =
     ZIO
-      .suspend { rt.InPort.unlimitedAwaitChoice(port)(exn).toZIO }
+      .suspend { exn.InPort.unlimitedAwaitChoice(port).toZIO }
       .flatMap {
         case Success(choice) =>
           choice match {
@@ -21,8 +21,8 @@ sealed trait ServiceInput[A] {
               ZIO.unit
             case Some(Left(port)) =>
               handleRequestFrom(port)
-            case Some(Right(port1, port2)) =>
-              handleRequestsFrom(port1)(exn) zipPar handleRequestsFrom(port2)(exn)
+            case Some(Right((port1, port2))) =>
+              handleRequestsFrom(port1) zipPar handleRequestsFrom(port2)
           }
         case Failure(e) =>
           ZIO.fail(e)
@@ -31,9 +31,9 @@ sealed trait ServiceInput[A] {
 
 object ServiceInput {
   object Empty extends ServiceInput[EmptyResource] {
-    override def handleRequestFrom(using rt: Runtime)(port: rt.InPort[EmptyResource]): ZIO[Any, Throwable, Unit] =
+    override def handleRequestFrom(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[EmptyResource]): ZIO[Any, Throwable, Unit] =
       ZIO.succeed {
-        rt.InPort.emptyResourceIgnore(port)
+        exn.InPort.emptyResourceIgnore(port)
       }
   }
 
@@ -41,18 +41,18 @@ object ServiceInput {
     api: RestApi[A],
     baseUri: String,
   ) extends ServiceInput[A] {
-    override def handleRequestFrom(using rt: Runtime)(port: rt.InPort[A]): ZIO[Any, Throwable, Unit] =
+    override def handleRequestFrom(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Any, Throwable, Unit] =
       api match {
         case RestApi.SingleEndpoint(endpoint) =>
           handleRequestUsingEndpoint(endpoint, port)
       }
 
-    private def handleRequestUsingEndpoint[I, O](using rt: Runtime)(
+    private def handleRequestUsingEndpoint[I, O](using rt: Runtime, exn: rt.Execution)(
       endpoint: Endpoint[I, O],
-      port: rt.InPort[I --> O],
+      port: exn.InPort[I --> O],
     ): ZIO[Any, Throwable, Unit] =
       ZIO
-        .suspend { rt.InPort.functionInputOutput(port).toZIO }
+        .suspend { exn.InPort.functionInputOutput(port).toZIO }
         .flatMap {
           case (argsPort, resultPort) =>
             endpoint match {
@@ -66,7 +66,7 @@ object ServiceInput {
       }
 
     extension [I](url: RelativeUrl[I]) {
-      def fillParamsFrom(using rt: Runtime)(port: rt.OutPort[I]): ZIO[Any, Throwable, String] =
+      def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): ZIO[Any, Throwable, String] =
         ZIO.fail(new NotImplementedError)
     }
 
@@ -89,7 +89,7 @@ object ServiceInput {
     }
 
     extension [T](value: Value[T]) {
-      def feedTo(using rt: Runtime)(port: rt.InPort[T]): ZIO[Any, Throwable, Unit] =
+      def feedTo(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[T]): ZIO[Any, Throwable, Unit] =
         ZIO.fail(new NotImplementedError)
     }
   }

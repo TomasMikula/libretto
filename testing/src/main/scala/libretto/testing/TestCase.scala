@@ -10,14 +10,14 @@ object TestCase {
     val testKit: TK
     import testKit.Outcome
     import testKit.dsl._
-    import testKit.probes.OutPort
+    import testKit.probes.Execution
 
     type O
     type X
 
     val body: Done -⚬ O
 
-    val conductor: OutPort[O] => Outcome[X]
+    val conductor: (exn: Execution) ?=> exn.OutPort[O] => Outcome[X]
 
     val postStop: X => Outcome[Unit]
   }
@@ -30,33 +30,33 @@ object TestCase {
     kit: TestKit,
   )(
     body0: dsl.-⚬[dsl.Done, A],
-    conductor0: kit.probes.OutPort[A] => kit.Outcome[B],
+    conductor0: (exn: kit.probes.Execution) ?=> exn.OutPort[A] => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
   ): TestCase[kit.type] =
     new Single[kit.type] {
       override type O = A
       override type X = B
-      override val testKit = kit
+      override val testKit: kit.type = kit
       override val body = body0
-      override val conductor = conductor0
+      override val conductor = conductor0(_)
       override val postStop = postStop0
     }
 
   def apply(using kit: TestKit)(body: dsl.-⚬[dsl.Done, kit.Assertion[dsl.Done]]): TestCase[kit.type] =
-    make(body, kit.extractOutcome, kit.monadOutcome.pure)
+    make(body, kit.extractOutcome(_), kit.monadOutcome.pure)
 
   def apply[O](using kit: TestKit)(
     body: kit.dsl.-⚬[kit.dsl.Done, O],
-    conduct: kit.probes.OutPort[O] => kit.Outcome[Unit],
+    conduct: (exn: kit.probes.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit],
   ): TestCase[kit.type] =
-    make[O, Unit](body, conduct, kit.monadOutcome.pure)
+    make[O, Unit](body, conduct(_), kit.monadOutcome.pure)
 
   def apply[A, B](using kit: TestKit)(
     body: kit.dsl.-⚬[kit.dsl.Done, A],
-    conduct: kit.probes.OutPort[A] => kit.Outcome[B],
+    conduct: (exn: kit.probes.Execution) ?=> exn.OutPort[A] => kit.Outcome[B],
     postStop: B => kit.Outcome[Unit],
   ): TestCase[kit.type] =
-    make[A, B](body, conduct, postStop)
+    make[A, B](body, conduct(_), postStop)
 
   def multiple[TK <: TestKit](
     cases: (String, TestCase[TK])*,
@@ -75,13 +75,13 @@ object TestCase {
     val kit: TK,
     val body: kit.dsl.-⚬[kit.dsl.Done, O],
   ) {
-    def via(conductor: kit.probes.OutPort[O] => kit.Outcome[Unit]): TestCase[kit.type] =
-      TestCase(using kit)(body, conductor)
+    def via(conductor: (exn: kit.probes.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit]): TestCase[kit.type] =
+      TestCase(using kit)(body, conductor(_))
 
     def via[X](
-      conductor: kit.probes.OutPort[O] => kit.Outcome[X],
+      conductor: (exn: kit.probes.Execution) ?=> exn.OutPort[O] => kit.Outcome[X],
       postStop: X => kit.Outcome[Unit],
     ): TestCase[kit.type] =
-      TestCase(using kit)(body, conductor, postStop)
+      TestCase(using kit)(body, conductor(_), postStop)
   }
 }

@@ -18,7 +18,7 @@ object ScalaTestExecutor {
       override val dsl: exec.dsl.type = exec.dsl
       override val probes: exec.type = exec
       import dsl._
-      import probes.OutPort
+      import probes.Execution
 
       override type Assertion[A] = Val[String] |+| A
 
@@ -40,21 +40,21 @@ object ScalaTestExecutor {
       override def monadAssertion: Monad[-⚬, Assertion] =
         |+|.right[Val[String]]
 
-      override def extractOutcome(outPort: probes.OutPort[Assertion[Done]]): Outcome[Unit] = {
+      override def extractOutcome(using exn: Execution)(outPort: exn.OutPort[Assertion[Done]]): Outcome[Unit] = {
         import TestResult.{Crash, Success, Failure}
         Outcome(
-          OutPort
+          exn.OutPort
             .awaitEither[Val[String], Done](outPort)
             .flatMap {
               case Left(e) =>
                 F.pure(Crash(e))
               case Right(Left(msg)) =>
-                OutPort.awaitVal(msg).map {
+                exn.OutPort.awaitVal(msg).map {
                   case Left(e)    => Crash(e)
                   case Right(msg) => Failure(msg)
                 }
               case Right(Right(d)) =>
-                OutPort.awaitDone(d).map {
+                exn.OutPort.awaitDone(d).map {
                   case Left(e)   => Crash(e)
                   case Right(()) => Success(())
                 }
@@ -76,11 +76,11 @@ object ScalaTestExecutor {
 
       import testKit.Outcome
       import testKit.dsl._
-      import testKit.probes.OutPort
+      import testKit.probes.Execution
 
       override def runTestCase[O, X](
         body: Done -⚬ O,
-        conduct: OutPort[O] => Outcome[X],
+        conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[X],
         postStop: X => Outcome[Unit],
       ): TestResult[Unit] =
         TestExecutor

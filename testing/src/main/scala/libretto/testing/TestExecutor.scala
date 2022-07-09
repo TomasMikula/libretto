@@ -9,21 +9,21 @@ trait TestExecutor[+TK <: TestKit] {
 
   import testKit.Outcome
   import testKit.dsl._
-  import testKit.probes.OutPort
+  import testKit.probes.Execution
 
   def name: String
 
   def runTestCase[O, X](
     body: Done -⚬ O,
-    conduct: OutPort[O] => Outcome[X],
+    conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[X],
     postStop: X => Outcome[Unit],
   ): TestResult[Unit]
 
   def runTestCase[O](
     body: Done -⚬ O,
-    conduct: OutPort[O] => Outcome[Unit],
+    conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[Unit],
   ): TestResult[Unit] =
-    runTestCase[O, Unit](body, conduct, testKit.monadOutcome.pure)
+    runTestCase[O, Unit](body, conduct(_), testKit.monadOutcome.pure)
 }
 
 object TestExecutor {
@@ -31,23 +31,23 @@ object TestExecutor {
     new UsingExecutor[F, executor.type](executor)
 
   class UsingExecutor[F[_]: Monad, E <: Executor[F]](val executor: E) {
-    import executor.{InPort, OutPort}
+    import executor.Execution
     import executor.dsl._
 
     def runTestCase[O, X](
       body: Done -⚬ O,
-      conduct: OutPort[O] => F[TestResult[X]],
+      conduct: (exn: Execution) ?=> exn.OutPort[O] => F[TestResult[X]],
       postStop: X => F[TestResult[Unit]],
     ): TestResult[Unit] = {
-      val (inPort, outPort, execution) =
-        executor.execute(body)
+      val executing = executor.execute(body)
+      import executing.{execution, inPort, outPort}
 
       val res0: TestResult[X] =
         try {
           executor.runAwait {
             for {
-              _   <- InPort.supplyDone(inPort)
-              res <- conduct(outPort)
+              _   <- execution.InPort.supplyDone(inPort)
+              res <- conduct(using execution)(outPort)
             } yield res
           }
         } catch {

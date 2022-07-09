@@ -82,90 +82,94 @@ object MashupKitImpl extends MashupKit { kit =>
     override val dsl: kit.dsl.type = kit.dsl
     import dsl.{-->, EmptyResource, Unlimited}
 
-    override opaque type InPort[A]  = executor.InPort[A]
-    override opaque type OutPort[A] = executor.OutPort[A]
-    override opaque type Execution  = executor.Execution
+    override opaque type Execution <: MashupExecution = ExecutionImpl[? <: executor.Execution]
 
-    override def run[A, B](prg: dsl.Fun[A, B]): (InPort[A], OutPort[B], Execution) =
-      executor.execute(prg)
-
-    override object InPort extends InPorts {
-      override def emptyResourceIgnore(port: InPort[EmptyResource]): Unit =
-        executor.InPort.discardOne(port)
-
-      override def functionInputOutput[I, O](port: InPort[I --> O]): Async[(OutPort[I], InPort[O])] =
-        Async.unsafeFromFuture(
-          executor.InPort.functionInputOutput(port),
-          onError = e => Console.err.println(s"Unexpected failure of InPort.functionInputOutput: $e") // XXX
-        )
-
-      override def unlimitedAwaitChoice[A](
-        port: InPort[Unlimited[A]],
-      )(
-        exn: Execution, // TODO: execution should be built into InPort
-      ): Async[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]] = {
-        val ft: Future[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]] =
-          executor.InPort.contramap(port)(StarterKit.coreLib.Unlimited.fromChoice[A])(exn)
-            .flatMap { port =>
-              executor.InPort.supplyChoice(port)
-                .flatMap {
-                  case Left(e) =>
-                    Future.successful(Failure(e))
-                  case Right(Left(empty)) =>
-                    executor.InPort.discardOne(empty)
-                      .map(_ => Success(None))(ExecutionContext.parasitic) // XXX
-                  case Right(Right(port)) =>
-                    executor.InPort.supplyChoice(port)
-                      .flatMap {
-                        case Left(e) =>
-                          Future.successful(Failure(e))
-                        case Right(Left(portSingle)) =>
-                          Future.successful(Success(Some(Left(portSingle))))
-                        case Right(Right(portSplit)) =>
-                          executor.InPort.split(portSplit)
-                            .map { case (port1, port2) =>
-                              Success(Some(Right((port1, port2))))
-                            } (ExecutionContext.parasitic) // XXX
-                      } (ExecutionContext.parasitic) // XXX
-                } (ExecutionContext.parasitic) // XXX
-            } (ExecutionContext.parasitic) // XXX
-        Async.unsafeFromFuture(
-          ft,
-          e => Console.err.println(s"Unexpected failure of InPort.supplyChoice: $e"), // XXX
-        )
-      }
+    override def run[A, B](prg: dsl.Fun[A, B]): Executing[A, B] = {
+      val executing = executor.execute(prg)
+      type EXN = executing.execution.type
+      val execution: EXN = executing.execution
+      new Executing(new ExecutionImpl[EXN](execution), executing.inPort, executing.outPort)
     }
 
-    override object OutPort extends OutPorts {
-      override def emptyResourceIgnore(port: OutPort[EmptyResource]): Unit =
-        executor.OutPort.discardOne(port)
 
-      override def functionInputOutput[I, O](port: OutPort[I --> O]): Async[(InPort[I], OutPort[O])] =
-        Async.unsafeFromFuture(
-          executor.OutPort.functionInputOutput(port),
-          onError = e => Console.err.println(s"Unexpected failure of OutPort.functionInputOutput: $e") // XXX
-        )
+    private class ExecutionImpl[EXN <: executor.Execution](val underlying: EXN) extends MashupExecution {
+      override type InPort[A]  = underlying.InPort[A]
+      override type OutPort[A] = underlying.OutPort[A]
 
-      override def unlimitedIgnore[A](port: OutPort[Unlimited[A]])(exn: Execution): Unit =
-        executor.OutPort.map(port)(StarterKit.coreLib.Unlimited.discard[A])(exn)
-          .flatMap { port => executor.OutPort.discardOne(port) } (ExecutionContext.parasitic) // XXX
+      override object InPort extends InPorts {
+        override def emptyResourceIgnore(port: InPort[EmptyResource]): Unit =
+          underlying.InPort.discardOne(port)
 
-      override def unlimitedGetSingle[A](port: OutPort[Unlimited[A]])(
-        exn: Execution, // TODO: execution should be built into OutPort
-      ): Async[OutPort[A]] =
-        Async.unsafeFromFuture[OutPort[A]](
-          executor.OutPort.map(port)(StarterKit.coreLib.Unlimited.single[A])(exn),
-          onError = e => Console.err.println(s"Unexpected failure of OutPort.map: $e") // XXX
-        )
+        override def functionInputOutput[I, O](port: InPort[I --> O]): Async[(OutPort[I], InPort[O])] =
+          Async.unsafeFromFuture(
+            underlying.InPort.functionInputOutput(port),
+            onError = e => Console.err.println(s"Unexpected failure of InPort.functionInputOutput: $e") // XXX
+          )
 
-      override def unlimitedSplit[A](port: OutPort[Unlimited[A]])(exn: Execution): Async[(OutPort[Unlimited[A]], OutPort[Unlimited[A]])] =
-        Async.unsafeFromFuture(
-          executor.OutPort.map(port)(StarterKit.coreLib.Unlimited.split)(exn)
-            .flatMap { port =>
-              executor.OutPort.split(port)
-            } (ExecutionContext.parasitic), // XXX
-          onError = e => Console.err.println(s"Unexpected failure of OutPort.map: $e") // XXX
-        )
+        override def unlimitedAwaitChoice[A](
+          port: InPort[Unlimited[A]],
+        ): Async[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]] = {
+          val ft: Future[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]] =
+            underlying.InPort.contramap(port)(StarterKit.coreLib.Unlimited.fromChoice[A])
+              .flatMap { port =>
+                underlying.InPort.supplyChoice(port)
+                  .flatMap {
+                    case Left(e) =>
+                      Future.successful(Failure(e))
+                    case Right(Left(empty)) =>
+                      underlying.InPort.discardOne(empty)
+                        .map(_ => Success(None))(ExecutionContext.parasitic) // XXX
+                    case Right(Right(port)) =>
+                      underlying.InPort.supplyChoice(port)
+                        .flatMap {
+                          case Left(e) =>
+                            Future.successful(Failure(e))
+                          case Right(Left(portSingle)) =>
+                            Future.successful(Success(Some(Left(portSingle))))
+                          case Right(Right(portSplit)) =>
+                            underlying.InPort.split(portSplit)
+                              .map { case (port1, port2) =>
+                                Success(Some(Right((port1, port2))))
+                              } (ExecutionContext.parasitic) // XXX
+                        } (ExecutionContext.parasitic) // XXX
+                  } (ExecutionContext.parasitic) // XXX
+              } (ExecutionContext.parasitic) // XXX
+          Async.unsafeFromFuture(
+            ft,
+            e => Console.err.println(s"Unexpected failure of InPort.supplyChoice: $e"), // XXX
+          )
+        }
+      }
+
+      override object OutPort extends OutPorts {
+        override def emptyResourceIgnore(port: OutPort[EmptyResource]): Unit =
+          underlying.OutPort.discardOne(port)
+
+        override def functionInputOutput[I, O](port: OutPort[I --> O]): Async[(InPort[I], OutPort[O])] =
+          Async.unsafeFromFuture(
+            underlying.OutPort.functionInputOutput(port),
+            onError = e => Console.err.println(s"Unexpected failure of OutPort.functionInputOutput: $e") // XXX
+          )
+
+        override def unlimitedIgnore[A](port: OutPort[Unlimited[A]]): Unit =
+          underlying.OutPort.map(port)(StarterKit.coreLib.Unlimited.discard[A])
+            .flatMap { port => underlying.OutPort.discardOne(port) } (ExecutionContext.parasitic) // XXX
+
+        override def unlimitedGetSingle[A](port: OutPort[Unlimited[A]]): Async[OutPort[A]] =
+          Async.unsafeFromFuture[OutPort[A]](
+            underlying.OutPort.map(port)(StarterKit.coreLib.Unlimited.single[A]),
+            onError = e => Console.err.println(s"Unexpected failure of OutPort.map: $e") // XXX
+          )
+
+        override def unlimitedSplit[A](port: OutPort[Unlimited[A]]): Async[(OutPort[Unlimited[A]], OutPort[Unlimited[A]])] =
+          Async.unsafeFromFuture(
+            underlying.OutPort.map(port)(StarterKit.coreLib.Unlimited.split)
+              .flatMap { port =>
+                underlying.OutPort.split(port)
+              } (ExecutionContext.parasitic), // XXX
+            onError = e => Console.err.println(s"Unexpected failure of OutPort.map: $e") // XXX
+          )
+      }
     }
   }
 }

@@ -27,10 +27,9 @@ object ScalaRunner {
       import dsl._
 
       override def runScala[A](prg: Done -⚬ Val[A]): F[A] =
-        import executor.{InPort, OutPort}
-
-        val (inPort, outPort, execution) =
-          executor.execute(prg)
+        val executing = executor.execute(prg)
+        import executing.{execution, inPort, outPort}
+        import execution.{InPort, OutPort}
 
         for {
           _   <- InPort.supplyDone(inPort)

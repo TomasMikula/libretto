@@ -30,11 +30,11 @@ object StarterTestExecutor {
 
       import testKit.Outcome
       import testKit.dsl._
-      import testKit.probes.OutPort
+      import testKit.probes.Execution
 
       override def runTestCase[O, X](
         body: Done -⚬ O,
-        conduct: OutPort[O] => Outcome[X],
+        conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[X],
         postStop: X => Outcome[Unit],
       ): TestResult[Unit] =
         TestExecutor

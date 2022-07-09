@@ -25,14 +25,12 @@ class FreeScalaFutureRunner(
   import ResourceRegistry._
 
   override type Dsl = FreeScalaDSL.type
-  override opaque type Execution = ResourceRegistry
-  override opaque type OutPort[A] = Frontier[A]
-  override opaque type InPort[A] = Frontier[A] => Unit
+  override opaque type Execution <: ScalaExecution = ExecutionImpl
 
   private implicit val ec: ExecutionContext =
     ExecutionContext.fromExecutor(scheduler)
 
-  val dsl = FreeScalaDSL
+  override val dsl = FreeScalaDSL
 
   import dsl._
 
@@ -49,12 +47,10 @@ class FreeScalaFutureRunner(
     pa.future
   }
 
-  override def execute[A, B](prg: A -⚬ B): (InPort[A], OutPort[B], Execution) = {
-    val resourceRegistry = new ResourceRegistry
-    val input = Promise[Frontier[A]]
-    val in:  InPort[A]  = fa => input.success(fa)
-    val out: OutPort[B] = Frontier.Deferred(input.future).extendBy(prg, resourceRegistry)
-    (in, out, resourceRegistry)
+  override def execute[A, B](prg: A -⚬ B): Executing[A, B] = {
+    val execution = new ExecutionImpl(new ResourceRegistry)
+    val (in, out) = execution.execute(prg)
+    new Executing(execution, in, out)
   }
 
   override def runScala[A](prg: Done -⚬ Val[A]): Future[A] = {
@@ -81,111 +77,126 @@ class FreeScalaFutureRunner(
     }
   }
 
-  override object OutPort extends ScalaOutPorts {
-    override def map[A, B](port: OutPort[A])(f: A -⚬ B)(exn: Execution): Future[OutPort[B]] =
-      Future.successful(port.extendBy(f, exn))
+  private class ExecutionImpl(resourceRegistry: ResourceRegistry) extends ScalaExecution {
+    override opaque type OutPort[A] = Frontier[A]
+    override opaque type InPort[A] = Frontier[A] => Unit
 
-    override def split[A, B](port: OutPort[A |*| B]): Future[(OutPort[A], OutPort[B])] =
-      Future.successful(port.splitPair)
-
-    override def discardOne(port: OutPort[One]): Future[Unit] = {
-      // do nothing
-      Future.successful(())
+    def execute[A, B](prg: A -⚬ B): (InPort[A], OutPort[B]) = {
+      val input = Promise[Frontier[A]]
+      val in:  InPort[A]  = fa => input.success(fa)
+      val out: OutPort[B] = Frontier.Deferred(input.future).extendBy(prg, resourceRegistry)
+      (in, out)
     }
 
-    override def awaitDone(port: OutPort[Done]): Future[Either[Throwable, Unit]] =
-      port.toFutureDone.transform {
-        case Success(Frontier.DoneNow) => Success(Right(()))
-        case Failure(e)                => Success(Left(e))
+    def cancel(): Future[Unit] =
+      closeRegistry(resourceRegistry).map(_ => ())
+
+    override object OutPort extends ScalaOutPorts {
+      override def map[A, B](port: OutPort[A])(f: A -⚬ B): Future[OutPort[B]] =
+        Future.successful(port.extendBy(f, resourceRegistry))
+
+      override def split[A, B](port: OutPort[A |*| B]): Future[(OutPort[A], OutPort[B])] =
+        Future.successful(port.splitPair)
+
+      override def discardOne(port: OutPort[One]): Future[Unit] = {
+        // do nothing
+        Future.successful(())
       }
 
-    override def awaitEither[A, B](port: OutPort[A |+| B]): Future[Either[Throwable, Either[OutPort[A], OutPort[B]]]] =
-      port.futureEither.transform {
-        case Success(res) => Success(Right(res))
-        case Failure(e)   => Success(Left(e))
+      override def awaitDone(port: OutPort[Done]): Future[Either[Throwable, Unit]] =
+        port.toFutureDone.transform {
+          case Success(Frontier.DoneNow) => Success(Right(()))
+          case Failure(e)                => Success(Left(e))
+        }
+
+      override def awaitEither[A, B](port: OutPort[A |+| B]): Future[Either[Throwable, Either[OutPort[A], OutPort[B]]]] =
+        port.futureEither.transform {
+          case Success(res) => Success(Right(res))
+          case Failure(e)   => Success(Left(e))
+        }
+
+      override def chooseLeft[A, B](port: OutPort[A |&| B]): Future[OutPort[A]] =
+        Future.successful(port.chooseL)
+
+      override def chooseRight[A, B](port: OutPort[A |&| B]): Future[OutPort[B]] =
+        Future.successful(port.chooseR)
+
+      override def functionInputOutput[I, O](port: OutPort[I =⚬ O]): Future[(InPort[I], OutPort[O])] = {
+        val (in, out) = port.splitPair
+        val in2: InPort[I] = i => in.fulfill(i)
+        Future.successful((in2, out))
       }
 
-    override def chooseLeft[A, B](port: OutPort[A |&| B]): Future[OutPort[A]] =
-      Future.successful(port.chooseL)
-
-    override def chooseRight[A, B](port: OutPort[A |&| B]): Future[OutPort[B]] =
-      Future.successful(port.chooseR)
-
-    override def functionInputOutput[I, O](port: OutPort[I =⚬ O]): Future[(InPort[I], OutPort[O])] = {
-      val (in, out) = port.splitPair
-      val in2: InPort[I] = i => in.fulfill(i)
-      Future.successful((in2, out))
+      override def awaitVal[A](port: OutPort[Val[A]]): Future[Either[Throwable, A]] =
+        port.toFutureValue.transform {
+          case Success(a) => Success(Right(a))
+          case Failure(e) => Success(Left(e))
+        }
     }
 
-    override def awaitVal[A](port: OutPort[Val[A]]): Future[Either[Throwable, A]] =
-      port.toFutureValue.transform {
-        case Success(a) => Success(Right(a))
-        case Failure(e) => Success(Left(e))
+    override object InPort extends ScalaInPorts {
+      override def contramap[A, B](port: InPort[B])(f: A -⚬ B): Future[InPort[A]] =
+        Future.successful(a => port(a.extendBy(f, resourceRegistry)))
+
+      override def split[A, B](port: InPort[A |*| B]): Future[(InPort[A], InPort[B])] = {
+        val (fna, fa) = Frontier.promise[A]
+        val (fnb, fb) = Frontier.promise[B]
+        port(Frontier.Pair(fa, fb))
+        Future.successful((
+          fa => fna.fulfill(fa),
+          fb => fnb.fulfill(fb)
+        ))
       }
-  }
 
-  override object InPort extends ScalaInPorts {
-    override def contramap[A, B](port: InPort[B])(f: A -⚬ B)(exn: Execution): Future[InPort[A]] =
-      Future.successful(a => port(a.extendBy(f, exn)))
+      override def discardOne(port: InPort[One]): Future[Unit] =
+        Future.successful(port(Frontier.One))
 
-    override def split[A, B](port: InPort[A |*| B]): Future[(InPort[A], InPort[B])] = {
-      val (fna, fa) = Frontier.promise[A]
-      val (fnb, fb) = Frontier.promise[B]
-      port(Frontier.Pair(fa, fb))
-      Future.successful((
-        fa => fna.fulfill(fa),
-        fb => fnb.fulfill(fb)
-      ))
-    }
+      override def supplyDone(port: InPort[Done]): Future[Unit] = {
+        Future.successful(port(Frontier.DoneNow))
+      }
 
-    override def discardOne(port: InPort[One]): Future[Unit] =
-      Future.successful(port(Frontier.One))
+      override def supplyLeft[A, B](port: InPort[A |+| B]): Future[InPort[A]] = {
+        val (fna, fa) = Frontier.promise[A]
+        port(Frontier.InjectL(fa))
+        Future.successful(fa => fna.fulfill(fa))
+      }
 
-    override def supplyDone(port: InPort[Done]): Future[Unit] = {
-      Future.successful(port(Frontier.DoneNow))
-    }
+      override def supplyRight[A, B](port: InPort[A |+| B]): Future[InPort[B]] = {
+        val (fnb, fb) = Frontier.promise[B]
+        port(Frontier.InjectR(fb))
+        Future.successful(fb => fnb.fulfill(fb))
+      }
 
-    override def supplyLeft[A, B](port: InPort[A |+| B]): Future[InPort[A]] = {
-      val (fna, fa) = Frontier.promise[A]
-      port(Frontier.InjectL(fa))
-      Future.successful(fa => fna.fulfill(fa))
-    }
+      override def supplyChoice[A, B](port: InPort[A |&| B]): Future[Either[Throwable, Either[InPort[A], InPort[B]]]] = {
+        val res = Promise[Either[Throwable, Either[InPort[A], InPort[B]]]]
+        port(Frontier.Choice(
+          { () =>
+            val (fna, fa) = Frontier.promise[A]
+            res.success(Right(Left(fa => fna.fulfill(fa))))
+            fa
+          },
+          { () =>
+            val (fnb, fb) = Frontier.promise[B]
+            res.success(Right(Right(fb => fnb.fulfill(fb))))
+            fb
+          },
+          e => res.success(Left(e))
+        ))
 
-    override def supplyRight[A, B](port: InPort[A |+| B]): Future[InPort[B]] = {
-      val (fnb, fb) = Frontier.promise[B]
-      port(Frontier.InjectR(fb))
-      Future.successful(fb => fnb.fulfill(fb))
-    }
+        res.future
+      }
 
-    override def supplyChoice[A, B](port: InPort[A |&| B]): Future[Either[Throwable, Either[InPort[A], InPort[B]]]] = {
-      val res = Promise[Either[Throwable, Either[InPort[A], InPort[B]]]]
-      port(Frontier.Choice(
-        { () =>
-          val (fna, fa) = Frontier.promise[A]
-          res.success(Right(Left(fa => fna.fulfill(fa))))
-          fa
-        },
-        { () =>
-          val (fnb, fb) = Frontier.promise[B]
-          res.success(Right(Right(fb => fnb.fulfill(fb))))
-          fb
-        },
-        e => res.success(Left(e))
-      ))
+      override def functionInputOutput[I, O](port: InPort[I =⚬ O]): Future[(OutPort[I], InPort[O])] = {
+        val (ni, i) = Frontier.promise[I]
+        val (no, o) = Frontier.promise[O]
+        port(Frontier.Pair(ni, o))
+        Future.successful((i, o => no.fulfill(o)))
+      }
 
-      res.future
-    }
-
-    override def functionInputOutput[I, O](port: InPort[I =⚬ O]): Future[(OutPort[I], InPort[O])] = {
-      val (ni, i) = Frontier.promise[I]
-      val (no, o) = Frontier.promise[O]
-      port(Frontier.Pair(ni, o))
-      Future.successful((i, o => no.fulfill(o)))
-    }
-
-    override def supplyVal[A](port: InPort[Val[A]], value: A): Future[Unit] = {
-      port(Frontier.Value(value))
-      Future.successful(())
+      override def supplyVal[A](port: InPort[Val[A]], value: A): Future[Unit] = {
+        port(Frontier.Value(value))
+        Future.successful(())
+      }
     }
   }
 
@@ -193,7 +204,7 @@ class FreeScalaFutureRunner(
     Await.result(fa, Duration.Inf)
 
   override def cancel(execution: Execution): Future[Unit] =
-    closeRegistry(execution).map(_ => ())
+    execution.cancel()
 
   private def closeRegistry(resourceRegistry: ResourceRegistry): Future[Any] = {
     val openResources: Seq[AcquiredResource[_]] =

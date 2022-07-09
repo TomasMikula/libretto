@@ -66,7 +66,7 @@ trait TestKit {
   val probes: CoreBridge.Of[dsl.type, F]
 
   import dsl.{-⚬, |*|, |+|, Done}
-  import probes.OutPort
+  import probes.Execution
 
   type Assertion[A]
 
@@ -75,7 +75,7 @@ trait TestKit {
 
   given monadAssertion: Monad[-⚬, Assertion]
 
-  def extractOutcome(outPort: OutPort[Assertion[Done]]): Outcome[Unit]
+  def extractOutcome(using exn: Execution)(outPort: exn.OutPort[Assertion[Done]]): Outcome[Unit]
 
   given monadOutcome: ScalaMonad[Outcome] with {
     override def pure[A](a: A): Outcome[A] =
@@ -89,30 +89,30 @@ trait TestKit {
       }
   }
 
-  def splitOut[A, B](port: OutPort[A |*| B]): Outcome[(OutPort[A], OutPort[B])] =
-    Outcome.successF(OutPort.split(port))
+  def splitOut[A, B](using exn: Execution)(port: exn.OutPort[A |*| B]): Outcome[(exn.OutPort[A], exn.OutPort[B])] =
+    Outcome.successF(exn.OutPort.split(port))
 
-  def expectDone(port: OutPort[Done]): Outcome[Unit] =
-    OutPort.awaitDone(port).map {
+  def expectDone(using exn: Execution)(port: exn.OutPort[Done]): Outcome[Unit] =
+    exn.OutPort.awaitDone(port).map {
       case Left(e)   => TestResult.crash(e)
       case Right(()) => TestResult.success(())
     }
 
-  def expectCrashDone(port: OutPort[Done]): Outcome[Throwable] =
-    OutPort.awaitDone(port).map {
+  def expectCrashDone(using exn: Execution)(port: exn.OutPort[Done]): Outcome[Throwable] =
+    exn.OutPort.awaitDone(port).map {
       case Left(e)   => TestResult.success(e)
       case Right(()) => TestResult.failure("Expected crash, but got Done")
     }
 
-  def expectLeft[A, B](port: OutPort[A |+| B]): Outcome[OutPort[A]] =
-    OutPort.awaitEither(port).map {
+  def expectLeft[A, B](using exn: Execution)(port: exn.OutPort[A |+| B]): Outcome[exn.OutPort[A]] =
+    exn.OutPort.awaitEither(port).map {
       case Left(e)         => TestResult.crash(e)
       case Right(Left(p))  => TestResult.success(p)
       case Right(Right(_)) => TestResult.failure("Expected Left, but got Right")
     }
 
-  def expectRight[A, B](port: OutPort[A |+| B]): Outcome[OutPort[B]] =
-    OutPort.awaitEither(port).map {
+  def expectRight[A, B](using exn: Execution)(port: exn.OutPort[A |+| B]): Outcome[exn.OutPort[B]] =
+    exn.OutPort.awaitEither(port).map {
       case Left(e)         => TestResult.crash(e)
       case Right(Left(_))  => TestResult.failure("Expected Right, but got Left")
       case Right(Right(p)) => TestResult.success(p)

@@ -22,25 +22,24 @@ object Service {
   ): ZIO[Any, Throwable, Unit] =
       ZIO
         .attempt(runtime.run(blueprint))
-        .flatMap { case (inPort, outPort, execution) =>
-          runInput(inputs, inPort)(execution) zipPar runOutput(outPort, outputs)
+        .flatMap { executing =>
+          given execution: executing.execution.type = executing.execution
+          runInput(inputs, executing.inPort) zipPar runOutput(executing.outPort, outputs)
         }
 
-  private def runInput[A](using rt: Runtime)(
+  private def runInput[A](using rt: Runtime, exn: rt.Execution)(
     input: Input[A],
-    inPort: rt.InPort[Unlimited[A]],
-  )(
-    exn: rt.Execution,
+    inPort: exn.InPort[Unlimited[A]],
   ): ZIO[Any, Throwable, Unit] =
     ZIO.scoped {
       for {
         service <- ServiceInput.initialize(input)
-        nothing <- service.handleRequestsFrom(inPort)(exn)
+        nothing <- service.handleRequestsFrom(inPort)
       } yield nothing
     }
 
-  private def runOutput[A](using rt: Runtime)(
-    outPort: rt.OutPort[Unlimited[A]],
+  private def runOutput[A](using rt: Runtime, exn: rt.Execution)(
+    outPort: exn.OutPort[Unlimited[A]],
     output: Output[A],
   ): ZIO[Any, Throwable, Unit] =
     ZIO.scoped {

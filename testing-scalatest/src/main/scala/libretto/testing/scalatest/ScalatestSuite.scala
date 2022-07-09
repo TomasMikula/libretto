@@ -25,7 +25,7 @@ abstract class ScalatestSuite extends AnyFunSuite with libretto.testing.TestSuit
       testCase match {
         case c: TestCase.Single[testExecutor.testKit.type] =>
           test(s"$prefix$testName (executed by ${testExecutor.name})") {
-            testExecutor.runTestCase(c.body, c.conductor, c.postStop) match {
+            testExecutor.runTestCase(c.body, c.conductor(_), c.postStop) match {
               case TestResult.Success(_) =>
                 // do nothing
               case TestResult.Failure(msg) =>
