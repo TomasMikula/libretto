@@ -23,17 +23,19 @@ object Service {
       ZIO
         .attempt(runtime.run(blueprint))
         .flatMap { case (inPort, outPort, execution) =>
-          runInput(inputs, inPort) zipPar runOutput(outPort, outputs)
+          runInput(inputs, inPort)(execution) zipPar runOutput(outPort, outputs)
         }
 
   private def runInput[A](using rt: Runtime)(
     input: Input[A],
     inPort: rt.InPort[Unlimited[A]],
+  )(
+    exn: rt.Execution,
   ): ZIO[Any, Throwable, Unit] =
     ZIO.scoped {
       for {
         service <- ServiceInput.initialize(input)
-        nothing <- service.handleRequestsFrom(inPort)
+        nothing <- service.handleRequestsFrom(inPort)(exn)
       } yield nothing
     }
 

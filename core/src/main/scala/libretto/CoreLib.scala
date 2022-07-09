@@ -2647,6 +2647,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     private def unpack[A]: Unlimited[A] -⚬ UnlimitedF[A, Unlimited[A]] =
       dsl.unpack
 
+    def fromChoice[A]: (One |&| (A |&| (Unlimited[A] |*| Unlimited[A]))) -⚬ Unlimited[A] =
+      dsl.pack[UnlimitedF[A, *]]
+
+    def toChoice[A]: Unlimited[A] -⚬ (One |&| (A |&| (Unlimited[A] |*| Unlimited[A]))) =
+      unpack
+
     def discard[A]: Unlimited[A] -⚬ One =
       unpack > chooseL
 

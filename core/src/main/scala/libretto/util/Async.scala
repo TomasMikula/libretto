@@ -1,7 +1,7 @@
 package libretto.util
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 sealed trait Async[A] {
   def map[B](f: A => B): Async[B] =
@@ -24,10 +24,28 @@ object Async {
   def defer[A](a: => A): Async[A] =
     later(f => f(a))
 
+  def never[A]: Async[A] =
+    Later(_ => ())
+
   def fromFuture[A](fa: Future[A]): Async[Try[A]] =
     fa.value match {
       case Some(ta) => Now(ta)
       case None => Later(callback => fa.onComplete(callback)(ExecutionContext.parasitic))
+    }
+
+  /** If the future fails, the returned `Async` never completes and the `onError` callback is invoked. */
+  def unsafeFromFuture[A](fa: Future[A], onError: Throwable => Unit): Async[A] =
+    fa.value match {
+      case Some(ta) =>
+        ta match {
+          case Success(a) => Now(a)
+          case Failure(e) => onError(e); never
+        }
+      case None =>
+        Later(callback => fa.onComplete {
+          case Success(a) => callback(a)
+          case Failure(e) => onError(e)
+        }(ExecutionContext.parasitic))
     }
 
   def toFuture[A](async: Async[A]): Future[A] =

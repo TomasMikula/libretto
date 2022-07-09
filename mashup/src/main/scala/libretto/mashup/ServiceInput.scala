@@ -2,6 +2,7 @@ package libretto.mashup
 
 import libretto.mashup.dsl.{-->, EmptyResource, Unlimited}
 import libretto.mashup.rest.{Endpoint, RelativeUrl, RestApi}
+import scala.util.{Failure, Success}
 import zio.{Scope, ZIO}
 import zio.json.ast.Json
 import zhttp.http.Method
@@ -10,16 +11,21 @@ import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 sealed trait ServiceInput[A] {
   def handleRequestFrom(using rt: Runtime)(port: rt.InPort[A]): ZIO[Any, Throwable, Unit]
 
-  def handleRequestsFrom(using rt: Runtime)(port: rt.InPort[Unlimited[A]]): ZIO[Any, Throwable, Unit] =
+  def handleRequestsFrom(using rt: Runtime)(port: rt.InPort[Unlimited[A]])(exn: rt.Execution): ZIO[Any, Throwable, Unit] =
     ZIO
-      .suspend { rt.InPort.unlimitedAwaitChoice(port).toZIO }
+      .suspend { rt.InPort.unlimitedAwaitChoice(port)(exn).toZIO }
       .flatMap {
-        case None =>
-          ZIO.unit
-        case Some(Left(port)) =>
-          handleRequestFrom(port)
-        case Some(Right(port1, port2)) =>
-          handleRequestsFrom(port1) zipPar handleRequestsFrom(port2)
+        case Success(choice) =>
+          choice match {
+            case None =>
+              ZIO.unit
+            case Some(Left(port)) =>
+              handleRequestFrom(port)
+            case Some(Right(port1, port2)) =>
+              handleRequestsFrom(port1)(exn) zipPar handleRequestsFrom(port2)(exn)
+          }
+        case Failure(e) =>
+          ZIO.fail(e)
       }
 }
 
@@ -46,7 +52,7 @@ object ServiceInput {
       port: rt.InPort[I --> O],
     ): ZIO[Any, Throwable, Unit] =
       ZIO
-        .suspend { rt.InPort.functionGetInOut(port).toZIO }
+        .suspend { rt.InPort.functionInputOutput(port).toZIO }
         .flatMap {
           case (argsPort, resultPort) =>
             endpoint match {

@@ -7,6 +7,8 @@ trait CoreBridge[F[_]] {
 
   import dsl._
 
+  type Execution
+
   type OutPort[A]
   val OutPort: OutPorts
 
@@ -14,7 +16,11 @@ trait CoreBridge[F[_]] {
   val InPort: InPorts
 
   trait OutPorts {
+    def map[A, B](port: OutPort[A])(f: A -⚬ B)(exn: Execution): F[OutPort[B]]
+
     def split[A, B](port: OutPort[A |*| B]): F[(OutPort[A], OutPort[B])]
+
+    def discardOne(port: OutPort[One]): F[Unit]
 
     def awaitDone(port: OutPort[Done]): F[Either[Throwable, Unit]]
 
@@ -26,7 +32,11 @@ trait CoreBridge[F[_]] {
   }
 
   trait InPorts {
+    def contramap[A, B](port: InPort[B])(f: A -⚬ B)(exn: Execution): F[InPort[A]]
+
     def split[A, B](port: InPort[A |*| B]): F[(InPort[A], InPort[B])]
+
+    def discardOne(port: InPort[One]): F[Unit]
 
     def supplyDone(port: InPort[Done]): F[Unit]
 
@@ -42,7 +52,28 @@ object CoreBridge {
   type Of[DSL <: CoreDSL, F[_]] = CoreBridge[F] { type Dsl = DSL }
 }
 
-trait ScalaBridge[F[_]] extends CoreBridge[F] {
+trait ClosedBridge[F[_]] extends CoreBridge[F] {
+  override type Dsl <: ClosedDSL
+
+  import dsl.=⚬
+
+  override val OutPort: ClosedOutPorts
+  override val InPort:  ClosedInPorts
+
+  trait ClosedOutPorts extends OutPorts {
+    def functionInputOutput[I, O](port: OutPort[I =⚬ O]): F[(InPort[I], OutPort[O])]
+  }
+
+  trait ClosedInPorts extends InPorts {
+    def functionInputOutput[I, O](port: InPort[I =⚬ O]): F[(OutPort[I], InPort[O])]
+  }
+}
+
+object ClosedBridge {
+  type Of[DSL <: ClosedDSL, F[_]] = ClosedBridge[F] { type Dsl = DSL }
+}
+
+trait ScalaBridge[F[_]] extends ClosedBridge[F] {
   override type Dsl <: ScalaDSL
 
   import dsl.Val
@@ -50,11 +81,11 @@ trait ScalaBridge[F[_]] extends CoreBridge[F] {
   override val OutPort: ScalaOutPorts
   override val InPort:  ScalaInPorts
 
-  trait ScalaOutPorts extends OutPorts {
+  trait ScalaOutPorts extends ClosedOutPorts {
     def awaitVal[A](port: OutPort[Val[A]]): F[Either[Throwable, A]]
   }
 
-  trait ScalaInPorts extends InPorts {
+  trait ScalaInPorts extends ClosedInPorts {
     def supplyVal[A](port: InPort[Val[A]], value: A): F[Unit]
   }
 }
@@ -65,8 +96,6 @@ object ScalaBridge {
 
 trait Executor[F[_]] extends CoreBridge[F] {
   import dsl._
-
-  type Execution
 
   def execute[A, B](prg: A -⚬ B): (InPort[A], OutPort[B], Execution)
 
