@@ -3,7 +3,7 @@ package libretto.mashup.examples.weather
 import libretto.mashup.Runtime
 
 import java.util.concurrent.Executors
-import zio.{Task, ZIO, ZIOAppDefault}
+import zio.{Scope, ZIO, ZIOAppDefault}
 
 object Main extends ZIOAppDefault {
   private object weather {
@@ -40,7 +40,7 @@ object Main extends ZIOAppDefault {
       )
       .map(Runtime.create)
 
-  private def run(using runtime: Runtime): ZIO[Any, Throwable, Unit] =
+  private def run(using runtime: Runtime): ZIO[Scope, Throwable, Unit] =
     for {
       // start mocks of input services
       _ <- WeatherService.start(weather.host, weather.port)//.forkDaemon

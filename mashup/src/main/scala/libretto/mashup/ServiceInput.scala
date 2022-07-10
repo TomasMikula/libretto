@@ -9,9 +9,9 @@ import zhttp.http.Method
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 
 sealed trait ServiceInput[A] {
-  def handleRequestFrom(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Any, Throwable, Unit]
+  def handleRequest(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Any, Throwable, Unit]
 
-  def handleRequestsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[Unlimited[A]]): ZIO[Any, Throwable, Unit] =
+  def operate(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[Unlimited[A]]): ZIO[Any, Throwable, Unit] =
     ZIO
       .suspend { exn.InPort.unlimitedAwaitChoice(port).toZIO }
       .flatMap {
@@ -20,9 +20,9 @@ sealed trait ServiceInput[A] {
             case None =>
               ZIO.unit
             case Some(Left(port)) =>
-              handleRequestFrom(port)
+              handleRequest(port)
             case Some(Right((port1, port2))) =>
-              handleRequestsFrom(port1) zipPar handleRequestsFrom(port2)
+              operate(port1) zipPar operate(port2)
           }
         case Failure(e) =>
           ZIO.fail(e)
@@ -31,7 +31,7 @@ sealed trait ServiceInput[A] {
 
 object ServiceInput {
   object Empty extends ServiceInput[EmptyResource] {
-    override def handleRequestFrom(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[EmptyResource]): ZIO[Any, Throwable, Unit] =
+    override def handleRequest(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[EmptyResource]): ZIO[Any, Throwable, Unit] =
       ZIO.succeed {
         exn.InPort.emptyResourceIgnore(port)
       }
@@ -41,7 +41,7 @@ object ServiceInput {
     api: RestApi[A],
     baseUri: String,
   ) extends ServiceInput[A] {
-    override def handleRequestFrom(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Any, Throwable, Unit] =
+    override def handleRequest(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Any, Throwable, Unit] =
       api match {
         case RestApi.SingleEndpoint(endpoint) =>
           handleRequestUsingEndpoint(endpoint, port)
@@ -58,17 +58,11 @@ object ServiceInput {
             endpoint match {
               case Endpoint.Get(url, outputType) =>
                 for {
-                  urlStr <- url.fillParamsFrom(argsPort)
+                  urlStr <- url.fillParamsFrom(argsPort).toZIO
                   result <- getJson(urlStr, outputType)
-                  _      <- result.feedTo(resultPort)
-                } yield ()
+                } yield result.feedTo(resultPort)
         }
       }
-
-    extension [I](url: RelativeUrl[I]) {
-      def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): ZIO[Any, Throwable, String] =
-        ZIO.fail(new NotImplementedError)
-    }
 
     private def getJson[T](url: String, outputType: JsonType[T]): ZIO[Any, Throwable, Value[T]] =
       ZIO.provideLayer(ChannelFactory.auto ++ EventLoopGroup.auto()) {
@@ -76,22 +70,21 @@ object ServiceInput {
           resp <- Client.request(url, Method.GET)
           body <- resp.bodyAsString
           json <- parseJson(body)
-          rslt <- outputType.readFromJson(json)
+          rslt <- readJson(outputType, json)
         } yield rslt
       }
 
     private def parseJson(s: String): ZIO[Any, Throwable, Json] =
-      ZIO.fail(new NotImplementedError)
+      Json.decoder.decodeJson(s) match {
+        case Right(json) => ZIO.succeed(json)
+        case Left(msg)   => ZIO.fail(new IllegalArgumentException(s"$msg. Input: $s"))
+      }
 
-    extension [T](tp: JsonType[T]) {
-      def readFromJson(json: Json): ZIO[Any, Throwable, Value[T]] =
-        ZIO.fail(new NotImplementedError)
-    }
-
-    extension [T](value: Value[T]) {
-      def feedTo(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[T]): ZIO[Any, Throwable, Unit] =
-        ZIO.fail(new NotImplementedError)
-    }
+    private def readJson[A](jsonType: JsonType[A], json: Json): ZIO[Any, Throwable, Value[A]] =
+      jsonType.readJson(json) match {
+        case Right(a)  => ZIO.succeed(a)
+        case Left(msg) => ZIO.fail(new IllegalArgumentException(msg))
+      }
   }
 
   def initialize[A](blueprint: Input[A]): ZIO[Any, Throwable, ServiceInput[A]] =

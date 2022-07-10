@@ -26,6 +26,8 @@ trait MashupRuntime[DSL <: MashupDsl] {
     val OutPort: OutPorts
 
     trait InPorts {
+      def contramap[A, B](port: InPort[B])(f: Fun[A, B]): InPort[A]
+
       def emptyResourceIgnore(port: InPort[EmptyResource]): Unit
 
       def functionInputOutput[I, O](port: InPort[I --> O]): (OutPort[I], InPort[O])
@@ -36,6 +38,8 @@ trait MashupRuntime[DSL <: MashupDsl] {
     }
 
     trait OutPorts {
+      def map[A, B](port: OutPort[A])(f: Fun[A, B]): OutPort[B]
+
       def emptyResourceIgnore(port: OutPort[EmptyResource]): Unit
 
       def functionInputOutput[I, O](port: OutPort[I --> O]): (InPort[I], OutPort[O])
@@ -43,6 +47,10 @@ trait MashupRuntime[DSL <: MashupDsl] {
       def unlimitedIgnore[A](port: OutPort[Unlimited[A]]): Unit
       def unlimitedGetSingle[A](port: OutPort[Unlimited[A]]): OutPort[A]
       def unlimitedSplit[A](port: OutPort[Unlimited[A]]): (OutPort[Unlimited[A]], OutPort[Unlimited[A]])
+
+      def unlimitedUncons[A](port: OutPort[Unlimited[A]]): (OutPort[A], OutPort[Unlimited[A]]) =
+        val (p1, p2) = unlimitedSplit(port)
+        (unlimitedGetSingle(p1), p2)
     }
   }
 }

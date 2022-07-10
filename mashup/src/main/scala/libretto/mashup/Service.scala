@@ -1,7 +1,7 @@
 package libretto.mashup
 
 import libretto.mashup.dsl.{Fun, Unlimited}
-import zio.ZIO
+import zio.{Scope, ZIO}
 
 object Service {
   def runStateless[A, B](
@@ -10,7 +10,7 @@ object Service {
     blueprint: Fun[A, B],
   )(using
     runtime: Runtime,
-  ): ZIO[Any, Throwable, Unit] =
+  ): ZIO[Scope, Throwable, Unit] =
     run(inputs, outputs, Unlimited.map(blueprint))
 
   def run[A, B](
@@ -19,7 +19,7 @@ object Service {
     blueprint: Fun[Unlimited[A], Unlimited[B]],
   )(using
     runtime: Runtime,
-  ): ZIO[Any, Throwable, Unit] =
+  ): ZIO[Scope, Throwable, Unit] =
       ZIO
         .attempt(runtime.run(blueprint))
         .flatMap { executing =>
@@ -30,22 +30,18 @@ object Service {
   private def runInput[A](using rt: Runtime, exn: rt.Execution)(
     input: Input[A],
     inPort: exn.InPort[Unlimited[A]],
-  ): ZIO[Any, Throwable, Unit] =
-    ZIO.scoped {
-      for {
-        service <- ServiceInput.initialize(input)
-        nothing <- service.handleRequestsFrom(inPort)
-      } yield nothing
-    }
+  ): ZIO[Scope, Throwable, Unit] =
+    for {
+      service <- ServiceInput.initialize(input)
+      nothing <- service.operate(inPort)
+    } yield nothing
 
   private def runOutput[A](using rt: Runtime, exn: rt.Execution)(
     outPort: exn.OutPort[Unlimited[A]],
     output: Output[A],
-  ): ZIO[Any, Throwable, Unit] =
-    ZIO.scoped {
-      for {
-        service <- ServiceOutput.initialize(output)
-        nothing <- service.forwardRequestsTo(outPort)
-      } yield nothing
-    }
+  ): ZIO[Scope, Throwable, Unit] =
+    for {
+      service <- ServiceOutput.initialize(output)
+      nothing <- service.operate(outPort)
+    } yield nothing
 }

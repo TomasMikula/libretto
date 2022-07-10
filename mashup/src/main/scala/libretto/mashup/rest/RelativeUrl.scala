@@ -1,10 +1,19 @@
 package libretto.mashup.rest
 
+import libretto.mashup.{Runtime, Value}
 import libretto.mashup.dsl._
 import libretto.mashup.rest.RelativeUrl._
+import libretto.util.Async
+import zhttp.http.Path
 
 /** Template for relative URL, parameterized by `I`. */
-sealed trait RelativeUrl[I]
+sealed trait RelativeUrl[I] {
+  def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): Async[String] =
+    ???
+
+  def matchPath(path: Path): Option[Value[I]] =
+    ???
+}
 
 object RelativeUrl {
   case class PathAndQuery[P, Q](

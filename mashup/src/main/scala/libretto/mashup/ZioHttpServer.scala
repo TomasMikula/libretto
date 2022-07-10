@@ -3,7 +3,7 @@ package libretto.mashup
 import java.net.InetSocketAddress
 import zhttp.http._
 import zhttp.service.Server
-import zio.{Fiber, Promise, Queue, UIO}
+import zio.{Fiber, Promise, Queue, Scope, UIO, ZIO}
 
 object ZioHttpServer {
   case class RequestStream(next: UIO[NextRequest])
@@ -34,10 +34,16 @@ object ZioHttpServer {
       (app, RequestStream(output.await))
     }
 
-  def start(address: InetSocketAddress): UIO[(RequestStream, Fiber.Runtime[Throwable, Nothing])] =
+  def start(address: InetSocketAddress): ZIO[Scope, Throwable, RequestStream] =
     makeApp.flatMap { case (app, requestStream) =>
-      Server.start(address, app)
-        .fork
-        .map((requestStream, _))
+      Server
+        .start(address, app)
+        .forkScoped
+        .flatMap { fiber =>
+          fiber.await.flatMap { exit =>
+            ZIO.console.flatMap { _.printLine(s"Server exited with $exit") }
+          }.fork
+        }
+        .as(requestStream)
     }
 }

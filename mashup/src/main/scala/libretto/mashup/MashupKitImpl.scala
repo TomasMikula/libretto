@@ -80,7 +80,7 @@ object MashupKitImpl extends MashupKit { kit =>
     executor: ScalaExecutor.Of[StarterKit.dsl.type],
   ) extends MashupRuntime[dsl.type] {
     override val dsl: kit.dsl.type = kit.dsl
-    import dsl.{-->, EmptyResource, Unlimited}
+    import dsl.{-->, EmptyResource, Fun, Unlimited}
 
     override opaque type Execution <: MashupExecution = ExecutionImpl[? <: executor.Execution]
 
@@ -97,6 +97,9 @@ object MashupKitImpl extends MashupKit { kit =>
       override type OutPort[A] = underlying.OutPort[A]
 
       override object InPort extends InPorts {
+        override def contramap[A, B](port: InPort[B])(f: Fun[A, B]): InPort[A] =
+          underlying.InPort.contramap(port)(f)
+
         override def emptyResourceIgnore(port: InPort[EmptyResource]): Unit =
           underlying.InPort.discardOne(port)
 
@@ -130,6 +133,9 @@ object MashupKitImpl extends MashupKit { kit =>
       }
 
       override object OutPort extends OutPorts {
+        override def map[A, B](port: OutPort[A])(f: Fun[A, B]): OutPort[B] =
+          underlying.OutPort.map(port)(f)
+
         override def emptyResourceIgnore(port: OutPort[EmptyResource]): Unit =
           underlying.OutPort.discardOne(port)
 
