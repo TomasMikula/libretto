@@ -60,11 +60,11 @@ object ServiceInput {
                 for {
                   urlStr <- url.fillParamsFrom(argsPort).toZIO
                   result <- getJson(urlStr, outputType)
-                } yield result.feedTo(resultPort)
+                } yield exn.InPort.supplyValue(resultPort, result)
         }
       }
 
-    private def getJson[T](url: String, outputType: JsonType[T]): ZIO[Any, Throwable, Value[T]] =
+    private def getJson[T](url: String, outputType: JsonType[T])(using rt: Runtime): ZIO[Any, Throwable, rt.Value[T]] =
       ZIO.provideLayer(ChannelFactory.auto ++ EventLoopGroup.auto()) {
         for {
           resp <- Client.request(url, Method.GET)
@@ -80,7 +80,7 @@ object ServiceInput {
         case Left(msg)   => ZIO.fail(new IllegalArgumentException(s"$msg. Input: $s"))
       }
 
-    private def readJson[A](jsonType: JsonType[A], json: Json): ZIO[Any, Throwable, Value[A]] =
+    private def readJson[A](jsonType: JsonType[A], json: Json)(using rt: Runtime): ZIO[Any, Throwable, rt.Value[A]] =
       jsonType.readJson(json) match {
         case Right(a)  => ZIO.succeed(a)
         case Left(msg) => ZIO.fail(new IllegalArgumentException(msg))

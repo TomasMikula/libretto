@@ -6,7 +6,10 @@ import scala.util.Try
 trait MashupRuntime[DSL <: MashupDsl] {
   val dsl: DSL
 
-  import dsl.{-->, EmptyResource, Fun, Unlimited}
+  import dsl.{-->, ##, EmptyResource, Float64, Fun, Record, Text, Unlimited, of}
+
+  type Value[A]
+  val Value: Values
 
   type Execution <: MashupExecution
 
@@ -17,6 +20,20 @@ trait MashupRuntime[DSL <: MashupDsl] {
   )
 
   def run[A, B](f: Fun[A, B]): Executing[A, B]
+
+  trait Values {
+    def text(value: String): Value[Text]
+
+    def float64(value: Double): Value[Float64]
+
+    def emptyRecord: Value[Record]
+
+    def extendRecord[A, Name <: String, T](
+      init: Value[A],
+      name: Name,
+      last: Value[T],
+    ): Value[A ## (Name of T)]
+  }
 
   trait MashupExecution {
     type InPort[A]
@@ -35,6 +52,8 @@ trait MashupRuntime[DSL <: MashupDsl] {
       def unlimitedAwaitChoice[A](
         port: InPort[Unlimited[A]],
       ): Async[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]]
+
+      def supplyValue[A](port: InPort[A], value: Value[A]): Unit
     }
 
     trait OutPorts {

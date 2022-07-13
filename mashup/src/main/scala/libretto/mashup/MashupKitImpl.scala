@@ -91,6 +91,37 @@ object MashupKitImpl extends MashupKit { kit =>
       new Executing(new ExecutionImpl[EXN](execution), executing.inPort, executing.outPort)
     }
 
+    sealed trait Value[A]
+
+    override object Value extends Values {
+      import dsl.{##, Float64, Record, Text, of}
+
+      case class Txt(value: String) extends Value[Text]
+      case class F64(value: Double) extends Value[Float64]
+      case object EmptyRecord extends Value[Record]
+      case class ExtendRecord[A, Name <: String, T](
+        init: Value[A],
+        name: Name,
+        last: Value[T],
+      ) extends Value[A ## (Name of T)]
+
+      override def text(value: String): Value[Text] =
+        Txt(value)
+
+      override def float64(value: Double): Value[Float64] =
+        F64(value)
+
+      override def emptyRecord: Value[Record] =
+        EmptyRecord
+
+      override def extendRecord[A, Name <: String, T](
+        init: Value[A],
+        name: Name,
+        last: Value[T],
+      ): Value[A ## (Name of T)] =
+        ExtendRecord(init, name, last)
+    }
+
 
     private class ExecutionImpl[EXN <: executor.Execution](val underlying: EXN) extends MashupExecution {
       override type InPort[A]  = underlying.InPort[A]
@@ -130,6 +161,17 @@ object MashupKitImpl extends MashupKit { kit =>
                   }
             }
         }
+
+        override def supplyValue[A](port: InPort[A], value: Value[A]): Unit =
+          value match {
+            case Value.Txt(value)  => underlying.InPort.supplyVal[String](port, value)
+            case Value.F64(value)  => underlying.InPort.supplyVal[Double](port, value)
+            case Value.EmptyRecord => underlying.InPort.discardOne(port)
+            case ext: Value.ExtendRecord[x, _, y] =>
+              val (initPort, lastPort) = underlying.InPort.split[x, y](port)
+              supplyValue(initPort, ext.init)
+              supplyValue(lastPort, ext.last)
+          }
       }
 
       override object OutPort extends OutPorts {

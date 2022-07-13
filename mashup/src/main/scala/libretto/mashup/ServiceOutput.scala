@@ -44,7 +44,7 @@ object ServiceOutput {
               import requestMatch.{adapt, input, outputType}
               val (pHead, pTail) = exn.OutPort.unlimitedUncons(port)
               val (pi, po) = exn.OutPort.functionInputOutput(exn.OutPort.map(pHead)(adapt))
-              input.feedTo(pi)
+              exn.InPort.supplyValue(pi, input)
               outputType.extractResponse(po).toZIO.flatMap(resp.succeed) &> operate(tail, pTail)
             case None =>
               resp.succeed(Response.status(Status.NotFound)) *>
@@ -52,14 +52,14 @@ object ServiceOutput {
           }
       }
 
-    private def matchRequest(req: Request): Option[RequestMatch[A]] =
+    private def matchRequest(req: Request)(using rt: Runtime): Option[RequestMatch[rt.type, A]] =
       api match {
         case RestApi.SingleEndpoint(endpoint) =>
           endpoint.matchRequest(req)
       }
 
     extension [I, O](endpoint: Endpoint[I, O]) {
-      private def matchRequest(res: Request): Option[RequestMatch[I --> O]] =
+      private def matchRequest(res: Request)(using rt: Runtime): Option[RequestMatch[rt.type, I --> O]] =
         endpoint match {
           case Endpoint.Get(url, outputType) =>
             url
@@ -68,24 +68,28 @@ object ServiceOutput {
         }
     }
 
-    private abstract class RequestMatch[A] {
+    private abstract class RequestMatch[RT <: Runtime, A] {
+      val runtime: RT
+
       type In
       type Out
 
       val adapt: Fun[A, In --> Out]
 
-      val input: Value[In]
+      val input: runtime.Value[In]
 
       val outputType: BodyType[Out]
     }
 
     private object RequestMatch {
-      def apply[A, I, O](
+      def apply[A, I, O](using rt: Runtime)(
         f: Fun[A, I --> O],
-        in: Value[I],
+        in: rt.Value[I],
         out: BodyType[O],
-      ): RequestMatch[A] =
-        new RequestMatch[A] {
+      ): RequestMatch[rt.type, A] =
+        new RequestMatch[rt.type, A] {
+          override val runtime: rt.type = rt
+
           override type In  = I
           override type Out = O
 

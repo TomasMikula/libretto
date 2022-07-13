@@ -1,6 +1,6 @@
 package libretto.mashup.rest
 
-import libretto.mashup.{Runtime, Value}
+import libretto.mashup.Runtime
 import libretto.mashup.dsl._
 import libretto.mashup.rest.RelativeUrl._
 import libretto.util.Async
@@ -11,7 +11,7 @@ sealed trait RelativeUrl[I] {
   def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): Async[String] =
     ???
 
-  def matchPath(path: Path): Option[Value[I]] =
+  def matchPath(path: Path)(using rt: Runtime): Option[rt.Value[I]] =
     ???
 }
 
