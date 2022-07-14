@@ -6,7 +6,7 @@ import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success, Try}
 
-sealed trait Async[A] {
+sealed trait Async[+A] {
   def map[B](f: A => B): Async[B] =
     this match {
       case Async.Now(a) => Async.Now(f(a))

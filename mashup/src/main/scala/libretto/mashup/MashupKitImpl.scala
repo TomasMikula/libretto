@@ -80,7 +80,7 @@ object MashupKitImpl extends MashupKit { kit =>
     executor: ScalaExecutor.Of[StarterKit.dsl.type],
   ) extends MashupRuntime[dsl.type] {
     override val dsl: kit.dsl.type = kit.dsl
-    import dsl.{-->, EmptyResource, Fun, Unlimited}
+    import dsl.{-->, ##, EmptyResource, Float64, Fun, Record, Text, Unlimited, of}
 
     override opaque type Execution <: MashupExecution = ExecutionImpl[? <: executor.Execution]
 
@@ -94,8 +94,6 @@ object MashupKitImpl extends MashupKit { kit =>
     sealed trait Value[A]
 
     override object Value extends Values {
-      import dsl.{##, Float64, Record, Text, of}
-
       case class Txt(value: String) extends Value[Text]
       case class F64(value: Double) extends Value[Float64]
       case object EmptyRecord extends Value[Record]
@@ -162,15 +160,21 @@ object MashupKitImpl extends MashupKit { kit =>
             }
         }
 
-        override def supplyValue[A](port: InPort[A], value: Value[A]): Unit =
+        override def float64Supply(port: InPort[Float64], value: Double): Unit =
+          underlying.InPort.supplyVal(port, value)
+
+        override def textSupply(port: InPort[Text], value: String): Unit =
+          underlying.InPort.supplyVal(port, value)
+
+        override def valueSupply[A](port: InPort[A], value: Value[A]): Unit =
           value match {
             case Value.Txt(value)  => underlying.InPort.supplyVal[String](port, value)
             case Value.F64(value)  => underlying.InPort.supplyVal[Double](port, value)
             case Value.EmptyRecord => underlying.InPort.discardOne(port)
             case ext: Value.ExtendRecord[x, _, y] =>
               val (initPort, lastPort) = underlying.InPort.split[x, y](port)
-              supplyValue(initPort, ext.init)
-              supplyValue(lastPort, ext.last)
+              valueSupply(initPort, ext.init)
+              valueSupply(lastPort, ext.last)
           }
       }
 
@@ -196,6 +200,18 @@ object MashupKitImpl extends MashupKit { kit =>
           val ports = underlying.OutPort.map(port)(StarterKit.coreLib.Unlimited.split)
           underlying.OutPort.split(ports)
         }
+
+        override def float64Get(port: OutPort[Float64]): Async[Try[Double]] =
+          underlying.OutPort.awaitVal(port).map(_.toTry)
+
+        override def textGet(port: OutPort[Text]): Async[Try[String]] =
+          underlying.OutPort.awaitVal(port).map(_.toTry)
+
+        override def recordIgnoreEmpty(port: OutPort[Record]): Unit =
+          underlying.OutPort.discardOne(port)
+
+        override def recordUnsnoc[A, N <: String, T](port: OutPort[A ## (N of T)]): (OutPort[A], OutPort[T]) =
+          underlying.OutPort.split(port)
       }
     }
   }

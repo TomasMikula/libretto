@@ -44,7 +44,7 @@ object ServiceOutput {
               import requestMatch.{adapt, input, outputType}
               val (pHead, pTail) = exn.OutPort.unlimitedUncons(port)
               val (pi, po) = exn.OutPort.functionInputOutput(exn.OutPort.map(pHead)(adapt))
-              exn.InPort.supplyValue(pi, input)
+              exn.InPort.valueSupply(pi, input)
               outputType.extractResponse(po).toZIO.flatMap(resp.succeed) &> operate(tail, pTail)
             case None =>
               resp.succeed(Response.status(Status.NotFound)) *>

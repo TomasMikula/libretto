@@ -53,7 +53,11 @@ trait MashupRuntime[DSL <: MashupDsl] {
         port: InPort[Unlimited[A]],
       ): Async[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]]
 
-      def supplyValue[A](port: InPort[A], value: Value[A]): Unit
+      def textSupply(port: InPort[Text], value: String): Unit
+
+      def float64Supply(port: InPort[Float64], value: Double): Unit
+
+      def valueSupply[A](port: InPort[A], value: Value[A]): Unit
     }
 
     trait OutPorts {
@@ -70,6 +74,13 @@ trait MashupRuntime[DSL <: MashupDsl] {
       def unlimitedUncons[A](port: OutPort[Unlimited[A]]): (OutPort[A], OutPort[Unlimited[A]]) =
         val (p1, p2) = unlimitedSplit(port)
         (unlimitedGetSingle(p1), p2)
+
+      def textGet(port: OutPort[Text]): Async[Try[String]]
+
+      def float64Get(port: OutPort[Float64]): Async[Try[Double]]
+
+      def recordIgnoreEmpty(port: OutPort[Record]): Unit
+      def recordUnsnoc[A, N <: String, T](port: OutPort[A ## (N of T)]): (OutPort[A], OutPort[T])
     }
   }
 }

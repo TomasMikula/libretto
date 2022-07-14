@@ -60,7 +60,7 @@ object ServiceInput {
                 for {
                   urlStr <- url.fillParamsFrom(argsPort).toZIO
                   result <- getJson(urlStr, outputType)
-                } yield exn.InPort.supplyValue(resultPort, result)
+                } yield exn.InPort.valueSupply(resultPort, result)
         }
       }
 
