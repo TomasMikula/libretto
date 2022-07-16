@@ -94,6 +94,7 @@ object MashupKitImpl extends MashupKit { kit =>
     sealed trait Value[A]
 
     override object Value extends Values {
+      case object Unit extends Value[EmptyResource]
       case class Txt(value: String) extends Value[Text]
       case class F64(value: Double) extends Value[Float64]
       case object EmptyRecord extends Value[Record]
@@ -103,11 +104,24 @@ object MashupKitImpl extends MashupKit { kit =>
         last: Value[T],
       ) extends Value[A ## (Name of T)]
 
+      override def unit: Value[EmptyResource] =
+        Unit
+
       override def text(value: String): Value[Text] =
         Txt(value)
 
+      override def textGet(value: Value[Text]): String =
+        value match {
+          case Txt(s) => s
+        }
+
       override def float64(value: Double): Value[Float64] =
         F64(value)
+
+      override def float64Get(value: Value[Float64]): Double =
+        value match {
+          case F64(d) => d
+        }
 
       override def emptyRecord: Value[Record] =
         EmptyRecord

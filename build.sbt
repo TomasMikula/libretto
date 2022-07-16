@@ -103,7 +103,7 @@ lazy val mashup = project
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio" % "2.0.0",
       "dev.zio" %% "zio-json" % "0.3.0-RC10",
-      "io.d11" %% "zhttp" % "2.0.0-RC9",
+      "io.d11" %% "zhttp" % "2.0.0-RC10",
     ),
   )
 

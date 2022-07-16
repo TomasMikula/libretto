@@ -22,9 +22,13 @@ trait MashupRuntime[DSL <: MashupDsl] {
   def run[A, B](f: Fun[A, B]): Executing[A, B]
 
   trait Values {
+    def unit: Value[EmptyResource]
+
     def text(value: String): Value[Text]
+    def textGet(value: Value[Text]): String
 
     def float64(value: Double): Value[Float64]
+    def float64Get(value: Value[Float64]): Double
 
     def emptyRecord: Value[Record]
 

@@ -31,7 +31,7 @@ object Main extends ZIOAppDefault {
       } yield ()
     )
 
-  private def acquireRuntime =
+  private def acquireRuntime: ZIO[Scope, Nothing, Runtime] =
     ZIO
       .acquireRelease(
         ZIO.succeed(Executors.newScheduledThreadPool(java.lang.Runtime.getRuntime().availableProcessors())),
@@ -43,11 +43,12 @@ object Main extends ZIOAppDefault {
   private def run(using runtime: Runtime): ZIO[Scope, Throwable, Unit] =
     for {
       // start mocks of input services
-      _ <- WeatherService.start(weather.host, weather.port)//.forkDaemon
-              .tapErrorCause(c => ZIO.logCause(c))
-      // _ <- TemperatureConverterService.start(converter.host, converter.port).forkDaemon
+      fiber1 <- WeatherService.start(weather.host, weather.port).forkDaemon
+      fiber2 <- TemperatureConverterService.start(converter.host, converter.port).forkDaemon
 
       // // start the mash-up service
       // _ <- PragueWeatherService.start(weather.uri, converter.uri, mashup.host, mashup.port)
+
+      _ <- ZIO.foreachPar(Seq(fiber1, fiber2))(_.join)
     } yield ()
 }
