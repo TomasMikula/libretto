@@ -7,7 +7,7 @@ import scala.util.{Failure, Success, Try}
 import java.util.concurrent.ScheduledExecutorService
 
 object MashupKitImpl extends MashupKit { kit =>
-  import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, One, Val}
+  import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, One, Val, mapVal, unliftPair}
   import StarterKit.dsl.$.>
 
   override object dsl extends MashupDsl {
@@ -57,8 +57,35 @@ object MashupKitImpl extends MashupKit { kit =>
     }
 
     override object Float64 extends Float64s {
+      import StarterKit.dsl.$.{map, zip}
+
       override def apply(value: Double)(using pos: scalasource.Position): Expr[Float64] =
         StarterKit.dsl.$.one(using pos) > StarterKit.dsl.done > StarterKit.dsl.constVal(value)
+
+      override def add(a: Expr[Float64], b: Expr[Float64])(using
+        pos: scalasource.Position,
+      ): Expr[Float64] =
+        map(zip(a, b)(pos))(unliftPair > mapVal { case (a, b) => a * b })(pos)
+
+      override def subtract(a: Expr[Float64], b: Expr[Float64])(using
+        pos: scalasource.Position,
+      ): Expr[Float64] =
+        map(zip(a, b)(pos))(unliftPair > mapVal { case (a, b) => a - b })(pos)
+
+      override def negate(a: Expr[Float64])(using
+        pos: scalasource.Position,
+      ): Expr[Float64] =
+        map(a)(mapVal(a => -a))(pos)
+
+      override def multiply(a: Expr[Float64], b: Expr[Float64])(using
+        pos: scalasource.Position,
+      ): Expr[Float64] =
+        map(zip(a, b)(pos))(unliftPair > mapVal { case (a, b) => a * b })(pos)
+
+      override def divide(a: Expr[Float64], b: Expr[Float64])(using
+        pos: scalasource.Position,
+      ): Expr[Float64] =
+        map(zip(a, b)(pos))(unliftPair > mapVal { case (a, b) => a / b })(pos)
     }
 
     override object Expr extends Exprs {
@@ -71,6 +98,15 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override object Unlimited extends Unlimiteds {
       export StarterKit.coreLib.Unlimited.map
+    }
+
+    override object as extends SingleFieldExtractor {
+      override def unapply[N <: String & Singleton, T](
+        field: Expr[Record[N of T]],
+      )(using
+        N: ConstValue[N],
+      ): (N, Expr[T]) =
+        (N.value, field)
     }
   }
 

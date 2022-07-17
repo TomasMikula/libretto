@@ -55,6 +55,16 @@ trait MashupDsl {
 
   trait Float64s {
     def apply(value: Double)(using pos: scalasource.Position): Expr[Float64]
+
+    def add(a: Expr[Float64], b: Expr[Float64])(using pos: scalasource.Position): Expr[Float64]
+
+    def subtract(a: Expr[Float64], b: Expr[Float64])(using pos: scalasource.Position): Expr[Float64]
+
+    def negate(a: Expr[Float64])(using pos: scalasource.Position): Expr[Float64]
+
+    def multiply(a: Expr[Float64], b: Expr[Float64])(using pos: scalasource.Position): Expr[Float64]
+
+    def divide(a: Expr[Float64], b: Expr[Float64])(using pos: scalasource.Position): Expr[Float64]
   }
 
   val Expr: Exprs
@@ -76,6 +86,16 @@ trait MashupDsl {
     def map[A, B](f: Fun[A, B]): Fun[Unlimited[A], Unlimited[B]]
   }
 
+  val as: SingleFieldExtractor
+
+  trait SingleFieldExtractor {
+    def unapply[N <: String & Singleton, T](
+      field: Expr[Record[N of T]],
+    )(using
+      N: ConstValue[N],
+    ): (N, Expr[T])
+  }
+
   extension [A](a: Expr[A]) {
     def alsoElim(empty: Expr[EmptyResource])(using
       pos: scalasource.Position,
@@ -88,5 +108,34 @@ trait MashupDsl {
       pos: scalasource.Position,
     ): Expr[Record[A ## (N of T)]] =
       Expr.extendRecord(a, field)(pos)
+  }
+
+  extension (self: Expr[Float64]) {
+    def +(that: Expr[Float64])(using pos: scalasource.Position): Expr[Float64] =
+      Float64.add(self, that)
+
+    def +(that: Double)(using pos: scalasource.Position): Expr[Float64] =
+      self + Float64(that)
+
+    def -(that: Expr[Float64])(using pos: scalasource.Position): Expr[Float64] =
+      Float64.subtract(self, that)
+
+    def -(that: Double)(using pos: scalasource.Position): Expr[Float64] =
+      self - Float64(that)
+
+    def unary_-(using pos: scalasource.Position): Expr[Float64] =
+      Float64.negate(self)
+
+    def *(that: Expr[Float64])(using pos: scalasource.Position): Expr[Float64] =
+      Float64.multiply(self, that)
+
+    def *(that: Double)(using pos: scalasource.Position): Expr[Float64] =
+      self * Float64(that)
+
+    def /(that: Expr[Float64])(using pos: scalasource.Position): Expr[Float64] =
+      Float64.divide(self, that)
+
+    def /(that: Double)(using pos: scalasource.Position): Expr[Float64] =
+      self / Float64(that)
   }
 }

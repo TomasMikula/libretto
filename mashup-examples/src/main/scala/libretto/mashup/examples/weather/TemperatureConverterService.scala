@@ -1,13 +1,18 @@
 package libretto.mashup.examples.weather
 
 import libretto.mashup.{Input, Output, Runtime, Service}
-import libretto.mashup.dsl.{-->, ##, EmptyResource, Float64, Fun, Record, closure, fun, of}
+import libretto.mashup.dsl.{-->, ##, EmptyResource, Expr, Float64, Fun, Record, as, closure, fun, of}
 import libretto.mashup.rest.RestApi
 import zio.{Scope, ZIO}
 
 object TemperatureConverterService {
   type Fahrenheit =
     Record["fahrenheit" of Float64]
+
+  object Fahrenheit {
+    def apply(value: Expr[Float64]): Expr[Fahrenheit] =
+      Record.field("fahrenheit" -> value)
+  }
 
   type Celsius =
     Record["celsius" of Float64]
@@ -32,7 +37,11 @@ object TemperatureConverterService {
   private def blueprint: Fun[EmptyResource, ConverterApi] =
     fun { emptyResource =>
       closure { celsius =>
-        ???
+        celsius match {
+          case "celsius" as value =>
+            Fahrenheit(value * (9.0/5) + 32)
+              .alsoElim(emptyResource)
+        }
       }
     }
 }
