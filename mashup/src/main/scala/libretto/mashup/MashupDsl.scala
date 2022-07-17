@@ -20,11 +20,15 @@ trait MashupDsl {
 
   type Expr[A]
 
+  type of[Name <: String, T]
+
   type Record
 
   type ##[A, B]
 
-  type of[Name <: String, T]
+  type NamedChoice[Options]
+
+  type |&|[A, B]
 
   type Unlimited[A]
 

@@ -7,17 +7,6 @@ import libretto.mashup.rest.RelativeUrl._
 import zio.{Scope, ZIO}
 
 object WeatherService {
-  def start(host: String, port: Int)(using Runtime): ZIO[Scope, Throwable, Unit] =
-    Service.runStateless(
-      Input.empty,
-      Output.restApiAt(
-        restApi,
-        host,
-        port,
-      ),
-      blueprint,
-    )
-
   type City =
     Text
 
@@ -45,7 +34,21 @@ object WeatherService {
         .##["temperature"](temperature)
   }
 
-  def blueprint: Fun[EmptyResource, City --> WeatherReport] =
+  type WeatherApi =
+    City --> WeatherReport
+
+  def start(host: String, port: Int)(using Runtime): ZIO[Scope, Throwable, Unit] =
+    Service.runStateless(
+      Input.empty,
+      Output.restApiAt(
+        restApi,
+        host,
+        port,
+      ),
+      blueprint,
+    )
+
+  private def blueprint: Fun[EmptyResource, WeatherApi] =
     fun { emptyResource =>
       closure { city =>
         WeatherReport(city, Celsius(23.5))
@@ -53,10 +56,10 @@ object WeatherService {
       }
     }
 
-  def restApi: RestApi[City --> WeatherReport] =
+  private def restApi: RestApi[WeatherApi] =
     RestApi(endpoint)
 
-  def endpoint: Endpoint[City, WeatherReport] =
+  private def endpoint: Endpoint[City, WeatherReport] =
     Endpoint
       .get(path[City])
 }
