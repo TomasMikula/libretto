@@ -30,13 +30,15 @@ trait MashupRuntime[DSL <: MashupDsl] {
     def float64(value: Double): Value[Float64]
     def float64Get(value: Value[Float64]): Double
 
-    def emptyRecord: Value[Record]
+    def emptyRecord: Value[Record[EmptyResource]]
+
+    def record[K <: String & Singleton, T](key: K, value: Value[T]): Value[Record[K of T]]
 
     def extendRecord[A, Name <: String, T](
-      init: Value[A],
+      init: Value[Record[A]],
       name: Name,
       last: Value[T],
-    ): Value[A ## (Name of T)]
+    ): Value[Record[A ## (Name of T)]]
   }
 
   trait MashupExecution {
@@ -83,8 +85,8 @@ trait MashupRuntime[DSL <: MashupDsl] {
 
       def float64Get(port: OutPort[Float64]): Async[Try[Double]]
 
-      def recordIgnoreEmpty(port: OutPort[Record]): Unit
-      def recordUnsnoc[A, N <: String, T](port: OutPort[A ## (N of T)]): (OutPort[A], OutPort[T])
+      def recordIgnoreEmpty(port: OutPort[Record[EmptyResource]]): Unit
+      def recordUnsnoc[A, N <: String, T](port: OutPort[Record[A ## (N of T)]]): (OutPort[Record[A]], OutPort[T])
     }
   }
 }

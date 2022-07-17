@@ -22,11 +22,9 @@ trait MashupDsl {
 
   type of[Name <: String, T]
 
-  type Record
+  type Record[Fields]
 
   type ##[A, B]
-
-  type NamedChoice[Options]
 
   type |&|[A, B]
 
@@ -48,7 +46,9 @@ trait MashupDsl {
   val Record: Records
 
   trait Records {
-    def apply()(using pos: scalasource.Position): Expr[Record]
+    def empty(using pos: scalasource.Position): Expr[Record[EmptyResource]]
+
+    def field[N <: String & Singleton, T](field: (N, Expr[T])): Expr[Record[N of T]]
   }
 
   val Float64: Float64s
@@ -62,7 +62,12 @@ trait MashupDsl {
   trait Exprs {
     def eliminateSecond[A](a: Expr[A], empty: Expr[EmptyResource])(pos: scalasource.Position): Expr[A]
 
-    def extendRecord[A, N <: String, T](init: Expr[A], last: (N, Expr[T]))(pos: scalasource.Position): Expr[A ## (N of T)]
+    def extendRecord[A, N <: String, T](
+      init: Expr[Record[A]],
+      last: (N, Expr[T]),
+    )(
+      pos: scalasource.Position,
+    ): Expr[Record[A ## (N of T)]]
   }
 
   val Unlimited: Unlimiteds
@@ -72,19 +77,16 @@ trait MashupDsl {
   }
 
   extension [A](a: Expr[A]) {
-    def ##[N <: String](using name: ConstValue[N]): RecordExtender[A, N] =
-      new RecordExtender(a, name)
-
     def alsoElim(empty: Expr[EmptyResource])(using
       pos: scalasource.Position,
     ): Expr[A] =
       Expr.eliminateSecond(a, empty)(pos)
   }
 
-  class RecordExtender[A, N <: String](initial: Expr[A], fieldName: ConstValue[N]) {
-    def apply[T](value: Expr[T])(using
+  extension [A](a: Expr[Record[A]]) {
+    def field[N <: String & Singleton, T](field: (N, Expr[T]))(using
       pos: scalasource.Position,
-    ): Expr[A ## (N of T)] =
-      Expr.extendRecord[A, N, T](initial, (fieldName.value, value))(pos)
+    ): Expr[Record[A ## (N of T)]] =
+      Expr.extendRecord(a, field)(pos)
   }
 }

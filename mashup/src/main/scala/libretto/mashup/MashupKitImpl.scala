@@ -25,7 +25,7 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override type Expr[A] = StarterKit.dsl.$[A]
 
-    override type Record = One
+    override type Record[A] = A
 
     override type ##[A, B] = A |*| B
 
@@ -49,8 +49,11 @@ object MashupKitImpl extends MashupKit { kit =>
       StarterKit.dsl.injectR[A, B]
 
     override object Record extends Records {
-      override def apply()(using pos: scalasource.Position): Expr[Record] =
+      override def empty(using pos: scalasource.Position): Expr[Record[EmptyResource]] =
         StarterKit.dsl.$.one(using pos)
+
+      override def field[N <: String & Singleton, T](field: (N, Expr[T])): Expr[Record[N of T]] =
+        field._2
     }
 
     override object Float64 extends Float64s {
@@ -97,7 +100,7 @@ object MashupKitImpl extends MashupKit { kit =>
       case object Unit extends Value[EmptyResource]
       case class Txt(value: String) extends Value[Text]
       case class F64(value: Double) extends Value[Float64]
-      case object EmptyRecord extends Value[Record]
+      case object EmptyRecord extends Value[Record[EmptyResource]]
       case class ExtendRecord[A, Name <: String, T](
         init: Value[A],
         name: Name,
@@ -123,8 +126,11 @@ object MashupKitImpl extends MashupKit { kit =>
           case F64(d) => d
         }
 
-      override def emptyRecord: Value[Record] =
+      override def emptyRecord: Value[Record[EmptyResource]] =
         EmptyRecord
+
+      override def record[K <: String & Singleton, T](key: K, value: Value[T]): Value[Record[K of T]] =
+        value
 
       override def extendRecord[A, Name <: String, T](
         init: Value[A],
@@ -221,7 +227,7 @@ object MashupKitImpl extends MashupKit { kit =>
         override def textGet(port: OutPort[Text]): Async[Try[String]] =
           underlying.OutPort.awaitVal(port).map(_.toTry)
 
-        override def recordIgnoreEmpty(port: OutPort[Record]): Unit =
+        override def recordIgnoreEmpty(port: OutPort[Record[EmptyResource]]): Unit =
           underlying.OutPort.discardOne(port)
 
         override def recordUnsnoc[A, N <: String, T](port: OutPort[A ## (N of T)]): (OutPort[A], OutPort[T]) =

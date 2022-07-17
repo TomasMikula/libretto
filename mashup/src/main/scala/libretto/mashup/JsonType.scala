@@ -47,37 +47,54 @@ object JsonType {
 
   object ObjectType {
 
-    case object EmptyRecord extends ObjectType[Record] {
-      override def readJson(fields: Chunk[(String, Json)])(using rt: Runtime): Either[String, rt.Value[Record]] =
+    case object EmptyRecord extends ObjectType[Record[EmptyResource]] {
+      override def readJson(fields: Chunk[(String, Json)])(using
+        rt: Runtime,
+      ): Either[String, rt.Value[Record[EmptyResource]]] =
         Right(rt.Value.emptyRecord)
     }
 
-    case class NonEmptyRecord[A, Name <: String, T](
-      init: ObjectType[A],
+    case class SingleFieldRecord[Name <: String & Singleton, T](
       name: Name,
       typ: JsonType[T],
-    ) extends ObjectType[A ## (Name of T)] {
-      override def readJson(fields: Chunk[(String, Json)])(using rt: Runtime): Either[String, rt.Value[A ## of[Name, T]]] =
-        for {
-          initValue <- init.readJson(fields)
-          lastValue <- readField(fields)
-        } yield rt.Value.extendRecord(initValue, name, lastValue)
-
-      private def readField(fields: Chunk[(String, Json)])(using rt: Runtime): Either[String, rt.Value[T]] =
-        fields.collectFirst { case (k, v) if k == name => v } match {
-          case None       => Left(s"Missing field \"${name}\" in ${Json.Obj(fields).toString()}")
-          case Some(json) => typ.readJson(json)
-        }
+    ) extends ObjectType[Record[Name of T]] {
+      override def readJson(fields: Chunk[(String, Json)])(using rt: Runtime): Either[String, rt.Value[Record[Name of T]]] =
+        readField(fields, name, typ)
+          .map(rt.Value.record(name, _))
     }
 
-    given objectTypeEmptyRecord: ObjectType[Record] =
+    case class NonEmptyRecord[A, Name <: String, T](
+      init: ObjectType[Record[A]],
+      name: Name,
+      typ: JsonType[T],
+    ) extends ObjectType[Record[A ## (Name of T)]] {
+      override def readJson(fields: Chunk[(String, Json)])(using rt: Runtime): Either[String, rt.Value[Record[A ## (Name of T)]]] =
+        for {
+          initValue <- init.readJson(fields)
+          lastValue <- readField(fields, name, typ)
+        } yield rt.Value.extendRecord(initValue, name, lastValue)
+    }
+
+    private def readField[T](fields: Chunk[(String, Json)], key: String, typ: JsonType[T])(using rt: Runtime): Either[String, rt.Value[T]] =
+      fields.collectFirst { case (k, v) if k == key => v } match {
+        case None       => Left(s"Missing field \"${key}\" in ${Json.Obj(fields).toString()}")
+        case Some(json) => typ.readJson(json)
+      }
+
+    given objectTypeEmptyRecord: ObjectType[Record[EmptyResource]] =
       EmptyRecord
 
-    given objectTypeNonEmptyRecord[A, Name <: String, T](using
-      A: ObjectType[A],
+    given objectTypeSingleFieldRecord[Name <: String & Singleton, T](using
       N: ConstValue[Name],
       T: JsonType[T],
-    ): ObjectType[A ## (Name of T)] =
+    ): ObjectType[Record[Name of T]] =
+      SingleFieldRecord(N.value, T)
+
+    given objectTypeNonEmptyRecord[A, Name <: String, T](using
+      A: ObjectType[Record[A]],
+      N: ConstValue[Name],
+      T: JsonType[T],
+    ): ObjectType[Record[A ## (Name of T)]] =
       NonEmptyRecord(A, N.value, T)
   }
 

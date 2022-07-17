@@ -1,7 +1,7 @@
 package libretto.mashup.examples.weather
 
 import libretto.mashup.{Input, Output, Runtime, Service}
-import libretto.mashup.dsl.{|&|, ##, -->, EmptyResource, Fun, NamedChoice, of}
+import libretto.mashup.dsl.{|&|, ##, -->, EmptyResource, Fun, Record, of}
 import libretto.mashup.examples.weather.TemperatureConverterService.{ConverterApi, Fahrenheit}
 import libretto.mashup.examples.weather.WeatherService.{Celsius, WeatherApi}
 import zio.{Scope, ZIO}
@@ -9,7 +9,7 @@ import zio.{Scope, ZIO}
 object PragueWeatherService {
 
   type PragueWeatherReport =
-    Record ## ("temperature" of Fahrenheit)
+    Record["temperature" of Fahrenheit]
 
   type PragueWeatherApi =
     EmptyResource --> PragueWeatherReport

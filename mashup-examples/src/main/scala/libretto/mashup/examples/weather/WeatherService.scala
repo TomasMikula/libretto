@@ -11,27 +11,27 @@ object WeatherService {
     Text
 
   type Celsius =
-    Record ## ("celsius" of Float64)
+    Record["celsius" of Float64]
 
   object Celsius {
     def apply(value: Expr[Float64]): Expr[Celsius] =
-      Record().##["celsius"](value)
+      Record
+        .field("celsius" -> value)
 
     def apply(value: Double): Expr[Celsius] =
       Celsius(Float64(value))
   }
 
-  type WeatherReport = (
-    Record
-      ## ("city"        of City)
-      ## ("temperature" of Celsius)
-  )
+  type WeatherReport =
+    Record[("city"        of City)
+        ## ("temperature" of Celsius)
+    ]
 
   object WeatherReport {
     def apply(city: Expr[City], temperature: Expr[Celsius]): Expr[WeatherReport] =
-      Record()
-        .##["city"](city)
-        .##["temperature"](temperature)
+      Record
+        .field("city"        -> city)
+        .field("temperature" -> temperature)
   }
 
   type WeatherApi =

@@ -1,16 +1,16 @@
 package libretto.mashup.examples.weather
 
 import libretto.mashup.{Input, Output, Runtime, Service}
-import libretto.mashup.dsl.{-->, ##, EmptyResource, Float64, Fun, closure, fun, of}
+import libretto.mashup.dsl.{-->, ##, EmptyResource, Float64, Fun, Record, closure, fun, of}
 import libretto.mashup.rest.RestApi
 import zio.{Scope, ZIO}
 
 object TemperatureConverterService {
   type Fahrenheit =
-    Record ## ("fahrenheit" of Float64)
+    Record["fahrenheit" of Float64]
 
   type Celsius =
-    Record ## ("celsius" of Float64)
+    Record["celsius" of Float64]
 
   type ConverterApi =
     Celsius --> Fahrenheit
