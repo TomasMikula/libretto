@@ -11,6 +11,12 @@ sealed trait RelativeUrl[I] {
     throw new NotImplementedError("fillParamsFrom")
 
   def matchPath(path: Path)(using rt: Runtime): Option[MappedValue[rt.type, I]]
+
+  def map[J](f: Fun[I, J], g: Fun[J, I]): RelativeUrl[J] =
+    Mapped(this, f, g)
+
+  def map[J](f: Expr[I] => Expr[J], g: Expr[J] => Expr[I]): RelativeUrl[J] =
+    this.map(fun(f), fun(g))
 }
 
 object RelativeUrl {
@@ -128,5 +134,8 @@ object RelativeUrl {
     PathOnly(PathTemplate.Constant(segment))
 
   def path[I](using codec: Codec[I]): PathOnly[I] =
-    PathOnly(PathTemplate.Param(codec))
+    PathOnly(param[I])
+
+  def param[I](using codec: Codec[I]): PathTemplate.Param[I] =
+    PathTemplate.Param(codec)
 }

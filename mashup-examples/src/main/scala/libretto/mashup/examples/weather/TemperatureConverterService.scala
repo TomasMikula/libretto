@@ -2,7 +2,8 @@ package libretto.mashup.examples.weather
 
 import libretto.mashup.{Input, Output, Runtime, Service}
 import libretto.mashup.dsl.{-->, ##, EmptyResource, Expr, Float64, Fun, Record, as, closure, fun, of}
-import libretto.mashup.rest.RestApi
+import libretto.mashup.rest.{Endpoint, RelativeUrl, RestApi}
+import libretto.mashup.rest.RelativeUrl.{param, path}
 import zio.{Scope, ZIO}
 
 object TemperatureConverterService {
@@ -16,6 +17,11 @@ object TemperatureConverterService {
 
   type Celsius =
     Record["celsius" of Float64]
+
+  object Celsius {
+    def apply(value: Expr[Float64]): Expr[Celsius] =
+      Record.field("celsius" -> value)
+  }
 
   type ConverterApi =
     Celsius --> Fahrenheit
@@ -32,7 +38,17 @@ object TemperatureConverterService {
     )
 
   private def restApi: RestApi[ConverterApi] =
-    throw NotImplementedError("TemperatureConverterService.restApi")
+    RestApi(endpoint)
+
+  private def endpoint: Endpoint[Celsius, Fahrenheit] = {
+    val p: RelativeUrl[Celsius] =
+      path("c2f") / param[Float64] map (
+        Celsius(_),
+        { case "celsius" as value => value },
+      )
+
+    Endpoint.get(p)
+  }
 
   private def blueprint: Fun[EmptyResource, ConverterApi] =
     fun { emptyResource =>
