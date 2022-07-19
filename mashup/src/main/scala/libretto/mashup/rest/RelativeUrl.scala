@@ -29,13 +29,13 @@ object RelativeUrl {
   }
 
   case class Mapped[I, J](
-    url: RelativeUrl[I],
+    base: RelativeUrl[I],
     f: Fun[I, J],
     g: Fun[J, I],
   ) extends RelativeUrl[J] {
 
     override def matchPath(path: Path)(using rt: Runtime): Option[MappedValue[rt.type, J]] =
-      throw NotImplementedError("RelativeUrl.Mapped.matchPath(Path)")
+      base.matchPath(path).map(_.map(f))
   }
 
   case class PathOnly[I](path: PathTemplate[I]) extends RelativeUrl[I] {
@@ -50,19 +50,39 @@ object RelativeUrl {
   }
 
   sealed trait PathTemplate[I] {
-    def /(segment: String): PathTemplate[I]
-    def /[J](param: PathTemplate.Param[J])(using I =:= EmptyResource): PathTemplate[J]
+    def </>[J](that: PathTemplate.Segment[J]): PathTemplate[I ** J]
+
+    def /(segment: String): PathTemplate[I] =
+      (this </> PathTemplate.Constant(segment)).adapt(
+        fun { case (i ** e) => i.alsoElim(e) },
+        fun { i => i ** Expr.unit },
+      )
+
+    def /[J](param: PathTemplate.Param[J])(using ev: I =:= EmptyResource): PathTemplate[J] =
+      (this </> param).adapt(
+        fun { case (i ** j) => j.alsoElim(ev.substituteCo(i)) },
+        fun { j => ev.substituteContra(Expr.unit) ** j },
+      )
+
+    def adapt[J](f: Fun[I, J], g: Fun[J, I]): PathTemplate[J] =
+      PathTemplate.Adapted(this, f, g)
 
     def matchPath(p: Path)(using rt: Runtime): Option[MappedValue[rt.type, I]]
   }
 
   object PathTemplate {
     case object Empty extends PathTemplate[EmptyResource] {
+      override def </>[J](that: PathTemplate.Segment[J]): PathTemplate[EmptyResource ** J] =
+        SingleSegment(that).adapt(
+          fun { j => Expr.unit ** j },
+          fun { case (u ** j) => j.alsoElim(u) },
+        )
+
       override def /(segment: String): PathTemplate[EmptyResource] =
-        Constant(segment)
+        SingleSegment(Constant(segment))
 
       override def /[J](param: PathTemplate.Param[J])(using EmptyResource =:= EmptyResource): PathTemplate[J] =
-        param
+        SingleSegment(param)
 
       override def matchPath(p: Path)(using rt: Runtime): Option[MappedValue[rt.type, EmptyResource]] =
         p match {
@@ -72,56 +92,80 @@ object RelativeUrl {
     }
 
     sealed trait NonEmpty[I] extends PathTemplate[I] {
-      override def /(segment: String): PathTemplate[I] =
-        throw new NotImplementedError("NonEmpty./(segment)")
-      override def /[J](param: PathTemplate.Param[J])(using I =:= EmptyResource): PathTemplate[J] =
-        throw new NotImplementedError("NonEmpty./(param)")
+      override def </>[J](that: PathTemplate.Segment[J]): PathTemplate[I ** J] =
+        PathTemplate.Snoc(this, that)
+
+      def matchSegments(segments: List[Path.Segment])(using rt: Runtime): Option[rt.Value[I]] =
+        throw new NotImplementedError(s"${this}.matchSegments(${segments})")
     }
 
-    case class Constant(segment: String) extends PathTemplate.NonEmpty[EmptyResource] {
-      override def matchPath(p: Path)(using rt: Runtime): Option[MappedValue[rt.type, EmptyResource]] =
-        p match {
-          case Path.NonEmpty(Nil, lastSegment) =>
-            lastSegment match {
-              case Path.LastSegment.NonEmpty(seg) if seg == Path.segment(segment) =>
-                Some(MappedValue.pure(rt.Value.unit))
-              case Path.LastSegment.SlashTerminated(seg) if seg == Path.segment(segment) =>
-                Some(MappedValue.pure(rt.Value.unit))
-              case _ =>
-                None
-            }
-          case _ =>
-            None
-        }
-    }
-
-    case class Param[I](codec: Codec[I]) extends PathTemplate.NonEmpty[I] {
+    case class SingleSegment[I](segment: Segment[I]) extends PathTemplate.NonEmpty[I] {
       override def matchPath(p: Path)(using rt: Runtime): Option[MappedValue[rt.type, I]] =
         p match {
           case Path.NonEmpty(Nil, lastSegment) =>
-            val s = lastSegment.segment.asString
-            codec.decode(s) match {
-              case Right(value) => Some(MappedValue.pure(value))
-              case Left(_)      => None
-            }
+            // TODO: consider lastSegment's trailing slash
+            (segment matches lastSegment.segment).map(MappedValue.pure(_))
           case _ =>
+            None
+        }
+
+      override def matchSegments(segments: List[Path.Segment])(using rt: Runtime): Option[rt.Value[I]] =
+        segments match {
+          case seg :: Nil => segment matches seg
+          case _          => None
+        }
+    }
+
+    case class Snoc[I, J](
+      init: PathTemplate.NonEmpty[I],
+      last: Segment[J],
+    ) extends PathTemplate.NonEmpty[I ** J] {
+      override def matchPath(p: Path)(using rt: Runtime): Option[MappedValue[rt.type, I ** J]] =
+        p match {
+          case Path.NonEmpty(segments, lastSegment) =>
+            for {
+              initMatch <- init.matchSegments(segments)
+              lastMatch <- last.matches(lastSegment.segment) // TODO: consider lastSegment's trailing slash
+            } yield MappedValue.pure(initMatch ** lastMatch)
+          case Path.Empty =>
             None
         }
     }
 
-    case class Composed[I, J](p: PathTemplate.NonEmpty[I], q: PathTemplate.NonEmpty[J]) extends PathTemplate.NonEmpty[(I, J)] {
-      override def matchPath(p: Path)(using rt: Runtime): Option[MappedValue[rt.type, (I, J)]] =
-        throw new NotImplementedError("Composed.matchPath(Path)")
-    }
-    case class Mapped[I, J](p: PathTemplate[I], f: Fun[I, J], g: Fun[J, I]) extends PathTemplate[J] {
-      override def /(segment: String): PathTemplate[J] =
-        throw new NotImplementedError("Mapped./(segment)")
-
-      override def /[K](param: PathTemplate.Param[K])(using J =:= EmptyResource): PathTemplate[K] =
-        throw new NotImplementedError("Mapped./(param)")
+    case class Adapted[I, J](
+      base: PathTemplate[I],
+      f: Fun[I, J],
+      g: Fun[J, I],
+    ) extends PathTemplate[J] {
+      override def </>[K](that: Segment[K]): PathTemplate[J ** K] =
+        Adapted(
+          base </> that,
+          fun { case (i ** k) => f(i) ** k },
+          fun { case (j ** k) => g(j) ** k },
+        )
 
       override def matchPath(p: Path)(using rt: Runtime): Option[MappedValue[rt.type, J]] =
-        throw new NotImplementedError("Mapped.matchPath(Path)")
+        base.matchPath(p).map(_.map(f))
+    }
+
+    sealed trait Segment[I] {
+      def matches(segment: Path.Segment)(using rt: Runtime): Option[rt.Value[I]]
+    }
+
+    case class Constant(segment: String) extends PathTemplate.Segment[EmptyResource] {
+      override def matches(seg: Path.Segment)(using rt: Runtime): Option[rt.Value[EmptyResource]] =
+        if (seg == Path.segment(segment))
+          Some(rt.Value.unit)
+        else
+          None
+    }
+
+    case class Param[I](codec: Codec[I]) extends PathTemplate.Segment[I] {
+      override def matches(seg: Path.Segment)(using rt: Runtime): Option[rt.Value[I]] =
+        codec.decode(seg.asString) match {
+          case Right(value) => Some(value)
+          case Left(_)      => None
+        }
     }
   }
 
@@ -131,10 +175,10 @@ object RelativeUrl {
     PathOnly(PathTemplate.Empty)
 
   def path(segment: String): PathOnly[EmptyResource] =
-    PathOnly(PathTemplate.Constant(segment))
+    PathOnly(PathTemplate.SingleSegment(PathTemplate.Constant(segment)))
 
   def path[I](using codec: Codec[I]): PathOnly[I] =
-    PathOnly(param[I])
+    PathOnly(PathTemplate.SingleSegment(param[I]))
 
   def param[I](using codec: Codec[I]): PathTemplate.Param[I] =
     PathTemplate.Param(codec)

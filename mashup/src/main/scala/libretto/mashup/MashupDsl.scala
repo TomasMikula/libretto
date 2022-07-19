@@ -7,6 +7,8 @@ import libretto.scalasource
 trait MashupDsl {
   type Fun[A, B]
 
+  type **[A, B]
+
   type EmptyResource
 
   type or[A, B]
@@ -70,6 +72,10 @@ trait MashupDsl {
   val Expr: Exprs
 
   trait Exprs {
+    def pair[A, B](a: Expr[A], b: Expr[B])(pos: scalasource.Position): Expr[A ** B]
+
+    def unit(using pos: scalasource.Position): Expr[EmptyResource]
+
     def eliminateSecond[A](a: Expr[A], empty: Expr[EmptyResource])(pos: scalasource.Position): Expr[A]
 
     def extendRecord[A, N <: String, T](
@@ -78,12 +84,23 @@ trait MashupDsl {
     )(
       pos: scalasource.Position,
     ): Expr[Record[A ## (N of T)]]
+
+    def map[A, B](a: Expr[A], f: Fun[A, B])(pos: scalasource.Position): Expr[B]
+
+    // TODO: support debug prints for any value type
+    def debugPrint(s: String, expr: Expr[Float64]): Expr[Float64]
   }
 
   val Unlimited: Unlimiteds
 
   trait Unlimiteds {
     def map[A, B](f: Fun[A, B]): Fun[Unlimited[A], Unlimited[B]]
+  }
+
+  val ** : PairExtractor
+
+  trait PairExtractor {
+    def unapply[A, B](ab: Expr[A ** B])(using pos: scalasource.Position): (Expr[A], Expr[B])
   }
 
   val as: SingleFieldExtractor
@@ -97,6 +114,9 @@ trait MashupDsl {
   }
 
   extension [A](a: Expr[A]) {
+    def **[B](b: Expr[B])(using pos: scalasource.Position): Expr[A ** B] =
+      Expr.pair(a, b)(pos)
+
     def alsoElim(empty: Expr[EmptyResource])(using
       pos: scalasource.Position,
     ): Expr[A] =
@@ -137,5 +157,13 @@ trait MashupDsl {
 
     def /(that: Double)(using pos: scalasource.Position): Expr[Float64] =
       self / Float64(that)
+
+    def debugPrint(msg: String): Expr[Float64] =
+      Expr.debugPrint(msg, self)
+  }
+
+  extension [A, B](f: Fun[A, B]) {
+    def apply(a: Expr[A])(using pos: scalasource.Position): Expr[B] =
+      Expr.map(a, f)(pos)
   }
 }

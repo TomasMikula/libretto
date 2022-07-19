@@ -54,6 +54,9 @@ object BodyType {
         case ObjectType.EmptyRecord =>
           val () = exn.OutPort.recordIgnoreEmpty(port)
           Async.now(Success(ZioJson.Obj()))
+        case r: ObjectType.SingleFieldRecord[n, t] =>
+          val pt = exn.OutPort.recordGetSingle[n, t](port)
+          extractJson(r.typ, pt).map(_.map(json => ZioJson.Obj(r.name -> json)))
         case r: ObjectType.NonEmptyRecord[x, n, y] =>
           val (portInit, portLast) = exn.OutPort.recordUnsnoc[x, n, y](port)
           for {

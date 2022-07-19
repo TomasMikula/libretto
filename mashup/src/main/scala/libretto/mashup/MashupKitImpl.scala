@@ -15,6 +15,9 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override type EmptyResource = One
 
+    // TODO: later distinguish between product on *data* types and monoidal product on resources
+    override type **[A, B] = A |*| B
+
     override type or[A, B] = A |+| B
 
     override type -->[A, B] = A =⚬ B
@@ -65,7 +68,7 @@ object MashupKitImpl extends MashupKit { kit =>
       override def add(a: Expr[Float64], b: Expr[Float64])(using
         pos: scalasource.Position,
       ): Expr[Float64] =
-        map(zip(a, b)(pos))(unliftPair > mapVal { case (a, b) => a * b })(pos)
+        map(zip(a, b)(pos))(unliftPair > mapVal { case (a, b) => a + b })(pos)
 
       override def subtract(a: Expr[Float64], b: Expr[Float64])(using
         pos: scalasource.Position,
@@ -89,15 +92,34 @@ object MashupKitImpl extends MashupKit { kit =>
     }
 
     override object Expr extends Exprs {
+      override def unit(using pos: scalasource.Position): Expr[EmptyResource] =
+        StarterKit.dsl.$.one(using pos)
+
+      override def pair[A, B](a: Expr[A], b: Expr[B])(using
+        pos: scalasource.Position,
+      ): Expr[A ** B] =
+        StarterKit.dsl.$.zip(a, b)(pos)
+
       override def eliminateSecond[A](a: Expr[A], empty: Expr[EmptyResource])(pos: scalasource.Position): Expr[A] =
         StarterKit.dsl.$.eliminateSecond(a, empty)(pos)
 
       override def extendRecord[A, N <: String, T](init: Expr[A], last: (N, Expr[T]))(pos: scalasource.Position): Expr[A ## (N of T)] =
         StarterKit.dsl.$.zip(init, last._2)(pos)
+
+      override def map[A, B](a: Expr[A], f: Fun[A, B])(using pos: scalasource.Position): Expr[B] =
+        StarterKit.dsl.$.map(a)(f)(pos)
+
+      override def debugPrint(s: String, expr: Expr[Float64]): Expr[Float64] =
+        expr > StarterKit.scalaLib.alsoPrintLine(d => s"$s: $d")
     }
 
     override object Unlimited extends Unlimiteds {
       export StarterKit.coreLib.Unlimited.map
+    }
+
+    override object ** extends PairExtractor {
+      override def unapply[A, B](ab: Expr[A ** B])(using pos: scalasource.Position): (Expr[A], Expr[B]) =
+        StarterKit.dsl.$.unzip(ab)(pos)
     }
 
     override object as extends SingleFieldExtractor {
@@ -119,7 +141,7 @@ object MashupKitImpl extends MashupKit { kit =>
     executor: ScalaExecutor.Of[StarterKit.dsl.type],
   ) extends MashupRuntime[dsl.type] {
     override val dsl: kit.dsl.type = kit.dsl
-    import dsl.{-->, ##, EmptyResource, Float64, Fun, Record, Text, Unlimited, of}
+    import dsl.{-->, **, ##, EmptyResource, Float64, Fun, Record, Text, Unlimited, of}
 
     override opaque type Execution <: MashupExecution = ExecutionImpl[? <: executor.Execution]
 
@@ -134,6 +156,7 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override object Value extends Values {
       case object Unit extends Value[EmptyResource]
+      case class Pair[A, B](a: Value[A], b: Value[B]) extends Value[A ** B]
       case class Txt(value: String) extends Value[Text]
       case class F64(value: Double) extends Value[Float64]
       case object EmptyRecord extends Value[Record[EmptyResource]]
@@ -146,12 +169,19 @@ object MashupKitImpl extends MashupKit { kit =>
       override def unit: Value[EmptyResource] =
         Unit
 
+      override def pair[A, B](a: Value[A], b: Value[B]): Value[A ** B] =
+        Pair(a, b)
+
       override def text(value: String): Value[Text] =
         Txt(value)
 
       override def textGet(value: Value[Text]): String =
         value match {
           case Txt(s) => s
+          case other =>
+            val msg = s"Unexpected Value[Text]: $other"
+            Console.err.println(msg)
+            throw new AssertionError(msg)
         }
 
       override def float64(value: Double): Value[Float64] =
@@ -160,6 +190,10 @@ object MashupKitImpl extends MashupKit { kit =>
       override def float64Get(value: Value[Float64]): Double =
         value match {
           case F64(d) => d
+          case other =>
+            val msg = s"Unexpected Value[Float64]: $other"
+            Console.err.println(msg)
+            throw new AssertionError(msg)
         }
 
       override def emptyRecord: Value[Record[EmptyResource]] =
@@ -224,9 +258,14 @@ object MashupKitImpl extends MashupKit { kit =>
 
         override def valueSupply[A](port: InPort[A], value: Value[A]): Unit =
           value match {
+            case Value.Unit        => underlying.InPort.discardOne(port)
             case Value.Txt(value)  => underlying.InPort.supplyVal[String](port, value)
             case Value.F64(value)  => underlying.InPort.supplyVal[Double](port, value)
             case Value.EmptyRecord => underlying.InPort.discardOne(port)
+            case p: Value.Pair[x, y]  =>
+              val (px, py) = underlying.InPort.split[x, y](port)
+              valueSupply(px, p.a)
+              valueSupply(py, p.b)
             case ext: Value.ExtendRecord[x, _, y] =>
               val (initPort, lastPort) = underlying.InPort.split[x, y](port)
               valueSupply(initPort, ext.init)
@@ -265,6 +304,9 @@ object MashupKitImpl extends MashupKit { kit =>
 
         override def recordIgnoreEmpty(port: OutPort[Record[EmptyResource]]): Unit =
           underlying.OutPort.discardOne(port)
+
+        override def recordGetSingle[N <: String, T](port: OutPort[Record[N of T]]): OutPort[T] =
+          port
 
         override def recordUnsnoc[A, N <: String, T](port: OutPort[A ## (N of T)]): (OutPort[A], OutPort[T]) =
           underlying.OutPort.split(port)
