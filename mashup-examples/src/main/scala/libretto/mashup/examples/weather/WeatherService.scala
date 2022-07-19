@@ -10,6 +10,11 @@ object WeatherService {
   type City =
     Text
 
+  object City {
+    def apply(value: String): Expr[City] =
+      Text(value)
+  }
+
   type Celsius =
     Record["celsius" of Float64]
 
@@ -38,7 +43,7 @@ object WeatherService {
     City --> WeatherReport
 
   def start(host: String, port: Int)(using Runtime): ZIO[Scope, Throwable, Unit] =
-    Service.runStateless(
+    Service.runSimple(
       Input.empty,
       Output.restApiAt(
         restApi,
@@ -56,7 +61,7 @@ object WeatherService {
       }
     }
 
-  private def restApi: RestApi[WeatherApi] =
+  def restApi: RestApi[WeatherApi] =
     RestApi(endpoint)
 
   private def endpoint: Endpoint[City, WeatherReport] =

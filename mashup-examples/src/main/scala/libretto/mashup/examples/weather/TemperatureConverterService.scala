@@ -27,7 +27,7 @@ object TemperatureConverterService {
     Celsius --> Fahrenheit
 
   def start(host: String, port: Int)(using Runtime): ZIO[Scope, Throwable, Unit] =
-    Service.runStateless(
+    Service.runSimple(
       Input.empty,
       Output.restApiAt(
         restApi,
@@ -37,7 +37,7 @@ object TemperatureConverterService {
       blueprint,
     )
 
-  private def restApi: RestApi[ConverterApi] =
+  def restApi: RestApi[ConverterApi] =
     RestApi(endpoint)
 
   private def endpoint: Endpoint[Celsius, Fahrenheit] = {

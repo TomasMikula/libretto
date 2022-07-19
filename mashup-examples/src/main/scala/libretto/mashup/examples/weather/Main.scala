@@ -1,6 +1,6 @@
 package libretto.mashup.examples.weather
 
-import libretto.mashup.Runtime
+import libretto.mashup.{Input, Runtime}
 
 import java.util.concurrent.Executors
 import zio.{Scope, ZIO, ZIOAppDefault}
@@ -46,9 +46,15 @@ object Main extends ZIOAppDefault {
       fiber1 <- WeatherService.start(weather.host, weather.port).forkDaemon
       fiber2 <- TemperatureConverterService.start(converter.host, converter.port).forkDaemon
 
-      // // start the mash-up service
-      // _ <- PragueWeatherService.start(weather.uri, converter.uri, mashup.host, mashup.port)
+      // start the mash-up service
+      fiber3 <-
+        PragueWeatherService.start(
+          Input.restApiAt(WeatherService.restApi, weather.uri),
+          Input.restApiAt(TemperatureConverterService.restApi, converter.uri),
+          mashup.host,
+          mashup.port
+        ).forkDaemon
 
-      _ <- ZIO.foreachPar(Seq(fiber1, fiber2))(_.join)
+      _ <- ZIO.foreachPar(Seq(fiber1, fiber2, fiber3))(_.join)
     } yield ()
 }

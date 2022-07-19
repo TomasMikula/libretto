@@ -7,7 +7,7 @@ import scala.util.{Failure, Success, Try}
 import java.util.concurrent.ScheduledExecutorService
 
 object MashupKitImpl extends MashupKit { kit =>
-  import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, One, Val, mapVal, unliftPair}
+  import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, One, Val, chooseL, chooseR, mapVal, unliftPair}
   import StarterKit.dsl.$.>
 
   override object dsl extends MashupDsl {
@@ -34,13 +34,17 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override type of[Name <: String, T] = T
 
+    override type |&|[A, B] = StarterKit.dsl.|&|[A, B]
+
     override type Unlimited[A] = StarterKit.coreLib.Unlimited[A]
 
-    override def fun[A, B](f: Expr[A] => Expr[B]): Fun[A, B] =
-      StarterKit.dsl.λ(f)
+    override type Pick[A, K <: String & Singleton] = AbstractPick[A, K]
 
-    override def closure[A, B](f: Expr[A] => Expr[B]): Expr[A --> B] =
-      StarterKit.dsl.Λ(f)
+    override def fun[A, B](f: Expr[A] => Expr[B])(using pos: scalasource.Position): Fun[A, B] =
+      StarterKit.dsl.λ(f)(using pos)
+
+    override def closure[A, B](f: Expr[A] => Expr[B])(using pos: scalasource.Position): Expr[A --> B] =
+      StarterKit.dsl.Λ(f)(using pos)
 
     override def id[A]: Fun[A, A] =
       StarterKit.dsl.id[A]
@@ -51,12 +55,20 @@ object MashupKitImpl extends MashupKit { kit =>
     override def right[A, B]: Fun[B, A or B] =
       StarterKit.dsl.injectR[A, B]
 
+    override def eval[A, B]: Fun[(A --> B) ** A, B] =
+      StarterKit.dsl.eval[A, B]
+
     override object Record extends Records {
       override def empty(using pos: scalasource.Position): Expr[Record[EmptyResource]] =
         StarterKit.dsl.$.one(using pos)
 
       override def field[N <: String & Singleton, T](field: (N, Expr[T])): Expr[Record[N of T]] =
         field._2
+    }
+
+    override object Text extends Texts {
+      def apply(value: String)(using pos: scalasource.Position): Expr[Text] =
+        StarterKit.dsl.$.one(using pos) > StarterKit.dsl.done > StarterKit.dsl.constVal(value)
     }
 
     override object Float64 extends Float64s {
@@ -114,7 +126,7 @@ object MashupKitImpl extends MashupKit { kit =>
     }
 
     override object Unlimited extends Unlimiteds {
-      export StarterKit.coreLib.Unlimited.map
+      export StarterKit.coreLib.Unlimited.{discard, duplicate, map, single => getSingle, split}
     }
 
     override object ** extends PairExtractor {
@@ -129,6 +141,32 @@ object MashupKitImpl extends MashupKit { kit =>
         N: ConstValue[N],
       ): (N, Expr[T]) =
         (N.value, field)
+    }
+
+    override object ### extends RecordExtractor {
+      override def unapply[A, B](rec: Expr[Record[A ## B]])(using
+        pos: scalasource.Position,
+      ): (Expr[Record[A]], Expr[Record[B]]) =
+        StarterKit.dsl.$.unzip(rec)(pos)
+    }
+
+    override def singleOptionPick[K <: String & Singleton, V]: Picked[K of V, K, V] =
+      PickImpl(id[V])
+
+    override def choicePickLeft[A, K <: String & Singleton, V, B](using
+      ev: Picked[A, K, V],
+    ): Picked[A |&| B, K, V] =
+      PickImpl(chooseL > ev.asFun)
+
+    override def choicePickRight[A, B, K <: String & Singleton, V](using
+      ev: Picked[B, K, V],
+    ): Picked[A |&| B, K, V] =
+      PickImpl(chooseR > ev.asFun)
+
+    private class PickImpl[A, K <: String & Singleton, V](f: Fun[A, V]) extends AbstractPick[A, K] {
+      override type T = V
+
+      override def asFun: Fun[A, V] = f
     }
   }
 

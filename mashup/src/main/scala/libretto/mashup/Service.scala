@@ -1,10 +1,10 @@
 package libretto.mashup
 
-import libretto.mashup.dsl.{Fun, Unlimited}
+import libretto.mashup.dsl.{Fun, Unlimited, fun}
 import zio.{Scope, ZIO}
 
 object Service {
-  def runStateless[A, B](
+  def runSimple[A, B](
     inputs: Input[A],
     outputs: Output[B],
     blueprint: Fun[A, B],
@@ -12,6 +12,15 @@ object Service {
     runtime: Runtime,
   ): ZIO[Scope, Throwable, Unit] =
     run(inputs, outputs, Unlimited.map(blueprint))
+
+  def runStateless[A, B](
+    inputs: Input[A],
+    outputs: Output[B],
+    blueprint: Fun[Unlimited[A], B],
+  )(using
+    runtime: Runtime,
+  ): ZIO[Scope, Throwable, Unit] =
+    run(inputs, outputs, fun(ua => Unlimited.map(blueprint)(Unlimited.duplicate(ua))))
 
   def run[A, B](
     inputs: Input[A],

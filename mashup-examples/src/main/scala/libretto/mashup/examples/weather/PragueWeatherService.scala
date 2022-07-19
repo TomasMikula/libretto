@@ -1,9 +1,10 @@
 package libretto.mashup.examples.weather
 
 import libretto.mashup.{Input, Output, Runtime, Service}
-import libretto.mashup.dsl.{|&|, ##, -->, EmptyResource, Fun, Record, of}
+import libretto.mashup.dsl.{|&|, ##, ###, -->, EmptyResource, Expr, Fun, Record, Unlimited, as, closure, fun, of}
 import libretto.mashup.examples.weather.TemperatureConverterService.{ConverterApi, Fahrenheit}
-import libretto.mashup.examples.weather.WeatherService.{Celsius, WeatherApi}
+import libretto.mashup.examples.weather.WeatherService.{Celsius, City, WeatherApi}
+import libretto.mashup.rest.{Endpoint, RelativeUrl, RestApi}
 import zio.{Scope, ZIO}
 
 object PragueWeatherService {
@@ -42,8 +43,26 @@ object PragueWeatherService {
       .and     ("converter", temperatureConverter)
 
   private def output(host: String, port: Int): Output[PragueWeatherApi] =
-    throw NotImplementedError("PragueWeatherService.output")
+    Output.restApiAt(restApi, host, port)
 
-  private def blueprint: Fun[Inputs, PragueWeatherApi] =
-    throw NotImplementedError("PragueWeatherService.blueprint")
+  private def restApi: RestApi[EmptyResource --> PragueWeatherReport] =
+    RestApi(endpoint)
+
+  private def endpoint: Endpoint[EmptyResource, PragueWeatherReport] =
+    Endpoint.get(RelativeUrl.empty)
+
+  private def blueprint: Fun[Unlimited[Inputs], PragueWeatherApi] =
+    fun { inputs =>
+      val (i1, i2) = inputs.split // manually duplicating because of linearity. TODO: infer splits automatically for Unlimited[A]
+      val weather:   Expr[WeatherApi]   = i1.get.pick["weather"]
+      val converter: Expr[ConverterApi] = i2.get.pick["converter"]
+      closure { empty =>
+        weather(City("Prague")) match {
+          case ("city" as city) ### ("temperature" as celsius) =>
+            val fahrenheit = converter(celsius)
+            Record.field("temperature" -> fahrenheit)
+              .alsoElim(empty)
+        }
+      }
+    }
 }

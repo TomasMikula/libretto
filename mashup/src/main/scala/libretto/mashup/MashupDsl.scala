@@ -3,6 +3,7 @@ package libretto.mashup
 import libretto.StarterKit.{dsl => StarterDsl}
 import libretto.StarterKit.dsl.{-⚬, =⚬, |*|, |+|, One, Val}
 import libretto.scalasource
+import scala.annotation.targetName
 
 trait MashupDsl {
   type Fun[A, B]
@@ -32,16 +33,29 @@ trait MashupDsl {
 
   type Unlimited[A]
 
+  /** Evidence that the type `A` has an option named `K` of type `T`. */
+  trait AbstractPick[A, K <: String & Singleton] {
+    type T
 
-  def fun[A, B](f: Expr[A] => Expr[B]): Fun[A, B]
+    def asFun: Fun[A, T]
+  }
 
-  def closure[A, B](f: Expr[A] => Expr[B]): Expr[A --> B]
+  type Pick[A, K <: String & Singleton] <: AbstractPick[A, K]
+
+  type Picked[A, K <: String & Singleton, V] = Pick[A, K] { type T = V }
+
+
+  def fun[A, B](f: Expr[A] => Expr[B])(using pos: scalasource.Position): Fun[A, B]
+
+  def closure[A, B](f: Expr[A] => Expr[B])(using pos: scalasource.Position): Expr[A --> B]
 
   def id[A]: Fun[A, A]
 
   def left[A, B]: Fun[A, A or B]
 
   def right[A, B]: Fun[B, A or B]
+
+  def eval[A, B]: Fun[(A --> B) ** A, B]
 
   import StarterDsl.$._
 
@@ -69,6 +83,12 @@ trait MashupDsl {
     def divide(a: Expr[Float64], b: Expr[Float64])(using pos: scalasource.Position): Expr[Float64]
   }
 
+  val Text: Texts
+
+  trait Texts {
+    def apply(value: String)(using pos: scalasource.Position): Expr[Text]
+  }
+
   val Expr: Exprs
 
   trait Exprs {
@@ -94,6 +114,10 @@ trait MashupDsl {
   val Unlimited: Unlimiteds
 
   trait Unlimiteds {
+    def discard[A]: Fun[Unlimited[A], EmptyResource]
+    def getSingle[A]: Fun[Unlimited[A], A]
+    def split[A]: Fun[Unlimited[A], Unlimited[A] ** Unlimited[A]]
+    def duplicate[A]: Fun[Unlimited[A], Unlimited[Unlimited[A]]]
     def map[A, B](f: Fun[A, B]): Fun[Unlimited[A], Unlimited[B]]
   }
 
@@ -103,7 +127,8 @@ trait MashupDsl {
     def unapply[A, B](ab: Expr[A ** B])(using pos: scalasource.Position): (Expr[A], Expr[B])
   }
 
-  val as: SingleFieldExtractor
+  val as  : SingleFieldExtractor
+  val ### : RecordExtractor
 
   trait SingleFieldExtractor {
     def unapply[N <: String & Singleton, T](
@@ -113,9 +138,18 @@ trait MashupDsl {
     ): (N, Expr[T])
   }
 
+  trait RecordExtractor {
+    def unapply[A, B](rec: Expr[Record[A ## B]])(using pos: scalasource.Position): (Expr[Record[A]], Expr[Record[B]])
+  }
+
   extension [A](a: Expr[A]) {
     def **[B](b: Expr[B])(using pos: scalasource.Position): Expr[A ** B] =
       Expr.pair(a, b)(pos)
+
+    def pick[K <: String & Singleton](using pick: Pick[A, K])(using
+      pos: scalasource.Position,
+    ): Expr[pick.T] =
+      Expr.map(a, pick.asFun)(pos)
 
     def alsoElim(empty: Expr[EmptyResource])(using
       pos: scalasource.Position,
@@ -163,7 +197,26 @@ trait MashupDsl {
   }
 
   extension [A, B](f: Fun[A, B]) {
+    @targetName("applyFun")
     def apply(a: Expr[A])(using pos: scalasource.Position): Expr[B] =
       Expr.map(a, f)(pos)
   }
+
+  extension [A, B](f: Expr[A --> B]) {
+    @targetName("evalFunExpr")
+    def apply(a: Expr[A])(using pos: scalasource.Position): Expr[B] =
+      Expr.map((f ** a)(using pos), eval)(pos)
+  }
+
+  extension [A](self: Expr[Unlimited[A]]) {
+    def split(using pos: scalasource.Position): (Expr[Unlimited[A]], Expr[Unlimited[A]]) =
+      **.unapply(Unlimited.split[A](self)(using pos))(using pos)
+
+    def get(using pos: scalasource.Position): Expr[A] =
+      Expr.map(self, Unlimited.getSingle)(pos)
+  }
+
+  given singleOptionPick[K <: String & Singleton, V]: Picked[K of V, K, V]
+  given choicePickLeft[A, K <: String & Singleton, V, B](using ev: Picked[A, K, V]): Picked[A |&| B, K, V]
+  given choicePickRight[A, B, K <: String & Singleton, V](using ev: Picked[B, K, V]): Picked[A |&| B, K, V]
 }
