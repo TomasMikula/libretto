@@ -235,5 +235,5 @@ trait MashupDsl {
   given valueTypeText: ValueType[Text]
   given valueTypeFloat64: ValueType[Float64]
   given valueTypeSingleFieldRecord[N <: String & Singleton, T](using ConstValue[N], ValueType[T]): ValueType[Record[N of T]]
-  given valueTypeRecord[A, N <: String & Singleton, T](using ValueType[A], ConstValue[N], ValueType[T]): ValueType[Record[A ## (N of T)]]
+  given valueTypeRecord[A, N <: String & Singleton, T](using ValueType[Record[A]], ConstValue[N], ValueType[T]): ValueType[Record[A ## (N of T)]]
 }

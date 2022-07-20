@@ -37,7 +37,7 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override type |&|[A, B] = StarterKit.dsl.|&|[A, B]
 
-    override opaque type ValueType[A] = ValueTypeImpl[A]
+    override type ValueType[A] = ValueTypeImpl[A]
 
     override type Unlimited[A] = StarterKit.coreLib.Unlimited[A]
 
@@ -185,21 +185,21 @@ object MashupKitImpl extends MashupKit { kit =>
       override def asFun: Fun[A, V] = f
     }
 
-    private sealed trait ValueTypeImpl[A] {
+    sealed trait ValueTypeImpl[A] {
       type ScalaRepr
 
       def toScalaValue: Fun[A, Val[ScalaRepr]]
 
       def fromScalaValue: Fun[Val[ScalaRepr], A]
 
+      def readFrom(using rt: MashupRuntime[dsl.type], exn: rt.Execution)(
+        port: exn.OutPort[A],
+      ): Async[Try[rt.Value[A]]]
+
       given junction: Junction.Positive[A]
 
       def neglect: Fun[A, Done] =
         toScalaValue > StarterKit.dsl.neglect
-    }
-
-    private object ValueTypeImpl {
-
     }
 
     override def valueTypeFloat64: ValueType[Float64] =
@@ -211,6 +211,12 @@ object MashupKitImpl extends MashupKit { kit =>
         override def toScalaValue: Fun[Float64, Val[Double]] = id[Val[Double]]
 
         override def fromScalaValue: Fun[Val[Double], Float64] = id[Val[Double]]
+
+        override def readFrom(using rt: MashupRuntime[dsl.type], exn: rt.Execution)(
+          port: exn.OutPort[Float64],
+        ): Async[Try[rt.Value[Float64]]] =
+          exn.OutPort.float64Get(port)
+            .map(_.map(rt.Value.float64(_)))
       }
 
     override def valueTypeText: ValueType[Text] =
@@ -222,6 +228,12 @@ object MashupKitImpl extends MashupKit { kit =>
         override def toScalaValue: Fun[Text, Val[String]] = id[Val[String]]
 
         override def fromScalaValue: Fun[Val[String], Text] = id[Val[String]]
+
+        override def readFrom(using rt: MashupRuntime[dsl.type], exn: rt.Execution)(
+          port: exn.OutPort[Text],
+        ): Async[Try[rt.Value[Text]]] =
+          exn.OutPort.textGet(port)
+            .map(_.map(rt.Value.text(_)))
       }
 
     override def valueTypeSingleFieldRecord[N <: String & Singleton, T](using
@@ -238,6 +250,12 @@ object MashupKitImpl extends MashupKit { kit =>
 
         override def fromScalaValue: Fun[Val[ScalaRepr], Record[N of T]] =
           mapVal[(N, T.ScalaRepr), T.ScalaRepr](_._2) > T.fromScalaValue
+
+        override def readFrom(using rt: MashupRuntime[dsl.type], exn: rt.Execution)(
+          port: exn.OutPort[Record[N of T]],
+        ): Async[Try[rt.Value[N of T]]] =
+          T.readFrom(exn.OutPort.recordGetSingle(port))
+            .map(_.map(rt.Value.record(N.value, _)))
       }
 
     override def valueTypeRecord[A, N <: String & Singleton, T](using
@@ -259,6 +277,21 @@ object MashupKitImpl extends MashupKit { kit =>
             A.fromScalaValue,
             mapVal[(N, T.ScalaRepr), T.ScalaRepr](_._2) > T.fromScalaValue,
           )
+
+        override def readFrom(using rt: MashupRuntime[dsl.type], exn: rt.Execution)(
+          port: exn.OutPort[Record[A ## (N of T)]],
+        ): Async[Try[rt.Value[Record[A ## (N of T)]]]] = {
+          val (pa, pt) = exn.OutPort.split(port)
+          for {
+            a <- A.readFrom(pa)
+            t <- T.readFrom(pt)
+          } yield {
+            for {
+              a <- a
+              t <- t
+            } yield rt.Value.extendRecord(a, N.value, t)
+          }
+        }
       }
   }
 
@@ -271,7 +304,7 @@ object MashupKitImpl extends MashupKit { kit =>
     executor: ScalaExecutor.Of[StarterKit.dsl.type],
   ) extends MashupRuntime[dsl.type] {
     override val dsl: kit.dsl.type = kit.dsl
-    import dsl.{-->, **, ##, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, of}
+    import dsl.{-->, **, ##, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, ValueType, of}
 
     override opaque type Execution <: MashupExecution = ExecutionImpl[? <: executor.Execution]
 
@@ -349,6 +382,9 @@ object MashupKitImpl extends MashupKit { kit =>
         override def contramap[A, B](port: InPort[B])(f: Fun[A, B]): InPort[A] =
           underlying.InPort.contramap(port)(f)
 
+        override def split[A, B](port: InPort[A ** B]): (InPort[A], InPort[B]) =
+          underlying.InPort.split(port)
+
         override def emptyResourceIgnore(port: InPort[EmptyResource]): Unit =
           underlying.InPort.discardOne(port)
 
@@ -413,6 +449,9 @@ object MashupKitImpl extends MashupKit { kit =>
         override def map[A, B](port: OutPort[A])(f: Fun[A, B]): OutPort[B] =
           underlying.OutPort.map(port)(f)
 
+        override def split[A, B](port: OutPort[A ** B]): (OutPort[A], OutPort[B]) =
+          underlying.OutPort.split(port)
+
         override def emptyResourceIgnore(port: OutPort[EmptyResource]): Unit =
           underlying.OutPort.discardOne(port)
 
@@ -443,6 +482,9 @@ object MashupKitImpl extends MashupKit { kit =>
 
         override def textGet(port: OutPort[Text]): Async[Try[String]] =
           underlying.OutPort.awaitVal(port).map(_.toTry)
+
+        override def valueGet[A](port: OutPort[A])(using ev: ValueType[A]): Async[Try[Value[A]]] =
+          ev.readFrom(using RuntimeImpl.this, ExecutionImpl.this)(port)
 
         override def recordIgnoreEmpty(port: OutPort[Record[EmptyResource]]): Unit =
           underlying.OutPort.discardOne(port)

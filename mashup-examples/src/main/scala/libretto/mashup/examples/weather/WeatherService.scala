@@ -56,7 +56,7 @@ object WeatherService {
   private def blueprint: Fun[EmptyResource, WeatherApi] =
     fun { emptyResource =>
       closure { city =>
-        WeatherReport(city, Celsius(23.5))
+        WeatherReport(city, Celsius(23.0))
           .alsoElim(emptyResource) // artifact of linearity: have to handle all inputs
       }
     }

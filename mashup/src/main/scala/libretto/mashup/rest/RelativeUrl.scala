@@ -4,11 +4,11 @@ import libretto.mashup.{MappedValue, Runtime}
 import libretto.mashup.dsl._
 import libretto.mashup.rest.RelativeUrl._
 import libretto.util.Async
+import scala.util.{Failure, Success, Try}
 
 /** Template for relative URL, parameterized by `I`. */
 sealed trait RelativeUrl[I] {
-  def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): Async[String] =
-    throw new NotImplementedError("fillParamsFrom")
+  def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): Async[Try[String]]
 
   def matchPath(path: Path)(using rt: Runtime): Option[MappedValue[rt.type, I]]
 
@@ -24,8 +24,17 @@ object RelativeUrl {
     path: PathTemplate[P],
     query: Query[Q],
   ) extends RelativeUrl[(P, Q)] {
-    override def matchPath(path: Path)(using rt: Runtime): Option[MappedValue[rt.type, (P, Q)]] =
-      throw NotImplementedError("RelativeUrl.PathAndQuery.matchPath(Path)")
+    override def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[(P, Q)]): Async[Try[String]] = {
+      val e = NotImplementedError("PathAndQueyr#fillParamsFrom")
+      e.printStackTrace(Console.err)
+      throw e
+    }
+
+    override def matchPath(path: Path)(using rt: Runtime): Option[MappedValue[rt.type, (P, Q)]] = {
+      val e = NotImplementedError("RelativeUrl.PathAndQuery#matchPath(Path)")
+      e.printStackTrace(Console.err)
+      throw e
+    }
   }
 
   case class Mapped[I, J](
@@ -33,12 +42,19 @@ object RelativeUrl {
     f: Fun[I, J],
     g: Fun[J, I],
   ) extends RelativeUrl[J] {
+    override def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[J]): Async[Try[String]] = {
+      val pi = exn.OutPort.map(port)(g)
+      base.fillParamsFrom(pi)
+    }
 
     override def matchPath(path: Path)(using rt: Runtime): Option[MappedValue[rt.type, J]] =
       base.matchPath(path).map(_.map(f))
   }
 
   case class PathOnly[I](path: PathTemplate[I]) extends RelativeUrl[I] {
+    override def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): Async[Try[String]] =
+      path.fillParamsFrom(port)
+
     override def matchPath(p: Path)(using rt: Runtime): Option[MappedValue[rt.type, I]] =
       path.matchPath(p)
 
@@ -51,6 +67,10 @@ object RelativeUrl {
 
   sealed trait PathTemplate[I] {
     def </>[J](that: PathTemplate.Segment[J]): PathTemplate[I ** J]
+
+    def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): Async[Try[String]]
+
+    def matchPath(p: Path)(using rt: Runtime): Option[MappedValue[rt.type, I]]
 
     def /(segment: String): PathTemplate[I] =
       (this </> PathTemplate.Constant(segment)).adapt(
@@ -66,8 +86,6 @@ object RelativeUrl {
 
     def adapt[J](f: Fun[I, J], g: Fun[J, I]): PathTemplate[J] =
       PathTemplate.Adapted(this, f, g)
-
-    def matchPath(p: Path)(using rt: Runtime): Option[MappedValue[rt.type, I]]
   }
 
   object PathTemplate {
@@ -77,6 +95,11 @@ object RelativeUrl {
           fun { j => Expr.unit ** j },
           fun { case (u ** j) => j.alsoElim(u) },
         )
+
+      override def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[EmptyResource]): Async[Try[String]] = {
+        exn.OutPort.emptyResourceIgnore(port)
+        Async.now(Success(""))
+      }
 
       override def /(segment: String): PathTemplate[EmptyResource] =
         SingleSegment(Constant(segment))
@@ -95,11 +118,17 @@ object RelativeUrl {
       override def </>[J](that: PathTemplate.Segment[J]): PathTemplate[I ** J] =
         PathTemplate.Snoc(this, that)
 
-      def matchSegments(segments: List[Path.Segment])(using rt: Runtime): Option[rt.Value[I]] =
-        throw new NotImplementedError(s"${this}.matchSegments(${segments})")
+      def matchSegments(segments: List[Path.Segment])(using rt: Runtime): Option[rt.Value[I]] = {
+        val e = new NotImplementedError(s"${this}.matchSegments(${segments})")
+        e.printStackTrace(Console.err)
+        throw e
+      }
     }
 
     case class SingleSegment[I](segment: Segment[I]) extends PathTemplate.NonEmpty[I] {
+      override def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): Async[Try[String]] =
+        segment.readFrom(port)
+
       override def matchPath(p: Path)(using rt: Runtime): Option[MappedValue[rt.type, I]] =
         p match {
           case Path.NonEmpty(Nil, lastSegment) =>
@@ -120,6 +149,19 @@ object RelativeUrl {
       init: PathTemplate.NonEmpty[I],
       last: Segment[J],
     ) extends PathTemplate.NonEmpty[I ** J] {
+      override def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I ** J]): Async[Try[String]] = {
+        val (pi, pj) = exn.OutPort.split(port)
+        for {
+          s <- init.fillParamsFrom(pi)
+          t <- last.readFrom(pj)
+        } yield {
+          for {
+            s <- s
+            t <- t
+          } yield s"$s/$t"
+        }
+      }
+
       override def matchPath(p: Path)(using rt: Runtime): Option[MappedValue[rt.type, I ** J]] =
         p match {
           case Path.NonEmpty(segments, lastSegment) =>
@@ -137,6 +179,11 @@ object RelativeUrl {
       f: Fun[I, J],
       g: Fun[J, I],
     ) extends PathTemplate[J] {
+      override def fillParamsFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[J]): Async[Try[String]] = {
+        val pi = exn.OutPort.map(port)(g)
+        base.fillParamsFrom(pi)
+      }
+
       override def </>[K](that: Segment[K]): PathTemplate[J ** K] =
         Adapted(
           base </> that,
@@ -149,10 +196,16 @@ object RelativeUrl {
     }
 
     sealed trait Segment[I] {
+      def readFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): Async[Try[String]]
       def matches(segment: Path.Segment)(using rt: Runtime): Option[rt.Value[I]]
     }
 
     case class Constant(segment: String) extends PathTemplate.Segment[EmptyResource] {
+      override def readFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[EmptyResource]): Async[Try[String]] = {
+        val () = exn.OutPort.emptyResourceIgnore(port)
+        Async.now(Success(segment))
+      }
+
       override def matches(seg: Path.Segment)(using rt: Runtime): Option[rt.Value[EmptyResource]] =
         if (seg == Path.segment(segment))
           Some(rt.Value.unit)
@@ -161,6 +214,10 @@ object RelativeUrl {
     }
 
     case class Param[I](codec: Codec[I]) extends PathTemplate.Segment[I] {
+      override def readFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): Async[Try[String]] = {
+        codec.encodeFrom(port)
+      }
+
       override def matches(seg: Path.Segment)(using rt: Runtime): Option[rt.Value[I]] =
         codec.decode(seg.asString) match {
           case Right(value) => Some(value)

@@ -51,15 +51,15 @@ object ServiceInput {
       endpoint: Endpoint[I, O],
       port: exn.InPort[I --> O],
     ): ZIO[Any, Throwable, Unit] =
-      ZIO.console.flatMap(_.printLine(s"going to execute REST request against $endpoint when input arrives")) *>
-        ZIO.succeed { exn.InPort.functionInputOutput(port) }
+      ZIO
+        .succeed { exn.InPort.functionInputOutput(port) }
         .flatMap {
           case (argsPort, resultPort) =>
             endpoint match {
               case Endpoint.Get(url, outputType) =>
                 for {
-                  urlStr <- url.fillParamsFrom(argsPort).toZIO
-                  result <- getJson(urlStr, outputType)
+                  urlStr <- url.fillParamsFrom(argsPort).toZIO.map(_.toEither).absolve
+                  result <- getJson(s"$baseUri/$urlStr", outputType)
                 } yield exn.InPort.valueSupply(resultPort, result)
         }
       }
@@ -100,13 +100,10 @@ object ServiceInput {
     override def handleRequest(using rt: Runtime, exn: rt.Execution)(
       port: exn.InPort[A |&| B],
     ): ZIO[Any, Throwable, Unit] =
-      exn.InPort.choiceAwait(port).toZIO.flatMap { choice =>
-        println(s"Choice: $choice")
-        choice match {
+      exn.InPort.choiceAwait(port).toZIO.flatMap {
         case Success(Left(pa))  => a.handleRequest(pa)
         case Success(Right(pb)) => b.handleRequest(pb)
         case Failure(e)         => ZIO.fail(e)
-        }
       }
   }
 

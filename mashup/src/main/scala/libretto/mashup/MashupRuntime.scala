@@ -6,7 +6,7 @@ import scala.util.Try
 trait MashupRuntime[DSL <: MashupDsl] {
   val dsl: DSL
 
-  import dsl.{-->, **, ##, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, of}
+  import dsl.{-->, **, ##, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, ValueType, of}
 
   type Value[A]
   val Value: Values
@@ -58,6 +58,8 @@ trait MashupRuntime[DSL <: MashupDsl] {
     trait InPorts {
       def contramap[A, B](port: InPort[B])(f: Fun[A, B]): InPort[A]
 
+      def split[A, B](port: InPort[A ** B]): (InPort[A], InPort[B])
+
       def emptyResourceIgnore(port: InPort[EmptyResource]): Unit
 
       def functionInputOutput[I, O](port: InPort[I --> O]): (OutPort[I], InPort[O])
@@ -80,6 +82,8 @@ trait MashupRuntime[DSL <: MashupDsl] {
     trait OutPorts {
       def map[A, B](port: OutPort[A])(f: Fun[A, B]): OutPort[B]
 
+      def split[A, B](port: OutPort[A ** B]): (OutPort[A], OutPort[B])
+
       def emptyResourceIgnore(port: OutPort[EmptyResource]): Unit
 
       def functionInputOutput[I, O](port: OutPort[I --> O]): (InPort[I], OutPort[O])
@@ -98,6 +102,8 @@ trait MashupRuntime[DSL <: MashupDsl] {
       def textGet(port: OutPort[Text]): Async[Try[String]]
 
       def float64Get(port: OutPort[Float64]): Async[Try[Double]]
+
+      def valueGet[A](port: OutPort[A])(using A: ValueType[A]): Async[Try[Value[A]]]
 
       def recordIgnoreEmpty(port: OutPort[Record[EmptyResource]]): Unit
       def recordGetSingle[N <: String, T](port: OutPort[Record[N of T]]): OutPort[T]
