@@ -33,6 +33,9 @@ trait MashupDsl {
 
   type Unlimited[A]
 
+  /** Evidence that `A` is a _value type_. */
+  type ValueType[A]
+
   /** Evidence that the type `A` has an option named `K` of type `T`. */
   trait AbstractPick[A, K <: String & Singleton] {
     type T
@@ -98,6 +101,11 @@ trait MashupDsl {
 
     def eliminateSecond[A](a: Expr[A], empty: Expr[EmptyResource])(pos: scalasource.Position): Expr[A]
 
+    def awaitSecond[A, B](a: Expr[A], b: Expr[B])(pos: scalasource.Position)(using
+      ValueType[A],
+      ValueType[B],
+    ): Expr[A]
+
     def extendRecord[A, N <: String, T](
       init: Expr[Record[A]],
       last: (N, Expr[T]),
@@ -155,6 +163,11 @@ trait MashupDsl {
       pos: scalasource.Position,
     ): Expr[A] =
       Expr.eliminateSecond(a, empty)(pos)
+  }
+
+  extension [A: ValueType](a: Expr[A]) {
+    def alsoAwait[B: ValueType](b: Expr[B])(using pos: scalasource.Position): Expr[A] =
+      Expr.awaitSecond(a, b)(pos)
   }
 
   extension [A](a: Expr[Record[A]]) {
@@ -219,4 +232,9 @@ trait MashupDsl {
   given singleOptionPick[K <: String & Singleton, V]: Picked[K of V, K, V]
   given choicePickLeft[A, K <: String & Singleton, V, B](using ev: Picked[A, K, V]): Picked[A |&| B, K, V]
   given choicePickRight[A, B, K <: String & Singleton, V](using ev: Picked[B, K, V]): Picked[A |&| B, K, V]
+
+  given valueTypeText: ValueType[Text]
+  given valueTypeFloat64: ValueType[Float64]
+  given valueTypeSingleFieldRecord[N <: String & Singleton, T](using ValueType[T]): ValueType[Record[N of T]]
+  given valueTypeRecord[A, N <: String & Singleton, T](using ValueType[A], ValueType[T]): ValueType[Record[A ## (N of T)]]
 }

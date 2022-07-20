@@ -61,7 +61,8 @@ object PragueWeatherService {
           case ("city" as city) ### ("temperature" as celsius) =>
             val fahrenheit = converter(celsius)
             Record.field("temperature" -> fahrenheit)
-              .alsoElim(empty)
+              .alsoElim(empty) // XXX: artifacts of linearity: can't simply ignore stuff.
+              .alsoAwait(city) // Will be ameliorated by dedicated support for *value* types.
         }
       }
     }

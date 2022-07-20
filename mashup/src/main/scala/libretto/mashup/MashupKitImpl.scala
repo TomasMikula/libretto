@@ -7,8 +7,9 @@ import scala.util.{Failure, Success, Try}
 import java.util.concurrent.ScheduledExecutorService
 
 object MashupKitImpl extends MashupKit { kit =>
-  import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, One, Val, chooseL, chooseR, mapVal, unliftPair}
+  import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, Done, One, Val, chooseL, chooseR, mapVal, unliftPair}
   import StarterKit.dsl.$.>
+  import StarterKit.coreLib.Junction
 
   override object dsl extends MashupDsl {
     override type Fun[A, B] = A -⚬ B // for now, let's just use libretto's linear functions
@@ -35,6 +36,8 @@ object MashupKitImpl extends MashupKit { kit =>
     override type of[Name <: String, T] = T
 
     override type |&|[A, B] = StarterKit.dsl.|&|[A, B]
+
+    override opaque type ValueType[A] = ValueTypeImpl[A]
 
     override type Unlimited[A] = StarterKit.coreLib.Unlimited[A]
 
@@ -115,6 +118,16 @@ object MashupKitImpl extends MashupKit { kit =>
       override def eliminateSecond[A](a: Expr[A], empty: Expr[EmptyResource])(pos: scalasource.Position): Expr[A] =
         StarterKit.dsl.$.eliminateSecond(a, empty)(pos)
 
+      override def awaitSecond[A, B](a: Expr[A], b: Expr[B])(pos: scalasource.Position)(using
+        A: ValueType[A],
+        B: ValueType[B],
+      ): Expr[A] = {
+        import A.junction
+        import StarterKit.dsl.$
+        import StarterKit.coreLib.awaitPosSnd
+        $.map($.zip(a, B.neglect(b)(using pos))(pos))(awaitPosSnd)(pos)
+      }
+
       override def extendRecord[A, N <: String, T](init: Expr[A], last: (N, Expr[T]))(pos: scalasource.Position): Expr[A ## (N of T)] =
         StarterKit.dsl.$.zip(init, last._2)(pos)
 
@@ -168,6 +181,47 @@ object MashupKitImpl extends MashupKit { kit =>
 
       override def asFun: Fun[A, V] = f
     }
+
+    private sealed trait ValueTypeImpl[A] {
+      def neglect: Fun[A, Done]
+
+      given junction: Junction.Positive[A]
+    }
+
+    private object ValueTypeImpl {
+
+    }
+
+    override def valueTypeFloat64: ValueType[Float64] =
+      new ValueTypeImpl[Float64] {
+        override def junction: Junction.Positive[Float64] = StarterKit.scalaLib.junctionVal[Double]
+        override def neglect:  Fun[Float64, Done]         = StarterKit.dsl.neglect[Double]
+      }
+
+    override def valueTypeText: ValueType[Text] =
+      new ValueTypeImpl[Text] {
+        override def junction: Junction.Positive[Text] = StarterKit.scalaLib.junctionVal[String]
+        override def neglect:  Fun[Text, Done]         = StarterKit.dsl.neglect[String]
+      }
+
+    override def valueTypeSingleFieldRecord[N <: String & Singleton, T](using
+      T: ValueType[T],
+    ): ValueType[Record[N of T]] =
+      new ValueType[Record[N of T]] {
+        override def junction: Junction.Positive[Record[N of T]] = T.junction
+        override def neglect:  Fun[Record[N of T], Done]         = T.neglect
+      }
+
+    override def valueTypeRecord[A, N <: String & Singleton, T](using
+      A: ValueType[A],
+      T: ValueType[T],
+    ): ValueType[Record[A ## (N of T)]] =
+      new ValueType[Record[A ## (N of T)]] {
+        override def junction: Junction.Positive[Record[A ## (N of T)]] =
+          Junction.Positive.both(A.junction, T.junction)
+        override def neglect: Fun[Record[A ## (N of T)], Done] =
+          StarterKit.dsl.joinMap(A.neglect, T.neglect)
+      }
   }
 
   override def createRuntime(executor: ScheduledExecutorService): MashupRuntime[dsl.type] = {
