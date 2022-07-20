@@ -5,6 +5,16 @@ import libretto.mashup.{Input, Runtime}
 import java.util.concurrent.Executors
 import zio.{Scope, ZIO, ZIOAppDefault}
 
+/**
+ * Runs [[PragueWeatherService]].
+ * Also starts mocks of general weather service and temperature converter service
+ * that are then used by [[PragueWeatherService]].
+ *
+ * Run using
+ *   sbt mashupExamples/run
+ * Then go to
+ *   http://localhost:8000/
+ */
 object Main extends ZIOAppDefault {
   private object weather {
     val host = "localhost"
