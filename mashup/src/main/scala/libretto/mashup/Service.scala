@@ -2,6 +2,7 @@ package libretto.mashup
 
 import libretto.mashup.dsl.{Fun, Unlimited, fun}
 import zio.{Scope, ZIO}
+import zhttp.service.{ChannelFactory, EventLoopGroup}
 
 object Service {
   def runSimple[A, B](
@@ -40,10 +41,12 @@ object Service {
     input: Input[A],
     inPort: exn.InPort[Unlimited[A]],
   ): ZIO[Scope, Throwable, Unit] =
-    for {
-      service <- ServiceInput.initialize(input)
-      nothing <- service.operate(inPort)
-    } yield nothing
+    ZIO.provideLayer(ChannelFactory.auto ++ EventLoopGroup.auto()) {
+      for {
+        service <- ServiceInput.initialize(input)
+        nothing <- service.operate(inPort)
+      } yield nothing
+    }
 
   private def runOutput[A](using rt: Runtime, exn: rt.Execution)(
     outPort: exn.OutPort[Unlimited[A]],

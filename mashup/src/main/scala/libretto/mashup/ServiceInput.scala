@@ -5,7 +5,7 @@ import libretto.mashup.rest.{Endpoint, RelativeUrl, RestApi}
 import scala.util.{Failure, Success}
 import zio.{Scope, ZIO}
 import zio.json.ast.Json
-import zhttp.http.Method
+import zhttp.http.{Method, Request, URL}
 import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
 
 sealed trait ServiceInput[A] {
@@ -40,6 +40,7 @@ object ServiceInput {
   class Rest[A](
     api: RestApi[A],
     baseUri: String,
+    client: Client[Any],
   ) extends ServiceInput[A] {
     override def handleRequest(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Any, Throwable, Unit] =
       api match {
@@ -65,14 +66,13 @@ object ServiceInput {
       }
 
     private def getJson[T](url: String, outputType: JsonType[T])(using rt: Runtime): ZIO[Any, Throwable, rt.Value[T]] =
-      ZIO.provideLayer(ChannelFactory.auto ++ EventLoopGroup.auto()) {
-        for {
-          resp <- Client.request(url, Method.GET)
-          body <- resp.bodyAsString
-          json <- parseJson(body)
-          rslt <- readJson(outputType, json)
-        } yield rslt
-      }
+      for {
+        url  <- ZIO.fromEither(URL.fromString(url))
+        resp <- client.request(Request(method = Method.GET, url = url), Client.Config.empty)
+        body <- resp.bodyAsString
+        json <- parseJson(body)
+        rslt <- readJson(outputType, json)
+      } yield rslt
 
     private def parseJson(s: String): ZIO[Any, Throwable, Json] =
       Json.decoder.decodeJson(s) match {
@@ -107,12 +107,13 @@ object ServiceInput {
       }
   }
 
-  def initialize[A](blueprint: Input[A]): ZIO[Any, Throwable, ServiceInput[A]] =
+  def initialize[A](blueprint: Input[A]): ZIO[EventLoopGroup & ChannelFactory, Throwable, ServiceInput[A]] =
     blueprint match {
       case Input.Empty =>
         ZIO.succeed(Empty)
       case Input.RestApiAt(api, uri) =>
-        ZIO.succeed(Rest(api, uri))
+        Client.make[Any]
+          .map(Rest(api, uri, _))
       case i: Input.SingleChoice[n, t] =>
         initialize(i.input).map(Labeled[n, t](i.label, _))
       case i: Input.MultiChoice[x, n, y] =>
