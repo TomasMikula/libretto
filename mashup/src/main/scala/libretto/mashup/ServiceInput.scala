@@ -1,6 +1,6 @@
 package libretto.mashup
 
-import libretto.mashup.dsl.{-->, EmptyResource, Unlimited}
+import libretto.mashup.dsl.{-->, |&|, EmptyResource, Unlimited, of}
 import libretto.mashup.rest.{Endpoint, RelativeUrl, RestApi}
 import scala.util.{Failure, Success}
 import zio.{Scope, ZIO}
@@ -51,8 +51,8 @@ object ServiceInput {
       endpoint: Endpoint[I, O],
       port: exn.InPort[I --> O],
     ): ZIO[Any, Throwable, Unit] =
-      ZIO
-        .succeed { exn.InPort.functionInputOutput(port) }
+      ZIO.console.flatMap(_.printLine(s"going to execute REST request against $endpoint when input arrives")) *>
+        ZIO.succeed { exn.InPort.functionInputOutput(port) }
         .flatMap {
           case (argsPort, resultPort) =>
             endpoint match {
@@ -87,11 +87,40 @@ object ServiceInput {
       }
   }
 
+  class Labeled[N <: String & Singleton, T](label: N, base: ServiceInput[T]) extends ServiceInput[N of T] {
+    override def handleRequest(using rt: Runtime, exn: rt.Execution)(
+      port: exn.InPort[N of T],
+    ): ZIO[Any, Throwable, Unit] =
+      base.handleRequest(
+        exn.InPort.labeledGet(port)
+      )
+  }
+
+  class BinaryChoice[A, B](a: ServiceInput[A], b: ServiceInput[B]) extends ServiceInput[A |&| B] {
+    override def handleRequest(using rt: Runtime, exn: rt.Execution)(
+      port: exn.InPort[A |&| B],
+    ): ZIO[Any, Throwable, Unit] =
+      exn.InPort.choiceAwait(port).toZIO.flatMap { choice =>
+        println(s"Choice: $choice")
+        choice match {
+        case Success(Left(pa))  => a.handleRequest(pa)
+        case Success(Right(pb)) => b.handleRequest(pb)
+        case Failure(e)         => ZIO.fail(e)
+        }
+      }
+  }
+
   def initialize[A](blueprint: Input[A]): ZIO[Any, Throwable, ServiceInput[A]] =
     blueprint match {
       case Input.Empty =>
         ZIO.succeed(Empty)
       case Input.RestApiAt(api, uri) =>
         ZIO.succeed(Rest(api, uri))
+      case i: Input.SingleChoice[n, t] =>
+        initialize(i.input).map(Labeled[n, t](i.label, _))
+      case i: Input.MultiChoice[x, n, y] =>
+        (initialize(i.base) zipWithPar initialize(i.input).map(Labeled[n, y](i.label, _))) {
+          (init, last) => BinaryChoice[x, n of y](init, last)
+        }
     }
 }

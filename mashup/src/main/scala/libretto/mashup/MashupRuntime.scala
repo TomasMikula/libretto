@@ -6,7 +6,7 @@ import scala.util.Try
 trait MashupRuntime[DSL <: MashupDsl] {
   val dsl: DSL
 
-  import dsl.{-->, **, ##, EmptyResource, Float64, Fun, Record, Text, Unlimited, of}
+  import dsl.{-->, **, ##, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, of}
 
   type Value[A]
   val Value: Values
@@ -62,6 +62,8 @@ trait MashupRuntime[DSL <: MashupDsl] {
 
       def functionInputOutput[I, O](port: InPort[I --> O]): (OutPort[I], InPort[O])
 
+      def choiceAwait[A, B](port: InPort[A |&| B]): Async[Try[Either[InPort[A], InPort[B]]]]
+
       def unlimitedAwaitChoice[A](
         port: InPort[Unlimited[A]],
       ): Async[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]]
@@ -71,6 +73,8 @@ trait MashupRuntime[DSL <: MashupDsl] {
       def float64Supply(port: InPort[Float64], value: Double): Unit
 
       def valueSupply[A](port: InPort[A], value: Value[A]): Unit
+
+      def labeledGet[Label <: String & Singleton, T](port: InPort[Label of T]): InPort[T]
     }
 
     trait OutPorts {
@@ -79,6 +83,9 @@ trait MashupRuntime[DSL <: MashupDsl] {
       def emptyResourceIgnore(port: OutPort[EmptyResource]): Unit
 
       def functionInputOutput[I, O](port: OutPort[I --> O]): (InPort[I], OutPort[O])
+
+      def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A]
+      def chooseRight[A, B](port: OutPort[A |&| B]): OutPort[B]
 
       def unlimitedIgnore[A](port: OutPort[Unlimited[A]]): Unit
       def unlimitedGetSingle[A](port: OutPort[Unlimited[A]]): OutPort[A]

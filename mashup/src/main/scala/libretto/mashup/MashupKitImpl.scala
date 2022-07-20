@@ -7,7 +7,7 @@ import scala.util.{Failure, Success, Try}
 import java.util.concurrent.ScheduledExecutorService
 
 object MashupKitImpl extends MashupKit { kit =>
-  import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, Done, One, Val, chooseL, chooseR, mapVal, unliftPair}
+  import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, Done, One, Val, chooseL, chooseR, liftPair, mapVal, par, unliftPair}
   import StarterKit.dsl.$.>
   import StarterKit.coreLib.Junction
 
@@ -134,8 +134,11 @@ object MashupKitImpl extends MashupKit { kit =>
       override def map[A, B](a: Expr[A], f: Fun[A, B])(using pos: scalasource.Position): Expr[B] =
         StarterKit.dsl.$.map(a)(f)(pos)
 
-      override def debugPrint(s: String, expr: Expr[Float64]): Expr[Float64] =
-        expr > StarterKit.scalaLib.alsoPrintLine(d => s"$s: $d")
+      override def debugPrint[A](s: String, expr: Expr[A])(using A: ValueType[A]): Expr[A] =
+        expr >
+          A.toScalaValue >
+          StarterKit.scalaLib.alsoPrintLine(v => s"$s: $v") >
+          A.fromScalaValue
     }
 
     override object Unlimited extends Unlimiteds {
@@ -183,9 +186,16 @@ object MashupKitImpl extends MashupKit { kit =>
     }
 
     private sealed trait ValueTypeImpl[A] {
-      def neglect: Fun[A, Done]
+      type ScalaRepr
+
+      def toScalaValue: Fun[A, Val[ScalaRepr]]
+
+      def fromScalaValue: Fun[Val[ScalaRepr], A]
 
       given junction: Junction.Positive[A]
+
+      def neglect: Fun[A, Done] =
+        toScalaValue > StarterKit.dsl.neglect
     }
 
     private object ValueTypeImpl {
@@ -194,33 +204,61 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override def valueTypeFloat64: ValueType[Float64] =
       new ValueTypeImpl[Float64] {
+        override type ScalaRepr = Double
+
         override def junction: Junction.Positive[Float64] = StarterKit.scalaLib.junctionVal[Double]
-        override def neglect:  Fun[Float64, Done]         = StarterKit.dsl.neglect[Double]
+
+        override def toScalaValue: Fun[Float64, Val[Double]] = id[Val[Double]]
+
+        override def fromScalaValue: Fun[Val[Double], Float64] = id[Val[Double]]
       }
 
     override def valueTypeText: ValueType[Text] =
       new ValueTypeImpl[Text] {
+        override type ScalaRepr = String
+
         override def junction: Junction.Positive[Text] = StarterKit.scalaLib.junctionVal[String]
-        override def neglect:  Fun[Text, Done]         = StarterKit.dsl.neglect[String]
+
+        override def toScalaValue: Fun[Text, Val[String]] = id[Val[String]]
+
+        override def fromScalaValue: Fun[Val[String], Text] = id[Val[String]]
       }
 
     override def valueTypeSingleFieldRecord[N <: String & Singleton, T](using
+      N: ConstValue[N],
       T: ValueType[T],
     ): ValueType[Record[N of T]] =
       new ValueType[Record[N of T]] {
+        override type ScalaRepr = (N, T.ScalaRepr)
+
         override def junction: Junction.Positive[Record[N of T]] = T.junction
-        override def neglect:  Fun[Record[N of T], Done]         = T.neglect
+
+        override def toScalaValue: Fun[Record[N of T], Val[ScalaRepr]] =
+          T.toScalaValue > mapVal((N.value, _))
+
+        override def fromScalaValue: Fun[Val[ScalaRepr], Record[N of T]] =
+          mapVal[(N, T.ScalaRepr), T.ScalaRepr](_._2) > T.fromScalaValue
       }
 
     override def valueTypeRecord[A, N <: String & Singleton, T](using
       A: ValueType[A],
+      N: ConstValue[N],
       T: ValueType[T],
     ): ValueType[Record[A ## (N of T)]] =
       new ValueType[Record[A ## (N of T)]] {
+        override type ScalaRepr = (A.ScalaRepr, (N, T.ScalaRepr))
+
         override def junction: Junction.Positive[Record[A ## (N of T)]] =
           Junction.Positive.both(A.junction, T.junction)
-        override def neglect: Fun[Record[A ## (N of T)], Done] =
-          StarterKit.dsl.joinMap(A.neglect, T.neglect)
+
+        override def toScalaValue: Fun[Record[A ## (N of T)], Val[ScalaRepr]] =
+          par(A.toScalaValue, T.toScalaValue) > unliftPair > mapVal { case (a, t) => (a, (N.value, t)) }
+
+        override def fromScalaValue: Fun[Val[(A.ScalaRepr, (N, T.ScalaRepr))], Record[A |*| of[N, T]]] =
+          liftPair > par(
+            A.fromScalaValue,
+            mapVal[(N, T.ScalaRepr), T.ScalaRepr](_._2) > T.fromScalaValue,
+          )
       }
   }
 
@@ -233,7 +271,7 @@ object MashupKitImpl extends MashupKit { kit =>
     executor: ScalaExecutor.Of[StarterKit.dsl.type],
   ) extends MashupRuntime[dsl.type] {
     override val dsl: kit.dsl.type = kit.dsl
-    import dsl.{-->, **, ##, EmptyResource, Float64, Fun, Record, Text, Unlimited, of}
+    import dsl.{-->, **, ##, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, of}
 
     override opaque type Execution <: MashupExecution = ExecutionImpl[? <: executor.Execution]
 
@@ -317,6 +355,9 @@ object MashupKitImpl extends MashupKit { kit =>
         override def functionInputOutput[I, O](port: InPort[I --> O]): (OutPort[I], InPort[O]) =
             underlying.InPort.functionInputOutput(port)
 
+        override def choiceAwait[A, B](port: InPort[A |&| B]): Async[Try[Either[InPort[A], InPort[B]]]] =
+          underlying.InPort.supplyChoice(port).map(_.toTry)
+
         override def unlimitedAwaitChoice[A](
           port: InPort[Unlimited[A]],
         ): Async[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]] = {
@@ -363,6 +404,9 @@ object MashupKitImpl extends MashupKit { kit =>
               valueSupply(initPort, ext.init)
               valueSupply(lastPort, ext.last)
           }
+
+        override def labeledGet[Label <: String & Singleton, T](port: InPort[Label of T]): InPort[T] =
+          port
       }
 
       override object OutPort extends OutPorts {
@@ -374,6 +418,12 @@ object MashupKitImpl extends MashupKit { kit =>
 
         override def functionInputOutput[I, O](port: OutPort[I --> O]): (InPort[I], OutPort[O]) =
           underlying.OutPort.functionInputOutput(port)
+
+        override def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A] =
+          underlying.OutPort.chooseLeft(port)
+
+        override def chooseRight[A, B](port: OutPort[A |&| B]): OutPort[B] =
+          underlying.OutPort.chooseRight(port)
 
         override def unlimitedIgnore[A](port: OutPort[Unlimited[A]]): Unit = {
           val port1 = underlying.OutPort.map(port)(StarterKit.coreLib.Unlimited.discard[A])

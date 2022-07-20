@@ -115,8 +115,7 @@ trait MashupDsl {
 
     def map[A, B](a: Expr[A], f: Fun[A, B])(pos: scalasource.Position): Expr[B]
 
-    // TODO: support debug prints for any value type
-    def debugPrint(s: String, expr: Expr[Float64]): Expr[Float64]
+    def debugPrint[A](s: String, expr: Expr[A])(using ValueType[A]): Expr[A]
   }
 
   val Unlimited: Unlimiteds
@@ -163,6 +162,9 @@ trait MashupDsl {
       pos: scalasource.Position,
     ): Expr[A] =
       Expr.eliminateSecond(a, empty)(pos)
+
+    def debugPrint(msg: String)(using ValueType[A]): Expr[A] =
+      Expr.debugPrint(msg, a)
   }
 
   extension [A: ValueType](a: Expr[A]) {
@@ -204,9 +206,6 @@ trait MashupDsl {
 
     def /(that: Double)(using pos: scalasource.Position): Expr[Float64] =
       self / Float64(that)
-
-    def debugPrint(msg: String): Expr[Float64] =
-      Expr.debugPrint(msg, self)
   }
 
   extension [A, B](f: Fun[A, B]) {
@@ -235,6 +234,6 @@ trait MashupDsl {
 
   given valueTypeText: ValueType[Text]
   given valueTypeFloat64: ValueType[Float64]
-  given valueTypeSingleFieldRecord[N <: String & Singleton, T](using ValueType[T]): ValueType[Record[N of T]]
-  given valueTypeRecord[A, N <: String & Singleton, T](using ValueType[A], ValueType[T]): ValueType[Record[A ## (N of T)]]
+  given valueTypeSingleFieldRecord[N <: String & Singleton, T](using ConstValue[N], ValueType[T]): ValueType[Record[N of T]]
+  given valueTypeRecord[A, N <: String & Singleton, T](using ValueType[A], ConstValue[N], ValueType[T]): ValueType[Record[A ## (N of T)]]
 }
