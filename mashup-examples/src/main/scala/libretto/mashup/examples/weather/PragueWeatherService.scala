@@ -46,6 +46,7 @@ object PragueWeatherService {
     )
   }
 
+  /** Type of inputs to this service: weather API and temperature converter API. */
   private type Inputs =
     (   ("weather"   of WeatherApi)
     |&| ("converter" of ConverterApi)

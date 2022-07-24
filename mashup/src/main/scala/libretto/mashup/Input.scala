@@ -3,6 +3,7 @@ package libretto.mashup
 import libretto.mashup.dsl.{|&|, EmptyResource, of}
 import libretto.mashup.rest.RestApi
 
+/** Declarative description of input endpoints. */
 sealed trait Input[A]
 
 object Input {

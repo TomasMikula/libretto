@@ -2,6 +2,7 @@ package libretto.mashup
 
 import libretto.mashup.rest.RestApi
 
+/** Declarative description of output endpoints. */
 sealed trait Output[A]
 
 object Output {
