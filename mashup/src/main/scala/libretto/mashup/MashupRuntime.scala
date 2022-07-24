@@ -6,7 +6,7 @@ import scala.util.Try
 trait MashupRuntime[DSL <: MashupDsl] {
   val dsl: DSL
 
-  import dsl.{-->, **, ##, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, ValueType, of}
+  import dsl.{-->, **, ###, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, ValueType, of}
 
   type Value[A]
   val Value: Values
@@ -40,7 +40,7 @@ trait MashupRuntime[DSL <: MashupDsl] {
       init: Value[Record[A]],
       name: Name,
       last: Value[T],
-    ): Value[Record[A ## (Name of T)]]
+    ): Value[Record[A ### (Name of T)]]
   }
 
   extension [A](a: Value[A]) {
@@ -107,7 +107,7 @@ trait MashupRuntime[DSL <: MashupDsl] {
 
       def recordIgnoreEmpty(port: OutPort[Record[EmptyResource]]): Unit
       def recordGetSingle[N <: String, T](port: OutPort[Record[N of T]]): OutPort[T]
-      def recordUnsnoc[A, N <: String, T](port: OutPort[Record[A ## (N of T)]]): (OutPort[Record[A]], OutPort[T])
+      def recordUnsnoc[A, N <: String, T](port: OutPort[Record[A ### (N of T)]]): (OutPort[Record[A]], OutPort[T])
     }
   }
 }

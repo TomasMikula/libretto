@@ -31,7 +31,7 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override type Record[A] = A
 
-    override type ##[A, B] = A |*| B
+    override type ###[A, B] = A |*| B
 
     override type of[Name <: String, T] = T
 
@@ -128,7 +128,7 @@ object MashupKitImpl extends MashupKit { kit =>
         $.map($.zip(a, B.neglect(b)(using pos))(pos))(awaitPosSnd)(pos)
       }
 
-      override def extendRecord[A, N <: String, T](init: Expr[A], last: (N, Expr[T]))(pos: scalasource.Position): Expr[A ## (N of T)] =
+      override def extendRecord[A, N <: String, T](init: Expr[A], last: (N, Expr[T]))(pos: scalasource.Position): Expr[A ### (N of T)] =
         StarterKit.dsl.$.zip(init, last._2)(pos)
 
       override def map[A, B](a: Expr[A], f: Fun[A, B])(using pos: scalasource.Position): Expr[B] =
@@ -160,7 +160,7 @@ object MashupKitImpl extends MashupKit { kit =>
     }
 
     override object ### extends RecordExtractor {
-      override def unapply[A, B](rec: Expr[Record[A ## B]])(using
+      override def unapply[A, B](rec: Expr[Record[A ### B]])(using
         pos: scalasource.Position,
       ): (Expr[Record[A]], Expr[Record[B]]) =
         StarterKit.dsl.$.unzip(rec)(pos)
@@ -262,14 +262,14 @@ object MashupKitImpl extends MashupKit { kit =>
       A: ValueType[A],
       N: ConstValue[N],
       T: ValueType[T],
-    ): ValueType[Record[A ## (N of T)]] =
-      new ValueType[Record[A ## (N of T)]] {
+    ): ValueType[Record[A ### (N of T)]] =
+      new ValueType[Record[A ### (N of T)]] {
         override type ScalaRepr = (A.ScalaRepr, (N, T.ScalaRepr))
 
-        override def junction: Junction.Positive[Record[A ## (N of T)]] =
+        override def junction: Junction.Positive[Record[A ### (N of T)]] =
           Junction.Positive.both(A.junction, T.junction)
 
-        override def toScalaValue: Fun[Record[A ## (N of T)], Val[ScalaRepr]] =
+        override def toScalaValue: Fun[Record[A ### (N of T)], Val[ScalaRepr]] =
           par(A.toScalaValue, T.toScalaValue) > unliftPair > mapVal { case (a, t) => (a, (N.value, t)) }
 
         override def fromScalaValue: Fun[Val[(A.ScalaRepr, (N, T.ScalaRepr))], Record[A |*| of[N, T]]] =
@@ -279,8 +279,8 @@ object MashupKitImpl extends MashupKit { kit =>
           )
 
         override def readFrom(using rt: MashupRuntime[dsl.type], exn: rt.Execution)(
-          port: exn.OutPort[Record[A ## (N of T)]],
-        ): Async[Try[rt.Value[Record[A ## (N of T)]]]] = {
+          port: exn.OutPort[Record[A ### (N of T)]],
+        ): Async[Try[rt.Value[Record[A ### (N of T)]]]] = {
           val (pa, pt) = exn.OutPort.split(port)
           for {
             a <- A.readFrom(pa)
@@ -304,7 +304,7 @@ object MashupKitImpl extends MashupKit { kit =>
     executor: ScalaExecutor.Of[StarterKit.dsl.type],
   ) extends MashupRuntime[dsl.type] {
     override val dsl: kit.dsl.type = kit.dsl
-    import dsl.{-->, **, ##, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, ValueType, of}
+    import dsl.{-->, **, ###, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, ValueType, of}
 
     override opaque type Execution <: MashupExecution = ExecutionImpl[? <: executor.Execution]
 
@@ -327,7 +327,7 @@ object MashupKitImpl extends MashupKit { kit =>
         init: Value[A],
         name: Name,
         last: Value[T],
-      ) extends Value[A ## (Name of T)]
+      ) extends Value[A ### (Name of T)]
 
       override def unit: Value[EmptyResource] =
         Unit
@@ -369,7 +369,7 @@ object MashupKitImpl extends MashupKit { kit =>
         init: Value[A],
         name: Name,
         last: Value[T],
-      ): Value[A ## (Name of T)] =
+      ): Value[A ### (Name of T)] =
         ExtendRecord(init, name, last)
     }
 
@@ -492,7 +492,7 @@ object MashupKitImpl extends MashupKit { kit =>
         override def recordGetSingle[N <: String, T](port: OutPort[Record[N of T]]): OutPort[T] =
           port
 
-        override def recordUnsnoc[A, N <: String, T](port: OutPort[A ## (N of T)]): (OutPort[A], OutPort[T]) =
+        override def recordUnsnoc[A, N <: String, T](port: OutPort[A ### (N of T)]): (OutPort[A], OutPort[T]) =
           underlying.OutPort.split(port)
       }
     }

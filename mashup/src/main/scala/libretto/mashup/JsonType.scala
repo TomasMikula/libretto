@@ -67,8 +67,8 @@ object JsonType {
       init: ObjectType[Record[A]],
       name: Name,
       typ: JsonType[T],
-    ) extends ObjectType[Record[A ## (Name of T)]] {
-      override def readJson(fields: Chunk[(String, Json)])(using rt: Runtime): Either[String, rt.Value[Record[A ## (Name of T)]]] =
+    ) extends ObjectType[Record[A ### (Name of T)]] {
+      override def readJson(fields: Chunk[(String, Json)])(using rt: Runtime): Either[String, rt.Value[Record[A ### (Name of T)]]] =
         for {
           initValue <- init.readJson(fields)
           lastValue <- readField(fields, name, typ)
@@ -94,7 +94,7 @@ object JsonType {
       A: ObjectType[Record[A]],
       N: ConstValue[Name],
       T: JsonType[T],
-    ): ObjectType[Record[A ## (Name of T)]] =
+    ): ObjectType[Record[A ### (Name of T)]] =
       NonEmptyRecord(A, N.value, T)
   }
 

@@ -27,7 +27,7 @@ trait MashupDsl {
 
   type Record[Fields]
 
-  type ##[A, B]
+  type ###[A, B]
 
   type |&|[A, B]
 
@@ -111,7 +111,7 @@ trait MashupDsl {
       last: (N, Expr[T]),
     )(
       pos: scalasource.Position,
-    ): Expr[Record[A ## (N of T)]]
+    ): Expr[Record[A ### (N of T)]]
 
     def map[A, B](a: Expr[A], f: Fun[A, B])(pos: scalasource.Position): Expr[B]
 
@@ -146,7 +146,7 @@ trait MashupDsl {
   }
 
   trait RecordExtractor {
-    def unapply[A, B](rec: Expr[Record[A ## B]])(using pos: scalasource.Position): (Expr[Record[A]], Expr[Record[B]])
+    def unapply[A, B](rec: Expr[Record[A ### B]])(using pos: scalasource.Position): (Expr[Record[A]], Expr[Record[B]])
   }
 
   extension [A](a: Expr[A]) {
@@ -175,7 +175,7 @@ trait MashupDsl {
   extension [A](a: Expr[Record[A]]) {
     def field[N <: String & Singleton, T](field: (N, Expr[T]))(using
       pos: scalasource.Position,
-    ): Expr[Record[A ## (N of T)]] =
+    ): Expr[Record[A ### (N of T)]] =
       Expr.extendRecord(a, field)(pos)
   }
 
@@ -235,5 +235,5 @@ trait MashupDsl {
   given valueTypeText: ValueType[Text]
   given valueTypeFloat64: ValueType[Float64]
   given valueTypeSingleFieldRecord[N <: String & Singleton, T](using ConstValue[N], ValueType[T]): ValueType[Record[N of T]]
-  given valueTypeRecord[A, N <: String & Singleton, T](using ValueType[Record[A]], ConstValue[N], ValueType[T]): ValueType[Record[A ## (N of T)]]
+  given valueTypeRecord[A, N <: String & Singleton, T](using ValueType[Record[A]], ConstValue[N], ValueType[T]): ValueType[Record[A ### (N of T)]]
 }
