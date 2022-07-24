@@ -213,7 +213,7 @@ object RelativeUrl {
           None
     }
 
-    case class Param[I](codec: Codec[I]) extends PathTemplate.Segment[I] {
+    case class Param[I](codec: StringCodec[I]) extends PathTemplate.Segment[I] {
       override def readFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): Async[Try[String]] = {
         codec.encodeFrom(port)
       }
@@ -234,9 +234,9 @@ object RelativeUrl {
   def path(segment: String): PathOnly[EmptyResource] =
     PathOnly(PathTemplate.SingleSegment(PathTemplate.Constant(segment)))
 
-  def path[I](using codec: Codec[I]): PathOnly[I] =
+  def path[I](using codec: StringCodec[I]): PathOnly[I] =
     PathOnly(PathTemplate.SingleSegment(param[I]))
 
-  def param[I](using codec: Codec[I]): PathTemplate.Param[I] =
+  def param[I](using codec: StringCodec[I]): PathTemplate.Param[I] =
     PathTemplate.Param(codec)
 }

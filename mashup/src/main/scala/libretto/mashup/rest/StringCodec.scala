@@ -6,7 +6,8 @@ import libretto.mashup.dsl
 import libretto.mashup.dsl.{Float64, Fun, Text, ValueType, or}
 import scala.util.Try
 
-trait Codec[A] {
+/** Supports encoding and decoding values to and from String. */
+trait StringCodec[A] {
   def valueType: ValueType[A]
 
   def encode(using rt: Runtime)(value: rt.Value[A]): String
@@ -17,12 +18,12 @@ trait Codec[A] {
       .map(_.map(encode(_)))
 }
 
-object Codec {
+object StringCodec {
   def apply[A: ValueType](
     encoder: (rt: Runtime) ?=> rt.Value[A] => String,
     decoder: (rt: Runtime) ?=> String => Either[String, rt.Value[A]],
   ) =
-    new Codec[A] {
+    new StringCodec[A] {
       override def valueType: ValueType[A] =
         summon[ValueType[A]]
 
@@ -33,8 +34,8 @@ object Codec {
         decoder(s)
     }
 
-  given Codec[Text] =
-    new Codec[Text] {
+  given StringCodec[Text] =
+    new StringCodec[Text] {
       override def valueType: ValueType[Text] =
         summon[ValueType[Text]]
       override def encode(using rt: Runtime)(value: rt.Value[Text]): String =
@@ -44,8 +45,8 @@ object Codec {
         Right(rt.Value.text(s))
     }
 
-  given Codec[Float64] =
-    new Codec[Float64] {
+  given StringCodec[Float64] =
+    new StringCodec[Float64] {
       override def valueType: ValueType[Float64] =
         summon[ValueType[Float64]]
 
