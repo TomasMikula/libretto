@@ -133,10 +133,10 @@ Primitives for racing and recursion were added.
 
 ## Documentation
 
-[Scaladoc](https://tomasmikula.github.io/libretto/latest/scaladoc/) (Found something undocumented or not documented clearly? We should do better. Do not hesitate to
+[Scaladoc](https://continuously.dev/p/libretto/docs/latest/scaladoc/) (Found something undocumented or not documented clearly? We should do better. Do not hesitate to
 [submit a documentation request](https://github.com/TomasMikula/libretto/issues/new?labels=documentation).)
 
-[Tutorial](https://tomasmikula.github.io/libretto/latest/tutorial/basics.html)
+[Tutorial](https://continuously.dev/p/libretto/docs/latest/tutorial/basics.html)
 
 ## Caveats
 
@@ -260,10 +260,10 @@ They are composed of Libretto's linear functions `A -⚬ B`, which are linear by
 ### What exactly are the primitives of Libretto, from which everything else is derived?
 
 There is a hierarchy of DSLs, partially ordered by their power. At the bottom, i.e. the weakest, is currently
-[CoreDSL](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/libretto/CoreDSL.html).
+[CoreDSL](https://continuously.dev/p/libretto/docs/latest/scaladoc/snapshot/api/libretto/CoreDSL.html).
 
 An extension of `CoreDSL` that is of particular interest is
-[ScalaDSL](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/libretto/ScalaDSL.html).
+[ScalaDSL](https://continuously.dev/p/libretto/docs/latest/scaladoc/snapshot/api/libretto/ScalaDSL.html).
 It adds support for using Scala values and pure Scala functions, managing resources that are Scala objects,
 performing effects on those resources, and marking thread-blocking Scala calls.
 
@@ -281,7 +281,7 @@ Yes, [loops can be implemented](https://github.com/TomasMikula/libretto/issues/1
 ### Is there support for timers?
 
 Yes, the basic operation is
-[delay](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/libretto/TimerDSL.html#delay-fffffb21):
+[delay](https://continuously.dev/p/libretto/docs/latest/scaladoc/snapshot/api/libretto/TimerDSL.html#delay-fffffb21):
 
 ```scala
 def delay(d: FiniteDuration): Done -⚬ Done
@@ -289,10 +289,10 @@ def delay(d: FiniteDuration): Done -⚬ Done
 
 ### How do I communicate with the external world (I/O)?
 
-[CoreDSL](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/libretto/CoreDSL.html)
+[CoreDSL](https://continuously.dev/p/libretto/docs/latest/scaladoc/snapshot/api/libretto/CoreDSL.html)
 does not have any means of I/O.
 
-Its extension, [ScalaDSL](https://tomasmikula.github.io/libretto/scaladoc/snapshot/api/libretto/ScalaDSL.html),
+Its extension, [ScalaDSL](https://continuously.dev/p/libretto/docs/latest/scaladoc/snapshot/api/libretto/ScalaDSL.html),
 has means to wrap Scala resources and perform effects on them.
 
 Another approach, although much more involved, is to
