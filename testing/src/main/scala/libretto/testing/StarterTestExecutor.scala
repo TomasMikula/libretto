@@ -44,6 +44,11 @@ object StarterTestExecutor {
             conduct andThen Outcome.toAsyncTestResult,
             postStop andThen Outcome.toAsyncTestResult,
           )
+
+      override def runTestCase(body: () => Outcome[Unit]): TestResult[Unit] =
+        TestExecutor
+          .usingExecutor(exec)
+          .runTestCase(() => Outcome.toAsyncTestResult(body()))
     }
 
   def fromJavaExecutors(

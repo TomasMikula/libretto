@@ -24,15 +24,29 @@ abstract class ScalatestSuite extends AnyFunSuite with libretto.testing.TestSuit
     } {
       testCase match {
         case c: TestCase.Single[testExecutor.testKit.type] =>
-          test(s"$prefix$testName (executed by ${testExecutor.name})") {
-            testExecutor.runTestCase(c.body, c.conductor(_), c.postStop) match {
+          val fullName = s"$prefix$testName (executed by ${testExecutor.name})"
+          def handleTestResult(r: TestResult[Unit]): Unit =
+            r match {
               case TestResult.Success(_) =>
                 // do nothing
-              case TestResult.Failure(msg) =>
-                fail(msg)
+              case TestResult.Failure(msg, pos) =>
+                fail(s"$msg (at ${pos.file}:${pos.line})")
               case TestResult.Crash(e) =>
                 fail(s"Crashed with ${e.getClass.getCanonicalName}: ${e.getMessage}", e)
             }
+          c match {
+            case c: TestCase.SingleProgram[testExecutor.testKit.type] =>
+              test(fullName) {
+                handleTestResult(
+                  testExecutor.runTestCase(c.body, c.conductor(_), c.postStop)
+                )
+              }
+            case c: TestCase.OutcomeOnly[testExecutor.testKit.type] =>
+              test(fullName) {
+                handleTestResult(
+                  testExecutor.runTestCase(c.body)
+                )
+              }
           }
         case TestCase.Multiple(cases) =>
           registerTests(testExecutor, s"$prefix$testName.", cases)

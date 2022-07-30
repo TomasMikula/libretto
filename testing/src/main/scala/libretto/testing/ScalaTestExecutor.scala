@@ -2,6 +2,7 @@ package libretto.testing
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
 import libretto.{CoreLib, Monad, ScalaBridge, ScalaExecutor, ScalaDSL, StarterKit}
+import libretto.scalasource.{Position => SourcePos}
 import libretto.util.{Async, Monad => ScalaMonad}
 import libretto.util.Monad.syntax._
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -36,7 +37,9 @@ object ScalaTestExecutor {
       override def monadAssertion: Monad[-⚬, Assertion] =
         |+|.right[Val[String]]
 
-      override def extractOutcome(using exn: Execution)(outPort: exn.OutPort[Assertion[Done]]): Outcome[Unit] = {
+      override def extractOutcome(using exn: Execution, pos: SourcePos)(
+        outPort: exn.OutPort[Assertion[Done]],
+      ): Outcome[Unit] = {
         import TestResult.{Crash, Success, Failure}
         Outcome.asyncTestResult(
           exn.OutPort
@@ -47,7 +50,7 @@ object ScalaTestExecutor {
               case Right(Left(msg)) =>
                 exn.OutPort.awaitVal(msg).map {
                   case Left(e)    => Crash(e)
-                  case Right(msg) => Failure(msg)
+                  case Right(msg) => Failure(msg, pos)
                 }
               case Right(Right(d)) =>
                 exn.OutPort.awaitDone(d).map {
@@ -86,6 +89,11 @@ object ScalaTestExecutor {
             conduct andThen Outcome.toAsyncTestResult,
             postStop andThen Outcome.toAsyncTestResult,
           )
+
+      override def runTestCase(body: () => Outcome[Unit]): TestResult[Unit] =
+        TestExecutor
+          .usingExecutor(exec)
+          .runTestCase(() => Outcome.toAsyncTestResult(body()))
     }
 
   def fromJavaExecutors(

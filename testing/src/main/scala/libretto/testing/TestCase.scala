@@ -5,8 +5,9 @@ import libretto.testing.TestKit.dsl
 sealed trait TestCase[TK <: TestKit]
 
 object TestCase {
+  sealed trait Single[TK <: TestKit] extends TestCase[TK]
 
-  sealed trait Single[TK <: TestKit] extends TestCase[TK] {
+  sealed trait SingleProgram[TK <: TestKit] extends Single[TK] {
     val testKit: TK
     import testKit.Outcome
     import testKit.dsl._
@@ -22,6 +23,11 @@ object TestCase {
     val postStop: X => Outcome[Unit]
   }
 
+  class OutcomeOnly[TK <: TestKit](
+    val testKit: TK,
+    val body: () => testKit.Outcome[Unit],
+  ) extends Single[TK]
+
   case class Multiple[TK <: TestKit](
     cases: List[(String, TestCase[TK])],
   ) extends TestCase[TK]
@@ -33,7 +39,7 @@ object TestCase {
     conductor0: (exn: kit.probes.Execution) ?=> exn.OutPort[A] => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
   ): TestCase[kit.type] =
-    new Single[kit.type] {
+    new SingleProgram[kit.type] {
       override type O = A
       override type X = B
       override val testKit: kit.type = kit
@@ -62,6 +68,11 @@ object TestCase {
     cases: (String, TestCase[TK])*,
   ): TestCase[TK] =
     Multiple[TK](cases.toList)
+
+  def testOutcome[TK <: TestKit](using kit: TestKit)(
+    body: => kit.Outcome[Unit],
+  ): TestCase[kit.type] =
+    new OutcomeOnly[kit.type](kit, () => body)
 
   def interactWith[O](using kit: TestKit)(body: kit.dsl.-⚬[kit.dsl.Done, O]): InteractWith[kit.type, O] =
     InteractWith(kit, body)

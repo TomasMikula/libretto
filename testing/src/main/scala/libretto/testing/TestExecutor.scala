@@ -19,6 +19,8 @@ trait TestExecutor[+TK <: TestKit] {
     postStop: X => Outcome[Unit],
   ): TestResult[Unit]
 
+  def runTestCase(body: () => Outcome[Unit]): TestResult[Unit]
+
   def runTestCase[O](
     body: Done -⚬ O,
     conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[Unit],
@@ -49,7 +51,7 @@ object TestExecutor {
             conduct(using execution)(outPort)
           }
         } catch {
-          case e => libretto.testing.TestResult.Crash(e)
+          case e => TestResult.Crash(e)
         } finally {
           executor.cancel(execution)
         }
@@ -61,13 +63,20 @@ object TestExecutor {
               postStop(x)
             }
           } catch {
-            case e => libretto.testing.TestResult.Crash(e)
+            case e => TestResult.Crash(e)
           }
-        case TestResult.Failure(msg) =>
-          TestResult.Failure(msg)
+        case TestResult.Failure(msg, pos) =>
+          TestResult.Failure(msg, pos)
         case TestResult.Crash(e) =>
           TestResult.Crash(e)
       }
     }
+
+    def runTestCase(body: () => Async[TestResult[Unit]]): TestResult[Unit] =
+      try {
+        Async.await(body())
+      } catch {
+        case e => TestResult.crash(e)
+      }
   }
 }
