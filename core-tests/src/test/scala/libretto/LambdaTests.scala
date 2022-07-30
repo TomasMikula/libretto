@@ -6,7 +6,6 @@ import libretto.StarterKit.coreLib._
 import libretto.testing.scalatest.ScalatestStarterTestSuite
 import libretto.testing.Tests.Cases
 import libretto.testing.{StarterTestKit, TestCase}
-import libretto.testing.TestCase.testOutcome
 import libretto.util.Monad.syntax._
 
 class LambdaTests extends ScalatestStarterTestSuite {
@@ -14,7 +13,7 @@ class LambdaTests extends ScalatestStarterTestSuite {
     constVal(c)
 
   override def testCases(using kit: StarterTestKit): Cases[kit.type] = {
-    import kit.Outcome.{assertSubstring, expectThrow}
+    import kit.Outcome.{assertSubstring, expectThrows}
     import kit.expectVal
 
     Cases(
@@ -114,7 +113,7 @@ class LambdaTests extends ScalatestStarterTestSuite {
       "unused variable" ->
         TestCase.testOutcome {
           for {
-            e <- expectThrow {
+            e <- expectThrows {
               λ { (trigger: $[Done]) =>
                 val (d1 |*| d2) = fork(trigger)
                 d1
@@ -122,21 +121,21 @@ class LambdaTests extends ScalatestStarterTestSuite {
             }
             _ <- assertSubstring("not fully consumed", e.getMessage)
             _ <- assertSubstring("The second half of untupling", e.getMessage)
-            _ <- assertSubstring("LambdaTests.scala:119", e.getMessage)
+            _ <- assertSubstring("LambdaTests.scala:118", e.getMessage)
           } yield ()
         },
 
       "overused variable" ->
         TestCase.testOutcome {
           for {
-            e <- expectThrow {
+            e <- expectThrows {
               λ { (trigger: $[Done]) =>
                 join(trigger |*| trigger)
               }
             }
             _ <- assertSubstring("used more than once", e.getMessage)
             _ <- assertSubstring("The input of lambda expression ending at", e.getMessage)
-            _ <- assertSubstring("LambdaTests.scala:135", e.getMessage)
+            _ <- assertSubstring("LambdaTests.scala:134", e.getMessage)
           } yield ()
         },
 
@@ -171,14 +170,14 @@ class LambdaTests extends ScalatestStarterTestSuite {
       "unused variable, `one`-based result" ->
         TestCase.testOutcome {
           for {
-            e <- expectThrow {
+            e <- expectThrows {
               λ { d =>
                 one > done
               }
             }
             _ <- assertSubstring("not fully consumed", e.getMessage)
             _ <- assertSubstring("The input of lambda expression ending at", e.getMessage)
-            _ <- assertSubstring("LambdaTests.scala:177", e.getMessage)
+            _ <- assertSubstring("LambdaTests.scala:176", e.getMessage)
           } yield ()
         },
     )

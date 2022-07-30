@@ -30,7 +30,7 @@ trait TestKit {
     def success[A](a: A): Outcome[A] =
       fromTestResult(TestResult.success(a))
 
-    def expectThrow[A](using pos: SourcePos)(a: => A): Outcome[Throwable] =
+    def expectThrows[A](using pos: SourcePos)(a: => A): Outcome[Throwable] =
       try {
         a
         failure(using pos)("Expected exception, nothing was thrown")
@@ -38,10 +38,18 @@ trait TestKit {
         case e => success(e)
       }
 
-    def expectThrow[A, B](using pos: SourcePos)(a: => A)(recover: PartialFunction[Throwable, B]): Outcome[B] =
-      monadOutcome.flatMap(expectThrow(using pos)(a)) {
+    def expectThrows[A, B](using pos: SourcePos)(a: => A)(recover: PartialFunction[Throwable, B]): Outcome[B] =
+      monadOutcome.flatMap(expectThrows(using pos)(a)) {
         case recover(b) => success(b)
         case e          => crash(e)
+      }
+
+    def expectNotThrows[A](using pos: SourcePos)(a: => A): Outcome[Unit] =
+      try {
+        a
+        success(())
+      } catch {
+        case e => failure(using pos)(s"Failed with exception: $e")
       }
 
     def failure[A](using pos: SourcePos)(msg: String): Outcome[A] =
