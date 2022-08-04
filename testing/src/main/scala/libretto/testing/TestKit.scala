@@ -167,12 +167,17 @@ trait TestKit {
     }
 }
 
-object TestKit {
+object TestKit extends TestKitOps
+
+trait TestKitOps {
   transparent inline def givenInstance(using kit: TestKit): kit.type =
     kit
 
   transparent inline def dsl(using kit: TestKit): kit.dsl.type =
     kit.dsl
+
+  transparent inline def probes(using kit: TestKit): kit.probes.type =
+    kit.probes
 
   def success(using kit: TestKit): kit.dsl.-⚬[kit.dsl.Done, kit.Assertion[dsl.Done]] =
     kit.success
