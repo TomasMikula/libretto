@@ -11,7 +11,7 @@ class StarterKit extends AbstractStarterKit(FreeScalaDSL, (scheduler, blockingEx
 
 abstract class AbstractStarterKit(
   val dsl: ScalaDSL,
-  val executor0: (ScheduledExecutorService, JExecutor) => ScalaExecutor.Of[dsl.type],
+  val executor0: (ScheduledExecutorService, JExecutor) => ScalaExecutor.OfDsl[dsl.type],
 ) {
   val coreLib: CoreLib[dsl.type] =
     CoreLib(dsl)
@@ -31,14 +31,15 @@ abstract class AbstractStarterKit(
   val scalaStreams: ScalaStreams[dsl.type, coreLib.type, scalaLib.type, coreStreams.type] =
     ScalaStreams(dsl, coreLib, scalaLib, coreStreams)
 
-  def executor(blockingExecutor: JExecutor)(implicit scheduler: ScheduledExecutorService): ScalaExecutor.Of[dsl.type] =
+  def executor(blockingExecutor: JExecutor)(implicit scheduler: ScheduledExecutorService): ScalaExecutor.OfDsl[dsl.type] =
     executor0(scheduler, blockingExecutor)
 
   def runner(blockingExecutor: JExecutor)(implicit scheduler: ScheduledExecutorService): ScalaRunner[dsl.type] = {
     val ec = ExecutionContext.fromExecutor(scheduler)
 
     ScalaRunner.fromExecutor(
-      executor(blockingExecutor)
+      dsl,
+      executor(blockingExecutor),
     )
   }
 

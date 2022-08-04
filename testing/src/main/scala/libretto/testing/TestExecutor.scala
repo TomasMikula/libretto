@@ -4,7 +4,7 @@ import libretto.{CoreDSL, Executor}
 import libretto.util.{Async, Monad}
 import libretto.util.Monad.syntax._
 
-trait TestExecutor[+TK <: TestKit] {
+trait TestExecutor[TK <: TestKit] {
   val testKit: TK
 
   import testKit.Outcome
@@ -33,7 +33,7 @@ object TestExecutor {
     new UsingExecutor[executor.type](executor)
 
   class UsingExecutor[E <: Executor](val executor: E) {
-    import executor.Execution
+    import executor.bridge.Execution
     import executor.dsl._
 
     def runTestCase[O, X](

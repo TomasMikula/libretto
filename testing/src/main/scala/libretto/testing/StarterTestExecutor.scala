@@ -10,14 +10,15 @@ import scala.util.{Failure, Success, Try}
 
 object StarterTestExecutor {
 
-  private class StarterTestKitFromExecutor[Exec <: ScalaExecutor.Of[StarterKit.dsl.type]](
-    exec: Exec,
+  private class StarterTestKitFromBridge[Bridge <: ScalaBridge.Of[StarterKit.dsl.type]](
+    bridge: Bridge,
   )(using
     ScalaMonad[Future],
-  ) extends ScalaTestExecutor.ScalaTestKitFromExecutor[StarterKit.dsl.type, Exec](StarterKit.dsl, exec) with StarterTestKit
+  ) extends ScalaTestExecutor.ScalaTestKitFromBridge[StarterKit.dsl.type, Bridge](StarterKit.dsl, bridge)
+       with StarterTestKit
 
   def fromExecutor(
-    exec: ScalaExecutor.Of[StarterKit.dsl.type],
+    exec: ScalaExecutor.OfDsl[StarterKit.dsl.type],
   )(using
     ScalaMonad[Future],
   ): TestExecutor[StarterTestKit] =
@@ -25,8 +26,8 @@ object StarterTestExecutor {
       override val name: String =
         StarterTestExecutor.getClass.getCanonicalName
 
-      override val testKit: StarterTestKitFromExecutor[exec.type] =
-        new StarterTestKitFromExecutor(exec)
+      override val testKit: StarterTestKitFromBridge[exec.bridge.type] =
+        new StarterTestKitFromBridge(exec.bridge)
 
       import testKit.Outcome
       import testKit.dsl._
@@ -55,7 +56,7 @@ object StarterTestExecutor {
     scheduler: ScheduledExecutorService,
     blockingExecutor: ExecutorService,
   ): TestExecutor[StarterTestKit] = {
-    val executor0: libretto.ScalaExecutor.Of[StarterKit.dsl.type] =
+    val executor0: libretto.ScalaExecutor.OfDsl[StarterKit.dsl.type] =
       StarterKit.executor(blockingExecutor)(scheduler)
 
     given monadFuture: ScalaMonad[Future] =

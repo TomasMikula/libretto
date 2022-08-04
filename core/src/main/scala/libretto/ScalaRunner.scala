@@ -15,11 +15,12 @@ trait ScalaRunner[DSL <: ScalaDSL] extends Runner[DSL] {
 }
 
 object ScalaRunner {
-  def fromExecutor[DSL <: ScalaDSL](
-    executor: ScalaExecutor.Of[DSL],
-  ): ScalaRunner[DSL] =
-    new ScalaRunner[DSL] {
-      override val dsl: executor.dsl.type = executor.dsl
+  def fromExecutor(
+    dsl0: ScalaDSL,
+    executor: ScalaExecutor.OfDsl[dsl0.type],
+  ): ScalaRunner[dsl0.type] =
+    new ScalaRunner[dsl0.type] {
+      override val dsl: dsl0.type = dsl0
 
       import dsl._
 

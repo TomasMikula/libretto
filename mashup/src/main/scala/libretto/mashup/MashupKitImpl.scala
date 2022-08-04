@@ -301,12 +301,12 @@ object MashupKitImpl extends MashupKit { kit =>
   }
 
   private class RuntimeImpl(
-    executor: ScalaExecutor.Of[StarterKit.dsl.type],
+    executor: ScalaExecutor.OfDsl[StarterKit.dsl.type],
   ) extends MashupRuntime[dsl.type] {
     override val dsl: kit.dsl.type = kit.dsl
     import dsl.{-->, **, ###, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, ValueType, of}
 
-    override opaque type Execution <: MashupExecution = ExecutionImpl[? <: executor.Execution]
+    override opaque type Execution <: MashupExecution = ExecutionImpl[? <: executor.bridge.Execution]
 
     override def run[A, B](prg: dsl.Fun[A, B]): Executing[A, B] = {
       val executing = executor.execute(prg)
@@ -374,7 +374,7 @@ object MashupKitImpl extends MashupKit { kit =>
     }
 
 
-    private class ExecutionImpl[EXN <: executor.Execution](val underlying: EXN) extends MashupExecution {
+    private class ExecutionImpl[EXN <: executor.bridge.Execution](val underlying: EXN) extends MashupExecution {
       override type InPort[A]  = underlying.InPort[A]
       override type OutPort[A] = underlying.OutPort[A]
 

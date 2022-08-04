@@ -2,7 +2,7 @@ package libretto.impl
 
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.{Executor => JExecutor, ScheduledExecutorService, TimeUnit}
-import libretto.{ScalaExecutor, ScalaRunner}
+import libretto.{ScalaBridge, ScalaExecutor, ScalaRunner}
 import libretto.util.Async
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
@@ -22,17 +22,74 @@ class FreeScalaFutureRunner(
   scheduler: ScheduledExecutorService,
   blockingExecutor: JExecutor,
 ) extends ScalaRunner[FreeScalaDSL.type] with ScalaExecutor {
-  import ResourceRegistry._
 
   override type Dsl = FreeScalaDSL.type
-  override opaque type Execution <: ScalaExecution = ExecutionImpl
+  override type Bridge = FreeScalaFutureBridge.type
 
   private implicit val ec: ExecutionContext =
     ExecutionContext.fromExecutor(scheduler)
 
   override val dsl = FreeScalaDSL
+  override val bridge = FreeScalaFutureBridge
 
   import dsl._
+  import bridge.{Executing, Execution, cancelExecution}
+
+  override def execute[A, B](prg: A -⚬ B): Executing[A, B] = {
+    val executing =
+      FreeScalaFutureBridge.execute(prg)(scheduler, blockingExecutor)
+    new Executing(executing.execution, executing.inPort, executing.outPort)
+  }
+
+  override def cancel(execution: Execution): Async[Unit] =
+    Async.fromFuture(cancelExecution(execution)).map(_ => ())
+
+  override def runScala[A](prg: Done -⚬ Val[A]): Future[A] = {
+    val executing = execute(prg)
+    import executing.{execution, inPort, outPort}
+    execution.InPort.supplyDone(inPort)
+    Async
+      .toFuture(
+        execution.OutPort.awaitVal(outPort)
+      )
+      .flatMap {
+        case Right(a) => Future.successful(a)
+        case Left(e)  => Future.failed(e)
+      }
+      .andThen { _ =>
+        // should not be necessary in a proper implementation, but this Future-based implementation
+        // does not guarantee all resources to be closed upon completion
+        cancel(execution)
+      }
+  }
+}
+
+object FreeScalaFutureBridge extends ScalaBridge {
+  import ResourceRegistry._
+
+  override type Dsl = FreeScalaDSL.type
+  override val dsl = FreeScalaDSL
+  import dsl._
+
+  override opaque type Execution <: ScalaExecution = ExecutionImpl
+
+  final class Executing[A, B](
+    val execution: Execution,
+    val inPort: execution.InPort[A],
+    val outPort: execution.OutPort[B],
+  )
+
+  def execute[A, B](prg: A -⚬ B)(
+    scheduler: ScheduledExecutorService,
+    blockingExecutor: JExecutor,
+  ): Executing[A, B] = {
+    val execution = new ExecutionImpl(new ResourceRegistry)(using scheduler, blockingExecutor)
+    val (in, out) = execution.execute(prg)
+    Executing(execution, in, out)
+  }
+
+  def cancelExecution(exn: Execution): Future[Unit] =
+    exn.cancel()
 
   private def bug[A](msg: String): A =
     throw new AssertionError(
@@ -41,59 +98,37 @@ class FreeScalaFutureRunner(
         .stripMargin
     )
 
-  private def schedule[A](d: FiniteDuration, f: () => A): Future[A] = {
-    val pa = Promise[A]()
-    scheduler.schedule(() => pa.success(f()), d.length, d.unit)
-    pa.future
-  }
-
-  override def execute[A, B](prg: A -⚬ B): Executing[A, B] = {
-    val execution = new ExecutionImpl(new ResourceRegistry)
-    val (in, out) = execution.execute(prg)
-    new Executing(execution, in, out)
-  }
-
-  override def runScala[A](prg: Done -⚬ Val[A]): Future[A] = {
-    import Frontier._
-    val resourceRegistry = new ResourceRegistry
-    val fa = Frontier.DoneNow.extendBy(prg, resourceRegistry).toFutureValue
-
-    def closeResources(openResources: Seq[AcquiredResource[_]]): Future[Any] =
-      Future.traverse(openResources) { r => Async.toFuture(r.releaseAsync(r.resource)) }
-
-    fa.transformWith {
-      case Success(a) =>
-        val openResources = resourceRegistry.close()
-        if (openResources.isEmpty) {
-          Future.successful(a)
-        } else {
-          System.err.println(s"Execution completed successfully, but there are ${openResources.size} unclosed resources left. Going to close them.")
-          closeResources(openResources).map { _ => a }
-        }
-      case Failure(e) =>
-        val openResources = resourceRegistry.close()
-        closeResources(openResources)
-          .transformWith(_ => Future.failed[A](e)) // return the original error
-    }
-  }
-
-  private class ExecutionImpl(resourceRegistry: ResourceRegistry) extends ScalaExecution {
+  private class ExecutionImpl(
+    resourceRegistry: ResourceRegistry,
+  )(using
+    scheduler: ScheduledExecutorService,
+    blockingExecutor: JExecutor,
+  ) extends ScalaExecution {
     override opaque type OutPort[A] = Frontier[A]
     override opaque type InPort[A] = Frontier[A] => Unit
+
+    private implicit val ec: ExecutionContext =
+      ExecutionContext.fromExecutor(scheduler)
 
     def execute[A, B](prg: A -⚬ B): (InPort[A], OutPort[B]) = {
       val input = Promise[Frontier[A]]
       val in:  InPort[A]  = fa => input.success(fa)
-      val out: OutPort[B] = Frontier.Deferred(input.future).extendBy(prg, resourceRegistry)
+      val out: OutPort[B] = Frontier.Deferred(input.future).extendBy(prg)(using resourceRegistry)
       (in, out)
     }
 
-    def cancel(): Future[Unit] =
-      closeRegistry(resourceRegistry).map(_ => ())
+    def cancel(): Future[Unit] = {
+      val openResources: Seq[AcquiredResource[_]] =
+        resourceRegistry.close()
+
+      Future.traverse(openResources) { r =>
+        Async.toFuture(r.releaseAsync(r.resource))
+      }.map(_ => ())
+    }
 
     override object OutPort extends ScalaOutPorts {
       override def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B] =
-        port.extendBy(f, resourceRegistry)
+        port.extendBy(f)(using resourceRegistry)
 
       override def split[A, B](port: OutPort[A |*| B]): (OutPort[A], OutPort[B]) =
         port.splitPair
@@ -144,7 +179,7 @@ class FreeScalaFutureRunner(
 
     override object InPort extends ScalaInPorts {
       override def contramap[A, B](port: InPort[B])(f: A -⚬ B): InPort[A] =
-        a => port(a.extendBy(f, resourceRegistry))
+        a => port(a.extendBy(f)(using resourceRegistry))
 
       override def split[A, B](port: InPort[A |*| B]): (InPort[A], InPort[B]) = {
         val (fna, fa) = Frontier.promise[A]
@@ -207,25 +242,26 @@ class FreeScalaFutureRunner(
     }
   }
 
-  override def cancel(execution: Execution): Async[Unit] =
-    Async.fromFuture(execution.cancel()).map(_ => ())
-
-  private def closeRegistry(resourceRegistry: ResourceRegistry): Future[Any] = {
-    val openResources: Seq[AcquiredResource[_]] =
-      resourceRegistry.close()
-
-    Future.traverse(openResources) { r =>
-      Async.toFuture(r.releaseAsync(r.resource))
-    }
-  }
-
   private sealed trait Frontier[A] {
     import Frontier._
 
-    def extendBy[B](f: A -⚬ B, resourceRegistry: ResourceRegistry): Frontier[B] = {
+    private def schedule[A](d: FiniteDuration, f: () => A)(using
+      scheduler: ScheduledExecutorService,
+    ): Future[A] = {
+      val pa = Promise[A]()
+      scheduler.schedule(() => pa.success(f()), d.length, d.unit)
+      pa.future
+    }
+
+    def extendBy[B](f: A -⚬ B)(using
+      resourceRegistry: ResourceRegistry,
+      ec: ExecutionContext,
+      scheduler: ScheduledExecutorService,
+      blockingExecutor: JExecutor,
+    ): Frontier[B] = {
       implicit class FrontierOps[X](fx: Frontier[X]) {
         def extend[Y](f: X -⚬ Y): Frontier[Y] =
-        fx.extendBy(f, resourceRegistry)
+        fx.extendBy(f)
       }
 
       f match {
@@ -1130,7 +1166,7 @@ class FreeScalaFutureRunner(
       }
     }
 
-    private def crash(e: Throwable): Unit = {
+    private def crash(e: Throwable)(using ExecutionContext): Unit = {
       this match {
         case One | DoneNow | PingNow | Value(_) | MVal(_) | Resource(_, _) =>
           // do nothing
@@ -1187,7 +1223,7 @@ class FreeScalaFutureRunner(
       Deferred(Future.failed(new Exception(msg)))
 
     extension (n: Frontier[Need]) {
-      def fulfillWith(f: Future[Any]): Unit =
+      def fulfillWith(f: Future[Any])(using ExecutionContext): Unit =
         n match {
           case NeedAsync(p) =>
             p.completeWith(f)
@@ -1205,7 +1241,7 @@ class FreeScalaFutureRunner(
     }
 
     extension (n: Frontier[Pong]) {
-      def fulfillPongWith(f: Future[Any]): Unit =
+      def fulfillPongWith(f: Future[Any])(using ExecutionContext): Unit =
         n match {
           case PongAsync(p) =>
             p.completeWith(f)
@@ -1223,7 +1259,7 @@ class FreeScalaFutureRunner(
     }
 
     extension [A, B](f: Frontier[A |+| B]) {
-      def futureEither: Future[Either[Frontier[A], Frontier[B]]] =
+      def futureEither(using ExecutionContext): Future[Either[Frontier[A], Frontier[B]]] =
         f match {
           case InjectL(a) => Future.successful(Left(a))
           case InjectR(b) => Future.successful(Right(b))
@@ -1232,19 +1268,19 @@ class FreeScalaFutureRunner(
     }
 
     extension [A, B](f: Frontier[A |&| B]) {
-      def chooseL: Frontier[A] =
+      def chooseL(using ExecutionContext): Frontier[A] =
         f match {
           case Choice(a, b, onError) => a()
           case Deferred(f) => Deferred(f.map(_.chooseL))
         }
 
-      def chooseR: Frontier[B] =
+      def chooseR(using ExecutionContext): Frontier[B] =
         f match {
           case Choice(a, b, onError) => b()
           case Deferred(f) => Deferred(f.map(_.chooseR))
         }
 
-      def asChoice: Choice[A, B] =
+      def asChoice(using ExecutionContext): Choice[A, B] =
         f match {
           case c @ Choice(_, _, _) => c
           case Deferred(f) =>
@@ -1263,7 +1299,7 @@ class FreeScalaFutureRunner(
     }
 
     extension [A, B](f: Frontier[A |*| B]) {
-      def splitPair: (Frontier[A], Frontier[B]) =
+      def splitPair(using ExecutionContext): (Frontier[A], Frontier[B]) =
         f match {
           case Pair(a, b) => (a, b)
           case Deferred(f) =>
@@ -1273,7 +1309,7 @@ class FreeScalaFutureRunner(
     }
 
     extension (f: Frontier[Done]) {
-      def toFutureDone: Future[DoneNow.type] =
+      def toFutureDone(using ExecutionContext): Future[DoneNow.type] =
         f match {
           case DoneNow =>
             Future.successful(DoneNow)
@@ -1283,7 +1319,7 @@ class FreeScalaFutureRunner(
     }
 
     extension (f: Frontier[Ping]) {
-      def toFuturePing: Future[PingNow.type] =
+      def toFuturePing(using ExecutionContext): Future[PingNow.type] =
         f match {
           case PingNow =>
             Future.successful(PingNow)
@@ -1293,7 +1329,7 @@ class FreeScalaFutureRunner(
     }
 
     extension [A](f: Frontier[Val[A]]) {
-      def toFutureValue: Future[A] =
+      def toFutureValue(using ExecutionContext): Future[A] =
         f match {
           case Value(a) => Future.successful(a)
           case Deferred(fa) => fa.flatMap(_.toFutureValue)
@@ -1301,7 +1337,7 @@ class FreeScalaFutureRunner(
     }
 
     extension [A](f: Frontier[Res[A]]) {
-      def toFutureRes: Future[ResFrontier[A]] =
+      def toFutureRes(using ExecutionContext): Future[ResFrontier[A]] =
         f match {
           case f @ MVal(_) => Future.successful(f)
           case f @ Resource(_, _) => Future.successful(f)
@@ -1311,7 +1347,7 @@ class FreeScalaFutureRunner(
 
     // using implicit class because extension methods may not have type parameters
     implicit class FrontierValOps[A](f: Frontier[Val[A]]) {
-      def mapVal[B](g: A => B): Frontier[Val[B]] =
+      def mapVal[B](g: A => B)(using ExecutionContext): Frontier[Val[B]] =
         f match {
           case Value(a) => Value(g(a))
           case Deferred(fa) => Deferred(fa.map(_.mapVal(g)))
@@ -1319,7 +1355,7 @@ class FreeScalaFutureRunner(
     }
 
     extension [A](f: Frontier[Neg[A]]) {
-      def completeWith(fa: Future[A]): Unit =
+      def completeWith(fa: Future[A])(using ExecutionContext): Unit =
         f match {
           case Backwards(pfa) => pfa.success(fa.toValFrontier)
           case Deferred(f) => f.onComplete {
@@ -1333,7 +1369,7 @@ class FreeScalaFutureRunner(
           }
         }
 
-      def future: Future[A] =
+      def future(using ExecutionContext): Future[A] =
         f match {
           case Backwards(pfa) => pfa.future.flatMap(_.toFutureValue)
           case Deferred(f) => f.flatMap(_.future)
@@ -1341,7 +1377,7 @@ class FreeScalaFutureRunner(
     }
 
     extension (f: Frontier[One]) {
-      def awaitIfDeferred: Unit =
+      def awaitIfDeferred(using ExecutionContext): Unit =
         f match {
           case One => // do nothing
           case Deferred(f) =>
@@ -1353,7 +1389,7 @@ class FreeScalaFutureRunner(
     }
 
     extension [A](fna: Frontier[-[A]]) {
-      def fulfill(fa: Frontier[A]): Unit =
+      def fulfill(fa: Frontier[A])(using ExecutionContext): Unit =
         fna match {
           case Backwards(pfa) =>
             pfa.success(fa)
@@ -1364,12 +1400,12 @@ class FreeScalaFutureRunner(
             }
         }
 
-      def fulfill(fa: Future[Frontier[A]]): Unit =
+      def fulfill(fa: Future[Frontier[A]])(using ExecutionContext): Unit =
         fulfill(Deferred(fa))
     }
 
     extension [A](fa: Future[A]) {
-      def toValFrontier: Frontier[Val[A]] =
+      def toValFrontier(using ExecutionContext): Frontier[Val[A]] =
         Deferred(fa.map(Value(_)))
     }
 

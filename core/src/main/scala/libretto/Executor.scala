@@ -108,8 +108,15 @@ object ScalaBridge {
   type Of[DSL <: ScalaDSL] = ScalaBridge { type Dsl = DSL }
 }
 
-trait Executor extends CoreBridge {
-  import dsl._
+trait Executor {
+  type Dsl <: CoreDSL
+  val dsl: Dsl
+
+  type Bridge <: CoreBridge.Of[dsl.type]
+  val bridge: Bridge
+
+  import dsl.-⚬
+  import bridge.Execution
 
   final class Executing[A, B](
     val execution: Execution,
@@ -123,11 +130,18 @@ trait Executor extends CoreBridge {
 }
 
 object Executor {
-  type Of[DSL <: CoreDSL] = Executor { type Dsl = DSL }
+  type Of[DSL <: CoreDSL, BRIDGE <: CoreBridge.Of[DSL]] =
+    Executor { type Dsl = DSL; type Bridge = BRIDGE }
 }
 
-trait ScalaExecutor extends Executor with ScalaBridge
+trait ScalaExecutor extends Executor {
+  override type Dsl <: ScalaDSL
+  override type Bridge <: ScalaBridge.Of[dsl.type]
+}
 
 object ScalaExecutor {
-  type Of[DSL <: ScalaDSL] = ScalaExecutor { type Dsl = DSL }
+  type OfDsl[DSL <: ScalaDSL] = ScalaExecutor { type Dsl = DSL }
+
+  type Of[DSL <: ScalaDSL, BRIDGE <: ScalaBridge.Of[DSL]] =
+    ScalaExecutor { type Dsl = DSL; type Bridge = BRIDGE }
 }

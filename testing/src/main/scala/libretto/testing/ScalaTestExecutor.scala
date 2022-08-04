@@ -11,12 +11,12 @@ import scala.util.{Failure, Success, Try}
 
 object ScalaTestExecutor {
 
-  class ScalaTestKitFromExecutor[DSL <: ScalaDSL, Exec <: ScalaExecutor.Of[DSL]](
+  class ScalaTestKitFromBridge[DSL <: ScalaDSL, Bridge <: ScalaBridge.Of[DSL]](
     val dsl0: DSL,
-    val exec: Exec & ScalaExecutor.Of[dsl0.type],
+    val bridge: Bridge & ScalaBridge.Of[dsl0.type],
   ) extends ScalaTestKit {
-      override val dsl: exec.dsl.type = exec.dsl
-      override val probes: exec.type = exec
+      override val dsl: bridge.dsl.type = bridge.dsl
+      override val probes: bridge.type = bridge
       import dsl._
       import probes.Execution
 
@@ -64,14 +64,14 @@ object ScalaTestExecutor {
 
   def fromExecutor(
     dsl: ScalaDSL,
-    exec: ScalaExecutor.Of[dsl.type],
+    exec: ScalaExecutor.OfDsl[dsl.type],
   ): TestExecutor[ScalaTestKit] =
     new TestExecutor[ScalaTestKit] {
       override val name: String =
         ScalaTestExecutor.getClass.getCanonicalName
 
-      override val testKit: ScalaTestKitFromExecutor[dsl.type, exec.type] =
-        new ScalaTestKitFromExecutor[dsl.type, exec.type](dsl, exec)
+      override val testKit: ScalaTestKitFromBridge[dsl.type, exec.bridge.type] =
+        new ScalaTestKitFromBridge[dsl.type, exec.bridge.type](dsl, exec.bridge)
 
       import testKit.Outcome
       import testKit.dsl._
@@ -100,7 +100,7 @@ object ScalaTestExecutor {
     scheduler: ScheduledExecutorService,
     blockingExecutor: ExecutorService,
   ): TestExecutor[ScalaTestKit] = {
-    val executor0: libretto.ScalaExecutor.Of[StarterKit.dsl.type] =
+    val executor0: libretto.ScalaExecutor.OfDsl[StarterKit.dsl.type] =
       StarterKit.executor(blockingExecutor)(scheduler)
 
     given monadFuture: ScalaMonad[Future] =
