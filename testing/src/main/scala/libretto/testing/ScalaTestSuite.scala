@@ -6,9 +6,9 @@ import scala.{:: => NonEmptyList}
 trait ScalaTestSuite extends TestSuite {
   def testCases(using kit: ScalaTestKit): Tests.Cases[kit.type]
 
-  def testExecutors: NonEmptyList[TestExecutor[ScalaTestKit]] =
+  def testExecutors: NonEmptyList[TestExecutor.Factory[ScalaTestKit]] =
     NonEmptyList(
-      ScalaTestExecutor.global,
+      TestExecutor.Factory.noOp(ScalaTestExecutor.global),
       Nil
     )
 

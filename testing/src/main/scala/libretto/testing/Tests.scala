@@ -8,7 +8,7 @@ sealed trait Tests {
 
   def testCases(using kit: Kit): NonEmptyList[(String, TestCase[kit.type])]
 
-  val testExecutors: NonEmptyList[TestExecutor[Kit]]
+  val testExecutors: List[TestExecutor.Factory[Kit]]
 }
 
 object Tests {
@@ -18,13 +18,19 @@ object Tests {
   object Builder {
     class WrittenUsing[TK <: TestKit]() {
       def executedBy(
-        executor: TestExecutor[TK],
-        executors: TestExecutor[TK]*,
+        executor: TestExecutor[TK] | TestExecutor.Factory[TK],
+        executors: TestExecutor[TK] | TestExecutor.Factory[TK]*,
       ): ExecutedBy[TK] =
-        new ExecutedBy[TK](NonEmptyList(executor, executors.toList))
+        new ExecutedBy[TK](
+          NonEmptyList(executor, executors.toList)
+            .map {
+              case factory: TestExecutor.Factory[TK] => factory
+              case executor: TestExecutor[TK]        => TestExecutor.Factory.noOp(executor)
+            }
+        )
     }
 
-    class ExecutedBy[TK <: TestKit](executors: NonEmptyList[TestExecutor[TK]]) {
+    class ExecutedBy[TK <: TestKit](executors: List[TestExecutor.Factory[TK]]) {
       def in(
         cases: (kit: TK) ?=> Cases[kit.type],
       ): Tests =

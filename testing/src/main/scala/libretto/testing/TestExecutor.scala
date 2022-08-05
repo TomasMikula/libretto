@@ -4,7 +4,7 @@ import libretto.{CoreDSL, Executor}
 import libretto.util.{Async, Monad}
 import libretto.util.Monad.syntax._
 
-trait TestExecutor[TK <: TestKit] {
+trait TestExecutor[TK <: TestKit] { self =>
   val testKit: TK
 
   import testKit.Outcome
@@ -26,9 +26,63 @@ trait TestExecutor[TK <: TestKit] {
     conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[Unit],
   ): TestResult[Unit] =
     runTestCase[O, Unit](body, conduct(_), testKit.monadOutcome.pure)
+
+  def narrow: TestExecutor[testKit.type] =
+    new TestExecutor[testKit.type] {
+      export self.{testKit, name, runTestCase}
+    }
 }
 
 object TestExecutor {
+  trait Factory[TK <: TestKit] {
+    val testKit: TK
+    def name: String
+
+    type Exec <: TestExecutor[testKit.type]
+
+    def create(): Exec
+    def shutdown(executor: Exec): Unit
+  }
+
+  object Factory {
+    /** Performs no initialization or shutdown. */
+    def noOp[TK <: TestKit](executor: TestExecutor[TK]): Factory[TK] =
+      new Factory[TK] {
+        override val testKit: executor.testKit.type = executor.testKit
+        override def name: String = executor.name
+        override type Exec = TestExecutor[testKit.type]
+        override def create(): Exec = executor.narrow
+        override def shutdown(exec: Exec): Unit = {}
+      }
+
+    def fromAcquire[TK <: TestKit](
+      factoryName: String,
+      kit: TK,
+      acquire: () => (TestExecutor[kit.type], () => Unit),
+    ): Factory[TK] = {
+      class TestExecutorWithShutdown(
+        val underlying: TestExecutor[kit.type],
+        val shutdown: () => Unit,
+      ) extends TestExecutor[kit.type] {
+        export underlying.{name, runTestCase, testKit}
+      }
+
+      new Factory[TK] {
+        override val testKit: kit.type = kit
+        override def name: String = factoryName
+        override type Exec = TestExecutorWithShutdown
+
+        override def create(): Exec = {
+          val (executor, shutdown) = acquire()
+          new TestExecutorWithShutdown(executor, shutdown)
+        }
+
+        override def shutdown(executor: TestExecutorWithShutdown): Unit =
+          executor.shutdown()
+      }
+    }
+  }
+
   def usingExecutor(executor: Executor): UsingExecutor[executor.type] =
     new UsingExecutor[executor.type](executor)
 
