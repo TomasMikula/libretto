@@ -2,7 +2,7 @@ package libretto.impl
 
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.{Executor => JExecutor, ScheduledExecutorService, TimeUnit}
-import libretto.{ScalaBridge, ScalaExecutor, ScalaRunner}
+import libretto.{ScalaBridge, ScalaExecutor}
 import libretto.util.Async
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
@@ -21,7 +21,7 @@ import scala.concurrent.duration.Duration
 class FreeScalaFutureRunner(
   scheduler: ScheduledExecutorService,
   blockingExecutor: JExecutor,
-) extends ScalaRunner[FreeScalaDSL.type] with ScalaExecutor {
+) extends ScalaExecutor {
 
   override type Dsl = FreeScalaDSL.type
   override type Bridge = FreeScalaFutureBridge.type
@@ -43,25 +43,6 @@ class FreeScalaFutureRunner(
 
   override def cancel(execution: Execution): Async[Unit] =
     Async.fromFuture(cancelExecution(execution)).map(_ => ())
-
-  override def runScala[A](prg: Done -⚬ Val[A]): Future[A] = {
-    val executing = execute(prg)
-    import executing.{execution, inPort, outPort}
-    execution.InPort.supplyDone(inPort)
-    Async
-      .toFuture(
-        execution.OutPort.awaitVal(outPort)
-      )
-      .flatMap {
-        case Right(a) => Future.successful(a)
-        case Left(e)  => Future.failed(e)
-      }
-      .andThen { _ =>
-        // should not be necessary in a proper implementation, but this Future-based implementation
-        // does not guarantee all resources to be closed upon completion
-        cancel(execution)
-      }
-  }
 }
 
 object FreeScalaFutureBridge extends ScalaBridge {

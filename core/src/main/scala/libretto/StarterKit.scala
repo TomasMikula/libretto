@@ -2,6 +2,7 @@ package libretto
 
 import java.util.concurrent.{Executor => JExecutor, Executors, ScheduledExecutorService}
 import libretto.impl.{FreeScalaDSL, FreeScalaFutureRunner}
+import libretto.util.Async
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
@@ -34,15 +35,6 @@ abstract class AbstractStarterKit(
   def executor(blockingExecutor: JExecutor)(implicit scheduler: ScheduledExecutorService): ScalaExecutor.OfDsl[dsl.type] =
     executor0(scheduler, blockingExecutor)
 
-  def runner(blockingExecutor: JExecutor)(implicit scheduler: ScheduledExecutorService): ScalaRunner[dsl.type] = {
-    val ec = ExecutionContext.fromExecutor(scheduler)
-
-    ScalaRunner.fromExecutor(
-      dsl,
-      executor(blockingExecutor),
-    )
-  }
-
   export dsl._
   export coreLib.{dsl => _, _}
   export scalaLib.{dsl => _, coreLib => _, _}
@@ -55,13 +47,22 @@ abstract class AbstractStarterKit(
     val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())
     val blockingExecutor = Executors.newCachedThreadPool()
     implicit val ec = ExecutionContext.fromExecutor(mainExecutor)
+    val exec = executor(blockingExecutor)(mainExecutor)
 
-    runner(blockingExecutor)(mainExecutor)
-      .runScala(blueprint)
-      .map { res =>
+    val executing = exec.execute(blueprint)
+    import executing.{execution, inPort, outPort}
+
+    execution.InPort.supplyDone(inPort)
+    Async
+      .toFuture { execution.OutPort.awaitVal(outPort) }
+      .flatMap {
+        case Right(a) => Future.successful(a)
+        case Left(e)  => Future.failed(e)
+      }
+      .andThen { _ =>
+        exec.cancel(execution) // should not be necessary, but the Future-based impl sometimes does not release all resources before completion
         blockingExecutor.shutdown()
         mainExecutor.shutdown()
-        res
       }
   }
 
