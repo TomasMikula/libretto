@@ -2,13 +2,54 @@ package libretto.impl
 
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.{Executor => JExecutor, ScheduledExecutorService, TimeUnit}
-import libretto.{ScalaBridge, ScalaExecutor}
+import libretto.{ExecutionParams, ScalaBridge, ScalaExecutor, Scheduler}
 import libretto.util.Async
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}
 import scala.concurrent.duration.Duration
+
+object FreeScalaFutureRunner {
+  def apply(
+    scheduler: ScheduledExecutorService,
+    blockingExecutor: JExecutor,
+  ): ScalaExecutor.OfDsl[FreeScalaDSL.type] = {
+    val ec = ExecutionContext.fromExecutor(scheduler)
+    val sc = new SchedulerFromScheduledExecutorService(scheduler)
+    new FreeScalaFutureRunner(ec, sc, blockingExecutor)
+  }
+
+  type ExecutionParam[A] = ExecutionParams.Free[SchedulerParam, A]
+  object ExecutionParam extends ExecutionParams.WithScheduler[ExecutionParam] {
+    override def unit: ExecutionParam[Unit] =
+      ExecutionParams.Free.unit
+    override def pair[A, B](a: ExecutionParam[A], b: ExecutionParam[B]): ExecutionParam[(A, B)] =
+      ExecutionParams.Free.pair(a, b)
+    override def scheduler(s: Scheduler): ExecutionParam[Unit] =
+      ExecutionParams.Free.wrap(SchedulerParam(s))
+
+    def extract[A](pa: ExecutionParam[A]): (Option[Scheduler], A) = {
+      import ExecutionParams.Free.{One, Zip, Ext}
+      pa match {
+        case Ext(sp @ SchedulerParam(scheduler)) =>
+          (Some(scheduler), sp.fromUnit(()))
+        case _: One[SchedulerParam] =>
+          (None, ())
+        case z: Zip[SchedulerParam, a, b] =>
+          (extract[a](z.a), extract[b](z.b)) match {
+            case ((None, a), (s, b)) => (s, (a, b))
+            case ((s, a), (None, b)) => (s, (a, b))
+            case ((Some(s1), a), (Some(s2), b)) => throw new IllegalArgumentException("Scheduler specified twice")
+          }
+      }
+    }
+  }
+
+  case class SchedulerParam[A](scheduler: Scheduler)(using ev: A =:= Unit) {
+    def fromUnit(u: Unit): A = ev.flip(u)
+  }
+}
 
 /** Runner of [[FreeScalaDSL]] that returns a [[Future]].
   *
@@ -19,26 +60,37 @@ import scala.concurrent.duration.Duration
   * Dotty's) type inference cannot cope with the kind of pattern matches found here.
   */
 class FreeScalaFutureRunner(
-  scheduler: ScheduledExecutorService,
+  ec: ExecutionContext,
+  scheduler: Scheduler,
   blockingExecutor: JExecutor,
 ) extends ScalaExecutor {
 
   override type Dsl = FreeScalaDSL.type
   override type Bridge = FreeScalaFutureBridge.type
 
-  private implicit val ec: ExecutionContext =
-    ExecutionContext.fromExecutor(scheduler)
-
   override val dsl = FreeScalaDSL
   override val bridge = FreeScalaFutureBridge
+
+  override type ExecutionParam[A] = FreeScalaFutureRunner.ExecutionParam[A]
+  override val ExecutionParam: ExecutionParams.WithScheduler[ExecutionParam] =
+    FreeScalaFutureRunner.ExecutionParam
 
   import dsl._
   import bridge.{Executing, Execution, cancelExecution}
 
-  override def execute[A, B](prg: A -⚬ B): Executing[A, B] = {
-    val executing =
-      FreeScalaFutureBridge.execute(prg)(scheduler, blockingExecutor)
-    new Executing(executing.execution, executing.inPort, executing.outPort)
+  override def execute[A, B, P](
+    prg: A -⚬ B,
+    params: ExecutionParam[P],
+  ): (Executing[A, B], P) = {
+    val (schedOpt, p) = FreeScalaFutureRunner.ExecutionParam.extract(params)
+    val sched = schedOpt.getOrElse(scheduler)
+
+    val executing = {
+      val exctng = FreeScalaFutureBridge.execute(prg)(ec, sched, blockingExecutor)
+      new Executing(exctng.execution, exctng.inPort, exctng.outPort)
+    }
+
+    (executing, p)
   }
 
   override def cancel(execution: Execution): Async[Unit] =
@@ -61,10 +113,11 @@ object FreeScalaFutureBridge extends ScalaBridge {
   )
 
   def execute[A, B](prg: A -⚬ B)(
-    scheduler: ScheduledExecutorService,
+    ec: ExecutionContext,
+    scheduler: Scheduler,
     blockingExecutor: JExecutor,
   ): Executing[A, B] = {
-    val execution = new ExecutionImpl(new ResourceRegistry)(using scheduler, blockingExecutor)
+    val execution = new ExecutionImpl(new ResourceRegistry)(using ec, scheduler, blockingExecutor)
     val (in, out) = execution.execute(prg)
     Executing(execution, in, out)
   }
@@ -82,14 +135,12 @@ object FreeScalaFutureBridge extends ScalaBridge {
   private class ExecutionImpl(
     resourceRegistry: ResourceRegistry,
   )(using
-    scheduler: ScheduledExecutorService,
+    ec: ExecutionContext,
+    scheduler: Scheduler,
     blockingExecutor: JExecutor,
   ) extends ScalaExecution {
     override opaque type OutPort[A] = Frontier[A]
     override opaque type InPort[A] = Frontier[A] => Unit
-
-    private implicit val ec: ExecutionContext =
-      ExecutionContext.fromExecutor(scheduler)
 
     def execute[A, B](prg: A -⚬ B): (InPort[A], OutPort[B]) = {
       val input = Promise[Frontier[A]]
@@ -226,18 +277,10 @@ object FreeScalaFutureBridge extends ScalaBridge {
   private sealed trait Frontier[A] {
     import Frontier._
 
-    private def schedule[A](d: FiniteDuration, f: () => A)(using
-      scheduler: ScheduledExecutorService,
-    ): Future[A] = {
-      val pa = Promise[A]()
-      scheduler.schedule(() => pa.success(f()), d.length, d.unit)
-      pa.future
-    }
-
     def extendBy[B](f: A -⚬ B)(using
       resourceRegistry: ResourceRegistry,
       ec: ExecutionContext,
-      scheduler: ScheduledExecutorService,
+      scheduler: Scheduler,
       blockingExecutor: JExecutor,
     ): Frontier[B] = {
       implicit class FrontierOps[X](fx: Frontier[X]) {
@@ -658,7 +701,7 @@ object FreeScalaFutureBridge extends ScalaBridge {
           this
             .asInstanceOf[Frontier[Val[FiniteDuration]]]
             .toFutureValue
-            .flatMap(d => schedule(d, () => DoneNow))
+            .flatMap(d => scheduler.schedule(d, () => DoneNow))
             .asDeferredFrontier
 
         case -⚬.LiftEither() =>
@@ -1478,4 +1521,14 @@ object FreeScalaFutureBridge extends ScalaBridge {
   }
 
   private case class Crash(msg: String) extends Exception(msg)
+}
+
+class SchedulerFromScheduledExecutorService(
+    scheduler: ScheduledExecutorService,
+) extends Scheduler {
+  override def schedule[A](d: FiniteDuration, f: () => A)(using unused: ExecutionContext): Future[A] = {
+    val pa = Promise[A]()
+    scheduler.schedule(() => pa.success(f()), d.length, d.unit)
+    pa.future
+  }
 }

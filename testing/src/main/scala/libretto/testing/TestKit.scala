@@ -1,6 +1,6 @@
 package libretto.testing
 
-import libretto.{CoreBridge, CoreDSL, Monad}
+import libretto.{CoreBridge, CoreDSL, ExecutionParams, Monad}
 import libretto.scalasource.{Position => SourcePos}
 import libretto.util.{Async, Monad => ScalaMonad}
 import libretto.util.Monad.syntax._
@@ -124,6 +124,9 @@ trait TestKit {
   def extractOutcome(using exn: Execution, pos: SourcePos)(
     outPort: exn.OutPort[Assertion[Done]],
   ): Outcome[Unit]
+
+  type ExecutionParam[A]
+  val ExecutionParam: ExecutionParams[ExecutionParam]
 
   given monadOutcome: ScalaMonad[Outcome] with {
     override def pure[A](a: A): Outcome[A] =

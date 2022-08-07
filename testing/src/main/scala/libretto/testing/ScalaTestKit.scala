@@ -4,7 +4,7 @@ import libretto.{CoreLib, ScalaBridge, ScalaDSL}
 import libretto.testing.TestKit.dsl
 import libretto.util.Monad.syntax._
 
-trait ScalaTestKit extends TestKit {
+trait ScalaTestKit extends TestKitWithManualClock {
   override val dsl: ScalaDSL
   override val probes: ScalaBridge.Of[dsl.type]
 

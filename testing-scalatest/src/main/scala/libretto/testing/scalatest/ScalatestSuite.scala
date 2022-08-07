@@ -75,7 +75,8 @@ extends AnyFunSuite
             case c: TestCase.SingleProgram[testKit.type] =>
               test(fullName) {
                 handleTestResult(
-                  testExecutor().runTestCase(c.body, c.conductor(_), c.postStop)
+                  testExecutor()
+                    .runTestCase(c.body, c.params, c.conductor(_, _), c.postStop)
                 )
               }
             case c: TestCase.OutcomeOnly[testKit.type] =>

@@ -9,16 +9,19 @@ object TestCase {
 
   sealed trait SingleProgram[TK <: TestKit] extends Single[TK] {
     val testKit: TK
-    import testKit.Outcome
+    import testKit.{ExecutionParam, Outcome}
     import testKit.dsl._
     import testKit.probes.Execution
 
     type O
+    type P
     type X
 
     val body: Done -⚬ O
 
-    val conductor: (exn: Execution) ?=> exn.OutPort[O] => Outcome[X]
+    val params: ExecutionParam[P]
+
+    val conductor: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[X]
 
     val postStop: X => Outcome[Unit]
   }
@@ -32,6 +35,25 @@ object TestCase {
     cases: List[(String, TestCase[TK])],
   ) extends TestCase[TK]
 
+  private def makeWithParams[A, Q, B](using
+    kit: TestKit,
+  )(
+    body0: dsl.-⚬[dsl.Done, A],
+    params0: kit.ExecutionParam[Q],
+    conductor0: (exn: kit.probes.Execution) ?=> (exn.OutPort[A], Q) => kit.Outcome[B],
+    postStop0: B => kit.Outcome[Unit],
+  ): TestCase[kit.type] =
+    new SingleProgram[kit.type] {
+      override type O = A
+      override type P = Q
+      override type X = B
+      override val testKit: kit.type = kit
+      override val body = body0
+      override val params = params0
+      override val conductor = conductor0(_, _)
+      override val postStop = postStop0
+    }
+
   private def make[A, B](using
     kit: TestKit,
   )(
@@ -39,14 +61,12 @@ object TestCase {
     conductor0: (exn: kit.probes.Execution) ?=> exn.OutPort[A] => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
   ): TestCase[kit.type] =
-    new SingleProgram[kit.type] {
-      override type O = A
-      override type X = B
-      override val testKit: kit.type = kit
-      override val body = body0
-      override val conductor = conductor0(_)
-      override val postStop = postStop0
-    }
+    makeWithParams[A, Unit, B](
+      body0,
+      kit.ExecutionParam.unit,
+      (pa, _) => conductor0(pa),
+      postStop0,
+    )
 
   def apply(using kit: TestKit)(body: dsl.-⚬[dsl.Done, kit.Assertion[dsl.Done]]): TestCase[kit.type] =
     make(body, kit.extractOutcome(_), kit.monadOutcome.pure)

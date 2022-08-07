@@ -8,7 +8,7 @@ import scala.util.{Failure, Success}
 
 object StarterKit extends StarterKit
 
-class StarterKit extends AbstractStarterKit(FreeScalaDSL, (scheduler, blockingExecutor) => new FreeScalaFutureRunner(scheduler, blockingExecutor))
+class StarterKit extends AbstractStarterKit(FreeScalaDSL, (scheduler, blockingExecutor) => FreeScalaFutureRunner(scheduler, blockingExecutor))
 
 abstract class AbstractStarterKit(
   val dsl: ScalaDSL,

@@ -118,13 +118,26 @@ trait Executor {
   import dsl.-⚬
   import bridge.Execution
 
+  /** Type of parameters used to tweak execution.
+    *
+    * @tparam A returned to the caller when execution starts
+    */
+  type ExecutionParam[A]
+  val  ExecutionParam: ExecutionParams[ExecutionParam]
+
   final class Executing[A, B](
     val execution: Execution,
     val inPort: execution.InPort[A],
     val outPort: execution.OutPort[B],
   )
 
-  def execute[A, B](prg: A -⚬ B): Executing[A, B]
+  def execute[A, B, P](
+    prg: A -⚬ B,
+    params: ExecutionParam[P],
+  ): (Executing[A, B], P)
+
+  final def execute[A, B](prg: A -⚬ B): Executing[A, B] =
+    execute(prg, ExecutionParam.unit)._1
 
   def cancel(execution: Execution): Async[Unit]
 }
@@ -137,6 +150,8 @@ object Executor {
 trait ScalaExecutor extends Executor {
   override type Dsl <: ScalaDSL
   override type Bridge <: ScalaBridge.Of[dsl.type]
+
+  override val ExecutionParam: ExecutionParams.WithScheduler[ExecutionParam]
 }
 
 object ScalaExecutor {

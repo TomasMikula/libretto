@@ -1,13 +1,14 @@
 package libretto.testing
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
-import libretto.{CoreLib, Monad, ScalaBridge, ScalaExecutor, ScalaDSL, StarterKit}
+import libretto.{CoreLib, ExecutionParams, Monad, ScalaBridge, ScalaExecutor, ScalaDSL, StarterKit}
 import libretto.scalasource.{Position => SourcePos}
 import libretto.util.{Async, Monad => ScalaMonad}
 import libretto.util.Monad.syntax._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+import libretto.testing.ScalaTestExecutor.ExecutionParam.Instantiation
 
 object ScalaTestExecutor {
 
@@ -21,6 +22,10 @@ object ScalaTestExecutor {
       import probes.Execution
 
       override type Assertion[A] = Val[String] |+| A
+
+      override type ExecutionParam[A] = ScalaTestExecutor.ExecutionParam[A]
+      override val ExecutionParam: ManualClockParams[ExecutionParam] =
+        ScalaTestExecutor.ExecutionParam.manualClockParamsInstance
 
       private val coreLib = CoreLib(this.dsl)
       import coreLib.{Monad => _, _}
@@ -62,6 +67,57 @@ object ScalaTestExecutor {
       }
   }
 
+  opaque type ExecutionParam[A] = ExecutionParams.Free[ExecutionParam.F, A]
+  object ExecutionParam {
+    sealed trait F[A]
+    case object ManualClockParam extends F[ManualClock]
+
+    def manualClock: ExecutionParam[ManualClock] =
+      ExecutionParams.Free.wrap(ManualClockParam)
+
+    given manualClockParamsInstance: ManualClockParams[ExecutionParam] with {
+      override def unit =
+        ExecutionParams.Free.unit
+      override def pair[A, B](a: ExecutionParam[A], b: ExecutionParam[B]): ExecutionParam[(A, B)] =
+        ExecutionParams.Free.pair(a, b)
+      override def manualClock: ExecutionParam[ManualClock] =
+        ExecutionParams.Free.wrap(ManualClockParam)
+    }
+
+    def instantiate[A, P[_]](p: ExecutionParam[A])(using
+      ep: ExecutionParams.WithScheduler[P],
+    ): Instantiation[A, P] = {
+      import ExecutionParams.Free.{Ext, One, Zip}
+
+      p match {
+        case _: One[F] =>
+          Instantiation[P, Unit, Unit](ep.unit, _ => ())
+        case z: Zip[F, a, b] =>
+          val (ia, ib) = (instantiate(z.a), instantiate(z.b))
+          Instantiation[P, (ia.X, ib.X), A](ep.pair(ia.px, ib.px), { case (x, y) => (ia.get(x), ib.get(y)) })
+        case Ext(ManualClockParam) =>
+          val (clock, scheduler) = ManualClock.scheduler()
+          Instantiation[P, Unit, ManualClock](ep.scheduler(scheduler), _ => clock)
+      }
+    }
+
+    sealed abstract class Instantiation[A, P[_]] {
+      type X
+
+      val px: P[X]
+      def get(x: X): A
+    }
+
+    object Instantiation {
+      def apply[P[_], X0, A](px0: P[X0], f: X0 => A): Instantiation[A, P] =
+        new Instantiation[A, P] {
+          override type X = X0
+          override val px = px0
+          override def get(x: X) = f(x)
+        }
+    }
+  }
+
   def fromExecutor(
     dsl: ScalaDSL,
     exec: ScalaExecutor.OfDsl[dsl.type],
@@ -73,22 +129,28 @@ object ScalaTestExecutor {
       override val testKit: ScalaTestKitFromBridge[dsl.type, exec.bridge.type] =
         new ScalaTestKitFromBridge[dsl.type, exec.bridge.type](dsl, exec.bridge)
 
-      import testKit.Outcome
+      import testKit.{ExecutionParam, Outcome}
       import testKit.dsl._
       import testKit.probes.Execution
 
-      override def runTestCase[O, X](
+      override def runTestCase[O, P, Y](
         body: Done -⚬ O,
-        conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[X],
-        postStop: X => Outcome[Unit],
-      ): TestResult[Unit] =
+        params: ExecutionParam[P],
+        conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[Y],
+        postStop: Y => Outcome[Unit],
+      ): TestResult[Unit] = {
+        val p: Instantiation[P, exec.ExecutionParam] =
+          ScalaTestExecutor.ExecutionParam.instantiate(params)(using exec.ExecutionParam)
+
         TestExecutor
           .usingExecutor(exec)
-          .runTestCase[O, X](
+          .runTestCase[O, p.X, Y](
             body,
-            conduct andThen Outcome.toAsyncTestResult,
+            p.px,
+            (port, x) => Outcome.toAsyncTestResult(conduct(port, p.get(x))),
             postStop andThen Outcome.toAsyncTestResult,
           )
+      }
 
       override def runTestCase(body: () => Outcome[Unit]): TestResult[Unit] =
         TestExecutor

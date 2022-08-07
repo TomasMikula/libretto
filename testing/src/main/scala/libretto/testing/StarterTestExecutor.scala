@@ -7,6 +7,7 @@ import libretto.util.Monad.syntax._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+import libretto.testing.ScalaTestExecutor.ExecutionParam.Instantiation
 
 object StarterTestExecutor {
 
@@ -29,22 +30,28 @@ object StarterTestExecutor {
       override val testKit: StarterTestKitFromBridge[exec.bridge.type] =
         new StarterTestKitFromBridge(exec.bridge)
 
-      import testKit.Outcome
+      import testKit.{ExecutionParam, Outcome}
       import testKit.dsl._
       import testKit.probes.Execution
 
-      override def runTestCase[O, X](
+      override def runTestCase[O, P, Y](
         body: Done -⚬ O,
-        conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[X],
-        postStop: X => Outcome[Unit],
-      ): TestResult[Unit] =
+        params: ExecutionParam[P],
+        conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[Y],
+        postStop: Y => Outcome[Unit],
+      ): TestResult[Unit] = {
+        val p: Instantiation[P, exec.ExecutionParam] =
+          ScalaTestExecutor.ExecutionParam.instantiate(params)(using exec.ExecutionParam)
+
         TestExecutor
           .usingExecutor(exec)
-          .runTestCase[O, X](
+          .runTestCase[O, p.X, Y](
             body,
-            conduct andThen Outcome.toAsyncTestResult,
+            p.px,
+            (port, x) => Outcome.toAsyncTestResult(conduct(port, p.get(x))),
             postStop andThen Outcome.toAsyncTestResult,
           )
+      }
 
       override def runTestCase(body: () => Outcome[Unit]): TestResult[Unit] =
         TestExecutor

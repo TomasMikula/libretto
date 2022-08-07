@@ -7,19 +7,27 @@ import libretto.util.Monad.syntax._
 trait TestExecutor[TK <: TestKit] { self =>
   val testKit: TK
 
-  import testKit.Outcome
+  import testKit.{ExecutionParam, Outcome}
   import testKit.dsl._
   import testKit.probes.Execution
 
   def name: String
 
-  def runTestCase[O, X](
+  def runTestCase[O, P, X](
     body: Done -⚬ O,
-    conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[X],
+    params: ExecutionParam[P],
+    conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[X],
     postStop: X => Outcome[Unit],
   ): TestResult[Unit]
 
   def runTestCase(body: () => Outcome[Unit]): TestResult[Unit]
+
+  def runTestCase[O, X](
+    body: Done -⚬ O,
+    conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[X],
+    postStop: X => Outcome[Unit],
+  ): TestResult[Unit] =
+    runTestCase[O, Unit, X](body, ExecutionParam.unit, (po, _) => conduct(po), postStop)
 
   def runTestCase[O](
     body: Done -⚬ O,
@@ -87,22 +95,24 @@ object TestExecutor {
     new UsingExecutor[executor.type](executor)
 
   class UsingExecutor[E <: Executor](val executor: E) {
+    import executor.ExecutionParam
     import executor.bridge.Execution
     import executor.dsl._
 
-    def runTestCase[O, X](
+    def runTestCase[O, P, X](
       body: Done -⚬ O,
-      conduct: (exn: Execution) ?=> exn.OutPort[O] => Async[TestResult[X]],
+      params: ExecutionParam[P],
+      conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Async[TestResult[X]],
       postStop: X => Async[TestResult[Unit]],
     ): TestResult[Unit] = {
-      val executing = executor.execute(body)
+      val (executing, p) = executor.execute(body, params)
       import executing.{execution, inPort, outPort}
 
       val res0: TestResult[X] =
         try {
           execution.InPort.supplyDone(inPort)
           Async.await {
-            conduct(using execution)(outPort)
+            conduct(using execution)(outPort, p)
           }
         } catch {
           case e => TestResult.Crash(e)
