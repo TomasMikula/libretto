@@ -44,7 +44,7 @@ class BasicTests extends ScalatestSuite {
               caseSndWins = id.awaitFst(neglect),
             )
 
-        Tests.Cases(
+        List(
           "done" -> TestCase {
             introFst(done) > join > success
           },

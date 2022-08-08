@@ -4,7 +4,6 @@ import libretto.StarterKit.dsl._
 import libretto.StarterKit.dsl.$._
 import libretto.StarterKit.coreLib._
 import libretto.testing.scalatest.ScalatestStarterTestSuite
-import libretto.testing.Tests.Cases
 import libretto.testing.{StarterTestKit, TestCase}
 import libretto.util.Monad.syntax._
 
@@ -12,11 +11,11 @@ class LambdaTests extends ScalatestStarterTestSuite {
   private def c(c: Char): Done -⚬ Val[Char] =
     constVal(c)
 
-  override def testCases(using kit: StarterTestKit): Cases[kit.type] = {
+  override def testCases(using kit: StarterTestKit): List[(String, TestCase[kit.type])] = {
     import kit.Outcome.{assertSubstring, expectThrows}
     import kit.expectVal
 
-    Cases(
+    List(
       "some λ-expressions" ->
         TestCase.interactWith {
           val f = λ { (t: $[Ping |*| (Done |*| Val[String])]) =>
@@ -121,7 +120,7 @@ class LambdaTests extends ScalatestStarterTestSuite {
             }
             _ <- assertSubstring("not fully consumed", e.getMessage)
             _ <- assertSubstring("The second half of untupling", e.getMessage)
-            _ <- assertSubstring("LambdaTests.scala:118", e.getMessage)
+            _ <- assertSubstring("LambdaTests.scala:117", e.getMessage)
           } yield ()
         },
 
@@ -135,7 +134,7 @@ class LambdaTests extends ScalatestStarterTestSuite {
             }
             _ <- assertSubstring("used more than once", e.getMessage)
             _ <- assertSubstring("The input of lambda expression ending at", e.getMessage)
-            _ <- assertSubstring("LambdaTests.scala:134", e.getMessage)
+            _ <- assertSubstring("LambdaTests.scala:133", e.getMessage)
           } yield ()
         },
 
@@ -177,7 +176,7 @@ class LambdaTests extends ScalatestStarterTestSuite {
             }
             _ <- assertSubstring("not fully consumed", e.getMessage)
             _ <- assertSubstring("The input of lambda expression ending at", e.getMessage)
-            _ <- assertSubstring("LambdaTests.scala:176", e.getMessage)
+            _ <- assertSubstring("LambdaTests.scala:175", e.getMessage)
           } yield ()
         },
     )

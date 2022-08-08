@@ -1,12 +1,12 @@
 package libretto
 
-import libretto.testing.{ScalaTestKit, TestCase, Tests}
+import libretto.testing.{ScalaTestKit, TestCase}
 import libretto.testing.scalatest.ScalatestScalaTestSuite
 import libretto.util.Monad.syntax._
 import scala.concurrent.duration._
 
 class StreamsTests extends ScalatestScalaTestSuite {
-  override def testCases(using kit: ScalaTestKit): Tests.Cases[kit.type] = {
+  override def testCases(using kit: ScalaTestKit): List[(String, TestCase[kit.type])] = {
     import kit.{dsl, expectVal}
     import kit.dsl._
     import kit.Outcome.assertEquals
@@ -20,7 +20,7 @@ class StreamsTests extends ScalatestScalaTestSuite {
     import scalaLib._
     import scalaStreams._
 
-    Tests.Cases(
+    List(
       "toList ⚬ fromList = id" -> TestCase
         .interactWith { Pollable.fromList(List(1, 2, 3, 4, 5, 6)) > Pollable.toList }
         .via { expectVal(_).assertEquals(List(1, 2, 3, 4, 5, 6)) },

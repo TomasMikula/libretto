@@ -14,10 +14,10 @@ class DiningPhilosophersTests extends ScalatestStarterTestSuite {
   given heldForkReadiness: SignalingJunction.Positive[HeldFork] =
     ForksProvider.heldForkReadiness
 
-  override def testCases(using kit: StarterTestKit): Tests.Cases[kit.type] = {
+  override def testCases(using kit: StarterTestKit): List[(String, TestCase[kit.type])] = {
     import kit.{leftOrCrash, rightOrCrash, success}
 
-    Tests.Cases(
+    List(
       "SharedFork: successful pick up (left)" -> TestCase {
         val prg: Done -⚬ Done =
           mkSharedFork > par(

@@ -1,22 +1,17 @@
 package libretto.testing
 
-import scala.{:: => NonEmptyList}
-
 /** Test suite where all tests are written using [[StarterTestKit]]. */
 trait StarterTestSuite extends TestSuite {
-  def testCases(using kit: StarterTestKit): Tests.Cases[kit.type]
+  def testCases(using kit: StarterTestKit): List[(String, TestCase[kit.type])]
 
-  def testExecutors: NonEmptyList[TestExecutor.Factory[StarterTestKit]] =
-    NonEmptyList(
+  def testExecutors: List[TestExecutor.Factory[StarterTestKit]] =
+    List(
       TestExecutor.Factory.noOp(StarterTestExecutor.global),
-      Nil
     )
 
-  override def tests: Tests = {
-    val (executor :: executors) = testExecutors
+  override def tests: Tests =
     Tests
       .writtenUsing[StarterTestKit]
-      .executedBy(executor, executors: _*)
+      .executedBy(testExecutors: _*)
       .in(testCases)
-  }
 }

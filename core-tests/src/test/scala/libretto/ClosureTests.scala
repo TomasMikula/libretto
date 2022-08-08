@@ -4,15 +4,14 @@ import libretto.StarterKit.dsl._
 import libretto.StarterKit.dsl.$._
 import libretto.StarterKit.coreLib._
 import libretto.testing.{StarterTestKit, TestCase}
-import libretto.testing.Tests.Cases
 import libretto.testing.scalatest.ScalatestStarterTestSuite
 
 class ClosureTests extends ScalatestStarterTestSuite {
-  override def testCases(using kit: StarterTestKit): Cases[kit.type] = {
+  override def testCases(using kit: StarterTestKit): List[(String, TestCase[kit.type])] = {
     import kit.{Outcome, expectVal}
     import kit.Outcome.expectNotThrows
 
-    Cases(
+    List(
       "simplest closure" ->
         TestCase.testOutcome {
           Outcome.expectNotThrows {
