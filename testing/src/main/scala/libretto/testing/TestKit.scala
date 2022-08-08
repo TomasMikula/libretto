@@ -8,24 +8,16 @@ import libretto.util.Monad.syntax._
 trait TestKit {
   val dsl: CoreDSL
 
-  opaque type F[A] = Async[A]
-
-  opaque type Outcome[A] = F[TestResult[A]]
+  opaque type Outcome[A] = Async[TestResult[A]]
   object Outcome {
-    def apply[A](fa: F[TestResult[A]]): Outcome[A] =
-      fa
-
     def asyncTestResult[A](fa: Async[TestResult[A]]): Outcome[A] =
       fa
-
-    def unwrap[A](outcome: Outcome[A]): F[TestResult[A]] =
-      outcome
 
     def toAsyncTestResult[A](outcome: Outcome[A]): Async[TestResult[A]] =
       outcome
 
     def fromTestResult[A](res: TestResult[A]): Outcome[A] =
-      Outcome(Async.now(res))
+      Async.now(res)
 
     def success[A](a: A): Outcome[A] =
       fromTestResult(TestResult.success(a))
@@ -57,9 +49,6 @@ trait TestKit {
 
     def crash[A](e: Throwable): Outcome[A] =
       fromTestResult(TestResult.crash(e))
-
-    def successF[A](fa: F[A]): Outcome[A] =
-      Outcome(fa.map(TestResult.success))
 
     def assert(using pos: SourcePos)(condition: Boolean, failMsg: String = "Assertion failed"): Outcome[Unit] =
       if (condition)
