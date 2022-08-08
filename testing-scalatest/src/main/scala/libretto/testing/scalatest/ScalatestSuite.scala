@@ -1,13 +1,13 @@
 package libretto.testing.scalatest
 
-import libretto.testing.{TestCase, TestExecutor, TestKit, TestResult, Tests}
+import libretto.testing.{TestCase, TestExecutor, TestKit, TestResult}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.BeforeAndAfterAll
 
-abstract class ScalatestSuite
+abstract class ScalatestSuite[Kit <: TestKit]
 extends AnyFunSuite
    with BeforeAndAfterAll
-   with libretto.testing.TestSuite
+   with libretto.testing.TestSuite[Kit]
 {
   private class FactoryWithExecutor[F <: TestExecutor.Factory[_]](
     val factory: F,
@@ -34,16 +34,15 @@ extends AnyFunSuite
   private var executors: List[FactoryWithExecutor[_]] = Nil
 
   private def registerTests(): Unit = {
-    val tests = this.tests
     this.executors =
-      tests.testExecutors.map { factory =>
+      this.testExecutors.map { factory =>
         val res = FactoryWithExecutor(factory)
         registerTests(
           factory.testKit,
           factory.name,
           res.getExecutor,
           prefix = "",
-          tests.testCases(using factory.testKit),
+          this.testCases(using factory.testKit),
         )
         res
       }

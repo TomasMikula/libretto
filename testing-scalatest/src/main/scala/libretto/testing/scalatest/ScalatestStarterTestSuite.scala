@@ -1,5 +1,7 @@
 package libretto.testing.scalatest
 
-import libretto.testing.StarterTestSuite
+import libretto.testing.{StarterTestKit, StarterTestSuite}
 
-abstract class ScalatestStarterTestSuite extends ScalatestSuite with StarterTestSuite
+abstract class ScalatestStarterTestSuite
+extends ScalatestSuite[StarterTestKit]
+   with StarterTestSuite

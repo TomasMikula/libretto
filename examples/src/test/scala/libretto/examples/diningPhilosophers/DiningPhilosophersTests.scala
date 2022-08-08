@@ -3,7 +3,7 @@ package libretto.examples.diningPhilosophers
 import libretto.StarterKit.dsl._
 import libretto.StarterKit.dsl.$._
 import libretto.StarterKit.coreLib._
-import libretto.testing.{StarterTestKit, Tests}
+import libretto.testing.StarterTestKit
 import libretto.testing.scalatest.ScalatestStarterTestSuite
 import libretto.testing.TestCase
 
