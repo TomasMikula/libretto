@@ -2,6 +2,7 @@ package libretto
 
 import java.util.concurrent.Executors
 import libretto.Functor._
+import libretto.scalasource.{Position => SourcePos}
 import libretto.testing.{ScalaTestExecutor, ScalaTestKit, TestCase, TestKit, Tests}
 import libretto.testing.scalatest.ScalatestSuite
 import libretto.util.Async
@@ -31,6 +32,7 @@ class BasicTests extends ScalatestSuite {
         val scalaLib = ScalaLib(dsl: dsl.type, coreLib)
         import coreLib._
         import scalaLib._
+        import probes.Execution
 
         def raceKeepWinner[A](
           prg1: Done -⚬ Val[A],
@@ -517,23 +519,49 @@ class BasicTests extends ScalatestSuite {
 
           "LList.sortBySignal" -> {
             val delays =
-              List(30, 20, 10, 50, 40)
+              List(30, 20, 10, 50, 40, 0)
 
             val elems: ::[Done -⚬ Val[Int]] =
               delays
                 .map(n => delay(n.millis) > constVal(n))
                 .asInstanceOf[::[Done -⚬ Val[Int]]]
 
-            val prg: Done -⚬ Val[List[Int]] =
+            val prg: Done -⚬ LList[Val[Int]] =
               id                               [       Done       ]
                 .>(LList1.from(elems))      .to[ LList1[Val[Int]] ]
                 .>(LList1.toLList)          .to[  LList[Val[Int]] ]
                 .>(LList.sortBySignal)      .to[  LList[Val[Int]] ]
-                .>(toScalaList)             .to[   Val[List[Int]] ]
 
-            TestCase {
-              prg > assertEquals(delays.sorted)
-            }
+            def expectNext(using e: Execution)(port: e.OutPort[LList[Val[Int]]], value: Int)(using SourcePos): Outcome[e.OutPort[LList[Val[Int]]]] =
+              for {
+                ht <- expectRight(e.OutPort.map(port)(LList.uncons > Maybe.toEither))
+                (h, t) = e.OutPort.split(ht)
+                _ <- expectVal(h).assertEquals(value)
+              } yield t
+
+            def expectNil(using e: Execution)(port: e.OutPort[LList[Val[Int]]])(using SourcePos): Outcome[Unit] =
+              expectLeft(e.OutPort.map(port)(LList.uncons > Maybe.toEither))
+                .map(e.OutPort.discardOne(_))
+
+            TestCase
+              .configure(ExecutionParam.manualClock)
+              .interactWith(prg)
+              .via { (port, clock) =>
+                for {
+                  t <- expectNext(port, 0)
+                  _ = clock.advanceTo(15.millis)
+                  t <- expectNext(t, 10)
+                  _ = clock.advanceTo(25.millis)
+                  t <- expectNext(t, 20)
+                  _ = clock.advanceTo(35.millis)
+                  t <- expectNext(t, 30)
+                  _ = clock.advanceTo(45.millis)
+                  t <- expectNext(t, 40)
+                  _ = clock.advanceTo(55.millis)
+                  t <- expectNext(t, 50)
+                  _ <- expectNil(t)
+                } yield ()
+              }
           },
 
           "endless fibonacci" -> {
@@ -578,6 +606,7 @@ class BasicTests extends ScalatestSuite {
 
             def client(cid: ClientId): (Val[ResourceId] |*| Neg[ResourceId]) -⚬ Val[(ClientId, ResourceId)] =
               id                             [                            Val[ResourceId]             |*| Neg[ResourceId]  ]
+                .>.fst(delayVal(1.milli)) .to[                            Val[ResourceId]             |*| Neg[ResourceId]  ]
                 .>.fst(dup).assocLR       .to[                   Val[ResourceId] |*| (Val[ResourceId] |*| Neg[ResourceId]) ]
                 .>(elimSnd(fulfill))      .to[                   Val[ResourceId]                                           ]
                 .>(introFst(const(cid)))  .to[ Val[ClientId] |*| Val[ResourceId]                                           ]

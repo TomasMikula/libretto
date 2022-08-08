@@ -1,5 +1,6 @@
 package libretto.testing
 
+import libretto.scalasource.{Position => SourcePos}
 import libretto.testing.TestKit.dsl
 
 sealed trait TestCase[TK <: TestKit]
@@ -35,9 +36,7 @@ object TestCase {
     cases: List[(String, TestCase[TK])],
   ) extends TestCase[TK]
 
-  private def makeWithParams[A, Q, B](using
-    kit: TestKit,
-  )(
+  def parameterized[A, Q, B](using kit: TestKit)(
     body0: dsl.-⚬[dsl.Done, A],
     params0: kit.ExecutionParam[Q],
     conductor0: (exn: kit.probes.Execution) ?=> (exn.OutPort[A], Q) => kit.Outcome[B],
@@ -54,35 +53,35 @@ object TestCase {
       override val postStop = postStop0
     }
 
-  private def make[A, B](using
-    kit: TestKit,
-  )(
+  private def apply[A, B](using kit: TestKit)(
     body0: dsl.-⚬[dsl.Done, A],
     conductor0: (exn: kit.probes.Execution) ?=> exn.OutPort[A] => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
   ): TestCase[kit.type] =
-    makeWithParams[A, Unit, B](
+    parameterized[A, Unit, B](
       body0,
       kit.ExecutionParam.unit,
       (pa, _) => conductor0(pa),
       postStop0,
     )
 
-  def apply(using kit: TestKit)(body: dsl.-⚬[dsl.Done, kit.Assertion[dsl.Done]]): TestCase[kit.type] =
-    make(body, kit.extractOutcome(_), kit.monadOutcome.pure)
+  def apply(using kit: TestKit)(
+    body: dsl.-⚬[dsl.Done, kit.Assertion[dsl.Done]],
+  )(using pos: SourcePos): TestCase[kit.type] =
+    apply[kit.Assertion[dsl.Done], Unit](body, kit.extractOutcome(_), kit.monadOutcome.pure)
 
   def apply[O](using kit: TestKit)(
     body: kit.dsl.-⚬[kit.dsl.Done, O],
     conduct: (exn: kit.probes.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit],
   ): TestCase[kit.type] =
-    make[O, Unit](body, conduct(_), kit.monadOutcome.pure)
+    apply[O, Unit](body, conduct(_), kit.monadOutcome.pure)
 
-  def apply[A, B](using kit: TestKit)(
-    body: kit.dsl.-⚬[kit.dsl.Done, A],
-    conduct: (exn: kit.probes.Execution) ?=> exn.OutPort[A] => kit.Outcome[B],
-    postStop: B => kit.Outcome[Unit],
+  def parameterized[O, P](using kit: TestKit)(
+    body: kit.dsl.-⚬[kit.dsl.Done, O],
+    params: kit.ExecutionParam[P],
+    conduct: (exn: kit.probes.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit],
   ): TestCase[kit.type] =
-    make[A, B](body, conduct(_), postStop)
+    parameterized[O, P, Unit](body, params, conduct(_, _), kit.monadOutcome.pure)
 
   def multiple[TK <: TestKit](
     cases: (String, TestCase[TK])*,
@@ -94,12 +93,20 @@ object TestCase {
   ): TestCase[kit.type] =
     new OutcomeOnly[kit.type](kit, () => body)
 
+  def configure[P](using kit: TestKit)(
+    params: kit.ExecutionParam[P],
+  ): Configure[kit.type, P] =
+    Configure(kit, params)
+
   def interactWith[O](using kit: TestKit)(body: kit.dsl.-⚬[kit.dsl.Done, O]): InteractWith[kit.type, O] =
     InteractWith(kit, body)
 
-  object InteractWith {
-    def apply[O](kit: TestKit, body: kit.dsl.-⚬[kit.dsl.Done, O]): InteractWith[kit.type, O] =
-      new InteractWith(kit, body)
+  class Configure[TK <: TestKit, P](
+    val kit: TK,
+    val params: kit.ExecutionParam[P],
+  ) {
+    def interactWith[O](body: kit.dsl.-⚬[kit.dsl.Done, O]): InteractWithConfigured[kit.type, O, P] =
+      InteractWithConfigured(kit, body, params)
   }
 
   class InteractWith[TK <: TestKit, O](
@@ -114,5 +121,20 @@ object TestCase {
       postStop: X => kit.Outcome[Unit],
     ): TestCase[kit.type] =
       TestCase(using kit)(body, conductor(_), postStop)
+  }
+
+  class InteractWithConfigured[TK <: TestKit, O, P](
+    val kit: TK,
+    val body: kit.dsl.-⚬[kit.dsl.Done, O],
+    val params: kit.ExecutionParam[P],
+  ) {
+    def via(conductor: (exn: kit.probes.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit]): TestCase[kit.type] =
+      TestCase.parameterized(using kit)(body, params, conductor(_, _))
+
+    def via[X](
+      conductor: (exn: kit.probes.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[X],
+      postStop: X => kit.Outcome[Unit],
+    ): TestCase[kit.type] =
+      TestCase.parameterized(using kit)(body, params, conductor(_, _), postStop)
   }
 }
