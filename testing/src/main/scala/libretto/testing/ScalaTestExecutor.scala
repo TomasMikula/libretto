@@ -3,11 +3,7 @@ package libretto.testing
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
 import libretto.{CoreLib, ExecutionParams, Monad, ScalaBridge, ScalaExecutor, ScalaDSL, StarterKit}
 import libretto.scalasource.{Position => SourcePos}
-import libretto.util.{Async, Monad => ScalaMonad}
-import libretto.util.Monad.syntax._
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import libretto.util.Async
 import libretto.testing.ScalaTestExecutor.ExecutionParam.Instantiation
 
 object ScalaTestExecutor {
@@ -119,15 +115,21 @@ object ScalaTestExecutor {
   }
 
   def fromExecutor(
-    dsl: ScalaDSL,
-    exec: ScalaExecutor.OfDsl[dsl.type],
-  ): TestExecutor[ScalaTestKit] =
-    new TestExecutor[ScalaTestKit] {
+    exec: ScalaExecutor,
+  ): TestExecutor[ScalaTestKit] = {
+    val kit = ScalaTestKitFromBridge[exec.dsl.type, exec.bridge.type](exec.dsl, exec.bridge)
+    fromKitAndExecutor(kit, exec.narrow)
+  }
+
+  def fromKitAndExecutor(
+    kit: ScalaTestKit { type ExecutionParam[A] = ScalaTestExecutor.ExecutionParam[A] },
+    exec: ScalaExecutor.Of[kit.dsl.type, kit.probes.type],
+  ): TestExecutor[kit.type] =
+    new TestExecutor[kit.type] {
       override val name: String =
         ScalaTestExecutor.getClass.getCanonicalName
 
-      override val testKit: ScalaTestKitFromBridge[dsl.type, exec.bridge.type] =
-        new ScalaTestKitFromBridge[dsl.type, exec.bridge.type](dsl, exec.bridge)
+      override val testKit: kit.type = kit
 
       import testKit.{ExecutionParam, Outcome}
       import testKit.dsl._
@@ -165,15 +167,35 @@ object ScalaTestExecutor {
     val executor0: libretto.ScalaExecutor.OfDsl[StarterKit.dsl.type] =
       StarterKit.executor(blockingExecutor)(scheduler)
 
-    given monadFuture: ScalaMonad[Future] =
-      ScalaMonad.monadFuture(using ExecutionContext.fromExecutor(scheduler))
-
-    fromExecutor(StarterKit.dsl, executor0)
+    fromExecutor(executor0)
   }
 
+  val defaultFactory: TestExecutor.Factory[ScalaTestKit] =
+    new TestExecutor.Factory[ScalaTestKit] {
+      override val testKit: ScalaTestKitFromBridge[StarterKit.dsl.type, StarterKit.bridge.type] =
+        new ScalaTestKitFromBridge(StarterKit.dsl, StarterKit.bridge)
+
+      override def name =
+        s"${ScalaTestExecutor.getClass.getSimpleName()} default"
+
+      override type Exec = (ScheduledExecutorService, ExecutorService, TestExecutor[testKit.type])
+
+      override def getExecutor(exec: Exec): TestExecutor[testKit.type] =
+        exec._3
+
+      override def create(): Exec = {
+        val scheduler = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors())
+        val blockingExecutor = Executors.newCachedThreadPool()
+        val testExecutor = fromKitAndExecutor(testKit, StarterKit.executor(blockingExecutor)(scheduler))
+        (scheduler, blockingExecutor, testExecutor)
+      }
+
+      override def shutdown(exec: Exec): Unit = {
+        exec._2.shutdownNow()
+        exec._1.shutdownNow()
+      }
+    }
+
   lazy val global: TestExecutor[ScalaTestKit] =
-    fromJavaExecutors(
-      scheduler        = Executors.newScheduledThreadPool(4),
-      blockingExecutor = Executors.newCachedThreadPool(),
-    )
+    defaultFactory.getExecutor(defaultFactory.create())
 }

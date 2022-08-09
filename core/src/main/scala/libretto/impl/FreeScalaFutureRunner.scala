@@ -2,7 +2,7 @@ package libretto.impl
 
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.{Executor => JExecutor, ScheduledExecutorService, TimeUnit}
-import libretto.{ExecutionParams, ScalaBridge, ScalaExecutor, Scheduler}
+import libretto.{Executing, ExecutionParams, ScalaBridge, ScalaExecutor, Scheduler}
 import libretto.util.Async
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
@@ -14,7 +14,7 @@ object FreeScalaFutureRunner {
   def apply(
     scheduler: ScheduledExecutorService,
     blockingExecutor: JExecutor,
-  ): ScalaExecutor.OfDsl[FreeScalaDSL.type] = {
+  ): ScalaExecutor.Of[FreeScalaDSL.type, FreeScalaFutureBridge.type] = {
     val ec = ExecutionContext.fromExecutor(scheduler)
     val sc = new SchedulerFromScheduledExecutorService(scheduler)
     new FreeScalaFutureRunner(ec, sc, blockingExecutor)
@@ -76,18 +76,18 @@ class FreeScalaFutureRunner(
     FreeScalaFutureRunner.ExecutionParam
 
   import dsl._
-  import bridge.{Executing, Execution, cancelExecution}
+  import bridge.{Execution, cancelExecution}
 
   override def execute[A, B, P](
     prg: A -⚬ B,
     params: ExecutionParam[P],
-  ): (Executing[A, B], P) = {
+  ): (Executing[bridge.type, A, B], P) = {
     val (schedOpt, p) = FreeScalaFutureRunner.ExecutionParam.extract(params)
     val sched = schedOpt.getOrElse(scheduler)
 
     val executing = {
       val exctng = FreeScalaFutureBridge.execute(prg)(ec, sched, blockingExecutor)
-      new Executing(exctng.execution, exctng.inPort, exctng.outPort)
+      new Executing(using bridge)(exctng.execution, exctng.inPort, exctng.outPort)
     }
 
     (executing, p)

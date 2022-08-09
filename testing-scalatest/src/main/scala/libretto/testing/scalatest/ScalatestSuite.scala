@@ -21,7 +21,7 @@ extends AnyFunSuite
       executor.foreach(factory.shutdown(_))
 
     def getExecutor(): TestExecutor[factory.testKit.type] =
-      executor.getOrElse {
+      executor.map(factory.getExecutor(_)).getOrElse {
         throw new IllegalStateException(s"TestExecutor ${factory.name} not  initialzed.")
       }
   }

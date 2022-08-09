@@ -108,7 +108,13 @@ object ScalaBridge {
   type Of[DSL <: ScalaDSL] = ScalaBridge { type Dsl = DSL }
 }
 
-trait Executor {
+final class Executing[BRIDGE <: CoreBridge & Singleton, A, B](using val bridge: BRIDGE)(
+  val execution: bridge.Execution,
+  val inPort: execution.InPort[A],
+  val outPort: execution.OutPort[B],
+)
+
+trait Executor { self =>
   type Dsl <: CoreDSL
   val dsl: Dsl
 
@@ -125,21 +131,23 @@ trait Executor {
   type ExecutionParam[A]
   val  ExecutionParam: ExecutionParams[ExecutionParam]
 
-  final class Executing[A, B](
-    val execution: Execution,
-    val inPort: execution.InPort[A],
-    val outPort: execution.OutPort[B],
-  )
-
   def execute[A, B, P](
     prg: A -⚬ B,
     params: ExecutionParam[P],
-  ): (Executing[A, B], P)
+  ): (Executing[bridge.type, A, B], P)
 
-  final def execute[A, B](prg: A -⚬ B): Executing[A, B] =
+  final def execute[A, B](prg: A -⚬ B): Executing[bridge.type, A, B] =
     execute(prg, ExecutionParam.unit)._1
 
   def cancel(execution: Execution): Async[Unit]
+
+  def narrow: Executor.Of[dsl.type, bridge.type] =
+    new Executor {
+      override type Dsl = self.dsl.type
+      override type Bridge = self.bridge.type
+
+      export self.{dsl, bridge, ExecutionParam, execute, cancel}
+    }
 }
 
 object Executor {
@@ -147,11 +155,19 @@ object Executor {
     Executor { type Dsl = DSL; type Bridge = BRIDGE }
 }
 
-trait ScalaExecutor extends Executor {
+trait ScalaExecutor extends Executor { self =>
   override type Dsl <: ScalaDSL
   override type Bridge <: ScalaBridge.Of[dsl.type]
 
   override val ExecutionParam: ExecutionParams.WithScheduler[ExecutionParam]
+
+  override def narrow: ScalaExecutor.Of[dsl.type, bridge.type] =
+    new ScalaExecutor {
+      override type Dsl = self.dsl.type
+      override type Bridge = self.bridge.type
+
+      export self.{dsl, bridge, ExecutionParam, execute, cancel}
+    }
 }
 
 object ScalaExecutor {

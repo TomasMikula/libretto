@@ -22,7 +22,7 @@ class BasicTests extends ScalatestSuite[ScalaTestKit] {
 
   override def testExecutors: List[TestExecutor.Factory[ScalaTestKit]] =
     List(
-      TestExecutor.Factory.noOp(ScalaTestExecutor.global),
+      ScalaTestExecutor.defaultFactory,
     )
 
   override def testCases(using kit: ScalaTestKit): List[(String, TestCase[kit.type])] = {

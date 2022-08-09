@@ -5,14 +5,20 @@ import libretto.impl.{FreeScalaDSL, FreeScalaFutureRunner}
 import libretto.util.Async
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
+import libretto.impl.FreeScalaFutureBridge
 
 object StarterKit extends StarterKit
 
-class StarterKit extends AbstractStarterKit(FreeScalaDSL, (scheduler, blockingExecutor) => FreeScalaFutureRunner(scheduler, blockingExecutor))
+class StarterKit extends AbstractStarterKit(
+  FreeScalaDSL,
+  FreeScalaFutureBridge,
+  (scheduler, blockingExecutor) => FreeScalaFutureRunner(scheduler, blockingExecutor),
+)
 
 abstract class AbstractStarterKit(
   val dsl: ScalaDSL,
-  val executor0: (ScheduledExecutorService, JExecutor) => ScalaExecutor.OfDsl[dsl.type],
+  val bridge: ScalaBridge.Of[dsl.type],
+  val executor0: (ScheduledExecutorService, JExecutor) => ScalaExecutor.Of[dsl.type, bridge.type],
 ) {
   val coreLib: CoreLib[dsl.type] =
     CoreLib(dsl)
@@ -32,7 +38,9 @@ abstract class AbstractStarterKit(
   val scalaStreams: ScalaStreams[dsl.type, coreLib.type, scalaLib.type, coreStreams.type] =
     ScalaStreams(dsl, coreLib, scalaLib, coreStreams)
 
-  def executor(blockingExecutor: JExecutor)(implicit scheduler: ScheduledExecutorService): ScalaExecutor.OfDsl[dsl.type] =
+  def executor(blockingExecutor: JExecutor)(implicit
+    scheduler: ScheduledExecutorService,
+  ): ScalaExecutor.Of[dsl.type, bridge.type] =
     executor0(scheduler, blockingExecutor)
 
   export dsl._

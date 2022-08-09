@@ -4,7 +4,7 @@ import libretto.{CoreDSL, Executor}
 import libretto.util.{Async, Monad}
 import libretto.util.Monad.syntax._
 
-trait TestExecutor[TK <: TestKit] { self =>
+trait TestExecutor[+TK <: TestKit] { self =>
   val testKit: TK
 
   import testKit.{ExecutionParam, Outcome}
@@ -46,9 +46,10 @@ object TestExecutor {
     val testKit: TK
     def name: String
 
-    type Exec <: TestExecutor[testKit.type]
+    type Exec
 
     def create(): Exec
+    def getExecutor(exec: Exec): TestExecutor[testKit.type]
     def shutdown(executor: Exec): Unit
   }
 
@@ -60,6 +61,7 @@ object TestExecutor {
         override def name: String = executor.name
         override type Exec = TestExecutor[testKit.type]
         override def create(): Exec = executor.narrow
+        override def getExecutor(exec: Exec): TestExecutor[testKit.type] = exec
         override def shutdown(exec: Exec): Unit = {}
       }
 
@@ -84,6 +86,9 @@ object TestExecutor {
           val (executor, shutdown) = acquire()
           new TestExecutorWithShutdown(executor, shutdown)
         }
+
+        override def getExecutor(exec: TestExecutorWithShutdown): TestExecutor[testKit.type] =
+          exec
 
         override def shutdown(executor: TestExecutorWithShutdown): Unit =
           executor.shutdown()
