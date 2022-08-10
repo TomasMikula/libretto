@@ -1,6 +1,6 @@
 package libretto
 
-import java.util.concurrent.Executors
+import java.util.concurrent.{Executors, ScheduledExecutorService}
 import libretto.Functor._
 import libretto.scalasource.{Position => SourcePos}
 import libretto.testing.{ScalaTestExecutor, ScalaTestKit, TestCase, TestExecutor, TestKit}
@@ -11,8 +11,17 @@ import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 
 class BasicTests extends ScalatestSuite[ScalaTestKit] {
-  // TODO: shutdown after tests
-  private lazy val scheduler = Executors.newScheduledThreadPool(1)
+  private var scheduler: ScheduledExecutorService = _
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    scheduler = Executors.newScheduledThreadPool(1)
+  }
+
+  protected override def afterAll(): Unit = {
+    scheduler.shutdownNow()
+    super.afterAll()
+  }
 
   private def delayedAsync[A](d: FiniteDuration)(a: => A): Async[A] = {
     val p = Promise[A]()
