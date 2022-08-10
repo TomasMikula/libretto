@@ -12,6 +12,8 @@ object ScalaTestExecutor {
     val dsl0: DSL,
     val bridge: Bridge & ScalaBridge.Of[dsl0.type],
   ) extends ScalaTestKit {
+      override type Dsl = bridge.dsl.type
+
       override val dsl: bridge.dsl.type = bridge.dsl
       override val probes: bridge.type = bridge
       import dsl._

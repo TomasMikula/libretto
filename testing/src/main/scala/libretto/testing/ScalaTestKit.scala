@@ -5,7 +5,8 @@ import libretto.testing.TestKit.dsl
 import libretto.util.Monad.syntax._
 
 trait ScalaTestKit extends TestKitWithManualClock {
-  override val dsl: ScalaDSL
+  override type Dsl <: ScalaDSL
+
   override val probes: ScalaBridge.Of[dsl.type]
 
   import dsl._
@@ -48,7 +49,9 @@ trait ScalaTestKit extends TestKitWithManualClock {
     )
 }
 
-object ScalaTestKit extends ScalaTestKitOps
+object ScalaTestKit extends ScalaTestKitOps {
+  type Of[DSL <: ScalaDSL] = ScalaTestKit { type Dsl = DSL }
+}
 
 trait ScalaTestKitOps extends TestKitOps {
   def failure[A](using kit: ScalaTestKit)(msg: String): dsl.-⚬[dsl.Done, kit.Assertion[A]] =

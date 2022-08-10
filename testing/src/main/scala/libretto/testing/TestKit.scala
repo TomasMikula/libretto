@@ -6,7 +6,9 @@ import libretto.util.{Async, Monad => ScalaMonad}
 import libretto.util.Monad.syntax._
 
 trait TestKit {
-  val dsl: CoreDSL
+  type Dsl <: CoreDSL
+
+  val dsl: Dsl
 
   opaque type Outcome[A] = Async[TestResult[A]]
   object Outcome {

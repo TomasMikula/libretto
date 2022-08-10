@@ -4,6 +4,6 @@ package libretto.testing
 trait ScalaTestSuite extends TestSuite[ScalaTestKit] {
   override def testExecutors: List[TestExecutor.Factory[ScalaTestKit]] =
     List(
-      TestExecutor.Factory.noOp(ScalaTestExecutor.global),
+      ScalaTestExecutor.defaultFactory,
     )
 }
