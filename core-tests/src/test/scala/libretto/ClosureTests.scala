@@ -1,15 +1,19 @@
 package libretto
 
-import libretto.StarterKit.dsl._
-import libretto.StarterKit.dsl.$._
-import libretto.StarterKit.coreLib._
-import libretto.testing.{StarterTestKit, TestCase}
-import libretto.testing.scalatest.ScalatestStarterTestSuite
+import libretto.testing.{ScalaTestKit, TestCase}
+import libretto.testing.scalatest.ScalatestScalaTestSuite
 
-class ClosureTests extends ScalatestStarterTestSuite {
-  override def testCases(using kit: StarterTestKit): List[(String, TestCase[kit.type])] = {
+class ClosureTests extends ScalatestScalaTestSuite {
+  override def testCases(using kit: ScalaTestKit): List[(String, TestCase[kit.type])] = {
+    import kit.dsl._
+    import kit.dsl.$._
     import kit.{Outcome, expectVal}
     import kit.Outcome.expectNotThrows
+
+    val coreLib = CoreLib(kit.dsl)
+    val scalaLib = ScalaLib(kit.dsl, coreLib)
+    import coreLib._
+    import scalaLib._
 
     List(
       "simplest closure" ->
