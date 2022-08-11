@@ -118,7 +118,7 @@ object ScalaTestExecutor {
 
   def fromExecutor(
     exec: ScalaExecutor,
-  ): TestExecutor[ScalaTestKit] = {
+  ): TestExecutor[ScalaTestKit.Of[exec.dsl.type]] = {
     val kit = ScalaTestKitFromBridge[exec.dsl.type, exec.bridge.type](exec.dsl, exec.bridge)
     fromKitAndExecutor(kit, exec.narrow)
   }
