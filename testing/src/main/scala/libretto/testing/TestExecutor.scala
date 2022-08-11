@@ -42,14 +42,14 @@ trait TestExecutor[+TK <: TestKit] { self =>
 }
 
 object TestExecutor {
-  trait Factory[TK <: TestKit] {
+  trait Factory[+TK <: TestKit] {
     val testKit: TK
     def name: String
 
     type Exec
 
     def create(): Exec
-    def getExecutor(exec: Exec): TestExecutor[testKit.type]
+    def access(exec: Exec): TestExecutor[testKit.type]
     def shutdown(executor: Exec): Unit
   }
 
@@ -61,7 +61,7 @@ object TestExecutor {
         override def name: String = executor.name
         override type Exec = TestExecutor[testKit.type]
         override def create(): Exec = executor.narrow
-        override def getExecutor(exec: Exec): TestExecutor[testKit.type] = exec
+        override def access(exec: Exec): TestExecutor[testKit.type] = exec
         override def shutdown(exec: Exec): Unit = {}
       }
 
@@ -87,7 +87,7 @@ object TestExecutor {
           new TestExecutorWithShutdown(executor, shutdown)
         }
 
-        override def getExecutor(exec: TestExecutorWithShutdown): TestExecutor[testKit.type] =
+        override def access(exec: TestExecutorWithShutdown): TestExecutor[testKit.type] =
           exec
 
         override def shutdown(executor: TestExecutorWithShutdown): Unit =

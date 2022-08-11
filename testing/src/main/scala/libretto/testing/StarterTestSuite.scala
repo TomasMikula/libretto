@@ -4,6 +4,6 @@ package libretto.testing
 trait StarterTestSuite extends TestSuite[StarterTestKit] {
   override def testExecutors: List[TestExecutor.Factory[StarterTestKit]] =
     List(
-      TestExecutor.Factory.noOp(StarterTestExecutor.global),
+      StarterTestExecutor.defaultFactory,
     )
 }

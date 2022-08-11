@@ -153,6 +153,25 @@ trait Executor { self =>
 object Executor {
   type Of[DSL <: CoreDSL, BRIDGE <: CoreBridge.Of[DSL]] =
     Executor { type Dsl = DSL; type Bridge = BRIDGE }
+
+  trait Factory {
+    type Dsl <: CoreDSL
+    val dsl: Dsl
+
+    type Bridge <: CoreBridge.Of[dsl.type]
+    val bridge: Bridge
+
+    type Exec
+
+    def create(): Exec
+    def access(e: Exec): Executor.Of[dsl.type, bridge.type]
+    def shutdown(e: Exec): Unit
+  }
+
+  object Factory {
+    type Of[DSL <: CoreDSL, BRIDGE <: CoreBridge.Of[DSL]] =
+      Factory { type Dsl = DSL; type Bridge = BRIDGE }
+  }
 }
 
 trait ScalaExecutor extends Executor { self =>
@@ -175,4 +194,54 @@ object ScalaExecutor {
 
   type Of[DSL <: ScalaDSL, BRIDGE <: ScalaBridge.Of[DSL]] =
     ScalaExecutor { type Dsl = DSL; type Bridge = BRIDGE }
+
+  trait Factory extends Executor.Factory {
+    override type Dsl <: ScalaDSL
+    override type Bridge <: ScalaBridge.Of[dsl.type]
+
+    override def access(e: Exec): ScalaExecutor.Of[dsl.type, bridge.type]
+  }
+
+  object Factory {
+    type Of[DSL <: ScalaDSL, BRIDGE <: ScalaBridge.Of[DSL]] =
+      Factory { type Dsl = DSL; type Bridge = BRIDGE }
+  }
+
+  private[libretto] val defaultFactory0: ScalaExecutor.Factory.Of[StarterKit.dsl.type, StarterKit.bridge.type] =
+    new ScalaExecutor.Factory {
+      import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
+
+      override type Dsl = StarterKit.dsl.type
+      override type Bridge = StarterKit.bridge.type
+
+      override val dsl = StarterKit.dsl
+      override val bridge = StarterKit.bridge
+
+      override type Exec = (ScheduledExecutorService, ExecutorService, ScalaExecutor.Of[dsl.type, bridge.type])
+
+      override def access(e: Exec): ScalaExecutor.Of[dsl.type, bridge.type] =
+        e._3
+
+      override def create(): Exec = {
+        val scheduler = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors())
+        val blockingExecutor = Executors.newCachedThreadPool()
+        val executor = StarterKit.executor(blockingExecutor)(scheduler)
+        (scheduler, blockingExecutor, executor)
+      }
+
+      override def shutdown(exec: Exec): Unit = {
+        exec._2.shutdownNow()
+        exec._1.shutdownNow()
+      }
+    }
+
+  val defaultFactory: ScalaExecutor.Factory =
+    defaultFactory0
+}
+
+type StarterExecutor = ScalaExecutor.Of[StarterKit.dsl.type, StarterKit.bridge.type]
+
+object StarterExecutor {
+  val defaultFactory: ScalaExecutor.Factory.Of[StarterKit.dsl.type, StarterKit.bridge.type] =
+    ScalaExecutor.defaultFactory0
 }

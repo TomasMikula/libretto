@@ -172,32 +172,34 @@ object ScalaTestExecutor {
     fromExecutor(executor0)
   }
 
-  val defaultFactory: TestExecutor.Factory[ScalaTestKit] =
-    new TestExecutor.Factory[ScalaTestKit] {
-      override val testKit: ScalaTestKitFromBridge[StarterKit.dsl.type, StarterKit.bridge.type] =
-        new ScalaTestKitFromBridge(StarterKit.dsl, StarterKit.bridge)
+  def defaultFactory(
+    ef: ScalaExecutor.Factory,
+  ): TestExecutor.Factory[ScalaTestKit.Of[ef.dsl.type]] =
+    new TestExecutor.Factory[ScalaTestKit.Of[ef.dsl.type]] {
+      override val testKit: ScalaTestKitFromBridge[ef.dsl.type, ef.bridge.type] =
+        new ScalaTestKitFromBridge(ef.dsl, ef.bridge)
 
       override def name =
         s"${ScalaTestExecutor.getClass.getSimpleName()} default"
 
-      override type Exec = (ScheduledExecutorService, ExecutorService, TestExecutor[testKit.type])
+      override type Exec = (ef.Exec, TestExecutor[testKit.type])
 
-      override def getExecutor(exec: Exec): TestExecutor[testKit.type] =
-        exec._3
+      override def access(exec: Exec): TestExecutor[testKit.type] =
+        exec._2
 
       override def create(): Exec = {
-        val scheduler = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors())
-        val blockingExecutor = Executors.newCachedThreadPool()
-        val testExecutor = fromKitAndExecutor(testKit, StarterKit.executor(blockingExecutor)(scheduler))
-        (scheduler, blockingExecutor, testExecutor)
+        val executor = ef.create()
+        val testExecutor = fromKitAndExecutor(testKit, ef.access(executor))
+        (executor, testExecutor)
       }
 
-      override def shutdown(exec: Exec): Unit = {
-        exec._2.shutdownNow()
-        exec._1.shutdownNow()
-      }
+      override def shutdown(exec: Exec): Unit =
+        ef.shutdown(exec._1)
     }
 
+  val defaultFactory: TestExecutor.Factory[ScalaTestKit] =
+    defaultFactory(ScalaExecutor.defaultFactory)
+
   lazy val global: TestExecutor[ScalaTestKit] =
-    defaultFactory.getExecutor(defaultFactory.create())
+    defaultFactory.access(defaultFactory.create())
 }

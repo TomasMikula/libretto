@@ -1,15 +1,11 @@
 package libretto.testing
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
-import libretto.{ScalaBridge, ScalaExecutor, StarterKit}
+import libretto.{ScalaExecutor, StarterExecutor, StarterKit}
 import libretto.testing.ScalaTestExecutor.ExecutionParam.Instantiation
 import libretto.testing.ScalaTestExecutor.ScalaTestKitFromBridge
 
 object StarterTestExecutor {
-
-  private class StarterTestKitFromBridge[Bridge <: ScalaBridge.Of[StarterKit.dsl.type]](
-    bridge: Bridge,
-  ) extends ScalaTestExecutor.ScalaTestKitFromBridge[StarterKit.dsl.type, Bridge](StarterKit.dsl, bridge)
 
   def fromExecutor(
     exec: ScalaExecutor.OfDsl[StarterKit.dsl.type],
@@ -60,9 +56,9 @@ object StarterTestExecutor {
     fromExecutor(executor0)
   }
 
+  val defaultFactory: TestExecutor.Factory[StarterTestKit] =
+    ScalaTestExecutor.defaultFactory(StarterExecutor.defaultFactory)
+
   lazy val global: TestExecutor[StarterTestKit] =
-    fromJavaExecutors(
-      scheduler        = Executors.newScheduledThreadPool(4),
-      blockingExecutor = Executors.newCachedThreadPool(),
-    )
+    defaultFactory.access(defaultFactory.create())
 }
