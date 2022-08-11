@@ -12,7 +12,7 @@ extends AnyFunSuite
   private class FactoryWithExecutor[F <: TestExecutor.Factory[_]](
     val factory: F,
   ) {
-    var executor: Option[factory.Exec] = None
+    var executor: Option[factory.ExecutorResource] = None
 
     def init(): Unit =
       executor = Some(factory.create())

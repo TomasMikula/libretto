@@ -182,19 +182,19 @@ object ScalaTestExecutor {
       override def name =
         s"${ScalaTestExecutor.getClass.getSimpleName()} default"
 
-      override type Exec = (ef.Exec, TestExecutor[testKit.type])
+      override type ExecutorResource = (ef.ExecutorResource, TestExecutor[testKit.type])
 
-      override def access(exec: Exec): TestExecutor[testKit.type] =
-        exec._2
+      override def access(r: ExecutorResource): TestExecutor[testKit.type] =
+        r._2
 
-      override def create(): Exec = {
+      override def create(): ExecutorResource = {
         val executor = ef.create()
         val testExecutor = fromKitAndExecutor(testKit, ef.access(executor))
         (executor, testExecutor)
       }
 
-      override def shutdown(exec: Exec): Unit =
-        ef.shutdown(exec._1)
+      override def shutdown(r: ExecutorResource): Unit =
+        ef.shutdown(r._1)
     }
 
   val defaultFactory: TestExecutor.Factory[ScalaTestKit] =

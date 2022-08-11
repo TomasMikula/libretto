@@ -46,11 +46,11 @@ object TestExecutor {
     val testKit: TK
     def name: String
 
-    type Exec
+    type ExecutorResource
 
-    def create(): Exec
-    def access(exec: Exec): TestExecutor[testKit.type]
-    def shutdown(executor: Exec): Unit
+    def create(): ExecutorResource
+    def access(r: ExecutorResource): TestExecutor[testKit.type]
+    def shutdown(r: ExecutorResource): Unit
   }
 
   object Factory {
@@ -59,10 +59,10 @@ object TestExecutor {
       new Factory[TK] {
         override val testKit: executor.testKit.type = executor.testKit
         override def name: String = executor.name
-        override type Exec = TestExecutor[testKit.type]
-        override def create(): Exec = executor.narrow
-        override def access(exec: Exec): TestExecutor[testKit.type] = exec
-        override def shutdown(exec: Exec): Unit = {}
+        override type ExecutorResource = TestExecutor[testKit.type]
+        override def create(): ExecutorResource = executor.narrow
+        override def access(r: ExecutorResource): TestExecutor[testKit.type] = r
+        override def shutdown(r: ExecutorResource): Unit = {}
       }
 
     def fromAcquire[TK <: TestKit](
@@ -80,9 +80,9 @@ object TestExecutor {
       new Factory[TK] {
         override val testKit: kit.type = kit
         override def name: String = factoryName
-        override type Exec = TestExecutorWithShutdown
+        override type ExecutorResource = TestExecutorWithShutdown
 
-        override def create(): Exec = {
+        override def create(): ExecutorResource = {
           val (executor, shutdown) = acquire()
           new TestExecutorWithShutdown(executor, shutdown)
         }

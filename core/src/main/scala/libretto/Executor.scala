@@ -161,11 +161,11 @@ object Executor {
     type Bridge <: CoreBridge.Of[dsl.type]
     val bridge: Bridge
 
-    type Exec
+    type ExecutorResource
 
-    def create(): Exec
-    def access(e: Exec): Executor.Of[dsl.type, bridge.type]
-    def shutdown(e: Exec): Unit
+    def create(): ExecutorResource
+    def access(r: ExecutorResource): Executor.Of[dsl.type, bridge.type]
+    def shutdown(r: ExecutorResource): Unit
   }
 
   object Factory {
@@ -199,7 +199,7 @@ object ScalaExecutor {
     override type Dsl <: ScalaDSL
     override type Bridge <: ScalaBridge.Of[dsl.type]
 
-    override def access(e: Exec): ScalaExecutor.Of[dsl.type, bridge.type]
+    override def access(r: ExecutorResource): ScalaExecutor.Of[dsl.type, bridge.type]
   }
 
   object Factory {
@@ -217,21 +217,22 @@ object ScalaExecutor {
       override val dsl = StarterKit.dsl
       override val bridge = StarterKit.bridge
 
-      override type Exec = (ScheduledExecutorService, ExecutorService, ScalaExecutor.Of[dsl.type, bridge.type])
+      override type ExecutorResource =
+        (ScheduledExecutorService, ExecutorService, ScalaExecutor.Of[dsl.type, bridge.type])
 
-      override def access(e: Exec): ScalaExecutor.Of[dsl.type, bridge.type] =
-        e._3
+      override def access(r: ExecutorResource): ScalaExecutor.Of[dsl.type, bridge.type] =
+        r._3
 
-      override def create(): Exec = {
+      override def create(): ExecutorResource = {
         val scheduler = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors())
         val blockingExecutor = Executors.newCachedThreadPool()
         val executor = StarterKit.executor(blockingExecutor)(scheduler)
         (scheduler, blockingExecutor, executor)
       }
 
-      override def shutdown(exec: Exec): Unit = {
-        exec._2.shutdownNow()
-        exec._1.shutdownNow()
+      override def shutdown(r: ExecutorResource): Unit = {
+        r._2.shutdownNow()
+        r._1.shutdownNow()
       }
     }
 
