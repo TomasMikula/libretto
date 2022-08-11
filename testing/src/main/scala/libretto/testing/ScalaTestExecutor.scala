@@ -10,14 +10,14 @@ object ScalaTestExecutor {
 
   class ScalaTestKitFromBridge[DSL <: ScalaDSL, Bridge <: ScalaBridge.Of[DSL]](
     val dsl0: DSL,
-    val bridge: Bridge & ScalaBridge.Of[dsl0.type],
+    val bridge0: Bridge & ScalaBridge.Of[dsl0.type],
   ) extends ScalaTestKit {
       override type Dsl = bridge.dsl.type
 
-      override val dsl: bridge.dsl.type = bridge.dsl
-      override val probes: bridge.type = bridge
+      override val dsl: bridge0.dsl.type = bridge0.dsl
+      override val bridge: bridge0.type = bridge0
       import dsl._
-      import probes.Execution
+      import bridge.Execution
 
       override type Assertion[A] = Val[String] |+| A
 
@@ -125,7 +125,7 @@ object ScalaTestExecutor {
 
   def fromKitAndExecutor(
     kit: ScalaTestKit { type ExecutionParam[A] = ScalaTestExecutor.ExecutionParam[A] },
-    exec: ScalaExecutor.Of[kit.dsl.type, kit.probes.type],
+    exec: ScalaExecutor.Of[kit.dsl.type, kit.bridge.type],
   ): TestExecutor[kit.type] =
     new TestExecutor[kit.type] {
       override val name: String =
@@ -135,7 +135,7 @@ object ScalaTestExecutor {
 
       import testKit.{ExecutionParam, Outcome}
       import testKit.dsl._
-      import testKit.probes.Execution
+      import testKit.bridge.Execution
 
       override def runTestCase[O, P, Y](
         body: Done -⚬ O,

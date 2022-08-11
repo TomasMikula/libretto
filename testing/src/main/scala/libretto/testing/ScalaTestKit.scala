@@ -7,10 +7,10 @@ import libretto.util.Monad.syntax._
 trait ScalaTestKit extends TestKitWithManualClock {
   override type Dsl <: ScalaDSL
 
-  override val probes: ScalaBridge.Of[dsl.type]
+  override val bridge: ScalaBridge.Of[dsl.type]
 
   import dsl._
-  import probes.Execution
+  import bridge.Execution
 
   private lazy val coreLib = CoreLib(dsl)
   import coreLib._
@@ -78,6 +78,6 @@ trait ScalaTestKitOps extends TestKitOps {
   def assertEquals[A](using kit: ScalaTestKit)(expected: A): dsl.-⚬[dsl.Val[A], kit.Assertion[dsl.Done]] =
     kit.assertEquals(expected)
 
-  def expectVal[A](using kit: ScalaTestKit, exn: kit.probes.Execution)(port: exn.OutPort[dsl.Val[A]]): kit.Outcome[A] =
+  def expectVal[A](using kit: ScalaTestKit, exn: kit.bridge.Execution)(port: exn.OutPort[dsl.Val[A]]): kit.Outcome[A] =
     kit.expectVal(port)
 }

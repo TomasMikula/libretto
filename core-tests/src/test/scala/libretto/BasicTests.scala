@@ -42,7 +42,7 @@ class BasicTests extends ScalatestSuite[ScalaTestKit] {
     val scalaLib = ScalaLib(dsl: dsl.type, coreLib)
     import coreLib._
     import scalaLib._
-    import probes.Execution
+    import bridge.Execution
 
     def raceKeepWinner[A](
       prg1: Done -⚬ Val[A],

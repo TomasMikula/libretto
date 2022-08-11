@@ -9,7 +9,7 @@ trait TestExecutor[+TK <: TestKit] { self =>
 
   import testKit.{ExecutionParam, Outcome}
   import testKit.dsl._
-  import testKit.probes.Execution
+  import testKit.bridge.Execution
 
   def name: String
 

@@ -100,10 +100,10 @@ trait TestKit {
     }
   }
 
-  val probes: CoreBridge.Of[dsl.type]
+  val bridge: CoreBridge.Of[dsl.type]
 
   import dsl.{-⚬, |*|, |+|, Done}
-  import probes.Execution
+  import bridge.Execution
 
   type Assertion[A]
 
@@ -170,8 +170,8 @@ trait TestKitOps {
   transparent inline def dsl(using kit: TestKit): kit.dsl.type =
     kit.dsl
 
-  transparent inline def probes(using kit: TestKit): kit.probes.type =
-    kit.probes
+  transparent inline def bridge(using kit: TestKit): kit.bridge.type =
+    kit.bridge
 
   def success(using kit: TestKit): kit.dsl.-⚬[kit.dsl.Done, kit.Assertion[dsl.Done]] =
     kit.success

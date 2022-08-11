@@ -12,7 +12,7 @@ object TestCase {
     val testKit: TK
     import testKit.{ExecutionParam, Outcome}
     import testKit.dsl._
-    import testKit.probes.Execution
+    import testKit.bridge.Execution
 
     type O
     type P
@@ -39,7 +39,7 @@ object TestCase {
   def parameterized[A, Q, B](using kit: TestKit)(
     body0: dsl.-⚬[dsl.Done, A],
     params0: kit.ExecutionParam[Q],
-    conductor0: (exn: kit.probes.Execution) ?=> (exn.OutPort[A], Q) => kit.Outcome[B],
+    conductor0: (exn: kit.bridge.Execution) ?=> (exn.OutPort[A], Q) => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
   ): TestCase[kit.type] =
     new SingleProgram[kit.type] {
@@ -55,7 +55,7 @@ object TestCase {
 
   private def apply[A, B](using kit: TestKit)(
     body0: dsl.-⚬[dsl.Done, A],
-    conductor0: (exn: kit.probes.Execution) ?=> exn.OutPort[A] => kit.Outcome[B],
+    conductor0: (exn: kit.bridge.Execution) ?=> exn.OutPort[A] => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
   ): TestCase[kit.type] =
     parameterized[A, Unit, B](
@@ -72,14 +72,14 @@ object TestCase {
 
   def apply[O](using kit: TestKit)(
     body: kit.dsl.-⚬[kit.dsl.Done, O],
-    conduct: (exn: kit.probes.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit],
+    conduct: (exn: kit.bridge.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit],
   ): TestCase[kit.type] =
     apply[O, Unit](body, conduct(_), kit.monadOutcome.pure)
 
   def parameterized[O, P](using kit: TestKit)(
     body: kit.dsl.-⚬[kit.dsl.Done, O],
     params: kit.ExecutionParam[P],
-    conduct: (exn: kit.probes.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit],
+    conduct: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit],
   ): TestCase[kit.type] =
     parameterized[O, P, Unit](body, params, conduct(_, _), kit.monadOutcome.pure)
 
@@ -113,11 +113,11 @@ object TestCase {
     val kit: TK,
     val body: kit.dsl.-⚬[kit.dsl.Done, O],
   ) {
-    def via(conductor: (exn: kit.probes.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit]): TestCase[kit.type] =
+    def via(conductor: (exn: kit.bridge.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit]): TestCase[kit.type] =
       TestCase(using kit)(body, conductor(_))
 
     def via[X](
-      conductor: (exn: kit.probes.Execution) ?=> exn.OutPort[O] => kit.Outcome[X],
+      conductor: (exn: kit.bridge.Execution) ?=> exn.OutPort[O] => kit.Outcome[X],
       postStop: X => kit.Outcome[Unit],
     ): TestCase[kit.type] =
       TestCase(using kit)(body, conductor(_), postStop)
@@ -128,11 +128,11 @@ object TestCase {
     val body: kit.dsl.-⚬[kit.dsl.Done, O],
     val params: kit.ExecutionParam[P],
   ) {
-    def via(conductor: (exn: kit.probes.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit]): TestCase[kit.type] =
+    def via(conductor: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit]): TestCase[kit.type] =
       TestCase.parameterized(using kit)(body, params, conductor(_, _))
 
     def via[X](
-      conductor: (exn: kit.probes.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[X],
+      conductor: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[X],
       postStop: X => kit.Outcome[Unit],
     ): TestCase[kit.type] =
       TestCase.parameterized(using kit)(body, params, conductor(_, _), postStop)
