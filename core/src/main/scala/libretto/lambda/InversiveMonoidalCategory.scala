@@ -1,4 +1,4 @@
-package libretto.impl
+package libretto.lambda
 
 trait InversiveMonoidalCategory[->[_, _], |*|[_, _], One, `-`[_]]
   extends InversiveSemigroupalCategory[->, |*|, -]

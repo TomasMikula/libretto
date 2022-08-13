@@ -1,7 +1,7 @@
-package libretto.impl
+package libretto.lambda
 
-import libretto.impl.Lambdas.Error.LinearityViolation
-import libretto.impl.Lambdas.ErrorFactory
+import libretto.lambda.Lambdas.Error.LinearityViolation
+import libretto.lambda.Lambdas.ErrorFactory
 import libretto.util.BiInjective
 import scala.annotation.targetName
 

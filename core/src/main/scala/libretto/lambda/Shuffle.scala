@@ -1,4 +1,4 @@
-package libretto.impl
+package libretto.lambda
 
 import libretto.util.BiInjective
 import libretto.util.BiInjective._

@@ -1,6 +1,7 @@
 package libretto.impl
 
 import libretto.ScalaDSL
+import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, LambdasOne, Tupled}
 import libretto.scalasource
 import libretto.util.{Async, BiInjective}
 import scala.concurrent.duration.FiniteDuration

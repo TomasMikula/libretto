@@ -1,4 +1,4 @@
-package libretto.impl
+package libretto.lambda
 
 trait MonoidalCategory[->[_, _], |*|[_, _], One]
   extends SemigroupalCategory[->, |*|]

@@ -1,5 +1,7 @@
 package libretto.impl
 
+import libretto.lambda.Variable
+
 /**
  * @param P representation of variable's origin (e.g. source code position)
  */

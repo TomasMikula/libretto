@@ -1,4 +1,4 @@
-package libretto.impl
+package libretto.lambda
 
 sealed trait Tupled[|*|[_, _], F[_], A] {
   import Tupled._

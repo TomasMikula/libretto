@@ -1,4 +1,4 @@
-package libretto.impl
+package libretto.lambda
 
 trait SymmetricSemigroupalCategory[->[_, _], |*|[_, _]] extends SemigroupalCategory[->, |*|] {
   def swap[A, B]: (A |*| B) -> (B |*| A)

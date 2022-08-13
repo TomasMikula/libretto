@@ -1,4 +1,4 @@
-package libretto.impl
+package libretto.lambda
 
 object UnhandledCase {
   def raise(desc: String): Nothing =

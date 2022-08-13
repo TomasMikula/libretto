@@ -1,4 +1,4 @@
-package libretto.impl
+package libretto.lambda
 
 trait ClosedSemigroupalCategory[->[_, _], |*|[_, _], -->[_, _]] extends SemigroupalCategory[->, |*|] {
   def curry[A, B, C](f: (A |*| B) -> C): A -> (B --> C)

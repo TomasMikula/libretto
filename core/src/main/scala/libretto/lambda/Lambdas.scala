@@ -1,11 +1,11 @@
-package libretto.impl
+package libretto.lambda
 
-import libretto.impl.Lambdas.Error.LinearityViolation
+import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.util.BiInjective
 import scala.annotation.targetName
 
 trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
-  final type Tupled[F[_], A] = libretto.impl.Tupled[|*|, F, A]
+  final type Tupled[F[_], A] = libretto.lambda.Tupled[|*|, F, A]
 
   final type Vars[A] = Tupled[Var, A]
 
@@ -136,7 +136,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
 
 object Lambdas {
   def apply[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
-  ssc: SymmetricSemigroupalCategory[-⚬, |*|],
+    ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
     variables: Variable[Var, VarSet],
     errors: ErrorFactory[E, LE, VarSet],

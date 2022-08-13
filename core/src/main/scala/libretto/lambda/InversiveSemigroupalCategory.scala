@@ -1,4 +1,4 @@
-package libretto.impl
+package libretto.lambda
 
 trait InversiveSemigroupalCategory[->[_, _], |*|[_, _], `-`[_]]
   extends ClosedSymmetricSemigroupalCategory[->, |*|, [x, y] =>> -[x] |*| y]
