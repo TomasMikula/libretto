@@ -1,6 +1,6 @@
 package libretto.examples.coffeemachine
 
-import libretto.StarterApp
+import libretto.scaletto.StarterApp
 
 object CoffeeMachine extends StarterApp { app =>
 

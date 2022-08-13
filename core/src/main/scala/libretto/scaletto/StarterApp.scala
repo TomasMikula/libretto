@@ -1,6 +1,6 @@
-package libretto
+package libretto.scaletto
 
-import libretto.StarterKit.runAsync
+import libretto.scaletto.StarterKit.runAsync
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 

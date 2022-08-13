@@ -1,35 +1,36 @@
-package libretto
+package libretto.scaletto
 
+import libretto.{CoreLib, CoreStreams}
 import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
 
-object ScalaStreams {
+object ScalettoStreams {
   def apply(
-    dsl: ScalaDSL,
+    dsl: Scaletto,
     coreLib: CoreLib[dsl.type],
-    scalaLib: ScalaLib[dsl.type, coreLib.type],
+    scalettoLib: ScalettoLib[dsl.type, coreLib.type],
     coreStreams: CoreStreams[dsl.type, coreLib.type],
   )
-  : ScalaStreams[dsl.type, coreLib.type, scalaLib.type, coreStreams.type] =
-    new ScalaStreams(dsl, coreLib, scalaLib, coreStreams)
+  : ScalettoStreams[dsl.type, coreLib.type, scalettoLib.type, coreStreams.type] =
+    new ScalettoStreams(dsl, coreLib, scalettoLib, coreStreams)
 }
 
-class ScalaStreams[
-  DSL <: ScalaDSL,
+class ScalettoStreams[
+  DSL <: Scaletto,
   Lib <: CoreLib[DSL],
-  SLib <: ScalaLib[DSL, Lib],
+  SLib <: ScalettoLib[DSL, Lib],
   Streams <: CoreStreams[DSL, Lib],
 ](
   val dsl: DSL,
   val coreLib: Lib with CoreLib[dsl.type],
-  val scalaLib: SLib with ScalaLib[dsl.type, coreLib.type],
+  val scalettoLib: SLib with ScalettoLib[dsl.type, coreLib.type],
   val coreStreams: Streams with CoreStreams[dsl.type, coreLib.type],
 ) {
-  private val Tree = BinarySearchTree(dsl, coreLib, scalaLib)
+  private val Tree = BinarySearchTree(dsl, coreLib, scalettoLib)
 
   import dsl._
   import coreLib._
-  import scalaLib._
+  import scalettoLib._
   import coreStreams._
   import Tree._
 
@@ -488,7 +489,7 @@ class ScalaStreams[
     def close[A]: Subscriber[A] -⚬ Need =
       LSubscriber.close
 
-    private[ScalaStreams] def merge[A](
+    private[ScalettoStreams] def merge[A](
       mergeDemandings: (Demanding[A] |*| Demanding[A]) -⚬ Demanding[A]
     ): (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A] = {
       val fstClosed: (Need |*| Subscriber[A]) -⚬ Subscriber[A] =
@@ -526,7 +527,7 @@ class ScalaStreams[
     def supply[A]: (Val[A] |*| Demanding[A]) -⚬ (Need |+| Demanding[A]) =
       LDemanding.supply(fulfill[A])
 
-    private[ScalaStreams] def merge[A](
+    private[ScalettoStreams] def merge[A](
       mergeSubscribers: (Subscriber[A] |*| Subscriber[A]) -⚬ Subscriber[A]
     ): (Demanding[A] |*| Demanding[A]) -⚬ Demanding[A] = {
       val caseClosed: (Demanding[A] |*| Demanding[A]) -⚬ Need =

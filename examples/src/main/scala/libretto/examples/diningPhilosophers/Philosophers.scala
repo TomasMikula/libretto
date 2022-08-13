@@ -1,7 +1,7 @@
 package libretto.examples.diningPhilosophers
 
-import libretto.StarterKit._
-import libretto.StarterKit.$._
+import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.$._
 import scala.concurrent.duration._
 import scala.util.Random
 

@@ -1,6 +1,6 @@
 package libretto.examples
 
-import libretto.StarterApp
+import libretto.scaletto.StarterApp
 
 /**
  * This example implements interaction between two parties, Alice and Bob, in which

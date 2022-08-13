@@ -1,8 +1,9 @@
-package libretto.impl
+package libretto.scaletto.impl
 
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.{Executor => JExecutor, ScheduledExecutorService, TimeUnit}
-import libretto.{Executing, ExecutionParams, ScalaBridge, ScalaExecutor, Scheduler}
+import libretto.{Executing, ExecutionParams, Scheduler}
+import libretto.scaletto.{ScalettoBridge, ScalettoExecutor}
 import libretto.util.Async
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
@@ -10,14 +11,14 @@ import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}
 import scala.concurrent.duration.Duration
 
-object FreeScalaFutureRunner {
+object FreeScalettoFutureRunner {
   def apply(
     scheduler: ScheduledExecutorService,
     blockingExecutor: JExecutor,
-  ): ScalaExecutor.Of[FreeScalaDSL.type, FreeScalaFutureBridge.type] = {
+  ): ScalettoExecutor.Of[FreeScaletto.type, FreeScalettoFutureBridge.type] = {
     val ec = ExecutionContext.fromExecutor(scheduler)
     val sc = new SchedulerFromScheduledExecutorService(scheduler)
-    new FreeScalaFutureRunner(ec, sc, blockingExecutor)
+    new FreeScalettoFutureRunner(ec, sc, blockingExecutor)
   }
 
   type ExecutionParam[A] = ExecutionParams.Free[SchedulerParam, A]
@@ -59,21 +60,21 @@ object FreeScalaFutureRunner {
   * On top of that, expect bugs, since the implementation is full of unsafe type casts, because Scala's (including
   * Dotty's) type inference cannot cope with the kind of pattern matches found here.
   */
-class FreeScalaFutureRunner(
+class FreeScalettoFutureRunner(
   ec: ExecutionContext,
   scheduler: Scheduler,
   blockingExecutor: JExecutor,
-) extends ScalaExecutor {
+) extends ScalettoExecutor {
 
-  override type Dsl = FreeScalaDSL.type
-  override type Bridge = FreeScalaFutureBridge.type
+  override type Dsl = FreeScaletto.type
+  override type Bridge = FreeScalettoFutureBridge.type
 
-  override val dsl = FreeScalaDSL
-  override val bridge = FreeScalaFutureBridge
+  override val dsl = FreeScaletto
+  override val bridge = FreeScalettoFutureBridge
 
-  override type ExecutionParam[A] = FreeScalaFutureRunner.ExecutionParam[A]
+  override type ExecutionParam[A] = FreeScalettoFutureRunner.ExecutionParam[A]
   override val ExecutionParam: ExecutionParams.WithScheduler[ExecutionParam] =
-    FreeScalaFutureRunner.ExecutionParam
+    FreeScalettoFutureRunner.ExecutionParam
 
   import dsl._
   import bridge.{Execution, cancelExecution}
@@ -82,11 +83,11 @@ class FreeScalaFutureRunner(
     prg: A -⚬ B,
     params: ExecutionParam[P],
   ): (Executing[bridge.type, A, B], P) = {
-    val (schedOpt, p) = FreeScalaFutureRunner.ExecutionParam.extract(params)
+    val (schedOpt, p) = FreeScalettoFutureRunner.ExecutionParam.extract(params)
     val sched = schedOpt.getOrElse(scheduler)
 
     val executing = {
-      val exctng = FreeScalaFutureBridge.execute(prg)(ec, sched, blockingExecutor)
+      val exctng = FreeScalettoFutureBridge.execute(prg)(ec, sched, blockingExecutor)
       new Executing(using bridge)(exctng.execution, exctng.inPort, exctng.outPort)
     }
 
@@ -97,14 +98,14 @@ class FreeScalaFutureRunner(
     Async.fromFuture(cancelExecution(execution)).map(_ => ())
 }
 
-object FreeScalaFutureBridge extends ScalaBridge {
+object FreeScalettoFutureBridge extends ScalettoBridge {
   import ResourceRegistry._
 
-  override type Dsl = FreeScalaDSL.type
-  override val dsl = FreeScalaDSL
+  override type Dsl = FreeScaletto.type
+  override val dsl = FreeScaletto
   import dsl._
 
-  override opaque type Execution <: ScalaExecution = ExecutionImpl
+  override opaque type Execution <: ScalettoExecution = ExecutionImpl
 
   final class Executing[A, B](
     val execution: Execution,
@@ -138,7 +139,7 @@ object FreeScalaFutureBridge extends ScalaBridge {
     ec: ExecutionContext,
     scheduler: Scheduler,
     blockingExecutor: JExecutor,
-  ) extends ScalaExecution {
+  ) extends ScalettoExecution {
     override opaque type OutPort[A] = Frontier[A]
     override opaque type InPort[A] = Frontier[A] => Unit
 
@@ -158,7 +159,7 @@ object FreeScalaFutureBridge extends ScalaBridge {
       }.map(_ => ())
     }
 
-    override object OutPort extends ScalaOutPorts {
+    override object OutPort extends ScalettoOutPorts {
       override def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B] =
         port.extendBy(f)(using resourceRegistry)
 
@@ -209,7 +210,7 @@ object FreeScalaFutureBridge extends ScalaBridge {
       }
     }
 
-    override object InPort extends ScalaInPorts {
+    override object InPort extends ScalettoInPorts {
       override def contramap[A, B](port: InPort[B])(f: A -⚬ B): InPort[A] =
         a => port(a.extendBy(f)(using resourceRegistry))
 

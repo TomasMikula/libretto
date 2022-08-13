@@ -1,30 +1,30 @@
-package libretto
+package libretto.scaletto
 
 import java.util.concurrent.{Executor => JExecutor, Executors, ScheduledExecutorService}
-import libretto.impl.{FreeScalaDSL, FreeScalaFutureRunner}
+import libretto.{CoreLib, CoreStreams, ClosedLib, InvertLib}
+import libretto.scaletto.impl.{FreeScaletto, FreeScalettoFutureBridge, FreeScalettoFutureRunner}
 import libretto.util.Async
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
-import libretto.impl.FreeScalaFutureBridge
 
 object StarterKit extends StarterKit
 
 class StarterKit extends AbstractStarterKit(
-  FreeScalaDSL,
-  FreeScalaFutureBridge,
-  (scheduler, blockingExecutor) => FreeScalaFutureRunner(scheduler, blockingExecutor),
+  FreeScaletto,
+  FreeScalettoFutureBridge,
+  (scheduler, blockingExecutor) => FreeScalettoFutureRunner(scheduler, blockingExecutor),
 )
 
 abstract class AbstractStarterKit(
-  val dsl: ScalaDSL,
-  val bridge: ScalaBridge.Of[dsl.type],
-  val executor0: (ScheduledExecutorService, JExecutor) => ScalaExecutor.Of[dsl.type, bridge.type],
+  val dsl: Scaletto,
+  val bridge: ScalettoBridge.Of[dsl.type],
+  val executor0: (ScheduledExecutorService, JExecutor) => ScalettoExecutor.Of[dsl.type, bridge.type],
 ) {
   val coreLib: CoreLib[dsl.type] =
     CoreLib(dsl)
 
-  val scalaLib: ScalaLib[dsl.type, coreLib.type] =
-    ScalaLib(dsl, coreLib)
+  val scalettoLib: ScalettoLib[dsl.type, coreLib.type] =
+    ScalettoLib(dsl, coreLib)
 
   val closedLib: ClosedLib[dsl.type, coreLib.type] =
     ClosedLib(dsl, coreLib)
@@ -35,21 +35,21 @@ abstract class AbstractStarterKit(
   val coreStreams: CoreStreams[dsl.type, coreLib.type] =
     CoreStreams(dsl, coreLib)
 
-  val scalaStreams: ScalaStreams[dsl.type, coreLib.type, scalaLib.type, coreStreams.type] =
-    ScalaStreams(dsl, coreLib, scalaLib, coreStreams)
+  val scalettoStreams: ScalettoStreams[dsl.type, coreLib.type, scalettoLib.type, coreStreams.type] =
+    ScalettoStreams(dsl, coreLib, scalettoLib, coreStreams)
 
   def executor(blockingExecutor: JExecutor)(implicit
     scheduler: ScheduledExecutorService,
-  ): ScalaExecutor.Of[dsl.type, bridge.type] =
+  ): ScalettoExecutor.Of[dsl.type, bridge.type] =
     executor0(scheduler, blockingExecutor)
 
   export dsl._
   export coreLib.{dsl => _, _}
-  export scalaLib.{dsl => _, coreLib => _, _}
+  export scalettoLib.{dsl => _, coreLib => _, _}
   export closedLib.{dsl => _, coreLib => _, _}
   export invertLib.{coreLib => _, _}
   export coreStreams.{dsl => _, _}
-  export scalaStreams.{dsl => _, coreLib => _, scalaLib => _, coreStreams => _, _}
+  export scalettoStreams.{dsl => _, coreLib => _, scalettoLib => _, coreStreams => _, _}
 
   def runScalaAsync[A](blueprint: Done -⚬ Val[A]): Future[A] = {
     val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())

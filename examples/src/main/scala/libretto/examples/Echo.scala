@@ -1,6 +1,6 @@
 package libretto.examples
 
-import libretto.StarterApp
+import libretto.scaletto.StarterApp
 
 /** Reads lines from standard input and prints them to standard output. */
 object Echo extends StarterApp {

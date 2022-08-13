@@ -1,16 +1,18 @@
-package libretto.testing
+package libretto.testing.scaletto
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
-import libretto.{CoreLib, ExecutionParams, Monad, ScalaBridge, ScalaExecutor, ScalaDSL, StarterKit}
+import libretto.{CoreLib, ExecutionParams, Monad}
+import libretto.scaletto.{Scaletto, ScalettoBridge, ScalettoExecutor, StarterKit}
+import libretto.testing.{ManualClock, ManualClockParams, TestExecutor, TestResult}
 import libretto.util.{Async, SourcePos}
-import libretto.testing.ScalaTestExecutor.ExecutionParam.Instantiation
 
-object ScalaTestExecutor {
+object ScalettoTestExecutor {
+  import ExecutionParam.Instantiation
 
-  class ScalaTestKitFromBridge[DSL <: ScalaDSL, Bridge <: ScalaBridge.Of[DSL]](
+  class ScalettoTestKitFromBridge[DSL <: Scaletto, Bridge <: ScalettoBridge.Of[DSL]](
     val dsl0: DSL,
-    val bridge0: Bridge & ScalaBridge.Of[dsl0.type],
-  ) extends ScalaTestKit {
+    val bridge0: Bridge & ScalettoBridge.Of[dsl0.type],
+  ) extends ScalettoTestKit {
       override type Dsl = bridge.dsl.type
 
       override val dsl: bridge0.dsl.type = bridge0.dsl
@@ -20,9 +22,9 @@ object ScalaTestExecutor {
 
       override type Assertion[A] = Val[String] |+| A
 
-      override type ExecutionParam[A] = ScalaTestExecutor.ExecutionParam[A]
+      override type ExecutionParam[A] = ScalettoTestExecutor.ExecutionParam[A]
       override val ExecutionParam: ManualClockParams[ExecutionParam] =
-        ScalaTestExecutor.ExecutionParam.manualClockParamsInstance
+        ScalettoTestExecutor.ExecutionParam.manualClockParamsInstance
 
       private val coreLib = CoreLib(this.dsl)
       import coreLib.{Monad => _, _}
@@ -116,19 +118,19 @@ object ScalaTestExecutor {
   }
 
   def fromExecutor(
-    exec: ScalaExecutor,
-  ): TestExecutor[ScalaTestKit.Of[exec.dsl.type]] = {
-    val kit = ScalaTestKitFromBridge[exec.dsl.type, exec.bridge.type](exec.dsl, exec.bridge)
+    exec: ScalettoExecutor,
+  ): TestExecutor[ScalettoTestKit.Of[exec.dsl.type]] = {
+    val kit = ScalettoTestKitFromBridge[exec.dsl.type, exec.bridge.type](exec.dsl, exec.bridge)
     fromKitAndExecutor(kit, exec.narrow)
   }
 
   def fromKitAndExecutor(
-    kit: ScalaTestKit { type ExecutionParam[A] = ScalaTestExecutor.ExecutionParam[A] },
-    exec: ScalaExecutor.Of[kit.dsl.type, kit.bridge.type],
+    kit: ScalettoTestKit { type ExecutionParam[A] = ScalettoTestExecutor.ExecutionParam[A] },
+    exec: ScalettoExecutor.Of[kit.dsl.type, kit.bridge.type],
   ): TestExecutor[kit.type] =
     new TestExecutor[kit.type] {
       override val name: String =
-        ScalaTestExecutor.getClass.getCanonicalName
+        ScalettoTestExecutor.getClass.getCanonicalName
 
       override val testKit: kit.type = kit
 
@@ -143,7 +145,7 @@ object ScalaTestExecutor {
         postStop: Y => Outcome[Unit],
       ): TestResult[Unit] = {
         val p: Instantiation[P, exec.ExecutionParam] =
-          ScalaTestExecutor.ExecutionParam.instantiate(params)(using exec.ExecutionParam)
+          ScalettoTestExecutor.ExecutionParam.instantiate(params)(using exec.ExecutionParam)
 
         TestExecutor
           .usingExecutor(exec)
@@ -164,22 +166,22 @@ object ScalaTestExecutor {
   def fromJavaExecutors(
     scheduler: ScheduledExecutorService,
     blockingExecutor: ExecutorService,
-  ): TestExecutor[ScalaTestKit] = {
-    val executor0: libretto.ScalaExecutor.OfDsl[StarterKit.dsl.type] =
+  ): TestExecutor[ScalettoTestKit] = {
+    val executor0: ScalettoExecutor.OfDsl[StarterKit.dsl.type] =
       StarterKit.executor(blockingExecutor)(scheduler)
 
     fromExecutor(executor0)
   }
 
   def defaultFactory(
-    ef: ScalaExecutor.Factory,
-  ): TestExecutor.Factory[ScalaTestKit.Of[ef.dsl.type]] =
-    new TestExecutor.Factory[ScalaTestKit.Of[ef.dsl.type]] {
-      override val testKit: ScalaTestKitFromBridge[ef.dsl.type, ef.bridge.type] =
-        new ScalaTestKitFromBridge(ef.dsl, ef.bridge)
+    ef: ScalettoExecutor.Factory,
+  ): TestExecutor.Factory[ScalettoTestKit.Of[ef.dsl.type]] =
+    new TestExecutor.Factory[ScalettoTestKit.Of[ef.dsl.type]] {
+      override val testKit: ScalettoTestKitFromBridge[ef.dsl.type, ef.bridge.type] =
+        new ScalettoTestKitFromBridge(ef.dsl, ef.bridge)
 
       override def name =
-        s"${ScalaTestExecutor.getClass.getSimpleName()} default"
+        s"${ScalettoTestExecutor.getClass.getSimpleName()} default"
 
       override type ExecutorResource = (ef.ExecutorResource, TestExecutor[testKit.type])
 
@@ -196,9 +198,9 @@ object ScalaTestExecutor {
         ef.shutdown(r._1)
     }
 
-  val defaultFactory: TestExecutor.Factory[ScalaTestKit] =
-    defaultFactory(ScalaExecutor.defaultFactory)
+  val defaultFactory: TestExecutor.Factory[ScalettoTestKit] =
+    defaultFactory(ScalettoExecutor.defaultFactory)
 
-  lazy val global: TestExecutor[ScalaTestKit] =
+  lazy val global: TestExecutor[ScalettoTestKit] =
     defaultFactory.access(defaultFactory.create())
 }

@@ -1,25 +1,27 @@
-package libretto
+package libretto.scaletto
+
+import libretto.{Category, CoreLib}
 
 object BinarySearchTree {
   def apply(
-    dsl: ScalaDSL,
+    dsl: Scaletto,
     coreLib: CoreLib[dsl.type],
-    scalaLib: ScalaLib[dsl.type, coreLib.type],
+    scalettoLib: ScalettoLib[dsl.type, coreLib.type],
   )
-  : BinarySearchTree[dsl.type, coreLib.type, scalaLib.type] =
-    new BinarySearchTree(dsl, coreLib, scalaLib)
+  : BinarySearchTree[dsl.type, coreLib.type, scalettoLib.type] =
+    new BinarySearchTree(dsl, coreLib, scalettoLib)
 }
 
-class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[DSL, CLib]](
+class BinarySearchTree[DSL <: Scaletto, CLib <: CoreLib[DSL], SLib <: ScalettoLib[DSL, CLib]](
   val dsl: DSL,
   val coreLib: CLib with CoreLib[dsl.type],
-  val scalaLib: SLib with ScalaLib[dsl.type, coreLib.type],
+  val scalettoLib: SLib with ScalettoLib[dsl.type, coreLib.type],
 ) {
   import dsl._
   import coreLib._
   import coreLib.Bool._
   import coreLib.Compared._
-  import scalaLib._
+  import scalettoLib._
 
   private def fstLens[A, B]: Lens[A |*| B, A] =
     Transportive.fst[B].lens[A]
@@ -73,7 +75,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       id
 
     def key[K, V]: Singleton[K, V] -⚬ (Val[K] |*| Singleton[K, V]) =
-      getFst(scalaLib.pComonoidVal)
+      getFst(scalettoLib.pComonoidVal)
 
     def summary[K, V]: Getter[Singleton[K, V], Summary[K]] = {
       val singletonSummary: Getter[Val[K], Summary[K]] =
@@ -82,7 +84,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
             (Summary.singleton[K] > that.getL).>.snd(Summary.minKey)
 
           override def extendJunction(implicit j: Junction.Positive[Summary[K]]): Junction.Positive[Val[K]] =
-            scalaLib.junctionVal[K]
+            scalettoLib.junctionVal[K]
         }
 
       singletonSummary compose fstLens
@@ -142,7 +144,7 @@ class BinarySearchTree[DSL <: ScalaDSL, CLib <: CoreLib[DSL], SLib <: ScalaLib[D
       BranchF.of(NonEmptyTree.summary)
 
     def deconstruct[K, V]: Branch[K, V] -⚬ (NonEmptyTree[K, V] |*| NonEmptyTree[K, V]) =
-      BranchF.deconstruct(NonEmptyTree.minKey[K, V].extendJunction(scalaLib.junctionVal[K]))
+      BranchF.deconstruct(NonEmptyTree.minKey[K, V].extendJunction(scalettoLib.junctionVal[K]))
 
     def clear[K, V](subClear: NonEmptyTree[K, V] -⚬ Done): Branch[K, V] -⚬ Done =
       BranchF.clear(subClear)

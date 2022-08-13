@@ -1,7 +1,7 @@
 package libretto.examples.coffeemachine
 
-import libretto.StarterKit
-import libretto.StarterKit._
+import libretto.scaletto.StarterKit
+import libretto.scaletto.StarterKit._
 
 object CoffeeMachineProvider {
   import Protocol._

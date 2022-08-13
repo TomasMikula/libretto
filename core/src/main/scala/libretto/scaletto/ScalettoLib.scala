@@ -1,21 +1,22 @@
-package libretto
+package libretto.scaletto
 
 import java.util.concurrent.atomic.AtomicLong
+import libretto.CoreLib
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 
-object ScalaLib {
+object ScalettoLib {
   def apply(
-    dsl: ScalaDSL,
+    dsl: Scaletto,
     coreLib: CoreLib[dsl.type],
   )
-  : ScalaLib[dsl.type, coreLib.type] =
-    new ScalaLib(dsl, coreLib)
+  : ScalettoLib[dsl.type, coreLib.type] =
+    new ScalettoLib(dsl, coreLib)
 }
 
-class ScalaLib[
-  DSL <: ScalaDSL,
+class ScalettoLib[
+  DSL <: Scaletto,
   CoreLib <: libretto.CoreLib[DSL],
 ](
   val dsl: DSL,

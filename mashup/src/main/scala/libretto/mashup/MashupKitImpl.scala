@@ -1,6 +1,6 @@
 package libretto.mashup
 
-import libretto.{ScalaExecutor, StarterKit}
+import libretto.scaletto.{ScalettoExecutor, StarterKit}
 import libretto.util.{Async, SourcePos}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -137,7 +137,7 @@ object MashupKitImpl extends MashupKit { kit =>
       override def debugPrint[A](s: String, expr: Expr[A])(using A: ValueType[A]): Expr[A] =
         expr >
           A.toScalaValue >
-          StarterKit.scalaLib.alsoPrintLine(v => s"$s: $v") >
+          StarterKit.scalettoLib.alsoPrintLine(v => s"$s: $v") >
           A.fromScalaValue
     }
 
@@ -206,7 +206,7 @@ object MashupKitImpl extends MashupKit { kit =>
       new ValueTypeImpl[Float64] {
         override type ScalaRepr = Double
 
-        override def junction: Junction.Positive[Float64] = StarterKit.scalaLib.junctionVal[Double]
+        override def junction: Junction.Positive[Float64] = StarterKit.scalettoLib.junctionVal[Double]
 
         override def toScalaValue: Fun[Float64, Val[Double]] = id[Val[Double]]
 
@@ -223,7 +223,7 @@ object MashupKitImpl extends MashupKit { kit =>
       new ValueTypeImpl[Text] {
         override type ScalaRepr = String
 
-        override def junction: Junction.Positive[Text] = StarterKit.scalaLib.junctionVal[String]
+        override def junction: Junction.Positive[Text] = StarterKit.scalettoLib.junctionVal[String]
 
         override def toScalaValue: Fun[Text, Val[String]] = id[Val[String]]
 
@@ -301,7 +301,7 @@ object MashupKitImpl extends MashupKit { kit =>
   }
 
   private class RuntimeImpl(
-    executor: ScalaExecutor.OfDsl[StarterKit.dsl.type],
+    executor: ScalettoExecutor.OfDsl[StarterKit.dsl.type],
   ) extends MashupRuntime[dsl.type] {
     override val dsl: kit.dsl.type = kit.dsl
     import dsl.{-->, **, ###, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, ValueType, of}

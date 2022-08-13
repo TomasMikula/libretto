@@ -2,14 +2,16 @@ package libretto
 
 import java.util.concurrent.{Executors, ScheduledExecutorService}
 import libretto.Functor._
-import libretto.testing.{ScalaTestExecutor, ScalaTestKit, TestCase, TestExecutor, TestKit}
+import libretto.scaletto.ScalettoLib
+import libretto.testing.{TestCase, TestExecutor, TestKit}
+import libretto.testing.scaletto.{ScalettoTestExecutor, ScalettoTestKit}
 import libretto.testing.scalatest.ScalatestSuite
 import libretto.util.{Async, SourcePos}
 import libretto.util.Monad.syntax._
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 
-class BasicTests extends ScalatestSuite[ScalaTestKit] {
+class BasicTests extends ScalatestSuite[ScalettoTestKit] {
   private var scheduler: ScheduledExecutorService = _
 
   protected override def beforeAll(): Unit = {
@@ -28,19 +30,19 @@ class BasicTests extends ScalatestSuite[ScalaTestKit] {
     Async.fromFuture(p.future).map(_.get)
   }
 
-  override def testExecutors: List[TestExecutor.Factory[ScalaTestKit]] =
+  override def testExecutors: List[TestExecutor.Factory[ScalettoTestKit]] =
     List(
-      ScalaTestExecutor.defaultFactory,
+      ScalettoTestExecutor.defaultFactory,
     )
 
-  override def testCases(using kit: ScalaTestKit): List[(String, TestCase[kit.type])] = {
+  override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
     import TestKit.givenInstance._
     import dsl._
     import dsl.$._
     val coreLib = CoreLib(dsl)
-    val scalaLib = ScalaLib(dsl: dsl.type, coreLib)
+    val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
     import coreLib._
-    import scalaLib._
+    import scalettoLib._
     import bridge.Execution
 
     def raceKeepWinner[A](

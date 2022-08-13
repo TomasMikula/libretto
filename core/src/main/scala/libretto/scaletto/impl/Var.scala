@@ -1,4 +1,4 @@
-package libretto.impl
+package libretto.scaletto.impl
 
 import libretto.lambda.Variable
 

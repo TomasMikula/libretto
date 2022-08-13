@@ -1,6 +1,6 @@
 package libretto.examples.supermarket
 
-import libretto.StarterKit._
+import libretto.scaletto.StarterKit._
 import libretto.examples.supermarket.money._
 import scala.concurrent.duration._
 
@@ -12,7 +12,7 @@ object Customers {
 class Customers[SupermarketImpl <: SupermarketInterface](
   val supermarket: SupermarketImpl,
 ) {
-  import libretto.StarterKit.$._
+  import libretto.scaletto.StarterKit.$._
   import supermarket._
   import supermarket.goods._
 

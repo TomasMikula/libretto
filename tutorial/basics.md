@@ -35,8 +35,8 @@ Libretto.
 The code snippets below use these imports:
 
 ```scala mdoc
-import libretto.StarterKit.dsl._
-import libretto.StarterKit.dsl.$._
+import libretto.scaletto.StarterKit.dsl._
+import libretto.scaletto.StarterKit.dsl.$._
 ```
 
 ```scala mdoc:invisible

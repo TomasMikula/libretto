@@ -1,6 +1,6 @@
 package libretto.examples.supermarket
 
-import libretto.StarterApp
+import libretto.scaletto.StarterApp
 
 /**
  * In a pandemic, supermarkets are required to limit the number of customers in the store.

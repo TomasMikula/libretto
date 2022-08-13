@@ -1,13 +1,15 @@
-package libretto.testing
+package libretto.testing.scaletto
 
-import libretto.{CoreLib, ScalaBridge, ScalaDSL}
+import libretto.CoreLib
+import libretto.scaletto.{Scaletto, ScalettoBridge}
 import libretto.testing.TestKit.dsl
+import libretto.testing.{TestKitOps, TestKitWithManualClock, TestResult}
 import libretto.util.Monad.syntax._
 
-trait ScalaTestKit extends TestKitWithManualClock {
-  override type Dsl <: ScalaDSL
+trait ScalettoTestKit extends TestKitWithManualClock {
+  override type Dsl <: Scaletto
 
-  override val bridge: ScalaBridge.Of[dsl.type]
+  override val bridge: ScalettoBridge.Of[dsl.type]
 
   import dsl._
   import bridge.Execution
@@ -49,35 +51,35 @@ trait ScalaTestKit extends TestKitWithManualClock {
     )
 }
 
-object ScalaTestKit extends ScalaTestKitOps {
-  type Of[DSL <: ScalaDSL] = ScalaTestKit { type Dsl = DSL }
+object ScalettoTestKit extends ScalettoTestKitOps {
+  type Of[DSL <: Scaletto] = ScalettoTestKit { type Dsl = DSL }
 }
 
-trait ScalaTestKitOps extends TestKitOps {
-  def failure[A](using kit: ScalaTestKit)(msg: String): dsl.-⚬[dsl.Done, kit.Assertion[A]] =
+trait ScalettoTestKitOps extends TestKitOps {
+  def failure[A](using kit: ScalettoTestKit)(msg: String): dsl.-⚬[dsl.Done, kit.Assertion[A]] =
     kit.failure(msg)
 
-  def assertLeft[A, B](using kit: ScalaTestKit)(
+  def assertLeft[A, B](using kit: ScalettoTestKit)(
     ifRight: dsl.-⚬[B, dsl.Done],
     msg: String = "Expected Left, was Right",
   ): dsl.-⚬[dsl.|+|[A, B], kit.Assertion[A]] =
     kit.assertLeft(ifRight, msg)
 
-  def assertRight[A, B](using kit: ScalaTestKit)(
+  def assertRight[A, B](using kit: ScalettoTestKit)(
     ifLeft: dsl.-⚬[A, dsl.Done],
     msg: String = "Expected Right, was Left",
   ): dsl.-⚬[dsl.|+|[A, B], kit.Assertion[B]] =
     kit.assertRight(ifLeft, msg)
 
-  def leftOrCrash[A, B](using kit: ScalaTestKit)(msg: String = "Expected Left, was Right"): dsl.-⚬[dsl.|+|[A, B], A] =
+  def leftOrCrash[A, B](using kit: ScalettoTestKit)(msg: String = "Expected Left, was Right"): dsl.-⚬[dsl.|+|[A, B], A] =
     kit.leftOrCrash(msg)
 
-  def rightOrCrash[A, B](using kit: ScalaTestKit)(msg: String = "Expected Right, was Left"): dsl.-⚬[dsl.|+|[A, B], B] =
+  def rightOrCrash[A, B](using kit: ScalettoTestKit)(msg: String = "Expected Right, was Left"): dsl.-⚬[dsl.|+|[A, B], B] =
     kit.rightOrCrash(msg)
 
-  def assertEquals[A](using kit: ScalaTestKit)(expected: A): dsl.-⚬[dsl.Val[A], kit.Assertion[dsl.Done]] =
+  def assertEquals[A](using kit: ScalettoTestKit)(expected: A): dsl.-⚬[dsl.Val[A], kit.Assertion[dsl.Done]] =
     kit.assertEquals(expected)
 
-  def expectVal[A](using kit: ScalaTestKit, exn: kit.bridge.Execution)(port: exn.OutPort[dsl.Val[A]]): kit.Outcome[A] =
+  def expectVal[A](using kit: ScalettoTestKit, exn: kit.bridge.Execution)(port: exn.OutPort[dsl.Val[A]]): kit.Outcome[A] =
     kit.expectVal(port)
 }

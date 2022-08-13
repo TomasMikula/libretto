@@ -1,21 +1,22 @@
-package libretto.testing
+package libretto.testing.scaletto
 
 import java.util.concurrent.{ExecutorService, ScheduledExecutorService}
-import libretto.{ScalaExecutor, StarterExecutor, StarterKit}
+import libretto.scaletto.{ScalettoExecutor, StarterExecutor, StarterKit}
+import libretto.testing.TestExecutor
 
 object StarterTestExecutor {
   def fromJavaExecutors(
     scheduler: ScheduledExecutorService,
     blockingExecutor: ExecutorService,
   ): TestExecutor[StarterTestKit] = {
-    val executor0: libretto.ScalaExecutor.OfDsl[StarterKit.dsl.type] =
+    val executor0: ScalettoExecutor.OfDsl[StarterKit.dsl.type] =
       StarterKit.executor(blockingExecutor)(scheduler)
 
-    ScalaTestExecutor.fromExecutor(executor0)
+    ScalettoTestExecutor.fromExecutor(executor0)
   }
 
   val defaultFactory: TestExecutor.Factory[StarterTestKit] =
-    ScalaTestExecutor.defaultFactory(StarterExecutor.defaultFactory)
+    ScalettoTestExecutor.defaultFactory(StarterExecutor.defaultFactory)
 
   lazy val global: TestExecutor[StarterTestKit] =
     defaultFactory.access(defaultFactory.create())

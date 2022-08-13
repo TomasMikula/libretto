@@ -1,6 +1,6 @@
 package libretto.examples.supermarket
 
-import libretto.StarterKit._
+import libretto.scaletto.StarterKit._
 
 object money {
   opaque type Coin = Done

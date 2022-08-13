@@ -1,6 +1,6 @@
 package libretto.examples
 
-import libretto.StarterAppScala
+import libretto.scaletto.StarterAppScala
 
 object HelloWorld extends StarterAppScala[String] {
   override def blueprint: Done -⚬ Val[String] =

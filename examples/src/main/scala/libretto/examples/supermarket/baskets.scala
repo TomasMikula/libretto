@@ -1,6 +1,6 @@
 package libretto.examples.supermarket
 
-import libretto.StarterKit._
+import libretto.scaletto.StarterKit._
 
 object baskets {
   opaque type Basket = Val[Int]

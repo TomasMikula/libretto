@@ -1,6 +1,6 @@
 package libretto.examples.coffeemachine
 
-import libretto.StarterKit._
+import libretto.scaletto.StarterKit._
 import scala.concurrent.duration._
 
 /**

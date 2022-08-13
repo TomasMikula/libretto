@@ -1,24 +1,26 @@
 package libretto
 
-import libretto.testing.{ScalaTestKit, TestCase}
-import libretto.testing.scalatest.ScalatestScalaTestSuite
+import libretto.scaletto.{ScalettoLib, ScalettoStreams}
+import libretto.testing.{TestCase}
+import libretto.testing.scaletto.ScalettoTestKit
+import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
 import libretto.util.Monad.syntax._
 import scala.concurrent.duration._
 
-class StreamsTests extends ScalatestScalaTestSuite {
-  override def testCases(using kit: ScalaTestKit): List[(String, TestCase[kit.type])] = {
+class StreamsTests extends ScalatestScalettoTestSuite {
+  override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
     import kit.{dsl, expectVal}
     import kit.dsl._
     import kit.Outcome.assertEquals
 
     val coreLib = CoreLib(dsl)
-    val scalaLib = ScalaLib(dsl: dsl.type, coreLib)
+    val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
     val coreStreams = CoreStreams(dsl, coreLib)
-    val scalaStreams = ScalaStreams(kit.dsl, coreLib, scalaLib, coreStreams)
+    val scalettoStreams = ScalettoStreams(kit.dsl, coreLib, scalettoLib, coreStreams)
 
     import coreLib._
-    import scalaLib._
-    import scalaStreams._
+    import scalettoLib._
+    import scalettoStreams._
 
     List(
       "toList ⚬ fromList = id" -> TestCase

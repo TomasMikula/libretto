@@ -1,7 +1,7 @@
-package libretto
+package libretto.scaletto
 
 import java.util.concurrent.Executors
-import libretto.StarterKit.runScalaAsync
+import libretto.scaletto.StarterKit.runScalaAsync
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
 import scala.util.{Failure, Success}

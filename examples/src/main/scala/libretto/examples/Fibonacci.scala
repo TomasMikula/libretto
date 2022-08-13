@@ -1,6 +1,6 @@
 package libretto.examples
 
-import libretto.StarterApp
+import libretto.scaletto.StarterApp
 
 object Fibonacci extends StarterApp {
 

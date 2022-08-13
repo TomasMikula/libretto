@@ -1,5 +1,6 @@
-package libretto
+package libretto.scaletto
 
+import libretto.{CoreLib, CrashDSL, InvertDSL, TimerDSL}
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 
@@ -7,7 +8,7 @@ import scala.concurrent.duration.FiniteDuration
   * Also extends [[InvertDSL]] (and thus [[ClosedDSL]]), [[TimerDSL]] and [[CrashDSL]],
   * since these are expected to be possible on a target platform that already supports Scala functions.
   */
-trait ScalaDSL extends TimerDSL with CrashDSL with InvertDSL {
+trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
   /** Scala value of type `A`.
     *
     * Somewhat analogous to [[scala.concurrent.Future]].

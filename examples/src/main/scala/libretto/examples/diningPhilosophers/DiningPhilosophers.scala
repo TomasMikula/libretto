@@ -1,6 +1,6 @@
 package libretto.examples.diningPhilosophers
 
-import libretto.StarterApp
+import libretto.scaletto.StarterApp
 
 object DiningPhilosophers extends StarterApp {
   import $._

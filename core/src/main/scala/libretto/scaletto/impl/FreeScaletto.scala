@@ -1,11 +1,11 @@
-package libretto.impl
+package libretto.scaletto.impl
 
-import libretto.ScalaDSL
+import libretto.scaletto.Scaletto
 import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, LambdasOne, Tupled}
 import libretto.util.{Async, BiInjective, SourcePos}
 import scala.concurrent.duration.FiniteDuration
 
-abstract class FreeScalaDSL {
+abstract class FreeScaletto {
   sealed trait -⚬[A, B]
 
   /** Type of nested arrows. */
@@ -139,7 +139,7 @@ abstract class FreeScalaDSL {
   }
 }
 
-object FreeScalaDSL extends FreeScalaDSL with ScalaDSL {
+object FreeScaletto extends FreeScaletto with Scaletto {
   import -⚬._
 
   override type ->[A, B] = A -⚬ B
@@ -390,21 +390,21 @@ object FreeScalaDSL extends FreeScalaDSL with ScalaDSL {
 
   implicit val csmc: ClosedSymmetricMonoidalCategory[-⚬, |*|, One, =⚬] =
     new ClosedSymmetricMonoidalCategory[-⚬, |*|, One, =⚬] {
-      override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C                              = FreeScalaDSL.this.andThen(f, g)
-      override def id[A]: A -⚬ A                                                               = FreeScalaDSL.this.id[A]
-      override def par[A1, A2, B1, B2](f1: A1 -⚬ B1, f2: A2 -⚬ B2): (A1 |*| A2) -⚬ (B1 |*| B2) = FreeScalaDSL.this.par(f1, f2)
-      override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C))                    = FreeScalaDSL.this.assocLR[A, B, C]
-      override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C)                    = FreeScalaDSL.this.assocRL[A, B, C]
-      override def swap[A, B]: (A |*| B) -⚬ (B |*| A)                                          = FreeScalaDSL.this.swap[A, B]
-      override def elimFst[A]: (One |*| A) -⚬ A                                                = FreeScalaDSL.this.elimFst[A]
-      override def elimSnd[A]: (A |*| One) -⚬ A                                                = FreeScalaDSL.this.elimSnd[A]
-      override def introFst[A]: A -⚬ (One |*| A)                                               = FreeScalaDSL.this.introFst[A]
-      override def introSnd[A]: A -⚬ (A |*| One)                                               = FreeScalaDSL.this.introSnd[A]
-      override def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C)                            = FreeScalaDSL.this.curry(f)
-      override def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B                                           = FreeScalaDSL.this.eval[A, B]
+      override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C                              = FreeScaletto.this.andThen(f, g)
+      override def id[A]: A -⚬ A                                                               = FreeScaletto.this.id[A]
+      override def par[A1, A2, B1, B2](f1: A1 -⚬ B1, f2: A2 -⚬ B2): (A1 |*| A2) -⚬ (B1 |*| B2) = FreeScaletto.this.par(f1, f2)
+      override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C))                    = FreeScaletto.this.assocLR[A, B, C]
+      override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C)                    = FreeScaletto.this.assocRL[A, B, C]
+      override def swap[A, B]: (A |*| B) -⚬ (B |*| A)                                          = FreeScaletto.this.swap[A, B]
+      override def elimFst[A]: (One |*| A) -⚬ A                                                = FreeScaletto.this.elimFst[A]
+      override def elimSnd[A]: (A |*| One) -⚬ A                                                = FreeScaletto.this.elimSnd[A]
+      override def introFst[A]: A -⚬ (One |*| A)                                               = FreeScaletto.this.introFst[A]
+      override def introSnd[A]: A -⚬ (A |*| One)                                               = FreeScaletto.this.introSnd[A]
+      override def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C)                            = FreeScaletto.this.curry(f)
+      override def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B                                           = FreeScaletto.this.eval[A, B]
     }
 
-  type Var[A] = libretto.impl.Var[VarOrigin, A]
+  type Var[A] = libretto.scaletto.impl.Var[VarOrigin, A]
 
   val lambdas: LambdasOne[-⚬, |*|, One, Var, Set[Var[?]]] =
     new LambdasOne[-⚬, |*|, One, Var, Set[Var[?]]](

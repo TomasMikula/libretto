@@ -1,10 +1,10 @@
 package libretto.examples.diningPhilosophers
 
-import libretto.StarterKit.dsl._
-import libretto.StarterKit.dsl.$._
-import libretto.StarterKit.coreLib._
-import libretto.testing.StarterTestKit
-import libretto.testing.scalatest.ScalatestStarterTestSuite
+import libretto.scaletto.StarterKit.dsl._
+import libretto.scaletto.StarterKit.dsl.$._
+import libretto.scaletto.StarterKit.coreLib._
+import libretto.testing.scaletto.StarterTestKit
+import libretto.testing.scalatest.scaletto.ScalatestStarterTestSuite
 import libretto.testing.TestCase
 
 class DiningPhilosophersTests extends ScalatestStarterTestSuite {

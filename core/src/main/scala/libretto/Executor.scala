@@ -83,31 +83,6 @@ object ClosedBridge {
   type Of[DSL <: ClosedDSL] = ClosedBridge { type Dsl = DSL }
 }
 
-trait ScalaBridge extends ClosedBridge {
-  override type Dsl <: ScalaDSL
-
-  import dsl.Val
-
-  override type Execution <: ScalaExecution
-
-  trait ScalaExecution extends ClosedExecution {
-    override val OutPort: ScalaOutPorts
-    override val InPort:  ScalaInPorts
-
-    trait ScalaOutPorts extends ClosedOutPorts {
-      def awaitVal[A](port: OutPort[Val[A]]): Async[Either[Throwable, A]]
-    }
-
-    trait ScalaInPorts extends ClosedInPorts {
-      def supplyVal[A](port: InPort[Val[A]], value: A): Unit
-    }
-  }
-}
-
-object ScalaBridge {
-  type Of[DSL <: ScalaDSL] = ScalaBridge { type Dsl = DSL }
-}
-
 final class Executing[BRIDGE <: CoreBridge & Singleton, A, B](using val bridge: BRIDGE)(
   val execution: bridge.Execution,
   val inPort: execution.InPort[A],
@@ -172,77 +147,4 @@ object Executor {
     type Of[DSL <: CoreDSL, BRIDGE <: CoreBridge.Of[DSL]] =
       Factory { type Dsl = DSL; type Bridge = BRIDGE }
   }
-}
-
-trait ScalaExecutor extends Executor { self =>
-  override type Dsl <: ScalaDSL
-  override type Bridge <: ScalaBridge.Of[dsl.type]
-
-  override val ExecutionParam: ExecutionParams.WithScheduler[ExecutionParam]
-
-  override def narrow: ScalaExecutor.Of[dsl.type, bridge.type] =
-    new ScalaExecutor {
-      override type Dsl = self.dsl.type
-      override type Bridge = self.bridge.type
-
-      export self.{dsl, bridge, ExecutionParam, execute, cancel}
-    }
-}
-
-object ScalaExecutor {
-  type OfDsl[DSL <: ScalaDSL] = ScalaExecutor { type Dsl = DSL }
-
-  type Of[DSL <: ScalaDSL, BRIDGE <: ScalaBridge.Of[DSL]] =
-    ScalaExecutor { type Dsl = DSL; type Bridge = BRIDGE }
-
-  trait Factory extends Executor.Factory {
-    override type Dsl <: ScalaDSL
-    override type Bridge <: ScalaBridge.Of[dsl.type]
-
-    override def access(r: ExecutorResource): ScalaExecutor.Of[dsl.type, bridge.type]
-  }
-
-  object Factory {
-    type Of[DSL <: ScalaDSL, BRIDGE <: ScalaBridge.Of[DSL]] =
-      Factory { type Dsl = DSL; type Bridge = BRIDGE }
-  }
-
-  private[libretto] val defaultFactory0: ScalaExecutor.Factory.Of[StarterKit.dsl.type, StarterKit.bridge.type] =
-    new ScalaExecutor.Factory {
-      import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
-
-      override type Dsl = StarterKit.dsl.type
-      override type Bridge = StarterKit.bridge.type
-
-      override val dsl = StarterKit.dsl
-      override val bridge = StarterKit.bridge
-
-      override type ExecutorResource =
-        (ScheduledExecutorService, ExecutorService, ScalaExecutor.Of[dsl.type, bridge.type])
-
-      override def access(r: ExecutorResource): ScalaExecutor.Of[dsl.type, bridge.type] =
-        r._3
-
-      override def create(): ExecutorResource = {
-        val scheduler = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors())
-        val blockingExecutor = Executors.newCachedThreadPool()
-        val executor = StarterKit.executor(blockingExecutor)(scheduler)
-        (scheduler, blockingExecutor, executor)
-      }
-
-      override def shutdown(r: ExecutorResource): Unit = {
-        r._2.shutdownNow()
-        r._1.shutdownNow()
-      }
-    }
-
-  val defaultFactory: ScalaExecutor.Factory =
-    defaultFactory0
-}
-
-type StarterExecutor = ScalaExecutor.Of[StarterKit.dsl.type, StarterKit.bridge.type]
-
-object StarterExecutor {
-  val defaultFactory: ScalaExecutor.Factory.Of[StarterKit.dsl.type, StarterKit.bridge.type] =
-    ScalaExecutor.defaultFactory0
 }

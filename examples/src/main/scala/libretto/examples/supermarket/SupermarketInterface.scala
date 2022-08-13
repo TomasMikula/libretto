@@ -1,6 +1,6 @@
 package libretto.examples.supermarket
 
-import libretto.StarterKit._
+import libretto.scaletto.StarterKit._
 import libretto.examples.supermarket.money._
 
 trait SupermarketInterface {

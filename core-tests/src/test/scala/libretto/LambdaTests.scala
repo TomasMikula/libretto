@@ -1,11 +1,13 @@
 package libretto
 
-import libretto.testing.{ScalaTestKit, TestCase}
-import libretto.testing.scalatest.ScalatestScalaTestSuite
+import libretto.scaletto.ScalettoLib
+import libretto.testing.TestCase
+import libretto.testing.scaletto.ScalettoTestKit
+import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
 import libretto.util.Monad.syntax._
 
-class LambdaTests extends ScalatestScalaTestSuite {
-  override def testCases(using kit: ScalaTestKit): List[(String, TestCase[kit.type])] = {
+class LambdaTests extends ScalatestScalettoTestSuite {
+  override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
     import kit.dsl
     import kit.dsl._
     import kit.dsl.$._
@@ -13,9 +15,9 @@ class LambdaTests extends ScalatestScalaTestSuite {
     import kit.expectVal
 
     val coreLib = CoreLib(dsl)
-    val scalaLib = ScalaLib(dsl, coreLib)
+    val scalettoLib = ScalettoLib(dsl, coreLib)
     import coreLib._
-    import scalaLib._
+    import scalettoLib._
 
     def c(c: Char): Done -⚬ Val[Char] =
       constVal(c)
@@ -125,7 +127,7 @@ class LambdaTests extends ScalatestScalaTestSuite {
             }
             _ <- assertSubstring("not fully consumed", e.getMessage)
             _ <- assertSubstring("The second half of untupling", e.getMessage)
-            _ <- assertSubstring("LambdaTests.scala:122", e.getMessage)
+            _ <- assertSubstring("LambdaTests.scala:124", e.getMessage)
           } yield ()
         },
 
@@ -139,7 +141,7 @@ class LambdaTests extends ScalatestScalaTestSuite {
             }
             _ <- assertSubstring("used more than once", e.getMessage)
             _ <- assertSubstring("The input of lambda expression ending at", e.getMessage)
-            _ <- assertSubstring("LambdaTests.scala:138", e.getMessage)
+            _ <- assertSubstring("LambdaTests.scala:140", e.getMessage)
           } yield ()
         },
 
@@ -181,7 +183,7 @@ class LambdaTests extends ScalatestScalaTestSuite {
             }
             _ <- assertSubstring("not fully consumed", e.getMessage)
             _ <- assertSubstring("The input of lambda expression ending at", e.getMessage)
-            _ <- assertSubstring("LambdaTests.scala:180", e.getMessage)
+            _ <- assertSubstring("LambdaTests.scala:182", e.getMessage)
           } yield ()
         },
     )

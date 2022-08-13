@@ -1,7 +1,7 @@
 package libretto.mashup
 
-import libretto.StarterKit.{dsl => StarterDsl}
-import libretto.StarterKit.dsl.{-⚬, =⚬, |*|, |+|, One, Val}
+import libretto.scaletto.StarterKit.{dsl => StarterDsl}
+import libretto.scaletto.StarterKit.dsl.{-⚬, =⚬, |*|, |+|, One, Val}
 import libretto.util.SourcePos
 import scala.annotation.targetName
 
