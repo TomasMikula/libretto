@@ -1,7 +1,7 @@
 package libretto.testing
 
-import libretto.scalasource.{Position => SourcePos}
 import libretto.testing.TestKit.dsl
+import libretto.util.SourcePos
 
 sealed trait TestCase[TK <: TestKit]
 

@@ -1,6 +1,6 @@
 package libretto.testing
 
-import libretto.scalasource.{Position => SourcePos}
+import libretto.util.SourcePos
 
 enum TestResult[A] {
   case Success(value: A)

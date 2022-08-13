@@ -2,8 +2,7 @@ package libretto.impl
 
 import libretto.ScalaDSL
 import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, LambdasOne, Tupled}
-import libretto.scalasource
-import libretto.util.{Async, BiInjective}
+import libretto.util.{Async, BiInjective, SourcePos}
 import scala.concurrent.duration.FiniteDuration
 
 abstract class FreeScalaDSL {
@@ -423,21 +422,21 @@ object FreeScalaDSL extends FreeScalaDSL with ScalaDSL {
   override type $[A] = lambdas.Expr[A]
 
   override val `$`: ClosureOps  = new ClosureOps {
-    override def one(implicit pos: scalasource.Position): $[One] =
+    override def one(implicit pos: SourcePos): $[One] =
       lambdas.Expr.one(new Var[One](VarOrigin.OneIntro(pos)))
 
     override def map[A, B](a: $[A])(f: A -⚬ B)(
-      pos: scalasource.Position,
+      pos: SourcePos,
     ): $[B] =
       (a map f)(new Var[B](VarOrigin.FunApp(pos)))
 
     override def zip[A, B](a: $[A], b: $[B])(
-      pos: scalasource.Position,
+      pos: SourcePos,
     ): $[A |*| B] =
       (a zip b)(new Var[A |*| B](VarOrigin.Pairing(pos)))
 
     override def unzip[A, B](ab: $[A |*| B])(
-      pos: scalasource.Position,
+      pos: SourcePos,
     ): ($[A], $[B]) =
       lambdas.Expr.unzip(ab)(
         new Var[A](VarOrigin.Prj1(pos)),
@@ -445,13 +444,13 @@ object FreeScalaDSL extends FreeScalaDSL with ScalaDSL {
       )
 
     override def app[A, B](f: $[A =⚬ B], a: $[A])(
-      pos: scalasource.Position,
+      pos: SourcePos,
     ): $[B] =
       closures.app(f, a)(new Var[B](VarOrigin.FunApp(pos)))
   }
 
   override def λ[A, B](f: $[A] => $[B])(implicit
-    pos: scalasource.Position,
+    pos: SourcePos,
   ): A -⚬ B =
     lambdas.compile(f, boundVar = new Var[A](VarOrigin.Lambda(pos))) match {
       case Right(f) =>
@@ -467,7 +466,7 @@ object FreeScalaDSL extends FreeScalaDSL with ScalaDSL {
     }
 
   override def Λ[A, B](f: $[A] => $[B])(implicit
-    pos: scalasource.Position,
+    pos: SourcePos,
   ): $[A =⚬ B] =
     closures.closure[A, B](
       f,

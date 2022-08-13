@@ -2,10 +2,9 @@ package libretto
 
 import java.util.concurrent.{Executors, ScheduledExecutorService}
 import libretto.Functor._
-import libretto.scalasource.{Position => SourcePos}
 import libretto.testing.{ScalaTestExecutor, ScalaTestKit, TestCase, TestExecutor, TestKit}
 import libretto.testing.scalatest.ScalatestSuite
-import libretto.util.Async
+import libretto.util.{Async, SourcePos}
 import libretto.util.Monad.syntax._
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._

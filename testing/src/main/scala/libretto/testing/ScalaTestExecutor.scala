@@ -2,8 +2,7 @@ package libretto.testing
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
 import libretto.{CoreLib, ExecutionParams, Monad, ScalaBridge, ScalaExecutor, ScalaDSL, StarterKit}
-import libretto.scalasource.{Position => SourcePos}
-import libretto.util.Async
+import libretto.util.{Async, SourcePos}
 import libretto.testing.ScalaTestExecutor.ExecutionParam.Instantiation
 
 object ScalaTestExecutor {

@@ -1,5 +1,7 @@
 package libretto
 
+import libretto.util.SourcePos
+
 trait InvertDSL extends ClosedDSL {
   /** `-[A]` is a demand for `A`.
     *
@@ -204,7 +206,7 @@ trait InvertDSL extends ClosedDSL {
 
   implicit class DemandExprOps[B](expr: $[-[B]]) {
     def contramap[A](f: A -⚬ B)(implicit
-      pos: scalasource.Position,
+      pos: SourcePos,
     ): $[-[A]] =
       $.map(expr)(contrapositive(f))(pos)
   }

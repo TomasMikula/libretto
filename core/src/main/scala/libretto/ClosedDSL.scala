@@ -1,5 +1,7 @@
 package libretto
 
+import libretto.util.SourcePos
+
 /** Extension of [[CoreDSL]] that adds support for "functions as data" (`=⚬`).
   * In other words, it makes [[CoreDSL.-⚬]] a ''closed'' monoidal category.
   */
@@ -29,19 +31,19 @@ trait ClosedDSL extends CoreDSL {
     * as an expression (`$[A =⚬ B]`) that can be used in outer [[λ]] or [[Λ]].
     */
   def Λ[A, B](f: $[A] => $[B])(implicit
-    pos: scalasource.Position,
+    pos: SourcePos,
   ): $[A =⚬ B]
 
   type NoCaptureException <: Throwable
 
   trait ClosureOps extends $Ops {
     def app[A, B](f: $[A =⚬ B], a: $[A])(
-      pos: scalasource.Position,
+      pos: SourcePos,
     ): $[B]
 
     implicit class ClosureOps[A, B](f: $[A =⚬ B]) {
       def apply(a: $[A])(implicit
-        pos: scalasource.Position,
+        pos: SourcePos,
       ): $[B] =
         app(f, a)(pos)
     }

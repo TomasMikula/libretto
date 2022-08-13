@@ -1,8 +1,7 @@
 package libretto.testing
 
 import libretto.{CoreBridge, CoreDSL, ExecutionParams, Monad}
-import libretto.scalasource.{Position => SourcePos}
-import libretto.util.{Async, Monad => ScalaMonad}
+import libretto.util.{Async, Monad => ScalaMonad, SourcePos}
 import libretto.util.Monad.syntax._
 
 trait TestKit {

@@ -1,5 +1,7 @@
 package libretto
 
+import libretto.util.SourcePos
+
 trait CoreDSL {
   /** Libretto arrow, also called a ''component'' or a ''linear function''.
     *
@@ -313,7 +315,7 @@ trait CoreDSL {
     * @throws UnboundVariablesException if the result expression contains free variables (from outer [[λ]]s).
     */
   def λ[A, B](f: $[A] => $[B])(implicit
-    pos: scalasource.Position,
+    pos: SourcePos,
   ): A -⚬ B
 
   type NotLinearException <: Throwable
@@ -322,52 +324,52 @@ trait CoreDSL {
   val $: $Ops
 
   trait $Ops {
-    def one(implicit pos: scalasource.Position): $[One]
+    def one(implicit pos: SourcePos): $[One]
 
     def map[A, B](a: $[A])(f: A -⚬ B)(
-      pos: scalasource.Position,
+      pos: SourcePos,
     ): $[B]
 
     def zip[A, B](a: $[A], b: $[B])(
-      pos: scalasource.Position,
+      pos: SourcePos,
     ): $[A |*| B]
 
     def unzip[A, B](ab: $[A |*| B])(
-      pos: scalasource.Position,
+      pos: SourcePos,
     ): ($[A], $[B])
 
     def eliminateFirst[A](unit: $[One], a: $[A])(
-      pos: scalasource.Position,
+      pos: SourcePos,
     ): $[A] =
       map(zip(unit, a)(pos))(elimFst)(pos)
 
     def eliminateSecond[A](a: $[A], unit: $[One])(
-      pos: scalasource.Position,
+      pos: SourcePos,
     ): $[A] =
       map(zip(a, unit)(pos))(elimSnd)(pos)
 
     object |*| {
       def unapply[A, B](ab: $[A |*| B])(implicit
-        pos: scalasource.Position,
+        pos: SourcePos,
       ): ($[A], $[B]) =
         unzip(ab)(pos)
     }
 
     extension [A, B](f: A -⚬ B) {
       def apply(a: $[A])(implicit
-        pos: scalasource.Position,
+        pos: SourcePos,
       ): $[B] =
         map(a)(f)(pos)
     }
 
     extension [A](a: $[A]) {
       def |*|[B](b: $[B])(implicit
-        pos: scalasource.Position,
+        pos: SourcePos,
       ): $[A |*| B] =
         zip(a, b)(pos)
 
       def >[B](f: A -⚬ B)(implicit
-        pos: scalasource.Position,
+        pos: SourcePos,
       ): $[B] =
         map(a)(f)(pos)
 
@@ -380,7 +382,7 @@ trait CoreDSL {
         a > introFst(f)
 
       def alsoElim(unit: $[One])(using
-        pos: scalasource.Position,
+        pos: SourcePos,
       ): $[A] =
         eliminateFirst(unit, a)(pos)
     }
