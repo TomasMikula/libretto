@@ -1,7 +1,8 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, LambdasOne, Tupled}
+import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, LambdasOne, Multiplier, Tupled}
+import libretto.lambda.Lambdas.Abstracted
 import libretto.util.{Async, BiInjective, SourcePos}
 import scala.concurrent.duration.FiniteDuration
 
@@ -451,43 +452,65 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   override def λ[A, B](f: $[A] => $[B])(implicit
     pos: SourcePos,
-  ): A -⚬ B =
-    lambdas.compile(f, boundVar = new Var[A](VarOrigin.Lambda(pos))) match {
-      case Right(f) =>
-        f
-      case Left(e) =>
-        import lambdas.Error.Undefined
-        import lambdas.LinearityViolation.{Overused, Underused}
-        e match {
-          case Overused(vs)  => throw new NotLinearException(s"Variables used more than once: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", ", ", "\n")}")
-          case Underused(vs) => throw new NotLinearException(s"Variables not fully consumed: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}")
-          case Undefined(vs) => throw new UnboundVariablesException(vs)
+  ): A -⚬ B = {
+    import Abstracted.{Closure, Exact, Failure, NotFound}
+
+    val bindVar = new Var[A](VarOrigin.Lambda(pos))
+
+    lambdas.abs(f, bindVar) match {
+      case Exact(m, f) =>
+        m match {
+          case Multiplier.Id() => f.fold
+          case _ => throw new NotLinearException(s"Variable used more than once: $bindVar")
         }
+      case Closure(captured, m, f) =>
+        m match {
+          case Multiplier.Id() =>
+            lambdas.compileConst(captured) match {
+              case Right(g) => id[A] > introFst(g) > f.fold
+              case Left(e) => raiseError(e)
+            }
+          case _ =>
+            throw new NotLinearException(s"Variable used more than once: $bindVar")
+        }
+      case NotFound(_) =>
+        throw new NotLinearException(s"Variable not consumed:$bindVar")
+      case Failure(e) =>
+        raiseError(e)
     }
+  }
 
   override def Λ[A, B](f: $[A] => $[B])(implicit
     pos: SourcePos,
-  ): $[A =⚬ B] =
-    closures.closure[A, B](
-      f,
-      boundVar = new Var[A](VarOrigin.Lambda(pos)),
-      resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(pos)),
-    ) match {
-      case Right(f) =>
-        f
-      case Left(e) =>
-        import closures.ClosureError
-        e match {
-          case ClosureError.NonLinear(e) =>
-            import lambdas.LinearityViolation.{Overused, Underused}
-            e match {
-              case Overused(vs)  => throw new NotLinearException(s"Variables used more than once: ${vs.toList.map(_.origin.print).mkString("\n", ", ", "\n")}")
-              case Underused(vs) => throw new NotLinearException(s"Variables not fully consumed: ${vs.toList.map(_.origin.print).mkString("\n", ", ", "\n")}")
-            }
-          case ClosureError.NoCapture(msg) =>
-            throw new NoCaptureException(msg)
+  ): $[A =⚬ B] = {
+    import closures.ClosureRes.{NoCapture, NonLinear, NotFound, Success}
+
+    val bindVar = new Var[A](VarOrigin.Lambda(pos))
+    val resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(pos))
+    closures.closure[A, B](f, bindVar) match {
+      case Success(captured, m, f) =>
+        m match {
+          case Multiplier.Id() => (captured map csmc.curry(f))(resultVar)
+          case _ => throw new NotLinearException(s"Variable used more than once: $bindVar")
         }
+      case NotFound(_) =>
+        throw new NotLinearException(s"Variable not consumed:$bindVar")
+      case NonLinear(e) =>
+        raiseError(e)
+      case NoCapture(msg) =>
+        throw new NoCaptureException(msg)
     }
+  }
+
+  private def raiseError(e: lambdas.Error): Nothing = {
+    import lambdas.Error.Undefined
+    import lambdas.LinearityViolation.{Overused, Underused}
+    e match {
+      case Overused(vs)  => throw new NotLinearException(s"Variables used more than once: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", ", ", "\n")}")
+      case Underused(vs) => throw new NotLinearException(s"Variables not fully consumed: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}")
+      case Undefined(vs) => throw new UnboundVariablesException(vs)
+    }
+  }
 
   override class NotLinearException(msg: String) extends Exception(msg)
   override class UnboundVariablesException(vs: Set[Var[?]]) extends Exception

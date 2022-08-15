@@ -34,27 +34,36 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
   def closure[A, B](
     f: Expr[A] => Expr[B],
     boundVar: Var[A],
-    resultVar: Var[A =⚬ B],
   )(using
     ev: ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬],
-  ): Either[ClosureError[LE], Expr[A =⚬ B]] = {
-    import ClosureError._
+  ): ClosureRes[A, B] = {
+    import ClosureRes._
 
     lambdas.abs(f(Expr.variable(boundVar)), boundVar) match {
-      case Abstracted.Exact(_) =>
-        Left(NoCapture("The closure does not capture any variables. Use an ordinary lambda instead"))
-      case Abstracted.Closure(captured, f) =>
-        Right((captured map ev.curry(f.fold))(resultVar))
+      case Abstracted.Exact(_, _) =>
+        NoCapture("The closure does not capture any variables. Use an ordinary lambda instead")
+      case Abstracted.Closure(captured, m, f) =>
+        Success(captured, m, f.fold)
+      case Abstracted.NotFound(b) =>
+        NotFound(b)
       case Abstracted.Failure(e) =>
-        Left(NonLinear(e))
+        NonLinear(e)
     }
   }
 
   /**
    * @tparam LE type that represents linearity violation
    */
-  enum ClosureError[LE] {
-    case NonLinear(e: LE)
-    case NoCapture(msg: String)
+  sealed trait ClosureRes[A, B]
+  object ClosureRes {
+    case class Success[X, A, A1, B](
+      captured: Expr[X],
+      m: Multiplier[|*|, A, A1],
+      f: (X |*| A1) -⚬ B,
+    ) extends ClosureRes[A, B]
+
+    case class NotFound[A, B](b: Expr[B]) extends ClosureRes[A, B]
+    case class NonLinear[A, B](e: LE) extends ClosureRes[A, B]
+    case class NoCapture[A, B](msg: String) extends ClosureRes[A, B]
   }
 }

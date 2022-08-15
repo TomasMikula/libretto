@@ -349,26 +349,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     expr.elim(boundVar) match {
       case ElimRes.Exact(e, f) =>
         e match {
-          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Exact(f)
+          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Exact(Multiplier.Id(), f)
           case other               => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
         }
       case ElimRes.Closure(captured, e, f) =>
         e match {
-          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Closure(captured, f)
+          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Closure(captured, Multiplier.Id(), f)
           case other               => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
         }
       case ElimRes.Error(e) =>
         Lambdas.Abstracted.Failure(e)
-    }
-  }
-
-  override def compile[A, B](expr: Expr[B], boundVar: Var[A]): Either[E, A -⚬ B] = {
-    import Lambdas.Abstracted._
-
-    abs(expr, boundVar) match {
-      case Exact(f)             => Right(f.fold)
-      case Closure(captured, _) => Left(errors.undefinedVars(captured.initialVars.toSet))
-      case Failure(e)           => Left(errors.fromLinearityViolation(e))
     }
   }
 

@@ -16,7 +16,7 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
   type LinearityViolation = Lambdas.Error.LinearityViolation[VarSet]
   val  LinearityViolation = Lambdas.Error.LinearityViolation
 
-  val lambdas = Lambdas[-⚬, |*|, Var, VarSet, Error, LinearityViolation]
+  val lambdas = LambdasImpl[-⚬, |*|, Var, VarSet, Error, LinearityViolation]
 
   override type AbstractFun[A, B] = lambdas.AbstractFun[A, B]
   override object AbstractFun extends AbstractFuns {
@@ -195,32 +195,38 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
         val b = f(lambdas.Expr.variable(v))
 
         // boundVar will not be found,
-        // because zipping with boundVar would produce LambdasExpr
+        // because zipping with boundVar would have produced LambdasExpr
+        // and other Expr constructors (Map, Prj1, Prj2)
+        // don't bring a lambda-bound variable into the Expr
         lambdas.abs(b, boundVar) match {
+          case NotFound(_) =>
+            NotFound(expr)
           case Failure(e) =>
             Failure(e)
-          case Exact(_) | Closure(_, _) =>
+          case Exact(_, _) | Closure(_, _, _) =>
             throw new AssertionError(s"Did not expect to find variable $boundVar in $b, because $b is a constant expression")
         }
     }
 
-  override def compile[A, B](
-    expr: Expr[B],
-    boundVar: Var[A],
-  ): Either[Error, A -⚬ B] =
+  def compileConst[B](expr: Expr[B]): Either[Error, One -⚬ B] =
     expr match {
       case Expr.LambdasExpr(b) =>
-        lambdas.compile(b, boundVar)
+        Left(Lambdas.Error.Undefined(b.initialVars.toSet))
       case Expr.OneExpr(v, f) =>
+        import Lambdas.Abstracted.{Closure, Exact, Failure, NotFound}
         val b = f(lambdas.Expr.variable(v))
-
-        // boundVar will not be found,
-        // because zipping with boundVar would produce LambdasExpr
-        lambdas.compile(b, boundVar) match {
-          case Left(e) =>
+        lambdas.abs(b, v) match {
+          case Exact(m, f) =>
+            m match {
+              case Multiplier.Id() => Right(f.fold)
+              case _ => throw new AssertionError(s"Did not expect $v to be used multiple times in $b")
+            }
+          case Closure(captured, _, _) =>
+            Left(Lambdas.Error.Undefined(captured.initialVars.toSet))
+          case Failure(e) =>
             Left(e)
-          case Right(f) =>
-            throw new AssertionError(s"Did not expect to find variable $boundVar in $b, because $b is a constant expression")
+          case NotFound(b) =>
+            throw new AssertionError(s"Did not expect to not find variable $v in $b")
         }
     }
 }

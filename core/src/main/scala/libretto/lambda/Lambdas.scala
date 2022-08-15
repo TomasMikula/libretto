@@ -122,16 +122,11 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     boundVar: Var[A],
   ): Abstracted[A, B]
 
-  def compile[A, B](
-    expr: Expr[B],
-    boundVar: Var[A],
-  ): Either[E, A -⚬ B]
-
-  def compile[A, B](
+  def abs[A, B](
     f: Expr[A] => Expr[B],
-    boundVar: Var[A],
-  ): Either[E, A -⚬ B] =
-    compile(f(Expr.variable(boundVar)), boundVar)
+    bindVar: Var[A],
+  ): Abstracted[A, B] =
+    abs(f(Expr.variable(bindVar)), bindVar)
 }
 
 object Lambdas {
@@ -179,20 +174,27 @@ object Lambdas {
 
     def mapExpr[Exp2[_]](g: [X] => Exp[X] => Exp2[X]): Abstracted[Exp2, |*|, AbsFun, LE, A, B] =
       this match {
-        case Exact(f)             => Exact(f)
-        case Closure(captured, f) => Closure(g(captured), f)
-        case Failure(e)           => Failure(e)
+        case Exact(u, f)             => Exact(u, f)
+        case Closure(captured, u, f) => Closure(g(captured), u, f)
+        case NotFound(b)             => NotFound(g(b))
+        case Failure(e)              => Failure(e)
       }
   }
 
   object Abstracted {
-    case class Exact[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B](
-      f: AbsFun[A, B],
+    case class Exact[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, A1, B](
+      m: Multiplier[|*|, A, A1],
+      f: AbsFun[A1, B],
     ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
 
-    case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], LE, X, A, B](
+    case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], LE, X, A, A1, B](
       captured: Exp[X],
-      f: AbsFun[X |*| A, B],
+      m: Multiplier[|*|, A, A1],
+      f: AbsFun[X |*| A1, B],
+    ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
+
+    case class NotFound[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B](
+      b: Exp[B],
     ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
 
     case class Failure[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B](
