@@ -450,38 +450,75 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       closures.app(f, a)(new Var[B](VarOrigin.FunApp(pos)))
   }
 
-  override def λ[A, B](f: $[A] => $[B])(implicit
-    pos: SourcePos,
-  ): A -⚬ B = {
-    import Abstracted.{Closure, Exact, Failure, NotFound}
+  override val λ = new LambdaOps {
+    override def apply[A, B](using pos: SourcePos)(
+      f: $[A] => $[B],
+    ): A -⚬ B = {
+      import Abstracted.{Closure, Exact, Failure, NotFound}
 
-    val bindVar = new Var[A](VarOrigin.Lambda(pos))
+      val bindVar = new Var[A](VarOrigin.Lambda(pos))
 
-    lambdas.abs(f, bindVar) match {
-      case Exact(m, f) =>
-        m match {
-          case Multiplier.Id() => f.fold
-          case _ => throw new NotLinearException(s"Variable used more than once: $bindVar")
-        }
-      case Closure(captured, m, f) =>
-        m match {
-          case Multiplier.Id() =>
-            lambdas.compileConst(captured) match {
-              case Right(g) => id[A] > introFst(g) > f.fold
-              case Left(e) => raiseError(e)
-            }
-          case _ =>
-            throw new NotLinearException(s"Variable used more than once: $bindVar")
-        }
-      case NotFound(_) =>
-        throw new NotLinearException(s"Variable not consumed:$bindVar")
-      case Failure(e) =>
-        raiseError(e)
+      lambdas.abs(f, bindVar) match {
+        case Exact(m, f) =>
+          m match {
+            case Multiplier.Id() => f.fold
+            case _ => throw new NotLinearException(s"Variable used more than once: $bindVar")
+          }
+        case Closure(captured, m, f) =>
+          m match {
+            case Multiplier.Id() =>
+              lambdas.compileConst(captured) match {
+                case Right(g) => id[A] > introFst(g) > f.fold
+                case Left(e) => raiseError(e)
+              }
+            case _ =>
+              throw new NotLinearException(s"Variable used more than once: $bindVar")
+          }
+        case NotFound(_) =>
+          throw new NotLinearException(s"Variable not consumed:$bindVar")
+        case Failure(e) =>
+          raiseError(e)
+      }
+    }
+
+    override def ?[A, B](using pos: SourcePos)(
+      f: $[A] => $[B],
+    )(using
+      A: Affine[A],
+    ): A -⚬ B = {
+      import Abstracted.{Closure, Exact, Failure, NotFound}
+
+      val bindVar = new Var[A](VarOrigin.Lambda(pos))
+
+      lambdas.abs(f, bindVar) match {
+        case Exact(m, f) =>
+          m match {
+            case Multiplier.Id() => f.fold
+            case _ => throw new NotLinearException(s"Variable used more than once: $bindVar")
+          }
+        case Closure(captured, m, f) =>
+          m match {
+            case Multiplier.Id() =>
+              lambdas.compileConst(captured) match {
+                case Right(g) => id[A] > introFst(g) > f.fold
+                case Left(e)  => raiseError(e)
+              }
+            case _ =>
+              throw new NotLinearException(s"Variable used more than once: $bindVar")
+          }
+        case NotFound(b) =>
+          lambdas.compileConst(b) match {
+            case Right(g) => A.discard > g
+            case Left(e)  => raiseError(e)
+          }
+        case Failure(e) =>
+          raiseError(e)
+      }
     }
   }
 
-  override def Λ[A, B](f: $[A] => $[B])(implicit
-    pos: SourcePos,
+  override def Λ[A, B](using pos: SourcePos)(
+    f: $[A] => $[B],
   ): $[A =⚬ B] = {
     import closures.ClosureRes.{NoCapture, NonLinear, NotFound, Success}
 

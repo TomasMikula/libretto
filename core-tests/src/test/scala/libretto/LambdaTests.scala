@@ -11,7 +11,7 @@ class LambdaTests extends ScalatestScalettoTestSuite {
     import kit.dsl
     import kit.dsl._
     import kit.dsl.$._
-    import kit.Outcome.{assertSubstring, expectThrows}
+    import kit.Outcome.{assertSubstring, expectNotThrows, expectThrows}
     import kit.expectVal
 
     val coreLib = CoreLib(dsl)
@@ -140,8 +140,8 @@ class LambdaTests extends ScalatestScalettoTestSuite {
               }
             }
             _ <- assertSubstring("used more than once", e.getMessage)
-            _ <- assertSubstring("The input of lambda expression ending at", e.getMessage)
-            _ <- assertSubstring("LambdaTests.scala:140", e.getMessage)
+            _ <- assertSubstring("The variable bound by lambda expression at", e.getMessage)
+            _ <- assertSubstring("LambdaTests.scala:138", e.getMessage)
           } yield ()
         },
 
@@ -182,9 +182,20 @@ class LambdaTests extends ScalatestScalettoTestSuite {
               }
             }
             _ <- assertSubstring("not fully consumed", e.getMessage)
-            _ <- assertSubstring("The input of lambda expression ending at", e.getMessage)
-            _ <- assertSubstring("LambdaTests.scala:182", e.getMessage)
+            _ <- assertSubstring("The variable bound by lambda expression at", e.getMessage)
+            _ <- assertSubstring("LambdaTests.scala:180", e.getMessage)
           } yield ()
+        },
+
+      "unused affine variable" ->
+        TestCase.testOutcome {
+          expectNotThrows {
+            val prg: One -⚬ Done =
+              λ.? { _ =>
+                one > done
+              }
+            prg
+          }
         },
     )
   }

@@ -30,8 +30,8 @@ trait ClosedDSL extends CoreDSL {
   /** Creates a closure (`A =⚬ B`), i.e. a function that captures variables from the outer scope,
     * as an expression (`$[A =⚬ B]`) that can be used in outer [[λ]] or [[Λ]].
     */
-  def Λ[A, B](f: $[A] => $[B])(implicit
-    pos: SourcePos,
+  def Λ[A, B](using SourcePos)(
+    f: $[A] => $[B],
   ): $[A =⚬ B]
 
   type NoCaptureException <: Throwable

@@ -43,11 +43,11 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override type Pick[A, K <: String & Singleton] = AbstractPick[A, K]
 
-    override def fun[A, B](f: Expr[A] => Expr[B])(using pos: SourcePos): Fun[A, B] =
-      StarterKit.dsl.λ(f)(using pos)
+    override def fun[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B]): Fun[A, B] =
+      StarterKit.dsl.λ(using pos)(f)
 
-    override def closure[A, B](f: Expr[A] => Expr[B])(using pos: SourcePos): Expr[A --> B] =
-      StarterKit.dsl.Λ(f)(using pos)
+    override def closure[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B]): Expr[A --> B] =
+      StarterKit.dsl.Λ(using pos)(f)
 
     override def id[A]: Fun[A, A] =
       StarterKit.dsl.id[A]

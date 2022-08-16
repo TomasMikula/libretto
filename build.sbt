@@ -26,6 +26,8 @@ ThisBuild / pomExtra := (
   </developers>
 )
 
+ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDS")
+
 import ReleaseTransformations._
 
 releaseProcess := Seq[ReleaseStep](

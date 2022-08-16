@@ -302,21 +302,31 @@ trait CoreDSL {
     */
   def selectPair: (One |&| One) -⚬ (Pong |*| Pong)
 
-  /** Used to define a linear function `A -⚬ B` in a point-full style, i.e. as a lambda expression.
-    *
-    * Recall that when defining `A -⚬ B`, we never get a hold of `a: A` as a Scala value. However,
-    * by using this method we get a hold of `a: $[A]`, a placeholder variable, and construct the result
-    * expression `$[B]`.
-    * This method then inspects how the input variable `a: $[A]` is used in the result `$[B]` and
-    * infers a (point-free) construction of `A -⚬ B`.
-    *
-    * @throws NotLinearException if the given function violates linearity, i.e. if the input variable
-    *   is not used exactly once.
-    * @throws UnboundVariablesException if the result expression contains free variables (from outer [[λ]]s).
-    */
-  def λ[A, B](f: $[A] => $[B])(implicit
-    pos: SourcePos,
-  ): A -⚬ B
+  val λ: LambdaOps
+
+  trait LambdaOps {
+    /** Used to define a linear function `A -⚬ B` in a point-full style, i.e. as a lambda expression.
+      *
+      * Recall that when defining `A -⚬ B`, we never get a hold of `a: A` as a Scala value. However,
+      * by using this method we get a hold of `a: $[A]`, a placeholder variable, and construct the result
+      * expression `$[B]`.
+      * This method then inspects how the input variable `a: $[A]` is used in the result `$[B]` and
+      * infers a (point-free) construction of `A -⚬ B`.
+      *
+      * @throws NotLinearException if the given function violates linearity, i.e. if the input variable
+      *   is not used exactly once.
+      * @throws UnboundVariablesException if the result expression contains free variables (from outer [[λ]]s).
+      */
+    def apply[A, B](using SourcePos)(
+      f: $[A] => $[B],
+    ): A -⚬ B
+
+    def ?[A, B](using SourcePos)(
+      f: $[A] => $[B],
+    )(using
+      Affine[A],
+    ): A -⚬ B
+  }
 
   type NotLinearException <: Throwable
   type UnboundVariablesException <: Throwable
@@ -394,5 +404,23 @@ trait CoreDSL {
       def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F]): $[F[B]] =
         fa > F.liftF(λ(f))
     }
+  }
+
+  trait Affine[A] {
+    def discard: A -⚬ One
+  }
+
+  object Affine {
+    def from[A](f: A -⚬ One): Affine[A] =
+      new Affine[A] {
+        override def discard: A -⚬ One =
+          f
+      }
+
+    given affineOne: Affine[One] =
+      from(id[One])
+
+    given affinePair[A, B](using A: Affine[A], B: Affine[B]): Affine[A |*| B] =
+      from(andThen(par(A.discard, B.discard), elimFst))
   }
 }

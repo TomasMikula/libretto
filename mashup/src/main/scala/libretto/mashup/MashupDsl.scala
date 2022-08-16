@@ -48,9 +48,9 @@ trait MashupDsl {
   type Picked[A, K <: String & Singleton, V] = Pick[A, K] { type T = V }
 
 
-  def fun[A, B](f: Expr[A] => Expr[B])(using pos: SourcePos): Fun[A, B]
+  def fun[A, B](using SourcePos)(f: Expr[A] => Expr[B]): Fun[A, B]
 
-  def closure[A, B](f: Expr[A] => Expr[B])(using pos: SourcePos): Expr[A --> B]
+  def closure[A, B](using SourcePos)(f: Expr[A] => Expr[B]): Expr[A --> B]
 
   def id[A]: Fun[A, A]
 

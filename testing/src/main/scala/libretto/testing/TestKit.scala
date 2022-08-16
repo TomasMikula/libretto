@@ -42,11 +42,14 @@ trait TestKit {
         a
         success(())
       } catch {
-        case e => failure(using pos)(s"Failed with exception: $e")
+        case e => failure(using pos)(s"Failed with exception: $e", Some(e))
       }
 
-    def failure[A](using pos: SourcePos)(msg: String): Outcome[A] =
-      fromTestResult(TestResult.failure(using pos)(msg))
+    def failure[A](using pos: SourcePos)(
+      msg: String,
+      error: Option[Throwable] = None,
+    ): Outcome[A] =
+      fromTestResult(TestResult.failure(using pos)(msg, error))
 
     def crash[A](e: Throwable): Outcome[A] =
       fromTestResult(TestResult.crash(e))
@@ -124,9 +127,9 @@ trait TestKit {
 
     override def flatMap[A, B](fa: Outcome[A])(f: A => Outcome[B]): Outcome[B] =
       fa.flatMap {
-        case TestResult.Success(a)        => f(a)
-        case TestResult.Failure(msg, pos) => Async.now(TestResult.Failure(msg, pos))
-        case TestResult.Crash(e)          => Async.now(TestResult.Crash(e))
+        case TestResult.Success(a)           => f(a)
+        case TestResult.Failure(msg, pos, e) => Async.now(TestResult.Failure(msg, pos, e))
+        case TestResult.Crash(e)             => Async.now(TestResult.Crash(e))
       }
   }
 

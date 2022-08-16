@@ -11,10 +11,10 @@ sealed trait VarOrigin {
       case Pairing(SourcePos(f, l))    => s"The pair created at $f:$l"
       case Prj1(SourcePos(f, l))       => s"The first half of untupling at $f:$l"
       case Prj2(SourcePos(f, l))       => s"The second half of untupling at $f:$l"
-      case Lambda(SourcePos(f, l))     => s"The input of lambda expression ending at $f:$l"
+      case Lambda(SourcePos(f, l))     => s"The variable bound by lambda expression at $f:$l"
       case ClosureVal(SourcePos(f, l)) => s"The value of closure expression at $f:$l"
       case OneIntro(SourcePos(f, l))   => s"The unit introduced at $f:$l"
-      case Synthetic(desc)            => s"Synthetic variable: $desc"
+      case Synthetic(desc)             => s"Synthetic variable: $desc"
     }
 }
 

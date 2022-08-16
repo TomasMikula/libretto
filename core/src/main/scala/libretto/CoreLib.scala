@@ -2873,24 +2873,6 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       from(par(A.deflate, B.deflate) > forkNeed)
   }
 
-  trait Affine[A] {
-    def discard: A -⚬ One
-  }
-
-  object Affine {
-    def from[A](f: A -⚬ One): Affine[A] =
-      new Affine[A] {
-        override def discard: A -⚬ One =
-          f
-      }
-
-    implicit def fromNAffine[A](implicit A: NAffine[A]): Affine[A] =
-      from(A.deflate > need)
-
-    implicit def affinePair[A, B](implicit A: Affine[A], B: Affine[B]): Affine[A |*| B] =
-      from(parToOne(A.discard, B.discard))
-  }
-
   trait PAffine[A] {
     def neglect: A -⚬ Done
   }

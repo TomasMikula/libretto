@@ -134,8 +134,8 @@ object TestExecutor {
           } catch {
             case e => TestResult.Crash(e)
           }
-        case TestResult.Failure(msg, pos) =>
-          TestResult.Failure(msg, pos)
+        case TestResult.Failure(msg, pos, e) =>
+          TestResult.Failure(msg, pos, e)
         case TestResult.Crash(e) =>
           TestResult.Crash(e)
       }
