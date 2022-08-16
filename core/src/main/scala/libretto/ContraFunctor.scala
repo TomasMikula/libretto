@@ -1,5 +1,7 @@
 package libretto
 
+import libretto.lambda.Category
+
 /** Witnesses that `F` is a contravariant endofunctor on the category `->`. */
 trait ContraFunctor[->[_, _], F[_]] { self =>
   val category: Category[->]

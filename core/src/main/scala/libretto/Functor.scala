@@ -1,5 +1,7 @@
 package libretto
 
+import libretto.lambda.Category
+
 /** Witnesses that `F` is a covariant endofunctor on the category `->`. */
 trait Functor[->[_, _], F[_]] { self =>
   val category: Category[->]

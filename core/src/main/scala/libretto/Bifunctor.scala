@@ -1,5 +1,7 @@
 package libretto
 
+import libretto.lambda.Category
+
 /** Witnesses that `F` is a bifunctor (covariant in both variables) on the category `->`. */
 trait Bifunctor[->[_, _], F[_, _]] { self =>
   val category: Category[->]

@@ -1,7 +1,6 @@
 package libretto
 
-import libretto.Semigroupoid
-import libretto.lambda.Shuffle
+import libretto.lambda.{Semigroupoid, Shuffle}
 import libretto.util.BiInjective
 import org.scalatest.funsuite.AnyFunSuite
 
