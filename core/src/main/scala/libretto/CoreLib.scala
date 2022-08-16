@@ -2,7 +2,7 @@ package libretto
 
 import libretto.lambda.Category
 import libretto.util.unapply._
-import libretto.util.∀
+import libretto.util.{Equal, ∀}
 import scala.annotation.tailrec
 
 object CoreLib {
