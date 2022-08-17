@@ -64,7 +64,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case thiz: VarDefining[A, B] =>
           testEqual(v, thiz.resultVar) match {
             case Some(ev) =>
-              ElimStep.Exact(ev.substituteContra(thiz), shuffled.id(ev))
+              ElimStep.Exact(ev.substituteContra(thiz), Multiplier.id, shuffled.id(ev))
             case None =>
               thiz match {
                 case Id(b) =>
@@ -83,11 +83,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     def elim[V](v: Var[V]): ElimRes[V, B] =
       this.elimStep(v) match {
-        case ElimStep.NotFound()       => ElimRes.unused(v)
-        case ElimStep.Exact(e, f)      => ElimRes.Exact(e, f)
-        case ElimStep.Closure(x, e, f) => ElimRes.Closure(x, e, f)
-        case ElimStep.HalfUsed(_, u)   => ElimRes.unused(u) // TODO: also report all half-used vars
-        case ElimStep.Overused(u)      => ElimRes.overused(u)
+        case ElimStep.NotFound()          => ElimRes.NotFound()
+        case ElimStep.Exact(e, m, f)      => ElimRes.Exact(e, m, f)
+        case ElimStep.Closure(x, e, m, f) => ElimRes.Closure(x, e, m, f)
+        case ElimStep.HalfUsed(_, u)      => ElimRes.unused(u) // TODO: also report all half-used vars
+        case ElimStep.Overused(u)         => ElimRes.overused(u)
       }
   }
 
@@ -152,37 +152,55 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       sealed trait Found[V, B] extends ElimStep[V, B] {
         def foundVar: Var[V] =
           this match {
-            case Exact(e, _)      => e.resultVar
-            case Closure(_, e, _) => e.resultVar
-            case HalfUsed(f, _)   => f.foundVar
+            case Exact(e, _, _)      => e.resultVar
+            case Closure(_, e, _, _) => e.resultVar
+            case HalfUsed(f, _)      => f.foundVar
           }
 
         override def map[C](f: B ≈⚬ C): Found[V, C] =
           this match {
-            case Exact(e, g)      => Exact(e, g > f)
-            case Closure(x, e, g) => Closure(x, e, g > f)
-            case HalfUsed(g, u)   => HalfUsed(g map fst(f), u)
+            case Exact(e, m, g)      => Exact(e, m, g > f)
+            case Closure(x, e, m, g) => Closure(x, e, m, g > f)
+            case HalfUsed(g, u)      => HalfUsed(g map fst(f), u)
+          }
+
+        def also[V0, B0](m0: Multiplier[|*|, V, V0], f0: V0 ≈⚬ B0): Found[V, B0 |*| B] =
+          this match {
+            case Exact(e, m, g)      => Exact(e, Multiplier.dup(m0, m), shuffled.par(f0, g))
+            case Closure(x, e, m, g) => Closure(x, e, Multiplier.dup(m0, m), xi > shuffled.par(f0, g))
+            case HalfUsed(g, u)      => HalfUsed(g.also(m0, f0).map(assocRL), u)
           }
 
         /** Along the way tries to resolve captured vars of `expr` to unused variables of `this`. */
         def withExpr[X](expr: Expr[X]): ElimStep[V, X |*| B] =
           this match {
-            case Exact(e, f) =>
+            case Exact(e, m, f) =>
               expr.elimStep(e.resultVar) match {
-                case NotFound() => Closure(expr, e, snd(f))
+                case NotFound() => Closure(expr, e, m, snd(f))
                 case other => UnhandledCase.raise(s"$other")
               }
             case HalfUsed(f, u) =>
               expr.elimStep(u) match {
-                case NotFound()               => halfUsed1(f.withExpr(expr).map(assocRL), u)
-                case Exact(_, h)              => f.map(snd(h) > swap)
-                case Closure(captured1, _, h) => f.withExpr(captured1).map(snd(swap) > assocRL > fst(h))
-                case HalfUsed(g, w)           => halfUsed1(ElimStep.thenSnd(f, g) map (assocRL > fst(swap)), w)
-                case Overused(w)              => Overused(w)
+                case NotFound() =>
+                  halfUsed1(f.withExpr(expr).map(assocRL), u)
+                case Exact(_, m, h) =>
+                  m match {
+                    case Multiplier.Id() => f.map(snd(h) > swap)
+                    case _               => Overused(u)
+                  }
+                case Closure(captured1, _, m, h) =>
+                  m match {
+                    case Multiplier.Id() => f.withExpr(captured1).map(snd(swap) > assocRL > fst(h))
+                    case _               => Overused(u)
+                  }
+                case HalfUsed(g, w) =>
+                  halfUsed1(ElimStep.thenSnd(f, g) map (assocRL > fst(swap)), w)
+                case Overused(w) =>
+                  Overused(w)
               }
-            case Closure(captured, e, f) =>
+            case Closure(captured, e, m, f) =>
               expr.elimStep(e.resultVar) match {
-                case NotFound() => Closure(expr par captured, e, assocLR > snd(f))
+                case NotFound() => Closure(expr par captured, e, m, assocLR > snd(f))
                 case other      => UnhandledCase.raise(s"$other")
               }
           }
@@ -192,18 +210,32 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
          */
         def withCaptured[X](captured: Expr[X]): Found[V, X |*| B] =
           this match {
-            case Exact(e, f) =>
-              Closure(captured, e, snd(f))
+            case Exact(e, m, f) =>
+              Closure(captured, e, m, snd(f))
             case HalfUsed(f, u) =>
               HalfUsed(f.withCaptured(captured).map(assocRL), u)
-            case Closure(y, e, f) =>
-              Closure(captured par y, e, assocLR > snd(f))
+            case Closure(y, e, m, f) =>
+              Closure(captured par y, e, m, assocLR > snd(f))
           }
       }
 
-      case class Exact[V, B](expr: Expr.VarDefining[V], f: V ≈⚬ B) extends Found[V, B]
-      case class Closure[X, V, B](captured: Expr[X], expr: Expr.VarDefining[V], f: (X |*| V) ≈⚬ B) extends Found[V, B]
-      case class HalfUsed[V, B, U](f: Found[V, B |*| U], unused: Var[U]) extends Found[V, B]
+      case class Exact[V, V1, B](
+        expr: Expr.VarDefining[V],
+        m: Multiplier[|*|, V, V1],
+        f: V1 ≈⚬ B,
+      ) extends Found[V, B]
+
+      case class Closure[X, V, V1, B](
+        captured: Expr[X],
+        expr: Expr.VarDefining[V],
+        m: Multiplier[|*|, V, V1],
+        f: (X |*| V1) ≈⚬ B,
+      ) extends Found[V, B]
+
+      case class HalfUsed[V, B, U](
+        f: Found[V, B |*| U],
+        unused: Var[U],
+      ) extends Found[V, B]
 
       def overused[U, V, B](u: Var[U]): ElimStep[V, B] =
         Overused(u)
@@ -231,28 +263,32 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             f2.elimStep(v) match {
               case ElimStep.NotFound() =>
                 ElimStep.NotFound()
-              case ElimStep.Exact(e2, g2) =>
-                ElimStep.Closure(f1, e2, snd(g2))
-              case ElimStep.Closure(x, e2, g2) =>
-                ElimStep.Closure(f1 par x, e2, assocLR > snd(g2))
+              case ElimStep.Exact(e2, m2, g2) =>
+                ElimStep.Closure(f1, e2, m2, snd(g2))
+              case ElimStep.Closure(x, e2, m2, g2) =>
+                ElimStep.Closure(f1 par x, e2, m2, assocLR > snd(g2))
               case ElimStep.HalfUsed(f2, u) =>
                 ElimStep.HalfUsed(f2.withCaptured(f1).map(assocRL), u)
               case ElimStep.Overused(w) =>
                 ElimStep.Overused(w)
             }
-          case ElimStep.Exact(e1, g1) =>
+          case ElimStep.Exact(e1, m1, g1) =>
             f2.elimStep(v) match {
               case ElimStep.NotFound() =>
-                ElimStep.Closure(f2, e1, snd(g1) > swap)
-              case found: Found[V, B2] =>
-                ElimStep.overused(v)
+                ElimStep.Closure(f2, e1, m1, snd(g1) > swap)
+              case ElimStep.Exact(e2, m2, g2) =>
+                ElimStep.Exact(e1, Multiplier.dup(m1, m2), shuffled.par(g1, g2))
+              case ElimStep.Closure(x2, e2, m2, g2) =>
+                ElimStep.Closure(x2, e1, Multiplier.dup(m1, m2), xi > shuffled.par(g1, g2))
+              case ElimStep.HalfUsed(f2, u) =>
+                ElimStep.HalfUsed(f2.also(m1, g1).map(assocRL), u)
               case ElimStep.Overused(w) =>
                 ElimStep.Overused(w)
             }
-          case ElimStep.Closure(captured, e, f) =>
+          case ElimStep.Closure(captured, e1, m1, g1) =>
             f2.elimStep(v) match {
               case ElimStep.NotFound() =>
-                ElimStep.Closure(f2 par captured, e, assocLR > snd(f) > swap)
+                ElimStep.Closure(f2 par captured, e1, m1, assocLR > snd(g1) > swap)
               case other =>
                 UnhandledCase.raise(s"$other")
             }
@@ -260,10 +296,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             f2.elimStep(u) match {
               case ElimStep.NotFound() =>
                 halfUsed1(h1.withExpr(f2).map(assocRL > fst(swap)), u)
-              case ElimStep.Exact(g2, h2) =>
-                h1 map snd(h2)
-              case ElimStep.Closure(captured, g2, h2) =>
-                h1.withExpr(captured).map(xi > snd(h2))
+              case ElimStep.Exact(e2, m2, h2) =>
+                m2 match {
+                  case Multiplier.Id() => h1 map snd(h2)
+                  case _               => ElimStep.Overused(u)
+                }
+              case ElimStep.Closure(captured, g2, m2, h2) =>
+                m2 match {
+                  case Multiplier.Id() => h1.withExpr(captured).map(xi > snd(h2))
+                  case _               => ElimStep.Overused(u)
+                }
               case ElimStep.HalfUsed(g2, w) =>
                 ElimStep.halfUsed1(ElimStep.thenSnd(h1, g2).map(assocRL), w)
               case ElimStep.Overused(w) =>
@@ -275,16 +317,38 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
       def thenSnd[V, B1, X, B2](f: Found[V, B1 |*| X], g: Found[X, B2]): ElimStep[V, B1 |*| B2] =
         g match {
-          case Exact(g0, g1)   => f.map(snd(g1))
-          case HalfUsed(g0, u) => halfUsed1(thenSnd(f, g0).map(assocRL), u)
-          case Closure(captured, g, h) => f.withExpr(captured).map(xi > snd(h))
+          case Exact(g0, m, g1) =>
+            m match {
+              case Multiplier.Id() => f.map(snd(g1))
+              case _               => ElimStep.Overused(g0.resultVar)
+            }
+          case Closure(captured, g, m, h) =>
+            m match {
+              case Multiplier.Id() => f.withExpr(captured).map(xi > snd(h))
+              case _               => ElimStep.Overused(g.resultVar)
+            }
+          case HalfUsed(g0, u) =>
+            halfUsed1(thenSnd(f, g0).map(assocRL), u)
         }
     }
 
     sealed trait ElimRes[V, B]
     object ElimRes {
-      case class Exact[V, B](expr: Expr[V], f: V ≈⚬ B) extends ElimRes[V, B]
-      case class Closure[X, V, B](captured: Expr[X], expr: Expr[V], f: (X |*| V) ≈⚬ B) extends ElimRes[V, B]
+      case class Exact[V, V1, B](
+        expr: Expr[V],
+        m: Multiplier[|*|, V, V1],
+        f: V1 ≈⚬ B,
+      ) extends ElimRes[V, B]
+
+      case class Closure[X, V, V1, B](
+        captured: Expr[X],
+        expr: Expr[V],
+        m: Multiplier[|*|, V, V1],
+        f: (X |*| V1) ≈⚬ B,
+      ) extends ElimRes[V, B]
+
+      case class NotFound[V, B]() extends ElimRes[V, B]
+
       case class Error[V, B](e: LE) extends ElimRes[V, B]
 
       def unused[U, V, B](u: Var[U]): ElimRes[V, B] =
@@ -347,16 +411,18 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     import VArr.ElimRes
 
     expr.elim(boundVar) match {
-      case ElimRes.Exact(e, f) =>
+      case ElimRes.Exact(e, m, f) =>
         e match {
-          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Exact(Multiplier.Id(), f)
+          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Exact(m, f)
           case other               => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
         }
-      case ElimRes.Closure(captured, e, f) =>
+      case ElimRes.Closure(captured, e, m, f) =>
         e match {
-          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Closure(captured, Multiplier.Id(), f)
+          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Closure(captured, m, f)
           case other               => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
         }
+      case ElimRes.NotFound() =>
+        Lambdas.Abstracted.NotFound(expr)
       case ElimRes.Error(e) =>
         Lambdas.Abstracted.Failure(e)
     }

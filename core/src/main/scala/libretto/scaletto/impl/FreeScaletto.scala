@@ -462,7 +462,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         case Exact(m, f) =>
           m match {
             case Multiplier.Id() => f.fold
-            case _ => throw new NotLinearException(s"Variable used more than once: $bindVar")
+            case _ => throw new NotLinearException(s"Variable used more than once: ${bindVar.origin.print}")
           }
         case Closure(captured, m, f) =>
           m match {
@@ -472,10 +472,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
                 case Left(e) => raiseError(e)
               }
             case _ =>
-              throw new NotLinearException(s"Variable used more than once: $bindVar")
+              throw new NotLinearException(s"Variable used more than once: ${bindVar.origin.print}")
           }
         case NotFound(_) =>
-          throw new NotLinearException(s"Variable not consumed:$bindVar")
+          throw new NotLinearException(s"Variable not consumed: ${bindVar.origin.print}")
         case Failure(e) =>
           raiseError(e)
       }
@@ -494,7 +494,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         case Exact(m, f) =>
           m match {
             case Multiplier.Id() => f.fold
-            case _ => throw new NotLinearException(s"Variable used more than once: $bindVar")
+            case _ => throw new NotLinearException(s"Variable used more than once: ${bindVar.origin.print}")
           }
         case Closure(captured, m, f) =>
           m match {
@@ -504,7 +504,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
                 case Left(e)  => raiseError(e)
               }
             case _ =>
-              throw new NotLinearException(s"Variable used more than once: $bindVar")
+              throw new NotLinearException(s"Variable used more than once: ${bindVar.origin.print}")
           }
         case NotFound(b) =>
           lambdas.compileConst(b) match {
@@ -528,10 +528,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       case Success(captured, m, f) =>
         m match {
           case Multiplier.Id() => (captured map csmc.curry(f))(resultVar)
-          case _ => throw new NotLinearException(s"Variable used more than once: $bindVar")
+          case _ => throw new NotLinearException(s"Variable used more than once: ${bindVar.origin.print}")
         }
       case NotFound(_) =>
-        throw new NotLinearException(s"Variable not consumed:$bindVar")
+        throw new NotLinearException(s"Variable not consumed: ${bindVar.origin.print}")
       case NonLinear(e) =>
         raiseError(e)
       case NoCapture(msg) =>
@@ -543,7 +543,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     import lambdas.Error.Undefined
     import lambdas.LinearityViolation.{Overused, Underused}
     e match {
-      case Overused(vs)  => throw new NotLinearException(s"Variables used more than once: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", ", ", "\n")}")
+      case Overused(vs)  => throw new NotLinearException(s"Variables used more than once: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}")
       case Underused(vs) => throw new NotLinearException(s"Variables not fully consumed: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}")
       case Undefined(vs) => throw new UnboundVariablesException(vs)
     }

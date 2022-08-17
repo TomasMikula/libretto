@@ -181,22 +181,34 @@ class LambdaTests extends ScalatestScalettoTestSuite {
                 one > done
               }
             }
-            _ <- assertSubstring("not fully consumed", e.getMessage)
+            _ <- assertSubstring("not consumed", e.getMessage)
             _ <- assertSubstring("The variable bound by lambda expression at", e.getMessage)
             _ <- assertSubstring("LambdaTests.scala:180", e.getMessage)
           } yield ()
         },
 
-      "unused affine variable" ->
-        TestCase.testOutcome {
-          expectNotThrows {
-            val prg: One -⚬ Done =
-              λ.? { _ =>
-                one > done
+      "affine variable" ->
+        TestCase.multiple(
+          "unused" ->
+            TestCase.testOutcome {
+              expectNotThrows {
+                val prg: One -⚬ Done =
+                  λ.? { _ =>
+                    one > done
+                  }
+                prg
               }
-            prg
-          }
-        },
+            },
+
+          "used" ->
+            TestCase.testOutcome {
+              expectNotThrows {
+                val prg: One -⚬ One =
+                  λ.? { d => d }
+                prg
+              }
+            },
+        ),
     )
   }
 }
