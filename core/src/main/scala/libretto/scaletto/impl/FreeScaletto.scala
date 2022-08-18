@@ -423,7 +423,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   override type $[A] = lambdas.Expr[A]
 
-  override val `$`: ClosureOps  = new ClosureOps {
+  override val `$`: FunExprOps  = new FunExprOps {
     override def one(implicit pos: SourcePos): $[One] =
       lambdas.Expr.one(new Var[One](VarOrigin.OneIntro(pos)))
 
@@ -451,48 +451,45 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       closures.app(f, a)(new Var[B](VarOrigin.FunApp(pos)))
   }
 
-  override val λ = new LambdaOps {
-    override def apply[A, B](using pos: SourcePos)(
-      f: $[A] => $[B],
-    ): A -⚬ B =
-      compile(f)(
-        split   = v => Left(lambdas.Error.overusedVar(v)),
-        discard = v => Left(lambdas.Error.underusedVar(v)),
-        pos     = pos,
-      )
+  override val λ = new LambdaOpsWithClosures {
+    override def apply[A, B](using pos: SourcePos)(f: $[A] => $[B]): A -⚬ B =
+      compile(f)(noSplit, noDiscard, pos)
 
-    override def ?[A, B](using pos: SourcePos)(
-      f: $[A] => $[B],
-    )(using
-      A: Affine[A],
-    ): A -⚬ B =
-      compile(f)(
-        split   = v => Left(lambdas.Error.overusedVar(v)),
-        discard = _ => Right(A.discard),
-        pos     = pos,
-      )
+    override def ?[A: Affine, B](using pos: SourcePos)(f: $[A] => $[B]): A -⚬ B =
+      compile(f)(noSplit, doDiscard, pos)
 
-    override def +[A, B](using pos: SourcePos)(
-      f: $[A] => $[B],
-    )(using
-      A: Cosemigroup[A],
-    ): A -⚬ B =
-      compile(f)(
-        split   = _ => Right(A.split),
-        discard = v => Left(lambdas.Error.underusedVar(v)),
-        pos     = pos,
-      )
+    override def +[A: Cosemigroup, B](using pos: SourcePos)(f: $[A] => $[B]): A -⚬ B =
+      compile(f)(doSplit, noDiscard, pos)
 
-    override def *[A, B](using pos: SourcePos)(
-      f: $[A] => $[B],
-    )(using
-      A: Comonoid[A],
-    ): A -⚬ B =
-      compile(f)(
-        split   = _ => Right(A.split),
-        discard = _ => Right(A.discard),
-        pos     = pos,
-      )
+    override def *[A: Comonoid, B](using pos: SourcePos)(f: $[A] => $[B]): A -⚬ B =
+      compile(f)(doSplit, doDiscard, pos)
+
+    override val closure: ClosureOps =
+      new ClosureOps {
+        override def apply[A, B](using pos: SourcePos)(f: $[A] => $[B]): $[A =⚬ B] =
+          compileClosure(f)(noSplit, noDiscard, pos)
+
+        override def ?[A: Affine, B](using pos: SourcePos)(f: $[A] => $[B]): $[A =⚬ B] =
+          compileClosure(f)(noSplit, doDiscard, pos)
+
+        override def +[A: Cosemigroup, B](using pos: SourcePos)(f: $[A] => $[B]): $[A =⚬ B] =
+          compileClosure(f)(doSplit, noDiscard, pos)
+
+        override def *[A: Comonoid, B](using pos: SourcePos)(f: $[A] => $[B]): $[A =⚬ B] =
+          compileClosure(f)(doSplit, doDiscard, pos)
+      }
+
+    private def noSplit[A](v: Var[A]): Either[lambdas.LinearityViolation, A -⚬ (A |*| A)] =
+      Left(lambdas.Error.overusedVar(v))
+
+    private def doSplit[A: Cosemigroup](v: Var[A]): Either[lambdas.LinearityViolation, A -⚬ (A |*| A)] =
+      Right(summon[Cosemigroup[A]].split)
+
+    private def noDiscard[A](v: Var[A]): Either[lambdas.LinearityViolation, A -⚬ One] =
+      Left(lambdas.Error.underusedVar(v))
+
+    private def doDiscard[A: Affine](v: Var[A]): Either[lambdas.LinearityViolation, A -⚬ One] =
+      Right(summon[Affine[A]].discard)
 
     private def compile[A, B](f: $[A] => $[B])(
       split: Var[A] => Either[lambdas.LinearityViolation, A -⚬ (A |*| A)],
@@ -525,27 +522,34 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         case Left(e)  => raiseError(e)
       }
     }
-  }
 
-  override def Λ[A, B](using pos: SourcePos)(
-    f: $[A] => $[B],
-  ): $[A =⚬ B] = {
-    import closures.ClosureRes.{NoCapture, NonLinear, NotFound, Success}
+    private def compileClosure[A, B](f: $[A] => $[B])(
+      split: Var[A] => Either[lambdas.LinearityViolation, A -⚬ (A |*| A)],
+      discard: Var[A] => Either[lambdas.LinearityViolation, A -⚬ One],
+      pos: SourcePos,
+    ): $[A =⚬ B] = {
+      import closures.ClosureRes.{NoCapture, NonLinear, NotFound, Success}
 
-    val bindVar = new Var[A](VarOrigin.Lambda(pos))
-    val resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(pos))
-    closures.closure[A, B](f, bindVar) match {
-      case Success(captured, m, f) =>
-        m match {
-          case Multiplier.Id() => (captured map csmc.curry(f))(resultVar)
-          case _ => throw new NotLinearException(s"Variable used more than once: ${bindVar.origin.print}")
-        }
-      case NotFound(_) =>
-        throw new NotLinearException(s"Variable not consumed: ${bindVar.origin.print}")
-      case NonLinear(e) =>
-        raiseError(e)
-      case NoCapture(msg) =>
-        throw new NoCaptureException(msg)
+      val bindVar = new Var[A](VarOrigin.Lambda(pos))
+      val resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(pos))
+
+      closures.closure[A, B](f, bindVar) match {
+        case Success(captured, m, f) =>
+          for {
+            m <- m.compileM(split(bindVar))
+          } yield (captured map csmc.curry(snd(m) > f))(resultVar)
+        case NotFound(b) =>
+          for {
+            discard <- discard(bindVar)
+          } yield (b map csmc.curry(elimSnd(discard)))(resultVar)
+        case NonLinear(e) =>
+          Left(e)
+        case NoCapture(msg) =>
+          throw new NoCaptureException(msg)
+      } match {
+        case Right(f) => f
+        case Left(e)  => raiseError(e)
+      }
     }
   }
 

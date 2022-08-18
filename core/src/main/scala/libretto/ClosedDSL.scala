@@ -27,16 +27,48 @@ trait ClosedDSL extends CoreDSL {
   def out[A, B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
     curry(andThen(eval[A, B], f))
 
-  /** Creates a closure (`A =⚬ B`), i.e. a function that captures variables from the outer scope,
-    * as an expression (`$[A =⚬ B]`) that can be used in outer [[λ]] or [[Λ]].
-    */
+  override val λ: LambdaOpsWithClosures
+
+  trait LambdaOpsWithClosures extends LambdaOps {
+    val closure: ClosureOps
+  }
+
+  trait ClosureOps {
+    /** Creates a closure (`A =⚬ B`), i.e. a function that captures variables from the outer scope,
+      * as an expression (`$[A =⚬ B]`) that can be used in outer [[λ]].
+      */
+    def apply[A, B](using SourcePos)(
+      f: $[A] => $[B],
+    ): $[A =⚬ B]
+
+    def ?[A, B](using SourcePos)(
+      f: $[A] => $[B],
+    )(using
+      Affine[A],
+    ): $[A =⚬ B]
+
+    def +[A, B](using SourcePos)(
+      f: $[A] => $[B],
+    )(using
+      Cosemigroup[A],
+    ): $[A =⚬ B]
+
+    def *[A, B](using SourcePos)(
+      f: $[A] => $[B],
+    )(using
+      Comonoid[A],
+    ): $[A =⚬ B]
+  }
+
+  /** Alias for [[λ.closure.apply]]. */
   def Λ[A, B](using SourcePos)(
     f: $[A] => $[B],
-  ): $[A =⚬ B]
+  ): $[A =⚬ B] =
+    λ.closure(f)
 
   type NoCaptureException <: Throwable
 
-  trait ClosureOps extends $Ops {
+  trait FunExprOps extends $Ops {
     def app[A, B](f: $[A =⚬ B], a: $[A])(
       pos: SourcePos,
     ): $[B]
@@ -49,5 +81,5 @@ trait ClosedDSL extends CoreDSL {
     }
   }
 
-  override val $: ClosureOps
+  override val $: FunExprOps
 }
