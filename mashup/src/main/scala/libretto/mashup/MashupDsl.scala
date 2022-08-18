@@ -1,7 +1,5 @@
 package libretto.mashup
 
-import libretto.scaletto.StarterKit.{dsl => StarterDsl}
-import libretto.scaletto.StarterKit.dsl.{-⚬, =⚬, |*|, |+|, One, Val}
 import libretto.util.SourcePos
 import scala.annotation.targetName
 
@@ -47,8 +45,14 @@ trait MashupDsl {
 
   type Picked[A, K <: String & Singleton, V] = Pick[A, K] { type T = V }
 
+  val fun: Funs
 
-  def fun[A, B](using SourcePos)(f: Expr[A] => Expr[B]): Fun[A, B]
+  trait Funs {
+    def apply[A, B](using SourcePos)(f: Expr[A] => Expr[B]): Fun[A, B]
+    def ?[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Affine[A]): Fun[A, B]
+    def +[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Cosemigroup[A]): Fun[A, B]
+    def *[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Comonoid[A]): Fun[A, B]
+  }
 
   def closure[A, B](using SourcePos)(f: Expr[A] => Expr[B]): Expr[A --> B]
 
@@ -59,8 +63,6 @@ trait MashupDsl {
   def right[A, B]: Fun[B, A or B]
 
   def eval[A, B]: Fun[(A --> B) ** A, B]
-
-  import StarterDsl.$._
 
   val Record: Records
 
@@ -127,6 +129,8 @@ trait MashupDsl {
     def duplicate[A]: Fun[Unlimited[A], Unlimited[Unlimited[A]]]
     def map[A, B](f: Fun[A, B]): Fun[Unlimited[A], Unlimited[B]]
   }
+
+  given comonoidUnlimited[A]: Comonoid[Unlimited[A]]
 
   val ** : PairExtractor
 
@@ -236,4 +240,44 @@ trait MashupDsl {
   given valueTypeFloat64: ValueType[Float64]
   given valueTypeSingleFieldRecord[N <: String & Singleton, T](using ConstValue[N], ValueType[T]): ValueType[Record[N of T]]
   given valueTypeRecord[A, N <: String & Singleton, T](using ValueType[Record[A]], ConstValue[N], ValueType[T]): ValueType[Record[A ### (N of T)]]
+
+  trait Affine[A] {
+    def discard: Fun[A, EmptyResource]
+  }
+
+  object Affine {
+    def from[A](f: Fun[A, EmptyResource]): Affine[A] =
+      new Affine[A] {
+        override def discard: Fun[A, EmptyResource] =
+          f
+      }
+
+    given affineEmpty: Affine[EmptyResource] =
+      from(id[EmptyResource])
+
+    given affinePair[A, B](using A: Affine[A], B: Affine[B]): Affine[A ** B] =
+      from(fun { case a ** b => B.discard(b) alsoElim A.discard(a) })
+  }
+
+  trait Cosemigroup[A] {
+    def split: Fun[A, A ** A]
+  }
+
+  trait Comonoid[A] extends Cosemigroup[A] with Affine[A] {
+    def counit: Fun[A, EmptyResource]
+
+    override def discard: Fun[A, EmptyResource] =
+      counit
+  }
+
+  object Comonoid {
+    implicit val comonoidEmpty: Comonoid[EmptyResource] =
+      new Comonoid[EmptyResource] {
+        override def counit: Fun[EmptyResource, EmptyResource] =
+          id[EmptyResource]
+
+        override def split: Fun[EmptyResource, EmptyResource ** EmptyResource] =
+          fun(_ => Expr.unit ** Expr.unit)
+      }
+  }
 }

@@ -7,14 +7,14 @@ sealed trait VarOrigin {
 
   def print: String =
     this match {
-      case FunApp(SourcePos(f, l))     => s"The result of function application at $f:$l"
-      case Pairing(SourcePos(f, l))    => s"The pair created at $f:$l"
-      case Prj1(SourcePos(f, l))       => s"The first half of untupling at $f:$l"
-      case Prj2(SourcePos(f, l))       => s"The second half of untupling at $f:$l"
-      case Lambda(SourcePos(f, l))     => s"The variable bound by lambda expression at $f:$l"
-      case ClosureVal(SourcePos(f, l)) => s"The value of closure expression at $f:$l"
-      case OneIntro(SourcePos(f, l))   => s"The unit introduced at $f:$l"
-      case Synthetic(desc)             => s"Synthetic variable: $desc"
+      case FunApp(SourcePos(p, _, l))     => s"The result of function application at $p:$l"
+      case Pairing(SourcePos(p, _, l))    => s"The pair created at $p:$l"
+      case Prj1(SourcePos(p, _, l))       => s"The first half of untupling at $p:$l"
+      case Prj2(SourcePos(p, _, l))       => s"The second half of untupling at $p:$l"
+      case Lambda(SourcePos(p, _, l))     => s"The variable bound by lambda expression at $p:$l"
+      case ClosureVal(SourcePos(p, _, l)) => s"The value of closure expression at $p:$l"
+      case OneIntro(SourcePos(p, _, l))   => s"The unit introduced at $p:$l"
+      case Synthetic(desc)                => s"Synthetic variable: $desc"
     }
 }
 

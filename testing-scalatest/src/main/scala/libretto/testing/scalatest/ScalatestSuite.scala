@@ -66,7 +66,7 @@ extends AnyFunSuite
               case TestResult.Success(_) =>
                 // do nothing
               case TestResult.Failure(msg, pos, e) =>
-                val message = s"$msg (at ${pos.file}:${pos.line})"
+                val message = s"$msg (at ${pos.path}:${pos.line})"
                 e match {
                   case Some(e) => fail(message, e)
                   case None    => fail(message)

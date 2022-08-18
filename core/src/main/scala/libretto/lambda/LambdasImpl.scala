@@ -176,7 +176,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           this match {
             case Exact(e, m, f) =>
               expr.elimStep(e.resultVar) match {
-                case NotFound() => Closure(expr, e, m, snd(f))
+                case NotFound()       => Closure(expr, e, m, snd(f))
+                case Exact(_, m0, f0) => Exact(e, Multiplier.dup(m0, m), shuffled.par(f0, f))
                 case other => UnhandledCase.raise(s"$other")
               }
             case HalfUsed(f, u) =>

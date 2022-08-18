@@ -77,11 +77,10 @@ object PragueWeatherService {
    *  without any Scala functions inside.
    */
   private def blueprint: Fun[Unlimited[Inputs], PragueWeatherApi] =
-    fun { inputs =>
+    fun.* { inputs =>
       // from the inputs, get one WeatherApi and one ConverterApi
-      val (i1, i2) = inputs.split // manually duplicating inputs because of linearity. TODO: infer splits automatically for Unlimited[A]
-      val weather:   Expr[WeatherApi]   = i1.get.pick["weather"]
-      val converter: Expr[ConverterApi] = i2.get.pick["converter"]
+      val weather:   Expr[WeatherApi]   = inputs.get.pick["weather"]
+      val converter: Expr[ConverterApi] = inputs.get.pick["converter"]
 
       closure { empty =>
         // invoke the weather API, passing in `City("Prague")` as the argument

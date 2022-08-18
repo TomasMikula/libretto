@@ -43,8 +43,20 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override type Pick[A, K <: String & Singleton] = AbstractPick[A, K]
 
-    override def fun[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B]): Fun[A, B] =
-      StarterKit.dsl.λ(using pos)(f)
+    override val fun: Funs =
+      new Funs {
+        override def apply[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B]): Fun[A, B] =
+          StarterKit.dsl.λ(using pos)(f)
+
+        override def ?[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B])(using A: Affine[A]): Fun[A, B] =
+          StarterKit.dsl.λ.?(using pos)(f)(using new StarterKit.dsl.Affine[A] { export A.discard })
+
+        override def +[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B])(using A: Cosemigroup[A]): Fun[A, B] =
+          StarterKit.dsl.λ.+(using pos)(f)(using new StarterKit.dsl.Cosemigroup[A] { export A.split })
+
+        override def *[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B])(using A: Comonoid[A]): Fun[A, B] =
+          StarterKit.dsl.λ.*(using pos)(f)(using new StarterKit.dsl.Comonoid[A] { export A.{split, counit} })
+      }
 
     override def closure[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B]): Expr[A --> B] =
       StarterKit.dsl.Λ(using pos)(f)
@@ -143,6 +155,13 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override object Unlimited extends Unlimiteds {
       export StarterKit.coreLib.Unlimited.{discard, duplicate, map, single => getSingle, split}
+    }
+
+    override def comonoidUnlimited[A]: Comonoid[Unlimited[A]] = {
+      val A = StarterKit.coreLib.Unlimited.comonoidUnlimited[A]
+      new Comonoid[Unlimited[A]] {
+        export A.{split, counit}
+      }
     }
 
     override object ** extends PairExtractor {
