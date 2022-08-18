@@ -1,6 +1,14 @@
 package libretto.lambda
 
-sealed trait Multiplier[|*|[_, _], A, A1]
+sealed trait Multiplier[|*|[_, _], A, A1] {
+  def compile[->[_, _]](split: A -> (A |*| A))(using
+    c: SemigroupalCategory[->, |*|],
+  ): A -> A1 =
+    this match {
+      case Multiplier.Id() => c.id[A]
+      case Multiplier.Dup(f, g) => split > c.par(f.compile(split), g.compile(split))
+    }
+}
 
 object Multiplier {
   case class Id[|*|[_, _], A]() extends Multiplier[|*|, A, A]

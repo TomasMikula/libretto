@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.util.SourcePos
+import libretto.util.{Equal, SourcePos}
 
 trait CoreDSL {
   /** Libretto arrow, also called a ''component'' or a ''linear function''.
@@ -326,6 +326,18 @@ trait CoreDSL {
     )(using
       Affine[A],
     ): A -⚬ B
+
+    def +[A, B](using SourcePos)(
+      f: $[A] => $[B],
+    )(using
+      Cosemigroup[A],
+    ): A -⚬ B
+
+    def *[A, B](using SourcePos)(
+      f: $[A] => $[B],
+    )(using
+      Comonoid[A],
+    ): A -⚬ B
   }
 
   type NotLinearException <: Throwable
@@ -422,5 +434,82 @@ trait CoreDSL {
 
     given affinePair[A, B](using A: Affine[A], B: Affine[B]): Affine[A |*| B] =
       from(andThen(par(A.discard, B.discard), elimFst))
+  }
+
+  trait Cosemigroup[A] {
+    def split: A -⚬ (A |*| A)
+
+    def law_coAssociativity: Equal[ A -⚬ ((A |*| A) |*| A) ] =
+      Equal(
+        andThen(split, par(split, id[A])),
+        andThen(andThen(split, par(id[A], split)), assocRL),
+      )
+  }
+
+  object Cosemigroup {
+    implicit val cosemigroupDone: Cosemigroup[Done] =
+      new Cosemigroup[Done] {
+        override def split: Done -⚬ (Done |*| Done) = fork
+      }
+
+    implicit val cosemigroupPing: Cosemigroup[Ping] =
+      new Cosemigroup[Ping] {
+        override def split: Ping -⚬ (Ping |*| Ping) = forkPing
+      }
+
+    implicit val cosemigroupNeed: Cosemigroup[Need] =
+      new Cosemigroup[Need] {
+        override def split: Need -⚬ (Need |*| Need) = joinNeed
+      }
+
+    implicit val cosemigroupPong: Cosemigroup[Pong] =
+      new Cosemigroup[Pong] {
+        override def split: Pong -⚬ (Pong |*| Pong) = joinPong
+      }
+  }
+
+  trait Comonoid[A] extends Cosemigroup[A] with Affine[A] {
+    def counit: A -⚬ One
+
+    override def discard: A -⚬ One =
+      counit
+
+    def law_leftCounit: Equal[ A -⚬ (One |*| A) ] =
+      Equal(
+        andThen(this.split, par(counit, id[A])),
+        introFst,
+      )
+
+    def law_rightCounit: Equal[ A -⚬ (A |*| One) ] =
+      Equal(
+        andThen(this.split, par(id[A], counit)),
+        introSnd,
+      )
+  }
+
+  object Comonoid {
+    implicit val comonoidOne: Comonoid[One] =
+      new Comonoid[One] {
+        override def counit: One -⚬ One = id[One]
+        override def split: One -⚬ (One |*| One) = introSnd[One]
+      }
+
+    implicit val comonoidPing: Comonoid[Ping] =
+      new Comonoid[Ping] {
+        override def split  : Ping -⚬ (Ping |*| Ping) = forkPing
+        override def counit : Ping -⚬ One             = dismissPing
+      }
+
+    implicit val comonoidNeed: Comonoid[Need] =
+      new Comonoid[Need] {
+        override def split  : Need -⚬ (Need |*| Need) = joinNeed
+        override def counit : Need -⚬ One             = need
+      }
+
+    implicit val comonoidPong: Comonoid[Pong] =
+      new Comonoid[Pong] {
+        override def split  : Pong -⚬ (Pong |*| Pong) = joinPong
+        override def counit : Pong -⚬ One             = pong
+      }
   }
 }

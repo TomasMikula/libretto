@@ -515,6 +515,57 @@ object FreeScaletto extends FreeScaletto with Scaletto {
           raiseError(e)
       }
     }
+
+    override def +[A, B](using pos: SourcePos)(
+      f: $[A] => $[B],
+    )(using
+      A: Cosemigroup[A],
+    ): A -⚬ B = {
+      import Abstracted.{Closure, Exact, Failure, NotFound}
+
+      val bindVar = new Var[A](VarOrigin.Lambda(pos))
+
+      lambdas.abs(f, bindVar) match {
+        case Exact(m, f) =>
+          m.compile(A.split) > f.fold
+        case Closure(captured, m, f) =>
+          lambdas.compileConst(captured) match {
+            case Right(g) => m.compile(A.split) > introFst(g) > f.fold
+            case Left(e)  => raiseError(e)
+          }
+        case NotFound(_) =>
+          throw new NotLinearException(s"Variable not consumed: ${bindVar.origin.print}")
+        case Failure(e) =>
+          raiseError(e)
+      }
+    }
+
+    override def *[A, B](using pos: SourcePos)(
+      f: $[A] => $[B],
+    )(using
+      A: Comonoid[A],
+    ): A -⚬ B = {
+      import Abstracted.{Closure, Exact, Failure, NotFound}
+
+      val bindVar = new Var[A](VarOrigin.Lambda(pos))
+
+      lambdas.abs(f, bindVar) match {
+        case Exact(m, f) =>
+          m.compile(A.split) > f.fold
+        case Closure(captured, m, f) =>
+          lambdas.compileConst(captured) match {
+            case Right(g) => m.compile(A.split) > introFst(g) > f.fold
+            case Left(e)  => raiseError(e)
+          }
+        case NotFound(b) =>
+          lambdas.compileConst(b) match {
+            case Right(g) => A.discard > g
+            case Left(e)  => raiseError(e)
+          }
+        case Failure(e) =>
+          raiseError(e)
+      }
+    }
   }
 
   override def Λ[A, B](using pos: SourcePos)(

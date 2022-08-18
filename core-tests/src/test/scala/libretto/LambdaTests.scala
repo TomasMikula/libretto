@@ -199,13 +199,72 @@ class LambdaTests extends ScalatestScalettoTestSuite {
                 prg
               }
             },
-
-          "used" ->
+          "used once" ->
             TestCase.testOutcome {
               expectNotThrows {
                 val prg: One -⚬ One =
                   λ.? { d => d }
                 prg
+              }
+            },
+          "used twice" ->
+            TestCase.testOutcome {
+              for {
+                e <- expectThrows {
+                  λ.? { (x: $[One]) => x |*| x }
+                }
+                _ <- assertSubstring("used more than once", e.getMessage)
+                _ <- assertSubstring("ariable bound by lambda expression at", e.getMessage)
+                _ <- assertSubstring("LambdaTests.scala:214", e.getMessage)
+              } yield ()
+            },
+        ),
+
+      "cosemigroupal variable" ->
+        TestCase.multiple(
+          "used once" ->
+            TestCase.testOutcome {
+              expectNotThrows {
+                λ.+ { (d: $[Done]) => d }
+              }
+            },
+          "used twice" ->
+            TestCase.testOutcome {
+              expectNotThrows {
+                λ.+ { (d: $[Done]) => d |*| d }
+              }
+            },
+          "unused" ->
+            TestCase.testOutcome {
+              for {
+                e <- expectThrows {
+                  λ.+ { (_: $[Done]) => one > done }
+                }
+                _ <- assertSubstring("not consumed", e.getMessage)
+                _ <- assertSubstring("variable bound by lambda expression at", e.getMessage)
+                _ <- assertSubstring("LambdaTests.scala:241", e.getMessage)
+              } yield ()
+            },
+        ),
+
+      "comonoidal variable" ->
+        TestCase.multiple(
+          "used once" ->
+            TestCase.testOutcome {
+              expectNotThrows {
+                λ.* { (p: $[Ping]) => p }
+              }
+            },
+          "used twice" ->
+            TestCase.testOutcome {
+              expectNotThrows {
+                λ.* { (p: $[Ping]) => p |*| p }
+              }
+            },
+          "unused" ->
+            TestCase.testOutcome {
+              expectNotThrows {
+                λ.* { (_: $[Ping]) => one > done }
               }
             },
         ),

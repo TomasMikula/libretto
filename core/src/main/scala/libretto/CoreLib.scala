@@ -2938,38 +2938,6 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       combineMap(f, g)
   }
 
-  trait Cosemigroup[A] {
-    def split: A -⚬ (A |*| A)
-
-    def law_coAssociativity: Equal[ A -⚬ ((A |*| A) |*| A) ] =
-      Equal(
-        split > par(split, id[A]),
-        split > par(id[A], split) > assocRL,
-      )
-  }
-
-  object Cosemigroup {
-    implicit val cosemigroupDone: Cosemigroup[Done] =
-      new Cosemigroup[Done] {
-        override def split: Done -⚬ (Done |*| Done) = fork
-      }
-
-    implicit val cosemigroupPing: Cosemigroup[Ping] =
-      new Cosemigroup[Ping] {
-        override def split: Ping -⚬ (Ping |*| Ping) = forkPing
-      }
-
-    implicit val cosemigroupNeed: Cosemigroup[Need] =
-      new Cosemigroup[Need] {
-        override def split: Need -⚬ (Need |*| Need) = joinNeed
-      }
-
-    implicit val cosemigroupPong: Cosemigroup[Pong] =
-      new Cosemigroup[Pong] {
-        override def split: Pong -⚬ (Pong |*| Pong) = joinPong
-      }
-  }
-
   def split[A: Cosemigroup]: A -⚬ (A |*| A) =
     summon[Cosemigroup[A]].split
 
@@ -3015,45 +2983,6 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       new Monoid[Ping] {
         override def unit   :             One -⚬ Ping = ping
         override def combine: (Ping |*| Ping) -⚬ Ping = joinPing
-      }
-  }
-
-  trait Comonoid[A] extends Cosemigroup[A] with Affine[A] {
-    def counit: A -⚬ One
-
-    override def discard: A -⚬ One =
-      counit
-
-    def law_leftCounit: Equal[ A -⚬ (One |*| A) ] =
-      Equal(
-        this.split > par(counit, id[A]),
-        introFst,
-      )
-
-    def law_rightCounit: Equal[ A -⚬ (A |*| One) ] =
-      Equal(
-        this.split > par(id[A], counit),
-        introSnd,
-      )
-  }
-
-  object Comonoid {
-    implicit val comonoidOne: Comonoid[One] =
-      new Comonoid[One] {
-        override def counit: One -⚬ One = id[One]
-        override def split: One -⚬ (One |*| One) = introSnd[One]
-      }
-
-    implicit val comonoidNeed: Comonoid[Need] =
-      new Comonoid[Need] {
-        override def split  : Need -⚬ (Need |*| Need) = joinNeed
-        override def counit : Need -⚬ One             = need
-      }
-
-    implicit val comonoidPong: Comonoid[Pong] =
-      new Comonoid[Pong] {
-        override def split  : Pong -⚬ (Pong |*| Pong) = joinPong
-        override def counit : Pong -⚬ One             = pong
       }
   }
 
