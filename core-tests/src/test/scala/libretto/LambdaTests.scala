@@ -181,7 +181,7 @@ class LambdaTests extends ScalatestScalettoTestSuite {
                 one > done
               }
             }
-            _ <- assertSubstring("not consumed", e.getMessage)
+            _ <- assertSubstring("not fully consumed", e.getMessage)
             _ <- assertSubstring("The variable bound by lambda expression at", e.getMessage)
             _ <- assertSubstring("LambdaTests.scala:180", e.getMessage)
           } yield ()
@@ -240,7 +240,7 @@ class LambdaTests extends ScalatestScalettoTestSuite {
                 e <- expectThrows {
                   λ.+ { (_: $[Done]) => one > done }
                 }
-                _ <- assertSubstring("not consumed", e.getMessage)
+                _ <- assertSubstring("not fully consumed", e.getMessage)
                 _ <- assertSubstring("variable bound by lambda expression at", e.getMessage)
                 _ <- assertSubstring("LambdaTests.scala:241", e.getMessage)
               } yield ()

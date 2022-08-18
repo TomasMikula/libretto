@@ -149,6 +149,21 @@ object Lambdas {
 
       case class Underused[VarSet](vars: VarSet) extends LinearityViolation[VarSet]
     }
+
+    def overusedVar[Var[_], VarSet, A](v: Var[A])(using
+      ev: Variable[Var, VarSet],
+    ): LinearityViolation[VarSet] =
+      LinearityViolation.Overused(ev.singleton(v))
+
+    def underusedVar[Var[_], VarSet, A](v: Var[A])(using
+      ev: Variable[Var, VarSet],
+    ): LinearityViolation[VarSet] =
+      LinearityViolation.Underused(ev.singleton(v))
+
+    def undefinedVar[Var[_], VarSet, A](v: Var[A])(using
+      ev: Variable[Var, VarSet],
+    ): Error[VarSet] =
+      Undefined(ev.singleton(v))
   }
 
   trait ErrorFactory[E, LE, VarSet] {

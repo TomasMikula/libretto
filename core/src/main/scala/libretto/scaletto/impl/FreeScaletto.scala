@@ -4,6 +4,7 @@ import libretto.scaletto.Scaletto
 import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, LambdasOne, Multiplier, Tupled}
 import libretto.lambda.Lambdas.Abstracted
 import libretto.util.{Async, BiInjective, SourcePos}
+import libretto.util.Monad.monadEither
 import scala.concurrent.duration.FiniteDuration
 
 abstract class FreeScaletto {
@@ -453,97 +454,50 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   override val λ = new LambdaOps {
     override def apply[A, B](using pos: SourcePos)(
       f: $[A] => $[B],
-    ): A -⚬ B = {
-      import Abstracted.{Closure, Exact, Failure, NotFound}
-
-      val bindVar = new Var[A](VarOrigin.Lambda(pos))
-
-      lambdas.abs(f, bindVar) match {
-        case Exact(m, f) =>
-          m match {
-            case Multiplier.Id() => f.fold
-            case _ => throw new NotLinearException(s"Variable used more than once: ${bindVar.origin.print}")
-          }
-        case Closure(captured, m, f) =>
-          m match {
-            case Multiplier.Id() =>
-              lambdas.compileConst(captured) match {
-                case Right(g) => id[A] > introFst(g) > f.fold
-                case Left(e) => raiseError(e)
-              }
-            case _ =>
-              throw new NotLinearException(s"Variable used more than once: ${bindVar.origin.print}")
-          }
-        case NotFound(_) =>
-          throw new NotLinearException(s"Variable not consumed: ${bindVar.origin.print}")
-        case Failure(e) =>
-          raiseError(e)
-      }
-    }
+    ): A -⚬ B =
+      compile(f)(
+        split   = v => Left(lambdas.Error.overusedVar(v)),
+        discard = v => Left(lambdas.Error.underusedVar(v)),
+        pos     = pos,
+      )
 
     override def ?[A, B](using pos: SourcePos)(
       f: $[A] => $[B],
     )(using
       A: Affine[A],
-    ): A -⚬ B = {
-      import Abstracted.{Closure, Exact, Failure, NotFound}
-
-      val bindVar = new Var[A](VarOrigin.Lambda(pos))
-
-      lambdas.abs(f, bindVar) match {
-        case Exact(m, f) =>
-          m match {
-            case Multiplier.Id() => f.fold
-            case _ => throw new NotLinearException(s"Variable used more than once: ${bindVar.origin.print}")
-          }
-        case Closure(captured, m, f) =>
-          m match {
-            case Multiplier.Id() =>
-              lambdas.compileConst(captured) match {
-                case Right(g) => id[A] > introFst(g) > f.fold
-                case Left(e)  => raiseError(e)
-              }
-            case _ =>
-              throw new NotLinearException(s"Variable used more than once: ${bindVar.origin.print}")
-          }
-        case NotFound(b) =>
-          lambdas.compileConst(b) match {
-            case Right(g) => A.discard > g
-            case Left(e)  => raiseError(e)
-          }
-        case Failure(e) =>
-          raiseError(e)
-      }
-    }
+    ): A -⚬ B =
+      compile(f)(
+        split   = v => Left(lambdas.Error.overusedVar(v)),
+        discard = _ => Right(A.discard),
+        pos     = pos,
+      )
 
     override def +[A, B](using pos: SourcePos)(
       f: $[A] => $[B],
     )(using
       A: Cosemigroup[A],
-    ): A -⚬ B = {
-      import Abstracted.{Closure, Exact, Failure, NotFound}
-
-      val bindVar = new Var[A](VarOrigin.Lambda(pos))
-
-      lambdas.abs(f, bindVar) match {
-        case Exact(m, f) =>
-          m.compile(A.split) > f.fold
-        case Closure(captured, m, f) =>
-          lambdas.compileConst(captured) match {
-            case Right(g) => m.compile(A.split) > introFst(g) > f.fold
-            case Left(e)  => raiseError(e)
-          }
-        case NotFound(_) =>
-          throw new NotLinearException(s"Variable not consumed: ${bindVar.origin.print}")
-        case Failure(e) =>
-          raiseError(e)
-      }
-    }
+    ): A -⚬ B =
+      compile(f)(
+        split   = _ => Right(A.split),
+        discard = v => Left(lambdas.Error.underusedVar(v)),
+        pos     = pos,
+      )
 
     override def *[A, B](using pos: SourcePos)(
       f: $[A] => $[B],
     )(using
       A: Comonoid[A],
+    ): A -⚬ B =
+      compile(f)(
+        split   = _ => Right(A.split),
+        discard = _ => Right(A.discard),
+        pos     = pos,
+      )
+
+    private def compile[A, B](f: $[A] => $[B])(
+      split: Var[A] => Either[lambdas.LinearityViolation, A -⚬ (A |*| A)],
+      discard: Var[A] => Either[lambdas.LinearityViolation, A -⚬ One],
+      pos: SourcePos,
     ): A -⚬ B = {
       import Abstracted.{Closure, Exact, Failure, NotFound}
 
@@ -551,19 +505,24 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
       lambdas.abs(f, bindVar) match {
         case Exact(m, f) =>
-          m.compile(A.split) > f.fold
+          for {
+            m <- m.compileM(split(bindVar))
+          } yield m > f.fold
         case Closure(captured, m, f) =>
-          lambdas.compileConst(captured) match {
-            case Right(g) => m.compile(A.split) > introFst(g) > f.fold
-            case Left(e)  => raiseError(e)
-          }
+          for {
+            g <- lambdas.compileConst(captured)
+            m <- m.compileM(split(bindVar))
+          } yield m > introFst(g) > f.fold
         case NotFound(b) =>
-          lambdas.compileConst(b) match {
-            case Right(g) => A.discard > g
-            case Left(e)  => raiseError(e)
-          }
+          for {
+            g       <- lambdas.compileConst(b)
+            discard <- discard(bindVar)
+          } yield discard > g
         case Failure(e) =>
-          raiseError(e)
+          Left(e)
+      } match {
+        case Right(f) => f
+        case Left(e)  => raiseError(e)
       }
     }
   }
