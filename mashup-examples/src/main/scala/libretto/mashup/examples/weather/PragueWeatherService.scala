@@ -82,7 +82,7 @@ object PragueWeatherService {
       val weather:   Expr[WeatherApi]   = inputs.get.pick["weather"]
       val converter: Expr[ConverterApi] = inputs.get.pick["converter"]
 
-      closure { empty =>
+      closure.? { empty =>
         // invoke the weather API, passing in `City("Prague")` as the argument
         weather(City("Prague")) match {
           // deconstruct the response
@@ -92,8 +92,8 @@ object PragueWeatherService {
 
             // form the response
             Record.field("temperature" -> fahrenheit)
-              .alsoElim(empty) // XXX: artifacts of linearity: can't simply ignore stuff.
-              .alsoAwait(city) // Will be ameliorated by dedicated support for *value* types.
+              .alsoAwait(city) // XXX: Can't simply ignore stuff due to linearity.
+                               // Will be ameliorated by dedicated support for *value* types.
         }
       }
     }

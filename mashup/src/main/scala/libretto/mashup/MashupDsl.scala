@@ -54,7 +54,14 @@ trait MashupDsl {
     def *[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Comonoid[A]): Fun[A, B]
   }
 
-  def closure[A, B](using SourcePos)(f: Expr[A] => Expr[B]): Expr[A --> B]
+  val closure: Closures
+
+  trait Closures {
+    def apply[A, B](using SourcePos)(f: Expr[A] => Expr[B]): Expr[A --> B]
+    def ?[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Affine[A]): Expr[A --> B]
+    def +[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Cosemigroup[A]): Expr[A --> B]
+    def *[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Comonoid[A]): Expr[A --> B]
+  }
 
   def id[A]: Fun[A, A]
 

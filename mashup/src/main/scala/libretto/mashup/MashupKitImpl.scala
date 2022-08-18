@@ -58,8 +58,20 @@ object MashupKitImpl extends MashupKit { kit =>
           StarterKit.dsl.λ.*(using pos)(f)(using new StarterKit.dsl.Comonoid[A] { export A.{split, counit} })
       }
 
-    override def closure[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B]): Expr[A --> B] =
-      StarterKit.dsl.Λ(using pos)(f)
+    override val closure: Closures =
+      new Closures {
+        override def apply[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B]): Expr[A --> B] =
+          StarterKit.dsl.λ.closure(using pos)(f)
+
+        override def ?[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B])(using A: Affine[A]): Expr[A --> B] =
+          StarterKit.dsl.λ.closure.?(using pos)(f)(using new StarterKit.dsl.Affine[A] { export A.discard })
+
+        override def +[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B])(using A: Cosemigroup[A]): Expr[A --> B] =
+          StarterKit.dsl.λ.closure.+(using pos)(f)(using new StarterKit.dsl.Cosemigroup[A] { export A.split })
+
+        override def *[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B])(using A: Comonoid[A]): Expr[A --> B] =
+          StarterKit.dsl.λ.closure.*(using pos)(f)(using new StarterKit.dsl.Comonoid[A] { export A.{split, counit} })
+      }
 
     override def id[A]: Fun[A, A] =
       StarterKit.dsl.id[A]
