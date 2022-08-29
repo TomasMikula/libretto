@@ -11,14 +11,14 @@ import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}
 import scala.concurrent.duration.Duration
 
-object FreeScalettoFutureRunner {
+object FutureExecutor {
   def apply(
     scheduler: ScheduledExecutorService,
     blockingExecutor: JExecutor,
   ): ScalettoExecutor.Of[FreeScaletto.type, FreeScalettoFutureBridge.type] = {
     val ec = ExecutionContext.fromExecutor(scheduler)
     val sc = new SchedulerFromScheduledExecutorService(scheduler)
-    new FreeScalettoFutureRunner(ec, sc, blockingExecutor)
+    new FutureExecutor(ec, sc, blockingExecutor)
   }
 
   type ExecutionParam[A] = ExecutionParams.Free[SchedulerParam, A]
@@ -60,7 +60,7 @@ object FreeScalettoFutureRunner {
   * On top of that, expect bugs, since the implementation is full of unsafe type casts, because Scala's (including
   * Dotty's) type inference cannot cope with the kind of pattern matches found here.
   */
-class FreeScalettoFutureRunner(
+class FutureExecutor(
   ec: ExecutionContext,
   scheduler: Scheduler,
   blockingExecutor: JExecutor,
@@ -72,9 +72,9 @@ class FreeScalettoFutureRunner(
   override val dsl = FreeScaletto
   override val bridge = FreeScalettoFutureBridge
 
-  override type ExecutionParam[A] = FreeScalettoFutureRunner.ExecutionParam[A]
+  override type ExecutionParam[A] = FutureExecutor.ExecutionParam[A]
   override val ExecutionParam: ExecutionParams.WithScheduler[ExecutionParam] =
-    FreeScalettoFutureRunner.ExecutionParam
+    FutureExecutor.ExecutionParam
 
   import dsl._
   import bridge.{Execution, cancelExecution}
@@ -83,7 +83,7 @@ class FreeScalettoFutureRunner(
     prg: A -⚬ B,
     params: ExecutionParam[P],
   ): (Executing[bridge.type, A, B], P) = {
-    val (schedOpt, p) = FreeScalettoFutureRunner.ExecutionParam.extract(params)
+    val (schedOpt, p) = FutureExecutor.ExecutionParam.extract(params)
     val sched = schedOpt.getOrElse(scheduler)
 
     val executing = {
