@@ -120,6 +120,21 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         }.via {
           expectVal(_).assertEquals(43)
         },
+
+      "non-capturing 'closure' (higher-order function)" ->
+        TestCase {
+          val f: Done -⚬ (Done |*| (Done =⚬ Done)) =
+            λ { x =>
+              x |*| (
+                Λ { y => y } // does not capture anything from the outer scope
+              )
+            }
+          val g: (Done |*| (Done =⚬ Done)) -⚬ Done =
+            λ { case d |*| f =>
+              f(d)
+            }
+          λ { d => kit.success(g(f(d))) }
+        },
     )
   }
 }

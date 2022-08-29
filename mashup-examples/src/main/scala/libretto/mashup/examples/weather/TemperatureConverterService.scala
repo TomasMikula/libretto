@@ -51,12 +51,11 @@ object TemperatureConverterService {
   }
 
   private def blueprint: Fun[EmptyResource, ConverterApi] =
-    fun { emptyResource =>
+    fun.? { _ =>
       closure { celsius =>
         celsius match {
           case "celsius" as value =>
             Fahrenheit(value * (9.0/5) + 32)
-              .alsoElim(emptyResource)
         }
       }
     }

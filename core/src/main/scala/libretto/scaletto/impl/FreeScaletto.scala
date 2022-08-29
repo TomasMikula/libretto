@@ -528,24 +528,29 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       discard: Var[A] => Either[lambdas.LinearityViolation, A -⚬ One],
       pos: SourcePos,
     ): $[A =⚬ B] = {
-      import closures.ClosureRes.{NoCapture, NonLinear, NotFound, Success}
+      import closures.ClosureRes.{Capturing, NonCapturing, NonLinear, NotFound}
 
       val bindVar = new Var[A](VarOrigin.Lambda(pos))
       val resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(pos))
 
       closures.closure[A, B](f, bindVar) match {
-        case Success(captured, m, f) =>
+        case Capturing(captured, m, f) =>
           for {
             m <- m.compileM(split(bindVar))
           } yield (captured map csmc.curry(snd(m) > f))(resultVar)
+        case NonCapturing(m, f) =>
+          for {
+            m <- m.compileM(split(bindVar))
+          } yield {
+            val captured0 = lambdas.Expr.one(new Var[One](VarOrigin.OneIntro(pos)))
+            (captured0 map csmc.curry(elimFst > m > f))(resultVar)
+          }
         case NotFound(b) =>
           for {
             discard <- discard(bindVar)
           } yield (b map csmc.curry(elimSnd(discard)))(resultVar)
         case NonLinear(e) =>
           Left(e)
-        case NoCapture(msg) =>
-          throw new NoCaptureException(msg)
       } match {
         case Right(f) => f
         case Left(e)  => raiseError(e)
@@ -565,5 +570,4 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   override class NotLinearException(msg: String) extends Exception(msg)
   override class UnboundVariablesException(vs: Set[Var[?]]) extends Exception
-  override class NoCaptureException(msg: String) extends Exception(msg)
 }
