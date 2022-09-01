@@ -3,8 +3,8 @@ package libretto.scaletto.impl.futurebased
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.{Executor => JExecutor, ScheduledExecutorService, TimeUnit}
 import libretto.{Executing, ExecutionParams, Scheduler}
-import libretto.scaletto.{ScalettoBridge, ScalettoExecutor}
-import libretto.scaletto.impl.FreeScaletto
+import libretto.scaletto.{ScalettoBridge, ScalettoExecution, ScalettoExecutor}
+import libretto.scaletto.impl.{FreeScaletto, bug}
 import libretto.util.Async
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
@@ -95,13 +95,11 @@ class FutureExecutor(
 }
 
 object FreeScalettoFutureBridge extends ScalettoBridge {
-  import ResourceRegistry._
-
   override type Dsl = FreeScaletto.type
   override val dsl = FreeScaletto
-  import dsl._
+  import dsl.-⚬
 
-  override opaque type Execution <: ScalettoExecution = ExecutionImpl
+  override opaque type Execution <: ScalettoExecution[dsl.type] = ExecutionImpl
 
   def execute[A, B](prg: A -⚬ B)(
     ec: ExecutionContext,
@@ -115,154 +113,152 @@ object FreeScalettoFutureBridge extends ScalettoBridge {
 
   def cancelExecution(exn: Execution): Future[Unit] =
     exn.cancel()
+}
 
-  private def bug[A](msg: String): A =
-    throw new AssertionError(
-      s"""$msg
-         |This is a bug, please report at https://github.com/TomasMikula/libretto/issues/new?labels=bug"""
-        .stripMargin
-    )
+private class ExecutionImpl(
+  resourceRegistry: ResourceRegistry,
+)(using
+  ec: ExecutionContext,
+  scheduler: Scheduler,
+  blockingExecutor: JExecutor,
+) extends ScalettoExecution[FreeScaletto.type] {
+  import ResourceRegistry._
 
-  private class ExecutionImpl(
-    resourceRegistry: ResourceRegistry,
-  )(using
-    ec: ExecutionContext,
-    scheduler: Scheduler,
-    blockingExecutor: JExecutor,
-  ) extends ScalettoExecution {
-    override opaque type OutPort[A] = Frontier[A]
-    override opaque type InPort[A] = Frontier[A] => Unit
+  override val dsl = FreeScaletto
+  import dsl._
 
-    def execute[A, B](prg: A -⚬ B): (InPort[A], OutPort[B]) = {
-      val input = Promise[Frontier[A]]
-      val in:  InPort[A]  = fa => input.success(fa)
-      val out: OutPort[B] = Frontier.Deferred(input.future).extendBy(prg)(using resourceRegistry)
-      (in, out)
+  override opaque type OutPort[A] = Frontier[A]
+  override opaque type InPort[A] = Frontier[A] => Unit
+
+  def execute[A, B](prg: A -⚬ B): (InPort[A], OutPort[B]) = {
+    val input = Promise[Frontier[A]]
+    val in:  InPort[A]  = fa => input.success(fa)
+    val out: OutPort[B] = Frontier.Deferred(input.future).extendBy(prg)(using resourceRegistry)
+    (in, out)
+  }
+
+  def cancel(): Future[Unit] = {
+    val openResources: Seq[AcquiredResource[_]] =
+      resourceRegistry.close()
+
+    Future.traverse(openResources) { r =>
+      Async.toFuture(r.releaseAsync(r.resource))
+    }.map(_ => ())
+  }
+
+  override object OutPort extends ScalettoOutPorts {
+    override def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B] =
+      port.extendBy(f)(using resourceRegistry)
+
+    override def split[A, B](port: OutPort[A |*| B]): (OutPort[A], OutPort[B]) =
+      port.splitPair
+
+    override def discardOne(port: OutPort[One]): Unit = {
+      // do nothing
     }
 
-    def cancel(): Future[Unit] = {
-      val openResources: Seq[AcquiredResource[_]] =
-        resourceRegistry.close()
-
-      Future.traverse(openResources) { r =>
-        Async.toFuture(r.releaseAsync(r.resource))
-      }.map(_ => ())
+    override def awaitDone(port: OutPort[Done]): Async[Either[Throwable, Unit]] = {
+      val (complete, res) = Async.promise[Either[Throwable, Unit]]
+      port.toFutureDone.onComplete {
+        case Success(Frontier.DoneNow) => complete(Right(()))
+        case Failure(e)                => complete(Left(e))
+      }
+      res
     }
 
-    override object OutPort extends ScalettoOutPorts {
-      override def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B] =
-        port.extendBy(f)(using resourceRegistry)
-
-      override def split[A, B](port: OutPort[A |*| B]): (OutPort[A], OutPort[B]) =
-        port.splitPair
-
-      override def discardOne(port: OutPort[One]): Unit = {
-        // do nothing
+    override def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]] = {
+      val (complete, res) = Async.promise[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
+      port.futureEither.onComplete {
+        case Success(res) => complete(Right(res))
+        case Failure(e)   => complete(Left(e))
       }
-
-      override def awaitDone(port: OutPort[Done]): Async[Either[Throwable, Unit]] = {
-        val (complete, res) = Async.promise[Either[Throwable, Unit]]
-        port.toFutureDone.onComplete {
-          case Success(Frontier.DoneNow) => complete(Right(()))
-          case Failure(e)                => complete(Left(e))
-        }
-        res
-      }
-
-      override def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]] = {
-        val (complete, res) = Async.promise[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
-        port.futureEither.onComplete {
-          case Success(res) => complete(Right(res))
-          case Failure(e)   => complete(Left(e))
-        }
-        res
-      }
-
-      override def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A] =
-        port.chooseL
-
-      override def chooseRight[A, B](port: OutPort[A |&| B]): OutPort[B] =
-        port.chooseR
-
-      override def functionInputOutput[I, O](port: OutPort[I =⚬ O]): (InPort[I], OutPort[O]) = {
-        val (in, out) = port.splitPair
-        val in2: InPort[I] = i => in.fulfill(i)
-        (in2, out)
-      }
-
-      override def awaitVal[A](port: OutPort[Val[A]]): Async[Either[Throwable, A]] = {
-        val (complete, res) = Async.promise[Either[Throwable, A]]
-        port.toFutureValue.onComplete {
-          case Success(a) => complete(Right(a))
-          case Failure(e) => complete(Left(e))
-        }
-        res
-      }
+      res
     }
 
-    override object InPort extends ScalettoInPorts {
-      override def contramap[A, B](port: InPort[B])(f: A -⚬ B): InPort[A] =
-        a => port(a.extendBy(f)(using resourceRegistry))
+    override def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A] =
+      port.chooseL
 
-      override def split[A, B](port: InPort[A |*| B]): (InPort[A], InPort[B]) = {
-        val (fna, fa) = Frontier.promise[A]
-        val (fnb, fb) = Frontier.promise[B]
-        port(Frontier.Pair(fa, fb))
-        (
-          fa => fna.fulfill(fa),
-          fb => fnb.fulfill(fb)
-        )
+    override def chooseRight[A, B](port: OutPort[A |&| B]): OutPort[B] =
+      port.chooseR
+
+    override def functionInputOutput[I, O](port: OutPort[I =⚬ O]): (InPort[I], OutPort[O]) = {
+      val (in, out) = port.splitPair
+      val in2: InPort[I] = i => in.fulfill(i)
+      (in2, out)
+    }
+
+    override def awaitVal[A](port: OutPort[Val[A]]): Async[Either[Throwable, A]] = {
+      val (complete, res) = Async.promise[Either[Throwable, A]]
+      port.toFutureValue.onComplete {
+        case Success(a) => complete(Right(a))
+        case Failure(e) => complete(Left(e))
       }
+      res
+    }
+  }
 
-      override def discardOne(port: InPort[One]): Unit =
-        port(Frontier.One)
+  override object InPort extends ScalettoInPorts {
+    override def contramap[A, B](port: InPort[B])(f: A -⚬ B): InPort[A] =
+      a => port(a.extendBy(f)(using resourceRegistry))
 
-      override def supplyDone(port: InPort[Done]): Unit = {
-        port(Frontier.DoneNow)
-      }
-
-      override def supplyLeft[A, B](port: InPort[A |+| B]): InPort[A] = {
-        val (fna, fa) = Frontier.promise[A]
-        port(Frontier.InjectL(fa))
-        fa => fna.fulfill(fa)
-      }
-
-      override def supplyRight[A, B](port: InPort[A |+| B]): InPort[B] = {
-        val (fnb, fb) = Frontier.promise[B]
-        port(Frontier.InjectR(fb))
+    override def split[A, B](port: InPort[A |*| B]): (InPort[A], InPort[B]) = {
+      val (fna, fa) = Frontier.promise[A]
+      val (fnb, fb) = Frontier.promise[B]
+      port(Frontier.Pair(fa, fb))
+      (
+        fa => fna.fulfill(fa),
         fb => fnb.fulfill(fb)
-      }
-
-      override def supplyChoice[A, B](port: InPort[A |&| B]): Async[Either[Throwable, Either[InPort[A], InPort[B]]]] = {
-        val (complete, res) = Async.promise[Either[Throwable, Either[InPort[A], InPort[B]]]]
-
-        port(Frontier.Choice(
-          { () =>
-            val (fna, fa) = Frontier.promise[A]
-            complete(Right(Left(fa => fna.fulfill(fa))))
-            fa
-          },
-          { () =>
-            val (fnb, fb) = Frontier.promise[B]
-            complete(Right(Right(fb => fnb.fulfill(fb))))
-            fb
-          },
-          e => complete(Left(e))
-        ))
-
-        res
-      }
-
-      override def functionInputOutput[I, O](port: InPort[I =⚬ O]): (OutPort[I], InPort[O]) = {
-        val (ni, i) = Frontier.promise[I]
-        val (no, o) = Frontier.promise[O]
-        port(Frontier.Pair(ni, o))
-        (i, o => no.fulfill(o))
-      }
-
-      override def supplyVal[A](port: InPort[Val[A]], value: A): Unit =
-        port(Frontier.Value(value))
+      )
     }
+
+    override def discardOne(port: InPort[One]): Unit =
+      port(Frontier.One)
+
+    override def supplyDone(port: InPort[Done]): Unit = {
+      port(Frontier.DoneNow)
+    }
+
+    override def supplyLeft[A, B](port: InPort[A |+| B]): InPort[A] = {
+      val (fna, fa) = Frontier.promise[A]
+      port(Frontier.InjectL(fa))
+      fa => fna.fulfill(fa)
+    }
+
+    override def supplyRight[A, B](port: InPort[A |+| B]): InPort[B] = {
+      val (fnb, fb) = Frontier.promise[B]
+      port(Frontier.InjectR(fb))
+      fb => fnb.fulfill(fb)
+    }
+
+    override def supplyChoice[A, B](port: InPort[A |&| B]): Async[Either[Throwable, Either[InPort[A], InPort[B]]]] = {
+      val (complete, res) = Async.promise[Either[Throwable, Either[InPort[A], InPort[B]]]]
+
+      port(Frontier.Choice(
+        { () =>
+          val (fna, fa) = Frontier.promise[A]
+          complete(Right(Left(fa => fna.fulfill(fa))))
+          fa
+        },
+        { () =>
+          val (fnb, fb) = Frontier.promise[B]
+          complete(Right(Right(fb => fnb.fulfill(fb))))
+          fb
+        },
+        e => complete(Left(e))
+      ))
+
+      res
+    }
+
+    override def functionInputOutput[I, O](port: InPort[I =⚬ O]): (OutPort[I], InPort[O]) = {
+      val (ni, i) = Frontier.promise[I]
+      val (no, o) = Frontier.promise[O]
+      port(Frontier.Pair(ni, o))
+      (i, o => no.fulfill(o))
+    }
+
+    override def supplyVal[A](port: InPort[Val[A]], value: A): Unit =
+      port(Frontier.Value(value))
   }
 
   private sealed trait Frontier[A] {
@@ -1442,80 +1438,80 @@ object FreeScalettoFutureBridge extends ScalettoBridge {
     }
   }
 
-  private class ResourceRegistry {
-    import ResourceRegistry._
-
-    // negative value indicates registry closed
-    private var lastResId: Long =
-      0L
-
-    private val resourceMap: mutable.Map[Long, AcquiredResource[_]] =
-      mutable.Map()
-
-    def registerResource[R](resource: R, releaseAsync: R => Async[Unit]): RegisterResult =
-      synchronized {
-        if (lastResId < 0L) {
-          assert(resourceMap.isEmpty)
-          RegisterResult.RegistryClosed
-        } else {
-          lastResId += 1
-          val id = lastResId
-          resourceMap.put(id, AcquiredResource(resource, releaseAsync))
-          RegisterResult.Registered(resId(id))
-        }
-      }
-
-    def unregisterResource(id: ResId): UnregisterResult =
-      synchronized {
-        if (lastResId < 0l) {
-          assert(resourceMap.isEmpty)
-          UnregisterResult.RegistryClosed
-        } else {
-          resourceMap.remove(id.value) match {
-            case None => UnregisterResult.NotFound
-            case Some(r) => UnregisterResult.Unregistered(r)
-          }
-        }
-      }
-
-    def close(): Seq[AcquiredResource[_]] =
-      synchronized {
-        if (lastResId < 0L) {
-          assert(resourceMap.isEmpty)
-          Seq.empty
-        } else {
-          lastResId = Long.MinValue
-          val result = resourceMap.values.toSeq
-          resourceMap.clear()
-          result
-        }
-      }
-  }
-
-  private object ResourceRegistry {
-    opaque type ResId = Long
-    private def resId(value: Long): ResId = value
-    extension (resId: ResId) {
-      def value: Long = resId
-    }
-
-    sealed trait RegisterResult
-    object RegisterResult {
-      case class Registered(id: ResId) extends RegisterResult
-      case object RegistryClosed extends RegisterResult
-    }
-
-    sealed trait UnregisterResult
-    object UnregisterResult {
-      case class Unregistered(value: AcquiredResource[_]) extends UnregisterResult
-      case object NotFound extends UnregisterResult
-      case object RegistryClosed extends UnregisterResult
-    }
-
-    case class AcquiredResource[A](resource: A, releaseAsync: A => Async[Unit])
-  }
-
   private case class Crash(msg: String) extends Exception(msg)
+}
+
+private class ResourceRegistry {
+  import ResourceRegistry._
+
+  // negative value indicates registry closed
+  private var lastResId: Long =
+    0L
+
+  private val resourceMap: mutable.Map[Long, AcquiredResource[_]] =
+    mutable.Map()
+
+  def registerResource[R](resource: R, releaseAsync: R => Async[Unit]): RegisterResult =
+    synchronized {
+      if (lastResId < 0L) {
+        assert(resourceMap.isEmpty)
+        RegisterResult.RegistryClosed
+      } else {
+        lastResId += 1
+        val id = lastResId
+        resourceMap.put(id, AcquiredResource(resource, releaseAsync))
+        RegisterResult.Registered(resId(id))
+      }
+    }
+
+  def unregisterResource(id: ResId): UnregisterResult =
+    synchronized {
+      if (lastResId < 0l) {
+        assert(resourceMap.isEmpty)
+        UnregisterResult.RegistryClosed
+      } else {
+        resourceMap.remove(id.value) match {
+          case None => UnregisterResult.NotFound
+          case Some(r) => UnregisterResult.Unregistered(r)
+        }
+      }
+    }
+
+  def close(): Seq[AcquiredResource[_]] =
+    synchronized {
+      if (lastResId < 0L) {
+        assert(resourceMap.isEmpty)
+        Seq.empty
+      } else {
+        lastResId = Long.MinValue
+        val result = resourceMap.values.toSeq
+        resourceMap.clear()
+        result
+      }
+    }
+}
+
+private object ResourceRegistry {
+  opaque type ResId = Long
+  private def resId(value: Long): ResId = value
+  extension (resId: ResId) {
+    def value: Long = resId
+  }
+
+  sealed trait RegisterResult
+  object RegisterResult {
+    case class Registered(id: ResId) extends RegisterResult
+    case object RegistryClosed extends RegisterResult
+  }
+
+  sealed trait UnregisterResult
+  object UnregisterResult {
+    case class Unregistered(value: AcquiredResource[_]) extends UnregisterResult
+    case object NotFound extends UnregisterResult
+    case object RegistryClosed extends UnregisterResult
+  }
+
+  case class AcquiredResource[A](resource: A, releaseAsync: A => Async[Unit])
 }
 
 class SchedulerFromScheduledExecutorService(
