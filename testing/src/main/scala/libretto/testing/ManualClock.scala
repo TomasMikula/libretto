@@ -32,22 +32,19 @@ object ManualClock {
 
     var now: FiniteDuration = 0.seconds
 
-    override def schedule[A](
+    override def schedule(
       delay: FiniteDuration,
-      action: () => A,
-    )(using ec: ExecutionContext): Future[A] = {
-      val pa = Promise[A]
+      action: () => Unit,
+    ): Unit = {
       if (delay.length == 0L) {
-        ec.execute(() => pa.success(action()))
-        pa.future
+        action()
       } else {
         this.synchronized {
           queue.addOne(ScheduledAction(
             fireAt = now + delay,
-            () => ec.execute(() => pa.success(action())),
+            action,
           ))
         }
-        pa.future
       }
     }
 

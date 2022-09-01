@@ -52,7 +52,7 @@ object FutureExecutor {
   }
 }
 
-/** Runner of [[FreeScalaDSL]] that returns a [[Future]].
+/** Executor of [[FreeScaletto]] based on [[Future]]s and [[Promise]]s.
   *
   * It is known to be flawed by design in that it might create long (potentially infinite) chains of [[Promise]]s.
   * This could be solved with a custom implementation of promises/futures that support unregistration of listeners.
@@ -85,12 +85,7 @@ class FutureExecutor(
   ): (Executing[bridge.type, A, B], P) = {
     val (schedOpt, p) = FutureExecutor.ExecutionParam.extract(params)
     val sched = schedOpt.getOrElse(scheduler)
-
-    val executing = {
-      val exctng = FreeScalettoFutureBridge.execute(prg)(ec, sched, blockingExecutor)
-      new Executing(using bridge)(exctng.execution, exctng.inPort, exctng.outPort)
-    }
-
+    val executing = FreeScalettoFutureBridge.execute(prg)(ec, sched, blockingExecutor)
     (executing, p)
   }
 
@@ -107,20 +102,14 @@ object FreeScalettoFutureBridge extends ScalettoBridge {
 
   override opaque type Execution <: ScalettoExecution = ExecutionImpl
 
-  final class Executing[A, B](
-    val execution: Execution,
-    val inPort: execution.InPort[A],
-    val outPort: execution.OutPort[B],
-  )
-
   def execute[A, B](prg: A -⚬ B)(
     ec: ExecutionContext,
     scheduler: Scheduler,
     blockingExecutor: JExecutor,
-  ): Executing[A, B] = {
+  ): Executing[this.type, A, B] = {
     val execution = new ExecutionImpl(new ResourceRegistry)(using ec, scheduler, blockingExecutor)
     val (in, out) = execution.execute(prg)
-    Executing(execution, in, out)
+    Executing(using this)(execution, in, out)
   }
 
   def cancelExecution(exn: Execution): Future[Unit] =
@@ -702,7 +691,11 @@ object FreeScalettoFutureBridge extends ScalettoBridge {
           this
             .asInstanceOf[Frontier[Val[FiniteDuration]]]
             .toFutureValue
-            .flatMap(d => scheduler.schedule(d, () => DoneNow))
+            .flatMap { d =>
+              val p = Promise[DoneNow.type]()
+              scheduler.schedule(d, () => p.success(DoneNow))
+              p.future
+            }
             .asDeferredFrontier
 
         case -⚬.LiftEither() =>
@@ -1527,9 +1520,6 @@ object FreeScalettoFutureBridge extends ScalettoBridge {
 class SchedulerFromScheduledExecutorService(
     scheduler: ScheduledExecutorService,
 ) extends Scheduler {
-  override def schedule[A](d: FiniteDuration, f: () => A)(using unused: ExecutionContext): Future[A] = {
-    val pa = Promise[A]()
-    scheduler.schedule(() => pa.success(f()), d.length, d.unit)
-    pa.future
-  }
+  override def schedule(d: FiniteDuration, f: () => Unit): Unit =
+    scheduler.schedule((() => f()): Runnable, d.length, d.unit)
 }
