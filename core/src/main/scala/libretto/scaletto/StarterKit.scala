@@ -2,7 +2,8 @@ package libretto.scaletto
 
 import java.util.concurrent.{Executor => JExecutor, Executors, ScheduledExecutorService}
 import libretto.{CoreLib, CoreStreams, ClosedLib, InvertLib}
-import libretto.scaletto.impl.{FreeScaletto, FreeScalettoFutureBridge, FutureExecutor}
+import libretto.scaletto.impl.FreeScaletto
+import libretto.scaletto.impl.futurebased.{FreeScalettoFutureBridge, FutureExecutor}
 import libretto.util.Async
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}

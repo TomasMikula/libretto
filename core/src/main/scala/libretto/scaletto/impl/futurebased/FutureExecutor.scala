@@ -1,9 +1,10 @@
-package libretto.scaletto.impl
+package libretto.scaletto.impl.futurebased
 
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.{Executor => JExecutor, ScheduledExecutorService, TimeUnit}
 import libretto.{Executing, ExecutionParams, Scheduler}
 import libretto.scaletto.{ScalettoBridge, ScalettoExecutor}
+import libretto.scaletto.impl.FreeScaletto
 import libretto.util.Async
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
