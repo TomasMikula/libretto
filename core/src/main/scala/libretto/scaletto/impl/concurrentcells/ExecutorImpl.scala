@@ -1,10 +1,11 @@
-package libretto.scaletto.impl.uberconcurrent
+package libretto.scaletto.impl.concurrentcells
 
 import libretto.{Executing, ExecutionParams}
 import libretto.scaletto.ScalettoExecutor
 import libretto.scaletto.impl.FreeScaletto
 import libretto.util.Async
 import libretto.Scheduler
+import scala.concurrent.ExecutionContext
 
 object ExecutorImpl {
   type ExecutionParam[A] = ExecutionParams.Free[SchedulerParam, A]
@@ -41,6 +42,7 @@ object ExecutorImpl {
 }
 
 class ExecutorImpl(
+  ec: ExecutionContext,
   scheduler: Scheduler,
 ) extends ScalettoExecutor {
   override type Dsl = FreeScaletto.type
@@ -62,7 +64,7 @@ class ExecutorImpl(
   ): (Executing[bridge.type, A, B], P) = {
     val (schedOpt, p) = ExecutorImpl.ExecutionParam.extract(params)
     val sched = schedOpt.getOrElse(scheduler)
-    val executing = BridgeImpl.execute(prg)(sched)
+    val executing = BridgeImpl.execute(prg)(ec, sched)
     (executing, p)
   }
 
