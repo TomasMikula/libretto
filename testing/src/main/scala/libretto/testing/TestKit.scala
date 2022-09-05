@@ -104,7 +104,7 @@ trait TestKit {
 
   val bridge: CoreBridge.Of[dsl.type]
 
-  import dsl.{-⚬, |*|, |+|, Done}
+  import dsl.{-⚬, |*|, |+|, Done, Ping}
   import bridge.Execution
 
   type Assertion[A]
@@ -146,6 +146,12 @@ trait TestKit {
     exn.OutPort.awaitDone(port).map {
       case Left(e)   => TestResult.success(e)
       case Right(()) => TestResult.failure(using pos)("Expected crash, but got Done")
+    }
+
+  def expectPing(using exn: Execution)(port: exn.OutPort[Ping]): Outcome[Unit] =
+    exn.OutPort.awaitPing(port).map {
+      case Left(e)   => TestResult.crash(e)
+      case Right(()) => TestResult.success(())
     }
 
   def expectLeft[A, B](using exn: Execution, pos: SourcePos)(port: exn.OutPort[A |+| B]): Outcome[exn.OutPort[A]] =

@@ -31,6 +31,8 @@ trait CoreExecution[DSL <: CoreDSL] {
 
     def awaitDone(port: OutPort[Done]): Async[Either[Throwable, Unit]]
 
+    def awaitPing(port: OutPort[Ping]): Async[Either[Throwable, Unit]]
+
     def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
 
     def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A]
@@ -46,6 +48,8 @@ trait CoreExecution[DSL <: CoreDSL] {
     def discardOne(port: InPort[One]): Unit
 
     def supplyDone(port: InPort[Done]): Unit
+
+    def supplyPing(port: InPort[Ping]): Unit
 
     def supplyLeft[A, B](port: InPort[A |+| B]): InPort[A]
 

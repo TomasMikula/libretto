@@ -60,6 +60,15 @@ private class ExecutionImpl(
       res
     }
 
+    override def awaitPing(port: OutPort[Ping]): Async[Either[Throwable, Unit]] = {
+      val (complete, res) = Async.promise[Either[Throwable, Unit]]
+      port.toFuturePing.onComplete {
+        case Success(Frontier.PingNow) => complete(Right(()))
+        case Failure(e)                => complete(Left(e))
+      }
+      res
+    }
+
     override def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]] = {
       val (complete, res) = Async.promise[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
       port.futureEither.onComplete {
@@ -108,9 +117,11 @@ private class ExecutionImpl(
     override def discardOne(port: InPort[One]): Unit =
       port(Frontier.One)
 
-    override def supplyDone(port: InPort[Done]): Unit = {
+    override def supplyDone(port: InPort[Done]): Unit =
       port(Frontier.DoneNow)
-    }
+
+    override def supplyPing(port: InPort[Ping]): Unit =
+      port(Frontier.PingNow)
 
     override def supplyLeft[A, B](port: InPort[A |+| B]): InPort[A] = {
       val (fna, fa) = Frontier.promise[A]
