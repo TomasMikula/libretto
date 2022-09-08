@@ -123,24 +123,50 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         prg > success
       },
 
-      "delayed injectL" -> TestCase {
-        // 'A' delayed by 40 millis
-        val a: Done -⚬ Val[Char] =
-          delay(40.millis) > constVal('A')
+      "delayed injectL" -> TestCase
+        .configure(ExecutionParam.manualClock)
+        .interactWith {
+          // delay of 40 millis
+          val a: Done -⚬ Done =
+            delay(40.millis)
 
-        // 'B' delayed by 30 + 20 = 50 millis.
-        // We are testing that the second timer starts ticking only after the delayed inject (joinInjectL).
-        val b: Done -⚬ Val[Char] = {
-          val delayedInjectL: Done -⚬ (Val[Char] |+| Val[Char]) =
-            forkMap(delay(30.millis), constVal('B')) > awaitInjectL
-          delayedInjectL > either(
-            introFst[Val[Char], Done](done > delay(20.millis)).awaitFst,
-            id,
-          )
+          // delay of 30 + 20 = 50 millis
+          // We are testing that the second timer starts ticking only after the delayed inject (awaitInjectL).
+          // The Ping in the output notifies of the first timer firing.
+          val b: Done -⚬ (Ping |*| Done) = {
+            val delayedInjectL: Done -⚬ (Done |+| Done) =
+              forkMap(delay(30.millis), id[Done]) > awaitInjectL
+            delayedInjectL > notifyEither > λ { case ping |*| e =>
+              val c =
+                e > |+|.signalL > either(
+                  λ { case d |*| b => b.waitFor(d > delay(20.millis)) },
+                  id,
+                )
+              ping |*| c
+            }
+          }
+
+          val prg: Done -⚬ (Ping |*| (Done |+| Done)) =
+            λ.+ { d =>
+              val d1 = a(d)
+              val p |*| d2 = b(d)
+              p |*| raceDone(d1 |*| d2)
+            }
+
+          prg
         }
-
-        raceKeepWinner(a, b) > assertEquals('A')
-      },
+        .via { (port, clock) =>
+          for {
+            pe <- splitOut(port)
+            (ping, e) = pe
+            _ = clock.advanceBy(31.millis)
+            _ <- expectPing(ping)
+            _ = clock.advanceBy(10.millis)
+            d <- expectLeft(e)
+            _ = clock.advanceBy(10.millis)
+            _ <- expectDone(d)
+          } yield ()
+        },
 
       "delayed chooseL" -> TestCase {
         // 'A' delayed by 40 millis
