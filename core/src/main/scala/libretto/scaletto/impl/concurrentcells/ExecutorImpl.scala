@@ -1,5 +1,6 @@
 package libretto.scaletto.impl.concurrentcells
 
+import java.util.concurrent.{Executor => JExecutor, ExecutorService, Executors, ScheduledExecutorService}
 import libretto.{Executing, ExecutionParams}
 import libretto.scaletto.ScalettoExecutor
 import libretto.scaletto.impl.FreeScaletto
@@ -39,11 +40,41 @@ object ExecutorImpl {
   case class SchedulerParam[A](scheduler: Scheduler)(using ev: A =:= Unit) {
     def fromUnit(u: Unit): A = ev.flip(u)
   }
+
+  def factory: ScalettoExecutor.Factory =
+    new ScalettoExecutor.Factory {
+      override type Dsl = FreeScaletto.type
+      override type Bridge = BridgeImpl.type
+
+      val dsl: Dsl = FreeScaletto
+      val bridge: Bridge = BridgeImpl
+
+      override type ExecutorResource =
+        (ScheduledExecutorService, ExecutorService, ScalettoExecutor.Of[dsl.type, bridge.type])
+
+      override def access(r: ExecutorResource): ScalettoExecutor.Of[dsl.type, bridge.type] =
+        r._3
+
+      override def create(): ExecutorResource = {
+        val scheduledExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors())
+        val scheduler: Scheduler = (d, f) => scheduledExecutor.schedule((() => f()): Runnable, d.length, d.unit)
+        val ec = ExecutionContext.fromExecutor(scheduledExecutor)
+        val blockingExecutor = Executors.newCachedThreadPool()
+        val executor = new ExecutorImpl(ec, scheduler, blockingExecutor)
+        (scheduledExecutor, blockingExecutor, executor)
+      }
+
+      override def shutdown(r: ExecutorResource): Unit = {
+        r._2.shutdownNow()
+        r._1.shutdownNow()
+      }
+    }
 }
 
 class ExecutorImpl(
   ec: ExecutionContext,
   scheduler: Scheduler,
+  blockingExecutor: JExecutor,
 ) extends ScalettoExecutor {
   override type Dsl = FreeScaletto.type
   override val dsl: Dsl = FreeScaletto
