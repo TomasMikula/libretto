@@ -1,6 +1,6 @@
 package libretto.scaletto.impl.futurebased
 
-import java.util.concurrent.{Executor => JExecutor, ScheduledExecutorService}
+import java.util.concurrent.{Executor => JExecutor, Executors, ExecutorService, ScheduledExecutorService}
 import libretto.{Executing, ExecutionParams, Scheduler}
 import libretto.scaletto.ScalettoExecutor
 import libretto.scaletto.impl.FreeScaletto
@@ -46,6 +46,33 @@ object FutureExecutor {
   case class SchedulerParam[A](scheduler: Scheduler)(using ev: A =:= Unit) {
     def fromUnit(u: Unit): A = ev.flip(u)
   }
+
+  val defaultFactory: ScalettoExecutor.Factory.Of[FreeScaletto.type, BridgeImpl.type] =
+    new ScalettoExecutor.Factory {
+      override type Dsl = FreeScaletto.type
+      override type Bridge = BridgeImpl.type
+
+      override val dsl = FreeScaletto
+      override val bridge = BridgeImpl
+
+      override type ExecutorResource =
+        (ScheduledExecutorService, ExecutorService, ScalettoExecutor.Of[dsl.type, bridge.type])
+
+      override def access(r: ExecutorResource): ScalettoExecutor.Of[dsl.type, bridge.type] =
+        r._3
+
+      override def create(): ExecutorResource = {
+        val scheduler = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors())
+        val blockingExecutor = Executors.newCachedThreadPool()
+        val executor = FutureExecutor(scheduler, blockingExecutor)
+        (scheduler, blockingExecutor, executor)
+      }
+
+      override def shutdown(r: ExecutorResource): Unit = {
+        r._2.shutdownNow()
+        r._1.shutdownNow()
+      }
+    }
 }
 
 /** Executor of [[FreeScaletto]] based on [[Future]]s and [[Promise]]s.

@@ -13,12 +13,14 @@ object StarterKit extends StarterKit
 class StarterKit extends AbstractStarterKit(
   FreeScaletto,
   BridgeImpl,
+  FutureExecutor.defaultFactory,
   (scheduler, blockingExecutor) => FutureExecutor(scheduler, blockingExecutor),
 )
 
 abstract class AbstractStarterKit(
   val dsl: Scaletto,
   val bridge: ScalettoBridge.Of[dsl.type],
+  val executorFactory: ScalettoExecutor.Factory.Of[dsl.type, bridge.type],
   val executor0: (ScheduledExecutorService, JExecutor) => ScalettoExecutor.Of[dsl.type, bridge.type],
 ) {
   val coreLib: CoreLib[dsl.type] =
