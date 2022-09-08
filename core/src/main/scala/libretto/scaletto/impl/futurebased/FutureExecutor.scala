@@ -58,6 +58,9 @@ object FutureExecutor {
       override type ExecutorResource =
         (ScheduledExecutorService, ExecutorService, ScalettoExecutor.Of[dsl.type, bridge.type])
 
+      override def name: String =
+        "FutureExecutor.defaultFactory"
+
       override def access(r: ExecutorResource): ScalettoExecutor.Of[dsl.type, bridge.type] =
         r._3
 

@@ -57,6 +57,7 @@ object Executor {
 
     type ExecutorResource
 
+    def name: String
     def create(): ExecutorResource
     def access(r: ExecutorResource): Executor.Of[dsl.type, bridge.type]
     def shutdown(r: ExecutorResource): Unit
