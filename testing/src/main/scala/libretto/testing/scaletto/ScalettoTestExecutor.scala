@@ -180,8 +180,8 @@ object ScalettoTestExecutor {
       override val testKit: ScalettoTestKitFromBridge[ef.dsl.type, ef.bridge.type] =
         new ScalettoTestKitFromBridge(ef.dsl, ef.bridge)
 
-      override def name =
-        s"${ScalettoTestExecutor.getClass.getSimpleName()} default"
+      override def name: String =
+        s"ScalettoTestExecutor.defaultFactory(${ef.name})"
 
       override type ExecutorResource = (ef.ExecutorResource, TestExecutor[testKit.type])
 

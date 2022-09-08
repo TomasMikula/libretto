@@ -36,35 +36,6 @@ object ScalettoExecutor {
       Factory { type Dsl = DSL; type Bridge = BRIDGE }
   }
 
-  private[libretto] val defaultFactory0: ScalettoExecutor.Factory.Of[StarterKit.dsl.type, StarterKit.bridge.type] =
-    new ScalettoExecutor.Factory {
-      import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
-
-      override type Dsl = StarterKit.dsl.type
-      override type Bridge = StarterKit.bridge.type
-
-      override val dsl = StarterKit.dsl
-      override val bridge = StarterKit.bridge
-
-      override type ExecutorResource =
-        (ScheduledExecutorService, ExecutorService, ScalettoExecutor.Of[dsl.type, bridge.type])
-
-      override def access(r: ExecutorResource): ScalettoExecutor.Of[dsl.type, bridge.type] =
-        r._3
-
-      override def create(): ExecutorResource = {
-        val scheduler = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors())
-        val blockingExecutor = Executors.newCachedThreadPool()
-        val executor = StarterKit.executor(blockingExecutor)(scheduler)
-        (scheduler, blockingExecutor, executor)
-      }
-
-      override def shutdown(r: ExecutorResource): Unit = {
-        r._2.shutdownNow()
-        r._1.shutdownNow()
-      }
-    }
-
   val defaultFactory: ScalettoExecutor.Factory =
-    defaultFactory0
+    libretto.scaletto.impl.futurebased.FutureExecutor.defaultFactory
 }
