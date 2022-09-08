@@ -52,6 +52,9 @@ object ExecutorImpl {
       override type ExecutorResource =
         (ScheduledExecutorService, ExecutorService, ScalettoExecutor.Of[dsl.type, bridge.type])
 
+      override def name =
+        "concurrentcells"
+
       override def access(r: ExecutorResource): ScalettoExecutor.Of[dsl.type, bridge.type] =
         r._3
 

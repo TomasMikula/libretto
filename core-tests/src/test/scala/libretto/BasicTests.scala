@@ -3,7 +3,7 @@ package libretto
 import java.util.concurrent.{Executors, ScheduledExecutorService}
 import libretto.Functor._
 import libretto.scaletto.ScalettoLib
-import libretto.scaletto.impl.concurrentcells
+import libretto.scaletto.impl.{concurrentcells, futurebased}
 import libretto.testing.{TestCase, TestExecutor, TestKit}
 import libretto.testing.scaletto.{ScalettoTestExecutor, ScalettoTestKit}
 import libretto.testing.scalatest.ScalatestSuite
@@ -33,7 +33,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
 
   override def testExecutors: List[TestExecutor.Factory[ScalettoTestKit]] =
     List(
-      ScalettoTestExecutor.defaultFactory,
+      ScalettoTestExecutor.defaultFactory(futurebased.FutureExecutor.defaultFactory),
       ScalettoTestExecutor.defaultFactory(concurrentcells.ExecutorImpl.factory),
     )
 
