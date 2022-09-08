@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-ThisBuild / scalaVersion := "3.2.0-RC4"
+ThisBuild / scalaVersion := "3.2.0"
 
 ThisBuild / organization := "dev.continuously"
 
