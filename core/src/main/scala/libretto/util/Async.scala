@@ -1,9 +1,10 @@
 package libretto.util
 
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.BinaryOperator
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success, Try}
 
 sealed trait Async[+A] {
@@ -109,6 +110,10 @@ object Async {
         pa.future
     }
 
-  def await[A](a: Async[A]): A =
-    Await.result(toFuture(a), Duration.Inf)
+  def await[A](timeout: FiniteDuration)(a: Async[A]): Option[A] =
+    try {
+      Some(Await.result(toFuture(a), timeout))
+    } catch {
+      case e: TimeoutException => None
+    }
 }

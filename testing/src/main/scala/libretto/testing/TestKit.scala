@@ -130,6 +130,7 @@ trait TestKit {
         case TestResult.Success(a)           => f(a)
         case TestResult.Failure(msg, pos, e) => Async.now(TestResult.Failure(msg, pos, e))
         case TestResult.Crash(e)             => Async.now(TestResult.Crash(e))
+        case TestResult.TimedOut(d)          => Async.now(TestResult.TimedOut(d))
       }
   }
 
