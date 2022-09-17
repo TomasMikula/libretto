@@ -2,11 +2,14 @@ package libretto.testing
 
 import libretto.testing.TestKit.dsl
 import libretto.util.SourcePos
+import scala.concurrent.duration._
 
 sealed trait TestCase[TK <: TestKit]
 
 object TestCase {
-  sealed trait Single[TK <: TestKit] extends TestCase[TK]
+  sealed trait Single[TK <: TestKit] extends TestCase[TK] {
+    def withTimeout(d: FiniteDuration): TestCase[TK]
+  }
 
   sealed trait SingleProgram[TK <: TestKit] extends Single[TK] {
     val testKit: TK
@@ -25,24 +28,34 @@ object TestCase {
     val conductor: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[X]
 
     val postStop: X => Outcome[Unit]
+
+    val timeout: FiniteDuration
+
+    override def withTimeout(d: FiniteDuration): TestCase[TK] =
+      parameterizedExecAndCheck(using testKit)(body, params, conductor(_, _), postStop, d)
   }
 
   class OutcomeOnly[TK <: TestKit](
     val testKit: TK,
     val body: () => testKit.Outcome[Unit],
-  ) extends Single[TK]
+    val timeout: FiniteDuration,
+  ) extends Single[TK] {
+    override def withTimeout(d: FiniteDuration): TestCase[TK] =
+      OutcomeOnly(testKit, body, d)
+  }
 
   case class Multiple[TK <: TestKit](
     cases: List[(String, TestCase[TK])],
   ) extends TestCase[TK]
 
-  def parameterized[A, Q, B](using kit: TestKit)(
+  def parameterizedExecAndCheck[TK <: TestKit, A, Q, B](using kit: TK)(
     body0: dsl.-⚬[dsl.Done, A],
     params0: kit.ExecutionParam[Q],
     conductor0: (exn: kit.bridge.Execution) ?=> (exn.OutPort[A], Q) => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
-  ): TestCase[kit.type] =
-    new SingleProgram[kit.type] {
+    timeout0: FiniteDuration = 1.second,
+  ): TestCase[TK] =
+    new SingleProgram[TK] {
       override type O = A
       override type P = Q
       override type X = B
@@ -51,6 +64,7 @@ object TestCase {
       override val params = params0
       override val conductor = conductor0(_, _)
       override val postStop = postStop0
+      override val timeout = timeout0
     }
 
   private def apply[A, B](using kit: TestKit)(
@@ -58,7 +72,7 @@ object TestCase {
     conductor0: (exn: kit.bridge.Execution) ?=> exn.OutPort[A] => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
   ): TestCase[kit.type] =
-    parameterized[A, Unit, B](
+    parameterizedExecAndCheck[kit.type, A, Unit, B](
       body0,
       kit.ExecutionParam.unit,
       (pa, _) => conductor0(pa),
@@ -76,12 +90,12 @@ object TestCase {
   ): TestCase[kit.type] =
     apply[O, Unit](body, conduct(_), kit.monadOutcome.pure)
 
-  def parameterized[O, P](using kit: TestKit)(
+  def parameterizedExec[O, P](using kit: TestKit)(
     body: kit.dsl.-⚬[kit.dsl.Done, O],
     params: kit.ExecutionParam[P],
     conduct: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit],
   ): TestCase[kit.type] =
-    parameterized[O, P, Unit](body, params, conduct(_, _), kit.monadOutcome.pure)
+    parameterizedExecAndCheck[kit.type, O, P, Unit](body, params, conduct(_, _), kit.monadOutcome.pure)
 
   def multiple[TK <: TestKit](
     cases: (String, TestCase[TK])*,
@@ -90,8 +104,9 @@ object TestCase {
 
   def testOutcome[TK <: TestKit](using kit: TestKit)(
     body: => kit.Outcome[Unit],
+    timeout: FiniteDuration = 1.second,
   ): TestCase[kit.type] =
-    new OutcomeOnly[kit.type](kit, () => body)
+    new OutcomeOnly[kit.type](kit, () => body, timeout)
 
   def configure[P](using kit: TestKit)(
     params: kit.ExecutionParam[P],
@@ -129,12 +144,12 @@ object TestCase {
     val params: kit.ExecutionParam[P],
   ) {
     def via(conductor: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit]): TestCase[kit.type] =
-      TestCase.parameterized(using kit)(body, params, conductor(_, _))
+      TestCase.parameterizedExec(using kit)(body, params, conductor(_, _))
 
     def via[X](
       conductor: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[X],
       postStop: X => kit.Outcome[Unit],
     ): TestCase[kit.type] =
-      TestCase.parameterized(using kit)(body, params, conductor(_, _), postStop)
+      TestCase.parameterizedExecAndCheck(using kit)(body, params, conductor(_, _), postStop)
   }
 }

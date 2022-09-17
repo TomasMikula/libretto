@@ -73,19 +73,21 @@ extends AnyFunSuite
                 }
               case TestResult.Crash(e) =>
                 fail(s"Crashed with ${e.getClass.getCanonicalName}: ${e.getMessage}", e)
+              case TestResult.TimedOut(d) =>
+                fail(s"Timed out after $d")
             }
           c match {
             case c: TestCase.SingleProgram[testKit.type] =>
               test(fullName) {
                 handleTestResult(
                   testExecutor()
-                    .runTestCase(c.body, c.params, c.conductor(_, _), c.postStop)
+                    .execpAndCheck(c.body, c.params, c.conductor(_, _), c.postStop, c.timeout)
                 )
               }
             case c: TestCase.OutcomeOnly[testKit.type] =>
               test(fullName) {
                 handleTestResult(
-                  testExecutor().runTestCase(c.body)
+                  testExecutor().check(c.body, c.timeout)
                 )
               }
           }

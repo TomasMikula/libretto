@@ -5,6 +5,7 @@ import libretto.{CoreLib, ExecutionParams, Monad}
 import libretto.scaletto.{Scaletto, ScalettoBridge, ScalettoExecutor, StarterKit}
 import libretto.testing.{ManualClock, ManualClockParams, TestExecutor, TestResult}
 import libretto.util.{Async, SourcePos}
+import scala.concurrent.duration.FiniteDuration
 
 object ScalettoTestExecutor {
   import ExecutionParam.Instantiation
@@ -126,7 +127,7 @@ object ScalettoTestExecutor {
 
   def fromKitAndExecutor(
     kit: ScalettoTestKit { type ExecutionParam[A] = ScalettoTestExecutor.ExecutionParam[A] },
-    exec: ScalettoExecutor.Of[kit.dsl.type, kit.bridge.type],
+    exr: ScalettoExecutor.Of[kit.dsl.type, kit.bridge.type],
   ): TestExecutor[kit.type] =
     new TestExecutor[kit.type] {
       override val name: String =
@@ -138,29 +139,34 @@ object ScalettoTestExecutor {
       import testKit.dsl._
       import testKit.bridge.Execution
 
-      override def runTestCase[O, P, Y](
+      override def execpAndCheck[O, P, Y](
         body: Done -⚬ O,
         params: ExecutionParam[P],
         conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[Y],
         postStop: Y => Outcome[Unit],
+        timeout: FiniteDuration,
       ): TestResult[Unit] = {
-        val p: Instantiation[P, exec.ExecutionParam] =
-          ScalettoTestExecutor.ExecutionParam.instantiate(params)(using exec.ExecutionParam)
+        val p: Instantiation[P, exr.ExecutionParam] =
+          ScalettoTestExecutor.ExecutionParam.instantiate(params)(using exr.ExecutionParam)
 
         TestExecutor
-          .usingExecutor(exec)
+          .usingExecutor(exr)
           .runTestCase[O, p.X, Y](
             body,
             p.px,
             (port, x) => Outcome.toAsyncTestResult(conduct(port, p.get(x))),
             postStop andThen Outcome.toAsyncTestResult,
+            timeout,
           )
       }
 
-      override def runTestCase(body: () => Outcome[Unit]): TestResult[Unit] =
+      override def check(
+        body: () => Outcome[Unit],
+        timeout: FiniteDuration,
+      ): TestResult[Unit] =
         TestExecutor
-          .usingExecutor(exec)
-          .runTestCase(() => Outcome.toAsyncTestResult(body()))
+          .usingExecutor(exr)
+          .runTestCase(() => Outcome.toAsyncTestResult(body()), timeout)
     }
 
   def fromJavaExecutors(

@@ -546,7 +546,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
 
               _ <- Outcome.assert(
                       sleepDurations.min >= sleepMillis,
-                      "sanity check: check that the blocking computations take the amount of time they are supposed to",
+                      s"sanity check failed: one of the blocking computations took only ${sleepDurations.min}ms, despite it having slept for ${sleepMillis}ms",
                     )
 
               // check that none of the non-blocking computations is blocked by any of the blocking computations,

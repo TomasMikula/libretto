@@ -26,7 +26,13 @@ ThisBuild / pomExtra := (
   </developers>
 )
 
+// o - write results back to sbt
+// D - show all durations
+// S - show short stack traces
 ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDS")
+
+// don't wait for all tests of a file before reporting
+ThisBuild / Test / logBuffered := false
 
 import ReleaseTransformations._
 

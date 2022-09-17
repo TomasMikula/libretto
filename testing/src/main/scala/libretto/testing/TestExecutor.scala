@@ -3,6 +3,7 @@ package libretto.testing
 import libretto.{CoreDSL, Executor}
 import libretto.util.{Async, Monad}
 import libretto.util.Monad.syntax._
+import scala.concurrent.duration.FiniteDuration
 
 trait TestExecutor[+TK <: TestKit] { self =>
   val testKit: TK
@@ -13,31 +14,37 @@ trait TestExecutor[+TK <: TestKit] { self =>
 
   def name: String
 
-  def runTestCase[O, P, X](
+  def execpAndCheck[O, P, X](
     body: Done -⚬ O,
     params: ExecutionParam[P],
     conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[X],
-    postStop: X => Outcome[Unit],
+    postStopCheck: X => Outcome[Unit],
+    timeout: FiniteDuration,
   ): TestResult[Unit]
 
-  def runTestCase(body: () => Outcome[Unit]): TestResult[Unit]
+  def check(
+    body: () => Outcome[Unit],
+    timeout: FiniteDuration,
+  ): TestResult[Unit]
 
-  def runTestCase[O, X](
+  def execAndCheck[O, X](
     body: Done -⚬ O,
     conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[X],
-    postStop: X => Outcome[Unit],
+    postStopCheck: X => Outcome[Unit],
+    timeout: FiniteDuration,
   ): TestResult[Unit] =
-    runTestCase[O, Unit, X](body, ExecutionParam.unit, (po, _) => conduct(po), postStop)
+    execpAndCheck[O, Unit, X](body, ExecutionParam.unit, (po, _) => conduct(po), postStopCheck, timeout)
 
-  def runTestCase[O](
+  def exec[O](
     body: Done -⚬ O,
     conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[Unit],
+    timeout: FiniteDuration,
   ): TestResult[Unit] =
-    runTestCase[O, Unit](body, conduct(_), testKit.monadOutcome.pure)
+    execAndCheck[O, Unit](body, conduct(_), testKit.monadOutcome.pure, timeout)
 
   def narrow: TestExecutor[testKit.type] =
     new TestExecutor[testKit.type] {
-      export self.{testKit, name, runTestCase}
+      export self.{testKit, name, check, execpAndCheck}
     }
 }
 
@@ -74,7 +81,7 @@ object TestExecutor {
         val underlying: TestExecutor[kit.type],
         val shutdown: () => Unit,
       ) extends TestExecutor[kit.type] {
-        export underlying.{name, runTestCase, testKit}
+        export underlying.{name, check, execpAndCheck, testKit}
       }
 
       new Factory[TK] {
@@ -109,6 +116,7 @@ object TestExecutor {
       params: ExecutionParam[P],
       conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Async[TestResult[X]],
       postStop: X => Async[TestResult[Unit]],
+      timeout: FiniteDuration,
     ): TestResult[Unit] = {
       val (executing, p) = executor.execute(body, params)
       import executing.{execution, inPort, outPort}
@@ -116,34 +124,34 @@ object TestExecutor {
       val res0: TestResult[X] =
         try {
           execution.InPort.supplyDone(inPort)
-          Async.await {
-            conduct(using execution)(outPort, p)
-          }
+          Async
+            .await(timeout) { conduct(using execution)(outPort, p) }
+            .getOrElse(TestResult.TimedOut(timeout))
         } catch {
           case e => TestResult.Crash(e)
         } finally {
           executor.cancel(execution)
         }
 
-      res0 match {
-        case TestResult.Success(x) =>
-          try {
-            Async.await {
-              postStop(x)
-            }
-          } catch {
-            case e => TestResult.Crash(e)
-          }
-        case TestResult.Failure(msg, pos, e) =>
-          TestResult.Failure(msg, pos, e)
-        case TestResult.Crash(e) =>
-          TestResult.Crash(e)
+      res0.flatMap { x =>
+        try {
+          Async
+            .await(timeout) { postStop(x) }
+            .getOrElse(TestResult.TimedOut(timeout))
+        } catch {
+          case e => TestResult.Crash(e)
+        }
       }
     }
 
-    def runTestCase(body: () => Async[TestResult[Unit]]): TestResult[Unit] =
+    def runTestCase(
+      body: () => Async[TestResult[Unit]],
+      timeout: FiniteDuration,
+    ): TestResult[Unit] =
       try {
-        Async.await(body())
+        Async
+          .await(timeout)(body())
+          .getOrElse(TestResult.TimedOut(timeout))
       } catch {
         case e => TestResult.crash(e)
       }
