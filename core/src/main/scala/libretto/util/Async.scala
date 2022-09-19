@@ -81,7 +81,7 @@ object Async {
         val oldState = ref.getAndAccumulate(Value(a), stateUpdate)
         oldState match {
           case Initial()          => // do nothing
-          case Listener(listener) => listener(a)
+          case Listener(listener) => safeInvoke(listener, a)
           case Value(_) | Done()  => throw new IllegalStateException("Double completion")
         }
       }
@@ -90,7 +90,7 @@ object Async {
         val oldState = ref.getAndAccumulate(Listener(listener), stateUpdate)
         oldState match {
           case Initial()            => // do nothing
-          case Value(a)             => listener(a)
+          case Value(a)             => listener(a) // don't guard, propagate any error to the provider of listener
           case Listener(_) | Done() => throw new IllegalStateException("Double listener registration")
         }
       }
@@ -112,9 +112,9 @@ object Async {
         @tailrec final def supplyAll(a: A): Unit =
           this match {
             case SingleListener(listener) =>
-              listener(a)
+              safeInvoke(listener, a)
             case Listeners(h, t) =>
-              h(a)
+              safeInvoke(h, a)
               t.supplyAll(a)
           }
       }
@@ -153,12 +153,19 @@ object Async {
     val registrar =
       { (listener: A => Unit) =>
         ref.modifyOpaqueWith(listener, register) match {
-          case Value(a) => listener(a)
+          case Value(a) => listener(a) // don't guard, propagate any error to the provider of listener
           case null     => // do nothing
         }
       }
     (completer, Later(registrar))
   }
+
+  private def safeInvoke[A](listener: A => Unit, value: A): Unit =
+    try {
+      listener(value)
+    } catch {
+      case _ => // do nothing
+    }
 
   def fromFuture[A](fa: Future[A]): Async[Try[A]] =
     fa.value match {
