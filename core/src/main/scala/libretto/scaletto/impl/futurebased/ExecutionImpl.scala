@@ -52,7 +52,7 @@ private class ExecutionImpl(
     }
 
     override def awaitDone(port: OutPort[Done]): Async[Either[Throwable, Unit]] = {
-      val (complete, res) = Async.promise[Either[Throwable, Unit]]
+      val (complete, res) = Async.promiseLinear[Either[Throwable, Unit]]
       port.toFutureDone.onComplete {
         case Success(Frontier.DoneNow) => complete(Right(()))
         case Failure(e)                => complete(Left(e))
@@ -61,7 +61,7 @@ private class ExecutionImpl(
     }
 
     override def awaitPing(port: OutPort[Ping]): Async[Either[Throwable, Unit]] = {
-      val (complete, res) = Async.promise[Either[Throwable, Unit]]
+      val (complete, res) = Async.promiseLinear[Either[Throwable, Unit]]
       port.toFuturePing.onComplete {
         case Success(Frontier.PingNow) => complete(Right(()))
         case Failure(e)                => complete(Left(e))
@@ -70,7 +70,7 @@ private class ExecutionImpl(
     }
 
     override def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]] = {
-      val (complete, res) = Async.promise[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
+      val (complete, res) = Async.promiseLinear[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
       port.futureEither.onComplete {
         case Success(res) => complete(Right(res))
         case Failure(e)   => complete(Left(e))
@@ -91,7 +91,7 @@ private class ExecutionImpl(
     }
 
     override def awaitVal[A](port: OutPort[Val[A]]): Async[Either[Throwable, A]] = {
-      val (complete, res) = Async.promise[Either[Throwable, A]]
+      val (complete, res) = Async.promiseLinear[Either[Throwable, A]]
       port.toFutureValue.onComplete {
         case Success(a) => complete(Right(a))
         case Failure(e) => complete(Left(e))
@@ -136,7 +136,7 @@ private class ExecutionImpl(
     }
 
     override def supplyChoice[A, B](port: InPort[A |&| B]): Async[Either[Throwable, Either[InPort[A], InPort[B]]]] = {
-      val (complete, res) = Async.promise[Either[Throwable, Either[InPort[A], InPort[B]]]]
+      val (complete, res) = Async.promiseLinear[Either[Throwable, Either[InPort[A], InPort[B]]]]
 
       port(Frontier.Choice(
         { () =>
