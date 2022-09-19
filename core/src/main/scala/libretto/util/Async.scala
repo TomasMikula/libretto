@@ -3,6 +3,8 @@ package libretto.util
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.BinaryOperator
+import libretto.util.atomic._
+import scala.annotation.tailrec
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success, Try}
@@ -83,7 +85,7 @@ object Async {
           case Value(_) | Done()  => throw new IllegalStateException("Double completion")
         }
       }
-    val register =
+    val registrar =
       { (listener: A => Unit) =>
         val oldState = ref.getAndAccumulate(Listener(listener), stateUpdate)
         oldState match {
@@ -92,7 +94,70 @@ object Async {
           case Listener(_) | Done() => throw new IllegalStateException("Double listener registration")
         }
       }
-    (completer, Later(register))
+    (completer, Later(registrar))
+  }
+
+  /** Returns an `Async[A]` value and a completer function that will complete it.
+    * If the returned completer function is called more than once, the subsequent
+    * calls have no effect and return `false`.
+    * The returned `Async` can register multiple listeners.
+    */
+  def promise[A]: (A => Boolean, Async[A]) = {
+    sealed trait State[A]
+    object State {
+      case class Initial[A]() extends State[A]
+      case class Value[A](value: A) extends State[A]
+
+      sealed trait Listening[A] extends State[A] {
+        @tailrec final def supplyAll(a: A): Unit =
+          this match {
+            case SingleListener(listener) =>
+              listener(a)
+            case Listeners(h, t) =>
+              h(a)
+              t.supplyAll(a)
+          }
+      }
+      case class SingleListener(listener: A => Unit) extends Listening[A]
+      case class Listeners[A](head: A => Unit, tail: Listening[A]) extends Listening[A]
+    }
+    import State._
+
+    val ref =
+      new AtomicReference[State[A]](State.Initial())
+    val complete: (State[A], A) => (State[A], State[A]) =
+      { (state, a) =>
+        state match {
+          case Initial()       => (Value(a), state)
+          case v @ Value(_)    => (v, state)
+          case l: Listening[A] => (Value(a), l)
+        }
+      }
+    val register: (State[A], A => Unit) => (State[A], Value[A] | Null) =
+      { (state, listener) =>
+        state match {
+          case Initial()        => (SingleListener(listener), null)
+          case ls: Listening[A] => (Listeners(listener, ls), null)
+          case v: Value[A]      => (v, v)
+        }
+      }
+    val completer =
+      { (a: A) =>
+        val oldState = ref.modifyOpaqueWith(a, complete)
+        oldState match {
+          case Initial()       => true
+          case Value(_)        => false
+          case l: Listening[A] => l.supplyAll(a); true
+        }
+      }
+    val registrar =
+      { (listener: A => Unit) =>
+        ref.modifyOpaqueWith(listener, register) match {
+          case Value(a) => listener(a)
+          case null     => // do nothing
+        }
+      }
+    (completer, Later(registrar))
   }
 
   def fromFuture[A](fa: Future[A]): Async[Try[A]] =
