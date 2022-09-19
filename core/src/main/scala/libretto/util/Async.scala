@@ -50,7 +50,7 @@ object Async {
     * The returned `Async` must register a listener exactly once. An exception will
     * be thrown on subsequent listeners.
     */
-  def promise[A]: (A => Unit, Async[A]) = {
+  def promiseLinear[A]: (A => Unit, Async[A]) = {
     enum State[A] {
       case Initial()
       case Value(value: A)
