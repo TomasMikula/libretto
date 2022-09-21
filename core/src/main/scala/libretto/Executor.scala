@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.util.Async
+import libretto.util.{Async, SourcePos}
 
 final class Executing[BRIDGE <: CoreBridge & Singleton, A, B](using val bridge: BRIDGE)(
   val execution: bridge.Execution,
@@ -35,7 +35,7 @@ trait Executor { self =>
   final def execute[A, B](prg: A -⚬ B): Executing[bridge.type, A, B] =
     execute(prg, ExecutionParam.unit)._1
 
-  def cancel(execution: Execution): Async[Unit]
+  def cancel(using pos: SourcePos)(execution: Execution): Async[Unit]
 
   /** Watch for abrupt cancellation of the given [[Execution]].
     * If the execution completes normally, the returned [[Async]] may never complete.
@@ -76,7 +76,7 @@ object Executor {
   }
 
   enum CancellationReason {
-    case User
+    case User(position: SourcePos)
     case Bug(message: String, cause: Option[Throwable])
   }
 }

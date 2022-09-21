@@ -5,7 +5,7 @@ import libretto.{Executing, ExecutionParams, Scheduler}
 import libretto.Executor.CancellationReason
 import libretto.scaletto.ScalettoExecutor
 import libretto.scaletto.impl.FreeScaletto
-import libretto.util.Async
+import libretto.util.{Async, SourcePos}
 import scala.concurrent.ExecutionContext
 
 object FutureExecutor {
@@ -116,8 +116,8 @@ class FutureExecutor(
     (executing, p)
   }
 
-  override def cancel(execution: Execution): Async[Unit] =
-    cancelExecution(execution)
+  override def cancel(using pos: SourcePos)(execution: Execution): Async[Unit] =
+    cancelExecution(execution, pos)
 
   override def watchForCancellation(execution: Execution): Async[CancellationReason] =
     bridge.watchForCancellation(execution)
