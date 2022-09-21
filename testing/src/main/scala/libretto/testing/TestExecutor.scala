@@ -4,6 +4,7 @@ import libretto.{CoreDSL, Executor}
 import libretto.util.{Async, Monad}
 import libretto.util.Monad.syntax._
 import scala.concurrent.duration.FiniteDuration
+import libretto.Executor.CancellationReason
 
 trait TestExecutor[+TK <: TestKit] { self =>
   val testKit: TK
@@ -124,8 +125,23 @@ object TestExecutor {
       val res0: TestResult[X] =
         try {
           execution.InPort.supplyDone(inPort)
+
+          val properResult: Async[TestResult[X]] =
+            conduct(using execution)(outPort, p)
+
+          val cancellationResult: Async[TestResult[X]] =
+            executor.watchForCancellation(execution).map {
+              case CancellationReason.Bug(msg, cause) =>
+                TestResult.crash(new RuntimeException(msg, cause.getOrElse(null)))
+              case CancellationReason.User =>
+                TestResult.crash(new AssertionError("Seemingly impossible cancellation occurred"))
+            }
+
+          val result: Async[TestResult[X]] =
+            Async.race_(properResult, cancellationResult)
+
           Async
-            .await(timeout) { conduct(using execution)(outPort, p) }
+            .await(timeout)(result)
             .getOrElse(TestResult.TimedOut(timeout))
         } catch {
           case e => TestResult.Crash(e)

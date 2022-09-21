@@ -2,6 +2,7 @@ package libretto.scaletto.impl.futurebased
 
 import java.util.concurrent.{Executor => JExecutor}
 import libretto.Scheduler
+import libretto.Executor.CancellationReason
 import libretto.scaletto.ScalettoExecution
 import libretto.scaletto.impl.{FreeScaletto, bug}
 import libretto.util.Async
@@ -24,6 +25,9 @@ private class ExecutionImpl(
   override opaque type OutPort[A] = Frontier[A]
   override opaque type InPort[A] = Frontier[A] => Unit
 
+  private val (notifyOnCancel, watchCancellation) =
+    Async.promise[CancellationReason]
+
   def execute[A, B](prg: A -⚬ B): (InPort[A], OutPort[B]) = {
     val input = Promise[Frontier[A]]
     val in:  InPort[A]  = fa => input.success(fa)
@@ -31,14 +35,17 @@ private class ExecutionImpl(
     (in, out)
   }
 
-  def cancel(): Future[Unit] = {
+  def cancel(): Async[Unit] = {
     val openResources: Seq[AcquiredResource[_]] =
       resourceRegistry.close()
 
-    Future.traverse(openResources) { r =>
-      Async.toFuture(r.releaseAsync(r.resource))
-    }.map(_ => ())
+    Async
+      .awaitAll(openResources.map { r => r.releaseAsync(r.resource) })
+      .map(_ => notifyOnCancel(CancellationReason.User))
   }
+
+  def watchForCancellation(): Async[CancellationReason] =
+    watchCancellation
 
   override object OutPort extends ScalettoOutPorts {
     override def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B] =

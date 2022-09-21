@@ -23,7 +23,7 @@ package object atomic {
       @tailrec def go(expected: A): C = {
         val res: (A, C) = f(expected, b)
         val changed: A = compareAndSetOpaque[A](ref, expected, res._1)
-        if (changed eq null)
+        if (changed eq res._1) // success
           res._2
         else
           go(changed)

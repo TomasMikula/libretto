@@ -1,7 +1,7 @@
 package libretto.util
 
 import java.util.concurrent.TimeoutException
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import java.util.function.BinaryOperator
 import libretto.util.atomic._
 import scala.annotation.tailrec
@@ -165,6 +165,43 @@ object Async {
       listener(value)
     } catch {
       case _ => // do nothing
+    }
+
+  def race[A, B](a: Async[A], b: Async[B]): Async[Either[A, B]] = {
+    val (completer, res) = promise[Either[A, B]]
+    a.onComplete(a => completer(Left(a)))
+    b.onComplete(b => completer(Right(b)))
+    res
+  }
+
+  def race_[A](a1: Async[A], a2: Async[A]): Async[A] =
+    race(a1, a2).map(_.fold(identity, identity))
+
+  def awaitAll(as: Seq[Async[?]]): Async[Unit] = {
+    val (complete, promised) = promise[Unit]
+    val countdownVar = new AtomicInteger(as.size)
+    val listener: Any => Unit = once { _ =>
+      val m = countdownVar.decrementAndGet()
+      if (m == 0) {
+        complete(())
+      }
+    }
+    as.foreach(_.onComplete(listener))
+    promised
+  }
+
+  private def once[A, B](f: A => B): A => B =
+    limitInvocations(f, 1)
+
+  private def limitInvocations[A, B](f: A => B, limit: Int): A => B =
+    new Function1[A, B] {
+      val remaining = new AtomicInteger(limit)
+      override def apply(a: A): B =
+        if (remaining.decrementAndGet() >= 0) {
+          f(a)
+        } else {
+          throw new IllegalStateException("The function may not be invoked multiple times")
+        }
     }
 
   def fromFuture[A](fa: Future[A]): Async[Try[A]] =
