@@ -2,6 +2,7 @@ package libretto.scaletto.impl.concurrentcells
 
 import java.util.concurrent.{Executor => JExecutor, ExecutorService, Executors, ScheduledExecutorService}
 import libretto.{Executing, ExecutionParams}
+import libretto.Executor.CancellationReason
 import libretto.scaletto.ScalettoExecutor
 import libretto.scaletto.impl.FreeScaletto
 import libretto.util.Async
@@ -25,9 +26,9 @@ object ExecutorImpl {
       pa match {
         case Ext(sp @ SchedulerParam(scheduler)) =>
           (Some(scheduler), sp.fromUnit(()))
-        case _: One[SchedulerParam] =>
+        case _: One[sp] =>
           (None, ())
-        case z: Zip[SchedulerParam, a, b] =>
+        case z: Zip[sp, a, b] =>
           (extract[a](z.a), extract[b](z.b)) match {
             case ((None, a), (s, b)) => (s, (a, b))
             case ((s, a), (None, b)) => (s, (a, b))
@@ -104,4 +105,7 @@ class ExecutorImpl(
 
   override def cancel(execution: bridge.Execution): Async[Unit] =
     bridge.cancelExecution(execution)
+
+  override def watchForCancellation(execution: bridge.Execution): Async[CancellationReason] =
+    bridge.watchForCancellation(execution)
 }

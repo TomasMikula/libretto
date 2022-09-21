@@ -1,8 +1,10 @@
 package libretto.scaletto.impl.concurrentcells
 
+import java.util.concurrent.atomic.AtomicReference
 import libretto.scaletto.ScalettoExecution
 import libretto.scaletto.impl.FreeScaletto
 import libretto.util.Async
+import libretto.Executor.CancellationReason
 import libretto.Scheduler
 import scala.concurrent.ExecutionContext
 
@@ -17,8 +19,45 @@ class ExecutionImpl(
   override type InPort[A] = Cell[A]
   override type OutPort[A] = Cell[A]
 
-  override val InPort: ScalettoInPorts = ??? // TODO
-  override val OutPort: ScalettoOutPorts = ??? // TODO
+  override object InPort extends ScalettoInPorts {
+    override def split[A, B](port: Cell[A |*| B]): (Cell[A], Cell[B]) = ???
+    override def discardOne(port: Cell[One]): Unit = ???
+    override def supplyDone(port: Cell[Done]): Unit = Cell.supplyDone(port).followUp()
+    override def supplyPing(port: Cell[Ping]): Unit = ???
+    override def supplyLeft[A, B](port: Cell[A |+| B]): Cell[A] = ???
+    override def supplyRight[A, B](port: Cell[A |+| B]): Cell[B] = ???
+    override def supplyChoice[A, B](port: Cell[A |&| B]): Async[Either[Throwable, Either[Cell[A], Cell[B]]]] = ???
+    override def supplyVal[A](port: Cell[Val[A]], value: A): Unit = ???
+    override def contramap[A, B](port: Cell[B])(f: A -⚬ B): Cell[A] = ???
+    override def functionInputOutput[I, O](port: Cell[I =⚬ O]): (Cell[I], Cell[O]) = ???
+  }
+
+  override object OutPort extends ScalettoOutPorts {
+    override def split[A, B](port: Cell[A |*| B]): (Cell[A], Cell[B]) = ???
+    override def discardOne(port: Cell[One]): Unit = ???
+    override def awaitDone(port: Cell[Done]): Async[Either[Throwable, Unit]] = ???
+    override def awaitPing(port: Cell[Ping]): Async[Either[Throwable, Unit]] = ???
+
+    override def awaitEither[A, B](port: Cell[A |+| B]): Async[Either[Throwable, Either[Cell[A], Cell[B]]]] =
+      Cell.awaitEither(port)
+
+    override def chooseLeft[A, B](port: Cell[A |&| B]): Cell[A] = ???
+    override def chooseRight[A, B](port: Cell[A |&| B]): Cell[B] = ???
+    override def awaitVal[A](port: Cell[Val[A]]): Async[Either[Throwable, A]] = ???
+    override def map[A, B](port: Cell[A])(f: A -⚬ B): Cell[B] = ???
+    override def functionInputOutput[I, O](port: Cell[I =⚬ O]): (Cell[I], Cell[O]) = ???
+  }
+
+  enum CancellationState {
+    case Initial
+    case Cancelling
+    case Cancelled
+  }
+
+  val cancellationState = new AtomicReference(CancellationState.Initial)
+
+  val (notifyOnCancel, watchCancellation) =
+    Async.promise[CancellationReason]
 
   def execute[A, B](prg: A -⚬ B): (InPort[A], OutPort[B]) = {
     val in = Cell.empty[A]
@@ -27,11 +66,38 @@ class ExecutionImpl(
     (in, out)
   }
 
-  def cancel(): Async[Unit] =
-    ??? // TODO
+  def cancel(reason: CancellationReason): Async[Unit] = {
+    import CancellationState._
 
-  private def submitJob(action: Runnable): Unit =
-    ec.execute(action)
+    if (cancellationState.compareAndSet(Initial, Cancelling)) {
+      Async
+        .now(()) // TODO: release resources
+        .map { _ =>
+          cancellationState.compareAndSet(Cancelling, Cancelled)
+          notifyOnCancel(reason)
+        }
+    } else {
+      watchCancellation.map(_ => ())
+    }
+  }
+
+  def watchForCancellation(): Async[CancellationReason] =
+    watchCancellation
+
+  private def submitJob(action: Runnable): Unit = {
+    val safeAction: Runnable =
+      () => {
+        if (cancellationState.get() == CancellationState.Initial) {
+          try  {
+            action.run()
+          } catch {
+            e => cancel(CancellationReason.Bug("Job threw an exception", Some(e)))
+          }
+        }
+      }
+
+    ec.execute(safeAction)
+  }
 
   private def connectLater[A, B](in: Cell[A], f: A -⚬ B, out: Cell[B]): Unit =
     submitJob { () => connect(in, f, out) }
@@ -137,9 +203,9 @@ class ExecutionImpl(
   private def unify[A](l: Cell[A], r: Cell[A]): Unit =
     Cell.unify(l, r).followUp()
 
-  extension (r: Cell.ActionResult) {
+  extension (r: CellContent.ActionResult) {
     private def followUp(): Unit = {
-      import Cell.ActionResult.{ConnectionRequest, Done}
+      import CellContent.ActionResult.{ConnectionRequest, Done}
       r match {
         case Done => // do nothing
         case ConnectionRequest(x, f, y) => connectLater(x, f, y)
