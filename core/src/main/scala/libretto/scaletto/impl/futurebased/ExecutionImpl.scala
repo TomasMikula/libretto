@@ -5,7 +5,7 @@ import libretto.Scheduler
 import libretto.Executor.CancellationReason
 import libretto.scaletto.ScalettoExecution
 import libretto.scaletto.impl.{FreeScaletto, bug}
-import libretto.util.Async
+import libretto.util.{Async, SourcePos}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}
@@ -35,13 +35,13 @@ private class ExecutionImpl(
     (in, out)
   }
 
-  def cancel(): Async[Unit] = {
+  def cancel(pos: SourcePos): Async[Unit] = {
     val openResources: Seq[AcquiredResource[_]] =
       resourceRegistry.close()
 
     Async
       .awaitAll(openResources.map { r => r.releaseAsync(r.resource) })
-      .map(_ => notifyOnCancel(CancellationReason.User))
+      .map(_ => notifyOnCancel(CancellationReason.User(pos)))
   }
 
   def watchForCancellation(): Async[CancellationReason] =

@@ -133,8 +133,8 @@ object TestExecutor {
             executor.watchForCancellation(execution).map {
               case CancellationReason.Bug(msg, cause) =>
                 TestResult.crash(new RuntimeException(msg, cause.getOrElse(null)))
-              case CancellationReason.User =>
-                TestResult.crash(new AssertionError("Seemingly impossible cancellation occurred"))
+              case CancellationReason.User(pos) =>
+                TestResult.crash(new AssertionError(s"Unexpected call to cancel at ${pos.filename}:${pos.line}"))
             }
 
           val result: Async[TestResult[X]] =
