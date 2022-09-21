@@ -9,6 +9,8 @@ final class Executing[BRIDGE <: CoreBridge & Singleton, A, B](using val bridge: 
 )
 
 trait Executor { self =>
+  import Executor.CancellationReason
+
   type Dsl <: CoreDSL
   val dsl: Dsl
 
@@ -35,12 +37,17 @@ trait Executor { self =>
 
   def cancel(execution: Execution): Async[Unit]
 
+  /** Watch for abrupt cancellation of the given [[Execution]].
+    * If the execution completes normally, the returned [[Async]] may never complete.
+    */
+  def watchForCancellation(execution: Execution): Async[CancellationReason]
+
   def narrow: Executor.Of[dsl.type, bridge.type] =
     new Executor {
       override type Dsl = self.dsl.type
       override type Bridge = self.bridge.type
 
-      export self.{dsl, bridge, ExecutionParam, execute, cancel}
+      export self.{dsl, bridge, ExecutionParam, execute, cancel, watchForCancellation}
     }
 }
 
@@ -66,5 +73,10 @@ object Executor {
   object Factory {
     type Of[DSL <: CoreDSL, BRIDGE <: CoreBridge.Of[DSL]] =
       Factory { type Dsl = DSL; type Bridge = BRIDGE }
+  }
+
+  enum CancellationReason {
+    case User
+    case Bug(message: String, cause: Option[Throwable])
   }
 }

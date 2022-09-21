@@ -14,7 +14,7 @@ trait ScalettoExecutor extends Executor { self =>
       override type Dsl = self.dsl.type
       override type Bridge = self.bridge.type
 
-      export self.{dsl, bridge, ExecutionParam, execute, cancel}
+      export self.{dsl, bridge, ExecutionParam, execute, cancel, watchForCancellation}
     }
 }
 

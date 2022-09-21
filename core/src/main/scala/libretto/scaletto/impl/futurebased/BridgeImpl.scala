@@ -2,9 +2,11 @@ package libretto.scaletto.impl.futurebased
 
 import java.util.concurrent.{Executor => JExecutor}
 import libretto.{Executing, Scheduler}
+import libretto.Executor.CancellationReason
 import libretto.scaletto.{ScalettoBridge, ScalettoExecution}
 import libretto.scaletto.impl.FreeScaletto
-import scala.concurrent.{ExecutionContext, Future}
+import libretto.util.Async
+import scala.concurrent.ExecutionContext
 
 object BridgeImpl extends ScalettoBridge {
   override type Dsl = FreeScaletto.type
@@ -23,6 +25,9 @@ object BridgeImpl extends ScalettoBridge {
     Executing(using this)(execution, in, out)
   }
 
-  def cancelExecution(exn: Execution): Future[Unit] =
+  def cancelExecution(exn: Execution): Async[Unit] =
     exn.cancel()
+
+  def watchForCancellation(exn: Execution): Async[CancellationReason] =
+    exn.watchForCancellation()
 }
