@@ -3,6 +3,7 @@ package libretto.scaletto.impl.concurrentcells
 import java.util.concurrent.atomic.AtomicReference
 import libretto.scaletto.impl.FreeScaletto._
 import libretto.util.Async
+import libretto.util.atomic._
 import scala.annotation.tailrec
 
 opaque type Cell[A] = AtomicReference[CellContent[A]]
@@ -33,51 +34,6 @@ object Cell {
 
   def awaitEither[A, B](src: Cell[A |+| B]): Async[Either[Throwable, Either[Cell[A], Cell[B]]]] =
     src.modifyOpaque(CellContent.awaitEither)
-
-  extension [A](cell: Cell[A]) {
-    def modifyOpaque[C](f: CellContent[A] => (CellContent[A], C)): C = {
-      @tailrec def go(expected: CellContent[A]): C = {
-        val res: (CellContent[A], C) = f(expected)
-        val changed = compareAndSetOpaque(cell, expected, res._1)
-        if (changed eq null)
-          res._2
-        else
-          go(changed)
-      }
-
-      go(cell.getOpaque())
-    }
-
-    def modifyOpaqueWith[B, C](b: B, f: (CellContent[A], B) => (CellContent[A], C)): C = {
-      @tailrec def go(expected: CellContent[A]): C = {
-        val res: (CellContent[A], C) = f(expected, b)
-        val changed = compareAndSetOpaque(cell, expected, res._1)
-        if (changed eq null)
-          res._2
-        else
-          go(changed)
-      }
-
-      go(cell.getOpaque())
-    }
-  }
-
-  /** Returns `null` when successful, current value if different from expected. */
-  @tailrec private def compareAndSetOpaque[A](
-    cell: Cell[A],
-    expected: CellContent[A],
-    next: CellContent[A],
-  ): CellContent[A] = {
-    if (cell.weakCompareAndSetPlain(expected, next)) {
-      null // success
-    } else {
-      val current = cell.getOpaque()
-      if (current eq expected)
-        compareAndSetOpaque(cell, expected, next)
-      else
-        current
-    }
-  }
 }
 
 sealed trait CellContent[A]
