@@ -524,6 +524,9 @@ private class ExecutionImpl(
         case r @ -⚬.RecF(_) =>
           this.extend(r.recursed)
 
+        case -⚬.RecCall(recF) =>
+          this.extend(recF.recursed) // for now, we just expand recursive call right away
+
         case -⚬.Pack() =>
           type F[_]
           Pack(this.asInstanceOf[Frontier[F[Rec[F]]]])            .asInstanceOf[Frontier[B]]

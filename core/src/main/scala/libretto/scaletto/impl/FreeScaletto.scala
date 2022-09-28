@@ -90,8 +90,9 @@ abstract class FreeScaletto {
     case class RInvertTerminus() extends ((RTerminus |*| LTerminus) -⚬ One)
     case class LInvertTerminus() extends (One -⚬ (LTerminus |*| RTerminus))
     case class RecF[A, B](f: (A -⚬ B) => (A -⚬ B)) extends (A -⚬ B) { self =>
-      val recursed: A -⚬ B = f(self)
+      val recursed: A -⚬ B = f(RecCall(self))
     }
+    case class RecCall[A, B](f: RecF[A, B]) extends (A -⚬ B)
     case class Pack[F[_]]() extends (F[Rec[F]] -⚬ Rec[F])
     case class Unpack[F[_]]() extends (Rec[F] -⚬ F[Rec[F]])
     case class RacePair() extends ((Ping |*| Ping) -⚬ (One |+| One))

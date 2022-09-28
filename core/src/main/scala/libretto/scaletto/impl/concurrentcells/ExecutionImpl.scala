@@ -35,11 +35,17 @@ class ExecutionImpl(
   override object OutPort extends ScalettoOutPorts {
     override def split[A, B](port: Cell[A |*| B]): (Cell[A], Cell[B]) = ???
     override def discardOne(port: Cell[One]): Unit = ???
-    override def awaitDone(port: Cell[Done]): Async[Either[Throwable, Unit]] = ???
+
+    override def awaitDone(port: Cell[Done]): Async[Either[Throwable, Unit]] =
+      Cell.awaitDone(port)
+
     override def awaitPing(port: Cell[Ping]): Async[Either[Throwable, Unit]] = ???
 
-    override def awaitEither[A, B](port: Cell[A |+| B]): Async[Either[Throwable, Either[Cell[A], Cell[B]]]] =
-      Cell.awaitEither(port)
+    override def awaitEither[A, B](port: Cell[A |+| B]): Async[Either[Throwable, Either[Cell[A], Cell[B]]]] = {
+      val (completer, async) = Async.promiseLinear[Either[Throwable, Either[Cell[A], Cell[B]]]]
+      Cell.awaitEither(port, completer).followUp()
+      async
+    }
 
     override def chooseLeft[A, B](port: Cell[A |&| B]): Cell[A] = ???
     override def chooseRight[A, B](port: Cell[A |&| B]): Cell[B] = ???
@@ -122,8 +128,8 @@ class ExecutionImpl(
           f2: A2 -⚬ B2,
           out: Cell[B1 |*| B2],
         ): Unit =
-          val (a1, a2) = Cell.split(in)
-          val (b1, b2) = Cell.split(out)
+          val (a1, a2) = Cell.rsplit(in)
+          val (b1, b2) = Cell.lsplit(out)
           connectLater(a1, f1, b1)
           connectLater(a2, f2, b2)
 
@@ -131,38 +137,38 @@ class ExecutionImpl(
 
       case -⚬.IntroFst() =>
         inline def go(out: Cell[One |*| A]): Unit =
-          val (_, out1) = Cell.split(out)
+          val (_, out1) = Cell.lsplit(out)
           unify(in, out1)
 
         go(out)
 
       case -⚬.IntroSnd() =>
         inline def go(out: Cell[A |*| One]): Unit =
-          val (out1, _) = Cell.split(out)
+          val (out1, _) = Cell.lsplit(out)
           unify(in, out1)
 
         go(out)
 
       case -⚬.ElimFst() =>
         inline def go(in: Cell[One |*| B]): Unit =
-          val (_, in1) = Cell.split(in)
+          val (_, in1) = Cell.rsplit(in)
           unify(in1, out)
 
         go(in)
 
       case -⚬.ElimSnd() =>
         inline def go(in: Cell[B |*| One]): Unit =
-          val (in1, _) = Cell.split(in)
+          val (in1, _) = Cell.rsplit(in)
           unify(in1, out)
 
         go(in)
 
       case _: -⚬.AssocLR[x, y, z] =>
         inline def go[X, Y, Z](in: Cell[(X |*| Y) |*| Z], out: Cell[X |*| (Y |*| Z)]): Unit =
-          val (ixy, iz) = Cell.split(in)
-          val (ix, iy)  = Cell.split(ixy)
-          val (ox, oyz) = Cell.split(out)
-          val (oy, oz)  = Cell.split(oyz)
+          val (ixy, iz) = Cell.rsplit(in)
+          val (ix, iy)  = Cell.rsplit(ixy)
+          val (ox, oyz) = Cell.lsplit(out)
+          val (oy, oz)  = Cell.lsplit(oyz)
           unify(ix, ox)
           unify(iy, oy)
           unify(iz, oz)
@@ -171,10 +177,10 @@ class ExecutionImpl(
 
       case _: -⚬.AssocRL[x, y, z] =>
         inline def go[X, Y, Z](in: Cell[X |*| (Y |*| Z)], out: Cell[(X |*| Y) |*| Z]): Unit =
-          val (ix, iyz) = Cell.split(in)
-          val (iy, iz)  = Cell.split(iyz)
-          val (oxy, oz) = Cell.split(out)
-          val (ox, oy)  = Cell.split(oxy)
+          val (ix, iyz) = Cell.rsplit(in)
+          val (iy, iz)  = Cell.rsplit(iyz)
+          val (oxy, oz) = Cell.lsplit(out)
+          val (ox, oy)  = Cell.lsplit(oxy)
           unify(ix, ox)
           unify(iy, oy)
           unify(iz, oz)
@@ -183,8 +189,8 @@ class ExecutionImpl(
 
       case _: -⚬.Swap[x, y] =>
         inline def go[X, Y](in: Cell[X |*| Y], out: Cell[Y |*| X]): Unit =
-          val (ix, iy) = Cell.split(in)
-          val (oy, ox) = Cell.split(out)
+          val (ix, iy) = Cell.rsplit(in)
+          val (oy, ox) = Cell.lsplit(out)
           unify(ix, ox)
           unify(iy, oy)
 
@@ -198,6 +204,36 @@ class ExecutionImpl(
 
       case e: -⚬.EitherF[x, y, z] =>
         Cell.either[x, y, z](in, e.f, e.g, out).followUp()
+
+      case _: -⚬.ChooseL[x, y] =>
+        Cell.chooseL[x, y](in, out).followUp()
+
+      case _: -⚬.ChooseR[l, r] =>
+        ???
+
+      case c: -⚬.Choice[a, b1, b2] =>
+        Cell.choice[a, b1, b2](in, c.f, c.g, out).followUp()
+
+      case _: -⚬.Join =>
+        val (in1, in2) = Cell.rsplit[Done, Done](in)
+        Cell.join(in1, in2, out).followUp()
+
+      case r: -⚬.RecF[A, B] =>
+        connect(in, r.recursed, out)
+
+      case _: -⚬.Pack[f] =>
+        def go[F[_]](in: Cell[F[Rec[F]]], out: Cell[Rec[F]]): Unit =
+          val ev = summon[Rec[F] =:= Rec[F]].asInstanceOf[Rec[F] =:= F[Rec[F]]] // XXX: cheating
+          unify(in, ev.substituteCo(out))
+
+        go[f](in, out)
+
+      case _: -⚬.Unpack[f] =>
+        def go[F[_]](in: Cell[Rec[F]], out: Cell[F[Rec[F]]]): Unit =
+          val ev = summon[Rec[F] =:= Rec[F]].asInstanceOf[Rec[F] =:= F[Rec[F]]] // XXX: cheating
+          unify(in, ev.substituteContra(out))
+
+        go[f](in, out)
     }
 
   private def unify[A](l: Cell[A], r: Cell[A]): Unit =
@@ -205,10 +241,13 @@ class ExecutionImpl(
 
   extension (r: CellContent.ActionResult) {
     private def followUp(): Unit = {
-      import CellContent.ActionResult.{ConnectionRequest, Done}
+      import CellContent.ActionResult.{AllDone, CallbackTriggered, ConnectionRequest, Instruction, Two}
       r match {
-        case Done => // do nothing
+        case AllDone => // do nothing
         case ConnectionRequest(x, f, y) => connectLater(x, f, y)
+        case CallbackTriggered(f, x) => f(x)
+        case Two(r1, r2) => r1.followUp(); r2.followUp()
+        case i: Instruction => submitJob { () => i.execute().followUp() }
       }
     }
   }
