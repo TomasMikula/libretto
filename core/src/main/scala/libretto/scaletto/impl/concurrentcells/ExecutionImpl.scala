@@ -36,8 +36,11 @@ class ExecutionImpl(
     override def split[A, B](port: Cell[A |*| B]): (Cell[A], Cell[B]) = ???
     override def discardOne(port: Cell[One]): Unit = ???
 
-    override def awaitDone(port: Cell[Done]): Async[Either[Throwable, Unit]] =
-      Cell.awaitDone(port)
+    override def awaitDone(port: Cell[Done]): Async[Either[Throwable, Unit]] = {
+      val (completer, async) = Async.promiseLinear[Either[Throwable, Unit]]
+      Cell.awaitDone(port, completer).followUp()
+      async
+    }
 
     override def awaitPing(port: Cell[Ping]): Async[Either[Throwable, Unit]] = ???
 
@@ -128,71 +131,87 @@ class ExecutionImpl(
           f2: A2 -⚬ B2,
           out: Cell[B1 |*| B2],
         ): Unit =
-          val (a1, a2) = Cell.rsplit(in)
-          val (b1, b2) = Cell.lsplit(out)
+          val (a1, a2, r1) = Cell.rsplit(in)
+          val (b1, b2, r2) = Cell.lsplit(out)
           connectLater(a1, f1, b1)
           connectLater(a2, f2, b2)
+          r1.followUp()
+          r2.followUp()
 
         go[a1, a2, b1, b2](in, p.f, p.g, out)
 
       case -⚬.IntroFst() =>
         inline def go(out: Cell[One |*| A]): Unit =
-          val (_, out1) = Cell.lsplit(out)
+          val (_, out1, r) = Cell.lsplit(out)
           unify(in, out1)
+          r.followUp()
 
         go(out)
 
       case -⚬.IntroSnd() =>
         inline def go(out: Cell[A |*| One]): Unit =
-          val (out1, _) = Cell.lsplit(out)
+          val (out1, _, r) = Cell.lsplit(out)
           unify(in, out1)
+          r.followUp()
 
         go(out)
 
       case -⚬.ElimFst() =>
         inline def go(in: Cell[One |*| B]): Unit =
-          val (_, in1) = Cell.rsplit(in)
+          val (_, in1, r) = Cell.rsplit(in)
           unify(in1, out)
+          r.followUp()
 
         go(in)
 
       case -⚬.ElimSnd() =>
         inline def go(in: Cell[B |*| One]): Unit =
-          val (in1, _) = Cell.rsplit(in)
+          val (in1, _, r) = Cell.rsplit(in)
           unify(in1, out)
+          r.followUp()
 
         go(in)
 
       case _: -⚬.AssocLR[x, y, z] =>
         inline def go[X, Y, Z](in: Cell[(X |*| Y) |*| Z], out: Cell[X |*| (Y |*| Z)]): Unit =
-          val (ixy, iz) = Cell.rsplit(in)
-          val (ix, iy)  = Cell.rsplit(ixy)
-          val (ox, oyz) = Cell.lsplit(out)
-          val (oy, oz)  = Cell.lsplit(oyz)
+          val (ixy, iz, r1) = Cell.rsplit(in)
+          val (ix, iy, r2)  = Cell.rsplit(ixy)
+          val (ox, oyz, r3) = Cell.lsplit(out)
+          val (oy, oz, r4)  = Cell.lsplit(oyz)
           unify(ix, ox)
           unify(iy, oy)
           unify(iz, oz)
+          r1.followUp()
+          r2.followUp()
+          r3.followUp()
+          r4.followUp()
 
         go[x, y, z](in, out)
 
       case _: -⚬.AssocRL[x, y, z] =>
         inline def go[X, Y, Z](in: Cell[X |*| (Y |*| Z)], out: Cell[(X |*| Y) |*| Z]): Unit =
-          val (ix, iyz) = Cell.rsplit(in)
-          val (iy, iz)  = Cell.rsplit(iyz)
-          val (oxy, oz) = Cell.lsplit(out)
-          val (ox, oy)  = Cell.lsplit(oxy)
+          val (ix, iyz, r1) = Cell.rsplit(in)
+          val (iy, iz, r2)  = Cell.rsplit(iyz)
+          val (oxy, oz, r3) = Cell.lsplit(out)
+          val (ox, oy, r4)  = Cell.lsplit(oxy)
           unify(ix, ox)
           unify(iy, oy)
           unify(iz, oz)
+          r1.followUp()
+          r2.followUp()
+          r3.followUp()
+          r4.followUp()
 
         go[x, y, z](in, out)
 
       case _: -⚬.Swap[x, y] =>
         inline def go[X, Y](in: Cell[X |*| Y], out: Cell[Y |*| X]): Unit =
-          val (ix, iy) = Cell.rsplit(in)
-          val (oy, ox) = Cell.lsplit(out)
+          val (ix, iy, r1) = Cell.rsplit(in)
+          val (oy, ox, r2) = Cell.lsplit(out)
           unify(ix, ox)
           unify(iy, oy)
+          r1.followUp()
+          r2.followUp()
 
         go[x, y](in, out)
 
@@ -215,7 +234,8 @@ class ExecutionImpl(
         Cell.choice[a, b1, b2](in, c.f, c.g, out).followUp()
 
       case _: -⚬.Join =>
-        val (in1, in2) = Cell.rsplit[Done, Done](in)
+        val (in1, in2, r) = Cell.rsplit[Done, Done](in)
+        r.followUp()
         Cell.join(in1, in2, out).followUp()
 
       case r: -⚬.RecF[A, B] =>

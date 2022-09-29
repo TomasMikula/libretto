@@ -31,6 +31,24 @@ package object atomic {
 
       go(ref.getOpaque())
     }
+
+    def modifyOpaqueOptWith[B, C](b: B, f: (A, B) => (Option[A], C)): C = {
+      @tailrec def go(expected: A): C = {
+        val res: (Option[A], C) = f(expected, b)
+        res._1 match {
+          case None =>
+            res._2
+          case Some(a) =>
+            val changed: A = compareAndSetOpaque[A](ref, expected, a)
+            if (changed eq a) // success
+              res._2
+            else
+              go(changed)
+        }
+      }
+
+      go(ref.getOpaque())
+    }
   }
 
   /** Returns the value of `ref` afterwards.
