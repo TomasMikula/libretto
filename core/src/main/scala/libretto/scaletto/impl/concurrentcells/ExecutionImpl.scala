@@ -224,11 +224,11 @@ class ExecutionImpl(
       case e: -⚬.EitherF[x, y, z] =>
         Cell.either[x, y, z](in, e.f, e.g, out).followUp()
 
-      case _: -⚬.ChooseL[x, y] =>
-        Cell.chooseL[x, y](in, out).followUp()
+      case _: -⚬.ChooseL[l, r] =>
+        Cell.chooseL[l, r](in, out).followUp()
 
       case _: -⚬.ChooseR[l, r] =>
-        ???
+        Cell.chooseR[l, r](in, out).followUp()
 
       case c: -⚬.Choice[a, b1, b2] =>
         Cell.choice[a, b1, b2](in, c.f, c.g, out).followUp()
@@ -254,6 +254,16 @@ class ExecutionImpl(
           unify(in, ev.substituteContra(out))
 
         go[f](in, out)
+
+      case _: -⚬.SelectPair =>
+        val (o1, o2, r) = Cell.lsplit[Pong, Pong](out)
+        Cell.select(in, o1, o2).followUp()
+        r.followUp()
+
+      case _: -⚬.CoDistributeL[x, y, z] =>
+        val (ox, oyz, r) = Cell.lsplit[x, y |&| z](out)
+        Cell.choiceWith[x, y, z](in, ox, oyz).followUp()
+        r.followUp()
     }
 
   private def unify[A](l: Cell[A], r: Cell[A]): Unit =
@@ -261,11 +271,12 @@ class ExecutionImpl(
 
   extension (r: CellContent.ActionResult) {
     private def followUp(): Unit = {
-      import CellContent.ActionResult.{AllDone, CallbackTriggered, ConnectionRequest, Instruction, Two}
+      import CellContent.ActionResult._
       r match {
         case AllDone => // do nothing
+        case UnificationRequest(x, y) => submitJob { () => unify(x, y) }
         case ConnectionRequest(x, f, y) => connectLater(x, f, y)
-        case CallbackTriggered(f, x) => f(x)
+        case CallbackTriggered(f, x) => submitJob { () => f(x) }
         case Two(r1, r2) => r1.followUp(); r2.followUp()
         case i: Instruction => submitJob { () => i.execute().followUp() }
       }
