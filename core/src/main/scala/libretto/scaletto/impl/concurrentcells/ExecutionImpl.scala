@@ -235,8 +235,13 @@ class ExecutionImpl(
 
       case _: -⚬.Join =>
         val (in1, in2, r) = Cell.rsplit[Done, Done](in)
-        r.followUp()
         Cell.join(in1, in2, out).followUp()
+        r.followUp()
+
+      case _: -⚬.JoinPong =>
+        val (out1, out2, r) = Cell.lsplit[Pong, Pong](out)
+        Cell.joinPong(in, out1, out2).followUp()
+        r.followUp()
 
       case r: -⚬.RecF[A, B] =>
         connect(in, r.recursed, out)
@@ -264,6 +269,12 @@ class ExecutionImpl(
         val (ox, oyz, r) = Cell.lsplit[x, y |&| z](out)
         Cell.choiceWith[x, y, z](in, ox, oyz).followUp()
         r.followUp()
+
+      case _: -⚬.RInvertSignal =>
+        val (in1, in2, r) = Cell.rsplit[Done, Need](in)
+        Cell.rInvertSignal(in1, in2).followUp()
+        r.followUp()
+        // `out: Cell[One]` is ignored
     }
 
   private def unify[A](l: Cell[A], r: Cell[A]): Unit =

@@ -1,6 +1,7 @@
 package libretto.scaletto.impl.concurrentcells
 
 import java.util.concurrent.atomic.AtomicReference
+import libretto.lambda.UnhandledCase
 import libretto.scaletto.impl.FreeScaletto._
 import libretto.util.Async
 import libretto.util.atomic._
@@ -21,14 +22,13 @@ object Cell {
     cell.modifyContentWith(cell, CellContent.rsplit)
 
   def unify[A](l: Cell[A], r: Cell[A]): ActionResult =
-    r.modifyContentWith((l, r), CellContent.lFwd) match {
-      case ActionResult.AllDone =>
-        ActionResult.RReciprocateForward(l, r)
-      case r: ActionResult.RefineRFwd[_] =>
-        r
-      case r: ActionResult.ContractCell[_] =>
-        r
-    }
+    r.modifyContentWith((l, r), CellContent.unifyInit)
+
+  def rInvertSignal(d: Cell[Done], n: Cell[Need]): ActionResult =
+    rInvert(d, Inversion.DoneNeed, n)
+
+  private def rInvert[A, B](src: Cell[A], i: Inversion[A, B], tgt: Cell[B]): ActionResult =
+    ???
 
   def injectL[A, B](src: Cell[A], tgt: Cell[A |+| B]): ActionResult =
     tgt.modifyContentWith(src, CellContent.injectL)
@@ -53,6 +53,9 @@ object Cell {
 
   def join(src1: Cell[Done], src2: Cell[Done], tgt: Cell[Done]): ActionResult =
     tgt.modifyContentWith((tgt, CellContent.JoinOf(src1, src2)), CellContent.makeAJoinOf)
+
+  def joinPong(tgt: Cell[Pong], src1: Cell[Pong], src2: Cell[Pong]): ActionResult =
+    tgt.modifyContentWith((tgt, CellContent.JoinPongOf(src1, src2)), CellContent.makeAJoinPongOf)
 
   def supplyDone(tgt: Cell[Done]): ActionResult =
     tgt.modifyContentWith(tgt, CellContent.supplyDone)
@@ -124,6 +127,7 @@ object CellContent {
   case class ChoiceWith[A, B, C](tgt: Cell[(A |*| B) |&| (A |*| C)], addendum: Cell[A]) extends LDefined[B |&| C]
 
   case class JoinOf(src1: Cell[Done], src2: Cell[Done]) extends LDefined[Done]
+  case class JoinPongOf(src1: Cell[Pong], src2: Cell[Pong]) extends RDefined[Pong]
 
   case class SelectOf(contestant1: Cell[Pong], contestant2: Cell[Pong]) extends RDefined[One |&| One]
 
@@ -270,7 +274,7 @@ object CellContent {
         case EitherCallback(f) =>
           (Consumed(), CallbackTriggered(f, Right(Left(src))))
         case _: LDefined[A |+| B] | Consumed() =>
-          throw new IllegalStateException("The target cell is already left-connected")
+          throw new IllegalStateException(s"The target cell is already left-connected: $tgt")
       }
   }
 
@@ -315,6 +319,8 @@ object CellContent {
           (ChosenR(resultCell), AllDone)
         case LFwd(tgt) =>
           (Consumed(), RefineRFwd(tgt, expectedRTarget = choiceCell, ChosenR(resultCell)))
+        case l: LBypassing[A |&| B] =>
+          (BiDef(l, ChosenR(resultCell)), AllDone)
       }
   }
 
@@ -323,6 +329,8 @@ object CellContent {
       src match {
         case Empty() => (ch, AllDone)
         case rFwd @ RFwd(_) => (BiDef(ch, rFwd), AllDone)
+        case ChosenL(rTgt)  => (Consumed(), ConnectionRequest(ch.tgt, ch.f, rTgt))
+        case ChosenR(rTgt)  => (Consumed(), ConnectionRequest(ch.tgt, ch.g, rTgt))
       }
   }
 
@@ -330,6 +338,7 @@ object CellContent {
     (src, ch) =>
       src match {
         case Empty() => (ch, AllDone)
+        case rFwd @ RFwd(_) => (BiDef(ch, rFwd), AllDone)
       }
   }
 
@@ -349,6 +358,25 @@ object CellContent {
             DirectToR(joiners.src1, Joiner1, self) and
             DirectToR(joiners.src2, Joiner2, self)
           (BiDef(joiners, r), followUp)
+      }
+  }
+
+  val makeAJoinPongOf: (CellContent[Pong], (Cell[Pong], JoinPongOf)) => (CellContent[Pong], ActionResult) = {
+    (content, cellAndJoiners) =>
+      import RoleL.{JoinerPong1, JoinerPong2}
+
+      val (self, joiners) = cellAndJoiners
+      content match {
+        case Empty() =>
+          val followUp =
+            DirectToL(self, JoinerPong1, joiners.src1) and
+            DirectToL(self, JoinerPong2, joiners.src2)
+          (joiners, followUp)
+        case l: LDefined[Pong] =>
+          val followUp =
+            DirectToL(self, JoinerPong1, joiners.src1) and
+            DirectToL(self, JoinerPong2, joiners.src2)
+          (BiDef(l, joiners), followUp)
       }
   }
 
@@ -379,21 +407,23 @@ object CellContent {
       }
   }
 
-  def lFwd[A]: (CellContent[A], (Cell[A], Cell[A])) => (CellContent[A], AllDone.type | ContractCell[A] | RefineRFwd[A]) = {
+  def unifyInit[A]: (CellContent[A], (Cell[A], Cell[A])) => (CellContent[A], ActionResult) = {
     (rContent, cells) =>
       val (lCell, rCell) = cells
       rContent match {
-        case Empty()                 => (LFwd(lCell), AllDone)
+        case Empty()                 => (LFwd(lCell), RReciprocateForward(lCell, rCell))
         case c: ChosenL[a1, a2]      => (Consumed(), RefineRFwd[a1 |&| a2](lCell, expectedRTarget = rCell, c))
+        case c: ChosenR[a1, a2]      => (Consumed(), RefineRFwd[a1 |&| a2](lCell, expectedRTarget = rCell, c))
         case e: EitherCallback[x, y] => (Consumed(), RefineRFwd[x |+| y](lCell, expectedRTarget = rCell, e))
         case r: RSplit[x, y]         => (Consumed(), RefineRFwd[x |*| y](lCell, expectedRTarget = rCell, r))
         case cb: DoneCallback        => (Consumed(), RefineRFwd[Done](lCell, expectedRTarget = rCell, cb))
         case rFwd: RFwd[a]           => (BiDef(LFwd(lCell), rFwd), ContractBiFwd(lCell, rCell, rFwd.tgt))
         case rLnk @ RLink(rel, tgt)  => (BiDef(LFwd(lCell), rLnk), ContractLFwd(lCell, rCell, rel, tgt))
+        case s: SelectOf             => (BiDef(LFwd(lCell), s), RReciprocateForward(lCell, rCell))
       }
   }
 
-  def rReciprocateFwd[A]: (CellContent[A], (Cell[A], Cell[A])) => (Option[CellContent[A]], AllDone.type | ContractCell[A] | RefineLFwd[A]) = {
+  def rReciprocateFwd[A]: (CellContent[A], (Cell[A], Cell[A])) => (Option[CellContent[A]], ActionResult) = {
     (lContent, cells) =>
       val (self, rCell) = cells
       lContent match {
@@ -492,7 +522,8 @@ object CellContent {
           case LFwd(lTgt)     => (Consumed(), RefineRFwd(lTgt, expectedRTarget = self, r))
       case cr @ ChosenR(resultCell) =>
         l match
-          case LFwd(lTgt) => (Consumed(), RefineRFwd(lTgt, expectedRTarget = self, cr))
+          case ChooseFrom(lTgt, _, g) => (Consumed(), ConnectionRequest(lTgt, g, resultCell))
+          case LFwd(lTgt)             => (Consumed(), RefineRFwd(lTgt, expectedRTarget = self, cr))
       case cl @ ChosenL(resultCell) =>
         l match
           case LFwd(lTgt)            => (Consumed(), RefineRFwd(lTgt, expectedRTarget = self, cl))
@@ -508,6 +539,7 @@ object CellContent {
     (l, r) match {
       case (lc: LComplete[A], r) => combineLCompleteRDefined(self, lc, r)
       case (l, rc: RComplete[A]) => combineLDefinedRComplete(self, l, rc)
+      case _ => UnhandledCase.raise(s"($l, $r)")
     }
 
   def initLBypass[A]: (CellContent[A], (Cell[A], Cell[A], Cell[A])) => (Option[CellContent[A]], ActionResult) = {
@@ -557,6 +589,10 @@ object CellContent {
           )
         case Empty() =>
           (Some(RFwd(rCell)), CompleteLBypass(lCell, mCell, rCell) and ConsumeBypassedCell(lCell, mCell, rCell))
+        case l @ LFwd(lTgt) =>
+          (Some(BiDef(l, RFwd(rCell))), ContractBiFwd(lTgt, lCell, rCell) and ConsumeBypassedCell(lCell, mCell, rCell))
+        case c: ChooseFrom[x, a1, a2] =>
+          (Some(BiDef(c, RFwd(rCell))), CompleteLBypass(lCell, mCell, rCell) and ConsumeBypassedCell(lCell, mCell, rCell))
       }
   }
 
@@ -623,6 +659,57 @@ enum RoleR[A, B] {
 
 /** Role a `B`-cell plays in an `A`-cell to its left. */
 enum RoleL[A, B] {
+  case JoinerPong1 extends RoleL[Pong, Pong]
+  case JoinerPong2 extends RoleL[Pong, Pong]
   case SelectContestant1 extends RoleL[One |&| One, Pong]
   case SelectContestant2 extends RoleL[One |&| One, Pong]
+}
+
+enum Iso[A, B] {
+  case Id[A]() extends Iso[A, A]
+  case NeedInvDone extends Iso[Need, -[Done]]
+  case InvDoneNeed extends Iso[-[Done], Need]
+  case PongInvPing extends Iso[Pong, -[Ping]]
+  case InvPingPong extends Iso[-[Ping], Pong]
+
+  def reverse: Iso[B, A] =
+    this match
+      case Id() => Id()
+      case NeedInvDone => InvDoneNeed
+      case InvDoneNeed => NeedInvDone
+      case PongInvPing => InvPingPong
+      case InvPingPong => PongInvPing
+
+  def andThen[C](that: Iso[B, C]): Iso[A, C] =
+    (this, that) match
+      case (Id(), that) => that
+      case (thiz, Id()) => thiz
+      case (InvDoneNeed, NeedInvDone) => Id()
+      case (NeedInvDone, InvDoneNeed) => Id()
+      case (InvPingPong, PongInvPing) => Id()
+      case (PongInvPing, InvPingPong) => Id()
+}
+
+enum Inversion[A, B] {
+  case DoneNeed extends Inversion[Done, Need]
+  case PingPong extends Inversion[Ping, Pong]
+  case Universal[A]() extends Inversion[A, -[A]]
+
+  def alsoTo[X](that: Inversion[A, X]): Iso[B, X] =
+    (this, that) match {
+      case (DoneNeed, DoneNeed)       => Iso.Id()
+      case (PingPong, PingPong)       => Iso.Id()
+      case (Universal(), Universal()) => Iso.Id()
+      case (DoneNeed, Universal())    => Iso.NeedInvDone
+      case (Universal(), DoneNeed)    => Iso.InvDoneNeed
+      case (PingPong, Universal())    => Iso.PongInvPing
+      case (Universal(), PingPong)    => Iso.InvPingPong
+    }
+
+  def alsoFrom[X](that: Inversion[X, B]): A =:= X =
+    (this, that) match {
+      case (DoneNeed, DoneNeed)       => summon
+      case (PingPong, PingPong)       => summon
+      case (Universal(), Universal()) => summon
+    }
 }
