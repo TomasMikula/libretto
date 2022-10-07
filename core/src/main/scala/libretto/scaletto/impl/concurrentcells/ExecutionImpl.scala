@@ -274,7 +274,12 @@ class ExecutionImpl(
         val (in1, in2, r) = Cell.rsplit[Done, Need](in)
         Cell.rInvertSignal(in1, in2).followUp()
         r.followUp()
-        // `out: Cell[One]` is ignored
+        // `out: Cell[One]` can be ignored
+
+      case _: -⚬.NotifyEither[x, y] =>
+        val (o1, o2, r) = Cell.lsplit[Ping, x |+| y](out)
+        Cell.notifyEither[x, y](in, o1, o2).followUp()
+        r.followUp()
     }
 
   private def unify[A](l: Cell[A], r: Cell[A]): Unit =
