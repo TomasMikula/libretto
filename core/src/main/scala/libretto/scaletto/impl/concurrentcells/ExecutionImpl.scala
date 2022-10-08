@@ -280,6 +280,11 @@ class ExecutionImpl(
         val (o1, o2, r) = Cell.lsplit[Ping, x |+| y](out)
         Cell.notifyEither[x, y](in, o1, o2).followUp()
         r.followUp()
+
+      case _: -⚬.NotifyChoice[x, y] =>
+        val (i1, i2, r) = Cell.rsplit[Pong, x |&| y](in)
+        Cell.notifyChoice[x, y](i1, i2, out).followUp()
+        r.followUp()
     }
 
   private def unify[A](l: Cell[A], r: Cell[A]): Unit =
