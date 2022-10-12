@@ -276,6 +276,11 @@ class ExecutionImpl(
         r.followUp()
         // `out: Cell[One]` can be ignored
 
+      case _: -⚬.NotifyNeedL =>
+        val (i1, i2, r) = Cell.rsplit[Pong, Need](in)
+        Cell.notifyNeed(i1, i2, out).followUp()
+        r.followUp()
+
       case _: -⚬.NotifyEither[x, y] =>
         val (o1, o2, r) = Cell.lsplit[Ping, x |+| y](out)
         Cell.notifyEither[x, y](in, o1, o2).followUp()

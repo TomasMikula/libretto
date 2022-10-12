@@ -76,6 +76,9 @@ object Cell {
   def notifyEither[A, B](src: Cell[A |+| B], pingCell: Cell[Ping], out: Cell[A |+| B]): ActionResult =
     src.modifyContentWith((src, CellContent.RNotifyEither(pingCell, out)), CellContent.notifyEither)
 
+  def notifyNeed(pongCell: Cell[Pong], tgt: Cell[Need], src: Cell[Need]): ActionResult =
+    src.modifyContentWith((CellContent.LNotifyNeed(pongCell, tgt), src), CellContent.notifyNeed)
+
   def notifyChoice[A, B](pongCell: Cell[Pong], tgt: Cell[A |&| B], src: Cell[A |&| B]): ActionResult =
     src.modifyContentWith((CellContent.LNotifyChoice(pongCell, tgt), src), CellContent.notifyChoice)
 
@@ -119,6 +122,7 @@ sealed trait CellContent[A] {
       case JoinPong1(p1)         => s"JoinPong1(${addr(p1)})"
       case JoinPong2(p2)         => s"JoinPong2(${addr(p2)})"
       case BiDef(l, r)           => s"BiDef($l, $r)"
+      case Slated(l, r)          => s"Slated($l, $r)"
       case DoneSupplied          => "DoneSupplied"
       case PongSupplied          => "PongSupplied"
       case Consumed()            => "Consumed()"
@@ -140,11 +144,11 @@ sealed trait CellContent[A] {
       case RInvertTgtBypassingSrc(x, y, i) => s"RInvertTgtBypassingSrc(${addr(x)}, ${addr(y)}, $i)"
       case l: LNotifyChoice[x, y] =>
         val ns = l.notification match
-          case c: Cell[Pong] => addr(c)
-          case b: LBypassingPong => b.toString
+          case c: Cell[Pong]       => addr(c)
+          case b: LBypassing[Pong] => b.toString
         val ts = l.tgt match
           case c: Cell[`x` |&| `y`] => addr(c)
-          case b: LBypassing[_] => b.toString
+          case b: LBypassing[_]     => b.toString
         s"LNotifyChoice($ns, $ts)"
     }
 }
@@ -152,7 +156,16 @@ object CellContent {
   case class Empty[A]() extends CellContent[A]
   sealed trait LDefined[A] extends CellContent[A]
   sealed trait RDefined[A] extends CellContent[A]
+
+  /** Cell content with left and right part, such that the parts form a stable conformation. */
   case class BiDef[A](l: LDefined[A], r: RDefined[A]) extends CellContent[A]
+
+  /** Cell content with left and right part, where the collocation of these parts has triggered a reduction.
+   *  The cell with this content will soon be consumed, unless the scheduled reduction is obstructed
+   *  by a higher-priority activity (i.e. activity originating on the right of this cell).
+   */
+  case class Slated[A](l: LDefined[A], r: RDefined[A]) extends CellContent[A]
+
   case class Consumed[A]() extends CellContent[A]
 
   sealed trait LComplete[A] extends LDefined[A]
@@ -210,21 +223,33 @@ object CellContent {
 
   case class RNotifyEither[A, B](notificationCell: Cell[Ping], outCell: Cell[A |+| B]) extends RDefined[A |+| B]
   case class LNotifyChoice[A, B](
-    notification: Cell[Pong] | LBypassingPong,
+    notification: Cell[Pong] | LBypassing[Pong],
     tgt: Cell[A |&| B] | LBypassing[A |&| B],
   ) extends LDefined[A |&| B] {
     def notificationCell: Cell[Pong] =
       notification match
-        case c: Cell[Pong]             => c
-        case LBypassingPong(newTgt, _) => newTgt
+        case c: Cell[Pong]       => c
+        case l: LBypassing[Pong] => l.newTgt
 
     def tgtCell: Cell[A |&| B] =
       tgt match
         case c: Cell[A |&| B]       => c
         case l: LBypassing[A |&| B] => l.newTgt
   }
-  case class LBypassingPong(newTgt: Cell[Pong], oldTgt: Cell[Pong]) {
-    override def toString = s"LBypassingPong(${addr(newTgt)}, ${addr(oldTgt)})"
+
+  case class LNotifyNeed(
+    notification: Cell[Pong] | LBypassing[Pong],
+    tgt: Cell[Need] | LBypassing[Need],
+  ) extends LDefined[Need] {
+    def notificationCell: Cell[Pong] =
+      notification match
+        case c: Cell[Pong]       => c
+        case l: LBypassing[Pong] => l.newTgt
+
+    def tgtCell: Cell[Need] =
+      tgt match
+        case c: Cell[Need]       => c
+        case l: LBypassing[Need] => l.newTgt
   }
 
   sealed trait ActionResult
@@ -443,9 +468,9 @@ object CellContent {
         invTgt.modifyContentOptWith(this, CellContent.completeRInvSrcContraction)
     }
 
-    case class ConsumeBypassedCell[A, B, C](l: Cell[A], bypassed: Cell[B], r: Cell[C]) extends Instruction {
+    case class ConsumeSlatedCell[A, B, C](l: Cell[A], bypassed: Cell[B], r: Cell[C]) extends Instruction {
       override def execute(): ActionResult =
-        bypassed.modifyContentOptWith(this, CellContent.consumeBypassedCell)
+        bypassed.modifyContentOptWith(this, CellContent.consumeSlatedCell)
     }
   }
   import ActionResult._
@@ -687,6 +712,24 @@ object CellContent {
       }
   }
 
+  val notifyNeed: (CellContent[Need], (LNotifyNeed, Cell[Need])) => (CellContent[Need], ActionResult) = {
+    (srcContent, payloadAndCell) =>
+      import RoleR.{NeedNotification, NotifyNeedTgt}
+
+      val (payload, self) = payloadAndCell
+
+      def followUp =
+        DirectToR(payload.notificationCell, NeedNotification, self) and
+        DirectToR(payload.tgtCell, NotifyNeedTgt, self)
+
+      srcContent match {
+        case Empty() =>
+          (payload, followUp)
+        case r: RInvertTgt[x, Need] =>
+          (BiDef(payload, r), followUp)
+      }
+  }
+
   def notifyChoice[A, B]: (CellContent[A |&| B], (LNotifyChoice[A, B], Cell[A |&| B])) => (CellContent[A |&| B], ActionResult) = {
     (srcContent, payloadAndCell) =>
       import RoleR.{ChoiceNotification, NotifyChoiceTgt}
@@ -711,7 +754,7 @@ object CellContent {
       val (self, rLink) = cellAndLink
       src match {
         case Empty()                => (rLink, AllDone)
-        case l @ LFwd(lTgt)         => (BiDef(l, rLink), ContractLFwd(lTgt, slated = self, rLink.role, rLink.tgt))
+        case l @ LFwd(lTgt)         => (Slated(l, rLink), ContractLFwd(lTgt, slated = self, rLink.role, rLink.tgt))
         case l: LBypassing[A]       => (BiDef(l, rLink), AllDone)
         case l: JoinOf              => (BiDef(l, rLink), AllDone)
         case l: ChooseFrom[x, y, z] => (BiDef(l, rLink), AllDone)
@@ -723,7 +766,7 @@ object CellContent {
       val (lLink, self) = lLinkSelf
       src match {
         case Empty() => (lLink, AllDone)
-        case r @ RFwd(rTgt) => (BiDef(lLink, r), ContractRFwd(lLink.tgt, lLink.role, slated = self, rTgt))
+        case r @ RFwd(rTgt) => (Slated(lLink, r), ContractRFwd(lLink.tgt, lLink.role, slated = self, rTgt))
       }
   }
 
@@ -731,18 +774,19 @@ object CellContent {
     (rContent, cells) =>
       val (lCell, rCell) = cells
       rContent match {
-        case Empty()                 => (LFwd(lCell), RReciprocateForward(lCell, rCell))
-        case c: ChosenL[a1, a2]      => (Consumed(), RefineRFwd[a1 |&| a2](lCell, expectedRTarget = rCell, c))
-        case c: ChosenR[a1, a2]      => (Consumed(), RefineRFwd[a1 |&| a2](lCell, expectedRTarget = rCell, c))
-        case e: EitherCallback[x, y] => (Consumed(), RefineRFwd[x |+| y](lCell, expectedRTarget = rCell, e))
-        case r: RSplit[x, y]         => (Consumed(), RefineRFwd[x |*| y](lCell, expectedRTarget = rCell, r))
-        case cb: DoneCallback        => (Consumed(), RefineRFwd[Done](lCell, expectedRTarget = rCell, cb))
-        case PongSupplied            => (Consumed(), RefineRFwd(lCell, expectedRTarget = rCell, PongSupplied))
-        case rFwd: RFwd[a]           => (BiDef(LFwd(lCell), rFwd), ContractBiFwd(lCell, rCell, rFwd.tgt))
-        case rLnk @ RRole(role, tgt) => (BiDef(LFwd(lCell), rLnk), ContractLFwd(lCell, rCell, role, tgt))
-        case r @ RInvertSrc(i, tgt)  => (BiDef(LFwd(lCell), r), ContractLFwdRInvSrc(lCell, rCell, i, tgt))
-        case s: SelectOf             => (BiDef(LFwd(lCell), s), RReciprocateForward(lCell, rCell))
-        case j: JoinPongOf           => (BiDef(LFwd(lCell), j), RReciprocateForward(lCell, rCell))
+        case Empty()                         => (LFwd(lCell), RReciprocateForward(lCell, rCell))
+        case c: ChosenL[a1, a2]              => (Consumed(), RefineRFwd[a1 |&| a2](lCell, expectedRTarget = rCell, c))
+        case c: ChosenR[a1, a2]              => (Consumed(), RefineRFwd[a1 |&| a2](lCell, expectedRTarget = rCell, c))
+        case e: EitherCallback[x, y]         => (Consumed(), RefineRFwd[x |+| y](lCell, expectedRTarget = rCell, e))
+        case r: RSplit[x, y]                 => (Consumed(), RefineRFwd[x |*| y](lCell, expectedRTarget = rCell, r))
+        case cb: DoneCallback                => (Consumed(), RefineRFwd[Done](lCell, expectedRTarget = rCell, cb))
+        case PongSupplied                    => (Consumed(), RefineRFwd(lCell, expectedRTarget = rCell, PongSupplied))
+        case rFwd: RFwd[a]                   => (Slated(LFwd(lCell), rFwd), ContractBiFwd(lCell, rCell, rFwd.tgt))
+        case rLnk @ RRole(role, tgt)         => (Slated(LFwd(lCell), rLnk), ContractLFwd(lCell, rCell, role, tgt))
+        case r @ RInvertSrc(i, tgt)          => (Slated(LFwd(lCell), r), ContractLFwdRInvSrc(lCell, rCell, i, tgt))
+        case s: SelectOf                     => (BiDef(LFwd(lCell), s), RReciprocateForward(lCell, rCell))
+        case j: JoinPongOf                   => (BiDef(LFwd(lCell), j), RReciprocateForward(lCell, rCell))
+        case r: RInvertTgtBypassingSrc[x, A] => (BiDef(LFwd(lCell), r), RReciprocateForward(lCell, rCell))
       }
   }
 
@@ -753,21 +797,22 @@ object CellContent {
         case Empty()                => (Some(RFwd(rCell)), AllDone)
         case DoneSupplied           => (Some(Consumed()), RefineLFwd(rCell, expectedLTarget = self, DoneSupplied))
         case i: InjectedR[x, y]     => (Some(Consumed()), RefineLFwd(rCell, expectedLTarget = self, i))
-        case l: LSplit[x, y]        => (Some(BiDef(l, RFwd(rCell))), PropagateLSplit[x, y](from = self, payload = l, to = rCell))
-        case l: LFwd[x]             => (Some(BiDef(l, RFwd(rCell))), ContractBiFwd(l.tgt, slated = self, rCell))
-        case l: LRole[x, y]         => (Some(BiDef(l, RFwd(rCell))), ContractRFwd(l.tgt, l.role, slated = self, rCell))
+        case l: LSplit[x, y]        => (Some(Slated(l, RFwd(rCell))), PropagateLSplit[x, y](from = self, payload = l, to = rCell))
+        case l: LFwd[x]             => (Some(Slated(l, RFwd(rCell))), ContractBiFwd(l.tgt, slated = self, rCell))
+        case l: LRole[x, y]         => (Some(Slated(l, RFwd(rCell))), ContractRFwd(l.tgt, l.role, slated = self, rCell))
+        case l: LBypassing[x]       => (Some(BiDef(l, RFwd(rCell))), AllDone)
         case l: LBypassingTo[x, y]  => (Some(BiDef(l, RFwd(rCell))), AllDone)
         case j: JoinOf              => (Some(BiDef(j, RFwd(rCell))), AllDone)
         case c: ChooseFrom[x, y, z] => (Some(BiDef(c, RFwd(rCell))), AllDone)
         case c: ChoiceWith[x, y, z] => (Some(BiDef(c, RFwd(rCell))), AllDone)
-        case l: LBypassing[x]       => (Some(BiDef(l, RFwd(rCell))), AllDone)
 
         // overtaken
-        case BiDef(_, _)  => (None, AllDone)
-        case RSplit(_, _) => (None, AllDone)
-        case ChosenR(_)   => (None, AllDone)
-        case ChosenL(_)   => (None, AllDone)
-        case Consumed()   => (None, AllDone)
+        case BiDef(_, _)      => (None, AllDone)
+        case RSplit(_, _)     => (None, AllDone)
+        case ChosenR(_)       => (None, AllDone)
+        case ChosenL(_)       => (None, AllDone)
+        case Consumed()       => (None, AllDone)
+        case RInvertSrc(_, _) => (None, AllDone)
       }
   }
 
@@ -776,7 +821,7 @@ object CellContent {
       val (src, inv, tgt) = srcInvTgt
       tgtContent match {
         case Empty()    => (RInvertTgt(src, inv), RReciprocateRInvert(src, inv, tgt))
-        case l: LFwd[B] => (BiDef(l, RInvertTgt(src, inv)), ContractLFwdRInvTgt(l.tgt, tgt, inv, src))
+        case l: LFwd[B] => (Slated(l, RInvertTgt(src, inv)), ContractLFwdRInvTgt(l.tgt, tgt, inv, src))
       }
   }
 
@@ -822,6 +867,11 @@ object CellContent {
         case (BiDef(l, r), link) =>
           val r1 = refineRLink(r, link, expectedRCell, payload)
           combine(self, l, r1)
+        case (Slated(l, r), link) =>
+          // even if already slated, refinement from the right is higher-priority
+          // and has already precluded the slated-related action
+          val r1 = refineRLink(r, link, expectedRCell, payload)
+          combine(self, l, r1)
         case _ =>
           UnhandledCase.raise(s"($lContent, $link)")
       }
@@ -862,6 +912,19 @@ object CellContent {
   def refineRFwd[A]: (CellContent[A], RefineRFwd[A]) => (CellContent[A], ActionResult) = {
     (lContent, refinement) =>
       val RefineRFwd(self, expectedRCell, payload) = refinement
+
+      def goBi(l: LDefined[A], r: RDefined[A]): (CellContent[A], ActionResult) = {
+        val r1 = r match {
+          case RFwd(tgt) =>
+            if (tgt eq expectedRCell) {
+              payload
+            } else {
+              throw new IllegalStateException(s"Actual RFwd target did not equal expected: $tgt vs. $expectedRCell")
+            }
+        }
+        combineLDefinedRComplete(self, l, r1)
+      }
+
       lContent match {
         case RFwd(tgt) =>
           if (tgt eq expectedRCell) {
@@ -870,15 +933,9 @@ object CellContent {
             throw new IllegalStateException(s"Actual RFwd target did not equal expected: $tgt vs. $expectedRCell")
           }
         case BiDef(l, r) =>
-          val r1 = r match {
-            case RFwd(tgt) =>
-              if (tgt eq expectedRCell) {
-                payload
-              } else {
-                throw new IllegalStateException(s"Actual RFwd target did not equal expected: $tgt vs. $expectedRCell")
-              }
-          }
-          combineLDefinedRComplete(self, l, r1)
+          goBi(l, r)
+        case Slated(l, r) =>
+          goBi(l, r)
         case l: LDefined[A] =>
           combineLDefinedRComplete(self, l, payload)
         case Empty() =>
@@ -925,45 +982,59 @@ object CellContent {
 
     (lContent, refinement) =>
       val RefineRPart(self, lRole, expectedRCell, payload) = refinement
+
+      def goBi(l: LDefined[A], r: RDefined[A]): (Option[CellContent[A]], ActionResult) = {
+        def goPong(self: Cell[Pong], l: LDefined[Pong], src: Cell[Pong], newPayload: RDefined[Pong]): (Option[CellContent[Pong]], ActionResult) =
+          assert(src eq expectedRCell)
+          payload match
+            case PongSupplied =>
+              val (content, action) = combine(self, l, newPayload)
+              (Some(content), action)
+
+        lRole match
+          case JoinerPong1 =>
+            r match
+              case JoinPongOf(src1, src2) =>
+                goPong(self, l, src1, newPayload = JoinPong2(src2))
+              case JoinPong1(src1) =>
+                goPong(self, l, src1, newPayload = PongSupplied)
+              case JoinPong2(_) =>
+                throw IllegalStateException(s"Double arrival of first Pong joiner")
+          case JoinerPong2 =>
+            r match
+              case JoinPongOf(src1, src2) =>
+                goPong(self, l, src2, newPayload = JoinPong1(src1))
+              case JoinPong2(src2) =>
+                goPong(self, l, src2, newPayload = PongSupplied)
+              case JoinPong1(src1) =>
+                throw IllegalStateException(s"Double arrival of second Pong joiner")
+          case SelectContestant1 =>
+            r match
+              case SelectOf(contestant1, contestant2) =>
+                assert(contestant1 eq expectedRCell)
+                payload match
+                  case PongSupplied =>
+                    val (content, action) = combine(self, l, ChosenL[One, One](Cell.one))
+                    (Some(content), action)
+          case SelectContestant2 =>
+            r match
+              case SelectOf(contestant1, contestant2) =>
+                assert(contestant2 eq expectedRCell)
+                payload match
+                  case PongSupplied =>
+                    val (content, action) = combine(self, l, ChosenR[One, One](Cell.one))
+                    (Some(content), action)
+      }
+
       lContent match {
-        case Empty() =>
-          throw new IllegalStateException(s"Unexpected empty cell linked to by $lRole from $expectedRCell")
         case BiDef(l, r) =>
-          lRole match
-            case JoinerPong1 =>
-              r match
-                case JoinPongOf(src1, src2) =>
-                  assert(src1 eq expectedRCell)
-                  payload match
-                    case PongSupplied =>
-                      val (content, action) = combine(self, l, JoinPong2(src2))
-                      (Some(content), action)
-            case JoinerPong2 =>
-              r match
-                case JoinPongOf(src1, src2) =>
-                  assert(src2 eq expectedRCell)
-                  payload match
-                    case PongSupplied =>
-                      val (content, action) = combine(self, l, JoinPong1(src1))
-                      (Some(content), action)
-            case SelectContestant1 =>
-              r match
-                case SelectOf(contestant1, contestant2) =>
-                  assert(contestant1 eq expectedRCell)
-                  payload match
-                    case PongSupplied =>
-                      val (content, action) = combine(self, l, ChosenL[One, One](Cell.one))
-                      (Some(content), action)
-            case SelectContestant2 =>
-              r match
-                case SelectOf(contestant1, contestant2) =>
-                  assert(contestant2 eq expectedRCell)
-                  payload match
-                    case PongSupplied =>
-                      val (content, action) = combine(self, l, ChosenR[One, One](Cell.one))
-                      (Some(content), action)
+          goBi(l, r)
+        case Slated(l, r) =>
+          goBi(l, r)
         case Consumed() =>
           (None, AllDone)
+        case Empty() =>
+          throw new IllegalStateException(s"Unexpected empty cell linked to by $lRole from $expectedRCell")
       }
   }
 
@@ -997,9 +1068,10 @@ object CellContent {
           case l: LBypassing[A]       => (BiDef(l, r), AllDone)
       case PongSupplied =>
         l match
-          case LFwd(lTgt)         => (Consumed(), RefineRFwd(lTgt, expectedRTarget = self, PongSupplied))
-          case LRole(lTgt, lRole) => (Consumed(), RefineRPart(lTgt, lRole, expectedRTarget = self, PongSupplied))
-          case l: LBypassing[A]   => (BiDef(l, r), AllDone)
+          case LFwd(lTgt)            => (Consumed(), RefineRFwd(lTgt, expectedRTarget = self, PongSupplied))
+          case LRole(lTgt, lRole)    => (Consumed(), RefineRPart(lTgt, lRole, expectedRTarget = self, PongSupplied))
+          case l: LBypassing[A]      => (BiDef(l, r), AllDone)
+          case l: LBypassingTo[x, A] => (BiDef(l, r), AllDone)
 
   private def combineLCompleteRDefined[A](self: Cell[A], l: LComplete[A], r: RDefined[A]): (CellContent[A], ActionResult) =
     l match
@@ -1009,14 +1081,26 @@ object CellContent {
 
   private def combine[A](self: Cell[A], l: LDefined[A], r: RDefined[A]): (CellContent[A], ActionResult) =
     (l, r) match {
-      case (lc: LComplete[A], r)                => combineLCompleteRDefined(self, lc, r)
-      case (l, rc: RComplete[A])                => combineLDefinedRComplete(self, l, rc)
-      case (l: LFwd[A], r: RFwd[A])             => (BiDef(l, r), ContractBiFwd(l.tgt, self, r.tgt))
-      case (l: LFwd[A], r: RInvertSrc[A, b])    => (BiDef(l, r), ContractLFwdRInvSrc(l.tgt, self, r.inv, r.tgt))
-      case (l: LFwd[A], r: JoinPongOf)          => (BiDef(l, r), AllDone)
-      case (l: LRole[x, A], r: RFwd[A])         => (BiDef(l, r), ContractRFwd(l.tgt, l.role, self, r.tgt))
-      case (l: LFwd[A], r: RRole[A, x])         => (BiDef(l, r), ContractLFwd(l.tgt, self, r.role, r.tgt))
-      case (l @ LFwd(lTgt), r @ JoinPong1(src)) => (BiDef(l, r), ContractCell(lTgt, Fwd(), slated = self, RoleL.JoinerPong1, src, Fwd()))
+      case (lc: LComplete[A], r)                   => combineLCompleteRDefined(self, lc, r)
+      case (l, rc: RComplete[A])                   => combineLDefinedRComplete(self, l, rc)
+      case (l: LFwd[A], r: RFwd[A])                => (Slated(l, r), ContractBiFwd(l.tgt, self, r.tgt))
+      case (l: LFwd[A], r: RInvertSrc[A, b])       => (Slated(l, r), ContractLFwdRInvSrc(l.tgt, self, r.inv, r.tgt))
+      case (l: LFwd[A], r: JoinPongOf)             => (BiDef(l, r), AllDone)
+      case (l: LRole[x, A], r: JoinPongOf)         => (BiDef(l, r), AllDone)
+      case (l: LRole[x, A], r: RFwd[A])            => (Slated(l, r), ContractRFwd(l.tgt, l.role, self, r.tgt))
+      case (l: LFwd[A], r: RRole[A, x])            => (Slated(l, r), ContractLFwd(l.tgt, self, r.role, r.tgt))
+      case (l: LRole[x, A], r: RRole[A, y])        => (BiDef(l, r), AllDone)
+      case (l: LBypassing[A], r: RFwd[A])          => (BiDef(l, r), AllDone)
+      case (l: LBypassing[A], r: JoinPong1)        => (BiDef(l, r), AllDone)
+      case (l: LBypassing[A], r: JoinPong2)        => (BiDef(l, r), AllDone)
+      case (l: LBypassingTo[x, A], r: RFwd[A])     => (BiDef(l, r), AllDone)
+      case (l: LBypassingTo[x, A], r: RRole[A, y]) => (BiDef(l, r), AllDone)
+      case (l: LBypassingTo[x, A], r: JoinPong1)   => (BiDef(l, r), AllDone)
+      case (l: LBypassingTo[x, A], r: JoinPong2)   => (BiDef(l, r), AllDone)
+      case (l @ LFwd(lTgt), r @ JoinPong1(src))    => (Slated(l, r), ContractCell(lTgt, Fwd(), slated = self, RoleL.JoinerPong1, src, Fwd()))
+      case (l @ LFwd(lTgt), r @ JoinPong2(src))    => (Slated(l, r), ContractCell(lTgt, Fwd(), slated = self, RoleL.JoinerPong2, src, Fwd()))
+      case (l: LRole[x, A], r @ JoinPong1(src))    => (Slated(l, r), ContractCell(l.tgt, l.role, slated = self, RoleL.JoinerPong1, src, l.role))
+      case (l: LRole[x, A], r @ JoinPong2(src))    => (Slated(l, r), ContractCell(l.tgt, l.role, slated = self, RoleL.JoinerPong2, src, l.role))
       case _ =>
         UnhandledCase.raise(s"($l, $r)")
     }
@@ -1027,8 +1111,18 @@ object CellContent {
       rContent match {
         case Empty() =>
           (Some(BypassingL(lCell, newLink, slatedCell, rLink)), SkipSlatedCell(contraction))
+        case LRole(lTgt, lRole) =>
+          if (lTgt eq slatedCell)
+            assert(lRole == rLink)
+            (Some(BypassingL(lCell, newLink, slatedCell, rLink)), SkipSlatedCell(contraction))
+          else
+            (None, AllDone)
+        case Slated(l, r) => // obstructed
+          (None, AllDone)
         case PongSupplied =>
           (Some(Consumed()), RefineRLink(slatedCell, rLink, expectedRTarget = self, PongSupplied))
+        case Consumed() =>
+          (None, AllDone)
       }
   }
 
@@ -1053,11 +1147,7 @@ object CellContent {
           l match
             case LFwd(tgt) =>
               if (tgt eq mCell) {
-                r match
-                  case RFwd(_) | RRole(_, _) => // obstructed by higher-priority task (rCell is being bypassed)
-                    (None, AllDone)
-                  case j: JoinPongOf =>
-                    (Some(BiDef(LBypassing(lCell, mCell), j)), SkipAhead(lCell, mCell, rCell))
+                (Some(BiDef(LBypassing(lCell, mCell), r)), SkipAhead(lCell, mCell, rCell))
               } else { // overtaken
                 (None, AllDone)
               }
@@ -1068,9 +1158,11 @@ object CellContent {
                 (None, AllDone)
               }
 
-        // overtaken
-        case Consumed()   => (None, AllDone)
-        case DoneSupplied => (None, AllDone)
+        case Slated(_, _) => // obstructed
+          (None, AllDone)
+
+        case Consumed() | DoneSupplied => // overtaken
+          (None, AllDone)
       }
   }
 
@@ -1094,16 +1186,18 @@ object CellContent {
         case BiDef(rl, rr) =>
           def go(lTgt: Cell[B]): (Option[CellContent[B]], ActionResult) =
             if (lTgt eq slatedCell) {
-              rr match {
-                case RFwd(_) | RRole(_, _) => // obstructed by higher-priority task (the `self` cell is being bypassed)
-                  (None, AllDone)
-              }
+              ( Some(BiDef(LBypassingTo(lCell, link, slatedCell), rr))
+              , SkipAheadTo(lCell, link, slatedCell, self)
+              )
             } else { // overtaken
               (None, AllDone)
             }
 
           rl match
-            case LFwd(tgt) => go(tgt)
+            case LFwd(tgt)             => go(tgt)
+            case LBypassing(newTgt, _) => go(newTgt)
+        case Slated(_, _) =>
+          (None, AllDone)
         case r: RRole[B, c] =>
           (Some(BiDef(LBypassingTo(lCell, link, slatedCell), r)), SkipAheadTo(lCell, link, slatedCell, self))
         case Consumed() =>
@@ -1121,7 +1215,7 @@ object CellContent {
           rRole match {
             case ChoiceNotification() =>
               if (l.notificationCell eq slatedCell)
-                ( Some(LNotifyChoice(LBypassingPong(lCell, slatedCell), l.tgt))
+                ( Some(LNotifyChoice(LBypassing(lCell, slatedCell), l.tgt))
                 , SkipAheadLink(lCell, slatedCell, rRole, self)
                 )
               else // overtaken
@@ -1186,40 +1280,53 @@ object CellContent {
   def skipAhead[A]: (CellContent[A], SkipAhead[A]) => (Option[CellContent[A]], ActionResult) = {
     (lContent, cells) =>
       val SkipAhead(lCell, mCell, rCell) = cells
-      lContent match {
-        case RFwd(tgt) =>
-          if (tgt eq mCell)
-            (Some(RFwd(rCell)), CompleteLBypass(lCell, mCell, rCell) and ConsumeBypassedCell(lCell, mCell, rCell))
-          else // overtaken
-            (None, AllDone)
-        case BiDef(ll, lr) =>
-          lr match {
+
+      def goBi(l: LDefined[A], r: RDefined[A]): (Option[CellContent[A]], ActionResult) = {
+          r match {
             case RFwd(tgt) =>
               if (tgt eq mCell)
-                (Some(BiDef(ll, RFwd(rCell))), CompleteLBypass(lCell, mCell, rCell) and ConsumeBypassedCell(lCell, mCell, rCell))
+                val (content, res) = combine(lCell, l, RFwd(rCell))
+                val action = res match {
+                  case a: FollowUpAction => a
+                  case AllDone           => CompleteLBypass(lCell, mCell, rCell)
+                }
+                val followUp = action and ConsumeSlatedCell(lCell, mCell, rCell)
+                (Some(content), followUp)
               else // overtaken
                 (None, AllDone)
           }
+      }
+
+      lContent match {
+        case RFwd(tgt) =>
+          if (tgt eq mCell)
+            (Some(RFwd(rCell)), CompleteLBypass(lCell, mCell, rCell) and ConsumeSlatedCell(lCell, mCell, rCell))
+          else // overtaken
+            (None, AllDone)
+        case BiDef(l, r) =>
+          goBi(l, r)
+        case Slated(l, r) =>
+          goBi(l, r)
         case Consumed() => // overtaken
           (None, AllDone)
         case DoneSupplied =>
           (
             Some(Consumed()),
             RefineLFwd(rCell, expectedLTarget = lCell, DoneSupplied) and
-              ConsumeBypassedCell(lCell, mCell, rCell)
+              ConsumeSlatedCell(lCell, mCell, rCell)
           )
         case Empty() =>
-          (Some(RFwd(rCell)), CompleteLBypass(lCell, mCell, rCell) and ConsumeBypassedCell(lCell, mCell, rCell))
+          (Some(RFwd(rCell)), CompleteLBypass(lCell, mCell, rCell) and ConsumeSlatedCell(lCell, mCell, rCell))
         case l @ LFwd(lTgt) =>
-          (Some(BiDef(l, RFwd(rCell))), ContractBiFwd(lTgt, lCell, rCell) and ConsumeBypassedCell(lCell, mCell, rCell))
+          (Some(Slated(l, RFwd(rCell))), ContractBiFwd(lTgt, lCell, rCell) and ConsumeSlatedCell(lCell, mCell, rCell))
         case l @ LRole(lTgt, lRole) =>
-          (Some(BiDef(l, RFwd(rCell))), ContractRFwd(lTgt, lRole, slated = lCell, rCell) and ConsumeBypassedCell(lCell, mCell, rCell))
+          (Some(Slated(l, RFwd(rCell))), ContractRFwd(lTgt, lRole, slated = lCell, rCell) and ConsumeSlatedCell(lCell, mCell, rCell))
         case l: LBypassing[A] =>
-          (Some(BiDef(l, RFwd(rCell))), CompleteLBypass(lCell, mCell, rCell) and ConsumeBypassedCell(lCell, mCell, rCell))
+          (Some(BiDef(l, RFwd(rCell))), CompleteLBypass(lCell, mCell, rCell) and ConsumeSlatedCell(lCell, mCell, rCell))
         case c: ChooseFrom[x, a1, a2] =>
-          (Some(BiDef(c, RFwd(rCell))), CompleteLBypass(lCell, mCell, rCell) and ConsumeBypassedCell(lCell, mCell, rCell))
+          (Some(BiDef(c, RFwd(rCell))), CompleteLBypass(lCell, mCell, rCell) and ConsumeSlatedCell(lCell, mCell, rCell))
         case c: ChoiceWith[x, y, z] =>
-          (Some(BiDef(c, RFwd(rCell))), CompleteLBypass(lCell, mCell, rCell) and ConsumeBypassedCell(lCell, mCell, rCell))
+          (Some(BiDef(c, RFwd(rCell))), CompleteLBypass(lCell, mCell, rCell) and ConsumeSlatedCell(lCell, mCell, rCell))
       }
   }
 
@@ -1229,7 +1336,7 @@ object CellContent {
 
       def followUp: ActionResult =
         CompleteContractRFwd(lCell, lRole, slatedCell, rCell) and
-        ConsumeBypassedCell(lCell, slatedCell, rCell)
+        ConsumeSlatedCell(lCell, slatedCell, rCell)
 
       lContent match {
         case BiDef(ll, lr) =>
@@ -1273,23 +1380,33 @@ object CellContent {
   def skipAheadLink[A, B]: (CellContent[A], SkipAheadLink[A, B]) => (Option[CellContent[A]], ActionResult) = {
     (lContent, payload) =>
       val SkipAheadLink(lCell, slatedCell, rRole, rCell) = payload
+
+      def goBi(l: LDefined[A], r: RDefined[A]): (Option[CellContent[A]], ActionResult) = {
+          r match {
+            case RFwd(tgt) =>
+              if (tgt eq slatedCell)
+                val (content, res) = combine(lCell, l, RRole(rRole, rCell))
+                val action = res match {
+                  case a: FollowUpAction => a
+                  case AllDone           => CompleteContractLFwd(lCell, slatedCell, rRole, rCell)
+                }
+                val followUp = action and ConsumeSlatedCell(lCell, slatedCell, rCell)
+                (Some(content), followUp)
+              else // overtaken
+                (None, AllDone)
+          }
+      }
+
       lContent match {
         case Empty() =>
           val followUp =
             CompleteContractLFwd(lCell, slatedCell, rRole, rCell) and
-            ConsumeBypassedCell(lCell, slatedCell, rCell)
+            ConsumeSlatedCell(lCell, slatedCell, rCell)
           (Some(RRole(rRole, rCell)), followUp)
         case BiDef(l, r) =>
-          r match {
-            case RFwd(tgt) =>
-              if (tgt eq slatedCell)
-                val followUp =
-                  CompleteContractLFwd(lCell, slatedCell, rRole, rCell) and
-                  ConsumeBypassedCell(lCell, slatedCell, rCell)
-                (Some(RRole(rRole, rCell)), followUp)
-              else // overtaken
-                (None, AllDone)
-          }
+          goBi(l, r)
+        case Slated(l, r) =>
+          goBi(l, r)
       }
   }
 
@@ -1300,13 +1417,13 @@ object CellContent {
         case Empty() =>
           val followUp =
             CompleteRInvTgtContraction(lCell, slatedCell, invSrc) and
-            ConsumeBypassedCell(lCell, slatedCell, invSrc)
+            ConsumeSlatedCell(lCell, slatedCell, invSrc)
           (Some(RInvertTgt(invSrc, inversion)), followUp)
         case RFwd(rTgt) =>
           if (rTgt eq slatedCell)
             val followUp =
               CompleteRInvTgtContraction(lCell, slatedCell, invSrc) and
-              ConsumeBypassedCell(lCell, slatedCell, invSrc)
+              ConsumeSlatedCell(lCell, slatedCell, invSrc)
             (Some(RInvertTgt(invSrc, inversion)), followUp)
           else // overtaken
             (None, AllDone)
@@ -1320,13 +1437,13 @@ object CellContent {
         case Empty() =>
           val followUp =
             CompleteRInvSrcContraction(lCell, slatedCell, invTgt) and
-            ConsumeBypassedCell(lCell, slatedCell, invTgt)
+            ConsumeSlatedCell(lCell, slatedCell, invTgt)
           (Some(RInvertSrc(inversion, invTgt)), followUp)
         case RFwd(rTgt) =>
           if (rTgt eq slatedCell)
             val followUp =
               CompleteRInvSrcContraction(lCell, slatedCell, invTgt) and
-              ConsumeBypassedCell(lCell, slatedCell, invTgt)
+              ConsumeSlatedCell(lCell, slatedCell, invTgt)
             (Some(RInvertSrc(inversion, invTgt)), followUp)
           else // overtaken
             (None, AllDone)
@@ -1335,7 +1452,7 @@ object CellContent {
           val action = res match
             case a: FollowUpAction => a
             case AllDone           => CompleteRInvSrcContraction(lCell, slatedCell, invTgt)
-          val followUp = action and ConsumeBypassedCell(lCell, slatedCell, invTgt)
+          val followUp = action and ConsumeSlatedCell(lCell, slatedCell, invTgt)
           (Some(content), followUp)
       }
   }
@@ -1383,8 +1500,8 @@ object CellContent {
           rRole match {
             case ChoiceNotification() =>
               l.notification match
-                case LBypassingPong(`lCell`, _) => (Some(LNotifyChoice(lCell, l.tgt)), AllDone)
-                case _                          => (None, AllDone) // overtaken
+                case LBypassing(`lCell`, _) => (Some(LNotifyChoice(lCell, l.tgt)), AllDone)
+                case _                      => (None, AllDone) // overtaken
             case NotifyChoiceTgt() =>
               ???
           }
@@ -1429,11 +1546,11 @@ object CellContent {
       }
   }
 
-  def consumeBypassedCell[A, B, C]: (CellContent[B], ConsumeBypassedCell[A, B, C]) => (Option[CellContent[B]], ActionResult) = {
+  def consumeSlatedCell[A, B, C]: (CellContent[B], ConsumeSlatedCell[A, B, C]) => (Option[CellContent[B]], ActionResult) = {
     (mContent, cells) =>
-      val ConsumeBypassedCell(lCell, mCell, rCell) = cells
+      val ConsumeSlatedCell(lCell, mCell, rCell) = cells
       mContent match {
-        case BiDef(l, r) =>
+        case Slated(l, r) =>
           // check that `l` still points to `lCell`
           l match {
             case LFwd(`lCell`) =>
@@ -1497,6 +1614,8 @@ case class Fwd[A]() extends Link[A, A]
 enum RoleR[A, B] extends Link[A, B] {
   case Joiner1 extends RoleR[Done, Done]
   case Joiner2 extends RoleR[Done, Done]
+  case NeedNotification extends RoleR[Pong, Need]
+  case NotifyNeedTgt extends RoleR[Need, Need]
   case ChoiceNotification[A, B]() extends RoleR[Pong, A |&| B]
   case NotifyChoiceTgt[A, B]() extends RoleR[A |&| B, A |&| B]
 }
