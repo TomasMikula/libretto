@@ -246,6 +246,9 @@ class ExecutionImpl(
       case r: -⚬.RecF[A, B] =>
         connect(in, r.recursed, out)
 
+      case -⚬.RecCall(f) =>
+        connect(in, f.recursed, out) // XXX: expanding recursive calls immediately
+
       case _: -⚬.Pack[f] =>
         def go[F[_]](in: Cell[F[Rec[F]]], out: Cell[Rec[F]]): Unit =
           val ev = summon[Rec[F] =:= Rec[F]].asInstanceOf[Rec[F] =:= F[Rec[F]]] // XXX: cheating
@@ -275,6 +278,12 @@ class ExecutionImpl(
         Cell.rInvertSignal(in1, in2).followUp()
         r.followUp()
         // `out: Cell[One]` can be ignored
+
+      case _: -⚬.LInvertSignal =>
+        val (out1, out2, r) = Cell.lsplit[Need, Done](out)
+        Cell.lInvertSignal(out1, out2).followUp()
+        r.followUp()
+        // `in: Cell[One]` can be ignored
 
       case _: -⚬.NotifyNeedL =>
         val (i1, i2, r) = Cell.rsplit[Pong, Need](in)
