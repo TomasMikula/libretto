@@ -299,6 +299,10 @@ class ExecutionImpl(
         val (i1, i2, r) = Cell.rsplit[Pong, x |&| y](in)
         Cell.notifyChoice[x, y](i1, i2, out).followUp()
         r.followUp()
+
+      case _: -⚬.PongF =>
+        Cell.supplyPong(in).followUp()
+        // `out: Cell[One]` can be ignored
     }
 
   private def unify[A](l: Cell[A], r: Cell[A]): Unit =
