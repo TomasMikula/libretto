@@ -300,9 +300,16 @@ class ExecutionImpl(
         Cell.notifyChoice[x, y](i1, i2, out).followUp()
         r.followUp()
 
+      case _: -⚬.PingF =>
+        Cell.supplyPing(out).followUp()
+        // `in: Cell[One]` can be ignored
+
       case _: -⚬.PongF =>
         Cell.supplyPong(in).followUp()
         // `out: Cell[One]` can be ignored
+
+      case _: -⚬.StrengthenPing =>
+        Cell.strengthenPing(in, out).followUp()
     }
 
   private def unify[A](l: Cell[A], r: Cell[A]): Unit =
