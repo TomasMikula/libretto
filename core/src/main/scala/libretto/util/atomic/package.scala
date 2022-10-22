@@ -4,6 +4,13 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec
 
 package object atomic {
+  private inline val Debug = false
+
+  private inline def debugPrint(s: String): Unit =
+    if (Debug) println(s)
+
+  private def addr[X](c: AtomicReference[X]): String =
+    "@" + System.identityHashCode(c).toHexString
 
   extension [A <: AnyRef](ref: AtomicReference[A]) {
     def modifyOpaque[C](f: A => (A, C)): C = {
@@ -24,6 +31,7 @@ package object atomic {
         val res: (A, C) = f(expected, b)
         val changed: A = compareAndSetOpaque[A](ref, expected, res._1)
         if (changed eq res._1) // success
+          debugPrint(s"${addr(ref)} set to $changed, returning ${res._2}")
           res._2
         else
           go(changed)
@@ -37,10 +45,12 @@ package object atomic {
         val res: (Option[A], C) = f(expected, b)
         res._1 match {
           case None =>
+            debugPrint(s"${addr(ref)} unchanged by $b, remaining at $expected, returning ${res._2}")
             res._2
           case Some(a) =>
             val changed: A = compareAndSetOpaque[A](ref, expected, a)
             if (changed eq a) // success
+              debugPrint(s"${addr(ref)} set to $changed, returning ${res._2}")
               res._2
             else
               go(changed)
