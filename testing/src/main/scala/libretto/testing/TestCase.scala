@@ -8,7 +8,7 @@ sealed trait TestCase[TK <: TestKit]
 
 object TestCase {
   sealed trait Single[TK <: TestKit] extends TestCase[TK] {
-    def withTimeout(d: FiniteDuration): TestCase[TK]
+    def withTimeout(d: FiniteDuration): TestCase.Single[TK]
   }
 
   sealed trait SingleProgram[TK <: TestKit] extends Single[TK] {
@@ -31,7 +31,7 @@ object TestCase {
 
     val timeout: FiniteDuration
 
-    override def withTimeout(d: FiniteDuration): TestCase[TK] =
+    override def withTimeout(d: FiniteDuration): TestCase.Single[TK] =
       parameterizedExecAndCheck(using testKit)(body, params, conductor(_, _), postStop, d)
   }
 
@@ -40,7 +40,7 @@ object TestCase {
     val body: () => testKit.Outcome[Unit],
     val timeout: FiniteDuration,
   ) extends Single[TK] {
-    override def withTimeout(d: FiniteDuration): TestCase[TK] =
+    override def withTimeout(d: FiniteDuration): TestCase.Single[TK] =
       OutcomeOnly(testKit, body, d)
   }
 
@@ -54,7 +54,7 @@ object TestCase {
     conductor0: (exn: kit.bridge.Execution) ?=> (exn.OutPort[A], Q) => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
     timeout0: FiniteDuration = 1.second,
-  ): TestCase[TK] =
+  ): TestCase.Single[TK] =
     new SingleProgram[TK] {
       override type O = A
       override type P = Q
@@ -71,7 +71,7 @@ object TestCase {
     body0: dsl.-⚬[dsl.Done, A],
     conductor0: (exn: kit.bridge.Execution) ?=> exn.OutPort[A] => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
-  ): TestCase[kit.type] =
+  ): TestCase.Single[kit.type] =
     parameterizedExecAndCheck[kit.type, A, Unit, B](
       body0,
       kit.ExecutionParam.unit,
@@ -81,7 +81,7 @@ object TestCase {
 
   def apply(using kit: TestKit)(
     body: dsl.-⚬[dsl.Done, kit.Assertion[dsl.Done]],
-  )(using pos: SourcePos): TestCase[kit.type] =
+  )(using pos: SourcePos): TestCase.Single[kit.type] =
     apply[kit.Assertion[dsl.Done], Unit](body, kit.extractOutcome(_), kit.monadOutcome.pure)
 
   def apply[O](using kit: TestKit)(
@@ -94,7 +94,7 @@ object TestCase {
     body: kit.dsl.-⚬[kit.dsl.Done, O],
     params: kit.ExecutionParam[P],
     conduct: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit],
-  ): TestCase[kit.type] =
+  ): TestCase.Single[kit.type] =
     parameterizedExecAndCheck[kit.type, O, P, Unit](body, params, conduct(_, _), kit.monadOutcome.pure)
 
   def multiple[TK <: TestKit](
@@ -149,7 +149,7 @@ object TestCase {
     def via[X](
       conductor: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[X],
       postStop: X => kit.Outcome[Unit],
-    ): TestCase[kit.type] =
+    ): TestCase.Single[kit.type] =
       TestCase.parameterizedExecAndCheck(using kit)(body, params, conductor(_, _), postStop)
   }
 }
