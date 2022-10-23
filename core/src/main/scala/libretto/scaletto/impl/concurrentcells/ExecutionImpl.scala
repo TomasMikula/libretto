@@ -238,6 +238,11 @@ class ExecutionImpl(
         Cell.join(in1, in2, out).followUp()
         r.followUp()
 
+      case _: -⚬.JoinNeed =>
+        val (out1, out2, r) = Cell.lsplit[Need, Need](out)
+        Cell.joinNeed(in, out1, out2).followUp()
+        r.followUp()
+
       case _: -⚬.JoinPong =>
         val (out1, out2, r) = Cell.lsplit[Pong, Pong](out)
         Cell.joinPong(in, out1, out2).followUp()
@@ -268,9 +273,19 @@ class ExecutionImpl(
         Cell.select(in, o1, o2).followUp()
         r.followUp()
 
+      case _: -⚬.DistributeL[x, y, z] =>
+        val (ix, iyz, r) = Cell.rsplit[x, y |+| z](in)
+        Cell.eitherWith[x, y, z](ix, iyz, out).followUp()
+        r.followUp()
+
       case _: -⚬.CoDistributeL[x, y, z] =>
         val (ox, oyz, r) = Cell.lsplit[x, y |&| z](out)
         Cell.choiceWith[x, y, z](in, ox, oyz).followUp()
+        r.followUp()
+
+      case _: -⚬.DistributeInversion[x, y] =>
+        val (ox, oy, r) = Cell.lsplit[-[x], -[y]](out)
+        Cell.rsplitInv[x, y](in, ox, oy).followUp()
         r.followUp()
 
       case _: -⚬.RInvertSignal =>
@@ -284,6 +299,23 @@ class ExecutionImpl(
         Cell.lInvertSignal(out1, out2).followUp()
         r.followUp()
         // `in: Cell[One]` can be ignored
+
+      case _: -⚬.Backvert[x] =>
+        val (in1, in2, r) = Cell.rsplit[x, -[x]](in)
+        Cell.backvert(in1, in2)
+        r.followUp()
+        // `out: Cell[One]` can be ignored
+
+      case _: -⚬.Forevert[x] =>
+        val (out1, out2, r) = Cell.lsplit[-[x], x](out)
+        Cell.forevert(out1, out2).followUp()
+        r.followUp()
+        // `in: Cell[One]` can be ignored
+
+      case _: -⚬.NotifyDoneL =>
+        val (out1, out2, r) = Cell.lsplit[Ping, Done](out)
+        Cell.notifyDone(in, out1, out2).followUp()
+        r.followUp()
 
       case _: -⚬.NotifyNeedL =>
         val (i1, i2, r) = Cell.rsplit[Pong, Need](in)
@@ -310,6 +342,11 @@ class ExecutionImpl(
 
       case _: -⚬.StrengthenPing =>
         Cell.strengthenPing(in, out).followUp()
+
+      case _: -⚬.InjectLOnPing[x, y] =>
+        val (i1, i2, r) = Cell.rsplit[Ping, x](in)
+        Cell.injectLOnPing[x, y](i1, i2, out).followUp()
+        r.followUp()
     }
 
   private def unify[A](l: Cell[A], r: Cell[A]): Unit =
