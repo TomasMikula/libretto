@@ -11,7 +11,7 @@ opaque type Cell[A] <: AnyRef = AtomicReference[CellContent[A]]
 
 object Cell {
   import CellContent.ActionResult
-  import ActionResult.{ChooseL, ChooseR, SupplyDone, SupplyPing}
+  import ActionResult.{ChooseL, ChooseR, InjectL, InjectR, SupplyDone, SupplyPing}
 
   def apply[A](content: CellContent[A]): Cell[A] =
     new AtomicReference(content)
@@ -40,6 +40,9 @@ object Cell {
   def rInvertSignal(d: Cell[Done], n: Cell[Need]): ActionResult =
     rInvert(d, Inversion.DoneNeed, n)
 
+  def rInvertPingPong(src: Cell[Ping], tgt: Cell[Pong]): ActionResult =
+    rInvert(src, Inversion.PingPong, tgt)
+
   def backvert[A](p: Cell[A], n: Cell[-[A]]): ActionResult =
     rInvert(p, Inversion.Universal[A](), n)
 
@@ -49,6 +52,9 @@ object Cell {
   def lInvertSignal(n: Cell[Need], d: Cell[Done]): ActionResult =
     lInvert(n, Inversion.DoneNeed, d)
 
+  def lInvertPongPing(src: Cell[Pong], tgt: Cell[Ping]): ActionResult =
+    lInvert(src, Inversion.PingPong, tgt)
+
   def forevert[A](n: Cell[-[A]], p: Cell[A]): ActionResult =
     lInvert(n, Inversion.Universal[A](), p)
 
@@ -56,10 +62,10 @@ object Cell {
     tgt.modifyContentWith((src, i, tgt), CellContent.lInvertInit)
 
   def injectL[A, B](src: Cell[A], tgt: Cell[A |+| B]): ActionResult =
-    tgt.modifyContentWith(src, CellContent.injectL)
+    InjectL(src, tgt).execute()
 
   def injectR[A, B](src: Cell[B], tgt: Cell[A |+| B]): ActionResult =
-    tgt.modifyContentWith((src, tgt), CellContent.injectR)
+    InjectR(src, tgt).execute()
 
   def either[A, B, C](src: Cell[A |+| B], f: A -⚬ C, g: B -⚬ C, tgt: Cell[C]): ActionResult =
     src.modifyContentWith(CellContent.EitherSwitch(f, g, tgt), CellContent.eitherSwitch)
@@ -171,6 +177,7 @@ sealed trait CellContent[A] {
       case Consumed()              => "Consumed()"
       case LSplit(c1, c2)          => s"LSplit(${addr(c1)}, ${addr(c2)})"
       case RSplit(c1, c2)          => s"RSplit(${addr(c1)}, ${addr(c2)})"
+      case RSplitInv(c1, c2)       => s"RSplitInv(${addr(c1)}, ${addr(c2)})"
       case ChooseFrom(c, f, g)     => s"ChooseFrom(${addr(c)}, $f, $g)"
       case ChoiceWith(c, a)        => s"ChoiceWith(${addr(c)}, ${addr(a)})"
       case ChosenL(c)              => s"ChosenL(${addr(c)})"
@@ -190,8 +197,9 @@ sealed trait CellContent[A] {
       case LInvertSrc(i, c)        => s"LInvertSrc($i, ${addr(c)})"
       case LInvertTgt(c, i)        => s"LInvertTgt(${addr(c)}, $i)"
       case LInvertTgtClaimed(c, i) => s"LInvertTgtClaimed(${addr(c)}, $i)"
+      case LInvertSrcPair(c1, c2)  => s"LInvertSrcPair(${addr(c1)}, ${addr(c2)})"
       case RSkippingDownLeft(i, x, y) => s"RSkippingDownLeft($i, ${addr(x)}, ${addr(y)})"
-      case RSkippingUpLeft(x, y, i)   => s"RInvertTgtBypassingSrc(${addr(x)}, ${addr(y)}, $i)"
+      case RSkippingUpLeft(x, y, i)   => s"RSkippingUpLeft(${addr(x)}, ${addr(y)}, $i)"
       case LNotifyChoice(n, t)        => s"LNotifyChoice(${addr(n)}, ${addr(t)})"
       case LNotifyNeed(n, t)          => s"LNotifyNeed(${addr(n)}, ${addr(t)})"
       case RNotifyDone(n, t)          => s"RNotifyDone(${addr(n)}, ${addr(t)})"
@@ -392,11 +400,19 @@ object CellContent {
           case UnificationRequest(l, r) => s"UnificationRequest(${addr(l)}, ${addr(r)})"
           case ConnectionRequest(l, f, r) => s"ConnectionRequest(${addr(l)}, $f, ${addr(r)})"
           case CallbackTriggered(f, x) => s"CallbackTriggered($f, $x)"
+          case SupplyDone(t) => s"SupplyDone(${addr(t)})"
+          case SupplyPing(t) => s"SupplyPing(${addr(t)})"
           case FillRoleR(s, r, t) => s"FillRoleR(${addr(s)}, $r, ${addr(t)})"
           case FillRoleL(t, r, s) => s"FillRoleL(${addr(t)}, $r, ${addr(s)})"
           case PropagateLSplit(from, payload, to) => s"PropagateLSplit(${addr(from)}, $payload, ${addr(to)})"
           case PropagateRSplit(to, payload, from) => s"PropagateRSplit(${addr(to)}, $payload, ${addr(from)})"
+          case PropagateRSplitUp(t, p, s) => s"PropagateRSplitUp(${addr(t)}, $p, ${addr(s)})"
+          case PropagateRSplitInv(t, p, s) => s"PropagateRSplitInv(${addr(t)}, $p, ${addr(s)})"
           case LSplitPropagated(from, payload, to) => s"LSplitPropagated(${addr(from)}, $payload, ${addr(to)})"
+          case PropagateLInvertSrcPair(f, p, t) => s"PropagateLInvertSrcPair(${addr(f)}, $p, ${addr(t)})"
+          case LInvertSrcPairPropagated(p) => s"LInvertSrcPairPropagated($p)"
+          case InjectL(l, r) => s"InjectL(${addr(l)}, ${addr(r)})"
+          case InjectR(l, r) => s"InjectR(${addr(l)}, ${addr(r)})"
           case ChooseL(l, r) => s"ChooseL(${addr(l)}, ${addr(r)})"
           case ChooseR(l, r) => s"ChooseR(${addr(l)}, ${addr(r)})"
           case RefineLFwd(t, s, p) => s"RefineLFwd(${addr(t)}, ${addr(s)}, $p)"
@@ -432,7 +448,6 @@ object CellContent {
           case CompleteLInvSrcRFwdContraction(contraction) => s"CompleteLInvSrcRFwdContraction($contraction)"
           case CompleteLInvTgtRFwdContraction(contraction) => s"CompleteLInvTgtRFwdContraction($contraction)"
           case CompleteLInvSrcRInvTgtContraction(contraction) => s"CompleteLInvSrcRInvTgtContraction($contraction)"
-
     }
 
     case class Two(_1: FollowUpAction, _2: FollowUpAction) extends FollowUpAction
@@ -487,6 +502,14 @@ object CellContent {
         targetCell.modifyContentOptWith(this, CellContent.propagateLSplit)
     }
 
+    case class LSplitPropagated[A, B](from: Cell[A |*| B], payload: LSplit[A, B], to: Cell[A |*| B]) extends Instruction {
+      override type TargetCellType = A |*| B
+      override def targetCell = from
+
+      override def execute(): ActionResult =
+        targetCell.modifyContentOptWith(this, CellContent.lsplitPropagated)
+    }
+
     case class PropagateRSplit[A, B](to: Cell[A |*| B], payload: RSplit[A, B], from: Cell[A |*| B]) extends Instruction {
       override type TargetCellType = A |*| B
       override def targetCell = to
@@ -495,12 +518,28 @@ object CellContent {
         targetCell.modifyContentOptWith(this, CellContent.propagateRSplit)
     }
 
-    case class LSplitPropagated[A, B](from: Cell[A |*| B], payload: LSplit[A, B], to: Cell[A |*| B]) extends Instruction {
-      override type TargetCellType = A |*| B
-      override def targetCell = from
+    case class PropagateRSplitInv[A, B](to: Cell[-[A |*| B]], payload: RSplitInv[A, B], from: Cell[-[A |*| B]]) extends Instruction {
+      override type TargetCellType = -[A |*| B]
+      override def targetCell = to
 
       override def execute(): ActionResult =
-        targetCell.modifyContentOptWith(this, CellContent.lsplitPropagated)
+        targetCell.modifyContentOptWith(this, CellContent.propagateRSplitInv)
+    }
+
+    case class PropagateLInvertSrcPair[A, B](from: Cell[-[A |*| B]], payload: LInvertSrcPair[A, B], to: Cell[-[A |*| B]]) extends Instruction {
+      override type TargetCellType = -[A |*| B]
+      override def targetCell = to
+
+      override def execute(): ActionResult =
+        targetCell.modifyContentOptWith(this, CellContent.propagateLInvertSrcPair)
+    }
+
+    case class LInvertSrcPairPropagated[A, B](propagation: PropagateLInvertSrcPair[A, B]) extends Instruction {
+      override type TargetCellType = -[A |*| B]
+      override def targetCell = propagation.from
+
+      override def execute(): ActionResult =
+        targetCell.modifyContentOptWith(propagation, CellContent.lInvertSrcPairPropagated)
     }
 
     case class PropagateRSplitUp[A, B](
@@ -513,6 +552,16 @@ object CellContent {
 
       override def execute(): ActionResult =
         targetCell.modifyContentWith(this, CellContent.propagateRSplitUp)
+    }
+
+    object PropagateRSplitUp {
+      def apply[X, A, B](
+        to: Cell[X],
+        lInv: Inversion[A |*| B, X],
+        payload: LInvertSrcPair[A, B],
+        from: Cell[A |*| B],
+      ): PropagateRSplitUp[A, B] =
+        PropagateRSplitUp(lInv.fromPair[A, B].substituteCo[Cell](to), payload, from)
     }
 
     case class SupplyDone(cell: Cell[Done]) extends Instruction {
@@ -529,6 +578,22 @@ object CellContent {
 
       override def execute(): ActionResult =
         targetCell.modifyContentWith(cell, CellContent.supplyPing)
+    }
+
+    case class InjectL[A, B](lCell: Cell[A], rCell: Cell[A |+| B]) extends Instruction {
+      override type TargetCellType = A |+| B
+      override def targetCell = rCell
+
+      override def execute(): ActionResult =
+        targetCell.modifyContentWith(this, CellContent.injectL)
+    }
+
+    case class InjectR[A, B](lCell: Cell[B], rCell: Cell[A |+| B]) extends Instruction {
+      override type TargetCellType = A |+| B
+      override def targetCell = rCell
+
+      override def execute(): ActionResult =
+        targetCell.modifyContentWith(this, CellContent.injectR)
     }
 
     case class ChooseL[A, B](lCell: Cell[A |&| B], rCell: Cell[A]) extends Instruction {
@@ -771,14 +836,6 @@ object CellContent {
         targetCell.modifyContentOptWith(contraction, CellContent.completeBiFwdContraction)
     }
 
-    // case class CompleteContractRFwd[A, B](l: Cell[A], link: RoleL[A, B], bypassed: Cell[B], r: Cell[B]) extends Instruction {
-    //   override type TargetCellType = B
-    //   override def targetCell = r
-
-    //   override def execute(): ActionResult =
-    //     targetCell.modifyContentOptWith(this, CellContent.completeContractRFwd)
-    // }
-
     case class CompleteLFwdRInvTgtContraction[A, B](contraction: ContractLFwdRInvTgt[A, B]) extends CompleteContraction {
       override type TargetCellType = B
       override def targetCell = contraction.src
@@ -830,11 +887,12 @@ object CellContent {
   import ActionResult._
 
   val supplyDone: (CellContent[Done], Cell[Done]) => (CellContent[Done], ActionResult) = {
-    (content, cell) =>
+    (content, self) =>
       content match
-        case Empty()      => (DoneSupplied, AllDone)
-        case RFwd(tgt)    => (Consumed(), RefineLFwd(tgt, expectedLTarget = cell, DoneSupplied))
-        case DoneSupplied => throw new IllegalStateException("Double completion")
+        case Empty()          => (DoneSupplied, AllDone)
+        case RFwd(tgt)        => (Consumed(), RefineLFwd(tgt, expectedLTarget = self, DoneSupplied))
+        case RInvertSrc(i, t) => (Consumed(), RefineRInvertTgt(self, i, t, DoneSupplied.rInvert(i)))
+        case DoneSupplied     => throw new IllegalStateException("Double completion")
   }
 
   val supplyPing: (CellContent[Ping], Cell[Ping]) => (CellContent[Ping], ActionResult) = {
@@ -885,14 +943,18 @@ object CellContent {
           val a = Cell.empty[A]
           val b = Cell.empty[B]
           (Consumed(), (a, b, PropagateRSplit(to = tgt, payload = RSplit(a, b), from = self)))
+        case l @ LInvertTgt(src, inv) =>
+          val a = Cell.empty[A]
+          val b = Cell.empty[B]
+          (Consumed(), (a, b, PropagateRSplitUp(src, inv, payload = LInvertSrcPair(a, b), from = self)))
         case l @ LSkippingLeftLeft(_, _) =>
           val a = Cell.empty[A]
           val b = Cell.empty[B]
           (BiDef(l, RSplit(a, b)), (a, b, AllDone))
-        case l @ LInvertTgt(src, inv) =>
+        case l: LInvertTgtClaimed[x, A |*| B] =>
           val a = Cell.empty[A]
           val b = Cell.empty[B]
-          (Consumed(), (a, b, PropagateRSplitUp[A, B](to = inv.fromPair[A, B].substituteCo(src), payload = LInvertSrcPair(a, b), from = self)))
+          (BiDef(l, RSplit(a, b)), (a, b, AllDone))
         case _: RDefined[A |*| B] | Consumed() =>
           throw new IllegalStateException("The cell is already right-connected")
   }
@@ -972,14 +1034,30 @@ object CellContent {
   def propagateRSplitUp[A, B]: (CellContent[-[A |*| B]], PropagateRSplitUp[A, B]) => (CellContent[-[A |*| B]], ActionResult) = {
     (invSrcContent, propagation) =>
       val PropagateRSplitUp(self, payload, invTgt) = propagation
+
+      def checkL(l: LDefined[-[A |*| B]]): Unit =
+        l match {
+          case LInvertSrc(i, tgt) =>
+            assert(invTgt eq tgt)
+          case LSkippingLeftDown(tgt, i, oldTgt) =>
+            assert(invTgt eq tgt)
+        }
+
       invSrcContent match {
         case Empty() =>
           (payload, AllDone)
+        case l: LDefined[-[A |*| B]] =>
+          checkL(l)
+          (payload, AllDone)
+        case Slated(l, r) =>
+          checkL(l)
+          combineLInvertSrcPairRDefined(self, payload, r)
       }
   }
 
-  def injectL[A, B]: (CellContent[A |+| B], Cell[A]) => (CellContent[A |+| B], ActionResult) = {
-    (tgt, src) =>
+  def injectL[A, B]: (CellContent[A |+| B], InjectL[A, B]) => (CellContent[A |+| B], ActionResult) = {
+    (tgt, inj) =>
+      val InjectL(src, self) = inj
       tgt match {
         case Empty() =>
           (InjectedL(src), AllDone)
@@ -987,14 +1065,16 @@ object CellContent {
           (Consumed(), CallbackTriggered(f, Right(Left(src))))
         case EitherSwitch(f, g, tgt) =>
           (Consumed(), ConnectionRequest(src, f, tgt))
+        case RFwd(rTgt) =>
+          (Consumed(), RefineLFwd(rTgt, expectedLTarget = self, InjectedL(src)))
         case _: LDefined[A |+| B] | Consumed() =>
           throw new IllegalStateException(s"The target cell is already left-connected: $tgt")
       }
   }
 
-  def injectR[A, B]: (CellContent[A |+| B], (Cell[B], Cell[A |+| B])) => (CellContent[A |+| B], ActionResult) = {
-    (tgtContent, cells) =>
-      val (srcCell, eitherCell) = cells
+  def injectR[A, B]: (CellContent[A |+| B], InjectR[A, B]) => (CellContent[A |+| B], ActionResult) = {
+    (tgtContent, inj) =>
+      val InjectR(srcCell, eitherCell) = inj
       tgtContent match {
         case Empty() =>
           (InjectedR(srcCell), AllDone)
@@ -1012,7 +1092,8 @@ object CellContent {
   def eitherSwitch[A, B, C]: (CellContent[A |+| B], EitherSwitch[A, B, C]) => (CellContent[A |+| B], ActionResult) = {
     (eitherContent, es) =>
       eitherContent match {
-        case Empty() => (es, AllDone)
+        case Empty()                => (es, AllDone)
+        case l: InjectLOnPing[A, B] => (BiDef(l, es), AllDone)
       }
   }
 
@@ -1170,10 +1251,10 @@ object CellContent {
       srcContent match {
         case Empty() =>
           (payload, followUp)
-        case i @ InjectedL(_) =>
+        case InjectedL(lCell) =>
           val followUp =
-            RefineLRole(self, EitherNotification(), payload.notificationCell, PingSupplied) and
-            RefineLRole(self, NotifyEitherTgt(), payload.outCell, i)
+            SupplyPing(payload.notificationCell) and
+            InjectL(lCell, payload.outCell)
           (Consumed(), followUp)
         case l: LFwd[A |+| B] =>
           (BiDef(l, payload), followUp)
@@ -1280,6 +1361,8 @@ object CellContent {
           (Some(newContent), res)
         case Empty() =>
           (Some(rRole), AllDone)
+        case r: RComplete[A] =>
+          (None, AllDone)
         case Consumed() =>
           (None, AllDone)
       }
@@ -1325,6 +1408,7 @@ object CellContent {
       lContent match {
         case Empty()                => (Some(RFwd(rCell)), AllDone)
         case DoneSupplied           => (Some(Consumed()), RefineLFwd(rCell, expectedLTarget = self, DoneSupplied))
+        case PingSupplied           => (Some(Consumed()), RefineLFwd(rCell, expectedLTarget = self, PingSupplied))
         case l: NeedCallback        => (Some(Consumed()), RefineLFwd(rCell, expectedLTarget = self, l))
         case i: InjectedR[x, y]     => (Some(Consumed()), RefineLFwd(rCell, expectedLTarget = self, i))
         case l: LSplit[x, y]        => (Some(Slated(l, RFwd(rCell))), PropagateLSplit[x, y](from = self, payload = l, to = rCell))
@@ -1381,8 +1465,45 @@ object CellContent {
       lContent match {
         case LFwd(lTgt) =>
           (Consumed(), PropagateRSplitInv(to = lTgt, payload = payload, from = self))
+        case l: LSkippingLeftLeft[-[A |*| B]] =>
+          (BiDef(l, payload), AllDone)
         case Empty() =>
           (payload, AllDone)
+      }
+  }
+
+  /** Differs from [[rsplitInv]] in that the target cell is not necessarily undefined on the right. */
+  def propagateRSplitInv[A, B]: (CellContent[-[A |*| B]], PropagateRSplitInv[A, B]) => (Option[CellContent[-[A |*| B]]], ActionResult) = {
+    (lContent, propagation) =>
+      val PropagateRSplitInv(self, payload, fromCell) = propagation
+      lContent match {
+        case Empty() =>
+          (Some(payload), AllDone)
+      }
+  }
+
+  def propagateLInvertSrcPair[A, B]: (CellContent[-[A |*| B]], PropagateLInvertSrcPair[A, B]) => (Option[CellContent[-[A |*| B]]], ActionResult) = {
+    (rContent, propagation) =>
+      val PropagateLInvertSrcPair(from, payload, self) = propagation
+      rContent match {
+        case Empty() =>
+          (Some(payload), LInvertSrcPairPropagated(propagation))
+      }
+  }
+
+  def lInvertSrcPairPropagated[A, B]: (CellContent[-[A |*| B]], PropagateLInvertSrcPair[A, B]) => (Option[CellContent[-[A |*| B]]], ActionResult) = {
+    (lContent, propagation) =>
+      val PropagateLInvertSrcPair(self, payload, to) = propagation
+
+      def checkR(r: RDefined[-[A |*| B]]): Unit =
+        r match
+          case RFwd(rTgt) => assert(to eq rTgt)
+
+      lContent match {
+        case Slated(l, r) =>
+          assert(payload == l)
+          checkR(r)
+          (Some(Consumed()), AllDone)
       }
   }
 
@@ -1397,7 +1518,7 @@ object CellContent {
         case Empty()                    => (newContentR, nextStep)
         case l: LFwd[B]                 => (Slated(l, newContentR), ContractLFwdRInvTgt(l.tgt, tgt, inv, src))
         case l: LSkippingLeftLeft[B]    => (BiDef(l, newContentR), nextStep)
-        case l: LSkippingLeftDown[B, x] => (BiDef(l, newContentR), nextStep)
+        case l: LSkippingLeftDown[x, B] => (BiDef(l, newContentR), nextStep)
         case l: NeedCallback            => (Consumed(), RefineRInvertSrc(src, inv, tgt, l.rUnInvert(inv)))
       }
   }
@@ -1672,49 +1793,6 @@ object CellContent {
 
         }
 
-      // def goBi(l: LDefined[A], r: RDefined[A]): (Option[CellContent[A]], ActionResult) = {
-      //   def goPong(self: Cell[Pong], l: LDefined[Pong], src: Cell[Pong], newPayload: RDefined[Pong]): (Option[CellContent[Pong]], ActionResult) =
-      //     assert(src eq expectedRCell)
-      //     payload match
-      //       case PongSupplied =>
-      //         val (content, action) = combine(self, l, newPayload)
-      //         (Some(content), action)
-
-      //   lRole match
-      //     case JoinerPong1 =>
-      //       r match
-      //         case JoinPongOf(src1, src2) =>
-      //           goPong(self, l, src1, newPayload = JoinPong2(src2))
-      //         case JoinPong1(src1) =>
-      //           goPong(self, l, src1, newPayload = PongSupplied)
-      //         case JoinPong2(_) =>
-      //           throw IllegalStateException(s"Double arrival of first Pong joiner")
-      //     case JoinerPong2 =>
-      //       r match
-      //         case JoinPongOf(src1, src2) =>
-      //           goPong(self, l, src2, newPayload = JoinPong1(src1))
-      //         case JoinPong2(src2) =>
-      //           goPong(self, l, src2, newPayload = PongSupplied)
-      //         case JoinPong1(src1) =>
-      //           throw IllegalStateException(s"Double arrival of second Pong joiner")
-      //     case SelectContestant1 =>
-      //       r match
-      //         case SelectOf(contestant1, contestant2) =>
-      //           assert(contestant1 eq expectedRCell)
-      //           payload match
-      //             case PongSupplied =>
-      //               val (content, action) = combine(self, l, ChosenL[One, One](Cell.one))
-      //               (Some(content), action)
-      //     case SelectContestant2 =>
-      //       r match
-      //         case SelectOf(contestant1, contestant2) =>
-      //           assert(contestant2 eq expectedRCell)
-      //           payload match
-      //             case PongSupplied =>
-      //               val (content, action) = combine(self, l, ChosenR[One, One](Cell.one))
-      //               (Some(content), action)
-      // }
-
       lContent match {
         case BiDef(l, r) =>
           goR(r) match
@@ -1873,7 +1951,7 @@ object CellContent {
   }
 
   private def combineLDefinedRComplete[A](self: Cell[A], l: LDefined[A], r: RComplete[A]): (CellContent[A], ActionResult) =
-    r match
+    r match {
       case cb @ DoneCallback(listener) =>
         l match
           case DoneSupplied               => (Consumed(), CallbackTriggered(listener, Right(())))
@@ -1884,6 +1962,8 @@ object CellContent {
           case LInvertTgt(src, i)         => (Consumed(), RefineLInvertSrc(expectedInvTgt = self, i, src, cb.lInvert(i)))
           case l: LInvertTgtClaimed[x, A] => (BiDef(l, cb), AllDone)
           case l: LSkippingLeftLeft[A]    => (BiDef(l, cb), AllDone)
+          case l: LSkippingUpUp[A, x]     => (BiDef(l, cb), AllDone)
+          case l: LSkippingLeftUp[x, A]   => (BiDef(l, cb), AllDone)
       case cb @ EitherCallback(listener) =>
         l match
           case InjectedL(cell) => (Consumed(), CallbackTriggered(listener, Right(Left(cell))))
@@ -1924,10 +2004,15 @@ object CellContent {
           case LRole(lTgt, lRole)          => (Consumed(), RefineRPart(lTgt, lRole, expectedRTarget = self, PongSupplied))
           case l: LSkippingLeftLeft[A]     => (BiDef(l, r), AllDone)
           case l: LSkippingLeftLRole[x, A] => (BiDef(l, r), AllDone)
-          // case l: BypassingL[x, y, z] => (BiDef(l, r), AllDone)
+      case r: RCompleteInv[x] =>
+        l match
+          case LFwd(lTgt)                 => (Consumed(), RefineRFwd(lTgt, expectedRTarget = self, r))
+          case l: LSkippingLeftLeft[A]    => (BiDef(l, r), AllDone)
+          case l: LInvertTgtClaimed[x, A] => (BiDef(l, r), AllDone)
+    }
 
   private def combineLCompleteRDefined[A](self: Cell[A], l: LComplete[A], r: RDefined[A]): (CellContent[A], ActionResult) =
-    l match
+    l match {
       case DoneSupplied =>
         r match
           case RFwd(tgt) =>
@@ -1957,16 +2042,39 @@ object CellContent {
           case RInvertTgt(src, i) =>
             (Consumed(), RefineRInvertSrc(src, i, self, cb.rUnInvert(i)))
 
+      case l @ InjectedL(lCell) =>
+        r match
+          case EitherSwitch(f, g, rCell) =>
+            (Consumed(), ConnectionRequest(lCell, f, rCell))
+          case r: RNotifyEither[x, y] =>
+            val followUp =
+              RefineLRole(self, RoleL.EitherNotification[x, y](), r.notificationCell, PingSupplied) and
+              RefineLRole(self, RoleL.NotifyEitherTgt[x, y](), r.outCell, l)
+            (Consumed(), followUp)
+
+      case l: LCompleteInv[x] =>
+        r match
+          case RFwd(rTgt) => (Consumed(), RefineLFwd(rTgt, expectedLTarget = self, l))
+    }
+
   private def combineLDefinedRSplit[A, B](self: Cell[A |*| B], l: LDefined[A |*| B], r: RSplit[A, B]): (CellContent[A |*| B], ActionResult) =
     l match
-      case LSplit(l1, l2)          => (Consumed(), UnificationRequest(l1, r.cell1) and UnificationRequest(l2, r.cell2))
-      case LFwd(lTgt)              => (Consumed(), PropagateRSplit(to = lTgt, r, from = self))
-      case l: LSkippingLeftLeft[A] => (BiDef(l, r), AllDone)
+      case LSplit(l1, l2)                => (Consumed(), UnificationRequest(l1, r.cell1) and UnificationRequest(l2, r.cell2))
+      case LFwd(lTgt)                    => (Consumed(), PropagateRSplit(to = lTgt, r, from = self))
+      case l: LSkippingLeftLeft[A |*| B] => (BiDef(l, r), AllDone)
+      case LInvertTgt(invSrc, i)         => (Consumed(), PropagateRSplitUp(invSrc, i, LInvertSrcPair(r.cell1, r.cell2), from = self))
+
+  private def combineLDefinedRSplitInv[A, B](self: Cell[-[A |*| B]], l: LDefined[-[A |*| B]], r: RSplitInv[A, B]): (CellContent[-[A |*| B]], ActionResult) =
+    UnhandledCase.raise(s"$l")
 
   private def combineLSplitRDefined[A, B](self: Cell[A |*| B], l: LSplit[A, B], r: RDefined[A |*| B]): (CellContent[A |*| B], ActionResult) =
     r match
       case RSplit(r1, r2) => (Consumed(), UnificationRequest(l.cell1, r1) and UnificationRequest(l.cell2, r2))
       case r @ RFwd(rTgt) => (Slated(l, r), PropagateLSplit(from = self, l, to = rTgt))
+
+  private def combineLInvertSrcPairRDefined[A, B](self: Cell[-[A |*| B]], l: LInvertSrcPair[A, B], r: RDefined[-[A |*| B]]): (CellContent[-[A |*| B]], ActionResult) =
+    r match
+      case r @ RFwd(rTgt) => (Slated(l, r), PropagateLInvertSrcPair(from = self, payload = l, to = rTgt))
 
   private def combine[A](self: Cell[A], l: LDefined[A], r: RDefined[A]): (CellContent[A], ActionResult) =
     (l, r) match {
@@ -1974,6 +2082,8 @@ object CellContent {
       case (l, r: RComplete[A])                       => combineLDefinedRComplete(self, l, r)
       case (l: LSplit[x, y], r)                       => combineLSplitRDefined[x, y](self, l, r)
       case (l, r: RSplit[x, y])                       => combineLDefinedRSplit[x, y](self, l, r)
+      case (l: LInvertSrcPair[x, y], r)               => combineLInvertSrcPairRDefined[x, y](self, l, r)
+      case (l, r: RSplitInv[x, y])                    => combineLDefinedRSplitInv[x, y](self, l, r)
       case (l: LFwd[A], r: RFwd[A])                   => (Slated(l, r), ContractBiFwd(l.tgt, self, r.tgt))
       case (l: LFwd[A], r: RInvertSrc[A, b])          => (Slated(l, r), ContractLFwdRInvSrc(l.tgt, self, r.inv, r.tgt))
       case (l: LFwd[A], r: RInvertTgt[x, A])          => (Slated(l, r), ContractLFwdRInvTgt(l.tgt, self, r.inv, r.src))
@@ -1983,24 +2093,22 @@ object CellContent {
       case (l: LInvertTgt[x, A], r: RInvertSrc[A, y]) => (BiDef(l, r), AllDone) // TODO: Do contract. Use Iso[x, y] in RFwd, LFwd
       case (l: LInvertTgt[x, A], r: RInvertTgt[y, A]) => (BiDef(l, r), AllDone)
       case (l, r: RSkippingDownLeft[A, b])            => (BiDef(l, r), AllDone)
+      case (l, r: RSkippingUpLeft[x, A])              => (BiDef(l, r), AllDone)
       case (l: LFwd[A], r: JoinPongOf)                => (BiDef(l, r), AllDone)
-      case (l: LRole[x, A], r: JoinPongOf)            => (BiDef(l, r), AllDone)
+      case (l: LRole[x, A], r)                        => (BiDef(l, r), AllDone)
       case (l: JoinOf, r: RRole[A, b])                => (BiDef(l, r), AllDone)
       case (l: Join1, r: RRole[A, b])                 => (BiDef(l, r), AllDone)
       case (l: Join2, r: RRole[A, b])                 => (BiDef(l, r), AllDone)
-      case (l: LRole[x, A], r: RFwd[A])               => (BiDef(l, r), AllDone)
-      case (l: LFwd[A], r: RRole[A, x])               => (BiDef(l, r), AllDone) // (Slated(l, r), ContractLFwd(l.tgt, self, r.role, r.tgt))
-      case (l: LRole[x, A], r: RRole[A, y])           => (BiDef(l, r), AllDone)
+      case (l: LFwd[A], r: RRole[A, x])               => (BiDef(l, r), AllDone)
       case (l: LInvertSrc[A, x], r: RRole[A, y])      => (BiDef(l, r), AllDone)
       case (l: LInvertTgt[x, A], r: RRole[A, y])      => (BiDef(l, r), AllDone)
       case (l: LSkippingLeftLeft[A], r)               => (BiDef(l, r), AllDone)
       case (l: LSkippingLeftLRole[x, A], r)           => (BiDef(l, r), AllDone)
       case (l: LSkippingLeftUp[x, A], r)              => (BiDef(l, r), AllDone)
       case (l: LSkippingLeftDown[x, A], r)            => (BiDef(l, r), AllDone)
+      case (l: LSkippingUpUp[A, x], r)                => (BiDef(l, r), AllDone)
       case (l @ LFwd(lTgt), r @ JoinPong1(src))       => (Slated(l, r), ContractBiFwd(lTgt, slated = self, src))
       case (l @ LFwd(lTgt), r @ JoinPong2(src))       => (Slated(l, r), ContractBiFwd(lTgt, slated = self, src))
-      case (l: LRole[x, A], r @ JoinPong1(src))       => (BiDef(l, r), AllDone)
-      case (l: LRole[x, A], r @ JoinPong2(src))       => (BiDef(l, r), AllDone)
       case (l: ChooseFrom[x, y, z], r: RFwd[A])       => (BiDef(l, r), AllDone)
       case (l: ChooseFrom[x, y, z], r: RRole[A, b])   => (BiDef(l, r), AllDone)
       case (l: ChoiceWith[x, y, z], r: RFwd[A])       => (BiDef(l, r), AllDone)
@@ -2230,9 +2338,10 @@ object CellContent {
 
       def lStillCurrent(l: LDefined[B]): Boolean =
         l match {
-          case LFwd(tgt)                    => tgt eq slatedInvTgt
-          case LSkippingLeftLeft(newTgt, _) => newTgt eq slatedInvTgt
-          case DoneSupplied                 => false
+          case LFwd(tgt)                      => tgt eq slatedInvTgt
+          case LSkippingLeftLeft(newTgt, _)   => newTgt eq slatedInvTgt
+          case LSkippingUpUp(newTgt, _, _, _) => newTgt eq slatedInvTgt
+          case DoneSupplied                   => false
         }
 
       rContent match {
@@ -2589,6 +2698,8 @@ object CellContent {
             (Some(content), action)
           else
             (None, AllDone)
+        case Slated(_, _) => // overtaken
+          (None, AllDone)
       }
   }
 

@@ -294,9 +294,21 @@ class ExecutionImpl(
         r.followUp()
         // `out: Cell[One]` can be ignored
 
+      case _: -⚬.RInvertPingPong =>
+        val (in1, in2, r) = Cell.rsplit[Ping, Pong](in)
+        Cell.rInvertPingPong(in1, in2).followUp()
+        r.followUp()
+        // `out: Cell[One]` can be ignored
+
       case _: -⚬.LInvertSignal =>
         val (out1, out2, r) = Cell.lsplit[Need, Done](out)
         Cell.lInvertSignal(out1, out2).followUp()
+        r.followUp()
+        // `in: Cell[One]` can be ignored
+
+      case _: -⚬.LInvertPongPing =>
+        val (out1, out2, r) = Cell.lsplit[Pong, Ping](out)
+        Cell.lInvertPongPing(out1, out2).followUp()
         r.followUp()
         // `in: Cell[One]` can be ignored
 
