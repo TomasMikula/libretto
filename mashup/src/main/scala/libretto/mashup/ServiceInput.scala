@@ -69,7 +69,7 @@ object ServiceInput {
       for {
         url  <- ZIO.fromEither(URL.fromString(url))
         resp <- client.request(Request(method = Method.GET, url = url), Client.Config.empty)
-        body <- resp.bodyAsString
+        body <- resp.body.asString
         json <- parseJson(body)
         rslt <- readJson(outputType, json)
       } yield rslt

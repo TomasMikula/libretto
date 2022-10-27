@@ -4,7 +4,7 @@ import libretto.util.Async
 import scala.util.{Failure, Success, Try}
 import zio.json.ast.{Json => ZioJson}
 import zio.json.ast.Json.{encoder => JsonEncoder}
-import zhttp.http.{Headers, HttpData, Response, Status}
+import zhttp.http.{Body, Headers, Response, Status}
 import zio.Chunk
 
 sealed trait BodyType[A] {
@@ -24,9 +24,9 @@ object BodyType {
       Json.extractJson(typ, port).map {
         case Success(json) =>
           val jsonStr = JsonEncoder.encodeJson(json, indent = None)
-          Response(Status.Ok, Headers.empty, HttpData.fromCharSequence(jsonStr))
+          Response(Status.Ok, Headers.empty, Body.fromCharSequence(jsonStr))
         case Failure(e) =>
-          Response(Status.InternalServerError, Headers.empty, HttpData.fromString(e.getMessage))
+          Response(Status.InternalServerError, Headers.empty, Body.fromString(e.getMessage))
       }
   }
 

@@ -109,9 +109,9 @@ lazy val mashup = project
     name := "libretto-mashup",
     publish / skip := true, // experimental project, do not publish
     libraryDependencies ++= Seq(
-      "dev.zio" %% "zio" % "2.0.0",
+      "dev.zio" %% "zio" % "2.0.2",
       "dev.zio" %% "zio-json" % "0.3.0-RC10",
-      "io.d11" %% "zhttp" % "2.0.0-RC10",
+      "io.d11" %% "zhttp" % "2.0.0-RC11",
     ),
   )
 
