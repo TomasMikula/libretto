@@ -254,7 +254,7 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
         release1,
         release2,
       )                                         .to[ Val[Nothing] |+| ((Res[S] |*| Res[T]) |*| Val[B]) ]
-        .either(anyTwoResourcesFronNothing, id) .to[                   (Res[S] |*| Res[T]) |*| Val[B]  ]
+        .either(anyTwoResourcesFromNothing, id) .to[                   (Res[S] |*| Res[T]) |*| Val[B]  ]
 
   def trySplitResource[R, A, S, T, B, E](
     f: (R, A) => Either[E, (S, T, B)],
@@ -277,7 +277,7 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
   private def anyResourceFromNothing[R, B]: Val[Nothing] -⚬ (Res[R] |*| Val[B])=
     acquire(x => x, release = None)
 
-  private def anyTwoResourcesFronNothing[S, T, B]: Val[Nothing] -⚬ ((Res[S] |*| Res[T]) |*| Val[B]) =
+  private def anyTwoResourcesFromNothing[S, T, B]: Val[Nothing] -⚬ ((Res[S] |*| Res[T]) |*| Val[B]) =
     dup[Nothing]                                                                          .to[       Val[Nothing]        |*|          Val[Nothing]           ]
       .>( par(anyResourceFromNothing[S, Nothing], anyResourceFromNothing[T, Nothing]) )   .to[ (Res[S] |*| Val[Nothing]) |*| (   Res[T]    |*| Val[Nothing]) ]
       .>( IXI )                                                                           .to[ (Res[S] |*|    Res[T]   ) |*| (Val[Nothing] |*| Val[Nothing]) ]
