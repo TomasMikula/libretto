@@ -49,6 +49,12 @@ class ScalettoStreams[
   type Consumer[A] = Rec[ConsumerF[A, *]]
 
   object Pollable {
+    def from[Z, A](
+      onClose: Z -⚬ Done,
+      onPoll: Z -⚬ (Done |+| (Val[A] |*| Pollable[A]))
+    ) =
+      LPollable.from(onClose, onPoll)
+
     def close[A]: Pollable[A] -⚬ Done =
       LPollable.close[Val[A]]
 
