@@ -370,27 +370,39 @@ trait CoreDSL {
     ): $[A] =
       map(zip(a, unit)(pos))(elimSnd)(pos)
 
+    def joinTwo(a: $[Done], b: $[Done])(
+      pos: SourcePos,
+    ): $[Done] =
+      map(zip(a, b)(pos))(CoreDSL.this.join)(pos)
+
+    def joinAll(a: $[Done], as: $[Done]*)(using pos: SourcePos): $[Done] =
+      as match {
+        case Seq()  => a
+        case Seq(b) => joinTwo(a, b)(pos)
+        case as     => joinAll(joinTwo(a, as.head)(pos), as.tail: _*)
+      }
+
     object |*| {
-      def unapply[A, B](ab: $[A |*| B])(implicit
+      def unapply[A, B](ab: $[A |*| B])(using
         pos: SourcePos,
       ): ($[A], $[B]) =
         unzip(ab)(pos)
     }
 
     extension [A, B](f: A -⚬ B) {
-      def apply(a: $[A])(implicit
+      def apply(a: $[A])(using
         pos: SourcePos,
       ): $[B] =
         map(a)(f)(pos)
     }
 
     extension [A](a: $[A]) {
-      def |*|[B](b: $[B])(implicit
+      def |*|[B](b: $[B])(using
         pos: SourcePos,
       ): $[A |*| B] =
         zip(a, b)(pos)
 
-      def >[B](f: A -⚬ B)(implicit
+      def >[B](f: A -⚬ B)(using
         pos: SourcePos,
       ): $[B] =
         map(a)(f)(pos)
@@ -407,6 +419,13 @@ trait CoreDSL {
         pos: SourcePos,
       ): $[A] =
         eliminateFirst(unit, a)(pos)
+    }
+
+    extension (d: $[Done]) {
+      def alsoJoin(that: $[Done])(using
+        pos: SourcePos,
+      ): $[Done] =
+        joinTwo(d, that)(pos)
     }
 
     implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
