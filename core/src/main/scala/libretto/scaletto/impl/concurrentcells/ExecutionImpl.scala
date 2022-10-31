@@ -314,7 +314,7 @@ class ExecutionImpl(
 
       case _: -⚬.Backvert[x] =>
         val (in1, in2, r) = Cell.rsplit[x, -[x]](in)
-        Cell.backvert(in1, in2)
+        Cell.backvert(in1, in2).followUp()
         r.followUp()
         // `out: Cell[One]` can be ignored
 
