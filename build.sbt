@@ -51,6 +51,8 @@ releaseProcess := Seq[ReleaseStep](
   pushChanges,
 )
 
+val ZioVersion = "2.0.2"
+
 lazy val core = project
   .in(file("core"))
   .settings(
@@ -93,6 +95,19 @@ lazy val examples = project
     name := "libretto-examples",
   )
 
+lazy val mashup = project
+  .in(file("mashup"))
+  .dependsOn(core)
+  .settings(
+    name := "libretto-mashup",
+    publish / skip := true, // experimental project, do not publish
+    libraryDependencies ++= Seq(
+      "dev.zio" %% "zio" % ZioVersion,
+      "dev.zio" %% "zio-json" % "0.3.0-RC10",
+      "io.d11" %% "zhttp" % "2.0.0-RC11",
+    ),
+  )
+
 lazy val mashupExamples = project
   .in(file("mashup-examples"))
   .dependsOn(mashup)
@@ -102,17 +117,21 @@ lazy val mashupExamples = project
     publish / skip := true, // experimental project, do not publish
   )
 
-lazy val mashup = project
-  .in(file("mashup"))
-  .dependsOn(core)
+lazy val librettoZio = project
+  .in(file("libretto-zio"))
+  .dependsOn(
+    core,
+    examples % Test,
+  )
   .settings(
-    name := "libretto-mashup",
-    publish / skip := true, // experimental project, do not publish
+    name := "libretto-zio",
     libraryDependencies ++= Seq(
-      "dev.zio" %% "zio" % "2.0.2",
-      "dev.zio" %% "zio-json" % "0.3.0-RC10",
-      "io.d11" %% "zhttp" % "2.0.0-RC11",
+      "dev.zio" %% "zio"          % ZioVersion,
+      "dev.zio" %% "zio-streams"  % ZioVersion,
+      "dev.zio" %% "zio-test"     % ZioVersion % Test,
+      "dev.zio" %% "zio-test-sbt" % ZioVersion % Test,
     ),
+    testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
   )
 
 lazy val root = project
@@ -127,6 +146,7 @@ lazy val root = project
     examples,
     mashup,
     mashupExamples,
+    librettoZio,
   )
 
 lazy val laikaSite         = taskKey[File]("generates HTML from Markdown using Laika")

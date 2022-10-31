@@ -22,4 +22,9 @@ class AssemblyTests extends AnyFunSuite {
     val prg =
       diningPhilosophers.DiningPhilosophers.blueprint
   }
+
+  test("DogTreatsFactory") {
+    val prg =
+      dogTreatsFactory.DogTreatsFactory.blueprint
+  }
 }
