@@ -124,6 +124,9 @@ object Cell {
   def injectLOnPing[A, B](pingCell: Cell[Ping], injected: Cell[A], tgt: Cell[A |+| B]): ActionResult =
     tgt.modifyContentWith((pingCell, injected, tgt), CellContent.injectLOnPing)
 
+  def mapVal[A, B](src: Cell[Val[A]], f: A => B, tgt: Cell[Val[B]]): ActionResult =
+    src.modifyContentWith((src, f, tgt), CellContent.mapVal)
+
   def awaitDone(
     src: Cell[Done],
     listener: Either[Throwable, Unit] => Unit,
@@ -211,6 +214,8 @@ sealed trait CellContent[A] {
       case LCompleteInv(r)            => s"LCompleteInv($r)"
       case RCompleteInv(l)            => s"RCompleteInv($l)"
       case InjectLOnPing(tr, c)       => s"InjectLOnPing(${addr(tr)}, ${addr(c)})"
+      case RMapValSrc(f, t)           => s"RMapValSrc($f, ${addr(t)})"
+      case LMapValTgt(s)              => s"LMapValTgt(${addr(s)})"
     }
   }
 }
@@ -360,6 +365,9 @@ object CellContent {
 
   case class InjectLOnPing[A, B](trigger: Cell[Ping], cellToInject: Cell[A]) extends LDefined[A |+| B]
 
+  case class RMapValSrc[A, B](f: A => B, tgt: Cell[Val[B]]) extends RDefined[Val[A]]
+  case class LMapValTgt[A, B](src: Cell[Val[A]]) extends LDefined[Val[B]]
+
   sealed trait ActionResult {
     import ActionResult._
 
@@ -452,6 +460,7 @@ object CellContent {
           case CompleteLInvSrcRInvTgtContraction(contraction) => s"CompleteLInvSrcRInvTgtContraction($contraction)"
           case LInvert(s, i, t) => s"LInvert(${addr(s)}, $i, ${addr(t)})"
           case PropagateRSplitInvDown(f, p, t) => s"PropagateRSplitInvDown(${addr(f)}, $p, ${addr(t)})"
+          case LReciprocateMapVal(s, f, t) => s"LReciprocateMapVal(${addr(s)}, $f, ${addr(t)})"
     }
 
     case class Two(_1: FollowUpAction, _2: FollowUpAction) extends FollowUpAction
@@ -917,6 +926,14 @@ object CellContent {
 
       override def execute(): ActionResult =
         targetCell.modifyContentOptWith(this, CellContent.consumeSlatedCell)
+    }
+
+    case class LReciprocateMapVal[A, B](src: Cell[Val[A]], f: A => B, tgt: Cell[Val[B]]) extends Instruction {
+      override type TargetCellType = Val[B]
+      override def targetCell = tgt
+
+      override def execute(): ActionResult =
+        tgt.modifyContentWith(this, CellContent.lReciprocateMapVal)
     }
   }
   import ActionResult._
@@ -1460,6 +1477,7 @@ object CellContent {
         case r: RSkippingUpLeft[x, A] => (BiDef(LFwd(lCell), r), RReciprocateForward(lCell, rCell))
         case r: RNotifyDone           => (BiDef(LFwd(lCell), r), RReciprocateForward(lCell, rCell))
         case r: RNotifyEither[x, y]   => (BiDef(LFwd(lCell), r), RReciprocateForward(lCell, rCell))
+        case r: RMapValSrc[x, y]      => (BiDef(LFwd(lCell), r), RReciprocateForward(lCell, rCell))
       }
   }
 
@@ -1631,15 +1649,21 @@ object CellContent {
   def lInvertInit[A, B]: (CellContent[B], LInvert[A, B]) => (CellContent[B], ActionResult) = {
     (tgtContent, inversion) =>
       val LInvert(src, inv, tgt) = inversion
+
+      def newContentL = LInvertTgt(src, inv)
+      def nextStep    = LReciprocateLInvert(src, inv, tgt)
+
       tgtContent match {
         case Empty() =>
-          (LInvertTgt(src, inv), LReciprocateLInvert(src, inv, tgt))
+          (newContentL, nextStep)
         case r: RFwd[B] =>
-          (Slated(LInvertTgt(src, inv), r), ContractLInvTgtRFwd(src, inv, tgt, r.tgt))
+          (Slated(newContentL, r), nextStep and ContractLInvTgtRFwd(src, inv, tgt, r.tgt))
         case r: RInvertSrc[B, y] =>
           // not contracting in the current version
           // TODO: Do contract. Use Iso[A, y].
-          (BiDef(LInvertTgt(src, inv), r), LReciprocateLInvert(src, inv, tgt))
+          (BiDef(newContentL, r), nextStep)
+        case r: RSkippingUpLeft[x, B] =>
+          (BiDef(newContentL, r), nextStep)
         case r: RComplete[B] =>
           (Consumed(), RefineLInvertSrc(tgt, inv, src, r.lInvert(inv)))
       }
@@ -2361,6 +2385,9 @@ object CellContent {
       case (l: JoinOf, r: RRole[A, b])                => (BiDef(l, r), AllDone)
       case (l: Join1, r: RRole[A, b])                 => (BiDef(l, r), AllDone)
       case (l: Join2, r: RRole[A, b])                 => (BiDef(l, r), AllDone)
+      case (l: JoinOf, r: RFwd[A])                    => (BiDef(l, r), AllDone)
+      case (l: Join1, r: RFwd[A])                     => (BiDef(l, r), AllDone)
+      case (l: Join2, r: RFwd[A])                     => (BiDef(l, r), AllDone)
       case (l: LFwd[A], r: RRole[A, x])               => (BiDef(l, r), AllDone)
       case (l: LInvertSrc[A, x], r: RRole[A, y])      => (BiDef(l, r), AllDone)
       case (l: LInvertTgt[x, A], r: RRole[A, y])      => (BiDef(l, r), AllDone)
@@ -2578,6 +2605,9 @@ object CellContent {
           case LSkippingLeftLeft(newTgt, _) =>
             if (newTgt eq slated) Some(newContentL)
             else                  None
+          case LSkippingUpUp(lTgt, _, _, _) =>
+            if (lTgt eq slated) Some(newContentL)
+            else                None
         }
 
       rContent match {
@@ -3136,6 +3166,35 @@ object CellContent {
             case JoinPong2(`rCell`) =>
           }
           (Some(Consumed()), AllDone)
+      }
+  }
+
+  def mapVal[A, B]: (CellContent[Val[A]], (Cell[Val[A]], A => B, Cell[Val[B]])) => (CellContent[Val[A]], ActionResult) = {
+    (srcContent, payload) =>
+      val (self, f, tgt) = payload
+
+      def newContentR = RMapValSrc(f, tgt)
+      def nextStep    = LReciprocateMapVal(self, f, tgt)
+
+      srcContent match {
+        case Empty() =>
+          (newContentR, nextStep)
+        case l: LComplete[Val[A]] =>
+          UnhandledCase.raise(s"$l")
+        case l: LDefined[Val[A]] =>
+          (BiDef(l, newContentR), nextStep)
+      }
+  }
+
+  def lReciprocateMapVal[A, B]: (CellContent[Val[B]], LReciprocateMapVal[A, B]) => (CellContent[Val[B]], ActionResult) = {
+    (tgtContent, payload) =>
+      val LReciprocateMapVal(src, f, self) = payload
+
+      def newContentL = LMapValTgt[A, B](src)
+
+      tgtContent match {
+        case Empty() =>
+          (newContentL, AllDone)
       }
   }
 

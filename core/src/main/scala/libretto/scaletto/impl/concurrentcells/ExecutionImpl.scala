@@ -359,6 +359,9 @@ class ExecutionImpl(
         val (i1, i2, r) = Cell.rsplit[Ping, x](in)
         Cell.injectLOnPing[x, y](i1, i2, out).followUp()
         r.followUp()
+
+      case f: -⚬.MapVal[x, y] =>
+        Cell.mapVal[x, y](in, f.f, out).followUp()
     }
 
   private def unify[A](l: Cell[A], r: Cell[A]): Unit =
