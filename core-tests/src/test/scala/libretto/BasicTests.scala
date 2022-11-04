@@ -62,6 +62,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         introFst(done) > join > success
       },
 
+      "id > id > id > id > id" -> TestCase
+        .interactWith { id > id > id > id > id }
+        .via { expectDone(_) },
+
       "join ⚬ fork" -> TestCase {
         fork > join > success
       },

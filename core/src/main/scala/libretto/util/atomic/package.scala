@@ -17,10 +17,31 @@ package object atomic {
       @tailrec def go(expected: A): C = {
         val res: (A, C) = f(expected)
         val changed: A = compareAndSetOpaque[A](ref, expected, res._1)
-        if (changed eq res._1)
+        if (changed eq res._1) // success
+          debugPrint(s"${addr(ref)} set to $changed, returning ${res._2}")
           res._2
         else
           go(changed)
+      }
+
+      go(ref.getOpaque())
+    }
+
+    def modifyOpaqueOpt[C](f: A => (Option[A], C)): C = {
+      @tailrec def go(expected: A): C = {
+        val res: (Option[A], C) = f(expected)
+        res._1 match {
+          case None =>
+            debugPrint(s"${addr(ref)} unchanged by $f, remaining at $expected, returning ${res._2}")
+            res._2
+          case Some(a) =>
+            val changed: A = compareAndSetOpaque[A](ref, expected, a)
+            if(changed eq a) // success
+              debugPrint(s"${addr(ref)} set to $changed, returning ${res._2}")
+              res._2
+            else
+              go(changed)
+        }
       }
 
       go(ref.getOpaque())

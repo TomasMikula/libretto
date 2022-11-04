@@ -362,6 +362,9 @@ class ExecutionImpl(
 
       case f: -⚬.MapVal[x, y] =>
         Cell.mapVal[x, y](in, f.f, out).followUp()
+
+      case _: -⚬.LiftEither[x, y] =>
+        Cell.liftEither[x, y](in, out).followUp()
     }
 
   private def unify[A](l: Cell[A], r: Cell[A]): Unit =
