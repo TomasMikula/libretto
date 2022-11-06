@@ -288,6 +288,11 @@ class ExecutionImpl(
         Cell.rsplitInv[x, y](in, ox, oy).followUp()
         r.followUp()
 
+      case _: -⚬.FactorOutInversion[x, y] =>
+        val (ix, iy, r) = Cell.rsplit[-[x], -[y]](in)
+        Cell.lsplitInv[x, y](ix, iy, out).followUp()
+        r.followUp()
+
       case _: -⚬.RInvertSignal =>
         val (in1, in2, r) = Cell.rsplit[Done, Need](in)
         Cell.rInvertSignal(in1, in2).followUp()
@@ -363,12 +368,42 @@ class ExecutionImpl(
       case f: -⚬.MapVal[x, y] =>
         Cell.mapVal[x, y](in, f.f, out).followUp()
 
+      case _: -⚬.LiftPair[x, y] =>
+        val (o1, o2, r) = Cell.lsplit[Val[x], Val[y]](out)
+        Cell.splitVal[x, y](in, o1, o2).followUp()
+        r.followUp()
+
+      case _: -⚬.UnliftPair[x, y] =>
+        val (i1, i2, r) = Cell.rsplit[Val[x], Val[y]](in)
+        Cell.zipVal[x, y](i1, i2, out).followUp()
+        r.followUp()
+
+      case -⚬.ConstVal(b) =>
+        Cell.constVal(in, b, out).followUp()
+
+      case _: -⚬.Neglect[x] =>
+        Cell.neglect[x](in, out).followUp()
+
       case _: -⚬.LiftEither[x, y] =>
         Cell.liftEither[x, y](in, out).followUp()
     }
 
   private def unify[A](l: Cell[A], r: Cell[A]): Unit =
     Cell.unify(l, r).followUp()
+
+  private def mapVal[A, B](src: Cell[Val[A]], value: A, f: A => B, tgt: Cell[Val[B]]): Unit = {
+    // TODO: use a different thread pool for invoking user-provided functions?
+    import scala.util.{Failure, Success, Try}
+
+    Try {
+      f(value)
+    } match {
+      case Success(b) =>
+        Cell.deliverValRight(src, b, tgt).followUp()
+      case Failure(e) =>
+        Cell.crashFromLeft(src, e, tgt).followUp()
+    }
+  }
 
   extension (r: CellContent.ActionResult) {
     private def followUp(): Unit = {
@@ -378,6 +413,7 @@ class ExecutionImpl(
         case UnificationRequest(x, y) => submitJob { () => unify(x, y) }
         case ConnectionRequest(x, f, y) => connectLater(x, f, y)
         case CallbackTriggered(f, x) => submitJob { () => f(x) }
+        case MapValTriggered(src, value, f, tgt) => submitJob { () => mapVal(src, value, f, tgt) }
         case Two(r1, r2) => r1.followUp(); r2.followUp()
         case i: Instruction => submitJob { () => i.execute().followUp() }
       }
