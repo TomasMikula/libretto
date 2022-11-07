@@ -2516,6 +2516,26 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       caseJust: (A |*| B) -⚬ R,
     ): (Maybe[A] |*| B) -⚬ R =
       distributeR > either(elimFst > caseNone, caseJust)
+
+    given monadMaybe: Monad[Maybe] =
+      new Monad[Maybe] {
+        override val category: Category[-⚬] =
+          lib.category
+
+        override def lift[A, B](f: A -⚬ B): Maybe[A] -⚬ Maybe[B] =
+          |+|.bimap(id[One], f)
+
+        override def flatten[A]: Maybe[Maybe[A]] -⚬ Maybe[A] =
+          either(injectL, id[Maybe[A]])
+
+        override def pure[A]: A -⚬ Maybe[A] =
+          injectR
+      }
+
+    extension [A](ma: $[Maybe[A]]) {
+      def getOrElse(using pos: SourcePos)(ifEmpty: One -⚬ A): $[A] =
+        Maybe.getOrElse(ifEmpty)(ma)(using pos)
+    }
   }
 
   opaque type Optionally[A] = One |&| A

@@ -422,10 +422,10 @@ trait CoreDSL {
     }
 
     extension (d: $[Done]) {
-      def alsoJoin(that: $[Done])(using
+      def alsoJoin(others: $[Done]*)(using
         pos: SourcePos,
       ): $[Done] =
-        joinTwo(d, that)(pos)
+        joinAll(d, others: _*)(using pos)
     }
 
     implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
