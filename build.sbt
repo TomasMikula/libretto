@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-ThisBuild / scalaVersion := "3.2.0"
+ThisBuild / scalaVersion := "3.2.1"
 
 ThisBuild / organization := "dev.continuously"
 
@@ -51,7 +51,7 @@ releaseProcess := Seq[ReleaseStep](
   pushChanges,
 )
 
-val ZioVersion = "2.0.2"
+val ZioVersion = "2.0.3"
 
 lazy val core = project
   .in(file("core"))
@@ -76,7 +76,7 @@ lazy val testingScalatest = project
   .settings(
     name := "libretto-testing-scalatest",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.9",
+      "org.scalatest" %% "scalatest" % "3.2.14",
     ),
   )
 
@@ -103,7 +103,7 @@ lazy val mashup = project
     publish / skip := true, // experimental project, do not publish
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio" % ZioVersion,
-      "dev.zio" %% "zio-json" % "0.3.0-RC10",
+      "dev.zio" %% "zio-json" % "0.3.0",
       "io.d11" %% "zhttp" % "2.0.0-RC11",
     ),
   )
