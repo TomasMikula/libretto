@@ -10,102 +10,111 @@ object Protocol {
     *
     * The session starts in the soup section.
     */
-  opaque type Session = StageSoup
+  opaque type Session = SectionSoup
   object Session {
-    def enter: Session -⚬ StageSoup =
+    def enter: Session -⚬ SectionSoup =
       id
 
-    def from[A](f: A -⚬ StageSoup): A -⚬ Session =
+    def from[A](f: A -⚬ SectionSoup): A -⚬ Session =
       f
   }
 
-  /** At this stage, the customer has the option to get a soup or to move down the line to the next stage.
+  /** In this section, the customer has the option to get a soup or to move down the line to the next section.
     * In fact, they may get multiple soups, but also no soup if there is none left.
     */
-  type StageSoup = Rec[ [StageSoup] =>> // recursive types have to be defined using the `Rec` operator
+  type SectionSoup = Rec[ [SectionSoup] =>> // recursive types have to be defined using the `Rec` operator
     |&| [ // `|&|` means consumer choice: the party to the right (the "consumer", in our case the customer) chooses the branch
 
       // Option 1:
-      //   Try to get a soup (if there's any left) and repeat this stage (to get an opportunity to get another soup).
+      //   Try to get a soup (if there's any left) and remain in this section (to get an opportunity to get another soup).
       //   `|+|` means producer choice: the party to the left (the "producer", in our case the canteen facility) chooses the branch.
-      //   Here, the facility chooses whether there is any soup left, or the customer has to proceed (without soup) to the next stage.
-      (Soup |*| StageSoup) |+| StageMainDish,
+      //   Here, the facility chooses whether there is any soup left, or the customer has to proceed (without soup) to the next section.
+      (Soup |*| SectionSoup) |+| SectionMainDish,
 
       // Option 2:
-      //   Proceed to the next stage.
-      StageMainDish,
+      //   Proceed to the next section.
+      SectionMainDish,
     ]
   ]
 
-  object StageSoup {
+  object SectionSoup {
     def from[A](
-      onSoupRequest: A -⚬ ((Soup |*| StageSoup) |+| StageMainDish),
-      goToNextStage: A -⚬ StageMainDish,
-    ): A -⚬ StageSoup =
-      λ { a => pack(choice(onSoupRequest, goToNextStage)(a)) }
+      onSoupRequest : A -⚬ ((Soup |*| SectionSoup) |+| SectionMainDish),
+      goToMainDishes: A -⚬ SectionMainDish,
+    ): A -⚬ SectionSoup =
+      λ { a => pack(choice(onSoupRequest, goToMainDishes)(a)) }
 
-    def getSoup: StageSoup -⚬ ((Soup |*| StageSoup) |+| StageMainDish) =
+    def getSoup: SectionSoup -⚬ ((Soup |*| SectionSoup) |+| SectionMainDish) =
       unpack > chooseL
 
-    def proceedToNextStage: StageSoup -⚬ StageMainDish =
+    def proceedToMainDishes: SectionSoup -⚬ SectionMainDish =
       unpack > chooseR
   }
 
-  /** At this stage, the customer has the option to get the main dish.
+  /** In this section, the customer has the option to get the main dish.
     * As with soup, the customer may get multiple main dishes. There's no variety though, to keep things simple.
-    * At this stage, the customer no longer has the possibility to ask for soup, as they have moved to the next section of the canteen.
+    * The customer no longer has the possibility to ask for soup, as they have already left the soup section.
     */
-  type StageMainDish = Rec[ [StageMainDish] =>>
+  type SectionMainDish = Rec[ [SectionMainDish] =>>
     |&| [
-      // Option 1: Try to get the main dish (if there's any left) and repeat this stage.
-      (MainDish |*| StageMainDish) |+| StageDessert,
+      // Option 1: Try to get the main dish (if there's any left) and remain in the main dish section.
+      (MainDish |*| SectionMainDish) |+| SectionDessert,
 
-      // Option 2: Proceed to the next stage.
-      StageDessert,
+      // Option 2: Proceed to the next section.
+      SectionDessert,
     ]
   ]
 
-  object StageMainDish {
+  object SectionMainDish {
     def from[A](
-      onDishRequest: A -⚬ ((MainDish |*| StageMainDish) |+| StageDessert),
-      goToNextStage: A -⚬ StageDessert,
-    ): A -⚬ StageMainDish =
-      λ { a => pack(choice(onDishRequest, goToNextStage)(a)) }
+      onDishRequest: A -⚬ ((MainDish |*| SectionMainDish) |+| SectionDessert),
+      goToDesserts : A -⚬ SectionDessert,
+    ): A -⚬ SectionMainDish =
+      λ { a => pack(choice(onDishRequest, goToDesserts)(a)) }
 
-    def getMainDish: StageMainDish -⚬ ((MainDish |*| StageMainDish) |+| StageDessert) =
+    def getMainDish: SectionMainDish -⚬ ((MainDish |*| SectionMainDish) |+| SectionDessert) =
       unpack > chooseL
 
-    def proceedToNextStage: StageMainDish -⚬ StageDessert =
+    def proceedToDesserts: SectionMainDish -⚬ SectionDessert =
       unpack > chooseR
   }
 
-  type StageDessert = Rec[ [StageDessert] =>>
+  type SectionDessert = Rec[ [SectionDessert] =>>
     |&| [
-      (Dessert |*| StageDessert) |+| StagePayment,
-      StagePayment,
+      (Dessert |*| SectionDessert) |+| SectionPayment,
+      SectionPayment,
     ]
   ]
 
-  object StageDessert {
+  object SectionDessert {
     def from[A](
-      onDessertRequest: A -⚬ ((Dessert |*| StageDessert) |+| StagePayment),
-      goToNextStage:    A -⚬ StagePayment,
-    ): A -⚬ StageDessert =
-      λ { a => pack(choice(onDessertRequest, goToNextStage)(a)) }
+      onDessertRequest: A -⚬ ((Dessert |*| SectionDessert) |+| SectionPayment),
+      goToPayment     : A -⚬ SectionPayment,
+    ): A -⚬ SectionDessert =
+      λ { a => pack(choice(onDessertRequest, goToPayment)(a)) }
 
-    def getDessert: StageDessert -⚬ ((Dessert |*| StageDessert) |+| StagePayment) =
+    def getDessert: SectionDessert -⚬ ((Dessert |*| SectionDessert) |+| SectionPayment) =
       unpack > chooseL
 
-    def proceedToNextStage: StageDessert -⚬ StagePayment =
+    def proceedToPayment: SectionDessert -⚬ SectionPayment =
       unpack > chooseR
   }
 
-  type StagePayment =
+  type SectionPayment =
     PaymentCard =⚬ PaymentCard // The cashier borrows customer's payment card and always returns it back.
 
-  type Soup     = Val["Soup"]
-  type MainDish = Val["MainDish"]
-  type Dessert  = Val["Dessert"]
+  opaque type Soup     = Val["Soup"]
+  opaque type MainDish = Val["MainDish"]
+  opaque type Dessert  = Val["Dessert"]
+
+  def makeSoup: Done -⚬ Soup =
+    printLine("Cooking soup") > constVal("Soup")
+
+  def makeMainDish: Done -⚬ MainDish =
+    printLine("Cooking main dish") > constVal("MainDish")
+
+  def makeDessert: Done -⚬ Dessert =
+    printLine("Cooking dessert") > constVal("Dessert")
 
   def eatSoup: Soup -⚬ Done =
     printLine(soup => s"Eating $soup")

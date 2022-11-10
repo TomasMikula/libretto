@@ -10,55 +10,46 @@ object Facility {
   def behavior: Done -⚬ Session =
     Session.from(soupSection)
 
-  def soupSection: Done -⚬ StageSoup =
+  def soupSection: Done -⚬ SectionSoup =
     rec { soupSection =>
-      StageSoup.from(
+      SectionSoup.from(
         onSoupRequest =
           λ.+ { done =>
-            injectL( cookSoup(done) |*| soupSection(done) )
+            injectL( makeSoup(done) |*| soupSection(done) )
           },
-        goToNextStage =
+        goToMainDishes =
           mainSection,
       )
     }
 
-  def mainSection: Done -⚬ StageMainDish =
+  def mainSection: Done -⚬ SectionMainDish =
     rec { mainSection =>
-      StageMainDish.from(
+      SectionMainDish.from(
         onDishRequest =
           λ.+ { done =>
-            injectL( cookMainDish(done) |*| mainSection(done) )
+            injectL( makeMainDish(done) |*| mainSection(done) )
           },
-        goToNextStage =
+        goToDesserts =
           dessertSection,
       )
     }
 
-  def dessertSection: Done -⚬ StageDessert =
+  def dessertSection: Done -⚬ SectionDessert =
     rec { dessertSection =>
-      StageDessert.from(
+      SectionDessert.from(
         onDessertRequest =
           λ.+ { done =>
-            injectL( cookDessert(done) |*| dessertSection(done) )
+            injectL( makeDessert(done) |*| dessertSection(done) )
           },
-        goToNextStage =
+        goToPayment =
           paymentSection,
       )
     }
 
-  def paymentSection: Done -⚬ StagePayment =
+  def paymentSection: Done -⚬ SectionPayment =
     λ { done =>
       λ.closure { card =>
         card.waitFor(done)
       }
     }
-
-  def cookSoup: Done -⚬ Soup =
-    printLine("Cooking soup") > constVal("Soup")
-
-  def cookMainDish: Done -⚬ MainDish =
-    printLine("Cooking main dish") > constVal("MainDish")
-
-  def cookDessert: Done -⚬ Dessert =
-    printLine("Cooking dessert") > constVal("Dessert")
 }

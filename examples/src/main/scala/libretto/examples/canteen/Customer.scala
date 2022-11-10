@@ -25,14 +25,14 @@ object Customer {
         )
     }
 
-  private def tryGetSoupAndProceed: StageSoup -⚬ (Maybe[Soup] |*| StageMainDish) =
+  private def tryGetSoupAndProceed: SectionSoup -⚬ (Maybe[Soup] |*| SectionMainDish) =
     λ { soupSection =>
-      StageSoup
+      SectionSoup
         .getSoup(soupSection)
         .switch(
           caseLeft =
             λ { case (soup |*| soupSection) =>
-              val mainSection = StageSoup.proceedToNextStage(soupSection)
+              val mainSection = SectionSoup.proceedToMainDishes(soupSection)
               val someSoup    = Maybe.just(soup)
               someSoup |*| mainSection
             },
@@ -44,14 +44,14 @@ object Customer {
         )
     }
 
-  private def tryGetMainDishAndProceed: StageMainDish -⚬ (Maybe[MainDish] |*| StageDessert) =
+  private def tryGetMainDishAndProceed: SectionMainDish -⚬ (Maybe[MainDish] |*| SectionDessert) =
     λ { mainSection =>
-      StageMainDish
+      SectionMainDish
         .getMainDish(mainSection)
         .switch(
           caseLeft =
             λ { case (dish |*| mainSection) =>
-              val dessertSection = StageMainDish.proceedToNextStage(mainSection)
+              val dessertSection = SectionMainDish.proceedToDesserts(mainSection)
               val someDish       = Maybe.just(dish)
               someDish |*| dessertSection
             },
@@ -63,14 +63,14 @@ object Customer {
         )
     }
 
-  private def tryGetDessertAndProceed: StageDessert -⚬ (Maybe[Dessert] |*| StagePayment) =
+  private def tryGetDessertAndProceed: SectionDessert -⚬ (Maybe[Dessert] |*| SectionPayment) =
     λ { dessertSection =>
-      StageDessert
+      SectionDessert
         .getDessert(dessertSection)
         .switch(
           caseLeft =
             λ { case (dessert |*| dessertSection) =>
-              val paymentSection = StageDessert.proceedToNextStage(dessertSection)
+              val paymentSection = SectionDessert.proceedToPayment(dessertSection)
               val someDessert    = Maybe.just(dessert)
               someDessert |*| paymentSection
             },
