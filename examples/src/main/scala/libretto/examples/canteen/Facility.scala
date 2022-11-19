@@ -29,18 +29,6 @@ object Facility {
           λ.+ { done =>
             injectL( makeMainDish(done) |*| mainSection(done) )
           },
-        goToDesserts =
-          dessertSection,
-      )
-    }
-
-  def dessertSection: Done -⚬ SectionDessert =
-    rec { dessertSection =>
-      SectionDessert.from(
-        onDessertRequest =
-          λ.+ { done =>
-            injectL( makeDessert(done) |*| dessertSection(done) )
-          },
         goToPayment =
           paymentSection,
       )
