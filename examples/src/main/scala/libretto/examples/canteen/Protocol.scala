@@ -57,46 +57,26 @@ object Protocol {
     */
   type SectionMainDish = Rec[ [SectionMainDish] =>>
     |&| [
-      // Option 1: Try to get the main dish (if there's any left) and remain in the main dish section.
-      (MainDish |*| SectionMainDish) |+| SectionDessert,
+      // Option 1: Try to get the main dish (if there's any left).
+      // If successful, remain in the main dish section, otherwise, proceed to the payment section.
+      (MainDish |*| SectionMainDish) |+| SectionPayment,
 
-      // Option 2: Proceed to the next section.
-      SectionDessert,
+      // Option 2: Proceed to the payment section.
+      SectionPayment,
     ]
   ]
 
   object SectionMainDish {
     def from[A](
-      onDishRequest: A -⚬ ((MainDish |*| SectionMainDish) |+| SectionDessert),
-      goToDesserts : A -⚬ SectionDessert,
+      onDishRequest: A -⚬ ((MainDish |*| SectionMainDish) |+| SectionPayment),
+      goToPayment  : A -⚬ SectionPayment,
     ): A -⚬ SectionMainDish =
-      λ { a => pack(choice(onDishRequest, goToDesserts)(a)) }
+      λ { a => pack(choice(onDishRequest, goToPayment)(a)) }
 
-    def getMainDish: SectionMainDish -⚬ ((MainDish |*| SectionMainDish) |+| SectionDessert) =
+    def getMainDish: SectionMainDish -⚬ ((MainDish |*| SectionMainDish) |+| SectionPayment) =
       unpack > chooseL
 
-    def proceedToDesserts: SectionMainDish -⚬ SectionDessert =
-      unpack > chooseR
-  }
-
-  type SectionDessert = Rec[ [SectionDessert] =>>
-    |&| [
-      (Dessert |*| SectionDessert) |+| SectionPayment,
-      SectionPayment,
-    ]
-  ]
-
-  object SectionDessert {
-    def from[A](
-      onDessertRequest: A -⚬ ((Dessert |*| SectionDessert) |+| SectionPayment),
-      goToPayment     : A -⚬ SectionPayment,
-    ): A -⚬ SectionDessert =
-      λ { a => pack(choice(onDessertRequest, goToPayment)(a)) }
-
-    def getDessert: SectionDessert -⚬ ((Dessert |*| SectionDessert) |+| SectionPayment) =
-      unpack > chooseL
-
-    def proceedToPayment: SectionDessert -⚬ SectionPayment =
+    def proceedToPayment: SectionMainDish -⚬ SectionPayment =
       unpack > chooseR
   }
 
@@ -105,7 +85,6 @@ object Protocol {
 
   opaque type Soup     = Val["Soup"]
   opaque type MainDish = Val["MainDish"]
-  opaque type Dessert  = Val["Dessert"]
 
   def makeSoup: Done -⚬ Soup =
     printLine("Cooking soup") > constVal("Soup")
@@ -113,17 +92,11 @@ object Protocol {
   def makeMainDish: Done -⚬ MainDish =
     printLine("Cooking main dish") > constVal("MainDish")
 
-  def makeDessert: Done -⚬ Dessert =
-    printLine("Cooking dessert") > constVal("Dessert")
-
   def eatSoup: Soup -⚬ Done =
     printLine(soup => s"Eating $soup")
 
   def eatMainDish: MainDish -⚬ Done =
     printLine(dish => s"Eating $dish")
-
-  def eatDessert: Dessert -⚬ Done =
-    printLine(dessert => s"Eating $dessert")
 
   opaque type PaymentCard = Val[String]
 

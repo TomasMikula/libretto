@@ -10,74 +10,49 @@ object Customer {
 
   def behavior: (Session |*| PaymentCard) -⚬ PaymentCard =
     λ { case (session |*| card) =>
-      val soupSection                     = Session.enter(session)
-      val (soupOpt |*| mainSection)       = tryGetSoupAndProceed(soupSection)
-      val (dishOpt |*| dessertSection)    = tryGetMainDishAndProceed(mainSection)
-      val (dessertOpt |*| paymentSection) = tryGetDessertAndProceed(dessertSection)
+      val soupSection               = Session.enter(session)
+      val (soupOpt |*| mainSection) = tryGetSoupAndProceed(soupSection)
+      val (dishOpt |*| paySection)  = tryGetMainDishAndProceed(mainSection)
 
-      paymentSection(card)
+      paySection(card)
         .waitFor(
           joinAll(
-            soupOpt    .map(eatSoup(_))     .getOrElse(done),
-            dishOpt    .map(eatMainDish(_)) .getOrElse(done),
-            dessertOpt .map(eatDessert(_))  .getOrElse(done),
+            soupOpt .map(eatSoup(_))     .getOrElse(done),
+            dishOpt .map(eatMainDish(_)) .getOrElse(done),
           )
         )
     }
 
   private def tryGetSoupAndProceed: SectionSoup -⚬ (Maybe[Soup] |*| SectionMainDish) =
-    λ { soupSection =>
-      SectionSoup
-        .getSoup(soupSection)
-        .switch(
-          caseLeft =
-            λ { case (soup |*| soupSection) =>
-              val mainSection = SectionSoup.proceedToMainDishes(soupSection)
-              val someSoup    = Maybe.just(soup)
-              someSoup |*| mainSection
-            },
-          caseRight =
-            λ { mainSection =>
-              val noSoup = Maybe.empty[Soup](one)
-              noSoup |*| mainSection
-            },
-        )
-    }
+    SectionSoup.getSoup > either(
+      caseLeft =
+        λ { case (soup |*| soupSection) =>
+          val mainSection = SectionSoup.proceedToMainDishes(soupSection)
+          val someSoup    = Maybe.just(soup)
+          someSoup |*| mainSection
+        },
+      caseRight =
+        λ { mainSection =>
+          val noSoup = Maybe.empty[Soup](one)
+          noSoup |*| mainSection
+        },
+    )
 
-  private def tryGetMainDishAndProceed: SectionMainDish -⚬ (Maybe[MainDish] |*| SectionDessert) =
+  private def tryGetMainDishAndProceed: SectionMainDish -⚬ (Maybe[MainDish] |*| SectionPayment) =
     λ { mainSection =>
       SectionMainDish
         .getMainDish(mainSection)
         .switch(
           caseLeft =
             λ { case (dish |*| mainSection) =>
-              val dessertSection = SectionMainDish.proceedToDesserts(mainSection)
-              val someDish       = Maybe.just(dish)
-              someDish |*| dessertSection
+              val paySection = SectionMainDish.proceedToPayment(mainSection)
+              val someDish   = Maybe.just(dish)
+              someDish |*| paySection
             },
           caseRight =
-            λ { dessertSection =>
+            λ { paySection =>
               val noDish = Maybe.empty[MainDish](one)
-              noDish |*| dessertSection
-            },
-        )
-    }
-
-  private def tryGetDessertAndProceed: SectionDessert -⚬ (Maybe[Dessert] |*| SectionPayment) =
-    λ { dessertSection =>
-      SectionDessert
-        .getDessert(dessertSection)
-        .switch(
-          caseLeft =
-            λ { case (dessert |*| dessertSection) =>
-              val paymentSection = SectionDessert.proceedToPayment(dessertSection)
-              val someDessert    = Maybe.just(dessert)
-              someDessert |*| paymentSection
-            },
-          caseRight =
-            λ { paymentSection =>
-              val noDessert = Maybe.empty[Dessert](one)
-              noDessert |*| paymentSection
+              noDish |*| paySection
             },
         )
     }
