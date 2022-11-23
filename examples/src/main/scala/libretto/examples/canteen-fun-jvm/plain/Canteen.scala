@@ -11,8 +11,6 @@ object Canteen {
 
     def getMainDish(): Option[MainDish]
 
-    def getDessert(): Option[Dessert]
-
     def payAndClose(card: PaymentCard): Unit
   }
 
@@ -29,7 +27,6 @@ object Canteen {
   }
   class Soup extends Meal
   class MainDish extends Meal
-  class Dessert extends Meal
 
   case class PaymentCard(number: String)
 }

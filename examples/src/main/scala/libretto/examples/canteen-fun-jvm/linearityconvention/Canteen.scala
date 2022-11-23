@@ -1,36 +1,23 @@
 package canteen.linearityconvention
 
-trait Canteen {
+trait Canteen:
   def enter(): Canteen.Session
-}
 
 object Canteen {
 
-  trait Session {
+  trait Session:
     def proceedToSoups(): SectionSoup
-  }
 
-  trait SectionSoup {
+  trait SectionSoup:
     def getSoup(): Either[(Soup, SectionSoup), SectionMain]
-
     def proceedToMainDishes(): SectionMain
-  }
 
-  trait SectionMain {
-    def getMainDish(): Either[(MainDish, SectionMain), SectionDessert]
-
-    def proceedToDesserts(): SectionDessert
-  }
-
-  trait SectionDessert {
-    def getDessert(): Either[(Dessert, SectionDessert), SectionPayment]
-
+  trait SectionMain:
+    def getMainDish(): Either[(MainDish, SectionMain), SectionPayment]
     def proceedToPayment(): SectionPayment
-  }
 
-  trait SectionPayment {
+  trait SectionPayment:
     def payAndClose(card: PaymentCard): Unit
-  }
 
   abstract class Meal {
     private var consumed: Boolean = false
@@ -45,7 +32,6 @@ object Canteen {
   }
   class Soup extends Meal
   class MainDish extends Meal
-  class Dessert extends Meal
 
   case class PaymentCard(number: String)
 }

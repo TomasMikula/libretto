@@ -2,24 +2,21 @@ package canteen.plain
 
 import Canteen._
 
-class Customer(paymentCard: PaymentCard) {
+object Customer {
 
-  def visitCanteen(canteen: Canteen): Unit =
+  def behavior(canteen: Canteen, card: PaymentCard): Unit =
     val session = canteen.enter()
 
     val soup = session.getSoup()
 
     val dish = session.getMainDish()
 
-    val dessert = session.getDessert()
+    session.payAndClose(card)
 
-    session.payAndClose(paymentCard)
+    soup.foreach(_.eat())
+    dish.foreach(_.eat())
 
-    soup   .foreach(_.eat())
-    dish   .foreach(_.eat())
-    dessert.foreach(_.eat())
-
-  def illegalBehavior1(canteen: Canteen): Unit = {
+  def illegalBehavior1(canteen: Canteen, card: PaymentCard): Unit = {
     val session = canteen.enter()
 
     val dish = session.getMainDish()
@@ -28,18 +25,18 @@ class Customer(paymentCard: PaymentCard) {
     // 💥 Illegal: Cannot go from main dishes back to soups.
   }
 
-  def illegalBehavior2(canteen: Canteen): Unit = {
+  def illegalBehavior2(canteen: Canteen, card: PaymentCard): Unit = {
     val session = canteen.enter()
 
     val soup = session.getSoup()
 
-    session.payAndClose(paymentCard)
+    session.payAndClose(card)
 
     val dish = session.getMainDish()
     // 💥 Illegal: Session already closed.
   }
 
-  def illegalBehavior3(canteen: Canteen): Unit = {
+  def illegalBehavior3(canteen: Canteen, card: PaymentCard): Unit = {
     val session = canteen.enter()
 
     val soup = session.getSoup()
@@ -49,32 +46,32 @@ class Customer(paymentCard: PaymentCard) {
     // 👮‍♀️ Illegal: Leaving without paying.
   }
 
-  def illegalBehavior4(canteen: Canteen): Unit = {
+  def illegalBehavior4(canteen: Canteen, card: PaymentCard): Unit = {
     val session = canteen.enter()
 
     val soup = session.getSoup()
     val dish = session.getMainDish()
 
-    session.payAndClose(paymentCard)
+    session.payAndClose(card)
 
     dish.foreach(_.eat())
 
     // 👮‍♀️ Illegal: Did not eat the soup.
   }
 
-  def illegalBehavior5(canteen: Canteen): Unit = {
+  def illegalBehavior5(canteen: Canteen, card: PaymentCard): Unit = {
     val session = canteen.enter()
 
-    val dessert = session.getDessert()
+    val soup = session.getSoup()
 
-    session.payAndClose(paymentCard)
+    session.payAndClose(card)
 
-    dessert.foreach(_.eat())
-    dessert.foreach(_.eat())
-    // 💥 Illegal: Attempting to eat the dessert twice.
+    soup.foreach(_.eat())
+    soup.foreach(_.eat())
+    // 💥 Illegal: Attempting to eat the soup twice.
   }
 
-  def illegalBehavior6(canteen: Canteen): Unit = {
+  def illegalBehavior6(canteen: Canteen, card: PaymentCard): Unit = {
     val session = canteen.enter()
 
     val soup1: Option[Soup] = session.getSoup() // None

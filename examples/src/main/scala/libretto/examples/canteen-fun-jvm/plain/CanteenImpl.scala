@@ -15,7 +15,6 @@ object CanteenImpl {
     enum State:
       case SectionSoup
       case SectionMain
-      case SectionDessert
       case SectionPayment
       case Closed
 
@@ -32,8 +31,8 @@ object CanteenImpl {
             this.state = SectionMain
           res
 
-        case other =>
-          throw IllegalStateException(s"Cannot ask for soup in state $other")
+        case SectionMain | SectionPayment | Closed =>
+          throw IllegalStateException(s"Cannot ask for soup in state $state")
 
     override def getMainDish(): Option[MainDish] =
       this.state match
@@ -43,37 +42,22 @@ object CanteenImpl {
 
         case SectionMain =>
           val res = cookMainDish()
-          if (res.isEmpty) this.state = SectionDessert
-          res
-
-        case other =>
-          throw IllegalStateException(s"Cannot ask for main dish in state $other")
-
-    override def getDessert(): Option[Dessert] =
-      this.state match {
-        case SectionSoup | SectionMain =>
-          this.state = SectionDessert // automatically transition to SectionDessert
-          getDessert()
-
-        case SectionDessert =>
-          val res = cookDessert()
           if (res.isEmpty) {
             // forcefully proceed to SectionPayment
             this.state = SectionPayment
           }
           res
 
-        case other =>
-          throw IllegalStateException(s"Cannot ask for dessert in state $other")
-      }
+        case SectionPayment | Closed =>
+          throw IllegalStateException(s"Cannot ask for main dish in state $state")
 
     override def payAndClose(card: PaymentCard): Unit =
       this.state match {
-        case Closed =>
-          throw IllegalStateException("Session already closed")
-        case _ =>
+        case SectionPayment | SectionMain | SectionSoup =>
           processPayment(card)
           this.state = Closed
+        case Closed =>
+          throw IllegalStateException("Session already closed")
       }
 
 
@@ -82,9 +66,6 @@ object CanteenImpl {
 
     private def cookMainDish(): Option[MainDish] =
       Some(new MainDish())
-
-    private def cookDessert(): Option[Dessert] =
-      Some(new Dessert())
 
     private def processPayment(card: PaymentCard): Unit =
       ()
