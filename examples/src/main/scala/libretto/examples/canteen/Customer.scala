@@ -10,9 +10,9 @@ object Customer {
 
   def behavior: (Session |*| PaymentCard) -⚬ PaymentCard =
     λ { case (session |*| card) =>
-      val soupSection               = Session.enter(session)
+      val soupSection               = Session.proceedToSoups(session)
       val (soupOpt |*| mainSection) = tryGetSoupAndProceed(soupSection)
-      val (dishOpt |*| paySection)  = tryGetMainDishAndProceed(mainSection)
+      val (dishOpt |*| paySection)  = tryGetDishAndProceed(mainSection)
 
       paySection(card)
         .waitFor(
@@ -38,7 +38,7 @@ object Customer {
         },
     )
 
-  private def tryGetMainDishAndProceed: SectionMainDish -⚬ (Maybe[MainDish] |*| SectionPayment) =
+  private def tryGetDishAndProceed: SectionMainDish -⚬ (Maybe[MainDish] |*| SectionPayment) =
     λ { mainSection =>
       SectionMainDish
         .getMainDish(mainSection)

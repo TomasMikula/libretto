@@ -12,7 +12,7 @@ object Protocol {
     */
   opaque type Session = SectionSoup
   object Session {
-    def enter: Session -⚬ SectionSoup =
+    def proceedToSoups: Session -⚬ SectionSoup =
       id
 
     def from[A](f: A -⚬ SectionSoup): A -⚬ Session =
