@@ -23,7 +23,7 @@ object Customer {
         )
     }
 
-  private def tryGetSoupAndProceed: SectionSoup -⚬ (Maybe[Soup] |*| SectionMainDish) =
+  private def tryGetSoupAndProceed: SectionSoup -⚬ (Maybe[Soup] |*| SectionMain) =
     SectionSoup.getSoup > either(
       caseLeft =
         λ { case (soup |*| soupSection) =>
@@ -38,14 +38,14 @@ object Customer {
         },
     )
 
-  private def tryGetDishAndProceed: SectionMainDish -⚬ (Maybe[MainDish] |*| SectionPayment) =
+  private def tryGetDishAndProceed: SectionMain -⚬ (Maybe[MainDish] |*| SectionPayment) =
     λ { mainSection =>
-      SectionMainDish
+      SectionMain
         .getMainDish(mainSection)
         .switch(
           caseLeft =
             λ { case (dish |*| mainSection) =>
-              val paySection = SectionMainDish.proceedToPayment(mainSection)
+              val paySection = SectionMain.proceedToPayment(mainSection)
               val someDish   = Maybe.just(dish)
               someDish |*| paySection
             },

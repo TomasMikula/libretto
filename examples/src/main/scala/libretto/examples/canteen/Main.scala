@@ -10,7 +10,7 @@ object Main extends StarterApp {
   override def blueprint: Done -⚬ Done =
     λ.+ { started =>
       val paymentCard  = started > PaymentCard.issue
-      val session      = Facility.behavior(started)
+      val session      = Provider.behavior(started)
       val paymentCard1 = Customer.behavior(session |*| paymentCard)
       PaymentCard.shred(paymentCard1)
     }

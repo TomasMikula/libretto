@@ -15,8 +15,8 @@ object Protocol {
     def proceedToSoups: Session -⚬ SectionSoup =
       id
 
-    def from[A](f: A -⚬ SectionSoup): A -⚬ Session =
-      f
+    def create: SectionSoup -⚬ Session =
+      id
   }
 
   /** In this section, the customer has the option to get a soup or to move down the line to the next section.
@@ -29,25 +29,25 @@ object Protocol {
       //   Try to get a soup (if there's any left) and remain in this section (to get an opportunity to get another soup).
       //   `|+|` means producer choice: the party to the left (the "producer", in our case the canteen facility) chooses the branch.
       //   Here, the facility chooses whether there is any soup left, or the customer has to proceed (without soup) to the next section.
-      (Soup |*| SectionSoup) |+| SectionMainDish,
+      (Soup |*| SectionSoup) |+| SectionMain,
 
       // Option 2:
       //   Proceed to the next section.
-      SectionMainDish,
+      SectionMain,
     ]
   ]
 
   object SectionSoup {
     def from[A](
-      onSoupRequest : A -⚬ ((Soup |*| SectionSoup) |+| SectionMainDish),
-      goToMainDishes: A -⚬ SectionMainDish,
+      onSoupRequest : A -⚬ ((Soup |*| SectionSoup) |+| SectionMain),
+      goToMainDishes: A -⚬ SectionMain,
     ): A -⚬ SectionSoup =
       λ { a => pack(choice(onSoupRequest, goToMainDishes)(a)) }
 
-    def getSoup: SectionSoup -⚬ ((Soup |*| SectionSoup) |+| SectionMainDish) =
+    def getSoup: SectionSoup -⚬ ((Soup |*| SectionSoup) |+| SectionMain) =
       unpack > chooseL
 
-    def proceedToMainDishes: SectionSoup -⚬ SectionMainDish =
+    def proceedToMainDishes: SectionSoup -⚬ SectionMain =
       unpack > chooseR
   }
 
@@ -55,28 +55,28 @@ object Protocol {
     * As with soup, the customer may get multiple main dishes. There's no variety though, to keep things simple.
     * The customer no longer has the possibility to ask for soup, as they have already left the soup section.
     */
-  type SectionMainDish = Rec[ [SectionMainDish] =>>
+  type SectionMain = Rec[ [SectionMain] =>>
     |&| [
       // Option 1: Try to get the main dish (if there's any left).
       // If successful, remain in the main dish section, otherwise, proceed to the payment section.
-      (MainDish |*| SectionMainDish) |+| SectionPayment,
+      (MainDish |*| SectionMain) |+| SectionPayment,
 
       // Option 2: Proceed to the payment section.
       SectionPayment,
     ]
   ]
 
-  object SectionMainDish {
+  object SectionMain {
     def from[A](
-      onDishRequest: A -⚬ ((MainDish |*| SectionMainDish) |+| SectionPayment),
+      onDishRequest: A -⚬ ((MainDish |*| SectionMain) |+| SectionPayment),
       goToPayment  : A -⚬ SectionPayment,
-    ): A -⚬ SectionMainDish =
+    ): A -⚬ SectionMain =
       λ { a => pack(choice(onDishRequest, goToPayment)(a)) }
 
-    def getMainDish: SectionMainDish -⚬ ((MainDish |*| SectionMainDish) |+| SectionPayment) =
+    def getMainDish: SectionMain -⚬ ((MainDish |*| SectionMain) |+| SectionPayment) =
       unpack > chooseL
 
-    def proceedToPayment: SectionMainDish -⚬ SectionPayment =
+    def proceedToPayment: SectionMain -⚬ SectionPayment =
       unpack > chooseR
   }
 

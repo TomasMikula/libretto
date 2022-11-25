@@ -5,10 +5,10 @@ import libretto.scaletto.StarterKit._
 import libretto.scaletto.StarterKit.$._
 
 /** A simplistic canteen facility that serves only one customer and prepares everything on demand. */
-object Facility {
+object Provider {
 
   def behavior: Done -⚬ Session =
-    Session.from(soupSection)
+    λ { start => Session.create(soupSection(start)) }
 
   def soupSection: Done -⚬ SectionSoup =
     rec { soupSection =>
@@ -22,9 +22,9 @@ object Facility {
       )
     }
 
-  def mainSection: Done -⚬ SectionMainDish =
+  def mainSection: Done -⚬ SectionMain =
     rec { mainSection =>
-      SectionMainDish.from(
+      SectionMain.from(
         onDishRequest =
           λ.+ { done =>
             injectL( makeMainDish(done) |*| mainSection(done) )
