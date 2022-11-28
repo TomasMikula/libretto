@@ -38,11 +38,14 @@ object Protocol {
   ]
 
   object SectionSoup {
+    private def pack: (((Soup |*| SectionSoup) |+| SectionMain) |&| SectionMain) -⚬ SectionSoup =
+      dsl.pack[[S] =>> ((Soup |*| S) |+| SectionMain) |&| SectionMain]
+
     def from[A](
       onSoupRequest : A -⚬ ((Soup |*| SectionSoup) |+| SectionMain),
       goToMainDishes: A -⚬ SectionMain,
     ): A -⚬ SectionSoup =
-      λ { a => pack(choice(onSoupRequest, goToMainDishes)(a)) }
+      choice(onSoupRequest, goToMainDishes) > pack
 
     def getSoup: SectionSoup -⚬ ((Soup |*| SectionSoup) |+| SectionMain) =
       unpack > chooseL

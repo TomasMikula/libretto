@@ -8,7 +8,7 @@ import libretto.scaletto.StarterKit.$._
 object Provider {
 
   def behavior: Done -⚬ Session =
-    λ { start => Session.create(soupSection(start)) }
+    soupSection > Session.create
 
   def soupSection: Done -⚬ SectionSoup =
     rec { soupSection =>
