@@ -473,6 +473,14 @@ A negative value `Neg[A]` could alternatively be expressed as a callback `Val[A]
    (In terms of category theory, higher-order functions require closedness of the category.)
    By the principle of least power, we should avoid higher-order functions, and thus callbacks, when possible.
 
+### How does Libretto compare to lchannels?
+
+[lchannels](https://alcestes.github.io/lchannels/) is another Scala library with support for session types.
+Its encoding of session types is based on continuation-passing style classes and ordinary Scala functions.
+As a result, it is more lightweight in terms of the required machinery, but linearity is only checked at runtime.
+lchannel's heavy reliance on Scala functions preclude it from having Libretto's level of concurrency and analyzability,
+but those are not among stated goals of the project.
+
 ## Copyright and License
 
 Copyright 2020–2022 Tomas Mikula
