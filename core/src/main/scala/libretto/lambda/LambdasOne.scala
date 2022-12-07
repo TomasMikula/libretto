@@ -23,15 +23,6 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
     export lambdas.AbstractFun.fold
   }
 
-  override type VArr[A, B] = lambdas.VArr[A, B]
-
-  override object VArr extends VArrs {
-    export lambdas.VArr.{id, initialVars, map, par, terminalVars, unzip, zip}
-
-    override def toExpr[A, B](f: VArr[A, B]): Expr[B] =
-      Expr.LambdasExpr(lambdas.VArr.toExpr(f))
-  }
-
   sealed trait Expr[A]
 
   override object Expr extends Exprs {

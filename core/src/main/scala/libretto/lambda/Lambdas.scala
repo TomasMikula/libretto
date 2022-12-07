@@ -37,42 +37,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
       Vars.toSet(vars)
   }
 
-  type VArr[A, B]
-  val VArr: VArrs
-
-  trait VArrs {
-    def id[A](a: Var[A]): VArr[A, A]
-    def map[A, B, C](f: VArr[A, B], g: B -⚬ C, resultVar: Var[C]): VArr[A, C]
-    def zip[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2], resultVar: Var[B1 |*| B2]): VArr[A1 |*| A2, B1 |*| B2]
-    def par[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2]): VArr[A1 |*| A2, B1 |*| B2]
-    def unzip[A, B1, B2](f: VArr[A, B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (VArr[A, B1], VArr[A, B2])
-    def initialVars[A, B](f: VArr[A, B]): Vars[A]
-    def terminalVars[A, B](f: VArr[A, B]): Vars[B]
-    def toExpr[A, B](f: VArr[A, B]): Expr[B]
-  }
-
-  extension [A, B](f: VArr[A, B]) {
-    @targetName("varrMap")
-    def map[C](g: B -⚬ C)(resultVar: Var[C]): VArr[A, C] =
-      VArr.map(f, g, resultVar)
-
-    @targetName("varrZip")
-    def zip[A2, B2](g: VArr[A2, B2])(resultVar: Var[B |*| B2]): VArr[A |*| A2, B |*| B2] =
-      VArr.zip(f, g, resultVar)
-
-    @targetName("varrInitialVars")
-    def initialVars: Vars[A] =
-      VArr.initialVars(f)
-
-    @targetName("varrTerminalVars")
-    def terminalVars: Vars[B] =
-      VArr.terminalVars(f)
-
-    @targetName("varrToExpr")
-    def toExpr: Expr[B] =
-      VArr.toExpr(f)
-  }
-
   type Expr[A]
   val Expr: Exprs
 

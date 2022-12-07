@@ -91,7 +91,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       }
   }
 
-  object VArr extends VArrs {
+  object VArr {
     sealed trait VarDefining[A, B] extends VArr[A, B] {
       def resultVar: Var[B]
     }
@@ -359,28 +359,28 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         Error(errors.overusedVars(variables.singleton(u)))
     }
 
-    override def id[A](a: Var[A]): VArr[A, A] =
+    def id[A](a: Var[A]): VArr[A, A] =
       VArr.Id(a)
 
-    override def map[A, B, C](f: VArr[A, B], g: B -⚬ C, resultVar: Var[C]): VArr[A, C] =
+    def map[A, B, C](f: VArr[A, B], g: B -⚬ C, resultVar: Var[C]): VArr[A, C] =
       (f map g)(resultVar)
 
-    override def zip[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2], resultVar: Var[B1 |*| B2]): VArr[A1 |*| A2, B1 |*| B2] =
+    def zip[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2], resultVar: Var[B1 |*| B2]): VArr[A1 |*| A2, B1 |*| B2] =
       (f1 zip f2)(resultVar)
 
-    override def par[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2]): VArr[A1 |*| A2, B1 |*| B2] =
+    def par[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2]): VArr[A1 |*| A2, B1 |*| B2] =
       f1 par f2
 
-    override def unzip[A, B1, B2](f: VArr[A, B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (VArr[A, B1], VArr[A, B2]) =
+    def unzip[A, B1, B2](f: VArr[A, B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (VArr[A, B1], VArr[A, B2]) =
       (Prj1(f, resultVar1, resultVar2), Prj2(f, resultVar1, resultVar2))
 
-    override def initialVars[A, B](f: VArr[A, B]): Vars[A] =
+    def initialVars[A, B](f: VArr[A, B]): Vars[A] =
       f.initialVars
 
-    override def terminalVars[A, B](f: VArr[A, B]): Vars[B] =
+    def terminalVars[A, B](f: VArr[A, B]): Vars[B] =
       f.terminalVars
 
-    override def toExpr[A, B](f: VArr[A, B]): Expr[B] =
+    def toExpr[A, B](f: VArr[A, B]): Expr[B] =
       f
   }
 
