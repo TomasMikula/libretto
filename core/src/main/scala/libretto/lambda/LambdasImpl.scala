@@ -408,24 +408,39 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       VArr.terminalVars(a)
   }
 
-  override def abs[A, B](expr: Expr[B], boundVar: Var[A]): Abstracted[A, B] = {
-    import VArr.ElimRes
+  // override def abs[A, B](expr: Expr[B], boundVar: Var[A]): Abstracted[A, B] = {
+  //   import VArr.ElimRes
 
-    expr.elim(boundVar) match {
-      case ElimRes.Exact(e, m, f) =>
-        e match {
-          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Exact(m, f)
-          case other               => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
+  //   expr.elim(boundVar) match {
+  //     case ElimRes.Exact(e, m, f) =>
+  //       e match {
+  //         case VArr.Id(`boundVar`) => Lambdas.Abstracted.Exact(m, f)
+  //         case other               => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
+  //       }
+  //     case ElimRes.Closure(captured, e, m, f) =>
+  //       e match {
+  //         case VArr.Id(`boundVar`) => Lambdas.Abstracted.Closure(captured, m, f)
+  //         case other               => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
+  //       }
+  //     case ElimRes.NotFound() =>
+  //       Lambdas.Abstracted.NotFound(expr)
+  //     case ElimRes.Error(e) =>
+  //       Lambdas.Abstracted.Failure(e)
+  //   }
+  // }
+
+  override def abs[A, B](expr: Expr[B], boundVar: Var[A]): Abstracted[A, B] = {
+    import HybridArrow.LinearRes
+
+    eliminate(boundVar, expr) match {
+      case EliminateRes.Found(arr, u) =>
+        arr.extractLinear(u) match {
+          case LinearRes.Exact(m, f)             => Lambdas.Abstracted.Exact(m, f)
+          case LinearRes.Closure(captured, m, f) => Lambdas.Abstracted.Closure(captured, m, f)
+          case LinearRes.Violation(e)            => Lambdas.Abstracted.Failure(e)
         }
-      case ElimRes.Closure(captured, e, m, f) =>
-        e match {
-          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Closure(captured, m, f)
-          case other               => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
-        }
-      case ElimRes.NotFound() =>
+      case EliminateRes.NotFound() =>
         Lambdas.Abstracted.NotFound(expr)
-      case ElimRes.Error(e) =>
-        Lambdas.Abstracted.Failure(e)
     }
   }
 
@@ -437,4 +452,144 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
   private def bug(msg: String): Nothing =
     throw new AssertionError(msg)
+
+  // Note: The variable is only searched for among initial variables of the expression,
+  // not in any (intermediate) results.
+  private def eliminate[A, B](v: Var[A], expr: Expr[B]): EliminateRes[A, B] = {
+    import EliminateRes.{Found, NotFound}
+
+    expr match
+      case VArr.Id(w) =>
+        testEqual(v, w) match
+          case None     => NotFound()
+          case Some(ev) => Found(HybridArrow.id(v).to(ev.liftCo[Var]), Untag.Variable())
+      case VArr.Map(f, g, resultVar) =>
+        eliminate(v, f) match
+          case NotFound() => NotFound()
+          case Found(arr, u) => Found(arr.map(u, g, resultVar), Untag.Variable())
+      case VArr.Par(f1, f2) =>
+        (eliminate(v, f1), eliminate(v, f2)) match
+          case (NotFound(), NotFound())       => NotFound()
+          case (NotFound(), Found(arr, u))    => Found(arr.alsoFst(f1), Untag.Par(Untag.Capture(), u))
+          case (Found(arr, u), NotFound())    => Found(arr.alsoSnd(f2), Untag.Par(u, Untag.Capture()))
+          case (Found(ar1, t), Found(ar2, u)) => Found(ar1 interweave ar2, Untag.Par(t, u))
+      case VArr.Zip(f1, f2, resultVar) =>
+        (eliminate(v, f1), eliminate(v, f2)) match
+          case (NotFound(), NotFound())       => NotFound()
+          case (NotFound(), Found(arr, u))    => Found(arr.alsoFst(f1).zip(Untag.Par(Untag.Capture(), u), resultVar), Untag.Variable())
+          case (Found(arr, u), NotFound())    => Found(arr.alsoSnd(f2).zip(Untag.Par(u, Untag.Capture()), resultVar), Untag.Variable())
+          case (Found(ar1, t), Found(ar2, u)) => Found((ar1 interweave ar2).zip(Untag.Par(t, u), resultVar), Untag.Variable())
+      case VArr.Prj1(f, b1, b2) =>
+        eliminate(v, f) match
+          case NotFound()    => NotFound()
+          case Found(arr, u) => Found(arr.prj1(u, b1, b2), Untag.Variable())
+      case VArr.Prj2(f, b1, b2) =>
+        eliminate(v, f) match
+          case NotFound()    => NotFound()
+          case Found(arr, u) => Found(arr.prj2(u, b1, b2), Untag.Variable())
+  }
+
+  private enum EliminateRes[A, B] {
+    case Found[A, X, B](arr: HybridArrow[A, X], u: Untag[X, B]) extends EliminateRes[A, B]
+    case NotFound()
+  }
+
+  private case class HybridArrow[A, B](v: Var[A], tail: HybridArrow.Tail[Var[A], B]) {
+    import HybridArrow._
+
+    def map[B1, C](u: Untag[B, B1], f: B1 -⚬ C, resultVar: Var[C]): HybridArrow[A, Var[C]] =
+      HybridArrow(v, tail.map(u, f, resultVar))
+
+    def alsoFst[X](x: Expr[X]): HybridArrow[A, Expr[X] |*| B] =
+      HybridArrow(v, tail.alsoFst(x))
+
+    def alsoSnd[X](x: Expr[X]): HybridArrow[A, B |*| Expr[X]] =
+      HybridArrow(v, tail.alsoSnd(x))
+
+    def zip[B1, B2](u: Untag[B, B1 |*| B2], resultVar: Var[B1 |*| B2]): HybridArrow[A, Var[B1 |*| B2]] =
+      HybridArrow(v, tail.zip(u, resultVar))
+
+    def prj1[B1, B2](u: Untag[B, B1 |*| B2], resultVar: Var[B1], unusedVar: Var[B2]): HybridArrow[A, Var[B1]] =
+      HybridArrow(v, tail.prj1(u, resultVar, unusedVar))
+
+    def prj2[B1, B2](u: Untag[B, B1 |*| B2], unusedVar: Var[B1], resultVar: Var[B2]): HybridArrow[A, Var[B2]] =
+      HybridArrow(v, tail.prj2(u, unusedVar, resultVar))
+
+    def to[C](ev: B =:= C): HybridArrow[A, C] =
+      ev.substituteCo(this)
+
+    def interweave[C](that: HybridArrow[A, C]): HybridArrow[A, B |*| C] = {
+      val f: HybridArrow[A, B |*| Var[A]] = this.newStrand
+      // that match {
+      //   case Id(v) =>
+      //     f
+      //   case Map(base, u, f, resultVar) =>
+      //     ???
+      //   case AlsoFst(x, f) =>
+      //     ???
+      //   case AlsoSnd(f, x) =>
+      //     ???
+      //   case Zip(f, u, resultVar) =>
+      //     ???
+      //   case Prj1(f, u, resultVar, unusedVar) =>
+      //     ???
+      //   case Prj2(f, u, unusedVar, resultVar) =>
+      //     ???
+      // }
+      ???
+    }
+
+    private def newStrand: HybridArrow[A, B |*| Var[A]] =
+      ???
+
+    def extractLinear[B1](u: Untag[B, B1]): HybridArrow.LinearRes[A, B1] =
+      ???
+  }
+
+  private object HybridArrow {
+    sealed trait Tail[A, B] {
+      def map[B1, C](u: Untag[B, B1], f: B1 -⚬ C, resultVar: Var[C]): Tail[A, Var[C]] =
+        Tail.Map(this, u, f, resultVar)
+
+      def alsoFst[X](x: Expr[X]): Tail[A, Expr[X] |*| B] =
+        Tail.AlsoFst(x, this)
+
+      def alsoSnd[X](x: Expr[X]): Tail[A, B |*| Expr[X]] =
+        Tail.AlsoSnd(this, x)
+
+      def zip[B1, B2](u: Untag[B, B1 |*| B2], resultVar: Var[B1 |*| B2]): Tail[A, Var[B1 |*| B2]] =
+        Tail.Zip(this, u, resultVar)
+
+      def prj1[B1, B2](u: Untag[B, B1 |*| B2], resultVar: Var[B1], unusedVar: Var[B2]): Tail[A, Var[B1]] =
+        Tail.Prj1(this, u, resultVar, unusedVar)
+
+      def prj2[B1, B2](u: Untag[B, B1 |*| B2], unusedVar: Var[B1], resultVar: Var[B2]): Tail[A, Var[B2]] =
+        Tail.Prj2(this, u, unusedVar, resultVar)
+    }
+
+    object Tail {
+      case class Id[A]() extends Tail[A, A]
+      case class Map[A, X, Y, C](base: Tail[A, X], u: Untag[X, Y], f: Y -⚬ C, resultVar: Var[C]) extends Tail[A, Var[C]]
+      case class AlsoFst[A, X, B](x: Expr[X], f: Tail[A, B]) extends Tail[A, Expr[X] |*| B]
+      case class AlsoSnd[A, B, X](f: Tail[A, B], x: Expr[X]) extends Tail[A, B |*| Expr[X]]
+      case class Zip[A, B, B1, B2](f: Tail[A, B], u: Untag[B, B1 |*| B2], resultVar: Var[B1 |*| B2]) extends Tail[A, Var[B1 |*| B2]]
+      case class Prj1[A, B, B1, B2](f: Tail[A, B], u: Untag[B, B1 |*| B2], resultVar: Var[B1], unusedVar: Var[B2]) extends Tail[A, Var[B1]]
+      case class Prj2[A, B, B1, B2](f: Tail[A, B], u: Untag[B, B1 |*| B2], unusedVar: Var[B1], resultVar: Var[B2]) extends Tail[A, Var[B2]]
+    }
+
+    def id[A](v: Var[A]): HybridArrow[A, Var[A]] =
+      HybridArrow(v, Tail.Id())
+
+    enum LinearRes[A, B] {
+      case Exact[A, A1, B](m: Multiplier[|*|, A, A1], f: AbstractFun[A1, B]) extends LinearRes[A, B]
+      case Closure[X, A, A1, B](captured: Expr[X], m: Multiplier[|*|, A, A1], f: AbstractFun[X |*| A1, B]) extends LinearRes[A, B]
+      case Violation(e: LE)
+    }
+  }
+
+  private enum Untag[A, B] {
+    case Variable[A]() extends Untag[Var[A], A]
+    case Capture[A]() extends Untag[Expr[A], A]
+    case Par[A1, A2, B1, B2](e1: Untag[A1, B1], e2: Untag[A2, B2]) extends Untag[A1 |*| A2, B1 |*| B2]
+  }
 }
