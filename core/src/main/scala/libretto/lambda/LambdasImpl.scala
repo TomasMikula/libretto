@@ -3,7 +3,7 @@ package libretto.lambda
 import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.lambda.Lambdas.ErrorFactory
 import libretto.util.BiInjective
-import scala.annotation.targetName
+import scala.annotation.{tailrec, targetName}
 
 class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   ssc: SymmetricSemigroupalCategory[-⚬, |*|],
@@ -466,27 +466,28 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       case VArr.Map(f, g, resultVar) =>
         eliminate(v, f) match
           case NotFound() => NotFound()
-          case Found(arr, u) => Found(arr.map(u, g, resultVar), Untag.Variable())
+          case Found(arr, u) => Found(arr > HybridArrow.map(u, g, resultVar), Untag.Variable())
       case VArr.Par(f1, f2) =>
-        (eliminate(v, f1), eliminate(v, f2)) match
-          case (NotFound(), NotFound())       => NotFound()
-          case (NotFound(), Found(arr, u))    => Found(arr.alsoFst(f1), Untag.Par(Untag.Capture(), u))
-          case (Found(arr, u), NotFound())    => Found(arr.alsoSnd(f2), Untag.Par(u, Untag.Capture()))
-          case (Found(ar1, t), Found(ar2, u)) => Found(ar1 interweave ar2, Untag.Par(t, u))
+        ???
+        // (eliminate(v, f1), eliminate(v, f2)) match
+        //   case (NotFound(), NotFound())       => NotFound()
+        //   case (NotFound(), Found(arr, u))    => Found(arr.alsoFst(f1), Untag.Par(Untag.Capture(), u))
+        //   case (Found(arr, u), NotFound())    => Found(arr.alsoSnd(f2), Untag.Par(u, Untag.Capture()))
+        //   case (Found(ar1, t), Found(ar2, u)) => Found(ar1 interweave ar2, Untag.Par(t, u))
       case VArr.Zip(f1, f2, resultVar) =>
         (eliminate(v, f1), eliminate(v, f2)) match
           case (NotFound(), NotFound())       => NotFound()
-          case (NotFound(), Found(arr, u))    => Found(arr.alsoFst(f1).zip(Untag.Par(Untag.Capture(), u), resultVar), Untag.Variable())
-          case (Found(arr, u), NotFound())    => Found(arr.alsoSnd(f2).zip(Untag.Par(u, Untag.Capture()), resultVar), Untag.Variable())
-          case (Found(ar1, t), Found(ar2, u)) => Found((ar1 interweave ar2).zip(Untag.Par(t, u), resultVar), Untag.Variable())
+          case (NotFound(), Found(arr, u))    => Found(arr > HybridArrow.captureFst(f1, u, resultVar), Untag.Variable())
+          case (Found(arr, u), NotFound())    => Found(arr > HybridArrow.captureSnd(u, f2, resultVar), Untag.Variable())
+          case (Found(ar1, t), Found(ar2, u)) => Found((ar1 interweave ar2) > HybridArrow.zip(t, u, resultVar), Untag.Variable())
       case VArr.Prj1(f, b1, b2) =>
         eliminate(v, f) match
           case NotFound()    => NotFound()
-          case Found(arr, u) => Found(arr.prj1(u, b1, b2), Untag.Variable())
+          case Found(arr, u) => Found(arr > HybridArrow.prj1(u, b1, b2), Untag.Variable())
       case VArr.Prj2(f, b1, b2) =>
         eliminate(v, f) match
           case NotFound()    => NotFound()
-          case Found(arr, u) => Found(arr.prj2(u, b1, b2), Untag.Variable())
+          case Found(arr, u) => Found(arr > HybridArrow.prj2(u, b1, b2), Untag.Variable())
   }
 
   private enum EliminateRes[A, B] {
@@ -497,49 +498,38 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   private case class HybridArrow[A, B](v: Var[A], tail: HybridArrow.Tail[Var[A], B]) {
     import HybridArrow._
 
-    def map[B1, C](u: Untag[B, B1], f: B1 -⚬ C, resultVar: Var[C]): HybridArrow[A, Var[C]] =
-      HybridArrow(v, tail.map(u, f, resultVar))
-
-    def alsoFst[X](x: Expr[X]): HybridArrow[A, Expr[X] |*| B] =
-      HybridArrow(v, tail.alsoFst(x))
-
-    def alsoSnd[X](x: Expr[X]): HybridArrow[A, B |*| Expr[X]] =
-      HybridArrow(v, tail.alsoSnd(x))
-
-    def zip[B1, B2](u: Untag[B, B1 |*| B2], resultVar: Var[B1 |*| B2]): HybridArrow[A, Var[B1 |*| B2]] =
-      HybridArrow(v, tail.zip(u, resultVar))
-
-    def prj1[B1, B2](u: Untag[B, B1 |*| B2], resultVar: Var[B1], unusedVar: Var[B2]): HybridArrow[A, Var[B1]] =
-      HybridArrow(v, tail.prj1(u, resultVar, unusedVar))
-
-    def prj2[B1, B2](u: Untag[B, B1 |*| B2], unusedVar: Var[B1], resultVar: Var[B2]): HybridArrow[A, Var[B2]] =
-      HybridArrow(v, tail.prj2(u, unusedVar, resultVar))
+    def >[C](that: Tail[B, C]): HybridArrow[A, C] =
+      HybridArrow(v, tail > that)
 
     def to[C](ev: B =:= C): HybridArrow[A, C] =
       ev.substituteCo(this)
 
     def interweave[C](that: HybridArrow[A, C]): HybridArrow[A, B |*| C] = {
-      val f: HybridArrow[A, B |*| Var[A]] = this.newStrand
-      // that match {
-      //   case Id(v) =>
-      //     f
-      //   case Map(base, u, f, resultVar) =>
-      //     ???
-      //   case AlsoFst(x, f) =>
-      //     ???
-      //   case AlsoSnd(f, x) =>
-      //     ???
-      //   case Zip(f, u, resultVar) =>
-      //     ???
-      //   case Prj1(f, u, resultVar, unusedVar) =>
-      //     ???
-      //   case Prj2(f, u, unusedVar, resultVar) =>
-      //     ???
-      // }
-      ???
+      assert(testEqual(this.v, that.v).isDefined)
+      HybridArrow(v, HybridArrow.dupVar[A] > tail.inFst)
+        .weaveIn(that.tail.inSnd)
     }
 
-    private def newStrand: HybridArrow[A, B |*| Var[A]] =
+    @tailrec
+    private def weaveIn[C](that: Tail[B, C]): HybridArrow[A, C] = {
+      import shOp.UnconsSomeRes.{Cons, Pure}
+
+      that.unconsSome match
+        case Pure(s) =>
+          HybridArrow(v, tail thenShuffle s)
+        case Cons(pre, i, f, post) =>
+          HybridArrow(v, tail thenShuffle pre)
+            .weaveInOp(i, f)
+            .weaveIn(post)
+    }
+
+    private def weaveInOp[F[_], X, Y](i: Focus[|*|, F], f: Op[X, Y])(using ev: B =:= F[X]): HybridArrow[A, F[Y]] =
+      pullOut(i, f) match {
+        case Some(res) => res
+        case None      => HybridArrow(v, tail.to[F[X]] > shOp.liftFocused(i, f))
+      }
+
+    private def pullOut[F[_], X, Y](i: Focus[|*|, F], f: Op[X, Y])(using ev: B =:= F[X]): Option[HybridArrow[A, F[Y]]] =
       ???
 
     def extractLinear[B1](u: Untag[B, B1]): HybridArrow.LinearRes[A, B1] =
@@ -547,38 +537,44 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   }
 
   private object HybridArrow {
-    sealed trait Tail[A, B] {
-      def map[B1, C](u: Untag[B, B1], f: B1 -⚬ C, resultVar: Var[C]): Tail[A, Var[C]] =
-        Tail.Map(this, u, f, resultVar)
-
-      def alsoFst[X](x: Expr[X]): Tail[A, Expr[X] |*| B] =
-        Tail.AlsoFst(x, this)
-
-      def alsoSnd[X](x: Expr[X]): Tail[A, B |*| Expr[X]] =
-        Tail.AlsoSnd(this, x)
-
-      def zip[B1, B2](u: Untag[B, B1 |*| B2], resultVar: Var[B1 |*| B2]): Tail[A, Var[B1 |*| B2]] =
-        Tail.Zip(this, u, resultVar)
-
-      def prj1[B1, B2](u: Untag[B, B1 |*| B2], resultVar: Var[B1], unusedVar: Var[B2]): Tail[A, Var[B1]] =
-        Tail.Prj1(this, u, resultVar, unusedVar)
-
-      def prj2[B1, B2](u: Untag[B, B1 |*| B2], unusedVar: Var[B1], resultVar: Var[B2]): Tail[A, Var[B2]] =
-        Tail.Prj2(this, u, unusedVar, resultVar)
+    enum Op[A, B] {
+      case DupVar[A]() extends Op[Var[A], Var[A] |*| Var[A]]
+      case Map[A, A0, B](u: Untag[A, A0], f: A0 -⚬ B, resultVar: Var[B]) extends Op[A, Var[B]]
+      case CaptureFst[A, A0, X](x: Expr[X], u: Untag[A, A0], resultVar: Var[X |*| A0]) extends Op[A, Var[X |*| A0]]
+      case CaptureSnd[A, A0, X](u: Untag[A, A0], x: Expr[X], resultVar: Var[A0 |*| X]) extends Op[A, Var[A0 |*| X]]
+      case Zip[A1, A2, B1, B2](u1: Untag[A1, B1], u2: Untag[A2, B2], resultVar: Var[B1 |*| B2]) extends Op[A1 |*| A2, Var[B1 |*| B2]]
+      case Prj1[A, A1, A2](u: Untag[A, A1 |*| A2], resultVar: Var[A1], unusedVar: Var[A2]) extends Op[A, Var[A1]]
+      case Prj2[A, A1, A2](u: Untag[A, A1 |*| A2], unusedVar: Var[A1], resultVar: Var[A2]) extends Op[A, Var[A2]]
     }
 
-    object Tail {
-      case class Id[A]() extends Tail[A, A]
-      case class Map[A, X, Y, C](base: Tail[A, X], u: Untag[X, Y], f: Y -⚬ C, resultVar: Var[C]) extends Tail[A, Var[C]]
-      case class AlsoFst[A, X, B](x: Expr[X], f: Tail[A, B]) extends Tail[A, Expr[X] |*| B]
-      case class AlsoSnd[A, B, X](f: Tail[A, B], x: Expr[X]) extends Tail[A, B |*| Expr[X]]
-      case class Zip[A, B, B1, B2](f: Tail[A, B], u: Untag[B, B1 |*| B2], resultVar: Var[B1 |*| B2]) extends Tail[A, Var[B1 |*| B2]]
-      case class Prj1[A, B, B1, B2](f: Tail[A, B], u: Untag[B, B1 |*| B2], resultVar: Var[B1], unusedVar: Var[B2]) extends Tail[A, Var[B1]]
-      case class Prj2[A, B, B1, B2](f: Tail[A, B], u: Untag[B, B1 |*| B2], unusedVar: Var[B1], resultVar: Var[B2]) extends Tail[A, Var[B2]]
-    }
+    val shOp = new Shuffled[Op, |*|]
+
+    type Tail[A, B] =
+      shOp.Shuffled[A, B]
 
     def id[A](v: Var[A]): HybridArrow[A, Var[A]] =
-      HybridArrow(v, Tail.Id())
+      HybridArrow(v, shOp.id)
+
+    def dupVar[A]: Tail[Var[A], Var[A] |*| Var[A]] =
+      shOp.lift(Op.DupVar())
+
+    def map[A, A0, B](u: Untag[A, A0], f: A0 -⚬ B, resultVar: Var[B]): Tail[A, Var[B]] =
+      shOp.lift(Op.Map(u, f, resultVar))
+
+    def captureFst[A, A0, X](x: Expr[X], u: Untag[A, A0], resultVar: Var[X |*| A0]): Tail[A, Var[X |*| A0]] =
+      shOp.lift(Op.CaptureFst(x, u, resultVar))
+
+    def captureSnd[A, A0, X](u: Untag[A, A0], x: Expr[X], resultVar: Var[A0 |*| X]): Tail[A, Var[A0 |*| X]] =
+      shOp.lift(Op.CaptureSnd(u, x, resultVar))
+
+    def zip[A1, A2, B1, B2](u1: Untag[A1, B1], u2: Untag[A2, B2], resultVar: Var[B1 |*| B2]): Tail[A1 |*| A2, Var[B1 |*| B2]] =
+      shOp.lift(Op.Zip(u1, u2, resultVar))
+
+    def prj1[A, A1, A2](u: Untag[A, A1 |*| A2], resultVar: Var[A1], unusedVar: Var[A2]): Tail[A, Var[A1]] =
+      shOp.lift(Op.Prj1(u, resultVar, unusedVar))
+
+    def prj2[A, A1, A2](u: Untag[A, A1 |*| A2], unusedVar: Var[A1], resultVar: Var[A2]): Tail[A, Var[A2]] =
+      shOp.lift(Op.Prj2(u, unusedVar, resultVar))
 
     enum LinearRes[A, B] {
       case Exact[A, A1, B](m: Multiplier[|*|, A, A1], f: AbstractFun[A1, B]) extends LinearRes[A, B]

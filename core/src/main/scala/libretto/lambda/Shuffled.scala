@@ -16,6 +16,21 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     def >[C](that: Shuffled[B, C]): Shuffled[A, C] =
       that after this
+
+    def unconsSome: UnconsSomeRes[A, B] =
+      ???
+
+    def chaseFw[X](i: Inj[|*|, X, A]): ChaseFwRes[X, A, B] =
+      ???
+
+    def chaseBw[X](i: Inj[|*|, X, B]): ChaseBwRes[A, B, X] =
+      ???
+
+    def to[C](using ev: B =:= C): Shuffled[A, C] =
+      ev.substituteCo(this)
+
+    def from[Z](using ev: Z =:= A): Shuffled[Z, B] =
+      ev.substituteContra[Shuffled[*, B]](this)
   }
 
   sealed trait Permeable[A, B] extends Shuffled[A, B]
@@ -234,6 +249,9 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   def lift[X, Y](f: X -> Y): Shuffled[X, Y] =
     Impermeable(~⚬.id, Solid(f), ~⚬.id)
 
+  def liftFocused[F[_], X, Y](i: Focus[|*|, F], f: X -> Y): Shuffled[F[X], F[Y]] =
+    ???
+
   private def ▄░▄[A1, A2, X2, Y2, B1, B2](
     l: Plated[A2, X2],
     m: (A1 |*| X2) ~⚬ (B1 |*| Y2),
@@ -386,5 +404,44 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       g1: Y1 ~⚬ Z1,
       g2: Y2 ~⚬ Z2,
     )
+  }
+
+  enum UnconsSomeRes[A, B] {
+    case Pure(s: A ~⚬ B)
+
+    case Cons[A, F[_], X, Y, B](
+      pre: A ~⚬ F[X],
+      i: Focus[|*|, F],
+      f: X -> Y,
+      post: Shuffled[F[Y], B],
+    ) extends UnconsSomeRes[A, B]
+  }
+
+  enum ChaseFwRes[X, A, B] {
+    case Transported(i: Inj[|*|, X, B])
+
+    case FedTo[X, A, F[_], Y, Z, B](
+      pre: Shuffled[A, F[Y]],
+      i: Focus[|*|, F],
+      j: Inj[|*|, X, Y],
+      f: Y -> Z,
+      post: Shuffled[F[Z], B],
+    ) extends ChaseFwRes[X, A, B]
+
+    case Split[X, X1, X2, A, B](ev: X =:= (X1 |*| X2)) extends ChaseFwRes[X, A, B]
+  }
+
+  enum ChaseBwRes[A, B, X] {
+    case Transported(i: Inj[|*|, X, A])
+
+    case OriginatesFrom[A, F[_], X, Y, Z, B](
+      pre: Shuffled[A, F[Y]],
+      i: Focus[|*|, F],
+      f: Y -> Z,
+      j: Inj[|*|, X, Z],
+      post: Shuffled[F[Z], B],
+    ) extends ChaseBwRes[A, B, X]
+
+    case Split[A, B, X, X1, X2](ev: X =:= (X1 |*| X2)) extends ChaseBwRes[A, B, X]
   }
 }
