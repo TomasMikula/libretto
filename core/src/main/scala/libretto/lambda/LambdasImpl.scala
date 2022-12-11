@@ -529,8 +529,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case None      => HybridArrow(v, tail.to[F[X]] > shOp.liftFocused(i, f))
       }
 
-    private def pullOut[F[_], X, Y](i: Focus[|*|, F], f: Op[X, Y])(using ev: B =:= F[X]): Option[HybridArrow[A, F[Y]]] =
-      ???
+    private def pullOut[F[_], X, Y](i: Focus[|*|, F], op: Op[X, Y])(using ev: B =:= F[X]): Option[HybridArrow[A, F[Y]]] =
+      HybridArrow.pullOut(tail.to[F[X]], i, op)
+        .map(HybridArrow(v, _))
 
     def extractLinear[B1](u: Untag[B, B1]): HybridArrow.LinearRes[A, B1] =
       ???
@@ -575,6 +576,29 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     def prj2[A, A1, A2](u: Untag[A, A1 |*| A2], unusedVar: Var[A1], resultVar: Var[A2]): Tail[A, Var[A2]] =
       shOp.lift(Op.Prj2(u, unusedVar, resultVar))
+
+    /** If `op` introduces a new variable(s), searches through `t` for an existing occurrence of `op`
+     *  and channels it to the output.
+     *  If `op` does not introduce new variables, or if `op` is not found in `t`, returns `None`.
+     */
+    def pullOut[A, F[_], X, Y](t: Tail[A, F[X]], i: Focus[|*|, F], op: Op[X, Y]): Option[Tail[A, F[Y]]] = {
+      op match {
+        case Op.DupVar() =>
+          None
+        case Op.Map(u, f, resultVar) =>
+          UnhandledCase.raise(s"t = $t; i = $i; op = $op")
+        case Op.CaptureFst(x, u, resultVar) =>
+          UnhandledCase.raise(s"t = $t; i = $i; op = $op")
+        case Op.CaptureSnd(u, x, resultVar) =>
+          UnhandledCase.raise(s"t = $t; i = $i; op = $op")
+        case Op.Zip(u1, u2, resultVar) =>
+          UnhandledCase.raise(s"t = $t; i = $i; op = $op")
+        case Op.Prj1(u, resultVar, unusedVar) =>
+          UnhandledCase.raise(s"t = $t; i = $i; op = $op")
+        case Op.Prj2(u, unusedVar, resultVar) =>
+          UnhandledCase.raise(s"t = $t; i = $i; op = $op")
+      }
+    }
 
     enum LinearRes[A, B] {
       case Exact[A, A1, B](m: Multiplier[|*|, A, A1], f: AbstractFun[A1, B]) extends LinearRes[A, B]

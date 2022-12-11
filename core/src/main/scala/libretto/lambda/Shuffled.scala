@@ -13,12 +13,10 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     def fold(using SymmetricSemigroupalCategory[->, |*|]): A -> B
     def inFst[Y]: Shuffled[A |*| Y, B |*| Y]
     def inSnd[X]: Shuffled[X |*| A, X |*| B]
+    def unconsSome: UnconsSomeRes[A, B]
 
     def >[C](that: Shuffled[B, C]): Shuffled[A, C] =
       that after this
-
-    def unconsSome: UnconsSomeRes[A, B] =
-      ???
 
     def chaseFw[X](i: Inj[|*|, X, A]): ChaseFwRes[X, A, B] =
       ???
@@ -60,6 +58,11 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     override def inSnd[P]: Shuffled[P |*| A, P |*| B] =
       SemiObstructed(~⚬.snd(l), m, r, TransferOpt.None())
+
+    override def unconsSome: UnconsSomeRes[A, B] =
+      m.unconsSome match
+        case c: Plated.UnconsSomeRes.Cons[f, v, w, y] =>
+          UnconsSomeRes.Cons[A, f, v, w, B](l, c.i, c.f, c.post thenShuffle r)
   }
 
   case class Pure[A, B](s: A ~⚬ B) extends Permeable[A, B] {
@@ -80,6 +83,9 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     override def inSnd[X]: Shuffled[X |*| A, X |*| B] =
       Pure(~⚬.snd(s))
+
+    override def unconsSome: UnconsSomeRes[A, B] =
+      UnconsSomeRes.Pure(s)
   }
 
   case class SemiObstructed[A, X1, X2, Y2, Z2, B1, B2](
@@ -125,6 +131,16 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         case ~⚬.Decomposition(f1, f2, h) =>
           SemiObstructed(~⚬.snd(left) > ~⚬.assocRL > ~⚬.fst(f1), bottom1, f2, h)
       }
+
+    override def unconsSome: UnconsSomeRes[A, B1 |*| B2] =
+      bottom1.unconsSome match
+        case c: Plated.UnconsSomeRes.Cons[f, x, y, y2] =>
+          UnconsSomeRes.Cons[A, [t] =>> X1 |*| f[t], x, y, B1 |*| B2](
+            left,
+            Focus.snd(c.i),
+            c.f,
+            (c.post thenShuffle bottom2).inSnd thenShuffle right.asShuffle,
+          )
   }
 
   object Permeable {
@@ -143,23 +159,41 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
           Preshuffled(l, SemiCons(b1, b2, r, this))
       }
 
+    def asShuffled: Shuffled[A, B] =
+      Impermeable(~⚬.id, this, ~⚬.id)
+
     def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B
+
+    def unconsSome: Plated.UnconsSomeRes[A, B]
   }
 
   object Plated {
     case class Solid[A, B](f: A -> B) extends Plated[A, B] {
       override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B =
         f
+
+      override def unconsSome: UnconsSomeRes[A, B] =
+        UnconsSomeRes.Cons(Focus.id, f, id)
     }
 
     case class Stacked[A1, A2, B1, B2](f1: Plated[A1, B1], f2: Plated[A2, B2]) extends Plated[A1 |*| A2, B1 |*| B2] {
       override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2) =
         ev.par(f1.fold, f2.fold)
+
+      override def unconsSome: UnconsSomeRes[A1 |*| A2, B1 |*| B2] =
+        f1.unconsSome match
+          case c: UnconsSomeRes.Cons[f, x, y, b1] =>
+            UnconsSomeRes.Cons[[t] =>> f[t] |*| A2, x, y, B1 |*| B2](c.i.inFst[A2], c.f, par(c.post, f2.asShuffled))
     }
 
     case class Sandwich[A, X, Y, B](l: Plated[A, X], m: X ~⚬ Y, r: Plated[Y, B]) extends Plated[A, B] {
       override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B =
         ev.andThen(l.fold, ev.andThen(m.fold, r.fold))
+
+      override def unconsSome: UnconsSomeRes[A, B] =
+        l.unconsSome match
+          case c: UnconsSomeRes.Cons[f, v, w, x] =>
+            UnconsSomeRes.Cons(c.i, c.f, (c.post thenShuffle m) > r.asShuffled)
     }
 
     case class SemiCons[A1, A2, X2, Y2, Z1, Z2, B](
@@ -170,6 +204,15 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     ) extends Plated[A1 |*| A2, B] {
       override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> B =
         ev.andThen(ev.andThen(ev.snd(ev.andThen(semiHead.fold, s.fold)), t.fold), tail.fold)
+
+      override def unconsSome: UnconsSomeRes[A1 |*| A2, B] =
+        semiHead.unconsSome match
+          case c: UnconsSomeRes.Cons[f, v, w, x2] =>
+            UnconsSomeRes.Cons[[t] =>> A1 |*| f[t], v, w, B](
+              c.i.inSnd,
+              c.f,
+              ((c.post thenShuffle s).inSnd thenShuffle t.asShuffle) > tail.asShuffled,
+            )
     }
 
     case class SemiSnoc[A, X1, X2, Y2, Z2, B1, B2](
@@ -180,6 +223,11 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     ) extends Plated[A, B1 |*| B2] {
       override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> (B1 |*| B2) =
         ev.andThen(init.fold, ev.andThen(t.fold, ev.snd(ev.andThen(s.fold, semiLast.fold))))
+
+      override def unconsSome: UnconsSomeRes[A, B1 |*| B2] =
+        init.unconsSome match
+          case c: UnconsSomeRes.Cons[f, v, w, x1x2] =>
+            UnconsSomeRes.Cons(c.i, c.f, (c.post thenShuffle t.asShuffle) > (Pure(s) > semiLast.asShuffled).inSnd)
     }
 
     case class XI[A1, A2, P1, P2, Q, R, S1, S2, B1, B2](
@@ -199,15 +247,36 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
           ),
         )
       }
+
+      override def unconsSome: UnconsSomeRes[A1 |*| A2, B1 |*| B2] =
+        l.unconsSome match
+          case c: UnconsSomeRes.Cons[f, x, y, p1p2] =>
+            UnconsSomeRes.Cons[[t] =>> A1 |*| f[t], x, y, B1 |*| B2](
+              c.i.inSnd,
+              c.f,
+              ((c.post thenShuffle (lt.asShuffle > ~⚬.snd(b))).inSnd[A1] thenShuffle ~⚬.xi) > (Pure(rt.asShuffle) > r.asShuffled).inSnd,
+            )
+
     }
 
     case class Preshuffled[A, X, B](s: A ~⚬ X, t: Plated[X, B])
+
+    enum UnconsSomeRes[A, B] {
+      case Cons[F[_], X, Y, B](
+        i: Focus[|*|, F],
+        f: X -> Y,
+        post: Shuffled[F[Y], B],
+      ) extends UnconsSomeRes[F[X], B]
+    }
   }
   import Plated._
 
   case class RevTransferOpt[A1, A2, B1, B2](t: TransferOpt[B1, B2, A1, A2]) {
     def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2) =
-      t.asShuffle.invert.fold
+      this.asShuffle.fold
+
+    def asShuffle: (A1 |*| A2) ~⚬ (B1 |*| B2) =
+      t.asShuffle.invert
   }
 
   def id[X]: Shuffled[X, X] =
