@@ -43,6 +43,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       }
     }
 
+    def chaseBw[X](i: Inj[|*|, X, B]): ChaseBwRes[A, B, X]
+
     def to[C](using ev: B =:= C): A ~⚬ C =
       ev.substituteCo(this)
   }
@@ -179,6 +181,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       g: TransferOpt[Y1, Y2, Z1, Z2],
       ev: (Z1 |*| Z2) =:= Z,
     )
+
+    enum ChaseBwRes[A, B, X] {
+      case Transported(i: Inj[|*|, X, A])
+      case Split[A, B, X, X1, X2](ev: X =:= (X1 |*| X2)) extends ChaseBwRes[A, B, X]
+    }
   }
   import ~⚬._
 

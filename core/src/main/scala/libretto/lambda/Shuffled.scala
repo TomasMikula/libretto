@@ -21,8 +21,7 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     def chaseFw[X](i: Inj[|*|, X, A]): ChaseFwRes[X, A, B] =
       ???
 
-    def chaseBw[X](i: Inj[|*|, X, B]): ChaseBwRes[A, B, X] =
-      ???
+    def chaseBw[X](i: Inj[|*|, X, B]): ChaseBwRes[A, B, X]
 
     def to[C](using ev: B =:= C): Shuffled[A, C] =
       ev.substituteCo(this)
@@ -63,6 +62,15 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       m.unconsSome match
         case c: Plated.UnconsSomeRes.Cons[f, v, w, y] =>
           UnconsSomeRes.Cons[A, f, v, w, B](l, c.i, c.f, c.post thenShuffle r)
+
+    override def chaseBw[T](i: Inj[|*|, T, B]): ChaseBwRes[A, B, T] =
+      r.chaseBw(i) match
+        case ~⚬.ChaseBwRes.Transported(j) =>
+          m.chaseBw(j) match
+            case Plated.ChaseBwRes.OriginatesFrom(pre, i, f, j, post) =>
+              ???
+        case ~⚬.ChaseBwRes.Split(ev) =>
+          ChaseBwRes.Split(ev)
   }
 
   case class Pure[A, B](s: A ~⚬ B) extends Permeable[A, B] {
@@ -86,6 +94,11 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     override def unconsSome: UnconsSomeRes[A, B] =
       UnconsSomeRes.Pure(s)
+
+    override def chaseBw[X](i: Inj[|*|, X, B]): ChaseBwRes[A, B, X] =
+      s.chaseBw(i) match
+        case ~⚬.ChaseBwRes.Transported(j) => ChaseBwRes.Transported(j)
+        case ~⚬.ChaseBwRes.Split(ev)      => ChaseBwRes.Split(ev)
   }
 
   case class SemiObstructed[A, X1, X2, Y2, Z2, B1, B2](
@@ -141,6 +154,21 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
             c.f,
             (c.post thenShuffle bottom2).inSnd thenShuffle right.asShuffle,
           )
+
+    override def chaseBw[T](i: Inj[|*|, T, B1 |*| B2]): ChaseBwRes[A, B1 |*| B2, T] =
+      right.asShuffle.chaseBw(i) match
+        case ~⚬.ChaseBwRes.Split(ev) =>
+          ChaseBwRes.Split(ev)
+        case ~⚬.ChaseBwRes.Transported(j) =>
+          j match
+            case Inj.Id() =>
+              ChaseBwRes.Split(summon[T =:= (X1 |*| Z2)])
+            case Inj.Fst(k) =>
+              left.chaseBw(Inj.fst(k)) match
+                case ~⚬.ChaseBwRes.Split(ev)      => ChaseBwRes.Split(ev)
+                case ~⚬.ChaseBwRes.Transported(l) => ChaseBwRes.Transported(l)
+            case Inj.Snd(k) =>
+              ???
   }
 
   object Permeable {
@@ -165,6 +193,8 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B
 
     def unconsSome: Plated.UnconsSomeRes[A, B]
+
+    def chaseBw[X](i: Inj[|*|, X, B]): Plated.ChaseBwRes[A, B, X]
   }
 
   object Plated {
@@ -174,6 +204,9 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
       override def unconsSome: UnconsSomeRes[A, B] =
         UnconsSomeRes.Cons(Focus.id, f, id)
+
+      override def chaseBw[X](i: Inj[|*|, X, B]): ChaseBwRes[A, B, X] =
+        ChaseBwRes.OriginatesFrom[A, [x] =>> x, X, A, B, B](id[A], Focus.id, f, i, ~⚬.id[B])
     }
 
     case class Stacked[A1, A2, B1, B2](f1: Plated[A1, B1], f2: Plated[A2, B2]) extends Plated[A1 |*| A2, B1 |*| B2] {
@@ -184,6 +217,12 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f1.unconsSome match
           case c: UnconsSomeRes.Cons[f, x, y, b1] =>
             UnconsSomeRes.Cons[[t] =>> f[t] |*| A2, x, y, B1 |*| B2](c.i.inFst[A2], c.f, par(c.post, f2.asShuffled))
+
+      override def chaseBw[X](i: Inj[|*|, X, B1 |*| B2]): ChaseBwRes[A1 |*| A2, B1 |*| B2, X] =
+        i match
+          case Inj.Id()   => ChaseBwRes.Split(summon[X =:= (B1 |*| B2)])
+          case Inj.Fst(j) => f1.chaseBw(j).inFst(f2.asShuffled)
+          case Inj.Snd(j) => f2.chaseBw(j).inSnd(f1.asShuffled)
     }
 
     case class Sandwich[A, X, Y, B](l: Plated[A, X], m: X ~⚬ Y, r: Plated[Y, B]) extends Plated[A, B] {
@@ -194,6 +233,9 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         l.unconsSome match
           case c: UnconsSomeRes.Cons[f, v, w, x] =>
             UnconsSomeRes.Cons(c.i, c.f, (c.post thenShuffle m) > r.asShuffled)
+
+      override def chaseBw[X](i: Inj[|*|, X, B]): ChaseBwRes[A, B, X] =
+        r.chaseBw(i) after (l.asShuffled thenShuffle m)
     }
 
     case class SemiCons[A1, A2, X2, Y2, Z1, Z2, B](
@@ -213,6 +255,9 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
               c.f,
               ((c.post thenShuffle s).inSnd thenShuffle t.asShuffle) > tail.asShuffled,
             )
+
+      override def chaseBw[T](i: Inj[|*|, T, B]): ChaseBwRes[A1 |*| A2, B, T] =
+        tail.chaseBw(i) after (semiHead.asShuffled thenShuffle s).inSnd[A1].thenShuffle(t.asShuffle)
     }
 
     case class SemiSnoc[A, X1, X2, Y2, Z2, B1, B2](
@@ -228,6 +273,15 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         init.unconsSome match
           case c: UnconsSomeRes.Cons[f, v, w, x1x2] =>
             UnconsSomeRes.Cons(c.i, c.f, (c.post thenShuffle t.asShuffle) > (Pure(s) > semiLast.asShuffled).inSnd)
+
+      override def chaseBw[T](i: Inj[|*|, T, B1 |*| B2]): ChaseBwRes[A, B1 |*| B2, T] =
+        i match
+          case Inj.Id() => ChaseBwRes.Split(summon[T =:= (B1 |*| B2)])
+          case Inj.Fst(j) =>
+            t.asShuffle.chaseBw(Inj.fst(j)) match
+              case ~⚬.ChaseBwRes.Split(ev) => ChaseBwRes.Split(ev)
+              case ~⚬.ChaseBwRes.Transported(k) =>
+                init.chaseBw(k)
     }
 
     case class XI[A1, A2, P1, P2, Q, R, S1, S2, B1, B2](
@@ -267,6 +321,37 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f: X -> Y,
         post: Shuffled[F[Y], B],
       ) extends UnconsSomeRes[F[X], B]
+    }
+
+    sealed trait ChaseBwRes[A, B, X] {
+      def after[P](p: Shuffled[P, A]): ChaseBwRes[P, B, X]
+      def inFst[P, Q](snd: Shuffled[P, Q]): ChaseBwRes[A |*| P, B |*| Q, X]
+      def inSnd[P, Q](fst: Shuffled[P, Q]): ChaseBwRes[P |*| A, Q |*| B, X]
+    }
+
+    object ChaseBwRes {
+      case class OriginatesFrom[A, F[_], X, Y, Z, B](
+        pre: Shuffled[A, F[Y]],
+        i: Focus[|*|, F],
+        f: Y -> Z,
+        j: Inj[|*|, X, Z],
+        post: F[Z] ~⚬ B,
+      ) extends ChaseBwRes[A, B, X] {
+        override def after[P](p: Shuffled[P, A]): ChaseBwRes[P, B, X] =
+          OriginatesFrom(p > pre, i, f, j, post)
+
+        override def inFst[P, Q](snd: Shuffled[P, Q]): ChaseBwRes[A |*| P, B |*| Q, X] =
+          OriginatesFrom[A |*| P, [t] =>> F[t] |*| Q, X, Y, Z, B |*| Q](par(pre, snd), i.inFst, f, j, ~⚬.fst(post))
+
+        override def inSnd[P, Q](fst: Shuffled[P, Q]): ChaseBwRes[P |*| A, Q |*| B, X] =
+          OriginatesFrom[P |*| A, [t] =>> Q |*| F[t], X, Y, Z, Q |*| B](par(fst, pre), i.inSnd, f, j, ~⚬.snd(post))
+      }
+
+      case class Split[A, B, X, X1, X2](ev: X =:= (X1 |*| X2)) extends ChaseBwRes[A, B, X] {
+        override def after[P](p: Shuffled[P, A]): ChaseBwRes[P, B, X] = Split(ev)
+        override def inFst[P, Q](snd: Shuffled[P, Q]): ChaseBwRes[A |*| P, B |*| Q, X] = Split(ev)
+        override def inSnd[P, Q](fst: Shuffled[P, Q]): ChaseBwRes[P |*| A, Q |*| B, X] = Split(ev)
+      }
     }
   }
   import Plated._
@@ -508,7 +593,7 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       i: Focus[|*|, F],
       f: Y -> Z,
       j: Inj[|*|, X, Z],
-      post: Shuffled[F[Z], B],
+      post: F[Z] ~⚬ B,
     ) extends ChaseBwRes[A, B, X]
 
     case Split[A, B, X, X1, X2](ev: X =:= (X1 |*| X2)) extends ChaseBwRes[A, B, X]

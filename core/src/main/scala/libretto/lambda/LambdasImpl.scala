@@ -544,6 +544,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       case CaptureFst[A, A0, X](x: Expr[X], u: Untag[A, A0], resultVar: Var[X |*| A0]) extends Op[A, Var[X |*| A0]]
       case CaptureSnd[A, A0, X](u: Untag[A, A0], x: Expr[X], resultVar: Var[A0 |*| X]) extends Op[A, Var[A0 |*| X]]
       case Zip[A1, A2, B1, B2](u1: Untag[A1, B1], u2: Untag[A2, B2], resultVar: Var[B1 |*| B2]) extends Op[A1 |*| A2, Var[B1 |*| B2]]
+      case Unzip[A, A1, A2](u: Untag[A, A1 |*| A2], resultVar1: Var[A1], resultVar2: Var[A2]) extends Op[A, Var[A1] |*| Var[A2]]
       case Prj1[A, A1, A2](u: Untag[A, A1 |*| A2], resultVar: Var[A1], unusedVar: Var[A2]) extends Op[A, Var[A1]]
       case Prj2[A, A1, A2](u: Untag[A, A1 |*| A2], unusedVar: Var[A1], resultVar: Var[A2]) extends Op[A, Var[A2]]
     }
@@ -571,6 +572,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     def zip[A1, A2, B1, B2](u1: Untag[A1, B1], u2: Untag[A2, B2], resultVar: Var[B1 |*| B2]): Tail[A1 |*| A2, Var[B1 |*| B2]] =
       shOp.lift(Op.Zip(u1, u2, resultVar))
 
+    // def unzip[A, A1, A2](u: Untag[A, A1 |*| A2], resultVar1: Var[A1], resultVar2: Var[A2]): Tail[A, Var[A1] |*| Var[A2]] =
+    //   shOp.lift(Op.Unzip(u, resultVar1, resultVar2))
+
     def prj1[A, A1, A2](u: Untag[A, A1 |*| A2], resultVar: Var[A1], unusedVar: Var[A2]): Tail[A, Var[A1]] =
       shOp.lift(Op.Prj1(u, resultVar, unusedVar))
 
@@ -582,6 +586,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
      *  If `op` does not introduce new variables, or if `op` is not found in `t`, returns `None`.
      */
     def pullOut[A, F[_], X, Y](t: Tail[A, F[X]], i: Focus[|*|, F], op: Op[X, Y]): Option[Tail[A, F[Y]]] = {
+      import shOp.ChaseBwRes
+
       op match {
         case Op.DupVar() =>
           None
@@ -593,8 +599,22 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           UnhandledCase.raise(s"t = $t; i = $i; op = $op")
         case Op.Zip(u1, u2, resultVar) =>
           UnhandledCase.raise(s"t = $t; i = $i; op = $op")
-        case Op.Prj1(u, resultVar, unusedVar) =>
+        case Op.Unzip(u, resultVar1, resultVar2) =>
           UnhandledCase.raise(s"t = $t; i = $i; op = $op")
+
+        case Op.Prj1(u, resultVar, unusedVar) =>
+          def go[X1, X2](u: Untag[X, X1 |*| X2], resultVar: Var[X1], unusedVar: Var[X2]): Option[Tail[A, F[Var[X1]]]] =
+            t.chaseBw(i.at[X]) match
+              case ChaseBwRes.Transported(i) =>
+                None
+              case ChaseBwRes.OriginatesFrom(pre, i, f, j, post) =>
+                UnhandledCase.raise(s"originates from $f at $j")
+              case ChaseBwRes.Split(ev) =>
+                // TODO: prove impossible
+                bug(s"Unexpected projection from a pair, expected a variable")
+
+          go(u, resultVar, unusedVar)
+
         case Op.Prj2(u, unusedVar, resultVar) =>
           UnhandledCase.raise(s"t = $t; i = $i; op = $op")
       }
