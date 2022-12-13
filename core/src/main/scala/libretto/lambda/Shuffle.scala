@@ -43,7 +43,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       }
     }
 
-    def chaseBw[X](i: Inj[|*|, X, B]): ChaseBwRes[A, B, X]
+    def chaseBw[G[_], X](i: Focus[|*|, G])(using ev: B =:= G[X]): ChaseBwRes[A, G, X]
 
     def to[C](using ev: B =:= C): A ~⚬ C =
       ev.substituteCo(this)
@@ -65,6 +65,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def ev: X =:= X =
         summon[X =:= X]
+
+      override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: X =:= G[T]): ChaseBwRes[X, G, T] =
+        ChaseBwRes.Transported[X, G, G, T](ev, i, [t] => (_: Unit) => Id[G[t]]())
     }
 
     /** Non-[[Id]] combinators. */
@@ -84,10 +87,16 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     }
 
     /** Two parallel operations, at least one of which is not [[Id]]. */
-    case class Bimap[X1, X2, Y1, Y2](par: Par[X1, X2, Y1, Y2]) extends Composed[X1 |*| X2, Y1 |*| Y2]
+    case class Bimap[X1, X2, Y1, Y2](par: Par[X1, X2, Y1, Y2]) extends Composed[X1 |*| X2, Y1 |*| Y2] {
+      override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (Y1 |*| Y2) =:= G[T]): ChaseBwRes[X1 |*| X2, G, T] =
+        par.chaseBw(i)
+    }
 
     /** An operator that transfers resources across inputs. */
-    case class Xfer[A1, A2, X1, X2, B1, B2](f1: A1 ~⚬ X1, f2: A2 ~⚬ X2, transfer: Transfer[X1, X2, B1, B2]) extends Composed[A1 |*| A2, B1 |*| B2]
+    case class Xfer[A1, A2, X1, X2, B1, B2](f1: A1 ~⚬ X1, f2: A2 ~⚬ X2, transfer: Transfer[X1, X2, B1, B2]) extends Composed[A1 |*| A2, B1 |*| B2] {
+      override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2) =:= G[T]): ChaseBwRes[A1 |*| A2, G, T] =
+        transfer.chaseBw(i) after par(f1, f2)
+    }
 
     def id[X]: X ~⚬ X =
       Id()
@@ -182,9 +191,27 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ev: (Z1 |*| Z2) =:= Z,
     )
 
-    enum ChaseBwRes[A, B, X] {
-      case Transported(i: Inj[|*|, X, A])
-      case Split[A, B, X, X1, X2](ev: X =:= (X1 |*| X2)) extends ChaseBwRes[A, B, X]
+    sealed trait ChaseBwRes[A, G[_], X] {
+      def after[Z](f: Z ~⚬ A): ChaseBwRes[Z, G, X]
+    }
+
+    object ChaseBwRes {
+      case class Transported[A, F[_], G[_], X](
+        ev: A =:= F[X],
+        f: Focus[|*|, F],
+        s: [t] => Unit => F[t] ~⚬ G[t],
+      ) extends ChaseBwRes[A, G, X] {
+
+        override def after[Z](g: Z ~⚬ A): ChaseBwRes[Z, G, X] =
+          g.chaseBw(f)(using ev) match
+            case Transported(ev0, f0, s0) => Transported(ev0, f0, [t] => (_: Unit) => s0[t](()) > s[t](()))
+            case Split(ev) => Split(ev)
+      }
+
+      case class Split[A, G[_], X, X1, X2](ev: X =:= (X1 |*| X2)) extends ChaseBwRes[A, G, X] {
+        override def after[Z](f: Z ~⚬ A): ChaseBwRes[Z, G, X] =
+          Split(ev)
+      }
     }
   }
   import ~⚬._
@@ -201,6 +228,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         case Snd(f2)      => Snd(f2.invert)
         case Both(f1, f2) => Both(f1.invert, f2.invert)
       }
+
+    def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (Y1 |*| Y2) =:= G[T]): ChaseBwRes[X1 |*| X2, G, T] =
+      ???
   }
 
   object Par {
@@ -393,12 +423,25 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         case f: IXI[x1, x2, x3, x4, y1, y2, y3, y4] => ixi[x1, x2, x3, x4] > par(f.g1.fold, f.g2.fold)
       }
     }
+
+    def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2) =:= G[T]): ChaseBwRes[A1 |*| A2, G, T]
   }
 
   object Transfer {
     case class Swap[X1, X2]() extends Transfer[X1, X2, X2, X1] {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, X1, X2]): (Z1 |*| Z2) ~⚬ (X2 |*| X1) =
         that.thenSwap
+
+      override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (X2 |*| X1) =:= G[T]): ChaseBwRes[X1 |*| X2, G, T] =
+        i match
+          case Focus.Id() =>
+            ChaseBwRes.Split(ev.andThen(summon[G[T] =:= T]).flip)
+          case fst: Focus.Fst[p, f, b] =>
+            val inj(x2ft, x1b) = ev andThen summon[G[T] =:= (f[T] |*| b)]
+            ChaseBwRes.Transported[X1 |*| X2, [t] =>> b |*| f[t], [t] =>> f[t] |*| b, T](x1b zip x2ft, fst.i.inSnd, [t] => (_: Unit) => swap[b, f[t]])
+          case snd: Focus.Snd[p, f, a] =>
+            val inj(x2b, x1ft) = ev andThen summon[G[T] =:= (a |*| f[T])]
+            ChaseBwRes.Transported[X1 |*| X2, [t] =>> f[t] |*| a, [t] =>> a |*| f[t], T](x1ft zip x2b, snd.i.inFst, [t] => (_: Unit) => swap[f[t], a])
 
       override def thenBi[C1, C2](g1: X2 ~⚬ C1, g2: X1 ~⚬ C2): Xfer[X1, X2, _, _, C1, C2] =
         Xfer(g2, g1, Swap())
@@ -533,6 +576,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, A1 |*| A2, A3]): (Z1 |*| Z2) ~⚬ (A1 |*| (B2 |*| B3)) =
         that thenAssocLR this
 
+      override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (A1 |*| (B2 |*| B3)) =:= G[T]): ChaseBwRes[A1 |*| A2 |*| A3, G, T] = ???
+
       override def thenBi[C1, C2](g1: A1 ~⚬ C1, g2: (B2 |*| B3) ~⚬ C2): Xfer[A1 |*| A2, A3, _, _, C1, C2] =
         decompose1(g.asShuffle > g2) match {
           case Decomposition1(f1, f2, g, ev) => ev.substituteCo(Xfer(par(g1, f1), f2, AssocLR(g)))
@@ -666,6 +711,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     case class AssocRL[A1, A2, A3, B1, B2](g: TransferOpt[A1, A2, B1, B2]) extends Transfer[A1, A2 |*| A3, B1 |*| B2, A3] {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, A1, A2 |*| A3]): (Z1 |*| Z2) ~⚬ ((B1 |*| B2) |*| A3) =
         that.thenAssocRL(this)
+
+      override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2 |*| A3) =:= G[T]): ChaseBwRes[A1 |*| (A2 |*| A3), G, T] = ???
 
       override def thenBi[C1, C2](g1: (B1 |*| B2) ~⚬ C1, g2: A3 ~⚬ C2): Xfer[A1, A2 |*| A3, _, _, C1, C2] =
         decompose1(g.asShuffle > g1) match {
@@ -810,6 +857,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     case class IX[A1, A2, A3, B1, B2](g: TransferOpt[A1, A3, B1, B2]) extends Transfer[A1 |*| A2, A3, B1 |*| B2, A2] {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, A1 |*| A2, A3]): (Z1 |*| Z2) ~⚬ ((B1 |*| B2) |*| A2) =
         that.thenIX(this)
+
+      override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2 |*| A2) =:= G[T]): ChaseBwRes[A1 |*| A2 |*| A3, G, T] = ???
 
       override def thenBi[C1, C2](g1: (B1 |*| B2) ~⚬ C1, g2: A2 ~⚬ C2): Xfer[A1 |*| A2, A3, _, _, C1, C2] =
         decompose1(g.asShuffle > g1) match {
@@ -964,6 +1013,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, A1, A2 |*| A3]): (Z1 |*| Z2) ~⚬ (A2 |*| (B2 |*| B3)) =
         that thenXI this
 
+      override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (A2 |*| (B2 |*| B3)) =:= G[T]): ChaseBwRes[A1 |*| (A2 |*| A3), G, T] = ???
+
       override def thenBi[C1, C2](g1: A2 ~⚬ C1, g2: (B2 |*| B3) ~⚬ C2): Xfer[A1, A2 |*| A3, _, _, C1, C2] =
         decompose1(g.asShuffle > g2) match {
           case Decomposition1(f1, f2, h, ev) => ev.substituteCo(Xfer(f1, par(g1, f2), XI(h)))
@@ -1100,6 +1151,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     ) extends Transfer[A1 |*| A2, A3 |*| A4, B1 |*| B2, B3 |*| B4] {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, A1 |*| A2, A3 |*| A4]): (Z1 |*| Z2) ~⚬ ((B1 |*| B2) |*| (B3 |*| B4)) =
         that thenIXI this
+
+      override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2 |*| (B3 |*| B4)) =:= G[T]): ChaseBwRes[A1 |*| A2 |*| (A3 |*| A4), G, T] = ???
 
       override def thenBi[C1, C2](h1: (B1 |*| B2) ~⚬ C1, h2: (B3 |*| B4) ~⚬ C2): Xfer[A1 |*| A2, A3 |*| A4, _, _, C1, C2] =
         (decompose1(g1.asShuffle > h1), decompose1(g2.asShuffle > h2)) match {

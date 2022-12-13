@@ -6,9 +6,6 @@ sealed trait Focus[|*|[_, _], F[_]] {
 
   def inSnd[A]: Focus[|*|, [x] =>> A |*| F[x]] =
     Focus.snd(this)
-
-  def at[X]: Inj[|*|, X, F[X]] =
-    Inj.focusedAt(this)
 }
 
 object Focus {

@@ -604,8 +604,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
         case Op.Prj1(u, resultVar, unusedVar) =>
           def go[X1, X2](u: Untag[X, X1 |*| X2], resultVar: Var[X1], unusedVar: Var[X2]): Option[Tail[A, F[Var[X1]]]] =
-            t.chaseBw(i.at[X]) match
-              case ChaseBwRes.Transported(i) =>
+            t.chaseBw(i) match
+              case ChaseBwRes.Transported(_, _, _) =>
                 None
               case ChaseBwRes.OriginatesFrom(pre, i, f, j, post) =>
                 UnhandledCase.raise(s"originates from $f at $j")
