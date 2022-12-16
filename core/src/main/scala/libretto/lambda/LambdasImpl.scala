@@ -525,11 +525,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     private def weaveInOp[F[_], X, Y](i: Focus[|*|, F], f: Op[X, Y])(using ev: B =:= F[X]): HybridArrow[A, F[Y]] =
       pullOut(i, f) match {
-        case Some(res) => res
-        case None      => HybridArrow(v, tail.to[F[X]] > shOp.liftFocused(i, f))
+        case Some(HybridArrow(v, t)) => HybridArrow(v, t > shOp.liftFocused(i, Op.DiscardFst()))
+        case None                    => HybridArrow(v, tail.to[F[X]] > shOp.liftFocused(i, f))
       }
 
-    private def pullOut[F[_], X, Y](i: Focus[|*|, F], op: Op[X, Y])(using ev: B =:= F[X]): Option[HybridArrow[A, F[Y]]] =
+    private def pullOut[F[_], X, Y](i: Focus[|*|, F], op: Op[X, Y])(using ev: B =:= F[X]): Option[HybridArrow[A, F[X |*| Y]]] =
       HybridArrow.pullOut(tail.to[F[X]], i, op)
         .map(HybridArrow(v, _))
 
@@ -538,15 +538,23 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   }
 
   private object HybridArrow {
-    enum Op[A, B] {
-      case DupVar[A]() extends Op[Var[A], Var[A] |*| Var[A]]
-      case Map[A, A0, B](u: Untag[A, A0], f: A0 -⚬ B, resultVar: Var[B]) extends Op[A, Var[B]]
-      case CaptureFst[A, A0, X](x: Expr[X], u: Untag[A, A0], resultVar: Var[X |*| A0]) extends Op[A, Var[X |*| A0]]
-      case CaptureSnd[A, A0, X](u: Untag[A, A0], x: Expr[X], resultVar: Var[A0 |*| X]) extends Op[A, Var[A0 |*| X]]
-      case Zip[A1, A2, B1, B2](u1: Untag[A1, B1], u2: Untag[A2, B2], resultVar: Var[B1 |*| B2]) extends Op[A1 |*| A2, Var[B1 |*| B2]]
-      case Unzip[A, A1, A2](u: Untag[A, A1 |*| A2], resultVar1: Var[A1], resultVar2: Var[A2]) extends Op[A, Var[A1] |*| Var[A2]]
-      case Prj1[A, A1, A2](u: Untag[A, A1 |*| A2], resultVar: Var[A1], unusedVar: Var[A2]) extends Op[A, Var[A1]]
-      case Prj2[A, A1, A2](u: Untag[A, A1 |*| A2], unusedVar: Var[A1], resultVar: Var[A2]) extends Op[A, Var[A2]]
+    sealed trait Op[A, B] {}
+    object Op {
+      case class Zip[A1, A2, B1, B2](u1: Untag[A1, B1], u2: Untag[A2, B2], resultVar: Var[B1 |*| B2]) extends Op[A1 |*| A2, Var[B1 |*| B2]]
+
+      sealed trait SingleSource[A, B] extends Op[A, B] {
+        def deriveContradiction[A1, A2](using ev: A =:= (A1 |*| A2)): Nothing =
+          throw new AssertionError() // TODO: derive contradiction more precisely
+      }
+      case class Map[A, A0, B](u: Untag[A, A0], f: A0 -⚬ B, resultVar: Var[B]) extends SingleSource[A, Var[B]]
+      case class Prj1[A, A1, A2](u: Untag[A, A1 |*| A2], resultVar: Var[A1], unusedVar: Var[A2]) extends SingleSource[A, Var[A1]]
+      case class Prj2[A, A1, A2](u: Untag[A, A1 |*| A2], unusedVar: Var[A1], resultVar: Var[A2]) extends SingleSource[A, Var[A2]]
+
+      case class DupVar[A]() extends Op[Var[A], Var[A] |*| Var[A]]
+      case class CaptureFst[A, A0, X](x: Expr[X], u: Untag[A, A0], resultVar: Var[X |*| A0]) extends Op[A, Var[X |*| A0]]
+      case class CaptureSnd[A, A0, X](u: Untag[A, A0], x: Expr[X], resultVar: Var[A0 |*| X]) extends Op[A, Var[A0 |*| X]]
+      case class Unzip[A, A1, A2](u: Untag[A, A1 |*| A2], resultVar1: Var[A1], resultVar2: Var[A2]) extends Op[A, Var[A1] |*| Var[A2]]
+      case class DiscardFst[A1, A2]() extends Op[A1 |*| A2, A2]
     }
 
     val shOp = new Shuffled[Op, |*|]
@@ -585,14 +593,22 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
      *  and channels it to the output.
      *  If `op` does not introduce new variables, or if `op` is not found in `t`, returns `None`.
      */
-    def pullOut[A, F[_], X, Y](t: Tail[A, F[X]], i: Focus[|*|, F], op: Op[X, Y]): Option[Tail[A, F[Y]]] = {
+    def pullOut[A, G[_], X, Y](t: Tail[A, G[X]], i: Focus[|*|, G], op: Op[X, Y]): Option[Tail[A, G[X |*| Y]]] = {
       import shOp.ChaseBwRes
 
       op match {
+        case op: Op.SingleSource[X, Y] =>
+          t.chaseBw(i) match {
+            case ChaseBwRes.Transported(_, _, _) =>
+              None
+            case r: ChaseBwRes.OriginatesFrom[a, f, v, w, x, g] =>
+              pullBump(r.pre, r.i, r.f, r.w, r.post, op)
+            case ChaseBwRes.Split(ev) =>
+              // TODO: prove impossible
+              bug(s"Did not expect $op to originate from a pair of expressions. Expected a single variable.")
+          }
         case Op.DupVar() =>
           None
-        case Op.Map(u, f, resultVar) =>
-          UnhandledCase.raise(s"t = $t; i = $i; op = $op")
         case Op.CaptureFst(x, u, resultVar) =>
           UnhandledCase.raise(s"t = $t; i = $i; op = $op")
         case Op.CaptureSnd(u, x, resultVar) =>
@@ -601,24 +617,91 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           UnhandledCase.raise(s"t = $t; i = $i; op = $op")
         case Op.Unzip(u, resultVar1, resultVar2) =>
           UnhandledCase.raise(s"t = $t; i = $i; op = $op")
-
-        case Op.Prj1(u, resultVar, unusedVar) =>
-          def go[X1, X2](u: Untag[X, X1 |*| X2], resultVar: Var[X1], unusedVar: Var[X2]): Option[Tail[A, F[Var[X1]]]] =
-            t.chaseBw(i) match
-              case ChaseBwRes.Transported(_, _, _) =>
-                None
-              case ChaseBwRes.OriginatesFrom(pre, i, f, j, post) =>
-                UnhandledCase.raise(s"originates from $f at $j")
-              case ChaseBwRes.Split(ev) =>
-                // TODO: prove impossible
-                bug(s"Unexpected projection from a pair, expected a variable")
-
-          go(u, resultVar, unusedVar)
-
-        case Op.Prj2(u, unusedVar, resultVar) =>
+        case Op.DiscardFst() =>
           UnhandledCase.raise(s"t = $t; i = $i; op = $op")
       }
     }
+
+    def pullBump[A, F[_], V, WX, W[_], X, G[_], Y](
+      pre: Tail[A, F[V]],
+      i: Focus[|*|, F],
+      obstacle: Op[V, WX],
+      w: Focus[|*|, W],
+      post: Tail[F[W[X]], G[X]],
+      op: Op.SingleSource[X, Y],
+    )(using
+      ev: WX =:= W[X],
+    ): Option[Tail[A, G[X |*| Y]]] = {
+      import shOp.shuffle.{zip => zipEq}
+
+      obstacle match
+        case o: Op.DupVar[v0] =>
+          summon[V =:= Var[v0]]
+          summon[WX =:= (Var[v0] |*| Var[v0])]
+          w match
+            case Focus.Fst(_) =>
+              ???
+            case w: Focus.Snd[pair, w2, p] =>
+              summon[W[X] =:= (p |*| w2[X])]
+              val inj(pvv0, w2xvv0) = summon[(p |*| w2[X]) =:= W[X]] andThen ev.flip andThen summon[WX =:= (Var[v0] |*| Var[v0])]
+              w.i match
+                case Focus.Id() =>
+                  val xvv0: X =:= Var[v0] = summon[X =:= w2[X]] andThen w2xvv0
+                  val xxwx: (X |*| X) =:= W[X] = (xvv0 zipEq xvv0) andThen summon[(Var[v0] |*| Var[v0]) =:= WX] andThen ev
+                  pushOut[[x] =>> F[x |*| X], X, Y, G[X]](post.from(using xxwx.liftCo[F]), i compose Focus.fst[|*|, X], op) match
+                    case Some(post1) =>
+                      ???
+                    case None =>
+                      ???
+                case Focus.Fst(_) =>
+                  throw new AssertionError() // TODO: derive contradiction
+                case Focus.Snd(_) =>
+                  throw new AssertionError() // TODO: derive contradiction
+            case Focus.Id() =>
+              val contraEv: X =:= (Var[v0] |*| Var[v0]) = summon[X =:= W[X]] andThen ev.flip andThen summon[WX =:= (Var[v0] |*| Var[v0])]
+              op.deriveContradiction(using contraEv)
+        case Op.Zip(u1, u2, resultVar) =>
+          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+        case Op.CaptureFst(x, u, resultVar) =>
+          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+        case Op.CaptureSnd(u, x, resultVar) =>
+          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+        case Op.Unzip(u, resultVar1, resultVar2) =>
+          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+        case Op.DiscardFst() =>
+          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+        case Op.Map(u, f, resultVar) =>
+          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+        case Op.Prj1(u, resultVar, unusedVar) =>
+          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+        case Op.Prj2(u, unusedVar, resultVar) =>
+          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+    }
+
+    def pushOut[F[_], X, Y, B](t: Tail[F[X], B], i: Focus[|*|, F], op: Op[X, Y]): Option[Tail[F[X], B |*| Y]] =
+      op match {
+        case op: Op.SingleSource[X, Y] =>
+          t.chaseFw(i) match {
+            case r: shOp.ChaseFwRes.FedTo[f, x, v, w, g, b] =>
+              pushBump(r.pre, r.v, r.f, r.g, r.post, op)
+            case shOp.ChaseFwRes.Transported(_, _, _) =>
+              None
+            case shOp.ChaseFwRes.Split(_) =>
+              bug(s"Unexpected pair of expressions fed to $op")
+          }
+        case other =>
+          UnhandledCase.raise(s"Pushing out $op from $t at $i")
+      }
+
+    def pushBump[F[_], X, V[_], W, G[_], B, Y](
+      pre: Tail[F[X], G[V[X]]],
+      v: Focus[|*|, V],
+      obstacle: Op[V[X], W],
+      g: Focus[|*|, G],
+      post: Tail[G[W], B],
+      op: Op.SingleSource[X, Y],
+    ): Option[Tail[F[X], B |*| Y]] =
+      UnhandledCase.raise(s"$op hit obstacle $obstacle at $v")
 
     enum LinearRes[A, B] {
       case Exact[A, A1, B](m: Multiplier[|*|, A, A1], f: AbstractFun[A1, B]) extends LinearRes[A, B]

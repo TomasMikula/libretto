@@ -1,6 +1,19 @@
 package libretto.lambda
 
+import libretto.lambda.Focus.Id
+
+import libretto.lambda.Focus.Fst
+
+import libretto.lambda.Focus.Snd
+
 sealed trait Focus[|*|[_, _], F[_]] {
+  def compose[G[_]](that: Focus[|*|, G]): Focus[|*|, [x] =>> F[G[x]]] =
+    this match {
+      case Id()   => that
+      case Fst(i) => (i compose that).inFst
+      case Snd(i) => (i compose that).inSnd
+    }
+
   def inFst[B]: Focus[|*|, [x] =>> F[x] |*| B] =
     Focus.fst(this)
 
@@ -19,6 +32,12 @@ object Focus {
   def fst[|*|[_, _], F[_], B](i: Focus[|*|, F]): Focus[|*|, [x] =>> F[x] |*| B] =
     Fst(i)
 
+  def fst[|*|[_, _], B]: Focus[|*|, [x] =>> x |*| B] =
+    fst(id[|*|])
+
   def snd[|*|[_, _], F[_], A](i: Focus[|*|, F]): Focus[|*|, [x] =>> A |*| F[x]] =
     Snd(i)
+
+  def snd[|*|[_, _], A]: Focus[|*|, [x] =>> A |*| x] =
+    snd(id[|*|])
 }
