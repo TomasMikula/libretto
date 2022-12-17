@@ -48,6 +48,13 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     def to[C](using ev: B =:= C): A ~⚬ C =
       ev.substituteCo(this)
+
+    def at[F[_]](f: Focus[|*|, F]): F[A] ~⚬ F[B] =
+      f match {
+        case Focus.Id()    => this
+        case Focus.Fst(f1) => fst(this.at(f1))
+        case Focus.Snd(f2) => snd(this.at(f2))
+      }
   }
 
   object ~⚬ {
@@ -234,6 +241,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     sealed trait ChaseBwRes[A, G[_], X] {
       def after[Z](f: Z ~⚬ A): ChaseBwRes[Z, G, X]
+      def inFst[B, C](snd: B ~⚬ C): ChaseBwRes[A |*| B, [x] =>> G[x] |*| C, X]
+      def inSnd[Y, Z](fst: Y ~⚬ Z): ChaseBwRes[Y |*| A, [x] =>> Z |*| G[x], X]
+
+      def inFst[B]: ChaseBwRes[A |*| B, [x] =>> G[x] |*| B, X] = inFst(id[B])
+      def inSnd[Z]: ChaseBwRes[Z |*| A, [x] =>> Z |*| G[x], X] = inSnd(id[Z])
     }
 
     object ChaseBwRes {
@@ -242,16 +254,22 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         f: Focus[|*|, F],
         s: [t] => Unit => F[t] ~⚬ G[t],
       ) extends ChaseBwRes[A, G, X] {
-
         override def after[Z](g: Z ~⚬ A): ChaseBwRes[Z, G, X] =
           g.chaseBw(f)(using ev) match
             case Transported(ev0, f0, s0) => Transported(ev0, f0, [t] => (_: Unit) => s0[t](()) > s[t](()))
             case Split(ev) => Split(ev)
+
+        override def inFst[B, C](snd: B ~⚬ C): ChaseBwRes[A |*| B, [x] =>> G[x] |*| C, X] =
+          Transported[A |*| B, [x] =>> F[x] |*| B, [x] =>> G[x] |*| C, X](ev zip summon, f.inFst, [t] => (_: Unit) => par(s[t](()), snd))
+
+        override def inSnd[Y, Z](fst: Y ~⚬ Z): ChaseBwRes[Y |*| A, [x] =>> Z |*| G[x], X] =
+          Transported[Y |*| A, [x] =>> Y |*| F[x], [x] =>> Z |*| G[x], X](summon[Y =:= Y] zip ev, f.inSnd, [t] => (_: Unit) => par(fst, s[t](())))
       }
 
       case class Split[A, G[_], X, X1, X2](ev: X =:= (X1 |*| X2)) extends ChaseBwRes[A, G, X] {
-        override def after[Z](f: Z ~⚬ A): ChaseBwRes[Z, G, X] =
-          Split(ev)
+        override def after[Z](f: Z ~⚬ A): ChaseBwRes[Z, G, X] = Split(ev)
+        override def inFst[B, C](snd: B ~⚬ C): ChaseBwRes[A |*| B, [x] =>> G[x] |*| C, X] = Split(ev)
+        override def inSnd[Y, Z](fst: Y ~⚬ Z): ChaseBwRes[Y |*| A, [x] =>> Z |*| G[x], X] = Split(ev)
       }
     }
   }
@@ -274,7 +292,36 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ???
 
     def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (Y1 |*| Y2) =:= G[T]): ChaseBwRes[X1 |*| X2, G, T] =
-      ???
+      i match {
+        case Focus.Id() =>
+          ChaseBwRes.Split(ev.flip)
+        case i: Focus.Fst[pair, g1, y2] =>
+          val BiInjective[|*|](y1_g1t, y2_y2) = ev andThen summon[G[T] =:= (g1[T] |*| y2)]
+          this match
+            case Snd(f2) =>
+              ChaseBwRes.Transported[X1 |*| X2, [t] =>> g1[t] |*| X2, G, T](y1_g1t zip summon, i.i.inFst, [t] => (_: Unit) => par(id[t].at(i.i), f2.to[y2](using y2_y2)))
+            case Fst(f1) =>
+              y2_y2.substituteCo[[y] =>> ChaseBwRes[X1 |*| X2, [x] =>> g1[x] |*| y, T]](
+                f1.chaseBw[g1, T](i.i)(using y1_g1t).inFst[X2]
+              )
+            case Both(f1, f2) =>
+              y2_y2.substituteCo[[y] =>> ChaseBwRes[X1 |*| X2, [x] =>> g1[x] |*| y, T]](
+                f1.chaseBw[g1, T](i.i)(using y1_g1t).inFst(f2)
+              )
+        case i: Focus.Snd[pair, g2, y1] =>
+          val BiInjective[|*|](y1_y1, y2_g2t) = ev andThen summon[G[T] =:= (y1 |*| g2[T])]
+          this match
+            case Fst(f1) =>
+              ChaseBwRes.Transported[X1 |*| X2, [t] =>> X1 |*| g2[t], G, T](summon[X1 =:= X1] zip y2_g2t, i.i.inSnd, [t] => (_: Unit) => par(f1.to(using y1_y1), id[t].at(i.i)))
+            case Snd(f2) =>
+              y1_y1.substituteCo[[y] =>> ChaseBwRes[X1 |*| X2, [x] =>> y |*| g2[x], T]](
+                f2.chaseBw[g2, T](i.i)(using y2_g2t).inSnd[X1]
+              )
+            case Both(f1, f2) =>
+              y1_y1.substituteCo[[y] =>> ChaseBwRes[X1 |*| X2, [x] =>> y |*| g2[x], T]](
+                f2.chaseBw[g2, T](i.i)(using y2_g2t).inSnd(f1)
+              )
+      }
   }
 
   object Par {

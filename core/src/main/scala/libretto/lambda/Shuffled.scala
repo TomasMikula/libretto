@@ -18,6 +18,13 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     def >[C](that: Shuffled[B, C]): Shuffled[A, C] =
       that after this
 
+    def at[F[_]](f: Focus[|*|, F]): Shuffled[F[A], F[B]] =
+      f match {
+        case Focus.Id()    => this
+        case Focus.Fst(f1) => this.at(f1).inFst
+        case Focus.Snd(f2) => this.at(f2).inSnd
+      }
+
     def chaseFw[F[_], X](i: Focus[|*|, F])(using A =:= F[X]): ChaseFwRes[F, X, B]
 
     def chaseBw[G[_], X](i: Focus[|*|, G])(using B =:= G[X]): ChaseBwRes[A, G, X]
@@ -367,8 +374,14 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
                     case ChaseBwRes.OriginatesFrom(pre, i1, f, i2, post) =>
                       ChaseBwRes.OriginatesFrom(pre, i1, f, i2, (post thenShuffle (s1[T](()) > ~⚬.snd(s))) > semiLast.asShuffled.to[b](using b2b).inSnd[f[T]])
                 go[f1](r.ev, r.f, r.s)
-          case Focus.Snd(j) =>
-            ???
+          case j: Focus.Snd[pair, g2, b1] =>
+            val BiInjective[|*|](ev1, ev2) = ev
+            ev1.substituteCo[[b1] =>> ChaseBwRes[A, [t] =>> b1 |*| g2[t], T]](
+              semiLast.chaseBw[g2, T](j.i)(using ev2)
+                .after(Pure(s))
+                .inSnd[B1]
+                .after(init.asShuffled > Pure(t.asShuffle))
+            )
     }
 
     case class XI[A1, A2, P1, P2, Q, R, S1, S2, B1, B2](
@@ -439,6 +452,9 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       def after[P](p: Shuffled[P, A]): ChaseBwRes[P, G, X]
       def inFst[P, Q](snd: Shuffled[P, Q]): ChaseBwRes[A |*| P, [x] =>> G[x] |*| Q, X]
       def inSnd[P, Q](fst: Shuffled[P, Q]): ChaseBwRes[P |*| A, [x] =>> Q |*| G[x], X]
+
+      def inFst[Q]: ChaseBwRes[A |*| Q, [x] =>> G[x] |*| Q, X] = inFst(id[Q])
+      def inSnd[P]: ChaseBwRes[P |*| A, [x] =>> P |*| G[x], X] = inSnd(id[P])
     }
 
     object ChaseBwRes {
@@ -515,8 +531,19 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   def lift[X, Y](f: X -> Y): Shuffled[X, Y] =
     Impermeable(~⚬.id, Solid(f), ~⚬.id)
 
-  def liftFocused[F[_], X, Y](i: Focus[|*|, F], f: X -> Y): Shuffled[F[X], F[Y]] =
-    ???
+  def extractSnd[F[_], X, Y](i: Focus[|*|, F]): Shuffled[F[X |*| Y], F[X] |*| Y] =
+    i match {
+      case Focus.Id()    => id[X |*| Y]
+      case Focus.Fst(i1) => extractSnd(i1).inFst > ix
+      case Focus.Snd(i2) => extractSnd(i2).inSnd > assocRL
+    }
+
+  def absorbSnd[F[_], X, Y](i: Focus[|*|, F]): Shuffled[F[X] |*| Y, F[X |*| Y]] =
+    i match {
+      case Focus.Id()    => id[X |*| Y]
+      case Focus.Fst(i1) => ix > fst(absorbSnd(i1))
+      case Focus.Snd(i2) => assocLR > snd(absorbSnd(i2))
+    }
 
   private def ▄░▄[A1, A2, X2, Y2, B1, B2](
     l: Plated[A2, X2],
