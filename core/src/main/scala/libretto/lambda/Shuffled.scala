@@ -29,6 +29,11 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     def chaseBw[G[_], X](i: Focus[|*|, G])(using B =:= G[X]): ChaseBwRes[A, G, X]
 
+    def project[C](
+      p: Projection[|*|, B, C],
+      f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => Shuffled[X, Z],
+    ): ProjectRes[A, C] = ???
+
     def to[C](using ev: B =:= C): Shuffled[A, C] =
       ev.substituteCo(this)
 
@@ -736,5 +741,9 @@ class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     ) extends ChaseBwRes[A, G, X]
 
     case Split[A, G[_], X, X1, X2](ev: X =:= (X1 |*| X2)) extends ChaseBwRes[A, G, X]
+  }
+
+  enum ProjectRes[A, C] {
+    case Projected[A0, A, C](p: Projection[|*|, A, A0], f: Shuffled[A0, C]) extends ProjectRes[A, C]
   }
 }

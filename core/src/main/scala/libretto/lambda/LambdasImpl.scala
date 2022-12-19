@@ -525,8 +525,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     private def weaveInOp[F[_], X, Y](i: Focus[|*|, F], f: Op[X, Y])(using ev: B =:= F[X]): HybridArrow[A, F[Y]] =
       pullOut(i, f) match {
-        case Some(HybridArrow(v, t)) => HybridArrow(v, t > shOp.lift(Op.DiscardFst()).at(i))
-        case None                    => HybridArrow(v, tail.to[F[X]] > shOp.lift(f).at(i))
+        case Some(HybridArrow(v, t)) =>
+          val t1 = discardFst(t, i)
+          HybridArrow(v, t1)
+        case None =>
+          HybridArrow(v, tail.to[F[X]] > shOp.lift(f).at(i))
       }
 
     private def pullOut[F[_], X, Y](i: Focus[|*|, F], op: Op[X, Y])(using ev: B =:= F[X]): Option[HybridArrow[A, F[X |*| Y]]] =
@@ -538,7 +541,49 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   }
 
   private object HybridArrow {
-    sealed trait Op[A, B] {}
+    sealed trait Op[A, B] {
+      import Op._
+
+      def project[C](p: Projection[|*|, B, C]): Tail[A, C] =
+        p match {
+          case Projection.Id() =>
+            shOp.lift(this)
+          case p: Projection.DiscardFst[pair, b1, b2] =>
+            this.projectSnd[b1, b2]
+          case p: Projection.DiscardSnd[pair, b1, b2] =>
+            this.projectFst[b1, b2]
+          case Projection.Fst(p1) =>
+            bug(s"Did not realize that the first output of $this can be projected from")
+          case Projection.Snd(p2) =>
+            bug(s"Did not realize that the second output of $this can be projected from")
+          case Projection.Par(p1, p2) =>
+            bug(s"Did not realize that both outputs of $this can be projected from")
+        }
+
+      private def projectFst[B1, B2](using ev: B =:= (B1 |*| B2)): Tail[A, B1] =
+        this match {
+          case u: Unzip[a, a1, a2] =>
+            val BiInjective[|*|](va1_b1, _) = summon[(Var[a1] |*| Var[a2]) =:= B] andThen ev
+            shOp.lift(Prj1[a, a1, a2](u.u, u.resultVar1, u.resultVar2)).to[B1](using va1_b1)
+          case op: DupVar[a] =>
+            val BiInjective[|*|](va_b1, _) = summon[(Var[a] |*| Var[a]) =:= B] andThen ev
+            shOp.id.to[B1](using va_b1)
+          case other =>
+            bug(s"Did not realize that $other can be projected from")
+        }
+
+      private def projectSnd[B1, B2](using ev: B =:= (B1 |*| B2)): Tail[A, B2] =
+        this match {
+          case u: Unzip[a, a1, a2] =>
+            val BiInjective[|*|](_, va2_b2) = summon[(Var[a1] |*| Var[a2]) =:= B] andThen ev
+            shOp.lift(Prj2[a, a1, a2](u.u, u.resultVar1, u.resultVar2)).to[B2](using va2_b2)
+          case op: DupVar[a] =>
+            val BiInjective[|*|](_, va_b2) = summon[(Var[a] |*| Var[a]) =:= B] andThen ev
+            shOp.id.to[B2](using va_b2)
+          case other =>
+            bug(s"Did not realize that $other can be projected from")
+        }
+    }
     object Op {
       case class Zip[A1, A2, B1, B2](u1: Untag[A1, B1], u2: Untag[A2, B2], resultVar: Var[B1 |*| B2]) extends Op[A1 |*| A2, Var[B1 |*| B2]]
 
@@ -551,6 +596,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
               (testEqual(p.unusedVar, q.resultVar), testEqual(p.resultVar, q.unusedVar)) match
                 case (Some(ev1), Some(ev2)) =>
                   Some(shOp.lift(Unzip(p.u, p.unusedVar, p.resultVar)) > shOp.swap[Var[b1], Var[b2]].to(using ev1.liftCo[[t] =>> B |*| Var[t]]))
+                case (None, None) =>
+                  None
+                case (Some(_), None) =>
+                  bug(s"Variable ${p.unusedVar} appeared as a result of two different projections")
+                case (None, Some(_)) =>
+                  bug(s"Variable ${p.resultVar} appeared as a result of two different projections")
+            case (p: Prj2[a, b1, b2], q: Unzip[a_, c1, c2]) =>
+              (testEqual(p.unusedVar, q.resultVar1), testEqual(p.resultVar, q.resultVar2)) match
+                case (Some(ev1), Some(ev2)) =>
+                  Some(shOp.lift(q) > shOp.snd(shOp.lift(DupVar())) > shOp.xi > shOp.fst(shOp.id(ev2.flip.liftCo[Var])))
                 case (None, None) =>
                   None
                 case (Some(_), None) =>
@@ -572,7 +627,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       case class DupVar[A]() extends Op[Var[A], Var[A] |*| Var[A]]
       case class CaptureFst[A, A0, X](x: Expr[X], u: Untag[A, A0], resultVar: Var[X |*| A0]) extends Op[A, Var[X |*| A0]]
       case class CaptureSnd[A, A0, X](u: Untag[A, A0], x: Expr[X], resultVar: Var[A0 |*| X]) extends Op[A, Var[A0 |*| X]]
-      case class DiscardFst[A1, A2]() extends Op[A1 |*| A2, A2]
+      // case class DiscardFst[A1, A2]() extends Op[A1 |*| A2, A2]
     }
 
     val shOp = new Shuffled[Op, |*|]
@@ -635,8 +690,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           UnhandledCase.raise(s"t = $t; i = $i; op = $op")
         case Op.Zip(u1, u2, resultVar) =>
           UnhandledCase.raise(s"t = $t; i = $i; op = $op")
-        case Op.DiscardFst() =>
-          UnhandledCase.raise(s"t = $t; i = $i; op = $op")
+        // case Op.DiscardFst() =>
+        //   UnhandledCase.raise(s"t = $t; i = $i; op = $op")
       }
     }
 
@@ -660,12 +715,18 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
               w.i match
                 case Focus.Id() =>
                   val xvv0: X =:= Var[v0] = summon[X =:= w1[X]] andThen w1xvv0
-                  val xxwx: (X |*| X) =:= W[X] = (xvv0 zipEq xvv0) andThen summon[(Var[v0] |*| Var[v0]) =:= WX] andThen ev
+                  val vv0vv0_wx: (Var[v0] |*| Var[v0]) =:= W[X] = summon[(Var[v0] |*| Var[v0]) =:= WX] andThen ev
+                  val xxwx: (X |*| X) =:= W[X] = (xvv0 zipEq xvv0) andThen vv0vv0_wx
                   pushOut[[x] =>> F[X |*| x], X, Y, G[X]](post.from(using xxwx.liftCo[F]), i compose Focus.snd[|*|, X], op) match
                     case Some(post1) =>
                       ???
                     case None =>
-                      ???
+                      pullOut[A, F, X, Y](pre.to[F[X]](using xvv0.flip.liftCo[F]), i, op) match
+                        case Some(pre1) =>
+                          val post1: Tail[F[X], G[X]] = (shOp.id(xvv0) > shOp.lift(Op.DupVar[v0]()).to(using vv0vv0_wx)).at[F](i) > post
+                          Some(pre1 > shOp.extractSnd[F, X, Y](i) > post1.inFst)
+                        case None =>
+                          ???
                 case Focus.Fst(_) =>
                   throw new AssertionError() // TODO: derive contradiction
                 case Focus.Snd(_) =>
@@ -696,8 +757,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           UnhandledCase.raise(s"$obstacle at $w followed by $op")
         case Op.Unzip(u, resultVar1, resultVar2) =>
           UnhandledCase.raise(s"$obstacle at $w followed by $op")
-        case Op.DiscardFst() =>
-          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+        // case Op.DiscardFst() =>
+        //   UnhandledCase.raise(s"$obstacle at $w followed by $op")
         case Op.Map(u, f, resultVar) =>
           UnhandledCase.raise(s"$obstacle at $w followed by $op")
         case Op.Prj1(u, resultVar, unusedVar) =>
@@ -749,6 +810,29 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case Focus.Snd(v2) =>
           UnhandledCase.raise(s"$op hit obstacle $obstacle at $v")
       }
+
+    def discardFst[A, G[_], X, Y](t: Tail[Var[A], G[X |*| Y]], g: Focus[|*|, G]): Tail[Var[A], G[Y]] = {
+      val prj: Projection[|*|, G[X |*| Y], G[Y]] = Projection.discardFst[|*|, X, Y].at[G](g)
+      t.project(prj, [t, u, v] => (op: Op[t, u], p: Projection[|*|, u, v]) => op.project(p)) match
+        case shOp.ProjectRes.Projected(p, f) =>
+          p match
+            case Projection.Id() =>
+              f
+            case _: Projection.Proper[pair, p, q] =>
+              throw AssertionError("Cannot project from Var[A]") // TODO: derive contradiction
+
+      // type GY[T] = G[T |*| Y]
+      // t.chaseBw[GY, X](g compose Focus.fst) match
+      //   case s: shOp.ChaseBwRes.Split[a, gy, x, x1, x2] =>
+      //     val t1: Tail[A, G[x1 |*| (x2 |*| Y)]] = t.to[G[(x1 |*| x2) |*| Y]](using s.ev.liftCo[[t] =>> G[t |*| Y]]) > shOp.assocLR[x1, x2, Y].at(g)
+      //     discardFst[A, G, x1, x2 |*| Y](t1, g) flatMap { t2 =>
+      //       discardFst(t2, g)
+      //     }
+      //   case tr: shOp.ChaseBwRes.Transported[a, f, gy, x] =>
+      //     None
+      //   case r: shOp.ChaseBwRes.OriginatesFrom[a, f, v, w, x, gy] =>
+      //     UnhandledCase.raise(s"${r.f} at ${r.w}")
+    }
 
     enum LinearRes[A, B] {
       case Exact[A, A1, B](m: Multiplier[|*|, A, A1], f: AbstractFun[A1, B]) extends LinearRes[A, B]
