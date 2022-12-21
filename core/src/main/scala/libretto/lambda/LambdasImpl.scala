@@ -544,19 +544,19 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     sealed trait Op[A, B] {
       import Op._
 
-      def project[C](p: Projection[|*|, B, C]): Tail[A, C] =
+      def project[C](p: Projection[|*|, B, C]): shOp.ProjectRes[A, C] =
         p match {
           case Projection.Id() =>
-            shOp.lift(this)
-          case p: Projection.DiscardFst[pair, b1, b2] =>
-            this.projectSnd[b1, b2]
-          case p: Projection.DiscardSnd[pair, b1, b2] =>
-            this.projectFst[b1, b2]
+            shOp.ProjectRes.Projected(Projection.id, shOp.lift(this))
+          case p: Projection.DiscardFst[pair, b1, b2, c] =>
+            this.projectSnd[b1, b2].project(p.p2, Op.project)
+          case p: Projection.DiscardSnd[pair, b1, b2, c] =>
+            this.projectFst[b1, b2].project(p.p1, Op.project)
           case Projection.Fst(p1) =>
             bug(s"Did not realize that the first output of $this can be projected from")
           case Projection.Snd(p2) =>
             bug(s"Did not realize that the second output of $this can be projected from")
-          case Projection.Par(p1, p2) =>
+          case Projection.Both(p1, p2) =>
             bug(s"Did not realize that both outputs of $this can be projected from")
         }
 
@@ -628,6 +628,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       case class CaptureFst[A, A0, X](x: Expr[X], u: Untag[A, A0], resultVar: Var[X |*| A0]) extends Op[A, Var[X |*| A0]]
       case class CaptureSnd[A, A0, X](u: Untag[A, A0], x: Expr[X], resultVar: Var[A0 |*| X]) extends Op[A, Var[A0 |*| X]]
       // case class DiscardFst[A1, A2]() extends Op[A1 |*| A2, A2]
+
+      val project: [t, u, v] => (op: Op[t, u], p: Projection[|*|, u, v]) => shOp.ProjectRes[t, v] =
+        [t, u, v] => (op: Op[t, u], p: Projection[|*|, u, v]) => op.project(p)
     }
 
     val shOp = new Shuffled[Op, |*|]
@@ -813,7 +816,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     def discardFst[A, G[_], X, Y](t: Tail[Var[A], G[X |*| Y]], g: Focus[|*|, G]): Tail[Var[A], G[Y]] = {
       val prj: Projection[|*|, G[X |*| Y], G[Y]] = Projection.discardFst[|*|, X, Y].at[G](g)
-      t.project(prj, [t, u, v] => (op: Op[t, u], p: Projection[|*|, u, v]) => op.project(p)) match
+      t.project(prj, Op.project) match
         case shOp.ProjectRes.Projected(p, f) =>
           p match
             case Projection.Id() =>

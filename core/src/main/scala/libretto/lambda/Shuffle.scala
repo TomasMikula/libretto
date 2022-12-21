@@ -1,7 +1,8 @@
 package libretto.lambda
 
-import libretto.util.BiInjective
+import libretto.util.{BiInjective, TypeEq}
 import libretto.util.BiInjective._
+import libretto.util.TypeEq.Refl
 
 class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
   sealed trait ~⚬[A, B] {
@@ -43,8 +44,15 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       }
     }
 
+    def projectProper[C](p: Projection.Proper[|*|, B, C]): ProjectProperRes[A, C]
     def chaseFw[F[_], X](i: Focus[|*|, F])(using ev: A =:= F[X]): ChaseFwRes[F, X, B]
     def chaseBw[G[_], X](i: Focus[|*|, G])(using ev: B =:= G[X]): ChaseBwRes[A, G, X]
+
+    def project[C](p: Projection[|*|, B, C]): ProjectRes[A, C] =
+      p match {
+        case Projection.Id()                 => ProjectRes.Projected(Projection.Id(), this)
+        case p: Projection.Proper[|*|, B, C] => projectProper(p).unproper
+      }
 
     def to[C](using ev: B =:= C): A ~⚬ C =
       ev.substituteCo(this)
@@ -77,6 +85,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def ev: X =:= X =
         summon[X =:= X]
 
+      override def projectProper[C](p: Projection.Proper[|*|, X, C]): ProjectProperRes[X, C] =
+        ProjectProperRes.Projected[C, X, C](p, id[C])
+
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: X =:= F[T]): ChaseFwRes[F, T, X] =
         ChaseFwRes.Transported[F, T, F, X]([t] => (_: Unit) => Id[F[t]](), i, ev.flip)
 
@@ -107,10 +118,21 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (Y1 |*| Y2) =:= G[T]): ChaseBwRes[X1 |*| X2, G, T] =
         par.chaseBw(i)
+
+      override def projectProper[C](p: Projection.Proper[|*|, Y1 |*| Y2, C]): ProjectProperRes[X1 |*| X2, C] =
+        par.projectProper(p)
     }
 
     /** An operator that transfers resources across inputs. */
     case class Xfer[A1, A2, X1, X2, B1, B2](f1: A1 ~⚬ X1, f2: A2 ~⚬ X2, transfer: Transfer[X1, X2, B1, B2]) extends Composed[A1 |*| A2, B1 |*| B2] {
+      override def projectProper[C](p: Projection.Proper[|*|, B1 |*| B2, C]): ProjectProperRes[A1 |*| A2, C] =
+        transfer.projectProper(p) match {
+          case ProjectProperRes.Projected(px, t) =>
+            par(f1, f2).projectProper(px) match
+              case ProjectProperRes.Projected(pa, f) =>
+                ProjectProperRes.Projected(pa, f > t)
+        }
+
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: (A1 |*| A2) =:= F[T]): ChaseFwRes[F, T, B1 |*| B2] =
         i match {
           case Focus.Id() =>
@@ -320,6 +342,18 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         override def inSnd[Y, Z](fst: Y ~⚬ Z): ChaseBwRes[Y |*| A, [x] =>> Z |*| G[x], X] = Split(ev)
       }
     }
+
+    enum ProjectRes[A, C] {
+      case Projected[A0, A, C](p: Projection[|*|, A, A0], f: A0 ~⚬ C) extends ProjectRes[A, C]
+    }
+
+    enum ProjectProperRes[A, C] {
+      case Projected[A0, A, C](p: Projection.Proper[|*|, A, A0], f: A0 ~⚬ C) extends ProjectProperRes[A, C]
+
+      def unproper: ProjectRes[A, C] =
+        this match
+          case Projected(p, f) => ProjectRes.Projected(p, f)
+    }
   }
   import ~⚬._
 
@@ -335,6 +369,34 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         case Snd(f2)      => Snd(f2.invert)
         case Both(f1, f2) => Both(f1.invert, f2.invert)
       }
+
+    def projectProper[C](p: Projection.Proper[|*|, Y1 |*| Y2, C]): ProjectProperRes[X1 |*| X2, C] = {
+      import libretto.lambda.{Projection => P}
+      val Par(f1, f2) = this
+      p.fromPair[Y1, Y2].switch[ProjectProperRes[X1 |*| X2, C]](
+        caseDiscardFst = { p2 =>
+          f2.project(p2) match
+            case ProjectRes.Projected(p0, f0) => ProjectProperRes.Projected(P.discardFst(p0), f0)
+        },
+        caseDiscardSnd = { p1 =>
+          f1.project(p1) match
+            case ProjectRes.Projected(p0, f0) => ProjectProperRes.Projected(P.discardSnd(p0), f0)
+        },
+        casePar = [q1, q2] => (ev: C =:= (q1 |*| q2)) ?=> (p: P.Par[|*|, Y1, Y2, q1, q2]) =>                                                      ev match { case TypeEq(Refl()) =>
+          p match
+            case P.Fst(p1) =>
+              f1.projectProper(p1) match
+                case ProjectProperRes.Projected(p0, f0) => ProjectProperRes.Projected(P.Fst(p0), par(f0, f2).to[C])
+            case P.Snd(p2) =>
+              f2.projectProper(p2) match
+                case ProjectProperRes.Projected(p0, f0) => ProjectProperRes.Projected(P.Snd(p0), par(f1, f0).to[C])
+            case P.Both(p1, p2) =>
+              (f1.projectProper(p1), f2.projectProper(p2)) match
+                case (ProjectProperRes.Projected(q1, g1), ProjectProperRes.Projected(q2, g2)) =>
+                  ProjectProperRes.Projected(P.Both(q1, q2), par(g1, g2).to[C])
+        },
+      )
+    }
 
     def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: (X1 |*| X2) =:= F[T]): ChaseFwRes[F, T, Y1 |*| Y2] =
       i match {
@@ -429,8 +491,15 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
   sealed trait TransferOpt[A1, A2, B1, B2] {
     def fold[->[_, _]](using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2)
 
+    def projectProper[C](p: Projection.Proper[|*|, B1 |*| B2, C]): ProjectProperRes[A1 |*| A2, C]
     def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2)): ChaseFwRes[F, T, B1 |*| B2]
     def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2) =:= G[T]): ChaseBwRes[A1 |*| A2, G, T]
+
+    def project[C](p: Projection[|*|, B1 |*| B2, C]): ProjectRes[A1 |*| A2, C] =
+      p match {
+        case Projection.Id()                    => ProjectRes.Projected(Projection.id, this.asShuffle)
+        case p: Projection.Proper[|*|, b1b2, c] => projectProper(p).unproper
+      }
 
     def pairWith[X3, X4, Z1, Z2](
       that: TransferOpt[X3, X4, Z1, Z2],
@@ -495,6 +564,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         that: Transfer.IXI[X1, X2, X3, X4, Y1, Y2, Y3, Y4],
       ): BiTransferOpt[X1 |*| X2, X3 |*| X4, A1, A2, Y1 |*| Y2, Y3 |*| Y4, A1, A2] =
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.ixiPairWith_:($that)")
+
+      override def projectProper[C](p: Projection.Proper[|*|, A1 |*| A2, C]): ProjectProperRes[A1 |*| A2, C] =
+        ProjectProperRes.Projected(p, id[C])
 
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2)): ChaseFwRes[F, T, A1 |*| A2] =
         ChaseFwRes.Transported[F, T, F, A1 |*| A2]([t] => (_: Unit) => id[F[t]], i, ev)
@@ -622,6 +694,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     case class Swap[X1, X2]() extends Transfer[X1, X2, X2, X1] {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, X1, X2]): (Z1 |*| Z2) ~⚬ (X2 |*| X1) =
         that.thenSwap
+
+      override def projectProper[C](p: Projection.Proper[|*|, X2 |*| X1, C]): ProjectProperRes[X1 |*| X2, C] = ???
 
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (X1 |*| X2)): ChaseFwRes[F, T, X2 |*| X1] =
         i match
@@ -778,6 +852,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, A1 |*| A2, A3]): (Z1 |*| Z2) ~⚬ (A1 |*| (B2 |*| B3)) =
         that thenAssocLR this
 
+      override def projectProper[C](p: Projection.Proper[|*|, A1 |*| (B2 |*| B3), C]): ProjectProperRes[A1 |*| A2 |*| A3, C] = ???
+
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2 |*| A3)): ChaseFwRes[F, T, A1 |*| (B2 |*| B3)] =
         UnhandledCase.raise(s"AssocLR.chaseFw($i)")
 
@@ -916,6 +992,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     case class AssocRL[A1, A2, A3, B1, B2](g: TransferOpt[A1, A2, B1, B2]) extends Transfer[A1, A2 |*| A3, B1 |*| B2, A3] {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, A1, A2 |*| A3]): (Z1 |*| Z2) ~⚬ ((B1 |*| B2) |*| A3) =
         that.thenAssocRL(this)
+
+      override def projectProper[C](p: Projection.Proper[|*|, B1 |*| B2 |*| A3, C]): ProjectProperRes[A1 |*| (A2 |*| A3), C] = ???
 
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| (A2 |*| A3))): ChaseFwRes[F, T, B1 |*| B2 |*| A3] =
         UnhandledCase.raise(s"AssocRL.chaseFw($i)")
@@ -1065,6 +1143,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     case class IX[A1, A2, A3, B1, B2](g: TransferOpt[A1, A3, B1, B2]) extends Transfer[A1 |*| A2, A3, B1 |*| B2, A2] {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, A1 |*| A2, A3]): (Z1 |*| Z2) ~⚬ ((B1 |*| B2) |*| A2) =
         that.thenIX(this)
+
+      override def projectProper[C](p: Projection.Proper[|*|, B1 |*| B2 |*| A2, C]): ProjectProperRes[A1 |*| A2 |*| A3, C] = ???
 
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2 |*| A3)): ChaseFwRes[F, T, B1 |*| B2 |*| A2] =
         UnhandledCase.raise(s"IX.chaseFw($i)")
@@ -1223,6 +1303,45 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     case class XI[A1, A2, A3, B2, B3](g: TransferOpt[A1, A3, B2, B3]) extends Transfer[A1, A2 |*| A3, A2, B2 |*| B3] {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, A1, A2 |*| A3]): (Z1 |*| Z2) ~⚬ (A2 |*| (B2 |*| B3)) =
         that thenXI this
+
+      override def projectProper[C](p: Projection.Proper[|*|, A2 |*| (B2 |*| B3), C]): ProjectProperRes[A1 |*| (A2 |*| A3), C] = {
+        import libretto.lambda.{Projection => P}
+
+        p.fromPair[A2, B2 |*| B3].switch[ProjectProperRes[A1 |*| (A2 |*| A3), C]](
+          caseDiscardFst = p2 =>
+            g.asShuffle.project(p2) match
+              case ProjectRes.Projected(pa, g1) =>
+                ProjectProperRes.Projected(P.Snd(P.discardFst) > pa, g1),
+          caseDiscardSnd = p1 =>
+            ProjectProperRes.Projected(P.discardFst(P.discardSnd(p1)), id),
+          casePar = [Q1, Q2] => (ev: C =:= (Q1 |*| Q2)) ?=> (p: P.Par[|*|, A2, B2 |*| B3, Q1, Q2]) =>                                            ev match { case TypeEq(Refl()) =>
+            p match
+              case P.Fst(p1) =>
+                ProjectProperRes.Projected(P.Snd(P.Fst(p1)), XI(g).asShuffle.to[C])
+              case P.Snd(p2) =>
+                g.projectProper(p2) match
+                  case ProjectProperRes.Projected(pa, g1) =>
+                    def go[X](pa: P.Proper[|*|, A1 |*| A3, X], g1: X ~⚬ Q2): ProjectProperRes[A1 |*| (A2 |*| A3), C] =
+                      pa.fromPair[A1, A3].switch[ProjectProperRes[A1 |*| (A2 |*| A3), C]](
+                        caseDiscardFst = pa3 => ProjectProperRes.Projected(P.discardFst(P.snd(pa3)), snd(g1)),
+                        caseDiscardSnd = pa1 => ProjectProperRes.Projected(P.par2(pa1, P.discardSnd[|*|, A2, A3]), swap[X, A2] > snd(g1)),
+                        casePar = [q1, q3] => (ev: X =:= (q1 |*| q3)) ?=> (pa: P.Par[|*|, A1, A3, q1, q3]) =>                                   ev match { case TypeEq(Refl()) =>
+                          pa match
+                            case P.Fst(pa1) =>
+                              ProjectProperRes.Projected(P.Fst(pa1), xi[q1, A2, A3] > snd(g1))
+                            case P.Snd(pa3) =>
+                              ProjectProperRes.Projected(P.Snd(P.Snd(pa3)), xi[A1, A2, q3] > snd(g1))
+                            case P.Both(pa1, pa3) =>
+                              ProjectProperRes.Projected(P.Both(pa1, P.Snd(pa3)), xi[q1, A2, q3] > snd(g1))
+                        },
+                      )
+
+                    go(pa, g1)
+              case P.Both(p1, p2) =>
+                ???
+          },
+        )
+      }
 
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| (A2 |*| A3))): ChaseFwRes[F, T, A2 |*| (B2 |*| B3)] =
         UnhandledCase.raise(s"XI.chaseFw($i)")
@@ -1400,10 +1519,12 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, A1 |*| A2, A3 |*| A4]): (Z1 |*| Z2) ~⚬ ((B1 |*| B2) |*| (B3 |*| B4)) =
         that thenIXI this
 
-      override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2 |*| (A3 |*| A4))): ChaseFwRes[F, T, B1 |*| B2 |*| (B3 |*| B4)] =
+      override def projectProper[C](p: Projection.Proper[|*|, (B1 |*| B2) |*| (B3 |*| B4), C]): ProjectProperRes[(A1 |*| A2) |*| (A3 |*| A4), C] = ???
+
+      override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= ((A1 |*| A2) |*| (A3 |*| A4))): ChaseFwRes[F, T, (B1 |*| B2) |*| (B3 |*| B4)] =
         UnhandledCase.raise(s"IXI.chaseFw($i)")
 
-      override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2 |*| (B3 |*| B4)) =:= G[T]): ChaseBwRes[A1 |*| A2 |*| (A3 |*| A4), G, T] = ???
+      override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: ((B1 |*| B2) |*| (B3 |*| B4)) =:= G[T]): ChaseBwRes[(A1 |*| A2) |*| (A3 |*| A4), G, T] = ???
 
       override def thenBi[C1, C2](h1: (B1 |*| B2) ~⚬ C1, h2: (B3 |*| B4) ~⚬ C2): Xfer[A1 |*| A2, A3 |*| A4, _, _, C1, C2] =
         (decompose1(g1.asShuffle > h1), decompose1(g2.asShuffle > h2)) match {
