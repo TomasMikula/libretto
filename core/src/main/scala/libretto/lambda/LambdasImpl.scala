@@ -2,7 +2,8 @@ package libretto.lambda
 
 import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.lambda.Lambdas.ErrorFactory
-import libretto.util.BiInjective
+import libretto.util.{BiInjective, TypeEq}
+import libretto.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
 class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
@@ -592,6 +593,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
         def gcd[C](that: SingleSource[A, C]): Option[Tail[A, B |*| C]] =
           (this, that) match {
+            case (p: Prj1[a, b1, b2], q: Prj2[a_, c1, c2]) =>
+              (testEqual(p.resultVar, q.unusedVar), testEqual(p.unusedVar, q.resultVar)) match
+                case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+                  Some(shOp.lift(Unzip(p.u, p.resultVar, p.unusedVar)))
+                case (None, None) =>
+                  None
+                case (Some(_), None) =>
+                  bug(s"Variable ${p.resultVar} appeared as a result of two different projections")
+                case (None, Some(_)) =>
+                  bug(s"Variable ${p.unusedVar} appeared as a result of two different projections")
             case (p: Prj2[a, b1, b2], q: Prj1[a_, c1, c2]) =>
               (testEqual(p.unusedVar, q.resultVar), testEqual(p.resultVar, q.unusedVar)) match
                 case (Some(ev1), Some(ev2)) =>

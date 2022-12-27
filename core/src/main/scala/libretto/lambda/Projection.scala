@@ -31,6 +31,12 @@ object Projection {
 
     override def >[R](that: Projection[|*|, Q, R]): Proper[|*|, P, R] = ???
 
+    def inFst[X2]: Proper[|*|, P |*| X2, Q |*| X2] =
+      Fst(this)
+
+    def inSnd[X1]: Proper[|*|, X1 |*| P, X1 |*| Q] =
+      Snd(this)
+
     def fromPair[P1, P2](using P =:= (P1 |*| P2)): FromPair[P1, P2] =
       FromPair[P1, P2]
 
