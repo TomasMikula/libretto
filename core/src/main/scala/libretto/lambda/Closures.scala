@@ -25,11 +25,12 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
     f: Expr[A =⚬ B],
     a: Expr[A],
   )(
+    auxVar: Var[(A =⚬ B) |*| A],
     resultVar: Var[B],
   )(using
     ev: ClosedSemigroupalCategory[-⚬, |*|, =⚬],
   ): Expr[B] =
-    (f par a).map(ev.eval[A, B])(resultVar)
+    (f zip a)(auxVar).map(ev.eval[A, B])(resultVar)
 
   def closure[A, B](
     f: Expr[A] => Expr[B],

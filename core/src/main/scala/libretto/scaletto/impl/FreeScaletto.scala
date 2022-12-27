@@ -430,7 +430,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     override def map[A, B](a: $[A])(f: A -⚬ B)(
       pos: SourcePos,
     ): $[B] =
-      (a map f)(new Var[B](VarOrigin.FunApp(pos)))
+      (a map f)(new Var[B](VarOrigin.FunAppRes(pos)))
 
     override def zip[A, B](a: $[A], b: $[B])(
       pos: SourcePos,
@@ -448,7 +448,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     override def app[A, B](f: $[A =⚬ B], a: $[A])(
       pos: SourcePos,
     ): $[B] =
-      closures.app(f, a)(new Var[B](VarOrigin.FunApp(pos)))
+      closures.app(f, a)(
+        new Var[(A =⚬ B) |*| A](VarOrigin.FunAndArg(pos)),
+        new Var[B](VarOrigin.FunAppRes(pos)),
+      )
   }
 
   override val λ = new LambdaOpsWithClosures {

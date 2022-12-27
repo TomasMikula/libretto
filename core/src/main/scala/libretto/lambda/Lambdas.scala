@@ -44,7 +44,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     def variable[A](a: Var[A]): Expr[A]
     def map[A, B](e: Expr[A], f: A -⚬ B, resultVar: Var[B]): Expr[B]
     def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[A |*| B]): Expr[A |*| B]
-    def par[A, B](a: Expr[A], b: Expr[B]): Expr[A |*| B]
     def unzip[A, B](ab: Expr[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (Expr[A], Expr[B])
     def terminalVars[A](a: Expr[A]): Vars[A]
   }
@@ -57,10 +56,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     @targetName("exprZip")
     def zip[B](b: Expr[B])(resultVar: Var[A |*| B]): Expr[A |*| B] =
       Expr.zip(a, b, resultVar)
-
-    @targetName("exprPar")
-    def par[B](b: Expr[B]): Expr[A |*| B] =
-      Expr.par(a, b)
 
     @targetName("exprTerminalVars")
     def terminalVars: Vars[A] =
