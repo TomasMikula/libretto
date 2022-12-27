@@ -8,6 +8,10 @@ sealed trait Projection[|*|[_, _], P, Q] {
 
   def >[R](that: Projection[|*|, Q, R]): Projection[|*|, P, R]
 
+  def inFst[Y]: Projection[|*|, P |*| Y, Q |*| Y]
+
+  def inSnd[X]: Projection[|*|, X |*| P, X |*| Q]
+
   def from[O](using ev: O =:= P): Projection[|*|, O, Q] =
     ev.substituteContra[[p] =>> Projection[|*|, p, Q]](this)
 
@@ -19,6 +23,8 @@ object Projection {
   case class Id[|*|[_, _], P]() extends Projection[|*|, P, P] {
     override def at[F[_]](f: Focus[|*|, F]): Projection[|*|, F[P], F[P]] = Id()
     override def >[R](that: Projection[|*|, P, R]): Projection[|*|, P, R] = that
+    override def inFst[Y]: Projection[|*|, P |*| Y, P |*| Y] = Id()
+    override def inSnd[X]: Projection[|*|, X |*| P, X |*| P] = Id()
   }
 
   sealed trait Proper[|*|[_, _], P, Q] extends Projection[|*|, P, Q] {
@@ -47,10 +53,10 @@ object Projection {
 
     protected def projectSnd[Q1, Q2, R2](using ev: Q =:= (Q1 |*| Q2))(p2: Proper[|*|, Q2, R2]): Proper[|*|, P, Q1 |*| R2]
 
-    def inFst[X2]: Proper[|*|, P |*| X2, Q |*| X2] =
+    override def inFst[X2]: Proper[|*|, P |*| X2, Q |*| X2] =
       Fst(this)
 
-    def inSnd[X1]: Proper[|*|, X1 |*| P, X1 |*| Q] =
+    override def inSnd[X1]: Proper[|*|, X1 |*| P, X1 |*| Q] =
       Snd(this)
 
     def fromPair[P1, P2](using P =:= (P1 |*| P2)): FromPair[P1, P2] =

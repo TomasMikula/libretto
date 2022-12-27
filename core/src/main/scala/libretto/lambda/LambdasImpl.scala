@@ -690,7 +690,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             case ChaseBwRes.Transported(_, _, _) =>
               None
             case r: ChaseBwRes.OriginatesFrom[a, f, v, w, x, g] =>
-              pullBump(r.pre, r.i, r.f, r.w, r.post, op)
+              pullBump(r.pre, r.f, r.post, op)(r.i, r.w)
                 .map(_ > shOp.absorbSnd(i))
             case ChaseBwRes.Split(ev) =>
               // TODO: prove impossible
@@ -709,120 +709,135 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       }
     }
 
-    def pullBump[A, F[_], V, WX, W[_], X, G[_], Y](
+    def pullBump[A, F[_], V, CX, C[_], X, G[_], Y](
       pre: Tail[A, F[V]],
-      i: Focus[|*|, F],
-      obstacle: Op[V, WX],
-      w: Focus[|*|, W],
-      post: Tail[F[W[X]], G[X]],
+      obstacle: Op[V, CX],
+      post: Tail[F[C[X]], G[X]],
       op: Op.SingleSource[X, Y],
+    )(
+      F: Focus[|*|, F],
+      C: Focus[|*|, C],
     )(using
-      ev: WX =:= W[X],
+      ev: CX =:= C[X],
     ): Option[Tail[A, G[X] |*| Y]] = {
       obstacle match
         case o: Op.DupVar[v0] =>
-          summon[V =:= Var[v0]]
-          summon[WX =:= (Var[v0] |*| Var[v0])]
-          w match
-            case w: Focus.Fst[pair, w1, q] =>
-              val BiInjective[|*|](w1xvv0, qvv0) = summon[(w1[X] |*| q) =:= W[X]] andThen ev.flip andThen summon[WX =:= (Var[v0] |*| Var[v0])]
-              w.i match
-                case Focus.Id() =>
-                  val xvv0: X =:= Var[v0] = summon[X =:= w1[X]] andThen w1xvv0
-                  val vv0vv0_wx: (Var[v0] |*| Var[v0]) =:= W[X] = summon[(Var[v0] |*| Var[v0]) =:= WX] andThen ev
-                  val xxwx: (X |*| X) =:= W[X] = (xvv0 zipEq xvv0) andThen vv0vv0_wx
-                  pushOut[[x] =>> F[X |*| x], X, Y, G[X]](post.from(using xxwx.liftCo[F]), i compose Focus.snd[|*|, X], op) match
-                    case Some(post1) =>
-                      ???
-                    case None =>
-                      pullOut[A, F, X, Y](pre.to[F[X]](using xvv0.flip.liftCo[F]), i, op) match
-                        case Some(pre1) =>
-                          val post1: Tail[F[X], G[X]] = (shOp.id(xvv0) > shOp.lift(Op.DupVar[v0]()).to(using vv0vv0_wx)).at[F](i) > post
-                          Some(pre1 > shOp.extractSnd[F, X, Y](i) > post1.inFst)
-                        case None =>
-                          ???
-                case Focus.Fst(_) =>
-                  throw new AssertionError() // TODO: derive contradiction
-                case Focus.Snd(_) =>
-                  throw new AssertionError() // TODO: derive contradiction
-            case w: Focus.Snd[pair, w2, p] =>
-              val BiInjective[|*|](pvv0, w2xvv0) = summon[(p |*| w2[X]) =:= W[X]] andThen ev.flip andThen summon[WX =:= (Var[v0] |*| Var[v0])]
-              w.i match
-                case Focus.Id() =>
-                  val xvv0: X =:= Var[v0] = summon[X =:= w2[X]] andThen w2xvv0
-                  val xxwx: (X |*| X) =:= W[X] = (xvv0 zipEq xvv0) andThen summon[(Var[v0] |*| Var[v0]) =:= WX] andThen ev
-                  pushOut[[x] =>> F[x |*| X], X, Y, G[X]](post.from(using xxwx.liftCo[F]), i compose Focus.fst[|*|, X], op) match
-                    case Some(post1) =>
-                      Some(pre > shOp.lift(Op.DupVar[v0]()).to[X |*| X](using (xvv0 zipEq xvv0).flip).at[F](i) > post1)
-                    case None =>
-                      ???
-                case Focus.Fst(_) =>
-                  throw new AssertionError() // TODO: derive contradiction
-                case Focus.Snd(_) =>
-                  throw new AssertionError() // TODO: derive contradiction
-            case Focus.Id() =>
-              val contraEv: X =:= (Var[v0] |*| Var[v0]) = summon[X =:= W[X]] andThen ev.flip andThen summon[WX =:= (Var[v0] |*| Var[v0])]
-              op.deriveContradiction(using contraEv)
+          pullBumpDupVar[A, F, v0, C, X, G, Y](pre, post, op)(F, C)(using
+            ev.flip andThen summon[CX =:= (Var[v0] |*| Var[v0])],
+          )
         case Op.Zip(u1, u2, resultVar) =>
-          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+          UnhandledCase.raise(s"$obstacle at $C followed by $op")
         case Op.CaptureFst(x, u, resultVar) =>
-          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+          UnhandledCase.raise(s"$obstacle at $C followed by $op")
         case Op.CaptureSnd(u, x, resultVar) =>
-          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+          UnhandledCase.raise(s"$obstacle at $C followed by $op")
         case Op.Unzip(u, resultVar1, resultVar2) =>
-          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+          UnhandledCase.raise(s"$obstacle at $C followed by $op")
         // case Op.DiscardFst() =>
-        //   UnhandledCase.raise(s"$obstacle at $w followed by $op")
+        //   UnhandledCase.raise(s"$obstacle at $C followed by $op")
         case Op.Map(u, f, resultVar) =>
-          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+          UnhandledCase.raise(s"$obstacle at $C followed by $op")
         case Op.Prj1(u, resultVar, unusedVar) =>
-          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+          UnhandledCase.raise(s"$obstacle at $C followed by $op")
         case Op.Prj2(u, unusedVar, resultVar) =>
-          UnhandledCase.raise(s"$obstacle at $w followed by $op")
+          UnhandledCase.raise(s"$obstacle at $C followed by $op")
     }
 
-    def pushOut[F[_], X, Y, B](t: Tail[F[X], B], i: Focus[|*|, F], op: Op[X, Y]): Option[Tail[F[X], B |*| Y]] =
+    def pullBumpDupVar[A, F[_], V, C[_], X, G[_], Y](
+      pre: Tail[A, F[Var[V]]],
+      post: Tail[F[C[X]], G[X]],
+      op: Op.SingleSource[X, Y],
+    )(
+      F: Focus[|*|, F],
+      C: Focus[|*|, C],
+    )(using
+      ev: C[X] =:= (Var[V] |*| Var[V]),
+    ): Option[Tail[A, G[X] |*| Y]] = ev match { case TypeEq(Refl()) =>
+      C match
+        case c: Focus.Fst[pair, c1, q] =>
+          (summon[(c1[X] |*| q) =:= C[X]] andThen ev) match { case BiInjective[|*|](c1x_vv @ TypeEq(Refl()), q_vv @ TypeEq(Refl())) =>
+            c.i match
+              case Focus.Id() =>
+                (summon[X =:= c1[X]] andThen c1x_vv) match { case TypeEq(Refl()) =>
+                  pushOut[[x] =>> F[X |*| x], X, Y, G[X]](post, op)(F compose Focus.snd[|*|, X]) match
+                    case Some(post1) =>
+                      ???
+                    case None =>
+                      pullOut[A, F, X, Y](pre.to[F[X]], F, op) match
+                        case Some(pre1) =>
+                          val post1: Tail[F[X], G[X]] = shOp.lift(Op.DupVar[V]()).to[C[X]].at(F) > post
+                          Some(pre1 > shOp.extractSnd[F, X, Y](F) > post1.inFst)
+                        case None =>
+                          ???
+                }
+              case Focus.Fst(_) =>
+                throw new AssertionError() // TODO: derive contradiction
+              case Focus.Snd(_) =>
+                throw new AssertionError() // TODO: derive contradiction
+          }
+        case c: Focus.Snd[pair, c2, p] =>
+          (summon[(p |*| c2[X]) =:= C[X]] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), c2x_vv @ TypeEq(Refl())) =>
+            c.i match
+              case Focus.Id() =>
+                (summon[X =:= c2[X]] andThen c2x_vv) match { case TypeEq(Refl()) =>
+                  pushOut[[x] =>> F[x |*| X], X, Y, G[X]](post, op)(F compose Focus.fst[|*|, X]) match
+                    case Some(post1) =>
+                      Some(pre > shOp.lift(Op.DupVar[V]()).to[X |*| X].at(F) > post1)
+                    case None =>
+                      ???
+                }
+              case Focus.Fst(_) =>
+                throw new AssertionError() // TODO: derive contradiction
+              case Focus.Snd(_) =>
+                throw new AssertionError() // TODO: derive contradiction
+          }
+        case Focus.Id() =>
+          op.deriveContradiction[Var[V], Var[V]]
+    }
+
+    def pushOut[F[_], X, Y, B](t: Tail[F[X], B], op: Op[X, Y])(F: Focus[|*|, F]): Option[Tail[F[X], B |*| Y]] =
       op match {
         case op: Op.SingleSource[X, Y] =>
-          t.chaseFw(i) match {
+          t.chaseFw(F) match {
             case r: shOp.ChaseFwRes.FedTo[f, x, v, w, g, b] =>
-              pushBump(r.pre, r.v, r.f, r.g, r.post, op)
+              pushBump(r.pre, r.f, r.post, op)(r.v, r.g)
             case shOp.ChaseFwRes.Transported(_, _, _) =>
               None
             case shOp.ChaseFwRes.Split(_) =>
               bug(s"Unexpected pair of expressions fed to $op")
           }
         case other =>
-          UnhandledCase.raise(s"Pushing out $op from $t at $i")
+          UnhandledCase.raise(s"Pushing out $op from $t at $F")
       }
 
-    def pushBump[F[_], X, V[_], W, G[_], B, Y](
-      pre: Tail[F[X], G[V[X]]],
-      v: Focus[|*|, V],
-      obstacle: Op[V[X], W],
-      g: Focus[|*|, G],
+    def pushBump[F[_], X, C[_], W, G[_], B, Y](
+      pre: Tail[F[X], G[C[X]]],
+      obstacle: Op[C[X], W],
       post: Tail[G[W], B],
       op: Op.SingleSource[X, Y],
+    )(
+      C: Focus[|*|, C],
+      G: Focus[|*|, G],
     ): Option[Tail[F[X], B |*| Y]] =
-      v match {
+      C match {
         case Focus.Id() =>
-          summon[X =:= V[X]]
+          summon[X =:= C[X]]
           obstacle match
             case ob: Op.SingleSource[x, W] =>
               summon[x =:= X]
               (ob gcd op) map { (f: Tail[X, W |*| Y]) =>
-                pre > f.at(g) > shOp.extractSnd[G, W, Y](g) > post.inFst[Y]
+                pre > f.at(G) > shOp.extractSnd[G, W, Y](G) > post.inFst[Y]
               }
             case Op.Zip(_, _, _) =>
-              UnhandledCase.raise(s"$op hit obstacle $obstacle at $v")
+              UnhandledCase.raise(s"$op hit obstacle $obstacle at $C")
             case Op.DupVar() =>
-              UnhandledCase.raise(s"$op hit obstacle $obstacle at $v")
+              UnhandledCase.raise(s"$op hit obstacle $obstacle at $C")
             case other =>
-              UnhandledCase.raise(s"$op hit obstacle $obstacle at $v")
-        case Focus.Fst(v1) =>
-          UnhandledCase.raise(s"$op hit obstacle $obstacle at $v")
-        case Focus.Snd(v2) =>
-          UnhandledCase.raise(s"$op hit obstacle $obstacle at $v")
+              UnhandledCase.raise(s"$op hit obstacle $obstacle at $C")
+        case Focus.Fst(c1) =>
+          UnhandledCase.raise(s"$op hit obstacle $obstacle at $C")
+        case Focus.Snd(c2) =>
+          UnhandledCase.raise(s"$op hit obstacle $obstacle at $C")
       }
 
     def discardFst[A, G[_], X, Y](t: Tail[Var[A], G[X |*| Y]], g: Focus[|*|, G]): Tail[Var[A], G[Y]] = {
