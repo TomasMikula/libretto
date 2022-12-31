@@ -1544,29 +1544,32 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               i.i.inFst[A3].inSnd[A1],
               [t] => (_: Unit) => XI[A1, g1[t], A3, B2, B3](g).asShuffle > snd(Id0(b2b3_b)),
             )
-          case i: Focus.Snd[pair, g2, a] =>
-            val BiInjective[|*|](a2_a, b2b3_g2t) = ev andThen summon[G[T] =:= (a |*| g2[T])]
+          case i: Focus.Snd[pair, g2, a] =>                                                                             (ev andThen summon[G[T] =:= (a |*| g2[T])]) match { case BiInjective[|*|](TypeEq(Refl()), b2b3_g2t) =>
             g.chaseBw[g2, T](i.i)(using b2b3_g2t) match
               case ChaseBwRes.Split(ev) =>
                 ChaseBwRes.Split(ev)
-              case tr: ChaseBwRes.Transported[a, f, g2, t] =>
+              case tr: ChaseBwRes.Transported[a, f, g2, t] =>                                                           tr.ev match { case TypeEq(Refl()) =>
                 tr.f match
                   case Focus.Id() =>
                     ChaseBwRes.Split(tr.ev.flip andThen summon[a =:= (A1 |*| A3)])
                   case j: Focus.Fst[pair, f1, q] =>
-                    val BiInjective[|*|](a1_f1t, a3_q) = summon[(A1 |*| A3) =:= a] andThen tr.ev
-                    ChaseBwRes.Transported[A1 |*| (A2 |*| A3), [t] =>> f1[t] |*| (A2 |*| A3), G, T](
-                      a1_f1t zip summon[(A2 |*| A3) =:= (A2 |*| A3)],
-                      j.i.inFst[A2 |*| A3],
-                      [t] => (_: Unit) => {
-                        val m: (f1[t] |*| A3) ~⚬ f[t] = snd(Id0(a3_q))
-                        val post: f[t] ~⚬ g2[t]       = tr.s[t](())
-                        val n: (A2 |*| g2[t]) ~⚬ G[t] = fst(Id0(a2_a))
-                        xi[f1[t], A2, A3] > snd(m > post) > n
-                      },
-                    )
+                    (summon[(A1 |*| A3) =:= a] andThen tr.ev) match { case BiInjective[|*|](a1_f1t, TypeEq(Refl())) =>
+                      ChaseBwRes.Transported[A1 |*| (A2 |*| A3), [t] =>> f1[t] |*| (A2 |*| A3), G, T](
+                        a1_f1t zip summon[(A2 |*| A3) =:= (A2 |*| A3)],
+                        j.i.inFst[A2 |*| A3],
+                        [t] => (_: Unit) => xi[f1[t], A2, A3] > snd(tr.s[t](())),
+                      )
+                    }
                   case j: Focus.Snd[pair, f2, p] =>
-                    UnhandledCase.raise(s"$j")
+                    (summon[(A1 |*| A3) =:= a] andThen tr.ev) match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+                      ChaseBwRes.Transported[A1 |*| (A2 |*| A3), [t] =>> A1 |*| (A2 |*| f2[t]), G, T](
+                        summon,
+                        j.i.inSnd[A2].inSnd[A1],
+                        [t] => (_: Unit) => xi[A1, A2, f2[t]] > snd(tr.s[t](())),
+                      )
+                    }
+              }
+          }
         }
 
       override def thenBi[C1, C2](g1: A2 ~⚬ C1, g2: (B2 |*| B3) ~⚬ C2): Xfer[A1, A2 |*| A3, _, _, C1, C2] =
