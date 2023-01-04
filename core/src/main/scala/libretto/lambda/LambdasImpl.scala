@@ -13,7 +13,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 ) extends Lambdas[-⚬, |*|, Var, VarSet, E, LE] {
   import variables.testEqual
 
-  val shuffled = new Shuffled[-⚬, |*|]
+  val shuffled = Shuffled[-⚬, |*|]
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
   import shuffled.{Shuffled => ≈⚬, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
 

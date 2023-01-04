@@ -2,8 +2,27 @@ package libretto.lambda
 
 import libretto.util.BiInjective
 
-class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
-  val shuffle = new Shuffle[|*|]
+object Shuffled {
+  type With[->[_, _], |*|[_, _], S <: Shuffle[|*|]] =
+    Shuffled[->, |*|] {
+      val shuffle: S
+    }
+
+  def apply[->[_, _], |*|[_, _]](sh: Shuffle[|*|])(using BiInjective[|*|]): Shuffled.With[->, |*|, sh.type] =
+    new ShuffledImpl[->, |*|, sh.type](sh)
+
+  def apply[->[_, _], |*|[_, _]](using BiInjective[|*|]): Shuffled[->, |*|] =
+    Shuffled[->, |*|](new Shuffle[|*|])
+
+  private class ShuffledImpl[->[_, _], |*|[_, _], S <: Shuffle[|*|]](
+    override val shuffle: S,
+  )(using
+    BiInjective[|*|],
+  ) extends Shuffled[->, |*|]
+}
+
+sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
+  val shuffle: Shuffle[|*|]
   import shuffle.{~⚬, Transfer, TransferOpt}
 
   sealed trait Shuffled[A, B] {
