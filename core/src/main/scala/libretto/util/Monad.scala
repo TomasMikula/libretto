@@ -8,7 +8,7 @@ trait Monad[F[_]] extends Applicative[F] {
 
   def pure[A](a: A): F[A]
 
-  override def map[A, B](fa: F[A])(f: A => B): F[B] =
+  override def map[A, B](fa: F[A], f: A => B): F[B] =
     flatMap(fa)(a => pure(f(a)))
 
   override def ap[A, B](ff: F[A => B])(fa: F[A]): F[B] =
@@ -19,7 +19,7 @@ object Monad {
   object syntax {
     extension [F[_], A](fa: F[A])(using F: Monad[F]) {
       def map[B](f: A => B): F[B] =
-        F.map(fa)(f)
+        F.map(fa, f)
 
       def flatMap[B](f: A => F[B]): F[B] =
         F.flatMap(fa)(f)

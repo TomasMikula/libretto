@@ -1,7 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.Lambdas.Error.LinearityViolation
-import libretto.util.BiInjective
+import libretto.util.{BiInjective, Semigroup}
 import scala.annotation.targetName
 
 trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
@@ -101,12 +101,29 @@ object Lambdas {
   object Error {
     case class Undefined[VarSet](vars: VarSet) extends Error[VarSet]
 
-    sealed trait LinearityViolation[VarSet] extends Error[VarSet]
+    sealed trait LinearityViolation[VarSet] extends Error[VarSet] {
+      import LinearityViolation._
+
+      def combine(that: LinearityViolation[VarSet])(using ev: Semigroup[VarSet]): LinearityViolation[VarSet] =
+        (this, that) match {
+          case (Overused(s),     Overused(t)    ) => Overused(ev.combine(s, t))
+          case (Overused(s),     Underused(t)   ) => OverUnder(s, t)
+          case (Overused(s),     OverUnder(t, u)) => OverUnder(ev.combine(s, t), u)
+          case (Underused(s),    Overused(t)    ) => OverUnder(t, s)
+          case (Underused(s),    Underused(t)   ) => Underused(ev.combine(s, t))
+          case (Underused(s),    OverUnder(t, u)) => OverUnder(t, ev.combine(s, u))
+          case (OverUnder(s, t), Overused(u)    ) => OverUnder(ev.combine(s, u), t)
+          case (OverUnder(s, t), Underused(u)   ) => OverUnder(s, ev.combine(t, u))
+          case (OverUnder(s, t), OverUnder(u, v)) => OverUnder(ev.combine(s, u), ev.combine(t, v))
+        }
+    }
 
     object LinearityViolation {
       case class Overused[VarSet](vars: VarSet) extends LinearityViolation[VarSet]
 
       case class Underused[VarSet](vars: VarSet) extends LinearityViolation[VarSet]
+
+      case class OverUnder[VarSet](overused: VarSet, underused: VarSet) extends LinearityViolation[VarSet]
     }
 
     def overusedVar[Var[_], VarSet, A](v: Var[A])(using
@@ -129,15 +146,18 @@ object Lambdas {
     def underusedVars(vs: VarSet): LE
     def overusedVars(vs: VarSet): LE
 
+    def combineLinear(l: LE, r: LE): LE
+
     def undefinedVars(vs: VarSet): E
 
     def fromLinearityViolation(e: LE): E
   }
 
   object ErrorFactory {
-    given canonicalInstance[VarSet]: ErrorFactory[Error[VarSet], LinearityViolation[VarSet], VarSet] with {
+    given canonicalInstance[VarSet: Semigroup]: ErrorFactory[Error[VarSet], LinearityViolation[VarSet], VarSet] with {
       override def overusedVars(vs: VarSet): LinearityViolation[VarSet] = LinearityViolation.Overused(vs)
       override def underusedVars(vs: VarSet): LinearityViolation[VarSet] = LinearityViolation.Underused(vs)
+      override def combineLinear(l: LinearityViolation[VarSet], r: LinearityViolation[VarSet]): LinearityViolation[VarSet] = l combine r
       override def undefinedVars(vs: VarSet): Error[VarSet] = Error.Undefined(vs)
       override def fromLinearityViolation(e: LinearityViolation[VarSet]): Error[VarSet] = e
     }
