@@ -2,7 +2,7 @@ package libretto.lambda
 
 import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.lambda.Lambdas.ErrorFactory
-import libretto.util.{Applicative, BiInjective, Exists, TypeEq}
+import libretto.util.{Applicative, BiInjective, Exists, Masked, TypeEq}
 import libretto.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
@@ -308,6 +308,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
       def terminalVars(a: Varz[A]): Varz[B] =
         ???
+
+      def maskInput: Masked[Op[*, B], A] =
+        Masked[Op[*, B], A](this)
     }
     object Op {
       sealed trait Linear[A, B] extends Op[A, B]
@@ -664,7 +667,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     ): Option[Tail[F[Var[X]], B |*| Y]] =
       t.chaseFw(F) match {
         case r: shOp.ChaseFwRes.FedTo[f, x, v, w, g, b] =>
-          pushBump(r.pre, r.f, r.post, op)(r.v, r.g, D)
+          pushBump(r.pre(()), r.f, r.post, op)(r.v, r.g, D)
         case shOp.ChaseFwRes.Transported(_, _, _) =>
           None
         case shOp.ChaseFwRes.Split(_) =>
@@ -710,7 +713,60 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     }
 
     def demultiply[V, B](t: Tail[Var[V], B]): Demultiplied[V, B] =
-      ???
+      demultiplyAt[[x] =>> x, V, B](t)(Focus.id[|*|]) match {
+        case DemultipliedAt.Impl(m, t) => Demultiplied.Impl(m, t)
+      }
+
+    def demultiplyAt[F[_], X, B](t: Tail[F[Var[X]], B])(F: Focus[|*|, F]): DemultipliedAt[F, X, B] =
+      t.chaseFw(F) match {
+        case bumped: shOp.ChaseFwRes.FedTo[f, vx, v, w, g, b] =>
+          def go[V[_], W, G[_]](bumped: shOp.ChaseFwRes.FedTo[F, Var[X], V, W, G, B]): DemultipliedAt[F, X, B] = {
+            bumped.f.maskInput.visit[DemultipliedAt[F, X, B]]([VVX] => (op: Op[VVX, W], ev: VVX =:= V[Var[X]]) => {
+              op match {
+                case op: Op.DupVar[y] =>
+                  bumped.v match {
+                    case Focus.Id() =>
+                      summon[V[Var[X]] =:= Var[X]]
+                      summon[Var[y] =:= VVX]
+                      type G1[T] = G[T |*| Var[y]]
+                      demultiplyAt[G1, y, B](bumped.post)(bumped.g compose Focus.fst) match {
+                        case d: DemultipliedAt.Impl[g1, y, a, b] =>
+                          type G2[T] = G[a |*| T]
+                          demultiplyAt[G2, y, B](d.t)(bumped.g compose Focus.snd) match {
+                            case DemultipliedAt.Impl(m2, t) =>
+                              DemultipliedAt.Impl(Multiplier.dup(d.m, m2).from(using ev.flip), bumped.pre(()) > t)
+                          }
+                      }
+                    case _: Focus.Fst[pair, v1, z] =>
+                      varIsNotPair(summon[Var[y] =:= VVX] andThen ev andThen summon[V[Var[X]] =:= (v1[Var[X]] |*| z)])
+                    case _: Focus.Snd[pair, v2, z] =>
+                      varIsNotPair(summon[Var[y] =:= VVX] andThen ev andThen summon[V[Var[X]] =:= (z |*| v2[Var[X]])])
+                  }
+                case other =>
+                  DemultipliedAt.Impl(Multiplier.id[|*|, Var[X]], t)
+              }
+            })
+          }
+          go(bumped)
+        case shOp.ChaseFwRes.Transported(_, _, _) =>
+          DemultipliedAt.Impl(Multiplier.id[|*|, Var[X]], t)
+        case shOp.ChaseFwRes.Split(ev) =>
+          varIsNotPair(ev)
+      }
+
+    enum Demultiplied[V, B] {
+      case Impl[V, A, B](
+        m: Multiplier[|*|, Var[V], A],
+        t: Tail[A, B],
+      ) extends Demultiplied[V, B]
+    }
+
+    enum DemultipliedAt[F[_], V, B] {
+      case Impl[F[_], V, A, B](
+        m: Multiplier[|*|, Var[V], A],
+        t: Tail[F[A], B],
+      ) extends DemultipliedAt[F, V, B]
+    }
 
     def extractLinear[A, B, X, Y](a: Varz[A], t: Tail[A, B])(u: Unvar[A, X], v: Unvar[B, Y]): LinearRes[X, Y] = {
       val vt: VTail[A, B] =
@@ -762,13 +818,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       case Exact[A, A1, B](m: Multiplier[|*|, A, A1], f: AbstractFun[A1, B]) extends TailLinearRes[A, B]
       case Closure[X, A, A1, B](captured: Expr[X], m: Multiplier[|*|, A, A1], f: AbstractFun[X |*| A1, B]) extends TailLinearRes[A, B]
       case Violation(e: LE)
-    }
-
-    enum Demultiplied[V, B] {
-      case Impl[V, A, B](
-        m: Multiplier[|*|, Var[V], A],
-        t: Tail[A, B],
-      ) extends Demultiplied[V, B]
     }
 
     sealed trait Unvar[A, B] {

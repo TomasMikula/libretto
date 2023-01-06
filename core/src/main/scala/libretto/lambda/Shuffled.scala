@@ -282,7 +282,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
                   ChaseFwRes.Split(ev)
                 case r: Plated.ChaseFwRes.FedTo[g2, t, v, w, h, y2] =>
                   ChaseFwRes.FedTo[F, T, v, w, [t] =>> X1 |*| h[t], B1 |*| B2](
-                    Pure(tr.s[T](())) > par(id(x1p.flip), r.pre),
+                    [t] => (_: Unit) => Pure(tr.s[t](())) > par(id(x1p.flip), r.pre[t](())),
                     r.v,
                     r.f,
                     r.g.inSnd[X1],
@@ -388,7 +388,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         h(f, p)
 
       override def chaseFw[F[_], X](i: Focus[|*|, F])(using ev: A =:= F[X]): ChaseFwRes[F, X, B] =
-        ChaseFwRes.FedTo[F, X, F, B, [x] =>> x, B](id[F[X]], i, ev.substituteCo[[x] =>> x -> B](f), Focus.id, id[B])
+        ChaseFwRes.FedTo[F, X, F, B, [x] =>> x, B]([x] => (_: Unit) => id[F[x]], i, ev.substituteCo[[x] =>> x -> B](f), Focus.id, id[B])
 
       override def chaseBw[G[_], X](i: Focus[|*|, G])(using ev: B =:= G[X]): ChaseBwRes[A, G, X] =
         ChaseBwRes.OriginatesFrom[A, [x] =>> x, A, G, X, G](id[A], Focus.id, ev.substituteCo(f), i, id[G[X]])
@@ -628,7 +628,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     object ChaseFwRes {
       case class FedTo[F[_], X, V[_], W, G[_], B](
-        pre: Shuffled[F[X], G[V[X]]],
+        pre: [x] => Unit => Shuffled[F[x], G[V[x]]],
         v: Focus[|*|, V],
         f: V[X] -> W,
         g: Focus[|*|, G],
@@ -906,10 +906,14 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   }
 
   enum ChaseFwRes[F[_], X, B] {
-    case Transported[F[_], X, G[_], B](s: [x] => Unit => Shuffled[F[x], G[x]], g: Focus[|*|, G], ev: G[X] =:= B) extends ChaseFwRes[F, X, B]
+    case Transported[F[_], X, G[_], B](
+      s: [x] => Unit => Shuffled[F[x], G[x]],
+      g: Focus[|*|, G],
+      ev: G[X] =:= B,
+    ) extends ChaseFwRes[F, X, B]
 
     case FedTo[F[_], X, V[_], W, G[_], B](
-      pre: Shuffled[F[X], G[V[X]]],
+      pre: [x] => Unit => Shuffled[F[x], G[V[x]]],
       v: Focus[|*|, V],
       f: V[X] -> W,
       g: Focus[|*|, G],
