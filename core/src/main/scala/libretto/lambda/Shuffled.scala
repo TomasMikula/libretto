@@ -36,12 +36,12 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     def unconsSome: UnconsSomeRes[A, B]
 
     def sweepL[F[_], ->>[_, _]](
+      a: F[A],
       f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
     )(using
       tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
       F: Cartesian[|*|, F],
-    ): tgt.Shuffled[A, B] =
-      ???
+    ): (tgt.Shuffled[A, B], F[B])
 
     def traverse[G[_]: Applicative, ->>[_, _]](
       f: [t, u] => (t -> u) => G[t ->> u],
@@ -51,7 +51,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     def translate[->>[_, _], <*>[_, _], F[_, _], S](
       fa: F[A, S],
-      m: ArrowMap[->, |*|, ->>, <*>, F],
+      om: ObjectMap[|*|, <*>, F],
+      am: ArrowMap[->, ->>, F],
     )(using
       tgt: libretto.lambda.Shuffled[->>, <*>],
     ): Exists[[T] =>> (tgt.Shuffled[S, T], F[B, T])] = ???
@@ -122,6 +123,19 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     ): G[tgt.Shuffled[A, B]] =
       m.traverse(f).map { m1 => tgt.Impermeable(l, m1, r) }
 
+    override def sweepL[F[_], ->>[_,_]](
+      a: F[A],
+      f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
+    )(using
+      tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
+      F: Cartesian[|*|, F],
+    ): (tgt.Shuffled[A, B], F[B]) = {
+      val x: F[X] = l(a)
+      val (m1, y) = m.sweepL[F, ->>](x, f)
+      val b = r(y)
+      (tgt.Impermeable(l, m1, r), b)
+    }
+
     override def project[C](
       p: Projection[|*|, B, C],
       f: [P, Q, R] => (P -> Q, Projection[|*|, Q, R]) => ProjectRes[P, R],
@@ -148,7 +162,10 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     override def chaseFw[F[_], T](i: Focus[|*|, F])(using A =:= F[T]): ChaseFwRes[F, T, B] =
       l.chaseFw(i) match
         case tr: ~⚬.ChaseFwRes.Transported[f, t, g, x] =>
-          ???
+          m.chaseFw[g, T](tr.g)(using tr.ev.flip)
+            .andThen(Pure(r))
+            .unplated
+            .afterShuffle(tr.s)
         case ~⚬.ChaseFwRes.Split(ev) =>
           ChaseFwRes.Split(ev)
   }
@@ -202,6 +219,14 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
     ): G[tgt.Shuffled[A, B]] =
       Applicative[G].pure(tgt.Pure(s))
+
+    override def sweepL[F[_], ->>[_,_]](
+      a: F[A],
+      f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
+    )(using
+      tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
+      F: Cartesian[|*|, F],
+    ): (tgt.Shuffled[A, B], F[B]) = ???
   }
 
   case class SemiObstructed[A, X1, X2, Y2, Z2, B1, B2](
@@ -262,6 +287,14 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
             c.f,
             (c.post thenShuffle bottom2).inSnd thenShuffle right.asShuffle,
           )
+
+    override def sweepL[F[_], ->>[_,_]](
+      a: F[A],
+      f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
+    )(using
+      tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
+      F: Cartesian[|*|, F],
+    ): (tgt.Shuffled[A, B1 |*| B2], F[B1 |*| B2]) = ???
 
     override def traverse[G[_]: Applicative, ->>[_,_]](f: [t, u] => (t -> u) => G[->>[t, u]])(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): G[tgt.Shuffled[A, B1 |*| B2]] = ???
 
@@ -355,6 +388,14 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
     ): G[tgt.Plated[A, B]]
 
+    def sweepL[F[_], ->>[_,_]](
+      a: F[A],
+      f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
+    )(using
+      tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
+      F: Cartesian[|*|, F],
+    ): (tgt.Plated[A, B], F[B])
+
     def projectProper[C](
       p: Projection.Proper[|*|, B, C],
       f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z],
@@ -393,7 +434,23 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       override def chaseBw[G[_], X](i: Focus[|*|, G])(using ev: B =:= G[X]): ChaseBwRes[A, G, X] =
         ChaseBwRes.OriginatesFrom[A, [x] =>> x, A, G, X, G](id[A], Focus.id, ev.substituteCo(f), i, id[G[X]])
 
-      override def traverse[G[_]: Applicative, ->>[_,_]](f: [t, u] => (t -> u) => G[->>[t, u]])(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): G[tgt.Plated[A, B]] = ???
+      override def traverse[G[_]: Applicative, ->>[_, _]](
+        g: [t, u] => (t -> u) => G[t ->> u],
+      )(using
+        tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
+      ): G[tgt.Plated[A, B]] =
+        g(f).map(tgt.Plated.Solid(_))
+
+      override def sweepL[F[_], ->>[_, _]](
+        a: F[A],
+        g: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
+      )(using
+        tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
+        F: Cartesian[|*|, F],
+      ): (tgt.Plated[A, B], F[B]) = {
+        val (f1, b) = g(a, f)
+        (tgt.Plated.Solid(f1), b)
+      }
     }
 
     case class Stacked[A1, A2, B1, B2](f1: Plated[A1, B1], f2: Plated[A2, B2]) extends Plated[A1 |*| A2, B1 |*| B2] {
@@ -422,6 +479,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
       override def traverse[G[_]: Applicative, ->>[_,_]](f: [t, u] => (t -> u) => G[->>[t, u]])(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): G[tgt.Plated[A1 |*| A2, B1 |*| B2]] =
         ???
+
+      override def sweepL[F[_], ->>[_,_]](a: F[A1 |*| A2], f: [t, u] => (F[t], t -> u) => (->>[t, u], F[u]))(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type], F: Cartesian[|*|, F]): (tgt.Plated[A1 |*| A2, B1 |*| B2], F[B1 |*| B2]) = ???
     }
 
     case class Sandwich[A, X, Y, B](l: Plated[A, X], m: X ~⚬ Y, r: Plated[Y, B]) extends Plated[A, B] {
@@ -444,7 +503,31 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       override def chaseBw[G[_], X](i: Focus[|*|, G])(using ev: B =:= G[X]): ChaseBwRes[A, G, X] =
         r.chaseBw(i) after (l.asShuffled thenShuffle m)
 
-      override def traverse[G[_]: Applicative, ->>[_,_]](f: [t, u] => (t -> u) => G[->>[t, u]])(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): G[tgt.Plated[A, B]] = ???
+      override def traverse[G[_]: Applicative, ->>[_, _]](
+        f: [t, u] => (t -> u) => G[t ->> u],
+      )(using
+        tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
+      ): G[tgt.Plated[A, B]] = {
+        Applicative[G].map2(
+          l.traverse(f),
+          r.traverse(f),
+        ) { (l1, r1) =>
+          tgt.Plated.Sandwich(l1, m, r1)
+        }
+      }
+
+      override def sweepL[F[_], ->>[_, _]](
+        a: F[A],
+        f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
+      )(using
+        tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
+        F: Cartesian[|*|, F],
+      ): (tgt.Plated[A, B], F[B]) = {
+        val (l1, x) = l.sweepL[F, ->>](a, f)
+        val y = m(x)
+        val (r1, b) = r.sweepL[F, ->>](y, f)
+        (tgt.Plated.Sandwich(l1, m, r1), b)
+      }
     }
 
     case class SemiCons[A1, A2, X2, Y2, Z1, Z2, B](
@@ -476,6 +559,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         tail.chaseBw(i) after (semiHead.asShuffled thenShuffle s).inSnd[A1].thenShuffle(t.asShuffle)
 
       override def traverse[G[_]: Applicative, ->>[_,_]](f: [t, u] => (t -> u) => G[->>[t, u]])(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): G[tgt.Plated[A1 |*| A2, B]] = ???
+
+      override def sweepL[F[_], ->>[_,_]](a: F[A1 |*| A2], f: [t, u] => (F[t], t -> u) => (->>[t, u], F[u]))(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type], F: Cartesian[|*|, F]): (tgt.Plated[A1 |*| A2, B], F[B]) = ???
     }
 
     case class SemiSnoc[A, X1, X2, Y2, Z2, B1, B2](
@@ -540,7 +625,9 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         )
       }
 
-      override def chaseFw[F[_], X](i: Focus[|*|, F])(using A =:= F[X]): ChaseFwRes[F, X, B1 |*| B2] = ???
+      override def chaseFw[F[_], T](i: Focus[|*|, F])(using A =:= F[T]): ChaseFwRes[F, T, B1 |*| B2] =
+        init.chaseFw[F, T](i)
+          .andThen(Pure(t.asShuffle > ~⚬.snd(s)) > snd(semiLast.asShuffled))
 
       override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2) =:= G[T]): ChaseBwRes[A, G, T] =
         i match
@@ -569,7 +656,31 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
                 .after(init.asShuffled > Pure(t.asShuffle))
             )
 
-      override def traverse[G[_]: Applicative, ->>[_,_]](f: [t, u] => (t -> u) => G[->>[t, u]])(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): G[tgt.Plated[A, B1 |*| B2]] = ???
+      override def traverse[G[_]: Applicative, ->>[_, _]](
+        f: [t, u] => (t -> u) => G[t ->> u],
+      )(using
+        tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
+      ): G[tgt.Plated[A, B1 |*| B2]] =
+        Applicative[G].map2(
+          init.traverse(f),
+          semiLast.traverse(f),
+        ) { (init1, semiLast1) =>
+          tgt.Plated.SemiSnoc(init1, t.rebase(tgt), s, semiLast1)
+        }
+
+      override def sweepL[F[_], ->>[_, _]](
+        a: F[A],
+        f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
+      )(using
+        tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
+        F: Cartesian[|*|, F],
+      ): (tgt.Plated[A, B1 |*| B2], F[B1 |*| B2]) = {
+        val (init1, x) = init.sweepL[F, ->>](a, f)
+        val (b1, y2)   = F.unzip(t.asShuffle(x))
+        val z2         = s(y2)
+        val (sl1, b2)  = semiLast.sweepL[F, ->>](z2, f)
+        (tgt.Plated.SemiSnoc(init1, t.rebase(tgt), s, sl1), F.zip(b1, b2))
+      }
     }
 
     case class XI[A1, A2, P1, P2, Q, R, S1, S2, B1, B2](
@@ -610,6 +721,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         ???
 
       override def traverse[G[_]: Applicative, ->>[_,_]](f: [t, u] => (t -> u) => G[->>[t, u]])(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): G[tgt.Plated[A1 |*| A2, B1 |*| B2]] = ???
+
+      override def sweepL[F[_], ->>[_,_]](a: F[A1 |*| A2], f: [t, u] => (F[t], t -> u) => (->>[t, u], F[u]))(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type], F: Cartesian[|*|, F]): (tgt.Plated[A1 |*| A2, B1 |*| B2], F[B1 |*| B2]) = ???
     }
 
     case class Preshuffled[A, X, B](s: A ~⚬ X, t: Plated[X, B])
@@ -624,6 +737,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     sealed trait ChaseFwRes[F[_], X, B] {
       def andThen[C](that: Shuffled[B, C]): ChaseFwRes[F, X, C]
+
+      def unplated: Shuffled.this.ChaseFwRes[F, X, B]
     }
 
     object ChaseFwRes {
@@ -636,10 +751,14 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       ) extends ChaseFwRes[F, X, B] {
         override def andThen[C](that: Shuffled[B, C]): ChaseFwRes[F, X, C] =
           FedTo(pre, v, f, g, post > that)
+
+        override def unplated: Shuffled.this.ChaseFwRes[F, X, B] =
+          Shuffled.this.ChaseFwRes.FedTo(pre, v, f, g, post)
       }
 
       case class Split[F[_], X, X1, X2, B](ev: X =:= (X1 |*| X2)) extends ChaseFwRes[F, X, B] {
         override def andThen[C](that: Shuffled[B, C]): ChaseFwRes[F, X, C] = Split(ev)
+        override def unplated: Shuffled.this.ChaseFwRes[F, X, B] = Shuffled.this.ChaseFwRes.Split(ev)
       }
     }
 
@@ -685,6 +804,9 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     def asShuffle: (A1 |*| A2) ~⚬ (B1 |*| B2) =
       t.asShuffle.invert
+
+    def rebase[->>[_, _]](tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): tgt.RevTransferOpt[A1, A2, B1, B2] =
+      tgt.RevTransferOpt(t)
   }
 
   def id[X]: Shuffled[X, X] =
@@ -905,22 +1027,38 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     ) extends UnconsSomeRes[A, B]
   }
 
-  enum ChaseFwRes[F[_], X, B] {
-    case Transported[F[_], X, G[_], B](
+  sealed trait ChaseFwRes[F[_], X, B] {
+    def after[H[_]](h: [x] => Unit => Shuffled[H[x], F[x]]): ChaseFwRes[H, X, B]
+
+    def afterShuffle[H[_]](h: [x] => Unit => H[x] ~⚬ F[x]): ChaseFwRes[H, X, B] =
+      this.after[H]([t] => (_: Unit) => Pure(h[t](())))
+  }
+
+  object ChaseFwRes {
+    case class Transported[F[_], X, G[_], B](
       s: [x] => Unit => Shuffled[F[x], G[x]],
       g: Focus[|*|, G],
       ev: G[X] =:= B,
-    ) extends ChaseFwRes[F, X, B]
+    ) extends ChaseFwRes[F, X, B] {
+      override def after[H[_]](h: [x] => Unit => Shuffled[H[x], F[x]]): ChaseFwRes[H, X, B] =
+        Transported([x] => (_: Unit) => h[x](()) > s[x](()), g, ev)
+    }
 
-    case FedTo[F[_], X, V[_], W, G[_], B](
+    case class FedTo[F[_], X, V[_], W, G[_], B](
       pre: [x] => Unit => Shuffled[F[x], G[V[x]]],
       v: Focus[|*|, V],
       f: V[X] -> W,
       g: Focus[|*|, G],
       post: Shuffled[G[W], B],
-    ) extends ChaseFwRes[F, X, B]
+    ) extends ChaseFwRes[F, X, B] {
+      override def after[H[_]](h: [x] => Unit => Shuffled[H[x], F[x]]): ChaseFwRes[H, X, B] =
+        FedTo([x] => (_: Unit) => h[x](()) > pre[x](()), v, f, g, post)
+    }
 
-    case Split[F[_], X, X1, X2, B](ev: X =:= (X1 |*| X2)) extends ChaseFwRes[F, X, B]
+    case class Split[F[_], X, X1, X2, B](ev: X =:= (X1 |*| X2)) extends ChaseFwRes[F, X, B] {
+      override def after[H[_]](h: [x] => Unit => Shuffled[H[x], F[x]]): ChaseFwRes[H, X, B] =
+        Split(ev)
+    }
   }
 
   enum ChaseBwRes[A, G[_], X] {

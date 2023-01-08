@@ -1,6 +1,6 @@
 package libretto.lambda
 
-trait ArrowMap[-->[_, _], |*|[_, _], ->>[_, _], <*>[_, _], F[_, _]] {
+trait ArrowMap[-->[_, _], ->>[_, _], F[_, _]] {
   sealed trait Image[A, B] {
     type A1
     type B1

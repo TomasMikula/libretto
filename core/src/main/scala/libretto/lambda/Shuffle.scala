@@ -76,6 +76,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       m: ObjectMap[|*|, <*>, F],
       sh: Shuffle[<*>],
     ): Exists[[t] =>> (F[B, t], sh.~⚬[X, t])]
+
+    def apply[F[_]](a: F[A])(using Cartesian[|*|, F]): F[B]
   }
 
   object ~⚬ {
@@ -111,6 +113,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         sh: Shuffle[<*>],
       ): Exists[[t] =>> (F[X, t], sh.~⚬[S, t])] =
         Exists((fx, sh.~⚬.id))
+
+      override def apply[F[_]](fx: F[X])(using Cartesian[|*|, F]): F[X] =
+        fx
     }
 
     /** Non-[[Id]] combinators. */
@@ -147,6 +152,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         sh: Shuffle[<*>],
       ): Exists[[t] =>> (F[Y1 |*| Y2, t], sh.~⚬[S, t])] =
         par.translate(fa)(m, sh)
+
+      override def apply[F[_]](a: F[X1 |*| X2])(using Cartesian[|*|, F]): F[Y1 |*| Y2] =
+        par(a)
     }
 
     /** An operator that transfers resources across inputs. */
@@ -197,6 +205,13 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2) =:= G[T]): ChaseBwRes[A1 |*| A2, G, T] =
         transfer.chaseBw(i) after par(f1, f2)
+
+      override def apply[F[_]](a: F[A1 |*| A2])(using F: Cartesian[|*|, F]): F[B1 |*| B2] = {
+        val (a1, a2) = F.unzip(a)
+        val x1 = f1(a1)
+        val x2 = f2(a2)
+        transfer(F.zip(x1, x2))
+      }
 
       override def translate[<*>[_,_], F[_,_], S](
         fa: F[A1 |*| A2, S],
@@ -474,6 +489,12 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       )
     }
 
+    def apply[F[_]](fx: F[X1 |*| X2])(using F: Cartesian[|*|, F]): F[Y1 |*| Y2] = {
+      val (f1, f2) = Par.unapply(this)
+      val (x1, x2) = F.unzip(fx)
+      F.zip(f1(x1), f2(x2))
+    }
+
     def translate[<*>[_, _], F[_, _], S](
       fa: F[X1 |*| X2, S],
     )(
@@ -587,6 +608,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     def projectProper[C](p: Projection.Proper[|*|, B1 |*| B2, C]): ProjectProperRes[A1 |*| A2, C]
     def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2)): ChaseFwRes[F, T, B1 |*| B2]
     def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2) =:= G[T]): ChaseBwRes[A1 |*| A2, G, T]
+    def apply[F[_]](a: F[A1 |*| A2])(using F: Cartesian[|*|, F]): F[B1 |*| B2]
     def translate[<*>[_, _], F[_, _], S](
       fa: F[A1 |*| A2, S],
     )(
@@ -672,6 +694,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (A1 |*| A2) =:= G[T]): ChaseBwRes[A1 |*| A2, G, T] =
         ChaseBwRes.Transported[A1 |*| A2, G, G, T](ev, i, [t] => (_: Unit) => id[G[t]])
+
+      override def apply[F[_]](a: F[A1 |*| A2])(using F: Cartesian[|*|, F]): F[A1 |*| A2] =
+        a
 
       override def translate[<*>[_,_], F[_,_], S](
         fa: F[A1 |*| A2, S],
@@ -835,6 +860,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override protected def projectSnd[C2](px1: Proper[|*|, X1, C2]): ProjectProperRes[X1 |*| X2, X2 |*| C2] =
         ProjectProperRes.Projected(px1.inFst[X2], swap)
+
+      override def apply[F[_]](a: F[X1 |*| X2])(using F: Cartesian[|*|, F]): F[X2 |*| X1] = {
+        val (x1, x2) = F.unzip(a)
+        F.zip(x2, x1)
+      }
 
       override def translate[<*>[_,_], F[_,_], S](
         fa: F[X1 |*| X2, S],
@@ -1025,6 +1055,12 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             go(q, g1)
         }
 
+      override def apply[F[_]](a: F[(A1 |*| A2) |*| A3])(using F: Cartesian[|*|, F]): F[A1 |*| (B2 |*| B3)] = {
+        val (a12, a3) = F.unzip(a)
+        val (a1, a2)  = F.unzip(a12)
+        F.zip(a1, g(F.zip(a2, a3)))
+      }
+
       override def translate[<*>[_,_], F[_,_], S](
         fa: F[(A1 |*| A2) |*| A3, S],
       )(
@@ -1200,6 +1236,12 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         }
 
       override protected def projectSnd[C2](p2: Proper[|*|, A3, C2]): ProjectProperRes[A1 |*| (A2 |*| A3), B1 |*| B2 |*| C2] = ???
+
+      override def apply[F[_]](a: F[A1 |*| (A2 |*| A3)])(using F: Cartesian[|*|, F]): F[(B1 |*| B2) |*| A3] = {
+        val (a1, a23) = F.unzip(a)
+        val (a2, a3)  = F.unzip(a23)
+        F.zip(g(F.zip(a1, a2)), a3)
+      }
 
       override def translate[<*>[_,_], F[_,_], S](
         fa: F[A1 |*| (A2 |*| A3), S],
@@ -1446,6 +1488,12 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override protected def projectSnd[C2](p2: Proper[|*|, A2, C2]): ProjectProperRes[(A1 |*| A2) |*| A3, (B1 |*| B2) |*| C2] = ???
 
+      override def apply[F[_]](a: F[(A1 |*| A2) |*| A3])(using F: Cartesian[|*|, F]): F[(B1 |*| B2) |*| A2] = {
+        val (a12, a3) = F.unzip(a)
+        val (a1, a2)  = F.unzip(a12)
+        F.zip(g(F.zip(a1, a3)), a2)
+      }
+
       override def translate[<*>[_,_], F[_,_], S](
         fa: F[(A1 |*| A2) |*| A3, S],
       )(
@@ -1650,6 +1698,12 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             go(pa, g1)
         }
 
+      override def apply[F[_]](a: F[A1 |*| (A2 |*| A3)])(using F: Cartesian[|*|, F]): F[A2 |*| (B2 |*| B3)] = {
+        val (a1, a23) = F.unzip(a)
+        val (a2, a3)  = F.unzip(a23)
+        F.zip(a2, g(F.zip(a1, a3)))
+      }
+
       override def translate[<*>[_,_], F[_,_], S](
         fa: F[A1 |*| (A2 |*| A3), S],
       )(m: ObjectMap[|*|, <*>, F],
@@ -1851,6 +1905,13 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override protected def projectFst[C1](p1: Proper[|*|, B1 |*| B2, C1]): ProjectProperRes[(A1 |*| A2) |*| (A3 |*| A4), C1 |*| (B3 |*| B4)] = ???
 
       override protected def projectSnd[C2](p2: Proper[|*|, B3 |*| B4, C2]): ProjectProperRes[(A1 |*| A2) |*| (A3 |*| A4), (B1 |*| B2) |*| C2] = ???
+
+      override def apply[F[_]](a: F[(A1 |*| A2) |*| (A3 |*| A4)])(using F: Cartesian[|*|, F]): F[(B1 |*| B2) |*| (B3 |*| B4)] = {
+        val (a12, a34) = F.unzip(a)
+        val (a1, a2)   = F.unzip(a12)
+        val (a3, a4)   = F.unzip(a34)
+        F.zip(g1(F.zip(a1, a3)), g2(F.zip(a2, a4)))
+      }
 
       override def translate[<*>[_,_], F[_,_], S](
         fa: F[(A1 |*| A2) |*| (A3 |*| A4), S],
