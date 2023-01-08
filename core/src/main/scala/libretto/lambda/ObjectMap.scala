@@ -1,5 +1,7 @@
 package libretto.lambda
 
+import libretto.util.Functional
+
 /**
   *
   * @tparam |*| monoidal product in the source "category"
@@ -8,7 +10,7 @@ package libretto.lambda
   *   `f: F[A, X]` means that object `A` of the source "category"
   *   is mapped to object `X` in the target "category".
   */
-trait ObjectMap[|*|[_, _], <*>[_, _], F[_, _]] {
+trait ObjectMap[|*|[_, _], <*>[_, _], F[_, _]] extends Functional[F] {
   sealed trait Unpaired[A1, A2, X] {
     type X1
     type X2
@@ -24,8 +26,6 @@ trait ObjectMap[|*|[_, _], <*>[_, _], F[_, _]] {
       override def ev = summon[(T1 <*> T2) =:= (X1 <*> X2)]
     }
   }
-
-  def functional[A, X, Y](f1: F[A, X], f2: F[A, Y]): X =:= Y
 
   def pair[A1, A2, X1, X2](f1: F[A1, X1], f2: F[A2, X2]): F[A1 |*| A2, X1 <*> X2]
   def unpair[A1, A2, X](f: F[A1 |*| A2, X]): Unpaired[A1, A2, X]

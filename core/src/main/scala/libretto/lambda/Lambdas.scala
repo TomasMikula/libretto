@@ -169,7 +169,7 @@ object Lambdas {
     def mapExpr[Exp2[_]](g: [X] => Exp[X] => Exp2[X]): Abstracted[Exp2, |*|, AbsFun, LE, A, B] =
       this match {
         case Exact(u, f)             => Exact(u, f)
-        case Closure(captured, u, f) => Closure(g(captured), u, f)
+        case Closure(captured, u, f) => Closure(captured.trans(g), u, f)
         case NotFound(b)             => NotFound(g(b))
         case Failure(e)              => Failure(e)
       }
@@ -182,7 +182,7 @@ object Lambdas {
     ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
 
     case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], LE, X, A, A1, B](
-      captured: Exp[X],
+      captured: Tupled[|*|, Exp, X],
       m: Multiplier[|*|, A, A1],
       f: AbsFun[X |*| A1, B],
     ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]

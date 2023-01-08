@@ -1,5 +1,6 @@
 package libretto.lambda
 
+import libretto.{lambda => ll}
 import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.lambda.Lambdas.ErrorFactory
 import libretto.util.{Applicative, BiInjective, Exists, Masked, TypeEq}
@@ -26,7 +27,23 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       f.fold
   }
 
-  type CapturingFun[A, B] = libretto.lambda.CapturingFun[AbstractFun, |*|, Expr, A, B]
+  type CapturingFun[A, B] = libretto.lambda.CapturingFun[AbstractFun, |*|, Tupled[Expr, *], A, B]
+  object CapturingFun {
+    def noCapture[A, B](f: AbstractFun[A, B]): CapturingFun[A, B] =
+      ll.CapturingFun.NoCapture(f)
+
+    def id[A]: CapturingFun[A, A] =
+      noCapture(shuffled.id)
+
+    def lift[A, B](f: A -⚬ B): CapturingFun[A, B] =
+      noCapture(shuffled.lift(f))
+
+    def captureFst[X, A](captured: Expr[X]): CapturingFun[A, X |*| A] =
+      ll.CapturingFun.Closure(ll.Tupled.Single(captured), shuffled.id)
+
+    def captureSnd[X, A](captured: Expr[X]): CapturingFun[A, A |*| X] =
+      ll.CapturingFun.Closure(ll.Tupled.Single(captured), shuffled.swap)
+  }
 
   /**
    * Arrow interspersed with intermediate [[Var]]s.
@@ -332,7 +349,14 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def terminalVars(a: Varz[Var[A]]): Varz[Var[B]] =
           Varz.Atom(resultVar)
 
-        override def gcdSimple[X, C](that: Op[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[B] |*| C]] = ???
+        override def gcdSimple[X, C](that: Op[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[B] |*| C]] =
+          that match
+            case Map(_, v) =>
+              (testEqual(v, resultVar)) match
+                case Some(TypeEq(Refl())) => Some(shOp.lift(this) > shOp.lift(DupVar()))
+                case None                 => None
+            case _ =>
+              None
 
         override def prj1_gcd_this[A1, A2](that: Prj1[A1, A2])(using ev: Var[A] =:= Var[A1 |*| A2]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| Var[B]]] = ???
 
@@ -380,7 +404,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             case (None, Some(_)) =>
               bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
 
-        override def prj2_gcd_this[a1, a2](that: Prj2[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a2] |*| Var[A2]]] = ???
+        override def prj2_gcd_this[a1, a2](that: Prj2[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a2] |*| Var[A2]]] =
+          (testEqual(that.unusedVar, this.unusedVar), testEqual(that.resultVar, this.resultVar)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(this) > shOp.lift(DupVar()))
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
       }
 
       case class Unzip[A1, A2](resultVar1: Var[A1], resultVar2: Var[A2]) extends Op.Linear[Var[A1 |*| A2], Var[A1] |*| Var[A2]] {
@@ -819,11 +852,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         [p, q] => (op: VarOp[p, q]) => linearOp(op._1, op._2),
       ) match {
         case LinCheck.Success(tl) =>
-          val t1: CTail[X, Y] = unvar(tl)(u, v)
-          val t2: CapturingFun[X, Y] = collectCaptures(t1)
-          t2 match {
-            case CapturingFun.NoCapture(f)  => LinearRes.Exact(f)
-            case CapturingFun.Closure(x, f) => LinearRes.Closure(x, f)
+          val t1: CapturingFun[X, Y] = unvar(tl)(u, v)
+          t1 match {
+            case ll.CapturingFun.NoCapture(f)  => LinearRes.Exact(f)
+            case ll.CapturingFun.Closure(x, f) => LinearRes.Closure(x, f)
           }
         case LinCheck.Failure(e) =>
           LinearRes.Violation(e)
@@ -841,30 +873,33 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           UnhandledCase.raise(s"$other")
       }
 
-    def unvar[A, B, X, Y](t: LTail[A, B])(u: Unvar[A, X], v: Unvar[B, Y]): CTail[X, Y] =
-      t.translate[CapFun, |*|, Unvar, X](u, Unvar.objectMap, Unvar.arrowMap) match {
+    def unvar[A, B, X, Y](t: LTail[A, B])(u: Unvar[A, X], v: Unvar[B, Y]): CapturingFun[X, Y] =
+      given shCFun: Shuffled[CapturingFun, |*|] =
+        Shuffled[CapturingFun, |*|](shuffled.shuffle)
+      t.translate[CapturingFun, |*|, Unvar, X](u, Unvar.objectMap, Unvar.arrowMap) match {
         case Exists.Some((t1, v1)) =>
-          Unvar.functional(v, v1) match {
+          (v uniqueOutType v1) match {
             case TypeEq(Refl()) =>
-              t1
+              t1.fold
           }
       }
 
-    def collectCaptures[A, B](f: CTail[A, B]): CapturingFun[A, B] =
-      ???
-
     enum LinearRes[A, B] {
       case Exact(f: AbstractFun[A, B])
-      case Closure[X, A, B](captured: Expr[X], f: AbstractFun[X |*| A, B]) extends LinearRes[A, B]
+      case Closure[X, A, B](captured: Tupled[Expr, X], f: AbstractFun[X |*| A, B]) extends LinearRes[A, B]
       case Violation(e: LE)
 
       def multiplied[A0](m: Multiplier[|*|, A0, A]): TailLinearRes[A0, B] =
-        ???
+        this match
+          case Exact(f)             => TailLinearRes.Exact(m, f)
+          case Closure(captured, f) => TailLinearRes.Closure(captured, m, f)
+          case Violation(e)         => TailLinearRes.Violation(e)
+
     }
 
     enum TailLinearRes[A, B] {
       case Exact[A, A1, B](m: Multiplier[|*|, A, A1], f: AbstractFun[A1, B]) extends TailLinearRes[A, B]
-      case Closure[X, A, A1, B](captured: Expr[X], m: Multiplier[|*|, A, A1], f: AbstractFun[X |*| A1, B]) extends TailLinearRes[A, B]
+      case Closure[X, A, A1, B](captured: Tupled[Expr, X], m: Multiplier[|*|, A, A1], f: AbstractFun[X |*| A1, B]) extends TailLinearRes[A, B]
       case Violation(e: LE)
     }
 
@@ -916,13 +951,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           })
       }
 
-      def functional[A, B, C](u: Unvar[A, B], v: Unvar[A, C]): B =:= C =
-        u uniqueOutType v
-
       val objectMap: ObjectMap[|*|, |*|, Unvar] =
         new ObjectMap[|*|, |*|, Unvar] {
-          override def functional[A, X, Y](f1: Unvar[A, X], f2: Unvar[A, Y]): X =:= Y =
-            Unvar.functional(f1, f2)
+          override def uniqueOutputType[A, X, Y](f1: Unvar[A, X], f2: Unvar[A, Y]): X =:= Y =
+            f1 uniqueOutType f2
 
           override def pair[A1, A2, X1, X2](f1: Unvar[A1, X1], f2: Unvar[A2, X2]): Unvar[A1 |*| A2, X1 |*| X2] =
             Unvar.Par(f1, f2)
@@ -940,20 +972,20 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             })
         }
 
-      val arrowMap: ArrowMap[Op.Linear, CapFun, Unvar] =
-        new ArrowMap[Op.Linear, CapFun, Unvar] {
+      val arrowMap: ArrowMap[Op.Linear, CapturingFun, Unvar] =
+        new ArrowMap[Op.Linear, CapturingFun, Unvar] {
           override def map[A, B](op: Op.Linear[A, B]): Image[A, B] =
             op match {
               case _: Op.Zip[a1, a2] =>
-                Image(Par(SingleVar[a1](), SingleVar[a2]()), CapFun.id, SingleVar[a1 |*| a2]())
+                Image(Par(SingleVar[a1](), SingleVar[a2]()), CapturingFun.id, SingleVar[a1 |*| a2]())
               case op: Op.Map[a, b] =>
-                Image(SingleVar[a](), CapFun.lift(op.f), SingleVar[b]())
+                Image(SingleVar[a](), CapturingFun.lift(op.f), SingleVar[b]())
               case _: Op.Unzip[a1, a2] =>
-                Image(SingleVar[a1 |*| a2](), CapFun.id, Par(SingleVar[a1](), SingleVar[a2]()))
+                Image(SingleVar[a1 |*| a2](), CapturingFun.id, Par(SingleVar[a1](), SingleVar[a2]()))
               case op: Op.CaptureFst[a, x] =>
-                Image(SingleVar[a](), CapFun.captureFst(op.x), SingleVar[x |*| a]())
+                Image(SingleVar[a](), CapturingFun.captureFst(op.x), SingleVar[x |*| a]())
               case op: Op.CaptureSnd[a, x] =>
-                Image(SingleVar[a](), CapFun.captureSnd(op.x), SingleVar[a |*| x]())
+                Image(SingleVar[a](), CapturingFun.captureSnd(op.x), SingleVar[a |*| x]())
             }
         }
     }

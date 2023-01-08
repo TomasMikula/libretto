@@ -2,7 +2,7 @@ package libretto.util
 
 import scala.annotation.targetName
 
-trait Applicative[F[_]] { self =>
+trait Applicative[F[_]] extends Zippable[Tuple2, F] { self =>
   def ap[A, B](ff: F[A => B])(fa: F[A]): F[B]
   def pure[A](a: A): F[A]
 
@@ -14,6 +14,9 @@ trait Applicative[F[_]] { self =>
 
   def mapN[A, B, C, R](fa: F[A], fb: F[B], fc: F[C])(f: (A, B, C) => R): F[R] =
     map2(fa, map2(fb, fc)((b, c) => (a: A) => f(a, b, c)))((a, g) => g(a))
+
+  def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)] =
+    map2(fa, fb)((_, _))
 
   extension [A](fa: F[A]) {
     @targetName("extMap")

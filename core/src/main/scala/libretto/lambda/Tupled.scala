@@ -1,5 +1,7 @@
 package libretto.lambda
 
+import libretto.util.Zippable
+
 sealed trait Tupled[|*|[_, _], F[_], A] {
   import Tupled._
 
@@ -52,4 +54,9 @@ object Tupled {
       case Zip(a, b) => Some((a, b))
       case Single(_) => None
     }
+
+  given [|*|[_, _], F[_]]: Zippable[|*|, Tupled[|*|, F, *]] with {
+    override def zip[A, B](fa: Tupled[|*|, F, A], fb: Tupled[|*|, F, B]): Tupled[|*|, F, A |*| B] =
+      Zip(fa, fb)
+  }
 }

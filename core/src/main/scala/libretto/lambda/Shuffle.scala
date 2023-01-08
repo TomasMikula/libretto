@@ -609,12 +609,23 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2)): ChaseFwRes[F, T, B1 |*| B2]
     def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2) =:= G[T]): ChaseBwRes[A1 |*| A2, G, T]
     def apply[F[_]](a: F[A1 |*| A2])(using F: Cartesian[|*|, F]): F[B1 |*| B2]
+
+    // TODO: write in terms of translateLR (to be added)
     def translate[<*>[_, _], F[_, _], S](
       fa: F[A1 |*| A2, S],
     )(
       m: ObjectMap[|*|, <*>, F],
       sh: Shuffle[<*>],
     ): Exists[[t] =>> (F[B1 |*| B2, t], sh.~⚬[S, t])]
+
+    def translateRL[<*>[_, _], F[_, _], T1, T2](
+      fb1: F[B1, T1],
+      fb2: F[B2, T2],
+    )(
+      m: ObjectMap[|*|, <*>, F],
+    )(using
+      tgt: Shuffle[<*>],
+    ): Exists[[S1] =>> Exists[[S2] =>> (F[A1, S1], F[A2, S2], tgt.TransferOpt[S1, S2, T1, T2])]]
 
     def project[C](p: Projection[|*|, B1 |*| B2, C]): ProjectRes[A1 |*| A2, C] =
       p match {
@@ -705,6 +716,16 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         sh: Shuffle[<*>],
       ): Exists[[t] =>> (F[A1 |*| A2, t], sh.~⚬[S, t])] =
         Exists((fa, sh.~⚬.id[S]))
+
+      override def translateRL[<*>[_, _], F[_, _], T1, T2](
+        fb1: F[A1, T1],
+        fb2: F[A2, T2],
+      )(
+        m: ObjectMap[|*|, <*>, F],
+      )(using
+        tgt: Shuffle[<*>],
+      ): Exists[[S1] =>> Exists[[S2] =>> (F[A1, S1], F[A2, S2], tgt.TransferOpt[S1, S2, T1, T2])]] =
+        Exists(Exists((fb1, fb2, tgt.TransferOpt.None())))
     }
 
     def decompose[A1, A2, B1, B2](f: TransferOpt[A1, A2, B1, B2]): Either[Transfer[A1, A2, B1, B2], (Id0[A1, B1], Id0[A2, B2])] =
@@ -875,6 +896,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         m.unpair(fa) match { case u @ m.Unpaired.Impl(fx1, fx2) =>
           Exists((m.pair(fx2, fx1), sh.~⚬.swap[u.X1, u.X2]))
         }
+
+      override def translateRL[<*>[_,_], F[_,_], T1, T2](fb1: F[X2, T1], fb2: F[X1, T2])(m: ObjectMap[|*|, <*>, F])(using tgt: Shuffle[<*>]): Exists[[S1] =>> libretto.util.Exists[[S2] =>> (F[X1, S1], F[X2, S2], tgt.TransferOpt[S1, S2, T1, T2])]] = ???
 
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (X1 |*| X2)): ChaseFwRes[F, T, X2 |*| X1] =
         i match
@@ -1074,10 +1097,16 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         }}}
       }
 
+      override def translateRL[<*>[_,_], F[_,_], T1, T2](fb1: F[A1, T1], fb2: F[B2 |*| B3, T2])(m: ObjectMap[|*|, <*>, F])(using tgt: Shuffle[<*>]): Exists[[S1] =>> libretto.util.Exists[[S2] =>> (F[A1 |*| A2, S1], F[A3, S2], tgt.TransferOpt[S1, S2, T1, T2])]] = ???
+
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2 |*| A3)): ChaseFwRes[F, T, A1 |*| (B2 |*| B3)] =
         UnhandledCase.raise(s"AssocLR.chaseFw($i)")
 
-      override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (A1 |*| (B2 |*| B3)) =:= G[T]): ChaseBwRes[(A1 |*| A2) |*| A3, G, T] = ???
+      override def chaseBw[G[_], T](
+        i: Focus[|*|, G],
+      )(using
+        ev: (A1 |*| (B2 |*| B3)) =:= G[T],
+      ): ChaseBwRes[(A1 |*| A2) |*| A3, G, T] = ???
 
       override def thenBi[C1, C2](g1: A1 ~⚬ C1, g2: (B2 |*| B3) ~⚬ C2): Xfer[A1 |*| A2, A3, _, _, C1, C2] =
         decompose1(g.asShuffle > g2) match {
@@ -1255,6 +1284,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         Exists((m.pair(b._1, fa3), sh.~⚬.assocRL[u.X1, v.X1, v.X2] > sh.~⚬.fst(b._2)))
         }}}
       }
+
+      override def translateRL[<*>[_,_], F[_,_], T1, T2](fb1: F[B1 |*| B2, T1], fb2: F[A3, T2])(m: ObjectMap[|*|, <*>, F])(using tgt: Shuffle[<*>]): Exists[[S1] =>> libretto.util.Exists[[S2] =>> (F[A1, S1], F[A2 |*| A3, S2], tgt.TransferOpt[S1, S2, T1, T2])]] = ???
 
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| (A2 |*| A3))): ChaseFwRes[F, T, (B1 |*| B2) |*| A3] =
         i match {
@@ -1510,6 +1541,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         }}}
       }
 
+      override def translateRL[<*>[_,_], F[_,_], T1, T2](fb1: F[B1 |*| B2, T1], fb2: F[A2, T2])(m: ObjectMap[|*|, <*>, F])(using tgt: Shuffle[<*>]): Exists[[S1] =>> libretto.util.Exists[[S2] =>> (F[A1 |*| A2, S1], F[A3, S2], tgt.TransferOpt[S1, S2, T1, T2])]] = ???
+
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2 |*| A3)): ChaseFwRes[F, T, B1 |*| B2 |*| A2] =
         UnhandledCase.raise(s"IX.chaseFw($i)")
 
@@ -1718,6 +1751,21 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         ))
         }}}
       }
+
+      override def translateRL[<*>[_, _], F[_, _], T1, T2](
+        fb1: F[A2, T1],
+        fb23: F[B2 |*| B3, T2],
+      )(
+        m: ObjectMap[|*|, <*>, F],
+      )(using
+        tgt: Shuffle[<*>],
+      ): Exists[[S1] =>> Exists[[S2] =>> (F[A1, S1], F[A2 |*| A3, S2], tgt.TransferOpt[S1, S2, T1, T2])]] =
+        m.unpair(fb23) match {
+          case m.Unpaired.Impl(fb2, fb3) =>
+            g.translateRL(fb2, fb3)(m) match
+              case Exists.Some(Exists.Some((fa1, fa3, h))) =>
+                Exists(Exists((fa1, m.pair(fb1, fa3), tgt.Transfer.XI(h))))
+        }
 
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| (A2 |*| A3))): ChaseFwRes[F, T, A2 |*| (B2 |*| B3)] =
         UnhandledCase.raise(s"XI.chaseFw($i)")
@@ -1930,6 +1978,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         ))
         }}}}}
       }
+
+      override def translateRL[<*>[_,_], F[_,_], T1, T2](fb1: F[B1 |*| B2, T1], fb2: F[B3 |*| B4, T2])(m: ObjectMap[|*|, <*>, F])(using tgt: Shuffle[<*>]): Exists[[S1] =>> libretto.util.Exists[[S2] =>> (F[A1 |*| A2, S1], F[A3 |*| A4, S2], tgt.TransferOpt[S1, S2, T1, T2])]] = ???
 
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= ((A1 |*| A2) |*| (A3 |*| A4))): ChaseFwRes[F, T, (B1 |*| B2) |*| (B3 |*| B4)] =
         UnhandledCase.raise(s"IXI.chaseFw($i)")

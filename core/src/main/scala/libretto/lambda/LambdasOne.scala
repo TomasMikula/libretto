@@ -209,7 +209,12 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
               case _ => throw new AssertionError(s"Did not expect $v to be used multiple times in $b")
             }
           case Closure(captured, _, _) =>
-            Left(Lambdas.Error.Undefined(captured.initialVars.toSet))
+            Left(Lambdas.Error.Undefined(
+              captured.mapReduce0(
+                [x] => (ex: lambdas.Expr[x]) => ex.initialVars.toSet,
+                variables.union,
+              )
+            ))
           case Failure(e) =>
             Left(e)
           case NotFound(b) =>

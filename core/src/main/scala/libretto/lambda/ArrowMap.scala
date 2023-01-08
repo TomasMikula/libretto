@@ -1,5 +1,8 @@
 package libretto.lambda
 
+import libretto.util.{Exists, Functional, TypeEq}
+import libretto.util.TypeEq.Refl
+
 trait ArrowMap[-->[_, _], ->>[_, _], F[_, _]] {
   sealed trait Image[A, B] {
     type A1
@@ -22,4 +25,10 @@ trait ArrowMap[-->[_, _], ->>[_, _], F[_, _]] {
 
   def map[A, B](f: A --> B): Image[A, B]
 
+  def map[A, B, S](fa: F[A, S], f: A --> B)(using F: Functional[F]): Exists[[T] =>> (S ->> T, F[B, T])] = {
+    val g = map(f)
+    F.uniqueOutputType(fa, g.srcMap) match
+      case TypeEq(Refl()) =>
+        Exists((g.f, g.tgtMap))
+  }
 }

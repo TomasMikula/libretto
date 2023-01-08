@@ -510,7 +510,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
           } yield m > f.fold
         case Closure(captured, m, f) =>
           for {
-            g <- lambdas.compileConst(captured)
+            g <- lambdas.compileConst(zipExprs(captured))
             m <- m.compileM(split(bindVar))
           } yield m > introFst(g) > f.fold
         case NotFound(b) =>
@@ -526,6 +526,13 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       }
     }
 
+    // TODO: avoid the need to create auxiliary pairings
+    private def zipExprs[A](es: Tupled[|*|, lambdas.Expr, A]): lambdas.Expr[A] =
+      es.fold([x, y] => (ex: lambdas.Expr[x], ey: lambdas.Expr[y]) => {
+        val v = new Var[x |*| y](VarOrigin.Synthetic(s"auxiliary pairing of ($ex, $ey)"))
+        lambdas.Expr.zip(ex, ey, v)
+      })
+
     private def compileClosure[A, B](f: $[A] => $[B])(
       split: Var[A] => Either[lambdas.LinearityViolation, A -⚬ (A |*| A)],
       discard: Var[A] => Either[lambdas.LinearityViolation, A -⚬ One],
@@ -540,7 +547,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         case Capturing(captured, m, f) =>
           for {
             m <- m.compileM(split(bindVar))
-          } yield (captured map csmc.curry(snd(m) > f))(resultVar)
+          } yield (zipExprs(captured) map csmc.curry(snd(m) > f))(resultVar)
         case NonCapturing(m, f) =>
           for {
             m <- m.compileM(split(bindVar))

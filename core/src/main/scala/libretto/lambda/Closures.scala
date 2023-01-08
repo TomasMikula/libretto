@@ -58,7 +58,7 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
   sealed trait ClosureRes[A, B]
   object ClosureRes {
     case class Capturing[X, A, A1, B](
-      captured: Expr[X],
+      captured: Tupled[|*|, Expr, X],
       m: Multiplier[|*|, A, A1],
       f: (X |*| A1) -⚬ B,
     ) extends ClosureRes[A, B]

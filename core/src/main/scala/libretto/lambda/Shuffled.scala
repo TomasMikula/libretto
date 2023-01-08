@@ -26,6 +26,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   val shuffle: Shuffle[|*|]
   import shuffle.{~⚬, Transfer, TransferOpt}
 
+  def biInjectiveProduct: BiInjective[|*|] = summon
+
   sealed trait Shuffled[A, B] {
     def after[Z](that: Shuffled[Z, A]): Shuffled[Z, B]
     def thenShuffle[C](that: B ~⚬ C): Shuffled[A, C]
@@ -55,7 +57,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       am: ArrowMap[->, ->>, F],
     )(using
       tgt: libretto.lambda.Shuffled[->>, <*>],
-    ): Exists[[T] =>> (tgt.Shuffled[S, T], F[B, T])] = ???
+    ): Exists[[T] =>> (tgt.Shuffled[S, T], F[B, T])]
 
     def >[C](that: Shuffled[B, C]): Shuffled[A, C] =
       that after this
@@ -115,6 +117,22 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       m.unconsSome match
         case c: Plated.UnconsSomeRes.Cons[f, v, w, y] =>
           UnconsSomeRes.Cons[A, f, v, w, B](l, c.i, c.f, c.post thenShuffle r)
+
+    override def translate[->>[_, _], <*>[_, _], F[_, _], S](
+      fa: F[A, S],
+      om: ObjectMap[|*|, <*>, F],
+      am: ArrowMap[->, ->>, F],
+    )(using
+      tgt: libretto.lambda.Shuffled[->>, <*>],
+    ): Exists[[T] =>> (tgt.Shuffled[S, T], F[B, T])] = {
+      l.translate[<*>, F, S](fa)(om, tgt.shuffle) match
+        case Exists.Some((fx, l1)) =>
+          m.translate(fx, om, am) match
+            case Exists.Some((m1, fy)) =>
+              r.translate(fy)(om, tgt.shuffle) match
+                case Exists.Some((fb, r1)) =>
+                  Exists((tgt.Impermeable(l1, m1, r1), fb))
+    }
 
     override def traverse[G[_]: Applicative, ->>[_,_]](
       f: [t, u] => (t -> u) => G[t ->> u]
@@ -213,6 +231,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         case ~⚬.ChaseFwRes.Split(ev) =>
           ChaseFwRes.Split(ev)
 
+    override def translate[->>[_,_], <*>[_,_], F[_,_], S](fa: F[A, S], om: ObjectMap[|*|, <*>, F], am: ArrowMap[->, ->>, F])(using tgt: libretto.lambda.Shuffled[->>, <*>]): Exists[[T] =>> (tgt.Shuffled[S, T], F[B, T])] = ???
+
     override def traverse[G[_]: Applicative, ->>[_,_]](
       f: [t, u] => (t -> u) => G[t ->> u],
     )(using
@@ -287,6 +307,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
             c.f,
             (c.post thenShuffle bottom2).inSnd thenShuffle right.asShuffle,
           )
+
+    override def translate[->>[_,_], <*>[_,_], F[_,_], S](fa: F[A, S], om: ObjectMap[|*|, <*>, F], am: ArrowMap[->, ->>, F])(using tgt: libretto.lambda.Shuffled[->>, <*>]): Exists[[T] =>> (tgt.Shuffled[S, T], F[B1 |*| B2, T])] = ???
 
     override def sweepL[F[_], ->>[_,_]](
       a: F[A],
@@ -388,6 +410,14 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
     ): G[tgt.Plated[A, B]]
 
+    def translate[->>[_, _], <*>[_, _], F[_, _], S](
+      fa: F[A, S],
+      om: ObjectMap[|*|, <*>, F],
+      am: ArrowMap[->, ->>, F],
+    )(using
+      tgt: libretto.lambda.Shuffled[->>, <*>],
+    ): Exists[[T] =>> (tgt.Plated[S, T], F[B, T])]
+
     def sweepL[F[_], ->>[_,_]](
       a: F[A],
       f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
@@ -412,6 +442,9 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     def chaseFw[F[_], X](i: Focus[|*|, F])(using A =:= F[X]): Plated.ChaseFwRes[F, X, B]
     def chaseBw[G[_], X](i: Focus[|*|, G])(using B =:= G[X]): Plated.ChaseBwRes[A, G, X]
+
+    def to[C](using ev: B =:= C): Plated[A, C] =
+      ev.substituteCo(this)
   }
 
   object Plated {
@@ -440,6 +473,18 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
       ): G[tgt.Plated[A, B]] =
         g(f).map(tgt.Plated.Solid(_))
+
+      override def translate[->>[_, _], <*>[_, _], F[_, _], S](
+        fa: F[A, S],
+        om: ObjectMap[|*|, <*>, F],
+        am: ArrowMap[->, ->>, F],
+      )(using
+        tgt: libretto.lambda.Shuffled[->>, <*>],
+      ): Exists[[T] =>> (tgt.Plated[S, T], F[B, T])] = {
+        am.map(fa, f)(using om) match
+          case Exists.Some((g, fb)) =>
+            Exists((tgt.Plated.Solid(g), fb))
+      }
 
       override def sweepL[F[_], ->>[_, _]](
         a: F[A],
@@ -481,6 +526,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         ???
 
       override def sweepL[F[_], ->>[_,_]](a: F[A1 |*| A2], f: [t, u] => (F[t], t -> u) => (->>[t, u], F[u]))(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type], F: Cartesian[|*|, F]): (tgt.Plated[A1 |*| A2, B1 |*| B2], F[B1 |*| B2]) = ???
+
+      override def translate[->>[_,_], <*>[_,_], F[_,_], S](fa: F[A1 |*| A2, S], om: ObjectMap[|*|, <*>, F], am: ArrowMap[->, ->>, F])(using tgt: libretto.lambda.Shuffled[->>, <*>]): Exists[[T] =>> (tgt.Plated[S, T], F[B1 |*| B2, T])] = ???
     }
 
     case class Sandwich[A, X, Y, B](l: Plated[A, X], m: X ~⚬ Y, r: Plated[Y, B]) extends Plated[A, B] {
@@ -495,7 +542,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       override def projectProper[C](
         p: Projection.Proper[|*|, B, C],
         f: [P, Q, R] => (P -> Q, Projection[|*|, Q, R]) => ProjectRes[P, R],
-      ): ProjectRes[A, C] = ???
+      ): ProjectRes[A, C] =
+        r.projectProper(p, f).after(l.asShuffled thenShuffle m, f)
 
       override def chaseFw[F[_], X](i: Focus[|*|, F])(using A =:= F[X]): ChaseFwRes[F, X, B] =
         l.chaseFw(i) andThen (Pure(m) > r.asShuffled)
@@ -527,6 +575,22 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         val y = m(x)
         val (r1, b) = r.sweepL[F, ->>](y, f)
         (tgt.Plated.Sandwich(l1, m, r1), b)
+      }
+
+      override def translate[->>[_, _], <*>[_, _], F[_, _], S](
+        fa: F[A, S],
+        om: ObjectMap[|*|, <*>, F],
+        am: ArrowMap[->, ->>, F],
+      )(using
+        tgt: libretto.lambda.Shuffled[->>, <*>],
+      ): Exists[[T] =>> (tgt.Plated[S, T], F[B, T])] = {
+        l.translate(fa, om, am) match
+          case Exists.Some((l1, fx)) =>
+            m.translate(fx)(om, tgt.shuffle) match
+              case Exists.Some((fy, m1)) =>
+                r.translate(fy, om, am) match
+                  case Exists.Some((r1, fb)) =>
+                    Exists(tgt.Plated.Sandwich(l1, m1, r1), fb)
       }
     }
 
@@ -561,6 +625,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       override def traverse[G[_]: Applicative, ->>[_,_]](f: [t, u] => (t -> u) => G[->>[t, u]])(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): G[tgt.Plated[A1 |*| A2, B]] = ???
 
       override def sweepL[F[_], ->>[_,_]](a: F[A1 |*| A2], f: [t, u] => (F[t], t -> u) => (->>[t, u], F[u]))(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type], F: Cartesian[|*|, F]): (tgt.Plated[A1 |*| A2, B], F[B]) = ???
+
+      override def translate[->>[_,_], <*>[_,_], F[_,_], S](fa: F[A1 |*| A2, S], om: ObjectMap[|*|, <*>, F], am: ArrowMap[->, ->>, F])(using tgt: libretto.lambda.Shuffled[->>, <*>]): Exists[[T] =>> (tgt.Plated[S, T], F[B, T])] = ???
     }
 
     case class SemiSnoc[A, X1, X2, Y2, Z2, B1, B2](
@@ -681,6 +747,27 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         val (sl1, b2)  = semiLast.sweepL[F, ->>](z2, f)
         (tgt.Plated.SemiSnoc(init1, t.rebase(tgt), s, sl1), F.zip(b1, b2))
       }
+
+      override def translate[->>[_, _], <*>[_, _], F[_, _], S](
+        fa: F[A, S],
+        om: ObjectMap[|*|, <*>, F],
+        am: ArrowMap[->, ->>, F],
+      )(using
+        tgt: libretto.lambda.Shuffled[->>, <*>],
+      ): Exists[[T] =>> (tgt.Plated[S, T], F[B1 |*| B2, T])] = {
+        init.translate(fa, om, am) match
+          case Exists.Some((init1, fx)) =>
+            val ufx = om.unpair(fx)
+            t.translate(ufx.f1, ufx.f2, om) match
+              case Exists.Some(Exists.Some((t1, fb1, fy2))) =>
+                s.translate(fy2)(om, tgt.shuffle) match
+                  case Exists.Some((fz2, s1)) =>
+                    semiLast.translate(fz2, om, am) match
+                      case Exists.Some((semiLast1, fb2)) =>
+                        ufx.ev match
+                          case TypeEq(Refl()) =>
+                            Exists((tgt.Plated.SemiSnoc(init1.to(using ufx.ev), t1, s1, semiLast1), om.pair(fb1, fb2)))
+      }
     }
 
     case class XI[A1, A2, P1, P2, Q, R, S1, S2, B1, B2](
@@ -723,6 +810,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       override def traverse[G[_]: Applicative, ->>[_,_]](f: [t, u] => (t -> u) => G[->>[t, u]])(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): G[tgt.Plated[A1 |*| A2, B1 |*| B2]] = ???
 
       override def sweepL[F[_], ->>[_,_]](a: F[A1 |*| A2], f: [t, u] => (F[t], t -> u) => (->>[t, u], F[u]))(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type], F: Cartesian[|*|, F]): (tgt.Plated[A1 |*| A2, B1 |*| B2], F[B1 |*| B2]) = ???
+
+      override def translate[->>[_,_], <*>[_,_], F[_,_], S](fa: F[A1 |*| A2, S], om: ObjectMap[|*|, <*>, F], am: ArrowMap[->, ->>, F])(using tgt: libretto.lambda.Shuffled[->>, <*>]): Exists[[T] =>> (tgt.Plated[S, T], F[B1 |*| B2, T])] = ???
     }
 
     case class Preshuffled[A, X, B](s: A ~⚬ X, t: Plated[X, B])
@@ -807,6 +896,18 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     def rebase[->>[_, _]](tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): tgt.RevTransferOpt[A1, A2, B1, B2] =
       tgt.RevTransferOpt(t)
+
+
+    def translate[->>[_, _], <*>[_, _], F[_, _], S1, S2](
+      fa1: F[A1, S1],
+      fa2: F[A2, S2],
+      om: ObjectMap[|*|, <*>, F],
+    )(using
+      tgt: libretto.lambda.Shuffled[->>, <*>],
+    ): Exists[[T1] =>> Exists[[T2] =>> (tgt.RevTransferOpt[S1, S2, T1, T2], F[B1, T1], F[B2, T2])]] =
+      t.translateRL(fa1, fa2)(om)(using tgt.shuffle) match
+        case Exists.Some(Exists.Some((fb1, fb2, t1))) =>
+          Exists(Exists((tgt.RevTransferOpt(t1), fb1, fb2)))
   }
 
   def id[X]: Shuffled[X, X] =
@@ -860,6 +961,16 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       case Focus.Id()    => id[X |*| Y]
       case Focus.Fst(i1) => ix > fst(absorbSnd(i1))
       case Focus.Snd(i2) => assocLR > snd(absorbSnd(i2))
+    }
+
+  given SymmetricSemigroupalCategory[Shuffled, |*|] =
+    new SymmetricSemigroupalCategory[Shuffled, |*|] {
+      override def id[A]: Shuffled[A, A] = Shuffled.this.id
+      override def andThen[A, B, C](f: Shuffled[A, B], g: Shuffled[B, C]): Shuffled[A, C] = f > g
+      override def assocLR[A, B, C]: Shuffled[A |*| B |*| C, A |*| (B |*| C)] = Shuffled.this.assocLR
+      override def assocRL[A, B, C]: Shuffled[A |*| (B |*| C), A |*| B |*| C] = Shuffled.this.assocRL
+      override def par[A1, A2, B1, B2](f1: Shuffled[A1, B1], f2: Shuffled[A2, B2]): Shuffled[A1 |*| A2, B1 |*| B2] = Shuffled.this.par(f1, f2)
+      override def swap[A, B]: Shuffled[A |*| B, B |*| A] = Shuffled.this.swap
     }
 
   private def ▄░▄[A1, A2, X2, Y2, B1, B2](
