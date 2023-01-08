@@ -323,6 +323,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
       def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| B]]
 
+      def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| B]]
+
       def terminalVars(a: Varz[A]): Varz[B]
 
       def maskInput: Masked[Op[*, B], A] =
@@ -343,6 +345,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
         override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| Var[A1 |*| A2]]] =
           varIsNotPair(ev.flip)
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A1 |*| A2]]] = ???
       }
 
       case class Map[A, B](f: A -⚬ B, resultVar: Var[B]) extends Op.Linear[Var[A], Var[B]] {
@@ -361,6 +365,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def prj1_gcd_this[A1, A2](that: Prj1[A1, A2])(using ev: Var[A] =:= Var[A1 |*| A2]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| Var[B]]] = ???
 
         override def prj2_gcd_this[A1, A2](that: Prj2[A1, A2])(using ev: Var[A] =:= Var[A1 |*| A2]): Option[Tail[Var[A1 |*| A2], Var[A2] |*| Var[B]]] = ???
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[B]]] = ???
       }
 
       case class Prj1[A1, A2](resultVar: Var[A1], unusedVar: Var[A2]) extends Op[Var[A1 |*| A2], Var[A1]] {
@@ -370,7 +376,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def gcdSimple[X, C](that: Op[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| C]] =
           that.prj1_gcd_this(this)(using ev.flip)
 
-        override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a1] |*| Var[A1]]] = ???
+        override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a1] |*| Var[A1]]] =
+          (testEqual(that.resultVar, this.resultVar), testEqual(that.unusedVar, this.unusedVar)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(this) > shOp.lift(DupVar()))
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
 
         override def prj2_gcd_this[a1, a2](that: Prj2[a1, a2])(using
           ev: Var[A1 |*| A2] =:= Var[a1 |*| a2],
@@ -384,6 +399,22 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
               bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
             case (None, Some(_)) =>
               bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using
+          ev: Var[A1 |*| A2] =:= Var[T1 |*| T2],
+        ): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A1]]] =
+          ev match {
+            case InjectiveVar(BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl()))) =>
+              (testEqual(that.resultVar1, this.resultVar), testEqual(that.resultVar2, this.unusedVar)) match
+                case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+                  Some(shOp.lift(that) > shOp.lift(DupVar[A1]()).inFst[Var[A2]] > shOp.ix)
+                case (None, None) =>
+                  None
+                case (Some(_), None) =>
+                  bug(s"Variable ${that.resultVar1} appeared as a result of two different projections")
+                case (None, Some(_)) =>
+                  bug(s"Variable ${that.resultVar2} appeared as a result of two different projections")
+          }
       }
 
       case class Prj2[A1, A2](unusedVar: Var[A1], resultVar: Var[A2]) extends Op[Var[A1 |*| A2], Var[A2]] {
@@ -414,13 +445,17 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
               bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
             case (None, Some(_)) =>
               bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A1 |*| A2] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A2]]] = ???
       }
 
       case class Unzip[A1, A2](resultVar1: Var[A1], resultVar2: Var[A2]) extends Op.Linear[Var[A1 |*| A2], Var[A1] |*| Var[A2]] {
         override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A1] |*| Var[A2]] =
           Varz.Zip(Varz.Atom(resultVar1), Varz.Atom(resultVar2))
 
-        override def gcdSimple[X, C](that: Op[Var[X], C])(using Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| Var[A2] |*| C]] = ???
+        override def gcdSimple[X, C](that: Op[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| Var[A2] |*| C]] =
+          that.unzip_gcd_this(this)(using ev.flip)
+
         override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a1] |*| (Var[A1] |*| Var[A2])]] = ???
 
         override def prj2_gcd_this[a1, a2](that: Prj2[a1, a2])(using
@@ -435,6 +470,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
               bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
             case (None, Some(_)) =>
               bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A1 |*| A2] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| (Var[A1] |*| Var[A2])]] = ???
       }
 
       case class DupVar[A]() extends Op[Var[A], Var[A] |*| Var[A]] {
@@ -446,6 +483,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| (Var[A] |*| Var[A])]] = ???
 
         override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| (Var[A] |*| Var[A])]] = ???
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| (Var[A] |*| Var[A])]] = ???
       }
 
       case class CaptureFst[A, X](x: Expr[X], resultVar: Var[X |*| A]) extends Op.Linear[Var[A], Var[X |*| A]] {
@@ -457,6 +496,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[X |*| A]]] = ???
 
         override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| Var[X |*| A]]] = ???
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[X |*| A]]] = ???
       }
 
       case class CaptureSnd[A, X](x: Expr[X], resultVar: Var[A |*| X]) extends Op.Linear[Var[A], Var[A |*| X]] {
@@ -468,6 +509,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[A |*| X]]] = ???
 
         override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| Var[A |*| X]]] = ???
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A |*| X]]] = ???
       }
 
       val project: [t, u, v] => (op: Op[t, u], p: Projection[|*|, u, v]) => shOp.ProjectRes[t, v] =
