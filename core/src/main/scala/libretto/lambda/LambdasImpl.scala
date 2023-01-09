@@ -446,7 +446,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             case (None, Some(_)) =>
               bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
 
-        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A1 |*| A2] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A2]]] = ???
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A1 |*| A2] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A2]]] =
+          (testEqual(that.resultVar1, this.unusedVar), testEqual(that.resultVar2, this.resultVar)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(that) > shOp.snd(shOp.lift(DupVar())) > shOp.assocRL)
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.resultVar1} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.resultVar2} appeared as a result of two different projections")
       }
 
       case class Unzip[A1, A2](resultVar1: Var[A1], resultVar2: Var[A2]) extends Op.Linear[Var[A1 |*| A2], Var[A1] |*| Var[A2]] {
@@ -456,7 +465,18 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def gcdSimple[X, C](that: Op[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| Var[A2] |*| C]] =
           that.unzip_gcd_this(this)(using ev.flip)
 
-        override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a1] |*| (Var[A1] |*| Var[A2])]] = ???
+        override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using
+          ev: Var[A1 |*| A2] =:= Var[a1 |*| a2],
+        ): Option[Tail[Var[a1 |*| a2], Var[a1] |*| (Var[A1] |*| Var[A2])]] =
+          (testEqual(that.resultVar, this.resultVar1), testEqual(that.unusedVar, this.resultVar2)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(this) > shOp.fst(shOp.lift(DupVar())) > shOp.assocLR)
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
 
         override def prj2_gcd_this[a1, a2](that: Prj2[a1, a2])(using
           ev: Var[A1 |*| A2] =:= Var[a1 |*| a2],
@@ -716,9 +736,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case Op.Map(f, resultVar) =>
           None
         case Op.Prj1(resultVar, unusedVar) =>
-          UnhandledCase.raise(s"$obstacle at $C followed by $op at $D")
+          None
         case Op.Prj2(unusedVar, resultVar) =>
-          UnhandledCase.raise(s"$obstacle at $C followed by $op at $D")
+          None
     }
 
     def pullBumpDupVar[A, F[_], V, C[_], D[_], G[_], Y](

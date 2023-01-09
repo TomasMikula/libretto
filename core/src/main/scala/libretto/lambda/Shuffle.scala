@@ -475,8 +475,12 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       case Projected[A0, A, C](p: Projection[|*|, A, A0], f: A0 ~⚬ C) extends ProjectRes[A, C]
     }
 
-    enum ProjectProperRes[A, C] {
-      case Projected[A0, A, C](p: Projection.Proper[|*|, A, A0], f: A0 ~⚬ C) extends ProjectProperRes[A, C]
+    sealed trait ProjectProperRes[A, C] {
+      type X
+      val p: Projection.Proper[|*|, A, X]
+      val f: X ~⚬ C
+
+      import ProjectProperRes._
 
       def unproper: ProjectRes[A, C] =
         this match
@@ -490,6 +494,12 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       def to[D](using ev: C =:= D): ProjectProperRes[A, D] =
         ev.substituteCo(this)
+    }
+
+    object ProjectProperRes {
+      case class Projected[A0, A, C](p: Projection.Proper[|*|, A, A0], f: A0 ~⚬ C) extends ProjectProperRes[A, C] {
+        override type X = A0
+      }
     }
   }
   import ~⚬._
@@ -1612,7 +1622,22 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override protected def discardSnd: ProjectProperRes[(A1 |*| A2) |*| A3, B1 |*| B2] = ???
 
-      override protected def projectFst[C1](p1: Proper[|*|, B1 |*| B2, C1]): ProjectProperRes[(A1 |*| A2) |*| A3, C1 |*| A2] = ???
+      override protected def projectFst[C1](p1: Proper[|*|, B1 |*| B2, C1]): ProjectProperRes[(A1 |*| A2) |*| A3, C1 |*| A2] =
+        g.projectProper(p1) match
+          case r @ ProjectProperRes.Projected(q, f) =>
+            q.fromPair[A1, A3].switch(
+              caseDiscardFst = q2 => ProjectProperRes.Projected(P.par1(P.discardFst, q2), swap > fst(f)),
+              caseDiscardSnd = q1 => ProjectProperRes.Projected(P.discardSnd(P.fst(q1)), fst(f)),
+              casePar = [Q1, Q2] => (ev: r.X =:= (Q1 |*| Q2)) ?=> (p: P.Par[|*|, A1, A3, Q1, Q2]) => {
+                ev match { case TypeEq(Refl()) =>
+                  p match
+                    case P.Fst(p1)      => ProjectProperRes.Projected(p1.inFst[A2].inFst[A3], ix > fst(f))
+                    case P.Snd(p2)      => ProjectProperRes.Projected(p2.inSnd[A1 |*| A2], ix > fst(f))
+                    case P.Both(p1, p2) => ProjectProperRes.Projected(P.Both(p1.inFst[A2], p2), ix > fst(f))
+                }
+              },
+            )
+
 
       override protected def projectSnd[C2](p2: Proper[|*|, A2, C2]): ProjectProperRes[(A1 |*| A2) |*| A3, (B1 |*| B2) |*| C2] = ???
 
@@ -2000,7 +2025,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         IXI(h.g, g).asShuffle
 
       override def assocLR_this_xi[X, Y2, Y3](h: XI[X, A2, B2 |*| B3, Y2, Y3]): ((X |*| A1) |*| (A2 |*| A3)) ~⚬ (A2 |*| (Y2 |*| Y3)) =
-        UnhandledCase.raise(s"$h")
+        decompose(assocLR > snd(g.asShuffle) > h.g.asShuffle) match
+          case Decomposition(f1, f2, h) => Xfer(f1, snd(f2), XI(h))
 
       override def assocLR_this_ixi[P1, P2, Q1, Q2, Q3, Q4](that: IXI[P1, P2, A2, B2 |*| B3, Q1, Q2, Q3, Q4]): (((P1 |*| P2) |*| A1) |*| (A2 |*| A3)) ~⚬ ((Q1 |*| Q2) |*| (Q3 |*| Q4)) =
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.assocLR_this_ixi")
@@ -2084,7 +2110,20 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override protected def discardSnd: ProjectProperRes[(A1 |*| A2) |*| (A3 |*| A4), B1 |*| B2] = ???
 
-      override protected def projectFst[C1](p1: Proper[|*|, B1 |*| B2, C1]): ProjectProperRes[(A1 |*| A2) |*| (A3 |*| A4), C1 |*| (B3 |*| B4)] = ???
+      override protected def projectFst[C1](p1: Proper[|*|, B1 |*| B2, C1]): ProjectProperRes[(A1 |*| A2) |*| (A3 |*| A4), C1 |*| (B3 |*| B4)] =
+        g1.projectProper(p1) match {
+          case r @ ProjectProperRes.Projected(q, f1) =>
+            q.fromPair[A1, A3].switch(
+              caseDiscardFst = q2 => ProjectProperRes.Projected(P.par1(P.discardFst, q2.inFst[A4]), xi > par(f1, g2.asShuffle)),
+              caseDiscardSnd = q1 => ProjectProperRes.Projected(P.par2(q1.inFst[A2], P.discardFst), assocLR > par(f1, g2.asShuffle)),
+              casePar = [Q1, Q2] => (ev: r.X =:= (Q1 |*| Q2)) ?=> (p: P.Par[|*|, A1, A3, Q1, Q2]) =>                                    ev match { case TypeEq(Refl()) =>
+                p match
+                  case P.Fst(p1)      => ProjectProperRes.Projected(p1.inFst[A2].inFst[A3 |*| A4], ixi > par(f1, g2.asShuffle))
+                  case P.Snd(p2)      => ProjectProperRes.Projected(p2.inFst[A4].inSnd[A1 |*| A2], ixi > par(f1, g2.asShuffle))
+                  case P.Both(p1, p2) => ProjectProperRes.Projected(P.Both(p1.inFst[A2], p2.inFst[A4]), ixi > par(f1, g2.asShuffle))
+              },
+            )
+        }
 
       override protected def projectSnd[C2](p2: Proper[|*|, B3 |*| B4, C2]): ProjectProperRes[(A1 |*| A2) |*| (A3 |*| A4), (B1 |*| B2) |*| C2] = ???
 
