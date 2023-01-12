@@ -185,12 +185,12 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         case ~⚬.ChaseBwRes.Split(ev) =>
           ChaseBwRes.Split(ev)
 
-    override def chaseFw[F[_], T](i: Focus[|*|, F])(using A =:= F[T]): ChaseFwRes[F, T, B] =
+    override def chaseFw[F[_], T](i: Focus[|*|, F])(using A =:= F[T]): ChaseFwRes.Blocked[F, T, B] =
       l.chaseFw(i) match
         case tr: ~⚬.ChaseFwRes.Transported[f, t, g, x] =>
           m.chaseFw[g, T](tr.g)(using tr.ev.flip)
             .andThen(Pure(r))
-            .afterShuffle(tr.s)
+            .after([t] => (_: Unit) => Pure(tr.s[t](())))
         case ~⚬.ChaseFwRes.Split(ev) =>
           ChaseFwRes.Split(ev)
   }
@@ -865,7 +865,13 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z],
       ): ProjectRes[A1 |*| A2, C] = ???
 
-      override def chaseFwFst[F[_], X](i: Focus[|*|, F])(using ev: A1 =:= F[X]): ChaseFwRes.Blocked[[x] =>> F[x] |*| A2, X, B1 |*| B2] = ???
+      override def chaseFwFst[F[_], X](i: Focus[|*|, F])(using ev: A1 =:= F[X]): ChaseFwRes.Blocked[[x] =>> F[x] |*| A2, X, B1 |*| B2] =
+        ev match { case TypeEq(Refl()) =>
+          Impermeable(rt.asShuffle, r, ~⚬.id)
+            .chaseFw[[t] =>> F[t] |*| R, X](i.inFst[R])
+            .inSnd[B1]
+            .after([x] => (_: Unit) => (l.asShuffled > Pure(lt.asShuffle) > Pure(b).inSnd[B1]).inSnd[F[x]] > xi)
+        }
 
       override def chaseFwSnd[F[_], X](i: Focus[|*|, F])(using ev: A2 =:= F[X]): ChaseFwRes.Blocked[[x] =>> A1 |*| F[x], X, B1 |*| B2] = ???
 
@@ -1159,9 +1165,6 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     def after[H[_]](h: [x] => Unit => Shuffled[H[x], F[x]]): ChaseFwRes[H, X, B]
     def inFst[C, D](snd: Shuffled[C, D]): ChaseFwRes[[x] =>> F[x] |*| C, X, B |*| D]
     def inSnd[P, Q](fst: Shuffled[P, Q]): ChaseFwRes[[x] =>> P |*| F[x], X, Q |*| B]
-
-    def afterShuffle[H[_]](h: [x] => Unit => H[x] ~⚬ F[x]): ChaseFwRes[H, X, B] =
-      this.after[H]([t] => (_: Unit) => Pure(h[t](())))
 
     def inFst[C]: ChaseFwRes[[x] =>> F[x] |*| C, X, B |*| C] = inFst(id[C])
     def inSnd[A]: ChaseFwRes[[x] =>> A |*| F[x], X, A |*| B] = inSnd(id[A])
