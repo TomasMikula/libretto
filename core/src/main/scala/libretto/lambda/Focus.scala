@@ -1,12 +1,8 @@
 package libretto.lambda
 
-import libretto.lambda.Focus.Id
-
-import libretto.lambda.Focus.Fst
-
-import libretto.lambda.Focus.Snd
-
 sealed trait Focus[|*|[_, _], F[_]] {
+  import Focus._
+
   def compose[G[_]](that: Focus[|*|, G]): Focus[|*|, [x] =>> F[G[x]]] =
     this match {
       case Id()   => that

@@ -327,6 +327,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
       def terminalVars(a: Varz[A]): Varz[B]
 
+      def asZip[P1, P2](using A =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], B =:= Var[V1 |*| V2])]]
+
       def maskInput: Masked[Op[*, B], A] =
         Masked[Op[*, B], A](this)
     }
@@ -347,6 +349,13 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           varIsNotPair(ev.flip)
 
         override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A1 |*| A2]]] = ???
+
+        override def asZip[P1, P2](using
+          ev: (Var[A1] |*| Var[A2]) =:= (P1 |*| P2),
+        ): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[A1 |*| A2] =:= Var[V1 |*| V2])]] =
+          ev match
+            case BiInjective[|*|](ev1 @ TypeEq(Refl()), ev2 @ TypeEq(Refl())) =>
+              Exists(Exists(this, ev1, ev2, summon))
       }
 
       case class Map[A, B](f: A -⚬ B, resultVar: Var[B]) extends Op.Linear[Var[A], Var[B]] {
@@ -367,6 +376,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def prj2_gcd_this[A1, A2](that: Prj2[A1, A2])(using ev: Var[A] =:= Var[A1 |*| A2]): Option[Tail[Var[A1 |*| A2], Var[A2] |*| Var[B]]] = ???
 
         override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[B]]] = ???
+
+        override def asZip[P1, P2](using ev: Var[A] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[B] =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
       }
 
       case class Prj1[A1, A2](resultVar: Var[A1], unusedVar: Var[A2]) extends Op[Var[A1 |*| A2], Var[A1]] {
@@ -415,6 +427,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
                 case (None, Some(_)) =>
                   bug(s"Variable ${that.resultVar2} appeared as a result of two different projections")
           }
+
+        override def asZip[P1, P2](using ev: Var[A1 |*| A2] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[A1] =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
       }
 
       case class Prj2[A1, A2](unusedVar: Var[A1], resultVar: Var[A2]) extends Op[Var[A1 |*| A2], Var[A2]] {
@@ -456,6 +471,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
               bug(s"Variable ${that.resultVar1} appeared as a result of two different projections")
             case (None, Some(_)) =>
               bug(s"Variable ${that.resultVar2} appeared as a result of two different projections")
+
+        override def asZip[P1, P2](using ev: Var[A1 |*| A2] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[A2] =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
       }
 
       case class Unzip[A1, A2](resultVar1: Var[A1], resultVar2: Var[A2]) extends Op.Linear[Var[A1 |*| A2], Var[A1] |*| Var[A2]] {
@@ -491,7 +509,21 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             case (None, Some(_)) =>
               bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
 
-        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A1 |*| A2] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| (Var[A1] |*| Var[A2])]] = ???
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using
+          ev: Var[A1 |*| A2] =:= Var[T1 |*| T2],
+        ): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| (Var[A1] |*| Var[A2])]] =
+          (testEqual(that.resultVar1, this.resultVar1), testEqual(that.resultVar2, this.resultVar2)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(this) > shOp.par(shOp.lift(DupVar()), shOp.lift(DupVar())) > shOp.ixi)
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.resultVar1} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.resultVar2} appeared as a result of two different projections")
+
+        override def asZip[P1, P2](using ev: Var[A1 |*| A2] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], (Var[A1] |*| Var[A2]) =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
       }
 
       case class DupVar[A]() extends Op[Var[A], Var[A] |*| Var[A]] {
@@ -505,6 +537,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| (Var[A] |*| Var[A])]] = ???
 
         override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| (Var[A] |*| Var[A])]] = ???
+
+        override def asZip[P1, P2](using ev: Var[A] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], (Var[A] |*| Var[A]) =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
       }
 
       case class CaptureFst[A, X](x: Expr[X], resultVar: Var[X |*| A]) extends Op.Linear[Var[A], Var[X |*| A]] {
@@ -518,6 +553,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| Var[X |*| A]]] = ???
 
         override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[X |*| A]]] = ???
+
+        override def asZip[P1, P2](using ev: Var[A] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[X |*| A] =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
       }
 
       case class CaptureSnd[A, X](x: Expr[X], resultVar: Var[A |*| X]) extends Op.Linear[Var[A], Var[A |*| X]] {
@@ -531,6 +569,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| Var[A |*| X]]] = ???
 
         override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A |*| X]]] = ???
+
+        override def asZip[P1, P2](using ev: Var[A] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[A |*| X] =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
       }
 
       val project: [t, u, v] => (op: Op[t, u], p: Projection[|*|, u, v]) => shOp.ProjectRes[t, v] =
@@ -573,12 +614,37 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       )(
         C: Focus[|*|, C],
         D: Focus[|*|, D],
-      ): Option[Tail[C[Var[X]], Y |*| Z]] =
+      ): Option[Tail[C[Var[X]], Y |*| Z]] = {
+        import shOp.shuffle.{zip => zipEq}
+
         (C, D) match {
           case (Focus.Id(), Focus.Id()) =>
             f gcdSimple g
+          case (c: Focus.Fst[p, c1, y], d: Focus.Fst[q, d1, z]) =>
+            f.asZip[c1[Var[X]], y] match
+              case e1 @ Exists.Some(e2 @ Exists.Some((z1, ev1 @ TypeEq(Refl()), TypeEq(Refl()), TypeEq(Refl())))) =>
+                g.asZip[d1[Var[X]], z] match
+                  case e3 @ Exists.Some(e4 @ Exists.Some(z2, ev2, TypeEq(Refl()), TypeEq(Refl()))) =>
+                    gcdZips(z1, z2).map(_.from(using ev1 zipEq summon[y =:= Var[e2.T]]))
+          case (c: Focus.Snd[p, c2, y], d: Focus.Snd[q, d2, z]) =>
+            f.asZip[y, c2[Var[X]]] match
+              case e1 @ Exists.Some(e2 @ Exists.Some((z1, ev1 @ TypeEq(Refl()), ev2 @ TypeEq(Refl()), TypeEq(Refl())))) =>
+                g.asZip[z, d2[Var[X]]] match
+                  case e3 @ Exists.Some(e4 @ Exists.Some(z2, TypeEq(Refl()), TypeEq(Refl()), TypeEq(Refl()))) =>
+                    gcdZips(z1, z2).map(_.from[y |*| c2[Var[X]]](using ev1 zipEq ev2))
           case _ =>
+            // TODO: derive contradiction
             UnhandledCase.raise(s"($f at $C) gcd ($g at $D)")
+        }
+      }
+
+      private def gcdZips[A1, A2, B1, B2](
+        z1: Zip[A1, A2],
+        z2: Zip[B1, B2],
+      ): Option[Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2] |*| Var[B1 |*| B2]]] =
+        testEqual(z1.resultVar, z2.resultVar) map {
+          case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+            shOp.lift(z1) > shOp.lift(DupVar())
         }
     }
 
