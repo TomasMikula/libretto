@@ -1,7 +1,9 @@
 package libretto.lambda
 
+import libretto.lambda.{Projection => P}
 import libretto.util.{Applicative, BiInjective, Exists, TypeEq}
 import libretto.util.TypeEq.Refl
+import libretto.lambda.Projection.Proper
 
 object Shuffled {
   type With[->[_, _], |*|[_, _], S <: Shuffle[|*|]] =
@@ -238,7 +240,16 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         case ~⚬.ChaseFwRes.Split(ev) =>
           ChaseFwRes.Split(ev)
 
-    override def translate[->>[_,_], <*>[_,_], F[_,_], S](fa: F[A, S], om: ObjectMap[|*|, <*>, F], am: ArrowMap[->, ->>, F])(using tgt: libretto.lambda.Shuffled[->>, <*>]): Exists[[T] =>> (tgt.Shuffled[S, T], F[B, T])] = ???
+    override def translate[->>[_, _], <*>[_, _], F[_, _], S](
+      fa: F[A, S],
+      om: ObjectMap[|*|, <*>, F],
+      am: ArrowMap[->, ->>, F],
+    )(using
+      tgt: libretto.lambda.Shuffled[->>, <*>],
+    ): Exists[[T] =>> (tgt.Shuffled[S, T], F[B, T])] =
+      s.translate(fa)(om, tgt.shuffle) match
+        case Exists.Some((s1, fb)) =>
+          Exists((tgt.Pure(s1), fb))
 
     override def traverse[G[_]: Applicative, ->>[_,_]](
       f: [t, u] => (t -> u) => G[t ->> u],
@@ -253,7 +264,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     )(using
       tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
       F: Cartesian[|*|, F],
-    ): (tgt.Shuffled[A, B], F[B]) = ???
+    ): (tgt.Shuffled[A, B], F[B]) =
+      (tgt.Pure(s), s.apply(a))
   }
 
   case class SemiObstructed[A, X1, X2, Y2, Z2, B1, B2](
@@ -506,6 +518,44 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
             (ev andThen summon[G[X] =:= (b1 |*| g2[X])]) match
               case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
                 chaseBwSnd[g2, X](j.i)
+
+      def discardFst(f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A, B2]
+      def discardSnd(f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A, B1]
+
+      def projectFst[C](
+        p: Projection.Proper[|*|, B1, C],
+        f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z],
+      ): ProjectRes[A, C |*| B2]
+
+      def projectSnd[C](
+        p: P.Proper[|*|, B2, C],
+        f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z],
+      ): ProjectRes[A, B1 |*| C]
+
+      final override def projectProper[C](
+        p: P.Proper[|*|, B1 |*| B2, C],
+        f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z],
+      ): ProjectRes[A, C] =
+        p.fromPair[B1, B2].switch(
+          caseDiscardFst = { p2 =>
+            discardFst(f) match
+              case ProjectRes.Projected(q0, s0) =>
+                s0.project(p2, f) match
+                  case ProjectRes.Projected(q1, s1) => ProjectRes.Projected(q0 > q1, s1)
+          },
+          caseDiscardSnd = { p1 =>
+            discardSnd(f) match
+              case ProjectRes.Projected(q0, s0) =>
+                s0.project(p1, f) match
+                  case ProjectRes.Projected(q1, s1) => ProjectRes.Projected(q0 > q1, s1)
+          },
+          casePar = [q1, q2] => (ev: C =:= (q1 |*| q2)) ?=> (p: P.Par[|*|, B1, B2, q1, q2]) =>                        ev match { case TypeEq(Refl()) =>
+            p match
+              case P.Fst(p1)      => projectFst(p1, f).to[C]
+              case P.Snd(p2)      => projectSnd(p2, f).to[C]
+              case P.Both(p1, p2) => projectFst(p1, f).project(P.snd(p2), f)
+          },
+        )
     }
 
     case class Solid[A, B](f: A -> B) extends Plated[A, B] {
@@ -570,10 +620,13 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
           case c: UnconsSomeRes.Cons[f, x, y, b1] =>
             UnconsSomeRes.Cons[[t] =>> f[t] |*| A2, x, y, B1 |*| B2](c.i.inFst[A2], c.f, par(c.post, f2.asShuffled))
 
-      override def projectProper[C](
-        p: Projection.Proper[|*|, B1 |*| B2, C],
-        f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z],
-      ): ProjectRes[A1 |*| A2, C] = ???
+      override def discardFst(f: [X, Y, Z] => (X -> Y, P[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A1 |*| A2, B2] = ???
+
+      override def discardSnd(f: [X, Y, Z] => (X -> Y, P[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A1 |*| A2, B1] = ???
+
+      override def projectFst[C](p: Proper[|*|, B1, C], f: [X, Y, Z] => (X -> Y, P[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A1 |*| A2, C |*| B2] = ???
+
+      override def projectSnd[C](p: Proper[|*|, B2, C], f: [X, Y, Z] => (X -> Y, P[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A1 |*| A2, B1 |*| C] = ???
 
       override def chaseFwFst[F[_], X](i: Focus[|*|, F])(using ev: A1 =:= F[X]): ChaseFwRes.Blocked[[x] =>> F[x] |*| A2, X, B1 |*| B2] =
         f1.chaseFw[F, X](i).inFst(snd = f2.asShuffled)
@@ -793,53 +846,26 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
           case c: UnconsSomeRes.Cons[f, v, w, x1x2] =>
             UnconsSomeRes.Cons(c.i, c.f, (c.post thenShuffle t.asShuffle) > (Pure(s) > semiLast.asShuffled).inSnd)
 
-      override def projectProper[C](
-        p: Projection.Proper[|*|, B1 |*| B2, C],
-        f: [P, Q, R] => (P -> Q, Projection[|*|, Q, R]) => ProjectRes[P, R],
-      ): ProjectRes[A, C] = {
-        import libretto.lambda.{Projection => P}
+      override def discardFst(f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A, B2] =
+        t.asShuffle.projectProper(P.discardFst) match
+          case ~⚬.ProjectProperRes.Projected(p, t1) =>
+            init.projectProper(p, f) match
+              case ProjectRes.Projected(p0, init1) =>
+                ProjectRes.Projected(p0, init1 > Pure(t1) > Pure(s) > semiLast.asShuffled)
 
-        def discardFst: ProjectRes[A, B2] =
-          t.asShuffle.projectProper(P.discardFst) match
-            case ~⚬.ProjectProperRes.Projected(p, t1) =>
-              init.projectProper(p, f) match
-                case ProjectRes.Projected(p0, init1) =>
-                  ProjectRes.Projected(p0, init1 > Pure(t1) > Pure(s) > semiLast.asShuffled)
+      override def discardSnd(f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A, B1] =
+        ???
 
-        def discardSnd: ProjectRes[A, B1] = ???
+      override def projectFst[C](p1: Proper[|*|, B1, C], f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A, C |*| B2] =
+        ProjectRes(t.asShuffle.projectProper(p1.inFst[Y2]))
+          .after(init.asShuffled, f)
+          .andThen(snd(Pure(s) > semiLast.asShuffled))
 
-        def projectFst[Q1](p1: Projection.Proper[|*|, B1, Q1]): ProjectRes[A, Q1 |*| B2] =
-          ProjectRes(t.asShuffle.projectProper(p1.inFst[Y2]))
-            .after(init.asShuffled, f)
-            .andThen(snd(Pure(s) > semiLast.asShuffled))
-
-        def projectSnd[Q2](p2: Projection.Proper[|*|, B2, Q2]): ProjectRes[A, B1 |*| Q2] =
-          semiLast.project(p2, f)
-            .after(Pure(s), f)
-            .inSnd[B1]
-            .after(init.asShuffled thenShuffle t.asShuffle, f)
-
-        p.fromPair[B1, B2].switch(
-          caseDiscardFst = { p2 =>
-            discardFst match
-              case ProjectRes.Projected(q0, s0) =>
-                s0.project(p2, f) match
-                  case ProjectRes.Projected(q1, s1) => ProjectRes.Projected(q0 > q1, s1)
-          },
-          caseDiscardSnd = { p1 =>
-            discardSnd match
-              case ProjectRes.Projected(q0, s0) =>
-                s0.project(p1, f) match
-                  case ProjectRes.Projected(q1, s1) => ProjectRes.Projected(q0 > q1, s1)
-          },
-          casePar = [q1, q2] => (ev: C =:= (q1 |*| q2)) ?=> (p: P.Par[|*|, B1, B2, q1, q2]) =>                        ev match { case TypeEq(Refl()) =>
-            p match
-              case P.Fst(p1)      => projectFst(p1).to[C]
-              case P.Snd(p2)      => projectSnd(p2).to[C]
-              case P.Both(p1, p2) => projectFst(p1).project(P.snd(p2), f)
-          },
-        )
-      }
+      override def projectSnd[C](p2: Proper[|*|, B2, C], f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A, B1 |*| C] =
+        semiLast.project(p2, f)
+          .after(Pure(s), f)
+          .inSnd[B1]
+          .after(init.asShuffled thenShuffle t.asShuffle, f)
 
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using A =:= F[T]): ChaseFwRes.Blocked[F, T, B1 |*| B2] =
         init.chaseFw[F, T](i)
@@ -942,10 +968,19 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
               ((c.post thenShuffle (lt.asShuffle > ~⚬.snd(b))).inSnd[A1] thenShuffle ~⚬.xi) > (Pure(rt.asShuffle) > r.asShuffled).inSnd,
             )
 
-      override def projectProper[C](
-        p: Projection.Proper[|*|, B1 |*| B2, C],
-        f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z],
-      ): ProjectRes[A1 |*| A2, C] = ???
+      override def discardFst(f: [X, Y, Z] => (X -> Y, P[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A1 |*| A2, B2] =
+        lt.project(P.discardFst)
+          .after(l.asShuffled, f)
+          .andThen(Pure(b))
+          .inSnd[A1]
+          .andThen(Pure(rt.asShuffle))
+          .andThen(r.asShuffled)
+
+      override def discardSnd(f: [X, Y, Z] => (X -> Y, P[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A1 |*| A2, B1] = ???
+
+      override def projectFst[C](p: Proper[|*|, B1, C], f: [X, Y, Z] => (X -> Y, P[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A1 |*| A2, C |*| B2] = ???
+
+      override def projectSnd[C](p: Proper[|*|, B2, C], f: [X, Y, Z] => (X -> Y, P[|*|, Y, Z]) => ProjectRes[X, Z]): ProjectRes[A1 |*| A2, B1 |*| C] = ???
 
       override def chaseFwFst[F[_], X](i: Focus[|*|, F])(using ev: A1 =:= F[X]): ChaseFwRes.Blocked[[x] =>> F[x] |*| A2, X, B1 |*| B2] =
         ev match { case TypeEq(Refl()) =>
@@ -1054,6 +1089,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     def rebase[->>[_, _]](tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): tgt.RevTransferOpt[A1, A2, B1, B2] =
       tgt.RevTransferOpt(t)
 
+    def project[C](p: Projection[|*|, B1 |*| B2, C]): ProjectRes[A1 |*| A2, C] =
+      ProjectRes(asShuffle.project(p))
 
     def translate[->>[_, _], <*>[_, _], F[_, _], S1, S2](
       fa1: F[A1, S1],
@@ -1485,9 +1522,12 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   }
 
   object ProjectRes {
-    def apply[A, C](r: ~⚬.ProjectProperRes[A, C]): ProjectRes[A, C] =
+    def apply[A, C](r: ~⚬.ProjectRes[A, C]): ProjectRes[A, C] =
       r match
-        case ~⚬.ProjectProperRes.Projected(p, f) =>
+        case ~⚬.ProjectRes.Projected(p, f) =>
           Projected(p, Pure(f))
+
+    def apply[A, C](r: ~⚬.ProjectProperRes[A, C]): ProjectRes[A, C] =
+      ProjectRes(r.unproper)
   }
 }

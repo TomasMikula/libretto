@@ -331,6 +331,12 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
       def maskInput: Masked[Op[*, B], A] =
         Masked[Op[*, B], A](this)
+
+      def from[Z](using ev: Z =:= A): Op[Z, B] =
+        ev.substituteContra[Op[*, B]](this)
+
+      def to[C](using ev: B =:= C): Op[A, C] =
+        ev.substituteCo(this)
     }
     object Op {
       sealed trait Linear[A, B] extends Op[A, B]
@@ -530,7 +536,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def terminalVars(a: Varz[Var[A]]): Varz[Var[A] |*| Var[A]] =
           Varz.Zip(a, a)
 
-        override def gcdSimple[X, C](that: Op[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[A] |*| Var[A] |*| C]] = ???
+        override def gcdSimple[X, C](that: Op[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[A] |*| Var[A] |*| C]] =
+          None
 
         override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| (Var[A] |*| Var[A])]] = ???
 
@@ -787,7 +794,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case o: Op.DupVar[v0] =>
           val ev1 = ev.flip andThen summon[CX =:= (Var[v0] |*| Var[v0])]
           (ev1.deriveEquality(C): X =:= v0) match { case TypeEq(Refl()) =>
-            pullBumpDupVar[A, F, v0, C, D, G, Y](pre, post, op)(F, C, D)(using
+            pullBumpDupVar[A, F, v0, C, G[Var[v0]], D, Y](pre, post, op)(F, C, D)(using
               ev1,
             )
           }
@@ -807,9 +814,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           None
     }
 
-    def pullBumpDupVar[A, F[_], V, C[_], D[_], G[_], Y](
+    def pullBumpDupVar[A, F[_], V, C[_], B, D[_], Y](
       pre: Tail[A, F[Var[V]]],
-      post: Tail[F[C[Var[V]]], G[Var[V]]],
+      post: Tail[F[C[Var[V]]], B],
       op: Op[D[Var[V]], Y],
     )(
       F: Focus[|*|, F],
@@ -817,24 +824,15 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       D: Focus[|*|, D],
     )(using
       ev: C[Var[V]] =:= (Var[V] |*| Var[V]),
-    ): Option[Tail[A, G[Var[V]] |*| Y]] = ev match { case TypeEq(Refl()) =>
+    ): Option[Tail[A, B |*| Y]] = ev match { case TypeEq(Refl()) =>
       C match
         case c: Focus.Fst[pair, c1, q] =>
           (summon[(c1[Var[V]] |*| q) =:= C[Var[V]]] andThen ev) match { case BiInjective[|*|](c1vv_vv @ TypeEq(Refl()), q_vv @ TypeEq(Refl())) =>
             c.i match
               case Focus.Id() =>
-                (summon[Var[V] =:= c1[Var[V]]] andThen c1vv_vv) match { case TypeEq(Refl()) =>
-                  pushOut[[x] =>> F[Var[V] |*| x], V, D, Y, G[Var[V]]](post, op)(F compose Focus.snd[|*|, Var[V]], D) match
-                    case Some(post1) =>
-                      ???
-                    case None =>
-                      pullOut[A, F, V, D, Y](pre.to[F[Var[V]]], op)(F, D) match
-                        case Some(pre1) =>
-                          val post1: Tail[F[Var[V]], G[Var[V]]] = shOp.lift(Op.DupVar[V]()).to[C[Var[V]]].at(F) > post
-                          Some(pre1 > shOp.extractSnd[F, Var[V], Y](F) > post1.inFst)
-                        case None =>
-                          ???
-                }
+                (summon[Var[V] =:= c1[Var[V]]] andThen c1vv_vv) match
+                  case TypeEq(Refl()) =>
+                    pullBumpDupVarChaseOther[A, F, V, [x] =>> Var[V] |*| x, B, D, Y](pre, post, op)(F, Focus.snd[|*|, Var[V]], D)
               case Focus.Fst(_) =>
                 throw new AssertionError() // TODO: derive contradiction
               case Focus.Snd(_) =>
@@ -844,13 +842,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           (summon[(p |*| c2[Var[V]]) =:= C[Var[V]]] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), c2vv_vv @ TypeEq(Refl())) =>
             c.i match
               case Focus.Id() =>
-                (summon[Var[V] =:= c2[Var[V]]] andThen c2vv_vv) match { case TypeEq(Refl()) =>
-                  pushOut[[x] =>> F[x |*| Var[V]], V, D, Y, G[Var[V]]](post, op)(F compose Focus.fst[|*|, Var[V]], D) match
-                    case Some(post1) =>
-                      Some(pre > shOp.lift(Op.DupVar[V]()).to[Var[V] |*| Var[V]].at(F) > post1)
-                    case None =>
-                      ???
-                }
+                (summon[Var[V] =:= c2[Var[V]]] andThen c2vv_vv) match
+                  case TypeEq(Refl()) =>
+                    pullBumpDupVarChaseOther[A, F, V, [x] =>> x |*| Var[V], B, D, Y](pre, post, op)(F, Focus.fst[|*|, Var[V]], D)
               case Focus.Fst(_) =>
                 throw new AssertionError() // TODO: derive contradiction
               case Focus.Snd(_) =>
@@ -859,6 +853,32 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case Focus.Id() =>
           varIsNotPair(summon[Var[V] =:= (Var[V] |*| Var[V])])
     }
+
+    /** After bumping into one output of DupVar. */
+    private def pullBumpDupVarChaseOther[A, F[_], V, O[_], B, D[_], Y](
+      pre: Tail[A, F[Var[V]]],
+      post: Tail[F[O[Var[V]]], B],
+      op: Op[D[Var[V]], Y],
+    )(
+      F: Focus[|*|, F],
+      O: Focus[|*|, O],
+      D: Focus[|*|, D],
+    )(using
+      ev: O[Var[V]] =:= (Var[V] |*| Var[V]),
+    ): Option[Tail[A, B |*| Y]] =
+      // chase forward through the other output of DupVar
+      pushOut[[x] =>> F[O[x]], V, D, Y, B](post, op)(F compose O, D) match
+        case Some(post1) =>
+          Some(pre > shOp.lift(Op.DupVar[V]()).to(using ev.flip).at(F) > post1)
+        case None =>
+          // chase upstream
+          pullOut[A, F, V, D, Y](pre, op)(F, D) match
+            case Some(pre1) =>
+              val post1: Tail[F[Var[V]], B] =
+                shOp.lift(Op.DupVar[V]()).to(using ev.flip).at(F) > post
+              Some(pre1 > shOp.extractSnd(F) > post1.inFst)
+            case None =>
+              None
 
     def pushOut[F[_], X, D[_], Y, B](t: Tail[F[Var[X]], B], op: Op[D[Var[X]], Y])(
       F: Focus[|*|, F],
@@ -883,10 +903,26 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       G: Focus[|*|, G],
       D: Focus[|*|, D],
     ): Option[Tail[A, B |*| Y]] =
-      Op.gcd(obstacle, op)(C, D)
-        .map { (res0: Tail[C[Var[X]], W |*| Y]) =>
-          pre > res0.at(G) > shOp.extractSnd[G, W, Y](G) > post.inFst[Y]
-        }
+      obstacle.maskInput.visit([CX] => (o: Op[CX, W], ev: CX =:= C[Var[X]]) => {
+        o match
+          case o: Op.DupVar[v0] =>
+            summon[W =:= (Var[v0] |*| Var[v0])]
+            given ev1: (C[Var[X]] =:= Var[v0]) = ev.flip andThen summon[CX =:= Var[v0]]
+            given evx: (Var[X] =:= Var[v0]) = C.mustBeId[Var[X], v0]
+            def go[E[_]](e: Focus[|*|, E])(using ev2: W =:= E[Var[v0]]): Option[Tail[A, B |*| Y]] =
+              ev1 match { case TypeEq(Refl()) =>
+                evx match { case TypeEq(Refl()) =>
+                  pushOut[[x] =>> G[E[x]], v0, D, Y, B](post.from(using ev2.flip.liftCo[G]), op.from(using evx.flip.liftCo[D]))(G compose e, D)
+                    .map { post1 => pre.to[G[Var[v0]]](using ev1.liftCo[G]) > shOp.lift(Op.DupVar[v0]()).at(G) > post1.from(using ev2.liftCo[G]) }
+                }
+              }
+            go[[x] =>> x |*| Var[v0]](Focus.fst) orElse go[[x] =>> Var[v0] |*| x](Focus.snd)
+          case o =>
+            Op.gcd(o.from(using ev.flip), op)(C, D)
+              .map { (res0: Tail[C[Var[X]], W |*| Y]) =>
+                pre > res0.at(G) > shOp.extractSnd[G, W, Y](G) > post.inFst[Y]
+              }
+      })
 
     def discardFst[A, G[_], X, Y](t: Tail[Var[A], G[X |*| Y]], g: Focus[|*|, G]): Tail[Var[A], G[Y]] = {
       val prj: Projection[|*|, G[X |*| Y], G[Y]] = Projection.discardFst[|*|, X, Y].at[G](g)
@@ -897,18 +933,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
               f
             case _: Projection.Proper[pair, p, q] =>
               throw AssertionError("Cannot project from Var[A]") // TODO: derive contradiction
-
-      // type GY[T] = G[T |*| Y]
-      // t.chaseBw[GY, X](g compose Focus.fst) match
-      //   case s: shOp.ChaseBwRes.Split[a, gy, x, x1, x2] =>
-      //     val t1: Tail[A, G[x1 |*| (x2 |*| Y)]] = t.to[G[(x1 |*| x2) |*| Y]](using s.ev.liftCo[[t] =>> G[t |*| Y]]) > shOp.assocLR[x1, x2, Y].at(g)
-      //     discardFst[A, G, x1, x2 |*| Y](t1, g) flatMap { t2 =>
-      //       discardFst(t2, g)
-      //     }
-      //   case tr: shOp.ChaseBwRes.Transported[a, f, gy, x] =>
-      //     None
-      //   case r: shOp.ChaseBwRes.OriginatesFrom[a, f, v, w, x, gy] =>
-      //     UnhandledCase.raise(s"${r.f} at ${r.w}")
     }
 
     def demultiply[V, B](t: Tail[Var[V], B]): Demultiplied[V, B] =
@@ -993,11 +1017,15 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     def linearOp[A, B](vs: Varz[A], op: Op[A, B]): LinCheck[Op.Linear[A, B]] =
       op match {
+        case op: Op.Linear[a, b] =>
+          LinCheck.Success(op)
         case op: Op.DupVar[a] =>
           val v = vs.get[a]
           LinCheck.Failure(errors.overusedVars(variables.singleton(v)))
-        case op: Op.Linear[a, b] =>
-          LinCheck.Success(op)
+        case p: Op.Prj1[a1, a2] =>
+          LinCheck.Failure(errors.underusedVars(variables.singleton(p.unusedVar)))
+        case p: Op.Prj2[a1, a2] =>
+          LinCheck.Failure(errors.underusedVars(variables.singleton(p.unusedVar)))
         case other =>
           UnhandledCase.raise(s"$other")
       }
@@ -1163,6 +1191,14 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case Focus.Id() =>
           varIsNotPair(ev)
       }
+  }
+
+  extension [F[_]](f: Focus[|*|, F]) {
+    def mustBeId[A, V](using ev: F[A] =:= Var[V]): A =:= Var[V] =
+      f match
+        case Focus.Id()                => ev
+        case _: Focus.Fst[pair, f1, y] => varIsNotPair(ev.flip)
+        case _: Focus.Snd[pair, f2, x] => varIsNotPair(ev.flip)
   }
 
   // TODO: Require Injective[Var] as an argument

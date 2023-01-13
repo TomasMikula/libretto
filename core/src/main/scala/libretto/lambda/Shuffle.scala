@@ -1509,9 +1509,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def after[Z1, Z2](that: Transfer[Z1, Z2, A1, A2 |*| A3]): (Z1 |*| Z2) ~⚬ ((B1 |*| B2) |*| A3) =
         that.thenAssocRL(this)
 
-      override protected def discardFst: ProjectProperRes[A1 |*| (A2 |*| A3), A3] = ???
+      override protected def discardFst: ProjectProperRes[A1 |*| (A2 |*| A3), A3] =
+        ProjectProperRes.Projected(P.discardFst(P.discardFst), id[A3])
 
-      override protected def discardSnd: ProjectProperRes[A1 |*| (A2 |*| A3), B1 |*| B2] = ???
+      override protected def discardSnd: ProjectProperRes[A1 |*| (A2 |*| A3), B1 |*| B2] =
+        ProjectProperRes.Projected(P.Snd(P.discardSnd), g.asShuffle)
 
       override protected def projectFst[C1](p1: Proper[|*|, B1 |*| B2, C1]): ProjectProperRes[A1 |*| (A2 |*| A3), C1 |*| A3] =
         g.projectProper(p1) match {
