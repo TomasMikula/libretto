@@ -121,30 +121,6 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
           OneExpr(v, OneTail.Zip(a1, g.apply1(o1), resultVar))
       }
 
-    // override def par[A, B](a: Expr[A], b: Expr[B]): Expr[A |*| B] =
-    //   (a, b) match {
-    //     case (LambdasExpr(a), LambdasExpr(b)) =>
-    //       LambdasExpr(a par b)
-    //     case (LambdasExpr(a), OneExpr(v, g)) =>
-    //       val aOne: lambdas.Expr[A |*| One] =
-    //         (a map smc.introSnd)(newSyntheticVar(a.terminalVars zip Vars.single(v)))
-    //       val va = newSyntheticVar[A](hint = a.terminalVars)
-    //       val (a1, o1) = lambdas.Expr.unzip(aOne)(va, v)
-    //       LambdasExpr(lambdas.Expr.par(a1, g(o1)))
-    //     case (OneExpr(v, f), LambdasExpr(b)) =>
-    //       val oneB: lambdas.Expr[One |*| B] =
-    //         (b map smc.introFst)(newSyntheticVar(Vars.single(v) zip b.terminalVars))
-    //       val vb = newSyntheticVar[B](hint = b.terminalVars)
-    //       val (o1, b1) = lambdas.Expr.unzip(oneB)(v, vb)
-    //       LambdasExpr(lambdas.Expr.par(f(o1), b1))
-    //     case (a @ OneExpr(v, f), OneExpr(w, g)) =>
-    //       val aOne: OneTail[A |*| One] =
-    //         OneTail.Map(f, smc.introSnd, newSyntheticVar(a.terminalVars zip Vars.single(w)))
-    //       val va = newSyntheticVar[A](hint = a.terminalVars)
-    //       val (a1, o1) = OneTail.unzip(aOne)(va, w)
-    //       OneExpr(v, OneTail.Par(a1, g.apply1(o1)))
-    //   }
-
     override def unzip[B1, B2](e: Expr[B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (Expr[B1], Expr[B2]) =
       e match {
         case LambdasExpr(e) =>

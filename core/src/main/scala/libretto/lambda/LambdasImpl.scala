@@ -52,10 +52,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   sealed trait VArr[A, B] {
     import VArr._
 
-    def vd: VarDefining[A, B] =
-      this match
-        case vd: VarDefining[A, B] => vd
-
     def initialVars: Vars[A] =
       this match {
         case Id(a)         => Vars.single(a)
@@ -65,46 +61,42 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case Prj2(f, _, _) => f.initialVars
       }
 
+    def resultVar: Var[B]
+
     def terminalVars: Vars[B] =
-      this match {
-        case vd: VarDefining[A, B] => Vars.single(vd.resultVar)
-      }
+      Vars.single(resultVar)
 
     def map[C](f: B -⚬ C)(resultVar: Var[C]): VArr[A, C] =
-      Map(this.vd, f, resultVar)
+      Map(this, f, resultVar)
 
     def zip[C, D](that: VArr[C, D])(resultVar: Var[B |*| D]): VArr[A |*| C, B |*| D] =
       Zip(this, that, resultVar)
   }
 
   object VArr {
-    sealed trait VarDefining[A, B] extends VArr[A, B] {
-      def resultVar: Var[B]
-    }
-
-    case class Id[A](variable: Var[A]) extends VarDefining[A, A] {
+    case class Id[A](variable: Var[A]) extends VArr[A, A] {
       override def resultVar: Var[A] =
         variable
     }
 
     case class Map[A, B, C](
-      f: VarDefining[A, B],
+      f: VArr[A, B],
       g: B -⚬ C,
       resultVar: Var[C],
-    ) extends VarDefining[A, C]
+    ) extends VArr[A, C]
 
     case class Zip[A1, A2, B1, B2](
       f1: VArr[A1, B1],
       f2: VArr[A2, B2],
       resultVar: Var[B1 |*| B2],
-    ) extends VarDefining[A1 |*| A2, B1 |*| B2]
+    ) extends VArr[A1 |*| A2, B1 |*| B2]
 
-    case class Prj1[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VarDefining[A, B1] {
+    case class Prj1[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VArr[A, B1] {
       override def resultVar: Var[B1] =
         b1
     }
 
-    case class Prj2[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VarDefining[A, B2] {
+    case class Prj2[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VArr[A, B2] {
       override def resultVar: Var[B2] =
         b2
     }
@@ -134,8 +126,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   type Expr[A] = VArr[?, A]
 
   object Expr extends Exprs {
-    type VarDefining[A] = VArr.VarDefining[?, A]
-
     override def variable[A](a: Var[A]): Expr[A] =
       VArr.id(a)
 
@@ -155,7 +145,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   override def abs[A, B](expr: Expr[B], boundVar: Var[A]): Abstracted[A, B] = {
     import HybridArrow.TailLinearRes
 
-    eliminate(boundVar, expr.vd) match {
+    eliminate(boundVar, expr) match {
       case EliminateRes.Found(arr) =>
         arr.tailLinear match {
           case TailLinearRes.Exact(m, f)             => Lambdas.Abstracted.Exact(m, f)
@@ -167,18 +157,12 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     }
   }
 
-  private def overusedVar[A](v: Var[A]): LinearityViolation.Overused[VarSet] =
-    LinearityViolation.Overused(variables.singleton(v))
-
-  private def underusedVar[A](v: Var[A]): LinearityViolation.Underused[VarSet] =
-    LinearityViolation.Underused(variables.singleton(v))
-
   private def bug(msg: String): Nothing =
     throw new AssertionError(msg)
 
   // Note: The variable is only searched for among initial variables of the expression,
   // not in any (intermediate) results.
-  private def eliminate[A, B](v: Var[A], expr: Expr.VarDefining[B]): EliminateRes[A, B] = {
+  private def eliminate[A, B](v: Var[A], expr: Expr[B]): EliminateRes[A, B] = {
     import EliminateRes.{Found, NotFound}
 
     expr match
@@ -191,17 +175,17 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           case NotFound() => NotFound()
           case Found(arr) => Found(arr > HybridArrow.map(g, resultVar))
       case VArr.Zip(f1, f2, resultVar) =>
-        (eliminate(v, f1.vd), eliminate(v, f2.vd)) match
+        (eliminate(v, f1), eliminate(v, f2)) match
           case (NotFound(), NotFound()) => NotFound()
           case (NotFound(), Found(arr)) => Found(arr > HybridArrow.captureFst(f1, resultVar))
           case (Found(arr), NotFound()) => Found(arr > HybridArrow.captureSnd(f2, resultVar))
           case (Found(ar1), Found(ar2)) => Found((ar1 interweave ar2) > HybridArrow.zip(resultVar))
       case VArr.Prj1(f, b1, b2) =>
-        eliminate(v, f.vd) match
+        eliminate(v, f) match
           case NotFound() => NotFound()
           case Found(arr) => Found(arr > HybridArrow.prj1(b1, b2))
       case VArr.Prj2(f, b1, b2) =>
-        eliminate(v, f.vd) match
+        eliminate(v, f) match
           case NotFound() => NotFound()
           case Found(arr) => Found(arr > HybridArrow.prj2(b1, b2))
   }
@@ -712,22 +696,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       case CaptureFst[X, A](captured: Expr[X]) extends CaptureOp[A, X |*| A]
       case CaptureSnd[A, X](captured: Expr[X]) extends CaptureOp[A, A |*| X]
     }
-    type CapFun[A, B] = Either[CaptureOp[A, B], A -⚬ B]
-    object CapFun {
-      def id[A]: CapFun[A, A] =
-        Left(CaptureOp.Id())
-
-      def captureFst[X, A](captured: Expr[X]): CapFun[A, X |*| A] =
-        Left(CaptureOp.CaptureFst(captured))
-
-      def captureSnd[A, X](captured: Expr[X]): CapFun[A, A |*| X] =
-        Left(CaptureOp.CaptureSnd(captured))
-
-      def lift[A, B](f: A -⚬ B): CapFun[A, B] =
-        Right(f)
-    }
-    given shCap: Shuffled.With[CapFun, |*|, shuffled.shuffle.type] =
-      Shuffled[CapFun, |*|](shuffled.shuffle)
 
     type Tail[A, B] =
       shOp.Shuffled[A, B]
@@ -737,9 +705,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     type LTail[A, B] =
       shLOp.Shuffled[A, B]
-
-    type CTail[A, B] =
-      shCap.Shuffled[A, B]
 
     def id[A](v: Var[A]): HybridArrow[A, Var[A]] =
       HybridArrow(v, shOp.id)
