@@ -23,6 +23,12 @@ sealed trait Multiplier[|*|[_, _], A, A1] {
           (split, f, g) => split > c.par(f, g)
         }
     }
+
+  def from[Z](using ev: Z =:= A): Multiplier[|*|, Z, A1] =
+    ev.substituteContra[Multiplier[|*|, *, A1]](this)
+
+  def to[B](using ev: A1 =:= B): Multiplier[|*|, A, B] =
+    ev.substituteCo(this)
 }
 
 object Multiplier {

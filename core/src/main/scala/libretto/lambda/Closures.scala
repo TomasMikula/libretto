@@ -25,11 +25,12 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
     f: Expr[A =⚬ B],
     a: Expr[A],
   )(
+    auxVar: Var[(A =⚬ B) |*| A],
     resultVar: Var[B],
   )(using
     ev: ClosedSemigroupalCategory[-⚬, |*|, =⚬],
   ): Expr[B] =
-    (f par a).map(ev.eval[A, B])(resultVar)
+    (f zip a)(auxVar).map(ev.eval[A, B])(resultVar)
 
   def closure[A, B](
     f: Expr[A] => Expr[B],
@@ -57,7 +58,7 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
   sealed trait ClosureRes[A, B]
   object ClosureRes {
     case class Capturing[X, A, A1, B](
-      captured: Expr[X],
+      captured: Tupled[|*|, Expr, X],
       m: Multiplier[|*|, A, A1],
       f: (X |*| A1) -⚬ B,
     ) extends ClosureRes[A, B]

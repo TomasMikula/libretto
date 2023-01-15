@@ -1,9 +1,11 @@
 package libretto.lambda
 
+import libretto.{lambda => ll}
 import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.lambda.Lambdas.ErrorFactory
-import libretto.util.BiInjective
-import scala.annotation.targetName
+import libretto.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeEq}
+import libretto.util.TypeEq.Refl
+import scala.annotation.{tailrec, targetName}
 
 class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   ssc: SymmetricSemigroupalCategory[-⚬, |*|],
@@ -13,7 +15,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 ) extends Lambdas[-⚬, |*|, Var, VarSet, E, LE] {
   import variables.testEqual
 
-  val shuffled = new Shuffled[-⚬, |*|]
+  val shuffled = Shuffled[-⚬, |*|]
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
   import shuffled.{Shuffled => ≈⚬, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
 
@@ -25,416 +27,1193 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       f.fold
   }
 
+  type CapturingFun[A, B] = libretto.lambda.CapturingFun[AbstractFun, |*|, Tupled[Expr, *], A, B]
+  object CapturingFun {
+    def noCapture[A, B](f: AbstractFun[A, B]): CapturingFun[A, B] =
+      ll.CapturingFun.NoCapture(f)
+
+    def id[A]: CapturingFun[A, A] =
+      noCapture(shuffled.id)
+
+    def lift[A, B](f: A -⚬ B): CapturingFun[A, B] =
+      noCapture(shuffled.lift(f))
+
+    def captureFst[X, A](captured: Expr[X]): CapturingFun[A, X |*| A] =
+      ll.CapturingFun.Closure(ll.Tupled.Single(captured), shuffled.id)
+
+    def captureSnd[X, A](captured: Expr[X]): CapturingFun[A, A |*| X] =
+      ll.CapturingFun.Closure(ll.Tupled.Single(captured), shuffled.swap)
+  }
+
   /**
-   * Arrow interspersed with intermediate [[Var]]s.
+   * AST of an expression, created by user code, before translation to point-free representation,
+   * containing intermediate [[Var]]s.
    * Non-linear: includes projections and multiple occurrences of the same variable.
    */
-  sealed trait VArr[A, B] {
-    import VArr._
+  sealed trait Expr[B] {
+    import Expr._
 
-    def initialVars: Vars[A] =
+    def resultVar: Var[B]
+
+    def initialVars: VarSet =
       this match {
-        case Id(a)         => Vars.single(a)
+        case Id(a)         => variables.singleton(a)
         case Map(f, _, _)  => f.initialVars
-        case Zip(f, g, _)  => f.initialVars zip g.initialVars
-        case Par(f, g)     => f.initialVars zip g.initialVars
+        case Zip(f, g, _)  => variables.union(f.initialVars, g.initialVars)
         case Prj1(f, _, _) => f.initialVars
         case Prj2(f, _, _) => f.initialVars
       }
 
     def terminalVars: Vars[B] =
-      this match {
-        case vd: VarDefining[A, B] => Vars.single(vd.resultVar)
-        case Par(f, g)             => Vars.zip(f.terminalVars, g.terminalVars)
-      }
+      Vars.single(resultVar)
 
-    def map[C](f: B -⚬ C)(resultVar: Var[C]): VArr[A, C] =
+    def map[C](f: B -⚬ C)(resultVar: Var[C]): Expr[C] =
       Map(this, f, resultVar)
 
-    def par[C, D](that: VArr[C, D]): VArr[A |*| C, B |*| D] =
-      Par(this, that)
-
-    def zip[C, D](that: VArr[C, D])(resultVar: Var[B |*| D]): VArr[A |*| C, B |*| D] =
+    def zip[D](that: Expr[D])(resultVar: Var[B |*| D]): Expr[B |*| D] =
       Zip(this, that, resultVar)
-
-    def elimStep[V](v: Var[V]): ElimStep[V, B] =
-      this match {
-        case Par(f1, f2) =>
-          ElimStep.ofPar(v, f1, f2)
-        case thiz: VarDefining[A, B] =>
-          testEqual(v, thiz.resultVar) match {
-            case Some(ev) =>
-              ElimStep.Exact(ev.substituteContra(thiz), Multiplier.id, shuffled.id(ev))
-            case None =>
-              thiz match {
-                case Id(b) =>
-                  ElimStep.NotFound()
-                case Map(f, g, b) =>
-                  f.elimStep(v).map(g)
-                case Prj1(f, b1, b2) =>
-                  ElimStep.halfUsed1(f.elimStep(v), b2)
-                case Prj2(f, b1, b2) =>
-                  ElimStep.halfUsed2(f.elimStep(v), b1)
-                case Zip(f1, f2, _) =>
-                  ElimStep.ofPar(v, f1, f2)
-              }
-          }
-      }
-
-    def elim[V](v: Var[V]): ElimRes[V, B] =
-      this.elimStep(v) match {
-        case ElimStep.NotFound()          => ElimRes.NotFound()
-        case ElimStep.Exact(e, m, f)      => ElimRes.Exact(e, m, f)
-        case ElimStep.Closure(x, e, m, f) => ElimRes.Closure(x, e, m, f)
-        case ElimStep.HalfUsed(_, u)      => ElimRes.unused(u) // TODO: also report all half-used vars
-        case ElimStep.Overused(u)         => ElimRes.overused(u)
-      }
   }
 
-  object VArr extends VArrs {
-    sealed trait VarDefining[A, B] extends VArr[A, B] {
-      def resultVar: Var[B]
-    }
-
-    case class Id[A](variable: Var[A]) extends VarDefining[A, A] {
+  object Expr extends Exprs {
+    case class Id[A](variable: Var[A]) extends Expr[A] {
       override def resultVar: Var[A] =
         variable
     }
 
-    case class Map[A, B, C](
-      f: VArr[A, B],
+    case class Map[B, C](
+      f: Expr[B],
       g: B -⚬ C,
       resultVar: Var[C],
-    ) extends VarDefining[A, C]
+    ) extends Expr[C]
 
-    case class Par[A1, A2, B1, B2](
-      f1: VArr[A1, B1],
-      f2: VArr[A2, B2],
-    ) extends VArr[A1 |*| A2, B1 |*| B2]
-
-    /** Like [[Par]], but defines a new variable to store the result */
-    case class Zip[A1, A2, B1, B2](
-      f1: VArr[A1, B1],
-      f2: VArr[A2, B2],
+    case class Zip[B1, B2](
+      f1: Expr[B1],
+      f2: Expr[B2],
       resultVar: Var[B1 |*| B2],
-    ) extends VarDefining[A1 |*| A2, B1 |*| B2]
+    ) extends Expr[B1 |*| B2]
 
-    case class Prj1[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VarDefining[A, B1] {
+    case class Prj1[B1, B2](f: Expr[B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends Expr[B1] {
       override def resultVar: Var[B1] =
         b1
     }
 
-    case class Prj2[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VarDefining[A, B2] {
+    case class Prj2[B1, B2](f: Expr[B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends Expr[B2] {
       override def resultVar: Var[B2] =
         b2
     }
 
-    sealed trait ElimStep[V, B] {
-      import ElimStep._
+    override def variable[A](a: Var[A]): Expr[A] =
+      Id(a)
 
-      def map[C](f: B ≈⚬ C): ElimStep[V, C]
-
-      def map[C](f: B -⚬ C): ElimStep[V, C] =
-        map(shuffled.lift(f))
-    }
-
-    object ElimStep {
-      case class NotFound[V, B]() extends ElimStep[V, B] {
-        override def map[C](f: B ≈⚬ C): ElimStep[V, C] =
-          NotFound()
-      }
-
-      case class Overused[U, V, B](u: Var[U]) extends ElimStep[V, B] {
-        override def map[C](f: B ≈⚬ C): ElimStep[V, C] =
-          Overused(u)
-      }
-
-      sealed trait Found[V, B] extends ElimStep[V, B] {
-        def foundVar: Var[V] =
-          this match {
-            case Exact(e, _, _)      => e.resultVar
-            case Closure(_, e, _, _) => e.resultVar
-            case HalfUsed(f, _)      => f.foundVar
-          }
-
-        override def map[C](f: B ≈⚬ C): Found[V, C] =
-          this match {
-            case Exact(e, m, g)      => Exact(e, m, g > f)
-            case Closure(x, e, m, g) => Closure(x, e, m, g > f)
-            case HalfUsed(g, u)      => HalfUsed(g map fst(f), u)
-          }
-
-        def also[V0, B0](m0: Multiplier[|*|, V, V0], f0: V0 ≈⚬ B0): Found[V, B0 |*| B] =
-          this match {
-            case Exact(e, m, g)      => Exact(e, Multiplier.dup(m0, m), shuffled.par(f0, g))
-            case Closure(x, e, m, g) => Closure(x, e, Multiplier.dup(m0, m), xi > shuffled.par(f0, g))
-            case HalfUsed(g, u)      => HalfUsed(g.also(m0, f0).map(assocRL), u)
-          }
-
-        /** Along the way tries to resolve captured vars of `expr` to unused variables of `this`. */
-        def withExpr[X](expr: Expr[X]): ElimStep[V, X |*| B] =
-          this match {
-            case Exact(e, m, f) =>
-              expr.elimStep(e.resultVar) match {
-                case NotFound()       => Closure(expr, e, m, snd(f))
-                case Exact(_, m0, f0) => Exact(e, Multiplier.dup(m0, m), shuffled.par(f0, f))
-                case other => UnhandledCase.raise(s"$other")
-              }
-            case HalfUsed(f, u) =>
-              expr.elimStep(u) match {
-                case NotFound() =>
-                  halfUsed1(f.withExpr(expr).map(assocRL), u)
-                case Exact(_, m, h) =>
-                  m match {
-                    case Multiplier.Id() => f.map(snd(h) > swap)
-                    case _               => Overused(u)
-                  }
-                case Closure(captured1, _, m, h) =>
-                  m match {
-                    case Multiplier.Id() => f.withExpr(captured1).map(snd(swap) > assocRL > fst(h))
-                    case _               => Overused(u)
-                  }
-                case HalfUsed(g, w) =>
-                  halfUsed1(ElimStep.thenSnd(f, g) map (assocRL > fst(swap)), w)
-                case Overused(w) =>
-                  Overused(w)
-              }
-            case Closure(captured, e, m, f) =>
-              expr.elimStep(e.resultVar) match {
-                case NotFound() => Closure(expr par captured, e, m, assocLR > snd(f))
-                case other      => UnhandledCase.raise(s"$other")
-              }
-          }
-
-        /** Assumes `captured` does not contain [[foundVar]] (and thus neither any vars derived from it).
-         *  Since `captured` uses only external variables, a closure will be created.
-         */
-        def withCaptured[X](captured: Expr[X]): Found[V, X |*| B] =
-          this match {
-            case Exact(e, m, f) =>
-              Closure(captured, e, m, snd(f))
-            case HalfUsed(f, u) =>
-              HalfUsed(f.withCaptured(captured).map(assocRL), u)
-            case Closure(y, e, m, f) =>
-              Closure(captured par y, e, m, assocLR > snd(f))
-          }
-      }
-
-      case class Exact[V, V1, B](
-        expr: Expr.VarDefining[V],
-        m: Multiplier[|*|, V, V1],
-        f: V1 ≈⚬ B,
-      ) extends Found[V, B]
-
-      case class Closure[X, V, V1, B](
-        captured: Expr[X],
-        expr: Expr.VarDefining[V],
-        m: Multiplier[|*|, V, V1],
-        f: (X |*| V1) ≈⚬ B,
-      ) extends Found[V, B]
-
-      case class HalfUsed[V, B, U](
-        f: Found[V, B |*| U],
-        unused: Var[U],
-      ) extends Found[V, B]
-
-      def overused[U, V, B](u: Var[U]): ElimStep[V, B] =
-        Overused(u)
-
-      def halfUsed1[V, B, U](step: ElimStep[V, B |*| U], u: Var[U]): ElimStep[V, B] =
-        step match {
-          case NotFound()               => NotFound()
-          case Overused(w)              => Overused(w)
-          case found: Found[V, B |*| U] => HalfUsed(found, u)
-        }
-
-      def halfUsed2[V, U, B](step: ElimStep[V, U |*| B], u: Var[U]): ElimStep[V, B] =
-        halfUsed1(step.map(swap[U, B]), u)
-
-      def closure[X, V, W, B](captured: Expr[X], f: Found[V, W], g: (X |*| W) ≈⚬ B): ElimStep[V, B] =
-        f.withExpr(captured).map(g)
-
-      def ofPar[V, B1, B2](
-        v: Var[V],
-        f1: Expr[B1],
-        f2: Expr[B2],
-      ): ElimStep[V, B1 |*| B2] =
-        f1.elimStep(v) match {
-          case ElimStep.NotFound() =>
-            f2.elimStep(v) match {
-              case ElimStep.NotFound() =>
-                ElimStep.NotFound()
-              case ElimStep.Exact(e2, m2, g2) =>
-                ElimStep.Closure(f1, e2, m2, snd(g2))
-              case ElimStep.Closure(x, e2, m2, g2) =>
-                ElimStep.Closure(f1 par x, e2, m2, assocLR > snd(g2))
-              case ElimStep.HalfUsed(f2, u) =>
-                ElimStep.HalfUsed(f2.withCaptured(f1).map(assocRL), u)
-              case ElimStep.Overused(w) =>
-                ElimStep.Overused(w)
-            }
-          case ElimStep.Exact(e1, m1, g1) =>
-            f2.elimStep(v) match {
-              case ElimStep.NotFound() =>
-                ElimStep.Closure(f2, e1, m1, snd(g1) > swap)
-              case ElimStep.Exact(e2, m2, g2) =>
-                ElimStep.Exact(e1, Multiplier.dup(m1, m2), shuffled.par(g1, g2))
-              case ElimStep.Closure(x2, e2, m2, g2) =>
-                ElimStep.Closure(x2, e1, Multiplier.dup(m1, m2), xi > shuffled.par(g1, g2))
-              case ElimStep.HalfUsed(f2, u) =>
-                ElimStep.HalfUsed(f2.also(m1, g1).map(assocRL), u)
-              case ElimStep.Overused(w) =>
-                ElimStep.Overused(w)
-            }
-          case ElimStep.Closure(captured, e1, m1, g1) =>
-            f2.elimStep(v) match {
-              case ElimStep.NotFound() =>
-                ElimStep.Closure(f2 par captured, e1, m1, assocLR > snd(g1) > swap)
-              case other =>
-                UnhandledCase.raise(s"$other")
-            }
-          case ElimStep.HalfUsed(h1, u) =>
-            f2.elimStep(u) match {
-              case ElimStep.NotFound() =>
-                halfUsed1(h1.withExpr(f2).map(assocRL > fst(swap)), u)
-              case ElimStep.Exact(e2, m2, h2) =>
-                m2 match {
-                  case Multiplier.Id() => h1 map snd(h2)
-                  case _               => ElimStep.Overused(u)
-                }
-              case ElimStep.Closure(captured, g2, m2, h2) =>
-                m2 match {
-                  case Multiplier.Id() => h1.withExpr(captured).map(xi > snd(h2))
-                  case _               => ElimStep.Overused(u)
-                }
-              case ElimStep.HalfUsed(g2, w) =>
-                ElimStep.halfUsed1(ElimStep.thenSnd(h1, g2).map(assocRL), w)
-              case ElimStep.Overused(w) =>
-                ElimStep.Overused(w)
-            }
-          case ElimStep.Overused(w) =>
-            ElimStep.Overused(w)
-        }
-
-      def thenSnd[V, B1, X, B2](f: Found[V, B1 |*| X], g: Found[X, B2]): ElimStep[V, B1 |*| B2] =
-        g match {
-          case Exact(g0, m, g1) =>
-            m match {
-              case Multiplier.Id() => f.map(snd(g1))
-              case _               => ElimStep.Overused(g0.resultVar)
-            }
-          case Closure(captured, g, m, h) =>
-            m match {
-              case Multiplier.Id() => f.withExpr(captured).map(xi > snd(h))
-              case _               => ElimStep.Overused(g.resultVar)
-            }
-          case HalfUsed(g0, u) =>
-            halfUsed1(thenSnd(f, g0).map(assocRL), u)
-        }
-    }
-
-    sealed trait ElimRes[V, B]
-    object ElimRes {
-      case class Exact[V, V1, B](
-        expr: Expr[V],
-        m: Multiplier[|*|, V, V1],
-        f: V1 ≈⚬ B,
-      ) extends ElimRes[V, B]
-
-      case class Closure[X, V, V1, B](
-        captured: Expr[X],
-        expr: Expr[V],
-        m: Multiplier[|*|, V, V1],
-        f: (X |*| V1) ≈⚬ B,
-      ) extends ElimRes[V, B]
-
-      case class NotFound[V, B]() extends ElimRes[V, B]
-
-      case class Error[V, B](e: LE) extends ElimRes[V, B]
-
-      def unused[U, V, B](u: Var[U]): ElimRes[V, B] =
-        Error(errors.underusedVars(variables.singleton(u)))
-
-      def overused[U, V, B](u: Var[U]): ElimRes[V, B] =
-        Error(errors.overusedVars(variables.singleton(u)))
-    }
-
-    override def id[A](a: Var[A]): VArr[A, A] =
-      VArr.Id(a)
-
-    override def map[A, B, C](f: VArr[A, B], g: B -⚬ C, resultVar: Var[C]): VArr[A, C] =
+    override def map[B, C](f: Expr[B], g: B -⚬ C, resultVar: Var[C]): Expr[C] =
       (f map g)(resultVar)
 
-    override def zip[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2], resultVar: Var[B1 |*| B2]): VArr[A1 |*| A2, B1 |*| B2] =
+    override def zip[B1, B2](f1: Expr[B1], f2: Expr[B2], resultVar: Var[B1 |*| B2]): Expr[B1 |*| B2] =
       (f1 zip f2)(resultVar)
 
-    override def par[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2]): VArr[A1 |*| A2, B1 |*| B2] =
-      f1 par f2
-
-    override def unzip[A, B1, B2](f: VArr[A, B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (VArr[A, B1], VArr[A, B2]) =
+    override def unzip[B1, B2](f: Expr[B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (Expr[B1], Expr[B2]) =
       (Prj1(f, resultVar1, resultVar2), Prj2(f, resultVar1, resultVar2))
 
-    override def initialVars[A, B](f: VArr[A, B]): Vars[A] =
-      f.initialVars
-
-    override def terminalVars[A, B](f: VArr[A, B]): Vars[B] =
+    override def terminalVars[B](f: Expr[B]): Vars[B] =
       f.terminalVars
 
-    override def toExpr[A, B](f: VArr[A, B]): Expr[B] =
-      f
-  }
-
-  type Expr[A] = VArr[?, A]
-
-  object Expr extends Exprs {
-    type VarDefining[A] = VArr.VarDefining[?, A]
-
-    override def variable[A](a: Var[A]): Expr[A] =
-      VArr.id(a)
-
-    override def map[A, B](e: Expr[A], f: A -⚬ B, resultVar: Var[B]): Expr[B] =
-      VArr.map(e, f, resultVar)
-
-    override def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[A |*| B]): Expr[A |*| B] =
-      VArr.zip(a, b, resultVar)
-
-    override def par[A, B](a: Expr[A], b: Expr[B]): Expr[A |*| B] =
-      VArr.par(a, b)
-
-    override def unzip[A, B](p: Expr[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (Expr[A], Expr[B]) =
-      VArr.unzip(p)(resultVar1, resultVar2)
-
-    override def terminalVars[A](a: Expr[A]): Vars[A] =
-      VArr.terminalVars(a)
+    def initialVars[B](f: Expr[B]): VarSet =
+      f.initialVars
   }
 
   override def abs[A, B](expr: Expr[B], boundVar: Var[A]): Abstracted[A, B] = {
-    import VArr.ElimRes
+    import HybridArrow.TailLinearRes
 
-    expr.elim(boundVar) match {
-      case ElimRes.Exact(e, m, f) =>
-        e match {
-          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Exact(m, f)
-          case other               => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
+    eliminate(boundVar, expr) match {
+      case EliminateRes.Found(arr) =>
+        arr.tailLinear match {
+          case TailLinearRes.Exact(m, f)             => Lambdas.Abstracted.Exact(m, f)
+          case TailLinearRes.Closure(captured, m, f) => Lambdas.Abstracted.Closure(captured, m, f)
+          case TailLinearRes.Violation(e)            => Lambdas.Abstracted.Failure(e)
         }
-      case ElimRes.Closure(captured, e, m, f) =>
-        e match {
-          case VArr.Id(`boundVar`) => Lambdas.Abstracted.Closure(captured, m, f)
-          case other               => bug(s"Expected ${Expr.variable(boundVar)}, got $other")
-        }
-      case ElimRes.NotFound() =>
+      case EliminateRes.NotFound() =>
         Lambdas.Abstracted.NotFound(expr)
-      case ElimRes.Error(e) =>
-        Lambdas.Abstracted.Failure(e)
     }
   }
 
-  private def overusedVar[A](v: Var[A]): LinearityViolation.Overused[VarSet] =
-    LinearityViolation.Overused(variables.singleton(v))
-
-  private def underusedVar[A](v: Var[A]): LinearityViolation.Underused[VarSet] =
-    LinearityViolation.Underused(variables.singleton(v))
-
   private def bug(msg: String): Nothing =
     throw new AssertionError(msg)
+
+  // Note: The variable is only searched for among initial variables of the expression,
+  // not in any (intermediate) results.
+  private def eliminate[A, B](v: Var[A], expr: Expr[B]): EliminateRes[A, B] = {
+    import EliminateRes.{Found, NotFound}
+
+    expr match
+      case Expr.Id(w) =>
+        testEqual(v, w) match
+          case None     => NotFound()
+          case Some(ev) => Found(HybridArrow.id(v).to(using ev.liftCo[Var]))
+      case Expr.Map(f, g, resultVar) =>
+        eliminate(v, f) match
+          case NotFound() => NotFound()
+          case Found(arr) => Found(arr > HybridArrow.map(g, resultVar))
+      case Expr.Zip(f1, f2, resultVar) =>
+        (eliminate(v, f1), eliminate(v, f2)) match
+          case (NotFound(), NotFound()) => NotFound()
+          case (NotFound(), Found(arr)) => Found(arr > HybridArrow.captureFst(f1, resultVar))
+          case (Found(arr), NotFound()) => Found(arr > HybridArrow.captureSnd(f2, resultVar))
+          case (Found(ar1), Found(ar2)) => Found((ar1 interweave ar2) > HybridArrow.zip(resultVar))
+      case Expr.Prj1(f, b1, b2) =>
+        eliminate(v, f) match
+          case NotFound() => NotFound()
+          case Found(arr) => Found(arr > HybridArrow.prj1(b1, b2))
+      case Expr.Prj2(f, b1, b2) =>
+        eliminate(v, f) match
+          case NotFound() => NotFound()
+          case Found(arr) => Found(arr > HybridArrow.prj2(b1, b2))
+  }
+
+  private enum EliminateRes[A, B] {
+    case Found[A, B](arr: HybridArrow[A, Var[B]]) extends EliminateRes[A, B]
+    case NotFound()
+  }
+
+  private case class HybridArrow[A, B](v: Var[A], tail: HybridArrow.Tail[Var[A], B]) {
+    import HybridArrow._
+
+    def >[C](that: Tail[B, C]): HybridArrow[A, C] =
+      HybridArrow(v, tail > that)
+
+    def to[C](using ev: B =:= C): HybridArrow[A, C] =
+      ev.substituteCo(this)
+
+    def interweave[C](that: HybridArrow[A, C]): HybridArrow[A, B |*| C] = {
+      assert(testEqual(this.v, that.v).isDefined)
+      HybridArrow(v, HybridArrow.dupVar[A] > tail.inFst)
+        .weaveIn(that.tail.inSnd)
+    }
+
+    @tailrec
+    private def weaveIn[C](that: Tail[B, C]): HybridArrow[A, C] = {
+      import shOp.UnconsSomeRes.{Cons, Pure}
+
+      that.unconsSome match
+        case Pure(s) =>
+          HybridArrow(v, tail thenShuffle s)
+        case Cons(pre, i, f, post) =>
+          HybridArrow(v, tail thenShuffle pre)
+            .weaveInOp(i, f)
+            .weaveIn(post)
+    }
+
+    private def weaveInOp[F[_], X, Y](i: Focus[|*|, F], op: Op[X, Y])(using ev: B =:= F[X]): HybridArrow[A, F[Y]] =
+      op match {
+        case _: Op.DupVar[x]=>
+          HybridArrow(v, tail.to[F[X]] > shOp.lift(op).at(i))
+        case op: Op.Affine[x, y] =>
+          pullOut(i, op) match
+            case Some(HybridArrow(v, t)) =>
+              val t1 = discardFst(t, i)
+              HybridArrow(v, t1)
+            case None =>
+              HybridArrow(v, tail.to[F[X]] > shOp.lift(op).at(i))
+      }
+
+    private def pullOut[F[_], X, Y](i: Focus[|*|, F], op: Op.Affine[X, Y])(using ev: B =:= F[X]): Option[HybridArrow[A, F[X |*| Y]]] = ev match { case TypeEq(Refl()) =>
+      val aux = Op.InputVarFocus(op)
+      type FF[T] = F[aux.F[T]]
+      aux.ev match { case TypeEq(Refl()) =>
+        HybridArrow.pullOut[Var[A], FF, aux.X, aux.F, Y](tail, aux.op)(i compose aux.F, aux.F)
+          .map { (res0: Tail[Var[A], F[aux.F[Var[aux.X] |*| Y]]]) =>
+            val   res1: Tail[Var[A], F[aux.F[Var[aux.X]] |*| Y]] = res0 > shOp.extractSnd(aux.F).at(i)
+            HybridArrow(v, res1)
+          }
+      }
+    }
+
+    def tailLinear[B0](using ev: B =:= Var[B0]): HybridArrow.TailLinearRes[A, B0] =
+      ev match { case TypeEq(Refl()) =>
+        demultiply(tail) match {
+          case Demultiplied.Impl(m, tail1) =>
+            Unvar.SingleVar[A]().multiply(m) match {
+              case Exists.Some((u, m0)) =>
+                extractLinear(v.multiply(m), tail1)(u, Unvar.SingleVar[B0]())
+                  .multiplied(m0)
+            }
+        }
+      }
+  }
+
+  private object HybridArrow {
+    sealed trait Op[A, B] {
+      import Op._
+
+      def project[C](p: Projection[|*|, B, C]): shOp.ProjectRes[A, C] =
+        p match {
+          case Projection.Id() =>
+            shOp.ProjectRes.Projected(Projection.id, shOp.lift(this))
+          case p: Projection.DiscardFst[pair, b1, b2, c] =>
+            this.projectSnd[b1, b2].project(p.p2, Op.project)
+          case p: Projection.DiscardSnd[pair, b1, b2, c] =>
+            this.projectFst[b1, b2].project(p.p1, Op.project)
+          case Projection.Fst(p1) =>
+            bug(s"Did not realize that the first output of $this can be projected from")
+          case Projection.Snd(p2) =>
+            bug(s"Did not realize that the second output of $this can be projected from")
+          case Projection.Both(p1, p2) =>
+            bug(s"Did not realize that both outputs of $this can be projected from")
+        }
+
+      private def projectFst[B1, B2](using ev: B =:= (B1 |*| B2)): Tail[A, B1] =
+        this match {
+          case u: Unzip[a1, a2] =>
+            val BiInjective[|*|](va1_b1, _) = summon[(Var[a1] |*| Var[a2]) =:= B] andThen ev
+            shOp.lift(Prj1[a1, a2](u.resultVar1, u.resultVar2)).to[B1](using va1_b1)
+          case op: DupVar[a] =>
+            val BiInjective[|*|](va_b1, _) = summon[(Var[a] |*| Var[a]) =:= B] andThen ev
+            shOp.id.to[B1](using va_b1)
+          case other =>
+            bug(s"Did not realize that $other can be projected from")
+        }
+
+      private def projectSnd[B1, B2](using ev: B =:= (B1 |*| B2)): Tail[A, B2] =
+        this match {
+          case u: Unzip[a1, a2] =>
+            val BiInjective[|*|](_, va2_b2) = summon[(Var[a1] |*| Var[a2]) =:= B] andThen ev
+            shOp.lift(Prj2[a1, a2](u.resultVar1, u.resultVar2)).to[B2](using va2_b2)
+          case op: DupVar[a] =>
+            val BiInjective[|*|](_, va_b2) = summon[(Var[a] |*| Var[a]) =:= B] andThen ev
+            shOp.id.to[B2](using va_b2)
+          case other =>
+            bug(s"Did not realize that $other can be projected from")
+        }
+
+      def terminalVars(a: Varz[A]): Varz[B]
+
+      def maskInput: Masked[Op[*, B], A] =
+        Masked[Op[*, B], A](this)
+
+      def from[Z](using ev: Z =:= A): Op[Z, B] =
+        ev.substituteContra[Op[*, B]](this)
+
+      def to[C](using ev: B =:= C): Op[A, C] =
+        ev.substituteCo(this)
+    }
+    object Op {
+      sealed trait Affine[A, B] extends Op[A, B] {
+        def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using A =:= Var[X]): Option[Tail[A, B |*| C]]
+        def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| B]]
+        def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| B]]
+        def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| B]]
+        def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using A =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| B]]
+        def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using A =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| B]]
+
+        def asZip[P1, P2](using A =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], B =:= Var[V1 |*| V2])]]
+
+        override def from[Z](using ev: Z =:= A): Op.Affine[Z, B] = ev.substituteContra[Op.Affine[*, B]](this)
+        override def to[C](using ev: B =:= C): Op.Affine[A, C]   = ev.substituteCo(this)
+      }
+
+      sealed trait Linear[A, B] extends Affine[A, B]
+
+      case class Zip[A1, A2](resultVar: Var[A1 |*| A2]) extends Op.Linear[Var[A1] |*| Var[A2], Var[A1 |*| A2]] {
+        override def terminalVars(a: Varz[Var[A1] |*| Var[A2]]): Varz[Var[A1 |*| A2]] =
+          Varz.Atom(resultVar)
+
+        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: (Var[A1] |*| Var[A2]) =:= Var[X]): Option[Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2] |*| C]] =
+          varIsNotPair(ev.flip)
+
+        override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[A1 |*| A2]]] =
+          varIsNotPair(ev.flip)
+
+        override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| Var[A1 |*| A2]]] =
+          varIsNotPair(ev.flip)
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A1 |*| A2]]] =
+          varIsNotPair(ev.flip)
+
+        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[A1 |*| A2]]] =
+          varIsNotPair(ev.flip)
+
+        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A1 |*| A2]]] =
+          varIsNotPair(ev.flip)
+
+        override def asZip[P1, P2](using
+          ev: (Var[A1] |*| Var[A2]) =:= (P1 |*| P2),
+        ): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[A1 |*| A2] =:= Var[V1 |*| V2])]] =
+          ev match
+            case BiInjective[|*|](ev1 @ TypeEq(Refl()), ev2 @ TypeEq(Refl())) =>
+              Exists(Exists(this, ev1, ev2, summon))
+      }
+
+      case class Map[A, B](f: A -⚬ B, resultVar: Var[B]) extends Op.Linear[Var[A], Var[B]] {
+        override def terminalVars(a: Varz[Var[A]]): Varz[Var[B]] =
+          Varz.Atom(resultVar)
+
+        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[B] |*| C]] =
+          that match
+            case Map(_, v) =>
+              (testEqual(v, resultVar)) match
+                case Some(TypeEq(Refl())) => Some(shOp.lift(this) > shOp.lift(DupVar()))
+                case None                 => None
+            case _ =>
+              None
+
+        override def prj1_gcd_this[A1, A2](that: Prj1[A1, A2])(using ev: Var[A] =:= Var[A1 |*| A2]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| Var[B]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj1_gcd_this")
+
+        override def prj2_gcd_this[A1, A2](that: Prj2[A1, A2])(using ev: Var[A] =:= Var[A1 |*| A2]): Option[Tail[Var[A1 |*| A2], Var[A2] |*| Var[B]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj2_gcd_this")
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[B]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.unzip_gcd_this")
+
+        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[B]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap1_gcd_this")
+
+        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[B]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
+
+        override def asZip[P1, P2](using ev: Var[A] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[B] =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
+      }
+
+      case class Prj1[A1, A2](resultVar: Var[A1], unusedVar: Var[A2]) extends Affine[Var[A1 |*| A2], Var[A1]] {
+        override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A1]] =
+          Varz.Atom(resultVar)
+
+        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| C]] =
+          that.prj1_gcd_this(this)(using ev.flip)
+
+        override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a1] |*| Var[A1]]] =
+          (testEqual(that.resultVar, this.resultVar), testEqual(that.unusedVar, this.unusedVar)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(this) > shOp.lift(DupVar()))
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
+
+        override def prj2_gcd_this[a1, a2](that: Prj2[a1, a2])(using
+          ev: Var[A1 |*| A2] =:= Var[a1 |*| a2],
+        ): Option[Tail[Var[a1 |*| a2], Var[a2] |*| Var[A1]]] =
+          (testEqual(that.unusedVar, this.resultVar), testEqual(that.resultVar, this.unusedVar)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(Unzip(that.unusedVar, that.resultVar)) > shOp.swap[Var[a1], Var[a2]])
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using
+          ev: Var[A1 |*| A2] =:= Var[T1 |*| T2],
+        ): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A1]]] =
+          ev match {
+            case Injective[Var](BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl()))) =>
+              (testEqual(that.resultVar1, this.resultVar), testEqual(that.resultVar2, this.unusedVar)) match
+                case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+                  Some(shOp.lift(that) > shOp.lift(DupVar[A1]()).inFst[Var[A2]] > shOp.ix)
+                case (None, None) =>
+                  None
+                case (Some(_), None) =>
+                  bug(s"Variable ${that.resultVar1} appeared as a result of two different projections")
+                case (None, Some(_)) =>
+                  bug(s"Variable ${that.resultVar2} appeared as a result of two different projections")
+          }
+
+        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[A1]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap1_gcd_this")
+
+        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A1]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
+
+        override def asZip[P1, P2](using ev: Var[A1 |*| A2] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[A1] =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
+      }
+
+      case class Prj2[A1, A2](unusedVar: Var[A1], resultVar: Var[A2]) extends Affine[Var[A1 |*| A2], Var[A2]] {
+        override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A2]] =
+          Varz.Atom(resultVar)
+
+        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A2] |*| C]] =
+          that.prj2_gcd_this(this)(using ev.flip)
+
+        override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a1] |*| Var[A2]]] =
+          (testEqual(that.resultVar, this.unusedVar), testEqual(that.unusedVar, this.resultVar)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(Unzip(that.resultVar, this.resultVar)))
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
+
+        override def prj2_gcd_this[a1, a2](that: Prj2[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a2] |*| Var[A2]]] =
+          (testEqual(that.unusedVar, this.unusedVar), testEqual(that.resultVar, this.resultVar)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(this) > shOp.lift(DupVar()))
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A1 |*| A2] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A2]]] =
+          (testEqual(that.resultVar1, this.unusedVar), testEqual(that.resultVar2, this.resultVar)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(that) > shOp.snd(shOp.lift(DupVar())) > shOp.assocRL)
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.resultVar1} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.resultVar2} appeared as a result of two different projections")
+
+        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[A2]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap1_gcd_this")
+
+        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A2]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
+
+        override def asZip[P1, P2](using ev: Var[A1 |*| A2] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[A2] =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
+      }
+
+      case class Unzip[A1, A2](resultVar1: Var[A1], resultVar2: Var[A2]) extends Op.Linear[Var[A1 |*| A2], Var[A1] |*| Var[A2]] {
+        override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A1] |*| Var[A2]] =
+          Varz.Zip(Varz.Atom(resultVar1), Varz.Atom(resultVar2))
+
+        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| Var[A2] |*| C]] =
+          that.unzip_gcd_this(this)(using ev.flip)
+
+        override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using
+          ev: Var[A1 |*| A2] =:= Var[a1 |*| a2],
+        ): Option[Tail[Var[a1 |*| a2], Var[a1] |*| (Var[A1] |*| Var[A2])]] =
+          (testEqual(that.resultVar, this.resultVar1), testEqual(that.unusedVar, this.resultVar2)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(this) > shOp.fst(shOp.lift(DupVar())) > shOp.assocLR)
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
+
+        override def prj2_gcd_this[a1, a2](that: Prj2[a1, a2])(using
+          ev: Var[A1 |*| A2] =:= Var[a1 |*| a2],
+        ): Option[Tail[Var[a1 |*| a2], Var[a2] |*| (Var[A1] |*| Var[A2])]] =
+          (testEqual(that.unusedVar, this.resultVar1), testEqual(that.resultVar, this.resultVar2)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(this) > shOp.snd(shOp.lift(DupVar())) > shOp.xi)
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using
+          ev: Var[A1 |*| A2] =:= Var[T1 |*| T2],
+        ): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| (Var[A1] |*| Var[A2])]] =
+          (testEqual(that.resultVar1, this.resultVar1), testEqual(that.resultVar2, this.resultVar2)) match
+            case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
+              Some(shOp.lift(this) > shOp.par(shOp.lift(DupVar()), shOp.lift(DupVar())) > shOp.ixi)
+            case (None, None) =>
+              None
+            case (Some(_), None) =>
+              bug(s"Variable ${that.resultVar1} appeared as a result of two different projections")
+            case (None, Some(_)) =>
+              bug(s"Variable ${that.resultVar2} appeared as a result of two different projections")
+
+        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| (Var[A1] |*| Var[A2])]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap1_gcd_this")
+
+        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| (Var[A1] |*| Var[A2])]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
+
+        override def asZip[P1, P2](using ev: Var[A1 |*| A2] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], (Var[A1] |*| Var[A2]) =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
+      }
+
+      case class DupVar[A]() extends Op[Var[A], Var[A] |*| Var[A]] {
+        override def terminalVars(a: Varz[Var[A]]): Varz[Var[A] |*| Var[A]] =
+          Varz.Zip(a, a)
+      }
+
+      case class CaptureFst[A, X](x: Expr[X], resultVar: Var[X |*| A]) extends Op.Linear[Var[A], Var[X |*| A]] {
+        override def terminalVars(a: Varz[Var[A]]): Varz[Var[X |*| A]] =
+          Varz.Atom(resultVar)
+
+        override def gcdSimple[Q, C](that: Op.Affine[Var[Q], C])(using ev: Var[A] =:= Var[Q]): Option[Tail[Var[A], Var[X |*| A] |*| C]] =
+          that.cap1_gcd_this(this)(using ev.flip)
+
+        override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[X |*| A]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj1_gcd_this")
+
+        override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| Var[X |*| A]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj2_gcd_this")
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[X |*| A]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.unzip_gcd_this")
+
+        override def cap1_gcd_this[T, Y](that: CaptureFst[T, Y])(using ev: Var[A] =:= Var[T]): Option[Tail[Var[T], Var[Y |*| T] |*| Var[X |*| A]]] =
+          ev match { case Injective[Var](TypeEq(Refl())) =>
+            testEqual(that.resultVar, this.resultVar) map {
+              case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+                shOp.lift(this) > shOp.lift(DupVar[X |*| A]())
+            }
+          }
+
+        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[X |*| A]]] =
+          None
+
+        override def asZip[P1, P2](using ev: Var[A] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[X |*| A] =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
+      }
+
+      case class CaptureSnd[A, X](x: Expr[X], resultVar: Var[A |*| X]) extends Op.Linear[Var[A], Var[A |*| X]] {
+        override def terminalVars(a: Varz[Var[A]]): Varz[Var[A |*| X]] =
+          Varz.Atom(resultVar)
+
+        override def gcdSimple[Q, C](that: Op.Affine[Var[Q], C])(using ev: Var[A] =:= Var[Q]): Option[Tail[Var[A], Var[A |*| X] |*| C]] =
+          that.cap2_gcd_this(this)(using ev.flip)
+
+        override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[A |*| X]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj1_gcd_this")
+
+        override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| Var[A |*| X]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj2_gcd_this")
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A |*| X]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.unzip_gcd_this")
+
+        override def cap1_gcd_this[T, Y](that: CaptureFst[T, Y])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[Y |*| T] |*| Var[A |*| X]]] =
+          None
+
+        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using ev: Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A |*| X]]] =
+          ev match { case Injective[Var](TypeEq(Refl())) =>
+            testEqual(that.resultVar, this.resultVar) map {
+              case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+                shOp.lift(this) > shOp.lift(DupVar())
+            }
+          }
+
+        override def asZip[P1, P2](using ev: Var[A] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[A |*| X] =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
+      }
+
+      val project: [t, u, v] => (op: Op[t, u], p: Projection[|*|, u, v]) => shOp.ProjectRes[t, v] =
+        [t, u, v] => (op: Op[t, u], p: Projection[|*|, u, v]) => op.project(p)
+
+      /** Focuses on _some_ input variable of an operation. */
+      sealed trait InputVarFocus[A, B] {
+        type F[_]
+        type X
+        val F: Focus[|*|, F]
+        val ev: A =:= F[Var[X]]
+        val op: Op.Affine[F[Var[X]], B]
+      }
+
+      object InputVarFocus {
+        def apply[G[_], T, B](op0: Op.Affine[G[Var[T]], B], g: Focus[|*|, G]): InputVarFocus[G[Var[T]], B] =
+          new InputVarFocus[G[Var[T]], B] {
+            override type F[A] = G[A]
+            override type X = T
+            override val F = g
+            override val ev = summon
+            override val op = op0
+          }
+
+        def apply[A, B](op: Op.Affine[A, B]): InputVarFocus[A, B] =
+          op match {
+            case op: Zip[t, u]        => InputVarFocus[[x] =>> x |*| Var[u], t, Var[t |*| u]](op, Focus.fst) // arbitrarily picking the first input
+            case op: Unzip[t, u]      => InputVarFocus[[x] =>> x, t |*| u, Var[t] |*| Var[u]](op, Focus.id)
+            case op: Prj1[t, u]       => InputVarFocus[[x] =>> x, t |*| u, Var[t]](op, Focus.id)
+            case op: Prj2[t, u]       => InputVarFocus[[x] =>> x, t |*| u, Var[u]](op, Focus.id)
+            case op: Map[t, u]        => InputVarFocus[[x] =>> x, t, Var[u]](op, Focus.id)
+            case op: CaptureFst[t, u] => InputVarFocus[[x] =>> x, t, Var[u |*| t]](op, Focus.id)
+            case op: CaptureSnd[t, u] => InputVarFocus[[x] =>> x, t, Var[t |*| u]](op, Focus.id)
+          }
+      }
+
+      def gcd[C[_], D[_], X, Y, Z](
+        f: Op.Affine[C[Var[X]], Y],
+        g: Op.Affine[D[Var[X]], Z],
+      )(
+        C: Focus[|*|, C],
+        D: Focus[|*|, D],
+      ): Option[Tail[C[Var[X]], Y |*| Z]] = {
+        import shOp.shuffle.{zip => zipEq}
+
+        (C, D) match {
+          case (Focus.Id(), Focus.Id()) =>
+            f gcdSimple g
+          case (c: Focus.Fst[p, c1, y], d: Focus.Fst[q, d1, z]) =>
+            f.asZip[c1[Var[X]], y] match
+              case e1 @ Exists.Some(e2 @ Exists.Some((z1, ev1 @ TypeEq(Refl()), TypeEq(Refl()), TypeEq(Refl())))) =>
+                g.asZip[d1[Var[X]], z] match
+                  case e3 @ Exists.Some(e4 @ Exists.Some(z2, ev2, TypeEq(Refl()), TypeEq(Refl()))) =>
+                    gcdZips(z1, z2).map(_.from(using ev1 zipEq summon[y =:= Var[e2.T]]))
+          case (c: Focus.Snd[p, c2, y], d: Focus.Snd[q, d2, z]) =>
+            f.asZip[y, c2[Var[X]]] match
+              case e1 @ Exists.Some(e2 @ Exists.Some((z1, ev1 @ TypeEq(Refl()), ev2 @ TypeEq(Refl()), TypeEq(Refl())))) =>
+                g.asZip[z, d2[Var[X]]] match
+                  case e3 @ Exists.Some(e4 @ Exists.Some(z2, TypeEq(Refl()), TypeEq(Refl()), TypeEq(Refl()))) =>
+                    gcdZips(z1, z2).map(_.from[y |*| c2[Var[X]]](using ev1 zipEq ev2))
+          case _ =>
+            None
+        }
+      }
+
+      private def gcdZips[A1, A2, B1, B2](
+        z1: Zip[A1, A2],
+        z2: Zip[B1, B2],
+      ): Option[Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2] |*| Var[B1 |*| B2]]] =
+        testEqual(z1.resultVar, z2.resultVar) map {
+          case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+            shOp.lift(z1) > shOp.lift(DupVar())
+        }
+    }
+
+    enum Varz[A] {
+      case Atom[V](v: Var[V]) extends Varz[Var[V]]
+      case Zip[A, B](a: Varz[A], b: Varz[B]) extends Varz[A |*| B]
+
+      def get[V](using ev: A =:= Var[V]): Var[V] =
+        this match {
+          case Atom(v) => v
+          case _: Zip[a, b] => varIsNotPair[V, a, b](ev.flip)
+        }
+
+      def unzip[X, Y](using ev: A =:= (X |*| Y)): (Varz[X], Varz[Y]) =
+        this match {
+          case z: Zip[a, b] =>
+            (summon[(a |*| b) =:= A] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+              (z.a, z.b)
+            }
+          case _: Atom[v] =>
+            varIsNotPair(summon[Var[v] =:= A] andThen ev)
+        }
+    }
+
+    object Varz {
+      given Cartesian[|*|, Varz] with {
+        override def zip[A, B](a: Varz[A], b: Varz[B]): Varz[A |*| B] =
+          Zip(a, b)
+
+        override def unzip[A, B](ab: Varz[A |*| B]): (Varz[A], Varz[B]) =
+          ab.unzip
+      }
+    }
+
+    val shOp = Shuffled[Op, |*|](shuffled.shuffle)
+    import shOp.shuffle.{zip => zipEq}
+
+    type VarOp[A, B] = (Varz[A], Op[A, B])
+    given shVOp: Shuffled.With[VarOp, |*|, shuffled.shuffle.type] =
+      Shuffled[VarOp, |*|](shuffled.shuffle)
+
+    given shLOp: Shuffled.With[Op.Linear, |*|, shuffled.shuffle.type] =
+      Shuffled[Op.Linear, |*|](shuffled.shuffle)
+
+    enum CaptureOp[A, B] {
+      case Id[A]() extends CaptureOp[A, A]
+      case CaptureFst[X, A](captured: Expr[X]) extends CaptureOp[A, X |*| A]
+      case CaptureSnd[A, X](captured: Expr[X]) extends CaptureOp[A, A |*| X]
+    }
+
+    type Tail[A, B] =
+      shOp.Shuffled[A, B]
+
+    type VTail[A, B] =
+      shVOp.Shuffled[A, B]
+
+    type LTail[A, B] =
+      shLOp.Shuffled[A, B]
+
+    def id[A](v: Var[A]): HybridArrow[A, Var[A]] =
+      HybridArrow(v, shOp.id)
+
+    def dupVar[A]: Tail[Var[A], Var[A] |*| Var[A]] =
+      shOp.lift(Op.DupVar())
+
+    def map[A, B](f: A -⚬ B, resultVar: Var[B]): Tail[Var[A], Var[B]] =
+      shOp.lift(Op.Map(f, resultVar))
+
+    def captureFst[A, X](x: Expr[X], resultVar: Var[X |*| A]): Tail[Var[A], Var[X |*| A]] =
+      shOp.lift(Op.CaptureFst(x, resultVar))
+
+    def captureSnd[A, X](x: Expr[X], resultVar: Var[A |*| X]): Tail[Var[A], Var[A |*| X]] =
+      shOp.lift(Op.CaptureSnd(x, resultVar))
+
+    def zip[A1, A2](resultVar: Var[A1 |*| A2]): Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2]] =
+      shOp.lift(Op.Zip(resultVar))
+
+    // def unzip[A, A1, A2](u: Untag[A, A1 |*| A2], resultVar1: Var[A1], resultVar2: Var[A2]): Tail[A, Var[A1] |*| Var[A2]] =
+    //   shOp.lift(Op.Unzip(u, resultVar1, resultVar2))
+
+    def prj1[A1, A2](resultVar: Var[A1], unusedVar: Var[A2]): Tail[Var[A1 |*| A2], Var[A1]] =
+      shOp.lift(Op.Prj1(resultVar, unusedVar))
+
+    def prj2[A1, A2](unusedVar: Var[A1], resultVar: Var[A2]): Tail[Var[A1 |*| A2], Var[A2]] =
+      shOp.lift(Op.Prj2(unusedVar, resultVar))
+
+    /** If `op` introduces a new variable(s), searches through `t` for an existing occurrence of `op`
+     *  and channels it to the output.
+     *  If `op` does not introduce new variables, or if `op` is not found in `t`, returns `None`.
+     */
+    def pullOut[A, G[_], X, D[_], Y](t: Tail[A, G[Var[X]]], op: Op.Affine[D[Var[X]], Y])(
+      G: Focus[|*|, G],
+      D: Focus[|*|, D],
+    ): Option[Tail[A, G[Var[X] |*| Y]]] = {
+      import shOp.ChaseBwRes
+
+      t.chaseBw(G) match {
+        case ChaseBwRes.Transported(_, _, _) =>
+          None
+        case r: ChaseBwRes.OriginatesFrom[a, f, v, w, x, g] =>
+          pullBump(r.pre, r.f, r.post, op)(r.i, r.w, D)
+            .map(_ > shOp.absorbSnd(G))
+        case ChaseBwRes.Split(ev) =>
+          varIsNotPair(ev)
+      }
+    }
+
+    def pullBump[A, F[_], V, CX, C[_], X, D[_], G[_], Y](
+      pre: Tail[A, F[V]],
+      obstacle: Op[V, CX],
+      post: Tail[F[C[Var[X]]], G[Var[X]]],
+      op: Op.Affine[D[Var[X]], Y],
+    )(
+      F: Focus[|*|, F],
+      C: Focus[|*|, C],
+      D: Focus[|*|, D],
+    )(using
+      ev: CX =:= C[Var[X]],
+    ): Option[Tail[A, G[Var[X]] |*| Y]] = {
+      obstacle match
+        case o: Op.DupVar[v0] =>
+          val ev1 = ev.flip andThen summon[CX =:= (Var[v0] |*| Var[v0])]
+          (ev1.deriveEquality(C): X =:= v0) match { case TypeEq(Refl()) =>
+            pullBumpDupVar[A, F, v0, C, G[Var[v0]], D, Y](pre, post, op)(F, C, D)(using
+              ev1,
+            )
+          }
+        case Op.Zip(_)           => None
+        case Op.CaptureFst(_, _) => None
+        case Op.CaptureSnd(_, _) => None
+        case Op.Unzip(_, _)      => None
+        case Op.Map(_, _)        => None
+        case Op.Prj1(_, _)       => None
+        case Op.Prj2(_, _)       => None
+    }
+
+    def pullBumpDupVar[A, F[_], V, C[_], B, D[_], Y](
+      pre: Tail[A, F[Var[V]]],
+      post: Tail[F[C[Var[V]]], B],
+      op: Op.Affine[D[Var[V]], Y],
+    )(
+      F: Focus[|*|, F],
+      C: Focus[|*|, C],
+      D: Focus[|*|, D],
+    )(using
+      ev: C[Var[V]] =:= (Var[V] |*| Var[V]),
+    ): Option[Tail[A, B |*| Y]] = ev match { case TypeEq(Refl()) =>
+      C match
+        case c: Focus.Fst[pair, c1, q] =>
+          (summon[(c1[Var[V]] |*| q) =:= C[Var[V]]] andThen ev) match { case BiInjective[|*|](c1vv_vv @ TypeEq(Refl()), q_vv @ TypeEq(Refl())) =>
+            c.i match
+              case Focus.Id() =>
+                (summon[Var[V] =:= c1[Var[V]]] andThen c1vv_vv) match
+                  case TypeEq(Refl()) =>
+                    pullBumpDupVarChaseOther[A, F, V, [x] =>> Var[V] |*| x, B, D, Y](pre, post, op)(F, Focus.snd[|*|, Var[V]], D)
+              case _: Focus.Fst[pair, c11, p] =>
+                varIsNotPair(c1vv_vv.flip andThen summon[c1[Var[V]] =:= (c11[Var[V]] |*| p)])
+              case _: Focus.Snd[pair, c12, p] =>
+                varIsNotPair(c1vv_vv.flip andThen summon[c1[Var[V]] =:= (p |*| c12[Var[V]])])
+          }
+        case c: Focus.Snd[pair, c2, p] =>
+          (summon[(p |*| c2[Var[V]]) =:= C[Var[V]]] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), c2vv_vv @ TypeEq(Refl())) =>
+            c.i match
+              case Focus.Id() =>
+                (summon[Var[V] =:= c2[Var[V]]] andThen c2vv_vv) match
+                  case TypeEq(Refl()) =>
+                    pullBumpDupVarChaseOther[A, F, V, [x] =>> x |*| Var[V], B, D, Y](pre, post, op)(F, Focus.fst[|*|, Var[V]], D)
+              case _: Focus.Fst[pair, c21, q] =>
+                varIsNotPair(c2vv_vv.flip andThen summon[c2[Var[V]] =:= (c21[Var[V]] |*| q)])
+              case _: Focus.Snd[pair, c22, q] =>
+                varIsNotPair(c2vv_vv.flip andThen summon[c2[Var[V]] =:= (q |*| c22[Var[V]])])
+          }
+        case Focus.Id() =>
+          varIsNotPair(summon[Var[V] =:= (Var[V] |*| Var[V])])
+    }
+
+    /** After bumping into one output of DupVar. */
+    private def pullBumpDupVarChaseOther[A, F[_], V, O[_], B, D[_], Y](
+      pre: Tail[A, F[Var[V]]],
+      post: Tail[F[O[Var[V]]], B],
+      op: Op.Affine[D[Var[V]], Y],
+    )(
+      F: Focus[|*|, F],
+      O: Focus[|*|, O],
+      D: Focus[|*|, D],
+    )(using
+      ev: O[Var[V]] =:= (Var[V] |*| Var[V]),
+    ): Option[Tail[A, B |*| Y]] =
+      // chase forward through the other output of DupVar
+      pushOut[[x] =>> F[O[x]], V, D, Y, B](post, op)(F compose O, D) match
+        case Some(post1) =>
+          Some(pre > shOp.lift(Op.DupVar[V]()).to(using ev.flip).at(F) > post1)
+        case None =>
+          // chase upstream
+          pullOut[A, F, V, D, Y](pre, op)(F, D) match
+            case Some(pre1) =>
+              val post1: Tail[F[Var[V]], B] =
+                shOp.lift(Op.DupVar[V]()).to(using ev.flip).at(F) > post
+              Some(pre1 > shOp.extractSnd(F) > post1.inFst)
+            case None =>
+              None
+
+    def pushOut[F[_], X, D[_], Y, B](t: Tail[F[Var[X]], B], op: Op.Affine[D[Var[X]], Y])(
+      F: Focus[|*|, F],
+      D: Focus[|*|, D],
+    ): Option[Tail[F[Var[X]], B |*| Y]] =
+      t.chaseFw(F) match {
+        case r: shOp.ChaseFwRes.FedTo[f, x, v, w, g, b] =>
+          pushBump(r.pre(()), r.f, r.post, op)(r.v, r.g, D)
+        case shOp.ChaseFwRes.Transported(_, _, _) =>
+          None
+        case shOp.ChaseFwRes.Split(_) =>
+          bug(s"Unexpected pair of expressions fed to $op")
+      }
+
+    def pushBump[A, X, C[_], W, G[_], B, D[_], Y](
+      pre: Tail[A, G[C[Var[X]]]],
+      obstacle: Op[C[Var[X]], W],
+      post: Tail[G[W], B],
+      op: Op.Affine[D[Var[X]], Y],
+    )(
+      C: Focus[|*|, C],
+      G: Focus[|*|, G],
+      D: Focus[|*|, D],
+    ): Option[Tail[A, B |*| Y]] =
+      obstacle.maskInput.visit([CX] => (o: Op[CX, W], ev: CX =:= C[Var[X]]) => {
+        o match
+          case o: Op.DupVar[v0] =>
+            summon[W =:= (Var[v0] |*| Var[v0])]
+            given ev1: (C[Var[X]] =:= Var[v0]) = ev.flip andThen summon[CX =:= Var[v0]]
+            given evx: (Var[X] =:= Var[v0]) = C.mustBeId[Var[X], v0]
+            def go[E[_]](e: Focus[|*|, E])(using ev2: W =:= E[Var[v0]]): Option[Tail[A, B |*| Y]] =
+              ev1 match { case TypeEq(Refl()) =>
+                evx match { case TypeEq(Refl()) =>
+                  pushOut[[x] =>> G[E[x]], v0, D, Y, B](post.from(using ev2.flip.liftCo[G]), op.from(using evx.flip.liftCo[D]))(G compose e, D)
+                    .map { post1 => pre.to[G[Var[v0]]](using ev1.liftCo[G]) > shOp.lift(Op.DupVar[v0]()).at(G) > post1.from(using ev2.liftCo[G]) }
+                }
+              }
+            go[[x] =>> x |*| Var[v0]](Focus.fst) orElse go[[x] =>> Var[v0] |*| x](Focus.snd)
+          case o: Op.Affine[cx, w] =>
+            Op.gcd(o.from(using ev.flip), op)(C, D)
+              .map { (res0: Tail[C[Var[X]], W |*| Y]) =>
+                pre > res0.at(G) > shOp.extractSnd[G, W, Y](G) > post.inFst[Y]
+              }
+      })
+
+    def discardFst[A, G[_], X, Y](t: Tail[Var[A], G[X |*| Y]], g: Focus[|*|, G]): Tail[Var[A], G[Y]] = {
+      val prj: Projection[|*|, G[X |*| Y], G[Y]] = Projection.discardFst[|*|, X, Y].at[G](g)
+      t.project(prj, Op.project) match
+        case shOp.ProjectRes.Projected(p, f) =>
+          p match
+            case Projection.Id() =>
+              f
+            case p: Projection.Proper[pair, p, q] =>
+              p.startsFromPair match
+                case Exists.Some(Exists.Some(ev)) =>
+                  varIsNotPair(ev)
+    }
+
+    def demultiply[V, B](t: Tail[Var[V], B]): Demultiplied[V, B] =
+      demultiplyAt[[x] =>> x, V, B](t)(Focus.id[|*|]) match {
+        case DemultipliedAt.Impl(m, t) => Demultiplied.Impl(m, t)
+      }
+
+    def demultiplyAt[F[_], X, B](t: Tail[F[Var[X]], B])(F: Focus[|*|, F]): DemultipliedAt[F, X, B] =
+      t.chaseFw(F) match {
+        case bumped: shOp.ChaseFwRes.FedTo[f, vx, v, w, g, b] =>
+          def go[V[_], W, G[_]](bumped: shOp.ChaseFwRes.FedTo[F, Var[X], V, W, G, B]): DemultipliedAt[F, X, B] = {
+            bumped.f.maskInput.visit[DemultipliedAt[F, X, B]]([VVX] => (op: Op[VVX, W], ev: VVX =:= V[Var[X]]) => {
+              op match {
+                case op: Op.DupVar[y] =>
+                  bumped.v match {
+                    case Focus.Id() =>
+                      summon[V[Var[X]] =:= Var[X]]
+                      summon[Var[y] =:= VVX]
+                      type G1[T] = G[T |*| Var[y]]
+                      demultiplyAt[G1, y, B](bumped.post)(bumped.g compose Focus.fst) match {
+                        case d: DemultipliedAt.Impl[g1, y, a, b] =>
+                          type G2[T] = G[a |*| T]
+                          demultiplyAt[G2, y, B](d.t)(bumped.g compose Focus.snd) match {
+                            case DemultipliedAt.Impl(m2, t) =>
+                              DemultipliedAt.Impl(Multiplier.dup(d.m, m2).from(using ev.flip), bumped.pre(()) > t)
+                          }
+                      }
+                    case _: Focus.Fst[pair, v1, z] =>
+                      varIsNotPair(summon[Var[y] =:= VVX] andThen ev andThen summon[V[Var[X]] =:= (v1[Var[X]] |*| z)])
+                    case _: Focus.Snd[pair, v2, z] =>
+                      varIsNotPair(summon[Var[y] =:= VVX] andThen ev andThen summon[V[Var[X]] =:= (z |*| v2[Var[X]])])
+                  }
+                case other =>
+                  DemultipliedAt.Impl(Multiplier.id[|*|, Var[X]], t)
+              }
+            })
+          }
+          go(bumped)
+        case shOp.ChaseFwRes.Transported(_, _, _) =>
+          DemultipliedAt.Impl(Multiplier.id[|*|, Var[X]], t)
+        case shOp.ChaseFwRes.Split(ev) =>
+          varIsNotPair(ev)
+      }
+
+    enum Demultiplied[V, B] {
+      case Impl[V, A, B](
+        m: Multiplier[|*|, Var[V], A],
+        t: Tail[A, B],
+      ) extends Demultiplied[V, B]
+    }
+
+    enum DemultipliedAt[F[_], V, B] {
+      case Impl[F[_], V, A, B](
+        m: Multiplier[|*|, Var[V], A],
+        t: Tail[F[A], B],
+      ) extends DemultipliedAt[F, V, B]
+    }
+
+    def extractLinear[A, B, X, Y](a: Varz[A], t: Tail[A, B])(u: Unvar[A, X], v: Unvar[B, Y]): LinearRes[X, Y] = {
+      val vt: VTail[A, B] =
+        t.sweepL[Varz, VarOp](
+          a,
+          [p, q] => (p: Varz[p], op: Op[p, q]) => {
+            val q = op.terminalVars(p)
+            ((p, op), q)
+          }
+        )._1
+
+      vt.traverse[LinCheck, Op.Linear](
+        [p, q] => (op: VarOp[p, q]) => linearOp(op._1, op._2),
+      ) match {
+        case LinCheck.Success(tl) =>
+          val t1: CapturingFun[X, Y] = unvar(tl)(u, v)
+          t1 match {
+            case ll.CapturingFun.NoCapture(f)  => LinearRes.Exact(f)
+            case ll.CapturingFun.Closure(x, f) => LinearRes.Closure(x, f)
+          }
+        case LinCheck.Failure(e) =>
+          LinearRes.Violation(e)
+      }
+    }
+
+    def linearOp[A, B](vs: Varz[A], op: Op[A, B]): LinCheck[Op.Linear[A, B]] =
+      op match {
+        case op: Op.Linear[a, b] =>
+          LinCheck.Success(op)
+        case op: Op.DupVar[a] =>
+          val v = vs.get[a]
+          LinCheck.Failure(errors.overusedVars(variables.singleton(v)))
+        case p: Op.Prj1[a1, a2] =>
+          LinCheck.Failure(errors.underusedVars(variables.singleton(p.unusedVar)))
+        case p: Op.Prj2[a1, a2] =>
+          LinCheck.Failure(errors.underusedVars(variables.singleton(p.unusedVar)))
+        case other =>
+          UnhandledCase.raise(s"$other")
+      }
+
+    def unvar[A, B, X, Y](t: LTail[A, B])(u: Unvar[A, X], v: Unvar[B, Y]): CapturingFun[X, Y] =
+      given shCFun: Shuffled[CapturingFun, |*|] =
+        Shuffled[CapturingFun, |*|](shuffled.shuffle)
+      t.translate[CapturingFun, |*|, Unvar, X](u, Unvar.objectMap, Unvar.arrowMap) match {
+        case Exists.Some((t1, v1)) =>
+          (v uniqueOutType v1) match {
+            case TypeEq(Refl()) =>
+              t1.fold
+          }
+      }
+
+    enum LinearRes[A, B] {
+      case Exact(f: AbstractFun[A, B])
+      case Closure[X, A, B](captured: Tupled[Expr, X], f: AbstractFun[X |*| A, B]) extends LinearRes[A, B]
+      case Violation(e: LE)
+
+      def multiplied[A0](m: Multiplier[|*|, A0, A]): TailLinearRes[A0, B] =
+        this match
+          case Exact(f)             => TailLinearRes.Exact(m, f)
+          case Closure(captured, f) => TailLinearRes.Closure(captured, m, f)
+          case Violation(e)         => TailLinearRes.Violation(e)
+
+    }
+
+    enum TailLinearRes[A, B] {
+      case Exact[A, A1, B](m: Multiplier[|*|, A, A1], f: AbstractFun[A1, B]) extends TailLinearRes[A, B]
+      case Closure[X, A, A1, B](captured: Tupled[Expr, X], m: Multiplier[|*|, A, A1], f: AbstractFun[X |*| A1, B]) extends TailLinearRes[A, B]
+      case Violation(e: LE)
+    }
+
+    sealed trait Unvar[A, B] {
+      def uniqueOutType[C](that: Unvar[A, C]): B =:= C
+
+      def multiply[AA](m: Multiplier[|*|, A, AA]): Exists[[BB] =>> (Unvar[AA, BB], Multiplier[|*|, B, BB])] =
+        m match {
+          case Multiplier.Id() =>
+            Exists((this, Multiplier.id[|*|, B]))
+          case Multiplier.Dup(m1, m2) =>
+            (this.multiply(m1), this.multiply(m2)) match {
+              case (Exists.Some((u1, n1)), Exists.Some((u2, n2))) =>
+                Exists(Unvar.Par(u1, u2), Multiplier.dup(n1, n2))
+            }
+        }
+
+      def maskInput: Masked[Unvar[*, B], A] =
+        Masked(this)
+    }
+    object Unvar {
+      case class SingleVar[V]() extends Unvar[Var[V], V] {
+        override def uniqueOutType[C](that: Unvar[Var[V], C]): V =:= C =
+          that.maskInput.visit([VV] => (that: Unvar[VV, C], ev: VV =:= Var[V]) => {
+            that match {
+              case _: SingleVar[v] =>
+                (summon[Var[v] =:= VV] andThen ev) match { case Injective[Var](TypeEq(Refl())) =>
+                  summon[V =:= C]
+                }
+              case p: Par[a1, a2, x1, x2] =>
+                varIsNotPair[V, a1, a2](ev.flip andThen summon[VV =:= (a1 |*| a2)])
+            }
+          })
+      }
+
+      case class Par[A1, A2, X1, X2](u1: Unvar[A1, X1], u2: Unvar[A2, X2]) extends Unvar[A1 |*| A2, X1 |*| X2] {
+        override def uniqueOutType[C](that: Unvar[A1 |*| A2, C]): (X1 |*| X2) =:= C =
+          that.maskInput.visit([A] => (that: Unvar[A, C], ev: A =:= (A1 |*| A2)) => {
+            that match {
+              case p: Par[a1, a2, c1, c2] =>
+                (summon[(a1 |*| a2) =:= A] andThen ev)                match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+                  ((u1 uniqueOutType p.u1), (u2 uniqueOutType p.u2))  match { case (TypeEq(Refl()), TypeEq(Refl())) =>
+                    summon[(X1 |*| X2) =:= C]
+                  }
+                }
+              case _: SingleVar[v] =>
+                varIsNotPair[v, A1, A2](summon[Var[v] =:= A] andThen ev)
+            }
+          })
+      }
+
+      val objectMap: ObjectMap[|*|, |*|, Unvar] =
+        new ObjectMap[|*|, |*|, Unvar] {
+          override def uniqueOutputType[A, X, Y](f1: Unvar[A, X], f2: Unvar[A, Y]): X =:= Y =
+            f1 uniqueOutType f2
+
+          override def pair[A1, A2, X1, X2](f1: Unvar[A1, X1], f2: Unvar[A2, X2]): Unvar[A1 |*| A2, X1 |*| X2] =
+            Unvar.Par(f1, f2)
+
+          override def unpair[A1, A2, X](f: Unvar[A1 |*| A2, X]): Unpaired[A1, A2, X] =
+            f.maskInput.visit[Unpaired[A1, A2, X]]([A] => (u: Unvar[A, X], ev: A =:= (A1 |*| A2)) => {
+              u match {
+                case p: Par[a1, a2, x1, x2] =>
+                  (summon[(a1 |*| a2) =:= A] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+                    Unpaired.Impl(p.u1, p.u2)
+                  }
+                case _: SingleVar[v] =>
+                  varIsNotPair[v, A1, A2](summon[Var[v] =:= A] andThen ev)
+              }
+            })
+        }
+
+      val arrowMap: ArrowMap[Op.Linear, CapturingFun, Unvar] =
+        new ArrowMap[Op.Linear, CapturingFun, Unvar] {
+          override def map[A, B](op: Op.Linear[A, B]): Image[A, B] =
+            op match {
+              case _: Op.Zip[a1, a2] =>
+                Image(Par(SingleVar[a1](), SingleVar[a2]()), CapturingFun.id, SingleVar[a1 |*| a2]())
+              case op: Op.Map[a, b] =>
+                Image(SingleVar[a](), CapturingFun.lift(op.f), SingleVar[b]())
+              case _: Op.Unzip[a1, a2] =>
+                Image(SingleVar[a1 |*| a2](), CapturingFun.id, Par(SingleVar[a1](), SingleVar[a2]()))
+              case op: Op.CaptureFst[a, x] =>
+                Image(SingleVar[a](), CapturingFun.captureFst(op.x), SingleVar[x |*| a]())
+              case op: Op.CaptureSnd[a, x] =>
+                Image(SingleVar[a](), CapturingFun.captureSnd(op.x), SingleVar[a |*| x]())
+            }
+        }
+    }
+
+    extension [A](va: Var[A]) {
+      def multiply[B](m: Multiplier[|*|, Var[A], B]): Varz[B] =
+        m match {
+          case Multiplier.Id() =>
+            Varz.Atom(va)
+          case Multiplier.Dup(m1, m2) =>
+            Varz.Zip(multiply(m1), multiply(m2))
+        }
+    }
+  }
+
+  private def varIsNotPair[V, A, B](ev: Var[V] =:= (A |*| B)): Nothing =
+    throw new AssertionError("Var[A] =:= (A |*| B)")
+
+  extension[F[_], V, U](ev: F[Var[V]] =:= (Var[U] |*| Var[U])) {
+    def deriveEquality(f: Focus[|*|, F]): V =:= U =
+      f match {
+        case f: Focus.Fst[pair, f1, q] =>
+          (summon[(f1[Var[V]] |*| q) =:= F[Var[V]]] andThen ev) match { case BiInjective[|*|](f1v_u @ TypeEq(Refl()), TypeEq(Refl())) =>
+            f.i match
+              case Focus.Id() =>
+                (summon[Var[V] =:= f1[Var[V]]] andThen f1v_u) match
+                  case Injective[Var](v_u) => v_u
+              case _: Focus.Fst[pair, g1, t] =>
+                varIsNotPair(f1v_u.flip andThen summon[f1[Var[V]] =:= (g1[Var[V]] |*| t)])
+              case _: Focus.Snd[pair, g2, s] =>
+                varIsNotPair(f1v_u.flip andThen summon[f1[Var[V]] =:= (s |*| g2[Var[V]])])
+          }
+        case f: Focus.Snd[pair, f2, p] =>
+          (summon[(p|*| f2[Var[V]]) =:= F[Var[V]]] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), f2v_u @ TypeEq(Refl())) =>
+            f.i match
+              case Focus.Id() =>
+                (summon[Var[V] =:= f2[Var[V]]] andThen f2v_u) match
+                  case Injective[Var](v_u) => v_u
+              case _: Focus.Fst[pair, g1, t] =>
+                varIsNotPair(f2v_u.flip andThen summon[f2[Var[V]] =:= (g1[Var[V]] |*| t)])
+              case _: Focus.Snd[pair, g2, s] =>
+                varIsNotPair(f2v_u.flip andThen summon[f2[Var[V]] =:= (s |*| g2[Var[V]])])
+          }
+        case Focus.Id() =>
+          varIsNotPair(ev)
+      }
+  }
+
+  extension [F[_]](f: Focus[|*|, F]) {
+    def mustBeId[A, V](using ev: F[A] =:= Var[V]): A =:= Var[V] =
+      f match
+        case Focus.Id()                => ev
+        case _: Focus.Fst[pair, f1, y] => varIsNotPair(ev.flip)
+        case _: Focus.Snd[pair, f2, x] => varIsNotPair(ev.flip)
+  }
+
+  enum LinCheck[A] {
+    case Success(value: A)
+    case Failure(e: LE)
+  }
+
+  object LinCheck {
+    given Applicative[LinCheck] with {
+      override def pure[A](a: A): LinCheck[A] =
+        Success(a)
+
+      override def ap[A, B](ff: LinCheck[A => B])(fa: LinCheck[A]): LinCheck[B] =
+        (ff, fa) match {
+          case (Success(f), Success(a)) => Success(f(a))
+          case (Success(_), Failure(e)) => Failure(e)
+          case (Failure(e), Success(_)) => Failure(e)
+          case (Failure(e), Failure(f)) => Failure(errors.combineLinear(e, f))
+        }
+    }
+  }
 }

@@ -7,7 +7,8 @@ sealed trait VarOrigin {
 
   def print: String =
     this match {
-      case FunApp(SourcePos(p, _, l))     => s"The result of function application at $p:$l"
+      case FunAppRes(SourcePos(p, _, l))  => s"The result of function application at $p:$l"
+      case FunAndArg(SourcePos(p, _, l))  => s"The pair of function and its argument at $p:$l"
       case Pairing(SourcePos(p, _, l))    => s"The pair created at $p:$l"
       case Prj1(SourcePos(p, _, l))       => s"The first half of untupling at $p:$l"
       case Prj2(SourcePos(p, _, l))       => s"The second half of untupling at $p:$l"
@@ -19,7 +20,8 @@ sealed trait VarOrigin {
 }
 
 object VarOrigin {
-  case class FunApp(pos: SourcePos) extends VarOrigin
+  case class FunAppRes(pos: SourcePos) extends VarOrigin
+  case class FunAndArg(pos: SourcePos) extends VarOrigin
   case class Pairing(pos: SourcePos) extends VarOrigin
   case class Prj1(pos: SourcePos) extends VarOrigin
   case class Prj2(pos: SourcePos) extends VarOrigin

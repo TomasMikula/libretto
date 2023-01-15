@@ -214,7 +214,7 @@ class LambdaTests extends ScalatestScalettoTestSuite {
                   λ.? { (x: $[One]) => x |*| x }
                 }
                 _ <- assertSubstring("used more than once", e.getMessage)
-                _ <- assertSubstring("ariable bound by lambda expression at", e.getMessage)
+                _ <- assertSubstring("variable bound by lambda expression at", e.getMessage)
                 _ <- assertSubstring("LambdaTests.scala:214", e.getMessage)
               } yield ()
             },
@@ -245,6 +245,30 @@ class LambdaTests extends ScalatestScalettoTestSuite {
                 _ <- assertSubstring("LambdaTests.scala:241", e.getMessage)
               } yield ()
             },
+          "used twice, with a twist" ->
+            TestCase.testOutcome {
+              expectNotThrows {
+                λ.+ { (d: $[Done]) =>
+                  val (p |*| q) = fork(d)
+                  val (r |*| s) = fork(d)
+                  (p |*| r) |*| (q |*| s)
+                }
+              }
+            },
+          "derived expressions remain linear" ->
+            TestCase.testOutcome {
+              for {
+                e <- expectThrows {
+                  λ.+ { (d: $[Done]) =>
+                    val someExpensiveOrSideEffectingFunction = id[Done]
+                    val x = someExpensiveOrSideEffectingFunction(d)
+                    x |*| x
+                  }
+                }
+                _ <- assertSubstring("used more than once", e.getMessage)
+                _ <- assertSubstring("LambdaTests.scala:264", e.getMessage)
+              } yield ()
+            }
         ),
 
       "comonoidal variable" ->

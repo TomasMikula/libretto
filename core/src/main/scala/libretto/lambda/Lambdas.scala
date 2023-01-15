@@ -1,7 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.Lambdas.Error.LinearityViolation
-import libretto.util.BiInjective
+import libretto.util.{BiInjective, Semigroup}
 import scala.annotation.targetName
 
 trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
@@ -37,42 +37,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
       Vars.toSet(vars)
   }
 
-  type VArr[A, B]
-  val VArr: VArrs
-
-  trait VArrs {
-    def id[A](a: Var[A]): VArr[A, A]
-    def map[A, B, C](f: VArr[A, B], g: B -⚬ C, resultVar: Var[C]): VArr[A, C]
-    def zip[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2], resultVar: Var[B1 |*| B2]): VArr[A1 |*| A2, B1 |*| B2]
-    def par[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2]): VArr[A1 |*| A2, B1 |*| B2]
-    def unzip[A, B1, B2](f: VArr[A, B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (VArr[A, B1], VArr[A, B2])
-    def initialVars[A, B](f: VArr[A, B]): Vars[A]
-    def terminalVars[A, B](f: VArr[A, B]): Vars[B]
-    def toExpr[A, B](f: VArr[A, B]): Expr[B]
-  }
-
-  extension [A, B](f: VArr[A, B]) {
-    @targetName("varrMap")
-    def map[C](g: B -⚬ C)(resultVar: Var[C]): VArr[A, C] =
-      VArr.map(f, g, resultVar)
-
-    @targetName("varrZip")
-    def zip[A2, B2](g: VArr[A2, B2])(resultVar: Var[B |*| B2]): VArr[A |*| A2, B |*| B2] =
-      VArr.zip(f, g, resultVar)
-
-    @targetName("varrInitialVars")
-    def initialVars: Vars[A] =
-      VArr.initialVars(f)
-
-    @targetName("varrTerminalVars")
-    def terminalVars: Vars[B] =
-      VArr.terminalVars(f)
-
-    @targetName("varrToExpr")
-    def toExpr: Expr[B] =
-      VArr.toExpr(f)
-  }
-
   type Expr[A]
   val Expr: Exprs
 
@@ -80,7 +44,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     def variable[A](a: Var[A]): Expr[A]
     def map[A, B](e: Expr[A], f: A -⚬ B, resultVar: Var[B]): Expr[B]
     def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[A |*| B]): Expr[A |*| B]
-    def par[A, B](a: Expr[A], b: Expr[B]): Expr[A |*| B]
     def unzip[A, B](ab: Expr[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (Expr[A], Expr[B])
     def terminalVars[A](a: Expr[A]): Vars[A]
   }
@@ -93,10 +56,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     @targetName("exprZip")
     def zip[B](b: Expr[B])(resultVar: Var[A |*| B]): Expr[A |*| B] =
       Expr.zip(a, b, resultVar)
-
-    @targetName("exprPar")
-    def par[B](b: Expr[B]): Expr[A |*| B] =
-      Expr.par(a, b)
 
     @targetName("exprTerminalVars")
     def terminalVars: Vars[A] =
@@ -142,12 +101,29 @@ object Lambdas {
   object Error {
     case class Undefined[VarSet](vars: VarSet) extends Error[VarSet]
 
-    sealed trait LinearityViolation[VarSet] extends Error[VarSet]
+    sealed trait LinearityViolation[VarSet] extends Error[VarSet] {
+      import LinearityViolation._
+
+      def combine(that: LinearityViolation[VarSet])(using ev: Semigroup[VarSet]): LinearityViolation[VarSet] =
+        (this, that) match {
+          case (Overused(s),     Overused(t)    ) => Overused(ev.combine(s, t))
+          case (Overused(s),     Underused(t)   ) => OverUnder(s, t)
+          case (Overused(s),     OverUnder(t, u)) => OverUnder(ev.combine(s, t), u)
+          case (Underused(s),    Overused(t)    ) => OverUnder(t, s)
+          case (Underused(s),    Underused(t)   ) => Underused(ev.combine(s, t))
+          case (Underused(s),    OverUnder(t, u)) => OverUnder(t, ev.combine(s, u))
+          case (OverUnder(s, t), Overused(u)    ) => OverUnder(ev.combine(s, u), t)
+          case (OverUnder(s, t), Underused(u)   ) => OverUnder(s, ev.combine(t, u))
+          case (OverUnder(s, t), OverUnder(u, v)) => OverUnder(ev.combine(s, u), ev.combine(t, v))
+        }
+    }
 
     object LinearityViolation {
       case class Overused[VarSet](vars: VarSet) extends LinearityViolation[VarSet]
 
       case class Underused[VarSet](vars: VarSet) extends LinearityViolation[VarSet]
+
+      case class OverUnder[VarSet](overused: VarSet, underused: VarSet) extends LinearityViolation[VarSet]
     }
 
     def overusedVar[Var[_], VarSet, A](v: Var[A])(using
@@ -170,15 +146,18 @@ object Lambdas {
     def underusedVars(vs: VarSet): LE
     def overusedVars(vs: VarSet): LE
 
+    def combineLinear(l: LE, r: LE): LE
+
     def undefinedVars(vs: VarSet): E
 
     def fromLinearityViolation(e: LE): E
   }
 
   object ErrorFactory {
-    given canonicalInstance[VarSet]: ErrorFactory[Error[VarSet], LinearityViolation[VarSet], VarSet] with {
+    given canonicalInstance[VarSet: Semigroup]: ErrorFactory[Error[VarSet], LinearityViolation[VarSet], VarSet] with {
       override def overusedVars(vs: VarSet): LinearityViolation[VarSet] = LinearityViolation.Overused(vs)
       override def underusedVars(vs: VarSet): LinearityViolation[VarSet] = LinearityViolation.Underused(vs)
+      override def combineLinear(l: LinearityViolation[VarSet], r: LinearityViolation[VarSet]): LinearityViolation[VarSet] = l combine r
       override def undefinedVars(vs: VarSet): Error[VarSet] = Error.Undefined(vs)
       override def fromLinearityViolation(e: LinearityViolation[VarSet]): Error[VarSet] = e
     }
@@ -190,7 +169,7 @@ object Lambdas {
     def mapExpr[Exp2[_]](g: [X] => Exp[X] => Exp2[X]): Abstracted[Exp2, |*|, AbsFun, LE, A, B] =
       this match {
         case Exact(u, f)             => Exact(u, f)
-        case Closure(captured, u, f) => Closure(g(captured), u, f)
+        case Closure(captured, u, f) => Closure(captured.trans(g), u, f)
         case NotFound(b)             => NotFound(g(b))
         case Failure(e)              => Failure(e)
       }
@@ -203,7 +182,7 @@ object Lambdas {
     ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
 
     case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], LE, X, A, A1, B](
-      captured: Exp[X],
+      captured: Tupled[|*|, Exp, X],
       m: Multiplier[|*|, A, A1],
       f: AbsFun[X |*| A1, B],
     ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]

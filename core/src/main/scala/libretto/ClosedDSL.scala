@@ -61,6 +61,7 @@ trait ClosedDSL extends CoreDSL {
   }
 
   /** Alias for [[λ.closure.apply]]. */
+  @deprecated("Use λ.closure instead.", since = "0.2")
   def Λ[A, B](using SourcePos)(
     f: $[A] => $[B],
   ): $[A =⚬ B] =

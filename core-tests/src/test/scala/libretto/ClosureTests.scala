@@ -23,7 +23,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
           Outcome.expectNotThrows {
             val f: Done -⚬ (Done =⚬ (Done |*| Done)) =
               λ { d1 =>
-                Λ { d2 =>
+                λ.closure { d2 =>
                   d1 |*| d2
                 }
               }
@@ -38,7 +38,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
               λ { d =>
                 val (d1 |*| d2) = d
                 val f: $[Done =⚬ (Done |*| Done)] =
-                  Λ { d3 =>
+                  λ.closure { d3 =>
                     d3 |*| d2
                   }
                 f(d1)
@@ -54,7 +54,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
               λ { d =>
                 val (d1 |*| d2) = d > fork
                 val f: $[Done =⚬ (Done |*| Done)] =
-                  Λ { d3 =>
+                  λ.closure { d3 =>
                     d3 |*| d2
                   }
                 f(d1)
@@ -69,7 +69,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             λ { (d: $[Done]) =>
               val n: $[Val[Int]] = d > constVal(2)
               val f: $[Val[String] =⚬ Val[String]] =
-                Λ { s =>
+                λ.closure { s =>
                   (n |*| s) > unliftPair > mapVal { case (n, s) => s.repeat(n) }
                 }
               f
@@ -89,7 +89,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             val (d1 |*| d2) = d > fork
             val n: $[Val[Int]] = d1 > constVal(2)
             val f: $[Val[String] =⚬ Val[String]] =
-              Λ { s =>
+              λ.closure { s =>
                 (n |*| s) > unliftPair > mapVal { case (n, s) => s.repeat(n) }
               }
             val s = d2 > constVal("abc")
@@ -103,7 +103,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         TestCase.interactWith {
           val p1: Done -⚬ (-[Val[Int]] |*| Val[Int]) =
             λ { d =>
-              Λ { (i: $[Val[Int]]) =>
+              λ.closure { (i: $[Val[Int]]) =>
                 val j = one > done > constVal(1)
                 val res = (i * j) > mapVal(_ + _)
                 (res |*| d) > awaitPosSnd
@@ -126,7 +126,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
           val f: Done -⚬ (Done |*| (Done =⚬ Done)) =
             λ { x =>
               x |*| (
-                Λ { y => y } // does not capture anything from the outer scope
+                λ.closure { y => y } // does not capture anything from the outer scope
               )
             }
           val g: (Done |*| (Done =⚬ Done)) -⚬ Done =
@@ -134,6 +134,35 @@ class ClosureTests extends ScalatestScalettoTestSuite {
               f(d)
             }
           λ { d => kit.success(g(f(d))) }
+        },
+
+      "nested closures with semigroupal variables" ->
+        TestCase.testOutcome {
+          Outcome.expectNotThrows {
+            λ.+ { (a: $[Done]) =>
+              λ.closure.+ { (b: $[Done]) =>
+                λ.closure.+ { (c: $[Done]) =>
+                  λ.closure.+ { (d: $[Done]) =>
+                    ((c |*| d) |*| (b |*| a)) |*| ((d |*| (a |*| a)) |*| (c |*| b))
+                  } |*|
+                  λ.closure.+ { (d: $[Done]) =>
+                    ((c |*| d) |*| (b |*| a)) |*| ((d |*| (a |*| a)) |*| (c |*| b))
+                  }
+                } |*|
+                λ.closure.+ { (d: $[Done]) =>
+                  (d |*| (b |*| a)) |*| ((d |*| (a |*| a)) |*| b)
+                }
+              } |*|
+              λ.closure.+ { (c: $[Done]) =>
+                λ.closure.+ { (d: $[Done]) =>
+                  ((a |*| d) |*| a) |*| ((d |*| (c |*| a)) |*| (c |*| c))
+                } |*|
+                λ.closure.+ { (d: $[Done]) =>
+                  ((c |*| d) |*| (d |*| a)) |*| ((d |*| (a |*| a)) |*| c)
+                }
+              }
+            }
+          }
         },
     )
   }

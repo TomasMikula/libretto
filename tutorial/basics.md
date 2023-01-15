@@ -1558,13 +1558,12 @@ def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B =
   swap > assocRL > elimFst(supply[A])
 ```
 
-### Λ-expressions
+### λ.closure
 
-Function objects can also be created using Λ-expressions (uppercase Greek letter Lambda),
-which are similar to λ-expressions introduced above.
+Function objects can also be created via the `λ.closure` method.
 
 ```scala
-def Λ[A, B](f: $[A] => $[B]): $[A =⚬ B]
+def closure[A, B](f: $[A] => $[B]): $[A =⚬ B]
 ```
 
 For comparison, here is the `λ` signature again:
@@ -1573,7 +1572,7 @@ For comparison, here is the `λ` signature again:
 def λ[A, B](f: $[A] => $[B]): A -⚬ B
 ```
 
-While `λ` creates a Libretto function, `Λ` creates just an auxiliary expression `$[A =⚬ B]`
+While `λ` creates a Libretto function, `λ.closure` creates just an auxiliary expression `$[A =⚬ B]`
 that can be used from the outer `λ` expression.
 
 For example, we could reimplement `curry` like this:
@@ -1581,13 +1580,13 @@ For example, we could reimplement `curry` like this:
 ```scala mdoc
 def myCurry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C) =
   λ { a =>
-    Λ { b =>
+    λ.closure { b =>
       f(a |*| b)
     }
   }
 ```
 
-Notice how the `Λ`-expression captures the variable `a` from the outer scope, i.e. it is a closure.
+Notice how the argument of `λ.closure` captures the variable `a` from the outer scope, i.e. it is a closure.
 
 Note that capturing outer variables is not allowed for `λ`-expressions.
 

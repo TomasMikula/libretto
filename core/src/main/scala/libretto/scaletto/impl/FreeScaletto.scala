@@ -3,8 +3,9 @@ package libretto.scaletto.impl
 import libretto.scaletto.Scaletto
 import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, LambdasOne, Multiplier, Tupled}
 import libretto.lambda.Lambdas.Abstracted
-import libretto.util.{Async, BiInjective, SourcePos}
+import libretto.util.{Async, BiInjective, SourcePos, TypeEq}
 import libretto.util.Monad.monadEither
+import libretto.util.TypeEq.Refl
 import scala.concurrent.duration.FiniteDuration
 
 abstract class FreeScaletto {
@@ -36,7 +37,7 @@ abstract class FreeScaletto {
   implicit val biInjectivePair: BiInjective[|*|] =
     new BiInjective[|*|] {
       override def unapply[A, B, X, Y](ev: (A |*| B) =:= (X |*| Y)): (A =:= X, B =:= Y) =
-        (ev.asInstanceOf[A =:= X], ev.asInstanceOf[B =:= Y])
+        ev match { case TypeEq(Refl()) => (summon, summon) }
     }
 
   object -⚬ {
@@ -431,7 +432,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     override def map[A, B](a: $[A])(f: A -⚬ B)(
       pos: SourcePos,
     ): $[B] =
-      (a map f)(new Var[B](VarOrigin.FunApp(pos)))
+      (a map f)(new Var[B](VarOrigin.FunAppRes(pos)))
 
     override def zip[A, B](a: $[A], b: $[B])(
       pos: SourcePos,
@@ -449,7 +450,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     override def app[A, B](f: $[A =⚬ B], a: $[A])(
       pos: SourcePos,
     ): $[B] =
-      closures.app(f, a)(new Var[B](VarOrigin.FunApp(pos)))
+      closures.app(f, a)(
+        new Var[(A =⚬ B) |*| A](VarOrigin.FunAndArg(pos)),
+        new Var[B](VarOrigin.FunAppRes(pos)),
+      )
   }
 
   override val λ = new LambdaOpsWithClosures {
@@ -508,7 +512,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
           } yield m > f.fold
         case Closure(captured, m, f) =>
           for {
-            g <- lambdas.compileConst(captured)
+            g <- lambdas.compileConst(zipExprs(captured))
             m <- m.compileM(split(bindVar))
           } yield m > introFst(g) > f.fold
         case NotFound(b) =>
@@ -524,6 +528,13 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       }
     }
 
+    // TODO: avoid the need to create auxiliary pairings
+    private def zipExprs[A](es: Tupled[|*|, lambdas.Expr, A]): lambdas.Expr[A] =
+      es.fold([x, y] => (ex: lambdas.Expr[x], ey: lambdas.Expr[y]) => {
+        val v = new Var[x |*| y](VarOrigin.Synthetic(s"auxiliary pairing of ($ex, $ey)"))
+        lambdas.Expr.zip(ex, ey, v)
+      })
+
     private def compileClosure[A, B](f: $[A] => $[B])(
       split: Var[A] => Either[lambdas.LinearityViolation, A -⚬ (A |*| A)],
       discard: Var[A] => Either[lambdas.LinearityViolation, A -⚬ One],
@@ -538,7 +549,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         case Capturing(captured, m, f) =>
           for {
             m <- m.compileM(split(bindVar))
-          } yield (captured map csmc.curry(snd(m) > f))(resultVar)
+          } yield (zipExprs(captured) map csmc.curry(snd(m) > f))(resultVar)
         case NonCapturing(m, f) =>
           for {
             m <- m.compileM(split(bindVar))
