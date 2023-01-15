@@ -174,7 +174,7 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
   def compileConst[B](expr: Expr[B]): Either[Error, One -⚬ B] =
     expr match {
       case Expr.LambdasExpr(b) =>
-        Left(Lambdas.Error.Undefined(b.initialVars.toSet))
+        Left(Lambdas.Error.Undefined(b.initialVars))
       case Expr.OneExpr(v, f) =>
         import Lambdas.Abstracted.{Closure, Exact, Failure, NotFound}
         val b = f(lambdas.Expr.variable(v))
@@ -187,7 +187,7 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
           case Closure(captured, _, _) =>
             Left(Lambdas.Error.Undefined(
               captured.mapReduce0(
-                [x] => (ex: lambdas.Expr[x]) => ex.initialVars.toSet,
+                [x] => (ex: lambdas.Expr[x]) => ex.initialVars,
                 variables.union,
               )
             ))

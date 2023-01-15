@@ -46,100 +46,79 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   }
 
   /**
-   * Arrow interspersed with intermediate [[Var]]s.
+   * AST of an expression, created by user code, before translation to point-free representation,
+   * containing intermediate [[Var]]s.
    * Non-linear: includes projections and multiple occurrences of the same variable.
    */
-  sealed trait VArr[A, B] {
-    import VArr._
+  sealed trait Expr[B] {
+    import Expr._
 
-    def initialVars: Vars[A] =
+    def resultVar: Var[B]
+
+    def initialVars: VarSet =
       this match {
-        case Id(a)         => Vars.single(a)
+        case Id(a)         => variables.singleton(a)
         case Map(f, _, _)  => f.initialVars
-        case Zip(f, g, _)  => f.initialVars zip g.initialVars
+        case Zip(f, g, _)  => variables.union(f.initialVars, g.initialVars)
         case Prj1(f, _, _) => f.initialVars
         case Prj2(f, _, _) => f.initialVars
       }
 
-    def resultVar: Var[B]
-
     def terminalVars: Vars[B] =
       Vars.single(resultVar)
 
-    def map[C](f: B -⚬ C)(resultVar: Var[C]): VArr[A, C] =
+    def map[C](f: B -⚬ C)(resultVar: Var[C]): Expr[C] =
       Map(this, f, resultVar)
 
-    def zip[C, D](that: VArr[C, D])(resultVar: Var[B |*| D]): VArr[A |*| C, B |*| D] =
+    def zip[D](that: Expr[D])(resultVar: Var[B |*| D]): Expr[B |*| D] =
       Zip(this, that, resultVar)
   }
 
-  object VArr {
-    case class Id[A](variable: Var[A]) extends VArr[A, A] {
+  object Expr extends Exprs {
+    case class Id[A](variable: Var[A]) extends Expr[A] {
       override def resultVar: Var[A] =
         variable
     }
 
-    case class Map[A, B, C](
-      f: VArr[A, B],
+    case class Map[B, C](
+      f: Expr[B],
       g: B -⚬ C,
       resultVar: Var[C],
-    ) extends VArr[A, C]
+    ) extends Expr[C]
 
-    case class Zip[A1, A2, B1, B2](
-      f1: VArr[A1, B1],
-      f2: VArr[A2, B2],
+    case class Zip[B1, B2](
+      f1: Expr[B1],
+      f2: Expr[B2],
       resultVar: Var[B1 |*| B2],
-    ) extends VArr[A1 |*| A2, B1 |*| B2]
+    ) extends Expr[B1 |*| B2]
 
-    case class Prj1[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VArr[A, B1] {
+    case class Prj1[B1, B2](f: Expr[B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends Expr[B1] {
       override def resultVar: Var[B1] =
         b1
     }
 
-    case class Prj2[A, B1, B2](f: VArr[A, B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends VArr[A, B2] {
+    case class Prj2[B1, B2](f: Expr[B1 |*| B2], b1: Var[B1], b2: Var[B2]) extends Expr[B2] {
       override def resultVar: Var[B2] =
         b2
     }
 
-    def id[A](a: Var[A]): VArr[A, A] =
-      VArr.Id(a)
+    override def variable[A](a: Var[A]): Expr[A] =
+      Id(a)
 
-    def map[A, B, C](f: VArr[A, B], g: B -⚬ C, resultVar: Var[C]): VArr[A, C] =
+    override def map[B, C](f: Expr[B], g: B -⚬ C, resultVar: Var[C]): Expr[C] =
       (f map g)(resultVar)
 
-    def zip[A1, A2, B1, B2](f1: VArr[A1, B1], f2: VArr[A2, B2], resultVar: Var[B1 |*| B2]): VArr[A1 |*| A2, B1 |*| B2] =
+    override def zip[B1, B2](f1: Expr[B1], f2: Expr[B2], resultVar: Var[B1 |*| B2]): Expr[B1 |*| B2] =
       (f1 zip f2)(resultVar)
 
-    def unzip[A, B1, B2](f: VArr[A, B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (VArr[A, B1], VArr[A, B2]) =
+    override def unzip[B1, B2](f: Expr[B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (Expr[B1], Expr[B2]) =
       (Prj1(f, resultVar1, resultVar2), Prj2(f, resultVar1, resultVar2))
 
-    def initialVars[A, B](f: VArr[A, B]): Vars[A] =
-      f.initialVars
-
-    def terminalVars[A, B](f: VArr[A, B]): Vars[B] =
+    override def terminalVars[B](f: Expr[B]): Vars[B] =
       f.terminalVars
 
-    def toExpr[A, B](f: VArr[A, B]): Expr[B] =
-      f
-  }
-
-  type Expr[A] = VArr[?, A]
-
-  object Expr extends Exprs {
-    override def variable[A](a: Var[A]): Expr[A] =
-      VArr.id(a)
-
-    override def map[A, B](e: Expr[A], f: A -⚬ B, resultVar: Var[B]): Expr[B] =
-      VArr.map(e, f, resultVar)
-
-    override def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[A |*| B]): Expr[A |*| B] =
-      VArr.zip(a, b, resultVar)
-
-    override def unzip[A, B](p: Expr[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (Expr[A], Expr[B]) =
-      VArr.unzip(p)(resultVar1, resultVar2)
-
-    override def terminalVars[A](a: Expr[A]): Vars[A] =
-      VArr.terminalVars(a)
+    def initialVars[B](f: Expr[B]): VarSet =
+      f.initialVars
   }
 
   override def abs[A, B](expr: Expr[B], boundVar: Var[A]): Abstracted[A, B] = {
@@ -166,25 +145,25 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     import EliminateRes.{Found, NotFound}
 
     expr match
-      case VArr.Id(w) =>
+      case Expr.Id(w) =>
         testEqual(v, w) match
           case None     => NotFound()
           case Some(ev) => Found(HybridArrow.id(v).to(using ev.liftCo[Var]))
-      case VArr.Map(f, g, resultVar) =>
+      case Expr.Map(f, g, resultVar) =>
         eliminate(v, f) match
           case NotFound() => NotFound()
           case Found(arr) => Found(arr > HybridArrow.map(g, resultVar))
-      case VArr.Zip(f1, f2, resultVar) =>
+      case Expr.Zip(f1, f2, resultVar) =>
         (eliminate(v, f1), eliminate(v, f2)) match
           case (NotFound(), NotFound()) => NotFound()
           case (NotFound(), Found(arr)) => Found(arr > HybridArrow.captureFst(f1, resultVar))
           case (Found(arr), NotFound()) => Found(arr > HybridArrow.captureSnd(f2, resultVar))
           case (Found(ar1), Found(ar2)) => Found((ar1 interweave ar2) > HybridArrow.zip(resultVar))
-      case VArr.Prj1(f, b1, b2) =>
+      case Expr.Prj1(f, b1, b2) =>
         eliminate(v, f) match
           case NotFound() => NotFound()
           case Found(arr) => Found(arr > HybridArrow.prj1(b1, b2))
-      case VArr.Prj2(f, b1, b2) =>
+      case Expr.Prj2(f, b1, b2) =>
         eliminate(v, f) match
           case NotFound() => NotFound()
           case Found(arr) => Found(arr > HybridArrow.prj2(b1, b2))
