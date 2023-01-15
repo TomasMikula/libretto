@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.util.{BiInjective, TypeEq}
+import libretto.util.{BiInjective, Exists, TypeEq}
 import libretto.util.TypeEq.Refl
 
 sealed trait Projection[|*|[_, _], P, Q] {
@@ -59,6 +59,8 @@ object Projection {
     override def inSnd[X1]: Proper[|*|, X1 |*| P, X1 |*| Q] =
       Snd(this)
 
+    def startsFromPair: Exists[[P1] =>> Exists[[P2] =>> P =:= (P1 |*| P2)]]
+
     def fromPair[P1, P2](using P =:= (P1 |*| P2)): FromPair[P1, P2] =
       FromPair[P1, P2]
 
@@ -93,6 +95,9 @@ object Projection {
   }
 
   case class DiscardFst[|*|[_, _], A, B, B0](p2: Projection[|*|, B, B0]) extends Proper[|*|, A |*| B, B0] {
+    override def startsFromPair: Exists[[P1] =>> Exists[[P2] =>> (A |*| B) =:= (P1 |*| P2)]] =
+      Exists(Exists(summon))
+
     override protected def discardFst[Q1, Q2](using ev: B0 =:= (Q1 |*| Q2)): Proper[|*|, A |*| B, Q2] = ???
     override protected def discardSnd[Q1, Q2](using ev: B0 =:= (Q1 |*| Q2)): Proper[|*|, A |*| B, Q1] = ???
     override protected def projectFst[Q1, Q2, R1](using ev: B0 =:= (Q1 |*| Q2))(p1: Proper[|*|, Q1, R1]): Proper[|*|, A |*| B, R1 |*| Q2] = ???
@@ -100,6 +105,9 @@ object Projection {
   }
 
   case class DiscardSnd[|*|[_, _], A, B, A0](p1: Projection[|*|, A, A0]) extends Proper[|*|, A |*| B, A0] {
+    override def startsFromPair: Exists[[P1] =>> Exists[[P2] =>> (A |*| B) =:= (P1 |*| P2)]] =
+      Exists(Exists(summon))
+
     override protected def discardFst[Q1, Q2](using ev: A0 =:= (Q1 |*| Q2)): Proper[|*|, A |*| B, Q2] = ???
     override protected def discardSnd[Q1, Q2](using ev: A0 =:= (Q1 |*| Q2)): Proper[|*|, A |*| B, Q1] = ???
     override protected def projectFst[Q1, Q2, R1](using ev: A0 =:= (Q1 |*| Q2))(p1: Proper[|*|, Q1, R1]): Proper[|*|, A |*| B, R1 |*| Q2] = ???
@@ -107,6 +115,9 @@ object Projection {
   }
 
   sealed trait Par[|*|[_, _], P1, P2, Q1, Q2] extends Proper[|*|, P1 |*| P2, Q1 |*| Q2] {
+    override def startsFromPair: Exists[[X1] =>> Exists[[X2] =>> (P1 |*| P2) =:= (X1 |*| X2)]] =
+      Exists(Exists(summon))
+
     def unpar: (Projection[|*|, P1, Q1], Projection[|*|, P2, Q2]) =
       this match {
         case Fst(p1)      => (p1, Id())

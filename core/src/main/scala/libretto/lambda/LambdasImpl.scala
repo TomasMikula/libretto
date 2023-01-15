@@ -652,8 +652,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
                   case e3 @ Exists.Some(e4 @ Exists.Some(z2, TypeEq(Refl()), TypeEq(Refl()), TypeEq(Refl()))) =>
                     gcdZips(z1, z2).map(_.from[y |*| c2[Var[X]]](using ev1 zipEq ev2))
           case _ =>
-            // TODO: derive contradiction
-            UnhandledCase.raise(s"($f at $C) gcd ($g at $D)")
+            None
         }
       }
 
@@ -845,10 +844,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
                 (summon[Var[V] =:= c1[Var[V]]] andThen c1vv_vv) match
                   case TypeEq(Refl()) =>
                     pullBumpDupVarChaseOther[A, F, V, [x] =>> Var[V] |*| x, B, D, Y](pre, post, op)(F, Focus.snd[|*|, Var[V]], D)
-              case Focus.Fst(_) =>
-                throw new AssertionError() // TODO: derive contradiction
-              case Focus.Snd(_) =>
-                throw new AssertionError() // TODO: derive contradiction
+              case _: Focus.Fst[pair, c11, p] =>
+                varIsNotPair(c1vv_vv.flip andThen summon[c1[Var[V]] =:= (c11[Var[V]] |*| p)])
+              case _: Focus.Snd[pair, c12, p] =>
+                varIsNotPair(c1vv_vv.flip andThen summon[c1[Var[V]] =:= (p |*| c12[Var[V]])])
           }
         case c: Focus.Snd[pair, c2, p] =>
           (summon[(p |*| c2[Var[V]]) =:= C[Var[V]]] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), c2vv_vv @ TypeEq(Refl())) =>
@@ -857,10 +856,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
                 (summon[Var[V] =:= c2[Var[V]]] andThen c2vv_vv) match
                   case TypeEq(Refl()) =>
                     pullBumpDupVarChaseOther[A, F, V, [x] =>> x |*| Var[V], B, D, Y](pre, post, op)(F, Focus.fst[|*|, Var[V]], D)
-              case Focus.Fst(_) =>
-                throw new AssertionError() // TODO: derive contradiction
-              case Focus.Snd(_) =>
-                throw new AssertionError() // TODO: derive contradiction
+              case _: Focus.Fst[pair, c21, q] =>
+                varIsNotPair(c2vv_vv.flip andThen summon[c2[Var[V]] =:= (c21[Var[V]] |*| q)])
+              case _: Focus.Snd[pair, c22, q] =>
+                varIsNotPair(c2vv_vv.flip andThen summon[c2[Var[V]] =:= (q |*| c22[Var[V]])])
           }
         case Focus.Id() =>
           varIsNotPair(summon[Var[V] =:= (Var[V] |*| Var[V])])
@@ -943,8 +942,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           p match
             case Projection.Id() =>
               f
-            case _: Projection.Proper[pair, p, q] =>
-              throw AssertionError("Cannot project from Var[A]") // TODO: derive contradiction
+            case p: Projection.Proper[pair, p, q] =>
+              p.startsFromPair match
+                case Exists.Some(Exists.Some(ev)) =>
+                  varIsNotPair(ev)
     }
 
     def demultiply[V, B](t: Tail[Var[V], B]): Demultiplied[V, B] =
