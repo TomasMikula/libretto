@@ -202,16 +202,20 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             .weaveIn(post)
     }
 
-    private def weaveInOp[F[_], X, Y](i: Focus[|*|, F], f: Op[X, Y])(using ev: B =:= F[X]): HybridArrow[A, F[Y]] =
-      pullOut(i, f) match {
-        case Some(HybridArrow(v, t)) =>
-          val t1 = discardFst(t, i)
-          HybridArrow(v, t1)
-        case None =>
-          HybridArrow(v, tail.to[F[X]] > shOp.lift(f).at(i))
+    private def weaveInOp[F[_], X, Y](i: Focus[|*|, F], op: Op[X, Y])(using ev: B =:= F[X]): HybridArrow[A, F[Y]] =
+      op match {
+        case _: Op.DupVar[x]=>
+          HybridArrow(v, tail.to[F[X]] > shOp.lift(op).at(i))
+        case op: Op.Affine[x, y] =>
+          pullOut(i, op) match
+            case Some(HybridArrow(v, t)) =>
+              val t1 = discardFst(t, i)
+              HybridArrow(v, t1)
+            case None =>
+              HybridArrow(v, tail.to[F[X]] > shOp.lift(op).at(i))
       }
 
-    private def pullOut[F[_], X, Y](i: Focus[|*|, F], op: Op[X, Y])(using ev: B =:= F[X]): Option[HybridArrow[A, F[X |*| Y]]] = ev match { case TypeEq(Refl()) =>
+    private def pullOut[F[_], X, Y](i: Focus[|*|, F], op: Op.Affine[X, Y])(using ev: B =:= F[X]): Option[HybridArrow[A, F[X |*| Y]]] = ev match { case TypeEq(Refl()) =>
       val aux = Op.InputVarFocus(op)
       type FF[T] = F[aux.F[T]]
       aux.ev match { case TypeEq(Refl()) =>
@@ -280,17 +284,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             bug(s"Did not realize that $other can be projected from")
         }
 
-      def gcdSimple[X, C](that: Op[Var[X], C])(using A =:= Var[X]): Option[Tail[A, B |*| C]]
-
-      def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| B]]
-
-      def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| B]]
-
-      def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| B]]
-
       def terminalVars(a: Varz[A]): Varz[B]
-
-      def asZip[P1, P2](using A =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], B =:= Var[V1 |*| V2])]]
 
       def maskInput: Masked[Op[*, B], A] =
         Masked[Op[*, B], A](this)
@@ -302,13 +296,25 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         ev.substituteCo(this)
     }
     object Op {
-      sealed trait Linear[A, B] extends Op[A, B]
+      sealed trait Affine[A, B] extends Op[A, B] {
+        def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using A =:= Var[X]): Option[Tail[A, B |*| C]]
+        def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| B]]
+        def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| B]]
+        def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| B]]
+
+        def asZip[P1, P2](using A =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], B =:= Var[V1 |*| V2])]]
+
+        override def from[Z](using ev: Z =:= A): Op.Affine[Z, B] = ev.substituteContra[Op.Affine[*, B]](this)
+        override def to[C](using ev: B =:= C): Op.Affine[A, C]   = ev.substituteCo(this)
+      }
+
+      sealed trait Linear[A, B] extends Affine[A, B]
 
       case class Zip[A1, A2](resultVar: Var[A1 |*| A2]) extends Op.Linear[Var[A1] |*| Var[A2], Var[A1 |*| A2]] {
         override def terminalVars(a: Varz[Var[A1] |*| Var[A2]]): Varz[Var[A1 |*| A2]] =
           Varz.Atom(resultVar)
 
-        override def gcdSimple[X, C](that: Op[Var[X], C])(using ev: (Var[A1] |*| Var[A2]) =:= Var[X]): Option[Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2] |*| C]] =
+        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: (Var[A1] |*| Var[A2]) =:= Var[X]): Option[Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2] |*| C]] =
           varIsNotPair(ev.flip)
 
         override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[A1 |*| A2]]] =
@@ -332,7 +338,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def terminalVars(a: Varz[Var[A]]): Varz[Var[B]] =
           Varz.Atom(resultVar)
 
-        override def gcdSimple[X, C](that: Op[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[B] |*| C]] =
+        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[B] |*| C]] =
           that match
             case Map(_, v) =>
               (testEqual(v, resultVar)) match
@@ -354,11 +360,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           varIsNotPair(ev)
       }
 
-      case class Prj1[A1, A2](resultVar: Var[A1], unusedVar: Var[A2]) extends Op[Var[A1 |*| A2], Var[A1]] {
+      case class Prj1[A1, A2](resultVar: Var[A1], unusedVar: Var[A2]) extends Affine[Var[A1 |*| A2], Var[A1]] {
         override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A1]] =
           Varz.Atom(resultVar)
 
-        override def gcdSimple[X, C](that: Op[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| C]] =
+        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| C]] =
           that.prj1_gcd_this(this)(using ev.flip)
 
         override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a1] |*| Var[A1]]] =
@@ -405,11 +411,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           varIsNotPair(ev)
       }
 
-      case class Prj2[A1, A2](unusedVar: Var[A1], resultVar: Var[A2]) extends Op[Var[A1 |*| A2], Var[A2]] {
+      case class Prj2[A1, A2](unusedVar: Var[A1], resultVar: Var[A2]) extends Affine[Var[A1 |*| A2], Var[A2]] {
         override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A2]] =
           Varz.Atom(resultVar)
 
-        override def gcdSimple[X, C](that: Op[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A2] |*| C]] =
+        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A2] |*| C]] =
           that.prj2_gcd_this(this)(using ev.flip)
 
         override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a1] |*| Var[A2]]] =
@@ -453,7 +459,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A1] |*| Var[A2]] =
           Varz.Zip(Varz.Atom(resultVar1), Varz.Atom(resultVar2))
 
-        override def gcdSimple[X, C](that: Op[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| Var[A2] |*| C]] =
+        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| Var[A2] |*| C]] =
           that.unzip_gcd_this(this)(using ev.flip)
 
         override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using
@@ -502,25 +508,13 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       case class DupVar[A]() extends Op[Var[A], Var[A] |*| Var[A]] {
         override def terminalVars(a: Varz[Var[A]]): Varz[Var[A] |*| Var[A]] =
           Varz.Zip(a, a)
-
-        override def gcdSimple[X, C](that: Op[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[A] |*| Var[A] |*| C]] =
-          ???
-
-        override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| (Var[A] |*| Var[A])]] = ???
-
-        override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| (Var[A] |*| Var[A])]] = ???
-
-        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| (Var[A] |*| Var[A])]] = ???
-
-        override def asZip[P1, P2](using ev: Var[A] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], (Var[A] |*| Var[A]) =:= Var[V1 |*| V2])]] =
-          varIsNotPair(ev)
       }
 
       case class CaptureFst[A, X](x: Expr[X], resultVar: Var[X |*| A]) extends Op.Linear[Var[A], Var[X |*| A]] {
         override def terminalVars(a: Varz[Var[A]]): Varz[Var[X |*| A]] =
           Varz.Atom(resultVar)
 
-        override def gcdSimple[Q, C](that: Op[Var[Q], C])(using Var[A] =:= Var[Q]): Option[Tail[Var[A], Var[X |*| A] |*| C]] =
+        override def gcdSimple[Q, C](that: Op.Affine[Var[Q], C])(using Var[A] =:= Var[Q]): Option[Tail[Var[A], Var[X |*| A] |*| C]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.gcdSimple")
 
         override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[X |*| A]]] =
@@ -540,7 +534,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def terminalVars(a: Varz[Var[A]]): Varz[Var[A |*| X]] =
           Varz.Atom(resultVar)
 
-        override def gcdSimple[Q, C](that: Op[Var[Q], C])(using Var[A] =:= Var[Q]): Option[Tail[Var[A], Var[A |*| X] |*| C]] =
+        override def gcdSimple[Q, C](that: Op.Affine[Var[Q], C])(using Var[A] =:= Var[Q]): Option[Tail[Var[A], Var[A |*| X] |*| C]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.gcdSimple")
 
         override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[A |*| X]]] =
@@ -564,11 +558,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         type X
         val F: Focus[|*|, F]
         val ev: A =:= F[Var[X]]
-        val op: Op[F[Var[X]], B]
+        val op: Op.Affine[F[Var[X]], B]
       }
 
       object InputVarFocus {
-        def apply[G[_], T, B](op0: Op[G[Var[T]], B], g: Focus[|*|, G]): InputVarFocus[G[Var[T]], B] =
+        def apply[G[_], T, B](op0: Op.Affine[G[Var[T]], B], g: Focus[|*|, G]): InputVarFocus[G[Var[T]], B] =
           new InputVarFocus[G[Var[T]], B] {
             override type F[A] = G[A]
             override type X = T
@@ -577,9 +571,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             override val op = op0
           }
 
-        def apply[A, B](op: Op[A, B]): InputVarFocus[A, B] =
+        def apply[A, B](op: Op.Affine[A, B]): InputVarFocus[A, B] =
           op match {
-            case op: DupVar[t]   => InputVarFocus[[x] =>> x, t, Var[t] |*| Var[t]](op, Focus.id)
             case op: Zip[t, u]   => InputVarFocus[[x] =>> x |*| Var[u], t, Var[t |*| u]](op, Focus.fst) // arbitrarily picking the first input
             case op: Unzip[t, u] => InputVarFocus[[x] =>> x, t |*| u, Var[t] |*| Var[u]](op, Focus.id)
             case op: Prj1[t, u]  => InputVarFocus[[x] =>> x, t |*| u, Var[t]](op, Focus.id)
@@ -591,8 +584,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       }
 
       def gcd[C[_], D[_], X, Y, Z](
-        f: Op[C[Var[X]], Y],
-        g: Op[D[Var[X]], Z],
+        f: Op.Affine[C[Var[X]], Y],
+        g: Op.Affine[D[Var[X]], Z],
       )(
         C: Focus[|*|, C],
         D: Focus[|*|, D],
@@ -716,7 +709,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
      *  and channels it to the output.
      *  If `op` does not introduce new variables, or if `op` is not found in `t`, returns `None`.
      */
-    def pullOut[A, G[_], X, D[_], Y](t: Tail[A, G[Var[X]]], op: Op[D[Var[X]], Y])(
+    def pullOut[A, G[_], X, D[_], Y](t: Tail[A, G[Var[X]]], op: Op.Affine[D[Var[X]], Y])(
       G: Focus[|*|, G],
       D: Focus[|*|, D],
     ): Option[Tail[A, G[Var[X] |*| Y]]] = {
@@ -737,7 +730,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       pre: Tail[A, F[V]],
       obstacle: Op[V, CX],
       post: Tail[F[C[Var[X]]], G[Var[X]]],
-      op: Op[D[Var[X]], Y],
+      op: Op.Affine[D[Var[X]], Y],
     )(
       F: Focus[|*|, F],
       C: Focus[|*|, C],
@@ -772,7 +765,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     def pullBumpDupVar[A, F[_], V, C[_], B, D[_], Y](
       pre: Tail[A, F[Var[V]]],
       post: Tail[F[C[Var[V]]], B],
-      op: Op[D[Var[V]], Y],
+      op: Op.Affine[D[Var[V]], Y],
     )(
       F: Focus[|*|, F],
       C: Focus[|*|, C],
@@ -813,7 +806,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     private def pullBumpDupVarChaseOther[A, F[_], V, O[_], B, D[_], Y](
       pre: Tail[A, F[Var[V]]],
       post: Tail[F[O[Var[V]]], B],
-      op: Op[D[Var[V]], Y],
+      op: Op.Affine[D[Var[V]], Y],
     )(
       F: Focus[|*|, F],
       O: Focus[|*|, O],
@@ -835,7 +828,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             case None =>
               None
 
-    def pushOut[F[_], X, D[_], Y, B](t: Tail[F[Var[X]], B], op: Op[D[Var[X]], Y])(
+    def pushOut[F[_], X, D[_], Y, B](t: Tail[F[Var[X]], B], op: Op.Affine[D[Var[X]], Y])(
       F: Focus[|*|, F],
       D: Focus[|*|, D],
     ): Option[Tail[F[Var[X]], B |*| Y]] =
@@ -852,7 +845,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       pre: Tail[A, G[C[Var[X]]]],
       obstacle: Op[C[Var[X]], W],
       post: Tail[G[W], B],
-      op: Op[D[Var[X]], Y],
+      op: Op.Affine[D[Var[X]], Y],
     )(
       C: Focus[|*|, C],
       G: Focus[|*|, G],
@@ -872,7 +865,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
                 }
               }
             go[[x] =>> x |*| Var[v0]](Focus.fst) orElse go[[x] =>> Var[v0] |*| x](Focus.snd)
-          case o =>
+          case o: Op.Affine[cx, w] =>
             Op.gcd(o.from(using ev.flip), op)(C, D)
               .map { (res0: Tail[C[Var[X]], W |*| Y]) =>
                 pre > res0.at(G) > shOp.extractSnd[G, W, Y](G) > post.inFst[Y]
