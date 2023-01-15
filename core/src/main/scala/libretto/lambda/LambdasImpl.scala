@@ -3,7 +3,7 @@ package libretto.lambda
 import libretto.{lambda => ll}
 import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.lambda.Lambdas.ErrorFactory
-import libretto.util.{Applicative, BiInjective, Exists, Masked, TypeEq}
+import libretto.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeEq}
 import libretto.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
@@ -426,7 +426,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           ev: Var[A1 |*| A2] =:= Var[T1 |*| T2],
         ): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A1]]] =
           ev match {
-            case InjectiveVar(BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl()))) =>
+            case Injective[Var](BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl()))) =>
               (testEqual(that.resultVar1, this.resultVar), testEqual(that.resultVar2, this.unusedVar)) match
                 case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
                   Some(shOp.lift(that) > shOp.lift(DupVar[A1]()).inFst[Var[A2]] > shOp.ix)
@@ -1096,7 +1096,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           that.maskInput.visit([VV] => (that: Unvar[VV, C], ev: VV =:= Var[V]) => {
             that match {
               case _: SingleVar[v] =>
-                (summon[Var[v] =:= VV] andThen ev) match { case InjectiveVar(TypeEq(Refl())) =>
+                (summon[Var[v] =:= VV] andThen ev) match { case Injective[Var](TypeEq(Refl())) =>
                   summon[V =:= C]
                 }
               case p: Par[a1, a2, x1, x2] =>
@@ -1181,9 +1181,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           (summon[(f1[Var[V]] |*| q) =:= F[Var[V]]] andThen ev) match { case BiInjective[|*|](f1v_u @ TypeEq(Refl()), TypeEq(Refl())) =>
             f.i match
               case Focus.Id() =>
-                (summon[Var[V] =:= f1[Var[V]]] andThen f1v_u) match {
-                  case InjectiveVar(v_u) => v_u
-                }
+                (summon[Var[V] =:= f1[Var[V]]] andThen f1v_u) match
+                  case Injective[Var](v_u) => v_u
               case _: Focus.Fst[pair, g1, t] =>
                 varIsNotPair(f1v_u.flip andThen summon[f1[Var[V]] =:= (g1[Var[V]] |*| t)])
               case _: Focus.Snd[pair, g2, s] =>
@@ -1193,9 +1192,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           (summon[(p|*| f2[Var[V]]) =:= F[Var[V]]] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), f2v_u @ TypeEq(Refl())) =>
             f.i match
               case Focus.Id() =>
-                (summon[Var[V] =:= f2[Var[V]]] andThen f2v_u) match {
-                  case InjectiveVar(v_u) => v_u
-                }
+                (summon[Var[V] =:= f2[Var[V]]] andThen f2v_u) match
+                  case Injective[Var](v_u) => v_u
               case _: Focus.Fst[pair, g1, t] =>
                 varIsNotPair(f2v_u.flip andThen summon[f2[Var[V]] =:= (g1[Var[V]] |*| t)])
               case _: Focus.Snd[pair, g2, s] =>
@@ -1212,12 +1210,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case Focus.Id()                => ev
         case _: Focus.Fst[pair, f1, y] => varIsNotPair(ev.flip)
         case _: Focus.Snd[pair, f2, x] => varIsNotPair(ev.flip)
-  }
-
-  // TODO: Require Injective[Var] as an argument
-  private object InjectiveVar {
-    def unapply[U, V](ev: Var[U] =:= Var[V]): Some[U =:= V] =
-      Some(ev.asInstanceOf[U =:= V])
   }
 
   enum LinCheck[A] {
