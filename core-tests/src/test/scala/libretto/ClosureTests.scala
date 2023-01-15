@@ -135,6 +135,35 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             }
           λ { d => kit.success(g(f(d))) }
         },
+
+      "nested closures with semigroupal variables" ->
+        TestCase.testOutcome {
+          Outcome.expectNotThrows {
+            λ.+ { (a: $[Done]) =>
+              λ.closure.+ { (b: $[Done]) =>
+                λ.closure.+ { (c: $[Done]) =>
+                  λ.closure.+ { (d: $[Done]) =>
+                    ((c |*| d) |*| (b |*| a)) |*| ((d |*| (a |*| a)) |*| (c |*| b))
+                  } |*|
+                  λ.closure.+ { (d: $[Done]) =>
+                    ((c |*| d) |*| (b |*| a)) |*| ((d |*| (a |*| a)) |*| (c |*| b))
+                  }
+                } |*|
+                λ.closure.+ { (d: $[Done]) =>
+                  (d |*| (b |*| a)) |*| ((d |*| (a |*| a)) |*| b)
+                }
+              } |*|
+              λ.closure.+ { (c: $[Done]) =>
+                λ.closure.+ { (d: $[Done]) =>
+                  ((a |*| d) |*| a) |*| ((d |*| (c |*| a)) |*| (c |*| c))
+                } |*|
+                λ.closure.+ { (d: $[Done]) =>
+                  ((c |*| d) |*| (d |*| a)) |*| ((d |*| (a |*| a)) |*| c)
+                }
+              }
+            }
+          }
+        },
     )
   }
 }

@@ -1880,11 +1880,17 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           .inFst[A2]
           .after([t] => (_: Unit) => ix[A1, A2, F[t]])
 
-      override def chaseBwFst[G[_], T](i: Focus[|*|, G])(using (B1 |*| B2) =:= G[T]): ChaseBwRes[A1 |*| A2 |*| A3, [t] =>> G[t] |*| A2, T] =
+      override def chaseBwFst[G[_], T](i: Focus[|*|, G])(using (B1 |*| B2) =:= G[T]): ChaseBwRes[(A1 |*| A2) |*| A3, [t] =>> G[t] |*| A2, T] =
         g.chaseBw[G, T](i).afterIX
 
-      override def chaseBwSnd[G[_], T](i: Focus[|*|, G])(using A2 =:= G[T]): ChaseBwRes[A1 |*| A2 |*| A3, [t] =>> B1 |*| B2 |*| G[t], T] =
-        UnhandledCase.raise(s"${this.getClass.getSimpleName}.chaseBwSnd")
+      override def chaseBwSnd[G[_], T](i: Focus[|*|, G])(using ev: A2 =:= G[T]): ChaseBwRes[(A1 |*| A2) |*| A3, [t] =>> (B1 |*| B2) |*| G[t], T] =
+        ev match { case TypeEq(Refl()) =>
+          ChaseBwRes.Transported[(A1 |*| A2) |*| A3, [t] =>> (A1 |*| G[t]) |*| A3, [t] =>> (B1 |*| B2) |*| G[t], T](
+            summon,
+            i.inSnd[A1].inFst[A3],
+            [t] => (_: Unit) => ix[A1, G[t], A3] > fst(g.asShuffle),
+          )
+        }
 
       override def thenBi[C1, C2](g1: (B1 |*| B2) ~⚬ C1, g2: A2 ~⚬ C2): Xfer[A1 |*| A2, A3, _, _, C1, C2] =
         decompose1(g.asShuffle > g1) match {
