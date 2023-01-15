@@ -23,14 +23,14 @@ object CoffeeMachineProvider {
 
   private def serveEspresso: Done -⚬ (EspressoOptions =⚬ Val[Beverage]) =
     λ { ready =>
-      Λ { espressoOptions =>
+      λ.closure { espressoOptions =>
         (espressoOptions waitFor ready) > makeEspresso
       }
     }
 
   private def serveLatte: Done -⚬ (LatteOptions =⚬ Val[Beverage]) =
     λ { ready =>
-      Λ { latteOptions =>
+      λ.closure { latteOptions =>
         (latteSpec(latteOptions) waitFor ready) > makeLatte
       }
     }
