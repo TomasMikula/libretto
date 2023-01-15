@@ -3,8 +3,9 @@ package libretto.scaletto.impl
 import libretto.scaletto.Scaletto
 import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, LambdasOne, Multiplier, Tupled}
 import libretto.lambda.Lambdas.Abstracted
-import libretto.util.{Async, BiInjective, SourcePos}
+import libretto.util.{Async, BiInjective, SourcePos, TypeEq}
 import libretto.util.Monad.monadEither
+import libretto.util.TypeEq.Refl
 import scala.concurrent.duration.FiniteDuration
 
 abstract class FreeScaletto {
@@ -36,7 +37,7 @@ abstract class FreeScaletto {
   implicit val biInjectivePair: BiInjective[|*|] =
     new BiInjective[|*|] {
       override def unapply[A, B, X, Y](ev: (A |*| B) =:= (X |*| Y)): (A =:= X, B =:= Y) =
-        (ev.asInstanceOf[A =:= X], ev.asInstanceOf[B =:= Y])
+        ev match { case TypeEq(Refl()) => (summon, summon) }
     }
 
   object -⚬ {
