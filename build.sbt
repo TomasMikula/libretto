@@ -76,7 +76,7 @@ lazy val testingScalatest = project
   .settings(
     name := "libretto-testing-scalatest",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.14",
+      "org.scalatest" %% "scalatest" % "3.2.15",
     ),
   )
 
