@@ -1151,18 +1151,15 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       )(implicit
         ev: X2 =:= (X21 |*| X22),
       ): (X1 |*| X2) ~⚬ (X21 |*| (C2 |*| C3)) = {
-        val res = swap_then_assocLR(ev.substituteCo(this), that)
-        ev.substituteContra[[x] =>> (X1 |*| x) ~⚬ (X21 |*| (C2 |*| C3))](res)
+        ev match { case TypeEq(Refl()) => xi[X1, X21, X22] > snd(swap > that.g.asShuffle) }
       }
 
-      override def thenAssocRL[B21, B22, C1, C2](
-        that: AssocRL[X2, B21, B22, C1, C2],
+      override def thenAssocRL[X11, X12, C1, C2](
+        that: AssocRL[X2, X11, X12, C1, C2],
       )(using
-        ev: X1 =:= (B21 |*| B22),
-      ): (X1 |*| X2) ~⚬ ((C1 |*| C2) |*| B22) = {
-        val res = swap_then_assocRL(ev.substituteCo[[x] =>> Swap[x, X2]](this), that)
-        ev.substituteContra[[x] =>> (x |*| X2) ~⚬ ((C1 |*| C2) |*| B22)](res)
-      }
+        ev: X1 =:= (X11 |*| X12),
+      ): (X1 |*| X2) ~⚬ ((C1 |*| C2) |*| X12) =
+        ev match { case TypeEq(Refl()) => ix[X11, X12, X2] > fst(swap > that.g.asShuffle) }
 
       override def thenIX[B11, B12, C1, C2](
         that: IX[B11, B12, X1, C1, C2],
@@ -1391,17 +1388,26 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         that: AssocLR[A11, A12, B2 |*| B3, C2, C3],
       )(implicit
         ev: A1 =:= (A11 |*| A12),
-      ): ((A1 |*| A2) |*| A3) ~⚬ (A11 |*| (C2 |*| C3)) = {
-        val res = assocLR_then_assocLR(ev.substituteCo[AssocLR[*, A2, A3, B2, B3]](this), that)
-        ev.substituteContra[[x] =>> ((x |*| A2) |*| A3) ~⚬ (A11 |*| (C2 |*| C3))](res)
-      }
+      ): ((A1 |*| A2) |*| A3) ~⚬ (A11 |*| (C2 |*| C3)) =
+        ev match { case TypeEq(Refl()) =>
+          decompose(assocLR > snd(g.asShuffle) > that.g.asShuffle) match
+            case Decomposition(f1, f2, g) =>
+              Xfer(assocLR[A11, A12, A2] > snd(f1), f2, AssocLR(g))
+        }
 
       override def thenAssocRL[B21, B22, C1, C2](
         that: AssocRL[A1, B21, B22, C1, C2],
       )(using
         ev: (B2 |*| B3) =:= (B21 |*| B22),
       ): ((A1 |*| A2) |*| A3) ~⚬ ((C1 |*| C2) |*| B22) =
-        assocLR_then_assocRL(ev.biSubst[AssocLR[A1, A2, A3, *, *]](this), that)
+        ev match {
+          case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+            TransferOpt.decompose(this.g) match
+              case Right((i, j)) =>
+                par(snd(i) > that.g.asShuffle, j)
+              case Left(t) =>
+                t.assocLR_this_assocRL(that)
+        }
 
       override def thenIX[B11, B12, C1, C2](
         that: IX[B11, B12, B2 |*| B3, C1, C2],
@@ -1417,7 +1423,14 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       )(implicit
         ev: (B2 |*| B3) =:= (B21 |*| B22),
       ): ((A1 |*| A2) |*| A3) ~⚬ (B21 |*| (C2 |*| C3)) =
-        assocLR_then_xi(ev.biSubst[AssocLR[A1, A2, A3, *, *]](this), that)
+        ev match {
+          case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+            TransferOpt.decompose(this.g) match
+              case Right((i, j)) =>
+                Xfer(snd(i) > swap, j, AssocLR(that.g))
+              case Left(t) =>
+                t.assocLR_this_xi(that)
+        }
 
       override def thenIXI[B11, B12, B21, B22, C1, C2, C3, C4](
         that: IXI[B11, B12, B21, B22, C1, C2, C3, C4]
@@ -1633,7 +1646,14 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       )(implicit
         ev: (B1 |*| B2) =:= (D1 |*| D2),
       ): (A1 |*| (A2 |*| A3)) ~⚬ (D1 |*| (C2 |*| C3)) =
-        assocRL_then_assocLR(ev.biSubst[AssocRL[A1, A2, A3, *, *]](this), that)
+        ev match {
+          case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+            TransferOpt.decompose(this.g) match
+              case Right((i, j)) =>
+                par(i, fst(j) > that.g.asShuffle)
+              case Left(t) =>
+                t.assocRL_this_assocLR(that)
+        }
 
       override def thenAssocRL[B3, B4, C1, C2](
         that: AssocRL[B1 |*| B2, B3, B4, C1, C2],
@@ -1892,10 +1912,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         that: AssocRL[(B1 |*| B2), X1, X2, C1, C2],
       )(using
         ev: A2 =:= (X1 |*| X2),
-      ): ((A1 |*| A2) |*| A3) ~⚬ ((C1 |*| C2) |*| X2) = {
-        val res = ix_then_assocRL(ev.substituteCo[IX[A1, *, A3, B1, B2]](this), that)
-        ev.substituteContra[[x] =>> ((A1 |*| x) |*| A3) ~⚬ ((C1 |*| C2) |*| X2)](res)
-      }
+      ): ((A1 |*| A2) |*| A3) ~⚬ ((C1 |*| C2) |*| X2) =
+        ev match { case TypeEq(Refl()) =>
+          decompose(IX(this.g).asShuffle > that.g.asShuffle) match
+            case Decomposition(f1, f2, h) => Xfer(assocRL[A1, X1, X2] > fst(f1), f2, IX(h))
+        }
 
       override def thenIX[B11, B12, C1, C2](
         that: IX[B11, B12, A2, C1, C2],
@@ -2143,17 +2164,28 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         that: AssocLR[A21, A22, B2 |*| B3, C2, C3],
       )(implicit
         ev: A2 =:= (A21 |*| A22),
-      ): (A1 |*| (A2 |*| A3)) ~⚬ (A21 |*| (C2 |*| C3)) = {
-        val res = xi_then_assocLR(ev.substituteCo[[x] =>> XI[A1, x, A3, B2, B3]](this), that)
-        ev.substituteContra[[x] =>> (A1 |*| (x |*| A3)) ~⚬ (A21 |*| (C2 |*| C3))](res)
-      }
+      ): (A1 |*| (A2 |*| A3)) ~⚬ (A21 |*| (C2 |*| C3)) =
+        ev match { case TypeEq(Refl()) =>
+          decompose(xi > snd(this.g.asShuffle) > that.g.asShuffle) match
+            case Decomposition(f1, f2, g) =>
+              Xfer(f1, assocLR[A21, A22, A3] > snd(f2), XI(g))
+        }
 
-      override def thenAssocRL[B21, B22, C1, C2](
-        that: AssocRL[A2, B21, B22, C1, C2],
+      override def thenAssocRL[B2_, B3_, C1, C2](
+        that: AssocRL[A2, B2_, B3_, C1, C2],
       )(using
-        ev: (B2 |*| B3) =:= (B21 |*| B22),
-      ): (A1 |*| (A2 |*| A3)) ~⚬ ((C1 |*| C2) |*| B22) =
-        xi_then_assocRL(ev.biSubst[XI[A1, A2, A3, *, *]](this), that)
+        ev: (B2 |*| B3) =:= (B2_ |*| B3_),
+      ): (A1 |*| (A2 |*| A3)) ~⚬ ((C1 |*| C2) |*| B3_) =
+        ev match {
+          case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+            TransferOpt.decompose(this.g) match
+              case Right((i, j)) =>
+                decompose(swap > that.g.asShuffle) match
+                  case Decomposition(f1, f2, h) =>
+                    Xfer(i > f1, par(f2, j), AssocRL(h))
+              case Left(t) =>
+                t.xi_this_assocRL(that)
+        }
 
       override def thenIX[A21, A22, C1, C2](
         that: IX[A21, A22, B2 |*| B3, C1, C2],
@@ -2166,12 +2198,19 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               Xfer(f1, ix[A21, A22, A3] > fst(f2), AssocRL(h))
         }
 
-      override def thenXI[B21, B22, C2, C3](
-        that: XI[A2, B21, B22, C2, C3],
+      override def thenXI[B2_, B3_, C2, C3](
+        that: XI[A2, B2_, B3_, C2, C3],
       )(implicit
-        ev: (B2 |*| B3) =:= (B21 |*| B22),
-      ): (A1 |*| (A2 |*| A3)) ~⚬ (B21 |*| (C2 |*| C3)) =
-        xi_then_xi(ev.biSubst[XI[A1, A2, A3, *, *]](this), that)
+        ev: (B2 |*| B3) =:= (B2_ |*| B3_),
+      ): (A1 |*| (A2 |*| A3)) ~⚬ (B2_ |*| (C2 |*| C3)) =
+        ev match {
+          case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+            TransferOpt.decompose(this.g) match
+              case Right((i, j)) =>
+                par(i, snd(j) > that.g.asShuffle)
+              case Left(t) =>
+                t.xi_this_xi(that)
+        }
 
       override def thenIXI[B11, B12, B21, B22, C1, C2, C3, C4](
         that: IXI[B11, B12, B21, B22, C1, C2, C3, C4]
@@ -2588,100 +2627,6 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def pairWith[X3, X4, Z1, Z2](that: TransferOpt[X3, X4, Z1, Z2]): BiTransferOpt[A1 |*| A2, A3 |*| A4, X3, X4, (B1 |*| B2), (B3 |*| B4), Z1, Z2] =
         this ixiPairWith_: that
     }
-
-    def swap_then_assocLR[X1, X2, X3, Y2, Y3](
-      f: Swap[X1, X2 |*| X3],
-      g: AssocLR[X2, X3, X1, Y2, Y3]
-    ): (X1 |*| (X2 |*| X3)) ~⚬ (X2 |*| (Y2 |*| Y3)) =
-      xi(swap > g.g.asShuffle)
-
-    def swap_then_assocRL[X1, X2, X3, Y1, Y2](
-      f: Swap[X1 |*| X2, X3],
-      g: AssocRL[X3, X1, X2, Y1, Y2],
-    ): ((X1 |*| X2) |*| X3) ~⚬ ((Y1 |*| Y2) |*| X2) =
-      ix(swap > g.g.asShuffle)
-
-    def assocLR_then_assocLR[A1, A2, A3, A4, B2, B3, C2, C3](
-      f: AssocLR[A1 |*| A2, A3, A4, B2, B3],
-      g: AssocLR[A1, A2, B2 |*| B3, C2, C3],
-    ): (((A1 |*| A2)|*| A3) |*| A4) ~⚬ (A1 |*| (C2 |*| C3)) =
-      decompose(assocLR > snd(f.g.asShuffle) > g.g.asShuffle) match {
-        case Decomposition(f1, f2, g) => Xfer(assocLR > snd(f1), f2, AssocLR(g))
-      }
-
-    def assocLR_then_assocRL[A1, A2, A3, B2, B3, C1, C2](
-      f: AssocLR[A1, A2, A3, B2, B3],
-      g: AssocRL[A1, B2, B3, C1, C2],
-    ): ((A1 |*| A2) |*| A3) ~⚬ ((C1 |*| C2) |*| B3) =
-      TransferOpt.decompose(f.g) match {
-        case Right((i, j)) =>
-          par(snd(i) > g.g.asShuffle, j)
-        case Left(t) =>
-          t.assocLR_this_assocRL(g)
-      }
-
-    def assocLR_then_xi[A1, A2, A3, B2, B3, C2, C3](
-      f: AssocLR[A1, A2, A3, B2, B3],
-      g: XI[A1, B2, B3, C2, C3],
-    ): ((A1 |*| A2) |*| A3) ~⚬ (B2 |*| (C2 |*| C3)) =
-      TransferOpt.decompose(f.g) match {
-        case Right((i, j)) =>
-          Xfer(snd(i) > swap, j, AssocLR(g.g))
-        case Left(t) =>
-          t.assocLR_this_xi(g)
-      }
-
-    def assocRL_then_assocLR[A1, A2, A3, B1, B2, C2, C3](
-      f: AssocRL[A1, A2, A3, B1, B2],
-      g: AssocLR[B1, B2, A3, C2, C3],
-    ): (A1 |*| (A2 |*| A3)) ~⚬ (B1 |*| (C2 |*| C3)) =
-      TransferOpt.decompose(f.g) match {
-        case Right((i, j)) =>
-          par(i, fst(j) > g.g.asShuffle)
-        case Left(t) =>
-          t.assocRL_this_assocLR(g)
-      }
-
-    def ix_then_assocRL[A1, A2, A3, A4, B1, B2, C1, C2](
-      f: IX[A1, A2 |*| A3, A4, B1, B2],
-      g: AssocRL[B1 |*| B2, A2, A3, C1, C2],
-    ): ((A1 |*| (A2 |*| A3)) |*| A4) ~⚬ ((C1 |*| C2) |*| A3) =
-      decompose(IX(f.g).asShuffle > g.g.asShuffle) match {
-        case Decomposition(f1, f2, h) => Xfer(assocRL > fst(f1), f2, IX(h))
-      }
-
-    def xi_then_assocLR[A1, A2, A3, A4, B2, B3, C2, C3](
-      f: XI[A1, A2 |*| A3, A4, B2, B3],
-      g: AssocLR[A2, A3, B2 |*| B3, C2, C3],
-    ): (A1 |*| ((A2 |*| A3) |*| A4)) ~⚬ (A2 |*| (C2 |*| C3)) =
-      decompose(xi > snd(f.g.asShuffle) > g.g.asShuffle) match {
-        case Decomposition(f1, f2, g) => Xfer(f1, assocLR > snd(f2), XI(g))
-      }
-
-    def xi_then_assocRL[A1, A2, A3, B2, B3, C1, C2](
-      f: XI[A1, A2, A3, B2, B3],
-      g: AssocRL[A2, B2, B3, C1, C2],
-    ): (A1 |*| (A2 |*| A3)) ~⚬ ((C1 |*| C2) |*| B3) =
-      TransferOpt.decompose(f.g) match {
-        case Right((i, j)) =>
-          decompose(swap > g.g.asShuffle) match {
-            case Decomposition(f1, f2, h) => Xfer(i > f1, par(f2, j), AssocRL(h))
-          }
-        case Left(t) =>
-          t.xi_this_assocRL(g)
-      }
-
-    def xi_then_xi[A1, A2, A3, B2, B3, C2, C3](
-      f: XI[A1, A2, A3, B2, B3],
-      g: XI[A2, B2, B3, C2, C3],
-    ): (A1 |*| (A2 |*| A3)) ~⚬ (B2 |*| (C2 |*| C3)) =
-      TransferOpt.decompose(f.g) match {
-        case Right((i, j)) =>
-          par(i, snd(j) > g.g.asShuffle)
-        case Left(t) =>
-          t.xi_this_xi(g)
-      }
-
   }
 
   sealed trait BiTransferOpt[A1, A2, A3, A4, B1, B2, B3, B4] {
