@@ -360,6 +360,11 @@ trait CoreDSL {
       pos: SourcePos,
     ): ($[A], $[B])
 
+    def switchEither[A, B, C](
+      ab: $[A |+| B],
+      f: Either[$[A], $[B]] => $[C],
+    )(pos: SourcePos): $[C]
+
     def eliminateFirst[A](unit: $[One], a: $[A])(
       pos: SourcePos,
     ): $[A] =
@@ -426,6 +431,11 @@ trait CoreDSL {
         pos: SourcePos,
       ): $[Done] =
         joinAll(d, others: _*)(using pos)
+    }
+
+    extension [A, B](x: $[A |+| B]) {
+      def switch[C](f: Either[$[A], $[B]] => $[C])(using pos: SourcePos): $[C] =
+        switchEither(x, f)(pos)
     }
 
     implicit class FunctorOps[F[_], A](fa: $[F[A]]) {

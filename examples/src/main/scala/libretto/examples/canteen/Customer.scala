@@ -4,7 +4,6 @@ import libretto.examples.canteen.Protocol._
 import libretto.scaletto.StarterKit._
 import libretto.scaletto.StarterKit.$._
 import libretto.scaletto.StarterKit.coreLib._
-import libretto.scaletto.StarterKit.coreLib.|+|._
 
 object Customer {
 
@@ -42,19 +41,15 @@ object Customer {
     λ { mainSection =>
       SectionMain
         .getMainDish(mainSection)
-        .switch(
-          caseLeft =
-            λ { case (dish |*| mainSection) =>
-              val paySection = SectionMain.proceedToPayment(mainSection)
-              val someDish   = Maybe.just(dish)
-              someDish |*| paySection
-            },
-          caseRight =
-            λ { paySection =>
-              val noDish = Maybe.empty[MainDish](one)
-              noDish |*| paySection
-            },
-        )
+        .switch {
+          case Left(dish |*| mainSection) =>
+            val paySection = SectionMain.proceedToPayment(mainSection)
+            val someDish   = Maybe.just(dish)
+            someDish |*| paySection
+          case Right(paySection) =>
+            val noDish = Maybe.empty[MainDish](one)
+            noDish |*| paySection
+        }
     }
 
 }

@@ -446,6 +446,12 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         new Var[B](VarOrigin.Prj2(pos)),
       )
 
+    override def switchEither[A, B, C](
+      ab: $[A |+| B],
+      f: Either[$[A], $[B]] => $[C],
+    )(pos: SourcePos): $[C] =
+      ???
+
     override def app[A, B](f: $[A =⚬ B], a: $[A])(
       pos: SourcePos,
     ): $[B] =
