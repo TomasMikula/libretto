@@ -33,14 +33,14 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
     (f zip a)(auxVar).map(ev.eval[A, B])(resultVar)
 
   def closure[A, B](
-    f: Expr[A] => Expr[B],
     boundVar: Var[A],
+    f: Expr[A] => Expr[B],
   )(using
     ev: ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬],
   ): ClosureRes[A, B] = {
     import ClosureRes._
 
-    lambdas.abs(f(Expr.variable(boundVar)), boundVar) match {
+    lambdas.abs(boundVar, f(Expr.variable(boundVar))) match {
       case Abstracted.Exact(m, f) =>
         NonCapturing(m, f.fold)
       case Abstracted.Closure(captured, m, f) =>
