@@ -510,7 +510,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
       val bindVar = new Var[A](VarOrigin.Lambda(pos))
 
-      lambdas.abs(f, bindVar) match {
+      lambdas.abs(bindVar, f) match {
         case Exact(m, f) =>
           for {
             m <- m.compileM(split(bindVar))
@@ -550,7 +550,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       val bindVar = new Var[A](VarOrigin.Lambda(pos))
       val resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(pos))
 
-      closures.closure[A, B](f, bindVar) match {
+      closures.closure[A, B](bindVar, f) match {
         case Capturing(captured, m, f) =>
           for {
             m <- m.compileM(split(bindVar))

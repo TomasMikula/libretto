@@ -77,15 +77,23 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
   type Abstracted[A, B] = Lambdas.Abstracted[Expr, |*|, AbstractFun, LE, A, B]
 
   def abs[A, B](
-    expr: Expr[B],
     boundVar: Var[A],
+    expr: Expr[B],
   ): Abstracted[A, B]
 
   def abs[A, B](
-    f: Expr[A] => Expr[B],
     bindVar: Var[A],
+    f: Expr[A] => Expr[B],
   ): Abstracted[A, B] =
-    abs(f(Expr.variable(bindVar)), bindVar)
+    abs(bindVar, f(Expr.variable(bindVar)))
+
+  type VFun[A, B] = (Var[A], Expr[A] => Expr[B])
+
+  def switch[<+>[_, _], A, B](
+    scrutinee: Expr[A],
+    patterns: Sink[VFun, <+>, A, B],
+    // distribute: [x, y, z] => (x |*| (y <+> z)) -⚬ ((x |*| y) <+> (x |*| z))
+  ): Expr[B]
 }
 
 object Lambdas {

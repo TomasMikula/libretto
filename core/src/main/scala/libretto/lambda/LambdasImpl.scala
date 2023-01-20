@@ -121,7 +121,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       f.initialVars
   }
 
-  override def abs[A, B](expr: Expr[B], boundVar: Var[A]): Abstracted[A, B] = {
+  override def abs[A, B](boundVar: Var[A], expr: Expr[B]): Abstracted[A, B] = {
     import HybridArrow.TailLinearRes
 
     eliminate(boundVar, expr) match {
