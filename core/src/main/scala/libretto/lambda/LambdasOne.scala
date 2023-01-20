@@ -148,10 +148,10 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
       OneExpr(v, OneTail.Id)
   }
 
-  override def abs[A, B](expr: Expr[B], boundVar: Var[A]): Abstracted[A, B] =
+  override def abs[A, B](boundVar: Var[A], expr: Expr[B]): Abstracted[A, B] =
     expr match {
       case Expr.LambdasExpr(b) =>
-        lambdas.abs(b, boundVar)
+        lambdas.abs(boundVar, b)
           .mapExpr[Expr]([X] => (x: lambdas.Expr[X]) => Expr.lift(x))
       case Expr.OneExpr(v, f) =>
         import Lambdas.Abstracted._
@@ -161,7 +161,7 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
         // because zipping with boundVar would have produced LambdasExpr
         // and other Expr constructors (Map, Prj1, Prj2)
         // don't bring a lambda-bound variable into the Expr
-        lambdas.abs(b, boundVar) match {
+        lambdas.abs(boundVar, b) match {
           case NotFound(_) =>
             NotFound(expr)
           case Failure(e) =>
@@ -178,7 +178,7 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
       case Expr.OneExpr(v, f) =>
         import Lambdas.Abstracted.{Closure, Exact, Failure, NotFound}
         val b = f(lambdas.Expr.variable(v))
-        lambdas.abs(b, v) match {
+        lambdas.abs(v, b) match {
           case Exact(m, f) =>
             m match {
               case Multiplier.Id() => Right(f.fold)
