@@ -45,6 +45,12 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     def map[A, B](e: Expr[A], f: A -⚬ B, resultVar: Var[B]): Expr[B]
     def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[A |*| B]): Expr[A |*| B]
     def unzip[A, B](ab: Expr[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (Expr[A], Expr[B])
+
+    def withNonLinearOps[A](a: Expr[A])(
+      split: Option[A -⚬ (A |*| A)],
+      discard: Option[[B] => Unit => (A |*| B) -⚬ B],
+    )(resultVar: Var[A]): Expr[A]
+
     def terminalVars[A](a: Expr[A]): Vars[A]
   }
 
@@ -168,23 +174,21 @@ object Lambdas {
 
     def mapExpr[Exp2[_]](g: [X] => Exp[X] => Exp2[X]): Abstracted[Exp2, |*|, AbsFun, LE, A, B] =
       this match {
-        case Exact(u, f)             => Exact(u, f)
-        case Closure(captured, u, f) => Closure(captured.trans(g), u, f)
-        case NotFound(b)             => NotFound(g(b))
-        case Failure(e)              => Failure(e)
+        case Exact(f)             => Exact(f)
+        case Closure(captured, f) => Closure(captured.trans(g), f)
+        case NotFound(b)          => NotFound(g(b))
+        case Failure(e)           => Failure(e)
       }
   }
 
   object Abstracted {
-    case class Exact[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, A1, B](
-      m: Multiplier[|*|, A, A1],
-      f: AbsFun[A1, B],
+    case class Exact[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B](
+      f: AbsFun[A, B],
     ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
 
-    case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], LE, X, A, A1, B](
+    case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], LE, X, A, B](
       captured: Tupled[|*|, Exp, X],
-      m: Multiplier[|*|, A, A1],
-      f: AbsFun[X |*| A1, B],
+      f: AbsFun[X |*| A, B],
     ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
 
     case class NotFound[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B](

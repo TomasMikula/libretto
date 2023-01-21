@@ -102,6 +102,13 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         b2
     }
 
+    case class NonLinearOps[A](
+      a: Expr[A],
+      split: Option[A -⚬ (A |*| A)],
+      discard: Option[[B] => Unit => (A |*| B) -⚬ B],
+      resultVar: Var[A]
+    ) extends Expr[A]
+
     override def variable[A](a: Var[A]): Expr[A] =
       Id(a)
 
@@ -114,6 +121,14 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     override def unzip[B1, B2](f: Expr[B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (Expr[B1], Expr[B2]) =
       (Prj1(f, resultVar1, resultVar2), Prj2(f, resultVar1, resultVar2))
 
+    override def withNonLinearOps[A](a: Expr[A])(
+      split: Option[A -⚬ (A |*| A)],
+      discard: Option[[B] => Unit => (A |*| B) -⚬ B],
+    )(
+      resultVar: Var[A],
+    ): Expr[A] =
+      NonLinearOps(a, split, discard, resultVar)
+
     override def terminalVars[B](f: Expr[B]): Vars[B] =
       f.terminalVars
 
@@ -122,14 +137,14 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   }
 
   override def abs[A, B](boundVar: Var[A], expr: Expr[B]): Abstracted[A, B] = {
-    import HybridArrow.TailLinearRes
+    import HybridArrow.{LinearRes, NLOpss, Op, Unvar}
 
     eliminate(boundVar, expr) match {
       case EliminateRes.Found(arr) =>
-        arr.tailLinear match {
-          case TailLinearRes.Exact(m, f)             => Lambdas.Abstracted.Exact(m, f)
-          case TailLinearRes.Closure(captured, m, f) => Lambdas.Abstracted.Closure(captured, m, f)
-          case TailLinearRes.Violation(e)            => Lambdas.Abstracted.Failure(e)
+        HybridArrow.extract(NLOpss(Op.NLOps(None, None, arr.v)), arr.tail)(Unvar.SingleVar(), Unvar.SingleVar())  match {
+          case LinearRes.Exact(f)             => Lambdas.Abstracted.Exact(f)
+          case LinearRes.Closure(captured, f) => Lambdas.Abstracted.Closure(captured, f)
+          case LinearRes.Violation(e)         => Lambdas.Abstracted.Failure(e)
         }
       case EliminateRes.NotFound() =>
         Lambdas.Abstracted.NotFound(expr)
@@ -167,6 +182,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         eliminate(v, f) match
           case NotFound() => NotFound()
           case Found(arr) => Found(arr > HybridArrow.prj2(b1, b2))
+      case Expr.NonLinearOps(b, split, discard, r) =>
+        eliminate(v, b) match {
+          case Found(arr) => Found(arr > HybridArrow.nlOps(split, discard, r))
+          case NotFound() => NotFound()
+        }
   }
 
   private enum EliminateRes[A, B] {
@@ -286,6 +306,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
       def terminalVars(a: Varz[A]): Varz[B]
 
+      def outNLOps(a: NLOpss[A]): NLOpss[B]
+
       def maskInput: Masked[Op[*, B], A] =
         Masked[Op[*, B], A](this)
 
@@ -314,7 +336,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
       case class Zip[A1, A2](resultVar: Var[A1 |*| A2]) extends Op.Linear[Var[A1] |*| Var[A2], Var[A1 |*| A2]] {
         override def terminalVars(a: Varz[Var[A1] |*| Var[A2]]): Varz[Var[A1 |*| A2]] =
-          Varz.Atom(resultVar)
+          Varz.atom(resultVar)
+
+        override def outNLOps(a: NLOpss[Var[A1] |*| Var[A2]]): NLOpss[Var[A1 |*| A2]] =
+          NLOpss(NLOps(None, None, resultVar))
 
         override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: (Var[A1] |*| Var[A2]) =:= Var[X]): Option[Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2] |*| C]] =
           varIsNotPair(ev.flip)
@@ -344,7 +369,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
       case class Map[A, B](f: A -⚬ B, resultVar: Var[B]) extends Op.Linear[Var[A], Var[B]] {
         override def terminalVars(a: Varz[Var[A]]): Varz[Var[B]] =
-          Varz.Atom(resultVar)
+          Varz.atom(resultVar)
+
+        override def outNLOps(a: NLOpss[Var[A]]): NLOpss[Var[B]] =
+          NLOpss(NLOps(None, None, resultVar))
 
         override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[B] |*| C]] =
           that match
@@ -374,9 +402,51 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           varIsNotPair(ev)
       }
 
+      case class NLOps[A](
+        split: Option[A -⚬ (A |*| A)],
+        discard: Option[[B] => Unit => (A |*| B) -⚬ B],
+        resultVar: Var[A],
+      ) extends Op.Linear[Var[A], Var[A]] {
+        override def terminalVars(a: Varz[Var[A]]): Varz[Var[A]] =
+          Varz.atom(resultVar)
+
+        override def outNLOps(a: NLOpss[Var[A]]): NLOpss[Var[A]] =
+          NLOpss(NLOps(None, None, resultVar))
+
+        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[A] |*| C]] =
+          that match
+            case NLOps(_, _, v) =>
+              (testEqual(v, resultVar)) match
+                case Some(TypeEq(Refl())) => Some(shOp.lift(this) > shOp.lift(DupVar()))
+                case None                 => None
+            case _ =>
+              None
+
+        override def prj1_gcd_this[A1, A2](that: Prj1[A1, A2])(using ev: Var[A] =:= Var[A1 |*| A2]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| Var[A]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj1_gcd_this")
+
+        override def prj2_gcd_this[A1, A2](that: Prj2[A1, A2])(using ev: Var[A] =:= Var[A1 |*| A2]): Option[Tail[Var[A1 |*| A2], Var[A2] |*| Var[A]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj2_gcd_this")
+
+        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.unzip_gcd_this")
+
+        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[A]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap1_gcd_this")
+
+        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A]]] =
+          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
+
+        override def asZip[P1, P2](using ev: Var[A] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[A] =:= Var[V1 |*| V2])]] =
+          varIsNotPair(ev)
+      }
+
       case class Prj1[A1, A2](resultVar: Var[A1], unusedVar: Var[A2]) extends Affine[Var[A1 |*| A2], Var[A1]] {
         override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A1]] =
-          Varz.Atom(resultVar)
+          Varz.atom(resultVar)
+
+        override def outNLOps(a: NLOpss[Var[A1 |*| A2]]): NLOpss[Var[A1]] =
+          NLOpss(NLOps(None, None, resultVar))
 
         override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| C]] =
           that.prj1_gcd_this(this)(using ev.flip)
@@ -433,7 +503,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
       case class Prj2[A1, A2](unusedVar: Var[A1], resultVar: Var[A2]) extends Affine[Var[A1 |*| A2], Var[A2]] {
         override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A2]] =
-          Varz.Atom(resultVar)
+          Varz.atom(resultVar)
+
+        override def outNLOps(a: NLOpss[Var[A1 |*| A2]]): NLOpss[Var[A2]] =
+          NLOpss(NLOps(None, None, resultVar))
 
         override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A2] |*| C]] =
           that.prj2_gcd_this(this)(using ev.flip)
@@ -483,7 +556,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
       case class Unzip[A1, A2](resultVar1: Var[A1], resultVar2: Var[A2]) extends Op.Linear[Var[A1 |*| A2], Var[A1] |*| Var[A2]] {
         override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A1] |*| Var[A2]] =
-          Varz.Zip(Varz.Atom(resultVar1), Varz.Atom(resultVar2))
+          Varz.zip(Varz.atom(resultVar1), Varz.atom(resultVar2))
+
+        override def outNLOps(a: NLOpss[Var[A1 |*| A2]]): NLOpss[Var[A1] |*| Var[A2]] =
+          NLOpss(NLOps(None, None, resultVar1)) <*> NLOpss(NLOps(None, None, resultVar2))
 
         override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| Var[A2] |*| C]] =
           that.unzip_gcd_this(this)(using ev.flip)
@@ -539,12 +615,18 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
       case class DupVar[A]() extends Op[Var[A], Var[A] |*| Var[A]] {
         override def terminalVars(a: Varz[Var[A]]): Varz[Var[A] |*| Var[A]] =
-          Varz.Zip(a, a)
+          Varz.zip(a, a)
+
+        override def outNLOps(a: NLOpss[Var[A]]): NLOpss[Var[A] |*| Var[A]] =
+          a <*> a
       }
 
       case class CaptureFst[A, X](x: Expr[X], resultVar: Var[X |*| A]) extends Op.Linear[Var[A], Var[X |*| A]] {
         override def terminalVars(a: Varz[Var[A]]): Varz[Var[X |*| A]] =
-          Varz.Atom(resultVar)
+          Varz.atom(resultVar)
+
+        override def outNLOps(a: NLOpss[Var[A]]): NLOpss[Var[X |*| A]] =
+          NLOpss(NLOps(None, None, resultVar))
 
         override def gcdSimple[Q, C](that: Op.Affine[Var[Q], C])(using ev: Var[A] =:= Var[Q]): Option[Tail[Var[A], Var[X |*| A] |*| C]] =
           that.cap1_gcd_this(this)(using ev.flip)
@@ -575,7 +657,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
       case class CaptureSnd[A, X](x: Expr[X], resultVar: Var[A |*| X]) extends Op.Linear[Var[A], Var[A |*| X]] {
         override def terminalVars(a: Varz[Var[A]]): Varz[Var[A |*| X]] =
-          Varz.Atom(resultVar)
+          Varz.atom(resultVar)
+
+        override def outNLOps(a: NLOpss[Var[A]]): NLOpss[Var[A |*| X]] =
+          NLOpss(NLOps(None, None, resultVar))
 
         override def gcdSimple[Q, C](that: Op.Affine[Var[Q], C])(using ev: Var[A] =:= Var[Q]): Option[Tail[Var[A], Var[A |*| X] |*| C]] =
           that.cap2_gcd_this(this)(using ev.flip)
@@ -635,6 +720,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             case op: Map[t, u]        => InputVarFocus[[x] =>> x, t, Var[u]](op, Focus.id)
             case op: CaptureFst[t, u] => InputVarFocus[[x] =>> x, t, Var[u |*| t]](op, Focus.id)
             case op: CaptureSnd[t, u] => InputVarFocus[[x] =>> x, t, Var[t |*| u]](op, Focus.id)
+            case op: NLOps[t]         => InputVarFocus[[x] =>> x, t, Var[t]](op, Focus.id)
           }
       }
 
@@ -677,35 +763,13 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         }
     }
 
-    enum Varz[A] {
-      case Atom[V](v: Var[V]) extends Varz[Var[V]]
-      case Zip[A, B](a: Varz[A], b: Varz[B]) extends Varz[A |*| B]
-
-      def get[V](using ev: A =:= Var[V]): Var[V] =
-        this match {
-          case Atom(v) => v
-          case _: Zip[a, b] => varIsNotPair[V, a, b](ev.flip)
-        }
-
-      def unzip[X, Y](using ev: A =:= (X |*| Y)): (Varz[X], Varz[Y]) =
-        this match {
-          case z: Zip[a, b] =>
-            (summon[(a |*| b) =:= A] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
-              (z.a, z.b)
-            }
-          case _: Atom[v] =>
-            varIsNotPair(summon[Var[v] =:= A] andThen ev)
-        }
-    }
-
+    type Varz[A] = Bin[|*|, Var, Var, A]
     object Varz {
-      given Cartesian[|*|, Varz] with {
-        override def zip[A, B](a: Varz[A], b: Varz[B]): Varz[A |*| B] =
-          Zip(a, b)
+      def atom[A](a: Var[A]): Varz[Var[A]] =
+        Bin.Leaf(a)
 
-        override def unzip[A, B](ab: Varz[A |*| B]): (Varz[A], Varz[B]) =
-          ab.unzip
-      }
+      def zip[A, B](a: Varz[A], b: Varz[B]): Varz[A |*| B] =
+        Bin.Branch(a, b)
     }
 
     val shOp = Shuffled[Op, |*|](shuffled.shuffle)
@@ -714,6 +778,15 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     type VarOp[A, B] = (Varz[A], Op[A, B])
     given shVOp: Shuffled.With[VarOp, |*|, shuffled.shuffle.type] =
       Shuffled[VarOp, |*|](shuffled.shuffle)
+
+    type NLOpss[A] = Bin[|*|, Var, Op.NLOps, A]
+    object NLOpss {
+      def apply[A](op: Op.NLOps[A]): NLOpss[Var[A]] =
+        Bin.Leaf(op)
+    }
+    type NLOpsOp[A, B] = (NLOpss[A], Op[A, B])
+    given shNLOp: Shuffled.With[NLOpsOp, |*|, shuffled.shuffle.type] =
+      Shuffled[NLOpsOp, |*|](shuffled.shuffle)
 
     given shLOp: Shuffled.With[Op.Linear, |*|, shuffled.shuffle.type] =
       Shuffled[Op.Linear, |*|](shuffled.shuffle)
@@ -730,6 +803,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     type VTail[A, B] =
       shVOp.Shuffled[A, B]
 
+    type NLTail[A, B] =
+      shNLOp.Shuffled[A, B]
+
     type LTail[A, B] =
       shLOp.Shuffled[A, B]
 
@@ -742,6 +818,13 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     def map[A, B](f: A -⚬ B, resultVar: Var[B]): Tail[Var[A], Var[B]] =
       shOp.lift(Op.Map(f, resultVar))
 
+    def nlOps[A](
+      split: Option[A -⚬ (A |*| A)],
+      discard: Option[[B] => Unit => (A |*| B) -⚬ B],
+      resultVar: Var[A],
+    ): Tail[Var[A], Var[A]] =
+      shOp.lift(Op.NLOps(split, discard, resultVar))
+
     def captureFst[A, X](x: Expr[X], resultVar: Var[X |*| A]): Tail[Var[A], Var[X |*| A]] =
       shOp.lift(Op.CaptureFst(x, resultVar))
 
@@ -750,9 +833,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     def zip[A1, A2](resultVar: Var[A1 |*| A2]): Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2]] =
       shOp.lift(Op.Zip(resultVar))
-
-    // def unzip[A, A1, A2](u: Untag[A, A1 |*| A2], resultVar1: Var[A1], resultVar2: Var[A2]): Tail[A, Var[A1] |*| Var[A2]] =
-    //   shOp.lift(Op.Unzip(u, resultVar1, resultVar2))
 
     def prj1[A1, A2](resultVar: Var[A1], unusedVar: Var[A2]): Tail[Var[A1 |*| A2], Var[A1]] =
       shOp.lift(Op.Prj1(resultVar, unusedVar))
@@ -808,6 +888,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case Op.Map(_, _)        => None
         case Op.Prj1(_, _)       => None
         case Op.Prj2(_, _)       => None
+        case Op.NLOps(_, _, _)   => None
     }
 
     def pullBumpDupVar[A, F[_], V, C[_], B, D[_], Y](
@@ -989,6 +1070,89 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       ) extends DemultipliedAt[F, V, B]
     }
 
+    def extract[A, B, X, Y](a: NLOpss[A], t: Tail[A, B])(u: Unvar[A, X], v: Unvar[B, Y]): LinearRes[X, Y] = {
+      val t1: NLTail[A, B] =
+        t.sweepL[NLOpss, NLOpsOp](
+          a,
+          [p, q] => (p: NLOpss[p], op: Op[p, q]) => {
+            val q = op.outNLOps(p)
+            ((p, op), q)
+          }
+        )._1
+
+      type Arr[T, U] = LinCheck[CapturingFun[T, U]]
+      given shArr: Shuffled.With[Arr, |*|, shuffled.shuffle.type] =
+        Shuffled[Arr, |*|](shuffled.shuffle)
+
+      val t2: shArr.Shuffled[X, Y] =
+        t1.translate[Arr, |*|, Unvar, X](
+          u,
+          Unvar.objectMap,
+          new ArrowMap[NLOpsOp, Arr, Unvar] {
+            import Unvar.{Par, SingleVar}
+            override def map[A, B](op: NLOpsOp[A, B]): Image[A, B] =
+              op match {
+                case (opss, _: Op.Zip[a1, a2]) =>
+                  Image(Par(SingleVar[a1](), SingleVar[a2]()), LinCheck.Success(CapturingFun.id), SingleVar[a1 |*| a2]())
+                case (opss, op: Op.Map[a, b]) =>
+                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.lift(op.f)), SingleVar[b]())
+                case (opss, _: Op.Unzip[a1, a2]) =>
+                  Image(SingleVar[a1 |*| a2](), LinCheck.Success(CapturingFun.id), Par(SingleVar[a1](), SingleVar[a2]()))
+                case (opss, op: Op.CaptureFst[a, x]) =>
+                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureFst(op.x)), SingleVar[x |*| a]())
+                case (opss, op: Op.CaptureSnd[a, x]) =>
+                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureSnd(op.x)), SingleVar[a |*| x]())
+                case (opss, op: Op.NLOps[a]) =>
+                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.id), SingleVar[a]())
+                case (opss, op: Op.DupVar[a]) =>
+                  val ops = opss.getValue[a]
+                  Image(
+                    SingleVar[a](),
+                    ops.split match
+                      case Some(split) => LinCheck.Success(CapturingFun.lift(split))
+                      case None        => LinCheck.Failure(errors.overusedVars(variables.singleton(ops.resultVar))),
+                    Par(SingleVar[a](), SingleVar[a]()),
+                  )
+                case (opss, op: Op.Prj1[a1, a2]) =>
+                  Image(
+                    SingleVar[a1 |*| a2](),
+                    LinCheck.Failure(errors.underusedVars(variables.singleton(op.unusedVar))),
+                    SingleVar[a1](),
+                  )
+                case (opss, op: Op.Prj2[a1, a2]) =>
+                  Image(
+                    SingleVar[a1 |*| a2](),
+                    LinCheck.Failure(errors.underusedVars(variables.singleton(op.unusedVar))),
+                    SingleVar[a2](),
+                  )
+                case (opss, other) =>
+                  UnhandledCase.raise(s"$other")
+              }
+          },
+        ) match {
+          case Exists.Some((t2, v2)) =>
+            (v uniqueOutType v2) match {
+              case TypeEq(Refl()) =>
+                t2
+            }
+        }
+
+      given shCFun: Shuffled.With[CapturingFun, |*|, shuffled.shuffle.type] =
+        Shuffled[CapturingFun, |*|](shuffled.shuffle)
+
+      t2.traverse[LinCheck, CapturingFun](
+        [p, q] => (op: LinCheck[CapturingFun[p, q]]) => op
+      ) match {
+        case LinCheck.Success(t3) =>
+          t3.fold match {
+            case ll.CapturingFun.NoCapture(f)  => LinearRes.Exact(f)
+            case ll.CapturingFun.Closure(x, f) => LinearRes.Closure(x, f)
+          }
+        case LinCheck.Failure(e) =>
+          LinearRes.Violation(e)
+      }
+    }
+
     def extractLinear[A, B, X, Y](a: Varz[A], t: Tail[A, B])(u: Unvar[A, X], v: Unvar[B, Y]): LinearRes[X, Y] = {
       val vt: VTail[A, B] =
         t.sweepL[Varz, VarOp](
@@ -1018,7 +1182,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case op: Op.Linear[a, b] =>
           LinCheck.Success(op)
         case op: Op.DupVar[a] =>
-          val v = vs.get[a]
+          val v = vs.getValue[a]
           LinCheck.Failure(errors.overusedVars(variables.singleton(v)))
         case p: Op.Prj1[a1, a2] =>
           LinCheck.Failure(errors.underusedVars(variables.singleton(p.unusedVar)))
@@ -1149,15 +1313,18 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       def multiply[B](m: Multiplier[|*|, Var[A], B]): Varz[B] =
         m match {
           case Multiplier.Id() =>
-            Varz.Atom(va)
+            Varz.atom(va)
           case Multiplier.Dup(m1, m2) =>
-            Varz.Zip(multiply(m1), multiply(m2))
+            Varz.zip(multiply(m1), multiply(m2))
         }
     }
   }
 
-  private def varIsNotPair[V, A, B](ev: Var[V] =:= (A |*| B)): Nothing =
-    throw new AssertionError("Var[A] =:= (A |*| B)")
+  private given varIsNotPair: ([V, A, B] => (Var[V] =:= (A |*| B)) => Nothing) =
+    [V, A, B] => (ev: Var[V] =:= (A |*| B)) => throw new AssertionError("Var[A] =:= (A |*| B)")
+
+  private given nlOpsIsNotPair: ([V, A, B] => (HybridArrow.Op.NLOps[V] =:= (A |*| B)) => Nothing) =
+    [V, A, B] => (ev: HybridArrow.Op.NLOps[V] =:= (A |*| B)) => throw new AssertionError("Var[A] =:= (A |*| B)")
 
   extension[F[_], V, U](ev: F[Var[V]] =:= (Var[U] |*| Var[U])) {
     def deriveEquality(f: Focus[|*|, F]): V =:= U =

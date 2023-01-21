@@ -41,10 +41,10 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
     import ClosureRes._
 
     lambdas.abs(boundVar, f(Expr.variable(boundVar))) match {
-      case Abstracted.Exact(m, f) =>
-        NonCapturing(m, f.fold)
-      case Abstracted.Closure(captured, m, f) =>
-        Capturing(captured, m, f.fold)
+      case Abstracted.Exact(f) =>
+        NonCapturing(f.fold)
+      case Abstracted.Closure(captured, f) =>
+        Capturing(captured, f.fold)
       case Abstracted.NotFound(b) =>
         NotFound(b)
       case Abstracted.Failure(e) =>
@@ -57,15 +57,13 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
    */
   sealed trait ClosureRes[A, B]
   object ClosureRes {
-    case class Capturing[X, A, A1, B](
+    case class Capturing[X, A, B](
       captured: Tupled[|*|, Expr, X],
-      m: Multiplier[|*|, A, A1],
-      f: (X |*| A1) -⚬ B,
+      f: (X |*| A) -⚬ B,
     ) extends ClosureRes[A, B]
 
-    case class NonCapturing[A, A1, B](
-      m: Multiplier[|*|, A, A1],
-      f: A1 -⚬ B,
+    case class NonCapturing[A, B](
+      f: A -⚬ B,
     ) extends ClosureRes[A, B]
 
     case class NotFound[A, B](b: Expr[B]) extends ClosureRes[A, B]

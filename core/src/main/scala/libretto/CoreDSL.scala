@@ -325,19 +325,22 @@ trait CoreDSL {
       f: $[A] => $[B],
     )(using
       Affine[A],
-    ): A -⚬ B
+    ): A -⚬ B =
+      apply { case $.?(a) => f(a) }
 
     def +[A, B](using SourcePos)(
       f: $[A] => $[B],
     )(using
       Cosemigroup[A],
-    ): A -⚬ B
+    ): A -⚬ B =
+      apply { case $.+(a) => f(a) }
 
     def *[A, B](using SourcePos)(
       f: $[A] => $[B],
     )(using
       Comonoid[A],
-    ): A -⚬ B
+    ): A -⚬ B =
+      apply { case $.*(a) => f(a) }
   }
 
   type NotLinearException <: Throwable
@@ -359,6 +362,13 @@ trait CoreDSL {
     def unzip[A, B](ab: $[A |*| B])(
       pos: SourcePos,
     ): ($[A], $[B])
+
+    def nonLinear[A](a: $[A])(
+      split: Option[A -⚬ (A |*| A)],
+      ditch: Option[A -⚬ One],
+    )(
+      pos: SourcePos,
+    ): $[A]
 
     def eliminateFirst[A](unit: $[One], a: $[A])(
       pos: SourcePos,
@@ -387,6 +397,21 @@ trait CoreDSL {
         pos: SourcePos,
       ): ($[A], $[B]) =
         unzip(ab)(pos)
+    }
+
+    object ? {
+      def unapply[A](using pos: SourcePos)(a: $[A])(using A: Affine[A]): Some[$[A]] =
+        Some(nonLinear(a)(split = None, ditch = Some(A.discard))(pos))
+    }
+
+    object + {
+      def unapply[A](using pos: SourcePos)(a: $[A])(using A: Cosemigroup[A]): Some[$[A]] =
+        Some(nonLinear(a)(Some(A.split), ditch = None)(pos))
+    }
+
+    object * {
+      def unapply[A](using pos: SourcePos)(a: $[A])(using A: Comonoid[A]): Some[$[A]] =
+        Some(nonLinear(a)(Some(A.split), Some(A.discard))(pos))
     }
 
     extension [A, B](f: A -⚬ B) {
@@ -442,6 +467,9 @@ trait CoreDSL {
   }
 
   object Affine {
+    def apply[A](using ev: Affine[A]): Affine[A] =
+      ev
+
     def from[A](f: A -⚬ One): Affine[A] =
       new Affine[A] {
         override def discard: A -⚬ One =
@@ -466,6 +494,9 @@ trait CoreDSL {
   }
 
   object Cosemigroup {
+    def apply[A](using ev: Cosemigroup[A]): Cosemigroup[A] =
+      ev
+
     implicit val cosemigroupDone: Cosemigroup[Done] =
       new Cosemigroup[Done] {
         override def split: Done -⚬ (Done |*| Done) = fork
@@ -507,6 +538,9 @@ trait CoreDSL {
   }
 
   object Comonoid {
+    def apply[A](using ev: Comonoid[A]): Comonoid[A] =
+      ev
+
     implicit val comonoidOne: Comonoid[One] =
       new Comonoid[One] {
         override def counit: One -⚬ One = id[One]
