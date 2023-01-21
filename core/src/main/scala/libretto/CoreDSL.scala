@@ -305,6 +305,8 @@ trait CoreDSL {
   val λ: LambdaOps
 
   trait LambdaOps {
+    type Ctx
+
     /** Used to define a linear function `A -⚬ B` in a point-full style, i.e. as a lambda expression.
       *
       * Recall that when defining `A -⚬ B`, we never get a hold of `a: A` as a Scala value. However,
@@ -318,25 +320,25 @@ trait CoreDSL {
       * @throws UnboundVariablesException if the result expression contains free variables (from outer [[λ]]s).
       */
     def apply[A, B](using SourcePos)(
-      f: $[A] => $[B],
+      f: Ctx ?=> $[A] => $[B],
     ): A -⚬ B
 
     def ?[A, B](using SourcePos)(
-      f: $[A] => $[B],
+      f: Ctx ?=> $[A] => $[B],
     )(using
       Affine[A],
     ): A -⚬ B =
       apply { case $.?(a) => f(a) }
 
     def +[A, B](using SourcePos)(
-      f: $[A] => $[B],
+      f: Ctx ?=> $[A] => $[B],
     )(using
       Cosemigroup[A],
     ): A -⚬ B =
       apply { case $.+(a) => f(a) }
 
     def *[A, B](using SourcePos)(
-      f: $[A] => $[B],
+      f: Ctx ?=> $[A] => $[B],
     )(using
       Comonoid[A],
     ): A -⚬ B =

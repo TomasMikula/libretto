@@ -467,12 +467,18 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   }
 
   override val λ = new LambdaOpsWithClosures {
-    override def apply[A, B](using pos: SourcePos)(f: $[A] => $[B]): A -⚬ B =
+    override type Ctx = Unit
+    given Ctx = ()
+
+    override def apply[A, B](using pos: SourcePos)(f: Ctx ?=> $[A] => $[B]): A -⚬ B =
       compile(f)(noSplit, noDiscard, pos)
 
     override val closure: ClosureOps =
       new ClosureOps {
-        override def apply[A, B](using pos: SourcePos)(f: $[A] => $[B]): $[A =⚬ B] =
+        override type Ctx = Unit
+        given Ctx = ()
+
+        override def apply[A, B](using pos: SourcePos)(f: Ctx ?=> $[A] => $[B]): $[A =⚬ B] =
           compileClosure(f)(noSplit, noDiscard, pos)
       }
 
