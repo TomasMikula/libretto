@@ -117,20 +117,20 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
           LambdasExpr((a zip b)(resultVar))
         case (LambdasExpr(a), OneExpr(v, g)) =>
           val aOne: lambdas.Expr[A |*| One] =
-            (a map smc.introSnd)(newSyntheticVar(a.terminalVars zip Vars.single(v)))
-          val va = newSyntheticVar[A](hint = a.terminalVars)
+            (a map smc.introSnd)(newSyntheticVar(Vars.single(a.resultVar) zip Vars.single(v)))
+          val va = newSyntheticVar[A](hint = Vars.single(a.resultVar))
           val (a1, o1) = lambdas.Expr.unzip(aOne)(va, v)
           LambdasExpr(lambdas.Expr.zip(a1, g(o1), resultVar))
         case (OneExpr(v, f), LambdasExpr(b)) =>
           val oneB: lambdas.Expr[One |*| B] =
-            (b map smc.introFst)(newSyntheticVar(Vars.single(v) zip b.terminalVars))
-          val vb = newSyntheticVar[B](hint = b.terminalVars)
+            (b map smc.introFst)(newSyntheticVar(Vars.single(v) zip Vars.single(b.resultVar)))
+          val vb = newSyntheticVar[B](hint = Vars.single(b.resultVar))
           val (o1, b1) = lambdas.Expr.unzip(oneB)(v, vb)
           LambdasExpr(lambdas.Expr.zip(f(o1), b1, resultVar))
         case (a @ OneExpr(v, f), OneExpr(w, g)) =>
           val aOne: OneTail[A |*| One] =
-            OneTail.Map(f, smc.introSnd, newSyntheticVar(a.terminalVars zip Vars.single(w)))
-          val va = newSyntheticVar[A](hint = a.terminalVars)
+            OneTail.Map(f, smc.introSnd, newSyntheticVar(Vars.single(a.resultVar) zip Vars.single(w)))
+          val va = newSyntheticVar[A](hint = Vars.single(a.resultVar))
           val (a1, o1) = OneTail.unzip(aOne)(va, w)
           OneExpr(v, OneTail.Zip(a1, g.apply1(o1), resultVar))
       }
@@ -145,8 +145,8 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
           (OneExpr(v, f1), OneExpr(v, f2))
       }
 
-    override def terminalVars[A](a: Expr[A]): Vars[A] =
-      Vars.single(a.resultVar)
+    override def resultVar[A](a: Expr[A]): Var[A] =
+      a.resultVar
 
     def lift[A](expr: lambdas.Expr[A]): Expr[A] =
       LambdasExpr(expr)

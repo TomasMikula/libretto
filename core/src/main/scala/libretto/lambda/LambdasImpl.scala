@@ -81,9 +81,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case Prj2(f, _, _) => f.initialVars
       }
 
-    def terminalVars: Vars[B] =
-      Vars.single(resultVar)
-
     def map[C](f: B -⚬ C)(resultVar: Var[C]): Expr[C] =
       Map(this, f, resultVar)
 
@@ -131,8 +128,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     override def unzip[B1, B2](f: Expr[B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (Expr[B1], Expr[B2]) =
       (Prj1(f, resultVar1, resultVar2), Prj2(f, resultVar1, resultVar2))
 
-    override def terminalVars[B](f: Expr[B]): Vars[B] =
-      f.terminalVars
+    override def resultVar[B](f: Expr[B]): Var[B] =
+      f.resultVar
 
     def initialVars[B](f: Expr[B]): VarSet =
       f.initialVars

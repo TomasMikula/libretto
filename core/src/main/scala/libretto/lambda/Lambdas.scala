@@ -46,7 +46,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[A |*| B]): Expr[A |*| B]
     def unzip[A, B](ab: Expr[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (Expr[A], Expr[B])
 
-    def terminalVars[A](a: Expr[A]): Vars[A]
+    def resultVar[A](a: Expr[A]): Var[A]
   }
 
   extension [A](a: Expr[A]) {
@@ -58,9 +58,9 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     def zip[B](b: Expr[B])(resultVar: Var[A |*| B]): Expr[A |*| B] =
       Expr.zip(a, b, resultVar)
 
-    @targetName("exprTerminalVars")
-    def terminalVars: Vars[A] =
-      Expr.terminalVars(a)
+    @targetName("exprResultVar")
+    def resultVar: Var[A] =
+      Expr.resultVar(a)
   }
 
   type Context
