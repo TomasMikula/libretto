@@ -172,10 +172,10 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
               case Tupled.Single(x) =>
                 lambdas.eliminateVariable(v, x) match
                   case Exact(g)      => Exact(lambdas.shuffled.lift(smc.introFst) > lambdas.shuffled.fst(g) > f)
-                  case Closure(y, g) => UnhandledCase.raise(s"OneExpr capturing another expression")
+                  case Closure(y, g) => throw AssertionError("Result of (f: OneExpr.Tail).apply(variable) can only capture that one variable, as OneExpr is not able to capture expressions.")
                   case Failure(e)    => Failure(e)
               case Tupled.Zip(_, _) =>
-                UnhandledCase.raise(s"OneExpr capturing multiple expressions")
+                throw AssertionError("Result of (f: OneExpr.Tail).apply(variable) can only capture that one variable, as OneExpr is not able to capture expressions.")
             }
           case Exact(_) =>
             throw new AssertionError(s"Expected closure over variable $v")

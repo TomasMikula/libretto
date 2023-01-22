@@ -202,7 +202,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
       "return only captured one-expression" ->
         TestCase.testOutcome {
           Outcome.expectNotThrows {
-            λ.? { (a: $[One]) =>
+            λ.? { (_: $[One]) =>
               val b: $[Done] = one > done
               λ.closure.? { (_: $[One]) =>
                 b
@@ -214,10 +214,23 @@ class ClosureTests extends ScalatestScalettoTestSuite {
       "capture one-expression into another one-expression" ->
         TestCase.testOutcome {
           Outcome.expectNotThrows {
-            λ.? { (a: $[One]) =>
+            λ.? { (_: $[One]) =>
               val b = one > done
               λ.closure.? { (_: $[One]) =>
                 val c = one > done
+                b |*| c
+              }
+            }
+          }
+        },
+
+      "capture two one-expression into another one-expression" ->
+        TestCase.testOutcome {
+          Outcome.expectNotThrows {
+            λ.? { (_: $[One]) =>
+              val b = one > done
+              val c = one > done
+              λ.closure.? { (_: $[One]) =>
                 b |*| c
               }
             }
