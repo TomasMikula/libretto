@@ -143,7 +143,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     eliminate(boundVar, expr) match {
       case EliminateRes.Found(arr) =>
-        HybridArrow.extract(Varz.atom(arr.v), arr.tail)(Unvar.SingleVar(), Unvar.SingleVar())  match {
+        arr.extract(Unvar.SingleVar()) match {
           case LinearRes.Exact(f)             => Lambdas.Abstracted.Exact(f)
           case LinearRes.Closure(captured, f) => Lambdas.Abstracted.Closure(captured, f)
           case LinearRes.Violation(e)         => Lambdas.Abstracted.Failure(e)
@@ -245,6 +245,98 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             val   res1: Tail[Var[A], F[aux.F[Var[aux.X]] |*| Y]] = res0 > shOp.extractSnd(aux.F).at(i)
             HybridArrow(v, res1)
           }
+      }
+    }
+
+    def extract[Y](u: Unvar[B, Y])(using
+      Context,
+    ): LinearRes[A, Y] = {
+      val t1: VTail[Var[A], B] =
+        tail.sweepL[Varz, VarOp](
+          Varz.atom(v),
+          [p, q] => (p: Varz[p], op: Op[p, q]) => {
+            val q = op.terminalVars(p)
+            ((p, op), q)
+          }
+        )._1
+
+      type Arr[T, U] = LinCheck[CapturingFun[T, U]]
+      given shArr: Shuffled.With[Arr, |*|, shuffled.shuffle.type] =
+        Shuffled[Arr, |*|](shuffled.shuffle)
+
+      val t2: shArr.Shuffled[A, Y] =
+        t1.translate[Arr, |*|, Unvar, A](
+          Unvar.SingleVar[A](),
+          Unvar.objectMap,
+          new ArrowMap[VarOp, Arr, Unvar] {
+            import Unvar.{Par, SingleVar}
+            override def map[A, B](op: VarOp[A, B]): Image[A, B] =
+              op match {
+                case (vars, _: Op.Zip[a1, a2]) =>
+                  Image(Par(SingleVar[a1](), SingleVar[a2]()), LinCheck.Success(CapturingFun.id), SingleVar[a1 |*| a2]())
+                case (vars, op: Op.Map[a, b]) =>
+                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.lift(op.f)), SingleVar[b]())
+                case (vars, _: Op.Unzip[a1, a2]) =>
+                  Image(SingleVar[a1 |*| a2](), LinCheck.Success(CapturingFun.id), Par(SingleVar[a1](), SingleVar[a2]()))
+                case (vars, op: Op.CaptureFst[a, x]) =>
+                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureFst(op.x)), SingleVar[x |*| a]())
+                case (vars, op: Op.CaptureSnd[a, x]) =>
+                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureSnd(op.x)), SingleVar[a |*| x]())
+                case (vars, op: Op.CaptureReplace[a, b]) =>
+                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureSnd[b, a](op.replacement) > CapturingFun.lift(op.discard)), SingleVar[b]())
+                case (vars, op: Op.DupVar[a]) =>
+                  val v = vars.getValue[a]
+                  Image(
+                    SingleVar[a](),
+                    Context.getSplit(v) match {
+                      case Some(split) => LinCheck.Success(CapturingFun.lift(split))
+                      case None        => LinCheck.Failure(errors.overusedVars(variables.singleton(v)))
+                    },
+                    Par(SingleVar[a](), SingleVar[a]()),
+                  )
+                case (vars, op: Op.Prj1[a1, a2]) =>
+                  Image(
+                    SingleVar[a1 |*| a2](),
+                    Context.getDiscard(op.unusedVar) match {
+                      case Some(discard) => UnhandledCase.raise(s"Discarding unused var")
+                      case None          => LinCheck.Failure(errors.underusedVars(variables.singleton(op.unusedVar)))
+                    },
+                    SingleVar[a1](),
+                  )
+                case (vars, op: Op.Prj2[a1, a2]) =>
+                  Image(
+                    SingleVar[a1 |*| a2](),
+                    Context.getDiscard(op.unusedVar) match {
+                      case Some(discard) => UnhandledCase.raise(s"Discarding unused var")
+                      case None          => LinCheck.Failure(errors.underusedVars(variables.singleton(op.unusedVar)))
+                    },
+                    SingleVar[a2](),
+                  )
+                case (vars, other) =>
+                  UnhandledCase.raise(s"$other")
+              }
+          },
+        ) match {
+          case Exists.Some((t2, u2)) =>
+            (u uniqueOutType u2) match {
+              case TypeEq(Refl()) =>
+                t2
+            }
+        }
+
+      given shCFun: Shuffled.With[CapturingFun, |*|, shuffled.shuffle.type] =
+        Shuffled[CapturingFun, |*|](shuffled.shuffle)
+
+      t2.traverse[LinCheck, CapturingFun](
+        [p, q] => (op: LinCheck[CapturingFun[p, q]]) => op
+      ) match {
+        case LinCheck.Success(t3) =>
+          t3.fold match {
+            case ll.CapturingFun.NoCapture(f)  => LinearRes.Exact(f)
+            case ll.CapturingFun.Closure(x, f) => LinearRes.Closure(x, f)
+          }
+        case LinCheck.Failure(e) =>
+          LinearRes.Violation(e)
       }
     }
   }
@@ -935,98 +1027,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
               p.startsFromPair match
                 case Exists.Some(Exists.Some(ev)) =>
                   varIsNotPair(ev)
-    }
-
-    def extract[A, B, X, Y](a: Varz[A], t: Tail[A, B])(u: Unvar[A, X], v: Unvar[B, Y])(using
-      Context,
-    ): LinearRes[X, Y] = {
-      val t1: VTail[A, B] =
-        t.sweepL[Varz, VarOp](
-          a,
-          [p, q] => (p: Varz[p], op: Op[p, q]) => {
-            val q = op.terminalVars(p)
-            ((p, op), q)
-          }
-        )._1
-
-      type Arr[T, U] = LinCheck[CapturingFun[T, U]]
-      given shArr: Shuffled.With[Arr, |*|, shuffled.shuffle.type] =
-        Shuffled[Arr, |*|](shuffled.shuffle)
-
-      val t2: shArr.Shuffled[X, Y] =
-        t1.translate[Arr, |*|, Unvar, X](
-          u,
-          Unvar.objectMap,
-          new ArrowMap[VarOp, Arr, Unvar] {
-            import Unvar.{Par, SingleVar}
-            override def map[A, B](op: VarOp[A, B]): Image[A, B] =
-              op match {
-                case (vars, _: Op.Zip[a1, a2]) =>
-                  Image(Par(SingleVar[a1](), SingleVar[a2]()), LinCheck.Success(CapturingFun.id), SingleVar[a1 |*| a2]())
-                case (vars, op: Op.Map[a, b]) =>
-                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.lift(op.f)), SingleVar[b]())
-                case (vars, _: Op.Unzip[a1, a2]) =>
-                  Image(SingleVar[a1 |*| a2](), LinCheck.Success(CapturingFun.id), Par(SingleVar[a1](), SingleVar[a2]()))
-                case (vars, op: Op.CaptureFst[a, x]) =>
-                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureFst(op.x)), SingleVar[x |*| a]())
-                case (vars, op: Op.CaptureSnd[a, x]) =>
-                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureSnd(op.x)), SingleVar[a |*| x]())
-                case (vars, op: Op.CaptureReplace[a, b]) =>
-                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureSnd[b, a](op.replacement) > CapturingFun.lift(op.discard)), SingleVar[b]())
-                case (vars, op: Op.DupVar[a]) =>
-                  val v = vars.getValue[a]
-                  Image(
-                    SingleVar[a](),
-                    Context.getSplit(v) match {
-                      case Some(split) => LinCheck.Success(CapturingFun.lift(split))
-                      case None        => LinCheck.Failure(errors.overusedVars(variables.singleton(v)))
-                    },
-                    Par(SingleVar[a](), SingleVar[a]()),
-                  )
-                case (vars, op: Op.Prj1[a1, a2]) =>
-                  Image(
-                    SingleVar[a1 |*| a2](),
-                    Context.getDiscard(op.unusedVar) match {
-                      case Some(discard) => UnhandledCase.raise(s"Discarding unused var")
-                      case None          => LinCheck.Failure(errors.underusedVars(variables.singleton(op.unusedVar)))
-                    },
-                    SingleVar[a1](),
-                  )
-                case (vars, op: Op.Prj2[a1, a2]) =>
-                  Image(
-                    SingleVar[a1 |*| a2](),
-                    Context.getDiscard(op.unusedVar) match {
-                      case Some(discard) => UnhandledCase.raise(s"Discarding unused var")
-                      case None          => LinCheck.Failure(errors.underusedVars(variables.singleton(op.unusedVar)))
-                    },
-                    SingleVar[a2](),
-                  )
-                case (vars, other) =>
-                  UnhandledCase.raise(s"$other")
-              }
-          },
-        ) match {
-          case Exists.Some((t2, v2)) =>
-            (v uniqueOutType v2) match {
-              case TypeEq(Refl()) =>
-                t2
-            }
-        }
-
-      given shCFun: Shuffled.With[CapturingFun, |*|, shuffled.shuffle.type] =
-        Shuffled[CapturingFun, |*|](shuffled.shuffle)
-
-      t2.traverse[LinCheck, CapturingFun](
-        [p, q] => (op: LinCheck[CapturingFun[p, q]]) => op
-      ) match {
-        case LinCheck.Success(t3) =>
-          t3.fold match {
-            case ll.CapturingFun.NoCapture(f)  => LinearRes.Exact(f)
-            case ll.CapturingFun.Closure(x, f) => LinearRes.Closure(x, f)
-          }
-        case LinCheck.Failure(e) =>
-          LinearRes.Violation(e)
-      }
     }
 
     enum LinearRes[A, B] {
