@@ -102,11 +102,18 @@ object TestCase {
   ): TestCase[TK] =
     Multiple[TK](cases.toList)
 
-  def testOutcome[TK <: TestKit](using kit: TestKit)(
+  def pure[TK <: TestKit](using kit: TestKit)(
     body: => kit.Outcome[Unit],
     timeout: FiniteDuration = 1.second,
   ): TestCase[kit.type] =
     new OutcomeOnly[kit.type](kit, () => body, timeout)
+
+  @deprecated("Use pure instead", since="0.2-M5")
+  def testOutcome[TK <: TestKit](using kit: TestKit)(
+    body: => kit.Outcome[Unit],
+    timeout: FiniteDuration = 1.second,
+  ): TestCase[kit.type] =
+    pure(body, timeout)
 
   def configure[P](using kit: TestKit)(
     params: kit.ExecutionParam[P],

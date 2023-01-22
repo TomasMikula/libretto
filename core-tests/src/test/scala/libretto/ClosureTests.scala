@@ -19,7 +19,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
     List(
       "simplest closure" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             val f: Done -⚬ (Done =⚬ (Done |*| Done)) =
               λ { d1 =>
@@ -32,7 +32,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         },
 
       "some closure 0" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             val f: (Done |*| Done) -⚬ (Done |*| Done) =
               λ { d =>
@@ -48,7 +48,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         },
 
       "some closure 1" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             val f: Done -⚬ (Done |*| Done) =
               λ { d =>
@@ -137,7 +137,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         },
 
       "closure capturing semigroupal variable" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             λ.+ { (a: $[Done]) =>
               λ.closure { (b: $[Done]) =>
@@ -148,7 +148,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         },
 
       "closure with semigroupal variable" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             λ { (a: $[Done]) =>
               λ.closure.+ { (b: $[Done]) =>
@@ -159,7 +159,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         },
 
       "nested closures with semigroupal variables" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             λ.+ { (a: $[Done]) =>
               λ.closure.+ { (b: $[Done]) =>
@@ -188,7 +188,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         },
 
       "capture one-expression" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             λ { (a: $[Done]) =>
               val b: $[Done] = one > done
@@ -200,7 +200,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         },
 
       "return only captured one-expression" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             λ.? { (_: $[One]) =>
               val b: $[Done] = one > done
@@ -212,7 +212,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         },
 
       "capture one-expression into another one-expression" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             λ.? { (_: $[One]) =>
               val b = one > done
@@ -225,7 +225,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         },
 
       "capture two one-expression into another one-expression" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             λ.? { (_: $[One]) =>
               val b = one > done
