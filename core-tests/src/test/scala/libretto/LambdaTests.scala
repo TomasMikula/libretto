@@ -304,7 +304,31 @@ class LambdaTests extends ScalatestScalettoTestSuite {
                       a |*| a
             }
           }
-        }
+        },
+
+      "discard projection 1" ->
+        TestCase.testOutcome {
+          expectNotThrows {
+            λ { (a: $[One |*| One]) =>
+              a match {
+                case ?(_) |*| a2 =>
+                  a2
+              }
+            }
+          }
+        },
+
+      "discard projection 2" ->
+        TestCase.testOutcome {
+          expectNotThrows {
+            λ { (a: $[One |*| One]) =>
+              a match {
+                case a1 |*| ?(_) =>
+                  a1
+              }
+            }
+          }
+        },
     )
   }
 }

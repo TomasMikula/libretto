@@ -295,7 +295,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
                   Image(
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
-                      case Some(discard) => UnhandledCase.raise(s"Discarding unused var")
+                      case Some(discard) => LinCheck.Success(CapturingFun.noCapture(shuffled.swap > shuffled.lift(discard[a1](()))))
                       case None          => LinCheck.Failure(errors.underusedVars(variables.singleton(op.unusedVar)))
                     },
                     SingleVar[a1](),
@@ -304,13 +304,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
                   Image(
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
-                      case Some(discard) => UnhandledCase.raise(s"Discarding unused var")
+                      case Some(discard) => LinCheck.Success(CapturingFun.lift(discard[a2](())))
                       case None          => LinCheck.Failure(errors.underusedVars(variables.singleton(op.unusedVar)))
                     },
                     SingleVar[a2](),
                   )
-                case (vars, other) =>
-                  UnhandledCase.raise(s"$other")
               }
           },
         ) match {
