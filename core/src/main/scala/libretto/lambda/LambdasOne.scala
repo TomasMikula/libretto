@@ -23,7 +23,21 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
     export lambdas.AbstractFun.fold
   }
 
-  sealed trait Expr[A]
+  override type Context = lambdas.Context
+  override object Context extends Contexts {
+    export lambdas.Context.{fresh, getDiscard, getSplit, registerNonLinearOps}
+  }
+
+  sealed trait Expr[A] {
+    def resultVar: Var[A] =
+      this match
+        case Expr.LambdasExpr(a) =>
+          a.resultVar
+        case Expr.OneExpr(v, t) =>
+          t.terminalVarOpt match
+            case Right(v) => v
+            case Left(ev) => ev.substituteCo(v)
+  }
 
   override object Expr extends Exprs {
     private[LambdasOne] case class LambdasExpr[A](value: lambdas.Expr[A]) extends Expr[A]
@@ -38,11 +52,10 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
       def apply(expr: lambdas.Expr[One]): lambdas.Expr[A] =
         this match {
           case Id => expr
-          case Map(init, f, v)   => (init(expr) map f)(v)
-          case Zip(t1, t2, v)    => (t1(expr) zip t2(expr))(v)
-          case Prj1(t, v1, v2)   => lambdas.Expr.unzip(t(expr))(v1, v2)._1
-          case Prj2(t, v1, v2)   => lambdas.Expr.unzip(t(expr))(v1, v2)._2
-          case NLOps(i, s, d, v) => lambdas.Expr.withNonLinearOps(i(expr))(s, d)(v)
+          case Map(init, f, v) => (init(expr) map f)(v)
+          case Zip(t1, t2, v)  => (t1(expr) zip t2(expr))(v)
+          case Prj1(t, v1, v2) => lambdas.Expr.unzip(t(expr))(v1, v2)._1
+          case Prj2(t, v1, v2) => lambdas.Expr.unzip(t(expr))(v1, v2)._2
         }
 
       def apply(t: OneTail[One]): OneTail[A]
@@ -53,46 +66,37 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
           case t: OneTail1[A] => t(init)
         }
 
-      def terminalVarsOpt: Either[One =:= A, Vars[A]]
+      def terminalVarOpt: Either[One =:= A, Var[A]]
     }
     private[Expr] object OneTail {
       case object Id extends OneTail[One] {
         override def apply(t: OneTail[One]): OneTail[One] = t
-        override def terminalVarsOpt = Left(summon[One =:= One])
+        override def terminalVarOpt = Left(summon[One =:= One])
       }
       sealed trait OneTail1[A] extends OneTail[A] {
         override def apply(t: OneTail[One]): OneTail1[A] =
           this match {
-            case Map(init, f, v)   => Map(init(t), f, v)
-            case Zip(t1, t2, v)    => Zip(t1(t), t2(t), v)
-            case Prj1(xy, x, y)    => Prj1(xy(t), x, y)
-            case Prj2(xy, x, y)    => Prj2(xy(t), x, y)
-            case NLOps(i, s, d, v) => NLOps(i(t), s, d, v)
+            case Map(init, f, v) => Map(init(t), f, v)
+            case Zip(t1, t2, v)  => Zip(t1(t), t2(t), v)
+            case Prj1(xy, x, y)  => Prj1(xy(t), x, y)
+            case Prj2(xy, x, y)  => Prj2(xy(t), x, y)
           }
 
-        def terminalVars: Vars[A] =
+        def terminalVar: Var[A] =
           this match {
-            case Map(_, _, v)      => Vars.single(v)
-            case Zip(_, _, v)      => Vars.single(v)
-            case Prj1(_, v, _)     => Vars.single(v)
-            case Prj2(_, _, v)     => Vars.single(v)
-            case NLOps(_, _, _, v) => Vars.single(v)
+            case Map(_, _, v)  => v
+            case Zip(_, _, v)  => v
+            case Prj1(_, v, _) => v
+            case Prj2(_, _, v) => v
           }
 
-        override def terminalVarsOpt: Either[One =:= A, Vars[A]] =
-          Right(terminalVars)
+        override def terminalVarOpt: Either[One =:= A, Var[A]] =
+          Right(terminalVar)
       }
       case class Map[A, B](init: OneTail[A], f: A -⚬ B, resultVar: Var[B]) extends OneTail1[B]
       case class Zip[A1, A2](t1: OneTail1[A1], t2: OneTail1[A2], resultVar: Var[A1 |*| A2]) extends OneTail1[A1 |*| A2]
       case class Prj1[A, B](init: OneTail[A |*| B], resultVar: Var[A], residueVar: Var[B]) extends OneTail1[A]
       case class Prj2[A, B](init: OneTail[A |*| B], residueVar: Var[A], resultVar: Var[B]) extends OneTail1[B]
-
-      case class NLOps[A](
-        init: OneTail[A],
-        split: Option[A -⚬ (A |*| A)],
-        discard: Option[[B] => Unit => (A |*| B) -⚬ B],
-        resultVar: Var[A],
-      ) extends OneTail1[A]
 
       def unzip[A, B](t: OneTail[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (OneTail1[A], OneTail1[B]) =
         (Prj1(t, resultVar1, resultVar2), Prj2(t, resultVar1, resultVar2))
@@ -141,28 +145,8 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
           (OneExpr(v, f1), OneExpr(v, f2))
       }
 
-    override def withNonLinearOps[A](a: Expr[A])(
-      split: Option[A -⚬ (A |*| A)],
-      discard: Option[[B] => Unit => (A |*| B) -⚬ B]
-    )(
-      resultVar: Var[A],
-    ): Expr[A] =
-      a match {
-        case LambdasExpr(a) =>
-          LambdasExpr(lambdas.Expr.withNonLinearOps(a)(split, discard)(resultVar))
-        case OneExpr(v, f) =>
-          OneExpr(v, OneTail.NLOps(f, split, discard, resultVar))
-      }
-
     override def terminalVars[A](a: Expr[A]): Vars[A] =
-      a match {
-        case LambdasExpr(a) => a.terminalVars
-        case OneExpr(v, f)  =>
-          f.terminalVarsOpt match {
-            case Right(va) => va
-            case Left(ev)  => Vars.single(ev.substituteCo(v))
-          }
-      }
+      Vars.single(a.resultVar)
 
     def lift[A](expr: lambdas.Expr[A]): Expr[A] =
       LambdasExpr(expr)
@@ -171,26 +155,30 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
       OneExpr(v, OneTail.Id)
   }
 
-  override def abs[A, B](boundVar: Var[A], expr: Expr[B]): Abstracted[A, B] =
+  override protected def eliminateVariable[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] =
     expr match {
       case Expr.LambdasExpr(b) =>
-        lambdas.abs(boundVar, b)
+        lambdas.eliminateVariable(boundVar, b)
           .mapExpr[Expr]([X] => (x: lambdas.Expr[X]) => Expr.lift(x))
       case Expr.OneExpr(v, f) =>
         import Lambdas.Abstracted._
         val b = f(lambdas.Expr.variable(v))
 
-        // boundVar will not be found,
-        // because zipping with boundVar would have produced LambdasExpr
-        // and other Expr constructors (Map, Prj1, Prj2)
-        // don't bring a lambda-bound variable into the Expr
-        lambdas.abs(boundVar, b) match {
-          case NotFound(_) =>
-            NotFound(expr)
+        lambdas.eliminateVariable(boundVar, b) match {
           case Failure(e) =>
             Failure(e)
-          case Exact( _) | Closure(_, _) =>
-            throw new AssertionError(s"Did not expect to find variable $boundVar in $b, because $b is a constant expression")
+          case Closure(captured, f) =>
+            captured match {
+              case Tupled.Single(x) =>
+                lambdas.eliminateVariable(v, x) match
+                  case Exact(g)      => Exact(lambdas.shuffled.lift(smc.introFst) > lambdas.shuffled.fst(g) > f)
+                  case Closure(y, g) => UnhandledCase.raise(s"OneExpr capturing another expression")
+                  case Failure(e)    => Failure(e)
+              case Tupled.Zip(_, _) =>
+                UnhandledCase.raise(s"OneExpr capturing multiple expressions")
+            }
+          case Exact(_) =>
+            throw new AssertionError(s"Expected closure over variable $v")
         }
     }
 
@@ -199,9 +187,9 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
       case Expr.LambdasExpr(b) =>
         Left(Lambdas.Error.Undefined(b.initialVars))
       case Expr.OneExpr(v, f) =>
-        import Lambdas.Abstracted.{Closure, Exact, Failure, NotFound}
+        import Lambdas.Abstracted.{Closure, Exact, Failure}
         val b = f(lambdas.Expr.variable(v))
-        lambdas.abs(v, b) match {
+        lambdas.eliminateVariable(v, b)(using Context.fresh()) match {
           case Exact(f) =>
             Right(f.fold)
           case Closure(captured, _) =>
@@ -213,8 +201,6 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
             ))
           case Failure(e) =>
             Left(e)
-          case NotFound(b) =>
-            throw new AssertionError(s"Did not expect to not find variable $v in $b")
         }
     }
 }

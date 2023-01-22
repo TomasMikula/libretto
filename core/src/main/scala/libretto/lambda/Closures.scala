@@ -34,19 +34,17 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
 
   def closure[A, B](
     boundVar: Var[A],
-    f: Expr[A] => Expr[B],
+    f: lambdas.Context ?=> Expr[A] => Expr[B],
   )(using
     ev: ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬],
   ): ClosureRes[A, B] = {
     import ClosureRes._
 
-    lambdas.abs(boundVar, f(Expr.variable(boundVar))) match {
+    lambdas.abs(boundVar, f) match {
       case Abstracted.Exact(f) =>
         NonCapturing(f.fold)
       case Abstracted.Closure(captured, f) =>
         Capturing(captured, f.fold)
-      case Abstracted.NotFound(b) =>
-        NotFound(b)
       case Abstracted.Failure(e) =>
         NonLinear(e)
     }
@@ -66,7 +64,6 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
       f: A -⚬ B,
     ) extends ClosureRes[A, B]
 
-    case class NotFound[A, B](b: Expr[B]) extends ClosureRes[A, B]
     case class NonLinear[A, B](e: LE) extends ClosureRes[A, B]
   }
 }

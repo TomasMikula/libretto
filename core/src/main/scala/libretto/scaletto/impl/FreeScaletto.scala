@@ -424,6 +424,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   override type $[A] = lambdas.Expr[A]
 
+  override type LambdaContext = lambdas.Context
+
   override val `$`: FunExprOps  = new FunExprOps {
     override def one(implicit pos: SourcePos): $[One] =
       lambdas.Expr.one(new Var[One](VarOrigin.OneIntro(pos)))
@@ -459,47 +461,31 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       discard: Option[A -⚬ One],
     )(
       pos: SourcePos,
-    ): $[A] =
-      lambdas.Expr.withNonLinearOps(a)(
-        split,
-        discard = discard.map(f => [B] => (_: Unit) => elimFst[A, B](f)),
-      )(new Var[A](VarOrigin.NonLinearOps(pos)))
+    )(using
+      lambdas.Context,
+    ): $[A] = {
+      // val v = new Var[A](VarOrigin.NonLinearOps(pos))
+      val v = a.resultVar
+      lambdas.Context.registerNonLinearOps(v)(split, discard.map(f => [B] => (_: Unit) => elimFst[A, B](f)))
+      // lambdas.Expr.assign(a)(v)
+      a
+    }
   }
 
   override val λ = new LambdaOpsWithClosures {
-    override type Ctx = Unit
-    given Ctx = ()
-
-    override def apply[A, B](using pos: SourcePos)(f: Ctx ?=> $[A] => $[B]): A -⚬ B =
-      compile(f)(noSplit, noDiscard, pos)
+    override def apply[A, B](using pos: SourcePos)(f: lambdas.Context ?=> $[A] => $[B]): A -⚬ B =
+      compile(f)(pos)
 
     override val closure: ClosureOps =
       new ClosureOps {
-        override type Ctx = Unit
-        given Ctx = ()
-
-        override def apply[A, B](using pos: SourcePos)(f: Ctx ?=> $[A] => $[B]): $[A =⚬ B] =
-          compileClosure(f)(noSplit, noDiscard, pos)
+        override def apply[A, B](using pos: SourcePos)(f: lambdas.Context ?=> $[A] => $[B]): $[A =⚬ B] =
+          compileClosure(f)(pos)
       }
 
-    private def noSplit[A](v: Var[A]): Either[lambdas.LinearityViolation, A -⚬ (A |*| A)] =
-      Left(lambdas.Error.overusedVar(v))
-
-    private def doSplit[A: Cosemigroup](v: Var[A]): Either[lambdas.LinearityViolation, A -⚬ (A |*| A)] =
-      Right(summon[Cosemigroup[A]].split)
-
-    private def noDiscard[A](v: Var[A]): Either[lambdas.LinearityViolation, A -⚬ One] =
-      Left(lambdas.Error.underusedVar(v))
-
-    private def doDiscard[A: Affine](v: Var[A]): Either[lambdas.LinearityViolation, A -⚬ One] =
-      Right(summon[Affine[A]].discard)
-
-    private def compile[A, B](f: $[A] => $[B])(
-      split: Var[A] => Either[lambdas.LinearityViolation, A -⚬ (A |*| A)],
-      discard: Var[A] => Either[lambdas.LinearityViolation, A -⚬ One],
+    private def compile[A, B](f: lambdas.Context ?=> $[A] => $[B])(
       pos: SourcePos,
     ): A -⚬ B = {
-      import Abstracted.{Closure, Exact, Failure, NotFound}
+      import Abstracted.{Closure, Exact, Failure}
 
       val bindVar = new Var[A](VarOrigin.Lambda(pos))
 
@@ -510,11 +496,6 @@ object FreeScaletto extends FreeScaletto with Scaletto {
           for {
             g <- lambdas.compileConst(zipExprs(captured))
           } yield introFst(g) > f.fold
-        case NotFound(b) =>
-          for {
-            g       <- lambdas.compileConst(b)
-            discard <- discard(bindVar)
-          } yield discard > g
         case Failure(e) =>
           Left(e)
       } match {
@@ -530,31 +511,22 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         lambdas.Expr.zip(ex, ey, v)
       })
 
-    private def compileClosure[A, B](f: $[A] => $[B])(
-      split: Var[A] => Either[lambdas.LinearityViolation, A -⚬ (A |*| A)],
-      discard: Var[A] => Either[lambdas.LinearityViolation, A -⚬ One],
+    private def compileClosure[A, B](f: lambdas.Context ?=> $[A] => $[B])(
       pos: SourcePos,
     ): $[A =⚬ B] = {
-      import closures.ClosureRes.{Capturing, NonCapturing, NonLinear, NotFound}
+      import closures.ClosureRes.{Capturing, NonCapturing, NonLinear}
 
       val bindVar = new Var[A](VarOrigin.Lambda(pos))
       val resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(pos))
 
       closures.closure[A, B](bindVar, f) match {
         case Capturing(captured, f) =>
-          Right((zipExprs(captured) map csmc.curry(f))(resultVar))
+          (zipExprs(captured) map csmc.curry(f))(resultVar)
         case NonCapturing(f) =>
           val captured0 = lambdas.Expr.one(new Var[One](VarOrigin.OneIntro(pos)))
-          Right((captured0 map csmc.curry(elimFst > f))(resultVar))
-        case NotFound(b) =>
-          for {
-            discard <- discard(bindVar)
-          } yield (b map csmc.curry(elimSnd(discard)))(resultVar)
+          (captured0 map csmc.curry(elimFst > f))(resultVar)
         case NonLinear(e) =>
-          Left(e)
-      } match {
-        case Right(f) => f
-        case Left(e)  => raiseError(e)
+          raiseError(e)
       }
     }
   }

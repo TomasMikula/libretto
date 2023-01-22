@@ -46,11 +46,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[A |*| B]): Expr[A |*| B]
     def unzip[A, B](ab: Expr[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (Expr[A], Expr[B])
 
-    def withNonLinearOps[A](a: Expr[A])(
-      split: Option[A -⚬ (A |*| A)],
-      discard: Option[[B] => Unit => (A |*| B) -⚬ B],
-    )(resultVar: Var[A]): Expr[A]
-
     def terminalVars[A](a: Expr[A]): Vars[A]
   }
 
@@ -68,6 +63,24 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
       Expr.terminalVars(a)
   }
 
+  type Context
+  val Context: Contexts
+
+  trait Contexts {
+    def fresh(): Context
+
+    def registerNonLinearOps[A](v: Var[A])(
+      split: Option[A -⚬ (A |*| A)],
+      discard: Option[[B] => Unit => (A |*| B) -⚬ B],
+    )(using
+      Context
+    ): Unit
+
+    def getSplit[A](v: Var[A])(using Context): Option[A -⚬ (A |*| A)]
+
+    def getDiscard[A](v: Var[A])(using Context): Option[[B] => Unit => (A |*| B) -⚬ B]
+  }
+
   type AbstractFun[A, B]
   val AbstractFun: AbstractFuns
 
@@ -82,16 +95,18 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
 
   type Abstracted[A, B] = Lambdas.Abstracted[Expr, |*|, AbstractFun, LE, A, B]
 
-  def abs[A, B](
+  protected def eliminateVariable[A, B](
     boundVar: Var[A],
     expr: Expr[B],
-  ): Abstracted[A, B]
+  )(using Context): Abstracted[A, B]
 
   def abs[A, B](
     bindVar: Var[A],
-    f: Expr[A] => Expr[B],
-  ): Abstracted[A, B] =
-    abs(bindVar, f(Expr.variable(bindVar)))
+    f: Context ?=> Expr[A] => Expr[B],
+  ): Abstracted[A, B] = {
+    given Context = Context.fresh()
+    eliminateVariable(bindVar, f(Expr.variable(bindVar)))
+  }
 }
 
 object Lambdas {
@@ -176,7 +191,6 @@ object Lambdas {
       this match {
         case Exact(f)             => Exact(f)
         case Closure(captured, f) => Closure(captured.trans(g), f)
-        case NotFound(b)          => NotFound(g(b))
         case Failure(e)           => Failure(e)
       }
   }
@@ -189,10 +203,6 @@ object Lambdas {
     case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], LE, X, A, B](
       captured: Tupled[|*|, Exp, X],
       f: AbsFun[X |*| A, B],
-    ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
-
-    case class NotFound[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B](
-      b: Exp[B],
     ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
 
     case class Failure[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B](

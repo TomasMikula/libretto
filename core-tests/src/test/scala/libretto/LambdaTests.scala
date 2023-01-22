@@ -292,6 +292,19 @@ class LambdaTests extends ScalatestScalettoTestSuite {
               }
             },
         ),
+
+      "non-linear variable via pattern match" ->
+        TestCase.testOutcome {
+          expectNotThrows {
+            λ { (a: $[One]) =>
+              a match
+                case $.*(a) =>
+                  (a, a) match
+                    case (?(a0), a) =>
+                      a |*| a
+            }
+          }
+        }
     )
   }
 }

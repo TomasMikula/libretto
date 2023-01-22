@@ -302,11 +302,11 @@ trait CoreDSL {
     */
   def selectPair: (One |&| One) -⚬ (Pong |*| Pong)
 
+  type LambdaContext
+
   val λ: LambdaOps
 
   trait LambdaOps {
-    type Ctx
-
     /** Used to define a linear function `A -⚬ B` in a point-full style, i.e. as a lambda expression.
       *
       * Recall that when defining `A -⚬ B`, we never get a hold of `a: A` as a Scala value. However,
@@ -320,25 +320,25 @@ trait CoreDSL {
       * @throws UnboundVariablesException if the result expression contains free variables (from outer [[λ]]s).
       */
     def apply[A, B](using SourcePos)(
-      f: Ctx ?=> $[A] => $[B],
+      f: LambdaContext ?=> $[A] => $[B],
     ): A -⚬ B
 
     def ?[A, B](using SourcePos)(
-      f: Ctx ?=> $[A] => $[B],
+      f: LambdaContext ?=> $[A] => $[B],
     )(using
       Affine[A],
     ): A -⚬ B =
       apply { case $.?(a) => f(a) }
 
     def +[A, B](using SourcePos)(
-      f: Ctx ?=> $[A] => $[B],
+      f: LambdaContext ?=> $[A] => $[B],
     )(using
       Cosemigroup[A],
     ): A -⚬ B =
       apply { case $.+(a) => f(a) }
 
     def *[A, B](using SourcePos)(
-      f: Ctx ?=> $[A] => $[B],
+      f: LambdaContext ?=> $[A] => $[B],
     )(using
       Comonoid[A],
     ): A -⚬ B =
@@ -370,6 +370,8 @@ trait CoreDSL {
       ditch: Option[A -⚬ One],
     )(
       pos: SourcePos,
+    )(using
+      LambdaContext,
     ): $[A]
 
     def eliminateFirst[A](unit: $[One], a: $[A])(
@@ -402,17 +404,17 @@ trait CoreDSL {
     }
 
     object ? {
-      def unapply[A](using pos: SourcePos)(a: $[A])(using A: Affine[A]): Some[$[A]] =
+      def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Affine[A]): Some[$[A]] =
         Some(nonLinear(a)(split = None, ditch = Some(A.discard))(pos))
     }
 
     object + {
-      def unapply[A](using pos: SourcePos)(a: $[A])(using A: Cosemigroup[A]): Some[$[A]] =
+      def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Cosemigroup[A]): Some[$[A]] =
         Some(nonLinear(a)(Some(A.split), ditch = None)(pos))
     }
 
     object * {
-      def unapply[A](using pos: SourcePos)(a: $[A])(using A: Comonoid[A]): Some[$[A]] =
+      def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Comonoid[A]): Some[$[A]] =
         Some(nonLinear(a)(Some(A.split), Some(A.discard))(pos))
     }
 

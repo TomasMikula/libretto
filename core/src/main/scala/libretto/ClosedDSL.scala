@@ -34,31 +34,29 @@ trait ClosedDSL extends CoreDSL {
   }
 
   trait ClosureOps {
-    type Ctx
-
     /** Creates a closure (`A =⚬ B`), i.e. a function that captures variables from the outer scope,
       * as an expression (`$[A =⚬ B]`) that can be used in outer [[λ]].
       */
     def apply[A, B](using SourcePos)(
-      f: Ctx ?=> $[A] => $[B],
+      f: LambdaContext ?=> $[A] => $[B],
     ): $[A =⚬ B]
 
     def ?[A, B](using SourcePos)(
-      f: Ctx ?=> $[A] => $[B],
+      f: LambdaContext ?=> $[A] => $[B],
     )(using
       Affine[A],
     ): $[A =⚬ B] =
       apply { case $.?(a) => f(a) }
 
     def +[A, B](using SourcePos)(
-      f: Ctx ?=> $[A] => $[B],
+      f: LambdaContext ?=> $[A] => $[B],
     )(using
       Cosemigroup[A],
     ): $[A =⚬ B] =
       apply { case $.+(a) => f(a) }
 
     def *[A, B](using SourcePos)(
-      f: Ctx ?=> $[A] => $[B],
+      f: LambdaContext ?=> $[A] => $[B],
     )(using
       Comonoid[A],
     ): $[A =⚬ B] =
