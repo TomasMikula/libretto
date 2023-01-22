@@ -23,7 +23,21 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
     export lambdas.AbstractFun.fold
   }
 
-  sealed trait Expr[A]
+  override type Context = lambdas.Context
+  override object Context extends Contexts {
+    export lambdas.Context.{fresh, getDiscard, getSplit, registerNonLinearOps}
+  }
+
+  sealed trait Expr[A] {
+    def resultVar: Var[A] =
+      this match
+        case Expr.LambdasExpr(a) =>
+          a.resultVar
+        case Expr.OneExpr(v, t) =>
+          t.terminalVarOpt match
+            case Right(v) => v
+            case Left(ev) => ev.substituteCo(v)
+  }
 
   override object Expr extends Exprs {
     private[LambdasOne] case class LambdasExpr[A](value: lambdas.Expr[A]) extends Expr[A]
@@ -52,12 +66,12 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
           case t: OneTail1[A] => t(init)
         }
 
-      def terminalVarsOpt: Either[One =:= A, Vars[A]]
+      def terminalVarOpt: Either[One =:= A, Var[A]]
     }
     private[Expr] object OneTail {
       case object Id extends OneTail[One] {
         override def apply(t: OneTail[One]): OneTail[One] = t
-        override def terminalVarsOpt = Left(summon[One =:= One])
+        override def terminalVarOpt = Left(summon[One =:= One])
       }
       sealed trait OneTail1[A] extends OneTail[A] {
         override def apply(t: OneTail[One]): OneTail1[A] =
@@ -68,16 +82,16 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
             case Prj2(xy, x, y)  => Prj2(xy(t), x, y)
           }
 
-        def terminalVars: Vars[A] =
+        def terminalVar: Var[A] =
           this match {
-            case Map(_, _, v)  => Vars.single(v)
-            case Zip(_, _, v)  => Vars.single(v)
-            case Prj1(_, v, _) => Vars.single(v)
-            case Prj2(_, _, v) => Vars.single(v)
+            case Map(_, _, v)  => v
+            case Zip(_, _, v)  => v
+            case Prj1(_, v, _) => v
+            case Prj2(_, _, v) => v
           }
 
-        override def terminalVarsOpt: Either[One =:= A, Vars[A]] =
-          Right(terminalVars)
+        override def terminalVarOpt: Either[One =:= A, Var[A]] =
+          Right(terminalVar)
       }
       case class Map[A, B](init: OneTail[A], f: A -⚬ B, resultVar: Var[B]) extends OneTail1[B]
       case class Zip[A1, A2](t1: OneTail1[A1], t2: OneTail1[A2], resultVar: Var[A1 |*| A2]) extends OneTail1[A1 |*| A2]
@@ -103,20 +117,20 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
           LambdasExpr((a zip b)(resultVar))
         case (LambdasExpr(a), OneExpr(v, g)) =>
           val aOne: lambdas.Expr[A |*| One] =
-            (a map smc.introSnd)(newSyntheticVar(a.terminalVars zip Vars.single(v)))
-          val va = newSyntheticVar[A](hint = a.terminalVars)
+            (a map smc.introSnd)(newSyntheticVar(Vars.single(a.resultVar) zip Vars.single(v)))
+          val va = newSyntheticVar[A](hint = Vars.single(a.resultVar))
           val (a1, o1) = lambdas.Expr.unzip(aOne)(va, v)
           LambdasExpr(lambdas.Expr.zip(a1, g(o1), resultVar))
         case (OneExpr(v, f), LambdasExpr(b)) =>
           val oneB: lambdas.Expr[One |*| B] =
-            (b map smc.introFst)(newSyntheticVar(Vars.single(v) zip b.terminalVars))
-          val vb = newSyntheticVar[B](hint = b.terminalVars)
+            (b map smc.introFst)(newSyntheticVar(Vars.single(v) zip Vars.single(b.resultVar)))
+          val vb = newSyntheticVar[B](hint = Vars.single(b.resultVar))
           val (o1, b1) = lambdas.Expr.unzip(oneB)(v, vb)
           LambdasExpr(lambdas.Expr.zip(f(o1), b1, resultVar))
         case (a @ OneExpr(v, f), OneExpr(w, g)) =>
           val aOne: OneTail[A |*| One] =
-            OneTail.Map(f, smc.introSnd, newSyntheticVar(a.terminalVars zip Vars.single(w)))
-          val va = newSyntheticVar[A](hint = a.terminalVars)
+            OneTail.Map(f, smc.introSnd, newSyntheticVar(Vars.single(a.resultVar) zip Vars.single(w)))
+          val va = newSyntheticVar[A](hint = Vars.single(a.resultVar))
           val (a1, o1) = OneTail.unzip(aOne)(va, w)
           OneExpr(v, OneTail.Zip(a1, g.apply1(o1), resultVar))
       }
@@ -131,15 +145,8 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
           (OneExpr(v, f1), OneExpr(v, f2))
       }
 
-    override def terminalVars[A](a: Expr[A]): Vars[A] =
-      a match {
-        case LambdasExpr(a) => a.terminalVars
-        case OneExpr(v, f)  =>
-          f.terminalVarsOpt match {
-            case Right(va) => va
-            case Left(ev)  => Vars.single(ev.substituteCo(v))
-          }
-      }
+    override def resultVar[A](a: Expr[A]): Var[A] =
+      a.resultVar
 
     def lift[A](expr: lambdas.Expr[A]): Expr[A] =
       LambdasExpr(expr)
@@ -148,26 +155,30 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
       OneExpr(v, OneTail.Id)
   }
 
-  override def abs[A, B](expr: Expr[B], boundVar: Var[A]): Abstracted[A, B] =
+  override protected def eliminateVariable[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] =
     expr match {
       case Expr.LambdasExpr(b) =>
-        lambdas.abs(b, boundVar)
+        lambdas.eliminateVariable(boundVar, b)
           .mapExpr[Expr]([X] => (x: lambdas.Expr[X]) => Expr.lift(x))
       case Expr.OneExpr(v, f) =>
         import Lambdas.Abstracted._
         val b = f(lambdas.Expr.variable(v))
 
-        // boundVar will not be found,
-        // because zipping with boundVar would have produced LambdasExpr
-        // and other Expr constructors (Map, Prj1, Prj2)
-        // don't bring a lambda-bound variable into the Expr
-        lambdas.abs(b, boundVar) match {
-          case NotFound(_) =>
-            NotFound(expr)
+        lambdas.eliminateVariable(boundVar, b) match {
           case Failure(e) =>
             Failure(e)
-          case Exact(_, _) | Closure(_, _, _) =>
-            throw new AssertionError(s"Did not expect to find variable $boundVar in $b, because $b is a constant expression")
+          case Closure(captured, f) =>
+            captured match {
+              case Tupled.Single(x) =>
+                lambdas.eliminateVariable(v, x) match
+                  case Exact(g)      => Exact(lambdas.shuffled.lift(smc.introFst) > lambdas.shuffled.fst(g) > f)
+                  case Closure(y, g) => throw AssertionError("Result of (f: OneExpr.Tail).apply(variable) can only capture that one variable, as OneExpr is not able to capture expressions.")
+                  case Failure(e)    => Failure(e)
+              case Tupled.Zip(_, _) =>
+                throw AssertionError("Result of (f: OneExpr.Tail).apply(variable) can only capture that one variable, as OneExpr is not able to capture expressions.")
+            }
+          case Exact(_) =>
+            throw new AssertionError(s"Expected closure over variable $v")
         }
     }
 
@@ -176,15 +187,12 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
       case Expr.LambdasExpr(b) =>
         Left(Lambdas.Error.Undefined(b.initialVars))
       case Expr.OneExpr(v, f) =>
-        import Lambdas.Abstracted.{Closure, Exact, Failure, NotFound}
+        import Lambdas.Abstracted.{Closure, Exact, Failure}
         val b = f(lambdas.Expr.variable(v))
-        lambdas.abs(b, v) match {
-          case Exact(m, f) =>
-            m match {
-              case Multiplier.Id() => Right(f.fold)
-              case _ => throw new AssertionError(s"Did not expect $v to be used multiple times in $b")
-            }
-          case Closure(captured, _, _) =>
+        lambdas.eliminateVariable(v, b)(using Context.fresh()) match {
+          case Exact(f) =>
+            Right(f.fold)
+          case Closure(captured, _) =>
             Left(Lambdas.Error.Undefined(
               captured.mapReduce0(
                 [x] => (ex: lambdas.Expr[x]) => ex.initialVars,
@@ -193,8 +201,6 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
             ))
           case Failure(e) =>
             Left(e)
-          case NotFound(b) =>
-            throw new AssertionError(s"Did not expect to not find variable $v in $b")
         }
     }
 }

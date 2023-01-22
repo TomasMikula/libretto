@@ -33,20 +33,18 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
     (f zip a)(auxVar).map(ev.eval[A, B])(resultVar)
 
   def closure[A, B](
-    f: Expr[A] => Expr[B],
     boundVar: Var[A],
+    f: lambdas.Context ?=> Expr[A] => Expr[B],
   )(using
     ev: ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬],
   ): ClosureRes[A, B] = {
     import ClosureRes._
 
-    lambdas.abs(f(Expr.variable(boundVar)), boundVar) match {
-      case Abstracted.Exact(m, f) =>
-        NonCapturing(m, f.fold)
-      case Abstracted.Closure(captured, m, f) =>
-        Capturing(captured, m, f.fold)
-      case Abstracted.NotFound(b) =>
-        NotFound(b)
+    lambdas.abs(boundVar, f) match {
+      case Abstracted.Exact(f) =>
+        NonCapturing(f.fold)
+      case Abstracted.Closure(captured, f) =>
+        Capturing(captured, f.fold)
       case Abstracted.Failure(e) =>
         NonLinear(e)
     }
@@ -57,18 +55,15 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
    */
   sealed trait ClosureRes[A, B]
   object ClosureRes {
-    case class Capturing[X, A, A1, B](
+    case class Capturing[X, A, B](
       captured: Tupled[|*|, Expr, X],
-      m: Multiplier[|*|, A, A1],
-      f: (X |*| A1) -⚬ B,
+      f: (X |*| A) -⚬ B,
     ) extends ClosureRes[A, B]
 
-    case class NonCapturing[A, A1, B](
-      m: Multiplier[|*|, A, A1],
-      f: A1 -⚬ B,
+    case class NonCapturing[A, B](
+      f: A -⚬ B,
     ) extends ClosureRes[A, B]
 
-    case class NotFound[A, B](b: Expr[B]) extends ClosureRes[A, B]
     case class NonLinear[A, B](e: LE) extends ClosureRes[A, B]
   }
 }

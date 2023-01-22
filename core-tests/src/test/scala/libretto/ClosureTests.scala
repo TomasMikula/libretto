@@ -19,7 +19,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
     List(
       "simplest closure" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             val f: Done -⚬ (Done =⚬ (Done |*| Done)) =
               λ { d1 =>
@@ -32,7 +32,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         },
 
       "some closure 0" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             val f: (Done |*| Done) -⚬ (Done |*| Done) =
               λ { d =>
@@ -48,7 +48,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         },
 
       "some closure 1" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             val f: Done -⚬ (Done |*| Done) =
               λ { d =>
@@ -136,8 +136,30 @@ class ClosureTests extends ScalatestScalettoTestSuite {
           λ { d => kit.success(g(f(d))) }
         },
 
+      "closure capturing semigroupal variable" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ.+ { (a: $[Done]) =>
+              λ.closure { (b: $[Done]) =>
+                a |*| b |*| a
+              }
+            }
+          }
+        },
+
+      "closure with semigroupal variable" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ { (a: $[Done]) =>
+              λ.closure.+ { (b: $[Done]) =>
+                b |*| a |*| b
+              }
+            }
+          }
+        },
+
       "nested closures with semigroupal variables" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           Outcome.expectNotThrows {
             λ.+ { (a: $[Done]) =>
               λ.closure.+ { (b: $[Done]) =>
@@ -160,6 +182,56 @@ class ClosureTests extends ScalatestScalettoTestSuite {
                 λ.closure.+ { (d: $[Done]) =>
                   ((c |*| d) |*| (d |*| a)) |*| ((d |*| (a |*| a)) |*| c)
                 }
+              }
+            }
+          }
+        },
+
+      "capture one-expression" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ { (a: $[Done]) =>
+              val b: $[Done] = one > done
+              λ.closure { (c: $[Done]) =>
+                a |*| b |*| c
+              }
+            }
+          }
+        },
+
+      "return only captured one-expression" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ.? { (_: $[One]) =>
+              val b: $[Done] = one > done
+              λ.closure.? { (_: $[One]) =>
+                b
+              }
+            }
+          }
+        },
+
+      "capture one-expression into another one-expression" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ.? { (_: $[One]) =>
+              val b = one > done
+              λ.closure.? { (_: $[One]) =>
+                val c = one > done
+                b |*| c
+              }
+            }
+          }
+        },
+
+      "capture two one-expression into another one-expression" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ.? { (_: $[One]) =>
+              val b = one > done
+              val c = one > done
+              λ.closure.? { (_: $[One]) =>
+                b |*| c
               }
             }
           }

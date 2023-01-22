@@ -117,7 +117,7 @@ class LambdaTests extends ScalatestScalettoTestSuite {
         },
 
       "unused variable" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           for {
             e <- expectThrows {
               λ { (trigger: $[Done]) =>
@@ -132,7 +132,7 @@ class LambdaTests extends ScalatestScalettoTestSuite {
         },
 
       "overused variable" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           for {
             e <- expectThrows {
               λ { (trigger: $[Done]) =>
@@ -174,7 +174,7 @@ class LambdaTests extends ScalatestScalettoTestSuite {
         },
 
       "unused variable, `one`-based result" ->
-        TestCase.testOutcome {
+        TestCase.pure {
           for {
             e <- expectThrows {
               λ { d =>
@@ -190,7 +190,7 @@ class LambdaTests extends ScalatestScalettoTestSuite {
       "affine variable" ->
         TestCase.multiple(
           "unused" ->
-            TestCase.testOutcome {
+            TestCase.pure {
               expectNotThrows {
                 val prg: One -⚬ Done =
                   λ.? { _ =>
@@ -200,7 +200,7 @@ class LambdaTests extends ScalatestScalettoTestSuite {
               }
             },
           "used once" ->
-            TestCase.testOutcome {
+            TestCase.pure {
               expectNotThrows {
                 val prg: One -⚬ One =
                   λ.? { d => d }
@@ -208,7 +208,7 @@ class LambdaTests extends ScalatestScalettoTestSuite {
               }
             },
           "used twice" ->
-            TestCase.testOutcome {
+            TestCase.pure {
               for {
                 e <- expectThrows {
                   λ.? { (x: $[One]) => x |*| x }
@@ -223,19 +223,19 @@ class LambdaTests extends ScalatestScalettoTestSuite {
       "cosemigroupal variable" ->
         TestCase.multiple(
           "used once" ->
-            TestCase.testOutcome {
+            TestCase.pure {
               expectNotThrows {
                 λ.+ { (d: $[Done]) => d }
               }
             },
           "used twice" ->
-            TestCase.testOutcome {
+            TestCase.pure {
               expectNotThrows {
                 λ.+ { (d: $[Done]) => d |*| d }
               }
             },
           "unused" ->
-            TestCase.testOutcome {
+            TestCase.pure {
               for {
                 e <- expectThrows {
                   λ.+ { (_: $[Done]) => one > done }
@@ -246,7 +246,7 @@ class LambdaTests extends ScalatestScalettoTestSuite {
               } yield ()
             },
           "used twice, with a twist" ->
-            TestCase.testOutcome {
+            TestCase.pure {
               expectNotThrows {
                 λ.+ { (d: $[Done]) =>
                   val (p |*| q) = fork(d)
@@ -256,7 +256,7 @@ class LambdaTests extends ScalatestScalettoTestSuite {
               }
             },
           "derived expressions remain linear" ->
-            TestCase.testOutcome {
+            TestCase.pure {
               for {
                 e <- expectThrows {
                   λ.+ { (d: $[Done]) =>
@@ -274,24 +274,61 @@ class LambdaTests extends ScalatestScalettoTestSuite {
       "comonoidal variable" ->
         TestCase.multiple(
           "used once" ->
-            TestCase.testOutcome {
+            TestCase.pure {
               expectNotThrows {
                 λ.* { (p: $[Ping]) => p }
               }
             },
           "used twice" ->
-            TestCase.testOutcome {
+            TestCase.pure {
               expectNotThrows {
                 λ.* { (p: $[Ping]) => p |*| p }
               }
             },
           "unused" ->
-            TestCase.testOutcome {
+            TestCase.pure {
               expectNotThrows {
                 λ.* { (_: $[Ping]) => one > done }
               }
             },
         ),
+
+      "non-linear variable via pattern match" ->
+        TestCase.pure {
+          expectNotThrows {
+            λ { (a: $[One]) =>
+              a match
+                case $.*(a) =>
+                  (a, a) match
+                    case (?(a0), a) =>
+                      a |*| a
+            }
+          }
+        },
+
+      "discard projection 1" ->
+        TestCase.pure {
+          expectNotThrows {
+            λ { (a: $[One |*| One]) =>
+              a match {
+                case ?(_) |*| a2 =>
+                  a2
+              }
+            }
+          }
+        },
+
+      "discard projection 2" ->
+        TestCase.pure {
+          expectNotThrows {
+            λ { (a: $[One |*| One]) =>
+              a match {
+                case a1 |*| ?(_) =>
+                  a1
+              }
+            }
+          }
+        },
     )
   }
 }

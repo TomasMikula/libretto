@@ -38,26 +38,29 @@ trait ClosedDSL extends CoreDSL {
       * as an expression (`$[A =⚬ B]`) that can be used in outer [[λ]].
       */
     def apply[A, B](using SourcePos)(
-      f: $[A] => $[B],
+      f: LambdaContext ?=> $[A] => $[B],
     ): $[A =⚬ B]
 
     def ?[A, B](using SourcePos)(
-      f: $[A] => $[B],
+      f: LambdaContext ?=> $[A] => $[B],
     )(using
       Affine[A],
-    ): $[A =⚬ B]
+    ): $[A =⚬ B] =
+      apply { case $.?(a) => f(a) }
 
     def +[A, B](using SourcePos)(
-      f: $[A] => $[B],
+      f: LambdaContext ?=> $[A] => $[B],
     )(using
       Cosemigroup[A],
-    ): $[A =⚬ B]
+    ): $[A =⚬ B] =
+      apply { case $.+(a) => f(a) }
 
     def *[A, B](using SourcePos)(
-      f: $[A] => $[B],
+      f: LambdaContext ?=> $[A] => $[B],
     )(using
       Comonoid[A],
-    ): $[A =⚬ B]
+    ): $[A =⚬ B] =
+      apply { case $.*(a) => f(a) }
   }
 
   /** Alias for [[λ.closure.apply]]. */
