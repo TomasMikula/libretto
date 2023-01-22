@@ -709,8 +709,18 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def terminalVars(a: Varz[Var[A]]): Varz[Var[Z]] =
           Varz.atom(replacement.resultVar)
 
-        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[Z] |*| C]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.gcdSimple")
+        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A] =:= Var[X]): Option[Tail[Var[A], Var[Z] |*| C]] =
+          that.maskInput.visit[Option[Tail[Var[A], Var[Z] |*| C]]]([T] => (that: Op[T, C], ev: T =:= Var[X]) => {
+            that match
+              case cr: CaptureReplace[a, c] =>
+                summon[C =:= Var[c]]
+                testEqual(cr.replacement.resultVar, replacement.resultVar) map {
+                  case TypeEq(Refl()) =>
+                    shOp.lift(CaptureReplace.this) > shOp.lift(DupVar[Z]().to[Var[Z] |*| Var[c]])
+                }
+              case _ =>
+                None
+          })
 
         override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[Z]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj1_gcd_this")
@@ -755,13 +765,14 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
         def apply[A, B](op: Op.Affine[A, B]): InputVarFocus[A, B] =
           op match {
-            case op: Zip[t, u]        => InputVarFocus[[x] =>> x |*| Var[u], t, Var[t |*| u]](op, Focus.fst) // arbitrarily picking the first input
-            case op: Unzip[t, u]      => InputVarFocus[[x] =>> x, t |*| u, Var[t] |*| Var[u]](op, Focus.id)
-            case op: Prj1[t, u]       => InputVarFocus[[x] =>> x, t |*| u, Var[t]](op, Focus.id)
-            case op: Prj2[t, u]       => InputVarFocus[[x] =>> x, t |*| u, Var[u]](op, Focus.id)
-            case op: Map[t, u]        => InputVarFocus[[x] =>> x, t, Var[u]](op, Focus.id)
-            case op: CaptureFst[t, u] => InputVarFocus[[x] =>> x, t, Var[u |*| t]](op, Focus.id)
-            case op: CaptureSnd[t, u] => InputVarFocus[[x] =>> x, t, Var[t |*| u]](op, Focus.id)
+            case op: Zip[t, u]            => InputVarFocus[[x] =>> x |*| Var[u], t, Var[t |*| u]](op, Focus.fst) // arbitrarily picking the first input
+            case op: Unzip[t, u]          => InputVarFocus[[x] =>> x, t |*| u, Var[t] |*| Var[u]](op, Focus.id)
+            case op: Prj1[t, u]           => InputVarFocus[[x] =>> x, t |*| u, Var[t]](op, Focus.id)
+            case op: Prj2[t, u]           => InputVarFocus[[x] =>> x, t |*| u, Var[u]](op, Focus.id)
+            case op: Map[t, u]            => InputVarFocus[[x] =>> x, t, Var[u]](op, Focus.id)
+            case op: CaptureFst[t, u]     => InputVarFocus[[x] =>> x, t, Var[u |*| t]](op, Focus.id)
+            case op: CaptureSnd[t, u]     => InputVarFocus[[x] =>> x, t, Var[t |*| u]](op, Focus.id)
+            case op: CaptureReplace[t, u] => InputVarFocus[[x] =>> x, t, Var[u]](op, Focus.id)
           }
       }
 

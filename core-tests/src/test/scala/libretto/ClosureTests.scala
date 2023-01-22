@@ -186,6 +186,43 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             }
           }
         },
+
+      "capture one-expression" ->
+        TestCase.testOutcome {
+          Outcome.expectNotThrows {
+            λ { (a: $[Done]) =>
+              val b: $[Done] = one > done
+              λ.closure { (c: $[Done]) =>
+                a |*| b |*| c
+              }
+            }
+          }
+        },
+
+      "return only captured one-expression" ->
+        TestCase.testOutcome {
+          Outcome.expectNotThrows {
+            λ.? { (a: $[One]) =>
+              val b: $[Done] = one > done
+              λ.closure.? { (_: $[One]) =>
+                b
+              }
+            }
+          }
+        },
+
+      "capture one-expression into another one-expression" ->
+        TestCase.testOutcome {
+          Outcome.expectNotThrows {
+            λ.? { (a: $[One]) =>
+              val b = one > done
+              λ.closure.? { (_: $[One]) =>
+                val c = one > done
+                b |*| c
+              }
+            }
+          }
+        },
     )
   }
 }
