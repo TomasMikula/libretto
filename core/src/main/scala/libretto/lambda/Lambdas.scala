@@ -45,7 +45,8 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     def map[A, B](e: Expr[A], f: A -⚬ B, resultVar: Var[B]): Expr[B]
     def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[A |*| B]): Expr[A |*| B]
     def unzip[A, B](ab: Expr[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (Expr[A], Expr[B])
-    def terminalVars[A](a: Expr[A]): Vars[A]
+
+    def resultVar[A](a: Expr[A]): Var[A]
   }
 
   extension [A](a: Expr[A]) {
@@ -57,9 +58,27 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     def zip[B](b: Expr[B])(resultVar: Var[A |*| B]): Expr[A |*| B] =
       Expr.zip(a, b, resultVar)
 
-    @targetName("exprTerminalVars")
-    def terminalVars: Vars[A] =
-      Expr.terminalVars(a)
+    @targetName("exprResultVar")
+    def resultVar: Var[A] =
+      Expr.resultVar(a)
+  }
+
+  type Context
+  val Context: Contexts
+
+  trait Contexts {
+    def fresh(): Context
+
+    def registerNonLinearOps[A](v: Var[A])(
+      split: Option[A -⚬ (A |*| A)],
+      discard: Option[[B] => Unit => (A |*| B) -⚬ B],
+    )(using
+      Context
+    ): Unit
+
+    def getSplit[A](v: Var[A])(using Context): Option[A -⚬ (A |*| A)]
+
+    def getDiscard[A](v: Var[A])(using Context): Option[[B] => Unit => (A |*| B) -⚬ B]
   }
 
   type AbstractFun[A, B]
@@ -76,16 +95,18 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
 
   type Abstracted[A, B] = Lambdas.Abstracted[Expr, |*|, AbstractFun, LE, A, B]
 
-  def abs[A, B](
+  protected def eliminateVariable[A, B](
     boundVar: Var[A],
     expr: Expr[B],
-  ): Abstracted[A, B]
+  )(using Context): Abstracted[A, B]
 
   def abs[A, B](
     bindVar: Var[A],
-    f: Expr[A] => Expr[B],
-  ): Abstracted[A, B] =
-    abs(bindVar, f(Expr.variable(bindVar)))
+    f: Context ?=> Expr[A] => Expr[B],
+  ): Abstracted[A, B] = {
+    given Context = Context.fresh()
+    eliminateVariable(bindVar, f(Expr.variable(bindVar)))
+  }
 
   type VFun[A, B] = (Var[A], Expr[A] => Expr[B])
 
@@ -176,27 +197,20 @@ object Lambdas {
 
     def mapExpr[Exp2[_]](g: [X] => Exp[X] => Exp2[X]): Abstracted[Exp2, |*|, AbsFun, LE, A, B] =
       this match {
-        case Exact(u, f)             => Exact(u, f)
-        case Closure(captured, u, f) => Closure(captured.trans(g), u, f)
-        case NotFound(b)             => NotFound(g(b))
-        case Failure(e)              => Failure(e)
+        case Exact(f)             => Exact(f)
+        case Closure(captured, f) => Closure(captured.trans(g), f)
+        case Failure(e)           => Failure(e)
       }
   }
 
   object Abstracted {
-    case class Exact[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, A1, B](
-      m: Multiplier[|*|, A, A1],
-      f: AbsFun[A1, B],
+    case class Exact[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B](
+      f: AbsFun[A, B],
     ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
 
-    case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], LE, X, A, A1, B](
+    case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], LE, X, A, B](
       captured: Tupled[|*|, Exp, X],
-      m: Multiplier[|*|, A, A1],
-      f: AbsFun[X |*| A1, B],
-    ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
-
-    case class NotFound[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B](
-      b: Exp[B],
+      f: AbsFun[X |*| A, B],
     ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
 
     case class Failure[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B](
