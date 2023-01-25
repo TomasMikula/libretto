@@ -255,7 +255,21 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             _ <- Outcome.assertSubstring("variable bound by lambda", e.getMessage)
             _ <- Outcome.assertSubstring("ClosureTests.scala:245", e.getMessage)
           } yield ()
-        }
+        },
+
+      "semigroup evidence in nested scope" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ { (a: $[Done]) =>
+              λ.closure { (b: $[Done]) =>
+                a match {
+                  case +(a) =>
+                    a |*| b |*| a
+                }
+              }
+            }
+          }
+        }.pending,
     )
   }
 }

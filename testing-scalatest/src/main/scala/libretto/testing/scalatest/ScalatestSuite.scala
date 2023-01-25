@@ -43,6 +43,7 @@ extends AnyFunSuite
           res.getExecutor,
           prefix = "",
           this.testCases(using factory.testKit),
+          isPending = false,
         )
         res
       }
@@ -54,27 +55,44 @@ extends AnyFunSuite
     testExecutor: () => TestExecutor[testKit.type],
     prefix: String,
     cases: List[(String, TestCase[testKit.type])],
+    isPending: Boolean,
   ): Unit = {
-    for {
-      (testName, testCase) <- cases
-    } {
+    def registerTest(
+      testName: String,
+      testCase: TestCase[testKit.type],
+      isPending: Boolean,
+    ): Unit =
       testCase match {
         case c: TestCase.Single[testKit.type] =>
           val fullName = s"$prefix$testName (executed by $testExecutorName)"
           def handleTestResult(r: TestResult[Unit]): Unit =
             r match {
               case TestResult.Success(_) =>
-                // do nothing
+                if (isPending) {
+                  fail(s"Pending test succeeded. You should remove the pending qualifier.")
+                } else {
+                  // do nothing
+                }
               case TestResult.Failure(msg, pos, e) =>
-                val message = s"$msg (at ${pos.path}:${pos.line})"
-                e match {
-                  case Some(e) => fail(message, e)
-                  case None    => fail(message)
+                if (isPending) {
+                  pending
+                } else {
+                  val message = s"$msg (at ${pos.path}:${pos.line})"
+                  e match {
+                    case Some(e) => fail(message, e)
+                    case None    => fail(message)
+                  }
                 }
               case TestResult.Crash(e) =>
-                fail(s"Crashed with ${e.getClass.getCanonicalName}: ${e.getMessage}", e)
+                if (isPending)
+                  pending
+                else
+                  fail(s"Crashed with ${e.getClass.getCanonicalName}: ${e.getMessage}", e)
               case TestResult.TimedOut(d) =>
-                fail(s"Timed out after $d")
+                if (isPending)
+                  pending
+                else
+                  fail(s"Timed out after $d")
             }
           c match {
             case c: TestCase.SingleProgram[testKit.type] =>
@@ -84,7 +102,7 @@ extends AnyFunSuite
                     .execpAndCheck(c.body, c.params, c.conductor(_, _), c.postStop, c.timeout)
                 )
               }
-            case c: TestCase.OutcomeOnly[testKit.type] =>
+            case c: TestCase.Pure[testKit.type] =>
               test(fullName) {
                 handleTestResult(
                   testExecutor().check(c.body, c.timeout)
@@ -92,8 +110,15 @@ extends AnyFunSuite
               }
           }
         case TestCase.Multiple(cases) =>
-          registerTests(testKit, testExecutorName, testExecutor, s"$prefix$testName.", cases)
+          registerTests(testKit, testExecutorName, testExecutor, s"$prefix$testName.", cases, isPending)
+        case TestCase.Pending(testCase) =>
+          registerTest(testName, testCase, isPending = true)
       }
+
+    for {
+      (testName, testCase) <- cases
+    } {
+      registerTest(testName, testCase, isPending)
     }
   }
 
