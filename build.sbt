@@ -110,7 +110,7 @@ lazy val mashup = project
 
 lazy val mashupExamples = project
   .in(file("mashup-examples"))
-  .dependsOn(mashup)
+  .dependsOn(mashup, testingScalatest)
   .settings(
     name := "libretto-mashup-examples",
     fork := true,

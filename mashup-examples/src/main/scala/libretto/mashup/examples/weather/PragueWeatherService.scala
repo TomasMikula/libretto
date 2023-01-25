@@ -76,7 +76,7 @@ object PragueWeatherService {
    *  Note that the resulting `Fun` is just a data structure
    *  without any Scala functions inside.
    */
-  private def blueprint: Fun[Unlimited[Inputs], PragueWeatherApi] =
+  def blueprint: Fun[Unlimited[Inputs], PragueWeatherApi] =
     fun.* { inputs =>
       // from the inputs, get one WeatherApi and one ConverterApi
       val weather:   Expr[WeatherApi]   = inputs.get.pick["weather"]

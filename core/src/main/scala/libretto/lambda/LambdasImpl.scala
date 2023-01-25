@@ -907,13 +907,14 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
               ev1,
             )
           }
-        case Op.Zip(_)           => None
-        case Op.CaptureFst(_, _) => None
-        case Op.CaptureSnd(_, _) => None
-        case Op.Unzip(_, _)      => None
-        case Op.Map(_, _)        => None
-        case Op.Prj1(_, _)       => None
-        case Op.Prj2(_, _)       => None
+        case Op.Zip(_)               => None
+        case Op.CaptureFst(_, _)     => None
+        case Op.CaptureSnd(_, _)     => None
+        case Op.Unzip(_, _)          => None
+        case Op.Map(_, _)            => None
+        case Op.Prj1(_, _)           => None
+        case Op.Prj2(_, _)           => None
+        case Op.CaptureReplace(_, _) => None
     }
 
     def pullBumpDupVar[A, F[_], V, C[_], B, D[_], Y](
