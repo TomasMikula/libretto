@@ -50,7 +50,7 @@ object TemperatureConverterService {
     Endpoint.get(p)
   }
 
-  private def blueprint: Fun[EmptyResource, ConverterApi] =
+  def blueprint: Fun[EmptyResource, ConverterApi] =
     fun.? { _ =>
       closure { celsius =>
         celsius match {

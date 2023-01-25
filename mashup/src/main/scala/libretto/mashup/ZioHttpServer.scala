@@ -1,8 +1,8 @@
 package libretto.mashup
 
 import java.net.InetSocketAddress
-import zhttp.http._
-import zhttp.service.Server
+import zio.http._
+import zio.http.Server
 import zio.{Fiber, Promise, Queue, Scope, UIO, ZIO}
 
 object ZioHttpServer {
@@ -21,7 +21,7 @@ object ZioHttpServer {
       _      <- queue.offer(output)
     } yield {
       val app =
-        Http.fromFunctionZIO { (req: Request) =>
+        Http.collectZIO { (req: Request) =>
           for {
             resp <- Promise.make[Nothing, Response]
             next <- Promise.make[Nothing, NextRequest]
@@ -37,7 +37,11 @@ object ZioHttpServer {
   def start(address: InetSocketAddress): ZIO[Scope, Throwable, RequestStream] =
     makeApp.flatMap { case (app, requestStream) =>
       Server
-        .start(address, app)
+        .serve(app)
+        .provide(
+          ServerConfig.live(ServerConfig.default.binding(address)),
+          Server.live,
+        )
         .forkScoped
         .flatMap { fiber =>
           fiber.await.flatMap { exit =>

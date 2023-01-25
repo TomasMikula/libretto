@@ -43,33 +43,35 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override type Pick[A, K <: String & Singleton] = AbstractPick[A, K]
 
+    override type LambdaContext = StarterKit.dsl.LambdaContext
+
     override val fun: Funs =
       new Funs {
-        override def apply[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B]): Fun[A, B] =
+        override def apply[A, B](using pos: SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[B]): Fun[A, B] =
           StarterKit.dsl.λ(using pos)(f)
 
-        override def ?[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B])(using A: Affine[A]): Fun[A, B] =
+        override def ?[A, B](using pos: SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[B])(using A: Affine[A]): Fun[A, B] =
           StarterKit.dsl.λ.?(using pos)(f)(using new StarterKit.dsl.Affine[A] { export A.discard })
 
-        override def +[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B])(using A: Cosemigroup[A]): Fun[A, B] =
+        override def +[A, B](using pos: SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[B])(using A: Cosemigroup[A]): Fun[A, B] =
           StarterKit.dsl.λ.+(using pos)(f)(using new StarterKit.dsl.Cosemigroup[A] { export A.split })
 
-        override def *[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B])(using A: Comonoid[A]): Fun[A, B] =
+        override def *[A, B](using pos: SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[B])(using A: Comonoid[A]): Fun[A, B] =
           StarterKit.dsl.λ.*(using pos)(f)(using new StarterKit.dsl.Comonoid[A] { export A.{split, counit} })
       }
 
     override val closure: Closures =
       new Closures {
-        override def apply[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B]): Expr[A --> B] =
+        override def apply[A, B](using pos: SourcePos, ctx: LambdaContext)(f: LambdaContext ?=> Expr[A] => Expr[B]): Expr[A --> B] =
           StarterKit.dsl.λ.closure(using pos)(f)
 
-        override def ?[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B])(using A: Affine[A]): Expr[A --> B] =
+        override def ?[A, B](using pos: SourcePos, ctx: LambdaContext)(f: LambdaContext ?=> Expr[A] => Expr[B])(using A: Affine[A]): Expr[A --> B] =
           StarterKit.dsl.λ.closure.?(using pos)(f)(using new StarterKit.dsl.Affine[A] { export A.discard })
 
-        override def +[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B])(using A: Cosemigroup[A]): Expr[A --> B] =
+        override def +[A, B](using pos: SourcePos, ctx: LambdaContext)(f: LambdaContext ?=> Expr[A] => Expr[B])(using A: Cosemigroup[A]): Expr[A --> B] =
           StarterKit.dsl.λ.closure.+(using pos)(f)(using new StarterKit.dsl.Cosemigroup[A] { export A.split })
 
-        override def *[A, B](using pos: SourcePos)(f: Expr[A] => Expr[B])(using A: Comonoid[A]): Expr[A --> B] =
+        override def *[A, B](using pos: SourcePos, ctx: LambdaContext)(f: LambdaContext ?=> Expr[A] => Expr[B])(using A: Comonoid[A]): Expr[A --> B] =
           StarterKit.dsl.λ.closure.*(using pos)(f)(using new StarterKit.dsl.Comonoid[A] { export A.{split, counit} })
       }
 

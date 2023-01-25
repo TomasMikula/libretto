@@ -5,8 +5,8 @@ import libretto.mashup.rest.{Endpoint, RelativeUrl, RestApi}
 import scala.util.{Failure, Success}
 import zio.{Scope, ZIO}
 import zio.json.ast.Json
-import zhttp.http.{Method, Request, URL}
-import zhttp.service.{ChannelFactory, Client, EventLoopGroup}
+import zio.http.{Client, ClientConfig, Request, URL}
+import zio.http.model.Method
 
 sealed trait ServiceInput[A] {
   def handleRequest(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Any, Throwable, Unit]
@@ -40,7 +40,7 @@ object ServiceInput {
   class Rest[A](
     api: RestApi[A],
     baseUri: String,
-    client: Client[Any],
+    client: Client,
   ) extends ServiceInput[A] {
     override def handleRequest(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Any, Throwable, Unit] =
       api match {
@@ -68,7 +68,7 @@ object ServiceInput {
     private def getJson[T](url: String, outputType: JsonType[T])(using rt: Runtime): ZIO[Any, Throwable, rt.Value[T]] =
       for {
         url  <- ZIO.fromEither(URL.fromString(url))
-        resp <- client.request(Request(method = Method.GET, url = url), Client.Config.empty)
+        resp <- client.request(Request.get(url))
         body <- resp.body.asString
         json <- parseJson(body)
         rslt <- readJson(outputType, json)
@@ -107,12 +107,14 @@ object ServiceInput {
       }
   }
 
-  def initialize[A](blueprint: Input[A]): ZIO[EventLoopGroup & ChannelFactory, Throwable, ServiceInput[A]] =
+  def initialize[A](blueprint: Input[A]): ZIO[Scope, Throwable, ServiceInput[A]] =
     blueprint match {
       case Input.Empty =>
         ZIO.succeed(Empty)
       case Input.RestApiAt(api, uri) =>
-        Client.make[Any]
+        Client.default
+          .build
+          .map(_.get[Client])
           .map(Rest(api, uri, _))
       case i: Input.SingleChoice[n, t] =>
         initialize(i.input).map(Labeled[n, t](i.label, _))

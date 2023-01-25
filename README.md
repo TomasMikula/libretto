@@ -85,7 +85,10 @@ Libretto grew out of frustration with existing libraries. Here is an attempt to 
 
 - **Statically checked linearity**
 
-  It is guaranteed at compile time that every producer is connected to a consumer, etc.
+  That every producer is connected to a consumer, etc., is guaranteed statically, i.e. before execution<sup>(*)</sup>.
+
+  <sup>(*)</sup> For programs written in point-free style, this is at compile time.
+  For programs written using λ-notation, it is at assembly time, i.e. when converting to the point-free representation.
 
 - **Direct-style programming**
 
@@ -127,7 +130,7 @@ Libretto takes inspiration from linear logic, with a twist of interpreting the m
 The correspondence of linear logic to certain monoidal categories led to a point-free notation that enforces linearity
 statically, despite the lack of linear types in the host language.
 
-There is also lambda syntax, whose linearity is checked at assembly time (i.e. when constructing the Libretto blueprint, before execution).
+There is also lambda syntax, whose linearity checking is deferred until assembly time (i.e. when constructing the Libretto blueprint, before execution).
 
 Primitives for racing and recursion were added.
 

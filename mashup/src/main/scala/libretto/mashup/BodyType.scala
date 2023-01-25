@@ -2,10 +2,11 @@ package libretto.mashup
 
 import libretto.util.Async
 import scala.util.{Failure, Success, Try}
+import zio.Chunk
 import zio.json.ast.{Json => ZioJson}
 import zio.json.ast.Json.{encoder => JsonEncoder}
-import zhttp.http.{Body, Headers, Response, Status}
-import zio.Chunk
+import zio.http.{Body, Response}
+import zio.http.model.{Headers, Status}
 
 sealed trait BodyType[A] {
   def extractResponse(using

@@ -4,6 +4,7 @@ import libretto.scaletto.ScalettoLib
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
 import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
+import libretto.util.Monad.syntax._
 
 class ClosureTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
@@ -236,6 +237,39 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             }
           }
         },
+
+      "non-linearity in nested context does not affect parent context" ->
+        TestCase.pure {
+          for {
+            e <- Outcome.expectThrows {
+              λ { (a: $[Done]) =>
+                λ.closure { (b: $[Done]) =>
+                  a match {
+                    case +(a) =>
+                      a |*| b
+                  }
+                } |*| a
+              }
+            }
+            _ <- Outcome.assertSubstring("used more than once", e.getMessage)
+            _ <- Outcome.assertSubstring("variable bound by lambda", e.getMessage)
+            _ <- Outcome.assertSubstring("ClosureTests.scala:245", e.getMessage)
+          } yield ()
+        },
+
+      "semigroup evidence in nested scope" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ { (a: $[Done]) =>
+              λ.closure { (b: $[Done]) =>
+                a match {
+                  case +(a) =>
+                    a |*| b |*| a
+                }
+              }
+            }
+          }
+        }.pending,
     )
   }
 }

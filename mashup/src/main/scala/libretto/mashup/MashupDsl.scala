@@ -45,22 +45,24 @@ trait MashupDsl {
 
   type Picked[A, K <: String & Singleton, V] = Pick[A, K] { type T = V }
 
+  type LambdaContext
+
   val fun: Funs
 
   trait Funs {
-    def apply[A, B](using SourcePos)(f: Expr[A] => Expr[B]): Fun[A, B]
-    def ?[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Affine[A]): Fun[A, B]
-    def +[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Cosemigroup[A]): Fun[A, B]
-    def *[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Comonoid[A]): Fun[A, B]
+    def apply[A, B](using SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[B]): Fun[A, B]
+    def ?[A, B](using SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[B])(using Affine[A]): Fun[A, B]
+    def +[A, B](using SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[B])(using Cosemigroup[A]): Fun[A, B]
+    def *[A, B](using SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[B])(using Comonoid[A]): Fun[A, B]
   }
 
   val closure: Closures
 
   trait Closures {
-    def apply[A, B](using SourcePos)(f: Expr[A] => Expr[B]): Expr[A --> B]
-    def ?[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Affine[A]): Expr[A --> B]
-    def +[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Cosemigroup[A]): Expr[A --> B]
-    def *[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Comonoid[A]): Expr[A --> B]
+    def apply[A, B](using SourcePos, LambdaContext)(f: LambdaContext ?=> Expr[A] => Expr[B]): Expr[A --> B]
+    def ?[A, B](using SourcePos, LambdaContext)(f: LambdaContext ?=> Expr[A] => Expr[B])(using Affine[A]): Expr[A --> B]
+    def +[A, B](using SourcePos, LambdaContext)(f: LambdaContext ?=> Expr[A] => Expr[B])(using Cosemigroup[A]): Expr[A --> B]
+    def *[A, B](using SourcePos, LambdaContext)(f: LambdaContext ?=> Expr[A] => Expr[B])(using Comonoid[A]): Expr[A --> B]
   }
 
   def id[A]: Fun[A, A]

@@ -53,7 +53,7 @@ object WeatherService {
       blueprint,
     )
 
-  private def blueprint: Fun[EmptyResource, WeatherApi] =
+  def blueprint: Fun[EmptyResource, WeatherApi] =
     fun.? { _ =>
       closure { city =>
         WeatherReport(city, Celsius(23.0))
