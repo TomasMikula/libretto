@@ -36,11 +36,12 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
     boundVar: Var[A],
     f: lambdas.Context ?=> Expr[A] => Expr[B],
   )(using
+    ctx: lambdas.Context,
     ev: ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬],
   ): ClosureRes[A, B] = {
     import ClosureRes._
 
-    lambdas.abs(boundVar, f) match {
+    lambdas.absNested(boundVar, f) match {
       case Abstracted.Exact(f) =>
         NonCapturing(f.fold)
       case Abstracted.Closure(captured, f) =>

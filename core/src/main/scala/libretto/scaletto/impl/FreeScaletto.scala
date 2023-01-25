@@ -478,8 +478,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
     override val closure: ClosureOps =
       new ClosureOps {
-        override def apply[A, B](using pos: SourcePos)(f: lambdas.Context ?=> $[A] => $[B]): $[A =⚬ B] =
-          compileClosure(f)(pos)
+        override def apply[A, B](using pos: SourcePos, ctx: lambdas.Context)(
+          f: lambdas.Context ?=> $[A] => $[B],
+        ): $[A =⚬ B] =
+          compileClosure(f)(pos, ctx)
       }
 
     private def compile[A, B](f: lambdas.Context ?=> $[A] => $[B])(
@@ -489,7 +491,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
       val bindVar = new Var[A](VarOrigin.Lambda(pos))
 
-      lambdas.abs(bindVar, f) match {
+      lambdas.absTopLevel(bindVar, f) match {
         case Exact(f) =>
           Right(f.fold)
         case Closure(captured, f) =>
@@ -513,13 +515,14 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
     private def compileClosure[A, B](f: lambdas.Context ?=> $[A] => $[B])(
       pos: SourcePos,
+      ctx: lambdas.Context,
     ): $[A =⚬ B] = {
       import closures.ClosureRes.{Capturing, NonCapturing, NonLinear}
 
       val bindVar = new Var[A](VarOrigin.Lambda(pos))
       val resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(pos))
 
-      closures.closure[A, B](bindVar, f) match {
+      closures.closure[A, B](bindVar, f)(using ctx) match {
         case Capturing(captured, f) =>
           (zipExprs(captured) map csmc.curry(f))(resultVar)
         case NonCapturing(f) =>

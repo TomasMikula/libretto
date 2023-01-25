@@ -25,7 +25,7 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
 
   override type Context = lambdas.Context
   override object Context extends Contexts {
-    export lambdas.Context.{fresh, getDiscard, getSplit, registerNonLinearOps}
+    export lambdas.Context.{fresh, getDiscard, getSplit, nested, registerNonLinearOps}
   }
 
   sealed trait Expr[A] {

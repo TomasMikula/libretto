@@ -2,7 +2,9 @@ package libretto.lambda
 
 import scala.collection.mutable
 
-class ContextImpl[-⚬[_, _], |*|[_, _], Var[_]] {
+class ContextImpl[-⚬[_, _], |*|[_, _], Var[_]](
+  parent: Option[ContextImpl[-⚬, |*|, Var]] = None,
+) {
   case class Entry[A](
     split: Option[A -⚬ (A |*| A)],
     discard: Option[[B] => Unit => (A |*| B) -⚬ B],
@@ -24,15 +26,19 @@ class ContextImpl[-⚬[_, _], |*|[_, _], Var[_]] {
         val e = e0.asInstanceOf[Entry[A]]
         Some(
           Entry[A](
-            e.split orElse split,
-            e.discard orElse discard,
+            split orElse e.split,
+            discard orElse e.discard,
           ).asInstanceOf[Entry[Any]]
         )
     }
 
   def getSplit[A](v: Var[A]): Option[A -⚬ (A |*| A)] =
-    m.get(v.asInstanceOf[Var[Any]]).flatMap(_.asInstanceOf[Entry[A]].split)
+    m.get(v.asInstanceOf[Var[Any]])
+      .flatMap(_.asInstanceOf[Entry[A]].split)
+      .orElse(parent.flatMap(_.getSplit(v)))
 
   def getDiscard[A](v: Var[A]): Option[[B] => Unit => (A |*| B) -⚬ B] =
-    m.get(v.asInstanceOf[Var[Any]]).flatMap(_.asInstanceOf[Entry[A]].discard)
+    m.get(v.asInstanceOf[Var[Any]])
+      .flatMap(_.asInstanceOf[Entry[A]].discard)
+      .orElse(parent.flatMap(_.getDiscard(v)))
 }

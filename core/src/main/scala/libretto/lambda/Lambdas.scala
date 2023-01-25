@@ -69,6 +69,8 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
   trait Contexts {
     def fresh(): Context
 
+    def nested(parent: Context): Context
+
     def registerNonLinearOps[A](v: Var[A])(
       split: Option[A -⚬ (A |*| A)],
       discard: Option[[B] => Unit => (A |*| B) -⚬ B],
@@ -100,13 +102,23 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
     expr: Expr[B],
   )(using Context): Abstracted[A, B]
 
-  def abs[A, B](
+  private def abs[A, B](
     bindVar: Var[A],
     f: Context ?=> Expr[A] => Expr[B],
-  ): Abstracted[A, B] = {
-    given Context = Context.fresh()
+  )(using Context): Abstracted[A, B] =
     eliminateVariable(bindVar, f(Expr.variable(bindVar)))
-  }
+
+  def absTopLevel[A, B](
+    bindVar: Var[A],
+    f: Context ?=> Expr[A] => Expr[B],
+  ): Abstracted[A, B] =
+    abs(bindVar, f)(using Context.fresh())
+
+  def absNested[A, B](
+    bindVar: Var[A],
+    f: Context ?=> Expr[A] => Expr[B],
+  )(using parent: Context): Abstracted[A, B] =
+    abs(bindVar, f)(using Context.nested(parent = parent))
 }
 
 object Lambdas {

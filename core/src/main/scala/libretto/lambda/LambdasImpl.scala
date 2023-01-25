@@ -29,7 +29,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
   override opaque type Context = ContextImpl[-⚬, |*|, Var]
   override object Context extends Contexts {
-    override def fresh(): Context = new ContextImpl[-⚬, |*|, Var]
+    override def fresh(): Context =
+      new ContextImpl[-⚬, |*|, Var]
+
+    override def nested(parent: Context): Context =
+      new ContextImpl[-⚬, |*|, Var](Some(parent))
 
     override def registerNonLinearOps[A](v: Var[A])(
       split: Option[A -⚬ (A |*| A)],
