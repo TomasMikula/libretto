@@ -27,6 +27,29 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     ev: A =:= T[V],
   ): F[V] =
     ev match { case TypeEq(Refl()) => Bin.valueOf(this) }
+
+  def mapLeafs[G[_]](f: [x] => F[x] => G[x]): Bin[<*>, T, G, A] =
+    this match {
+      case Leaf(a)      => Leaf(f(a))
+      case Branch(l, r) => Branch(l.mapLeafs(f), r.mapLeafs(f))
+    }
+
+  def foldMap[G[_]](
+    map: [x] => F[x] => G[T[x]],
+    zip: [x, y] => (G[x], G[y]) => G[x <*> y],
+  ): G[A] =
+    this match {
+      case Leaf(a)      => map(a)
+      case Branch(l, r) => zip(l.foldMap(map, zip), r.foldMap(map, zip))
+    }
+
+  def foldMap0[B](
+    map: [x] => F[x] => B,
+    reduce: (B, B) => B,
+  ): B = {
+    type G[x] = B
+    foldMap[G](map, [x, y] => (x: G[x], y: G[y]) => reduce(x, y))
+  }
 }
 
 object Bin {

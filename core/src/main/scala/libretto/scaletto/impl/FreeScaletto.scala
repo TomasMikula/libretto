@@ -412,8 +412,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   val lambdas: LambdasOne[-⚬, |*|, One, Var, Set[Var[?]]] =
     new LambdasOne[-⚬, |*|, One, Var, Set[Var[?]]](
       new LambdasOne.VarSynthesizer[Var, |*|] {
-        override def newSyntheticVar[A](hint: Tupled[|*|, Var, ?]): Var[A] = {
-          val desc = hint.mapReduce0([x] => (vx: Var[x]) => vx.origin.print, (x, y) => s"($x, $y)")
+        override def newSyntheticVar[A, X](hint: Tupled[|*|, Var, X]): Var[A] = {
+          val desc = hint.foldMap0([x] => (vx: Var[x]) => vx.origin.print, (x, y) => s"($x, $y)")
           new Var[A](VarOrigin.Synthetic(s"Combination of $desc"))
         }
       }

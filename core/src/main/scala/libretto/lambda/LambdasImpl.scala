@@ -60,10 +60,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       noCapture(shuffled.lift(f))
 
     def captureFst[X, A](captured: Expr[X]): CapturingFun[A, X |*| A] =
-      ll.CapturingFun.Closure(ll.Tupled.Single(captured), shuffled.id)
+      ll.CapturingFun.Closure(ll.Tupled.atom(captured), shuffled.id)
 
     def captureSnd[X, A](captured: Expr[X]): CapturingFun[A, A |*| X] =
-      ll.CapturingFun.Closure(ll.Tupled.Single(captured), shuffled.swap)
+      ll.CapturingFun.Closure(ll.Tupled.atom(captured), shuffled.swap)
   }
 
   /**
