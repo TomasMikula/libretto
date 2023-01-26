@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.util.{BiInjective, Injective, Masked, TypeEq}
+import libretto.util.{BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
 import libretto.util.TypeEq.Refl
 
 /**
@@ -49,6 +49,123 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
   ): B = {
     type G[x] = B
     foldMap[G](map, [x, y] => (x: G[x], y: G[y]) => reduce(x, y))
+  }
+
+  def deduplicateLeafs[->[_, _]](
+    dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
+  )(using
+    leafTest: UniqueTypeArg[F],
+    shuffled: Shuffled[->, <*>],
+  ): Exists[[X] =>> (Bin[<*>, T, F, X], shuffled.Shuffled[X, A])] =
+    this match {
+      case l @ Leaf(_) =>
+        Exists((l, shuffled.id))
+      case Branch(l, r) =>
+        (l.deduplicateLeafs(dup), r.deduplicateLeafs(dup)) match
+          case (Exists.Some((x1, f1)), Exists.Some((x2, f2))) =>
+            (x1 mergeIn x2)(dup) match
+              case Exists.Some((x, f)) =>
+                Exists((x, f > shuffled.par(f1, f2)))
+    }
+
+  private def mergeIn[B, ->[_, _]](that: Bin[<*>, T, F, B])(
+    dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
+  )(using
+    leafTest: UniqueTypeArg[F],
+    shuffled: Shuffled[->, <*>],
+  ): Exists[[X] =>> (Bin[<*>, T, F, X], shuffled.Shuffled[X, A <*> B])] =
+    (this mergeIn0 that)(dup) match {
+      case MergeRes.Absorbed(x, f) =>
+        Exists((x, f))
+      case MergeRes.WithRemainder(x, r, f1, g) =>
+        Exists((Branch(x, r), shuffled.fst(f1) > shuffled.Pure(g)))
+    }
+
+  private def mergeIn0[B, ->[_, _]](that: Bin[<*>, T, F, B])(
+    dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
+  )(using
+    leafTest: UniqueTypeArg[F],
+    shuffled: Shuffled[->, <*>],
+  ): MergeRes[A, B, shuffled.shuffle.~⚬, shuffled.Shuffled] = {
+    import MergeRes.{Absorbed, WithRemainder}
+    import shuffled.{assocRL, fst, id, ix, lift, par, pure, swap, xi}
+    import shuffled.shuffle.~⚬
+
+    given shuffled.shuffle.type = shuffled.shuffle
+
+    this match {
+      case l: Leaf[br, t, f, a] =>
+        that.find(l.value) match
+          case FindRes.Total(TypeEq(Refl())) =>
+            Absorbed(l, lift(dup(l.value)))
+          case FindRes.Partial(r, f) =>
+            WithRemainder(l, r, lift(dup(l.value)), ~⚬.assocLR > f.inSnd)
+          case FindRes.NotFound() =>
+            WithRemainder(this, that, id, ~⚬.id)
+      case br: Branch[br, t, f, a1, a2] =>
+        (br.l mergeIn0 that)(dup) match
+          case Absorbed(p, f) =>
+            Absorbed(Branch(p, br.r), f.inFst[a2] > ix)
+          case WithRemainder(p, r, f1, g) =>
+            (br.r mergeIn0 r)(dup) match
+              case Absorbed(p1, f2) =>
+                Absorbed(Branch(p, p1), par(f1, f2) > xi > pure(g).inSnd > assocRL > fst(swap))
+              case WithRemainder(p1, r1, f2, g2) =>
+                WithRemainder(Branch(p, p1), r1, par(f1, f2), ~⚬.assocLR > ~⚬.snd(g2) > ~⚬.xi > ~⚬.snd(g) > ~⚬.assocRL > ~⚬.fst(~⚬.swap))
+    }
+  }
+
+  private enum MergeRes[A, B, -->[_, _], ==>[_, _]] {
+    case Absorbed[P, A, B, -->[_, _], ==>[_, _]](
+      p: Bin[<*>, T, F, P],
+      f: P ==> (A <*> B),
+    ) extends MergeRes[A, B, -->, ==>]
+
+    case WithRemainder[P, Q, R, A, B, -->[_, _], ==>[_, _]](
+      p: Bin[<*>, T, F, P],
+      r: Bin[<*>, T, F, R],
+      f1: P ==> Q,
+      g: (Q <*> R) --> (A <*> B),
+    ) extends MergeRes[A, B, -->, ==>]
+  }
+
+  private def find[X](x: F[X])(using
+    leafTest: UniqueTypeArg[F],
+    shuffle: Shuffle[<*>],
+  ): FindRes[A, X, shuffle.~⚬] = {
+    import FindRes._
+    import shuffle.~⚬
+
+    this match {
+      case Leaf(a) =>
+        leafTest.testEqual(a, x) match
+          case Some(ev) => Total(ev.liftCo[T])
+          case None     => NotFound()
+      case Branch(l, r) =>
+        l.find(x) match
+          case Total(TypeEq(Refl())) =>
+            Partial(r, ~⚬.id)
+          case Partial(q, f) =>
+            Partial(Branch(q, r), ~⚬.assocRL > f.inFst)
+          case NotFound() =>
+            r.find(x) match
+              case Total(TypeEq(Refl())) =>
+                Partial(l, ~⚬.swap)
+              case Partial(q, f) =>
+                Partial(Branch(l, q), ~⚬.xi > ~⚬.snd(f))
+              case NotFound() =>
+                NotFound()
+    }
+  }
+
+  private enum FindRes[A, X, -->[_, _]] {
+    case NotFound()
+    case Total(ev: A =:= T[X])
+
+    case Partial[R, A, X, -->[_, _]](
+      remainder: Bin[<*>, T, F, R],
+      f: (T[X] <*> R) --> A
+    ) extends FindRes[A, X, -->]
   }
 }
 
