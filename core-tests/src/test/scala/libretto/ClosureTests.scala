@@ -269,7 +269,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
               }
             }
           }
-        }.pending,
+        },
     )
   }
 }

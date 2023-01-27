@@ -3,7 +3,7 @@ package libretto.lambda
 import libretto.{lambda => ll}
 import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.lambda.Lambdas.ErrorFactory
-import libretto.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeEq}
+import libretto.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
 import libretto.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
@@ -15,7 +15,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 ) extends Lambdas[-⚬, |*|, Var, VarSet, E, LE] {
   import variables.testEqual
 
-  val shuffled = Shuffled[-⚬, |*|]
+  given shuffled: Shuffled[-⚬, |*|] = Shuffled[-⚬, |*|]
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
   import shuffled.{Shuffled => ≈⚬, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
 
@@ -137,20 +137,59 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     def initialVars[B](f: Expr[B]): VarSet =
       f.initialVars
+
+    given UniqueTypeArg[Expr] with {
+      override def testEqual[A, B](a: Expr[A], b: Expr[B]): Option[A =:= B] =
+        variables.testEqual(a.resultVar, b.resultVar)
+    }
   }
 
   override def eliminateVariable[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] = {
     import HybridArrow.{LinearRes, Op, Unvar, Varz}
+    import Lambdas.Abstracted.{Closure, Exact, Failure}
 
     eliminate(boundVar, expr) match {
       case EliminateRes.Found(arr) =>
         arr.extract(Unvar.SingleVar()) match {
-          case LinearRes.Exact(f)             => Lambdas.Abstracted.Exact(f)
-          case LinearRes.Closure(captured, f) => Lambdas.Abstracted.Closure(captured, f)
-          case LinearRes.Violation(e)         => Lambdas.Abstracted.Failure(e)
+          case LinearRes.Exact(f) =>
+            Exact(f)
+          case LinearRes.Closure(captured, g) =>
+            deduplicateExpressions(captured) match
+              case Right(Exists.Some((x, f1))) => Closure(x, f1.inFst[A] > g)
+              case Left(e)                     => Failure(e)
+          case LinearRes.Violation(e) =>
+            Failure(e)
         }
       case EliminateRes.NotFound() =>
-        Lambdas.Abstracted.Failure(errors.underusedVars(variables.singleton(boundVar)))
+        Failure(errors.underusedVars(variables.singleton(boundVar)))
+    }
+  }
+
+  private def deduplicateExpressions[AA](exprs: Tupled[Expr, AA])(using
+    Context,
+  ): Either[LE, Exists[[A] =>> (Tupled[Expr, A], AbstractFun[A, AA])]] = {
+    enum Arr[A, B] {
+      case FreeDup[A](expr: Expr[A]) extends Arr[A, A |*| A]
+    }
+    given Shuffled.With[Arr, |*|, shuffled.shuffle.type] =
+      Shuffled[Arr, |*|](shuffled.shuffle)
+
+    exprs.deduplicateLeafs[Arr](
+      [x] => (x: Expr[x]) => Arr.FreeDup(x),
+    ) match {
+      case Exists.Some((a, f)) =>
+        f.traverse[LinCheck, -⚬](
+          [t, u] => (arr: Arr[t, u]) => {
+            arr match
+              case Arr.FreeDup(x) =>
+                Context.getSplit(x.resultVar) match
+                  case Some(split) => LinCheck.Success(split)
+                  case None        => LinCheck.Failure(errors.overusedVars(variables.singleton(x.resultVar)))
+          },
+        ) match {
+          case LinCheck.Success(f) => Right(Exists(a, f))
+          case LinCheck.Failure(e) => Left(e)
+        }
     }
   }
 

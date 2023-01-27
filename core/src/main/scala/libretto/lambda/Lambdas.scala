@@ -18,24 +18,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
 
     def zip[A, B](a: Vars[A], b: Vars[B]): Vars[A |*| B] =
       Tupled.zip(a, b)
-
-    // def unzip[A, B](ab: Vars[A |*| B]): Option[(Vars[A], Vars[B])] =
-    //   Tupled.unzip(ab)
-
-    // def sameVars[A](a: Vars[A], b: Vars[A]): Boolean =
-    //   (a isEqualTo b)([X] => (x: Var[X], y: Var[X]) => x == y)
-
-    // def toSet[A](vars: Vars[A])(using variables: Variable[Var, VarSet]): VarSet =
-    //   vars.mapReduce0(
-    //     map    = [x] => (v: Var[x]) => variables.singleton(v),
-    //     reduce = variables.union(_, _),
-    //   )
   }
-
-  // extension [A](vars: Vars[A]) {
-  //   def toSet(using variables: Variable[Var, VarSet]): VarSet =
-  //     Vars.toSet(vars)
-  // }
 
   type Expr[A]
   val Expr: Exprs

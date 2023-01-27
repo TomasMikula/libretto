@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.util.Zippable
+import libretto.util.{Exists, UniqueTypeArg, Zippable}
 import scala.annotation.targetName
 
 opaque type Tupled[|*|[_, _], F[_], A] =
@@ -41,6 +41,14 @@ object Tupled {
 
     def fold(zip: [x, y] => (F[x], F[y]) => F[x |*| y]): F[A] =
       foldMap[F]([x] => (fx: F[x]) => fx, zip)
+
+    def deduplicateLeafs[->[_, _]](
+      dup: [x] => F[x] => x -> (x |*| x),
+    )(using
+      F: UniqueTypeArg[F],
+      shuffled: Shuffled[->, |*|],
+    ): Exists[[X] =>> (Tupled[|*|, F, X], shuffled.Shuffled[X, A])] =
+      a.deduplicateLeafs(dup)
   }
 
   given [|*|[_, _], F[_]]: Zippable[|*|, Tupled[|*|, F, *]] with {

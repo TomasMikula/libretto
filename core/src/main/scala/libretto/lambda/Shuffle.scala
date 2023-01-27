@@ -2004,7 +2004,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         ix(XI(g).asShuffle > h.g.asShuffle)
 
       override def xi_this_xi[X, C2, C3](h: XI[X, (B1 |*| B2), A2, C2, C3]): ((A1 |*| A2) |*| (X |*| A3)) ~⚬ ((B1 |*| B2) |*| (C2 |*|C3)) =
-        UnhandledCase.raise(s"${this.getClass.getSimpleName}.xi_this_xi($h)")
+        decompose(swap > h.g.asShuffle) match
+          case Decomposition(f1, f2, h) =>
+            Xfer(snd(f1), swap > snd(f2), IXI(g, h))
 
       override def ixi_fstThis_assocLR[P1, P2, Q1, Q2, R2, R3](
         g2: TransferOpt[P1, P2, Q1, Q2],
