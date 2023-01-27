@@ -11,30 +11,13 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
 
   object Vars {
     def single[A](a: Var[A]): Vars[A] =
-      Tupled.Single(a)
+      Tupled.atom(a)
 
     def bi[A, B](a: Var[A], b: Var[B]): Vars[A |*| B] =
       zip(single(a), single(b))
 
     def zip[A, B](a: Vars[A], b: Vars[B]): Vars[A |*| B] =
-      Tupled.Zip(a, b)
-
-    def unzip[A, B](ab: Vars[A |*| B]): Option[(Vars[A], Vars[B])] =
-      Tupled.unzip(ab)
-
-    def sameVars[A](a: Vars[A], b: Vars[A]): Boolean =
-      (a isEqualTo b)([X] => (x: Var[X], y: Var[X]) => x == y)
-
-    def toSet[A](vars: Vars[A])(using variables: Variable[Var, VarSet]): VarSet =
-      vars.mapReduce0(
-        map    = [x] => (v: Var[x]) => variables.singleton(v),
-        reduce = variables.union(_, _),
-      )
-  }
-
-  extension [A](vars: Vars[A]) {
-    def toSet(using variables: Variable[Var, VarSet]): VarSet =
-      Vars.toSet(vars)
+      Tupled.zip(a, b)
   }
 
   type Expr[A]

@@ -340,8 +340,14 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     ): (tgt.Shuffled[A, B1 |*| B2], F[B1 |*| B2]) =
       UnhandledCase.raise(s"${this.getClass.getSimpleName}.sweepL")
 
-    override def traverse[G[_]: Applicative, ->>[_,_]](f: [t, u] => (t -> u) => G[->>[t, u]])(using tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type]): G[tgt.Shuffled[A, B1 |*| B2]] =
-      UnhandledCase.raise(s"${this.getClass.getSimpleName}.traverse")
+    override def traverse[G[_]: Applicative, ->>[_, _]](
+      f: [t, u] => (t -> u) => G[->>[t, u]],
+    )(using
+      tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
+    ): G[tgt.Shuffled[A, B1 |*| B2]] =
+      bottom1
+        .traverse[G, ->>](f)
+        .map(tgt.SemiObstructed(left, _, bottom2, right))
 
     override def chaseFw[F[_], T](i: Focus[|*|, F])(using A =:= F[T]): ChaseFwRes[F, T, B1 |*| B2] =
       ChaseFwRes(left.chaseFw(i))

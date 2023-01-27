@@ -118,19 +118,19 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
         case (LambdasExpr(a), OneExpr(v, g)) =>
           val aOne: lambdas.Expr[A |*| One] =
             (a map smc.introSnd)(newSyntheticVar(Vars.single(a.resultVar) zip Vars.single(v)))
-          val va = newSyntheticVar[A](hint = Vars.single(a.resultVar))
+          val va = newSyntheticVar[A, A](hint = Vars.single(a.resultVar))
           val (a1, o1) = lambdas.Expr.unzip(aOne)(va, v)
           LambdasExpr(lambdas.Expr.zip(a1, g(o1), resultVar))
         case (OneExpr(v, f), LambdasExpr(b)) =>
           val oneB: lambdas.Expr[One |*| B] =
             (b map smc.introFst)(newSyntheticVar(Vars.single(v) zip Vars.single(b.resultVar)))
-          val vb = newSyntheticVar[B](hint = Vars.single(b.resultVar))
+          val vb = newSyntheticVar[B, B](hint = Vars.single(b.resultVar))
           val (o1, b1) = lambdas.Expr.unzip(oneB)(v, vb)
           LambdasExpr(lambdas.Expr.zip(f(o1), b1, resultVar))
         case (a @ OneExpr(v, f), OneExpr(w, g)) =>
           val aOne: OneTail[A |*| One] =
             OneTail.Map(f, smc.introSnd, newSyntheticVar(Vars.single(a.resultVar) zip Vars.single(w)))
-          val va = newSyntheticVar[A](hint = Vars.single(a.resultVar))
+          val va = newSyntheticVar[A, A](hint = Vars.single(a.resultVar))
           val (a1, o1) = OneTail.unzip(aOne)(va, w)
           OneExpr(v, OneTail.Zip(a1, g.apply1(o1), resultVar))
       }
@@ -168,13 +168,13 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
           case Failure(e) =>
             Failure(e)
           case Closure(captured, f) =>
-            captured match {
-              case Tupled.Single(x) =>
+            captured.asBin match {
+              case Bin.Leaf(x) =>
                 lambdas.eliminateVariable(v, x) match
                   case Exact(g)      => Exact(lambdas.shuffled.lift(smc.introFst) > lambdas.shuffled.fst(g) > f)
                   case Closure(y, g) => throw AssertionError("Result of (f: OneExpr.Tail).apply(variable) can only capture that one variable, as OneExpr is not able to capture expressions.")
                   case Failure(e)    => Failure(e)
-              case Tupled.Zip(_, _) =>
+              case Bin.Branch(_, _) =>
                 throw AssertionError("Result of (f: OneExpr.Tail).apply(variable) can only capture that one variable, as OneExpr is not able to capture expressions.")
             }
           case Exact(_) =>
@@ -194,7 +194,7 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
             Right(f.fold)
           case Closure(captured, _) =>
             Left(Lambdas.Error.Undefined(
-              captured.mapReduce0(
+              captured.foldMap0(
                 [x] => (ex: lambdas.Expr[x]) => ex.initialVars,
                 variables.union,
               )
@@ -207,6 +207,6 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
 
 object LambdasOne {
   trait VarSynthesizer[Var[_], |*|[_, _]] {
-    def newSyntheticVar[A](hint: Tupled[|*|, Var, ?]): Var[A]
+    def newSyntheticVar[A, X](hint: Tupled[|*|, Var, X]): Var[A]
   }
 }
