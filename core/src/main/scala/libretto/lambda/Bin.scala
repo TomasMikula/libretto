@@ -96,21 +96,21 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     this match {
       case l: Leaf[br, t, f, a] =>
         that.find(l.value) match
-          case FindRes.Total(TypeEq(Refl())) =>
+          case that.FindRes.Total(TypeEq(Refl())) =>
             Absorbed(l, lift(dup(l.value)))
-          case FindRes.Partial(r, f) =>
+          case that.FindRes.Partial(r, f) =>
             WithRemainder(l, r, lift(dup(l.value)), ~⚬.assocLR > f.inSnd)
-          case FindRes.NotFound() =>
+          case that.FindRes.NotFound() =>
             WithRemainder(this, that, id, ~⚬.id)
       case br: Branch[br, t, f, a1, a2] =>
         (br.l mergeIn0 that)(dup) match
-          case Absorbed(p, f) =>
+          case br.l.MergeRes.Absorbed(p, f) =>
             Absorbed(Branch(p, br.r), f.inFst[a2] > ix)
-          case WithRemainder(p, r, f1, g) =>
+          case br.l.MergeRes.WithRemainder(p, r, f1, g) =>
             (br.r mergeIn0 r)(dup) match
-              case Absorbed(p1, f2) =>
+              case br.r.MergeRes.Absorbed(p1, f2) =>
                 Absorbed(Branch(p, p1), par(f1, f2) > xi > pure(g).inSnd > assocRL > fst(swap))
-              case WithRemainder(p1, r1, f2, g2) =>
+              case br.r.MergeRes.WithRemainder(p1, r1, f2, g2) =>
                 WithRemainder(Branch(p, p1), r1, par(f1, f2), ~⚬.assocLR > ~⚬.snd(g2) > ~⚬.xi > ~⚬.snd(g) > ~⚬.assocRL > ~⚬.fst(~⚬.swap))
     }
   }
@@ -143,17 +143,17 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
           case None     => NotFound()
       case Branch(l, r) =>
         l.find(x) match
-          case Total(TypeEq(Refl())) =>
+          case l.FindRes.Total(TypeEq(Refl())) =>
             Partial(r, ~⚬.id)
-          case Partial(q, f) =>
+          case l.FindRes.Partial(q, f) =>
             Partial(Branch(q, r), ~⚬.assocRL > f.inFst)
-          case NotFound() =>
+          case l.FindRes.NotFound() =>
             r.find(x) match
-              case Total(TypeEq(Refl())) =>
+              case r.FindRes.Total(TypeEq(Refl())) =>
                 Partial(l, ~⚬.swap)
-              case Partial(q, f) =>
+              case r.FindRes.Partial(q, f) =>
                 Partial(Branch(l, q), ~⚬.xi > ~⚬.snd(f))
-              case NotFound() =>
+              case r.FindRes.NotFound() =>
                 NotFound()
     }
   }
