@@ -129,6 +129,79 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     ) extends MergeRes[A, B, -->, ==>]
   }
 
+  def product[B](that: Bin[<*>, T, F, B])(using
+    leafTest: UniqueTypeArg[F],
+    shuffle: Shuffle[<*>],
+  ): Exists[[X] =>> (
+    Bin[<*>, T, F, X],
+    Exists[[A0] =>> (Projection[<*>, X, A0], shuffle.~⚬[A0, A])],
+    Exists[[B0] =>> (Projection[<*>, X, B0], shuffle.~⚬[B0, B])],
+  )] =
+    (this product0 that) match {
+      case ProductRes.Absorbed(x, p1, p2, f1, f2) =>
+        Exists((x, Exists(p1, f1), Exists(p2, f2)))
+      case ProductRes.WithRemainder(x, r, p1, p2, f1, f2) =>
+        Exists((
+          Branch(x, r),
+          Exists((Projection.discardSnd > p1, f1)),
+          Exists((p2, f2)),
+        ))
+    }
+
+  private def product0[B](that: Bin[<*>, T, F, B])(using
+    leafTest: UniqueTypeArg[F],
+    shuffle: Shuffle[<*>],
+  ): ProductRes[A, B, shuffle.~⚬] = {
+    import ProductRes.{Absorbed, WithRemainder}
+    import shuffle.~⚬
+
+    this match {
+      case l: Leaf[br, t, f, a] =>
+        that.find(l.value) match
+          case that.FindRes.Total(TypeEq(Refl())) =>
+            Absorbed(l, Projection.id, Projection.id, ~⚬.id, ~⚬.id)
+          case that.FindRes.Partial(r, f) =>
+            WithRemainder(l, r, Projection.id, Projection.id, ~⚬.id, f)
+          case that.FindRes.NotFound() =>
+            WithRemainder(l, that, Projection.id, Projection.discardFst, ~⚬.id, ~⚬.id)
+      case br: Branch[br, t, f, a1, a2] =>
+        (br.l product0 that) match
+          case br.l.ProductRes.Absorbed(p, p1, p2, f1, f2) =>
+            Absorbed(Branch(p, br.r), p1.inFst, Projection.discardSnd(p2), f1.inFst, f2)
+          case br.l.ProductRes.WithRemainder(p, r, p1, p2, f1, f2) =>
+            (br.r product0 r) match
+              case br.r.ProductRes.Absorbed(q, q1, q2, g1, g2) =>
+                g2.inSnd.project(p2) match
+                  case ~⚬.ProjectRes.Projected(p2, g2) =>
+                    Absorbed(Branch(p, q), Projection.par(p1, q1), q2.inSnd > p2, ~⚬.par(f1, g1), g2 > f2)
+              case br.r.ProductRes.WithRemainder(q, r, q1, q2, g1, g2) =>
+                g2.inSnd.project(p2) match
+                  case ~⚬.ProjectRes.Projected(p2, g2) =>
+                    ~⚬.assocLR.project(q2.inSnd > p2) match
+                      case ~⚬.ProjectRes.Projected(p2, h2) =>
+                        WithRemainder(Branch(p, q), r, Projection.par(p1, q1), p2, ~⚬.par(f1, g1), h2 > g2 > f2)
+    }
+  }
+
+  private enum ProductRes[A, B, -->[_, _]] {
+    case Absorbed[P, A0, B0, A, B, -->[_, _]](
+      p: Bin[<*>, T, F, P],
+      p1: Projection[<*>, P, A0],
+      p2: Projection[<*>, P, B0],
+      f1: A0 --> A,
+      f2: B0 --> B,
+    ) extends ProductRes[A, B, -->]
+
+    case WithRemainder[P, R, A0, B0, A, B, -->[_, _]](
+      p: Bin[<*>, T, F, P],
+      r: Bin[<*>, T, F, R],
+      p1: Projection[<*>, P, A0],
+      p2: Projection[<*>, P <*> R, B0],
+      f1: A0 --> A,
+      f2: B0 --> B,
+    ) extends ProductRes[A, B, -->]
+  }
+
   private def find[X](x: F[X])(using
     leafTest: UniqueTypeArg[F],
     shuffle: Shuffle[<*>],
