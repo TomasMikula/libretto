@@ -10,7 +10,7 @@ import scala.annotation.{tailrec, targetName}
 class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
   ssc: SymmetricSemigroupalCategory[-⚬, |*|],
   inj: BiInjective[|*|],
-  variables: Variable[Var, VarSet],
+  variables: Variables[Var, VarSet],
   errors: ErrorFactory[E, LE, VarSet],
 ) extends Lambdas[-⚬, |*|, Var, VarSet, E, LE] {
   import variables.testEqual
@@ -137,11 +137,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     def initialVars[B](f: Expr[B]): VarSet =
       f.initialVars
-
-    given UniqueTypeArg[Expr] with {
-      override def testEqual[A, B](a: Expr[A], b: Expr[B]): Option[A =:= B] =
-        variables.testEqual(a.resultVar, b.resultVar)
-    }
   }
 
   override def eliminateVariable[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] = {
@@ -164,6 +159,15 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         Failure(errors.underusedVars(variables.singleton(boundVar)))
     }
   }
+
+  override def switch[<+>[_, _], A, B](
+    cases: Sink[VFun, <+>, A, B],
+    sum: [X, Y] => (X -⚬ B, Y -⚬ B) => (X <+> Y) -⚬ B,
+    distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
+  )(using
+    Context,
+  ): AbsRes[A, B] =
+    switchImpl(cases, sum, distribute)
 
   private def deduplicateExpressions[AA](exprs: Tupled[Expr, AA])(using
     Context,
@@ -1184,25 +1188,5 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         case Focus.Id()                => ev
         case _: Focus.Fst[pair, f1, y] => varIsNotPair(ev.flip)
         case _: Focus.Snd[pair, f2, x] => varIsNotPair(ev.flip)
-  }
-
-  enum LinCheck[A] {
-    case Success(value: A)
-    case Failure(e: LE)
-  }
-
-  object LinCheck {
-    given Applicative[LinCheck] with {
-      override def pure[A](a: A): LinCheck[A] =
-        Success(a)
-
-      override def ap[A, B](ff: LinCheck[A => B])(fa: LinCheck[A]): LinCheck[B] =
-        (ff, fa) match {
-          case (Success(f), Success(a)) => Success(f(a))
-          case (Success(_), Failure(e)) => Failure(e)
-          case (Failure(e), Success(_)) => Failure(e)
-          case (Failure(e), Failure(f)) => Failure(errors.combineLinear(e, f))
-        }
-    }
   }
 }

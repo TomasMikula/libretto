@@ -1,10 +1,12 @@
 package libretto.lambda
 
 import libretto.lambda.Lambdas.Error.LinearityViolation
-import libretto.util.{BiInjective, Semigroup}
+import libretto.util.{Applicative, BiInjective, Exists, Semigroup, UniqueTypeArg}
 import scala.annotation.targetName
 
 trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
+  import Lambdas.ErrorFactory
+
   final type Tupled[F[_], A] = libretto.lambda.Tupled[|*|, F, A]
 
   final type Vars[A] = Tupled[Var, A]
@@ -46,6 +48,11 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
       Expr.resultVar(a)
   }
 
+  given (using UniqueTypeArg[Var]): UniqueTypeArg[Expr] with {
+    override def testEqual[A, B](a: Expr[A], b: Expr[B]): Option[A =:= B] =
+      summon[UniqueTypeArg[Var]].testEqual(a.resultVar, b.resultVar)
+  }
+
   type Context
   val Context: Contexts
 
@@ -79,6 +86,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
   }
 
   type Abstracted[A, B] = Lambdas.Abstracted[Expr, |*|, AbstractFun, LE, A, B]
+  type AbsRes[A, B]     = Lambdas.Abstracted[Expr, |*|, -⚬,          LE, A, B]
 
   protected def eliminateVariable[A, B](
     boundVar: Var[A],
@@ -103,20 +111,126 @@ trait Lambdas[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE] {
   )(using parent: Context): Abstracted[A, B] =
     abs(bindVar, f)(using Context.nested(parent = parent))
 
-  type VFun[A, B] = (Var[A], Expr[A] => Expr[B])
+  type VFun[A, B] = (Var[A], Context ?=> Expr[A] => Expr[B])
 
   def switch[<+>[_, _], A, B](
-    scrutinee: Expr[A],
-    patterns: Sink[VFun, <+>, A, B],
-    // distribute: [x, y, z] => (x |*| (y <+> z)) -⚬ ((x |*| y) <+> (x |*| z))
-  ): Expr[B]
+    cases: Sink[VFun, <+>, A, B],
+    sum: [X, Y] => (X -⚬ B, Y -⚬ B) => (X <+> Y) -⚬ B,
+    distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
+  )(using
+    Context,
+  ): AbsRes[A, B]
+
+  protected def switchImpl[<+>[_, _], A, B](
+    cases: Sink[VFun, <+>, A, B],
+    sum: [X, Y] => (X -⚬ B, Y -⚬ B) => (X <+> Y) -⚬ B,
+    distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
+  )(using
+    BiInjective[|*|],
+    UniqueTypeArg[Var],
+    SymmetricSemigroupalCategory[-⚬, |*|],
+    Variables[Var, VarSet],
+    ErrorFactory[E, LE, VarSet],
+    Context,
+  ): AbsRes[A, B] = {
+    val cases1: Sink[AbsRes, <+>, A, B] =
+      cases.map[AbsRes] { [X] => (vf: VFun[X, B]) =>
+        absNested(vf._1, vf._2)
+          .mapFun([X] => (f: AbstractFun[X, B]) => f.fold)
+      }
+
+    cases1.reduce(
+      [x, y] => (f1: AbsRes[x, B], f2: AbsRes[y, B]) => {
+        import Lambdas.Abstracted.{Closure, Exact, Failure}
+        (f1, f2) match {
+          case (Exact(f1), Exact(f2)) =>
+            Exact(sum(f1, f2))
+          case (Closure(x, f1), Exact(f2)) =>
+            discarderOf(x) match
+              case Right(discardFst) => Closure(x, distribute(()) > sum(f1, discardFst(()) > f2))
+              case Left(unusedVars)  => Failure(ErrorFactory.underusedVars(unusedVars))
+          case (Exact(f1), Closure(y, f2)) =>
+            discarderOf(y) match
+              case Right(discardFst) => Closure(y, distribute(()) > sum(discardFst(()) > f1, f2))
+              case Left(unusedVars)  => Failure(ErrorFactory.underusedVars(unusedVars))
+          case (Closure(x, f1), Closure(y, f2)) =>
+            product(x, y) match
+              case LinCheck.Success(Exists.Some((p, p1, p2))) =>
+                Closure(p, distribute(()) > sum(p1.inFst > f1, p2.inFst > f2))
+              case LinCheck.Failure(e) =>
+                Failure(e)
+          case (Failure(e1), Failure(e2)) =>
+            Failure(ErrorFactory.combineLinear(e1, e2))
+          case (Failure(e1), _) =>
+            Failure(e1)
+          case (_, Failure(e2)) =>
+            Failure(e2)
+        }
+      }
+    )
+  }
+
+  private def discarderOf[A](a: Tupled[Expr, A])(using Context): Either[VarSet, [B] => Unit => (A |*| B) -⚬ B] =
+    ???
+
+  private def product[A, B](
+    a: Tupled[Expr, A],
+    b: Tupled[Expr, B],
+  )(using
+    Context,
+    BiInjective[|*|],
+    UniqueTypeArg[Var],
+    SymmetricSemigroupalCategory[-⚬, |*|],
+    Variables[Var, VarSet],
+    ErrorFactory[E, LE, VarSet],
+  ): LinCheck[Exists[[P] =>> (Tupled[Expr, P], P -⚬ A, P -⚬ B)]] = {
+    type LinChecked[X, Y] = LinCheck[X -⚬ Y]
+    given shuffled: Shuffled[LinChecked, |*|] = Shuffled[LinChecked, |*|]
+    given Shuffled.With[-⚬, |*|, shuffled.shuffle.type] = Shuffled[-⚬, |*|](shuffled.shuffle)
+
+    val discardFst: [X, Y] => Expr[X] => LinChecked[X |*| Y, Y] =
+      [X, Y] => (x: Expr[X]) =>
+        Context.getDiscard(x.resultVar) match {
+          case Some(discardFst) => LinCheck.Success(discardFst[Y](()))
+          case None             => LinCheck.Failure(ErrorFactory.underusedVars(Variables.singleton(x.resultVar)))
+        }
+
+    (a product b)(discardFst) match
+      case Exists.Some((p, p1, p2)) =>
+        Applicative[LinCheck].map2(
+          p1.traverse[LinCheck, -⚬]([x, y] => (f: LinChecked[x, y]) => f),
+          p2.traverse[LinCheck, -⚬]([x, y] => (f: LinChecked[x, y]) => f),
+        ) { (p1, p2) =>
+          Exists((p, p1.fold, p2.fold))
+        }
+  }
+
+  enum LinCheck[A] {
+    case Success(value: A)
+    case Failure(e: LE)
+  }
+
+  object LinCheck {
+    given (using ErrorFactory[E, LE, VarSet]): Applicative[LinCheck] with {
+      override def pure[A](a: A): LinCheck[A] =
+        Success(a)
+
+      override def ap[A, B](ff: LinCheck[A => B])(fa: LinCheck[A]): LinCheck[B] =
+        (ff, fa) match {
+          case (Success(f), Success(a)) => Success(f(a))
+          case (Success(_), Failure(e)) => Failure(e)
+          case (Failure(e), Success(_)) => Failure(e)
+          case (Failure(e), Failure(f)) => Failure(ErrorFactory.combineLinear(e, f))
+        }
+    }
+  }
 }
 
 object Lambdas {
   def apply[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
     ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
-    variables: Variable[Var, VarSet],
+    variables: Variables[Var, VarSet],
     errors: ErrorFactory[E, LE, VarSet],
   ): Lambdas[-⚬, |*|, Var, VarSet, E, LE] =
     new LambdasImpl[-⚬, |*|, Var, VarSet, E, LE]
@@ -151,17 +265,17 @@ object Lambdas {
     }
 
     def overusedVar[Var[_], VarSet, A](v: Var[A])(using
-      ev: Variable[Var, VarSet],
+      ev: Variables[Var, VarSet],
     ): LinearityViolation[VarSet] =
       LinearityViolation.Overused(ev.singleton(v))
 
     def underusedVar[Var[_], VarSet, A](v: Var[A])(using
-      ev: Variable[Var, VarSet],
+      ev: Variables[Var, VarSet],
     ): LinearityViolation[VarSet] =
       LinearityViolation.Underused(ev.singleton(v))
 
     def undefinedVar[Var[_], VarSet, A](v: Var[A])(using
-      ev: Variable[Var, VarSet],
+      ev: Variables[Var, VarSet],
     ): Error[VarSet] =
       Undefined(ev.singleton(v))
   }
@@ -178,6 +292,12 @@ object Lambdas {
   }
 
   object ErrorFactory {
+    def underusedVars[E, LE, VarSet](using ef: ErrorFactory[E, LE, VarSet])(vs: VarSet): LE = ef.underusedVars(vs)
+    def overusedVars[E, LE, VarSet](using ef: ErrorFactory[E, LE, VarSet])(vs: VarSet): LE = ef.overusedVars(vs)
+    def combineLinear[E, LE, VarSet](using ef: ErrorFactory[E, LE, VarSet])(l: LE, r: LE): LE = ef.combineLinear(l, r)
+    def undefinedVars[E, LE, VarSet](using ef: ErrorFactory[E, LE, VarSet])(vs: VarSet): E = ef.undefinedVars(vs)
+    def fromLinearityViolation[E, LE, VarSet](using ef: ErrorFactory[E, LE, VarSet])(e: LE): E = ef.fromLinearityViolation(e)
+
     given canonicalInstance[VarSet: Semigroup]: ErrorFactory[Error[VarSet], LinearityViolation[VarSet], VarSet] with {
       override def overusedVars(vs: VarSet): LinearityViolation[VarSet] = LinearityViolation.Overused(vs)
       override def underusedVars(vs: VarSet): LinearityViolation[VarSet] = LinearityViolation.Underused(vs)
@@ -195,6 +315,13 @@ object Lambdas {
         case Exact(f)             => Exact(f)
         case Closure(captured, f) => Closure(captured.trans(g), f)
         case Failure(e)           => Failure(e)
+      }
+
+    def mapFun[->[_, _]](g: [X] => AbsFun[X, B] => (X -> B)): Abstracted[Exp, |*|, ->, LE, A, B] =
+      this match {
+        case Exact(f)      => Exact(g(f))
+        case Closure(x, f) => Closure(x, g(f))
+        case Failure(e)    => Failure(e)
       }
   }
 

@@ -1,6 +1,6 @@
 package libretto.scaletto.impl
 
-import libretto.lambda.Variable
+import libretto.lambda.Variables
 import libretto.util.TypeEq
 import libretto.util.TypeEq.Refl
 
@@ -11,11 +11,14 @@ class Var[P, A](val origin: P) {
   def testEqual[B](that: Var[P, B]): Option[A =:= B] =
     if (this eq that) Some(summon[A =:= A].asInstanceOf[A =:= B])
     else None
+
+  override def toString: String =
+    s"${super.toString} ($origin)"
 }
 
 object Var {
-  given [P]: Variable[Var[P, *], Set[Var[P, ?]]] =
-    new Variable[Var[P, *], Set[Var[P, ?]]] {
+  given [P]: Variables[Var[P, *], Set[Var[P, ?]]] =
+    new Variables[Var[P, *], Set[Var[P, ?]]] {
       override def testEqual[A, B](a: Var[P, A], b: Var[P, B]): Option[A =:= B] =
         a testEqual b
 

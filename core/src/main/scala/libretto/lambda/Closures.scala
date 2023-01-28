@@ -7,7 +7,7 @@ object Closures {
     lambdas: Lambdas[-⚬, |*|, Var, VarSet, E, LE],
   )(using
     inj: BiInjective[|*|],
-    variables: Variable[Var, VarSet],
+    variables: Variables[Var, VarSet],
   ): Closures[-⚬, |*|, =⚬, Var, VarSet, E, LE, lambdas.type] =
     new Closures(lambdas)
 }
@@ -16,7 +16,7 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
   val lambdas: LAMBDAS,
 )(using
   inj: BiInjective[|*|],
-  variables: Variable[Var, VarSet],
+  variables: Variables[Var, VarSet],
 ) {
   import Lambdas.Abstracted
   import lambdas.{Abstracted, Expr, Var}
@@ -31,40 +31,4 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS
     ev: ClosedSemigroupalCategory[-⚬, |*|, =⚬],
   ): Expr[B] =
     (f zip a)(auxVar).map(ev.eval[A, B])(resultVar)
-
-  def closure[A, B](
-    boundVar: Var[A],
-    f: lambdas.Context ?=> Expr[A] => Expr[B],
-  )(using
-    ctx: lambdas.Context,
-    ev: ClosedSymmetricSemigroupalCategory[-⚬, |*|, =⚬],
-  ): ClosureRes[A, B] = {
-    import ClosureRes._
-
-    lambdas.absNested(boundVar, f) match {
-      case Abstracted.Exact(f) =>
-        NonCapturing(f.fold)
-      case Abstracted.Closure(captured, f) =>
-        Capturing(captured, f.fold)
-      case Abstracted.Failure(e) =>
-        NonLinear(e)
-    }
-  }
-
-  /**
-   * @tparam LE type that represents linearity violation
-   */
-  sealed trait ClosureRes[A, B]
-  object ClosureRes {
-    case class Capturing[X, A, B](
-      captured: Tupled[|*|, Expr, X],
-      f: (X |*| A) -⚬ B,
-    ) extends ClosureRes[A, B]
-
-    case class NonCapturing[A, B](
-      f: A -⚬ B,
-    ) extends ClosureRes[A, B]
-
-    case class NonLinear[A, B](e: LE) extends ClosureRes[A, B]
-  }
 }

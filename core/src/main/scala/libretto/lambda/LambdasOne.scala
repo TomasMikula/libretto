@@ -1,12 +1,13 @@
 package libretto.lambda
 
 import libretto.util.BiInjective
+import libretto.lambda.Variables
 
 class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
   varSynthesizer: LambdasOne.VarSynthesizer[Var, |*|],
 )(using
   inj: BiInjective[|*|],
-  variables: Variable[Var, VarSet],
+  variables: Variables[Var, VarSet],
   smc: SymmetricMonoidalCategory[-⚬, |*|, One],
 ) extends Lambdas[-⚬, |*|, Var, VarSet, Lambdas.Error[VarSet], Lambdas.Error.LinearityViolation[VarSet]] {
   import varSynthesizer.newSyntheticVar
@@ -181,6 +182,15 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
             throw new AssertionError(s"Expected closure over variable $v")
         }
     }
+
+  override def switch[<+>[_, _], A, B](
+    cases: Sink[VFun, <+>, A, B],
+    sum: [X, Y] => (X -⚬ B, Y -⚬ B) => (X <+> Y) -⚬ B,
+    distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
+  )(using
+    Context,
+  ): AbsRes[A, B] =
+    switchImpl(cases, sum, distribute)
 
   def compileConst[B](expr: Expr[B]): Either[Error, One -⚬ B] =
     expr match {

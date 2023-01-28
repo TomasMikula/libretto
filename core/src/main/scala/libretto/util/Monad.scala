@@ -13,9 +13,18 @@ trait Monad[F[_]] extends Applicative[F] {
 
   override def ap[A, B](ff: F[A => B])(fa: F[A]): F[B] =
     flatMap(ff) { f => map(fa)(f) }
+
+  def flatten[A](a: F[F[A]]): F[A] =
+    flatMap(a)(identity)
+
+  def flatMap2[A, B, C](fa: F[A], fb: F[B])(f: (A, B) => F[C]): F[C] =
+    flatten(map2(fa, fb)(f))
 }
 
 object Monad {
+  def apply[F[_]](using Monad[F]): Monad[F] =
+    summon
+
   object syntax {
     extension [F[_], A](fa: F[A])(using F: Monad[F]) {
       def map[B](f: A => B): F[B] =

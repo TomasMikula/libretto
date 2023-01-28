@@ -376,8 +376,10 @@ trait CoreDSL {
 
     def switchEither[A, B, C](
       ab: $[A |+| B],
-      f: Either[$[A], $[B]] => $[C],
-    )(pos: SourcePos): $[C]
+      f: LambdaContext ?=> Either[$[A], $[B]] => $[C],
+    )(pos: SourcePos)(using
+      LambdaContext,
+    ): $[C]
 
     def eliminateFirst[A](unit: $[One], a: $[A])(
       pos: SourcePos,
@@ -463,7 +465,10 @@ trait CoreDSL {
     }
 
     extension [A, B](x: $[A |+| B]) {
-      def switch[C](f: Either[$[A], $[B]] => $[C])(using pos: SourcePos): $[C] =
+      def switch[C](f: Either[$[A], $[B]] => $[C])(using
+        pos: SourcePos,
+        ctx: LambdaContext,
+      ): $[C] =
         switchEither(x, f)(pos)
     }
 

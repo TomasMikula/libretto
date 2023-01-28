@@ -2,7 +2,7 @@ package libretto.scaletto
 
 import java.util.concurrent.atomic.AtomicLong
 import libretto.CoreLib
-import libretto.util.Async
+import libretto.util.{Async, SourcePos}
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 
@@ -531,7 +531,7 @@ class ScalettoLib[
   }
 
   extension [A](a: $[Val[A]]) {
-    def *[B](b: $[Val[B]]): $[Val[(A, B)]] =
+    def *[B](b: $[Val[B]])(using SourcePos): $[Val[(A, B)]] =
       unliftPair(a |*| b)
   }
 }
