@@ -13,7 +13,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], VarLabel, E, LE](using
   errors: ErrorFactory[E, LE, VarLabel],
 ) extends Lambdas[-⚬, |*|, VarLabel, E, LE] {
 
-  given shuffled: Shuffled[-⚬, |*|] = Shuffled[-⚬, |*|]
+  given shuffle: Shuffle[|*|] = Shuffle[|*|]
+  given shuffled: Shuffled.With[-⚬, |*|, shuffle.type] = Shuffled[-⚬, |*|](shuffle)
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
   import shuffled.{Shuffled => ≈⚬, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
 
@@ -173,8 +174,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], VarLabel, E, LE](using
     enum Arr[A, B] {
       case FreeDup[A](expr: Expr[A]) extends Arr[A, A |*| A]
     }
-    given Shuffled.With[Arr, |*|, shuffled.shuffle.type] =
-      Shuffled[Arr, |*|](shuffled.shuffle)
+    given Shuffled.With[Arr, |*|, shuffle.type] =
+      Shuffled[Arr, |*|](shuffle)
 
     exprs.deduplicateLeafs[Arr](
       [x] => (x: Expr[x]) => Arr.FreeDup(x),
@@ -189,7 +190,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], VarLabel, E, LE](using
                   case None        => LinCheck.Failure(errors.overusedVars(Var.Set(x.resultVar)))
           },
         ) match {
-          case LinCheck.Success(f) => Right(Exists(a, f))
+          case LinCheck.Success(f) => Right(Exists((a, f)))
           case LinCheck.Failure(e) => Left(e)
         }
     }
