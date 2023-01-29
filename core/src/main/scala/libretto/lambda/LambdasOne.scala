@@ -1,23 +1,21 @@
 package libretto.lambda
 
 import libretto.util.BiInjective
-import libretto.lambda.Variables
 
-class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
-  varSynthesizer: LambdasOne.VarSynthesizer[Var, |*|],
+class LambdasOne[-⚬[_, _], |*|[_, _], One, VarLabel](
+  varSynthesizer: LambdasOne.VarSynthesizer[VarLabel, |*|],
 )(using
   inj: BiInjective[|*|],
-  variables: Variables[Var, VarSet],
   smc: SymmetricMonoidalCategory[-⚬, |*|, One],
-) extends Lambdas[-⚬, |*|, Var, VarSet, Lambdas.Error[VarSet], Lambdas.Error.LinearityViolation[VarSet]] {
+) extends Lambdas[-⚬, |*|, VarLabel, Lambdas.Error[VarLabel], Lambdas.Error.LinearityViolation[VarLabel]] {
   import varSynthesizer.newSyntheticVar
 
-  type Error              = Lambdas.Error[VarSet]
+  type Error              = Lambdas.Error[VarLabel]
   val  Error              = Lambdas.Error
-  type LinearityViolation = Lambdas.Error.LinearityViolation[VarSet]
+  type LinearityViolation = Lambdas.Error.LinearityViolation[VarLabel]
   val  LinearityViolation = Lambdas.Error.LinearityViolation
 
-  val lambdas = LambdasImpl[-⚬, |*|, Var, VarSet, Error, LinearityViolation]
+  val lambdas = LambdasImpl[-⚬, |*|, VarLabel, Error, LinearityViolation]
 
   override type AbstractFun[A, B] = lambdas.AbstractFun[A, B]
   override object AbstractFun extends AbstractFuns {
@@ -206,7 +204,7 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
             Left(Lambdas.Error.Undefined(
               captured.foldMap0(
                 [x] => (ex: lambdas.Expr[x]) => ex.initialVars,
-                variables.union,
+                _ merge _,
               )
             ))
           case Failure(e) =>
@@ -216,7 +214,7 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, Var[_], VarSet](
 }
 
 object LambdasOne {
-  trait VarSynthesizer[Var[_], |*|[_, _]] {
-    def newSyntheticVar[A, X](hint: Tupled[|*|, Var, X]): Var[A]
+  trait VarSynthesizer[VarLabel, |*|[_, _]] {
+    def newSyntheticVar[A, X](hint: Tupled[|*|, Var[VarLabel, *], X]): Var[VarLabel, A]
   }
 }

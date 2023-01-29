@@ -3,20 +3,18 @@ package libretto.lambda
 import libretto.util.BiInjective
 
 object Closures {
-  def apply[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE](
-    lambdas: Lambdas[-⚬, |*|, Var, VarSet, E, LE],
+  def apply[-⚬[_, _], |*|[_, _], =⚬[_, _], VarLabel, E, LE](
+    lambdas: Lambdas[-⚬, |*|, VarLabel, E, LE],
   )(using
     inj: BiInjective[|*|],
-    variables: Variables[Var, VarSet],
-  ): Closures[-⚬, |*|, =⚬, Var, VarSet, E, LE, lambdas.type] =
+  ): Closures[-⚬, |*|, =⚬, VarLabel, E, LE, lambdas.type] =
     new Closures(lambdas)
 }
 
-class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], Var[_], VarSet, E, LE, LAMBDAS <: Lambdas[-⚬, |*|, Var, VarSet, E, LE]](
+class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], VarLabel, E, LE, LAMBDAS <: Lambdas[-⚬, |*|, VarLabel, E, LE]](
   val lambdas: LAMBDAS,
 )(using
   inj: BiInjective[|*|],
-  variables: Variables[Var, VarSet],
 ) {
   import Lambdas.Abstracted
   import lambdas.{Abstracted, Expr, Var}

@@ -1,7 +1,7 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, LambdasOne, Sink, Tupled}
+import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, LambdasOne, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Abstracted
 import libretto.util.{Async, BiInjective, SourcePos, TypeEq}
 import libretto.util.Monad.monadEither
@@ -407,11 +407,11 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       override def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B                                           = FreeScaletto.this.eval[A, B]
     }
 
-  type Var[A] = libretto.scaletto.impl.Var[VarOrigin, A]
+  type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
-  val lambdas: LambdasOne[-⚬, |*|, One, Var, Set[Var[?]]] =
-    new LambdasOne[-⚬, |*|, One, Var, Set[Var[?]]](
-      new LambdasOne.VarSynthesizer[Var, |*|] {
+  val lambdas: LambdasOne[-⚬, |*|, One, VarOrigin] =
+    new LambdasOne[-⚬, |*|, One, VarOrigin](
+      new LambdasOne.VarSynthesizer[VarOrigin, |*|] {
         override def newSyntheticVar[A, X](hint: Tupled[|*|, Var, X]): Var[A] = {
           val desc = hint.foldMap0([x] => (vx: Var[x]) => vx.origin.print, (x, y) => s"($x, $y)")
           new Var[A](VarOrigin.Synthetic(s"Combination of $desc"))
@@ -419,8 +419,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       }
     )
 
-  val closures: Closures[-⚬, |*|, =⚬, Var, Set[Var[?]], lambdas.Error, lambdas.LinearityViolation, lambdas.type] =
-    Closures[-⚬, |*|, =⚬, Var, Set[Var[?]], lambdas.Error, lambdas.LinearityViolation](lambdas)
+  val closures: Closures[-⚬, |*|, =⚬, VarOrigin, lambdas.Error, lambdas.LinearityViolation, lambdas.type] =
+    Closures[-⚬, |*|, =⚬, VarOrigin, lambdas.Error, lambdas.LinearityViolation](lambdas)
 
   override type $[A] = lambdas.Expr[A]
 
@@ -557,8 +557,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     import lambdas.Error.Undefined
     import lambdas.LinearityViolation.{OverUnder, Overused, Underused}
 
-    def overusedMsg(vs: Set[Var[?]])  = s"Variables used more than once: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"
-    def underusedMsg(vs: Set[Var[?]]) = s"Variables not fully consumed: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"
+    def overusedMsg(vs: Var.Set[VarOrigin])  = s"Variables used more than once: ${vs.list.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"
+    def underusedMsg(vs: Var.Set[VarOrigin]) = s"Variables not fully consumed: ${vs.list.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"
 
     e match {
       case Overused(vs)    => throw NotLinearException(overusedMsg(vs))
@@ -569,5 +569,5 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   }
 
   override class NotLinearException(msg: String) extends Exception(msg)
-  override class UnboundVariablesException(vs: Set[Var[?]]) extends Exception
+  override class UnboundVariablesException(vs: Var.Set[VarOrigin]) extends Exception
 }

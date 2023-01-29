@@ -7,13 +7,11 @@ import libretto.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeE
 import libretto.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
-class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
+class LambdasImpl[-⚬[_, _], |*|[_, _], VarLabel, E, LE](using
   ssc: SymmetricSemigroupalCategory[-⚬, |*|],
   inj: BiInjective[|*|],
-  variables: Variables[Var, VarSet],
-  errors: ErrorFactory[E, LE, VarSet],
-) extends Lambdas[-⚬, |*|, Var, VarSet, E, LE] {
-  import variables.testEqual
+  errors: ErrorFactory[E, LE, VarLabel],
+) extends Lambdas[-⚬, |*|, VarLabel, E, LE] {
 
   given shuffled: Shuffled[-⚬, |*|] = Shuffled[-⚬, |*|]
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
@@ -78,9 +76,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     def initialVars: VarSet =
       this match {
-        case Id(a)         => variables.singleton(a)
+        case Id(a)         => Var.Set(a)
         case Map(f, _, _)  => f.initialVars
-        case Zip(f, g, _)  => variables.union(f.initialVars, g.initialVars)
+        case Zip(f, g, _)  => f.initialVars merge g.initialVars
         case Prj1(f, _, _) => f.initialVars
         case Prj2(f, _, _) => f.initialVars
       }
@@ -156,7 +154,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             Failure(e)
         }
       case EliminateRes.NotFound() =>
-        Failure(errors.underusedVars(variables.singleton(boundVar)))
+        Failure(errors.underusedVars(Var.Set(boundVar)))
     }
   }
 
@@ -188,7 +186,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
               case Arr.FreeDup(x) =>
                 Context.getSplit(x.resultVar) match
                   case Some(split) => LinCheck.Success(split)
-                  case None        => LinCheck.Failure(errors.overusedVars(variables.singleton(x.resultVar)))
+                  case None        => LinCheck.Failure(errors.overusedVars(Var.Set(x.resultVar)))
           },
         ) match {
           case LinCheck.Success(f) => Right(Exists(a, f))
@@ -207,7 +205,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
     expr match
       case Expr.Id(w) =>
-        testEqual(v, w) match
+        (v testEqual w) match
           case Some(ev) =>
             Found(HybridArrow.id(v).to(using ev.liftCo[Var]))
           case None =>
@@ -249,7 +247,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
       ev.substituteCo(this)
 
     def interweave[C](that: HybridArrow[A, C]): HybridArrow[A, B |*| C] = {
-      assert(testEqual(this.v, that.v).isDefined)
+      assert((this.v testEqual that.v).isDefined)
       HybridArrow(v, HybridArrow.dupVar[A] > tail.inFst)
         .weaveIn(that.tail.inSnd)
     }
@@ -334,7 +332,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
                     SingleVar[a](),
                     Context.getSplit(v) match {
                       case Some(split) => LinCheck.Success(CapturingFun.lift(split))
-                      case None        => LinCheck.Failure(errors.overusedVars(variables.singleton(v)))
+                      case None        => LinCheck.Failure(errors.overusedVars(Var.Set(v)))
                     },
                     Par(SingleVar[a](), SingleVar[a]()),
                   )
@@ -343,7 +341,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
                       case Some(discard) => LinCheck.Success(CapturingFun.noCapture(shuffled.swap > shuffled.lift(discard[a1](()))))
-                      case None          => LinCheck.Failure(errors.underusedVars(variables.singleton(op.unusedVar)))
+                      case None          => LinCheck.Failure(errors.underusedVars(Var.Set(op.unusedVar)))
                     },
                     SingleVar[a1](),
                   )
@@ -352,7 +350,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
                       case Some(discard) => LinCheck.Success(CapturingFun.lift(discard[a2](())))
-                      case None          => LinCheck.Failure(errors.underusedVars(variables.singleton(op.unusedVar)))
+                      case None          => LinCheck.Failure(errors.underusedVars(Var.Set(op.unusedVar)))
                     },
                     SingleVar[a2](),
                   )
@@ -492,7 +490,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[B] |*| C]] =
           that match
             case Map(_, v) =>
-              (testEqual(v, resultVar)) match
+              ((v testEqual resultVar)) match
                 case Some(TypeEq(Refl())) => Some(shOp.lift(this) > shOp.lift(DupVar()))
                 case None                 => None
             case _ =>
@@ -525,7 +523,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           that.prj1_gcd_this(this)(using ev.flip)
 
         override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a1] |*| Var[A1]]] =
-          (testEqual(that.resultVar, this.resultVar), testEqual(that.unusedVar, this.unusedVar)) match
+          (that.resultVar testEqual this.resultVar, that.unusedVar testEqual this.unusedVar) match
             case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
               Some(shOp.lift(this) > shOp.lift(DupVar()))
             case (None, None) =>
@@ -538,7 +536,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def prj2_gcd_this[a1, a2](that: Prj2[a1, a2])(using
           ev: Var[A1 |*| A2] =:= Var[a1 |*| a2],
         ): Option[Tail[Var[a1 |*| a2], Var[a2] |*| Var[A1]]] =
-          (testEqual(that.unusedVar, this.resultVar), testEqual(that.resultVar, this.unusedVar)) match
+          (that.unusedVar testEqual this.resultVar, that.resultVar testEqual this.unusedVar) match
             case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
               Some(shOp.lift(Unzip(that.unusedVar, that.resultVar)) > shOp.swap[Var[a1], Var[a2]])
             case (None, None) =>
@@ -553,7 +551,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         ): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A1]]] =
           ev match {
             case Injective[Var](BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl()))) =>
-              (testEqual(that.resultVar1, this.resultVar), testEqual(that.resultVar2, this.unusedVar)) match
+              (that.resultVar1 testEqual this.resultVar, that.resultVar2 testEqual this.unusedVar) match
                 case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
                   Some(shOp.lift(that) > shOp.lift(DupVar[A1]()).inFst[Var[A2]] > shOp.ix)
                 case (None, None) =>
@@ -582,7 +580,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
           that.prj2_gcd_this(this)(using ev.flip)
 
         override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a1] |*| Var[A2]]] =
-          (testEqual(that.resultVar, this.unusedVar), testEqual(that.unusedVar, this.resultVar)) match
+          (that.resultVar testEqual this.unusedVar, that.unusedVar testEqual this.resultVar) match
             case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
               Some(shOp.lift(Unzip(that.resultVar, this.resultVar)))
             case (None, None) =>
@@ -593,7 +591,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
               bug(s"Variable ${that.unusedVar} appeared as a result of two different projections")
 
         override def prj2_gcd_this[a1, a2](that: Prj2[a1, a2])(using ev: Var[A1 |*| A2] =:= Var[a1 |*| a2]): Option[Tail[Var[a1 |*| a2], Var[a2] |*| Var[A2]]] =
-          (testEqual(that.unusedVar, this.unusedVar), testEqual(that.resultVar, this.resultVar)) match
+          (that.unusedVar testEqual this.unusedVar, that.resultVar testEqual this.resultVar) match
             case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
               Some(shOp.lift(this) > shOp.lift(DupVar()))
             case (None, None) =>
@@ -604,7 +602,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
               bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
 
         override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A1 |*| A2] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A2]]] =
-          (testEqual(that.resultVar1, this.unusedVar), testEqual(that.resultVar2, this.resultVar)) match
+          (that.resultVar1 testEqual this.unusedVar, that.resultVar2 testEqual this.resultVar) match
             case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
               Some(shOp.lift(that) > shOp.snd(shOp.lift(DupVar())) > shOp.assocRL)
             case (None, None) =>
@@ -634,7 +632,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def prj1_gcd_this[a1, a2](that: Prj1[a1, a2])(using
           ev: Var[A1 |*| A2] =:= Var[a1 |*| a2],
         ): Option[Tail[Var[a1 |*| a2], Var[a1] |*| (Var[A1] |*| Var[A2])]] =
-          (testEqual(that.resultVar, this.resultVar1), testEqual(that.unusedVar, this.resultVar2)) match
+          (that.resultVar testEqual this.resultVar1, that.unusedVar testEqual this.resultVar2) match
             case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
               Some(shOp.lift(this) > shOp.fst(shOp.lift(DupVar())) > shOp.assocLR)
             case (None, None) =>
@@ -647,7 +645,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def prj2_gcd_this[a1, a2](that: Prj2[a1, a2])(using
           ev: Var[A1 |*| A2] =:= Var[a1 |*| a2],
         ): Option[Tail[Var[a1 |*| a2], Var[a2] |*| (Var[A1] |*| Var[A2])]] =
-          (testEqual(that.unusedVar, this.resultVar1), testEqual(that.resultVar, this.resultVar2)) match
+          (that.unusedVar testEqual this.resultVar1, that.resultVar testEqual this.resultVar2) match
             case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
               Some(shOp.lift(this) > shOp.snd(shOp.lift(DupVar())) > shOp.xi)
             case (None, None) =>
@@ -660,7 +658,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using
           ev: Var[A1 |*| A2] =:= Var[T1 |*| T2],
         ): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| (Var[A1] |*| Var[A2])]] =
-          (testEqual(that.resultVar1, this.resultVar1), testEqual(that.resultVar2, this.resultVar2)) match
+          (that.resultVar1 testEqual this.resultVar1, that.resultVar2 testEqual this.resultVar2) match
             case (Some(TypeEq(Refl())), Some(TypeEq(Refl()))) =>
               Some(shOp.lift(this) > shOp.par(shOp.lift(DupVar()), shOp.lift(DupVar())) > shOp.ixi)
             case (None, None) =>
@@ -703,7 +701,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
         override def cap1_gcd_this[T, Y](that: CaptureFst[T, Y])(using ev: Var[A] =:= Var[T]): Option[Tail[Var[T], Var[Y |*| T] |*| Var[X |*| A]]] =
           ev match { case Injective[Var](TypeEq(Refl())) =>
-            testEqual(that.resultVar, this.resultVar) map {
+            (that.resultVar testEqual this.resultVar) map {
               case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
                 shOp.lift(this) > shOp.lift(DupVar[X |*| A]())
             }
@@ -737,7 +735,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
 
         override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using ev: Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A |*| X]]] =
           ev match { case Injective[Var](TypeEq(Refl())) =>
-            testEqual(that.resultVar, this.resultVar) map {
+            (that.resultVar testEqual this.resultVar) map {
               case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
                 shOp.lift(this) > shOp.lift(DupVar())
             }
@@ -759,7 +757,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
             that match
               case cr: CaptureReplace[a, c] =>
                 summon[C =:= Var[c]]
-                testEqual(cr.replacement.resultVar, replacement.resultVar) map {
+                (cr.replacement.resultVar testEqual replacement.resultVar) map {
                   case TypeEq(Refl()) =>
                     shOp.lift(CaptureReplace.this) > shOp.lift(DupVar[Z]().to[Var[Z] |*| Var[c]])
                 }
@@ -854,7 +852,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], Var[_], VarSet, E, LE](using
         z1: Zip[A1, A2],
         z2: Zip[B1, B2],
       ): Option[Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2] |*| Var[B1 |*| B2]]] =
-        testEqual(z1.resultVar, z2.resultVar) map {
+        (z1.resultVar testEqual z2.resultVar) map {
           case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
             shOp.lift(z1) > shOp.lift(DupVar())
         }
