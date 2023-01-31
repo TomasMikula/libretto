@@ -7,11 +7,11 @@ import libretto.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeE
 import libretto.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
-class LambdasImpl[-⚬[_, _], |*|[_, _], VarLabel, E, LE](using
+class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
   ssc: SymmetricSemigroupalCategory[-⚬, |*|],
   inj: BiInjective[|*|],
-  errors: ErrorFactory[E, LE, VarLabel],
-) extends Lambdas[-⚬, |*|, VarLabel, E, LE] {
+  errors: ErrorFactory[E, LE, V],
+) extends Lambdas[-⚬, |*|, V, E, LE] {
 
   given shuffle: Shuffle[|*|] = Shuffle[|*|]
   given shuffled: Shuffled.With[-⚬, |*|, shuffle.type] = Shuffled[-⚬, |*|](shuffle)
@@ -26,13 +26,15 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], VarLabel, E, LE](using
       f.fold
   }
 
-  override opaque type Context = ContextImpl[-⚬, |*|, Var]
+  type Var[A] = libretto.lambda.Var[V, A]
+
+  override opaque type Context = ContextImpl[-⚬, |*|, V]
   override object Context extends Contexts {
     override def fresh(): Context =
-      new ContextImpl[-⚬, |*|, Var]
+      new ContextImpl[-⚬, |*|, V]
 
     override def nested(parent: Context): Context =
-      new ContextImpl[-⚬, |*|, Var](Some(parent))
+      new ContextImpl[-⚬, |*|, V](Some(parent))
 
     override def registerNonLinearOps[A](v: Var[A])(
       split: Option[A -⚬ (A |*| A)],
@@ -75,7 +77,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], VarLabel, E, LE](using
 
     def resultVar: Var[B]
 
-    def initialVars: VarSet =
+    def initialVars: Var.Set[V] =
       this match {
         case Id(a)         => Var.Set(a)
         case Map(f, _, _)  => f.initialVars
@@ -134,7 +136,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], VarLabel, E, LE](using
     override def resultVar[B](f: Expr[B]): Var[B] =
       f.resultVar
 
-    def initialVars[B](f: Expr[B]): VarSet =
+    def initialVars[B](f: Expr[B]): Var.Set[V] =
       f.initialVars
   }
 

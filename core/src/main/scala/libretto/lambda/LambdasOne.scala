@@ -2,20 +2,20 @@ package libretto.lambda
 
 import libretto.util.BiInjective
 
-class LambdasOne[-⚬[_, _], |*|[_, _], One, VarLabel](
-  varSynthesizer: LambdasOne.VarSynthesizer[VarLabel, |*|],
+class LambdasOne[-⚬[_, _], |*|[_, _], One, V](
+  varSynthesizer: LambdasOne.VarSynthesizer[V, |*|],
 )(using
   inj: BiInjective[|*|],
   smc: SymmetricMonoidalCategory[-⚬, |*|, One],
-) extends Lambdas[-⚬, |*|, VarLabel, Lambdas.Error[VarLabel], Lambdas.Error.LinearityViolation[VarLabel]] {
+) extends Lambdas[-⚬, |*|, V, Lambdas.Error[V], Lambdas.Error.LinearityViolation[V]] {
   import varSynthesizer.newSyntheticVar
 
-  type Error              = Lambdas.Error[VarLabel]
+  type Error              = Lambdas.Error[V]
   val  Error              = Lambdas.Error
-  type LinearityViolation = Lambdas.Error.LinearityViolation[VarLabel]
+  type LinearityViolation = Lambdas.Error.LinearityViolation[V]
   val  LinearityViolation = Lambdas.Error.LinearityViolation
 
-  val lambdas = LambdasImpl[-⚬, |*|, VarLabel, Error, LinearityViolation]
+  val lambdas = LambdasImpl[-⚬, |*|, V, Error, LinearityViolation]
 
   override type AbstractFun[A, B] = lambdas.AbstractFun[A, B]
   override object AbstractFun extends AbstractFuns {
@@ -26,6 +26,8 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, VarLabel](
   override object Context extends Contexts {
     export lambdas.Context.{fresh, getDiscard, getSplit, nested, registerNonLinearOps}
   }
+
+  type Var[A] = libretto.lambda.Var[V, A]
 
   sealed trait Expr[A] {
     def resultVar: Var[A] =

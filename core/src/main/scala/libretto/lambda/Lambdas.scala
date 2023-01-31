@@ -4,21 +4,18 @@ import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.util.{Applicative, BiInjective, Exists, Semigroup, UniqueTypeArg}
 import scala.annotation.targetName
 
-trait Lambdas[-⚬[_, _], |*|[_, _], VarLabel, E, LE] {
+trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
   import Lambdas.ErrorFactory
 
   final type Tupled[F[_], A] = libretto.lambda.Tupled[|*|, F, A]
 
-  type Var[A] = libretto.lambda.Var[VarLabel, A]
-  type VarSet = libretto.lambda.Var.Set[VarLabel]
-
-  final type Vars[A] = Tupled[Var, A]
+  final type Vars[A] = Tupled[Var[V, *], A]
 
   object Vars {
-    def single[A](a: Var[A]): Vars[A] =
+    def single[A](a: Var[V, A]): Vars[A] =
       Tupled.atom(a)
 
-    def bi[A, B](a: Var[A], b: Var[B]): Vars[A |*| B] =
+    def bi[A, B](a: Var[V, A], b: Var[V, B]): Vars[A |*| B] =
       zip(single(a), single(b))
 
     def zip[A, B](a: Vars[A], b: Vars[B]): Vars[A |*| B] =
@@ -29,31 +26,31 @@ trait Lambdas[-⚬[_, _], |*|[_, _], VarLabel, E, LE] {
   val Expr: Exprs
 
   trait Exprs {
-    def variable[A](a: Var[A]): Expr[A]
-    def map[A, B](e: Expr[A], f: A -⚬ B, resultVar: Var[B]): Expr[B]
-    def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[A |*| B]): Expr[A |*| B]
-    def unzip[A, B](ab: Expr[A |*| B])(resultVar1: Var[A], resultVar2: Var[B]): (Expr[A], Expr[B])
+    def variable[A](a: Var[V, A]): Expr[A]
+    def map[A, B](e: Expr[A], f: A -⚬ B, resultVar: Var[V, B]): Expr[B]
+    def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[V, A |*| B]): Expr[A |*| B]
+    def unzip[A, B](ab: Expr[A |*| B])(resultVar1: Var[V, A], resultVar2: Var[V, B]): (Expr[A], Expr[B])
 
-    def resultVar[A](a: Expr[A]): Var[A]
+    def resultVar[A](a: Expr[A]): Var[V, A]
   }
 
   extension [A](a: Expr[A]) {
     @targetName("exprMap")
-    def map[B](f: A -⚬ B)(resultVar: Var[B]): Expr[B] =
+    def map[B](f: A -⚬ B)(resultVar: Var[V, B]): Expr[B] =
       Expr.map(a, f, resultVar)
 
     @targetName("exprZip")
-    def zip[B](b: Expr[B])(resultVar: Var[A |*| B]): Expr[A |*| B] =
+    def zip[B](b: Expr[B])(resultVar: Var[V, A |*| B]): Expr[A |*| B] =
       Expr.zip(a, b, resultVar)
 
     @targetName("exprResultVar")
-    def resultVar: Var[A] =
+    def resultVar: Var[V, A] =
       Expr.resultVar(a)
   }
 
-  given (using UniqueTypeArg[Var]): UniqueTypeArg[Expr] with {
+  given UniqueTypeArg[Expr] with {
     override def testEqual[A, B](a: Expr[A], b: Expr[B]): Option[A =:= B] =
-      summon[UniqueTypeArg[Var]].testEqual(a.resultVar, b.resultVar)
+      summon[UniqueTypeArg[Var[V, *]]].testEqual(a.resultVar, b.resultVar)
   }
 
   type Context
@@ -64,16 +61,16 @@ trait Lambdas[-⚬[_, _], |*|[_, _], VarLabel, E, LE] {
 
     def nested(parent: Context): Context
 
-    def registerNonLinearOps[A](v: Var[A])(
+    def registerNonLinearOps[A](v: Var[V, A])(
       split: Option[A -⚬ (A |*| A)],
       discard: Option[[B] => Unit => (A |*| B) -⚬ B],
     )(using
       Context
     ): Unit
 
-    def getSplit[A](v: Var[A])(using Context): Option[A -⚬ (A |*| A)]
+    def getSplit[A](v: Var[V, A])(using Context): Option[A -⚬ (A |*| A)]
 
-    def getDiscard[A](v: Var[A])(using Context): Option[[B] => Unit => (A |*| B) -⚬ B]
+    def getDiscard[A](v: Var[V, A])(using Context): Option[[B] => Unit => (A |*| B) -⚬ B]
   }
 
   type AbstractFun[A, B]
@@ -92,29 +89,29 @@ trait Lambdas[-⚬[_, _], |*|[_, _], VarLabel, E, LE] {
   type AbsRes[A, B]     = Lambdas.Abstracted[Expr, |*|, -⚬,          LE, A, B]
 
   protected def eliminateVariable[A, B](
-    boundVar: Var[A],
+    boundVar: Var[V, A],
     expr: Expr[B],
   )(using Context): Abstracted[A, B]
 
   private def abs[A, B](
-    bindVar: Var[A],
+    bindVar: Var[V, A],
     f: Context ?=> Expr[A] => Expr[B],
   )(using Context): Abstracted[A, B] =
     eliminateVariable(bindVar, f(Expr.variable(bindVar)))
 
   def absTopLevel[A, B](
-    bindVar: Var[A],
+    bindVar: Var[V, A],
     f: Context ?=> Expr[A] => Expr[B],
   ): Abstracted[A, B] =
     abs(bindVar, f)(using Context.fresh())
 
   def absNested[A, B](
-    bindVar: Var[A],
+    bindVar: Var[V, A],
     f: Context ?=> Expr[A] => Expr[B],
   )(using parent: Context): Abstracted[A, B] =
     abs(bindVar, f)(using Context.nested(parent = parent))
 
-  type VFun[A, B] = (Var[A], Context ?=> Expr[A] => Expr[B])
+  type VFun[A, B] = (Var[V, A], Context ?=> Expr[A] => Expr[B])
 
   def switch[<+>[_, _], A, B](
     cases: Sink[VFun, <+>, A, B],
@@ -131,7 +128,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], VarLabel, E, LE] {
   )(using
     BiInjective[|*|],
     SymmetricSemigroupalCategory[-⚬, |*|],
-    ErrorFactory[E, LE, VarLabel],
+    ErrorFactory[E, LE, V],
     Context,
   ): AbsRes[A, B] = {
     val cases1: Sink[AbsRes, <+>, A, B] =
@@ -171,7 +168,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], VarLabel, E, LE] {
     )
   }
 
-  private def discarderOf[A](a: Tupled[Expr, A])(using Context): Either[VarSet, [B] => Unit => (A |*| B) -⚬ B] =
+  private def discarderOf[A](a: Tupled[Expr, A])(using Context): Either[Var.Set[V], [B] => Unit => (A |*| B) -⚬ B] =
     ???
 
   private def product[A, B](
@@ -181,7 +178,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], VarLabel, E, LE] {
     Context,
     BiInjective[|*|],
     SymmetricSemigroupalCategory[-⚬, |*|],
-    ErrorFactory[E, LE, VarLabel],
+    ErrorFactory[E, LE, V],
   ): LinCheck[Exists[[P] =>> (Tupled[Expr, P], P -⚬ A, P -⚬ B)]] = {
     type LinChecked[X, Y] = LinCheck[X -⚬ Y]
     given shuffled: Shuffled[LinChecked, |*|] = Shuffled[LinChecked, |*|]
@@ -210,7 +207,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], VarLabel, E, LE] {
   }
 
   object LinCheck {
-    given (using ErrorFactory[E, LE, VarLabel]): Applicative[LinCheck] with {
+    given (using ErrorFactory[E, LE, V]): Applicative[LinCheck] with {
       override def pure[A](a: A): LinCheck[A] =
         Success(a)
 
