@@ -3,12 +3,11 @@ package libretto.lambda
 import libretto.util.BiInjective
 
 class LambdasOne[-⚬[_, _], |*|[_, _], One, V](
-  varSynthesizer: LambdasOne.VarSynthesizer[V, |*|],
+  syntheticVar: [A] => Tupled[|*|, [x] =>> V, A] => V,
 )(using
   inj: BiInjective[|*|],
   smc: SymmetricMonoidalCategory[-⚬, |*|, One],
 ) extends Lambdas[-⚬, |*|, V, Lambdas.Error[V], Lambdas.Error.LinearityViolation[V]] {
-  import varSynthesizer.newSyntheticVar
 
   type Error              = Lambdas.Error[V]
   val  Error              = Lambdas.Error
@@ -24,7 +23,7 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, V](
 
   override type Context = lambdas.Context
   override object Context extends Contexts {
-    export lambdas.Context.{fresh, getDiscard, getSplit, nested, registerNonLinearOps}
+    export lambdas.Context.{fresh, getDiscard, getSplit, nested, newVar, registerNonLinearOps}
   }
 
   type Var[A] = libretto.lambda.Var[V, A]
@@ -50,13 +49,13 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, V](
     private[Expr] sealed trait OneTail[A] {
       import OneTail._
 
-      def apply(expr: lambdas.Expr[One]): lambdas.Expr[A] =
+      def apply(expr: lambdas.Expr[One])(using lambdas.Context): lambdas.Expr[A] =
         this match {
           case Id => expr
           case Map(init, f, v) => (init(expr) map f)(v)
           case Zip(t1, t2, v)  => (t1(expr) zip t2(expr))(v)
-          case Prj1(t, v1, v2) => lambdas.Expr.unzip(t(expr))(v1, v2)._1
-          case Prj2(t, v1, v2) => lambdas.Expr.unzip(t(expr))(v1, v2)._2
+          case Prj1(t, v1, v2) => lambdas.Expr.unzip0(t(expr))(v1, v2)._1
+          case Prj2(t, v1, v2) => lambdas.Expr.unzip0(t(expr))(v1, v2)._2
         }
 
       def apply(t: OneTail[One]): OneTail[A]
@@ -106,45 +105,71 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, V](
     override def variable[A](v: Var[A]): Expr[A] =
       LambdasExpr(lambdas.Expr.variable(v))
 
-    override def map[A, B](e: Expr[A], f: A -⚬ B, resultVar: Var[B]): Expr[B] =
+    override def map[A, B](e: Expr[A], f: A -⚬ B, resultVarName: V)(using lambdas.Context): Expr[B] =
+      val resultVar = lambdas.Context.newVar[B](resultVarName)
       e match {
         case LambdasExpr(a) => LambdasExpr((a map f)(resultVar))
         case OneExpr(v, t)  => OneExpr(v, OneTail.Map(t, f, resultVar))
       }
 
-    override def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[A |*| B]): Expr[A |*| B] =
+    override def zip[A, B](a: Expr[A], b: Expr[B], resultVarName: V)(using lambdas.Context): Expr[A |*| B] = {
+      val resultVar = lambdas.Context.newVar[A |*| B](resultVarName)
       (a, b) match {
         case (LambdasExpr(a), LambdasExpr(b)) =>
           LambdasExpr((a zip b)(resultVar))
         case (LambdasExpr(a), OneExpr(v, g)) =>
           val aOne: lambdas.Expr[A |*| One] =
-            (a map smc.introSnd)(newSyntheticVar(Vars.single(a.resultVar) zip Vars.single(v)))
-          val va = newSyntheticVar[A, A](hint = Vars.single(a.resultVar))
-          val (a1, o1) = lambdas.Expr.unzip(aOne)(va, v)
-          LambdasExpr(lambdas.Expr.zip(a1, g(o1), resultVar))
+            (a map smc.introSnd)(lambdas.Context.newVar(newSyntheticVarName(a.resultVar.origin, v.origin)))
+          val va = lambdas.Context.newVar[A](newSyntheticVarName(hint = a.resultVar.origin))
+          val (a1, o1) = lambdas.Expr.unzip0(aOne)(va, v)
+          LambdasExpr(lambdas.Expr.zip(a1, g(o1), resultVarName))
         case (OneExpr(v, f), LambdasExpr(b)) =>
           val oneB: lambdas.Expr[One |*| B] =
-            (b map smc.introFst)(newSyntheticVar(Vars.single(v) zip Vars.single(b.resultVar)))
-          val vb = newSyntheticVar[B, B](hint = Vars.single(b.resultVar))
-          val (o1, b1) = lambdas.Expr.unzip(oneB)(v, vb)
-          LambdasExpr(lambdas.Expr.zip(f(o1), b1, resultVar))
+            (b map smc.introFst)(lambdas.Context.newVar(newSyntheticVarName(v.origin, b.resultVar.origin)))
+          val vb = lambdas.Context.newVar[B](newSyntheticVarName(hint = b.resultVar.origin))
+          val (o1, b1) = lambdas.Expr.unzip0(oneB)(v, vb)
+          LambdasExpr(lambdas.Expr.zip(f(o1), b1, resultVarName))
         case (a @ OneExpr(v, f), OneExpr(w, g)) =>
           val aOne: OneTail[A |*| One] =
-            OneTail.Map(f, smc.introSnd, newSyntheticVar(Vars.single(a.resultVar) zip Vars.single(w)))
-          val va = newSyntheticVar[A, A](hint = Vars.single(a.resultVar))
+            OneTail.Map(f, smc.introSnd, lambdas.Context.newVar(newSyntheticVarName(a.resultVar.origin, w.origin)))
+          val va = lambdas.Context.newVar[A](newSyntheticVarName(hint = a.resultVar.origin))
           val (a1, o1) = OneTail.unzip(aOne)(va, w)
           OneExpr(v, OneTail.Zip(a1, g.apply1(o1), resultVar))
       }
+    }
 
-    override def unzip[B1, B2](e: Expr[B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (Expr[B1], Expr[B2]) =
+    private def newSyntheticVarName(hint1: V, hint2: V): V = {
+      val hint: Tupled[[x] =>> V, Unit |*| Unit] =
+        Tupled.atom[|*|, [x] =>> V, Unit](hint1) zip Tupled.atom(hint2)
+      syntheticVar[Unit |*| Unit](hint)
+    }
+
+    private def newSyntheticVarName(hint: V): V =
+      syntheticVar(Tupled.atom(hint))
+
+    override def unzip[B1, B2](e: Expr[B1 |*| B2])(varName1: V, varName2: V)(using
+      Context
+    ): (Expr[B1], Expr[B2]) = {
       e match {
         case LambdasExpr(e) =>
-          val (b1, b2) = lambdas.Expr.unzip(e)(resultVar1, resultVar2)
+          val (b1, b2) = lambdas.Expr.unzip(e)(varName1, varName2)
           (LambdasExpr(b1), LambdasExpr(b2))
         case OneExpr(v, f) =>
-          val (f1, f2) = OneTail.unzip(f)(resultVar1, resultVar2)
+          val (f1, f2) = OneTail.unzip(f)(Context.newVar[B1](varName1), Context.newVar[B2](varName2))
           (OneExpr(v, f1), OneExpr(v, f2))
       }
+    }
+
+    override def unzip0[B1, B2](e: Expr[B1 |*| B2])(v1: Var[B1], v2: Var[B2]): (Expr[B1], Expr[B2]) = {
+      e match {
+        case LambdasExpr(e) =>
+          val (b1, b2) = lambdas.Expr.unzip0(e)(v1, v2)
+          (LambdasExpr(b1), LambdasExpr(b2))
+        case OneExpr(v, f) =>
+          val (f1, f2) = OneTail.unzip(f)(v1, v2)
+          (OneExpr(v, f1), OneExpr(v, f2))
+      }
+    }
 
     override def resultVar[A](a: Expr[A]): Var[A] =
       a.resultVar
@@ -152,8 +177,8 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, V](
     def lift[A](expr: lambdas.Expr[A]): Expr[A] =
       LambdasExpr(expr)
 
-    def one(v: Var[One]): Expr[One] =
-      OneExpr(v, OneTail.Id)
+    def one(v: V)(using Context): Expr[One] =
+      OneExpr(Context.newVar[One](v), OneTail.Id)
   }
 
   override protected def eliminateVariable[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] =
@@ -198,8 +223,9 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, V](
         Left(Lambdas.Error.Undefined(b.initialVars))
       case Expr.OneExpr(v, f) =>
         import Lambdas.Abstracted.{Closure, Exact, Failure}
+        given ctx: Context = Context.fresh()
         val b = f(lambdas.Expr.variable(v))
-        lambdas.eliminateVariable(v, b)(using Context.fresh()) match {
+        lambdas.eliminateVariable(v, b) match {
           case Exact(f) =>
             Right(f.fold)
           case Closure(captured, _) =>
@@ -213,10 +239,4 @@ class LambdasOne[-⚬[_, _], |*|[_, _], One, V](
             Left(e)
         }
     }
-}
-
-object LambdasOne {
-  trait VarSynthesizer[VarLabel, |*|[_, _]] {
-    def newSyntheticVar[A, X](hint: Tupled[|*|, Var[VarLabel, *], X]): Var[VarLabel, A]
-  }
 }

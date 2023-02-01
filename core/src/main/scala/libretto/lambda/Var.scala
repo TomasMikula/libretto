@@ -7,7 +7,7 @@ import scala.collection.{immutable => sci}
 /**
  * @param P representation of variable's origin (e.g. source code position)
  */
-class Var[P, A](val origin: P) {
+class Var[P, A] private[lambda](val origin: P) {
   def testEqual[B](that: Var[P, B]): Option[A =:= B] =
     if (this eq that) Some(summon[A =:= A].asInstanceOf[A =:= B])
     else None

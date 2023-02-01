@@ -21,7 +21,7 @@ class Philosophers[ForksImpl <: Forks](val forks: ForksImpl) {
     */
   def behavior(name: String)(cycles: Int): (SharedFork |*| SharedFork) -⚬ Done = {
     // turn the meta-level value `cycles` into a constant libretto expression
-    val constCycles: $[Val[Int]] =
+    def constCycles(using LambdaContext): $[Val[Int]] =
       one > const(cycles)
 
     λ { (forks: $[SharedFork |*| SharedFork]) =>

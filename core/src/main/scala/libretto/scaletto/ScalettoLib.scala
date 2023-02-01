@@ -530,7 +530,7 @@ class ScalettoLib[
       }
   }
 
-  extension [A](a: $[Val[A]]) {
+  extension [A](a: $[Val[A]])(using LambdaContext) {
     def *[B](b: $[Val[B]])(using SourcePos): $[Val[(A, B)]] =
       unliftPair(a |*| b)
   }

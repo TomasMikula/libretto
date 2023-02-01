@@ -27,20 +27,23 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
 
   trait Exprs {
     def variable[A](a: Var[V, A]): Expr[A]
-    def map[A, B](e: Expr[A], f: A -⚬ B, resultVar: Var[V, B]): Expr[B]
-    def zip[A, B](a: Expr[A], b: Expr[B], resultVar: Var[V, A |*| B]): Expr[A |*| B]
-    def unzip[A, B](ab: Expr[A |*| B])(resultVar1: Var[V, A], resultVar2: Var[V, B]): (Expr[A], Expr[B])
+    def map[A, B](e: Expr[A], f: A -⚬ B, resultVar: V)(using Context): Expr[B]
+    def zip[A, B](a: Expr[A], b: Expr[B], resultVar: V)(using Context): Expr[A |*| B]
+    def unzip[A, B](ab: Expr[A |*| B])(varName1: V, varName2: V)(using Context): (Expr[A], Expr[B])
+
+    // XXX
+    private[lambda] def unzip0[A, B](ab: Expr[A |*| B])(resultVar1: Var[V, A], resultVar2: Var[V, B]): (Expr[A], Expr[B])
 
     def resultVar[A](a: Expr[A]): Var[V, A]
   }
 
   extension [A](a: Expr[A]) {
     @targetName("exprMap")
-    def map[B](f: A -⚬ B)(resultVar: Var[V, B]): Expr[B] =
+    def map[B](f: A -⚬ B)(resultVar: V)(using Context): Expr[B] =
       Expr.map(a, f, resultVar)
 
     @targetName("exprZip")
-    def zip[B](b: Expr[B])(resultVar: Var[V, A |*| B]): Expr[A |*| B] =
+    def zip[B](b: Expr[B])(resultVar: V)(using Context): Expr[A |*| B] =
       Expr.zip(a, b, resultVar)
 
     @targetName("exprResultVar")
@@ -60,6 +63,8 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
     def fresh(): Context
 
     def nested(parent: Context): Context
+
+    def newVar[A](label: V)(using Context): Var[V, A]
 
     def registerNonLinearOps[A](v: Var[V, A])(
       split: Option[A -⚬ (A |*| A)],
@@ -94,24 +99,26 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
   )(using Context): Abstracted[A, B]
 
   private def abs[A, B](
-    bindVar: Var[V, A],
+    varName: V,
     f: Context ?=> Expr[A] => Expr[B],
-  )(using Context): Abstracted[A, B] =
+  )(using Context): Abstracted[A, B] = {
+    val bindVar = Context.newVar[A](varName)
     eliminateVariable(bindVar, f(Expr.variable(bindVar)))
+  }
 
   def absTopLevel[A, B](
-    bindVar: Var[V, A],
+    varName: V,
     f: Context ?=> Expr[A] => Expr[B],
   ): Abstracted[A, B] =
-    abs(bindVar, f)(using Context.fresh())
+    abs(varName, f)(using Context.fresh())
 
   def absNested[A, B](
-    bindVar: Var[V, A],
+    varName: V,
     f: Context ?=> Expr[A] => Expr[B],
   )(using parent: Context): Abstracted[A, B] =
-    abs(bindVar, f)(using Context.nested(parent = parent))
+    abs(varName, f)(using Context.nested(parent = parent))
 
-  type VFun[A, B] = (Var[V, A], Context ?=> Expr[A] => Expr[B])
+  type VFun[A, B] = (V, Context ?=> Expr[A] => Expr[B])
 
   def switch[<+>[_, _], A, B](
     cases: Sink[VFun, <+>, A, B],

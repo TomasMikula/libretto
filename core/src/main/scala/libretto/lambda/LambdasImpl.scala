@@ -36,6 +36,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
     override def nested(parent: Context): Context =
       new ContextImpl[-⚬, |*|, V](Some(parent))
 
+    override def newVar[A](label: V)(using ctx: Context): Var[A] =
+      ctx.newVar[A](label)
+
     override def registerNonLinearOps[A](v: Var[A])(
       split: Option[A -⚬ (A |*| A)],
       discard: Option[[B] => Unit => (A |*| B) -⚬ B],
@@ -124,14 +127,20 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
     override def variable[A](a: Var[A]): Expr[A] =
       Id(a)
 
-    override def map[B, C](f: Expr[B], g: B -⚬ C, resultVar: Var[C]): Expr[C] =
-      (f map g)(resultVar)
+    override def map[B, C](f: Expr[B], g: B -⚬ C, resultVar: V)(using Context): Expr[C] =
+      (f map g)(Context.newVar(resultVar))
 
-    override def zip[B1, B2](f1: Expr[B1], f2: Expr[B2], resultVar: Var[B1 |*| B2]): Expr[B1 |*| B2] =
-      (f1 zip f2)(resultVar)
+    override def zip[B1, B2](f1: Expr[B1], f2: Expr[B2], resultVar: V)(using Context): Expr[B1 |*| B2] =
+      (f1 zip f2)(Context.newVar(resultVar))
 
-    override def unzip[B1, B2](f: Expr[B1 |*| B2])(resultVar1: Var[B1], resultVar2: Var[B2]): (Expr[B1], Expr[B2]) =
-      (Prj1(f, resultVar1, resultVar2), Prj2(f, resultVar1, resultVar2))
+    override def unzip0[B1, B2](f: Expr[B1 |*| B2])(v1: Var[B1], v2: Var[B2]): (Expr[B1], Expr[B2]) =
+      (Prj1(f, v1, v2), Prj2(f, v1, v2))
+
+    override def unzip[B1, B2](f: Expr[B1 |*| B2])(resultVar1: V, resultVar2: V)(using Context): (Expr[B1], Expr[B2]) = {
+      val v1 = Context.newVar[B1](resultVar1)
+      val v2 = Context.newVar[B2](resultVar2)
+      unzip0(f)(v1, v2)
+    }
 
     override def resultVar[B](f: Expr[B]): Var[B] =
       f.resultVar

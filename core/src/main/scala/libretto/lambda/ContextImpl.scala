@@ -5,13 +5,16 @@ import scala.collection.mutable
 class ContextImpl[-⚬[_, _], |*|[_, _], V](
   parent: Option[ContextImpl[-⚬, |*|, V]] = None,
 ) {
-  case class Entry[A](
+  private case class Entry[A](
     split: Option[A -⚬ (A |*| A)],
     discard: Option[[B] => Unit => (A |*| B) -⚬ B],
   )
 
-  val m: mutable.Map[Var[V, Any], Entry[Any]] =
+  private val m: mutable.Map[Var[V, Any], Entry[Any]] =
     mutable.Map.empty
+
+  def newVar[A](data: V): Var[V, A] =
+    new Var[V, A](data)
 
   def register[A](v: Var[V, A])(
     split: Option[A -⚬ (A |*| A)],

@@ -23,9 +23,10 @@ class Closures[-⚬[_, _], |*|[_, _], =⚬[_, _], V, E, LE, LAMBDAS <: Lambdas[-
     f: Expr[A =⚬ B],
     a: Expr[A],
   )(
-    auxVar: Var[V, (A =⚬ B) |*| A],
-    resultVar: Var[V, B],
+    auxVar: V,
+    resultVar: V,
   )(using
+    ctx: lambdas.Context,
     ev: ClosedSemigroupalCategory[-⚬, |*|, =⚬],
   ): Expr[B] =
     (f zip a)(auxVar).map(ev.eval[A, B])(resultVar)

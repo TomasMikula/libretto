@@ -411,12 +411,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   val lambdas: LambdasOne[-⚬, |*|, One, VarOrigin] =
     new LambdasOne[-⚬, |*|, One, VarOrigin](
-      new LambdasOne.VarSynthesizer[VarOrigin, |*|] {
-        override def newSyntheticVar[A, X](hint: Tupled[|*|, Var, X]): Var[A] = {
-          val desc = hint.foldMap0([x] => (vx: Var[x]) => vx.origin.print, (x, y) => s"($x, $y)")
-          new Var[A](VarOrigin.Synthetic(s"Combination of $desc"))
-        }
-      }
+      syntheticVar = [A] => (hint: Tupled[|*|, [x] =>> VarOrigin, A]) => {
+        val desc = hint.foldMap0([x] => (vx: VarOrigin) => vx.print, (x, y) => s"($x, $y)")
+        VarOrigin.Synthetic(s"Combination of $desc")
+      },
     )
 
   val closures: Closures[-⚬, |*|, =⚬, VarOrigin, lambdas.Error, lambdas.LinearityViolation, lambdas.type] =
@@ -427,25 +425,29 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   override type LambdaContext = lambdas.Context
 
   override val `$`: FunExprOps  = new FunExprOps {
-    override def one(implicit pos: SourcePos): $[One] =
-      lambdas.Expr.one(new Var[One](VarOrigin.OneIntro(pos)))
+    override def one(using pos: SourcePos, ctx: lambdas.Context): $[One] =
+      lambdas.Expr.one(VarOrigin.OneIntro(pos))
 
-    override def map[A, B](a: $[A])(f: A -⚬ B)(
-      pos: SourcePos,
+    override def map[A, B](a: $[A])(f: A -⚬ B)(pos: SourcePos)(using
+      lambdas.Context,
     ): $[B] =
-      (a map f)(new Var[B](VarOrigin.FunAppRes(pos)))
+      (a map f)(VarOrigin.FunAppRes(pos))
 
     override def zip[A, B](a: $[A], b: $[B])(
       pos: SourcePos,
+    )(using
+      lambdas.Context,
     ): $[A |*| B] =
-      (a zip b)(new Var[A |*| B](VarOrigin.Pairing(pos)))
+      (a zip b)(VarOrigin.Pairing(pos))
 
     override def unzip[A, B](ab: $[A |*| B])(
       pos: SourcePos,
+    )(using
+      lambdas.Context,
     ): ($[A], $[B]) =
       lambdas.Expr.unzip(ab)(
-        new Var[A](VarOrigin.Prj1(pos)),
-        new Var[B](VarOrigin.Prj2(pos)),
+        VarOrigin.Prj1(pos),
+        VarOrigin.Prj2(pos),
       )
 
     override def switchEither[A, B, C](
@@ -456,8 +458,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     ): $[C] = {
       val f1: lambdas.Context ?=> $[A] => $[C] = ctx ?=> a => f(Left(a))
       val f2: lambdas.Context ?=> $[B] => $[C] = ctx ?=> b => f(Right(b))
-      val a = new Var[A](VarOrigin.Lambda(pos))
-      val b = new Var[B](VarOrigin.Lambda(pos))
+      val a = VarOrigin.Lambda(pos)
+      val b = VarOrigin.Lambda(pos)
       lambdas.switch(
         Sink[lambdas.VFun, |+|, A, C]((a, f1)) <+> Sink((b, f2)),
         [X, Y] => (fx: X -⚬ C, fy: Y -⚬ C) => either(fx, fy),
@@ -471,10 +473,12 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
     override def app[A, B](f: $[A =⚬ B], a: $[A])(
       pos: SourcePos,
+    )(using
+      lambdas.Context,
     ): $[B] =
       closures.app(f, a)(
-        new Var[(A =⚬ B) |*| A](VarOrigin.FunAndArg(pos)),
-        new Var[B](VarOrigin.FunAppRes(pos)),
+        VarOrigin.FunAndArg(pos),
+        VarOrigin.FunAppRes(pos),
       )
 
     override def nonLinear[A](a: $[A])(
@@ -500,7 +504,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         override def apply[A, B](using pos: SourcePos, ctx: lambdas.Context)(
           f: lambdas.Context ?=> $[A] => $[B],
         ): $[A =⚬ B] =
-          compileClosure(f)(pos, ctx)
+          compileClosure(f)(pos)(using ctx)
       }
 
     private def compile[A, B](f: lambdas.Context ?=> $[A] => $[B])(
@@ -508,9 +512,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     ): A -⚬ B = {
       import Abstracted.{Closure, Exact, Failure}
 
-      val bindVar = new Var[A](VarOrigin.Lambda(pos))
+      given ctx: lambdas.Context = lambdas.Context.fresh()
+      val a = VarOrigin.Lambda(pos)
 
-      lambdas.absTopLevel(bindVar, f) match {
+      lambdas.absTopLevel(a, f) match {
         case Exact(f) =>
           Right(f.fold)
         case Closure(captured, f) =>
@@ -527,18 +532,19 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
     private def compileClosure[A, B](f: lambdas.Context ?=> $[A] => $[B])(
       pos: SourcePos,
+    )(using
       ctx: lambdas.Context,
     ): $[A =⚬ B] = {
       import Abstracted.{Closure, Exact, Failure}
 
-      val bindVar = new Var[A](VarOrigin.Lambda(pos))
-      val resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(pos))
+      val bindVar   = VarOrigin.Lambda(pos)
+      val resultVar = VarOrigin.ClosureVal(pos)
 
-      lambdas.absNested[A, B](bindVar, f)(using ctx) match {
+      lambdas.absNested[A, B](bindVar, f) match {
         case Closure(captured, f) =>
           (zipExprs(captured) map csmc.curry(f.fold))(resultVar)
         case Exact(f) =>
-          val captured0 = lambdas.Expr.one(new Var[One](VarOrigin.OneIntro(pos)))
+          val captured0 = lambdas.Expr.one(VarOrigin.OneIntro(pos))
           (captured0 map csmc.curry(elimFst > f.fold))(resultVar)
         case Failure(e) =>
           raiseError(e)
@@ -547,9 +553,9 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   }
 
   // TODO: avoid the need to create auxiliary pairings
-  private def zipExprs[A](es: Tupled[|*|, lambdas.Expr, A]): lambdas.Expr[A] =
+  private def zipExprs[A](es: Tupled[|*|, lambdas.Expr, A])(using lambdas.Context): lambdas.Expr[A] =
     es.fold([x, y] => (ex: lambdas.Expr[x], ey: lambdas.Expr[y]) => {
-      val v = new Var[x |*| y](VarOrigin.Synthetic(s"auxiliary pairing of ($ex, $ey)"))
+      val v = VarOrigin.Synthetic(s"auxiliary pairing of ($ex, $ey)")
       lambdas.Expr.zip(ex, ey, v)
     })
 

@@ -278,7 +278,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   extension [A](a: $[Detained[A]]) {
-    def releaseWhen(trigger: $[Done]): $[A] =
+    def releaseWhen(trigger: $[Done])(using LambdaContext): $[A] =
       Detained.releaseBy(trigger |*| a)
   }
 
@@ -322,7 +322,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   extension [A](a: $[Deferred[A]]) {
-    def resumeWhen(trigger: $[Ping]): $[A] =
+    def resumeWhen(trigger: $[Ping])(using LambdaContext): $[A] =
       Deferred.resumeBy(trigger |*| a)
   }
 
@@ -1035,20 +1035,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def sequence_NN[A, B](using A: Signaling.Negative[A], B: Deferrable.Negative[B]): (A |*| B) -⚬ (A |*| B) =
     snd(awaitPongFst) > assocRL > fst(notifyNegSnd)
 
-  extension [A, B](a: $[A]) {
-    def sequence(b: $[B])(implicit A: Signaling.Positive[A], B: Deferrable.Positive[B]): $[A |*| B] =
+  extension [A, B](a: $[A])(using LambdaContext) {
+    def sequence(b: $[B])(using A: Signaling.Positive[A], B: Deferrable.Positive[B]): $[A |*| B] =
       (a |*| b) > sequence_PP
 
-    def sequence(f: Done -⚬ B)(implicit A: Signaling.Positive[A]): $[A |*| B] =
+    def sequence(f: Done -⚬ B)(using A: Signaling.Positive[A]): $[A |*| B] =
       a > signalPosSnd > snd(f)
 
-    def sequenceAfter(b: $[B])(implicit A: Deferrable.Positive[A], B: Signaling.Positive[B]): $[A |*| B] =
+    def sequenceAfter(b: $[B])(using A: Deferrable.Positive[A], B: Signaling.Positive[B]): $[A |*| B] =
       (b |*| a) > sequence_PP[B, A] > swap
 
-    def waitFor(b: $[Done])(implicit A: Junction.Positive[A]): $[A] =
+    def waitFor(b: $[Done])(using A: Junction.Positive[A]): $[A] =
       (a |*| b) > awaitPosSnd
 
-    def deferUntil(b: $[Ping])(implicit A: Deferrable.Positive[A]): $[A] =
+    def deferUntil(b: $[Ping])(using A: Deferrable.Positive[A]): $[A] =
       (a |*| b) > awaitPingSnd
 
     /** Obstructs further interaction until a [[Ping]] is received. */
@@ -1056,7 +1056,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       blockOutportUntilPing(b |*| a)
   }
 
-  def when[A](trigger: $[Done])(f: Done -⚬ A): $[A] =
+  def when[A](trigger: $[Done])(f: Done -⚬ A)(using LambdaContext): $[A] =
     trigger > f
 
   /** Races the two [[Done]] signals and
@@ -1465,7 +1465,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
           either(injectL, id)
       }
 
-    extension [A, B](ab: $[A |+| B]) {
+    extension [A, B](ab: $[A |+| B])(using LambdaContext) {
       def switch[C](using SourcePos)(
         caseLeft: A -⚬ C,
         caseRight: B -⚬ C,
@@ -2532,7 +2532,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
           injectR
       }
 
-    extension [A](ma: $[Maybe[A]]) {
+    extension [A](ma: $[Maybe[A]])(using LambdaContext) {
       def getOrElse(using pos: SourcePos)(ifEmpty: One -⚬ A): $[A] =
         Maybe.getOrElse(ifEmpty)(ma)(using pos)
     }
@@ -3429,10 +3429,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   /** Non-empty list, i.e. a list with at least one element. */
   opaque type LList1[T] = T |*| LList[T]
   object LList1 {
-    def apply[T](x: $[T], xs: $[T]*): $[LList1[T]] =
+    def apply[T](x: $[T], xs: $[T]*)(using LambdaContext): $[LList1[T]] =
       fromExprList(x, xs.toList)
 
-    def fromExprList[T](h: $[T], t: List[$[T]]): $[LList1[T]] =
+    def fromExprList[T](h: $[T], t: List[$[T]])(using LambdaContext): $[LList1[T]] =
       t match {
         case Nil => singleton(h)
         case (x :: xs) => cons1(h |*| fromExprList(x, xs))
@@ -3796,7 +3796,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
   }
 
-  extension (acquiredLock: $[AcquiredLock]) {
+  extension (acquiredLock: $[AcquiredLock])(using LambdaContext) {
     def deferReleaseUntil(ping: $[Ping]): $[AcquiredLock] =
       AcquiredLock.deferRelease(ping |*| acquiredLock)
 
