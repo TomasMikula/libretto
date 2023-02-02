@@ -149,24 +149,100 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       f.initialVars
   }
 
-  override def eliminateVariable[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] = {
+  override def eliminateVariable[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] =
+    eliminateVariableN(boundVar, Tupled.atom(expr))
+
+  def eliminateVariableN[A, B](boundVar: Var[A], exprs: Tupled[Expr, B])(using Context): Abstracted[A, B] =
+    eliminateVarN(boundVar, exprs) match {
+      case Right(res)                    => res
+      case Left(EliminateRes.NotFound()) => Lambdas.Abstracted.Failure(errors.underusedVar(boundVar))
+    }
+
+  private def eliminateVarN[A, B](boundVar: Var[A], exprs: Tupled[Expr, B])(using Context): Either[EliminateRes.NotFound[A, B], Abstracted[A, B]] = {
+    import Lambdas.Abstracted.{Closure, Exact, Failure}
+    import EliminateRes.NotFound
+    import libretto.lambda.{CapturingFun => cf}
+
+    exprs.asBin match {
+      case Bin.Leaf(b) =>
+        eliminateVar(boundVar, b)
+      case br: Bin.Branch[br, lf, f, b1, b2] =>
+        val b1 = Tupled.fromBin(br.l)
+        val b2 = Tupled.fromBin(br.r)
+        ( eliminateVarN(boundVar, b1)
+        , eliminateVarN(boundVar, b2)
+        ) match {
+          case (Right(r1), Right(r2)) =>
+            Right(
+              (r1.toEither, r2.toEither) match {
+                case (Right(f1), Right(f2)) =>
+                    Context.getSplit(boundVar) match
+                      case Some(split) =>
+                        (f1, f2) match
+                          case (cf.NoCapture(f1), cf.NoCapture(f2)) =>
+                            Exact(lift(split) > par(f1, f2))
+                          case (cf.NoCapture(f1), cf.Closure(y, f2)) =>
+                            Closure(y, snd(lift(split)) > xi > par(f1, f2))
+                          case (cf.Closure(x, f1), cf.NoCapture(f2)) =>
+                            Closure(x, snd(lift(split)) > assocRL > par(f1, f2))
+                          case (cf.Closure(x, f1), cf.Closure(y, f2)) =>
+                            Closure(x zip y, snd(lift(split)) > ixi > par(f1, f2))
+                      case None =>
+                        Failure(errors.overusedVar(boundVar))
+                case (Left(e1), Left(e2)) =>
+                  Failure(errors.combineLinear(e1, e2))
+                case (Left(e1), _) =>
+                  Failure(e1)
+                case (_, Left(e2)) =>
+                  Failure(e2)
+              }
+            )
+          case (Right(r1), Left(NotFound())) =>
+            Right(
+              r1.toEither match
+                case Right(f1) =>
+                  f1 match
+                    case cf.NoCapture(f1)  => Closure(b2, swap > fst(f1))
+                    case cf.Closure(x, f1) => Closure(x zip b2, ix > fst(f1))
+                case Left(e) =>
+                  Failure(e)
+            )
+          case (Left(NotFound()), Right(r2)) =>
+            Right(
+              r2.toEither match
+                case Right(f2) =>
+                  f2 match
+                    case cf.NoCapture(f2)  => Closure(b1, snd(f2))
+                    case cf.Closure(y, f2) => Closure(b1 zip y, assocLR > snd(f2))
+                case Left(e) =>
+                  Failure(e)
+            )
+          case (Left(NotFound()), Left(NotFound())) =>
+            Left(NotFound())
+        }
+    }
+  }
+
+  private def eliminateVar[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Either[EliminateRes.NotFound[A, B], Abstracted[A, B]] = {
     import HybridArrow.{LinearRes, Op, Unvar, Varz}
     import Lambdas.Abstracted.{Closure, Exact, Failure}
 
     eliminate(boundVar, expr) match {
       case EliminateRes.Found(arr) =>
-        arr.extract(Unvar.SingleVar()) match {
-          case LinearRes.Exact(f) =>
-            Exact(f)
-          case LinearRes.Closure(captured, g) =>
-            deduplicateExpressions(captured) match
-              case Right(Exists.Some((x, f1))) => Closure(x, f1.inFst[A] > g)
-              case Left(e)                     => Failure(e)
-          case LinearRes.Violation(e) =>
-            Failure(e)
-        }
-      case EliminateRes.NotFound() =>
-        Failure(errors.underusedVars(Var.Set(boundVar)))
+        Right(
+          arr.extract(Unvar.SingleVar()) match {
+            case LinearRes.Exact(f) =>
+              Exact(f)
+            case LinearRes.Closure(captured, g) =>
+              deduplicateExpressions(captured) match
+                case Right(Exists.Some((x, f1))) => Closure(x, f1.inFst[A] > g)
+                case Left(e)                     => Failure(e)
+            case LinearRes.Violation(e) =>
+              Failure(e)
+          }
+        )
+      case nf @ EliminateRes.NotFound() =>
+        Left(nf)
     }
   }
 

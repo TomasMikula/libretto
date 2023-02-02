@@ -285,6 +285,12 @@ object Lambdas {
     def undefinedVars(vs: Var.Set[VarLabel]): E
 
     def fromLinearityViolation(e: LE): E
+
+    def underusedVar[A](v: Var[VarLabel, A]): LE =
+      underusedVars(Var.Set(v))
+
+    def overusedVar[A](v: Var[VarLabel, A]): LE =
+      overusedVars(Var.Set(v))
   }
 
   object ErrorFactory {
@@ -318,6 +324,13 @@ object Lambdas {
         case Exact(f)      => Exact(g(f))
         case Closure(x, f) => Closure(x, g(f))
         case Failure(e)    => Failure(e)
+      }
+
+    def toEither: Either[LE, CapturingFun[AbsFun, |*|, Tupled[|*|, Exp, *], A, B]] =
+      this match {
+        case Exact(f)      => Right(CapturingFun.NoCapture(f))
+        case Closure(x, f) => Right(CapturingFun.Closure(x, f))
+        case Failure(e)    => Left(e)
       }
   }
 

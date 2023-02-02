@@ -16,6 +16,9 @@ object Tupled {
   ): Tupled[|*|, F, X |*| Y] =
     Bin.Branch(_1, _2)
 
+  def fromBin[|*|[_, _], F[_], A](value: Bin[|*|, [x] =>> x, F, A]): Tupled[|*|, F, A] =
+    value
+
   extension [|*|[_, _], F[_], A](a: Tupled[|*|, F, A]) {
     def trans[G[_]](f: [x] => F[x] => G[x]): Tupled[|*|, G, A] =
       a.mapLeafs(f)
