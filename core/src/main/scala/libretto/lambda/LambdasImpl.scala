@@ -94,6 +94,38 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
 
     def zip[D](that: Expr[D])(resultVar: Var[B |*| D]): Expr[B |*| D] =
       Zip(this, that, resultVar)
+
+    /** Goes from the end backwards (i.e. from the result variable towards inital variables)
+     * and splits this expression at the boundary where the given predicate first returns `true`.
+     * Initial variables of the resulting trimmed `Expr[B]` (second part of the returned tuple)
+     * are exactly the terminal variables of the returned prefix expressions (first part of the returned tuple).
+     * If in some branch the predicate never returns `true`, the expression's initial variable in that branch is returned as `Left`.
+     */
+    def splitAt(p: [X] => Var[X] => Boolean): Exists[[x] =>> (Tupled[[t] =>> Either[Var[t], Expr[t]], x], Expr[B])] =
+      if (p(resultVar)) {
+        Exists((Tupled.atom(Right(this)), Id(resultVar)))
+      } else {
+        this match {
+          case Id(v) =>
+            Exists((Tupled.atom(Left(v)), Id(v)))
+          case Map(y, f, v) =>
+            y.splitAt(p) match
+              case Exists.Some((x, y)) =>
+                Exists((x, Map(y, f, v)))
+          case Zip(y1, y2, v) =>
+            (y1.splitAt(p), y2.splitAt(p)) match
+              case (Exists.Some((x1, y1)), Exists.Some((x2, y2))) =>
+                Exists((x1 zip x2), Zip(y1, y2, v))
+          case Prj1(y, v1, v2) =>
+            y.splitAt(p) match
+              case Exists.Some((x, y)) =>
+                Exists.Some((x, Prj1(y, v1, v2)))
+          case Prj2(y, v1, v2) =>
+            y.splitAt(p) match
+              case Exists.Some((x, y)) =>
+                Exists.Some((x, Prj2(y, v1, v2)))
+        }
+      }
   }
 
   object Expr extends Exprs {
@@ -147,6 +179,20 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
 
     def initialVars[B](f: Expr[B]): Var.Set[V] =
       f.initialVars
+
+    def splitAt[B](b: Tupled[Expr, B])(p: [X] => Var[X] => Boolean): Exists[[x] =>> (Tupled[[t] =>> Either[Var[t], Expr[t]], x], Tupled[Expr, B])] =
+      b.asBin match {
+        case Bin.Leaf(b) =>
+          b.splitAt(p) match
+            case Exists.Some((x, b)) =>
+              Exists((x, Tupled.atom(b)))
+        case Bin.Branch(l, r) =>
+          ( splitAt(Tupled.fromBin(l))(p)
+          , splitAt(Tupled.fromBin(r))(p)
+          ) match
+            case (Exists.Some((x, b1)), Exists.Some((y, b2))) =>
+              Exists((x zip y, b1 zip b2))
+      }
   }
 
   override def eliminateVariable[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] =
