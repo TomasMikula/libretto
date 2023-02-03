@@ -51,6 +51,47 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     foldMap[G](map, [x, y] => (x: G[x], y: G[y]) => reduce(x, y))
   }
 
+  def partition[G[_], H[_]](
+    f: [x] => F[x] => Either[G[x], H[x]],
+  )(using
+    shuffle: Shuffle[<*>],
+  ): Partitioned[G, H, shuffle.~⚬] = {
+    import shuffle.~⚬
+    import shuffle.~⚬.{assocLR, assocRL, fst, id, ix, ixi, par, snd, swap, xi}
+
+    this match {
+      case Leaf(a) =>
+        f(a) match
+          case Left(a)  => Partitioned.Left(Leaf(a))
+          case Right(a) => Partitioned.Right(Leaf(a))
+      case Branch(l, r) =>
+        import Partitioned.{Both, Left, Right}
+        import l.Partitioned.{Both => LBoth, Left => LLeft, Right => LRight}
+        import r.Partitioned.{Both => RBoth, Left => RLeft, Right => RRight}
+
+        (l.partition(f), r.partition(f)) match
+          case (LLeft(lg),        RLeft(rg))        => Left(lg <*> rg)
+          case (LLeft(lg),        RRight(rh))       => Both(lg, rh, id)
+          case (LLeft(lg),        RBoth(rg, rh, t)) => Both(lg <*> rg, rh, assocLR > snd(t))
+          case (LRight(lh),       RLeft(rg))        => Both(rg, lh, swap)
+          case (LRight(lh),       RRight(rh))       => Right(lh <*> rh)
+          case (LRight(lh),       RBoth(rg, rh, t)) => Both(rg, lh <*> rh, xi > snd(t))
+          case (LBoth(lg, lh, s), RLeft(rg))        => Both(lg <*> rg, lh, ix > fst(s))
+          case (LBoth(lg, lh, s), RRight(rh))       => Both(lg, lh <*> rh, assocRL > fst(s))
+          case (LBoth(lg, lh, s), RBoth(rg, rh, t)) => Both(lg <*> rg, lh <*> rh, ixi > par(s, t))
+    }
+  }
+
+  enum Partitioned[G[_], H[_], ~⚬[_, _]] {
+    case Left(value: Bin[<*>, T, G, A])
+    case Right(value: Bin[<*>, T, H, A])
+    case Both[G[_], H[_], X, Y, ~⚬[_, _]](
+      l: Bin[<*>, T, G, X],
+      r: Bin[<*>, T, H, Y],
+      f: (X <*> Y) ~⚬ A,
+    ) extends Partitioned[G, H, ~⚬]
+  }
+
   def deduplicateLeafs[->[_, _]](
     dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
   )(using
