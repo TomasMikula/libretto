@@ -27,14 +27,17 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
 
   trait Exprs {
     def variable[A](a: Var[V, A]): Expr[A]
-    def map[A, B](e: Expr[A], f: A -⚬ B, resultVar: V)(using Context): Expr[B]
-    def zip[A, B](a: Expr[A], b: Expr[B], resultVar: V)(using Context): Expr[A |*| B]
+    def map[A, B](e: Expr[A], f: A -⚬ B, resultVarName: V)(using Context): Expr[B]
+    def zip[A, B](a: Expr[A], b: Expr[B], resultVarName: V)(using Context): Expr[A |*| B]
     def unzip[A, B](ab: Expr[A |*| B])(varName1: V, varName2: V)(using Context): (Expr[A], Expr[B])
+    def const[A](introduce: [x] => Unit => x -⚬ (A |*| x))(varName: V)(using Context): Expr[A]
 
     // XXX
     private[lambda] def unzip0[A, B](ab: Expr[A |*| B])(resultVar1: Var[V, A], resultVar2: Var[V, B]): (Expr[A], Expr[B])
 
     def resultVar[A](a: Expr[A]): Var[V, A]
+
+    def initialVars[A](a: Expr[A]): Var.Set[V]
   }
 
   extension [A](a: Expr[A]) {
@@ -73,9 +76,15 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
       Context
     ): Unit
 
+    def registerConstant[A](v: Var[V, A])(
+      introduce: [x] => Unit => x -⚬ (A |*| x),
+    )(using ctx: Context): Unit
+
     def getSplit[A](v: Var[V, A])(using Context): Option[A -⚬ (A |*| A)]
 
     def getDiscard[A](v: Var[V, A])(using Context): Option[[B] => Unit => (A |*| B) -⚬ B]
+
+    def getConstant[A](v: Var[V, A])(using Context): Option[[x] => Unit => x -⚬ (A |*| x)]
   }
 
   type AbstractFun[A, B]

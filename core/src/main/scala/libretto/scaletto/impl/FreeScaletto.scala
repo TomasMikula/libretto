@@ -1,7 +1,7 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, LambdasOne, Sink, Tupled, Var}
+import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, Lambdas, LambdasImpl, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Abstracted
 import libretto.util.{Async, BiInjective, SourcePos, TypeEq}
 import libretto.util.Monad.monadEither
@@ -409,16 +409,17 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
-  val lambdas: LambdasOne[-⚬, |*|, One, VarOrigin] =
-    new LambdasOne[-⚬, |*|, One, VarOrigin](
-      syntheticVar = [A] => (hint: Tupled[|*|, [x] =>> VarOrigin, A]) => {
-        val desc = hint.foldMap0([x] => (vx: VarOrigin) => vx.print, (x, y) => s"($x, $y)")
-        VarOrigin.Synthetic(s"Combination of $desc")
-      },
-    )
+  val lambdas: Lambdas[-⚬, |*|, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin]] =
+    new LambdasImpl[-⚬, |*|, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin]]
+    // (
+    //   syntheticVar = [A] => (hint: Tupled[|*|, [x] =>> VarOrigin, A]) => {
+    //     val desc = hint.foldMap0([x] => (vx: VarOrigin) => vx.print, (x, y) => s"($x, $y)")
+    //     VarOrigin.Synthetic(s"Combination of $desc")
+    //   },
+    // )
 
-  val closures: Closures[-⚬, |*|, =⚬, VarOrigin, lambdas.Error, lambdas.LinearityViolation, lambdas.type] =
-    Closures[-⚬, |*|, =⚬, VarOrigin, lambdas.Error, lambdas.LinearityViolation](lambdas)
+  val closures: Closures[-⚬, |*|, =⚬, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin], lambdas.type] =
+    Closures(lambdas)
 
   override type $[A] = lambdas.Expr[A]
 
@@ -426,7 +427,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   override val `$`: FunExprOps  = new FunExprOps {
     override def one(using pos: SourcePos, ctx: lambdas.Context): $[One] =
-      lambdas.Expr.one(VarOrigin.OneIntro(pos))
+      lambdas.Expr.const([x] => (_: Unit) => introFst[x])(VarOrigin.OneIntro(pos))
 
     override def map[A, B](a: $[A])(f: A -⚬ B)(pos: SourcePos)(using
       lambdas.Context,
@@ -517,16 +518,16 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
       lambdas.absTopLevel(a, f) match {
         case Exact(f) =>
-          Right(f.fold)
+          f.fold
         case Closure(captured, f) =>
-          for {
-            g <- lambdas.compileConst(zipExprs(captured))
-          } yield introFst(g) > f.fold
+          val undefinedVars: Var.Set[VarOrigin] =
+            captured.foldMap0(
+              [X] => (x: lambdas.Expr[X]) => lambdas.Expr.initialVars(x),
+              _ merge _,
+            )
+          raiseError(Lambdas.Error.Undefined(undefinedVars))
         case Failure(e) =>
-          Left(e)
-      } match {
-        case Right(f) => f
-        case Left(e)  => raiseError(e)
+          raiseError(e)
       }
     }
 
@@ -544,7 +545,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         case Closure(captured, f) =>
           (zipExprs(captured) map csmc.curry(f.fold))(resultVar)
         case Exact(f) =>
-          val captured0 = lambdas.Expr.one(VarOrigin.OneIntro(pos))
+          val captured0 = $.one(using pos)
           (captured0 map csmc.curry(elimFst > f.fold))(resultVar)
         case Failure(e) =>
           raiseError(e)
@@ -559,9 +560,9 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       lambdas.Expr.zip(ex, ey, v)
     })
 
-  private def raiseError(e: lambdas.Error): Nothing = {
-    import lambdas.Error.Undefined
-    import lambdas.LinearityViolation.{OverUnder, Overused, Underused}
+  private def raiseError(e: Lambdas.Error[VarOrigin]): Nothing = {
+    import Lambdas.Error.Undefined
+    import Lambdas.Error.LinearityViolation.{OverUnder, Overused, Underused}
 
     def overusedMsg(vs: Var.Set[VarOrigin])  = s"Variables used more than once: ${vs.list.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"
     def underusedMsg(vs: Var.Set[VarOrigin]) = s"Variables not fully consumed: ${vs.list.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"

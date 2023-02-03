@@ -45,11 +45,19 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
     )(using ctx: Context): Unit =
       ctx.register(v)(split, discard)
 
+    override def registerConstant[A](v: Var[A])(
+      introduce: [x] => Unit => x -⚬ (A |*| x),
+    )(using ctx: Context): Unit =
+      ctx.registerConstant(v)(introduce)
+
     override def getSplit[A](v: Var[A])(using ctx: Context): Option[A -⚬ (A |*| A)] =
       ctx.getSplit(v)
 
     override def getDiscard[A](v: Var[A])(using ctx: Context): Option[[B] => Unit => (A |*| B) -⚬ B] =
       ctx.getDiscard(v)
+
+    override def getConstant[A](v: Var[A])(using ctx: Context): Option[[x] => Unit => x -⚬ (A |*| x)] =
+      ctx.getConstant(v)
   }
 
   type CapturingFun[A, B] = libretto.lambda.CapturingFun[AbstractFun, |*|, Tupled[Expr, *], A, B]
@@ -174,10 +182,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       unzip0(f)(v1, v2)
     }
 
+    override def const[A](introduce: [x] => Unit => x -⚬ (A |*| x))(varName: V)(using Context): Expr[A] = {
+      val v = Context.newVar[A](varName)
+      Context.registerConstant(v)(introduce)
+      Id(v)
+    }
+
     override def resultVar[B](f: Expr[B]): Var[B] =
       f.resultVar
 
-    def initialVars[B](f: Expr[B]): Var.Set[V] =
+    override def initialVars[B](f: Expr[B]): Var.Set[V] =
       f.initialVars
 
     def splitAt[B](b: Tupled[Expr, B])(p: [X] => Var[X] => Boolean): Exists[[x] =>> (Tupled[[t] =>> Either[Var[t], Expr[t]], x], Tupled[Expr, B])] =
@@ -198,11 +212,41 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
   override def eliminateVariable[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] =
     eliminateVariableN(boundVar, Tupled.atom(expr))
 
-  def eliminateVariableN[A, B](boundVar: Var[A], exprs: Tupled[Expr, B])(using Context): Abstracted[A, B] =
+  def eliminateVariableN[A, B](boundVar: Var[A], exprs: Tupled[Expr, B])(using Context): Abstracted[A, B] = {
+    import Lambdas.Abstracted.{Closure, Exact, Failure}
+
     eliminateVarN(boundVar, exprs) match {
-      case Right(res)                    => res
-      case Left(EliminateRes.NotFound()) => Lambdas.Abstracted.Failure(errors.underusedVar(boundVar))
+      case Right(res) =>
+        res match {
+          // case Closure(x, f) =>
+            // eliminate all constant expressions
+
+            // split at constants
+
+            // eliminate constants from capture
+
+            // type Intro[T] = [x] => Unit => x -⚬ (T |*| x)
+            // val y = x.asBin
+            // given shuffled.shuffle.type = shuffled.shuffle
+            // y.partition[Expr, Intro](
+            //   [t] => (t: Expr[t]) =>
+            //     Context.getConstant(t.resultVar) match {
+            //       case Some(intro) => Right(intro)
+            //       case None        => Left(t)
+            //     }
+            // ) match {
+            //   case y.Partitioned.Left(y) =>
+            //     Closure(Tupled.fromBin(y), f)
+            //   case y.Partitioned.Right(y) =>
+
+            // }
+          case other =>
+            other
+        }
+      case Left(EliminateRes.NotFound()) =>
+        Failure(errors.underusedVar(boundVar))
     }
+  }
 
   private def eliminateVarN[A, B](boundVar: Var[A], exprs: Tupled[Expr, B])(using Context): Either[EliminateRes.NotFound[A, B], Abstracted[A, B]] = {
     import Lambdas.Abstracted.{Closure, Exact, Failure}

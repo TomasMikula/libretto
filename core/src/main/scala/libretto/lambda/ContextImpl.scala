@@ -10,7 +10,12 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V](
     discard: Option[[B] => Unit => (A |*| B) -⚬ B],
   )
 
-  private val m: mutable.Map[Var[V, Any], Entry[Any]] =
+  private type Intro[A] = [x] => Unit => x -⚬ (A |*| x)
+
+  private val nonLinearOps: mutable.Map[Var[V, Any], Entry[Any]] =
+    mutable.Map.empty
+
+  private val constants: mutable.Map[Var[V, Any], Intro[Any]] =
     mutable.Map.empty
 
   def newVar[A](data: V): Var[V, A] =
@@ -20,7 +25,7 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V](
     split: Option[A -⚬ (A |*| A)],
     discard: Option[[B] => Unit => (A |*| B) -⚬ B],
   ): Unit =
-    m.updateWith(
+    nonLinearOps.updateWith(
       v.asInstanceOf[Var[V, Any]],
     ) {
       case None =>
@@ -35,13 +40,26 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V](
         )
     }
 
+  def registerConstant[A](v: Var[V, A])(
+    introduce: [x] => Unit => x -⚬ (A |*| x),
+  ): Unit =
+    constants.put(
+      v.asInstanceOf[Var[V, Any]],
+      (introduce: Intro[A]).asInstanceOf[Intro[Any]],
+    )
+
   def getSplit[A](v: Var[V, A]): Option[A -⚬ (A |*| A)] =
-    m.get(v.asInstanceOf[Var[V, Any]])
+    nonLinearOps.get(v.asInstanceOf[Var[V, Any]])
       .flatMap(_.asInstanceOf[Entry[A]].split)
       .orElse(parent.flatMap(_.getSplit(v)))
 
   def getDiscard[A](v: Var[V, A]): Option[[B] => Unit => (A |*| B) -⚬ B] =
-    m.get(v.asInstanceOf[Var[V, Any]])
+    nonLinearOps.get(v.asInstanceOf[Var[V, Any]])
       .flatMap(_.asInstanceOf[Entry[A]].discard)
       .orElse(parent.flatMap(_.getDiscard(v)))
+
+  def getConstant[A](v: Var[V, A]): Option[[x] => Unit => x -⚬ (A |*| x)] =
+    constants
+      .get(v.asInstanceOf[Var[V, Any]])
+      .asInstanceOf
 }
