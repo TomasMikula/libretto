@@ -100,7 +100,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
   type Abstracted[A, B] = Lambdas.Abstracted[Expr, |*|, AbstractFun, LE, A, B]
   type AbsRes[A, B]     = Lambdas.Abstracted[Expr, |*|, -⚬,          LE, A, B]
 
-  protected def eliminateVariable[A, B](
+  protected def eliminateLocalVariables[A, B](
     boundVar: Var[V, A],
     expr: Expr[B],
   )(using Context): Abstracted[A, B]
@@ -110,7 +110,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
     f: Context ?=> Expr[A] => Expr[B],
   )(using Context): Abstracted[A, B] = {
     val bindVar = Context.newVar[A](varName)
-    eliminateVariable(bindVar, f(Expr.variable(bindVar)))
+    eliminateLocalVariables(bindVar, f(Expr.variable(bindVar)))
   }
 
   def absTopLevel[A, B](

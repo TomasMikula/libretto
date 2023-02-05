@@ -219,77 +219,64 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
   /** Multiple expression trees. */
   type Forest[A] = Tupled[Expr, A]
 
-  override def eliminateVariable[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] =
-    eliminateVariableN(boundVar, Tupled.atom(expr))
+  override def eliminateLocalVariables[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] =
+    eliminateLocalVariablesFromForest(boundVar, Tupled.atom(expr))
 
-  def eliminateVariableN[A, B](boundVar: Var[A], exprs: Tupled[Expr, B])(using Context): Abstracted[A, B] = {
+  def eliminateLocalVariablesFromForest[A, B](boundVar: Var[A], exprs: Forest[B])(using Context): Abstracted[A, B] = {
     import Lambdas.Abstracted.{Closure, Exact, Failure}
 
-    val res0: Abstracted[A, B] =
-      extractFunctionFromForest(boundVar, exprs) match {
-        case Closure(y, f) => // eliminate all constant expressions from captured expressions
-          type Intro[T]      = (Var[T], [x] => Unit => x -⚬ (T |*| x))
-          type VarOrIntro[T] = Either[Var[T], Intro[T]]
+    extractFunctionFromForest(boundVar, exprs) match {
+      case Closure(y, f) => // eliminate all constant expressions from captured expressions
+        // split captured expressions at context boundary
+        Expr.splitAt(y) { [t] => (v: Var[t]) =>
+          !Context.isDefiningFor(v)
+        } match {
+          case Exists.Some((x, y)) =>
+            type InnerVarOrOuterExpr[T] = Either[Var[T], Expr[T]]
 
-          // split captured expressions at context boundary
-          Expr.splitAt(y) { [t] => (v: Var[t]) =>
-            !Context.isDefiningFor(v)
-          } match {
-            case Exists.Some((x, y)) =>
-              type InnerVarOrOuterExpr[T] = Either[Var[T], Expr[T]]
+            def go[X, Y](
+              boundary: Bin[|*|, [t] =>> t, InnerVarOrOuterExpr, X],
+              captured: Tupled[Expr, Y],
+              f: AbstractFun[Y |*| A, B],
+              alreadyEliminated: Var.Set[V],
+            ): (Abstracted[A, B], Var.Set[V]) =
+              boundary match {
+                case Bin.Leaf(Left(v)) =>
+                  if (alreadyEliminated containsVar v)
+                    (Closure(captured, f), alreadyEliminated)
+                  else (
+                    Context.getConstant(v) match {
+                      case Some(intro) =>
+                        extractFunctionFromForest(v, captured) match
+                          case Exact(g)      => Exact(lift(intro[A](())) > fst(g) > f)
+                          case Closure(x, g) => Closure(x, snd(lift(intro[A](()))) > assocRL > fst(g) > f)
+                          case Failure(e)    => Failure(e)
+                      case None =>
+                        bug(s"Unexpected variable that neither derives from λ nor is a constant")
+                    },
+                    alreadyEliminated + v
+                  )
+                case Bin.Leaf(Right(x)) =>
+                  val v = x.resultVar
+                  if (alreadyEliminated containsVar v)
+                    (Closure(captured, f), alreadyEliminated)
+                  else (
+                    extractFunctionFromForest(v, captured) match {
+                      case Exact(g)      => Closure(Tupled.atom(x), fst(g) > f)
+                      case Closure(y, g) => Closure(y zip Tupled.atom(x), fst(g) > f)
+                      case Failure(e)    => Failure(e)
+                    },
+                    alreadyEliminated + v
+                  )
+                case Bin.Branch(l, r) =>
+                  go(r, captured, f, alreadyEliminated) match {
+                    case (Closure(x, f), eliminatedVars) => go(l, x, f, eliminatedVars)
+                    case other                           => other
+                  }
+              }
 
-              def go[X, Y](
-                boundary: Bin[|*|, [t] =>> t, InnerVarOrOuterExpr, X],
-                captured: Tupled[Expr, Y],
-                f: AbstractFun[Y |*| A, B],
-                alreadyEliminated: Var.Set[V],
-              ): (Abstracted[A, B], Var.Set[V]) =
-                boundary match {
-                  case Bin.Leaf(Left(v)) =>
-                    if (alreadyEliminated containsVar v)
-                      (Closure(captured, f), alreadyEliminated)
-                    else (
-                      Context.getConstant(v) match {
-                        case Some(intro) =>
-                          extractFunctionFromForest(v, captured) match
-                            case Exact(g)      => Exact(lift(intro[A](())) > fst(g) > f)
-                            case Closure(x, g) => Closure(x, snd(lift(intro[A](()))) > assocRL > fst(g) > f)
-                            case Failure(e)    => Failure(e)
-                        case None =>
-                          bug(s"Unexpected variable that neither derives from λ nor is a constant")
-                      },
-                      alreadyEliminated + v
-                    )
-                  case Bin.Leaf(Right(x)) =>
-                    val v = x.resultVar
-                    if (alreadyEliminated containsVar v)
-                      (Closure(captured, f), alreadyEliminated)
-                    else (
-                      extractFunctionFromForest(v, captured) match {
-                        case Exact(g)      => Closure(Tupled.atom(x), fst(g) > f)
-                        case Closure(y, g) => Closure(y zip Tupled.atom(x), fst(g) > f)
-                        case Failure(e)    => Failure(e)
-                      },
-                      alreadyEliminated + v
-                    )
-                  case Bin.Branch(l, r) =>
-                    go(r, captured, f, alreadyEliminated) match {
-                      case (Closure(x, f), eliminatedVars) => go(l, x, f, eliminatedVars)
-                      case other                           => other
-                    }
-                }
-
-              go(x.asBin, y, f, Var.Set(boundVar))._1
-          }
-        case other =>
-          other
-      }
-
-    res0 match {
-      case Closure(y, g) =>
-        deduplicateExpressions(y) match
-          case Right(Exists.Some((x, f))) => Closure(x, f.inFst[A] > g)
-          case Left(e)                    => Failure(e)
+            go(x.asBin, y, f, Var.Set(boundVar))._1
+        }
       case other =>
         other
     }
@@ -303,34 +290,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
     Context,
   ): AbsRes[A, B] =
     switchImpl(cases, sum, distribute)
-
-  private def deduplicateExpressions[AA](exprs: Tupled[Expr, AA])(using
-    Context,
-  ): Either[LE, Exists[[A] =>> (Tupled[Expr, A], AbstractFun[A, AA])]] = {
-    enum Arr[A, B] {
-      case FreeDup[A](expr: Expr[A]) extends Arr[A, A |*| A]
-    }
-    given Shuffled.With[Arr, |*|, shuffle.type] =
-      Shuffled[Arr, |*|](shuffle)
-
-    exprs.deduplicateLeafs[Arr](
-      [x] => (x: Expr[x]) => Arr.FreeDup(x),
-    ) match {
-      case Exists.Some((a, f)) =>
-        f.traverse[LinCheck, -⚬](
-          [t, u] => (arr: Arr[t, u]) => {
-            arr match
-              case Arr.FreeDup(x) =>
-                Context.getSplit(x.resultVar) match
-                  case Some(split) => LinCheck.Success(split)
-                  case None        => LinCheck.Failure(errors.overusedVars(Var.Set(x.resultVar)))
-          },
-        ) match {
-          case LinCheck.Success(f) => Right(Exists((a, f)))
-          case LinCheck.Failure(e) => Left(e)
-        }
-    }
-  }
 
   private def bug(msg: String): Nothing =
     throw new AssertionError(msg)
