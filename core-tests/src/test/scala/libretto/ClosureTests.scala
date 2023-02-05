@@ -250,6 +250,19 @@ class ClosureTests extends ScalatestScalettoTestSuite {
           }
         },
 
+
+      "one-expression whose part is consumed outside and part inside a closure" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ { (a: $[Done]) =>
+              val (b |*| c) = one > done > fork
+              λ.closure { (d: $[Done]) =>
+                c |*| d
+              } |*| (a |*| b)
+            }
+          }
+        }.pending,
+
       "non-linearity in nested context does not affect parent context" ->
         TestCase.pure {
           for {
@@ -265,7 +278,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             }
             _ <- Outcome.assertSubstring("used more than once", e.getMessage)
             _ <- Outcome.assertSubstring("variable bound by lambda", e.getMessage)
-            _ <- Outcome.assertSubstring("ClosureTests.scala:257", e.getMessage)
+            _ <- Outcome.assertSubstring("ClosureTests.scala:270", e.getMessage)
           } yield ()
         },
 
