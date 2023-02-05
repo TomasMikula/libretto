@@ -16,6 +16,9 @@ object Tupled {
   ): Tupled[|*|, F, X |*| Y] =
     Bin.Branch(_1, _2)
 
+  def fromBin[|*|[_, _], F[_], A](value: Bin[|*|, [x] =>> x, F, A]): Tupled[|*|, F, A] =
+    value
+
   extension [|*|[_, _], F[_], A](a: Tupled[|*|, F, A]) {
     def trans[G[_]](f: [x] => F[x] => G[x]): Tupled[|*|, G, A] =
       a.mapLeafs(f)
@@ -49,6 +52,18 @@ object Tupled {
       shuffled: Shuffled[->, |*|],
     ): Exists[[X] =>> (Tupled[|*|, F, X], shuffled.Shuffled[X, A])] =
       a.deduplicateLeafs(dup)
+
+    def product[B, ->[_, _]](b: Tupled[|*|, F, B])(
+      discardFst: [X, Y] => F[X] => (X |*| Y) -> Y,
+    )(using
+      F: UniqueTypeArg[F],
+      shuffled: Shuffled[->, |*|],
+    ): Exists[[P] =>> (
+      Tupled[|*|, F, P],
+      shuffled.Shuffled[P, A],
+      shuffled.Shuffled[P, B],
+    )] =
+      (a product b)(discardFst)
   }
 
   given [|*|[_, _], F[_]]: Zippable[|*|, Tupled[|*|, F, *]] with {

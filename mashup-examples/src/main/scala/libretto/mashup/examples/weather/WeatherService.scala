@@ -1,9 +1,10 @@
 package libretto.mashup.examples.weather
 
 import libretto.mashup.{Input, Output, Runtime, Service}
-import libretto.mashup.dsl.{-->, ###, EmptyResource, Expr, Float64, Fun, Record, Text, alsoElim, closure, fun, of}
+import libretto.mashup.dsl.{-->, ###, EmptyResource, Expr, Float64, Fun, LambdaContext, Record, Text, alsoElim, closure, fun, of}
 import libretto.mashup.rest.{Endpoint, RestApi}
 import libretto.mashup.rest.RelativeUrl._
+import libretto.util.SourcePos
 import zio.{Scope, ZIO}
 
 object WeatherService {
@@ -11,7 +12,7 @@ object WeatherService {
     Text
 
   object City {
-    def apply(value: String): Expr[City] =
+    def apply(value: String)(using SourcePos, LambdaContext): Expr[City] =
       Text(value)
   }
 
@@ -23,7 +24,7 @@ object WeatherService {
       Record
         .field("celsius" -> value)
 
-    def apply(value: Double): Expr[Celsius] =
+    def apply(value: Double)(using LambdaContext): Expr[Celsius] =
       Celsius(Float64(value))
   }
 
@@ -33,7 +34,7 @@ object WeatherService {
     ]
 
   object WeatherReport {
-    def apply(city: Expr[City], temperature: Expr[Celsius]): Expr[WeatherReport] =
+    def apply(city: Expr[City], temperature: Expr[Celsius])(using LambdaContext): Expr[WeatherReport] =
       Record
         .field("city"        -> city)
         .field("temperature" -> temperature)

@@ -205,8 +205,9 @@ trait InvertDSL extends ClosedDSL {
     contrapositive(pack[F])
 
   implicit class DemandExprOps[B](expr: $[-[B]]) {
-    def contramap[A](f: A -⚬ B)(implicit
+    def contramap[A](f: A -⚬ B)(using
       pos: SourcePos,
+      ctx: LambdaContext,
     ): $[-[A]] =
       $.map(expr)(contrapositive(f))(pos)
   }

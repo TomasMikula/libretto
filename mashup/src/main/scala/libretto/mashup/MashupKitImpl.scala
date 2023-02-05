@@ -88,7 +88,7 @@ object MashupKitImpl extends MashupKit { kit =>
       StarterKit.dsl.eval[A, B]
 
     override object Record extends Records {
-      override def empty(using pos: SourcePos): Expr[Record[EmptyResource]] =
+      override def empty(using pos: SourcePos, ctx: LambdaContext): Expr[Record[EmptyResource]] =
         StarterKit.dsl.$.one(using pos)
 
       override def field[N <: String & Singleton, T](field: (N, Expr[T])): Expr[Record[N of T]] =
@@ -96,57 +96,64 @@ object MashupKitImpl extends MashupKit { kit =>
     }
 
     override object Text extends Texts {
-      def apply(value: String)(using pos: SourcePos): Expr[Text] =
+      def apply(value: String)(using pos: SourcePos, ctx: LambdaContext): Expr[Text] =
         StarterKit.dsl.$.one(using pos) > StarterKit.dsl.done > StarterKit.dsl.constVal(value)
     }
 
     override object Float64 extends Float64s {
       import StarterKit.dsl.$.{map, zip}
 
-      override def apply(value: Double)(using pos: SourcePos): Expr[Float64] =
+      override def apply(value: Double)(using pos: SourcePos, ctx: LambdaContext): Expr[Float64] =
         StarterKit.dsl.$.one(using pos) > StarterKit.dsl.done > StarterKit.dsl.constVal(value)
 
       override def add(a: Expr[Float64], b: Expr[Float64])(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): Expr[Float64] =
         map(zip(a, b)(pos))(unliftPair > mapVal { case (a, b) => a + b })(pos)
 
       override def subtract(a: Expr[Float64], b: Expr[Float64])(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): Expr[Float64] =
         map(zip(a, b)(pos))(unliftPair > mapVal { case (a, b) => a - b })(pos)
 
       override def negate(a: Expr[Float64])(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): Expr[Float64] =
         map(a)(mapVal(a => -a))(pos)
 
       override def multiply(a: Expr[Float64], b: Expr[Float64])(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): Expr[Float64] =
         map(zip(a, b)(pos))(unliftPair > mapVal { case (a, b) => a * b })(pos)
 
       override def divide(a: Expr[Float64], b: Expr[Float64])(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): Expr[Float64] =
         map(zip(a, b)(pos))(unliftPair > mapVal { case (a, b) => a / b })(pos)
     }
 
     override object Expr extends Exprs {
-      override def unit(using pos: SourcePos): Expr[EmptyResource] =
+      override def unit(using pos: SourcePos, ctx: LambdaContext): Expr[EmptyResource] =
         StarterKit.dsl.$.one(using pos)
 
-      override def pair[A, B](a: Expr[A], b: Expr[B])(using
-        pos: SourcePos,
+      override def pair[A, B](a: Expr[A], b: Expr[B])(pos: SourcePos)(using
+        LambdaContext,
       ): Expr[A ** B] =
         StarterKit.dsl.$.zip(a, b)(pos)
 
-      override def eliminateSecond[A](a: Expr[A], empty: Expr[EmptyResource])(pos: SourcePos): Expr[A] =
+      override def eliminateSecond[A](a: Expr[A], empty: Expr[EmptyResource])(pos: SourcePos)(using LambdaContext): Expr[A] =
         StarterKit.dsl.$.eliminateSecond(a, empty)(pos)
 
       override def awaitSecond[A, B](a: Expr[A], b: Expr[B])(pos: SourcePos)(using
         A: ValueType[A],
         B: ValueType[B],
+      )(using
+        LambdaContext,
       ): Expr[A] = {
         import A.junction
         import StarterKit.dsl.$
@@ -154,13 +161,13 @@ object MashupKitImpl extends MashupKit { kit =>
         $.map($.zip(a, B.neglect(b)(using pos))(pos))(awaitPosSnd)(pos)
       }
 
-      override def extendRecord[A, N <: String, T](init: Expr[A], last: (N, Expr[T]))(pos: SourcePos): Expr[A ### (N of T)] =
+      override def extendRecord[A, N <: String, T](init: Expr[A], last: (N, Expr[T]))(pos: SourcePos)(using LambdaContext): Expr[A ### (N of T)] =
         StarterKit.dsl.$.zip(init, last._2)(pos)
 
-      override def map[A, B](a: Expr[A], f: Fun[A, B])(using pos: SourcePos): Expr[B] =
+      override def map[A, B](a: Expr[A], f: Fun[A, B])(pos: SourcePos)(using ctx: LambdaContext): Expr[B] =
         StarterKit.dsl.$.map(a)(f)(pos)
 
-      override def debugPrint[A](s: String, expr: Expr[A])(using A: ValueType[A]): Expr[A] =
+      override def debugPrint[A](s: String, expr: Expr[A])(using A: ValueType[A])(using LambdaContext): Expr[A] =
         expr >
           A.toScalaValue >
           StarterKit.scalettoLib.alsoPrintLine(v => s"$s: $v") >
@@ -179,7 +186,7 @@ object MashupKitImpl extends MashupKit { kit =>
     }
 
     override object ** extends PairExtractor {
-      override def unapply[A, B](ab: Expr[A ** B])(using pos: SourcePos): (Expr[A], Expr[B]) =
+      override def unapply[A, B](ab: Expr[A ** B])(using pos: SourcePos, ctx: LambdaContext): (Expr[A], Expr[B]) =
         StarterKit.dsl.$.unzip(ab)(pos)
     }
 
@@ -195,6 +202,7 @@ object MashupKitImpl extends MashupKit { kit =>
     override object ### extends RecordExtractor {
       override def unapply[A, B](rec: Expr[Record[A ### B]])(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): (Expr[Record[A]], Expr[Record[B]]) =
         StarterKit.dsl.$.unzip(rec)(pos)
     }

@@ -1,7 +1,7 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, LambdasOne, Tupled}
+import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, Lambdas, LambdasImpl, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Abstracted
 import libretto.util.{Async, BiInjective, SourcePos, TypeEq}
 import libretto.util.Monad.monadEither
@@ -407,53 +407,73 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       override def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B                                           = FreeScaletto.this.eval[A, B]
     }
 
-  type Var[A] = libretto.scaletto.impl.Var[VarOrigin, A]
+  type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
-  val lambdas: LambdasOne[-⚬, |*|, One, Var, Set[Var[?]]] =
-    new LambdasOne[-⚬, |*|, One, Var, Set[Var[?]]](
-      new LambdasOne.VarSynthesizer[Var, |*|] {
-        override def newSyntheticVar[A, X](hint: Tupled[|*|, Var, X]): Var[A] = {
-          val desc = hint.foldMap0([x] => (vx: Var[x]) => vx.origin.print, (x, y) => s"($x, $y)")
-          new Var[A](VarOrigin.Synthetic(s"Combination of $desc"))
-        }
-      }
-    )
+  val lambdas: Lambdas[-⚬, |*|, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin]] =
+    new LambdasImpl[-⚬, |*|, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin]]
 
-  val closures: Closures[-⚬, |*|, =⚬, Var, Set[Var[?]], lambdas.Error, lambdas.LinearityViolation, lambdas.type] =
-    Closures[-⚬, |*|, =⚬, Var, Set[Var[?]], lambdas.Error, lambdas.LinearityViolation](lambdas)
+  val closures: Closures[-⚬, |*|, =⚬, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin], lambdas.type] =
+    Closures(lambdas)
 
   override type $[A] = lambdas.Expr[A]
 
   override type LambdaContext = lambdas.Context
 
   override val `$`: FunExprOps  = new FunExprOps {
-    override def one(implicit pos: SourcePos): $[One] =
-      lambdas.Expr.one(new Var[One](VarOrigin.OneIntro(pos)))
+    override def one(using pos: SourcePos, ctx: lambdas.Context): $[One] =
+      lambdas.Expr.const([x] => (_: Unit) => introFst[x])(VarOrigin.OneIntro(pos))
 
-    override def map[A, B](a: $[A])(f: A -⚬ B)(
-      pos: SourcePos,
+    override def map[A, B](a: $[A])(f: A -⚬ B)(pos: SourcePos)(using
+      lambdas.Context,
     ): $[B] =
-      (a map f)(new Var[B](VarOrigin.FunAppRes(pos)))
+      (a map f)(VarOrigin.FunAppRes(pos))
 
     override def zip[A, B](a: $[A], b: $[B])(
       pos: SourcePos,
+    )(using
+      lambdas.Context,
     ): $[A |*| B] =
-      (a zip b)(new Var[A |*| B](VarOrigin.Pairing(pos)))
+      (a zip b)(VarOrigin.Pairing(pos))
 
     override def unzip[A, B](ab: $[A |*| B])(
       pos: SourcePos,
+    )(using
+      lambdas.Context,
     ): ($[A], $[B]) =
       lambdas.Expr.unzip(ab)(
-        new Var[A](VarOrigin.Prj1(pos)),
-        new Var[B](VarOrigin.Prj2(pos)),
+        VarOrigin.Prj1(pos),
+        VarOrigin.Prj2(pos),
       )
+
+    override def switchEither[A, B, C](
+      ab: $[A |+| B],
+      f: lambdas.Context ?=> Either[$[A], $[B]] => $[C],
+    )(pos: SourcePos)(using
+      lambdas.Context,
+    ): $[C] = {
+      val f1: lambdas.Context ?=> $[A] => $[C] = ctx ?=> a => f(Left(a))
+      val f2: lambdas.Context ?=> $[B] => $[C] = ctx ?=> b => f(Right(b))
+      val a = VarOrigin.Lambda(pos)
+      val b = VarOrigin.Lambda(pos)
+      lambdas.switch(
+        Sink[lambdas.VFun, |+|, A, C]((a, f1)) <+> Sink((b, f2)),
+        [X, Y] => (fx: X -⚬ C, fy: Y -⚬ C) => either(fx, fy),
+        [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
+      ) match {
+        case Abstracted.Exact(f)      => map(ab)(f)(pos)
+        case Abstracted.Closure(x, f) => map(zipExprs(Tupled.zip(x, Tupled.atom(ab))))(f)(pos)
+        case Abstracted.Failure(e)    => raiseError(e)
+      }
+    }
 
     override def app[A, B](f: $[A =⚬ B], a: $[A])(
       pos: SourcePos,
+    )(using
+      lambdas.Context,
     ): $[B] =
       closures.app(f, a)(
-        new Var[(A =⚬ B) |*| A](VarOrigin.FunAndArg(pos)),
-        new Var[B](VarOrigin.FunAppRes(pos)),
+        VarOrigin.FunAndArg(pos),
+        VarOrigin.FunAppRes(pos),
       )
 
     override def nonLinear[A](a: $[A])(
@@ -464,10 +484,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     )(using
       lambdas.Context,
     ): $[A] = {
-      // val v = new Var[A](VarOrigin.NonLinearOps(pos))
       val v = a.resultVar
       lambdas.Context.registerNonLinearOps(v)(split, discard.map(f => [B] => (_: Unit) => elimFst[A, B](f)))
-      // lambdas.Expr.assign(a)(v)
       a
     }
   }
@@ -481,7 +499,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         override def apply[A, B](using pos: SourcePos, ctx: lambdas.Context)(
           f: lambdas.Context ?=> $[A] => $[B],
         ): $[A =⚬ B] =
-          compileClosure(f)(pos, ctx)
+          compileClosure(f)(pos)(using ctx)
       }
 
     private def compile[A, B](f: lambdas.Context ?=> $[A] => $[B])(
@@ -489,61 +507,68 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     ): A -⚬ B = {
       import Abstracted.{Closure, Exact, Failure}
 
-      val bindVar = new Var[A](VarOrigin.Lambda(pos))
+      given ctx: lambdas.Context = lambdas.Context.fresh()
+      val a = VarOrigin.Lambda(pos)
 
-      lambdas.absTopLevel(bindVar, f) match {
+      lambdas.absTopLevel(a, f) match {
         case Exact(f) =>
-          Right(f.fold)
+          f.fold
         case Closure(captured, f) =>
-          for {
-            g <- lambdas.compileConst(zipExprs(captured))
-          } yield introFst(g) > f.fold
+          val undefinedVars: Var.Set[VarOrigin] =
+            captured.foldMap0(
+              [X] => (x: lambdas.Expr[X]) => lambdas.Expr.initialVars(x),
+              _ merge _,
+            )
+          raiseError(Lambdas.Error.Undefined(undefinedVars))
         case Failure(e) =>
-          Left(e)
-      } match {
-        case Right(f) => f
-        case Left(e)  => raiseError(e)
+          raiseError(e)
       }
     }
 
-    // TODO: avoid the need to create auxiliary pairings
-    private def zipExprs[A](es: Tupled[|*|, lambdas.Expr, A]): lambdas.Expr[A] =
-      es.fold([x, y] => (ex: lambdas.Expr[x], ey: lambdas.Expr[y]) => {
-        val v = new Var[x |*| y](VarOrigin.Synthetic(s"auxiliary pairing of ($ex, $ey)"))
-        lambdas.Expr.zip(ex, ey, v)
-      })
-
     private def compileClosure[A, B](f: lambdas.Context ?=> $[A] => $[B])(
       pos: SourcePos,
+    )(using
       ctx: lambdas.Context,
     ): $[A =⚬ B] = {
-      import closures.ClosureRes.{Capturing, NonCapturing, NonLinear}
+      import Abstracted.{Closure, Exact, Failure}
 
-      val bindVar = new Var[A](VarOrigin.Lambda(pos))
-      val resultVar = new Var[A =⚬ B](VarOrigin.ClosureVal(pos))
+      val bindVar   = VarOrigin.Lambda(pos)
+      val resultVar = VarOrigin.ClosureVal(pos)
 
-      closures.closure[A, B](bindVar, f)(using ctx) match {
-        case Capturing(captured, f) =>
-          (zipExprs(captured) map csmc.curry(f))(resultVar)
-        case NonCapturing(f) =>
-          val captured0 = lambdas.Expr.one(new Var[One](VarOrigin.OneIntro(pos)))
-          (captured0 map csmc.curry(elimFst > f))(resultVar)
-        case NonLinear(e) =>
+      lambdas.absNested[A, B](bindVar, f) match {
+        case Closure(captured, f) =>
+          (zipExprs(captured) map csmc.curry(f.fold))(resultVar)
+        case Exact(f) =>
+          val captured0 = $.one(using pos)
+          (captured0 map csmc.curry(elimFst > f.fold))(resultVar)
+        case Failure(e) =>
           raiseError(e)
       }
     }
   }
 
-  private def raiseError(e: lambdas.Error): Nothing = {
-    import lambdas.Error.Undefined
-    import lambdas.LinearityViolation.{Overused, Underused}
+  // TODO: avoid the need to create auxiliary pairings
+  private def zipExprs[A](es: Tupled[|*|, lambdas.Expr, A])(using lambdas.Context): lambdas.Expr[A] =
+    es.fold([x, y] => (ex: lambdas.Expr[x], ey: lambdas.Expr[y]) => {
+      val v = VarOrigin.Synthetic(s"auxiliary pairing of ($ex, $ey)")
+      lambdas.Expr.zip(ex, ey, v)
+    })
+
+  private def raiseError(e: Lambdas.Error[VarOrigin]): Nothing = {
+    import Lambdas.Error.Undefined
+    import Lambdas.Error.LinearityViolation.{OverUnder, Overused, Underused}
+
+    def overusedMsg(vs: Var.Set[VarOrigin])  = s"Variables used more than once: ${vs.list.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"
+    def underusedMsg(vs: Var.Set[VarOrigin]) = s"Variables not fully consumed: ${vs.list.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"
+
     e match {
-      case Overused(vs)  => throw new NotLinearException(s"Variables used more than once: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}")
-      case Underused(vs) => throw new NotLinearException(s"Variables not fully consumed: ${vs.toList.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}")
-      case Undefined(vs) => throw new UnboundVariablesException(vs)
+      case Overused(vs)    => throw NotLinearException(overusedMsg(vs))
+      case Underused(vs)   => throw NotLinearException(underusedMsg(vs))
+      case OverUnder(o, u) => throw NotLinearException(s"${overusedMsg(o)}\n${underusedMsg(u)}")
+      case Undefined(vs)   => throw UnboundVariablesException(vs)
     }
   }
 
   override class NotLinearException(msg: String) extends Exception(msg)
-  override class UnboundVariablesException(vs: Set[Var[?]]) extends Exception
+  override class UnboundVariablesException(vs: Var.Set[VarOrigin]) extends Exception
 }

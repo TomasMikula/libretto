@@ -75,11 +75,14 @@ trait ClosedDSL extends CoreDSL {
   trait FunExprOps extends $Ops {
     def app[A, B](f: $[A =⚬ B], a: $[A])(
       pos: SourcePos,
+    )(using
+      LambdaContext,
     ): $[B]
 
     implicit class ClosureOps[A, B](f: $[A =⚬ B]) {
-      def apply(a: $[A])(implicit
+      def apply(a: $[A])(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): $[B] =
         app(f, a)(pos)
     }

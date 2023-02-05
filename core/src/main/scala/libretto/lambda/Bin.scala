@@ -51,6 +51,47 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     foldMap[G](map, [x, y] => (x: G[x], y: G[y]) => reduce(x, y))
   }
 
+  def partition[G[_], H[_]](
+    f: [x] => F[x] => Either[G[x], H[x]],
+  )(using
+    shuffle: Shuffle[<*>],
+  ): Partitioned[G, H, shuffle.~⚬] = {
+    import shuffle.~⚬
+    import shuffle.~⚬.{assocLR, assocRL, fst, id, ix, ixi, par, snd, swap, xi}
+
+    this match {
+      case Leaf(a) =>
+        f(a) match
+          case Left(a)  => Partitioned.Left(Leaf(a))
+          case Right(a) => Partitioned.Right(Leaf(a))
+      case Branch(l, r) =>
+        import Partitioned.{Both, Left, Right}
+        import l.Partitioned.{Both => LBoth, Left => LLeft, Right => LRight}
+        import r.Partitioned.{Both => RBoth, Left => RLeft, Right => RRight}
+
+        (l.partition(f), r.partition(f)) match
+          case (LLeft(lg),        RLeft(rg))        => Left(lg <*> rg)
+          case (LLeft(lg),        RRight(rh))       => Both(lg, rh, id)
+          case (LLeft(lg),        RBoth(rg, rh, t)) => Both(lg <*> rg, rh, assocLR > snd(t))
+          case (LRight(lh),       RLeft(rg))        => Both(rg, lh, swap)
+          case (LRight(lh),       RRight(rh))       => Right(lh <*> rh)
+          case (LRight(lh),       RBoth(rg, rh, t)) => Both(rg, lh <*> rh, xi > snd(t))
+          case (LBoth(lg, lh, s), RLeft(rg))        => Both(lg <*> rg, lh, ix > fst(s))
+          case (LBoth(lg, lh, s), RRight(rh))       => Both(lg, lh <*> rh, assocRL > fst(s))
+          case (LBoth(lg, lh, s), RBoth(rg, rh, t)) => Both(lg <*> rg, lh <*> rh, ixi > par(s, t))
+    }
+  }
+
+  enum Partitioned[G[_], H[_], ~⚬[_, _]] {
+    case Left(value: Bin[<*>, T, G, A])
+    case Right(value: Bin[<*>, T, H, A])
+    case Both[G[_], H[_], X, Y, ~⚬[_, _]](
+      l: Bin[<*>, T, G, X],
+      r: Bin[<*>, T, H, Y],
+      f: (X <*> Y) ~⚬ A,
+    ) extends Partitioned[G, H, ~⚬]
+  }
+
   def deduplicateLeafs[->[_, _]](
     dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
   )(using
@@ -127,6 +168,86 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
       f1: P ==> Q,
       g: (Q <*> R) --> (A <*> B),
     ) extends MergeRes[A, B, -->, ==>]
+  }
+
+  def product[B, ->[_, _]](that: Bin[<*>, T, F, B])(
+    discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y,
+  )(using
+    leafTest: UniqueTypeArg[F],
+    shuffled: Shuffled[->, <*>],
+  ): Exists[[P] =>> (
+    Bin[<*>, T, F, P],
+    shuffled.Shuffled[P, A],
+    shuffled.Shuffled[P, B],
+  )] =
+    (this product0 that)(discardFst) match {
+      case ProductRes.Absorbed(x, p1, p2) =>
+        Exists((x, p1, p2))
+      case ProductRes.WithRemainder(x, r, p1, p2) =>
+        Exists((
+          Branch(x, r),
+          r.discardAll(discardFst).inSnd > p1,
+          p2,
+        ))
+    }
+
+  private def product0[B, ->[_, _]](that: Bin[<*>, T, F, B])(
+    discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y,
+  )(using
+    leafTest: UniqueTypeArg[F],
+    shuffled: Shuffled[->, <*>],
+  ): ProductRes[A, B, shuffled.Shuffled] = {
+    import ProductRes.{Absorbed, WithRemainder}
+    given shuffled.shuffle.type = shuffled.shuffle
+    import shuffled.{Pure, assocLR, id, lift, par}
+
+    this match {
+      case l: Leaf[br, t, f, a] =>
+        that.find(l.value) match
+          case that.FindRes.Total(TypeEq(Refl())) =>
+            Absorbed(l, id, id)
+          case that.FindRes.Partial(r, f) =>
+            WithRemainder(l, r, id, Pure(f))
+          case that.FindRes.NotFound() =>
+            WithRemainder(l, that, id, lift(discardFst(l.value)))
+      case br: Branch[br, t, f, a1, a2] =>
+        (br.l product0 that)(discardFst) match
+          case br.l.ProductRes.Absorbed(p, p1, p2) =>
+            Absorbed(Branch(p, br.r), p1.inFst, br.r.discardAll(discardFst).inSnd > p2)
+          case br.l.ProductRes.WithRemainder(p, r, p1, p2) =>
+            (br.r product0 r)(discardFst) match
+              case br.r.ProductRes.Absorbed(q, q1, q2) =>
+                Absorbed(Branch(p, q), par(p1, q1), q2.inSnd > p2)
+              case br.r.ProductRes.WithRemainder(q, r, q1, q2) =>
+                WithRemainder(Branch(p, q), r, par(p1, q1), assocLR > q2.inSnd > p2)
+    }
+  }
+
+  private enum ProductRes[A, B, -->[_, _]] {
+    case Absorbed[P, A, B, -->[_, _]](
+      p: Bin[<*>, T, F, P],
+      p1: P --> A,
+      p2: P --> B,
+    ) extends ProductRes[A, B, -->]
+
+    case WithRemainder[P, R, A0, B0, A, B, -->[_, _]](
+      p: Bin[<*>, T, F, P],
+      r: Bin[<*>, T, F, R],
+      p1: P --> A,
+      p2: (P <*> R) --> B,
+    ) extends ProductRes[A, B, -->]
+  }
+
+  private def discardAll[->[_, _]](discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y): DiscardingAll[->] =
+    DiscardingAll(discardFst)
+
+  private class DiscardingAll[->[_, _]](discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y) {
+    def inSnd[P](using shuffled: Shuffled[->, <*>]): shuffled.Shuffled[P <*> A, P] = {
+      Bin.this match {
+        case Leaf(value) => shuffled.swap > shuffled.lift(discardFst(value))
+        case Branch(l, r) => shuffled.assocRL > r.discardAll(discardFst).inSnd > l.discardAll(discardFst).inSnd
+      }
+    }
   }
 
   private def find[X](x: F[X])(using

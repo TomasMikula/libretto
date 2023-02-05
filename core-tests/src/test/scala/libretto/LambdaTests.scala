@@ -329,6 +329,65 @@ class LambdaTests extends ScalatestScalettoTestSuite {
             }
           }
         },
+
+      "simple switch on |+|" ->
+        TestCase.pure {
+          expectNotThrows {
+            λ { (a: $[Done |+| Done]) =>
+              a switch {
+                case Left(d)  => d
+                case Right(d) => d
+              }
+            }
+          }
+        },
+
+      "nested switch on |+|" ->
+        TestCase.pure {
+          expectNotThrows {
+            λ { (a: $[Done |+| (Done |+| Done)]) =>
+              a switch {
+                case Left(d) => d
+                case Right(e) =>
+                  e switch {
+                    case Left(d) => d
+                    case Right(d) =>
+                      val (d1 |*| d2) = d > fork
+                      joinAll(d1, d2)
+                  }
+              }
+            }
+          }
+        },
+
+      "switch on |+| capturing outer variables" ->
+        TestCase.pure {
+          expectNotThrows {
+            λ { (a: $[Val[Unit] |*| (Done |+| Done)]) =>
+              val a1 |*| a2 = a
+              a2 switch {
+                case Left(done) =>
+                  joinAll(done, neglect(a1))
+                case Right(done) =>
+                  joinAll(neglect(a1), done)
+              }
+            }
+          }
+        },
+
+        "switch with (multi-use) captured expression in one branch and no-use in the other branch" ->
+          TestCase.pure {
+            expectNotThrows {
+              λ { (x: $[One |*| (Done |+| Done)]) =>
+                x match
+                  case ($.*(a) |*| b) =>
+                    b switch {
+                      case Left(d)  => joinAll(d, a > done, a > done) // `a` used twice
+                      case Right(d) => d // `a` unused
+                    }
+              }
+            }
+          },
     )
   }
 }
