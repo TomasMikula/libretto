@@ -32,11 +32,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
     def unzip[A, B](ab: Expr[A |*| B])(varName1: V, varName2: V)(using Context): (Expr[A], Expr[B])
     def const[A](introduce: [x] => Unit => x -⚬ (A |*| x))(varName: V)(using Context): Expr[A]
 
-    // XXX
-    private[lambda] def unzip0[A, B](ab: Expr[A |*| B])(resultVar1: Var[V, A], resultVar2: Var[V, B]): (Expr[A], Expr[B])
-
     def resultVar[A](a: Expr[A]): Var[V, A]
-
     def initialVars[A](a: Expr[A]): Var.Set[V]
   }
 

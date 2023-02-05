@@ -110,29 +110,33 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
      * If in some branch the predicate never returns `true`, the expression's initial variable in that branch is returned as `Left`.
      */
     def splitAt(p: [X] => Var[X] => Boolean): Exists[[x] =>> (Tupled[[t] =>> Either[Var[t], Expr[t]], x], Expr[B])] =
-      if (p(resultVar)) {
-        Exists((Tupled.atom(Right(this)), Id(resultVar)))
-      } else {
-        this match {
-          case Id(v) =>
-            Exists((Tupled.atom(Left(v)), Id(v)))
-          case Map(y, f, v) =>
-            y.splitAt(p) match
-              case Exists.Some((x, y)) =>
-                Exists((x, Map(y, f, v)))
-          case Zip(y1, y2, v) =>
-            (y1.splitAt(p), y2.splitAt(p)) match
-              case (Exists.Some((x1, y1)), Exists.Some((x2, y2))) =>
-                Exists((x1 zip x2), Zip(y1, y2, v))
-          case Prj1(y, v1, v2) =>
-            y.splitAt(p) match
-              case Exists.Some((x, y)) =>
-                Exists.Some((x, Prj1(y, v1, v2)))
-          case Prj2(y, v1, v2) =>
-            y.splitAt(p) match
-              case Exists.Some((x, y)) =>
-                Exists.Some((x, Prj2(y, v1, v2)))
-        }
+      cutAt[Expr]([X] => (x: Expr[X]) => if (p(x.resultVar)) Some(x) else None)
+
+    def cutAt[G[_]](p: [X] => Expr[X] => Option[G[X]]): Exists[[x] =>> (Tupled[[t] =>> Either[Var[t], G[t]], x], Expr[B])] =
+      p(this) match {
+        case Some(gb) =>
+          Exists((Tupled.atom(Right(gb)), Id(resultVar)))
+        case None =>
+          this match {
+            case Id(v) =>
+              Exists((Tupled.atom(Left(v)), Id(v)))
+            case Map(y, f, v) =>
+              y.cutAt(p) match
+                case Exists.Some((x, y)) =>
+                  Exists((x, Map(y, f, v)))
+            case Zip(y1, y2, v) =>
+              (y1.cutAt(p), y2.cutAt(p)) match
+                case (Exists.Some((x1, y1)), Exists.Some((x2, y2))) =>
+                  Exists((x1 zip x2), Zip(y1, y2, v))
+            case Prj1(y, v1, v2) =>
+              y.cutAt(p) match
+                case Exists.Some((x, y)) =>
+                  Exists.Some((x, Prj1(y, v1, v2)))
+            case Prj2(y, v1, v2) =>
+              y.cutAt(p) match
+                case Exists.Some((x, y)) =>
+                  Exists.Some((x, Prj2(y, v1, v2)))
+          }
       }
   }
 
@@ -173,13 +177,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
     override def zip[B1, B2](f1: Expr[B1], f2: Expr[B2], resultVar: V)(using Context): Expr[B1 |*| B2] =
       (f1 zip f2)(Context.newVar(resultVar))
 
-    override def unzip0[B1, B2](f: Expr[B1 |*| B2])(v1: Var[B1], v2: Var[B2]): (Expr[B1], Expr[B2]) =
-      (Prj1(f, v1, v2), Prj2(f, v1, v2))
-
     override def unzip[B1, B2](f: Expr[B1 |*| B2])(resultVar1: V, resultVar2: V)(using Context): (Expr[B1], Expr[B2]) = {
       val v1 = Context.newVar[B1](resultVar1)
       val v2 = Context.newVar[B2](resultVar2)
-      unzip0(f)(v1, v2)
+      (Prj1(f, v1, v2), Prj2(f, v1, v2))
     }
 
     override def const[A](introduce: [x] => Unit => x -⚬ (A |*| x))(varName: V)(using Context): Expr[A] = {
@@ -195,14 +196,17 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       f.initialVars
 
     def splitAt[B](b: Tupled[Expr, B])(p: [X] => Var[X] => Boolean): Exists[[x] =>> (Tupled[[t] =>> Either[Var[t], Expr[t]], x], Tupled[Expr, B])] =
+      cutAt[B, Expr](b)([X] => (x: Expr[X]) => if (p(x.resultVar)) Some(x) else None)
+
+    def cutAt[B, G[_]](b: Tupled[Expr, B])(p: [X] => Expr[X] => Option[G[X]]): Exists[[x] =>> (Tupled[[t] =>> Either[Var[t], G[t]], x], Tupled[Expr, B])] =
       b.asBin match {
         case Bin.Leaf(b) =>
-          b.splitAt(p) match
+          b.cutAt(p) match
             case Exists.Some((x, b)) =>
               Exists((x, Tupled.atom(b)))
         case Bin.Branch(l, r) =>
-          ( splitAt(Tupled.fromBin(l))(p)
-          , splitAt(Tupled.fromBin(r))(p)
+          ( cutAt(Tupled.fromBin(l))(p)
+          , cutAt(Tupled.fromBin(r))(p)
           ) match
             case (Exists.Some((x, b1)), Exists.Some((y, b2))) =>
               Exists((x zip y, b1 zip b2))
@@ -215,37 +219,54 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
   def eliminateVariableN[A, B](boundVar: Var[A], exprs: Tupled[Expr, B])(using Context): Abstracted[A, B] = {
     import Lambdas.Abstracted.{Closure, Exact, Failure}
 
-    eliminateVarN(boundVar, exprs) match {
-      case Right(res) =>
-        res match {
-          // case Closure(x, f) =>
-            // eliminate all constant expressions
+    eliminateOrDiscard(boundVar, exprs) match {
+      case Closure(y, f) => // eliminate all constant expressions from captured expressions
+        type Intro[T]      = (Var[T], [x] => Unit => x -⚬ (T |*| x))
+        type VarOrIntro[T] = Either[Var[T], Intro[T]]
 
-            // split at constants
+        // split captured expressions at constants
+        Expr.cutAt(y) { [t] => (t: Expr[t]) =>
+          Context.getConstant(t.resultVar).map((t.resultVar, _)): Option[Intro[t]]
+        } match {
+          case Exists.Some((x, y)) =>
+            def go[X, Y](
+              constants: Bin[|*|, [t] =>> t, VarOrIntro, X],
+              captured: Tupled[Expr, Y],
+              f: AbstractFun[Y |*| A, B],
+            ): Abstracted[A, B] =
+              constants match {
+                case Bin.Leaf(Left(_)) =>
+                  Closure(captured, f)
+                case Bin.Leaf(Right((v, intro))) =>
+                  eliminateOrDiscard(v, captured) match
+                    case Exact(g)      => Exact(lift(intro[A](())) > fst(g) > f)
+                    case Closure(x, g) => Closure(x, snd(lift(intro[A](()))) > assocRL > fst(g) > f)
+                    case Failure(e)    => Failure(e)
+                case Bin.Branch(l, r) =>
+                  go(r, captured, f) match {
+                    case Closure(x, f) => go(l, x, f)
+                    case other         => other
+                  }
+              }
 
-            // eliminate constants from capture
-
-            // type Intro[T] = [x] => Unit => x -⚬ (T |*| x)
-            // val y = x.asBin
-            // given shuffled.shuffle.type = shuffled.shuffle
-            // y.partition[Expr, Intro](
-            //   [t] => (t: Expr[t]) =>
-            //     Context.getConstant(t.resultVar) match {
-            //       case Some(intro) => Right(intro)
-            //       case None        => Left(t)
-            //     }
-            // ) match {
-            //   case y.Partitioned.Left(y) =>
-            //     Closure(Tupled.fromBin(y), f)
-            //   case y.Partitioned.Right(y) =>
-
-            // }
-          case other =>
-            other
+            go(x.asBin, y, f)
         }
-      case Left(EliminateRes.NotFound()) =>
-        Failure(errors.underusedVar(boundVar))
+      case other =>
+        other
     }
+  }
+
+  private def eliminateOrDiscard[A, B](boundVar: Var[A], exprs: Tupled[Expr, B])(using Context): Abstracted[A, B] = {
+    // println(s"eliminateOrDiscard(${boundVar}, $exprs)")
+    import Lambdas.Abstracted.{Closure, Failure}
+
+    eliminateVarN(boundVar, exprs) match
+      case Right(res) =>
+        res
+      case Left(EliminateRes.NotFound()) =>
+        Context.getDiscard(boundVar) match
+          case Some(discardFst) => Closure(exprs, swap > lift(discardFst(())))
+          case None             => println(s"NO DISCARD FOR ${boundVar.origin}"); Failure(errors.underusedVar(boundVar))
   }
 
   private def eliminateVarN[A, B](boundVar: Var[A], exprs: Tupled[Expr, B])(using Context): Either[EliminateRes.NotFound[A, B], Abstracted[A, B]] = {
@@ -384,12 +405,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
     expr match
       case Expr.Id(w) =>
         (v testEqual w) match
-          case Some(ev) =>
-            Found(HybridArrow.id(v).to(using ev.liftCo[Var]))
-          case None =>
-            Context.getDiscard(v) match
-              case Some(discardFst) => Found(HybridArrow(v, HybridArrow.captureReplace(discardFst, expr)))
-              case None             => NotFound()
+          case Some(ev) => Found(HybridArrow.id(v).to(using ev.liftCo[Var]))
+          case None     => NotFound()
       case Expr.Map(f, g, resultVar) =>
         eliminate(v, f) match
           case NotFound() => NotFound()
@@ -502,8 +519,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
                   Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureFst(op.x)), SingleVar[x |*| a]())
                 case (vars, op: Op.CaptureSnd[a, x]) =>
                   Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureSnd(op.x)), SingleVar[a |*| x]())
-                case (vars, op: Op.CaptureReplace[a, b]) =>
-                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureSnd[b, a](op.replacement) > CapturingFun.lift(op.discard)), SingleVar[b]())
                 case (vars, op: Op.DupVar[a]) =>
                   val v = vars.getValue[a]
                   Image(
@@ -923,45 +938,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
           varIsNotPair(ev)
       }
 
-      case class CaptureReplace[A, Z](
-        discard: (A |*| Z) -⚬ Z,
-        replacement: Expr[Z],
-      ) extends Op.Linear[Var[A], Var[Z]] {
-        override def terminalVars(a: Varz[Var[A]]): Varz[Var[Z]] =
-          Varz.atom(replacement.resultVar)
-
-        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A] =:= Var[X]): Option[Tail[Var[A], Var[Z] |*| C]] =
-          that.maskInput.visit[Option[Tail[Var[A], Var[Z] |*| C]]]([T] => (that: Op[T, C], ev: T =:= Var[X]) => {
-            that match
-              case cr: CaptureReplace[a, c] =>
-                summon[C =:= Var[c]]
-                (cr.replacement.resultVar testEqual replacement.resultVar) map {
-                  case TypeEq(Refl()) =>
-                    shOp.lift(CaptureReplace.this) > shOp.lift(DupVar[Z]().to[Var[Z] |*| Var[c]])
-                }
-              case _ =>
-                None
-          })
-
-        override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[Z]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj1_gcd_this")
-
-        override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| Var[Z]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj2_gcd_this")
-
-        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[Z]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.unzip_gcd_this")
-
-        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[Z]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap1_gcd_this")
-
-        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[Z]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
-
-        override def asZip[P1, P2](using ev: Var[A] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[Z] =:= Var[V1 |*| V2])]] =
-          varIsNotPair(ev)
-      }
-
       val project: [t, u, v] => (op: Op[t, u], p: Projection[|*|, u, v]) => shOp.ProjectRes[t, v] =
         [t, u, v] => (op: Op[t, u], p: Projection[|*|, u, v]) => op.project(p)
 
@@ -986,14 +962,13 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
 
         def apply[A, B](op: Op.Affine[A, B]): InputVarFocus[A, B] =
           op match {
-            case op: Zip[t, u]            => InputVarFocus[[x] =>> x |*| Var[u], t, Var[t |*| u]](op, Focus.fst) // arbitrarily picking the first input
-            case op: Unzip[t, u]          => InputVarFocus[[x] =>> x, t |*| u, Var[t] |*| Var[u]](op, Focus.id)
-            case op: Prj1[t, u]           => InputVarFocus[[x] =>> x, t |*| u, Var[t]](op, Focus.id)
-            case op: Prj2[t, u]           => InputVarFocus[[x] =>> x, t |*| u, Var[u]](op, Focus.id)
-            case op: Map[t, u]            => InputVarFocus[[x] =>> x, t, Var[u]](op, Focus.id)
-            case op: CaptureFst[t, u]     => InputVarFocus[[x] =>> x, t, Var[u |*| t]](op, Focus.id)
-            case op: CaptureSnd[t, u]     => InputVarFocus[[x] =>> x, t, Var[t |*| u]](op, Focus.id)
-            case op: CaptureReplace[t, u] => InputVarFocus[[x] =>> x, t, Var[u]](op, Focus.id)
+            case op: Zip[t, u]        => InputVarFocus[[x] =>> x |*| Var[u], t, Var[t |*| u]](op, Focus.fst) // arbitrarily picking the first input
+            case op: Unzip[t, u]      => InputVarFocus[[x] =>> x, t |*| u, Var[t] |*| Var[u]](op, Focus.id)
+            case op: Prj1[t, u]       => InputVarFocus[[x] =>> x, t |*| u, Var[t]](op, Focus.id)
+            case op: Prj2[t, u]       => InputVarFocus[[x] =>> x, t |*| u, Var[u]](op, Focus.id)
+            case op: Map[t, u]        => InputVarFocus[[x] =>> x, t, Var[u]](op, Focus.id)
+            case op: CaptureFst[t, u] => InputVarFocus[[x] =>> x, t, Var[u |*| t]](op, Focus.id)
+            case op: CaptureSnd[t, u] => InputVarFocus[[x] =>> x, t, Var[t |*| u]](op, Focus.id)
           }
       }
 
@@ -1073,9 +1048,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
     def captureSnd[A, X](x: Expr[X], resultVar: Var[A |*| X]): Tail[Var[A], Var[A |*| X]] =
       shOp.lift(Op.CaptureSnd(x, resultVar))
 
-    def captureReplace[A, X](discard: [B] => Unit => (A |*| B) -⚬ B, replacement: Expr[X]): Tail[Var[A], Var[X]] =
-      shOp.lift(Op.CaptureReplace(discard[X](()), replacement))
-
     def zip[A1, A2](resultVar: Var[A1 |*| A2]): Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2]] =
       shOp.lift(Op.Zip(resultVar))
 
@@ -1126,14 +1098,13 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
               ev1,
             )
           }
-        case Op.Zip(_)               => None
-        case Op.CaptureFst(_, _)     => None
-        case Op.CaptureSnd(_, _)     => None
-        case Op.Unzip(_, _)          => None
-        case Op.Map(_, _)            => None
-        case Op.Prj1(_, _)           => None
-        case Op.Prj2(_, _)           => None
-        case Op.CaptureReplace(_, _) => None
+        case Op.Zip(_)           => None
+        case Op.CaptureFst(_, _) => None
+        case Op.CaptureSnd(_, _) => None
+        case Op.Unzip(_, _)      => None
+        case Op.Map(_, _)        => None
+        case Op.Prj1(_, _)       => None
+        case Op.Prj2(_, _)       => None
     }
 
     def pullBumpDupVar[A, F[_], V, C[_], B, D[_], Y](

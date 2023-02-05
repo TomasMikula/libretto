@@ -61,5 +61,6 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V](
   def getConstant[A](v: Var[V, A]): Option[[x] => Unit => x -⚬ (A |*| x)] =
     constants
       .get(v.asInstanceOf[Var[V, Any]])
-      .asInstanceOf
+      .asInstanceOf[Option[[x] => Unit => x -⚬ (A |*| x)]]
+      .orElse(parent.flatMap(_.getConstant(v)))
 }

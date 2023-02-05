@@ -4,6 +4,7 @@ import libretto.mashup.{Input, Output, Runtime, Service}
 import libretto.mashup.dsl.{-->, ###, EmptyResource, Expr, Float64, Fun, LambdaContext, Record, Text, alsoElim, closure, fun, of}
 import libretto.mashup.rest.{Endpoint, RestApi}
 import libretto.mashup.rest.RelativeUrl._
+import libretto.util.SourcePos
 import zio.{Scope, ZIO}
 
 object WeatherService {
@@ -11,7 +12,7 @@ object WeatherService {
     Text
 
   object City {
-    def apply(value: String)(using LambdaContext): Expr[City] =
+    def apply(value: String)(using SourcePos, LambdaContext): Expr[City] =
       Text(value)
   }
 

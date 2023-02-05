@@ -411,12 +411,6 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   val lambdas: Lambdas[-⚬, |*|, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin]] =
     new LambdasImpl[-⚬, |*|, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin]]
-    // (
-    //   syntheticVar = [A] => (hint: Tupled[|*|, [x] =>> VarOrigin, A]) => {
-    //     val desc = hint.foldMap0([x] => (vx: VarOrigin) => vx.print, (x, y) => s"($x, $y)")
-    //     VarOrigin.Synthetic(s"Combination of $desc")
-    //   },
-    // )
 
   val closures: Closures[-⚬, |*|, =⚬, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin], lambdas.type] =
     Closures(lambdas)

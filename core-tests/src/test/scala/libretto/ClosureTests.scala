@@ -225,7 +225,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
           }
         },
 
-      "capture two one-expression into another one-expression" ->
+      "capture two one-expressions into another one-expression" ->
         TestCase.pure {
           Outcome.expectNotThrows {
             λ.? { (_: $[One]) =>
@@ -233,6 +233,18 @@ class ClosureTests extends ScalatestScalettoTestSuite {
               val c = one > done
               λ.closure.? { (_: $[One]) =>
                 b |*| c
+              }
+            }
+          }
+        },
+
+      "fork a one-expression inside closure" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ { (a: $[Done]) =>
+              λ.closure { (b: $[Done]) =>
+                val (c |*| d) = one > done > fork
+                a |*| b |*| c |*| d
               }
             }
           }
@@ -253,7 +265,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             }
             _ <- Outcome.assertSubstring("used more than once", e.getMessage)
             _ <- Outcome.assertSubstring("variable bound by lambda", e.getMessage)
-            _ <- Outcome.assertSubstring("ClosureTests.scala:245", e.getMessage)
+            _ <- Outcome.assertSubstring("ClosureTests.scala:257", e.getMessage)
           } yield ()
         },
 
