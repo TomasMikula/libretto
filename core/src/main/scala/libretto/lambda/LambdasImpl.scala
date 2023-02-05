@@ -453,9 +453,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       Context,
     ): LinearRes[A, Y] = {
       val t1: VTail[Var[A], B] =
-        tail.sweepL[Varz, VarOp](
-          Varz.atom(v),
-          [p, q] => (p: Varz[p], op: Op[p, q]) => {
+        tail.sweepL[Vars, VarOp](
+          Vars.atom(v),
+          [p, q] => (p: Vars[p], op: Op[p, q]) => {
             val q = op.terminalVars(p)
             ((p, op), q)
           }
@@ -582,7 +582,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
             bug(s"Did not realize that $other can be projected from")
         }
 
-      def terminalVars(a: Varz[A]): Varz[B]
+      def terminalVars(a: Vars[A]): Vars[B]
 
       def maskInput: Masked[Op[*, B], A] =
         Masked[Op[*, B], A](this)
@@ -611,8 +611,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       sealed trait Linear[A, B] extends Affine[A, B]
 
       case class Zip[A1, A2](resultVar: Var[A1 |*| A2]) extends Op.Linear[Var[A1] |*| Var[A2], Var[A1 |*| A2]] {
-        override def terminalVars(a: Varz[Var[A1] |*| Var[A2]]): Varz[Var[A1 |*| A2]] =
-          Varz.atom(resultVar)
+        override def terminalVars(a: Vars[Var[A1] |*| Var[A2]]): Vars[Var[A1 |*| A2]] =
+          Vars.atom(resultVar)
 
         override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: (Var[A1] |*| Var[A2]) =:= Var[X]): Option[Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2] |*| C]] =
           varIsNotPair(ev.flip)
@@ -641,8 +641,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       }
 
       case class Map[A, B](f: A -⚬ B, resultVar: Var[B]) extends Op.Linear[Var[A], Var[B]] {
-        override def terminalVars(a: Varz[Var[A]]): Varz[Var[B]] =
-          Varz.atom(resultVar)
+        override def terminalVars(a: Vars[Var[A]]): Vars[Var[B]] =
+          Vars.atom(resultVar)
 
         override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using Var[A] =:= Var[X]): Option[Tail[Var[A], Var[B] |*| C]] =
           that match
@@ -673,8 +673,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       }
 
       case class Prj1[A1, A2](resultVar: Var[A1], unusedVar: Var[A2]) extends Affine[Var[A1 |*| A2], Var[A1]] {
-        override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A1]] =
-          Varz.atom(resultVar)
+        override def terminalVars(a: Vars[Var[A1 |*| A2]]): Vars[Var[A1]] =
+          Vars.atom(resultVar)
 
         override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| C]] =
           that.prj1_gcd_this(this)(using ev.flip)
@@ -730,8 +730,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       }
 
       case class Prj2[A1, A2](unusedVar: Var[A1], resultVar: Var[A2]) extends Affine[Var[A1 |*| A2], Var[A2]] {
-        override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A2]] =
-          Varz.atom(resultVar)
+        override def terminalVars(a: Vars[Var[A1 |*| A2]]): Vars[Var[A2]] =
+          Vars.atom(resultVar)
 
         override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A2] |*| C]] =
           that.prj2_gcd_this(this)(using ev.flip)
@@ -780,8 +780,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       }
 
       case class Unzip[A1, A2](resultVar1: Var[A1], resultVar2: Var[A2]) extends Op.Linear[Var[A1 |*| A2], Var[A1] |*| Var[A2]] {
-        override def terminalVars(a: Varz[Var[A1 |*| A2]]): Varz[Var[A1] |*| Var[A2]] =
-          Varz.zip(Varz.atom(resultVar1), Varz.atom(resultVar2))
+        override def terminalVars(a: Vars[Var[A1 |*| A2]]): Vars[Var[A1] |*| Var[A2]] =
+          Vars.zip(Vars.atom(resultVar1), Vars.atom(resultVar2))
 
         override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: Var[A1 |*| A2] =:= Var[X]): Option[Tail[Var[A1 |*| A2], Var[A1] |*| Var[A2] |*| C]] =
           that.unzip_gcd_this(this)(using ev.flip)
@@ -836,13 +836,13 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       }
 
       case class DupVar[A]() extends Op[Var[A], Var[A] |*| Var[A]] {
-        override def terminalVars(a: Varz[Var[A]]): Varz[Var[A] |*| Var[A]] =
-          Varz.zip(a, a)
+        override def terminalVars(a: Vars[Var[A]]): Vars[Var[A] |*| Var[A]] =
+          Vars.zip(a, a)
       }
 
       case class CaptureFst[A, X](x: Expr[X], resultVar: Var[X |*| A]) extends Op.Linear[Var[A], Var[X |*| A]] {
-        override def terminalVars(a: Varz[Var[A]]): Varz[Var[X |*| A]] =
-          Varz.atom(resultVar)
+        override def terminalVars(a: Vars[Var[A]]): Vars[Var[X |*| A]] =
+          Vars.atom(resultVar)
 
         override def gcdSimple[Q, C](that: Op.Affine[Var[Q], C])(using ev: Var[A] =:= Var[Q]): Option[Tail[Var[A], Var[X |*| A] |*| C]] =
           that.cap1_gcd_this(this)(using ev.flip)
@@ -872,8 +872,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       }
 
       case class CaptureSnd[A, X](x: Expr[X], resultVar: Var[A |*| X]) extends Op.Linear[Var[A], Var[A |*| X]] {
-        override def terminalVars(a: Varz[Var[A]]): Varz[Var[A |*| X]] =
-          Varz.atom(resultVar)
+        override def terminalVars(a: Vars[Var[A]]): Vars[Var[A |*| X]] =
+          Vars.atom(resultVar)
 
         override def gcdSimple[Q, C](that: Op.Affine[Var[Q], C])(using ev: Var[A] =:= Var[Q]): Option[Tail[Var[A], Var[A |*| X] |*| C]] =
           that.cap2_gcd_this(this)(using ev.flip)
@@ -975,19 +975,19 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
         }
     }
 
-    type Varz[A] = Bin[|*|, Var, Var, A]
-    object Varz {
-      def atom[A](a: Var[A]): Varz[Var[A]] =
+    type Vars[A] = Bin[|*|, Var, Var, A]
+    object Vars {
+      def atom[A](a: Var[A]): Vars[Var[A]] =
         Bin.Leaf(a)
 
-      def zip[A, B](a: Varz[A], b: Varz[B]): Varz[A |*| B] =
+      def zip[A, B](a: Vars[A], b: Vars[B]): Vars[A |*| B] =
         Bin.Branch(a, b)
     }
 
     val shOp = Shuffled[Op, |*|](shuffled.shuffle)
     import shOp.shuffle.{zip => zipEq}
 
-    type VarOp[A, B] = (Varz[A], Op[A, B])
+    type VarOp[A, B] = (Vars[A], Op[A, B])
     given shVOp: Shuffled.With[VarOp, |*|, shuffled.shuffle.type] =
       Shuffled[VarOp, |*|](shuffled.shuffle)
 

@@ -9,19 +9,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
 
   final type Tupled[F[_], A] = libretto.lambda.Tupled[|*|, F, A]
 
-  final type Vars[A] = Tupled[Var[V, *], A]
-
-  object Vars {
-    def single[A](a: Var[V, A]): Vars[A] =
-      Tupled.atom(a)
-
-    def bi[A, B](a: Var[V, A], b: Var[V, B]): Vars[A |*| B] =
-      zip(single(a), single(b))
-
-    def zip[A, B](a: Vars[A], b: Vars[B]): Vars[A |*| B] =
-      Tupled.zip(a, b)
-  }
-
   type Expr[A]
   val Expr: Exprs
 
