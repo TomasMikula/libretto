@@ -28,6 +28,12 @@ object Var {
 
       def list: List[Var[P, ?]] =
         List.from(vs)
+
+      def containsVar[A](v: Var[P, A]): Boolean =
+        (vs: sci.Set[Var[P, ?]]) contains v
+
+      def +[A](v: Var[P, A]): Var.Set[P] =
+        (vs: sci.Set[Var[P, ?]]) + v
     }
   }
 

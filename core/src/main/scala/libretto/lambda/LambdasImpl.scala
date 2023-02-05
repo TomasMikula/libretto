@@ -213,147 +213,66 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       }
   }
 
+  /** Multiple expression trees. */
+  type Forest[A] = Tupled[Expr, A]
+
   override def eliminateVariable[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] =
     eliminateVariableN(boundVar, Tupled.atom(expr))
 
   def eliminateVariableN[A, B](boundVar: Var[A], exprs: Tupled[Expr, B])(using Context): Abstracted[A, B] = {
     import Lambdas.Abstracted.{Closure, Exact, Failure}
 
-    eliminateOrDiscard(boundVar, exprs) match {
-      case Closure(y, f) => // eliminate all constant expressions from captured expressions
-        type Intro[T]      = (Var[T], [x] => Unit => x -⚬ (T |*| x))
-        type VarOrIntro[T] = Either[Var[T], Intro[T]]
+    val res0: Abstracted[A, B] =
+      extractFunctionFromForest(boundVar, exprs) match {
+        case Closure(y, f) => // eliminate all constant expressions from captured expressions
+          type Intro[T]      = (Var[T], [x] => Unit => x -⚬ (T |*| x))
+          type VarOrIntro[T] = Either[Var[T], Intro[T]]
 
-        // split captured expressions at constants
-        Expr.cutAt(y) { [t] => (t: Expr[t]) =>
-          Context.getConstant(t.resultVar).map((t.resultVar, _)): Option[Intro[t]]
-        } match {
-          case Exists.Some((x, y)) =>
-            def go[X, Y](
-              constants: Bin[|*|, [t] =>> t, VarOrIntro, X],
-              captured: Tupled[Expr, Y],
-              f: AbstractFun[Y |*| A, B],
-            ): Abstracted[A, B] =
-              constants match {
-                case Bin.Leaf(Left(_)) =>
-                  Closure(captured, f)
-                case Bin.Leaf(Right((v, intro))) =>
-                  eliminateOrDiscard(v, captured) match
-                    case Exact(g)      => Exact(lift(intro[A](())) > fst(g) > f)
-                    case Closure(x, g) => Closure(x, snd(lift(intro[A](()))) > assocRL > fst(g) > f)
-                    case Failure(e)    => Failure(e)
-                case Bin.Branch(l, r) =>
-                  go(r, captured, f) match {
-                    case Closure(x, f) => go(l, x, f)
-                    case other         => other
-                  }
-              }
+          // split captured expressions at constants
+          Expr.cutAt(y) { [t] => (t: Expr[t]) =>
+            Context.getConstant(t.resultVar).map((t.resultVar, _)): Option[Intro[t]]
+          } match {
+            case Exists.Some((x, y)) =>
+              def go[X, Y](
+                constants: Bin[|*|, [t] =>> t, VarOrIntro, X],
+                captured: Tupled[Expr, Y],
+                f: AbstractFun[Y |*| A, B],
+                alreadyEliminated: Var.Set[V],
+              ): (Abstracted[A, B], Var.Set[V]) =
+                constants match {
+                  case Bin.Leaf(Left(_)) =>
+                    (Closure(captured, f), alreadyEliminated)
+                  case Bin.Leaf(Right((v, intro))) =>
+                    if (alreadyEliminated containsVar v)
+                      (Closure(captured, f), alreadyEliminated)
+                    else (
+                      extractFunctionFromForest(v, captured) match {
+                        case Exact(g)      => Exact(lift(intro[A](())) > fst(g) > f)
+                        case Closure(x, g) => Closure(x, snd(lift(intro[A](()))) > assocRL > fst(g) > f)
+                        case Failure(e)    => Failure(e)
+                      },
+                      alreadyEliminated + v
+                    )
+                  case Bin.Branch(l, r) =>
+                    go(r, captured, f, alreadyEliminated) match {
+                      case (Closure(x, f), eliminatedVars) => go(l, x, f, eliminatedVars)
+                      case other                           => other
+                    }
+                }
 
-            go(x.asBin, y, f)
-        }
+              go(x.asBin, y, f, Var.Set(boundVar))._1
+          }
+        case other =>
+          other
+      }
+
+    res0 match {
+      case Closure(y, g) =>
+        deduplicateExpressions(y) match
+          case Right(Exists.Some((x, f))) => Closure(x, f.inFst[A] > g)
+          case Left(e)                    => Failure(e)
       case other =>
         other
-    }
-  }
-
-  private def eliminateOrDiscard[A, B](boundVar: Var[A], exprs: Tupled[Expr, B])(using Context): Abstracted[A, B] = {
-    // println(s"eliminateOrDiscard(${boundVar}, $exprs)")
-    import Lambdas.Abstracted.{Closure, Failure}
-
-    eliminateVarN(boundVar, exprs) match
-      case Right(res) =>
-        res
-      case Left(EliminateRes.NotFound()) =>
-        Context.getDiscard(boundVar) match
-          case Some(discardFst) => Closure(exprs, swap > lift(discardFst(())))
-          case None             => println(s"NO DISCARD FOR ${boundVar.origin}"); Failure(errors.underusedVar(boundVar))
-  }
-
-  private def eliminateVarN[A, B](boundVar: Var[A], exprs: Tupled[Expr, B])(using Context): Either[EliminateRes.NotFound[A, B], Abstracted[A, B]] = {
-    import Lambdas.Abstracted.{Closure, Exact, Failure}
-    import EliminateRes.NotFound
-    import libretto.lambda.{CapturingFun => cf}
-
-    exprs.asBin match {
-      case Bin.Leaf(b) =>
-        eliminateVar(boundVar, b)
-      case br: Bin.Branch[br, lf, f, b1, b2] =>
-        val b1 = Tupled.fromBin(br.l)
-        val b2 = Tupled.fromBin(br.r)
-        ( eliminateVarN(boundVar, b1)
-        , eliminateVarN(boundVar, b2)
-        ) match {
-          case (Right(r1), Right(r2)) =>
-            Right(
-              (r1.toEither, r2.toEither) match {
-                case (Right(f1), Right(f2)) =>
-                    Context.getSplit(boundVar) match
-                      case Some(split) =>
-                        (f1, f2) match
-                          case (cf.NoCapture(f1), cf.NoCapture(f2)) =>
-                            Exact(lift(split) > par(f1, f2))
-                          case (cf.NoCapture(f1), cf.Closure(y, f2)) =>
-                            Closure(y, snd(lift(split)) > xi > par(f1, f2))
-                          case (cf.Closure(x, f1), cf.NoCapture(f2)) =>
-                            Closure(x, snd(lift(split)) > assocRL > par(f1, f2))
-                          case (cf.Closure(x, f1), cf.Closure(y, f2)) =>
-                            Closure(x zip y, snd(lift(split)) > ixi > par(f1, f2))
-                      case None =>
-                        Failure(errors.overusedVar(boundVar))
-                case (Left(e1), Left(e2)) =>
-                  Failure(errors.combineLinear(e1, e2))
-                case (Left(e1), _) =>
-                  Failure(e1)
-                case (_, Left(e2)) =>
-                  Failure(e2)
-              }
-            )
-          case (Right(r1), Left(NotFound())) =>
-            Right(
-              r1.toEither match
-                case Right(f1) =>
-                  f1 match
-                    case cf.NoCapture(f1)  => Closure(b2, swap > fst(f1))
-                    case cf.Closure(x, f1) => Closure(x zip b2, ix > fst(f1))
-                case Left(e) =>
-                  Failure(e)
-            )
-          case (Left(NotFound()), Right(r2)) =>
-            Right(
-              r2.toEither match
-                case Right(f2) =>
-                  f2 match
-                    case cf.NoCapture(f2)  => Closure(b1, snd(f2))
-                    case cf.Closure(y, f2) => Closure(b1 zip y, assocLR > snd(f2))
-                case Left(e) =>
-                  Failure(e)
-            )
-          case (Left(NotFound()), Left(NotFound())) =>
-            Left(NotFound())
-        }
-    }
-  }
-
-  private def eliminateVar[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Either[EliminateRes.NotFound[A, B], Abstracted[A, B]] = {
-    import HybridArrow.{LinearRes, Op, Unvar, Varz}
-    import Lambdas.Abstracted.{Closure, Exact, Failure}
-
-    eliminate(boundVar, expr) match {
-      case EliminateRes.Found(arr) =>
-        Right(
-          arr.extract(Unvar.SingleVar()) match {
-            case LinearRes.Exact(f) =>
-              Exact(f)
-            case LinearRes.Closure(captured, g) =>
-              deduplicateExpressions(captured) match
-                case Right(Exists.Some((x, f1))) => Closure(x, f1.inFst[A] > g)
-                case Left(e)                     => Failure(e)
-            case LinearRes.Violation(e) =>
-              Failure(e)
-          }
-        )
-      case nf @ EliminateRes.NotFound() =>
-        Left(nf)
     }
   }
 
@@ -397,6 +316,67 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
   private def bug(msg: String): Nothing =
     throw new AssertionError(msg)
 
+  private def extractFunctionFromForest[A, B](
+    boundVar: Var[A],
+    exprs: Forest[B],
+  )(using
+    Context,
+  ): Abstracted[A, B] = {
+    import Lambdas.Abstracted.{Closure, Exact, Failure}
+    import HybridArrow.LinearRes
+
+    eliminateFromForest(boundVar, exprs) match {
+      case EliminatedFromForest.FoundEach(arr, u) =>
+        arr.extract(u) match
+          case LinearRes.Exact(f)      => Exact(f)
+          case LinearRes.Closure(x, f) => Closure(x, f)
+          case LinearRes.Violation(e)  => Failure(e)
+      case EliminatedFromForest.FoundSome(x, arr, u, s) =>
+        arr.extract(u) match
+          case LinearRes.Exact(f)      => Closure(x, snd(f) > pure(s))
+          case LinearRes.Closure(y, f) => Closure(x zip y, assocLR > snd(f) > pure(s))
+          case LinearRes.Violation(e)  => Failure(e)
+      case EliminatedFromForest.NotFound() =>
+        Context.getDiscard(boundVar) match
+          case Some(discardFst) => Closure(exprs, swap > lift(discardFst(())))
+          case None             => Failure(errors.underusedVar(boundVar))
+    }
+  }
+
+  private def eliminateFromForest[A, B](
+    boundVar: Var[A],
+    exprs: Forest[B],
+  )(using
+    Context,
+  ): EliminatedFromForest[A, B] = {
+    import Lambdas.Abstracted.{Closure, Exact, Failure}
+    import EliminatedFromForest.{FoundEach, FoundSome, NotFound}
+    import libretto.lambda.{CapturingFun => cf}
+
+    exprs.asBin match {
+      case Bin.Leaf(b) =>
+        eliminate(boundVar, b) match
+          case EliminateRes.Found(arr) => FoundEach(arr, Unvar.SingleVar())
+          case EliminateRes.NotFound() => NotFound()
+      case br: Bin.Branch[br, lf, f, b1, b2] =>
+        val b1 = Tupled.fromBin(br.l)
+        val b2 = Tupled.fromBin(br.r)
+        ( eliminateFromForest(boundVar, b1)
+        , eliminateFromForest(boundVar, b2)
+        ) match {
+          case (FoundEach(f1, u1),       FoundEach(f2, u2)      ) => FoundEach(f1 interweave f2, u1 zip u2)
+          case (FoundEach(f1, u1),       FoundSome(y, f2, u2, t)) => FoundSome(y, f1 interweave f2, u1 zip u2, ~⚬.xi > ~⚬.snd(t))
+          case (FoundEach(f1, u1),       NotFound()             ) => FoundSome(b2, f1, u1, ~⚬.swap)
+          case (FoundSome(x, f1, u1, s), FoundEach(f2, u2)      ) => FoundSome(x, f1 interweave f2, u1 zip u2, ~⚬.assocRL > ~⚬.fst(s))
+          case (FoundSome(x, f1, u1, s), FoundSome(y, f2, u2, t)) => FoundSome(x zip y, f1 interweave f2, u1 zip u2, ~⚬.ixi > ~⚬.par(s, t))
+          case (FoundSome(x, f1, u1, s), NotFound()             ) => FoundSome(x zip b2, f1, u1, ~⚬.ix > ~⚬.fst(s))
+          case (NotFound(),              FoundEach(f2, u2)      ) => FoundSome(b1, f2, u2, ~⚬.id)
+          case (NotFound(),              FoundSome(y, f2, u2, t)) => FoundSome(b1 zip y, f2, u2, ~⚬.assocLR > ~⚬.snd(t))
+          case (NotFound(),              NotFound()             ) => NotFound()
+        }
+    }
+  }
+
   // Note: The variable is only searched for among initial variables of the expression,
   // not in any (intermediate) results.
   private def eliminate[A, B](v: Var[A], expr: Expr[B])(using Context): EliminateRes[A, B] = {
@@ -429,6 +409,12 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
 
   private enum EliminateRes[A, B] {
     case Found[A, B](arr: HybridArrow[A, Var[B]]) extends EliminateRes[A, B]
+    case NotFound()
+  }
+
+  private enum EliminatedFromForest[A, B] {
+    case FoundEach[A, VB, B](arr: HybridArrow[A, VB], u: Unvar[VB, B]) extends EliminatedFromForest[A, B]
+    case FoundSome[A, VB, B, X, C](captured: Forest[X], arr: HybridArrow[A, VB], u: Unvar[VB, B], s: (X |*| B) ~⚬ C) extends EliminatedFromForest[A, C]
     case NotFound()
   }
 
@@ -1235,65 +1221,68 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       case Closure[X, A, B](captured: Tupled[Expr, X], f: AbstractFun[X |*| A, B]) extends LinearRes[A, B]
       case Violation(e: LE)
     }
+  }
 
-    sealed trait Unvar[A, B] {
-      def uniqueOutType[C](that: Unvar[A, C]): B =:= C
+  sealed trait Unvar[A, B] {
+    def uniqueOutType[C](that: Unvar[A, C]): B =:= C
 
-      def maskInput: Masked[Unvar[*, B], A] =
-        Masked(this)
+    def zip[C, D](that: Unvar[C, D]): Unvar[A |*| C, B |*| D] =
+      Unvar.Par(this, that)
+
+    def maskInput: Masked[Unvar[*, B], A] =
+      Masked(this)
+  }
+  object Unvar {
+    case class SingleVar[V]() extends Unvar[Var[V], V] {
+      override def uniqueOutType[C](that: Unvar[Var[V], C]): V =:= C =
+        that.maskInput.visit([VV] => (that: Unvar[VV, C], ev: VV =:= Var[V]) => {
+          that match {
+            case _: SingleVar[v] =>
+              (summon[Var[v] =:= VV] andThen ev) match { case Injective[Var](TypeEq(Refl())) =>
+                summon[V =:= C]
+              }
+            case p: Par[a1, a2, x1, x2] =>
+              varIsNotPair[V, a1, a2](ev.flip andThen summon[VV =:= (a1 |*| a2)])
+          }
+        })
     }
-    object Unvar {
-      case class SingleVar[V]() extends Unvar[Var[V], V] {
-        override def uniqueOutType[C](that: Unvar[Var[V], C]): V =:= C =
-          that.maskInput.visit([VV] => (that: Unvar[VV, C], ev: VV =:= Var[V]) => {
-            that match {
-              case _: SingleVar[v] =>
-                (summon[Var[v] =:= VV] andThen ev) match { case Injective[Var](TypeEq(Refl())) =>
-                  summon[V =:= C]
-                }
-              case p: Par[a1, a2, x1, x2] =>
-                varIsNotPair[V, a1, a2](ev.flip andThen summon[VV =:= (a1 |*| a2)])
-            }
-          })
-      }
 
-      case class Par[A1, A2, X1, X2](u1: Unvar[A1, X1], u2: Unvar[A2, X2]) extends Unvar[A1 |*| A2, X1 |*| X2] {
-        override def uniqueOutType[C](that: Unvar[A1 |*| A2, C]): (X1 |*| X2) =:= C =
-          that.maskInput.visit([A] => (that: Unvar[A, C], ev: A =:= (A1 |*| A2)) => {
-            that match {
-              case p: Par[a1, a2, c1, c2] =>
-                (summon[(a1 |*| a2) =:= A] andThen ev)                match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
-                  ((u1 uniqueOutType p.u1), (u2 uniqueOutType p.u2))  match { case (TypeEq(Refl()), TypeEq(Refl())) =>
-                    summon[(X1 |*| X2) =:= C]
-                  }
+    case class Par[A1, A2, X1, X2](u1: Unvar[A1, X1], u2: Unvar[A2, X2]) extends Unvar[A1 |*| A2, X1 |*| X2] {
+      override def uniqueOutType[C](that: Unvar[A1 |*| A2, C]): (X1 |*| X2) =:= C =
+        that.maskInput.visit([A] => (that: Unvar[A, C], ev: A =:= (A1 |*| A2)) => {
+          that match {
+            case p: Par[a1, a2, c1, c2] =>
+              (summon[(a1 |*| a2) =:= A] andThen ev)                match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+                ((u1 uniqueOutType p.u1), (u2 uniqueOutType p.u2))  match { case (TypeEq(Refl()), TypeEq(Refl())) =>
+                  summon[(X1 |*| X2) =:= C]
+                }
+              }
+            case _: SingleVar[v] =>
+              varIsNotPair[v, A1, A2](summon[Var[v] =:= A] andThen ev)
+          }
+        })
+    }
+
+    val objectMap: ObjectMap[|*|, |*|, Unvar] =
+      new ObjectMap[|*|, |*|, Unvar] {
+        override def uniqueOutputType[A, X, Y](f1: Unvar[A, X], f2: Unvar[A, Y]): X =:= Y =
+          f1 uniqueOutType f2
+
+        override def pair[A1, A2, X1, X2](f1: Unvar[A1, X1], f2: Unvar[A2, X2]): Unvar[A1 |*| A2, X1 |*| X2] =
+          Unvar.Par(f1, f2)
+
+        override def unpair[A1, A2, X](f: Unvar[A1 |*| A2, X]): Unpaired[A1, A2, X] =
+          f.maskInput.visit[Unpaired[A1, A2, X]]([A] => (u: Unvar[A, X], ev: A =:= (A1 |*| A2)) => {
+            u match {
+              case p: Par[a1, a2, x1, x2] =>
+                (summon[(a1 |*| a2) =:= A] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+                  Unpaired.Impl(p.u1, p.u2)
                 }
               case _: SingleVar[v] =>
                 varIsNotPair[v, A1, A2](summon[Var[v] =:= A] andThen ev)
             }
           })
       }
-
-      val objectMap: ObjectMap[|*|, |*|, Unvar] =
-        new ObjectMap[|*|, |*|, Unvar] {
-          override def uniqueOutputType[A, X, Y](f1: Unvar[A, X], f2: Unvar[A, Y]): X =:= Y =
-            f1 uniqueOutType f2
-
-          override def pair[A1, A2, X1, X2](f1: Unvar[A1, X1], f2: Unvar[A2, X2]): Unvar[A1 |*| A2, X1 |*| X2] =
-            Unvar.Par(f1, f2)
-
-          override def unpair[A1, A2, X](f: Unvar[A1 |*| A2, X]): Unpaired[A1, A2, X] =
-            f.maskInput.visit[Unpaired[A1, A2, X]]([A] => (u: Unvar[A, X], ev: A =:= (A1 |*| A2)) => {
-              u match {
-                case p: Par[a1, a2, x1, x2] =>
-                  (summon[(a1 |*| a2) =:= A] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
-                    Unpaired.Impl(p.u1, p.u2)
-                  }
-                case _: SingleVar[v] =>
-                  varIsNotPair[v, A1, A2](summon[Var[v] =:= A] andThen ev)
-              }
-            })
-        }
-    }
   }
 
   private given varIsNotPair: ([V, A, B] => (Var[V] =:= (A |*| B)) => Nothing) =
