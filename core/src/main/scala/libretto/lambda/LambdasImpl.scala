@@ -58,6 +58,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
 
     override def getConstant[A](v: Var[A])(using ctx: Context): Option[[x] => Unit => x -⚬ (A |*| x)] =
       ctx.getConstant(v)
+
+    override def isDefiningFor[A](v: Var[A])(using ctx: Context): Boolean =
+      ctx.isDefiningFor(v)
   }
 
   type CapturingFun[A, B] = libretto.lambda.CapturingFun[AbstractFun, |*|, Tupled[Expr, *], A, B]
@@ -228,27 +231,43 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
           type Intro[T]      = (Var[T], [x] => Unit => x -⚬ (T |*| x))
           type VarOrIntro[T] = Either[Var[T], Intro[T]]
 
-          // split captured expressions at constants
-          Expr.cutAt(y) { [t] => (t: Expr[t]) =>
-            Context.getConstant(t.resultVar).map((t.resultVar, _)): Option[Intro[t]]
+          // split captured expressions at context boundary
+          Expr.splitAt(y) { [t] => (v: Var[t]) =>
+            !Context.isDefiningFor(v)
           } match {
             case Exists.Some((x, y)) =>
+              type InnerVarOrOuterExpr[T] = Either[Var[T], Expr[T]]
+
               def go[X, Y](
-                constants: Bin[|*|, [t] =>> t, VarOrIntro, X],
+                boundary: Bin[|*|, [t] =>> t, InnerVarOrOuterExpr, X],
                 captured: Tupled[Expr, Y],
                 f: AbstractFun[Y |*| A, B],
                 alreadyEliminated: Var.Set[V],
               ): (Abstracted[A, B], Var.Set[V]) =
-                constants match {
-                  case Bin.Leaf(Left(_)) =>
-                    (Closure(captured, f), alreadyEliminated)
-                  case Bin.Leaf(Right((v, intro))) =>
+                boundary match {
+                  case Bin.Leaf(Left(v)) =>
+                    if (alreadyEliminated containsVar v)
+                      (Closure(captured, f), alreadyEliminated)
+                    else (
+                      Context.getConstant(v) match {
+                        case Some(intro) =>
+                          extractFunctionFromForest(v, captured) match
+                            case Exact(g)      => Exact(lift(intro[A](())) > fst(g) > f)
+                            case Closure(x, g) => Closure(x, snd(lift(intro[A](()))) > assocRL > fst(g) > f)
+                            case Failure(e)    => Failure(e)
+                        case None =>
+                          bug(s"Unexpected variable that neither derives from λ nor is a constant")
+                      },
+                      alreadyEliminated + v
+                    )
+                  case Bin.Leaf(Right(x)) =>
+                    val v = x.resultVar
                     if (alreadyEliminated containsVar v)
                       (Closure(captured, f), alreadyEliminated)
                     else (
                       extractFunctionFromForest(v, captured) match {
-                        case Exact(g)      => Exact(lift(intro[A](())) > fst(g) > f)
-                        case Closure(x, g) => Closure(x, snd(lift(intro[A](()))) > assocRL > fst(g) > f)
+                        case Exact(g)      => Closure(Tupled.atom(x), fst(g) > f)
+                        case Closure(y, g) => Closure(y zip Tupled.atom(x), fst(g) > f)
                         case Failure(e)    => Failure(e)
                       },
                       alreadyEliminated + v

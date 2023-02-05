@@ -19,7 +19,10 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V](
     mutable.Map.empty
 
   def newVar[A](data: V): Var[V, A] =
-    new Var[V, A](data)
+    new Var[V, A](data, this)
+
+  def isDefiningFor[A](v: Var[V, A]): Boolean =
+    v.context eq this
 
   def register[A](v: Var[V, A])(
     split: Option[A -⚬ (A |*| A)],

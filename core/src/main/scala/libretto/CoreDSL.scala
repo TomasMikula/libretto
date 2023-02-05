@@ -475,7 +475,7 @@ trait CoreDSL {
     }
 
     extension [A, B](x: $[A |+| B]) {
-      def switch[C](f: Either[$[A], $[B]] => $[C])(using
+      def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
         pos: SourcePos,
         ctx: LambdaContext,
       ): $[C] =

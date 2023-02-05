@@ -2028,7 +2028,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         g1: TransferOpt[P1, P2, Q1, Q2],
         that: XI[Q1 |*| Q2, (B1 |*| B2), A2, R2, R3],
       ): ((P1 |*| (A1 |*| A2)) |*| (P2 |*| A3)) ~⚬ ((B1 |*| B2) |*| (R2 |*| R3)) =
-        UnhandledCase.raise(s"${this.getClass.getSimpleName}.ixi_sndThis_xi")
+        decompose(ix > fst(g1.asShuffle) > that.g.asShuffle) match
+          case Decomposition(f1, f2, h) => Xfer(xi > snd(f1), swap > snd(f2), IXI(g, h))
 
       override def invert: Xfer[(B1 |*| B2), A2, _, _, A1 |*| A2, A3] =
         Xfer(g.asShuffle.invert, id, IX(TransferOpt.None()))

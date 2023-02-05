@@ -261,7 +261,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
               } |*| (a |*| b)
             }
           }
-        }.pending,
+        },
 
       "non-linearity in nested context does not affect parent context" ->
         TestCase.pure {

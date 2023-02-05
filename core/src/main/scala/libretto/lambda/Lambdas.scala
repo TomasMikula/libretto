@@ -65,6 +65,8 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
 
     def newVar[A](label: V)(using Context): Var[V, A]
 
+    def isDefiningFor[A](v: Var[V, A])(using ctx: Context): Boolean
+
     def registerNonLinearOps[A](v: Var[V, A])(
       split: Option[A -⚬ (A |*| A)],
       discard: Option[[B] => Unit => (A |*| B) -⚬ B],
@@ -180,8 +182,23 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
     )
   }
 
-  private def discarderOf[A](a: Tupled[Expr, A])(using Context): Either[Var.Set[V], [B] => Unit => (A |*| B) -⚬ B] =
-    ???
+  private def discarderOf[A](a: Tupled[Expr, A])(using
+    ctx: Context,
+    ssc: SymmetricSemigroupalCategory[-⚬, |*|],
+  ): Either[Var.Set[V], [B] => Unit => (A |*| B) -⚬ B] =
+    a.asBin match {
+      case Bin.Leaf(x) =>
+        val v = x.resultVar
+        Context.getDiscard(v) match
+          case Some(discardFst) => Right(discardFst)
+          case None             => Left(Var.Set(v))
+      case Bin.Branch(l, r) =>
+        (discarderOf(Tupled.fromBin(l)), discarderOf(Tupled.fromBin(r))) match
+          case (Right(f), Right(g)) => Right([B] => (_: Unit) => ssc.fst(f(())) > g[B](()))
+          case (Right(_), Left(ws)) => Left(ws)
+          case (Left(vs), Right(_)) => Left(vs)
+          case (Left(vs), Left(ws)) => Left(vs merge ws)
+    }
 
   private def product[A, B](
     a: Tupled[Expr, A],
