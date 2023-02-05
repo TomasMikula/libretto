@@ -1,7 +1,7 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{ClosedSymmetricMonoidalCategory, Closures, Lambdas, LambdasImpl, Sink, Tupled, Var}
+import libretto.lambda.{ClosedSymmetricMonoidalCategory, Lambdas, LambdasImpl, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Abstracted
 import libretto.util.{Async, BiInjective, SourcePos, TypeEq}
 import libretto.util.Monad.monadEither
@@ -412,9 +412,6 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   val lambdas: Lambdas[-⚬, |*|, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin]] =
     new LambdasImpl[-⚬, |*|, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin]]
 
-  val closures: Closures[-⚬, |*|, =⚬, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin], lambdas.type] =
-    Closures(lambdas)
-
   override type $[A] = lambdas.Expr[A]
 
   override type LambdaContext = lambdas.Context
@@ -471,10 +468,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     )(using
       lambdas.Context,
     ): $[B] =
-      closures.app(f, a)(
-        VarOrigin.FunAndArg(pos),
-        VarOrigin.FunAppRes(pos),
-      )
+      map((f zip a)(VarOrigin.FunAndArg(pos)))(eval[A, B])(pos)
 
     override def nonLinear[A](a: $[A])(
       split: Option[A -⚬ (A |*| A)],
