@@ -1,17 +1,16 @@
 package libretto.lambda
 
 import libretto.{lambda => ll}
+import libretto.lambda.Lambdas.Error
 import libretto.lambda.Lambdas.Error.LinearityViolation
-import libretto.lambda.Lambdas.ErrorFactory
 import libretto.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
 import libretto.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
-class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
+class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
   ssc: SymmetricSemigroupalCategory[-⚬, |*|],
   inj: BiInjective[|*|],
-  errors: ErrorFactory[E, LE, V],
-) extends Lambdas[-⚬, |*|, V, E, LE] {
+) extends Lambdas[-⚬, |*|, V] {
 
   given shuffle: Shuffle[|*|] = Shuffle[|*|]
   given shuffled: Shuffled.With[-⚬, |*|, shuffle.type] = Shuffled[-⚬, |*|](shuffle)
@@ -317,7 +316,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
       case EliminatedFromForest.NotFound() =>
         Context.getDiscard(boundVar) match
           case Some(discardFst) => Closure(exprs, swap > lift(discardFst(())))
-          case None             => Failure(errors.underusedVar(boundVar))
+          case None             => Failure(Error.underusedVar(boundVar))
     }
   }
 
@@ -489,7 +488,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
                     SingleVar[a](),
                     Context.getSplit(v) match {
                       case Some(split) => LinCheck.Success(CapturingFun.lift(split))
-                      case None        => LinCheck.Failure(errors.overusedVars(Var.Set(v)))
+                      case None        => LinCheck.Failure(Error.overusedVar(v))
                     },
                     Par(SingleVar[a](), SingleVar[a]()),
                   )
@@ -498,7 +497,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
                       case Some(discard) => LinCheck.Success(CapturingFun.noCapture(shuffled.swap > shuffled.lift(discard[a1](()))))
-                      case None          => LinCheck.Failure(errors.underusedVars(Var.Set(op.unusedVar)))
+                      case None          => LinCheck.Failure(Error.underusedVar(op.unusedVar))
                     },
                     SingleVar[a1](),
                   )
@@ -507,7 +506,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
                       case Some(discard) => LinCheck.Success(CapturingFun.lift(discard[a2](())))
-                      case None          => LinCheck.Failure(errors.underusedVars(Var.Set(op.unusedVar)))
+                      case None          => LinCheck.Failure(Error.underusedVar(op.unusedVar))
                     },
                     SingleVar[a2](),
                   )
@@ -1197,7 +1196,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, E, LE](using
     enum LinearRes[A, B] {
       case Exact(f: AbstractFun[A, B])
       case Closure[X, A, B](captured: Tupled[Expr, X], f: AbstractFun[X |*| A, B]) extends LinearRes[A, B]
-      case Violation(e: LE)
+      case Violation(e: LinearityViolation[V])
     }
   }
 

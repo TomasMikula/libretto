@@ -1,12 +1,11 @@
 package libretto.lambda
 
+import libretto.lambda.Lambdas.Error
 import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.util.{Applicative, BiInjective, Exists, Semigroup, UniqueTypeArg}
 import scala.annotation.targetName
 
-trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
-  import Lambdas.ErrorFactory
-
+trait Lambdas[-⚬[_, _], |*|[_, _], V] {
   final type Tupled[F[_], A] = libretto.lambda.Tupled[|*|, F, A]
 
   type Expr[A]
@@ -84,8 +83,8 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
       AbstractFun.fold(f)
   }
 
-  type Abstracted[A, B] = Lambdas.Abstracted[Expr, |*|, AbstractFun, LE, A, B]
-  type AbsRes[A, B]     = Lambdas.Abstracted[Expr, |*|, -⚬,          LE, A, B]
+  type Abstracted[A, B] = Lambdas.Abstracted[Expr, |*|, AbstractFun, V, A, B]
+  type AbsRes[A, B]     = Lambdas.Abstracted[Expr, |*|, -⚬,          V, A, B]
 
   protected def eliminateLocalVariables[A, B](
     boundVar: Var[V, A],
@@ -129,7 +128,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
   )(using
     BiInjective[|*|],
     SymmetricSemigroupalCategory[-⚬, |*|],
-    ErrorFactory[E, LE, V],
     Context,
   ): AbsRes[A, B] = {
     val cases1: Sink[AbsRes, <+>, A, B] =
@@ -147,11 +145,11 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
           case (Closure(x, f1), Exact(f2)) =>
             discarderOf(x) match
               case Right(discardFst) => Closure(x, distribute(()) > sum(f1, discardFst(()) > f2))
-              case Left(unusedVars)  => Failure(ErrorFactory.underusedVars(unusedVars))
+              case Left(unusedVars)  => Failure(LinearityViolation.Underused(unusedVars))
           case (Exact(f1), Closure(y, f2)) =>
             discarderOf(y) match
               case Right(discardFst) => Closure(y, distribute(()) > sum(discardFst(()) > f1, f2))
-              case Left(unusedVars)  => Failure(ErrorFactory.underusedVars(unusedVars))
+              case Left(unusedVars)  => Failure(LinearityViolation.Underused(unusedVars))
           case (Closure(x, f1), Closure(y, f2)) =>
             product(x, y) match
               case LinCheck.Success(Exists.Some((p, p1, p2))) =>
@@ -159,7 +157,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
               case LinCheck.Failure(e) =>
                 Failure(e)
           case (Failure(e1), Failure(e2)) =>
-            Failure(ErrorFactory.combineLinear(e1, e2))
+            Failure(e1 combine e2)
           case (Failure(e1), _) =>
             Failure(e1)
           case (_, Failure(e2)) =>
@@ -194,7 +192,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
     Context,
     BiInjective[|*|],
     SymmetricSemigroupalCategory[-⚬, |*|],
-    ErrorFactory[E, LE, V],
   ): LinCheck[Exists[[P] =>> (Tupled[Expr, P], P -⚬ A, P -⚬ B)]] = {
     type LinChecked[X, Y] = LinCheck[X -⚬ Y]
     given shuffled: Shuffled[LinChecked, |*|] = Shuffled[LinChecked, |*|]
@@ -204,7 +201,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
       [X, Y] => (x: Expr[X]) =>
         Context.getDiscard(x.resultVar) match {
           case Some(discardFst) => LinCheck.Success(discardFst[Y](()))
-          case None             => LinCheck.Failure(ErrorFactory.underusedVars(Var.Set(x.resultVar)))
+          case None             => LinCheck.Failure(Error.underusedVar(x.resultVar))
         }
 
     (a product b)(discardFst) match
@@ -219,11 +216,11 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
 
   enum LinCheck[A] {
     case Success(value: A)
-    case Failure(e: LE)
+    case Failure(e: LinearityViolation[V])
   }
 
   object LinCheck {
-    given (using ErrorFactory[E, LE, V]): Applicative[LinCheck] with {
+    given Applicative[LinCheck] with {
       override def pure[A](a: A): LinCheck[A] =
         Success(a)
 
@@ -232,19 +229,18 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, E, LE] {
           case (Success(f), Success(a)) => Success(f(a))
           case (Success(_), Failure(e)) => Failure(e)
           case (Failure(e), Success(_)) => Failure(e)
-          case (Failure(e), Failure(f)) => Failure(ErrorFactory.combineLinear(e, f))
+          case (Failure(e), Failure(f)) => Failure(e combine f)
         }
     }
   }
 }
 
 object Lambdas {
-  def apply[-⚬[_, _], |*|[_, _], VarLabel, E, LE](using
+  def apply[-⚬[_, _], |*|[_, _], VarLabel](using
     ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
-    errors: ErrorFactory[E, LE, VarLabel],
-  ): Lambdas[-⚬, |*|, VarLabel, E, LE] =
-    new LambdasImpl[-⚬, |*|, VarLabel, E, LE]
+  ): Lambdas[-⚬, |*|, VarLabel] =
+    new LambdasImpl[-⚬, |*|, VarLabel]
 
   sealed trait Error[VarLabel]
   object Error {
@@ -285,57 +281,24 @@ object Lambdas {
       Undefined(Var.Set(v))
   }
 
-  trait ErrorFactory[E, LE, VarLabel] {
-    def underusedVars(vs: Var.Set[VarLabel]): LE
-    def overusedVars(vs: Var.Set[VarLabel]): LE
-
-    def combineLinear(l: LE, r: LE): LE
-
-    def undefinedVars(vs: Var.Set[VarLabel]): E
-
-    def fromLinearityViolation(e: LE): E
-
-    def underusedVar[A](v: Var[VarLabel, A]): LE =
-      underusedVars(Var.Set(v))
-
-    def overusedVar[A](v: Var[VarLabel, A]): LE =
-      overusedVars(Var.Set(v))
-  }
-
-  object ErrorFactory {
-    def underusedVars[E, LE, VarLabel](using ef: ErrorFactory[E, LE, VarLabel])(vs: Var.Set[VarLabel]): LE = ef.underusedVars(vs)
-    def overusedVars[E, LE, VarLabel](using ef: ErrorFactory[E, LE, VarLabel])(vs: Var.Set[VarLabel]): LE = ef.overusedVars(vs)
-    def combineLinear[E, LE, VarLabel](using ef: ErrorFactory[E, LE, VarLabel])(l: LE, r: LE): LE = ef.combineLinear(l, r)
-    def undefinedVars[E, LE, VarLabel](using ef: ErrorFactory[E, LE, VarLabel])(vs: Var.Set[VarLabel]): E = ef.undefinedVars(vs)
-    def fromLinearityViolation[E, LE, VarLabel](using ef: ErrorFactory[E, LE, VarLabel])(e: LE): E = ef.fromLinearityViolation(e)
-
-    given canonicalInstance[VarLabel]: ErrorFactory[Error[VarLabel], LinearityViolation[VarLabel], VarLabel] with {
-      override def overusedVars(vs: Var.Set[VarLabel]): LinearityViolation[VarLabel] = LinearityViolation.Overused(vs)
-      override def underusedVars(vs: Var.Set[VarLabel]): LinearityViolation[VarLabel] = LinearityViolation.Underused(vs)
-      override def combineLinear(l: LinearityViolation[VarLabel], r: LinearityViolation[VarLabel]): LinearityViolation[VarLabel] = l combine r
-      override def undefinedVars(vs: Var.Set[VarLabel]): Error[VarLabel] = Error.Undefined(vs)
-      override def fromLinearityViolation(e: LinearityViolation[VarLabel]): Error[VarLabel] = e
-    }
-  }
-
-  sealed trait Abstracted[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B] {
+  sealed trait Abstracted[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B] {
     import Abstracted._
 
-    def mapExpr[Exp2[_]](g: [X] => Exp[X] => Exp2[X]): Abstracted[Exp2, |*|, AbsFun, LE, A, B] =
+    def mapExpr[Exp2[_]](g: [X] => Exp[X] => Exp2[X]): Abstracted[Exp2, |*|, AbsFun, V, A, B] =
       this match {
         case Exact(f)             => Exact(f)
         case Closure(captured, f) => Closure(captured.trans(g), f)
         case Failure(e)           => Failure(e)
       }
 
-    def mapFun[->[_, _]](g: [X] => AbsFun[X, B] => (X -> B)): Abstracted[Exp, |*|, ->, LE, A, B] =
+    def mapFun[->[_, _]](g: [X] => AbsFun[X, B] => (X -> B)): Abstracted[Exp, |*|, ->, V, A, B] =
       this match {
         case Exact(f)      => Exact(g(f))
         case Closure(x, f) => Closure(x, g(f))
         case Failure(e)    => Failure(e)
       }
 
-    def toEither: Either[LE, CapturingFun[AbsFun, |*|, Tupled[|*|, Exp, *], A, B]] =
+    def toEither: Either[LinearityViolation[V], CapturingFun[AbsFun, |*|, Tupled[|*|, Exp, *], A, B]] =
       this match {
         case Exact(f)      => Right(CapturingFun.NoCapture(f))
         case Closure(x, f) => Right(CapturingFun.Closure(x, f))
@@ -344,17 +307,17 @@ object Lambdas {
   }
 
   object Abstracted {
-    case class Exact[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B](
+    case class Exact[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B](
       f: AbsFun[A, B],
-    ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
+    ) extends Abstracted[Exp, |*|, AbsFun, V, A, B]
 
-    case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], LE, X, A, B](
+    case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], V, X, A, B](
       captured: Tupled[|*|, Exp, X],
       f: AbsFun[X |*| A, B],
-    ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
+    ) extends Abstracted[Exp, |*|, AbsFun, V, A, B]
 
-    case class Failure[Exp[_], |*|[_, _], AbsFun[_, _], LE, A, B](
-      e: LE,
-    ) extends Abstracted[Exp, |*|, AbsFun, LE, A, B]
+    case class Failure[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B](
+      e: LinearityViolation[V],
+    ) extends Abstracted[Exp, |*|, AbsFun, V, A, B]
   }
 }

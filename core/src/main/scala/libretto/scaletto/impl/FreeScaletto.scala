@@ -409,8 +409,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
-  val lambdas: Lambdas[-⚬, |*|, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin]] =
-    new LambdasImpl[-⚬, |*|, VarOrigin, Lambdas.Error[VarOrigin], Lambdas.Error.LinearityViolation[VarOrigin]]
+  val lambdas: Lambdas[-⚬, |*|, VarOrigin] =
+    new LambdasImpl[-⚬, |*|, VarOrigin]
 
   override type $[A] = lambdas.Expr[A]
 
