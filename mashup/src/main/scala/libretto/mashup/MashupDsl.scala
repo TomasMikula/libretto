@@ -45,22 +45,24 @@ trait MashupDsl {
 
   type Picked[A, K <: String & Singleton, V] = Pick[A, K] { type T = V }
 
+  type LambdaContext
+
   val fun: Funs
 
   trait Funs {
-    def apply[A, B](using SourcePos)(f: Expr[A] => Expr[B]): Fun[A, B]
-    def ?[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Affine[A]): Fun[A, B]
-    def +[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Cosemigroup[A]): Fun[A, B]
-    def *[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Comonoid[A]): Fun[A, B]
+    def apply[A, B](using SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[B]): Fun[A, B]
+    def ?[A, B](using SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[B])(using Affine[A]): Fun[A, B]
+    def +[A, B](using SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[B])(using Cosemigroup[A]): Fun[A, B]
+    def *[A, B](using SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[B])(using Comonoid[A]): Fun[A, B]
   }
 
   val closure: Closures
 
   trait Closures {
-    def apply[A, B](using SourcePos)(f: Expr[A] => Expr[B]): Expr[A --> B]
-    def ?[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Affine[A]): Expr[A --> B]
-    def +[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Cosemigroup[A]): Expr[A --> B]
-    def *[A, B](using SourcePos)(f: Expr[A] => Expr[B])(using Comonoid[A]): Expr[A --> B]
+    def apply[A, B](using SourcePos, LambdaContext)(f: LambdaContext ?=> Expr[A] => Expr[B]): Expr[A --> B]
+    def ?[A, B](using SourcePos, LambdaContext)(f: LambdaContext ?=> Expr[A] => Expr[B])(using Affine[A]): Expr[A --> B]
+    def +[A, B](using SourcePos, LambdaContext)(f: LambdaContext ?=> Expr[A] => Expr[B])(using Cosemigroup[A]): Expr[A --> B]
+    def *[A, B](using SourcePos, LambdaContext)(f: LambdaContext ?=> Expr[A] => Expr[B])(using Comonoid[A]): Expr[A --> B]
   }
 
   def id[A]: Fun[A, A]
@@ -74,7 +76,7 @@ trait MashupDsl {
   val Record: Records
 
   trait Records {
-    def empty(using pos: SourcePos): Expr[Record[EmptyResource]]
+    def empty(using SourcePos, LambdaContext): Expr[Record[EmptyResource]]
 
     def field[N <: String & Singleton, T](field: (N, Expr[T])): Expr[Record[N of T]]
   }
@@ -82,37 +84,39 @@ trait MashupDsl {
   val Float64: Float64s
 
   trait Float64s {
-    def apply(value: Double)(using pos: SourcePos): Expr[Float64]
+    def apply(value: Double)(using SourcePos, LambdaContext): Expr[Float64]
 
-    def add(a: Expr[Float64], b: Expr[Float64])(using pos: SourcePos): Expr[Float64]
+    def add(a: Expr[Float64], b: Expr[Float64])(using SourcePos, LambdaContext): Expr[Float64]
 
-    def subtract(a: Expr[Float64], b: Expr[Float64])(using pos: SourcePos): Expr[Float64]
+    def subtract(a: Expr[Float64], b: Expr[Float64])(using SourcePos, LambdaContext): Expr[Float64]
 
-    def negate(a: Expr[Float64])(using pos: SourcePos): Expr[Float64]
+    def negate(a: Expr[Float64])(using SourcePos, LambdaContext): Expr[Float64]
 
-    def multiply(a: Expr[Float64], b: Expr[Float64])(using pos: SourcePos): Expr[Float64]
+    def multiply(a: Expr[Float64], b: Expr[Float64])(using SourcePos, LambdaContext): Expr[Float64]
 
-    def divide(a: Expr[Float64], b: Expr[Float64])(using pos: SourcePos): Expr[Float64]
+    def divide(a: Expr[Float64], b: Expr[Float64])(using SourcePos, LambdaContext): Expr[Float64]
   }
 
   val Text: Texts
 
   trait Texts {
-    def apply(value: String)(using pos: SourcePos): Expr[Text]
+    def apply(value: String)(using SourcePos, LambdaContext): Expr[Text]
   }
 
   val Expr: Exprs
 
   trait Exprs {
-    def pair[A, B](a: Expr[A], b: Expr[B])(pos: SourcePos): Expr[A ** B]
+    def pair[A, B](a: Expr[A], b: Expr[B])(pos: SourcePos)(using LambdaContext): Expr[A ** B]
 
-    def unit(using pos: SourcePos): Expr[EmptyResource]
+    def unit(using SourcePos, LambdaContext): Expr[EmptyResource]
 
-    def eliminateSecond[A](a: Expr[A], empty: Expr[EmptyResource])(pos: SourcePos): Expr[A]
+    def eliminateSecond[A](a: Expr[A], empty: Expr[EmptyResource])(pos: SourcePos)(using LambdaContext): Expr[A]
 
     def awaitSecond[A, B](a: Expr[A], b: Expr[B])(pos: SourcePos)(using
       ValueType[A],
       ValueType[B],
+    )(using
+      LambdaContext,
     ): Expr[A]
 
     def extendRecord[A, N <: String, T](
@@ -120,11 +124,13 @@ trait MashupDsl {
       last: (N, Expr[T]),
     )(
       pos: SourcePos,
+    )(using
+      LambdaContext,
     ): Expr[Record[A ### (N of T)]]
 
-    def map[A, B](a: Expr[A], f: Fun[A, B])(pos: SourcePos): Expr[B]
+    def map[A, B](a: Expr[A], f: Fun[A, B])(pos: SourcePos)(using LambdaContext): Expr[B]
 
-    def debugPrint[A](s: String, expr: Expr[A])(using ValueType[A]): Expr[A]
+    def debugPrint[A](s: String, expr: Expr[A])(using ValueType[A])(using LambdaContext): Expr[A]
   }
 
   val Unlimited: Unlimiteds
@@ -142,7 +148,7 @@ trait MashupDsl {
   val ** : PairExtractor
 
   trait PairExtractor {
-    def unapply[A, B](ab: Expr[A ** B])(using pos: SourcePos): (Expr[A], Expr[B])
+    def unapply[A, B](ab: Expr[A ** B])(using SourcePos, LambdaContext): (Expr[A], Expr[B])
   }
 
   val as  : SingleFieldExtractor
@@ -157,85 +163,88 @@ trait MashupDsl {
   }
 
   trait RecordExtractor {
-    def unapply[A, B](rec: Expr[Record[A ### B]])(using pos: SourcePos): (Expr[Record[A]], Expr[Record[B]])
+    def unapply[A, B](rec: Expr[Record[A ### B]])(using SourcePos, LambdaContext): (Expr[Record[A]], Expr[Record[B]])
   }
 
   extension [A](a: Expr[A]) {
-    def **[B](b: Expr[B])(using pos: SourcePos): Expr[A ** B] =
+    def **[B](b: Expr[B])(using pos: SourcePos, ctx: LambdaContext): Expr[A ** B] =
       Expr.pair(a, b)(pos)
 
     def pick[K <: String & Singleton](using pick: Pick[A, K])(using
       pos: SourcePos,
+      ctx: LambdaContext,
     ): Expr[pick.T] =
       Expr.map(a, pick.asFun)(pos)
 
     def alsoElim(empty: Expr[EmptyResource])(using
       pos: SourcePos,
+      ctx: LambdaContext,
     ): Expr[A] =
       Expr.eliminateSecond(a, empty)(pos)
 
-    def debugPrint(msg: String)(using ValueType[A]): Expr[A] =
+    def debugPrint(msg: String)(using ValueType[A])(using LambdaContext): Expr[A] =
       Expr.debugPrint(msg, a)
   }
 
   extension [A: ValueType](a: Expr[A]) {
-    def alsoAwait[B: ValueType](b: Expr[B])(using pos: SourcePos): Expr[A] =
+    def alsoAwait[B: ValueType](b: Expr[B])(using pos: SourcePos, ctx: LambdaContext): Expr[A] =
       Expr.awaitSecond(a, b)(pos)
   }
 
   extension [A](a: Expr[Record[A]]) {
     def field[N <: String & Singleton, T](field: (N, Expr[T]))(using
       pos: SourcePos,
+      ctx: LambdaContext,
     ): Expr[Record[A ### (N of T)]] =
       Expr.extendRecord(a, field)(pos)
   }
 
   extension (self: Expr[Float64]) {
-    def +(that: Expr[Float64])(using pos: SourcePos): Expr[Float64] =
+    def +(that: Expr[Float64])(using pos: SourcePos, ctx: LambdaContext): Expr[Float64] =
       Float64.add(self, that)
 
-    def +(that: Double)(using pos: SourcePos): Expr[Float64] =
+    def +(that: Double)(using pos: SourcePos, ctx: LambdaContext): Expr[Float64] =
       self + Float64(that)
 
-    def -(that: Expr[Float64])(using pos: SourcePos): Expr[Float64] =
+    def -(that: Expr[Float64])(using pos: SourcePos, ctx: LambdaContext): Expr[Float64] =
       Float64.subtract(self, that)
 
-    def -(that: Double)(using pos: SourcePos): Expr[Float64] =
+    def -(that: Double)(using pos: SourcePos, ctx: LambdaContext): Expr[Float64] =
       self - Float64(that)
 
-    def unary_-(using pos: SourcePos): Expr[Float64] =
+    def unary_-(using pos: SourcePos, ctx: LambdaContext): Expr[Float64] =
       Float64.negate(self)
 
-    def *(that: Expr[Float64])(using pos: SourcePos): Expr[Float64] =
+    def *(that: Expr[Float64])(using pos: SourcePos, ctx: LambdaContext): Expr[Float64] =
       Float64.multiply(self, that)
 
-    def *(that: Double)(using pos: SourcePos): Expr[Float64] =
+    def *(that: Double)(using pos: SourcePos, ctx: LambdaContext): Expr[Float64] =
       self * Float64(that)
 
-    def /(that: Expr[Float64])(using pos: SourcePos): Expr[Float64] =
+    def /(that: Expr[Float64])(using pos: SourcePos, ctx: LambdaContext): Expr[Float64] =
       Float64.divide(self, that)
 
-    def /(that: Double)(using pos: SourcePos): Expr[Float64] =
+    def /(that: Double)(using pos: SourcePos, ctx: LambdaContext): Expr[Float64] =
       self / Float64(that)
   }
 
   extension [A, B](f: Fun[A, B]) {
     @targetName("applyFun")
-    def apply(a: Expr[A])(using pos: SourcePos): Expr[B] =
+    def apply(a: Expr[A])(using pos: SourcePos, ctx: LambdaContext): Expr[B] =
       Expr.map(a, f)(pos)
   }
 
   extension [A, B](f: Expr[A --> B]) {
     @targetName("evalFunExpr")
-    def apply(a: Expr[A])(using pos: SourcePos): Expr[B] =
+    def apply(a: Expr[A])(using pos: SourcePos, ctx: LambdaContext): Expr[B] =
       Expr.map((f ** a)(using pos), eval)(pos)
   }
 
   extension [A](self: Expr[Unlimited[A]]) {
-    def split(using pos: SourcePos): (Expr[Unlimited[A]], Expr[Unlimited[A]]) =
+    def split(using pos: SourcePos, ctx: LambdaContext): (Expr[Unlimited[A]], Expr[Unlimited[A]]) =
       **.unapply(Unlimited.split[A](self)(using pos))(using pos)
 
-    def get(using pos: SourcePos): Expr[A] =
+    def get(using pos: SourcePos, ctx: LambdaContext): Expr[A] =
       Expr.map(self, Unlimited.getSingle)(pos)
   }
 

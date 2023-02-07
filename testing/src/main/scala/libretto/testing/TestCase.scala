@@ -4,7 +4,13 @@ import libretto.testing.TestKit.dsl
 import libretto.util.SourcePos
 import scala.concurrent.duration._
 
-sealed trait TestCase[TK <: TestKit]
+sealed trait TestCase[TK <: TestKit] {
+  def pending: TestCase[TK] =
+    this match {
+      case p: TestCase.Pending[tk] => p
+      case q                       => TestCase.Pending(q)
+    }
+}
 
 object TestCase {
   sealed trait Single[TK <: TestKit] extends TestCase[TK] {
@@ -35,17 +41,21 @@ object TestCase {
       parameterizedExecAndCheck(using testKit)(body, params, conductor(_, _), postStop, d)
   }
 
-  class OutcomeOnly[TK <: TestKit](
+  class Pure[TK <: TestKit](
     val testKit: TK,
     val body: () => testKit.Outcome[Unit],
     val timeout: FiniteDuration,
   ) extends Single[TK] {
     override def withTimeout(d: FiniteDuration): TestCase.Single[TK] =
-      OutcomeOnly(testKit, body, d)
+      Pure(testKit, body, d)
   }
 
   case class Multiple[TK <: TestKit](
     cases: List[(String, TestCase[TK])],
+  ) extends TestCase[TK]
+
+  case class Pending[TK <: TestKit](
+    testCase: TestCase[TK],
   ) extends TestCase[TK]
 
   def parameterizedExecAndCheck[TK <: TestKit, A, Q, B](using kit: TK)(
@@ -106,7 +116,7 @@ object TestCase {
     body: => kit.Outcome[Unit],
     timeout: FiniteDuration = 1.second,
   ): TestCase[kit.type] =
-    new OutcomeOnly[kit.type](kit, () => body, timeout)
+    new Pure[kit.type](kit, () => body, timeout)
 
   @deprecated("Use pure instead", since="0.2-M5")
   def testOutcome[TK <: TestKit](using kit: TestKit)(

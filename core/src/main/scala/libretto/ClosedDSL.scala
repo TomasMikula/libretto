@@ -37,25 +37,25 @@ trait ClosedDSL extends CoreDSL {
     /** Creates a closure (`A =⚬ B`), i.e. a function that captures variables from the outer scope,
       * as an expression (`$[A =⚬ B]`) that can be used in outer [[λ]].
       */
-    def apply[A, B](using SourcePos)(
+    def apply[A, B](using SourcePos, LambdaContext)(
       f: LambdaContext ?=> $[A] => $[B],
     ): $[A =⚬ B]
 
-    def ?[A, B](using SourcePos)(
+    def ?[A, B](using SourcePos, LambdaContext)(
       f: LambdaContext ?=> $[A] => $[B],
     )(using
       Affine[A],
     ): $[A =⚬ B] =
       apply { case $.?(a) => f(a) }
 
-    def +[A, B](using SourcePos)(
+    def +[A, B](using SourcePos, LambdaContext)(
       f: LambdaContext ?=> $[A] => $[B],
     )(using
       Cosemigroup[A],
     ): $[A =⚬ B] =
       apply { case $.+(a) => f(a) }
 
-    def *[A, B](using SourcePos)(
+    def *[A, B](using SourcePos, LambdaContext)(
       f: LambdaContext ?=> $[A] => $[B],
     )(using
       Comonoid[A],
@@ -65,7 +65,7 @@ trait ClosedDSL extends CoreDSL {
 
   /** Alias for [[λ.closure.apply]]. */
   @deprecated("Use λ.closure instead.", since = "0.2")
-  def Λ[A, B](using SourcePos)(
+  def Λ[A, B](using SourcePos, LambdaContext)(
     f: $[A] => $[B],
   ): $[A =⚬ B] =
     λ.closure(f)
@@ -75,11 +75,14 @@ trait ClosedDSL extends CoreDSL {
   trait FunExprOps extends $Ops {
     def app[A, B](f: $[A =⚬ B], a: $[A])(
       pos: SourcePos,
+    )(using
+      LambdaContext,
     ): $[B]
 
     implicit class ClosureOps[A, B](f: $[A =⚬ B]) {
-      def apply(a: $[A])(implicit
+      def apply(a: $[A])(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): $[B] =
         app(f, a)(pos)
     }

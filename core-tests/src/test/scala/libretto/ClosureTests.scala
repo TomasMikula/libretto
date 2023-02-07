@@ -4,6 +4,7 @@ import libretto.scaletto.ScalettoLib
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
 import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
+import libretto.util.Monad.syntax._
 
 class ClosureTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
@@ -224,7 +225,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
           }
         },
 
-      "capture two one-expression into another one-expression" ->
+      "capture two one-expressions into another one-expression" ->
         TestCase.pure {
           Outcome.expectNotThrows {
             λ.? { (_: $[One]) =>
@@ -232,6 +233,64 @@ class ClosureTests extends ScalatestScalettoTestSuite {
               val c = one > done
               λ.closure.? { (_: $[One]) =>
                 b |*| c
+              }
+            }
+          }
+        },
+
+      "fork a one-expression inside closure" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ { (a: $[Done]) =>
+              λ.closure { (b: $[Done]) =>
+                val (c |*| d) = one > done > fork
+                a |*| b |*| c |*| d
+              }
+            }
+          }
+        },
+
+
+      "one-expression whose part is consumed outside and part inside a closure" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ { (a: $[Done]) =>
+              val (b |*| c) = one > done > fork
+              λ.closure { (d: $[Done]) =>
+                c |*| d
+              } |*| (a |*| b)
+            }
+          }
+        },
+
+      "non-linearity in nested context does not affect parent context" ->
+        TestCase.pure {
+          for {
+            e <- Outcome.expectThrows {
+              λ { (a: $[Done]) =>
+                λ.closure { (b: $[Done]) =>
+                  a match {
+                    case +(a) =>
+                      a |*| b
+                  }
+                } |*| a
+              }
+            }
+            _ <- Outcome.assertSubstring("used more than once", e.getMessage)
+            _ <- Outcome.assertSubstring("variable bound by lambda", e.getMessage)
+            _ <- Outcome.assertSubstring("ClosureTests.scala:270", e.getMessage)
+          } yield ()
+        },
+
+      "semigroup evidence in nested scope" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ { (a: $[Done]) =>
+              λ.closure { (b: $[Done]) =>
+                a match {
+                  case +(a) =>
+                    a |*| b |*| a
+                }
               }
             }
           }

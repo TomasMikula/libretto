@@ -51,7 +51,7 @@ releaseProcess := Seq[ReleaseStep](
   pushChanges,
 )
 
-val ZioVersion = "2.0.3"
+val ZioVersion = "2.0.6"
 
 lazy val core = project
   .in(file("core"))
@@ -103,14 +103,14 @@ lazy val mashup = project
     publish / skip := true, // experimental project, do not publish
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio" % ZioVersion,
-      "dev.zio" %% "zio-json" % "0.3.0",
-      "io.d11" %% "zhttp" % "2.0.0-RC11",
+      "dev.zio" %% "zio-json" % "0.4.2",
+      "dev.zio" %% "zio-http" % "0.0.4",
     ),
   )
 
 lazy val mashupExamples = project
   .in(file("mashup-examples"))
-  .dependsOn(mashup)
+  .dependsOn(mashup, testingScalatest)
   .settings(
     name := "libretto-mashup-examples",
     fork := true,

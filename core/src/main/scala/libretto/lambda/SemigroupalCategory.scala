@@ -8,4 +8,9 @@ trait SemigroupalCategory[->[_, _], |*|[_, _]] extends Category[->] {
 
   def fst[X, Y, Z](f: X -> Y): (X |*| Z) -> (Y |*| Z) = par(f, id)
   def snd[X, Y, Z](f: Y -> Z): (X |*| Y) -> (X |*| Z) = par(id, f)
+
+  extension [A, B](f: A -> B) {
+    def inFst[X]: (A |*| X) -> (B |*| X) = fst(f)
+    def inSnd[X]: (X |*| A) -> (X |*| B) = snd(f)
+  }
 }

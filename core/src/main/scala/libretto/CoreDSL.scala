@@ -351,18 +351,18 @@ trait CoreDSL {
   val $: $Ops
 
   trait $Ops {
-    def one(implicit pos: SourcePos): $[One]
+    def one(using SourcePos, LambdaContext): $[One]
 
-    def map[A, B](a: $[A])(f: A -⚬ B)(
-      pos: SourcePos,
+    def map[A, B](a: $[A])(f: A -⚬ B)(pos: SourcePos)(using
+      LambdaContext,
     ): $[B]
 
-    def zip[A, B](a: $[A], b: $[B])(
-      pos: SourcePos,
+    def zip[A, B](a: $[A], b: $[B])(pos: SourcePos)(using
+      LambdaContext,
     ): $[A |*| B]
 
-    def unzip[A, B](ab: $[A |*| B])(
-      pos: SourcePos,
+    def unzip[A, B](ab: $[A |*| B])(pos: SourcePos)(using
+      LambdaContext,
     ): ($[A], $[B])
 
     def nonLinear[A](a: $[A])(
@@ -374,22 +374,29 @@ trait CoreDSL {
       LambdaContext,
     ): $[A]
 
+    def switchEither[A, B, C](
+      ab: $[A |+| B],
+      f: LambdaContext ?=> Either[$[A], $[B]] => $[C],
+    )(pos: SourcePos)(using
+      LambdaContext,
+    ): $[C]
+
     def eliminateFirst[A](unit: $[One], a: $[A])(
       pos: SourcePos,
-    ): $[A] =
+    )(using LambdaContext): $[A] =
       map(zip(unit, a)(pos))(elimFst)(pos)
 
     def eliminateSecond[A](a: $[A], unit: $[One])(
       pos: SourcePos,
-    ): $[A] =
+    )(using LambdaContext): $[A] =
       map(zip(a, unit)(pos))(elimSnd)(pos)
 
     def joinTwo(a: $[Done], b: $[Done])(
       pos: SourcePos,
-    ): $[Done] =
+    )(using LambdaContext): $[Done] =
       map(zip(a, b)(pos))(CoreDSL.this.join)(pos)
 
-    def joinAll(a: $[Done], as: $[Done]*)(using pos: SourcePos): $[Done] =
+    def joinAll(a: $[Done], as: $[Done]*)(using pos: SourcePos, ctx: LambdaContext): $[Done] =
       as match {
         case Seq()  => a
         case Seq(b) => joinTwo(a, b)(pos)
@@ -399,6 +406,7 @@ trait CoreDSL {
     object |*| {
       def unapply[A, B](ab: $[A |*| B])(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): ($[A], $[B]) =
         unzip(ab)(pos)
     }
@@ -421,6 +429,7 @@ trait CoreDSL {
     extension [A, B](f: A -⚬ B) {
       def apply(a: $[A])(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): $[B] =
         map(a)(f)(pos)
     }
@@ -428,24 +437,31 @@ trait CoreDSL {
     extension [A](a: $[A]) {
       def |*|[B](b: $[B])(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): $[A |*| B] =
         zip(a, b)(pos)
 
       def >[B](f: A -⚬ B)(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): $[B] =
         map(a)(f)(pos)
 
-      // TODO: source position
-      def also[B](f: One -⚬ B): $[A |*| B] =
+      def also[B](f: One -⚬ B)(using
+        pos: SourcePos,
+        ctx: LambdaContext,
+      ): $[A |*| B] =
         a > introSnd(f)
 
-      // TODO: source position
-      def alsoFst[X](f: One -⚬ X): $[X |*| A] =
+      def alsoFst[X](f: One -⚬ X)(using
+        pos: SourcePos,
+        ctx: LambdaContext,
+      ): $[X |*| A] =
         a > introFst(f)
 
       def alsoElim(unit: $[One])(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): $[A] =
         eliminateFirst(unit, a)(pos)
     }
@@ -453,15 +469,24 @@ trait CoreDSL {
     extension (d: $[Done]) {
       def alsoJoin(others: $[Done]*)(using
         pos: SourcePos,
+        ctx: LambdaContext,
       ): $[Done] =
         joinAll(d, others: _*)(using pos)
     }
 
+    extension [A, B](x: $[A |+| B]) {
+      def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
+        pos: SourcePos,
+        ctx: LambdaContext,
+      ): $[C] =
+        switchEither(x, f)(pos)
+    }
+
     implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
-      def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F]): $[F[B]] =
+      def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F], ctx: LambdaContext): $[F[B]] =
         fa > F.lift(λ(f))
 
-      def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F]): $[F[B]] =
+      def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F], ctx: LambdaContext): $[F[B]] =
         fa > F.liftF(λ(f))
     }
   }
