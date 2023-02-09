@@ -53,10 +53,21 @@ releaseProcess := Seq[ReleaseStep](
 
 val ZioVersion = "2.0.6"
 
+lazy val lambda = project
+  .in(file("lambda"))
+  .settings(
+    name := "libretto-lambda",
+    scalacOptions ++= Seq(
+      "-deprecation",
+      "-Ykind-projector", // support '*' as a placeholder in type lambdas
+    ),
+  )
+
 lazy val core = project
   .in(file("core"))
+  .dependsOn(lambda)
   .settings(
-    name := "libretto",
+    name := "libretto-core",
     scalacOptions ++= Seq(
       "-deprecation",
       "-Ykind-projector", // support '*' as a placeholder in type lambdas
@@ -140,6 +151,7 @@ lazy val root = project
     publish / skip := true,
   )
   .aggregate(
+    lambda,
     core,
     testing,
     coreTests,

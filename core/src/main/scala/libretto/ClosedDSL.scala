@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.util.SourcePos
+import libretto.lambda.util.SourcePos
 
 /** Extension of [[CoreDSL]] that adds support for "functions as data" (`=⚬`).
   * In other words, it makes [[CoreDSL.-⚬]] a ''closed'' monoidal category.

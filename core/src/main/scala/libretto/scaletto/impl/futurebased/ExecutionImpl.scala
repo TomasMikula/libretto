@@ -3,9 +3,10 @@ package libretto.scaletto.impl.futurebased
 import java.util.concurrent.{Executor => JExecutor}
 import libretto.Scheduler
 import libretto.Executor.CancellationReason
+import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoExecution
 import libretto.scaletto.impl.{FreeScaletto, bug}
-import libretto.util.{Async, SourcePos}
+import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}

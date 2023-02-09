@@ -1,8 +1,9 @@
 package libretto
 
 import libretto.lambda.Category
+import libretto.lambda.util.SourcePos
 import libretto.util.unapply._
-import libretto.util.{Equal, SourcePos, ∀}
+import libretto.util.{Equal, ∀}
 import scala.annotation.tailrec
 
 object CoreLib {

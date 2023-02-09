@@ -1,4 +1,4 @@
-package libretto.util
+package libretto.lambda.util
 
 trait Injective[F[_]] {
   def unapply[A, B](ev: F[A] =:= F[B]): Tuple1[A =:= B]

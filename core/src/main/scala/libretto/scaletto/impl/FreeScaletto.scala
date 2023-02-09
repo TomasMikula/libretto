@@ -3,9 +3,10 @@ package libretto.scaletto.impl
 import libretto.scaletto.Scaletto
 import libretto.lambda.{ClosedSymmetricMonoidalCategory, Lambdas, LambdasImpl, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Abstracted
-import libretto.util.{Async, BiInjective, SourcePos, TypeEq}
-import libretto.util.Monad.monadEither
-import libretto.util.TypeEq.Refl
+import libretto.lambda.util.{BiInjective, SourcePos, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
+import libretto.lambda.util.Monad.monadEither
+import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 
 abstract class FreeScaletto {

@@ -1,8 +1,9 @@
 package libretto.testing
 
 import libretto.{CoreBridge, CoreDSL, ExecutionParams, Monad}
-import libretto.util.{Async, Monad => ScalaMonad, SourcePos}
-import libretto.util.Monad.syntax._
+import libretto.lambda.util.{Monad => ScalaMonad, SourcePos}
+import libretto.lambda.util.Monad.syntax._
+import libretto.util.Async
 
 trait TestKit {
   type Dsl <: CoreDSL

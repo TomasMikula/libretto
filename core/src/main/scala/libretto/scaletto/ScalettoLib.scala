@@ -2,7 +2,8 @@ package libretto.scaletto
 
 import java.util.concurrent.atomic.AtomicLong
 import libretto.CoreLib
-import libretto.util.{Async, SourcePos}
+import libretto.lambda.util.SourcePos
+import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 

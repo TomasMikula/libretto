@@ -1,8 +1,8 @@
 package libretto.lambda
 
 import libretto.lambda.{Projection => P}
-import libretto.util.{Applicative, BiInjective, Exists, TypeEq}
-import libretto.util.TypeEq.Refl
+import libretto.lambda.util.{Applicative, BiInjective, Exists, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.Projection.Proper
 
 object Shuffled {

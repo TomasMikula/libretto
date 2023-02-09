@@ -1,10 +1,10 @@
 package libretto
 
+import libretto.lambda.util.Monad.syntax._
 import libretto.scaletto.ScalettoLib
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
 import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
-import libretto.util.Monad.syntax._
 
 class ClosureTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {

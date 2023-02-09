@@ -1,4 +1,4 @@
-package libretto.util
+package libretto.lambda.util
 
 import scala.concurrent.{ExecutionContext, Future}
 

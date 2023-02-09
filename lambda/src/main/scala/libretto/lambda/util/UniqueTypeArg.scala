@@ -1,4 +1,4 @@
-package libretto.util
+package libretto.lambda.util
 
 /** Witnesses that a value `a: F[A]` cannot also be assigned a type `F[B]` where `B != A`. */
 trait UniqueTypeArg[F[_]] {

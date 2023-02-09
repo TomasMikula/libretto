@@ -1,6 +1,7 @@
 package libretto
 
-import libretto.util.{Async, SourcePos}
+import libretto.lambda.util.SourcePos
+import libretto.util.Async
 
 final class Executing[BRIDGE <: CoreBridge & Singleton, A, B](using val bridge: BRIDGE)(
   val execution: bridge.Execution,

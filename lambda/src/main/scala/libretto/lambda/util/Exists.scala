@@ -1,4 +1,4 @@
-package libretto.util
+package libretto.lambda.util
 
 sealed trait Exists[F[_]] {
   type T

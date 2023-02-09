@@ -1,7 +1,7 @@
 package libretto.lambda
 
-import libretto.util.{Exists, Functional, TypeEq}
-import libretto.util.TypeEq.Refl
+import libretto.lambda.util.{Exists, Functional, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
 
 trait ArrowMap[-->[_, _], ->>[_, _], F[_, _]] {
   sealed trait Image[A, B] {

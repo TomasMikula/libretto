@@ -1,4 +1,4 @@
-package libretto.util
+package libretto.lambda.util
 
 /** Type equality that, unlike Scala's `=:=`, can be pattern matched on. */
 sealed trait TypeEq[A, B]

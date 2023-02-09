@@ -1,7 +1,7 @@
 package libretto.lambda
 
-import libretto.util.{Injective, TypeEq, UniqueTypeArg}
-import libretto.util.TypeEq.Refl
+import libretto.lambda.util.{Injective, TypeEq, UniqueTypeArg}
+import libretto.lambda.util.TypeEq.Refl
 import scala.collection.{immutable => sci}
 
 /**

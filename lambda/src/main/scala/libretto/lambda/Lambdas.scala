@@ -2,7 +2,7 @@ package libretto.lambda
 
 import libretto.lambda.Lambdas.Error
 import libretto.lambda.Lambdas.Error.LinearityViolation
-import libretto.util.{Applicative, BiInjective, Exists, Semigroup, UniqueTypeArg}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, UniqueTypeArg}
 import scala.annotation.targetName
 
 trait Lambdas[-⚬[_, _], |*|[_, _], V] {

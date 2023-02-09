@@ -1,7 +1,8 @@
 package libretto.mashup
 
 import libretto.scaletto.{ScalettoExecutor, StarterKit}
-import libretto.util.{Async, SourcePos}
+import libretto.lambda.util.SourcePos
+import libretto.util.Async
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 import java.util.concurrent.ScheduledExecutorService

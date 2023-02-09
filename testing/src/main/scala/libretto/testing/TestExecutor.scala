@@ -1,10 +1,11 @@
 package libretto.testing
 
 import libretto.{CoreDSL, Executor}
-import libretto.util.{Async, Monad}
-import libretto.util.Monad.syntax._
-import scala.concurrent.duration.FiniteDuration
 import libretto.Executor.CancellationReason
+import libretto.lambda.util.Monad
+import libretto.lambda.util.Monad.syntax._
+import libretto.util.Async
+import scala.concurrent.duration.FiniteDuration
 
 trait TestExecutor[+TK <: TestKit] { self =>
   val testKit: TK

@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.util.SourcePos
+import libretto.lambda.util.SourcePos
 
 object UnhandledCase {
   def raise(desc: String)(using pos: SourcePos): Nothing =

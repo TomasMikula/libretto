@@ -1,7 +1,7 @@
 package libretto
 
 import libretto.lambda.{Semigroupoid, Shuffle}
-import libretto.util.BiInjective
+import libretto.lambda.util.BiInjective
 import org.scalatest.funsuite.AnyFunSuite
 
 class ShuffleTests extends AnyFunSuite {

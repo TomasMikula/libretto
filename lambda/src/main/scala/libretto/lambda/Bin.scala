@@ -1,7 +1,7 @@
 package libretto.lambda
 
-import libretto.util.{BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
-import libretto.util.TypeEq.Refl
+import libretto.lambda.util.{BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
+import libretto.lambda.util.TypeEq.Refl
 
 /**
  * Binary tree with leafs holding values of types `F[X]`, `F[Y]`, ...

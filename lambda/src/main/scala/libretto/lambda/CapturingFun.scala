@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.util.Zippable
+import libretto.lambda.util.Zippable
 
 sealed trait CapturingFun[-->[_, _], |*|[_, _], F[_], A, B] {
 

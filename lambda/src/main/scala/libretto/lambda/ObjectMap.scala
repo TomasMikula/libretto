@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.util.Functional
+import libretto.lambda.util.Functional
 
 /**
   *

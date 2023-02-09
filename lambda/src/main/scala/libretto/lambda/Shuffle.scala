@@ -1,9 +1,9 @@
 package libretto.lambda
 
 import libretto.lambda.{Projection => P}
-import libretto.util.{BiInjective, Exists, TypeEq}
-import libretto.util.BiInjective._
-import libretto.util.TypeEq.Refl
+import libretto.lambda.util.{BiInjective, Exists, TypeEq}
+import libretto.lambda.util.BiInjective._
+import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.Projection.Proper
 
 class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
@@ -1327,7 +1327,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         m: ObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
-      ): Exists[[S1] =>> libretto.util.Exists[[S2] =>> (F[A1 |*| A2, S1], F[A3, S2], tgt.TransferOpt[S1, S2, T1, T2])]] = {
+      ): Exists[[S1] =>> Exists[[S2] =>> (F[A1 |*| A2, S1], F[A3, S2], tgt.TransferOpt[S1, S2, T1, T2])]] = {
         m.unpair(fb23) match
           case m.Unpaired.Impl(fb2, fb3) =>
             g.translateRL(fb2, fb3)(m) match

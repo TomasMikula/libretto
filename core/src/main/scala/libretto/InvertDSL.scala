@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.util.SourcePos
+import libretto.lambda.util.SourcePos
 
 trait InvertDSL extends ClosedDSL {
   /** `-[A]` is a demand for `A`.

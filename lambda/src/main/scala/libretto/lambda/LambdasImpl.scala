@@ -3,8 +3,8 @@ package libretto.lambda
 import libretto.{lambda => ll}
 import libretto.lambda.Lambdas.Error
 import libretto.lambda.Lambdas.Error.LinearityViolation
-import libretto.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
-import libretto.util.TypeEq.Refl
+import libretto.lambda.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
+import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
 class LambdasImpl[-⚬[_, _], |*|[_, _], V](using

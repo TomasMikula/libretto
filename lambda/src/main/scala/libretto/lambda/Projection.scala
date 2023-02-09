@@ -1,7 +1,7 @@
 package libretto.lambda
 
-import libretto.util.{BiInjective, Exists, TypeEq}
-import libretto.util.TypeEq.Refl
+import libretto.lambda.util.{BiInjective, Exists, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
 
 sealed trait Projection[|*|[_, _], P, Q] {
   def at[F[_]](f: Focus[|*|, F]): Projection[|*|, F[P], F[Q]]

@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.util.{Applicative, Monad}
+import libretto.lambda.util.{Applicative, Monad}
 
 /** A collection of arrows of the form `Ai --> B`, with `A = A1 <+> ... <+> An`. */
 sealed trait Sink[-->[_, _], <+>[_, _], A, B] {
