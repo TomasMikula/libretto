@@ -66,7 +66,7 @@ object Tupled {
       (a product b)(discardFst)
   }
 
-  given [|*|[_, _], F[_]]: Zippable[|*|, Tupled[|*|, F, *]] with {
+  given [|*|[_, _], F[_]]: Zippable[|*|, Tupled[|*|, F, _]] with {
     override def zip[A, B](fa: Tupled[|*|, F, A], fb: Tupled[|*|, F, B]): Tupled[|*|, F, A |*| B] =
       Tupled.zip(fa, fb)
   }

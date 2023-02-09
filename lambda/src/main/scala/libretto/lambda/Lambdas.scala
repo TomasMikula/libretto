@@ -38,7 +38,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
 
   given UniqueTypeArg[Expr] with {
     override def testEqual[A, B](a: Expr[A], b: Expr[B]): Option[A =:= B] =
-      summon[UniqueTypeArg[Var[V, *]]].testEqual(a.resultVar, b.resultVar)
+      summon[UniqueTypeArg[Var[V, _]]].testEqual(a.resultVar, b.resultVar)
   }
 
   type Context

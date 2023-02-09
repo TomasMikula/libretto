@@ -11,7 +11,7 @@ object BiInjective {
   extension [F[_, _], A, B, X, Y](ev: F[A, B] =:= F[X, Y]) {
     def biSubst[G[_, _]](g: G[A, B])(implicit inj: BiInjective[F]): G[X, Y] = {
       val inj(ev1, ev2) = ev
-      ev2.substituteCo[G[X, *]](ev1.substituteCo[G[*, B]](g))
+      ev2.substituteCo[G[X, _]](ev1.substituteCo[G[_, B]](g))
     }
   }
 }

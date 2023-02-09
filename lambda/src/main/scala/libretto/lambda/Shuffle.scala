@@ -24,7 +24,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           g.thenBi(h1, h2) match {
             case Xfer(g1, g2, h) =>
               (h > i) match {
-                case id: Id0[_, _] => id.ev.substituteCo(par(f1 > g1, f2 > g2))
+                case id: Id0[?, ?] => id.ev.substituteCo(par(f1 > g1, f2 > g2))
                 case Bimap(Par(h1, h2)) => par(f1 > g1 > h1, f2 > g2 > h2)
                 case Xfer(h1, h2, i) => Xfer(f1 > g1 > h1, f2 > g2 > h2, i)
               }
@@ -276,7 +276,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     def tryUntangle[X1, X2, Y1, Y2](
       f: (X1 |*| X2) ~⚬ (Y1 |*| Y2)
-    ): Either[Xfer[X1, X2, _, _, Y1, Y2], (X1 ~⚬ Y1, X2 ~⚬ Y2)] =
+    ): Either[Xfer[X1, X2, ?, ?, Y1, Y2], (X1 ~⚬ Y1, X2 ~⚬ Y2)] =
       f match {
         case id: Id0[X1 |*| X2, Y1 |*| Y2] =>
           val inj(ev1, ev2) = id.ev
@@ -289,14 +289,14 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           Left(xfer)
       }
 
-    def decompose[X1, X2, Z1, Z2](f: (X1 |*| X2) ~⚬ (Z1 |*| Z2)): Decomposition[X1, X2, _, _, Z1, Z2] =
+    def decompose[X1, X2, Z1, Z2](f: (X1 |*| X2) ~⚬ (Z1 |*| Z2)): Decomposition[X1, X2, ?, ?, Z1, Z2] =
       f match {
         case i: Id0[X1 |*| X2, Z1 |*| Z2] => Decomposition(Id(), Id(), TransferOpt.None0(i.ev))
         case Bimap(Par(f1, f2))           => Decomposition(f1, f2, TransferOpt.None())
         case Xfer(f1, f2, xfer)           => Decomposition(f1, f2, xfer)
       }
 
-    def decompose1[X1, X2, Z](f: (X1 |*| X2) ~⚬ Z): Decomposition1[X1, X2, _, _, _, _, Z] =
+    def decompose1[X1, X2, Z](f: (X1 |*| X2) ~⚬ Z): Decomposition1[X1, X2, ?, ?, ?, ?, Z] =
       f match {
         case Id()               => Decomposition1(Id(), Id(), TransferOpt.None(), implicitly)
         case Bimap(Par(f1, f2)) => Decomposition1(f1, f2, TransferOpt.None(), implicitly)
@@ -816,7 +816,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     def asShuffle: (A1 |*| A2) ~⚬ (B1 |*| B2) =
       this match {
-        case x: Transfer[_, _, _, _] => Xfer(Id(), Id(), x)
+        case x: Transfer[?, ?, ?, ?] => Xfer(Id(), Id(), x)
         case TransferOpt.None() => Id()
       }
   }
@@ -921,7 +921,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     def after[Z1, Z2](that: Transfer[Z1, Z2, A1, A2]): (Z1 |*| Z2) ~⚬ (B1 |*| B2)
 
-    def thenBi[C1, C2](g1: B1 ~⚬ C1, g2: B2 ~⚬ C2): Xfer[A1, A2, _, _, C1, C2]
+    def thenBi[C1, C2](g1: B1 ~⚬ C1, g2: B2 ~⚬ C2): Xfer[A1, A2, ?, ?, C1, C2]
 
     def thenSwap: (A1 |*| A2) ~⚬ (B2 |*| B1)
 
@@ -999,7 +999,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       that: XI[Q1 |*| Q2, B1, B2, R2, R3],
     ): ((P1 |*| A1) |*| (P2 |*| A2)) ~⚬ (B1 |*| (R2 |*| R3))
 
-    def invert: Xfer[B1, B2, _, _, A1, A2]
+    def invert: Xfer[B1, B2, ?, ?, A1, A2]
 
     protected def discardFst: ProjectProperRes[A1 |*| A2, B2]
 
@@ -1028,7 +1028,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     def to[C1, C2](implicit ev: (B1 |*| B2) =:= (C1 |*| C2)): Transfer[A1, A2, C1, C2] = {
       val (ev1, ev2) = inj.unapply(ev)
-      ev1.substituteCo[Transfer[A1, A2, *, C2]](ev2.substituteCo(this))
+      ev1.substituteCo[Transfer[A1, A2, _, C2]](ev2.substituteCo(this))
     }
 
     override def fold[->[_, _]](using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2) = {
@@ -1140,7 +1140,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           ChaseBwRes.Transported[X1 |*| X2, [t] =>> G[t] |*| X2, [t] =>> X2 |*| G[t], T](summon, i.inFst, [t] => (_: Unit) => swap[G[t], X2])
         }
 
-      override def thenBi[C1, C2](g1: X2 ~⚬ C1, g2: X1 ~⚬ C2): Xfer[X1, X2, _, _, C1, C2] =
+      override def thenBi[C1, C2](g1: X2 ~⚬ C1, g2: X1 ~⚬ C2): Xfer[X1, X2, ?, ?, C1, C2] =
         Xfer(g2, g1, Swap())
 
       override def thenSwap: (X1 |*| X2) ~⚬ (X1 |*| X2) =
@@ -1252,7 +1252,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           case Decomposition(f1, f2, h) => Xfer(f1, swap > snd(f2), XI(h))
         }
 
-      override def invert: Xfer[X2, X1, _, _, X1, X2] =
+      override def invert: Xfer[X2, X1, ?, ?, X1, X2] =
         Xfer(Id(), Id(), Swap())
 
       override def ixiPairWith_:[A1, A2, A3, A4, B1, B2, B3, B4](
@@ -1376,7 +1376,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def chaseBwSnd[G[_], T](i: Focus[|*|, G])(using ev: (B2 |*| B3) =:= G[T]): ChaseBwRes[(A1 |*| A2) |*| A3, [t] =>> A1 |*| G[t], T] =
         g.chaseBw[G, T](i)(using ev).afterAssocLR[A1, A2, A3]
 
-      override def thenBi[C1, C2](g1: A1 ~⚬ C1, g2: (B2 |*| B3) ~⚬ C2): Xfer[A1 |*| A2, A3, _, _, C1, C2] =
+      override def thenBi[C1, C2](g1: A1 ~⚬ C1, g2: (B2 |*| B3) ~⚬ C2): Xfer[A1 |*| A2, A3, ?, ?, C1, C2] =
         decompose1(g.asShuffle > g2) match {
           case Decomposition1(f1, f2, g, ev) => ev.substituteCo(Xfer(par(g1, f1), f2, AssocLR(g)))
         }
@@ -1510,7 +1510,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ): ((P1 |*| (A1 |*| A2)) |*| (P2 |*| A3)) ~⚬ (A1 |*| (R2 |*| R3)) =
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.ixi_sndThis_xi")
 
-      override def invert: Xfer[A1, B2 |*| B3, _, _, A1 |*| A2, A3] =
+      override def invert: Xfer[A1, B2 |*| B3, ?, ?, A1 |*| A2, A3] =
         Xfer(id, g.asShuffle.invert, AssocRL(TransferOpt.None()))
 
       override def ixiPairWith_:[X1, X2, X3, X4, Y1, Y2, Y3, Y4](
@@ -1631,9 +1631,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               [t] => (_: Unit) => assocRL[A1, A2, G[t]] > fst(g.asShuffle),
             )
 
-      override def thenBi[C1, C2](g1: (B1 |*| B2) ~⚬ C1, g2: A3 ~⚬ C2): Xfer[A1, A2 |*| A3, _, _, C1, C2] =
+      override def thenBi[C1, C2](g1: (B1 |*| B2) ~⚬ C1, g2: A3 ~⚬ C2): Xfer[A1, A2 |*| A3, ?, ?, C1, C2] =
         decompose1(g.asShuffle > g1) match {
-          case Decomposition1(f1, f2, h, ev) => ev.substituteCo[Xfer[A1, A2 |*| A3, _, _, *, C2]](Xfer(f1, par(f2, g2), AssocRL(h)))
+          case Decomposition1(f1, f2, h, ev) => ev.substituteCo[Xfer[A1, A2 |*| A3, ?, ?, _, C2]](Xfer(f1, par(f2, g2), AssocRL(h)))
         }
 
       override def thenSwap: (A1 |*| (A2 |*| A3)) ~⚬ (A3 |*| (B1 |*| B2)) =
@@ -1772,7 +1772,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           case Decomposition(f1, f2, h) => Xfer(swap > snd(f1), xi > snd(f2), IXI(g, h))
         }
 
-      override def invert: Xfer[B1 |*| B2, A3, _, _, A1, A2 |*| A3] =
+      override def invert: Xfer[B1 |*| B2, A3, ?, ?, A1, A2 |*| A3] =
         Xfer(g.asShuffle.invert, id, AssocLR(TransferOpt.None()))
 
       override def ixiPairWith_:[X1, X2, X3, X4, Y1, Y2, Y3, Y4](
@@ -1892,9 +1892,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           )
         }
 
-      override def thenBi[C1, C2](g1: (B1 |*| B2) ~⚬ C1, g2: A2 ~⚬ C2): Xfer[A1 |*| A2, A3, _, _, C1, C2] =
+      override def thenBi[C1, C2](g1: (B1 |*| B2) ~⚬ C1, g2: A2 ~⚬ C2): Xfer[A1 |*| A2, A3, ?, ?, C1, C2] =
         decompose1(g.asShuffle > g1) match {
-          case Decomposition1(f1, f2, h, ev) => ev.substituteCo[Xfer[A1 |*| A2, A3, _, _, *, C2]](Xfer(par(f1, g2), f2, IX(h)))
+          case Decomposition1(f1, f2, h, ev) => ev.substituteCo[Xfer[A1 |*| A2, A3, ?, ?, _, C2]](Xfer(par(f1, g2), f2, IX(h)))
         }
 
       override def thenSwap: ((A1 |*| A2) |*| A3) ~⚬ (A2 |*| (B1 |*| B2)) =
@@ -2031,7 +2031,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         decompose(ix > fst(g1.asShuffle) > that.g.asShuffle) match
           case Decomposition(f1, f2, h) => Xfer(xi > snd(f1), swap > snd(f2), IXI(g, h))
 
-      override def invert: Xfer[(B1 |*| B2), A2, _, _, A1 |*| A2, A3] =
+      override def invert: Xfer[(B1 |*| B2), A2, ?, ?, A1 |*| A2, A3] =
         Xfer(g.asShuffle.invert, id, IX(TransferOpt.None()))
 
       override def ixiPairWith_:[X1, X2, X3, X4, Y1, Y2, Y3, Y4](
@@ -2161,7 +2161,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def chaseBwSnd[G[_], T](i: Focus[|*|, G])(using ev: (B2 |*| B3) =:= G[T]): ChaseBwRes[A1 |*| (A2 |*| A3), [t] =>> A2 |*| G[t], T] =
         g.chaseBw[G, T](i).afterXI
 
-      override def thenBi[C1, C2](g1: A2 ~⚬ C1, g2: (B2 |*| B3) ~⚬ C2): Xfer[A1, A2 |*| A3, _, _, C1, C2] =
+      override def thenBi[C1, C2](g1: A2 ~⚬ C1, g2: (B2 |*| B3) ~⚬ C2): Xfer[A1, A2 |*| A3, ?, ?, C1, C2] =
         decompose1(g.asShuffle > g2) match {
           case Decomposition1(f1, f2, h, ev) => ev.substituteCo(Xfer(f1, par(g1, f2), XI(h)))
         }
@@ -2308,7 +2308,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ): ((P1 |*| A1) |*| (P2 |*| (A2 |*| A3))) ~⚬ (A2 |*| (R2 |*| R3)) =
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.ixi_sndThis_xi")
 
-      override def invert: Xfer[A2, B2 |*| B3, _, _, A1, A2 |*| A3] =
+      override def invert: Xfer[A2, B2 |*| B3, ?, ?, A1, A2 |*| A3] =
         Xfer(id, g.asShuffle.invert, XI(TransferOpt.None()))
 
       override def ixiPairWith_:[X1, X2, X3, X4, Y1, Y2, Y3, Y4](
@@ -2449,7 +2449,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def chaseBwSnd[G[_], T](i: Focus[|*|, G])(using (B3 |*| B4) =:= G[T]): ChaseBwRes[A1 |*| A2 |*| (A3 |*| A4), [t] =>> B1 |*| B2 |*| G[t], T] =
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.chaseBwSnd($i)")
 
-      override def thenBi[C1, C2](h1: (B1 |*| B2) ~⚬ C1, h2: (B3 |*| B4) ~⚬ C2): Xfer[A1 |*| A2, A3 |*| A4, _, _, C1, C2] =
+      override def thenBi[C1, C2](h1: (B1 |*| B2) ~⚬ C1, h2: (B3 |*| B4) ~⚬ C2): Xfer[A1 |*| A2, A3 |*| A4, ?, ?, C1, C2] =
         (decompose1(g1.asShuffle > h1), decompose1(g2.asShuffle > h2)) match {
           case (Decomposition1(g11, g12, h1, TypeEq(Refl())), Decomposition1(g21, g22, h2, TypeEq(Refl()))) =>
             Xfer(par(g11, g21), par(g12, g22), IXI(h1, h2))
@@ -2463,7 +2463,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       )(implicit
         ev: (B1 |*| B2) =:= (D1 |*| D2),
       ): ((A1 |*| A2) |*| (A3 |*| A4)) ~⚬ (D1 |*| (C2 |*| C3)) = {
-        val thiz = ev.biSubst[IXI[A1, A2, A3, A4, *, *, B3, B4]](this)
+        val thiz = ev.biSubst[IXI[A1, A2, A3, A4, _, _, B3, B4]](this)
         TransferOpt.decompose(thiz.g1) match {
           case Right((i, j)) =>
             decompose(XI(thiz.g2).asShuffle > that.g.asShuffle) match {
@@ -2509,7 +2509,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       )(implicit
         ev: (B3 |*| B4) =:= (D1 |*| D2),
       ): ((A1 |*| A2) |*| (A3 |*| A4)) ~⚬ (D1 |*| (C2 |*| C3)) = {
-        val thiz = ev.biSubst[IXI[A1, A2, A3, A4, B1, B2, *, *]](this)
+        val thiz = ev.biSubst[IXI[A1, A2, A3, A4, B1, B2, _, _]](this)
         TransferOpt.decompose(thiz.g2) match {
           case Right((i, j)) =>
             decompose(assocRL > par(g1.asShuffle, j) > that.g.asShuffle) match {
@@ -2617,7 +2617,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           case Decomposition(f1, f2, h) =>
             Xfer(xi > snd(f1), xi > snd(f2), IXI(g1, h))
 
-      override def invert: Xfer[(B1 |*| B2), (B3 |*| B4), _, _, A1 |*| A2, A3 |*| A4] =
+      override def invert: Xfer[(B1 |*| B2), (B3 |*| B4), ?, ?, A1 |*| A2, A3 |*| A4] =
         Xfer(g1.asShuffle.invert, g2.asShuffle.invert, IXI(TransferOpt.None(), TransferOpt.None()))
 
       override def ixiPairWith_:[X1, X2, X3, X4, Y1, Y2, Y3, Y4](

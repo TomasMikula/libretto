@@ -37,7 +37,7 @@ private class ExecutionImpl(
   }
 
   def cancel(pos: SourcePos): Async[Unit] = {
-    val openResources: Seq[AcquiredResource[_]] =
+    val openResources: Seq[AcquiredResource[?]] =
       resourceRegistry.close()
 
     Async
@@ -248,7 +248,7 @@ private class ExecutionImpl(
         case -⚬.InjectR() =>
           InjectR(this)                                           .asInstanceOf[Frontier[B]]
 
-        case e: -⚬.EitherF[_, _, _] =>
+        case e: -⚬.EitherF[?, ?, ?] =>
           val -⚬.EitherF(f, g) = e // workaround for https://github.com/lampepfl/dotty/issues/7524
           type A1; type A2
           def go(a12: Frontier[A1 |+| A2]): Frontier[B] =
@@ -270,7 +270,7 @@ private class ExecutionImpl(
           type A1; type A2
           Frontier.chooseR(this.asInstanceOf[Frontier[A1 |&| A2]]).asInstanceOf[Frontier[B]]
 
-        case c: -⚬.Choice[_, _, _] =>
+        case c: -⚬.Choice[?, ?, ?] =>
           val -⚬.Choice(f, g) = c // workaround for https://github.com/lampepfl/dotty/issues/7524
           Choice(
             () => this.extend(f),

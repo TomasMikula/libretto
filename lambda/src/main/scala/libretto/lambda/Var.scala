@@ -40,12 +40,12 @@ object Var {
     }
   }
 
-  given [P]: Injective[Var[P, *]] with {
+  given [P]: Injective[Var[P, _]] with {
     override def unapply[A, B](ev: Var[P, A] =:= Var[P, B]): Tuple1[A =:= B] =
       ev match { case TypeEq(Refl()) => Tuple1(summon[A =:= B]) }
   }
 
-  given [P]: UniqueTypeArg[Var[P, *]] with {
+  given [P]: UniqueTypeArg[Var[P, _]] with {
     override def testEqual[A, B](a: Var[P, A], b: Var[P, B]): Option[A =:= B] =
       a testEqual b
   }

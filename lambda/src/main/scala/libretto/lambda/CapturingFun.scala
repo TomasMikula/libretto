@@ -13,8 +13,8 @@ object CapturingFun {
   given [-->[_, _], |*|[_, _], F[_]](using
     ev: SymmetricSemigroupalCategory[-->, |*|],
     F: Zippable[|*|, F],
-  ): SymmetricSemigroupalCategory[CapturingFun[-->, |*|, F, *, *], |*|] =
-    new SymmetricSemigroupalCategory[CapturingFun[-->, |*|, F, *, *], |*|] {
+  ): SymmetricSemigroupalCategory[CapturingFun[-->, |*|, F, _, _], |*|] =
+    new SymmetricSemigroupalCategory[CapturingFun[-->, |*|, F, _, _], |*|] {
       override def id[A]: CapturingFun[-->, |*|, F, A, A] =
         NoCapture(ev.id[A])
 

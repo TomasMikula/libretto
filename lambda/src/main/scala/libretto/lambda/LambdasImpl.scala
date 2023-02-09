@@ -62,7 +62,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
       ctx.isDefiningFor(v)
   }
 
-  type CapturingFun[A, B] = libretto.lambda.CapturingFun[AbstractFun, |*|, Tupled[Expr, *], A, B]
+  type CapturingFun[A, B] = libretto.lambda.CapturingFun[AbstractFun, |*|, Tupled[Expr, _], A, B]
   object CapturingFun {
     def noCapture[A, B](f: AbstractFun[A, B]): CapturingFun[A, B] =
       ll.CapturingFun.NoCapture(f)
@@ -603,7 +603,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
 
         def asZip[P1, P2](using A =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], B =:= Var[V1 |*| V2])]]
 
-        override def from[Z](using ev: Z =:= A): Op.Affine[Z, B] = ev.substituteContra[Op.Affine[*, B]](this)
+        override def from[Z](using ev: Z =:= A): Op.Affine[Z, B] = ev.substituteContra[Op.Affine[_, B]](this)
         override def to[C](using ev: B =:= C): Op.Affine[A, C]   = ev.substituteCo(this)
       }
 
@@ -1206,7 +1206,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
     def zip[C, D](that: Unvar[C, D]): Unvar[A |*| C, B |*| D] =
       Unvar.Par(this, that)
 
-    def maskInput: Masked[Unvar[*, B], A] =
+    def maskInput: Masked[Unvar[_, B], A] =
       Masked(this)
   }
   object Unvar {

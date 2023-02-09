@@ -59,7 +59,7 @@ lazy val lambda = project
     name := "libretto-lambda",
     scalacOptions ++= Seq(
       "-deprecation",
-      "-Ykind-projector", // support '*' as a placeholder in type lambdas
+      "-Ykind-projector:underscores",
     ),
   )
 
@@ -70,7 +70,7 @@ lazy val core = project
     name := "libretto-core",
     scalacOptions ++= Seq(
       "-deprecation",
-      "-Ykind-projector", // support '*' as a placeholder in type lambdas
+      "-Ykind-projector:underscores",
     ),
   )
 

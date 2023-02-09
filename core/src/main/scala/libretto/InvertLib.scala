@@ -2,20 +2,20 @@ package libretto
 
 object InvertLib {
   def apply(
-    coreLib: CoreLib[_ <: InvertDSL],
+    coreLib: CoreLib[? <: InvertDSL],
   ): InvertLib[coreLib.type] =
     new InvertLib[coreLib.type](coreLib)
 }
 
 class InvertLib[
-  CoreLib <: libretto.CoreLib[_ <: InvertDSL],
+  CoreLib <: libretto.CoreLib[? <: InvertDSL],
 ](
   val coreLib: CoreLib,
 ) {
   import coreLib.dsl._
   import coreLib._
 
-  implicit val contraFunctoDemand: ContraFunctor[-] =
+  implicit val contraFunctorDemand: ContraFunctor[-] =
     new ContraFunctor[-] {
       override val category =
         coreLib.category

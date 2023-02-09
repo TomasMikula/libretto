@@ -84,7 +84,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       ev.substituteCo(this)
 
     def from[Z](using ev: Z =:= A): Shuffled[Z, B] =
-      ev.substituteContra[Shuffled[*, B]](this)
+      ev.substituteContra[Shuffled[_, B]](this)
   }
 
   sealed trait Permeable[A, B] extends Shuffled[A, B]
@@ -292,7 +292,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     override def thenShuffle[C](s: (B1 |*| B2) ~⚬ C): Permeable[A, C] =
       ~⚬.decompose1(right.asShuffle > s) match {
-        case ~⚬.Decomposition1(g1, g2, h, ev) => ev.substituteCo[Permeable[A, *]](SemiObstructed(left > ~⚬.fst(g1), bottom1, bottom2 > g2, h))
+        case ~⚬.Decomposition1(g1, g2, h, ev) => ev.substituteCo[Permeable[A, _]](SemiObstructed(left > ~⚬.fst(g1), bottom1, bottom2 > g2, h))
       }
 
     override def afterShuffle[Z](that: Z ~⚬ A): Shuffled[Z, B1 |*| B2] =
@@ -1069,7 +1069,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       asShuffle.apply(fa)
   }
 
-  def revDecompose1[X, Z1, Z2](f: X ~⚬ (Z1 |*| Z2)): RevDecomposition1[X, _, _, _, _, Z1, Z2] =
+  def revDecompose1[X, Z1, Z2](f: X ~⚬ (Z1 |*| Z2)): RevDecomposition1[X, ?, ?, ?, ?, Z1, Z2] =
     ~⚬.decompose1(f.invert) match {
       case ~⚬.Decomposition1(f1, f2, g, ev) =>
         RevDecomposition1(ev.flip, RevTransferOpt(g), f1.invert, f2.invert)
@@ -1277,12 +1277,12 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     def apply[P1, P2, Q1, Q2](t: Transfer[P1, P2, Q1, Q2]): Tr[P1, P2, Q1, Q2] =
       t match {
-        case t: Transfer.Swap[_, _]                  => Swap(t)
-        case t: Transfer.AssocLR[_, _, _, _, _]      => AssocLR(t)
-        case t: Transfer.AssocRL[_, _, _, _, _]      => AssocRL(t)
-        case t: Transfer.IX[_, _, _, _, _]           => IX(t)
-        case t: Transfer.XI[_, _, _, _, _]           => XI(t)
-        case t: Transfer.IXI[_, _, _, _, _, _, _, _] => IXI(t)
+        case t: Transfer.Swap[?, ?]                  => Swap(t)
+        case t: Transfer.AssocLR[?, ?, ?, ?, ?]      => AssocLR(t)
+        case t: Transfer.AssocRL[?, ?, ?, ?, ?]      => AssocRL(t)
+        case t: Transfer.IX[?, ?, ?, ?, ?]           => IX(t)
+        case t: Transfer.XI[?, ?, ?, ?, ?]           => XI(t)
+        case t: Transfer.IXI[?, ?, ?, ?, ?, ?, ?, ?] => IXI(t)
       }
   }
 
