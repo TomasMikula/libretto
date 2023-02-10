@@ -1,32 +1,55 @@
-package libretto.scaletto
+package libretto.stream.scaletto
 
 import libretto.{CoreLib, CoreStreams}
+import libretto.scaletto.{Scaletto, ScalettoLib}
 import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
 
 object ScalettoStreams {
+  type Of[
+    DSL <: Scaletto,
+    Lib <: CoreLib[DSL],
+    SLib <: ScalettoLib[DSL, Lib],
+    Streams <: CoreStreams[DSL, Lib],
+  ] = ScalettoStreams {
+    type Dsl         = DSL
+    type CoreLib     = Lib
+    type ScalettoLib = SLib
+    type CoreStreams = Streams
+  }
+
   def apply(
-    dsl: Scaletto,
-    coreLib: CoreLib[dsl.type],
-    scalettoLib: ScalettoLib[dsl.type, coreLib.type],
-    coreStreams: CoreStreams[dsl.type, coreLib.type],
+    scaletto: Scaletto,
+    lib: CoreLib[scaletto.type],
+    sLib: ScalettoLib[scaletto.type, lib.type],
+    cStreams: CoreStreams[scaletto.type, lib.type],
   )
-  : ScalettoStreams[dsl.type, coreLib.type, scalettoLib.type, coreStreams.type] =
-    new ScalettoStreams(dsl, coreLib, scalettoLib, coreStreams)
+  : ScalettoStreams.Of[scaletto.type, lib.type, sLib.type, cStreams.type] =
+    new ScalettoStreams {
+      override type Dsl         = scaletto.type
+      override type CoreLib     = lib.type
+      override type ScalettoLib = sLib.type
+      override type CoreStreams = cStreams.type
+
+      override val dsl = scaletto
+      override val coreLib = lib
+      override val scalettoLib = sLib
+      override val coreStreams = cStreams
+    }
 }
 
-class ScalettoStreams[
-  DSL <: Scaletto,
-  Lib <: CoreLib[DSL],
-  SLib <: ScalettoLib[DSL, Lib],
-  Streams <: CoreStreams[DSL, Lib],
-](
-  val dsl: DSL,
-  val coreLib: Lib with CoreLib[dsl.type],
-  val scalettoLib: SLib with ScalettoLib[dsl.type, coreLib.type],
-  val coreStreams: Streams with CoreStreams[dsl.type, coreLib.type],
-) {
-  private val Tree = BinarySearchTree(dsl, coreLib, scalettoLib)
+abstract class ScalettoStreams {
+  type Dsl         <: Scaletto
+  type CoreLib     <: libretto.CoreLib[Dsl]
+  type ScalettoLib <: libretto.scaletto.ScalettoLib[Dsl, CoreLib]
+  type CoreStreams <: libretto.CoreStreams[Dsl, CoreLib]
+
+  val dsl: Dsl
+  val coreLib: CoreLib & libretto.CoreLib[dsl.type]
+  val scalettoLib: ScalettoLib & libretto.scaletto.ScalettoLib[dsl.type, coreLib.type]
+  val coreStreams: CoreStreams & libretto.CoreStreams[dsl.type, coreLib.type]
+
+  private lazy val Tree = BinarySearchTree(dsl, coreLib, scalettoLib)
 
   import dsl._
   import coreLib._

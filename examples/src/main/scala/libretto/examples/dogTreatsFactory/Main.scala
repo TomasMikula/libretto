@@ -1,6 +1,7 @@
 package libretto.examples.dogTreatsFactory
 
 import libretto.scaletto.StarterApp
+import libretto.stream.scaletto.Default.Pollable
 
 object Main extends StarterApp {
   import $._

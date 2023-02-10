@@ -111,12 +111,17 @@ lazy val stream = project
   )
   .settings(
     name := "libretto-stream",
+    scalacOptions ++= Seq(
+      "-deprecation",
+      "-Ykind-projector:underscores",
+    ),
   )
 
 lazy val examples = project
   .in(file("examples"))
   .dependsOn(
     core,
+    stream,
     testingScalatest % "test->compile",
   )
   .settings(
@@ -149,6 +154,7 @@ lazy val librettoZio = project
   .in(file("libretto-zio"))
   .dependsOn(
     core,
+    stream,
     examples % Test,
   )
   .settings(

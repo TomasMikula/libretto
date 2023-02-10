@@ -1,7 +1,8 @@
-package libretto.scaletto
+package libretto.stream.scaletto
 
 import libretto.CoreLib
 import libretto.lambda.Category
+import libretto.scaletto.{Scaletto, ScalettoLib}
 
 object BinarySearchTree {
   def apply(

@@ -2,8 +2,9 @@ package libretto.stream
 
 import libretto.{CoreLib, CoreStreams}
 import libretto.lambda.util.Monad.syntax._
-import libretto.scaletto.{ScalettoLib, ScalettoStreams}
-import libretto.testing.{TestCase}
+import libretto.scaletto.ScalettoLib
+import libretto.stream.scaletto.ScalettoStreams
+import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
 import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
 import scala.concurrent.duration._

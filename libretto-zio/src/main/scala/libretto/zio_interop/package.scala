@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.scaletto.StarterKit.scalettoStreams.Pollable
+import libretto.stream.scaletto.Default.Pollable
 import libretto.util.Async
 import zio.{UIO, ZIO}
 import zio.stream.UStream

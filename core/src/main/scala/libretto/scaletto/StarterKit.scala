@@ -38,9 +38,6 @@ abstract class AbstractStarterKit(
   val coreStreams: CoreStreams[dsl.type, coreLib.type] =
     CoreStreams(dsl, coreLib)
 
-  val scalettoStreams: ScalettoStreams[dsl.type, coreLib.type, scalettoLib.type, coreStreams.type] =
-    ScalettoStreams(dsl, coreLib, scalettoLib, coreStreams)
-
   def executor(blockingExecutor: JExecutor)(implicit
     scheduler: ScheduledExecutorService,
   ): ScalettoExecutor.Of[dsl.type, bridge.type] =
@@ -52,7 +49,6 @@ abstract class AbstractStarterKit(
   export closedLib.{dsl => _, coreLib => _, _}
   export invertLib.{coreLib => _, _}
   export coreStreams.{dsl => _, _}
-  export scalettoStreams.{dsl => _, coreLib => _, scalettoLib => _, coreStreams => _, _}
 
   def runScalaAsync[A](blueprint: Done -⚬ Val[A]): Future[A] = {
     val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())
