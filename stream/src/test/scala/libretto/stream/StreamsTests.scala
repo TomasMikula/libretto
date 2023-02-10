@@ -1,5 +1,6 @@
-package libretto
+package libretto.stream
 
+import libretto.{CoreLib, CoreStreams}
 import libretto.lambda.util.Monad.syntax._
 import libretto.scaletto.{ScalettoLib, ScalettoStreams}
 import libretto.testing.{TestCase}

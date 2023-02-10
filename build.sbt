@@ -97,15 +97,28 @@ lazy val testingScalatest = project
 
 lazy val coreTests = project
   .in(file("core-tests"))
-  .dependsOn(core, testing, testingScalatest)
+  .dependsOn(testingScalatest % "test->compile")
   .settings(
     name := "core-tests",
     publish / skip := true,
   )
 
+lazy val stream = project
+  .in(file("stream"))
+  .dependsOn(
+    core,
+    testingScalatest % "test->compile",
+  )
+  .settings(
+    name := "libretto-stream",
+  )
+
 lazy val examples = project
   .in(file("examples"))
-  .dependsOn(core, testing, testingScalatest)
+  .dependsOn(
+    core,
+    testingScalatest % "test->compile",
+  )
   .settings(
     name := "libretto-examples",
   )
@@ -159,6 +172,7 @@ lazy val root = project
     core,
     testing,
     coreTests,
+    stream,
     examples,
     mashup,
     mashupExamples,
