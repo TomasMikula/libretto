@@ -14,7 +14,6 @@ ThisBuild / scmInfo := Some(
 )
 
 ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
-ThisBuild / sonatypeProfileName := "dev.continuously"
 ThisBuild / publishTo := sonatypePublishTo.value
 
 ThisBuild / pomExtra := (
@@ -46,7 +45,7 @@ releaseProcess := Seq[ReleaseStep](
   commitReleaseVersion,
   tagRelease,
   releaseStepCommand("publishSigned"),
-  releaseStepCommand("sonatypeRelease"),
+  releaseStepCommand("sonatypeReleaseAll dev.continuously"),
   setNextVersion,
   commitNextVersion,
   pushChanges,
