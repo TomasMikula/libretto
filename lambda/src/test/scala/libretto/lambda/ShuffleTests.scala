@@ -1,7 +1,7 @@
-package libretto
+package libretto.lambda
 
-import libretto.lambda.{Semigroupoid, Shuffle}
-import libretto.lambda.util.BiInjective
+import libretto.lambda.util.{BiInjective, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
 import org.scalatest.funsuite.AnyFunSuite
 
 class ShuffleTests extends AnyFunSuite {
@@ -11,7 +11,7 @@ class ShuffleTests extends AnyFunSuite {
 
   given BiInjective[Tuple2] = new BiInjective[Tuple2] {
     override def unapply[A, B, X, Y](ev: (A, B) =:= (X, Y)): (A =:= X, B =:= Y) =
-      (ev.asInstanceOf[A =:= X], ev.asInstanceOf[B =:= Y])
+      ev match { case TypeEq(Refl()) => (summon, summon) }
   }
 
   test("normalization: fst(snd(f)) > assocLR = assocLR > snd(fst(f))") {
