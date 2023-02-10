@@ -2,7 +2,7 @@ package libretto.examples.dogTreatsFactory
 
 import libretto.scaletto.StarterKit.{$, -⚬, |*|, |+|, Done, Val, injectL, injectR, mapVal, neglect, rec, λ}
 import libretto.scaletto.StarterKit.$._
-import libretto.stream.scaletto.Default.Pollable
+import libretto.stream.scaletto.DefaultStreams.Pollable
 
 object DogTreatsFactory {
 

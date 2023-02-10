@@ -1,7 +1,8 @@
 package libretto.stream.scaletto
 
-import libretto.{CoreLib, CoreStreams}
+import libretto.CoreLib
 import libretto.scaletto.{Scaletto, ScalettoLib}
+import libretto.stream.CoreStreams
 import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
 
@@ -42,12 +43,12 @@ abstract class ScalettoStreams {
   type Dsl         <: Scaletto
   type CoreLib     <: libretto.CoreLib[Dsl]
   type ScalettoLib <: libretto.scaletto.ScalettoLib[Dsl, CoreLib]
-  type CoreStreams <: libretto.CoreStreams[Dsl, CoreLib]
+  type CoreStreams <: libretto.stream.CoreStreams[Dsl, CoreLib]
 
   val dsl: Dsl
   val coreLib: CoreLib & libretto.CoreLib[dsl.type]
   val scalettoLib: ScalettoLib & libretto.scaletto.ScalettoLib[dsl.type, coreLib.type]
-  val coreStreams: CoreStreams & libretto.CoreStreams[dsl.type, coreLib.type]
+  val coreStreams: CoreStreams & libretto.stream.CoreStreams[dsl.type, coreLib.type]
 
   private lazy val Tree = BinarySearchTree(dsl, coreLib, scalettoLib)
 

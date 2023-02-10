@@ -2,7 +2,7 @@ package libretto.zio_interop
 
 import libretto.scaletto.ScalettoBridge
 import libretto.scaletto.StarterKit
-import libretto.stream.scaletto.Default.Pollable
+import libretto.stream.scaletto.DefaultStreams.Pollable
 import zio.stream.{UStream, ZStream}
 
 class OutPort[A](

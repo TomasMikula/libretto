@@ -1,7 +1,7 @@
 package libretto.examples
 
 import libretto.scaletto.StarterApp
-import libretto.stream.scaletto.Default.Pollable
+import libretto.stream.scaletto.DefaultStreams.Pollable
 
 /** Reads lines from standard input and prints them to standard output. */
 object Echo extends StarterApp {

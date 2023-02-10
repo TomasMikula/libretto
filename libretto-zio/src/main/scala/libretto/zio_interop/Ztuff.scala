@@ -2,7 +2,7 @@ package libretto.zio_interop
 
 import libretto.scaletto.{ScalettoBridge, StarterKit}
 import libretto.scaletto.StarterKit.{-⚬, |*|, |+|, |&|, Done, Val}
-import libretto.stream.scaletto.Default.{Pollable, PollableF}
+import libretto.stream.scaletto.DefaultStreams.{Pollable, PollableF}
 import zio.{Fiber, Scope, ZIO}
 import zio.stream.UStream
 

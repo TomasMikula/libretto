@@ -1,5 +1,6 @@
-package libretto
+package libretto.stream
 
+import libretto.{CoreDSL, CoreLib}
 import libretto.util.∀
 
 object CoreStreams {

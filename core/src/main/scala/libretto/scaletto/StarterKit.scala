@@ -1,7 +1,7 @@
 package libretto.scaletto
 
 import java.util.concurrent.{Executor => JExecutor, Executors, ScheduledExecutorService}
-import libretto.{CoreLib, CoreStreams, ClosedLib, InvertLib}
+import libretto.{CoreLib, ClosedLib, InvertLib}
 import libretto.scaletto.impl.FreeScaletto
 import libretto.scaletto.impl.futurebased.{BridgeImpl, FutureExecutor}
 import libretto.util.Async
@@ -35,9 +35,6 @@ abstract class AbstractStarterKit(
   val invertLib: InvertLib[coreLib.type] =
     InvertLib(coreLib)
 
-  val coreStreams: CoreStreams[dsl.type, coreLib.type] =
-    CoreStreams(dsl, coreLib)
-
   def executor(blockingExecutor: JExecutor)(implicit
     scheduler: ScheduledExecutorService,
   ): ScalettoExecutor.Of[dsl.type, bridge.type] =
@@ -48,7 +45,6 @@ abstract class AbstractStarterKit(
   export scalettoLib.{dsl => _, coreLib => _, _}
   export closedLib.{dsl => _, coreLib => _, _}
   export invertLib.{coreLib => _, _}
-  export coreStreams.{dsl => _, _}
 
   def runScalaAsync[A](blueprint: Done -⚬ Val[A]): Future[A] = {
     val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())
