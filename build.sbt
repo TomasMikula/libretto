@@ -2,7 +2,7 @@ resolvers += Resolver.mavenCentral
 
 ThisBuild / scalaVersion := "3.2.2"
 
-ThisBuild / organization := "dev.continuously"
+ThisBuild / organization := "dev.continuously.libretto"
 
 ThisBuild / licenses += ("MPL 2.0", url("https://opensource.org/licenses/MPL-2.0"))
 ThisBuild / homepage := Some(url("https://github.com/TomasMikula/libretto"))
@@ -14,6 +14,7 @@ ThisBuild / scmInfo := Some(
 )
 
 ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
+ThisBuild / sonatypeProfileName := "dev.continuously"
 ThisBuild / publishTo := sonatypePublishTo.value
 
 ThisBuild / pomExtra := (
