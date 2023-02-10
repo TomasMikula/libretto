@@ -51,6 +51,7 @@ releaseProcess := Seq[ReleaseStep](
   pushChanges,
 )
 
+val ScalatestVersion = "3.2.15"
 val ZioVersion = "2.0.6"
 
 lazy val lambda = project
@@ -60,6 +61,9 @@ lazy val lambda = project
     scalacOptions ++= Seq(
       "-deprecation",
       "-Ykind-projector:underscores",
+    ),
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % ScalatestVersion % Test,
     ),
   )
 
@@ -87,7 +91,7 @@ lazy val testingScalatest = project
   .settings(
     name := "libretto-testing-scalatest",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.15",
+      "org.scalatest" %% "scalatest" % ScalatestVersion,
     ),
   )
 

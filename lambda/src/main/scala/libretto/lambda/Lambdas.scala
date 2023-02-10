@@ -13,23 +13,26 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
 
   trait Exprs {
     def variable[A](a: Var[V, A]): Expr[A]
-    def map[A, B](e: Expr[A], f: A -⚬ B, resultVarName: V)(using Context): Expr[B]
-    def zip[A, B](a: Expr[A], b: Expr[B], resultVarName: V)(using Context): Expr[A |*| B]
+    def map[A, B](e: Expr[A], f: A -⚬ B)(resultVarName: V)(using Context): Expr[B]
+    def zip[A, B](a: Expr[A], b: Expr[B])(resultVarName: V)(using Context): Expr[A |*| B]
     def unzip[A, B](ab: Expr[A |*| B])(varName1: V, varName2: V)(using Context): (Expr[A], Expr[B])
     def const[A](introduce: [x] => Unit => x -⚬ (A |*| x))(varName: V)(using Context): Expr[A]
 
     def resultVar[A](a: Expr[A]): Var[V, A]
     def initialVars[A](a: Expr[A]): Var.Set[V]
+
+    def initialVars[A](as: Tupled[Expr, A]): Var.Set[V] =
+      as.foldMap0([x] => (x: Expr[x]) => initialVars(x), _ merge _)
   }
 
   extension [A](a: Expr[A]) {
     @targetName("exprMap")
     def map[B](f: A -⚬ B)(resultVar: V)(using Context): Expr[B] =
-      Expr.map(a, f, resultVar)
+      Expr.map(a, f)(resultVar)
 
     @targetName("exprZip")
     def zip[B](b: Expr[B])(resultVar: V)(using Context): Expr[A |*| B] =
-      Expr.zip(a, b, resultVar)
+      Expr.zip(a, b)(resultVar)
 
     @targetName("exprResultVar")
     def resultVar: Var[V, A] =
@@ -69,6 +72,12 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     def getDiscard[A](v: Var[V, A])(using Context): Option[[B] => Unit => (A |*| B) -⚬ B]
 
     def getConstant[A](v: Var[V, A])(using Context): Option[[x] => Unit => x -⚬ (A |*| x)]
+
+    def registerSplit[A](v: Var[V, A])(split: A -⚬ (A |*| A))(using Context): Unit =
+      registerNonLinearOps(v)(Some(split), None)
+
+    def registerDiscard[A](v: Var[V, A])(discard: [B] => Unit => (A |*| B) -⚬ B)(using Context): Unit =
+      registerNonLinearOps(v)(None, Some(discard))
   }
 
   type AbstractFun[A, B]

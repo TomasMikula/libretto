@@ -510,10 +510,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
           f.fold
         case Closure(captured, f) =>
           val undefinedVars: Var.Set[VarOrigin] =
-            captured.foldMap0(
-              [X] => (x: lambdas.Expr[X]) => lambdas.Expr.initialVars(x),
-              _ merge _,
-            )
+            lambdas.Expr.initialVars(captured)
           raiseError(Lambdas.Error.Undefined(undefinedVars))
         case Failure(e) =>
           raiseError(e)
@@ -546,7 +543,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   private def zipExprs[A](es: Tupled[|*|, lambdas.Expr, A])(using lambdas.Context): lambdas.Expr[A] =
     es.fold([x, y] => (ex: lambdas.Expr[x], ey: lambdas.Expr[y]) => {
       val v = VarOrigin.Synthetic(s"auxiliary pairing of ($ex, $ey)")
-      lambdas.Expr.zip(ex, ey, v)
+      lambdas.Expr.zip(ex, ey)(v)
     })
 
   private def raiseError(e: Lambdas.Error[VarOrigin]): Nothing = {

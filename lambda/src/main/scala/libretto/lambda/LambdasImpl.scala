@@ -173,10 +173,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
     override def variable[A](a: Var[A]): Expr[A] =
       Id(a)
 
-    override def map[B, C](f: Expr[B], g: B -⚬ C, resultVar: V)(using Context): Expr[C] =
+    override def map[B, C](f: Expr[B], g: B -⚬ C)(resultVar: V)(using Context): Expr[C] =
       (f map g)(Context.newVar(resultVar))
 
-    override def zip[B1, B2](f1: Expr[B1], f2: Expr[B2], resultVar: V)(using Context): Expr[B1 |*| B2] =
+    override def zip[B1, B2](f1: Expr[B1], f2: Expr[B2])(resultVar: V)(using Context): Expr[B1 |*| B2] =
       (f1 zip f2)(Context.newVar(resultVar))
 
     override def unzip[B1, B2](f: Expr[B1 |*| B2])(resultVar1: V, resultVar2: V)(using Context): (Expr[B1], Expr[B2]) = {
