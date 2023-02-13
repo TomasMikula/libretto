@@ -58,11 +58,11 @@ abstract class ScalettoStreams {
   import coreStreams._
   import Tree._
 
-  type PollableF[A, X] = LPollableF[Val[A], X]
+  type PollableF[A, X] = StreamFollowerF[Done, Val[A], X]
   type Pollable[A] = LPollable[Val[A]]
   type Polled[A] = LPolled[Val[A]]
 
-  type SubscriberF[A, X]  = LSubscriberF[Neg[A], X]
+  type SubscriberF[A, X] = StreamLeaderF[Need, Neg[A], X]
   type Subscriber[A] = LSubscriber[Neg[A]]
   type Demanding[A] = LDemanding[Neg[A]]
 
@@ -91,9 +91,6 @@ abstract class ScalettoStreams {
     /** Polls and discards all elements. */
     def drain[A]: Pollable[A] -⚬ Done =
       LPollable.drain[Val[A]]
-
-    def emptyF[A]: Done -⚬ PollableF[A, Pollable[A]] =
-      LPollable.emptyF[Val[A]]
 
     def empty[A]: Done -⚬ Pollable[A] =
       LPollable.empty[Val[A]]
@@ -581,10 +578,10 @@ abstract class ScalettoStreams {
   }
 
   def rInvertSubscriber[A]: (Subscriber[A] |*| Pollable[A]) -⚬ One =
-    rInvertLSubscriber(fulfill)
+    rInvertLSubscriber(swap > fulfill)
 
   def lInvertPollable[A]: One -⚬ (Pollable[A] |*| Subscriber[A]) =
-    lInvertLPollable(promise)
+    lInvertLPollable(promise > swap)
 
   def rInvertProducingF[A, x, y](rInvertSub: (x |*| y) -⚬ One): (ProducingF[A, x] |*| ConsumerF[A, y]) -⚬ One =
     rInvertEither(

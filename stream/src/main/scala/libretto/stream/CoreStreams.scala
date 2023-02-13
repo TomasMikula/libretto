@@ -19,20 +19,24 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   import dsl._
   import lib._
 
-  type LPollableF[A, X] = Done |&| (Done |+| (A |*| X))
-  type LPollable[A] = Rec[LPollableF[A, *]]
+  type StreamLeaderF[T, A, X]   = T |+| (T |&| (A |*| X))
+  type StreamFollowerF[T, A, X] = T |&| (T |+| (A |*| X))
+
+  type StreamLeader[T, A]   = Rec[StreamLeaderF[T, A, _]]
+  type StreamFollower[T, A] = Rec[StreamFollowerF[T, A, _]]
+
+  type LPollable[A] = StreamFollower[Done, A]
   type LPolled[A] = Done |+| (A |*| LPollable[A])
 
-  type LSubscriberF[A, X]  = Need |+| (Need |&| (A |*| X))
-  type LSubscriber[A] = Rec[LSubscriberF[A, *]]
+  type LSubscriber[A] = StreamLeader[Need, A]
   type LDemanding[A] = Need |&| (A |*| LSubscriber[A])
 
   object LPollable {
     def pack[A]: (Done |&| LPolled[A]) -⚬ LPollable[A] =
-      dsl.pack[LPollableF[A, *]]
+      dsl.pack[StreamFollowerF[Done, A, _]]
 
     def unpack[A]: LPollable[A] -⚬ (Done |&| LPolled[A]) =
-      dsl.unpack[LPollableF[A, *]]
+      dsl.unpack[StreamFollowerF[Done, A, _]]
 
     def from[A, B](
       onClose: A -⚬ Done,
@@ -62,7 +66,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         poll[A] > either(id, joinMap(A.counit, self))
       }
 
-    def emptyF[A]: Done -⚬ LPollableF[A, LPollable[A]] =
+    private def emptyF[A]: Done -⚬ StreamFollowerF[Done, A, LPollable[A]] =
       choice[Done, Done, LPolled[A]](id, injectL)
 
     def empty[A]: Done -⚬ LPollable[A] =
@@ -104,7 +108,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>.snd(unpack)                          .to[  Done |*| (Done  |&|           LPolled[A]) ]
         .>(delayChoiceUntilDone)                .to[ (Done |*|  Done) |&| (Done |*| LPolled[A]) ]
         .bimap(join, LPolled.delayBy[A])        .to[       Done       |&|           LPolled[A]  ]
-        .pack[LPollableF[A, *]]                 .to[              LPollable[A]                  ]
+        .pack[StreamFollowerF[Done, A, *]]      .to[              LPollable[A]                  ]
 
     /** Delays the final [[Done]] signal (signaling end of stream or completed [[close]]) until the given [[Done]]
       * signal completes.
@@ -114,7 +118,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>.snd(unpack)                              .to[  Done |*| (Done  |&|           LPolled[A]) ]
         .>(coFactorL)                               .to[ (Done |*|  Done) |&| (Done |*| LPolled[A]) ]
         .bimap(join, LPolled.delayClosedBy(self))   .to[       Done       |&|           LPolled[A]  ]
-        .pack[LPollableF[A, *]]                     .to[              LPollable[A]                  ]
+        .pack[StreamFollowerF[Done, A, *]]          .to[              LPollable[A]                  ]
     }
 
     /** Blocks the first action ([[poll]] or [[close]]) on this [[LPollable]] until released. */
@@ -351,11 +355,17 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   }
 
   object LSubscriber {
+    def unpack[A]: LSubscriber[A] -⚬ (Need |+| (Need |&| (A |*| LSubscriber[A]))) =
+      dsl.unpack
+
+    def pack[A]: (Need |+| (Need |&| (A |*| LSubscriber[A]))) -⚬ LSubscriber[A] =
+      dsl.pack[StreamLeaderF[Need, A, _]]
+
     def unsubscribed[A]: Need -⚬ LSubscriber[A] =
-      injectL > pack[LSubscriberF[A, *]]
+      injectL > pack
 
     def close[A]: LSubscriber[A] -⚬ Need =
-      unpack[LSubscriberF[A, *]] > either(id, chooseL)
+      unpack > either(id, chooseL)
 
     def switch[A, R](
       onDemand      : LDemanding[A] -⚬ R,
@@ -363,7 +373,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     ): LSubscriber[A] -⚬ R =
       unpack > either(onUnsubscribe, onDemand)
 
-    implicit def positiveLSubscriberF[A, X](implicit A: Junction.Negative[A]): SignalingJunction.Positive[LSubscriberF[A, X]] =
+    private def positiveLSubscriberF[A, X](implicit A: Junction.Negative[A]): SignalingJunction.Positive[StreamLeaderF[Need, A, X]] =
       SignalingJunction.Positive.eitherNeg(
         Junction.Negative.junctionNeed,
         Junction.Negative.delayChoice(
@@ -372,14 +382,14 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         ),
       )
 
-    implicit def universalPositiveLSubscriberF[A](implicit A: Junction.Negative[A]): ∀[λ[x => SignalingJunction.Positive[LSubscriberF[A, x]]]] =
-      new ∀[λ[x => SignalingJunction.Positive[LSubscriberF[A, x]]]] {
-        def apply[X]: SignalingJunction.Positive[LSubscriberF[A, X]] =
+    implicit def universalPositiveLSubscriberF[A](implicit A: Junction.Negative[A]): ∀[λ[x => SignalingJunction.Positive[StreamLeaderF[Need, A, x]]]] =
+      new ∀[λ[x => SignalingJunction.Positive[StreamLeaderF[Need, A, x]]]] {
+        def apply[X]: SignalingJunction.Positive[StreamLeaderF[Need, A, X]] =
           positiveLSubscriberF[A, X]
       }
 
     implicit def positiveLSubscriber[A](implicit A: Junction.Negative[A]): SignalingJunction.Positive[LSubscriber[A]] =
-      SignalingJunction.Positive.rec[LSubscriberF[A, *]](universalPositiveLSubscriberF)
+      SignalingJunction.Positive.rec[StreamLeaderF[Need, A, _]](universalPositiveLSubscriberF)
 
     implicit def nAffineLSubscriber[A]: NAffine[LSubscriber[A]] =
       NAffine.from(LSubscriber.close)
@@ -394,7 +404,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>.snd(exposeDemand)          .to[  A |*| (B  |*| LSubscriber[B])  ]
         .assocRL                      .to[ (A |*|  B) |*| LSubscriber[B]   ]
         .elimFst(rInvert)             .to[                LSubscriber[B]   ]
-        .unpack[LSubscriberF[B, *]]   .to[          Need |+| LDemanding[B] ]
+        .>(LSubscriber.unpack)        .to[          Need |+| LDemanding[B] ]
 
     implicit def negativeLDemanding[A](implicit A: Junction.Negative[A]): SignalingJunction.Negative[LDemanding[A]] =
       SignalingJunction.Negative.choiceNeg(
@@ -403,15 +413,16 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       )
   }
 
-  def rInvertLSubscriberF[A, B, x, y](
+  def rInvertLeaderF[T, U, A, B, x, y](
+    rInvertT: (T |*| U) -⚬ One,
     rInvertA: (A |*| B) -⚬ One,
     rInvertSub: (x |*| y) -⚬ One,
-  ): (LSubscriberF[B, y] |*| LPollableF[A, x]) -⚬ One =
+  ): (StreamLeaderF[T, A, x] |*| StreamFollowerF[U, B, y]) -⚬ One =
     rInvertEither(
-      swap > rInvertSignal,
+      rInvertT,
       swap > rInvertEither(
-        rInvertSignal,
-        rInvertPair(
+        swap > rInvertT,
+        swap > rInvertPair(
           rInvertA,
           rInvertSub
         )
@@ -420,43 +431,44 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
   def rInvertLSubscriber[A, B](
     rInvertElem: (A |*| B) -⚬ One,
-  ): (LSubscriber[B] |*| LPollable[A]) -⚬ One =
-    rInvertRec[LSubscriberF[B, *], LPollableF[A, *]](
+  ): (LSubscriber[A] |*| LPollable[B]) -⚬ One =
+    rInvertRec[StreamLeaderF[Need, A, *], StreamFollowerF[Done, B, *]](
       [X, Y] => (rInvertSub: (X |*| Y) -⚬ One) =>
-        rInvertLSubscriberF(rInvertElem, swap > rInvertSub)
+        rInvertLeaderF(swap > rInvertSignal, rInvertElem, rInvertSub)
     )
 
-  def lInvertLPollableF[A, B, x, y](
-    lInvertA: One -⚬ (B |*| A),
-    lInvertSub: One -⚬ (y |*| x),
-  ): One -⚬ (LPollableF[A, x] |*| LSubscriberF[B, y]) =
+  def lInvertFollowerF[T, U, A, B, x, y](
+    lInvertT: One -⚬ (T |*| U),
+    lInvertA: One -⚬ (A |*| B),
+    lInvertSub: One -⚬ (x |*| y),
+  ): One -⚬ (StreamFollowerF[T, A, x] |*| StreamLeaderF[U, B, y]) =
     lInvertChoice(
-      lInvertSignal > swap,
+      lInvertT,
       lInvertChoice(
-        lInvertSignal,
+        lInvertT > swap,
         lInvertPair(
           lInvertA,
           lInvertSub
-        )
+        ) > swap
       ) > swap
     )
 
   def lInvertLPollable[A, B](
-    lInvertElem: One -⚬ (B |*| A),
+    lInvertElem: One -⚬ (A |*| B),
   ): One -⚬ (LPollable[A] |*| LSubscriber[B]) =
-    lInvertRec[LPollableF[A, *], LSubscriberF[B, *]](
+    lInvertRec[StreamFollowerF[Done, A, *], StreamLeaderF[Need, B, *]](
       [X, Y] => (lInvertSub: One -⚬ (X |*| Y)) =>
-        lInvertLPollableF(lInvertElem, lInvertSub > swap)
+        lInvertFollowerF(lInvertSignal > swap, lInvertElem, lInvertSub)
     )
 
-  implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[B], LPollable[A]] =
-    new Dual[LSubscriber[B], LPollable[A]] {
-      val rInvert: (LSubscriber[B] |*| LPollable[A]) -⚬ One =
+  implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[A], LPollable[B]] =
+    new Dual[LSubscriber[A], LPollable[B]] {
+      val rInvert: (LSubscriber[A] |*| LPollable[B]) -⚬ One =
         rInvertLSubscriber(AB.rInvert)
-      val lInvert: One -⚬ (LPollable[A] |*| LSubscriber[B]) =
+      val lInvert: One -⚬ (LPollable[B] |*| LSubscriber[A]) =
         lInvertLPollable(AB.lInvert)
     }
 
-  implicit def pollableSubscriberDuality[A, B](implicit BA: Dual[B, A]): Dual[LPollable[B], LSubscriber[A]] =
+  implicit def pollableSubscriberDuality[A, B](implicit BA: Dual[B, A]): Dual[LPollable[A], LSubscriber[B]] =
     dualSymmetric(subscriberPollableDuality[B, A])
 }
