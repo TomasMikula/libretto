@@ -2,7 +2,7 @@ package libretto.stream.scaletto
 
 import libretto.CoreLib
 import libretto.scaletto.{Scaletto, ScalettoLib}
-import libretto.stream.CoreStreams
+import libretto.stream.InvertStreams
 import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
 
@@ -11,51 +11,51 @@ object ScalettoStreams {
     DSL <: Scaletto,
     Lib <: CoreLib[DSL],
     SLib <: ScalettoLib[DSL, Lib],
-    Streams <: CoreStreams[DSL, Lib],
+    Streams <: InvertStreams[DSL, Lib],
   ] = ScalettoStreams {
-    type Dsl         = DSL
-    type CoreLib     = Lib
-    type ScalettoLib = SLib
-    type CoreStreams = Streams
+    type Dsl           = DSL
+    type CoreLib       = Lib
+    type ScalettoLib   = SLib
+    type InvertStreams = Streams
   }
 
   def apply(
     scaletto: Scaletto,
     lib: CoreLib[scaletto.type],
     sLib: ScalettoLib[scaletto.type, lib.type],
-    cStreams: CoreStreams[scaletto.type, lib.type],
+    iStreams: InvertStreams[scaletto.type, lib.type],
   )
-  : ScalettoStreams.Of[scaletto.type, lib.type, sLib.type, cStreams.type] =
+  : ScalettoStreams.Of[scaletto.type, lib.type, sLib.type, iStreams.type] =
     new ScalettoStreams {
-      override type Dsl         = scaletto.type
-      override type CoreLib     = lib.type
-      override type ScalettoLib = sLib.type
-      override type CoreStreams = cStreams.type
+      override type Dsl           = scaletto.type
+      override type CoreLib       = lib.type
+      override type ScalettoLib   = sLib.type
+      override type InvertStreams = iStreams.type
 
-      override val dsl = scaletto
-      override val coreLib = lib
-      override val scalettoLib = sLib
-      override val coreStreams = cStreams
+      override val dsl           = scaletto
+      override val coreLib       = lib
+      override val scalettoLib   = sLib
+      override val invertStreams = iStreams
     }
 }
 
 abstract class ScalettoStreams {
-  type Dsl         <: Scaletto
-  type CoreLib     <: libretto.CoreLib[Dsl]
-  type ScalettoLib <: libretto.scaletto.ScalettoLib[Dsl, CoreLib]
-  type CoreStreams <: libretto.stream.CoreStreams[Dsl, CoreLib]
+  type Dsl           <: Scaletto
+  type CoreLib       <: libretto.CoreLib[Dsl]
+  type ScalettoLib   <: libretto.scaletto.ScalettoLib[Dsl, CoreLib]
+  type InvertStreams <: libretto.stream.InvertStreams[Dsl, CoreLib]
 
   val dsl: Dsl
   val coreLib: CoreLib & libretto.CoreLib[dsl.type]
   val scalettoLib: ScalettoLib & libretto.scaletto.ScalettoLib[dsl.type, coreLib.type]
-  val coreStreams: CoreStreams & libretto.stream.CoreStreams[dsl.type, coreLib.type]
+  val invertStreams: InvertStreams & libretto.stream.InvertStreams[dsl.type, coreLib.type]
 
   private lazy val Tree = BinarySearchTree(dsl, coreLib, scalettoLib)
 
   import dsl._
   import coreLib._
   import scalettoLib._
-  import coreStreams._
+  import invertStreams._
   import Tree._
 
   type PollableF[A, X] = StreamFollowerF[Done, Val[A], X]
@@ -470,7 +470,7 @@ abstract class ScalettoStreams {
       f: Val[A] -⚬ (Val[K] |*| Val[V])
     ): Pollable[A] -⚬ BroadcastByKey[K, V] = {
       val lInvert: One -⚬ (LPollable[Val[K] |*| Subscriber[V]] |*| LSubscriber[Neg[K] |*| Pollable[V]]) =
-        subscriberPollableDuality.lInvert
+        invertStreams.subscriberPollableDuality.lInvert
 
       id                                [  Pollable[A]                                                                                  ]
         .introSnd(lInvert).assocRL   .to[ (Pollable[A] |*| LPollable[Val[K] |*| Subscriber[V]]) |*| LSubscriber[Neg[K] |*| Pollable[V]] ]

@@ -18,8 +18,8 @@ class StreamsTests extends ScalatestScalettoTestSuite {
 
     val coreLib = CoreLib(dsl)
     val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
-    val coreStreams = CoreStreams(dsl, coreLib)
-    val scalettoStreams = ScalettoStreams(kit.dsl, coreLib, scalettoLib, coreStreams)
+    val invertStreams = InvertStreams(dsl, coreLib)
+    val scalettoStreams = ScalettoStreams(kit.dsl, coreLib, scalettoLib, invertStreams)
 
     import coreLib._
     import scalettoLib._

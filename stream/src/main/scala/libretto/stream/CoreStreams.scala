@@ -1,7 +1,6 @@
 package libretto.stream
 
 import libretto.{CoreDSL, CoreLib}
-import libretto.util.∀
 
 object CoreStreams {
   def apply(
@@ -27,9 +26,6 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
   type LPollable[A] = StreamFollower[Done, A]
   type LPolled[A] = Done |+| (A |*| LPollable[A])
-
-  type LSubscriber[A] = StreamLeader[Need, A]
-  type LDemanding[A] = Need |&| (A |*| LSubscriber[A])
 
   object LPollable {
     def pack[A]: (Done |&| LPolled[A]) -⚬ LPollable[A] =
@@ -354,65 +350,6 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     }
   }
 
-  object LSubscriber {
-    def unpack[A]: LSubscriber[A] -⚬ (Need |+| (Need |&| (A |*| LSubscriber[A]))) =
-      dsl.unpack
-
-    def pack[A]: (Need |+| (Need |&| (A |*| LSubscriber[A]))) -⚬ LSubscriber[A] =
-      dsl.pack[StreamLeaderF[Need, A, _]]
-
-    def unsubscribed[A]: Need -⚬ LSubscriber[A] =
-      injectL > pack
-
-    def close[A]: LSubscriber[A] -⚬ Need =
-      unpack > either(id, chooseL)
-
-    def switch[A, R](
-      onDemand      : LDemanding[A] -⚬ R,
-      onUnsubscribe :          Need -⚬ R,
-    ): LSubscriber[A] -⚬ R =
-      unpack > either(onUnsubscribe, onDemand)
-
-    private def positiveLSubscriberF[A, X](implicit A: Junction.Negative[A]): SignalingJunction.Positive[StreamLeaderF[Need, A, X]] =
-      SignalingJunction.Positive.eitherNeg(
-        Junction.Negative.junctionNeed,
-        Junction.Negative.delayChoice(
-          Junction.Negative.junctionNeed,
-          Junction.Negative.byFst(A),
-        ),
-      )
-
-    implicit def universalPositiveLSubscriberF[A](implicit A: Junction.Negative[A]): ∀[λ[x => SignalingJunction.Positive[StreamLeaderF[Need, A, x]]]] =
-      new ∀[λ[x => SignalingJunction.Positive[StreamLeaderF[Need, A, x]]]] {
-        def apply[X]: SignalingJunction.Positive[StreamLeaderF[Need, A, X]] =
-          positiveLSubscriberF[A, X]
-      }
-
-    implicit def positiveLSubscriber[A](implicit A: Junction.Negative[A]): SignalingJunction.Positive[LSubscriber[A]] =
-      SignalingJunction.Positive.rec[StreamLeaderF[Need, A, _]](universalPositiveLSubscriberF)
-
-    implicit def nAffineLSubscriber[A]: NAffine[LSubscriber[A]] =
-      NAffine.from(LSubscriber.close)
-  }
-
-  object LDemanding {
-    def exposeDemand[A]: LDemanding[A] -⚬ (A |*| LSubscriber[A]) =
-      chooseR
-
-    def supply[A, B](rInvert: (A |*| B) -⚬ One): (A |*| LDemanding[B]) -⚬ (Need |+| LDemanding[B]) =
-      id                                 [  A |*|  LDemanding[B]           ]
-        .>.snd(exposeDemand)          .to[  A |*| (B  |*| LSubscriber[B])  ]
-        .assocRL                      .to[ (A |*|  B) |*| LSubscriber[B]   ]
-        .elimFst(rInvert)             .to[                LSubscriber[B]   ]
-        .>(LSubscriber.unpack)        .to[          Need |+| LDemanding[B] ]
-
-    implicit def negativeLDemanding[A](implicit A: Junction.Negative[A]): SignalingJunction.Negative[LDemanding[A]] =
-      SignalingJunction.Negative.choiceNeg(
-        SignalingJunction.Negative.signalingJunctionNegativeNeed,
-        Junction.Negative.byFst(A),
-      )
-  }
-
   def rInvertLeaderF[T, U, A, B, x, y](
     rInvertT: (T |*| U) -⚬ One,
     rInvertA: (A |*| B) -⚬ One,
@@ -429,12 +366,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       )
     )
 
-  def rInvertLSubscriber[A, B](
+  def rInvertLeader[T, U, A, B](
+    rInvertT: (T |*| U) -⚬ One,
     rInvertElem: (A |*| B) -⚬ One,
-  ): (LSubscriber[A] |*| LPollable[B]) -⚬ One =
-    rInvertRec[StreamLeaderF[Need, A, *], StreamFollowerF[Done, B, *]](
+  ): (StreamLeader[T, A] |*| StreamFollower[U, B]) -⚬ One =
+    rInvertRec[StreamLeaderF[T, A, _], StreamFollowerF[U, B, _]](
       [X, Y] => (rInvertSub: (X |*| Y) -⚬ One) =>
-        rInvertLeaderF(swap > rInvertSignal, rInvertElem, rInvertSub)
+        rInvertLeaderF(rInvertT, rInvertElem, rInvertSub)
     )
 
   def lInvertFollowerF[T, U, A, B, x, y](
@@ -453,22 +391,23 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       ) > swap
     )
 
-  def lInvertLPollable[A, B](
+  def lInvertFollower[T, U, A, B](
+    lInvertT: One -⚬ (T |*| U),
     lInvertElem: One -⚬ (A |*| B),
-  ): One -⚬ (LPollable[A] |*| LSubscriber[B]) =
-    lInvertRec[StreamFollowerF[Done, A, *], StreamLeaderF[Need, B, *]](
+  ): One -⚬ (StreamFollower[T, A] |*| StreamLeader[U, B]) =
+    lInvertRec[StreamFollowerF[T, A, _], StreamLeaderF[U, B, _]](
       [X, Y] => (lInvertSub: One -⚬ (X |*| Y)) =>
-        lInvertFollowerF(lInvertSignal > swap, lInvertElem, lInvertSub)
+        lInvertFollowerF(lInvertT, lInvertElem, lInvertSub)
     )
 
-  implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[A], LPollable[B]] =
-    new Dual[LSubscriber[A], LPollable[B]] {
-      val rInvert: (LSubscriber[A] |*| LPollable[B]) -⚬ One =
-        rInvertLSubscriber(AB.rInvert)
-      val lInvert: One -⚬ (LPollable[B] |*| LSubscriber[A]) =
-        lInvertLPollable(AB.lInvert)
-    }
+  given leaderFollowerDuality[T, U, A, B](using
+    Dual[T, U],
+    Dual[A, B],
+  ): Dual[StreamLeader[T, A], StreamFollower[U, B]] with {
+    override val rInvert: (StreamLeader[T, A] |*| StreamFollower[U, B]) -⚬ One =
+      rInvertLeader(Dual[T, U].rInvert, Dual[A, B].rInvert)
 
-  implicit def pollableSubscriberDuality[A, B](implicit BA: Dual[B, A]): Dual[LPollable[A], LSubscriber[B]] =
-    dualSymmetric(subscriberPollableDuality[B, A])
+    override val lInvert: One -⚬ (StreamFollower[U, B] |*| StreamLeader[T, A]) =
+      lInvertFollower[U, T, B, A](Dual[T, U].lInvert, Dual[A, B].lInvert)
+  }
 }
