@@ -31,6 +31,9 @@ class InvertStreams[DSL <: InvertDSL, Lib <: CoreLib[DSL]](
     def closed[A]: Need -⚬ Drain[A] =
       StreamLeader.closed[Need, -[A]]
 
+    def pulling[A]: Pulling[A] -⚬ Drain[A] =
+      StreamLeader.next[Need, -[A]]
+
     def switch[A, R](
       onClose: Need -⚬ R,
       onPull: Pulling[A] -⚬ R,
@@ -39,6 +42,9 @@ class InvertStreams[DSL <: InvertDSL, Lib <: CoreLib[DSL]](
 
     def toEither[A]: Drain[A] -⚬ (Need |+| Pulling[A]) =
       StreamLeader.unpack
+
+    def fromEither[A]: (Need |+| Pulling[A]) -⚬ Drain[A] =
+      StreamLeader.pack
 
     object Pulling {
       def warrant[A]: Pulling[A] -⚬ (-[A] |*| Drain[A]) =

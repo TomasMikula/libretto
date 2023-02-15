@@ -34,6 +34,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def closed[T, A]: T -⚬ StreamLeader[T, A] =
       injectL > pack
 
+    def next[T, A]: (T |&| (A |*| StreamLeader[T, A])) -⚬ StreamLeader[T, A] =
+      injectR > pack
+
     def switch[T, A, R](
       onClose: T -⚬ R,
       onNext: (T |&| (A |*| StreamLeader[T, A])) -⚬ R,

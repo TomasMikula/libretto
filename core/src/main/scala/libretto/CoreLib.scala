@@ -1104,6 +1104,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>(distributeR)                             .to[ (One |*| (A |*| B)) |+| (One |*| (A |*| B)) ]
       .>(|+|.bimap(elimFst, elimFst))             .to[          (A |*| B)  |+|          (A |*| B)  ]
 
+  def raceBy[A](
+    notify: A -⚬ (Ping |*| A),
+  ): (A |*| A) -⚬ ((A |*| A) |+| (A |*| A)) =
+    raceBy(notify, notify)
+
   def race[A, B](implicit
     A: Signaling.Positive[A],
     B: Signaling.Positive[B],

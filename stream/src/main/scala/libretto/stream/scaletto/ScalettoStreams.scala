@@ -525,40 +525,48 @@ abstract class ScalettoStreams {
     def close[A]: ValueDrain[A] -⚬ Need =
       LSubscriber.close
 
+    def pulling[A]: Pulling[A] -⚬ ValueDrain[A] =
+      Drain.pulling[Val[A]]
+
     def toEither[A]: ValueDrain[A] -⚬ (Need |+| Pulling[A]) =
       Drain.toEither[Val[A]]
+
+    def fromEither[A]: (Need |+| Pulling[A]) -⚬ ValueDrain[A] =
+      Drain.fromEither[Val[A]]
 
     def fromInvertedSource[A]: -[Pollable[A]] -⚬ ValueDrain[A] =
       λ { invSrc => invSrc unInvertWith (lInvertSource > swap) }
 
-    implicit def positiveValueDrain[A]: SignalingJunction.Positive[ValueDrain[A]] =
-      LSubscriber.positiveLSubscriber[Neg[A]]
+    /** Notifies when the drain has "made up its mind" whether to close or pull. */
+    def notifyReady[A]: ValueDrain[A] -⚬ (Ping |*| ValueDrain[A]) =
+      toEither > notifyEither > snd(fromEither)
 
-    type Demanding[A] = ValueDrain.Pulling[A]
     private[ScalettoStreams] def merge[A](
-      mergeDemandings: (Demanding[A] |*| Demanding[A]) -⚬ Demanding[A]
+      mergePullings: (Pulling[A] |*| Pulling[A]) -⚬ Pulling[A]
     ): (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] = {
-      val fstClosed: (Need |*| ValueDrain[A]) -⚬ ValueDrain[A] =
-        elimFst(need)
 
-      val fstDemanding: (Demanding[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] =
-        id                                               [  Demanding[A] |*|       ValueDrain[A]                       ]
-          .>.snd(unpack)                              .to[  Demanding[A] |*| (Need |+|                   Demanding[A]) ]
-          .distributeL                                .to[ (Demanding[A] |*| Need) |+| (Demanding[A] |*| Demanding[A]) ]
-          .>(either(elimSnd(need), mergeDemandings))  .to[                     Demanding[A]                            ]
-          .>(LSubscriber.demanding)                   .to[                    ValueDrain[A]                            ]
+      val goPulling: (ValueDrain.Pulling[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] =
+        λ { case (pulling1 |*| drain2) =>
+          drain2.toEither switch { // TODO: don't wait for what drain2 does, we already know the result will be pulling
+            case Left(closing2)  => ValueDrain.pulling(pulling1) alsoElim (closing2 > need)
+            case Right(pulling2) => ValueDrain.pulling(mergePullings(pulling1 |*| pulling2))
+          }
+        }
 
-      val caseFstReady: (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] =
-        id                                     [       ValueDrain[A]                         |*| ValueDrain[A]  ]
-          .>.fst(unpack)                    .to[ (Need |+|                     Demanding[A]) |*| ValueDrain[A]  ]
-          .distributeR                      .to[ (Need |*| ValueDrain[A]) |+| (Demanding[A]  |*| ValueDrain[A]) ]
-          .either(fstClosed, fstDemanding)  .to[                     ValueDrain[A]                              ]
+      val goFst: (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] =
+        λ { case (drain1 |*| drain2) =>
+          drain1.toEither switch {
+            case Left(closing)  => drain2 alsoElim (closing > need)
+            case Right(pulling) => goPulling(pulling |*| drain2)
+          }
+        }
 
-      val caseSndReady: (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] =
-        swap > caseFstReady
-
-      id                                         [ ValueDrain[A] |*| ValueDrain[A] ]
-        .race(caseFstReady, caseSndReady)     .to[           ValueDrain[A]         ]
+      λ { (drains: $[ValueDrain[A] |*| ValueDrain[A]]) =>
+        drains > raceBy(ValueDrain.notifyReady) switch {
+          case Left (dr1 |*| dr2) => goFst(dr1 |*| dr2)
+          case Right(dr1 |*| dr2) => goFst(dr2 |*| dr1)
+        }
+      }
     }
 
     def merge[A]: (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] = rec { self =>
