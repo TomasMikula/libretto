@@ -12,15 +12,16 @@ import scala.concurrent.duration._
 
 class StreamsTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{dsl, expectVal}
-    import kit.dsl._
-    import kit.Outcome.assertEquals
+    import kit.{dsl, expectDone, expectRight, expectVal, splitOut}
+    import kit.Outcome.{assertEquals, success}
 
     val coreLib = CoreLib(dsl)
     val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
     val invertStreams = InvertStreams(dsl, coreLib)
     val scalettoStreams = ScalettoStreams(kit.dsl, coreLib, scalettoLib, invertStreams)
 
+    import dsl._
+    import dsl.$._
     import coreLib._
     import scalettoLib._
     import scalettoStreams._
@@ -116,6 +117,30 @@ class StreamsTests extends ScalatestScalettoTestSuite {
         }.via {
           expectVal(_).assertEquals(Set("foo", "fooo", "pho", "phoo", "boo"))
         },
+
+      "ValueDrain.contraDup pulls as soon as either one pulls" -> TestCase
+        .interactWith {
+          val prg: Done -⚬ (Pollable[Unit] |*| Pollable[Unit] |*| ValueDrain[Unit]) =
+            λ { start =>
+              val (src1 |*| drn1) = $.one > lInvertPollable[Unit]
+              val (src2 |*| drn2) = $.one > lInvertPollable[Unit]
+              val drn = ValueDrain.contraDup(drn1 |*| drn2)
+              (src1 |*| src2) |*| (drn onCloseAwait start)
+            }
+
+          prg
+        }.via { port =>
+          for {
+            (srcs, drn)  <- splitOut(port)
+            (src1, src2) <- splitOut(srcs)
+            p1           =  src1 map Pollable.poll
+            pulling      <- expectRight(drn map ValueDrain.toEither) // checking pull before src2 acts
+            // close everything
+            _  = (pulling map ValueDrain.Pulling.close map need).discard
+            d1 <- expectDone(src2 map Pollable.close)
+            d2 <- expectDone(p1 map Polled.close)
+          } yield success(())
+        }.pending,
     )
   }
 }

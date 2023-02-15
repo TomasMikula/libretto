@@ -17,6 +17,7 @@ class InvertStreams[DSL <: InvertDSL, Lib <: CoreLib[DSL]](
   override val lib: Lib with CoreLib[dsl.type],
 ) extends CoreStreams[DSL, Lib](dsl, lib) {
   import dsl._
+  import dsl.$._
   import lib._
 
   type Drain[A] = StreamLeader[Need, -[A]]
@@ -46,10 +47,41 @@ class InvertStreams[DSL <: InvertDSL, Lib <: CoreLib[DSL]](
     def fromEither[A]: (Need |+| Pulling[A]) -⚬ Drain[A] =
       StreamLeader.pack
 
+    def onCloseAwait[A]: (Done |*| Drain[A]) -⚬ Drain[A] = rec { self =>
+      λ { case (d |*| drain) =>
+        toEither(drain) switch {
+          case Left(closing) =>
+            Drain.closed(needAbsorbDone(closing |*| d))
+          case Right(pulling) =>
+            Drain.pulling(Pulling.onCloseAwait0(self)(d |*| pulling))
+        }
+      }
+    }
+
     object Pulling {
+      def create[S, A](
+        caseClose:    S -⚬ Need,
+        caseWarrant:  S -⚬ (-[A] |*| Drain[A]),
+      ): S -⚬ Pulling[A] =
+        choice(caseClose, caseWarrant)
+
+      def close[A]: Pulling[A] -⚬ Need =
+        chooseL
+
       def warrant[A]: Pulling[A] -⚬ (-[A] |*| Drain[A]) =
         chooseR
+
+      private[Drain] def onCloseAwait0[A](
+        drainAwait: (Done |*| Drain[A]) -⚬ Drain[A],
+      ): (Done |*| Pulling[A]) -⚬ Pulling[A] =
+        create(
+          caseClose   = λ { case (d |*| p) => needAbsorbDone(close(p) |*| d) },
+          caseWarrant = snd(warrant) > XI > snd(drainAwait),
+        )
     }
+
+    private def needAbsorbDone: (Need |*| Done) -⚬ Need =
+      fst(joinNeed) > assocLR > elimSnd(swap > rInvertSignal)
   }
 
   def rInvertDrain[A]: (Drain[A] |*| LPollable[A]) -⚬ One =

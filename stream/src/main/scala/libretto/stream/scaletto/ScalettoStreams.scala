@@ -348,7 +348,7 @@ abstract class ScalettoStreams {
           .>(dispatchNE)                    .to[                  PMaybe[NeDT[K, V]] ]
 
       def addPulling[K, V](using Ordering[K]): ((Val[K] |*| ValueDrain.Pulling[V]) |*| DT[K, V]) -⚬ DT[K, V] =
-        Tree.insertOrUpdate(ValueDrain.Pulling.merge)
+        Tree.insertOrUpdate(ValueDrain.Pulling.contraDup)
 
       def clear[K, V]: DT[K, V] -⚬ Done =
         Tree.clear(ValueDrain.Pulling.close > need > done)
@@ -541,15 +541,18 @@ abstract class ScalettoStreams {
     def notifyReady[A]: ValueDrain[A] -⚬ (Ping |*| ValueDrain[A]) =
       toEither > notifyEither > snd(fromEither)
 
-    private[ScalettoStreams] def merge[A](
-      mergePullings: (Pulling[A] |*| Pulling[A]) -⚬ Pulling[A]
+    def onCloseAwait[A]: (Done |*| ValueDrain[A]) -⚬ ValueDrain[A] =
+      Drain.onCloseAwait[Val[A]]
+
+    private[ScalettoStreams] def contraDup0[A](
+      contraDupPullings: (Pulling[A] |*| Pulling[A]) -⚬ Pulling[A]
     ): (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] = {
 
       val goPulling: (ValueDrain.Pulling[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] =
         λ { case (pulling1 |*| drain2) =>
           drain2.toEither switch { // TODO: don't wait for what drain2 does, we already know the result will be pulling
             case Left(closing2)  => ValueDrain.pulling(pulling1) alsoElim (closing2 > need)
-            case Right(pulling2) => ValueDrain.pulling(mergePullings(pulling1 |*| pulling2))
+            case Right(pulling2) => ValueDrain.pulling(contraDupPullings(pulling1 |*| pulling2))
           }
         }
 
@@ -569,8 +572,9 @@ abstract class ScalettoStreams {
       }
     }
 
-    def merge[A]: (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] = rec { self =>
-      merge(ValueDrain.Pulling.merge(self))
+    /** Each value pulled by the resulting drain is duplicated and fed to both original drains. */
+    def contraDup[A]: (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] = rec { self =>
+      contraDup0(ValueDrain.Pulling.contraDup0(self))
     }
 
     object Pulling {
@@ -580,7 +584,7 @@ abstract class ScalettoStreams {
       def supply[A]: (Val[A] |*| Pulling[A]) -⚬ (Need |+| Pulling[A]) =
         LDemanding.supply(fulfill[A])
 
-      private[ScalettoStreams] def merge[A](
+      private[ScalettoStreams] def contraDup0[A](
         mergeDrains: (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A]
       ): (Pulling[A] |*| Pulling[A]) -⚬ Pulling[A] = {
         val caseClosed: (Pulling[A] |*| Pulling[A]) -⚬ Need =
@@ -595,8 +599,8 @@ abstract class ScalettoStreams {
         choice(caseClosed, caseDemanding)
       }
 
-      def merge[A]: (Pulling[A] |*| Pulling[A]) -⚬ Pulling[A] = rec { self =>
-        merge(ValueDrain.merge(self))
+      def contraDup[A]: (Pulling[A] |*| Pulling[A]) -⚬ Pulling[A] = rec { self =>
+        contraDup0(ValueDrain.contraDup0(self))
       }
     }
   }
@@ -605,6 +609,10 @@ abstract class ScalettoStreams {
     @targetName("valueDrainToEither")
     def toEither(using SourcePos, LambdaContext): $[Need |+| ValueDrain.Pulling[A]] =
       drain > ValueDrain.toEither
+
+    @targetName("valueDrainOnCloseAwait")
+    def onCloseAwait(using SourcePos, LambdaContext)(that: $[Done]): $[ValueDrain[A]] =
+      (that |*| drain) > ValueDrain.onCloseAwait
   }
 
   def rInvertValueDrain[A]: (ValueDrain[A] |*| Pollable[A]) -⚬ One =
