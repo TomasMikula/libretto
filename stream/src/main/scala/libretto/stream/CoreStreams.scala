@@ -24,6 +24,23 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   type StreamLeader[T, A]   = Rec[StreamLeaderF[T, A, _]]
   type StreamFollower[T, A] = Rec[StreamFollowerF[T, A, _]]
 
+  object StreamLeader {
+    def pack[T, A]: StreamLeaderF[T, A, StreamLeader[T, A]] -⚬ StreamLeader[T, A] =
+      dsl.pack
+
+    def unpack[T, A]: StreamLeader[T, A] -⚬ StreamLeaderF[T, A, StreamLeader[T, A]] =
+      dsl.unpack
+
+    def closed[T, A]: T -⚬ StreamLeader[T, A] =
+      injectL > pack
+
+    def switch[T, A, R](
+      onClose: T -⚬ R,
+      onNext: (T |&| (A |*| StreamLeader[T, A])) -⚬ R,
+    ): StreamLeader[T, A] -⚬ R =
+      unpack > either(onClose, onNext)
+  }
+
   type LPollable[A] = StreamFollower[Done, A]
   type LPolled[A] = Done |+| (A |*| LPollable[A])
 
