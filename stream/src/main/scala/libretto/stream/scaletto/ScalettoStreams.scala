@@ -550,10 +550,12 @@ abstract class ScalettoStreams {
 
       val goPulling: (ValueDrain.Pulling[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] =
         λ { case (pulling1 |*| drain2) =>
-          drain2.toEither switch { // TODO: don't wait for what drain2 does, we already know the result will be pulling
-            case Left(closing2)  => ValueDrain.pulling(pulling1) alsoElim (closing2 > need)
-            case Right(pulling2) => ValueDrain.pulling(contraDupPullings(pulling1 |*| pulling2))
-          }
+          ValueDrain.pulling(
+            drain2.toEither switch {
+              case Left(closing2)  => pulling1 alsoElim (closing2 > need)
+              case Right(pulling2) => contraDupPullings(pulling1 |*| pulling2)
+            }
+          )
         }
 
       val goFst: (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A] =

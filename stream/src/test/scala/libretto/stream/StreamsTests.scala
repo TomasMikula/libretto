@@ -140,7 +140,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             d1 <- expectDone(src2 map Pollable.close)
             d2 <- expectDone(p1 map Polled.close)
           } yield success(())
-        }.pending,
+        },
     )
   }
 }
