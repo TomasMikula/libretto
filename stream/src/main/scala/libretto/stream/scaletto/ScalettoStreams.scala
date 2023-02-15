@@ -580,25 +580,35 @@ abstract class ScalettoStreams {
     }
 
     object Pulling {
+      def create[S, A](
+        caseClose:    S -⚬ Need,
+        caseWarrant:  S -⚬ (-[Val[A]] |*| ValueDrain[A]),
+      ): S -⚬ Pulling[A] =
+        Drain.Pulling.create(caseClose, caseWarrant)
+
       def close[A]: Pulling[A] -⚬ Need =
-        chooseL
+        Drain.Pulling.close[Val[A]]
+
+      def warrant[A]: Pulling[A] -⚬ (-[Val[A]] |*| ValueDrain[A]) =
+        Drain.Pulling.warrant[Val[A]]
 
       def supply[A]: (Val[A] |*| Pulling[A]) -⚬ (Need |+| Pulling[A]) =
         LDemanding.supply(fulfill[A])
 
       private[ScalettoStreams] def contraDup0[A](
-        mergeDrains: (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A]
+        contraDupDrains: (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A]
       ): (Pulling[A] |*| Pulling[A]) -⚬ Pulling[A] = {
-        val caseClosed: (Pulling[A] |*| Pulling[A]) -⚬ Need =
-          forkMapNeed(chooseL, chooseL)
+        val caseClose: (Pulling[A] |*| Pulling[A]) -⚬ Need =
+          forkMapNeed(close, close)
 
-        val caseDemanding: (Pulling[A] |*| Pulling[A]) -⚬ (Neg[A] |*| ValueDrain[A]) =
-          id                                        [      Pulling[A]            |*|      Pulling[A]            ]
-            .>(par(chooseR, chooseR))            .to[ (Neg[A] |*| ValueDrain[A]) |*| (Neg[A] |*| ValueDrain[A]) ]
-            .>(IXI)                              .to[ (Neg[A] |*| Neg[A]) |*| (ValueDrain[A] |*| ValueDrain[A]) ]
-            .par(mergeDemands[A], mergeDrains)   .to[        Neg[A]       |*|            ValueDrain[A]          ]
+        val caseWarrant: (Pulling[A] |*| Pulling[A]) -⚬ (Neg[A] |*| ValueDrain[A]) =
+          λ { case (p1 |*| p2) =>
+            val (neg1 |*| drain1) = warrant(p1)
+            val (neg2 |*| drain2) = warrant(p2)
+            mergeDemands(neg1 |*| neg2) |*| contraDupDrains(drain1 |*| drain2)
+          }
 
-        choice(caseClosed, caseDemanding)
+        create(caseClose, caseWarrant)
       }
 
       def contraDup[A]: (Pulling[A] |*| Pulling[A]) -⚬ Pulling[A] = rec { self =>
