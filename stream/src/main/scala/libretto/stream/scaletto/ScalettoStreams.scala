@@ -75,7 +75,7 @@ abstract class ScalettoStreams {
   type Consumer[A] = Rec[ConsumerF[A, *]]
 
   object ValSource {
-    type Polled[A] = LPolled[Val[A]]
+    type Polled[A] = Source.Polled[Val[A]]
 
     def from[Z, A](
       onClose: Z -⚬ Done,
@@ -405,12 +405,13 @@ abstract class ScalettoStreams {
       val discardSubscriber: KSubs -⚬ One =
         λ { case (k |*| out) => (k > dsl.neglect > ValSource.empty[V]) supplyTo out }
 
-      val upstreamClosed: (Done |*| (LPolled[KSubs] |*| DT[K, V])) -⚬ Done =
-        joinMap(id, joinMap(LPolled.close(discardSubscriber > done), DT.clear))
+      val upstreamClosed: (Done |*| (Source.Polled[KSubs] |*| DT[K, V])) -⚬ Done =
+        joinMap(id, joinMap(Source.Polled.close(discardSubscriber > done), DT.clear))
 
       def upstreamVal(
-        goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
-      ): ((Val[A] |*| ValSource[A]) |*| (LPolled[KSubs] |*| DT[K, V])) -⚬ Done =
+        goRec: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done,
+      ): ((Val[A] |*| ValSource[A]) |*| (Source.Polled[KSubs] |*| DT[K, V])) -⚬ Done =
+        import Source.{Polled => LPolled}
         id                                   [ (Val[A] |*| ValSource[A]) |*|              (LPolled[KSubs] |*| DT[K, V]) ]
           .>.fst(swap)                    .to[ (ValSource[A] |*| Val[A]) |*|              (LPolled[KSubs] |*| DT[K, V]) ]
           .>(IXI)                         .to[ (ValSource[A] |*| LPolled[KSubs]) |*| (      Val[A]        |*| DT[K, V]) ]
@@ -422,14 +423,14 @@ abstract class ScalettoStreams {
           .>(goRec)                       .to[                                                           Done           ]
 
       def onUpstream(
-        goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
-      ): ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done =
-        assocLR           .to[ Polled[A] |*| (LPolled[KSubs] |*| DT[K, V]) ]
+        goRec: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done,
+      ): ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done =
+        assocLR           .to[ Polled[A] |*| (Source.Polled[KSubs] |*| DT[K, V]) ]
           .distributeR
           .either(upstreamClosed, upstreamVal(goRec))
 
       val feedToNEDT: (Polled[A] |*| NeDT[K, V]) -⚬ Done =
-        LPolled.feedTo(DT.dispatchNE(f)) > joinMap(id, Maybe.neglect(DT.clearNE))
+        Source.Polled.feedTo(DT.dispatchNE(f)) > joinMap(id, Maybe.neglect(DT.clearNE))
 
       val forward: (Polled[A] |*| DT[K, V]) -⚬ Done =
         id                                               [  Polled[A] |*| (Done |+|                NeDT[K, V]) ]
@@ -445,31 +446,31 @@ abstract class ScalettoStreams {
           .>(join)                  .to[                         Done      ]
 
       def newSubscriber(
-        goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
+        goRec: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done,
       ): ((Polled[A] |*| (KSubs |*| Source[KSubs])) |*| DT[K, V]) -⚬ Done =
         id                                 [ ( Polled[A] |*| (KSubs  |*|  Source[KSubs])) |*| DT[K, V]  ]
           .>.fst.snd(swap)              .to[ ( Polled[A] |*| (Source[KSubs]  |*|  KSubs)) |*| DT[K, V]  ]
           .>.fst.assocRL                .to[ ((Polled[A] |*|  Source[KSubs]) |*|  KSubs ) |*| DT[K, V]  ]
           .assocLR                      .to[  (Polled[A] |*|  Source[KSubs]) |*| (KSubs   |*| DT[K, V]) ]
           .>.snd(DT.addSubscriber)      .to[  (Polled[A] |*|  Source[KSubs]) |*|              DT[K, V]  ]
-          .>.fst.snd(Source.poll)       .to[  (Polled[A] |*|  LPolled[KSubs]) |*|             DT[K, V]  ]
+          .>.fst.snd(Source.poll)       .to[  (Polled[A] |*|  Source.Polled[KSubs]) |*|             DT[K, V]  ]
           .>(goRec)                     .to[                                 Done                       ]
 
       def onSubs(
-        goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
-      ): ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done =
-        id[ (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] ]
+        goRec: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done,
+      ): ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done =
+        id[ (Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V] ]
           .>.fst(distributeL)
           .distributeR
           .either(subsClosed, newSubscriber(goRec))
 
-      val go: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done = rec { self =>
-        import LPolled.positiveLPolled
+      val go: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done = rec { self =>
+        import Source.Polled.positivePolled
 
         implicit def positiveKSubs: SignalingJunction.Positive[KSubs] =
           SignalingJunction.Positive.byFst[Val[K], -[ValSource[V]]]
 
-        id                                           [ (Polled[A] |*| LPolled[KSubs]) |*| DT[K, V] ]
+        id                                           [ (Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V] ]
           .>.fst(lib.race)
           .distributeR
           .either(onUpstream(self), onSubs(self)) .to[                               Done          ]
@@ -495,22 +496,22 @@ abstract class ScalettoStreams {
 
     object Polled {
       def close[A]: Polled[A] -⚬ Done =
-        LPolled.close(dsl.neglect[A])
+        Source.Polled.close(dsl.neglect[A])
 
       def empty[A]: Done -⚬ Polled[A] =
-        LPolled.empty
+        Source.Polled.empty
 
       def cons[A]: (Val[A] |*| ValSource[A]) -⚬ Polled[A] =
-        LPolled.cons
+        Source.Polled.cons
 
       def unpoll[A]: Polled[A] -⚬ ValSource[A] =
-        LPolled.unpoll[Val[A]]
+        Source.Polled.unpoll[Val[A]]
 
       def delayBy[A]: (Done |*| Polled[A]) -⚬ Polled[A] =
-        LPolled.delayBy
+        Source.Polled.delayBy
 
       implicit def positivePolled[A]: SignalingJunction.Positive[Polled[A]] =
-        LPolled.positiveLPolled[Val[A]]
+        Source.Polled.positivePolled[Val[A]]
 
       /** Merges two [[Polled]]s into one.
         * Left-biased: whenever there is a value available from both upstreams, favors the first one.
@@ -520,7 +521,7 @@ abstract class ScalettoStreams {
       def merge[A](
         mergePollables: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A],
       ): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
-        LPolled.merge(mergePollables)
+        Source.Polled.merge(mergePollables)
     }
   }
 
