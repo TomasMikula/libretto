@@ -84,17 +84,17 @@ class InvertStreams[DSL <: InvertDSL, Lib <: CoreLib[DSL]](
       fst(joinNeed) > assocLR > elimSnd(swap > rInvertSignal)
   }
 
-  def rInvertDrain[A]: (Drain[A] |*| LPollable[A]) -⚬ One =
+  def rInvertDrain[A]: (Drain[A] |*| Source[A]) -⚬ One =
     rInvertLeader(swap > rInvertSignal, swap > backvert)
 
-  def lInvertSource[A]: One -⚬ (LPollable[A] |*| Drain[A]) =
+  def lInvertSource[A]: One -⚬ (Source[A] |*| Drain[A]) =
     lInvertFollower(lInvertSignal > swap, forevert > swap)
 
-  given drainSourceDuality[A]: Dual[Drain[A], LPollable[A]] with {
-    override val rInvert: (Drain[A] |*| LPollable[A]) -⚬ One = rInvertDrain
-    override val lInvert: One -⚬ (LPollable[A] |*| Drain[A]) = lInvertSource
+  given drainSourceDuality[A]: Dual[Drain[A], Source[A]] with {
+    override val rInvert: (Drain[A] |*| Source[A]) -⚬ One = rInvertDrain
+    override val lInvert: One -⚬ (Source[A] |*| Drain[A]) = lInvertSource
   }
 
-  given sourceDrainDuality[A]: Dual[LPollable[A], Drain[A]] =
+  given sourceDrainDuality[A]: Dual[Source[A], Drain[A]] =
     dualSymmetric(drainSourceDuality[A])
 }

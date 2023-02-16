@@ -60,7 +60,7 @@ abstract class ScalettoStreams {
   import invertStreams._
   import Tree._
 
-  type ValSource[A] = LPollable[Val[A]]
+  type ValSource[A] = Source[Val[A]]
 
   type ValDrain[A] = Drain[Val[A]]
 
@@ -81,44 +81,44 @@ abstract class ScalettoStreams {
       onClose: Z -⚬ Done,
       onPoll: Z -⚬ (Done |+| (Val[A] |*| ValSource[A]))
     ): Z -⚬ ValSource[A] =
-      LPollable.from(onClose, onPoll)
+      Source.from(onClose, onPoll)
 
     def fromChoice[A]: (Done |&| Polled[A]) -⚬ ValSource[A] =
-      LPollable.pack[Val[A]]
+      Source.pack[Val[A]]
 
     def toChoice[A]: ValSource[A] -⚬ (Done |&| Polled[A]) =
-      LPollable.unpack[Val[A]]
+      Source.unpack[Val[A]]
 
     def close[A]: ValSource[A] -⚬ Done =
-      LPollable.close[Val[A]]
+      Source.close[Val[A]]
 
     def poll[A]: ValSource[A] -⚬ Polled[A] =
-      LPollable.poll[Val[A]]
+      Source.poll[Val[A]]
 
     def delayedPoll[A]: (Done |*| ValSource[A]) -⚬ Polled[A] =
-      LPollable.delayedPoll[Val[A]]
+      Source.delayedPoll[Val[A]]
 
     /** Polls and discards all elements. */
     def drain[A]: ValSource[A] -⚬ Done =
-      LPollable.drain[Val[A]]
+      Source.drain[Val[A]]
 
     def empty[A]: Done -⚬ ValSource[A] =
-      LPollable.empty[Val[A]]
+      Source.empty[Val[A]]
 
     def cons[A]: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] =
-      LPollable.cons
+      Source.cons
 
     def fromLList[A]: LList[Val[A]] -⚬ ValSource[A] =
-      LPollable.fromLList[Val[A]]
+      Source.fromLList[Val[A]]
 
     def detain[A]: ValSource[A] -⚬ Detained[ValSource[A]] =
-      LPollable.detain[Val[A]]
+      Source.detain[Val[A]]
 
     def delayBy[A]: (Done |*| ValSource[A]) -⚬ ValSource[A] =
-      LPollable.delayBy[Val[A]]
+      Source.delayBy[Val[A]]
 
     def delayable[A]: ValSource[A] -⚬ (Need |*| ValSource[A]) =
-      LPollable.delayable[Val[A]]
+      Source.delayable[Val[A]]
 
     def notifyAction[A]: (Pong |*| ValSource[A]) -⚬ ValSource[A] =
       snd(toChoice) > notifyChoice > fromChoice
@@ -184,15 +184,15 @@ abstract class ScalettoStreams {
     }
 
     def repeatedly[A](f: Done -⚬ Val[A]): Done -⚬ ValSource[A] =
-      LPollable.repeatedly[Val[A]](f)
+      Source.repeatedly[Val[A]](f)
 
     def map[A, B](f: A => B): ValSource[A] -⚬ ValSource[B] = {
       val g: Val[A] -⚬ Val[B] = mapVal(f)
-      LPollable.map(g)
+      Source.map(g)
     }
 
     def forEachSequentially[A](f: Val[A] -⚬ Done): ValSource[A] -⚬ Done =
-      LPollable.forEachSequentially[Val[A]](f)
+      Source.forEachSequentially[Val[A]](f)
 
     def prepend[A]: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] = {
       val close: (Val[A] |*| ValSource[A]) -⚬ Done =
@@ -205,7 +205,7 @@ abstract class ScalettoStreams {
     }
 
     def concat[A]: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A] =
-      LPollable.concat
+      Source.concat
 
     def statefulMap[S, A, B](f: ((S, A)) => (S, B))(initialState: S): ValSource[A] -⚬ ValSource[B] = {
       val ff: (Val[S] |*| Val[A]) -⚬ (Val[S] |*| Val[B]) =
@@ -242,20 +242,20 @@ abstract class ScalettoStreams {
       * When either of the downstreams closes, the other downstream and the upstream are closed as well.
       */
     def partition[A, B]: ValSource[Either[A, B]] -⚬ (ValSource[A] |*| ValSource[B]) =
-      LPollable.map(liftEither[A, B]) > LPollable.partition
+      Source.map(liftEither[A, B]) > Source.partition
 
     /** Merges two [[ValSource]]s into one.
       * Left-biased: when there is a value available from both upstreams, favors the first one.
       */
     def merge[A]: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A] =
-      LPollable.merge[Val[A]]
+      Source.merge[Val[A]]
 
     /** Merges a list of [[ValSource]]s into a single [[ValSource]].
       * Head-biased: when there is an element available from multiple upstreams, favors the upstream closest to the
       * head of the input list.
       */
     def mergeAll[A]: LList[ValSource[A]] -⚬ ValSource[A] =
-      LPollable.mergeAll[Val[A]]
+      Source.mergeAll[Val[A]]
 
     def dup[A]: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) = rec { self =>
       val dupPolled: Polled[A] -⚬ (Polled[A] |*| Polled[A]) = {
@@ -312,7 +312,7 @@ abstract class ScalettoStreams {
 
         val goElem: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] =
           choice(caseDownstreamRequested, caseNotRequestedYet)
-            .>(selectSignaledOrNot(LPollable.negativeLPollable))
+            .>(selectSignaledOrNot(Source.negativeSource))
 
         id                               [    ValSource[A]                    ]
           .unpack                     .to[ Done |&| Polled[A]                 ]
@@ -397,7 +397,7 @@ abstract class ScalettoStreams {
       f: Val[A] -⚬ (Val[K] |*| Val[V])
     )(using
       Ordering[K],
-    ): (ValSource[A] |*| LPollable[Val[K] |*| -[ValSource[V]]]) -⚬ Done = {
+    ): (ValSource[A] |*| Source[Val[K] |*| -[ValSource[V]]]) -⚬ Done = {
       import ValSource.{DemandingTree => DT}
       import DemandingTree.NeDT
       type KSubs = Val[K] |*| -[ValSource[V]]
@@ -446,14 +446,14 @@ abstract class ScalettoStreams {
 
       def newSubscriber(
         goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
-      ): ((Polled[A] |*| (KSubs |*| LPollable[KSubs])) |*| DT[K, V]) -⚬ Done =
-        id                                 [ ( Polled[A] |*| (KSubs  |*|  LPollable[KSubs])) |*| DT[K, V]  ]
-          .>.fst.snd(swap)              .to[ ( Polled[A] |*| (LPollable[KSubs]  |*|  KSubs)) |*| DT[K, V]  ]
-          .>.fst.assocRL                .to[ ((Polled[A] |*|  LPollable[KSubs]) |*|  KSubs ) |*| DT[K, V]  ]
-          .assocLR                      .to[  (Polled[A] |*|  LPollable[KSubs]) |*| (KSubs   |*| DT[K, V]) ]
-          .>.snd(DT.addSubscriber)      .to[  (Polled[A] |*|  LPollable[KSubs]) |*|              DT[K, V]  ]
-          .>.fst.snd(LPollable.poll)    .to[  (Polled[A] |*|    LPolled[KSubs]) |*|              DT[K, V]  ]
-          .>(goRec)                     .to[                                   Done                        ]
+      ): ((Polled[A] |*| (KSubs |*| Source[KSubs])) |*| DT[K, V]) -⚬ Done =
+        id                                 [ ( Polled[A] |*| (KSubs  |*|  Source[KSubs])) |*| DT[K, V]  ]
+          .>.fst.snd(swap)              .to[ ( Polled[A] |*| (Source[KSubs]  |*|  KSubs)) |*| DT[K, V]  ]
+          .>.fst.assocRL                .to[ ((Polled[A] |*|  Source[KSubs]) |*|  KSubs ) |*| DT[K, V]  ]
+          .assocLR                      .to[  (Polled[A] |*|  Source[KSubs]) |*| (KSubs   |*| DT[K, V]) ]
+          .>.snd(DT.addSubscriber)      .to[  (Polled[A] |*|  Source[KSubs]) |*|              DT[K, V]  ]
+          .>.fst.snd(Source.poll)       .to[  (Polled[A] |*|  LPolled[KSubs]) |*|             DT[K, V]  ]
+          .>(goRec)                     .to[                                 Done                       ]
 
       def onSubs(
         goRec: ((Polled[A] |*| LPolled[KSubs]) |*| DT[K, V]) -⚬ Done,
@@ -475,8 +475,8 @@ abstract class ScalettoStreams {
           .either(onUpstream(self), onSubs(self)) .to[                               Done          ]
       }
 
-      id[ValSource[A] |*| LPollable[KSubs]]
-        .>(par(poll, LPollable.poll))
+      id[ValSource[A] |*| Source[KSubs]]
+        .>(par(poll, Source.poll))
         .introSnd(done > Tree.empty[K, ValDrain.Pulling[V]])
         .>(go)
     }
@@ -484,7 +484,7 @@ abstract class ScalettoStreams {
     def broadcastByKey[A, K: Ordering, V](
       f: Val[A] -⚬ (Val[K] |*| Val[V])
     ): ValSource[A] -⚬ BroadcastByKey[K, V] = {
-      val lInvert: One -⚬ (LPollable[Val[K] |*| -[ValSource[V]]] |*| Drain[Val[K] |*| -[ValSource[V]]]) =
+      val lInvert: One -⚬ (Source[Val[K] |*| -[ValSource[V]]] |*| Drain[Val[K] |*| -[ValSource[V]]]) =
         lInvertSource
 
       λ { src =>
