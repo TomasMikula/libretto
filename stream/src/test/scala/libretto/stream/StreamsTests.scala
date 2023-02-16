@@ -28,22 +28,22 @@ class StreamsTests extends ScalatestScalettoTestSuite {
 
     List(
       "toList ⚬ fromList = id" -> TestCase
-        .interactWith { Pollable.fromList(List(1, 2, 3, 4, 5, 6)) > Pollable.toList }
+        .interactWith { ValSource.fromList(List(1, 2, 3, 4, 5, 6)) > ValSource.toList }
         .via { expectVal(_).assertEquals(List(1, 2, 3, 4, 5, 6)) },
 
-      "Pollable.map" -> TestCase
+      "ValSource.map" -> TestCase
         .interactWith {
-          Pollable.fromList(List(1, 2, 3)) > Pollable.map(_.toString) > Pollable.toList
+          ValSource.fromList(List(1, 2, 3)) > ValSource.map(_.toString) > ValSource.toList
         }.via {
           expectVal(_).assertEquals(List("1", "2", "3"))
         },
 
       "partition" -> TestCase
         .interactWith {
-          Pollable.of(1, 2, 3, 4, 5, 6)
-            .>(Pollable.map { i => if (i % 2 == 0) Left(i) else Right(i) })
-            .>(Pollable.partition)
-            .par(Pollable.toList, Pollable.toList)
+          ValSource.of(1, 2, 3, 4, 5, 6)
+            .>(ValSource.map { i => if (i % 2 == 0) Left(i) else Right(i) })
+            .>(ValSource.partition)
+            .par(ValSource.toList, ValSource.toList)
             .>(unliftPair)
         }.via {
           expectVal(_).assertEquals((List(2, 4, 6), List(1, 3, 5)))
@@ -51,9 +51,9 @@ class StreamsTests extends ScalatestScalettoTestSuite {
 
       "concat" -> TestCase
         .interactWith {
-          forkMap(Pollable.of(1, 2, 3), Pollable.of(4, 5, 6))
-            .>(Pollable.concat)
-            .>(Pollable.toList)
+          forkMap(ValSource.of(1, 2, 3), ValSource.of(4, 5, 6))
+            .>(ValSource.concat)
+            .>(ValSource.toList)
         }.via {
           expectVal(_).assertEquals(List(1, 2, 3 ,4, 5, 6))
         },
@@ -61,11 +61,11 @@ class StreamsTests extends ScalatestScalettoTestSuite {
       "merge" -> TestCase
         .interactWith {
           forkMap(
-            Pollable.of(1, 2, 3),
-            Pollable.of(4, 5, 6),
+            ValSource.of(1, 2, 3),
+            ValSource.of(4, 5, 6),
           )
-            .>(Pollable.merge)
-            .>(Pollable.toList)
+            .>(ValSource.merge)
+            .>(ValSource.toList)
             .>(mapVal(_.toSet))
         }.via {
           expectVal(_).assertEquals(Set(1, 2, 3, 4, 5, 6))
@@ -75,13 +75,13 @@ class StreamsTests extends ScalatestScalettoTestSuite {
         .interactWith {
           LList1
             .of(
-              Pollable.of(1, 2, 3),
-              Pollable.of(4, 5, 6) > Pollable.delay(10.millis),
-              Pollable.of(7, 8, 9),
+              ValSource.of(1, 2, 3),
+              ValSource.of(4, 5, 6) > ValSource.delay(10.millis),
+              ValSource.of(7, 8, 9),
             )
             .>(LList1.toLList)
-            .>(Pollable.mergeAll)
-            .>(Pollable.toList)
+            .>(ValSource.mergeAll)
+            .>(ValSource.toList)
         }.via { port =>
           for {
             res <- expectVal(port)
@@ -94,23 +94,23 @@ class StreamsTests extends ScalatestScalettoTestSuite {
 
       "broadcastByKey" -> TestCase
         .interactWith {
-          import Pollable.broadcastByKey
-          import Pollable.BroadcastByKey.{close => closeBroadcast, subscribe}
+          import ValSource.broadcastByKey
+          import ValSource.BroadcastByKey.{close => closeBroadcast, subscribe}
 
           val byLength: Val[String] -⚬ (Val[Int] |*| Val[String]) =
             mapVal[String, (Int, String)](s => (s.length, s)) > liftPair
 
-          val input: Done -⚬ Pollable[String] =
-            Pollable.of("f", "fo", "foo", "fooo", "foooo", "pho", "phoo", "phooo", "bo", "boo")
+          val input: Done -⚬ ValSource[String] =
+            ValSource.of("f", "fo", "foo", "fooo", "foooo", "pho", "phoo", "phooo", "bo", "boo")
 
           val prg: Done -⚬ Val[List[String]] =
             input
-              .>(Pollable.delay(10.millis)) // delay so that subscribers have some time to subscribe
+              .>(ValSource.delay(10.millis)) // delay so that subscribers have some time to subscribe
               .>(broadcastByKey(byLength))
               .>(subscribe(3))
               .>.fst(subscribe(4))
-              .assocLR.>.snd(Pollable.merge)
-              .par(closeBroadcast, Pollable.toList)
+              .assocLR.>.snd(ValSource.merge)
+              .par(closeBroadcast, ValSource.toList)
               .awaitFst
 
           prg > mapVal(_.toSet)
@@ -120,7 +120,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
 
       "ValueDrain.contraDup pulls as soon as either one pulls" -> TestCase
         .interactWith {
-          val prg: Done -⚬ (Pollable[Unit] |*| Pollable[Unit] |*| ValDrain[Unit]) =
+          val prg: Done -⚬ (ValSource[Unit] |*| ValSource[Unit] |*| ValDrain[Unit]) =
             λ { start =>
               val (src1 |*| drn1) = $.one > lInvertValSource[Unit]
               val (src2 |*| drn2) = $.one > lInvertValSource[Unit]
@@ -133,12 +133,12 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           for {
             (srcs, drn)  <- splitOut(port)
             (src1, src2) <- splitOut(srcs)
-            p1           =  src1 map Pollable.poll
+            p1           =  src1 map ValSource.poll
             pulling      <- expectRight(drn map ValDrain.toEither) // checking pull before src2 acts
             // close everything
             _  = (pulling map ValDrain.Pulling.close map need).discard
-            d1 <- expectDone(src2 map Pollable.close)
-            d2 <- expectDone(p1 map Pollable.Polled.close)
+            d1 <- expectDone(src2 map ValSource.close)
+            d2 <- expectDone(p1 map ValSource.Polled.close)
           } yield success(())
         },
     )

@@ -62,9 +62,6 @@ abstract class ScalettoStreams {
 
   type ValSource[A] = LPollable[Val[A]]
 
-  @deprecated("Renamed to ValSource")
-  type Pollable[A] = ValSource[A]
-
   type ValDrain[A] = Drain[Val[A]]
 
   @deprecated
@@ -76,9 +73,6 @@ abstract class ScalettoStreams {
   type ConsumerF[A, X] = Need |&| (Need |+| (Neg[A] |*| X))
   @deprecated
   type Consumer[A] = Rec[ConsumerF[A, *]]
-
-  @deprecated("Renamed to ValSource")
-  transparent inline def Pollable = ValSource
 
   object ValSource {
     type Polled[A] = LPolled[Val[A]]
@@ -696,4 +690,10 @@ abstract class ScalettoStreams {
       .>.right.left(rInvertSignal) .to[ One |+| (      One       |+| ((Val[A] |*| ValSource[A]) |*| (Neg[B] |*| ValDrain[B])))]
       .assocRL                     .to[(One |+|        One     ) |+| ((Val[A] |*| ValSource[A]) |*| (Neg[B] |*| ValDrain[B])) ]
       .>.left(either(id, id))      .to[     One                  |+| ((Val[A] |*| ValSource[A]) |*| (Neg[B] |*| ValDrain[B])) ]
+
+  @deprecated("Renamed to ValSource")
+  type Pollable[A] = ValSource[A]
+
+  @deprecated("Renamed to ValSource")
+  val Pollable: ValSource.type = ValSource
 }

@@ -1,7 +1,7 @@
 package libretto.examples.dogTreatsFactory
 
 import libretto.scaletto.StarterApp
-import libretto.stream.scaletto.DefaultStreams.Pollable
+import libretto.stream.scaletto.DefaultStreams.ValSource
 
 object Main extends StarterApp {
   import $._
@@ -18,14 +18,14 @@ object Main extends StarterApp {
 
   override def blueprint: Done -⚬ Done =
     λ.+ { trigger =>
-      val toys     = trigger > Pollable.fromList(inToys)
-      val bones    = trigger > Pollable.fromList(inBones)
-      val biscuits = trigger > Pollable.fromList(inBiscuits)
+      val toys     = trigger > ValSource.fromList(inToys)
+      val bones    = trigger > ValSource.fromList(inBones)
+      val biscuits = trigger > ValSource.fromList(inBiscuits)
 
-      val treatsPacks: $[Pollable[TreatsPack]] =
+      val treatsPacks: $[ValSource[TreatsPack]] =
         DogTreatsFactory.blueprint(toys |*| bones |*| biscuits)
 
-      treatsPacks > Pollable.forEachSequentially {
+      treatsPacks > ValSource.forEachSequentially {
         printLine { pack => s"$pack" }
       }
     }
