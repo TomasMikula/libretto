@@ -393,8 +393,10 @@ abstract class ScalettoStreams {
       }
     }
 
-    private def subscribeByKey[A, K: Ordering, V](
+    private def subscribeByKey[A, K, V](
       f: Val[A] -⚬ (Val[K] |*| Val[V])
+    )(using
+      Ordering[K],
     ): (ValSource[A] |*| LPollable[Val[K] |*| -[ValSource[V]]]) -⚬ Done = {
       import ValSource.{DemandingTree => DT}
       import DemandingTree.NeDT
@@ -485,10 +487,10 @@ abstract class ScalettoStreams {
       val lInvert: One -⚬ (LPollable[Val[K] |*| -[ValSource[V]]] |*| Drain[Val[K] |*| -[ValSource[V]]]) =
         lInvertSource
 
-      id                                [  ValSource[A]                                                                                ]
-        .introSnd(lInvert).assocRL   .to[ (ValSource[A] |*| LPollable[Val[K] |*| -[ValSource[V]]]) |*| Drain[Val[K] |*| -[ValSource[V]]] ]
-        .>.fst(subscribeByKey(f))    .to[             Done                                       |*| Drain[Val[K] |*| -[ValSource[V]]] ]
-        .swap                        .to[                                         BroadcastByKey[K, V]                                ]
+      λ { src =>
+        val (subscriptions |*| subscribers) = one > lInvert
+        subscribers |*| subscribeByKey(f)(src |*| subscriptions)
+      }
     }
 
     object Polled {
