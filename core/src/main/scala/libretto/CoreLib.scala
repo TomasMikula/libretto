@@ -1154,6 +1154,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>(IXI)                                     .to[        (Pong |*| A) |*| (Pong |*| B)        ]
       .par(notifyA, notifyB)                      .to[                  A  |*|           B         ]
 
+  def selectBy[A](
+    notify: (Pong |*| A) -⚬ A,
+  ): ((A |*| A) |&| (A |*| A)) -⚬ (A |*| A) =
+    selectBy(notify, notify)
+
   def select[A, B](implicit
     A: Signaling.Negative[A],
     B: Signaling.Negative[B],

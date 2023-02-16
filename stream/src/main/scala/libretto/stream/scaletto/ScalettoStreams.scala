@@ -86,6 +86,9 @@ abstract class ScalettoStreams {
     def fromChoice[A]: (Done |&| Polled[A]) -⚬ Pollable[A] =
       LPollable.pack[Val[A]]
 
+    def toChoice[A]: Pollable[A] -⚬ (Done |&| Polled[A]) =
+      LPollable.unpack[Val[A]]
+
     def close[A]: Pollable[A] -⚬ Done =
       LPollable.close[Val[A]]
 
@@ -114,11 +117,18 @@ abstract class ScalettoStreams {
     def delayBy[A]: (Done |*| Pollable[A]) -⚬ Pollable[A] =
       LPollable.delayBy[Val[A]]
 
+    def delayable[A]: Pollable[A] -⚬ (Need |*| Pollable[A]) =
+      LPollable.delayable[Val[A]]
+
+    def notifyAction[A]: (Pong |*| Pollable[A]) -⚬ Pollable[A] =
+      snd(toChoice) > notifyChoice > fromChoice
+
     def delay[A](d: FiniteDuration): Pollable[A] -⚬ Pollable[A] = {
       id                                           [          Pollable[A] ]
-        .<(negativePollable[A].signalNeg)     .from[ Need |*| Pollable[A] ]
+        .<(notifyAction)                      .from[ Pong |*| Pollable[A] ]
+        .<.fst(strengthenPong)                .from[ Need |*| Pollable[A] ]
         .<.fst(delayNeed(d))                  .from[ Need |*| Pollable[A] ]
-        .<(negativePollable[A].awaitNeg)      .from[          Pollable[A] ]
+        .<(delayable)                         .from[          Pollable[A] ]
     }
 
     def fromList[A]: Val[List[A]] -⚬ Pollable[A] = rec { self =>
@@ -250,9 +260,6 @@ abstract class ScalettoStreams {
     def mergeAll[A]: LList[Pollable[A]] -⚬ Pollable[A] =
       LPollable.mergeAll[Val[A]]
 
-    implicit def negativePollable[A]: SignalingJunction.Negative[Pollable[A]] =
-      LPollable.negativeLPollable[Val[A]]
-
     def dup[A]: Pollable[A] -⚬ (Pollable[A] |*| Pollable[A]) = rec { self =>
       val dupPolled: Polled[A] -⚬ (Polled[A] |*| Polled[A]) = {
         val caseClosed: Done -⚬ (Polled[A] |*| Polled[A]) =
@@ -289,8 +296,7 @@ abstract class ScalettoStreams {
       val caseSnd: Pollable[A] -⚬ (Pollable[A] |*| Pollable[A]) =
         caseFst > swap
 
-      id                                   [          Pollable[A]        ]
-        .select(caseFst, caseSnd)       .to[ Pollable[A] |*| Pollable[A] ]
+      choice(caseFst, caseSnd) > selectBy(Pollable.notifyAction)
     }
 
     def dropUntilFirstDemand[A]: Pollable[A] -⚬ Pollable[A] = rec { self =>

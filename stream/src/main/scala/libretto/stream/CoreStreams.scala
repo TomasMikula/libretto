@@ -16,6 +16,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   val lib: Lib with CoreLib[dsl.type],
 ) {
   import dsl._
+  import dsl.$._
   import lib._
 
   type StreamLeaderF[T, A, X]   = T |+| (T |&| (A |*| X))
@@ -125,6 +126,12 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>(delayChoiceUntilDone)                .to[ (Done |*|  Done) |&| (Done |*| LPolled[A]) ]
         .bimap(join, LPolled.delayBy[A])        .to[       Done       |&|           LPolled[A]  ]
         .pack[StreamFollowerF[Done, A, *]]      .to[              LPollable[A]                  ]
+
+    def delayable[A](using Junction.Positive[A]): LPollable[A] -⚬ (Need |*| LPollable[A]) =
+      λ { src =>
+        val (n |*| d) = one > lInvertSignal
+        n |*| ((d |*| src) > delayBy)
+      }
 
     /** Delays the final [[Done]] signal (signaling end of stream or completed [[close]]) until the given [[Done]]
       * signal completes.
