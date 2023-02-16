@@ -529,7 +529,7 @@ abstract class ScalettoStreams {
     type Pulling[A] = Drain.Pulling[Val[A]]
 
     def close[A]: ValueDrain[A] -⚬ Need =
-      LSubscriber.close
+      Drain.close[Val[A]]
 
     def pulling[A]: Pulling[A] -⚬ ValueDrain[A] =
       Drain.pulling[Val[A]]
@@ -599,7 +599,10 @@ abstract class ScalettoStreams {
         Drain.Pulling.warrant[Val[A]]
 
       def supply[A]: (Val[A] |*| Pulling[A]) -⚬ (Need |+| Pulling[A]) =
-        LDemanding.supply(fulfill[A])
+        λ { case (a |*| pulling) =>
+          val na |*| drain = pulling > warrant
+          drain.toEither alsoElim (a supplyTo na)
+        }
 
       private[ScalettoStreams] def contraDup0[A](
         contraDupDrains: (ValueDrain[A] |*| ValueDrain[A]) -⚬ ValueDrain[A]
@@ -634,10 +637,10 @@ abstract class ScalettoStreams {
   }
 
   def rInvertValueDrain[A]: (ValueDrain[A] |*| Pollable[A]) -⚬ One =
-    rInvertLSubscriber(swap > fulfill)
+    rInvertDrain[Val[A]]
 
   def lInvertPollable[A]: One -⚬ (Pollable[A] |*| ValueDrain[A]) =
-    lInvertLPollable(promise > swap)
+    lInvertSource[Val[A]]
 
   def rInvertProducingF[A, x, y](rInvertSub: (x |*| y) -⚬ One): (ProducingF[A, x] |*| ConsumerF[A, y]) -⚬ One =
     rInvertEither(
