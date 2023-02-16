@@ -9,7 +9,7 @@ extends AnyFunSuite
    with BeforeAndAfterAll
    with libretto.testing.TestSuite[Kit]
 {
-  private class FactoryWithExecutor[F <: TestExecutor.Factory[_]](
+  private class FactoryWithExecutor[F <: TestExecutor.Factory[?]](
     val factory: F,
   ) {
     var executor: Option[factory.ExecutorResource] = None
@@ -27,11 +27,11 @@ extends AnyFunSuite
   }
 
   private object FactoryWithExecutor {
-    def apply(factory: TestExecutor.Factory[_]): FactoryWithExecutor[factory.type] =
+    def apply(factory: TestExecutor.Factory[?]): FactoryWithExecutor[factory.type] =
       new FactoryWithExecutor(factory)
   }
 
-  private var executors: List[FactoryWithExecutor[_]] = Nil
+  private var executors: List[FactoryWithExecutor[?]] = Nil
 
   private def registerTests(): Unit = {
     this.executors =

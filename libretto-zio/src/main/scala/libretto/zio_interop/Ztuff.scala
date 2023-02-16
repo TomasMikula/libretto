@@ -2,7 +2,7 @@ package libretto.zio_interop
 
 import libretto.scaletto.{ScalettoBridge, StarterKit}
 import libretto.scaletto.StarterKit.{-⚬, |*|, |+|, |&|, Done, Val}
-import libretto.stream.scaletto.DefaultStreams.{Pollable, PollableF}
+import libretto.stream.scaletto.DefaultStreams.Pollable
 import zio.{Fiber, Scope, ZIO}
 import zio.stream.UStream
 
@@ -52,7 +52,7 @@ sealed trait Ztuff[A] {
     inPort: exn.InPort[Pollable[X]],
   ): ZIO[Any, Nothing, Unit] = {
     def unpack(p: exn.InPort[Pollable[X]]): exn.InPort[Done |&| (Done |+| (Val[X] |*| Pollable[X]))] =
-      exn.InPort.contramap(p)(StarterKit.pack[[r] =>> PollableF[X, r]])
+      exn.InPort.contramap(p)(Pollable.fromChoice)
 
     exn.InPort
       .supplyChoice(unpack(inPort))

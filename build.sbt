@@ -54,14 +54,17 @@ releaseProcess := Seq[ReleaseStep](
 val ScalatestVersion = "3.2.15"
 val ZioVersion = "2.0.6"
 
+val commonScalacOptions =
+  Seq(
+    "-deprecation",
+    "-Ykind-projector:underscores",
+  )
+
 lazy val lambda = project
   .in(file("lambda"))
   .settings(
     name := "libretto-lambda",
-    scalacOptions ++= Seq(
-      "-deprecation",
-      "-Ykind-projector:underscores",
-    ),
+    scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % ScalatestVersion % Test,
     ),
@@ -72,10 +75,7 @@ lazy val core = project
   .dependsOn(lambda)
   .settings(
     name := "libretto-core",
-    scalacOptions ++= Seq(
-      "-deprecation",
-      "-Ykind-projector:underscores",
-    ),
+    scalacOptions ++= commonScalacOptions,
   )
 
 lazy val testing = project
@@ -83,6 +83,7 @@ lazy val testing = project
   .dependsOn(core)
   .settings(
     name := "libretto-testing",
+    scalacOptions ++= commonScalacOptions,
   )
 
 lazy val testingScalatest = project
@@ -90,6 +91,7 @@ lazy val testingScalatest = project
   .dependsOn(core, testing)
   .settings(
     name := "libretto-testing-scalatest",
+    scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % ScalatestVersion,
     ),
@@ -100,6 +102,7 @@ lazy val coreTests = project
   .dependsOn(testingScalatest % "test->compile")
   .settings(
     name := "core-tests",
+    scalacOptions ++= commonScalacOptions,
     publish / skip := true,
   )
 
@@ -111,10 +114,7 @@ lazy val stream = project
   )
   .settings(
     name := "libretto-stream",
-    scalacOptions ++= Seq(
-      "-deprecation",
-      "-Ykind-projector:underscores",
-    ),
+    scalacOptions ++= commonScalacOptions,
   )
 
 lazy val examples = project
@@ -126,6 +126,7 @@ lazy val examples = project
   )
   .settings(
     name := "libretto-examples",
+    scalacOptions ++= commonScalacOptions,
   )
 
 lazy val mashup = project
@@ -134,6 +135,7 @@ lazy val mashup = project
   .settings(
     name := "libretto-mashup",
     publish / skip := true, // experimental project, do not publish
+    scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio" % ZioVersion,
       "dev.zio" %% "zio-json" % "0.4.2",
@@ -146,6 +148,7 @@ lazy val mashupExamples = project
   .dependsOn(mashup, testingScalatest)
   .settings(
     name := "libretto-mashup-examples",
+    scalacOptions ++= commonScalacOptions,
     fork := true,
     publish / skip := true, // experimental project, do not publish
   )
@@ -159,6 +162,7 @@ lazy val librettoZio = project
   )
   .settings(
     name := "libretto-zio",
+    scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio"          % ZioVersion,
       "dev.zio" %% "zio-streams"  % ZioVersion,

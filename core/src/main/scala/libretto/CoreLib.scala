@@ -1109,7 +1109,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   ): (A |*| A) -⚬ ((A |*| A) |+| (A |*| A)) =
     raceBy(notify, notify)
 
-  def race[A, B](implicit
+  def race[A, B](using
     A: Signaling.Positive[A],
     B: Signaling.Positive[B],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =

@@ -120,11 +120,11 @@ class StreamsTests extends ScalatestScalettoTestSuite {
 
       "ValueDrain.contraDup pulls as soon as either one pulls" -> TestCase
         .interactWith {
-          val prg: Done -⚬ (Pollable[Unit] |*| Pollable[Unit] |*| ValueDrain[Unit]) =
+          val prg: Done -⚬ (Pollable[Unit] |*| Pollable[Unit] |*| ValDrain[Unit]) =
             λ { start =>
-              val (src1 |*| drn1) = $.one > lInvertPollable[Unit]
-              val (src2 |*| drn2) = $.one > lInvertPollable[Unit]
-              val drn = ValueDrain.contraDup(drn1 |*| drn2)
+              val (src1 |*| drn1) = $.one > lInvertValSource[Unit]
+              val (src2 |*| drn2) = $.one > lInvertValSource[Unit]
+              val drn = ValDrain.contraDup(drn1 |*| drn2)
               (src1 |*| src2) |*| (drn onCloseAwait start)
             }
 
@@ -134,11 +134,11 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             (srcs, drn)  <- splitOut(port)
             (src1, src2) <- splitOut(srcs)
             p1           =  src1 map Pollable.poll
-            pulling      <- expectRight(drn map ValueDrain.toEither) // checking pull before src2 acts
+            pulling      <- expectRight(drn map ValDrain.toEither) // checking pull before src2 acts
             // close everything
-            _  = (pulling map ValueDrain.Pulling.close map need).discard
+            _  = (pulling map ValDrain.Pulling.close map need).discard
             d1 <- expectDone(src2 map Pollable.close)
-            d2 <- expectDone(p1 map Polled.close)
+            d2 <- expectDone(p1 map Pollable.Polled.close)
           } yield success(())
         },
     )

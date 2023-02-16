@@ -477,7 +477,7 @@ object MashupKitImpl extends MashupKit { kit =>
               val (px, py) = underlying.InPort.split[x, y](port)
               valueSupply(px, p.a)
               valueSupply(py, p.b)
-            case ext: Value.ExtendRecord[x, _, y] =>
+            case ext: Value.ExtendRecord[x, ?, y] =>
               val (initPort, lastPort) = underlying.InPort.split[x, y](port)
               valueSupply(initPort, ext.init)
               valueSupply(lastPort, ext.last)

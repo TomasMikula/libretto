@@ -210,7 +210,7 @@ trait InvertDSL extends ClosedDSL {
       (a |*| out) > supply
   }
 
-  implicit class DemandExprOps[B](expr: $[-[B]]) {
+  extension [B](expr: $[-[B]]) {
     def contramap[A](f: A -⚬ B)(using
       pos: SourcePos,
       ctx: LambdaContext,
