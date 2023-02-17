@@ -106,7 +106,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             λ { d =>
               λ.closure { (i: $[Val[Int]]) =>
                 val j = one > done > constVal(1)
-                val res = (i * j) > mapVal(_ + _)
+                val res = (i ** j) > mapVal(_ + _)
                 (res |*| d) > awaitPosSnd
               }
             }

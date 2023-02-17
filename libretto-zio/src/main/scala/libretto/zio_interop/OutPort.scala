@@ -2,7 +2,7 @@ package libretto.zio_interop
 
 import libretto.scaletto.ScalettoBridge
 import libretto.scaletto.StarterKit
-import libretto.stream.scaletto.DefaultStreams.Pollable
+import libretto.stream.scaletto.DefaultStreams.ValSource
 import zio.stream.{UStream, ZStream}
 
 class OutPort[A](
@@ -12,12 +12,12 @@ class OutPort[A](
 ) {
   import execution.{OutPort => Port}
 
-  def zstream[X](using ev: A =:= Pollable[X]): UStream[X] = {
-    def go(port: Port[Pollable[X]]): UStream[X] =
+  def zstream[X](using ev: A =:= ValSource[X]): UStream[X] = {
+    def go(port: Port[ValSource[X]]): UStream[X] =
       ZStream.unfoldZIO(port) { port =>
         Port
           .awaitEither(
-            Port.map(port)(Pollable.poll)
+            Port.map(port)(ValSource.poll)
           )
           .toZIO.absolve.orDie
           .flatMap {

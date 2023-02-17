@@ -2,7 +2,7 @@ package libretto.zio_interop
 
 import libretto.scaletto.{ScalettoBridge, StarterKit}
 import libretto.scaletto.StarterKit.{-⚬, |*|, |+|, |&|, Done, Val}
-import libretto.stream.scaletto.DefaultStreams.{Pollable, PollableF}
+import libretto.stream.scaletto.DefaultStreams.ValSource
 import zio.{Fiber, Scope, ZIO}
 import zio.stream.UStream
 
@@ -49,10 +49,10 @@ sealed trait Ztuff[A] {
     exn: bridge.Execution,
   )(
     stream: UStream[X],
-    inPort: exn.InPort[Pollable[X]],
+    inPort: exn.InPort[ValSource[X]],
   ): ZIO[Any, Nothing, Unit] = {
-    def unpack(p: exn.InPort[Pollable[X]]): exn.InPort[Done |&| (Done |+| (Val[X] |*| Pollable[X]))] =
-      exn.InPort.contramap(p)(StarterKit.pack[[r] =>> PollableF[X, r]])
+    def unpack(p: exn.InPort[ValSource[X]]): exn.InPort[Done |&| (Done |+| (Val[X] |*| ValSource[X]))] =
+      exn.InPort.contramap(p)(ValSource.fromChoice)
 
     exn.InPort
       .supplyChoice(unpack(inPort))
@@ -62,7 +62,7 @@ sealed trait Ztuff[A] {
           // no pull, ignore the input stream altogether
           ZIO.succeed(exn.InPort.supplyDone(port))
         case Right(port) =>
-          type S = Option[exn.InPort[Done |+| (Val[X] |*| Pollable[X])]]
+          type S = Option[exn.InPort[Done |+| (Val[X] |*| ValSource[X])]]
           stream
             .runFoldWhileZIO(Some(port): S)(_.isDefined) { (optPort, elem) =>
               val Some(port) = optPort: @unchecked
@@ -86,5 +86,5 @@ sealed trait Ztuff[A] {
 
 object Ztuff {
   case class Pair[A, B](_1: Ztuff[A], _2: Ztuff[B]) extends Ztuff[A |*| B]
-  case class ZioUStream[A](s: UStream[A]) extends Ztuff[Pollable[A]]
+  case class ZioUStream[A](s: UStream[A]) extends Ztuff[ValSource[A]]
 }

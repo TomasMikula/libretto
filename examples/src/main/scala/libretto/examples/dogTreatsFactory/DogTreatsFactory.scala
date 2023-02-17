@@ -2,14 +2,14 @@ package libretto.examples.dogTreatsFactory
 
 import libretto.scaletto.StarterKit.{$, -⚬, |*|, |+|, Done, Val, injectL, injectR, mapVal, neglect, rec, λ}
 import libretto.scaletto.StarterKit.$._
-import libretto.stream.scaletto.DefaultStreams.Pollable
+import libretto.stream.scaletto.DefaultStreams.ValSource
 
 object DogTreatsFactory {
 
-  def blueprint: (Pollable[Toy] |*| Pollable[Bone] |*| Pollable[Biscuit]) -⚬ Pollable[TreatsPack] = rec { self =>
-    import Pollable.{close, poll}
+  def blueprint: (ValSource[Toy] |*| ValSource[Bone] |*| ValSource[Biscuit]) -⚬ ValSource[TreatsPack] = rec { self =>
+    import ValSource.{close, poll}
 
-    Pollable.from(
+    ValSource.from(
       onClose =
         λ { case (toys |*| bones |*| biscuits) =>
           joinAll(close(toys), close(bones), close(biscuits))
@@ -64,8 +64,8 @@ object DogTreatsFactory {
     )
   }
 
-  private def pullThreeBiscuits: Pollable[Biscuit] -⚬ (Done |+| (Val[Biscuit3] |*| Pollable[Biscuit])) = {
-    import Pollable.poll
+  private def pullThreeBiscuits: ValSource[Biscuit] -⚬ (Done |+| (Val[Biscuit3] |*| ValSource[Biscuit])) = {
+    import ValSource.poll
 
     λ { biscuits =>
       poll(biscuits) switch {
@@ -87,8 +87,8 @@ object DogTreatsFactory {
     }
   }
 
-  private def pullFiveBiscuits: Pollable[Biscuit] -⚬ (Done |+| (Val[Biscuit5] |*| Pollable[Biscuit])) = {
-    import Pollable.poll
+  private def pullFiveBiscuits: ValSource[Biscuit] -⚬ (Done |+| (Val[Biscuit5] |*| ValSource[Biscuit])) = {
+    import ValSource.poll
 
     λ { biscuits =>
       pullThreeBiscuits(biscuits) switch {
@@ -103,7 +103,7 @@ object DogTreatsFactory {
                 case Left(done) =>
                   joinAll(done, neglect(biscuit3), neglect(b4)) > injectL
                 case Right(b5 |*| biscuits) =>
-                  val biscuit5 = (biscuit3 * b4 * b5) > mapVal { case (((b1, b2, b3), b4), b5) => (b1, b2, b3, b4, b5) }
+                  val biscuit5 = (biscuit3 ** b4 ** b5) > mapVal { case (((b1, b2, b3), b4), b5) => (b1, b2, b3, b4, b5) }
                   injectR(biscuit5 |*| biscuits)
               }
           }

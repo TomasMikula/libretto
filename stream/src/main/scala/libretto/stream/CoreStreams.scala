@@ -1,7 +1,6 @@
 package libretto.stream
 
 import libretto.{CoreDSL, CoreLib}
-import libretto.util.∀
 
 object CoreStreams {
   def apply(
@@ -17,151 +16,189 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   val lib: Lib with CoreLib[dsl.type],
 ) {
   import dsl._
+  import dsl.$._
   import lib._
 
-  type LPollableF[A, X] = Done |&| (Done |+| (A |*| X))
-  type LPollable[A] = Rec[LPollableF[A, *]]
-  type LPolled[A] = Done |+| (A |*| LPollable[A])
+  type StreamLeaderF[T, A, X]   = T |+| (T |&| (A |*| X))
+  type StreamFollowerF[T, A, X] = T |&| (T |+| (A |*| X))
 
-  type LSubscriberF[A, X]  = Need |+| (Need |&| (A |*| X))
-  type LSubscriber[A] = Rec[LSubscriberF[A, *]]
-  type LDemanding[A] = Need |&| (A |*| LSubscriber[A])
+  type StreamLeader[T, A]   = Rec[StreamLeaderF[T, A, _]]
+  type StreamFollower[T, A] = Rec[StreamFollowerF[T, A, _]]
 
-  object LPollable {
-    def pack[A]: (Done |&| LPolled[A]) -⚬ LPollable[A] =
-      dsl.pack[LPollableF[A, *]]
+  opaque type Stream[A] = StreamLeader[Done, A]
+  opaque type Source[A] = StreamFollower[Done, A]
 
-    def unpack[A]: LPollable[A] -⚬ (Done |&| LPolled[A]) =
-      dsl.unpack[LPollableF[A, *]]
+  object StreamLeader {
+    def pack[T, A]: StreamLeaderF[T, A, StreamLeader[T, A]] -⚬ StreamLeader[T, A] =
+      dsl.pack
+
+    def unpack[T, A]: StreamLeader[T, A] -⚬ StreamLeaderF[T, A, StreamLeader[T, A]] =
+      dsl.unpack
+
+    def closed[T, A]: T -⚬ StreamLeader[T, A] =
+      injectL > pack
+
+    def next[T, A]: (T |&| (A |*| StreamLeader[T, A])) -⚬ StreamLeader[T, A] =
+      injectR > pack
+
+    def switch[T, A, R](
+      onClose: T -⚬ R,
+      onNext: (T |&| (A |*| StreamLeader[T, A])) -⚬ R,
+    ): StreamLeader[T, A] -⚬ R =
+      unpack > either(onClose, onNext)
+  }
+
+  object Stream {
+    def fromLeader[A]: StreamLeader[Done, A] -⚬ Stream[A] = id
+    def toLeader[A]  : Stream[A] -⚬ StreamLeader[Done, A] = id
+  }
+
+  object Source {
+    type Polled[A] = Done |+| (A |*| Source[A])
+
+    def fromFollower[A]: StreamFollower[Done, A] -⚬ Source[A] = id
+    def toFollower[A]  : Source[A] -⚬ StreamFollower[Done, A] = id
+
+    def pack[A]: (Done |&| Polled[A]) -⚬ Source[A] =
+      dsl.pack[StreamFollowerF[Done, A, _]]
+
+    def unpack[A]: Source[A] -⚬ (Done |&| Polled[A]) =
+      dsl.unpack[StreamFollowerF[Done, A, _]]
 
     def from[A, B](
       onClose: A -⚬ Done,
-      onPoll: A -⚬ LPolled[B],
-    ): A -⚬ LPollable[B] =
+      onPoll: A -⚬ Polled[B],
+    ): A -⚬ Source[B] =
       choice(onClose, onPoll) > pack
 
-    def close[A]: LPollable[A] -⚬ Done =
-      id                       [    LPollable[A]     ]
-        .unpack             .to[ Done |&| LPolled[A] ]
-        .chooseL            .to[ Done                ]
+    def close[A]: Source[A] -⚬ Done =
+      id                       [    Source[A]       ]
+        .unpack             .to[ Done |&| Polled[A] ]
+        .chooseL            .to[ Done               ]
 
-    def poll[A]: LPollable[A] -⚬ LPolled[A] =
-      id                       [    LPollable[A]     ]
-        .unpack             .to[ Done |&| LPolled[A] ]
-        .chooseR            .to[          LPolled[A] ]
+    def poll[A]: Source[A] -⚬ Polled[A] =
+      id                       [    Source[A]       ]
+        .unpack             .to[ Done |&| Polled[A] ]
+        .chooseR            .to[          Polled[A] ]
 
-    def delayedPoll[A: Junction.Positive]: (Done |*| LPollable[A]) -⚬ LPolled[A] =
-      id                                       [ Done |*|     LPollable[A]      ]
-        .>.snd(unpack)                      .to[ Done |*| (Done |&| LPolled[A]) ]
-        .>(chooseRWhenDone)                 .to[ Done |*|           LPolled[A]  ]
-        .>(LPolled.delayBy[A])              .to[                    LPolled[A]  ]
+    def delayedPoll[A: Junction.Positive]: (Done |*| Source[A]) -⚬ Polled[A] =
+      id                                       [ Done |*|     Source[A]        ]
+        .>.snd(unpack)                      .to[ Done |*| (Done |&| Polled[A]) ]
+        .>(chooseRWhenDone)                 .to[ Done |*|           Polled[A]  ]
+        .>(Polled.delayBy[A])               .to[                    Polled[A]  ]
 
     /** Polls and discards all elements. */
-    def drain[A](implicit A: PComonoid[A]): LPollable[A] -⚬ Done =
+    def drain[A](implicit A: PComonoid[A]): Source[A] -⚬ Done =
       rec { self =>
         poll[A] > either(id, joinMap(A.counit, self))
       }
 
-    def emptyF[A]: Done -⚬ LPollableF[A, LPollable[A]] =
-      choice[Done, Done, LPolled[A]](id, injectL)
+    private def emptyF[A]: Done -⚬ StreamFollowerF[Done, A, Source[A]] =
+      choice[Done, Done, Polled[A]](id, injectL)
 
-    def empty[A]: Done -⚬ LPollable[A] =
+    def empty[A]: Done -⚬ Source[A] =
       emptyF[A].pack
 
-    def cons[A](implicit A: PAffine[A]): (A |*| LPollable[A]) -⚬ LPollable[A] = {
-      val onClose: (A |*| LPollable[A]) -⚬ Done       = joinMap(A.neglect, LPollable.close)
-      val onPoll:  (A |*| LPollable[A]) -⚬ LPolled[A] = LPolled.cons
+    def cons[A](implicit A: PAffine[A]): (A |*| Source[A]) -⚬ Source[A] = {
+      val onClose: (A |*| Source[A]) -⚬ Done      = joinMap(A.neglect, Source.close)
+      val onPoll:  (A |*| Source[A]) -⚬ Polled[A] = Polled.cons
       from(onClose, onPoll)
     }
 
-    def fromLList[A](implicit A: PAffine[A]): LList[A] -⚬ LPollable[A] = rec { self =>
+    def fromLList[A](implicit A: PAffine[A]): LList[A] -⚬ Source[A] = rec { self =>
       LList.switch(
-        caseNil  = done          > LPollable.empty[A],
-        caseCons = par(id, self) > LPollable.cons[A],
+        caseNil  = done          > Source.empty[A],
+        caseCons = par(id, self) > Source.cons[A],
       )
     }
 
-    def of[A](as: (One -⚬ A)*)(implicit A: PAffine[A]): One -⚬ LPollable[A] =
+    def of[A](as: (One -⚬ A)*)(implicit A: PAffine[A]): One -⚬ Source[A] =
       LList.of(as: _*) > fromLList
 
-    def repeatedly[A](f: Done -⚬ A): Done -⚬ LPollable[A] = rec { self =>
+    def repeatedly[A](f: Done -⚬ A): Done -⚬ Source[A] = rec { self =>
       from(
         onClose = id[Done],
-        onPoll = forkMap(f, self) > LPolled.cons,
+        onPoll = forkMap(f, self) > Polled.cons,
       )
     }
 
     /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative ([[Pong]]) signal. */
-    def notifyAction[A]: (Pong |*| LPollable[A]) -⚬ LPollable[A] =
-      id                                     [             LPollable[A]       ]
-        .<(pack)                        .from[           Done |&| LPolled[A]  ]
-        .<(notifyChoice)                .from[ Pong |*| (Done |&| LPolled[A]) ]
-        .<(par(id, unpack))             .from[ Pong |*|    LPollable[A]       ]
+    def notifyAction[A]: (Pong |*| Source[A]) -⚬ Source[A] =
+      id                                     [             Source[A]         ]
+        .<(pack)                        .from[           Done |&| Polled[A]  ]
+        .<(notifyChoice)                .from[ Pong |*| (Done |&| Polled[A]) ]
+        .<(par(id, unpack))             .from[ Pong |*|    Source[A]         ]
 
     /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */
-    def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPollable[A]) -⚬ LPollable[A] =
-      id                                           [  Done |*|     LPollable[A]                 ]
-        .>.snd(unpack)                          .to[  Done |*| (Done  |&|           LPolled[A]) ]
-        .>(delayChoiceUntilDone)                .to[ (Done |*|  Done) |&| (Done |*| LPolled[A]) ]
-        .bimap(join, LPolled.delayBy[A])        .to[       Done       |&|           LPolled[A]  ]
-        .pack[LPollableF[A, *]]                 .to[              LPollable[A]                  ]
+    def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| Source[A]) -⚬ Source[A] =
+      id                                           [  Done |*|      Source[A]                  ]
+        .>.snd(unpack)                          .to[  Done |*| (Done  |&|           Polled[A]) ]
+        .>(delayChoiceUntilDone)                .to[ (Done |*|  Done) |&| (Done |*| Polled[A]) ]
+        .bimap(join, Polled.delayBy[A])         .to[       Done       |&|           Polled[A]  ]
+        .pack[StreamFollowerF[Done, A, *]]      .to[               Source[A]                   ]
+
+    def delayable[A](using Junction.Positive[A]): Source[A] -⚬ (Need |*| Source[A]) =
+      λ { src =>
+        val (n |*| d) = one > lInvertSignal
+        n |*| ((d |*| src) > delayBy)
+      }
 
     /** Delays the final [[Done]] signal (signaling end of stream or completed [[close]]) until the given [[Done]]
       * signal completes.
       */
-    def delayClosedBy[A]: (Done |*| LPollable[A]) -⚬ LPollable[A] = rec { self =>
-      id                                               [  Done |*|     LPollable[A]                 ]
-        .>.snd(unpack)                              .to[  Done |*| (Done  |&|           LPolled[A]) ]
-        .>(coFactorL)                               .to[ (Done |*|  Done) |&| (Done |*| LPolled[A]) ]
-        .bimap(join, LPolled.delayClosedBy(self))   .to[       Done       |&|           LPolled[A]  ]
-        .pack[LPollableF[A, *]]                     .to[              LPollable[A]                  ]
+    def delayClosedBy[A]: (Done |*| Source[A]) -⚬ Source[A] = rec { self =>
+      id                                               [  Done |*|      Source[A]                  ]
+        .>.snd(unpack)                              .to[  Done |*| (Done  |&|           Polled[A]) ]
+        .>(coFactorL)                               .to[ (Done |*|  Done) |&| (Done |*| Polled[A]) ]
+        .bimap(join, Polled.delayClosedBy(self))   .to[       Done        |&|           Polled[A]  ]
+        .pack[StreamFollowerF[Done, A, *]]          .to[               Source[A]                   ]
     }
 
-    /** Blocks the first action ([[poll]] or [[close]]) on this [[LPollable]] until released. */
-    def detain[A: Junction.Positive]: LPollable[A] -⚬ Detained[LPollable[A]] =
+    /** Blocks the first action ([[poll]] or [[close]]) on this [[Source]] until released. */
+    def detain[A: Junction.Positive]: Source[A] -⚬ Detained[Source[A]] =
       Detained(delayBy)
 
     /** Delays the final [[Done]] signal resulting from [[close]] or end of stream. */
-    def detainClosed[A]: LPollable[A] -⚬ Detained[LPollable[A]] =
+    def detainClosed[A]: Source[A] -⚬ Detained[Source[A]] =
       Detained(delayClosedBy)
 
-    def map[A, B](f: A -⚬ B): LPollable[A] -⚬ LPollable[B] = rec { self =>
+    def map[A, B](f: A -⚬ B): Source[A] -⚬ Source[B] = rec { self =>
       from(close[A], poll[A].>.right(par(f, self)))
     }
 
-    def forEachSequentially[A: Junction.Positive](f: A -⚬ Done): LPollable[A] -⚬ Done = rec { self =>
-      val caseCons: (A |*| LPollable[A]) -⚬ Done =
-        par(f, id) > LPollable.delayBy[A] > self
+    def forEachSequentially[A: Junction.Positive](f: A -⚬ Done): Source[A] -⚬ Done = rec { self =>
+      val caseCons: (A |*| Source[A]) -⚬ Done =
+        par(f, id) > Source.delayBy[A] > self
 
-      poll[A] > LPolled.switch(caseEmpty = id[Done], caseCons)
+      poll[A] > Polled.switch(caseEmpty = id[Done], caseCons)
     }
 
-    /** The second [[LPollable]] is "detained" because that gives the client flexibility in how the [[Done]] signal resulting from
-      * the exhaustion of the first [[LPollable]] is awaited. For example, if polling of the second [[LPollable]]
-      * should be delayed until the first [[LPollable]] is completely shut down, the client can use [[detain]] to delay the
-      * second [[LPollable]]. If polling of the second [[LPollable]] should start as soon as it is known that there are
-      * no more elements in the first [[LPollable]], the client can use [[detainClosed]] to delay the second [[LPollable]].
+    /** The second [[Source]] is "detained" because that gives the client flexibility in how the [[Done]] signal resulting from
+      * the exhaustion of the first [[Source]] is awaited. For example, if polling of the second [[Source]]
+      * should be delayed until the first [[Source]] is completely shut down, the client can use [[detain]] to delay the
+      * second [[Source]]. If polling of the second [[Source]] should start as soon as it is known that there are
+      * no more elements in the first [[Source]], the client can use [[detainClosed]] to delay the second [[Source]]
+      * (this latter behavior is the behavior of [[concat]]).
       */
-    def concatenate[A]: (LPollable[A] |*| Detained[LPollable[A]]) -⚬ LPollable[A] = rec { self =>
-      val close: (LPollable[A] |*| Detained[LPollable[A]]) -⚬ Done =
-        joinMap(LPollable.close, Detained.releaseAsap > LPollable.close)
+    def concatenate[A]: (Source[A] |*| Detained[Source[A]]) -⚬ Source[A] = rec { self =>
+      val onClose: (Source[A] |*| Detained[Source[A]]) -⚬ Done =
+        joinMap(Source.close, Detained.releaseAsap > Source.close)
 
-      val poll: (LPollable[A] |*| Detained[LPollable[A]]) -⚬ LPolled[A] =
-        id                               [                                                LPollable[A]    |*| Detained[LPollable[A]]   ]
-          .>.fst(unpack)              .to[ (Done |&| (Done                   |+|  (A |*|  LPollable[A]))) |*| Detained[LPollable[A]]   ]
-          .>.fst(chooseR)             .to[           (Done                   |+|  (A |*|  LPollable[A]))  |*| Detained[LPollable[A]]   ]
-          .distributeR                .to[ (Done |*| Detained[LPollable[A]]) |+| ((A |*|  LPollable[A])   |*| Detained[LPollable[A]] ) ]
-          .>.left(Detained.releaseBy) .to[                    LPollable[A]   |+| ((A |*|  LPollable[A])   |*| Detained[LPollable[A]] ) ]
-          .>.left(LPollable.poll)     .to[                      LPolled[A]   |+| ((A |*|  LPollable[A])   |*| Detained[LPollable[A]] ) ]
-          .>.right(assocLR)           .to[                      LPolled[A]   |+| ( A |*| (LPollable[A]    |*| Detained[LPollable[A]])) ]
-          .>.right.snd(self)          .to[                      LPolled[A]   |+| ( A |*|            LPollable[A]                     ) ]
-          .>.right.injectR[Done]      .to[                      LPolled[A]   |+|     LPolled[A]                                        ]
-          .>(either(id, id))          .to[                               LPolled[A]                                                    ]
+      val onPoll: (Source[A] |*| Detained[Source[A]]) -⚬ Polled[A] =
+        λ { case src1 |*| detainedSrc2 =>
+          poll(src1) switch {
+            case Left(src1Closed) =>
+              val src2 = Detained.releaseBy(src1Closed |*| detainedSrc2)
+              poll(src2)
+            case Right(a |*| as) =>
+              Polled.cons(a |*| self(as |*| detainedSrc2))
+          }
+        }
 
-      from(close, poll)
+      from(onClose, onPoll)
     }
 
-    def concat[A]: (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A] =
+    def concat[A]: (Source[A] |*| Source[A]) -⚬ Source[A] =
       id.>.snd(detainClosed) > concatenate
 
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
@@ -169,294 +206,244 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       * Polls the upstream only after ''both'' downstreams poll.
       * When either of the downstreams closes, the other downstream and the upstream are closed as well.
       */
-    def partition[A, B]: LPollable[A |+| B] -⚬ (LPollable[A] |*| LPollable[B]) = rec { self =>
-      val fstClosed: LPollable[A |+| B] -⚬ (Done |*| LPollable[B]) =
+    def partition[A, B]: Source[A |+| B] -⚬ (Source[A] |*| Source[B]) = rec { partition =>
+      val fstClosed: Source[A |+| B] -⚬ (Done |*| Source[B]) =
         close[A |+| B].introSnd(done > empty[B])
 
-      val sndClosed: LPollable[A |+| B] -⚬ (LPolled[A] |*| Done) =
-        close[A |+| B].introFst(done > LPolled.empty[A])
+      val sndClosed: Source[A |+| B] -⚬ (Polled[A] |*| Done) =
+        close[A |+| B].introFst(done > Polled.empty[A])
 
-      val bothPolled: LPollable[A |+| B] -⚬ (LPolled[A] |*| LPolled[B]) = {
-        val upClosed: Done -⚬ (LPolled[A] |*| LPolled[B]) =
-          forkMap(LPolled.empty[A], LPolled.empty[B])
+      val bothPolled: Source[A |+| B] -⚬ (Polled[A] |*| Polled[B]) =
+        λ { src =>
+          poll(src) switch {
+            case Left(+(closed)) =>
+              Polled.empty[A](closed) |*| Polled.empty[B](closed)
+            case Right(h |*| t) =>
+              val (ta |*| tb) = partition(t)
+              h switch {
+                case Left(a)  => Polled.cons(a |*| ta) |*| poll(tb)
+                case Right(b) => poll(ta) |*| Polled.cons(b |*| tb)
+              }
+          }
+        }
 
-        val upValue: ((A |+| B) |*| LPollable[A |+| B]) -⚬ (LPolled[A] |*| LPolled[B]) =
-          id                                 [ (A                                      |+|  B) |*|         LPollable[A |+| B]       ]
-            .>.snd(self)                  .to[ (A                                      |+|  B) |*| (LPollable[A] |*| LPollable[B])  ]
-            .distributeR                  .to[ (A |*| (LPollable[A] |*| LPollable[B])) |+| (B  |*| (LPollable[A] |*| LPollable[B])) ]
-            .>.left(assocRL)              .to[ ((A |*| LPollable[A]) |*| LPollable[B]) |+| (B  |*| (LPollable[A] |*| LPollable[B])) ]
-            .>.right(XI)                  .to[ ((A |*| LPollable[A]) |*| LPollable[B]) |+| (LPollable[A] |*|  (B |*| LPollable[B])) ]
-            .> .left.fst(LPolled.cons)    .to[ (  LPolled[A]         |*| LPollable[B]) |+| (LPollable[A] |*|  (B |*| LPollable[B])) ]
-            .>.right.snd(LPolled.cons)    .to[ (  LPolled[A]         |*| LPollable[B]) |+| (LPollable[A] |*|    LPolled[B]        ) ]
-            .> .left.snd(poll)            .to[ (  LPolled[A]         |*|   LPolled[B]) |+| (LPollable[A] |*|    LPolled[B]        ) ]
-            .>.right.fst(poll)            .to[ (  LPolled[A]         |*|   LPolled[B]) |+| (  LPolled[A] |*|    LPolled[B]        ) ]
-            .either(id, id)
+      val fstPolled: Source[A |+| B] -⚬ (Polled[A] |*| Source[B]) =
+        id                                   [                  Source[A |+| B]                   ]
+          .choice(sndClosed, bothPolled)  .to[ (Polled[A] |*| Done) |&| (Polled[A] |*| Polled[B]) ]
+          .coDistributeL                  .to[  Polled[A] |*| (Done |&|                Polled[B]) ]
+          .>.snd(pack)                    .to[  Polled[A] |*|    Source[B]                        ]
 
-        id                                   [   LPollable[A |+| B]                        ]
-          .>(poll)                        .to[ Done |+| ((A |+| B) |*| LPollable[A |+| B]) ]
-          .either(upClosed, upValue)      .to[         LPolled[A] |*| LPolled[B]           ]
-      }
-
-      val fstPolled: LPollable[A |+| B] -⚬ (LPolled[A] |*| LPollable[B]) =
-        id                                   [                 LPollable[A |+| B]                    ]
-          .choice(sndClosed, bothPolled)  .to[ (LPolled[A] |*| Done) |&| (LPolled[A] |*| LPolled[B]) ]
-          .coDistributeL                  .to[  LPolled[A] |*| (Done |&|                 LPolled[B]) ]
-          .>.snd(pack)                    .to[  LPolled[A] |*|   LPollable[B]                        ]
-
-      id                                 [                   LPollable[A |+| B]                      ]
-        .choice(fstClosed, fstPolled) .to[ (Done |*| LPollable[B]) |&| (LPolled[A] |*| LPollable[B]) ]
-        .coDistributeR                .to[ (Done                   |&| LPolled[A]) |*| LPollable[B]  ]
-        .>.fst(pack)                  .to[                     LPollable[A]        |*| LPollable[B]  ]
+      id                                 [                  Source[A |+| B]                   ]
+        .choice(fstClosed, fstPolled) .to[ (Done |*| Source[B]) |&| (Polled[A] |*| Source[B]) ]
+        .coDistributeR                .to[ (Done                |&| Polled[A]) |*| Source[B]  ]
+        .>.fst(pack)                  .to[                     Source[A]       |*| Source[B]  ]
     }
 
-    /** Merges two [[LPollable]]s into one.
+    /** Merges two [[Source]]s into one.
       * Left-biased: when there is a value available from both upstreams, favors the first one.
       */
     def merge[A](implicit
       A1: Junction.Positive[A],
       A2: PAffine[A],
-    ): (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A] = rec { self =>
-      val onClose: (LPollable[A] |*| LPollable[A]) -⚬ Done       = joinMap(close, close)
-      val onPoll : (LPollable[A] |*| LPollable[A]) -⚬ LPolled[A] = par(poll, poll) > LPolled.merge(self)
+    ): (Source[A] |*| Source[A]) -⚬ Source[A] = rec { self =>
+      val onClose: (Source[A] |*| Source[A]) -⚬ Done      = joinMap(close, close)
+      val onPoll : (Source[A] |*| Source[A]) -⚬ Polled[A] = par(poll, poll) > Polled.merge(self)
       from(onClose, onPoll)
     }
 
-    /** Merges a list of [[LPollable]]s into a single [[LPollable]].
+    /** Merges a list of [[Source]]s into a single [[Source]].
       * Head-biased: when there is an element available from multiple upstreams, favors the upstream closest to the
       * head of the input list.
       */
     def mergeAll[A](implicit
       A1: Junction.Positive[A],
       A2: PAffine[A],
-    ): LList[LPollable[A]] -⚬ LPollable[A] =
+    ): LList[Source[A]] -⚬ Source[A] =
       rec { self =>
         LList.switch(
-          caseNil = done > LPollable.empty,
+          caseNil = done > Source.empty,
           caseCons = par(id, self) > merge,
         )
       }
 
-    implicit def positiveJunction[A](implicit A: Junction.Positive[A]): Junction.Positive[LPollable[A]] =
-      Junction.Positive.from(LPollable.delayBy)
+    implicit def positiveJunction[A](implicit A: Junction.Positive[A]): Junction.Positive[Source[A]] =
+      Junction.Positive.from(Source.delayBy)
 
-    implicit def negativeSignaling[A]: Signaling.Negative[LPollable[A]] =
-      Signaling.Negative.from(LPollable.notifyAction[A])
+    implicit def negativeSignaling[A]: Signaling.Negative[Source[A]] =
+      Signaling.Negative.from(Source.notifyAction[A])
 
-    implicit def negativeLPollable[A](implicit A: Junction.Positive[A]): SignalingJunction.Negative[LPollable[A]] =
+    implicit def negativeSource[A](implicit A: Junction.Positive[A]): SignalingJunction.Negative[Source[A]] =
       SignalingJunction.Negative.from(
         negativeSignaling,
         Junction.invert(positiveJunction),
       )
 
-    implicit def pAffineLPollable[A]: PAffine[LPollable[A]] =
-      PAffine.from(LPollable.close)
-  }
+    implicit def pAffineSource[A]: PAffine[Source[A]] =
+      PAffine.from(Source.close)
 
-  object LPolled {
-    def close[A](neglect: A -⚬ Done): LPolled[A] -⚬ Done =
-      either(id, joinMap(neglect, LPollable.close))
+    object Polled {
+      def close[A](neglect: A -⚬ Done): Polled[A] -⚬ Done =
+        either(id, joinMap(neglect, Source.close))
 
-    def empty[A]: Done -⚬ LPolled[A] =
-      injectL
+      def empty[A]: Done -⚬ Polled[A] =
+        injectL
 
-    def cons[A]: (A |*| LPollable[A]) -⚬ LPolled[A] =
-      injectR
+      def cons[A]: (A |*| Source[A]) -⚬ Polled[A] =
+        injectR
 
-    def switch[A, R](
-      caseEmpty: Done -⚬ R,
-      caseCons: (A |*| LPollable[A]) -⚬ R,
-    ): LPolled[A] -⚬ R = {
-      either(caseEmpty, caseCons)
-    }
-
-    def unpoll[A](implicit A: PAffine[A]): LPolled[A] -⚬ LPollable[A] =
-      LPollable.from(close(A.neglect), id)
-
-    def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| LPolled[A]) -⚬ LPolled[A] =
-      id[Done |*| LPolled[A]]         .to[  Done |*| (Done |+|           (A |*| LPollable[A])) ]
-        .distributeL                  .to[ (Done |*| Done) |+| (Done |*| (A |*| LPollable[A])) ]
-        .>.left(join)                 .to[      Done       |+| (Done |*| (A |*| LPollable[A])) ]
-        .>.right(assocRL)             .to[      Done       |+| ((Done |*| A) |*| LPollable[A]) ]
-        .>.right.fst(ev.awaitPosFst)  .to[      Done       |+| (          A  |*| LPollable[A]) ]
-
-    def delayClosedBy[A](
-      delayLPollableClosed: (Done |*| LPollable[A]) -⚬ LPollable[A],
-    ): (Done |*| LPolled[A]) -⚬ LPolled[A] =
-      id[Done |*| LPolled[A]]               .to[  Done |*| (Done |+|           (A |*| LPollable[A])) ]
-        .distributeL                        .to[ (Done |*| Done) |+| (Done |*| (A |*| LPollable[A])) ]
-        .>.left(join)                       .to[      Done       |+| (Done |*| (A |*| LPollable[A])) ]
-        .>.right(XI)                        .to[      Done       |+| (A |*| (Done |*| LPollable[A])) ]
-        .>.right.snd(delayLPollableClosed)  .to[      Done       |+| (A |*|           LPollable[A] ) ]
-
-    def feedTo[A, B](
-      f: (A |*| B) -⚬ PMaybe[B],
-    ): (LPolled[A] |*| B) -⚬ (Done |*| Maybe[B]) = rec { self =>
-      val upstreamValue: ((A |*| LPollable[A]) |*| B) -⚬ (Done |*| Maybe[B]) = {
-        val caseStop: (LPollable[A] |*| Done) -⚬ (Done |*| Maybe[B]) =
-          joinMap(LPollable.close, id) > introSnd(Maybe.empty[B])
-        val caseCont: (LPollable[A] |*| B) -⚬ (Done |*| Maybe[B]) =
-          par(LPollable.poll, id) > self
-        id                                             [ (     A       |*| LPollable[A]) |*| B  ]
-          .>.fst(swap)                              .to[ (LPollable[A] |*|      A      ) |*| B  ]
-          .assocLR                                  .to[  LPollable[A] |*| (    A        |*| B) ]
-          .>.snd(f)                                 .to[  LPollable[A] |*|           PMaybe[B]  ]
-          .>(PMaybe.switchWithL(caseStop, caseCont)).to[             Done |*| Maybe[B]          ]
+      def switch[A, R](
+        caseEmpty: Done -⚬ R,
+        caseCons: (A |*| Source[A]) -⚬ R,
+      ): Polled[A] -⚬ R = {
+        either(caseEmpty, caseCons)
       }
 
-      val upstreamClosed: (Done |*| B) -⚬ (Done |*| Maybe[B]) =
-        par(id, Maybe.just)
+      def unpoll[A](implicit A: PAffine[A]): Polled[A] -⚬ Source[A] =
+        Source.from(close(A.neglect), id)
 
-      id[ (Done |+| (A |*| LPollable[A])) |*| B ]
-        .distributeR
-        .either(upstreamClosed, upstreamValue)
-    }
+      def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| Polled[A]) -⚬ Polled[A] =
+        id[Done |*| Polled[A]]          .to[  Done |*| (Done |+|           (A |*| Source[A])) ]
+          .distributeL                  .to[ (Done |*| Done) |+| (Done |*| (A |*| Source[A])) ]
+          .>.left(join)                 .to[      Done       |+| (Done |*| (A |*| Source[A])) ]
+          .>.right(assocRL)             .to[      Done       |+| ((Done |*| A) |*| Source[A]) ]
+          .>.right.fst(ev.awaitPosFst)  .to[      Done       |+| (          A  |*| Source[A]) ]
 
-    implicit def positiveLPolled[A](implicit A: Junction.Positive[A]): SignalingJunction.Positive[LPolled[A]] =
-      SignalingJunction.Positive.eitherPos(
-        SignalingJunction.Positive.signalingJunctionPositiveDone,
-        Junction.Positive.byFst(A),
-      )
+      def delayClosedBy[A](
+        delaySourceClosed: (Done |*| Source[A]) -⚬ Source[A],
+      ): (Done |*| Polled[A]) -⚬ Polled[A] =
+        id[Done |*| Polled[A]]                .to[  Done |*| (Done |+|           (A |*| Source[A])) ]
+          .distributeL                        .to[ (Done |*| Done) |+| (Done |*| (A |*| Source[A])) ]
+          .>.left(join)                       .to[      Done       |+| (Done |*| (A |*| Source[A])) ]
+          .>.right(XI)                        .to[      Done       |+| (A |*| (Done |*| Source[A])) ]
+          .>.right.snd(delaySourceClosed)     .to[      Done       |+| (A |*|           Source[A] ) ]
 
-    /** Merges two [[LPolled]]s into one.
-      * Left-biased: whenever there is a value available from both upstreams, favors the first one.
-      *
-      * @param mergePollables left-biased merge of two [[LPollable]]s.
-      */
-    def merge[A](
-      mergePollables: (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A],
-    )(implicit
-      A1: Junction.Positive[A],
-      A2: PAffine[A],
-    ): (LPolled[A] |*| LPolled[A]) -⚬ LPolled[A] = {
-      // checks the first argument first, uses the given function for recursive calls
-      def go(merge: (LPollable[A] |*| LPollable[A]) -⚬ LPollable[A]): (LPolled[A] |*| LPolled[A]) -⚬ LPolled[A] =
-        id[LPolled[A] |*| LPolled[A]] .to[ (Done                 |+|  (A |*| LPollable[A])) |*| LPolled[A]     ]
-          .distributeR                .to[ (Done |*| LPolled[A]) |+| ((A |*| LPollable[A])  |*| LPolled[A]   ) ]
-          .>.left(delayBy[A])         .to[           LPolled[A]  |+| ((A |*| LPollable[A])  |*| LPolled[A]   ) ]
-          .>.right.snd(unpoll)        .to[           LPolled[A]  |+| ((A |*| LPollable[A])  |*| LPollable[A] ) ]
-          .>.right.assocLR            .to[           LPolled[A]  |+| ( A |*| (LPollable[A]  |*| LPollable[A])) ]
-          .>.right.snd(merge)         .to[           LPolled[A]  |+| ( A |*|           LPollable[A]          ) ]
-          .>.right(cons)              .to[           LPolled[A]  |+|     LPolled[A]                            ]
-          .either(id, id)             .to[                   LPolled[A]                                        ]
+      def feedTo[A, B](
+        f: (A |*| B) -⚬ PMaybe[B],
+      ): (Polled[A] |*| B) -⚬ (Done |*| Maybe[B]) = rec { self =>
+        val upstreamValue: ((A |*| Source[A]) |*| B) -⚬ (Done |*| Maybe[B]) = {
+          val caseStop: (Source[A] |*| Done) -⚬ (Done |*| Maybe[B]) =
+            joinMap(Source.close, id) > introSnd(Maybe.empty[B])
+          val caseCont: (Source[A] |*| B) -⚬ (Done |*| Maybe[B]) =
+            par(Source.poll, id) > self
+          id                                             [ (     A    |*| Source[A]) |*| B  ]
+            .>.fst(swap)                              .to[ (Source[A] |*|     A    ) |*| B  ]
+            .assocLR                                  .to[  Source[A] |*| (   A      |*| B) ]
+            .>.snd(f)                                 .to[  Source[A] |*|        PMaybe[B]  ]
+            .>(PMaybe.switchWithL(caseStop, caseCont)).to[         Done |*| Maybe[B]        ]
+        }
 
-      // checks the first argument first
-      val goFst: (LPolled[A] |*| LPolled[A]) -⚬ LPolled[A] = go(mergePollables)
+        val upstreamClosed: (Done |*| B) -⚬ (Done |*| Maybe[B]) =
+          par(id, Maybe.just)
 
-      // checks the second argument first
-      val goSnd: (LPolled[A] |*| LPolled[A]) -⚬ LPolled[A] =
-        swap > go(swap > mergePollables)
-
-      race(goFst, goSnd)
-    }
-  }
-
-  object LSubscriber {
-    def unsubscribed[A]: Need -⚬ LSubscriber[A] =
-      injectL > pack[LSubscriberF[A, *]]
-
-    def close[A]: LSubscriber[A] -⚬ Need =
-      unpack[LSubscriberF[A, *]] > either(id, chooseL)
-
-    def switch[A, R](
-      onDemand      : LDemanding[A] -⚬ R,
-      onUnsubscribe :          Need -⚬ R,
-    ): LSubscriber[A] -⚬ R =
-      unpack > either(onUnsubscribe, onDemand)
-
-    implicit def positiveLSubscriberF[A, X](implicit A: Junction.Negative[A]): SignalingJunction.Positive[LSubscriberF[A, X]] =
-      SignalingJunction.Positive.eitherNeg(
-        Junction.Negative.junctionNeed,
-        Junction.Negative.delayChoice(
-          Junction.Negative.junctionNeed,
-          Junction.Negative.byFst(A),
-        ),
-      )
-
-    implicit def universalPositiveLSubscriberF[A](implicit A: Junction.Negative[A]): ∀[λ[x => SignalingJunction.Positive[LSubscriberF[A, x]]]] =
-      new ∀[λ[x => SignalingJunction.Positive[LSubscriberF[A, x]]]] {
-        def apply[X]: SignalingJunction.Positive[LSubscriberF[A, X]] =
-          positiveLSubscriberF[A, X]
+        id[ (Done |+| (A |*| Source[A])) |*| B ]
+          .distributeR
+          .either(upstreamClosed, upstreamValue)
       }
 
-    implicit def positiveLSubscriber[A](implicit A: Junction.Negative[A]): SignalingJunction.Positive[LSubscriber[A]] =
-      SignalingJunction.Positive.rec[LSubscriberF[A, *]](universalPositiveLSubscriberF)
+      implicit def positivePolled[A](implicit A: Junction.Positive[A]): SignalingJunction.Positive[Polled[A]] =
+        SignalingJunction.Positive.eitherPos(
+          SignalingJunction.Positive.signalingJunctionPositiveDone,
+          Junction.Positive.byFst(A),
+        )
 
-    implicit def nAffineLSubscriber[A]: NAffine[LSubscriber[A]] =
-      NAffine.from(LSubscriber.close)
+      /** Merges two [[Polled]]s into one.
+        * Left-biased: whenever there is a value available from both upstreams, favors the first one.
+        *
+        * @param mergeSources left-biased merge of two [[Source]]s.
+        */
+      def merge[A](
+        mergeSources: (Source[A] |*| Source[A]) -⚬ Source[A],
+      )(implicit
+        A1: Junction.Positive[A],
+        A2: PAffine[A],
+      ): (Polled[A] |*| Polled[A]) -⚬ Polled[A] = {
+        // checks the first argument first, uses the given function for recursive calls
+        def go(merge: (Source[A] |*| Source[A]) -⚬ Source[A]): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
+          id[Polled[A] |*| Polled[A]]   .to[ (Done                |+|  (A |*| Source[A])) |*| Polled[A]   ]
+            .distributeR                .to[ (Done |*| Polled[A]) |+| ((A |*| Source[A])  |*| Polled[A] ) ]
+            .>.left(delayBy[A])         .to[           Polled[A]  |+| ((A |*| Source[A])  |*| Polled[A] ) ]
+            .>.right.snd(unpoll)        .to[           Polled[A]  |+| ((A |*| Source[A])  |*| Source[A] ) ]
+            .>.right.assocLR            .to[           Polled[A]  |+| ( A |*| (Source[A]  |*| Source[A])) ]
+            .>.right.snd(merge)         .to[           Polled[A]  |+| ( A |*|           Source[A]       ) ]
+            .>.right(cons)              .to[           Polled[A]  |+|     Polled[A]                       ]
+            .either(id, id)             .to[                   Polled[A]                                  ]
+
+        // checks the first argument first
+        val goFst: (Polled[A] |*| Polled[A]) -⚬ Polled[A] = go(mergeSources)
+
+        // checks the second argument first
+        val goSnd: (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
+          swap > go(swap > mergeSources)
+
+        raceSwitch(goFst, goSnd)
+      }
+    }
   }
 
-  object LDemanding {
-    def exposeDemand[A]: LDemanding[A] -⚬ (A |*| LSubscriber[A]) =
-      chooseR
-
-    def supply[A, B](rInvert: (A |*| B) -⚬ One): (A |*| LDemanding[B]) -⚬ (Need |+| LDemanding[B]) =
-      id                                 [  A |*|  LDemanding[B]           ]
-        .>.snd(exposeDemand)          .to[  A |*| (B  |*| LSubscriber[B])  ]
-        .assocRL                      .to[ (A |*|  B) |*| LSubscriber[B]   ]
-        .elimFst(rInvert)             .to[                LSubscriber[B]   ]
-        .unpack[LSubscriberF[B, *]]   .to[          Need |+| LDemanding[B] ]
-
-    implicit def negativeLDemanding[A](implicit A: Junction.Negative[A]): SignalingJunction.Negative[LDemanding[A]] =
-      SignalingJunction.Negative.choiceNeg(
-        SignalingJunction.Negative.signalingJunctionNegativeNeed,
-        Junction.Negative.byFst(A),
-      )
-  }
-
-  def rInvertLSubscriberF[A, B, x, y](
+  private def rInvertLeaderF[T, U, A, B, x, y](
+    rInvertT: (T |*| U) -⚬ One,
     rInvertA: (A |*| B) -⚬ One,
     rInvertSub: (x |*| y) -⚬ One,
-  ): (LSubscriberF[B, y] |*| LPollableF[A, x]) -⚬ One =
+  ): (StreamLeaderF[T, A, x] |*| StreamFollowerF[U, B, y]) -⚬ One =
     rInvertEither(
-      swap > rInvertSignal,
+      rInvertT,
       swap > rInvertEither(
-        rInvertSignal,
-        rInvertPair(
+        swap > rInvertT,
+        swap > rInvertPair(
           rInvertA,
           rInvertSub
         )
       )
     )
 
-  def rInvertLSubscriber[A, B](
+  def rInvertLeader[T, U, A, B](
+    rInvertT: (T |*| U) -⚬ One,
     rInvertElem: (A |*| B) -⚬ One,
-  ): (LSubscriber[B] |*| LPollable[A]) -⚬ One =
-    rInvertRec[LSubscriberF[B, *], LPollableF[A, *]](
+  ): (StreamLeader[T, A] |*| StreamFollower[U, B]) -⚬ One =
+    rInvertRec[StreamLeaderF[T, A, _], StreamFollowerF[U, B, _]](
       [X, Y] => (rInvertSub: (X |*| Y) -⚬ One) =>
-        rInvertLSubscriberF(rInvertElem, swap > rInvertSub)
+        rInvertLeaderF(rInvertT, rInvertElem, rInvertSub)
     )
 
-  def lInvertLPollableF[A, B, x, y](
-    lInvertA: One -⚬ (B |*| A),
-    lInvertSub: One -⚬ (y |*| x),
-  ): One -⚬ (LPollableF[A, x] |*| LSubscriberF[B, y]) =
+  private def lInvertFollowerF[T, U, A, B, x, y](
+    lInvertT: One -⚬ (T |*| U),
+    lInvertA: One -⚬ (A |*| B),
+    lInvertSub: One -⚬ (x |*| y),
+  ): One -⚬ (StreamFollowerF[T, A, x] |*| StreamLeaderF[U, B, y]) =
     lInvertChoice(
-      lInvertSignal > swap,
+      lInvertT,
       lInvertChoice(
-        lInvertSignal,
+        lInvertT > swap,
         lInvertPair(
           lInvertA,
           lInvertSub
-        )
+        ) > swap
       ) > swap
     )
 
-  def lInvertLPollable[A, B](
-    lInvertElem: One -⚬ (B |*| A),
-  ): One -⚬ (LPollable[A] |*| LSubscriber[B]) =
-    lInvertRec[LPollableF[A, *], LSubscriberF[B, *]](
+  def lInvertFollower[T, U, A, B](
+    lInvertT: One -⚬ (T |*| U),
+    lInvertElem: One -⚬ (A |*| B),
+  ): One -⚬ (StreamFollower[T, A] |*| StreamLeader[U, B]) =
+    lInvertRec[StreamFollowerF[T, A, _], StreamLeaderF[U, B, _]](
       [X, Y] => (lInvertSub: One -⚬ (X |*| Y)) =>
-        lInvertLPollableF(lInvertElem, lInvertSub > swap)
+        lInvertFollowerF(lInvertT, lInvertElem, lInvertSub)
     )
 
-  implicit def subscriberPollableDuality[A, B](implicit AB: Dual[A, B]): Dual[LSubscriber[B], LPollable[A]] =
-    new Dual[LSubscriber[B], LPollable[A]] {
-      val rInvert: (LSubscriber[B] |*| LPollable[A]) -⚬ One =
-        rInvertLSubscriber(AB.rInvert)
-      val lInvert: One -⚬ (LPollable[A] |*| LSubscriber[B]) =
-        lInvertLPollable(AB.lInvert)
-    }
+  given leaderFollowerDuality[T, U, A, B](using
+    Dual[T, U],
+    Dual[A, B],
+  ): Dual[StreamLeader[T, A], StreamFollower[U, B]] with {
+    override val rInvert: (StreamLeader[T, A] |*| StreamFollower[U, B]) -⚬ One =
+      rInvertLeader(Dual[T, U].rInvert, Dual[A, B].rInvert)
 
-  implicit def pollableSubscriberDuality[A, B](implicit BA: Dual[B, A]): Dual[LPollable[B], LSubscriber[A]] =
-    dualSymmetric(subscriberPollableDuality[B, A])
+    override val lInvert: One -⚬ (StreamFollower[U, B] |*| StreamLeader[T, A]) =
+      lInvertFollower[U, T, B, A](Dual[T, U].lInvert, Dual[A, B].lInvert)
+  }
+
+  @deprecated("Renamed to Source")
+  type LPollable[A] = Source[A]
+
+  @deprecated("Renamed to Source")
+  val LPollable: Source.type = Source
 }

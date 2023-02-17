@@ -1,6 +1,7 @@
 package libretto
 
 import libretto.util.Async
+import scala.annotation.targetName
 
 /** Defines interface to interact with a running Libretto program. */
 trait CoreBridge {
@@ -38,6 +39,16 @@ trait CoreExecution[DSL <: CoreDSL] {
     def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A]
 
     def chooseRight[A, B](port: OutPort[A |&| B]): OutPort[B]
+  }
+
+  extension [A](port: OutPort[A]) {
+    @targetName("outPortMap")
+    def map[B](f: A -⚬ B): OutPort[B] =
+      OutPort.map(port)(f)
+
+    @targetName("outPortDiscard")
+    def discard(using ev: A =:= One): Unit =
+      OutPort.discardOne(ev.substituteCo(port))
   }
 
   trait InPorts {

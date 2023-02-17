@@ -81,6 +81,14 @@ trait TestKit {
         s"'$str' did not contain '$substr'",
       )
 
+    def flatMap[A, B](fa: Outcome[A])(f: A => Outcome[B]): Outcome[B] =
+      fa.flatMap {
+        case TestResult.Success(a)           => f(a)
+        case TestResult.Failure(msg, pos, e) => Async.now(TestResult.Failure(msg, pos, e))
+        case TestResult.Crash(e)             => Async.now(TestResult.Crash(e))
+        case TestResult.TimedOut(d)          => Async.now(TestResult.TimedOut(d))
+      }
+
     def traverseIterator[A, B](it: Iterator[A])(f: A => Outcome[B]): Outcome[List[B]] =
       if (it.hasNext) {
         monadOutcome.flatMap(f(it.next()))(b => monadOutcome.map(traverseIterator(it)(f))(b :: _))
@@ -99,7 +107,13 @@ trait TestKit {
 
     extension [A](outcome: Outcome[A]) {
       def assertEquals(using pos: SourcePos)(expected: A): Outcome[Unit] =
-        monadOutcome.flatMap(outcome)(a => Outcome.assertEquals(a, expected)(using pos))
+        Outcome.flatMap(outcome)(a => Outcome.assertEquals(a, expected)(using pos))
+
+      def withFilter(f: A => Boolean)(using pos: SourcePos): Outcome[A] =
+        Outcome.flatMap(outcome) { a =>
+          if (f(a)) Outcome.success(a)
+          else      Outcome.failure(using pos)(s"$a did not pass the filter")
+        }
     }
   }
 
@@ -127,12 +141,7 @@ trait TestKit {
       Async.now(TestResult.success(a))
 
     override def flatMap[A, B](fa: Outcome[A])(f: A => Outcome[B]): Outcome[B] =
-      fa.flatMap {
-        case TestResult.Success(a)           => f(a)
-        case TestResult.Failure(msg, pos, e) => Async.now(TestResult.Failure(msg, pos, e))
-        case TestResult.Crash(e)             => Async.now(TestResult.Crash(e))
-        case TestResult.TimedOut(d)          => Async.now(TestResult.TimedOut(d))
-      }
+      Outcome.flatMap(fa)(f)
   }
 
   def splitOut[A, B](using exn: Execution)(port: exn.OutPort[A |*| B]): Outcome[(exn.OutPort[A], exn.OutPort[B])] =

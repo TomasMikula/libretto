@@ -204,11 +204,25 @@ trait InvertDSL extends ClosedDSL {
   def unpackDemand[F[_]]: -[Rec[F]] -⚬ -[F[Rec[F]]] =
     contrapositive(pack[F])
 
-  implicit class DemandExprOps[B](expr: $[-[B]]) {
+  import $._
+  extension [A](a: $[A]) {
+    def supplyTo(out: $[-[A]])(using SourcePos, LambdaContext): $[One] =
+      (a |*| out) > supply
+  }
+
+  extension [B](expr: $[-[B]]) {
     def contramap[A](f: A -⚬ B)(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[-[A]] =
       $.map(expr)(contrapositive(f))(pos)
+
+    def unInvertWith[A](lInvert: One -⚬ (A |*| B))(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A] =
+      ($.one > lInvert) match {
+        case (a |*| b) => a alsoElim (b supplyTo expr)
+      }
   }
 }
