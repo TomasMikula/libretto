@@ -197,33 +197,26 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       * Polls the upstream only after ''both'' downstreams poll.
       * When either of the downstreams closes, the other downstream and the upstream are closed as well.
       */
-    def partition[A, B]: Source[A |+| B] -⚬ (Source[A] |*| Source[B]) = rec { self =>
+    def partition[A, B]: Source[A |+| B] -⚬ (Source[A] |*| Source[B]) = rec { partition =>
       val fstClosed: Source[A |+| B] -⚬ (Done |*| Source[B]) =
         close[A |+| B].introSnd(done > empty[B])
 
       val sndClosed: Source[A |+| B] -⚬ (Polled[A] |*| Done) =
         close[A |+| B].introFst(done > Polled.empty[A])
 
-      val bothPolled: Source[A |+| B] -⚬ (Polled[A] |*| Polled[B]) = {
-        val upClosed: Done -⚬ (Polled[A] |*| Polled[B]) =
-          forkMap(Polled.empty[A], Polled.empty[B])
-
-        val upValue: ((A |+| B) |*| Source[A |+| B]) -⚬ (Polled[A] |*| Polled[B]) =
-          id                                 [ (A                                |+|  B) |*|         Source[A |+| B]    ]
-            .>.snd(self)                  .to[ (A                                |+|  B) |*| (Source[A] |*| Source[B])  ]
-            .distributeR                  .to[ (A |*| (Source[A] |*| Source[B])) |+| (B  |*| (Source[A] |*| Source[B])) ]
-            .>.left(assocRL)              .to[ ((A |*| Source[A]) |*| Source[B]) |+| (B  |*| (Source[A] |*| Source[B])) ]
-            .>.right(XI)                  .to[ ((A |*| Source[A]) |*| Source[B]) |+| (Source[A] |*|  (B |*| Source[B])) ]
-            .> .left.fst(Polled.cons)     .to[ (  Polled[A]       |*| Source[B]) |+| (Source[A] |*|  (B |*| Source[B])) ]
-            .>.right.snd(Polled.cons)     .to[ (  Polled[A]       |*| Source[B]) |+| (Source[A] |*|     Polled[B]     ) ]
-            .> .left.snd(poll)            .to[ (  Polled[A]       |*| Polled[B]) |+| (Source[A] |*|     Polled[B]     ) ]
-            .>.right.fst(poll)            .to[ (  Polled[A]       |*| Polled[B]) |+| (Polled[A] |*|     Polled[B]     ) ]
-            .either(id, id)
-
-        id                                   [   Source[A |+| B]                        ]
-          .>(poll)                        .to[ Done |+| ((A |+| B) |*| Source[A |+| B]) ]
-          .either(upClosed, upValue)      .to[          Polled[A] |*| Polled[B]         ]
-      }
+      val bothPolled: Source[A |+| B] -⚬ (Polled[A] |*| Polled[B]) =
+        λ { src =>
+          poll(src) switch {
+            case Left(+(closed)) =>
+              Polled.empty[A](closed) |*| Polled.empty[B](closed)
+            case Right(h |*| t) =>
+              val (ta |*| tb) = partition(t)
+              h switch {
+                case Left(a)  => Polled.cons(a |*| ta) |*| poll(tb)
+                case Right(b) => poll(ta) |*| Polled.cons(b |*| tb)
+              }
+          }
+        }
 
       val fstPolled: Source[A |+| B] -⚬ (Polled[A] |*| Source[B]) =
         id                                   [                  Source[A |+| B]                   ]
