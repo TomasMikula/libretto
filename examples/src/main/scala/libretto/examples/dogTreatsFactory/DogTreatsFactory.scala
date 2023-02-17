@@ -103,7 +103,7 @@ object DogTreatsFactory {
                 case Left(done) =>
                   joinAll(done, neglect(biscuit3), neglect(b4)) > injectL
                 case Right(b5 |*| biscuits) =>
-                  val biscuit5 = (biscuit3 * b4 * b5) > mapVal { case (((b1, b2, b3), b4), b5) => (b1, b2, b3, b4, b5) }
+                  val biscuit5 = (biscuit3 ** b4 ** b5) > mapVal { case (((b1, b2, b3), b4), b5) => (b1, b2, b3, b4, b5) }
                   injectR(biscuit5 |*| biscuits)
               }
           }
