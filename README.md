@@ -1,6 +1,6 @@
 # Libretto
 
-[![Maven Central](https://maven-badges.herokuapp.com/maven-central/dev.continuously/libretto_3/badge.svg?style=flat-square)](https://search.maven.org/search?q=g:dev.continuously%20AND%20a:libretto*)
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/dev.continuously.libretto/libretto-core_3/badge.svg?style=flat-square)](https://central.sonatype.com/search?namespace=dev.continuously.libretto)
 
 Declarative concurrency and stream processing library for Scala.
 
@@ -136,10 +136,10 @@ Primitives for racing and recursion were added.
 
 ## Documentation
 
-[Scaladoc](https://continuously.dev/p/libretto/docs/latest/scaladoc/) (Found something undocumented or not documented clearly? We should do better. Do not hesitate to
+[Scaladoc](https://continuously.dev/libretto/docs/latest/scaladoc/) (Found something undocumented or not documented clearly? We should do better. Do not hesitate to
 [submit a documentation request](https://github.com/TomasMikula/libretto/issues/new?labels=documentation).)
 
-[Tutorial](https://continuously.dev/p/libretto/docs/latest/tutorial/basics.html)
+[Tutorial](https://continuously.dev/libretto/docs/latest/tutorial/basics.html)
 
 ## Caveats
 
@@ -263,10 +263,10 @@ They are composed of Libretto's linear functions `A -⚬ B`, which are linear by
 ### What exactly are the primitives of Libretto, from which everything else is derived?
 
 There is a hierarchy of DSLs, partially ordered by their power. At the bottom, i.e. the weakest, is currently
-[CoreDSL](https://continuously.dev/p/libretto/docs/latest/scaladoc/libretto/CoreDSL.html).
+[CoreDSL](https://continuously.dev/libretto/docs/latest/scaladoc/libretto/CoreDSL.html).
 
 An extension of `CoreDSL` that is of particular interest is
-[ScalaDSL](https://continuously.dev/p/libretto/docs/latest/scaladoc/libretto/ScalaDSL.html).
+[Scaletto](https://continuously.dev/libretto/docs/latest/scaladoc/libretto/scaletto/Scaletto.html).
 It adds support for using Scala values and pure Scala functions, managing resources that are Scala objects,
 performing effects on those resources, and marking thread-blocking Scala calls.
 
@@ -284,7 +284,7 @@ Yes, [loops can be implemented](https://github.com/TomasMikula/libretto/issues/1
 ### Is there support for timers?
 
 Yes, the basic operation is
-[delay](https://continuously.dev/p/libretto/docs/latest/scaladoc/libretto/TimerDSL.html#delay-fffffb21):
+[delay](https://continuously.dev/libretto/docs/latest/scaladoc/libretto/TimerDSL.html#delay-fffffb21):
 
 ```scala
 def delay(d: FiniteDuration): Done -⚬ Done
@@ -292,10 +292,10 @@ def delay(d: FiniteDuration): Done -⚬ Done
 
 ### How do I communicate with the external world (I/O)?
 
-[CoreDSL](https://continuously.dev/p/libretto/docs/latest/scaladoc/libretto/CoreDSL.html)
+[CoreDSL](https://continuously.dev/libretto/docs/latest/scaladoc/libretto/CoreDSL.html)
 does not have any means of I/O.
 
-Its extension, [ScalaDSL](https://continuously.dev/p/libretto/docs/latest/scaladoc/libretto/ScalaDSL.html),
+Its extension, [Scaletto](https://continuously.dev/libretto/docs/latest/scaladoc/libretto/scaletto/Scaletto.html),
 has means to wrap Scala resources and perform effects on them.
 
 Another approach, although much more involved, is to
@@ -486,6 +486,6 @@ but those are not among stated goals of the project.
 
 ## Copyright and License
 
-Copyright 2020–2022 Tomas Mikula
+Copyright 2020–2023 Tomas Mikula
 
 This software is distributed under the Mozilla Public License 2.0, see the LICENSE file for details.

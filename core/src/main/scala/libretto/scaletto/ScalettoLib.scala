@@ -2,7 +2,8 @@ package libretto.scaletto
 
 import java.util.concurrent.atomic.AtomicLong
 import libretto.CoreLib
-import libretto.util.{Async, SourcePos}
+import libretto.lambda.util.SourcePos
+import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 
@@ -531,7 +532,17 @@ class ScalettoLib[
   }
 
   extension [A](a: $[Val[A]])(using LambdaContext) {
-    def *[B](b: $[Val[B]])(using SourcePos): $[Val[(A, B)]] =
+    def **[B](b: $[Val[B]])(using SourcePos): $[Val[(A, B)]] =
       unliftPair(a |*| b)
+
+    @deprecated("Renamed to **")
+    def *[B](b: $[Val[B]])(using SourcePos): $[Val[(A, B)]] =
+      a ** b
+  }
+
+  object ** {
+    def unapply[A, B](ab: $[Val[(A, B)]])(using SourcePos, LambdaContext): ($[Val[A]], $[Val[B]]) =
+      val a |*| b = ab > liftPair
+      (a, b)
   }
 }

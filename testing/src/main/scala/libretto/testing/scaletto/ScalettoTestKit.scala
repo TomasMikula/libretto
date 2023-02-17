@@ -1,10 +1,10 @@
 package libretto.testing.scaletto
 
 import libretto.CoreLib
+import libretto.lambda.util.Monad.syntax._
 import libretto.scaletto.{Scaletto, ScalettoBridge}
 import libretto.testing.TestKit.dsl
 import libretto.testing.{TestKitOps, TestKitWithManualClock, TestResult}
-import libretto.util.Monad.syntax._
 
 trait ScalettoTestKit extends TestKitWithManualClock {
   override type Dsl <: Scaletto

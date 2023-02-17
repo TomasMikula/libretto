@@ -1,7 +1,7 @@
 package libretto.testing
 
+import libretto.lambda.util.SourcePos
 import libretto.testing.TestKit.dsl
-import libretto.util.SourcePos
 import scala.concurrent.duration._
 
 sealed trait TestCase[TK <: TestKit] {

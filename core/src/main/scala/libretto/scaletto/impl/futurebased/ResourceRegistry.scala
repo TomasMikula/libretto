@@ -10,7 +10,7 @@ private class ResourceRegistry {
   private var lastResId: Long =
     0L
 
-  private val resourceMap: mutable.Map[Long, AcquiredResource[_]] =
+  private val resourceMap: mutable.Map[Long, AcquiredResource[?]] =
     mutable.Map()
 
   def registerResource[R](resource: R, releaseAsync: R => Async[Unit]): RegisterResult =
@@ -39,7 +39,7 @@ private class ResourceRegistry {
       }
     }
 
-  def close(): Seq[AcquiredResource[_]] =
+  def close(): Seq[AcquiredResource[?]] =
     synchronized {
       if (lastResId < 0L) {
         assert(resourceMap.isEmpty)
@@ -68,7 +68,7 @@ private object ResourceRegistry {
 
   sealed trait UnregisterResult
   object UnregisterResult {
-    case class Unregistered(value: AcquiredResource[_]) extends UnregisterResult
+    case class Unregistered(value: AcquiredResource[?]) extends UnregisterResult
     case object NotFound extends UnregisterResult
     case object RegistryClosed extends UnregisterResult
   }

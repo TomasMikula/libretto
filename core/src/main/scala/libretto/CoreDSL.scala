@@ -1,6 +1,7 @@
 package libretto
 
-import libretto.util.{Equal, SourcePos}
+import libretto.lambda.util.SourcePos
+import libretto.util.Equal
 
 trait CoreDSL {
   /** Libretto arrow, also called a ''component'' or a ''linear function''.

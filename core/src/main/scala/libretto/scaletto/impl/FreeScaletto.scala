@@ -3,9 +3,10 @@ package libretto.scaletto.impl
 import libretto.scaletto.Scaletto
 import libretto.lambda.{ClosedSymmetricMonoidalCategory, Lambdas, LambdasImpl, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Abstracted
-import libretto.util.{Async, BiInjective, SourcePos, TypeEq}
-import libretto.util.Monad.monadEither
-import libretto.util.TypeEq.Refl
+import libretto.lambda.util.{BiInjective, SourcePos, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
+import libretto.lambda.util.Monad.monadEither
+import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 
 abstract class FreeScaletto {
@@ -510,10 +511,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
           f.fold
         case Closure(captured, f) =>
           val undefinedVars: Var.Set[VarOrigin] =
-            captured.foldMap0(
-              [X] => (x: lambdas.Expr[X]) => lambdas.Expr.initialVars(x),
-              _ merge _,
-            )
+            lambdas.Expr.initialVars(captured)
           raiseError(Lambdas.Error.Undefined(undefinedVars))
         case Failure(e) =>
           raiseError(e)
@@ -546,7 +544,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   private def zipExprs[A](es: Tupled[|*|, lambdas.Expr, A])(using lambdas.Context): lambdas.Expr[A] =
     es.fold([x, y] => (ex: lambdas.Expr[x], ey: lambdas.Expr[y]) => {
       val v = VarOrigin.Synthetic(s"auxiliary pairing of ($ex, $ey)")
-      lambdas.Expr.zip(ex, ey, v)
+      lambdas.Expr.zip(ex, ey)(v)
     })
 
   private def raiseError(e: Lambdas.Error[VarOrigin]): Nothing = {

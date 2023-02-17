@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.scaletto.StarterKit.scalettoStreams.Pollable
+import libretto.stream.scaletto.DefaultStreams.ValSource
 import libretto.util.Async
 import zio.{UIO, ZIO}
 import zio.stream.UStream
@@ -8,7 +8,7 @@ import zio.stream.UStream
 package object zio_interop {
 
   extension [A](stream: UStream[A]) {
-    def asPollable: Ztuff[Pollable[A]] =
+    def asPollable: Ztuff[ValSource[A]] =
       Ztuff.ZioUStream(stream)
   }
 

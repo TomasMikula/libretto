@@ -1,6 +1,6 @@
 package libretto.scaletto.impl
 
-import libretto.util.SourcePos
+import libretto.lambda.util.SourcePos
 
 sealed trait VarOrigin {
   import VarOrigin._

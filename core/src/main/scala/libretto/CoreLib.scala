@@ -1,8 +1,9 @@
 package libretto
 
 import libretto.lambda.Category
+import libretto.lambda.util.SourcePos
 import libretto.util.unapply._
-import libretto.util.{Equal, SourcePos, ∀}
+import libretto.util.{Equal, ∀}
 import scala.annotation.tailrec
 
 object CoreLib {
@@ -1103,13 +1104,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>(distributeR)                             .to[ (One |*| (A |*| B)) |+| (One |*| (A |*| B)) ]
       .>(|+|.bimap(elimFst, elimFst))             .to[          (A |*| B)  |+|          (A |*| B)  ]
 
-  def race[A, B](implicit
+  def raceBy[A](
+    notify: A -⚬ (Ping |*| A),
+  ): (A |*| A) -⚬ ((A |*| A) |+| (A |*| A)) =
+    raceBy(notify, notify)
+
+  def race[A, B](using
     A: Signaling.Positive[A],
     B: Signaling.Positive[B],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
     raceBy(A.notifyPosFst, B.notifyPosFst)
 
-  def race[A: Signaling.Positive, B: Signaling.Positive, C](
+  def raceSwitch[A: Signaling.Positive, B: Signaling.Positive, C](
     caseFstWins: (A |*| B) -⚬ C,
     caseSndWins: (A |*| B) -⚬ C,
   ): (A |*| B) -⚬ C =
@@ -1147,6 +1153,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>.fst(selectPair)                          .to[        (Pong |*| Pong) |*| (A |*| B)        ]
       .>(IXI)                                     .to[        (Pong |*| A) |*| (Pong |*| B)        ]
       .par(notifyA, notifyB)                      .to[                  A  |*|           B         ]
+
+  def selectBy[A](
+    notify: (Pong |*| A) -⚬ A,
+  ): ((A |*| A) |&| (A |*| A)) -⚬ (A |*| A) =
+    selectBy(notify, notify)
 
   def select[A, B](implicit
     A: Signaling.Negative[A],
@@ -1655,7 +1666,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     )(implicit
       ev: B =:= (B1 |*| B2),
     ): A -⚬ C =
-      ev.substituteCo(self) > lib.race(caseFstWins, caseSndWins)
+      ev.substituteCo(self) > lib.raceSwitch(caseFstWins, caseSndWins)
 
     def select[C1: Signaling.Negative, C2: Signaling.Negative](
       caseFstWins: B -⚬ (C1 |*| C2),
@@ -3386,7 +3397,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
      *  it also becomes available as the next element of the result list.
      */
     def merge[T]: (LList[T] |*| LList[T]) -⚬ LList[T] = rec { self =>
-      race(
+      raceSwitch(
         caseFstWins = switchWithR(
           caseNil = id[LList[T]],
           caseCons = assocLR > par(id, self) > cons,
@@ -3518,7 +3529,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def insertBySignal[T: Signaling.Positive]: (T |*| LList[T]) -⚬ LList1[T] = {
       import LList.signalingLList
 
-      race(
+      raceSwitch(
         caseFstWins = cons[T],
         caseSndWins = LList.switchWithL(
           caseNil = singleton[T],

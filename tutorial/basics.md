@@ -1020,32 +1020,36 @@ of the input variable `$[A]`) and infers a (point-free) Libretto function `A -�
 
 ```scala mdoc:compile-only
 // given
-val a: $[A]     = ???
-val b: $[B]     = ???
 val f: A -⚬ C   = ???
 val g: One -⚬ D = ???
 val h: B -⚬ One = ???
 
-// pair
-val ab: $[A |*| B] = a |*| b
+λ { (ab: $[A |*| B]) =>
+  // unpair
+  val ((a: $[A]) |*| (b: $[B])) = ab
 
-// unpair
-val ((a1: $[A]) |*| (b1: $[B])) = ab
+  // pair again
+  val ab1: $[A |*| B] = a |*| b
 
-// pass to a Libretto function
-val c1: $[C] = a > f
-// or equivalently
-val c2: $[C] = f(a)
+  // pass expression `a` to Libretto function `f`
+  val c1: $[C] = a > f
+  // or equivalently, apply Libretto function `f` to expression `a`
+  val c2: $[C] = f(a)
 
-// shortcut for introducing something constructed from `One`
-val ((a2: $[A]) |*| (d: $[D])) = a also g
-// equivalent to
-a > introSnd > snd(g)
+  val ((a2: $[A]) |*| (d: $[D])) =
+    // `one: $[One]` is a constant expression (i.e. not built from other expressions)
+    // that can be used as an argument to functions taking `One`, such as `g`
+    a |*| g(one)
+    // Without `one`, we could equivalently write
+    a also g
+    // which is a shortcut for
+    a > introSnd > snd(g)
 
-// shortcut for eliminating `$[One]`
-val a3: $[A] = a alsoElim h(b)
-// equivalent to
-(a |*| h(b)) > elimSnd
+  // `alsoElim` is shortcut for eliminating `$[One]`
+  val a3: $[A] = a alsoElim h(b)
+  // equivalent to
+  (a |*| h(b)) > elimSnd
+}
 ```
 
 ### Linearity checking

@@ -1,6 +1,6 @@
 package libretto.mashup
 
-import libretto.util.SourcePos
+import libretto.lambda.util.SourcePos
 import scala.annotation.targetName
 
 trait MashupDsl {

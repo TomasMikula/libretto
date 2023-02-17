@@ -2,9 +2,10 @@ package libretto.testing.scaletto
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
 import libretto.{CoreLib, ExecutionParams, Monad}
+import libretto.lambda.util.SourcePos
 import libretto.scaletto.{Scaletto, ScalettoBridge, ScalettoExecutor, StarterKit}
 import libretto.testing.{ManualClock, ManualClockParams, TestExecutor, TestResult}
-import libretto.util.{Async, SourcePos}
+import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 
 object ScalettoTestExecutor {

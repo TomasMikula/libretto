@@ -1,10 +1,10 @@
 package libretto.mashup.examples.weather
 
+import libretto.lambda.util.SourcePos
 import libretto.mashup.{Input, Output, Runtime, Service}
 import libretto.mashup.dsl.{-->, ###, EmptyResource, Expr, Float64, Fun, LambdaContext, Record, Text, alsoElim, closure, fun, of}
 import libretto.mashup.rest.{Endpoint, RestApi}
 import libretto.mashup.rest.RelativeUrl._
-import libretto.util.SourcePos
 import zio.{Scope, ZIO}
 
 object WeatherService {
