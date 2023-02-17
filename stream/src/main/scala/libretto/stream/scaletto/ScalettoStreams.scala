@@ -61,18 +61,9 @@ abstract class ScalettoStreams {
   import Tree._
 
   type ValSource[A] = Source[Val[A]]
-
-  type ValDrain[A] = Drain[Val[A]]
-
-  @deprecated
-  type ProducingF[A, X]  = Done |+| (Done |&| (Val[A] |*| X))
-  @deprecated
-  type Producing[A] = Rec[ProducingF[A, *]]
-
-  @deprecated
-  type ConsumerF[A, X] = Need |&| (Need |+| (Neg[A] |*| X))
-  @deprecated
-  type Consumer[A] = Rec[ConsumerF[A, *]]
+  type ValDrain[A]  = Drain[Val[A]]
+  type ValStream[A] = Stream[Val[A]]
+  type ValSink[A]   = Sink[Val[A]]
 
   object ValSource {
     type Polled[A] = Source.Polled[Val[A]]
@@ -630,57 +621,30 @@ abstract class ScalettoStreams {
   def lInvertValSource[A]: One -⚬ (ValSource[A] |*| ValDrain[A]) =
     lInvertSource[Val[A]]
 
-  def rInvertProducingF[A, x, y](rInvertSub: (x |*| y) -⚬ One): (ProducingF[A, x] |*| ConsumerF[A, y]) -⚬ One =
-    rInvertEither(
-      rInvertSignal,
-      swap > rInvertEither(
-        swap > rInvertSignal,
-        rInvertPair(
-          swap > fulfill[A],
-          swap > rInvertSub
-        )
-      )
-    )
+  def rInvertValStream[A]: (ValStream[A] |*| ValSink[A]) -⚬ One =
+    rInvertStream[Val[A]]
 
-  def lInvertConsumerF[A, x, y](lInvertSub: One -⚬ (y |*| x)): One -⚬ (ConsumerF[A, y] |*| ProducingF[A, x]) =
-    lInvertChoice(
-      lInvertSignal,
-      lInvertChoice(
-        lInvertSignal > swap,
-        lInvertPair(
-          promise[A] > swap,
-          lInvertSub > swap
-        )
-      ) > swap
-    )
-
-  implicit def producingConsumerDuality[A]: Dual[Producing[A], Consumer[A]] =
-    dualRec[ProducingF[A, *], ConsumerF[A, *]](
-      new Dual1[ProducingF[A, *], ConsumerF[A, *]] {
-        def rInvert[x, y](rInvertSub: (x |*| y) -⚬ One): (ProducingF[A, x] |*| ConsumerF[A, y]) -⚬ One =
-          rInvertProducingF(rInvertSub)
-        def lInvert[x, y](lInvertSub: One -⚬ (y |*| x)): One -⚬ (ConsumerF[A, y] |*| ProducingF[A, x]) =
-          lInvertConsumerF(lInvertSub)
-      }
-    )
-
-  implicit def consumerProducingDuality[A]: Dual[Consumer[A], Producing[A]] =
-    dualSymmetric(producingConsumerDuality[A])
+  def lInvertValSink[A]: One -⚬ (ValSink[A] |*| ValStream[A]) =
+    lInvertSink[Val[A]]
 
   /** If either the source or the drain is completed, complete the other one and be done.
     * Otherwise, expose their offer and demand, respectively.
     */
   def relayCompletion[A, B]: (ValSource[A] |*| ValDrain[B]) -⚬ (One |+| ((Val[A] |*| ValSource[A]) |*| (Neg[B] |*| ValDrain[B]))) =
-    id                                [ ValSource[A] |*| (                   ValDrain[B]                                     )]
-      .>.snd(unpack)               .to[ ValSource[A] |*| (Need   |+|                      (Need |&| (Neg[B] |*| ValDrain[B])))]
-      .distributeL                 .to[(ValSource[A] |*|  Need)  |+|  (ValSource[A]   |*| (Need |&| (Neg[B] |*| ValDrain[B])))]
-      .>.left.fst(ValSource.close) .to[(Done         |*|  Need)  |+|  (ValSource[A]   |*| (Need |&| (Neg[B] |*| ValDrain[B])))]
-      .>.left(rInvertSignal)       .to[ One |+| (                      ValSource[A]   |*| (Need |&| (Neg[B] |*| ValDrain[B])))]
-      .>.right.fst(ValSource.poll) .to[ One |+| ((Done |+| (Val[A] |*| ValSource[A])) |*| (Need |&| (Neg[B] |*| ValDrain[B])))]
-      .>.right(matchingChoiceLR)   .to[ One |+| ((Done |*| Need) |+| ((Val[A] |*| ValSource[A]) |*| (Neg[B] |*| ValDrain[B])))]
-      .>.right.left(rInvertSignal) .to[ One |+| (      One       |+| ((Val[A] |*| ValSource[A]) |*| (Neg[B] |*| ValDrain[B])))]
-      .assocRL                     .to[(One |+|        One     ) |+| ((Val[A] |*| ValSource[A]) |*| (Neg[B] |*| ValDrain[B])) ]
-      .>.left(either(id, id))      .to[     One                  |+| ((Val[A] |*| ValSource[A]) |*| (Neg[B] |*| ValDrain[B])) ]
+    λ { case (src |*| drn) =>
+      drn.toEither switch {
+        case Left(closing) =>
+          injectL(rInvertSignal(ValSource.close(src) |*| closing))
+        case Right(pulling) =>
+          ValSource.poll(src) switch {
+            case Left(closed) =>
+              injectL(rInvertSignal(closed |*| ValDrain.Pulling.close(pulling)))
+            case Right(a |*| as) =>
+              val b |*| bs = ValDrain.Pulling.warrant(pulling)
+              injectR((a |*| as) |*| (b |*| bs))
+          }
+      }
+    }
 
   @deprecated("Renamed to ValSource")
   type Pollable[A] = ValSource[A]

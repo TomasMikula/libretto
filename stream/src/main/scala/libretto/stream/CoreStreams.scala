@@ -25,6 +25,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   type StreamLeader[T, A]   = Rec[StreamLeaderF[T, A, _]]
   type StreamFollower[T, A] = Rec[StreamFollowerF[T, A, _]]
 
+  type Stream[A] = StreamLeader[Done, A]
+  type Source[A] = StreamFollower[Done, A]
+
   object StreamLeader {
     def pack[T, A]: StreamLeaderF[T, A, StreamLeader[T, A]] -⚬ StreamLeader[T, A] =
       dsl.pack
@@ -44,8 +47,6 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     ): StreamLeader[T, A] -⚬ R =
       unpack > either(onClose, onNext)
   }
-
-  type Source[A] = StreamFollower[Done, A]
 
   object Source {
     type Polled[A] = Done |+| (A |*| Source[A])
@@ -371,7 +372,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     }
   }
 
-  def rInvertLeaderF[T, U, A, B, x, y](
+  private def rInvertLeaderF[T, U, A, B, x, y](
     rInvertT: (T |*| U) -⚬ One,
     rInvertA: (A |*| B) -⚬ One,
     rInvertSub: (x |*| y) -⚬ One,
@@ -396,7 +397,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         rInvertLeaderF(rInvertT, rInvertElem, rInvertSub)
     )
 
-  def lInvertFollowerF[T, U, A, B, x, y](
+  private def lInvertFollowerF[T, U, A, B, x, y](
     lInvertT: One -⚬ (T |*| U),
     lInvertA: One -⚬ (A |*| B),
     lInvertSub: One -⚬ (x |*| y),

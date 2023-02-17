@@ -90,6 +90,12 @@ class InvertStreams[DSL <: InvertDSL, Lib <: CoreLib[DSL]](
   def lInvertSource[A]: One -⚬ (Source[A] |*| Drain[A]) =
     lInvertFollower(lInvertSignal > swap, forevert > swap)
 
+  def rInvertStream[A]: (Stream[A] |*| Sink[A]) -⚬ One =
+    rInvertLeader(rInvertSignal, backvert)
+
+  def lInvertSink[A]: One -⚬ (Sink[A] |*| Stream[A]) =
+    lInvertFollower(lInvertSignal, forevert)
+
   given drainSourceDuality[A]: Dual[Drain[A], Source[A]] with {
     override val rInvert: (Drain[A] |*| Source[A]) -⚬ One = rInvertDrain
     override val lInvert: One -⚬ (Source[A] |*| Drain[A]) = lInvertSource
@@ -97,4 +103,12 @@ class InvertStreams[DSL <: InvertDSL, Lib <: CoreLib[DSL]](
 
   given sourceDrainDuality[A]: Dual[Source[A], Drain[A]] =
     dualSymmetric(drainSourceDuality[A])
+
+  given streamSinkDuality[A]: Dual[Stream[A], Sink[A]] with {
+    override val rInvert = rInvertStream
+    override val lInvert = lInvertSink
+  }
+
+  given sinkStreamDuality[A]: Dual[Sink[A], Stream[A]] =
+    dualSymmetric(streamSinkDuality[A])
 }
