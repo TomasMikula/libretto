@@ -333,7 +333,7 @@ abstract class ScalettoStreams {
       type DT[K, V] = DemandingTree[K, V]
       type NeDT[K, V] = NonEmptyTree[K, ValDrain.Pulling[V]]
 
-      def dispatch[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| DT[K, V]) -⚬ (Done |*| DT[K, V]) =
+      def dispatch[K, V](using Ordering[K]): ((Val[K] |*| Val[V]) |*| DT[K, V]) -⚬ (Done |*| DT[K, V]) =
         Tree.update(ValDrain.Pulling.supply[V].>.left(need > done) > PMaybe.fromEither)
           .>.fst(PMaybe.neglect)
 
@@ -359,7 +359,7 @@ abstract class ScalettoStreams {
       def clearNE[K, V]: NeDT[K, V] -⚬ Done =
         NonEmptyTree.clear(ValDrain.Pulling.close > need > done)
 
-      def addSubscriber[K: Ordering, V]: ((Val[K] |*| -[ValSource[V]]) |*| DT[K, V]) -⚬ DT[K, V] =
+      def addSubscriber[K, V](using Ordering[K]): ((Val[K] |*| -[ValSource[V]]) |*| DT[K, V]) -⚬ DT[K, V] =
         λ { case ((k |*| out) |*| tree) =>
           val drain: $[ValDrain[V]] =
             ValDrain.fromInvertedSource(out)
@@ -405,81 +405,70 @@ abstract class ScalettoStreams {
       val discardSubscriber: KSubs -⚬ One =
         λ { case (k |*| out) => (k > dsl.neglect > ValSource.empty[V]) supplyTo out }
 
-      val upstreamClosed: (Done |*| (Source.Polled[KSubs] |*| DT[K, V])) -⚬ Done =
-        joinMap(id, joinMap(Source.Polled.close(discardSubscriber > done), DT.clear))
-
-      def upstreamVal(
-        goRec: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done,
-      ): ((Val[A] |*| ValSource[A]) |*| (Source.Polled[KSubs] |*| DT[K, V])) -⚬ Done =
-        import Source.{Polled => LPolled}
-        id                                   [ (Val[A] |*| ValSource[A]) |*|              (LPolled[KSubs] |*| DT[K, V]) ]
-          .>.fst(swap)                    .to[ (ValSource[A] |*| Val[A]) |*|              (LPolled[KSubs] |*| DT[K, V]) ]
-          .>(IXI)                         .to[ (ValSource[A] |*| LPolled[KSubs]) |*| (      Val[A]        |*| DT[K, V]) ]
-          .>.snd.fst(f)                   .to[ (ValSource[A] |*| LPolled[KSubs]) |*| ((Val[K] |*| Val[V]) |*| DT[K, V]) ]
-          .>.snd(DT.dispatch)             .to[ (ValSource[A] |*| LPolled[KSubs]) |*| (Done                |*| DT[K, V]) ]
-          .assocRL                        .to[ ((ValSource[A] |*| LPolled[KSubs]) |*| Done)               |*| DT[K, V]  ]
-          .>.fst(swap > assocRL)          .to[ ((Done |*| ValSource[A]) |*| LPolled[KSubs])               |*| DT[K, V]  ]
-          .>.fst.fst(delayedPoll)         .to[ (   Polled[A]            |*| LPolled[KSubs])               |*| DT[K, V]  ]
-          .>(goRec)                       .to[                                                           Done           ]
-
       def onUpstream(
         goRec: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done,
       ): ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done =
-        assocLR           .to[ Polled[A] |*| (Source.Polled[KSubs] |*| DT[K, V]) ]
-          .distributeR
-          .either(upstreamClosed, upstreamVal(goRec))
+        λ { case ((polled |*| kSubs) |*| tree) =>
+          polled switch {
+            case Left(closed) =>
+              joinAll(
+                closed,
+                Source.Polled.close(discardSubscriber > done)(kSubs),
+                DT.clear(tree),
+              )
+            case Right(a |*| as) =>
+              val (dispatched |*| tree1) = DT.dispatch(f(a) |*| tree)
+              val polled = delayedPoll(dispatched |*| as)
+              goRec((polled |*| kSubs) |*| tree1)
+          }
+        }
 
       val feedToNEDT: (Polled[A] |*| NeDT[K, V]) -⚬ Done =
         Source.Polled.feedTo(DT.dispatchNE(f)) > joinMap(id, Maybe.neglect(DT.clearNE))
 
       val forward: (Polled[A] |*| DT[K, V]) -⚬ Done =
-        id                                               [  Polled[A] |*| (Done |+|                NeDT[K, V]) ]
-          .distributeL                                .to[ (Polled[A] |*| Done) |+| (Polled[A] |*| NeDT[K, V]) ]
-          .>.left(joinMap(Polled.close, id))          .to[           Done       |+| (Polled[A] |*| NeDT[K, V]) ]
-          .>.right(feedToNEDT)                        .to[           Done       |+|           Done             ]
-          .>(either(id, id))                          .to[                     Done                            ]
-
-      val subsClosed: ((Polled[A] |*| Done) |*| DT[K, V]) -⚬ Done =
-        id                             [ (Polled[A] |*| Done) |*| DT[K, V] ]
-          .>(IX)                    .to[ (Polled[A] |*| DT[K, V]) |*| Done ]
-          .>.fst(forward)           .to[           Done           |*| Done ]
-          .>(join)                  .to[                         Done      ]
-
-      def newSubscriber(
-        goRec: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done,
-      ): ((Polled[A] |*| (KSubs |*| Source[KSubs])) |*| DT[K, V]) -⚬ Done =
-        id                                 [ ( Polled[A] |*| (KSubs  |*|  Source[KSubs])) |*| DT[K, V]  ]
-          .>.fst.snd(swap)              .to[ ( Polled[A] |*| (Source[KSubs]  |*|  KSubs)) |*| DT[K, V]  ]
-          .>.fst.assocRL                .to[ ((Polled[A] |*|  Source[KSubs]) |*|  KSubs ) |*| DT[K, V]  ]
-          .assocLR                      .to[  (Polled[A] |*|  Source[KSubs]) |*| (KSubs   |*| DT[K, V]) ]
-          .>.snd(DT.addSubscriber)      .to[  (Polled[A] |*|  Source[KSubs]) |*|              DT[K, V]  ]
-          .>.fst.snd(Source.poll)       .to[  (Polled[A] |*|  Source.Polled[KSubs]) |*|             DT[K, V]  ]
-          .>(goRec)                     .to[                                 Done                       ]
+        λ { case (polled |*| tree) =>
+          tree switch {
+            case Left(empty) => Polled.close(polled) alsoJoin empty
+            case Right(tree) => feedToNEDT(polled |*| tree)
+          }
+        }
 
       def onSubs(
         goRec: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done,
       ): ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done =
-        id[ (Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V] ]
-          .>.fst(distributeL)
-          .distributeR
-          .either(subsClosed, newSubscriber(goRec))
+        λ { case (vals |*| subs) |*| tree =>
+          subs switch {
+            case Left(closed) =>
+              forward(vals |*| tree) alsoJoin closed
+            case Right(sub |*| subs) =>
+              val tree1  = DT.addSubscriber(sub |*| tree)
+              val subs1 = Source.poll(subs)
+              goRec((vals |*| subs1) |*| tree1)
+          }
+        }
 
       val go: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done = rec { self =>
         import Source.Polled.positivePolled
 
-        implicit def positiveKSubs: SignalingJunction.Positive[KSubs] =
+        given SignalingJunction.Positive[KSubs] =
           SignalingJunction.Positive.byFst[Val[K], -[ValSource[V]]]
 
-        id                                           [ (Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V] ]
-          .>.fst(lib.race)
-          .distributeR
-          .either(onUpstream(self), onSubs(self)) .to[                               Done          ]
+        λ { case (vals |*| subs) |*| tree =>
+          ((vals |*| subs) > lib.race) switch {
+            case Left (vals |*| subs) => onUpstream(self)((vals |*| subs) |*| tree)
+            case Right(vals |*| subs) => onSubs(self)((vals |*| subs) |*| tree)
+          }
+        }
       }
 
-      id[ValSource[A] |*| Source[KSubs]]
-        .>(par(poll, Source.poll))
-        .introSnd(done > Tree.empty[K, ValDrain.Pulling[V]])
-        .>(go)
+      λ { case (vals |*| subscribers) =>
+        go(
+          ValSource.poll(vals) |*|
+          Source.poll(subscribers) |*|
+          one > done > Tree.empty[K, ValDrain.Pulling[V]]
+        )
+      }
     }
 
     def broadcastByKey[A, K: Ordering, V](
@@ -516,12 +505,12 @@ abstract class ScalettoStreams {
       /** Merges two [[Polled]]s into one.
         * Left-biased: whenever there is a value available from both upstreams, favors the first one.
         *
-        * @param mergePollables left-biased merge of two [[ValSource]]s.
+        * @param mergeSources left-biased merge of two [[ValSource]]s.
         */
       def merge[A](
-        mergePollables: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A],
+        mergeSources: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A],
       ): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
-        Source.Polled.merge(mergePollables)
+        Source.Polled.merge(mergeSources)
     }
   }
 

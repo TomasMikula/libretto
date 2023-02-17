@@ -373,7 +373,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         val goSnd: (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
           swap > go(swap > mergeSources)
 
-        race(goFst, goSnd)
+        raceSwitch(goFst, goSnd)
       }
     }
   }
