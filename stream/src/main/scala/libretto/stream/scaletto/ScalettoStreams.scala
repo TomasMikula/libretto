@@ -290,7 +290,7 @@ abstract class ScalettoStreams {
         val caseDownstreamRequested: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] = {
           val caseDownstreamClosed: (Val[A] |*| ValSource[A]) -⚬ Done      = joinMap(neglect, ValSource.close)
           val caseDownstreamPulled: (Val[A] |*| ValSource[A]) -⚬ Polled[A] = injectR
-          choice(caseDownstreamClosed, caseDownstreamPulled).pack
+          ValSource.from(caseDownstreamClosed, caseDownstreamPulled)
         }
 
         val caseNotRequestedYet: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] = {
@@ -304,10 +304,7 @@ abstract class ScalettoStreams {
           choice(caseDownstreamRequested, caseNotRequestedYet)
             .>(selectSignaledOrNot(Source.negativeSource))
 
-        id                               [    ValSource[A]                    ]
-          .unpack                     .to[ Done |&| Polled[A]                 ]
-          .chooseR                    .to[ Done |+| (Val[A] |*| ValSource[A]) ]
-          .either(empty[A], goElem)   .to[    ValSource[A]                    ]
+        poll > either(empty[A], goElem)
     }
 
     def broadcast[A]: ValSource[A] -⚬ PUnlimited[ValSource[A]] = rec { self =>

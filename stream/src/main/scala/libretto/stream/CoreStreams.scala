@@ -25,8 +25,8 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   type StreamLeader[T, A]   = Rec[StreamLeaderF[T, A, _]]
   type StreamFollower[T, A] = Rec[StreamFollowerF[T, A, _]]
 
-  type Stream[A] = StreamLeader[Done, A]
-  type Source[A] = StreamFollower[Done, A]
+  opaque type Stream[A] = StreamLeader[Done, A]
+  opaque type Source[A] = StreamFollower[Done, A]
 
   object StreamLeader {
     def pack[T, A]: StreamLeaderF[T, A, StreamLeader[T, A]] -⚬ StreamLeader[T, A] =
@@ -48,8 +48,16 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       unpack > either(onClose, onNext)
   }
 
+  object Stream {
+    def fromLeader[A]: StreamLeader[Done, A] -⚬ Stream[A] = id
+    def toLeader[A]  : Stream[A] -⚬ StreamLeader[Done, A] = id
+  }
+
   object Source {
     type Polled[A] = Done |+| (A |*| Source[A])
+
+    def fromFollower[A]: StreamFollower[Done, A] -⚬ Source[A] = id
+    def toFollower[A]  : Source[A] -⚬ StreamFollower[Done, A] = id
 
     def pack[A]: (Done |&| Polled[A]) -⚬ Source[A] =
       dsl.pack[StreamFollowerF[Done, A, _]]

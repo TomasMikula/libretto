@@ -20,8 +20,8 @@ class InvertStreams[DSL <: InvertDSL, Lib <: CoreLib[DSL]](
   import dsl.$._
   import lib._
 
-  type Drain[A] = StreamLeader[Need, -[A]]
-  type Sink[A]  = StreamFollower[Need, -[A]]
+  opaque type Drain[A] = StreamLeader[Need, -[A]]
+  opaque type Sink[A]  = StreamFollower[Need, -[A]]
 
   object Drain {
     type Pulling[A] = Need |&| (-[A] |*| Drain[A])
@@ -85,16 +85,16 @@ class InvertStreams[DSL <: InvertDSL, Lib <: CoreLib[DSL]](
   }
 
   def rInvertDrain[A]: (Drain[A] |*| Source[A]) -⚬ One =
-    rInvertLeader(swap > rInvertSignal, swap > backvert)
+    snd(Source.toFollower) > rInvertLeader(swap > rInvertSignal, swap > backvert)
 
   def lInvertSource[A]: One -⚬ (Source[A] |*| Drain[A]) =
-    lInvertFollower(lInvertSignal > swap, forevert > swap)
+    lInvertFollower(lInvertSignal > swap, forevert > swap) > fst(Source.fromFollower)
 
   def rInvertStream[A]: (Stream[A] |*| Sink[A]) -⚬ One =
-    rInvertLeader(rInvertSignal, backvert)
+    fst(Stream.toLeader) > rInvertLeader(rInvertSignal, backvert)
 
   def lInvertSink[A]: One -⚬ (Sink[A] |*| Stream[A]) =
-    lInvertFollower(lInvertSignal, forevert)
+    lInvertFollower(lInvertSignal, forevert) > snd(Stream.fromLeader)
 
   given drainSourceDuality[A]: Dual[Drain[A], Source[A]] with {
     override val rInvert: (Drain[A] |*| Source[A]) -⚬ One = rInvertDrain
