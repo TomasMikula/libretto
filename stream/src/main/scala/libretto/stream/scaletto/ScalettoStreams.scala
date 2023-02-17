@@ -131,7 +131,7 @@ abstract class ScalettoStreams {
         .<(delayable)                         .from[          ValSource[A] ]
     }
 
-    def fromList[A]: Val[List[A]] -⚬ ValSource[A] = rec { self =>
+    def fromList[A]: Val[List[A]] -⚬ ValSource[A] = rec { fromList =>
       val uncons: List[A] => Option[(A, List[A])] = _ match {
         case a :: as => Some((a, as))
         case Nil => None
@@ -139,13 +139,13 @@ abstract class ScalettoStreams {
 
       val close: Val[List[A]] -⚬ Done = neglect
 
-      val poll: Val[List[A]] -⚬ Polled[A] = {
-        val caseNil :              Done -⚬ Polled[A] = Polled.empty[A]
-        val caseCons: Val[(A, List[A])] -⚬ Polled[A] = liftPair > par(id, self) > Polled.cons
-        mapVal(uncons)                          .to[      Val[Option[(A, List[A])]]     ]
-          .>(optionToPMaybe)                    .to[      PMaybe[Val[(A, List[A])]]     ]
-          .>(PMaybe.switch(caseNil, caseCons))  .to[             Polled[A]              ]
-      }
+      val poll: Val[List[A]] -⚬ Polled[A] =
+        λ { as =>
+          as > mapVal(uncons) > optionToPMaybe > PMaybe.toEither switch {
+            case Left(nil)     => nil > Polled.empty[A]
+            case Right(h ** t) => Polled.cons(h |*| fromList(t))
+          }
+        }
 
       ValSource.from(close, poll)
     }
@@ -165,22 +165,22 @@ abstract class ScalettoStreams {
 
     def toList[A]: ValSource[A] -⚬ Val[List[A]] = {
       def go: (ValSource[A] |*| Val[List[A]]) -⚬ Val[List[A]] = rec { self =>
-        id                                   [                        ValSource[A]                    |*| Val[List[A]]  ]
-          .>.fst(poll)                    .to[ (Done                   |+| (Val[A] |*| ValSource[A])) |*| Val[List[A]]  ]
-          .distributeR                    .to[ (Done |*| Val[List[A]]) |+| ((Val[A] |*| ValSource[A]) |*| Val[List[A]]) ]
-          .>.left.snd(mapVal(_.reverse))  .to[ (Done |*| Val[List[A]]) |+| ((Val[A] |*| ValSource[A]) |*| Val[List[A]]) ]
-          .>.left.awaitFst                .to[           Val[List[A]]  |+| ((Val[A] |*| ValSource[A]) |*| Val[List[A]]) ]
-          .>.right.fst(swap)              .to[           Val[List[A]]  |+| ((ValSource[A] |*| Val[A]) |*| Val[List[A]]) ]
-          .>.right.assocLR                .to[           Val[List[A]]  |+| (ValSource[A] |*| (Val[A] |*| Val[List[A]])) ]
-          .>.right.snd(unliftPair)        .to[           Val[List[A]]  |+| (ValSource[A] |*|    Val[(A, List[A])]     ) ]
-          .>.right.snd(mapVal(_ :: _))    .to[           Val[List[A]]  |+| (ValSource[A] |*|      Val[List[A]]        ) ]
-          .>.right(self)                  .to[           Val[List[A]]  |+|           Val[List[A]]                       ]
-          .either(id, id)                 .to[                     Val[List[A]]                                         ]
+        λ { case as |*| acc =>
+          poll(as) switch {
+            case Left(closed) =>
+              val res = acc > mapVal(_.reverse)
+              res waitFor closed
+            case Right(h |*| t) =>
+              val acc1 = (h ** acc) > mapVal(_ :: _)
+              self(t |*| acc1)
+          }
+        }
       }
 
-      id[ValSource[A]]
-        .>(introSnd(const(List.empty[A])))
-        .>(go)
+      λ { as =>
+        val nil = one > const(List.empty[A])
+        go(as |*| nil)
+      }
     }
 
     def repeatedly[A](f: Done -⚬ Val[A]): Done -⚬ ValSource[A] =
@@ -209,31 +209,30 @@ abstract class ScalettoStreams {
 
     def statefulMap[S, A, B](f: ((S, A)) => (S, B))(initialState: S): ValSource[A] -⚬ ValSource[B] = {
       val ff: (Val[S] |*| Val[A]) -⚬ (Val[S] |*| Val[B]) =
-        unliftPair[S, A]
-          .>(mapVal(f))
-          .>(liftPair[S, B])
+        unliftPair[S, A] > mapVal(f) > liftPair[S, B]
 
       val inner: (Val[S] |*| ValSource[A]) -⚬ ValSource[B] = rec { self =>
         val close: (Val[S] |*| ValSource[A]) -⚬ Done =
           joinMap(neglect, ValSource.close)
 
         val poll:(Val[S] |*| ValSource[A]) -⚬ (Done |+| (Val[B] |*| ValSource[B])) =
-          id[Val[S] |*| ValSource[A]]         .to[ Val[S] |*|                                    ValSource[A]   ]
-            .>.snd(ValSource.poll)            .to[ Val[S] |*| (Done  |+|             (Val[A] |*| ValSource[A])) ]
-            .distributeL                      .to[ (Val[S] |*| Done) |+| (Val[S] |*| (Val[A] |*| ValSource[A])) ]
-            .>.left(joinMap(neglect, id))     .to[        Done       |+| (Val[S] |*| (Val[A] |*| ValSource[A])) ]
-            .>.right.assocRL                  .to[        Done       |+| ((Val[S] |*| Val[A]) |*| ValSource[A]) ]
-            .>.right.fst(ff)                  .to[        Done       |+| ((Val[S] |*| Val[B]) |*| ValSource[A]) ]
-            .>.right.fst(swap)                .to[        Done       |+| ((Val[B] |*| Val[S]) |*| ValSource[A]) ]
-            .>.right.assocLR                  .to[        Done       |+| (Val[B] |*| (Val[S] |*| ValSource[A])) ]
-            .>.right.snd(self)                .to[        Done       |+| (Val[B] |*|     ValSource[B]         ) ]
+          λ { case (s |*| as) =>
+            ValSource.poll(as) switch {
+              case Left(closed) =>
+                injectL(neglect(s) alsoJoin closed)
+              case Right(a |*| as) =>
+                val (s1 |*| b) = ff(s |*| a)
+                injectR(b |*| self(s1 |*| as))
+            }
+          }
 
         ValSource.from(close, poll)
       }
 
-      id[ValSource[A]]                  .to[            ValSource[A] ]
-        .introFst(const(initialState))  .to[ Val[S] |*| ValSource[A] ]
-        .>(inner)                       .to[     ValSource[B]        ]
+      λ { as =>
+        val s = one > const(initialState)
+        inner(s |*| as)
+      }
     }
 
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.

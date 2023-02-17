@@ -168,25 +168,25 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       * the exhaustion of the first [[Source]] is awaited. For example, if polling of the second [[Source]]
       * should be delayed until the first [[Source]] is completely shut down, the client can use [[detain]] to delay the
       * second [[Source]]. If polling of the second [[Source]] should start as soon as it is known that there are
-      * no more elements in the first [[Source]], the client can use [[detainClosed]] to delay the second [[Source]].
+      * no more elements in the first [[Source]], the client can use [[detainClosed]] to delay the second [[Source]]
+      * (this latter behavior is the behavior of [[concat]]).
       */
     def concatenate[A]: (Source[A] |*| Detained[Source[A]]) -⚬ Source[A] = rec { self =>
-      val close: (Source[A] |*| Detained[Source[A]]) -⚬ Done =
+      val onClose: (Source[A] |*| Detained[Source[A]]) -⚬ Done =
         joinMap(Source.close, Detained.releaseAsap > Source.close)
 
-      val poll: (Source[A] |*| Detained[Source[A]]) -⚬ Polled[A] =
-        id                               [                                             Source[A]    |*| Detained[Source[A]]   ]
-          .>.fst(unpack)              .to[ (Done |&| (Done                |+|  (A |*|  Source[A]))) |*| Detained[Source[A]]   ]
-          .>.fst(chooseR)             .to[           (Done                |+|  (A |*|  Source[A]))  |*| Detained[Source[A]]   ]
-          .distributeR                .to[ (Done |*| Detained[Source[A]]) |+| ((A |*|  Source[A])   |*| Detained[Source[A]] ) ]
-          .>.left(Detained.releaseBy) .to[                    Source[A]   |+| ((A |*|  Source[A])   |*| Detained[Source[A]] ) ]
-          .>.left(Source.poll)        .to[                    Polled[A]   |+| ((A |*|  Source[A])   |*| Detained[Source[A]] ) ]
-          .>.right(assocLR)           .to[                    Polled[A]   |+| ( A |*| (Source[A]    |*| Detained[Source[A]])) ]
-          .>.right.snd(self)          .to[                    Polled[A]   |+| ( A |*|            Source[A]                  ) ]
-          .>.right.injectR[Done]      .to[                    Polled[A]   |+|     Polled[A]                                   ]
-          .>(either(id, id))          .to[                             Polled[A]                                              ]
+      val onPoll: (Source[A] |*| Detained[Source[A]]) -⚬ Polled[A] =
+        λ { case src1 |*| detainedSrc2 =>
+          poll(src1) switch {
+            case Left(src1Closed) =>
+              val src2 = Detained.releaseBy(src1Closed |*| detainedSrc2)
+              poll(src2)
+            case Right(a |*| as) =>
+              Polled.cons(a |*| self(as |*| detainedSrc2))
+          }
+        }
 
-      from(close, poll)
+      from(onClose, onPoll)
     }
 
     def concat[A]: (Source[A] |*| Source[A]) -⚬ Source[A] =
