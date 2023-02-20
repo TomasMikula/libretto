@@ -478,7 +478,9 @@ trait CoreDSL {
     }
   }
 
-  object |*| {
+  val |*| : ConcurrentPairOps
+
+  trait ConcurrentPairOps {
     def unapply[A, B](ab: $[A |*| B])(using
       pos: SourcePos,
       ctx: LambdaContext,
