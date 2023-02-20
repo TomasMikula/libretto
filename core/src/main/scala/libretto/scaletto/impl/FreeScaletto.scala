@@ -27,7 +27,8 @@ abstract class FreeScaletto {
   final class Pong private()
   final class RTerminus private()
   final class LTerminus private()
-  final class |*|[A, B] private()
+  final class ConcurrentPair[A, B] private()
+  final type |*|[A, B] = ConcurrentPair[A, B]
   final class |+|[A, B] private()
   final class |&|[A, B] private()
   final class Rec[F[_]] private()

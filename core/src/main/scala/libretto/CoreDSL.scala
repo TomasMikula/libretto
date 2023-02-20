@@ -404,14 +404,6 @@ trait CoreDSL {
         case as     => joinAll(joinTwo(a, as.head)(pos), as.tail: _*)
       }
 
-    object |*| {
-      def unapply[A, B](ab: $[A |*| B])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): ($[A], $[B]) =
-        unzip(ab)(pos)
-    }
-
     object ? {
       def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Affine[A]): Some[$[A]] =
         Some(nonLinear(a)(split = None, ditch = Some(A.discard))(pos))
@@ -436,12 +428,6 @@ trait CoreDSL {
     }
 
     extension [A](a: $[A]) {
-      def |*|[B](b: $[B])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[A |*| B] =
-        zip(a, b)(pos)
-
       def >[B](f: A -⚬ B)(using
         pos: SourcePos,
         ctx: LambdaContext,
@@ -490,6 +476,22 @@ trait CoreDSL {
       def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F], ctx: LambdaContext): $[F[B]] =
         fa > F.liftF(λ(f))
     }
+  }
+
+  object |*| {
+    def unapply[A, B](ab: $[A |*| B])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): ($[A], $[B]) =
+      $.unzip(ab)(pos)
+  }
+
+  extension [A](a: $[A]) {
+    def |*|[B](b: $[B])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A |*| B] =
+      $.zip(a, b)(pos)
   }
 
   trait Affine[A] {
