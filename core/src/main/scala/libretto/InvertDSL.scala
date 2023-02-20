@@ -1,6 +1,7 @@
 package libretto
 
 import libretto.lambda.util.SourcePos
+import scala.annotation.targetName
 
 trait InvertDSL extends ClosedDSL {
   /** `-[A]` is a demand for `A`.
@@ -205,9 +206,10 @@ trait InvertDSL extends ClosedDSL {
     contrapositive(pack[F])
 
   import $._
+
   extension [A](a: $[A]) {
-    def supplyTo(out: $[-[A]])(using SourcePos, LambdaContext): $[One] =
-      (a |*| out) > supply
+    def supplyTo(out: $[-[A]])(using pos: SourcePos, ctx: LambdaContext): $[One] =
+      $.zip(a, out)(pos) > supply
   }
 
   extension [B](expr: $[-[B]]) {
@@ -221,8 +223,38 @@ trait InvertDSL extends ClosedDSL {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[A] =
-      ($.one > lInvert) match {
-        case (a |*| b) => a alsoElim (b supplyTo expr)
+      $.unzip($.one > lInvert)(pos) match {
+        case (a, b) => a alsoElim (b supplyTo expr)
       }
   }
+
+  opaque type ??[A] = $[-[A]]
+
+  extension [B](expr: ??[B]) {
+    def <<:[A](f: A -⚬ B)(using SourcePos, LambdaContext): ??[A] =
+      expr contramap f
+
+    @targetName("zipOutPair")
+    def |*|[C](that: ??[C])(using pos: SourcePos, ctx: LambdaContext): ??[B |*| C] =
+      $.zip(expr, that)(pos) > demandTogether
+  }
+
+  object producing {
+    def apply[B](using pos: SourcePos, ctx: LambdaContext)(f: ??[B] => ??[One]): $[B] = {
+      val g: $[-[-[B]] |*| -[One]] = λ.closure(f)
+      val (b, negOne) = $.unzip(g)(pos)
+      doubleDemandElimination(b) alsoElim (one supplyTo negOne)
+    }
+  }
+
+  trait ConcurrentPairInvertOps extends ConcurrentPairOps {
+    @targetName("unapplyOutPair")
+    def unapply[A, B](ab: ??[A |*| B])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): (??[A], ??[B]) =
+      $.unzip($.map(ab)(distributeInversion)(pos))(pos)
+  }
+
+  override val |*| : ConcurrentPairInvertOps
 }

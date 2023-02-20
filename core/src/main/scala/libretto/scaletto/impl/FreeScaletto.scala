@@ -540,8 +540,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     }
   }
 
-  override val |*| : ConcurrentPairOps =
-    new ConcurrentPairOps {}
+  override val |*| : ConcurrentPairInvertOps =
+    new ConcurrentPairInvertOps {}
 
   // TODO: avoid the need to create auxiliary pairings
   private def zipExprs[A](es: Tupled[|*|, lambdas.Expr, A])(using lambdas.Context): lambdas.Expr[A] =
