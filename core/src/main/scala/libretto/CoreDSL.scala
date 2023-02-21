@@ -445,12 +445,6 @@ trait CoreDSL {
         ctx: LambdaContext,
       ): $[X |*| A] =
         a > introFst(f)
-
-      def alsoElim(unit: $[One])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[A] =
-        eliminateFirst(unit, a)(pos)
     }
 
     extension (d: $[Done]) {
@@ -486,6 +480,12 @@ trait CoreDSL {
       ctx: LambdaContext,
     ): $[A |*| B] =
       $.zip(a, b)(pos)
+
+    def alsoElim(unit: $[One])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A] =
+      $.eliminateFirst(unit, a)(pos)
   }
 
   extension [A, B](x: $[A |+| B]) {

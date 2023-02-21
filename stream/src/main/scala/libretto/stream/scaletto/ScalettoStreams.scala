@@ -248,42 +248,33 @@ abstract class ScalettoStreams {
       Source.mergeAll[Val[A]]
 
     def dup[A]: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) = rec { self =>
-      val dupPolled: Polled[A] -⚬ (Polled[A] |*| Polled[A]) = {
-        val caseClosed: Done -⚬ (Polled[A] |*| Polled[A]) =
-          forkMap(injectL, injectL)
-
-        val caseValue: (Val[A] |*| ValSource[A]) -⚬ (Polled[A] |*| Polled[A]) =
-          id                                             [        Val[A]       |*|          ValSource[A]           ]
-            .par(dsl.dup[A], self)                    .to[ (Val[A] |*| Val[A]) |*| (ValSource[A] |*| ValSource[A]) ]
-            .>(IXI)                                   .to[ (Val[A] |*| ValSource[A]) |*| (Val[A] |*| ValSource[A]) ]
-            .>.fst.injectR[Done].>.snd.injectR[Done]  .to[       Polled[A]           |*|       Polled[A]           ]
-
-        either(caseClosed, caseValue)
-      }
-
-      val caseFstClosed: ValSource[A] -⚬ (Done |*| ValSource[A]) =
-        introFst > par(done, id)
-
-      val caseFstPolled: ValSource[A] -⚬ (Polled[A] |*| ValSource[A]) =
-        id                                           [                 ValSource[A]                       ]
-          .>(ValSource.poll[A])                   .to[                   Polled[A]                        ]
-          .>(choice(introSnd, dupPolled))         .to[ (Polled[A] |*| One)  |&| (Polled[A] |*| Polled[A]) ]
-          .coDistributeL                          .to[  Polled[A] |*| (One  |&|                Polled[A]) ]
-          .>.snd.choiceL(done)                    .to[  Polled[A] |*| (Done |&|                Polled[A]) ]
-          .>.snd(ValSource.fromChoice)            .to[  Polled[A] |*|       ValSource[A]                   ]
-
       // the case when the first output polls or closes before the second output does
-      val caseFst: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) =
-        id                                           [                   ValSource[A]                            ]
-          .choice(caseFstClosed, caseFstPolled)   .to[ (Done |*| ValSource[A]) |&| (Polled[A]  |*| ValSource[A]) ]
-          .coDistributeR                          .to[ (Done                   |&|  Polled[A]) |*| ValSource[A]  ]
-          .>.fst(ValSource.fromChoice)            .to[                 ValSource[A]            |*| ValSource[A]  ]
+      val goFst: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) =
+        λ { src =>
+          producing { case (out1 |*| out2) =>
+            (ValSource.fromChoice >>: out1) switch {
+              case Left(closing)  =>
+                (src :>: out2) alsoElim (done >>: closing)
+              case Right(polling1) =>
+                val polled = ValSource.poll(src)
+                (ValSource.fromChoice >>: out2) switch {
+                  case Left(closing2) =>
+                    (polled :>: polling1) alsoElim (done >>: closing2)
+                  case Right(polling2) =>
+                    Polled.dup(self)(polled) :>: (polling1 |*| polling2)
+                }
+            }
+          }
+        }
 
-      // the case when the second output polls or closes before the first output does
-      val caseSnd: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) =
-        caseFst > swap
-
-      choice(caseFst, caseSnd) > selectBy(ValSource.notifyAction)
+      λ { src =>
+        producing { case out1 |*| out2 =>
+          (selectBy(ValSource.notifyAction[A]) >>: (out1 |*| out2)) switch {
+            case Left (out1 |*| out2) => goFst(src) :>: (out1 |*| out2)
+            case Right(out1 |*| out2) => goFst(src) :>: (out2 |*| out1)
+          }
+        }
+      }
     }
 
     def dropUntilFirstDemand[A]: ValSource[A] -⚬ ValSource[A] = rec { self =>
@@ -498,6 +489,19 @@ abstract class ScalettoStreams {
         mergeSources: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A],
       ): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
         Source.Polled.merge(mergeSources)
+
+      def dup[A](
+        dupSource: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]),
+      ): Polled[A] -⚬ (Polled[A] |*| Polled[A]) =
+        λ { polled =>
+          polled switch {
+            case Left(+(closed)) =>
+              Polled.empty(closed) |*| Polled.empty(closed)
+            case Right(+(a) |*| as) =>
+              val (t1 |*| t2) = dupSource(as)
+              Polled.cons(a |*| t1) |*| Polled.cons(a |*| t2)
+          }
+        }
     }
   }
 
