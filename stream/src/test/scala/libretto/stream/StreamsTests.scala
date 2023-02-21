@@ -92,6 +92,22 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           } yield ()
         },
 
+      "dup" -> TestCase
+        .interactWith {
+          import ValSource.{dup, toList}
+
+          λ { (start: $[Done]) =>
+            val src = start > ValSource.of(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+            val (out1 |*| out2) = dup(src)
+            toList(out1) ** toList(out2)
+          }
+        }.via {
+          expectVal(_).assertEquals((
+            List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+            List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+          ))
+        },
+
       "broadcastByKey" -> TestCase
         .interactWith {
           import ValSource.broadcastByKey
