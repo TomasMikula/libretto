@@ -433,26 +433,6 @@ trait CoreDSL {
         ctx: LambdaContext,
       ): $[B] =
         map(a)(f)(pos)
-
-      def also[B](f: One -⚬ B)(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[A |*| B] =
-        a > introSnd(f)
-
-      def alsoFst[X](f: One -⚬ X)(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[X |*| A] =
-        a > introFst(f)
-    }
-
-    extension (d: $[Done]) {
-      def alsoJoin(others: $[Done]*)(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[Done] =
-        joinAll(d, others: _*)(using pos)
     }
 
     implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
@@ -486,6 +466,28 @@ trait CoreDSL {
       ctx: LambdaContext,
     ): $[A] =
       $.eliminateFirst(unit, a)(pos)
+
+    def also[B](f: One -⚬ B)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A |*| B] =
+      import $.>
+      a > introSnd(f)
+
+    def alsoFst[X](f: One -⚬ X)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[X |*| A] =
+      import $.>
+      a > introFst(f)
+  }
+
+  extension (d: $[Done]) {
+    def alsoJoin(others: $[Done]*)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[Done] =
+      $.joinAll(d, others: _*)(using pos)
   }
 
   extension [A, B](x: $[A |+| B]) {
