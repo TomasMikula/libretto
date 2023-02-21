@@ -461,14 +461,6 @@ trait CoreDSL {
         joinAll(d, others: _*)(using pos)
     }
 
-    extension [A, B](x: $[A |+| B]) {
-      def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[C] =
-        switchEither(x, f)(pos)
-    }
-
     implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
       def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F], ctx: LambdaContext): $[F[B]] =
         fa > F.lift(λ(f))
@@ -494,6 +486,14 @@ trait CoreDSL {
       ctx: LambdaContext,
     ): $[A |*| B] =
       $.zip(a, b)(pos)
+  }
+
+  extension [A, B](x: $[A |+| B]) {
+    def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[C] =
+      $.switchEither(x, f)(pos)
   }
 
   trait Affine[A] {
