@@ -329,21 +329,21 @@ trait CoreDSL {
     )(using
       Affine[A],
     ): A -⚬ B =
-      apply { case $.?(a) => f(a) }
+      apply { case ?(a) => f(a) }
 
     def +[A, B](using SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
     )(using
       Cosemigroup[A],
     ): A -⚬ B =
-      apply { case $.+(a) => f(a) }
+      apply { case +(a) => f(a) }
 
     def *[A, B](using SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
     )(using
       Comonoid[A],
     ): A -⚬ B =
-      apply { case $.*(a) => f(a) }
+      apply { case *(a) => f(a) }
   }
 
   type NotLinearException <: Throwable
@@ -396,21 +396,6 @@ trait CoreDSL {
       pos: SourcePos,
     )(using LambdaContext): $[Done] =
       map(zip(a, b)(pos))(CoreDSL.this.join)(pos)
-
-    object ? {
-      def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Affine[A]): Some[$[A]] =
-        Some(nonLinear(a)(split = None, ditch = Some(A.discard))(pos))
-    }
-
-    object + {
-      def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Cosemigroup[A]): Some[$[A]] =
-        Some(nonLinear(a)(Some(A.split), ditch = None)(pos))
-    }
-
-    object * {
-      def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Comonoid[A]): Some[$[A]] =
-        Some(nonLinear(a)(Some(A.split), Some(A.discard))(pos))
-    }
 
     implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
       def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F], ctx: LambdaContext): $[F[B]] =
@@ -492,6 +477,21 @@ trait CoreDSL {
       ctx: LambdaContext,
     ): $[C] =
       $.switchEither(x, f)(pos)
+  }
+
+  object ? {
+    def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Affine[A]): Some[$[A]] =
+      Some($.nonLinear(a)(split = None, ditch = Some(A.discard))(pos))
+  }
+
+  object + {
+    def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Cosemigroup[A]): Some[$[A]] =
+      Some($.nonLinear(a)(Some(A.split), ditch = None)(pos))
+  }
+
+  object * {
+    def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Comonoid[A]): Some[$[A]] =
+      Some($.nonLinear(a)(Some(A.split), Some(A.discard))(pos))
   }
 
   trait Affine[A] {
