@@ -396,14 +396,6 @@ trait CoreDSL {
       pos: SourcePos,
     )(using LambdaContext): $[Done] =
       map(zip(a, b)(pos))(CoreDSL.this.join)(pos)
-
-    implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
-      def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F], ctx: LambdaContext): $[F[B]] =
-        fa > F.lift(λ(f))
-
-      def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F], ctx: LambdaContext): $[F[B]] =
-        fa > F.liftF(λ(f))
-    }
   }
 
   val |*| : ConcurrentPairOps
@@ -596,5 +588,13 @@ trait CoreDSL {
         override def split  : Pong -⚬ (Pong |*| Pong) = joinPong
         override def counit : Pong -⚬ One             = pong
       }
+  }
+
+  implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
+    def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F], ctx: LambdaContext): $[F[B]] =
+      fa > F.lift(λ(f))
+
+    def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F], ctx: LambdaContext): $[F[B]] =
+      fa > F.liftF(λ(f))
   }
 }

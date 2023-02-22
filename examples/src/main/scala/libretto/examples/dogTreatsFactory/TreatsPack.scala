@@ -1,7 +1,6 @@
 package libretto.examples.dogTreatsFactory
 
 import libretto.scaletto.StarterKit.{$, >, LambdaContext, Val, mapVal}
-import libretto.scaletto.StarterKit.$._
 
 enum TreatsPack {
   case LargeBone(
