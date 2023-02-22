@@ -427,14 +427,6 @@ trait CoreDSL {
         map(a)(f)(pos)
     }
 
-    extension [A](a: $[A]) {
-      def >[B](f: A -⚬ B)(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[B] =
-        map(a)(f)(pos)
-    }
-
     implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
       def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F], ctx: LambdaContext): $[F[B]] =
         fa > F.lift(λ(f))
@@ -461,6 +453,12 @@ trait CoreDSL {
     ): $[A |*| B] =
       $.zip(a, b)(pos)
 
+    def >[B](f: A -⚬ B)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[B] =
+      $.map(a)(f)(pos)
+
     def alsoElim(unit: $[One])(using
       pos: SourcePos,
       ctx: LambdaContext,
@@ -471,14 +469,12 @@ trait CoreDSL {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[A |*| B] =
-      import $.>
       a > introSnd(f)
 
     def alsoFst[X](f: One -⚬ X)(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[X |*| A] =
-      import $.>
       a > introFst(f)
   }
 
