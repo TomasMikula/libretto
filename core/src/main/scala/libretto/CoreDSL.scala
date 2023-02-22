@@ -329,21 +329,21 @@ trait CoreDSL {
     )(using
       Affine[A],
     ): A -⚬ B =
-      apply { case $.?(a) => f(a) }
+      apply { case ?(a) => f(a) }
 
     def +[A, B](using SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
     )(using
       Cosemigroup[A],
     ): A -⚬ B =
-      apply { case $.+(a) => f(a) }
+      apply { case +(a) => f(a) }
 
     def *[A, B](using SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
     )(using
       Comonoid[A],
     ): A -⚬ B =
-      apply { case $.*(a) => f(a) }
+      apply { case *(a) => f(a) }
   }
 
   type NotLinearException <: Throwable
@@ -396,100 +396,94 @@ trait CoreDSL {
       pos: SourcePos,
     )(using LambdaContext): $[Done] =
       map(zip(a, b)(pos))(CoreDSL.this.join)(pos)
+  }
 
-    def joinAll(a: $[Done], as: $[Done]*)(using pos: SourcePos, ctx: LambdaContext): $[Done] =
-      as match {
-        case Seq()  => a
-        case Seq(b) => joinTwo(a, b)(pos)
-        case as     => joinAll(joinTwo(a, as.head)(pos), as.tail: _*)
-      }
+  val |*| : ConcurrentPairOps
 
-    object |*| {
-      def unapply[A, B](ab: $[A |*| B])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): ($[A], $[B]) =
-        unzip(ab)(pos)
+  trait ConcurrentPairOps {
+    def unapply[A, B](ab: $[A |*| B])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): ($[A], $[B]) =
+      $.unzip(ab)(pos)
+  }
+
+  extension [A, B](f: A -⚬ B) {
+    def apply(a: $[A])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[B] =
+      $.map(a)(f)(pos)
+  }
+
+  extension [A](a: $[A]) {
+    def |*|[B](b: $[B])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A |*| B] =
+      $.zip(a, b)(pos)
+
+    def >[B](f: A -⚬ B)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[B] =
+      $.map(a)(f)(pos)
+
+    def alsoElim(unit: $[One])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A] =
+      $.eliminateFirst(unit, a)(pos)
+
+    def also[B](f: One -⚬ B)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A |*| B] =
+      a > introSnd(f)
+
+    def alsoFst[X](f: One -⚬ X)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[X |*| A] =
+      a > introFst(f)
+  }
+
+  extension (d: $[Done]) {
+    def alsoJoin(others: $[Done]*)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[Done] =
+      joinAll(d, others: _*)(using pos)
+  }
+
+  def joinAll(a: $[Done], as: $[Done]*)(using pos: SourcePos, ctx: LambdaContext): $[Done] =
+    as match {
+      case Seq()  => a
+      case Seq(b) => $.joinTwo(a, b)(pos)
+      case as     => joinAll($.joinTwo(a, as.head)(pos), as.tail: _*)
     }
 
-    object ? {
-      def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Affine[A]): Some[$[A]] =
-        Some(nonLinear(a)(split = None, ditch = Some(A.discard))(pos))
-    }
+  extension [A, B](x: $[A |+| B]) {
+    def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[C] =
+      $.switchEither(x, f)(pos)
+  }
 
-    object + {
-      def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Cosemigroup[A]): Some[$[A]] =
-        Some(nonLinear(a)(Some(A.split), ditch = None)(pos))
-    }
+  object ? {
+    def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Affine[A]): Some[$[A]] =
+      Some($.nonLinear(a)(split = None, ditch = Some(A.discard))(pos))
+  }
 
-    object * {
-      def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Comonoid[A]): Some[$[A]] =
-        Some(nonLinear(a)(Some(A.split), Some(A.discard))(pos))
-    }
+  object + {
+    def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Cosemigroup[A]): Some[$[A]] =
+      Some($.nonLinear(a)(Some(A.split), ditch = None)(pos))
+  }
 
-    extension [A, B](f: A -⚬ B) {
-      def apply(a: $[A])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[B] =
-        map(a)(f)(pos)
-    }
-
-    extension [A](a: $[A]) {
-      def |*|[B](b: $[B])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[A |*| B] =
-        zip(a, b)(pos)
-
-      def >[B](f: A -⚬ B)(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[B] =
-        map(a)(f)(pos)
-
-      def also[B](f: One -⚬ B)(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[A |*| B] =
-        a > introSnd(f)
-
-      def alsoFst[X](f: One -⚬ X)(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[X |*| A] =
-        a > introFst(f)
-
-      def alsoElim(unit: $[One])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[A] =
-        eliminateFirst(unit, a)(pos)
-    }
-
-    extension (d: $[Done]) {
-      def alsoJoin(others: $[Done]*)(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[Done] =
-        joinAll(d, others: _*)(using pos)
-    }
-
-    extension [A, B](x: $[A |+| B]) {
-      def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[C] =
-        switchEither(x, f)(pos)
-    }
-
-    implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
-      def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F], ctx: LambdaContext): $[F[B]] =
-        fa > F.lift(λ(f))
-
-      def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F], ctx: LambdaContext): $[F[B]] =
-        fa > F.liftF(λ(f))
-    }
+  object * {
+    def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Comonoid[A]): Some[$[A]] =
+      Some($.nonLinear(a)(Some(A.split), Some(A.discard))(pos))
   }
 
   trait Affine[A] {
@@ -594,5 +588,13 @@ trait CoreDSL {
         override def split  : Pong -⚬ (Pong |*| Pong) = joinPong
         override def counit : Pong -⚬ One             = pong
       }
+  }
+
+  implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
+    def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F], ctx: LambdaContext): $[F[B]] =
+      fa > F.lift(λ(f))
+
+    def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F], ctx: LambdaContext): $[F[B]] =
+      fa > F.liftF(λ(f))
   }
 }

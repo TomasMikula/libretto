@@ -8,8 +8,7 @@ import scala.util.{Failure, Success, Try}
 import java.util.concurrent.ScheduledExecutorService
 
 object MashupKitImpl extends MashupKit { kit =>
-  import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, Done, One, Val, chooseL, chooseR, liftPair, mapVal, par, unliftPair}
-  import StarterKit.dsl.$.>
+  import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, >, Done, One, Val, chooseL, chooseR, liftPair, mapVal, par, unliftPair}
   import StarterKit.coreLib.Junction
 
   override object dsl extends MashupDsl {

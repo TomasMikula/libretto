@@ -1,6 +1,7 @@
 package libretto
 
 import libretto.lambda.util.SourcePos
+import scala.annotation.targetName
 
 trait InvertDSL extends ClosedDSL {
   /** `-[A]` is a demand for `A`.
@@ -83,6 +84,12 @@ trait InvertDSL extends ClosedDSL {
 
   override def out[A, B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
     snd(f)
+
+  def invertOne: One -⚬ -[One] =
+    forevert[One] > elimSnd
+
+  def unInvertOne: -[One] -⚬ One =
+    introFst > backvert[One]
 
   /** Double-inversion elimination. */
   def die[A]: -[-[A]] -⚬ A =
@@ -205,9 +212,16 @@ trait InvertDSL extends ClosedDSL {
     contrapositive(pack[F])
 
   import $._
+
   extension [A](a: $[A]) {
-    def supplyTo(out: $[-[A]])(using SourcePos, LambdaContext): $[One] =
-      (a |*| out) > supply
+    def supplyTo(out: $[-[A]])(using pos: SourcePos, ctx: LambdaContext): $[One] =
+      $.zip(a, out)(pos) > supply
+
+    def :>:(b: ??[A])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): ??[One] =
+      (a supplyTo b) > invertOne
   }
 
   extension [B](expr: $[-[B]]) {
@@ -221,8 +235,62 @@ trait InvertDSL extends ClosedDSL {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[A] =
-      ($.one > lInvert) match {
-        case (a |*| b) => a alsoElim (b supplyTo expr)
+      $.unzip($.one > lInvert)(pos) match {
+        case (a, b) => a alsoElim (b supplyTo expr)
       }
   }
+
+  opaque type ??[A] = $[-[A]]
+
+  extension [A, B](f: A -⚬ B) {
+    @targetName("contramapOut")
+    def >>:(expr: ??[B])(using SourcePos, LambdaContext): ??[A] =
+      expr contramap f
+  }
+
+  extension [B](expr: ??[B]) {
+    @targetName("zipOutPair")
+    def |*|[C](that: ??[C])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): ??[B |*| C] =
+      $.zip(expr, that)(pos) > demandTogether
+
+    @targetName("alsoElimOut")
+    def alsoElim(that: ??[One])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): ??[B] =
+      $.eliminateSecond(expr,  that > unInvertOne)(pos)
+  }
+
+  extension [A, B](x: ??[A |&| B]) {
+    @targetName("switch_|&|")
+    def switch[C](f: LambdaContext ?=> Either[??[A], ??[B]] => ??[C])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): ??[C] =
+      $.switchEither(x > distributeInversionInto_|&|, f)(pos)
+  }
+
+  object producing {
+    def apply[B](using pos: SourcePos, ctx: LambdaContext)(
+      f: LambdaContext ?=> ??[B] => ??[One]
+    ): $[B] = {
+      val g: $[-[-[B]] |*| -[One]] = λ.closure(f)
+      val (b, negOne) = $.unzip(g)(pos)
+      doubleDemandElimination(b) alsoElim (one supplyTo negOne)
+    }
+  }
+
+  trait ConcurrentPairInvertOps extends ConcurrentPairOps {
+    @targetName("unapplyOutPair")
+    def unapply[A, B](ab: ??[A |*| B])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): (??[A], ??[B]) =
+      $.unzip($.map(ab)(distributeInversion)(pos))(pos)
+  }
+
+  override val |*| : ConcurrentPairInvertOps
 }
