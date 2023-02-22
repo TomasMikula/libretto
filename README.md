@@ -279,7 +279,10 @@ but depend on runtime values or runtime load.
 
 ### Do libretto streams support feedback loops?
 
-Yes, [loops can be implemented](https://github.com/TomasMikula/libretto/issues/19).
+Yes, loops, where a stream from system's output is fed back into the system's input
+can be implemented easily.
+Note, however, that sending data _around_ the system might not be a great way to do feedback.
+As data in Libretto can flow in both directions, the feedback can flow backwards _through_ the system.
 
 ### Is there support for timers?
 
