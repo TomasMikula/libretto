@@ -397,13 +397,6 @@ trait CoreDSL {
     )(using LambdaContext): $[Done] =
       map(zip(a, b)(pos))(CoreDSL.this.join)(pos)
 
-    def joinAll(a: $[Done], as: $[Done]*)(using pos: SourcePos, ctx: LambdaContext): $[Done] =
-      as match {
-        case Seq()  => a
-        case Seq(b) => joinTwo(a, b)(pos)
-        case as     => joinAll(joinTwo(a, as.head)(pos), as.tail: _*)
-      }
-
     object ? {
       def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Affine[A]): Some[$[A]] =
         Some(nonLinear(a)(split = None, ditch = Some(A.discard))(pos))
@@ -483,8 +476,15 @@ trait CoreDSL {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[Done] =
-      $.joinAll(d, others: _*)(using pos)
+      joinAll(d, others: _*)(using pos)
   }
+
+  def joinAll(a: $[Done], as: $[Done]*)(using pos: SourcePos, ctx: LambdaContext): $[Done] =
+    as match {
+      case Seq()  => a
+      case Seq(b) => $.joinTwo(a, b)(pos)
+      case as     => joinAll($.joinTwo(a, as.head)(pos), as.tail: _*)
+    }
 
   extension [A, B](x: $[A |+| B]) {
     def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
