@@ -419,14 +419,6 @@ trait CoreDSL {
         Some(nonLinear(a)(Some(A.split), Some(A.discard))(pos))
     }
 
-    extension [A, B](f: A -⚬ B) {
-      def apply(a: $[A])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[B] =
-        map(a)(f)(pos)
-    }
-
     implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
       def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F], ctx: LambdaContext): $[F[B]] =
         fa > F.lift(λ(f))
@@ -444,6 +436,14 @@ trait CoreDSL {
       ctx: LambdaContext,
     ): ($[A], $[B]) =
       $.unzip(ab)(pos)
+  }
+
+  extension [A, B](f: A -⚬ B) {
+    def apply(a: $[A])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[B] =
+      $.map(a)(f)(pos)
   }
 
   extension [A](a: $[A]) {
