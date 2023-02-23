@@ -1,6 +1,7 @@
 package libretto
 
 import java.util.concurrent.{Executors, ScheduledExecutorService}
+import java.util.concurrent.atomic.AtomicInteger
 import libretto.Functor._
 import libretto.lambda.util.SourcePos
 import libretto.lambda.util.Monad.syntax._
@@ -687,6 +688,49 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
                     }
             } yield ()
           }
+      },
+
+      "LeasePool" -> {
+        val LeaseCount = 5
+        val ClientCount = 100
+        TestCase.interactWith {
+          val prg: Done -⚬ Val[List[Int]] =
+            λ.+ { start =>
+              type Counter = Val[AtomicInteger]
+
+              val pool: $[LeasePool] = LeasePool.fromList(LList1.fill(LeaseCount)(id[Done])(start))
+              val counter: $[Counter] = constVal(new AtomicInteger(0))(start)
+              val counters: $[LList1[Counter]] = LList1.fill(ClientCount)(id)(counter)
+              val (pool1 |*| lease_counters) = (pool |*| counters) > LList1.mapS(
+                λ { case pool |*| cntr =>
+                  val (lease |*| pool1) = LeasePool.acquireLease(pool)
+                  pool1 |*| (lease |*| cntr)
+                }
+              )
+              // Increments the counter when lease is obtained, decrements it before release.
+              // Retrns the value of the counter after increment.
+              val client: (Lease |*| Counter) -⚬ Val[Int] =
+                λ { case lease |*| counter =>
+                  Lease.notifyAcquired(lease) match
+                    case ping |*| lease =>
+                      val (counter1 ** n) = (counter deferUntil ping) > mapVal(n => (n, n.incrementAndGet()))
+                      val decremented = counter1 > signalPosFst > fst(delay(5.millis)) > awaitPosFst > mapVal(_.decrementAndGet) > neglect
+                      n alsoElim (Lease.releaseBy(decremented |*| lease))
+                }
+              val res: $[Val[List[Int]]] =
+                lease_counters > LList1.map(client) > LList1.toLList > toScalaList
+              res waitFor LeasePool.close(pool1)
+            }
+          prg
+        }
+        .via { port =>
+          for {
+            ns <- expectVal(port)
+            _  <- Outcome.assert(ns.size == ClientCount, s"${ns.size} != $ClientCount")
+            _  <- Outcome.assert(ns.forall(_ <= LeaseCount), s"contains values greater than $LeaseCount: ${ns.filter(_ >= LeaseCount)}")
+            _  <- Outcome.assert(ns.contains(LeaseCount), s"Number of granted leases hasn't reached the full capacity of $LeaseCount. Maximum reached was ${ns.max}: $ns")
+          } yield ()
+        }
       },
 
       "backvert then forevert" -> TestCase {

@@ -211,8 +211,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
   }
 
-  /** Expresses that interaction with `A` is (at least partially) obstructed.
+  /** Expresses the intent that interaction with `A` is (at least partially) obstructed.
     * The detention can be ended by receiving a signal.
+    *
+    * Note that whether/how much the interaction with `Detained[A]` is actually
+    * obstructed is completely up to the producer of `Detained[A]`.
     *
     * Equivalent to `Need |*| A` (or `Done =⚬ A` if the DSL extends [[ClosedDSL]]).
     */
@@ -2504,6 +2507,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def toEither[A]: Maybe[A] -⚬ (One |+| A) =
       id
 
+    def map[A, B](f: A -⚬ B): Maybe[A] -⚬ Maybe[B] =
+      |+|.rmap(f)
+
     def getOrElse[A](f: One -⚬ A): Maybe[A] -⚬ A =
       either(f, id)
 
@@ -3221,6 +3227,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def of[S, T](fs: (S -⚬ T)*)(using S: Comonoid[S]): S -⚬ LList[T] =
       fromList(fs.toList)
 
+    def unfold[S, T](f: S -⚬ (One |+| (T |*| S))): S -⚬ LList[T] = rec { self =>
+      f > |+|.rmap(snd(self)) > pack
+    }
+
+    def fill[S, T](n: Int)(f: S -⚬ T)(using Comonoid[S]): S -⚬ LList[T] = {
+      require(n >= 0, s"n must be non-negative, was $n")
+      fromList(List.fill(n)(f))
+    }
+
+    def fill0[S, T](n: Int)(f: S -⚬ T)(using Cosemigroup[S]): S -⚬ (S |*| LList[T]) = {
+      require(n >= 0, s"n must be non-negative, was $n")
+      fromList0(List.fill(n)(f))
+    }
+
     def switch[T, R](
       caseNil: One -⚬ R,
       caseCons: (T |*| LList[T]) -⚬ R,
@@ -3479,6 +3499,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def of[S, T](head: S -⚬ T, tail: (S -⚬ T)*)(using S: Cosemigroup[S]): S -⚬ LList1[T] =
       from(head, tail.toList)
 
+    def unfold[S, T](f: S -⚬ (T |*| Maybe[S])): S -⚬ LList1[T] =
+      λ { s =>
+        val (h |*| sOpt) = f(s)
+        val tail: $[LList[T]] = LList.unfold[Maybe[S], T](Maybe.map(f))(sOpt)
+        cons(h |*| tail)
+      }
+
+    def fill[S, T](n: Int)(f: S -⚬ T)(using Cosemigroup[S]): S -⚬ LList1[T] = {
+      require(n >= 1, s"n must be positive, was $n")
+      from(f, List.fill(n-1)(f))
+    }
+
     def map[T, U](f: T -⚬ U): LList1[T] -⚬ LList1[U] =
       par(f, LList.map(f))
 
@@ -3649,6 +3681,68 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         .>.snd(LList1.insertBySignal)         .to[  (A |*| Ā) |*|    LList1[A]     ]
 
     Unlimited.unfold(borrow)
+  }
+
+  opaque type Lease = Done |*| Need
+  object Lease {
+    /** The [[Done]] signal on the outport signals when the lease is released. */
+    def create: Done -⚬ (Lease |*| Done) =
+      introSnd(lInvertSignal) > assocRL
+
+    def release: Lease -⚬ One =
+      rInvertSignal
+
+    def releaseBy: (Done |*| Lease) -⚬ One =
+      assocRL > fst(join) > rInvertSignal
+
+    def notifyAcquired: Lease -⚬ (Ping |*| Lease) =
+      fst(notifyDoneL) > assocLR
+
+    def deferAcquisition: (Done |*| Lease) -⚬ Lease =
+      assocRL > fst(join)
+
+    def deferRelease: (Done |*| Lease) -⚬ Lease =
+      λ { case (d |*| (leaseD |*| leaseN)) =>
+        val (n1 |*| n2) = joinNeed(leaseN)
+        (leaseD |*| n2) alsoElim rInvertSignal(d |*| n1)
+      }
+  }
+
+  opaque type LeasePool = Rec[[LeasePool] =>>
+    Done |&| (Lease |*| LeasePool)
+  ]
+
+  object LeasePool {
+    private def pack: (Done |&| (Lease |*| LeasePool)) -⚬ LeasePool =
+      dsl.pack[[X] =>> Done |&| (Lease |*| X)]
+
+    private def unpack: LeasePool -⚬ (Done |&| (Lease |*| LeasePool)) =
+      dsl.unpack
+
+    private def make: (Unlimited[Lease] |*| Done) -⚬ LeasePool = rec { make =>
+      choice[Unlimited[Lease] |*| Done, Done, Lease |*| LeasePool](
+        λ { case (leases |*| end) =>
+          end alsoElim Unlimited.discard(leases)
+        },
+        λ { case (leases |*| end) =>
+          val (lease |*| leases1) = Unlimited.getSome(leases)
+          lease |*| make(leases1 |*| end)
+        }
+      ) > pack
+    }
+
+    def fromList: LList1[Done] -⚬ LeasePool =
+      pool[Done, Need](lInvertSignal) > snd(LList1.fold[Done]) > make
+
+    /** Creates a pool from `S` with as many leases as are unfolded from `S` via `f`. */
+    def createUnfold[S](f: S -⚬ (Done |*| Maybe[S])): S -⚬ LeasePool =
+      LList1.unfold(f) > fromList
+
+    def acquireLease: LeasePool -⚬ (Lease |*| LeasePool) =
+      unpack > chooseR
+
+    def close: LeasePool -⚬ Done =
+      unpack > chooseL
   }
 
   /** Represents an acquired "token".
