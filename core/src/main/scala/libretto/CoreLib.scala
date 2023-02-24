@@ -3708,41 +3708,22 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
   }
 
-  opaque type LeasePool = Rec[[LeasePool] =>>
-    Done |&| (Lease |*| LeasePool)
-  ]
+  opaque type LeasePool =
+    Unlimited[Lease] |*| Done
 
   object LeasePool {
-    private def pack: (Done |&| (Lease |*| LeasePool)) -⚬ LeasePool =
-      dsl.pack[[X] =>> Done |&| (Lease |*| X)]
-
-    private def unpack: LeasePool -⚬ (Done |&| (Lease |*| LeasePool)) =
-      dsl.unpack
-
-    private def make: (Unlimited[Lease] |*| Done) -⚬ LeasePool = rec { make =>
-      choice[Unlimited[Lease] |*| Done, Done, Lease |*| LeasePool](
-        λ { case (leases |*| end) =>
-          end alsoElim Unlimited.discard(leases)
-        },
-        λ { case (leases |*| end) =>
-          val (lease |*| leases1) = Unlimited.getSome(leases)
-          lease |*| make(leases1 |*| end)
-        }
-      ) > pack
-    }
-
     def fromList: LList1[Done] -⚬ LeasePool =
-      pool[Done, Need](lInvertSignal) > snd(LList1.fold[Done]) > make
+      pool[Done, Need](lInvertSignal) > snd(LList1.fold[Done])
 
     /** Creates a pool from `S` with as many leases as are unfolded from `S` via `f`. */
     def createUnfold[S](f: S -⚬ (Done |*| Maybe[S])): S -⚬ LeasePool =
       LList1.unfold(f) > fromList
 
     def acquireLease: LeasePool -⚬ (Lease |*| LeasePool) =
-      unpack > chooseR
+      fst(Unlimited.getSome) > assocLR
 
     def close: LeasePool -⚬ Done =
-      unpack > chooseL
+      elimFst(Unlimited.discard)
   }
 
   /** Represents an acquired "token".
