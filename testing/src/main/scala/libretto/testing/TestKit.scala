@@ -4,6 +4,7 @@ import libretto.{CoreBridge, CoreDSL, ExecutionParams, Monad}
 import libretto.lambda.util.{Monad => ScalaMonad, SourcePos}
 import libretto.lambda.util.Monad.syntax._
 import libretto.util.Async
+import scala.annotation.targetName
 
 trait TestKit {
   type Dsl <: CoreDSL
@@ -50,7 +51,7 @@ trait TestKit {
       msg: String,
       error: Option[Throwable] = None,
     ): Outcome[A] =
-      fromTestResult(TestResult.failure(using pos)(msg, error))
+      fromTestResult(TestResult.failed(using pos)(msg, error))
 
     def crash[A](e: Throwable): Outcome[A] =
       fromTestResult(TestResult.crash(e))
@@ -83,10 +84,8 @@ trait TestKit {
 
     def flatMap[A, B](fa: Outcome[A])(f: A => Outcome[B]): Outcome[B] =
       fa.flatMap {
-        case TestResult.Success(a)           => f(a)
-        case TestResult.Failure(msg, pos, e) => Async.now(TestResult.Failure(msg, pos, e))
-        case TestResult.Crash(e)             => Async.now(TestResult.Crash(e))
-        case TestResult.TimedOut(d)          => Async.now(TestResult.TimedOut(d))
+        case TestResult.Success(a)   => f(a)
+        case TestResult.Failures(es) => Async.now(TestResult.Failures(es))
       }
 
     def traverseIterator[A, B](it: Iterator[A])(f: A => Outcome[B]): Outcome[List[B]] =
@@ -104,6 +103,12 @@ trait TestKit {
         case Nil => success(Nil)
         case h :: t => monadOutcome.flatMap(f(h))(b => monadOutcome.map(traverseList(t)(f))(b :: _))
       }
+
+    def zipWith[A, B, C](a: Outcome[A], b: Outcome[B])(f: (A, B) => C): Outcome[C] =
+      Async.zipWith(a, b) { (a, b) => (a zipWith b)(f) }
+
+    def assertAll(outcomes: Outcome[Unit]*): Outcome[Unit] =
+      outcomes.foldRight(Outcome.success(()))(zipWith(_, _)((_, _) => ()))
 
     extension [A](outcome: Outcome[A]) {
       def assertEquals(using pos: SourcePos)(expected: A): Outcome[Unit] =
@@ -136,6 +141,12 @@ trait TestKit {
   type ExecutionParam[A]
   val ExecutionParam: ExecutionParams[ExecutionParam]
 
+  transparent inline def OutPort(using exn: Execution): exn.OutPort.type =
+    exn.OutPort
+
+  transparent inline def InPort(using exn: Execution): exn.InPort.type =
+    exn.InPort
+
   given monadOutcome: ScalaMonad[Outcome] with {
     override def pure[A](a: A): Outcome[A] =
       Async.now(TestResult.success(a))
@@ -156,7 +167,7 @@ trait TestKit {
   def expectCrashDone(using exn: Execution, pos: SourcePos)(port: exn.OutPort[Done]): Outcome[Throwable] =
     exn.OutPort.awaitDone(port).map {
       case Left(e)   => TestResult.success(e)
-      case Right(()) => TestResult.failure(using pos)("Expected crash, but got Done")
+      case Right(()) => TestResult.failed(using pos)("Expected crash, but got Done")
     }
 
   def expectPing(using exn: Execution)(port: exn.OutPort[Ping]): Outcome[Unit] =
@@ -169,13 +180,13 @@ trait TestKit {
     exn.OutPort.awaitEither(port).map {
       case Left(e)         => TestResult.crash(e)
       case Right(Left(p))  => TestResult.success(p)
-      case Right(Right(_)) => TestResult.failure(using pos)("Expected Left, but got Right")
+      case Right(Right(_)) => TestResult.failed(using pos)("Expected Left, but got Right")
     }
 
   def expectRight[A, B](using exn: Execution, pos: SourcePos)(port: exn.OutPort[A |+| B]): Outcome[exn.OutPort[B]] =
     exn.OutPort.awaitEither(port).map {
       case Left(e)         => TestResult.crash(e)
-      case Right(Left(_))  => TestResult.failure(using pos)("Expected Right, but got Left")
+      case Right(Left(_))  => TestResult.failed(using pos)("Expected Right, but got Left")
       case Right(Right(p)) => TestResult.success(p)
     }
 }

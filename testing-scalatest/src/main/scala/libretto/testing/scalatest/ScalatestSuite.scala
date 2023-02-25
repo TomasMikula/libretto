@@ -3,6 +3,7 @@ package libretto.testing.scalatest
 import libretto.testing.{TestCase, TestExecutor, TestKit, TestResult}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.Checkpoints.Checkpoint
 
 abstract class ScalatestSuite[Kit <: TestKit]
 extends AnyFunSuite
@@ -73,26 +74,30 @@ extends AnyFunSuite
                 } else {
                   // do nothing
                 }
-              case TestResult.Failure(msg, pos, e) =>
+              case TestResult.Failures(es) =>
                 if (isPending) {
                   pending
                 } else {
-                  val message = s"$msg (at ${pos.path}:${pos.line})"
-                  e match {
-                    case Some(e) => fail(message, e)
-                    case None    => fail(message)
+                  import TestResult.Failure.{Crash, Failed, TimedOut}
+                  val cp = new Checkpoint()
+                  es.foreach { e =>
+                    cp {
+                      e match {
+                        case Failed(msg, pos, e) =>
+                          val message = s"$msg (at ${pos.path}:${pos.line})"
+                          e match {
+                            case Some(e) => fail(message, e)
+                            case None    => fail(message)
+                          }
+                        case Crash(e) =>
+                          fail(s"Crashed with ${e.getClass.getCanonicalName}: ${e.getMessage}", e)
+                        case TimedOut(d) =>
+                          fail(s"Timed out after $d")
+                      }
+                    }
                   }
+                  cp.reportAll()
                 }
-              case TestResult.Crash(e) =>
-                if (isPending)
-                  pending
-                else
-                  fail(s"Crashed with ${e.getClass.getCanonicalName}: ${e.getMessage}", e)
-              case TestResult.TimedOut(d) =>
-                if (isPending)
-                  pending
-                else
-                  fail(s"Timed out after $d")
             }
           c match {
             case c: TestCase.SingleProgram[testKit.type] =>

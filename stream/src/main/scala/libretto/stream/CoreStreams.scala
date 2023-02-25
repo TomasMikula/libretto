@@ -49,8 +49,20 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   }
 
   object Stream {
+    type Offer[A] = Done |&| (A |*| Stream[A])
+
     def fromLeader[A]: StreamLeader[Done, A] -⚬ Stream[A] = id
     def toLeader[A]  : Stream[A] -⚬ StreamLeader[Done, A] = id
+
+    def toEither[A]: Stream[A] -⚬ (Done |+| Offer[A]) =
+      StreamLeader.unpack
+
+    def collectAll[A]: Stream[A] -⚬ (LList[A] |*| Done) = rec { collectAll =>
+      toEither > either(
+        introFst(LList.nil[A]),
+        chooseR > snd(collectAll) > assocRL > fst(LList.cons)
+      )
+    }
   }
 
   object Source {
@@ -124,10 +136,27 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative ([[Pong]]) signal. */
     def notifyAction[A]: (Pong |*| Source[A]) -⚬ Source[A] =
-      id                                     [             Source[A]         ]
-        .<(pack)                        .from[           Done |&| Polled[A]  ]
-        .<(notifyChoice)                .from[ Pong |*| (Done |&| Polled[A]) ]
-        .<(par(id, unpack))             .from[ Pong |*|    Source[A]         ]
+      snd(unpack) > notifyChoice > pack
+
+    def notifyClosed[A]: (Pong |*| Source[A]) -⚬ Source[A] = rec { self =>
+      val onClose: (Pong |*| Source[A]) -⚬ Done =
+        λ { case pong |*| src =>
+          close(src) alsoElim dsl.pong(pong)
+        }
+
+      val onPoll: (Pong |*| Source[A]) -⚬ Polled[A] =
+        λ { case pong |*| src =>
+          poll(src) switch {
+            case Left(closed) =>
+              Polled.empty(closed) alsoElim dsl.pong(pong)
+            case Right(a |*| as) =>
+              val tail = self(pong |*| as)
+              Polled.cons(a |*| tail)
+          }
+        }
+
+      choice(onClose, onPoll) > pack
+    }
 
     /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| Source[A]) -⚬ Source[A] =
@@ -265,6 +294,110 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           caseCons = par(id, self) > merge,
         )
       }
+
+    def prefetch[A](n: Int)(discardPrefetched: A -⚬ Done): Source[A] -⚬ Source[A] = {
+      def toBuffer: (Source[A] |*| LeasePool) -⚬ (Pong |*| Ping |*| LList[Lease |*| A] |*| Done) = {
+        def go: (Source[A] |*| LeasePool |*| Ping) -⚬ (Ping |*| LList[Lease |*| A] |*| Done) = rec { go =>
+          λ { case src |*| leasePool |*| downstreamClosed =>
+            val lease |*| leasePool1 = LeasePool.acquireLease(leasePool)
+            (downstreamClosed |*| lease) > raceBy(forkPing, Lease.notifyAcquired) switch {
+              case Left(downstreamClosed |*| lease) => // downstream closed
+                val cleanup = joinAll(
+                  Source.close(src),
+                  LeasePool.close(leasePool1),
+                ) alsoElim Lease.release(lease)
+                downstreamClosed |*| LList.nil(one) |*| cleanup
+              case Right(downstreamClosed |*| lease) => // obtained the lease
+                (Source.poll(src) > |+|.notifyL) switch {
+                  case Left(ping |*| upstreamClosed) =>
+                    val cleanup = joinAll(
+                      LeasePool.close(leasePool1),
+                      upstreamClosed,
+                    )
+                      .alsoElim(Lease.release(lease))
+                      .alsoElim(dismissPing(downstreamClosed))
+                    ping |*| LList.nil(one) |*| cleanup
+                  case Right(a |*| as) =>
+                    val donePulling |*| tail |*| closed = go(as |*| leasePool1 |*| downstreamClosed)
+                    donePulling |*| LList.cons((lease |*| a) |*| tail) |*| closed
+                }
+            }
+          }
+        }
+
+        λ { case src |*| pool =>
+          val pong |*| ping = one > lInvertPongPing
+          val doneWithPulling |*| buffer |*| closed = go(src |*| pool |*| ping)
+          pong |*| doneWithPulling |*| buffer |*| closed
+        }
+      }
+
+      def fromBuffer: (Pong |*| Ping |*| LList[Lease |*| A] |*| Done) -⚬ Source[A] = rec { fromBuffer =>
+        val onClose: (Pong |*| Ping |*| LList[Lease |*| A] |*| Done) -⚬ (Pong |*| Done) =
+          λ { case (downstreamClosed |*| donePulling |*| buffer |*| upstreamClosed) =>
+            val discarded: $[Done] =
+              (strengthenPing(donePulling) |*| buffer)
+                > LList.transform1(
+                  λ { case donePulling |*| (lease |*| a) =>
+                    discardPrefetched(a) alsoElim Lease.releaseBy(donePulling |*| lease)
+                  }
+                )
+                > either(id, LList1.fold[Done])
+            downstreamClosed |*| join(discarded |*| upstreamClosed)
+          }
+
+        val onPoll: (Pong |*| Ping |*| LList[Lease |*| A] |*| Done) -⚬ Polled[A] =
+          λ { case downstreamClosed |*| donePulling |*| buffer |*| upstreamClosed =>
+            (LList.uncons(buffer) > Maybe.toEither > |+|.notifyR) switch {
+              case Left(nil) =>
+                Polled.empty(upstreamClosed)
+                  .alsoElim(nil)
+                  .alsoElim(pong(downstreamClosed))
+                  .alsoElim(dismissPing(donePulling))
+              case Right(handingOver |*| ((lease |*| a) |*| buffer1)) =>
+                val tail: $[Source[A]] =
+                  fromBuffer(downstreamClosed |*| donePulling |*| buffer1 |*| upstreamClosed)
+                    .alsoElim(Lease.releaseBy(strengthenPing(handingOver) |*| lease))
+                Polled.cons(a |*| tail)
+            }
+          }
+
+        choice(onClose, onPoll) > |&|.notifyL > pack
+      }
+
+      def go: (Source[A] |*| LeasePool) -⚬ Source[A] =
+        toBuffer > fromBuffer
+
+      λ { upstream =>
+        val leasePool: $[LeasePool] =
+          one > done > LeasePool.allocate(n)
+        go(upstream |*| leasePool)
+      }
+    }
+
+    /** Every pulled element is also output in the list.
+     *  Note that if the resulting list is not consumed fast enough,
+     *  elements will accumulate there without any bound.
+     */
+    def tapBy[A](dup: A -⚬ (A |*| A)): Source[A] -⚬ (Source[A] |*| LList[A]) = rec { tap =>
+      val onClose: Source[A] -⚬ (Done |*| LList[A]) =
+        Source.close[A] > introSnd(LList.nil[A])
+
+      val onPoll: Source[A] -⚬ (Polled[A] |*| LList[A]) =
+        Source.poll[A] > either(
+          Polled.empty[A] > introSnd(LList.nil[A]),
+          λ { case a |*| as =>
+            val a1 |*| a2 = dup(a)
+            val sourceTail |*| listTail = tap(as)
+            Polled.cons(a1 |*| sourceTail) |*| LList.cons(a2 |*| listTail)
+          },
+        )
+
+      choice(onClose, onPoll) > coDistributeR > fst(pack)
+    }
+
+    def tap[A](using Cosemigroup[A]): Source[A] -⚬ (Source[A] |*| LList[A]) =
+      tapBy(Cosemigroup[A].split)
 
     implicit def positiveJunction[A](implicit A: Junction.Positive[A]): Junction.Positive[Source[A]] =
       Junction.Positive.from(Source.delayBy)

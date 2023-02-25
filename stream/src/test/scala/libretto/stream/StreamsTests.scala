@@ -12,7 +12,7 @@ import scala.concurrent.duration._
 
 class StreamsTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{dsl, expectDone, expectRight, expectVal, splitOut}
+    import kit.{Outcome, dsl, expectDone, expectRight, expectVal, splitOut}
     import kit.Outcome.{assertEquals, success}
 
     val coreLib = CoreLib(dsl)
@@ -157,6 +157,34 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             d2 <- expectDone(p1 map ValSource.Polled.close)
           } yield success(())
         },
+
+      "prefetch" -> {
+        val n = 10
+        val N = 20
+        TestCase.interactWith {
+          val prg: Done -⚬ ((Pong |*| Done) |*| (Val[List[Int]] |*| Val[List[Int]])) =
+            ValSource.fromList(List.range(0, N)) > ValSource.tap > par(
+              ValSource.prefetch(n) > ValSource.delayable > par(strengthenPong, ValSource.close),
+              LList.splitAt(n) > par(toScalaList, toScalaList),
+            )
+          prg
+        }
+        .via { port =>
+          for {
+            (signals, outputs) <- splitOut(port)
+            (out1, out2) <- splitOut(outputs)
+            (pong, done) <- splitOut(signals)
+            res1 <- expectVal(out1) // the first n should be output before the first poll
+            _ = OutPort.sendPong(pong)
+            res2 <- expectVal(out2)
+            _ <- expectDone(done)
+            _ <- Outcome.assertAll(
+              Outcome.assertEquals(res1, List.range(0, n)),
+              Outcome.assertEquals(res2, List.empty),
+            )
+          } yield success(())
+        }
+      },
     )
   }
 }

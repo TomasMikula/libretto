@@ -3335,6 +3335,29 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         switchWithL(caseNil, caseCons)
       }
 
+    def transform0[T, A, U](f: (A |*| T) -⚬ U)(using Cosemigroup[A]): (A |*| LList[T]) -⚬ (A |*| LList[U]) = {
+      def go: (A |*| (T |*| LList[T])) -⚬ LList[U] =
+        rec { go =>
+          assocRL > switchWithL(
+            f > singleton,
+            λ { case (+(a) |*| t0) |*| ts1 =>
+              cons(f(a |*| t0) |*| go(a |*| ts1))
+            },
+          )
+        }
+
+      switchWithL(
+        introSnd(nil[U]),
+        λ { case (+(a) |*| ts1) => a |*| go(a |*| ts1) }
+      )
+    }
+
+    def transform1[T, A, U](f: (A |*| T) -⚬ U)(using Cosemigroup[A]): (A |*| LList[T]) -⚬ (A |+| LList1[U]) =
+      switchWithL(
+        injectL,
+        snd(LList1.cons) > LList1.transform(f) > injectR,
+      )
+
     def transformCollect[T, A, U](f: (A |*| T) -⚬ Maybe[U])(implicit A: Comonoid[A]): (A |*| LList[T]) -⚬ LList[U] =
       rec { self =>
         val caseNil: A -⚬ LList[U] =
@@ -3352,6 +3375,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         par(id, self) > IXI > par(cons, cons)
 
       switch(caseNil, caseCons)
+    }
+
+    def splitAt[A](i: Int): LList[A] -⚬ (LList[A] |*| LList[A]) = {
+      require(i >= 0, s"i must not be negative, was $i")
+      if (i == 0)
+        introFst(LList.nil[A])
+      else
+        uncons > either(
+          parFromOne(LList.nil[A], LList.nil[A]),
+          snd(splitAt(i-1)) > assocRL > fst(cons),
+        )
     }
 
     def splitEvenOdd[A]: LList[A] -⚬ (LList[A] |*| LList[A]) = rec { self =>
@@ -3525,6 +3559,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def fold[T](using T: Semigroup[T]): LList1[T] -⚬ T =
       LList.actOn[T, T](T.combine)
+
+    def transform[T, A, U](f: (A |*| T) -⚬ U)(using A: Cosemigroup[A]): (A |*| LList1[T]) -⚬ LList1[U] =
+      λ { case a |*| (t0 |*| ts) =>
+        val a1 |*| us = LList.transform0(f)(a |*| ts)
+        f(a1 |*| t0) |*| us
+      }
 
     /** Shifts all the elements of a list by "half" to the left,
      *  moving the first half of the first element to the end of the list.
@@ -3714,6 +3754,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   object LeasePool {
     def fromList: LList1[Done] -⚬ LeasePool =
       pool[Done, Need](lInvertSignal) > snd(LList1.fold[Done])
+
+    def allocate(n: Int): Done -⚬ LeasePool =
+      LList1.fill(n)(id[Done]) > fromList
 
     /** Creates a pool from `S` with as many leases as are unfolded from `S` via `f`. */
     def createUnfold[S](f: S -⚬ (Done |*| Maybe[S])): S -⚬ LeasePool =

@@ -143,9 +143,9 @@ object TestExecutor {
 
           Async
             .await(timeout)(result)
-            .getOrElse(TestResult.TimedOut(timeout))
+            .getOrElse(TestResult.timedOut(timeout))
         } catch {
-          case e => TestResult.Crash(e)
+          case e => TestResult.crash(e)
         } finally {
           executor.cancel(execution)
         }
@@ -154,9 +154,9 @@ object TestExecutor {
         try {
           Async
             .await(timeout) { postStop(x) }
-            .getOrElse(TestResult.TimedOut(timeout))
+            .getOrElse(TestResult.timedOut(timeout))
         } catch {
-          case e => TestResult.Crash(e)
+          case e => TestResult.crash(e)
         }
       }
     }
@@ -168,7 +168,7 @@ object TestExecutor {
       try {
         Async
           .await(timeout)(body())
-          .getOrElse(TestResult.TimedOut(timeout))
+          .getOrElse(TestResult.timedOut(timeout))
       } catch {
         case e => TestResult.crash(e)
       }

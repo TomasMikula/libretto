@@ -38,14 +38,14 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     )
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import TestKit.givenInstance._
+    import kit._
     import dsl._
     import dsl.$._
     val coreLib = CoreLib(dsl)
     val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
     import coreLib._
     import scalettoLib._
-    import bridge.Execution
+    import kit.bridge.Execution
 
     def raceKeepWinner[A](
       prg1: Done -⚬ Val[A],

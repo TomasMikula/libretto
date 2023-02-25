@@ -112,7 +112,7 @@ abstract class ScalettoStreams {
       Source.delayable[Val[A]]
 
     def notifyAction[A]: (Pong |*| ValSource[A]) -⚬ ValSource[A] =
-      snd(toChoice) > notifyChoice > fromChoice
+      Source.notifyAction[Val[A]]
 
     def delay[A](d: FiniteDuration): ValSource[A] -⚬ ValSource[A] = {
       id                                           [          ValSource[A] ]
@@ -276,6 +276,12 @@ abstract class ScalettoStreams {
         }
       }
     }
+
+    def tap[A]: ValSource[A] -⚬ (ValSource[A] |*| LList[Val[A]]) =
+      Source.tap[Val[A]]
+
+    def prefetch[A](n: Int): ValSource[A] -⚬ ValSource[A] =
+      Source.prefetch[Val[A]](n)(neglect)
 
     def dropUntilFirstDemand[A]: ValSource[A] -⚬ ValSource[A] = rec { self =>
         val caseDownstreamRequested: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] = {
