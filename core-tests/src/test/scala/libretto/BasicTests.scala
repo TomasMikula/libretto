@@ -573,13 +573,13 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
 
         def expectNext(using e: Execution)(port: e.OutPort[LList[Val[Int]]], value: Int)(using SourcePos): Outcome[e.OutPort[LList[Val[Int]]]] =
           for {
-            ht <- expectRight(e.OutPort.map(port)(LList.uncons > Maybe.toEither))
+            ht <- expectRight(e.OutPort.map(port)(LList.uncons))
             (h, t) = e.OutPort.split(ht)
             _ <- expectVal(h).assertEquals(value)
           } yield t
 
         def expectNil(using e: Execution)(port: e.OutPort[LList[Val[Int]]])(using SourcePos): Outcome[Unit] =
-          expectLeft(e.OutPort.map(port)(LList.uncons > Maybe.toEither))
+          expectLeft(e.OutPort.map(port)(LList.uncons))
             .map(e.OutPort.discardOne(_))
 
         TestCase

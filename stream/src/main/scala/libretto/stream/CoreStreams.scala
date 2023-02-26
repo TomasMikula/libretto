@@ -360,7 +360,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def takeForeach[X, A]: (LList[X] |*| Source[A]) -⚬ (LList[X |*| A] |*| LList[X] |*| Done) =
       rec { takeForeach =>
         λ { case (xs |*| as) =>
-          (LList.uncons(xs) > Maybe.toEither) switch {
+          LList.uncons(xs) switch {
             case Left(*(unit)) =>
               LList.nil(unit) |*| LList.nil(unit) |*| Source.close(as)
             case Right(x |*| xs) =>

@@ -3198,7 +3198,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def singleton[T]: T -⚬ LList[T] =
       introSnd(nil[T]) > cons[T]
 
-    def uncons[T]: LList[T] -⚬ Maybe[T |*| LList[T]] =
+    def uncons[T]: LList[T] -⚬ (One |+| (T |*| LList[T])) =
       unpack
 
     /** Signals when it is decided whether the list is empty (nil) or has an element (cons). */
