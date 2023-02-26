@@ -1,6 +1,7 @@
 package libretto.stream
 
 import libretto.{CoreDSL, CoreLib}
+import libretto.lambda.util.Exists
 
 object CoreStreams {
   def apply(
@@ -111,18 +112,23 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def empty[A]: Done -⚬ Source[A] =
       emptyF[A].pack
 
-    def cons[A](implicit A: PAffine[A]): (A |*| Source[A]) -⚬ Source[A] = {
-      val onClose: (A |*| Source[A]) -⚬ Done      = joinMap(A.neglect, Source.close)
+    def cons[A](neglect: A -⚬ Done): (A |*| Source[A]) -⚬ Source[A] = {
+      val onClose: (A |*| Source[A]) -⚬ Done      = joinMap(neglect, Source.close)
       val onPoll:  (A |*| Source[A]) -⚬ Polled[A] = Polled.cons
       from(onClose, onPoll)
     }
 
-    def fromLList[A](implicit A: PAffine[A]): LList[A] -⚬ Source[A] = rec { self =>
+    def cons[A](using A: PAffine[A]): (A |*| Source[A]) -⚬ Source[A] =
+      cons[A](A.neglect)
+
+    def fromLList[A](neglect: A -⚬ Done): LList[A] -⚬ Source[A] = rec { self =>
       LList.switch(
         caseNil  = done          > Source.empty[A],
-        caseCons = par(id, self) > Source.cons[A],
+        caseCons = par(id, self) > Source.cons(neglect),
       )
     }
+    def fromLList[A](using A: PAffine[A]): LList[A] -⚬ Source[A] =
+      fromLList(A.neglect)
 
     def of[A](as: (One -⚬ A)*)(implicit A: PAffine[A]): One -⚬ Source[A] =
       LList.of(as: _*) > fromLList
@@ -295,83 +301,30 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         )
       }
 
-    def prefetch[A](n: Int)(discardPrefetched: A -⚬ Done): Source[A] -⚬ Source[A] = {
-      def toBuffer: (Source[A] |*| LeasePool) -⚬ (Pong |*| Ping |*| LList[Lease |*| A] |*| Done) = {
-        def go: (Source[A] |*| LeasePool |*| Ping) -⚬ (Ping |*| LList[Lease |*| A] |*| Done) = rec { go =>
-          λ { case src |*| leasePool |*| downstreamClosed =>
-            val lease |*| leasePool1 = LeasePool.acquireLease(leasePool)
-            (downstreamClosed |*| lease) > raceBy(forkPing, Lease.notifyAcquired) switch {
-              case Left(downstreamClosed |*| lease) => // downstream closed
-                val cleanup = joinAll(
-                  Source.close(src),
-                  LeasePool.close(leasePool1),
-                ) alsoElim Lease.release(lease)
-                downstreamClosed |*| LList.nil(one) |*| cleanup
-              case Right(downstreamClosed |*| lease) => // obtained the lease
-                (Source.poll(src) > |+|.notifyL) switch {
-                  case Left(ping |*| upstreamClosed) =>
-                    val cleanup = joinAll(
-                      LeasePool.close(leasePool1),
-                      upstreamClosed,
-                    )
-                      .alsoElim(Lease.release(lease))
-                      .alsoElim(dismissPing(downstreamClosed))
-                    ping |*| LList.nil(one) |*| cleanup
-                  case Right(a |*| as) =>
-                    val donePulling |*| tail |*| closed = go(as |*| leasePool1 |*| downstreamClosed)
-                    donePulling |*| LList.cons((lease |*| a) |*| tail) |*| closed
-                }
-            }
-          }
-        }
+    def prefetch[A](n: Int)(
+      discardPrefetched: A -⚬ Done,
+      tokenInvertor: Exists[[X] =>> Dual[LList[Done], X]] = Exists(listEndlessDuality[Done, Need](doneNeedDuality)),
+    ): Source[A] -⚬ Source[A] = {
+      type NegTokens = tokenInvertor.T
+      val tokensDuality: Dual[LList[Done], NegTokens] = tokenInvertor.value
 
-        λ { case src |*| pool =>
-          val pong |*| ping = one > lInvertPongPing
-          val doneWithPulling |*| buffer |*| closed = go(src |*| pool |*| ping)
-          pong |*| doneWithPulling |*| buffer |*| closed
-        }
-      }
-
-      def fromBuffer: (Pong |*| Ping |*| LList[Lease |*| A] |*| Done) -⚬ Source[A] = rec { fromBuffer =>
-        val onClose: (Pong |*| Ping |*| LList[Lease |*| A] |*| Done) -⚬ (Pong |*| Done) =
-          λ { case (downstreamClosed |*| donePulling |*| buffer |*| upstreamClosed) =>
-            val discarded: $[Done] =
-              (strengthenPing(donePulling) |*| buffer)
-                > LList.transform1(
-                  λ { case donePulling |*| (lease |*| a) =>
-                    discardPrefetched(a) alsoElim Lease.releaseBy(donePulling |*| lease)
-                  }
-                )
-                > either(id, LList1.fold[Done])
-            downstreamClosed |*| join(discarded |*| upstreamClosed)
-          }
-
-        val onPoll: (Pong |*| Ping |*| LList[Lease |*| A] |*| Done) -⚬ Polled[A] =
-          λ { case downstreamClosed |*| donePulling |*| buffer |*| upstreamClosed =>
-            (LList.uncons(buffer) > Maybe.toEither > |+|.notifyR) switch {
-              case Left(nil) =>
-                Polled.empty(upstreamClosed)
-                  .alsoElim(nil)
-                  .alsoElim(pong(downstreamClosed))
-                  .alsoElim(dismissPing(donePulling))
-              case Right(handingOver |*| ((lease |*| a) |*| buffer1)) =>
-                val tail: $[Source[A]] =
-                  fromBuffer(downstreamClosed |*| donePulling |*| buffer1 |*| upstreamClosed)
-                    .alsoElim(Lease.releaseBy(strengthenPing(handingOver) |*| lease))
-                Polled.cons(a |*| tail)
-            }
-          }
-
-        choice(onClose, onPoll) > |&|.notifyL > pack
-      }
-
-      def go: (Source[A] |*| LeasePool) -⚬ Source[A] =
-        toBuffer > fromBuffer
-
-      λ { upstream =>
-        val leasePool: $[LeasePool] =
-          one > done > LeasePool.allocate(n)
-        go(upstream |*| leasePool)
+      λ { as =>
+        val initialTokens: $[LList[Done]]  = LList.fill(n)(done)(one)
+        val (negTokens |*| returnedTokens) = tokensDuality.lInvert(one)
+        val tokens: $[LList[Done]]         = LList.concat(initialTokens |*| returnedTokens)
+        val (shutdownPong |*| as1)         = Source.takeUntilPong(as)
+        val (buffer |*| upstreamClosed) =
+          takeForeach(tokens |*| as1) > assocLR > snd(joinMap(LList.fold, id))
+        val bufferOut: $[Source[Done |*| A]] =
+          buffer > Source.fromLList(joinMap(id, discardPrefetched))
+        val bufferedAs: $[Source[A]] =
+          (bufferOut > tapMap(swap)) match
+            case (as |*| releasedTokens) =>
+              as alsoElim (tokensDuality.rInvert(releasedTokens |*| negTokens))
+        Source.notifyClosed(
+          shutdownPong |*|
+          Source.delayClosedBy(upstreamClosed |*| bufferedAs)
+        )
       }
     }
 

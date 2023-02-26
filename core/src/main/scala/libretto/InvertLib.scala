@@ -15,6 +15,12 @@ class InvertLib[
   import coreLib.dsl._
   import coreLib._
 
+  def inversionDuality[A]: Dual[A, -[A]] =
+    new Dual[A, -[A]] {
+      override val rInvert: (A |*| -[A]) -⚬ One = backvert[A]
+      override val lInvert: One -⚬ (-[A] |*| A) = forevert[A]
+    }
+
   implicit val contraFunctorDemand: ContraFunctor[-] =
     new ContraFunctor[-] {
       override val category =

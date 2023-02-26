@@ -1,7 +1,7 @@
 package libretto.stream.scaletto
 
-import libretto.CoreLib
-import libretto.lambda.util.SourcePos
+import libretto.{CoreLib, InvertLib}
+import libretto.lambda.util.{Exists, SourcePos}
 import libretto.scaletto.{Scaletto, ScalettoLib}
 import libretto.stream.InvertStreams
 import scala.annotation.{tailrec, targetName}
@@ -50,6 +50,9 @@ abstract class ScalettoStreams {
   val coreLib: CoreLib & libretto.CoreLib[dsl.type]
   val scalettoLib: ScalettoLib & libretto.scaletto.ScalettoLib[dsl.type, coreLib.type]
   val invertStreams: InvertStreams & libretto.stream.InvertStreams[dsl.type, coreLib.type]
+
+  private lazy val invertLib = InvertLib(coreLib)
+  import invertLib.inversionDuality
 
   private lazy val Tree = BinarySearchTree(dsl, coreLib, scalettoLib)
 
@@ -281,7 +284,7 @@ abstract class ScalettoStreams {
       Source.tap[Val[A]]
 
     def prefetch[A](n: Int): ValSource[A] -⚬ ValSource[A] =
-      Source.prefetch[Val[A]](n)(neglect)
+      Source.prefetch[Val[A]](n)(neglect, Exists(inversionDuality[LList[Done]]))
 
     def dropUntilFirstDemand[A]: ValSource[A] -⚬ ValSource[A] = rec { self =>
         val caseDownstreamRequested: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] = {
