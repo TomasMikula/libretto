@@ -521,25 +521,21 @@ trait CoreDSL {
     def apply[A](using ev: Cosemigroup[A]): Cosemigroup[A] =
       ev
 
-    implicit val cosemigroupDone: Cosemigroup[Done] =
-      new Cosemigroup[Done] {
-        override def split: Done -⚬ (Done |*| Done) = fork
-      }
+    given cosemigroupDone: Cosemigroup[Done] with {
+      override def split: Done -⚬ (Done |*| Done) = fork
+    }
 
-    implicit val cosemigroupPing: Cosemigroup[Ping] =
-      new Cosemigroup[Ping] {
-        override def split: Ping -⚬ (Ping |*| Ping) = forkPing
-      }
+    given cosemigroupPing: Cosemigroup[Ping] with {
+      override def split: Ping -⚬ (Ping |*| Ping) = forkPing
+    }
 
-    implicit val cosemigroupNeed: Cosemigroup[Need] =
-      new Cosemigroup[Need] {
-        override def split: Need -⚬ (Need |*| Need) = joinNeed
-      }
+    given cosemigroupNeed: Cosemigroup[Need] with {
+      override def split: Need -⚬ (Need |*| Need) = joinNeed
+    }
 
-    implicit val cosemigroupPong: Cosemigroup[Pong] =
-      new Cosemigroup[Pong] {
-        override def split: Pong -⚬ (Pong |*| Pong) = joinPong
-      }
+    given cosemigroupPong: Cosemigroup[Pong] with {
+      override def split: Pong -⚬ (Pong |*| Pong) = joinPong
+    }
   }
 
   trait Comonoid[A] extends Cosemigroup[A] with Affine[A] {
@@ -565,29 +561,25 @@ trait CoreDSL {
     def apply[A](using ev: Comonoid[A]): Comonoid[A] =
       ev
 
-    implicit val comonoidOne: Comonoid[One] =
-      new Comonoid[One] {
-        override def counit: One -⚬ One = id[One]
-        override def split: One -⚬ (One |*| One) = introSnd[One]
-      }
+    given comonoidOne: Comonoid[One] with {
+      override def counit: One -⚬ One = id[One]
+      override def split: One -⚬ (One |*| One) = introSnd[One]
+    }
 
-    implicit val comonoidPing: Comonoid[Ping] =
-      new Comonoid[Ping] {
-        override def split  : Ping -⚬ (Ping |*| Ping) = forkPing
-        override def counit : Ping -⚬ One             = dismissPing
-      }
+    given comonoidPing: Comonoid[Ping] with {
+      override def split  : Ping -⚬ (Ping |*| Ping) = forkPing
+      override def counit : Ping -⚬ One             = dismissPing
+    }
 
-    implicit val comonoidNeed: Comonoid[Need] =
-      new Comonoid[Need] {
-        override def split  : Need -⚬ (Need |*| Need) = joinNeed
-        override def counit : Need -⚬ One             = need
-      }
+    given comonoidNeed: Comonoid[Need] with {
+      override def split  : Need -⚬ (Need |*| Need) = joinNeed
+      override def counit : Need -⚬ One             = need
+    }
 
-    implicit val comonoidPong: Comonoid[Pong] =
-      new Comonoid[Pong] {
-        override def split  : Pong -⚬ (Pong |*| Pong) = joinPong
-        override def counit : Pong -⚬ One             = pong
-      }
+    given comonoidPong: Comonoid[Pong] with {
+      override def split  : Pong -⚬ (Pong |*| Pong) = joinPong
+      override def counit : Pong -⚬ One             = pong
+    }
   }
 
   implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
