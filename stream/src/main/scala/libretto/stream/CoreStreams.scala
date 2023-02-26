@@ -400,6 +400,48 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def tap[A](using Cosemigroup[A]): Source[A] -⚬ (Source[A] |*| LList[A]) =
       tapMap(Cosemigroup[A].split)
 
+    /** For each element of the input list, pull one element from the input source.
+     *  If the input source runs out of elements before the input list does,
+     *  the remaining elements of the input list are returned.
+     */
+    def takeForeach[X, A]: (LList[X] |*| Source[A]) -⚬ (LList[X |*| A] |*| LList[X] |*| Done) =
+      rec { takeForeach =>
+        λ { case (xs |*| as) =>
+          (LList.uncons(xs) > Maybe.toEither) switch {
+            case Left(*(unit)) =>
+              LList.nil(unit) |*| LList.nil(unit) |*| Source.close(as)
+            case Right(x |*| xs) =>
+              Source.poll(as) switch {
+                case Left(done) =>
+                  LList.nil(one) |*| LList.cons(x |*| xs) |*| done
+                case Right(a |*| as) =>
+                  val (xas |*| leftovers |*| done) = takeForeach(xs |*| as)
+                  LList.cons((x |*| a) |*| xas) |*| leftovers |*| done
+              }
+          }
+        }
+      }
+
+    def takeUntilPong[A]: Source[A] -⚬ (Pong |*| Source[A]) = rec { takeUntilPong =>
+      val onPong: Source[A] -⚬ (Pong |*| Source[A]) =
+        Source.close[A] > Source.empty[A] > introFst(dismissPong)
+
+      val onAction: Source[A] -⚬ (Pong |*| Source[A]) = {
+        val onClose: Source[A] -⚬ (Pong |*| Done) =
+          Source.close[A] > introFst(dismissPong)
+
+        val onPoll: Source[A] -⚬ (Pong |*| Polled[A]) =
+          Source.poll[A] > either(
+            Polled.empty[A] > introFst(dismissPong),
+            snd(takeUntilPong) > XI > snd(Polled.cons),
+          )
+
+        choice(onClose, onPoll) > coDistributeL > snd(pack)
+      }
+
+      choice(onPong, onAction) > selectBy(forkPong, Source.notifyAction)
+    }
+
     implicit def positiveJunction[A](implicit A: Junction.Positive[A]): Junction.Positive[Source[A]] =
       Junction.Positive.from(Source.delayBy)
 
