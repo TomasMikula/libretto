@@ -3701,6 +3701,23 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
   }
 
+  def listEndlessDuality[A, Ā](ev: Dual[A, Ā]): Dual[LList[A], Endless[Ā]] =
+    new Dual[LList[A], Endless[Ā]] {
+      override val rInvert: (LList[A] |*| Endless[Ā]) -⚬ One = rec { self =>
+        LList.switchWithR(
+          caseNil  = Endless.close[Ā],
+          caseCons = snd(Endless.pull) > IXI > elimFst(ev.rInvert) > self,
+        )
+      }
+
+      override val lInvert: One -⚬ (Endless[Ā] |*| LList[A]) = rec { self =>
+        Endless.createWith(
+          onClose = LList.nil[A],
+          onPull  = self > introFst(ev.lInvert) > IXI > snd(LList.cons),
+        )
+      }
+    }
+
   /** Present a non-empty list of resources `A` as an unlimited supply of "borrowed" resources `A ⊗ Ā`,
     * where `Ā` is the dual of `A`. A borrowed resource `A ⊗ Ā` must be "returned" by "annihilating"
     * `A` and its dual `Ā`, namely via an inversion on the right `A ⊗ Ā -⚬ One`.
