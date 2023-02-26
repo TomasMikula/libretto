@@ -375,21 +375,22 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       }
     }
 
-    /** Every pulled element is also output in the list.
+    /** Every element pulled from upstream is mapped using the given function
+     *  and the right part of the resulting pair is output in the list.
      *  Note that if the resulting list is not consumed fast enough,
      *  elements will accumulate there without any bound.
      */
-    def tapBy[A](dup: A -⚬ (A |*| A)): Source[A] -⚬ (Source[A] |*| LList[A]) = rec { tap =>
-      val onClose: Source[A] -⚬ (Done |*| LList[A]) =
-        Source.close[A] > introSnd(LList.nil[A])
+    def tapMap[A, B, W](f: A -⚬ (B |*| W)): Source[A] -⚬ (Source[B] |*| LList[W]) = rec { tapMap =>
+      val onClose: Source[A] -⚬ (Done |*| LList[W]) =
+        Source.close[A] > introSnd(LList.nil[W])
 
-      val onPoll: Source[A] -⚬ (Polled[A] |*| LList[A]) =
+      val onPoll: Source[A] -⚬ (Polled[B] |*| LList[W]) =
         Source.poll[A] > either(
-          Polled.empty[A] > introSnd(LList.nil[A]),
+          Polled.empty[B] > introSnd(LList.nil[W]),
           λ { case a |*| as =>
-            val a1 |*| a2 = dup(a)
-            val sourceTail |*| listTail = tap(as)
-            Polled.cons(a1 |*| sourceTail) |*| LList.cons(a2 |*| listTail)
+            val b  |*| w  = f(a)
+            val bs |*| ws = tapMap(as)
+            Polled.cons(b |*| bs) |*| LList.cons(w |*| ws)
           },
         )
 
@@ -397,7 +398,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     }
 
     def tap[A](using Cosemigroup[A]): Source[A] -⚬ (Source[A] |*| LList[A]) =
-      tapBy(Cosemigroup[A].split)
+      tapMap(Cosemigroup[A].split)
 
     implicit def positiveJunction[A](implicit A: Junction.Positive[A]): Junction.Positive[Source[A]] =
       Junction.Positive.from(Source.delayBy)
