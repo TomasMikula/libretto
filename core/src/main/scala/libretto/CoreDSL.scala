@@ -423,11 +423,19 @@ trait CoreDSL {
     ): $[A |*| B] =
       $.zip(a, b)(pos)
 
-    def >[B](f: A -⚬ B)(using
+    /** Reverse application: pass this expression into the given function. */
+    def :>>[B](f: A -⚬ B)(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[B] =
       $.map(a)(f)(pos)
+
+    /** Alias for [[:>>]] */
+    def >[B](f: A -⚬ B)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[B] =
+      a :>> f
 
     def alsoElim(unit: $[One])(using
       pos: SourcePos,
@@ -470,6 +478,9 @@ trait CoreDSL {
     ): $[C] =
       $.switchEither(x, f)(pos)
   }
+
+  def constant[A](f: One -⚬ A)(using SourcePos, LambdaContext): $[A] =
+    f($.one)
 
   object ? {
     def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Affine[A]): Some[$[A]] =
