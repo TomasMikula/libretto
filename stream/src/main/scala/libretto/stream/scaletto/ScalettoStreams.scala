@@ -33,10 +33,10 @@ object ScalettoStreams {
       override type ScalettoLib   = sLib.type
       override type InvertStreams = iStreams.type
 
-      override val dsl           = scaletto
-      override val coreLib       = lib
-      override val scalettoLib   = sLib
-      override val invertStreams = iStreams
+      override val dsl         = scaletto
+      override val coreLib     = lib
+      override val scalettoLib = sLib
+      override val underlying  = iStreams
     }
 }
 
@@ -49,7 +49,7 @@ abstract class ScalettoStreams {
   val dsl: Dsl
   val coreLib: CoreLib & libretto.CoreLib[dsl.type]
   val scalettoLib: ScalettoLib & libretto.scaletto.ScalettoLib[dsl.type, coreLib.type]
-  val invertStreams: InvertStreams & libretto.stream.InvertStreams[dsl.type, coreLib.type]
+  val underlying: InvertStreams & libretto.stream.InvertStreams[dsl.type, coreLib.type]
 
   private lazy val invertLib = InvertLib(coreLib)
   import invertLib.inversionDuality
@@ -60,8 +60,10 @@ abstract class ScalettoStreams {
   import dsl.$._
   import coreLib._
   import scalettoLib._
-  import invertStreams._
+  import underlying._
   import Tree._
+
+  export underlying.{lib => _, dsl => _, _}
 
   type ValSource[A] = Source[Val[A]]
   type ValDrain[A]  = Drain[Val[A]]
@@ -78,10 +80,10 @@ abstract class ScalettoStreams {
       Source.from(onClose, onPoll)
 
     def fromChoice[A]: (Done |&| Polled[A]) -⚬ ValSource[A] =
-      Source.pack[Val[A]]
+      Source.fromChoice[Val[A]]
 
     def toChoice[A]: ValSource[A] -⚬ (Done |&| Polled[A]) =
-      Source.unpack[Val[A]]
+      Source.toChoice[Val[A]]
 
     def close[A]: ValSource[A] -⚬ Done =
       Source.close[Val[A]]

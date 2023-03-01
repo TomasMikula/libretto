@@ -72,17 +72,17 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def fromFollower[A]: StreamFollower[Done, A] -⚬ Source[A] = id
     def toFollower[A]  : Source[A] -⚬ StreamFollower[Done, A] = id
 
-    def pack[A]: (Done |&| Polled[A]) -⚬ Source[A] =
+    def fromChoice[A]: (Done |&| Polled[A]) -⚬ Source[A] =
       dsl.pack[StreamFollowerF[Done, A, _]]
 
-    def unpack[A]: Source[A] -⚬ (Done |&| Polled[A]) =
+    def toChoice[A]: Source[A] -⚬ (Done |&| Polled[A]) =
       dsl.unpack[StreamFollowerF[Done, A, _]]
 
     def from[A, B](
       onClose: A -⚬ Done,
       onPoll: A -⚬ Polled[B],
     ): A -⚬ Source[B] =
-      choice(onClose, onPoll) > pack
+      choice(onClose, onPoll) > fromChoice
 
     def close[A]: Source[A] -⚬ Done =
       id                       [    Source[A]       ]
@@ -142,7 +142,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative ([[Pong]]) signal. */
     def notifyAction[A]: (Pong |*| Source[A]) -⚬ Source[A] =
-      snd(unpack) > notifyChoice > pack
+      snd(toChoice) > notifyChoice > fromChoice
 
     def notifyClosed[A]: (Pong |*| Source[A]) -⚬ Source[A] = rec { self =>
       val onClose: (Pong |*| Source[A]) -⚬ Done =
@@ -161,13 +161,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           }
         }
 
-      choice(onClose, onPoll) > pack
+      choice(onClose, onPoll) > fromChoice
     }
 
     /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| Source[A]) -⚬ Source[A] =
       id                                           [  Done |*|      Source[A]                  ]
-        .>.snd(unpack)                          .to[  Done |*| (Done  |&|           Polled[A]) ]
+        .>.snd(toChoice)                        .to[  Done |*| (Done  |&|           Polled[A]) ]
         .>(delayChoiceUntilDone)                .to[ (Done |*|  Done) |&| (Done |*| Polled[A]) ]
         .bimap(join, Polled.delayBy[A])         .to[       Done       |&|           Polled[A]  ]
         .pack[StreamFollowerF[Done, A, *]]      .to[               Source[A]                   ]
@@ -236,6 +236,15 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def concat[A]: (Source[A] |*| Source[A]) -⚬ Source[A] =
       id.>.snd(detainClosed) > concatenate
 
+    def flatten[A]: Source[Source[A]] -⚬ Source[A] =
+      from(
+        onClose = close[Source[A]],
+        onPoll  = poll[Source[A]] > either(
+          Polled.empty[A],
+          λ { case as |*| ass => poll(concat(as |*| flatten(ass))) }
+        ),
+      )
+
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
       *
       * Polls the upstream only after ''both'' downstreams poll.
@@ -266,12 +275,12 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         id                                   [                  Source[A |+| B]                   ]
           .choice(sndClosed, bothPolled)  .to[ (Polled[A] |*| Done) |&| (Polled[A] |*| Polled[B]) ]
           .coDistributeL                  .to[  Polled[A] |*| (Done |&|                Polled[B]) ]
-          .>.snd(pack)                    .to[  Polled[A] |*|    Source[B]                        ]
+          .>.snd(fromChoice)              .to[  Polled[A] |*|    Source[B]                        ]
 
       id                                 [                  Source[A |+| B]                   ]
         .choice(fstClosed, fstPolled) .to[ (Done |*| Source[B]) |&| (Polled[A] |*| Source[B]) ]
         .coDistributeR                .to[ (Done                |&| Polled[A]) |*| Source[B]  ]
-        .>.fst(pack)                  .to[                     Source[A]       |*| Source[B]  ]
+        .>.fst(fromChoice)            .to[                     Source[A]       |*| Source[B]  ]
     }
 
     /** Merges two [[Source]]s into one.
@@ -347,7 +356,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           },
         )
 
-      choice(onClose, onPoll) > coDistributeR > fst(pack)
+      choice(onClose, onPoll) > coDistributeR > fst(fromChoice)
     }
 
     def tap[A](using Cosemigroup[A]): Source[A] -⚬ (Source[A] |*| LList[A]) =
@@ -389,7 +398,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
             snd(takeUntilPong) > XI > snd(Polled.cons),
           )
 
-        choice(onClose, onPoll) > coDistributeL > snd(pack)
+        choice(onClose, onPoll) > coDistributeL > snd(fromChoice)
       }
 
       choice(onPong, onAction) > selectBy(forkPong, Source.notifyAction)
