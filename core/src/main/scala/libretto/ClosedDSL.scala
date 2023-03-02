@@ -46,21 +46,21 @@ trait ClosedDSL extends CoreDSL {
     )(using
       Affine[A],
     ): $[A =⚬ B] =
-      apply { case $.?(a) => f(a) }
+      apply { case ?(a) => f(a) }
 
     def +[A, B](using SourcePos, LambdaContext)(
       f: LambdaContext ?=> $[A] => $[B],
     )(using
       Cosemigroup[A],
     ): $[A =⚬ B] =
-      apply { case $.+(a) => f(a) }
+      apply { case +(a) => f(a) }
 
     def *[A, B](using SourcePos, LambdaContext)(
       f: LambdaContext ?=> $[A] => $[B],
     )(using
       Comonoid[A],
     ): $[A =⚬ B] =
-      apply { case $.*(a) => f(a) }
+      apply { case *(a) => f(a) }
   }
 
   /** Alias for [[λ.closure.apply]]. */

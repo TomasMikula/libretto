@@ -77,6 +77,10 @@ private class ExecutionImpl(
       res
     }
 
+    override def sendPong(port: OutPort[Pong]): Unit = {
+      port.fulfillPongWith(Future.successful(()))
+    }
+
     override def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]] = {
       val (complete, res) = Async.promiseLinear[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
       port.futureEither.onComplete {
@@ -182,10 +186,21 @@ private class ExecutionImpl(
       ec: ExecutionContext,
       scheduler: Scheduler,
       blockingExecutor: JExecutor,
+    ): Frontier[B] =
+      extendBy(f, 0)
+
+    private def extendBy[B](f: A -⚬ B, depth: Int)(using
+      resourceRegistry: ResourceRegistry,
+      ec: ExecutionContext,
+      scheduler: Scheduler,
+      blockingExecutor: JExecutor,
     ): Frontier[B] = {
       implicit class FrontierOps[X](fx: Frontier[X]) {
         def extend[Y](f: X -⚬ Y): Frontier[Y] =
-        fx.extendBy(f)
+          if (depth < 100)
+            fx.extendBy(f, depth + 1)
+          else
+            Deferred(Future.successful(fx).map(_.extendBy(f, 0)))
       }
 
       f match {
@@ -273,8 +288,8 @@ private class ExecutionImpl(
         case c: -⚬.Choice[?, ?, ?] =>
           val -⚬.Choice(f, g) = c // workaround for https://github.com/lampepfl/dotty/issues/7524
           Choice(
-            () => this.extend(f),
-            () => this.extend(g),
+            () => this.extendBy(f),
+            () => this.extendBy(g),
             onError = this.crash(_),
           )
 

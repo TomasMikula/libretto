@@ -46,22 +46,22 @@ object ScalettoTestExecutor {
       override def extractOutcome(using exn: Execution, pos: SourcePos)(
         outPort: exn.OutPort[Assertion[Done]],
       ): Outcome[Unit] = {
-        import TestResult.{Crash, Success, failure => fail}
+        import TestResult.{crash, success => succeed, failed => fail}
         Outcome.asyncTestResult(
           exn.OutPort
             .awaitEither[Val[String], Done](outPort)
             .flatMap {
               case Left(e) =>
-                Async.now(Crash(e))
+                Async.now(crash(e))
               case Right(Left(msg)) =>
                 exn.OutPort.awaitVal(msg).map {
-                  case Left(e)    => Crash(e)
+                  case Left(e)    => crash(e)
                   case Right(msg) => fail(using pos)(msg)
                 }
               case Right(Right(d)) =>
                 exn.OutPort.awaitDone(d).map {
-                  case Left(e)   => Crash(e)
-                  case Right(()) => Success(())
+                  case Left(e)   => crash(e)
+                  case Right(()) => succeed(())
                 }
             }
         )

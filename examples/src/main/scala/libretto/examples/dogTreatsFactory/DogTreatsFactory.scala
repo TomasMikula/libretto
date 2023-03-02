@@ -1,7 +1,6 @@
 package libretto.examples.dogTreatsFactory
 
-import libretto.scaletto.StarterKit.{$, -⚬, |*|, |+|, Done, Val, injectL, injectR, mapVal, neglect, rec, λ}
-import libretto.scaletto.StarterKit.$._
+import libretto.scaletto.StarterKit._
 import libretto.stream.scaletto.DefaultStreams.ValSource
 
 object DogTreatsFactory {

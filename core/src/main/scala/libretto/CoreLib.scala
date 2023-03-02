@@ -211,8 +211,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
   }
 
-  /** Expresses that interaction with `A` is (at least partially) obstructed.
+  /** Expresses the intent that interaction with `A` is (at least partially) obstructed.
     * The detention can be ended by receiving a signal.
+    *
+    * Note that whether/how much the interaction with `Detained[A]` is actually
+    * obstructed is completely up to the producer of `Detained[A]`.
     *
     * Equivalent to `Need |*| A` (or `Done =⚬ A` if the DSL extends [[ClosedDSL]]).
     */
@@ -2504,6 +2507,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def toEither[A]: Maybe[A] -⚬ (One |+| A) =
       id
 
+    def map[A, B](f: A -⚬ B): Maybe[A] -⚬ Maybe[B] =
+      |+|.rmap(f)
+
     def getOrElse[A](f: One -⚬ A): Maybe[A] -⚬ A =
       either(f, id)
 
@@ -3192,7 +3198,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def singleton[T]: T -⚬ LList[T] =
       introSnd(nil[T]) > cons[T]
 
-    def uncons[T]: LList[T] -⚬ Maybe[T |*| LList[T]] =
+    def uncons[T]: LList[T] -⚬ (One |+| (T |*| LList[T])) =
       unpack
 
     /** Signals when it is decided whether the list is empty (nil) or has an element (cons). */
@@ -3220,6 +3226,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def of[S, T](fs: (S -⚬ T)*)(using S: Comonoid[S]): S -⚬ LList[T] =
       fromList(fs.toList)
+
+    def unfold[S, T](f: S -⚬ (One |+| (T |*| S))): S -⚬ LList[T] = rec { self =>
+      f > |+|.rmap(snd(self)) > pack
+    }
+
+    def fill[S, T](n: Int)(f: S -⚬ T)(using Comonoid[S]): S -⚬ LList[T] = {
+      require(n >= 0, s"n must be non-negative, was $n")
+      fromList(List.fill(n)(f))
+    }
+
+    def fill0[S, T](n: Int)(f: S -⚬ T)(using Cosemigroup[S]): S -⚬ (S |*| LList[T]) = {
+      require(n >= 0, s"n must be non-negative, was $n")
+      fromList0(List.fill(n)(f))
+    }
 
     def switch[T, R](
       caseNil: One -⚬ R,
@@ -3315,6 +3335,29 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         switchWithL(caseNil, caseCons)
       }
 
+    def transform0[T, A, U](f: (A |*| T) -⚬ U)(using Cosemigroup[A]): (A |*| LList[T]) -⚬ (A |*| LList[U]) = {
+      def go: (A |*| (T |*| LList[T])) -⚬ LList[U] =
+        rec { go =>
+          assocRL > switchWithL(
+            f > singleton,
+            λ { case (+(a) |*| t0) |*| ts1 =>
+              cons(f(a |*| t0) |*| go(a |*| ts1))
+            },
+          )
+        }
+
+      switchWithL(
+        introSnd(nil[U]),
+        λ { case (+(a) |*| ts1) => a |*| go(a |*| ts1) }
+      )
+    }
+
+    def transform1[T, A, U](f: (A |*| T) -⚬ U)(using Cosemigroup[A]): (A |*| LList[T]) -⚬ (A |+| LList1[U]) =
+      switchWithL(
+        injectL,
+        snd(LList1.cons) > LList1.transform(f) > injectR,
+      )
+
     def transformCollect[T, A, U](f: (A |*| T) -⚬ Maybe[U])(implicit A: Comonoid[A]): (A |*| LList[T]) -⚬ LList[U] =
       rec { self =>
         val caseNil: A -⚬ LList[U] =
@@ -3332,6 +3375,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         par(id, self) > IXI > par(cons, cons)
 
       switch(caseNil, caseCons)
+    }
+
+    def splitAt[A](i: Int): LList[A] -⚬ (LList[A] |*| LList[A]) = {
+      require(i >= 0, s"i must not be negative, was $i")
+      if (i == 0)
+        introFst(LList.nil[A])
+      else
+        uncons > either(
+          parFromOne(LList.nil[A], LList.nil[A]),
+          snd(splitAt(i-1)) > assocRL > fst(cons),
+        )
     }
 
     def splitEvenOdd[A]: LList[A] -⚬ (LList[A] |*| LList[A]) = rec { self =>
@@ -3479,6 +3533,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def of[S, T](head: S -⚬ T, tail: (S -⚬ T)*)(using S: Cosemigroup[S]): S -⚬ LList1[T] =
       from(head, tail.toList)
 
+    def unfold[S, T](f: S -⚬ (T |*| Maybe[S])): S -⚬ LList1[T] =
+      λ { s =>
+        val (h |*| sOpt) = f(s)
+        val tail: $[LList[T]] = LList.unfold[Maybe[S], T](Maybe.map(f))(sOpt)
+        cons(h |*| tail)
+      }
+
+    def fill[S, T](n: Int)(f: S -⚬ T)(using Cosemigroup[S]): S -⚬ LList1[T] = {
+      require(n >= 1, s"n must be positive, was $n")
+      from(f, List.fill(n-1)(f))
+    }
+
     def map[T, U](f: T -⚬ U): LList1[T] -⚬ LList1[U] =
       par(f, LList.map(f))
 
@@ -3493,6 +3559,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def fold[T](using T: Semigroup[T]): LList1[T] -⚬ T =
       LList.actOn[T, T](T.combine)
+
+    def transform[T, A, U](f: (A |*| T) -⚬ U)(using A: Cosemigroup[A]): (A |*| LList1[T]) -⚬ LList1[U] =
+      λ { case a |*| (t0 |*| ts) =>
+        val a1 |*| us = LList.transform0(f)(a |*| ts)
+        f(a1 |*| t0) |*| us
+      }
 
     /** Shifts all the elements of a list by "half" to the left,
      *  moving the first half of the first element to the end of the list.
@@ -3629,6 +3701,23 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
   }
 
+  def listEndlessDuality[A, Ā](ev: Dual[A, Ā]): Dual[LList[A], Endless[Ā]] =
+    new Dual[LList[A], Endless[Ā]] {
+      override val rInvert: (LList[A] |*| Endless[Ā]) -⚬ One = rec { self =>
+        LList.switchWithR(
+          caseNil  = Endless.close[Ā],
+          caseCons = snd(Endless.pull) > IXI > elimFst(ev.rInvert) > self,
+        )
+      }
+
+      override val lInvert: One -⚬ (Endless[Ā] |*| LList[A]) = rec { self =>
+        Endless.createWith(
+          onClose = LList.nil[A],
+          onPull  = self > introFst(ev.lInvert) > IXI > snd(LList.cons),
+        )
+      }
+    }
+
   /** Present a non-empty list of resources `A` as an unlimited supply of "borrowed" resources `A ⊗ Ā`,
     * where `Ā` is the dual of `A`. A borrowed resource `A ⊗ Ā` must be "returned" by "annihilating"
     * `A` and its dual `Ā`, namely via an inversion on the right `A ⊗ Ā -⚬ One`.
@@ -3649,6 +3738,52 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         .>.snd(LList1.insertBySignal)         .to[  (A |*| Ā) |*|    LList1[A]     ]
 
     Unlimited.unfold(borrow)
+  }
+
+  opaque type Lease = Done |*| Need
+  object Lease {
+    /** The [[Done]] signal on the outport signals when the lease is released. */
+    def create: Done -⚬ (Lease |*| Done) =
+      introSnd(lInvertSignal) > assocRL
+
+    def release: Lease -⚬ One =
+      rInvertSignal
+
+    def releaseBy: (Done |*| Lease) -⚬ One =
+      assocRL > fst(join) > rInvertSignal
+
+    def notifyAcquired: Lease -⚬ (Ping |*| Lease) =
+      fst(notifyDoneL) > assocLR
+
+    def deferAcquisition: (Done |*| Lease) -⚬ Lease =
+      assocRL > fst(join)
+
+    def deferRelease: (Done |*| Lease) -⚬ Lease =
+      λ { case (d |*| (leaseD |*| leaseN)) =>
+        val (n1 |*| n2) = joinNeed(leaseN)
+        (leaseD |*| n2) alsoElim rInvertSignal(d |*| n1)
+      }
+  }
+
+  opaque type LeasePool =
+    Unlimited[Lease] |*| Done
+
+  object LeasePool {
+    def fromList: LList1[Done] -⚬ LeasePool =
+      pool[Done, Need](lInvertSignal) > snd(LList1.fold[Done])
+
+    def allocate(n: Int): Done -⚬ LeasePool =
+      LList1.fill(n)(id[Done]) > fromList
+
+    /** Creates a pool from `S` with as many leases as are unfolded from `S` via `f`. */
+    def createUnfold[S](f: S -⚬ (Done |*| Maybe[S])): S -⚬ LeasePool =
+      LList1.unfold(f) > fromList
+
+    def acquireLease: LeasePool -⚬ (Lease |*| LeasePool) =
+      fst(Unlimited.getSome) > assocLR
+
+    def close: LeasePool -⚬ Done =
+      elimFst(Unlimited.discard)
   }
 
   /** Represents an acquired "token".

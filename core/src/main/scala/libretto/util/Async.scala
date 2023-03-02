@@ -46,6 +46,9 @@ object Async {
   def never[A]: Async[A] =
     Later(_ => ())
 
+  def zipWith[A, B, C](a: Async[A], b: Async[B])(f: (A, B) => C): Async[C] =
+    a.flatMap { a => b.map { b => f(a, b) } }
+
   /** Returns an `Async[A]` value and a completer function that will complete it.
     * The returned completer function must be called exactly once. An exception will
     * be thrown on subsequent calls.

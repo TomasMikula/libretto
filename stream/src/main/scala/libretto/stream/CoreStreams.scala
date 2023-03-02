@@ -1,6 +1,7 @@
 package libretto.stream
 
 import libretto.{CoreDSL, CoreLib}
+import libretto.lambda.util.Exists
 
 object CoreStreams {
   def apply(
@@ -49,8 +50,20 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   }
 
   object Stream {
+    type Offer[A] = Done |&| (A |*| Stream[A])
+
     def fromLeader[A]: StreamLeader[Done, A] -⚬ Stream[A] = id
     def toLeader[A]  : Stream[A] -⚬ StreamLeader[Done, A] = id
+
+    def toEither[A]: Stream[A] -⚬ (Done |+| Offer[A]) =
+      StreamLeader.unpack
+
+    def collectAll[A]: Stream[A] -⚬ (LList[A] |*| Done) = rec { collectAll =>
+      toEither > either(
+        introFst(LList.nil[A]),
+        chooseR > snd(collectAll) > assocRL > fst(LList.cons)
+      )
+    }
   }
 
   object Source {
@@ -99,18 +112,23 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def empty[A]: Done -⚬ Source[A] =
       emptyF[A].pack
 
-    def cons[A](implicit A: PAffine[A]): (A |*| Source[A]) -⚬ Source[A] = {
-      val onClose: (A |*| Source[A]) -⚬ Done      = joinMap(A.neglect, Source.close)
+    def cons[A](neglect: A -⚬ Done): (A |*| Source[A]) -⚬ Source[A] = {
+      val onClose: (A |*| Source[A]) -⚬ Done      = joinMap(neglect, Source.close)
       val onPoll:  (A |*| Source[A]) -⚬ Polled[A] = Polled.cons
       from(onClose, onPoll)
     }
 
-    def fromLList[A](implicit A: PAffine[A]): LList[A] -⚬ Source[A] = rec { self =>
+    def cons[A](using A: PAffine[A]): (A |*| Source[A]) -⚬ Source[A] =
+      cons[A](A.neglect)
+
+    def fromLList[A](neglect: A -⚬ Done): LList[A] -⚬ Source[A] = rec { self =>
       LList.switch(
         caseNil  = done          > Source.empty[A],
-        caseCons = par(id, self) > Source.cons[A],
+        caseCons = par(id, self) > Source.cons(neglect),
       )
     }
+    def fromLList[A](using A: PAffine[A]): LList[A] -⚬ Source[A] =
+      fromLList(A.neglect)
 
     def of[A](as: (One -⚬ A)*)(implicit A: PAffine[A]): One -⚬ Source[A] =
       LList.of(as: _*) > fromLList
@@ -124,10 +142,27 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative ([[Pong]]) signal. */
     def notifyAction[A]: (Pong |*| Source[A]) -⚬ Source[A] =
-      id                                     [             Source[A]         ]
-        .<(pack)                        .from[           Done |&| Polled[A]  ]
-        .<(notifyChoice)                .from[ Pong |*| (Done |&| Polled[A]) ]
-        .<(par(id, unpack))             .from[ Pong |*|    Source[A]         ]
+      snd(unpack) > notifyChoice > pack
+
+    def notifyClosed[A]: (Pong |*| Source[A]) -⚬ Source[A] = rec { self =>
+      val onClose: (Pong |*| Source[A]) -⚬ Done =
+        λ { case pong |*| src =>
+          close(src) alsoElim dsl.pong(pong)
+        }
+
+      val onPoll: (Pong |*| Source[A]) -⚬ Polled[A] =
+        λ { case pong |*| src =>
+          poll(src) switch {
+            case Left(closed) =>
+              Polled.empty(closed) alsoElim dsl.pong(pong)
+            case Right(a |*| as) =>
+              val tail = self(pong |*| as)
+              Polled.cons(a |*| tail)
+          }
+        }
+
+      choice(onClose, onPoll) > pack
+    }
 
     /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */
     def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| Source[A]) -⚬ Source[A] =
@@ -265,6 +300,100 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           caseCons = par(id, self) > merge,
         )
       }
+
+    def prefetch[A](n: Int)(
+      discardPrefetched: A -⚬ Done,
+      tokenInvertor: Exists[[X] =>> Dual[LList[Done], X]] = Exists(listEndlessDuality[Done, Need](doneNeedDuality)),
+    ): Source[A] -⚬ Source[A] = {
+      type NegTokens = tokenInvertor.T
+      val tokensDuality: Dual[LList[Done], NegTokens] = tokenInvertor.value
+
+      λ { as =>
+        val initialTokens: $[LList[Done]]  = LList.fill(n)(done)(one)
+        val (negTokens |*| returnedTokens) = tokensDuality.lInvert(one)
+        val tokens: $[LList[Done]]         = LList.concat(initialTokens |*| returnedTokens)
+        val (shutdownPong |*| as1)         = Source.takeUntilPong(as)
+        val (buffer |*| upstreamClosed) =
+          takeForeach(tokens |*| as1) > assocLR > snd(joinMap(LList.fold, id))
+        val bufferOut: $[Source[Done |*| A]] =
+          buffer > Source.fromLList(joinMap(id, discardPrefetched))
+        val bufferedAs: $[Source[A]] =
+          (bufferOut > tapMap(swap)) match
+            case (as |*| releasedTokens) =>
+              as alsoElim (tokensDuality.rInvert(releasedTokens |*| negTokens))
+        Source.notifyClosed(
+          shutdownPong |*|
+          Source.delayClosedBy(upstreamClosed |*| bufferedAs)
+        )
+      }
+    }
+
+    /** Every element pulled from upstream is mapped using the given function
+     *  and the right part of the resulting pair is output in the list.
+     *  Note that if the resulting list is not consumed fast enough,
+     *  elements will accumulate there without any bound.
+     */
+    def tapMap[A, B, W](f: A -⚬ (B |*| W)): Source[A] -⚬ (Source[B] |*| LList[W]) = rec { tapMap =>
+      val onClose: Source[A] -⚬ (Done |*| LList[W]) =
+        Source.close[A] > introSnd(LList.nil[W])
+
+      val onPoll: Source[A] -⚬ (Polled[B] |*| LList[W]) =
+        Source.poll[A] > either(
+          Polled.empty[B] > introSnd(LList.nil[W]),
+          λ { case a |*| as =>
+            val b  |*| w  = f(a)
+            val bs |*| ws = tapMap(as)
+            Polled.cons(b |*| bs) |*| LList.cons(w |*| ws)
+          },
+        )
+
+      choice(onClose, onPoll) > coDistributeR > fst(pack)
+    }
+
+    def tap[A](using Cosemigroup[A]): Source[A] -⚬ (Source[A] |*| LList[A]) =
+      tapMap(Cosemigroup[A].split)
+
+    /** For each element of the input list, pull one element from the input source.
+     *  If the input source runs out of elements before the input list does,
+     *  the remaining elements of the input list are returned.
+     */
+    def takeForeach[X, A]: (LList[X] |*| Source[A]) -⚬ (LList[X |*| A] |*| LList[X] |*| Done) =
+      rec { takeForeach =>
+        λ { case (xs |*| as) =>
+          LList.uncons(xs) switch {
+            case Left(*(unit)) =>
+              LList.nil(unit) |*| LList.nil(unit) |*| Source.close(as)
+            case Right(x |*| xs) =>
+              Source.poll(as) switch {
+                case Left(done) =>
+                  LList.nil(one) |*| LList.cons(x |*| xs) |*| done
+                case Right(a |*| as) =>
+                  val (xas |*| leftovers |*| done) = takeForeach(xs |*| as)
+                  LList.cons((x |*| a) |*| xas) |*| leftovers |*| done
+              }
+          }
+        }
+      }
+
+    def takeUntilPong[A]: Source[A] -⚬ (Pong |*| Source[A]) = rec { takeUntilPong =>
+      val onPong: Source[A] -⚬ (Pong |*| Source[A]) =
+        Source.close[A] > Source.empty[A] > introFst(dismissPong)
+
+      val onAction: Source[A] -⚬ (Pong |*| Source[A]) = {
+        val onClose: Source[A] -⚬ (Pong |*| Done) =
+          Source.close[A] > introFst(dismissPong)
+
+        val onPoll: Source[A] -⚬ (Pong |*| Polled[A]) =
+          Source.poll[A] > either(
+            Polled.empty[A] > introFst(dismissPong),
+            snd(takeUntilPong) > XI > snd(Polled.cons),
+          )
+
+        choice(onClose, onPoll) > coDistributeL > snd(pack)
+      }
+
+      choice(onPong, onAction) > selectBy(forkPong, Source.notifyAction)
+    }
 
     implicit def positiveJunction[A](implicit A: Junction.Positive[A]): Junction.Positive[Source[A]] =
       Junction.Positive.from(Source.delayBy)

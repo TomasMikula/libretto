@@ -329,21 +329,21 @@ trait CoreDSL {
     )(using
       Affine[A],
     ): A -⚬ B =
-      apply { case $.?(a) => f(a) }
+      apply { case ?(a) => f(a) }
 
     def +[A, B](using SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
     )(using
       Cosemigroup[A],
     ): A -⚬ B =
-      apply { case $.+(a) => f(a) }
+      apply { case +(a) => f(a) }
 
     def *[A, B](using SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
     )(using
       Comonoid[A],
     ): A -⚬ B =
-      apply { case $.*(a) => f(a) }
+      apply { case *(a) => f(a) }
   }
 
   type NotLinearException <: Throwable
@@ -396,100 +396,94 @@ trait CoreDSL {
       pos: SourcePos,
     )(using LambdaContext): $[Done] =
       map(zip(a, b)(pos))(CoreDSL.this.join)(pos)
+  }
 
-    def joinAll(a: $[Done], as: $[Done]*)(using pos: SourcePos, ctx: LambdaContext): $[Done] =
-      as match {
-        case Seq()  => a
-        case Seq(b) => joinTwo(a, b)(pos)
-        case as     => joinAll(joinTwo(a, as.head)(pos), as.tail: _*)
-      }
+  val |*| : ConcurrentPairOps
 
-    object |*| {
-      def unapply[A, B](ab: $[A |*| B])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): ($[A], $[B]) =
-        unzip(ab)(pos)
+  trait ConcurrentPairOps {
+    def unapply[A, B](ab: $[A |*| B])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): ($[A], $[B]) =
+      $.unzip(ab)(pos)
+  }
+
+  extension [A, B](f: A -⚬ B) {
+    def apply(a: $[A])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[B] =
+      $.map(a)(f)(pos)
+  }
+
+  extension [A](a: $[A]) {
+    def |*|[B](b: $[B])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A |*| B] =
+      $.zip(a, b)(pos)
+
+    def >[B](f: A -⚬ B)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[B] =
+      $.map(a)(f)(pos)
+
+    def alsoElim(unit: $[One])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A] =
+      $.eliminateFirst(unit, a)(pos)
+
+    def also[B](f: One -⚬ B)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A |*| B] =
+      a > introSnd(f)
+
+    def alsoFst[X](f: One -⚬ X)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[X |*| A] =
+      a > introFst(f)
+  }
+
+  extension (d: $[Done]) {
+    def alsoJoin(others: $[Done]*)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[Done] =
+      joinAll(d, others: _*)(using pos)
+  }
+
+  def joinAll(a: $[Done], as: $[Done]*)(using pos: SourcePos, ctx: LambdaContext): $[Done] =
+    as match {
+      case Seq()  => a
+      case Seq(b) => $.joinTwo(a, b)(pos)
+      case as     => joinAll($.joinTwo(a, as.head)(pos), as.tail: _*)
     }
 
-    object ? {
-      def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Affine[A]): Some[$[A]] =
-        Some(nonLinear(a)(split = None, ditch = Some(A.discard))(pos))
-    }
+  extension [A, B](x: $[A |+| B]) {
+    def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[C] =
+      $.switchEither(x, f)(pos)
+  }
 
-    object + {
-      def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Cosemigroup[A]): Some[$[A]] =
-        Some(nonLinear(a)(Some(A.split), ditch = None)(pos))
-    }
+  object ? {
+    def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Affine[A]): Some[$[A]] =
+      Some($.nonLinear(a)(split = None, ditch = Some(A.discard))(pos))
+  }
 
-    object * {
-      def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Comonoid[A]): Some[$[A]] =
-        Some(nonLinear(a)(Some(A.split), Some(A.discard))(pos))
-    }
+  object + {
+    def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Cosemigroup[A]): Some[$[A]] =
+      Some($.nonLinear(a)(Some(A.split), ditch = None)(pos))
+  }
 
-    extension [A, B](f: A -⚬ B) {
-      def apply(a: $[A])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[B] =
-        map(a)(f)(pos)
-    }
-
-    extension [A](a: $[A]) {
-      def |*|[B](b: $[B])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[A |*| B] =
-        zip(a, b)(pos)
-
-      def >[B](f: A -⚬ B)(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[B] =
-        map(a)(f)(pos)
-
-      def also[B](f: One -⚬ B)(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[A |*| B] =
-        a > introSnd(f)
-
-      def alsoFst[X](f: One -⚬ X)(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[X |*| A] =
-        a > introFst(f)
-
-      def alsoElim(unit: $[One])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[A] =
-        eliminateFirst(unit, a)(pos)
-    }
-
-    extension (d: $[Done]) {
-      def alsoJoin(others: $[Done]*)(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[Done] =
-        joinAll(d, others: _*)(using pos)
-    }
-
-    extension [A, B](x: $[A |+| B]) {
-      def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[C] =
-        switchEither(x, f)(pos)
-    }
-
-    implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
-      def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F], ctx: LambdaContext): $[F[B]] =
-        fa > F.lift(λ(f))
-
-      def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F], ctx: LambdaContext): $[F[B]] =
-        fa > F.liftF(λ(f))
-    }
+  object * {
+    def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Comonoid[A]): Some[$[A]] =
+      Some($.nonLinear(a)(Some(A.split), Some(A.discard))(pos))
   }
 
   trait Affine[A] {
@@ -527,25 +521,21 @@ trait CoreDSL {
     def apply[A](using ev: Cosemigroup[A]): Cosemigroup[A] =
       ev
 
-    implicit val cosemigroupDone: Cosemigroup[Done] =
-      new Cosemigroup[Done] {
-        override def split: Done -⚬ (Done |*| Done) = fork
-      }
+    given cosemigroupDone: Cosemigroup[Done] with {
+      override def split: Done -⚬ (Done |*| Done) = fork
+    }
 
-    implicit val cosemigroupPing: Cosemigroup[Ping] =
-      new Cosemigroup[Ping] {
-        override def split: Ping -⚬ (Ping |*| Ping) = forkPing
-      }
+    given cosemigroupPing: Cosemigroup[Ping] with {
+      override def split: Ping -⚬ (Ping |*| Ping) = forkPing
+    }
 
-    implicit val cosemigroupNeed: Cosemigroup[Need] =
-      new Cosemigroup[Need] {
-        override def split: Need -⚬ (Need |*| Need) = joinNeed
-      }
+    given cosemigroupNeed: Cosemigroup[Need] with {
+      override def split: Need -⚬ (Need |*| Need) = joinNeed
+    }
 
-    implicit val cosemigroupPong: Cosemigroup[Pong] =
-      new Cosemigroup[Pong] {
-        override def split: Pong -⚬ (Pong |*| Pong) = joinPong
-      }
+    given cosemigroupPong: Cosemigroup[Pong] with {
+      override def split: Pong -⚬ (Pong |*| Pong) = joinPong
+    }
   }
 
   trait Comonoid[A] extends Cosemigroup[A] with Affine[A] {
@@ -571,28 +561,32 @@ trait CoreDSL {
     def apply[A](using ev: Comonoid[A]): Comonoid[A] =
       ev
 
-    implicit val comonoidOne: Comonoid[One] =
-      new Comonoid[One] {
-        override def counit: One -⚬ One = id[One]
-        override def split: One -⚬ (One |*| One) = introSnd[One]
-      }
+    given comonoidOne: Comonoid[One] with {
+      override def counit: One -⚬ One = id[One]
+      override def split: One -⚬ (One |*| One) = introSnd[One]
+    }
 
-    implicit val comonoidPing: Comonoid[Ping] =
-      new Comonoid[Ping] {
-        override def split  : Ping -⚬ (Ping |*| Ping) = forkPing
-        override def counit : Ping -⚬ One             = dismissPing
-      }
+    given comonoidPing: Comonoid[Ping] with {
+      override def split  : Ping -⚬ (Ping |*| Ping) = forkPing
+      override def counit : Ping -⚬ One             = dismissPing
+    }
 
-    implicit val comonoidNeed: Comonoid[Need] =
-      new Comonoid[Need] {
-        override def split  : Need -⚬ (Need |*| Need) = joinNeed
-        override def counit : Need -⚬ One             = need
-      }
+    given comonoidNeed: Comonoid[Need] with {
+      override def split  : Need -⚬ (Need |*| Need) = joinNeed
+      override def counit : Need -⚬ One             = need
+    }
 
-    implicit val comonoidPong: Comonoid[Pong] =
-      new Comonoid[Pong] {
-        override def split  : Pong -⚬ (Pong |*| Pong) = joinPong
-        override def counit : Pong -⚬ One             = pong
-      }
+    given comonoidPong: Comonoid[Pong] with {
+      override def split  : Pong -⚬ (Pong |*| Pong) = joinPong
+      override def counit : Pong -⚬ One             = pong
+    }
+  }
+
+  implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
+    def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F], ctx: LambdaContext): $[F[B]] =
+      fa > F.lift(λ(f))
+
+    def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F], ctx: LambdaContext): $[F[B]] =
+      fa > F.liftF(λ(f))
   }
 }
