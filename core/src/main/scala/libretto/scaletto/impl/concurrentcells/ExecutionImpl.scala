@@ -44,6 +44,8 @@ class ExecutionImpl(
 
     override def awaitPing(port: Cell[Ping]): Async[Either[Throwable, Unit]] = ???
 
+    override def sendPong(port: Cell[Pong]): Unit = ???
+
     override def awaitEither[A, B](port: Cell[A |+| B]): Async[Either[Throwable, Either[Cell[A], Cell[B]]]] = {
       val (completer, async) = Async.promiseLinear[Either[Throwable, Either[Cell[A], Cell[B]]]]
       Cell.awaitEither(port, completer).followUp()

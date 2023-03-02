@@ -1,8 +1,9 @@
 package libretto.scaletto.impl.concurrentcells
 
+import libretto.lambda.util.SourcePos
 import libretto.scaletto.{ScalettoBridge, ScalettoExecution}
 import libretto.scaletto.impl.FreeScaletto
-import libretto.util.{Async, SourcePos}
+import libretto.util.Async
 import libretto.{Executing, Scheduler}
 import libretto.Executor.CancellationReason
 import scala.concurrent.ExecutionContext
