@@ -45,10 +45,10 @@ abstract class FreeScaletto {
   object -⚬ {
     case class Id[A]() extends (A -⚬ A)
     case class AndThen[A, B, C](f: A -> B, g: B -> C) extends (A -⚬ C)
-    case class Par[A, B, C, D](
-      f: A -> B,
-      g: C -> D,
-    ) extends ((A |*| C) -⚬ (B |*| D))
+    case class Par[A1, A2, B1, B2](
+      f1: A1 -> B1,
+      f2: A2 -> B2,
+    ) extends ((A1 |*| A2) -⚬ (B1 |*| B2))
     case class IntroFst[B]() extends (B -⚬ (One |*| B))
     case class IntroSnd[A]() extends (A -⚬ (A |*| One))
     case class ElimFst[B]() extends ((One |*| B) -⚬ B)
