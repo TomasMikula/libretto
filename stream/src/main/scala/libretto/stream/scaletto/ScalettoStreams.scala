@@ -110,14 +110,25 @@ abstract class ScalettoStreams {
     def detain[A]: ValSource[A] -⚬ Detained[ValSource[A]] =
       Source.detain[Val[A]]
 
+    /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal is received. */
     def delayBy[A]: (Done |*| ValSource[A]) -⚬ ValSource[A] =
       Source.delayBy[Val[A]]
 
     def delayable[A]: ValSource[A] -⚬ (Need |*| ValSource[A]) =
       Source.delayable[Val[A]]
 
+    /** Delays the final [[Done]] signal sent when upstream is shutdown
+     *  until the given [[Done]] signal is received.
+     */
+    def delayClosedBy[A]: (Done |*| ValSource[A]) -⚬ ValSource[A] =
+      Source.delayClosedBy[Val[A]]
+
     def notifyAction[A]: (Pong |*| ValSource[A]) -⚬ ValSource[A] =
       Source.notifyAction[Val[A]]
+
+    /** Notifies when the upstream is fully closed. */
+    def notifyUpstreamClosed[A]: ValSource[A] -⚬ (Ping |*| ValSource[A]) =
+      Source.notifyUpstreamClosed[Val[A]]
 
     def delay[A](d: FiniteDuration): ValSource[A] -⚬ ValSource[A] = {
       id                                           [          ValSource[A] ]

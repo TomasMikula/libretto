@@ -3,13 +3,20 @@ package libretto.examples.libraryOfAlexandria
 import libretto.scaletto.StarterKit._
 import libretto.stream.scaletto.DefaultStreams._
 
-class Downloader(val api: ConnectorApi) {
-  def blueprint: (api.Connector |*| ValSource[ScrollId]) -⚬ ValSource[Page] =
+import vendor.{Page, ScrollId}
+
+object Downloader {
+  def apply(cm: ConnectorModule): Downloader[cm.type] =
+    new Downloader(cm)
+}
+
+class Downloader[CM <: ConnectorModule](val cm: CM) {
+  def downloadAll(prepareAhead: Int): (cm.Connector |*| ValSource[ScrollId]) -⚬ ValSource[Page] =
     fetchForEach
-     > Source.prefetch(10)(discardPrefetched = ValSource.close)
+     > Source.prefetch(prepareAhead)(discardPrefetched = ValSource.close)
      > Source.flatten
 
-  private def fetchForEach: (api.Connector |*| ValSource[ScrollId]) -⚬ Source[ValSource[Page]] =
+  private def fetchForEach: (cm.Connector |*| ValSource[ScrollId]) -⚬ Source[ValSource[Page]] =
     rec { fetchForEach =>
       λ { case connector |*| ids =>
         producing { pagess =>
@@ -22,7 +29,9 @@ class Downloader(val api: ConnectorApi) {
                   case Left(closed) =>
                     Source.Polled.empty(closed)
                   case Right(id |*| ids) =>
-                    Source.Polled.cons(api.fetch(connector |*| id) |*| fetchForEach(connector |*| ids))
+                    val pages  = cm.fetchScroll(connector |*| id)
+                    val pagess = fetchForEach(connector |*| ids)
+                    Source.Polled.cons(pages |*| pagess)
                 }
           }
         }

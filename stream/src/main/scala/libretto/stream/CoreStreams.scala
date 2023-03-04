@@ -144,7 +144,12 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def notifyAction[A]: (Pong |*| Source[A]) -⚬ Source[A] =
       snd(toChoice) > notifyChoice > fromChoice
 
-    def notifyClosed[A]: (Pong |*| Source[A]) -⚬ Source[A] = rec { self =>
+    /** Notifies as soon as donwstream closes
+     *  (without waiting for upstream to be fully shutdown)
+     *  or when the upstream runs out of elements
+     *  (again without waiting for upstream to be fully shutdown).
+     */
+    def notifyDownstreamClosed[A]: (Pong |*| Source[A]) -⚬ Source[A] = rec { self =>
       val onClose: (Pong |*| Source[A]) -⚬ Done =
         λ { case pong |*| src =>
           close(src) alsoElim dsl.pong(pong)
@@ -162,6 +167,27 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         }
 
       choice(onClose, onPoll) > fromChoice
+    }
+
+    /** Notifies when upstream is fully shutdown
+     *  (whether in response to downstream closing or upstream finished).
+     */
+    def notifyUpstreamClosed[A]: Source[A] -⚬ (Ping |*| Source[A]) = rec { self =>
+      val onClose: Source[A] -⚬ (Ping |*| Done) =
+        close > notifyDoneL
+
+      val onPoll: Source[A] -⚬ (Ping |*| Polled[A]) =
+        λ { src =>
+          poll(src) switch {
+            case Left(closed) =>
+              closed :>> notifyDoneL :>> snd(Polled.empty)
+            case Right(a |*| as) =>
+              val (ping |*| as1) = self(as)
+              ping |*| Polled.cons(a |*| as1)
+          }
+        }
+
+      choice(onClose, onPoll) > coDistributeL > snd(fromChoice)
     }
 
     /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */
@@ -330,7 +356,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           (bufferOut > tapMap(swap)) match
             case (as |*| releasedTokens) =>
               as alsoElim (tokensDuality.rInvert(releasedTokens |*| negTokens))
-        Source.notifyClosed(
+        Source.notifyDownstreamClosed(
           shutdownPong |*|
           Source.delayClosedBy(upstreamClosed |*| bufferedAs)
         )

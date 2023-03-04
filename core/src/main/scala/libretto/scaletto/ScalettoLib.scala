@@ -380,6 +380,16 @@ class ScalettoLib[
     def release[R]: RefCounted[R] -⚬ Done =
       dsl.release
 
+    def releaseWhenDone[R]: (Done |*| RefCounted[R]) -⚬ Done =
+      λ { case done |*| res =>
+        (res |*| constVal(())(done))
+        :>> effectWr((_, _) => ())
+        :>> release
+      }
+
+    def releaseOnPing[R]: (Ping |*| RefCounted[R]) -⚬ Done =
+      fst(strengthenPing) > releaseWhenDone
+
     def dupRef[R]: RefCounted[R] -⚬ (RefCounted[R] |*| RefCounted[R]) =
       splitResource0(
         { case rc @ (_, _, n) =>
@@ -395,6 +405,16 @@ class ScalettoLib[
 
     def effectAsync[R, A, B](f: (R, A) => Async[B]): (RefCounted[R] |*| Val[A]) -⚬ (RefCounted[R] |*| Val[B]) =
       dsl.effectAsync((rn, a) => f(rn._1, a))
+
+    def effectRd[R, B](f: R => B): RefCounted[R] -⚬ (RefCounted[R] |*| Val[B]) =
+      ScalettoLib.this.effectRd(rn => f(rn._1))
+
+    def effectRdAcquire[R, B](f: R => B, release: Option[B => Unit]): RefCounted[R] -⚬ (RefCounted[R] |*| Res[B]) =
+      splitResource0(
+        rn => (rn, f(rn._1)),
+        release1 = Some(releaseFn[R]),
+        release2 = release,
+      )
 
     private def releaseFn[R]: ((R, R => Unit, AtomicLong)) => Unit =
       { case (r, release, n) =>
