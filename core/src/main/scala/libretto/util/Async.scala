@@ -49,6 +49,12 @@ object Async {
   def zipWith[A, B, C](a: Async[A], b: Async[B])(f: (A, B) => C): Async[C] =
     a.flatMap { a => b.map { b => f(a, b) } }
 
+  def executeOn[A](ec: ExecutionContext)(a: => A): Async[A] = {
+    val (complete, aa) = Async.promise[A]
+    ec.execute(() => complete(a))
+    aa
+  }
+
   /** Returns an `Async[A]` value and a completer function that will complete it.
     * The returned completer function must be called exactly once. An exception will
     * be thrown on subsequent calls.
