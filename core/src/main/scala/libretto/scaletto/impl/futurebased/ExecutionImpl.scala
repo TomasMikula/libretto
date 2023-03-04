@@ -4,7 +4,7 @@ import libretto.Scheduler
 import libretto.Executor.CancellationReason
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoExecution
-import libretto.scaletto.impl.{FreeScaletto, bug}
+import libretto.scaletto.impl.{FreeScaletto, ScalaFunction, bug}
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -40,7 +40,7 @@ private class ExecutionImpl(
       resourceRegistry.close()
 
     Async
-      .awaitAll(openResources.map { r => r.releaseAsync(r.resource) })
+      .awaitAll(openResources.map { r => r.release.runAsync(r.resource) })
       .map(_ => notifyOnCancel(CancellationReason.User(pos)))
   }
 
@@ -178,11 +178,18 @@ private class ExecutionImpl(
   }
 
   extension [A, B](f: ScalaFunction[A, B]) {
-    def run: A => Future[B] =
+    def runFuture: A => Future[B] =
       f match {
         case ScalaFunction.Direct(f)       => a => Future.successful(f(a))
         case ScalaFunction.Blocking(f)     => a => Future { f(a) } (blockingEC)
         case ScalaFunction.Asynchronous(f) => a => Async.toFuture(f(a))
+      }
+
+    def runAsync: A => Async[B] =
+      f match {
+        case ScalaFunction.Direct(f)       => a => Async.now(f(a))
+        case ScalaFunction.Blocking(f)     => a => Async.executeOn(blockingEC) { f(a) }
+        case ScalaFunction.Asynchronous(f) => f
       }
   }
 
@@ -633,7 +640,7 @@ private class ExecutionImpl(
         case op: -⚬.MapVal[x, y] =>
           (this: Frontier[Val[x]])
             .toFutureValue
-            .flatMap(op.f.run)
+            .flatMap(op.f.runFuture)
             .toValFrontier
 
         case -⚬.ConstVal(a) =>
@@ -694,8 +701,8 @@ private class ExecutionImpl(
         case op: -⚬.Acquire[x, r, y] =>
           // Val[x] -⚬ (Res[r] |*| Val[y])
 
-          val acquire: x => (r, y)       = op.acquire
-          val release: Option[r => Unit] = op.release
+          val acquire: ScalaFun[x, (r, y)]       = op.acquire
+          val release: Option[ScalaFun[r, Unit]] = op.release
 
           def go(x: x): Frontier[Res[r] |*| Val[y]] = {
             def go1(r: r, y: y): Frontier[Res[r] |*| Val[y]] =
@@ -703,17 +710,18 @@ private class ExecutionImpl(
                 case None =>
                   Pair(MVal(r), Value(y))
                 case Some(release) =>
-                  resourceRegistry.registerResource(r, release andThen Async.now) match {
+                  resourceRegistry.registerResource(r, release) match {
                     case RegisterResult.Registered(resId) =>
                       Pair(Resource(resId, r), Value(y))
                     case RegisterResult.RegistryClosed =>
-                      release(r)
-                      Frontier.failure("resource allocation not allowed because the program has ended or crashed")
+                      release
+                        .runFuture(r)
+                        .map(_ => Frontier.failure("resource allocation not allowed because the program has ended or crashed"))
+                        .asDeferredFrontier
                   }
               }
 
-            val (r, y) = acquire(x)
-            go1(r, y)
+            acquire.runFuture(x).map { case (r, y) => go1(r, y) }.asDeferredFrontier
           }
 
           (this: Frontier[Val[x]]) match {
@@ -721,11 +729,11 @@ private class ExecutionImpl(
             case x => x.toFutureValue.map(go).asDeferredFrontier
           }
 
-        case op: -⚬.TryAcquireAsync[x, r, y, e] =>
+        case op: -⚬.TryAcquire[x, r, y, e] =>
           // Val[x] -⚬ (Val[e] |+| (Res[r] |*| Val[y]))
 
-          val acquire: x => Async[Either[e, (r, y)]] = op.acquire
-          val release: Option[r => Async[Unit]]      = op.release
+          val acquire: ScalaFun[x, Either[e, (r, y)]] = op.acquire
+          val release: Option[ScalaFun[r, Unit]]      = op.release
 
           def go(x: x): Frontier[Val[e] |+| (Res[r] |*| Val[y])] = {
             def go1(res: Either[e, (r, y)]): Frontier[Val[e] |+| (Res[r] |*| Val[y])] =
@@ -743,7 +751,7 @@ private class ExecutionImpl(
                           case Registered(resId) =>
                             Pair(Resource(resId, r), Value(y))
                           case RegistryClosed =>
-                            release(r)
+                            release.runAsync(r)
                               .map[Frontier[Res[r] |*| Val[y]]](_ => Frontier.failure("resource allocation not allowed because the program has ended or crashed"))
                               .asAsyncFrontier
                         }
@@ -751,7 +759,7 @@ private class ExecutionImpl(
                   InjectR(fr)
               }
 
-            acquire(x) match {
+            acquire.runAsync(x) match {
               case Async.Now(value) => go1(value)
               case other => Async.toFuture(other).map(go1).asDeferredFrontier
             }
@@ -762,16 +770,16 @@ private class ExecutionImpl(
             case x => x.toFutureValue.map(go).asDeferredFrontier
           }
 
-        case op: -⚬.EffectAsync[r, x, y] =>
+        case op: -⚬.Effect[r, x, y] =>
           // (Res[r] |*| Val[x]) -⚬ (Res[r] |*| Val[y])
 
-          val f: (r, x) => Async[y] =
+          val f: ScalaFun[(r, x), y] =
             op.f
 
           def go(fr: ResFrontier[r], x: x): Frontier[Res[r] |*| Val[y]] =
             fr match {
-              case fr @ MVal(r) => f(r, x).map(y => Pair(fr, Value(y))).asAsyncFrontier
-              case fr @ Resource(id, r) => f(r, x).map(y => Pair(fr, Value(y))).asAsyncFrontier
+              case fr @ MVal(r)         => f.runAsync(r, x).map(y => Pair(fr, Value(y))).asAsyncFrontier
+              case fr @ Resource(id, r) => f.runAsync(r, x).map(y => Pair(fr, Value(y))).asAsyncFrontier
             }
 
           (this: Frontier[Res[r] |*| Val[x]]).splitPair match {
@@ -779,16 +787,16 @@ private class ExecutionImpl(
             case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
           }
 
-        case op: -⚬.EffectWrAsync[r, x] =>
+        case op: -⚬.EffectWr[r, x] =>
           // (Res[r] |*| Val[x]) -⚬ Res[r]
 
-          val f: (r, x) => Async[Unit] =
+          val f: ScalaFun[(r, x), Unit] =
             op.f
 
           def go(fr: ResFrontier[r], x: x): Frontier[Res[r]] =
             fr match {
-              case fr @ MVal(r) => f(r, x).map(_ => fr).asAsyncFrontier
-              case fr @ Resource(id, r) => f(r, x).map(_ => fr).asAsyncFrontier
+              case fr @ MVal(r)         => f.runAsync(r, x).map(_ => fr).asAsyncFrontier
+              case fr @ Resource(id, r) => f.runAsync(r, x).map(_ => fr).asAsyncFrontier
             }
 
           (this: Frontier[Res[r] |*| Val[x]]).splitPair match {
@@ -796,17 +804,15 @@ private class ExecutionImpl(
             case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
           }
 
-        case op: -⚬.TryTransformResourceAsync[r, x, s, y, e] =>
+        case op: -⚬.TryTransformResource[r, x, s, y, e] =>
           // (Res[r] |*| Val[x]) -⚬ (Val[e] |+| (Res[s] |*| Val[y]))
 
-          val f: (r, x) => Async[Either[e, (s, y)]] =
-            op.f
-          val release: Option[s => Async[Unit]] =
-            op.release
+          val f: ScalaFunction[(r, x), Either[e, (s, y)]] = op.f
+          val release: Option[ScalaFunction[s, Unit]]     = op.release
 
           def go(r: ResFrontier[r], x: x): Frontier[Val[e] |+| (Res[s] |*| Val[y])] = {
             def go1(r: r, x: x): Frontier[Val[e] |+| (Res[s] |*| Val[y])] =
-              f(r, x)
+              f.runAsync(r, x)
                 .map[Frontier[Val[e] |+| (Res[s] |*| Val[y])]] {
                   case Left(e) =>
                     InjectL(Value(e))
@@ -820,7 +826,7 @@ private class ExecutionImpl(
                             case RegisterResult.Registered(id) =>
                               Pair(Resource(id, s), Value(y))
                             case RegisterResult.RegistryClosed =>
-                              release(s)
+                              release.runAsync(s)
                                 .map(_ => Frontier.failure("Transformed resource not registered because shutting down"))
                                 .asAsyncFrontier
                           }
@@ -849,19 +855,16 @@ private class ExecutionImpl(
             case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
           }
 
-        case op: -⚬.TrySplitResourceAsync[r, x, s, t, y, e] =>
+        case op: -⚬.TrySplitResource[r, x, s, t, y, e] =>
           // (Res[r] |*| Val[x]) -⚬ (Val[e] |+| ((Res[s] |*| Res[t]) |*| Val[y]))
 
-          val f: (r, x) => Async[Either[e, (s, t, y)]] =
-            op.f
-          val releaseS: Option[s => Async[Unit]] =
-            op.release1
-          val releaseT: Option[t => Async[Unit]] =
-            op.release2
+          val f: ScalaFun[(r, x), Either[e, (s, t, y)]] = op.f
+          val releaseS: Option[ScalaFun[s, Unit]]       = op.release1
+          val releaseT: Option[ScalaFun[t, Unit]]       = op.release2
 
           def go(r: ResFrontier[r], x: x): Frontier[Val[e] |+| ((Res[s] |*| Res[t]) |*| Val[y])] = {
             def go1(r: r, x: x): Frontier[Val[e] |+| ((Res[s] |*| Res[t]) |*| Val[y])] =
-              f(r, x)
+              f.runAsync(r, x)
                 .map[Frontier[Val[e] |+| ((Res[s] |*| Res[t]) |*| Val[y])]] {
                   case Left(e) =>
                     InjectL(Value(e))
@@ -875,7 +878,7 @@ private class ExecutionImpl(
                             case RegisterResult.Registered(id) =>
                               Resource(id, s)
                             case RegisterResult.RegistryClosed =>
-                              releaseS(s)
+                              releaseS.runAsync(s)
                                 .map(_ => Frontier.failure("Post-split resource not registered because shutting down"))
                                 .asAsyncFrontier
                           }
@@ -889,7 +892,7 @@ private class ExecutionImpl(
                             case RegisterResult.Registered(id) =>
                               Resource(id, t)
                             case RegisterResult.RegistryClosed =>
-                              releaseT(t)
+                              releaseT.runAsync(t)
                                 .map(_ => Frontier.failure("Post-split resource not registered because shutting down"))
                                 .asAsyncFrontier
                           }
@@ -918,20 +921,20 @@ private class ExecutionImpl(
             case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
           }
 
-        case op: -⚬.ReleaseAsync[r, x, y] =>
+        case op: -⚬.ReleaseWith[r, x, y] =>
           // (Res[r] |*| Val[x]) -⚬ Val[]
 
-          val release: (r, x) => Async[y] =
+          val release: ScalaFun[(r, x), y] =
             op.f
 
           def go(r: ResFrontier[r], x: x): Frontier[Val[y]] =
             r match {
               case MVal(r) =>
-                release(r, x).map(Value(_)).asAsyncFrontier
+                release.runAsync(r, x).map(Value(_)).asAsyncFrontier
               case Resource(id, r) =>
                 resourceRegistry.unregisterResource(id) match {
                   case UnregisterResult.Unregistered(_) =>
-                    release(r, x).map(Value(_)).asAsyncFrontier
+                    release.runAsync(r, x).map(Value(_)).asAsyncFrontier
                   case UnregisterResult.NotFound =>
                     bug(s"Previously registered resource $id not found in resource registry")
                   case UnregisterResult.RegistryClosed =>
@@ -944,7 +947,7 @@ private class ExecutionImpl(
             case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
           }
 
-        case op: -⚬.Release[r] =>
+        case _: -⚬.Release[r] =>
           // Res[R] -⚬ Done
 
           def go(r: ResFrontier[r]): Frontier[Done] =
@@ -955,7 +958,7 @@ private class ExecutionImpl(
               case Resource(id, r) =>
                 resourceRegistry.unregisterResource(id) match {
                   case UnregisterResult.Unregistered(r) =>
-                    r.releaseAsync(r.resource).map(_ => DoneNow).asAsyncFrontier
+                    r.release.runAsync(r.resource).map(_ => DoneNow).asAsyncFrontier
                   case UnregisterResult.NotFound =>
                     bug(s"Previously registered resource $id not found in resource registry")
                   case UnregisterResult.RegistryClosed =>

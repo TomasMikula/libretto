@@ -367,7 +367,7 @@ class ScalettoLib[
   object RefCounted {
     def acquire[A, R, B](acquire: A => (R, B), release: R => Unit): Val[A] -⚬ (RefCounted[R] |*| Val[B]) =
       dsl.acquire[A, (R, R => Unit, AtomicLong), B](
-        acquire = { a =>
+        acquire = { (a: A) =>
           val (r, b) = acquire(a)
           ((r, release, new AtomicLong(1L)), b)
         },
