@@ -33,6 +33,15 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     */
   type Res[A]
 
+  type ScalaFun[A, B]
+  val ScalaFun: ScalaFuns
+
+  trait ScalaFuns {
+    def apply[A, B](f: A => B): ScalaFun[A, B]
+    def blocking[A, B](f: A => B): ScalaFun[A, B]
+    def async[A, B](f: A => Async[B]): ScalaFun[A, B]
+  }
+
   private val lib = CoreLib(this)
   import lib._
 
@@ -59,8 +68,11 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
   def unliftNegPair[A, B]: (Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)] =
     introFst(promise[(A, B)] > snd(liftPair)) > assocLR > elimSnd(IXI > parToOne(fulfill, fulfill))
 
+  def mapVal[A, B](f: ScalaFun[A, B]): Val[A] -⚬ Val[B]
+
   /** Lifts an ordinary Scala function to a linear function on [[Val]]s. */
-  def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B]
+  def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B] =
+    mapVal(ScalaFun(f))
 
   /** Lifts an ordinary Scala function to a linear function on demands, in opposite direction. */
   def contramapNeg[A, B](f: A => B): Neg[B] -⚬ Neg[A] =
@@ -284,10 +296,11 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
       .>( par(id, unliftPair > mapVal(_._1)) )                                            .to[ (Res[S] |*|    Res[T]   ) |*|             Val[B]              ]
 
   /** Executes a potentially blocking operation.
-   *  The implementation must ensure that the blocking operation does not impede
+   *  The runtime will ensure that the blocking operation does not impede
    *  any of the concurrently happening non-blocking computations.
    */
-  def blocking[A, B](f: A => B): Val[A] -⚬ Val[B]
+  def blocking[A, B](f: A => B): Val[A] -⚬ Val[B] =
+    mapVal(ScalaFun.blocking(f))
 
   /** Prints the given message to the console, without creating an obligation to await. */
   def debugPrint(msg: String): Ping -⚬ One

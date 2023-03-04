@@ -36,6 +36,12 @@ abstract class FreeScaletto {
   final class Val[A] private()
   final class Res[A] private()
 
+  enum ScalaFunction[A, B] {
+    case Direct(f: A => B)
+    case Blocking(f: A => B)
+    case Asynchronous(f: A => Async[B])
+  }
+
   implicit val biInjectivePair: BiInjective[|*|] =
     new BiInjective[|*|] {
       override def unapply[A, B, X, Y](ev: (A |*| B) =:= (X |*| Y)): (A =:= X, B =:= Y) =
@@ -110,7 +116,7 @@ abstract class FreeScaletto {
     case class LiftEither[A, B]() extends (Val[Either[A, B]] -⚬ (Val[A] |+| Val[B]))
     case class LiftPair[A, B]() extends (Val[(A, B)] -⚬ (Val[A] |*| Val[B]))
     case class UnliftPair[A, B]() extends ((Val[A] |*| Val[B]) -⚬ Val[(A, B)])
-    case class MapVal[A, B](f: A => B) extends (Val[A] -⚬ Val[B])
+    case class MapVal[A, B](f: ScalaFunction[A, B]) extends (Val[A] -⚬ Val[B])
     case class ConstVal[A](a: A) extends (Done -⚬ Val[A])
     case class ConstNeg[A](a: A) extends (-[Val[A]] -⚬ Need)
     case class Neglect[A]() extends (Val[A] -⚬ Done)
@@ -139,8 +145,6 @@ abstract class FreeScaletto {
       release1: Option[S => Async[Unit]],
       release2: Option[T => Async[Unit]],
     ) extends ((Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])))
-
-    case class Blocking[A, B](f: A => B) extends (Val[A] -⚬ Val[B])
   }
 }
 
@@ -148,6 +152,14 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   import -⚬._
 
   override type ->[A, B] = A -⚬ B
+
+  override type ScalaFun[A, B] = ScalaFunction[A, B]
+
+  override object ScalaFun extends ScalaFuns {
+    override def apply[A, B](f: A => B): ScalaFun[A, B]        = ScalaFunction.Direct(f)
+    override def blocking[A, B](f: A => B): ScalaFun[A, B]     = ScalaFunction.Blocking(f)
+    override def async[A, B](f: A => Async[B]): ScalaFun[A, B] = ScalaFunction.Asynchronous(f)
+  }
 
   override def id[A]: A -⚬ A =
     Id()
@@ -320,7 +332,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   override def unliftPair[A, B]: (Val[A] |*| Val[B]) -⚬ Val[(A, B)] =
     UnliftPair()
 
-  override def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B] =
+  override def mapVal[A, B](f: ScalaFun[A, B]): Val[A] -⚬ Val[B] =
     MapVal(f)
 
   override def constVal[A](a: A): Done -⚬ Val[A] =
@@ -377,9 +389,6 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     release2: Option[T => Async[Unit]],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])) =
     TrySplitResourceAsync(f, release1, release2)
-
-  override def blocking[A, B](f: A => B): Val[A] -⚬ Val[B] =
-    Blocking(f)
 
   override def forevert[A]: One -⚬ (-[A] |*| A) =
     Forevert()

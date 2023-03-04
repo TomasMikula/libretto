@@ -1,6 +1,5 @@
 package libretto.scaletto.impl.futurebased
 
-import java.util.concurrent.{Executor => JExecutor}
 import libretto.Scheduler
 import libretto.Executor.CancellationReason
 import libretto.lambda.util.SourcePos
@@ -13,10 +12,10 @@ import scala.util.{Failure, Success, Try}
 
 private class ExecutionImpl(
   resourceRegistry: ResourceRegistry,
+  blockingEC: ExecutionContext,
 )(using
   ec: ExecutionContext,
   scheduler: Scheduler,
-  blockingExecutor: JExecutor,
 ) extends ScalettoExecution[FreeScaletto.type] {
   import ResourceRegistry._
 
@@ -178,6 +177,15 @@ private class ExecutionImpl(
       port(Frontier.Value(value))
   }
 
+  extension [A, B](f: ScalaFunction[A, B]) {
+    def run: A => Future[B] =
+      f match {
+        case ScalaFunction.Direct(f)       => a => Future.successful(f(a))
+        case ScalaFunction.Blocking(f)     => a => Future { f(a) } (blockingEC)
+        case ScalaFunction.Asynchronous(f) => a => Async.toFuture(f(a))
+      }
+  }
+
   private sealed trait Frontier[A] {
     import Frontier._
 
@@ -185,7 +193,6 @@ private class ExecutionImpl(
       resourceRegistry: ResourceRegistry,
       ec: ExecutionContext,
       scheduler: Scheduler,
-      blockingExecutor: JExecutor,
     ): Frontier[B] =
       extendBy(f, 0)
 
@@ -193,7 +200,6 @@ private class ExecutionImpl(
       resourceRegistry: ResourceRegistry,
       ec: ExecutionContext,
       scheduler: Scheduler,
-      blockingExecutor: JExecutor,
     ): Frontier[B] = {
       implicit class FrontierOps[X](fx: Frontier[X]) {
         def extend[Y](f: X -⚬ Y): Frontier[Y] =
@@ -627,7 +633,7 @@ private class ExecutionImpl(
         case op: -⚬.MapVal[x, y] =>
           (this: Frontier[Val[x]])
             .toFutureValue
-            .map(op.f)
+            .flatMap(op.f.run)
             .toValFrontier
 
         case -⚬.ConstVal(a) =>
@@ -960,27 +966,6 @@ private class ExecutionImpl(
           (this: Frontier[Res[r]]) match {
             case r: ResFrontier[r] => go(r)
             case r => r.toFutureRes.map(go).asDeferredFrontier
-          }
-
-        case op: -⚬.Blocking[x, y] =>
-          // Val[x] -⚬ Val[y]
-
-          val f: x => y =
-            op.f
-
-          def go(x: x): Frontier[Val[y]] = {
-            val py = Promise[y]()
-
-            blockingExecutor.execute { () =>
-              py.complete(Try(f(x)))
-            }
-
-            py.future.toValFrontier
-          }
-
-          (this: Frontier[Val[x]]) match {
-            case Value(x) => go(x)
-            case other    => other.toFutureValue.map(go).asDeferredFrontier
           }
 
         case _: -⚬.Backvert[x] =>

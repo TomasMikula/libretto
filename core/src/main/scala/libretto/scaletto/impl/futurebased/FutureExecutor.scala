@@ -16,7 +16,8 @@ object FutureExecutor {
   ): ScalettoExecutor.Of[FreeScaletto.type, BridgeImpl.type] = {
     val ec = ExecutionContext.fromExecutor(scheduler)
     val sc = new SchedulerFromScheduledExecutorService(scheduler)
-    new FutureExecutor(ec, sc, blockingExecutor)
+    val blockingEC = ExecutionContext.fromExecutor(blockingExecutor)
+    new FutureExecutor(ec, sc, blockingEC)
   }
 
   type ExecutionParam[A] = ExecutionParams.Free[SchedulerParam, A]
@@ -91,7 +92,7 @@ object FutureExecutor {
 class FutureExecutor(
   ec: ExecutionContext,
   scheduler: Scheduler,
-  blockingExecutor: JExecutor,
+  blockingEC: ExecutionContext,
 ) extends ScalettoExecutor {
 
   override type Dsl = FreeScaletto.type
@@ -113,7 +114,7 @@ class FutureExecutor(
   ): (Executing[bridge.type, A, B], P) = {
     val (schedOpt, p) = FutureExecutor.ExecutionParam.extract(params)
     val sched = schedOpt.getOrElse(scheduler)
-    val executing = BridgeImpl.execute(prg)(ec, sched, blockingExecutor)
+    val executing = BridgeImpl.execute(prg)(ec, sched, blockingEC)
     (executing, p)
   }
 
