@@ -1,6 +1,7 @@
 package libretto.scaletto
 
 import libretto.{CoreLib, CrashDSL, InvertDSL, TimerDSL}
+import libretto.lambda.util.SourcePos
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 
@@ -217,6 +218,11 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
   def effectWrAsync[R, A](f: (R, A) => Async[Unit]): (Res[R] |*| Val[A]) -⚬ Res[R] =
     effectWr(ScalaFun.async(f.tupled))
 
+  def tryEffectAcquire[R, A, S, B, E](
+    f: ScalaFun[(R, A), Either[E, (S, B)]],
+    release: Option[ScalaFun[S, Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| (Val[E] |+| (Res[S] |*| Val[B])))
+
   /** Transforms a resource into a resource of (possibly) different type.
     *
     * @param f the transformation function. It receives the input resource and additional input of type [[A]].
@@ -363,4 +369,37 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
 
   /** Prints the given message to the console, without creating an obligation to await. */
   def debugPrint(msg: String): Ping -⚬ One
+
+  def constantVal[A](a: A)(using SourcePos, LambdaContext): $[Val[A]] =
+    constant(done) > constVal(a)
+
+  def tuple[A, B](a: $[Val[A]], b: $[Val[B]])(using
+    SourcePos,
+    LambdaContext,
+  ): $[Val[(A, B)]] =
+    (a |*| b) > unliftPair
+
+  def tuple[A, B, C](a: $[Val[A]], b: $[Val[B]], c: $[Val[C]])(using
+    SourcePos,
+    LambdaContext,
+  ): $[Val[(A, B, C)]] =
+    tuple(tuple(a, b), c) > mapVal { case ((a, b), c) => (a, b, c) }
+
+  def tuple[A, B, C, D](a: $[Val[A]], b: $[Val[B]], c: $[Val[C]], d: $[Val[D]])(using
+    SourcePos,
+    LambdaContext,
+  ): $[Val[(A, B, C, D)]] =
+    tuple(tuple(a, b), tuple(c, d)) > mapVal { case ((a, b), (c, d)) => (a, b, c, d) }
+
+  def tuple[A, B, C, D, E](a: $[Val[A]], b: $[Val[B]], c: $[Val[C]], d: $[Val[D]], e: $[Val[E]])(using
+    SourcePos,
+    LambdaContext,
+  ): $[Val[(A, B, C, D, E)]] =
+    tuple(tuple(a, b, c), tuple(d, e)) > mapVal { case ((a, b, c), (d, e)) => (a, b, c, d, e) }
+
+  def tuple[A, B, C, D, E, F](a: $[Val[A]], b: $[Val[B]], c: $[Val[C]], d: $[Val[D]], e: $[Val[E]], f: $[Val[F]])(using
+    SourcePos,
+    LambdaContext,
+  ): $[Val[(A, B, C, D, E, F)]] =
+    tuple(tuple(a, b, c), tuple(d, e, f)) > mapVal { case ((a, b, c), (d, e, f)) => (a, b, c, d, e, f) }
 }

@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicLong
 import libretto.CoreLib
 import libretto.lambda.util.SourcePos
 import libretto.util.Async
+import scala.annotation.targetName
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 
@@ -334,6 +335,15 @@ class ScalettoLib[
   def effectAsync0[R](f: R => Async[Unit]): Res[R] -⚬ Res[R] =
     id[Res[R]].introSnd(const(())) > effectWrAsync((r, _) => f(r))
 
+  def tryEffectAcquireWr[R, A, S, E](
+    f: ScalaFun[(R, A), Either[E, S]],
+    release: Option[ScalaFun[S, Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| (Val[E] |+| Res[S])) =
+    tryEffectAcquire[R, A, S, Unit, E](
+      f.adaptPost(_.map(s => (s, ()))),
+      release,
+    ) > snd(|+|.rmap(effectWr((_, _) => ())))
+
   /** Variant of [[transformResource]] that does not take additional input and does not produce additional output. */
   def transformResource0[R, S](f: R => S, release: Option[S => Unit]): Res[R] -⚬ Res[S] =
     id[Res[R]].introSnd(const(())) > transformResource((r, u) => (f(r), u), release) > effectWr((_, _) => ())
@@ -379,6 +389,15 @@ class ScalettoLib[
       release2.map(ScalaFun.async(_)),
     )
 
+  extension [R](r: $[Res[R]])(using LambdaContext) {
+    @targetName("releaseResourceWhen")
+    def releaseWhen(d: $[Done])(using SourcePos): $[Done] =
+      (r |*| constVal(())(d)) :>> effectWr((_, _) => ()) :>> release
+
+    def releaseOnPing(p: $[Ping])(using SourcePos): $[Done] =
+      releaseWhen(strengthenPing(p))
+  }
+
   opaque type RefCounted[R] = Res[RefCounted.Repr[R]]
 
   object RefCounted {
@@ -403,6 +422,16 @@ class ScalettoLib[
 
     def release[R]: RefCounted[R] -⚬ Done =
       dsl.release
+
+    def releaseWhenDone[R]: (Done |*| RefCounted[R]) -⚬ Done =
+      λ { case done |*| res =>
+        (res |*| constVal(())(done))
+        :>> effectWr((_, _) => ())
+        :>> release
+      }
+
+    def releaseOnPing[R]: (Ping |*| RefCounted[R]) -⚬ Done =
+      fst(strengthenPing) > releaseWhenDone
 
     def dupRef[R]: RefCounted[R] -⚬ (RefCounted[R] |*| RefCounted[R]) =
       splitResource0(

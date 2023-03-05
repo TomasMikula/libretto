@@ -857,6 +857,41 @@ private class ExecutionImpl(
             case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
           }
 
+        case op: -⚬.TryEffectAcquire[r, x, s, y, e] =>
+          // (Res[r] |*| Val[x]) -⚬ (Res[r] |*| (Val[e] |+| (Res[s] |*| Val[y])))
+          val f: ScalaFunction[(r, x), Either[e, (s, y)]] = op.f
+          val releaseS: Option[ScalaFunction[s, Unit]]     = op.release
+
+          def go(rf: ResFrontier[r], x: x): Frontier[Res[r] |*| (Val[e] |+| (Res[s] |*| Val[y]))] = {
+            f.runAsync(rf.resource, x)
+              .map {
+                case Left(e) =>
+                  Pair(rf, InjectL(Value(e)))
+                case Right((s, y)) =>
+                  val fs: Frontier[Res[s]] =
+                    releaseS match {
+                      case None =>
+                        MVal(s)
+                      case Some(releaseS) =>
+                        resourceRegistry.registerResource(s, releaseS) match {
+                          case RegisterResult.Registered(id) =>
+                            Resource(id, s)
+                          case RegisterResult.RegistryClosed =>
+                            releaseS.runAsync(s)
+                              .map(_ => Frontier.failure("Acquired resource not registered because shutting down"))
+                              .asAsyncFrontier
+                        }
+                    }
+                  Pair(rf, InjectR(Pair(fs, Value(y))))
+              }
+              .asAsyncFrontier
+          }
+
+          (this: Frontier[Res[r] |*| Val[x]]).splitPair match {
+            case (r: ResFrontier[r], Value(x)) => go(r, x)
+            case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
+          }
+
         case op: -⚬.TrySplitResource[r, x, s, t, y, e] =>
           // (Res[r] |*| Val[x]) -⚬ (Val[e] |+| ((Res[s] |*| Res[t]) |*| Val[y]))
 
@@ -1057,7 +1092,13 @@ private class ExecutionImpl(
 
     case class Value[A](a: A) extends Frontier[Val[A]]
 
-    sealed trait ResFrontier[A] extends Frontier[Res[A]]
+    sealed trait ResFrontier[A] extends Frontier[Res[A]] {
+      def resource: A =
+        this match {
+          case MVal(a) => a
+          case Resource(_, a) => a
+        }
+    }
     case class MVal[A](value: A) extends ResFrontier[A]
     case class Resource[A](id: ResId, obj: A) extends ResFrontier[A]
 
