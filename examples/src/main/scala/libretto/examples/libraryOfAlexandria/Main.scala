@@ -32,17 +32,17 @@ object Main extends StarterApp {
 
   override def blueprint: Done -⚬ Done = {
     val downloader = Downloader(ConnectorModuleImpl)
-    λ { start =>
+    λ.+ { start =>
       val connector = ConnectorModuleImpl.createConnector(start)
       val scrollIds = ValSource.fromList(ScrollIds)(start)
       (connector |*| scrollIds)
-      :>> downloader.downloadAll(10)
+      :>> downloader.downloadAll(prepareAhead = 10)
       :>> ValSource.forEachSequentially(printPage)
     }
   }
 
   private def printPage: Val[Page] -⚬ Done =
     printLine { case Page(scrollId, pageNumber, content) =>
-      s"${scrollId.value} p${pageNumber}\n${content}}"
+      s"${scrollId.value} page ${pageNumber}\n${content}"
     }
 }

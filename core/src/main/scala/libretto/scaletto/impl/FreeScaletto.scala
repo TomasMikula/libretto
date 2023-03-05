@@ -130,6 +130,10 @@ abstract class FreeScaletto {
     case class ReleaseWith[R, A, B](f: ScalaFunction[(R, A), B]) extends ((Res[R] |*| Val[A]) -⚬ Val[B])
     case class Effect[R, A, B](f: ScalaFunction[(R, A), B]) extends ((Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]))
     case class EffectWr[R, A](f: ScalaFunction[(R, A), Unit]) extends ((Res[R] |*| Val[A]) -⚬ Res[R])
+    case class TryEffectAcquire[R, A, S, B, E](
+      f: ScalaFunction[(R, A), Either[E, (S, B)]],
+      release: Option[ScalaFunction[S, Unit]],
+    ) extends ((Res[R] |*| Val[A]) -⚬ (Res[R] |*| (Val[E] |+| (Res[S] |*| Val[B]))))
     case class TryTransformResource[R, A, S, B, E](
       f: ScalaFunction[(R, A), Either[E, (S, B)]],
       release: Option[ScalaFunction[S, Unit]],
@@ -385,6 +389,12 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   override def effectWr[R, A](f: ScalaFunction[(R, A), Unit]): (Res[R] |*| Val[A]) -⚬ Res[R] =
     EffectWr(f)
+
+  override def tryEffectAcquire[R, A, S, B, E](
+    f: ScalaFunction[(R, A), Either[E, (S, B)]],
+    release: Option[ScalaFunction[S, Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| (Val[E] |+| (Res[S] |*| Val[B]))) =
+    TryEffectAcquire(f, release)
 
   override def tryTransformResource[R, A, S, B, E](
     f: ScalaFunction[(R, A), Either[E, (S, B)]],

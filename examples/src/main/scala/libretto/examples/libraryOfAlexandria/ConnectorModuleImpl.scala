@@ -5,9 +5,27 @@ import libretto.stream.scaletto.DefaultStreams._
 
 import vendor.{Page, ScrollId}
 
+/** Adapts the vendor-provided API for consumption by Libretto.
+ * We codify the rules of use, such as
+ *  - do not close the connector while it has active connections,
+ *  - do not reuse or close a connection while still reading query results
+ * so that they cannot be violated by the client Libretto code.
+ *
+ * There is a clash of two worlds here:
+ * sequential, non-linear vs. concurrent, linear.
+ */
 object ConnectorModuleImpl extends ConnectorModule {
   override opaque type Connector = RefCounted[vendor.Connector]
 
+  override given shareableConnector: Cosemigroup[Connector] with {
+    override def split: Connector -⚬ (Connector |*| Connector) =
+      RefCounted.dupRef[vendor.Connector]
+  }
+
+  override def closeConnector: Connector -⚬ Done =
+    RefCounted.release[vendor.Connector]
+
+  // Connection will hold on to connector, thus keeping it alive, until the connection is closed.
   private type Connection = Connector |*| Res[vendor.Connection]
 
   override def fetchScroll: (Connector |*| Val[ScrollId]) -⚬ ValSource[Page] =
@@ -29,6 +47,60 @@ object ConnectorModuleImpl extends ConnectorModule {
       Some(ScalaFun.blocking(_.close())),
     )
 
-  private def fetch: (Res[vendor.Connection] |*| Val[ScrollId]) -⚬ ValSource[Page] =
-    ???
+  /** Initiates fetch even before the downstream pulls, but waits with transfering pages
+   *  until downstream pulls.
+   */
+  private def fetch: (Res[vendor.Connection] |*| Val[ScrollId]) -⚬ ValSource[Page] = {
+    val scalaFetch: ScalaFun[(vendor.Connection, ScrollId), Either[Unit, vendor.ResultSet[Page]]] =
+      ScalaFun.blocking { case (c, id) => c.fetchScroll(id).toRight(left = ()) }
+
+    val rsClose: ScalaFun[vendor.ResultSet[Page], Unit] =
+      ScalaFun.blocking(_.earlyClose())
+
+    λ { case conn |*| id =>
+      val conn1 |*| rsOpt = (conn |*| id) :>> tryEffectAcquireWr(scalaFetch, Some(rsClose))
+      rsOpt switch {
+        case Left(notFound) =>
+          conn1.releaseWhen(neglect(notFound)) :>> ValSource.empty[Page]
+        case Right(rs) =>
+          val (pagesClosed |*| pages) =
+            resultSetSource(rs) :>> ValSource.notifyUpstreamClosed
+
+          // closing connection only after the result set is closed
+          val connClosed = conn1 releaseOnPing pagesClosed
+
+          // for the downstream, delay the pages closed signal until connection is closed
+          ValSource.delayClosedBy(connClosed |*| pages)
+      }
+    }
+  }
+
+  private def resultSetSource: Res[vendor.ResultSet[Page]] -⚬ ValSource[Page] = rec { self =>
+    λ { rs =>
+      producing { pages =>
+        (ValSource.fromChoice >>: pages) switch {
+          case Left(closing) =>
+            closing := rs :>> release
+          case Right(pulling) =>
+            pulling :=
+              nextPage(rs) switch {
+                case Left(closed)       => ValSource.Polled.empty[Page](closed)
+                case Right(page |*| rs) => ValSource.Polled.cons(page |*| self(rs))
+              }
+        }
+      }
+    }
+  }
+
+  private def nextPage: Res[vendor.ResultSet[Page]] -⚬ (Done |+| (Val[Page] |*| Res[vendor.ResultSet[Page]])) = {
+    val nextPageScala: ScalaFun[vendor.ResultSet[Page], Either[Unit, Page]] =
+      ScalaFun.blocking { rs => rs.next().toRight(left = ()) }
+
+    effectRd(nextPageScala) > λ { case rs |*| pageOpt =>
+      liftEither(pageOpt) switch {
+        case Left(end)   => injectL(rs releaseWhen neglect(end))
+        case Right(page) => injectR(page |*| rs)
+      }
+    }
+  }
 }

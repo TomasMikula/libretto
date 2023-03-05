@@ -263,13 +263,15 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       id.>.snd(detainClosed) > concatenate
 
     def flatten[A]: Source[Source[A]] -⚬ Source[A] =
-      from(
-        onClose = close[Source[A]],
-        onPoll  = poll[Source[A]] > either(
-          Polled.empty[A],
-          λ { case as |*| ass => poll(concat(as |*| flatten(ass))) }
-        ),
-      )
+      rec { flatten =>
+        from(
+          onClose = close[Source[A]],
+          onPoll  = poll[Source[A]] > either(
+            Polled.empty[A],
+            λ { case as |*| ass => poll(concat(as |*| flatten(ass))) }
+          ),
+        )
+      }
 
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
       *

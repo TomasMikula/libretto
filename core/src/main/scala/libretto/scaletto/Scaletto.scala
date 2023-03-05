@@ -218,6 +218,11 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
   def effectWrAsync[R, A](f: (R, A) => Async[Unit]): (Res[R] |*| Val[A]) -⚬ Res[R] =
     effectWr(ScalaFun.async(f.tupled))
 
+  def tryEffectAcquire[R, A, S, B, E](
+    f: ScalaFun[(R, A), Either[E, (S, B)]],
+    release: Option[ScalaFun[S, Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| (Val[E] |+| (Res[S] |*| Val[B])))
+
   /** Transforms a resource into a resource of (possibly) different type.
     *
     * @param f the transformation function. It receives the input resource and additional input of type [[A]].

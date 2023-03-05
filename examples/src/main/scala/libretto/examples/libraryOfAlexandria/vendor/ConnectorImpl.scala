@@ -1,11 +1,6 @@
 package libretto.examples.libraryOfAlexandria.vendor
 
 private[vendor] class ConnectorImpl extends Connector {
-  case class Scroll(text: String)
-
-  val Library: Map[ScrollId, Scroll] =
-    Map()
-
   private var openConnections: Int = 0
   private var closed: Boolean = false
 
@@ -40,7 +35,7 @@ private[vendor] class ConnectorImpl extends Connector {
             throw IllegalStateException("Connection already in use.")
           } else {
             val job: Option[ScrollDigitization] =
-              Library.get(id).map(ScrollDigitization(id, _))
+              ScrollDatabase.get(id).map(ScrollDigitization(id, _))
             inUseBy = job
             job
           }
@@ -82,8 +77,7 @@ private[vendor] class ConnectorImpl extends Connector {
           else {
             started = true
             Thread.sleep(10) // scanning the scroll takes some time
-            val pages = scroll.text.grouped(80).zipWithIndex
-            new ResultSetImpl(id, pages)
+            new ResultSetImpl(id, scroll.paginate())
           }
         }
 
@@ -105,14 +99,14 @@ private[vendor] class ConnectorImpl extends Connector {
 
       class ResultSetImpl(
         scrollId: ScrollId,
-        pages: Iterator[(String, Int)],
+        pages: Iterator[(Int, String)],
       ) extends ResultSet[Page] {
         override def earlyClose(): Unit =
           ScrollDigitization.this.cancel()
 
         override def next(): Option[Page] =
           if (pages.hasNext) {
-            val (content, number) = pages.next()
+            val (number, content) = pages.next()
             Some(Page(scrollId, number, content))
           } else {
             ScrollDigitization.this.cancel()
