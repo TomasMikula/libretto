@@ -24,7 +24,10 @@ object ConnectorModuleImpl extends ConnectorModule {
     )
 
   private def connect: Connector -⚬ Connection =
-    RefCounted.effectRdAcquire(_.connect(), Some(_.close()))
+    RefCounted.effectRdAcquire(
+      ScalaFun.blocking(_.connect()),
+      Some(ScalaFun.blocking(_.close())),
+    )
 
   private def fetch: (Res[vendor.Connection] |*| Val[ScrollId]) -⚬ ValSource[Page] =
     ???

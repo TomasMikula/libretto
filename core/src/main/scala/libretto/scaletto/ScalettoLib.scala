@@ -320,8 +320,11 @@ class ScalettoLib[
   def releaseAsync0[R, B](release: R => Async[B]): Res[R] -⚬ Val[B] =
     id[Res[R]].introSnd(const(())) > dsl.releaseAsync((r, _) => release(r))
 
+  def effectRd[R, B](f: ScalaFun[R, B]): Res[R] -⚬ (Res[R] |*| Val[B]) =
+    id[Res[R]].introSnd(const(())) > effect(f.adapt[(R, Unit), B](_._1, identity))
+
   def effectRd[R, B](f: R => B): Res[R] -⚬ (Res[R] |*| Val[B]) =
-    id[Res[R]].introSnd(const(())) > effect((r, _) => f(r))
+    effectRd(ScalaFun(f))
 
   /** Variant of [[effect]] that does not take additional input and does not produce additional output. */
   def effect0[R](f: R => Unit): Res[R] -⚬ Res[R] =
@@ -340,15 +343,29 @@ class ScalettoLib[
     id[Res[R]].introSnd(const(())) > transformResourceAsync((r, u) => f(r).map((_, u)), release) > effectWr((_, _) => ())
 
   def splitResource0[R, S, T](
+    f: ScalaFun[R, (S, T)],
+    release1: Option[ScalaFun[S, Unit]],
+    release2: Option[ScalaFun[T, Unit]],
+  ): Res[R] -⚬ (Res[S] |*| Res[T]) = {
+    val f1: ScalaFun[(R, Unit), (S, T, Unit)] =
+      ScalaFun.adapt(f)({ case (r, ()) => r }, { case (s, t) => (s, t, ()) })
+    id[Res[R]]
+      .introSnd(const(()))
+      .>(splitResource(f1, release1, release2))
+      .assocLR
+      .>.snd(effectWr((_, _) => ()))
+  }
+
+  def splitResource0[R, S, T](
     f: R => (S, T),
     release1: Option[S => Unit],
     release2: Option[T => Unit],
   ): Res[R] -⚬ (Res[S] |*| Res[T]) =
-    id[Res[R]]
-      .introSnd(const(()))
-      .>(splitResource((r, u) => { val (s, t) = f(r); (s, t, u) }, release1, release2))
-      .assocLR
-      .>.snd(effectWr((_, _) => ()))
+    splitResource0(
+      ScalaFun(f),
+      release1.map(ScalaFun(_)),
+      release2.map(ScalaFun(_)),
+    )
 
 
   def splitResourceAsync0[R, S, T](
@@ -356,23 +373,30 @@ class ScalettoLib[
     release1: Option[S => Async[Unit]],
     release2: Option[T => Async[Unit]],
   ): Res[R] -⚬ (Res[S] |*| Res[T]) =
-    id[Res[R]]
-      .introSnd(const(()))
-      .>(splitResourceAsync((r, u) => { f(r) map { case (s, t) => (s, t, u) } }, release1, release2))
-      .assocLR
-      .>.snd(effectWr((_, _) => ()))
+    splitResource0(
+      ScalaFun.async(f),
+      release1.map(ScalaFun.async(_)),
+      release2.map(ScalaFun.async(_)),
+    )
 
-  opaque type RefCounted[R] = Res[(R, R => Unit, AtomicLong)]
+  opaque type RefCounted[R] = Res[RefCounted.Repr[R]]
 
   object RefCounted {
-    def acquire[A, R, B](acquire: A => (R, B), release: R => Unit): Val[A] -⚬ (RefCounted[R] |*| Val[B]) =
-      dsl.acquire[A, (R, R => Unit, AtomicLong), B](
-        acquire = { (a: A) =>
-          val (r, b) = acquire(a)
+    private[ScalettoLib] type Repr[R] = (R, ScalaFun[R, Unit], AtomicLong)
+
+    def acquire[A, R, B](
+      acquire: ScalaFun[A, (R, B)],
+      release: ScalaFun[R, Unit],
+    ): Val[A] -⚬ (RefCounted[R] |*| Val[B]) =
+      dsl.acquire[A, (R, ScalaFun[R, Unit], AtomicLong), B](
+        acquire = acquire.adaptPost { case (r, b) =>
           ((r, release, new AtomicLong(1L)), b)
         },
         release = Some(releaseFn[R]),
       )
+
+    def acquire[A, R, B](acquire: A => (R, B), release: R => Unit): Val[A] -⚬ (RefCounted[R] |*| Val[B]) =
+      RefCounted.acquire(ScalaFun(acquire), ScalaFun(release))
 
     def acquire0[A, R](acquire: A => R, release: R => Unit): Val[A] -⚬ RefCounted[R] =
       RefCounted.acquire[A, R, Unit](a => (acquire(a), ()), release) > effectWr((_, _) => ())
@@ -392,9 +416,10 @@ class ScalettoLib[
 
     def dupRef[R]: RefCounted[R] -⚬ (RefCounted[R] |*| RefCounted[R]) =
       splitResource0(
-        { case rc @ (_, _, n) =>
-          n.incrementAndGet()
-          (rc, rc)
+        ScalaFun[Repr[R], (Repr[R], Repr[R])] {
+          case rc @ (_, _, n) =>
+            n.incrementAndGet()
+            (rc, rc)
         },
         Some(releaseFn[R]),
         Some(releaseFn[R]),
@@ -406,28 +431,39 @@ class ScalettoLib[
     def effectAsync[R, A, B](f: (R, A) => Async[B]): (RefCounted[R] |*| Val[A]) -⚬ (RefCounted[R] |*| Val[B]) =
       dsl.effectAsync((rn, a) => f(rn._1, a))
 
-    def effectRd[R, B](f: R => B): RefCounted[R] -⚬ (RefCounted[R] |*| Val[B]) =
-      ScalettoLib.this.effectRd(rn => f(rn._1))
+    def effectRd[R, B](f: ScalaFun[R, B]): RefCounted[R] -⚬ (RefCounted[R] |*| Val[B]) =
+      ScalettoLib.this.effectRd(f.adapt[Repr[R], B](_._1, identity))
 
-    def effectRdAcquire[R, B](f: R => B, release: Option[B => Unit]): RefCounted[R] -⚬ (RefCounted[R] |*| Res[B]) =
+    def effectRdAcquire[R, B](
+      f: ScalaFun[R, B],
+      release: Option[ScalaFun[B, Unit]],
+    ): RefCounted[R] -⚬ (RefCounted[R] |*| Res[B]) = {
+      val f1: ScalaFun[Repr[R], (Repr[R], B)] =
+        f.adaptWith[Repr[R], Repr[R], (Repr[R], B)](
+          r => (r, r._1),
+          (r, b) => (r, b),
+        )
       splitResource0(
-        rn => (rn, f(rn._1)),
+        f1,
         release1 = Some(releaseFn[R]),
         release2 = release,
       )
+    }
 
-    private def releaseFn[R]: ((R, R => Unit, AtomicLong)) => Unit =
-      { case (r, release, n) =>
-        n.decrementAndGet match {
-          case 0 =>
-            // no more references exist, release
-            release(r)
-          case i if i > 0 =>
-            // there are remaining references, do nothing
-          case i =>
-            assert(false, s"Bug: reached negative number ($i) of references to $r")
+    private def releaseFn[R]: ScalaFun[(R, ScalaFun[R, Unit], AtomicLong), Unit] =
+      ScalaFun.eval[R, Unit]
+        .adaptPre { case (r, release, n) =>
+          n.decrementAndGet match {
+            case 0 =>
+              // no more references exist, release
+              (release, r)
+            case i if i > 0 =>
+              // there are remaining references, do nothing
+              (ScalaFun(identity), r)
+            case i =>
+              assert(false, s"Bug: reached negative number ($i) of references to $r")
+          }
         }
-      }
   }
 
   def putStr: Val[String] -⚬ Done =
