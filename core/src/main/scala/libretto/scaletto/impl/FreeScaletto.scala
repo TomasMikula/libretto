@@ -153,6 +153,21 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     override def apply[A, B](f: A => B): ScalaFun[A, B]        = ScalaFunction.Direct(f)
     override def blocking[A, B](f: A => B): ScalaFun[A, B]     = ScalaFunction.Blocking(f)
     override def async[A, B](f: A => Async[B]): ScalaFun[A, B] = ScalaFunction.Asynchronous(f)
+
+    override def adapt[A, B, Z, C](f: ScalaFun[A, B])(
+      pre: Z => A,
+      post: B => C,
+    ): ScalaFun[Z, C] =
+      f.adapt(pre, post)
+
+    override def adaptWith[A, B, Z, P, C](f: ScalaFun[A, B])(
+      pre: Z => (P, A),
+      post: (P, B) => C,
+    ): ScalaFun[Z, C] =
+      f.adaptWith(pre, post)
+
+    override def eval[A, B]: ScalaFun[(ScalaFun[A, B], A), B] =
+      ScalaFunction.eval[A, B]
   }
 
   override def id[A]: A -⚬ A =

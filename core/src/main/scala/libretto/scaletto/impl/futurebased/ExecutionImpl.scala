@@ -183,6 +183,7 @@ private class ExecutionImpl(
         case ScalaFunction.Direct(f)       => a => Future.successful(f(a))
         case ScalaFunction.Blocking(f)     => a => Future { f(a) } (blockingEC)
         case ScalaFunction.Asynchronous(f) => a => Async.toFuture(f(a))
+        case ScalaFunction.Step(f)         => a => { val (g, x) = f(a); g.runFuture(x) }
       }
 
     def runAsync: A => Async[B] =
@@ -190,6 +191,7 @@ private class ExecutionImpl(
         case ScalaFunction.Direct(f)       => a => Async.now(f(a))
         case ScalaFunction.Blocking(f)     => a => Async.executeOn(blockingEC) { f(a) }
         case ScalaFunction.Asynchronous(f) => f
+        case ScalaFunction.Step(f)         => a => { val (g, x) = f(a); g.runAsync(x) }
       }
   }
 

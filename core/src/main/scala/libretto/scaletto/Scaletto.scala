@@ -40,6 +40,24 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     def apply[A, B](f: A => B): ScalaFun[A, B]
     def blocking[A, B](f: A => B): ScalaFun[A, B]
     def async[A, B](f: A => Async[B]): ScalaFun[A, B]
+
+    def adapt[A, B, Z, C](f: ScalaFun[A, B])(pre: Z => A, post: B => C): ScalaFun[Z, C]
+    def adaptWith[A, B, Z, P, C](f: ScalaFun[A, B])(pre: Z => (P, A), post: (P, B) => C): ScalaFun[Z, C]
+    def eval[A, B]: ScalaFun[(ScalaFun[A, B], A), B]
+  }
+
+  extension [A, B](f: ScalaFun[A, B]) {
+    def adapt[Z, C](pre: Z => A, post: B => C): ScalaFun[Z, C] =
+      ScalaFun.adapt(f)(pre, post)
+
+    def adaptPre[Z](pre: Z => A): ScalaFun[Z, B] =
+      ScalaFun.adapt(f)(pre, identity)
+
+    def adaptPost[C](post: B => C): ScalaFun[A, C] =
+      ScalaFun.adapt(f)(identity, post)
+
+    def adaptWith[Z, P, C](pre: Z => (P, A), post: (P, B) => C): ScalaFun[Z, C] =
+      ScalaFun.adaptWith(f)(pre, post)
   }
 
   private val lib = CoreLib(this)
@@ -266,14 +284,25 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     )
 
   def splitResource[R, A, S, T, B](
+    f: ScalaFun[(R, A), (S, T, B)],
+    release1: Option[ScalaFun[S, Unit]],
+    release2: Option[ScalaFun[T, Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ ((Res[S] |*| Res[T]) |*| Val[B]) =
+    trySplitResource(
+      ScalaFun.adapt(f)(identity[(R, A)], Right[Nothing, (S, T, B)]),
+      release1,
+      release2,
+    ) > either(anyTwoResourcesFromNothing, id)
+
+  def splitResource[R, A, S, T, B](
     f: (R, A) => (S, T, B),
     release1: Option[S => Unit],
     release2: Option[T => Unit],
   ): (Res[R] |*| Val[A]) -⚬ ((Res[S] |*| Res[T]) |*| Val[B]) =
-    splitResourceAsync(
-      (r, a) => Async.now(f(r, a)),
-      release1.map(_ andThen Async.now),
-      release2.map(_ andThen Async.now),
+    splitResource(
+      ScalaFun(f.tupled),
+      release1.map(ScalaFun(_)),
+      release2.map(ScalaFun(_)),
     )
 
   def splitResourceAsync[R, A, S, T, B](
@@ -281,12 +310,11 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     release1: Option[S => Async[Unit]],
     release2: Option[T => Async[Unit]],
   ): (Res[R] |*| Val[A]) -⚬ ((Res[S] |*| Res[T]) |*| Val[B]) =
-      trySplitResourceAsync[R, A, S, T, B, Nothing](
-        (r, a) => f(r, a).map(Right(_)),
-        release1,
-        release2,
-      )                                         .to[ Val[Nothing] |+| ((Res[S] |*| Res[T]) |*| Val[B]) ]
-        .either(anyTwoResourcesFromNothing, id) .to[                   (Res[S] |*| Res[T]) |*| Val[B]  ]
+      splitResource(
+        ScalaFun.async(f.tupled),
+        release1.map(ScalaFun.async(_)),
+        release2.map(ScalaFun.async(_)),
+      )
 
   def trySplitResource[R, A, S, T, B, E](
     f: ScalaFun[(R, A), Either[E, (S, T, B)]],
