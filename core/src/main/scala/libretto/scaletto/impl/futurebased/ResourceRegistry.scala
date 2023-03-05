@@ -1,5 +1,6 @@
 package libretto.scaletto.impl.futurebased
 
+import libretto.scaletto.impl.ScalaFunction
 import libretto.util.Async
 import scala.collection.mutable
 
@@ -13,7 +14,7 @@ private class ResourceRegistry {
   private val resourceMap: mutable.Map[Long, AcquiredResource[?]] =
     mutable.Map()
 
-  def registerResource[R](resource: R, releaseAsync: R => Async[Unit]): RegisterResult =
+  def registerResource[R](resource: R, release: ScalaFunction[R, Unit]): RegisterResult =
     synchronized {
       if (lastResId < 0L) {
         assert(resourceMap.isEmpty)
@@ -21,7 +22,7 @@ private class ResourceRegistry {
       } else {
         lastResId += 1
         val id = lastResId
-        resourceMap.put(id, AcquiredResource(resource, releaseAsync))
+        resourceMap.put(id, AcquiredResource(resource, release))
         RegisterResult.Registered(resId(id))
       }
     }
@@ -73,5 +74,5 @@ private object ResourceRegistry {
     case object RegistryClosed extends UnregisterResult
   }
 
-  case class AcquiredResource[A](resource: A, releaseAsync: A => Async[Unit])
+  case class AcquiredResource[A](resource: A, release: ScalaFunction[A ,Unit])
 }

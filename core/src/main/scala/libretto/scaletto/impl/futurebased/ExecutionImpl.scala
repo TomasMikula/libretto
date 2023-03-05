@@ -1,11 +1,10 @@
 package libretto.scaletto.impl.futurebased
 
-import java.util.concurrent.{Executor => JExecutor}
 import libretto.Scheduler
 import libretto.Executor.CancellationReason
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoExecution
-import libretto.scaletto.impl.{FreeScaletto, bug}
+import libretto.scaletto.impl.{FreeScaletto, ScalaFunction, bug}
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -13,10 +12,10 @@ import scala.util.{Failure, Success, Try}
 
 private class ExecutionImpl(
   resourceRegistry: ResourceRegistry,
+  blockingEC: ExecutionContext,
 )(using
   ec: ExecutionContext,
   scheduler: Scheduler,
-  blockingExecutor: JExecutor,
 ) extends ScalettoExecution[FreeScaletto.type] {
   import ResourceRegistry._
 
@@ -41,7 +40,7 @@ private class ExecutionImpl(
       resourceRegistry.close()
 
     Async
-      .awaitAll(openResources.map { r => r.releaseAsync(r.resource) })
+      .awaitAll(openResources.map { r => r.release.runAsync(r.resource) })
       .map(_ => notifyOnCancel(CancellationReason.User(pos)))
   }
 
@@ -178,6 +177,24 @@ private class ExecutionImpl(
       port(Frontier.Value(value))
   }
 
+  extension [A, B](f: ScalaFunction[A, B]) {
+    def runFuture: A => Future[B] =
+      f match {
+        case ScalaFunction.Direct(f)       => a => Future.successful(f(a))
+        case ScalaFunction.Blocking(f)     => a => Future { f(a) } (blockingEC)
+        case ScalaFunction.Asynchronous(f) => a => Async.toFuture(f(a))
+        case ScalaFunction.Step(f)         => a => { val (g, x) = f(a); g.runFuture(x) }
+      }
+
+    def runAsync: A => Async[B] =
+      f match {
+        case ScalaFunction.Direct(f)       => a => Async.now(f(a))
+        case ScalaFunction.Blocking(f)     => a => Async.executeOn(blockingEC) { f(a) }
+        case ScalaFunction.Asynchronous(f) => f
+        case ScalaFunction.Step(f)         => a => { val (g, x) = f(a); g.runAsync(x) }
+      }
+  }
+
   private sealed trait Frontier[A] {
     import Frontier._
 
@@ -185,7 +202,6 @@ private class ExecutionImpl(
       resourceRegistry: ResourceRegistry,
       ec: ExecutionContext,
       scheduler: Scheduler,
-      blockingExecutor: JExecutor,
     ): Frontier[B] =
       extendBy(f, 0)
 
@@ -193,7 +209,6 @@ private class ExecutionImpl(
       resourceRegistry: ResourceRegistry,
       ec: ExecutionContext,
       scheduler: Scheduler,
-      blockingExecutor: JExecutor,
     ): Frontier[B] = {
       implicit class FrontierOps[X](fx: Frontier[X]) {
         def extend[Y](f: X -⚬ Y): Frontier[Y] =
@@ -210,13 +225,12 @@ private class ExecutionImpl(
         case -⚬.AndThen(f, g) =>
           this.extend(f).extend(g)
 
-        case -⚬.Par(f, g) =>
-          type A1; type A2
-          val (a1, a2) = this.asInstanceOf[Frontier[A1 |*| A2]].splitPair
+        case op: -⚬.Par[a1, a2, b1, b2] =>
+          val (a1, a2) = (this: Frontier[a1 |*| a2]).splitPair
           Pair(
-            a1.extend(f.asInstanceOf[A1 -⚬ Nothing]),
-            a2.extend(g.asInstanceOf[A2 -⚬ Nothing]),
-          )                                                       .asInstanceOf[Frontier[B]]
+            a1.extend(op.f1),
+            a2.extend(op.f2),
+          )
 
         case -⚬.IntroFst() =>
           Pair(One, this)
@@ -224,69 +238,59 @@ private class ExecutionImpl(
         case -⚬.IntroSnd() =>
           Pair(this, One)
 
-        case -⚬.ElimFst() =>
-          type X
-          this
-            .asInstanceOf[Frontier[One |*| X]]
+        case _: -⚬.ElimFst[x] =>
+          (this: Frontier[One |*| x])
             .splitPair
-            ._2                                                   .asInstanceOf[Frontier[B]]
+            ._2
 
-        case -⚬.ElimSnd() =>
-          type X
-          this
-            .asInstanceOf[Frontier[X |*| One]]
+        case _: -⚬.ElimSnd[x] =>
+          (this: Frontier[x |*| One])
             .splitPair
-            ._1                                                   .asInstanceOf[Frontier[B]]
+            ._1
 
-        case -⚬.AssocLR() =>
-          // ((X |*| Y) |*| Z) -⚬ (X |*| (Y |*| Z))
-          type X; type Y; type Z
-          val (xy, z) = this.asInstanceOf[Frontier[(X |*| Y) |*| Z]].splitPair
-          val (x, y) = xy.splitPair
-          Pair(x, Pair(y, z))                                     .asInstanceOf[Frontier[B]]
+        case _: -⚬.AssocLR[x, y, z] =>
+          // ((x |*| y) |*| z) -⚬ (x |*| (y |*| z))
+          val (xy, z) = (this: Frontier[(x |*| y) |*| z]).splitPair
+          val (x, y)  = xy.splitPair
+          Pair(x, Pair(y, z))
 
-        case -⚬.AssocRL() =>
-          // (X |*| (Y |*| Z)) -⚬ ((X |*| Y) |*| Z)
-          type X; type Y; type Z
-          val (x, yz) = this.asInstanceOf[Frontier[X |*| (Y |*| Z)]].splitPair
+        case _: -⚬.AssocRL[x, y, z] =>
+          // (x |*| (y |*| z)) -⚬ ((x |*| y) |*| z)
+          val (x, yz) = (this: Frontier[x |*| (y |*| z)]).splitPair
           val (y, z) = yz.splitPair
-          Pair(Pair(x, y), z)                                     .asInstanceOf[Frontier[B]]
+          Pair(Pair(x, y), z)
 
-        case -⚬.Swap() =>
-          type X; type Y
-          val (x, y) = this.asInstanceOf[Frontier[X |*| Y]].splitPair
-          Pair(y, x)                                              .asInstanceOf[Frontier[B]]
+        case _: -⚬.Swap[x, y] =>
+          val (x, y) = (this: Frontier[x |*| y]).splitPair
+          Pair(y, x)
 
-        case -⚬.InjectL() =>
-          InjectL(this)                                           .asInstanceOf[Frontier[B]]
+        case _: -⚬.InjectL[x, y] =>
+          InjectL[x, y](this)
 
-        case -⚬.InjectR() =>
-          InjectR(this)                                           .asInstanceOf[Frontier[B]]
+        case _: -⚬.InjectR[x, y] =>
+          InjectR[x, y](this)
 
-        case e: -⚬.EitherF[?, ?, ?] =>
-          val -⚬.EitherF(f, g) = e // workaround for https://github.com/lampepfl/dotty/issues/7524
-          type A1; type A2
-          def go(a12: Frontier[A1 |+| A2]): Frontier[B] =
+        case op: -⚬.EitherF[a1, a2, b] =>
+          val -⚬.EitherF(f, g) = op
+          def go(a12: Frontier[a1 |+| a2]): Frontier[B] =
             a12 match {
               case InjectL(a1) =>
-                a1.extend(f.asInstanceOf[A1 -⚬ B])
+                a1.extend(f)
               case InjectR(a2) =>
-                a2.extend(g.asInstanceOf[A2 -⚬ B])
+                a2.extend(g)
               case Deferred(fa12) =>
                 Deferred(fa12.map(go))
             }
-          go(this.asInstanceOf[Frontier[A1 |+| A2]])
+          go(this: Frontier[a1 |+| a2])
 
-        case -⚬.ChooseL() =>
-          type A1; type A2
-          Frontier.chooseL(this.asInstanceOf[Frontier[A1 |&| A2]]).asInstanceOf[Frontier[B]]
+        case _: -⚬.ChooseL[a1, a2] =>
+          Frontier.chooseL[a1, a2](this)
 
-        case -⚬.ChooseR() =>
-          type A1; type A2
-          Frontier.chooseR(this.asInstanceOf[Frontier[A1 |&| A2]]).asInstanceOf[Frontier[B]]
+        case _: -⚬.ChooseR[a1, a2] =>
+          Frontier.chooseR[a1, a2](this)
 
-        case c: -⚬.Choice[?, ?, ?] =>
-          val -⚬.Choice(f, g) = c // workaround for https://github.com/lampepfl/dotty/issues/7524
+        case op: -⚬.Choice[x1, x2, y] =>
+          val -⚬.Choice(f, g) = op
           Choice(
             () => this.extendBy(f),
             () => this.extendBy(g),
@@ -330,7 +334,7 @@ private class ExecutionImpl(
               case (Deferred(f1), Deferred(f2)) =>
                 Deferred((f1 zipWith f2)(go))
             }
-          val (d1, d2) = this.asInstanceOf[Frontier[Done |*| Done]].splitPair
+          val (d1, d2) = (this: Frontier[Done |*| Done]).splitPair
           go(d1, d2)
 
         case -⚬.JoinPing() =>
@@ -344,26 +348,26 @@ private class ExecutionImpl(
                 Deferred((f1 zipWith f2)(go))
             }
 
-          val (d1, d2) = this.asInstanceOf[Frontier[Ping |*| Ping]].splitPair
+          val (d1, d2) = (this: Frontier[Ping |*| Ping]).splitPair
           go(d1, d2)
 
         case -⚬.ForkNeed() =>
           val p = Promise[Any]()
-          val (n1, n2) = this.asInstanceOf[Frontier[Need |*| Need]].splitPair
+          val (n1, n2) = (this: Frontier[Need |*| Need]).splitPair
           n1 fulfillWith p.future
           n2 fulfillWith p.future
           NeedAsync(p)
 
         case -⚬.ForkPong() =>
           val p = Promise[Any]()
-          val (p1, p2) = this.asInstanceOf[Frontier[Pong |*| Pong]].splitPair
+          val (p1, p2) = (this: Frontier[Pong |*| Pong]).splitPair
           p1 fulfillPongWith p.future
           p2 fulfillPongWith p.future
           PongAsync(p)
 
         case -⚬.NotifyNeedL() =>
           // (Pong |*| Need) -⚬ Need
-          val (wn, n) = this.asInstanceOf[Frontier[Pong |*| Need]].splitPair
+          val (wn, n) = (this: Frontier[Pong |*| Need]).splitPair
           val p = Promise[Any]()
           wn fulfillPongWith p.future
           n fulfillWith p.future
@@ -394,11 +398,10 @@ private class ExecutionImpl(
           this.fulfillWith(p.future)
           PongAsync(p)
 
-        case -⚬.NotifyEither() =>
-          // (X |+| Y) -⚬ (Ping |*| (X |+| Y))
-          type X; type Y
+        case _: -⚬.NotifyEither[x, y] =>
+          // (x |+| y) -⚬ (Ping |*| (x |+| y))
 
-          def go(xy: Frontier[X |+| Y]): Frontier[Ping |*| (X |+| Y)] =
+          def go(xy: Frontier[x |+| y]): Frontier[Ping |*| (x |+| y)] =
             xy match {
               case l @ InjectL(_) => Pair(PingNow, l)
               case r @ InjectR(_) => Pair(PingNow, r)
@@ -407,13 +410,11 @@ private class ExecutionImpl(
                 Pair(decided, other)
             }
 
-          go(this.asInstanceOf[Frontier[X |+| Y]])                .asInstanceOf[Frontier[B]]
+          go(this: Frontier[x |+| y])
 
-        case -⚬.NotifyChoice() =>
-          //        A             -⚬     B
-          // (Pong |*| (X |&| Y)) -⚬ (X |&| Y)
-          type X; type Y
-          this.asInstanceOf[Frontier[Pong |*| (X |&| Y)]].splitPair match {
+        case _: -⚬.NotifyChoice[x, y] =>
+          // (Pong |*| (x |&| y)) -⚬ (x |&| y)
+          (this: Frontier[Pong |*| (x |&| y)]).splitPair match {
             case (n, c) =>
               Choice(
                 () => {
@@ -428,33 +429,28 @@ private class ExecutionImpl(
                   n fulfillPongWith Future.failed(e)
                   c.asChoice.onError(e)
                 },
-              )                                                   .asInstanceOf[Frontier[B]]
+              )
           }
 
-        case -⚬.InjectLOnPing() =>
-          // (Ping |*| X) -⚬ (X |+| Y)
+        case _: -⚬.InjectLOnPing[x, y] =>
+          // (Ping |*| x) -⚬ (x |+| y)
 
-          def go[X, Y](fpx: Frontier[Ping |*| X]): Frontier[X |+| Y] = {
-            val (p, x) = fpx.splitPair
-            p match {
-              case PingNow =>
-                InjectL(x)
-              case p =>
-                p
-                  .toFuturePing
-                  .map { case PingNow => InjectL(x) }
-                  .asDeferredFrontier
-            }
+          val (p, x) = (this: Frontier[Ping |*| x]).splitPair
+          p match {
+            case PingNow =>
+              InjectL[x, y](x)
+            case p =>
+              p
+                .toFuturePing
+                .map { case PingNow => InjectL[x, y](x) }
+                .asDeferredFrontier
           }
 
-          go(this.asInstanceOf)                                   .asInstanceOf[Frontier[B]]
-
-        case -⚬.ChooseLOnPong() =>
-          // (X |&| Y) -⚬ (Pong |*| X)
-          type X; type Y
-          val Choice(fx, fy, onError) = this.asInstanceOf[Frontier[X |&| Y]].asChoice
+        case _: -⚬.ChooseLOnPong[x, y] =>
+          // (x |&| y) -⚬ (Pong |*| x)
+          val Choice(fx, fy, onError) = (this: Frontier[x |&| y]).asChoice
           val pp = Promise[Any]()
-          val px = Promise[Frontier[X]]()
+          val px = Promise[Frontier[x]]()
           pp.future.onComplete {
             case Failure(e) =>
               onError(e)
@@ -462,40 +458,35 @@ private class ExecutionImpl(
             case Success(_) =>
               px.success(fx())
           }
-          Pair(PongAsync(pp), Deferred(px.future))                .asInstanceOf[Frontier[B]]
+          Pair(PongAsync(pp), Deferred(px.future))
 
-        case -⚬.DistributeL() =>
-          // (X |*| (Y |+| Z)) -⚬ ((X |*| Y) |+| (X |*| Z))
+        case _: -⚬.DistributeL[x, y, z] =>
+          // (x |*| (y |+| z)) -⚬ ((x |*| y) |+| (x |*| z))
 
-          def go[X, Y, Z](fxyz: Frontier[X |*| (Y |+| Z)]): Frontier[(X |*| Y) |+| (X |*| Z)] = {
-            fxyz.splitPair match {
-              case (x, InjectL(y)) => InjectL(Pair(x, y))
-              case (x, InjectR(z)) => InjectR(Pair(x, z))
-              case (x, fyz) =>
-                fyz
-                  .futureEither
-                  .map[Frontier[(X |*| Y) |+| (X |*| Z)]] {
-                    case Left(y) => InjectL(Pair(x, y))
-                    case Right(z) => InjectR(Pair(x, z))
-                  }
-                  .asDeferredFrontier
-            }
+          (this: Frontier[x |*| (y |+| z)]).splitPair match {
+            case (x, InjectL(y)) => InjectL[x |*| y, x |*| z](Pair(x, y))
+            case (x, InjectR(z)) => InjectR[x |*| y, x |*| z](Pair(x, z))
+            case (x, fyz) =>
+              fyz
+                .futureEither
+                .map[Frontier[(x |*| y) |+| (x |*| z)]] {
+                  case Left(y) => InjectL(Pair(x, y))
+                  case Right(z) => InjectR(Pair(x, z))
+                }
+                .asDeferredFrontier
           }
 
-          go(this.asInstanceOf)                                   .asInstanceOf[Frontier[B]]
-
-        case -⚬.CoDistributeL() =>
-          // ((X |*| Y) |&| (X |*| Z)) -⚬ (X |*| (Y |&| Z))
-          type X; type Y; type Z
-          this.asInstanceOf[Frontier[(X |*| Y) |&| (X |*| Z)]].asChoice match {
+        case _: -⚬.CoDistributeL[x, y, z] =>
+          // ((x |*| y) |&| (x |*| z)) -⚬ (x |*| (y |&| z))
+          (this: Frontier[(x |*| y) |&| (x |*| z)]).asChoice match {
             case Choice(f, g, onError) =>
-              val px = Promise[Frontier[X]]()
-              val chooseL: () => Frontier[Y] = { () =>
+              val px = Promise[Frontier[x]]()
+              val chooseL: () => Frontier[y] = { () =>
                 val (x, y) = Frontier.splitPair(f())
                 px.success(x)
                 y
               }
-              val chooseR: () => Frontier[Z] = { () =>
+              val chooseR: () => Frontier[z] = { () =>
                 val (x, z) = Frontier.splitPair(g())
                 px.success(x)
                 z
@@ -504,18 +495,18 @@ private class ExecutionImpl(
                 onError(e)
                 px.failure(e)
               }
-              Pair(Deferred(px.future), Choice(chooseL, chooseR, onError1)) .asInstanceOf[Frontier[B]]
+              Pair(Deferred(px.future), Choice(chooseL, chooseR, onError1))
           }
 
         case -⚬.RInvertSignal() =>
           // (Done |*| Need) -⚬ One
-          val (d, n) = this.asInstanceOf[Frontier[Done |*| Need]].splitPair
+          val (d, n) = (this: Frontier[Done |*| Need]).splitPair
           n fulfillWith d.toFutureDone
           One
 
         case -⚬.RInvertPingPong() =>
           // (Ping |*| Pong) -⚬ One
-          val (d, n) = this.asInstanceOf[Frontier[Ping |*| Pong]].splitPair
+          val (d, n) = (this: Frontier[Ping |*| Pong]).splitPair
           n fulfillPongWith d.toFuturePing
           One
 
@@ -540,18 +531,16 @@ private class ExecutionImpl(
         case r @ -⚬.RecF(_) =>
           this.extend(r.recursed)
 
-        case -⚬.Pack() =>
-          type F[_]
-          Pack(this.asInstanceOf[Frontier[F[Rec[F]]]])            .asInstanceOf[Frontier[B]]
+        case _: -⚬.Pack[f] =>
+          Pack[f](this: Frontier[f[Rec[f]]])
 
-        case -⚬.Unpack() =>
-          type F[_]
-          def go(f: Frontier[Rec[F]]): Frontier[F[Rec[F]]] =
+        case _: -⚬.Unpack[f] =>
+          def go(f: Frontier[Rec[f]]): Frontier[f[Rec[f]]] =
             f match {
               case Pack(f) => f
               case Deferred(f) => Deferred(f.map(go))
             }
-          go(this.asInstanceOf[Frontier[Rec[F]]])                 .asInstanceOf[Frontier[B]]
+          go(this: Frontier[Rec[f]])
 
         case -⚬.RacePair() =>
           def go(x: Frontier[Ping], y: Frontier[Ping]): Frontier[One |+| One] =
@@ -577,12 +566,12 @@ private class ExecutionImpl(
                 }
             }
 
-          val (x, y) = this.asInstanceOf[Frontier[Ping |*| Ping]].splitPair
+          val (x, y) = (this: Frontier[Ping |*| Ping]).splitPair
           go(x, y)
 
         case -⚬.SelectPair() =>
           // XXX: not left-biased. What does it even mean, precisely, for a racing operator to be biased?
-          val Choice(f, g, onError) = this.asInstanceOf[Frontier[One |&| One]].asChoice
+          val Choice(f, g, onError) = (this: Frontier[One |&| One]).asChoice
           val p1 = Promise[Any]()
           val p2 = Promise[Any]()
           val p = Promise[() => Frontier[One]]
@@ -594,16 +583,15 @@ private class ExecutionImpl(
           }
           Pair(PongAsync(p1), PongAsync(p2))
 
-        case -⚬.CrashWhenDone(msg) =>
-          // (Done |*| X) -⚬ B
-          type X
+        case op: -⚬.CrashWhenDone[x, b] =>
+          // (Done |*| x) -⚬ B
 
-          val (d, x) = this.asInstanceOf[Frontier[Done |*| X]].splitPair
+          val (d, x) = (this: Frontier[Done |*| x]).splitPair
           d
             .toFutureDone
             .transformWith[Frontier[B]] { res =>
               val e = res match {
-                case Success(DoneNow) => Crash(msg)
+                case Success(DoneNow) => Crash(op.msg)
                 case Failure(e) => e
               }
               x.crash(e)
@@ -613,8 +601,7 @@ private class ExecutionImpl(
 
         case -⚬.Delay() =>
           // Val[FiniteDuration] -⚬ Done
-          this
-            .asInstanceOf[Frontier[Val[FiniteDuration]]]
+          (this: Frontier[Val[FiniteDuration]])
             .toFutureValue
             .flatMap { d =>
               val p = Promise[DoneNow.type]()
@@ -623,45 +610,40 @@ private class ExecutionImpl(
             }
             .asDeferredFrontier
 
-        case -⚬.LiftEither() =>
+        case _: -⚬.LiftEither[a1, a2] =>
           def go[X, Y](xy: Either[X, Y]): Frontier[Val[X] |+| Val[Y]] =
             xy match {
               case Left(x)  => InjectL(Value(x))
               case Right(y) => InjectR(Value(y))
             }
-          type A1; type A2
-          this.asInstanceOf[Frontier[Val[Either[A1, A2]]]] match {
-            case Value(e) => go(e)                                .asInstanceOf[Frontier[B]]
-            case a => a.toFutureValue.map(go).asDeferredFrontier  .asInstanceOf[Frontier[B]]
+          (this: Frontier[Val[Either[a1, a2]]]) match {
+            case Value(e) => go(e)
+            case a        => a.toFutureValue.map(go).asDeferredFrontier
           }
 
-        case -⚬.LiftPair() =>
-          type A1; type A2 // such that A = Val[(A1, A2)]
-          this.asInstanceOf[Frontier[Val[(A1, A2)]]] match {
+        case _: -⚬.LiftPair[a1, a2] =>
+          // Val[(a1, a2)] -⚬ (Val[a1] |*| Val[a2])
+          (this: Frontier[Val[(a1, a2)]]) match {
             case Value((a1, a2)) =>
-              Pair(Value(a1), Value(a2))                          .asInstanceOf[Frontier[B]]
+              Pair(Value(a1), Value(a2))
             case a =>
               val fa12 = a.toFutureValue
               Pair(
                 fa12.map(_._1).toValFrontier,
                 fa12.map(_._2).toValFrontier,
-              )                                                   .asInstanceOf[Frontier[B]]
+              )
           }
 
-        case -⚬.UnliftPair() =>
-          //          A          -⚬    B
-          // (Val[X] |*| Val[Y]) -⚬ Val[(X, Y)]
-          type X; type Y
-          val (x, y) = Frontier.splitPair(this.asInstanceOf[Frontier[Val[X] |*| Val[Y]]])
-          (x.toFutureValue zip y.toFutureValue).toValFrontier     .asInstanceOf[Frontier[B]]
+        case _: -⚬.UnliftPair[x, y] =>
+          // (Val[x] |*| Val[y]) -⚬ Val[(x, y)]
+          val (x, y) = Frontier.splitPair(this: Frontier[Val[x] |*| Val[y]])
+          (x.toFutureValue zip y.toFutureValue).toValFrontier
 
-        case -⚬.MapVal(f) =>
-          type X; type Y
-          this
-            .asInstanceOf[Frontier[Val[X]]]
+        case op: -⚬.MapVal[x, y] =>
+          (this: Frontier[Val[x]])
             .toFutureValue
-            .map(f.asInstanceOf[X => Y])
-            .toValFrontier                                        .asInstanceOf[Frontier[B]]
+            .flatMap(op.f.runFuture)
+            .toValFrontier
 
         case -⚬.ConstVal(a) =>
           this
@@ -669,40 +651,34 @@ private class ExecutionImpl(
             .map(_ => a)
             .toValFrontier
 
-        case -⚬.ConstNeg(a) =>
-          type X
+        case op: -⚬.ConstNeg[x] =>
           val pu = Promise[Any]()
-          this
-            .asInstanceOf[Frontier[Neg[X]]]
-            .completeWith(pu.future.map(_ => a.asInstanceOf[X]))
-          NeedAsync(pu)                                           .asInstanceOf[Frontier[B]]
+          (this: Frontier[Neg[x]])
+            .completeWith(pu.future.map(_ => op.a))
+          NeedAsync(pu)
 
-        case -⚬.Neglect() =>
-          type X
-          this
-            .asInstanceOf[Frontier[Val[X]]]
+        case _: -⚬.Neglect[x] =>
+          (this: Frontier[Val[x]])
             .toFutureValue
             .map(_ => DoneNow)
             .asDeferredFrontier
 
-        case -⚬.NotifyVal() =>
-          // Val[X] -⚬ (Ping |*| Val[X])
-          type X
-          val (fd: Frontier[Ping], fx: Frontier[Val[X]]) =
-            this.asInstanceOf[Frontier[Val[X]]] match {
+        case _: -⚬.NotifyVal[x] =>
+          // Val[x] -⚬ (Ping |*| Val[x])
+          val (fd: Frontier[Ping], fx: Frontier[Val[x]]) =
+            (this: Frontier[Val[x]]) match {
               case x @ Value(_) =>
                 (PingNow, x)
               case fx =>
                 (fx.toFutureValue.map(_ => PingNow).asDeferredFrontier, fx)
             }
-          Pair(fd, fx)                                            .asInstanceOf[Frontier[B]]
+          Pair(fd, fx)
 
-        case -⚬.NotifyNeg() =>
-          // (Pong |*| Neg[X]) -⚬ Neg[X]
-          type X
-          val (n, x) = this.asInstanceOf[Frontier[Pong |*| Neg[X]]].splitPair
+        case _: -⚬.NotifyNeg[x] =>
+          // (Pong |*| Neg[x]) -⚬ Neg[x]
+          val (n, x) = (this: Frontier[Pong |*| Neg[x]]).splitPair
           n fulfillPongWith x.future
-          x                                                       .asInstanceOf[Frontier[B]]
+          x
 
         case -⚬.DebugPrint(msg) =>
           // Ping -⚬ One
@@ -724,57 +700,51 @@ private class ExecutionImpl(
         case f @ -⚬.LInvertTerminus() =>
           bug(s"Did not expect to be able to construct a program that uses $f")
 
-        case -⚬.Acquire(acquire0, release0) =>
-          // Val[X] -⚬ (Res[R] |*| Val[Y])
-          type X; type R; type Y
+        case op: -⚬.Acquire[x, r, y] =>
+          // Val[x] -⚬ (Res[r] |*| Val[y])
 
-          val acquire: X => (R, Y) =
-            acquire0.asInstanceOf
-          val release: Option[R => Unit] =
-            release0.asInstanceOf
+          val acquire: ScalaFun[x, (r, y)]       = op.acquire
+          val release: Option[ScalaFun[r, Unit]] = op.release
 
-          def go(x: X): Frontier[Res[R] |*| Val[Y]] = {
-            def go1(r: R, y: Y): Frontier[Res[R] |*| Val[Y]] =
+          def go(x: x): Frontier[Res[r] |*| Val[y]] = {
+            def go1(r: r, y: y): Frontier[Res[r] |*| Val[y]] =
               release match {
                 case None =>
                   Pair(MVal(r), Value(y))
                 case Some(release) =>
-                  resourceRegistry.registerResource(r, release andThen Async.now) match {
+                  resourceRegistry.registerResource(r, release) match {
                     case RegisterResult.Registered(resId) =>
                       Pair(Resource(resId, r), Value(y))
                     case RegisterResult.RegistryClosed =>
-                      release(r)
-                      Frontier.failure("resource allocation not allowed because the program has ended or crashed")
+                      release
+                        .runFuture(r)
+                        .map(_ => Frontier.failure("resource allocation not allowed because the program has ended or crashed"))
+                        .asDeferredFrontier
                   }
               }
 
-            val (r, y) = acquire(x)
-            go1(r, y)
+            acquire.runFuture(x).map { case (r, y) => go1(r, y) }.asDeferredFrontier
           }
 
-          val res: Frontier[Res[R] |*| Val[Y]] =
-            this.asInstanceOf[Frontier[Val[X]]] match {
-              case Value(x) => go(x)
-              case x => x.toFutureValue.map(go).asDeferredFrontier
-            }
+          (this: Frontier[Val[x]]) match {
+            case Value(x) => go(x)
+            case x => x.toFutureValue.map(go).asDeferredFrontier
+          }
 
-          res                                                     .asInstanceOf[Frontier[B]]
+        case op: -⚬.TryAcquire[x, r, y, e] =>
+          // Val[x] -⚬ (Val[e] |+| (Res[r] |*| Val[y]))
 
-        case -⚬.TryAcquireAsync(acquire, release0) =>
-          // Val[X] -⚬ (Val[E] |+| (Res[R] |*| Val[Y]))
-          type X; type E; type R; type Y
+          val acquire: ScalaFun[x, Either[e, (r, y)]] = op.acquire
+          val release: Option[ScalaFun[r, Unit]]      = op.release
 
-          val release: Option[R => Async[Unit]] =
-            release0.asInstanceOf
-
-          def go(x: X): Frontier[Val[E] |+| (Res[R] |*| Val[Y])] = {
-            def go1(res: Either[E, (R, Y)]): Frontier[Val[E] |+| (Res[R] |*| Val[Y])] =
+          def go(x: x): Frontier[Val[e] |+| (Res[r] |*| Val[y])] = {
+            def go1(res: Either[e, (r, y)]): Frontier[Val[e] |+| (Res[r] |*| Val[y])] =
               res match {
                 case Left(e) =>
                   InjectL(Value(e))
                 case Right((r, y)) =>
                   import ResourceRegistry.RegisterResult._
-                  val fr: Frontier[Res[R] |*| Val[Y]] =
+                  val fr: Frontier[Res[r] |*| Val[y]] =
                     release match {
                       case None =>
                         Pair(MVal(r), Value(y))
@@ -783,84 +753,73 @@ private class ExecutionImpl(
                           case Registered(resId) =>
                             Pair(Resource(resId, r), Value(y))
                           case RegistryClosed =>
-                            release(r)
-                              .map[Frontier[Res[R] |*| Val[Y]]](_ => Frontier.failure("resource allocation not allowed because the program has ended or crashed"))
+                            release.runAsync(r)
+                              .map[Frontier[Res[r] |*| Val[y]]](_ => Frontier.failure("resource allocation not allowed because the program has ended or crashed"))
                               .asAsyncFrontier
                         }
                       }
                   InjectR(fr)
               }
 
-            acquire.asInstanceOf[X => Async[Either[E, (R, Y)]]](x) match {
+            acquire.runAsync(x) match {
               case Async.Now(value) => go1(value)
               case other => Async.toFuture(other).map(go1).asDeferredFrontier
             }
           }
 
-          this.asInstanceOf[Frontier[Val[X]]] match {
-            case Value(x) => go(x)                                .asInstanceOf[Frontier[B]]
-            case x => x.toFutureValue.map(go).asDeferredFrontier  .asInstanceOf[Frontier[B]]
+          (this: Frontier[Val[x]]) match {
+            case Value(x) => go(x)
+            case x => x.toFutureValue.map(go).asDeferredFrontier
           }
 
-        case -⚬.EffectAsync(f0) =>
-          // (Res[R] |*| Val[X]) -⚬ (Res[R] |*| Val[Y])
-          type R; type X; type Y
+        case op: -⚬.Effect[r, x, y] =>
+          // (Res[r] |*| Val[x]) -⚬ (Res[r] |*| Val[y])
 
-          val f: (R, X) => Async[Y] =
-            f0.asInstanceOf
+          val f: ScalaFun[(r, x), y] =
+            op.f
 
-          def go(fr: ResFrontier[R], x: X): Frontier[Res[R] |*| Val[Y]] =
+          def go(fr: ResFrontier[r], x: x): Frontier[Res[r] |*| Val[y]] =
             fr match {
-              case fr @ MVal(r) => f(r, x).map(y => Pair(fr, Value(y))).asAsyncFrontier
-              case fr @ Resource(id, r) => f(r, x).map(y => Pair(fr, Value(y))).asAsyncFrontier
+              case fr @ MVal(r)         => f.runAsync(r, x).map(y => Pair(fr, Value(y))).asAsyncFrontier
+              case fr @ Resource(id, r) => f.runAsync(r, x).map(y => Pair(fr, Value(y))).asAsyncFrontier
             }
 
-          val res: Frontier[Res[R] |*| Val[Y]] =
-            this.asInstanceOf[Frontier[Res[R] |*| Val[X]]].splitPair match {
-              case (r: ResFrontier[R], Value(x)) => go(r, x)
-              case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
-            }
+          (this: Frontier[Res[r] |*| Val[x]]).splitPair match {
+            case (r: ResFrontier[r], Value(x)) => go(r, x)
+            case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
+          }
 
-          res                                                     .asInstanceOf[Frontier[B]]
+        case op: -⚬.EffectWr[r, x] =>
+          // (Res[r] |*| Val[x]) -⚬ Res[r]
 
-        case -⚬.EffectWrAsync(f0) =>
-          // (Res[R] |*| Val[X]) -⚬ Res[R]
-          type R; type X
+          val f: ScalaFun[(r, x), Unit] =
+            op.f
 
-          val f: (R, X) => Async[Unit] =
-            f0.asInstanceOf
-
-          def go(fr: ResFrontier[R], x: X): Frontier[Res[R]] =
+          def go(fr: ResFrontier[r], x: x): Frontier[Res[r]] =
             fr match {
-              case fr @ MVal(r) => f(r, x).map(_ => fr).asAsyncFrontier
-              case fr @ Resource(id, r) => f(r, x).map(_ => fr).asAsyncFrontier
+              case fr @ MVal(r)         => f.runAsync(r, x).map(_ => fr).asAsyncFrontier
+              case fr @ Resource(id, r) => f.runAsync(r, x).map(_ => fr).asAsyncFrontier
             }
 
-          val res: Frontier[Res[R]] =
-            this.asInstanceOf[Frontier[Res[R] |*| Val[X]]].splitPair match {
-              case (r: ResFrontier[R], Value(x)) => go(r, x)
-              case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
-            }
+          (this: Frontier[Res[r] |*| Val[x]]).splitPair match {
+            case (r: ResFrontier[r], Value(x)) => go(r, x)
+            case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
+          }
 
-          res                                                     .asInstanceOf[Frontier[B]]
+        case op: -⚬.TryTransformResource[r, x, s, y, e] =>
+          // (Res[r] |*| Val[x]) -⚬ (Val[e] |+| (Res[s] |*| Val[y]))
 
-        case -⚬.TryTransformResourceAsync(f0, release0) =>
-          // (Res[R] |*| Val[X]) -⚬ (Val[E] |+| (Res[S] |*| Val[Y]))
-          type R; type X; type E; type S; type Y
+          val f: ScalaFunction[(r, x), Either[e, (s, y)]] = op.f
+          val release: Option[ScalaFunction[s, Unit]]     = op.release
 
-          val f: (R, X) => Async[Either[E, (S, Y)]] =
-            f0.asInstanceOf
-          val release: Option[S => Async[Unit]] =
-            release0.asInstanceOf
-
-          def go(r: ResFrontier[R], x: X): Frontier[Val[E] |+| (Res[S] |*| Val[Y])] = {
-            def go1(r: R, x: X): Frontier[Val[E] |+| (Res[S] |*| Val[Y])] =
-              f(r, x)
-                .map[Frontier[Val[E] |+| (Res[S] |*| Val[Y])]] {
+          def go(r: ResFrontier[r], x: x): Frontier[Val[e] |+| (Res[s] |*| Val[y])] = {
+            def go1(r: r, x: x): Frontier[Val[e] |+| (Res[s] |*| Val[y])] =
+              f.runAsync(r, x)
+                .map[Frontier[Val[e] |+| (Res[s] |*| Val[y])]] {
                   case Left(e) =>
                     InjectL(Value(e))
                   case Right((s, y)) =>
-                    val sy: Frontier[Res[S] |*| Val[Y]] =
+                    val sy: Frontier[Res[s] |*| Val[y]] =
                       release match {
                         case None =>
                           Pair(MVal(s), Value(y))
@@ -869,7 +828,7 @@ private class ExecutionImpl(
                             case RegisterResult.Registered(id) =>
                               Pair(Resource(id, s), Value(y))
                             case RegisterResult.RegistryClosed =>
-                              release(s)
+                              release.runAsync(s)
                                 .map(_ => Frontier.failure("Transformed resource not registered because shutting down"))
                                 .asAsyncFrontier
                           }
@@ -893,33 +852,26 @@ private class ExecutionImpl(
             }
           }
 
-          val res: Frontier[Val[E] |+| (Res[S] |*| Val[Y])] =
-            this.asInstanceOf[Frontier[Res[R] |*| Val[X]]].splitPair match {
-              case (r: ResFrontier[R], Value(x)) => go(r, x)
-              case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
-            }
+          (this: Frontier[Res[r] |*| Val[x]]).splitPair match {
+            case (r: ResFrontier[r], Value(x)) => go(r, x)
+            case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
+          }
 
-          res                                                     .asInstanceOf[Frontier[B]]
+        case op: -⚬.TrySplitResource[r, x, s, t, y, e] =>
+          // (Res[r] |*| Val[x]) -⚬ (Val[e] |+| ((Res[s] |*| Res[t]) |*| Val[y]))
 
-        case -⚬.TrySplitResourceAsync(f0, rel1, rel2) =>
-          // (Res[R] |*| Val[X]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[Y]))
-          type R; type X; type E; type S; type T; type Y
+          val f: ScalaFun[(r, x), Either[e, (s, t, y)]] = op.f
+          val releaseS: Option[ScalaFun[s, Unit]]       = op.release1
+          val releaseT: Option[ScalaFun[t, Unit]]       = op.release2
 
-          val f: (R, X) => Async[Either[E, (S, T, Y)]] =
-            f0.asInstanceOf
-          val releaseS: Option[S => Async[Unit]] =
-            rel1.asInstanceOf
-          val releaseT: Option[T => Async[Unit]] =
-            rel2.asInstanceOf
-
-          def go(r: ResFrontier[R], x: X): Frontier[Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[Y])] = {
-            def go1(r: R, x: X): Frontier[Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[Y])] =
-              f(r, x)
-                .map[Frontier[Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[Y])]] {
+          def go(r: ResFrontier[r], x: x): Frontier[Val[e] |+| ((Res[s] |*| Res[t]) |*| Val[y])] = {
+            def go1(r: r, x: x): Frontier[Val[e] |+| ((Res[s] |*| Res[t]) |*| Val[y])] =
+              f.runAsync(r, x)
+                .map[Frontier[Val[e] |+| ((Res[s] |*| Res[t]) |*| Val[y])]] {
                   case Left(e) =>
                     InjectL(Value(e))
                   case Right((s, t, y)) =>
-                    val fs: Frontier[Res[S]] =
+                    val fs: Frontier[Res[s]] =
                       releaseS match {
                         case None =>
                           MVal(s)
@@ -928,12 +880,12 @@ private class ExecutionImpl(
                             case RegisterResult.Registered(id) =>
                               Resource(id, s)
                             case RegisterResult.RegistryClosed =>
-                              releaseS(s)
+                              releaseS.runAsync(s)
                                 .map(_ => Frontier.failure("Post-split resource not registered because shutting down"))
                                 .asAsyncFrontier
                           }
                       }
-                    val ft: Frontier[Res[T]] =
+                    val ft: Frontier[Res[t]] =
                       releaseT match {
                         case None =>
                           MVal(t)
@@ -942,7 +894,7 @@ private class ExecutionImpl(
                             case RegisterResult.Registered(id) =>
                               Resource(id, t)
                             case RegisterResult.RegistryClosed =>
-                              releaseT(t)
+                              releaseT.runAsync(t)
                                 .map(_ => Frontier.failure("Post-split resource not registered because shutting down"))
                                 .asAsyncFrontier
                           }
@@ -966,29 +918,25 @@ private class ExecutionImpl(
             }
           }
 
-          val res: Frontier[Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[Y])] =
-            this.asInstanceOf[Frontier[Res[R] |*| Val[X]]].splitPair match {
-              case (r: ResFrontier[R], Value(x)) => go(r, x)
-              case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
-            }
+          (this: Frontier[Res[r] |*| Val[x]]).splitPair match {
+            case (r: ResFrontier[r], Value(x)) => go(r, x)
+            case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
+          }
 
-          res                                                     .asInstanceOf[Frontier[B]]
+        case op: -⚬.ReleaseWith[r, x, y] =>
+          // (Res[r] |*| Val[x]) -⚬ Val[]
 
-        case -⚬.ReleaseAsync(release0) =>
-          // (Res[R] |*| Val[X]) -⚬ Val[Y]
-          type R; type X; type Y
+          val release: ScalaFun[(r, x), y] =
+            op.f
 
-          val release: (R, X) => Async[Y] =
-            release0.asInstanceOf
-
-          def go(r: ResFrontier[R], x: X): Frontier[Val[Y]] =
+          def go(r: ResFrontier[r], x: x): Frontier[Val[y]] =
             r match {
               case MVal(r) =>
-                release(r, x).map(Value(_)).asAsyncFrontier
+                release.runAsync(r, x).map(Value(_)).asAsyncFrontier
               case Resource(id, r) =>
                 resourceRegistry.unregisterResource(id) match {
                   case UnregisterResult.Unregistered(_) =>
-                    release(r, x).map(Value(_)).asAsyncFrontier
+                    release.runAsync(r, x).map(Value(_)).asAsyncFrontier
                   case UnregisterResult.NotFound =>
                     bug(s"Previously registered resource $id not found in resource registry")
                   case UnregisterResult.RegistryClosed =>
@@ -996,19 +944,15 @@ private class ExecutionImpl(
                 }
             }
 
-          val res: Frontier[Val[Y]] =
-            this.asInstanceOf[Frontier[Res[R] |*| Val[X]]].splitPair match {
-              case (r: ResFrontier[R], Value(x)) => go(r, x)
-              case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
-            }
+          (this: Frontier[Res[r] |*| Val[x]]).splitPair match {
+            case (r: ResFrontier[r], Value(x)) => go(r, x)
+            case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
+          }
 
-          res                                                     .asInstanceOf[Frontier[B]]
-
-        case -⚬.Release() =>
+        case _: -⚬.Release[r] =>
           // Res[R] -⚬ Done
-          type R
 
-          def go(r: ResFrontier[R]): Frontier[Done] =
+          def go(r: ResFrontier[r]): Frontier[Done] =
             r match {
               case MVal(r) =>
                 // no release needed, done
@@ -1016,7 +960,7 @@ private class ExecutionImpl(
               case Resource(id, r) =>
                 resourceRegistry.unregisterResource(id) match {
                   case UnregisterResult.Unregistered(r) =>
-                    r.releaseAsync(r.resource).map(_ => DoneNow).asAsyncFrontier
+                    r.release.runAsync(r.resource).map(_ => DoneNow).asAsyncFrontier
                   case UnregisterResult.NotFound =>
                     bug(s"Previously registered resource $id not found in resource registry")
                   case UnregisterResult.RegistryClosed =>
@@ -1024,88 +968,50 @@ private class ExecutionImpl(
                 }
             }
 
-          val res: Frontier[Done] =
-            this.asInstanceOf[Frontier[Res[R]]] match {
-              case r: ResFrontier[R] => go(r)
-              case r => r.toFutureRes.map(go).asDeferredFrontier
-            }
-
-          res                                                     .asInstanceOf[Frontier[B]]
-
-        case -⚬.Blocking(f0) =>
-          // Val[X] -⚬ Val[Y]
-          type X; type Y
-
-          val f: X => Y =
-            f0.asInstanceOf
-
-          def go(x: X): Frontier[Val[Y]] = {
-            val py = Promise[Y]()
-
-            blockingExecutor.execute { () =>
-              py.complete(Try(f(x)))
-            }
-
-            py.future.toValFrontier
+          (this: Frontier[Res[r]]) match {
+            case r: ResFrontier[r] => go(r)
+            case r => r.toFutureRes.map(go).asDeferredFrontier
           }
 
-          val res: Frontier[Val[Y]] =
-            this.asInstanceOf[Frontier[Val[X]]] match {
-              case Value(x) => go(x)
-              case other => other.toFutureValue.map(go).asDeferredFrontier
-            }
+        case _: -⚬.Backvert[x] =>
+          // (x |*| -[x]) -⚬ One
 
-          res                                                     .asInstanceOf[Frontier[B]]
-
-        case -⚬.Backvert() =>
-          // (X |*| -[X]) -⚬ One
-          type X
-
-          val (fw, bw) = this.asInstanceOf[Frontier[X |*| -[X]]].splitPair
+          val (fw, bw) = (this: Frontier[x |*| -[x]]).splitPair
           bw.fulfill(fw)
           One
 
-        case -⚬.Forevert() =>
-          // One -⚬ (-[X] |*| X)
+        case _: -⚬.Forevert[x] =>
+          // One -⚬ (-[x] |*| x)
 
           this.awaitIfDeferred
 
-          def go[X]: Frontier[-[X] |*| X] = {
-            val pfx = Promise[Frontier[X]]()
-            Pair(
-              Backwards(pfx),
-              Deferred(pfx.future),
-            )
-          }
+          val pfx = Promise[Frontier[x]]()
+          Pair(
+            Backwards(pfx),
+            Deferred(pfx.future),
+          )
 
-          type X
-          go[X]                                                   .asInstanceOf[Frontier[B]]
+        case _: -⚬.DistributeInversion[x, y] =>
+          // -[x |*| y] -⚬ (-[x] |*| -[y])
 
-        case -⚬.DistributeInversion() =>
-          // -[X |*| Y] -⚬ (-[X] |*| -[Y])
-          type X
-          type Y
+          val px = Promise[Frontier[x]]()
+          val py = Promise[Frontier[y]]()
 
-          val px = Promise[Frontier[X]]()
-          val py = Promise[Frontier[Y]]()
-
-          this.asInstanceOf[Frontier[-[X |*| Y]]]
+          (this: Frontier[-[x |*| y]])
             .fulfill(Pair(px.future.asDeferredFrontier, py.future.asDeferredFrontier))
 
-          Pair(Backwards(px), Backwards(py))                      .asInstanceOf[Frontier[B]]
+          Pair(Backwards(px), Backwards(py))
 
-        case -⚬.FactorOutInversion() =>
-          // (-[X] |*| -[Y]) -⚬ -[X |*| Y]
-          type X
-          type Y
+        case _: -⚬.FactorOutInversion[x, y] =>
+          // (-[x] |*| -[y]) -⚬ -[x |*| y]
 
-          val (fpx, fpy) = this.asInstanceOf[Frontier[-[X] |*| -[Y]]].splitPair
-          val pfxy = Promise[Frontier[X |*| Y]]()
+          val (fpx, fpy) = (this: Frontier[-[x] |*| -[y]]).splitPair
+          val pfxy = Promise[Frontier[x |*| y]]()
           val ffxfy = pfxy.future.map(_.splitPair)
           fpx.fulfill(ffxfy.map(_._1))
           fpy.fulfill(ffxfy.map(_._2))
 
-          Backwards(pfxy)                                         .asInstanceOf[Frontier[B]]
+          Backwards(pfxy)
       }
     }
 

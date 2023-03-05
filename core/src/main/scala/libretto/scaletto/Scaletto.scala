@@ -33,6 +33,33 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     */
   type Res[A]
 
+  type ScalaFun[A, B]
+  val ScalaFun: ScalaFuns
+
+  trait ScalaFuns {
+    def apply[A, B](f: A => B): ScalaFun[A, B]
+    def blocking[A, B](f: A => B): ScalaFun[A, B]
+    def async[A, B](f: A => Async[B]): ScalaFun[A, B]
+
+    def adapt[A, B, Z, C](f: ScalaFun[A, B])(pre: Z => A, post: B => C): ScalaFun[Z, C]
+    def adaptWith[A, B, Z, P, C](f: ScalaFun[A, B])(pre: Z => (P, A), post: (P, B) => C): ScalaFun[Z, C]
+    def eval[A, B]: ScalaFun[(ScalaFun[A, B], A), B]
+  }
+
+  extension [A, B](f: ScalaFun[A, B]) {
+    def adapt[Z, C](pre: Z => A, post: B => C): ScalaFun[Z, C] =
+      ScalaFun.adapt(f)(pre, post)
+
+    def adaptPre[Z](pre: Z => A): ScalaFun[Z, B] =
+      ScalaFun.adapt(f)(pre, identity)
+
+    def adaptPost[C](post: B => C): ScalaFun[A, C] =
+      ScalaFun.adapt(f)(identity, post)
+
+    def adaptWith[Z, P, C](pre: Z => (P, A), post: (P, B) => C): ScalaFun[Z, C] =
+      ScalaFun.adaptWith(f)(pre, post)
+  }
+
   private val lib = CoreLib(this)
   import lib._
 
@@ -59,8 +86,11 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
   def unliftNegPair[A, B]: (Neg[A] |*| Neg[B]) -⚬ Neg[(A, B)] =
     introFst(promise[(A, B)] > snd(liftPair)) > assocLR > elimSnd(IXI > parToOne(fulfill, fulfill))
 
+  def mapVal[A, B](f: ScalaFun[A, B]): Val[A] -⚬ Val[B]
+
   /** Lifts an ordinary Scala function to a linear function on [[Val]]s. */
-  def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B]
+  def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B] =
+    mapVal(ScalaFun(f))
 
   /** Lifts an ordinary Scala function to a linear function on demands, in opposite direction. */
   def contramapNeg[A, B](f: A => B): Neg[B] -⚬ Neg[A] =
@@ -94,6 +124,11 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
   override def delay(d: FiniteDuration): Done -⚬ Done =
     constVal(d) > delay
 
+  def acquire[A, R, B](
+    acquire: ScalaFun[A, (R, B)],
+    release: Option[ScalaFun[R, Unit]],
+  ): Val[A] -⚬ (Res[R] |*| Val[B])
+
   /** Acquires a resource of type [[R]].
     *
     * @param acquire
@@ -105,17 +140,14 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
   def acquire[A, R, B](
     acquire: A => (R, B),
     release: Option[R => Unit],
-  ): Val[A] -⚬ (Res[R] |*| Val[B])
+  ): Val[A] -⚬ (Res[R] |*| Val[B]) =
+    this.acquire(ScalaFun(acquire), release.map(ScalaFun(_)))
 
   def acquireAsync[A, R, B](
     acquire: A => Async[(R, B)],
     release: Option[R => Async[Unit]],
   ): Val[A] -⚬ (Res[R] |*| Val[B]) =
-    tryAcquireAsync[A, R, B, Nothing](
-      a => acquire(a).map(Right(_)),
-      release
-    )                                       .to[ Val[Nothing] |+| (Res[R] |*| Val[B]) ]
-      .either(anyResourceFromNothing, id)   .to[                   Res[R] |*| Val[B]  ]
+    this.acquire(ScalaFun.async(acquire), release.map(ScalaFun.async(_)))
 
   /** Acquires a resource of type [[R]]. Might fail with an error of type [[E]].
     *
@@ -130,18 +162,20 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     acquire: A => Either[E, (R, B)],
     release: Option[R => Unit],
   ): Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])) =
-    tryAcquireAsync(
-      acquire andThen Async.now,
-      release.map(_ andThen Async.now),
+    tryAcquire(
+      ScalaFun(acquire),
+      release.map(ScalaFun(_)),
     )
 
-  def tryAcquireAsync[A, R, B, E](
-    acquire: A => Async[Either[E, (R, B)]],
-    release: Option[R => Async[Unit]],
+  def tryAcquire[A, R, B, E](
+    acquire: ScalaFun[A, Either[E, (R, B)]],
+    release: Option[ScalaFun[R, Unit]],
   ): Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B]))
 
   /** Releases a resource using the `release` function registered during resource acquisition. */
   def release[R]: Res[R] -⚬ Done
+
+  def releaseWith[R, A, B](f: ScalaFun[(R, A), B]): (Res[R] |*| Val[A]) -⚬ Val[B]
 
   /** Releases a resource using the given function. The `release` function previously registered during resource
     * acquisition is not used.
@@ -152,9 +186,12 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     * @tparam B additional data produced by the release function
     */
   def release[R, A, B](f: (R, A) => B): (Res[R] |*| Val[A]) -⚬ Val[B] =
-    releaseAsync((r, a) => Async.now(f(r, a)))
+    releaseWith(ScalaFun(f.tupled))
 
-  def releaseAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ Val[B]
+  def releaseAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ Val[B] =
+    releaseWith(ScalaFun.async(f.tupled))
+
+  def effect[R, A, B](f: ScalaFun[(R, A), B]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B])
 
   /** Performs a (potentially) effectful operation on a resource, producing some output.
     *
@@ -164,17 +201,21 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     * @tparam B additional output of the operation
     */
   def effect[R, A, B](f: (R, A) => B): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]) =
-    effectAsync((r, a) => Async.now(f(r, a)))
+    effect(ScalaFun(f.tupled))
 
-  def effectAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B])
+  def effectAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]) =
+    effect(ScalaFun.async(f.tupled))
+
+  def effectWr[R, A](f: ScalaFun[(R, A), Unit]): (Res[R] |*| Val[A]) -⚬ Res[R]
 
   /** Variant of [[effect]] that does not produce output in addition to performing the effect.
     * Can be viewed as ''wr''iting an [[A]] into the resource.
     */
   def effectWr[R, A](f: (R, A) => Unit): (Res[R] |*| Val[A]) -⚬ Res[R] =
-    effectWrAsync((r, a) => Async.now(f(r, a)))
+    effectWr(ScalaFun(f.tupled))
 
-  def effectWrAsync[R, A](f: (R, A) => Async[Unit]): (Res[R] |*| Val[A]) -⚬ Res[R]
+  def effectWrAsync[R, A](f: (R, A) => Async[Unit]): (Res[R] |*| Val[A]) -⚬ Res[R] =
+    effectWr(ScalaFun.async(f.tupled))
 
   /** Transforms a resource into a resource of (possibly) different type.
     *
@@ -205,6 +246,11 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     )                                       .to[ Val[Nothing] |+| (Res[S] |*| Val[B]) ]
       .either(anyResourceFromNothing, id)   .to[                   Res[S] |*| Val[B]  ]
 
+  def tryTransformResource[R, A, S, B, E](
+    f: ScalaFun[(R, A), Either[E, (S, B)]],
+    release: Option[ScalaFun[S, Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B]))
+
   /** Transforms a resource into a resource of (possibly) different type. Might fail with an error of type [[E]].
     *
     * @param f the transformation function. It receives the input resource and additional input of type [[A]].
@@ -223,25 +269,40 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     f: (R, A) => Either[E, (S, B)],
     release: Option[S => Unit],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])) =
-    tryTransformResourceAsync(
-      (r, a) => Async.now(f(r, a)),
-      release.map(_ andThen Async.now),
+    tryTransformResource(
+      ScalaFun(f.tupled),
+      release.map(ScalaFun(_)),
     )
 
   def tryTransformResourceAsync[R, A, S, B, E](
     f: (R, A) => Async[Either[E, (S, B)]],
     release: Option[S => Async[Unit]],
-  ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B]))
+  ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])) =
+    tryTransformResource(
+      ScalaFun.async(f.tupled),
+      release.map(ScalaFun.async(_)),
+    )
+
+  def splitResource[R, A, S, T, B](
+    f: ScalaFun[(R, A), (S, T, B)],
+    release1: Option[ScalaFun[S, Unit]],
+    release2: Option[ScalaFun[T, Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ ((Res[S] |*| Res[T]) |*| Val[B]) =
+    trySplitResource(
+      ScalaFun.adapt(f)(identity[(R, A)], Right[Nothing, (S, T, B)]),
+      release1,
+      release2,
+    ) > either(anyTwoResourcesFromNothing, id)
 
   def splitResource[R, A, S, T, B](
     f: (R, A) => (S, T, B),
     release1: Option[S => Unit],
     release2: Option[T => Unit],
   ): (Res[R] |*| Val[A]) -⚬ ((Res[S] |*| Res[T]) |*| Val[B]) =
-    splitResourceAsync(
-      (r, a) => Async.now(f(r, a)),
-      release1.map(_ andThen Async.now),
-      release2.map(_ andThen Async.now),
+    splitResource(
+      ScalaFun(f.tupled),
+      release1.map(ScalaFun(_)),
+      release2.map(ScalaFun(_)),
     )
 
   def splitResourceAsync[R, A, S, T, B](
@@ -249,29 +310,39 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     release1: Option[S => Async[Unit]],
     release2: Option[T => Async[Unit]],
   ): (Res[R] |*| Val[A]) -⚬ ((Res[S] |*| Res[T]) |*| Val[B]) =
-      trySplitResourceAsync[R, A, S, T, B, Nothing](
-        (r, a) => f(r, a).map(Right(_)),
-        release1,
-        release2,
-      )                                         .to[ Val[Nothing] |+| ((Res[S] |*| Res[T]) |*| Val[B]) ]
-        .either(anyTwoResourcesFromNothing, id) .to[                   (Res[S] |*| Res[T]) |*| Val[B]  ]
+      splitResource(
+        ScalaFun.async(f.tupled),
+        release1.map(ScalaFun.async(_)),
+        release2.map(ScalaFun.async(_)),
+      )
+
+  def trySplitResource[R, A, S, T, B, E](
+    f: ScalaFun[(R, A), Either[E, (S, T, B)]],
+    release1: Option[ScalaFun[S, Unit]],
+    release2: Option[ScalaFun[T, Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B]))
 
   def trySplitResource[R, A, S, T, B, E](
     f: (R, A) => Either[E, (S, T, B)],
     release1: Option[S => Unit],
     release2: Option[T => Unit],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])) =
-    trySplitResourceAsync(
-      (r, a) => Async.now(f(r, a)),
-      release1.map(_ andThen Async.now),
-      release2.map(_ andThen Async.now),
+    trySplitResource(
+      ScalaFun(f.tupled),
+      release1.map(ScalaFun(_)),
+      release2.map(ScalaFun(_)),
     )
 
   def trySplitResourceAsync[R, A, S, T, B, E](
     f: (R, A) => Async[Either[E, (S, T, B)]],
     release1: Option[S => Async[Unit]],
     release2: Option[T => Async[Unit]],
-  ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B]))
+  ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])) =
+    trySplitResource(
+      ScalaFun.async(f.tupled),
+      release1.map(ScalaFun.async(_)),
+      release2.map(ScalaFun.async(_)),
+    )
 
 
   private def anyResourceFromNothing[R, B]: Val[Nothing] -⚬ (Res[R] |*| Val[B])=
@@ -284,10 +355,11 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
       .>( par(id, unliftPair > mapVal(_._1)) )                                            .to[ (Res[S] |*|    Res[T]   ) |*|             Val[B]              ]
 
   /** Executes a potentially blocking operation.
-   *  The implementation must ensure that the blocking operation does not impede
+   *  The runtime will ensure that the blocking operation does not impede
    *  any of the concurrently happening non-blocking computations.
    */
-  def blocking[A, B](f: A => B): Val[A] -⚬ Val[B]
+  def blocking[A, B](f: A => B): Val[A] -⚬ Val[B] =
+    mapVal(ScalaFun.blocking(f))
 
   /** Prints the given message to the console, without creating an obligation to await. */
   def debugPrint(msg: String): Ping -⚬ One
