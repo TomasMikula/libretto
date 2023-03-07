@@ -101,9 +101,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>(Polled.delayBy[A])               .to[                    Polled[A]  ]
 
     /** Polls and discards all elements. */
-    def drain[A](implicit A: PComonoid[A]): Source[A] -⚬ Done =
+    def drain[A](using A: Closeable[A]): Source[A] -⚬ Done =
       rec { self =>
-        poll[A] > either(id, joinMap(A.counit, self))
+        poll[A] > either(id, joinMap(A.close, self))
       }
 
     private def emptyF[A]: Done -⚬ StreamFollowerF[Done, A, Source[A]] =
@@ -118,8 +118,8 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       from(onClose, onPoll)
     }
 
-    def cons[A](using A: PAffine[A]): (A |*| Source[A]) -⚬ Source[A] =
-      cons[A](A.neglect)
+    def cons[A](using A: Closeable[A]): (A |*| Source[A]) -⚬ Source[A] =
+      cons[A](A.close)
 
     def fromLList[A](neglect: A -⚬ Done): LList[A] -⚬ Source[A] = rec { self =>
       LList.switch(
@@ -127,10 +127,10 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         caseCons = par(id, self) > Source.cons(neglect),
       )
     }
-    def fromLList[A](using A: PAffine[A]): LList[A] -⚬ Source[A] =
-      fromLList(A.neglect)
+    def fromLList[A](using A: Closeable[A]): LList[A] -⚬ Source[A] =
+      fromLList(A.close)
 
-    def of[A](as: (One -⚬ A)*)(implicit A: PAffine[A]): One -⚬ Source[A] =
+    def of[A](as: (One -⚬ A)*)(using Closeable[A]): One -⚬ Source[A] =
       LList.of(as: _*) > fromLList
 
     def repeatedly[A](f: Done -⚬ A): Done -⚬ Source[A] = rec { self =>
@@ -314,9 +314,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     /** Merges two [[Source]]s into one.
       * Left-biased: when there is a value available from both upstreams, favors the first one.
       */
-    def merge[A](implicit
-      A1: Junction.Positive[A],
-      A2: PAffine[A],
+    def merge[A](using
+      Junction.Positive[A],
+      Closeable[A],
     ): (Source[A] |*| Source[A]) -⚬ Source[A] = rec { self =>
       val onClose: (Source[A] |*| Source[A]) -⚬ Done      = joinMap(close, close)
       val onPoll : (Source[A] |*| Source[A]) -⚬ Polled[A] = par(poll, poll) > Polled.merge(self)
@@ -327,9 +327,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       * Head-biased: when there is an element available from multiple upstreams, favors the upstream closest to the
       * head of the input list.
       */
-    def mergeAll[A](implicit
-      A1: Junction.Positive[A],
-      A2: PAffine[A],
+    def mergeAll[A](using
+      Junction.Positive[A],
+      Closeable[A],
     ): LList[Source[A]] -⚬ Source[A] =
       rec { self =>
         LList.switch(
@@ -444,7 +444,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         Junction.invert(positiveJunction),
       )
 
-    implicit def pAffineSource[A]: PAffine[Source[A]] =
+    given closeableSource[A]: Closeable[Source[A]] =
       PAffine.from(Source.close)
 
     object Polled {
@@ -464,10 +464,10 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         either(caseEmpty, caseCons)
       }
 
-      def unpoll[A](implicit A: PAffine[A]): Polled[A] -⚬ Source[A] =
-        Source.from(close(A.neglect), id)
+      def unpoll[A](using A: Closeable[A]): Polled[A] -⚬ Source[A] =
+        Source.from(close(A.close), id)
 
-      def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| Polled[A]) -⚬ Polled[A] =
+      def delayBy[A](using ev: Junction.Positive[A]): (Done |*| Polled[A]) -⚬ Polled[A] =
         id[Done |*| Polled[A]]          .to[  Done |*| (Done |+|           (A |*| Source[A])) ]
           .distributeL                  .to[ (Done |*| Done) |+| (Done |*| (A |*| Source[A])) ]
           .>.left(join)                 .to[      Done       |+| (Done |*| (A |*| Source[A])) ]
@@ -519,9 +519,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         */
       def merge[A](
         mergeSources: (Source[A] |*| Source[A]) -⚬ Source[A],
-      )(implicit
-        A1: Junction.Positive[A],
-        A2: PAffine[A],
+      )(using
+        Junction.Positive[A],
+        Closeable[A],
       ): (Polled[A] |*| Polled[A]) -⚬ Polled[A] = {
         // checks the first argument first, uses the given function for recursive calls
         def go(merge: (Source[A] |*| Source[A]) -⚬ Source[A]): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =

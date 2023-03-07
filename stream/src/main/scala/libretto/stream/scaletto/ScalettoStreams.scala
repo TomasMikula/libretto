@@ -59,7 +59,7 @@ abstract class ScalettoStreams {
   import dsl._
   import dsl.$._
   import coreLib._
-  import scalettoLib._
+  import scalettoLib.{_, given}
   import underlying._
   import Tree._
 

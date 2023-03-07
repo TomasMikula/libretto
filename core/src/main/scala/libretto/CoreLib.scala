@@ -2339,7 +2339,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   import Compared._
 
-  def compareBy[A, B, K1 : PComonoid : Junction.Positive, K2 : PComonoid : Junction.Positive](
+  def compareBy[A, B, K1 : CloseableCosemigroup : Junction.Positive, K2 : CloseableCosemigroup : Junction.Positive](
     aKey: Getter[A, K1],
     bKey: Getter[B, K2],
   )(implicit
@@ -2354,9 +2354,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def contramap[S, T](
       f: Getter[S, A],
       g: Getter[T, B],
-    )(implicit
-      A: PComonoid[A],
-      B: PComonoid[B],
+    )(using
+      A: CloseableCosemigroup[A],
+      B: CloseableCosemigroup[B],
       AJ: Junction.Positive[A],
       BJ: Junction.Positive[B],
     ): Comparable[S, T] =
@@ -2364,8 +2364,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         private val absorb: ((A |*| B) |*| (S |*| T)) -⚬ (S |*| T) =
           id                                 [ (A    |*| B) |*| (S    |*| T) ]
             .>(IXI)                       .to[ (A    |*| S) |*| (B    |*| T) ]
-            .>.fst.fst(A.counit)          .to[ (Done |*| S) |*| (B    |*| T) ]
-            .>.snd.fst(B.counit)          .to[ (Done |*| S) |*| (Done |*| T) ]
+            .>.fst.fst(A.close)           .to[ (Done |*| S) |*| (B    |*| T) ]
+            .>.snd.fst(B.close)           .to[ (Done |*| S) |*| (Done |*| T) ]
             .par(f.awaitFst, g.awaitFst)  .to[           S  |*|           T  ]
 
         override def compare: (S |*| T) -⚬ Compared[S, T] = {
@@ -2605,8 +2605,8 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def neglect[A](f: A -⚬ Done): PMaybe[A] -⚬ Done =
       either(id, f)
 
-    def neglect[A](implicit A: PComonoid[A]): PMaybe[A] -⚬ Done =
-      neglect(A.counit)
+    def neglect[A](using A: CloseableCosemigroup[A]): PMaybe[A] -⚬ Done =
+      neglect(A.close)
 
     def lift[A, B](f: A -⚬ B): PMaybe[A] -⚬ PMaybe[B] =
       Bifunctor[|+|].lift(id, f)
@@ -2884,13 +2884,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
     }
 
-    implicit def pComonoidPUnlimited[A]: PComonoid[PUnlimited[A]] =
-      new PComonoid[PUnlimited[A]] {
-        def counit : PUnlimited[A] -⚬ Done                              = PUnlimited.neglect
-        def split  : PUnlimited[A] -⚬ (PUnlimited[A] |*| PUnlimited[A]) = PUnlimited.split
+    given closeableCosemigroupPUnlimited[A]: CloseableCosemigroup[PUnlimited[A]] =
+      new CloseableCosemigroup[PUnlimited[A]] {
+        def close : PUnlimited[A] -⚬ Done                              = PUnlimited.neglect
+        def split : PUnlimited[A] -⚬ (PUnlimited[A] |*| PUnlimited[A]) = PUnlimited.split
       }
 
-    implicit val comonadPUnlimited: Comonad[PUnlimited] =
+    given comonadPUnlimited: Comonad[PUnlimited] =
       new Comonad[PUnlimited] {
         override val category: Category[-⚬] =
           lib.category
@@ -2924,25 +2924,25 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       from(par(A.deflate, B.deflate) > forkNeed)
   }
 
-  trait PAffine[A] {
-    def neglect: A -⚬ Done
+  trait Closeable[A] {
+    def close: A -⚬ Done
   }
 
   object PAffine {
-    def from[A](f: A -⚬ Done): PAffine[A] =
-      new PAffine[A] {
-        override def neglect: A -⚬ Done =
+    def from[A](f: A -⚬ Done): Closeable[A] =
+      new Closeable[A] {
+        override def close: A -⚬ Done =
           f
       }
 
-    implicit def fromAffine[A](implicit A: Affine[A]): PAffine[A] =
+    given fromAffine[A](using A: Affine[A]): Closeable[A] =
       from(A.discard > done)
 
-    implicit val pAffineDone: PAffine[Done] =
+    given closeableDone: Closeable[Done] =
       from(id)
 
-    implicit def pAffinePair[A, B](implicit A: PAffine[A], B: PAffine[B]): PAffine[A |*| B] =
-      from(par(A.neglect, B.neglect) > join)
+    given closeablePair[A, B](using A: Closeable[A], B: Closeable[B]): Closeable[A |*| B] =
+      from(par(A.close, B.close) > join)
   }
 
   trait Semigroup[A] {
@@ -3121,36 +3121,30 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
   }
 
-  /** A weaker version of [[Comonoid]] whose [[counit]] cannot discard the input completely, but can reduce it to
-    * a signal traveling in the '''P'''ositive direction ([[Done]]) that eventually needs to be awaited.
+  /** A weaker version of [[Comonoid]] where the input cannot be discarded completely, but can be reduced to
+    * a signal traveling in the positive direction ([[Done]]) that eventually needs to be awaited.
     *
     * The dual of [[NMonoid]].
     */
-  trait PComonoid[A] extends Cosemigroup[A] with PAffine[A] {
-    def counit: A -⚬ Done
-
-    override def neglect: A -⚬ Done =
-      counit
-
+  trait CloseableCosemigroup[A] extends Cosemigroup[A] with Closeable[A] {
     def law_leftCounit: Equal[ A -⚬ (RTerminus |*| A) ] =
       Equal(
-        this.split > par(counit > delayIndefinitely, id[A]),
+        this.split > par(close > delayIndefinitely, id[A]),
         id[A].introFst(done > delayIndefinitely),
       )
 
     def law_rightCounit: Equal[ A -⚬ (A |*| RTerminus) ] =
       Equal(
-        this.split > par(id[A], counit > delayIndefinitely),
+        this.split > par(id[A], close > delayIndefinitely),
         id[A].introSnd(done > delayIndefinitely),
       )
   }
 
-  object PComonoid {
-    implicit val pComonoidDone: PComonoid[Done] =
-      new PComonoid[Done] {
-        override def split  : Done -⚬ (Done |*| Done) = fork
-        override def counit : Done -⚬ Done            = id
-      }
+  object CloseableCosemigroup {
+    given closeableCosemigroupDone: CloseableCosemigroup[Done] with {
+      override def split : Done -⚬ (Done |*| Done) = fork
+      override def close : Done -⚬ Done            = id
+    }
   }
 
   type Monad[F[_]] =
@@ -3898,12 +3892,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     private def notifyAction: (Pong |*| Lock) -⚬ Lock =
       snd(unpack[LockF]) > notifyChoiceAndRight(notifyChoice) > pack[LockF]
 
-    given PComonoid[Lock] =
-      new PComonoid[Lock] {
+    given CloseableCosemigroup[Lock] =
+      new CloseableCosemigroup[Lock] {
         override def split: Lock -⚬ (Lock |*| Lock) =
           Lock.share
 
-        override def counit: Lock -⚬ Done =
+        override def close: Lock -⚬ Done =
           Lock.close
       }
   }

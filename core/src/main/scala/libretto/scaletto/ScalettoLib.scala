@@ -110,11 +110,10 @@ class ScalettoLib[
   def delayVal[A](by: FiniteDuration): Val[A] -⚬ Val[A] =
     delayVal(delay(by))
 
-  implicit def pComonoidVal[A]: PComonoid[Val[A]] =
-    new PComonoid[Val[A]] {
-      def counit : Val[A] -⚬ Done                = dsl.neglect
-      def split  : Val[A] -⚬ (Val[A] |*| Val[A]) = dup
-    }
+  given closeableCosemigroupVal[A]: CloseableCosemigroup[Val[A]] with {
+    override def close : Val[A] -⚬ Done                = dsl.neglect
+    override def split : Val[A] -⚬ (Val[A] |*| Val[A]) = dup
+  }
 
   implicit def nMonoidNeg[A]: NMonoid[Neg[A]] =
     new NMonoid[Neg[A]] {
