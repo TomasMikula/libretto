@@ -195,6 +195,37 @@ private class ExecutionImpl(
       }
   }
 
+  private def newResource[R](r: R, release: Option[ScalaFun[R, Unit]]): Frontier[Res[R]] =
+    release match {
+      case None =>
+        Frontier.MVal(r)
+      case Some(release) =>
+        resourceRegistry.registerResource(r, release) match {
+          case RegisterResult.Registered(resId) =>
+            Frontier.Resource(resId, r)
+          case RegisterResult.RegistryClosed =>
+            release
+              .runFuture(r)
+              .map(_ => Frontier.failure("acquired resource immediately released because shutting down"))
+              .asDeferredFrontier
+        }
+    }
+
+  private def unregisterResource[R](r: Frontier.ResFrontier[R]): Boolean =
+    r match {
+      case Frontier.MVal(r) =>
+        true
+      case Frontier.Resource(id, r) =>
+        resourceRegistry.unregisterResource(id) match {
+          case UnregisterResult.Unregistered(_) =>
+            true
+          case UnregisterResult.NotFound =>
+            bug(s"Previously registered resource $id not found in resource registry")
+          case UnregisterResult.RegistryClosed =>
+            false
+        }
+    }
+
   private sealed trait Frontier[A] {
     import Frontier._
 
@@ -707,23 +738,10 @@ private class ExecutionImpl(
           val release: Option[ScalaFun[r, Unit]] = op.release
 
           def go(x: x): Frontier[Res[r] |*| Val[y]] = {
-            def go1(r: r, y: y): Frontier[Res[r] |*| Val[y]] =
-              release match {
-                case None =>
-                  Pair(MVal(r), Value(y))
-                case Some(release) =>
-                  resourceRegistry.registerResource(r, release) match {
-                    case RegisterResult.Registered(resId) =>
-                      Pair(Resource(resId, r), Value(y))
-                    case RegisterResult.RegistryClosed =>
-                      release
-                        .runFuture(r)
-                        .map(_ => Frontier.failure("resource allocation not allowed because the program has ended or crashed"))
-                        .asDeferredFrontier
-                  }
-              }
-
-            acquire.runFuture(x).map { case (r, y) => go1(r, y) }.asDeferredFrontier
+            acquire
+              .runFuture(x)
+              .map { case (r, y) => Pair(newResource(r, release), Value(y)) }
+              .asDeferredFrontier
           }
 
           (this: Frontier[Val[x]]) match {
@@ -743,22 +761,7 @@ private class ExecutionImpl(
                 case Left(e) =>
                   InjectL(Value(e))
                 case Right((r, y)) =>
-                  import ResourceRegistry.RegisterResult._
-                  val fr: Frontier[Res[r] |*| Val[y]] =
-                    release match {
-                      case None =>
-                        Pair(MVal(r), Value(y))
-                      case Some(release) =>
-                        resourceRegistry.registerResource(r, release) match {
-                          case Registered(resId) =>
-                            Pair(Resource(resId, r), Value(y))
-                          case RegistryClosed =>
-                            release.runAsync(r)
-                              .map[Frontier[Res[r] |*| Val[y]]](_ => Frontier.failure("resource allocation not allowed because the program has ended or crashed"))
-                              .asAsyncFrontier
-                        }
-                      }
-                  InjectR(fr)
+                  InjectR(Pair(newResource(r, release), Value(y)))
               }
 
             acquire.runAsync(x) match {
@@ -819,37 +822,14 @@ private class ExecutionImpl(
                   case Left(e) =>
                     InjectL(Value(e))
                   case Right((s, y)) =>
-                    val sy: Frontier[Res[s] |*| Val[y]] =
-                      release match {
-                        case None =>
-                          Pair(MVal(s), Value(y))
-                        case Some(release) =>
-                          resourceRegistry.registerResource(s, release) match {
-                            case RegisterResult.Registered(id) =>
-                              Pair(Resource(id, s), Value(y))
-                            case RegisterResult.RegistryClosed =>
-                              release.runAsync(s)
-                                .map(_ => Frontier.failure("Transformed resource not registered because shutting down"))
-                                .asAsyncFrontier
-                          }
-                      }
-                    InjectR(sy)
+                    InjectR(Pair(newResource(s, release), Value(y)))
                 }
                 .asAsyncFrontier
 
-            r match {
-              case MVal(r) =>
-                go1(r, x)
-              case Resource(id, r) =>
-                resourceRegistry.unregisterResource(id) match {
-                  case UnregisterResult.Unregistered(_) =>
-                    go1(r, x)
-                  case UnregisterResult.NotFound =>
-                    bug(s"Previously registered resource $id not found in resource registry")
-                  case UnregisterResult.RegistryClosed =>
-                    Frontier.failure("Not transforming resource because shutting down")
-                }
-            }
+            if (unregisterResource(r))
+              go1(r.resource, x)
+            else
+              Frontier.failure("Not transforming resource because shutting down")
           }
 
           (this: Frontier[Res[r] |*| Val[x]]).splitPair match {
@@ -868,21 +848,7 @@ private class ExecutionImpl(
                 case Left(e) =>
                   Pair(rf, InjectL(Value(e)))
                 case Right((s, y)) =>
-                  val fs: Frontier[Res[s]] =
-                    releaseS match {
-                      case None =>
-                        MVal(s)
-                      case Some(releaseS) =>
-                        resourceRegistry.registerResource(s, releaseS) match {
-                          case RegisterResult.Registered(id) =>
-                            Resource(id, s)
-                          case RegisterResult.RegistryClosed =>
-                            releaseS.runAsync(s)
-                              .map(_ => Frontier.failure("Acquired resource not registered because shutting down"))
-                              .asAsyncFrontier
-                        }
-                    }
-                  Pair(rf, InjectR(Pair(fs, Value(y))))
+                  Pair(rf, InjectR(Pair(newResource(s, releaseS), Value(y))))
               }
               .asAsyncFrontier
           }
@@ -906,51 +872,16 @@ private class ExecutionImpl(
                   case Left(e) =>
                     InjectL(Value(e))
                   case Right((s, t, y)) =>
-                    val fs: Frontier[Res[s]] =
-                      releaseS match {
-                        case None =>
-                          MVal(s)
-                        case Some(releaseS) =>
-                          resourceRegistry.registerResource(s, releaseS) match {
-                            case RegisterResult.Registered(id) =>
-                              Resource(id, s)
-                            case RegisterResult.RegistryClosed =>
-                              releaseS.runAsync(s)
-                                .map(_ => Frontier.failure("Post-split resource not registered because shutting down"))
-                                .asAsyncFrontier
-                          }
-                      }
-                    val ft: Frontier[Res[t]] =
-                      releaseT match {
-                        case None =>
-                          MVal(t)
-                        case Some(releaseT) =>
-                          resourceRegistry.registerResource(t, releaseT) match {
-                            case RegisterResult.Registered(id) =>
-                              Resource(id, t)
-                            case RegisterResult.RegistryClosed =>
-                              releaseT.runAsync(t)
-                                .map(_ => Frontier.failure("Post-split resource not registered because shutting down"))
-                                .asAsyncFrontier
-                          }
-                      }
+                    val fs: Frontier[Res[s]] = newResource(s, releaseS)
+                    val ft: Frontier[Res[t]] = newResource(t, releaseT)
                     InjectR(Pair(Pair(fs, ft), Value(y)))
                 }
                 .asAsyncFrontier
 
-            r match {
-              case MVal(r) =>
-                go1(r, x)
-              case Resource(id, r) =>
-                resourceRegistry.unregisterResource(id) match {
-                  case UnregisterResult.Unregistered(_) =>
-                    go1(r, x)
-                  case UnregisterResult.NotFound =>
-                    bug(s"Previously registered resource $id not found in resource registry")
-                  case UnregisterResult.RegistryClosed =>
-                    Frontier.failure("Not going to split the resource because shutting down")
-                }
-            }
+            if (unregisterResource(r))
+              go1(r.resource, x)
+            else
+              Frontier.failure("Not going to split the resource because shutting down")
           }
 
           (this: Frontier[Res[r] |*| Val[x]]).splitPair match {
@@ -965,19 +896,10 @@ private class ExecutionImpl(
             op.f
 
           def go(r: ResFrontier[r], x: x): Frontier[Val[y]] =
-            r match {
-              case MVal(r) =>
-                release.runAsync(r, x).map(Value(_)).asAsyncFrontier
-              case Resource(id, r) =>
-                resourceRegistry.unregisterResource(id) match {
-                  case UnregisterResult.Unregistered(_) =>
-                    release.runAsync(r, x).map(Value(_)).asAsyncFrontier
-                  case UnregisterResult.NotFound =>
-                    bug(s"Previously registered resource $id not found in resource registry")
-                  case UnregisterResult.RegistryClosed =>
-                    Frontier.failure("Not releasing resource because shutting down. It was or will be released as part of the shutdown")
-                }
-            }
+            if (unregisterResource(r))
+              release.runAsync(r.resource, x).map(Value(_)).asAsyncFrontier
+            else
+              Frontier.failure("Not releasing resource because shutting down. It was or will be released as part of the shutdown")
 
           (this: Frontier[Res[r] |*| Val[x]]).splitPair match {
             case (r: ResFrontier[r], Value(x)) => go(r, x)
