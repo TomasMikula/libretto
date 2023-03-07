@@ -17,9 +17,12 @@ import vendor.{Page, ScrollId}
 object ConnectorModuleImpl extends ConnectorModule {
   override opaque type Connector = RefCounted[vendor.Connector]
 
-  override given shareableConnector: Cosemigroup[Connector] with {
+  override given shareableConnector: CloseableCosemigroup[Connector] with {
     override def split: Connector -⚬ (Connector |*| Connector) =
       RefCounted.dupRef[vendor.Connector]
+
+    override def close: Connector -⚬ Done =
+      closeConnector
   }
 
   override def closeConnector: Connector -⚬ Done =

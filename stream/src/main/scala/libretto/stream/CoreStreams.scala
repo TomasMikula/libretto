@@ -227,6 +227,26 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       from(close[A], poll[A].>.right(par(f, self)))
     }
 
+    def mapWith[X, A, B](f: (X |*| A) -⚬ B)(using
+      X: CloseableCosemigroup[X],
+    ): (X |*| Source[A]) -⚬ Source[B] =
+      rec { self =>
+        val onClose: (X |*| Source[A]) -⚬ Done =
+          joinMap(X.close, Source.close)
+
+        val onPoll: (X |*| Source[A]) -⚬ Polled[B] =
+          λ { case +(x) |*| as =>
+            poll(as) switch {
+              case Left(closed) =>
+                Polled.empty(joinAll(X.close(x), closed))
+              case Right(a |*| as) =>
+                Polled.cons(f(x |*| a) |*| self(x |*| as))
+            }
+          }
+
+        from(onClose, onPoll)
+      }
+
     def forEachSequentially[A: Junction.Positive](f: A -⚬ Done): Source[A] -⚬ Done = rec { self =>
       val caseCons: (A |*| Source[A]) -⚬ Done =
         par(f, id) > Source.delayBy[A] > self

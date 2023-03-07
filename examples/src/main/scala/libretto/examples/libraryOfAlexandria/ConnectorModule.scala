@@ -8,7 +8,7 @@ import vendor.{Page, ScrollId}
 trait ConnectorModule {
   type Connector
 
-  given shareableConnector: Cosemigroup[Connector]
+  given shareableConnector: CloseableCosemigroup[Connector]
 
   def closeConnector: Connector -⚬ Done
 
