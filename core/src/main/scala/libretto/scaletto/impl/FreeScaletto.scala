@@ -3,11 +3,12 @@ package libretto.scaletto.impl
 import libretto.scaletto.Scaletto
 import libretto.lambda.{ClosedSymmetricMonoidalCategory, Lambdas, LambdasImpl, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Abstracted
-import libretto.lambda.util.{BiInjective, SourcePos, TypeEq}
+import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Monad.monadEither
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
+import scala.reflect.TypeTest
 
 abstract class FreeScaletto {
   sealed trait -⚬[A, B]
@@ -446,7 +447,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   override type LambdaContext = lambdas.Context
 
-  override val `$`: FunExprOps  = new FunExprOps {
+  override val `$`: FunExprOps = new FunExprOps {
     override def one(using pos: SourcePos, ctx: lambdas.Context): $[One] =
       lambdas.Expr.const([x] => (_: Unit) => introFst[x])(VarOrigin.OneIntro(pos))
 
@@ -567,6 +568,99 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       }
     }
   }
+
+  /** Preprocessed [[ValSwitch]]. */
+  private sealed trait ValHandler[A, R] {
+    def compile: Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.VFun, |+|, AA, R])]
+  }
+
+  private object ValDecomposition {
+    class Last[A, R](
+      pos: SourcePos,
+      f: LambdaContext ?=> $[Val[A]] => $[R],
+    ) extends ValHandler[A, R] {
+      override def compile: Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.VFun, |+|, AA, R])] = {
+        val label = VarOrigin.Lambda(pos)
+        Exists((id[Val[A]], Sink((label, f))))
+      }
+    }
+
+    class Cons[A, H, T, R](
+      partition: A => Either[H, T],
+      pos: SourcePos,
+      f: LambdaContext ?=> $[Val[H]] => $[R],
+      t: ValHandler[T, R],
+    ) extends ValHandler[A, R] {
+      override def compile: Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.VFun, |+|, AA, R])] = {
+        val tail = t.compile
+        type AA = Val[H] |+| tail.T
+        val partition1: Val[A] -⚬ AA =
+          mapVal(partition) > liftEither > either(injectL, tail.value._1 > injectR)
+        val sink: Sink[lambdas.VFun, |+|, AA, R] =
+          Sink[lambdas.VFun, |+|, Val[H], R]((VarOrigin.Lambda(pos), f)) <+> tail.value._2
+        Exists((partition1, sink))
+      }
+    }
+
+    def from[A, R](cases: ValSwitch.Cases[A, A, R]): ValHandler[A, R] =
+      cases match {
+        case c1: ValSwitch.FirstCase[a, a_, r] =>
+          Last(c1.pos, c1.f)
+        case cn: ValSwitch.NextCase[a, a1, a2, r] =>
+          summon[a =:= A]
+          // (a1 | a2) =:= A
+          (from[a1, a2, R](
+            (cn.base: ValSwitch.Cases[A, a1, R]).asInstanceOf[ValSwitch.Cases[a1 | a2, a1, R]],
+            Last(cn.pos, cn.f),
+          ): ValHandler[a1 | a2, R]).asInstanceOf[ValHandler[A, R]]
+      }
+
+    def from[A1, A2, R](
+      cases: ValSwitch.Cases[A1 | A2, A1, R],
+      acc: ValHandler[A2, R],
+    ): ValHandler[A1 | A2, R] = {
+      def prepend[X](pos: SourcePos, f: LambdaContext ?=> $[Val[X]] => $[R])(using TypeTest[X | A2, X]): ValHandler[X | A2, R] = {
+        val partition: (X | A2) => Either[X, A2] = {
+          case (x: X) => Left(x)
+          case a2     => Right(a2.asInstanceOf[A2])
+        }
+        Cons[X | A2, X, A2, R](partition, pos, f, acc)
+      }
+      cases match {
+        case c1: ValSwitch.FirstCase[a, a1, r] =>
+          prepend[A1](c1.pos, c1.f)(using c1.typeTest)
+        case cn: ValSwitch.NextCase[a, a10, a11, r] =>
+          // a =:= (A1 | A2)
+          // A1 =:= (a10 | a11)
+          // Compiler does not infer these equations. See // https://github.com/lampepfl/dotty/issues/17075
+          val ev = summon[A1 =:= A1].asInstanceOf[A1 =:= (a10 | a11)]
+          (from[a10, a11 | A2, R](
+            (cn.base: ValSwitch.Cases[a, a10, r]).asInstanceOf[ValSwitch.Cases[a10 | (a11 | A2), a10, R]],
+            prepend[a11](cn.pos, cn.f)(using cn.typeTest),
+          ): ValHandler[a10 | (a11 | A2), R])
+            .asInstanceOf[ValHandler[A1 | A2, R]]
+      }
+    }
+  }
+
+  override def switchVal[A, R](
+    a: $[Val[A]],
+    cases: ValSwitch.Cases[A, A, R],
+  )(pos: SourcePos)(using
+    lambdas.Context,
+  ): $[R] =
+    ValDecomposition.from(cases).compile match {
+      case Exists.Some((partition, sink)) =>
+        lambdas.switch(
+          sink,
+          [X, Y] => (fx: X -⚬ R, fy: Y -⚬ R) => either(fx, fy),
+          [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
+        ) match {
+          case Abstracted.Exact(f)      => $.map(a)(partition > f)(pos)
+          case Abstracted.Closure(x, f) => $.map(zipExprs(Tupled.zip(x, Tupled.atom(a))))(snd(partition) > f)(pos)
+          case Abstracted.Failure(e)    => raiseError(e)
+        }
+    }
 
   override val |*| : ConcurrentPairInvertOps =
     new ConcurrentPairInvertOps {}
