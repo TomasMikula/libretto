@@ -4,6 +4,7 @@ import libretto.{CoreLib, CrashDSL, InvertDSL, TimerDSL}
 import libretto.lambda.util.SourcePos
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
+import scala.reflect.TypeTest
 
 /** Supports manipulating Scala values via pure Scala functions.
   * Also extends [[InvertDSL]] (and thus [[ClosedDSL]]), [[TimerDSL]] and [[CrashDSL]],
@@ -112,6 +113,16 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
 
   def dupNeg[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
     unliftNegPair[A, A] > contramapNeg(a => (a, a))
+
+  def switchVal[A, R](
+    a: $[Val[A]],
+    cases: ValSwitch.Cases[A, A, R],
+  )(pos: SourcePos)(using
+    LambdaContext,
+  ): $[R]
+
+  def switch[A](using pos: SourcePos)(a: $[Val[A]])(using LambdaContext): ValSwitchInit[A] =
+    ValSwitchInit(a, pos)
 
   def delay: Val[FiniteDuration] -⚬ Done
 
@@ -402,4 +413,47 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     LambdaContext,
   ): $[Val[(A, B, C, D, E, F)]] =
     tuple(tuple(a, b, c), tuple(d, e, f)) > mapVal { case ((a, b, c), (d, e, f)) => (a, b, c, d, e, f) }
+
+  class ValSwitchInit[A](a: $[Val[A]], pos: SourcePos)(using LambdaContext) {
+    def Case[A0 <: A](using tt: TypeTest[A, A0], casePos: SourcePos): ValSwitchInitCase[A, A0] =
+      ValSwitchInitCase[A, A0](a, pos, tt, casePos)
+  }
+
+  class ValSwitchInitCase[A, A0 <: A](a: $[Val[A]], pos: SourcePos, tt: TypeTest[A, A0], casePos: SourcePos)(using LambdaContext) {
+    def apply[R](f: LambdaContext ?=> $[Val[A0]] => $[R]): ValSwitch[A, A0, R] =
+      ValSwitch(a, pos, ValSwitch.FirstCase(tt, f, casePos))
+  }
+
+  /**
+   *
+   * @tparam A type of the scrutinee (the value to match on)
+   * @tparam A0 subtype of A covered so far
+   * @tparam R result type that each case must produce
+   */
+  class ValSwitch[A, A0, R](a: $[Val[A]], pos: SourcePos, cases: ValSwitch.Cases[A, A0, R])(using LambdaContext) {
+    def endswitch(using ev: A0 =:= A): $[R] =
+      switchVal[A, R](a, ev.substituteCo[[a] =>> ValSwitch.Cases[A, a, R]](cases))(pos)
+
+    def Case[A1 <: A](using tt: TypeTest[A, A1], pos: SourcePos)(
+      f: LambdaContext ?=> $[Val[A1]] => $[R],
+    ): ValSwitch[A, A0 | A1, R] =
+      ValSwitch(a, pos, ValSwitch.NextCase(cases, tt, f, pos))
+  }
+
+  object ValSwitch {
+    sealed trait Cases[A, A0, R]
+
+    class FirstCase[A, A0, R](
+      val typeTest: TypeTest[A, A0],
+      val f: LambdaContext ?=> $[Val[A0]] => $[R],
+      val pos: SourcePos,
+    ) extends Cases[A, A0, R]
+
+    class NextCase[A, A0, A1, R](
+      val base: Cases[A, A0, R],
+      val typeTest: TypeTest[A, A1],
+      val f: LambdaContext ?=> $[Val[A1]] => $[R],
+      val pos: SourcePos,
+    ) extends Cases[A, A0 | A1, R]
+  }
 }

@@ -146,17 +146,10 @@ object CoffeeMachine extends StarterApp { app =>
     repeat: (Done |*| CoffeeMachine) -⚬ Done,
   ): (Done |*| (((EspressoMenu |*| CoffeeMachine) |&| (LatteMenu |*| CoffeeMachine)) |&| Done)) -⚬ Done = {
 
-    enum Item { case Espresso, Latte, Quit }
-    object Item {
-      // ¯\_(ツ)_/¯ Why doesn't the compiler know that Item =:= (Espresso.type | Latte.type | Quit.type)?
-      def asUnion(i: Item): (Espresso.type | Latte.type | Quit.type) =
-        i match {
-          case Espresso => Espresso
-          case Latte => Latte
-          case Quit => Quit
-        }
-    }
-    import Item._
+    case class Espresso()
+    case class Latte()
+    case class Quit()
+    type Item = Espresso | Latte | Quit
 
     val msg =
       """Choose your beverage:
@@ -166,28 +159,23 @@ object CoffeeMachine extends StarterApp { app =>
         |""".stripMargin
 
     val parse: String => Option[Item] = {
-      case "e" => Some(Item.Espresso)
-      case "l" => Some(Item.Latte)
-      case "q" => Some(Item.Quit)
+      case "e" => Some(Espresso())
+      case "l" => Some(Latte())
+      case "q" => Some(Quit())
       case _   => None
     }
 
-    val goEspresso: (Val[Espresso.type] |*| (EspressoMenu |*| CoffeeMachine)) -⚬ Done = fst(neglect) > VI(getEspresso) > repeat
-    val goLatte:    (Val[Latte.type   ] |*| (LatteMenu    |*| CoffeeMachine)) -⚬ Done = fst(neglect) > VI(getLatte   ) > repeat
-    val quit:       (Val[Quit.type    ] |*|              Done               ) -⚬ Done = fst(neglect) > join
+    val goEspresso: (Val[Espresso] |*| (EspressoMenu |*| CoffeeMachine)) -⚬ Done = fst(neglect) > VI(getEspresso) > repeat
+    val goLatte:    (Val[Latte   ] |*| (LatteMenu    |*| CoffeeMachine)) -⚬ Done = fst(neglect) > VI(getLatte   ) > repeat
+    val quit:       (Val[Quit    ] |*|              Done               ) -⚬ Done = fst(neglect) > join
 
-    import ValMatcher.caseEq
-    val chooseItem: (Val[Item] |*| (((EspressoMenu |*| CoffeeMachine) |&| (LatteMenu |*| CoffeeMachine)) |&| Done)) -⚬ Done =
-      ( caseEq(Espresso) { goEspresso }
-      & caseEq(Latte)    { goLatte    }
-      & caseEq(Quit)     { quit       }
-      )
-        .contramapVal(Item.asUnion)
-        .get
-
-    id                               [   Done    |*| (((EspressoMenu |*| CoffeeMachine) |&| (LatteMenu |*| CoffeeMachine)) |&| Done) ]
-      .>.fst(prompt(msg, parse))  .to[ Val[Item] |*| (((EspressoMenu |*| CoffeeMachine) |&| (LatteMenu |*| CoffeeMachine)) |&| Done) ]
-      .>(chooseItem)              .to[           Done                                                                                ]
+    λ { case start |*| menu =>
+      switch(start :>> prompt(msg, parse))
+        .Case[Espresso] { e => goEspresso(e |*| chooseL(chooseL(menu))) }
+        .Case[Latte]    { l => goLatte   (l |*| chooseR(chooseL(menu))) }
+        .Case[Quit]     { q => quit      (q |*| chooseR(menu))          }
+        .endswitch
+    }
   }
 
   def getEspresso: (Done |*| EspressoMenu) -⚬ Done =
