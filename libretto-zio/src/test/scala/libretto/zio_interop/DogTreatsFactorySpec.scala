@@ -14,7 +14,7 @@ object DogTreatsFactorySpec extends ZIOSpecDefault {
     biscuits: UStream[Biscuit],
   ): ZIO[Scope, Nothing, UStream[TreatsPack]] = {
     // prepare a description of ZIO inputs
-    (toys.asPollable |*| bones.asPollable |*| biscuits.asPollable)
+    (toys.asSource |*| bones.asSource |*| biscuits.asSource)
       // pass it through a Libretto function
       .through_(DogTreatsFactory.blueprint)
       // convert the output back to ZIO

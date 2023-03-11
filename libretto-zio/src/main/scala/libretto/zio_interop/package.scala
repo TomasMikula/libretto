@@ -8,7 +8,7 @@ import zio.stream.UStream
 package object zio_interop {
 
   extension [A](stream: UStream[A]) {
-    def asPollable: Ztuff[ValSource[A]] =
+    def asSource: Ztuff[ValSource[A]] =
       Ztuff.ZioUStream(stream)
   }
 
