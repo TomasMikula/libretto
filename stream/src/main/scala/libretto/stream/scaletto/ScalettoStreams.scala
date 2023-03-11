@@ -65,10 +65,101 @@ abstract class ScalettoStreams {
 
   export underlying.{lib => _, dsl => _, _}
 
+  type ValSourceT[T, A] = SourceT[T, Val[A]]
+
   type ValSource[A] = Source[Val[A]]
   type ValDrain[A]  = Drain[Val[A]]
   type ValStream[A] = Stream[Val[A]]
   type ValSink[A]   = Sink[Val[A]]
+
+  object ValSourceT {
+    type Polled[T, A] = SourceT.Polled[T, Val[A]]
+
+    def from[S, T, A](
+      onClose: S -⚬ T,
+      onPoll: S -⚬ (T |+| (Val[A] |*| ValSourceT[T, A]))
+    ): S -⚬ ValSourceT[T, A] =
+      SourceT.from(onClose, onPoll)
+
+    def fromChoice[T, A]: (T |&| (T |+| (Val[A] |*| ValSourceT[T, A]))) -⚬ ValSourceT[T, A] =
+      SourceT.fromChoice[T, Val[A]]
+
+    def empty[T, A]: T -⚬ ValSourceT[T, A] =
+      SourceT.empty[T, Val[A]]
+
+    def close[T, A]: ValSourceT[T, A] -⚬ T =
+      SourceT.close[T, Val[A]]
+
+    def poll[T, A]: ValSourceT[T, A] -⚬ Polled[T, A] =
+      SourceT.poll[T, Val[A]]
+
+    def fromList[T, A]: (Val[List[A]] |*| Detained[T]) -⚬ ValSourceT[T, A] = rec { fromList =>
+      val uncons: List[A] => Option[(A, List[A])] = _ match {
+        case a :: as => Some((a, as))
+        case Nil => None
+      }
+
+      val close: (Val[List[A]] |*| Detained[T]) -⚬ T =
+        λ { case as |*| t =>
+          t.releaseWhen(neglect(as))
+        }
+
+      val poll: (Val[List[A]] |*| Detained[T]) -⚬ Polled[T, A] =
+        λ { case as |*| t =>
+          as > mapVal(uncons) > optionToPMaybe > PMaybe.toEither switch {
+            case Left(nil)      => t.releaseWhen(nil) > Polled.empty[T, A]
+            case Right(a ** as) => Polled.cons(a |*| fromList(as |*| t))
+          }
+        }
+
+      ValSourceT.from(close, poll)
+    }
+
+    def take[T, A](n: Int): ValSourceT[T, A] -⚬ (Val[Int] |*| ValSourceT[T, A]) =
+      introFst(const(n)) > take
+
+    /** Cut off the upstream after a given number _n_ of elements.
+     *  The number on the outport is _n - m_, where _m_ is the number of elements actually served.
+     */
+    def take[T, A]: (Val[Int] |*| ValSourceT[T, A]) -⚬ (Val[Int] |*| ValSourceT[T, A]) = rec { take =>
+      λ { case n |*| src =>
+        decrement(n) switch {
+          case Left(done) =>
+            constVal(0)(done) |*| empty(close(src))
+          case Right(n0)  =>
+            producing { case remaining |*| as =>
+              (fromChoice >>: as) switch {
+                case Left(closing) =>
+                  returning(
+                    remaining := n0,
+                    closing   := close(src),
+                  )
+                case Right(pulling) =>
+                  (remaining |*| pulling) :=
+                    poll(src) switch {
+                      case Left(t) =>
+                        n0 |*| Polled.empty(t)
+                      case Right(a |*| as) =>
+                        val (n1 |*| as1) = take(n0 |*| as)
+                        n1 |*| Polled.cons(a |*| as1)
+                    }
+              }
+            }
+        }
+      }
+    }
+
+    def forEachSequentially[T, A](f: Val[A] -⚬ Done): ValSourceT[T, A] -⚬ (Done |*| T) =
+      SourceT.forEachSequentially(f)
+
+    object Polled {
+      def empty[T, A]: T -⚬ Polled[T, A] =
+        SourceT.Polled.empty[T, Val[A]]
+
+      def cons[T, A]: (Val[A] |*| ValSourceT[T, A]) -⚬ Polled[T, A] =
+        SourceT.Polled.cons[T, Val[A]]
+    }
+  }
 
   object ValSource {
     type Polled[A] = Source.Polled[Val[A]]
@@ -295,6 +386,9 @@ abstract class ScalettoStreams {
 
     def tap[A]: ValSource[A] -⚬ (ValSource[A] |*| LList[Val[A]]) =
       Source.tap[Val[A]]
+
+    def terminateWith[A, T]: (ValSource[A] |*| Detained[T]) -⚬ ValSourceT[T, A] =
+      Source.terminateWith[Val[A], T]
 
     def prefetch[A](n: Int): ValSource[A] -⚬ ValSource[A] =
       Source.prefetch[Val[A]](n)(neglect, Exists(inversionDuality[LList[Done]]))

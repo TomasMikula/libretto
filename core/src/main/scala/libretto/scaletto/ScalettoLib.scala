@@ -525,4 +525,9 @@ class ScalettoLib[
       val a |*| b = ab > liftPair
       (a, b)
   }
+
+  def decrement: Val[Int] -⚬ (Done |+| Val[Int]) =
+    mapVal[Int, Either[Unit, Int]](n => if (n > 0) Right(n-1) else Left(()))
+    > liftEither
+    > (|+|.lmap(neglect))
 }

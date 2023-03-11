@@ -20,40 +20,71 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   import dsl.$._
   import lib._
 
-  type StreamLeaderF[T, A, X]   = T |+| (T |&| (A |*| X))
-  type StreamFollowerF[T, A, X] = T |&| (T |+| (A |*| X))
+  type StreamLeaderF[S, T, A, X]   = S |+| (T |&| (A |*| X))
+  type StreamFollowerF[S, T, A, X] = S |&| (T |+| (A |*| X))
 
-  type StreamLeader[T, A]   = Rec[StreamLeaderF[T, A, _]]
-  type StreamFollower[T, A] = Rec[StreamFollowerF[T, A, _]]
+  type StreamLeader[S, T, A]   = Rec[StreamLeaderF[S, T, A, _]]
+  type StreamFollower[S, T, A] = Rec[StreamFollowerF[S, T, A, _]]
 
-  opaque type Stream[A] = StreamLeader[Done, A]
-  opaque type Source[A] = StreamFollower[Done, A]
+  opaque type StreamT[T, A] = StreamLeader[T, T, A]
+  opaque type SourceT[T, A] = StreamFollower[T, T, A]
+
+  type Stream[A] = StreamT[Done, A]
+  type Source[A] = SourceT[Done, A]
 
   object StreamLeader {
-    def pack[T, A]: StreamLeaderF[T, A, StreamLeader[T, A]] -⚬ StreamLeader[T, A] =
+    def pack[S, T, A]: StreamLeaderF[S, T, A, StreamLeader[S, T, A]] -⚬ StreamLeader[S, T, A] =
       dsl.pack
 
-    def unpack[T, A]: StreamLeader[T, A] -⚬ StreamLeaderF[T, A, StreamLeader[T, A]] =
+    def unpack[S, T, A]: StreamLeader[S, T, A] -⚬ StreamLeaderF[S, T, A, StreamLeader[S, T, A]] =
       dsl.unpack
 
-    def closed[T, A]: T -⚬ StreamLeader[T, A] =
+    def closed[S, T, A]: S -⚬ StreamLeader[S, T, A] =
       injectL > pack
 
-    def next[T, A]: (T |&| (A |*| StreamLeader[T, A])) -⚬ StreamLeader[T, A] =
+    def next[S, T, A]: (T |&| (A |*| StreamLeader[S, T, A])) -⚬ StreamLeader[S, T, A] =
       injectR > pack
+
+    def switch[S, T, A, R](
+      onClose: S -⚬ R,
+      onNext: (T |&| (A |*| StreamLeader[S, T, A])) -⚬ R,
+    ): StreamLeader[S, T, A] -⚬ R =
+      unpack > either(onClose, onNext)
+  }
+
+  object StreamFollower {
+    def pack[S, T, A]: StreamFollowerF[S, T, A, StreamFollower[S, T, A]] -⚬ StreamFollower[S, T, A] =
+      dsl.pack
+
+    def unpack[S, T, A]: StreamFollower[S, T, A] -⚬ StreamFollowerF[S, T, A, StreamFollower[S, T, A]] =
+      dsl.unpack
+  }
+
+  object StreamT {
+    def fromEither[T, A]: (T |+| (T |&| (A |*| StreamT[T, A]))) -⚬ StreamT[T, A] =
+      StreamLeader.pack[T, T, A]
+
+    def toEither[T, A]: StreamT[T, A] -⚬ (T |+| (T |&| (A |*| StreamT[T, A]))) =
+      StreamLeader.unpack
+
+    def closed[T, A]: T -⚬ StreamT[T, A] =
+      StreamLeader.closed[T, T, A]
+
+    def next[T, A]: (T |&| (A |*| StreamT[T, A])) -⚬ StreamT[T, A] =
+      StreamLeader.next[T, T, A]
 
     def switch[T, A, R](
       onClose: T -⚬ R,
-      onNext: (T |&| (A |*| StreamLeader[T, A])) -⚬ R,
-    ): StreamLeader[T, A] -⚬ R =
-      unpack > either(onClose, onNext)
+      onNext: (T |&| (A |*| StreamT[T, A])) -⚬ R,
+    ): StreamT[T, A] -⚬ R =
+      StreamLeader.switch(onClose, onNext)
   }
 
   object Stream {
     type Offer[A] = Done |&| (A |*| Stream[A])
 
-    def fromLeader[A]: StreamLeader[Done, A] -⚬ Stream[A] = id
-    def toLeader[A]  : Stream[A] -⚬ StreamLeader[Done, A] = id
+    def fromLeader[A]: StreamLeader[Done, Done, A] -⚬ Stream[A] = id
+    def toLeader[A]  : Stream[A] -⚬ StreamLeader[Done, Done, A] = id
 
     def toEither[A]: Stream[A] -⚬ (Done |+| Offer[A]) =
       StreamLeader.unpack
@@ -66,17 +97,99 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     }
   }
 
+  object SourceT {
+    type Polled[T, A] = T |+| (A |*| SourceT[T, A])
+
+    def fromChoice[T, A]: (T |&| (T |+| (A |*| SourceT[T, A]))) -⚬ SourceT[T, A] =
+      StreamFollower.pack
+
+    def toChoice[T, A]: SourceT[T, A] -⚬ (T |&| (T |+| (A |*| SourceT[T, A]))) =
+      StreamFollower.unpack
+
+    def from[S, T, A](
+      onClose: S -⚬ T,
+      onPoll: S -⚬ (T |+| (A |*| SourceT[T, A]))
+    ): S -⚬ SourceT[T, A] =
+      choice(onClose, onPoll) > fromChoice
+
+    def empty[T, A]: T -⚬ SourceT[T, A] =
+      from[T, T, A](id[T], injectL)
+
+    def close[T, A]: SourceT[T, A] -⚬ T =
+      StreamFollower.unpack > chooseL
+
+    def poll[T, A]: SourceT[T, A] -⚬ Polled[T, A] =
+      StreamFollower.unpack > chooseR
+
+    def map[T, A, B](f: A -⚬ B): SourceT[T, A] -⚬ SourceT[T, B] = rec { self =>
+      from(
+        onClose = close[T, A],
+        onPoll  = poll[T, A] > either(
+          Polled.empty[T, B],
+          par(f, self) > Polled.cons[T, B],
+        ),
+      )
+    }
+
+    def delayUntilPing[T, A]: (Ping |*| SourceT[T, A]) -⚬ SourceT[T, A] =
+      snd(toChoice) > delayChoiceUntilPing > fromChoice
+
+    /** Delays each next poll or close until the previously emitted element signalled. */
+    def sequence[T, A](using Signaling.Positive[A]): SourceT[T, A] -⚬ SourceT[T, A] = {
+      def go: (Ping |*| SourceT[T, A]) -⚬ SourceT[T, A] = rec { go =>
+        val onPoll: SourceT[T, A] -⚬ Polled[T, A] =
+          λ { as =>
+            poll(as) switch {
+              case Left(t) =>
+                Polled.empty(t)
+              case Right(a |*| as) =>
+                (a :>> notifyPosFst) match
+                  case p |*| a => Polled.cons(a |*| go(p |*| as))
+            }
+          }
+
+        delayUntilPing[T, A] > from(close[T, A], onPoll)
+      }
+
+      introFst(ping) > go
+    }
+
+    def fold[T, A](using A: Monoid[A]): SourceT[T, A] -⚬ (A |*| T) = {
+      def go: (A |*| SourceT[T, A]) -⚬ (A |*| T) = rec { go =>
+        λ { case a0 |*| as =>
+          poll(as) switch {
+            case Left(t)          => a0 |*| t
+            case Right(a1 |*| as) => go((A.combine(a0 |*| a1)) |*| as)
+          }
+        }
+      }
+
+      introFst(A.unit) > go
+    }
+
+    def forEachSequentially[T, A](f: A -⚬ Done): SourceT[T, A] -⚬ (Done |*| T) =
+      map(f) > sequence > fold
+
+    object Polled {
+      def empty[T, A]: T -⚬ Polled[T, A] =
+        injectL
+
+      def cons[T, A]: (A |*| SourceT[T, A]) -⚬ Polled[T, A] =
+        injectR
+    }
+  }
+
   object Source {
     type Polled[A] = Done |+| (A |*| Source[A])
 
-    def fromFollower[A]: StreamFollower[Done, A] -⚬ Source[A] = id
-    def toFollower[A]  : Source[A] -⚬ StreamFollower[Done, A] = id
+    def fromFollower[A]: StreamFollower[Done, Done, A] -⚬ Source[A] = id
+    def toFollower[A]  : Source[A] -⚬ StreamFollower[Done, Done, A] = id
 
     def fromChoice[A]: (Done |&| Polled[A]) -⚬ Source[A] =
-      dsl.pack[StreamFollowerF[Done, A, _]]
+      dsl.pack[StreamFollowerF[Done, Done, A, _]]
 
     def toChoice[A]: Source[A] -⚬ (Done |&| Polled[A]) =
-      dsl.unpack[StreamFollowerF[Done, A, _]]
+      dsl.unpack[StreamFollowerF[Done, Done, A, _]]
 
     def from[A, B](
       onClose: A -⚬ Done,
@@ -106,7 +219,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         poll[A] > either(id, joinMap(A.close, self))
       }
 
-    private def emptyF[A]: Done -⚬ StreamFollowerF[Done, A, Source[A]] =
+    private def emptyF[A]: Done -⚬ StreamFollowerF[Done, Done, A, Source[A]] =
       choice[Done, Done, Polled[A]](id, injectL)
 
     def empty[A]: Done -⚬ Source[A] =
@@ -196,7 +309,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>.snd(toChoice)                        .to[  Done |*| (Done  |&|           Polled[A]) ]
         .>(delayChoiceUntilDone)                .to[ (Done |*|  Done) |&| (Done |*| Polled[A]) ]
         .bimap(join, Polled.delayBy[A])         .to[       Done       |&|           Polled[A]  ]
-        .pack[StreamFollowerF[Done, A, *]]      .to[               Source[A]                   ]
+        .pack[StreamFollowerF[Done, Done, A, *]].to[               Source[A]                   ]
 
     def delayable[A](using Junction.Positive[A]): Source[A] -⚬ (Need |*| Source[A]) =
       λ { src =>
@@ -211,8 +324,8 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       id                                               [  Done |*|      Source[A]                  ]
         .>.snd(unpack)                              .to[  Done |*| (Done  |&|           Polled[A]) ]
         .>(coFactorL)                               .to[ (Done |*|  Done) |&| (Done |*| Polled[A]) ]
-        .bimap(join, Polled.delayClosedBy(self))   .to[       Done        |&|           Polled[A]  ]
-        .pack[StreamFollowerF[Done, A, *]]          .to[               Source[A]                   ]
+        .bimap(join, Polled.delayClosedBy(self))    .to[       Done       |&|           Polled[A]  ]
+        .pack[StreamFollowerF[Done, Done, A, *]]    .to[               Source[A]                   ]
     }
 
     /** Blocks the first action ([[poll]] or [[close]]) on this [[Source]] until released. */
@@ -452,6 +565,21 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       choice(onPong, onAction) > selectBy(forkPong, Source.notifyAction)
     }
 
+    def terminateWith[A, T]: (Source[A] |*| Detained[T]) -⚬ SourceT[T, A] = rec { self =>
+      val onClose: (Source[A] |*| Detained[T]) -⚬ T =
+        λ { case as |*| t => t releaseWhen close(as) }
+
+      val onPoll: (Source[A] |*| Detained[T]) -⚬ SourceT.Polled[T, A] =
+        λ { case as |*| t =>
+          poll(as) switch {
+            case Left(closed)    => SourceT.Polled.empty(t releaseWhen closed)
+            case Right(a |*| as) => SourceT.Polled.cons(a |*| self(as |*| t))
+          }
+        }
+
+      SourceT.from(onClose, onPoll)
+    }
+
     implicit def positiveJunction[A](implicit A: Junction.Positive[A]): Junction.Positive[Source[A]] =
       Junction.Positive.from(Source.delayBy)
 
@@ -566,66 +694,83 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     }
   }
 
-  private def rInvertLeaderF[T, U, A, B, x, y](
-    rInvertT: (T |*| U) -⚬ One,
-    rInvertA: (A |*| B) -⚬ One,
-    rInvertSub: (x |*| y) -⚬ One,
-  ): (StreamLeaderF[T, A, x] |*| StreamFollowerF[U, B, y]) -⚬ One =
+  private def rInvertLeaderF[R, S, T, U, A, B, x, y](
+    rInvertR: (R |*| S) -⚬ One,
+    rInvertU: (U |*| T) -⚬ One,
+    rInvertB: (B |*| A) -⚬ One,
+    rInvertSub: (y |*| x) -⚬ One,
+  ): (StreamLeaderF[R, T, A, x] |*| StreamFollowerF[S, U, B, y]) -⚬ One =
     rInvertEither(
-      rInvertT,
+      rInvertR,
       swap > rInvertEither(
-        swap > rInvertT,
-        swap > rInvertPair(
-          rInvertA,
+        rInvertU,
+        rInvertPair(
+          rInvertB,
           rInvertSub
         )
       )
     )
 
-  def rInvertLeader[T, U, A, B](
-    rInvertT: (T |*| U) -⚬ One,
-    rInvertElem: (A |*| B) -⚬ One,
-  ): (StreamLeader[T, A] |*| StreamFollower[U, B]) -⚬ One =
-    rInvertRec[StreamLeaderF[T, A, _], StreamFollowerF[U, B, _]](
+  def rInvertLeader[R, S, T, U, A, B](
+    rInvertR: (R |*| S) -⚬ One,
+    rInvertU: (U |*| T) -⚬ One,
+    rInvertB: (B |*| A) -⚬ One,
+  ): (StreamLeader[R, T, A] |*| StreamFollower[S, U, B]) -⚬ One =
+    rInvertRec[StreamLeaderF[R, T, A, _], StreamFollowerF[S, U, B, _]](
       [X, Y] => (rInvertSub: (X |*| Y) -⚬ One) =>
-        rInvertLeaderF(rInvertT, rInvertElem, rInvertSub)
+        rInvertLeaderF(rInvertR, rInvertU, rInvertB, swap > rInvertSub)
     )
 
-  private def lInvertFollowerF[T, U, A, B, x, y](
-    lInvertT: One -⚬ (T |*| U),
-    lInvertA: One -⚬ (A |*| B),
-    lInvertSub: One -⚬ (x |*| y),
-  ): One -⚬ (StreamFollowerF[T, A, x] |*| StreamLeaderF[U, B, y]) =
+  private def lInvertFollowerF[R, S, T, U, A, B, x, y](
+    lInvertR: One -⚬ (R |*| S),
+    lInvertU: One -⚬ (U |*| T),
+    lInvertB: One -⚬ (B |*| A),
+    lInvertSub: One -⚬ (y |*| x),
+  ): One -⚬ (StreamFollowerF[R, T, A, x] |*| StreamLeaderF[S, U, B, y]) =
     lInvertChoice(
-      lInvertT,
+      lInvertR,
       lInvertChoice(
-        lInvertT > swap,
+        lInvertU,
         lInvertPair(
-          lInvertA,
+          lInvertB,
           lInvertSub
-        ) > swap
+        )
       ) > swap
     )
 
-  def lInvertFollower[T, U, A, B](
-    lInvertT: One -⚬ (T |*| U),
-    lInvertElem: One -⚬ (A |*| B),
-  ): One -⚬ (StreamFollower[T, A] |*| StreamLeader[U, B]) =
-    lInvertRec[StreamFollowerF[T, A, _], StreamLeaderF[U, B, _]](
+  def lInvertFollower[R, S, T, U, A, B](
+    lInvertR: One -⚬ (R |*| S),
+    lInvertU: One -⚬ (U |*| T),
+    lInvertB: One -⚬ (B |*| A),
+  ): One -⚬ (StreamFollower[R, T, A] |*| StreamLeader[S, U, B]) =
+    lInvertRec[StreamFollowerF[R, T, A, _], StreamLeaderF[S, U, B, _]](
       [X, Y] => (lInvertSub: One -⚬ (X |*| Y)) =>
-        lInvertFollowerF(lInvertT, lInvertElem, lInvertSub)
+        lInvertFollowerF(lInvertR, lInvertU, lInvertB, lInvertSub > swap)
     )
 
-  given leaderFollowerDuality[T, U, A, B](using
-    Dual[T, U],
-    Dual[A, B],
-  ): Dual[StreamLeader[T, A], StreamFollower[U, B]] with {
-    override val rInvert: (StreamLeader[T, A] |*| StreamFollower[U, B]) -⚬ One =
-      rInvertLeader(Dual[T, U].rInvert, Dual[A, B].rInvert)
+  given leaderFollowerDuality[R, S, T, U, A, B](using
+    Dual[R, S],
+    Dual[U, T],
+    Dual[B, A],
+  ): Dual[StreamLeader[R, T, A], StreamFollower[S, U, B]] with {
+    override val rInvert: (StreamLeader[R, T, A] |*| StreamFollower[S, U, B]) -⚬ One =
+      rInvertLeader(Dual[R, S].rInvert, Dual[U, T].rInvert, Dual[B, A].rInvert)
 
-    override val lInvert: One -⚬ (StreamFollower[U, B] |*| StreamLeader[T, A]) =
-      lInvertFollower[U, T, B, A](Dual[T, U].lInvert, Dual[A, B].lInvert)
+    override val lInvert: One -⚬ (StreamFollower[S, U, B] |*| StreamLeader[R, T, A]) =
+      lInvertFollower[S, R, U, T, B, A](Dual[R, S].lInvert, Dual[U, T].lInvert, Dual[B, A].lInvert)
   }
+
+  def rInvertStreamT[T, U, A, B](
+    rInvertT: (T |*| U) -⚬ One,
+    rInvertB: (B |*| A) -⚬ One,
+  ): (StreamT[T, A] |*| SourceT[U, B]) -⚬ One =
+    rInvertLeader[T, U, T, U, A, B](rInvertT, swap > rInvertT, rInvertB)
+
+  def lInvertSourceT[T, U, A, B](
+    lInvertT: One -⚬ (T |*| U),
+    lInvertB: One -⚬ (B |*| A),
+  ): One -⚬ (SourceT[T, A] |*| StreamT[U, B]) =
+    lInvertFollower[T, U, T, U, A, B](lInvertT, lInvertT > swap, lInvertB)
 
   @deprecated("Renamed to Source")
   type LPollable[A] = Source[A]

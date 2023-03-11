@@ -25,7 +25,7 @@ class AssemblyTests extends AnyFunSuite {
 
   test("DogTreatsFactory") {
     val prg =
-      dogTreatsFactory.DogTreatsFactory.blueprint
+      dogTreatsFactory.Main.blueprint
   }
 
   test("Canteen") {
@@ -35,11 +35,16 @@ class AssemblyTests extends AnyFunSuite {
 
   test("SunflowerProcessingFactory") {
     val prg =
-      sunflowers.SunflowerProcessingFacility.blueprint
+      sunflowers.Main.blueprint
   }
 
   test("LibraryOfAlexandria") {
     val prg =
       libraryOfAlexandria.Main.blueprint
+  }
+
+  test("TV") {
+    val prg =
+      tv.Main.blueprint
   }
 }
