@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicLong
 import libretto.CoreLib
 import libretto.lambda.util.SourcePos
 import libretto.util.Async
+import scala.annotation.targetName
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 
@@ -109,11 +110,10 @@ class ScalettoLib[
   def delayVal[A](by: FiniteDuration): Val[A] -⚬ Val[A] =
     delayVal(delay(by))
 
-  implicit def pComonoidVal[A]: PComonoid[Val[A]] =
-    new PComonoid[Val[A]] {
-      def counit : Val[A] -⚬ Done                = dsl.neglect
-      def split  : Val[A] -⚬ (Val[A] |*| Val[A]) = dup
-    }
+  given closeableCosemigroupVal[A]: CloseableCosemigroup[Val[A]] with {
+    override def close : Val[A] -⚬ Done                = dsl.neglect
+    override def split : Val[A] -⚬ (Val[A] |*| Val[A]) = dup
+  }
 
   implicit def nMonoidNeg[A]: NMonoid[Neg[A]] =
     new NMonoid[Neg[A]] {
@@ -320,8 +320,11 @@ class ScalettoLib[
   def releaseAsync0[R, B](release: R => Async[B]): Res[R] -⚬ Val[B] =
     id[Res[R]].introSnd(const(())) > dsl.releaseAsync((r, _) => release(r))
 
+  def effectRd[R, B](f: ScalaFun[R, B]): Res[R] -⚬ (Res[R] |*| Val[B]) =
+    id[Res[R]].introSnd(const(())) > effect(f.adapt[(R, Unit), B](_._1, identity))
+
   def effectRd[R, B](f: R => B): Res[R] -⚬ (Res[R] |*| Val[B]) =
-    id[Res[R]].introSnd(const(())) > effect((r, _) => f(r))
+    effectRd(ScalaFun(f))
 
   /** Variant of [[effect]] that does not take additional input and does not produce additional output. */
   def effect0[R](f: R => Unit): Res[R] -⚬ Res[R] =
@@ -330,6 +333,15 @@ class ScalettoLib[
   /** Variant of [[effectAsync]] that does not take additional input and does not produce additional output. */
   def effectAsync0[R](f: R => Async[Unit]): Res[R] -⚬ Res[R] =
     id[Res[R]].introSnd(const(())) > effectWrAsync((r, _) => f(r))
+
+  def tryEffectAcquireWr[R, A, S, E](
+    f: ScalaFun[(R, A), Either[E, S]],
+    release: Option[ScalaFun[S, Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| (Val[E] |+| Res[S])) =
+    tryEffectAcquire[R, A, S, Unit, E](
+      f.adaptPost(_.map(s => (s, ()))),
+      release,
+    ) > snd(|+|.rmap(effectWr((_, _) => ())))
 
   /** Variant of [[transformResource]] that does not take additional input and does not produce additional output. */
   def transformResource0[R, S](f: R => S, release: Option[S => Unit]): Res[R] -⚬ Res[S] =
@@ -340,15 +352,29 @@ class ScalettoLib[
     id[Res[R]].introSnd(const(())) > transformResourceAsync((r, u) => f(r).map((_, u)), release) > effectWr((_, _) => ())
 
   def splitResource0[R, S, T](
+    f: ScalaFun[R, (S, T)],
+    release1: Option[ScalaFun[S, Unit]],
+    release2: Option[ScalaFun[T, Unit]],
+  ): Res[R] -⚬ (Res[S] |*| Res[T]) = {
+    val f1: ScalaFun[(R, Unit), (S, T, Unit)] =
+      ScalaFun.adapt(f)({ case (r, ()) => r }, { case (s, t) => (s, t, ()) })
+    id[Res[R]]
+      .introSnd(const(()))
+      .>(splitResource(f1, release1, release2))
+      .assocLR
+      .>.snd(effectWr((_, _) => ()))
+  }
+
+  def splitResource0[R, S, T](
     f: R => (S, T),
     release1: Option[S => Unit],
     release2: Option[T => Unit],
   ): Res[R] -⚬ (Res[S] |*| Res[T]) =
-    id[Res[R]]
-      .introSnd(const(()))
-      .>(splitResource((r, u) => { val (s, t) = f(r); (s, t, u) }, release1, release2))
-      .assocLR
-      .>.snd(effectWr((_, _) => ()))
+    splitResource0(
+      ScalaFun(f),
+      release1.map(ScalaFun(_)),
+      release2.map(ScalaFun(_)),
+    )
 
 
   def splitResourceAsync0[R, S, T](
@@ -356,23 +382,39 @@ class ScalettoLib[
     release1: Option[S => Async[Unit]],
     release2: Option[T => Async[Unit]],
   ): Res[R] -⚬ (Res[S] |*| Res[T]) =
-    id[Res[R]]
-      .introSnd(const(()))
-      .>(splitResourceAsync((r, u) => { f(r) map { case (s, t) => (s, t, u) } }, release1, release2))
-      .assocLR
-      .>.snd(effectWr((_, _) => ()))
+    splitResource0(
+      ScalaFun.async(f),
+      release1.map(ScalaFun.async(_)),
+      release2.map(ScalaFun.async(_)),
+    )
 
-  opaque type RefCounted[R] = Res[(R, R => Unit, AtomicLong)]
+  extension [R](r: $[Res[R]])(using LambdaContext) {
+    @targetName("releaseResourceWhen")
+    def releaseWhen(d: $[Done])(using SourcePos): $[Done] =
+      (r |*| constVal(())(d)) :>> effectWr((_, _) => ()) :>> release
+
+    def releaseOnPing(p: $[Ping])(using SourcePos): $[Done] =
+      releaseWhen(strengthenPing(p))
+  }
+
+  opaque type RefCounted[R] = Res[RefCounted.Repr[R]]
 
   object RefCounted {
-    def acquire[A, R, B](acquire: A => (R, B), release: R => Unit): Val[A] -⚬ (RefCounted[R] |*| Val[B]) =
-      dsl.acquire[A, (R, R => Unit, AtomicLong), B](
-        acquire = { a =>
-          val (r, b) = acquire(a)
+    private[ScalettoLib] type Repr[R] = (R, ScalaFun[R, Unit], AtomicLong)
+
+    def acquire[A, R, B](
+      acquire: ScalaFun[A, (R, B)],
+      release: ScalaFun[R, Unit],
+    ): Val[A] -⚬ (RefCounted[R] |*| Val[B]) =
+      dsl.acquire[A, (R, ScalaFun[R, Unit], AtomicLong), B](
+        acquire = acquire.adaptPost { case (r, b) =>
           ((r, release, new AtomicLong(1L)), b)
         },
         release = Some(releaseFn[R]),
       )
+
+    def acquire[A, R, B](acquire: A => (R, B), release: R => Unit): Val[A] -⚬ (RefCounted[R] |*| Val[B]) =
+      RefCounted.acquire(ScalaFun(acquire), ScalaFun(release))
 
     def acquire0[A, R](acquire: A => R, release: R => Unit): Val[A] -⚬ RefCounted[R] =
       RefCounted.acquire[A, R, Unit](a => (acquire(a), ()), release) > effectWr((_, _) => ())
@@ -380,11 +422,22 @@ class ScalettoLib[
     def release[R]: RefCounted[R] -⚬ Done =
       dsl.release
 
+    def releaseWhenDone[R]: (Done |*| RefCounted[R]) -⚬ Done =
+      λ { case done |*| res =>
+        (res |*| constVal(())(done))
+        :>> effectWr((_, _) => ())
+        :>> release
+      }
+
+    def releaseOnPing[R]: (Ping |*| RefCounted[R]) -⚬ Done =
+      fst(strengthenPing) > releaseWhenDone
+
     def dupRef[R]: RefCounted[R] -⚬ (RefCounted[R] |*| RefCounted[R]) =
       splitResource0(
-        { case rc @ (_, _, n) =>
-          n.incrementAndGet()
-          (rc, rc)
+        ScalaFun[Repr[R], (Repr[R], Repr[R])] {
+          case rc @ (_, _, n) =>
+            n.incrementAndGet()
+            (rc, rc)
         },
         Some(releaseFn[R]),
         Some(releaseFn[R]),
@@ -396,18 +449,39 @@ class ScalettoLib[
     def effectAsync[R, A, B](f: (R, A) => Async[B]): (RefCounted[R] |*| Val[A]) -⚬ (RefCounted[R] |*| Val[B]) =
       dsl.effectAsync((rn, a) => f(rn._1, a))
 
-    private def releaseFn[R]: ((R, R => Unit, AtomicLong)) => Unit =
-      { case (r, release, n) =>
-        n.decrementAndGet match {
-          case 0 =>
-            // no more references exist, release
-            release(r)
-          case i if i > 0 =>
-            // there are remaining references, do nothing
-          case i =>
-            assert(false, s"Bug: reached negative number ($i) of references to $r")
+    def effectRd[R, B](f: ScalaFun[R, B]): RefCounted[R] -⚬ (RefCounted[R] |*| Val[B]) =
+      ScalettoLib.this.effectRd(f.adapt[Repr[R], B](_._1, identity))
+
+    def effectRdAcquire[R, B](
+      f: ScalaFun[R, B],
+      release: Option[ScalaFun[B, Unit]],
+    ): RefCounted[R] -⚬ (RefCounted[R] |*| Res[B]) = {
+      val f1: ScalaFun[Repr[R], (Repr[R], B)] =
+        f.adaptWith[Repr[R], Repr[R], (Repr[R], B)](
+          r => (r, r._1),
+          (r, b) => (r, b),
+        )
+      splitResource0(
+        f1,
+        release1 = Some(releaseFn[R]),
+        release2 = release,
+      )
+    }
+
+    private def releaseFn[R]: ScalaFun[(R, ScalaFun[R, Unit], AtomicLong), Unit] =
+      ScalaFun.eval[R, Unit]
+        .adaptPre { case (r, release, n) =>
+          n.decrementAndGet match {
+            case 0 =>
+              // no more references exist, release
+              (release, r)
+            case i if i > 0 =>
+              // there are remaining references, do nothing
+              (ScalaFun(identity), r)
+            case i =>
+              assert(false, s"Bug: reached negative number ($i) of references to $r")
+          }
         }
-      }
   }
 
   def putStr: Val[String] -⚬ Done =
@@ -437,100 +511,6 @@ class ScalettoLib[
   def readLine: Done -⚬ Val[String] =
     constVal(()) > blocking[Unit, String](_ => Console.in.readLine())
 
-  /** Utility to construct a Libretto program that branches based on a Scala value inside a [[Val]]. */
-  sealed trait ValMatcher[-U >: V, V, A, R] { thiz =>
-    def typeTest: TypeTest[U, V]
-
-    def get: (Val[V] |*| A) -⚬ R
-
-    def map[S](f: R -⚬ S): ValMatcher[U, V, A, S] =
-      new ValMatcher[U, V, A, S] {
-        override def typeTest: TypeTest[U, V] = thiz.typeTest
-        override def get: (Val[V] |*| A) -⚬ S = thiz.get > f
-      }
-
-    def contramap[Z](f: Z -⚬ A): ValMatcher[U, V, Z, R] =
-      new ValMatcher[U, V, Z, R] {
-        override def typeTest: TypeTest[U, V] = thiz.typeTest
-        override def get: (Val[V] |*| Z) -⚬ R = par(id, f) > thiz.get
-      }
-
-    def contramapVal[W](f: W => V): ValMatcher[W, W, A, R] =
-      new ValMatcher[W, W, A, R] {
-        override def typeTest: TypeTest[W, W] = TypeTest.identity
-        override def get: (Val[W] |*| A) -⚬ R = par(mapVal(f), id) > thiz.get
-      }
-
-    def |[W >: V <: U, V2 <: W](that: ValMatcher[W, V2, A, R]): ValMatcher[W, V | V2, A, R] =
-      new ValMatcher[W, V | V2, A, R] {
-        override def get: (Val[V | V2] |*| A) -⚬ R = {
-          def split(v: V | V2): Either[V, V2] =
-            v match {
-              case thiz.typeTest(v) => Left(v)
-              case that.typeTest(v) => Right(v)
-              case _ => sys.error("impossible")
-            }
-
-          id                                   [        Val[V | V2]          |*| A  ]
-            .>.fst(mapVal(split))           .to[     Val[Either[V, V2]]      |*| A  ]
-            .>.fst(liftEither)              .to[ (Val[V]        |+| Val[V2]) |*| A  ]
-            .>(distributeR)                 .to[ (Val[V] |*| A) |+| (Val[V2] |*| A) ]
-            .>(either(thiz.get, that.get))  .to[                 R                  ]
-        }
-
-        override def typeTest: TypeTest[W, V | V2] =
-          new TypeTest[W, V | V2] {
-            override def unapply(w: W): Option[w.type & (V | V2)] =
-              (thiz: ValMatcher[W, V, A, R]).typeTest.unapply(w) orElse that.typeTest.unapply(w)
-          }
-      }
-
-    def &[W >: V <: U, V2 <: W, B](that: ValMatcher[W, V2, B, R]): ValMatcher[W, V | V2, A |&| B, R] =
-      thiz.contramap[A |&| B](chooseL) | that.contramap[A |&| B](chooseR)
-
-    def otherwise[W >: V <: U](f: (Val[W] |*| A) -⚬ R): ValMatcher[W, W, A, R] =
-      new ValMatcher[W, W, A, R] {
-        override def typeTest: TypeTest[W, W] = TypeTest.identity
-
-        override def get: (Val[W] |*| A) -⚬ R = {
-          def split(w: W): Either[V, W] =
-            thiz.typeTest.unapply(w).toLeft(right = w)
-
-          id                             [      Val[      W     ]     |*| A  ]
-            .>.fst(mapVal(split))     .to[      Val[Either[V, W]]     |*| A  ]
-            .>.fst(liftEither)        .to[ (Val[V]        |+| Val[W]) |*| A  ]
-            .>(distributeR)           .to[ (Val[V] |*| A) |+| (Val[W] |*| A) ]
-            .>(either(thiz.get, f))   .to[                 R                 ]
-        }
-      }
-  }
-
-  object ValMatcher {
-    def caseEq[V, A, R](v: V)(f: (Val[v.type] |*| A) -⚬ R): ValMatcher[Any, v.type, A, R] =
-      new ValMatcher[Any, v.type, A, R] {
-        override def get: (Val[v.type] |*| A) -⚬ R =
-          f
-
-        override def typeTest: TypeTest[Any, v.type] =
-          new TypeTest[Any, v.type] {
-            override def unapply(x: Any): Option[x.type & v.type] =
-              x match {
-                case y: v.type => Some(y.asInstanceOf[x.type & v.type])
-                case _ => None
-              }
-          }
-      }
-
-    def caseAny[V, A, R](f: (Val[V] |*| A) -⚬ R): ValMatcher[V, V, A, R] =
-      new ValMatcher[V, V, A, R] {
-        override def get: (Val[V] |*| A) -⚬ R =
-          f
-
-        override def typeTest: TypeTest[V, V] =
-          TypeTest.identity[V]
-      }
-  }
-
   extension [A](a: $[Val[A]])(using LambdaContext) {
     def **[B](b: $[Val[B]])(using SourcePos): $[Val[(A, B)]] =
       unliftPair(a |*| b)
@@ -545,4 +525,9 @@ class ScalettoLib[
       val a |*| b = ab > liftPair
       (a, b)
   }
+
+  def decrement: Val[Int] -⚬ (Done |+| Val[Int]) =
+    mapVal[Int, Either[Unit, Int]](n => if (n > 0) Right(n-1) else Left(()))
+    > liftEither
+    > (|+|.lmap(neglect))
 }

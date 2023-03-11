@@ -33,10 +33,10 @@ object ScalettoStreams {
       override type ScalettoLib   = sLib.type
       override type InvertStreams = iStreams.type
 
-      override val dsl           = scaletto
-      override val coreLib       = lib
-      override val scalettoLib   = sLib
-      override val invertStreams = iStreams
+      override val dsl         = scaletto
+      override val coreLib     = lib
+      override val scalettoLib = sLib
+      override val underlying  = iStreams
     }
 }
 
@@ -49,7 +49,7 @@ abstract class ScalettoStreams {
   val dsl: Dsl
   val coreLib: CoreLib & libretto.CoreLib[dsl.type]
   val scalettoLib: ScalettoLib & libretto.scaletto.ScalettoLib[dsl.type, coreLib.type]
-  val invertStreams: InvertStreams & libretto.stream.InvertStreams[dsl.type, coreLib.type]
+  val underlying: InvertStreams & libretto.stream.InvertStreams[dsl.type, coreLib.type]
 
   private lazy val invertLib = InvertLib(coreLib)
   import invertLib.inversionDuality
@@ -59,14 +59,107 @@ abstract class ScalettoStreams {
   import dsl._
   import dsl.$._
   import coreLib._
-  import scalettoLib._
-  import invertStreams._
+  import scalettoLib.{_, given}
+  import underlying._
   import Tree._
+
+  export underlying.{lib => _, dsl => _, _}
+
+  type ValSourceT[T, A] = SourceT[T, Val[A]]
 
   type ValSource[A] = Source[Val[A]]
   type ValDrain[A]  = Drain[Val[A]]
   type ValStream[A] = Stream[Val[A]]
   type ValSink[A]   = Sink[Val[A]]
+
+  object ValSourceT {
+    type Polled[T, A] = SourceT.Polled[T, Val[A]]
+
+    def from[S, T, A](
+      onClose: S -⚬ T,
+      onPoll: S -⚬ (T |+| (Val[A] |*| ValSourceT[T, A]))
+    ): S -⚬ ValSourceT[T, A] =
+      SourceT.from(onClose, onPoll)
+
+    def fromChoice[T, A]: (T |&| (T |+| (Val[A] |*| ValSourceT[T, A]))) -⚬ ValSourceT[T, A] =
+      SourceT.fromChoice[T, Val[A]]
+
+    def empty[T, A]: T -⚬ ValSourceT[T, A] =
+      SourceT.empty[T, Val[A]]
+
+    def close[T, A]: ValSourceT[T, A] -⚬ T =
+      SourceT.close[T, Val[A]]
+
+    def poll[T, A]: ValSourceT[T, A] -⚬ Polled[T, A] =
+      SourceT.poll[T, Val[A]]
+
+    def fromList[T, A]: (Val[List[A]] |*| Detained[T]) -⚬ ValSourceT[T, A] = rec { fromList =>
+      val uncons: List[A] => Option[(A, List[A])] = _ match {
+        case a :: as => Some((a, as))
+        case Nil => None
+      }
+
+      val close: (Val[List[A]] |*| Detained[T]) -⚬ T =
+        λ { case as |*| t =>
+          t.releaseWhen(neglect(as))
+        }
+
+      val poll: (Val[List[A]] |*| Detained[T]) -⚬ Polled[T, A] =
+        λ { case as |*| t =>
+          as > mapVal(uncons) > optionToPMaybe > PMaybe.toEither switch {
+            case Left(nil)      => t.releaseWhen(nil) > Polled.empty[T, A]
+            case Right(a ** as) => Polled.cons(a |*| fromList(as |*| t))
+          }
+        }
+
+      ValSourceT.from(close, poll)
+    }
+
+    def take[T, A](n: Int): ValSourceT[T, A] -⚬ (Val[Int] |*| ValSourceT[T, A]) =
+      introFst(const(n)) > take
+
+    /** Cut off the upstream after a given number _n_ of elements.
+     *  The number on the outport is _n - m_, where _m_ is the number of elements actually served.
+     */
+    def take[T, A]: (Val[Int] |*| ValSourceT[T, A]) -⚬ (Val[Int] |*| ValSourceT[T, A]) = rec { take =>
+      λ { case n |*| src =>
+        decrement(n) switch {
+          case Left(done) =>
+            constVal(0)(done) |*| empty(close(src))
+          case Right(n0)  =>
+            producing { case remaining |*| as =>
+              (fromChoice >>: as) switch {
+                case Left(closing) =>
+                  returning(
+                    remaining := n0,
+                    closing   := close(src),
+                  )
+                case Right(pulling) =>
+                  (remaining |*| pulling) :=
+                    poll(src) switch {
+                      case Left(t) =>
+                        n0 |*| Polled.empty(t)
+                      case Right(a |*| as) =>
+                        val (n1 |*| as1) = take(n0 |*| as)
+                        n1 |*| Polled.cons(a |*| as1)
+                    }
+              }
+            }
+        }
+      }
+    }
+
+    def forEachSequentially[T, A](f: Val[A] -⚬ Done): ValSourceT[T, A] -⚬ (Done |*| T) =
+      SourceT.forEachSequentially(f)
+
+    object Polled {
+      def empty[T, A]: T -⚬ Polled[T, A] =
+        SourceT.Polled.empty[T, Val[A]]
+
+      def cons[T, A]: (Val[A] |*| ValSourceT[T, A]) -⚬ Polled[T, A] =
+        SourceT.Polled.cons[T, Val[A]]
+    }
+  }
 
   object ValSource {
     type Polled[A] = Source.Polled[Val[A]]
@@ -78,10 +171,10 @@ abstract class ScalettoStreams {
       Source.from(onClose, onPoll)
 
     def fromChoice[A]: (Done |&| Polled[A]) -⚬ ValSource[A] =
-      Source.pack[Val[A]]
+      Source.fromChoice[Val[A]]
 
     def toChoice[A]: ValSource[A] -⚬ (Done |&| Polled[A]) =
-      Source.unpack[Val[A]]
+      Source.toChoice[Val[A]]
 
     def close[A]: ValSource[A] -⚬ Done =
       Source.close[Val[A]]
@@ -108,14 +201,25 @@ abstract class ScalettoStreams {
     def detain[A]: ValSource[A] -⚬ Detained[ValSource[A]] =
       Source.detain[Val[A]]
 
+    /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal is received. */
     def delayBy[A]: (Done |*| ValSource[A]) -⚬ ValSource[A] =
       Source.delayBy[Val[A]]
 
     def delayable[A]: ValSource[A] -⚬ (Need |*| ValSource[A]) =
       Source.delayable[Val[A]]
 
+    /** Delays the final [[Done]] signal sent when upstream is shutdown
+     *  until the given [[Done]] signal is received.
+     */
+    def delayClosedBy[A]: (Done |*| ValSource[A]) -⚬ ValSource[A] =
+      Source.delayClosedBy[Val[A]]
+
     def notifyAction[A]: (Pong |*| ValSource[A]) -⚬ ValSource[A] =
       Source.notifyAction[Val[A]]
+
+    /** Notifies when the upstream is fully closed. */
+    def notifyUpstreamClosed[A]: ValSource[A] -⚬ (Ping |*| ValSource[A]) =
+      Source.notifyUpstreamClosed[Val[A]]
 
     def delay[A](d: FiniteDuration): ValSource[A] -⚬ ValSource[A] = {
       id                                           [          ValSource[A] ]
@@ -282,6 +386,9 @@ abstract class ScalettoStreams {
 
     def tap[A]: ValSource[A] -⚬ (ValSource[A] |*| LList[Val[A]]) =
       Source.tap[Val[A]]
+
+    def terminateWith[A, T]: (ValSource[A] |*| Detained[T]) -⚬ ValSourceT[T, A] =
+      Source.terminateWith[Val[A], T]
 
     def prefetch[A](n: Int): ValSource[A] -⚬ ValSource[A] =
       Source.prefetch[Val[A]](n)(neglect, Exists(inversionDuality[LList[Done]]))

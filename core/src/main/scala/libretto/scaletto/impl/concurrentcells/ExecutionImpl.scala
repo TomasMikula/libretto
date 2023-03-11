@@ -7,6 +7,7 @@ import libretto.util.Async
 import libretto.Executor.CancellationReason
 import libretto.Scheduler
 import scala.concurrent.ExecutionContext
+import libretto.scaletto.impl.ScalaFunction
 
 class ExecutionImpl(
   ec: ExecutionContext,
@@ -126,7 +127,7 @@ class ExecutionImpl(
 
         go(f, g)
 
-      case p: -⚬.Par[a1, b1, a2, b2] =>
+      case p: -⚬.Par[a1, a2, b1, b2] =>
         inline def go[A1, A2, B1, B2](
           in: Cell[A1 |*| A2],
           f1: A1 -⚬ B1,
@@ -140,7 +141,7 @@ class ExecutionImpl(
           r1.followUp()
           r2.followUp()
 
-        go[a1, a2, b1, b2](in, p.f, p.g, out)
+        go[a1, a2, b1, b2](in, p.f1, p.f2, out)
 
       case -⚬.IntroFst() =>
         inline def go(out: Cell[One |*| A]): Unit =
@@ -368,7 +369,11 @@ class ExecutionImpl(
         r.followUp()
 
       case f: -⚬.MapVal[x, y] =>
-        Cell.mapVal[x, y](in, f.f, out).followUp()
+        f.f match
+          case ScalaFunction.Direct(f) =>
+            Cell.mapVal[x, y](in, f, out).followUp()
+          case other =>
+            throw NotImplementedError(s"$other")
 
       case _: -⚬.LiftPair[x, y] =>
         val (o1, o2, r) = Cell.lsplit[Val[x], Val[y]](out)

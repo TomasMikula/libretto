@@ -23,7 +23,7 @@ class BinarySearchTree[DSL <: Scaletto, CLib <: CoreLib[DSL], SLib <: ScalettoLi
   import coreLib._
   import coreLib.Bool._
   import coreLib.Compared._
-  import scalettoLib._
+  import scalettoLib.{_, given}
 
   private def fstLens[A, B]: Lens[A |*| B, A] =
     Transportive.fst[B].lens[A]
@@ -77,7 +77,7 @@ class BinarySearchTree[DSL <: Scaletto, CLib <: CoreLib[DSL], SLib <: ScalettoLi
       id
 
     def key[K, V]: Singleton[K, V] -⚬ (Val[K] |*| Singleton[K, V]) =
-      getFst(scalettoLib.pComonoidVal)
+      getFst(scalettoLib.closeableCosemigroupVal)
 
     def summary[K, V]: Getter[Singleton[K, V], Summary[K]] = {
       val singletonSummary: Getter[Val[K], Summary[K]] =
@@ -394,10 +394,10 @@ class BinarySearchTree[DSL <: Scaletto, CLib <: CoreLib[DSL], SLib <: ScalettoLi
     override val category: Category[-⚬] =
       coreLib.category
 
-    def absorbOrNeglectL[A: PComonoid, B]: (A |*| F[B]) -⚬ F[A |*| B]
+    def absorbOrNeglectL[A, B](using CloseableCosemigroup[A]): (A |*| F[B]) -⚬ F[A |*| B]
     def absorbL[A, B, C](combine: (A |*| B) -⚬ C, recover: (A |*| Done) -⚬ C): (A |*| F[B]) -⚬ F[C]
 
-    def absorbOrNeglectR[A, B: PComonoid]: (F[A] |*| B) -⚬ F[A |*| B] =
+    def absorbOrNeglectR[A, B](using CloseableCosemigroup[B]): (F[A] |*| B) -⚬ F[A |*| B] =
       swap > absorbOrNeglectL[B, A] > lift(swap)
 
     def absorbR[A, B, C](combine: (A |*| B) -⚬ C, recover: (Done |*| B) -⚬ C): (F[A] |*| B) -⚬ F[C] =
@@ -414,10 +414,10 @@ class BinarySearchTree[DSL <: Scaletto, CLib <: CoreLib[DSL], SLib <: ScalettoLi
         override def lift[A, B](f: A -⚬ B): G[F[A]] -⚬ G[F[B]] =
           G.lift(F.lift(f))
 
-        override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]): (A |*| G[F[B]]) -⚬ G[F[A |*| B]] =
+        override def absorbOrNeglectL[A, B](using CloseableCosemigroup[A]): (A |*| G[F[B]]) -⚬ G[F[A |*| B]] =
           G.inL > G.lift(F.absorbOrNeglectL)
 
-        override def absorbOrNeglectR[A, B](implicit B: PComonoid[B]): (G[F[A]] |*| B) -⚬ G[F[A |*| B]] =
+        override def absorbOrNeglectR[A, B](using CloseableCosemigroup[B]): (G[F[A]] |*| B) -⚬ G[F[A |*| B]] =
           G.inR > G.lift(F.absorbOrNeglectR)
 
         override def absorbL[A, B, C](combine: (A |*| B) -⚬ C, recover: (A |*| Done) -⚬ C): (A |*| G[F[B]]) -⚬ G[F[C]] =
@@ -434,10 +434,10 @@ class BinarySearchTree[DSL <: Scaletto, CLib <: CoreLib[DSL], SLib <: ScalettoLi
         override def lift[A, B](f: A -⚬ B): F[A] -⚬ F[B] =
           F.lift(f)
 
-        override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]): (A |*| F[B]) -⚬ F[A |*| B] =
+        override def absorbOrNeglectL[A, B](using CloseableCosemigroup[A]): (A |*| F[B]) -⚬ F[A |*| B] =
           F.inL
 
-        override def absorbOrNeglectR[A, B](implicit B: PComonoid[B]): (F[A] |*| B) -⚬ F[A |*| B] =
+        override def absorbOrNeglectR[A, B](using CloseableCosemigroup[B]): (F[A] |*| B) -⚬ F[A |*| B] =
           F.inR
 
         override def absorbL[A, B, C](combine: (A |*| B) -⚬ C, recover: (A |*| Done) -⚬ C): (A |*| F[B]) -⚬ F[C] =
@@ -459,9 +459,9 @@ class BinarySearchTree[DSL <: Scaletto, CLib <: CoreLib[DSL], SLib <: ScalettoLi
           PMaybe.switchWithL(recover, combine)    .to[               C            ]
             .>(PMaybe.just)                       .to[        PMaybe[C]           ]
 
-        override def absorbOrNeglectL[A, B](implicit A: PComonoid[A]): (A |*| PMaybe[B]) -⚬ PMaybe[A |*| B] =
+        override def absorbOrNeglectL[A, B](using A: CloseableCosemigroup[A]): (A |*| PMaybe[B]) -⚬ PMaybe[A |*| B] =
           PMaybe.switchWithL(
-            caseNone = joinMap(A.counit, id) > PMaybe.empty,
+            caseNone = joinMap(A.close, id) > PMaybe.empty,
             caseSome = PMaybe.just,
           )
       }

@@ -1,6 +1,5 @@
 package libretto.scaletto.impl.futurebased
 
-import java.util.concurrent.{Executor => JExecutor}
 import libretto.{Executing, Scheduler}
 import libretto.Executor.CancellationReason
 import libretto.lambda.util.SourcePos
@@ -19,9 +18,9 @@ object BridgeImpl extends ScalettoBridge {
   def execute[A, B](prg: A -⚬ B)(
     ec: ExecutionContext,
     scheduler: Scheduler,
-    blockingExecutor: JExecutor,
+    blockingEC: ExecutionContext,
   ): Executing[this.type, A, B] = {
-    val execution = new ExecutionImpl(new ResourceRegistry)(using ec, scheduler, blockingExecutor)
+    val execution = new ExecutionImpl(new ResourceRegistry, blockingEC)(using ec, scheduler)
     val (in, out) = execution.execute(prg)
     Executing(using this)(execution, in, out)
   }

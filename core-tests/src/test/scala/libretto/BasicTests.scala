@@ -46,7 +46,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     val coreLib = CoreLib(dsl)
     val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
     import coreLib._
-    import scalettoLib._
+    import scalettoLib.{_, given}
     import kit.bridge.Execution
 
     def raceKeepWinner[A](

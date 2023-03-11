@@ -256,6 +256,13 @@ trait InvertDSL extends ClosedDSL {
     ): ??[B |*| C] =
       $.zip(expr, that)(pos) > demandTogether
 
+    @targetName("set")
+    def := (value: $[B])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): ??[One] =
+      value :>: expr
+
     @targetName("alsoElimOut")
     def alsoElim(that: ??[One])(using
       pos: SourcePos,
@@ -281,6 +288,17 @@ trait InvertDSL extends ClosedDSL {
       val (b, negOne) = $.unzip(g)(pos)
       doubleDemandElimination(b) alsoElim (one supplyTo negOne)
     }
+  }
+
+  def returning(a: ??[One], as: ??[One]*)(using
+    pos: SourcePos,
+    ctx: LambdaContext,
+  ): ??[One] = {
+    def go(a: ??[One], as: List[??[One]]): ??[One] =
+      as match
+        case Nil => a
+        case h :: t => go(a alsoElim h, t)
+    go(a, as.toList)
   }
 
   trait ConcurrentPairInvertOps extends ConcurrentPairOps {

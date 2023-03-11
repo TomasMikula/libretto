@@ -3,11 +3,12 @@ package libretto.scaletto.impl
 import libretto.scaletto.Scaletto
 import libretto.lambda.{ClosedSymmetricMonoidalCategory, Lambdas, LambdasImpl, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Abstracted
-import libretto.lambda.util.{BiInjective, SourcePos, TypeEq}
+import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Monad.monadEither
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
+import scala.reflect.TypeTest
 
 abstract class FreeScaletto {
   sealed trait -⚬[A, B]
@@ -45,10 +46,10 @@ abstract class FreeScaletto {
   object -⚬ {
     case class Id[A]() extends (A -⚬ A)
     case class AndThen[A, B, C](f: A -> B, g: B -> C) extends (A -⚬ C)
-    case class Par[A, B, C, D](
-      f: A -> B,
-      g: C -> D,
-    ) extends ((A |*| C) -⚬ (B |*| D))
+    case class Par[A1, A2, B1, B2](
+      f1: A1 -> B1,
+      f2: A2 -> B2,
+    ) extends ((A1 |*| A2) -⚬ (B1 |*| B2))
     case class IntroFst[B]() extends (B -⚬ (One |*| B))
     case class IntroSnd[A]() extends (A -⚬ (A |*| One))
     case class ElimFst[B]() extends ((One |*| B) -⚬ B)
@@ -111,7 +112,7 @@ abstract class FreeScaletto {
     case class LiftEither[A, B]() extends (Val[Either[A, B]] -⚬ (Val[A] |+| Val[B]))
     case class LiftPair[A, B]() extends (Val[(A, B)] -⚬ (Val[A] |*| Val[B]))
     case class UnliftPair[A, B]() extends ((Val[A] |*| Val[B]) -⚬ Val[(A, B)])
-    case class MapVal[A, B](f: A => B) extends (Val[A] -⚬ Val[B])
+    case class MapVal[A, B](f: ScalaFunction[A, B]) extends (Val[A] -⚬ Val[B])
     case class ConstVal[A](a: A) extends (Done -⚬ Val[A])
     case class ConstNeg[A](a: A) extends (-[Val[A]] -⚬ Need)
     case class Neglect[A]() extends (Val[A] -⚬ Done)
@@ -120,28 +121,30 @@ abstract class FreeScaletto {
     case class DebugPrint(msg: String) extends (Ping -⚬ One)
 
     case class Acquire[A, R, B](
-      acquire: A => (R, B),
-      release: Option[R => Unit],
+      acquire: ScalaFunction[A, (R, B)],
+      release: Option[ScalaFunction[R, Unit]],
     ) extends (Val[A] -⚬ (Res[R] |*| Val[B]))
-    case class TryAcquireAsync[A, R, B, E](
-      acquire: A => Async[Either[E, (R, B)]],
-      release: Option[R => Async[Unit]],
+    case class TryAcquire[A, R, B, E](
+      acquire: ScalaFunction[A, Either[E, (R, B)]],
+      release: Option[ScalaFunction[R, Unit]],
     ) extends (Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])))
     case class Release[R]() extends (Res[R] -⚬ Done)
-    case class ReleaseAsync[R, A, B](f: (R, A) => Async[B]) extends ((Res[R] |*| Val[A]) -⚬ Val[B])
-    case class EffectAsync[R, A, B](f: (R, A) => Async[B]) extends ((Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]))
-    case class EffectWrAsync[R, A](f: (R, A) => Async[Unit]) extends ((Res[R] |*| Val[A]) -⚬ Res[R])
-    case class TryTransformResourceAsync[R, A, S, B, E](
-      f: (R, A) => Async[Either[E, (S, B)]],
-      release: Option[S => Async[Unit]],
+    case class ReleaseWith[R, A, B](f: ScalaFunction[(R, A), B]) extends ((Res[R] |*| Val[A]) -⚬ Val[B])
+    case class Effect[R, A, B](f: ScalaFunction[(R, A), B]) extends ((Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]))
+    case class EffectWr[R, A](f: ScalaFunction[(R, A), Unit]) extends ((Res[R] |*| Val[A]) -⚬ Res[R])
+    case class TryEffectAcquire[R, A, S, B, E](
+      f: ScalaFunction[(R, A), Either[E, (S, B)]],
+      release: Option[ScalaFunction[S, Unit]],
+    ) extends ((Res[R] |*| Val[A]) -⚬ (Res[R] |*| (Val[E] |+| (Res[S] |*| Val[B]))))
+    case class TryTransformResource[R, A, S, B, E](
+      f: ScalaFunction[(R, A), Either[E, (S, B)]],
+      release: Option[ScalaFunction[S, Unit]],
     ) extends ((Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])))
-    case class TrySplitResourceAsync[R, A, S, T, B, E](
-      f: (R, A) => Async[Either[E, (S, T, B)]],
-      release1: Option[S => Async[Unit]],
-      release2: Option[T => Async[Unit]],
+    case class TrySplitResource[R, A, S, T, B, E](
+      f: ScalaFunction[(R, A), Either[E, (S, T, B)]],
+      release1: Option[ScalaFunction[S, Unit]],
+      release2: Option[ScalaFunction[T, Unit]],
     ) extends ((Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])))
-
-    case class Blocking[A, B](f: A => B) extends (Val[A] -⚬ Val[B])
   }
 }
 
@@ -149,6 +152,29 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   import -⚬._
 
   override type ->[A, B] = A -⚬ B
+
+  override type ScalaFun[A, B] = ScalaFunction[A, B]
+
+  override object ScalaFun extends ScalaFuns {
+    override def apply[A, B](f: A => B): ScalaFun[A, B]        = ScalaFunction.Direct(f)
+    override def blocking[A, B](f: A => B): ScalaFun[A, B]     = ScalaFunction.Blocking(f)
+    override def async[A, B](f: A => Async[B]): ScalaFun[A, B] = ScalaFunction.Asynchronous(f)
+
+    override def adapt[A, B, Z, C](f: ScalaFun[A, B])(
+      pre: Z => A,
+      post: B => C,
+    ): ScalaFun[Z, C] =
+      f.adapt(pre, post)
+
+    override def adaptWith[A, B, Z, P, C](f: ScalaFun[A, B])(
+      pre: Z => (P, A),
+      post: (P, B) => C,
+    ): ScalaFun[Z, C] =
+      f.adaptWith(pre, post)
+
+    override def eval[A, B]: ScalaFun[(ScalaFun[A, B], A), B] =
+      ScalaFunction.eval[A, B]
+  }
 
   override def id[A]: A -⚬ A =
     Id()
@@ -321,7 +347,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   override def unliftPair[A, B]: (Val[A] |*| Val[B]) -⚬ Val[(A, B)] =
     UnliftPair()
 
-  override def mapVal[A, B](f: A => B): Val[A] -⚬ Val[B] =
+  override def mapVal[A, B](f: ScalaFun[A, B]): Val[A] -⚬ Val[B] =
     MapVal(f)
 
   override def constVal[A](a: A): Done -⚬ Val[A] =
@@ -343,44 +369,47 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     DebugPrint(msg)
 
   override def acquire[A, R, B](
-    acquire: A => (R, B),
-    release: Option[R => Unit],
+    acquire: ScalaFun[A, (R, B)],
+    release: Option[ScalaFun[R, Unit]],
   ): Val[A] -⚬ (Res[R] |*| Val[B]) =
     Acquire(acquire, release)
 
-  override def tryAcquireAsync[A, R, B, E](
-    acquire: A => Async[Either[E, (R, B)]],
-    release: Option[R => Async[Unit]],
+  override def tryAcquire[A, R, B, E](
+    acquire: ScalaFun[A, Either[E, (R, B)]],
+    release: Option[ScalaFun[R, Unit]],
   ): Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])) =
-    TryAcquireAsync(acquire, release)
+    TryAcquire(acquire, release)
 
   override def release[R]: Res[R] -⚬ Done =
     Release()
 
-  override def releaseAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ Val[B] =
-    ReleaseAsync(f)
+  override def releaseWith[R, A, B](f: ScalaFunction[(R, A), B]): (Res[R] |*| Val[A]) -⚬ Val[B] =
+    ReleaseWith(f)
 
-  override def effectAsync[R, A, B](f: (R, A) => Async[B]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]) =
-    EffectAsync(f)
+  override def effect[R, A, B](f: ScalaFunction[(R, A), B]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]) =
+    Effect(f)
 
-  override def effectWrAsync[R, A](f: (R, A) => Async[Unit]): (Res[R] |*| Val[A]) -⚬ Res[R] =
-    EffectWrAsync(f)
+  override def effectWr[R, A](f: ScalaFunction[(R, A), Unit]): (Res[R] |*| Val[A]) -⚬ Res[R] =
+    EffectWr(f)
 
-  override def tryTransformResourceAsync[R, A, S, B, E](
-    f: (R, A) => Async[Either[E, (S, B)]],
-    release: Option[S => Async[Unit]],
+  override def tryEffectAcquire[R, A, S, B, E](
+    f: ScalaFunction[(R, A), Either[E, (S, B)]],
+    release: Option[ScalaFunction[S, Unit]],
+  ): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| (Val[E] |+| (Res[S] |*| Val[B]))) =
+    TryEffectAcquire(f, release)
+
+  override def tryTransformResource[R, A, S, B, E](
+    f: ScalaFunction[(R, A), Either[E, (S, B)]],
+    release: Option[ScalaFunction[S, Unit]],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])) =
-    TryTransformResourceAsync(f, release)
+    TryTransformResource(f, release)
 
-  override def trySplitResourceAsync[R, A, S, T, B, E](
-    f: (R, A) => Async[Either[E, (S, T, B)]],
-    release1: Option[S => Async[Unit]],
-    release2: Option[T => Async[Unit]],
+  override def trySplitResource[R, A, S, T, B, E](
+    f: ScalaFunction[(R, A), Either[E, (S, T, B)]],
+    release1: Option[ScalaFunction[S, Unit]],
+    release2: Option[ScalaFunction[T, Unit]],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])) =
-    TrySplitResourceAsync(f, release1, release2)
-
-  override def blocking[A, B](f: A => B): Val[A] -⚬ Val[B] =
-    Blocking(f)
+    TrySplitResource(f, release1, release2)
 
   override def forevert[A]: One -⚬ (-[A] |*| A) =
     Forevert()
@@ -419,7 +448,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   override type LambdaContext = lambdas.Context
 
-  override val `$`: FunExprOps  = new FunExprOps {
+  override val `$`: FunExprOps = new FunExprOps {
     override def one(using pos: SourcePos, ctx: lambdas.Context): $[One] =
       lambdas.Expr.const([x] => (_: Unit) => introFst[x])(VarOrigin.OneIntro(pos))
 
@@ -540,6 +569,99 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       }
     }
   }
+
+  /** Preprocessed [[ValSwitch]]. */
+  private sealed trait ValHandler[A, R] {
+    def compile: Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.VFun, |+|, AA, R])]
+  }
+
+  private object ValDecomposition {
+    class Last[A, R](
+      pos: SourcePos,
+      f: LambdaContext ?=> $[Val[A]] => $[R],
+    ) extends ValHandler[A, R] {
+      override def compile: Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.VFun, |+|, AA, R])] = {
+        val label = VarOrigin.Lambda(pos)
+        Exists((id[Val[A]], Sink((label, f))))
+      }
+    }
+
+    class Cons[A, H, T, R](
+      partition: A => Either[H, T],
+      pos: SourcePos,
+      f: LambdaContext ?=> $[Val[H]] => $[R],
+      t: ValHandler[T, R],
+    ) extends ValHandler[A, R] {
+      override def compile: Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.VFun, |+|, AA, R])] = {
+        val tail = t.compile
+        type AA = Val[H] |+| tail.T
+        val partition1: Val[A] -⚬ AA =
+          mapVal(partition) > liftEither > either(injectL, tail.value._1 > injectR)
+        val sink: Sink[lambdas.VFun, |+|, AA, R] =
+          Sink[lambdas.VFun, |+|, Val[H], R]((VarOrigin.Lambda(pos), f)) <+> tail.value._2
+        Exists((partition1, sink))
+      }
+    }
+
+    def from[A, R](cases: ValSwitch.Cases[A, A, R]): ValHandler[A, R] =
+      cases match {
+        case c1: ValSwitch.FirstCase[a, a_, r] =>
+          Last(c1.pos, c1.f)
+        case cn: ValSwitch.NextCase[a, a1, a2, r] =>
+          summon[a =:= A]
+          // (a1 | a2) =:= A
+          (from[a1, a2, R](
+            (cn.base: ValSwitch.Cases[A, a1, R]).asInstanceOf[ValSwitch.Cases[a1 | a2, a1, R]],
+            Last(cn.pos, cn.f),
+          ): ValHandler[a1 | a2, R]).asInstanceOf[ValHandler[A, R]]
+      }
+
+    def from[A1, A2, R](
+      cases: ValSwitch.Cases[A1 | A2, A1, R],
+      acc: ValHandler[A2, R],
+    ): ValHandler[A1 | A2, R] = {
+      def prepend[X](pos: SourcePos, f: LambdaContext ?=> $[Val[X]] => $[R])(using TypeTest[X | A2, X]): ValHandler[X | A2, R] = {
+        val partition: (X | A2) => Either[X, A2] = {
+          case (x: X) => Left(x)
+          case a2     => Right(a2.asInstanceOf[A2])
+        }
+        Cons[X | A2, X, A2, R](partition, pos, f, acc)
+      }
+      cases match {
+        case c1: ValSwitch.FirstCase[a, a1, r] =>
+          prepend[A1](c1.pos, c1.f)(using c1.typeTest)
+        case cn: ValSwitch.NextCase[a, a10, a11, r] =>
+          // a =:= (A1 | A2)
+          // A1 =:= (a10 | a11)
+          // Compiler does not infer these equations. See // https://github.com/lampepfl/dotty/issues/17075
+          val ev = summon[A1 =:= A1].asInstanceOf[A1 =:= (a10 | a11)]
+          (from[a10, a11 | A2, R](
+            (cn.base: ValSwitch.Cases[a, a10, r]).asInstanceOf[ValSwitch.Cases[a10 | (a11 | A2), a10, R]],
+            prepend[a11](cn.pos, cn.f)(using cn.typeTest),
+          ): ValHandler[a10 | (a11 | A2), R])
+            .asInstanceOf[ValHandler[A1 | A2, R]]
+      }
+    }
+  }
+
+  override def switchVal[A, R](
+    a: $[Val[A]],
+    cases: ValSwitch.Cases[A, A, R],
+  )(pos: SourcePos)(using
+    lambdas.Context,
+  ): $[R] =
+    ValDecomposition.from(cases).compile match {
+      case Exists.Some((partition, sink)) =>
+        lambdas.switch(
+          sink,
+          [X, Y] => (fx: X -⚬ R, fy: Y -⚬ R) => either(fx, fy),
+          [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
+        ) match {
+          case Abstracted.Exact(f)      => $.map(a)(partition > f)(pos)
+          case Abstracted.Closure(x, f) => $.map(zipExprs(Tupled.zip(x, Tupled.atom(a))))(snd(partition) > f)(pos)
+          case Abstracted.Failure(e)    => raiseError(e)
+        }
+    }
 
   override val |*| : ConcurrentPairInvertOps =
     new ConcurrentPairInvertOps {}
