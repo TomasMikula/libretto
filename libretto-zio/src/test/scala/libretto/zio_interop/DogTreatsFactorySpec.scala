@@ -16,7 +16,7 @@ object DogTreatsFactorySpec extends ZIOSpecDefault {
     // prepare a description of ZIO inputs
     (toys.asSource |*| bones.asSource |*| biscuits.asSource)
       // pass it through a Libretto function
-      .through_(DogTreatsFactory.blueprint)
+      .through_(DogTreatsFactory.packagingLine)
       // convert the output back to ZIO
       .map(_.zstream)
   }
