@@ -131,6 +131,30 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       )
     }
 
+    /** Concatenates the two sources.
+     *
+     * @param carryOver defines how the terminator of the first source is carried over to the second one.
+     */
+    def concatenate[T, A](
+      carryOver: (T |*| SourceT[T, A]) -⚬ SourceT[T, A],
+    ): (SourceT[T, A] |*| SourceT[T, A]) -⚬ SourceT[T, A] =
+      rec { self =>
+        val onClose: (SourceT[T, A] |*| SourceT[T, A]) -⚬ T =
+          fst(SourceT.close) > carryOver > SourceT.close
+
+        val onPoll: (SourceT[T, A] |*| SourceT[T, A]) -⚬ Polled[T, A] =
+          λ { case src1 |*| src2 =>
+            poll(src1) switch {
+              case Left(t) =>
+                poll(carryOver(t |*| src2))
+              case Right(a |*| as) =>
+                Polled.cons(a |*| self(as |*| src2))
+            }
+          }
+
+        from(onClose, onPoll)
+      }
+
     def delayUntilPing[T, A]: (Ping |*| SourceT[T, A]) -⚬ SourceT[T, A] =
       snd(toChoice) > delayChoiceUntilPing > fromChoice
 
@@ -374,33 +398,12 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       poll[A] > Polled.switch(caseEmpty = id[Done], caseCons)
     }
 
-    /** The second [[Source]] is "detained" because that gives the client flexibility in how the [[Done]] signal resulting from
-      * the exhaustion of the first [[Source]] is awaited. For example, if polling of the second [[Source]]
-      * should be delayed until the first [[Source]] is completely shut down, the client can use [[detain]] to delay the
-      * second [[Source]]. If polling of the second [[Source]] should start as soon as it is known that there are
-      * no more elements in the first [[Source]], the client can use [[detainClosed]] to delay the second [[Source]]
-      * (this latter behavior is the behavior of [[concat]]).
-      */
-    def concatenate[A]: (Source[A] |*| Detained[Source[A]]) -⚬ Source[A] = rec { self =>
-      val onClose: (Source[A] |*| Detained[Source[A]]) -⚬ Done =
-        joinMap(Source.close, Detained.releaseAsap > Source.close)
-
-      val onPoll: (Source[A] |*| Detained[Source[A]]) -⚬ Polled[A] =
-        λ { case src1 |*| detainedSrc2 =>
-          poll(src1) switch {
-            case Left(src1Closed) =>
-              val src2 = Detained.releaseBy(src1Closed |*| detainedSrc2)
-              poll(src2)
-            case Right(a |*| as) =>
-              Polled.cons(a |*| self(as |*| detainedSrc2))
-          }
-        }
-
-      from(onClose, onPoll)
-    }
-
+    /** Concatenates the two sources.
+     *
+     * @param carryOver defines how the terminator of the first source is carried over to the second one.
+     */
     def concatenate[A](carryOver: (Done |*| Source[A]) -⚬ Source[A]): (Source[A] |*| Source[A]) -⚬ Source[A] =
-      snd(Detained(carryOver)) > concatenate[A]
+      SourceT.concatenate[Done, A](carryOver)
 
     /** Concatenates the two sources.
      *  Before pulling from or closing the second one, waits until the first one is fully closed.
