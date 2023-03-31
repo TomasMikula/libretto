@@ -392,19 +392,46 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       from(onClose, onPoll)
     }
 
-    def concat[A]: (Source[A] |*| Source[A]) -⚬ Source[A] =
-      id.>.snd(detainClosed) > concatenate
+    def concatenate[A](carryOver: (Done |*| Source[A]) -⚬ Source[A]): (Source[A] |*| Source[A]) -⚬ Source[A] =
+      snd(Detained(carryOver)) > concatenate[A]
 
-    def flatten[A]: Source[Source[A]] -⚬ Source[A] =
+    /** Concatenates the two sources.
+     *  Before pulling from or closing the second one, waits until the first one is fully closed.
+     */
+    def concatStrict[A: Junction.Positive]: (Source[A] |*| Source[A]) -⚬ Source[A] =
+      concatenate(delayBy)
+
+    /** Concatenates the two sources.
+     *  Does not wait for the first source to be fully closed before pulling or closing the second one.
+     */
+    def concatLax[A]: (Source[A] |*| Source[A]) -⚬ Source[A] =
+      concatenate(delayClosedBy)
+
+    /** Alias for [[concatLax]].
+     *  Does not wait for the first source to be fully closed before pulling or closing the second one.
+     */
+    def concat[A]: (Source[A] |*| Source[A]) -⚬ Source[A] =
+      concatLax[A]
+
+    def flatten[A](carryOver: (Done |*| Source[A]) -⚬ Source[A]): Source[Source[A]] -⚬ Source[A] =
       rec { flatten =>
         from(
           onClose = close[Source[A]],
           onPoll  = poll[Source[A]] > either(
             Polled.empty[A],
-            λ { case as |*| ass => poll(concat(as |*| flatten(ass))) }
+            λ { case as |*| ass => poll(concatenate(carryOver)(as |*| flatten(ass))) }
           ),
         )
       }
+
+    def flattenStrict[A: Junction.Positive]: Source[Source[A]] -⚬ Source[A] =
+      flatten[A](delayBy)
+
+    def flattenLax[A]: Source[Source[A]] -⚬ Source[A] =
+      flatten[A](delayClosedBy)
+
+    def flatten[A]: Source[Source[A]] -⚬ Source[A] =
+      flattenLax[A]
 
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
       *
