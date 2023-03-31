@@ -2,7 +2,6 @@ package libretto.mashup
 
 import libretto.mashup.dsl.{Fun, Unlimited, fun}
 import zio.{Scope, ZIO}
-import zio.http.service.{ChannelFactory, EventLoopGroup}
 
 object Service {
   def runSimple[A, B](
