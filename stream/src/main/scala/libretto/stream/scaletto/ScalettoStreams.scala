@@ -195,6 +195,9 @@ abstract class ScalettoStreams {
     def cons[A]: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] =
       Source.cons
 
+    def singleton[A]: (Val[A] |*| Done) -⚬ ValSource[A] =
+      Source.singleton[Val[A]]
+
     def fromLList[A]: LList[Val[A]] -⚬ ValSource[A] =
       Source.fromLList[Val[A]]
 
@@ -281,13 +284,16 @@ abstract class ScalettoStreams {
       }
     }
 
-    def repeatedly[A](f: Done -⚬ Val[A]): Done -⚬ ValSource[A] =
-      Source.repeatedly[Val[A]](f)
+    def repeatedly[A, B](f: A -⚬ Val[B])(using CloseableCosemigroup[A]): A -⚬ ValSource[B] =
+      Source.repeatedly[A, Val[B]](f)
 
     def map[A, B](f: A => B): ValSource[A] -⚬ ValSource[B] = {
       val g: Val[A] -⚬ Val[B] = mapVal(f)
       Source.map(g)
     }
+
+    def take[A](n: Int): ValSource[A] -⚬ ValSource[A] =
+      ValSourceT.take[Done, A](n) > fst(neglect) > delayClosedBy
 
     def forEachSequentially[A](f: Val[A] -⚬ Done): ValSource[A] -⚬ Done =
       Source.forEachSequentially[Val[A]](f)

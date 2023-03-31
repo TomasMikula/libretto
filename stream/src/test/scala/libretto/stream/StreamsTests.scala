@@ -23,7 +23,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
     import dsl._
     import dsl.$._
     import coreLib._
-    import scalettoLib._
+    import scalettoLib.{given, _}
     import scalettoStreams._
 
     List(
@@ -184,6 +184,48 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             )
           } yield success(())
         }
+      },
+
+      "prefetch > flatten" -> {
+        import java.util.concurrent.atomic.AtomicReference
+        case class Counter(current: Int = 0, max: Int = 0) {
+          def inc: Counter = Counter(current + 1, math.max(current + 1, max))
+          def dec: Counter = Counter(current - 1, max)
+        }
+
+        val n = 4
+        val N = 100
+
+        val singletonAndCloseLater: Val[AtomicReference[Counter]] -⚬ ValSource[Unit] =
+          dup > par(
+            mapVal[AtomicReference[Counter], Unit](_ => ()),
+            delayVal(5.millis) > mapVal[AtomicReference[Counter], Counter] { ref => ref.updateAndGet(_.dec) } > neglect,
+          ) > ValSource.singleton
+
+        val prg: Done -⚬ (Done |*| Val[AtomicReference[Counter]]) =
+          constVal(new AtomicReference(Counter())) > λ.+ { counter =>
+            val done = counter
+              :>> ValSource.repeatedly(mapVal[AtomicReference[Counter], AtomicReference[Counter]] { ref => ref.updateAndGet(_.inc); ref })
+              :>> Source.map(singletonAndCloseLater)
+              :>> Source.prefetch(n - 1)(Source.close)
+              :>> Source.flatten
+              :>> ValSource.take(N)
+              :>> ValSource.forEachSequentially(neglect)
+            done |*| counter
+          }
+
+        TestCase
+          .interactWith(prg)
+          .via { port =>
+            for {
+              (done, ref) <- splitOut(port)
+              _ <- expectDone(done)
+              ref <- expectVal(ref)
+              Counter(k, m) = ref.get()
+              _ <- assertEquals(k, 0)
+              _ <- assertEquals(m, n)
+            } yield success(())
+          }
       },
     )
   }

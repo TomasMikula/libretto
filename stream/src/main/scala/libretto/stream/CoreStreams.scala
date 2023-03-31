@@ -234,6 +234,12 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def cons[A](using A: Closeable[A]): (A |*| Source[A]) -⚬ Source[A] =
       cons[A](A.close)
 
+    def singleton[A](using A: Closeable[A]): (A |*| Done) -⚬ Source[A] =
+      from(
+        onClose = fst(A.close) > join,
+        onPoll  = Polled.singleton[A],
+      )
+
     def fromLList[A](neglect: A -⚬ Done): LList[A] -⚬ Source[A] = rec { self =>
       LList.switch(
         caseNil  = done          > Source.empty[A],
@@ -246,12 +252,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def of[A](as: (One -⚬ A)*)(using Closeable[A]): One -⚬ Source[A] =
       LList.of(as: _*) > fromLList
 
-    def repeatedly[A](f: Done -⚬ A): Done -⚬ Source[A] = rec { self =>
-      from(
-        onClose = id[Done],
-        onPoll = forkMap(f, self) > Polled.cons,
-      )
-    }
+    def repeatedly[A, B](f: A -⚬ B)(using A: CloseableCosemigroup[A]): A -⚬ Source[B] =
+      rec { self =>
+        from(
+          onClose = A.close,
+          onPoll  = A.split > par(f, self) > Polled.cons,
+        )
+      }
 
     /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative ([[Pong]]) signal. */
     def notifyAction[A]: (Pong |*| Source[A]) -⚬ Source[A] =
@@ -424,14 +431,23 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         )
       }
 
+    /** Emits the elements from each inner source, in order.
+     *  Waits for each inner source to be fully closed before pulling/closing the next inner source.
+     */
     def flattenStrict[A: Junction.Positive]: Source[Source[A]] -⚬ Source[A] =
       flatten[A](delayBy)
 
+    /** Emits the elements from each inner source, in order.
+     *  Does not wait for an inner source to be fully closed before pulling/closing the next inner source.
+     */
     def flattenLax[A]: Source[Source[A]] -⚬ Source[A] =
       flatten[A](delayClosedBy)
 
-    def flatten[A]: Source[Source[A]] -⚬ Source[A] =
-      flattenLax[A]
+    /** Alias for [[flattenStrict]].
+     *  Waits for each inner source to be fully closed before pulling/closing the next inner source.
+     */
+    def flatten[A: Junction.Positive]: Source[Source[A]] -⚬ Source[A] =
+      flattenStrict[A]
 
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
       *
@@ -631,6 +647,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
       def cons[A]: (A |*| Source[A]) -⚬ Polled[A] =
         injectR
+
+      def singleton[A]: (A |*| Done) -⚬ Polled[A] =
+        snd(Source.empty[A]) > cons
 
       def switch[A, R](
         caseEmpty: Done -⚬ R,
