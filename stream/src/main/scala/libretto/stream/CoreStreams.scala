@@ -358,7 +358,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       id                                               [  Done |*|      Source[A]                  ]
         .>.snd(unpack)                              .to[  Done |*| (Done  |&|           Polled[A]) ]
         .>(coFactorL)                               .to[ (Done |*|  Done) |&| (Done |*| Polled[A]) ]
-        .bimap(join, Polled.delayClosedBy(self))    .to[       Done       |&|           Polled[A]  ]
+        .bimap(join, Polled.delayClosedBy_(self))   .to[       Done       |&|           Polled[A]  ]
         .pack[StreamFollowerF[Done, Done, A, *]]    .to[               Source[A]                   ]
     }
 
@@ -492,11 +492,75 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>.fst(fromChoice)            .to[                     Source[A]       |*| Source[B]  ]
     }
 
+    /** Merges two [[Source]]s into one.
+      * Left-biased: when there is a value available from both upstreams at the time of pull, favors the first one.
+      * Prefetches up to 1 element from each of the sources. If downstream closes while there are prefetched elements,
+      * they are discarded using the given [[Closeable]] instance.
+      */
     def mergePreferred[A](using
-      Junction.Positive[A],
-      Closeable[A],
-    ): (Source[A] |*| Source[A]) -⚬ Source[A] =
-      merge // TODO
+      A: Closeable[A],
+    ): (Source[A] |*| Source[A]) -⚬ Source[A] = {
+      def go: (Polled[A] |*| Source[A]) -⚬ Source[A] = rec { go =>
+        def goDownstream: (Polled[A] |*| Source[A]) -⚬ Source[A] = {
+          def onClose: (Polled[A] |*| Source[A]) -⚬ Done =
+            par(Polled.close(A.close), Source.close) > join
+
+          def onPoll: (Polled[A] |*| Source[A]) -⚬ Polled[A] =
+            λ { case as |*| bs =>
+              ((as |*| poll(bs)) :>> raceBy(notifyEither)) switch {
+                case Left(as |*| bs) => // `as` ready
+                  as switch {
+                    case Left(closed) =>
+                      Polled.delayClosedBy(closed |*| bs)
+                    case Right(a |*| as) =>
+                      Polled.cons(a |*| go(poll(as) |*| Polled.unpoll(bs)))
+                  }
+                case Right(as |*| bs) => // `bs` ready
+                  bs switch {
+                    case Left(closed) =>
+                      Polled.delayClosedBy(closed |*| as)
+                    case Right(b |*| bs) =>
+                      Polled.cons(b |*| go(as |*| bs))
+                  }
+              }
+            }
+
+          Source.from(onClose, onPoll)
+        }
+
+        def goPrefetched: ((A |*| Source[A]) |*| Source[A]) -⚬ Source[A] = {
+          val onClose: ((A |*| Source[A]) |*| Source[A]) -⚬ Done =
+            par(par(A.close, Source.close[A]) > join, Source.close[A]) > join
+          val onPoll: ((A |*| Source[A]) |*| Source[A]) -⚬ Polled[A] =
+            λ { case (a |*| as) |*| bs =>
+              Polled.cons(a |*| go(poll(as) |*| bs))
+            }
+          from(onClose, onPoll)
+        }
+
+        def go1: (Ping |*| (Polled[A] |*| Source[A])) -⚬ Source[A] =
+          λ { case downstreamActing |*| (as |*| bs) =>
+            (as :>> notifyEither) match {
+              case aReady |*| as =>
+                ((downstreamActing |*| aReady) :>> racePair) switch {
+                  case Left(?(_)) => // downstream acting
+                    goDownstream(as |*| bs)
+                  case Right(?(_)) => // `as` ready
+                    as switch {
+                      case Left(closed) =>
+                        Source.delayClosedBy(closed |*| bs)
+                      case Right(a |*| as) =>
+                        goPrefetched((a |*| as) |*| bs)
+                    }
+                }
+            }
+          }
+
+        introFst(lInvertPongPing) > assocLR > snd(go1) > notifyAction
+      }
+
+      fst(poll) > go
+    }
 
     def mergeBalanced[A](using
       Junction.Positive[A],
@@ -685,7 +749,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           .>.right(assocRL)             .to[      Done       |+| ((Done |*| A) |*| Source[A]) ]
           .>.right.fst(ev.awaitPosFst)  .to[      Done       |+| (          A  |*| Source[A]) ]
 
-      def delayClosedBy[A](
+      def delayClosedBy_[A](
         delaySourceClosed: (Done |*| Source[A]) -⚬ Source[A],
       ): (Done |*| Polled[A]) -⚬ Polled[A] =
         id[Done |*| Polled[A]]                .to[  Done |*| (Done |+|           (A |*| Source[A])) ]
@@ -693,6 +757,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           .>.left(join)                       .to[      Done       |+| (Done |*| (A |*| Source[A])) ]
           .>.right(XI)                        .to[      Done       |+| (A |*| (Done |*| Source[A])) ]
           .>.right.snd(delaySourceClosed)     .to[      Done       |+| (A |*|           Source[A] ) ]
+
+      def delayClosedBy[A]: (Done |*| Polled[A]) -⚬ Polled[A] =
+        delayClosedBy_(Source.delayClosedBy)
 
       def feedTo[A, B](
         f: (A |*| B) -⚬ PMaybe[B],

@@ -121,7 +121,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             mkTestCase(
               ValSource.mergePreferred,
               n => Outcome.assert(n >= 0.9 * N, s"Only $n out of $N elements come from the first source"),
-            ).pending,
+            ),
           "balanced" ->
             mkTestCase(
               ValSource.mergeBalanced,
