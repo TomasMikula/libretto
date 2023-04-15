@@ -608,16 +608,6 @@ abstract class ScalettoStreams {
       implicit def positivePolled[A]: SignalingJunction.Positive[Polled[A]] =
         Source.Polled.positivePolled[Val[A]]
 
-      /** Merges two [[Polled]]s into one.
-        * Left-biased: whenever there is a value available from both upstreams, favors the first one.
-        *
-        * @param mergeSources left-biased merge of two [[ValSource]]s.
-        */
-      def merge[A](
-        mergeSources: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A],
-      ): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
-        Source.Polled.merge(mergeSources)
-
       def dup[A](
         dupSource: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]),
       ): Polled[A] -⚬ (Polled[A] |*| Polled[A]) =

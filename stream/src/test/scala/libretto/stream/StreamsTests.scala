@@ -76,7 +76,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           LList1
             .of(
               ValSource.of(1, 2, 3),
-              ValSource.of(4, 5, 6) > ValSource.delay(10.millis),
+              ValSource.of(4, 5, 6) > ValSource.delay(20.millis),
               ValSource.of(7, 8, 9),
             )
             .>(LList1.toLList)
