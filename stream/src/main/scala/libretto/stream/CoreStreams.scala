@@ -492,15 +492,10 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>.fst(fromChoice)            .to[                     Source[A]       |*| Source[B]  ]
     }
 
-    /** Merges two [[Source]]s into one.
-      * Left-biased: when there is a value available from both upstreams at the time of pull, favors the first one.
-      * Prefetches up to 1 element from each of the sources. If downstream closes while there are prefetched elements,
-      * they are discarded using the given [[Closeable]] instance.
-      */
-    def mergePreferred[A](using
+    private def merge[A](continue: (Source[A] |*| Source[A]) -⚬ Source[A])(using
       A: Closeable[A],
     ): (Source[A] |*| Source[A]) -⚬ Source[A] = {
-      def go: (Polled[A] |*| Source[A]) -⚬ Source[A] = rec { go =>
+      def go: (Polled[A] |*| Source[A]) -⚬ Source[A] = {
         def goDownstream: (Polled[A] |*| Source[A]) -⚬ Source[A] = {
           def onClose: (Polled[A] |*| Source[A]) -⚬ Done =
             par(Polled.close(A.close), Source.close) > join
@@ -513,14 +508,14 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
                     case Left(closed) =>
                       Polled.delayClosedBy(closed |*| bs)
                     case Right(a |*| as) =>
-                      Polled.cons(a |*| go(poll(as) |*| Polled.unpoll(bs)))
+                      Polled.cons(a |*| continue(as |*| Polled.unpoll(bs)))
                   }
                 case Right(as |*| bs) => // `bs` ready
                   bs switch {
                     case Left(closed) =>
                       Polled.delayClosedBy(closed |*| as)
                     case Right(b |*| bs) =>
-                      Polled.cons(b |*| go(as |*| bs))
+                      Polled.cons(b |*| continue(bs |*| Polled.unpoll(as)))
                   }
               }
             }
@@ -533,7 +528,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
             par(par(A.close, Source.close[A]) > join, Source.close[A]) > join
           val onPoll: ((A |*| Source[A]) |*| Source[A]) -⚬ Polled[A] =
             λ { case (a |*| as) |*| bs =>
-              Polled.cons(a |*| go(poll(as) |*| bs))
+              Polled.cons(a |*| continue(as |*| bs))
             }
           from(onClose, onPoll)
         }
@@ -562,11 +557,30 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       fst(poll) > go
     }
 
+    /** Merges two [[Source]]s into one.
+      * Left-biased: when upstreams are faster than the downstream, consistently favors the first one.
+      * Prefetches up to 1 element from each of the upstream sources.
+      * If downstream closes while there are prefetched elements,
+      * they are discarded using the given [[Closeable]] instance.
+      */
+    def mergePreferred[A](using
+      A: Closeable[A],
+    ): (Source[A] |*| Source[A]) -⚬ Source[A] = rec { self =>
+      merge(self)
+    }
+
+
+    /** Merges two [[Source]]s into one.
+      * When upstreams are faster than the downstream, favors the one that emitted less recently.
+      * Prefetches up to 1 element from each of the upstream sources.
+      * If downstream closes while there are prefetched elements,
+      * they are discarded using the given [[Closeable]] instance.
+      */
     def mergeBalanced[A](using
-      Junction.Positive[A],
       Closeable[A],
-    ): (Source[A] |*| Source[A]) -⚬ Source[A] =
-      merge // TODO
+    ): (Source[A] |*| Source[A]) -⚬ Source[A] = rec { self =>
+      merge(swap > self)
+    }
 
     /** Merges two [[Source]]s into one.
       * Left-biased: when there is a value available from both upstreams, favors the first one.
