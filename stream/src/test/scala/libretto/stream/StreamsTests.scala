@@ -76,7 +76,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           LList1
             .of(
               ValSource.of(1, 2, 3),
-              ValSource.of(4, 5, 6) > ValSource.delay(10.millis),
+              ValSource.of(4, 5, 6) > ValSource.delay(20.millis),
               ValSource.of(7, 8, 9),
             )
             .>(LList1.toLList)
@@ -91,6 +91,66 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             _   <- assertEquals(res2, List(4, 5, 6))
           } yield ()
         },
+
+      "merge{Preferred, Balanced}" -> {
+        val N = 100
+
+        def mkTestCase(
+          merge: (ValSource[String] |*| ValSource[String]) -⚬ ValSource[String],
+          check: Int => kit.Outcome[Unit],
+          slowConsumer: Boolean,
+          slowedProducer1: Boolean,
+        ): TestCase.Single[kit.type] =
+          TestCase
+            .interactWith {
+              λ.+ { start =>
+                val as = start :>> ValSource.fromList(List.fill(N)("a"))
+                val as1 = if (slowedProducer1) as :>> Source.mapSequentially(delayVal(3.millis)) else as
+                val bs = start :>> ValSource.fromList(List.fill(N)("b"))
+                val cs = merge(as1 |*| bs)
+                val cs1 = if (slowConsumer) cs :>> Source.mapSequentially(delayVal(4.millis)) else cs
+                cs1 :>> ValSource.take(N) :>> ValSource.toList
+              }
+            }
+            .via { port =>
+              for {
+                res <- expectVal(port)
+                n = res.count(_ == "a")
+                _ <- check(n)
+              } yield ()
+            }
+
+        def balanced(slowConsumer: Boolean) =
+          mkTestCase(
+            ValSource.mergeBalanced,
+            n => Outcome.assert(n >= 0.4 * N && n <= 0.6 * N, s"$n out of $N elements come from the first source"),
+            slowConsumer,
+            slowedProducer1 = slowConsumer,
+          )
+
+        TestCase.multiple(
+          "preferred" -> TestCase.multiple(
+            "slow consumer" ->
+              mkTestCase(
+                ValSource.mergePreferred,
+                n => Outcome.assert(n >= 0.9 * N, s"Only $n out of $N elements come from the first source"),
+                slowConsumer = true,
+                slowedProducer1 = true,
+              ),
+            "fast consumer" ->
+              mkTestCase(
+                ValSource.mergePreferred,
+                n => Outcome.assert(n <= 0.5 * N, s"$n out of $N elements still come from the first source."),
+                slowConsumer = false,
+                slowedProducer1 = true,
+              ),
+          ),
+          "balanced" -> TestCase.multiple(
+            "slow consumer" -> balanced(slowConsumer = true),
+            "fast consumer" -> balanced(slowConsumer = false),
+          ),
+        )
+      },
 
       "dup" -> TestCase
         .interactWith {

@@ -360,6 +360,12 @@ abstract class ScalettoStreams {
     def mergeAll[A]: LList[ValSource[A]] -⚬ ValSource[A] =
       Source.mergeAll[Val[A]]
 
+    def mergePreferred[A]: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A] =
+      Source.mergePreferred[Val[A]]
+
+    def mergeBalanced[A]: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A] =
+      Source.mergeBalanced[Val[A]]
+
     def dup[A]: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) = rec { self =>
       // the case when the first output polls or closes before the second output does
       val goFst: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) =
@@ -601,16 +607,6 @@ abstract class ScalettoStreams {
 
       implicit def positivePolled[A]: SignalingJunction.Positive[Polled[A]] =
         Source.Polled.positivePolled[Val[A]]
-
-      /** Merges two [[Polled]]s into one.
-        * Left-biased: whenever there is a value available from both upstreams, favors the first one.
-        *
-        * @param mergeSources left-biased merge of two [[ValSource]]s.
-        */
-      def merge[A](
-        mergeSources: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A],
-      ): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
-        Source.Polled.merge(mergeSources)
 
       def dup[A](
         dupSource: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]),

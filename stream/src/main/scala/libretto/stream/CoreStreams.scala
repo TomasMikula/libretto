@@ -191,6 +191,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       introFst(A.unit) > go
     }
 
+    def mapSequentially[T, A, B: Signaling.Positive](f: A -⚬ B): SourceT[T, A] -⚬ SourceT[T, B] =
+      map(f) > sequence
+
     def forEachSequentially[T, A](f: A -⚬ Done): SourceT[T, A] -⚬ (Done |*| T) =
       map(f) > sequence > fold
 
@@ -355,7 +358,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       id                                               [  Done |*|      Source[A]                  ]
         .>.snd(unpack)                              .to[  Done |*| (Done  |&|           Polled[A]) ]
         .>(coFactorL)                               .to[ (Done |*|  Done) |&| (Done |*| Polled[A]) ]
-        .bimap(join, Polled.delayClosedBy(self))    .to[       Done       |&|           Polled[A]  ]
+        .bimap(join, Polled.delayClosedBy_(self))   .to[       Done       |&|           Polled[A]  ]
         .pack[StreamFollowerF[Done, Done, A, *]]    .to[               Source[A]                   ]
     }
 
@@ -391,12 +394,11 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         from(onClose, onPoll)
       }
 
-    def forEachSequentially[A: Junction.Positive](f: A -⚬ Done): Source[A] -⚬ Done = rec { self =>
-      val caseCons: (A |*| Source[A]) -⚬ Done =
-        par(f, id) > Source.delayBy[A] > self
+    def mapSequentially[A, B: Signaling.Positive](f: A -⚬ B): Source[A] -⚬ Source[B] =
+      SourceT.mapSequentially(f)
 
-      poll[A] > Polled.switch(caseEmpty = id[Done], caseCons)
-    }
+    def forEachSequentially[A](f: A -⚬ Done): Source[A] -⚬ Done =
+      SourceT.forEachSequentially(f) > join
 
     /** Concatenates the two sources.
      *
@@ -490,24 +492,105 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>.fst(fromChoice)            .to[                     Source[A]       |*| Source[B]  ]
     }
 
-    /** Merges two [[Source]]s into one.
-      * Left-biased: when there is a value available from both upstreams, favors the first one.
-      */
-    def merge[A](using
-      Junction.Positive[A],
-      Closeable[A],
-    ): (Source[A] |*| Source[A]) -⚬ Source[A] = rec { self =>
-      val onClose: (Source[A] |*| Source[A]) -⚬ Done      = joinMap(close, close)
-      val onPoll : (Source[A] |*| Source[A]) -⚬ Polled[A] = par(poll, poll) > Polled.merge(self)
-      from(onClose, onPoll)
+    private def merge[A](continue: (Source[A] |*| Source[A]) -⚬ Source[A])(using
+      A: Closeable[A],
+    ): (Source[A] |*| Source[A]) -⚬ Source[A] = {
+      def go: (Polled[A] |*| Source[A]) -⚬ Source[A] = {
+        def goDownstream: (Polled[A] |*| Source[A]) -⚬ Source[A] = {
+          def onClose: (Polled[A] |*| Source[A]) -⚬ Done =
+            par(Polled.close(A.close), Source.close) > join
+
+          def onPoll: (Polled[A] |*| Source[A]) -⚬ Polled[A] =
+            λ { case as |*| bs =>
+              ((as |*| poll(bs)) :>> raceBy(notifyEither)) switch {
+                case Left(as |*| bs) => // `as` ready
+                  as switch {
+                    case Left(closed) =>
+                      Polled.delayClosedBy(closed |*| bs)
+                    case Right(a |*| as) =>
+                      Polled.cons(a |*| continue(as |*| Polled.unpoll(bs)))
+                  }
+                case Right(as |*| bs) => // `bs` ready
+                  bs switch {
+                    case Left(closed) =>
+                      Polled.delayClosedBy(closed |*| as)
+                    case Right(b |*| bs) =>
+                      Polled.cons(b |*| continue(bs |*| Polled.unpoll(as)))
+                  }
+              }
+            }
+
+          Source.from(onClose, onPoll)
+        }
+
+        def goPrefetched: ((A |*| Source[A]) |*| Source[A]) -⚬ Source[A] = {
+          val onClose: ((A |*| Source[A]) |*| Source[A]) -⚬ Done =
+            par(par(A.close, Source.close[A]) > join, Source.close[A]) > join
+          val onPoll: ((A |*| Source[A]) |*| Source[A]) -⚬ Polled[A] =
+            λ { case (a |*| as) |*| bs =>
+              Polled.cons(a |*| continue(as |*| bs))
+            }
+          from(onClose, onPoll)
+        }
+
+        def go1: (Ping |*| (Polled[A] |*| Source[A])) -⚬ Source[A] =
+          λ { case downstreamActing |*| (as |*| bs) =>
+            (as :>> notifyEither) match {
+              case aReady |*| as =>
+                ((downstreamActing |*| aReady) :>> racePair) switch {
+                  case Left(?(_)) => // downstream acting
+                    goDownstream(as |*| bs)
+                  case Right(?(_)) => // `as` ready
+                    as switch {
+                      case Left(closed) =>
+                        Source.delayClosedBy(closed |*| bs)
+                      case Right(a |*| as) =>
+                        goPrefetched((a |*| as) |*| bs)
+                    }
+                }
+            }
+          }
+
+        introFst(lInvertPongPing) > assocLR > snd(go1) > notifyAction
+      }
+
+      fst(poll) > go
     }
 
+    /** Merges two [[Source]]s into one.
+      * Left-biased: when upstreams are faster than the downstream, consistently favors the first one.
+      * Prefetches up to 1 element from each of the upstream sources.
+      * If downstream closes while there are prefetched elements,
+      * they are discarded using the given [[Closeable]] instance.
+      */
+    def mergePreferred[A](using
+      A: Closeable[A],
+    ): (Source[A] |*| Source[A]) -⚬ Source[A] = rec { self =>
+      merge(self)
+    }
+
+
+    /** Merges two [[Source]]s into one.
+      * When upstreams are faster than the downstream, favors the one that emitted less recently.
+      * Prefetches up to 1 element from each of the upstream sources.
+      * If downstream closes while there are prefetched elements,
+      * they are discarded using the given [[Closeable]] instance.
+      */
+    def mergeBalanced[A](using
+      Closeable[A],
+    ): (Source[A] |*| Source[A]) -⚬ Source[A] = rec { self =>
+      merge(swap > self)
+    }
+
+    /** Merges two [[Source]]s into one. Alias for [[mergePreferred]]. */
+    def merge[A](using Closeable[A]): (Source[A] |*| Source[A]) -⚬ Source[A] =
+      mergePreferred
+
     /** Merges a list of [[Source]]s into a single [[Source]].
-      * Head-biased: when there is an element available from multiple upstreams, favors the upstream closest to the
-      * head of the input list.
+      * Head-biased: when upstreams are faster than the downstream,
+      * consistently favors the upstreams from the beginning of the list.
       */
     def mergeAll[A](using
-      Junction.Positive[A],
       Closeable[A],
     ): LList[Source[A]] -⚬ Source[A] =
       rec { self =>
@@ -671,7 +754,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           .>.right(assocRL)             .to[      Done       |+| ((Done |*| A) |*| Source[A]) ]
           .>.right.fst(ev.awaitPosFst)  .to[      Done       |+| (          A  |*| Source[A]) ]
 
-      def delayClosedBy[A](
+      def delayClosedBy_[A](
         delaySourceClosed: (Done |*| Source[A]) -⚬ Source[A],
       ): (Done |*| Polled[A]) -⚬ Polled[A] =
         id[Done |*| Polled[A]]                .to[  Done |*| (Done |+|           (A |*| Source[A])) ]
@@ -679,6 +762,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           .>.left(join)                       .to[      Done       |+| (Done |*| (A |*| Source[A])) ]
           .>.right(XI)                        .to[      Done       |+| (A |*| (Done |*| Source[A])) ]
           .>.right.snd(delaySourceClosed)     .to[      Done       |+| (A |*|           Source[A] ) ]
+
+      def delayClosedBy[A]: (Done |*| Polled[A]) -⚬ Polled[A] =
+        delayClosedBy_(Source.delayClosedBy)
 
       def feedTo[A, B](
         f: (A |*| B) -⚬ PMaybe[B],
@@ -708,38 +794,6 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           SignalingJunction.Positive.signalingJunctionPositiveDone,
           Junction.Positive.byFst(A),
         )
-
-      /** Merges two [[Polled]]s into one.
-        * Left-biased: whenever there is a value available from both upstreams, favors the first one.
-        *
-        * @param mergeSources left-biased merge of two [[Source]]s.
-        */
-      def merge[A](
-        mergeSources: (Source[A] |*| Source[A]) -⚬ Source[A],
-      )(using
-        Junction.Positive[A],
-        Closeable[A],
-      ): (Polled[A] |*| Polled[A]) -⚬ Polled[A] = {
-        // checks the first argument first, uses the given function for recursive calls
-        def go(merge: (Source[A] |*| Source[A]) -⚬ Source[A]): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
-          id[Polled[A] |*| Polled[A]]   .to[ (Done                |+|  (A |*| Source[A])) |*| Polled[A]   ]
-            .distributeR                .to[ (Done |*| Polled[A]) |+| ((A |*| Source[A])  |*| Polled[A] ) ]
-            .>.left(delayBy[A])         .to[           Polled[A]  |+| ((A |*| Source[A])  |*| Polled[A] ) ]
-            .>.right.snd(unpoll)        .to[           Polled[A]  |+| ((A |*| Source[A])  |*| Source[A] ) ]
-            .>.right.assocLR            .to[           Polled[A]  |+| ( A |*| (Source[A]  |*| Source[A])) ]
-            .>.right.snd(merge)         .to[           Polled[A]  |+| ( A |*|           Source[A]       ) ]
-            .>.right(cons)              .to[           Polled[A]  |+|     Polled[A]                       ]
-            .either(id, id)             .to[                   Polled[A]                                  ]
-
-        // checks the first argument first
-        val goFst: (Polled[A] |*| Polled[A]) -⚬ Polled[A] = go(mergeSources)
-
-        // checks the second argument first
-        val goSnd: (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
-          swap > go(swap > mergeSources)
-
-        raceSwitch(goFst, goSnd)
-      }
     }
   }
 
