@@ -92,6 +92,44 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           } yield ()
         },
 
+      "merge{Preferred, Balanced}" -> {
+        val N = 100
+
+        def mkTestCase(
+          merge: (ValSource[String] |*| ValSource[String]) -⚬ ValSource[String],
+          check: Int => kit.Outcome[Unit],
+        ): TestCase.Single[kit.type] =
+          TestCase
+            .interactWith {
+              λ.+ { start =>
+                val as = start :>> ValSource.fromList(List.fill(N)("a")) :>> Source.mapSequentially(delayVal(2.millis))
+                val bs = start :>> ValSource.fromList(List.fill(N)("b"))
+                val cs = merge(as |*| bs) :>> Source.mapSequentially(delayVal(5.millis))
+                cs :>> ValSource.take(N) :>> ValSource.toList
+              }
+            }
+            .via { port =>
+              for {
+                res <- expectVal(port)
+                n = res.count(_ == "a")
+                _ <- check(n)
+              } yield ()
+            }
+
+        TestCase.multiple(
+          "preferred" ->
+            mkTestCase(
+              ValSource.mergePreferred,
+              n => Outcome.assert(n >= 0.9 * N, s"Only $n out of $N elements come from the first source"),
+            ).pending,
+          "balanced" ->
+            mkTestCase(
+              ValSource.mergeBalanced,
+              n => Outcome.assert(n >= 0.4 * N && n <= 0.6 * N, s"$n out of $N elements come from the first source"),
+            ).pending,
+        )
+      },
+
       "dup" -> TestCase
         .interactWith {
           import ValSource.{dup, toList}

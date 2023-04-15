@@ -360,6 +360,12 @@ abstract class ScalettoStreams {
     def mergeAll[A]: LList[ValSource[A]] -⚬ ValSource[A] =
       Source.mergeAll[Val[A]]
 
+    def mergePreferred[A]: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A] =
+      Source.mergePreferred[Val[A]]
+
+    def mergeBalanced[A]: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A] =
+      Source.mergeBalanced[Val[A]]
+
     def dup[A]: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) = rec { self =>
       // the case when the first output polls or closes before the second output does
       val goFst: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) =

@@ -191,6 +191,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       introFst(A.unit) > go
     }
 
+    def mapSequentially[T, A, B: Signaling.Positive](f: A -⚬ B): SourceT[T, A] -⚬ SourceT[T, B] =
+      map(f) > sequence
+
     def forEachSequentially[T, A](f: A -⚬ Done): SourceT[T, A] -⚬ (Done |*| T) =
       map(f) > sequence > fold
 
@@ -391,12 +394,11 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         from(onClose, onPoll)
       }
 
-    def forEachSequentially[A: Junction.Positive](f: A -⚬ Done): Source[A] -⚬ Done = rec { self =>
-      val caseCons: (A |*| Source[A]) -⚬ Done =
-        par(f, id) > Source.delayBy[A] > self
+    def mapSequentially[A, B: Signaling.Positive](f: A -⚬ B): Source[A] -⚬ Source[B] =
+      SourceT.mapSequentially(f)
 
-      poll[A] > Polled.switch(caseEmpty = id[Done], caseCons)
-    }
+    def forEachSequentially[A](f: A -⚬ Done): Source[A] -⚬ Done =
+      SourceT.forEachSequentially(f) > join
 
     /** Concatenates the two sources.
      *
@@ -489,6 +491,18 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .coDistributeR                .to[ (Done                |&| Polled[A]) |*| Source[B]  ]
         .>.fst(fromChoice)            .to[                     Source[A]       |*| Source[B]  ]
     }
+
+    def mergePreferred[A](using
+      Junction.Positive[A],
+      Closeable[A],
+    ): (Source[A] |*| Source[A]) -⚬ Source[A] =
+      merge // TODO
+
+    def mergeBalanced[A](using
+      Junction.Positive[A],
+      Closeable[A],
+    ): (Source[A] |*| Source[A]) -⚬ Source[A] =
+      merge // TODO
 
     /** Merges two [[Source]]s into one.
       * Left-biased: when there is a value available from both upstreams, favors the first one.
