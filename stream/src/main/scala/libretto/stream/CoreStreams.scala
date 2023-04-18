@@ -159,20 +159,23 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       snd(toChoice) > delayChoiceUntilPing > fromChoice
 
     /** Delays each next poll or close until the previously emitted element signalled. */
-    def sequence[T, A](using Signaling.Positive[A]): SourceT[T, A] -⚬ SourceT[T, A] = {
-      def go: (Ping |*| SourceT[T, A]) -⚬ SourceT[T, A] = rec { go =>
-        val onPoll: SourceT[T, A] -⚬ Polled[T, A] =
+    def sequence[T, A](using A: Signaling.Positive[A]): SourceT[T, A] -⚬ SourceT[T, A] =
+      map(A.notifyPosFst) > sequenceByPing[T, A]
+
+    /** Delays each next poll or close until the [[Ping]] from the previously emitted element. */
+    def sequenceByPing[T, A]: SourceT[T, Ping |*| A] -⚬ SourceT[T, A] = {
+      def go: (Ping |*| SourceT[T, Ping |*| A]) -⚬ SourceT[T, A] = rec { go =>
+        val onPoll: SourceT[T, Ping |*| A] -⚬ Polled[T, A] =
           λ { as =>
             poll(as) switch {
               case Left(t) =>
                 Polled.empty(t)
-              case Right(a |*| as) =>
-                (a :>> notifyPosFst) match
-                  case p |*| a => Polled.cons(a |*| go(p |*| as))
+              case Right((p |*| a) |*| as) =>
+                Polled.cons(a |*| go(p |*| as))
             }
           }
 
-        delayUntilPing[T, A] > from(close[T, A], onPoll)
+        delayUntilPing[T, Ping |*| A] > from(close[T, Ping |*| A], onPoll)
       }
 
       introFst(ping) > go
@@ -190,6 +193,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
       introFst(A.unit) > go
     }
+
+    def mapSequence[T, A, B](f: A -⚬ (Ping |*| B)): SourceT[T, A] -⚬ SourceT[T, B] =
+      map(f) > sequenceByPing
 
     def mapSequentially[T, A, B: Signaling.Positive](f: A -⚬ B): SourceT[T, A] -⚬ SourceT[T, B] =
       map(f) > sequence
@@ -394,8 +400,11 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         from(onClose, onPoll)
       }
 
+    def mapSequence[A, B](f: A -⚬ (Ping |*| B)): Source[A] -⚬ Source[B] =
+      SourceT.mapSequence(f)
+
     def mapSequentially[A, B: Signaling.Positive](f: A -⚬ B): Source[A] -⚬ Source[B] =
-      SourceT.mapSequentially(f)
+      mapSequence(f > notifyPosFst)
 
     def forEachSequentially[A](f: A -⚬ Done): Source[A] -⚬ Done =
       SourceT.forEachSequentially(f) > join
