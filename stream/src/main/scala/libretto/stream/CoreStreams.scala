@@ -131,6 +131,18 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       )
     }
 
+    def toLList[T, A]: SourceT[T, A] -⚬ (LList[A] |*| T) = rec { self =>
+      λ { src =>
+        poll(src) switch {
+          case Left(t) =>
+            constant(LList.nil) |*| t
+          case Right(a |*| tl) =>
+            val (as |*| t) = self(tl)
+            LList.cons(a |*| as) |*| t
+        }
+      }
+    }
+
     /** Concatenates the two sources.
      *
      * @param carryOver defines how the terminator of the first source is carried over to the second one.
@@ -281,6 +293,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>.snd(unpack)                      .to[ Done |*| (Done |&| Polled[A]) ]
         .>(chooseRWhenDone)                 .to[ Done |*|           Polled[A]  ]
         .>(Polled.delayBy[A])               .to[                    Polled[A]  ]
+
+    def toLList[A]: Source[A] -⚬ (LList[A] |*| Done) =
+      SourceT.toLList
 
     /** Polls and discards all elements. */
     def drain[A](using A: Closeable[A]): Source[A] -⚬ Done =
