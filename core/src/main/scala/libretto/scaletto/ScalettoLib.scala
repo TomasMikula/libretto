@@ -273,6 +273,16 @@ class ScalettoLib[
   def constListOf1[A](a: A, as: A*): Done -⚬ LList[Val[A]] =
     constList1(a, as.toList) > LList1.toLList
 
+  def liftScalaList1[A]: Val[::[A]] -⚬ LList1[Val[A]] = rec { self =>
+    mapVal[::[A], Either[A, (A, ::[A])]] {
+      case a0 :: Nil => Left(a0)
+      case a0 :: a1 :: as => Right((a0, ::(a1, as)))
+    } > liftEither > either(
+      LList1.singleton,
+      liftPair > snd(self) > LList1.cons1,
+    )
+  }
+
   def toScalaList[A]: LList[Val[A]] -⚬ Val[List[A]] = rec { self =>
     LList.switch(
       caseNil  = const(List.empty[A]),
@@ -290,6 +300,14 @@ class ScalettoLib[
 
   def constList1Of[A](a: A, as: A*): Done -⚬ LList1[Val[A]] =
     constList1(a, as.toList)
+
+  def toScalaList1[A]: LList1[Val[A]] -⚬ Val[::[A]] =
+    rec { self =>
+      LList1.switch(
+        case1 = mapVal(::(_, Nil)),
+        caseN = snd(self) > unliftPair > mapVal { case (h, t) => ::(h, t) },
+      )
+    }
 
   /** Create a resource that is just a (potentially) mutable value which does not need any cleanup.
     *
