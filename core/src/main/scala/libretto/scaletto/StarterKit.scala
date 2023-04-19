@@ -42,7 +42,7 @@ abstract class AbstractStarterKit(
 
   export dsl._
   export coreLib.{dsl => _, _}
-  export scalettoLib.{dsl => _, coreLib => _, _}
+  export scalettoLib.{dsl => _, coreLib => _, _, given}
   export closedLib.{dsl => _, coreLib => _, _}
   export invertLib.{coreLib => _, _}
 
