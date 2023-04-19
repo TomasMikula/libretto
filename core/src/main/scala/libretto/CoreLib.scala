@@ -3261,6 +3261,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         switch(nil[U], par(f, self) > cons)
       }
 
+    def flatMap[A, B](f: A -⚬ LList[B]): LList[A] -⚬ LList[B] =
+      rec { self =>
+        switch(nil[B], par(f, self) > concat)
+      }
+
     def mapS[S, T, U](f: (S |*| T) -⚬ (S |*| U)): (S |*| LList[T]) -⚬ (S |*| LList[U]) = rec { self =>
       switchWithL(
         caseNil = id[S] > introSnd(nil[U]),
