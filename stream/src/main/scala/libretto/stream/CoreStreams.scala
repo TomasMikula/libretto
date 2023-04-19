@@ -108,7 +108,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def from[S, T, A](
       onClose: S -⚬ T,
-      onPoll: S -⚬ (T |+| (A |*| SourceT[T, A]))
+      onPoll: S -⚬ Polled[T, A],
     ): S -⚬ SourceT[T, A] =
       choice(onClose, onPoll) > fromChoice
 
@@ -202,6 +202,42 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def forEachSequentially[T, A](f: A -⚬ Done): SourceT[T, A] -⚬ (Done |*| T) =
       map(f) > sequence > fold
+
+    def pullN[T, A](n: Int): SourceT[T, A] -⚬ ((LList[A] |*| T) |+| (LList1[A] |*| SourceT[T, A])) = {
+      require(n > 0, s"n must be positive")
+
+      λ { src =>
+        poll(src) switch {
+          case Left(t) =>
+            injectL(constant(LList.nil[A]) |*| t)
+          case Right(a |*| as) =>
+            if (n == 1)
+              injectR(LList1.singleton(a) |*| as)
+            else
+              pullN(n-1)(as) switch {
+                case Left(as |*| t)     => injectL(LList.cons(a |*| as) |*| t)
+                case Right(as |*| tail) => injectR(LList1.cons1(a |*| as) |*| tail)
+              }
+        }
+      }
+    }
+
+    def groups[T, A](groupSize: Int): SourceT[T, A] -⚬ SourceT[T, LList1[A]] = rec { self =>
+      require(groupSize > 0, s"group size must be positive")
+
+      val onPull: SourceT[T, A] -⚬ Polled[T, LList1[A]] =
+        pullN(groupSize) > either(
+          λ { case elems |*| closed =>
+            (closed |*| elems) > LList.switchWithL(
+              Polled.empty,
+              λ { case closed |*| (h |*| t) => Polled.cons(LList1.cons(h |*| t) |*| SourceT.empty(closed)) },
+            )
+          },
+          snd(self) > Polled.cons[T, LList1[A]],
+        )
+
+      SourceT.from(close, onPull)
+    }
 
     object Polled {
       def empty[T, A]: T -⚬ Polled[T, A] =
@@ -409,6 +445,12 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def forEachSequentially[A](f: A -⚬ Done): Source[A] -⚬ Done =
       SourceT.forEachSequentially(f) > join
 
+    def pullN[A](n: Int): Source[A] -⚬ ((LList[A] |*| Done) |+| (LList1[A] |*| Source[A])) =
+      SourceT.pullN(n)
+
+    def groups[A](groupSize: Int): Source[A] -⚬ Source[LList1[A]] =
+      SourceT.groups(groupSize)
+
     /** Concatenates the two sources.
      *
      * @param carryOver defines how the terminator of the first source is carried over to the second one.
@@ -595,6 +637,15 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def merge[A](using Closeable[A]): (Source[A] |*| Source[A]) -⚬ Source[A] =
       mergePreferred
 
+    def mergeEither[A, B](using Closeable[A], Closeable[B]): (Source[A] |*| Source[B]) -⚬ Source[A |+| B] =
+      par(map(injectL), map(injectR)) > merge
+
+    def mergeEitherPreferred[A, B](using Closeable[A], Closeable[B]): (Source[A] |*| Source[B]) -⚬ Source[A |+| B] =
+      par(map(injectL), map(injectR)) > mergePreferred
+
+    def mergeEitherBalanced[A, B](using Closeable[A], Closeable[B]): (Source[A] |*| Source[B]) -⚬ Source[A |+| B] =
+      par(map(injectL), map(injectR)) > mergeBalanced
+
     /** Merges a list of [[Source]]s into a single [[Source]].
       * Head-biased: when upstreams are faster than the downstream,
       * consistently favors the upstreams from the beginning of the list.
@@ -731,7 +782,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       )
 
     given closeableSource[A]: Closeable[Source[A]] =
-      PAffine.from(Source.close)
+      Closeable.from(Source.close)
 
     object Polled {
       def close[A](neglect: A -⚬ Done): Polled[A] -⚬ Done =

@@ -2928,7 +2928,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def close: A -⚬ Done
   }
 
-  object PAffine {
+  object Closeable {
     def from[A](f: A -⚬ Done): Closeable[A] =
       new Closeable[A] {
         override def close: A -⚬ Done =
@@ -2943,6 +2943,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     given closeablePair[A, B](using A: Closeable[A], B: Closeable[B]): Closeable[A |*| B] =
       from(par(A.close, B.close) > join)
+
+    given closeableEither[A, B](using A: Closeable[A], B: Closeable[B]): Closeable[A |+| B] =
+      from(either(A.close, B.close))
   }
 
   trait Semigroup[A] {
