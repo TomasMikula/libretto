@@ -116,38 +116,13 @@ abstract class ScalettoStreams {
     }
 
     def take[T, A](n: Int): ValSourceT[T, A] -⚬ (Val[Int] |*| ValSourceT[T, A]) =
-      introFst(const(n)) > take
+      SourceT.take(n) > fst(UInt31.toInt)
 
     /** Cut off the upstream after a given number _n_ of elements.
      *  The number on the outport is _n - m_, where _m_ is the number of elements actually served.
      */
-    def take[T, A]: (Val[Int] |*| ValSourceT[T, A]) -⚬ (Val[Int] |*| ValSourceT[T, A]) = rec { take =>
-      λ { case n |*| src =>
-        decrement(n) switch {
-          case Left(done) =>
-            constVal(0)(done) |*| empty(close(src))
-          case Right(n0)  =>
-            producing { case remaining |*| as =>
-              (fromChoice >>: as) switch {
-                case Left(closing) =>
-                  returning(
-                    remaining := n0,
-                    closing   := close(src),
-                  )
-                case Right(pulling) =>
-                  (remaining |*| pulling) :=
-                    poll(src) switch {
-                      case Left(t) =>
-                        n0 |*| Polled.empty(t)
-                      case Right(a |*| as) =>
-                        val (n1 |*| as1) = take(n0 |*| as)
-                        n1 |*| Polled.cons(a |*| as1)
-                    }
-              }
-            }
-        }
-      }
-    }
+    def take[T, A]: (Val[Int] |*| ValSourceT[T, A]) -⚬ (Val[Int] |*| ValSourceT[T, A]) =
+      fst(UInt31.fromInt) > SourceT.take > fst(UInt31.toInt)
 
     def forEachSequentially[T, A](f: Val[A] -⚬ Done): ValSourceT[T, A] -⚬ (Done |*| T) =
       SourceT.forEachSequentially(f)

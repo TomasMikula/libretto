@@ -251,6 +251,39 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       SourceT.from(close, onPull)
     }
 
+    def take[T, A](n: Int): SourceT[T, A] -⚬ (UInt31 |*| SourceT[T, A]) =
+      introFst(done > UInt31(n)) > take
+
+    /** Cut off the upstream after a given number _n_ of elements.
+     *  The number on the outport is _n - m_, where _m_ is the number of elements actually served.
+     */
+    def take[T, A]: (UInt31 |*| SourceT[T, A]) -⚬ (UInt31 |*| SourceT[T, A]) = rec { take =>
+      def go1: (UInt31 |*| SourceT[T, A]) -⚬ (UInt31 |*| SourceT[T, A]) = {
+        val onClose: (UInt31 |*| SourceT[T, A]) -⚬ (UInt31 |*| T) =
+          par(UInt31.increment, close)
+        val onPoll: (UInt31 |*| SourceT[T, A]) -⚬ (UInt31 |*| Polled[T, A]) =
+          λ { case n0 |*| src =>
+            poll(src) switch {
+              case Left(t) =>
+                UInt31.increment(n0) |*| Polled.empty(t)
+              case Right(a |*| as) =>
+                val (n1 |*| as1) = take(n0 |*| as)
+                n1 |*| Polled.cons(a |*| as1)
+            }
+          }
+        choice(onClose, onPoll) > coDistributeL > snd(SourceT.fromChoice)
+      }
+
+      λ { case n |*| src =>
+        UInt31.decrement(n) switch {
+          case Left(done) =>
+            UInt31(0)(done) |*| empty(close(src))
+          case Right(n0) =>
+            go1(n0 |*| src)
+        }
+      }
+    }
+
     object Polled {
       def empty[T, A]: T -⚬ Polled[T, A] =
         injectL
@@ -465,6 +498,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def groups[A](groupSize: Int): Source[A] -⚬ Source[LList1[A]] =
       SourceT.groups(groupSize)
+
+    def take[A](n: Int): Source[A] -⚬ Source[A] =
+      SourceT.take[Done, A](n) > fst(UInt31.neglect) > delayClosedBy
 
     /** Concatenates the two sources.
      *
