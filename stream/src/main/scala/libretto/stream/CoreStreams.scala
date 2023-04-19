@@ -581,7 +581,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
                     case Left(closed) =>
                       Polled.delayClosedBy(closed |*| as)
                     case Right(b |*| bs) =>
-                      Polled.cons(b |*| continue(bs |*| Polled.unpoll(as)))
+                      Polled.cons(b |*| continue(Polled.unpoll(as) |*| bs))
                   }
               }
             }
