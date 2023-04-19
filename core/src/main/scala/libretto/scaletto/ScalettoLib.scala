@@ -158,7 +158,7 @@ class ScalettoLib[
       .>(mapVal(_.toRight(())))           .to[ Val[Either[Unit, A]] ]
       .>(liftEither)                      .to[ Val[Unit] |+| Val[A] ]
       .>.left(dsl.neglect)                .to[   Done    |+| Val[A] ]
-      .either(PMaybe.empty, PMaybe.just)  .to[     PMaybe[Val[A]]   ]
+      .>(PMaybe.fromEither)               .to[     PMaybe[Val[A]]   ]
 
   def pMaybeToOption[A]: PMaybe[Val[A]] -⚬ Val[Option[A]] =
     PMaybe.switch(

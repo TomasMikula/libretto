@@ -89,6 +89,13 @@ trait CoreDSL {
 
   type Rec[F[_]]
 
+  /** Unsigned (i.e. non-negative) integer up to 31 bits.
+    * Behavior on overflow is undefined.
+    */
+  type UInt31
+
+  val UInt31: UInt31s
+
   /** The type of auxiliary placeholder variables used in construction of [[λ]]-expressions. */
   type $[A]
 
@@ -481,6 +488,21 @@ trait CoreDSL {
 
   def constant[A](f: One -⚬ A)(using SourcePos, LambdaContext): $[A] =
     f($.one)
+
+  trait UInt31s {
+    /**
+     *
+     * @throws IllegalArgumentException if `n` is negative
+     */
+    def apply(n: Int): Done -⚬ UInt31
+
+    def add: (UInt31 |*| UInt31) -⚬ UInt31
+    def multiply: (UInt31 |*| UInt31) -⚬ UInt31
+    def increment: UInt31 -⚬ UInt31
+    def decrement: UInt31 -⚬ (Done |+| UInt31)
+
+    def neglect: UInt31 -⚬ Done
+  }
 
   object ? {
     def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Affine[A]): Some[$[A]] =

@@ -35,6 +35,13 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
     */
   type Res[A]
 
+  override val UInt31: UInt31Scaletto
+
+  trait UInt31Scaletto extends UInt31s {
+    def fromInt: Val[Int] -⚬ UInt31
+    def toInt: UInt31 -⚬ Val[Int]
+  }
+
   type ScalaFun[A, B]
   val ScalaFun: ScalaFuns
 
