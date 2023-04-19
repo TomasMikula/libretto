@@ -3318,6 +3318,19 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
     }
 
+    def partition[A, B]: LList[A |+| B] -⚬ (LList[A] |*| LList[B]) = rec { self =>
+      switch(
+        λ.? { _ => constant(nil[A]) |*| constant(nil[B]) },
+        λ { case x |*| t =>
+          val as |*| bs = self(t)
+          x switch {
+            case Left(a)  => cons(a |*| as) |*| bs
+            case Right(b) => as |*| cons(b |*| bs)
+          }
+        },
+      )
+    }
+
     def consMaybe[T]: (Maybe[T] |*| LList[T]) -⚬ LList[T] =
       id[Maybe[T] |*| LList[T]]             .to[ (One |+|                T) |*| LList[T] ]
         .distributeR                        .to[ (One |*| LList[T]) |+| (T |*| LList[T]) ]
