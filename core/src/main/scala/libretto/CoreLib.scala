@@ -2941,6 +2941,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     given closeableDone: Closeable[Done] =
       from(id)
 
+    given closeablePing: Closeable[Ping] =
+      from(strengthenPing)
+
     given closeablePair[A, B](using A: Closeable[A], B: Closeable[B]): Closeable[A |*| B] =
       from(par(A.close, B.close) > join)
 

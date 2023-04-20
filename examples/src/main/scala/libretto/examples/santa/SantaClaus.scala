@@ -54,23 +54,23 @@ object SantaClaus extends StarterApp {
     Source.mapSequence(go)
   }
 
-  def pipeline: (LList[Reindeer] |*| LList[Elf]) -⚬ ((LList[Reindeer] |*| LList[Elf]) |*| Done) =
+  def pipeline(nCycles: Int): (LList[Reindeer] |*| LList[Elf]) -⚬ ((LList[Reindeer] |*| LList[Elf]) |*| Done) =
     λ { case reindeers |*| elves =>
       val rGrps = reindeers :>> (LList.map(vacation) > LList.sortBySignal > Source.fromLList > Source.groups(9) > Source.map(ReindeerGroup.make))
       val eGrps = elves     :>> (LList.map(makeToys) > LList.sortBySignal > Source.fromLList > Source.groups(3) > Source.map(ElfGroup.make))
-      val outGrps |*| done = (rGrps |*| eGrps) :>> (Source.mergeEitherPreferred[ReindeerGroup, ElfGroup] > santa > Source.toLList)
+      val pings |*| outGrps = (rGrps |*| eGrps) :>> (Source.mergeEitherPreferred[ReindeerGroup, ElfGroup] > santa > Source.tapMap(notifyEither))
       val outRGs |*| outEGs = LList.partition(outGrps)
       val outRs = outRGs :>> LList.flatMap(ReindeerGroup.ungroup > LList1.toLList)
       val outEs = outEGs :>> LList.flatMap(ElfGroup.ungroup > LList1.toLList)
-      (outRs |*| outEs) |*| done
+      (outRs |*| outEs) |*| (pings :>> Source.take(nCycles) :>> Source.drain)
     }
 
-  def goForever: (LList[Reindeer] |*| LList[Elf]) -⚬ Done =
+  def go(nCycles: Int): (LList[Reindeer] |*| LList[Elf]) -⚬ Done =
     λ { case reindeers |*| elves =>
       val promise |*| (returningReindeers |*| returningElves) = constant(demand[LList[Reindeer] |*| LList[Elf]])
       val rs = LList.concat(reindeers |*| returningReindeers)
       val es = LList.concat(elves |*| returningElves)
-      val returningHelpers |*| done = pipeline(rs |*| es)
+      val returningHelpers |*| done = pipeline(nCycles)(rs |*| es)
       done alsoElim supply(returningHelpers |*| promise)
     }
 
@@ -78,6 +78,6 @@ object SantaClaus extends StarterApp {
     λ.+ { start =>
       val reindeers = start :>> constListOf1("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9")
       val elves     = start :>> constListOf1("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10")
-      goForever(reindeers |*| elves)
+      go(nCycles = 20)(reindeers |*| elves)
     }
 }
