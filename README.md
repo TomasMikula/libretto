@@ -141,6 +141,12 @@ Primitives for racing and recursion were added.
 
 [Tutorial](https://continuously.dev/libretto/docs/latest/tutorial/basics.html)
 
+### Presentations
+
+**Typed Interaction with Session Types (using Scala and Libretto).** Functional Scala 2022 [[video](https://www.youtube.com/watch?v=IU_nb6yozas)] [[slides](https://continuously.dev/presentations/Typed_Interaction_with_Session_Types_20221201.pdf)]
+
+**Custom Stream Operators Made Safe And Simple with Libretto.** Scalar 2023 [[video](https://www.youtube.com/watch?v=iPn4iwSu5Sw)] [[slides](https://continuously.dev/presentations/Custom-Stream-Operators_20230324.pdf)]
+
 ## Caveats
 
 It is all too common for software projects to highlight only the good parts or to overstate their features.
