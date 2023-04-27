@@ -44,6 +44,14 @@ object Monad {
     }
   }
 
+  given monadId: Monad[[A] =>> A] with {
+    override def pure[A](a: A): A =
+      a
+
+    override def flatMap[A, B](a: A)(f: A => B): B =
+      f(a)
+  }
+
   given monadEither[E]: Monad[[A] =>> Either[E, A]] with {
     override def pure[A](a: A): Either[E, A] =
       Right(a)

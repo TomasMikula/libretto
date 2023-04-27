@@ -173,6 +173,15 @@ lazy val librettoZio = project
     testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
   )
 
+lazy val typology = project
+  .in(file("typology"))
+  .dependsOn(core)
+  .settings(
+    name := "libretto-typology",
+    publish / skip := true, // experimental project, do not publish
+    scalacOptions ++= commonScalacOptions,
+  )
+
 lazy val root = project
   .in(file("."))
   .settings(
@@ -188,6 +197,7 @@ lazy val root = project
     mashup,
     mashupExamples,
     librettoZio,
+    typology,
   )
 
 lazy val laikaSite         = taskKey[File]("generates HTML from Markdown using Laika")

@@ -28,4 +28,9 @@ trait Applicative[F[_]] extends Zippable[Tuple2, F] { self =>
 object Applicative {
   def apply[F[_]](using Applicative[F]): Applicative[F] =
     summon
+
+  extension [A](a: A) {
+    def pure[F[_]](using F: Applicative[F]): F[A] =
+      F.pure(a)
+  }
 }
