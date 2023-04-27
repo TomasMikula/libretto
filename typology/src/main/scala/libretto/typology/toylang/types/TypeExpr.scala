@@ -4,11 +4,11 @@ import libretto.lambda.util.Monad
 import libretto.lambda.util.Monad.syntax._
 import libretto.typology.kinds._
 
-case class TypeExpr[K, L](value: generic.TypeExpr[TypeExpr, K, L, ?]) {
+case class TypeExpr[K, L](value: generic.TypeExpr[TypeExpr, K, L]) {
   given inKind: Kind[K] = value.inKind
   given outKind: OutputKind[L] = value.outKind
 
-  def foldM[F[_, _], M[_]: Monad](f: [k, l] => generic.TypeExpr[F, k, l, ?] => M[F[k, l]]): M[F[K, L]] = {
+  def foldM[F[_, _], M[_]: Monad](f: [k, l] => generic.TypeExpr[F, k, l] => M[F[k, l]]): M[F[K, L]] = {
     value
       .translateM[F, M]([x, y] => (te: TypeExpr[x, y]) => te.foldM[F, M](f))
       .flatMap(f(_))
@@ -79,13 +79,13 @@ object TypeExpr {
     TypeExpr(generic.TypeExpr.newInferenceVar())
 
   def appFst[K1, K2, L](
-    op: generic.TypeExpr.BinaryOperator[?, K1, K2, L, ?],
+    op: generic.TypeExpr.BinaryOperator[?, K1, K2, L],
     arg1: TypeExpr[○, K1],
   ): TypeExpr[K2, L] =
     TypeExpr(generic.TypeExpr.AppFst(op.cast[TypeExpr], arg1))
 
   def appCompose[K: ProperKind, L1, L2, M](
-    op: generic.TypeExpr.BinaryOperator[?, L1, L2, M, ?],
+    op: generic.TypeExpr.BinaryOperator[?, L1, L2, M],
     arg1: TypeExpr[○, L1],
     arg2: TypeExpr[K, L2],
   ): TypeExpr[K, M] = {
@@ -94,7 +94,7 @@ object TypeExpr {
   }
 
   def biApp[K1, K2, L](
-    op: generic.TypeExpr.BinaryOperator[?, K1, K2, L, ?],
+    op: generic.TypeExpr.BinaryOperator[?, K1, K2, L],
     arg1: TypeExpr[○, K1],
     arg2: TypeExpr[○, K2],
   ): TypeExpr[○, L] =
