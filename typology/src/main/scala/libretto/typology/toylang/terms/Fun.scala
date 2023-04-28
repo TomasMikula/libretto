@@ -21,14 +21,8 @@ object Fun {
   case class FixF[F[_]](f: TypeTag[F]) extends Fun[F[Fix[F]], Fix[F]]
   case class UnfixF[F[_]](f: TypeTag[F]) extends Fun[Fix[F], F[Fix[F]]]
 
-  case class Rec[A, B](label: Label[A, B], f: Fun[A, B]) extends Fun[A, B]
-  object Rec {
-    def apply[A, B](f: Fun[A, B] => Fun[A, B]): Rec[A, B] = {
-      val label = new Label[A, B]
-      Rec[A, B](label, f(RecCall(label)))
-    }
-  }
-  case class RecCall[A, B](label: Label[A, B]) extends Fun[A, B]
+  case class Rec[A, B](f: Fun[(RecCall[A, B], A), B]) extends Fun[A, B]
+  case class Recur[A, B]() extends Fun[(RecCall[A, B], A), B]
 
   case class ConstInt(n: Int) extends Fun[Unit, Int]
 
@@ -36,7 +30,7 @@ object Fun {
 
   case class IntToString() extends Fun[Int, String]
 
-  final class Label[A, B] private[Fun]()
+  sealed trait RecCall[A, B]
 
   def id[A]: Fun[A, A] =
     IdFun()
@@ -59,7 +53,7 @@ object Fun {
   def unfix[F[_]](using f: TypeTag[F]): Fun[Fix[F], F[Fix[F]]] =
     UnfixF[F](f)
 
-  def rec[A, B](f: Fun[A, B] => Fun[A, B]): Fun[A, B] =
+  def rec[A, B](f: Fun[(RecCall[A, B], A), B]): Fun[A, B] =
     Rec(f)
 
   def constInt(n: Int): Fun[Unit, Int] =
