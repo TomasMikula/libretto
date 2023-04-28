@@ -75,8 +75,8 @@ object TypeExpr {
   def string: TypeExpr[○, ●] =
     TypeExpr(generic.TypeExpr.StringType())
 
-  def inferenceVar(aliases: Set[Object]): TypeExpr[○, ●] =
-    TypeExpr(generic.TypeExpr.newInferenceVar())
+  def abstractType(label: AbstractTypeLabel): TypeExpr[○, ●] =
+    TypeExpr(generic.TypeExpr.abstractType(label))
 
   def appFst[K1, K2, L](
     op: generic.TypeExpr.BinaryOperator[?, K1, K2, L],

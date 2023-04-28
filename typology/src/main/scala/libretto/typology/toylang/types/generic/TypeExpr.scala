@@ -4,7 +4,7 @@ import libretto.lambda.util.Applicative._
 import libretto.lambda.util.Monad
 import libretto.lambda.util.Monad.syntax._
 import libretto.typology.kinds._
-import libretto.typology.toylang.types.{ArgIntro, ArgTrans, Routing}
+import libretto.typology.toylang.types.{AbstractTypeLabel, ArgIntro, ArgTrans, Routing}
 import libretto.typology.toylang.types.ArgTrans.Wrap
 
 /** Tree-like structure that builds up a type (or type constructor, depending on the output kind `L`).
@@ -33,7 +33,7 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
       case StringType() => StringType().pure[M]
       case Pair() => Pair().pure[M]
       case Sum() => Sum().pure[M]
-      case InferenceVar(as) => InferenceVar(as).pure[M]
+      case AbstractType(label) => AbstractType(label).pure[M]
       case ScalaTypeParams(ps) => ScalaTypeParams(ps).pure[M]
 
       case AppFst(op, a) =>
@@ -306,7 +306,7 @@ object TypeExpr {
     val properInKind: ProperKind[K],
   ) extends TypeExpr[->>, K, ●]
 
-  case class InferenceVar[->>[_, _]](aliases: Set[Object]) extends TypeExpr[->>, ○, ●]
+  case class AbstractType[->>[_, _]](label: AbstractTypeLabel) extends TypeExpr[->>, ○, ●]
 
   case class ScalaTypeParam(filename: String, line: Int, name: String)
   case class ScalaTypeParams[->>[_, _]](values: Set[ScalaTypeParam]) extends TypeExpr[->>, ○, ●] {
@@ -351,8 +351,8 @@ object TypeExpr {
 
   case class TypeError[->>[_, _], K: Kind, L: OutputKind](msg: String) extends TypeExpr[->>, K, L]
 
-  def newInferenceVar[->>[_, _]](): TypeExpr[->>, ○, ●] =
-    InferenceVar(Set(new Object))
+  def abstractType[->>[_, _]](label: AbstractTypeLabel): TypeExpr[->>, ○, ●] =
+    AbstractType(label)
 
   def pair[->>[_, _]](a: ○ ->> ●, b: ○ ->> ●): TypeExpr[->>, ○, ●] =
     BiApp(Pair(), a, b)
