@@ -12,7 +12,9 @@ This example implements a stream operator to fetch digitized versions of papyrus
  
 ### Details
 
- - We are provided with an API to fetch a stream of scanned pages for a given scroll ID.
+ - We are provided with an API to fetch a stream of scanned pages for a given scroll ID. 
+   - For the sake of solving this example, implementors are free to define type signature of the API that best suits them.
+   - In our solution, we go as far as to wrap an imperative, blocking API from the `vendor` package. That is just to demonstrate ability to integrate with the (ugly) "real world", but is way beyond what is expected.
  - It might take a long time before we get any bytes in the response, while, on the server, a robot goes to fetch and scan the papyrus scroll.
  - The actual data transfer is then relatively fast.
  - The library's fair use policy allows at most _k_ concurrent connections.
