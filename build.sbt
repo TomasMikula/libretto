@@ -175,7 +175,10 @@ lazy val librettoZio = project
 
 lazy val typology = project
   .in(file("typology"))
-  .dependsOn(core)
+  .dependsOn(
+    core,
+    testingScalatest % "test->compile",
+  )
   .settings(
     name := "libretto-typology",
     publish / skip := true, // experimental project, do not publish

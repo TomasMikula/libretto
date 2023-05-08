@@ -14,4 +14,9 @@ object BiInjective {
       ev2.substituteCo[G[X, _]](ev1.substituteCo[G[_, B]](g))
     }
   }
+
+  given BiInjective[Tuple2] with {
+    override def unapply[A, B, X, Y](ev: (A, B) =:= (X, Y)): (A =:= X, B =:= Y) =
+      ev match { case TypeEq(TypeEq.Refl()) => (summon, summon) }
+  }
 }

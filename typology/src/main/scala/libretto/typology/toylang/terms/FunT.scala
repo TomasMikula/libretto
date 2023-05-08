@@ -1,6 +1,6 @@
 package libretto.typology.toylang.terms
 
-import libretto.typology.toylang.types.{Fix, TypeTag}
+import libretto.typology.toylang.types.{Fix, RecCall, TypeTag}
 
 sealed trait FunT[->[_, _], A, B]
 
@@ -26,6 +26,4 @@ object FunT {
   case class AddInts[->[_, _]]() extends FunT[->, (Int, Int), Int]
 
   case class IntToString[->[_, _]]() extends FunT[->, Int, String]
-
-  sealed trait RecCall[A, B]
 }

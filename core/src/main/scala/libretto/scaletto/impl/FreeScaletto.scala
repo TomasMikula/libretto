@@ -567,7 +567,6 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     ): A -⚬ B = {
       import Abstracted.{Closure, Exact, Failure}
 
-      given ctx: lambdas.Context = lambdas.Context.fresh()
       val a = VarOrigin.Lambda(pos)
 
       lambdas.absTopLevel(a, f) match {
