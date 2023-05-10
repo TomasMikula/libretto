@@ -13,6 +13,8 @@ object TypeInference {
   opaque type TypeEmitter = Rec[TypeEmitterF]
   private type TypeEmitterF[X] = (
     One
+    |+| One // int
+    |+| One // string
     |+| (Val[TypeFun[●, ●]] |*| X) // apply1
     |+| Val[TypeFun[●, ●]] // fix
     |+| (X |*| X) // recCall
@@ -60,6 +62,12 @@ object TypeInference {
       λ { x =>
         pack(injectL(injectL(injectL(injectL(injectL(injectR(constantVal(TypeTag.toTypeFun(F)) |*| x)))))))
       }
+
+    def string: One -⚬ TypeEmitter =
+      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
+
+    def int: One -⚬ TypeEmitter =
+      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
     def unify: (TypeEmitter |*| TypeEmitter) -⚬ TypeEmitter =
       ???
@@ -167,6 +175,8 @@ object TypeInference {
             (r1 |*| f |*| b)
               .alsoElim(TypeEmitter.disengage(l1))
           }
+      case FunT.Distribute() =>
+        ???
       case f: FunT.FixF[arr, f] =>
         M.pure(
           λ.* { one =>
@@ -214,6 +224,13 @@ object TypeInference {
       case FunT.AddInts() =>
         ???
       case FunT.IntToString() =>
-        ???
+        M.pure(
+          λ.* { one =>
+            val a = one :>> TypeEmitter.int
+            val b = one :>> TypeEmitter.string
+            val tf = constantVal(TypedFun.intToString)
+            a |*| tf |*| b
+          }
+        )
     }
 }

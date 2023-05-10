@@ -2,7 +2,13 @@ package libretto.typology.toylang.terms
 
 import libretto.typology.toylang.types.{Fix, RecCall, Type, TypeTag}
 
-sealed trait TypedFun[A, B]
+sealed trait TypedFun[A, B] {
+  def inType: Type =
+    ???
+
+  def outType: Type =
+    ???
+}
 
 object TypedFun {
   case class Id[A](typ: Type) extends TypedFun[A, A]
@@ -16,6 +22,8 @@ object TypedFun {
   case class FixF[F[_]](f: TypeTag[F]) extends TypedFun[F[Fix[F]], Fix[F]]
   case class UnfixF[F[_]](f: TypeTag[F]) extends TypedFun[Fix[F], F[Fix[F]]]
 
+  case object IntToString extends TypedFun[Int, String]
+
   def id[A](typ: Type): TypedFun[A, A] = Id(typ)
   def andThen[A, X, B](f: TypedFun[A, X], tx: Type, g: TypedFun[X, B]): TypedFun[A, B] = AndThen(f, tx, g)
   def par[A1, A2, B1, B2](f1: TypedFun[A1, B1], f2: TypedFun[A2, B2]): TypedFun[(A1, A2), (B1, B2)] = Par(f1, f2)
@@ -26,4 +34,6 @@ object TypedFun {
   def recur[A, B](ta: Type, tb: Type): TypedFun[(RecCall[A, B], A), B] = Recur(ta, tb)
   def fix[F[_]](f: TypeTag[F]): TypedFun[F[Fix[F]], Fix[F]] = FixF(f)
   def unfix[F[_]](f: TypeTag[F]): TypedFun[Fix[F], F[Fix[F]]] = UnfixF(f)
+
+  def intToString: TypedFun[Int, String] = IntToString
 }

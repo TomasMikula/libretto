@@ -15,6 +15,8 @@ object FunT {
   case class InjectL[->[_, _], A, B]() extends FunT[->, A, A Either B]
   case class InjectR[->[_, _], A, B]() extends FunT[->, B, A Either B]
 
+  case class Distribute[->[_, _], A, B, C]() extends FunT[->, (A, Either[B, C]), Either[(A, B), (A, C)]]
+
   case class FixF[->[_, _], F[_]](f: TypeTag[F]) extends FunT[->, F[Fix[F]], Fix[F]]
   case class UnfixF[->[_, _], F[_]](f: TypeTag[F]) extends FunT[->, Fix[F], F[Fix[F]]]
 
