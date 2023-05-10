@@ -288,6 +288,13 @@ trait InvertDSL extends ClosedDSL {
       val (b, negOne) = $.unzip(g)(pos)
       doubleDemandElimination(b) alsoElim (one supplyTo negOne)
     }
+
+    def demand[B](using pos: SourcePos, ctx: LambdaContext)(
+      f: LambdaContext ?=> $[B] => $[One]
+    ): $[-[B]] = {
+      val g: $[-[B] |*| One] = λ.closure(f)
+      $.map(g)(elimSnd)(pos)
+    }
   }
 
   def returning(a: ??[One], as: ??[One]*)(using
