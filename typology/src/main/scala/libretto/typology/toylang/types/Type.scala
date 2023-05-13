@@ -12,4 +12,7 @@ object Type {
 
   def fix(f: TypeFun[●, ●]): Type =
     TypeFun.toExpr(TypeFun.fix(f))
+
+  def abstractType(label: AbstractTypeLabel): Type =
+    TypeExpr(generic.TypeExpr.abstractType(label))
 }

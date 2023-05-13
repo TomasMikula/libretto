@@ -20,25 +20,42 @@ object TypeInference {
     |+| (X |*| X) // recCall
     |+| (X |*| X) // either
     |+| (X |*| X) // pair
-    |+| (Val[AbstractTypeLabel] |*| TypeReceiverF[X])
+    |+| (Val[AbstractTypeLabel] |*| -[TypeEmitter.ReboundF[X]])
   )
 
-  private type TypeReceiverF[TypeEmitter] = -[
-    TypeEmitter // refinement
-    |+| YieldF[TypeEmitter] // refinement won't come from here
-  ]
-
-  private type YieldF[TypeEmitter] = -[
-    TypeEmitter // refinement came from elsewhere
-    |+| One // there won't be any more refinement
-  ]
-
   object TypeEmitter {
+    private[TypeInference] type ReboundF[TypeEmitter] = (
+      TypeEmitter // refinement
+      |+| YieldF[TypeEmitter] // refinement won't come from here
+    )
+
+    private type Rebound =
+      ReboundF[TypeEmitter]
+
+    private type YieldF[TypeEmitter] = (
+      -[TypeEmitter] // refinement came from elsewhere
+      |&| One // there won't be any more refinement
+    )
+
     private def pack: TypeEmitterF[TypeEmitter] -⚬ TypeEmitter =
       dsl.pack
 
-    def abstractType(v: AbstractTypeLabel): One -⚬ (TypeEmitter |*| Val[Type] |*| TypeEmitter) =
-      ???
+    def abstractType: (Val[AbstractTypeLabel] |*| -[TypeEmitter.Rebound]) -⚬ TypeEmitter =
+      pack ∘ injectR
+
+    def newAbstractType(v: AbstractTypeLabel): One -⚬ (TypeEmitter |*| Val[Type] |*| TypeEmitter) =
+      λ.* { _ =>
+        producing { case tl |*| t |*| tr =>
+          ((abstractType >>: tl) |*| (abstractType >>: tr)) match {
+            case (lblL |*| recvL) |*| (lblR |*| recvR) =>
+              returning(
+                const(v) >>: lblL,
+                const(v) >>: lblR,
+                t := unifyRebounds(v)(recvL.asInput |*| recvR.asInput),
+              )
+          }
+        }
+      }
 
     def pair: (TypeEmitter |*| TypeEmitter) -⚬ TypeEmitter =
       pack ∘ injectL ∘ injectR
@@ -70,6 +87,35 @@ object TypeInference {
       pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
     def unify: (TypeEmitter |*| TypeEmitter) -⚬ TypeEmitter =
+      ???
+
+    def unifyRebounds(v: AbstractTypeLabel): (Rebound |*| Rebound) -⚬ Val[Type] =
+      λ { case l |*| r =>
+        l switch {
+          case Left(refinedL) =>
+            r switch {
+              case Left(refinedR) =>
+                output(unify(refinedL |*| refinedR))
+              case Right(unrefinedR) =>
+                (refinedL :>> tap) match
+                  case refinedL |*| t =>
+                    t.alsoElim(refinedL supplyTo chooseL(unrefinedR))
+            }
+          case Right(unrefinedL) =>
+            r switch {
+              case Left(refinedR) =>
+                (refinedR :>> tap) match
+                  case refinedR |*| t =>
+                    t.alsoElim(refinedR supplyTo chooseL(unrefinedL))
+              case Right(unrefinedR) =>
+                constantVal(Type.abstractType(v))
+                  .alsoElim(chooseR(unrefinedL))
+                  .alsoElim(chooseR(unrefinedR))
+            }
+        }
+      }
+
+    def tap: TypeEmitter -⚬ (TypeEmitter |*| Val[Type]) =
       ???
 
     def output: TypeEmitter -⚬ Val[Type] =
@@ -107,7 +153,7 @@ object TypeInference {
         for {
           v <- gen.newVar
         } yield
-          TypeEmitter.abstractType(v)
+          TypeEmitter.newAbstractType(v)
           > λ { case a |*| t |*| b =>
             a |*| (t :>> mapVal(TypedFun.Id(_))) |*| b
           }
@@ -155,8 +201,8 @@ object TypeInference {
           r <- gen.newVar
         } yield
           λ.* { one =>
-            val l1 |*| lt |*| l2 = TypeEmitter.abstractType(l)(one)
-            val r1 |*| rt |*| r2 = TypeEmitter.abstractType(r)(one)
+            val l1 |*| lt |*| l2 = TypeEmitter.newAbstractType(l)(one)
+            val r1 |*| rt |*| r2 = TypeEmitter.newAbstractType(r)(one)
             val f = (lt ** rt) :>> mapVal { case (lt, rt) => TypedFun.injectL[l, r](lt, rt) }
             val b = TypeEmitter.either(l2 |*| r2)
             (l1 |*| f |*| b)
@@ -168,8 +214,8 @@ object TypeInference {
           r <- gen.newVar
         } yield
           λ.* { one =>
-            val l1 |*| lt |*| l2 = TypeEmitter.abstractType(l)(one)
-            val r1 |*| rt |*| r2 = TypeEmitter.abstractType(r)(one)
+            val l1 |*| lt |*| l2 = TypeEmitter.newAbstractType(l)(one)
+            val r1 |*| rt |*| r2 = TypeEmitter.newAbstractType(r)(one)
             val f = (lt ** rt) :>> mapVal { case (lt, rt) => TypedFun.injectR[l, r](lt, rt) }
             val b = TypeEmitter.either(l2 |*| r2)
             (r1 |*| f |*| b)
@@ -213,8 +259,8 @@ object TypeInference {
           vb <- gen.newVar
         } yield
           λ.* { one =>
-            val a1 |*| ta |*| a2 = one :>> TypeEmitter.abstractType(va)
-            val b1 |*| tb |*| b2 = one :>> TypeEmitter.abstractType(vb)
+            val a1 |*| ta |*| a2 = one :>> TypeEmitter.newAbstractType(va)
+            val b1 |*| tb |*| b2 = one :>> TypeEmitter.newAbstractType(vb)
             val tf = (ta ** tb) :>> mapVal { case (ta, tb) => TypedFun.recur[a, b](ta, tb) }
             val tIn = TypeEmitter.pair(TypeEmitter.recCall(a1 |*| b1) |*| a2)
             tIn |*| tf |*| b2
