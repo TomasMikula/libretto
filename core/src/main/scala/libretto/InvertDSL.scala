@@ -280,6 +280,14 @@ trait InvertDSL extends ClosedDSL {
       $.switchEither(x > distributeInversionInto_|&|, f)(pos)
   }
 
+  extension [A](a: ??[-[A]]) {
+    def asInput(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A] =
+      doubleDemandElimination(a)
+  }
+
   object producing {
     def apply[B](using pos: SourcePos, ctx: LambdaContext)(
       f: LambdaContext ?=> ??[B] => ??[One]
