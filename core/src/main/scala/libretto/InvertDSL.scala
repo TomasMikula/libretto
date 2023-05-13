@@ -222,6 +222,9 @@ trait InvertDSL extends ClosedDSL {
       ctx: LambdaContext,
     ): ??[One] =
       (a supplyTo b) > invertOne
+
+    def alsoElimInv(x: $[-[One]])(using pos: SourcePos, ctx: LambdaContext): $[A] =
+      a alsoElim (backvert(one |*| x))
   }
 
   extension [B](expr: $[-[B]]) {
@@ -269,6 +272,15 @@ trait InvertDSL extends ClosedDSL {
       ctx: LambdaContext,
     ): ??[B] =
       $.eliminateSecond(expr,  that > unInvertOne)(pos)
+  }
+
+  extension [A, B](x: $[-[A |&| B]]) {
+    @targetName("switch_-|&|")
+    def switch[C](f: LambdaContext ?=> Either[$[-[A]], $[-[B]]] => $[C])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[C] =
+      $.switchEither(x > distributeInversionInto_|&|, f)(pos)
   }
 
   extension [A, B](x: ??[A |&| B]) {
@@ -326,4 +338,12 @@ trait InvertDSL extends ClosedDSL {
   }
 
   override val |*| : ConcurrentPairInvertOps
+
+  object -- {
+    def unapply[A](a: $[-[-[A]]])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): Some[$[A]] =
+      Some(doubleDemandElimination(a))
+  }
 }
