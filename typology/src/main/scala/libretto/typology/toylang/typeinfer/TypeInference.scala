@@ -1,7 +1,7 @@
 
 package libretto.typology.toylang.typeinfer
 
-import libretto.lambda.util.Monad
+import libretto.lambda.util.{Monad, SourcePos}
 import libretto.lambda.util.Monad.syntax._
 import libretto.scaletto.StarterKit._
 import libretto.typology.kinds.{●}
@@ -11,8 +11,10 @@ import libretto.typology.util.State
 
 object TypeInference {
   opaque type TypeEmitter = Rec[TypeEmitterF]
-  private type TypeEmitterF[X] = (
-    One
+  private type TypeEmitterF[X] = NonAbstractTypeF[X] |+| AbstractTypeF[X]
+
+  private type NonAbstractTypeF[X] = (
+    One // unit
     |+| One // int
     |+| One // string
     |+| (Val[TypeFun[●, ●]] |*| X) // apply1
@@ -20,8 +22,15 @@ object TypeInference {
     |+| (X |*| X) // recCall
     |+| (X |*| X) // either
     |+| (X |*| X) // pair
-    |+| (Val[AbstractTypeLabel] |*| -[TypeEmitter.ReboundF[X]])
   )
+
+  private type NonAbstractType = NonAbstractTypeF[TypeEmitter]
+
+  private type AbstractTypeF[X] = Val[AbstractTypeLabel] |*| RefinementRequestF[X]
+  private type RefinementRequestF[X] = -[TypeEmitter.ReboundF[X]]
+
+  private type AbstractType = AbstractTypeF[TypeEmitter]
+  private type RefinementRequest = RefinementRequestF[TypeEmitter]
 
   object TypeEmitter {
     private[TypeInference] type ReboundF[TypeEmitter] = (
@@ -39,6 +48,12 @@ object TypeInference {
 
     private def pack: TypeEmitterF[TypeEmitter] -⚬ TypeEmitter =
       dsl.pack
+
+    private def unpack: TypeEmitter -⚬ TypeEmitterF[TypeEmitter] =
+      dsl.unpack
+
+    def unapply(using SourcePos)(a: $[TypeEmitter])(using LambdaContext): Some[$[TypeEmitterF[TypeEmitter]]] =
+      Some(unpack(a))
 
     def abstractType: (Val[AbstractTypeLabel] |*| -[TypeEmitter.Rebound]) -⚬ TypeEmitter =
       pack ∘ injectR
@@ -87,6 +102,39 @@ object TypeInference {
       pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
     def unify: (TypeEmitter |*| TypeEmitter) -⚬ TypeEmitter =
+      λ { case TypeEmitter(a) |*| TypeEmitter(b) =>
+        a switch {
+          case Right(aLabel |*| aReq) => // `a` is abstract type
+            b switch {
+              case Right(bLabel |*| bReq) => // `b` is abstract type
+                compareLabels(aLabel |*| bLabel) switch {
+                  case Left(label) => // labels are same
+                    ???
+                  case Right(res) =>
+                    res switch {
+                      case Left(aLabel) =>
+                        ???
+                      case Right(bLabel) =>
+                        ???
+                    }
+                }
+              case Left(b) => // `b` is not abstract type
+                refineUnify(aReq |*| b) // TODO: consume aLabel
+            }
+          case Left(a) => // `a` is not abstract type
+            b switch {
+              case Right(bLabel |*| bReq) => // `b` is abstract type
+                refineUnify(bReq |*| a) // TODO: consume bLabel
+              case Left(b) => // `b` is not abstract type
+                unifyNonAbstract(a |*| b)
+            }
+        }
+      }
+
+    def refineUnify: (RefinementRequest |*| NonAbstractType) -⚬ TypeEmitter =
+      ???
+
+    def unifyNonAbstract: (NonAbstractType |*| NonAbstractType) -⚬ TypeEmitter =
       ???
 
     def unifyRebounds(v: AbstractTypeLabel): (Rebound |*| Rebound) -⚬ Val[Type] =
@@ -118,10 +166,71 @@ object TypeInference {
     def tap: TypeEmitter -⚬ (TypeEmitter |*| Val[Type]) =
       ???
 
-    def output: TypeEmitter -⚬ Val[Type] =
-      ???
+    def output: TypeEmitter -⚬ Val[Type] = rec { output =>
+      unpack > λ { _ switch {
+        case Right(label |*| req) => // abstract type
+          req.contramap(injectR) switch {
+            case Left(--(t)) =>
+              output(t)
+                .waitFor(neglect(label))
+            case Right(no) =>
+              (label :>> mapVal { Type.abstractType(_) })
+                .alsoElimInv(no)
+          }
+        case Left(x) =>
+          x switch {
+            case Right(x1 |*| x2) => // pair
+              (output(x1) ** output(x2)) :>> mapVal { case (t1, t2) =>
+                Type.pair(t1, t2)
+              }
+            case Left(x) =>
+              x switch {
+                case Right(a |*| b) => // either
+                  (output(a) ** output(b)) :>> mapVal { case (a, b) =>
+                    Type.pair(a, b)
+                  }
+                case Left(x) =>
+                  x switch {
+                    case Right(a |*| b) => // recCall
+                      (output(a) ** output(b)) :>> mapVal { case (a, b) =>
+                        Type.recCall(a, b)
+                      }
+                    case Left(x) =>
+                      x switch {
+                        case Right(tf) => // fix
+                          tf :>> mapVal { Type.fix(_) }
+                        case Left(x) =>
+                          x switch {
+                            case Right(tf |*| a) => // apply1
+                              (tf ** output(a)) :>> mapVal { case (f, a) =>
+                                f(a)
+                              }
+                            case Left(x) =>
+                              x switch {
+                                case Right(one) => // string
+                                  one :>> const(Type.string)
+                                case Left(x) =>
+                                  x switch {
+                                    case Right(one) => // int
+                                      one :>> const(Type.int)
+                                    case Left(one) => // unit
+                                      one :>> const(Type.unit)
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+      }}
+    }
 
     def disengage: TypeEmitter -⚬ One =
+      ???
+
+    private type Label = Val[AbstractTypeLabel]
+
+    private def compareLabels: (Label |*| Label) -⚬ (Label |+| (Label |+| Label)) =
       ???
   }
 

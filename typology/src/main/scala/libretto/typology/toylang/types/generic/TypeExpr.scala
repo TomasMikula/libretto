@@ -286,6 +286,7 @@ object TypeExpr {
       this match {
         case Pair() => Pair()
         case Sum()  => Sum()
+        case RecCall() => RecCall()
       }
   }
 
@@ -295,6 +296,7 @@ object TypeExpr {
 
   case class Pair[->>[_, _]]() extends BinaryOperator[->>, ●, ●, ●]
   case class Sum[->>[_, _]]() extends BinaryOperator[->>, ●, ●, ●]
+  case class RecCall[->>[_, _]]() extends BinaryOperator[->>, ●, ●, ●]
 
   case class Fix[->>[_, _], K](f: Routing[●, K], g: K ->> ●) extends TypeExpr[->>, ○, ●]
 
@@ -359,6 +361,9 @@ object TypeExpr {
 
   def sum[->>[_, _]](a: ○ ->> ●, b: ○ ->> ●): TypeExpr[->>, ○, ●] =
     BiApp(Sum(), a, b)
+
+  def recCall[->>[_, _]](a: ○ ->> ●, b: ○ ->> ●): TypeExpr[->>, ○, ●] =
+    BiApp(RecCall(), a, b)
 
   def pair1[->>[_, _]](a: ○ ->> ●): TypeExpr[->>, ●, ●] =
     AppFst(Pair(), a)
