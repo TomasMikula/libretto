@@ -272,6 +272,12 @@ trait InvertDSL extends ClosedDSL {
       ctx: LambdaContext,
     ): ??[B] =
       $.eliminateSecond(expr,  that > unInvertOne)(pos)
+
+    def asInputInv(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[-[B]] =
+      expr
   }
 
   extension [A, B](x: $[-[A |&| B]]) {
@@ -338,6 +344,14 @@ trait InvertDSL extends ClosedDSL {
   }
 
   override val |*| : ConcurrentPairInvertOps
+
+  object - {
+    def unapply[A](a: $[-[A]])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): Some[??[A]] =
+      Some(a)
+  }
 
   object -- {
     def unapply[A](a: $[-[-[A]]])(using

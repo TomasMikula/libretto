@@ -33,7 +33,8 @@ abstract class FreeScaletto {
   final class |+|[A, B] private()
   final class |&|[A, B] private()
   final class Rec[F[_]] private()
-  final class -[A] private()
+  final class Inverted[A] private()
+  final type -[A] = Inverted[A]
   final class Val[A] private()
   final class Res[A] private()
   final type UInt31 = Val[Int]
