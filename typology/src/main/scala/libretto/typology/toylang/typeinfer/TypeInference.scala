@@ -14,7 +14,8 @@ object TypeInference {
   private type TypeEmitterF[X] = NonAbstractTypeF[X] |+| AbstractTypeF[X]
 
   private type NonAbstractTypeF[X] = (
-    One // unit
+    Val[(Type, Type)] // type mismatch
+    |+| One // unit
     |+| One // int
     |+| One // string
     |+| (Val[TypeFun[●, ●]] |*| X) // apply1
@@ -31,6 +32,11 @@ object TypeInference {
 
   private type AbstractType = AbstractTypeF[TypeEmitter]
   private type RefinementRequest = RefinementRequestF[TypeEmitter]
+
+  object RefinementRequest {
+    def completeWith: (RefinementRequest |*| TypeEmitter) -⚬ One =
+      λ { case req |*| t => injectL(t) supplyTo req }
+  }
 
   object TypeEmitter {
     private[TypeInference] type ReboundF[TypeEmitter] = (
@@ -57,6 +63,9 @@ object TypeInference {
 
     def abstractType: (Val[AbstractTypeLabel] |*| -[TypeEmitter.Rebound]) -⚬ TypeEmitter =
       pack ∘ injectR
+
+    def nonAbstractType: NonAbstractType -⚬ TypeEmitter =
+      pack ∘ injectL
 
     def newAbstractType(v: AbstractTypeLabel): One -⚬ (TypeEmitter |*| Val[Type] |*| TypeEmitter) =
       λ.* { _ =>
@@ -87,12 +96,18 @@ object TypeInference {
     def expectRecCall: TypeEmitter -⚬ (TypeEmitter |*| TypeEmitter) =
       ???
 
-    def fix[F[_]](F: TypeTag[F]): One -⚬ TypeEmitter =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR ∘ const(TypeTag.toTypeFun(F))
+    def fix: Val[TypeFun[●, ●]] -⚬ TypeEmitter =
+      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
-    def apply1[F[_]](F: TypeTag[F]): TypeEmitter -⚬ TypeEmitter =
+    def fixT[F[_]](F: TypeTag[F]): One -⚬ TypeEmitter =
+      fix ∘ const(TypeTag.toTypeFun(F))
+
+    def apply1: (Val[TypeFun[●, ●]] |*| TypeEmitter) -⚬ TypeEmitter =
+      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
+
+    def apply1T[F[_]](F: TypeTag[F]): TypeEmitter -⚬ TypeEmitter =
       λ { x =>
-        pack(injectL(injectL(injectL(injectL(injectL(injectR(constantVal(TypeTag.toTypeFun(F)) |*| x)))))))
+        apply1(constantVal(TypeTag.toTypeFun(F)) |*| x)
       }
 
     def string: One -⚬ TypeEmitter =
@@ -101,7 +116,13 @@ object TypeInference {
     def int: One -⚬ TypeEmitter =
       pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
-    def unify: (TypeEmitter |*| TypeEmitter) -⚬ TypeEmitter =
+    def unit: One -⚬ TypeEmitter =
+      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
+
+    def mismatch: Val[(Type, Type)] -⚬ TypeEmitter =
+      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL
+
+    def unify: (TypeEmitter |*| TypeEmitter) -⚬ TypeEmitter = rec { self =>
       λ { case TypeEmitter(a) |*| TypeEmitter(b) =>
         a switch {
           case Right(aLabel |*| aReq) => // `a` is abstract type
@@ -119,23 +140,194 @@ object TypeInference {
                     }
                 }
               case Left(b) => // `b` is not abstract type
+                val b1 |*| b2 = dup(nonAbstractType(b))
+                b2 alsoElim RefinementRequest.completeWith(aReq |*| b1)
                 refineUnify(aReq |*| b) // TODO: consume aLabel
             }
           case Left(a) => // `a` is not abstract type
             b switch {
               case Right(bLabel |*| bReq) => // `b` is abstract type
-                refineUnify(bReq |*| a) // TODO: consume bLabel
+                val a1 |*| a2 = dup(nonAbstractType(a))
+                a2 alsoElim RefinementRequest.completeWith(bReq |*| a1) // TODO: consume bLabel
               case Left(b) => // `b` is not abstract type
-                unifyNonAbstract(a |*| b)
+                unifyNonAbstract(self)(a |*| b)
             }
         }
       }
+    }
 
     def refineUnify: (RefinementRequest |*| NonAbstractType) -⚬ TypeEmitter =
-      ???
+      λ { case req |*| t =>
+        val t1 |*| t2 = TypeEmitter.dup(TypeEmitter.nonAbstractType(t))
+        t2 alsoElim RefinementRequest.completeWith(req |*| t1)
+      }
 
-    def unifyNonAbstract: (NonAbstractType |*| NonAbstractType) -⚬ TypeEmitter =
-      ???
+    private def unifyNonAbstract(
+      unify: (TypeEmitter |*| TypeEmitter) -⚬ TypeEmitter,
+    ): (NonAbstractType |*| NonAbstractType) -⚬ TypeEmitter =
+      λ { case a |*| b =>
+        a switch {
+          case Right(a1 |*| a2) => // `a` is a pair
+            b switch {
+              case Right(b1 |*| b2) => // `b` is a pair
+                TypeEmitter.pair(unify(a1 |*| b1) |*| unify(a2 |*| b2))
+              case Left(b) =>
+                TypeEmitter.mismatch(
+                  ((output(a1) ** output(a2)) :>> mapVal { case (a1, a2) => Type.pair(a1, a2) })
+                  ** output(pack(injectL(injectL(b))))
+                )
+            }
+          case Left(a) =>
+            b switch {
+              case Right(b1 |*| b2) => // `b` is a pair
+                TypeEmitter.mismatch(
+                  output(pack(injectL(injectL(a))))
+                  ** ((output(b1) ** output(b2)) :>> mapVal { case (b1, b2) => Type.pair(b1, b2) })
+                )
+              case Left(b) =>
+                a switch {
+                  case Right(p |*| q) => // `a` is either
+                    b switch {
+                      case Right(r |*| s) => // `b` is either
+                        TypeEmitter.either(unify(p |*| r) |*| unify (q |*| s))
+                      case Left(b) =>
+                        TypeEmitter.mismatch(
+                          ((output(p) ** output(q)) :>> mapVal { case (p, q) => Type.sum(p, q) })
+                          ** output(pack(injectL(injectL(injectL(b)))))
+                        )
+                    }
+                  case Left(a) =>
+                    b switch {
+                      case Right(r |*| s) => // `b` is either
+                        TypeEmitter.mismatch(
+                          output(pack(injectL(injectL(injectL(a)))))
+                          ** ((output(r) ** output(s)) :>> mapVal { case (r, s) => Type.sum(r, s) })
+                        )
+                      case Left(b) =>
+                        a switch {
+                          case Right(p |*| q) => // `a` is RecCall
+                            b switch {
+                              case Right(r |*| s) => // `b` is RecCall
+                                TypeEmitter.recCall(unify(p |*| q) |*| unify(r |*| s))
+                              case Left(b) =>
+                                TypeEmitter.mismatch(
+                                  ((output(p) ** output(q)) :>> mapVal { case (p, q) => Type.recCall(p, q) })
+                                  ** output(pack(injectL(injectL(injectL(injectL(b))))))
+                                )
+                            }
+                          case Left(a) =>
+                            b switch {
+                              case Right(r |*| s) => // `b` is RecCall
+                                TypeEmitter.mismatch(
+                                  output(pack(injectL(injectL(injectL(injectL(a))))))
+                                  ** ((output(r) ** output(s)) :>> mapVal { case (r, s) => Type.recCall(r, s) })
+                                )
+                              case Left(b) =>
+                                a switch {
+                                  case Right(f) => // `a` is fix
+                                    b switch {
+                                      case Right(g) => // `b` is fix
+                                        ((f ** g) :>> mapVal { case (f, g) =>
+                                          if (f == g) Left(f)
+                                          else        Right((f, g))
+                                        } :>> liftEither) switch {
+                                          case Left(f)   => TypeEmitter.fix(f)
+                                          case Right(fg) => TypeEmitter.mismatch(fg :>> mapVal { case (f, g) => (Type.fix(f), Type.fix(g)) })
+                                        }
+                                      case Left(b) =>
+                                        TypeEmitter.mismatch(
+                                          (f :>> mapVal { f => Type.fix(f) })
+                                          ** output(pack(injectL(injectL(injectL(injectL(injectL(b)))))))
+                                        )
+                                    }
+                                  case Left(a) =>
+                                    b switch {
+                                      case Right(g) => // `b` is fix
+                                        TypeEmitter.mismatch(
+                                          output(pack(injectL(injectL(injectL(injectL(injectL(a)))))))
+                                          ** (g :>> mapVal { g => Type.fix(g) })
+                                        )
+                                      case Left(b) =>
+                                        a switch {
+                                          case Right(f |*| x) => // `a` is apply1
+                                            (f |*| x |*| b) :>> crashNow(s"Not implemented (at ${summon[SourcePos]})")
+                                          case Left(a) =>
+                                            b switch {
+                                              case Right(g |*| y) => // `b` is apply1
+                                                (a |*| g |*| y) :>> crashNow(s"Not implemented (at ${summon[SourcePos]})")
+                                              case Left(b) =>
+                                                a switch {
+                                                  case Right(?(_)) => // `a` is string
+                                                    b switch {
+                                                      case Right(?(_)) => // `b` is string
+                                                        constant(TypeEmitter.string)
+                                                      case Left(b) =>
+                                                        TypeEmitter.mismatch(
+                                                          constantVal(Type.string)
+                                                          ** output(pack(injectL(injectL(injectL(injectL(injectL(injectL(injectL(b)))))))))
+                                                        )
+                                                    }
+                                                  case Left(a) =>
+                                                    b switch {
+                                                      case Right(?(_)) => // `b` is string
+                                                        TypeEmitter.mismatch(
+                                                          output(pack(injectL(injectL(injectL(injectL(injectL(injectL(injectL(a)))))))))
+                                                          ** constantVal(Type.string)
+                                                        )
+                                                      case Left(b) =>
+                                                        a switch {
+                                                          case Right(?(_)) => // `a` is int
+                                                            b switch {
+                                                              case Right(?(_)) => // `b` is int
+                                                                constant(TypeEmitter.int)
+                                                              case Left(b) =>
+                                                                TypeEmitter.mismatch(
+                                                                  constantVal(Type.int) 
+                                                                  ** output(pack(injectL(injectL(injectL(injectL(injectL(injectL(injectL(injectL(b))))))))))
+                                                                )
+                                                            }
+                                                          case Left(a) =>
+                                                            b switch {
+                                                              case Right(?(_)) => // `b` is int
+                                                                TypeEmitter.mismatch(
+                                                                  output(pack(injectL(injectL(injectL(injectL(injectL(injectL(injectL(injectL(a))))))))))
+                                                                  ** constantVal(Type.int)
+                                                                )
+                                                              case Left(b) =>
+                                                                a switch {
+                                                                  case Right(?(_)) => // `a` is unit
+                                                                    b switch {
+                                                                      case Right(?(_)) => // `b` is unit
+                                                                        constant(TypeEmitter.unit)
+                                                                      case Left(bx) => // `b` is type mismatch
+                                                                        val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
+                                                                        TypeEmitter.mismatch(constantVal(Type.unit) ** tb)
+                                                                    }
+                                                                  case Left(ax) => // `a` is type mismatch
+                                                                    val ta = ax :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
+                                                                    b switch {
+                                                                      case Right(?(_)) => // `b` is unit
+                                                                        TypeEmitter.mismatch(ta ** constantVal(Type.unit))
+                                                                      case Left(bx) => // `b` is type mismatch
+                                                                        val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
+                                                                        TypeEmitter.mismatch(ta ** tb)
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+      }
 
     def unifyRebounds(v: AbstractTypeLabel): (Rebound |*| Rebound) -⚬ Val[Type] =
       λ { case l |*| r =>
@@ -213,8 +405,13 @@ object TypeInference {
                                   x switch {
                                     case Right(one) => // int
                                       one :>> const(Type.int)
-                                    case Left(one) => // unit
-                                      one :>> const(Type.unit)
+                                    case Left(x) =>
+                                      x switch {
+                                        case Right(one) => // unit
+                                          one :>> const(Type.unit)
+                                        case Left(mismatch) =>
+                                          mismatch :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
+                                      }
                                   }
                               }
                           }
@@ -223,6 +420,65 @@ object TypeInference {
               }
           }
       }}
+    }
+
+    def dup: TypeEmitter -⚬ (TypeEmitter |*| TypeEmitter) = rec {dup =>
+      λ { case TypeEmitter(t) =>
+        t switch {
+          case Right(at) => // abstract type
+            at :>> crashNow(s"not implemented (at ${summon[SourcePos]})")
+          case Left(t) =>
+            t switch {
+              case Right(r |*| s) => // pair
+                val r1 |*| r2 = dup(r)
+                val s1 |*| s2 = dup(s)
+                pair(r1 |*| s1) |*| pair(r2 |*| s2)
+              case Left(t) =>
+                t switch {
+                  case Right(r |*| s) => // either
+                    val r1 |*| r2 = dup(r)
+                    val s1 |*| s2 = dup(s)
+                    either(r1 |*| s1) |*| either(r2 |*| s2)
+                  case Left(t) =>
+                    t switch {
+                      case Right(r |*| s) => // RecCall
+                        val r1 |*| r2 = dup(r)
+                        val s1 |*| s2 = dup(s)
+                        recCall(r1 |*| s1) |*| recCall(r2 |*| s2)
+                      case Left(t) =>
+                        t switch {
+                          case Right(+(f)) => // fix
+                            fix(f) |*| fix(f)
+                          case Left(t) =>
+                            t switch {
+                              case Right(f |*| x) => // apply1
+                                val f1 |*| f2 = dsl.dup(f)
+                                val x1 |*| x2 = dup(x)
+                                apply1(f1 |*| x1) |*| apply1(f2 |*| x2)
+                              case Left(t) =>
+                                t switch {
+                                  case Right(?(_)) => // string
+                                    constant(string) |*| constant(string)
+                                  case Left(t) =>
+                                    t switch {
+                                      case Right(?(_)) => // int
+                                        constant(int) |*| constant(int)
+                                      case Left(t) =>
+                                        t switch {
+                                          case Right(?(_)) => // unit
+                                            constant(unit) |*| constant(unit)
+                                          case Left(err) =>
+                                            err :>> dsl.dup :>> par(mismatch, mismatch)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+      }
     }
 
     def disengage: TypeEmitter -⚬ One =
@@ -335,8 +591,8 @@ object TypeInference {
       case f: FunT.FixF[arr, f] =>
         M.pure(
           λ.* { one =>
-            val fixF = TypeEmitter.fix(f.f)(one)
-            val fFixF = TypeEmitter.apply1(f.f)(TypeEmitter.fix(f.f)(one))
+            val fixF = TypeEmitter.fixT(f.f)(one)
+            val fFixF = TypeEmitter.apply1T(f.f)(TypeEmitter.fixT(f.f)(one))
             val tf = constantVal(TypedFun.fix(f.f))
             fFixF |*| tf |*| fixF
           }
@@ -344,8 +600,8 @@ object TypeInference {
       case f: FunT.UnfixF[arr, f] =>
         M.pure(
           λ.* { one =>
-            val fixF = TypeEmitter.fix(f.f)(one)
-            val fFixF = TypeEmitter.apply1(f.f)(TypeEmitter.fix(f.f)(one))
+            val fixF = TypeEmitter.fixT(f.f)(one)
+            val fFixF = TypeEmitter.apply1T(f.f)(TypeEmitter.fixT(f.f)(one))
             val tf = constantVal(TypedFun.unfix(f.f))
             fixF |*| tf |*| fFixF
           }

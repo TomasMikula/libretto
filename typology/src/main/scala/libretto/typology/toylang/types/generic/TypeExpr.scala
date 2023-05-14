@@ -351,7 +351,10 @@ object TypeExpr {
     val properInKind: ProperKind[K],
   ) extends TypeExpr[->>, K, M](using summon, op.outKind)
 
-  case class TypeError[->>[_, _], K: Kind, L: OutputKind](msg: String) extends TypeExpr[->>, K, L]
+  case class TypeMismatch[->>[_, _], K: Kind, L: OutputKind](
+    a: K ->> L, 
+    b: K ->> L,
+  ) extends TypeExpr[->>, K, L]
 
   def abstractType[->>[_, _]](label: AbstractTypeLabel): TypeExpr[->>, ○, ●] =
     AbstractType(label)
@@ -392,4 +395,9 @@ object TypeExpr {
   ): TypeExpr[->>, K1 × K2, M] =
     ComposeSnd(op, arg2)
 
+  def typeMismatch[->>[_, _], K: Kind, L: OutputKind](
+    a: K ->> L,
+    b: K ->> L,
+  ): TypeExpr[->>, K, L] =
+    TypeMismatch(a, b)
 }

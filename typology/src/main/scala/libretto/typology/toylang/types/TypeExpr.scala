@@ -137,6 +137,6 @@ object TypeExpr {
   def scalaTypeParam[T](filename: String, line: Int, name: String): TypeExpr[○, ●] =
     TypeExpr(generic.TypeExpr.ScalaTypeParams.one(filename, line, name))
 
-  def typeError[K: Kind, L: OutputKind](msg: String): TypeExpr[K, L] =
-    TypeExpr(generic.TypeExpr.TypeError(msg))
+  def typeMismatch[K: Kind, L: OutputKind](a: TypeExpr[K, L], b: TypeExpr[K, L]): TypeExpr[K, L] =
+    TypeExpr(generic.TypeExpr.TypeMismatch(a, b))
 }

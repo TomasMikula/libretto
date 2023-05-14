@@ -21,4 +21,7 @@ object Type {
 
   def abstractType(label: AbstractTypeLabel): Type =
     TypeExpr(generic.TypeExpr.abstractType(label))
+
+  def typeMismatch(a: Type, b: Type): Type =
+    TypeExpr(generic.TypeExpr.typeMismatch(a, b))
 }
