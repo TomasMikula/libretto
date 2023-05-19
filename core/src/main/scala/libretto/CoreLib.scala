@@ -3717,6 +3717,38 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       else
         close > LList.nil[A]
     }
+
+    def map[A, B](f: A -⚬ B): Endless[A] -⚬ Endless[B] = rec { self =>
+      create(
+        onClose = close,
+        onPull  = pull > par(f, self),
+      )
+    }
+
+    def delayUntilPing[A]: (Ping |*| Endless[A]) -⚬ Endless[A] =
+      snd(unpack) > delayChoiceUntilPing > pack
+
+    /** Delays each next pull until the previously emitted element signalled. */
+    def sequence[A](using A: Signaling.Positive[A]): Endless[A] -⚬ Endless[A] =
+      map(A.notifyPosFst) > sequenceByPing[A]
+
+    /** Delays each next pull until the [[Ping]] from the previously emitted element. */
+    def sequenceByPing[A]: Endless[Ping |*| A] -⚬ Endless[A] = {
+      def go: (Ping |*| Endless[Ping |*| A]) -⚬ Endless[A] = rec { go =>
+        delayUntilPing[Ping |*| A] > create(
+          onClose = close,
+          onPull  = pull > λ { case (p |*| a) |*| as => a |*| go(p |*| as) },
+        )
+      }
+
+      introFst(ping) > go
+    }
+
+    def mapSequence[A, B](f: A -⚬ (Ping |*| B)): Endless[A] -⚬ Endless[B] =
+      map(f) > sequenceByPing
+
+    def mapSequentially[A, B: Signaling.Positive](f: A -⚬ B): Endless[A] -⚬ Endless[B] =
+      map(f) > sequence
   }
 
   def listEndlessDuality[A, Ā](ev: Dual[A, Ā]): Dual[LList[A], Endless[Ā]] =
