@@ -3658,6 +3658,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     ): X -⚬ (Endless[A] |*| Y) =
       choice(onClose > introFst, onPull) > coDistributeR > par(pack, id)
 
+    def fromUnlimited[A]: Unlimited[A] -⚬ Endless[A] = rec { self =>
+      create(
+        onClose = Unlimited.discard,
+        onPull  = Unlimited.getSome > snd(self)
+      )
+    }
+
     def unfold[S, A](f: S -⚬ (A |*| S)): S -⚬ (Endless[A] |*| S) = rec { self =>
       createWith[S, A, S](
         onClose = id[S],
@@ -3789,6 +3796,15 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
     }
 
+  private def borrow[A: Signaling.Positive, Ā](
+    lInvert: One -⚬ (Ā |*| A),
+  ): LList1[A] -⚬ ((A |*| Ā) |*| LList1[A]) =
+    id                                         [     LList1[A]                   ]
+      .>(LList1.uncons)                     .to[   A |*|               LList[A]  ]
+      .>.fst(introSnd(lInvert) > assocRL)   .to[ ((A |*| Ā) |*| A) |*| LList[A]  ]
+      .>(assocLR)                           .to[  (A |*| Ā) |*| (A |*| LList[A]) ]
+      .>.snd(LList1.insertBySignal)         .to[  (A |*| Ā) |*|    LList1[A]     ]
+
   /** Present a non-empty list of resources `A` as an unlimited supply of "borrowed" resources `A ⊗ Ā`,
     * where `Ā` is the dual of `A`. A borrowed resource `A ⊗ Ā` must be "returned" by "annihilating"
     * `A` and its dual `Ā`, namely via an inversion on the right `A ⊗ Ā -⚬ One`.
@@ -3800,16 +3816,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     */
   def pool[A: Signaling.Positive, Ā](
     lInvert: One -⚬ (Ā |*| A),
-  ): LList1[A] -⚬ (Unlimited[A |*| Ā] |*| LList1[A]) = rec { self =>
-    val borrow: LList1[A] -⚬ ((A |*| Ā) |*| LList1[A]) =
-      id                                         [     LList1[A]                   ]
-        .>(LList1.uncons)                     .to[   A |*|               LList[A]  ]
-        .>.fst(introSnd(lInvert) > assocRL)   .to[ ((A |*| Ā) |*| A) |*| LList[A]  ]
-        .>(assocLR)                           .to[  (A |*| Ā) |*| (A |*| LList[A]) ]
-        .>.snd(LList1.insertBySignal)         .to[  (A |*| Ā) |*|    LList1[A]     ]
+  ): LList1[A] -⚬ (Unlimited[A |*| Ā] |*| LList1[A]) =
+    Unlimited.unfold(borrow(lInvert))
 
-    Unlimited.unfold(borrow)
-  }
+  def poolEndless[A: Signaling.Positive, Ā](
+    lInvert: One -⚬ (Ā |*| A),
+  ): LList1[A] -⚬ (Endless[A |*| Ā] |*| LList1[A]) =
+    Endless.unfold(borrow(lInvert))
 
   opaque type Lease = Done |*| Need
   object Lease {
