@@ -3749,6 +3749,27 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def mapSequentially[A, B: Signaling.Positive](f: A -⚬ B): Endless[A] -⚬ Endless[B] =
       map(f) > sequence
+
+    def pullN[A](n: Int): Endless[A] -⚬ (LList1[A] |*| Endless[A]) = {
+      require(n > 0, s"n must be positive")
+
+      pull > λ { case h |*| t =>
+        if (n == 1)
+          LList1.singleton(h) |*| t
+        else
+          val as |*| t1 = pullN(n-1)(t)
+          LList1.cons1(h |*| as) |*| t1
+      }
+    }
+
+    def groups[A](groupSize: Int): Endless[A] -⚬ Endless[LList1[A]] = rec { self =>
+      require(groupSize > 0, s"group size must be positive")
+
+      create(
+        onClose = close,
+        onPull  = pullN(groupSize) > snd(self),
+      )
+    }
   }
 
   def listEndlessDuality[A, Ā](ev: Dual[A, Ā]): Dual[LList[A], Endless[Ā]] =
