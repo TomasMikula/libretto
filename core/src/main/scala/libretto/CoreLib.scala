@@ -1212,6 +1212,38 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>.snd(elimSnd(need))                   .to[  A |*|  Need                   ]
       .>(A.signalNegSnd)                      .to[  A                             ]
 
+  def racePreferred[A, B](using
+    A: Signaling.Positive[A],
+    B: Signaling.Positive[B],
+  ): (Ping |*| (A |*| B)) -⚬ ((A |*| B) |+| (A |*| B)) = {
+    import dsl.Comonoid.comonoidPing
+
+    λ { case p |*| (a |*| b) =>
+      race[Ping, A](p |*| a) switch {
+        case Left(?(_) |*| a) =>
+          injectL(a |*| b)
+        case Right(?(_) |*| a) =>
+          race[A, B](a |*| b)
+      }
+    }
+  }
+
+  def raceHandicap[A, B, C](f: (Ping |*| B) -⚬ C)(using
+    A: Signaling.Positive[A],
+    C: Signaling.Positive[C],
+  ): (A |*| (Ping |*| B)) -⚬ ((A |*| B) |+| ((A |*| C) |+| (A |*| C))) = {
+    import dsl.Comonoid.comonoidPing
+
+    λ { case a |*| (p |*| b) =>
+      race[A, Ping](a |*| p) switch {
+        case Left(a |*| ?(_)) =>
+          injectL(a |*| b)
+        case Right(a |*| p) =>
+          injectR(race[A, C](a |*| f(p |*| b)))
+      }
+    }
+  }
+
   trait Getter[S, A] { self =>
     def getL[B](that: Getter[A, B])(implicit B: Cosemigroup[B]): S -⚬ (B |*| S)
 
@@ -3646,6 +3678,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def pull[A]: Endless[A] -⚬ (A |*| Endless[A]) =
       unpack > chooseR
 
+    def pullOnPing[A]: (Ping |*| Endless[A]) -⚬ (A |*| Endless[A]) =
+      snd(unpack) > delayChoiceUntilPing > chooseR
+
     def create[X, A](
       onClose: X -⚬ One,
       onPull: X -⚬ (A |*| Endless[A]),
@@ -3769,6 +3804,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
     }
 
+    def unpull[A](using A: Affine[A]): (A |*| Endless[A]) -⚬ Endless[A] =
+      create(
+        onClose = λ { case ?(_) |*| as => close(as) },
+        onPull  = id,
+      )
+
     def groups[A](groupSize: Int): Endless[A] -⚬ Endless[LList1[A]] = rec { self =>
       require(groupSize > 0, s"group size must be positive")
 
@@ -3776,6 +3817,43 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         onClose = close,
         onPull  = pullN(groupSize) > snd(self),
       )
+    }
+
+    def mergePreferred[A](using
+      A: Signaling.Positive[A],
+      aff: Affine[A],
+    ): (Endless[A] |*| Endless[A]) -⚬ Endless[A] = {
+      given Signaling.Positive[A |*| Endless[A]] = Signaling.Positive.byFst
+
+      def go: ((A |*| Endless[A]) |*| Endless[A]) -⚬ Endless[A] = rec { self =>
+        λ { case (a |*| as) |*| bs =>
+          val po |*| pi = constant(lInvertPongPing)
+          val res: $[One |&| (A |*| Endless[A])] =
+            ((a|*| (pi |*| bs)) :>> raceHandicap(Endless.pullOnPing)) switch {
+              case Left(a |*| bs) =>
+                (a |*| as |*| bs) :>> choice(
+                  λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
+                  λ { case a |*| as |*| bs => a |*| self(pull(as) |*| bs) },
+                )
+              case Right(x) =>
+                x switch {
+                  case Left(a |*| (b |*| bs)) =>
+                    (a |*| as |*| b |*| bs) :>> choice(
+                      λ { case ?(_) |*| as |*| ?(_) |*| bs => close(as) alsoElim close(bs) },
+                      λ { case a |*| as |*| b |*| bs => a |*| self(pull(as) |*| unpull(b |*| bs)) },
+                    )
+                  case Right(a |*| (b |*| bs)) =>
+                    (a |*| as |*| b |*| bs) :>> choice(
+                      λ { case ?(_) |*| as |*| ?(_) |*| bs => close(as) alsoElim close(bs) },
+                      λ { case a |*| as |*| b |*| bs => b |*| self((a |*| as) |*| bs) },
+                    )
+                }
+            }
+          (po |*| res) :>> notifyChoice :>> pack
+        }
+      }
+
+      fst(pull) > go
     }
   }
 
