@@ -3610,6 +3610,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def fold[T](using T: Semigroup[T]): LList1[T] -⚬ T =
       LList.actOn[T, T](T.combine)
 
+    def closeAll[T](using T: Closeable[T]): LList1[T] -⚬ Done =
+      foldMap(T.close)
+
     def transform[T, A, U](f: (A |*| T) -⚬ U)(using A: Cosemigroup[A]): (A |*| LList1[T]) -⚬ LList1[U] =
       λ { case a |*| (t0 |*| ts) =>
         val a1 |*| us = LList.transform0(f)(a |*| ts)
