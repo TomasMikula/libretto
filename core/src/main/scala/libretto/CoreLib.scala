@@ -697,6 +697,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       implicit def either[A, B]: Signaling.Positive[A |+| B] =
         from(dsl.notifyEither[A, B])
 
+      def either[A, B](A: Signaling.Positive[A], B: Signaling.Positive[B]): Signaling.Positive[A |+| B] =
+        from(dsl.either(A.notifyPosFst > snd(injectL), B.notifyPosFst > snd(injectR)))
+
       def rec[F[_]](implicit F: Positive[F[Rec[F]]]): Positive[Rec[F]] =
         from(unpack > F.notifyPosFst > par(id, pack))
 
@@ -732,6 +735,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Signals when the choice is made between [[A]] and [[B]]. */
       implicit def choice[A, B]: Signaling.Negative[A |&| B] =
         from(dsl.notifyChoice[A, B])
+
+      def choice[A, B](A: Signaling.Negative[A], B: Signaling.Negative[B]): Signaling.Negative[A |&| B] =
+        from(dsl.choice(snd(chooseL) > A.notifyNegFst, snd(chooseR) > B.notifyNegFst))
 
       def rec[F[_]](implicit F: Negative[F[Rec[F]]]): Negative[Rec[F]] =
         from(par(id, unpack) > F.notifyNegFst > pack)
@@ -3662,6 +3668,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         ),
       )
     }
+
+    def unzip[A, B]: LList1[A |*| B] -⚬ (LList1[A] |*| LList1[B]) =
+      switch(
+        par(singleton, singleton),
+        λ { case (a |*| b) |*| tail =>
+          val as |*| bs = LList.unzip(LList.cons(tail))
+          cons(a |*| as) |*| cons(b |*| bs)
+        }
+      )
+
+    def unzipBy[T, A, B](f: T -⚬ (A |*| B)): LList1[T] -⚬ (LList1[A] |*| LList1[B]) =
+      map(f) > unzip
   }
 
   /** An endless source of elements, where the consumer decides whether to pull one more element or close.
@@ -3832,7 +3850,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         λ { case (a |*| as) |*| bs =>
           val po |*| pi = constant(lInvertPongPing)
           val res: $[One |&| (A |*| Endless[A])] =
-            ((a|*| (pi |*| bs)) :>> raceHandicap(Endless.pullOnPing)) switch {
+            ((a |*| (pi |*| bs)) :>> raceHandicap(Endless.pullOnPing)) switch {
               case Left(a |*| bs) =>
                 (a |*| as |*| bs) :>> choice(
                   λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
@@ -3857,6 +3875,16 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
 
       fst(pull) > go
+    }
+
+    def mergeEitherPreferred[A, B](using
+      A: Signaling.Positive[A],
+      B: Signaling.Positive[B],
+      affA: Affine[A],
+      affB: Affine[B],
+    ): (Endless[A] |*| Endless[B]) -⚬ Endless[A |+| B] = {
+      given Signaling.Positive[A |+| B] = Signaling.Positive.either(A, B)
+      par(Endless.map(injectL), Endless.map(injectR)) > mergePreferred[A |+| B]
     }
   }
 

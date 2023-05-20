@@ -538,6 +538,9 @@ trait CoreDSL {
 
     given affinePair[A, B](using A: Affine[A], B: Affine[B]): Affine[A |*| B] =
       from(andThen(par(A.discard, B.discard), elimFst))
+
+    given affineEither[A, B](using A: Affine[A], B: Affine[B]): Affine[A |+| B] =
+      from(either(A.discard, B.discard))
   }
 
   trait Cosemigroup[A] {
