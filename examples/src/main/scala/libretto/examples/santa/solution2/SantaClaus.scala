@@ -1,4 +1,4 @@
-package libretto.examples.santa
+package libretto.examples.santa.solution2
 
 import libretto.scaletto.StarterApp
 import libretto.scaletto.StarterKit._
