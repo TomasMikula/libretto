@@ -37,7 +37,7 @@ object SantaClaus extends StarterApp {
     def act: Type -⚬ Done =
       collectNames > λ { case names |*| grp =>
         val +(done) = names :>> printLine(formatMessage) :>> delayRandomMs(50, 100)
-        done alsoElim releaseWhen(done |*| grp)
+        returning(done, releaseWhen(done |*| grp))
       }
 
     private def releaseWhen: (Done |*| Type) -⚬ One =

@@ -415,6 +415,17 @@ trait CoreDSL {
       $.unzip(ab)(pos)
   }
 
+  def returning[A](a: $[A], as: $[One]*)(using
+    pos: SourcePos,
+    ctx: LambdaContext,
+  ): $[A] = {
+    def go(a: $[A], as: List[$[One]]): $[A] =
+      as match
+        case Nil => a
+        case h :: t => go(a alsoElim h, t)
+    go(a, as.toList)
+  }
+
   extension [A, B](f: A -⚬ B) {
     def apply(a: $[A])(using
       pos: SourcePos,
