@@ -668,7 +668,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           )
 
         val prg: Done -⚬ Val[List[(ClientId, ResourceId)]] =
-          resources > pool(promise) > par(clientsPrg, LList1.foldMap(neglect)) > awaitPosSnd
+          resources > Unlimited.poolBy(promise) > par(clientsPrg, LList1.foldMap(neglect)) > awaitPosSnd
 
         TestCase
           .interactWith(prg)

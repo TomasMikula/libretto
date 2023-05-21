@@ -70,8 +70,8 @@ object SantaClaus extends StarterApp {
     λ.+ { start =>
       val reindeers : $[LList1[Reindeer]] = start :>> constList1Of("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9")
       val elves     : $[LList1[Elf]]      = start :>> constList1Of("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10")
-      val rGroups |*| releasedReindeers = reindeers :>> map(vacation) :>> poolEndless :>> fst(groupMap(9, ReindeerGroup.make))
-      val eGroups |*| releasedElves     = elves     :>> map(makeToys) :>> poolEndless :>> fst(groupMap(3, ElfGroup.make))
+      val rGroups |*| releasedReindeers = reindeers :>> map(vacation) :>> Endless.pool :>> fst(groupMap(9, ReindeerGroup.make))
+      val eGroups |*| releasedElves     = elves     :>> map(makeToys) :>> Endless.pool :>> fst(groupMap(3, ElfGroup.make))
       val groups: $[Endless[ReindeerGroup |+| ElfGroup]] = mergeEitherPreferred[ReindeerGroup, ElfGroup](rGroups |*| eGroups)
       joinAll(
         groups :>> santa(nCycles = 20),
