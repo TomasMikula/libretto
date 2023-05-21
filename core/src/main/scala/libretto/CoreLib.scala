@@ -1202,22 +1202,6 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def selectAgainstR[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (A |*| Need) =
     |&|.swap > selectAgainstL > swap
 
-  def raceSignaledOrNot[A](implicit A: SignalingJunction.Positive[A]): A -⚬ (A |+| A) =
-    id                                           [  A                             ]
-      .>(A.signalPosSnd)                      .to[  A |*|  Done                   ]
-      .>.snd(introSnd(done))                  .to[  A |*| (Done  |*|        Done) ]
-      .>.snd(raceDone)                        .to[  A |*| (Done  |+|        Done) ]
-      .distributeL                            .to[ (A |*|  Done) |+| (A |*| Done) ]
-      .bimap(A.awaitPosSnd, A.awaitPosSnd)    .to[  A           |+|  A            ]
-
-  def selectSignaledOrNot[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ A =
-    id                                           [  A            |&|  A           ]
-      .bimap(A.awaitNegSnd, A.awaitNegSnd)    .to[ (A |*|  Need) |&| (A |*| Need) ]
-      .coDistributeL                          .to[  A |*| (Need  |&|        Need) ]
-      .>.snd(selectNeed)                      .to[  A |*| (Need  |*|        Need) ]
-      .>.snd(elimSnd(need))                   .to[  A |*|  Need                   ]
-      .>(A.signalNegSnd)                      .to[  A                             ]
-
   def racePreferred[A, B](using
     A: Signaling.Positive[A],
     B: Signaling.Positive[B],
