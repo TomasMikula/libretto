@@ -95,7 +95,7 @@ object PoolingMicroscopes extends StarterApp {
   override def blueprint: Done -⚬ Done =
     id[Done]
       .>(createMicroscopes)
-      .>(pool)
+      .>(Unlimited.pool)
       .>(fst(LList.fromList(scientists)))
       .>(fst(LList.fold))
       .>(snd(destroyMicroscopes))

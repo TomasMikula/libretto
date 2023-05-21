@@ -290,11 +290,12 @@ trait InvertDSL extends ClosedDSL {
     }
   }
 
-  def returning(a: ??[One], as: ??[One]*)(using
+  @targetName("returningDemand")
+  def returning[A](a: ??[A], as: ??[One]*)(using
     pos: SourcePos,
     ctx: LambdaContext,
-  ): ??[One] = {
-    def go(a: ??[One], as: List[??[One]]): ??[One] =
+  ): ??[A] = {
+    def go(a: ??[A], as: List[??[One]]): ??[A] =
       as match
         case Nil => a
         case h :: t => go(a alsoElim h, t)

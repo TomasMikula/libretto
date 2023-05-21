@@ -697,6 +697,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       implicit def either[A, B]: Signaling.Positive[A |+| B] =
         from(dsl.notifyEither[A, B])
 
+      def either[A, B](A: Signaling.Positive[A], B: Signaling.Positive[B]): Signaling.Positive[A |+| B] =
+        from(dsl.either(A.notifyPosFst > snd(injectL), B.notifyPosFst > snd(injectR)))
+
       def rec[F[_]](implicit F: Positive[F[Rec[F]]]): Positive[Rec[F]] =
         from(unpack > F.notifyPosFst > par(id, pack))
 
@@ -732,6 +735,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Signals when the choice is made between [[A]] and [[B]]. */
       implicit def choice[A, B]: Signaling.Negative[A |&| B] =
         from(dsl.notifyChoice[A, B])
+
+      def choice[A, B](A: Signaling.Negative[A], B: Signaling.Negative[B]): Signaling.Negative[A |&| B] =
+        from(dsl.choice(snd(chooseL) > A.notifyNegFst, snd(chooseR) > B.notifyNegFst))
 
       def rec[F[_]](implicit F: Negative[F[Rec[F]]]): Negative[Rec[F]] =
         from(par(id, unpack) > F.notifyNegFst > pack)
@@ -2832,6 +2838,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def getSndWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| (Unlimited[A] |*| A)) =
       splitWhenDone > snd(snd(single))
 
+    /** Present a non-empty list of resources `A` as an unlimited supply of "borrowed" resources `A ⊗ Ā`,
+      * where `Ā` is the dual of `A`. A borrowed resource `A ⊗ Ā` must be "returned" by "annihilating"
+      * `A` and its dual `Ā`, namely via an inversion on the right `A ⊗ Ā -⚬ One`.
+      * A returned resource will become available for further use when it signals readiness using the
+      * [[Signaling.Positive]] instance.
+      *
+      * When all accesses to the pooled resources (obtained via the `Unlimited[A |*| Ā]` in the first
+      * out-port) are closed, the resources are returned in the second out-port.
+      */
+    def poolBy[A: Signaling.Positive, Ā](
+      lInvert: One -⚬ (Ā |*| A),
+    ): LList1[A] -⚬ (Unlimited[A |*| Ā] |*| LList1[A]) =
+      unfold(borrow(lInvert))
+
     implicit def comonoidUnlimited[A]: Comonoid[Unlimited[A]] =
       new Comonoid[Unlimited[A]] {
         def counit : Unlimited[A] -⚬ One                             = Unlimited.discard
@@ -3662,6 +3682,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         ),
       )
     }
+
+    def unzip[A, B]: LList1[A |*| B] -⚬ (LList1[A] |*| LList1[B]) =
+      switch(
+        par(singleton, singleton),
+        λ { case (a |*| b) |*| tail =>
+          val as |*| bs = LList.unzip(LList.cons(tail))
+          cons(a |*| as) |*| cons(b |*| bs)
+        }
+      )
+
+    def unzipBy[T, A, B](f: T -⚬ (A |*| B)): LList1[T] -⚬ (LList1[A] |*| LList1[B]) =
+      map(f) > unzip
   }
 
   /** An endless source of elements, where the consumer decides whether to pull one more element or close.
@@ -3822,6 +3854,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
     }
 
+    def groupMap[A, B](groupSize: Int, f: LList1[A] -⚬ B): Endless[A] -⚬ Endless[B] =
+      groups(groupSize) > map(f)
+
     def mergePreferred[A](using
       A: Signaling.Positive[A],
       aff: Affine[A],
@@ -3832,7 +3867,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         λ { case (a |*| as) |*| bs =>
           val po |*| pi = constant(lInvertPongPing)
           val res: $[One |&| (A |*| Endless[A])] =
-            ((a|*| (pi |*| bs)) :>> raceHandicap(Endless.pullOnPing)) switch {
+            ((a |*| (pi |*| bs)) :>> raceHandicap(Endless.pullOnPing)) switch {
               case Left(a |*| bs) =>
                 (a |*| as |*| bs) :>> choice(
                   λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
@@ -3858,6 +3893,21 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
       fst(pull) > go
     }
+
+    def mergeEitherPreferred[A, B](using
+      A: Signaling.Positive[A],
+      B: Signaling.Positive[B],
+      affA: Affine[A],
+      affB: Affine[B],
+    ): (Endless[A] |*| Endless[B]) -⚬ Endless[A |+| B] = {
+      given Signaling.Positive[A |+| B] = Signaling.Positive.either(A, B)
+      par(Endless.map(injectL), Endless.map(injectR)) > mergePreferred[A |+| B]
+    }
+
+    def poolBy[A: Signaling.Positive, Ā](
+      lInvert: One -⚬ (Ā |*| A),
+    ): LList1[A] -⚬ (Endless[A |*| Ā] |*| LList1[A]) =
+      unfold(borrow(lInvert))
   }
 
   def listEndlessDuality[A, Ā](ev: Dual[A, Ā]): Dual[LList[A], Endless[Ā]] =
@@ -3885,25 +3935,6 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       .>.fst(introSnd(lInvert) > assocRL)   .to[ ((A |*| Ā) |*| A) |*| LList[A]  ]
       .>(assocLR)                           .to[  (A |*| Ā) |*| (A |*| LList[A]) ]
       .>.snd(LList1.insertBySignal)         .to[  (A |*| Ā) |*|    LList1[A]     ]
-
-  /** Present a non-empty list of resources `A` as an unlimited supply of "borrowed" resources `A ⊗ Ā`,
-    * where `Ā` is the dual of `A`. A borrowed resource `A ⊗ Ā` must be "returned" by "annihilating"
-    * `A` and its dual `Ā`, namely via an inversion on the right `A ⊗ Ā -⚬ One`.
-    * A returned resource will become available for further use when it signals readiness using the
-    * [[Signaling.Positive]] instance.
-    *
-    * When all accesses to the pooled resources (obtained via the `Unlimited[A |*| Ā]` in the first
-    * out-port) are closed, the resources are returned in the second out-port.
-    */
-  def pool[A: Signaling.Positive, Ā](
-    lInvert: One -⚬ (Ā |*| A),
-  ): LList1[A] -⚬ (Unlimited[A |*| Ā] |*| LList1[A]) =
-    Unlimited.unfold(borrow(lInvert))
-
-  def poolEndless[A: Signaling.Positive, Ā](
-    lInvert: One -⚬ (Ā |*| A),
-  ): LList1[A] -⚬ (Endless[A |*| Ā] |*| LList1[A]) =
-    Endless.unfold(borrow(lInvert))
 
   opaque type Lease = Done |*| Need
   object Lease {
@@ -3935,7 +3966,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   object LeasePool {
     def fromList: LList1[Done] -⚬ LeasePool =
-      pool[Done, Need](lInvertSignal) > snd(LList1.fold[Done])
+      Unlimited.poolBy[Done, Need](lInvertSignal) > snd(LList1.fold[Done])
 
     def allocate(n: Int): Done -⚬ LeasePool =
       LList1.fill(n)(id[Done]) > fromList

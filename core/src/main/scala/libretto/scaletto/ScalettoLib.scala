@@ -5,8 +5,9 @@ import libretto.CoreLib
 import libretto.lambda.util.SourcePos
 import libretto.util.Async
 import scala.annotation.targetName
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
 import scala.reflect.TypeTest
+import scala.util.Random
 
 object ScalettoLib {
   def apply(
@@ -109,6 +110,12 @@ class ScalettoLib[
 
   def delayVal[A](by: FiniteDuration): Val[A] -⚬ Val[A] =
     delayVal(delay(by))
+
+  def delayRandomMs(minMs: Int, maxMs: Int): Done -⚬ Done =
+    constVal(()) > mapVal(_ => Random.between(minMs, maxMs).millis) > delay
+
+  def delayValRandomMs[A](minMs: Int, maxMs: Int): Val[A] -⚬ Val[A] =
+    delayVal(delayRandomMs(minMs, maxMs))
 
   given closeableCosemigroupVal[A]: CloseableCosemigroup[Val[A]] with {
     override def close : Val[A] -⚬ Done                = dsl.neglect

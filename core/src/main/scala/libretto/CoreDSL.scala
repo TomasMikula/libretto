@@ -415,6 +415,17 @@ trait CoreDSL {
       $.unzip(ab)(pos)
   }
 
+  def returning[A](a: $[A], as: $[One]*)(using
+    pos: SourcePos,
+    ctx: LambdaContext,
+  ): $[A] = {
+    def go(a: $[A], as: List[$[One]]): $[A] =
+      as match
+        case Nil => a
+        case h :: t => go(a alsoElim h, t)
+    go(a, as.toList)
+  }
+
   extension [A, B](f: A -⚬ B) {
     def apply(a: $[A])(using
       pos: SourcePos,
@@ -538,6 +549,9 @@ trait CoreDSL {
 
     given affinePair[A, B](using A: Affine[A], B: Affine[B]): Affine[A |*| B] =
       from(andThen(par(A.discard, B.discard), elimFst))
+
+    given affineEither[A, B](using A: Affine[A], B: Affine[B]): Affine[A |+| B] =
+      from(either(A.discard, B.discard))
   }
 
   trait Cosemigroup[A] {
