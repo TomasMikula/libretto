@@ -3840,6 +3840,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
     }
 
+    def groupMap[A, B](groupSize: Int, f: LList1[A] -⚬ B): Endless[A] -⚬ Endless[B] =
+      groups(groupSize) > map(f)
+
     def mergePreferred[A](using
       A: Signaling.Positive[A],
       aff: Affine[A],

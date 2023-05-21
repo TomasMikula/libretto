@@ -1,16 +1,16 @@
 package libretto.examples.santa.solution1
 
 import libretto.scaletto.StarterApp
-import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.{_, given}
+import libretto.scaletto.StarterKit.Endless.{groupMap, mapSequentially, mergeEitherPreferred, take}
+import libretto.scaletto.StarterKit.LList1.{closeAll, map}
+import libretto.scaletto.StarterKit.Monoid.monoidOne
 import libretto.stream.scaletto.DefaultStreams.Source
 import scala.util.Random
 import scala.concurrent.duration._
 import scala.{:: => NonEmptyList}
 
 object SantaClaus extends StarterApp {
-  import scalettoLib.closeableCosemigroupVal
-  import Monoid.monoidOne
-
   opaque type Reindeer = Val[String]
   opaque type Elf      = Val[String]
 
@@ -34,6 +34,8 @@ object SantaClaus extends StarterApp {
     formatMessage: NonEmptyList[String] => String,
     onRelease: A -⚬ A,
   )(using SignalingJunction.Positive[A]) {
+    import LList1.{fold, foldMap, transform, unzipBy}
+
     opaque type Type = LList1[A |*| -[A]]
 
     def make: LList1[A |*| -[A]] -⚬ Type = id
@@ -45,16 +47,16 @@ object SantaClaus extends StarterApp {
       }
 
     private def releaseWhen: (Done |*| Type) -⚬ One =
-      LList1.transform(assocRL > fst(awaitPosFst[A] > onRelease) > supply) > LList1.fold
+      transform(assocRL > fst(awaitPosFst[A] > onRelease) > supply) > fold
 
     private def collectNames: Type -⚬ (Val[NonEmptyList[String]] |*| Type) =
-      LList1.unzipBy(fst(getName) > assocLR) > fst(toScalaList1)
+      unzipBy(fst(getName) > assocLR) > fst(toScalaList1)
 
     given Affine[Type] =
-      Affine.from(LList1.foldMap(supply))
+      Affine.from(foldMap(supply))
 
     given Signaling.Positive[Type] =
-      Signaling.Positive.from(LList1.unzipBy(fst(notifyPosFst[A]) > assocLR) > fst(LList1.fold))
+      Signaling.Positive.from(unzipBy(fst(notifyPosFst[A]) > assocLR) > fst(fold))
   }
 
   val ReindeerGroup = Group[Reindeer](dup, names => s"Delivering toys with ${names.mkString(", ")}", vacation)
@@ -67,17 +69,20 @@ object SantaClaus extends StarterApp {
     def go: (ReindeerGroup |+| ElfGroup) -⚬ Done =
       either(ReindeerGroup.act, ElfGroup.act)
 
-    Endless.mapSequentially(go) > Endless.take(nCycles) > LList.fold
+    mapSequentially(go) > take(nCycles) > LList.fold
   }
 
   override def blueprint: Done -⚬ Done =
     λ.+ { start =>
-      val reindeers = start :>> constList1Of("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9")
-      val elves     = start :>> constList1Of("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10")
-      val rGrpPool |*| releasedReindeers = reindeers :>> poolEndless :>> fst(Endless.groups(9) > Endless.map(ReindeerGroup.make))
-      val eGrpPool |*| releasedElves     = elves     :>> poolEndless :>> fst(Endless.groups(3) > Endless.map(ElfGroup.make))
-      santa(nCycles = 20)(Endless.mergeEitherPreferred[ReindeerGroup, ElfGroup](rGrpPool |*| eGrpPool))
-        .waitFor(LList1.closeAll(releasedReindeers))
-        .waitFor(LList1.closeAll(releasedElves))
+      val reindeers : $[LList1[Reindeer]] = start :>> constList1Of("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9")
+      val elves     : $[LList1[Elf]]      = start :>> constList1Of("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10")
+      val rGroups |*| releasedReindeers = reindeers :>> map(vacation) :>> poolEndless :>> fst(groupMap(9, ReindeerGroup.make))
+      val eGroups |*| releasedElves     = elves     :>> map(makeToys) :>> poolEndless :>> fst(groupMap(3, ElfGroup.make))
+      val groups: $[Endless[ReindeerGroup |+| ElfGroup]] = mergeEitherPreferred[ReindeerGroup, ElfGroup](rGroups |*| eGroups)
+      joinAll(
+        groups :>> santa(nCycles = 20),
+        closeAll(releasedReindeers),
+        closeAll(releasedElves),
+      )
     }
 }
