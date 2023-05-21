@@ -3845,31 +3845,29 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       A: Signaling.Positive[A],
       aff: Affine[A],
     ): (Endless[A] |*| Endless[A]) -⚬ Endless[A] = {
-      given Signaling.Positive[A |*| Endless[A]] = Signaling.Positive.byFst
+      import Comonoid.comonoidPing
 
       def go: ((A |*| Endless[A]) |*| Endless[A]) -⚬ Endless[A] = rec { self =>
         λ { case (a |*| as) |*| bs =>
           val po |*| pi = constant(lInvertPongPing)
           val res: $[One |&| (A |*| Endless[A])] =
-            ((a |*| (pi |*| bs)) :>> raceHandicap(Endless.pullOnPing)) switch {
-              case Left(a |*| bs) =>
+            ((a |*| pi) :>> race) switch {
+              case Left(a |*| ?(_)) =>
                 (a |*| as |*| bs) :>> choice(
                   λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
                   λ { case a |*| as |*| bs => a |*| self(pull(as) |*| bs) },
                 )
-              case Right(x) =>
-                x switch {
-                  case Left(a |*| (b |*| bs)) =>
-                    (a |*| as |*| b |*| bs) :>> choice(
-                      λ { case ?(_) |*| as |*| ?(_) |*| bs => close(as) alsoElim close(bs) },
-                      λ { case a |*| as |*| b |*| bs => a |*| self(pull(as) |*| unpull(b |*| bs)) },
-                    )
-                  case Right(a |*| (b |*| bs)) =>
-                    (a |*| as |*| b |*| bs) :>> choice(
-                      λ { case ?(_) |*| as |*| ?(_) |*| bs => close(as) alsoElim close(bs) },
-                      λ { case a |*| as |*| b |*| bs => b |*| self((a |*| as) |*| bs) },
-                    )
-                }
+              case Right(a |*| ?(_)) =>
+                (a |*| as |*| bs) :>> choice(
+                  λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
+                  λ { case   a  |*| as |*| bs =>
+                    val b |*| bs1 = pull(bs)
+                    ((a |*| b) :>> race) switch {
+                      case Left(a |*| b)  => a |*| self(pull(as) |*| unpull[A](b |*| bs1))
+                      case Right(a |*| b) => b |*| self((a |*| as) |*| bs1)
+                    }
+                  },
+                )
             }
           (po |*| res) :>> notifyChoice :>> pack
         }
