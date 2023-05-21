@@ -3,26 +3,21 @@ package libretto.examples.santa
 import libretto.scaletto.StarterApp
 import libretto.scaletto.StarterKit._
 import libretto.stream.scaletto.DefaultStreams.Source
-import scala.util.Random
-import scala.concurrent.duration._
 import scala.{:: => NonEmptyList}
 
 object SantaClaus extends StarterApp {
   opaque type Reindeer = Val[String]
   opaque type Elf      = Val[String]
 
-  def randomDelay(minMs: Int, maxMs: Int): Done -⚬ Done =
-    constVal(()) > mapVal(_ => Random.between(minMs, maxMs).millis) > delay
-
   def vacation: Reindeer -⚬ Reindeer = λ { rndr =>
     rndr :>> alsoPrintLine(r => s"$r going on vacation")
-         :>> delayVal(randomDelay(100, 200))
+         :>> delayValRandomMs(100, 200)
          :>> alsoPrintLine(r => s"$r returned from vacation")
   }
 
   def makeToys: Elf -⚬ Elf = λ { elf =>
     elf :>> alsoPrintLine(e => s"$e making toys")
-        :>> delayVal(randomDelay(30, 50))
+        :>> delayValRandomMs(30, 50)
         :>> alsoPrintLine(e => s"$e needs consultation")
   }
 
@@ -42,8 +37,8 @@ object SantaClaus extends StarterApp {
   }
 
   def santa: Source[ReindeerGroup |+| ElfGroup] -⚬ Source[ReindeerGroup |+| ElfGroup] = {
-    def deliverToys: ReindeerGroup -⚬ ReindeerGroup = alsoPrintLine[NonEmptyList[String]](grp => s"Delivering toys with ${grp.mkString(", ")}") > delayVal(randomDelay(50, 100))
-    def meetInStudy:      ElfGroup -⚬ ElfGroup      = alsoPrintLine[NonEmptyList[String]](grp => s"Meeting in study with ${grp.mkString(", ")}") > delayVal(randomDelay(10, 20))
+    def deliverToys: ReindeerGroup -⚬ ReindeerGroup = alsoPrintLine[NonEmptyList[String]](grp => s"Delivering toys with ${grp.mkString(", ")}") > delayValRandomMs(50, 100)
+    def meetInStudy:      ElfGroup -⚬ ElfGroup      = alsoPrintLine[NonEmptyList[String]](grp => s"Meeting in study with ${grp.mkString(", ")}") > delayValRandomMs(10, 20)
 
     def go: (ReindeerGroup |+| ElfGroup) -⚬ (Ping |*| (ReindeerGroup |+| ElfGroup)) =
       either(

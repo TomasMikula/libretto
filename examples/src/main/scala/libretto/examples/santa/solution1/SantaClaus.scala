@@ -5,27 +5,21 @@ import libretto.scaletto.StarterKit.{_, given}
 import libretto.scaletto.StarterKit.Endless.{groupMap, mapSequentially, mergeEitherPreferred, take}
 import libretto.scaletto.StarterKit.LList1.{closeAll, map}
 import libretto.scaletto.StarterKit.Monoid.monoidOne
-import libretto.stream.scaletto.DefaultStreams.Source
-import scala.util.Random
-import scala.concurrent.duration._
 import scala.{:: => NonEmptyList}
 
 object SantaClaus extends StarterApp {
   opaque type Reindeer = Val[String]
   opaque type Elf      = Val[String]
 
-  def randomDelay(minMs: Int, maxMs: Int): Done -⚬ Done =
-    constVal(()) > mapVal(_ => Random.between(minMs, maxMs).millis) > delay
-
   def vacation: Reindeer -⚬ Reindeer = λ { rndr =>
     rndr :>> alsoPrintLine(r => s"$r going on vacation")
-         :>> delayVal(randomDelay(100, 200))
+         :>> delayValRandomMs(100, 200)
          :>> alsoPrintLine(r => s"$r returned from vacation")
   }
 
   def makeToys: Elf -⚬ Elf = λ { elf =>
     elf :>> alsoPrintLine(e => s"$e making toys")
-        :>> delayVal(randomDelay(30, 50))
+        :>> delayValRandomMs(30, 50)
         :>> alsoPrintLine(e => s"$e needs consultation")
   }
 
@@ -42,7 +36,7 @@ object SantaClaus extends StarterApp {
 
     def act: Type -⚬ Done =
       collectNames > λ { case names |*| grp =>
-        val +(done) = names :>> printLine(formatMessage) :>> randomDelay(50, 100)
+        val +(done) = names :>> printLine(formatMessage) :>> delayRandomMs(50, 100)
         done alsoElim releaseWhen(done |*| grp)
       }
 
