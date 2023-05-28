@@ -3673,7 +3673,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
      *  their timely appearence in the input list is sufficient for them to come before
      *  the inserted element.
      */
-    def insertBySignal[T: Signaling.Positive]: (T |*| LList[T]) -⚬ LList1[T] = {
+    def insertBySignal[T](using Signaling.Positive[T]): (T |*| LList[T]) -⚬ LList1[T] = {
       import LList.signalingLList
 
       raceSwitch(
@@ -3702,11 +3702,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     )(using
       Signaling.Positive[A],
     ): LList1[A] -⚬ ((A |*| Ā) |*| LList1[A]) =
-      id                                         [     LList1[A]                   ]
-        .>(LList1.uncons)                     .to[   A |*|               LList[A]  ]
-        .>.fst(introSnd(lInvert) > assocRL)   .to[ ((A |*| Ā) |*| A) |*| LList[A]  ]
-        .>(assocLR)                           .to[  (A |*| Ā) |*| (A |*| LList[A]) ]
-        .>.snd(LList1.insertBySignal)         .to[  (A |*| Ā) |*|    LList1[A]     ]
+      λ { case a |*| as =>
+        val na |*| a1 = constant(lInvert)
+        (a |*| na) |*| insertBySignal(a1 |*| as)
+      }
   }
 
   /** An endless source of elements, where the consumer decides whether to pull one more element or close.
