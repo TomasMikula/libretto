@@ -2834,7 +2834,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def poolBy[A: Signaling.Positive, Ā](
       lInvert: One -⚬ (Ā |*| A),
     ): LList1[A] -⚬ (Unlimited[A |*| Ā] |*| LList1[A]) =
-      unfold(borrow(lInvert))
+      unfold(LList1.borrow(lInvert))
 
     implicit def comonoidUnlimited[A]: Comonoid[Unlimited[A]] =
       new Comonoid[Unlimited[A]] {
@@ -3696,6 +3696,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def unzipBy[T, A, B](f: T -⚬ (A |*| B)): LList1[T] -⚬ (LList1[A] |*| LList1[B]) =
       map(f) > unzip
+
+    def borrow[A, Ā](
+      lInvert: One -⚬ (Ā |*| A),
+    )(using
+      Signaling.Positive[A],
+    ): LList1[A] -⚬ ((A |*| Ā) |*| LList1[A]) =
+      id                                         [     LList1[A]                   ]
+        .>(LList1.uncons)                     .to[   A |*|               LList[A]  ]
+        .>.fst(introSnd(lInvert) > assocRL)   .to[ ((A |*| Ā) |*| A) |*| LList[A]  ]
+        .>(assocLR)                           .to[  (A |*| Ā) |*| (A |*| LList[A]) ]
+        .>.snd(LList1.insertBySignal)         .to[  (A |*| Ā) |*|    LList1[A]     ]
   }
 
   /** An endless source of elements, where the consumer decides whether to pull one more element or close.
@@ -3907,7 +3918,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def poolBy[A: Signaling.Positive, Ā](
       lInvert: One -⚬ (Ā |*| A),
     ): LList1[A] -⚬ (Endless[A |*| Ā] |*| LList1[A]) =
-      unfold(borrow(lInvert))
+      unfold(LList1.borrow(lInvert))
   }
 
   def listEndlessDuality[A, Ā](ev: Dual[A, Ā]): Dual[LList[A], Endless[Ā]] =
@@ -3926,15 +3937,6 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         )
       }
     }
-
-  private def borrow[A: Signaling.Positive, Ā](
-    lInvert: One -⚬ (Ā |*| A),
-  ): LList1[A] -⚬ ((A |*| Ā) |*| LList1[A]) =
-    id                                         [     LList1[A]                   ]
-      .>(LList1.uncons)                     .to[   A |*|               LList[A]  ]
-      .>.fst(introSnd(lInvert) > assocRL)   .to[ ((A |*| Ā) |*| A) |*| LList[A]  ]
-      .>(assocLR)                           .to[  (A |*| Ā) |*| (A |*| LList[A]) ]
-      .>.snd(LList1.insertBySignal)         .to[  (A |*| Ā) |*|    LList1[A]     ]
 
   opaque type Lease = Done |*| Need
   object Lease {
