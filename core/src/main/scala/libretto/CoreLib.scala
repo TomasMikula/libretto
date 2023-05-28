@@ -3505,16 +3505,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
      *  it also becomes available as the next element of the result list.
      */
     def merge[T]: (LList[T] |*| LList[T]) -⚬ LList[T] = rec { self =>
-      raceSwitch(
-        caseFstWins = switchWithR(
-          caseNil = id[LList[T]],
-          caseCons = assocLR > par(id, self) > cons,
-        ),
-        caseSndWins = switchWithL(
-          caseNil = id[LList[T]],
-          caseCons = XI > par(id, self) > cons,
-        ),
-      )
+      λ { case as |*| bs =>
+        race(as |*| bs) switch {
+          case Left(as |*| bs) =>
+            uncons(as) switch {
+              case Left(?(one))    => bs
+              case Right(a |*| as) => cons(a |*| self(as |*| bs))
+            }
+          case Right(as |*| bs) =>
+            uncons(bs) switch {
+              case Left(?(one)) => as
+              case Right(b |*| bs) => cons(b |*| self(as |*| bs))
+            }
+        }
+      }
     }
 
     /** Inserts an element to a list as soon as the element signals.
