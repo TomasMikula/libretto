@@ -3528,18 +3528,32 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
      *  their timely appearence in the input list is sufficient for them to come before
      *  the inserted element.
      */
-    def insertBySignal[T: Signaling.Positive]: (T |*| LList[T]) -⚬ LList[T] =
-      par(singletonOnSignal[T], id) > merge[T]
+    def insertBySignal[T](using Signaling.Positive[T]): (T |*| LList[T]) -⚬ LList[T] =
+      rec { self =>
+        λ { case a |*| as =>
+          race[T, LList[T]](a |*| as) switch {
+            case Left(a |*| as) =>
+              cons(a |*| as)
+            case Right(a |*| as) =>
+              uncons(as) switch {
+                case Left(?(one))     => singletonOnSignal(a)
+                case Right(a1 |*| as) => cons(a1 |*| self(a |*| as))
+              }
+          }
+        }
+      }
 
     /** Make the elements of the input list available in the output list in the order in which they signal. */
-    def sortBySignal[T: Signaling.Positive]: LList[T] -⚬ LList[T] = rec { self =>
+    def sortBySignal[T](using Signaling.Positive[T]): LList[T] -⚬ LList[T] = rec { self =>
       // XXX O(n^2) complexity: if the element at the end of the list signals first, it will take O(n) steps for it
       // to bubble to the front. Could be improved to O(log(n)) steps to bubble any element and O(n*log(n)) total
       // complexity by using a heap data structure.
-      switch(
-        caseNil = nil[T],
-        caseCons = par(id[T], self) > insertBySignal[T],
-      )
+      λ { as =>
+        uncons(as) switch {
+          case Left(one)       => nil(one)
+          case Right(a |*| as) => insertBySignal(a |*| self(as))
+        }
+      }
     }
 
     implicit def monoidLList[A]: Monoid[LList[A]] =
