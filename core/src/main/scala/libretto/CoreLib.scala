@@ -3706,6 +3706,18 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         val na |*| a1 = constant(lInvert)
         (a |*| na) |*| insertBySignal(a1 |*| as)
       }
+
+    def eachNotifyBy[A](notify: A -⚬ (Ping |*| A)): LList1[A] -⚬ (Ping |*| LList1[A]) =
+      unzipBy(notify) > fst(fold)
+
+    def eachNotify[A](using A: Signaling.Positive[A]): LList1[A] -⚬ (Ping |*| LList1[A]) =
+      eachNotifyBy(A.notifyPosFst)
+
+    def eachAwaitBy[A](await: (Done |*| A) -⚬ A): (Done |*| LList1[A]) -⚬ LList1[A] =
+      transform[A, Done, A](await)
+
+    def eachAwait[A](using A: Junction.Positive[A]): (Done |*| LList1[A]) -⚬ LList1[A] =
+      eachAwaitBy(A.awaitPosFst)
   }
 
   /** An endless source of elements, where the consumer decides whether to pull one more element or close.
