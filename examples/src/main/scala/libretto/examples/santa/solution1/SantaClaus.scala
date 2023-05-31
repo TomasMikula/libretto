@@ -26,7 +26,6 @@ object SantaClaus extends StarterApp {
   class Group[A](
     getName: A -⚬ (Val[String] |*| A),
     formatMessage: NonEmptyList[String] => String,
-    onRelease: A -⚬ A,
   )(using SignalingJunction.Positive[A]) {
     import LList1.{fold, foldMap, transform, unzipBy}
 
@@ -41,7 +40,7 @@ object SantaClaus extends StarterApp {
       }
 
     private def releaseWhen: (Done |*| Type) -⚬ One =
-      transform(assocRL > fst(awaitPosFst[A] > onRelease) > supply) > fold
+      transform(assocRL > fst(awaitPosFst[A]) > supply) > fold
 
     private def collectNames: Type -⚬ (Val[NonEmptyList[String]] |*| Type) =
       unzipBy(fst(getName) > assocLR) > fst(toScalaList1)
@@ -53,8 +52,8 @@ object SantaClaus extends StarterApp {
       Signaling.Positive.from(unzipBy(fst(notifyPosFst[A]) > assocLR) > fst(fold))
   }
 
-  val ReindeerGroup = Group[Reindeer](dup, names => s"Delivering toys with ${names.mkString(", ")}", vacation)
-  val ElfGroup      = Group[Elf]     (dup, names => s"Meeting in study with ${names.mkString(", ")}", makeToys)
+  val ReindeerGroup = Group[Reindeer](dup, names => s"Delivering toys with ${names.mkString(", ")}")
+  val ElfGroup      = Group[Elf]     (dup, names => s"Meeting in study with ${names.mkString(", ")}")
 
   type ReindeerGroup = ReindeerGroup.Type
   type ElfGroup = ElfGroup.Type
@@ -70,8 +69,8 @@ object SantaClaus extends StarterApp {
     λ.+ { start =>
       val reindeers : $[LList1[Reindeer]] = start :>> constList1Of("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9")
       val elves     : $[LList1[Elf]]      = start :>> constList1Of("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10")
-      val rGroups |*| releasedReindeers = reindeers :>> map(vacation) :>> Endless.pool :>> fst(groupMap(9, ReindeerGroup.make))
-      val eGroups |*| releasedElves     = elves     :>> map(makeToys) :>> Endless.pool :>> fst(groupMap(3, ElfGroup.make))
+      val rGroups |*| releasedReindeers = reindeers :>> map(vacation) :>> Endless.poolReset(vacation) :>> fst(groupMap(9, ReindeerGroup.make))
+      val eGroups |*| releasedElves     = elves     :>> map(makeToys) :>> Endless.poolReset(makeToys) :>> fst(groupMap(3, ElfGroup.make))
       val groups: $[Endless[ReindeerGroup |+| ElfGroup]] = mergeEitherPreferred[ReindeerGroup, ElfGroup](rGroups |*| eGroups)
       joinAll(
         groups :>> santa(nCycles = 20),

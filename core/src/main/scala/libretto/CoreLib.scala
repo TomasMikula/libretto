@@ -3883,7 +3883,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
               case Left(a |*| ?(_)) =>
                 (a |*| as |*| bs) :>> choice(
                   λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
-                  λ { case a |*| as |*| bs => a |*| self(pull(as) |*| bs) },
+                  λ { case   a  |*| as |*| bs => a |*| self(pull(as) |*| bs) },
                 )
               case Right(a |*| ?(_)) =>
                 (a |*| as |*| bs) :>> choice(

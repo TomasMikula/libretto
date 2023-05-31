@@ -31,12 +31,17 @@ class InvertLib[
     }
 
   extension (obj: Unlimited.type) {
-    def pool[A: Signaling.Positive]: LList1[A] -⚬ (Unlimited[A |*| -[A]] |*| LList1[A]) =
+    def pool[A](using Signaling.Positive[A]): LList1[A] -⚬ (Unlimited[A |*| -[A]] |*| LList1[A]) =
       Unlimited.poolBy[A, -[A]](forevert[A])
   }
 
   extension (obj: Endless.type) {
-    def pool[A: Signaling.Positive]: LList1[A] -⚬ (Endless[A |*| -[A]] |*| LList1[A]) =
+    def pool[A](using Signaling.Positive[A]): LList1[A] -⚬ (Endless[A |*| -[A]] |*| LList1[A]) =
       obj.poolBy[A, -[A]](forevert[A])
+
+    def poolReset[A, B](reset: B -⚬ A)(using
+      Signaling.Positive[A]
+    ): LList1[A] -⚬ (Endless[A |*| -[B]] |*| LList1[A]) =
+      obj.poolBy[A, -[B]](forevert[B] > snd(reset))
   }
 }
