@@ -3685,6 +3685,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
     }
 
+    def sortBySignal[A](using Signaling.Positive[A]): LList1[A] -⚬ LList1[A] =
+      λ { case a |*| as => insertBySignal(a |*| LList.sortBySignal(as)) }
+
     def unzip[A, B]: LList1[A |*| B] -⚬ (LList1[A] |*| LList1[B]) =
       switch(
         par(singleton, singleton),
@@ -3848,8 +3851,34 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def mapSequence[A, B](f: A -⚬ (Ping |*| B)): Endless[A] -⚬ Endless[B] =
       map(f) > sequenceByPing
 
-    def mapSequentially[A, B: Signaling.Positive](f: A -⚬ B): Endless[A] -⚬ Endless[B] =
+    def mapSequentially[A, B](f: A -⚬ B)(using Signaling.Positive[B]): Endless[A] -⚬ Endless[B] =
       map(f) > sequence
+
+    def foldLeftSequentially[B, A](f: (B |*| A) -⚬ B)(using
+      Signaling.Positive[B]
+    ): (B |*| Endless[A]) -⚬ B =
+      rec { self =>
+        λ { case b |*| as =>
+          val p |*| b1 = b :>> notifyPosFst
+          injectLOnPing[Endless[A], One](p |*| as) switch {
+            case Left(as) =>
+              val h |*| t = pull(as)
+              self(f(b1 |*| h) |*| t)
+            case Right(?(_)) =>
+              b1
+          }
+        }
+      }
+
+    def foldMapSequentially[A, B](f: A -⚬ B)(using
+      Signaling.Positive[B],
+      Semigroup[B],
+    ): Endless[A] -⚬ B = {
+      val g: (B |*| A) -⚬ B =
+        snd(f) > summon[Semigroup[B]].combine
+
+      pull > fst(f) > foldLeftSequentially[B, A](g)
+    }
 
     def pullN[A](n: Int): Endless[A] -⚬ (LList1[A] |*| Endless[A]) = {
       require(n > 0, s"n must be positive")
@@ -3891,22 +3920,22 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         λ { case (a |*| as) |*| bs =>
           val po |*| pi = constant(lInvertPongPing)
           val res: $[One |&| (A |*| Endless[A])] =
-            ((a |*| pi) :>> race) switch {
-              case Left(a |*| ?(_)) =>
-                (a |*| as |*| bs) :>> choice(
-                  λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
-                  λ { case   a  |*| as |*| bs => a |*| self(pull(as) |*| bs) },
-                )
-              case Right(a |*| ?(_)) =>
+            race[Ping, A](pi |*| a) switch {
+              case Left(?(_) |*| a) =>
                 (a |*| as |*| bs) :>> choice(
                   λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
                   λ { case   a  |*| as |*| bs =>
                     val b |*| bs1 = pull(bs)
-                    ((a |*| b) :>> race) switch {
+                    race[A, A](a |*| b) switch {
                       case Left(a |*| b)  => a |*| self(pull(as) |*| unpull[A](b |*| bs1))
                       case Right(a |*| b) => b |*| self((a |*| as) |*| bs1)
                     }
                   },
+                )
+              case Right(?(_) |*| a) =>
+                (a |*| as |*| bs) :>> choice(
+                  λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
+                  λ { case   a  |*| as |*| bs => a |*| self(pull(as) |*| bs) },
                 )
             }
           (po |*| res) :>> notifyChoice :>> pack
