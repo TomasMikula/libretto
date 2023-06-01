@@ -3,7 +3,7 @@ package libretto.examples.santa.solution1
 import libretto.scaletto.StarterApp
 import libretto.scaletto.StarterKit.{_, given}
 import libretto.scaletto.StarterKit.Endless.{groupMap, mapSequentially, mergeEitherPreferred, take}
-import libretto.scaletto.StarterKit.LList1.{closeAll, eachNotifyBy, foldMap, map, transform, unzipBy}
+import libretto.scaletto.StarterKit.LList1.{closeAll, eachNotifyBy, foldMap, map, sortBySignal, transform, unzipBy}
 import libretto.scaletto.StarterKit.Monoid.monoidOne
 import scala.{:: => NonEmptyList}
 
@@ -78,8 +78,10 @@ object SantaClaus extends StarterApp {
     λ.+ { start =>
       val reindeers : $[LList1[Reindeer]] = start :>> constList1Of("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9")
       val elves     : $[LList1[Elf]]      = start :>> constList1Of("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10")
-      val rGroups |*| releasedReindeers = reindeers :>> map(vacation) :>> Endless.poolReset(vacation) :>> fst(groupMap(9, RGroup.make))
-      val eGroups |*| releasedElves     = elves     :>> map(makeToys) :>> Endless.poolReset(makeToys) :>> fst(groupMap(3, EGroup.make))
+      val reindeers1 = reindeers :>> map(vacation) :>> sortBySignal
+      val elves1     = elves     :>> map(makeToys) :>> sortBySignal
+      val rGroups |*| releasedReindeers = reindeers1 :>> Endless.poolReset(vacation) :>> fst(groupMap(9, RGroup.make))
+      val eGroups |*| releasedElves     = elves1     :>> Endless.poolReset(makeToys) :>> fst(groupMap(3, EGroup.make))
       val groups: $[Endless[RGroup |+| EGroup]] = mergeEitherPreferred[RGroup, EGroup](rGroups |*| eGroups)
       joinAll(
         groups :>> santa(nCycles = 20),
