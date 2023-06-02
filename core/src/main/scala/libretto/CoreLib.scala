@@ -3832,27 +3832,32 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def delayUntilPing[A]: (Ping |*| Endless[A]) -⚬ Endless[A] =
       snd(unpack) > delayChoiceUntilPing > pack
 
+    def delayUntilPong[A]: Endless[A] -⚬ (Pong |*| Endless[A]) =
+      unpack > delayChoiceUntilPong > snd(pack)
+
     /** Delays each next pull until the previously emitted element signalled. */
     def sequence[A](using A: Signaling.Positive[A]): Endless[A] -⚬ Endless[A] =
-      map(A.notifyPosFst) > sequenceByPing[A]
+      mapSequentially(id)
 
-    /** Delays each next pull until the [[Ping]] from the previously emitted element. */
-    def sequenceByPing[A]: Endless[Ping |*| A] -⚬ Endless[A] = {
-      def go: (Ping |*| Endless[Ping |*| A]) -⚬ Endless[A] = rec { go =>
-        delayUntilPing[Ping |*| A] > create(
-          onClose = close,
-          onPull  = pull > λ { case (p |*| a) |*| as => a |*| go(p |*| as) },
+    /** Delays each next pull until the [[Ping]] produced from the previous element. */
+    def mapSequence[A, B](f: A -⚬ (Ping |*| B)): Endless[A] -⚬ Endless[B] =
+      rec { self =>
+        Endless.create(
+          onClose = close[A],
+          onPull  = λ { as =>
+            val h  |*| t  = pull(as)
+            val pi |*| b  = f(h)
+            val po |*| t1 = delayUntilPong(t)
+            returning(
+              b |*| self(t1),
+              rInvertPingPong(pi |*| po),
+            )
+          }
         )
       }
 
-      introFst(ping) > go
-    }
-
-    def mapSequence[A, B](f: A -⚬ (Ping |*| B)): Endless[A] -⚬ Endless[B] =
-      map(f) > sequenceByPing
-
     def mapSequentially[A, B](f: A -⚬ B)(using Signaling.Positive[B]): Endless[A] -⚬ Endless[B] =
-      map(f) > sequence
+      mapSequence(f > notifyPosFst)
 
     def foldLeftSequentially[B, A](f: (B |*| A) -⚬ B)(using
       Signaling.Positive[B]
