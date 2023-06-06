@@ -147,6 +147,8 @@ Primitives for racing and recursion were added.
 
 **Custom Stream Operators Made Safe And Simple with Libretto.** Scalar 2023 [[video](https://www.youtube.com/watch?v=iPn4iwSu5Sw)] [[slides](https://continuously.dev/presentations/Custom-Stream-Operators_20230324.pdf)]
 
+**Concurrent All The Way Down (Functional Concurrency with Libretto).** LambdaDays 2023 [[slides](https://continuously.dev/presentations/Concurrent-All-The-Way-Down_20230606.pdf)]
+
 ## Caveats
 
 It is all too common for software projects to highlight only the good parts or to overstate their features.
