@@ -3734,6 +3734,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     private def unpack[A]: Endless[A] -⚬ (One |&| (A |*| Endless[A])) =
       dsl.unpack
 
+    def fromChoice[A]: (One |&| (A |*| Endless[A])) -⚬ Endless[A] =
+      pack
+
+    def toChoice[A]: Endless[A] -⚬ (One |&| (A |*| Endless[A])) =
+      dsl.unpack
+
     def close[A]: Endless[A] -⚬ One =
       unpack > chooseL
 
