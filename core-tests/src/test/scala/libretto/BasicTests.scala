@@ -38,7 +38,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     )
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit._
+    import kit.{OutPort => _, _}
     import dsl._
     import dsl.$._
     val coreLib = CoreLib(dsl)
@@ -668,7 +668,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           )
 
         val prg: Done -⚬ Val[List[(ClientId, ResourceId)]] =
-          resources > pool(promise) > par(clientsPrg, LList1.foldMap(neglect)) > awaitPosSnd
+          resources > Unlimited.poolBy(promise) > par(clientsPrg, LList1.foldMap(neglect)) > awaitPosSnd
 
         TestCase
           .interactWith(prg)
@@ -932,6 +932,35 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
 
         prg > success
       },
+
+      "latestValue" ->
+        TestCase.interactWith {
+          val prg: Done -⚬ ((-[LList1[Val[Int]]] |*| Endless[Val[Int]]) |*| Done) =
+            λ { d =>
+              val nis |*| is = constant(demand[LList1[Val[Int]]])
+              val out |*| d1 = latestValue(LList1.uncons(is))
+              (nis |*| out) |*| join(d |*| d1)
+            }
+          prg
+        }.via { port =>
+          val N = 100
+          val (snkSrc, d) = OutPort.split(port)
+          val (snk, src)  = OutPort.split(snkSrc)
+
+          // write numbers 0..N-1 at maximum speed
+          val input: One -⚬ LList1[Val[Int]] =
+            done > constList1(0, List.range(1, N))
+          OutPort.discardOne(snk.map(λ { nis => constant(input) supplyTo nis }))
+
+          // read N numbers at maximum speed
+          val out = src.map(Endless.take(N) > toScalaList)
+
+          // check that at least N/2 values were equal to the last written value (N-1)
+          for {
+            is <- expectVal(out)
+            _  <- Outcome.assert(is.count(_ == N-1) >= N/2, s"Expected ${N/2}+ values to be ${N-1}, got $is")
+          } yield ()
+        },
     )
   }
 }

@@ -62,6 +62,7 @@ abstract class ScalettoStreams {
   import scalettoLib.{_, given}
   import underlying._
   import Tree._
+  import Comonoid.given
 
   export underlying.{lib => _, dsl => _, _}
 
@@ -381,24 +382,21 @@ abstract class ScalettoStreams {
       Source.prefetch[Val[A]](n)(neglect, Exists(inversionDuality[LList[Done]]))
 
     def dropUntilFirstDemand[A]: ValSource[A] -⚬ ValSource[A] = rec { self =>
-        val caseDownstreamRequested: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] = {
-          val caseDownstreamClosed: (Val[A] |*| ValSource[A]) -⚬ Done      = joinMap(neglect, ValSource.close)
-          val caseDownstreamPulled: (Val[A] |*| ValSource[A]) -⚬ Polled[A] = injectR
-          ValSource.from(caseDownstreamClosed, caseDownstreamPulled)
+      poll > λ { as =>
+        producing { out =>
+          (notifyAction >>: out) match {
+            case downstreamPong |*| out =>
+              val downstreamActing = downstreamPong.asInput(lInvertPongPing)
+              out :=
+                race[Ping, Polled[A]](downstreamActing |*| as) switch {
+                  case Left(?(_) |*| as) => // downstream acting
+                    as :>> ValSource.from(Polled.close, id)
+                  case Right(?(_) |*| as) => // upstream response
+                    as :>> either(ValSource.empty, fst(neglect) > ValSource.delayBy > self)
+                }
+          }
         }
-
-        val caseNotRequestedYet: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] = {
-          id[Val[A] |*| ValSource[A]]
-            .>.fst(neglect)
-            .>(ValSource.delayBy)
-            .>(self)
-        }
-
-        val goElem: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] =
-          choice(caseDownstreamRequested, caseNotRequestedYet)
-            .>(selectSignaledOrNot(Source.negativeSource))
-
-        poll > either(empty[A], goElem)
+      }
     }
 
     def broadcast[A]: ValSource[A] -⚬ PUnlimited[ValSource[A]] = rec { self =>

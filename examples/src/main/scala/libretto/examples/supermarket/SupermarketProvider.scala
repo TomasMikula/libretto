@@ -157,7 +157,7 @@ object SupermarketProvider extends SupermarketInterface {
       // When the pool is empty, next customer will not obtain a basket until a basket is returned to the pool.
       // `collectedBaskets` will become available once there's no chance that anyone will still use them.
       val ((basketSupply: $[Unlimited[BorrowedBasket]]) |*| (collectedBaskets: $[LList1[Basket]])) =
-        baskets > pool
+        baskets > Unlimited.pool
 
       // `goodsSupplyClosed` will signal once there's no chance that anyone still needs it.
       val ((goodsSupply: $[GoodsSupply]) |*| (goodsSupplyClosed: $[Done])) =

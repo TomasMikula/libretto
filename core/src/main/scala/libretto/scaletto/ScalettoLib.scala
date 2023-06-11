@@ -1,12 +1,13 @@
 package libretto.scaletto
 
 import java.util.concurrent.atomic.AtomicLong
-import libretto.CoreLib
+import libretto.{CoreLib, InvertLib}
 import libretto.lambda.util.SourcePos
 import libretto.util.Async
 import scala.annotation.targetName
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
 import scala.reflect.TypeTest
+import scala.util.Random
 
 object ScalettoLib {
   def apply(
@@ -27,6 +28,9 @@ class ScalettoLib[
   import dsl._
   import dsl.$._
   import coreLib._
+
+  private val invertLib = InvertLib(coreLib)
+  import invertLib._
 
   object Val {
     def isEq[A](a: A): Val[A] -⚬ (Val[a.type] |+| Val[A]) =
@@ -109,6 +113,42 @@ class ScalettoLib[
 
   def delayVal[A](by: FiniteDuration): Val[A] -⚬ Val[A] =
     delayVal(delay(by))
+
+  def delayRandomMs(minMs: Int, maxMs: Int): Done -⚬ Done =
+    constVal(()) > mapVal(_ => Random.between(minMs, maxMs).millis) > delay
+
+  def delayValRandomMs[A](minMs: Int, maxMs: Int): Val[A] -⚬ Val[A] =
+    delayVal(delayRandomMs(minMs, maxMs))
+
+  def latestValue[A]: (Val[A] |*| LList[Val[A]]) -⚬ (Endless[Val[A]] |*| Done) = rec { self =>
+    λ { case +(a) |*| as =>
+      producing { case outAs |*| outDone =>
+        (outAs raceWith as) {
+          case Left((outAs, as)) =>
+            (Endless.fromChoice >>: outAs) switch {
+              case Left(end) => // no more reads
+                returning(
+                  end := one,
+                  outDone := LList1.cons(a |*| as) :>> LList1.closeAll,
+                )
+              case Right(na |*| nas) => // read
+                returning(
+                  na := a,
+                  (nas |*| outDone) := self(a |*| as),
+                )
+            }
+          case Right((outAs, as)) =>
+            (outAs |*| outDone) :=
+              LList.uncons(as) switch {
+                case Left(?(_)) => // no more writes
+                  a :>> Endless.unfold(dup) :>> snd(neglect)
+                case Right(a1 |*| as) => // write
+                  self((a1 waitFor neglect(a)) |*| as)
+              }
+        }
+      }
+    }
+  }
 
   given closeableCosemigroupVal[A]: CloseableCosemigroup[Val[A]] with {
     override def close : Val[A] -⚬ Done                = dsl.neglect
