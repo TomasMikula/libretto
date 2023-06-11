@@ -222,6 +222,14 @@ trait InvertDSL extends ClosedDSL {
       ctx: LambdaContext,
     ): ??[One] =
       (a supplyTo b) > invertOne
+
+    def asOutput[B](rInvert: (A |*| B) -⚬ One)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): ??[B] = {
+      val nb |*| b = constant(demand[B])
+      returning(nb, rInvert(a |*| b))
+    }
   }
 
   extension [B](expr: $[-[B]]) {
