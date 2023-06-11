@@ -3326,21 +3326,21 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
     }
 
-    def foldMap0[T, U](f: T -⚬ U)(implicit U: Semigroup[U]): LList[T] -⚬ Maybe[U] =
+    def foldMap0[T, U](f: T -⚬ U)(using U: Semigroup[U]): LList[T] -⚬ Maybe[U] =
       switch(
         caseNil  = Maybe.empty[U],
         caseCons = par(f, id) > actOn[U, T](par(id, f) > U.combine) > Maybe.just[U],
       )
 
-    def foldMap[T, U](f: T -⚬ U)(implicit U: Monoid[U]): LList[T] -⚬ U =
+    def foldMap[T, U](f: T -⚬ U)(using U: Monoid[U]): LList[T] -⚬ U =
       rec { self =>
         switch(U.unit, par(f, self) > U.combine)
       }
 
-    def fold0[T](implicit T: Semigroup[T]): LList[T] -⚬ Maybe[T] =
+    def fold0[T](using T: Semigroup[T]): LList[T] -⚬ Maybe[T] =
       foldMap0(id[T])
 
-    def fold[T](implicit T: Monoid[T]): LList[T] -⚬ T =
+    def fold[T](using T: Monoid[T]): LList[T] -⚬ T =
       foldMap(id[T])
 
     def foldL[S, T](f: (S |*| T) -⚬ S): (S |*| LList[T]) -⚬ S = rec { self =>
