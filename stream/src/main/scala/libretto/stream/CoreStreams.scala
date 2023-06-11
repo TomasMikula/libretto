@@ -108,7 +108,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def from[S, T, A](
       onClose: S -⚬ T,
-      onPoll: S -⚬ (T |+| (A |*| SourceT[T, A]))
+      onPoll: S -⚬ Polled[T, A],
     ): S -⚬ SourceT[T, A] =
       choice(onClose, onPoll) > fromChoice
 
@@ -131,24 +131,63 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       )
     }
 
+    def toLList[T, A]: SourceT[T, A] -⚬ (LList[A] |*| T) = rec { self =>
+      λ { src =>
+        poll(src) switch {
+          case Left(t) =>
+            constant(LList.nil) |*| t
+          case Right(a |*| tl) =>
+            val (as |*| t) = self(tl)
+            LList.cons(a |*| as) |*| t
+        }
+      }
+    }
+
+    /** Concatenates the two sources.
+     *
+     * @param carryOver defines how the terminator of the first source is carried over to the second one.
+     */
+    def concatenate[T, A](
+      carryOver: (T |*| SourceT[T, A]) -⚬ SourceT[T, A],
+    ): (SourceT[T, A] |*| SourceT[T, A]) -⚬ SourceT[T, A] =
+      rec { self =>
+        val onClose: (SourceT[T, A] |*| SourceT[T, A]) -⚬ T =
+          fst(SourceT.close) > carryOver > SourceT.close
+
+        val onPoll: (SourceT[T, A] |*| SourceT[T, A]) -⚬ Polled[T, A] =
+          λ { case src1 |*| src2 =>
+            poll(src1) switch {
+              case Left(t) =>
+                poll(carryOver(t |*| src2))
+              case Right(a |*| as) =>
+                Polled.cons(a |*| self(as |*| src2))
+            }
+          }
+
+        from(onClose, onPoll)
+      }
+
     def delayUntilPing[T, A]: (Ping |*| SourceT[T, A]) -⚬ SourceT[T, A] =
       snd(toChoice) > delayChoiceUntilPing > fromChoice
 
     /** Delays each next poll or close until the previously emitted element signalled. */
-    def sequence[T, A](using Signaling.Positive[A]): SourceT[T, A] -⚬ SourceT[T, A] = {
-      def go: (Ping |*| SourceT[T, A]) -⚬ SourceT[T, A] = rec { go =>
-        val onPoll: SourceT[T, A] -⚬ Polled[T, A] =
+    def sequence[T, A](using A: Signaling.Positive[A]): SourceT[T, A] -⚬ SourceT[T, A] =
+      map(A.notifyPosFst) > sequenceByPing[T, A]
+
+    /** Delays each next poll or close until the [[Ping]] from the previously emitted element. */
+    def sequenceByPing[T, A]: SourceT[T, Ping |*| A] -⚬ SourceT[T, A] = {
+      def go: (Ping |*| SourceT[T, Ping |*| A]) -⚬ SourceT[T, A] = rec { go =>
+        val onPoll: SourceT[T, Ping |*| A] -⚬ Polled[T, A] =
           λ { as =>
             poll(as) switch {
               case Left(t) =>
                 Polled.empty(t)
-              case Right(a |*| as) =>
-                (a :>> notifyPosFst) match
-                  case p |*| a => Polled.cons(a |*| go(p |*| as))
+              case Right((p |*| a) |*| as) =>
+                Polled.cons(a |*| go(p |*| as))
             }
           }
 
-        delayUntilPing[T, A] > from(close[T, A], onPoll)
+        delayUntilPing[T, Ping |*| A] > from(close[T, Ping |*| A], onPoll)
       }
 
       introFst(ping) > go
@@ -167,8 +206,83 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       introFst(A.unit) > go
     }
 
+    def mapSequence[T, A, B](f: A -⚬ (Ping |*| B)): SourceT[T, A] -⚬ SourceT[T, B] =
+      map(f) > sequenceByPing
+
+    def mapSequentially[T, A, B: Signaling.Positive](f: A -⚬ B): SourceT[T, A] -⚬ SourceT[T, B] =
+      map(f) > sequence
+
     def forEachSequentially[T, A](f: A -⚬ Done): SourceT[T, A] -⚬ (Done |*| T) =
       map(f) > sequence > fold
+
+    def pullN[T, A](n: Int): SourceT[T, A] -⚬ ((LList[A] |*| T) |+| (LList1[A] |*| SourceT[T, A])) = {
+      require(n > 0, s"n must be positive")
+
+      λ { src =>
+        poll(src) switch {
+          case Left(t) =>
+            injectL(constant(LList.nil[A]) |*| t)
+          case Right(a |*| as) =>
+            if (n == 1)
+              injectR(LList1.singleton(a) |*| as)
+            else
+              pullN(n-1)(as) switch {
+                case Left(as |*| t)     => injectL(LList.cons(a |*| as) |*| t)
+                case Right(as |*| tail) => injectR(LList1.cons1(a |*| as) |*| tail)
+              }
+        }
+      }
+    }
+
+    def groups[T, A](groupSize: Int): SourceT[T, A] -⚬ SourceT[T, LList1[A]] = rec { self =>
+      require(groupSize > 0, s"group size must be positive")
+
+      val onPull: SourceT[T, A] -⚬ Polled[T, LList1[A]] =
+        pullN(groupSize) > either(
+          λ { case elems |*| closed =>
+            (closed |*| elems) > LList.switchWithL(
+              Polled.empty,
+              λ { case closed |*| (h |*| t) => Polled.cons(LList1.cons(h |*| t) |*| SourceT.empty(closed)) },
+            )
+          },
+          snd(self) > Polled.cons[T, LList1[A]],
+        )
+
+      SourceT.from(close, onPull)
+    }
+
+    def take[T, A](n: Int): SourceT[T, A] -⚬ (UInt31 |*| SourceT[T, A]) =
+      introFst(done > UInt31(n)) > take
+
+    /** Cut off the upstream after a given number _n_ of elements.
+     *  The number on the outport is _n - m_, where _m_ is the number of elements actually served.
+     */
+    def take[T, A]: (UInt31 |*| SourceT[T, A]) -⚬ (UInt31 |*| SourceT[T, A]) = rec { take =>
+      def go1: (UInt31 |*| SourceT[T, A]) -⚬ (UInt31 |*| SourceT[T, A]) = {
+        val onClose: (UInt31 |*| SourceT[T, A]) -⚬ (UInt31 |*| T) =
+          par(UInt31.increment, close)
+        val onPoll: (UInt31 |*| SourceT[T, A]) -⚬ (UInt31 |*| Polled[T, A]) =
+          λ { case n0 |*| src =>
+            poll(src) switch {
+              case Left(t) =>
+                UInt31.increment(n0) |*| Polled.empty(t)
+              case Right(a |*| as) =>
+                val (n1 |*| as1) = take(n0 |*| as)
+                n1 |*| Polled.cons(a |*| as1)
+            }
+          }
+        choice(onClose, onPoll) > coDistributeL > snd(SourceT.fromChoice)
+      }
+
+      λ { case n |*| src =>
+        UInt31.decrement(n) switch {
+          case Left(done) =>
+            UInt31(0)(done) |*| empty(close(src))
+          case Right(n0) =>
+            go1(n0 |*| src)
+        }
+      }
+    }
 
     object Polled {
       def empty[T, A]: T -⚬ Polled[T, A] =
@@ -213,6 +327,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>(chooseRWhenDone)                 .to[ Done |*|           Polled[A]  ]
         .>(Polled.delayBy[A])               .to[                    Polled[A]  ]
 
+    def toLList[A]: Source[A] -⚬ (LList[A] |*| Done) =
+      SourceT.toLList
+
     /** Polls and discards all elements. */
     def drain[A](using A: Closeable[A]): Source[A] -⚬ Done =
       rec { self =>
@@ -234,6 +351,12 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def cons[A](using A: Closeable[A]): (A |*| Source[A]) -⚬ Source[A] =
       cons[A](A.close)
 
+    def singleton[A](using A: Closeable[A]): (A |*| Done) -⚬ Source[A] =
+      from(
+        onClose = fst(A.close) > join,
+        onPoll  = Polled.singleton[A],
+      )
+
     def fromLList[A](neglect: A -⚬ Done): LList[A] -⚬ Source[A] = rec { self =>
       LList.switch(
         caseNil  = done          > Source.empty[A],
@@ -246,12 +369,13 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def of[A](as: (One -⚬ A)*)(using Closeable[A]): One -⚬ Source[A] =
       LList.of(as: _*) > fromLList
 
-    def repeatedly[A](f: Done -⚬ A): Done -⚬ Source[A] = rec { self =>
-      from(
-        onClose = id[Done],
-        onPoll = forkMap(f, self) > Polled.cons,
-      )
-    }
+    def repeatedly[A, B](f: A -⚬ B)(using A: CloseableCosemigroup[A]): A -⚬ Source[B] =
+      rec { self =>
+        from(
+          onClose = A.close,
+          onPoll  = A.split > par(f, self) > Polled.cons,
+        )
+      }
 
     /** Signals the first action (i.e. [[poll]] or [[close]]) via a negative ([[Pong]]) signal. */
     def notifyAction[A]: (Pong |*| Source[A]) -⚬ Source[A] =
@@ -324,7 +448,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       id                                               [  Done |*|      Source[A]                  ]
         .>.snd(unpack)                              .to[  Done |*| (Done  |&|           Polled[A]) ]
         .>(coFactorL)                               .to[ (Done |*|  Done) |&| (Done |*| Polled[A]) ]
-        .bimap(join, Polled.delayClosedBy(self))    .to[       Done       |&|           Polled[A]  ]
+        .bimap(join, Polled.delayClosedBy_(self))   .to[       Done       |&|           Polled[A]  ]
         .pack[StreamFollowerF[Done, Done, A, *]]    .to[               Source[A]                   ]
     }
 
@@ -360,51 +484,77 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         from(onClose, onPoll)
       }
 
-    def forEachSequentially[A: Junction.Positive](f: A -⚬ Done): Source[A] -⚬ Done = rec { self =>
-      val caseCons: (A |*| Source[A]) -⚬ Done =
-        par(f, id) > Source.delayBy[A] > self
+    def mapSequence[A, B](f: A -⚬ (Ping |*| B)): Source[A] -⚬ Source[B] =
+      SourceT.mapSequence(f)
 
-      poll[A] > Polled.switch(caseEmpty = id[Done], caseCons)
-    }
+    def mapSequentially[A, B: Signaling.Positive](f: A -⚬ B): Source[A] -⚬ Source[B] =
+      mapSequence(f > notifyPosFst)
 
-    /** The second [[Source]] is "detained" because that gives the client flexibility in how the [[Done]] signal resulting from
-      * the exhaustion of the first [[Source]] is awaited. For example, if polling of the second [[Source]]
-      * should be delayed until the first [[Source]] is completely shut down, the client can use [[detain]] to delay the
-      * second [[Source]]. If polling of the second [[Source]] should start as soon as it is known that there are
-      * no more elements in the first [[Source]], the client can use [[detainClosed]] to delay the second [[Source]]
-      * (this latter behavior is the behavior of [[concat]]).
-      */
-    def concatenate[A]: (Source[A] |*| Detained[Source[A]]) -⚬ Source[A] = rec { self =>
-      val onClose: (Source[A] |*| Detained[Source[A]]) -⚬ Done =
-        joinMap(Source.close, Detained.releaseAsap > Source.close)
+    def forEachSequentially[A](f: A -⚬ Done): Source[A] -⚬ Done =
+      SourceT.forEachSequentially(f) > join
 
-      val onPoll: (Source[A] |*| Detained[Source[A]]) -⚬ Polled[A] =
-        λ { case src1 |*| detainedSrc2 =>
-          poll(src1) switch {
-            case Left(src1Closed) =>
-              val src2 = Detained.releaseBy(src1Closed |*| detainedSrc2)
-              poll(src2)
-            case Right(a |*| as) =>
-              Polled.cons(a |*| self(as |*| detainedSrc2))
-          }
-        }
+    def pullN[A](n: Int): Source[A] -⚬ ((LList[A] |*| Done) |+| (LList1[A] |*| Source[A])) =
+      SourceT.pullN(n)
 
-      from(onClose, onPoll)
-    }
+    def groups[A](groupSize: Int): Source[A] -⚬ Source[LList1[A]] =
+      SourceT.groups(groupSize)
 
+    def take[A](n: Int): Source[A] -⚬ Source[A] =
+      SourceT.take[Done, A](n) > fst(UInt31.neglect) > delayClosedBy
+
+    /** Concatenates the two sources.
+     *
+     * @param carryOver defines how the terminator of the first source is carried over to the second one.
+     */
+    def concatenate[A](carryOver: (Done |*| Source[A]) -⚬ Source[A]): (Source[A] |*| Source[A]) -⚬ Source[A] =
+      SourceT.concatenate[Done, A](carryOver)
+
+    /** Concatenates the two sources.
+     *  Before pulling from or closing the second one, waits until the first one is fully closed.
+     */
+    def concatStrict[A: Junction.Positive]: (Source[A] |*| Source[A]) -⚬ Source[A] =
+      concatenate(delayBy)
+
+    /** Concatenates the two sources.
+     *  Does not wait for the first source to be fully closed before pulling or closing the second one.
+     */
+    def concatLax[A]: (Source[A] |*| Source[A]) -⚬ Source[A] =
+      concatenate(delayClosedBy)
+
+    /** Alias for [[concatLax]].
+     *  Does not wait for the first source to be fully closed before pulling or closing the second one.
+     */
     def concat[A]: (Source[A] |*| Source[A]) -⚬ Source[A] =
-      id.>.snd(detainClosed) > concatenate
+      concatLax[A]
 
-    def flatten[A]: Source[Source[A]] -⚬ Source[A] =
+    def flatten[A](carryOver: (Done |*| Source[A]) -⚬ Source[A]): Source[Source[A]] -⚬ Source[A] =
       rec { flatten =>
         from(
           onClose = close[Source[A]],
           onPoll  = poll[Source[A]] > either(
             Polled.empty[A],
-            λ { case as |*| ass => poll(concat(as |*| flatten(ass))) }
+            λ { case as |*| ass => poll(concatenate(carryOver)(as |*| flatten(ass))) }
           ),
         )
       }
+
+    /** Emits the elements from each inner source, in order.
+     *  Waits for each inner source to be fully closed before pulling/closing the next inner source.
+     */
+    def flattenStrict[A: Junction.Positive]: Source[Source[A]] -⚬ Source[A] =
+      flatten[A](delayBy)
+
+    /** Emits the elements from each inner source, in order.
+     *  Does not wait for an inner source to be fully closed before pulling/closing the next inner source.
+     */
+    def flattenLax[A]: Source[Source[A]] -⚬ Source[A] =
+      flatten[A](delayClosedBy)
+
+    /** Alias for [[flattenStrict]].
+     *  Waits for each inner source to be fully closed before pulling/closing the next inner source.
+     */
+    def flatten[A: Junction.Positive]: Source[Source[A]] -⚬ Source[A] =
+      flattenStrict[A]
 
     /** Splits a stream of "`A` or `B`" to a stream of `A` and a stream of `B`.
       *
@@ -444,24 +594,114 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         .>.fst(fromChoice)            .to[                     Source[A]       |*| Source[B]  ]
     }
 
-    /** Merges two [[Source]]s into one.
-      * Left-biased: when there is a value available from both upstreams, favors the first one.
-      */
-    def merge[A](using
-      Junction.Positive[A],
-      Closeable[A],
-    ): (Source[A] |*| Source[A]) -⚬ Source[A] = rec { self =>
-      val onClose: (Source[A] |*| Source[A]) -⚬ Done      = joinMap(close, close)
-      val onPoll : (Source[A] |*| Source[A]) -⚬ Polled[A] = par(poll, poll) > Polled.merge(self)
-      from(onClose, onPoll)
+    private def merge[A](continue: (Source[A] |*| Source[A]) -⚬ Source[A])(using
+      A: Closeable[A],
+    ): (Source[A] |*| Source[A]) -⚬ Source[A] = {
+      def go: (Polled[A] |*| Source[A]) -⚬ Source[A] = {
+        def goDownstream: (Polled[A] |*| Source[A]) -⚬ Source[A] = {
+          def onClose: (Polled[A] |*| Source[A]) -⚬ Done =
+            par(Polled.close(A.close), Source.close) > join
+
+          def onPoll: (Polled[A] |*| Source[A]) -⚬ Polled[A] =
+            λ { case as |*| bs =>
+              ((as |*| poll(bs)) :>> raceBy(notifyEither)) switch {
+                case Left(as |*| bs) => // `as` ready
+                  as switch {
+                    case Left(closed) =>
+                      Polled.delayClosedBy(closed |*| bs)
+                    case Right(a |*| as) =>
+                      Polled.cons(a |*| continue(as |*| Polled.unpoll(bs)))
+                  }
+                case Right(as |*| bs) => // `bs` ready
+                  bs switch {
+                    case Left(closed) =>
+                      Polled.delayClosedBy(closed |*| as)
+                    case Right(b |*| bs) =>
+                      Polled.cons(b |*| continue(Polled.unpoll(as) |*| bs))
+                  }
+              }
+            }
+
+          Source.from(onClose, onPoll)
+        }
+
+        def goPrefetched: ((A |*| Source[A]) |*| Source[A]) -⚬ Source[A] = {
+          val onClose: ((A |*| Source[A]) |*| Source[A]) -⚬ Done =
+            par(par(A.close, Source.close[A]) > join, Source.close[A]) > join
+          val onPoll: ((A |*| Source[A]) |*| Source[A]) -⚬ Polled[A] =
+            λ { case (a |*| as) |*| bs =>
+              Polled.cons(a |*| continue(as |*| bs))
+            }
+          from(onClose, onPoll)
+        }
+
+        def go1: (Ping |*| (Polled[A] |*| Source[A])) -⚬ Source[A] =
+          λ { case downstreamActing |*| (as |*| bs) =>
+            (as :>> notifyEither) match {
+              case aReady |*| as =>
+                ((downstreamActing |*| aReady) :>> racePair) switch {
+                  case Left(?(_)) => // downstream acting
+                    goDownstream(as |*| bs)
+                  case Right(?(_)) => // `as` ready
+                    as switch {
+                      case Left(closed) =>
+                        Source.delayClosedBy(closed |*| bs)
+                      case Right(a |*| as) =>
+                        goPrefetched((a |*| as) |*| bs)
+                    }
+                }
+            }
+          }
+
+        introFst(lInvertPongPing) > assocLR > snd(go1) > notifyAction
+      }
+
+      fst(poll) > go
     }
 
+    /** Merges two [[Source]]s into one.
+      * Left-biased: when upstreams are faster than the downstream, consistently favors the first one.
+      * Prefetches up to 1 element from each of the upstream sources.
+      * If downstream closes while there are prefetched elements,
+      * they are discarded using the given [[Closeable]] instance.
+      */
+    def mergePreferred[A](using
+      A: Closeable[A],
+    ): (Source[A] |*| Source[A]) -⚬ Source[A] = rec { self =>
+      merge(self)
+    }
+
+
+    /** Merges two [[Source]]s into one.
+      * When upstreams are faster than the downstream, favors the one that emitted less recently.
+      * Prefetches up to 1 element from each of the upstream sources.
+      * If downstream closes while there are prefetched elements,
+      * they are discarded using the given [[Closeable]] instance.
+      */
+    def mergeBalanced[A](using
+      Closeable[A],
+    ): (Source[A] |*| Source[A]) -⚬ Source[A] = rec { self =>
+      merge(swap > self)
+    }
+
+    /** Merges two [[Source]]s into one. Alias for [[mergePreferred]]. */
+    def merge[A](using Closeable[A]): (Source[A] |*| Source[A]) -⚬ Source[A] =
+      mergePreferred
+
+    def mergeEither[A, B](using Closeable[A], Closeable[B]): (Source[A] |*| Source[B]) -⚬ Source[A |+| B] =
+      par(map(injectL), map(injectR)) > merge
+
+    def mergeEitherPreferred[A, B](using Closeable[A], Closeable[B]): (Source[A] |*| Source[B]) -⚬ Source[A |+| B] =
+      par(map(injectL), map(injectR)) > mergePreferred
+
+    def mergeEitherBalanced[A, B](using Closeable[A], Closeable[B]): (Source[A] |*| Source[B]) -⚬ Source[A |+| B] =
+      par(map(injectL), map(injectR)) > mergeBalanced
+
     /** Merges a list of [[Source]]s into a single [[Source]].
-      * Head-biased: when there is an element available from multiple upstreams, favors the upstream closest to the
-      * head of the input list.
+      * Head-biased: when upstreams are faster than the downstream,
+      * consistently favors the upstreams from the beginning of the list.
       */
     def mergeAll[A](using
-      Junction.Positive[A],
       Closeable[A],
     ): LList[Source[A]] -⚬ Source[A] =
       rec { self =>
@@ -593,7 +833,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       )
 
     given closeableSource[A]: Closeable[Source[A]] =
-      PAffine.from(Source.close)
+      Closeable.from(Source.close)
 
     object Polled {
       def close[A](neglect: A -⚬ Done): Polled[A] -⚬ Done =
@@ -604,6 +844,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
       def cons[A]: (A |*| Source[A]) -⚬ Polled[A] =
         injectR
+
+      def singleton[A]: (A |*| Done) -⚬ Polled[A] =
+        snd(Source.empty[A]) > cons
 
       def switch[A, R](
         caseEmpty: Done -⚬ R,
@@ -622,7 +865,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           .>.right(assocRL)             .to[      Done       |+| ((Done |*| A) |*| Source[A]) ]
           .>.right.fst(ev.awaitPosFst)  .to[      Done       |+| (          A  |*| Source[A]) ]
 
-      def delayClosedBy[A](
+      def delayClosedBy_[A](
         delaySourceClosed: (Done |*| Source[A]) -⚬ Source[A],
       ): (Done |*| Polled[A]) -⚬ Polled[A] =
         id[Done |*| Polled[A]]                .to[  Done |*| (Done |+|           (A |*| Source[A])) ]
@@ -630,6 +873,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           .>.left(join)                       .to[      Done       |+| (Done |*| (A |*| Source[A])) ]
           .>.right(XI)                        .to[      Done       |+| (A |*| (Done |*| Source[A])) ]
           .>.right.snd(delaySourceClosed)     .to[      Done       |+| (A |*|           Source[A] ) ]
+
+      def delayClosedBy[A]: (Done |*| Polled[A]) -⚬ Polled[A] =
+        delayClosedBy_(Source.delayClosedBy)
 
       def feedTo[A, B](
         f: (A |*| B) -⚬ PMaybe[B],
@@ -659,38 +905,6 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           SignalingJunction.Positive.signalingJunctionPositiveDone,
           Junction.Positive.byFst(A),
         )
-
-      /** Merges two [[Polled]]s into one.
-        * Left-biased: whenever there is a value available from both upstreams, favors the first one.
-        *
-        * @param mergeSources left-biased merge of two [[Source]]s.
-        */
-      def merge[A](
-        mergeSources: (Source[A] |*| Source[A]) -⚬ Source[A],
-      )(using
-        Junction.Positive[A],
-        Closeable[A],
-      ): (Polled[A] |*| Polled[A]) -⚬ Polled[A] = {
-        // checks the first argument first, uses the given function for recursive calls
-        def go(merge: (Source[A] |*| Source[A]) -⚬ Source[A]): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
-          id[Polled[A] |*| Polled[A]]   .to[ (Done                |+|  (A |*| Source[A])) |*| Polled[A]   ]
-            .distributeR                .to[ (Done |*| Polled[A]) |+| ((A |*| Source[A])  |*| Polled[A] ) ]
-            .>.left(delayBy[A])         .to[           Polled[A]  |+| ((A |*| Source[A])  |*| Polled[A] ) ]
-            .>.right.snd(unpoll)        .to[           Polled[A]  |+| ((A |*| Source[A])  |*| Source[A] ) ]
-            .>.right.assocLR            .to[           Polled[A]  |+| ( A |*| (Source[A]  |*| Source[A])) ]
-            .>.right.snd(merge)         .to[           Polled[A]  |+| ( A |*|           Source[A]       ) ]
-            .>.right(cons)              .to[           Polled[A]  |+|     Polled[A]                       ]
-            .either(id, id)             .to[                   Polled[A]                                  ]
-
-        // checks the first argument first
-        val goFst: (Polled[A] |*| Polled[A]) -⚬ Polled[A] = go(mergeSources)
-
-        // checks the second argument first
-        val goSnd: (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
-          swap > go(swap > mergeSources)
-
-        raceSwitch(goFst, goSnd)
-      }
     }
   }
 

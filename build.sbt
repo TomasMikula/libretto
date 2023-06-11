@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-ThisBuild / scalaVersion := "3.2.2"
+ThisBuild / scalaVersion := "3.3.0"
 
 ThisBuild / organization := "dev.continuously.libretto"
 
@@ -53,7 +53,7 @@ releaseProcess := Seq[ReleaseStep](
 )
 
 val ScalatestVersion = "3.2.15"
-val ZioVersion = "2.0.6"
+val ZioVersion = "2.0.10"
 
 val commonScalacOptions =
   Seq(
@@ -139,8 +139,8 @@ lazy val mashup = project
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio" % ZioVersion,
-      "dev.zio" %% "zio-json" % "0.4.2",
-      "dev.zio" %% "zio-http" % "0.0.4",
+      "dev.zio" %% "zio-json" % "0.5.0",
+      "dev.zio" %% "zio-http" % "0.0.5",
     ),
   )
 

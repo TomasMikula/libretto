@@ -89,6 +89,13 @@ trait CoreDSL {
 
   type Rec[F[_]]
 
+  /** Unsigned (i.e. non-negative) integer up to 31 bits.
+    * Behavior on overflow is undefined.
+    */
+  type UInt31
+
+  val UInt31: UInt31s
+
   /** The type of auxiliary placeholder variables used in construction of [[λ]]-expressions. */
   type $[A]
 
@@ -408,6 +415,17 @@ trait CoreDSL {
       $.unzip(ab)(pos)
   }
 
+  def returning[A](a: $[A], as: $[One]*)(using
+    pos: SourcePos,
+    ctx: LambdaContext,
+  ): $[A] = {
+    def go(a: $[A], as: List[$[One]]): $[A] =
+      as match
+        case Nil => a
+        case h :: t => go(a alsoElim h, t)
+    go(a, as.toList)
+  }
+
   extension [A, B](f: A -⚬ B) {
     def apply(a: $[A])(using
       pos: SourcePos,
@@ -482,6 +500,21 @@ trait CoreDSL {
   def constant[A](f: One -⚬ A)(using SourcePos, LambdaContext): $[A] =
     f($.one)
 
+  trait UInt31s {
+    /**
+     *
+     * @throws IllegalArgumentException if `n` is negative
+     */
+    def apply(n: Int): Done -⚬ UInt31
+
+    def add: (UInt31 |*| UInt31) -⚬ UInt31
+    def multiply: (UInt31 |*| UInt31) -⚬ UInt31
+    def increment: UInt31 -⚬ UInt31
+    def decrement: UInt31 -⚬ (Done |+| UInt31)
+
+    def neglect: UInt31 -⚬ Done
+  }
+
   object ? {
     def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A])(using A: Affine[A]): Some[$[A]] =
       Some($.nonLinear(a)(split = None, ditch = Some(A.discard))(pos))
@@ -516,6 +549,9 @@ trait CoreDSL {
 
     given affinePair[A, B](using A: Affine[A], B: Affine[B]): Affine[A |*| B] =
       from(andThen(par(A.discard, B.discard), elimFst))
+
+    given affineEither[A, B](using A: Affine[A], B: Affine[B]): Affine[A |+| B] =
+      from(either(A.discard, B.discard))
   }
 
   trait Cosemigroup[A] {

@@ -23,7 +23,7 @@ object Main extends StarterApp {
       val biscuits = trigger > ValSource.fromList(inBiscuits)
 
       val treatsPacks: $[ValSource[TreatsPack]] =
-        DogTreatsFactory.blueprint(toys |*| bones |*| biscuits)
+        DogTreatsFactory.packagingLine(toys |*| bones |*| biscuits)
 
       treatsPacks > ValSource.forEachSequentially {
         printLine { pack => s"$pack" }

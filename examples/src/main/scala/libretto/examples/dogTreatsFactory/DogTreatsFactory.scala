@@ -5,62 +5,64 @@ import libretto.stream.scaletto.DefaultStreams.ValSource
 
 object DogTreatsFactory {
 
-  def blueprint: (ValSource[Toy] |*| ValSource[Bone] |*| ValSource[Biscuit]) -⚬ ValSource[TreatsPack] = rec { self =>
-    import ValSource.{close, poll}
+  def packagingLine: (ValSource[Toy] |*| ValSource[Bone] |*| ValSource[Biscuit]) -⚬ ValSource[TreatsPack] = {
+    import ValSource.{Polled, close, poll}
 
-    ValSource.from(
-      onClose =
-        λ { case (toys |*| bones |*| biscuits) =>
-          joinAll(close(toys), close(bones), close(biscuits))
-        },
+    rec { self =>
+      ValSource.from(
+        onClose =
+          λ { case (toys |*| bones |*| biscuits) =>
+            joinAll(close(toys), close(bones), close(biscuits))
+          },
 
-      onPoll =
-        λ { case (toys |*| bones |*| biscuits) =>
-          poll(toys) switch {
-            case Left(done) =>
-              // no toys left
-              injectL(joinAll(done, close(bones), close(biscuits)))
+        onPoll =
+          λ { case (toys |*| bones |*| biscuits) =>
+            poll(toys) switch {
+              case Left(done) =>
+                // no toys left
+                Polled.empty(joinAll(done, close(bones), close(biscuits)))
 
-            case Right(toy |*| toys) =>
-              // got a toy
-              poll(bones) switch {
-                case Left(done) =>
-                  // no bones left
-                  injectL(joinAll(done, neglect(toy), close(toys), close(biscuits)))
-                case Right(bone |*| bones) =>
-                  // got a bone
-                  Bone.classifySize(bone) switch {
-                    case Left(largeBone) =>
-                      // got a large bone
-                      pullThreeBiscuits(biscuits) switch {
-                        case Left(done) =>
-                          // not enough biscuits
-                          injectL(joinAll(done, neglect(toy), neglect(largeBone), close(toys), close(bones)))
-                        case Right(biscuit3 |*| biscuits) =>
-                          // got three biscuits
-                          injectR(
-                            TreatsPack.largeBone(toy, largeBone, biscuit3) |*|
-                            self(toys |*| bones |*| biscuits)
-                          )
-                      }
-                    case Right(smallBone) =>
-                      // got a small bone
-                      pullFiveBiscuits(biscuits) switch {
+              case Right(toy |*| toys) =>
+                // got a toy
+                poll(bones) switch {
+                  case Left(done) =>
+                    // no bones left
+                    Polled.empty(joinAll(done, neglect(toy), close(toys), close(biscuits)))
+                  case Right(bone |*| bones) =>
+                    // got a bone
+                    Bone.classifySize(bone) switch {
+                      case Left(largeBone) =>
+                        // got a large bone
+                        pullThreeBiscuits(biscuits) switch {
                           case Left(done) =>
                             // not enough biscuits
-                            injectL(joinAll(done, neglect(toy), neglect(smallBone), close(toys), close(bones)))
-                          case Right(biscuit5 |*| biscuits) =>
-                            // got five biscuits
-                            injectR(
-                              TreatsPack.smallBone(toy, smallBone, biscuit5) |*|
+                            Polled.empty(joinAll(done, neglect(toy), neglect(largeBone), close(toys), close(bones)))
+                          case Right(biscuit3 |*| biscuits) =>
+                            // got three biscuits
+                            Polled.cons(
+                              TreatsPack.largeBone(toy, largeBone, biscuit3) |*|
                               self(toys |*| bones |*| biscuits)
                             )
-                      }
-                  }
-              }
-          }
-        },
-    )
+                        }
+                      case Right(smallBone) =>
+                        // got a small bone
+                        pullFiveBiscuits(biscuits) switch {
+                            case Left(done) =>
+                              // not enough biscuits
+                              Polled.empty(joinAll(done, neglect(toy), neglect(smallBone), close(toys), close(bones)))
+                            case Right(biscuit5 |*| biscuits) =>
+                              // got five biscuits
+                              Polled.cons(
+                                TreatsPack.smallBone(toy, smallBone, biscuit5) |*|
+                                self(toys |*| bones |*| biscuits)
+                              )
+                        }
+                    }
+                }
+            }
+          },
+      )
+    }
   }
 
   private def pullThreeBiscuits: ValSource[Biscuit] -⚬ (Done |+| (Val[Biscuit3] |*| ValSource[Biscuit])) = {

@@ -36,6 +36,7 @@ abstract class FreeScaletto {
   final class -[A] private()
   final class Val[A] private()
   final class Res[A] private()
+  final type UInt31 = Val[Int]
 
   implicit val biInjectivePair: BiInjective[|*|] =
     new BiInjective[|*|] {
@@ -422,6 +423,40 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   override def factorOutInversion[A, B]: (-[A] |*| -[B]) -⚬ -[A |*| B] =
     FactorOutInversion()
+
+  override object UInt31 extends UInt31Scaletto {
+    override def apply(n: Int): Done -⚬ UInt31 = {
+      require(n >= 0, s"$n is negative")
+      constVal(n)
+    }
+
+    override def add: (UInt31 |*| UInt31) -⚬ UInt31 =
+      unliftPair > mapVal { case (x, y) => x + y }
+
+    override def multiply: (UInt31 |*| UInt31) -⚬ UInt31 =
+      unliftPair > mapVal { case (x, y) => x * y }
+
+    override def increment: UInt31 -⚬ UInt31 =
+      mapVal { _ + 1 }
+
+    override def decrement: UInt31 -⚬ (Done |+| UInt31) =
+      mapVal[Int, Either[Unit, Int]] {
+        case 0 => Left(())
+        case n => Right(n-1)
+      } > liftEither > either(
+        FreeScaletto.this.neglect > injectL,
+        injectR,
+      )
+
+    override def neglect: UInt31 -⚬ Done =
+      FreeScaletto.this.neglect
+
+    override def fromInt: Val[Int] -⚬ UInt31 =
+      id
+
+    override def toInt: UInt31 -⚬ Val[Int] =
+      id
+  }
 
   implicit val csmc: ClosedSymmetricMonoidalCategory[-⚬, |*|, One, =⚬] =
     new ClosedSymmetricMonoidalCategory[-⚬, |*|, One, =⚬] {

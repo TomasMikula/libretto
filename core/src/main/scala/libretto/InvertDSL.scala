@@ -222,6 +222,14 @@ trait InvertDSL extends ClosedDSL {
       ctx: LambdaContext,
     ): ??[One] =
       (a supplyTo b) > invertOne
+
+    def asOutput[B](rInvert: (A |*| B) -⚬ One)(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): ??[B] = {
+      val nb |*| b = constant(demand[B])
+      returning(nb, rInvert(a |*| b))
+    }
   }
 
   extension [B](expr: $[-[B]]) {
@@ -269,6 +277,15 @@ trait InvertDSL extends ClosedDSL {
       ctx: LambdaContext,
     ): ??[B] =
       $.eliminateSecond(expr,  that > unInvertOne)(pos)
+
+    def asInput[A](lInvert: One -⚬ (B |*| A))(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A] = {
+      val ba = constant(lInvert)
+      val (b, a) = $.unzip(ba)(pos)
+      returning(a, b supplyTo expr)
+    }
   }
 
   extension [A, B](x: ??[A |&| B]) {
@@ -278,6 +295,14 @@ trait InvertDSL extends ClosedDSL {
       ctx: LambdaContext,
     ): ??[C] =
       $.switchEither(x > distributeInversionInto_|&|, f)(pos)
+  }
+
+  extension [A](a: ??[-[A]]) {
+    def asInput(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[A] =
+      doubleDemandElimination(a)
   }
 
   object producing {
@@ -290,11 +315,12 @@ trait InvertDSL extends ClosedDSL {
     }
   }
 
-  def returning(a: ??[One], as: ??[One]*)(using
+  @targetName("returningDemand")
+  def returning[A](a: ??[A], as: ??[One]*)(using
     pos: SourcePos,
     ctx: LambdaContext,
-  ): ??[One] = {
-    def go(a: ??[One], as: List[??[One]]): ??[One] =
+  ): ??[A] = {
+    def go(a: ??[A], as: List[??[One]]): ??[A] =
       as match
         case Nil => a
         case h :: t => go(a alsoElim h, t)

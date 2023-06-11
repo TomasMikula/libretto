@@ -62,6 +62,7 @@ abstract class ScalettoStreams {
   import scalettoLib.{_, given}
   import underlying._
   import Tree._
+  import Comonoid.given
 
   export underlying.{lib => _, dsl => _, _}
 
@@ -116,38 +117,13 @@ abstract class ScalettoStreams {
     }
 
     def take[T, A](n: Int): ValSourceT[T, A] -⚬ (Val[Int] |*| ValSourceT[T, A]) =
-      introFst(const(n)) > take
+      SourceT.take(n) > fst(UInt31.toInt)
 
     /** Cut off the upstream after a given number _n_ of elements.
      *  The number on the outport is _n - m_, where _m_ is the number of elements actually served.
      */
-    def take[T, A]: (Val[Int] |*| ValSourceT[T, A]) -⚬ (Val[Int] |*| ValSourceT[T, A]) = rec { take =>
-      λ { case n |*| src =>
-        decrement(n) switch {
-          case Left(done) =>
-            constVal(0)(done) |*| empty(close(src))
-          case Right(n0)  =>
-            producing { case remaining |*| as =>
-              (fromChoice >>: as) switch {
-                case Left(closing) =>
-                  returning(
-                    remaining := n0,
-                    closing   := close(src),
-                  )
-                case Right(pulling) =>
-                  (remaining |*| pulling) :=
-                    poll(src) switch {
-                      case Left(t) =>
-                        n0 |*| Polled.empty(t)
-                      case Right(a |*| as) =>
-                        val (n1 |*| as1) = take(n0 |*| as)
-                        n1 |*| Polled.cons(a |*| as1)
-                    }
-              }
-            }
-        }
-      }
-    }
+    def take[T, A]: (Val[Int] |*| ValSourceT[T, A]) -⚬ (Val[Int] |*| ValSourceT[T, A]) =
+      fst(UInt31.fromInt) > SourceT.take > fst(UInt31.toInt)
 
     def forEachSequentially[T, A](f: Val[A] -⚬ Done): ValSourceT[T, A] -⚬ (Done |*| T) =
       SourceT.forEachSequentially(f)
@@ -194,6 +170,9 @@ abstract class ScalettoStreams {
 
     def cons[A]: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] =
       Source.cons
+
+    def singleton[A]: (Val[A] |*| Done) -⚬ ValSource[A] =
+      Source.singleton[Val[A]]
 
     def fromLList[A]: LList[Val[A]] -⚬ ValSource[A] =
       Source.fromLList[Val[A]]
@@ -281,13 +260,16 @@ abstract class ScalettoStreams {
       }
     }
 
-    def repeatedly[A](f: Done -⚬ Val[A]): Done -⚬ ValSource[A] =
-      Source.repeatedly[Val[A]](f)
+    def repeatedly[A, B](f: A -⚬ Val[B])(using CloseableCosemigroup[A]): A -⚬ ValSource[B] =
+      Source.repeatedly[A, Val[B]](f)
 
     def map[A, B](f: A => B): ValSource[A] -⚬ ValSource[B] = {
       val g: Val[A] -⚬ Val[B] = mapVal(f)
       Source.map(g)
     }
+
+    def take[A](n: Int): ValSource[A] -⚬ ValSource[A] =
+      ValSourceT.take[Done, A](n) > fst(neglect) > delayClosedBy
 
     def forEachSequentially[A](f: Val[A] -⚬ Done): ValSource[A] -⚬ Done =
       Source.forEachSequentially[Val[A]](f)
@@ -354,6 +336,12 @@ abstract class ScalettoStreams {
     def mergeAll[A]: LList[ValSource[A]] -⚬ ValSource[A] =
       Source.mergeAll[Val[A]]
 
+    def mergePreferred[A]: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A] =
+      Source.mergePreferred[Val[A]]
+
+    def mergeBalanced[A]: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A] =
+      Source.mergeBalanced[Val[A]]
+
     def dup[A]: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) = rec { self =>
       // the case when the first output polls or closes before the second output does
       val goFst: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) =
@@ -394,24 +382,21 @@ abstract class ScalettoStreams {
       Source.prefetch[Val[A]](n)(neglect, Exists(inversionDuality[LList[Done]]))
 
     def dropUntilFirstDemand[A]: ValSource[A] -⚬ ValSource[A] = rec { self =>
-        val caseDownstreamRequested: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] = {
-          val caseDownstreamClosed: (Val[A] |*| ValSource[A]) -⚬ Done      = joinMap(neglect, ValSource.close)
-          val caseDownstreamPulled: (Val[A] |*| ValSource[A]) -⚬ Polled[A] = injectR
-          ValSource.from(caseDownstreamClosed, caseDownstreamPulled)
+      poll > λ { as =>
+        producing { out =>
+          (notifyAction >>: out) match {
+            case downstreamPong |*| out =>
+              val downstreamActing = downstreamPong.asInput(lInvertPongPing)
+              out :=
+                race[Ping, Polled[A]](downstreamActing |*| as) switch {
+                  case Left(?(_) |*| as) => // downstream acting
+                    as :>> ValSource.from(Polled.close, id)
+                  case Right(?(_) |*| as) => // upstream response
+                    as :>> either(ValSource.empty, fst(neglect) > ValSource.delayBy > self)
+                }
+          }
         }
-
-        val caseNotRequestedYet: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] = {
-          id[Val[A] |*| ValSource[A]]
-            .>.fst(neglect)
-            .>(ValSource.delayBy)
-            .>(self)
-        }
-
-        val goElem: (Val[A] |*| ValSource[A]) -⚬ ValSource[A] =
-          choice(caseDownstreamRequested, caseNotRequestedYet)
-            .>(selectSignaledOrNot(Source.negativeSource))
-
-        poll > either(empty[A], goElem)
+      }
     }
 
     def broadcast[A]: ValSource[A] -⚬ PUnlimited[ValSource[A]] = rec { self =>
@@ -595,16 +580,6 @@ abstract class ScalettoStreams {
 
       implicit def positivePolled[A]: SignalingJunction.Positive[Polled[A]] =
         Source.Polled.positivePolled[Val[A]]
-
-      /** Merges two [[Polled]]s into one.
-        * Left-biased: whenever there is a value available from both upstreams, favors the first one.
-        *
-        * @param mergeSources left-biased merge of two [[ValSource]]s.
-        */
-      def merge[A](
-        mergeSources: (ValSource[A] |*| ValSource[A]) -⚬ ValSource[A],
-      ): (Polled[A] |*| Polled[A]) -⚬ Polled[A] =
-        Source.Polled.merge(mergeSources)
 
       def dup[A](
         dupSource: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]),

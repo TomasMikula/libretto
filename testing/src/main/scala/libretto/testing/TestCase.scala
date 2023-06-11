@@ -97,7 +97,7 @@ object TestCase {
   def apply[O](using kit: TestKit)(
     body: kit.dsl.-⚬[kit.dsl.Done, O],
     conduct: (exn: kit.bridge.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit],
-  ): TestCase[kit.type] =
+  ): TestCase.Single[kit.type] =
     apply[O, Unit](body, conduct(_), kit.monadOutcome.pure)
 
   def parameterizedExec[O, P](using kit: TestKit)(
@@ -145,13 +145,13 @@ object TestCase {
     val kit: TK,
     val body: kit.dsl.-⚬[kit.dsl.Done, O],
   ) {
-    def via(conductor: (exn: kit.bridge.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit]): TestCase[kit.type] =
+    def via(conductor: (exn: kit.bridge.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit]): TestCase.Single[kit.type] =
       TestCase(using kit)(body, conductor(_))
 
     def via[X](
       conductor: (exn: kit.bridge.Execution) ?=> exn.OutPort[O] => kit.Outcome[X],
       postStop: X => kit.Outcome[Unit],
-    ): TestCase[kit.type] =
+    ): TestCase.Single[kit.type] =
       TestCase(using kit)(body, conductor(_), postStop)
   }
 

@@ -2,6 +2,7 @@ package libretto.zio_interop
 
 import libretto.scaletto.ScalettoBridge
 import libretto.scaletto.StarterKit
+import libretto.scaletto.StarterKit.|*|
 import libretto.stream.scaletto.DefaultStreams.ValSource
 import zio.stream.{UStream, ZStream}
 
@@ -30,5 +31,19 @@ class OutPort[A](
       }
 
     go(ev.substituteCo(port))
+  }
+
+  def unpair[X, Y](using ev: A =:= (X |*| Y)): (OutPort[X], OutPort[Y]) = {
+    val (x, y) = Port.split(ev.substituteCo(port))
+    val px = OutPort(bridge, execution, x)
+    val py = OutPort(bridge, execution, y)
+    (px, py)
+  }
+}
+
+object OutPort {
+  object |*| {
+    def unapply[A, B](port: OutPort[A |*| B]): (OutPort[A], OutPort[B]) =
+      port.unpair
   }
 }

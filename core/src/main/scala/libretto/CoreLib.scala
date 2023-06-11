@@ -697,6 +697,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       implicit def either[A, B]: Signaling.Positive[A |+| B] =
         from(dsl.notifyEither[A, B])
 
+      def either[A, B](A: Signaling.Positive[A], B: Signaling.Positive[B]): Signaling.Positive[A |+| B] =
+        from(dsl.either(A.notifyPosFst > snd(injectL), B.notifyPosFst > snd(injectR)))
+
       def rec[F[_]](implicit F: Positive[F[Rec[F]]]): Positive[Rec[F]] =
         from(unpack > F.notifyPosFst > par(id, pack))
 
@@ -732,6 +735,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       /** Signals when the choice is made between [[A]] and [[B]]. */
       implicit def choice[A, B]: Signaling.Negative[A |&| B] =
         from(dsl.notifyChoice[A, B])
+
+      def choice[A, B](A: Signaling.Negative[A], B: Signaling.Negative[B]): Signaling.Negative[A |&| B] =
+        from(dsl.choice(snd(chooseL) > A.notifyNegFst, snd(chooseR) > B.notifyNegFst))
 
       def rec[F[_]](implicit F: Negative[F[Rec[F]]]): Negative[Rec[F]] =
         from(par(id, unpack) > F.notifyNegFst > pack)
@@ -1196,21 +1202,37 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def selectAgainstR[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (A |*| Need) =
     |&|.swap > selectAgainstL > swap
 
-  def raceSignaledOrNot[A](implicit A: SignalingJunction.Positive[A]): A -⚬ (A |+| A) =
-    id                                           [  A                             ]
-      .>(A.signalPosSnd)                      .to[  A |*|  Done                   ]
-      .>.snd(introSnd(done))                  .to[  A |*| (Done  |*|        Done) ]
-      .>.snd(raceDone)                        .to[  A |*| (Done  |+|        Done) ]
-      .distributeL                            .to[ (A |*|  Done) |+| (A |*| Done) ]
-      .bimap(A.awaitPosSnd, A.awaitPosSnd)    .to[  A           |+|  A            ]
+  def racePreferred[A, B](using
+    A: Signaling.Positive[A],
+    B: Signaling.Positive[B],
+  ): (Ping |*| (A |*| B)) -⚬ ((A |*| B) |+| (A |*| B)) = {
+    import dsl.Comonoid.comonoidPing
 
-  def selectSignaledOrNot[A](implicit A: SignalingJunction.Negative[A]): (A |&| A) -⚬ A =
-    id                                           [  A            |&|  A           ]
-      .bimap(A.awaitNegSnd, A.awaitNegSnd)    .to[ (A |*|  Need) |&| (A |*| Need) ]
-      .coDistributeL                          .to[  A |*| (Need  |&|        Need) ]
-      .>.snd(selectNeed)                      .to[  A |*| (Need  |*|        Need) ]
-      .>.snd(elimSnd(need))                   .to[  A |*|  Need                   ]
-      .>(A.signalNegSnd)                      .to[  A                             ]
+    λ { case p |*| (a |*| b) =>
+      race[Ping, A](p |*| a) switch {
+        case Left(?(_) |*| a) =>
+          injectL(a |*| b)
+        case Right(?(_) |*| a) =>
+          race[A, B](a |*| b)
+      }
+    }
+  }
+
+  def raceHandicap[A, B, C](f: (Ping |*| B) -⚬ C)(using
+    A: Signaling.Positive[A],
+    C: Signaling.Positive[C],
+  ): (A |*| (Ping |*| B)) -⚬ ((A |*| B) |+| ((A |*| C) |+| (A |*| C))) = {
+    import dsl.Comonoid.comonoidPing
+
+    λ { case a |*| (p |*| b) =>
+      race[A, Ping](a |*| p) switch {
+        case Left(a |*| ?(_)) =>
+          injectL(a |*| b)
+        case Right(a |*| p) =>
+          injectR(race[A, C](a |*| f(p |*| b)))
+      }
+    }
+  }
 
   trait Getter[S, A] { self =>
     def getL[B](that: Getter[A, B])(implicit B: Cosemigroup[B]): S -⚬ (B |*| S)
@@ -2800,6 +2822,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def getSndWhenDone[A]: (Done |*| Unlimited[A]) -⚬ (Done |*| (Unlimited[A] |*| A)) =
       splitWhenDone > snd(snd(single))
 
+    /** Present a non-empty list of resources `A` as an unlimited supply of "borrowed" resources `A ⊗ Ā`,
+      * where `Ā` is the dual of `A`. A borrowed resource `A ⊗ Ā` must be "returned" by "annihilating"
+      * `A` and its dual `Ā`, namely via an inversion on the right `A ⊗ Ā -⚬ One`.
+      * A returned resource will become available for further use when it signals readiness using the
+      * [[Signaling.Positive]] instance.
+      *
+      * When all accesses to the pooled resources (obtained via the `Unlimited[A |*| Ā]` in the first
+      * out-port) are closed, the resources are returned in the second out-port.
+      */
+    def poolBy[A: Signaling.Positive, Ā](
+      lInvert: One -⚬ (Ā |*| A),
+    ): LList1[A] -⚬ (Unlimited[A |*| Ā] |*| LList1[A]) =
+      unfold(LList1.borrow(lInvert))
+
     implicit def comonoidUnlimited[A]: Comonoid[Unlimited[A]] =
       new Comonoid[Unlimited[A]] {
         def counit : Unlimited[A] -⚬ One                             = Unlimited.discard
@@ -2928,7 +2964,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def close: A -⚬ Done
   }
 
-  object PAffine {
+  object Closeable {
     def from[A](f: A -⚬ Done): Closeable[A] =
       new Closeable[A] {
         override def close: A -⚬ Done =
@@ -2941,8 +2977,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     given closeableDone: Closeable[Done] =
       from(id)
 
+    given closeablePing: Closeable[Ping] =
+      from(strengthenPing)
+
     given closeablePair[A, B](using A: Closeable[A], B: Closeable[B]): Closeable[A |*| B] =
       from(par(A.close, B.close) > join)
+
+    given closeableEither[A, B](using A: Closeable[A], B: Closeable[B]): Closeable[A |+| B] =
+      from(either(A.close, B.close))
   }
 
   trait Semigroup[A] {
@@ -3258,6 +3300,11 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         switch(nil[U], par(f, self) > cons)
       }
 
+    def flatMap[A, B](f: A -⚬ LList[B]): LList[A] -⚬ LList[B] =
+      rec { self =>
+        switch(nil[B], par(f, self) > concat)
+      }
+
     def mapS[S, T, U](f: (S |*| T) -⚬ (S |*| U)): (S |*| LList[T]) -⚬ (S |*| LList[U]) = rec { self =>
       switchWithL(
         caseNil = id[S] > introSnd(nil[U]),
@@ -3279,21 +3326,21 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       )
     }
 
-    def foldMap0[T, U](f: T -⚬ U)(implicit U: Semigroup[U]): LList[T] -⚬ Maybe[U] =
+    def foldMap0[T, U](f: T -⚬ U)(using U: Semigroup[U]): LList[T] -⚬ Maybe[U] =
       switch(
         caseNil  = Maybe.empty[U],
         caseCons = par(f, id) > actOn[U, T](par(id, f) > U.combine) > Maybe.just[U],
       )
 
-    def foldMap[T, U](f: T -⚬ U)(implicit U: Monoid[U]): LList[T] -⚬ U =
+    def foldMap[T, U](f: T -⚬ U)(using U: Monoid[U]): LList[T] -⚬ U =
       rec { self =>
         switch(U.unit, par(f, self) > U.combine)
       }
 
-    def fold0[T](implicit T: Semigroup[T]): LList[T] -⚬ Maybe[T] =
+    def fold0[T](using T: Semigroup[T]): LList[T] -⚬ Maybe[T] =
       foldMap0(id[T])
 
-    def fold[T](implicit T: Monoid[T]): LList[T] -⚬ T =
+    def fold[T](using T: Monoid[T]): LList[T] -⚬ T =
       foldMap(id[T])
 
     def foldL[S, T](f: (S |*| T) -⚬ S): (S |*| LList[T]) -⚬ S = rec { self =>
@@ -3307,6 +3354,19 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       switchWithR(
         caseNil  = id[LList[T]],
         caseCons = assocLR > par(id, self) > cons,
+      )
+    }
+
+    def partition[A, B]: LList[A |+| B] -⚬ (LList[A] |*| LList[B]) = rec { self =>
+      switch(
+        λ.? { _ => constant(nil[A]) |*| constant(nil[B]) },
+        λ { case x |*| t =>
+          val as |*| bs = self(t)
+          x switch {
+            case Left(a)  => cons(a |*| as) |*| bs
+            case Right(b) => as |*| cons(b |*| bs)
+          }
+        },
       )
     }
 
@@ -3445,16 +3505,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
      *  it also becomes available as the next element of the result list.
      */
     def merge[T]: (LList[T] |*| LList[T]) -⚬ LList[T] = rec { self =>
-      raceSwitch(
-        caseFstWins = switchWithR(
-          caseNil = id[LList[T]],
-          caseCons = assocLR > par(id, self) > cons,
-        ),
-        caseSndWins = switchWithL(
-          caseNil = id[LList[T]],
-          caseCons = XI > par(id, self) > cons,
-        ),
-      )
+      λ { case as |*| bs =>
+        race(as |*| bs) switch {
+          case Left(as |*| bs) =>
+            uncons(as) switch {
+              case Left(?(one))    => bs
+              case Right(a |*| as) => cons(a |*| self(as |*| bs))
+            }
+          case Right(as |*| bs) =>
+            uncons(bs) switch {
+              case Left(?(one)) => as
+              case Right(b |*| bs) => cons(b |*| self(as |*| bs))
+            }
+        }
+      }
     }
 
     /** Inserts an element to a list as soon as the element signals.
@@ -3464,18 +3528,32 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
      *  their timely appearence in the input list is sufficient for them to come before
      *  the inserted element.
      */
-    def insertBySignal[T: Signaling.Positive]: (T |*| LList[T]) -⚬ LList[T] =
-      par(singletonOnSignal[T], id) > merge[T]
+    def insertBySignal[T](using Signaling.Positive[T]): (T |*| LList[T]) -⚬ LList[T] =
+      rec { self =>
+        λ { case a |*| as =>
+          race[T, LList[T]](a |*| as) switch {
+            case Left(a |*| as) =>
+              cons(a |*| as)
+            case Right(a |*| as) =>
+              uncons(as) switch {
+                case Left(?(one))     => singletonOnSignal(a)
+                case Right(a1 |*| as) => cons(a1 |*| self(a |*| as))
+              }
+          }
+        }
+      }
 
     /** Make the elements of the input list available in the output list in the order in which they signal. */
-    def sortBySignal[T: Signaling.Positive]: LList[T] -⚬ LList[T] = rec { self =>
+    def sortBySignal[T](using Signaling.Positive[T]): LList[T] -⚬ LList[T] = rec { self =>
       // XXX O(n^2) complexity: if the element at the end of the list signals first, it will take O(n) steps for it
       // to bubble to the front. Could be improved to O(log(n)) steps to bubble any element and O(n*log(n)) total
       // complexity by using a heap data structure.
-      switch(
-        caseNil = nil[T],
-        caseCons = par(id[T], self) > insertBySignal[T],
-      )
+      λ { as =>
+        uncons(as) switch {
+          case Left(one)       => nil(one)
+          case Right(a |*| as) => insertBySignal(a |*| self(as))
+        }
+      }
     }
 
     implicit def monoidLList[A]: Monoid[LList[A]] =
@@ -3554,6 +3632,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def fold[T](using T: Semigroup[T]): LList1[T] -⚬ T =
       LList.actOn[T, T](T.combine)
 
+    def closeAll[T](using T: Closeable[T]): LList1[T] -⚬ Done =
+      foldMap(T.close)
+
     def transform[T, A, U](f: (A |*| T) -⚬ U)(using A: Cosemigroup[A]): (A |*| LList1[T]) -⚬ LList1[U] =
       λ { case a |*| (t0 |*| ts) =>
         val a1 |*| us = LList.transform0(f)(a |*| ts)
@@ -3592,7 +3673,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
      *  their timely appearence in the input list is sufficient for them to come before
      *  the inserted element.
      */
-    def insertBySignal[T: Signaling.Positive]: (T |*| LList[T]) -⚬ LList1[T] = {
+    def insertBySignal[T](using Signaling.Positive[T]): (T |*| LList[T]) -⚬ LList1[T] = {
       import LList.signalingLList
 
       raceSwitch(
@@ -3603,6 +3684,43 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         ),
       )
     }
+
+    def sortBySignal[A](using Signaling.Positive[A]): LList1[A] -⚬ LList1[A] =
+      λ { case a |*| as => insertBySignal(a |*| LList.sortBySignal(as)) }
+
+    def unzip[A, B]: LList1[A |*| B] -⚬ (LList1[A] |*| LList1[B]) =
+      switch(
+        par(singleton, singleton),
+        λ { case (a |*| b) |*| tail =>
+          val as |*| bs = LList.unzip(LList.cons(tail))
+          cons(a |*| as) |*| cons(b |*| bs)
+        }
+      )
+
+    def unzipBy[T, A, B](f: T -⚬ (A |*| B)): LList1[T] -⚬ (LList1[A] |*| LList1[B]) =
+      map(f) > unzip
+
+    def borrow[A, Ā](
+      lInvert: One -⚬ (Ā |*| A),
+    )(using
+      Signaling.Positive[A],
+    ): LList1[A] -⚬ ((A |*| Ā) |*| LList1[A]) =
+      λ { case a |*| as =>
+        val na |*| a1 = constant(lInvert)
+        (a |*| na) |*| insertBySignal(a1 |*| as)
+      }
+
+    def eachNotifyBy[A](notify: A -⚬ (Ping |*| A)): LList1[A] -⚬ (Ping |*| LList1[A]) =
+      unzipBy(notify) > fst(fold)
+
+    def eachNotify[A](using A: Signaling.Positive[A]): LList1[A] -⚬ (Ping |*| LList1[A]) =
+      eachNotifyBy(A.notifyPosFst)
+
+    def eachAwaitBy[A](await: (Done |*| A) -⚬ A): (Done |*| LList1[A]) -⚬ LList1[A] =
+      transform[A, Done, A](await)
+
+    def eachAwait[A](using A: Junction.Positive[A]): (Done |*| LList1[A]) -⚬ LList1[A] =
+      eachAwaitBy(A.awaitPosFst)
   }
 
   /** An endless source of elements, where the consumer decides whether to pull one more element or close.
@@ -3616,11 +3734,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     private def unpack[A]: Endless[A] -⚬ (One |&| (A |*| Endless[A])) =
       dsl.unpack
 
+    def fromChoice[A]: (One |&| (A |*| Endless[A])) -⚬ Endless[A] =
+      pack
+
+    def toChoice[A]: Endless[A] -⚬ (One |&| (A |*| Endless[A])) =
+      dsl.unpack
+
     def close[A]: Endless[A] -⚬ One =
       unpack > chooseL
 
     def pull[A]: Endless[A] -⚬ (A |*| Endless[A]) =
       unpack > chooseR
+
+    def pullOnPing[A]: (Ping |*| Endless[A]) -⚬ (A |*| Endless[A]) =
+      snd(unpack) > delayChoiceUntilPing > chooseR
 
     def create[X, A](
       onClose: X -⚬ One,
@@ -3633,6 +3760,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       onPull: X -⚬ ((A |*| Endless[A]) |*| Y),
     ): X -⚬ (Endless[A] |*| Y) =
       choice(onClose > introFst, onPull) > coDistributeR > par(pack, id)
+
+    def fromUnlimited[A]: Unlimited[A] -⚬ Endless[A] = rec { self =>
+      create(
+        onClose = Unlimited.discard,
+        onPull  = Unlimited.getSome > snd(self)
+      )
+    }
 
     def unfold[S, A](f: S -⚬ (A |*| S)): S -⚬ (Endless[A] |*| S) = rec { self =>
       createWith[S, A, S](
@@ -3693,6 +3827,149 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       else
         close > LList.nil[A]
     }
+
+    def map[A, B](f: A -⚬ B): Endless[A] -⚬ Endless[B] = rec { self =>
+      create(
+        onClose = close,
+        onPull  = pull > par(f, self),
+      )
+    }
+
+    def delayUntilPing[A]: (Ping |*| Endless[A]) -⚬ Endless[A] =
+      snd(unpack) > delayChoiceUntilPing > pack
+
+    def delayUntilPong[A]: Endless[A] -⚬ (Pong |*| Endless[A]) =
+      unpack > delayChoiceUntilPong > snd(pack)
+
+    /** Delays each next pull until the previously emitted element signalled. */
+    def sequence[A](using A: Signaling.Positive[A]): Endless[A] -⚬ Endless[A] =
+      mapSequentially(id)
+
+    /** Delays each next pull until the [[Ping]] produced from the previous element. */
+    def mapSequence[A, B](f: A -⚬ (Ping |*| B)): Endless[A] -⚬ Endless[B] =
+      rec { self =>
+        Endless.create(
+          onClose = close[A],
+          onPull  = λ { as =>
+            val h  |*| t  = pull(as)
+            val pi |*| b  = f(h)
+            val po |*| t1 = delayUntilPong(t)
+            returning(
+              b |*| self(t1),
+              rInvertPingPong(pi |*| po),
+            )
+          }
+        )
+      }
+
+    def mapSequentially[A, B](f: A -⚬ B)(using Signaling.Positive[B]): Endless[A] -⚬ Endless[B] =
+      mapSequence(f > notifyPosFst)
+
+    def foldLeftSequentially[B, A](f: (B |*| A) -⚬ B)(using
+      Signaling.Positive[B]
+    ): (B |*| Endless[A]) -⚬ B =
+      rec { self =>
+        λ { case b |*| as =>
+          val p |*| b1 = b :>> notifyPosFst
+          injectLOnPing[Endless[A], One](p |*| as) switch {
+            case Left(as) =>
+              val h |*| t = pull(as)
+              self(f(b1 |*| h) |*| t)
+            case Right(?(_)) =>
+              b1
+          }
+        }
+      }
+
+    def foldMapSequentially[A, B](f: A -⚬ B)(using
+      Signaling.Positive[B],
+      Semigroup[B],
+    ): Endless[A] -⚬ B = {
+      val g: (B |*| A) -⚬ B =
+        snd(f) > summon[Semigroup[B]].combine
+
+      pull > fst(f) > foldLeftSequentially[B, A](g)
+    }
+
+    def pullN[A](n: Int): Endless[A] -⚬ (LList1[A] |*| Endless[A]) = {
+      require(n > 0, s"n must be positive")
+
+      pull > λ { case h |*| t =>
+        if (n == 1)
+          LList1.singleton(h) |*| t
+        else
+          val as |*| t1 = pullN(n-1)(t)
+          LList1.cons1(h |*| as) |*| t1
+      }
+    }
+
+    def unpull[A](using A: Affine[A]): (A |*| Endless[A]) -⚬ Endless[A] =
+      create(
+        onClose = λ { case ?(_) |*| as => close(as) },
+        onPull  = id,
+      )
+
+    def groups[A](groupSize: Int): Endless[A] -⚬ Endless[LList1[A]] = rec { self =>
+      require(groupSize > 0, s"group size must be positive")
+
+      create(
+        onClose = close,
+        onPull  = pullN(groupSize) > snd(self),
+      )
+    }
+
+    def groupMap[A, B](groupSize: Int, f: LList1[A] -⚬ B): Endless[A] -⚬ Endless[B] =
+      groups(groupSize) > map(f)
+
+    def mergePreferred[A](using
+      A: Signaling.Positive[A],
+      aff: Affine[A],
+    ): (Endless[A] |*| Endless[A]) -⚬ Endless[A] = {
+      import Comonoid.comonoidPing
+
+      def go: ((A |*| Endless[A]) |*| Endless[A]) -⚬ Endless[A] = rec { self =>
+        λ { case (a |*| as) |*| bs =>
+          val po |*| pi = constant(lInvertPongPing)
+          val res: $[One |&| (A |*| Endless[A])] =
+            race[Ping, A](pi |*| a) switch {
+              case Left(?(_) |*| a) =>
+                (a |*| as |*| bs) :>> choice(
+                  λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
+                  λ { case   a  |*| as |*| bs =>
+                    val b |*| bs1 = pull(bs)
+                    race[A, A](a |*| b) switch {
+                      case Left(a |*| b)  => a |*| self(pull(as) |*| unpull[A](b |*| bs1))
+                      case Right(a |*| b) => b |*| self((a |*| as) |*| bs1)
+                    }
+                  },
+                )
+              case Right(?(_) |*| a) =>
+                (a |*| as |*| bs) :>> choice(
+                  λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
+                  λ { case   a  |*| as |*| bs => a |*| self(pull(as) |*| bs) },
+                )
+            }
+          (po |*| res) :>> notifyChoice :>> pack
+        }
+      }
+
+      fst(pull) > go
+    }
+
+    def mergeEitherPreferred[A, B](using
+      A: Signaling.Positive[A],
+      B: Signaling.Positive[B],
+      affA: Affine[A],
+      affB: Affine[B],
+    ): (Endless[A] |*| Endless[B]) -⚬ Endless[A |+| B] = {
+      given Signaling.Positive[A |+| B] = Signaling.Positive.either(A, B)
+      par(Endless.map(injectL), Endless.map(injectR)) > mergePreferred[A |+| B]
+    }
+
+    def poolBy[A: Signaling.Positive, Ā](
+      lInvert: One -⚬ (Ā |*| A),
+    ): LList1[A] -⚬ (Endless[A |*| Ā] |*| LList1[A]) =
+      unfold(LList1.borrow(lInvert))
   }
 
   def listEndlessDuality[A, Ā](ev: Dual[A, Ā]): Dual[LList[A], Endless[Ā]] =
@@ -3711,28 +3988,6 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         )
       }
     }
-
-  /** Present a non-empty list of resources `A` as an unlimited supply of "borrowed" resources `A ⊗ Ā`,
-    * where `Ā` is the dual of `A`. A borrowed resource `A ⊗ Ā` must be "returned" by "annihilating"
-    * `A` and its dual `Ā`, namely via an inversion on the right `A ⊗ Ā -⚬ One`.
-    * A returned resource will become available for further use when it signals readiness using the
-    * [[Signaling.Positive]] instance.
-    *
-    * When all accesses to the pooled resources (obtained via the `Unlimited[A |*| Ā]` in the first
-    * out-port) are closed, the resources are returned in the second out-port.
-    */
-  def pool[A: Signaling.Positive, Ā](
-    lInvert: One -⚬ (Ā |*| A),
-  ): LList1[A] -⚬ (Unlimited[A |*| Ā] |*| LList1[A]) = rec { self =>
-    val borrow: LList1[A] -⚬ ((A |*| Ā) |*| LList1[A]) =
-      id                                         [     LList1[A]                   ]
-        .>(LList1.uncons)                     .to[   A |*|               LList[A]  ]
-        .>.fst(introSnd(lInvert) > assocRL)   .to[ ((A |*| Ā) |*| A) |*| LList[A]  ]
-        .>(assocLR)                           .to[  (A |*| Ā) |*| (A |*| LList[A]) ]
-        .>.snd(LList1.insertBySignal)         .to[  (A |*| Ā) |*|    LList1[A]     ]
-
-    Unlimited.unfold(borrow)
-  }
 
   opaque type Lease = Done |*| Need
   object Lease {
@@ -3764,7 +4019,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
   object LeasePool {
     def fromList: LList1[Done] -⚬ LeasePool =
-      pool[Done, Need](lInvertSignal) > snd(LList1.fold[Done])
+      Unlimited.poolBy[Done, Need](lInvertSignal) > snd(LList1.fold[Done])
 
     def allocate(n: Int): Done -⚬ LeasePool =
       LList1.fill(n)(id[Done]) > fromList
