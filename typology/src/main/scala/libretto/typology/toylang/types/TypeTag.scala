@@ -62,6 +62,12 @@ object TypeTag {
     TypeFun.composeSnd(f1, h1)
   }
 
+  def app[F[_], A](f: TypeTag[F], a: TypeTag[A]): TypeTag[F[A]] = {
+    val f1 = (f: TypeFun[?, ?]).asInstanceOf[TypeFun[●, ●]]
+    val a1 = (a: TypeFun[?, ?]).asInstanceOf[TypeFun[○, ●]]
+    TypeFun.fromExpr(f1(toType(a1)))
+  }
+
   def appFst[F[_, _], A](f: TypeTag[F], a: TypeTag[A]): TypeTag[F[A, *]] = {
     val f1 = (f: TypeFun[?, ?]).asInstanceOf[TypeFun[● × ●, ●]]
     val a1 = (a: TypeFun[?, ?]).asInstanceOf[TypeFun[○, ●]]

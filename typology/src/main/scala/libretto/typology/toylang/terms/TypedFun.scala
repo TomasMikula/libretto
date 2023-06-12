@@ -1,13 +1,38 @@
 package libretto.typology.toylang.terms
 
+import libretto.lambda.util.SourcePos
 import libretto.typology.toylang.types.{Fix, RecCall, Type, TypeTag}
 
 sealed trait TypedFun[A, B] {
+  import TypedFun._
+
   def inType: Type =
-    ???
+    this match
+      case Id(typ)           => typ
+      case AndThen(f, tx, g) => f.inType
+      case Par(f1, f2)       => Type.pair(f1.inType, f2.inType)
+      case EitherF(f1, f2)   => Type.sum(f1.inType, f2.inType)
+      case InjectL(ta, tb)   => ta
+      case InjectR(ta, tb)   => tb
+      case Rec(f)            => ???
+      case Recur(ta, tb)     => Type.pair(Type.recCall(ta, tb), ta)
+      case FixF(f)           => TypeTag.toType(TypeTag.app(f, TypeTag.fix(using f)))
+      case UnfixF(f)         => TypeTag.toType(TypeTag.fix(using f))
+      case IntToString       => Type.int
 
   def outType: Type =
-    ???
+    this match
+      case Id(typ)           => typ
+      case AndThen(f, tx, g) => g.outType
+      case Par(f1, f2)       => Type.pair(f1.outType, f2.outType)
+      case EitherF(f1, f2)   => f1.outType
+      case InjectL(ta, tb)   => Type.sum(ta, tb)
+      case InjectR(ta, tb)   => Type.sum(ta, tb)
+      case Rec(f)            => f.outType
+      case Recur(ta, tb)     => tb
+      case FixF(f)           => TypeTag.toType(TypeTag.fix(using f))
+      case UnfixF(f)         => TypeTag.toType(TypeTag.app(f, TypeTag.fix(using f)))
+      case IntToString       => Type.string
 }
 
 object TypedFun {
