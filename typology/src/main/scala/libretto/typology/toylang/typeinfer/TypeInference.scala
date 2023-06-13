@@ -732,6 +732,52 @@ object TypeInference {
             val f = (f1 ** f2) :>> mapVal { case (f1, f2) => TypedFun.par(f1, f2) }
             a |*| f |*| b
           }
+      case _: FunT.AssocLR[arr, a, b, c] =>
+        for {
+          a <- gen.newVar
+          b <- gen.newVar
+          c <- gen.newVar
+        } yield {
+          λ.* { one =>
+            val a1 |*| ta |*| a2 = TypeEmitter.newAbstractType(a)(one)
+            val b1 |*| tb |*| b2 = TypeEmitter.newAbstractType(b)(one)
+            val c1 |*| tc |*| c2 = TypeEmitter.newAbstractType(c)(one)
+            val f = (ta ** tb ** tc) :>> mapVal { case ((a, b), c) => TypedFun.assocLR[a, b, c](a, b, c) }
+            val in  = TypeEmitter.pair(TypeEmitter.pair(a1 |*| b1) |*| c1)
+            val out = TypeEmitter.pair(a2 |*| TypeEmitter.pair(b2 |*| c2))
+            in |*| f |*| out
+          }
+        }
+      case _: FunT.AssocRL[arr, a, b, c] =>
+        for {
+          a <- gen.newVar
+          b <- gen.newVar
+          c <- gen.newVar
+        } yield {
+          λ.* { one =>
+            val a1 |*| ta |*| a2 = TypeEmitter.newAbstractType(a)(one)
+            val b1 |*| tb |*| b2 = TypeEmitter.newAbstractType(b)(one)
+            val c1 |*| tc |*| c2 = TypeEmitter.newAbstractType(c)(one)
+            val f = (ta ** tb ** tc) :>> mapVal { case ((a, b), c) => TypedFun.assocRL[a, b, c](a, b, c) }
+            val in  = TypeEmitter.pair(a1 |*| TypeEmitter.pair(b1 |*| c1))
+            val out = TypeEmitter.pair(TypeEmitter.pair(a2 |*| b2) |*| c2)
+            in |*| f |*| out
+          }
+        }
+      case _: FunT.Swap[arr, a, b] =>
+        for {
+          a <- gen.newVar
+          b <- gen.newVar
+        } yield {
+          λ.* { one =>
+            val a1 |*| ta |*| a2 = TypeEmitter.newAbstractType(a)(one)
+            val b1 |*| tb |*| b2 = TypeEmitter.newAbstractType(b)(one)
+            val f = (ta ** tb) :>> mapVal { case (a, b) => TypedFun.swap[a, b](a, b) }
+            val in  = TypeEmitter.pair(a1 |*| b1)
+            val out = TypeEmitter.pair(b2 |*| a2)
+            in |*| f |*| out
+          }
+        }
       case FunT.EitherF(f, g) =>
         for {
           tf <- reconstructTypes(f)

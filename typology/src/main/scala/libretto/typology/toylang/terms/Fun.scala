@@ -19,6 +19,15 @@ object Fun {
   def par[A1, A2, B1, B2](f1: Fun[A1, B1], f2: Fun[A2, B2]): Fun[(A1, A2), (B1, B2)] =
     Fun(FunT.Par(f1, f2))
 
+  def assocLR[A, B, C]: Fun[((A, B), C), (A, (B, C))] =
+    Fun(FunT.AssocLR())
+
+  def assocRL[A, B, C]: Fun[(A, (B, C)), ((A, B), C)] =
+    Fun(FunT.AssocRL())
+
+  def swap[A, B]: Fun[(A, B), (B, A)] =
+    Fun(FunT.Swap())
+
   def injectL[A, B]: Fun[A, A Either B] =
     Fun(FunT.InjectL())
 
@@ -62,9 +71,9 @@ object Fun {
     override def andThen[A, B, C](f: Fun[A, B], g: Fun[B, C]): Fun[A, C] = Fun.andThen(f, g)
     override def id[A]: Fun[A, A] = Fun.id[A]
     override def par[A1, A2, B1, B2](f1: Fun[A1, B1], f2: Fun[A2, B2]): Fun[(A1, A2), (B1, B2)] = Fun.par(f1, f2)
-    override def assocLR[A, B, C]: Fun[((A, B), C), (A, (B, C))] = throw NotImplementedError(s"at ${summon[SourcePos]}")
-    override def assocRL[A, B, C]: Fun[(A, (B, C)), ((A, B), C)] = throw NotImplementedError(s"at ${summon[SourcePos]}")
-    override def swap[A, B]: Fun[(A, B), (B, A)] = throw NotImplementedError(s"at ${summon[SourcePos]}")
+    override def assocLR[A, B, C]: Fun[((A, B), C), (A, (B, C))] = Fun.assocLR
+    override def assocRL[A, B, C]: Fun[(A, (B, C)), ((A, B), C)] = Fun.assocRL
+    override def swap[A, B]: Fun[(A, B), (B, A)] = Fun.swap
   }
 
   private val lambdas: libretto.lambda.Lambdas[Fun, Tuple2, Object] =

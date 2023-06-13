@@ -7,7 +7,7 @@ import libretto.testing.scaletto.StarterTestKit
 import libretto.testing.TestCase
 import libretto.typology.kinds._
 import libretto.typology.toylang.typeinfer.TypeInference.inferTypes
-import libretto.typology.toylang.terms.Fun
+import libretto.typology.toylang.terms.{Fun, TypedFun}
 import libretto.typology.toylang.terms.Fun._
 import libretto.typology.toylang.types._
 
@@ -168,30 +168,27 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
   override def testCases(using kit: StarterTestKit): scala.List[(String, TestCase[kit.type])] = {
     import kit.{Outcome, expectVal}
 
+    def testInferredTypes[A, B](f: Fun[A, B])(check: TypedFun[A, B] => Outcome[Unit]): TestCase[kit.type] =
+      TestCase
+        .interactWith { λ { start => constant(inferTypes(f)) waitFor start } }
+        .via { expectVal(_).flatMap(check) }
+
     scala.List(
-      "infer types of eitherBimap(intToString, intToString)" -> TestCase
-        .interactWith {
-          λ { start =>
-            constant(inferTypes[Either[Int, Int], Either[String, String]](eitherBimap(Fun.intToString, Fun.intToString)))
-              .waitFor(start)
-          }
-        }
-        .via { port =>
+      "infer types of eitherBimap(intToString, intToString)" ->
+        testInferredTypes(eitherBimap(Fun.intToString, Fun.intToString)) { tf =>
           for {
-            tf <- expectVal(port)
-            tIn = tf.inType
-            tOut = tf.outType
-            _ <- Outcome.assertEquals(tIn, Type.sum(Type.int, Type.int))
-            _ <- Outcome.assertEquals(tOut, Type.sum(Type.string, Type.string))
+            _ <- Outcome.assertEquals(tf.inType, Type.sum(Type.int, Type.int))
+            _ <- Outcome.assertEquals(tf.outType, Type.sum(Type.string, Type.string))
           } yield ()
         },
 
-  // test("infer types of InfiniteList.map(intToString)") {
-  //   val (tIn, tOut) = reconstructTypes[InfiniteList[Int], InfiniteList[String]](InfiniteList.map(Fun.intToString))
-
-  //   assert(tIn  == InfiniteList.tpe(Type.int))
-  //   assert(tOut == InfiniteList.tpe(Type.string))
-  // }
+      "infer types of InfiniteList.map(intToString)" ->
+        testInferredTypes(InfiniteList.map(Fun.intToString)) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
+            _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.string))
+          } yield ()
+        },
 
   // test("infer types of List.map(intToString)") {
   //   val (tIn, tOut) = reconstructTypes[List[Int], List[String]](List.map(Fun.intToString))
