@@ -11,13 +11,17 @@ import libretto.typology.toylang.types.{Fix, AbstractTypeLabel, Type, TypeFun, T
 import libretto.typology.util.State
 
 object TypeInference {
-  opaque type TypeEmitter[T] = Rec[TypeEmitterF[T, _]]
-  private type TypeEmitterF[T, X] = NonAbstractTypeF[T, X] |+| AbstractTypeF[T, X]
+  opaque type TypeEmitter[T] = Rec[[X] =>> TypeEmitterF[T, ReboundTypeF[T, X]]]
+  opaque type ReboundType[T] = Rec[[X] =>> ReboundTypeF[T, TypeEmitterF[T, X]]]
+  private type TypeEmitterF[T, Y] = Rec[TypeSkelet[T, Y, _]]
+  private type ReboundTypeF[T, Y] = Rec[TypeSkelet[-[T], Y, _]]
+
+  private type TypeSkelet[T, Y, X] = NonAbstractTypeF[X] |+| AbstractTypeF[T, Y, X]
 
   private type ConcreteType[T] = Rec[ConcreteTypeF[T, _]]
-  private type ConcreteTypeF[T, X] = NonAbstractTypeF[T, X] |+| TypeParamF[T]
+  private type ConcreteTypeF[T, X] = NonAbstractTypeF[T] |+| TypeParamF[T]
 
-  private type NonAbstractTypeF[T, X] = ( // TODO: unused T param
+  private type NonAbstractTypeF[X] = (
     Val[(Type, Type)] // type mismatch
     |+| Done // unit
     |+| Done // int
@@ -29,20 +33,20 @@ object TypeInference {
     |+| (X |*| X) // pair
   )
 
-  private type NonAbstractType[T] = NonAbstractTypeF[T, TypeEmitter[T]]
+  private type NonAbstractType[T] = NonAbstractTypeF[TypeEmitter[T]]
 
   /** Type param may be instantiated to types of "type" T. */
   private type TypeParamF[T] = Val[AbstractTypeLabel] |*| -[Maybe[T]]
 
-  private type AbstractTypeF[T, X] = Val[AbstractTypeLabel] |*| RefinementRequestF[T, X]
-  private type RefinementRequestF[T, X] = -[ReboundF[T, X]]
+  private type AbstractTypeF[T, Y, X] = Val[AbstractTypeLabel] |*| RefinementRequestF[T, Y, X]
+  private type RefinementRequestF[T, Y, X] = -[ReboundF[T, Y, X]]
 
-  private type AbstractType[T] = AbstractTypeF[T, TypeEmitter[T]]
-  private type RefinementRequest[T] = RefinementRequestF[T, TypeEmitter[T]]
+  private type AbstractType[T] = AbstractTypeF[T, ReboundType[T], TypeEmitter[T]]
+  private type RefinementRequest[T] = RefinementRequestF[T, ReboundType[T], TypeEmitter[T]]
 
-  private type ReboundF[T, TypeEmitter] = (
-    TypeEmitter // refinement
-    |+| YieldF[T, TypeEmitter] // refinement won't come from here
+  private type ReboundF[T, Y, X] = (
+    Y // refinement
+    |+| YieldF[T, X] // refinement won't come from here
   )
 
   private type YieldF[T, TypeEmitter] = -[
@@ -50,12 +54,12 @@ object TypeInference {
     |+| -[T] // there won't be any more internal refinement, open to a type parameter from the outside
   ] |+| One // disengage (providing no refinement, interested in no further refinement)
 
-  private type Rebound[T] = ReboundF[T, TypeEmitter[T]]
+  private type Rebound[T] = ReboundF[T, ReboundType[T], TypeEmitter[T]]
   private type Yield[T] = YieldF[T, TypeEmitter[T]]
 
   object RefinementRequest {
-    def completeWith[T]: (RefinementRequest[T] |*| TypeEmitter[T]) -⚬ One =
-      λ { case req |*| t => injectL(t) supplyTo req }
+    // def completeWith[T]: (RefinementRequest[T] |*| TypeEmitterG[T, TypeEmitter[T]]) -⚬ One =
+    //   λ { case req |*| t => injectL(t) supplyTo req }
 
     def decline[T]: RefinementRequest[T] -⚬ (TypeEmitter[T] |+| -[T]) =
       λ { req =>
@@ -192,30 +196,47 @@ object TypeInference {
       }
   }
 
+  object ReboundType {
+    def pack[T]: ReboundTypeF[T, TypeEmitterF[T, ReboundType[T]]] -⚬ ReboundType[T] =
+      dsl.pack[[X] =>> ReboundTypeF[T, TypeEmitterF[T, X]]]
+
+    def unpack[T]: ReboundType[T] -⚬ ReboundTypeF[T, TypeEmitterF[T, ReboundType[T]]] =
+      dsl.unpack
+  }
+
   object TypeEmitter {
 
-    private def pack[T]: TypeEmitterF[T, TypeEmitter[T]] -⚬ TypeEmitter[T] =
-      dsl.pack
+    private def pack[T]: TypeEmitterF[T, ReboundTypeF[T, TypeEmitter[T]]] -⚬ TypeEmitter[T] =
+      dsl.pack[[X] =>> TypeEmitterF[T, ReboundTypeF[T, X]]]
 
-    private def unpack[T]: TypeEmitter[T] -⚬ TypeEmitterF[T, TypeEmitter[T]] =
+    private def unpack[T]: TypeEmitter[T] -⚬ TypeEmitterF[T, ReboundTypeF[T, TypeEmitter[T]]] =
       dsl.unpack
 
-    def unapply[T](using SourcePos)(a: $[TypeEmitter[T]])(using LambdaContext): Some[$[TypeEmitterF[T, TypeEmitter[T]]]] =
-      Some(unpack(a))
+    private def packF[T, Y]: TypeSkelet[T, Y, TypeEmitterF[T, Y]] -⚬ TypeEmitterF[T, Y] =
+      dsl.pack
 
-    def abstractType[T]: (Val[AbstractTypeLabel] |*| -[Rebound[T]]) -⚬ TypeEmitter[T] =
-      pack ∘ injectR
+    // private def packF0[T]: TypeSkelet[T, ReboundType[T], TypeEmitterF[T, ReboundType[T]]] -⚬ TypeEmitterF[T, ReboundType[T]] =
+    //   packF
 
-    def nonAbstractType[T]: NonAbstractType[T] -⚬ TypeEmitter[T] =
-      pack ∘ injectL
+    private def unpackF[T, Y]: TypeEmitterF[T, Y] -⚬ TypeSkelet[T, Y, TypeEmitterF[T, Y]] =
+      dsl.unpack
 
-    def newAbstractType[T](v: AbstractTypeLabel)(
+    def unapply[T, Y](using SourcePos)(a: $[TypeEmitterF[T, Y]])(using LambdaContext): Some[$[TypeSkelet[T, Y, TypeEmitterF[T, Y]]]] =
+      Some(unpackF(a))
+
+    def abstractType[T, Y]: (Val[AbstractTypeLabel] |*| -[ReboundF[T, Y, TypeEmitterF[T, Y]]]) -⚬ TypeEmitterF[T, Y] =
+      packF ∘ injectR
+
+    def nonAbstractType[T, Y]: NonAbstractTypeF[TypeEmitterF[T, Y]] -⚬ TypeEmitterF[T, Y] =
+      packF ∘ injectL
+
+    def newAbstractType[T, Y](v: AbstractTypeLabel)(
       mergeT: (T |*| T) -⚬ T,
       outputT: T -⚬ Val[Type],
-    ): One -⚬ (TypeEmitter[T] |*| Val[Type] |*| TypeEmitter[T]) =
+    ): One -⚬ (TypeEmitterF[T, Y] |*| Val[Type] |*| TypeEmitterF[T, Y]) =
       λ.* { _ =>
         producing { case tl |*| t |*| tr =>
-          ((abstractType >>: tl) |*| (abstractType >>: tr)) match {
+          ((abstractType[T, Y] >>: tl) |*| (abstractType[T, Y] >>: tr)) match {
             case (lblL |*| recvL) |*| (lblR |*| recvR) =>
               returning(
                 const(v) >>: lblL,
@@ -226,50 +247,50 @@ object TypeInference {
         }
       }
 
-    def pair[T]: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
-      pack ∘ injectL ∘ injectR
+    def pair[T, Y]: (TypeEmitterF[T, Y] |*| TypeEmitterF[T, Y]) -⚬ TypeEmitterF[T, Y] =
+      packF ∘ injectL ∘ injectR
 
     def expectPair[T]: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T]) =
       throw NotImplementedError(s"at ${summon[SourcePos]}")
 
-    def either[T]: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
-      pack ∘ injectL ∘ injectL ∘ injectR
+    def either[T, Y]: (TypeEmitterF[T, Y] |*| TypeEmitterF[T, Y]) -⚬ TypeEmitterF[T, Y] =
+      packF ∘ injectL ∘ injectL ∘ injectR
 
-    def recCall[T]: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
-      pack ∘ injectL  ∘ injectL ∘ injectL ∘ injectR
+    def recCall[T, Y]: (TypeEmitterF[T, Y] |*| TypeEmitterF[T, Y]) -⚬ TypeEmitterF[T, Y] =
+      packF ∘ injectL  ∘ injectL ∘ injectL ∘ injectR
 
     def expectRecCall[T]: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T]) =
       throw NotImplementedError(s"at ${summon[SourcePos]}")
 
-    def fix[T]: Val[TypeFun[●, ●]] -⚬ TypeEmitter[T] =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
+    def fix[T, Y]: Val[TypeFun[●, ●]] -⚬ TypeEmitterF[T, Y] =
+      packF ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
-    def fixT[T, F[_]](F: TypeTag[F]): One -⚬ TypeEmitter[T] =
+    def fixT[T, Y, F[_]](F: TypeTag[F]): One -⚬ TypeEmitterF[T, Y] =
       fix ∘ const(TypeTag.toTypeFun(F))
 
-    def apply1[T]: (Val[TypeFun[●, ●]] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
+    def apply1[T, Y]: (Val[TypeFun[●, ●]] |*| TypeEmitterF[T, Y]) -⚬ TypeEmitterF[T, Y] =
+      packF ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
-    def apply1T[T, F[_]](F: TypeTag[F]): TypeEmitter[T] -⚬ TypeEmitter[T] =
+    def apply1T[T, Y, F[_]](F: TypeTag[F]): TypeEmitterF[T, Y] -⚬ TypeEmitterF[T, Y] =
       λ { x =>
         apply1(constantVal(TypeTag.toTypeFun(F)) |*| x)
       }
 
-    def string[T]: Done -⚬ TypeEmitter[T] =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
+    def string[T]: Done -⚬ TypeEmitterF[T, Y] =
+      packF ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
-    def int[T]: Done -⚬ TypeEmitter[T] =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
+    def int[T, Y]: Done -⚬ TypeEmitterF[T, Y] =
+      packF ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
-    def unit[T]: Done -⚬ TypeEmitter[T] =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
+    def unit[T, Y]: Done -⚬ TypeEmitterF[T, Y] =
+      packF ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
-    def mismatch[T]: Val[(Type, Type)] -⚬ TypeEmitter[T] =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL
+    def mismatch[T, Y]: Val[(Type, Type)] -⚬ TypeEmitterF[T, Y] =
+      packF ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL
 
-    def unify[T](
+    def unify[T, Y](
       mergeT: (T |*| T) -⚬ T,
-    ): (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] = rec { self =>
+    ): (TypeEmitterF[T, Y] |*| TypeEmitterF[T, Y]) -⚬ TypeEmitterF[T, Y] = rec { self =>
       λ { case TypeEmitter(a) |*| TypeEmitter(b) =>
         a switch {
           case Right(aLabel |*| aReq) => // `a` is abstract type
@@ -478,16 +499,18 @@ object TypeInference {
         }
       }
 
-    def unifyRebounds[T](v: AbstractTypeLabel)(
+    def unifyRebounds[T, Y](v: AbstractTypeLabel)(
+      mergeY: (Y |*| Y) -⚬ Y,
+      outputY: Y -⚬ Val[Type],
       mergeT: (T |*| T) -⚬ T,
       outputT: T -⚬ Val[Type],
-    ): (Rebound[T] |*| Rebound[T]) -⚬ Val[Type] =
+    ): (ReboundF[T, Y, TypeEmitterF[T, Y]] |*| ReboundF[T, Y, TypeEmitterF[T, Y]]) -⚬ Val[Type] =
       λ { case l |*| r =>
         l switch {
           case Left(refinedL) =>
             r switch {
               case Left(refinedR) =>
-                output(unify(mergeT)(refinedL |*| refinedR))
+                outputY(mergeY(refinedL |*| refinedR))
               case Right(unrefinedR) =>
                 unrefinedR switch {
                   case Left(unrefinedR) =>
@@ -535,13 +558,13 @@ object TypeInference {
         }
       }
 
-    def tap[T](
+    def tap[T, Y](
       mergeT: (T |*| T) -⚬ T,
-    ): TypeEmitter[T] -⚬ (TypeEmitter[T] |*| Val[Type]) =
+    ): TypeEmitterF[T, Y] -⚬ (TypeEmitterF[T, Y] |*| Val[Type]) =
       dup(unify(mergeT), mergeT) > snd(output)
 
-    def output[T]: TypeEmitter[T] -⚬ Val[Type] = rec { output =>
-      unpack > λ { _ switch {
+    def output[T, Y]: TypeEmitterF[T, Y] -⚬ Val[Type] = rec { output =>
+      unpackF > λ { _ switch {
         case Right(label |*| req) => // abstract type
           RefinementRequest.decline(req) switch {
             case Left(t) =>
@@ -556,8 +579,8 @@ object TypeInference {
       }}
     }
 
-    def outputApprox[T]: TypeEmitter[T] -⚬ Val[Type] = rec { output =>
-      unpack > λ { _ switch {
+    def outputApprox[T, Y]: TypeEmitterF[T, Y] -⚬ Val[Type] = rec { output =>
+      unpackF > λ { _ switch {
         case Right(label |*| req) => // abstract type
           returning(
             label :>> mapVal(Type.abstractType),
@@ -568,12 +591,12 @@ object TypeInference {
       }}
     }
 
-    def outputNonAbstractApprox[T]: NonAbstractTypeF[T, TypeEmitter[T]] -⚬ Val[Type] =
+    def outputNonAbstractApprox[T, Y]: NonAbstractTypeF[TypeEmitterF[T, Y]] -⚬ Val[Type] =
       outputNonAbstract0(outputApprox)
 
-    def outputNonAbstract0[T](
+    def outputNonAbstract0[T, Y](
       output: TypeEmitter[T] -⚬ Val[Type],
-    ): NonAbstractTypeF[T, TypeEmitter[T]] -⚬ Val[Type] =
+    ): NonAbstractTypeF[TypeEmitterF[T, Y]] -⚬ Val[Type] =
       λ { x =>
         x switch {
           case Right(x1 |*| x2) => // pair
@@ -626,10 +649,10 @@ object TypeInference {
         }
       }
 
-    def dup[T](
-      unify: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T],
+    def dup[T, Y](
+      unify: (TypeEmitterF[T, Y] |*| TypeEmitterF[T, Y]) -⚬ TypeEmitterF[T, Y],
       mergeT: (T |*| T) -⚬ T,
-    ): TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T]) = rec { dup =>
+    ): TypeEmitterF[T, Y] -⚬ (TypeEmitterF[T, Y] |*| TypeEmitterF[T, Y]) = rec { dup =>
       λ { case TypeEmitter(t) =>
         t switch {
           case Right(+(lbl) |*| req) => // abstract type
