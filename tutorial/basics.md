@@ -27,7 +27,7 @@ scalaVersion := "@SCALA_VERSION@"
 libraryDependencies += "dev.continuously" %% "libretto-core" % "0.2-M6"
 ```
 
-Check [search.maven.org](https://search.maven.org/search?q=dev.continuously%20libretto) for the latest version of
+Check [Maven Central](https://central.sonatype.com/search?q=dev.continuously%20libretto-core) for the latest version of
 Libretto.
 
 ### Imports
