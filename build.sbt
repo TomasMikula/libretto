@@ -231,13 +231,7 @@ lazy val docs = project
             .site.topNavigationBar(
               homeLink = TextLink.external("https://github.com/TomasMikula/libretto", "GitHub"),
             )
-            // Change the code font, since Helium's default "Fira Code" lacks some symbols used in tutorial
-            // and the fallback font is not monospace. See https://github.com/planet42/Laika/issues/218.
-            .all.fontFamilies(
-              body = "Lato",      // just repeating the default
-              headlines = "Lato", // just repeating the default
-              code = "Menlo",
-            )
+            .site.fontResources(/* Empty overrides Default! We use our custom CSS for the fonts. */)
             .build
         )
         .build
