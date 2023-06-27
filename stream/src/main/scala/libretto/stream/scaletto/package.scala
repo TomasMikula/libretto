@@ -1,13 +1,11 @@
-package libretto.stream
+package libretto.stream.scaletto
 
 import libretto.scaletto.StarterKit
 
-package object scaletto {
-  val DefaultStreams =
-    ScalettoStreams(
-      StarterKit.dsl,
-      StarterKit.coreLib,
-      StarterKit.scalettoLib,
-      libretto.stream.DefaultStreams,
-    )
-}
+val DefaultStreams =
+  ScalettoStreams(
+    StarterKit.dsl,
+    StarterKit.coreLib,
+    StarterKit.scalettoLib,
+    libretto.stream.DefaultStreams,
+  )
