@@ -1282,33 +1282,49 @@ object TypeInference {
     def mismatch[T]: Val[(Type, Type)] -⚬ ConcreteType[T] =
       NonAbstractType.mismatch > nonAbstractType
 
-    // TODO: likely impossible, should reconsider call-sites to introduce extra abstract types
-    // def merge[T](
-    //   makeT: NonAbstractType[T] -⚬ T,
-    // ): (ConcreteType[T] |*| ConcreteType[T]) -⚬ ConcreteType[T] = rec { self =>
-    //   par(unpack, unpack) > λ { case a |*| b =>
-    //     a switch {
-    //       case Left(a) =>
-    //         b switch {
-    //           case Left(b) =>
-    //             (a |*| b) :>> NonAbstractType.merge(self, output) :>> nonAbstractType
-    //           case Right(bLbl |*| u) =>
-    //             val a1 |*| a2 = a :>> NonAbstractType.split(split)
-    //             returning(
-    //               nonAbstractType(a1),
-    //               makeT(a2) supplyTo u,
-    //             )
-    //         }
-    //       case Right(aLbl |*| t) =>
-    //         b switch {
-    //           case Left(b) =>
-    //             ???
-    //           case Right(bLbl |*| u) =>
-    //             ???
-    //         }
-    //     }
-    //   }
-    // }
+    def abstractify[T](
+      instantiate: ReboundType[T] -⚬ T,
+    ): ConcreteType[T] -⚬ TypeEmitter[T] = rec { self =>
+      unpack > dsl.either(
+        NonAbstractType.map(self) > TypeEmitter.nonAbstractType[T],
+        λ { case lbl |*| nt =>
+          (lbl |*| nt) :>> TypeEmitter.genericType(instantiate)
+        },
+      )
+    }
+
+    def merge[T](
+      instantiate: ReboundType[T] -⚬ T,
+    ): (ConcreteType[T] |*| ConcreteType[T]) -⚬ ConcreteType[T] =
+      val abstractify = ConcreteType.abstractify(instantiate)
+      par(abstractify, abstractify) > TypeEmitter.merge > TypeEmitter.generify
+      // rec { self =>
+      //   par(unpack, unpack) > λ { case a |*| b =>
+      //     a switch {
+      //       case Left(a) =>
+      //         b switch {
+      //           case Left(b) =>
+      //             (a |*| b) :>> NonAbstractType.merge(self, output) :>> nonAbstractType
+      //           case Right(bLbl |*| u) =>
+      //             val a1 |*| a2 = a :>> NonAbstractType.split(split)
+      //             returning(
+      //               nonAbstractType(a1),
+      //               makeT(a2) supplyTo u,
+      //             )
+      //         }
+      //       case Right(aLbl |*| nt) =>
+      //         b switch {
+      //           case Left(b) =>
+      //             val b1 |*| b2 = b :>> NonAbstractType.split(split)
+      //             returning(
+      //               nonAbstractType(b1)
+      //             )
+      //           case Right(bLbl |*| nu) =>
+      //             ???
+      //         }
+      //     }
+      //   }
+      // }
 
     def split[T]: ConcreteType[T] -⚬ (ConcreteType[T] |*| ConcreteType[T]) =
       ???
@@ -1990,6 +2006,9 @@ object TypeInference {
         }
       }
 
+    def tapFlip[T, Y, X](): TypeSkelet[T, Y, X] -⚬ (TypeSkelet[T, Y, X] |*| TypeSkelet[-[T], X, Y]) =
+      ???
+
     def output[T, Y, X](
       outputX: X -⚬ Val[Type],
       outputNegT: (Label |*| -[T]) -⚬ Val[Type],
@@ -2152,8 +2171,35 @@ object TypeInference {
         pack1(t2)
       }
 
-    def unapply[T, Y](using SourcePos)(a: $[TypeEmitterF[T, Y]])(using LambdaContext): Some[$[TypeSkelet[T, Y, TypeEmitterF[T, Y]]]] =
-      Some(TypeEmitterF.unpack(a))
+    def unapply[T](using SourcePos)(a: $[TypeEmitter[T]])(using LambdaContext): Some[$[TypeSkelet[T, ReboundType[T], TypeEmitter[T]]]] =
+      Some(unpack(a))
+
+    def nonAbstractType[T]: NonAbstractTypeF[TypeEmitter[T]] -⚬ TypeEmitter[T] =
+      TypeSkelet.nonAbstractType > pack
+
+    def makeAbstractType[T]: Val[AbstractTypeLabel] -⚬ (TypeEmitter[T] |*| ReboundF[T, ReboundType[T], TypeEmitter[T]]) =
+      TypeSkelet.makeAbstractType[T, ReboundType[T], TypeEmitter[T]] > fst(pack)
+
+    def genericType[T](
+      instantiate: ReboundType[T] -⚬ T,
+    ): (Val[AbstractTypeLabel] |*| -[T]) -⚬ TypeEmitter[T] =
+      λ { case lbl |*| nt =>
+        val out |*| resp = makeAbstractType[T](lbl)
+        returning(
+          out,
+          resp switch {
+            case Left(y) =>
+              instantiate(y) supplyTo nt
+            case Right(value) =>
+              value switch {
+                case Left(outReq) =>
+                  injectR(nt) supplyTo outReq
+                case Right(?(_)) =>
+                  nt :>> crashNow(s"TODO: Is this case really ever used? (${summon[SourcePos]})")
+              }
+          }
+        )
+      }
 
     def newAbstractType[T](v: AbstractTypeLabel)(
       mergeInT: (TypeEmitter[T] |*| T) -⚬ TypeEmitter[T],
@@ -2203,6 +2249,29 @@ object TypeInference {
           mergeT,
         )
       }
+
+    def tapFlip[T](): TypeEmitter[T] -⚬ (TypeEmitter[T] |*| ReboundType[T]) =
+      λ { case TypeEmitter(a) =>
+        TypeSkelet.tapFlip()
+      }
+
+    def merge__[T](
+      instantiate: ReboundType[T] -⚬ T,
+      splitT: T -⚬ (T |*| T),
+    ): (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] = rec { self =>
+      λ { case TypeEmitter(a) |*| TypeEmitter(b) =>
+        TypeSkelet.merge(
+          self,
+          splitY = ???, // ReboundType.split(),
+          tapFlipXY = ???, // : X -⚬ (X |*| Y),
+          makeX = pack,
+          makeY = ReboundType.pack,
+          makeT = instantiate, //: Y -⚬ T,
+          splitT = splitT,
+          outputApprox,
+        )(a |*| b)
+      }
+    }
 
     def mergeIn__[T](
       split: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T]),
