@@ -1,7 +1,5 @@
-package libretto.examples
+package libretto.examples.sunflowers
 
-package object sunflowers {
-  case class Sunflower()
-  case class SeedsPack()
-  case class OilBottle()
-}
+case class Sunflower()
+case class SeedsPack()
+case class OilBottle()

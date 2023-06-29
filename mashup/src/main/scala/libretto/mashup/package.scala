@@ -1,28 +1,26 @@
-package libretto
+package libretto.mashup
 
 import java.util.concurrent.ScheduledExecutorService
 import libretto.util.Async
 import zio.ZIO
 
-package object mashup {
-  val kit: MashupKit = MashupKitImpl
+val kit: MashupKit = MashupKitImpl
 
-  val dsl: kit.dsl.type = kit.dsl
+val dsl: kit.dsl.type = kit.dsl
 
-  type Runtime = MashupRuntime[dsl.type]
+type Runtime = MashupRuntime[dsl.type]
 
-  object Runtime {
-    def create(executor: ScheduledExecutorService): Runtime =
-      kit.createRuntime(executor)
-  }
+object Runtime {
+  def create(executor: ScheduledExecutorService): Runtime =
+    kit.createRuntime(executor)
+}
 
-  extension [A](a: Async[A]) {
-    def toZIO: ZIO[Any, Nothing, A] =
-      a match {
-        case Async.Now(a) =>
-          ZIO.succeed(a)
-        case Async.Later(register) =>
-          ZIO.async(callback => register(a => callback(ZIO.succeed(a))))
-      }
-  }
+extension [A](a: Async[A]) {
+  def toZIO: ZIO[Any, Nothing, A] =
+    a match {
+      case Async.Now(a) =>
+        ZIO.succeed(a)
+      case Async.Later(register) =>
+        ZIO.async(callback => register(a => callback(ZIO.succeed(a))))
+    }
 }

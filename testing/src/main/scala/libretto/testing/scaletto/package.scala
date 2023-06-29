@@ -1,7 +1,5 @@
-package libretto.testing
+package libretto.testing.scaletto
 
 import libretto.scaletto.StarterKit
 
-package object scaletto {
-  type StarterTestKit = ScalettoTestKit.Of[StarterKit.dsl.type]
-}
+type StarterTestKit = ScalettoTestKit.Of[StarterKit.dsl.type]

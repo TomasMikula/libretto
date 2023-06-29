@@ -1,5 +1,3 @@
-package libretto
+package libretto.util
 
-package object util {
-  type ∀[F[_]] = ForAll[F]
-}
+type ∀[F[_]] = ForAll[F]
