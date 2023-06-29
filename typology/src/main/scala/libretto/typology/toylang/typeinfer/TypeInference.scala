@@ -2006,8 +2006,78 @@ object TypeInference {
         }
       }
 
-    def tapFlip[T, Y, X](): TypeSkelet[T, Y, X] -⚬ (TypeSkelet[T, Y, X] |*| TypeSkelet[-[T], X, Y]) =
-      ???
+    def tapFlip[T, Y, X](
+      splitY: Y -⚬ (Y |*| Y),
+      tapFlip: X -⚬ (X |*| Y),
+      mergeInYX: (Y |*| X) -⚬ Y,
+      splitT: T -⚬ (T |*| T),
+    ): TypeSkelet[T, Y, X] -⚬ (TypeSkelet[T, Y, X] |*| TypeSkelet[-[T], X, Y]) =
+      λ { t =>
+        t switch {
+          case Right(+(lbl) |*| req) => // abstract type
+            val out1 |*| resp1 = makeAbstractType[T, Y, X](lbl)
+            val out2 |*| resp2 = makeAbstractType[-[T], X, Y](lbl)
+            returning(
+              out1 |*| out2,
+              resp1 switch {
+                case Left(y) =>
+                  resp2 switch {
+                    case Left(x) =>
+                      RefinementRequest.completeWith(req |*| mergeInYX(y |*| x))
+                    case Right(value) =>
+                      value switch {
+                        case Left(out2Req) =>
+                          val y1 |*| y2 = splitY(y)
+                          returning(
+                            RefinementRequest.completeWith(req |*| y1),
+                            injectL(y2) supplyTo out2Req,
+                          )
+                        case Right(?(_)) =>
+                          (req |*| y) :>> crashNow(s"TODO: is this case ever used? (${summon[SourcePos]})")
+                      }
+                  }
+                case Right(value) =>
+                  value switch {
+                    case Left(out1Req) =>
+                      resp2 switch {
+                        case Left(x) =>
+                          val x1 |*| y1 = tapFlip(x)
+                          returning(
+                            RefinementRequest.completeWith(req |*| y1),
+                            injectL(x1) supplyTo out1Req,
+                          )
+                        case Right(value) =>
+                          value switch {
+                            case Left(out2Req) =>
+                              RefinementRequest.decline(req) switch {
+                                case Left(x) =>
+                                  val x1 |*| y1 = tapFlip(x)
+                                  returning(
+                                    injectL(x1) supplyTo out1Req,
+                                    injectL(y1) supplyTo out2Req,
+                                  )
+                                case Right(nt0) =>
+                                  val --(t) = out1Req contramap injectR
+                                  val --(nt2) = out2Req contramap injectR
+                                  val t1 |*| t2 = splitT(t)
+                                  returning(
+                                    t1 supplyTo nt0,
+                                    t2 supplyTo nt2,
+                                  )
+                              }
+                            case Right(?(_)) =>
+                              req :>> crashNow(s"TODO: is this case ever used? (${summon[SourcePos]})")
+                          }
+                      }
+                    case Right(?(_)) =>
+                      req :>> crashNow(s"TODO: is this case ever used? (${summon[SourcePos]})")
+                  }
+              },
+            )
+          case Left(t) => // non-abstract type
+            t :>> NonAbstractType.splitMap[X, X, Y](tapFlip) :>> par(nonAbstractType, nonAbstractType)
+        }
+      }
 
     def output[T, Y, X](
       outputX: X -⚬ Val[Type],
@@ -2250,10 +2320,18 @@ object TypeInference {
         )
       }
 
-    def tapFlip[T](): TypeEmitter[T] -⚬ (TypeEmitter[T] |*| ReboundType[T]) =
+    def tapFlip[T](
+      splitT: T -⚬ (T |*| T),
+    ): TypeEmitter[T] -⚬ (TypeEmitter[T] |*| ReboundType[T]) = rec { self =>
       λ { case TypeEmitter(a) =>
-        TypeSkelet.tapFlip()
+        TypeSkelet.tapFlip(
+          ReboundType.split(),
+          self,
+          ReboundType.mergeIn(),
+          splitT,
+        )
       }
+    }
 
     def merge__[T](
       instantiate: ReboundType[T] -⚬ T,
@@ -2262,8 +2340,8 @@ object TypeInference {
       λ { case TypeEmitter(a) |*| TypeEmitter(b) =>
         TypeSkelet.merge(
           self,
-          splitY = ???, // ReboundType.split(),
-          tapFlipXY = ???, // : X -⚬ (X |*| Y),
+          splitY = ReboundType.split(),
+          tapFlipXY = tapFlip(splitT),
           makeX = pack,
           makeY = ReboundType.pack,
           makeT = instantiate, //: Y -⚬ T,
