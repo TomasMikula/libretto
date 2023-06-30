@@ -56,15 +56,15 @@ abstract class ScalettoStreams {
 
   private lazy val Tree = BinarySearchTree(dsl, coreLib, scalettoLib)
 
-  import dsl._
-  import dsl.$._
-  import coreLib._
-  import scalettoLib.{_, given}
-  import underlying._
-  import Tree._
+  import dsl.*
+  import dsl.$.*
+  import coreLib.*
+  import scalettoLib.{*, given}
+  import underlying.*
+  import Tree.*
   import Comonoid.given
 
-  export underlying.{lib => _, dsl => _, _}
+  export underlying.{lib => _, dsl => _, *}
 
   type ValSourceT[T, A] = SourceT[T, Val[A]]
 

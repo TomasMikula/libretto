@@ -16,8 +16,8 @@ class ClosedLib[
   val dsl: DSL,
   val coreLib: CLib with CoreLib[dsl.type],
 ) { lib =>
-  import dsl._
-  import coreLib._
+  import dsl.*
+  import coreLib.*
 
   /** Function object (internal hom) is contravariant in the input type. */
   def input[C]: ContraFunctor[[x] =>> x =⚬ C] =

@@ -2,13 +2,13 @@ package libretto.lambda
 
 import libretto.lambda.{Projection => P}
 import libretto.lambda.util.{BiInjective, Exists, TypeEq}
-import libretto.lambda.util.BiInjective._
+import libretto.lambda.util.BiInjective.*
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.Projection.Proper
 
 class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
   sealed trait ~⚬[A, B] {
-    import ~⚬._
+    import ~⚬.*
 
     def >[C](that: B ~⚬ C): A ~⚬ C =
       (this, that) match {
@@ -584,7 +584,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       val p: Projection.Proper[|*|, A, X]
       val f: X ~⚬ C
 
-      import ProjectProperRes._
+      import ProjectProperRes.*
 
       def unproper: ProjectRes[A, C] =
         this match
@@ -606,7 +606,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       }
     }
   }
-  import ~⚬._
+  import ~⚬.*
 
   /** Two parallel operations, at least one of which is not [[Id]]. */
   enum Par[X1, X2, Y1, Y2] {
@@ -917,7 +917,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
   }
 
   sealed trait Transfer[A1, A2, B1, B2] extends TransferOpt[A1, A2, B1, B2] {
-    import Transfer._
+    import Transfer.*
 
     def after[Z1, Z2](that: Transfer[Z1, Z2, A1, A2]): (Z1 |*| Z2) ~⚬ (B1 |*| B2)
 
@@ -1034,7 +1034,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     }
 
     override def fold[->[_, _]](using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2) = {
-      import ev._
+      import ev.*
 
       extension [X, Y, Z](f: X -> Y) {
         def >(g: Y -> Z): X -> Z =

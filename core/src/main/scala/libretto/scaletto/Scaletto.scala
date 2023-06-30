@@ -70,7 +70,7 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
   }
 
   private val lib = CoreLib(this)
-  import lib._
+  import lib.*
 
   /** Creates an entangled pair of demand ([[Neg]]) and supply ([[Val]]) such that when the demand is fulfilled
     * with a value, that value will be produced by the supply.

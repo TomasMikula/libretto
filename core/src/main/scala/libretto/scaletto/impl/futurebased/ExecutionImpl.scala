@@ -17,10 +17,10 @@ private class ExecutionImpl(
   ec: ExecutionContext,
   scheduler: Scheduler,
 ) extends ScalettoExecution[FreeScaletto.type] {
-  import ResourceRegistry._
+  import ResourceRegistry.*
 
   override val dsl = FreeScaletto
-  import dsl._
+  import dsl.*
 
   override opaque type OutPort[A] = Frontier[A]
   override opaque type InPort[A] = Frontier[A] => Unit
@@ -227,7 +227,7 @@ private class ExecutionImpl(
     }
 
   private sealed trait Frontier[A] {
-    import Frontier._
+    import Frontier.*
 
     def extendBy[B](f: A -⚬ B)(using
       resourceRegistry: ResourceRegistry,

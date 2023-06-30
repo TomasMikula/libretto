@@ -1,8 +1,8 @@
 package libretto.mashup.rest
 
 import libretto.mashup.{MappedValue, Runtime}
-import libretto.mashup.dsl._
-import libretto.mashup.rest.RelativeUrl._
+import libretto.mashup.dsl.*
+import libretto.mashup.rest.RelativeUrl.*
 import libretto.util.Async
 import scala.util.Try
 

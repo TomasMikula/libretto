@@ -14,7 +14,7 @@ trait CrashDSL extends CoreDSL {
   def crashWhenDone[A, B](msg: String): (Done |*| A) -⚬ B
 
   private val lib = CoreLib(this)
-  import lib._
+  import lib.*
 
   def crashWhenNeed[A, B](msg: String): A -⚬ (Need |*| B) =
     introFst(lInvertSignal) > assocLR > snd(crashWhenDone(msg))

@@ -1,7 +1,7 @@
 package libretto.mashup
 
 import java.net.InetSocketAddress
-import zio.http._
+import zio.http.*
 import zio.http.Server
 import zio.{Fiber, Promise, Queue, Scope, UIO, ZIO}
 

@@ -1,6 +1,6 @@
 package libretto.lambda.util
 
-import scala.quoted._
+import scala.quoted.*
 
 final case class SourcePos(path: String, filename: String, line: Int)
 

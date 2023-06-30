@@ -1,6 +1,6 @@
 package libretto.examples.supermarket
 
-import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.*
 
 /** Our supermarket specializes in the most wanted items in a pandemic,
   * namely toilet paper and beer.

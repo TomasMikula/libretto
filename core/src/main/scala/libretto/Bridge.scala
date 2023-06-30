@@ -15,7 +15,7 @@ trait CoreBridge {
 
 trait CoreExecution[DSL <: CoreDSL] {
   val dsl: DSL
-  import dsl._
+  import dsl.*
 
   type OutPort[A]
   val OutPort: OutPorts

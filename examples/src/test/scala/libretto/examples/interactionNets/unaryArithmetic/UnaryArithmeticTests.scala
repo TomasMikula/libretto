@@ -1,7 +1,7 @@
 package libretto.examples.interactionNets.unaryArithmetic
 
-import libretto.examples.interactionNets.unaryArithmetic._
-import libretto.scaletto.StarterKit._
+import libretto.examples.interactionNets.unaryArithmetic.*
+import libretto.scaletto.StarterKit.*
 import libretto.testing.scalatest.scaletto.ScalatestStarterTestSuite
 import libretto.testing.scaletto.StarterTestKit
 import libretto.testing.TestCase

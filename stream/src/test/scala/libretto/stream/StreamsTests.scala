@@ -1,14 +1,14 @@
 package libretto.stream
 
 import libretto.CoreLib
-import libretto.lambda.util.Monad.syntax._
+import libretto.lambda.util.Monad.syntax.*
 import libretto.scaletto.ScalettoLib
 import libretto.stream.CoreStreams
 import libretto.stream.scaletto.ScalettoStreams
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
 import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 class StreamsTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
@@ -20,11 +20,11 @@ class StreamsTests extends ScalatestScalettoTestSuite {
     val invertStreams = InvertStreams(dsl, coreLib)
     val scalettoStreams = ScalettoStreams(kit.dsl, coreLib, scalettoLib, invertStreams)
 
-    import dsl._
-    import dsl.$._
-    import coreLib._
-    import scalettoLib.{given, _}
-    import scalettoStreams._
+    import dsl.*
+    import dsl.$.*
+    import coreLib.*
+    import scalettoLib.{*, given}
+    import scalettoStreams.*
 
     List(
       "toList ⚬ fromList = id" -> TestCase

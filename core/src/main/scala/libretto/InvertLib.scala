@@ -14,8 +14,8 @@ class InvertLib[
 ](
   val coreLib: CoreLib,
 ) {
-  import coreLib.dsl._
-  import coreLib._
+  import coreLib.dsl.*
+  import coreLib.*
 
   def inversionDuality[A]: Dual[A, -[A]] =
     new Dual[A, -[A]] {

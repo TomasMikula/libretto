@@ -16,9 +16,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   val dsl: DSL,
   val lib: Lib with CoreLib[dsl.type],
 ) {
-  import dsl._
-  import dsl.$._
-  import lib.{_, given}
+  import dsl.*
+  import dsl.$.*
+  import lib.{*, given}
 
   type StreamLeaderF[S, T, A, X]   = S |+| (T |&| (A |*| X))
   type StreamFollowerF[S, T, A, X] = S |&| (T |+| (A |*| X))

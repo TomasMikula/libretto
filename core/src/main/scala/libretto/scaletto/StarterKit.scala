@@ -41,11 +41,11 @@ abstract class AbstractStarterKit(
   ): ScalettoExecutor.Of[dsl.type, bridge.type] =
     executor0(scheduler, blockingExecutor)
 
-  export dsl._
-  export coreLib.{dsl => _, _}
-  export scalettoLib.{dsl => _, coreLib => _, _, given}
-  export closedLib.{dsl => _, coreLib => _, _}
-  export invertLib.{coreLib => _, _}
+  export dsl.*
+  export coreLib.{dsl => _, *}
+  export scalettoLib.{dsl => _, coreLib => _, *, given}
+  export closedLib.{dsl => _, coreLib => _, *}
+  export invertLib.{coreLib => _, *}
 
   def runScalaAsync[A](blueprint: Done -⚬ Val[A]): Future[A] = {
     val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())

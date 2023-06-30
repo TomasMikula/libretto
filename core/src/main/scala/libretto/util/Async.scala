@@ -3,7 +3,7 @@ package libretto.util
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import java.util.function.BinaryOperator
-import libretto.util.atomic._
+import libretto.util.atomic.*
 import scala.annotation.tailrec
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration.FiniteDuration
@@ -68,7 +68,7 @@ object Async {
       case Listener(listener: A => Unit)
       case Done()
     }
-    import State._
+    import State.*
 
     val ref =
       new AtomicReference[State[A]](State.Initial())
@@ -130,7 +130,7 @@ object Async {
       case class SingleListener(listener: A => Unit) extends Listening[A]
       case class Listeners[A](head: A => Unit, tail: Listening[A]) extends Listening[A]
     }
-    import State._
+    import State.*
 
     val ref =
       new AtomicReference[State[A]](State.Initial())

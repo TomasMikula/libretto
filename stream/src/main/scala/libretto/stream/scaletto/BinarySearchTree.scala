@@ -19,11 +19,11 @@ class BinarySearchTree[DSL <: Scaletto, CLib <: CoreLib[DSL], SLib <: ScalettoLi
   val coreLib: CLib with CoreLib[dsl.type],
   val scalettoLib: SLib with ScalettoLib[dsl.type, coreLib.type],
 ) {
-  import dsl._
-  import coreLib._
-  import coreLib.Bool._
-  import coreLib.Compared._
-  import scalettoLib.{_, given}
+  import dsl.*
+  import coreLib.*
+  import coreLib.Bool.*
+  import coreLib.Compared.*
+  import scalettoLib.{*, given}
 
   private def fstLens[A, B]: Lens[A |*| B, A] =
     Transportive.fst[B].lens[A]

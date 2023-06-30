@@ -1,7 +1,7 @@
 package libretto.examples.canteen
 
-import libretto.scaletto.StarterKit._
-import libretto.scaletto.StarterKit.$._
+import libretto.scaletto.StarterKit.*
+import libretto.scaletto.StarterKit.$.*
 import libretto.scaletto.StarterKit.scalettoLib.given
 
 object Protocol {

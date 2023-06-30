@@ -1,12 +1,12 @@
 package libretto.examples.coffeemachine
 
 import libretto.scaletto.StarterKit
-import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.*
 import libretto.scaletto.StarterKit.scalettoLib.given
 
 object CoffeeMachineProvider {
-  import Protocol._
-  import $._
+  import Protocol.*
+  import $.*
 
   val makeCoffeeMachine: Done -⚬ CoffeeMachine = rec { self =>
     val returnAndRepeat: Val[Beverage] -⚬ (Val[Beverage] |*| CoffeeMachine) =

@@ -1,7 +1,7 @@
 package libretto.examples.coffeemachine
 
 import libretto.scaletto.StarterKit.dsl
-import libretto.scaletto.StarterKit.dsl._
+import libretto.scaletto.StarterKit.dsl.*
 
 object Protocol {
 

@@ -1,15 +1,15 @@
 package libretto.examples.supermarket
 
-import libretto.scaletto.StarterKit._
-import libretto.examples.supermarket.baskets._
-import libretto.examples.supermarket.money._
-import scala.concurrent.duration._
+import libretto.scaletto.StarterKit.*
+import libretto.examples.supermarket.baskets.*
+import libretto.examples.supermarket.money.*
+import scala.concurrent.duration.*
 
 object SupermarketProvider extends SupermarketInterface {
-  import libretto.scaletto.StarterKit.$._
+  import libretto.scaletto.StarterKit.$.*
 
   override val goods: Goods.type = Goods
-  import goods._
+  import goods.*
 
   private type BorrowedBasket = Basket |*| -[Basket]
   private type ItemSelection = Beer |&| ToiletPaper

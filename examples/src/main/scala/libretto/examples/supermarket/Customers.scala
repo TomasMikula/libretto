@@ -1,8 +1,8 @@
 package libretto.examples.supermarket
 
-import libretto.scaletto.StarterKit._
-import libretto.examples.supermarket.money._
-import scala.concurrent.duration._
+import libretto.scaletto.StarterKit.*
+import libretto.examples.supermarket.money.*
+import scala.concurrent.duration.*
 
 object Customers {
   def apply(supermarket: SupermarketInterface): Customers[supermarket.type] =
@@ -12,9 +12,9 @@ object Customers {
 class Customers[SupermarketImpl <: SupermarketInterface](
   val supermarket: SupermarketImpl,
 ) {
-  import libretto.scaletto.StarterKit.$._
-  import supermarket.{_, given}
-  import supermarket.goods._
+  import libretto.scaletto.StarterKit.$.*
+  import supermarket.{*, given}
+  import supermarket.goods.*
 
   /** Blueprint for customer behavior. A customer gets access to a supermarket and runs to completion ([[Done]]). */
   def behavior(who: String): Supermarket -⚬ Done = {

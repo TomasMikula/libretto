@@ -2,7 +2,7 @@ package libretto.examples
 
 import libretto.scaletto.StarterApp
 import libretto.scaletto.StarterKit.scalettoLib.given
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 object CoffeeMachine extends StarterApp { app =>
 

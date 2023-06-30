@@ -32,7 +32,7 @@ object BodyType {
   }
 
   object Json {
-    import JsonType._
+    import JsonType.*
 
     private def extractJson[A](using rt: Runtime, exn: rt.Execution)(
       typ: JsonType[A],

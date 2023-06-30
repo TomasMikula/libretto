@@ -2,16 +2,16 @@ package libretto
 
 import java.util.concurrent.{Executors, ScheduledExecutorService}
 import java.util.concurrent.atomic.AtomicInteger
-import libretto.Functor._
+import libretto.Functor.*
 import libretto.lambda.util.SourcePos
-import libretto.lambda.util.Monad.syntax._
+import libretto.lambda.util.Monad.syntax.*
 import libretto.scaletto.ScalettoLib
 import libretto.testing.{TestCase, TestExecutor, TestKit}
 import libretto.testing.scaletto.{ScalettoTestExecutor, ScalettoTestKit}
 import libretto.testing.scalatest.ScalatestSuite
 import libretto.util.Async
 import scala.concurrent.{Await, Promise}
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 class BasicTests extends ScalatestSuite[ScalettoTestKit] {
   private var scheduler: ScheduledExecutorService = _
@@ -38,13 +38,13 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     )
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{OutPort => _, _}
-    import dsl._
-    import dsl.$._
+    import kit.{OutPort => _, *}
+    import dsl.*
+    import dsl.$.*
     val coreLib = CoreLib(dsl)
     val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
-    import coreLib.{_, given}
-    import scalettoLib.{_, given}
+    import coreLib.{*, given}
+    import scalettoLib.{*, given}
     import kit.bridge.Execution
 
     def raceKeepWinner[A](

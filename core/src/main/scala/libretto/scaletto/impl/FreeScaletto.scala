@@ -149,7 +149,7 @@ abstract class FreeScaletto {
 }
 
 object FreeScaletto extends FreeScaletto with Scaletto {
-  import -⚬._
+  import -⚬.*
 
   override type ->[A, B] = A -⚬ B
 

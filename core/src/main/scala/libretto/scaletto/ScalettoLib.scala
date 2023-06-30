@@ -5,7 +5,7 @@ import libretto.{CoreLib, InvertLib}
 import libretto.lambda.util.SourcePos
 import libretto.util.Async
 import scala.annotation.targetName
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 import scala.reflect.TypeTest
 import scala.util.Random
 
@@ -25,12 +25,12 @@ class ScalettoLib[
   val dsl: DSL,
   val coreLib: CoreLib with libretto.CoreLib[dsl.type],
 ) {
-  import dsl._
-  import dsl.$._
-  import coreLib._
+  import dsl.*
+  import dsl.$.*
+  import coreLib.*
 
   private val invertLib = InvertLib(coreLib)
-  import invertLib._
+  import invertLib.*
 
   object Val {
     def isEq[A](a: A): Val[A] -⚬ (Val[a.type] |+| Val[A]) =
@@ -279,7 +279,7 @@ class ScalettoLib[
     lteqBy(aKey, bKey).>.right(swap)
 
   given [A : Ordering]: Comparable[Val[A], Val[A]] with {
-    import coreLib.given, Compared._, Either as ⊻
+    import coreLib.given, Compared.*, Either as ⊻
 
     private val scalaCompare: ((A, A)) => ((A, A) ⊻ ((A, A) ⊻ (A, A))) =
       { (a1, a2) =>

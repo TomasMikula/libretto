@@ -2,7 +2,7 @@ package libretto
 
 import libretto.lambda.Category
 import libretto.lambda.util.SourcePos
-import libretto.util.unapply._
+import libretto.util.unapply.*
 import libretto.util.{Equal, ∀}
 import scala.annotation.tailrec
 
@@ -12,8 +12,8 @@ object CoreLib {
 }
 
 class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
-  import dsl._
-  import dsl.$._
+  import dsl.*
+  import dsl.$.*
 
   val category: Category[-⚬] =
     new Category[-⚬] {
@@ -2290,7 +2290,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         .bimap(ifTrue, ifFalse)         .to[        B     |+|        C     ]
   }
 
-  import Bool._
+  import Bool.*
 
   def testBy[A, B, K: Cosemigroup: Junction.Positive](
     aKey: Getter[A, K],
@@ -2358,7 +2358,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       }
   }
 
-  import Compared._
+  import Compared.*
 
   def compareBy[A, B, K1 : CloseableCosemigroup : Junction.Positive, K2 : CloseableCosemigroup : Junction.Positive](
     aKey: Getter[A, K1],

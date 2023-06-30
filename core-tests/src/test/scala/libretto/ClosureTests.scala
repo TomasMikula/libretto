@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.lambda.util.Monad.syntax._
+import libretto.lambda.util.Monad.syntax.*
 import libretto.scaletto.ScalettoLib
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
@@ -8,15 +8,15 @@ import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
 
 class ClosureTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.dsl._
-    import kit.dsl.$._
+    import kit.dsl.*
+    import kit.dsl.$.*
     import kit.{Outcome, expectVal}
     import kit.Outcome.expectNotThrows
 
     val coreLib = CoreLib(kit.dsl)
     val scalettoLib = ScalettoLib(kit.dsl, coreLib)
-    import coreLib._
-    import scalettoLib.{_, given}
+    import coreLib.*
+    import scalettoLib.{*, given}
 
     List(
       "simplest closure" ->
