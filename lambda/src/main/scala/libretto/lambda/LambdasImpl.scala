@@ -662,7 +662,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.unzip_gcd_this")
 
         override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[B]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap1_gcd_this")
+          None
 
         override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[B]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
