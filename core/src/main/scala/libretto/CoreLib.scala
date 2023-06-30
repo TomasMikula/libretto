@@ -2259,6 +2259,52 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       rec { (cd: C -⚬ D) => g(rec { (ab: A -⚬ B) => f(ab, cd) }, cd) },
     )
 
+  def rec2[A, B, C, D](
+    fs: (A -⚬ B, C -⚬ D) => (A -⚬ B, C -⚬ D),
+  ): (A -⚬ B, C -⚬ D) =
+    rec2(
+      (f, g) => fs(f, g)._1,
+      (f, g) => fs(f, g)._2,
+    )
+
+  def rec3[A, B, C, D, E, F](
+    f: (A -⚬ B, C -⚬ D, E -⚬ F) => A -⚬ B,
+    g: (A -⚬ B, C -⚬ D, E -⚬ F) => C -⚬ D,
+    h: (A -⚬ B, C -⚬ D, E -⚬ F) => E -⚬ F,
+  ): (A -⚬ B, C -⚬ D, E -⚬ F) =
+    (
+      rec { (ab: A -⚬ B) =>
+        f(
+          ab,
+          rec { (cd: C -⚬ D) => g(ab, cd, rec { (ef: E -⚬ F) => h(ab, cd, ef) }) },
+          rec { (ef: E -⚬ F) => h(ab, rec { (cd: C -⚬ D) => g(ab, cd, ef) }, ef) },
+        )
+      },
+      rec { (cd: C -⚬ D) =>
+        g(
+          rec { (ab: A -⚬ B) => f(ab, cd, rec { (ef: E -⚬ F) => h(ab, cd, ef) }) },
+          cd,
+          rec { (ef: E -⚬ F) => h(rec { (ab: A -⚬ B) => f(ab, cd, ef) }, cd, ef) },
+        )
+      },
+      rec { (ef: E -⚬ F) =>
+        h(
+          rec { (ab: A -⚬ B) => f(ab, rec { (cd: C -⚬ D) => g(ab, cd, ef) }, ef) },
+          rec { (cd: C -⚬ D) => g(rec { (ab: A -⚬ B) => f(ab, cd, ef) }, cd, ef) },
+          ef,
+        )
+      },
+    )
+
+  def rec3[A, B, C, D, E, F](
+    fs: (A -⚬ B, C -⚬ D, E -⚬ F) => (A -⚬ B, C -⚬ D, E -⚬ F),
+  ): (A -⚬ B, C -⚬ D, E -⚬ F) =
+    rec3(
+      (f, g, h) => fs(f, g, h)._1,
+      (f, g, h) => fs(f, g, h)._2,
+      (f, g, h) => fs(f, g, h)._3,
+    )
+
   opaque type Bool = Done |+| Done
   object Bool {
     val constTrue: Done -⚬ Bool =
