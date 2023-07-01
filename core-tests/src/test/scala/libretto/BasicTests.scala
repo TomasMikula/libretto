@@ -126,46 +126,23 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
       },
 
       "delayed injectL" -> TestCase
-        .configure(ExecutionParam.manualClock)
         .interactWith {
-          // delay of 40 millis
-          val a: Done -⚬ Done =
-            delay(40.millis)
-
-          // delay of 30 + 20 = 50 millis
-          // We are testing that the second timer starts ticking only after the delayed inject (awaitInjectL).
-          // The Ping in the output notifies of the first timer firing.
-          val b: Done -⚬ (Ping |*| Done) = {
-            val delayedInjectL: Done -⚬ (Done |+| Done) =
-              forkMap(delay(30.millis), id[Done]) > awaitInjectL
-            delayedInjectL > notifyEither > λ { case ping |*| e =>
-              val c =
-                e > |+|.signalL > either(
-                  λ { case d |*| b => b.waitFor(d > delay(20.millis)) },
-                  id,
-                )
-              ping |*| c
+          // the Done on the out-port must not appear until the Need is supplied
+          val prg: Done -⚬ (Need |*| (Done |+| Nothing)) =
+            λ { start =>
+              val n |*| d = constant(lInvertSignal)
+              val res = (d |*| start) :>> awaitInjectL
+              n |*| res
             }
-          }
-
-          val prg: Done -⚬ (Ping |*| (Done |+| Done)) =
-            λ.+ { d =>
-              val d1 = a(d)
-              val p |*| d2 = b(d)
-              p |*| raceDone(d1 |*| d2)
-            }
-
           prg
         }
-        .via { (port, clock) =>
+        .via { port =>
           for {
-            pe <- splitOut(port)
-            (ping, e) = pe
-            _ = clock.advanceBy(31.millis)
-            _ <- expectPing(ping)
-            _ = clock.advanceBy(10.millis)
-            d <- expectLeft(e)
-            _ = clock.advanceBy(10.millis)
+            (need, res0) <- splitOut(port)
+            (ping, res1) <- splitOut(res0.map(notifyEither))
+            _ <- expectNoPing_(ping, 10.millis)
+            _ = OutPort.supplyNeed(need)
+            d <- expectLeft(res1)
             _ <- expectDone(d)
           } yield ()
         },
