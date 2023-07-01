@@ -2,6 +2,7 @@ package libretto
 
 import libretto.util.Async
 import scala.annotation.targetName
+import scala.concurrent.duration.FiniteDuration
 
 /** Defines interface to interact with a running Libretto program. */
 trait CoreBridge {
@@ -33,6 +34,11 @@ trait CoreExecution[DSL <: CoreDSL] {
     def awaitDone(port: OutPort[Done]): Async[Either[Throwable, Unit]]
 
     def awaitPing(port: OutPort[Ping]): Async[Either[Throwable, Unit]]
+
+    def awaitNoPing(
+      port: OutPort[Ping],
+      duration: FiniteDuration,
+    ): Async[Either[Either[Throwable, Unit], OutPort[Ping]]]
 
     def sendPong(port: OutPort[Pong]): Unit
 

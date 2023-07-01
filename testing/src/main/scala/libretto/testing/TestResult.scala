@@ -10,6 +10,12 @@ enum TestResult[A] {
   case Success(value: A)
   case Failures(value: NonEmptyList[TestResult.Failure])
 
+  def map[B](f: A => B): TestResult[B] =
+    this match {
+      case Success(a)   => Success(f(a))
+      case Failures(es) => Failures(es)
+    }
+
   def flatMap[B](f: A => TestResult[B]): TestResult[B] =
     this match {
       case Success(a)   => f(a)

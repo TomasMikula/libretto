@@ -76,6 +76,19 @@ private class ExecutionImpl(
       res
     }
 
+    override def awaitNoPing(
+      port: OutPort[Ping],
+      duration: FiniteDuration,
+    ): Async[Either[Either[Throwable, Unit], OutPort[Ping]]] = {
+      val (complete, res) = Async.promise[Either[Either[Throwable, Unit], OutPort[Ping]]]
+      port.toFuturePing.onComplete {
+        case Success(Frontier.PingNow) => complete(Left(Right(())))
+        case Failure(e)                => complete(Left(Left(e)))
+      }
+      scheduler.schedule(duration, () => complete(Right(port)))
+      res
+    }
+
     override def sendPong(port: OutPort[Pong]): Unit = {
       port.fulfillPongWith(Future.successful(()))
     }
