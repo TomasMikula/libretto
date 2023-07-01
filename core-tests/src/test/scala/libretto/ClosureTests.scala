@@ -16,7 +16,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
     val coreLib = CoreLib(kit.dsl)
     val scalettoLib = ScalettoLib(kit.dsl, coreLib)
     import coreLib._
-    import scalettoLib._
+    import scalettoLib.{_, given}
 
     List(
       "simplest closure" ->

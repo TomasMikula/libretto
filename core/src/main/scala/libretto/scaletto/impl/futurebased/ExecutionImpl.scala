@@ -241,7 +241,7 @@ private class ExecutionImpl(
       ec: ExecutionContext,
       scheduler: Scheduler,
     ): Frontier[B] = {
-      implicit class FrontierOps[X](fx: Frontier[X]) {
+      extension [X](fx: Frontier[X]) {
         def extend[Y](f: X -⚬ Y): Frontier[Y] =
           if (depth < 100)
             fx.extendBy(f, depth + 1)
@@ -1157,8 +1157,7 @@ private class ExecutionImpl(
         }
     }
 
-    // using implicit class because extension methods may not have type parameters
-    implicit class FrontierValOps[A](f: Frontier[Val[A]]) {
+    extension [A](f: Frontier[Val[A]]) {
       def mapVal[B](g: A => B)(using ExecutionContext): Frontier[Val[B]] =
         f match {
           case Value(a) => Value(g(a))

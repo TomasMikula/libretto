@@ -1,6 +1,7 @@
 package libretto.examples.supermarket
 
 import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.scalettoLib.given
 
 object baskets {
   opaque type Basket = Val[Int]
@@ -25,6 +26,6 @@ object baskets {
   def destroyBaskets: LList1[Basket] -⚬ Done =
     LList1.foldMap(destroyBasket)
 
-  implicit def signalingJunctionBasket: SignalingJunction.Positive[Basket] =
+  given SignalingJunction.Positive[Basket] =
     signalingJunctionPositiveVal
 }

@@ -9,8 +9,8 @@ trait AbstractGoods {
   type ToiletPaper
   type Beer
 
-  implicit def signalingJunctionToiletPaper: SignalingJunction.Positive[ToiletPaper]
-  implicit def signalingJunctionBeer:        SignalingJunction.Positive[Beer]
+  given signalingJunctionToiletPaper: SignalingJunction.Positive[ToiletPaper]
+  given signalingJunctionBeer:        SignalingJunction.Positive[Beer]
 }
 
 trait GoodsProducer extends AbstractGoods {
@@ -27,10 +27,10 @@ object Goods extends GoodsProducer with GoodsConsumer {
   override opaque type ToiletPaper = Done
   override opaque type Beer        = Done
 
-  override implicit def signalingJunctionToiletPaper: SignalingJunction.Positive[ToiletPaper] =
+  override given signalingJunctionToiletPaper: SignalingJunction.Positive[ToiletPaper] =
     SignalingJunction.Positive.signalingJunctionPositiveDone
 
-  override implicit def signalingJunctionBeer: SignalingJunction.Positive[Beer] =
+  override given signalingJunctionBeer: SignalingJunction.Positive[Beer] =
     SignalingJunction.Positive.signalingJunctionPositiveDone
 
   override def produceToiletPaper: Done -⚬ ToiletPaper =

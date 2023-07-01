@@ -13,7 +13,7 @@ class Customers[SupermarketImpl <: SupermarketInterface](
   val supermarket: SupermarketImpl,
 ) {
   import libretto.scaletto.StarterKit.$._
-  import supermarket._
+  import supermarket.{_, given}
   import supermarket.goods._
 
   /** Blueprint for customer behavior. A customer gets access to a supermarket and runs to completion ([[Done]]). */

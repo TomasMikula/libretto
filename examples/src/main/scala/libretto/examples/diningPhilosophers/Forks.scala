@@ -33,5 +33,5 @@ trait Forks {
     *  - signal readiness (when picked up or done being used).
     *  - defer readiness by awaiting a [[Done]] signal.
     */
-  implicit def heldForkReadiness: SignalingJunction.Positive[HeldFork]
+  given heldForkReadiness: SignalingJunction.Positive[HeldFork]
 }

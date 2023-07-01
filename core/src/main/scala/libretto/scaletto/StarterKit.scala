@@ -7,6 +7,7 @@ import libretto.scaletto.impl.futurebased.{BridgeImpl, FutureExecutor}
 import libretto.util.Async
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
+import scala.concurrent.ExecutionContextExecutor
 
 object StarterKit extends StarterKit
 
@@ -35,7 +36,7 @@ abstract class AbstractStarterKit(
   val invertLib: InvertLib[coreLib.type] =
     InvertLib(coreLib)
 
-  def executor(blockingExecutor: JExecutor)(implicit
+  def executor(blockingExecutor: JExecutor)(
     scheduler: ScheduledExecutorService,
   ): ScalettoExecutor.Of[dsl.type, bridge.type] =
     executor0(scheduler, blockingExecutor)
@@ -49,7 +50,7 @@ abstract class AbstractStarterKit(
   def runScalaAsync[A](blueprint: Done -⚬ Val[A]): Future[A] = {
     val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())
     val blockingExecutor = Executors.newCachedThreadPool()
-    implicit val ec = ExecutionContext.fromExecutor(mainExecutor)
+    given ExecutionContextExecutor = ExecutionContext.fromExecutor(mainExecutor)
     val exec = executor(blockingExecutor)(mainExecutor)
 
     val executing = exec.execute(blueprint)

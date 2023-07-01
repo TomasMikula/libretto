@@ -298,7 +298,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     def decompose1[X1, X2, Z](f: (X1 |*| X2) ~⚬ Z): Decomposition1[X1, X2, ?, ?, ?, ?, Z] =
       f match {
-        case Id()               => Decomposition1(Id(), Id(), TransferOpt.None(), implicitly)
+        case Id()               => Decomposition1(Id(), Id(), TransferOpt.None(), summon)
         case Bimap(Par(f1, f2)) => Decomposition1(f1, f2, TransferOpt.None(), implicitly)
         case Xfer(f1, f2, xfer) => Decomposition1(f1, f2, xfer, implicitly)
       }
@@ -927,7 +927,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     def thenAssocLR[B11, B12, C2, C3](
       that: AssocLR[B11, B12, B2, C2, C3],
-    )(implicit
+    )(using
       ev: B1 =:= (B11 |*| B12),
     ): (A1 |*| A2) ~⚬ (B11 |*| (C2 |*| C3))
 
@@ -945,13 +945,13 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     def thenXI[B21, B22, C2, C3](
       that: XI[B1, B21, B22, C2, C3],
-    )(implicit
+    )(using
       ev: B2 =:= (B21 |*| B22),
     ): (A1 |*| A2) ~⚬ (B21 |*| (C2 |*| C3))
 
     def thenIXI[B11, B12, B21, B22, C1, C2, C3, C4](
       that: IXI[B11, B12, B21, B22, C1, C2, C3, C4]
-    )(implicit
+    )(using
       ev1: B1 =:= (B11 |*| B12),
       ev2: B2 =:= (B21 |*| B22),
     ): (A1 |*| A2) ~⚬ ((C1 |*| C2) |*| (C3 |*| C4))
@@ -1028,7 +1028,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     def >[C1, C2](that: Transfer[B1, B2, C1, C2]): (A1 |*| A2) ~⚬ (C1 |*| C2) =
       that after this
 
-    def to[C1, C2](implicit ev: (B1 |*| B2) =:= (C1 |*| C2)): Transfer[A1, A2, C1, C2] = {
+    def to[C1, C2](using ev: (B1 |*| B2) =:= (C1 |*| C2)): Transfer[A1, A2, C1, C2] = {
       val (ev1, ev2) = inj.unapply(ev)
       ev1.substituteCo[Transfer[A1, A2, _, C2]](ev2.substituteCo(this))
     }
@@ -1150,7 +1150,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenAssocLR[X21, X22, C2, C3](
         that: AssocLR[X21, X22, X1, C2, C3],
-      )(implicit
+      )(using
         ev: X2 =:= (X21 |*| X22),
       ): (X1 |*| X2) ~⚬ (X21 |*| (C2 |*| C3)) = {
         ev match { case TypeEq(Refl()) => xi[X1, X21, X22] > snd(swap > that.g.asShuffle) }
@@ -1174,7 +1174,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenXI[X11, X12, C2, C3](
         that: XI[X2, X11, X12, C2, C3],
-      )(implicit
+      )(using
         ev: X1 =:= (X11 |*| X12),
       ): (X1 |*| X2) ~⚬ (X11 |*| (C2 |*| C3)) =
         decompose(swap > that.g.asShuffle) match {
@@ -1183,7 +1183,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenIXI[B1, B2, B3, B4, C1, C2, C3, C4](
         that: IXI[B1, B2, B3, B4, C1, C2, C3, C4]
-      )(implicit
+      )(using
         ev1: X2 =:= (B1 |*| B2),
         ev2: X1 =:= (B3 |*| B4),
       ): (X1 |*| X2) ~⚬ ((C1 |*| C2) |*| (C3 |*| C4)) =
@@ -1391,7 +1391,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenAssocLR[A11, A12, C2, C3](
         that: AssocLR[A11, A12, B2 |*| B3, C2, C3],
-      )(implicit
+      )(using
         ev: A1 =:= (A11 |*| A12),
       ): ((A1 |*| A2) |*| A3) ~⚬ (A11 |*| (C2 |*| C3)) =
         ev match { case TypeEq(Refl()) =>
@@ -1425,7 +1425,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenXI[B21, B22, C2, C3](
         that: XI[A1, B21, B22, C2, C3],
-      )(implicit
+      )(using
         ev: (B2 |*| B3) =:= (B21 |*| B22),
       ): ((A1 |*| A2) |*| A3) ~⚬ (B21 |*| (C2 |*| C3)) =
         ev match {
@@ -1439,7 +1439,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenIXI[B11, B12, B21, B22, C1, C2, C3, C4](
         that: IXI[B11, B12, B21, B22, C1, C2, C3, C4]
-      )(implicit
+      )(using
         ev1: A1 =:= (B11 |*| B12),
         ev2: (B2 |*| B3) =:= (B21 |*| B22),
       ): ((A1 |*| A2) |*| A3) ~⚬ ((C1 |*| C2) |*| (C3 |*| C4)) =
@@ -1651,7 +1651,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenAssocLR[D1, D2, C2, C3](
         that: AssocLR[D1, D2, A3, C2, C3],
-      )(implicit
+      )(using
         ev: (B1 |*| B2) =:= (D1 |*| D2),
       ): (A1 |*| (A2 |*| A3)) ~⚬ (D1 |*| (C2 |*| C3)) =
         ev match {
@@ -1684,7 +1684,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenXI[A31, A32, C2, C3](
         that: XI[B1 |*| B2, A31, A32, C2, C3],
-      )(implicit
+      )(using
         ev: A3 =:= (A31 |*| A32),
       ): (A1 |*| (A2 |*| A3)) ~⚬ (A31 |*| (C2 |*| C3)) =
         decompose(assocRL > fst(g.asShuffle) > that.g.asShuffle) match {
@@ -1694,7 +1694,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenIXI[B11, B12, B21, B22, C1, C2, C3, C4](
         that: IXI[B11, B12, B21, B22, C1, C2, C3, C4]
-      )(implicit
+      )(using
         ev1: (B1 |*| B2) =:= (B11 |*| B12),
         ev2: A3 =:= (B21 |*| B22),
       ): (A1 |*| (A2 |*| A3)) ~⚬ ((C1 |*| C2) |*| (C3 |*| C4)) = {
@@ -1913,7 +1913,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenAssocLR[D1, D2, C2, C3](
         that: AssocLR[D1, D2, A2, C2, C3],
-      )(implicit
+      )(using
         ev: (B1 |*| B2) =:= (D1 |*| D2),
       ): ((A1 |*| A2) |*| A3) ~⚬ (D1 |*| (C2 |*| C3)) =
         TransferOpt.decompose(ev.biSubst(g)) match {
@@ -1947,7 +1947,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenXI[A21, A22, C2, C3](
         that: XI[(B1 |*| B2), A21, A22, C2, C3],
-      )(implicit
+      )(using
         ev: A2 =:= (A21 |*| A22),
       ): ((A1 |*| A2) |*| A3) ~⚬ (A21 |*| (C2 |*| C3)) =
         decompose(IX(g).asShuffle > that.g.asShuffle) match {
@@ -1956,7 +1956,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenIXI[B11, B12, B21, B22, C1, C2, C3, C4](
         that: IXI[B11, B12, B21, B22, C1, C2, C3, C4]
-      )(implicit
+      )(using
         ev1: (B1 |*| B2) =:= (B11 |*| B12),
         ev2: A2 =:= (B21 |*| B22),
       ): ((A1 |*| A2) |*| A3) ~⚬ ((C1 |*|C2) |*| (C3 |*| C4)) =
@@ -2189,7 +2189,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenAssocLR[A21, A22, C2, C3](
         that: AssocLR[A21, A22, B2 |*| B3, C2, C3],
-      )(implicit
+      )(using
         ev: A2 =:= (A21 |*| A22),
       ): (A1 |*| (A2 |*| A3)) ~⚬ (A21 |*| (C2 |*| C3)) =
         ev match { case TypeEq(Refl()) =>
@@ -2227,7 +2227,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenXI[B2_, B3_, C2, C3](
         that: XI[A2, B2_, B3_, C2, C3],
-      )(implicit
+      )(using
         ev: (B2 |*| B3) =:= (B2_ |*| B3_),
       ): (A1 |*| (A2 |*| A3)) ~⚬ (B2_ |*| (C2 |*| C3)) =
         ev match {
@@ -2241,7 +2241,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenIXI[B11, B12, B21, B22, C1, C2, C3, C4](
         that: IXI[B11, B12, B21, B22, C1, C2, C3, C4]
-      )(implicit
+      )(using
         ev1: A2 =:= (B11 |*| B12),
         ev2: (B2 |*| B3) =:= (B21 |*| B22),
       ): (A1 |*| (A2 |*| A3)) ~⚬ ((C1 |*| C2) |*| (C3 |*| C4)) = {
@@ -2489,7 +2489,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenAssocLR[D1, D2, C2, C3](
         that: AssocLR[D1, D2, B3 |*| B4, C2, C3],
-      )(implicit
+      )(using
         ev: (B1 |*| B2) =:= (D1 |*| D2),
       ): ((A1 |*| A2) |*| (A3 |*| A4)) ~⚬ (D1 |*| (C2 |*| C3)) = {
         val thiz = ev.biSubst[IXI[A1, A2, A3, A4, _, _, B3, B4]](this)
@@ -2535,7 +2535,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenXI[D1, D2, C2, C3](
         that: XI[(B1 |*| B2), D1, D2, C2, C3],
-      )(implicit
+      )(using
         ev: (B3 |*| B4) =:= (D1 |*| D2),
       ): ((A1 |*| A2) |*| (A3 |*| A4)) ~⚬ (D1 |*| (C2 |*| C3)) = {
         val thiz = ev.biSubst[IXI[A1, A2, A3, A4, B1, B2, _, _]](this)
@@ -2551,7 +2551,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def thenIXI[B11, B12, B21, B22, C1, C2, C3, C4](
         that: IXI[B11, B12, B21, B22, C1, C2, C3, C4]
-      )(implicit
+      )(using
         ev1: (B1 |*| B2) =:= (B11 |*| B12),
         ev2: (B3 |*| B4) =:= (B21 |*| B22),
       ): ((A1 |*| A2) |*| (A3 |*| A4)) ~⚬ ((C1 |*| C2) |*| (C3 |*| C4)) =
@@ -2752,7 +2752,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     def zip[C, D](that: C =:= D): (A |*| C) =:= (B |*| D) =
       that.substituteCo[[x] =>> (A |*| C) =:= (B |*| x)](
         ev.substituteCo[[x] =>> (A |*| C) =:= (x |*| C)](
-          implicitly[(A |*| C) =:= (A |*| C)]
+          summon[(A |*| C) =:= (A |*| C)]
         )
       )
   }

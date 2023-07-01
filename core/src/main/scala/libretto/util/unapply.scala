@@ -7,11 +7,10 @@ object unapply {
   }
 
   object Unapply {
-    implicit def unapplyInstance[F[_], X]: Unapply[F[X], F] { type A = X } =
-      new Unapply[F[X], F] {
-        type A = X
-        val ev: F[X] =:= F[A] = implicitly
-      }
+    given [F[_], X]: Unapply[F[X], F] with {
+      type A = X
+      val ev: F[X] =:= F[A] = summon
+    }
   }
 
   trait Unapply2[FAB, F[_, _]] {
@@ -21,11 +20,10 @@ object unapply {
   }
 
   object Unapply2 {
-    implicit def unapply2Instance[F[_, _], X, Y]: Unapply2[F[X, Y], F] { type A = X; type B = Y } =
-      new Unapply2[F[X, Y], F] {
-        type A = X
-        type B = Y
-        val ev: F[X, Y] =:= F[A, B] = implicitly
-      }
+    given [F[_, _], X, Y]: Unapply2[F[X, Y], F] with {
+      type A = X
+      type B = Y
+      val ev: F[X, Y] =:= F[A, B] = summon
+    }
   }
 }

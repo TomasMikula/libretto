@@ -528,8 +528,6 @@ abstract class ScalettoStreams {
         }
 
       val go: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done = rec { self =>
-        import Source.Polled.positivePolled
-
         given SignalingJunction.Positive[KSubs] =
           SignalingJunction.Positive.byFst[Val[K], -[ValSource[V]]]
 
@@ -577,9 +575,6 @@ abstract class ScalettoStreams {
 
       def delayBy[A]: (Done |*| Polled[A]) -⚬ Polled[A] =
         Source.Polled.delayBy
-
-      implicit def positivePolled[A]: SignalingJunction.Positive[Polled[A]] =
-        Source.Polled.positivePolled[Val[A]]
 
       def dup[A](
         dupSource: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]),

@@ -2,6 +2,7 @@ package libretto.examples.canteen
 
 import libretto.scaletto.StarterKit._
 import libretto.scaletto.StarterKit.$._
+import libretto.scaletto.StarterKit.scalettoLib.given
 
 object Protocol {
   /** Interface of a canteen for one session.

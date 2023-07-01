@@ -43,7 +43,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     import dsl.$._
     val coreLib = CoreLib(dsl)
     val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
-    import coreLib._
+    import coreLib.{_, given}
     import scalettoLib.{_, given}
     import kit.bridge.Execution
 

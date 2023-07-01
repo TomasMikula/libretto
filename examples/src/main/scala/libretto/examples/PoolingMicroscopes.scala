@@ -34,7 +34,8 @@ object PoolingMicroscopes extends StarterApp {
           .>(assocLR > elimSnd(backvert))   .to[    Done                                    ]
     }
 
-    implicit def signalMicroscopeReadiness: Signaling.Positive[Microscope] =
+    // signalMicroscopeReadiness
+    given Signaling.Positive[Microscope] =
       signalingVal
   }
   import Microscopes._

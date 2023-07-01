@@ -4,7 +4,7 @@ import libretto.scaletto.StarterApp
 import libretto.scaletto.StarterKit.{_, given}
 import libretto.scaletto.StarterKit.Endless.{groupMap, mapSequentially, mergeEitherPreferred, take}
 import libretto.scaletto.StarterKit.LList1.{closeAll, eachNotifyBy, foldMap, map, sortBySignal, transform, unzipBy}
-import libretto.scaletto.StarterKit.Monoid.monoidOne
+import libretto.scaletto.StarterKit.Monoid.given
 import scala.{:: => NonEmptyList}
 
 object SantaClaus extends StarterApp {

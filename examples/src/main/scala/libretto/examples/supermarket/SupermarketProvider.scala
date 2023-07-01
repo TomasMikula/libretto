@@ -22,11 +22,11 @@ object SupermarketProvider extends SupermarketInterface {
   override opaque type Supermarket =
     Unlimited[Shopping[One]]
 
-  override implicit def comonoidSupermarket: Comonoid[Supermarket] =
+  override given comonoidSupermarket: Comonoid[Supermarket] =
     Unlimited.comonoidUnlimited
 
-  override def basketReadiness[Items]: Signaling.Positive[Shopping[Items]] =
-    Signaling.Positive.bySnd(Signaling.Positive.byFst(signalingJunctionBorrowedBasket))
+  override given basketReadiness[Items]: Signaling.Positive[Shopping[Items]] =
+    Signaling.Positive.bySnd(using Signaling.Positive.byFst(using signalingJunctionBorrowedBasket))
 
   override def enterAndObtainBasket: Supermarket -⚬ Shopping[One] =
     λ { supermarket =>
@@ -72,7 +72,7 @@ object SupermarketProvider extends SupermarketInterface {
   override def payForBeer[Items]: (Coin |*| Shopping[Beer |*| Items]) -⚬ (Beer |*| Shopping[Items]) =
     payForItem[Beer, Items]
 
-  private implicit def signalingJunctionBorrowedBasket: SignalingJunction.Positive[BorrowedBasket] =
+  private given signalingJunctionBorrowedBasket: SignalingJunction.Positive[BorrowedBasket] =
     SignalingJunction.Positive.byFst
 
   private def returnBasket  : (Basket |*| -[Basket]) -⚬ One = backvert

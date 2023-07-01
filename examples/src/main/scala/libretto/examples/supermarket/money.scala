@@ -1,38 +1,38 @@
 package libretto.examples.supermarket
 
 import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.scalettoLib.given
 
 object money {
   opaque type Coin = Done
   opaque type CoinBank = Val[Int] // number of coins
 
   def forgeCoin: Done -⚬ Coin =
-      id[Done]
+    id[Done]
 
   def sendCoin: (Coin |*| -[Coin]) -⚬ One =
-      backvert
+    backvert
 
   def receiveCoin: One -⚬ (-[Coin] |*| Coin) =
-      forevert
+    forevert
 
   def newCoinBank: Done -⚬ CoinBank =
-      constVal(0)
+    constVal(0)
 
   def openCoinBank: CoinBank -⚬ Val[Int] =
-      id
+    id
 
   def depositCoin: (Coin |*| CoinBank) -⚬ CoinBank =
-      awaitPosFst[CoinBank] > mapVal(_ + 1)
+    awaitPosFst[CoinBank] > mapVal(_ + 1)
 
-  implicit def signalingJunctionCoin: SignalingJunction.Positive[Coin] =
-      SignalingJunction.Positive. signalingJunctionPositiveDone
+  given SignalingJunction.Positive[Coin] =
+    SignalingJunction.Positive. signalingJunctionPositiveDone
 
-  implicit def junctionCoinBank: Junction.Positive[CoinBank] =
-      junctionVal
+  given Junction.Positive[CoinBank] =
+    junctionVal
 
-  implicit def semigroupCoinBank: Semigroup[CoinBank] =
-      new Semigroup[CoinBank] {
-      override def combine: (CoinBank |*| CoinBank) -⚬ CoinBank =
-          unliftPair > mapVal { case (a, b) => a + b }
-      }
+  given Semigroup[CoinBank] with {
+    override def combine: (CoinBank |*| CoinBank) -⚬ CoinBank =
+      unliftPair > mapVal { case (a, b) => a + b }
+  }
 }

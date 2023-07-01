@@ -5,10 +5,10 @@ import scala.quoted._
 final case class SourcePos(path: String, filename: String, line: Int)
 
 object SourcePos {
-  def apply(implicit pos: SourcePos): SourcePos =
+  def apply(using pos: SourcePos): SourcePos =
     pos
 
-  inline implicit def sourcePosition: SourcePos =
+  inline given SourcePos =
     ${ sourcePositionImpl }
 
   def sourcePositionImpl(using Quotes): Expr[SourcePos] = {

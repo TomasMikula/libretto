@@ -54,49 +54,46 @@ class ScalettoLib[
   def const[A](a: A): One -⚬ Val[A] =
     andThen(done, constVal(a))
 
-  implicit def junctionVal[A]: Junction.Positive[Val[A]] =
+  given junctionVal[A]: Junction.Positive[Val[A]] =
     new Junction.Positive[Val[A]] {
       override def awaitPosFst: (Done |*| Val[A]) -⚬ Val[A] =
         par(constVal(()), id[Val[A]]) > unliftPair > mapVal(_._2)
     }
 
-  implicit def junctionNeg[A]: Junction.Negative[Neg[A]] =
-    new Junction.Negative[Neg[A]] {
-      override def awaitNegFst: Neg[A] -⚬ (Need |*| Neg[A]) =
-        contramapNeg[(Unit, A), A](_._2) > liftNegPair > par(constNeg(()), id[Neg[A]])
-    }
+  given junctionNeg[A]: Junction.Negative[Neg[A]] with {
+    override def awaitNegFst: Neg[A] -⚬ (Need |*| Neg[A]) =
+      contramapNeg[(Unit, A), A](_._2) > liftNegPair > par(constNeg(()), id[Neg[A]])
+  }
 
-  implicit def signalingVal[A]: Signaling.Positive[Val[A]] =
+  given signalingVal[A]: Signaling.Positive[Val[A]] =
     new Signaling.Positive[Val[A]] {
       override def notifyPosFst: Val[A] -⚬ (Ping |*| Val[A]) =
         notifyVal
     }
 
-  implicit def signalingNeg[A]: Signaling.Negative[Neg[A]] =
-    new Signaling.Negative[Neg[A]] {
-      override def notifyNegFst: (Pong |*| Neg[A]) -⚬ Neg[A] =
-        notifyNeg
-    }
+  given signalingNeg[A]: Signaling.Negative[Neg[A]] with {
+    override def notifyNegFst: (Pong |*| Neg[A]) -⚬ Neg[A] =
+      notifyNeg
+  }
 
-  implicit def signalingJunctionPositiveVal[A]: SignalingJunction.Positive[Val[A]] =
+  given signalingJunctionPositiveVal[A]: SignalingJunction.Positive[Val[A]] =
     SignalingJunction.Positive.from(
       signalingVal,
       junctionVal,
     )
 
-  implicit def signalingJunctionNegativeNeg[A]: SignalingJunction.Negative[Neg[A]] =
+  given signalingJunctionNegativeNeg[A]: SignalingJunction.Negative[Neg[A]] =
     SignalingJunction.Negative.from(
-      signalingNeg[A],
-      junctionNeg[A],
+      signalingNeg,
+      junctionNeg,
     )
 
-  implicit def valNegDuality[A]: Dual[Val[A], Neg[A]] =
-    new Dual[Val[A], Neg[A]] {
-      val lInvert: One -⚬ (Neg[A] |*| Val[A]) = promise[A]
-      val rInvert: (Val[A] |*| Neg[A]) -⚬ One = fulfill[A]
-    }
+  given valNegDuality[A]: Dual[Val[A], Neg[A]] with {
+    val lInvert: One -⚬ (Neg[A] |*| Val[A]) = promise[A]
+    val rInvert: (Val[A] |*| Neg[A]) -⚬ One = fulfill[A]
+  }
 
-  implicit def negValDuality[A]: Dual[Neg[A], Val[A]] =
+  given negValDuality[A]: Dual[Neg[A], Val[A]] =
     dualSymmetric(valNegDuality)
 
   def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
@@ -155,11 +152,10 @@ class ScalettoLib[
     override def split : Val[A] -⚬ (Val[A] |*| Val[A]) = dup
   }
 
-  implicit def nMonoidNeg[A]: NMonoid[Neg[A]] =
-    new NMonoid[Neg[A]] {
-      def unit    :                Need -⚬ Neg[A] = inflate
-      def combine : (Neg[A] |*| Neg[A]) -⚬ Neg[A] = mergeDemands
-    }
+  given [A]: NMonoid[Neg[A]] with {
+    def unit    :                Need -⚬ Neg[A] = inflate
+    def combine : (Neg[A] |*| Neg[A]) -⚬ Neg[A] = mergeDemands
+  }
 
   private val eitherToBoolean: Either[Unit, Unit] => Boolean = {
     case Left(())  => true
@@ -212,19 +208,19 @@ class ScalettoLib[
       .>(mapVal(p.tupled))                .to[   Val[Boolean]    ]
       .>(liftBoolean)                     .to[       Bool        ]
 
-  def isLt[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
+  def isLt[A](using ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
     liftBipredicate(ord.lt)
 
-  def isLteq[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
+  def isLteq[A](using ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
     liftBipredicate(ord.lteq)
 
-  def isGt[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
+  def isGt[A](using ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
     liftBipredicate(ord.gt)
 
-  def isGteq[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
+  def isGteq[A](using ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
     liftBipredicate(ord.gteq)
 
-  def isEq[A](implicit ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
+  def isEq[A](using ord: Ordering[A]): (Val[A] |*| Val[A]) -⚬ Bool =
     liftBipredicate(ord.equiv)
 
   def testByVals[A, B, K](
@@ -238,7 +234,7 @@ class ScalettoLib[
   def ltBy[A, B, K](
     aKey: Getter[A, Val[K]],
     bKey: Getter[B, Val[K]],
-  )(implicit
+  )(using
     ord: Ordering[K],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
     testByVals(aKey, bKey, ord.lt)
@@ -246,7 +242,7 @@ class ScalettoLib[
   def lteqBy[A, B, K](
     aKey: Getter[A, Val[K]],
     bKey: Getter[B, Val[K]],
-  )(implicit
+  )(using
     ord: Ordering[K],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
     testByVals(aKey, bKey, ord.lteq)
@@ -254,7 +250,7 @@ class ScalettoLib[
   def gtBy[A, B, K](
     aKey: Getter[A, Val[K]],
     bKey: Getter[B, Val[K]],
-  )(implicit
+  )(using
     ord: Ordering[K],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
     testByVals(aKey, bKey, ord.gt)
@@ -262,7 +258,7 @@ class ScalettoLib[
   def gteqBy[A, B, K](
     aKey: Getter[A, Val[K]],
     bKey: Getter[B, Val[K]],
-  )(implicit
+  )(using
     ord: Ordering[K],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
     testByVals(aKey, bKey, ord.gteq)
@@ -270,7 +266,7 @@ class ScalettoLib[
   def equivBy[A, B, K](
     aKey: Getter[A, Val[K]],
     bKey: Getter[B, Val[K]],
-  )(implicit
+  )(using
     ord: Ordering[K],
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
     testByVals(aKey, bKey, ord.equiv)
@@ -282,27 +278,26 @@ class ScalettoLib[
   : (A |*| B) -⚬ ((A |*| B) |+| (B |*| A)) =
     lteqBy(aKey, bKey).>.right(swap)
 
-  implicit def comparableVal[A](implicit A: Ordering[A]): Comparable[Val[A], Val[A]] =
-    new Comparable[Val[A], Val[A]] {
-      import coreLib.Compared._
+  given [A : Ordering]: Comparable[Val[A], Val[A]] with {
+    import coreLib.given, Compared._, Either as ⊻
 
-      private val scalaCompare: ((A, A)) => ((A, A) Either ((A, A) Either (A, A))) =
-        { (a1, a2) =>
-          A.compare(a1, a2) match {
-            case i if i < 0 => Left((a1, a2))
-            case 0          => Right(Left((a1, a2)))
-            case i if i > 0 => Right(Right((a1, a2)))
-          }
+    private val scalaCompare: ((A, A)) => ((A, A) ⊻ ((A, A) ⊻ (A, A))) =
+      { (a1, a2) =>
+        Ordering[A].compare(a1, a2) match {
+          case i if i < 0 => Left((a1, a2))
+          case 0          => Right(Left((a1, a2)))
+          case i if i > 0 => Right(Right((a1, a2)))
         }
+      }
 
-      override def compare: (Val[A] |*| Val[A]) -⚬ Compared[Val[A], Val[A]] =
-        id                                                   [              Val[A] |*| Val[A]                                        ]
-          .>(unliftPair)                                  .to[ Val[               (A, A)                                           ] ]
-          .>(mapVal(scalaCompare))                        .to[ Val[(A   ,      A) Either (  (A   ,      A) Either   (A   ,      A))] ]
-          .>(liftEither).>.right(liftEither)              .to[ Val[(A   ,      A)] |+| (Val[(A   ,      A)] |+| Val[(A   ,      A)]) ]
-          .bimap(liftPair, |+|.bimap(liftPair, liftPair)) .to[ (Val[A] |*| Val[A]) |+| ((Val[A] |*| Val[A]) |+| (Val[A] |*| Val[A])) ]
-          .either(lt, either(equiv, gt))                  .to[                Compared[Val[A], Val[A]]                               ]
-    }
+    override def compare: (Val[A] |*| Val[A]) -⚬ Compared[Val[A], Val[A]] =
+      id                                                   [              Val[A] |*| Val[A]                                        ]
+        .>(unliftPair)                                  .to[ Val[               (A, A)                                           ] ]
+        .>(mapVal(scalaCompare))                        .to[ Val[(A   ,      A) Either (  (A   ,      A) Either   (A   ,      A))] ]
+        .>(liftEither).>.right(liftEither)              .to[ Val[(A   ,      A)] |+| (Val[(A   ,      A)] |+| Val[(A   ,      A)]) ]
+        .bimap(liftPair, |+|.bimap(liftPair, liftPair)) .to[ (Val[A] |*| Val[A]) |+| ((Val[A] |*| Val[A]) |+| (Val[A] |*| Val[A])) ]
+        .either(lt, either(equiv, gt))                  .to[                Compared[Val[A], Val[A]]                               ]
+  }
 
   def constList[A](as: List[A]): One -⚬ LList[Val[A]] =
     LList.fromList(as.map(const(_)))
@@ -563,7 +558,7 @@ class ScalettoLib[
   def alsoPrintLine[A](f: A => String): Val[A] -⚬ Val[A] =
     dup > fst(mapVal(f) > printLine) > awaitPosFst
 
-  def alsoPrintLine[A](s: String)(implicit S: Signaling.Positive[A], J: Junction.Positive[A]): A -⚬ A =
+  def alsoPrintLine[A](s: String)(using S: Signaling.Positive[A], J: Junction.Positive[A]): A -⚬ A =
     S.signalPosFst > fst(printLine(s)) > J.awaitPosFst
 
   def readLine: Done -⚬ Val[String] =

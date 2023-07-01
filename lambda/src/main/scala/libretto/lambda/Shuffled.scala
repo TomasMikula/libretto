@@ -1085,7 +1085,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   def id[X]: Shuffled[X, X] =
     Permeable.id
 
-  def id[X, Y](implicit ev: X =:= Y): Shuffled[X, Y] =
+  def id[X, Y](using ev: X =:= Y): Shuffled[X, Y] =
     ev.substituteCo(Permeable.id[X])
 
   def pure[X, Y](f: X ~⚬ Y): Shuffled[X, Y] =

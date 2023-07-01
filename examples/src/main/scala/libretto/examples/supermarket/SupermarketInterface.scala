@@ -11,8 +11,8 @@ trait SupermarketInterface {
 
   import goods.{Beer, ToiletPaper}
 
-  implicit def comonoidSupermarket: Comonoid[Supermarket]
-  implicit def basketReadiness[Items]: Signaling.Positive[Shopping[Items]]
+  given comonoidSupermarket: Comonoid[Supermarket]
+  given basketReadiness[Items]: Signaling.Positive[Shopping[Items]]
 
   def enterAndObtainBasket: Supermarket -⚬ Shopping[One]
 
