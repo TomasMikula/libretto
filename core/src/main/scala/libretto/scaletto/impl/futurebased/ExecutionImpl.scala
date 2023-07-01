@@ -89,9 +89,11 @@ private class ExecutionImpl(
       res
     }
 
-    override def sendPong(port: OutPort[Pong]): Unit = {
+    override def supplyNeed(port: OutPort[Need]): Unit =
+      port.fulfillWith(Future.successful(()))
+
+    override def supplyPong(port: OutPort[Pong]): Unit =
       port.fulfillPongWith(Future.successful(()))
-    }
 
     override def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]] = {
       val (complete, res) = Async.promiseLinear[Either[Throwable, Either[OutPort[A], OutPort[B]]]]

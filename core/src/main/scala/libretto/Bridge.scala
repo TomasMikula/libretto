@@ -40,7 +40,13 @@ trait CoreExecution[DSL <: CoreDSL] {
       duration: FiniteDuration,
     ): Async[Either[Either[Throwable, Unit], OutPort[Ping]]]
 
-    def sendPong(port: OutPort[Pong]): Unit
+    def supplyNeed(port: OutPort[Need]): Unit
+
+    def supplyPong(port: OutPort[Pong]): Unit
+
+    @deprecated("Use supplyPong")
+    def sendPong(port: OutPort[Pong]): Unit =
+      supplyPong(port)
 
     def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
 
