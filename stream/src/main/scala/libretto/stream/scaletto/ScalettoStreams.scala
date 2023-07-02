@@ -461,7 +461,7 @@ abstract class ScalettoStreams {
             .>.fst(distributeInversion)         .to[ -[Val[K]] |*| -[-[ValSource[V]]]  |*| Drain[Val[K] |*| -[ValSource[V]]] ]
             .>.fst(elimFst(constNeg(k) > need)) .to[               -[-[ValSource[V]]]  |*| Drain[Val[K] |*| -[ValSource[V]]] ]
             .>.fst(die)                         .to[                   ValSource[V]    |*| Drain[Val[K] |*| -[ValSource[V]]] ]
-            .swap                               .to[ Drain[Val[K] |*| -[ValSource[V]]] |*|           ValSource[V]            ]
+            .>(swap)                            .to[ Drain[Val[K] |*| -[ValSource[V]]] |*|           ValSource[V]            ]
 
         val onUnsubscribed: Need -⚬ (Drain[Val[K] |*| -[ValSource[V]]] |*| ValSource[V]) =
           id[Need] > Drain.closed > introSnd(done > ValSource.empty[V])

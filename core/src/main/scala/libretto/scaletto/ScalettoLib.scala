@@ -98,12 +98,12 @@ class ScalettoLib[
 
   def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
     id                                         [                                       Neg[A] |*| Neg[A]   ]
-      .introFst(promise[A])                 .to[ (Neg[A] |*|        Val[A]      ) |*| (Neg[A] |*| Neg[A])  ]
-      .assocLR                              .to[  Neg[A] |*| (      Val[A]        |*| (Neg[A] |*| Neg[A])) ]
+      .>(introFst(promise[A]))              .to[ (Neg[A] |*|        Val[A]      ) |*| (Neg[A] |*| Neg[A])  ]
+      .>(assocLR)                           .to[  Neg[A] |*| (      Val[A]        |*| (Neg[A] |*| Neg[A])) ]
       .>.snd.fst(dup)                       .to[  Neg[A] |*| ((Val[A] |*| Val[A]) |*| (Neg[A] |*| Neg[A])) ]
       .>.snd(IXI)                           .to[  Neg[A] |*| ((Val[A] |*| Neg[A]) |*| (Val[A] |*| Neg[A])) ]
       .>.snd(parToOne(fulfill, fulfill))    .to[  Neg[A] |*|                      One                      ]
-      .elimSnd                              .to[  Neg[A]                                                   ]
+      .>(elimSnd)                           .to[  Neg[A]                                                   ]
 
   def delayVal[A](by: Done -⚬ Done): Val[A] -⚬ Val[A] =
     signalPosFst > par(by, id) > awaitPosFst
@@ -171,10 +171,10 @@ class ScalettoLib[
     id                                       [ Val[Boolean]            ]
       .>(mapVal(booleanToEither))         .to[ Val[Either[Unit, Unit]] ]
       .>(liftEither)                      .to[ Val[Unit] |+| Val[Unit] ]
-      .either(
+      .>(either(
         neglect > Bool.constTrue,
         neglect > Bool.constFalse,
-      )                                   .to [          Bool          ]
+      ))                                  .to [          Bool          ]
   }
 
   def unliftBoolean: Bool -⚬ Val[Boolean] =
@@ -291,12 +291,12 @@ class ScalettoLib[
       }
 
     override def compare: (Val[A] |*| Val[A]) -⚬ Compared[Val[A], Val[A]] =
-      id                                                   [              Val[A] |*| Val[A]                                        ]
-        .>(unliftPair)                                  .to[ Val[               (A, A)                                           ] ]
-        .>(mapVal(scalaCompare))                        .to[ Val[(A   ,      A) Either (  (A   ,      A) Either   (A   ,      A))] ]
-        .>(liftEither).>.right(liftEither)              .to[ Val[(A   ,      A)] |+| (Val[(A   ,      A)] |+| Val[(A   ,      A)]) ]
-        .bimap(liftPair, |+|.bimap(liftPair, liftPair)) .to[ (Val[A] |*| Val[A]) |+| ((Val[A] |*| Val[A]) |+| (Val[A] |*| Val[A])) ]
-        .either(lt, either(equiv, gt))                  .to[                Compared[Val[A], Val[A]]                               ]
+      id                                                           [              Val[A] |*| Val[A]                                        ]
+        .>(unliftPair)                                          .to[ Val[               (A, A)                                           ] ]
+        .>(mapVal(scalaCompare))                                .to[ Val[(A   ,      A) Either (  (A   ,      A) Either   (A   ,      A))] ]
+        .>(liftEither).>.right(liftEither)                      .to[ Val[(A   ,      A)] |+| (Val[(A   ,      A)] |+| Val[(A   ,      A)]) ]
+        .>(|+|.bimap(liftPair, |+|.bimap(liftPair, liftPair)))  .to[ (Val[A] |*| Val[A]) |+| ((Val[A] |*| Val[A]) |+| (Val[A] |*| Val[A])) ]
+        .>(either(lt, either(equiv, gt)))                       .to[                Compared[Val[A], Val[A]]                               ]
   }
 
   def constList[A](as: List[A]): One -⚬ LList[Val[A]] =
@@ -367,25 +367,25 @@ class ScalettoLib[
 
   /** Variant of [[release]] that does not take additional input. */
   def release0[R, B](release: R => B): Res[R] -⚬ Val[B] =
-    id[Res[R]].introSnd(const(())) > dsl.release((r, _) => release(r))
+    id[Res[R]] > introSnd(const(())) > dsl.release((r, _) => release(r))
 
   /** Variant of [[releaseAsync]] that does not take additional input. */
   def releaseAsync0[R, B](release: R => Async[B]): Res[R] -⚬ Val[B] =
-    id[Res[R]].introSnd(const(())) > dsl.releaseAsync((r, _) => release(r))
+    id[Res[R]] > introSnd(const(())) > dsl.releaseAsync((r, _) => release(r))
 
   def effectRd[R, B](f: ScalaFun[R, B]): Res[R] -⚬ (Res[R] |*| Val[B]) =
-    id[Res[R]].introSnd(const(())) > effect(f.adapt[(R, Unit), B](_._1, identity))
+    id[Res[R]] > introSnd(const(())) > effect(f.adapt[(R, Unit), B](_._1, identity))
 
   def effectRd[R, B](f: R => B): Res[R] -⚬ (Res[R] |*| Val[B]) =
     effectRd(ScalaFun(f))
 
   /** Variant of [[effect]] that does not take additional input and does not produce additional output. */
   def effect0[R](f: R => Unit): Res[R] -⚬ Res[R] =
-    id[Res[R]].introSnd(const(())) > effectWr((r, _) => f(r))
+    id[Res[R]] > introSnd(const(())) > effectWr((r, _) => f(r))
 
   /** Variant of [[effectAsync]] that does not take additional input and does not produce additional output. */
   def effectAsync0[R](f: R => Async[Unit]): Res[R] -⚬ Res[R] =
-    id[Res[R]].introSnd(const(())) > effectWrAsync((r, _) => f(r))
+    id[Res[R]] > introSnd(const(())) > effectWrAsync((r, _) => f(r))
 
   def tryEffectAcquireWr[R, A, S, E](
     f: ScalaFun[(R, A), Either[E, S]],
@@ -398,11 +398,11 @@ class ScalettoLib[
 
   /** Variant of [[transformResource]] that does not take additional input and does not produce additional output. */
   def transformResource0[R, S](f: R => S, release: Option[S => Unit]): Res[R] -⚬ Res[S] =
-    id[Res[R]].introSnd(const(())) > transformResource((r, u) => (f(r), u), release) > effectWr((_, _) => ())
+    id[Res[R]] > introSnd(const(())) > transformResource((r, u) => (f(r), u), release) > effectWr((_, _) => ())
 
   /** Variant of [[transformResourceAsync]] that does not take additional input and does not produce additional output. */
   def transformResourceAsync0[R, S](f: R => Async[S], release: Option[S => Async[Unit]]): Res[R] -⚬ Res[S] =
-    id[Res[R]].introSnd(const(())) > transformResourceAsync((r, u) => f(r).map((_, u)), release) > effectWr((_, _) => ())
+    id[Res[R]] > introSnd(const(())) > transformResourceAsync((r, u) => f(r).map((_, u)), release) > effectWr((_, _) => ())
 
   def splitResource0[R, S, T](
     f: ScalaFun[R, (S, T)],
@@ -412,9 +412,9 @@ class ScalettoLib[
     val f1: ScalaFun[(R, Unit), (S, T, Unit)] =
       ScalaFun.adapt(f)({ case (r, ()) => r }, { case (s, t) => (s, t, ()) })
     id[Res[R]]
-      .introSnd(const(()))
+      .>(introSnd(const(())))
       .>(splitResource(f1, release1, release2))
-      .assocLR
+      .>(assocLR)
       .>.snd(effectWr((_, _) => ()))
   }
 

@@ -52,9 +52,9 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
       prg2: Done -⚬ Val[A],
     ): Done -⚬ Val[A] =
       forkMap(prg1, prg2)
-        .race(
-          caseFstWins = id.awaitSnd(neglect),
-          caseSndWins = id.awaitFst(neglect),
+        > raceSwitch(
+          caseFstWins = snd(neglect) > awaitPosSnd,
+          caseSndWins = fst(neglect) > awaitPosFst,
         )
 
     List(
@@ -89,10 +89,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         val prg: Done -⚬ Val[(String, Int)] =
           id                                       [       Done                                                                           ]
             .>(constVal(("foo", 42)))           .to[     Val[(String, Int)]                                                               ]
-            .introSnd(promise)                  .to[     Val[(String, Int)]      |*| (   Neg[(String, Int)]       |*| Val[(String, Int)]) ]
-            .assocRL                            .to[ (   Val[(String, Int)]      |*|     Neg[(String, Int)]     ) |*| Val[(String, Int)]  ]
+            .>(introSnd(promise))               .to[     Val[(String, Int)]      |*| (   Neg[(String, Int)]       |*| Val[(String, Int)]) ]
+            .>(assocRL)                         .to[ (   Val[(String, Int)]      |*|     Neg[(String, Int)]     ) |*| Val[(String, Int)]  ]
             .>.fst(par(liftPair, liftNegPair))  .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| Val[(String, Int)]  ]
-            .>.fst(rInvert).elimFst             .to[                                                                  Val[(String, Int)]  ]
+            .>.fst(rInvert).>(elimFst)          .to[                                                                  Val[(String, Int)]  ]
 
         prg > assertEquals(("foo", 42))
       },
@@ -104,10 +104,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         val prg: Done -⚬ Val[(String, Int)] =
           id                                              [               Done                                                                           ]
             .>(forkMap(constVal("foo"), constVal(42))) .to[   Val[String] |*| Val[Int]                                                                   ]
-            .introSnd.>.snd(lInvert)                   .to[  (Val[String] |*| Val[Int]) |*| ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) ]
-            .assocRL                                   .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| (Val[String] |*| Val[Int])  ]
+            .>(introSnd).>.snd(lInvert)                .to[  (Val[String] |*| Val[Int]) |*| ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) ]
+            .>(assocRL)                                .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| (Val[String] |*| Val[Int])  ]
             .>.fst(par(unliftPair, unliftNegPair))     .to[ (    Val[(String, Int)]     |*|      Neg[(String, Int)]    ) |*| (Val[String] |*| Val[Int])  ]
-            .elimFst(fulfill)                          .to[                                                                   Val[String] |*| Val[Int]   ]
+            .>(elimFst(fulfill))                       .to[                                                                   Val[String] |*| Val[Int]   ]
             .>(unliftPair)                             .to[                                                                      Val[(String, Int)]      ]
 
         prg > assertEquals(("foo", 42))
@@ -118,9 +118,9 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           id                                 [    Done                           ]
             .>(constVal(42))              .to[  Val[Int]                         ]
             .>(introSnd(lInvertSignal))   .to[  Val[Int] |*| ( Need    |*| Done) ]
-            .assocRL                      .to[ (Val[Int] |*|   Need  ) |*| Done  ]
+            .>(assocRL)                   .to[ (Val[Int] |*|   Need  ) |*| Done  ]
             .>.fst.snd(inflate)           .to[ (Val[Int] |*| Neg[Int]) |*| Done  ]
-            .elimFst(fulfill)             .to[                             Done  ]
+            .>(elimFst(fulfill))          .to[                             Done  ]
 
         prg > success
       },
@@ -247,13 +247,13 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
 
         val coDistributed1: Done -⚬ ((B |&| C) |*| (I |&| S)) =
           init
-            .bimap(coDistributeL, coDistributeL)
+            .>(|&|.bimap(coDistributeL, coDistributeL))
             .>(coDistributeR)
 
         val coDistributed2: Done -⚬ ((B |&| C) |*| (I |&| S)) =
           init                                          .to[ ((B |*| I) |&| (B  |*|  S)) |&| ((C |*| I) |&| (C  |*| S)) ]
             .>(|&|.IXI)                                 .to[ ((B |*| I) |&| (C  |*|  I)) |&| ((B |*| S) |&| (C  |*| S)) ]
-            .bimap(coDistributeR, coDistributeR)        .to[ ((B        |&|  C) |*|  I ) |&| ((B        |&|  C) |*| S ) ]
+            .>(|&|.bimap(coDistributeR, coDistributeR)) .to[ ((B        |&|  C) |*|  I ) |&| ((B        |&|  C) |*| S ) ]
             .>(coDistributeL)                           .to[  (B        |&|  C) |*| (I   |&|                        S ) ]
 
         val combinations = Seq(
@@ -380,7 +380,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
                   release1 = Some(_ => log("release B")),
                   release2 = Some(_ => log("release C")),
                 ))
-                .par(release, release)
+                .>(par(release, release))
                 .>(join)
 
             prg
@@ -418,10 +418,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
               release1 = Some({ _ => log("release B"); pb.success(()); Async.now(()) }),
               release2 = Some({ _ => log("release C"); pc.success(()); Async.now(()) }),
             ))
-            .par(
+            .>(par(
               release0[Unit, Unit](_ => log("release B XXX")) > neglect, // this release function should never be invoked
               release0[Unit, Unit](_ => log("release C XXX")) > neglect, // this release function should never be invoked
-            )
+            ))
             .>(join)
 
         val crashThread: Done -⚬ Done =
@@ -461,14 +461,14 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         val incGetClose: RefCounted[AtomicInteger] -⚬ Val[Int] =
           introSnd(const(()))                                       .to[ RefCounted[AtomicInteger] |*| Val[Unit] ]
             .>( RefCounted.effect((i, _) => i.incrementAndGet) )    .to[ RefCounted[AtomicInteger] |*| Val[Int]  ]
-            .awaitFst(RefCounted.release)                           .to[                               Val[Int]  ]
+            .>(fst(RefCounted.release) > awaitPosFst)               .to[                               Val[Int]  ]
 
         val prg: Done -⚬ Val[Int] =
           constVal(0)
             .>(RefCounted.acquire0(new AtomicInteger(_), _ => releaseCounter.incrementAndGet))
             .>(RefCounted.dupRef)
             .>.snd(RefCounted.dupRef)
-            .par(incGetClose, par(incGetClose, incGetClose))
+            .>(par(incGetClose, par(incGetClose, incGetClose)))
             .>.snd(unliftPair > mapVal(t => t._1 + t._2))
             .>(unliftPair > mapVal(t => t._1 + t._2))
 
@@ -623,7 +623,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         def client(cid: ClientId): (Val[ResourceId] |*| Neg[ResourceId]) -⚬ Val[(ClientId, ResourceId)] =
           id                             [                            Val[ResourceId]             |*| Neg[ResourceId]  ]
             .>.fst(delayVal(1.milli)) .to[                            Val[ResourceId]             |*| Neg[ResourceId]  ]
-            .>.fst(dup).assocLR       .to[                   Val[ResourceId] |*| (Val[ResourceId] |*| Neg[ResourceId]) ]
+            .>.fst(dup).>(assocLR)    .to[                   Val[ResourceId] |*| (Val[ResourceId] |*| Neg[ResourceId]) ]
             .>(elimSnd(fulfill))      .to[                   Val[ResourceId]                                           ]
             .>(introFst(const(cid)))  .to[ Val[ClientId] |*| Val[ResourceId]                                           ]
             .>(unliftPair)            .to[ Val[(ClientId, ResourceId)]                                                 ]

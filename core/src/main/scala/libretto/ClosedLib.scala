@@ -69,7 +69,7 @@ class ClosedLib[
 
   def zapPremises[A, Ā, B, C](using ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
     id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
-      .introSnd(ev.lInvert)      .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (Ā |*| A) ]
+      .>(introSnd(ev.lInvert))   .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (Ā |*| A) ]
       .>.snd(swap)               .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
       .>(IXI)                    .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
       .>(par(eval, eval))        .to[        B         |*|        C         ]
@@ -80,19 +80,19 @@ class ClosedLib[
     */
   def unveilSequentially[A, Ā, B](using ev: Dual[A, Ā]): (A |*| B) -⚬ (Ā =⚬ B) =
     id[(A |*| B) |*| Ā]           .to[ (A |*|  B) |*| Ā  ]
-      .assocLR                    .to[  A |*| (B  |*| Ā) ]
+      .>(assocLR)                 .to[  A |*| (B  |*| Ā) ]
       .>.snd(swap)                .to[  A |*| (Ā  |*| B) ]
-      .assocRL                    .to[ (A |*|  Ā) |*| B  ]
-      .elimFst(ev.rInvert)        .to[                B  ]
+      .>(assocRL)                 .to[ (A |*|  Ā) |*| B  ]
+      .>(elimFst(ev.rInvert))     .to[                B  ]
       .as[ ((A |*| B) |*| Ā) -⚬ B ]
       .curry
 
   /** Make a function `A =⚬ B` ''"absorb"'' a `C` and return it as part of its output, i.e. `A =⚬ (B |*| C)`. */
   def absorbR[A, B, C]: ((A =⚬ B) |*| C) -⚬ (A =⚬ (B |*| C)) =
     id[((A =⚬ B) |*| C) |*| A]  .to[ ((A =⚬ B) |*| C) |*| A ]
-      .assocLR                  .to[ (A =⚬ B) |*| (C |*| A) ]
+      .>(assocLR)               .to[ (A =⚬ B) |*| (C |*| A) ]
       .>.snd(swap)              .to[ (A =⚬ B) |*| (A |*| C) ]
-      .assocRL                  .to[ ((A =⚬ B) |*| A) |*| C ]
+      .>(assocRL)               .to[ ((A =⚬ B) |*| A) |*| C ]
       .>.fst(eval)              .to[        B         |*| C ]
       .as[ (((A =⚬ B) |*| C) |*| A) -⚬ (B |*| C) ]
       .curry
