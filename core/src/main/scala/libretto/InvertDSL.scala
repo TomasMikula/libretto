@@ -72,7 +72,7 @@ trait InvertDSL extends ClosedDSL {
   def factorOutInversion[A, B]: (-[A] |*| -[B]) -⚬ -[A |*| B]
 
   private val coreLib = CoreLib(this)
-  import coreLib._
+  import coreLib.*
 
   override type =⚬[A, B] = -[A] |*| B
 
@@ -211,7 +211,7 @@ trait InvertDSL extends ClosedDSL {
   def unpackDemand[F[_]]: -[Rec[F]] -⚬ -[F[Rec[F]]] =
     contrapositive(pack[F])
 
-  import $._
+  import $.*
 
   extension [A](a: $[A]) {
     def supplyTo(out: $[-[A]])(using pos: SourcePos, ctx: LambdaContext): $[One] =

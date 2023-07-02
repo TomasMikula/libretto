@@ -1,9 +1,9 @@
 package libretto.examples.santa.solution2
 
 import libretto.scaletto.StarterApp
-import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.*
 import libretto.stream.scaletto.DefaultStreams.Source
-import scala.{:: => NonEmptyList}
+import scala.{:: as NonEmptyList}
 
 object SantaClaus extends StarterApp {
   opaque type Reindeer = Val[String]

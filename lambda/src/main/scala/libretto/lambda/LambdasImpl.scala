@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.{lambda => ll}
+import libretto.{lambda as ll}
 import libretto.lambda.Lambdas.Error
 import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.lambda.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
@@ -15,7 +15,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
   given shuffle: Shuffle[|*|] = Shuffle[|*|]
   given shuffled: Shuffled.With[-⚬, |*|, shuffle.type] = Shuffled[-⚬, |*|](shuffle)
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
-  import shuffled.{Shuffled => ≈⚬, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
+  import shuffled.{Shuffled as ≈⚬, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
 
   override type AbstractFun[A, B] =
     A ≈⚬ B
@@ -86,7 +86,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
    * Non-linear: includes projections and multiple occurrences of the same variable.
    */
   sealed trait Expr[B] {
-    import Expr._
+    import Expr.*
 
     def resultVar: Var[B]
 
@@ -328,7 +328,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
   ): EliminatedFromForest[A, B] = {
     import Lambdas.Abstracted.{Closure, Exact, Failure}
     import EliminatedFromForest.{FoundEach, FoundSome, NotFound}
-    import libretto.lambda.{CapturingFun => cf}
+    import libretto.lambda.{CapturingFun as cf}
 
     exprs.asBin match {
       case Bin.Leaf(b) =>
@@ -396,7 +396,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
   }
 
   private case class HybridArrow[A, B](v: Var[A], tail: HybridArrow.Tail[Var[A], B]) {
-    import HybridArrow._
+    import HybridArrow.*
 
     def >[C](that: Tail[B, C]): HybridArrow[A, C] =
       HybridArrow(v, tail > that)
@@ -539,7 +539,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
 
   private object HybridArrow {
     sealed trait Op[A, B] {
-      import Op._
+      import Op.*
 
       def project[C](p: Projection[|*|, B, C]): shOp.ProjectRes[A, C] =
         p match {
@@ -942,7 +942,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
         C: Focus[|*|, C],
         D: Focus[|*|, D],
       ): Option[Tail[C[Var[X]], Y |*| Z]] = {
-        import shOp.shuffle.{zip => zipEq}
+        import shOp.shuffle.{zip as zipEq}
 
         (C, D) match {
           case (Focus.Id(), Focus.Id()) =>
@@ -984,7 +984,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
     }
 
     val shOp = Shuffled[Op, |*|](shuffled.shuffle)
-    import shOp.shuffle.{zip => zipEq}
+    import shOp.shuffle.{zip as zipEq}
 
     type VarOp[A, B] = (Vars[A], Op[A, B])
     given shVOp: Shuffled.With[VarOp, |*|, shuffled.shuffle.type] =

@@ -1,10 +1,11 @@
 package libretto.testing
 
 import libretto.{CoreBridge, CoreDSL, ExecutionParams, Monad}
-import libretto.lambda.util.{Monad => ScalaMonad, SourcePos}
-import libretto.lambda.util.Monad.syntax._
+import libretto.lambda.util.{Monad as ScalaMonad, SourcePos}
+import libretto.lambda.util.Monad.syntax.*
 import libretto.util.Async
 import scala.annotation.targetName
+import scala.concurrent.duration.FiniteDuration
 
 trait TestKit {
   type Dsl <: CoreDSL
@@ -81,6 +82,9 @@ trait TestKit {
         str contains substr,
         s"'$str' did not contain '$substr'",
       )
+
+    def map[A, B](fa: Outcome[A])(f: A => B): Outcome[B] =
+      fa.map(_.map(f))
 
     def flatMap[A, B](fa: Outcome[A])(f: A => Outcome[B]): Outcome[B] =
       fa.flatMap {
@@ -174,6 +178,27 @@ trait TestKit {
     exn.OutPort.awaitPing(port).map {
       case Left(e)   => TestResult.crash(e)
       case Right(()) => TestResult.success(())
+    }
+
+  def expectNoPing(using exn: Execution, pos: SourcePos)(
+    port: exn.OutPort[Ping],
+    duration: FiniteDuration,
+  ): Outcome[exn.OutPort[Ping]] =
+    exn.OutPort.awaitNoPing(port, duration).map {
+      case Left(Left(e))   => TestResult.crash(e)
+      case Left(Right(())) => TestResult.failed(using pos)(s"Expected no Ping for $duration, but got Ping")
+      case Right(port)     => TestResult.success(port)
+    }
+
+  def expectNoPing_(using exn: Execution, pos: SourcePos)(
+    port: exn.OutPort[Ping],
+    duration: FiniteDuration,
+  ): Outcome[Unit] =
+    Outcome.map(
+      expectNoPing(port, duration)
+    ) { port =>
+      val p1 = exn.OutPort.map(port)(dsl.dismissPing)
+      exn.OutPort.discardOne(p1)
     }
 
   def expectLeft[A, B](using exn: Execution, pos: SourcePos)(port: exn.OutPort[A |+| B]): Outcome[exn.OutPort[A]] =

@@ -3,10 +3,9 @@ package libretto.mashup
 import libretto.util.Async
 import scala.util.{Failure, Success, Try}
 import zio.Chunk
-import zio.json.ast.{Json => ZioJson}
-import zio.json.ast.Json.{encoder => JsonEncoder}
-import zio.http.{Body, Response}
-import zio.http.model.{Headers, Status}
+import zio.json.ast.{Json as ZioJson}
+import zio.json.ast.Json.{encoder as JsonEncoder}
+import zio.http.{Body, Response, Headers, Status}
 
 sealed trait BodyType[A] {
   def extractResponse(using
@@ -32,7 +31,7 @@ object BodyType {
   }
 
   object Json {
-    import JsonType._
+    import JsonType.*
 
     private def extractJson[A](using rt: Runtime, exn: rt.Execution)(
       typ: JsonType[A],

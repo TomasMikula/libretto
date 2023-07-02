@@ -70,7 +70,7 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
   }
 
   private val lib = CoreLib(this)
-  import lib._
+  import lib.*
 
   /** Creates an entangled pair of demand ([[Neg]]) and supply ([[Val]]) such that when the demand is fulfilled
     * with a value, that value will be produced by the supply.
@@ -134,11 +134,11 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
   def delay: Val[FiniteDuration] -⚬ Done
 
   def delayNeed: Need -⚬ Neg[FiniteDuration] =
-    id                                       [                                                    Need  ]
-      .introFst(promise[FiniteDuration])  .to[ (Neg[FiniteDuration] |*|  Val[FiniteDuration]) |*| Need  ]
-      .assocLR                            .to[  Neg[FiniteDuration] |*| (Val[FiniteDuration]  |*| Need) ]
-      .>.snd.fst(delay)                   .to[  Neg[FiniteDuration] |*| (  Done               |*| Need) ]
-      .elimSnd(rInvertSignal)             .to[  Neg[FiniteDuration]                                     ]
+    id                                         [                                                    Need  ]
+      .>(introFst(promise[FiniteDuration])) .to[ (Neg[FiniteDuration] |*|  Val[FiniteDuration]) |*| Need  ]
+      .>(assocLR)                           .to[  Neg[FiniteDuration] |*| (Val[FiniteDuration]  |*| Need) ]
+      .>.snd.fst(delay)                     .to[  Neg[FiniteDuration] |*| (  Done               |*| Need) ]
+      .>(elimSnd(rInvertSignal))            .to[  Neg[FiniteDuration]                                     ]
 
   override def delay(d: FiniteDuration): Done -⚬ Done =
     constVal(d) > delay
@@ -268,7 +268,7 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
       (r, a) => f(r, a).map(Right(_)),
       release,
     )                                       .to[ Val[Nothing] |+| (Res[S] |*| Val[B]) ]
-      .either(anyResourceFromNothing, id)   .to[                   Res[S] |*| Val[B]  ]
+      > either(anyResourceFromNothing, id)  .to[                   Res[S] |*| Val[B]  ]
 
   def tryTransformResource[R, A, S, B, E](
     f: ScalaFun[(R, A), Either[E, (S, B)]],

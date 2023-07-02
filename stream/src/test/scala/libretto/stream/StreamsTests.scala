@@ -1,14 +1,14 @@
 package libretto.stream
 
 import libretto.CoreLib
-import libretto.lambda.util.Monad.syntax._
+import libretto.lambda.util.Monad.syntax.*
 import libretto.scaletto.ScalettoLib
 import libretto.stream.CoreStreams
 import libretto.stream.scaletto.ScalettoStreams
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
 import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 class StreamsTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
@@ -20,11 +20,11 @@ class StreamsTests extends ScalatestScalettoTestSuite {
     val invertStreams = InvertStreams(dsl, coreLib)
     val scalettoStreams = ScalettoStreams(kit.dsl, coreLib, scalettoLib, invertStreams)
 
-    import dsl._
-    import dsl.$._
-    import coreLib._
-    import scalettoLib.{given, _}
-    import scalettoStreams._
+    import dsl.*
+    import dsl.$.*
+    import coreLib.*
+    import scalettoLib.{*, given}
+    import scalettoStreams.*
 
     List(
       "toList ⚬ fromList = id" -> TestCase
@@ -43,7 +43,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           ValSource.of(1, 2, 3, 4, 5, 6)
             .>(ValSource.map { i => if (i % 2 == 0) Left(i) else Right(i) })
             .>(ValSource.partition)
-            .par(ValSource.toList, ValSource.toList)
+            .>(par(ValSource.toList, ValSource.toList))
             .>(unliftPair)
         }.via {
           expectVal(_).assertEquals((List(2, 4, 6), List(1, 3, 5)))
@@ -171,7 +171,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
       "broadcastByKey" -> TestCase
         .interactWith {
           import ValSource.broadcastByKey
-          import ValSource.BroadcastByKey.{close => closeBroadcast, subscribe}
+          import ValSource.BroadcastByKey.{close as closeBroadcast, subscribe}
 
           val byLength: Val[String] -⚬ (Val[Int] |*| Val[String]) =
             mapVal[String, (Int, String)](s => (s.length, s)) > liftPair
@@ -185,9 +185,9 @@ class StreamsTests extends ScalatestScalettoTestSuite {
               .>(broadcastByKey(byLength))
               .>(subscribe(3))
               .>.fst(subscribe(4))
-              .assocLR.>.snd(ValSource.merge)
-              .par(closeBroadcast, ValSource.toList)
-              .awaitFst
+              .>(assocLR).>.snd(ValSource.merge)
+              .>(par(closeBroadcast, ValSource.toList))
+              .>(awaitPosFst)
 
           prg > mapVal(_.toSet)
         }.via {
@@ -235,7 +235,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             (out1, out2) <- splitOut(outputs)
             (pong, done) <- splitOut(signals)
             res1 <- expectVal(out1) // the first n should be output before the first poll
-            _ = OutPort.sendPong(pong)
+            _ = OutPort.supplyPong(pong)
             res2 <- expectVal(out2)
             _ <- expectDone(done)
             _ <- Outcome.assertAll(

@@ -17,10 +17,10 @@ private class ExecutionImpl(
   ec: ExecutionContext,
   scheduler: Scheduler,
 ) extends ScalettoExecution[FreeScaletto.type] {
-  import ResourceRegistry._
+  import ResourceRegistry.*
 
   override val dsl = FreeScaletto
-  import dsl._
+  import dsl.*
 
   override opaque type OutPort[A] = Frontier[A]
   override opaque type InPort[A] = Frontier[A] => Unit
@@ -76,9 +76,24 @@ private class ExecutionImpl(
       res
     }
 
-    override def sendPong(port: OutPort[Pong]): Unit = {
-      port.fulfillPongWith(Future.successful(()))
+    override def awaitNoPing(
+      port: OutPort[Ping],
+      duration: FiniteDuration,
+    ): Async[Either[Either[Throwable, Unit], OutPort[Ping]]] = {
+      val (complete, res) = Async.promise[Either[Either[Throwable, Unit], OutPort[Ping]]]
+      port.toFuturePing.onComplete {
+        case Success(Frontier.PingNow) => complete(Left(Right(())))
+        case Failure(e)                => complete(Left(Left(e)))
+      }
+      scheduler.schedule(duration, () => complete(Right(port)))
+      res
     }
+
+    override def supplyNeed(port: OutPort[Need]): Unit =
+      port.fulfillWith(Future.successful(()))
+
+    override def supplyPong(port: OutPort[Pong]): Unit =
+      port.fulfillPongWith(Future.successful(()))
 
     override def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]] = {
       val (complete, res) = Async.promiseLinear[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
@@ -227,7 +242,7 @@ private class ExecutionImpl(
     }
 
   private sealed trait Frontier[A] {
-    import Frontier._
+    import Frontier.*
 
     def extendBy[B](f: A -⚬ B)(using
       resourceRegistry: ResourceRegistry,
@@ -241,7 +256,7 @@ private class ExecutionImpl(
       ec: ExecutionContext,
       scheduler: Scheduler,
     ): Frontier[B] = {
-      implicit class FrontierOps[X](fx: Frontier[X]) {
+      extension [X](fx: Frontier[X]) {
         def extend[Y](f: X -⚬ Y): Frontier[Y] =
           if (depth < 100)
             fx.extendBy(f, depth + 1)
@@ -1157,8 +1172,7 @@ private class ExecutionImpl(
         }
     }
 
-    // using implicit class because extension methods may not have type parameters
-    implicit class FrontierValOps[A](f: Frontier[Val[A]]) {
+    extension [A](f: Frontier[Val[A]]) {
       def mapVal[B](g: A => B)(using ExecutionContext): Frontier[Val[B]] =
         f match {
           case Value(a) => Value(g(a))

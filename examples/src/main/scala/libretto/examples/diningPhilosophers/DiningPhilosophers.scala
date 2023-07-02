@@ -3,10 +3,10 @@ package libretto.examples.diningPhilosophers
 import libretto.scaletto.StarterApp
 
 object DiningPhilosophers extends StarterApp {
-  import $._
+  import $.*
 
   val philosophers = Philosophers(ForksProvider)
-  import philosophers.{behavior => philosopher}
+  import philosophers.{behavior as philosopher}
   import ForksProvider.mkSharedFork
 
   override def blueprint: Done -⚬ Done =

@@ -1,6 +1,6 @@
 package libretto.scaletto.impl.futurebased
 
-import java.util.concurrent.{Executor => JExecutor, Executors, ExecutorService, ScheduledExecutorService}
+import java.util.concurrent.{Executor as JExecutor, Executors, ExecutorService, ScheduledExecutorService}
 import libretto.{Executing, ExecutionParams, Scheduler}
 import libretto.Executor.CancellationReason
 import libretto.lambda.util.SourcePos

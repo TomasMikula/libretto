@@ -1,6 +1,6 @@
 package libretto.examples.interactionNets.unaryArithmetic
 
-import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.*
 import libretto.scaletto.StarterKit.scalettoLib.given
 import libretto.lambda.util.SourcePos
 

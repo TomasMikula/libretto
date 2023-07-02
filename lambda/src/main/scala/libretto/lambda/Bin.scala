@@ -13,7 +13,7 @@ import libretto.lambda.util.TypeEq.Refl
  * @tparam A captures the complete structure of the tree
  */
 sealed trait Bin[<*>[_, _], T[_], F[_], A] {
-  import Bin._
+  import Bin.*
 
   def <*>[B](that: Bin[<*>, T, F, B]): Bin[<*>, T, F, A <*> B] =
     Branch(this, that)
@@ -66,8 +66,8 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
           case Right(a) => Partitioned.Right(Leaf(a))
       case Branch(l, r) =>
         import Partitioned.{Both, Left, Right}
-        import l.Partitioned.{Both => LBoth, Left => LLeft, Right => LRight}
-        import r.Partitioned.{Both => RBoth, Left => RLeft, Right => RRight}
+        import l.Partitioned.{Both as LBoth, Left as LLeft, Right as LRight}
+        import r.Partitioned.{Both as RBoth, Left as RLeft, Right as RRight}
 
         (l.partition(f), r.partition(f)) match
           case (LLeft(lg),        RLeft(rg))        => Left(lg <*> rg)
@@ -254,7 +254,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     leafTest: UniqueTypeArg[F],
     shuffle: Shuffle[<*>],
   ): FindRes[A, X, shuffle.~⚬] = {
-    import FindRes._
+    import FindRes.*
     import shuffle.~⚬
 
     this match {

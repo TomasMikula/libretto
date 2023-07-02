@@ -308,7 +308,7 @@ object MashupKitImpl extends MashupKit { kit =>
         override type ScalaRepr = (A.ScalaRepr, (N, T.ScalaRepr))
 
         override def junction: Junction.Positive[Record[A ### (N of T)]] =
-          Junction.Positive.both(A.junction, T.junction)
+          Junction.Positive.both(using A.junction, T.junction)
 
         override def toScalaValue: Fun[Record[A ### (N of T)], Val[ScalaRepr]] =
           par(A.toScalaValue, T.toScalaValue) > unliftPair > mapVal { case (a, t) => (a, (N.value, t)) }

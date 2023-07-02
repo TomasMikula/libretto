@@ -26,7 +26,7 @@ trait Bifunctor[->[_, _], F[_, _]] { self =>
         Bifunctor.this.lift[A, A, B1, B2](this.category.id[A], g)
     }
 
-  def inside[G[_]](implicit G: Functor[->, G]): Bifunctor[->, λ[(x, y) => G[F[x, y]]]] =
+  def inside[G[_]](using G: Functor[->, G]): Bifunctor[->, λ[(x, y) => G[F[x, y]]]] =
     new Bifunctor[->, λ[(x, y) => G[F[x, y]]]] {
       override val category =
         self.category

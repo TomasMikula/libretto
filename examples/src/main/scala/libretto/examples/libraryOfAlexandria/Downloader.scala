@@ -1,7 +1,7 @@
 package libretto.examples.libraryOfAlexandria
 
-import libretto.scaletto.StarterKit._
-import libretto.stream.scaletto.DefaultStreams._
+import libretto.scaletto.StarterKit.*
+import libretto.stream.scaletto.DefaultStreams.*
 
 import vendor.{Page, ScrollId}
 

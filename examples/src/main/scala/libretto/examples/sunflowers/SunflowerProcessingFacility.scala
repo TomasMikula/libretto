@@ -1,6 +1,6 @@
 package libretto.examples.sunflowers
 
-import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.*
 import libretto.stream.scaletto.DefaultStreams.ValSource
 import libretto.stream.scaletto.DefaultStreams.ValSource.{Polled, fromChoice, notifyAction, poll}
 

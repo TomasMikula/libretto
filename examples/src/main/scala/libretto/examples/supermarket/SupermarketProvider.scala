@@ -1,15 +1,15 @@
 package libretto.examples.supermarket
 
-import libretto.scaletto.StarterKit._
-import libretto.examples.supermarket.baskets._
-import libretto.examples.supermarket.money._
-import scala.concurrent.duration._
+import libretto.scaletto.StarterKit.*
+import libretto.examples.supermarket.baskets.*
+import libretto.examples.supermarket.money.*
+import scala.concurrent.duration.*
 
 object SupermarketProvider extends SupermarketInterface {
-  import libretto.scaletto.StarterKit.$._
+  import libretto.scaletto.StarterKit.$.*
 
   override val goods: Goods.type = Goods
-  import goods._
+  import goods.*
 
   private type BorrowedBasket = Basket |*| -[Basket]
   private type ItemSelection = Beer |&| ToiletPaper
@@ -22,11 +22,11 @@ object SupermarketProvider extends SupermarketInterface {
   override opaque type Supermarket =
     Unlimited[Shopping[One]]
 
-  override implicit def comonoidSupermarket: Comonoid[Supermarket] =
+  override given comonoidSupermarket: Comonoid[Supermarket] =
     Unlimited.comonoidUnlimited
 
-  override def basketReadiness[Items]: Signaling.Positive[Shopping[Items]] =
-    Signaling.Positive.bySnd(Signaling.Positive.byFst(signalingJunctionBorrowedBasket))
+  override given basketReadiness[Items]: Signaling.Positive[Shopping[Items]] =
+    Signaling.Positive.bySnd(using Signaling.Positive.byFst(using signalingJunctionBorrowedBasket))
 
   override def enterAndObtainBasket: Supermarket -⚬ Shopping[One] =
     λ { supermarket =>
@@ -72,7 +72,7 @@ object SupermarketProvider extends SupermarketInterface {
   override def payForBeer[Items]: (Coin |*| Shopping[Beer |*| Items]) -⚬ (Beer |*| Shopping[Items]) =
     payForItem[Beer, Items]
 
-  private implicit def signalingJunctionBorrowedBasket: SignalingJunction.Positive[BorrowedBasket] =
+  private given signalingJunctionBorrowedBasket: SignalingJunction.Positive[BorrowedBasket] =
     SignalingJunction.Positive.byFst
 
   private def returnBasket  : (Basket |*| -[Basket]) -⚬ One = backvert

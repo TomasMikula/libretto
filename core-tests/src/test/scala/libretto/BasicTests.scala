@@ -2,16 +2,16 @@ package libretto
 
 import java.util.concurrent.{Executors, ScheduledExecutorService}
 import java.util.concurrent.atomic.AtomicInteger
-import libretto.Functor._
+import libretto.Functor.*
 import libretto.lambda.util.SourcePos
-import libretto.lambda.util.Monad.syntax._
+import libretto.lambda.util.Monad.syntax.*
 import libretto.scaletto.ScalettoLib
 import libretto.testing.{TestCase, TestExecutor, TestKit}
 import libretto.testing.scaletto.{ScalettoTestExecutor, ScalettoTestKit}
 import libretto.testing.scalatest.ScalatestSuite
 import libretto.util.Async
 import scala.concurrent.{Await, Promise}
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 class BasicTests extends ScalatestSuite[ScalettoTestKit] {
   private var scheduler: ScheduledExecutorService = _
@@ -38,13 +38,13 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     )
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{OutPort => _, _}
-    import dsl._
-    import dsl.$._
+    import kit.{OutPort as _, *}
+    import dsl.*
+    import dsl.$.*
     val coreLib = CoreLib(dsl)
     val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
-    import coreLib._
-    import scalettoLib.{_, given}
+    import coreLib.{*, given}
+    import scalettoLib.{*, given}
     import kit.bridge.Execution
 
     def raceKeepWinner[A](
@@ -52,9 +52,9 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
       prg2: Done -⚬ Val[A],
     ): Done -⚬ Val[A] =
       forkMap(prg1, prg2)
-        .race(
-          caseFstWins = id.awaitSnd(neglect),
-          caseSndWins = id.awaitFst(neglect),
+        > raceSwitch(
+          caseFstWins = snd(neglect) > awaitPosSnd,
+          caseSndWins = fst(neglect) > awaitPosFst,
         )
 
     List(
@@ -89,10 +89,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         val prg: Done -⚬ Val[(String, Int)] =
           id                                       [       Done                                                                           ]
             .>(constVal(("foo", 42)))           .to[     Val[(String, Int)]                                                               ]
-            .introSnd(promise)                  .to[     Val[(String, Int)]      |*| (   Neg[(String, Int)]       |*| Val[(String, Int)]) ]
-            .assocRL                            .to[ (   Val[(String, Int)]      |*|     Neg[(String, Int)]     ) |*| Val[(String, Int)]  ]
+            .>(introSnd(promise))               .to[     Val[(String, Int)]      |*| (   Neg[(String, Int)]       |*| Val[(String, Int)]) ]
+            .>(assocRL)                         .to[ (   Val[(String, Int)]      |*|     Neg[(String, Int)]     ) |*| Val[(String, Int)]  ]
             .>.fst(par(liftPair, liftNegPair))  .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| Val[(String, Int)]  ]
-            .>.fst(rInvert).elimFst             .to[                                                                  Val[(String, Int)]  ]
+            .>.fst(rInvert).>(elimFst)          .to[                                                                  Val[(String, Int)]  ]
 
         prg > assertEquals(("foo", 42))
       },
@@ -104,10 +104,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         val prg: Done -⚬ Val[(String, Int)] =
           id                                              [               Done                                                                           ]
             .>(forkMap(constVal("foo"), constVal(42))) .to[   Val[String] |*| Val[Int]                                                                   ]
-            .introSnd.>.snd(lInvert)                   .to[  (Val[String] |*| Val[Int]) |*| ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) ]
-            .assocRL                                   .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| (Val[String] |*| Val[Int])  ]
+            .>(introSnd).>.snd(lInvert)                .to[  (Val[String] |*| Val[Int]) |*| ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) ]
+            .>(assocRL)                                .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| (Val[String] |*| Val[Int])  ]
             .>.fst(par(unliftPair, unliftNegPair))     .to[ (    Val[(String, Int)]     |*|      Neg[(String, Int)]    ) |*| (Val[String] |*| Val[Int])  ]
-            .elimFst(fulfill)                          .to[                                                                   Val[String] |*| Val[Int]   ]
+            .>(elimFst(fulfill))                       .to[                                                                   Val[String] |*| Val[Int]   ]
             .>(unliftPair)                             .to[                                                                      Val[(String, Int)]      ]
 
         prg > assertEquals(("foo", 42))
@@ -118,54 +118,31 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           id                                 [    Done                           ]
             .>(constVal(42))              .to[  Val[Int]                         ]
             .>(introSnd(lInvertSignal))   .to[  Val[Int] |*| ( Need    |*| Done) ]
-            .assocRL                      .to[ (Val[Int] |*|   Need  ) |*| Done  ]
+            .>(assocRL)                   .to[ (Val[Int] |*|   Need  ) |*| Done  ]
             .>.fst.snd(inflate)           .to[ (Val[Int] |*| Neg[Int]) |*| Done  ]
-            .elimFst(fulfill)             .to[                             Done  ]
+            .>(elimFst(fulfill))          .to[                             Done  ]
 
         prg > success
       },
 
       "delayed injectL" -> TestCase
-        .configure(ExecutionParam.manualClock)
         .interactWith {
-          // delay of 40 millis
-          val a: Done -⚬ Done =
-            delay(40.millis)
-
-          // delay of 30 + 20 = 50 millis
-          // We are testing that the second timer starts ticking only after the delayed inject (awaitInjectL).
-          // The Ping in the output notifies of the first timer firing.
-          val b: Done -⚬ (Ping |*| Done) = {
-            val delayedInjectL: Done -⚬ (Done |+| Done) =
-              forkMap(delay(30.millis), id[Done]) > awaitInjectL
-            delayedInjectL > notifyEither > λ { case ping |*| e =>
-              val c =
-                e > |+|.signalL > either(
-                  λ { case d |*| b => b.waitFor(d > delay(20.millis)) },
-                  id,
-                )
-              ping |*| c
+          // the Done on the out-port must not appear until the Need is supplied
+          val prg: Done -⚬ (Need |*| (Done |+| Nothing)) =
+            λ { start =>
+              val n |*| d = constant(lInvertSignal)
+              val res = (d |*| start) :>> awaitInjectL
+              n |*| res
             }
-          }
-
-          val prg: Done -⚬ (Ping |*| (Done |+| Done)) =
-            λ.+ { d =>
-              val d1 = a(d)
-              val p |*| d2 = b(d)
-              p |*| raceDone(d1 |*| d2)
-            }
-
           prg
         }
-        .via { (port, clock) =>
+        .via { port =>
           for {
-            pe <- splitOut(port)
-            (ping, e) = pe
-            _ = clock.advanceBy(31.millis)
-            _ <- expectPing(ping)
-            _ = clock.advanceBy(10.millis)
-            d <- expectLeft(e)
-            _ = clock.advanceBy(10.millis)
+            (need, res0) <- splitOut(port)
+            (ping, res1) <- splitOut(res0.map(notifyEither))
+            _ <- expectNoPing_(ping, 10.millis)
+            _ = OutPort.supplyNeed(need)
+            d <- expectLeft(res1)
             _ <- expectDone(d)
           } yield ()
         },
@@ -270,13 +247,13 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
 
         val coDistributed1: Done -⚬ ((B |&| C) |*| (I |&| S)) =
           init
-            .bimap(coDistributeL, coDistributeL)
+            .>(|&|.bimap(coDistributeL, coDistributeL))
             .>(coDistributeR)
 
         val coDistributed2: Done -⚬ ((B |&| C) |*| (I |&| S)) =
           init                                          .to[ ((B |*| I) |&| (B  |*|  S)) |&| ((C |*| I) |&| (C  |*| S)) ]
             .>(|&|.IXI)                                 .to[ ((B |*| I) |&| (C  |*|  I)) |&| ((B |*| S) |&| (C  |*| S)) ]
-            .bimap(coDistributeR, coDistributeR)        .to[ ((B        |&|  C) |*|  I ) |&| ((B        |&|  C) |*| S ) ]
+            .>(|&|.bimap(coDistributeR, coDistributeR)) .to[ ((B        |&|  C) |*|  I ) |&| ((B        |&|  C) |*| S ) ]
             .>(coDistributeL)                           .to[  (B        |&|  C) |*| (I   |&|                        S ) ]
 
         val combinations = Seq(
@@ -403,7 +380,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
                   release1 = Some(_ => log("release B")),
                   release2 = Some(_ => log("release C")),
                 ))
-                .par(release, release)
+                .>(par(release, release))
                 .>(join)
 
             prg
@@ -441,10 +418,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
               release1 = Some({ _ => log("release B"); pb.success(()); Async.now(()) }),
               release2 = Some({ _ => log("release C"); pc.success(()); Async.now(()) }),
             ))
-            .par(
+            .>(par(
               release0[Unit, Unit](_ => log("release B XXX")) > neglect, // this release function should never be invoked
               release0[Unit, Unit](_ => log("release C XXX")) > neglect, // this release function should never be invoked
-            )
+            ))
             .>(join)
 
         val crashThread: Done -⚬ Done =
@@ -484,14 +461,14 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         val incGetClose: RefCounted[AtomicInteger] -⚬ Val[Int] =
           introSnd(const(()))                                       .to[ RefCounted[AtomicInteger] |*| Val[Unit] ]
             .>( RefCounted.effect((i, _) => i.incrementAndGet) )    .to[ RefCounted[AtomicInteger] |*| Val[Int]  ]
-            .awaitFst(RefCounted.release)                           .to[                               Val[Int]  ]
+            .>(fst(RefCounted.release) > awaitPosFst)               .to[                               Val[Int]  ]
 
         val prg: Done -⚬ Val[Int] =
           constVal(0)
             .>(RefCounted.acquire0(new AtomicInteger(_), _ => releaseCounter.incrementAndGet))
             .>(RefCounted.dupRef)
             .>.snd(RefCounted.dupRef)
-            .par(incGetClose, par(incGetClose, incGetClose))
+            .>(par(incGetClose, par(incGetClose, incGetClose)))
             .>.snd(unliftPair > mapVal(t => t._1 + t._2))
             .>(unliftPair > mapVal(t => t._1 + t._2))
 
@@ -646,7 +623,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         def client(cid: ClientId): (Val[ResourceId] |*| Neg[ResourceId]) -⚬ Val[(ClientId, ResourceId)] =
           id                             [                            Val[ResourceId]             |*| Neg[ResourceId]  ]
             .>.fst(delayVal(1.milli)) .to[                            Val[ResourceId]             |*| Neg[ResourceId]  ]
-            .>.fst(dup).assocLR       .to[                   Val[ResourceId] |*| (Val[ResourceId] |*| Neg[ResourceId]) ]
+            .>.fst(dup).>(assocLR)    .to[                   Val[ResourceId] |*| (Val[ResourceId] |*| Neg[ResourceId]) ]
             .>(elimSnd(fulfill))      .to[                   Val[ResourceId]                                           ]
             .>(introFst(const(cid)))  .to[ Val[ClientId] |*| Val[ResourceId]                                           ]
             .>(unliftPair)            .to[ Val[(ClientId, ResourceId)]                                                 ]
