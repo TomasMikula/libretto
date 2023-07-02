@@ -171,7 +171,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
       "broadcastByKey" -> TestCase
         .interactWith {
           import ValSource.broadcastByKey
-          import ValSource.BroadcastByKey.{close => closeBroadcast, subscribe}
+          import ValSource.BroadcastByKey.{close as closeBroadcast, subscribe}
 
           val byLength: Val[String] -⚬ (Val[Int] |*| Val[String]) =
             mapVal[String, (Int, String)](s => (s.length, s)) > liftPair

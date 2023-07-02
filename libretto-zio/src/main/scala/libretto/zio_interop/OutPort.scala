@@ -11,7 +11,7 @@ class OutPort[A](
   val execution: bridge.Execution,
   val port: execution.OutPort[A],
 ) {
-  import execution.{OutPort => Port}
+  import execution.{OutPort as Port}
 
   def zstream[X](using ev: A =:= ValSource[X]): UStream[X] = {
     def go(port: Port[ValSource[X]]): UStream[X] =

@@ -5,7 +5,7 @@ import libretto.scaletto.StarterKit.{*, given}
 import libretto.scaletto.StarterKit.Endless.{groupMap, mapSequentially, mergeEitherPreferred, take}
 import libretto.scaletto.StarterKit.LList1.{closeAll, eachNotifyBy, foldMap, map, sortBySignal, transform, unzipBy}
 import libretto.scaletto.StarterKit.Monoid.given
-import scala.{:: => NonEmptyList}
+import scala.{:: as NonEmptyList}
 
 object SantaClaus extends StarterApp {
   opaque type Reindeer = Val[String]
@@ -61,8 +61,8 @@ object SantaClaus extends StarterApp {
     def meetInStudy = act
   }
 
-  import RGroup.{Type => RGroup, deliverToys}
-  import EGroup.{Type => EGroup, meetInStudy}
+  import RGroup.{Type as RGroup, deliverToys}
+  import EGroup.{Type as EGroup, meetInStudy}
 
   def santa(nCycles: Int): Endless[RGroup |+| EGroup] -⚬ Done = {
     def go: (RGroup |+| EGroup) -⚬ Done =

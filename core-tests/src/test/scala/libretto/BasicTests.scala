@@ -38,7 +38,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     )
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{OutPort => _, *}
+    import kit.{OutPort as _, *}
     import dsl.*
     import dsl.$.*
     val coreLib = CoreLib(dsl)

@@ -477,7 +477,7 @@ abstract class ScalettoStreams {
     )(using
       Ordering[K],
     ): (ValSource[A] |*| Source[Val[K] |*| -[ValSource[V]]]) -⚬ Done = {
-      import ValSource.{DemandingTree => DT}
+      import ValSource.{DemandingTree as DT}
       import DemandingTree.NeDT
       type KSubs = Val[K] |*| -[ValSource[V]]
 
