@@ -5,8 +5,7 @@ import libretto.mashup.rest.{Endpoint, RelativeUrl, RestApi}
 import scala.util.{Failure, Success}
 import zio.{Scope, ZIO}
 import zio.json.ast.Json
-import zio.http.{Client, ClientConfig, Request, URL}
-import zio.http.model.Method
+import zio.http.{Client, Request, URL, Method}
 
 sealed trait ServiceInput[A] {
   def handleRequest(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Any, Throwable, Unit]
@@ -67,7 +66,7 @@ object ServiceInput {
 
     private def getJson[T](url: String, outputType: JsonType[T])(using rt: Runtime): ZIO[Any, Throwable, rt.Value[T]] =
       for {
-        url  <- ZIO.fromEither(URL.fromString(url))
+        url  <- ZIO.fromEither(URL.decode(url))
         resp <- client.request(Request.get(url))
         body <- resp.body.asString
         json <- parseJson(body)

@@ -63,6 +63,11 @@
 	font-style: normal;
 }
 
+body {
+	padding-bottom: 0;
+	margin-bottom: 0;
+}
+
 :target {
 	scroll-margin-top: calc(var(--top-bar-height) + 9px);
 }
@@ -73,6 +78,7 @@
 
 main.content {
 	font-size: 17px;
+	margin-bottom: 0;
 }
 
 #page-nav {
@@ -121,6 +127,8 @@ h1.title {
 	padding-left: 0;
 }
 
+footer,
+.footer-rule,
 #page-nav .footer {
 	display: none;
 }
@@ -150,6 +158,7 @@ a.anchor-link.left {
 	--code-font: "JetBrains Mono", "JuliaMono";
 	--body-font: "Lato", "DejaVu Sans", "Noto Color Emoji";
 	--header-font: var(--body-font);
+	--code-font-size: .8em;
 	/*--text-color: #3b3c3c;*/
 	--text-color: #282a36;
 	--primary-color: #037d;
@@ -168,10 +177,12 @@ a.anchor-link.left {
 
 pre {
 	border-radius: 4px;
+	line-height: 1rem;
 }
 
 pre code {
-	line-height: 1em;
+	line-height: 1.4;
+	font-size: var(--code-font-size);
 }
 
 code {

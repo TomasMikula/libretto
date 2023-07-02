@@ -2,8 +2,15 @@ package libretto.mashup
 
 import java.net.InetSocketAddress
 import zio.http.*
-import zio.http.Server
-import zio.{Fiber, Promise, Queue, Scope, UIO, ZIO}
+import zio.{
+  Fiber,
+  Promise,
+  Queue,
+  Scope,
+  UIO,
+  ZIO,
+  ZLayer
+}
 
 object ZioHttpServer {
   case class RequestStream(next: UIO[NextRequest])
@@ -39,7 +46,7 @@ object ZioHttpServer {
       Server
         .serve(app)
         .provide(
-          ServerConfig.live(ServerConfig.default.binding(address)),
+          ZLayer.succeed(Server.Config.default.binding(address)),
           Server.live,
         )
         .forkScoped

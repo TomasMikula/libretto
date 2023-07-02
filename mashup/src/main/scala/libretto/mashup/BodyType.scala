@@ -5,8 +5,7 @@ import scala.util.{Failure, Success, Try}
 import zio.Chunk
 import zio.json.ast.{Json as ZioJson}
 import zio.json.ast.Json.{encoder as JsonEncoder}
-import zio.http.{Body, Response}
-import zio.http.model.{Headers, Status}
+import zio.http.{Body, Response, Headers, Status}
 
 sealed trait BodyType[A] {
   def extractResponse(using
