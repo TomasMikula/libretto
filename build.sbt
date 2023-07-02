@@ -52,8 +52,8 @@ releaseProcess := Seq[ReleaseStep](
   pushChanges,
 )
 
-val ScalatestVersion = "3.2.15"
-val ZioVersion = "2.0.10"
+val ScalatestVersion = "3.2.16"
+val ZioVersion = "2.0.15"
 
 val commonScalacOptions =
   Seq(
@@ -140,7 +140,7 @@ lazy val mashup = project
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio" % ZioVersion,
       "dev.zio" %% "zio-json" % "0.5.0",
-      "dev.zio" %% "zio-http" % "0.0.5",
+      "dev.zio" %% "zio-http" % "3.0.0-RC2",
     ),
   )
 
@@ -237,8 +237,8 @@ lazy val docs = project
         .build
         .use { transformer =>
           transformer
-            .fromDirectory(srcDir)
-            .toDirectory(tgtDir)
+            .fromDirectory(srcDir.absolutePath)
+            .toDirectory(tgtDir.absolutePath)
             .transform
         }
         .unsafeRunSync()
