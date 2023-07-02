@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.Fun._
+import libretto.lambda.Fun.*
 import org.scalatest.funsuite.AnyFunSuite
 
 class LambdaTests extends AnyFunSuite {

@@ -35,7 +35,7 @@ object Functor {
 
   extension [->[_, _], F[_], A, B](f: A -> F[B])(using F: Functor[->, F]) {
     def >-[C](g: B -> C): A -> F[C] = {
-      import F.category._
+      import F.category.*
 
       f > F.lift(g)
     }

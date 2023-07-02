@@ -5,7 +5,7 @@ trait Monad[->[_, _], F[_]] extends Functor[->, F] {
   def pure[A]    :       A -> F[A]
   def flatten[A] : F[F[A]] -> F[A]
 
-  import category._
+  import category.*
 
   def liftF[A, B](f: A -> F[B]): F[A] -> F[B] =
     lift(f) > flatten

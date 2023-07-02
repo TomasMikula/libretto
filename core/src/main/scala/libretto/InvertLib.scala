@@ -14,8 +14,8 @@ class InvertLib[
 ](
   val coreLib: CoreLib,
 ) {
-  import coreLib.dsl._
-  import coreLib._
+  import coreLib.dsl.*
+  import coreLib.*
 
   def inversionDuality[A]: Dual[A, -[A]] =
     new Dual[A, -[A]] {
@@ -23,14 +23,14 @@ class InvertLib[
       override val lInvert: One -⚬ (-[A] |*| A) = forevert[A]
     }
 
-  implicit val contraFunctorDemand: ContraFunctor[-] =
-    new ContraFunctor[-] {
-      override val category =
-        coreLib.category
+  // contraFunctorDemand
+  given ContraFunctor[-] with {
+    override val category =
+      coreLib.category
 
-      override def lift[A, B](f: A -⚬ B): -[B] -⚬ -[A] =
-        contrapositive(f)
-    }
+    override def lift[A, B](f: A -⚬ B): -[B] -⚬ -[A] =
+      contrapositive(f)
+  }
 
   extension (obj: Unlimited.type) {
     def pool[A](using Signaling.Positive[A]): LList1[A] -⚬ (Unlimited[A |*| -[A]] |*| LList1[A]) =

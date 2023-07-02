@@ -2,7 +2,7 @@ package libretto.testing
 
 import libretto.{CoreBridge, CoreDSL, ExecutionParams, Monad}
 import libretto.lambda.util.{Monad => ScalaMonad, SourcePos}
-import libretto.lambda.util.Monad.syntax._
+import libretto.lambda.util.Monad.syntax.*
 import libretto.util.Async
 import scala.annotation.targetName
 import scala.concurrent.duration.FiniteDuration

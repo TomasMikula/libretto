@@ -1,7 +1,7 @@
 package libretto.testing.scaletto
 
 import libretto.CoreLib
-import libretto.lambda.util.Monad.syntax._
+import libretto.lambda.util.Monad.syntax.*
 import libretto.scaletto.{Scaletto, ScalettoBridge}
 import libretto.testing.TestKit.dsl
 import libretto.testing.{TestKitOps, TestKitWithManualClock, TestResult}
@@ -11,11 +11,11 @@ trait ScalettoTestKit extends TestKitWithManualClock {
 
   override val bridge: ScalettoBridge.Of[dsl.type]
 
-  import dsl._
+  import dsl.*
   import bridge.Execution
 
   private lazy val coreLib = CoreLib(dsl)
-  import coreLib._
+  import coreLib.*
 
   def failure[A](msg: String): Done -⚬ Assertion[A]
 

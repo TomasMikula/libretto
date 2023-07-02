@@ -6,6 +6,6 @@ object TvChannel {
   case class Sport()
 }
 
-import TvChannel._
+import TvChannel.*
 
 type TvChannel = Discovery | Cooking | Sport

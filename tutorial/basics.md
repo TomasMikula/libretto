@@ -35,8 +35,8 @@ Libretto.
 The code snippets below use these imports:
 
 ```scala mdoc
-import libretto.scaletto.StarterKit.dsl._
-import libretto.scaletto.StarterKit.dsl.$._
+import libretto.scaletto.StarterKit.dsl.*
+import libretto.scaletto.StarterKit.dsl.$.*
 ```
 
 ```scala mdoc:invisible
@@ -48,7 +48,7 @@ object Types {
   type D
   type E
 }
-import Types._
+import Types.*
 ```
 
 ## Building blocks
@@ -1079,7 +1079,7 @@ If this is the main program
 
 ```scala mdoc
 object MyApp {
-  import scala.concurrent.duration._
+  import scala.concurrent.duration.*
 
   val prg: Done -⚬ Done =
     λ { start =>

@@ -8,7 +8,7 @@ import zio.stream.UStream
 
 /** ZIO stuff that can be mapped to Libretto type `A`. */
 sealed trait Ztuff[A] {
-  import Ztuff._
+  import Ztuff.*
 
   def |*|[B](that: Ztuff[B]): Ztuff[A |*| B] =
     Ztuff.Pair(this, that)

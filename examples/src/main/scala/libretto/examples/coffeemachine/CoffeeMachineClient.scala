@@ -1,14 +1,14 @@
 package libretto.examples.coffeemachine
 
-import libretto.scaletto.StarterKit._
-import scala.concurrent.duration._
+import libretto.scaletto.StarterKit.*
+import scala.concurrent.duration.*
 
 /**
  * A front panel of a coffee machine. Displays the menu and prompts the user for choices.
  */
 object CoffeeMachineClient {
-  import Protocol._
-  import $._
+  import Protocol.*
+  import $.*
 
   val useCoffeeMachine: CoffeeMachine -⚬ Done = {
     def go: (Done |*| CoffeeMachine) -⚬ Done = rec { repeat =>

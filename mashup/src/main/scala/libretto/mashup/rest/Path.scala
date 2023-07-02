@@ -1,6 +1,6 @@
 package libretto.mashup.rest
 
-import Path._
+import Path.*
 
 enum Path {
   case Empty

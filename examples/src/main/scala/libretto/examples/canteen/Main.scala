@@ -1,9 +1,9 @@
 package libretto.examples.canteen
 
-import libretto.examples.canteen.Protocol._
+import libretto.examples.canteen.Protocol.*
 import libretto.scaletto.StarterApp
-import libretto.scaletto.StarterKit._
-import libretto.scaletto.StarterKit.$._
+import libretto.scaletto.StarterKit.*
+import libretto.scaletto.StarterKit.$.*
 
 object Main extends StarterApp {
 

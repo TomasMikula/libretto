@@ -1,8 +1,8 @@
 package libretto.examples.canteen
 
-import libretto.examples.canteen.Protocol._
-import libretto.scaletto.StarterKit._
-import libretto.scaletto.StarterKit.$._
+import libretto.examples.canteen.Protocol.*
+import libretto.scaletto.StarterKit.*
+import libretto.scaletto.StarterKit.$.*
 
 /** A simplistic canteen facility that serves only one customer and prepares everything on demand. */
 object Provider {

@@ -3,7 +3,7 @@ package libretto.scaletto.impl
 import libretto.lambda.util.SourcePos
 
 sealed trait VarOrigin {
-  import VarOrigin._
+  import VarOrigin.*
 
   def print: String =
     this match {

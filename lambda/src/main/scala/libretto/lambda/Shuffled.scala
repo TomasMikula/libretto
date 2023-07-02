@@ -364,7 +364,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   }
 
   sealed trait Plated[A, B] {
-    import Plated._
+    import Plated.*
 
     def afterPermeable[Z](that: Permeable[Z, A]): Plated.Preshuffled[Z, ?, B] =
       that match {
@@ -1039,7 +1039,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       ) extends UnconsSomeRes[F[X], B]
     }
   }
-  import Plated._
+  import Plated.*
 
   case class RevTransferOpt[A1, A2, B1, B2](t: TransferOpt[B1, B2, A1, A2]) {
     def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2) =
@@ -1085,7 +1085,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   def id[X]: Shuffled[X, X] =
     Permeable.id
 
-  def id[X, Y](implicit ev: X =:= Y): Shuffled[X, Y] =
+  def id[X, Y](using ev: X =:= Y): Shuffled[X, Y] =
     ev.substituteCo(Permeable.id[X])
 
   def pure[X, Y](f: X ~⚬ Y): Shuffled[X, Y] =

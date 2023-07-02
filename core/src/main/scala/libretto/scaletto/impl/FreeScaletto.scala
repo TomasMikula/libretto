@@ -38,11 +38,11 @@ abstract class FreeScaletto {
   final class Res[A] private()
   final type UInt31 = Val[Int]
 
-  implicit val biInjectivePair: BiInjective[|*|] =
-    new BiInjective[|*|] {
-      override def unapply[A, B, X, Y](ev: (A |*| B) =:= (X |*| Y)): (A =:= X, B =:= Y) =
-        ev match { case TypeEq(Refl()) => (summon, summon) }
-    }
+  // biInjectivePair
+  given BiInjective[|*|] with {
+    override def unapply[A, B, X, Y](ev: (A |*| B) =:= (X |*| Y)): (A =:= X, B =:= Y) =
+      ev match { case TypeEq(Refl()) => (summon, summon) }
+  }
 
   object -⚬ {
     case class Id[A]() extends (A -⚬ A)
@@ -149,7 +149,7 @@ abstract class FreeScaletto {
 }
 
 object FreeScaletto extends FreeScaletto with Scaletto {
-  import -⚬._
+  import -⚬.*
 
   override type ->[A, B] = A -⚬ B
 
@@ -457,21 +457,20 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       id
   }
 
-  implicit val csmc: ClosedSymmetricMonoidalCategory[-⚬, |*|, One, =⚬] =
-    new ClosedSymmetricMonoidalCategory[-⚬, |*|, One, =⚬] {
-      override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C                              = FreeScaletto.this.andThen(f, g)
-      override def id[A]: A -⚬ A                                                               = FreeScaletto.this.id[A]
-      override def par[A1, A2, B1, B2](f1: A1 -⚬ B1, f2: A2 -⚬ B2): (A1 |*| A2) -⚬ (B1 |*| B2) = FreeScaletto.this.par(f1, f2)
-      override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C))                    = FreeScaletto.this.assocLR[A, B, C]
-      override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C)                    = FreeScaletto.this.assocRL[A, B, C]
-      override def swap[A, B]: (A |*| B) -⚬ (B |*| A)                                          = FreeScaletto.this.swap[A, B]
-      override def elimFst[A]: (One |*| A) -⚬ A                                                = FreeScaletto.this.elimFst[A]
-      override def elimSnd[A]: (A |*| One) -⚬ A                                                = FreeScaletto.this.elimSnd[A]
-      override def introFst[A]: A -⚬ (One |*| A)                                               = FreeScaletto.this.introFst[A]
-      override def introSnd[A]: A -⚬ (A |*| One)                                               = FreeScaletto.this.introSnd[A]
-      override def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C)                            = FreeScaletto.this.curry(f)
-      override def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B                                           = FreeScaletto.this.eval[A, B]
-    }
+  given ℭ: ClosedSymmetricMonoidalCategory[-⚬, |*|, One, =⚬] with {
+    override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C                              = FreeScaletto.this.andThen(f, g)
+    override def id[A]: A -⚬ A                                                               = FreeScaletto.this.id[A]
+    override def par[A1, A2, B1, B2](f1: A1 -⚬ B1, f2: A2 -⚬ B2): (A1 |*| A2) -⚬ (B1 |*| B2) = FreeScaletto.this.par(f1, f2)
+    override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C))                    = FreeScaletto.this.assocLR[A, B, C]
+    override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C)                    = FreeScaletto.this.assocRL[A, B, C]
+    override def swap[A, B]: (A |*| B) -⚬ (B |*| A)                                          = FreeScaletto.this.swap[A, B]
+    override def elimFst[A]: (One |*| A) -⚬ A                                                = FreeScaletto.this.elimFst[A]
+    override def elimSnd[A]: (A |*| One) -⚬ A                                                = FreeScaletto.this.elimSnd[A]
+    override def introFst[A]: A -⚬ (One |*| A)                                               = FreeScaletto.this.introFst[A]
+    override def introSnd[A]: A -⚬ (A |*| One)                                               = FreeScaletto.this.introSnd[A]
+    override def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C)                            = FreeScaletto.this.curry(f)
+    override def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B                                           = FreeScaletto.this.eval[A, B]
+  }
 
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
@@ -594,10 +593,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
       lambdas.absNested[A, B](bindVar, f) match {
         case Closure(captured, f) =>
-          (zipExprs(captured) map csmc.curry(f.fold))(resultVar)
+          (zipExprs(captured) map ℭ.curry(f.fold))(resultVar)
         case Exact(f) =>
           val captured0 = $.one(using pos)
-          (captured0 map csmc.curry(elimFst > f.fold))(resultVar)
+          (captured0 map ℭ.curry(elimFst > f.fold))(resultVar)
         case Failure(e) =>
           raiseError(e)
       }

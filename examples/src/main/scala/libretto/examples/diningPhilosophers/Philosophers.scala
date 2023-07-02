@@ -1,8 +1,8 @@
 package libretto.examples.diningPhilosophers
 
-import libretto.scaletto.StarterKit._
-import libretto.scaletto.StarterKit.$._
-import scala.concurrent.duration._
+import libretto.scaletto.StarterKit.*
+import libretto.scaletto.StarterKit.$.*
+import scala.concurrent.duration.*
 import scala.util.Random
 
 object Philosophers {
@@ -11,7 +11,7 @@ object Philosophers {
 }
 
 class Philosophers[ForksImpl <: Forks](val forks: ForksImpl) {
-  import forks._
+  import forks.*
 
   /** A philosopher is given access to two shared forks (each of them shared with one neighbor).
     * When a philosopher finishes, it produces a [[Done]] signal.

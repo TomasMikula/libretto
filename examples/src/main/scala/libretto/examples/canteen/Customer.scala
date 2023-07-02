@@ -1,9 +1,9 @@
 package libretto.examples.canteen
 
-import libretto.examples.canteen.Protocol._
-import libretto.scaletto.StarterKit._
-import libretto.scaletto.StarterKit.$._
-import libretto.scaletto.StarterKit.coreLib._
+import libretto.examples.canteen.Protocol.*
+import libretto.scaletto.StarterKit.*
+import libretto.scaletto.StarterKit.$.*
+import libretto.scaletto.StarterKit.coreLib.*
 
 object Customer {
 

@@ -256,7 +256,7 @@ object Lambdas {
     case class Undefined[VarLabel](vars: Var.Set[VarLabel]) extends Error[VarLabel]
 
     sealed trait LinearityViolation[VarLabel] extends Error[VarLabel] {
-      import LinearityViolation._
+      import LinearityViolation.*
 
       def combine(that: LinearityViolation[VarLabel]): LinearityViolation[VarLabel] =
         (this, that) match {
@@ -291,7 +291,7 @@ object Lambdas {
   }
 
   sealed trait Abstracted[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B] {
-    import Abstracted._
+    import Abstracted.*
 
     def mapExpr[Exp2[_]](g: [X] => Exp[X] => Exp2[X]): Abstracted[Exp2, |*|, AbsFun, V, A, B] =
       this match {

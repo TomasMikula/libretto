@@ -2,7 +2,7 @@ package libretto.testing
 
 import libretto.lambda.util.SourcePos
 import libretto.testing.TestKit.dsl
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 sealed trait TestCase[TK <: TestKit] {
   def pending: TestCase[TK] =
@@ -20,7 +20,7 @@ object TestCase {
   sealed trait SingleProgram[TK <: TestKit] extends Single[TK] {
     val testKit: TK
     import testKit.{ExecutionParam, Outcome}
-    import testKit.dsl._
+    import testKit.dsl.*
     import testKit.bridge.Execution
 
     type O

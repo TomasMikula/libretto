@@ -5,7 +5,7 @@ import libretto.util.Async
 import scala.collection.mutable
 
 private class ResourceRegistry {
-  import ResourceRegistry._
+  import ResourceRegistry.*
 
   // negative value indicates registry closed
   private var lastResId: Long =
