@@ -822,13 +822,6 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     given negativeSignaling[A]: Signaling.Negative[Source[A]] =
       Signaling.Negative.from(Source.notifyAction[A])
 
-    // negativeSource
-    given [A : Junction.Positive]: SignalingJunction.Negative[Source[A]] =
-      SignalingJunction.Negative.from(
-        negativeSignaling,
-        Junction.invert(positiveJunction),
-      )
-
     given closeableSource[A]: Closeable[Source[A]] =
       Closeable.from(Source.close)
 
@@ -896,12 +889,6 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           .>(distributeR)
           .>(either(upstreamClosed, upstreamValue))
       }
-
-      given [A : Junction.Positive]: SignalingJunction.Positive[Polled[A]] =
-        SignalingJunction.Positive.eitherPos(using
-          SignalingJunction.Positive.signalingJunctionPositiveDone,
-          Junction.Positive.byFst,
-        )
     }
   }
 
