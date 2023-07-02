@@ -56,15 +56,15 @@ abstract class ScalettoStreams {
 
   private lazy val Tree = BinarySearchTree(dsl, coreLib, scalettoLib)
 
-  import dsl._
-  import dsl.$._
-  import coreLib._
-  import scalettoLib.{_, given}
-  import underlying._
-  import Tree._
+  import dsl.*
+  import dsl.$.*
+  import coreLib.*
+  import scalettoLib.{*, given}
+  import underlying.*
+  import Tree.*
   import Comonoid.given
 
-  export underlying.{lib => _, dsl => _, _}
+  export underlying.{lib => _, dsl => _, *}
 
   type ValSourceT[T, A] = SourceT[T, Val[A]]
 
@@ -528,8 +528,6 @@ abstract class ScalettoStreams {
         }
 
       val go: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done = rec { self =>
-        import Source.Polled.positivePolled
-
         given SignalingJunction.Positive[KSubs] =
           SignalingJunction.Positive.byFst[Val[K], -[ValSource[V]]]
 
@@ -577,9 +575,6 @@ abstract class ScalettoStreams {
 
       def delayBy[A]: (Done |*| Polled[A]) -⚬ Polled[A] =
         Source.Polled.delayBy
-
-      implicit def positivePolled[A]: SignalingJunction.Positive[Polled[A]] =
-        Source.Polled.positivePolled[Val[A]]
 
       def dup[A](
         dupSource: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]),

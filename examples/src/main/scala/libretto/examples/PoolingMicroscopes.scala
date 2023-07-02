@@ -1,7 +1,7 @@
 package libretto.examples
 
 import libretto.scaletto.StarterApp
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 /**
  * N scientists sharing M microscopes (N > M).
@@ -34,10 +34,11 @@ object PoolingMicroscopes extends StarterApp {
           .>(assocLR > elimSnd(backvert))   .to[    Done                                    ]
     }
 
-    implicit def signalMicroscopeReadiness: Signaling.Positive[Microscope] =
+    // signalMicroscopeReadiness
+    given Signaling.Positive[Microscope] =
       signalingVal
   }
-  import Microscopes._
+  import Microscopes.*
 
   def doExperiment(
     scientistName: String,

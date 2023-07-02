@@ -1,10 +1,10 @@
 package libretto.examples.tv
 
-import libretto.scaletto.StarterKit._
-import libretto.scaletto.StarterKit.$._
-import libretto.stream.scaletto.DefaultStreams._
+import libretto.scaletto.StarterKit.*
+import libretto.scaletto.StarterKit.$.*
+import libretto.stream.scaletto.DefaultStreams.*
 import TvChannel.{Cooking, Discovery, Sport}
-import TvInterface._
+import TvInterface.*
 import TvInterface.Tv.{turnOff, watch}
 
 object TvViewer {

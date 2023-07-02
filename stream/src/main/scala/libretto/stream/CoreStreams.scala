@@ -16,9 +16,9 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
   val dsl: DSL,
   val lib: Lib with CoreLib[dsl.type],
 ) {
-  import dsl._
-  import dsl.$._
-  import lib._
+  import dsl.*
+  import dsl.$.*
+  import lib.{*, given}
 
   type StreamLeaderF[S, T, A, X]   = S |+| (T |&| (A |*| X))
   type StreamFollowerF[S, T, A, X] = S |&| (T |+| (A |*| X))
@@ -428,7 +428,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     }
 
     /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */
-    def delayBy[A](implicit ev: Junction.Positive[A]): (Done |*| Source[A]) -⚬ Source[A] =
+    def delayBy[A](using ev: Junction.Positive[A]): (Done |*| Source[A]) -⚬ Source[A] =
       id                                           [  Done |*|      Source[A]                  ]
         .>.snd(toChoice)                        .to[  Done |*| (Done  |&|           Polled[A]) ]
         .>(delayChoiceUntilDone)                .to[ (Done |*|  Done) |&| (Done |*| Polled[A]) ]
@@ -820,13 +820,14 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       SourceT.from(onClose, onPoll)
     }
 
-    implicit def positiveJunction[A](implicit A: Junction.Positive[A]): Junction.Positive[Source[A]] =
+    given positiveJunction[A : Junction.Positive]: Junction.Positive[Source[A]] =
       Junction.Positive.from(Source.delayBy)
 
-    implicit def negativeSignaling[A]: Signaling.Negative[Source[A]] =
+    given negativeSignaling[A]: Signaling.Negative[Source[A]] =
       Signaling.Negative.from(Source.notifyAction[A])
 
-    implicit def negativeSource[A](implicit A: Junction.Positive[A]): SignalingJunction.Negative[Source[A]] =
+    // negativeSource
+    given [A : Junction.Positive]: SignalingJunction.Negative[Source[A]] =
       SignalingJunction.Negative.from(
         negativeSignaling,
         Junction.invert(positiveJunction),
@@ -900,10 +901,10 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           .either(upstreamClosed, upstreamValue)
       }
 
-      implicit def positivePolled[A](implicit A: Junction.Positive[A]): SignalingJunction.Positive[Polled[A]] =
-        SignalingJunction.Positive.eitherPos(
+      given [A : Junction.Positive]: SignalingJunction.Positive[Polled[A]] =
+        SignalingJunction.Positive.eitherPos(using
           SignalingJunction.Positive.signalingJunctionPositiveDone,
-          Junction.Positive.byFst(A),
+          Junction.Positive.byFst,
         )
     }
   }

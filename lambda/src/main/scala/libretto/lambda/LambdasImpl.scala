@@ -86,7 +86,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
    * Non-linear: includes projections and multiple occurrences of the same variable.
    */
   sealed trait Expr[B] {
-    import Expr._
+    import Expr.*
 
     def resultVar: Var[B]
 
@@ -396,7 +396,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
   }
 
   private case class HybridArrow[A, B](v: Var[A], tail: HybridArrow.Tail[Var[A], B]) {
-    import HybridArrow._
+    import HybridArrow.*
 
     def >[C](that: Tail[B, C]): HybridArrow[A, C] =
       HybridArrow(v, tail > that)
@@ -539,7 +539,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
 
   private object HybridArrow {
     sealed trait Op[A, B] {
-      import Op._
+      import Op.*
 
       def project[C](p: Projection[|*|, B, C]): shOp.ProjectRes[A, C] =
         p match {

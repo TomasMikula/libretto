@@ -1,7 +1,7 @@
 package libretto.examples.tv
 
-import libretto.scaletto.StarterKit._
-import libretto.stream.scaletto.DefaultStreams._
+import libretto.scaletto.StarterKit.*
+import libretto.stream.scaletto.DefaultStreams.*
 
 object TvInterface {
   type Tv = Rec[TvF]

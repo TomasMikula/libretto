@@ -1,6 +1,6 @@
 package libretto.mashup
 
-import libretto.mashup.dsl._
+import libretto.mashup.dsl.*
 import zio.Chunk
 import zio.json.ast.Json
 

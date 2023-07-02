@@ -1,7 +1,7 @@
 package libretto.examples.diningPhilosophers
 
-import libretto.scaletto.StarterKit._
-import libretto.scaletto.StarterKit.$._
+import libretto.scaletto.StarterKit.*
+import libretto.scaletto.StarterKit.$.*
 
 trait Forks {
   /** Interface to a fork. The fork itself may be shared among multiple philosophers,
@@ -33,5 +33,5 @@ trait Forks {
     *  - signal readiness (when picked up or done being used).
     *  - defer readiness by awaiting a [[Done]] signal.
     */
-  implicit def heldForkReadiness: SignalingJunction.Positive[HeldFork]
+  given heldForkReadiness: SignalingJunction.Positive[HeldFork]
 }

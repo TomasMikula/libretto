@@ -1,7 +1,7 @@
 package libretto.examples
 
 import libretto.scaletto.StarterApp
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 /**
  * This example implements interaction between two parties, Alice and Bob, in which

@@ -16,9 +16,9 @@ class InvertStreams[DSL <: InvertDSL, Lib <: CoreLib[DSL]](
   override val dsl: DSL,
   override val lib: Lib with CoreLib[dsl.type],
 ) extends CoreStreams[DSL, Lib](dsl, lib) {
-  import dsl._
-  import dsl.$._
-  import lib._
+  import dsl.*
+  import dsl.$.*
+  import lib.*
 
   opaque type Drain[A] = StreamT[Need, -[A]]
   opaque type Sink[A]  = SourceT[Need, -[A]]

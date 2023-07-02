@@ -16,8 +16,8 @@ class ClosedLib[
   val dsl: DSL,
   val coreLib: CLib with CoreLib[dsl.type],
 ) { lib =>
-  import dsl._
-  import coreLib._
+  import dsl.*
+  import coreLib.*
 
   /** Function object (internal hom) is contravariant in the input type. */
   def input[C]: ContraFunctor[[x] =>> x =⚬ C] =
@@ -43,15 +43,15 @@ class ClosedLib[
         out(f)
     }
 
-  implicit class ClosedLinearFunctionOps[A, B](self: A -⚬ B) {
-    def curry[A1, A2](implicit ev: A =:= (A1 |*| A2)): A1 -⚬ (A2 =⚬ B) =
-      dsl.curry(ev.substituteCo[λ[x => x -⚬ B]](self))
+  extension [A, B](f: A -⚬ B) {
+    def curry[A1, A2](using ev: A =:= (A1 |*| A2)): A1 -⚬ (A2 =⚬ B) =
+      dsl.curry(ev.substituteCo[λ[x => x -⚬ B]](f))
 
-    def uncurry[B1, B2](implicit ev: B =:= (B1 =⚬ B2)): (A |*| B1) -⚬ B2 =
-      dsl.uncurry(ev.substituteCo(self))
+    def uncurry[B1, B2](using ev: B =:= (B1 =⚬ B2)): (A |*| B1) -⚬ B2 =
+      dsl.uncurry(ev.substituteCo(f))
   }
 
-  implicit class FocusedOnFunctionCo[F[_], A, B](f: FocusedCo[F, A =⚬ B]) {
+  extension [F[_], A, B](f: FocusedCo[F, A =⚬ B]) {
     def input: FocusedContra[λ[x => F[x =⚬ B]], A] =
       f.zoomContra(lib.input[B])
 
@@ -59,7 +59,7 @@ class ClosedLib[
       f.zoomCo(lib.output[A])
   }
 
-  implicit class FocusedOnFunctionContra[F[_], A, B](f: FocusedContra[F, A =⚬ B]) {
+  extension [F[_], A, B](f: FocusedContra[F, A =⚬ B]) {
     def input: FocusedCo[λ[x => F[x =⚬ B]], A] =
       f.zoomContra(lib.input[B])
 
@@ -67,7 +67,7 @@ class ClosedLib[
       f.zoomCo(lib.output[A])
   }
 
-  def zapPremises[A, Ā, B, C](implicit ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
+  def zapPremises[A, Ā, B, C](using ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
     id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
       .introSnd(ev.lInvert)      .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (Ā |*| A) ]
       .>.snd(swap)               .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
@@ -78,7 +78,7 @@ class ClosedLib[
   /** Given `A` and `B` concurrently (`A |*| B`), we can suggest that `A` be consumed before `B`
     * by turning it into `Ā =⚬ B`, where `Ā` is the dual of `A`.
     */
-  def unveilSequentially[A, Ā, B](implicit ev: Dual[A, Ā]): (A |*| B) -⚬ (Ā =⚬ B) =
+  def unveilSequentially[A, Ā, B](using ev: Dual[A, Ā]): (A |*| B) -⚬ (Ā =⚬ B) =
     id[(A |*| B) |*| Ā]           .to[ (A |*|  B) |*| Ā  ]
       .assocLR                    .to[  A |*| (B  |*| Ā) ]
       .>.snd(swap)                .to[  A |*| (Ā  |*| B) ]

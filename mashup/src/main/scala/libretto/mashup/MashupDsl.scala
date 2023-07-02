@@ -287,13 +287,12 @@ trait MashupDsl {
   }
 
   object Comonoid {
-    implicit val comonoidEmpty: Comonoid[EmptyResource] =
-      new Comonoid[EmptyResource] {
-        override def counit: Fun[EmptyResource, EmptyResource] =
-          id[EmptyResource]
+    given Comonoid[EmptyResource] with {
+      override def counit: Fun[EmptyResource, EmptyResource] =
+        id[EmptyResource]
 
-        override def split: Fun[EmptyResource, EmptyResource ** EmptyResource] =
-          fun(_ => Expr.unit ** Expr.unit)
-      }
+      override def split: Fun[EmptyResource, EmptyResource ** EmptyResource] =
+        fun(_ => Expr.unit ** Expr.unit)
+    }
   }
 }

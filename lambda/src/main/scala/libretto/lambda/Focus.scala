@@ -1,7 +1,7 @@
 package libretto.lambda
 
 sealed trait Focus[|*|[_, _], F[_]] {
-  import Focus._
+  import Focus.*
 
   def compose[G[_]](that: Focus[|*|, G]): Focus[|*|, [x] =>> F[G[x]]] =
     this match {

@@ -19,7 +19,7 @@ object ScalettoTestExecutor {
 
       override val dsl: bridge0.dsl.type = bridge0.dsl
       override val bridge: bridge0.type = bridge0
-      import dsl._
+      import dsl.*
       import bridge.Execution
 
       override type Assertion[A] = Val[String] |+| A
@@ -29,7 +29,7 @@ object ScalettoTestExecutor {
         ScalettoTestExecutor.ExecutionParam.manualClockParamsInstance
 
       private val coreLib = CoreLib(this.dsl)
-      import coreLib.{Monad => _, _}
+      import coreLib.{Monad => _, *}
 
       override def success[A]: A -⚬ Assertion[A] =
         injectR
@@ -137,7 +137,7 @@ object ScalettoTestExecutor {
       override val testKit: kit.type = kit
 
       import testKit.{ExecutionParam, Outcome}
-      import testKit.dsl._
+      import testKit.dsl.*
       import testKit.bridge.Execution
 
       override def execpAndCheck[O, P, Y](

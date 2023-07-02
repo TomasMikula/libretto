@@ -6,7 +6,7 @@ trait TimerDSL extends CoreDSL {
   def delay(d: FiniteDuration): Done -⚬ Done
 
   private val lib = CoreLib(this)
-  import lib._
+  import lib.*
 
   def delayNeed(d: FiniteDuration): Need -⚬ Need = {
     id                           [                      Need  ]

@@ -4,7 +4,7 @@ import libretto.lambda.util.{Applicative, Monad}
 
 /** A collection of arrows of the form `Ai --> B`, with `A = A1 <+> ... <+> An`. */
 sealed trait Sink[-->[_, _], <+>[_, _], A, B] {
-  import Sink._
+  import Sink.*
 
   def <+>[X](that: Sink[-->, <+>, X, B]): Sink[-->, <+>, A <+> X, B] =
     Join(this, that)

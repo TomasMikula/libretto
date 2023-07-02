@@ -3,7 +3,7 @@ package libretto.testing
 import libretto.{CoreDSL, Executor}
 import libretto.Executor.CancellationReason
 import libretto.lambda.util.Monad
-import libretto.lambda.util.Monad.syntax._
+import libretto.lambda.util.Monad.syntax.*
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 
@@ -11,7 +11,7 @@ trait TestExecutor[+TK <: TestKit] { self =>
   val testKit: TK
 
   import testKit.{ExecutionParam, Outcome}
-  import testKit.dsl._
+  import testKit.dsl.*
   import testKit.bridge.Execution
 
   def name: String
@@ -111,7 +111,7 @@ object TestExecutor {
   class UsingExecutor[E <: Executor](val executor: E) {
     import executor.ExecutionParam
     import executor.bridge.Execution
-    import executor.dsl._
+    import executor.dsl.*
 
     def runTestCase[O, P, X](
       body: Done -⚬ O,
