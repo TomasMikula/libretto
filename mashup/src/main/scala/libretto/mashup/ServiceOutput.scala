@@ -5,7 +5,7 @@ import libretto.mashup.dsl.{-->, Fun, Unlimited}
 import libretto.mashup.rest.{Endpoint, Path, RestApi}
 import libretto.mashup.ZioHttpServer.{NextRequest, RequestStream}
 import zio.{Promise, Scope, ZIO}
-import zio.http.{Path => ZPath, Request, Response}
+import zio.http.{Path as ZPath, Request, Response}
 import zio.http.model.Status
 
 sealed trait ServiceOutput[A] {

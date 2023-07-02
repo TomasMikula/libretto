@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.{Projection => P}
+import libretto.lambda.{Projection as P}
 import libretto.lambda.util.{BiInjective, Exists, TypeEq}
 import libretto.lambda.util.BiInjective.*
 import libretto.lambda.util.TypeEq.Refl
@@ -622,7 +622,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       }
 
     def projectProper[C](p: Projection.Proper[|*|, Y1 |*| Y2, C]): ProjectProperRes[X1 |*| X2, C] = {
-      import libretto.lambda.{Projection => P}
+      import libretto.lambda.{Projection as P}
       val Par(f1, f2) = this
       p.fromPair[Y1, Y2].switch[ProjectProperRes[X1 |*| X2, C]](
         caseDiscardFst = { p2 =>

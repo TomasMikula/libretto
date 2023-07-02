@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.{Projection => P}
+import libretto.lambda.{Projection as P}
 import libretto.lambda.util.{Applicative, BiInjective, Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.Projection.Proper
@@ -26,7 +26,7 @@ object Shuffled {
 
 sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   val shuffle: Shuffle[|*|]
-  import shuffle.{~⚬, Transfer, TransferOpt, zip => zipEq}
+  import shuffle.{~⚬, Transfer, TransferOpt, zip as zipEq}
 
   def biInjectiveProduct: BiInjective[|*|] = summon
 

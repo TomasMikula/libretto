@@ -29,7 +29,7 @@ object ScalettoTestExecutor {
         ScalettoTestExecutor.ExecutionParam.manualClockParamsInstance
 
       private val coreLib = CoreLib(this.dsl)
-      import coreLib.{Monad => _, *}
+      import coreLib.{Monad as _, *}
 
       override def success[A]: A -⚬ Assertion[A] =
         injectR
@@ -46,7 +46,7 @@ object ScalettoTestExecutor {
       override def extractOutcome(using exn: Execution, pos: SourcePos)(
         outPort: exn.OutPort[Assertion[Done]],
       ): Outcome[Unit] = {
-        import TestResult.{crash, success => succeed, failed => fail}
+        import TestResult.{crash, success as succeed, failed as fail}
         Outcome.asyncTestResult(
           exn.OutPort
             .awaitEither[Val[String], Done](outPort)

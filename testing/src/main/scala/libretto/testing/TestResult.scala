@@ -1,7 +1,7 @@
 package libretto.testing
 
 import libretto.lambda.util.SourcePos
-import scala.{:: => NonEmptyList}
+import scala.{:: as NonEmptyList}
 import scala.concurrent.duration.FiniteDuration
 
 enum TestResult[A] {
