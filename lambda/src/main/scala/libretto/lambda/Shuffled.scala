@@ -4,6 +4,7 @@ import libretto.lambda.{Projection as P}
 import libretto.lambda.util.{Applicative, BiInjective, Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.Projection.Proper
+import scala.annotation.nowarn
 
 object Shuffled {
   type With[->[_, _], |*|[_, _], S <: Shuffle[|*|]] =
@@ -443,6 +444,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       def chaseFwFst[F[_], X](i: Focus[|*|, F])(using ev: A1 =:= F[X]): ChaseFwRes.Blocked[[x] =>> F[x] |*| A2, X, B]
       def chaseFwSnd[F[_], X](i: Focus[|*|, F])(using ev: A2 =:= F[X]): ChaseFwRes.Blocked[[x] =>> A1 |*| F[x], X, B]
 
+      @nowarn("msg=match may not be exhaustive")
       final override def chaseFw[F[_], X](i: Focus[|*|, F])(using ev: (A1 |*| A2) =:= F[X]): ChaseFwRes.Blocked[F, X, B] =
         ev match { case TypeEq(Refl()) =>
           i match {
@@ -464,6 +466,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       def chaseBwFst[G[_], X](i: Focus[|*|, G])(using B1 =:= G[X]): ChaseBwRes.Blocked[A, [x] =>> G[x] |*| B2, X]
       def chaseBwSnd[G[_], X](i: Focus[|*|, G])(using B2 =:= G[X]): ChaseBwRes.Blocked[A, [x] =>> B1 |*| G[x], X]
 
+      @nowarn("msg=match may not be exhaustive")
       final override def chaseBw[G[_], X](i: Focus[|*|, G])(using ev: (B1 |*| B2) =:= G[X]): ChaseBwRes.Blocked[A, G, X] =
         i match
           case Focus.Id() =>
@@ -775,6 +778,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         (tgt.Plated.SemiCons(semiHead1, s, t, tail1), b)
       }
 
+      @nowarn("msg=match may not be exhaustive")
       override def translate[->>[_, _], <*>[_, _], F[_, _], S](
         fa: F[A1 |*| A2, S],
         om: ObjectMap[|*|, <*>, F],
@@ -874,6 +878,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         (tgt.Plated.SemiSnoc(init1, t.rebase(tgt), s, sl1), F.zip(b1, b2))
       }
 
+      @nowarn("msg=match may not be exhaustive")
       override def translate[->>[_, _], <*>[_, _], F[_, _], S](
         fa: F[A, S],
         om: ObjectMap[|*|, <*>, F],
@@ -1003,6 +1008,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         )
       }
 
+      @nowarn("msg=match may not be exhaustive")
+      @nowarn("msg=type test")
       override def translate[->>[_, _], <*>[_, _], F[_, _], S](
         fa: F[A1 |*| A2, S],
         om: ObjectMap[|*|, <*>, F],
@@ -1054,6 +1061,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     def project[C](p: Projection[|*|, B1 |*| B2, C]): ProjectRes[A1 |*| A2, C] =
       ProjectRes(asShuffle.project(p))
 
+    @nowarn("msg=match may not be exhaustive")
     def translate[->>[_, _], <*>[_, _], F[_, _], S1, S2](
       fa1: F[A1, S1],
       fa2: F[A2, S2],
@@ -1320,6 +1328,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       override def andThen[C](that: Shuffled[B, C]): ChaseFwRes[F, X, C] =
         that.chaseFw[G, X](g)(using ev.flip).after(s)
 
+      @nowarn("msg=match may not be exhaustive")
       override def thenSnd[B1, B2, C2](using ev1: B =:= (B1 |*| B2))(that: Shuffled[B2, C2]): ChaseFwRes[F, X, B1 |*| C2] =
         g match {
           case g: Focus.Fst[pair, g1, b2] =>

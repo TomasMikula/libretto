@@ -3,8 +3,10 @@ package libretto.examples.sunflowers
 import libretto.scaletto.StarterKit.*
 import libretto.stream.scaletto.DefaultStreams.ValSource
 import libretto.stream.scaletto.DefaultStreams.ValSource.{Polled, fromChoice, notifyAction, poll}
+import scala.annotation.nowarn
 
 object SunflowerProcessingFacility {
+  @nowarn("msg=match may not be exhaustive")
   def blueprint: ValSource[Sunflower] -⚬ (ValSource[SeedsPack] |*| ValSource[OilBottle]) = rec { self =>
     λ { sunflowers =>
       // give names to the outputs

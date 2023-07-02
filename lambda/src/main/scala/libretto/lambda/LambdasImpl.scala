@@ -6,6 +6,7 @@ import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.lambda.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
+import scala.annotation.nowarn
 
 class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
   ssc: SymmetricSemigroupalCategory[-⚬, |*|],
@@ -631,6 +632,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
         override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A1 |*| A2]]] =
           varIsNotPair(ev.flip)
 
+        @nowarn("msg=match may not be exhaustive")
         override def asZip[P1, P2](using
           ev: (Var[A1] |*| Var[A2]) =:= (P1 |*| P2),
         ): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[A1 |*| A2] =:= Var[V1 |*| V2])]] =
@@ -702,6 +704,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
             case (None, Some(_)) =>
               bug(s"Variable ${that.resultVar} appeared as a result of two different projections")
 
+        @nowarn("msg=match may not be exhaustive")
         override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using
           ev: Var[A1 |*| A2] =:= Var[T1 |*| T2],
         ): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A1]]] =
@@ -855,6 +858,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
         override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[X |*| A]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.unzip_gcd_this")
 
+        @nowarn("msg=match may not be exhaustive")
         override def cap1_gcd_this[T, Y](that: CaptureFst[T, Y])(using ev: Var[A] =:= Var[T]): Option[Tail[Var[T], Var[Y |*| T] |*| Var[X |*| A]]] =
           ev match { case Injective[Var](TypeEq(Refl())) =>
             (that.resultVar testEqual this.resultVar) map {
@@ -889,6 +893,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
         override def cap1_gcd_this[T, Y](that: CaptureFst[T, Y])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[Y |*| T] |*| Var[A |*| X]]] =
           None
 
+        @nowarn("msg=match may not be exhaustive")
         override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using ev: Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A |*| X]]] =
           ev match { case Injective[Var](TypeEq(Refl())) =>
             (that.resultVar testEqual this.resultVar) map {
@@ -935,6 +940,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
           }
       }
 
+      @nowarn("msg=match may not be exhaustive")
+      @nowarn("msg=type test")
       def gcd[C[_], D[_], X, Y, Z](
         f: Op.Affine[C[Var[X]], Y],
         g: Op.Affine[D[Var[X]], Z],
@@ -964,6 +971,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
         }
       }
 
+      @nowarn("msg=match may not be exhaustive")
       private def gcdZips[A1, A2, B1, B2](
         z1: Zip[A1, A2],
         z2: Zip[B1, B2],
@@ -1070,6 +1078,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
         case Op.Prj2(_, _)       => None
     }
 
+    @nowarn("msg=match may not be exhaustive")
     def pullBumpDupVar[A, F[_], V, C[_], B, D[_], Y](
       pre: Tail[A, F[Var[V]]],
       post: Tail[F[C[Var[V]]], B],
@@ -1211,6 +1220,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
   }
   object Unvar {
     case class SingleVar[V]() extends Unvar[Var[V], V] {
+      @nowarn("msg=match may not be exhaustive")
       override def uniqueOutType[C](that: Unvar[Var[V], C]): V =:= C =
         that.maskInput.visit([VV] => (that: Unvar[VV, C], ev: VV =:= Var[V]) => {
           that match {
@@ -1225,6 +1235,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
     }
 
     case class Par[A1, A2, X1, X2](u1: Unvar[A1, X1], u2: Unvar[A2, X2]) extends Unvar[A1 |*| A2, X1 |*| X2] {
+      @nowarn("msg=match may not be exhaustive")
       override def uniqueOutType[C](that: Unvar[A1 |*| A2, C]): (X1 |*| X2) =:= C =
         that.maskInput.visit([A] => (that: Unvar[A, C], ev: A =:= (A1 |*| A2)) => {
           that match {
@@ -1248,6 +1259,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
         override def pair[A1, A2, X1, X2](f1: Unvar[A1, X1], f2: Unvar[A2, X2]): Unvar[A1 |*| A2, X1 |*| X2] =
           Unvar.Par(f1, f2)
 
+        @nowarn("msg=match may not be exhaustive")
         override def unpair[A1, A2, X](f: Unvar[A1 |*| A2, X]): Unpaired[A1, A2, X] =
           f.maskInput.visit[Unpaired[A1, A2, X]]([A] => (u: Unvar[A, X], ev: A =:= (A1 |*| A2)) => {
             u match {
@@ -1266,6 +1278,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
     [V, A, B] => (ev: Var[V] =:= (A |*| B)) => throw new AssertionError("Var[A] =:= (A |*| B)")
 
   extension[F[_], V, U](ev: F[Var[V]] =:= (Var[U] |*| Var[U])) {
+    @nowarn("msg=match may not be exhaustive")
     def deriveEquality(f: Focus[|*|, F]): V =:= U =
       f match {
         case f: Focus.Fst[pair, f1, q] =>

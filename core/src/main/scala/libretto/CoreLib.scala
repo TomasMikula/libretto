@@ -5,6 +5,7 @@ import libretto.lambda.util.SourcePos
 import libretto.util.unapply.*
 import libretto.util.{Equal, ∀}
 import scala.annotation.tailrec
+import scala.annotation.nowarn
 
 object CoreLib {
   def apply(dsl: CoreDSL): CoreLib[dsl.type] =
@@ -1199,6 +1200,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def selectAgainstR[A](using A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (A |*| Need) =
     |&|.swap > selectAgainstL > swap
 
+  @nowarn("msg=match may not be exhaustive")
   def racePreferred[A, B](using
     A: Signaling.Positive[A],
     B: Signaling.Positive[B],
@@ -1215,6 +1217,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
   }
 
+  @nowarn("msg=match may not be exhaustive")
   def raceHandicap[A, B, C](f: (Ping |*| B) -⚬ C)(using
     A: Signaling.Positive[A],
     C: Signaling.Positive[C],
@@ -3322,6 +3325,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Merges the two lists as they unfold, i.e. as soon as the next element becomes available in one of the lists,
      *  it also becomes available as the next element of the result list.
      */
+    @nowarn("msg=match may not be exhaustive")
     def merge[T]: (LList[T] |*| LList[T]) -⚬ LList[T] = rec { self =>
       λ { case as |*| bs =>
         race(as |*| bs) switch {
@@ -3346,6 +3350,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
      *  their timely appearence in the input list is sufficient for them to come before
      *  the inserted element.
      */
+    @nowarn("msg=match may not be exhaustive")
     def insertBySignal[T](using Signaling.Positive[T]): (T |*| LList[T]) -⚬ LList[T] =
       rec { self =>
         λ { case a |*| as =>
@@ -3681,6 +3686,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def mapSequentially[A, B](f: A -⚬ B)(using Signaling.Positive[B]): Endless[A] -⚬ Endless[B] =
       mapSequence(f > notifyPosFst)
 
+    @nowarn("msg=match may not be exhaustive")
     def foldLeftSequentially[B, A](f: (B |*| A) -⚬ B)(using
       Signaling.Positive[B]
     ): (B |*| Endless[A]) -⚬ B =
@@ -3746,6 +3752,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       def go: ((A |*| Endless[A]) |*| Endless[A]) -⚬ Endless[A] = rec { self =>
         λ { case (a |*| as) |*| bs =>
           val po |*| pi = constant(lInvertPongPing)
+          @nowarn("msg=match may not be exhaustive")
           val res: $[One |&| (A |*| Endless[A])] =
             race[Ping, A](pi |*| a) switch {
               case Left(?(_) |*| a) =>

@@ -3,6 +3,7 @@ package libretto.lambda
 import libretto.lambda.Lambdas.Error.LinearityViolation.{OverUnder, Overused, Underused}
 import libretto.lambda.util.{BiInjective, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
+import scala.annotation.nowarn
 
 sealed trait Fun[A, B] {
 
@@ -222,6 +223,7 @@ object Fun {
     case Pair[A, B](_1: Values[A], _2: Values[B]) extends Values[A ** B]
   }
 
+  @nowarn("msg=match may not be exhaustive")
   private def evaluate[A, B](f: Fun[A, B])(a: Values[A]): Values[B] = {
     import Values.{Pair, SingleVal}
 

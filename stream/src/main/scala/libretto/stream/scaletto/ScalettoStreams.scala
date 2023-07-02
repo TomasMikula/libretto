@@ -6,6 +6,7 @@ import libretto.scaletto.{Scaletto, ScalettoLib}
 import libretto.stream.InvertStreams
 import scala.annotation.{tailrec, targetName}
 import scala.concurrent.duration.FiniteDuration
+import scala.annotation.nowarn
 
 object ScalettoStreams {
   type Of[
@@ -381,6 +382,7 @@ abstract class ScalettoStreams {
     def prefetch[A](n: Int): ValSource[A] -⚬ ValSource[A] =
       Source.prefetch[Val[A]](n)(neglect, Exists(inversionDuality[LList[Done]]))
 
+    @nowarn("msg=match may not be exhaustive")
     def dropUntilFirstDemand[A]: ValSource[A] -⚬ ValSource[A] = rec { self =>
       poll > λ { as =>
         producing { out =>
@@ -576,6 +578,7 @@ abstract class ScalettoStreams {
       def delayBy[A]: (Done |*| Polled[A]) -⚬ Polled[A] =
         Source.Polled.delayBy
 
+      @nowarn("msg=match may not be exhaustive")
       def dup[A](
         dupSource: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]),
       ): Polled[A] -⚬ (Polled[A] |*| Polled[A]) =

@@ -7,6 +7,7 @@ import libretto.scaletto.{Scaletto, ScalettoBridge, ScalettoExecutor, StarterKit
 import libretto.testing.{ManualClock, ManualClockParams, TestExecutor, TestResult}
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
+import scala.annotation.nowarn
 
 object ScalettoTestExecutor {
   import ExecutionParam.Instantiation
@@ -85,6 +86,7 @@ object ScalettoTestExecutor {
         ExecutionParams.Free.wrap(ManualClockParam)
     }
 
+    @nowarn("msg=type test")
     def instantiate[A, P[_]](p: ExecutionParam[A])(using
       ep: ExecutionParams.WithScheduler[P],
     ): Instantiation[A, P] = {
