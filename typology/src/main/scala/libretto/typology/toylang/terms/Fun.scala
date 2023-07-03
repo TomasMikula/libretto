@@ -7,6 +7,9 @@ import libretto.typology.toylang.types.{Fix, RecCall, TypeTag}
 case class Fun[A, B](value: FunT[Fun, A, B]) {
   def >[C](that: Fun[B, C]): Fun[A, C] =
     Fun(FunT.AndThen(this, that))
+
+  override def toString: String =
+    value.toString
 }
 
 object Fun {

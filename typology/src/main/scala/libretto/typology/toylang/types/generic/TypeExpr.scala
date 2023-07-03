@@ -1,7 +1,7 @@
 package libretto.typology.toylang.types.generic
 
 import libretto.lambda.util.Applicative._
-import libretto.lambda.util.Monad
+import libretto.lambda.util.{Monad, SourcePos}
 import libretto.lambda.util.Monad.syntax._
 import libretto.typology.kinds._
 import libretto.typology.toylang.types.{AbstractTypeLabel, ArgIntro, ArgTrans, Routing}
@@ -66,7 +66,7 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
         } yield PFix(pre, expr)
 
       case other =>
-        throw new NotImplementedError(s"$other")
+        throw new NotImplementedError(s"$other (${summon[SourcePos]})")
     }
   }
 
@@ -106,7 +106,7 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
           case ArgIntro.IntroBoth(a1, a2) =>
             BiApp(Pair[F](), ArgIntro.unwrap(a1), ArgIntro.unwrap(a2)).pure[M]
           case other =>
-            throw new NotImplementedError(s"$other")
+            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
 
       case AppFst(op, arg1) =>
@@ -125,7 +125,7 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
         }
 
       case other =>
-        throw new NotImplementedError(s"Applying $other to $args")
+        throw new NotImplementedError(s"Applying $other to $args (${summon[SourcePos]})")
     }
   }
 
@@ -142,7 +142,7 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
             transApp(g, f)
               .map(AppCompose(op.cast, ArgIntro.unwrap(a), _))
           case other =>
-            throw new NotImplementedError(s"$other")
+            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
 
       case AppCompose(op, a, g) =>
@@ -161,11 +161,11 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
               .from(using ArgIntro.deriveId(f))
               .pure[M]
           case other =>
-            throw new NotImplementedError(s"$other")
+            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
 
       case other =>
-        throw new NotImplementedError(s"Applying $other to $args")
+        throw new NotImplementedError(s"Applying $other to $args (${summon[SourcePos]})")
     }
   }
 
@@ -206,18 +206,26 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
             transApp(e, g)
               .map(Fix(q, _))
         }
+
+      case AppFst(op, a) =>
+        f match {
+          case ArgTrans.Wrap(b) =>
+            BiApp(op.cast[F], trans(a), b).pure[M]
+          case other =>
+            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
+        }
       case AppSnd(op, b) =>
         f match {
           case ArgTrans.Wrap(a) =>
             BiApp(op.cast[F], a, trans(b)).pure[M]
           case other =>
-            throw new NotImplementedError(s"$other")
+            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
       case AppCompose(op, a, g) =>
         transApp(g, f)
           .map(BiApp(op.cast[F], trans(a), _))
       case other =>
-        throw new NotImplementedError(s"$other")
+        throw new NotImplementedError(s"$other (${summon[SourcePos]})")
     }
 
   private def transCompose1M[F[_, _], J: ProperKind, M[_]: Monad](
@@ -239,7 +247,7 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
         case ArgTrans.IntroFst(f1) =>
           AppFst(op.cast[F], ArgTrans.unwrap(f1)).pure[M]
         case other =>
-          throw new NotImplementedError(s"$other")
+          throw new NotImplementedError(s"$other (${summon[SourcePos]})")
       }
     }
 
@@ -253,7 +261,7 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
           case ArgTrans.Wrap(h) =>
             appCompose(op.cast[F], trans(a), h).pure[M]
           case other =>
-            throw new NotImplementedError(s"$other")
+            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
       case AppCompose(op, a, g) =>
         transComp(g, f)
@@ -264,10 +272,10 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
           case ArgTrans.IntroFst(f1) =>
             appCompose(op.cast[F], ArgTrans.unwrap(f1), trans(g)).pure[M]
           case other =>
-            throw new NotImplementedError(s"$other")
+            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
       case other =>
-        throw new NotImplementedError(s"Composing $other after $f")
+        throw new NotImplementedError(s"Composing $other after $f (${summon[SourcePos]})")
     }
   }
 }
@@ -352,7 +360,7 @@ object TypeExpr {
   ) extends TypeExpr[->>, K, M](using summon, op.outKind)
 
   case class TypeMismatch[->>[_, _], K: Kind, L: OutputKind](
-    a: K ->> L, 
+    a: K ->> L,
     b: K ->> L,
   ) extends TypeExpr[->>, K, L]
 

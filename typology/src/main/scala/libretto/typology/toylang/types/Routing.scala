@@ -1,5 +1,6 @@
 package libretto.typology.toylang.types
 
+import libretto.lambda.util.SourcePos
 import libretto.typology.kinds._
 
 sealed trait Routing[K, L](using
@@ -60,7 +61,7 @@ sealed trait Routing[K, L](using
                 ApplyRes.par(g1.applyTo(f1), g2.applyTo(f2))
               go(f1, f2)(using Kind.fst(p.inKind), Kind.snd(p.inKind))
             case other =>
-              throw new NotImplementedError(s"$other")
+              throw new NotImplementedError(s"$other (${summon[SourcePos]})")
           }
 
         go[k1, k2, l1, l2](args, p.f1, p.f2)
@@ -78,7 +79,7 @@ sealed trait Routing[K, L](using
                 case ArgIntro.IntroBoth(a, b) =>
                   ArgIntro.introFst(a, ArgIntro.introFst(b, f))
                 case other =>
-                  throw new NotImplementedError(s"$other")
+                  throw new NotImplementedError(s"$other (${summon[SourcePos]})")
               }
             case p @ ArgIntro.Par(f1, f2) =>
               def go[J1: ProperKind, J2: ProperKind](f1: ArgIntro[TA, J1, K1 × K2], f2: ArgIntro[TA, J2, K3]): ArgIntro[TA, J1 × J2, K1 × (K2 × K3)] =
@@ -88,11 +89,11 @@ sealed trait Routing[K, L](using
                   case ArgIntro.IntroSnd(f11, b) =>
                     ArgIntro.par(f11, ArgIntro.introFst(b, f2))
                   case other =>
-                    throw new NotImplementedError(s"$other")
+                    throw new NotImplementedError(s"$other (${summon[SourcePos]})")
                 }
               go(f1, f2)(using Kind.fst(p.inKind), Kind.snd(p.inKind))
             case other =>
-              throw new NotImplementedError(s"$other")
+              throw new NotImplementedError(s"$other (${summon[SourcePos]})")
           }
         }
 
@@ -114,10 +115,10 @@ sealed trait Routing[K, L](using
                     ArgIntro.par(ArgIntro.introFst(a, f1), f2)
                   go(f1, f2)(using Kind.fst(p.inKind), Kind.snd(p.inKind))
                 case other =>
-                  throw new NotImplementedError(s"$other")
+                  throw new NotImplementedError(s"$other (${summon[SourcePos]})")
               }
             case other =>
-              throw new NotImplementedError(s"$other")
+              throw new NotImplementedError(s"$other (${summon[SourcePos]})")
           }
         }
 
@@ -129,7 +130,7 @@ sealed trait Routing[K, L](using
           case ArgIntro.Id() =>
             ApplyRes(Dup[K](), ArgIntro.Id())
           case other =>
-            throw new NotImplementedError(s"$other")
+            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
 
       case Swap() =>
@@ -138,7 +139,7 @@ sealed trait Routing[K, L](using
             given ProperKind[J] = i1.properInKind
             ApplyRes(Id(), ArgIntro.introSnd(f, a))
           case other =>
-            throw new NotImplementedError(s"$other")
+            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
 
       case ElimSnd() =>
@@ -146,11 +147,11 @@ sealed trait Routing[K, L](using
           case ArgIntro.IntroFst(a, _) =>
             ApplyRes(Routing.elim[J], a)
           case other =>
-            throw new NotImplementedError(s"$other")
+            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
 
       case other =>
-        throw new NotImplementedError(s"applying $other to $args")
+        throw new NotImplementedError(s"applying $other to $args (${summon[SourcePos]})")
     }
   }
 
@@ -159,7 +160,7 @@ sealed trait Routing[K, L](using
       case Id() => args
       case AndThen(f, g) => g.applyTo0(f.applyTo0(args))
       case Dup() => ArgIntro.introBoth(args, args)
-      case other => throw new NotImplementedError(s"$other")
+      case other => throw new NotImplementedError(s"$other (${summon[SourcePos]})")
     }
   }
 
@@ -194,7 +195,7 @@ sealed trait Routing[K, L](using
             case ArgTrans.IntroBoth(f1, f2) =>
               AppTransRes(id, ArgTrans.introBoth(g1.applyToTrans0(f1), g2.applyToTrans0(f2)))
             case other =>
-              throw new NotImplementedError(s"$other")
+              throw new NotImplementedError(s"$other (${summon[SourcePos]})")
           }
 
         go[k1, k2, l1, l2](f, p.f1, p.f2)
@@ -212,10 +213,10 @@ sealed trait Routing[K, L](using
           case ArgTrans.IntroBoth(f1, f2) =>
             AppTransRes(id, f2)
           case other =>
-            throw new NotImplementedError(s"$other")
+            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
       case other =>
-        throw new NotImplementedError(s"Applyint $other to $f")
+        throw new NotImplementedError(s"Applying $other to $f (${summon[SourcePos]})")
     }
   }
 
@@ -335,6 +336,6 @@ object Routing {
       case AndThen(p, q) =>
         proveId(proveId(p).substituteCo[Routing[*, K]](q))
       case other =>
-        throw new NotImplementedError(s"$other")
+        throw new NotImplementedError(s"$other (${summon[SourcePos]})")
     }
 }

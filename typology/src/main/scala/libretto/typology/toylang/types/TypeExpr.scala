@@ -1,6 +1,6 @@
 package libretto.typology.toylang.types
 
-import libretto.lambda.util.Monad
+import libretto.lambda.util.{Monad, SourcePos}
 import libretto.lambda.util.Monad.syntax._
 import libretto.typology.kinds._
 
@@ -30,7 +30,7 @@ case class TypeExpr[K, L](value: generic.TypeExpr[TypeExpr, K, L]) {
         case (f, gt.AppFst(g, b1)) =>
           gt.AppCompose(g, b1, TypeExpr(f))
         case (a, b) =>
-          throw new NotImplementedError(s"$b ∘ $a")
+          throw new NotImplementedError(s"$b ∘ $a (${summon[SourcePos]})")
       }
     )
   }
