@@ -1,14 +1,15 @@
 package libretto.typology.toylang.typeinfer
 
-import libretto.lambda.util.{Monad, SourcePos}
+import libretto.lambda.{MonoidalObjectMap, SymmetricMonoidalCategory}
+import libretto.lambda.util.{Monad, SourcePos, TypeEq}
 import libretto.lambda.util.Monad.syntax._
+import libretto.lambda.util.TypeEq.Refl
 import libretto.scaletto.StarterKit._
 import libretto.scaletto.StarterKit.Comonoid.comonoidOne
-import libretto.typology.kinds.{●}
+import libretto.typology.kinds.{×, ○, ●}
 import libretto.typology.toylang.terms.{Fun, FunT, TypedFun}
-import libretto.typology.toylang.types.{Fix, AbstractTypeLabel, Type, TypeFun, TypeTag}
+import libretto.typology.toylang.types.{Fix, AbstractTypeLabel, Type, TypeAlgebra, TypeFun, TypeTag}
 import libretto.typology.util.State
-import libretto.scaletto.StarterKit
 
 object TypeInference {
   opaque type TypeEmitter[T] = Rec[[X] =>> TypeEmitterF[T, ReboundTypeF[T, X]]]
@@ -29,7 +30,7 @@ object TypeInference {
     |+| Done // unit
     |+| Done // int
     |+| Done // string
-    |+| (Val[TypeFun[●, ●]] |*| X) // apply1
+    |+| (Val[TypeFun[●, ●]] |*| X) // apply1 // TODO: eliminate?
     |+| Val[TypeFun[●, ●]] // fix
     |+| (X |*| X) // recCall
     |+| (X |*| X) // either
@@ -1008,14 +1009,6 @@ object TypeInference {
     def fixT[X, F[_]](F: TypeTag[F]): One -⚬ NonAbstractTypeF[X] =
       fix ∘ const(TypeTag.toTypeFun(F))
 
-    def apply1[X]: (Val[TypeFun[●, ●]] |*| X) -⚬ NonAbstractTypeF[X] =
-      injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
-
-    def apply1T[X, F[_]](F: TypeTag[F]): X -⚬ NonAbstractTypeF[X] =
-      λ { x =>
-        apply1(constantVal(TypeTag.toTypeFun(F)) |*| x)
-      }
-
     def string[X]: Done -⚬ NonAbstractTypeF[X] =
       injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
@@ -1080,7 +1073,8 @@ object TypeInference {
                       case Left(t) =>
                         t switch {
                           case Right(f |*| x) => // apply1
-                            apply1(f |*| g(x))
+                            // apply1(f |*| g(x))
+                            (f |*| x) :>> crashNow(s"TODO: eliminate (${summon[SourcePos]})")
                           case Left(t) =>
                             t switch {
                               case Right(d) => // string
@@ -1133,9 +1127,10 @@ object TypeInference {
                       case Left(t) =>
                         t switch {
                           case Right(g |*| x) => // apply1
-                            val g1 |*| g2 = dsl.dup(g)
-                            val x1 |*| x2 = f(x)
-                            apply1(g1 |*| x1) |*| apply1(g2 |*| x2)
+                            // val g1 |*| g2 = dsl.dup(g)
+                            // val x1 |*| x2 = f(x)
+                            // apply1(g1 |*| x1) |*| apply1(g2 |*| x2)
+                            (g |*| x) :>> crashNow(s"TODO: eliminate (${summon[SourcePos]})")
                           case Left(t) =>
                             t switch {
                               case Right(+(t)) => // string
@@ -1451,7 +1446,9 @@ object TypeInference {
               case Left(t) => t switch {
                 case Right(f) => fix(f waitFor d)
                 case Left(t) => t switch {
-                  case Right(f |*| x) => apply1(f.waitFor(d) |*| x)
+                  case Right(f |*| x) =>
+                    // apply1(f.waitFor(d) |*| x)
+                    (d |*| f |*| x) :>> crashNow(s"TODO: eliminate (${summon[SourcePos]})")
                   case Left(t) => t switch {
                     case Right(x) => string(join(d |*| x))
                     case Left(t) => t switch {
@@ -1505,12 +1502,6 @@ object TypeInference {
     def fixT[T, F[_]](F: TypeTag[F]): One -⚬ ConcreteType[T] =
       NonAbstractType.fixT(F) > nonAbstractType
 
-    def apply1[T]: (Val[TypeFun[●, ●]] |*| ConcreteType[T]) -⚬ ConcreteType[T] =
-      NonAbstractType.apply1 > nonAbstractType
-
-    def apply1T[T, F[_]](F: TypeTag[F]): ConcreteType[T] -⚬ ConcreteType[T] =
-      NonAbstractType.apply1T(F) > nonAbstractType
-
     def string[T]: Done -⚬ ConcreteType[T] =
       NonAbstractType.string > nonAbstractType
 
@@ -1522,6 +1513,122 @@ object TypeInference {
 
     def mismatch[T]: Val[(Type, Type)] -⚬ ConcreteType[T] =
       NonAbstractType.mismatch > nonAbstractType
+
+    def apply1T[T, F[_]](F: TypeTag[F]): ConcreteType[T] -⚬ ConcreteType[T] =
+      apply1(TypeTag.toTypeFun(F))
+
+    def apply1[T](f: TypeFun[●, ●]): ConcreteType[T] -⚬ ConcreteType[T] = {
+      val ct = compilationTarget[T]
+      import ct.Map_●
+      f.compile(Map_●)(ct.typeAlgebra, Map_●).get(Map_●, Map_●) > awaitPosFst
+    }
+
+    class compilationTarget[T] {
+      val typeAlgebra: TypeAlgebra.With[[x, y] =>> x -⚬ (Done |*| y), ConcreteType[T], |*|, One] =
+        new TypeAlgebra[[x, y] =>> x -⚬ (Done |*| y)] {
+          override type Type = ConcreteType[T]
+          override type <*>[A, B] = A |*| B
+          override type None = One
+
+          override def unit: One -⚬ (Done |*| ConcreteType[T]) =
+            done > λ { case +(d) => d |*| ConcreteType.unit(d) }
+          override def int: One -⚬ (Done |*| ConcreteType[T]) =
+            done > λ { case +(d) => d |*| ConcreteType.int(d) }
+          override def string: One -⚬ (Done |*| ConcreteType[T]) =
+            done > λ { case +(d) => d |*| ConcreteType.string(d) }
+          override def pair: (ConcreteType[T] |*| ConcreteType[T]) -⚬ (Done |*| ConcreteType[T]) =
+            λ { case t |*| u => constant(done) |*| ConcreteType.pair(t |*| u) }
+          override def sum: (ConcreteType[T] |*| ConcreteType[T]) -⚬ (Done |*| ConcreteType[T]) =
+            λ { case t |*| u => constant(done) |*| ConcreteType.either(t |*| u) }
+          override def recCall: (ConcreteType[T] |*| ConcreteType[T]) -⚬ (Done |*| ConcreteType[T]) =
+            λ { case t |*| u => constant(done) |*| ConcreteType.recCall(t |*| u) }
+          override def fix(f: TypeFun[●, ●]): One -⚬ (Done |*| ConcreteType[T]) =
+            const(f) > ConcreteType.fix > introFst(done)
+
+          override given category: SymmetricMonoidalCategory[[x, y] =>> x -⚬ (Done |*| y), |*|, One] =
+            new SymmetricMonoidalCategory[[x, y] =>> x -⚬ (Done |*| y), |*|, One] {
+
+              override def id[A]: A -⚬ (Done |*| A) =
+                dsl.introFst(done)
+
+              override def introFst[A]: A -⚬ (Done |*| (One |*| A)) =
+                dsl.andThen(dsl.introFst, dsl.introFst(done))
+
+              override def introSnd[A]: A -⚬ (Done |*| (A |*| One)) =
+                dsl.andThen(dsl.introSnd, dsl.introFst(done))
+
+              override def elimFst[A]: (One |*| A) -⚬ (Done |*| A) =
+                dsl.fst(done)
+
+              override def elimSnd[A]: (A |*| One) -⚬ (Done |*| A) =
+                dsl.andThen(dsl.swap, dsl.fst(done))
+
+              override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ (Done |*| (A |*| B |*| C)) =
+                dsl.andThen(dsl.assocRL, dsl.introFst(done))
+
+              override def assocLR[A, B, C]: (A |*| B |*| C) -⚬ (Done |*| (A |*| (B |*| C))) =
+                dsl.andThen(dsl.assocLR, dsl.introFst(done))
+
+              override def swap[A, B]: (A |*| B) -⚬ (Done |*| (B |*| A)) =
+                dsl.andThen(dsl.swap, dsl.introFst(done))
+
+              override def andThen[A, B, C](
+                f: A -⚬ (Done |*| B),
+                g: B -⚬ (Done |*| C),
+              ): A -⚬ (Done |*| C) =
+                dsl.andThen(
+                  dsl.andThen(f, dsl.snd(g)),
+                  dsl.andThen(dsl.assocRL, dsl.fst(join)),
+                )
+
+              override def par[A1, A2, B1, B2](
+                f1: A1 -⚬ (Done |*| B1),
+                f2: A2 -⚬ (Done |*| B2),
+              ): (A1 |*| A2) -⚬ (Done |*| (B1 |*| B2)) =
+                dsl.andThen(
+                  dsl.par(f1, f2),
+                  λ { case (d1 |*| b1) |*| (d2 |*| b2) =>
+                    join(d1 |*| d2) |*| (b1 |*| b2)
+                  },
+                )
+            }
+        }
+
+      sealed trait as[K, Q]
+
+      case object Map_○ extends as[○, One]
+      case object Map_● extends as[●, ConcreteType[T]]
+      case class Pair[K1, K2, Q1, Q2](
+        f1: K1 as Q1,
+        f2: K2 as Q2,
+      ) extends as[K1 × K2, Q1 |*| Q2]
+
+      given objectMap: MonoidalObjectMap[as, ×, ○, |*|, One] =
+        new MonoidalObjectMap[as, ×, ○, |*|, One] {
+
+          override def uniqueOutputType[A, B, C](f: as[A, B], g: as[A, C]): B =:= C =
+            (f, g) match {
+              case (Map_○, Map_○) => summon[B =:= C]
+              case (Map_●, Map_●) => summon[B =:= C]
+              case (Pair(f1, f2), Pair(g1, g2)) =>
+                (uniqueOutputType(f1, g1), uniqueOutputType(f2, g2)) match {
+                  case (TypeEq(Refl()), TypeEq(Refl())) =>
+                    summon[B =:= C]
+                }
+            }
+
+          override def pair[A1, A2, X1, X2](f1: as[A1, X1], f2: as[A2, X2]): as[A1 × A2, X1 |*| X2] =
+            Pair(f1, f2)
+
+          override def unpair[A1, A2, X](f: as[A1 × A2, X]): Unpaired[A1, A2, X] =
+            f match {
+              case Pair(f1, f2) => Unpaired.Impl(f1, f2)
+            }
+
+          override def unit: as[○, One] =
+            Map_○
+        }
+    }
 
     def abstractify[T](
       instantiate: ReboundType[T] -⚬ T,
@@ -1629,15 +1736,15 @@ object TypeInference {
     def abstractType: Val[AbstractTypeLabel] -⚬ DegenericType =
       injectR > pack
 
-    def neglect: DegenericType -⚬ Done =
-      output > dsl.neglect
-
-    def output: DegenericType -⚬ Val[Type] = rec { self =>
+    val output: DegenericType -⚬ Val[Type] = rec { self =>
       unpack > either(
         NonAbstractType.output(self),
         mapVal { Type.abstractType },
       )
     }
+
+    val neglect: DegenericType -⚬ Done =
+      output > dsl.neglect
   }
 
   object TypeSkelet {
@@ -2977,7 +3084,7 @@ object TypeInference {
     def unpack: InboundType -⚬ Maybe[ReboundType[InboundType]] =
       dsl.unpack
 
-    def just: ReboundType[InboundType] -⚬ InboundType =
+    val just: ReboundType[InboundType] -⚬ InboundType =
       Maybe.just > pack
 
     def none: One -⚬ InboundType =
@@ -3008,7 +3115,7 @@ object TypeInference {
       }
     }
 
-    def mergeTo: (TypeEmitter[InboundType] |*| InboundType) -⚬ TypeEmitter[InboundType] =
+    val mergeTo: (TypeEmitter[InboundType] |*| InboundType) -⚬ TypeEmitter[InboundType] =
       mergeTo_(merge)
 
     def mergeIn_(
@@ -3025,10 +3132,10 @@ object TypeInference {
         }
       }
 
-    def mergeIn: (InboundType |*| TypeEmitter[InboundType]) -⚬ ReboundType[InboundType] =
+    val mergeIn: (InboundType |*| TypeEmitter[InboundType]) -⚬ ReboundType[InboundType] =
       mergeIn_(split)
 
-    def merge: (InboundType |*| InboundType) -⚬ InboundType =
+    val merge: (InboundType |*| InboundType) -⚬ InboundType =
       rec { self =>
         λ { case InboundType(a) |*| InboundType(b) =>
           Maybe.toEither(a) switch {
@@ -3052,7 +3159,7 @@ object TypeInference {
         }
       }
 
-    def split: InboundType -⚬ (InboundType |*| InboundType) =
+    val split: InboundType -⚬ (InboundType |*| InboundType) =
       rec { self =>
         λ { case InboundType(a) =>
           Maybe.toEither(a) switch {
@@ -3075,7 +3182,7 @@ object TypeInference {
     def supplyNone: -[InboundType] -⚬ Done =
       introFst(none) > supply > done
 
-    def output: (Val[AbstractTypeLabel] |*| InboundType) -⚬ Val[Type] =
+    val output: (Val[AbstractTypeLabel] |*| InboundType) -⚬ Val[Type] =
       rec { self =>
         λ { case lbl |*| t =>
           Maybe.toEither(unpack(t)) switch {
@@ -3089,7 +3196,7 @@ object TypeInference {
       }
   }
 
-  private def degenerify: GenericType[InboundType] -⚬ DegenericType =
+  private val degenerify: GenericType[InboundType] -⚬ DegenericType =
     rec { self =>
       ConcreteType.unpack > either(
         NonAbstractType.map(self) > DegenericType.nonAbstractType,
@@ -3104,29 +3211,14 @@ object TypeInference {
 
   def inferTypes[A, B](f: Fun[A, B]): One -⚬ Val[TypedFun[A, B]] = {
     println(s"inferTypes($f)")
+    val t0 = System.currentTimeMillis()
+
     given VarGen[State[Int, *], AbstractTypeLabel] with {
       override def newVar: State[Int, AbstractTypeLabel] =
         State(n => (n+1, AbstractTypeLabel(n)))
     }
 
-    println("CHECK 1")
-    InboundType.mergeTo
-    println("CHECK 2")
-    InboundType.mergeIn
-    println("CHECK 3")
-    InboundType.merge
-    println("CHECK 4")
-    InboundType.split
-    println("CHECK 5")
-    InboundType.just
-    println("CHECK 6")
-    InboundType.output
-    println("CHECK 7")
-    degenerify
-    println("CHECK 8")
-    DegenericType.neglect
-    println("CHECK 9")
-
+    val res =
     reconstructTypes[InboundType, A, B, State[Int, *]](f)(
       InboundType.mergeTo,
       InboundType.mergeIn,
@@ -3146,6 +3238,10 @@ object TypeInference {
         }
       }
       .run(0)
+
+    val t1 = System.currentTimeMillis()
+    println(s"inferTypes assembly took ${t1 - t0}ms")
+    res
   }
 
   def reconstructTypes[T, A, B, M[_]](f: Fun[A, B])(

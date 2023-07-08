@@ -1,5 +1,6 @@
 package libretto.typology.toylang.types
 
+import libretto.lambda.{MappedMorphism, MonoidalObjectMap}
 import libretto.typology.kinds._
 
 sealed trait TypeFun[K, L] {
@@ -22,6 +23,18 @@ sealed trait TypeFun[K, L] {
 
   def apply(t: TypeExpr[○, K]): TypeExpr[○, L] =
     TypeFun.toExpr(this ∘ TypeFun.fromExpr(t))
+
+  def compile[==>[_, _], F[_, _], Q](
+    fk: F[K, Q],
+  )(
+    tgt: TypeAlgebra[==>],
+    map_● : F[●, tgt.Type],
+  )(using
+    F: MonoidalObjectMap[F, ×, ○, tgt.<*>, tgt.None],
+  ): MappedMorphism[==>, F, K, L] = {
+    import tgt.given
+    pre.compile(fk)() > expr.compile(tgt, map_●)
+  }
 }
 
 object TypeFun {

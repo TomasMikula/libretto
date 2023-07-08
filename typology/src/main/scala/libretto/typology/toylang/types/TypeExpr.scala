@@ -1,8 +1,10 @@
 package libretto.typology.toylang.types
 
-import libretto.lambda.util.{Monad, SourcePos}
+import libretto.lambda.{MappedMorphism, MonoidalObjectMap, SemigroupalCategory}
+import libretto.lambda.util.{Exists, Monad, SourcePos}
 import libretto.lambda.util.Monad.syntax._
 import libretto.typology.kinds._
+import libretto.typology.toylang.types.generic.{TypeExpr => gte}
 
 case class TypeExpr[K, L](value: generic.TypeExpr[TypeExpr, K, L]) {
   given inKind: Kind[K] = value.inKind
@@ -63,6 +65,72 @@ case class TypeExpr[K, L](value: generic.TypeExpr[TypeExpr, K, L]) {
 
   override def toString: String =
     value.toString
+
+  def compile[==>[_, _], F[_, _]](
+    tgt: TypeAlgebra[==>],
+    map_● : F[●, tgt.Type],
+  )(using
+    F: MonoidalObjectMap[F, ×, ○, tgt.<*>, tgt.None],
+  ): MappedMorphism[==>, F, K, L] = {
+    import tgt.given
+    this.value match
+      case gte.UnitType() =>
+        MappedMorphism(F.unit, tgt.unit, map_●)
+      case gte.IntType() =>
+        MappedMorphism(F.unit, tgt.int, map_●)
+      case gte.StringType() =>
+        MappedMorphism(F.unit, tgt.string, map_●)
+      case gte.Pair() =>
+        MappedMorphism(F.pair(map_●, map_●), tgt.pair, map_●)
+      case gte.Sum() =>
+        MappedMorphism(F.pair(map_●, map_●), tgt.sum, map_●)
+      case gte.RecCall() =>
+        MappedMorphism(F.pair(map_●, map_●), tgt.recCall, map_●)
+      case gte.Fix(f, g) =>
+        MappedMorphism(F.unit, tgt.fix(TypeFun(f, g)), map_●)
+      case gte.PFix(f, g) =>
+        throw NotImplementedError(s"PFix($f, $g) at ${summon[SourcePos]}")
+      case gte.AbstractType(label) =>
+        throw NotImplementedError(s"AbstractType($label) at ${summon[SourcePos]}")
+      case gte.ScalaTypeParams(values) =>
+        throw NotImplementedError(s"ScalaTypeParams($values) at ${summon[SourcePos]}")
+      case gte.BiApp(op, a, b) =>
+        MappedMorphism(
+          F.unit,
+          tgt.category.introFst,
+          F.pair(F.unit, F.unit),
+        ) >
+        MappedMorphism.par(
+          a.compile(tgt, map_●),
+          b.compile(tgt, map_●),
+        ) >
+        TypeExpr(op).compile[==>, F](tgt, map_●)
+      case gte.AppFst(op, a) =>
+        val op1 = TypeExpr(op).compile(tgt, map_●)
+        val a1  = a.compile(tgt, map_●)
+        MappedMorphism.composeIntroFst(
+          MappedMorphism.composeFst(op1, a1),
+        )
+      case gte.AppSnd(op, b) =>
+        val op1 = TypeExpr(op).compile(tgt, map_●)
+        val b1  = b.compile(tgt, map_●)
+        MappedMorphism.composeIntroSnd(
+          MappedMorphism.composeSnd(op1, b1),
+        )
+      case gte.ComposeSnd(op, g) =>
+        val op1 = TypeExpr(op).compile(tgt, map_●)
+        val g1  = g.compile(tgt, map_●)
+        MappedMorphism.composeSnd(op1, g1)
+      case gte.AppCompose(op, a, g) =>
+        val op1 = TypeExpr(op).compile(tgt, map_●)
+        val a1  = a.compile(tgt, map_●)
+        val g1  = g.compile(tgt, map_●)
+        MappedMorphism.composeIntroFst(
+          MappedMorphism.par(a1, g1) > op1
+        )
+      case gte.TypeMismatch(a, b) =>
+        throw NotImplementedError(s"TypeMismatch($a, $b) at ${summon[SourcePos]}")
+  }
 }
 
 object TypeExpr {

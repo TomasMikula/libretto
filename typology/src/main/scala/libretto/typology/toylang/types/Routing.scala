@@ -1,5 +1,6 @@
 package libretto.typology.toylang.types
 
+import libretto.lambda.{MappedMorphism, MonoidalObjectMap, SymmetricMonoidalCategory}
 import libretto.lambda.util.SourcePos
 import libretto.typology.kinds._
 
@@ -225,6 +226,61 @@ sealed trait Routing[K, L](using
       case AppTransRes(r, f) =>
         proveId(r).substituteCo[ArgTrans[F, *, L]](f)
     }
+
+  def compile[==>[_, _], F[_, _], |*|[_, _], One, Q](fk: F[K, Q])(
+    // tgt: TypeAlgebra[==>],
+    // map_● : F[●, tgt.Type],
+  )(using
+    F: MonoidalObjectMap[F, ×, ○, |*|, One],
+    cat: SymmetricMonoidalCategory[==>, |*|, One],
+  ): MappedMorphism[==>, F, K, L] = {
+    this match
+      case Id() =>
+        MappedMorphism(fk, cat.id, fk)
+      case _: AssocLR[k, l, m] =>
+        val fk_ = F.unpair[(k × l), m, Q](fk)
+        val fk12 = F.unpair(fk_.f1)
+        val fk1 = fk12.f1
+        val fk2 = fk12.f2
+        val fk3 = fk_.f2
+        MappedMorphism(
+          F.pair(F.pair(fk1, fk2), fk3),
+          cat.assocLR,
+          F.pair(fk1, F.pair(fk2, fk3)),
+        )
+      case _: AssocRL[k, l, m] =>
+        val fk_ = F.unpair[k, l × m, Q](fk)
+        val fk23 = F.unpair(fk_.f2)
+        val fk1 = fk_.f1
+        val fk2 = fk23.f1
+        val fk3 = fk23.f2
+        MappedMorphism(
+          F.pair(fk1, F.pair(fk2, fk3)),
+          cat.assocRL,
+          F.pair(F.pair(fk1, fk2), fk3),
+        )
+      case _: Swap[k, l] =>
+        val fk_ = F.unpair[k, l, Q](fk)
+        val fk1 = fk_.f1
+        val fk2 = fk_.f2
+        MappedMorphism(
+          F.pair(fk1, fk2),
+          cat.swap,
+          F.pair(fk2, fk1),
+        )
+      case ElimFst() =>
+        throw NotImplementedError(s"at ${summon[SourcePos]}")
+      case ElimSnd() =>
+        throw NotImplementedError(s"at ${summon[SourcePos]}")
+      case AndThen(f, g) =>
+        throw NotImplementedError(s"at ${summon[SourcePos]}")
+      case Par(f1, f2) =>
+        throw NotImplementedError(s"at ${summon[SourcePos]}")
+      case Elim() =>
+        throw NotImplementedError(s"at ${summon[SourcePos]}")
+      case Dup() =>
+        throw NotImplementedError(s"at ${summon[SourcePos]}")
+  }
 }
 
 object Routing {
@@ -306,6 +362,9 @@ object Routing {
 
   def swap[K: ProperKind, L: ProperKind]: Routing[K × L, L × K] =
     Swap()
+
+  def elimFst[K: ProperKind, L: ProperKind]: Routing[K × L, L] =
+    ElimFst()
 
   def elimSnd[K: ProperKind, L: ProperKind]: Routing[K × L, K] =
     ElimSnd()

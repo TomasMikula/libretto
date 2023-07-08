@@ -19,10 +19,16 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
       g > Fun.injectR,
     )
 
-  type InfiniteList[A] = Fix[(A, *)]
+  type InfiniteList[A] = Fix[(A, _)]
   object InfiniteList {
     def tpe(elemType: Type): Type =
       Type.fix(TypeFun.pair1(elemType))
+
+    def fix[A](using TypeTag[A]): Fun[(A, InfiniteList[A]), InfiniteList[A]] =
+      Fun.fix[(A, _)]
+
+    def unfix[A](using TypeTag[A]): Fun[InfiniteList[A], (A, InfiniteList[A])] =
+      Fun.unfix[(A, _)]
 
     def map[A, B](f: Fun[A, B]): Fun[InfiniteList[A], InfiniteList[B]] = {
       given TypeTag[A] = TypeTag.ofTypeParam[A]
@@ -30,8 +36,8 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
 
       Fun.recFun { map =>
         as => {
-          val h <*> t = Fun.unfix[(A, *)](as)
-          Fun.fix[(B, *)](f(h) <*> map(t))
+          val h <*> t = unfix[A](as)
+          fix[B](f(h) <*> map(t))
         }
       }
     }
@@ -174,11 +180,51 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
         .via { expectVal(_).flatMap(check) }
 
     scala.List(
+      "infer types of id > intToString > id" ->
+        testInferredTypes(Fun.id > Fun.intToString > Fun.id) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, Type.int)
+            _ <- Outcome.assertEquals(tf.outType, Type.string)
+          } yield ()
+        },
+
       "infer types of eitherBimap(intToString, intToString)" ->
         testInferredTypes(eitherBimap(Fun.intToString, Fun.intToString)) { tf =>
           for {
             _ <- Outcome.assertEquals(tf.inType, Type.sum(Type.int, Type.int))
             _ <- Outcome.assertEquals(tf.outType, Type.sum(Type.string, Type.string))
+          } yield ()
+        },
+
+      "infer types of InfiniteList.fix[Int]" ->
+        testInferredTypes(InfiniteList.fix[Int]) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, Type.pair(Type.int, InfiniteList.tpe(Type.int)))
+            _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.int))
+          } yield ()
+        },
+
+      "infer types of InfiniteList.unfix[Int]" ->
+        testInferredTypes(InfiniteList.unfix[Int]) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
+            _ <- Outcome.assertEquals(tf.outType, Type.pair(Type.int, InfiniteList.tpe(Type.int)))
+          } yield ()
+        },
+
+      "infer types of InfiniteList.fix[Int] > InfiniteList.unfix[Int]" ->
+        testInferredTypes(InfiniteList.fix[Int] > InfiniteList.unfix[Int]) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType,  Type.pair(Type.int, InfiniteList.tpe(Type.int)))
+            _ <- Outcome.assertEquals(tf.outType, Type.pair(Type.int, InfiniteList.tpe(Type.int)))
+          } yield ()
+        },
+
+      "infer types of InfiniteList.unfix[Int] > InfiniteList.fix[Int]" ->
+        testInferredTypes(InfiniteList.unfix[Int] > InfiniteList.fix[Int]) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType,  InfiniteList.tpe(Type.int))
+            _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.int))
           } yield ()
         },
 
