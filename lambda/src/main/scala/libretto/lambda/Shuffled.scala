@@ -55,7 +55,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     def translate[->>[_, _], <*>[_, _], F[_, _], S](
       fa: F[A, S],
-      om: ObjectMap[|*|, <*>, F],
+      om: SemigroupalObjectMap[|*|, <*>, F],
       am: ArrowMap[->, ->>, F],
     )(using
       tgt: libretto.lambda.Shuffled[->>, <*>],
@@ -132,7 +132,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     override def translate[->>[_, _], <*>[_, _], F[_, _], S](
       fa: F[A, S],
-      om: ObjectMap[|*|, <*>, F],
+      om: SemigroupalObjectMap[|*|, <*>, F],
       am: ArrowMap[->, ->>, F],
     )(using
       tgt: libretto.lambda.Shuffled[->>, <*>],
@@ -242,7 +242,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     override def translate[->>[_, _], <*>[_, _], F[_, _], S](
       fa: F[A, S],
-      om: ObjectMap[|*|, <*>, F],
+      om: SemigroupalObjectMap[|*|, <*>, F],
       am: ArrowMap[->, ->>, F],
     )(using
       tgt: libretto.lambda.Shuffled[->>, <*>],
@@ -328,7 +328,13 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
             (c.post thenShuffle bottom2).inSnd thenShuffle right.asShuffle,
           )
 
-    override def translate[->>[_,_], <*>[_,_], F[_,_], S](fa: F[A, S], om: ObjectMap[|*|, <*>, F], am: ArrowMap[->, ->>, F])(using tgt: libretto.lambda.Shuffled[->>, <*>]): Exists[[T] =>> (tgt.Shuffled[S, T], F[B1 |*| B2, T])] =
+    override def translate[->>[_,_], <*>[_,_], F[_,_], S](
+      fa: F[A, S],
+      om: SemigroupalObjectMap[|*|, <*>, F],
+      am: ArrowMap[->, ->>, F],
+    )(using
+      tgt: libretto.lambda.Shuffled[->>, <*>],
+    ): Exists[[T] =>> (tgt.Shuffled[S, T], F[B1 |*| B2, T])] =
       UnhandledCase.raise(s"${this.getClass.getSimpleName}.translate")
 
     override def sweepL[F[_], ->>[_,_]](
@@ -403,7 +409,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     def translate[->>[_, _], <*>[_, _], F[_, _], S](
       fa: F[A, S],
-      om: ObjectMap[|*|, <*>, F],
+      om: SemigroupalObjectMap[|*|, <*>, F],
       am: ArrowMap[->, ->>, F],
     )(using
       tgt: libretto.lambda.Shuffled[->>, <*>],
@@ -544,7 +550,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
       override def translate[->>[_, _], <*>[_, _], F[_, _], S](
         fa: F[A, S],
-        om: ObjectMap[|*|, <*>, F],
+        om: SemigroupalObjectMap[|*|, <*>, F],
         am: ArrowMap[->, ->>, F],
       )(using
         tgt: libretto.lambda.Shuffled[->>, <*>],
@@ -629,7 +635,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
       override def translate[->>[_, _], <*>[_, _], F[_, _], S](
         fa12: F[A1 |*| A2, S],
-        om: ObjectMap[|*|, <*>, F],
+        om: SemigroupalObjectMap[|*|, <*>, F],
         am: ArrowMap[->, ->>, F],
       )(using
         tgt: libretto.lambda.Shuffled[->>, <*>],
@@ -693,7 +699,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
       override def translate[->>[_, _], <*>[_, _], F[_, _], S](
         fa: F[A, S],
-        om: ObjectMap[|*|, <*>, F],
+        om: SemigroupalObjectMap[|*|, <*>, F],
         am: ArrowMap[->, ->>, F],
       )(using
         tgt: libretto.lambda.Shuffled[->>, <*>],
@@ -777,7 +783,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
       override def translate[->>[_, _], <*>[_, _], F[_, _], S](
         fa: F[A1 |*| A2, S],
-        om: ObjectMap[|*|, <*>, F],
+        om: SemigroupalObjectMap[|*|, <*>, F],
         am: ArrowMap[->, ->>, F],
       )(using
         tgt: libretto.lambda.Shuffled[->>, <*>],
@@ -876,7 +882,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
       override def translate[->>[_, _], <*>[_, _], F[_, _], S](
         fa: F[A, S],
-        om: ObjectMap[|*|, <*>, F],
+        om: SemigroupalObjectMap[|*|, <*>, F],
         am: ArrowMap[->, ->>, F],
       )(using
         tgt: libretto.lambda.Shuffled[->>, <*>],
@@ -1005,7 +1011,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
       override def translate[->>[_, _], <*>[_, _], F[_, _], S](
         fa: F[A1 |*| A2, S],
-        om: ObjectMap[|*|, <*>, F],
+        om: SemigroupalObjectMap[|*|, <*>, F],
         am: ArrowMap[->, ->>, F],
       )(using
         tgt: libretto.lambda.Shuffled[->>, <*>],
@@ -1057,7 +1063,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     def translate[->>[_, _], <*>[_, _], F[_, _], S1, S2](
       fa1: F[A1, S1],
       fa2: F[A2, S2],
-      om: ObjectMap[|*|, <*>, F],
+      om: SemigroupalObjectMap[|*|, <*>, F],
     )(using
       tgt: libretto.lambda.Shuffled[->>, <*>],
     ): Exists[[T1] =>> Exists[[T2] =>> (tgt.RevTransferOpt[S1, S2, T1, T2], F[B1, T1], F[B2, T2])]] =

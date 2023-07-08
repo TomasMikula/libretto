@@ -85,7 +85,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     def translate[<*>[_, _], F[_, _], X](
       fa: F[A, X],
     )(
-      m: ObjectMap[|*|, <*>, F],
+      m: SemigroupalObjectMap[|*|, <*>, F],
       sh: Shuffle[<*>],
     ): Exists[[t] =>> (sh.~⚬[X, t], F[B, t])]
 
@@ -121,7 +121,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def translate[<*>[_, _], F[_, _], S](
         fx: F[X, S],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
         sh: Shuffle[<*>],
       ): Exists[[t] =>> (sh.~⚬[S, t], F[X, t])] =
         Exists((sh.~⚬.id, fx))
@@ -160,7 +160,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def translate[<*>[_, _], F[_, _], S](
         fa: F[X1 |*| X2, S],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
         sh: Shuffle[<*>],
       ): Exists[[t] =>> (sh.~⚬[S, t], F[Y1 |*| Y2, t])] =
         par.translate(fa)(m, sh)
@@ -212,7 +212,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def translate[<*>[_,_], F[_,_], S](
         fa: F[A1 |*| A2, S],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
         sh: Shuffle[<*>],
       ): Exists[[t] =>> (sh.~⚬[S, t], F[B1 |*| B2, t])] = {
         m.unpair(fa)                                          match { case m.Unpaired.Impl(fa1, fa2) =>
@@ -658,7 +658,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     def translate[<*>[_, _], F[_, _], S](
       fa: F[X1 |*| X2, S],
     )(
-      m: ObjectMap[|*|, <*>, F],
+      m: SemigroupalObjectMap[|*|, <*>, F],
       sh: Shuffle[<*>],
     ): Exists[[t] =>> (sh.~⚬[S, t], F[Y1 |*| Y2, t])] = {
       this                        match { case Par(f1, f2) =>
@@ -765,7 +765,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     final def translate[<*>[_, _], F[_, _], S](
       fa: F[A1 |*| A2, S],
     )(
-      m: ObjectMap[|*|, <*>, F],
+      m: SemigroupalObjectMap[|*|, <*>, F],
       tgt: Shuffle[<*>],
     ): Exists[[t] =>> (tgt.~⚬[S, t], F[B1 |*| B2, t])] =
       m.unpair(fa) match
@@ -778,7 +778,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       fa1: F[A1, S1],
       fa2: F[A2, S2],
     )(
-      m: ObjectMap[|*|, <*>, F],
+      m: SemigroupalObjectMap[|*|, <*>, F],
     )(using
       tgt: Shuffle[<*>],
     ): Exists[[T1] =>> Exists[[T2] =>> (tgt.TransferOpt[S1, S2, T1, T2], F[B1, T1], F[B2, T2])]]
@@ -787,7 +787,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       fb1: F[B1, T1],
       fb2: F[B2, T2],
     )(
-      m: ObjectMap[|*|, <*>, F],
+      m: SemigroupalObjectMap[|*|, <*>, F],
     )(using
       tgt: Shuffle[<*>],
     ): Exists[[S1] =>> Exists[[S2] =>> (F[A1, S1], F[A2, S2], tgt.TransferOpt[S1, S2, T1, T2])]]
@@ -890,7 +890,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fa1: F[A1, S1],
         fa2: F[A2, S2],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[T1] =>> Exists[[T2] =>> (tgt.TransferOpt[S1, S2, T1, T2], F[A1, T1], F[A2, T2])]] =
@@ -900,7 +900,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fb1: F[A1, T1],
         fb2: F[A2, T2],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[S1] =>> Exists[[S2] =>> (F[A1, S1], F[A2, S2], tgt.TransferOpt[S1, S2, T1, T2])]] =
@@ -1106,7 +1106,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fx1: F[X1, S1],
         fx2: F[X2, S2],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[T1] =>> Exists[[T2] =>> (tgt.TransferOpt[S1, S2, T1, T2], F[X2, T1], F[X1, T2])]] =
@@ -1116,7 +1116,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fb1: F[X2, T1],
         fb2: F[X1, T2],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[S1] =>> Exists[[S2] =>> (F[X1, S1], F[X2, S2], tgt.TransferOpt[S1, S2, T1, T2])]] =
@@ -1315,7 +1315,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fa12: F[A1 |*| A2, S12],
         fa3 : F[A3, S3],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[T1] =>> Exists[[T2] =>> (tgt.TransferOpt[S12, S3, T1, T2], F[A1, T1], F[B2 |*| B3, T2])]] = {
@@ -1329,7 +1329,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fa1: F[A1, T1],
         fb23: F[B2 |*| B3, T2],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[S1] =>> Exists[[S2] =>> (F[A1 |*| A2, S1], F[A3, S2], tgt.TransferOpt[S1, S2, T1, T2])]] = {
@@ -1577,7 +1577,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fa1: F[A1, S1],
         fa23: F[A2 |*| A3, S23],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[T1] =>> Exists[[T2] =>> (tgt.TransferOpt[S1, S23, T1, T2], F[B1 |*| B2, T1], F[A3, T2])]] =
@@ -1590,7 +1590,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fb12: F[B1 |*| B2, T1],
         fa3: F[A3, T2],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[S1] =>> Exists[[S2] =>> (F[A1, S1], F[A2 |*| A3, S2], tgt.TransferOpt[S1, S2, T1, T2])]] =
@@ -1841,7 +1841,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fa12: F[A1 |*| A2, S12],
         fa3: F[A3, S3],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[T1] =>> Exists[[T2] =>> (tgt.TransferOpt[S12, S3, T1, T2], F[B1 |*| B2, T1], F[A2, T2])]] =
@@ -1855,7 +1855,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fb12: F[B1 |*| B2, T1],
         fa2: F[A2, T2],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[S1] =>> Exists[[S2] =>> (F[A1 |*| A2, S1], F[A3, S2], tgt.TransferOpt[S1, S2, T1, T2])]] =
@@ -2111,7 +2111,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fa1: F[A1, S1],
         fa23: F[A2 |*| A3, S23],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[T1] =>> Exists[[T2] =>> (tgt.TransferOpt[S1, S23, T1, T2], F[A2, T1], F[B2 |*| B3, T2])]] =
@@ -2125,7 +2125,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fb1: F[A2, T1],
         fb23: F[B2 |*| B3, T2],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[S1] =>> Exists[[S2] =>> (F[A1, S1], F[A2 |*| A3, S2], tgt.TransferOpt[S1, S2, T1, T2])]] =
@@ -2397,7 +2397,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fa12: F[A1 |*| A2, S1],
         fa34: F[A3 |*| A4, S2],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[T1] =>> Exists[[T2] =>> (tgt.TransferOpt[S1, S2, T1, T2], F[B1 |*| B2, T1], F[B3 |*| B4, T2])]] =
@@ -2416,7 +2416,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         fb12: F[B1 |*| B2, T1],
         fb34: F[B3 |*| B4, T2],
       )(
-        m: ObjectMap[|*|, <*>, F],
+        m: SemigroupalObjectMap[|*|, <*>, F],
       )(using
         tgt: Shuffle[<*>],
       ): Exists[[S1] =>> Exists[[S2] =>> (F[A1 |*| A2, S1], F[A3 |*| A4, S2], tgt.TransferOpt[S1, S2, T1, T2])]] =

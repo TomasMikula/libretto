@@ -10,7 +10,7 @@ import libretto.lambda.util.Functional
   *   `f: F[A, X]` means that object `A` of the source "category"
   *   is mapped to object `X` in the target "category".
   */
-trait ObjectMap[|*|[_, _], <*>[_, _], F[_, _]] extends Functional[F] {
+trait SemigroupalObjectMap[|*|[_, _], <*>[_, _], F[_, _]] extends Functional[F] {
   sealed trait Unpaired[A1, A2, X] {
     type X1
     type X2

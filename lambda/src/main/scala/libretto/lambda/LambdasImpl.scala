@@ -473,18 +473,18 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
             override def map[A, B](op: VarOp[A, B]): Image[A, B] =
               op match {
                 case (vars, _: Op.Zip[a1, a2]) =>
-                  Image(Par(SingleVar[a1](), SingleVar[a2]()), LinCheck.Success(CapturingFun.id), SingleVar[a1 |*| a2]())
+                  MappedMorphism(Par(SingleVar[a1](), SingleVar[a2]()), LinCheck.Success(CapturingFun.id), SingleVar[a1 |*| a2]())
                 case (vars, op: Op.Map[a, b]) =>
-                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.lift(op.f)), SingleVar[b]())
+                  MappedMorphism(SingleVar[a](), LinCheck.Success(CapturingFun.lift(op.f)), SingleVar[b]())
                 case (vars, _: Op.Unzip[a1, a2]) =>
-                  Image(SingleVar[a1 |*| a2](), LinCheck.Success(CapturingFun.id), Par(SingleVar[a1](), SingleVar[a2]()))
+                  MappedMorphism(SingleVar[a1 |*| a2](), LinCheck.Success(CapturingFun.id), Par(SingleVar[a1](), SingleVar[a2]()))
                 case (vars, op: Op.CaptureFst[a, x]) =>
-                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureFst(op.x)), SingleVar[x |*| a]())
+                  MappedMorphism(SingleVar[a](), LinCheck.Success(CapturingFun.captureFst(op.x)), SingleVar[x |*| a]())
                 case (vars, op: Op.CaptureSnd[a, x]) =>
-                  Image(SingleVar[a](), LinCheck.Success(CapturingFun.captureSnd(op.x)), SingleVar[a |*| x]())
+                  MappedMorphism(SingleVar[a](), LinCheck.Success(CapturingFun.captureSnd(op.x)), SingleVar[a |*| x]())
                 case (vars, op: Op.DupVar[a]) =>
                   val v = vars.getValue[a]
-                  Image(
+                  MappedMorphism(
                     SingleVar[a](),
                     Context.getSplit(v) match {
                       case Some(split) => LinCheck.Success(CapturingFun.lift(split))
@@ -493,7 +493,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
                     Par(SingleVar[a](), SingleVar[a]()),
                   )
                 case (vars, op: Op.Prj1[a1, a2]) =>
-                  Image(
+                  MappedMorphism(
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
                       case Some(discard) => LinCheck.Success(CapturingFun.noCapture(shuffled.swap > shuffled.lift(discard[a1](()))))
@@ -502,7 +502,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
                     SingleVar[a1](),
                   )
                 case (vars, op: Op.Prj2[a1, a2]) =>
-                  Image(
+                  MappedMorphism(
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
                       case Some(discard) => LinCheck.Success(CapturingFun.lift(discard[a2](())))
@@ -1240,8 +1240,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
         })
     }
 
-    val objectMap: ObjectMap[|*|, |*|, Unvar] =
-      new ObjectMap[|*|, |*|, Unvar] {
+    val objectMap: SemigroupalObjectMap[|*|, |*|, Unvar] =
+      new SemigroupalObjectMap[|*|, |*|, Unvar] {
         override def uniqueOutputType[A, X, Y](f1: Unvar[A, X], f2: Unvar[A, Y]): X =:= Y =
           f1 uniqueOutType f2
 
