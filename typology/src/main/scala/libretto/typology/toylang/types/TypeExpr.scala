@@ -92,8 +92,6 @@ case class TypeExpr[V, K, L](value: generic.TypeExpr[V, TypeExpr[V, _, _], K, L]
         throw NotImplementedError(s"PFix($f, $g) at ${summon[SourcePos]}")
       case gte.AbstractType(label) =>
         MappedMorphism(F.unit, tgt.abstractTypeName(label), map_●)
-      case gte.ScalaTypeParams(values) =>
-        throw NotImplementedError(s"ScalaTypeParams($values) at ${summon[SourcePos]}")
       case gte.BiApp(op, a, b) =>
         MappedMorphism(
           F.unit,
@@ -208,9 +206,6 @@ object TypeExpr {
 
   def pfix[V, K: ProperKind, X](f: Routing[K × ●, X], g: TypeExpr[V, X, ●]): TypeExpr[V, K, ●] =
     TypeExpr(generic.TypeExpr.PFix(f, g))
-
-  def scalaTypeParam[V, T](filename: String, line: Int, name: String): TypeExpr[V, ○, ●] =
-    TypeExpr(generic.TypeExpr.ScalaTypeParams.one(filename, line, name))
 
   def typeMismatch[V, K: Kind, L: OutputKind](a: TypeExpr[V, K, L], b: TypeExpr[V, K, L]): TypeExpr[V, K, L] =
     TypeExpr(generic.TypeExpr.TypeMismatch(a, b))

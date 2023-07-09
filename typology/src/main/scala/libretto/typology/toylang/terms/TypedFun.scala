@@ -1,7 +1,8 @@
 package libretto.typology.toylang.terms
 
 import libretto.lambda.util.SourcePos
-import libretto.typology.toylang.types.{AbstractTypeLabel, Fix, RecCall, TypeTag}
+import libretto.typology.kinds.*
+import libretto.typology.toylang.types.{AbstractTypeLabel, Fix, RecCall, ScalaTypeParam, TypeTag}
 
 sealed trait TypedFun[A, B] {
   import TypedFun._
@@ -16,8 +17,8 @@ sealed trait TypedFun[A, B] {
       case InjectR(ta, tb)   => tb
       case Rec(f)            => ???
       case Recur(ta, tb)     => Type.pair(Type.recCall(ta, tb), ta)
-      case FixF(f)           => TypeTag.toType(TypeTag.app(f, TypeTag.fix(using f))).vmap(identity)
-      case UnfixF(f)         => TypeTag.toType(TypeTag.fix(using f)).vmap(identity)
+      case FixF(f)           => f(Type.fix(f))
+      case UnfixF(f)         => Type.fix(f)
       case IntToString       => Type.int
 
   def outType: Type =
@@ -30,14 +31,18 @@ sealed trait TypedFun[A, B] {
       case InjectR(ta, tb)   => Type.sum(ta, tb)
       case Rec(f)            => f.outType
       case Recur(ta, tb)     => tb
-      case FixF(f)           => TypeTag.toType(TypeTag.fix(using f)).vmap(identity)
-      case UnfixF(f)         => TypeTag.toType(TypeTag.app(f, TypeTag.fix(using f))).vmap(identity)
+      case FixF(f)           => Type.fix(f)
+      case UnfixF(f)         => f(Type.fix(f))
       case IntToString       => Type.string
 }
 
 object TypedFun {
-  type Type = libretto.typology.toylang.types.Type[AbstractTypeLabel]
-  def Type  = libretto.typology.toylang.types.Type
+  type Label = Either[ScalaTypeParam, AbstractTypeLabel]
+
+  type Type = libretto.typology.toylang.types.Type[Label]
+  def  Type = libretto.typology.toylang.types.Type
+  type TypeFun[K, L] = libretto.typology.toylang.types.TypeFun[Label, K, L]
+  def  TypeFun       = libretto.typology.toylang.types.TypeFun
 
   case class Id[A](typ: Type) extends TypedFun[A, A]
   case class AndThen[A, X, B](f: TypedFun[A, X], tx: Type, g: TypedFun[X, B]) extends TypedFun[A, B]
@@ -50,8 +55,8 @@ object TypedFun {
   case class InjectR[A, B](ta: Type, tb: Type) extends TypedFun[B, Either[A, B]]
   case class Rec[A, B](f: TypedFun[(RecCall[A, B], A), B]) extends TypedFun[A, B]
   case class Recur[A, B](ta: Type, tb: Type) extends TypedFun[(RecCall[A, B], A), B]
-  case class FixF[F[_]](f: TypeTag[F]) extends TypedFun[F[Fix[F]], Fix[F]]
-  case class UnfixF[F[_]](f: TypeTag[F]) extends TypedFun[Fix[F], F[Fix[F]]]
+  case class FixF[F[_]](f: TypeFun[●, ●]) extends TypedFun[F[Fix[F]], Fix[F]]
+  case class UnfixF[F[_]](f: TypeFun[●, ●]) extends TypedFun[Fix[F], F[Fix[F]]]
 
   case object IntToString extends TypedFun[Int, String]
 
@@ -66,8 +71,8 @@ object TypedFun {
   def injectR[A, B](ta: Type, tb: Type): TypedFun[B, Either[A, B]] = InjectR(ta, tb)
   def rec[A, B](f: TypedFun[(RecCall[A, B], A), B]): TypedFun[A, B] = Rec(f)
   def recur[A, B](ta: Type, tb: Type): TypedFun[(RecCall[A, B], A), B] = Recur(ta, tb)
-  def fix[F[_]](f: TypeTag[F]): TypedFun[F[Fix[F]], Fix[F]] = FixF(f)
-  def unfix[F[_]](f: TypeTag[F]): TypedFun[Fix[F], F[Fix[F]]] = UnfixF(f)
+  def fix[F[_]](f: TypeFun[●, ●]): TypedFun[F[Fix[F]], Fix[F]] = FixF(f)
+  def unfix[F[_]](f: TypeFun[●, ●]): TypedFun[Fix[F], F[Fix[F]]] = UnfixF(f)
 
   def intToString: TypedFun[Int, String] = IntToString
 }

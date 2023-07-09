@@ -146,6 +146,6 @@ object TypeFun {
     }
   }
 
-  def scalaTypeParam[V, T](filename: String, line: Int, name: String): TypeFun[V, ○, ●] =
-    fromExpr(TypeExpr.scalaTypeParam(filename, line, name))
+  def abstractType[V](name: V): TypeFun[V, ○, ●] =
+    fromExpr(TypeExpr.abstractType(name))
 }

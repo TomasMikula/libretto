@@ -1,10 +1,13 @@
-package libretto.typology.toylang
+package libretto.typology.toylang.types
 
-import libretto.typology.kinds._
+/** Used as a phantom type representing a reference to a surrounding recursive function. */
+sealed trait RecCall[A, B]
 
-package object types {
-  type Type[V] = TypeExpr[V, ○, ●]
-
-  /** Used as a phantom type representing a reference to a surrounding recursive function. */
-  sealed trait RecCall[A, B]
+case class ScalaTypeParam(filename: String, line: Int, name: String)
+case class ScalaTypeParams(values: Set[ScalaTypeParam]) {
+  require(values.nonEmpty)
+}
+object ScalaTypeParams {
+  def one(filename: String, line: Int, name: String): ScalaTypeParams =
+    ScalaTypeParams(Set(ScalaTypeParam(filename, line, name)))
 }

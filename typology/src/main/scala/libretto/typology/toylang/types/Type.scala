@@ -2,6 +2,8 @@ package libretto.typology.toylang.types
 
 import libretto.typology.kinds._
 
+type Type[V] = TypeExpr[V, ○, ●]
+
 object Type {
   def unit[V]: Type[V]   = TypeExpr.unit
   def int[V]: Type[V]    = TypeExpr.int

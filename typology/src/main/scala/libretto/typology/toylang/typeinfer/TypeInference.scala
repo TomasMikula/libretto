@@ -8,7 +8,7 @@ import libretto.scaletto.StarterKit._
 import libretto.scaletto.StarterKit.Comonoid.comonoidOne
 import libretto.typology.kinds.{×, ○, ●}
 import libretto.typology.toylang.terms.{Fun, FunT, TypedFun}
-import libretto.typology.toylang.types.{Fix, AbstractTypeLabel, TypeAlgebra, TypeFun, TypeTag}
+import libretto.typology.toylang.types.{Fix, AbstractTypeLabel, ScalaTypeParam, TypeAlgebra, TypeFun, TypeTag}
 import libretto.typology.util.State
 
 object TypeInference {
@@ -25,19 +25,21 @@ object TypeInference {
   private type DegenericType = Rec[DegenericTypeF]
   private type DegenericTypeF[X] = NonAbstractTypeF[X] |+| Val[AbstractTypeLabel]
 
-  type Type = libretto.typology.toylang.types.Type[AbstractTypeLabel]
-  def  Type = libretto.typology.toylang.types.Type
+  type Type = TypedFun.Type // libretto.typology.toylang.types.Type[AbstractTypeLabel]
+  def  Type = TypedFun.Type // libretto.typology.toylang.types.Type
 
   type TypeFun[K, L] = libretto.typology.toylang.types.TypeFun[AbstractTypeLabel, K, L]
   // def  TypeFun = libretto.typology.toylang.types.TypeFun
+
+  type TypeTagF = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, ●, ●]
 
   private type NonAbstractTypeF[X] = (
     Val[(Type, Type)] // type mismatch
     |+| Done // unit
     |+| Done // int
     |+| Done // string
-    |+| (Val[TypeFun[●, ●]] |*| X) // apply1 // TODO: eliminate?
-    |+| Val[TypeFun[●, ●]] // fix
+    |+| (Val[TypeTagF] |*| X) // apply1 // TODO: eliminate?
+    |+| Val[TypeTagF] // fix
     |+| (X |*| X) // recCall
     |+| (X |*| X) // either
     |+| (X |*| X) // pair
@@ -394,7 +396,7 @@ object TypeInference {
                         val --(t) = unrefinedR.contramap(injectR)
                         outputT(constantVal(v) |*| t)
                       case Right(?(_)) =>
-                        constantVal(Type.abstractType(v))
+                        constantVal(Type.abstractType(Right(v)))
                     }
                 }
             }
@@ -1009,11 +1011,19 @@ object TypeInference {
     def recCall[X]: (X |*| X) -⚬ NonAbstractTypeF[X] =
       injectL ∘ injectL ∘ injectR
 
-    def fix[X]: Val[TypeFun[●, ●]] -⚬ NonAbstractTypeF[X] =
+    def fix[X]: Val[TypeTagF] -⚬ NonAbstractTypeF[X] =
       injectL ∘ injectL ∘ injectL ∘ injectR
 
     def fixT[X, F[_]](F: TypeTag[F]): One -⚬ NonAbstractTypeF[X] =
-      fix ∘ const(TypeTag.toTypeFun(F).vmap(identity))
+      fix ∘ const(TypeTag.toTypeFun(F))
+
+    def apply1[X]: (Val[TypeTagF] |*| X) -⚬ NonAbstractTypeF[X] =
+      injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
+
+    def apply1T[X, F[_]](F: TypeTag[F]): X -⚬ NonAbstractTypeF[X] =
+      λ { x =>
+        apply1(constantVal(TypeTag.toTypeFun(F)) |*| x)
+      }
 
     def string[X]: Done -⚬ NonAbstractTypeF[X] =
       injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
@@ -1079,8 +1089,7 @@ object TypeInference {
                       case Left(t) =>
                         t switch {
                           case Right(f |*| x) => // apply1
-                            // apply1(f |*| g(x))
-                            (f |*| x) :>> crashNow(s"TODO: eliminate (${summon[SourcePos]})")
+                            apply1(f |*| g(x))
                           case Left(t) =>
                             t switch {
                               case Right(d) => // string
@@ -1133,10 +1142,9 @@ object TypeInference {
                       case Left(t) =>
                         t switch {
                           case Right(g |*| x) => // apply1
-                            // val g1 |*| g2 = dsl.dup(g)
-                            // val x1 |*| x2 = f(x)
-                            // apply1(g1 |*| x1) |*| apply1(g2 |*| x2)
-                            (g |*| x) :>> crashNow(s"TODO: eliminate (${summon[SourcePos]})")
+                            val g1 |*| g2 = dsl.dup(g)
+                            val x1 |*| x2 = f(x)
+                            apply1(g1 |*| x1) |*| apply1(g2 |*| x2)
                           case Left(t) =>
                             t switch {
                               case Right(+(t)) => // string
@@ -1244,11 +1252,11 @@ object TypeInference {
                                           else        Right((f, g))
                                         } :>> liftEither) switch {
                                           case Left(f)   => NonAbstractType.fix(f)
-                                          case Right(fg) => NonAbstractType.mismatch(fg :>> mapVal { case (f, g) => (Type.fix(f), Type.fix(g)) })
+                                          case Right(fg) => NonAbstractType.mismatch(fg :>> mapVal { case (f, g) => (Type.fix(f.vmap(Left(_))), Type.fix(g.vmap(Left(_)))) })
                                         }
                                       case Left(b) =>
                                         NonAbstractType.mismatch(
-                                          (f :>> mapVal { f => Type.fix(f) })
+                                          (f :>> mapVal { f => Type.fix(f.vmap(Left(_))) })
                                           ** output(outputYApprox)(injectL(injectL(injectL(injectL(b)))))
                                         )
                                     }
@@ -1257,12 +1265,31 @@ object TypeInference {
                                       case Right(g) => // `b` is fix
                                         NonAbstractType.mismatch(
                                           output(outputXApprox)(injectL(injectL(injectL(injectL(a)))))
-                                          ** (g :>> mapVal { g => Type.fix(g) })
+                                          ** (g :>> mapVal { g => Type.fix(g.vmap(Left(_))) })
                                         )
                                       case Left(b) =>
                                         a switch {
                                           case Right(f |*| x) => // `a` is apply1
-                                            (f |*| x |*| b) :>> crashNow(s"Not implemented (at ${summon[SourcePos]})")
+                                            b switch {
+                                              case Right(h |*| y) => // `b` is apply1
+                                                ((f ** h) :>> mapVal { case (f, h) =>
+                                                  if (f == h) Left(f)
+                                                  else        Right((f, h))
+                                                } :>> liftEither) switch {
+                                                  case Left(f) =>
+                                                    NonAbstractType.apply1(f |*| g(x |*| y))
+                                                  case Right(fh) =>
+                                                    val x1 = outputXApprox(x)
+                                                    val y1 = outputYApprox(y)
+                                                    // XXX: of course it is wrong to conclude from f != h that f(x) != h(y)
+                                                    NonAbstractType.mismatch((fh ** (x1 ** y1)) :>> mapVal { case ((f, h), (x, y)) => (f.vmap(Left(_))(x), h.vmap(Left(_))(y)) })
+                                                }
+                                              case Left(b) =>
+                                                NonAbstractType.mismatch(
+                                                  ((f ** outputXApprox(x)) :>> mapVal { case (f, x) => f.vmap(Left(_))(x) })
+                                                  ** output(outputYApprox)(injectL(injectL(injectL(injectL(injectL(b)))))),
+                                                )
+                                            }
                                           case Left(a) =>
                                             b switch {
                                               case Right(g |*| y) => // `b` is apply1
@@ -1313,14 +1340,14 @@ object TypeInference {
                                                                         NonAbstractType.unit(join(x |*| y))
                                                                       case Left(bx) => // `b` is type mismatch
                                                                         val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
-                                                                        val ta = x :>> constVal(Type.unit[AbstractTypeLabel])
+                                                                        val ta = x :>> constVal(Type.unit[TypedFun.Label])
                                                                         NonAbstractType.mismatch(ta ** tb)
                                                                     }
                                                                   case Left(ax) => // `a` is type mismatch
                                                                     val ta = ax :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
                                                                     b switch {
                                                                       case Right(y) => // `b` is unit
-                                                                        val tb = y :>> constVal(Type.unit[AbstractTypeLabel])
+                                                                        val tb = y :>> constVal(Type.unit[TypedFun.Label])
                                                                         NonAbstractType.mismatch(ta ** tb)
                                                                       case Left(bx) => // `b` is type mismatch
                                                                         val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
@@ -1377,12 +1404,12 @@ object TypeInference {
                   case Left(x) =>
                     x switch {
                       case Right(tf) => // fix
-                        tf :>> mapVal { Type.fix(_) }
+                        tf :>> mapVal { tf => Type.fix(tf.vmap(Left(_))) }
                       case Left(x) =>
                         x switch {
                           case Right(tf |*| a) => // apply1
                             (tf ** outputX(a)) :>> mapVal { case (f, a) =>
-                              f(a)
+                              f.vmap(Left(_))(a)
                             }
                           case Left(x) =>
                             x switch {
@@ -1453,8 +1480,7 @@ object TypeInference {
                 case Right(f) => fix(f waitFor d)
                 case Left(t) => t switch {
                   case Right(f |*| x) =>
-                    // apply1(f.waitFor(d) |*| x)
-                    (d |*| f |*| x) :>> crashNow(s"TODO: eliminate (${summon[SourcePos]})")
+                    apply1(f.waitFor(d) |*| x)
                   case Left(t) => t switch {
                     case Right(x) => string(join(d |*| x))
                     case Left(t) => t switch {
@@ -1502,7 +1528,7 @@ object TypeInference {
     def recCall[T]: (ConcreteType[T] |*| ConcreteType[T]) -⚬ ConcreteType[T] =
       NonAbstractType.recCall > nonAbstractType
 
-    def fix[T]: Val[TypeFun[●, ●]] -⚬ ConcreteType[T] =
+    def fix[T]: Val[TypeTagF] -⚬ ConcreteType[T] =
       NonAbstractType.fix > nonAbstractType
 
     def fixT[T, F[_]](F: TypeTag[F]): One -⚬ ConcreteType[T] =
@@ -1521,12 +1547,13 @@ object TypeInference {
       NonAbstractType.mismatch > nonAbstractType
 
     def apply1T[T, F[_]](F: TypeTag[F]): ConcreteType[T] -⚬ ConcreteType[T] =
-      apply1(TypeTag.toTypeFun(F).vmap(identity))
+      apply1(TypeTag.toTypeFun(F))
 
-    def apply1[T](f: TypeFun[●, ●]): ConcreteType[T] -⚬ ConcreteType[T] = {
-      val ct = compilationTarget[T]
-      import ct.Map_●
-      f.compile(Map_●)(ct.typeAlgebra, Map_●).get(Map_●, Map_●) > awaitPosFst
+    def apply1[T](f: TypeTagF): ConcreteType[T] -⚬ ConcreteType[T] = {
+      λ { t => NonAbstractType.apply1(constantVal(f) |*| t) :>> nonAbstractType }
+      // val ct = compilationTarget[T]
+      // import ct.Map_●
+      // f.compile(Map_●)(ct.typeAlgebra, Map_●).get(Map_●, Map_●) > awaitPosFst
     }
 
     class compilationTarget[T] {
@@ -1599,7 +1626,8 @@ object TypeInference {
           override def recCall: Arr[ConcreteType[T] |*| ConcreteType[T], ConcreteType[T]] =
             λ { case t |*| u => constant(done) |*| ConcreteType.recCall(t |*| u) }
           override def fix(f: TypeFun[●, ●]): Arr[One, ConcreteType[T]] =
-            const(f) > ConcreteType.fix > introFst(done)
+            // const(f) > ConcreteType.fix > introFst(done)
+            ???
           override def abstractTypeName(name: AbstractTypeLabel): Arr[One, ConcreteType[T]] =
             throw NotImplementedError(s"TODO (${summon[SourcePos]})")
 
@@ -1752,7 +1780,7 @@ object TypeInference {
     val output: DegenericType -⚬ Val[Type] = rec { self =>
       unpack > either(
         NonAbstractType.output(self),
-        mapVal { Type.abstractType[AbstractTypeLabel] },
+        mapVal { lbl => Type.abstractType(Right(lbl)) },
       )
     }
 
@@ -2538,7 +2566,7 @@ object TypeInference {
     ): TypeSkelet[T, Y, X] -⚬ Val[Type] =
       λ { _ switch {
         case Right(label |*| req) => // abstract type
-          (label :>> mapVal(Type.abstractType[AbstractTypeLabel]))
+          (label :>> mapVal(l => Type.abstractType(Right(l))))
             .waitFor {
               RefinementRequest.decline(req) switch {
                 case Left(x) =>
@@ -2602,41 +2630,6 @@ object TypeInference {
       rec { self =>
         unpack[T, Y] > TypeSkelet.dimap(f, self) > pack[T, P]
       }
-
-    def pair[T, Y]: (TypeEmitterF[T, Y] |*| TypeEmitterF[T, Y]) -⚬ TypeEmitterF[T, Y] =
-      pack ∘ injectL ∘ injectR
-
-    def either[T, Y]: (TypeEmitterF[T, Y] |*| TypeEmitterF[T, Y]) -⚬ TypeEmitterF[T, Y] =
-      pack ∘ injectL ∘ injectL ∘ injectR
-
-    def recCall[T, Y]: (TypeEmitterF[T, Y] |*| TypeEmitterF[T, Y]) -⚬ TypeEmitterF[T, Y] =
-      pack ∘ injectL  ∘ injectL ∘ injectL ∘ injectR
-
-    def fix[T, Y]: Val[TypeFun[●, ●]] -⚬ TypeEmitterF[T, Y] =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
-
-    def fixT[T, Y, F[_]](F: TypeTag[F]): One -⚬ TypeEmitterF[T, Y] =
-      fix ∘ const(TypeTag.toTypeFun(F).vmap(identity))
-
-    def apply1[T, Y]: (Val[TypeFun[●, ●]] |*| TypeEmitterF[T, Y]) -⚬ TypeEmitterF[T, Y] =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
-
-    def apply1T[T, Y, F[_]](F: TypeTag[F]): TypeEmitterF[T, Y] -⚬ TypeEmitterF[T, Y] =
-      λ { x =>
-        apply1(constantVal(TypeTag.toTypeFun(F).vmap(identity)) |*| x)
-      }
-
-    def string[T, Y]: Done -⚬ TypeEmitterF[T, Y] =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
-
-    def int[T, Y]: Done -⚬ TypeEmitterF[T, Y] =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
-
-    def unit[T, Y]: Done -⚬ TypeEmitterF[T, Y] =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
-
-    def mismatch[T, Y]: Val[(Type, Type)] -⚬ TypeEmitterF[T, Y] =
-      pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL
   }
 
   object TypeEmitter {
@@ -3200,7 +3193,7 @@ object TypeInference {
         λ { case lbl |*| t =>
           Maybe.toEither(unpack(t)) switch {
             case Left(?(_)) =>
-              lbl :>> mapVal { Type.abstractType[AbstractTypeLabel] }
+              lbl :>> mapVal { l => Type.abstractType(Right(l)) }
             case Right(t) =>
               (t :>> ReboundType.output(self))
                 .waitFor(neglect(lbl))
@@ -3421,7 +3414,7 @@ object TypeInference {
           λ.* { one =>
             val fixF = fixT[T, f](f.f)(one)
             val fFixF = apply1T(f.f)(fixT[T, f](f.f)(one))
-            val tf = constantVal(TypedFun.fix(f.f))
+            val tf = constantVal(TypedFun.fix[f](TypeTag.toTypeFun(f.f).vmap(Left(_))))
             fFixF |*| tf |*| fixF
           }
         )
@@ -3430,7 +3423,7 @@ object TypeInference {
           λ.* { one =>
             val fixF = fixT[T, f](f.f)(one)
             val fFixF = apply1T(f.f)(fixT[T, f](f.f)(one))
-            val tf = constantVal(TypedFun.unfix(f.f))
+            val tf = constantVal(TypedFun.unfix[f](TypeTag.toTypeFun(f.f).vmap(Left(_))))
             fixF |*| tf |*| fFixF
           }
         )

@@ -37,7 +37,6 @@ sealed abstract class TypeExpr[V, ->>[_, _], K, L](using
       case RecCall() => RecCall()
       case Fix(f, g) => Fix(f, g)
       case x @ PFix(f, g) => import x.given; PFix(f, g)
-      case ScalaTypeParams(values) => ScalaTypeParams(values)
       case BiApp(op, arg1, arg2) => BiApp(op.vcast[W], arg1, arg2)
       case AppFst(op, arg1) => AppFst(op.vcast[W], arg1)
       case AppSnd(op, arg2) => AppSnd(op.vcast[W], arg2)
@@ -57,7 +56,6 @@ sealed abstract class TypeExpr[V, ->>[_, _], K, L](using
       case Pair() => Pair().pure[M]
       case Sum() => Sum().pure[M]
       case AbstractType(label) => AbstractType(label).pure[M]
-      case ScalaTypeParams(ps) => ScalaTypeParams(ps).pure[M]
 
       case AppFst(op, a) =>
         for {
@@ -347,15 +345,6 @@ object TypeExpr {
   ) extends TypeExpr[V, ->>, K, ●]
 
   case class AbstractType[V, ->>[_, _]](label: V) extends TypeExpr[V, ->>, ○, ●]
-
-  case class ScalaTypeParam(filename: String, line: Int, name: String)
-  case class ScalaTypeParams[V, ->>[_, _]](values: Set[ScalaTypeParam]) extends TypeExpr[V, ->>, ○, ●] {
-    require(values.nonEmpty)
-  }
-  object ScalaTypeParams {
-    def one[V, ->>[_, _]](filename: String, line: Int, name: String): ScalaTypeParams[V, ->>] =
-      ScalaTypeParams(Set(ScalaTypeParam(filename, line, name)))
-  }
 
   case class BiApp[V, ->>[_, _], K1, K2, L](
     op: BinaryOperator[V, ->>, K1, K2, L],
