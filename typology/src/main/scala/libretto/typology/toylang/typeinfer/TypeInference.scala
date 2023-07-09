@@ -8,7 +8,7 @@ import libretto.scaletto.StarterKit._
 import libretto.scaletto.StarterKit.Comonoid.comonoidOne
 import libretto.typology.kinds.{×, ○, ●}
 import libretto.typology.toylang.terms.{Fun, FunT, TypedFun}
-import libretto.typology.toylang.types.{Fix, AbstractTypeLabel, Type, TypeAlgebra, TypeFun, TypeTag}
+import libretto.typology.toylang.types.{Fix, AbstractTypeLabel, TypeAlgebra, TypeFun, TypeTag}
 import libretto.typology.util.State
 
 object TypeInference {
@@ -24,6 +24,12 @@ object TypeInference {
 
   private type DegenericType = Rec[DegenericTypeF]
   private type DegenericTypeF[X] = NonAbstractTypeF[X] |+| Val[AbstractTypeLabel]
+
+  type Type = libretto.typology.toylang.types.Type[AbstractTypeLabel]
+  def  Type = libretto.typology.toylang.types.Type
+
+  type TypeFun[K, L] = libretto.typology.toylang.types.TypeFun[AbstractTypeLabel, K, L]
+  // def  TypeFun = libretto.typology.toylang.types.TypeFun
 
   private type NonAbstractTypeF[X] = (
     Val[(Type, Type)] // type mismatch
@@ -1007,7 +1013,7 @@ object TypeInference {
       injectL ∘ injectL ∘ injectL ∘ injectR
 
     def fixT[X, F[_]](F: TypeTag[F]): One -⚬ NonAbstractTypeF[X] =
-      fix ∘ const(TypeTag.toTypeFun(F))
+      fix ∘ const(TypeTag.toTypeFun(F).vmap(identity))
 
     def string[X]: Done -⚬ NonAbstractTypeF[X] =
       injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
@@ -1307,14 +1313,14 @@ object TypeInference {
                                                                         NonAbstractType.unit(join(x |*| y))
                                                                       case Left(bx) => // `b` is type mismatch
                                                                         val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
-                                                                        val ta = x :>> constVal(Type.unit)
+                                                                        val ta = x :>> constVal(Type.unit[AbstractTypeLabel])
                                                                         NonAbstractType.mismatch(ta ** tb)
                                                                     }
                                                                   case Left(ax) => // `a` is type mismatch
                                                                     val ta = ax :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
                                                                     b switch {
                                                                       case Right(y) => // `b` is unit
-                                                                        val tb = y :>> constVal(Type.unit)
+                                                                        val tb = y :>> constVal(Type.unit[AbstractTypeLabel])
                                                                         NonAbstractType.mismatch(ta ** tb)
                                                                       case Left(bx) => // `b` is type mismatch
                                                                         val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
@@ -1515,7 +1521,7 @@ object TypeInference {
       NonAbstractType.mismatch > nonAbstractType
 
     def apply1T[T, F[_]](F: TypeTag[F]): ConcreteType[T] -⚬ ConcreteType[T] =
-      apply1(TypeTag.toTypeFun(F))
+      apply1(TypeTag.toTypeFun(F).vmap(identity))
 
     def apply1[T](f: TypeFun[●, ●]): ConcreteType[T] -⚬ ConcreteType[T] = {
       val ct = compilationTarget[T]
@@ -1524,74 +1530,81 @@ object TypeInference {
     }
 
     class compilationTarget[T] {
-      val typeAlgebra: TypeAlgebra.With[[x, y] =>> x -⚬ (Done |*| y), ConcreteType[T], |*|, One] =
-        new TypeAlgebra[[x, y] =>> x -⚬ (Done |*| y)] {
+      type Arr[K, L] = K -⚬ (Done |*| L)
+
+      val category: SymmetricMonoidalCategory[Arr, |*|, One] =
+        new SymmetricMonoidalCategory[Arr, |*|, One] {
+
+          override def id[A]: Arr[A, A] =
+            dsl.introFst(done)
+
+          override def introFst[A]: Arr[A, One |*| A] =
+            dsl.andThen(dsl.introFst, dsl.introFst(done))
+
+          override def introSnd[A]: Arr[A, A |*| One] =
+            dsl.andThen(dsl.introSnd, dsl.introFst(done))
+
+          override def elimFst[A]: Arr[One |*| A, A] =
+            dsl.fst(done)
+
+          override def elimSnd[A]: Arr[A |*| One, A] =
+            dsl.andThen(dsl.swap, dsl.fst(done))
+
+          override def assocRL[A, B, C]: Arr[A |*| (B |*| C), (A |*| B) |*| C] =
+            dsl.andThen(dsl.assocRL, dsl.introFst(done))
+
+          override def assocLR[A, B, C]: Arr[(A |*| B) |*| C, A |*| (B |*| C)] =
+            dsl.andThen(dsl.assocLR, dsl.introFst(done))
+
+          override def swap[A, B]: Arr[A |*| B, B |*| A] =
+            dsl.andThen(dsl.swap, dsl.introFst(done))
+
+          override def andThen[A, B, C](
+            f: Arr[A, B],
+            g: Arr[B, C],
+          ): Arr[A, C] =
+            dsl.andThen(
+              dsl.andThen(f, dsl.snd(g)),
+              dsl.andThen(dsl.assocRL, dsl.fst(join)),
+            )
+
+          override def par[A1, A2, B1, B2](
+            f1: Arr[A1, B1],
+            f2: Arr[A2, B2],
+          ): Arr[A1 |*| A2, B1 |*| B2] =
+            dsl.andThen(
+              dsl.par(f1, f2),
+              λ { case (d1 |*| b1) |*| (d2 |*| b2) =>
+                join(d1 |*| d2) |*| (b1 |*| b2)
+              },
+            )
+        }
+
+      val typeAlgebra: TypeAlgebra.Of[AbstractTypeLabel, Arr, ConcreteType[T], |*|, One] =
+        new TypeAlgebra[AbstractTypeLabel, Arr] {
           override type Type = ConcreteType[T]
           override type <*>[A, B] = A |*| B
           override type None = One
 
-          override def unit: One -⚬ (Done |*| ConcreteType[T]) =
+          override def unit: Arr[One, ConcreteType[T]] =
             done > λ { case +(d) => d |*| ConcreteType.unit(d) }
-          override def int: One -⚬ (Done |*| ConcreteType[T]) =
+          override def int: Arr[One, ConcreteType[T]] =
             done > λ { case +(d) => d |*| ConcreteType.int(d) }
-          override def string: One -⚬ (Done |*| ConcreteType[T]) =
+          override def string: Arr[One, ConcreteType[T]] =
             done > λ { case +(d) => d |*| ConcreteType.string(d) }
-          override def pair: (ConcreteType[T] |*| ConcreteType[T]) -⚬ (Done |*| ConcreteType[T]) =
+          override def pair: Arr[ConcreteType[T] |*| ConcreteType[T], ConcreteType[T]] =
             λ { case t |*| u => constant(done) |*| ConcreteType.pair(t |*| u) }
-          override def sum: (ConcreteType[T] |*| ConcreteType[T]) -⚬ (Done |*| ConcreteType[T]) =
+          override def sum: Arr[ConcreteType[T] |*| ConcreteType[T], ConcreteType[T]] =
             λ { case t |*| u => constant(done) |*| ConcreteType.either(t |*| u) }
-          override def recCall: (ConcreteType[T] |*| ConcreteType[T]) -⚬ (Done |*| ConcreteType[T]) =
+          override def recCall: Arr[ConcreteType[T] |*| ConcreteType[T], ConcreteType[T]] =
             λ { case t |*| u => constant(done) |*| ConcreteType.recCall(t |*| u) }
-          override def fix(f: TypeFun[●, ●]): One -⚬ (Done |*| ConcreteType[T]) =
+          override def fix(f: TypeFun[●, ●]): Arr[One, ConcreteType[T]] =
             const(f) > ConcreteType.fix > introFst(done)
+          override def abstractTypeName(name: AbstractTypeLabel): Arr[One, ConcreteType[T]] =
+            throw NotImplementedError(s"TODO (${summon[SourcePos]})")
 
-          override given category: SymmetricMonoidalCategory[[x, y] =>> x -⚬ (Done |*| y), |*|, One] =
-            new SymmetricMonoidalCategory[[x, y] =>> x -⚬ (Done |*| y), |*|, One] {
-
-              override def id[A]: A -⚬ (Done |*| A) =
-                dsl.introFst(done)
-
-              override def introFst[A]: A -⚬ (Done |*| (One |*| A)) =
-                dsl.andThen(dsl.introFst, dsl.introFst(done))
-
-              override def introSnd[A]: A -⚬ (Done |*| (A |*| One)) =
-                dsl.andThen(dsl.introSnd, dsl.introFst(done))
-
-              override def elimFst[A]: (One |*| A) -⚬ (Done |*| A) =
-                dsl.fst(done)
-
-              override def elimSnd[A]: (A |*| One) -⚬ (Done |*| A) =
-                dsl.andThen(dsl.swap, dsl.fst(done))
-
-              override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ (Done |*| (A |*| B |*| C)) =
-                dsl.andThen(dsl.assocRL, dsl.introFst(done))
-
-              override def assocLR[A, B, C]: (A |*| B |*| C) -⚬ (Done |*| (A |*| (B |*| C))) =
-                dsl.andThen(dsl.assocLR, dsl.introFst(done))
-
-              override def swap[A, B]: (A |*| B) -⚬ (Done |*| (B |*| A)) =
-                dsl.andThen(dsl.swap, dsl.introFst(done))
-
-              override def andThen[A, B, C](
-                f: A -⚬ (Done |*| B),
-                g: B -⚬ (Done |*| C),
-              ): A -⚬ (Done |*| C) =
-                dsl.andThen(
-                  dsl.andThen(f, dsl.snd(g)),
-                  dsl.andThen(dsl.assocRL, dsl.fst(join)),
-                )
-
-              override def par[A1, A2, B1, B2](
-                f1: A1 -⚬ (Done |*| B1),
-                f2: A2 -⚬ (Done |*| B2),
-              ): (A1 |*| A2) -⚬ (Done |*| (B1 |*| B2)) =
-                dsl.andThen(
-                  dsl.par(f1, f2),
-                  λ { case (d1 |*| b1) |*| (d2 |*| b2) =>
-                    join(d1 |*| d2) |*| (b1 |*| b2)
-                  },
-                )
-            }
+          override given category: SymmetricMonoidalCategory[Arr, |*|, One] =
+            compilationTarget.this.category
         }
 
       sealed trait as[K, Q]
@@ -1739,7 +1752,7 @@ object TypeInference {
     val output: DegenericType -⚬ Val[Type] = rec { self =>
       unpack > either(
         NonAbstractType.output(self),
-        mapVal { Type.abstractType },
+        mapVal { Type.abstractType[AbstractTypeLabel] },
       )
     }
 
@@ -2525,7 +2538,7 @@ object TypeInference {
     ): TypeSkelet[T, Y, X] -⚬ Val[Type] =
       λ { _ switch {
         case Right(label |*| req) => // abstract type
-          (label :>> mapVal(Type.abstractType))
+          (label :>> mapVal(Type.abstractType[AbstractTypeLabel]))
             .waitFor {
               RefinementRequest.decline(req) switch {
                 case Left(x) =>
@@ -2603,14 +2616,14 @@ object TypeInference {
       pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
     def fixT[T, Y, F[_]](F: TypeTag[F]): One -⚬ TypeEmitterF[T, Y] =
-      fix ∘ const(TypeTag.toTypeFun(F))
+      fix ∘ const(TypeTag.toTypeFun(F).vmap(identity))
 
     def apply1[T, Y]: (Val[TypeFun[●, ●]] |*| TypeEmitterF[T, Y]) -⚬ TypeEmitterF[T, Y] =
       pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
     def apply1T[T, Y, F[_]](F: TypeTag[F]): TypeEmitterF[T, Y] -⚬ TypeEmitterF[T, Y] =
       λ { x =>
-        apply1(constantVal(TypeTag.toTypeFun(F)) |*| x)
+        apply1(constantVal(TypeTag.toTypeFun(F).vmap(identity)) |*| x)
       }
 
     def string[T, Y]: Done -⚬ TypeEmitterF[T, Y] =
@@ -3187,7 +3200,7 @@ object TypeInference {
         λ { case lbl |*| t =>
           Maybe.toEither(unpack(t)) switch {
             case Left(?(_)) =>
-              lbl :>> mapVal { Type.abstractType }
+              lbl :>> mapVal { Type.abstractType[AbstractTypeLabel] }
             case Right(t) =>
               (t :>> ReboundType.output(self))
                 .waitFor(neglect(lbl))

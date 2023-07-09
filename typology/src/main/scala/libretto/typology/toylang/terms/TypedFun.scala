@@ -1,7 +1,7 @@
 package libretto.typology.toylang.terms
 
 import libretto.lambda.util.SourcePos
-import libretto.typology.toylang.types.{Fix, RecCall, Type, TypeTag}
+import libretto.typology.toylang.types.{AbstractTypeLabel, Fix, RecCall, TypeTag}
 
 sealed trait TypedFun[A, B] {
   import TypedFun._
@@ -16,8 +16,8 @@ sealed trait TypedFun[A, B] {
       case InjectR(ta, tb)   => tb
       case Rec(f)            => ???
       case Recur(ta, tb)     => Type.pair(Type.recCall(ta, tb), ta)
-      case FixF(f)           => TypeTag.toType(TypeTag.app(f, TypeTag.fix(using f)))
-      case UnfixF(f)         => TypeTag.toType(TypeTag.fix(using f))
+      case FixF(f)           => TypeTag.toType(TypeTag.app(f, TypeTag.fix(using f))).vmap(identity)
+      case UnfixF(f)         => TypeTag.toType(TypeTag.fix(using f)).vmap(identity)
       case IntToString       => Type.int
 
   def outType: Type =
@@ -30,12 +30,15 @@ sealed trait TypedFun[A, B] {
       case InjectR(ta, tb)   => Type.sum(ta, tb)
       case Rec(f)            => f.outType
       case Recur(ta, tb)     => tb
-      case FixF(f)           => TypeTag.toType(TypeTag.fix(using f))
-      case UnfixF(f)         => TypeTag.toType(TypeTag.app(f, TypeTag.fix(using f)))
+      case FixF(f)           => TypeTag.toType(TypeTag.fix(using f)).vmap(identity)
+      case UnfixF(f)         => TypeTag.toType(TypeTag.app(f, TypeTag.fix(using f))).vmap(identity)
       case IntToString       => Type.string
 }
 
 object TypedFun {
+  type Type = libretto.typology.toylang.types.Type[AbstractTypeLabel]
+  def Type  = libretto.typology.toylang.types.Type
+
   case class Id[A](typ: Type) extends TypedFun[A, A]
   case class AndThen[A, X, B](f: TypedFun[A, X], tx: Type, g: TypedFun[X, B]) extends TypedFun[A, B]
   case class Par[A1, A2, B1, B2](f1: TypedFun[A1, B1], f2: TypedFun[A2, B2]) extends TypedFun[(A1, A2), (B1, B2)]

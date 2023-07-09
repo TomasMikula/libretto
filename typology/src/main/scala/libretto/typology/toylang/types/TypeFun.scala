@@ -3,31 +3,31 @@ package libretto.typology.toylang.types
 import libretto.lambda.{MappedMorphism, MonoidalObjectMap}
 import libretto.typology.kinds._
 
-sealed trait TypeFun[K, L] {
+sealed trait TypeFun[V, K, L] {
   type X
   val pre: Routing[K, X]
-  val expr: TypeExpr[X, L]
+  val expr: TypeExpr[V, X, L]
 
   given inKind: Kind[K] = pre.inKind
   given outKind: OutputKind[L] = expr.outKind
 
-  def ∘[J](that: TypeFun[J, K]): TypeFun[J, L] = {
+  def ∘[J](that: TypeFun[V, J, K]): TypeFun[V, J, L] = {
     import that.pre.outKind
     import that.expr.outKind
 
-    this.pre.applyToTrans[TypeExpr[*, *], that.X](ArgTrans(that.expr)) match {
+    this.pre.applyToTrans[TypeExpr[V, _, _], that.X](ArgTrans(that.expr)) match {
       case Routing.AppTransRes(q, e) =>
         TypeFun(that.pre > q, this.expr.transCompose(e))
     }
   }
 
-  def apply(t: TypeExpr[○, K]): TypeExpr[○, L] =
+  def apply(t: TypeExpr[V, ○, K]): TypeExpr[V, ○, L] =
     TypeFun.toExpr(this ∘ TypeFun.fromExpr(t))
 
   def compile[==>[_, _], F[_, _], Q](
     fk: F[K, Q],
   )(
-    tgt: TypeAlgebra[==>],
+    tgt: TypeAlgebra[V, ==>],
     map_● : F[●, tgt.Type],
   )(using
     F: MonoidalObjectMap[F, ×, ○, tgt.<*>, tgt.None],
@@ -35,80 +35,83 @@ sealed trait TypeFun[K, L] {
     import tgt.given
     pre.compile(fk)() > expr.compile(tgt, map_●)
   }
+
+  def vmap[W](f: V => W): TypeFun[W, K, L] =
+    TypeFun(pre, expr.vmap(f))
 }
 
 object TypeFun {
-  def apply[K, P, L](r: Routing[K, P], f: TypeExpr[P, L]): TypeFun[K, L] =
-    new TypeFun[K, L] {
+  def apply[V, K, P, L](r: Routing[K, P], f: TypeExpr[V, P, L]): TypeFun[V, K, L] =
+    new TypeFun[V, K, L] {
       override type X = P
       override val pre = r
       override val expr = f
     }
 
-  def unapply[K, L](f: TypeFun[K, L]): (Routing[K, f.X], TypeExpr[f.X, L]) =
+  def unapply[V, K, L](f: TypeFun[V, K, L]): (Routing[K, f.X], TypeExpr[V, f.X, L]) =
     (f.pre, f.expr)
 
-  def fromExpr[K, L](e: TypeExpr[K, L]): TypeFun[K, L] = {
+  def fromExpr[V, K, L](e: TypeExpr[V, K, L]): TypeFun[V, K, L] = {
     import e.inKind
     TypeFun(Routing.id[K], e)
   }
 
-  def toExpr[L](f: TypeFun[○, L]): TypeExpr[○, L] =
-    Routing.proveId(f.pre).substituteCo[TypeExpr[*, L]](f.expr)
+  def toExpr[V, L](f: TypeFun[V, ○, L]): TypeExpr[V, ○, L] =
+    Routing.proveId(f.pre).substituteCo[TypeExpr[V, _, L]](f.expr)
 
-  def unit: TypeFun[○, ●] =
+  def unit[V]: TypeFun[V, ○, ●] =
     fromExpr(TypeExpr.unit)
 
-  def int: TypeFun[○, ●] =
+  def int[V]: TypeFun[V, ○, ●] =
     fromExpr(TypeExpr.int)
 
-  def string: TypeFun[○, ●] =
+  def string[V]: TypeFun[V, ○, ●] =
     fromExpr(TypeExpr.string)
 
-  def pair: TypeFun[● × ●, ●] =
+  def pair[V]: TypeFun[V, ● × ●, ●] =
     fromExpr(TypeExpr.pair)
 
-  def pair(a: TypeFun[○, ●], b: TypeFun[○, ●]): TypeFun[○, ●] =
+  def pair[V](a: TypeFun[V, ○, ●], b: TypeFun[V, ○, ●]): TypeFun[V, ○, ●] =
     fromExpr(TypeExpr.pair(toExpr(a), toExpr(b)))
 
-  def pair1(a: Type): TypeFun[●, ●] =
+  def pair1[V](a: Type[V]): TypeFun[V, ●, ●] =
     fromExpr(TypeExpr.pair1(a))
 
-  def pair1(a: TypeFun[○, ●]): TypeFun[●, ●] =
+  def pair1[V](a: TypeFun[V, ○, ●]): TypeFun[V, ●, ●] =
     pair1(toExpr(a))
 
-  def sum: TypeFun[● × ●, ●] =
+  def sum[V]: TypeFun[V, ● × ●, ●] =
     fromExpr(TypeExpr.sum)
 
-  def sum(a: TypeFun[○, ●], b: TypeFun[○, ●]): TypeFun[○, ●] =
+  def sum[V](a: TypeFun[V, ○, ●], b: TypeFun[V, ○, ●]): TypeFun[V, ○, ●] =
     fromExpr(TypeExpr.sum(toExpr(a), toExpr(b)))
 
-  def sum1(a: Type): TypeFun[●, ●] =
+  def sum1[V](a: Type[V]): TypeFun[V, ●, ●] =
     fromExpr(TypeExpr.sum1(a))
 
-  def sum1(a: TypeFun[○, ●]): TypeFun[●, ●] =
+  def sum1[V](a: TypeFun[V, ○, ●]): TypeFun[V, ●, ●] =
     sum1(toExpr(a))
 
-  def fix(f: TypeFun[●, ●]): TypeFun[○, ●] =
+  def fix[V](f: TypeFun[V, ●, ●]): TypeFun[V, ○, ●] =
     f match {
       case TypeFun(pre, expr) => fromExpr(TypeExpr.fix(pre, expr))
     }
 
-  def pfix(f: TypeFun[● × ●, ●]): TypeFun[●, ●] =
+  def pfix[V](f: TypeFun[V, ● × ●, ●]): TypeFun[V, ●, ●] =
     f match {
       case TypeFun(pre, expr) => fromExpr(TypeExpr.pfix(pre, expr))
     }
 
-  def composeSnd[K, L, M, N](g: TypeFun[K × M, N], f: TypeFun[L, M])(using
+  def composeSnd[V, K, L, M, N](g: TypeFun[V, K × M, N], f: TypeFun[V, L, M])(using
     ProperKind[L],
-  ): TypeFun[K × L, N] = {
-    def go[X, Y](f1: Routing[L, X], f2: TypeExpr[X, M], g1: Routing[K × M, Y], g2: TypeExpr[Y, N]): TypeFun[K × L, N] = {
+  ): TypeFun[V, K × L, N] = {
+    def go[X, Y](f1: Routing[L, X], f2: TypeExpr[V, X, M], g1: Routing[K × M, Y], g2: TypeExpr[V, Y, N]): TypeFun[V, K × L, N] = {
       given ProperKind[K] = Kind.fst(g.inKind)
       given OutputKind[M] = f2.outKind
 
       f2.inKind.properKind match {
         case Left(x_eq_○) =>
-          val f20: TypeExpr[○, M] = x_eq_○.substituteCo[TypeExpr[*, M]](f2)
+          val f20: TypeExpr[V, ○, M] = x_eq_○.substituteCo[TypeExpr[V, _, M]](f2)
           g1.applyTo(ArgIntro.wrapArgSnd(f20)) match {
             case Routing.ApplyRes(g1, f21) =>
               TypeFun(Routing.elimSnd[K, L] > g1, g2.applyTo(f21))
@@ -127,11 +130,11 @@ object TypeFun {
     }
   }
 
-  def appFst[K, L, M](f: TypeFun[K × L, M], a: TypeFun[○, K]): TypeFun[L, M] = {
+  def appFst[V, K, L, M](f: TypeFun[V, K × L, M], a: TypeFun[V, ○, K]): TypeFun[V, L, M] = {
     given OutputKind[K] = a.outKind
     given ProperKind[L] = Kind.snd(f.inKind)
 
-    def go[X](a: TypeExpr[○, K], f1: Routing[K × L, X], f2: TypeExpr[X, M]): TypeFun[L, M] = {
+    def go[X](a: TypeExpr[V, ○, K], f1: Routing[K × L, X], f2: TypeExpr[V, X, M]): TypeFun[V, L, M] = {
       f1.applyTo(ArgIntro.wrapArgFst(a)) match {
         case Routing.ApplyRes(f0, args) =>
           TypeFun(f0, f2.applyTo(args))
@@ -143,6 +146,6 @@ object TypeFun {
     }
   }
 
-  def scalaTypeParam[T](filename: String, line: Int, name: String): TypeFun[○, ●] =
+  def scalaTypeParam[V, T](filename: String, line: Int, name: String): TypeFun[V, ○, ●] =
     fromExpr(TypeExpr.scalaTypeParam(filename, line, name))
 }

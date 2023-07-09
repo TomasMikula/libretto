@@ -3,7 +3,7 @@ package libretto.typology.toylang.types
 import libretto.lambda.SymmetricMonoidalCategory
 import libretto.typology.kinds._
 
-trait TypeAlgebra[==>[_, _]] {
+trait TypeAlgebra[V, ==>[_, _]] {
   type Type
   type <*>[_, _]
   type None
@@ -19,12 +19,14 @@ trait TypeAlgebra[==>[_, _]] {
   def recCall : (Type <*> Type) ==> Type
 
   // XXX: crutch
-  def fix(f: TypeFun[●, ●]): None ==> Type
+  def fix(f: TypeFun[V, ●, ●]): None ==> Type
+
+  def abstractTypeName(name: V): None ==> Type
 }
 
 object TypeAlgebra {
-  type With[==>[_, _], T, P[_, _], U] =
-    TypeAlgebra[==>] {
+  type Of[V, ==>[_, _], T, P[_, _], U] =
+    TypeAlgebra[V, ==>] {
       type Type      = T
       type <*>[a, b] = P[a, b]
       type None      = U

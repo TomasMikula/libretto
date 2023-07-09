@@ -12,6 +12,8 @@ import libretto.typology.toylang.terms.Fun._
 import libretto.typology.toylang.types._
 
 class TypeInferenceTests extends ScalatestStarterTestSuite {
+  type Type = libretto.typology.toylang.types.Type[AbstractTypeLabel]
+  type TypeFun[K, L] = libretto.typology.toylang.types.TypeFun[AbstractTypeLabel, K, L]
 
   def eitherBimap[A, B, C, D](f: Fun[A, C], g: Fun[B, D]): Fun[Either[A, B], Either[C, D]] =
     Fun.either(
@@ -58,7 +60,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
       TypeTag.pfix[ListF](using ListF.typeTag)
 
     def tpe: TypeFun[●, ●] =
-      TypeTag.toTypeFun[List](summon[TypeTag[List]])
+      TypeTag.toTypeFun[List](summon[TypeTag[List]]).vmap(identity)
 
     def map[A, B](f: Fun[A, B]): Fun[List[A], List[B]] = {
       given TypeTag[A] = TypeTag.ofTypeParam[A]
@@ -93,7 +95,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
       TypeTag.pfix[NonEmptyTreeF](using NonEmptyTreeF.typeTag)
 
     def tpe: TypeFun[●, ●] =
-      TypeTag.toTypeFun(typeTag)
+      TypeTag.toTypeFun(typeTag).vmap(identity)
 
     def map[A, B](f: Fun[A, B]): Fun[NonEmptyTree[A], NonEmptyTree[B]] = {
       given TypeTag[A] = TypeTag.ofTypeParam[A]
@@ -121,7 +123,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
       )
 
     def tpe: TypeFun[●, ●] =
-      TypeTag.toTypeFun[Tree](typeTag)
+      TypeTag.toTypeFun[Tree](typeTag).vmap(identity)
 
     def map[A, B](f: Fun[A, B]): Fun[Tree[A], Tree[B]] = {
       Fun.either(

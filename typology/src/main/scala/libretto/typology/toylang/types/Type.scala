@@ -3,25 +3,25 @@ package libretto.typology.toylang.types
 import libretto.typology.kinds._
 
 object Type {
-  def unit: Type   = TypeExpr.unit
-  def int: Type    = TypeExpr.int
-  def string: Type = TypeExpr.string
+  def unit[V]: Type[V]   = TypeExpr.unit
+  def int[V]: Type[V]    = TypeExpr.int
+  def string[V]: Type[V] = TypeExpr.string
 
-  def pair(a: Type, b: Type): Type =
+  def pair[V](a: Type[V], b: Type[V]): Type[V] =
     TypeExpr(generic.TypeExpr.pair(a, b))
 
-  def sum(a: Type, b: Type): Type =
+  def sum[V](a: Type[V], b: Type[V]): Type[V] =
     TypeExpr(generic.TypeExpr.sum(a, b))
 
-  def fix(f: TypeFun[●, ●]): Type =
+  def fix[V](f: TypeFun[V, ●, ●]): Type[V] =
     TypeFun.toExpr(TypeFun.fix(f))
 
-  def recCall(a: Type, b: Type): Type =
+  def recCall[V](a: Type[V], b: Type[V]): Type[V] =
     TypeExpr(generic.TypeExpr.recCall(a, b))
 
-  def abstractType(label: AbstractTypeLabel): Type =
+  def abstractType[V](label: V): Type[V] =
     TypeExpr(generic.TypeExpr.abstractType(label))
 
-  def typeMismatch(a: Type, b: Type): Type =
+  def typeMismatch[V](a: Type[V], b: Type[V]): Type[V] =
     TypeExpr(generic.TypeExpr.typeMismatch(a, b))
 }

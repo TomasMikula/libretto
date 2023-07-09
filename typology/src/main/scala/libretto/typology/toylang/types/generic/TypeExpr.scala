@@ -10,23 +10,46 @@ import libretto.typology.toylang.types.ArgTrans.Wrap
 /** Tree-like structure that builds up a type (or type constructor, depending on the output kind `L`).
  *  May take type parameters, represented by the input kind `K`.
  *  Each type (constructor) has a unique representation as [[TypeExpr]] (i.e. each [[TypeExpr]] is a normal form).
+ *
+ * @tparam V labeling of type variables
  */
-sealed abstract class TypeExpr[->>[_, _], K, L](using
+sealed abstract class TypeExpr[V, ->>[_, _], K, L](using
   val inKind: Kind[K],
   val outKind: OutputKind[L],
 ) {
   import TypeExpr._
 
-  def from[J](using ev: J =:= K): TypeExpr[->>, J, L] =
-    ev.substituteContra[TypeExpr[->>, *, L]](this)
+  def from[J](using ev: J =:= K): TypeExpr[V, ->>, J, L] =
+    ev.substituteContra[TypeExpr[V, ->>, *, L]](this)
 
-  def to[M](using ev: L =:= M): TypeExpr[->>, K, M] =
-    ev.substituteCo[TypeExpr[->>, K, *]](this)
+  def to[M](using ev: L =:= M): TypeExpr[V, ->>, K, M] =
+    ev.substituteCo[TypeExpr[V, ->>, K, *]](this)
 
-  def translate[-->>[_, _]](f: [k, l] => (k ->> l) => (k -->> l)): TypeExpr[-->>, K, L] =
+  def vmap[W](f: V => W): TypeExpr[W, ->>, K, L] =
+    this match {
+      case AbstractType(v) => AbstractType(f(v))
+
+      case UnitType() => UnitType()
+      case IntType() => IntType()
+      case StringType() => StringType()
+      case Pair() => Pair()
+      case Sum() => Sum()
+      case RecCall() => RecCall()
+      case Fix(f, g) => Fix(f, g)
+      case x @ PFix(f, g) => import x.given; PFix(f, g)
+      case ScalaTypeParams(values) => ScalaTypeParams(values)
+      case BiApp(op, arg1, arg2) => BiApp(op.vcast[W], arg1, arg2)
+      case AppFst(op, arg1) => AppFst(op.vcast[W], arg1)
+      case AppSnd(op, arg2) => AppSnd(op.vcast[W], arg2)
+      case x @ ComposeSnd(op, arg2) => import x.given; ComposeSnd(op.vcast[W], arg2)
+      case x @ AppCompose(op, arg1, arg2) => import x.given; AppCompose(op.vcast[W], arg1, arg2)
+      case TypeMismatch(a, b) => TypeMismatch(a, b)
+    }
+
+  def translate[-->>[_, _]](f: [k, l] => (k ->> l) => (k -->> l)): TypeExpr[V, -->>, K, L] =
     translateM[-->>, [x] =>> x](f)
 
-  def translateM[-->>[_, _], M[_]: Monad](f: [k, l] => (k ->> l) => M[k -->> l]): M[TypeExpr[-->>, K, L]] = {
+  def translateM[-->>[_, _], M[_]: Monad](f: [k, l] => (k ->> l) => M[k -->> l]): M[TypeExpr[V, -->>, K, L]] = {
     this match {
       case UnitType() => UnitType().pure[M]
       case IntType() => IntType().pure[M]
@@ -74,17 +97,17 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
     a: ArgIntro[F[○, *], J, K],
     trans: [k, l] => (k ->> l) => F[k, l],
     transApp: [j, k, l] => (k ->> l, ArgIntro[F[○, *], j, k]) => F[j, l],
-  ): TypeExpr[F, J, L] =
+  ): TypeExpr[V, F, J, L] =
     transApplyM[F, J, [x] =>> x](a, trans, transApp)
 
   def transApplyM[F[_, _], J, M[_]: Monad](
     a: ArgIntro[F[○, *], J, K],
     trans: [k, l] => (k ->> l) => F[k, l],
     transApp: [j, k, l] => (k ->> l, ArgIntro[F[○, *], j, k]) => M[F[j, l]],
-  ): M[TypeExpr[F, J, L]] =
+  ): M[TypeExpr[V, F, J, L]] =
     a.inKind.properKind match {
       case Left(j_eq_○) =>
-        j_eq_○.substituteContra[[j] =>> M[TypeExpr[F, j, L]]](
+        j_eq_○.substituteContra[[j] =>> M[TypeExpr[V, F, j, L]]](
           transApply0M(
             j_eq_○.substituteCo[ArgIntro[F[○, *], *, K]](a),
             trans,
@@ -99,12 +122,12 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
     args: ArgIntro[F[○, *], ○, K],
     trans: [k, l] => (k ->> l) => F[k, l],
     transApp: [j, k, l] => (k ->> l, ArgIntro[F[○, *], j, k]) => M[F[j, l]],
-  ): M[TypeExpr[F, ○, L]] = {
+  ): M[TypeExpr[V, F, ○, L]] = {
     this match {
       case Pair() =>
         args match {
           case ArgIntro.IntroBoth(a1, a2) =>
-            BiApp(Pair[F](), ArgIntro.unwrap(a1), ArgIntro.unwrap(a2)).pure[M]
+            BiApp(Pair[V, F](), ArgIntro.unwrap(a1), ArgIntro.unwrap(a2)).pure[M]
           case other =>
             throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
@@ -133,7 +156,7 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
     args: ArgIntro[F[○, *], J, K],
     trans: [k, l] => (k ->> l) => F[k, l],
     transApp: [j, k, l] => (k ->> l, ArgIntro[F[○, *], j, k]) => M[F[j, l]],
-  ): M[TypeExpr[F, J, L]] = {
+  ): M[TypeExpr[V, F, J, L]] = {
     this match {
       case ComposeSnd(op, g) =>
         args match {
@@ -173,17 +196,17 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
     a: ArgTrans[A, J, K],
     trans: [k, l] => (k ->> l) => A[k, l],
     transComp: [j, k, l] => (k ->> l, ArgTrans[A, j, k]) => A[j, l],
-  ): TypeExpr[A, J, L] =
+  ): TypeExpr[V, A, J, L] =
     transComposeM[A, J, [x] =>> x](a, trans, transComp)
 
   def transComposeM[A[_, _], J, M[_]: Monad](
     a: ArgTrans[A, J, K],
     trans: [k, l] => (k ->> l) => A[k, l],
     transComp: [j, k, l] => (k ->> l, ArgTrans[A, j, k]) => M[A[j, l]],
-  ): M[TypeExpr[A, J, L]] =
+  ): M[TypeExpr[V, A, J, L]] =
     a.inKind.properKind match {
       case Left(j_eq_○) =>
-        j_eq_○.substituteContra[[j] =>> M[TypeExpr[A, j, L]]](
+        j_eq_○.substituteContra[[j] =>> M[TypeExpr[V, A, j, L]]](
           transCompose0M(
             j_eq_○.substituteCo[ArgTrans[A, *, K]](a),
             trans,
@@ -198,7 +221,7 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
     f: ArgTrans[F, ○, K],
     trans: [k, l] => (k ->> l) => F[k, l],
     transApp: [j, k, l] => (k ->> l, ArgTrans[F, j, k]) => M[F[j, l]],
-  ): M[TypeExpr[F, ○, L]] =
+  ): M[TypeExpr[V, F, ○, L]] =
     this match {
       case PFix(p, e) =>
         p.applyToTrans(ArgTrans.introFst(f)) match {
@@ -232,12 +255,12 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
     f: ArgTrans[F, J, K],
     trans: [k, l] => (k ->> l) => F[k, l],
     transComp: [j, k, l] => (k ->> l, ArgTrans[F, j, k]) => M[F[j, l]],
-  ): M[TypeExpr[F, J, L]] = {
+  ): M[TypeExpr[V, F, J, L]] = {
 
     def goOp[K1, K2](
-      op: BinaryOperator[->>, K1, K2, L],
+      op: BinaryOperator[V, ->>, K1, K2, L],
       f: ArgTrans[F, J, K1 × K2],
-    ): M[TypeExpr[F, J, L]] = {
+    ): M[TypeExpr[V, F, J, L]] = {
       import op.in1Kind
       import op.in2Kind
 
@@ -282,130 +305,139 @@ sealed abstract class TypeExpr[->>[_, _], K, L](using
 
 object TypeExpr {
 
-  sealed abstract class BinaryOperator[->>[_, _], K1, K2, L](using
+  sealed abstract class BinaryOperator[V, ->>[_, _], K1, K2, L](using
     k1: OutputKind[K1],
     k2: OutputKind[K2],
     l: OutputKind[L],
-  ) extends TypeExpr[->>, K1 × K2, L] {
+  ) extends TypeExpr[V, ->>, K1 × K2, L] {
     given in1Kind: OutputKind[K1] = k1
     given in2Kind: OutputKind[K2] = k2
 
-    def cast[F[_, _]]: BinaryOperator[F, K1, K2, L] =
+    def cast[F[_, _]]: BinaryOperator[V, F, K1, K2, L] =
       this match {
         case Pair() => Pair()
         case Sum()  => Sum()
         case RecCall() => RecCall()
       }
+
+    def vcast[W]: BinaryOperator[W, ->>, K1, K2, L] =
+      this match {
+        case Pair()    => Pair()
+        case Sum()     => Sum()
+        case RecCall() => RecCall()
+      }
   }
 
-  case class UnitType[->>[_, _]]() extends TypeExpr[->>, ○, ●]
-  case class IntType[->>[_, _]]() extends TypeExpr[->>, ○, ●]
-  case class StringType[->>[_, _]]() extends TypeExpr[->>, ○, ●]
+  case class UnitType[V, ->>[_, _]]() extends TypeExpr[V, ->>, ○, ●]
+  case class IntType[V, ->>[_, _]]() extends TypeExpr[V, ->>, ○, ●]
+  case class StringType[V, ->>[_, _]]() extends TypeExpr[V, ->>, ○, ●]
 
-  case class Pair[->>[_, _]]() extends BinaryOperator[->>, ●, ●, ●]
-  case class Sum[->>[_, _]]() extends BinaryOperator[->>, ●, ●, ●]
-  case class RecCall[->>[_, _]]() extends BinaryOperator[->>, ●, ●, ●]
+  case class Pair[V, ->>[_, _]]() extends BinaryOperator[V, ->>, ●, ●, ●]
+  case class Sum[V, ->>[_, _]]() extends BinaryOperator[V, ->>, ●, ●, ●]
+  case class RecCall[V, ->>[_, _]]() extends BinaryOperator[V, ->>, ●, ●, ●]
 
-  case class Fix[->>[_, _], K](f: Routing[●, K], g: K ->> ●) extends TypeExpr[->>, ○, ●]
+  case class Fix[V, ->>[_, _], K](f: Routing[●, K], g: K ->> ●) extends TypeExpr[V, ->>, ○, ●]
 
   // TODO: Make the representation normalized (part of initial routing may possibly be factored out)
-  case class PFix[->>[_, _], K, X](
+  case class PFix[V, ->>[_, _], K, X](
     f: Routing[K × ●, X],
     g: X ->> ●,
   )(using
     val properInKind: ProperKind[K],
-  ) extends TypeExpr[->>, K, ●]
+  ) extends TypeExpr[V, ->>, K, ●]
 
-  case class AbstractType[->>[_, _]](label: AbstractTypeLabel) extends TypeExpr[->>, ○, ●]
+  case class AbstractType[V, ->>[_, _]](label: V) extends TypeExpr[V, ->>, ○, ●]
 
   case class ScalaTypeParam(filename: String, line: Int, name: String)
-  case class ScalaTypeParams[->>[_, _]](values: Set[ScalaTypeParam]) extends TypeExpr[->>, ○, ●] {
+  case class ScalaTypeParams[V, ->>[_, _]](values: Set[ScalaTypeParam]) extends TypeExpr[V, ->>, ○, ●] {
     require(values.nonEmpty)
   }
   object ScalaTypeParams {
-    def one[->>[_, _]](filename: String, line: Int, name: String): ScalaTypeParams[->>] =
+    def one[V, ->>[_, _]](filename: String, line: Int, name: String): ScalaTypeParams[V, ->>] =
       ScalaTypeParams(Set(ScalaTypeParam(filename, line, name)))
   }
 
-  case class BiApp[->>[_, _], K1, K2, L](
-    op: BinaryOperator[->>, K1, K2, L],
+  case class BiApp[V, ->>[_, _], K1, K2, L](
+    op: BinaryOperator[V, ->>, K1, K2, L],
     arg1: ○ ->> K1,
     arg2: ○ ->> K2,
-  ) extends TypeExpr[->>, ○, L](using summon, op.outKind)
+  ) extends TypeExpr[V, ->>, ○, L](using summon, op.outKind)
 
-  case class AppFst[->>[_, _], K1, K2, L](
-    op: BinaryOperator[->>, K1, K2, L],
+  case class AppFst[V, ->>[_, _], K1, K2, L](
+    op: BinaryOperator[V, ->>, K1, K2, L],
     arg1: ○ ->> K1,
-  ) extends TypeExpr[->>, K2, L](using op.in2Kind.kind, op.outKind)
+  ) extends TypeExpr[V, ->>, K2, L](using op.in2Kind.kind, op.outKind)
 
-  case class AppSnd[->>[_, _], K1, K2, L](
-    op: BinaryOperator[->>, K1, K2, L],
+  case class AppSnd[V, ->>[_, _], K1, K2, L](
+    op: BinaryOperator[V, ->>, K1, K2, L],
     arg2: ○ ->> K2,
-  ) extends TypeExpr[->>, K1, L](using op.in1Kind.kind, op.outKind)
+  ) extends TypeExpr[V, ->>, K1, L](using op.in1Kind.kind, op.outKind)
 
-  case class ComposeSnd[->>[_, _], K1, K2: ProperKind, L2, M](
-    op: BinaryOperator[->>, K1, L2, M],
+  case class ComposeSnd[V, ->>[_, _], K1, K2, L2, M](
+    op: BinaryOperator[V, ->>, K1, L2, M],
     arg2: K2 ->> L2,
-  ) extends TypeExpr[->>, K1 × K2, M](using
+  )(using
+    val properKind2: ProperKind[K2],
+  ) extends TypeExpr[V, ->>, K1 × K2, M](using
     (Kind.fst(op.inKind) × ProperKind[K2]).kind,
     op.outKind,
   )
 
-  case class AppCompose[->>[_, _], K, L1, L2, M](
-    op: BinaryOperator[->>, L1, L2, M],
+  case class AppCompose[V, ->>[_, _], K, L1, L2, M](
+    op: BinaryOperator[V, ->>, L1, L2, M],
     arg1: ○ ->> L1,
     arg2: K ->> L2,
   )(using
     val properInKind: ProperKind[K],
-  ) extends TypeExpr[->>, K, M](using summon, op.outKind)
+  ) extends TypeExpr[V, ->>, K, M](using summon, op.outKind)
 
-  case class TypeMismatch[->>[_, _], K: Kind, L: OutputKind](
+  case class TypeMismatch[V, ->>[_, _], K: Kind, L: OutputKind](
     a: K ->> L,
     b: K ->> L,
-  ) extends TypeExpr[->>, K, L]
+  ) extends TypeExpr[V, ->>, K, L]
 
-  def abstractType[->>[_, _]](label: AbstractTypeLabel): TypeExpr[->>, ○, ●] =
+  def abstractType[V, ->>[_, _]](label: V): TypeExpr[V, ->>, ○, ●] =
     AbstractType(label)
 
-  def pair[->>[_, _]](a: ○ ->> ●, b: ○ ->> ●): TypeExpr[->>, ○, ●] =
+  def pair[V, ->>[_, _]](a: ○ ->> ●, b: ○ ->> ●): TypeExpr[V, ->>, ○, ●] =
     BiApp(Pair(), a, b)
 
-  def sum[->>[_, _]](a: ○ ->> ●, b: ○ ->> ●): TypeExpr[->>, ○, ●] =
+  def sum[V, ->>[_, _]](a: ○ ->> ●, b: ○ ->> ●): TypeExpr[V, ->>, ○, ●] =
     BiApp(Sum(), a, b)
 
-  def recCall[->>[_, _]](a: ○ ->> ●, b: ○ ->> ●): TypeExpr[->>, ○, ●] =
+  def recCall[V, ->>[_, _]](a: ○ ->> ●, b: ○ ->> ●): TypeExpr[V, ->>, ○, ●] =
     BiApp(RecCall(), a, b)
 
-  def pair1[->>[_, _]](a: ○ ->> ●): TypeExpr[->>, ●, ●] =
+  def pair1[V, ->>[_, _]](a: ○ ->> ●): TypeExpr[V, ->>, ●, ●] =
     AppFst(Pair(), a)
 
-  def pair2[->>[_, _]](b: ○ ->> ●): TypeExpr[->>, ●, ●] =
+  def pair2[V, ->>[_, _]](b: ○ ->> ●): TypeExpr[V, ->>, ●, ●] =
     AppSnd(Pair(), b)
 
-  def sum1[->>[_, _]](a: ○ ->> ●): TypeExpr[->>, ●, ●] =
+  def sum1[V, ->>[_, _]](a: ○ ->> ●): TypeExpr[V, ->>, ●, ●] =
     AppFst(Sum(), a)
 
-  def sum2[->>[_, _]](b: ○ ->> ●): TypeExpr[->>, ●, ●] =
+  def sum2[V, ->>[_, _]](b: ○ ->> ●): TypeExpr[V, ->>, ●, ●] =
     AppSnd(Sum(), b)
 
-  def appCompose[->>[_, _], K, L1, L2, M](
-    op: BinaryOperator[->>, L1, L2, M],
+  def appCompose[V, ->>[_, _], K, L1, L2, M](
+    op: BinaryOperator[V, ->>, L1, L2, M],
     arg1: ○ ->> L1,
     arg2: K ->> L2,
   )(using
     k: ProperKind[K],
-  ): TypeExpr[->>, K, M] =
+  ): TypeExpr[V, ->>, K, M] =
     AppCompose(op, arg1, arg2)
 
-  def composeSnd[->>[_, _], K1, K2: ProperKind, L2, M](
-    op: BinaryOperator[->>, K1, L2, M],
+  def composeSnd[V, ->>[_, _], K1, K2: ProperKind, L2, M](
+    op: BinaryOperator[V, ->>, K1, L2, M],
     arg2: K2 ->> L2,
-  ): TypeExpr[->>, K1 × K2, M] =
+  ): TypeExpr[V, ->>, K1 × K2, M] =
     ComposeSnd(op, arg2)
 
-  def typeMismatch[->>[_, _], K: Kind, L: OutputKind](
+  def typeMismatch[V, ->>[_, _], K: Kind, L: OutputKind](
     a: K ->> L,
     b: K ->> L,
-  ): TypeExpr[->>, K, L] =
+  ): TypeExpr[V, ->>, K, L] =
     TypeMismatch(a, b)
 }
