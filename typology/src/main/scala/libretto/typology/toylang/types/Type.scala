@@ -1,6 +1,7 @@
 package libretto.typology.toylang.types
 
 import libretto.typology.kinds._
+import libretto.typology.toylang.types.generic.{TypeExpr => gte}
 
 type Type[V] = TypeExpr[V, ○, ●]
 
@@ -26,4 +27,36 @@ object Type {
 
   def typeMismatch[V](a: Type[V], b: Type[V]): Type[V] =
     TypeExpr(generic.TypeExpr.typeMismatch(a, b))
+
+  object Pair {
+    def unapply[V](t: Type[V]): Option[(Type[V], Type[V])] =
+      t.value match {
+        case gte.BiApp(gte.Pair(), a, b) => Some(a, b)
+        case _ => None
+      }
+  }
+
+  object Sum {
+    def unapply[V](t: Type[V]): Option[(Type[V], Type[V])] =
+      t.value match {
+        case gte.BiApp(gte.Sum(), a, b) => Some(a, b)
+        case _ => None
+      }
+  }
+
+  object RecCall {
+    def unapply[V](t: Type[V]): Option[(Type[V], Type[V])] =
+      t.value match {
+        case gte.BiApp(gte.RecCall(), a, b) => Some(a, b)
+        case _ => None
+      }
+  }
+
+  object AbstractType {
+    def unapply[V](t: Type[V]): Option[V] =
+      t.value match {
+        case gte.AbstractType(v) => Some(v)
+        case _ => None
+      }
+  }
 }

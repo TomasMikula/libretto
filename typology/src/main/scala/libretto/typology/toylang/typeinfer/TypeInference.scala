@@ -2155,9 +2155,9 @@ object TypeInference {
               }
 
             res switch {
-              case Left(+(aLabel)) =>
+              case Left(aLabel) =>
                 go(aLabel |*| aReq |*| bReq)
-              case Right(+(bLabel)) =>
+              case Right(bLabel) =>
                 go(bLabel |*| bReq |*| aReq)
             }
         }
@@ -3202,6 +3202,9 @@ object TypeInference {
       }
   }
 
+  private val generify: TypeEmitter[InboundType] -⚬ GenericType[InboundType] =
+    TypeEmitter.generify
+
   private val degenerify: GenericType[InboundType] -⚬ DegenericType =
     rec { self =>
       ConcreteType.unpack > either(
@@ -3234,6 +3237,7 @@ object TypeInference {
       InboundType.output,
       InboundType.close,
       InboundType.supplyNone,
+      generify,
       degenerify,
     )
       .map { prg =>
@@ -3259,6 +3263,7 @@ object TypeInference {
     outputT: (Val[AbstractTypeLabel] |*| T) -⚬ Val[Type],
     neglectT: T -⚬ Done,
     neglectNT: -[T] -⚬ Done,
+    generify: TypeEmitter[T] -⚬ GenericType[T],
     degenerify: GenericType[T] -⚬ DegenericType,
   )(using
     gen: VarGen[M, AbstractTypeLabel],
@@ -3266,10 +3271,9 @@ object TypeInference {
   ): M[One -⚬ (ConcreteType[T] |*| Val[TypedFun[A, B]] |*| ConcreteType[T])] = {
     println(s"reconstructTypes($f)")
     import ConcreteType.{apply1T, fixT, int, isPair, isRecCall, pair, recCall, string}
-    import TypeEmitter.generify
 
     def reconstructTypes[A, B](f: Fun[A, B]): M[One -⚬ (ConcreteType[T] |*| Val[TypedFun[A, B]] |*| ConcreteType[T])] =
-      TypeInference.reconstructTypes(f)(mergeInT, mergeIntoT, mergeT, splitT, makeT, outputT, neglectT, neglectNT, degenerify)
+      TypeInference.reconstructTypes(f)(mergeInT, mergeIntoT, mergeT, splitT, makeT, outputT, neglectT, neglectNT, generify, degenerify)
 
     def newAbstractType(v: AbstractTypeLabel): One -⚬ (TypeEmitter[T] |*| Val[Type] |*| TypeEmitter[T]) =
       TypeEmitter.newAbstractType(v)(mergeInT, mergeT, makeT, outputT, neglectT, neglectNT)
@@ -3468,7 +3472,15 @@ object TypeInference {
       case FunT.ConstInt(n) =>
         throw NotImplementedError(s"at ${summon[SourcePos]}")
       case FunT.AddInts() =>
-        throw NotImplementedError(s"at ${summon[SourcePos]}")
+        M.pure(
+          λ.? { one =>
+            val a1 = constant(done > int[T])
+            val a2 = constant(done > int[T])
+            val b  = constant(done > int[T])
+            val tf = constantVal(TypedFun.addInts)
+            pair(a1 |*| a2) |*| tf |*| b
+          }
+        )
       case FunT.IntToString() =>
         M.pure(
           λ.* { one =>

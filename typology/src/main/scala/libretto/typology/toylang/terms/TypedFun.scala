@@ -9,31 +9,39 @@ sealed trait TypedFun[A, B] {
 
   def inType: Type =
     this match
-      case Id(typ)           => typ
-      case AndThen(f, tx, g) => f.inType
-      case Par(f1, f2)       => Type.pair(f1.inType, f2.inType)
-      case EitherF(f1, f2)   => Type.sum(f1.inType, f2.inType)
-      case InjectL(ta, tb)   => ta
-      case InjectR(ta, tb)   => tb
-      case Rec(f)            => ???
-      case Recur(ta, tb)     => Type.pair(Type.recCall(ta, tb), ta)
-      case FixF(f)           => f(Type.fix(f))
-      case UnfixF(f)         => Type.fix(f)
-      case IntToString       => Type.int
+      case Id(typ)             => typ
+      case AndThen(f, tx, g)   => f.inType
+      case Par(f1, f2)         => Type.pair(f1.inType, f2.inType)
+      case AssocLR(ta, tb, tc) => Type.pair(Type.pair(ta, tb), tc)
+      case AssocRL(ta, tb, tc) => Type.pair(ta, Type.pair(tb, tc))
+      case Swap(ta, tb)        => Type.pair(ta, tb)
+      case EitherF(f1, f2)     => Type.sum(f1.inType, f2.inType)
+      case InjectL(ta, tb)     => ta
+      case InjectR(ta, tb)     => tb
+      case Rec(f)              => ???
+      case Recur(ta, tb)       => Type.pair(Type.recCall(ta, tb), ta)
+      case FixF(f)             => f(Type.fix(f))
+      case UnfixF(f)           => Type.fix(f)
+      case IntToString         => Type.int
+      case AddInts             => Type.pair(Type.int, Type.int)
 
   def outType: Type =
     this match
-      case Id(typ)           => typ
-      case AndThen(f, tx, g) => g.outType
-      case Par(f1, f2)       => Type.pair(f1.outType, f2.outType)
-      case EitherF(f1, f2)   => f1.outType
-      case InjectL(ta, tb)   => Type.sum(ta, tb)
-      case InjectR(ta, tb)   => Type.sum(ta, tb)
-      case Rec(f)            => f.outType
-      case Recur(ta, tb)     => tb
-      case FixF(f)           => Type.fix(f)
-      case UnfixF(f)         => f(Type.fix(f))
-      case IntToString       => Type.string
+      case Id(typ)             => typ
+      case AndThen(f, tx, g)   => g.outType
+      case Par(f1, f2)         => Type.pair(f1.outType, f2.outType)
+      case AssocLR(ta, tb, tc) => Type.pair(ta, Type.pair(tb, tc))
+      case AssocRL(ta, tb, tc) => Type.pair(Type.pair(ta, tb), tc)
+      case Swap(ta, tb)        => Type.pair(tb, ta)
+      case EitherF(f1, f2)     => f1.outType
+      case InjectL(ta, tb)     => Type.sum(ta, tb)
+      case InjectR(ta, tb)     => Type.sum(ta, tb)
+      case Rec(f)              => f.outType
+      case Recur(ta, tb)       => tb
+      case FixF(f)             => Type.fix(f)
+      case UnfixF(f)           => f(Type.fix(f))
+      case IntToString         => Type.string
+      case AddInts             => Type.int
 }
 
 object TypedFun {
@@ -59,6 +67,7 @@ object TypedFun {
   case class UnfixF[F[_]](f: TypeFun[●, ●]) extends TypedFun[Fix[F], F[Fix[F]]]
 
   case object IntToString extends TypedFun[Int, String]
+  case object AddInts extends TypedFun[(Int, Int), Int]
 
   def id[A](typ: Type): TypedFun[A, A] = Id(typ)
   def andThen[A, X, B](f: TypedFun[A, X], tx: Type, g: TypedFun[X, B]): TypedFun[A, B] = AndThen(f, tx, g)
@@ -75,4 +84,5 @@ object TypedFun {
   def unfix[F[_]](f: TypeFun[●, ●]): TypedFun[Fix[F], F[Fix[F]]] = UnfixF(f)
 
   def intToString: TypedFun[Int, String] = IntToString
+  def addInts: TypedFun[(Int, Int), Int] = AddInts
 }

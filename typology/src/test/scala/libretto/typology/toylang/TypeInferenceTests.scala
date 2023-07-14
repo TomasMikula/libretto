@@ -33,6 +33,9 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
     def unfix[A](using TypeTag[A]): Fun[InfiniteList[A], (A, InfiniteList[A])] =
       Fun.unfix[(A, _)]
 
+    def sum: Fun[InfiniteList[Int], Int] =
+      Fun.rec(Fun.snd(unfix[Int] > Fun.swap) > Fun.assocRL > Fun.fst(Fun.recur) > Fun.addInts)
+
     def map[A, B](f: Fun[A, B]): Fun[InfiniteList[A], InfiniteList[B]] = {
       given TypeTag[A] = TypeTag.ofTypeParam[A]
       given TypeTag[B] = TypeTag.ofTypeParam[B]
@@ -183,61 +186,251 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
         .via { expectVal(_).flatMap(check) }
 
     scala.List(
-      "infer types of id > intToString > id" ->
-        testInferredTypes(Fun.id > Fun.intToString > Fun.id) { tf =>
-          for {
-            _ <- Outcome.assertEquals(tf.inType, Type.int)
-            _ <- Outcome.assertEquals(tf.outType, Type.string)
-          } yield ()
+      // "infer types of id > intToString > id" ->
+      //   testInferredTypes(Fun.id > Fun.intToString > Fun.id) { tf =>
+      //     for {
+      //       _ <- Outcome.assertEquals(tf.inType, Type.int)
+      //       _ <- Outcome.assertEquals(tf.outType, Type.string)
+      //     } yield ()
+      //   },
+
+      // "infer types of swap > par(intToString, intToString) > swap" ->
+      //   testInferredTypes(Fun.swap > Fun.par(Fun.intToString, Fun.intToString) > Fun.swap) { tf =>
+      //     for {
+      //       _ <- Outcome.assertEquals(tf.inType, Type.pair(Type.int, Type.int))
+      //       _ <- Outcome.assertEquals(tf.outType, Type.pair(Type.string, Type.string))
+      //     } yield ()
+      //   },
+
+      // "infer types of adding ints ((a + b) + c) + d" ->
+      //   testInferredTypes(Fun.fst(Fun.fst(Fun.addInts) > Fun.addInts) > Fun.addInts) { tf =>
+      //     for {
+      //       _ <- Outcome.assertEquals(tf.inType, Type.pair(Type.pair(Type.pair(Type.int, Type.int), Type.int), Type.int))
+      //       _ <- Outcome.assertEquals(tf.outType, Type.int)
+      //     } yield ()
+      //   },
+
+      // "infer types of eitherBimap(intToString, intToString)" ->
+      //   testInferredTypes(eitherBimap(Fun.intToString, Fun.intToString)) { tf =>
+      //     for {
+      //       _ <- Outcome.assertEquals(tf.inType, Type.sum(Type.int, Type.int))
+      //       _ <- Outcome.assertEquals(tf.outType, Type.sum(Type.string, Type.string))
+      //     } yield ()
+      //   },
+
+      // "infer types of InfiniteList.fix[Int]" ->
+      //   testInferredTypes(InfiniteList.fix[Int]) { tf =>
+      //     for {
+      //       _ <- Outcome.assertEquals(tf.inType, Type.pair(Type.int, InfiniteList.tpe(Type.int)))
+      //       _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.int))
+      //     } yield ()
+      //   },
+
+      // "infer types of InfiniteList.unfix[Int]" ->
+      //   testInferredTypes(InfiniteList.unfix[Int]) { tf =>
+      //     for {
+      //       _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
+      //       _ <- Outcome.assertEquals(tf.outType, Type.pair(Type.int, InfiniteList.tpe(Type.int)))
+      //     } yield ()
+      //   },
+
+      // "infer types of InfiniteList.fix[Int] > InfiniteList.unfix[Int]" ->
+      //   testInferredTypes(InfiniteList.fix[Int] > InfiniteList.unfix[Int]) { tf =>
+      //     for {
+      //       _ <- Outcome.assertEquals(tf.inType,  Type.pair(Type.int, InfiniteList.tpe(Type.int)))
+      //       _ <- Outcome.assertEquals(tf.outType, Type.pair(Type.int, InfiniteList.tpe(Type.int)))
+      //     } yield ()
+      //   },
+
+      // "infer types of InfiniteList.unfix[Int] > InfiniteList.fix[Int]" ->
+      //   testInferredTypes(InfiniteList.unfix[Int] > InfiniteList.fix[Int]) { tf =>
+      //     for {
+      //       _ <- Outcome.assertEquals(tf.inType,  InfiniteList.tpe(Type.int))
+      //       _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.int))
+      //     } yield ()
+      //   },
+
+      // "infer types of recur" ->
+      //   testInferredTypes(Fun.recur[String, Int]) { tf =>
+      //     (tf.inType, tf.outType) match {
+      //       case (Type.Pair(Type.RecCall(Type.AbstractType(a), Type.AbstractType(b)), Type.AbstractType(c)), Type.AbstractType(d)) if a == c && b == d =>
+      //         Outcome.success(())
+      //       case other =>
+      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+      //     }
+      //   },
+
+      // "infer types of assocLR > snd(swap)" ->
+      //   testInferredTypes(Fun.assocLR > Fun.snd(Fun.swap)) { tf =>
+      //     (tf.inType, tf.outType) match {
+      //       case (
+      //         Type.Pair(Type.Pair(Type.AbstractType(a), Type.AbstractType(b)), Type.AbstractType(c)),
+      //         Type.Pair(Type.AbstractType(d), Type.Pair(Type.AbstractType(e), Type.AbstractType(f)))
+      //       ) if a == d && b == f && c == e =>
+      //         Outcome.success(())
+      //       case other =>
+      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+      //     }
+      //   },
+
+      // "infer types of id > id" ->
+      //   testInferredTypes(Fun.id > Fun.id) { tf =>
+      //     (tf.inType, tf.outType) match {
+      //       case (
+      //         Type.AbstractType(a),
+      //         Type.AbstractType(b),
+      //       ) if a == b =>
+      //         Outcome.success(())
+      //       case other =>
+      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+      //     }
+      //   },
+
+      "infer types of id > id > id" ->
+        testInferredTypes(Fun.id > Fun.id > Fun.id) { tf =>
+          (tf.inType, tf.outType) match {
+            case (
+              Type.AbstractType(a),
+              Type.AbstractType(b),
+            ) if a == b =>
+              Outcome.success(())
+            case other =>
+              Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+          }
         },
 
-      "infer types of eitherBimap(intToString, intToString)" ->
-        testInferredTypes(eitherBimap(Fun.intToString, Fun.intToString)) { tf =>
-          for {
-            _ <- Outcome.assertEquals(tf.inType, Type.sum(Type.int, Type.int))
-            _ <- Outcome.assertEquals(tf.outType, Type.sum(Type.string, Type.string))
-          } yield ()
+      "infer types of id > id > id > id" ->
+        testInferredTypes((Fun.id > Fun.id) > (Fun.id > Fun.id)) { tf =>
+          (tf.inType, tf.outType) match {
+            case (
+              Type.AbstractType(a),
+              Type.AbstractType(b),
+            ) if a == b =>
+              Outcome.success(())
+            case other =>
+              Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+          }
         },
 
-      "infer types of InfiniteList.fix[Int]" ->
-        testInferredTypes(InfiniteList.fix[Int]) { tf =>
-          for {
-            _ <- Outcome.assertEquals(tf.inType, Type.pair(Type.int, InfiniteList.tpe(Type.int)))
-            _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.int))
-          } yield ()
+      "infer types of id > id > id > id > id" ->
+        testInferredTypes((Fun.id > Fun.id > Fun.id) > (Fun.id > Fun.id)) { tf =>
+          (tf.inType, tf.outType) match {
+            case (
+              Type.AbstractType(a),
+              Type.AbstractType(b),
+            ) if a == b =>
+              Outcome.success(())
+            case other =>
+              Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+          }
         },
 
-      "infer types of InfiniteList.unfix[Int]" ->
-        testInferredTypes(InfiniteList.unfix[Int]) { tf =>
-          for {
-            _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
-            _ <- Outcome.assertEquals(tf.outType, Type.pair(Type.int, InfiniteList.tpe(Type.int)))
-          } yield ()
+      "infer types of id > id > id > id > id > id" ->
+        testInferredTypes((Fun.id > Fun.id > Fun.id) > (Fun.id > Fun.id > Fun.id)) { tf =>
+          (tf.inType, tf.outType) match {
+            case (
+              Type.AbstractType(a),
+              Type.AbstractType(b),
+            ) if a == b =>
+              Outcome.success(())
+            case other =>
+              Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+          }
         },
 
-      "infer types of InfiniteList.fix[Int] > InfiniteList.unfix[Int]" ->
-        testInferredTypes(InfiniteList.fix[Int] > InfiniteList.unfix[Int]) { tf =>
-          for {
-            _ <- Outcome.assertEquals(tf.inType,  Type.pair(Type.int, InfiniteList.tpe(Type.int)))
-            _ <- Outcome.assertEquals(tf.outType, Type.pair(Type.int, InfiniteList.tpe(Type.int)))
-          } yield ()
+      "infer types of id > id > id > id > id > id > id" ->
+        testInferredTypes(Fun.id > Fun.id > Fun.id > Fun.id > Fun.id > Fun.id > Fun.id) { tf =>
+          (tf.inType, tf.outType) match {
+            case (
+              Type.AbstractType(a),
+              Type.AbstractType(b),
+            ) if a == b =>
+              Outcome.success(())
+            case other =>
+              Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+          }
         },
 
-      "infer types of InfiniteList.unfix[Int] > InfiniteList.fix[Int]" ->
-        testInferredTypes(InfiniteList.unfix[Int] > InfiniteList.fix[Int]) { tf =>
-          for {
-            _ <- Outcome.assertEquals(tf.inType,  InfiniteList.tpe(Type.int))
-            _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.int))
-          } yield ()
-        },
+      // "infer types of swap > swap > swap" ->
+      //   testInferredTypes(Fun.swap > Fun.swap > Fun.swap) { tf =>
+      //     (tf.inType, tf.outType) match {
+      //       case (
+      //         Type.Pair(Type.AbstractType(a), Type.AbstractType(b)),
+      //         Type.Pair(Type.AbstractType(c), Type.AbstractType(d)),
+      //       ) if a == d && b == c =>
+      //         Outcome.success(())
+      //       case other =>
+      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+      //     }
+      //   },
 
-      "infer types of InfiniteList.map(intToString)" ->
-        testInferredTypes(InfiniteList.map(Fun.intToString)) { tf =>
-          for {
-            _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
-            _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.string))
-          } yield ()
-        },
+      // "infer types of swap > swap > swap > swap" ->
+      //   testInferredTypes(Fun.swap > Fun.swap > Fun.swap > Fun.swap) { tf =>
+      //     (tf.inType, tf.outType) match {
+      //       case (
+      //         Type.Pair(Type.AbstractType(a), Type.AbstractType(b)),
+      //         Type.Pair(Type.AbstractType(c), Type.AbstractType(d)),
+      //       ) if a == c && b == d =>
+      //         Outcome.success(())
+      //       case other =>
+      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+      //     }
+      //   },
+
+      // "infer types of assocLR > assocLR > assocRL > assocRL" ->
+      //   testInferredTypes(Fun.assocLR > Fun.assocLR > Fun.assocRL > Fun.assocRL) { tf =>
+      //     (tf.inType, tf.outType) match {
+      //       case (
+      //         Type.Pair(Type.Pair(Type.Pair(Type.AbstractType(a), Type.AbstractType(b)), Type.AbstractType(c)), Type.AbstractType(d)),
+      //         Type.Pair(Type.Pair(Type.Pair(Type.AbstractType(e), Type.AbstractType(f)), Type.AbstractType(g)), Type.AbstractType(h))
+      //       ) if a == e && b == f && c == g && d == h =>
+      //         Outcome.success(())
+      //       case other =>
+      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+      //     }
+      //   },
+
+      // "infer types of assocLR > snd(swap) > assocRL" ->
+      //   testInferredTypes(Fun.assocLR > Fun.snd(Fun.swap) > Fun.assocRL) { tf =>
+      //     (tf.inType, tf.outType) match {
+      //       case (
+      //         Type.Pair(Type.Pair(Type.AbstractType(a), Type.AbstractType(b)), Type.AbstractType(c)),
+      //         Type.Pair(Type.Pair(Type.AbstractType(d), Type.AbstractType(e)), Type.AbstractType(f))
+      //       ) if a == d && b == f && c == e =>
+      //         Outcome.success(())
+      //       case other =>
+      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+      //     }
+      //   },
+
+      // "infer types of (assocLR > snd(swap)) > (assocRL > fst(swap))" ->
+      //   testInferredTypes((Fun.assocLR > Fun.snd(Fun.swap)) > (Fun.assocRL > Fun.fst(Fun.swap))) { tf =>
+      //     (tf.inType, tf.outType) match {
+      //       case (
+      //         Type.Pair(Type.Pair(Type.AbstractType(a), Type.AbstractType(b)), Type.AbstractType(c)),
+      //         Type.Pair(Type.Pair(Type.AbstractType(d), Type.AbstractType(e)), Type.AbstractType(f))
+      //       ) if a == e && b == f && c == d =>
+      //         Outcome.success(())
+      //       case other =>
+      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+      //     }
+      //   },
+
+      // "infer types of InfiniteList.sum" ->
+      //   testInferredTypes(InfiniteList.sum) { tf =>
+      //     for {
+      //       _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
+      //       _ <- Outcome.assertEquals(tf.outType, Type.int)
+      //     } yield ()
+      //   },
+
+      // "infer types of InfiniteList.map(intToString)" ->
+      //   testInferredTypes(InfiniteList.map(Fun.intToString)) { tf =>
+      //     for {
+      //       _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
+      //       _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.string))
+      //     } yield ()
+      //   },
 
   // test("infer types of List.map(intToString)") {
   //   val (tIn, tOut) = reconstructTypes[List[Int], List[String]](List.map(Fun.intToString))

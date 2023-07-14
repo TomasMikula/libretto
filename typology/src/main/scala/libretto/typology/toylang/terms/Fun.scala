@@ -22,6 +22,12 @@ object Fun {
   def par[A1, A2, B1, B2](f1: Fun[A1, B1], f2: Fun[A2, B2]): Fun[(A1, A2), (B1, B2)] =
     Fun(FunT.Par(f1, f2))
 
+  def fst[A1, A2, B1](f1: Fun[A1, B1]): Fun[(A1, A2), (B1, A2)] =
+    par(f1, id)
+
+  def snd[A1, A2, B2](f2: Fun[A2, B2]): Fun[(A1, A2), (A1, B2)] =
+    par(id, f2)
+
   def assocLR[A, B, C]: Fun[((A, B), C), (A, (B, C))] =
     Fun(FunT.AssocLR())
 
