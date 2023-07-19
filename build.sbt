@@ -54,6 +54,8 @@ releaseProcess := Seq[ReleaseStep](
 
 val ScalatestVersion = "3.2.16"
 val ZioVersion = "2.0.15"
+val ZioJsonVersion = "0.6.0"
+val ZioHttpVersion = "3.0.0-RC2"
 
 val commonScalacOptions =
   Seq(
@@ -139,8 +141,8 @@ lazy val mashup = project
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio" % ZioVersion,
-      "dev.zio" %% "zio-json" % "0.5.0",
-      "dev.zio" %% "zio-http" % "3.0.0-RC2",
+      "dev.zio" %% "zio-json" % ZioJsonVersion,
+      "dev.zio" %% "zio-http" % ZioHttpVersion,
     ),
   )
 
