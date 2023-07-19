@@ -1,1 +1,1 @@
-libraryDependencies += "org.planet42" %% "laika-io" % "0.19.2"
+libraryDependencies += "org.planet42" %% "laika-io" % "0.19.3"
