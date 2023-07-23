@@ -665,7 +665,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
           None
 
         override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[B]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
+          None
 
         override def asZip[P1, P2](using ev: Var[A] =:= (P1 |*| P2)): Exists[[V1] =>> Exists[[V2] =>> (Zip[V1, V2], P1 =:= Var[V1], P2 =:= Var[V2], Var[B] =:= Var[V1 |*| V2])]] =
           varIsNotPair(ev)
