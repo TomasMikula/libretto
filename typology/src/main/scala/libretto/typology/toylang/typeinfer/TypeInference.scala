@@ -34,6 +34,13 @@ object TypeInference {
             case x: Abstracted    => (x, acc)
         go(this, Nil)
 
+      def originalBase: AbstractTypeLabel =
+        this match
+          case Base(value) => value
+          case Clone(base, tag) => base.originalBase
+          case Abstracted(TParamLbl.Promoted(base)) => base.originalBase
+    end Lbl
+
     enum TParamLbl:
       case Promoted(base: Lbl)
 
@@ -120,7 +127,16 @@ object TypeInference {
       mapVal { Lbl.Abstracted(_) }
 
     val toAbstractType: Label -⚬ Val[Type] =
-      mapVal { l => Type.abstractType(Right(l)) }
+      mapVal { l => Type.abstractType(Right(l.originalBase)) }
+
+    val show: Label -⚬ Val[String] =
+      mapVal(_.toString)
+
+    given Junction.Positive[Label] =
+      scalettoLib.junctionVal
+
+    given Junction.Positive[TParamLabel] =
+      scalettoLib.junctionVal
   }
 
   import Labels.{Label, TParamLabel}
@@ -872,14 +888,14 @@ object TypeInference {
 
     def split[T](
       splitT: T -⚬ (T |*| T),
-      zeroTypeArg: Label -⚬ (T |*| Done),
+      outputTParamApprox: (TParamLabel |*| -[T]) -⚬ Val[Type],
     ): ReboundType[T] -⚬ (ReboundType[T] |*| ReboundType[T]) = rec { self =>
       val tapFlip: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| ReboundType[T]) =
         TypeEmitter.tapFlip_(splitT, self)
 
       split_(
         splitT,
-        TypeEmitter.merge_(splitT, zeroTypeArg, self),
+        TypeEmitter.merge_(splitT, outputTParamApprox, self),
         tapFlip,
       )
     }
@@ -887,8 +903,7 @@ object TypeInference {
     def merge__[T](
       splitOutbound: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T]),
       mergeT: (T |*| T) -⚬ T,
-      neglectT: T -⚬ Done,
-      outputT: (Label |*| T) -⚬ Val[Type],
+      outputTParam: (TParamLabel |*| T) -⚬ Val[Type],
     )(using
       Junction.Positive[T],
     ): (ReboundType[T] |*| ReboundType[T]) -⚬ ReboundType[T] = {
@@ -903,9 +918,9 @@ object TypeInference {
               ReboundType.pack,
               tapFlop_(self, mergeT),
               self,
-              outputApprox(neglectT),
+              outputApprox(outputTParam),
               mergeT,
-              outputT,
+              outputTParam,
             )
         }
       }
@@ -913,8 +928,7 @@ object TypeInference {
 
     def merge_[T](
       mergeT: (T |*| T) -⚬ T,
-      neglectT: T -⚬ Done,
-      outputT: (Label |*| T) -⚬ Val[Type],
+      outputTParam: (TParamLabel |*| T) -⚬ Val[Type],
     )(using
       Junction.Positive[T],
     ): (ReboundType[T] |*| ReboundType[T]) -⚬ ReboundType[T] =
@@ -926,98 +940,95 @@ object TypeInference {
             mergeT,
           ),
           mergeT,
-          neglectT,
-          outputT,
+          outputTParam,
         )
       }
 
     def merge[T](
       mergeT: (T |*| T) -⚬ T,
-      neglectT: T -⚬ Done,
-      outputT: (Label |*| T) -⚬ Val[Type],
+      outputTParam: (TParamLabel |*| T) -⚬ Val[Type],
     )(using
       Junction.Positive[T],
     ): (ReboundType[T] |*| ReboundType[T]) -⚬ ReboundType[T] =
       merge_(
         mergeT,
-        neglectT,
-        outputT,
+        outputTParam,
       )
 
-    def mergeIn__[T](
-      splitT: T -⚬ (T |*| T),
-      neglectT: T -⚬ Done,
-      zeroTypeArg: Label -⚬ (T |*| Done),
-      tapFlip: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| ReboundType[T]),
-      split: ReboundType[T] -⚬ (ReboundType[T] |*| ReboundType[T]),
-    ): (ReboundType[T] |*| TypeEmitter[T]) -⚬ ReboundType[T] = rec { self =>
-      par(unpack, TypeEmitter.unpack) > TypeSkelet.mergeOpWith[-[T], T, TypeEmitter[T], ReboundType[T]](
-        split,
-        self,
-        tapFlip,
-        factorOutInversion > contrapositive(splitT),
-        pack,
-        TypeEmitter.pack,
-        λ { nt =>
-          producing { case nt1 |*| tOut =>
-            val t = nt1.asInput
-            val t1 |*| t2 = splitT(t)
-            tOut := returning(t1, t2 supplyTo nt)
-          }
-        },
-        λ { case t |*| nt =>
-          val t1 |*| t2 = splitT(t)
-          returning(t1, t2 supplyTo nt)
-        },
-        outputApprox(neglectT),
-        TypeEmitter.outputApprox(zeroTypeArg),
-      )
-    }
+    // def mergeIn__[T](
+    //   splitT: T -⚬ (T |*| T),
+    //   neglectT: T -⚬ Done,
+    //   zeroTypeArg: Label -⚬ (T |*| Done),
+    //   tapFlip: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| ReboundType[T]),
+    //   split: ReboundType[T] -⚬ (ReboundType[T] |*| ReboundType[T]),
+    // ): (ReboundType[T] |*| TypeEmitter[T]) -⚬ ReboundType[T] = rec { self =>
+    //   par(unpack, TypeEmitter.unpack) > TypeSkelet.mergeOpWith[-[T], T, TypeEmitter[T], ReboundType[T]](
+    //     split,
+    //     self,
+    //     tapFlip,
+    //     factorOutInversion > contrapositive(splitT),
+    //     pack,
+    //     TypeEmitter.pack,
+    //     λ { nt =>
+    //       producing { case nt1 |*| tOut =>
+    //         val t = nt1.asInput
+    //         val t1 |*| t2 = splitT(t)
+    //         tOut := returning(t1, t2 supplyTo nt)
+    //       }
+    //     },
+    //     λ { case t |*| nt =>
+    //       val t1 |*| t2 = splitT(t)
+    //       returning(t1, t2 supplyTo nt)
+    //     },
+    //     outputApprox(neglectT),
+    //     TypeEmitter.outputApprox(zeroTypeArg),
+    //   )
+    // }
 
-    def mergeIn_[T](
-      splitT: T -⚬ (T |*| T),
-      neglectT: T -⚬ Done,
-      zeroTypeArg: Label -⚬ (T |*| Done),
-      mergeOutbound: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T],
-      tapFlip: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| ReboundType[T]),
-    ): (ReboundType[T] |*| TypeEmitter[T]) -⚬ ReboundType[T] =
-      mergeIn__(
-        splitT,
-        neglectT,
-        zeroTypeArg,
-        tapFlip,
-        split__(splitT, mergeOutbound, tapFlip),
-      )
+    // def mergeIn_[T](
+    //   splitT: T -⚬ (T |*| T),
+    //   neglectT: T -⚬ Done,
+    //   zeroTypeArg: Label -⚬ (T |*| Done),
+    //   mergeOutbound: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T],
+    //   tapFlip: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| ReboundType[T]),
+    // ): (ReboundType[T] |*| TypeEmitter[T]) -⚬ ReboundType[T] =
+    //   mergeIn__(
+    //     splitT,
+    //     neglectT,
+    //     zeroTypeArg,
+    //     tapFlip,
+    //     split__(splitT, mergeOutbound, tapFlip),
+    //   )
 
-    def mergeIn[T](
-      splitT: T -⚬ (T |*| T),
-      neglectT: T -⚬ Done,
-      zeroTypeArg: Label -⚬ (T |*| Done),
-    ): (ReboundType[T] |*| TypeEmitter[T]) -⚬ ReboundType[T] = {
-      val (split, mergeOutbound, tapFlip) =
-        rec3 {
-          (
-            split: ReboundType[T] -⚬ (ReboundType[T] |*| ReboundType[T]),
-            mergeOutbound: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T],
-            tapFlip: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| ReboundType[T]),
-          ) => (
-            split__(splitT, mergeOutbound, tapFlip),
-            TypeEmitter.merge_(splitT, zeroTypeArg, split),
-            TypeEmitter.tapFlip_(splitT, split),
-          )
-        }
+    // def mergeIn[T](
+    //   splitT: T -⚬ (T |*| T),
+    //   neglectT: T -⚬ Done,
+    //   zeroTypeArg: Label -⚬ (T |*| Done),
+    // ): (ReboundType[T] |*| TypeEmitter[T]) -⚬ ReboundType[T] = {
+    //   val (split, mergeOutbound, tapFlip) =
+    //     rec3 {
+    //       (
+    //         split: ReboundType[T] -⚬ (ReboundType[T] |*| ReboundType[T]),
+    //         mergeOutbound: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T],
+    //         tapFlip: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| ReboundType[T]),
+    //       ) => (
+    //         split__(splitT, mergeOutbound, tapFlip),
+    //         TypeEmitter.merge_(splitT, zeroTypeArg, split),
+    //         TypeEmitter.tapFlip_(splitT, split),
+    //       )
+    //     }
 
-      println("mergeIn 1")
-      val res = mergeIn_(
-        splitT,
-        neglectT,
-        zeroTypeArg,
-        mergeOutbound,
-        tapFlip,
-      )
-      println("mergeIn 2")
-      res
-    }
+    //   println("mergeIn 1")
+    //   val res = mergeIn_(
+    //     splitT,
+    //     neglectT,
+    //     zeroTypeArg,
+    //     mergeOutbound,
+    //     tapFlip,
+    //   )
+    //   println("mergeIn 2")
+    //   res
+    // }
 
     def tapFlop_[T](
       merge: (ReboundType[T] |*| ReboundType[T]) -⚬ ReboundType[T],
@@ -1037,19 +1048,19 @@ object TypeInference {
     def tapFlop[T](
       mergeT: (T |*| T) -⚬ T,
       neglectT: T -⚬ Done,
-      outputT: (Label |*| T) -⚬ Val[Type],
+      outputTParam: (TParamLabel |*| T) -⚬ Val[Type],
     )(using
       Junction.Positive[T],
     ): ReboundType[T] -⚬ (ReboundType[T] |*| TypeEmitter[T]) =
       tapFlop_(
-        merge_(mergeT, neglectT, outputT),
+        merge_(mergeT, outputTParam),
         mergeT,
       )
 
     def output[T](
-      outputT: (Label |*| T) -⚬ Val[Type],
+      outputT: (TParamLabel |*| T) -⚬ Val[Type],
     ): ReboundType[T] -⚬ Val[Type] = {
-      val outputT1: (Label |*| -[-[T]]) -⚬ Val[Type] =
+      val outputT1: (TParamLabel |*| -[-[T]]) -⚬ Val[Type] =
         λ { case lbl |*| --(t) => outputT(lbl |*| t) }
 
       rec { self =>
@@ -1072,36 +1083,58 @@ object TypeInference {
       }
     }
 
-    def zero[T](
-      zeroTypeArg: Label -⚬ (T |*| Done),
-    ): Label -⚬ (ReboundType[T] |*| Done) =
-      λ { case +(label) =>
-        val res |*| resp = makeAbstractType[T](label)
-        res |*| (resp switch {
-          case Left(x) =>
-            join(TypeEmitter.close(zeroTypeArg)(x) |*| Labels.neglect(label))
-          case Right(value) =>
-            value switch {
-              case Left(req) =>
-                val --(nt) = req contramap injectR
-                val t |*| d = zeroTypeArg(label)
-                returning(d, t supplyTo nt)
-              case Right(?(_)) =>
-                label :>> crashNow(s"TODO: eliminate? (at ${summon[SourcePos]})")
-            }
-        })
+    // def zero[T](
+    //   zeroTypeArg: Label -⚬ (T |*| Done),
+    // ): Label -⚬ (ReboundType[T] |*| Done) =
+    //   λ { case +(label) =>
+    //     val res |*| resp = makeAbstractType[T](label)
+    //     res |*| (resp switch {
+    //       case Left(x) =>
+    //         join(TypeEmitter.close(zeroTypeArg)(x) |*| Labels.neglect(label))
+    //       case Right(value) =>
+    //         value switch {
+    //           case Left(req) =>
+    //             val --(nt) = req contramap injectR
+    //             val t |*| d = zeroTypeArg(label)
+    //             returning(d, t supplyTo nt)
+    //           case Right(?(_)) =>
+    //             label :>> crashNow(s"TODO: eliminate? (at ${summon[SourcePos]})")
+    //         }
+    //     })
+    //   }
+
+    def probeApprox[T](
+      outputTypeParamApprox: (TParamLabel |*| -[T]) -⚬ Val[Type],
+    ): (TParamLabel |*| -[ReboundType[T]]) -⚬ Val[Type] =
+      λ { case label |*| nt =>
+        val lbl1 |*| lbl2 = Labels.split(Labels.abstractify(label))
+        val t |*| reb = makeAbstractType[T](lbl1)
+        returning(
+          reb switch {
+            case Left(x) =>
+              TypeEmitter.outputApprox(outputTypeParamApprox)(x)
+                .waitFor(Labels.neglect(lbl2))
+            case Right(value) =>
+              value switch {
+                case Left(req) =>
+                  val --(nt) = req contramap injectR
+                  val l = Labels.generify(lbl2)
+                  outputTypeParamApprox(l |*| nt)
+                case Right(?(_)) =>
+                  lbl2 :>> crashNow(s"TODO: eliminate? (at ${summon[SourcePos]})")
+              }
+          },
+          t supplyTo nt,
+        )
       }
 
     def outputApprox[T](
-      neglectTypeArg: T -⚬ Done,
+      outputTParam: (TParamLabel |*| T) -⚬ Val[Type],
     ): ReboundType[T] -⚬ Val[Type] =
       rec { self =>
         unpack > TypeSkelet.outputApprox(
           self,
-          λ { lbl =>
-            val nt |*| t = constant(demand[T])
-            nt |*| join(neglectTypeArg(t) |*| neglect(lbl))
-          },
+          snd(die) > outputTParam,
         )
       }
 
@@ -1789,16 +1822,17 @@ object TypeInference {
     def abstractify[T]: ConcreteType[ReboundType[T]] -⚬ TypeEmitter[T] = rec { self =>
       unpack > dsl.either(
         NonAbstractType.map(self) > TypeEmitter.nonAbstractType[T],
-        λ { case +(lbl) |*| nt =>
-          val arg |*| resp = ReboundType.makeAbstractType[T](lbl) // TODO: MUST make a fresh label
+        λ { case label |*| nt =>
+          val lbl1 |*| lbl2 = Labels.split(Labels.abstractify(label))
+          val arg |*| resp = ReboundType.makeAbstractType[T](lbl1)
           returning(
             resp switch {
               case Left(x) =>
-                (neglect(lbl) |*| x) :>> TypeEmitter.awaitPosFst[T]
+                (Labels.neglect(lbl2) |*| x) :>> TypeEmitter.awaitPosFst[T]
               case Right(value) =>
                 value switch {
                   case Left(inReq) =>
-                    val res |*| resp = TypeEmitter.makeAbstractType[T](lbl) // TODO: must use THE fresh label
+                    val res |*| resp = TypeEmitter.makeAbstractType[T](lbl2)
                     returning(
                       res,
                       resp switch {
@@ -1814,7 +1848,7 @@ object TypeInference {
                       }
                     )
                   case Right(?(_)) =>
-                    lbl :>> crashNow(s"TODO: eliminate? (${summon[SourcePos]})")
+                    lbl2 :>> crashNow(s"TODO: eliminate? (${summon[SourcePos]})")
                 }
             },
             arg supplyTo nt,
@@ -1826,13 +1860,13 @@ object TypeInference {
     def merge[T](
       splitT: T -⚬ (T |*| T),
       neglectT: T -⚬ Done,
-      zeroTypeArg: Val[AbstractTypeLabel] -⚬ (T |*| Done),
+      outputTParam: (TParamLabel |*| -[T]) -⚬ Val[Type],
     ): (ConcreteType[ReboundType[T]] |*| ConcreteType[ReboundType[T]]) -⚬ ConcreteType[T] =
       val abstractify = ConcreteType.abstractify[T]
       par(abstractify, abstractify) > TypeEmitter.merge(
         splitT,
         neglectT,
-        zeroTypeArg,
+        outputTParam,
       ) > TypeEmitter.generify
       // rec { self =>
       //   par(unpack, unpack) > λ { case a |*| b =>
@@ -1877,28 +1911,30 @@ object TypeInference {
         typeParam > injectL,
       )
 
-    def degenerify[T](
-      zeroTypeArg: TParamLabel -⚬ (T |*| Done),
-    ): GenericType[T] -⚬ DegenericType =
-      rec { self =>
-        unpack > dsl.either(
-          NonAbstractType.map(self) > DegenericType.nonAbstractType,
-          λ { case lbl |*| p =>
-            val l1 |*| l2 = Labels.dupTParam(lbl)
-            val t |*| d = zeroTypeArg(l1)
-            returning(
-              DegenericType.abstractType(l2 waitFor d),
-              t supplyTo p,
-            )
-          },
-        )
-      }
+    // def degenerify[T](
+    //   zeroTypeArg: TParamLabel -⚬ (T |*| Done),
+    // ): GenericType[T] -⚬ DegenericType =
+    //   rec { self =>
+    //     unpack > dsl.either(
+    //       NonAbstractType.map(self) > DegenericType.nonAbstractType,
+    //       λ { case lbl |*| p =>
+    //         val l1 |*| l2 = Labels.dupTParam(lbl)
+    //         val t |*| d = zeroTypeArg(l1)
+    //         returning(
+    //           DegenericType.abstractType(l2 waitFor d),
+    //           t supplyTo p,
+    //         )
+    //       },
+    //     )
+    //   }
 
-    def output[T]: ConcreteType[T] -⚬ Val[Type] = rec { self =>
+    def output[T](
+      outputTypeParam: (TParamLabel |*| -[T]) -⚬ Val[Type],
+    ): ConcreteType[T] -⚬ Val[Type] = rec { self =>
       λ { t =>
         unpack(t) switch {
-          case Left(t) => t :>> NonAbstractType.output(self)
-          case Right(lbl |*| nt) => ???
+          case Left(t)           => t :>> NonAbstractType.output(self)
+          case Right(lbl |*| nt) => outputTypeParam(lbl |*| nt)
         }
       }
     }
@@ -1919,22 +1955,22 @@ object TypeInference {
   }
 
   object DegenericType {
-    def pack: (NonAbstractTypeF[DegenericType] |+| Val[AbstractTypeLabel]) -⚬ DegenericType =
+    def pack: (NonAbstractTypeF[DegenericType] |+| Label) -⚬ DegenericType =
       dsl.pack[DegenericTypeF]
 
-    def unpack: DegenericType -⚬ (NonAbstractTypeF[DegenericType] |+| Val[AbstractTypeLabel]) =
+    def unpack: DegenericType -⚬ (NonAbstractTypeF[DegenericType] |+| Label) =
       dsl.unpack
 
     def nonAbstractType: NonAbstractTypeF[DegenericType] -⚬ DegenericType =
       injectL > pack
 
-    def abstractedType: Val[AbstractTypeLabel] -⚬ DegenericType =
+    def abstractedType: Label -⚬ DegenericType =
       injectR > pack
 
     val output: DegenericType -⚬ Val[Type] = rec { self =>
       unpack > either(
         NonAbstractType.output(self),
-        mapVal { lbl => Type.abstractType(Right(lbl)) },
+        Labels.toAbstractType,
       )
     }
 
@@ -1980,7 +2016,7 @@ object TypeInference {
       tapFlop: Y -⚬ (Y |*| X),
       mergeT: (T |*| T) -⚬ T,
       outputY: Y -⚬ Val[Type],
-      outputT: (Label |*| T) -⚬ Val[Type],
+      outputT: (TParamLabel |*| T) -⚬ Val[Type],
     ): Label -⚬ (TypeSkelet[T, Y, X] |*| Val[Type] |*| TypeSkelet[T, Y, X]) =
       λ { lbl =>
         producing { case tl |*| t |*| tr =>
@@ -2052,7 +2088,7 @@ object TypeInference {
       mergeY: (Y |*| Y) -⚬ Y,
       outputYApprox: Y -⚬ Val[Type],
       mergeT: (T |*| T) -⚬ T,
-      outputT: (Label |*| T) -⚬ Val[Type],
+      outputTParam: (TParamLabel |*| T) -⚬ Val[Type],
     )(using
       Junction.Positive[X],
       Junction.Positive[Y],
@@ -2066,13 +2102,14 @@ object TypeInference {
             b switch {
               case Right(bLabel |*| bReq) => // `b` is abstract type
                 Labels.compare(aLabel |*| bLabel) switch {
-                  case Left(+(label)) => // labels are same => neither refines the other
-                    val res |*| resp = makeAbstractType[-[T], X, Y](label)
+                  case Left(label) => // labels are same => neither refines the other
+                    val lbl1 |*| lbl2 = Labels.split(label)
+                    val res |*| resp = makeAbstractType[-[T], X, Y](lbl1)
                     returning(
                       makeY(res),
                       resp switch {
                         case Left(x) =>
-                          val x1 |*| x2 = splitX(x waitFor neglect(label))
+                          val x1 |*| x2 = splitX(x waitFor Labels.neglect(lbl2))
                           returning(
                             injectL(x1) supplyTo aReq,
                             injectL(x2) supplyTo bReq,
@@ -2086,9 +2123,10 @@ object TypeInference {
                                 case Left(y1) =>
                                   b switch {
                                     case Left(y2) =>
-                                      injectL(mergeY(y1 |*| y2) waitFor neglect(label)) supplyTo outReq
+                                      injectL(mergeY(y1 |*| y2) waitFor Labels.neglect(lbl2)) supplyTo outReq
                                     case Right(--(t2)) =>
-                                      val d = (label ** outputYApprox(y1) ** outputT(label |*| t2)) :>> printLine { case ((l, y1), t2) =>
+                                      val l1 |*| l2 = Labels.split(lbl2)
+                                      val d = (Labels.show(l1) ** outputYApprox(y1) ** outputTParam(Labels.generify(l2) |*| t2)) :>> printLine { case ((l, y1), t2) =>
                                         s"label = $l, y1 = $y1, t2 = $t2"
                                       }
                                       (d |*| outReq) :>> crashWhenDone(s"The same abstract type resolved to two different outcomes (at ${summon[SourcePos]})")
@@ -2096,32 +2134,33 @@ object TypeInference {
                                 case Right(--(t1)) =>
                                   b switch {
                                     case Left(y2) =>
-                                      (t1 |*| (y2 waitFor neglect(label)) |*| outReq) :>> crashNow(s"The same abstract type resolved to two different outcomes (at ${summon[SourcePos]})")
+                                      (t1 |*| (y2 waitFor Labels.neglect(lbl2)) |*| outReq) :>> crashNow(s"The same abstract type resolved to two different outcomes (at ${summon[SourcePos]})")
                                     case Right(--(t2)) =>
-                                      injectR(dii(mergeT(t1 |*| t2) waitFor neglect(label))) supplyTo outReq
+                                      injectR(dii(mergeT(t1 |*| t2) waitFor Labels.neglect(lbl2))) supplyTo outReq
                                   }
                               }
                             case Right(?(_)) =>
-                              (label |*| aReq |*| bReq) :>> crashNow(s"TODO: eliminate? (at ${summon[SourcePos]})")
+                              (lbl2 |*| aReq |*| bReq) :>> crashNow(s"TODO: eliminate? (at ${summon[SourcePos]})")
                           }
                       }
                     )
                   case Right(res) =>
-                    val go: (Val[AbstractTypeLabel] |*| RefinementRequestF[-[T], X, Y] |*| RefinementRequestF[-[T], X, Y]) -⚬ Y =
-                      λ { case +(label) |*| req1 |*| req2 =>
-                        val x |*| resp = makeAbstractType[T, Y, X](label)
+                    val go: (Label |*| RefinementRequestF[-[T], X, Y] |*| RefinementRequestF[-[T], X, Y]) -⚬ Y =
+                      λ { case label |*| req1 |*| req2 =>
+                        val lbl1 |*| lbl2 = Labels.split(label)
+                        val x |*| resp = makeAbstractType[T, Y, X](lbl1)
                         returning(
                           resp switch {
                             case Left(y) =>
                               val y1 |*| x1 = tapFlop(y)
                               returning(
-                                y1 waitFor neglect(label),
+                                y1 waitFor Labels.neglect(lbl2),
                                 RefinementRequest.completeWith(req1 |*| x1),
                               )
                             case Right(value) =>
                               value switch {
                                 case Left(req2) =>
-                                  val out |*| resp = makeAbstractType[-[T], X, Y](label)
+                                  val out |*| resp = makeAbstractType[-[T], X, Y](lbl2)
                                   returning(
                                     makeY(out),
                                     resp switch {
@@ -2151,7 +2190,7 @@ object TypeInference {
                                     }
                                   )
                                 case Right(?(_)) =>
-                                  (label |*| req1) :>> crashNow(s"TODO: eliminate? (at ${summon[SourcePos]})")
+                                  (lbl2 |*| req1) :>> crashNow(s"TODO: eliminate? (at ${summon[SourcePos]})")
                               }
                           },
                           RefinementRequest.completeWith(req2 |*| makeX(x)),
@@ -2168,7 +2207,7 @@ object TypeInference {
               case Left(b) => // `b` is not abstract type
                 val y |*| x = b :>> NonAbstractType.splitMap(tapFlop)
                 returning(
-                  makeY(nonAbstractType(y waitFor neglect(aLabel))),
+                  makeY(nonAbstractType(y waitFor Labels.neglect(aLabel))),
                   RefinementRequest.completeWith(aReq |*| makeX(nonAbstractType(x))),
                 )
             }
@@ -2177,7 +2216,7 @@ object TypeInference {
               case Right(bLabel |*| bReq) => // `b` is abstract type
                 val y |*| x = a :>> NonAbstractType.splitMap(tapFlop)
                 returning(
-                  makeY(nonAbstractType(y waitFor neglect(bLabel))),
+                  makeY(nonAbstractType(y waitFor Labels.neglect(bLabel))),
                   RefinementRequest.completeWith(bReq |*| makeX(nonAbstractType(x))),
                 )
               case Left(b) => // `b` is not abstract type
@@ -2265,7 +2304,7 @@ object TypeInference {
                 import NonAbstractType.junctionNonAbstractType
                 val bx |*| by = b :>> NonAbstractType.splitMap[X, X, Y](tapFlipXY)
                 returning(
-                  makeX(nonAbstractType(bx waitFor neglect(aLabel))),
+                  makeX(nonAbstractType(bx waitFor Labels.neglect(aLabel))),
                   RefinementRequest.completeWith(aReq |*| makeY(nonAbstractType(by))),
                 )
             }
@@ -2274,7 +2313,7 @@ object TypeInference {
               case Right(bLabel |*| bReq) => // `b` is abstract type
                 val ax |*| ay = a :>> NonAbstractType.splitMap[X, X, Y](tapFlipXY)
                 returning(
-                  makeX(nonAbstractType[T, Y, X](ax)) waitFor neglect(bLabel),
+                  makeX(nonAbstractType[T, Y, X](ax)) waitFor Labels.neglect(bLabel),
                   RefinementRequest.completeWith(bReq |*| makeY(nonAbstractType(ay))),
                 )
               case Left(b) => // `b` is not abstract type
@@ -2339,22 +2378,23 @@ object TypeInference {
             )
           case Right(res) =>
             def go: (Label |*| RefinementRequestF[T, Y, X] |*| RefinementRequestF[T, Y, X]) -⚬ X =
-              λ { case +(aLabel) |*| aReq |*| bReq =>
-                val y |*| resp = makeAbstractType[-[T], X, Y](aLabel)
+              λ { case aLabel |*| aReq |*| bReq =>
+                val aLbl1 |*| aLbl2 = Labels.split(aLabel)
+                val y |*| resp = makeAbstractType[-[T], X, Y](aLbl1)
                 returning(
                   resp switch {
                     case Left(x) =>
                       val x1 |*| y1 = tapFlipXY(x)
                       returning(
-                        x1 waitFor neglect(aLabel),
+                        x1 waitFor Labels.neglect(aLbl2),
                         RefinementRequest.completeWith(aReq |*| y1),
                       )
                     case Right(b) =>
                       b switch {
                         case Right(?(_)) =>
-                          (aLabel |*| aReq) :>> crashNow(s"TODO: eliminate ${summon[SourcePos]}")
+                          (aLbl2 |*| aReq) :>> crashNow(s"TODO: eliminate ${summon[SourcePos]}")
                         case Left(bReq1) =>
-                          val x |*| resp = makeAbstractType[T, Y, X](aLabel)
+                          val x |*| resp = makeAbstractType[T, Y, X](aLbl2)
                           returning(
                             makeX(x),
                             resp switch {
@@ -2403,215 +2443,215 @@ object TypeInference {
         }
       }
 
-    def mergeOpWith[P, Q, Y, X](
-      splitX: X -⚬ (X |*| X),
-      mergeInXY: (X |*| Y) -⚬ X,
-      tapFlopYX: Y -⚬ (Y |*| X),
-      mergeP: (P |*| P) -⚬ P,
-      makeX: TypeSkelet[P, Y, X] -⚬ X,
-      makeY: TypeSkelet[Q, X, Y] -⚬ Y,
-      tapFlipPQ: P -⚬ (P |*| Q),
-      mergeInQP: (Q |*| P) -⚬ Q,
-      outputXApprox: X -⚬ Val[Type],
-      outputYApprox: Y -⚬ Val[Type],
-    )(using
-      Junction.Positive[X],
-    ): (TypeSkelet[P, Y, X] |*| TypeSkelet[Q, X, Y]) -⚬ X =
-      λ { case a |*| b =>
-        a switch {
-          case Right(aLabel |*| aReq) => // `a` is abstract type
-            b switch {
-              case Right(bLabel |*| bReq) => // `b` is abstract type
-                mergeAbstractTypesOp(splitX, mergeInXY, tapFlopYX, makeX, makeY, mergeP, tapFlipPQ, mergeInQP)(
-                  (aLabel |*| aReq) |*| (bLabel |*| bReq)
-                )
-              case Left(b) => // `b` is not abstract type
-                import NonAbstractType.junctionNonAbstractType
-                val by |*| bx = b :>> NonAbstractType.splitMap[Y, Y, X](tapFlopYX)
-                returning(
-                  makeX(nonAbstractType(bx waitFor neglect(aLabel))),
-                  RefinementRequest.completeWith(aReq |*| makeY(nonAbstractType(by))),
-                )
-            }
-          case Left(a) => // `a` is not abstract type
-            b switch {
-              case Right(bLabel |*| bReq) => // `b` is abstract type
-                val a1 |*| a2 = a :>> NonAbstractType.split(splitX)
-                val x = makeX(nonAbstractType[P, Y, X](a1)) waitFor neglect(bLabel)
-                returning(
-                  makeX(nonAbstractType(a2)),
-                  RefinementRequest.completeWith(bReq |*| x),
-                )
-              case Left(b) => // `b` is not abstract type
-                makeX(nonAbstractType((a |*| b) :>> NonAbstractType.mergeWith(mergeInXY, outputXApprox, outputYApprox)))
-            }
-        }
-      }
+    // def mergeOpWith[P, Q, Y, X](
+    //   splitX: X -⚬ (X |*| X),
+    //   mergeInXY: (X |*| Y) -⚬ X,
+    //   tapFlopYX: Y -⚬ (Y |*| X),
+    //   mergeP: (P |*| P) -⚬ P,
+    //   makeX: TypeSkelet[P, Y, X] -⚬ X,
+    //   makeY: TypeSkelet[Q, X, Y] -⚬ Y,
+    //   tapFlipPQ: P -⚬ (P |*| Q),
+    //   mergeInQP: (Q |*| P) -⚬ Q,
+    //   outputXApprox: X -⚬ Val[Type],
+    //   outputYApprox: Y -⚬ Val[Type],
+    // )(using
+    //   Junction.Positive[X],
+    // ): (TypeSkelet[P, Y, X] |*| TypeSkelet[Q, X, Y]) -⚬ X =
+    //   λ { case a |*| b =>
+    //     a switch {
+    //       case Right(aLabel |*| aReq) => // `a` is abstract type
+    //         b switch {
+    //           case Right(bLabel |*| bReq) => // `b` is abstract type
+    //             mergeAbstractTypesOp(splitX, mergeInXY, tapFlopYX, makeX, makeY, mergeP, tapFlipPQ, mergeInQP)(
+    //               (aLabel |*| aReq) |*| (bLabel |*| bReq)
+    //             )
+    //           case Left(b) => // `b` is not abstract type
+    //             import NonAbstractType.junctionNonAbstractType
+    //             val by |*| bx = b :>> NonAbstractType.splitMap[Y, Y, X](tapFlopYX)
+    //             returning(
+    //               makeX(nonAbstractType(bx waitFor neglect(aLabel))),
+    //               RefinementRequest.completeWith(aReq |*| makeY(nonAbstractType(by))),
+    //             )
+    //         }
+    //       case Left(a) => // `a` is not abstract type
+    //         b switch {
+    //           case Right(bLabel |*| bReq) => // `b` is abstract type
+    //             val a1 |*| a2 = a :>> NonAbstractType.split(splitX)
+    //             val x = makeX(nonAbstractType[P, Y, X](a1)) waitFor neglect(bLabel)
+    //             returning(
+    //               makeX(nonAbstractType(a2)),
+    //               RefinementRequest.completeWith(bReq |*| x),
+    //             )
+    //           case Left(b) => // `b` is not abstract type
+    //             makeX(nonAbstractType((a |*| b) :>> NonAbstractType.mergeWith(mergeInXY, outputXApprox, outputYApprox)))
+    //         }
+    //     }
+    //   }
 
-    def mergeAbstractTypesOp[P, Q, Y, X](
-      splitX: X -⚬ (X |*| X),
-      mergeInXY: (X |*| Y) -⚬ X,
-      tapFlopYX: Y -⚬ (Y |*| X),
-      makeX: TypeSkelet[P, Y, X] -⚬ X,
-      makeY: TypeSkelet[Q, X, Y] -⚬ Y,
-      mergeP: (P |*| P) -⚬ P,
-      tapFlipPQ: P -⚬ (P |*| Q),
-      mergeInQP: (Q |*| P) -⚬ Q,
-    )(using
-      Junction.Positive[X],
-    ): ((Label |*| RefinementRequestF[P, Y, X]) |*| (Label |*| RefinementRequestF[Q, X, Y])) -⚬ X =
-      λ { case
-        (aLabel |*| aReq)
-        |*|
-        (bLabel |*| bReq) =>
-        Labels.compare(aLabel |*| bLabel) switch {
-          case Left(label) => // labels are same => neither refines the other
-            // TODO: Can it even legally happen that the same
-            //       abstract type is being merged in opposite polarities?
-            val x |*| resp = makeAbstractType[P, Y, X](label)
-            returning(
-              makeX(x),
-              resp switch {
-                case Left(y) =>
-                  val y1 |*| x1 = tapFlopYX(y)
-                  returning(
-                    RefinementRequest.completeWith(aReq |*| y1),
-                    RefinementRequest.completeWith(bReq |*| x1),
-                  )
-                case Right(value) =>
-                  value switch {
-                    case Left(outReq) =>
-                      val a = RefinementRequest.decline(aReq)
-                      val b = RefinementRequest.decline(bReq)
-                      a switch {
-                        case Left(x) =>
-                          b switch {
-                            case Left(y) =>
-                              injectL(mergeInXY(x |*| y)) supplyTo outReq
-                            case Right(nq) =>
-                              (x |*| nq |*| outReq) :>> crashNow(s"The same abstract type resolved to two different outcomes (at ${summon[SourcePos]})")
-                          }
-                        case Right(np) =>
-                          b switch {
-                            case Left(y) =>
-                              (y |*| np |*| outReq) :>> crashNow(s"The same abstract type resolved to two different outcomes (at ${summon[SourcePos]})")
-                            case Right(nq) =>
-                              val --(p) = outReq contramap injectR
-                              val p1 |*| q1 = tapFlipPQ(p)
-                              returning(
-                                p1 supplyTo np,
-                                q1 supplyTo nq,
-                              )
-                          }
-                      }
-                    case Right(?(_)) =>
-                      (aReq |*| bReq) :>> crashNow(s"TODO: is this case ever used? (${summon[SourcePos]})")
-                  }
-              },
-            )
-          case Right(res) =>
-            res switch {
-              case Left(+(aLabel)) =>
-                val x |*| resp = makeAbstractType[P, Y, X](aLabel)
-                returning(
-                  resp switch {
-                    case Left(y) =>
-                      val y1 |*| x1 = tapFlopYX(y)
-                      returning(
-                        x1 waitFor neglect(aLabel),
-                        RefinementRequest.completeWith(aReq |*| y1),
-                      )
-                    case Right(b) =>
-                      b switch {
-                        case Right(?(_)) =>
-                          (aLabel |*| aReq) :>> crashNow(s"TODO: eliminate ${summon[SourcePos]}")
-                        case Left(bReq1) =>
-                          val x |*| resp = makeAbstractType[P, Y, X](aLabel)
-                          returning(
-                            makeX(x),
-                            resp switch {
-                              case Left(y) =>
-                                val y1 |*| x1 = tapFlopYX(y)
-                                returning(
-                                  RefinementRequest.completeWith(aReq |*| y1),
-                                  injectL(x1) supplyTo bReq1,
-                                )
-                              case Right(value) =>
-                                value switch {
-                                  case Right(?(_)) =>
-                                    (aReq |*| bReq1) :>> crashNow(s"TODO: eliminate ${summon[SourcePos]}")
-                                  case Left(outReq) =>
-                                    RefinementRequest.decline(aReq) switch {
-                                      case Left(res) =>
-                                        val x1 |*| x2 = splitX(res)
-                                        returning(
-                                          injectL(x1) supplyTo outReq,
-                                          injectL(x2) supplyTo bReq1,
-                                        )
-                                      case Right(np) =>
-                                        val --(p1) = bReq1 contramap injectR
-                                        val --(p2) = outReq contramap injectR
-                                        mergeP(p1 |*| p2) supplyTo np
-                                    }
-                                }
-                            }
-                          )
-                      }
-                  },
-                  RefinementRequest.completeWith(bReq |*| makeX(x)),
-                )
-              case Right(+(bLabel)) =>
-                val y |*| resp = makeAbstractType[Q, X, Y](bLabel)
-                returning(
-                  resp switch {
-                    case Left(x) =>
-                      val x1 |*| x2 = splitX(x)
-                      returning(
-                        x1 waitFor neglect(bLabel),
-                        RefinementRequest.completeWith(bReq |*| x2),
-                      )
-                    case Right(a) =>
-                      a switch {
-                        case Right(?(_)) =>
-                          (bLabel |*| bReq) :>> crashNow(s"TODO: eliminate ${summon[SourcePos]}")
-                        case Left(aReq1) =>
-                          val x |*| resp = makeAbstractType[P, Y, X](bLabel)
-                          returning(
-                            makeX(x),
-                            resp switch {
-                              case Left(y) =>
-                                val y1 |*| x1 = tapFlopYX(y)
-                                returning(
-                                  RefinementRequest.completeWith(bReq |*| x1),
-                                  injectL(y1) supplyTo aReq1,
-                                )
-                              case Right(value) =>
-                                value switch {
-                                  case Right(?(_)) =>
-                                    (aReq1 |*| bReq) :>> crashNow(s"TODO: eliminate ${summon[SourcePos]}")
-                                  case Left(outReq) =>
-                                    RefinementRequest.decline(bReq) switch {
-                                      case Left(res) =>
-                                        val y1 |*| x1 = tapFlopYX(res)
-                                        returning(
-                                          injectL(y1) supplyTo aReq1,
-                                          injectL(x1) supplyTo outReq,
-                                        )
-                                      case Right(nq) =>
-                                        val --(p) = outReq contramap injectR
-                                        val --(q) = aReq1 contramap injectR
-                                        mergeInQP(q |*| p) supplyTo nq
-                                    }
-                                }
-                            }
-                          )
-                      }
-                  },
-                  RefinementRequest.completeWith(aReq |*| makeY(y)),
-                )
-            }
-        }
-      }
+    // def mergeAbstractTypesOp[P, Q, Y, X](
+    //   splitX: X -⚬ (X |*| X),
+    //   mergeInXY: (X |*| Y) -⚬ X,
+    //   tapFlopYX: Y -⚬ (Y |*| X),
+    //   makeX: TypeSkelet[P, Y, X] -⚬ X,
+    //   makeY: TypeSkelet[Q, X, Y] -⚬ Y,
+    //   mergeP: (P |*| P) -⚬ P,
+    //   tapFlipPQ: P -⚬ (P |*| Q),
+    //   mergeInQP: (Q |*| P) -⚬ Q,
+    // )(using
+    //   Junction.Positive[X],
+    // ): ((Label |*| RefinementRequestF[P, Y, X]) |*| (Label |*| RefinementRequestF[Q, X, Y])) -⚬ X =
+    //   λ { case
+    //     (aLabel |*| aReq)
+    //     |*|
+    //     (bLabel |*| bReq) =>
+    //     Labels.compare(aLabel |*| bLabel) switch {
+    //       case Left(label) => // labels are same => neither refines the other
+    //         // TODO: Can it even legally happen that the same
+    //         //       abstract type is being merged in opposite polarities?
+    //         val x |*| resp = makeAbstractType[P, Y, X](label)
+    //         returning(
+    //           makeX(x),
+    //           resp switch {
+    //             case Left(y) =>
+    //               val y1 |*| x1 = tapFlopYX(y)
+    //               returning(
+    //                 RefinementRequest.completeWith(aReq |*| y1),
+    //                 RefinementRequest.completeWith(bReq |*| x1),
+    //               )
+    //             case Right(value) =>
+    //               value switch {
+    //                 case Left(outReq) =>
+    //                   val a = RefinementRequest.decline(aReq)
+    //                   val b = RefinementRequest.decline(bReq)
+    //                   a switch {
+    //                     case Left(x) =>
+    //                       b switch {
+    //                         case Left(y) =>
+    //                           injectL(mergeInXY(x |*| y)) supplyTo outReq
+    //                         case Right(nq) =>
+    //                           (x |*| nq |*| outReq) :>> crashNow(s"The same abstract type resolved to two different outcomes (at ${summon[SourcePos]})")
+    //                       }
+    //                     case Right(np) =>
+    //                       b switch {
+    //                         case Left(y) =>
+    //                           (y |*| np |*| outReq) :>> crashNow(s"The same abstract type resolved to two different outcomes (at ${summon[SourcePos]})")
+    //                         case Right(nq) =>
+    //                           val --(p) = outReq contramap injectR
+    //                           val p1 |*| q1 = tapFlipPQ(p)
+    //                           returning(
+    //                             p1 supplyTo np,
+    //                             q1 supplyTo nq,
+    //                           )
+    //                       }
+    //                   }
+    //                 case Right(?(_)) =>
+    //                   (aReq |*| bReq) :>> crashNow(s"TODO: is this case ever used? (${summon[SourcePos]})")
+    //               }
+    //           },
+    //         )
+    //       case Right(res) =>
+    //         res switch {
+    //           case Left(+(aLabel)) =>
+    //             val x |*| resp = makeAbstractType[P, Y, X](aLabel)
+    //             returning(
+    //               resp switch {
+    //                 case Left(y) =>
+    //                   val y1 |*| x1 = tapFlopYX(y)
+    //                   returning(
+    //                     x1 waitFor neglect(aLabel),
+    //                     RefinementRequest.completeWith(aReq |*| y1),
+    //                   )
+    //                 case Right(b) =>
+    //                   b switch {
+    //                     case Right(?(_)) =>
+    //                       (aLabel |*| aReq) :>> crashNow(s"TODO: eliminate ${summon[SourcePos]}")
+    //                     case Left(bReq1) =>
+    //                       val x |*| resp = makeAbstractType[P, Y, X](aLabel)
+    //                       returning(
+    //                         makeX(x),
+    //                         resp switch {
+    //                           case Left(y) =>
+    //                             val y1 |*| x1 = tapFlopYX(y)
+    //                             returning(
+    //                               RefinementRequest.completeWith(aReq |*| y1),
+    //                               injectL(x1) supplyTo bReq1,
+    //                             )
+    //                           case Right(value) =>
+    //                             value switch {
+    //                               case Right(?(_)) =>
+    //                                 (aReq |*| bReq1) :>> crashNow(s"TODO: eliminate ${summon[SourcePos]}")
+    //                               case Left(outReq) =>
+    //                                 RefinementRequest.decline(aReq) switch {
+    //                                   case Left(res) =>
+    //                                     val x1 |*| x2 = splitX(res)
+    //                                     returning(
+    //                                       injectL(x1) supplyTo outReq,
+    //                                       injectL(x2) supplyTo bReq1,
+    //                                     )
+    //                                   case Right(np) =>
+    //                                     val --(p1) = bReq1 contramap injectR
+    //                                     val --(p2) = outReq contramap injectR
+    //                                     mergeP(p1 |*| p2) supplyTo np
+    //                                 }
+    //                             }
+    //                         }
+    //                       )
+    //                   }
+    //               },
+    //               RefinementRequest.completeWith(bReq |*| makeX(x)),
+    //             )
+    //           case Right(+(bLabel)) =>
+    //             val y |*| resp = makeAbstractType[Q, X, Y](bLabel)
+    //             returning(
+    //               resp switch {
+    //                 case Left(x) =>
+    //                   val x1 |*| x2 = splitX(x)
+    //                   returning(
+    //                     x1 waitFor neglect(bLabel),
+    //                     RefinementRequest.completeWith(bReq |*| x2),
+    //                   )
+    //                 case Right(a) =>
+    //                   a switch {
+    //                     case Right(?(_)) =>
+    //                       (bLabel |*| bReq) :>> crashNow(s"TODO: eliminate ${summon[SourcePos]}")
+    //                     case Left(aReq1) =>
+    //                       val x |*| resp = makeAbstractType[P, Y, X](bLabel)
+    //                       returning(
+    //                         makeX(x),
+    //                         resp switch {
+    //                           case Left(y) =>
+    //                             val y1 |*| x1 = tapFlopYX(y)
+    //                             returning(
+    //                               RefinementRequest.completeWith(bReq |*| x1),
+    //                               injectL(y1) supplyTo aReq1,
+    //                             )
+    //                           case Right(value) =>
+    //                             value switch {
+    //                               case Right(?(_)) =>
+    //                                 (aReq1 |*| bReq) :>> crashNow(s"TODO: eliminate ${summon[SourcePos]}")
+    //                               case Left(outReq) =>
+    //                                 RefinementRequest.decline(bReq) switch {
+    //                                   case Left(res) =>
+    //                                     val y1 |*| x1 = tapFlopYX(res)
+    //                                     returning(
+    //                                       injectL(y1) supplyTo aReq1,
+    //                                       injectL(x1) supplyTo outReq,
+    //                                     )
+    //                                   case Right(nq) =>
+    //                                     val --(p) = outReq contramap injectR
+    //                                     val --(q) = aReq1 contramap injectR
+    //                                     mergeInQP(q |*| p) supplyTo nq
+    //                                 }
+    //                             }
+    //                         }
+    //                       )
+    //                   }
+    //               },
+    //               RefinementRequest.completeWith(aReq |*| makeY(y)),
+    //             )
+    //         }
+    //     }
+    //   }
 
     // def mergeIn[T, Y, X](
     //   splitX: X -⚬ (X |*| X),
@@ -2687,19 +2727,20 @@ object TypeInference {
     ): TypeSkelet[-[T], X, Y] -⚬ (Y |*| X) =
       λ { t =>
         t switch {
-          case Right(+(lbl) |*| req) =>
-            val (out2 |*| resp2) = makeAbstractType[T, Y, X](lbl)
+          case Right(label |*| req) =>
+            val lbl1 |*| lbl2 = Labels.split(label)
+            val (out2 |*| resp2) = makeAbstractType[T, Y, X](lbl1)
             resp2 switch {
               case Left(y) =>
                 val y1 |*| x1 = tapFlop(y)
                 returning(
-                  y1 |*| (makeX(out2) waitFor neglect(lbl)),
+                  y1 |*| (makeX(out2) waitFor Labels.neglect(lbl2)),
                   RefinementRequest.completeWith(req |*| x1)
                 )
               case Right(value) =>
                 value switch {
                   case Left(outReq2) =>
-                    val (out1 |*| resp1) = makeAbstractType[-[T], X, Y](lbl)
+                    val (out1 |*| resp1) = makeAbstractType[-[T], X, Y](lbl2)
                     resp1 switch {
                       case Left(x) =>
                         val x1 |*| x2 = splitX(x)
@@ -2732,7 +2773,7 @@ object TypeInference {
                         }
                     }
                   case Right(?(_)) =>
-                    (lbl |*| out2 |*| req) :>> crashNow(s"TODO: eliminate (at ${summon[SourcePos]})")
+                    (lbl2 |*| out2 |*| req) :>> crashNow(s"TODO: eliminate (at ${summon[SourcePos]})")
                 }
             }
           case Left(a) => // NonAbstractType
@@ -2754,19 +2795,20 @@ object TypeInference {
     ): TypeSkelet[T, Y, X] -⚬ (X |*| Y) =
       λ { t =>
         t switch {
-          case Right(+(lbl) |*| req) => // abstract type
-            val out2 |*| resp2 = makeAbstractType[-[T], X, Y](lbl)
+          case Right(label |*| req) => // abstract type
+            val lbl1 |*| lbl2 = Labels.split(label)
+            val out2 |*| resp2 = makeAbstractType[-[T], X, Y](lbl1)
             resp2 switch {
               case Left(x) =>
                 val x1 |*| y1 = tapFlip(x)
                 returning(
-                  x1 |*| (makeY(out2) waitFor neglect(lbl)),
+                  x1 |*| (makeY(out2) waitFor Labels.neglect(lbl2)),
                   RefinementRequest.completeWith(req |*| y1),
                 )
               case Right(value) =>
                 value switch {
                   case Left(outReq2) =>
-                    val out1 |*| resp1 = makeAbstractType[T, Y, X](lbl)
+                    val out1 |*| resp1 = makeAbstractType[T, Y, X](lbl2)
                     returning(
                       makeX(out1) |*| makeY(out2),
                       resp1 switch {
@@ -2800,7 +2842,7 @@ object TypeInference {
                       }
                     )
                   case Right(?(_)) =>
-                    (lbl |*| req |*| out2) :>> crashNow(s"TODO: eliminate? (at ${summon[SourcePos]})")
+                    (lbl2 |*| req |*| out2) :>> crashNow(s"TODO: eliminate? (at ${summon[SourcePos]})")
                 }
             }
           case Left(t) => // non-abstract type
@@ -2813,13 +2855,13 @@ object TypeInference {
 
     def output[T, Y, X](
       outputX: X -⚬ Val[Type],
-      outputNegT: (Label |*| -[T]) -⚬ Val[Type],
+      outputNegT: (TParamLabel |*| -[T]) -⚬ Val[Type],
     ): TypeSkelet[T, Y, X] -⚬ Val[Type] =
       λ { _ switch {
         case Right(label |*| req) => // abstract type
           RefinementRequest.decline(req) switch {
-            case Left(x)   => outputX(x) waitFor neglect(label)
-            case Right(nt) => outputNegT(label |*| nt)
+            case Left(x)   => outputX(x) waitFor Labels.neglect(label)
+            case Right(nt) => outputNegT(Labels.generify(label) |*| nt)
           }
         case Left(x) =>
           NonAbstractType.output(outputX)(x)
@@ -2833,7 +2875,7 @@ object TypeInference {
         case Right(label |*| req) => // abstract type
           RefinementRequest.decline(req) switch {
             case Left(x)   =>
-              join(neglectX(x) |*| neglect(label))
+              join(neglectX(x) |*| Labels.neglect(label))
             case Right(nt) =>
               val t |*| d = zeroTypeArg(label)
               returning(d, t supplyTo nt)
@@ -2844,23 +2886,17 @@ object TypeInference {
 
     def outputApprox[T, Y, X](
       outputXApprox: X -⚬ Val[Type],
-      zeroTypeArg: Label -⚬ (T |*| Done),
+      outputTParamApprox: (TParamLabel |*| -[T]) -⚬ Val[Type],
     ): TypeSkelet[T, Y, X] -⚬ Val[Type] =
       λ { _ switch {
-        case Right(+(label) |*| req) => // abstract type
-          (label :>> mapVal(l => Type.abstractType(Right(l))))
-            .waitFor {
-              RefinementRequest.decline(req) switch {
-                case Left(x) =>
-                  joinAll(
-                    neglect(outputXApprox(x)),
-                    neglect(label),
-                  )
-                case Right(nt) =>
-                  val t |*| d = zeroTypeArg(label)
-                  returning(d, t supplyTo nt)
-              }
-            }
+        case Right(label |*| req) => // abstract type
+          RefinementRequest.decline(req) switch {
+            case Left(x) =>
+              outputXApprox(x)
+                .waitFor(Labels.neglect(label))
+            case Right(nt) =>
+              outputTParamApprox(Labels.generify(label) |*| nt)
+          }
         case Left(x) =>
           NonAbstractType.output(outputXApprox)(x)
       }}
@@ -2874,8 +2910,8 @@ object TypeInference {
         NonAbstractType.map(wrapX) > ConcreteType.nonAbstractType,
         λ { case lbl |*| req =>
           RefinementRequest.decline(req) switch {
-            case Left(x)   => wrapX(x) waitFor neglect(lbl)
-            case Right(nt) => ConcreteType.typeParam(lbl |*| nt)
+            case Left(x)   => wrapX(x) waitFor Labels.neglect(lbl)
+            case Right(nt) => ConcreteType.typeParam(Labels.generify(lbl) |*| nt)
           }
         },
       )
@@ -2956,37 +2992,37 @@ object TypeInference {
     def makeAbstractType[T]: Label -⚬ (TypeEmitter[T] |*| ReboundF[T, ReboundType[T], TypeEmitter[T]]) =
       TypeSkelet.makeAbstractType[T, ReboundType[T], TypeEmitter[T]] > fst(pack)
 
-    def genericType[T](
-      instantiate: ReboundType[T] -⚬ T,
-    ): (Val[AbstractTypeLabel] |*| -[T]) -⚬ TypeEmitter[T] =
-      λ { case lbl |*| nt =>
-        val out |*| resp = makeAbstractType[T](lbl)
-        returning(
-          out,
-          resp switch {
-            case Left(y) =>
-              instantiate(y) supplyTo nt
-            case Right(value) =>
-              value switch {
-                case Left(outReq) =>
-                  injectR(nt) supplyTo outReq
-                case Right(?(_)) =>
-                  nt :>> crashNow(s"TODO: Is this case really ever used? (${summon[SourcePos]})")
-              }
-          }
-        )
-      }
+    // def genericType[T](
+    //   instantiate: ReboundType[T] -⚬ T,
+    // ): (Val[AbstractTypeLabel] |*| -[T]) -⚬ TypeEmitter[T] =
+    //   λ { case lbl |*| nt =>
+    //     val out |*| resp = makeAbstractType[T](lbl)
+    //     returning(
+    //       out,
+    //       resp switch {
+    //         case Left(y) =>
+    //           instantiate(y) supplyTo nt
+    //         case Right(value) =>
+    //           value switch {
+    //             case Left(outReq) =>
+    //               injectR(nt) supplyTo outReq
+    //             case Right(?(_)) =>
+    //               nt :>> crashNow(s"TODO: Is this case really ever used? (${summon[SourcePos]})")
+    //           }
+    //       }
+    //     )
+    //   }
 
     def newAbstractType[T](
       mergeT: (T |*| T) -⚬ T,
-      outputT: (Label |*| T) -⚬ Val[Type],
+      outputT: (TParamLabel |*| T) -⚬ Val[Type],
       neglectT: T -⚬ Done,
     )(using
       Junction.Positive[T],
     ): Label -⚬ (TypeEmitter[T] |*| Val[Type] |*| TypeEmitter[T]) =
       TypeSkelet.newAbstractType[T, ReboundType[T], TypeEmitter[T]](
         TypeEmitter.split(mergeT, neglectT, outputT),
-        ReboundType.merge(mergeT, neglectT, outputT),
+        ReboundType.merge(mergeT, outputT),
         ReboundType.tapFlop(mergeT, neglectT, outputT),
         mergeT,
         ReboundType.output(outputT),
@@ -3011,14 +3047,13 @@ object TypeInference {
     def split[T](
       mergeT: (T |*| T) -⚬ T,
       neglectT: T -⚬ Done,
-      outputT: (Label |*| T) -⚬ Val[Type],
+      outputT: (TParamLabel |*| T) -⚬ Val[Type],
     )(using
       Junction.Positive[T],
     ): TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T]) = {
       val mergeInbound =
         ReboundType.merge_(
           mergeT,
-          neglectT,
           outputT,
         )
 
@@ -3057,7 +3092,7 @@ object TypeInference {
     def tapFlip[T](
       splitT: T -⚬ (T |*| T),
       neglectT: T -⚬ Done,
-      zeroTypeArg: Val[AbstractTypeLabel] -⚬ (T |*| Done),
+      outputTParamApprox: (TParamLabel |*| -[T]) -⚬ Val[Type],
     ): TypeEmitter[T] -⚬ (TypeEmitter[T] |*| ReboundType[T]) = rec { self =>
       val splitRebound: ReboundType[T] -⚬ (ReboundType[T] |*| ReboundType[T]) =
         rec { splitRebound =>
@@ -3065,7 +3100,7 @@ object TypeInference {
             splitT,
             merge__(
               splitT,
-              zeroTypeArg,
+              outputTParamApprox,
               splitRebound,
               self,
             ),
@@ -3081,7 +3116,7 @@ object TypeInference {
 
     def merge__[T](
       splitT: T -⚬ (T |*| T),
-      zeroTypeArg: Label -⚬ (T |*| Done),
+      outputTParamApprox: (TParamLabel |*| -[T]) -⚬ Val[Type],
       splitRebound: ReboundType[T] -⚬ (ReboundType[T] |*| ReboundType[T]),
       tapFlip: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| ReboundType[T]),
     ): (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] = rec { self =>
@@ -3093,19 +3128,19 @@ object TypeInference {
           makeX = pack,
           makeY = ReboundType.pack,
           splitT = splitT,
-          outputApprox(zeroTypeArg),
+          outputApprox(outputTParamApprox),
         )(a |*| b)
       }
     }
 
     def merge_[T](
       splitT: T -⚬ (T |*| T),
-      zeroTypeArg: Label -⚬ (T |*| Done),
+      outputTParamApprox: (TParamLabel |*| -[T]) -⚬ Val[Type],
       splitRebound: ReboundType[T] -⚬ (ReboundType[T] |*| ReboundType[T]),
     ): (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] = rec { self =>
       merge__(
         splitT,
-        zeroTypeArg,
+        outputTParamApprox,
         splitRebound,
         tapFlip__(splitT, splitRebound),
       )
@@ -3114,7 +3149,7 @@ object TypeInference {
     def merge[T](
       splitT: T -⚬ (T |*| T),
       neglectT: T -⚬ Done,
-      zeroTypeArg: Label -⚬ (T |*| Done),
+      outputTParamApprox: (TParamLabel |*| -[T]) -⚬ Val[Type],
     ): (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] = rec { self =>
       val splitRebound: ReboundType[T] -⚬ (ReboundType[T] |*| ReboundType[T]) =
         rec { splitRebound =>
@@ -3128,87 +3163,87 @@ object TypeInference {
 
       merge_(
         splitT,
-        zeroTypeArg,
+        outputTParamApprox,
         splitRebound,
       )
     }
 
-    def mergeIn__[T](
-      split: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T]),
-      mergeRebound: (ReboundType[T] |*| ReboundType[T]) -⚬ ReboundType[T],
-      tapFlop: ReboundType[T] -⚬ (ReboundType[T] |*| TypeEmitter[T]),
-      mergeT: (T |*| T) -⚬ T,
-      neglectT: T -⚬ Done,
-      zeroTypeArg: Label -⚬ (T |*| Done),
-    ): (TypeEmitter[T] |*| ReboundType[T]) -⚬ TypeEmitter[T] = rec { self =>
-      λ { case a |*| b =>
-        val a1: $[TypeSkelet[  T , ReboundType[T], TypeEmitter[T]]] = unpack(a)
-        val b1: $[TypeSkelet[-[T], TypeEmitter[T], ReboundType[T]]] = ReboundType.unpack(b)
+    // def mergeIn__[T](
+    //   split: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T]),
+    //   mergeRebound: (ReboundType[T] |*| ReboundType[T]) -⚬ ReboundType[T],
+    //   tapFlop: ReboundType[T] -⚬ (ReboundType[T] |*| TypeEmitter[T]),
+    //   mergeT: (T |*| T) -⚬ T,
+    //   neglectT: T -⚬ Done,
+    //   outputTParam: (TParamLabel |*| -[T]) -⚬ Val[Type],
+    // ): (TypeEmitter[T] |*| ReboundType[T]) -⚬ TypeEmitter[T] = rec { self =>
+    //   λ { case a |*| b =>
+    //     val a1: $[TypeSkelet[  T , ReboundType[T], TypeEmitter[T]]] = unpack(a)
+    //     val b1: $[TypeSkelet[-[T], TypeEmitter[T], ReboundType[T]]] = ReboundType.unpack(b)
 
-        (a1 |*| b1) :>> TypeSkelet.mergeOpWith[T, -[T], ReboundType[T], TypeEmitter[T]](
-          split,
-          self,
-          tapFlop,
-          mergeT,
-          TypeEmitter.pack,
-          ReboundType.pack,
-          λ { t =>
-            producing { case ot |*| ont =>
-              ot := mergeT(t |*| ont.asInput)
-            }
-          },
-          λ { case nt |*| t =>
-            val nt1 |*| nt2 = distributeInversion(nt contramap mergeT)
-            returning(
-              nt1,
-              t supplyTo nt2,
-            )
-          },
-          TypeEmitter.outputApprox(zeroTypeArg),
-          ReboundType.outputApprox(neglectT),
-        )
-      }
-    }
+    //     (a1 |*| b1) :>> TypeSkelet.mergeOpWith[T, -[T], ReboundType[T], TypeEmitter[T]](
+    //       split,
+    //       self,
+    //       tapFlop,
+    //       mergeT,
+    //       TypeEmitter.pack,
+    //       ReboundType.pack,
+    //       λ { t =>
+    //         producing { case ot |*| ont =>
+    //           ot := mergeT(t |*| ont.asInput)
+    //         }
+    //       },
+    //       λ { case nt |*| t =>
+    //         val nt1 |*| nt2 = distributeInversion(nt contramap mergeT)
+    //         returning(
+    //           nt1,
+    //           t supplyTo nt2,
+    //         )
+    //       },
+    //       TypeEmitter.outputApprox(outputTParam),
+    //       ReboundType.outputApprox(neglectT),
+    //     )
+    //   }
+    // }
 
-    def mergeIn_[T](
-      mergeInbound: (ReboundType[T] |*| ReboundType[T]) -⚬ ReboundType[T],
-      tapFlop: ReboundType[T] -⚬ (ReboundType[T] |*| TypeEmitter[T]),
-      mergeT: (T |*| T) -⚬ T,
-      neglectT: T -⚬ Done,
-      zeroTypeArg: Label -⚬ (T |*| Done),
-    ): (TypeEmitter[T] |*| ReboundType[T]) -⚬ TypeEmitter[T] =
-      mergeIn__[T](
-        split_(mergeInbound, tapFlop, mergeT),
-        mergeInbound,
-        tapFlop,
-        mergeT,
-        neglectT,
-        zeroTypeArg,
-      )
+    // def mergeIn_[T](
+    //   mergeInbound: (ReboundType[T] |*| ReboundType[T]) -⚬ ReboundType[T],
+    //   tapFlop: ReboundType[T] -⚬ (ReboundType[T] |*| TypeEmitter[T]),
+    //   mergeT: (T |*| T) -⚬ T,
+    //   neglectT: T -⚬ Done,
+    //   outputTParam: (TParamLabel |*| -[T]) -⚬ Val[Type],
+    // ): (TypeEmitter[T] |*| ReboundType[T]) -⚬ TypeEmitter[T] =
+    //   mergeIn__[T](
+    //     split_(mergeInbound, tapFlop, mergeT),
+    //     mergeInbound,
+    //     tapFlop,
+    //     mergeT,
+    //     neglectT,
+    //     outputTParam,
+    //   )
 
-    def mergeIn[T](
-      mergeT: (T |*| T) -⚬ T,
-      neglectT: T -⚬ Done,
-      zeroTypeArg: Label -⚬ (T |*| Done),
-      outputT: (Label |*| T) -⚬ Val[Type],
-    )(using
-      Junction.Positive[T],
-    ): (TypeEmitter[T] |*| ReboundType[T]) -⚬ TypeEmitter[T] = {
-      val mergeInbound =
-        ReboundType.merge_(
-          mergeT,
-          neglectT,
-          outputT,
-        )
+    // def mergeIn[T](
+    //   mergeT: (T |*| T) -⚬ T,
+    //   neglectT: T -⚬ Done,
+    //   outputTParam: (TParamLabel |*| -[T]) -⚬ Val[Type],
+    //   outputT: (Label |*| T) -⚬ Val[Type],
+    // )(using
+    //   Junction.Positive[T],
+    // ): (TypeEmitter[T] |*| ReboundType[T]) -⚬ TypeEmitter[T] = {
+    //   val mergeInbound =
+    //     ReboundType.merge_(
+    //       mergeT,
+    //       neglectT,
+    //       outputT,
+    //     )
 
-      mergeIn_[T](
-        mergeInbound,
-        ReboundType.tapFlop_(mergeInbound, mergeT),
-        mergeT,
-        neglectT,
-        zeroTypeArg,
-      )
-    }
+    //   mergeIn_[T](
+    //     mergeInbound,
+    //     ReboundType.tapFlop_(mergeInbound, mergeT),
+    //     mergeT,
+    //     neglectT,
+    //     outputTParam,
+    //   )
+    // }
 
     // def mergeFlip[T](
     //   merge: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T],
@@ -3227,10 +3262,10 @@ object TypeInference {
     // }
 
     def outputApprox[T](
-      zeroTypeArg: Label -⚬ (T |*| Done),
+      outputTParamApprox: (TParamLabel |*| -[T]) -⚬ Val[Type],
     ): TypeEmitter[T] -⚬ Val[Type] =
       rec { self =>
-        unpack > TypeSkelet.outputApprox(self, zeroTypeArg)
+        unpack > TypeSkelet.outputApprox(self, outputTParamApprox)
       }
 
     def close[T](
@@ -3338,20 +3373,20 @@ object TypeInference {
     // val mergeTo: (TypeEmitter[InboundType] |*| InboundType) -⚬ TypeEmitter[InboundType] =
     //   mergeTo_(merge)
 
-    def mergeIn_(
-      split: InboundType -⚬ (InboundType |*| InboundType),
-    ): (InboundType |*| TypeEmitter[InboundType]) -⚬ ReboundType[InboundType] =
-      λ { case InboundType(a) |*| b =>
-        a switch {
-          case Left(d) =>
-            (d |*| b) :>> crashWhenDone(s"Cannot implement TypeEmitter[InboundType] -⚬ ReboundType[InboundType] (${summon[SourcePos]})")
-          case Right(a) =>
-            (a |*| b) :>> ReboundType.mergeIn(split, close, unspecified)
-        }
-      }
+    // def mergeIn_(
+    //   split: InboundType -⚬ (InboundType |*| InboundType),
+    // ): (InboundType |*| TypeEmitter[InboundType]) -⚬ ReboundType[InboundType] =
+    //   λ { case InboundType(a) |*| b =>
+    //     a switch {
+    //       case Left(d) =>
+    //         (d |*| b) :>> crashWhenDone(s"Cannot implement TypeEmitter[InboundType] -⚬ ReboundType[InboundType] (${summon[SourcePos]})")
+    //       case Right(a) =>
+    //         (a |*| b) :>> ReboundType.mergeIn(split, close, unspecified)
+    //     }
+    //   }
 
-    val mergeIn: (InboundType |*| TypeEmitter[InboundType]) -⚬ ReboundType[InboundType] =
-      mergeIn_(split)
+    // val mergeIn: (InboundType |*| TypeEmitter[InboundType]) -⚬ ReboundType[InboundType] =
+    //   mergeIn_(split)
 
     val merge: (InboundType |*| InboundType) -⚬ InboundType =
       rec { self =>
@@ -3366,7 +3401,6 @@ object TypeInference {
                 case Right(b) =>
                   (a |*| b) :>> ReboundType.merge_(
                     self,
-                    close,
                     output,
                   ) :>> just
               }
@@ -3431,8 +3465,8 @@ object TypeInference {
   private val generify: TypeEmitter[InboundType] -⚬ GenericType[InboundType] =
     TypeEmitter.generify
 
-  private val degenerify: GenericType[InboundType] -⚬ DegenericType =
-    ConcreteType.degenerify(InboundType.unspecified)
+  // private val degenerify: GenericType[InboundType] -⚬ DegenericType =
+  //   ConcreteType.degenerify(InboundType.unspecified)
 
   def inferTypes[A, B](f: Fun[A, B]): One -⚬ Val[TypedFun[A, B]] = {
     import InboundType.given
@@ -3453,13 +3487,13 @@ object TypeInference {
       InboundType.close,
       InboundType.unspecified,
       generify,
-      degenerify,
+      // degenerify,
     )
       .map { prg =>
         prg > λ { case a |*| f |*| b =>
           f
-            .waitFor(a :>> degenerify :>> DegenericType.neglect)
-            .waitFor(b :>> degenerify :>> DegenericType.neglect)
+            .waitFor(a :>> ConcreteType.neglect)
+            .waitFor(b :>> ConcreteType.neglect)
         }
       }
       .run(0)
@@ -3474,9 +3508,11 @@ object TypeInference {
     splitT: T -⚬ (T |*| T),
     outputT: (Label |*| T) -⚬ Val[Type],
     neglectT: T -⚬ Done,
-    zeroTypeArg: Label -⚬ (T |*| Done),
+    outputTParam: (TParamLabel |*| -[T]) -⚬ Val[Type],
+    // zeroTypeArg: Label -⚬ (T |*| Done),
+    // outputTypeParamApprox: (TParamLabel |*| -[T]) -⚬ Val[Type],
     generify: TypeEmitter[T] -⚬ GenericType[T],
-    degenerify: GenericType[T] -⚬ DegenericType,
+    // degenerify: GenericType[T] -⚬ DegenericType,
   )(using
     gen: VarGen[M, AbstractTypeLabel],
     M: Monad[M],
@@ -3489,12 +3525,13 @@ object TypeInference {
     def reconstructTypes[A, B](f: Fun[A, B]): M[One -⚬ (ConcreteType[ReboundType[T]] |*| Val[TypedFun[A, B]] |*| ConcreteType[ReboundType[T]])] =
       TypeInference.reconstructTypes[ReboundType[T], A, B, M](f)(
         ReboundType.merge(mergeT, neglectT, outputT),
-        ReboundType.split(splitT, zeroTypeArg),
-        fst(neglect) > ReboundType.awaitPosFst > ReboundType.output(outputT),
+        ReboundType.split(splitT, outputTParam),
+        fst(Labels.neglect) > ReboundType.awaitPosFst > ReboundType.output(outputT),
         ReboundType.close(neglectT),
-        ReboundType.zero(zeroTypeArg),
-        TypeEmitter.generify,
-        ConcreteType.degenerify(ReboundType.zero(zeroTypeArg)),
+        // ReboundType.zero(zeroTypeArg),
+        ReboundType.probeApprox(outputTParam),
+        TypeEmitter.generify[ReboundType[T]],
+        // ConcreteType.degenerify(ReboundType.zero(zeroTypeArg)),
       )
 
     def newAbstractType(v: AbstractTypeLabel): One -⚬ (TypeEmitter[T] |*| Val[Type] |*| TypeEmitter[T]) =
@@ -3511,10 +3548,10 @@ object TypeInference {
       }
 
     def merge: (ConcreteType[ReboundType[T]] |*| ConcreteType[ReboundType[T]]) -⚬ ConcreteType[T] =
-      ConcreteType.merge(splitT, neglectT, zeroTypeArg)
+      ConcreteType.merge(splitT, neglectT, outputTParam)
 
     def output: ConcreteType[T] -⚬ Val[Type] =
-      degenerify > DegenericType.output
+      ConcreteType.output(outputTParam)
 
     val lower: ConcreteType[ReboundType[T]] -⚬ ConcreteType[T] =
       ConcreteType.abstractify[T] > generify
