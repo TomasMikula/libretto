@@ -1,4 +1,4 @@
-package libretto.typology.toylang
+package libretto.typology.toylang.typeinfer
 
 import libretto.lambda.util.Monad.syntax._
 import libretto.scaletto.StarterKit._
