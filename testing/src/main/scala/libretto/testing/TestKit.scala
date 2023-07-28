@@ -77,6 +77,16 @@ trait TestKit {
         failMsg = s"$actual did not equal $expected",
       )
 
+    def assertLeft[A, B](using pos: SourcePos)(value: Either[A, B]): Outcome[A] =
+      value match
+        case Left(a) => success(a)
+        case other   => failure(using pos)(s"Expected Left, got $other")
+
+    def assertRight[A, B](using pos: SourcePos)(value: Either[A, B]): Outcome[B] =
+      value match
+        case Right(b) => success(b)
+        case other    => failure(using pos)(s"Expected Right, got $other")
+
     def assertSubstring(using pos: SourcePos)(substr: String, str: String): Outcome[Unit] =
       assert(using pos)(
         str contains substr,
