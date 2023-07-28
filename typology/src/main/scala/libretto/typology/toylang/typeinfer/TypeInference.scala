@@ -3054,6 +3054,27 @@ object TypeInference {
     def makeAbstractType[T]: Label -⚬ (TypeEmitter[T] |*| ReboundF[T, ReboundType[T], TypeEmitter[T]]) =
       TypeSkelet.makeAbstractType[T, ReboundType[T], TypeEmitter[T]] > fst(pack)
 
+    def abstractTypeTap[T](
+      outputT: (TParamLabel |*| T) -⚬ Val[Type],
+    ): Label -⚬ (TypeEmitter[T] |*| Val[Type]) =
+      λ { label =>
+        val l1 |*| l2 = Labels.split(label)
+        val t |*| resp = TypeEmitter.makeAbstractType[T](l1)
+        t |*| (resp switch {
+          case Left(y) =>
+            (y :>> ReboundType.output(outputT))
+              .waitFor(Labels.neglect(l2))
+          case Right(value) =>
+            value switch {
+              case Left(req) =>
+                val --(t) = req contramap injectR
+                outputT(Labels.generify(l2) |*| t)
+              case Right(?(_)) =>
+                l2 :>> crashNow(s"TODO: eliminate (at ${summon[SourcePos]})")
+            }
+        })
+      }
+
     // def genericType[T](
     //   instantiate: ReboundType[T] -⚬ T,
     // ): (Val[AbstractTypeLabel] |*| -[T]) -⚬ TypeEmitter[T] =
@@ -3081,15 +3102,20 @@ object TypeInference {
     )(using
       Junction.Positive[T],
     ): Label -⚬ (TypeEmitter[T] |*| Val[Type] |*| TypeEmitter[T]) =
-      TypeSkelet.newAbstractType[T, ReboundType[T], TypeEmitter[T]](
-        TypeEmitter.split(mergeT, outputT),
-        ReboundType.merge(mergeT, outputT),
-        ReboundType.tapFlop(mergeT, outputT),
-        mergeT,
-        ReboundType.output(outputT),
-        outputT,
-      )
-        > λ { case a |*| t |*| b => pack(a) |*| t |*| pack(b) }
+      λ { label =>
+        val a |*| t = label :>> abstractTypeTap(outputT)
+        val x |*| y = a     :>> split(mergeT, outputT)
+        x |*| t |*| y
+      }
+      // TypeSkelet.newAbstractType[T, ReboundType[T], TypeEmitter[T]](
+      //   TypeEmitter.split(mergeT, outputT),
+      //   ReboundType.merge(mergeT, outputT),
+      //   ReboundType.tapFlop(mergeT, outputT),
+      //   mergeT,
+      //   ReboundType.output(outputT),
+      //   outputT,
+      // )
+      //   > λ { case a |*| t |*| b => pack(a) |*| t |*| pack(b) }
 
     def expectPair[T]: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T]) =
       throw NotImplementedError(s"at ${summon[SourcePos]}")
@@ -3429,12 +3455,19 @@ object TypeInference {
   trait Tools[T] {
     def label(v: AbstractTypeLabel): One -⚬ Label
 
+    def abstractTypeTap: Label -⚬ (TypeEmitter[T] |*| Val[Type])
     def newAbstractType: Label -⚬ (TypeEmitter[T] |*| Val[Type] |*| TypeEmitter[T])
-    def newTypeParam: Label -⚬ (Val[Type] |*| ConcreteType[T])
-    def merge: (ConcreteType[ReboundType[T]] |*| ConcreteType[ReboundType[T]]) -⚬ ConcreteType[T]
-    def unnest: ConcreteType[ReboundType[T]] -⚬ ConcreteType[T]
-    def output: ConcreteType[T] -⚬ Val[Type]
+    def newAbstractTypeGen: Label -⚬ (GenericType[T] |*| Val[Type] |*| GenericType[T])
+    def newTypeParam: Label -⚬ (Val[Type] |*| GenericType[T])
+    def merge: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T]
+    def mergeGen: (GenericType[ReboundType[T]] |*| GenericType[ReboundType[T]]) -⚬ GenericType[T]
+    def split: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T])
+    def unnest: TypeEmitter[ReboundType[T]] -⚬ TypeEmitter[T]
+    def unnestGen: GenericType[ReboundType[T]] -⚬ GenericType[T]
+    def output: TypeEmitter[T] -⚬ Val[Type]
+    def outputGen: GenericType[T] -⚬ Val[Type]
     def close: TypeEmitter[T] -⚬ Done
+    def closeGen: GenericType[T] -⚬ Done
 
     def nested: Tools[ReboundType[T]]
   }
@@ -3481,8 +3514,16 @@ object TypeInference {
         ReboundType.close(neglectT),
       )
 
+    override lazy val abstractTypeTap: Label -⚬ (TypeEmitter[T] |*| Val[Type]) =
+      TypeEmitter.abstractTypeTap(outputT)
+
     override lazy val newAbstractType: Label -⚬ (TypeEmitter[T] |*| Val[Type] |*| TypeEmitter[T]) =
       TypeEmitter.newAbstractType(mergeT, outputT)
+
+    def newAbstractTypeGen: Label -⚬ (GenericType[T] |*| Val[Type] |*| GenericType[T]) =
+      newAbstractType > λ { case a |*| t |*| b =>
+        TypeEmitter.generify(a) |*| t |*| TypeEmitter.generify(b)
+      }
 
     override lazy val newTypeParam: Label -⚬ (Val[Type] |*| ConcreteType[T]) =
       λ { label =>
@@ -3491,16 +3532,31 @@ object TypeInference {
         outputT(Labels.generify(l1) |*| t) |*| ConcreteType.typeParam(Labels.generify(l2) |*| nt)
       }
 
-    override lazy val merge: (ConcreteType[ReboundType[T]] |*| ConcreteType[ReboundType[T]]) -⚬ ConcreteType[T] =
+    override lazy val merge: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
+      TypeEmitter.merge(splitT, outputTParam)
+
+    override lazy val mergeGen: (GenericType[ReboundType[T]] |*| GenericType[ReboundType[T]]) -⚬ GenericType[T] =
       ConcreteType.merge(splitT, outputTParam)
 
-    override lazy val output: ConcreteType[T] -⚬ Val[Type] =
+    override def split: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T]) =
+      TypeEmitter.split(mergeT, outputT)
+
+    override lazy val outputGen: GenericType[T] -⚬ Val[Type] =
       ConcreteType.output(outputTParam)
 
-    override lazy val close: TypeEmitter[T] -⚬ Done =
-      TypeEmitter.generify[T] > ConcreteType.close[T](outputTParam > dsl.neglect)
+    override lazy val output: TypeEmitter[T] -⚬ Val[Type] =
+      TypeEmitter.generify > outputGen
 
-    override lazy val unnest: ConcreteType[ReboundType[T]] -⚬ ConcreteType[T] =
+    override lazy val closeGen: GenericType[T] -⚬ Done =
+      ConcreteType.close[T](outputTParam > dsl.neglect)
+
+    override lazy val close: TypeEmitter[T] -⚬ Done =
+      TypeEmitter.generify[T] > closeGen
+
+    override lazy val unnest: TypeEmitter[ReboundType[T]] -⚬ TypeEmitter[T] =
+      TypeEmitter.generify > ConcreteType.abstractify[T]
+
+    override lazy val unnestGen: GenericType[ReboundType[T]] -⚬ GenericType[T] =
       ConcreteType.abstractify[T] > TypeEmitter.generify
 
     override def label(v: AbstractTypeLabel): One -⚬ Label =
@@ -3512,27 +3568,25 @@ object TypeInference {
   )(using
     gen: VarGen[M, AbstractTypeLabel],
     M: Monad[M],
-  ): M[One -⚬ (ConcreteType[T] |*| Val[TypedFun[A, B]] |*| ConcreteType[T])] = {
+  ): M[One -⚬ (GenericType[T] |*| Val[TypedFun[A, B]] |*| GenericType[T])] = {
     println(s"reconstructTypes($f)")
     import gen.newVar
-    import tools.{label, merge, output, unnest, given}
+    import tools.{label, mergeGen as merge, outputGen  as output, unnestGen, given}
     import ConcreteType.{apply1T, fixT, int, isPair, isRecCall, pair, recCall, string}
 
-    def reconstructTypes[A, B](f: Fun[A, B]): M[One -⚬ (ConcreteType[ReboundType[T]] |*| Val[TypedFun[A, B]] |*| ConcreteType[ReboundType[T]])] =
+    def reconstructTypes[A, B](f: Fun[A, B]): M[One -⚬ (GenericType[ReboundType[T]] |*| Val[TypedFun[A, B]] |*| GenericType[ReboundType[T]])] =
       TypeInference.reconstructTypes(f)(using tools.nested)
 
     def newAbstractTypeG(v: AbstractTypeLabel)(using
       SourcePos,
       LambdaContext,
-    ): $[ConcreteType[T] |*| Val[Type] |*| ConcreteType[T]] =
-      constant(label(v)) :>> tools.newAbstractType :>> λ { case a |*| t |*| b =>
-        TypeEmitter.generify(a) |*| t |*| TypeEmitter.generify(b)
-      }
+    ): $[GenericType[T] |*| Val[Type] |*| GenericType[T]] =
+      constant(label(v)) :>> tools.newAbstractTypeGen
 
     def newTypeParam(v: AbstractTypeLabel)(using
       SourcePos,
       LambdaContext,
-    ): $[Val[Type] |*| ConcreteType[T]] =
+    ): $[Val[Type] |*| GenericType[T]] =
       tools.newTypeParam(constant(label(v)))
 
     f.value match {
@@ -3554,7 +3608,7 @@ object TypeInference {
             val x2 |*| g |*| b = tg(one)
             val x = output(merge(x1 |*| x2))
             val h = (f ** x ** g) :>> mapVal { case ((f, x), g) => TypedFun.andThen(f, x, g) }
-            unnest(a) |*| h |*| unnest(b)
+            unnestGen(a) |*| h |*| unnestGen(b)
           }
       case FunT.Par(f1, f2) =>
         for {
@@ -3567,7 +3621,7 @@ object TypeInference {
             val a = pair(a1 |*| a2)
             val b = pair(b1 |*| b2)
             val f = (f1 ** f2) :>> mapVal { case (f1, f2) => TypedFun.par(f1, f2) }
-            unnest(a) |*| f |*| unnest(b)
+            unnestGen(a) |*| f |*| unnestGen(b)
           }
       case _: FunT.AssocLR[arr, a, b, c] =>
         for {
@@ -3626,7 +3680,7 @@ object TypeInference {
             val a = ConcreteType.either(a1 |*| a2)
             val b = merge(b1 |*| b2)
             val h = (f ** g) :>> mapVal { case (f, g) => TypedFun.either(f, g) }
-            unnest(a) |*| h |*| b
+            unnestGen(a) |*| h |*| b
           }
       case _: FunT.InjectL[arr, l, r] =>
         for {
@@ -3690,7 +3744,7 @@ object TypeInference {
                 }
               case Left(aba) =>
                 import scala.concurrent.duration._
-                val d = (f ** output(unnest(aba)) ** output(unnest(b1)))
+                val d = (f ** output(unnestGen(aba)) ** output(unnestGen(b1)))
                   :>> printLine { case ((f, aba), b) =>
                     s"FUNCTION=${scala.util.Try(f.toString)}, IN-TYPE=$aba, OUT-TYPE=$b"
                   }
