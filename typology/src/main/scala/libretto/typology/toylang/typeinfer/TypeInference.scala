@@ -243,7 +243,6 @@ object TypeInference {
     |+| Done // unit
     |+| Done // int
     |+| Done // string
-    |+| (Val[TypeTagF] |*| X) // apply1 // TODO: eliminate?
     |+| Val[TypeTagF] // fix
     |+| (X |*| X) // recCall
     |+| (X |*| X) // either
@@ -787,25 +786,17 @@ object TypeInference {
     def fixT[X, F[_]](F: TypeTag[F]): One -⚬ NonAbstractTypeF[X] =
       fix ∘ const(TypeTag.toTypeFun(F))
 
-    def apply1[X]: (Val[TypeTagF] |*| X) -⚬ NonAbstractTypeF[X] =
+    def string[X]: Done -⚬ NonAbstractTypeF[X] =
       injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
-    def apply1T[X, F[_]](F: TypeTag[F]): X -⚬ NonAbstractTypeF[X] =
-      λ { x =>
-        apply1(constantVal(TypeTag.toTypeFun(F)) |*| x)
-      }
-
-    def string[X]: Done -⚬ NonAbstractTypeF[X] =
+    def int[X]: Done -⚬ NonAbstractTypeF[X] =
       injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
-    def int[X]: Done -⚬ NonAbstractTypeF[X] =
+    def unit[X]: Done -⚬ NonAbstractTypeF[X] =
       injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
-    def unit[X]: Done -⚬ NonAbstractTypeF[X] =
-      injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
-
     def mismatch[X]: Val[(Type, Type)] -⚬ NonAbstractTypeF[X] =
-      injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL
+      injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL
 
     def isPair[X]: NonAbstractTypeF[X] -⚬ (NonAbstractTypeF[X] |+| (X |*| X)) =
       λ { t =>
@@ -858,23 +849,18 @@ object TypeInference {
                         fix(f)
                       case Left(t) =>
                         t switch {
-                          case Right(f |*| x) => // apply1
-                            apply1(f |*| g(x))
+                          case Right(d) => // string
+                            string(d)
                           case Left(t) =>
                             t switch {
-                              case Right(d) => // string
-                                string(d)
+                              case Right(d) => // int
+                                int(d)
                               case Left(t) =>
                                 t switch {
-                                  case Right(d) => // int
-                                    int(d)
-                                  case Left(t) =>
-                                    t switch {
-                                      case Right(d) => // unit
-                                        unit(d)
-                                      case Left(err) =>
-                                        mismatch(err)
-                                    }
+                                  case Right(d) => // unit
+                                    unit(d)
+                                  case Left(err) =>
+                                    mismatch(err)
                                 }
                             }
                         }
@@ -911,25 +897,18 @@ object TypeInference {
                         fix(f) |*| fix(f)
                       case Left(t) =>
                         t switch {
-                          case Right(g |*| x) => // apply1
-                            val g1 |*| g2 = dsl.dup(g)
-                            val x1 |*| x2 = f(x)
-                            apply1(g1 |*| x1) |*| apply1(g2 |*| x2)
+                          case Right(+(t)) => // string
+                            string(t) |*| string(t)
                           case Left(t) =>
                             t switch {
-                              case Right(+(t)) => // string
-                                string(t) |*| string(t)
+                              case Right(+(t)) => // int
+                                int(t) |*| int(t)
                               case Left(t) =>
                                 t switch {
-                                  case Right(+(t)) => // int
-                                    int(t) |*| int(t)
-                                  case Left(t) =>
-                                    t switch {
-                                      case Right(+(t)) => // unit
-                                        unit(t) |*| unit(t)
-                                      case Left(err) =>
-                                        err :>> dsl.dup :>> par(mismatch, mismatch)
-                                    }
+                                  case Right(+(t)) => // unit
+                                    unit(t) |*| unit(t)
+                                  case Left(err) =>
+                                    err :>> dsl.dup :>> par(mismatch, mismatch)
                                 }
                             }
                         }
@@ -1033,91 +1012,62 @@ object TypeInference {
                                         )
                                       case Left(b) =>
                                         a switch {
-                                          case Right(f |*| x) => // `a` is apply1
+                                          case Right(x) => // `a` is string
                                             b switch {
-                                              case Right(h |*| y) => // `b` is apply1
-                                                ((f ** h) :>> mapVal { case (f, h) =>
-                                                  if (f == h) Left(f)
-                                                  else        Right((f, h))
-                                                } :>> liftEither) switch {
-                                                  case Left(f) =>
-                                                    NonAbstractType.apply1(f |*| g(x |*| y))
-                                                  case Right(fh) =>
-                                                    val x1 = outputXApprox(x)
-                                                    val y1 = outputYApprox(y)
-                                                    // XXX: of course it is wrong to conclude from f != h that f(x) != h(y)
-                                                    NonAbstractType.mismatch((fh ** (x1 ** y1)) :>> mapVal { case ((f, h), (x, y)) => (f.vmap(Left(_))(x), h.vmap(Left(_))(y)) })
-                                                }
+                                              case Right(y) => // `b` is string
+                                                NonAbstractType.string(join(x |*| y))
                                               case Left(b) =>
                                                 NonAbstractType.mismatch(
-                                                  ((f ** outputXApprox(x)) :>> mapVal { case (f, x) => f.vmap(Left(_))(x) })
-                                                  ** output(outputYApprox)(injectL(injectL(injectL(injectL(injectL(b)))))),
+                                                  (x :>> constVal(Type.string))
+                                                  ** output(outputXApprox)(injectL(injectL(injectL(injectL(injectL(b))))))
                                                 )
                                             }
                                           case Left(a) =>
                                             b switch {
-                                              case Right(g |*| y) => // `b` is apply1
-                                                (a |*| g |*| y) :>> crashNow(s"Not implemented (at ${summon[SourcePos]})")
+                                              case Right(y) => // `b` is string
+                                                NonAbstractType.mismatch(
+                                                  output(outputXApprox)(injectL(injectL(injectL(injectL(injectL(a))))))
+                                                  ** (y :>> constVal(Type.string))
+                                                )
                                               case Left(b) =>
                                                 a switch {
-                                                  case Right(x) => // `a` is string
+                                                  case Right(x) => // `a` is int
                                                     b switch {
-                                                      case Right(y) => // `b` is string
-                                                        NonAbstractType.string(join(x |*| y))
+                                                      case Right(y) => // `b` is int
+                                                        NonAbstractType.int(join(x |*| y))
                                                       case Left(b) =>
                                                         NonAbstractType.mismatch(
-                                                          (x :>> constVal(Type.string))
+                                                          (x :>> constVal(Type.int))
                                                           ** output(outputXApprox)(injectL(injectL(injectL(injectL(injectL(injectL(b)))))))
                                                         )
                                                     }
                                                   case Left(a) =>
                                                     b switch {
-                                                      case Right(y) => // `b` is string
+                                                      case Right(y) => // `b` is int
                                                         NonAbstractType.mismatch(
                                                           output(outputXApprox)(injectL(injectL(injectL(injectL(injectL(injectL(a)))))))
-                                                          ** (y :>> constVal(Type.string))
+                                                          ** (y :>> constVal(Type.int))
                                                         )
                                                       case Left(b) =>
                                                         a switch {
-                                                          case Right(x) => // `a` is int
+                                                          case Right(x) => // `a` is unit
                                                             b switch {
-                                                              case Right(y) => // `b` is int
-                                                                NonAbstractType.int(join(x |*| y))
-                                                              case Left(b) =>
-                                                                NonAbstractType.mismatch(
-                                                                  (x :>> constVal(Type.int))
-                                                                  ** output(outputXApprox)(injectL(injectL(injectL(injectL(injectL(injectL(injectL(b))))))))
-                                                                )
+                                                              case Right(y) => // `b` is unit
+                                                                NonAbstractType.unit(join(x |*| y))
+                                                              case Left(bx) => // `b` is type mismatch
+                                                                val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
+                                                                val ta = x :>> constVal(Type.unit[TypedFun.Label])
+                                                                NonAbstractType.mismatch(ta ** tb)
                                                             }
-                                                          case Left(a) =>
+                                                          case Left(ax) => // `a` is type mismatch
+                                                            val ta = ax :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
                                                             b switch {
-                                                              case Right(y) => // `b` is int
-                                                                NonAbstractType.mismatch(
-                                                                  output(outputXApprox)(injectL(injectL(injectL(injectL(injectL(injectL(injectL(a))))))))
-                                                                  ** (y :>> constVal(Type.int))
-                                                                )
-                                                              case Left(b) =>
-                                                                a switch {
-                                                                  case Right(x) => // `a` is unit
-                                                                    b switch {
-                                                                      case Right(y) => // `b` is unit
-                                                                        NonAbstractType.unit(join(x |*| y))
-                                                                      case Left(bx) => // `b` is type mismatch
-                                                                        val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
-                                                                        val ta = x :>> constVal(Type.unit[TypedFun.Label])
-                                                                        NonAbstractType.mismatch(ta ** tb)
-                                                                    }
-                                                                  case Left(ax) => // `a` is type mismatch
-                                                                    val ta = ax :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
-                                                                    b switch {
-                                                                      case Right(y) => // `b` is unit
-                                                                        val tb = y :>> constVal(Type.unit[TypedFun.Label])
-                                                                        NonAbstractType.mismatch(ta ** tb)
-                                                                      case Left(bx) => // `b` is type mismatch
-                                                                        val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
-                                                                        NonAbstractType.mismatch(ta ** tb)
-                                                                    }
-                                                                }
+                                                              case Right(y) => // `b` is unit
+                                                                val tb = y :>> constVal(Type.unit[TypedFun.Label])
+                                                                NonAbstractType.mismatch(ta ** tb)
+                                                              case Left(bx) => // `b` is type mismatch
+                                                                val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
+                                                                NonAbstractType.mismatch(ta ** tb)
                                                             }
                                                         }
                                                     }
@@ -1168,25 +1118,18 @@ object TypeInference {
                         tf :>> mapVal { tf => Type.fix(tf.vmap(Left(_))) }
                       case Left(x) =>
                         x switch {
-                          case Right(tf |*| a) => // apply1
-                            (tf ** outputX(a)) :>> mapVal { case (f, a) =>
-                              f.vmap(Left(_))(a)
-                            }
+                          case Right(x) => // string
+                            x :>> constVal(Type.string)
                           case Left(x) =>
                             x switch {
-                              case Right(x) => // string
-                                x :>> constVal(Type.string)
+                              case Right(x) => // int
+                                x :>> constVal(Type.int)
                               case Left(x) =>
                                 x switch {
-                                  case Right(x) => // int
-                                    x :>> constVal(Type.int)
-                                  case Left(x) =>
-                                    x switch {
-                                      case Right(x) => // unit
-                                        x :>> constVal(Type.unit)
-                                      case Left(mismatch) =>
-                                        mismatch :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
-                                    }
+                                  case Right(x) => // unit
+                                    x :>> constVal(Type.unit)
+                                  case Left(mismatch) =>
+                                    mismatch :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
                                 }
                             }
                         }
@@ -1209,15 +1152,12 @@ object TypeInference {
               case Left(t) => t switch {
                 case Right(f) => neglect(f)
                 case Left(t) => t switch {
-                  case Right(f |*| x) => join(neglect(f) |*| closeX(x))
+                  case Right(x) => x
                   case Left(t) => t switch {
                     case Right(x) => x
                     case Left(t) => t switch {
                       case Right(x) => x
-                      case Left(t) => t switch {
-                        case Right(x) => x
-                        case Left(e) => neglect(e)
-                      }
+                      case Left(e) => neglect(e)
                     }
                   }
                 }
@@ -1240,16 +1180,12 @@ object TypeInference {
               case Left(t) => t switch {
                 case Right(f) => fix(f waitFor d)
                 case Left(t) => t switch {
-                  case Right(f |*| x) =>
-                    apply1(f.waitFor(d) |*| x)
+                  case Right(x) => string(join(d |*| x))
                   case Left(t) => t switch {
-                    case Right(x) => string(join(d |*| x))
+                    case Right(x) => int(join(d |*| x))
                     case Left(t) => t switch {
-                      case Right(x) => int(join(d |*| x))
-                      case Left(t) => t switch {
-                        case Right(x) => unit(join(d |*| x))
-                        case Left(e) => mismatch(e waitFor d)
-                      }
+                      case Right(x) => unit(join(d |*| x))
+                      case Left(e) => mismatch(e waitFor d)
                     }
                   }
                 }
