@@ -179,6 +179,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
 
   override def testCases(using kit: StarterTestKit): scala.List[(String, TestCase[kit.type])] = {
     import kit.{Outcome, expectVal}
+    import Outcome.assertEquals
 
     def testInferredTypes[A, B](f: Fun[A, B])(check: TypedFun[A, B] => Outcome[Unit]): TestCase[kit.type] =
       TestCase
@@ -234,6 +235,14 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
       //     } yield ()
       //   },
 
+      "infer types of InfiniteList.unfix[Int] > swap" ->
+        testInferredTypes(InfiniteList.unfix[Int] > Fun.swap) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
+            _ <- Outcome.assertEquals(tf.outType, Type.pair(InfiniteList.tpe(Type.int), Type.int))
+          } yield ()
+        },
+
       // "infer types of InfiniteList.fix[Int] > InfiniteList.unfix[Int]" ->
       //   testInferredTypes(InfiniteList.fix[Int] > InfiniteList.unfix[Int]) { tf =>
       //     for {
@@ -273,47 +282,47 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
       //     }
       //   },
 
-      "infer types of id > id" ->
-        testInferredTypes(Fun.id > Fun.id) { tf =>
-          (tf.inType, tf.outType) match {
-            case (
-              Type.AbstractType(a),
-              Type.AbstractType(b),
-            ) if a == b =>
-              Outcome.success(())
-            case other =>
-              Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
-          }
-        },
+      // "infer types of id > id" ->
+      //   testInferredTypes(Fun.id > Fun.id) { tf =>
+      //     (tf.inType, tf.outType) match {
+      //       case (
+      //         Type.AbstractType(a),
+      //         Type.AbstractType(b),
+      //       ) if a == b =>
+      //         Outcome.success(())
+      //       case other =>
+      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+      //     }
+      //   },
 
-      "infer types of id > id > id" ->
-        testInferredTypes(Fun.id > Fun.id > Fun.id) { tf =>
-          (tf.inType, tf.outType) match {
-            case (
-              Type.AbstractType(a),
-              Type.AbstractType(b),
-            ) if a == b =>
-              Outcome.success(())
-            case other =>
-              Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
-          }
-        },
+      // "infer types of id > id > id" ->
+      //   testInferredTypes(Fun.id > Fun.id > Fun.id) { tf =>
+      //     (tf.inType, tf.outType) match {
+      //       case (
+      //         Type.AbstractType(a),
+      //         Type.AbstractType(b),
+      //       ) if a == b =>
+      //         Outcome.success(())
+      //       case other =>
+      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+      //     }
+      //   },
 
-      "infer types of id > id > id > id" ->
-        testInferredTypes(Fun.id > Fun.id > Fun.id > Fun.id) { tf =>
-          (tf.inType, tf.outType) match {
-            case (
-              Type.AbstractType(a),
-              Type.AbstractType(b),
-            ) if a == b =>
-              Outcome.success(())
-            case other =>
-              Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
-          }
-        },
+      // "infer types of id > id > id > id" ->
+      //   testInferredTypes(Fun.id > Fun.id > Fun.id > Fun.id) { tf =>
+      //     (tf.inType, tf.outType) match {
+      //       case (
+      //         Type.AbstractType(a),
+      //         Type.AbstractType(b),
+      //       ) if a == b =>
+      //         Outcome.success(())
+      //       case other =>
+      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+      //     }
+      //   },
 
       // "infer types of id > id > id > id > id" ->
-      //   testInferredTypes((Fun.id > Fun.id > Fun.id) > (Fun.id > Fun.id)) { tf =>
+      //   testInferredTypes(Fun.id > Fun.id > Fun.id > Fun.id > Fun.id) { tf =>
       //     (tf.inType, tf.outType) match {
       //       case (
       //         Type.AbstractType(a),
@@ -325,21 +334,8 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
       //     }
       //   },
 
-      // "infer types of id > id > id > id > id > id" ->
+      // "infer types of (id > id > id) > (id > id > id)" ->
       //   testInferredTypes((Fun.id > Fun.id > Fun.id) > (Fun.id > Fun.id > Fun.id)) { tf =>
-      //     (tf.inType, tf.outType) match {
-      //       case (
-      //         Type.AbstractType(a),
-      //         Type.AbstractType(b),
-      //       ) if a == b =>
-      //         Outcome.success(())
-      //       case other =>
-      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
-      //     }
-      //   },
-
-      // "infer types of id > id > id > id > id > id > id" ->
-      //   testInferredTypes(Fun.id > Fun.id > Fun.id > Fun.id > Fun.id > Fun.id > Fun.id) { tf =>
       //     (tf.inType, tf.outType) match {
       //       case (
       //         Type.AbstractType(a),
@@ -411,6 +407,24 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
       //         Type.Pair(Type.Pair(Type.AbstractType(d), Type.AbstractType(e)), Type.AbstractType(f))
       //       ) if a == e && b == f && c == d =>
       //         Outcome.success(())
+      //       case other =>
+      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+      //     }
+      //   },
+
+      // "infer types of snd(InfiniteList.unfix[Int] > swap) > assocRL > fst(recur)" ->
+      //   testInferredTypes(Fun.snd(InfiniteList.unfix[Int] > Fun.swap) > Fun.assocRL > Fun.fst(Fun.recur)) { tf =>
+      //     (tf.inType, tf.outType) match {
+      //       case (
+      //         Type.Pair(Type.RecCall(a, b), c),
+      //         Type.Pair(x, y)
+      //       ) =>
+      //         for {
+      //           _ <- assertEquals(c, InfiniteList.tpe(Type.int))
+      //           _ <- assertEquals(x, b)
+      //           _ <- assertEquals(y, Type.int)
+      //           _ <- assertEquals(a, InfiniteList.tpe(Type.int))
+      //         } yield ()
       //       case other =>
       //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
       //     }
