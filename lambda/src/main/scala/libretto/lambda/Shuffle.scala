@@ -298,9 +298,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     def decompose1[X1, X2, Z](f: (X1 |*| X2) ~⚬ Z): Decomposition1[X1, X2, ?, ?, ?, ?, Z] =
       f match {
-        case Id()               => Decomposition1(Id(), Id(), TransferOpt.None(), summon)
-        case Bimap(Par(f1, f2)) => Decomposition1(f1, f2, TransferOpt.None(), implicitly)
-        case Xfer(f1, f2, xfer) => Decomposition1(f1, f2, xfer, implicitly)
+        case Id()               => Decomposition1.make(Id(), Id(), TransferOpt.None())
+        case Bimap(Par(f1, f2)) => Decomposition1.make(f1, f2, TransferOpt.None())
+        case Xfer(f1, f2, xfer) => Decomposition1.make(f1, f2, xfer)
       }
 
     case class Decomposition[X1, X2, Y1, Y2, Z1, Z2](
@@ -315,6 +315,15 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       g: TransferOpt[Y1, Y2, Z1, Z2],
       ev: (Z1 |*| Z2) =:= Z,
     )
+
+    object Decomposition1 {
+      def make[X1, X2, Y1, Y2, Z1, Z2](
+        f1: X1 ~⚬ Y1,
+        f2: X2 ~⚬ Y2,
+        g: TransferOpt[Y1, Y2, Z1, Z2],
+      ): Decomposition1[X1, X2, Y1, Y2, Z1, Z2, Z1 |*| Z2] =
+        Decomposition1(f1, f2, g, summon)
+    }
 
     sealed trait ChaseFwRes[F[_], X, B] {
       def andThen[C](g: B ~⚬ C): ChaseFwRes[F, X, C]
