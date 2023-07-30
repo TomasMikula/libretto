@@ -286,31 +286,31 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
           }
         },
 
-      // "infer types of id > id > id" ->
-      //   testInferredTypes(Fun.id > Fun.id > Fun.id) { tf =>
-      //     (tf.inType, tf.outType) match {
-      //       case (
-      //         Type.AbstractType(a),
-      //         Type.AbstractType(b),
-      //       ) if a == b =>
-      //         Outcome.success(())
-      //       case other =>
-      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
-      //     }
-      //   },
+      "infer types of id > id > id" ->
+        testInferredTypes(Fun.id > Fun.id > Fun.id) { tf =>
+          (tf.inType, tf.outType) match {
+            case (
+              Type.AbstractType(a),
+              Type.AbstractType(b),
+            ) if a == b =>
+              Outcome.success(())
+            case other =>
+              Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+          }
+        },
 
-      // "infer types of id > id > id > id" ->
-      //   testInferredTypes((Fun.id > Fun.id) > (Fun.id > Fun.id)) { tf =>
-      //     (tf.inType, tf.outType) match {
-      //       case (
-      //         Type.AbstractType(a),
-      //         Type.AbstractType(b),
-      //       ) if a == b =>
-      //         Outcome.success(())
-      //       case other =>
-      //         Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
-      //     }
-      //   },
+      "infer types of id > id > id > id" ->
+        testInferredTypes(Fun.id > Fun.id > Fun.id > Fun.id) { tf =>
+          (tf.inType, tf.outType) match {
+            case (
+              Type.AbstractType(a),
+              Type.AbstractType(b),
+            ) if a == b =>
+              Outcome.success(())
+            case other =>
+              Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+          }
+        },
 
       // "infer types of id > id > id > id > id" ->
       //   testInferredTypes((Fun.id > Fun.id > Fun.id) > (Fun.id > Fun.id)) { tf =>
