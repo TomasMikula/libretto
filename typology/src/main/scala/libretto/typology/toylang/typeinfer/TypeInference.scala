@@ -173,13 +173,6 @@ object TypeInference {
         res
       }
 
-    // val toAbstractType: TParamLabel -⚬ Val[Type] =
-    //   mapVal { case x @ TParamLbl.Promoted(l) =>
-    //     val res: Type = Type.abstractType(Right(l.originalBase))
-    //     println(s"$x outputted as $res")
-    //     res
-    //   }
-
     val show: Label -⚬ Val[String] =
       // mapVal(_.toString)
       mapVal(x =>
@@ -204,12 +197,23 @@ object TypeInference {
       scalettoLib.junctionVal
   }
 
-  private given Ordering[AbstractTypeLabel] with {
-    override def compare(x: AbstractTypeLabel, y: AbstractTypeLabel): Int =
-      x.value compareTo y.value
+  private given Ordering[Either[ScalaTypeParam, AbstractTypeLabel]] with {
+    private val ScalaTypeParamOrdering =
+      Ordering.Tuple3[String, Int, String]
+
+    override def compare(
+      x: Either[ScalaTypeParam, AbstractTypeLabel],
+      y: Either[ScalaTypeParam, AbstractTypeLabel],
+    ): Int =
+      (x, y) match
+        case (Left(ScalaTypeParam(f1, l1, n1)), Left(ScalaTypeParam(f2, l2, n2))) =>
+          ScalaTypeParamOrdering.compare((f1, l1, n1), (f2, l2, n2))
+        case (Left(_), Right(_)) => -1
+        case (Right(_), Left(_)) => 1
+        case (Right(AbstractTypeLabel(x)), Right(AbstractTypeLabel(y))) => x compareTo y
   }
 
-  val Labels = new Labels[AbstractTypeLabel]
+  val Labels = new Labels[Either[ScalaTypeParam, AbstractTypeLabel]]
 
   import Labels.{Label, TParamLabel}
 
@@ -229,7 +233,7 @@ object TypeInference {
   type Type = TypedFun.Type // libretto.typology.toylang.types.Type[AbstractTypeLabel]
   def  Type = TypedFun.Type // libretto.typology.toylang.types.Type
 
-  type TypeFun[K, L] = libretto.typology.toylang.types.TypeFun[AbstractTypeLabel, K, L]
+  type TypeFun[K, L] = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, K, L]
   // def  TypeFun = libretto.typology.toylang.types.TypeFun
 
   type TypeTagF = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, ●, ●]
@@ -1307,10 +1311,10 @@ object TypeInference {
       apply1(TypeTag.toTypeFun(F))
 
     def apply1[T](f: TypeTagF): ConcreteType[T] -⚬ ConcreteType[T] = {
-      λ { t => NonAbstractType.apply1(constantVal(f) |*| t) :>> nonAbstractType }
-      // val ct = compilationTarget[T]
-      // import ct.Map_●
-      // f.compile[ct.Arr, ct.as, ct.C](Map_●)(ct.typeAlgebra, Map_●).get(Map_●, Map_●) > awaitPosFst
+      // λ { t => NonAbstractType.apply1(constantVal(f) |*| t) :>> nonAbstractType }
+      val ct = compilationTarget[T]
+      import ct.Map_●
+      f.compile[ct.Arr, ct.as, ConcreteType[T]](Map_●)(ct.typeAlgebra, Map_●).get(Map_●, Map_●) > awaitPosFst
     }
 
     class compilationTarget[T] {
@@ -1364,8 +1368,8 @@ object TypeInference {
             )
         }
 
-      val typeAlgebra: TypeAlgebra.Of[AbstractTypeLabel, Arr, ConcreteType[T], |*|, One] =
-        new TypeAlgebra[AbstractTypeLabel, Arr] {
+      val typeAlgebra: TypeAlgebra.Of[ScalaTypeParam, Arr, ConcreteType[T], |*|, One] =
+        new TypeAlgebra[ScalaTypeParam, Arr] {
           override type Type = ConcreteType[T]
           override type <*>[A, B] = A |*| B
           override type None = One
@@ -1385,7 +1389,7 @@ object TypeInference {
           override def fix(f: TypeFun[●, ●]): Arr[One, ConcreteType[T]] =
             // const(f) > ConcreteType.fix > introFst(done)
             ???
-          override def abstractTypeName(name: AbstractTypeLabel): Arr[One, ConcreteType[T]] =
+          override def abstractTypeName(name: ScalaTypeParam): Arr[One, ConcreteType[T]] =
             throw NotImplementedError(s"TODO (${summon[SourcePos]})")
 
           override given category: SymmetricMonoidalCategory[Arr, |*|, One] =
@@ -2721,7 +2725,7 @@ object TypeInference {
   object Tools {
     val groundInstance: Tools[Done] =
       val outputTParam: TParamLabel -⚬ Val[Type] =
-        Labels.unwrapOriginalTP > mapVal(x => Type.abstractType(Right(x)))
+        Labels.unwrapOriginalTP > mapVal(x => Type.abstractType(x))
       Tools(
         join,
         fork,
@@ -2814,7 +2818,7 @@ object TypeInference {
       TypeEmitter.generify > ConcreteType.debugPrintGradually(outputTParam > printLine(_.toString))
 
     override def label(v: AbstractTypeLabel): One -⚬ Label =
-      Labels.from(v)
+      Labels.from(Right(v))
   }
 
   def reconstructTypes[M[_], T, A, B](f: Fun[A, B])(using

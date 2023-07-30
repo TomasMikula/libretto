@@ -15,7 +15,7 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
 
   override def testCases(using kit: StarterTestKit): scala.List[(String, TestCase[kit.type])] = {
     import kit.{Outcome, expectDone, expectLeft, expectRight, expectVal}
-    import Outcome.{assertEquals, assertRight, failure, success}
+    import Outcome.{assertEquals, assertLeft, assertRight, failure, success}
 
     import TypeInference.{Labels, ReboundType, RefinementRequest, Tools, Type, TypeEmitter}
     import Labels.Label
@@ -45,7 +45,9 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
 
     def assertLabelEquals(using exn: kit.bridge.Execution)(l: exn.OutPort[Label], expectedValue: Int)(using SourcePos): Outcome[Unit] =
       expectVal(OutPort.map(l)(Labels.unwrapOriginal)) flatMap { label =>
-        assertEquals(label.value, expectedValue)
+        assertRight(label) flatMap { label =>
+          assertEquals(label.value, expectedValue)
+        }
       }
 
     List(
