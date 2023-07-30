@@ -51,8 +51,14 @@ private class ExecutionImpl(
     override def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B] =
       port.extendBy(f)(using resourceRegistry)
 
+    override def pair[A, B](a: OutPort[A], b: OutPort[B]): OutPort[A |*| B] =
+      Frontier.Pair(a, b)
+
     override def split[A, B](port: OutPort[A |*| B]): (OutPort[A], OutPort[B]) =
       port.splitPair
+
+    override def constant[A](obj: One -⚬ A): OutPort[A] =
+      Frontier.One.extendBy(obj)(using resourceRegistry)
 
     override def discardOne(port: OutPort[One]): Unit = {
       // do nothing
@@ -130,6 +136,13 @@ private class ExecutionImpl(
     override def contramap[A, B](port: InPort[B])(f: A -⚬ B): InPort[A] =
       a => port(a.extendBy(f)(using resourceRegistry))
 
+    override def pair[A, B](fa: InPort[A], fb: InPort[B]): InPort[A |*| B] =
+      { ab =>
+        val (a, b) = ab.splitPair
+        fa(a)
+        fb(b)
+      }
+
     override def split[A, B](port: InPort[A |*| B]): (InPort[A], InPort[B]) = {
       val (fna, fa) = Frontier.promise[A]
       val (fnb, fb) = Frontier.promise[B]
@@ -139,6 +152,9 @@ private class ExecutionImpl(
         fb => fnb.fulfill(fb)
       )
     }
+
+    override def constant[A](f: A -⚬ One): InPort[A] =
+      fa => OutPort.discardOne(OutPort.map(fa)(f))
 
     override def discardOne(port: InPort[One]): Unit =
       port(Frontier.One)

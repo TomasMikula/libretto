@@ -27,7 +27,11 @@ trait CoreExecution[DSL <: CoreDSL] {
   trait OutPorts {
     def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B]
 
+    def pair[A, B](a: OutPort[A], b: OutPort[B]): OutPort[A |*| B]
+
     def split[A, B](port: OutPort[A |*| B]): (OutPort[A], OutPort[B])
+
+    def constant[A](obj: One -⚬ A): OutPort[A]
 
     def discardOne(port: OutPort[One]): Unit
 
@@ -68,7 +72,11 @@ trait CoreExecution[DSL <: CoreDSL] {
   trait InPorts {
     def contramap[A, B](port: InPort[B])(f: A -⚬ B): InPort[A]
 
+    def pair[A, B](a: InPort[A], b: InPort[B]): InPort[A |*| B]
+
     def split[A, B](port: InPort[A |*| B]): (InPort[A], InPort[B])
+
+    def constant[A](f: A -⚬ One): InPort[A]
 
     def discardOne(port: InPort[One]): Unit
 
