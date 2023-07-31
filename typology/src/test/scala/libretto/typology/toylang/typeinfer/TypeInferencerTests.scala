@@ -373,6 +373,69 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
             _ <- assertAbstractEquals(t2, 1)
           } yield ()
         },
+
+      "construct and deconstruct RecCall[A, B]" -> TestCase
+        .interactWith {
+          λ { start =>
+            val a |*| ta = abstractTypeTap(label(1))
+            val b |*| tb = abstractTypeTap(label(2))
+            tools.recCall(a |*| b)
+              |*| (ta |*| tb.waitFor(start))
+          }
+        }
+        .via { port =>
+          val (t, ts) = OutPort.split(port)
+          val (ta, tb) = OutPort.split(ts)
+          for {
+            ab <- expectRight(OutPort.map(t)(tools.isRecCall))
+            (a, b) = OutPort.split(ab)
+            ta1 <- expectVal(OutPort.map(a)(output))
+            tb1 <- expectVal(OutPort.map(b)(output))
+            ta  <- expectVal(ta)
+            tb  <- expectVal(tb)
+            _ <- assertAbstractEquals(ta, 1)
+            _ <- assertAbstractEquals(ta1, 1)
+            _ <- assertAbstractEquals(tb, 2)
+            _ <- assertAbstractEquals(tb1, 2)
+          } yield ()
+        },
+
+      "construct and deconstruct (RecCall[A, B], A)" -> TestCase
+        .interactWith {
+          λ { start =>
+            val a |*| ta = abstractTypeTap(label(1))
+            val b |*| tb = abstractTypeTap(label(2))
+            val a1 |*| a2 = split(a)
+            tools.pair(tools.recCall(a1 |*| b) |*| a2)
+              |*| (ta |*| tb.waitFor(start))
+          }
+        }
+        .via { port =>
+          val (t, ts)  = OutPort.split(port)
+          val (ta, tb) = OutPort.split(ts)
+          for {
+            fa <- expectRight(OutPort.map(t)(tools.isPair))
+            (f, a2) = OutPort.split(fa)
+            ab <- expectRight(OutPort.map(f)(tools.isRecCall))
+            (a1, b) = OutPort.split(ab)
+
+            ta1 = OutPort.map(a1)(output)
+            ta2 = OutPort.map(a2)(output)
+            tb0 = OutPort.map(b)(output)
+
+            ta1 <- expectVal(ta1)
+            ta2 <- expectVal(ta2)
+            tb0 <- expectVal(tb0)
+            ta  <- expectVal(ta)
+            tb  <- expectVal(tb)
+
+            _ <- assertAbstractEquals(ta, 1)
+            _ <- assertAbstractEquals(ta1, 1)
+            _ <- assertAbstractEquals(ta2, 1)
+            _ <- assertAbstractEquals(tb, 2)
+            _ <- assertAbstractEquals(tb0, 2)
+          } yield ()
+        },
     )
   }
 }

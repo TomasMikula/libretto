@@ -430,6 +430,16 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
           }
         },
 
+      "infer types of rec(recur)" ->
+        testInferredTypes(Fun.rec(Fun.recur)) { tf =>
+          (tf.inType, tf.outType) match {
+            case (Type.AbstractType(a), Type.AbstractType(b)) =>
+              Outcome.success(())
+            case other =>
+              Outcome.failure(s"Unexpected types (${tf.inType}, ${tf.outType})")
+          }
+        },
+
       "infer types of InfiniteList.sum" ->
         testInferredTypes(InfiniteList.sum) { tf =>
           for {

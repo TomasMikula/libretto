@@ -190,6 +190,9 @@ object TypeInference {
     def alsoDebugPrint(f: String => String): Label -⚬ Label =
       alsoPrintLine(x => f(x.toString))
 
+    def alsoDebugPrintTP(f: String => String): TParamLabel -⚬ TParamLabel =
+      alsoPrintLine(x => f(x.toString))
+
     given Junction.Positive[Label] =
       scalettoLib.junctionVal
 
@@ -1446,12 +1449,14 @@ object TypeInference {
     def isPair[T]: ConcreteType[T] -⚬ (ConcreteType[T] |+| (ConcreteType[T] |*| ConcreteType[T])) =
       unpack > dsl.either(
         NonAbstractType.isPair > |+|.lmap(nonAbstractType),
+        fst(Labels.alsoDebugPrintTP(s => s"ABSTRACT TYPE $s was NOT a pair")) >
         typeParam > injectL,
       )
 
     def isRecCall[T]: ConcreteType[T] -⚬ (ConcreteType[T] |+| (ConcreteType[T] |*| ConcreteType[T])) =
       unpack > dsl.either(
         NonAbstractType.isRecCall > |+|.lmap(nonAbstractType),
+        fst(Labels.alsoDebugPrintTP(s => s"ABSTRACT TYPE $s was NOT a RecCall")) >
         typeParam > injectL,
       )
 
@@ -2237,6 +2242,9 @@ object TypeInference {
     def nonAbstractType[T]: NonAbstractTypeF[TypeEmitter[T]] -⚬ TypeEmitter[T] =
       TypeSkelet.nonAbstractType > pack
 
+    def abstractType[T]: (Label |*| RefinementRequest[T]) -⚬ TypeEmitter[T] =
+      TypeSkelet.abstractType > pack
+
     def makeAbstractType[T]: Label -⚬ (TypeEmitter[T] |*| ReboundF[T, ReboundType[T], TypeEmitter[T]]) =
       TypeSkelet.makeAbstractType[T, ReboundType[T], TypeEmitter[T]] > fst(pack)
 
@@ -2303,11 +2311,24 @@ object TypeInference {
       // )
       //   > λ { case a |*| t |*| b => pack(a) |*| t |*| pack(b) }
 
-    def expectPair[T]: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T]) =
-      throw NotImplementedError(s"at ${summon[SourcePos]}")
 
-    def expectRecCall[T]: TypeEmitter[T] -⚬ (TypeEmitter[T] |*| TypeEmitter[T]) =
-      throw NotImplementedError(s"at ${summon[SourcePos]}")
+    def pair[T]: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
+      λ { case a |*| b => pack(TypeSkelet.nonAbstractType(NonAbstractType.pair(a |*| b))) }
+
+    def isPair[T]: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
+      unpack > dsl.either(
+        NonAbstractType.isPair > |+|.lmap(nonAbstractType),
+        abstractType > injectL,
+      )
+
+    def recCall[T]: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
+      λ { case a |*| b => pack(TypeSkelet.nonAbstractType(NonAbstractType.recCall(a |*| b))) }
+
+    def isRecCall[T]: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
+      unpack > dsl.either(
+        NonAbstractType.isRecCall > |+|.lmap(nonAbstractType),
+        abstractType > injectL,
+      )
 
     def split_[T](
       mergeInbound: (ReboundType[T] |*| ReboundType[T]) -⚬ ReboundType[T],
@@ -2656,6 +2677,12 @@ object TypeInference {
     def nested: Tools[ReboundType[T]]
 
     def debugPrintGradually: TypeEmitter[T] -⚬ Done
+
+    def pair: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T]
+    def isPair: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T]))
+
+    def recCall: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T]
+    def isRecCall: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T]))
   }
 
   object Tools {
@@ -2755,6 +2782,18 @@ object TypeInference {
 
     override def label(v: AbstractTypeLabel): One -⚬ Label =
       Labels.from(Right(v))
+
+    override lazy val pair: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
+      TypeEmitter.pair
+
+    override lazy val isPair: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
+      TypeEmitter.isPair
+
+    override lazy val recCall: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
+      TypeEmitter.recCall
+
+    override lazy val isRecCall: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
+      TypeEmitter.isRecCall
   }
 
   def reconstructTypes[M[_], T, A, B](f: Fun[A, B])(using
@@ -2934,7 +2973,12 @@ object TypeInference {
                     val h = f :>> mapVal { TypedFun.rec(_) }
                     a |*| h |*| b
                   case Left(ab) =>
-                    (ab |*| f |*| a1 |*| b1) :>> crashNow(s"TODO (${summon[SourcePos]})")
+                    // (ab |*| f |*| a1 |*| b1) :>> crashNow(s"TODO (${summon[SourcePos]})")
+                    val d = (f ** output(unnestGen(ab)) ** output(unnestGen(a1)) ** output(unnestGen(b1)))
+                      :>> printLine { case (((f, ab), a1), b) =>
+                        s"FUNCTION=${scala.util.Try(f.toString)}, IN-TYPE=($ab, $a1), OUT-TYPE=$b"
+                      }
+                    d :>> fork :>> crashWhenDone(s"TODO (${summon[SourcePos]})")
                 }
               case Left(aba) =>
                 import scala.concurrent.duration._
