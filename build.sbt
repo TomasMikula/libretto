@@ -73,6 +73,19 @@ lazy val lambda = project
     ),
   )
 
+lazy val lambdaExamples = project
+  .in(file("lambda-examples"))
+  .dependsOn(
+    lambda,
+  )
+  .settings(
+    name := "libretto-lambda-examples",
+    scalacOptions ++= commonScalacOptions,
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % ScalatestVersion % Test,
+    ),
+  )
+
 lazy val core = project
   .in(file("core"))
   .dependsOn(lambda)
