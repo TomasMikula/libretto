@@ -1,5 +1,7 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
+import workflows.Flow.newHttpReceptorEndpoint
+
 val backgroundCheck: Flow[EmailAddress, Report] =
   Flow { candidate =>
     askForAcceptance(candidate) switch {
@@ -11,4 +13,13 @@ val backgroundCheck: Flow[EmailAddress, Report] =
         val employmentCert = verifyEmploymentHistory(employmentHistory)
         Report.results(criminalReport ** civilReport ** employmentCert)
     }
+  }
+
+def askForAcceptance: Flow[EmailAddress, CandidateResponse] =
+  Flow { emailAddr =>
+    val responseEndpoint ** response = Expr(newHttpReceptorEndpoint[CandidateResponse])
+    returning(
+      response,
+      sendAcceptanceRequest(emailAddr ** responseEndpoint),
+    )
   }

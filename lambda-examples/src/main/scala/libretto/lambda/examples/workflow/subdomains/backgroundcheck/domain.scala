@@ -10,16 +10,19 @@ type CivilRecord
 type EmploymentVerificationResult
 type Report
 
-sealed trait Action[A, B]
+type CandidateResponse = Unit ++ (PersonalId ** EmploymentHistory)
 
-val flow = Flows[Action]
+enum Action[A, B]:
+  case SendAcceptanceRequest extends Action[EmailAddress ** ReceptorEndpointDesc[CandidateResponse], Unit]
 
-export flow.{
-  **,
-  ++,
-  Flow,
-  Expr,
-}
+val workflows = Workflows[Action]
+
+export workflows.*
+
+import workflows.Flow.{action, newHttpReceptorEndpoint}
+
+def sendAcceptanceRequest: Flow[EmailAddress ** ReceptorEndpointDesc[CandidateResponse], Unit] =
+  action(Action.SendAcceptanceRequest)
 
 object Report {
   def candidateDeclined: Flow[EmailAddress, Report] =
@@ -28,9 +31,6 @@ object Report {
   def results: Flow[CriminalRecord ** CivilRecord ** EmploymentVerificationResult, Report] =
     ???
 }
-
-def askForAcceptance: Flow[EmailAddress, Unit ++ (PersonalId ** EmploymentHistory)] =
-  ???
 
 def checkCriminalRecord: Flow[PersonalId, CriminalRecord] =
   ???
