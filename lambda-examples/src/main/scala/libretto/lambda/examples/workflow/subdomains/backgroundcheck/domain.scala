@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
-import libretto.lambda.examples.workflow.lang.*
+import libretto.lambda.examples.workflow.generic.lang.*
 
 type EmailAddress
 type PersonalId
@@ -15,7 +15,7 @@ type CandidateResponse = Unit ++ (PersonalId ** EmploymentHistory)
 enum Action[A, B]:
   case SendAcceptanceRequest extends Action[EmailAddress ** ReceptorEndpointDesc[CandidateResponse], Unit]
 
-val workflows = Workflows[Action]
+given workflows: Workflows[Action] = Workflows[Action]
 
 export workflows.*
 

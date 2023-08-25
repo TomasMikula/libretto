@@ -1,4 +1,4 @@
-package libretto.lambda.examples.workflow.engine
+package libretto.lambda.examples.workflow.generic.runtime
 
 /** Reference to a workflow with output type `A` */
 case class WorkflowRef[A]()

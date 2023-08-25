@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
-import libretto.lambda.examples.workflow.engine.WorkflowEngine
+import libretto.lambda.examples.workflow.generic.runtime.WorkflowEngine
 
 object TestApp {
   def main(args: Array[String]): Unit =
@@ -10,7 +10,7 @@ object TestApp {
 
     val ref = engine.submit(
       backgroundCheck,
-      EmailAddress(candidate),
+      emailAddress(candidate),
     )
 
     println(s"Started background check for $candidate: $ref")

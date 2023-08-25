@@ -1,4 +1,4 @@
-package libretto.lambda.examples.workflow.lang
+package libretto.lambda.examples.workflow.generic.lang
 
 import libretto.lambda.{Lambdas, SymmetricSemigroupalCategory}
 import libretto.lambda.Lambdas.Abstracted
@@ -48,6 +48,9 @@ class Workflows[Action[_, _]] {
   }
 
   opaque type Flow[A, B] = FlowAST[Action, A, B]
+
+  def astOf[A, B](f: Flow[A, B]): FlowAST[Action, A, B] =
+    f
 
   extension [A, B](f: Flow[A, B]) {
     def apply(using pos: SourcePos)(a: Expr[A])(using LambdaContext): Expr[B] =
