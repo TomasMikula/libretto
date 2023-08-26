@@ -84,6 +84,7 @@ lazy val lambdaExamples = project
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % ScalatestVersion % Test,
     ),
+    fork := true,
   )
 
 lazy val core = project

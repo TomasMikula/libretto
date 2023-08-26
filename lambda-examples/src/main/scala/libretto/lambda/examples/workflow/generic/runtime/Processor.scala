@@ -18,9 +18,11 @@ private[runtime] object Processor {
     val queue = new ArrayBlockingQueue[WorkItem](1000)
     val stopSignal = Promise[Unit]
     val processor = new Processor(persistor, queue, stopSignal)
-    new Thread {
+    val processorThread = new Thread {
       override def run(): Unit = processLoop(persistor, queue, stopSignal.future)
-    }.run()
+    }
+    processorThread.setDaemon(true)
+    processorThread.start()
     processor
   }
 
@@ -33,6 +35,7 @@ private[runtime] object Processor {
       Option(workQueue.poll())
         .orElse(persistor.pollWorkItem())
         .orElse(Option(workQueue.poll(5, TimeUnit.SECONDS)))
+        .orElse { println(s"Nothing to do"); None }
 
     while (!stopSignal.isCompleted) {
       poll()
