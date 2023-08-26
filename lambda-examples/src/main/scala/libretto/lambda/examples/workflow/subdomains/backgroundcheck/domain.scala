@@ -14,6 +14,11 @@ type CandidateResponse = Unit ++ (PersonalId ** EmploymentHistory)
 
 enum Action[A, B]:
   case SendAcceptanceRequest extends Action[EmailAddress ** ReceptorEndpointDesc[CandidateResponse], Unit]
+  case NotifyVerificationTeam extends Action[EmploymentHistory ** ReceptorEndpointDesc[EmploymentVerificationResult], Unit]
+  case ReportCandidateDeclined extends Action[EmailAddress, Report]
+  case CreateReport extends Action[CriminalRecord ** CivilRecord ** EmploymentVerificationResult, Report]
+  case CheckCriminalRecord extends Action[PersonalId, CriminalRecord]
+  case CheckCivilRecord extends Action[PersonalId, CivilRecord]
 
 given workflows: Workflows[Action] = Workflows[Action]
 
@@ -26,17 +31,17 @@ def sendAcceptanceRequest: Flow[EmailAddress ** ReceptorEndpointDesc[CandidateRe
 
 object Report {
   def candidateDeclined: Flow[EmailAddress, Report] =
-    ???
+    action(Action.ReportCandidateDeclined)
 
   def results: Flow[CriminalRecord ** CivilRecord ** EmploymentVerificationResult, Report] =
-    ???
+    action(Action.CreateReport)
 }
 
 def checkCriminalRecord: Flow[PersonalId, CriminalRecord] =
-  ???
+  action(Action.CheckCriminalRecord)
 
 def checkCivilRecord: Flow[PersonalId, CivilRecord] =
-  ???
+  action(Action.CheckCivilRecord)
 
-def verifyEmploymentHistory: Flow[EmploymentHistory, EmploymentVerificationResult] =
-  ???
+def notifyVerificationTeam: Flow[EmploymentHistory ** ReceptorEndpointDesc[EmploymentVerificationResult], Unit] =
+  action(Action.NotifyVerificationTeam)

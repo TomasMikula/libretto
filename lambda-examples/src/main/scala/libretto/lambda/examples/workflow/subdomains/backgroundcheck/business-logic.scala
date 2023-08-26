@@ -23,3 +23,12 @@ def askForAcceptance: Flow[EmailAddress, CandidateResponse] =
       sendAcceptanceRequest(emailAddr ** responseEndpoint),
     )
   }
+
+def verifyEmploymentHistory: Flow[EmploymentHistory, EmploymentVerificationResult] =
+  Flow { history =>
+    val responseEndpoint ** response = Expr(newHttpReceptorEndpoint[EmploymentVerificationResult])
+    returning(
+      response,
+      notifyVerificationTeam(history ** responseEndpoint),
+    )
+  }
