@@ -4,6 +4,7 @@ import libretto.lambda.{Lambdas, Sink, SymmetricSemigroupalCategory}
 import libretto.lambda.Lambdas.Abstracted
 import libretto.lambda.util.{BiInjective, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
+import libretto.lambda.Tupled
 
 /** A domain-level pair.
   *
@@ -37,7 +38,11 @@ object FlowAST {
   case class Par[Op[_, _], A1, A2, B1, B2](f1: FlowAST[Op, A1, B1], f2: FlowAST[Op, A2, B2]) extends FlowAST[Op, A1 ** A2, B1 ** B2]
   case class Swap[Op[_, _], A, B]() extends FlowAST[Op, A ** B, B ** A]
   case class IntroFst[Op[_, _], A]() extends FlowAST[Op, A, Unit ** A]
-  case class ElimFst[Op[_, _], A]() extends FlowAST[Op, Unit ** A, A]
+  case class Prj1[Op[_, _], A, B]() extends FlowAST[Op, A ** B, A]
+  case class Prj2[Op[_, _], A, B]() extends FlowAST[Op, A ** B, B]
+  case class Dup[Op[_, _], A]() extends FlowAST[Op, A, A ** A]
+  case class Either[Op[_, _], A, B, C](f: FlowAST[Op, A, C], g: FlowAST[Op, B, C]) extends FlowAST[Op, A ++ B, C]
+  case class DistributeLR[Op[_, _], A, B, C]() extends FlowAST[Op, A ** (B ++ C), (A ** B) ++ (A ** C)]
 
   case class NewHttpReceptorEndpoint[Op[_, _], A]() extends FlowAST[Op, Unit, ReceptorEndpointDesc[A] ** A]
 
@@ -105,17 +110,20 @@ class Workflows[Action[_, _]] {
     def introFst[X, A](f: Flow[Unit, A]): Flow[X, A ** X] =
       introFst[X] >>> fst(f)
 
-    def elimFst[X]: Flow[Unit ** X, X] =
-      FlowAST.ElimFst()
-
-    def elimSnd[X]: Flow[X ** Unit, X] =
-      swap >>> elimFst
-
     def either[A, B, C](f: Flow[A, C], g: Flow[B, C]): Flow[A ++ B, C] =
-      ???
+      FlowAST.Either(f, g)
 
     def distributeLR[A, B, C]: Flow[A ** (B ++ C), (A ** B) ++ (A ** C)] =
-      ???
+      FlowAST.DistributeLR()
+
+    def dup[A]: Flow[A, A ** A] =
+      FlowAST.Dup()
+
+    def prj1[A, B]: Flow[A ** B, A] =
+      FlowAST.Prj1()
+
+    def prj2[A, B]: Flow[A ** B, B] =
+      FlowAST.Prj2()
 
     def newHttpReceptorEndpoint[A]: Flow[Unit, ReceptorEndpointDesc[A] ** A] =
       FlowAST.NewHttpReceptorEndpoint()
@@ -126,7 +134,11 @@ class Workflows[Action[_, _]] {
   }
 
   private val lambdas: Lambdas[Flow, **, VarOrigin] =
-    Lambdas[Flow, **, VarOrigin]
+    Lambdas[Flow, **, VarOrigin](
+      syntheticPairVar = (x, y) => VarOrigin.SyntheticPair(x, y),
+      universalSplit   = Some([X] => (_: Unit) => Flow.dup[X]),
+      universalDiscard = Some([X, Y] => (_: Unit) => Flow.prj2[X, Y]),
+    )
 
   opaque type Expr[A]       = lambdas.Expr[A]
   opaque type LambdaContext = lambdas.Context
@@ -158,7 +170,7 @@ class Workflows[Action[_, _]] {
         distribute = [X, Y, Z] => (_: Unit) => Flow.distributeLR[X, Y, Z],
       ) match {
         case Abstracted.Exact(g) => g(expr)
-        case Abstracted.Closure(x, g) => ???
+        case Abstracted.Closure(x, g) => lambdas.Expr.mapTupled(Tupled.zip(x, Tupled.atom(expr)), g)(VarOrigin.CapturingSwitch(pos))
         case Abstracted.Failure(e) => throw AssertionError(e)
       }
 
@@ -172,7 +184,7 @@ class Workflows[Action[_, _]] {
     def go(a: Expr[A], cmds: List[Expr[Unit]]): Expr[A] =
       cmds match
         case Nil     => a
-        case c :: cs => go(Flow.elimSnd(a ** c), cs)
+        case c :: cs => go(Flow.prj1(a ** c), cs)
     go(a, cmds.toList)
 }
 
@@ -187,3 +199,5 @@ object Workflows:
     case Prj2(pos: SourcePos)
     case Left(pos: SourcePos)
     case Right(pos: SourcePos)
+    case CapturingSwitch(pos: SourcePos)
+    case SyntheticPair(a: VarOrigin, b: VarOrigin)
