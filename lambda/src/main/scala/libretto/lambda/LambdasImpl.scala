@@ -7,7 +7,11 @@ import libretto.lambda.util.{Applicative, BiInjective, Exists, Injective, Masked
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
-class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
+class LambdasImpl[-⚬[_, _], |*|[_, _], V](
+  syntheticPairVar: (V, V) => V,
+  universalSplit  : Option[[X]    => Unit => X -⚬ (X |*| X)],
+  universalDiscard: Option[[X, Y] => Unit => (X |*| Y) -⚬ Y],
+)(using
   ssc: SymmetricSemigroupalCategory[-⚬, |*|],
   inj: BiInjective[|*|],
 ) extends Lambdas[-⚬, |*|, V] {
@@ -50,10 +54,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
       ctx.registerConstant(v)(introduce)
 
     override def getSplit[A](v: Var[A])(using ctx: Context): Option[A -⚬ (A |*| A)] =
-      ctx.getSplit(v)
+      ctx.getSplit(v) orElse universalSplit.map(_[A](()))
 
     override def getDiscard[A](v: Var[A])(using ctx: Context): Option[[B] => Unit => (A |*| B) -⚬ B] =
-      ctx.getDiscard(v)
+      ctx.getDiscard(v) orElse universalDiscard.map(f => [B] => (_: Unit) => f[A, B](()))
 
     override def getConstant[A](v: Var[A])(using ctx: Context): Option[[x] => Unit => x -⚬ (A |*| x)] =
       ctx.getConstant(v)
@@ -175,6 +179,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](using
 
     override def map[B, C](f: Expr[B], g: B -⚬ C)(resultVar: V)(using Context): Expr[C] =
       (f map g)(Context.newVar(resultVar))
+
+    override def mapTupled[A, B](a: Tupled[Expr, A], f: A -⚬ B)(resultVar: V)(using Context): Expr[B] =
+      map(zipExprs(a), f)(resultVar)
+
+    // TODO: avoid the need to create synthetic variables
+    private def zipExprs[A](a: Tupled[Expr, A])(using Context): Expr[A] =
+      a.fold([x, y] => (x: Expr[x], y: Expr[y]) => {
+        val v = syntheticPairVar(x.resultVar.origin, y.resultVar.origin)
+        Expr.zip(x, y)(v)
+      })
 
     override def zip[B1, B2](f1: Expr[B1], f2: Expr[B2])(resultVar: V)(using Context): Expr[B1 |*| B2] =
       (f1 zip f2)(Context.newVar(resultVar))

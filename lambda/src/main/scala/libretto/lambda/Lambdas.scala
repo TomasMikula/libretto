@@ -18,6 +18,8 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     def unzip[A, B](ab: Expr[A |*| B])(varName1: V, varName2: V)(using Context): (Expr[A], Expr[B])
     def const[A](introduce: [x] => Unit => x -⚬ (A |*| x))(varName: V)(using Context): Expr[A]
 
+    def mapTupled[A, B](a: Tupled[Expr, A], f: A -⚬ B)(resultVarName: V)(using Context): Expr[B]
+
     def resultVar[A](a: Expr[A]): Var[V, A]
     def initialVars[A](a: Expr[A]): Var.Set[V]
 
@@ -245,11 +247,19 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
 }
 
 object Lambdas {
-  def apply[-⚬[_, _], |*|[_, _], VarLabel](using
+  def apply[-⚬[_, _], |*|[_, _], VarLabel](
+    syntheticPairVar: (VarLabel, VarLabel) => VarLabel,
+    universalSplit  : Option[[X]    => Unit => X -⚬ (X |*| X)] = None,
+    universalDiscard: Option[[X, Y] => Unit => (X |*| Y) -⚬ Y] = None,
+  )(using
     ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
   ): Lambdas[-⚬, |*|, VarLabel] =
-    new LambdasImpl[-⚬, |*|, VarLabel]
+    new LambdasImpl[-⚬, |*|, VarLabel](
+      syntheticPairVar,
+      universalSplit,
+      universalDiscard,
+    )
 
   sealed trait Error[VarLabel]
   object Error {

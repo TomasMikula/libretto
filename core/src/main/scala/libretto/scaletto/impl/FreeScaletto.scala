@@ -475,7 +475,9 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
   val lambdas: Lambdas[-⚬, |*|, VarOrigin] =
-    new LambdasImpl[-⚬, |*|, VarOrigin]
+    Lambdas[-⚬, |*|, VarOrigin](
+      syntheticPairVar = (x, y) => VarOrigin.Synthetic(s"auxiliary pairing of ($x, $y)"),
+    )
 
   override type $[A] = lambdas.Expr[A]
 
@@ -523,7 +525,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
       ) match {
         case Abstracted.Exact(f)      => map(ab)(f)(pos)
-        case Abstracted.Closure(x, f) => map(zipExprs(Tupled.zip(x, Tupled.atom(ab))))(f)(pos)
+        case Abstracted.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(ab)), f)(pos)
         case Abstracted.Failure(e)    => raiseError(e)
       }
     }
@@ -593,7 +595,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
       lambdas.absNested[A, B](bindVar, f) match {
         case Closure(captured, f) =>
-          (zipExprs(captured) map ℭ.curry(f.fold))(resultVar)
+          lambdas.Expr.mapTupled(captured, ℭ.curry(f.fold))(resultVar)
         case Exact(f) =>
           val captured0 = $.one(using pos)
           (captured0 map ℭ.curry(elimFst > f.fold))(resultVar)
@@ -691,7 +693,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
           [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
         ) match {
           case Abstracted.Exact(f)      => $.map(a)(partition > f)(pos)
-          case Abstracted.Closure(x, f) => $.map(zipExprs(Tupled.zip(x, Tupled.atom(a))))(snd(partition) > f)(pos)
+          case Abstracted.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), snd(partition) > f)(pos)
           case Abstracted.Failure(e)    => raiseError(e)
         }
     }
@@ -699,13 +701,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   override val |*| : ConcurrentPairInvertOps =
     new ConcurrentPairInvertOps {}
 
-  // TODO: avoid the need to create auxiliary pairings
-  private def zipExprs[A](es: Tupled[|*|, lambdas.Expr, A])(using lambdas.Context): lambdas.Expr[A] =
-    es.fold([x, y] => (ex: lambdas.Expr[x], ey: lambdas.Expr[y]) => {
-      val v = VarOrigin.Synthetic(s"auxiliary pairing of ($ex, $ey)")
-      lambdas.Expr.zip(ex, ey)(v)
-    })
-
+  private def mapTupled[A, B](a: Tupled[|*|, lambdas.Expr, A], f: A -⚬ B)(pos: SourcePos)(using lambdas.Context): lambdas.Expr[B] =
+    lambdas.Expr.mapTupled(a, f)(VarOrigin.FunAppRes(pos))
   private def raiseError(e: Lambdas.Error[VarOrigin]): Nothing = {
     import Lambdas.Error.Undefined
     import Lambdas.Error.LinearityViolation.{OverUnder, Overused, Underused}
