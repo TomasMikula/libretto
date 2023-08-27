@@ -17,9 +17,12 @@ class WorkflowEngine[Action[_, _], Val[_]] {
     input: Value[Val, A],
   ): WorkflowRef[B] = {
     val ref = persistor.insert(input, workflow)
-    processor.notify(WorkItem.InputReady(ref))
+    processor.notify(WorkItem.Wakeup(ref))
     ref
   }
+
+  def pollResult[A](ref: WorkflowRef[A]): Option[WorkflowResult[Val, A]] =
+    persistor.pollResult(ref)
 }
 
 object WorkflowEngine {
