@@ -1,9 +1,9 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.Capture
+import libretto.lambda.{Capture, Unzippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, FlowAST}
-import libretto.lambda.util.SourcePos
 import libretto.lambda.examples.workflow.generic.runtime.WIP.Irreducible.PartialResult
+import libretto.lambda.util.SourcePos
 
 sealed trait WIP[Action[_, _], Val[_], A] {
   import WIP.*
@@ -22,7 +22,7 @@ sealed trait WIP[Action[_, _], Val[_], A] {
       case Zip(a1, a2) => None
       case Map(a, f) => None
 
-  def crank: CrankRes[Action, Val, A]
+  def crank(using Unzippable[**, Val]): CrankRes[Action, Val, A]
 }
 
 object WIP {
@@ -47,7 +47,7 @@ object WIP {
     a1: WIP[Action, Val, A1],
     a2: WIP[Action, Val, A2],
   ) extends WIP[Action, Val, A1 ** A2]:
-    override def crank: CrankRes[Action, Val, A1 ** A2] =
+    override def crank(using Unzippable[**, Val]): CrankRes[Action, Val, A1 ** A2] =
       a1.crank match
         case CrankRes.AlreadyIrreducible(w) =>
           throw NotImplementedError(s"at ${summon[SourcePos]}")
@@ -58,7 +58,7 @@ object WIP {
 
 
   case class Map[Action[_, _], Val[_], A, B](a: WIP[Action, Val, A], f: Closure[Action, Val, A, B]) extends WIP[Action, Val, B]:
-    override def crank: CrankRes[Action, Val, B] =
+    override def crank(using Unzippable[**, Val]): CrankRes[Action, Val, B] =
       a.crank match
         case CrankRes.AlreadyIrreducible(w) =>
           w.partialResult match
@@ -81,7 +81,7 @@ object WIP {
   sealed trait Irreducible[Action[_, _], Val[_], A] extends WIP[Action, Val, A]:
     import Irreducible.*
 
-    override def crank: CrankRes[Action, Val, A] =
+    override def crank(using Unzippable[**, Val]): CrankRes[Action, Val, A] =
       CrankRes.AlreadyIrreducible(this)
 
     def partialResult: PartialResult[Action, Val, A]
@@ -125,29 +125,49 @@ object WIP {
   def evalStep[Action[_, _], Val[_], A, B](
     f: Closure[Action, Val, A, B],
     input: Value[Val, A],
+  )(using
+    Unzippable[**, Val],
   ): EvalStepRes[Action, Val, B] =
     f match
       case FlowAST.Id() =>
         EvalStepRes.Done(input)
+
       case FlowAST.AndThen(f, g) =>
         evalStep(f, input) match
           case EvalStepRes.Done(value) =>
             evalStep(g, value)
           case other =>
             throw NotImplementedError(s"$other (at ${summon[SourcePos]})")
+
       case FlowAST.AssocLR() => throw NotImplementedError(s"at ${summon[SourcePos]}")
       case FlowAST.AssocRL() =>throw NotImplementedError(s"at ${summon[SourcePos]}")
-      case FlowAST.Par(f1, f2) =>
-        throw NotImplementedError(s"at ${summon[SourcePos]}")
+      case f: FlowAST.Par[action, a1, a2, b1, b2] =>
+        val (a1, a2) = Value.unpair[Val, a1, a2](input)
+        evalStep(f.f1, a1) match
+          case EvalStepRes.Done(b1) =>
+            evalStep(f.f2, a2) match
+              case EvalStepRes.Done(b2) =>
+                EvalStepRes.Done(b1 ** b2)
+              case other =>
+                throw NotImplementedError(s"$other (at ${summon[SourcePos]})")
+          case other =>
+            throw NotImplementedError(s"$other (at ${summon[SourcePos]})")
+
       case FlowAST.Swap() =>throw NotImplementedError(s"at ${summon[SourcePos]}")
-      case FlowAST.IntroFst() =>throw NotImplementedError(s"at ${summon[SourcePos]}")
+      case FlowAST.IntroFst() =>
+        EvalStepRes.Done(Value.unit ** input)
+
       case FlowAST.Prj1() =>throw NotImplementedError(s"at ${summon[SourcePos]}")
       case FlowAST.Prj2() =>throw NotImplementedError(s"at ${summon[SourcePos]}")
       case FlowAST.Dup() =>
         EvalStepRes.Done(input ** input)
+
       case FlowAST.Either(f, g) =>throw NotImplementedError(s"at ${summon[SourcePos]}")
       case FlowAST.DistributeLR() =>throw NotImplementedError(s"at ${summon[SourcePos]}")
-      case FlowAST.NewHttpReceptorEndpoint() =>throw NotImplementedError(s"at ${summon[SourcePos]}")
+
+      case FlowAST.NewHttpReceptorEndpoint() =>
+        throw NotImplementedError(s"at ${summon[SourcePos]}")
+
       case FlowAST.DomainAction(action) =>throw NotImplementedError(s"at ${summon[SourcePos]}")
 
 

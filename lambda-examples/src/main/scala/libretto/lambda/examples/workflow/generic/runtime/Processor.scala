@@ -1,5 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
+import libretto.lambda.Unzippable
+import libretto.lambda.examples.workflow.generic.lang.**
 import libretto.lambda.util.SourcePos
 
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
@@ -9,6 +11,8 @@ private[runtime] class Processor[Action[_, _], Val[_]](
   persistor: Persistor[Action, Val],
   workQueue: BlockingQueue[WorkItem],
   stopSignal: Promise[Unit],
+)(using
+  Unzippable[**, Val],
 ) {
   def notify(item: WorkItem): Unit =
     workQueue.put(item)
@@ -79,7 +83,11 @@ private[runtime] class Processor[Action[_, _], Val[_]](
 
 private[runtime] object Processor {
 
-  def start[Action[_, _], Val[_]](persistor: Persistor[Action, Val]): Processor[Action, Val] = {
+  def start[Action[_, _], Val[_]](
+    persistor: Persistor[Action, Val],
+  )(using
+    Unzippable[**, Val],
+  ): Processor[Action, Val] = {
     val queue = new ArrayBlockingQueue[WorkItem](1000)
     val stopSignal = Promise[Unit]
     val processor = new Processor(persistor, queue, stopSignal)

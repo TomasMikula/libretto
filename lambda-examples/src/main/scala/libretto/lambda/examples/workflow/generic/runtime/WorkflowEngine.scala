@@ -1,8 +1,9 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.examples.workflow.generic.lang.{FlowAST, Workflows}
+import libretto.lambda.Unzippable
+import libretto.lambda.examples.workflow.generic.lang.{**, FlowAST, Workflows}
 
-class WorkflowEngine[Action[_, _], Val[_]] {
+class WorkflowEngine[Action[_, _], Val[_]](using Unzippable[**, Val]) {
   val persistor = new Persistor[Action, Val]
   val processor = Processor.start(persistor)
 
@@ -26,6 +27,6 @@ class WorkflowEngine[Action[_, _], Val[_]] {
 }
 
 object WorkflowEngine {
-  def start[Action[_, _], Val[_]](): WorkflowEngine[Action, Val] =
+  def start[Action[_, _], Val[_]]()(using Unzippable[**, Val]): WorkflowEngine[Action, Val] =
     new WorkflowEngine[Action, Val]
 }
