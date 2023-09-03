@@ -29,7 +29,7 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
   def pollWorkItem(): Option[WorkItem] =
     this.synchronized {
       workflows.collectFirst {
-        case (ref, Entry.Unlocked(_, wf)) if wf.isActive => WorkItem.Wakeup(ref)
+        case (ref, Entry.Unlocked(_, wf)) if wf.isReducible => WorkItem.Wakeup(ref)
       }
     }
 

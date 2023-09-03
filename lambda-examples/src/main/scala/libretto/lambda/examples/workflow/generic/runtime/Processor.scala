@@ -1,8 +1,9 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
+import libretto.lambda.util.SourcePos
+
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
 import scala.concurrent.{Future, Promise}
-import java.lang.Thread.UncaughtExceptionHandler
 
 private[runtime] class Processor[Action[_, _], Val[_]](
   persistor: Persistor[Action, Val],
@@ -37,26 +38,42 @@ private[runtime] class Processor[Action[_, _], Val[_]](
 
   private def crankOpt[A](w: WIP[Action, Val, A]): Option[WIP[Action, Val, A]] =
     crank(w) match
-      case CrankRes.AlreadyStill(_) => None
+      case CrankRes.AlreadyIrreducible(_) => None
       case CrankRes.Progressed(w1)  => Some(w1)
 
   private def crank[A](w: WIP[Action, Val, A]): CrankRes[A] =
-    w match {
-      case w: WIP.Still[Action, Val, A] =>
-        // nothing to do, false alarm
-        CrankRes.AlreadyStill(w)
+    w.crank match
+      case WIP.CrankRes.AlreadyIrreducible(w) =>
+        CrankRes.AlreadyIrreducible(w)
+      case WIP.CrankRes.Progressed(w) =>
+        CrankRes.Progressed(w)
+      case WIP.CrankRes.ActionRequest(input, action, cont) =>
+        throw NotImplementedError(s"at ${summon[SourcePos]}")
 
-      case WIP.Zip(a1, a2) =>
-        println(w)
-        ???
+    // w match {
+    //   case w: WIP.Irreducible[Action, Val, A] =>
+    //     // nothing to do, false alarm
+    //     CrankRes.AlreadyIrreducible(w)
 
-      case WIP.Map(a, f) =>
-        println(w)
-        ???
-    }
+    //   case WIP.Zip(a1, a2) =>
+    //     println(w)
+    //     ???
+
+    //   case WIP.Map(a, f) =>
+    //     crank(a) match
+    //       case CrankRes.Progressed(a1) =>
+    //         CrankRes.Progressed(WIP.Map(a1, f))
+    //       case CrankRes.AlreadyIrreducible(w) =>
+    //         w match
+    //           case WIP.Irreducible.Done(value) =>
+    //             ???
+    //             // push `value` into `f`:
+    //             //  - Done[A]
+    //             //  - (Value[X], Action[X, Y], Promise[Y] => WIP[A])
+    // }
 
   private enum CrankRes[A]:
-    case AlreadyStill(w: WIP.Still[Action, Val, A])
+    case AlreadyIrreducible(w: WIP.Irreducible[Action, Val, A])
     case Progressed(w: WIP[Action, Val, A])
 }
 
@@ -71,7 +88,7 @@ private[runtime] object Processor {
     }
     processorThread.setName("WorkflowProcessor")
     processorThread.setDaemon(true)
-    processorThread.setUncaughtExceptionHandler((t, e) => { e.printStackTrace(Console.err); Console.err.flush() })
+    processorThread.setUncaughtExceptionHandler((t, e) => e.printStackTrace(Console.err))
     processorThread.start()
     processor
   }
