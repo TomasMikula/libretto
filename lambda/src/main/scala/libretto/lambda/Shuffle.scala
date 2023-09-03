@@ -89,7 +89,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       sh: Shuffle[<*>],
     ): Exists[[t] =>> (sh.~⚬[X, t], F[B, t])]
 
-    def apply[F[_]](a: F[A])(using Cartesian[|*|, F]): F[B]
+    def apply[F[_]](a: F[A])(using StrongZippable[|*|, F]): F[B]
   }
 
   object ~⚬ {
@@ -126,7 +126,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ): Exists[[t] =>> (sh.~⚬[S, t], F[X, t])] =
         Exists((sh.~⚬.id, fx))
 
-      override def apply[F[_]](fx: F[X])(using Cartesian[|*|, F]): F[X] =
+      override def apply[F[_]](fx: F[X])(using StrongZippable[|*|, F]): F[X] =
         fx
     }
 
@@ -165,7 +165,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ): Exists[[t] =>> (sh.~⚬[S, t], F[Y1 |*| Y2, t])] =
         par.translate(fa)(m, sh)
 
-      override def apply[F[_]](a: F[X1 |*| X2])(using Cartesian[|*|, F]): F[Y1 |*| Y2] =
+      override def apply[F[_]](a: F[X1 |*| X2])(using StrongZippable[|*|, F]): F[Y1 |*| Y2] =
         par(a)
     }
 
@@ -202,7 +202,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2) =:= G[T]): ChaseBwRes[A1 |*| A2, G, T] =
         transfer.chaseBw(i) after par(f1, f2)
 
-      override def apply[F[_]](a: F[A1 |*| A2])(using F: Cartesian[|*|, F]): F[B1 |*| B2] = {
+      override def apply[F[_]](a: F[A1 |*| A2])(using F: StrongZippable[|*|, F]): F[B1 |*| B2] = {
         val (a1, a2) = F.unzip(a)
         val x1 = f1(a1)
         val x2 = f2(a2)
@@ -658,7 +658,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       )
     }
 
-    def apply[F[_]](fx: F[X1 |*| X2])(using F: Cartesian[|*|, F]): F[Y1 |*| Y2] = {
+    def apply[F[_]](fx: F[X1 |*| X2])(using F: StrongZippable[|*|, F]): F[Y1 |*| Y2] = {
       val (f1, f2) = Par.unapply(this)
       val (x1, x2) = F.unzip(fx)
       F.zip(f1(x1), f2(x2))
@@ -762,7 +762,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
   sealed trait TransferOpt[A1, A2, B1, B2] {
     def fold[->[_, _]](using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2)
 
-    def apply[F[_]](a: F[A1 |*| A2])(using F: Cartesian[|*|, F]): F[B1 |*| B2]
+    def apply[F[_]](a: F[A1 |*| A2])(using F: StrongZippable[|*|, F]): F[B1 |*| B2]
     def projectProper[C](p: Projection.Proper[|*|, B1 |*| B2, C]): ProjectProperRes[A1 |*| A2, C]
     def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2)): ChaseFwRes[F, T, B1 |*| B2]
     def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2) =:= G[T]): ChaseBwRes[A1 |*| A2, G, T]
@@ -892,7 +892,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def chaseBwSnd[G[_], T](i: Focus[|*|, G])(using ev: A2 =:= G[T]): ChaseBwRes[A1 |*| A2, [t] =>> A1 |*| G[t], T] =
         ev match { case TypeEq(Refl()) => chaseBw(i.inSnd[A1]) }
 
-      override def apply[F[_]](a: F[A1 |*| A2])(using F: Cartesian[|*|, F]): F[A1 |*| A2] =
+      override def apply[F[_]](a: F[A1 |*| A2])(using F: StrongZippable[|*|, F]): F[A1 |*| A2] =
         a
 
       override def translateLR[<*>[_, _], F[_, _], S1, S2](
@@ -1106,7 +1106,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override protected def projectSnd[C2](px1: Proper[|*|, X1, C2]): ProjectProperRes[X1 |*| X2, X2 |*| C2] =
         ProjectProperRes.Projected(px1.inFst[X2], swap)
 
-      override def apply[F[_]](a: F[X1 |*| X2])(using F: Cartesian[|*|, F]): F[X2 |*| X1] = {
+      override def apply[F[_]](a: F[X1 |*| X2])(using F: StrongZippable[|*|, F]): F[X2 |*| X1] = {
         val (x1, x2) = F.unzip(a)
         F.zip(x2, x1)
       }
@@ -1314,7 +1314,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             go(q, g1)
         }
 
-      override def apply[F[_]](a: F[(A1 |*| A2) |*| A3])(using F: Cartesian[|*|, F]): F[A1 |*| (B2 |*| B3)] = {
+      override def apply[F[_]](a: F[(A1 |*| A2) |*| A3])(using F: StrongZippable[|*|, F]): F[A1 |*| (B2 |*| B3)] = {
         val (a12, a3) = F.unzip(a)
         val (a1, a2)  = F.unzip(a12)
         F.zip(a1, g(F.zip(a2, a3)))
@@ -1576,7 +1576,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override protected def projectSnd[C2](p2: Proper[|*|, A3, C2]): ProjectProperRes[A1 |*| (A2 |*| A3), B1 |*| B2 |*| C2] =
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.projectSnd")
 
-      override def apply[F[_]](a: F[A1 |*| (A2 |*| A3)])(using F: Cartesian[|*|, F]): F[(B1 |*| B2) |*| A3] = {
+      override def apply[F[_]](a: F[A1 |*| (A2 |*| A3)])(using F: StrongZippable[|*|, F]): F[(B1 |*| B2) |*| A3] = {
         val (a1, a23) = F.unzip(a)
         val (a2, a3)  = F.unzip(a23)
         F.zip(g(F.zip(a1, a2)), a3)
@@ -1840,7 +1840,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override protected def projectSnd[C2](p2: Proper[|*|, A2, C2]): ProjectProperRes[(A1 |*| A2) |*| A3, (B1 |*| B2) |*| C2] =
         UnhandledCase.raise(s"${this.getClass.getSimpleName}.projectSnd")
 
-      override def apply[F[_]](a: F[(A1 |*| A2) |*| A3])(using F: Cartesian[|*|, F]): F[(B1 |*| B2) |*| A2] = {
+      override def apply[F[_]](a: F[(A1 |*| A2) |*| A3])(using F: StrongZippable[|*|, F]): F[(B1 |*| B2) |*| A2] = {
         val (a12, a3) = F.unzip(a)
         val (a1, a2)  = F.unzip(a12)
         F.zip(g(F.zip(a1, a3)), a2)
@@ -2110,7 +2110,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             go(pa, g1)
         }
 
-      override def apply[F[_]](a: F[A1 |*| (A2 |*| A3)])(using F: Cartesian[|*|, F]): F[A2 |*| (B2 |*| B3)] = {
+      override def apply[F[_]](a: F[A1 |*| (A2 |*| A3)])(using F: StrongZippable[|*|, F]): F[A2 |*| (B2 |*| B3)] = {
         val (a1, a23) = F.unzip(a)
         val (a2, a3)  = F.unzip(a23)
         F.zip(a2, g(F.zip(a1, a3)))
@@ -2407,7 +2407,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             )
         }
 
-      override def apply[F[_]](a: F[(A1 |*| A2) |*| (A3 |*| A4)])(using F: Cartesian[|*|, F]): F[(B1 |*| B2) |*| (B3 |*| B4)] = {
+      override def apply[F[_]](a: F[(A1 |*| A2) |*| (A3 |*| A4)])(using F: StrongZippable[|*|, F]): F[(B1 |*| B2) |*| (B3 |*| B4)] = {
         val (a12, a34) = F.unzip(a)
         val (a1, a2)   = F.unzip(a12)
         val (a3, a4)   = F.unzip(a34)

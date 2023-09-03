@@ -330,7 +330,7 @@ object Bin {
     leafIsNotBranch: [x, y, z] => (T[x] =:= (y <*> z)) => Nothing,
   )(using
     BiInjective[<*>],
-  ): Cartesian[<*>, Bin[<*>, T, F, _]] with {
+  ): StrongZippable[<*>, Bin[<*>, T, F, _]] with {
     override def zip[A, B](a: Bin[<*>, T, F, A], b: Bin[<*>, T, F, B]): Bin[<*>, T, F, A <*> B] =
       Branch(a, b)
 
