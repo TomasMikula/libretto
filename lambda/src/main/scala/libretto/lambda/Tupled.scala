@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Exists, UniqueTypeArg, Zippable}
+import libretto.lambda.util.{Exists, UniqueTypeArg}
 import scala.annotation.targetName
 
 opaque type Tupled[|*|[_, _], F[_], A] =
