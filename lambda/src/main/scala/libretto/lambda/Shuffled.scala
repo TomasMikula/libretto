@@ -44,7 +44,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
     )(using
       tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
-      F: Cartesian[|*|, F],
+      F: StrongZippable[|*|, F],
     ): (tgt.Shuffled[A, B], F[B])
 
     def traverse[G[_]: Applicative, ->>[_, _]](
@@ -158,7 +158,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
     )(using
       tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
-      F: Cartesian[|*|, F],
+      F: StrongZippable[|*|, F],
     ): (tgt.Shuffled[A, B], F[B]) = {
       val x: F[X] = l(a)
       val (m1, y) = m.sweepL[F, ->>](x, f)
@@ -263,7 +263,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
     )(using
       tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
-      F: Cartesian[|*|, F],
+      F: StrongZippable[|*|, F],
     ): (tgt.Shuffled[A, B], F[B]) =
       (tgt.Pure(s), s.apply(a))
   }
@@ -336,7 +336,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
     )(using
       tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
-      F: Cartesian[|*|, F],
+      F: StrongZippable[|*|, F],
     ): (tgt.Shuffled[A, B1 |*| B2], F[B1 |*| B2]) =
       UnhandledCase.raise(s"${this.getClass.getSimpleName}.sweepL")
 
@@ -414,7 +414,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
     )(using
       tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
-      F: Cartesian[|*|, F],
+      F: StrongZippable[|*|, F],
     ): (tgt.Plated[A, B], F[B])
 
     def projectProper[C](
@@ -559,7 +559,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         g: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
       )(using
         tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
-        F: Cartesian[|*|, F],
+        F: StrongZippable[|*|, F],
       ): (tgt.Plated[A, B], F[B]) = {
         val (f1, b) = g(a, f)
         (tgt.Plated.Solid(f1), b)
@@ -619,7 +619,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
       )(using
         tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
-        F: Cartesian[|*|, F],
+        F: StrongZippable[|*|, F],
       ): (tgt.Plated[A1 |*| A2, B1 |*| B2], F[B1 |*| B2]) = {
         val F.Unzip(a1, a2) = a
         val (g1, b1) = f1.sweepL[F, ->>](a1, f)
@@ -683,7 +683,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
       )(using
         tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
-        F: Cartesian[|*|, F],
+        F: StrongZippable[|*|, F],
       ): (tgt.Plated[A, B], F[B]) = {
         val (l1, x) = l.sweepL[F, ->>](a, f)
         val y = m(x)
@@ -765,7 +765,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
       )(using
         tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
-        F: Cartesian[|*|, F],
+        F: StrongZippable[|*|, F],
       ): (tgt.Plated[A1 |*| A2, B], F[B]) = {
         val F.Unzip(a1, a2) = a
         val (semiHead1, x2) = semiHead.sweepL[F, ->>](a2, f)
@@ -865,7 +865,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
       )(using
         tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
-        F: Cartesian[|*|, F],
+        F: StrongZippable[|*|, F],
       ): (tgt.Plated[A, B1 |*| B2], F[B1 |*| B2]) = {
         val (init1, x) = init.sweepL[F, ->>](a, f)
         val (b1, y2)   = F.unzip(t.asShuffle(x))
@@ -989,7 +989,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         f: [t, u] => (F[t], t -> u) => (t ->> u, F[u]),
       )(using
         tgt: libretto.lambda.Shuffled.With[->>, |*|, shuffle.type],
-        F: Cartesian[|*|, F],
+        F: StrongZippable[|*|, F],
       ): (tgt.Plated[A1 |*| A2, B1 |*| B2], F[B1 |*| B2]) = {
         val (fa1, fa2)       = F.unzip(fa)
         val (l1, fp12)       = l.sweepL[F, ->>](fa2, f)
@@ -1065,7 +1065,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         case Exists.Some(Exists.Some((fb1, fb2, t1))) =>
           Exists(Exists((tgt.RevTransferOpt(t1), fb1, fb2)))
 
-    def apply[F[_]](fa: F[A1 |*| A2])(using Cartesian[|*|, F]): F[B1 |*| B2] =
+    def apply[F[_]](fa: F[A1 |*| A2])(using StrongZippable[|*|, F]): F[B1 |*| B2] =
       asShuffle.apply(fa)
   }
 
