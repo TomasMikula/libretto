@@ -19,6 +19,7 @@ sealed trait WIP[Action[_, _], Val[_], A] {
     this match
       case Irreducible.Done(value) => Some(WorkflowResult.Success(value))
       case _: Irreducible.Suspended[Action, Val, A] => None
+      case Irreducible.Zip(w1, w2) => None
       case Zip(a1, a2) => None
       case Map(a, f) => None
 
@@ -39,8 +40,28 @@ object WIP {
 
   type Closure[Action[_, _], Val[_], A, B] = FlowAST[PartiallyAppliedAction[Action, Val, _, _], A, B]
   object Closure {
+    private def ssc[Action[_, _], Val[_]] = summon[libretto.lambda.SymmetricSemigroupalCategory[Closure[Action, Val, _, _], **]]
+
     def pure[Action[_, _], Val[_], A, B](f: FlowAST[Action, A, B]): Closure[Action, Val, A, B] =
       f.translate([x, y] => (f: Action[x, y]) => PartiallyAppliedAction.pure[Action, Val, x, y](f))
+
+    def id[Action[_, _], Val[_], A]: Closure[Action, Val, A, A] =
+      FlowAST.Id()
+
+    def swap[Action[_, _], Val[_], A, B]: Closure[Action, Val, A ** B, B ** A] =
+      FlowAST.Swap()
+
+    def assocLR[Action[_, _], Val[_], A, B, C]: Closure[Action, Val, (A ** B) ** C, A ** (B ** C)] =
+      FlowAST.AssocLR()
+
+    def assocRL[Action[_, _], Val[_], A, B, C]: Closure[Action, Val, A ** (B ** C), (A ** B) ** C] =
+      FlowAST.AssocRL()
+
+    def fst[Action[_, _], Val[_], A, B, Y](f: Closure[Action, Val, A, B]): Closure[Action, Val, A ** Y, B ** Y] =
+      ssc.fst(f)
+
+    def snd[Action[_, _], Val[_], A, B, X](f: Closure[Action, Val, A, B]): Closure[Action, Val, X ** A, X ** B] =
+      ssc.snd(f)
   }
 
   case class Zip[Action[_, _], Val[_], A1, A2](
@@ -49,10 +70,20 @@ object WIP {
   ) extends WIP[Action, Val, A1 ** A2]:
     override def crank(using Unzippable[**, Val]): CrankRes[Action, Val, A1 ** A2] =
       a1.crank match
-        case CrankRes.AlreadyIrreducible(w) =>
-          throw NotImplementedError(s"at ${summon[SourcePos]}")
+        case CrankRes.AlreadyIrreducible(w1) =>
+          a2.crank match
+            case CrankRes.AlreadyIrreducible(w2) =>
+              CrankRes.Progressed(WIP.Irreducible.Zip(w1, w2))
+            case CrankRes.Progressed(w2) =>
+              CrankRes.Progressed(Zip(w1, w2))
+            case CrankRes.Ask(cont) =>
+              throw NotImplementedError(s"at ${summon[SourcePos]}")
+            case CrankRes.ActionRequest(input, action, cont) =>
+              throw NotImplementedError(s"at ${summon[SourcePos]}")
         case CrankRes.Progressed(a1) =>
           CrankRes.Progressed(Zip(a1, a2))
+        case CrankRes.Ask(cont) =>
+          throw NotImplementedError(s"at ${summon[SourcePos]}")
         case CrankRes.ActionRequest(input, action, cont) =>
           throw NotImplementedError(s"at ${summon[SourcePos]}")
 
@@ -68,12 +99,16 @@ object WIP {
               evalStep(f, value) match
                 case EvalStepRes.Done(value) =>
                   CrankRes.Progressed(WIP.Irreducible.Done(value))
+                case EvalStepRes.Ask(cont) =>
+                  CrankRes.Ask(cont)
                 case other =>
                   throw NotImplementedError(s"$other (at ${summon[SourcePos]})")
             case PartialResult.Partial(x, y, f) =>
               throw NotImplementedError(s"at ${summon[SourcePos]}")
         case CrankRes.Progressed(a1) =>
           CrankRes.Progressed(Map(a1, f))
+        case CrankRes.Ask(cont) =>
+          throw NotImplementedError(s"at ${summon[SourcePos]}")
         case CrankRes.ActionRequest(input, action, cont) =>
           throw NotImplementedError(s"at ${summon[SourcePos]}")
 
@@ -92,17 +127,44 @@ object WIP {
       override def partialResult: PartialResult[Action, Val, A] =
         PartialResult.FullResult(value)
 
+    /** Unlike [[WIP.Zip]], the consituents are already [[Irreducible]]. */
+    case class Zip[Action[_, _], Val[_], A1, A2](
+      a1: WIP.Irreducible[Action, Val, A1],
+      a2: WIP.Irreducible[Action, Val, A2],
+    ) extends WIP.Irreducible[Action, Val, A1 ** A2]:
+      override def partialResult: PartialResult[Action, Val, A1 ** A2] =
+        import PartialResult.*
+
+        a1.partialResult match
+          case NotAvailable(w1) =>
+            a2.partialResult match
+              case NotAvailable(w2) => NotAvailable(Suspended.Zip(w1, w2))
+              case FullResult(a2)   => Partial(a2, w1, Closure.swap)
+              case Partial(x, y, f) => Partial(x, Zip(y, w1), Closure.assocRL >>> Closure.swap >>> Closure.snd(f))
+          case FullResult(a1) =>
+            Partial(a1, a2, Closure.id)
+          case Partial(x, y, f) =>
+            Partial(x, Zip(y, a2), Closure.assocRL >>> Closure.fst(f))
+
     sealed trait Suspended[Action[_, _], Val[_], A] extends Irreducible[Action, Val, A]:
       override def partialResult: PartialResult[Action, Val, A] =
         PartialResult.NotAvailable(this)
 
     object Suspended {
-      case class Awaiting[Action[_, _], Val[_], A](promised: Promised[A]) extends Suspended[Action, Val, A]
+      case class Awaiting[Action[_, _], Val[_], A](
+        promise: PromiseId[A],
+      ) extends Suspended[Action, Val, A]
 
       case class Map[Action[_, _], Val[_], A, B](
         a: Suspended[Action, Val, A],
         f: Closure[Action, Val, A, B],
       ) extends Suspended[Action, Val, B]
+
+      /** Unlike [[WIP.Zip]] and [[Irreducible.Zip]], the consituents are both [[Suspended]]. */
+      case class Zip[Action[_, _], Val[_], A1, A2](
+        a1: Suspended[Action, Val, A1],
+        a2: Suspended[Action, Val, A2],
+      ) extends Suspended[Action, Val, A1 ** A2]
     }
 
     enum PartialResult[Action[_, _], Val[_], A]:
@@ -136,6 +198,8 @@ object WIP {
         evalStep(f, input) match
           case EvalStepRes.Done(value) =>
             evalStep(g, value)
+          case ask: EvalStepRes.Ask[action, v, x, b] =>
+            EvalStepRes.Ask { (px: PromiseId[x]) => WIP.Map(ask.cont(px), g) }
           case other =>
             throw NotImplementedError(s"$other (at ${summon[SourcePos]})")
 
@@ -148,8 +212,16 @@ object WIP {
             evalStep(f.f2, a2) match
               case EvalStepRes.Done(b2) =>
                 EvalStepRes.Done(b1 ** b2)
+              case ask: EvalStepRes.Ask[action_, v, x, b2_] =>
+                EvalStepRes.Ask { (px: PromiseId[x]) =>
+                  WIP.Zip(WIP.Irreducible.Done(b1), ask.cont(px))
+                }
               case other =>
                 throw NotImplementedError(s"$other (at ${summon[SourcePos]})")
+          case ask: EvalStepRes.Ask[action_, v, x, b1_] =>
+            EvalStepRes.Ask { (px: PromiseId[x]) =>
+              WIP.Zip(ask.cont(px), WIP.Map(Irreducible.Done(a2), f.f2))
+            }
           case other =>
             throw NotImplementedError(s"$other (at ${summon[SourcePos]})")
 
@@ -165,8 +237,8 @@ object WIP {
       case FlowAST.Either(f, g) =>throw NotImplementedError(s"at ${summon[SourcePos]}")
       case FlowAST.DistributeLR() =>throw NotImplementedError(s"at ${summon[SourcePos]}")
 
-      case FlowAST.NewHttpReceptorEndpoint() =>
-        throw NotImplementedError(s"at ${summon[SourcePos]}")
+      case FlowAST.Promise() =>
+        EvalStepRes.Ask { (pb: PromiseId[B]) => WIP.Irreducible.Suspended.Awaiting(pb) }
 
       case FlowAST.DomainAction(action) =>throw NotImplementedError(s"at ${summon[SourcePos]}")
 
@@ -174,6 +246,9 @@ object WIP {
   enum CrankRes[Action[_, _], Val[_], A] {
     case AlreadyIrreducible(w: WIP.Irreducible[Action, Val, A])
     case Progressed(w: WIP[Action, Val, A])
+    case Ask[Action[_, _], Val[_], X, A](
+      cont: PromiseId[X] => WIP[Action, Val, A],
+    ) extends CrankRes[Action, Val, A]
     case ActionRequest[Action[_, _], Val[_], X, Y, A](
       input: Value[Val, X],
       action: Action[X, Y],
@@ -183,4 +258,7 @@ object WIP {
 
   enum EvalStepRes[Action[_, _], Val[_], A]:
     case Done(value: Value[Val, A])
+    case Ask[Action[_, _], Val[_], X, A](
+      cont: PromiseId[X] => WIP[Action, Val, A],
+    ) extends EvalStepRes[Action, Val, A]
 }

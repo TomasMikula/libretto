@@ -72,8 +72,8 @@ class Workflows[Action[_, _]] {
     def prj2[A, B]: Flow[A ** B, B] =
       FlowAST.Prj2()
 
-    def newHttpReceptorEndpoint[A]: Flow[Unit, ReceptorEndpointDesc[A] ** A] =
-      FlowAST.NewHttpReceptorEndpoint()
+    def promise[A]: Flow[Unit, PromiseRef[A] ** A] =
+      FlowAST.Promise()
 
     def action[A, B](a: Action[A, B]): Flow[A, B] =
       FlowAST.DomainAction(a)

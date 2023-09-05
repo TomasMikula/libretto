@@ -20,4 +20,4 @@ given BiInjective[**] with {
   */
 sealed trait ++[A, B]
 
-sealed trait ReceptorEndpointDesc[A]
+sealed trait PromiseRef[A]

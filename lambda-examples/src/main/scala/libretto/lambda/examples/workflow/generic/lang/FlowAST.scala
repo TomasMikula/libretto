@@ -29,7 +29,7 @@ object FlowAST {
   case class Either[Op[_, _], A, B, C](f: FlowAST[Op, A, C], g: FlowAST[Op, B, C]) extends FlowAST[Op, A ++ B, C]
   case class DistributeLR[Op[_, _], A, B, C]() extends FlowAST[Op, A ** (B ++ C), (A ** B) ++ (A ** C)]
 
-  case class NewHttpReceptorEndpoint[Op[_, _], A]() extends FlowAST[Op, Unit, ReceptorEndpointDesc[A] ** A]
+  case class Promise[Op[_, _], A]() extends FlowAST[Op, Unit, PromiseRef[A] ** A]
 
   case class DomainAction[Op[_, _], A, B](action: Op[A, B]) extends FlowAST[Op, A, B]
 

@@ -13,8 +13,8 @@ type Report
 type CandidateResponse = Unit ++ (PersonalId ** EmploymentHistory)
 
 enum Action[A, B]:
-  case SendAcceptanceRequest extends Action[EmailAddress ** ReceptorEndpointDesc[CandidateResponse], Unit]
-  case NotifyVerificationTeam extends Action[EmploymentHistory ** ReceptorEndpointDesc[EmploymentVerificationResult], Unit]
+  case SendAcceptanceRequest extends Action[EmailAddress ** PromiseRef[CandidateResponse], Unit]
+  case NotifyVerificationTeam extends Action[EmploymentHistory ** PromiseRef[EmploymentVerificationResult], Unit]
   case ReportCandidateDeclined extends Action[EmailAddress, Report]
   case CreateReport extends Action[CriminalRecord ** CivilRecord ** EmploymentVerificationResult, Report]
   case CheckCriminalRecord extends Action[PersonalId, CriminalRecord]
@@ -24,9 +24,9 @@ given workflows: Workflows[Action] = Workflows[Action]
 
 export workflows.*
 
-import workflows.Flow.{action, newHttpReceptorEndpoint}
+import workflows.Flow.action
 
-def sendAcceptanceRequest: Flow[EmailAddress ** ReceptorEndpointDesc[CandidateResponse], Unit] =
+def sendAcceptanceRequest: Flow[EmailAddress ** PromiseRef[CandidateResponse], Unit] =
   action(Action.SendAcceptanceRequest)
 
 object Report {
@@ -43,5 +43,5 @@ def checkCriminalRecord: Flow[PersonalId, CriminalRecord] =
 def checkCivilRecord: Flow[PersonalId, CivilRecord] =
   action(Action.CheckCivilRecord)
 
-def notifyVerificationTeam: Flow[EmploymentHistory ** ReceptorEndpointDesc[EmploymentVerificationResult], Unit] =
+def notifyVerificationTeam: Flow[EmploymentHistory ** PromiseRef[EmploymentVerificationResult], Unit] =
   action(Action.NotifyVerificationTeam)

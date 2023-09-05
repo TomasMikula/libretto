@@ -5,6 +5,7 @@ import scala.collection.mutable
 
 private[runtime] class Persistor[Action[_, _], Val[_]] {
   private var nextWorkflowId: Long = 1
+  private var nextPromiseId: Long = 1
 
   private enum Entry[A]:
     case Unlocked(sn: Long, w: WIP[Action, Val, A])
@@ -12,6 +13,9 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
 
   private val workflows: mutable.Map[WorkflowRef[?], Entry[?]] =
     mutable.Map.empty[WorkflowRef[?], Entry[?]]
+
+  private val promises: mutable.Map[PromiseId[?], Promised[?]] =
+    mutable.Map.empty[PromiseId[?], Promised[?]]
 
   def insert[A, B](
     input: Value[Val, A],
@@ -122,6 +126,14 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
           case Entry.Locked(_, _) =>
             None
         }
+    }
+
+  def promise[A]: PromiseId[A] =
+    this.synchronized {
+      val id = PromiseId[A](nextPromiseId)
+      nextPromiseId += 1
+      promises.put(id, Promised.Empty())
+      id
     }
 
   enum LockGetRes[A]:
