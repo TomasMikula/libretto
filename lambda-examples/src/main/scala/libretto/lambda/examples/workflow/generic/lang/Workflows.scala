@@ -5,6 +5,8 @@ import libretto.lambda.Lambdas.Abstracted
 import libretto.lambda.util.SourcePos
 import libretto.lambda.Tupled
 
+import scala.concurrent.duration.FiniteDuration
+
 class Workflows[Action[_, _]] {
   import Workflows.VarOrigin
 
@@ -57,6 +59,12 @@ class Workflows[Action[_, _]] {
     def introFst[X, A](f: Flow[Unit, A]): Flow[X, A ** X] =
       introFst[X] >>> fst(f)
 
+    def injectL[Op[_, _], A, B]: Flow[A, A ++ B] =
+      FlowAST.InjectL()
+
+    def injectR[Op[_, _], A, B]: Flow[B, A ++ B] =
+      FlowAST.InjectR()
+
     def either[A, B, C](f: Flow[A, C], g: Flow[B, C]): Flow[A ++ B, C] =
       FlowAST.Either(f, g)
 
@@ -74,6 +82,20 @@ class Workflows[Action[_, _]] {
 
     def promise[A]: Flow[Unit, PromiseRef[A] ** A] =
       FlowAST.Promise()
+
+    def isComplete[A]: Flow[PromiseRef[A], Unit ++ Unit] =
+      FlowAST.IsComplete()
+
+    def doWhileLoop[A, B](f: Flow[A, A ++ B]): Flow[A, B] =
+      FlowAST.DoWhile(f)
+
+    def doWhile[A, B](using SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[A ++ B]): Flow[A, B] =
+      doWhileLoop(Flow(f))
+
+    // TODO: not all types might be meaningfully delayable.
+    // Might require a typeclass evidence.
+    def delay[A](duration: FiniteDuration): Flow[A, A] =
+      FlowAST.Delay(duration)
 
     def action[A, B](a: Action[A, B]): Flow[A, B] =
       FlowAST.DomainAction(a)
@@ -120,6 +142,9 @@ class Workflows[Action[_, _]] {
         case Abstracted.Closure(x, g) => lambdas.Expr.mapTupled(Tupled.zip(x, Tupled.atom(expr)), g)(VarOrigin.CapturingSwitch(pos))
         case Abstracted.Failure(e) => throw AssertionError(e)
       }
+
+  def unit(using SourcePos, LambdaContext): Expr[Unit] =
+    Expr(Flow.id[Unit])
 
   def returning[A](
     a: Expr[A],

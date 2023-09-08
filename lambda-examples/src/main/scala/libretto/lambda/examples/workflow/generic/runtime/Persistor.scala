@@ -14,8 +14,8 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
   private val workflows: mutable.Map[WorkflowRef[?], Entry[?]] =
     mutable.Map.empty[WorkflowRef[?], Entry[?]]
 
-  private val promises: mutable.Map[PromiseId[?], Promised[?]] =
-    mutable.Map.empty[PromiseId[?], Promised[?]]
+  private val promises: mutable.Map[PromiseId[?], PromiseState[?]] =
+    mutable.Map.empty[PromiseId[?], PromiseState[?]]
 
   def insert[A, B](
     input: Value[Val, A],
@@ -132,7 +132,7 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
     this.synchronized {
       val id = PromiseId[A](nextPromiseId)
       nextPromiseId += 1
-      promises.put(id, Promised.Empty())
+      promises.put(id, PromiseState.Empty())
       id
     }
 

@@ -1,5 +1,5 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-enum Promised[A]:
+enum PromiseState[A]:
   case Empty()
   case Complete(value: A)

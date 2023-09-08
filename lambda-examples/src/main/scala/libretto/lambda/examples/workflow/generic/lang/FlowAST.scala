@@ -2,6 +2,8 @@ package libretto.lambda.examples.workflow.generic.lang
 
 import libretto.lambda.{Shuffled, SymmetricSemigroupalCategory}
 
+import scala.concurrent.duration.FiniteDuration
+
 sealed trait FlowAST[Op[_, _], A, B] {
   import FlowAST.*
 
@@ -34,10 +36,15 @@ object FlowAST {
   case class Prj1[Op[_, _], A, B]() extends Work[Op, A ** B, A]
   case class Prj2[Op[_, _], A, B]() extends Work[Op, A ** B, B]
   case class Dup[Op[_, _], A]() extends Work[Op, A, A ** A]
+  case class InjectL[Op[_, _], A, B]() extends Work[Op, A, A ++ B]
+  case class InjectR[Op[_, _], A, B]() extends Work[Op, B, A ++ B]
   case class Either[Op[_, _], A, B, C](f: FlowAST[Op, A, C], g: FlowAST[Op, B, C]) extends Work[Op, A ++ B, C]
   case class DistributeLR[Op[_, _], A, B, C]() extends Work[Op, A ** (B ++ C), (A ** B) ++ (A ** C)]
+  case class DoWhile[Op[_, _], A, B](f: FlowAST[Op, A, A ++ B]) extends Work[Op, A, B]
+  case class Delay[Op[_, _], A](duration: FiniteDuration) extends Work[Op, A, A]
 
   case class Promise[Op[_, _], A]() extends Work[Op, Unit, PromiseRef[A] ** A]
+  case class IsComplete[Op[_, _], A]() extends Work[Op, PromiseRef[A], Unit ++ Unit]
 
   case class DomainAction[Op[_, _], A, B](action: Op[A, B]) extends Work[Op, A, B]
 

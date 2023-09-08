@@ -1,6 +1,9 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
-import workflows.Flow.promise
+import libretto.lambda.examples.workflow.generic.lang.{**, PromiseRef, Promised}
+import workflows.Flow.{delay, doWhile, injectL, injectR, isComplete, promise}
+
+import scala.concurrent.duration.*
 
 val backgroundCheck: Flow[EmailAddress, Report] =
   Flow { candidate =>
@@ -21,6 +24,17 @@ def askForAcceptance: Flow[EmailAddress, CandidateResponse] =
     returning(
       response,
       sendAcceptanceRequest(emailAddr ** responseEndpoint),
+    )
+  }
+
+def requestAcceptance: Flow[EmailAddress ** PromiseRef[CandidateResponse], Unit] =
+  doWhile { case addr ** ref =>
+    returning(
+      switch (isComplete(delay(1.day)(ref))) {
+        case Left(_) => injectL(addr ** ref)
+        case Right(_)  => injectR(unit)
+      },
+      sendAcceptanceRequest(addr ** ref),
     )
   }
 
