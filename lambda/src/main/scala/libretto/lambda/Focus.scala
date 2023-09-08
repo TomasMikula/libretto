@@ -19,8 +19,10 @@ sealed trait Focus[|*|[_, _], F[_]] {
 
 object Focus {
   case class Id[|*|[_, _]]() extends Focus[|*|, [x] =>> x]
-  case class Fst[|*|[_, _], F[_], B](i: Focus[|*|, F]) extends Focus[|*|, [x] =>> F[x] |*| B]
-  case class Snd[|*|[_, _], F[_], A](i: Focus[|*|, F]) extends Focus[|*|, [x] =>> A |*| F[x]]
+
+  sealed trait Proper[|*|[_, _], F[_]] extends Focus[|*|, F]
+  case class Fst[|*|[_, _], F[_], B](i: Focus[|*|, F]) extends Proper[|*|, [x] =>> F[x] |*| B]
+  case class Snd[|*|[_, _], F[_], A](i: Focus[|*|, F]) extends Proper[|*|, [x] =>> A |*| F[x]]
 
   def id[|*|[_, _]]: Focus[|*|, [x] =>> x] =
     Id()
