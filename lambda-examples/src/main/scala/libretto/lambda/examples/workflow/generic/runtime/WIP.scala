@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{Capture, Unzippable}
+import libretto.lambda.{Capture, Shuffled, Unzippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, FlowAST}
 import libretto.lambda.examples.workflow.generic.runtime.WIP.Irreducible.PartialResult
 import libretto.lambda.util.SourcePos
@@ -42,7 +42,11 @@ object WIP {
 
   type Closure[Action[_, _], Val[_], A, B] = FlowAST[PartiallyAppliedAction[Action, Val, _, _], A, B]
   object Closure {
-    def ssc[Action[_, _], Val[_]] = summon[libretto.lambda.SymmetricSemigroupalCategory[Closure[Action, Val, _, _], **]]
+    def ssc[Action[_, _], Val[_]] =
+      summon[libretto.lambda.SymmetricSemigroupalCategory[Closure[Action, Val, _, _], **]]
+
+    def shuffled[Action[_, _], Val[_]]: Shuffled[FlowAST.Work[PartiallyAppliedAction[Action, Val, _, _], _, _], **] =
+      FlowAST.shuffled
 
     def pure[Action[_, _], Val[_], A, B](f: FlowAST[Action, A, B]): Closure[Action, Val, A, B] =
       f.translate([x, y] => (f: Action[x, y]) => PartiallyAppliedAction.pure[Action, Val, x, y](f))
