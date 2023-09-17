@@ -232,11 +232,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
   /** Multiple expression trees. */
   type Forest[A] = Tupled[Expr, A]
 
-  override def eliminateLocalVariables[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Abstracted[A, B] =
+  override def eliminateLocalVariables[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Delambdified[A, B] =
     eliminateLocalVariablesFromForest(boundVar, Tupled.atom(expr))
 
-  def eliminateLocalVariablesFromForest[A, B](boundVar: Var[A], exprs: Forest[B])(using Context): Abstracted[A, B] = {
-    import Lambdas.Abstracted.{Closure, Exact, Failure}
+  def eliminateLocalVariablesFromForest[A, B](boundVar: Var[A], exprs: Forest[B])(using Context): Delambdified[A, B] = {
+    import Lambdas.Delambdified.{Closure, Exact, Failure}
 
     extractFunctionFromForest(boundVar, exprs) match {
       case Closure(y, f) => // eliminate all constant expressions from captured expressions
@@ -252,7 +252,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
               captured: Tupled[Expr, Y],
               f: AbstractFun[Y |*| A, B],
               alreadyEliminated: Var.Set[V],
-            ): (Abstracted[A, B], Var.Set[V]) =
+            ): (Delambdified[A, B], Var.Set[V]) =
               boundary match {
                 case Bin.Leaf(Left(v)) =>
                   if (alreadyEliminated containsVar v)
@@ -312,8 +312,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
     exprs: Forest[B],
   )(using
     Context,
-  ): Abstracted[A, B] = {
-    import Lambdas.Abstracted.{Closure, Exact, Failure}
+  ): Delambdified[A, B] = {
+    import Lambdas.Delambdified.{Closure, Exact, Failure}
     import HybridArrow.LinearRes
 
     eliminateFromForest(boundVar, exprs) match {
@@ -340,7 +340,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
   )(using
     Context,
   ): EliminatedFromForest[A, B] = {
-    import Lambdas.Abstracted.{Closure, Exact, Failure}
+    import Lambdas.Delambdified.{Closure, Exact, Failure}
     import EliminatedFromForest.{FoundEach, FoundSome, NotFound}
     import libretto.lambda.{CapturingFun as cf}
 

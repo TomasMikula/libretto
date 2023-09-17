@@ -123,9 +123,9 @@ object Fun {
         [X, Y] => (fx: Fun[X, C], fy: Fun[Y, C]) => either(fx, fy),
         [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
       ) match {
-        case Lambdas.Abstracted.Exact(f)      => f(ab)
-        case Lambdas.Abstracted.Closure(x, f) => lambdas.Expr.mapTupled(x zip Tupled.atom(ab), f)(VarDesc("switch with captured expressions", pos))
-        case Lambdas.Abstracted.Failure(e)    => raiseError(e)
+        case Lambdas.Delambdified.Exact(f)      => f(ab)
+        case Lambdas.Delambdified.Closure(x, f) => lambdas.Expr.mapTupled(x zip Tupled.atom(ab), f)(VarDesc("switch with captured expressions", pos))
+        case Lambdas.Delambdified.Failure(e)    => raiseError(e)
       }
     }
   }
@@ -142,17 +142,17 @@ object Fun {
     def apply[A, B](using pos: SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
     ): Fun[A, B] = {
-      lambdas.absTopLevel(VarDesc("The variable bound by lambda expression", pos), f) match
-        case Lambdas.Abstracted.Exact(f) =>
+      lambdas.delambdifyTopLevel(VarDesc("The variable bound by lambda expression", pos), f) match
+        case Lambdas.Delambdified.Exact(f) =>
           f.fold
-        case Lambdas.Abstracted.Closure(captured, f) =>
+        case Lambdas.Delambdified.Closure(captured, f) =>
           throw RuntimeException(
             s"Lambda expression at ${pos.filename}:${pos.line} " +
               s"is not allowed to capture variables from an outer scope.\n" +
               s"Captured:\n" +
               printVars(lambdas.Expr.initialVars(captured))
           )
-        case Lambdas.Abstracted.Failure(e) =>
+        case Lambdas.Delambdified.Failure(e) =>
           raiseError(e)
     }
 

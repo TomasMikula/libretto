@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.lang
 
 import libretto.lambda.{Lambdas, Sink}
-import libretto.lambda.Lambdas.Abstracted
+import libretto.lambda.Lambdas.Delambdified
 import libretto.lambda.util.SourcePos
 import libretto.lambda.Tupled
 
@@ -35,10 +35,10 @@ class Workflows[Action[_, _]] {
     )(
       f: LambdaContext ?=> Expr[A] => Expr[B],
     ): Flow[A, B] =
-      lambdas.absTopLevel(VarOrigin.LambdaAbstraction(pos), f) match {
-        case Abstracted.Exact(g) => g.fold // TODO: should return "folded" already
-        case Abstracted.Closure(x, g) => ???
-        case Abstracted.Failure(e) => throw AssertionError(e)
+      lambdas.delambdifyTopLevel(VarOrigin.LambdaAbstraction(pos), f) match {
+        case Delambdified.Exact(g) => g.fold // TODO: should return "folded" already
+        case Delambdified.Closure(x, g) => ???
+        case Delambdified.Failure(e) => throw AssertionError(e)
       }
 
     def id[A]: Flow[A, A] =
@@ -138,9 +138,9 @@ class Workflows[Action[_, _]] {
         sum = [X, Y] => (f: Flow[X, C], g: Flow[Y, C]) => Flow.either(f, g),
         distribute = [X, Y, Z] => (_: Unit) => Flow.distributeLR[X, Y, Z],
       ) match {
-        case Abstracted.Exact(g) => g(expr)
-        case Abstracted.Closure(x, g) => lambdas.Expr.mapTupled(Tupled.zip(x, Tupled.atom(expr)), g)(VarOrigin.CapturingSwitch(pos))
-        case Abstracted.Failure(e) => throw AssertionError(e)
+        case Delambdified.Exact(g) => g(expr)
+        case Delambdified.Closure(x, g) => lambdas.Expr.mapTupled(Tupled.zip(x, Tupled.atom(expr)), g)(VarOrigin.CapturingSwitch(pos))
+        case Delambdified.Failure(e) => throw AssertionError(e)
       }
 
   def unit(using SourcePos, LambdaContext): Expr[Unit] =
