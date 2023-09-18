@@ -16,3 +16,8 @@ _closed_ (function objects, higher-order functions).
 ## Examples
 
 See [lambda-examples](../lambda-examples).
+
+## Presentations
+
+**When Your DSL Needs to Support User-Defined Domain Functions.** ScalaDays 2023 [[slides](https://continuously.dev/presentations/When_your_DSL_needs_to_support_user-defined_domain_functions_20230914.pdf)]
+
