@@ -80,6 +80,7 @@ lazy val lambdaExamples = project
   )
   .settings(
     name := "libretto-lambda-examples",
+    publish / skip := true, // experimental project, do not publish
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % ScalatestVersion % Test,
