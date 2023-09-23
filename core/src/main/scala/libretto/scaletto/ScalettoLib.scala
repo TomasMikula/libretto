@@ -8,6 +8,7 @@ import scala.annotation.targetName
 import scala.concurrent.duration.*
 import scala.reflect.TypeTest
 import scala.util.Random
+import scala.annotation.nowarn
 
 object ScalettoLib {
   def apply(
@@ -117,6 +118,7 @@ class ScalettoLib[
   def delayValRandomMs[A](minMs: Int, maxMs: Int): Val[A] -⚬ Val[A] =
     delayVal(delayRandomMs(minMs, maxMs))
 
+  @nowarn("msg=match may not be exhaustive")
   def latestValue[A]: (Val[A] |*| LList[Val[A]]) -⚬ (Endless[Val[A]] |*| Done) = rec { self =>
     λ { case +(a) |*| as =>
       producing { case outAs |*| outDone =>

@@ -1,6 +1,7 @@
 package libretto
 
 import libretto.lambda.util.SourcePos
+import scala.annotation.nowarn
 
 object InvertLib {
   def apply(
@@ -54,6 +55,7 @@ class InvertLib[
     ): $[(A |*| B) |+| (A |*| B)] =
       coreLib.race[A, B](a |*| b)
 
+    @nowarn("msg=match may not be exhaustive")
     def race[B](using SourcePos, LambdaContext)(b: ??[B])(using
       Signaling.Positive[A],
       Signaling.Negative[B],

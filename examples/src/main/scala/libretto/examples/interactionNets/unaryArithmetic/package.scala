@@ -27,6 +27,7 @@ object Wire {
     def dup   : (Wire |*| Wire) -⚬ Proper = injectL ∘ injectR
     def eraser: One             -⚬ Proper = injectR
 
+    @nowarn("msg=match may not be exhaustive")
     def switchWith[A, R](
       caseZero: A -⚬ R,
       caseSucc: (A |*| Wire) -⚬ R,
@@ -192,6 +193,7 @@ object Wire {
 }
 
 import Wire.Outlet
+import scala.annotation.nowarn
 
 enum Result {
   case Zero

@@ -2,6 +2,7 @@ package libretto.lambda
 
 import libretto.lambda.util.{BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
 import libretto.lambda.util.TypeEq.Refl
+import scala.annotation.nowarn
 
 /**
  * Binary tree with leafs holding values of types `F[X]`, `F[Y]`, ...
@@ -92,6 +93,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     ) extends Partitioned[G, H, ~⚬]
   }
 
+  @nowarn("msg=type test")
   def deduplicateLeafs[->[_, _]](
     dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
   )(using
@@ -294,6 +296,7 @@ object Bin {
   case class Branch[<*>[_, _], T[_], F[_], A, B](l: Bin[<*>, T, F, A], r: Bin[<*>, T, F, B]) extends Bin[<*>, T, F, A <*> B]
   case class Leaf[<*>[_, _], T[_], F[_], A](value: F[A]) extends Bin[<*>, T, F, T[A]]
 
+  @nowarn("msg=match may not be exhaustive")
   def branchesOf[<*>[_, _], T[_], F[_], A, B](tree: Bin[<*>, T, F, A <*> B])(using
     leafIsNotBranch: [x, y, z] => (T[x] =:= (y <*> z)) => Nothing,
   )(using
@@ -311,6 +314,7 @@ object Bin {
         }
     )
 
+  @nowarn("msg=match may not be exhaustive")
   def valueOf[<*>[_, _], T[_], F[_], A](tree: Bin[<*>, T, F, T[A]])(using
     leafIsNotBranch: [x, y, z] => (T[x] =:= (y <*> z)) => Nothing,
   )(using

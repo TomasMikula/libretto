@@ -8,6 +8,7 @@ import libretto.scaletto.ScalettoExecutor
 import libretto.scaletto.impl.FreeScaletto
 import libretto.util.Async
 import scala.concurrent.ExecutionContext
+import scala.annotation.nowarn
 
 object FutureExecutor {
   def apply(
@@ -29,6 +30,7 @@ object FutureExecutor {
     override def scheduler(s: Scheduler): ExecutionParam[Unit] =
       ExecutionParams.Free.wrap(SchedulerParam(s))
 
+    @nowarn("msg=type test")
     def extract[A](pa: ExecutionParam[A]): (Option[Scheduler], A) = {
       import ExecutionParams.Free.{One, Zip, Ext}
       pa match {

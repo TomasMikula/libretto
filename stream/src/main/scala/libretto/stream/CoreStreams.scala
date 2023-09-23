@@ -2,6 +2,7 @@ package libretto.stream
 
 import libretto.{CoreDSL, CoreLib}
 import libretto.lambda.util.Exists
+import scala.annotation.nowarn
 
 object CoreStreams {
   def apply(
@@ -564,6 +565,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       val sndClosed: Source[A |+| B] -⚬ (Polled[A] |*| Done) =
         close[A |+| B] > introFst(done > Polled.empty[A])
 
+      @nowarn("msg=match may not be exhaustive")
       val bothPolled: Source[A |+| B] -⚬ (Polled[A] |*| Polled[B]) =
         λ { src =>
           poll(src) switch {
@@ -631,6 +633,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           from(onClose, onPoll)
         }
 
+        @nowarn("msg=match may not be exhaustive")
         def go1: (Ping |*| (Polled[A] |*| Source[A])) -⚬ Source[A] =
           λ { case downstreamActing |*| (as |*| bs) =>
             (as :>> notifyEither) match {
@@ -763,6 +766,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
      *  If the input source runs out of elements before the input list does,
      *  the remaining elements of the input list are returned.
      */
+    @nowarn("msg=match may not be exhaustive")
     def takeForeach[X, A]: (LList[X] |*| Source[A]) -⚬ (LList[X |*| A] |*| LList[X] |*| Done) =
       rec { takeForeach =>
         λ { case (xs |*| as) =>

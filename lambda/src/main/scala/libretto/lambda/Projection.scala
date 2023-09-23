@@ -2,6 +2,7 @@ package libretto.lambda
 
 import libretto.lambda.util.{BiInjective, Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
+import scala.annotation.nowarn
 
 sealed trait Projection[|*|[_, _], P, Q] {
   def at[F[_]](f: Focus[|*|, F]): Projection[|*|, F[P], F[Q]]
@@ -73,6 +74,8 @@ object Projection {
         switchFromPair[P1, P2, R](caseDiscardFst, caseDiscardSnd, casePar)
     }
 
+    @nowarn("msg=match may not be exhaustive")
+    @nowarn("msg=type test")
     def switchFromPair[P1, P2, R](using ev: P =:= (P1 |*| P2))(
       caseDiscardFst: (p2: Projection[|*|, P2, Q]) => R,
       caseDiscardSnd: (p1: Projection[|*|, P1, Q]) => R,

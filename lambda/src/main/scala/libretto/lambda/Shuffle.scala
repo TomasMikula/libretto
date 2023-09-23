@@ -5,6 +5,7 @@ import libretto.lambda.util.{BiInjective, Exists, TypeEq}
 import libretto.lambda.util.BiInjective.*
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.Projection.Proper
+import scala.annotation.nowarn
 
 class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
   sealed trait ~⚬[A, B] {
@@ -180,7 +181,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         }
 
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: (A1 |*| A2) =:= F[T]): ChaseFwRes[F, T, B1 |*| B2] = {
-        val res0: ChaseFwRes[F, T, X1 |*| X2] =
+        @nowarn("msg=match may not be exhaustive") val res0: ChaseFwRes[F, T, X1 |*| X2] =
           i match
             case Focus.Id() =>
               ChaseFwRes.Split(summon[T =:= F[T]] andThen ev.flip)
@@ -365,6 +366,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         override def after[F0[_]](f: [x] => Unit => F0[x] ~⚬ F[x]): ChaseFwRes[F0, X, B] =
           Transported[F0, X, G, B]([t] => (_: Unit) => f[t](()) > s[t](()), g, ev)
 
+        @nowarn("msg=match may not be exhaustive")
         override def thenSnd[B1, B2, C](f: B2 ~⚬ C)(using ev1: B =:= (B1 |*| B2)): ChaseFwRes[F, X, B1 |*| C] =
           g match {
             case Focus.Id() =>
@@ -437,6 +439,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             [t] => (_: Unit) => par(fst, s[t](())),
           )
 
+        @nowarn("msg=match may not be exhaustive")
         override def afterAssocLR[A1, A2, A3](using ev1: (A2 |*| A3) =:= A): ChaseBwRes[(A1 |*| A2) |*| A3, [x] =>> A1 |*| G[x], X] =
           f match {
             case Focus.Id() =>
@@ -459,6 +462,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               }
           }
 
+        @nowarn("msg=match may not be exhaustive")
         override def afterAssocRL[A1, A2, A3](using ev1: (A1 |*| A2) =:= A): ChaseBwRes[A1 |*| (A2 |*| A3), [x] =>> G[x] |*| A3, X] =
           f match {
             case Focus.Id() =>
@@ -481,6 +485,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               }
           }
 
+        @nowarn("msg=match may not be exhaustive")
         override def afterXI[A1, A2, A3](using ev1: (A1 |*| A3) =:= A): ChaseBwRes[A1 |*| (A2 |*| A3), [x] =>> A2 |*| G[x], X] =
           f match {
             case Focus.Id() =>
@@ -503,6 +508,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               }
             }
 
+        @nowarn("msg=match may not be exhaustive")
         override def afterIX[A1, A2, A3](using ev1: (A1 |*| A3) =:= A): ChaseBwRes[(A1 |*| A2) |*| A3, [x] =>> G[x] |*| A2, X] =
           f match {
             case Focus.Id() =>
@@ -525,6 +531,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               }
           }
 
+        @nowarn("msg=match may not be exhaustive")
         override def afterIXI1[A1, A2, A3, A4](using ev1: (A1 |*| A3) =:= A): ChaseBwRes[(A1 |*| A2) |*| (A3 |*| A4), [x] =>> G[x] |*| (A2 |*| A4), X] =
           f match {
             case Focus.Id() =>
@@ -681,6 +688,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       }}}}
     }
 
+    @nowarn("msg=match may not be exhaustive")
     def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: (X1 |*| X2) =:= F[T]): ChaseFwRes[F, T, Y1 |*| Y2] =
       i match {
         case Focus.Id() =>
@@ -715,6 +723,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           }
       }
 
+    @nowarn("msg=match may not be exhaustive")
     def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (Y1 |*| Y2) =:= G[T]): ChaseBwRes[X1 |*| X2, G, T] =
       i match {
         case Focus.Id() =>
@@ -771,6 +780,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     def chaseBwFst[G[_], T](i: Focus[|*|, G])(using B1 =:= G[T]): ChaseBwRes[A1 |*| A2, [t] =>> G[t] |*| B2, T]
     def chaseBwSnd[G[_], T](i: Focus[|*|, G])(using B2 =:= G[T]): ChaseBwRes[A1 |*| A2, [t] =>> B1 |*| G[t], T]
 
+    @nowarn("msg=match may not be exhaustive")
     final def translate[<*>[_, _], F[_, _], S](
       fa: F[A1 |*| A2, S],
     )(
@@ -1060,6 +1070,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       }
     }
 
+    @nowarn("msg=match may not be exhaustive")
     final override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2)): ChaseFwRes[F, T, B1 |*| B2] =
       i match {
         case Focus.Id() =>
@@ -1074,6 +1085,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               chaseFwSnd[f2, T](snd.i)
       }
 
+    @nowarn("msg=match may not be exhaustive")
     final override def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2) =:= G[T]): ChaseBwRes[A1 |*| A2, G, T] =
       i match {
         case Focus.Id() =>
@@ -1320,6 +1332,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F.zip(a1, g(F.zip(a2, a3)))
       }
 
+      @nowarn("msg=match may not be exhaustive")
+      @nowarn("msg=type test")
       override def translateLR[<*>[_,_], F[_,_], S12, S3](
         fa12: F[A1 |*| A2, S12],
         fa3 : F[A3, S3],
@@ -1334,6 +1348,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         }}
       }
 
+      @nowarn("msg=match may not be exhaustive")
       override def translateRL[<*>[_, _], F[_, _], T1, T2](
         fa1: F[A1, T1],
         fb23: F[B2 |*| B3, T2],
@@ -1349,6 +1364,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                 Exists(Exists((m.pair(fa1, fa2), fa3, tgt.Transfer.AssocLR(h))))
       }
 
+      @nowarn("msg=match may not be exhaustive")
       override def chaseFwFst[F[_], T](i: Focus[|*|, F])(using
         ev: F[T] =:= (A1 |*| A2),
       ): ChaseFwRes[[t] =>> F[t] |*| A3, T, A1 |*| (B2 |*| B3)] =
@@ -1409,6 +1425,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               Xfer(assocLR[A11, A12, A2] > snd(f1), f2, AssocLR(g))
         }
 
+      @nowarn("msg=match may not be exhaustive")
       override def thenAssocRL[B21, B22, C1, C2](
         that: AssocRL[A1, B21, B22, C1, C2],
       )(using
@@ -1432,6 +1449,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           case Decomposition(f1, f2, h) => Xfer(fst(Id0(ev)) > ix > fst(f1), f2, IX(h))
         }
 
+      @nowarn("msg=match may not be exhaustive")
       override def thenXI[B21, B22, C2, C3](
         that: XI[A1, B21, B22, C2, C3],
       )(using
@@ -1582,6 +1600,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F.zip(g(F.zip(a1, a2)), a3)
       }
 
+      @nowarn("msg=match may not be exhaustive")
+      @nowarn("msg=type test")
       override def translateLR[<*>[_, _], F[_, _], S1, S23](
         fa1: F[A1, S1],
         fa23: F[A2 |*| A3, S23],
@@ -1595,6 +1615,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         Exists(Exists((tgt.Transfer.AssocRL[S1, v.X1, v.X2, e1.T, e2.T](g1), m.pair(fb1, fb2), fa3)))
         }}
 
+      @nowarn("msg=match may not be exhaustive")
       override def translateRL[<*>[_, _], F[_, _], T1, T2](
         fb12: F[B1 |*| B2, T1],
         fa3: F[A3, T2],
@@ -1616,6 +1637,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             .after([t] => (_: Unit) => assocRL[F[t], A2, A3])
         }
 
+      @nowarn("msg=match may not be exhaustive")
       override def chaseFwSnd[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A2 |*| A3)): ChaseFwRes[[t] =>> A1 |*| F[t], T, (B1 |*| B2) |*| A3] =
         i match {
           case Focus.Id() =>
@@ -1658,6 +1680,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           case Decomposition(f1, f2, h) => Xfer(f1, fst(f2) > swap, XI(h))
         }
 
+      @nowarn("msg=match may not be exhaustive")
       override def thenAssocLR[D1, D2, C2, C3](
         that: AssocLR[D1, D2, A3, C2, C3],
       )(using
@@ -1846,6 +1869,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F.zip(g(F.zip(a1, a3)), a2)
       }
 
+      @nowarn("msg=match may not be exhaustive")
+      @nowarn("msg=type test")
       override def translateLR[<*>[_, _], F[_, _], S12, S3](
         fa12: F[A1 |*| A2, S12],
         fa3: F[A3, S3],
@@ -1860,6 +1885,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               case e1 @ Exists.Some(e2 @ Exists.Some((g1, fb1, fb2))) =>
                 Exists(Exists((tgt.Transfer.IX[v.X1, v.X2, S3, e1.T, e2.T](g1), m.pair(fb1, fb2), fa2)))
 
+      @nowarn("msg=match may not be exhaustive")
       override def translateRL[<*>[_, _], F[_, _], T1, T2](
         fb12: F[B1 |*| B2, T1],
         fa2: F[A2, T2],
@@ -1874,6 +1900,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               case Exists.Some(Exists.Some((fa1, fa3, g1))) =>
                 Exists(Exists((m.pair(fa1, fa2), fa3, tgt.Transfer.IX(g1))))
 
+      @nowarn("msg=match may not be exhaustive")
       override def chaseFwFst[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2)): ChaseFwRes[[t] =>> F[t] |*| A3, T, (B1 |*| B2) |*| A2] =
         ev match { case TypeEq(Refl()) =>
           i match
@@ -2116,6 +2143,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F.zip(a2, g(F.zip(a1, a3)))
       }
 
+      @nowarn("msg=match may not be exhaustive")
+      @nowarn("msg=type test")
       override def translateLR[<*>[_, _], F[_, _], S1, S23](
         fa1: F[A1, S1],
         fa23: F[A2 |*| A3, S23],
@@ -2130,6 +2159,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               case e1 @ Exists.Some(e2 @ Exists.Some((g1, fb2, fb3))) =>
                 Exists(Exists((tgt.Transfer.XI[S1, v.X1, v.X2, e1.T, e2.T](g1), fa2, m.pair(fb2, fb3))))
 
+      @nowarn("msg=match may not be exhaustive")
       override def translateRL[<*>[_, _], F[_, _], T1, T2](
         fb1: F[A2, T1],
         fb23: F[B2 |*| B3, T2],
@@ -2154,12 +2184,13 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           ).thenSnd[A2, A1 |*| A3, B2 |*| B3](g.asShuffle)
         }
 
+      @nowarn("msg=match may not be exhaustive")
       override def chaseFwSnd[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A2 |*| A3)): ChaseFwRes[[t] =>> A1 |*| F[t], T, A2 |*| (B2 |*| B3)] =
         i match {
           case Focus.Id() =>
             ChaseFwRes.Split(ev)
           case i: Focus.Fst[pair, f1, z] =>
-            (summon[(f1[T] |*| z) =:= F[T]] andThen ev)                                               match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+            (summon[(f1[T] |*| z) =:= F[T]] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
               type G[t] = A1 |*| (f1[t] |*| A3)
               type H[t] = f1[t] |*| (B2 |*| B3)
               ChaseFwRes.Transported[G, T, H, A2 |*| (B2 |*| B3)](
@@ -2169,7 +2200,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               )
             }
           case i: Focus.Snd[pair, f2, z] =>
-            (summon[(z |*| f2[T]) =:= F[T]] andThen ev)                                               match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
+            (summon[(z |*| f2[T]) =:= F[T]] andThen ev) match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
               g.chaseFw[[x] =>> A1 |*| f2[x], T](i.i.inSnd[A1])
                 .inSnd[A2]
                 .after([x] => (_: Unit) => xi[A1, A2, f2[x]])
@@ -2207,6 +2238,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               Xfer(f1, assocLR[A21, A22, A3] > snd(f2), XI(g))
         }
 
+      @nowarn("msg=match may not be exhaustive")
       override def thenAssocRL[B2_, B3_, C1, C2](
         that: AssocRL[A2, B2_, B3_, C1, C2],
       )(using
@@ -2234,6 +2266,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               Xfer(f1, ix[A21, A22, A3] > fst(f2), AssocRL(h))
         }
 
+      @nowarn("msg=match may not be exhaustive")
       override def thenXI[B2_, B3_, C2, C3](
         that: XI[A2, B2_, B3_, C2, C3],
       )(using
@@ -2248,6 +2281,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                 t.xi_this_xi(that)
         }
 
+      @nowarn("msg=match may not be exhaustive")
       override def thenIXI[B11, B12, B21, B22, C1, C2, C3, C4](
         that: IXI[B11, B12, B21, B22, C1, C2, C3, C4]
       )(using
@@ -2414,6 +2448,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F.zip(g1(F.zip(a1, a3)), g2(F.zip(a2, a4)))
       }
 
+      @nowarn("msg=match may not be exhaustive")
       override def translateLR[<*>[_, _], F[_, _], S1, S2](
         fa12: F[A1 |*| A2, S1],
         fa34: F[A3 |*| A4, S2],
@@ -2433,6 +2468,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         )))
         }}}}
 
+      @nowarn("msg=match may not be exhaustive")
       override def translateRL[<*>[_, _], F[_, _], T1, T2](
         fb12: F[B1 |*| B2, T1],
         fb34: F[B3 |*| B4, T2],
@@ -2451,6 +2487,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                       case Exists.Some(Exists.Some((fa2, fa4, h2))) =>
                         Exists(Exists((m.pair(fa1, fa2), m.pair(fa3, fa4), tgt.Transfer.IXI(h1, h2))))
 
+      @nowarn("msg=match may not be exhaustive")
       override def chaseFwFst[F[_], T](i: Focus[|*|, F])(using
         ev: F[T] =:= (A1 |*| A2),
       ): ChaseFwRes[[t] =>> F[t] |*| (A3 |*| A4), T, B1 |*| B2 |*| (B3 |*| B4)] =
@@ -2471,6 +2508,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   .after([t] => (_: Unit) => ixi[A1, f2[t], A3, A4])
         }
 
+      @nowarn("msg=match may not be exhaustive")
       override def chaseFwSnd[F[_], T](i: Focus[|*|, F])(using
         ev: F[T] =:= (A3 |*| A4),
       ): ChaseFwRes[[t] =>> A1 |*| A2 |*| F[t], T, B1 |*| B2 |*| (B3 |*| B4)] =
@@ -2538,6 +2576,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             t.ixi_sndThis_assocRL(g1, that)
         }
 
+      @nowarn("msg=match may not be exhaustive")
       override def thenIX[B1_, B2_, C1, C2](
         that: IX[B1_, B2_, B3 |*| B4, C1, C2],
       )(using

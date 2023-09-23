@@ -4,6 +4,7 @@ import libretto.lambda.Lambdas.Error
 import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.lambda.util.{Applicative, BiInjective, Exists, UniqueTypeArg}
 import scala.annotation.targetName
+import scala.annotation.nowarn
 
 trait Lambdas[-⚬[_, _], |*|[_, _], V] {
   final type Tupled[F[_], A] = libretto.lambda.Tupled[|*|, F, A]
@@ -146,6 +147,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     Context,
   ): AbsRes[A, B]
 
+  @nowarn("msg=match may not be exhaustive")
   protected def switchImpl[<+>[_, _], A, B](
     cases: Sink[VFun, <+>, A, B],
     sum: [X, Y] => (X -⚬ B, Y -⚬ B) => (X <+> Y) -⚬ B,
