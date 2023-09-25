@@ -18,9 +18,16 @@ enum Input[Val[_], A]:
     import FindValueRes.*
 
     this match
-      case Ready(value) => ???
+      case Ready(value) =>
+        Found(Spine.Id(), value, summon)
       case Awaiting(value) => ???
       case Zip(a1, a2) => ???
+
+  def isPartiallyReady: Boolean =
+    this match
+      case Ready(value)    => true
+      case Awaiting(value) => false
+      case Zip(a1, a2)     => a1.isPartiallyReady || a2.isPartiallyReady
 
 
 object Input {

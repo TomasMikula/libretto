@@ -1,5 +1,6 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
+import libretto.lambda.examples.workflow.generic.runtime.{WorkflowInProgress => WIP}
 import libretto.lambda.examples.workflow.generic.lang.FlowAST
 import scala.collection.mutable
 

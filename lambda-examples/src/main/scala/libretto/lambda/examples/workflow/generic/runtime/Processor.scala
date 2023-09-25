@@ -2,6 +2,7 @@ package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.Unzippable
 import libretto.lambda.examples.workflow.generic.lang.**
+import libretto.lambda.examples.workflow.generic.runtime.{WorkflowInProgress => WIP}
 import libretto.lambda.util.SourcePos
 
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
@@ -46,17 +47,21 @@ private[runtime] class Processor[Action[_, _], Val[_]](
       case CrankRes.Progressed(w1)  => Some(w1)
 
   private def crank[A](w: WIP[Action, Val, A]): CrankRes[A] =
-    w.crank match
-      case WIP.CrankRes.AlreadyIrreducible(w) =>
+    w match
+      case w @ WIP.Completed(_) =>
         CrankRes.AlreadyIrreducible(w)
-      case WIP.CrankRes.Progressed(w) =>
-        CrankRes.Progressed(w)
-      case ask: WIP.CrankRes.Ask[action, val_, x, a] =>
-        val promiseId = persistor.promise[x]
-        val w1 = ask.cont(promiseId)
-        CrankRes.Progressed(w1)
-      case WIP.CrankRes.ActionRequest(input, action, cont) =>
-        throw NotImplementedError(s"at ${summon[SourcePos]}")
+      case w: WIP.Incomplete[op, v, a] =>
+        w.crank match
+          case WIP.CrankRes.AlreadyStuck(w) =>
+            CrankRes.AlreadyIrreducible(w)
+          case WIP.CrankRes.Progressed(w) =>
+            CrankRes.Progressed(w)
+          // case ask: WIP.CrankRes.Ask[action, val_, x, a] =>
+          //   val promiseId = persistor.promise[x]
+          //   val w1 = ask.cont(promiseId)
+          //   CrankRes.Progressed(w1)
+          // case WIP.CrankRes.ActionRequest(input, action, cont) =>
+          //   throw NotImplementedError(s"at ${summon[SourcePos]}")
 
     // w match {
     //   case w: WIP.Irreducible[Action, Val, A] =>
@@ -81,7 +86,7 @@ private[runtime] class Processor[Action[_, _], Val[_]](
     // }
 
   private enum CrankRes[A]:
-    case AlreadyIrreducible(w: WIP.Irreducible[Action, Val, A])
+    case AlreadyIrreducible(w: WIP[Action, Val, A])
     case Progressed(w: WIP[Action, Val, A])
 }
 

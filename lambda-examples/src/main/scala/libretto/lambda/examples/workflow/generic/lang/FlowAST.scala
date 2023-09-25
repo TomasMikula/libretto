@@ -20,7 +20,15 @@ sealed trait FlowAST[Op[_, _], A, B] {
     }
 
   def toShuffled(using shuffled: Shuffled[FlowAST.Work[Op, _, _], **]): shuffled.Shuffled[A, B] =
-    ???
+    this match
+      case Id()                    => shuffled.id
+      case AndThen(f, g)           => f.toShuffled > g.toShuffled
+      case _: AssocLR[op, x, y, z] => shuffled.assocLR[x, y, z]
+      case _: AssocRL[op, x, y, z] => shuffled.assocRL[x, y, z]
+      case Par(f1, f2)             => shuffled.par(f1.toShuffled, f2.toShuffled)
+      case _: Swap[op, x, y]       => shuffled.swap[x, y]
+      case f: Work[Op, A, B]       => shuffled.lift(f)
+
 }
 
 object FlowAST {
