@@ -121,8 +121,8 @@ object WorkflowInProgress {
     import sh.ChaseFwRes.*
 
     cont.toShuffled.chaseFw(remainingInput.focus) match
-      case Transported(s, g, ev) =>
-        accumulateResult(value, resultAcc.from(using ev), g, remainingInput, s)
+      case Transported(s, ev) =>
+        accumulateResult(value, resultAcc.from(using ev), remainingInput, s)
       case Split(ev1) =>
         // split value and continue with a half
         throw NotImplementedError(s"at ${summon[SourcePos]}")
@@ -147,7 +147,6 @@ object WorkflowInProgress {
   )(
     newResult: Value[Val, A],
     resultAcc: Capture[**, Value[Val, _], G[A], B],
-    g: Focus[**, G],
     remainingInput: Spine[**, Input[Val, _], F],
     cont: sh.Punched[F, G],
   ): CrankRes[Action, Val, B] =

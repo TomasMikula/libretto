@@ -1045,10 +1045,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
       import shOp.ChaseBwRes
 
       t.chaseBw(G) match {
-        case ChaseBwRes.Transported(_, _, _) =>
+        case ChaseBwRes.Transported(_, _) =>
           None
         case r: ChaseBwRes.OriginatesFrom[a, f, v, w, x, g] =>
-          pullBump(r.pre, r.f, r.post, op)(r.i, r.w, D)
+          pullBump(r.pre, r.f, r.post.plug, op)(r.i, r.w, D)
             .map(_ > shOp.absorbSnd(G))
         case ChaseBwRes.Split(ev) =>
           varIsNotPair(ev)
@@ -1157,7 +1157,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
       t.chaseFw(F) match {
         case r: shOp.ChaseFwRes.FedTo[f, x, v, w, g, b] =>
           pushBump(r.pre.plug, r.f, r.post, op)(r.v, r.g, D)
-        case shOp.ChaseFwRes.Transported(_, _, _) =>
+        case shOp.ChaseFwRes.Transported(_, _) =>
           None
         case shOp.ChaseFwRes.Split(_) =>
           bug(s"Unexpected pair of expressions fed to $op")
