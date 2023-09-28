@@ -1156,7 +1156,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
     ): Option[Tail[F[Var[X]], B |*| Y]] =
       t.chaseFw(F) match {
         case r: shOp.ChaseFwRes.FedTo[f, x, v, w, g, b] =>
-          pushBump(r.pre(()), r.f, r.post, op)(r.v, r.g, D)
+          pushBump(r.pre.plug, r.f, r.post, op)(r.v, r.g, D)
         case shOp.ChaseFwRes.Transported(_, _, _) =>
           None
         case shOp.ChaseFwRes.Split(_) =>

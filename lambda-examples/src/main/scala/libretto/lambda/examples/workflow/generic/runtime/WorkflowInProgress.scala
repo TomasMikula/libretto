@@ -79,7 +79,7 @@ object WorkflowInProgress {
         throw NotImplementedError(s"at ${summon[SourcePos]}")
       case r: FedTo[f, x, v, w, g, b] => //(pre, v, f, g, post) =>
         def go[X, V[_], G[_], W](
-          pre: [x] => Unit => sh.Shuffled[F[x], G[V[x]]],
+          pre: sh.Punched[F, [x] =>> G[V[x]]],
           v: Focus[**, V],
           f: FlowAST.Work[WIP.PartiallyAppliedAction[Action, Val, *, *], V[X], W],
           g: Focus[**, G],
@@ -100,7 +100,7 @@ object WorkflowInProgress {
     resultAcc: Capture[**, Value[Val, _], G[A], B],
     g: Focus[**, G],
     remainingInput: Spine[**, Input[Val, _], F],
-    cont: [x] => Unit => sh.Shuffled[F[x], G[x]],
+    cont: sh.Punched[F, G],
   ): CrankRes[Action, Val, B] =
     // feed `value` into `resultAcc`
     throw NotImplementedError(s"at ${summon[SourcePos]}")
