@@ -74,6 +74,11 @@ object WorkflowInProgress {
     def shuffled[Action[_, _], Val[_]]: Shuffled[Action, Val] =
       FlowAST.shuffled
 
+    def fromShuffled[Action[_, _], Val[_], A, B](using sh: Shuffled[Action, Val])(
+      f: sh.Shuffled[A, B],
+    ): Closure[Action, Val, A, B] =
+      FlowAST.fromShuffled(f)
+
     def pure[Action[_, _], Val[_], A, B](f: FlowAST[Action, A, B]): Closure[Action, Val, A, B] =
       f.translate([x, y] => (f: Action[x, y]) => PartiallyAppliedAction.pure[Action, Val, x, y](f))
 
@@ -126,20 +131,32 @@ object WorkflowInProgress {
       case Split(ev1) =>
         // split value and continue with a half
         throw NotImplementedError(s"at ${summon[SourcePos]}")
-      case r: FedTo[f, x, v, w, g, b] => //(pre, v, f, g, post) =>
-        def go[X, V[_], G[_], W](
+      case r: FedTo[f, a, v, w, g, b] =>
+        def go[V[_], G[_], W](
           pre: sh.Punched[F, [x] =>> G[V[x]]],
           v: Focus[**, V],
-          f: Closure.Work[Action, Val, V[X], W],
+          f: Closure.Work[Action, Val, V[A], W],
           g: Focus[**, G],
           post: sh.Shuffled[G[W], B]
         ): CrankRes[Action, Val, C] =
-          // depending on `v`, either
-          //  - capture value and call it progress; or
-          //  - ask for action execution
-          throw NotImplementedError(s"$r (at ${summon[SourcePos]})")
+          f match
+            case FlowAST.Dup() =>
+              v match
+                case Focus.Id() =>
+                  val i = Input.Ready(value)
+                  val input = remainingInput.plugFold(Input.Zip(i, i))
+                  val pre1  = pre.plug[A ** A]
+                  val cont1 = Closure.fromShuffled(pre1 > post)
+                  CrankRes.Progressed(IncompleteImpl(input, cont1, resultAcc))
+                case Focus.Fst(i) =>
+                  throw NotImplementedError(s"at ${summon[SourcePos]}")
+                case Focus.Snd(i) =>
+                  throw NotImplementedError(s"at ${summon[SourcePos]}")
 
-        go[x, v, g, w](r.pre, r.v, r.f, r.g, r.post)
+            case other =>
+              throw NotImplementedError(s"$other (at ${summon[SourcePos]})")
+
+        go[v, g, w](r.pre, r.v, r.f, r.g, r.post)
   }
 
   private def accumulateResult[Action[_, _], Val[_], F[_], G[_], A, B](using

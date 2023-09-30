@@ -1,8 +1,9 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.Spine
+import libretto.lambda.{Spine, Zippable}
 import libretto.lambda.examples.workflow.generic.lang.**
-
+import libretto.lambda.util.TypeEq
+import libretto.lambda.util.TypeEq.{Refl, *}
 
 enum Input[Val[_], A]:
   import Input.*
@@ -20,8 +21,18 @@ enum Input[Val[_], A]:
     this match
       case Ready(value) =>
         Found(Spine.Id(), value, summon)
-      case Awaiting(value) => ???
-      case Zip(a1, a2) => ???
+      case Awaiting(value) =>
+        ???
+      case z: Zip[v, a1, a2] =>
+        z.a1.findValue match
+          case NotFound(awaiting1) =>
+            z.a2.findValue match
+              case NotFound(awaiting2) =>
+                NotFound(awaiting1 ** awaiting2)
+              case Found(path, value, ev) =>
+                Found(path.inSnd(z.a1), value, ev.inSnd)
+          case Found(path, value, ev) =>
+            Found(path.inFst(z.a2), value, ev.inFst)
 
   def isPartiallyReady: Boolean =
     this match
@@ -38,6 +49,10 @@ object Input {
       value: Value[Val, X],
       ev: F[X] =:= A,
     ) extends FindValueRes[Val, A]
+
+  given zippableInput[Val[_]]: Zippable[**, Input[Val, _]] with
+    override def zip[A, B](fa: Input[Val, A], fb: Input[Val, B]): Input[Val, A ** B] =
+      Input.Zip(fa, fb)
 }
 
 enum AwaitedValues[Val[_], A]:
@@ -46,4 +61,7 @@ enum AwaitedValues[Val[_], A]:
     a1: AwaitedValues[Val, A1],
     a2: AwaitedValues[Val, A2],
   ) extends AwaitedValues[Val, A1 ** A2]
+
+  def **[B](that: AwaitedValues[Val, B]): AwaitedValues[Val, A ** B] =
+    Zip(this, that)
 

@@ -67,4 +67,11 @@ object FlowAST {
 
   def shuffled[Op[_, _]]: Shuffled[Work[Op, _, _], **] =
     Shuffled[Work[Op, _, _], **]
+
+  def fromShuffled[Op[_, _], A, B](using
+    shuffled: Shuffled[FlowAST.Work[Op, _, _], **],
+  )(
+    f: shuffled.Shuffled[A, B],
+  ): FlowAST[Op[_, _], A, B] =
+    f.foldMap[FlowAST[Op, _, _]]([x, y] => (w: Work[Op, x, y]) => w)
 }

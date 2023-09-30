@@ -2892,10 +2892,6 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
   extension [A, B](ev: A =:= B) {
     def zip[C, D](that: C =:= D): (A |*| C) =:= (B |*| D) =
-      that.substituteCo[[x] =>> (A |*| C) =:= (B |*| x)](
-        ev.substituteCo[[x] =>> (A |*| C) =:= (x |*| C)](
-          summon[(A |*| C) =:= (A |*| C)]
-        )
-      )
+      TypeEq.zip(ev)(that)
   }
 }
