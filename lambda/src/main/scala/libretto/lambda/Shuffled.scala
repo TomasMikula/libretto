@@ -34,7 +34,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     def after[Z](that: Shuffled[Z, A]): Shuffled[Z, B]
     def thenShuffle[C](that: B ~⚬ C): Shuffled[A, C]
     def afterShuffle[Z](that: Z ~⚬ A): Shuffled[Z, B]
-    def fold(using SymmetricSemigroupalCategory[->, |*|]): A -> B
+    def foldMap[->>[_, _]](f: [x, y] => (x -> y) => (x ->> y))(using SymmetricSemigroupalCategory[->>, |*|]): A ->> B
     def inFst[Y]: Shuffled[A |*| Y, B |*| Y]
     def inSnd[X]: Shuffled[X |*| A, X |*| B]
     def unconsSome: UnconsSomeRes[A, B]
@@ -63,6 +63,9 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     def >[C](that: Shuffled[B, C]): Shuffled[A, C] =
       that after this
+
+    def fold(using SymmetricSemigroupalCategory[->, |*|]): A -> B =
+      foldMap[->]([x, y] => (f: x -> y) => f)
 
     def at[F[_]](f: Focus[|*|, F]): Shuffled[F[A], F[B]] =
       f match {
@@ -114,8 +117,12 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     override def afterShuffle[Z](k: Z ~⚬ A): Shuffled[Z, B] =
       Impermeable(k > l, m, r)
 
-    override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B = {
-      val (f, g, h) = (l.fold, m.fold, r.fold)
+    override def foldMap[->>[_, _]](
+      tr: [x, y] => (x -> y) => (x ->> y),
+    )(using
+      ev: SymmetricSemigroupalCategory[->>, |*|],
+    ): A ->> B = {
+      val (f, g, h) = (l.fold, m.foldMap(tr), r.fold)
       ev.andThen(f, ev.andThen(g, h))
     }
 
@@ -207,7 +214,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     override def afterShuffle[Z](r: Z ~⚬ A): Shuffled[Z, B] =
       Pure(r > s)
 
-    override def fold(using SymmetricSemigroupalCategory[->, |*|]): A -> B =
+    override def foldMap[->>[_,_]](f: [x, y] => (x -> y) => (x ->> y))(using SymmetricSemigroupalCategory[->>, |*|]): A ->> B =
       s.fold
 
     override def inFst[Y]: Shuffled[A |*| Y, B |*| Y] =
@@ -298,8 +305,10 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     override def afterShuffle[Z](that: Z ~⚬ A): Shuffled[Z, B1 |*| B2] =
       SemiObstructed(that > left, bottom1, bottom2, right)
 
-    override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> (B1 |*| B2) = {
-      val (f, g, h, i) = (left.fold, bottom1.fold, bottom2.fold, right.fold)
+    override def foldMap[->>[_,_]](tr: [x, y] => (x: x -> y) => ->>[x, y])(using
+      ev: SymmetricSemigroupalCategory[->>, |*|],
+    ): A ->> (B1 |*| B2) = {
+      val (f, g, h, i) = (left.fold, bottom1.foldMap(tr), bottom2.fold, right.fold)
       ev.andThen(f, ev.andThen(ev.snd(ev.andThen(g, h)), i))
     }
 
@@ -391,7 +400,15 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     def asShuffled: Shuffled[A, B] =
       impermeable
 
-    def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B
+
+    def foldMap[->>[_, _]](
+      tr: [x, y] => (x -> y) => (x ->> y),
+    )(using
+      ev: SymmetricSemigroupalCategory[->>, |*|],
+    ): A ->> B
+
+    def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B =
+      foldMap([x, y] => (f: x -> y) => f)
 
     def unconsSome: Plated.UnconsSomeRes[A, B]
 
@@ -517,8 +534,10 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     }
 
     case class Solid[A, B](f: A -> B) extends Plated[A, B] {
-      override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B =
-        f
+      override def foldMap[->>[_,_]](tr: [x, y] => (x -> y) => ->>[x, y])(using
+        ev: SymmetricSemigroupalCategory[->>, |*|],
+      ): A ->> B =
+        tr(f)
 
       override def unconsSome: UnconsSomeRes[A, B] =
         UnconsSomeRes.Cons(Focus.id, f, id)
@@ -570,8 +589,10 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       f1: Plated[A1, B1],
       f2: Plated[A2, B2],
     ) extends BiInput[A1, A2, B1 |*| B2] with BiOutput[A1 |*| A2, B1, B2] {
-      override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2) =
-        ev.par(f1.fold, f2.fold)
+      override def foldMap[->>[_,_]](tr: [x, y] => (x -> y) => ->>[x, y])(using
+        ev: SymmetricSemigroupalCategory[->>, |*|],
+      ): (A1 |*| A2) ->> (B1 |*| B2) =
+        ev.par(f1.foldMap(tr), f2.foldMap(tr))
 
       override def unconsSome: UnconsSomeRes[A1 |*| A2, B1 |*| B2] =
         f1.unconsSome match
@@ -645,8 +666,10 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     }
 
     case class Sandwich[A, X, Y, B](l: Plated[A, X], m: X ~⚬ Y, r: Plated[Y, B]) extends Plated[A, B] {
-      override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B =
-        ev.andThen(l.fold, ev.andThen(m.fold, r.fold))
+      override def foldMap[->>[_,_]](tr: [x, y] => (x -> y) => (x ->> y))(using
+        ev: SymmetricSemigroupalCategory[->>, |*|],
+      ): A ->> B =
+        ev.andThen(l.foldMap(tr), ev.andThen(m.fold, r.foldMap(tr)))
 
       override def unconsSome: UnconsSomeRes[A, B] =
         l.unconsSome match
@@ -714,8 +737,10 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       t: TransferOpt[A1, Y2, Z1, Z2],
       tail: Plated[Z1 |*| Z2, B],
     ) extends BiInput[A1, A2, B] {
-      override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> B =
-        ev.andThen(ev.andThen(ev.snd(ev.andThen(semiHead.fold, s.fold)), t.fold), tail.fold)
+      override def foldMap[->>[_,_]](tr: [x, y] => (x -> y) => (x ->> y))(using
+        ev: SymmetricSemigroupalCategory[->>, |*|],
+      ): (A1 |*| A2) ->> B =
+        ev.andThen(ev.andThen(ev.snd(ev.andThen(semiHead.foldMap(tr), s.fold)), t.fold), tail.foldMap(tr))
 
       override def unconsSome: UnconsSomeRes[A1 |*| A2, B] =
         semiHead.unconsSome match
@@ -801,8 +826,10 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       s: Y2 ~⚬ Z2,
       semiLast: Plated[Z2, B2],
     ) extends BiOutput[A, B1, B2] {
-      override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> (B1 |*| B2) =
-        ev.andThen(init.fold, ev.andThen(t.fold, ev.snd(ev.andThen(s.fold, semiLast.fold))))
+      override def foldMap[->>[_,_]](tr: [x, y] => (x -> y) => (x ->> y))(using
+        ev: SymmetricSemigroupalCategory[->>, |*|],
+      ): A ->> (B1 |*| B2) =
+        ev.andThen(init.foldMap(tr), ev.andThen(t.fold, ev.snd(ev.andThen(s.fold, semiLast.foldMap(tr)))))
 
       override def unconsSome: UnconsSomeRes[A, B1 |*| B2] =
         init.unconsSome match
@@ -906,13 +933,15 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       rt: TransferOpt[A1, R, S1, S2],
       r: Plated[S1 |*| S2, B2],
     ) extends BiInput[A1, A2, B1 |*| B2] with BiOutput[A1 |*| A2, B1, B2] {
-      override def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2) = {
+      override def foldMap[->>[_,_]](tr: [x, y] => (x -> y) => (x ->> y))(using
+        ev: SymmetricSemigroupalCategory[->>, |*|],
+      ): (A1 |*| A2) ->> (B1 |*| B2) = {
         import ev.andThen
         andThen(
-          ev.snd(andThen(l.fold, andThen(lt.fold, ev.snd(b.fold)))),
+          ev.snd(andThen(l.foldMap(tr), andThen(lt.fold, ev.snd(b.fold)))),
           andThen(
             ev.xi,
-            ev.snd(andThen(rt.fold, r.fold)),
+            ev.snd(andThen(rt.fold, r.foldMap(tr))),
           ),
         )
       }
@@ -1051,7 +1080,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   import Plated.*
 
   case class RevTransferOpt[A1, A2, B1, B2](t: TransferOpt[B1, B2, A1, A2]) {
-    def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2) =
+    def fold[->>[_, _]](using ev: SymmetricSemigroupalCategory[->>, |*|]): (A1 |*| A2) ->> (B1 |*| B2) =
       this.asShuffle.fold
 
     def asShuffle: (A1 |*| A2) ~⚬ (B1 |*| B2) =
