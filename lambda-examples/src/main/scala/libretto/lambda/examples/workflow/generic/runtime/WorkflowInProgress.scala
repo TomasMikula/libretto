@@ -1,9 +1,9 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.examples.workflow.generic.lang.{**, FlowAST}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, given}
 import libretto.lambda.{Capture, Focus, Shuffled, Spine}
 import libretto.lambda.examples.workflow.generic.runtime.Input.FindValueRes
-import libretto.lambda.util.{SourcePos, TypeEq}
+import libretto.lambda.util.{BiInjective, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
 sealed trait WorkflowInProgress[Action[_, _], Val[_], A] {
@@ -47,26 +47,29 @@ object WorkflowInProgress {
 
   }
 
-  enum PartiallyAppliedAction[Action[_, _], Val[_], A, B]:
-    case Impl[Action[_, _], Val[_], A, X, B](
+  enum PartiallyApplied[Action[_, _], Val[_], A, B]:
+    case DomainAction[Action[_, _], Val[_], A, X, B](
       args: Capture[**, Val, A, X],
       f: Action[X, B],
-    ) extends PartiallyAppliedAction[Action, Val, A, B]
+    ) extends PartiallyApplied[Action, Val, A, B]
+    case DistLR[Action[_, _], Val[_], X, Y, Z](
+      x: Value[Val, X],
+    ) extends PartiallyApplied[Action, Val, Y ++ Z, (X ** Y) ++ (X ** Z)]
 
-  object PartiallyAppliedAction {
-    def pure[Action[_, _], Val[_], A, B](f: Action[A, B]): PartiallyAppliedAction[Action, Val, A, B] =
-      PartiallyAppliedAction.Impl(Capture.NoCapture(), f)
+  object PartiallyApplied {
+    def action[Action[_, _], Val[_], A, B](f: Action[A, B]): PartiallyApplied[Action, Val, A, B] =
+      PartiallyApplied.DomainAction(Capture.NoCapture(), f)
   }
 
   type Closure[Action[_, _], Val[_], A, B] =
-    FlowAST[PartiallyAppliedAction[Action, Val, _, _], A, B]
+    FlowAST[PartiallyApplied[Action, Val, _, _], A, B]
 
   object Closure {
     type Work[Action[_, _], Val[_], A, B] =
-      FlowAST.Work[PartiallyAppliedAction[Action, Val, _, _], A, B]
+      FlowAST.Work[PartiallyApplied[Action, Val, _, _], A, B]
 
     type Shuffled[Action[_, _], Val[_]] =
-      libretto.lambda.Shuffled[FlowAST.Work[PartiallyAppliedAction[Action, Val, _, _], _, _], **]
+      libretto.lambda.Shuffled[FlowAST.Work[PartiallyApplied[Action, Val, _, _], _, _], **]
 
     def ssc[Action[_, _], Val[_]] =
       summon[libretto.lambda.SymmetricSemigroupalCategory[Closure[Action, Val, _, _], **]]
@@ -80,7 +83,10 @@ object WorkflowInProgress {
       FlowAST.fromShuffled(f)
 
     def pure[Action[_, _], Val[_], A, B](f: FlowAST[Action, A, B]): Closure[Action, Val, A, B] =
-      f.translate([x, y] => (f: Action[x, y]) => PartiallyAppliedAction.pure[Action, Val, x, y](f))
+      f.translate([x, y] => (g: Action[x, y]) => PartiallyApplied.action[Action, Val, x, y](g))
+
+    def distLR[Action[_, _], Val[_], A, B, C](captured: Value[Val, A]): Closure[Action, Val, B ++ C, (A ** B) ++ (A ** C)] =
+      FlowAST.DomainAction(PartiallyApplied.DistLR(captured))
 
     def id[Action[_, _], Val[_], A]: Closure[Action, Val, A, A] =
       FlowAST.Id()
@@ -137,22 +143,48 @@ object WorkflowInProgress {
           v: Focus[**, V],
           f: Closure.Work[Action, Val, V[A], W],
           g: Focus[**, G],
-          post: sh.Shuffled[G[W], B]
+          post: sh.Shuffled[G[W], B],
         ): CrankRes[Action, Val, C] =
-          f match
+          f.maskInput.visit { [VA] => (f: Closure.Work[Action, Val, VA, W], ev: VA =:= V[A]) => f match
             case FlowAST.Dup() =>
+              ev match { case TypeEq(Refl()) =>
+                v match
+                  case Focus.Id() =>
+                    val i = Input.Ready(value)
+                    val input = remainingInput.plugFold(Input.Zip(i, i))
+                    val pre1  = pre.plug[A ** A]
+                    val cont1 = Closure.fromShuffled(pre1 > post)
+                    CrankRes.Progressed(IncompleteImpl(input, cont1, resultAcc))
+                  case Focus.Fst(i) =>
+                    throw NotImplementedError(s"at ${summon[SourcePos]}")
+                  case Focus.Snd(i) =>
+                    throw NotImplementedError(s"at ${summon[SourcePos]}")
+              }
+            case f1: FlowAST.DistributeLR[op, x, y, z] =>
+              summon[VA =:= (x ** (y ++ z))]
               v match
-                case Focus.Id() =>
-                  val i = Input.Ready(value)
-                  val input = remainingInput.plugFold(Input.Zip(i, i))
-                  val pre1  = pre.plug[A ** A]
-                  val cont1 = Closure.fromShuffled(pre1 > post)
-                  CrankRes.Progressed(IncompleteImpl(input, cont1, resultAcc))
-                case Focus.Fst(i) =>
-                  throw NotImplementedError(s"at ${summon[SourcePos]}")
+                case v: Focus.Fst[p, v1, yz] =>
+                  (summon[(x ** (y ++ z)) =:= VA] andThen ev andThen summon[V[A] =:= (v1[A] ** yz)]) match
+                    case BiInjective[**](TypeEq(Refl()), TypeEq(Refl())) =>
+                      distributePartLR[v1, y, z, G](pre, v.i, post, g)
                 case Focus.Snd(i) =>
-                  throw NotImplementedError(s"at ${summon[SourcePos]}")
+                  throw NotImplementedError(s"DistributeLR() at $v (at ${summon[SourcePos]})")
+                case Focus.Id() =>
+                  throw NotImplementedError(s"DistributeLR() at $v (at ${summon[SourcePos]})")
 
+            case other =>
+              throw NotImplementedError(s"$other at $v (at ${summon[SourcePos]})")
+          }
+
+        def distributePartLR[V[_], Y, Z, G[_]](
+          pre: sh.Punched[F, [a] =>> G[V[a] ** (Y ++ Z)]],
+          v: Focus[**, V],
+          post: sh.Shuffled[G[(V[A] ** Y) ++ (V[A] ** Z)], B],
+          g: Focus[**, G],
+        ): CrankRes[Action, Val, C] =
+          v match
+            case Focus.Id() =>
+              throw NotImplementedError(s"at ${summon[SourcePos]}")
             case other =>
               throw NotImplementedError(s"$other (at ${summon[SourcePos]})")
 
