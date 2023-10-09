@@ -1,5 +1,7 @@
 package libretto.lambda
 
+import libretto.lambda.util.SourcePos
+
 /** Nested tuples with a hole.
  *
  * For example, a structure
@@ -34,6 +36,17 @@ sealed trait Spine[**[_, _], G[_], F[_]] {
       case Fst(fst, snd) => fst.plugFold(a) zip snd
       case Snd(fst, snd) => fst zip snd.plugFold(a)
 
+  def knitFoldMap[H[_]](
+    k: Knit[**, F],
+    f: [x] => G[x] => H[x],
+  )(using Zippable[**, H]): H[k.Res]
+
+  def knit(k: Knit[**, F]): Tupled[**, G, k.Res] =
+    knitFoldMap[Tupled[**, G, _]](k, [x] => (gx: G[x]) => Tupled.atom(gx))
+
+  def knitFold(k: Knit[**, F])(using Zippable[**, G]): G[k.Res] =
+    knitFoldMap[G](k, [x] => (gx: G[x]) => gx)
+
   def inFst[B](b: G[B]): Spine[**, G, [x] =>> F[x] ** B] =
     Fst(this, b)
 
@@ -42,13 +55,38 @@ sealed trait Spine[**[_, _], G[_], F[_]] {
 }
 
 object Spine {
-  case class Id[|*|[_, _], G[_]]() extends Spine[|*|, G, [x] =>> x]
+  case class Id[|*|[_, _], G[_]]() extends Spine[|*|, G, [x] =>> x] {
+    override def knitFoldMap[H[_]](
+      k: Knit[|*|, [x] =>> x],
+      f: [x] => G[x] => H[x],
+    )(using Zippable[|*|, H]): H[k.Res] =
+      type Fresh
+      val ev = k.proveProduct[Fresh]
+      type A = ev.T
+      type B = ev.value.T
+      val impossible: Fresh =:= (A |*| B) = ev.value.value
+      throw AssertionError("Impossible for a fresh type to be equal to A |*| B")
+  }
+
   case class Fst[|*|[_, _], G[_], F[_], B](
     fst: Spine[|*|, G, F],
     snd: G[B],
-  ) extends Spine[|*|, G, [x] =>> F[x] |*| B]
+  ) extends Spine[|*|, G, [x] =>> F[x] |*| B] {
+    override def knitFoldMap[H[_]](
+      k: Knit[|*|, [x] =>> F[x] |*| B],
+      f: [x] => G[x] => H[x],
+    )(using Zippable[|*|, H]): H[k.Res] =
+      throw NotImplementedError(s"at ${summon[SourcePos]}")
+  }
+
   case class Snd[|*|[_, _], G[_], F[_], A](
     fst: G[A],
     snd: Spine[|*|, G, F],
-  ) extends Spine[|*|, G, [x] =>> A |*| F[x]]
+  ) extends Spine[|*|, G, [x] =>> A |*| F[x]] {
+    override def knitFoldMap[H[_]](
+      k: Knit[|*|, [x] =>> A |*| F[x]],
+      f: [x] => G[x] => H[x],
+    )(using Zippable[|*|, H]): H[k.Res] =
+      throw NotImplementedError(s"at ${summon[SourcePos]}")
+  }
 }
