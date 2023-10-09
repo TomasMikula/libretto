@@ -325,7 +325,31 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       p: Projection[|*|, B1 |*| B2, C],
       f: [P, Q, R] => (P -> Q, Projection[|*|, Q, R]) => ProjectRes[P, R],
     ): ProjectRes[A, C] =
-      UnhandledCase.raise(s"${this.getClass.getSimpleName}.project")
+      p match
+        case Projection.Id()         => ProjectRes.Projected(P.id, this)
+        case p: P.Proper[pr, b12, c] => this.projectProper(p, f)
+
+    private def projectProper[C](
+      p: Projection.Proper[|*|, B1 |*| B2, C],
+      f: [P, Q, R] => (P -> Q, Projection[|*|, Q, R]) => ProjectRes[P, R],
+    ): ProjectRes[A, C] =
+      right.projectProper(p) match
+        case res @ ~⚬.ProjectProperRes.Projected(p0, right1) =>
+          p0.fromPair[X1, Z2].switch(
+            caseDiscardFst = { p2 =>
+              bottom2.project(p2) match
+                case ~⚬.ProjectRes.Projected(q, bot2) =>
+                  bottom1.project(q, f) match
+                    case ProjectRes.Projected(q0, bot1) =>
+                      left.projectProper(P.discardFst(q0)) match
+                        case ~⚬.ProjectProperRes.Projected(r, left1) =>
+                          ProjectRes.Projected(r, Pure(left1) > bot1 > Pure(bot2) > Pure(right1))
+            },
+            caseDiscardSnd = p1 =>
+              UnhandledCase.raise(s"${this.getClass.getSimpleName}.projectProper caseDiscardSnd"),
+            casePar = [Q1, Q2] => (ev: res.X =:= (Q1 |*| Q2)) ?=> (p12: P.Par[|*|, X1, Z2, Q1, Q2]) =>
+              UnhandledCase.raise(s"${this.getClass.getSimpleName}.projectProper casePar"),
+          )
 
     override def unconsSome: UnconsSomeRes[A, B1 |*| B2] =
       bottom1.unconsSome match
@@ -1379,6 +1403,23 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         override def plug[X]: Shuffled[P |*| F[X], P |*| G[X]] = self.plug[X].inSnd
         override val focusIn = self.focusIn.inSnd[P]
         override val focusOut = self.focusOut.inSnd[P]
+
+    def knitBw(k: Knit[|*|, G]): Exists[[F0] =>> (Knitted[|*|, F, F0], Shuffled[F0, k.Res])] =
+      type FreshType
+      val f: Shuffled[F[FreshType], G[FreshType]] = this.plug[FreshType]
+      val p: Projection[|*|, G[FreshType], k.Res] = k.toProjection[FreshType]
+      f.project(
+        p,
+        [x, y, z] => (op: x -> y, q: Projection[|*|, y, z]) =>
+          throw AssertionError("Elimination of a fresh type cannot lead to projecting from operations"),
+      ) match
+        case res: ProjectRes.Projected[x, y, z] =>
+          Knitted.fromProjection(res.p) match
+            case Some(k0) =>
+              val k1: Knitted[|*|, k0.T, x] = k0.value
+              Exists((k1.asInstanceOf[Knitted[|*|, F, x]], res.f))
+            case None =>
+              throw AssertionError(s"Knitting was expected to result in a projection eliminating a single hole, got ${res.p}")
   }
 
   object Punched {

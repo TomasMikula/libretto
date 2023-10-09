@@ -1,9 +1,9 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
+import libretto.lambda.{Capture, Focus, Knitted, Shuffled, Spine}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, given}
-import libretto.lambda.{Capture, Focus, Shuffled, Spine}
 import libretto.lambda.examples.workflow.generic.runtime.Input.FindValueRes
-import libretto.lambda.util.{BiInjective, SourcePos, TypeEq}
+import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
 sealed trait WorkflowInProgress[Action[_, _], Val[_], A] {
@@ -69,7 +69,7 @@ object WorkflowInProgress {
       FlowAST.Work[PartiallyApplied[Action, Val, _, _], A, B]
 
     type Shuffled[Action[_, _], Val[_]] =
-      libretto.lambda.Shuffled[FlowAST.Work[PartiallyApplied[Action, Val, _, _], _, _], **]
+      libretto.lambda.Shuffled[Work[Action, Val, _, _], **]
 
     def ssc[Action[_, _], Val[_]] =
       summon[libretto.lambda.SymmetricSemigroupalCategory[Closure[Action, Val, _, _], **]]
@@ -177,14 +177,25 @@ object WorkflowInProgress {
           }
 
         def distributePartLR[V[_], Y, Z, G[_]](
+          // value: Value[Val, A],
+          // remainingInput: Spine[**, Input[Val, _], F],
           pre: sh.Punched[F, [a] =>> G[V[a] ** (Y ++ Z)]],
           v: Focus[**, V],
           post: sh.Shuffled[G[(V[A] ** Y) ++ (V[A] ** Z)], B],
           g: Focus[**, G],
+          // resultAcc: Capture[**, Value[Val, _], B, C],
         ): CrankRes[Action, Val, C] =
           v match
             case Focus.Id() =>
-              throw NotImplementedError(s"at ${summon[SourcePos]}")
+              summon[V[A] =:= A]
+              val k: Knitted[**, [a] =>> G[a ** (Y ++ Z)], G[Y ++ Z]] =
+                Knitted.keepSnd[**, Y ++ Z].at[G](g)
+              pre.knitBw(k) match
+                case Exists.Some((k, f)) =>
+                  val input = remainingInput.knitFold(k)
+                  val op = Closure.distLR[Action, Val, A, Y, Z](value)
+                  val post1 = op.toShuffled.at(g) > post
+                  CrankRes.Progressed(IncompleteImpl(input, Closure.fromShuffled(f > post1), resultAcc))
             case other =>
               throw NotImplementedError(s"$other (at ${summon[SourcePos]})")
 
