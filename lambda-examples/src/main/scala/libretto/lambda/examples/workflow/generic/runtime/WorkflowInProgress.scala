@@ -1,10 +1,11 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Capture, Focus, Knitted, Shuffled, Spine}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, given}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, PromiseRef, given}
 import libretto.lambda.examples.workflow.generic.runtime.Input.FindValueRes
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
+import libretto.lambda.UnhandledCase
 
 sealed trait WorkflowInProgress[Action[_, _], Val[_], A] {
   import WorkflowInProgress.*
@@ -151,7 +152,7 @@ object WorkflowInProgress {
                 v match
                   case Focus.Id() =>
                     val i = Input.Ready(value)
-                    val input = remainingInput.plugFold(Input.Zip(i, i))
+                    val input = remainingInput.plugFold(i ** i)
                     val pre1  = pre.plug[A ** A]
                     val cont1 = Closure.fromShuffled(pre1 > post)
                     CrankRes.Progressed(IncompleteImpl(input, cont1, resultAcc))
@@ -160,6 +161,7 @@ object WorkflowInProgress {
                   case Focus.Snd(i) =>
                     throw NotImplementedError(s"at ${summon[SourcePos]}")
               }
+
             case f1: FlowAST.DistributeLR[op, x, y, z] =>
               summon[VA =:= (x ** (y ++ z))]
               v match
@@ -172,8 +174,34 @@ object WorkflowInProgress {
                 case Focus.Id() =>
                   throw NotImplementedError(s"DistributeLR() at $v (at ${summon[SourcePos]})")
 
+            case FlowAST.IntroFst() =>
+              v match
+                case Focus.Id() =>
+                  ev match { case TypeEq(Refl()) =>
+                    summon[W =:= (Unit ** A)]
+                    val input = remainingInput.plugFold(Input.Ready(Value.unit) ** Input.Ready(value))
+                    CrankRes.Progressed(IncompleteImpl(input, Closure.fromShuffled(pre[Unit ** A] > post), resultAcc))
+                  }
+                case Focus.Fst(i) =>
+                  UnhandledCase.raise(s"propagateValue into $f at $v")
+                case Focus.Snd(i) =>
+                  UnhandledCase.raise(s"propagateValue into $f at $v")
+
+            case _: FlowAST.Promise[op, x] =>
+              v match
+                case Focus.Id() =>
+                  summon[W =:= (PromiseRef[x] ** x)]
+                  CrankRes.Ask { (px: PromiseId[x]) =>
+                    val input = remainingInput.plugFold(Input.Ready(Value.promiseRef(px)) ** Input.awaiting(px))
+                    IncompleteImpl(input, Closure.fromShuffled(pre[PromiseRef[x] ** x] > post), resultAcc)
+                  }
+                case Focus.Fst(i) =>
+                  UnhandledCase.raise(s"propagateValue into $f at $v")
+                case Focus.Snd(i) =>
+                  UnhandledCase.raise(s"propagateValue into $f at $v")
+
             case other =>
-              throw NotImplementedError(s"$other at $v (at ${summon[SourcePos]})")
+              UnhandledCase.raise(s"propagateValue into $other at $v")
           }
 
         def distributePartLR[V[_], Y, Z, G[_]](
@@ -216,4 +244,7 @@ object WorkflowInProgress {
   enum CrankRes[Action[_, _], Val[_], A]:
     case AlreadyStuck(w: WorkflowInProgress.Incomplete[Action, Val, A])
     case Progressed(w: WorkflowInProgress[Action, Val, A])
+    case Ask[Action[_, _], Val[_], X, A](
+      cont: PromiseId[X] => WorkflowInProgress[Action, Val, A],
+    ) extends CrankRes[Action, Val, A]
 }

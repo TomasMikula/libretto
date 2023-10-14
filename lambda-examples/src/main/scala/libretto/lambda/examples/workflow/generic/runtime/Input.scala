@@ -34,6 +34,9 @@ enum Input[Val[_], A]:
           case Found(path, value, ev) =>
             Found(path.inFst(z.a2), value, ev.inFst)
 
+  def **[B](that: Input[Val, B]): Input[Val, A ** B] =
+    Zip(this, that)
+
   def isPartiallyReady: Boolean =
     this match
       case Ready(value)    => true
@@ -42,6 +45,9 @@ enum Input[Val[_], A]:
 
 
 object Input {
+  def awaiting[Val[_], A](pa: PromiseId[A]): Input[Val, A] =
+    Awaiting(AwaitedValues.Awaiting(pa))
+
   enum FindValueRes[Val[_], A]:
     case NotFound(awaiting: AwaitedValues[Val, A])
     case Found[Val[_], F[_], X, A](

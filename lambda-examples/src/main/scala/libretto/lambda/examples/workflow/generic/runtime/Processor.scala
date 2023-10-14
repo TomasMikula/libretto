@@ -56,10 +56,10 @@ private[runtime] class Processor[Action[_, _], Val[_]](
             CrankRes.AlreadyIrreducible(w)
           case WIP.CrankRes.Progressed(w) =>
             CrankRes.Progressed(w)
-          // case ask: WIP.CrankRes.Ask[action, val_, x, a] =>
-          //   val promiseId = persistor.promise[x]
-          //   val w1 = ask.cont(promiseId)
-          //   CrankRes.Progressed(w1)
+          case ask: WIP.CrankRes.Ask[action, val_, x, a] =>
+            val promiseId = persistor.promise[x]
+            val w1 = ask.cont(promiseId)
+            CrankRes.Progressed(w1)
           // case WIP.CrankRes.ActionRequest(input, action, cont) =>
           //   throw NotImplementedError(s"at ${summon[SourcePos]}")
 

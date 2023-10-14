@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
-import libretto.lambda.examples.workflow.generic.lang.{**, PromiseRef, Promised}
+import libretto.lambda.examples.workflow.generic.lang.{**, PromiseRef}
 import workflows.Flow.{delay, doWhile, injectL, injectR, isComplete, promise}
 
 import scala.concurrent.duration.*

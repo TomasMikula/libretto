@@ -21,4 +21,3 @@ given BiInjective[**] with {
 sealed trait ++[A, B]
 
 sealed trait PromiseRef[A]
-sealed trait Promised[A]

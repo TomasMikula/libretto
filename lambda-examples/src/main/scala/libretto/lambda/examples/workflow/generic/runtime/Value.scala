@@ -1,14 +1,17 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.Unzippable
-import libretto.lambda.examples.workflow.generic.lang.**
+import libretto.lambda.examples.workflow.generic.lang.{**, PromiseRef}
 
 enum Value[F[_], A]:
   case One[F[_]]() extends Value[F, Unit]
+
   case Pair[F[_], A1, A2](
     a1: Value[F, A1],
     a2: Value[F, A2],
   ) extends Value[F, A1 ** A2]
+
+  case PromiseToComplete[F[_], A](pa: PromiseId[A]) extends Value[F, PromiseRef[A]]
 
   /** Extension point for domain-specific values. */
   case Ext(value: F[A])
@@ -27,3 +30,6 @@ object Value:
       case Ext(value) =>
         val (a, b) = F.unzip(value)
         (Ext(a), Ext(b))
+
+  def promiseRef[F[_], A](promiseId: PromiseId[A]): Value[F, PromiseRef[A]] =
+    PromiseToComplete(promiseId)
