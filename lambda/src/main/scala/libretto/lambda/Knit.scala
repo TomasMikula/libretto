@@ -1,7 +1,8 @@
 package libretto.lambda
 
 import libretto.lambda.Projection
-import libretto.lambda.util.{Exists, ExistsK, SourcePos}
+import libretto.lambda.util.{Exists, ExistsK, SourcePos, TypeEqK}
+import libretto.lambda.util.TypeEqK
 
 sealed trait Knit[**[_, _], F[_]] {
   type Res
@@ -24,6 +25,13 @@ sealed trait Knit[**[_, _], F[_]] {
         this.at(g.i).inFst[b]
       case g: Focus.Snd[p, f2, a] =>
         this.at(g.i).inSnd[a]
+
+  def visit[R](
+    caseKeepFst: [X] => (TypeEqK[F, **[X, *]], Res =:= X) => R,
+    caseKeepSnd: [Y] => (TypeEqK[F, **[*, Y]], Res =:= Y) => R,
+    caseInFst: [F1[_], Y] => (Knit[**, F1], TypeEqK[F, [x] =>> F1[x] ** Y]) => R,
+    caseInSnd: [X, F2[_]] => (Knit[**, F2], TypeEqK[F, [y] =>> X ** F2[y]]) => R,
+  ): R
 }
 
 object Knit {
@@ -35,6 +43,14 @@ object Knit {
 
     override def proveProduct[X]: Exists[[a] =>> Exists[[b] =>> A ** X =:= a ** b]] =
       Exists(Exists(summon[(A ** X) =:= (A ** X)]))
+
+    override def visit[R](
+      caseKeepFst: [X] => (TypeEqK[**[A, *], **[X, *]], Res =:= X) => R,
+      caseKeepSnd: [Y] => (TypeEqK[**[A, *], **[*, Y]], Res =:= Y) => R,
+      caseInFst: [F1[_], Y] => (Knit[**, F1], TypeEqK[**[A, *], [x] =>> F1[x] ** Y]) => R,
+      caseInSnd: [X, F2[_]] => (Knit[**, F2], TypeEqK[**[A, *], [y] =>> X ** F2[y]]) => R,
+    ): R =
+      caseKeepFst[A](summon, summon)
   }
 
   case class KeepSnd[**[_, _], B]() extends Knit[**, [x] =>> x ** B] {
@@ -45,6 +61,14 @@ object Knit {
 
     override def proveProduct[X]: Exists[[a] =>> Exists[[b] =>> X ** B =:= a ** b]] =
       Exists(Exists(summon[(X ** B) =:= (X ** B)]))
+
+    override def visit[R](
+      caseKeepFst: [X] => (TypeEqK[**[*, B], **[X, *]], Res =:= X) => R,
+      caseKeepSnd: [Y] => (TypeEqK[**[*, B], **[*, Y]], Res =:= Y) => R,
+      caseInFst: [F1[_], Y] => (Knit[**, F1], TypeEqK[**[*, B], [x] =>> F1[x] ** Y]) => R,
+      caseInSnd: [X, F2[_]] => (Knit[**, F2], TypeEqK[**[*, B], [y] =>> X ** F2[y]]) => R,
+    ): R =
+      caseKeepSnd[B](summon, summon)
   }
 
   case class InFst[**[_, _], F[_], B](k: Knit[**, F]) extends Knit[**, [x] =>> F[x] ** B] {
@@ -55,9 +79,17 @@ object Knit {
 
     override def proveProduct[X]: Exists[[a] =>> Exists[[b] =>> F[X] ** B =:= a ** b]] =
       Exists(Exists(summon[(F[X] ** B) =:= (F[X] ** B)]))
+
+    override def visit[R](
+      caseKeepFst: [X] => (TypeEqK[[x] =>> F[x] ** B, **[X, *]], Res =:= X) => R,
+      caseKeepSnd: [Y] => (TypeEqK[[x] =>> F[x] ** B, **[*, Y]], Res =:= Y) => R,
+      caseInFst: [F1[_], Y] => (Knit[**, F1], TypeEqK[[x] =>> F[x] ** B, [x] =>> F1[x] ** Y]) => R,
+      caseInSnd: [X, F2[_]] => (Knit[**, F2], TypeEqK[[x] =>> F[x] ** B, [y] =>> X ** F2[y]]) => R,
+    ): R =
+      caseInFst[F, B](k, summon)
   }
 
-  case class InSnd[**[_, _], A, G[_]](k: Knit[**, G]) extends Knit[**, [x] =>> A ** G[x]] {
+  case class InSnd[**[_, _], A, G[_]](k: Knit[**, G]) extends Knit[**, [y] =>> A ** G[y]] {
     override type Res = A ** k.Res
 
     override def toProjection[X]: Projection[**, A ** G[X], Res] =
@@ -65,6 +97,14 @@ object Knit {
 
     override def proveProduct[X]: Exists[[a] =>> Exists[[b] =>> A ** G[X] =:= a ** b]] =
       Exists(Exists(summon[(A ** G[X]) =:= (A ** G[X])]))
+
+    override def visit[R](
+      caseKeepFst: [X] => (TypeEqK[[y] =>> A ** G[y], **[X, *]], Res =:= X) => R,
+      caseKeepSnd: [Y] => (TypeEqK[[y] =>> A ** G[y], **[*, Y]], Res =:= Y) => R,
+      caseInFst: [F1[_], Y] => (Knit[**, F1], TypeEqK[[y] =>> A ** G[y], [x] =>> F1[x] ** Y]) => R,
+      caseInSnd: [X, F2[_]] => (Knit[**, F2], TypeEqK[[y] =>> A ** G[y], [y] =>> X ** F2[y]]) => R,
+    ): R =
+      caseInSnd[A, G](k, summon)
   }
 }
 

@@ -20,3 +20,19 @@ object TypeEq {
     def zip[P, Q, F[_, _]](that: P =:= Q): F[A, P] =:= F[B, Q] =
       that.substituteCo[[x] =>> F[A, P] =:= F[B, x]](ev.inFst[P, F])
 }
+
+sealed trait TypeEqK[F[_], G[_]]:
+  import TypeEqK.Refl
+
+  def at[X]: F[X] =:= G[X] =
+    this match { case Refl() => summon[F[X] =:= G[X]] }
+
+object TypeEqK {
+  case class Refl[F[_]]() extends TypeEqK[F, F]
+
+  given refl[F[_]]: TypeEqK[F, F] =
+    Refl()
+
+  def ext[F[_], G[_]](f: [x] => Unit => F[x] =:= G[x]): TypeEqK[F[_], G[_]] =
+    refl[F].asInstanceOf[TypeEqK[F, G]]
+}

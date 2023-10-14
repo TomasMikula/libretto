@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.SourcePos
+import libretto.lambda.util.{BiInjective, SourcePos, TypeEqK}
 
 /** Nested tuples with a hole.
  *
@@ -39,12 +39,12 @@ sealed trait Spine[**[_, _], G[_], F[_]] {
   def knitFoldMap[H[_]](
     k: Knit[**, F],
     f: [x] => G[x] => H[x],
-  )(using Zippable[**, H]): H[k.Res]
+  )(using BiInjective[**], Zippable[**, H]): H[k.Res]
 
-  def knit(k: Knit[**, F]): Tupled[**, G, k.Res] =
+  def knit(k: Knit[**, F])(using BiInjective[**]): Tupled[**, G, k.Res] =
     knitFoldMap[Tupled[**, G, _]](k, [x] => (gx: G[x]) => Tupled.atom(gx))
 
-  def knitFold(k: Knit[**, F])(using Zippable[**, G]): G[k.Res] =
+  def knitFold(k: Knit[**, F])(using BiInjective[**], Zippable[**, G]): G[k.Res] =
     knitFoldMap[G](k, [x] => (gx: G[x]) => gx)
 
   def inFst[B](b: G[B]): Spine[**, G, [x] =>> F[x] ** B] =
@@ -59,7 +59,7 @@ object Spine {
     override def knitFoldMap[H[_]](
       k: Knit[|*|, [x] =>> x],
       f: [x] => G[x] => H[x],
-    )(using Zippable[|*|, H]): H[k.Res] =
+    )(using BiInjective[|*|], Zippable[|*|, H]): H[k.Res] =
       type Fresh
       val ev = k.proveProduct[Fresh]
       type A = ev.T
@@ -72,11 +72,42 @@ object Spine {
     fst: Spine[|*|, G, F],
     snd: G[B],
   ) extends Spine[|*|, G, [x] =>> F[x] |*| B] {
+
     override def knitFoldMap[H[_]](
       k: Knit[|*|, [x] =>> F[x] |*| B],
       f: [x] => G[x] => H[x],
-    )(using Zippable[|*|, H]): H[k.Res] =
-      throw NotImplementedError(s"at ${summon[SourcePos]}")
+    )(using
+      BiInjective[|*|],
+      Zippable[|*|, H],
+    ): H[k.Res] = {
+      k.visit(
+        caseKeepFst = [X] => (
+          ev1: TypeEqK[[x] =>> F[x] |*| B, [y] =>> X |*| y],
+          ev2: k.Res =:= X,
+        ) =>
+          // impossible, derive contradiction
+          val ev3: B =:= Unit    = ev1.at[Unit]    match { case BiInjective[|*|](_, ev) => ev }
+          val ev4: B =:= Nothing = ev1.at[Nothing] match { case BiInjective[|*|](_, ev) => ev }
+          ev4(ev3.flip(())),
+        caseKeepSnd = [Y] => (
+          ev1: TypeEqK[[x] =>> F[x] |*| B, [x] =>> x |*| Y],
+          ev2: k.Res =:= Y,
+        ) =>
+          val ev3: B =:= Y     = ev1.at[Any] match { case BiInjective[|*|](_, ev) => ev }
+          val ev4: B =:= k.Res = ev3 andThen ev2.flip
+          ev4.substituteCo[H](f(snd)),
+        caseInFst = [F1[_], Y] => (
+          k1: Knit[|*|, F1],
+          ev: TypeEqK[[x] =>> F[x] |*| B, [x] =>> F1[x] |*| Y],
+        ) =>
+          UnhandledCase.raise("knitFoldMap/caseInFst"),
+        caseInSnd = [X, F2[_]] => (
+          k2: Knit[|*|, F2],
+          ev: TypeEqK[[x] =>> F[x] |*| B, [y] =>> X |*| F2[y]],
+        ) =>
+          UnhandledCase.raise("knitFoldMap/caseInSnd"),
+      )
+    }
   }
 
   case class Snd[|*|[_, _], G[_], F[_], A](
@@ -86,7 +117,7 @@ object Spine {
     override def knitFoldMap[H[_]](
       k: Knit[|*|, [x] =>> A |*| F[x]],
       f: [x] => G[x] => H[x],
-    )(using Zippable[|*|, H]): H[k.Res] =
+    )(using BiInjective[|*|], Zippable[|*|, H]): H[k.Res] =
       throw NotImplementedError(s"at ${summon[SourcePos]}")
   }
 }
