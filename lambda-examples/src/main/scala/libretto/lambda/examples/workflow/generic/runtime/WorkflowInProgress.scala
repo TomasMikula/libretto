@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{Capture, Focus, Knitted, Shuffled, Spine}
+import libretto.lambda.{Capture, Focus, Knitted, Shuffled, Spine, Unzippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, PromiseRef, given}
 import libretto.lambda.examples.workflow.generic.runtime.Input.FindValueRes
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
@@ -24,7 +24,7 @@ object WorkflowInProgress {
     override def isReducible: Boolean = false
 
   sealed trait Incomplete[Action[_, _], Val[_], A] extends WorkflowInProgress[Action, Val, A] {
-    def crank: CrankRes[Action, Val, A]
+    def crank(using Unzippable[**, Val]): CrankRes[Action, Val, A]
   }
 
   case class IncompleteImpl[Action[_, _], Val[_], X, Y, A](
@@ -35,7 +35,7 @@ object WorkflowInProgress {
     override def isReducible: Boolean =
       input.isPartiallyReady
 
-    override def crank: CrankRes[Action, Val, A] =
+    override def crank(using Unzippable[**, Val]): CrankRes[Action, Val, A] =
       input match
         case i @ Input.Awaiting(_) =>
           CrankRes.AlreadyStuck(this)
@@ -50,7 +50,7 @@ object WorkflowInProgress {
 
   enum PartiallyApplied[Action[_, _], Val[_], A, B]:
     case DomainAction[Action[_, _], Val[_], A, X, B](
-      args: Capture[**, Val, A, X],
+      args: Capture[**, Value[Val, _], A, X],
       f: Action[X, B],
     ) extends PartiallyApplied[Action, Val, A, B]
     case DistLR[Action[_, _], Val[_], X, Y, Z](
@@ -109,6 +109,14 @@ object WorkflowInProgress {
 
     def dup[Action[_, _], Val[_], A]: Closure[Action, Val, A, A ** A] =
       FlowAST.Dup()
+
+    def partiallyAppliedAction[Action[_, _], Val[_], A, X, B](
+      args: Capture[**, Value[Val, _], A, X],
+      f: Action[X, B],
+    ): Closure.Work[Action, Val, A, B] =
+      FlowAST.DomainAction(
+        PartiallyApplied.DomainAction(args, f),
+      )
   }
 
   def init[Action[_, _], Val[_], A, B](
@@ -126,6 +134,8 @@ object WorkflowInProgress {
     remainingInput: Spine[**, Input[Val, _], F],
     cont: Closure[Action, Val, F[A], B],
     resultAcc: Capture[**, Value[Val, _], B, C],
+  )(using
+    Unzippable[**, Val],
   ): CrankRes[Action, Val, C] = {
     given sh: Closure.Shuffled[Action, Val] =
       Closure.shuffled[Action, Val]
@@ -199,6 +209,27 @@ object WorkflowInProgress {
                   UnhandledCase.raise(s"propagateValue into $f at $v")
                 case Focus.Snd(i) =>
                   UnhandledCase.raise(s"propagateValue into $f at $v")
+
+            case FlowAST.DomainAction(action) =>
+              action match
+                case PartiallyApplied.DomainAction(args, f) =>
+                  v match
+                    case Focus.Id() =>
+                      UnhandledCase.raise(s"propagateValue into $action at $v")
+                    case v: Focus.Proper[prod, f] =>
+                      ev match { case TypeEq(Refl()) =>
+                        args.absorb(value, v) match
+                          case Capture.Absorbed.Impl(k, r) =>
+                            val k1 = k.at(g)
+                            pre.knitBw(k1) match
+                              case Exists.Some((k0, pre1)) =>
+                                val input = remainingInput.knitFold(k0)
+                                val f1 = sh.lift(Closure.partiallyAppliedAction(r, f)).at(g)
+                                val cont1 = Closure.fromShuffled(pre1 > f1 > post)
+                                CrankRes.Progressed(IncompleteImpl(input, cont1, resultAcc))
+                      }
+                case PartiallyApplied.DistLR(x) =>
+                  UnhandledCase.raise(s"propagateValue into $action at $v")
 
             case other =>
               UnhandledCase.raise(s"propagateValue into $other at $v")

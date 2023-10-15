@@ -33,3 +33,7 @@ object Value:
 
   def promiseRef[F[_], A](promiseId: PromiseId[A]): Value[F, PromiseRef[A]] =
     PromiseToComplete(promiseId)
+
+  given unzippableValue[F[_]](using Unzippable[**, F]): Unzippable[**, Value[F, _]] with
+    override def unzip[A, B](fab: Value[F, A ** B]): (Value[F, A], Value[F, B]) =
+      Value.unpair(fab)
