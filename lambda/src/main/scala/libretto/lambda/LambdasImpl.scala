@@ -185,7 +185,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
 
     // TODO: avoid the need to create synthetic variables
     private def zipExprs[A](a: Tupled[Expr, A])(using Context): Expr[A] =
-      a.fold([x, y] => (x: Expr[x], y: Expr[y]) => {
+      a.foldWith([x, y] => (x: Expr[x], y: Expr[y]) => {
         val v = syntheticPairVar(x.resultVar.origin, y.resultVar.origin)
         Expr.zip(x, y)(v)
       })

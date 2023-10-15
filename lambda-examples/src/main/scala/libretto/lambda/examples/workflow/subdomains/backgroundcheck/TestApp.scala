@@ -5,7 +5,7 @@ import scala.annotation.tailrec
 
 object TestApp {
   def main(args: Array[String]): Unit =
-    val engine = WorkflowEngine.start[Action, Val]()
+    val engine = WorkflowEngine.start[Action, Val](new ActionExecutor)
 
     val candidate = "john.doe@example.com"
 

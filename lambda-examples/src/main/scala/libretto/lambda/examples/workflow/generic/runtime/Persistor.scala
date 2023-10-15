@@ -3,6 +3,7 @@ package libretto.lambda.examples.workflow.generic.runtime
 import libretto.lambda.examples.workflow.generic.runtime.{WorkflowInProgress => WIP}
 import libretto.lambda.examples.workflow.generic.lang.FlowAST
 import scala.collection.mutable
+import scala.util.Try
 
 private[runtime] class Persistor[Action[_, _], Val[_]] {
   private var nextWorkflowId: Long = 1
@@ -15,8 +16,8 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
   private val workflows: mutable.Map[WorkflowRef[?], Entry[?]] =
     mutable.Map.empty[WorkflowRef[?], Entry[?]]
 
-  private val promises: mutable.Map[PromiseId[?], PromiseState[?]] =
-    mutable.Map.empty[PromiseId[?], PromiseState[?]]
+  private val promises: mutable.Map[PromiseId[?], PromiseState[Val, ?]] =
+    mutable.Map.empty[PromiseId[?], PromiseState[Val, ?]]
 
   def insert[A, B](
     input: Value[Val, A],
@@ -135,6 +136,20 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
       nextPromiseId += 1
       promises.put(id, PromiseState.Empty())
       id
+    }
+
+  def completePromise[A](id: PromiseId[A], result: Try[Value[Val, A]]): Boolean =
+    this.synchronized {
+      promises.get(id) match
+        case None =>
+          false
+        case Some(value) =>
+          value match
+            case PromiseState.Empty() =>
+              promises.put(id, PromiseState.Complete(result))
+              true
+            case PromiseState.Complete(_) =>
+              false
     }
 
   enum LockGetRes[A]:

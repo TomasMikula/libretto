@@ -212,22 +212,31 @@ object WorkflowInProgress {
 
             case FlowAST.DomainAction(action) =>
               action match
-                case PartiallyApplied.DomainAction(args, f) =>
-                  v match
-                    case Focus.Id() =>
-                      UnhandledCase.raise(s"propagateValue into $action at $v")
-                    case v: Focus.Proper[prod, f] =>
-                      ev match { case TypeEq(Refl()) =>
-                        args.absorb(value, v) match
-                          case Capture.Absorbed.Impl(k, r) =>
-                            val k1 = k.at(g)
-                            pre.knitBw(k1) match
-                              case Exists.Some((k0, pre1)) =>
-                                val input = remainingInput.knitFold(k0)
-                                val f1 = sh.lift(Closure.partiallyAppliedAction(r, f)).at(g)
-                                val cont1 = Closure.fromShuffled(pre1 > f1 > post)
-                                CrankRes.Progressed(IncompleteImpl(input, cont1, resultAcc))
-                      }
+                case PartiallyApplied.DomainAction(partialArgs, action) =>
+                  ev match { case TypeEq(Refl()) =>
+                    v match
+                      case Focus.Id() =>
+                        val args = partialArgs.complete(value).fold
+                        CrankRes.ActionRequest(
+                          args,
+                          action,
+                          px => IncompleteImpl(
+                            remainingInput.plugFold(Input.awaiting(px)),
+                            Closure.fromShuffled(pre[W] > post),
+                            resultAcc,
+                          ),
+                        )
+                      case v: Focus.Proper[prod, f] =>
+                          partialArgs.absorb(value, v) match
+                            case Capture.Absorbed.Impl(k, r) =>
+                              val k1 = k.at(g)
+                              pre.knitBw(k1) match
+                                case Exists.Some((k0, pre1)) =>
+                                  val input = remainingInput.knitFold(k0)
+                                  val f1 = sh.lift(Closure.partiallyAppliedAction(r, action)).at(g)
+                                  val cont1 = Closure.fromShuffled(pre1 > f1 > post)
+                                  CrankRes.Progressed(IncompleteImpl(input, cont1, resultAcc))
+                  }
                 case PartiallyApplied.DistLR(x) =>
                   UnhandledCase.raise(s"propagateValue into $action at $v")
 
@@ -277,5 +286,10 @@ object WorkflowInProgress {
     case Progressed(w: WorkflowInProgress[Action, Val, A])
     case Ask[Action[_, _], Val[_], X, A](
       cont: PromiseId[X] => WorkflowInProgress[Action, Val, A],
+    ) extends CrankRes[Action, Val, A]
+    case ActionRequest[Action[_, _], Val[_], X, Y, A](
+      input: Value[Val, X],
+      action: Action[X, Y],
+      cont: PromiseId[Y] => WorkflowInProgress[Action, Val, A],
     ) extends CrankRes[Action, Val, A]
 }

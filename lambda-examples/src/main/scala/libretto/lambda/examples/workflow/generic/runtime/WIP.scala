@@ -346,7 +346,7 @@ object WIP {
     case ActionRequest[Action[_, _], Val[_], X, Y, A](
       input: Value[Val, X],
       action: Action[X, Y],
-      cont: PromiseState[Y] => WIP[Action, Val, A],
+      cont: PromiseState[Val, Y] => WIP[Action, Val, A],
     ) extends CrankRes[Action, Val, A]
   }
 

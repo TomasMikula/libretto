@@ -3,9 +3,11 @@ package libretto.lambda.examples.workflow.generic.runtime
 import libretto.lambda.Unzippable
 import libretto.lambda.examples.workflow.generic.lang.{**, FlowAST, Workflows}
 
-class WorkflowEngine[Action[_, _], Val[_]](using Unzippable[**, Val]) {
+class WorkflowEngine[Action[_, _], Val[_]](
+  worker: Worker[Action, Val],
+)(using Unzippable[**, Val]) {
   val persistor = new Persistor[Action, Val]
-  val processor = Processor.start(persistor)
+  val processor = Processor.start(persistor, worker)
 
   def submit[A, B](using ws: Workflows[Action])(
     workflow: ws.Flow[A, B],
@@ -27,6 +29,8 @@ class WorkflowEngine[Action[_, _], Val[_]](using Unzippable[**, Val]) {
 }
 
 object WorkflowEngine {
-  def start[Action[_, _], Val[_]]()(using Unzippable[**, Val]): WorkflowEngine[Action, Val] =
-    new WorkflowEngine[Action, Val]
+  def start[Action[_, _], Val[_]](
+    worker: Worker[Action, Val],
+  )(using Unzippable[**, Val]): WorkflowEngine[Action, Val] =
+    new WorkflowEngine[Action, Val](worker)
 }

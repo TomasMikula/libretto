@@ -1,5 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-enum PromiseState[A]:
+import scala.util.Try
+
+enum PromiseState[Val[_], A]:
   case Empty()
-  case Complete(value: A)
+  case Complete(result: Try[Value[Val, A]])

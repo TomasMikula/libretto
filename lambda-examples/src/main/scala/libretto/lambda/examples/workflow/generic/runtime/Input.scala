@@ -22,7 +22,7 @@ enum Input[Val[_], A]:
       case Ready(value) =>
         Found(Spine.Id(), value, summon)
       case Awaiting(value) =>
-        ???
+        NotFound(value)
       case z: Zip[v, a1, a2] =>
         z.a1.findValue match
           case NotFound(awaiting1) =>

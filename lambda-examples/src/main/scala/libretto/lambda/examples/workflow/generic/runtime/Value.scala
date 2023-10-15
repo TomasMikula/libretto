@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.Unzippable
+import libretto.lambda.{Unzippable, Zippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, PromiseRef}
 
 enum Value[F[_], A]:
@@ -33,6 +33,10 @@ object Value:
 
   def promiseRef[F[_], A](promiseId: PromiseId[A]): Value[F, PromiseRef[A]] =
     PromiseToComplete(promiseId)
+
+  given zippableValue[F[_]]: Zippable[**, Value[F, _]] with
+    override def zip[A, B](fa: Value[F, A], fb: Value[F, B]): Value[F, A ** B] =
+      Pair(fa, fb)
 
   given unzippableValue[F[_]](using Unzippable[**, F]): Unzippable[**, Value[F, _]] with
     override def unzip[A, B](fab: Value[F, A ** B]): (Value[F, A], Value[F, B]) =

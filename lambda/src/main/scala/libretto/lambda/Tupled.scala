@@ -42,8 +42,11 @@ object Tupled {
     ): B =
       a.foldMap0[B](map, reduce)
 
-    def fold(zip: [x, y] => (F[x], F[y]) => F[x |*| y]): F[A] =
+    def foldWith(zip: [x, y] => (F[x], F[y]) => F[x |*| y]): F[A] =
       foldMap[F]([x] => (fx: F[x]) => fx, zip)
+
+    def fold(using F: Zippable[|*|, F]): F[A] =
+      foldWith([x, y] => (fx: F[x], fy: F[y]) => F.zip(fx, fy))
 
     def deduplicateLeafs[->[_, _]](
       dup: [x] => F[x] => x -> (x |*| x),

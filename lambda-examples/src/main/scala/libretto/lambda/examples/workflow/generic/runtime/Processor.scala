@@ -7,9 +7,11 @@ import libretto.lambda.util.SourcePos
 
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
 import scala.concurrent.{Future, Promise}
+import scala.util.{Failure, Success}
 
 private[runtime] class Processor[Action[_, _], Val[_]](
   persistor: Persistor[Action, Val],
+  worker: Worker[Action, Val],
   workQueue: BlockingQueue[WorkItem],
   stopSignal: Promise[Unit],
 )(using
@@ -60,30 +62,14 @@ private[runtime] class Processor[Action[_, _], Val[_]](
             val promiseId = persistor.promise[x]
             val w1 = ask.cont(promiseId)
             CrankRes.Progressed(w1)
-          // case WIP.CrankRes.ActionRequest(input, action, cont) =>
-          //   throw NotImplementedError(s"at ${summon[SourcePos]}")
-
-    // w match {
-    //   case w: WIP.Irreducible[Action, Val, A] =>
-    //     // nothing to do, false alarm
-    //     CrankRes.AlreadyIrreducible(w)
-
-    //   case WIP.Zip(a1, a2) =>
-    //     println(w)
-    //     ???
-
-    //   case WIP.Map(a, f) =>
-    //     crank(a) match
-    //       case CrankRes.Progressed(a1) =>
-    //         CrankRes.Progressed(WIP.Map(a1, f))
-    //       case CrankRes.AlreadyIrreducible(w) =>
-    //         w match
-    //           case WIP.Irreducible.Done(value) =>
-    //             ???
-    //             // push `value` into `f`:
-    //             //  - Done[A]
-    //             //  - (Value[X], Action[X, Y], Promise[Y] => WIP[A])
-    // }
+          case req: WIP.CrankRes.ActionRequest[action, val_, x, y, a] =>
+            val promiseId = persistor.promise[y]
+            worker.executeAction(req.input, req.action) { result =>
+              persistor.completePromise(promiseId, result)
+              workQueue.put(WorkItem.PromiseCompleted(promiseId))
+            }
+            val w1 = req.cont(promiseId)
+            CrankRes.Progressed(w1)
 
   private enum CrankRes[A]:
     case AlreadyIrreducible(w: WIP[Action, Val, A])
@@ -94,12 +80,13 @@ private[runtime] object Processor {
 
   def start[Action[_, _], Val[_]](
     persistor: Persistor[Action, Val],
+    worker: Worker[Action, Val],
   )(using
     Unzippable[**, Val],
   ): Processor[Action, Val] = {
     val queue = new ArrayBlockingQueue[WorkItem](1000)
     val stopSignal = Promise[Unit]
-    val processor = new Processor(persistor, queue, stopSignal)
+    val processor = new Processor(persistor, worker, queue, stopSignal)
     val processorThread = new Thread {
       override def run(): Unit = processor.loop()
     }
