@@ -22,13 +22,19 @@ object TypeEq {
 }
 
 sealed trait TypeEqK[F[_], G[_]]:
-  import TypeEqK.Refl
+  import TypeEqK.{Refl, refl}
+
+  def subst[H[_[_]]](hf: H[F]): H[G]
 
   def at[X]: F[X] =:= G[X] =
     this match { case Refl() => summon[F[X] =:= G[X]] }
 
+  def flip: TypeEqK[G, F] =
+    subst[[f[_]] =>> TypeEqK[f, F]](refl[F])
+
 object TypeEqK {
-  case class Refl[F[_]]() extends TypeEqK[F, F]
+  case class Refl[F[_]]() extends TypeEqK[F, F]:
+    override def subst[H[_[_]]](hf: H[F]): H[F] = hf
 
   given refl[F[_]]: TypeEqK[F, F] =
     Refl()

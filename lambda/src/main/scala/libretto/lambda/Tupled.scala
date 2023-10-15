@@ -66,6 +66,16 @@ object Tupled {
       (a product b)(discardFst)
   }
 
+  def unzip[|*|[_, _], F[_], A, B](
+    ab: Tupled[|*|, F, A |*| B],
+  )(using F: Unzippable[|*|, F]): (Tupled[|*|, F, A], Tupled[|*|, F, B]) =
+    ab match
+      case Bin.Branch(l, r) =>
+        (l, r)
+      case Bin.Leaf(fab) =>
+        val (fa, fb) = F.unzip(fab)
+        (atom(fa), atom(fb))
+
   given [|*|[_, _], F[_]]: Zippable[|*|, Tupled[|*|, F, _]] with {
     override def zip[A, B](fa: Tupled[|*|, F, A], fb: Tupled[|*|, F, B]): Tupled[|*|, F, A |*| B] =
       Tupled.zip(fa, fb)

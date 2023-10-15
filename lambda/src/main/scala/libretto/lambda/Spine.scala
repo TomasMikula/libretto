@@ -99,13 +99,26 @@ object Spine {
         caseInFst = [F1[_], Y] => (
           k1: Knit[|*|, F1],
           ev: TypeEqK[[x] =>> F[x] |*| B, [x] =>> F1[x] |*| Y],
+          ev1: k.Res =:= (k1.Res |*| Y),
         ) =>
-          UnhandledCase.raise("knitFoldMap/caseInFst"),
+          given TypeEqK[F, F1] =
+            TypeEqK.ext[F, F1]([x] => (_: Unit) => ev.at[x] match { case BiInjective[|*|](ev, _) => ev })
+          val ev2: B =:= Y =
+            ev.at[Any] match { case BiInjective[|*|](_, ev) => ev }
+          ev1.substituteContra[H](
+            fst.knitFoldMap(k1.from[F], f) zip f(ev2.substituteCo[G](snd))
+          ),
         caseInSnd = [X, F2[_]] => (
           k2: Knit[|*|, F2],
           ev: TypeEqK[[x] =>> F[x] |*| B, [y] =>> X |*| F2[y]],
+          ev1: k.Res =:= (X |*| k2.Res),
         ) =>
-          UnhandledCase.raise("knitFoldMap/caseInSnd"),
+          // impossible, derive contradiction
+          val injF2 = k2.toFocus.injective
+          val bu: B =:= F2[Unit]    = ev.at[Unit]    match { case BiInjective[|*|](_, ev) => ev }
+          val bn: B =:= F2[Nothing] = ev.at[Nothing] match { case BiInjective[|*|](_, ev) => ev }
+          val un: Unit =:= Nothing = (bu.flip andThen bn) match { case injF2(ev) => ev }
+          un(())
       )
     }
   }
