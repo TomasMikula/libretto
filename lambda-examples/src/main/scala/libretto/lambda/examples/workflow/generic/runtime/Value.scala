@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Unzippable, Zippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, PromiseRef}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, PromiseRef}
 
 enum Value[F[_], A]:
   case One[F[_]]() extends Value[F, Unit]
@@ -10,6 +10,9 @@ enum Value[F[_], A]:
     a1: Value[F, A1],
     a2: Value[F, A2],
   ) extends Value[F, A1 ** A2]
+
+  case Left [F[_], A, B](a: Value[F, A]) extends Value[F, A ++ B]
+  case Right[F[_], A, B](b: Value[F, B]) extends Value[F, A ++ B]
 
   case PromiseToComplete[F[_], A](pa: PromiseId[A]) extends Value[F, PromiseRef[A]]
 
@@ -30,6 +33,12 @@ object Value:
       case Ext(value) =>
         val (a, b) = F.unzip(value)
         (Ext(a), Ext(b))
+
+  def left[F[_], A, B](value: Value[F, A]): Value[F, A ++ B] =
+    Value.Left(value)
+
+  def right[F[_], A, B](value: Value[F, B]): Value[F, A ++ B] =
+    Value.Right(value)
 
   def promiseRef[F[_], A](promiseId: PromiseId[A]): Value[F, PromiseRef[A]] =
     PromiseToComplete(promiseId)

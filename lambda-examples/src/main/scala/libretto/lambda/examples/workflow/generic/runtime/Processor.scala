@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.Unzippable
+import libretto.lambda.{UnhandledCase, Unzippable}
 import libretto.lambda.examples.workflow.generic.lang.**
 import libretto.lambda.examples.workflow.generic.runtime.{WorkflowInProgress => WIP}
 import libretto.lambda.util.SourcePos
@@ -11,7 +11,7 @@ import scala.util.{Failure, Success}
 
 private[runtime] class Processor[Action[_, _], Val[_]](
   persistor: Persistor[Action, Val],
-  worker: Worker[Action, Val],
+  worker: ActionExecutor[Action, Val],
   workQueue: BlockingQueue[WorkItem],
   stopSignal: Promise[Unit],
 )(using
@@ -41,6 +41,8 @@ private[runtime] class Processor[Action[_, _], Val[_]](
     item match {
       case WorkItem.Wakeup(ref) =>
         persistor.modifyOpt(ref) { crankOpt(_) }
+      case WorkItem.PromiseCompleted(pid) =>
+        UnhandledCase.raise(s"processItem(PromiseCompleted)")
     }
 
   private def crankOpt[A](w: WIP[Action, Val, A]): Option[WIP[Action, Val, A]] =
@@ -64,7 +66,7 @@ private[runtime] class Processor[Action[_, _], Val[_]](
             CrankRes.Progressed(w1)
           case req: WIP.CrankRes.ActionRequest[action, val_, x, y, a] =>
             val promiseId = persistor.promise[y]
-            worker.executeAction(req.input, req.action) { result =>
+            worker.submit(req.input, req.action) { result =>
               persistor.completePromise(promiseId, result)
               workQueue.put(WorkItem.PromiseCompleted(promiseId))
             }
@@ -80,7 +82,7 @@ private[runtime] object Processor {
 
   def start[Action[_, _], Val[_]](
     persistor: Persistor[Action, Val],
-    worker: Worker[Action, Val],
+    worker: ActionExecutor[Action, Val],
   )(using
     Unzippable[**, Val],
   ): Processor[Action, Val] = {

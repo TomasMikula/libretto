@@ -3,8 +3,10 @@ package libretto.lambda.examples.workflow.generic.runtime
 import libretto.lambda.Unzippable
 import libretto.lambda.examples.workflow.generic.lang.{**, FlowAST, Workflows}
 
+import scala.util.Try
+
 class WorkflowEngine[Action[_, _], Val[_]](
-  worker: Worker[Action, Val],
+  worker: ActionExecutor[Action, Val],
 )(using Unzippable[**, Val]) {
   val persistor = new Persistor[Action, Val]
   val processor = Processor.start(persistor, worker)
@@ -24,13 +26,20 @@ class WorkflowEngine[Action[_, _], Val[_]](
     ref
   }
 
+  def completePromise[A](p: PromiseId[A], result: Try[Value[Val, A]]): Boolean =
+    if (persistor.completePromise(p, result))
+      processor.notify(WorkItem.PromiseCompleted(p))
+      true
+    else
+      false
+
   def pollResult[A](ref: WorkflowRef[A]): Option[WorkflowResult[Val, A]] =
     persistor.pollResult(ref)
 }
 
 object WorkflowEngine {
   def start[Action[_, _], Val[_]](
-    worker: Worker[Action, Val],
+    worker: ActionExecutor[Action, Val],
   )(using Unzippable[**, Val]): WorkflowEngine[Action, Val] =
     new WorkflowEngine[Action, Val](worker)
 }

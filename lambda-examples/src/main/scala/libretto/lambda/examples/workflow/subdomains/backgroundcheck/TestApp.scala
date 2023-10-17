@@ -1,11 +1,24 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
-import libretto.lambda.examples.workflow.generic.runtime.WorkflowEngine
+import libretto.lambda.examples.workflow.generic.runtime.{ActionExecutor, WorkflowEngine}
+import libretto.lambda.examples.workflow.generic.runtime.ActionExecutor.ActionRequest
+
+import java.util.concurrent.ArrayBlockingQueue
 import scala.annotation.tailrec
 
 object TestApp {
   def main(args: Array[String]): Unit =
-    val engine = WorkflowEngine.start[Action, Val](new ActionExecutor)
+    val actionQueue =
+      new ArrayBlockingQueue[ActionRequest[Action, Val]](1000)
+    val engine =
+      WorkflowEngine.start[Action, Val](ActionExecutor.enqueuer(actionQueue))
+    val actionExecutor =
+      new DummyActionExecutor(engine)
+    val execThread =
+      forkDaemon(
+        () => actionExecutor.consumeIndefinitely(actionQueue),
+        threadName = "ActionExecutor",
+      )
 
     val candidate = "john.doe@example.com"
 
@@ -28,4 +41,16 @@ object TestApp {
       }
 
     go()
+
+  private def forkDaemon(
+    body: () => Unit,
+    threadName: String,
+  ): Thread =
+    val t = new Thread:
+      override def run(): Unit = body()
+    t.setName(threadName)
+    t.setDaemon(true)
+    t.setUncaughtExceptionHandler(((t, e) => e.printStackTrace(Console.err)))
+    t.start()
+    t
 }
