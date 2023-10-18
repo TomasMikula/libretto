@@ -29,30 +29,70 @@ private[runtime] class Processor[Action[_, _], Val[_]](
 
     while (!stopSignal.future.isCompleted) {
       poll()
-        .foreach { processItem(persistor, _) }
+        .foreach { processItem(_) }
     }
   }
 
-  private def processItem(
-    persistor: Persistor[Action, Val],
-    item: WorkItem,
-  ): Unit =
+  private def processItem(item: WorkItem): Unit =
     println(s"processItem($item)")
     item match {
       case WorkItem.Wakeup(ref) =>
-        persistor.modifyOpt(ref) { crankOpt(_) }
+        persistor.modifyOpt(ref) { crankOpt(ref, _) }
       case WorkItem.PromiseCompleted(pid) =>
-        UnhandledCase.raise(s"processItem(PromiseCompleted)")
+        persistor.fetchResult(pid) match
+          case Some(result) =>
+            result match
+              case Success(value) =>
+                supplyResult(pid, value)
+              case Failure(e) =>
+                failWorkflow(pid.workflow, e)
+          case None =>
+            Console.err.println(s"Non-existent promise $pid")
     }
 
-  private def crankOpt[A](w: WIP[Action, Val, A]): Option[WIP[Action, Val, A]] =
-    crank(w) match
-      case CrankRes.AlreadyIrreducible(_) => None
-      case CrankRes.Progressed(w1)  => Some(w1)
+  private def supplyResult[A](
+    pid: PromiseId[A],
+    result: Value[Val, A],
+  ): Unit =
+    persistor.modifyOpt(pid.workflow) {
+      case WorkflowInProgress.IncompleteImpl(input, cont, resultAcc) =>
+        input
+          .supplyResult(pid, result)
+          .map { input =>
+            WorkflowInProgress.IncompleteImpl(input, cont, resultAcc)
+          }
+      case WorkflowInProgress.Completed(result) =>
+        Console.err.println(s"Supplying promise result to an already completed workflow.")
+        None
+      case WorkflowInProgress.Failed(_, _) =>
+        // do nothing
+        None
+    }
 
-  private def crank[A](w: WIP[Action, Val, A]): CrankRes[A] =
+  private def failWorkflow[A](
+    w: WorkflowRef[A],
+    e: Throwable,
+  ): Unit =
+    persistor.modifyOpt(w) {
+      case WorkflowInProgress.Failed(_, _) =>
+        None
+      case WorkflowInProgress.Completed(_) =>
+        Console.err.println(s"Completed workflow received a failed promise.")
+        None
+      case w: WorkflowInProgress.Incomplete[act, val_, a] =>
+        Some(WorkflowInProgress.Failed(e, w))
+    }
+
+  private def crankOpt[A](ref: WorkflowRef[A], w: WIP[Action, Val, A]): Option[WIP[Action, Val, A]] =
+    crank(ref, w) match
+      case CrankRes.AlreadyIrreducible(_) => None
+      case CrankRes.Progressed(w1)        => Some(w1)
+
+  private def crank[A](ref: WorkflowRef[A], w: WIP[Action, Val, A]): CrankRes[A] =
     w match
       case w @ WIP.Completed(_) =>
+        CrankRes.AlreadyIrreducible(w)
+      case w @ WIP.Failed(_, _) =>
         CrankRes.AlreadyIrreducible(w)
       case w: WIP.Incomplete[op, v, a] =>
         w.crank match
@@ -61,11 +101,11 @@ private[runtime] class Processor[Action[_, _], Val[_]](
           case WIP.CrankRes.Progressed(w) =>
             CrankRes.Progressed(w)
           case ask: WIP.CrankRes.Ask[action, val_, x, a] =>
-            val promiseId = persistor.promise[x]
+            val promiseId = persistor.promise[x](ref)
             val w1 = ask.cont(promiseId)
             CrankRes.Progressed(w1)
           case req: WIP.CrankRes.ActionRequest[action, val_, x, y, a] =>
-            val promiseId = persistor.promise[y]
+            val promiseId = persistor.promise[y](ref)
             worker.submit(req.input, req.action) { result =>
               persistor.completePromise(promiseId, result)
               workQueue.put(WorkItem.PromiseCompleted(promiseId))

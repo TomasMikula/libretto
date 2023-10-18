@@ -16,11 +16,18 @@ sealed trait WorkflowInProgress[Action[_, _], Val[_], A] {
     this match
       case Completed(result)       => Some(WorkflowResult.Success(result))
       case IncompleteImpl(_, _, _) => None
+      case Failed(_, _)            => None
 
 }
 
 object WorkflowInProgress {
   case class Completed[Action[_, _], Val[_], A](result: Value[Val, A]) extends WorkflowInProgress[Action, Val, A]:
+    override def isReducible: Boolean = false
+
+  case class Failed[Action[_, _], Val[_], A](
+    error: Throwable,
+    incomplete: Incomplete[Action, Val, A],
+  ) extends WorkflowInProgress[Action, Val, A]:
     override def isReducible: Boolean = false
 
   sealed trait Incomplete[Action[_, _], Val[_], A] extends WorkflowInProgress[Action, Val, A] {
@@ -241,7 +248,7 @@ object WorkflowInProgress {
                   UnhandledCase.raise(s"propagateValue into $action at $v")
 
             case other =>
-              UnhandledCase.raise(s"propagateValue into $other at $v")
+              UnhandledCase.raise(s"propagateValue $value into $other at $v")
           }
 
         def distributePartLR[V[_], Y, Z, G[_]](

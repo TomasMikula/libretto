@@ -34,6 +34,22 @@ enum Input[Val[_], A]:
           case Found(path, value, ev) =>
             Found(path.inFst(z.a2), value, ev.inFst)
 
+  def supplyResult[X](
+    pid: PromiseId[X],
+    result: Value[Val, X],
+  ): Option[Input[Val, A]] =
+    this match
+      case Ready(value) =>
+        None
+      case Awaiting(awaited) =>
+        awaited.supplyResult(pid, result)
+      case Zip(a1, a2) =>
+        (a1.supplyResult(pid, result), a2.supplyResult(pid, result)) match
+          case (None   , None   ) => None
+          case (Some(i), None   ) => Some(Zip(i, a2))
+          case (None   , Some(j)) => Some(Zip(a1, j))
+          case (Some(i), Some(j)) => Some(Zip(i, j))
+
   def **[B](that: Input[Val, B]): Input[Val, A ** B] =
     Zip(this, that)
 
@@ -71,3 +87,19 @@ enum AwaitedValues[Val[_], A]:
   def **[B](that: AwaitedValues[Val, B]): AwaitedValues[Val, A ** B] =
     Zip(this, that)
 
+  def supplyResult[X](
+    px: PromiseId[X],
+    result: Value[Val, X],
+  ): Option[Input[Val, A]] =
+    this match
+      case Awaiting(pa) =>
+        if (px == pa)
+          Some(Input.Ready(result.asInstanceOf[Value[Val, A]]))
+        else
+          None
+      case Zip(a1, a2) =>
+        (a1.supplyResult(px, result), a2.supplyResult(px, result)) match
+          case (Some(i), Some(j)) => Some(Input.Zip(i, j))
+          case (Some(i), None   ) => Some(Input.Zip(i, Input.Awaiting(a2)))
+          case (None   , Some(j)) => Some(Input.Zip(Input.Awaiting(a1), j))
+          case (None   , None   ) => None

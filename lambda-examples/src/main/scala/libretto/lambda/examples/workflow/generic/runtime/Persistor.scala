@@ -130,9 +130,9 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
         }
     }
 
-  def promise[A]: PromiseId[A] =
+  def promise[A](w: WorkflowRef[?]): PromiseId[A] =
     this.synchronized {
-      val id = PromiseId[A](nextPromiseId)
+      val id = PromiseId[A](w, nextPromiseId)
       nextPromiseId += 1
       promises.put(id, PromiseState.Empty())
       id
@@ -150,6 +150,16 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
               true
             case PromiseState.Complete(_) =>
               false
+    }
+
+  def fetchResult[A](id: PromiseId[A]): Option[Try[Value[Val, A]]] =
+    this.synchronized {
+      promises.get(id).flatMap {
+        case PromiseState.Complete(result) =>
+          Some((result: Try[Value[Val, ?]]).asInstanceOf[Try[Value[Val, A]]])
+        case PromiseState.Empty() =>
+          None
+      }
     }
 
   enum LockGetRes[A]:
