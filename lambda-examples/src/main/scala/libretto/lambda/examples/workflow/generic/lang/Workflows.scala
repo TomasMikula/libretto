@@ -80,11 +80,22 @@ class Workflows[Action[_, _]] {
     def prj2[A, B]: Flow[A ** B, B] =
       FlowAST.Prj2()
 
+    @deprecated
     def promise[A]: Flow[Unit, PromiseRef[A] ** A] =
       FlowAST.Promise()
 
+    @deprecated
     def isComplete[A]: Flow[PromiseRef[A], Unit ++ Unit] =
       FlowAST.IsComplete()
+
+    def promiseMake[A]: Flow[Unit, Due[A] ** Promised[A]] =
+      FlowAST.PromiseMake()
+
+    def promiseAwait[A]: Flow[Promised[A], A] =
+      FlowAST.PromiseAwait()
+
+    def promiseAwaitTimeout[A](duration: FiniteDuration): Flow[Promised[A], A ++ Promised[A]] =
+      FlowAST.PromiseAwaitTimeout(duration)
 
     def doWhileLoop[A, B](f: Flow[A, A ++ B]): Flow[A, B] =
       FlowAST.DoWhile(f)

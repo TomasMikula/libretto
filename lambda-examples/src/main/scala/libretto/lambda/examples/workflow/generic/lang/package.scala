@@ -20,4 +20,8 @@ given BiInjective[**] with {
   */
 sealed trait ++[A, B]
 
+@deprecated
 sealed trait PromiseRef[A]
+
+sealed trait Due[A]
+sealed trait Promised[A]

@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Spine, Zippable}
-import libretto.lambda.examples.workflow.generic.lang.**
+import libretto.lambda.examples.workflow.generic.lang.{**, Promised}
 import libretto.lambda.util.TypeEq
 import libretto.lambda.util.TypeEq.{Refl, *}
 
@@ -63,6 +63,9 @@ enum Input[Val[_], A]:
 object Input {
   def awaiting[Val[_], A](pa: PromiseId[A]): Input[Val, A] =
     Awaiting(AwaitedValues.Awaiting(pa))
+
+  def promised[Val[_], A](pa: PromiseId[A]): Input[Val, Promised[A]] =
+    Ready(Value.promised(pa))
 
   enum FindValueRes[Val[_], A]:
     case NotFound(awaiting: AwaitedValues[Val, A])

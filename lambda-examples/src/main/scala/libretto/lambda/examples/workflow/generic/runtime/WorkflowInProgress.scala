@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Capture, Focus, Knitted, Shuffled, Spine, Unzippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, PromiseRef, given}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, Due, FlowAST, PromiseRef, Promised, given}
 import libretto.lambda.examples.workflow.generic.runtime.Input.FindValueRes
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
@@ -211,6 +211,19 @@ object WorkflowInProgress {
                   CrankRes.Ask { (px: PromiseId[x]) =>
                     val input = remainingInput.plugFold(Input.Ready(Value.promiseRef(px)) ** Input.awaiting(px))
                     IncompleteImpl(input, Closure.fromShuffled(pre[PromiseRef[x] ** x] > post), resultAcc)
+                  }
+                case Focus.Fst(i) =>
+                  UnhandledCase.raise(s"propagateValue into $f at $v")
+                case Focus.Snd(i) =>
+                  UnhandledCase.raise(s"propagateValue into $f at $v")
+
+            case _: FlowAST.PromiseMake[op, x] =>
+              v match
+                case Focus.Id() =>
+                  summon[W =:= (Due[x] ** Promised[x])]
+                  CrankRes.Ask { (px: PromiseId[x]) =>
+                    val input = remainingInput.plugFold(Input.Ready(Value.duePromise(px)) ** Input.promised(px))
+                    IncompleteImpl(input, Closure.fromShuffled(pre[Due[x] ** Promised[x]] > post), resultAcc)
                   }
                 case Focus.Fst(i) =>
                   UnhandledCase.raise(s"propagateValue into $f at $v")

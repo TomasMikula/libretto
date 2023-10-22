@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
-import libretto.lambda.examples.workflow.generic.lang.{**, PromiseRef}
-import workflows.Flow.{delay, doWhile, injectL, injectR, isComplete, promise}
+import libretto.lambda.examples.workflow.generic.lang.{**, Due, Promised}
+import workflows.Flow.{doWhile, injectL, injectR, promiseAwait, promiseAwaitTimeout, promiseMake}
 
 import scala.concurrent.duration.*
 
@@ -20,29 +20,26 @@ val backgroundCheck: Flow[EmailAddress, Report] =
 
 def askForAcceptance: Flow[EmailAddress, CandidateResponse] =
   Flow { emailAddr =>
-    val responseEndpoint ** response = Expr(promise[CandidateResponse])
-    returning(
-      response,
-      sendAcceptanceRequest(emailAddr ** responseEndpoint),
-    )
+    val dueResponse ** response = Expr(promiseMake[CandidateResponse])
+    requestAcceptance(emailAddr ** dueResponse ** response)
   }
 
-def requestAcceptance: Flow[EmailAddress ** PromiseRef[CandidateResponse], Unit] =
-  doWhile { case addr ** ref =>
+def requestAcceptance: Flow[EmailAddress ** Due[CandidateResponse] ** Promised[CandidateResponse], CandidateResponse] =
+  doWhile { case addr ** due ** promised =>
     returning(
-      switch (isComplete(delay(1.day)(ref))) {
-        case Left(_) => injectL(addr ** ref)
-        case Right(_)  => injectR(unit)
+      promiseAwaitTimeout(1.day)(promised) switch {
+        case Left(resp) => injectR(resp)
+        case Right(p)   => injectL(addr ** due ** p)
       },
-      sendAcceptanceRequest(addr ** ref),
+      sendAcceptanceRequest(addr ** due),
     )
   }
 
 def verifyEmploymentHistory: Flow[EmploymentHistory, EmploymentVerificationResult] =
   Flow { history =>
-    val responseEndpoint ** response = Expr(promise[EmploymentVerificationResult])
+    val due ** promised = Expr(promiseMake[EmploymentVerificationResult])
     returning(
-      response,
-      notifyVerificationTeam(history ** responseEndpoint),
+      promiseAwait(promised),
+      notifyVerificationTeam(history ** due),
     )
   }

@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
-import libretto.lambda.examples.workflow.generic.lang.{**, PromiseRef}
+import libretto.lambda.examples.workflow.generic.lang.{**, Due, PromiseRef}
 import libretto.lambda.examples.workflow.generic.runtime.{ActionExecutor, Value, WorkflowEngine}
 import libretto.lambda.UnhandledCase
 import scala.util.{Success, Try}
@@ -29,12 +29,12 @@ class DummyActionExecutor(
         UnhandledCase.raise(s"ActionExecutor#executeAction($action)")
 
   private def sendAcceptanceRequest(
-    args: Value[Val, EmailAddress ** PromiseRef[CandidateResponse]],
+    args: Value[Val, EmailAddress ** Due[CandidateResponse]],
     onComplete: Try[Value[Val, Unit]] => Unit,
   ): Unit =
     val (addr, promResp) = Value.unpair(args)
     promResp match
-      case Value.PromiseToComplete(p) =>
+      case Value.DuePromise(p) =>
         val pId: Value[Val, PersonalId] =
           personalId("1234")
         val hist: Value[Val, EmploymentHistory] =
@@ -42,5 +42,5 @@ class DummyActionExecutor(
         engine.completePromise(p, Success(Value.right(pId ** hist)))
         onComplete(Success(Value.unit))
       case other =>
-        throw AssertionError(s"Unexpected value of type PromiseRef: $other")
+        throw AssertionError(s"Unexpected value of type Due[T]: $other")
 }
