@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
-import libretto.lambda.examples.workflow.generic.lang.{**, Due, Promised}
-import workflows.Flow.{doWhile, injectL, injectR, promiseAwait, promiseAwaitTimeout, promiseMake}
+import libretto.lambda.examples.workflow.generic.lang.{**, InputPortRef, Reading}
+import workflows.Flow.{doWhile, injectL, injectR, read, readAwait, readAwaitTimeout}
 
 import scala.concurrent.duration.*
 
@@ -20,14 +20,14 @@ val backgroundCheck: Flow[EmailAddress, Report] =
 
 def askForAcceptance: Flow[EmailAddress, CandidateResponse] =
   Flow { emailAddr =>
-    val dueResponse ** response = Expr(promiseMake[CandidateResponse])
-    requestAcceptance(emailAddr ** dueResponse ** response)
+    val inPort ** response = Expr(read[CandidateResponse])
+    requestAcceptance(emailAddr ** inPort ** response)
   }
 
-def requestAcceptance: Flow[EmailAddress ** Due[CandidateResponse] ** Promised[CandidateResponse], CandidateResponse] =
+def requestAcceptance: Flow[EmailAddress ** InputPortRef[CandidateResponse] ** Reading[CandidateResponse], CandidateResponse] =
   doWhile { case addr ** due ** promised =>
     returning(
-      promiseAwaitTimeout(1.day)(promised) switch {
+      readAwaitTimeout(1.day)(promised) switch {
         case Left(resp) => injectR(resp)
         case Right(p)   => injectL(addr ** due ** p)
       },
@@ -37,9 +37,9 @@ def requestAcceptance: Flow[EmailAddress ** Due[CandidateResponse] ** Promised[C
 
 def verifyEmploymentHistory: Flow[EmploymentHistory, EmploymentVerificationResult] =
   Flow { history =>
-    val due ** promised = Expr(promiseMake[EmploymentVerificationResult])
+    val inPort ** promised = Expr(read[EmploymentVerificationResult])
     returning(
-      promiseAwait(promised),
-      notifyVerificationTeam(history ** due),
+      readAwait(promised),
+      notifyVerificationTeam(history ** inPort),
     )
   }

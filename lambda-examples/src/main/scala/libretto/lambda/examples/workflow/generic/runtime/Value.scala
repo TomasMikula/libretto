@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Unzippable, Zippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, Due, PromiseRef, Promised}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, InputPortRef, Reading}
 
 enum Value[F[_], A]:
   case One[F[_]]() extends Value[F, Unit]
@@ -14,11 +14,8 @@ enum Value[F[_], A]:
   case Left [F[_], A, B](a: Value[F, A]) extends Value[F, A ++ B]
   case Right[F[_], A, B](b: Value[F, B]) extends Value[F, A ++ B]
 
-  @deprecated
-  case PromiseToComplete[F[_], A](pa: PromiseId[A]) extends Value[F, PromiseRef[A]]
-
-  case DuePromise[F[_], A](pa: PromiseId[A]) extends Value[F, Due[A]]
-  case PromisedValue[F[_], A](pa: PromiseId[A]) extends Value[F, Promised[A]]
+  case InPortRef[F[_], A](pa: PromiseId[A]) extends Value[F, InputPortRef[A]]
+  case ReadingInput[F[_], A](pa: PromiseId[A]) extends Value[F, Reading[A]]
 
   /** Extension point for domain-specific values. */
   case Ext(value: F[A])
@@ -44,14 +41,11 @@ object Value:
   def right[F[_], A, B](value: Value[F, B]): Value[F, A ++ B] =
     Value.Right(value)
 
-  def promiseRef[F[_], A](promiseId: PromiseId[A]): Value[F, PromiseRef[A]] =
-    PromiseToComplete(promiseId)
+  def inputPortRef[F[_], A](promiseId: PromiseId[A]): Value[F, InputPortRef[A]] =
+    InPortRef(promiseId)
 
-  def duePromise[F[_], A](pa: PromiseId[A]): Value[F, Due[A]] =
-    DuePromise(pa)
-
-  def promised[F[_], A](pa: PromiseId[A]): Value[F, Promised[A]] =
-    PromisedValue(pa)
+  def reading[F[_], A](pa: PromiseId[A]): Value[F, Reading[A]] =
+    ReadingInput(pa)
 
   given zippableValue[F[_]]: Zippable[**, Value[F, _]] with
     override def zip[A, B](fa: Value[F, A], fb: Value[F, B]): Value[F, A ** B] =

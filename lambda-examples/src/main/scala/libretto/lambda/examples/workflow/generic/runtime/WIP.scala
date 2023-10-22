@@ -268,8 +268,8 @@ object WIP {
       case FlowAST.Either(f, g) =>throw NotImplementedError(s"at ${summon[SourcePos]}")
       case FlowAST.DistributeLR() =>throw NotImplementedError(s"at ${summon[SourcePos]}")
 
-      case FlowAST.Promise() =>
-        EvalStepRes.Ask { (pb: PromiseId[B]) => WIP.Irreducible.Suspended.Awaiting(pb) }
+      // case FlowAST.Promise() =>
+      //   EvalStepRes.Ask { (pb: PromiseId[B]) => WIP.Irreducible.Suspended.Awaiting(pb) }
 
       case FlowAST.DomainAction(action) =>throw NotImplementedError(s"at ${summon[SourcePos]}")
 
@@ -332,8 +332,8 @@ object WIP {
       case FlowAST.Either(f, g) =>throw NotImplementedError(s"at ${summon[SourcePos]}")
       case FlowAST.DistributeLR() =>throw NotImplementedError(s"at ${summon[SourcePos]}")
 
-      case FlowAST.Promise() =>
-        EvalStepPartialRes.Ask { (pb: PromiseId[B]) => WIP.Irreducible.Suspended.Awaiting(pb) }
+      // case FlowAST.Promise() =>
+      //   EvalStepPartialRes.Ask { (pb: PromiseId[B]) => WIP.Irreducible.Suspended.Awaiting(pb) }
 
       case FlowAST.DomainAction(action) =>throw NotImplementedError(s"at ${summon[SourcePos]}")
 

@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Capture, Focus, Knitted, Shuffled, Spine, Unzippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, Due, FlowAST, PromiseRef, Promised, given}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, InputPortRef, Reading, given}
 import libretto.lambda.examples.workflow.generic.runtime.Input.FindValueRes
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
@@ -204,26 +204,13 @@ object WorkflowInProgress {
                 case Focus.Snd(i) =>
                   UnhandledCase.raise(s"propagateValue into $f at $v")
 
-            case _: FlowAST.Promise[op, x] =>
+            case _: FlowAST.Read[op, x] =>
               v match
                 case Focus.Id() =>
-                  summon[W =:= (PromiseRef[x] ** x)]
+                  summon[W =:= (InputPortRef[x] ** Reading[x])]
                   CrankRes.Ask { (px: PromiseId[x]) =>
-                    val input = remainingInput.plugFold(Input.Ready(Value.promiseRef(px)) ** Input.awaiting(px))
-                    IncompleteImpl(input, Closure.fromShuffled(pre[PromiseRef[x] ** x] > post), resultAcc)
-                  }
-                case Focus.Fst(i) =>
-                  UnhandledCase.raise(s"propagateValue into $f at $v")
-                case Focus.Snd(i) =>
-                  UnhandledCase.raise(s"propagateValue into $f at $v")
-
-            case _: FlowAST.PromiseMake[op, x] =>
-              v match
-                case Focus.Id() =>
-                  summon[W =:= (Due[x] ** Promised[x])]
-                  CrankRes.Ask { (px: PromiseId[x]) =>
-                    val input = remainingInput.plugFold(Input.Ready(Value.duePromise(px)) ** Input.promised(px))
-                    IncompleteImpl(input, Closure.fromShuffled(pre[Due[x] ** Promised[x]] > post), resultAcc)
+                    val input = remainingInput.plugFold(Input.Ready(Value.inputPortRef(px)) ** Input.reading(px))
+                    IncompleteImpl(input, Closure.fromShuffled(pre[InputPortRef[x] ** Reading[x]] > post), resultAcc)
                   }
                 case Focus.Fst(i) =>
                   UnhandledCase.raise(s"propagateValue into $f at $v")

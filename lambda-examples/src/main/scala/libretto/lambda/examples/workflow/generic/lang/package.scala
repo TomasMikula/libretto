@@ -20,8 +20,7 @@ given BiInjective[**] with {
   */
 sealed trait ++[A, B]
 
-@deprecated
-sealed trait PromiseRef[A]
+sealed trait InputPortRef[A]
 
-sealed trait Due[A]
-sealed trait Promised[A]
+/** Value `A` to be read from an external input port */
+sealed trait Reading[A]

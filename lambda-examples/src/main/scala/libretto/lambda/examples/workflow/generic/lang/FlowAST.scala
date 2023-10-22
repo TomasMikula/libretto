@@ -58,14 +58,9 @@ object FlowAST {
   case class DoWhile[Op[_, _], A, B](f: FlowAST[Op, A, A ++ B]) extends Work[Op, A, B]
   case class Delay[Op[_, _], A](duration: FiniteDuration) extends Work[Op, A, A]
 
-  @deprecated
-  case class Promise[Op[_, _], A]() extends Work[Op, Unit, PromiseRef[A] ** A]
-  @deprecated
-  case class IsComplete[Op[_, _], A]() extends Work[Op, PromiseRef[A], Unit ++ Unit]
-
-  case class PromiseMake[Op[_, _], A]() extends Work[Op, Unit, Due[A] ** Promised[A]]
-  case class PromiseAwait[Op[_, _], A]() extends Work[Op, Promised[A], A]
-  case class PromiseAwaitTimeout[Op[_, _], A](duration: FiniteDuration) extends Work[Op, Promised[A], A ++ Promised[A]]
+  case class Read[Op[_, _], A]() extends Work[Op, Unit, InputPortRef[A] ** Reading[A]]
+  case class ReadAwait[Op[_, _], A]() extends Work[Op, Reading[A], A]
+  case class ReadAwaitTimeout[Op[_, _], A](duration: FiniteDuration) extends Work[Op, Reading[A], A ++ Reading[A]]
 
   case class DomainAction[Op[_, _], A, B](action: Op[A, B]) extends Work[Op, A, B]
 
