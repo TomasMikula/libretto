@@ -346,9 +346,19 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
                           ProjectRes.Projected(r, Pure(left1) > bot1 > Pure(bot2) > Pure(right1))
             },
             caseDiscardSnd = p1 =>
-              UnhandledCase.raise(s"${this.getClass.getSimpleName}.projectProper caseDiscardSnd"),
+              UnhandledCase.raise(s"${SemiObstructed.this.getClass.getSimpleName}.projectProper caseDiscardSnd($p1)"),
             casePar = [Q1, Q2] => (ev: res.X =:= (Q1 |*| Q2)) ?=> (p12: P.Par[|*|, X1, Z2, Q1, Q2]) =>
-              UnhandledCase.raise(s"${this.getClass.getSimpleName}.projectProper casePar"),
+              p12 match
+                case P.Fst(p1) =>
+                  summon[Z2 =:= Q2]
+                  left.projectProper(p1.inFst[X2]) match
+                    case ~⚬.ProjectProperRes.Projected(p0, left1) =>
+                      ProjectRes.Projected(
+                        p0,
+                        Pure(left1) > snd(bottom1.asShuffled > Pure(bottom2)) > Pure(right1.from(using ev.flip)),
+                      )
+                case other =>
+                  UnhandledCase.raise(s"${SemiObstructed.this.getClass.getSimpleName}.projectProper casePar $other"),
           )
 
     override def unconsSome: UnconsSomeRes[A, B1 |*| B2] =
