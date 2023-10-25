@@ -20,6 +20,7 @@ sealed trait FlowAST[Op[_, _], A, B] {
       case AndThen(f, g)        => AndThen(f.translate(h), g.translate(h))
       case Par(f1, f2)          => Par(f1.translate(h), f2.translate(h))
       case Either(f, g)         => Either(f.translate(h), g.translate(h))
+      case DoWhile(f)           => DoWhile(f.translate(h))
       case other                => other.asInstanceOf[FlowAST[F, A, B]]
     }
 

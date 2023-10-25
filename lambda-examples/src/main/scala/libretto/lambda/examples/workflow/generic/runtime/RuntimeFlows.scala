@@ -4,6 +4,7 @@ import libretto.lambda.{Capture, Focus, Knit, Knitted, Spine, SymmetricSemigroup
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, InputPortRef, Reading, given}
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
+import scala.annotation.tailrec
 
 object RuntimeFlows {
   opaque type Flow[Op[_, _], Val[_], A, B] =
@@ -14,9 +15,6 @@ object RuntimeFlows {
 
   def pure[Op[_, _], Val[_], A, B](f: FlowAST[Op, A, B]): Flow[Op, Val, A, B] =
     f.translate([x, y] => (g: Op[x, y]) => RuntimeAction.action[Op, Val, x, y](g))
-
-  def distLR[Op[_, _], Val[_], A, B, C](captured: Value[Val, A]): Flow[Op, Val, B ++ C, (A ** B) ++ (A ** C)] =
-    FlowAST.DomainAction(RuntimeAction.DistLR(captured))
 
   def id[Op[_, _], Val[_], A]: Flow[Op, Val, A, A] =
     FlowAST.Id()
@@ -39,8 +37,32 @@ object RuntimeFlows {
   def dup[Op[_, _], Val[_], A]: Flow[Op, Val, A, A ** A] =
     FlowAST.Dup()
 
+  def inl[Op[_, _], Val[_], A, B]: Flow[Op, Val, A, A ++ B] =
+    FlowAST.InjectL()
+
+  def inr[Op[_, _], Val[_], A, B]: Flow[Op, Val, B, A ++ B] =
+    FlowAST.InjectR()
+
+  def either[Op[_, _], Val[_], A, B, C](
+    f: Flow[Op, Val, A, C],
+    g: Flow[Op, Val, B, C],
+  ): Flow[Op, Val, A ++ B, C] =
+    FlowAST.Either(f, g)
+
+  def eitherBimap[Op[_, _], Val[_], A, B, C, D](
+    f: Flow[Op, Val, A, C],
+    g: Flow[Op, Val, B, D],
+  ): Flow[Op, Val, A ++ B, C ++ D] =
+    either(f >>> inl, g >>> inr)
+
+  def distributeLR[Op[_, _], Val[_], A, B, C]: Flow[Op, Val, A ** (B ++ C), (A ** B) ++ (A ** C)] =
+    FlowAST.DistributeLR()
+
   def action[Op[_, _], Val[_], A, B](f: RuntimeAction[Op, Val, A, B]): Flow[Op, Val, A, B] =
     FlowAST.DomainAction(f)
+
+  def distLR[Op[_, _], Val[_], A, B, C](captured: Value[Val, A]): Flow[Op, Val, B ++ C, (A ** B) ++ (A ** C)] =
+    action(RuntimeAction.DistLR(captured))
 
   private type Work[Action[_, _], Val[_], A, B] =
     FlowAST.Work[RuntimeAction[Action, Val, _, _], A, B]
@@ -175,6 +197,7 @@ object RuntimeFlows {
               UnhandledCase.raise(s"propagateValue $value into $other at $v")
           }
 
+        @tailrec
         def distributePartLR[V[_], Y, Z, G[_]](
           pre: sh.Punched[F, [a] =>> G[V[a] ** (Y ++ Z)]],
           v: Focus[**, V],
@@ -191,6 +214,15 @@ object RuntimeFlows {
                   val op = RuntimeFlows.distLR[Action, Val, A, Y, Z](value)
                   val post1 = toShuffled(op).at(g) > post
                   PropagateValueRes.Absorbed(k, fromShuffled(f > post1))
+            case v: Focus.Fst[pr, v1, q] =>
+              type H[a] = G[v1[a] ** ((q ** Y) ++ (q ** Z))]
+              val H: Focus[**, H] = g compose v.i.inFst[(q ** Y) ++ (q ** Z)]
+              distributePartLR[v1, q ** Y, q ** Z, G](
+                pre.andThen[H](H, [x] => (_: Unit) => (sh.assocLR > sh.snd(toShuffled(distributeLR))).at(g)),
+                v.i,
+                post after toShuffled(eitherBimap(assocRL, assocRL)).at(g),
+                g,
+              )
             case other =>
               UnhandledCase.raise(s"distributePartLR at $other")
 
