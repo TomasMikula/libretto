@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{Unzippable, Zippable}
+import libretto.lambda.{UnhandledCase, Unzippable, Zippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, InputPortRef, Reading}
 
 enum Value[F[_], A]:
@@ -46,6 +46,11 @@ object Value:
 
   def reading[F[_], A](pa: PromiseId[A]): Value[F, Reading[A]] =
     ReadingInput(pa)
+
+  def extractInPortId[F[_], A](value: Value[F, Reading[A]]): PromiseId[A] =
+    value match
+      case ReadingInput(pa) => pa
+      case Ext(_) => UnhandledCase.raise(s"$value")
 
   given zippableValue[F[_]]: Zippable[**, Value[F, _]] with
     override def zip[A, B](fa: Value[F, A], fb: Value[F, B]): Value[F, A ** B] =

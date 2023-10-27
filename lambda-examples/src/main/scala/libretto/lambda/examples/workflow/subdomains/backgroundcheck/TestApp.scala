@@ -5,13 +5,16 @@ import libretto.lambda.examples.workflow.generic.runtime.ActionExecutor.ActionRe
 
 import java.util.concurrent.ArrayBlockingQueue
 import scala.annotation.tailrec
+import java.util.concurrent.Executors
 
 object TestApp {
   def main(args: Array[String]): Unit =
     val actionQueue =
       new ArrayBlockingQueue[ActionRequest[Action, Val]](1000)
+    val scheduler =
+      Executors.newSingleThreadScheduledExecutor()
     val engine =
-      WorkflowEngine.start[Action, Val](ActionExecutor.enqueuer(actionQueue))
+      WorkflowEngine.start[Action, Val](ActionExecutor.enqueuer(actionQueue), scheduler)
     val actionExecutor =
       new DummyActionExecutor(engine)
     val execThread =
@@ -41,6 +44,7 @@ object TestApp {
       }
 
     go()
+    scheduler.shutdown()
 
   private def forkDaemon(
     body: () => Unit,

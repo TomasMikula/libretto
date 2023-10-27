@@ -5,13 +5,15 @@ import libretto.lambda.examples.workflow.generic.lang.**
 import libretto.lambda.examples.workflow.generic.runtime.{WorkflowInProgress => WIP}
 import libretto.lambda.util.SourcePos
 
-import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
+import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, ScheduledExecutorService, TimeUnit}
 import scala.concurrent.{Future, Promise}
+import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success}
 
 private[runtime] class Processor[Action[_, _], Val[_]](
   persistor: Persistor[Action, Val],
   worker: ActionExecutor[Action, Val],
+  schedule: (FiniteDuration, () => Unit) => Unit, // TODO: must use durable timers
   workQueue: BlockingQueue[WorkItem],
   stopSignal: Promise[Unit],
 )(using
@@ -48,6 +50,8 @@ private[runtime] class Processor[Action[_, _], Val[_]](
                 failWorkflow(pid.workflow, e)
           case None =>
             Console.err.println(s"Non-existent promise $pid")
+      case WorkItem.TimerElapsed(wRef, timerId) =>
+        UnhandledCase.raise(s"$item")
     }
 
   private def supplyResult[A](
@@ -104,6 +108,14 @@ private[runtime] class Processor[Action[_, _], Val[_]](
             val promiseId = persistor.promise[x](ref)
             val w1 = ask.cont(promiseId)
             CrankRes.Progressed(w1)
+          case WIP.CrankRes.SetTimer(timeout, cont) =>
+            val timerId = new TimerId
+
+            // TODO: elapsed timer must go through persistor first
+            schedule(timeout, () => notify(WorkItem.TimerElapsed(ref, timerId)))
+
+            val w1 = cont(timerId)
+            CrankRes.Progressed(w1)
           case req: WIP.CrankRes.ActionRequest[action, val_, x, y, a] =>
             val promiseId = persistor.promise[y](ref)
             worker.submit(req.input, req.action) { result =>
@@ -123,12 +135,15 @@ private[runtime] object Processor {
   def start[Action[_, _], Val[_]](
     persistor: Persistor[Action, Val],
     worker: ActionExecutor[Action, Val],
+    scheduler: ScheduledExecutorService,
   )(using
     Unzippable[**, Val],
   ): Processor[Action, Val] = {
     val queue = new ArrayBlockingQueue[WorkItem](1000)
     val stopSignal = Promise[Unit]
-    val processor = new Processor(persistor, worker, queue, stopSignal)
+    val schedule = (timeout: FiniteDuration, action: () => Unit) =>
+      scheduler.schedule((() => action()): Runnable, timeout.toMillis, TimeUnit.MILLISECONDS): Unit
+    val processor = new Processor(persistor, worker, schedule, queue, stopSignal)
     val processorThread = new Thread {
       override def run(): Unit = processor.loop()
     }

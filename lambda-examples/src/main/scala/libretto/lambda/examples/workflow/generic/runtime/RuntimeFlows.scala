@@ -5,6 +5,7 @@ import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, InputPor
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.tailrec
+import scala.concurrent.duration.FiniteDuration
 
 object RuntimeFlows {
   opaque type Flow[Op[_, _], Val[_], A, B] =
@@ -160,6 +161,26 @@ object RuntimeFlows {
                 case Focus.Snd(i) =>
                   UnhandledCase.raise(s"propagateValue into $f at $v")
 
+            case FlowAST.DoWhile(body) =>
+              ev match { case TypeEq(Refl()) =>
+                val f1 = body >>> FlowAST.Either(FlowAST.DoWhile(body), FlowAST.Id())
+                val cont = fromShuffled(pre[A] > toShuffled(f1).at(g) > post)
+                PropagateValueRes.Transformed[Action, Val, F, A, B](Input.Ready(value), cont)
+              }
+
+            case read: FlowAST.ReadAwaitTimeout[op, a] =>
+              v match
+                case Focus.Id() =>
+                  val ev1: Reading[a] =:= A =
+                    summon[Reading[a] =:= VA] andThen ev
+                  val cont: Flow[Action, Val, F[a ++ Reading[a]], B] =
+                    fromShuffled(pre[a ++ Reading[a]] > post)
+                  val awaited: Value[Val, Reading[a]] =
+                    ev1.substituteContra[Value[Val, _]](value)
+                  PropagateValueRes.ReadAwaitTimeout[Action, Val, F, a, B](awaited, read.duration, cont)
+                case other =>
+                  UnhandledCase.raise(s"propagateValue $value into $other at $v")
+
             case FlowAST.DomainAction(action) =>
               action match
                 case RuntimeAction.DomainAction(partialArgs, action) =>
@@ -187,12 +208,6 @@ object RuntimeFlows {
                 case RuntimeAction.DistLR(x) =>
                   UnhandledCase.raise(s"propagateValue into $action at $v")
 
-            case FlowAST.DoWhile(body) =>
-              ev match { case TypeEq(Refl()) =>
-                val f1 = body >>> FlowAST.Either(FlowAST.DoWhile(body), FlowAST.Id())
-                val cont = fromShuffled(pre[A] > toShuffled(f1).at(g) > post)
-                PropagateValueRes.Transformed[Action, Val, F, A, B](Input.Ready(value), cont)
-              }
             case other =>
               UnhandledCase.raise(s"propagateValue $value into $other at $v")
           }
@@ -254,6 +269,12 @@ object RuntimeFlows {
 
     case class Read[Action[_, _], Val[_], F[_], Y, B](
       cont: Flow[Action, Val, F[InputPortRef[Y] ** Reading[Y]], B]
+    ) extends PropagateValueRes[Action, Val, F, B]
+
+    case class ReadAwaitTimeout[Action[_, _], Val[_], F[_], Y, B](
+      toAwait: Value[Val, Reading[Y]],
+      timeout: FiniteDuration,
+      cont: Flow[Action, Val, F[Y ++ Reading[Y]], B],
     ) extends PropagateValueRes[Action, Val, F, B]
 
     case class ActionRequest[Action[_, _], Val[_], F[_], X, Y, B](

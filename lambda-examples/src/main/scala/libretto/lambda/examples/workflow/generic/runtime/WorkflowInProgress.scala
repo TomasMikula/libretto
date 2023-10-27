@@ -7,6 +7,7 @@ import libretto.lambda.examples.workflow.generic.runtime.{RuntimeFlows as rtf}
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.UnhandledCase
+import scala.concurrent.duration.FiniteDuration
 
 sealed trait WorkflowInProgress[Action[_, _], Val[_], A] {
   import WorkflowInProgress.*
@@ -62,6 +63,18 @@ object WorkflowInProgress {
                   CrankRes.Progressed(IncompleteImpl(path.knitFold(k), f, resultAcc))
                 case pvr.Read(cont) =>
                   CrankRes.read(path, cont, resultAcc)
+                case pvr.ReadAwaitTimeout(toAwait, timeout, cont) =>
+                  val pId = Value.extractInPortId(toAwait)
+                  CrankRes.SetTimer(
+                    timeout,
+                    timerId => {
+                      IncompleteImpl(
+                        path.plugFold(Input.awaitingTimeout(pId, timerId)),
+                        cont,
+                        resultAcc,
+                      )
+                    },
+                  )
                 case pvr.ActionRequest(input, action, cont) =>
                   UnhandledCase.raise(s"ActionRequest($input, $action, $cont)")
   }
@@ -81,6 +94,10 @@ object WorkflowInProgress {
     case Progressed(w: WorkflowInProgress[Action, Val, A])
     case Ask[Action[_, _], Val[_], X, A](
       cont: PromiseId[X] => WorkflowInProgress[Action, Val, A],
+    ) extends CrankRes[Action, Val, A]
+    case SetTimer[Action[_, _], Val[_], A](
+      duration: FiniteDuration,
+      cont: TimerId => WorkflowInProgress[Action, Val, A],
     ) extends CrankRes[Action, Val, A]
     case ActionRequest[Action[_, _], Val[_], X, Y, A](
       input: Value[Val, X],

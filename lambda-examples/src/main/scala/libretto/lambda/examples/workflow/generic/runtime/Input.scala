@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Spine, Zippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, InputPortRef, Reading}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, InputPortRef, Reading}
 import libretto.lambda.util.TypeEq
 import libretto.lambda.util.TypeEq.{Refl, *}
 
@@ -64,6 +64,9 @@ object Input {
   def awaiting[Val[_], A](pa: PromiseId[A]): Input[Val, A] =
     Awaiting(AwaitedValues.Awaiting(pa))
 
+  def awaitingTimeout[Val[_], A](pa: PromiseId[A], t: TimerId): Input[Val, A ++ Reading[A]] =
+    Awaiting(AwaitedValues.AwaitingTimeout(pa, t))
+
   def inPortRef[Val[_], A](pa: PromiseId[A]): Input[Val, InputPortRef[A]] =
     Ready(Value.inputPortRef(pa))
 
@@ -85,6 +88,7 @@ object Input {
 
 enum AwaitedValues[Val[_], A]:
   case Awaiting(promised: PromiseId[A])
+  case AwaitingTimeout(promised: PromiseId[A], t: TimerId) extends AwaitedValues[Val, A ++ Reading[A]]
   case Zip[Val[_], A1, A2](
     a1: AwaitedValues[Val, A1],
     a2: AwaitedValues[Val, A2],
