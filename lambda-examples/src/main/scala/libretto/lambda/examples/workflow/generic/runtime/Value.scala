@@ -27,14 +27,6 @@ object Value:
   def unit[F[_]]: Value[F, Unit] =
     Value.One()
 
-  def unpair[F[_], A, B](value: Value[F, A ** B])(using F: Unzippable[**, F]): (Value[F, A], Value[F, B]) =
-    value match
-      case Pair(a, b) =>
-        (a, b)
-      case Ext(value) =>
-        val (a, b) = F.unzip(value)
-        (Ext(a), Ext(b))
-
   def left[F[_], A, B](value: Value[F, A]): Value[F, A ++ B] =
     Value.Left(value)
 
@@ -47,10 +39,24 @@ object Value:
   def reading[F[_], A](pa: PromiseId[A]): Value[F, Reading[A]] =
     ReadingInput(pa)
 
+  def unpair[F[_], A, B](value: Value[F, A ** B])(using F: Unzippable[**, F]): (Value[F, A], Value[F, B]) =
+    value match
+      case Pair(a, b) =>
+        (a, b)
+      case Ext(value) =>
+        val (a, b) = F.unzip(value)
+        (Ext(a), Ext(b))
+
+  def toEither[F[_], A, B](value: Value[F, A ++ B]): Either[Value[F, A], Value[F, B]] =
+    value match
+      case Value.Left(a)  => scala.Left(a)
+      case Value.Right(b) => scala.Right(b)
+      case Ext(_) => UnhandledCase.raise(s"$value") // TODO: require evidence for F that makes it compliant
+
   def extractInPortId[F[_], A](value: Value[F, Reading[A]]): PromiseId[A] =
     value match
       case ReadingInput(pa) => pa
-      case Ext(_) => UnhandledCase.raise(s"$value")
+      case Ext(_) => UnhandledCase.raise(s"$value") // TODO: require evidence for F that makes it compliant
 
   given zippableValue[F[_]]: Zippable[**, Value[F, _]] with
     override def zip[A, B](fa: Value[F, A], fb: Value[F, B]): Value[F, A ** B] =

@@ -76,7 +76,15 @@ object WorkflowInProgress {
                     },
                   )
                 case pvr.ActionRequest(input, action, cont) =>
-                  UnhandledCase.raise(s"ActionRequest($input, $action, $cont)")
+                  CrankRes.ActionRequest(
+                    input,
+                    action,
+                    py => IncompleteImpl(
+                      path.plugFold(Input.awaiting(py)),
+                      cont,
+                      resultAcc,
+                    ),
+                  )
   }
 
   def init[Action[_, _], Val[_], A, B](

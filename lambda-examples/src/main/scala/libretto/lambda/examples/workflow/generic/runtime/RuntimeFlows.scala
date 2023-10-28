@@ -101,9 +101,10 @@ object RuntimeFlows {
     cont.toShuffled.chaseFw(F) match
       case Transported(s, ev) =>
         PropagateValueRes.Transported.Impl(s, ev, value)
-      case Split(ev1) =>
-        // split value and continue with a half
-        throw NotImplementedError(s"at ${summon[SourcePos]}")
+      case Split(ev) =>
+        val (a1, a2) = Value.unpair(ev.substituteCo(value))
+        val input = ev.substituteContra(Input.Ready(a1) ** Input.Ready(a2))
+        PropagateValueRes.Transformed(input, cont)
       case r: FedTo[f, a, v, w, g, b] =>
         def go[V[_], G[_], W](
           pre: sh.Punched[F, [x] =>> G[V[x]]],
@@ -125,6 +126,65 @@ object RuntimeFlows {
                   case Focus.Snd(i) =>
                     UnhandledCase.raise(s"propagateValue into $f at $v")
               }
+
+            case i: FlowAST.InjectL[op, x, y] =>
+              summon[VA =:= x]
+              v match
+                case Focus.Id() =>
+                  PropagateValueRes.Transformed(
+                    Input.Ready(Value.left(ev.substituteContra(value))),
+                    fromShuffled(pre[x ++ y] > post),
+                  )
+                case v: Focus.Proper[**, V] =>
+                  RuntimeAction.captureValue[Action, Val, V, A](value, v) match
+                    case Exists.Some((collector, k)) =>
+                      given (V[A] =:= x) = ev.flip andThen summon[VA =:= x]
+                      pre.knitBw(k.at(g)) match
+                        case Exists.Some((k1, pre1)) =>
+                          val i1 = action(collector).to[x] >>> i
+                          PropagateValueRes.Absorbed(
+                            k1,
+                            fromShuffled(pre1 > toShuffled(i1).at(g) > post),
+                          )
+
+            case i: FlowAST.InjectR[op, x, y] =>
+              summon[VA =:= y]
+              v match
+                case Focus.Id() =>
+                  PropagateValueRes.Transformed(
+                    Input.Ready(Value.right(ev.substituteContra(value))),
+                    fromShuffled(pre[x ++ y] > post),
+                  )
+                case v: Focus.Proper[**, V] =>
+                  RuntimeAction.captureValue[Action, Val, V, A](value, v) match
+                    case Exists.Some((collector, k)) =>
+                      given (V[A] =:= y) = ev.flip andThen summon[VA =:= y]
+                      pre.knitBw(k.at(g)) match
+                        case Exists.Some((k1, pre1)) =>
+                          val i1 = action(collector).to[y] >>> i
+                          PropagateValueRes.Absorbed(
+                            k1,
+                            fromShuffled(pre1 > toShuffled(i1).at(g) > post),
+                          )
+
+            case e: FlowAST.Either[op, x, y, w] =>
+              v match
+                case Focus.Id() =>
+                  val axy: A =:= (x ++ y) = summon[A =:= V[A]] andThen ev.flip andThen summon[VA =:= (x ++ y)]
+                  val xy: Value[Val, x ++ y] = axy.substituteCo(value)
+                  Value.toEither(xy) match
+                    case Left(x) =>
+                      PropagateValueRes.Transformed(
+                        Input.Ready(x),
+                        fromShuffled(pre[x] > toShuffled(e.f).at(g) > post),
+                      )
+                    case Right(y) =>
+                      PropagateValueRes.Transformed(
+                        Input.Ready(y),
+                        fromShuffled(pre[y] > toShuffled(e.g).at(g) > post),
+                      )
+                case other =>
+                  throw AssertionError(s"Impossible: would meant that `++` = `**`")
 
             case f1: FlowAST.DistributeLR[op, x, y, z] =>
               summon[VA =:= (x ** (y ++ z))]
@@ -199,14 +259,48 @@ object RuntimeFlows {
                             val k1 = k.at(g)
                             pre.knitBw(k1) match
                               case Exists.Some((k0, pre1)) =>
-                                // val input = remainingInput.knitFold(k0)
                                 val f1 = toShuffled(RuntimeFlows.action(RuntimeAction.partiallyApplied(r, action))).at(g)
                                 val cont1 = fromShuffled(pre1 > f1 > post)
-                                // CrankRes.Progressed(IncompleteImpl(input, cont1, resultAcc))
                                 PropagateValueRes.Absorbed(k0, cont1)
                   }
-                case RuntimeAction.DistLR(x) =>
-                  UnhandledCase.raise(s"propagateValue into $action at $v")
+                case d: RuntimeAction.DistLR[op, val_, x, y, z] =>
+                  v match
+                    case Focus.Id() =>
+                      def go[X, Y, Z](
+                        x: Value[Val, X],
+                        yz: Value[Val, Y ++ Z],
+                        post: sh.Shuffled[G[(X ** Y) ++ (X ** Z)], B],
+                      ): PropagateValueRes[Action, Val, F, B] =
+                        val input: Value[Val, (X ** Y) ++ (X ** Z)] =
+                          Value.toEither(yz) match
+                            case Left(y)  => Value.left(x ** y)
+                            case Right(z) => Value.right(x ** z)
+                        PropagateValueRes.Transformed(
+                          Input.Ready(input),
+                          fromShuffled(pre[(X ** Y) ++ (X ** Z)] > post),
+                        )
+
+                      val yz: Value[Val, y ++ z] = ev.flip.substituteCo[Value[Val, _]](value)
+                      go[x, y, z](d.x, yz, post)
+
+                    case other =>
+                      throw AssertionError(s"Impossible, would mean that `++` = `**`")
+
+                case RuntimeAction.ValueCollector(f) =>
+                  v match
+                    case Focus.Id() =>
+                      PropagateValueRes.Transformed(
+                        Input.Ready(f.complete(ev.substituteContra(value)).fold),
+                        fromShuffled(pre[W] > post),
+                      )
+                    case v: Focus.Proper[**, V] =>
+                      given (V[A] =:= VA) = ev.flip
+                      f.absorb[V, A](value, v) match
+                        case Capture.Absorbed.Impl(k, f1) =>
+                          pre.knitBw(k.at(g)) match
+                            case Exists.Some((k1, pre1)) =>
+                              val f2 = toShuffled(RuntimeFlows.action(RuntimeAction.ValueCollector(f1))).at(g)
+                              PropagateValueRes.Absorbed(k1, fromShuffled(pre1 > f2 > post))
 
             case other =>
               UnhandledCase.raise(s"propagateValue $value into $other at $v")

@@ -107,6 +107,12 @@ enum AwaitedValues[Val[_], A]:
           Some(Input.Ready(result.asInstanceOf[Value[Val, A]]))
         else
           None
+      case AwaitingTimeout(pa, t) =>
+        if (px == pa)
+          Some(Input.Ready(result.asInstanceOf[Value[Val, A]]))
+          // TODO: cancel the timer
+        else
+          None
       case Zip(a1, a2) =>
         (a1.supplyResult(px, result), a2.supplyResult(px, result)) match
           case (Some(i), Some(j)) => Some(Input.Zip(i, j))
