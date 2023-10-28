@@ -16,11 +16,9 @@ sealed trait Capture[**[_, _], F[_], A, B] {
   def >[C](that: Capture[**, F, B, C])(using Unzippable[**, F]): Capture[**, F, A, C] =
     that after this
 
-  def inFst[Y]: Capture[**, F, A ** Y, B ** Y] =
-    throw NotImplementedError(s"at ${summon[SourcePos]}")
+  def inFst[Y]: Capture[**, F, A ** Y, B ** Y]
 
-  def inSnd[X]: Capture[**, F, X ** A, X ** B] =
-    throw NotImplementedError(s"at ${summon[SourcePos]}")
+  def inSnd[X]: Capture[**, F, X ** A, X ** B]
 
   def complete(value: Tupled[**, F, A])(using Unzippable[**, F]): Tupled[**, F, B]
 
@@ -44,8 +42,20 @@ object Capture {
     override def after[Z](that: Capture[**, F, Z, A])(using Unzippable[**, F]): Capture[**, F, Z, A] =
       that
 
+    override def inFst[Y]: Capture[**, F, A ** Y, A ** Y] =
+      NoCapture()
+
+    override def inSnd[X]: Capture[**, F, X ** A, X ** A] =
+      NoCapture()
+
   sealed trait Proper[**[_, _], F[_], A, B] extends Capture[**, F, A, B]:
     override def after[Z](that: Capture[**, F, Z, A])(using Unzippable[**, F]): Capture.Proper[**, F, Z, B]
+
+    override def inFst[Y]: Capture[**, F, A ** Y, B ** Y] =
+      Capture.InFst(this)
+
+    override def inSnd[X]: Capture[**, F, X ** A, X ** B] =
+      Capture.InSnd(this)
 
   case class CaptureFst[**[_, _], F[_], A, B1, B2](
     b1: Tupled[**, F, B1],
@@ -67,6 +77,40 @@ object Capture {
     override def after[Z](that: Capture[**, F, Z, A])(using Unzippable[**, F]): Capture.Proper[**, F, Z, B1 ** B2] =
       CaptureSnd(that > f, b2)
 
+  case class InFst[**[_, _], F[_], A, B, Y](
+    f: Capture.Proper[**, F, A, B],
+  ) extends Proper[**, F, A ** Y, B ** Y]:
+    override def complete(value: Tupled[**, F, A ** Y])(using F: Unzippable[**, F]): Tupled[**, F, B ** Y] =
+      val (a, y) = Tupled.unzip(value)
+      f.complete(a) zip y
+
+    override def after[Z](that: Capture[**, F, Z, A ** Y])(using Unzippable[**, F]): Proper[**, F, Z, B ** Y] =
+      that match
+        case NoCapture()       => this
+        case CaptureFst(b1, g) => CaptureFst(f.complete(b1), g)
+        case CaptureSnd(g, b2) => CaptureSnd(f after g, b2)
+        case InFst(g)          => InFst(f after g).asInstanceOf // XXX
+        case InSnd(g)          => Par(f, g)
+        case Par(g1, g2)       => Par(f after g1, g2)
+
+
+  case class InSnd[**[_, _], F[_], X, A, B](
+    f: Capture.Proper[**, F, A, B],
+  ) extends Proper[**, F, X ** A, X ** B]:
+    override def complete(value: Tupled[**, F, X ** A])(using F: Unzippable[**, F]): Tupled[**, F, X ** B] =
+      val (x, a) = Tupled.unzip(value)
+      x zip f.complete(a)
+
+    override def after[Z](that: Capture[**, F, Z, X ** A])(using Unzippable[**, F]): Proper[**, F, Z, X ** B] =
+      that match
+        case NoCapture()       => this
+        case CaptureFst(b1, g) => CaptureFst(b1, f after g)
+        case CaptureSnd(g, b2) => CaptureSnd(g, f.complete(b2))
+        case InFst(g)          => Par(g, f)
+        case InSnd(g)          => InSnd(f after g).asInstanceOf // XXX
+        case Par(g1, g2)       => Par(g1, f after g2)
+
+
   case class Par[**[_, _], F[_], A1, A2, B1, B2](
     f1: Proper[**, F, A1, B1],
     f2: Proper[**, F, A2, B2],
@@ -78,8 +122,10 @@ object Capture {
     override def after[Z](that: Capture[**, F, Z, A1 ** A2])(using Unzippable[**, F]): Capture.Proper[**, F, Z, B1 ** B2] =
       that match
         case NoCapture()       => this
-        case CaptureFst(a1, h) => f1.complete(a1) match { case b1 => CaptureFst(b1, f2 after h) }
-        case CaptureSnd(h, a2) => f2.complete(a2) match { case b2 => CaptureSnd(f1 after h, b2) }
+        case CaptureFst(a1, h) => CaptureFst(f1.complete(a1), f2 after h)
+        case CaptureSnd(h, a2) => CaptureSnd(f1 after h, f2.complete(a2))
+        case InFst(h)          => Par(f1 after h, f2)
+        case InSnd(h)          => Par(f1, f2 after h)
         case Par(h1, h2)       => Par(f1 after h1, f2 after h2)
 
   def fromFocus[**[_, _], F[_], P[_], X](
