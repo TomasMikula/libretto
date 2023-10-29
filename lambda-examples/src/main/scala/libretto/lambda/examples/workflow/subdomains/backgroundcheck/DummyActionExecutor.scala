@@ -18,15 +18,15 @@ class DummyActionExecutor(
       case Action.SendAcceptanceRequest =>
         sendAcceptanceRequest(input, onComplete)
       case Action.NotifyVerificationTeam =>
-        UnhandledCase.raise(s"ActionExecutor#executeAction($action)")
+        notifyVerificationTeam(input, onComplete)
       case Action.ReportCandidateDeclined =>
         UnhandledCase.raise(s"ActionExecutor#executeAction($action)")
       case Action.CreateReport =>
         UnhandledCase.raise(s"ActionExecutor#executeAction($action)")
       case Action.CheckCriminalRecord =>
-        UnhandledCase.raise(s"ActionExecutor#executeAction($action)")
+        checkCriminalRecord(input, onComplete)
       case Action.CheckCivilRecord =>
-        UnhandledCase.raise(s"ActionExecutor#executeAction($action)")
+        checkCivilRecord(input, onComplete)
 
   private def sendAcceptanceRequest(
     args: Value[Val, EmailAddress ** InputPortRef[CandidateResponse]],
@@ -42,5 +42,39 @@ class DummyActionExecutor(
         engine.completePromise(p, Success(Value.right(pId ** hist)))
         onComplete(Success(Value.unit))
       case other =>
-        throw AssertionError(s"Unexpected value of type Due[T]: $other")
+        throw AssertionError(s"Unexpected value of type InputPortRef[T]: $other")
+
+  private def notifyVerificationTeam(
+    args: Value[Val, EmploymentHistory ** InputPortRef[EmploymentVerificationResult]],
+    onComplete: Try[Value[Val, Unit]] => Unit,
+  ): Unit =
+    val (hist, ref) = Value.unpair(args)
+    ref match
+      case Value.InPortRef(ref) =>
+        val res: Value[Val, EmploymentVerificationResult] =
+          employmentVerificationResult(true)
+        engine.completePromise(ref, Success(res))
+        onComplete(Success(Value.unit))
+      case other =>
+        throw AssertionError(s"Unexpected value of type InputPortRef[T]: $other")
+
+  private def checkCriminalRecord(
+    args: Value[Val, PersonalId],
+    onComplete: Try[Value[Val, CriminalRecord]] => Unit,
+  ): Unit =
+    args match
+      case Value.Ext(Val.PersonId(personalId)) =>
+        onComplete(Success(criminalRecord(clean = true)))
+      case other =>
+        throw AssertionError(s"Unexpected value of type PersonalId: $other")
+
+  private def checkCivilRecord(
+    args: Value[Val, PersonalId],
+    onComplete: Try[Value[Val, CivilRecord]] => Unit,
+  ): Unit =
+    args match
+      case Value.Ext(Val.PersonId(personalId)) =>
+        onComplete(Success(civilRecord(clean = true)))
+      case other =>
+        throw AssertionError(s"Unexpected value of type PersonalId: $other")
 }

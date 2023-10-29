@@ -8,6 +8,9 @@ enum Val[A]:
   case EmailAddr(value: String) extends Val[EmailAddress]
   case PersonId(value: String) extends Val[PersonalId]
   case EmployHistory(value: String) extends Val[EmploymentHistory]
+  case VerificationResult(value: Boolean) extends Val[EmploymentVerificationResult]
+  case CrimiRec(clean: Boolean) extends Val[CriminalRecord]
+  case CivilRec(clean: Boolean) extends Val[CivilRecord]
 
 object Val:
   given Unzippable[**, Val] with
@@ -24,3 +27,12 @@ def personalId(value: String): Value[PersonalId] =
 
 def employmentHistory(value: String): Value[EmploymentHistory] =
   generic.runtime.Value.Ext(Val.EmployHistory(value))
+
+def employmentVerificationResult(value: Boolean): Value[EmploymentVerificationResult] =
+  generic.runtime.Value.Ext(Val.VerificationResult(value))
+
+def criminalRecord(clean: Boolean): Value[CriminalRecord] =
+  generic.runtime.Value.Ext(Val.CrimiRec(clean))
+
+def civilRecord(clean: Boolean): Value[CivilRecord] =
+  generic.runtime.Value.Ext(Val.CivilRec(clean))

@@ -245,6 +245,21 @@ object RuntimeFlows {
                 PropagateValueRes.Transformed[Action, Val, F, A, B](Input.Ready(value), cont)
               }
 
+            case read: FlowAST.ReadAwait[op, a] =>
+              v match
+                case Focus.Id() =>
+                  given (A =:= Reading[a]) =
+                    summon[A =:= V[A]] andThen ev.flip andThen summon[VA =:= Reading[a]]
+                  val ref =
+                    Value.extractInPortId(value.as[Reading[a]])
+                  PropagateValueRes.Transformed(
+                    Input.awaiting(ref),
+                    fromShuffled(pre[a] > post),
+                  )
+                case other =>
+                  // TODO: derive contradiction
+                  UnhandledCase.raise(s"propagateValue $value into $other at $v")
+
             case read: FlowAST.ReadAwaitTimeout[op, a] =>
               v match
                 case Focus.Id() =>
@@ -256,6 +271,7 @@ object RuntimeFlows {
                     ev1.substituteContra[Value[Val, _]](value)
                   PropagateValueRes.ReadAwaitTimeout[Action, Val, F, a, B](awaited, read.duration, cont)
                 case other =>
+                  // TODO: derive contradiction
                   UnhandledCase.raise(s"propagateValue $value into $other at $v")
 
             case FlowAST.DomainAction(action) =>
