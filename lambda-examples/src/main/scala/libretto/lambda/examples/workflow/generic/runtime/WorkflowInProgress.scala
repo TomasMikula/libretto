@@ -61,6 +61,10 @@ object WorkflowInProgress {
                   CrankRes.Progressed(IncompleteImpl(path.plugFold(newInput), f, resultAcc))
                 case pvr.Absorbed(k, f) =>
                   CrankRes.Progressed(IncompleteImpl(path.knitFold(k), f, resultAcc))
+                case pvr.Shrunk(newInput, p, f) =>
+                  val input1 = path.plugFold(newInput)
+                  val input2 = input1.discard(p) // TODO: cancel running actions
+                  CrankRes.Progressed(IncompleteImpl(input2, f, resultAcc))
                 case pvr.Read(cont) =>
                   CrankRes.read(path, cont, resultAcc)
                 case pvr.ReadAwaitTimeout(toAwait, timeout, cont) =>

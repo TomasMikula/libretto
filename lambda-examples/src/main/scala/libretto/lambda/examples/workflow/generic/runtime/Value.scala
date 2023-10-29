@@ -1,7 +1,8 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{UnhandledCase, Unzippable, Zippable}
+import libretto.lambda.{Projection, UnhandledCase, Unzippable, Zippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, InputPortRef, Reading}
+import libretto.lambda.util.Exists
 
 enum Value[F[_], A]:
   case One[F[_]]() extends Value[F, Unit]
@@ -20,8 +21,21 @@ enum Value[F[_], A]:
   /** Extension point for domain-specific values. */
   case Ext(value: F[A])
 
+  def as[B](using ev: A =:= B): Value[F, B] =
+    ev.substituteCo(this)
+
   def **[B](that: Value[F, B]): Value[F, A ** B] =
     Pair(this, that)
+
+  def discard[B](p: Projection[**, A, B])(using Unzippable[**, F]): Value[F, B] =
+    p match
+      case Projection.Id()                => this
+      case p: Projection.Proper[pr, a, b] => discardProper(p)
+
+  def discardProper[B](p: Projection.Proper[**, A, B])(using Unzippable[**, F]): Value[F, B] =
+    p.startsFromPair match
+      case Exists.Some(Exists.Some(ev)) =>
+        Value.discardProper(this.as(using ev), p.from(using ev.flip))
 
 object Value:
   def unit[F[_]]: Value[F, Unit] =
@@ -65,3 +79,22 @@ object Value:
   given unzippableValue[F[_]](using Unzippable[**, F]): Unzippable[**, Value[F, _]] with
     override def unzip[A, B](fab: Value[F, A ** B]): (Value[F, A], Value[F, B]) =
       Value.unpair(fab)
+
+  private[Value] def discardProper[F[_], A1, A2, B](
+    value: Value[F, A1 ** A2],
+    p: Projection.Proper[**, A1 ** A2, B],
+  )(using
+    Unzippable[**, F],
+  ): Value[F, B] =
+    val (a1, a2) = unpair(value)
+    p match
+      case Projection.DiscardFst(p2) =>
+        a2.discard(p2)
+      case Projection.DiscardSnd(p1) =>
+        a1.discard(p1)
+      case Projection.Fst(p1) =>
+        a1.discardProper(p1) ** a2
+      case Projection.Snd(p2) =>
+        a1 ** a2.discardProper(p2)
+      case Projection.Both(p1, p2) =>
+        a1.discardProper(p1) ** a2.discardProper(p2)

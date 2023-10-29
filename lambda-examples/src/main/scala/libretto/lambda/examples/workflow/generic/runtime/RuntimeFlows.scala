@@ -1,10 +1,9 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{Capture, Focus, Knit, Knitted, Spine, SymmetricSemigroupalCategory, UnhandledCase, Unzippable}
+import libretto.lambda.{Capture, Focus, Knit, Knitted, Projection, Spine, SymmetricSemigroupalCategory, UnhandledCase, Unzippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, InputPortRef, Reading, given}
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
-import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
 
 object RuntimeFlows {
@@ -126,6 +125,24 @@ object RuntimeFlows {
                   case Focus.Snd(i) =>
                     UnhandledCase.raise(s"propagateValue into $f at $v")
               }
+
+            case _: FlowAST.Prj1[op, x, y] =>
+              summon[VA =:= (x ** y)]
+              summon[W =:= x]
+              val pre1: sh.Shuffled[F[A], G[x ** y]] = pre[A].to(using ev.flip.liftCo[G])
+              val p: Projection.Proper[**, G[x ** y], G[x]] = Projection.discardSnd[**, x, y].at(g)
+              project(pre1, p) match
+                case sh.ProjectRes.Projected(p0, pre2) =>
+                  PropagateValueRes.Shrunk(Input.Ready(value), p0, fromShuffled(pre2 > post))
+
+            case _: FlowAST.Prj2[op, x, y] =>
+              summon[VA =:= (x ** y)]
+              summon[W =:= y]
+              val pre1: sh.Shuffled[F[A], G[x ** y]] = pre[A].to(using ev.flip.liftCo[G])
+              val p: Projection.Proper[**, G[x ** y], G[y]] = Projection.discardFst[**, x, y].at(g)
+              project(pre1, p) match
+                case sh.ProjectRes.Projected(p0, pre2) =>
+                  PropagateValueRes.Shrunk(Input.Ready(value), p0, fromShuffled(pre2 > post))
 
             case i: FlowAST.InjectL[op, x, y] =>
               summon[VA =:= x]
@@ -306,7 +323,6 @@ object RuntimeFlows {
               UnhandledCase.raise(s"propagateValue $value into $other at $v")
           }
 
-        @tailrec
         def distributePartLR[V[_], Y, Z, G[_]](
           pre: sh.Punched[F, [a] =>> G[V[a] ** (Y ++ Z)]],
           v: Focus[**, V],
@@ -323,20 +339,36 @@ object RuntimeFlows {
                   val op = RuntimeFlows.distLR[Action, Val, A, Y, Z](value)
                   val post1 = toShuffled(op).at(g) > post
                   PropagateValueRes.Absorbed(k, fromShuffled(f > post1))
-            case v: Focus.Fst[pr, v1, q] =>
-              type H[a] = G[v1[a] ** ((q ** Y) ++ (q ** Z))]
-              val H: Focus[**, H] = g compose v.i.inFst[(q ** Y) ++ (q ** Z)]
-              distributePartLR[v1, q ** Y, q ** Z, G](
-                pre.andThen[H](H, [x] => (_: Unit) => (sh.assocLR > sh.snd(toShuffled(distributeLR))).at(g)),
-                v.i,
-                post after toShuffled(eitherBimap(assocRL, assocRL)).at(g),
-                g,
+            case v: Focus.Proper[pr, v] =>
+              val ev = v.provePair[A]
+              type P = ev.T
+              type Q = ev.value.T
+              given ev1: (V[A] =:= (P ** Q)) =
+                ev.value.value
+              val pre1: sh.Shuffled[F[A], G[(P ** Q) ** (Y ++ Z)]] =
+                pre[A].to(using ev1.liftCo[[x] =>> G[x ** (Y ++ Z)]])
+              val distSeparately: Flow[Action, Val, (P ** Q) ** (Y ++ Z), ((P ** Q) ** Y) ++ ((P ** Q) ** Z)] =
+                assocLR >>> snd(distributeLR) >>> distributeLR >>> eitherBimap(assocRL, assocRL)
+              val distSeparately1: Flow[Action, Val, (P ** Q) ** (Y ++ Z), (V[A] ** Y) ++ (V[A] ** Z)] =
+                distSeparately.to(using ev1.liftContra[[x] =>> (x ** Y) ++ (x ** Z)])
+              PropagateValueRes.Transformed(
+                Input.Ready(value),
+                fromShuffled(pre1 > toShuffled(distSeparately1).at(g) > post)
               )
-            case other =>
-              UnhandledCase.raise(s"distributePartLR at $other")
 
         go[v, g, w](r.pre, r.v, r.f, r.g, r.post)
   }
+
+  private def project[Action[_, _], Val[_], A, B, C](using sh: Shuffled[Action, Val])(
+    f: sh.Shuffled[A, B],
+    p: Projection[**, B, C],
+  ): sh.ProjectRes[A, C] =
+    f.project(
+      p,
+      [X, Y, Z] => (w: Work[Action, Val, X, Y], p: Projection[**, Y, Z]) => {
+        UnhandledCase.raise(s"Projecting $w by $p")
+      },
+    )
 
   sealed trait PropagateValueRes[Action[_, _], Val[_], F[_], B]
 
@@ -358,6 +390,12 @@ object RuntimeFlows {
 
     case class Absorbed[Action[_, _], Val[_], F[_], F0, B](
       k: Knitted[**, F, F0],
+      f: Flow[Action, Val, F0, B],
+    ) extends PropagateValueRes[Action, Val, F, B]
+
+    case class Shrunk[Action[_, _], Val[_], F[_], X, F0, B](
+      newValue: Input[Val, X],
+      p: Projection[**, F[X], F0],
       f: Flow[Action, Val, F0, B],
     ) extends PropagateValueRes[Action, Val, F, B]
 
