@@ -2,6 +2,7 @@ package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
 import libretto.lambda.Unzippable
 import libretto.lambda.examples.workflow.generic
+import libretto.lambda.examples.workflow.generic.runtime.Value.Ext
 import libretto.lambda.examples.workflow.generic.lang.**
 
 enum Val[A]:
@@ -11,6 +12,11 @@ enum Val[A]:
   case VerificationResult(value: Boolean) extends Val[EmploymentVerificationResult]
   case CrimiRec(clean: Boolean) extends Val[CriminalRecord]
   case CivilRec(clean: Boolean) extends Val[CivilRecord]
+  case ReportResults(
+    crimiClean: Boolean,
+    civilClean: Boolean,
+    employmentHistoryChecksUp: Boolean,
+  ) extends Val[Report]
 
 object Val:
   given Unzippable[**, Val] with
@@ -20,19 +26,34 @@ object Val:
 type Value[A] = generic.runtime.Value[Val, A]
 
 def emailAddress(value: String): Value[EmailAddress] =
-  generic.runtime.Value.Ext(Val.EmailAddr(value))
+  Ext(Val.EmailAddr(value))
 
 def personalId(value: String): Value[PersonalId] =
-  generic.runtime.Value.Ext(Val.PersonId(value))
+  Ext(Val.PersonId(value))
 
 def employmentHistory(value: String): Value[EmploymentHistory] =
-  generic.runtime.Value.Ext(Val.EmployHistory(value))
+  Ext(Val.EmployHistory(value))
 
 def employmentVerificationResult(value: Boolean): Value[EmploymentVerificationResult] =
-  generic.runtime.Value.Ext(Val.VerificationResult(value))
+  Ext(Val.VerificationResult(value))
 
 def criminalRecord(clean: Boolean): Value[CriminalRecord] =
-  generic.runtime.Value.Ext(Val.CrimiRec(clean))
+  Ext(Val.CrimiRec(clean))
 
 def civilRecord(clean: Boolean): Value[CivilRecord] =
-  generic.runtime.Value.Ext(Val.CivilRec(clean))
+  Ext(Val.CivilRec(clean))
+
+def makeReport(
+  crimiRecord: Value[CriminalRecord],
+  civilRecord: Value[CivilRecord],
+  verification: Value[EmploymentVerificationResult],
+): Value[Report] =
+  val crimiClean = crimiRecord match
+    case Ext(Val.CrimiRec(value)) => value
+  val civilClean = civilRecord match
+    case Ext(Val.CivilRec(value)) => value
+  val verified = verification match
+    case Ext(Val.VerificationResult(value)) => value
+  generic.runtime.Value.Ext(
+    Val.ReportResults(crimiClean, civilClean, verified)
+  )

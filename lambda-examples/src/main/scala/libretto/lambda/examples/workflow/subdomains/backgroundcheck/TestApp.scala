@@ -36,7 +36,7 @@ object TestApp {
     def go(): Unit =
       engine.pollResult(ref) match {
         case Some(res) =>
-          println(res)
+          println(s"Background check result: $res")
         case None =>
           println(s"Waiting for result")
           Thread.sleep(1000)
@@ -44,7 +44,7 @@ object TestApp {
       }
 
     go()
-    scheduler.shutdown()
+    scheduler.shutdownNow()
 
   private def forkDaemon(
     body: () => Unit,

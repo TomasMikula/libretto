@@ -36,7 +36,6 @@ private[runtime] class Processor[Action[_, _], Val[_]](
   }
 
   private def processItem(item: WorkItem): Unit =
-    println(s"processItem($item)")
     item match {
       case WorkItem.Wakeup(ref) =>
         persistor.modifyOpt(ref) { crankOpt(ref, _) }

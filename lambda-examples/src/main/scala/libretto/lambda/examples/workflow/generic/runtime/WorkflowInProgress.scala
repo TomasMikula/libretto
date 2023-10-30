@@ -55,8 +55,18 @@ object WorkflowInProgress {
             case FindValueRes.Found(path, value, TypeEq(Refl())) =>
               import libretto.lambda.examples.workflow.generic.runtime.RuntimeFlows.{PropagateValueRes as pvr}
               rtf.propagateValue(value, path.focus, cont) match
-                case tr: pvr.Transported[op, val_, f, y] =>
-                  UnhandledCase.raise(s"$tr")
+                case tr: pvr.Transported[op, val_, f, x, g, y] =>
+                  tr.outFocus match
+                    case Focus.Id() =>
+                      val result = resultAcc.complete(tr.outputValue.as(using tr.ev)).fold
+                      CrankRes.Progressed(Completed(result))
+                    case g: Focus.Proper[pr, g] =>
+                      resultAcc.absorb(tr.outputValue, g)(using tr.ev) match
+                        case Capture.Absorbed.Impl(k, resultAcc1) =>
+                          tr.knit(k) match
+                            case Exists.Some((k0, f)) =>
+                              val input1 = path.knitFold(k0)
+                              CrankRes.Progressed(IncompleteImpl(input1, f, resultAcc1))
                 case pvr.Transformed(newInput, f) =>
                   CrankRes.Progressed(IncompleteImpl(path.plugFold(newInput), f, resultAcc))
                 case pvr.Absorbed(k, f) =>

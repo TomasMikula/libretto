@@ -22,7 +22,7 @@ class DummyActionExecutor(
       case Action.ReportCandidateDeclined =>
         UnhandledCase.raise(s"ActionExecutor#executeAction($action)")
       case Action.CreateReport =>
-        UnhandledCase.raise(s"ActionExecutor#executeAction($action)")
+        createReport(input, onComplete)
       case Action.CheckCriminalRecord =>
         checkCriminalRecord(input, onComplete)
       case Action.CheckCivilRecord =>
@@ -77,4 +77,13 @@ class DummyActionExecutor(
         onComplete(Success(civilRecord(clean = true)))
       case other =>
         throw AssertionError(s"Unexpected value of type PersonalId: $other")
+
+  private def createReport(
+    args: Value[Val, CriminalRecord ** CivilRecord ** EmploymentVerificationResult],
+    onComplete: Try[Value[Val, Report]] => Unit,
+  ): Unit =
+    val (records, verification) = Value.unpair(args)
+    val (crimiRec, civilRec)    = Value.unpair(records)
+    val report = makeReport(crimiRec, civilRec, verification)
+    onComplete(Success(report))
 }
