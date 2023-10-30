@@ -18,6 +18,8 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     def unzip[A, B](ab: Expr[A |*| B])(varName1: V, varName2: V)(using Context): (Expr[A], Expr[B])
     def const[A](introduce: [x] => Unit => x -⚬ (A |*| x))(varName: V)(using Context): Expr[A]
 
+    def mapTupled[A, B](a: Tupled[Expr, A], f: A -⚬ B)(resultVarName: V)(using Context): Expr[B]
+
     def resultVar[A](a: Expr[A]): Var[V, A]
     def initialVars[A](a: Expr[A]): Var.Set[V]
 
@@ -92,33 +94,47 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
       AbstractFun.fold(f)
   }
 
-  type Abstracted[A, B] = Lambdas.Abstracted[Expr, |*|, AbstractFun, V, A, B]
-  type AbsRes[A, B]     = Lambdas.Abstracted[Expr, |*|, -⚬,          V, A, B]
+  type Delambdified[A, B] = Lambdas.Delambdified[Expr, |*|, AbstractFun, V, A, B]
+  type AbsRes[A, B]       = Lambdas.Delambdified[Expr, |*|, -⚬,          V, A, B]
 
   protected def eliminateLocalVariables[A, B](
     boundVar: Var[V, A],
     expr: Expr[B],
-  )(using Context): Abstracted[A, B]
+  )(using Context): Delambdified[A, B]
 
-  private def abs[A, B](
+  private def delambdify[A, B](
     varName: V,
     f: Context ?=> Expr[A] => Expr[B],
-  )(using Context): Abstracted[A, B] = {
+  )(using Context): Delambdified[A, B] = {
     val bindVar = Context.newVar[A](varName)
     eliminateLocalVariables(bindVar, f(Expr.variable(bindVar)))
   }
 
+  def delambdifyTopLevel[A, B](
+    varName: V,
+    f: Context ?=> Expr[A] => Expr[B],
+  ): Delambdified[A, B] =
+    delambdify(varName, f)(using Context.fresh())
+
+  @deprecated("use delambdifyTopLevel")
   def absTopLevel[A, B](
     varName: V,
     f: Context ?=> Expr[A] => Expr[B],
-  ): Abstracted[A, B] =
-    abs(varName, f)(using Context.fresh())
+  ): Delambdified[A, B] =
+    delambdifyTopLevel(varName, f)
 
+  def delambdifyNested[A, B](
+    varName: V,
+    f: Context ?=> Expr[A] => Expr[B],
+  )(using parent: Context): Delambdified[A, B] =
+    delambdify(varName, f)(using Context.nested(parent = parent))
+
+  @deprecated("use delambdifyNested")
   def absNested[A, B](
     varName: V,
     f: Context ?=> Expr[A] => Expr[B],
-  )(using parent: Context): Abstracted[A, B] =
-    abs(varName, f)(using Context.nested(parent = parent))
+  )(using parent: Context): Delambdified[A, B] =
+    delambdifyNested(varName, f)
 
   type VFun[A, B] = (V, Context ?=> Expr[A] => Expr[B])
 
@@ -141,13 +157,13 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
   ): AbsRes[A, B] = {
     val cases1: Sink[AbsRes, <+>, A, B] =
       cases.map[AbsRes] { [X] => (vf: VFun[X, B]) =>
-        absNested(vf._1, vf._2)
+        delambdifyNested(vf._1, vf._2)
           .mapFun([X] => (f: AbstractFun[X, B]) => f.fold)
       }
 
     cases1.reduce(
       [x, y] => (f1: AbsRes[x, B], f2: AbsRes[y, B]) => {
-        import Lambdas.Abstracted.{Closure, Exact, Failure}
+        import Lambdas.Delambdified.{Closure, Exact, Failure}
         (f1, f2) match {
           case (Exact(f1), Exact(f2)) =>
             Exact(sum(f1, f2))
@@ -245,11 +261,19 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
 }
 
 object Lambdas {
-  def apply[-⚬[_, _], |*|[_, _], VarLabel](using
+  def apply[-⚬[_, _], |*|[_, _], VarLabel](
+    syntheticPairVar: (VarLabel, VarLabel) => VarLabel,
+    universalSplit  : Option[[X]    => Unit => X -⚬ (X |*| X)] = None,
+    universalDiscard: Option[[X, Y] => Unit => (X |*| Y) -⚬ Y] = None,
+  )(using
     ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
   ): Lambdas[-⚬, |*|, VarLabel] =
-    new LambdasImpl[-⚬, |*|, VarLabel]
+    new LambdasImpl[-⚬, |*|, VarLabel](
+      syntheticPairVar,
+      universalSplit,
+      universalDiscard,
+    )
 
   sealed trait Error[VarLabel]
   object Error {
@@ -290,17 +314,17 @@ object Lambdas {
       Undefined(Var.Set(v))
   }
 
-  sealed trait Abstracted[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B] {
-    import Abstracted.*
+  sealed trait Delambdified[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B] {
+    import Delambdified.*
 
-    def mapExpr[Exp2[_]](g: [X] => Exp[X] => Exp2[X]): Abstracted[Exp2, |*|, AbsFun, V, A, B] =
+    def mapExpr[Exp2[_]](g: [X] => Exp[X] => Exp2[X]): Delambdified[Exp2, |*|, AbsFun, V, A, B] =
       this match {
         case Exact(f)             => Exact(f)
         case Closure(captured, f) => Closure(captured.trans(g), f)
         case Failure(e)           => Failure(e)
       }
 
-    def mapFun[->[_, _]](g: [X] => AbsFun[X, B] => (X -> B)): Abstracted[Exp, |*|, ->, V, A, B] =
+    def mapFun[->[_, _]](g: [X] => AbsFun[X, B] => (X -> B)): Delambdified[Exp, |*|, ->, V, A, B] =
       this match {
         case Exact(f)      => Exact(g(f))
         case Closure(x, f) => Closure(x, g(f))
@@ -315,18 +339,23 @@ object Lambdas {
       }
   }
 
-  object Abstracted {
+  object Delambdified {
     case class Exact[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B](
       f: AbsFun[A, B],
-    ) extends Abstracted[Exp, |*|, AbsFun, V, A, B]
+    ) extends Delambdified[Exp, |*|, AbsFun, V, A, B]
 
     case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], V, X, A, B](
       captured: Tupled[|*|, Exp, X],
       f: AbsFun[X |*| A, B],
-    ) extends Abstracted[Exp, |*|, AbsFun, V, A, B]
+    ) extends Delambdified[Exp, |*|, AbsFun, V, A, B]
 
     case class Failure[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B](
       e: LinearityViolation[V],
-    ) extends Abstracted[Exp, |*|, AbsFun, V, A, B]
+    ) extends Delambdified[Exp, |*|, AbsFun, V, A, B]
   }
+
+  @deprecated("Renamed to Delambdified")
+  type Abstracted[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B] = Delambdified[Exp, |*|, AbsFun, V, A, B]
+  @deprecated("Renamed to Delambdified")
+  val Abstracted = Delambdified
 }

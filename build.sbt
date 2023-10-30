@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-ThisBuild / scalaVersion := "3.3.0"
+ThisBuild / scalaVersion := "3.3.1"
 
 ThisBuild / organization := "dev.continuously.libretto"
 
@@ -71,6 +71,21 @@ lazy val lambda = project
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % ScalatestVersion % Test,
     ),
+  )
+
+lazy val lambdaExamples = project
+  .in(file("lambda-examples"))
+  .dependsOn(
+    lambda,
+  )
+  .settings(
+    name := "libretto-lambda-examples",
+    publish / skip := true, // experimental project, do not publish
+    scalacOptions ++= commonScalacOptions,
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % ScalatestVersion % Test,
+    ),
+    fork := true,
   )
 
 lazy val core = project

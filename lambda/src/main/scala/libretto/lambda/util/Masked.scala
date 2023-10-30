@@ -1,6 +1,6 @@
 package libretto.lambda.util
 
-sealed trait Masked[F[_], A] {
+sealed trait Masked[+F[_], A] {
   type X
   val value: F[X]
   def ev: X =:= A

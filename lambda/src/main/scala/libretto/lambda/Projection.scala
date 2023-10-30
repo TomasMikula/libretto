@@ -45,6 +45,12 @@ object Projection {
         case p: Both[pair, q1, q2, r1, r2]  => projectFst[q1, q2, r1](p.p1) > p.p2.inSnd
       }
 
+    override def from[O](using ev: O =:= P): Proper[|*|, O, Q] =
+      ev.substituteContra[[p] =>> Proper[|*|, p, Q]](this)
+
+    override def to[R](using ev: Q =:= R): Proper[|*|, P, R] =
+      ev.substituteCo(this)
+
     protected def discardFst[Q1, Q2](using ev: Q =:= (Q1 |*| Q2)): Proper[|*|, P, Q2]
 
     protected def discardSnd[Q1, Q2](using ev: Q =:= (Q1 |*| Q2)): Proper[|*|, P, Q1]

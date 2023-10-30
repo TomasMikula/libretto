@@ -2,7 +2,7 @@ package libretto.lambda.util
 
 import scala.annotation.targetName
 
-trait Applicative[F[_]] extends Zippable[Tuple2, F] { self =>
+trait Applicative[F[_]] { self =>
   def ap[A, B](ff: F[A => B])(fa: F[A]): F[B]
   def pure[A](a: A): F[A]
 

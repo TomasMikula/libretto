@@ -2,7 +2,7 @@ package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
 import libretto.lambda.{ClosedSymmetricMonoidalCategory, Lambdas, LambdasImpl, Sink, Tupled, Var}
-import libretto.lambda.Lambdas.Abstracted
+import libretto.lambda.Lambdas.Delambdified
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Monad.monadEither
@@ -476,7 +476,9 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
   val lambdas: Lambdas[-⚬, |*|, VarOrigin] =
-    new LambdasImpl[-⚬, |*|, VarOrigin]
+    Lambdas[-⚬, |*|, VarOrigin](
+      syntheticPairVar = (x, y) => VarOrigin.Synthetic(s"auxiliary pairing of ($x, $y)"),
+    )
 
   override type $[A] = lambdas.Expr[A]
 
@@ -523,9 +525,9 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         [X, Y] => (fx: X -⚬ C, fy: Y -⚬ C) => either(fx, fy),
         [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
       ) match {
-        case Abstracted.Exact(f)      => map(ab)(f)(pos)
-        case Abstracted.Closure(x, f) => map(zipExprs(Tupled.zip(x, Tupled.atom(ab))))(f)(pos)
-        case Abstracted.Failure(e)    => raiseError(e)
+        case Delambdified.Exact(f)      => map(ab)(f)(pos)
+        case Delambdified.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(ab)), f)(pos)
+        case Delambdified.Failure(e)    => raiseError(e)
       }
     }
 
@@ -565,11 +567,11 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     private def compile[A, B](f: lambdas.Context ?=> $[A] => $[B])(
       pos: SourcePos,
     ): A -⚬ B = {
-      import Abstracted.{Closure, Exact, Failure}
+      import Delambdified.{Closure, Exact, Failure}
 
       val a = VarOrigin.Lambda(pos)
 
-      lambdas.absTopLevel(a, f) match {
+      lambdas.delambdifyTopLevel(a, f) match {
         case Exact(f) =>
           f.fold
         case Closure(captured, f) =>
@@ -586,14 +588,14 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     )(using
       ctx: lambdas.Context,
     ): $[A =⚬ B] = {
-      import Abstracted.{Closure, Exact, Failure}
+      import Delambdified.{Closure, Exact, Failure}
 
       val bindVar   = VarOrigin.Lambda(pos)
       val resultVar = VarOrigin.ClosureVal(pos)
 
-      lambdas.absNested[A, B](bindVar, f) match {
+      lambdas.delambdifyNested[A, B](bindVar, f) match {
         case Closure(captured, f) =>
-          (zipExprs(captured) map ℭ.curry(f.fold))(resultVar)
+          lambdas.Expr.mapTupled(captured, ℭ.curry(f.fold))(resultVar)
         case Exact(f) =>
           val captured0 = $.one(using pos)
           (captured0 map ℭ.curry(elimFst > f.fold))(resultVar)
@@ -690,22 +692,17 @@ object FreeScaletto extends FreeScaletto with Scaletto {
           [X, Y] => (fx: X -⚬ R, fy: Y -⚬ R) => either(fx, fy),
           [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
         ) match {
-          case Abstracted.Exact(f)      => $.map(a)(partition > f)(pos)
-          case Abstracted.Closure(x, f) => $.map(zipExprs(Tupled.zip(x, Tupled.atom(a))))(snd(partition) > f)(pos)
-          case Abstracted.Failure(e)    => raiseError(e)
+          case Delambdified.Exact(f)      => $.map(a)(partition > f)(pos)
+          case Delambdified.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), snd(partition) > f)(pos)
+          case Delambdified.Failure(e)    => raiseError(e)
         }
     }
 
   override val |*| : ConcurrentPairInvertOps =
     new ConcurrentPairInvertOps {}
 
-  // TODO: avoid the need to create auxiliary pairings
-  private def zipExprs[A](es: Tupled[|*|, lambdas.Expr, A])(using lambdas.Context): lambdas.Expr[A] =
-    es.fold([x, y] => (ex: lambdas.Expr[x], ey: lambdas.Expr[y]) => {
-      val v = VarOrigin.Synthetic(s"auxiliary pairing of ($ex, $ey)")
-      lambdas.Expr.zip(ex, ey)(v)
-    })
-
+  private def mapTupled[A, B](a: Tupled[|*|, lambdas.Expr, A], f: A -⚬ B)(pos: SourcePos)(using lambdas.Context): lambdas.Expr[B] =
+    lambdas.Expr.mapTupled(a, f)(VarOrigin.FunAppRes(pos))
   private def raiseError(e: Lambdas.Error[VarOrigin]): Nothing = {
     import Lambdas.Error.Undefined
     import Lambdas.Error.LinearityViolation.{OverUnder, Overused, Underused}

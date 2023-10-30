@@ -1,8 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.Zippable
-
-trait Cartesian[|*|[_, _], F[_]] extends Zippable[|*|, F] {
+trait Unzippable[|*|[_, _], F[_]] {
   def unzip[A, B](fab: F[A |*| B]): (F[A], F[B])
 
   object Unzip {

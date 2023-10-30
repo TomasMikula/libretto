@@ -149,6 +149,8 @@ Primitives for racing and recursion were added.
 
 **Concurrent All The Way Down (Functional Concurrency with Libretto).** LambdaDays 2023 [[slides](https://continuously.dev/presentations/Concurrent-All-The-Way-Down_20230606.pdf)]
 
+**When Your DSL Needs to Support User-Defined Domain Functions.** ScalaDays 2023 [[slides](https://continuously.dev/presentations/When_your_DSL_needs_to_support_user-defined_domain_functions_20230914.pdf)]
+
 ## Caveats
 
 It is all too common for software projects to highlight only the good parts or to overstate their features.

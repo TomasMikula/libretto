@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Exists, UniqueTypeArg, Zippable}
+import libretto.lambda.util.{Exists, UniqueTypeArg}
 import scala.annotation.targetName
 
 opaque type Tupled[|*|[_, _], F[_], A] =
@@ -42,8 +42,11 @@ object Tupled {
     ): B =
       a.foldMap0[B](map, reduce)
 
-    def fold(zip: [x, y] => (F[x], F[y]) => F[x |*| y]): F[A] =
+    def foldWith(zip: [x, y] => (F[x], F[y]) => F[x |*| y]): F[A] =
       foldMap[F]([x] => (fx: F[x]) => fx, zip)
+
+    def fold(using F: Zippable[|*|, F]): F[A] =
+      foldWith([x, y] => (fx: F[x], fy: F[y]) => F.zip(fx, fy))
 
     def deduplicateLeafs[->[_, _]](
       dup: [x] => F[x] => x -> (x |*| x),
@@ -65,6 +68,16 @@ object Tupled {
     )] =
       (a product b)(discardFst)
   }
+
+  def unzip[|*|[_, _], F[_], A, B](
+    ab: Tupled[|*|, F, A |*| B],
+  )(using F: Unzippable[|*|, F]): (Tupled[|*|, F, A], Tupled[|*|, F, B]) =
+    ab match
+      case Bin.Branch(l, r) =>
+        (l, r)
+      case Bin.Leaf(fab) =>
+        val (fa, fb) = F.unzip(fab)
+        (atom(fa), atom(fb))
 
   given [|*|[_, _], F[_]]: Zippable[|*|, Tupled[|*|, F, _]] with {
     override def zip[A, B](fa: Tupled[|*|, F, A], fb: Tupled[|*|, F, B]): Tupled[|*|, F, A |*| B] =

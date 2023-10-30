@@ -52,4 +52,10 @@ object Sink {
 
   def apply[-->[_, _], <+>[_, _], A, B](f: A --> B): Sink[-->, <+>, A, B] =
     Arrow(f)
+
+  def apply[-->[_, _], <+>[_, _], A, B, C](
+    a: Sink[-->, <+>, A, C],
+    b: Sink[-->, <+>, B, C],
+  ): Sink[-->, <+>, A <+> B, C] =
+    Join(a, b)
 }

@@ -61,10 +61,19 @@ object Fun {
     override def swap[A, B]: Fun[A ** B, B ** A] = Fun.swap
   }
 
-  private case class VarDesc(desc: String, pos: SourcePos)
+  private case class VarDesc(desc: String, pos: Option[SourcePos])
+  private object VarDesc {
+    def apply(desc: String, pos: SourcePos): VarDesc =
+      VarDesc(desc, Some(pos))
+
+    def apply(desc: String): VarDesc =
+      VarDesc(desc, None)
+  }
 
   private val lambdas: Lambdas[Fun, **, VarDesc] =
-    Lambdas[Fun, **, VarDesc]
+    Lambdas[Fun, **, VarDesc](
+      (x, y) => VarDesc(s"auxiliary pairing of ($x, $y)"),
+    )
 
   opaque type $[A] = lambdas.Expr[A]
   opaque type LambdaContext = lambdas.Context
@@ -105,13 +114,6 @@ object Fun {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[C] = {
-      // TODO: avoid the need to create auxiliary pairings
-      def zipExprs[A](es: Tupled[**, lambdas.Expr, A])(using lambdas.Context): lambdas.Expr[A] =
-        es.fold([x, y] => (ex: lambdas.Expr[x], ey: lambdas.Expr[y]) => {
-          val v = VarDesc(s"auxiliary pairing of ($ex, $ey)", pos)
-          lambdas.Expr.zip(ex, ey)(v)
-        })
-
       val f1: lambdas.Context ?=> $[A] => $[C] = ctx ?=> a => f(Left(a))
       val f2: lambdas.Context ?=> $[B] => $[C] = ctx ?=> b => f(Right(b))
       val a = VarDesc("Variable bound by Left pattern", pos)
@@ -121,9 +123,9 @@ object Fun {
         [X, Y] => (fx: Fun[X, C], fy: Fun[Y, C]) => either(fx, fy),
         [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
       ) match {
-        case Lambdas.Abstracted.Exact(f)      => f(ab)
-        case Lambdas.Abstracted.Closure(x, f) => f(zipExprs(x zip Tupled.atom(ab)))
-        case Lambdas.Abstracted.Failure(e)    => raiseError(e)
+        case Lambdas.Delambdified.Exact(f)      => f(ab)
+        case Lambdas.Delambdified.Closure(x, f) => lambdas.Expr.mapTupled(x zip Tupled.atom(ab), f)(VarDesc("switch with captured expressions", pos))
+        case Lambdas.Delambdified.Failure(e)    => raiseError(e)
       }
     }
   }
@@ -140,17 +142,17 @@ object Fun {
     def apply[A, B](using pos: SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
     ): Fun[A, B] = {
-      lambdas.absTopLevel(VarDesc("The variable bound by lambda expression", pos), f) match
-        case Lambdas.Abstracted.Exact(f) =>
+      lambdas.delambdifyTopLevel(VarDesc("The variable bound by lambda expression", pos), f) match
+        case Lambdas.Delambdified.Exact(f) =>
           f.fold
-        case Lambdas.Abstracted.Closure(captured, f) =>
+        case Lambdas.Delambdified.Closure(captured, f) =>
           throw RuntimeException(
             s"Lambda expression at ${pos.filename}:${pos.line} " +
               s"is not allowed to capture variables from an outer scope.\n" +
               s"Captured:\n" +
               printVars(lambdas.Expr.initialVars(captured))
           )
-        case Lambdas.Abstracted.Failure(e) =>
+        case Lambdas.Delambdified.Failure(e) =>
           raiseError(e)
     }
 
@@ -201,7 +203,10 @@ object Fun {
   private def printVars(vs: Var.Set[VarDesc]): String =
     vs.list
       .map(_.origin)
-      .map(v => s" - ${v.desc} at ${v.pos.filename}:${v.pos.line}")
+      .map {
+        case VarDesc(desc, Some(pos)) => s" - $desc at ${pos.filename}:${pos.line}"
+        case VarDesc(desc, None)      => s" - $desc"
+      }
       .mkString("\n")
 
   private def raiseError(e: Lambdas.Error.LinearityViolation[VarDesc]): Nothing = {
