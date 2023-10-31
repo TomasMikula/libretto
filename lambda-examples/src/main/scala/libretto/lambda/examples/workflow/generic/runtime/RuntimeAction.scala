@@ -6,9 +6,8 @@ import libretto.lambda.util.Exists
 
 /** An action that might have already captured some of its inputs. */
 enum RuntimeAction[Op[_, _], Val[_], A, B]:
-  case DomainAction[Op[_, _], Val[_], A, X, B](
-    args: Capture[**, Value[Val, _], A, X],
-    f: Op[X, B],
+  case DomainAction[Op[_, _], Val[_], A, B](
+    f: Op[A, B],
   ) extends RuntimeAction[Op, Val, A, B]
 
   case ValueCollector[Op[_, _], Val[_], A, B](
@@ -21,13 +20,7 @@ enum RuntimeAction[Op[_, _], Val[_], A, B]:
 
 object RuntimeAction {
   def action[Op[_, _], Val[_], A, B](f: Op[A, B]): RuntimeAction[Op, Val, A, B] =
-    DomainAction(Capture.NoCapture(), f)
-
-  def partiallyApplied[Op[_, _], Val[_], A, X, B](
-    args: Capture[**, Value[Val, _], A, X],
-    f: Op[X, B],
-  ): RuntimeAction[Op, Val, A, B] =
-    DomainAction(args, f)
+    DomainAction(f)
 
   def captureValue[Op[_, _], Val[_], F[_], A](
     value: Value[Val, A],
