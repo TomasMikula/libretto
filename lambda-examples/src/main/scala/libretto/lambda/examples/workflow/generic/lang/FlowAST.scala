@@ -16,12 +16,26 @@ sealed trait FlowAST[Op[_, _], A, B] {
 
   def translate[F[_, _]](h: [x, y] => Op[x, y] => F[x, y]): FlowAST[F, A, B] =
     this match {
-      case Ext(action)          => Ext(h(action))
-      case AndThen(f, g)        => AndThen(f.translate(h), g.translate(h))
-      case Par(f1, f2)          => Par(f1.translate(h), f2.translate(h))
-      case Either(f, g)         => Either(f.translate(h), g.translate(h))
-      case DoWhile(f)           => DoWhile(f.translate(h))
-      case other                => other.asInstanceOf[FlowAST[F, A, B]]
+      case Ext(action)                  => Ext(h(action))
+      case AndThen(f, g)                => AndThen(f.translate(h), g.translate(h))
+      case Par(f1, f2)                  => Par(f1.translate(h), f2.translate(h))
+      case Either(f, g)                 => Either(f.translate(h), g.translate(h))
+      case DoWhile(f)                   => DoWhile(f.translate(h))
+      case Id()                         => Id()
+      case _: Swap[op, x, y]            => Swap[F, x, y]()
+      case _: AssocLR[op, x, y, z]      => AssocLR[F, x, y, z]()
+      case _: AssocRL[op, x, y, z]      => AssocRL[F, x, y, z]()
+      case _: InjectL[op, x, y]         => InjectL[F, x, y]()
+      case _: InjectR[op, x, y]         => InjectR[F, x, y]()
+      case _: Prj1[op, x, y]            => Prj1[F, x, y]()
+      case _: Prj2[op, x, y]            => Prj2[F, x, y]()
+      case Dup()                        => Dup()
+      case IntroFst()                   => IntroFst()
+      case _: DistributeLR[op, x, y, z] => DistributeLR[F, x, y , z]()
+      case _: Read[op, x]               => Read[F, x]()
+      case _: ReadAwait[op, x]          => ReadAwait[F, x]()
+      case r: ReadAwaitTimeout[op, x]   => ReadAwaitTimeout[F, x](r.duration)
+      case Delay(duration)              => Delay(duration)
     }
 
   def toShuffled(using shuffled: Shuffled[FlowAST.Work[Op, _, _], **]): shuffled.Shuffled[A, B] =
