@@ -101,7 +101,7 @@ class Workflows[Action[_, _]] {
       FlowAST.Delay(duration)
 
     def action[A, B](a: Action[A, B]): Flow[A, B] =
-      FlowAST.DomainAction(a)
+      FlowAST.Ext(a)
 
   }
 

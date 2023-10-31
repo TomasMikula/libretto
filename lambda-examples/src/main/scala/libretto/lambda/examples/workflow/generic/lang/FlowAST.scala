@@ -16,7 +16,7 @@ sealed trait FlowAST[Op[_, _], A, B] {
 
   def translate[F[_, _]](h: [x, y] => Op[x, y] => F[x, y]): FlowAST[F, A, B] =
     this match {
-      case DomainAction(action) => DomainAction(h(action))
+      case Ext(action)          => Ext(h(action))
       case AndThen(f, g)        => AndThen(f.translate(h), g.translate(h))
       case Par(f1, f2)          => Par(f1.translate(h), f2.translate(h))
       case Either(f, g)         => Either(f.translate(h), g.translate(h))
@@ -63,7 +63,8 @@ object FlowAST {
   case class ReadAwait[Op[_, _], A]() extends Work[Op, Reading[A], A]
   case class ReadAwaitTimeout[Op[_, _], A](duration: FiniteDuration) extends Work[Op, Reading[A], A ++ Reading[A]]
 
-  case class DomainAction[Op[_, _], A, B](action: Op[A, B]) extends Work[Op, A, B]
+  /** Extension point for pluggable actions. */
+  case class Ext[Op[_, _], A, B](action: Op[A, B]) extends Work[Op, A, B]
 
   given ssc[Op[_, _]]: SymmetricSemigroupalCategory[FlowAST[Op, _, _], **] with {
     override def id[A]: FlowAST[Op, A, A] = Id()

@@ -59,7 +59,7 @@ object RuntimeFlows {
     FlowAST.DistributeLR()
 
   def action[Op[_, _], Val[_], A, B](f: RuntimeAction[Op, Val, A, B]): Flow[Op, Val, A, B] =
-    FlowAST.DomainAction(f)
+    FlowAST.Ext(f)
 
   def distLR[Op[_, _], Val[_], A, B, C](captured: Value[Val, A]): Flow[Op, Val, B ++ C, (A ** B) ++ (A ** C)] =
     action(RuntimeAction.DistLR(captured))
@@ -278,7 +278,7 @@ object RuntimeFlows {
                   // TODO: derive contradiction
                   UnhandledCase.raise(s"propagateValue $value into $other at $v")
 
-            case FlowAST.DomainAction(action) =>
+            case FlowAST.Ext(action) =>
               action match
                 case a @ RuntimeAction.DomainAction(action) =>
                   ev match { case TypeEq(Refl()) =>
