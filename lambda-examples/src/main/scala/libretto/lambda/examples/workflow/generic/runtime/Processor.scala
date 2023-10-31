@@ -17,7 +17,7 @@ private[runtime] class Processor[Action[_, _], Val[_]](
   workQueue: BlockingQueue[WorkItem],
   stopSignal: Promise[Unit],
 )(using
-  Unzippable[**, Val],
+  Value.Compliant[Val],
 ) {
   def notify(item: WorkItem): Unit =
     workQueue.put(item)
@@ -136,7 +136,7 @@ private[runtime] object Processor {
     worker: ActionExecutor[Action, Val],
     scheduler: ScheduledExecutorService,
   )(using
-    Unzippable[**, Val],
+    Value.Compliant[Val],
   ): Processor[Action, Val] = {
     val queue = new ArrayBlockingQueue[WorkItem](1000)
     val stopSignal = Promise[Unit]

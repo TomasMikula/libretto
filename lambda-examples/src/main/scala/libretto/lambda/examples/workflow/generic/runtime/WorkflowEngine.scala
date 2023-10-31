@@ -9,7 +9,9 @@ import scala.util.Try
 class WorkflowEngine[Action[_, _], Val[_]](
   worker: ActionExecutor[Action, Val],
   scheduler: ScheduledExecutorService,
-)(using Unzippable[**, Val]) {
+)(using
+  Value.Compliant[Val],
+) {
   val persistor = new Persistor[Action, Val]
   val processor = Processor.start(persistor, worker, scheduler)
 
@@ -43,6 +45,8 @@ object WorkflowEngine {
   def start[Action[_, _], Val[_]](
     worker: ActionExecutor[Action, Val],
     scheduler: ScheduledExecutorService,
-  )(using Unzippable[**, Val]): WorkflowEngine[Action, Val] =
+  )(using
+    Value.Compliant[Val],
+  ): WorkflowEngine[Action, Val] =
     new WorkflowEngine[Action, Val](worker, scheduler)
 }

@@ -53,6 +53,10 @@ object Value:
   def reading[F[_], A](pa: PromiseId[A]): Value[F, Reading[A]] =
     ReadingInput(pa)
 
+  trait Compliant[F[_]] extends Unzippable[**, F]:
+    def toEither[A, B](value: F[A ++ B]): Either[F[A], F[B]]
+    def extractInPortRef[A](value: F[Reading[A]]): PromiseId[A]
+
   def unpair[F[_], A, B](value: Value[F, A ** B])(using F: Unzippable[**, F]): (Value[F, A], Value[F, B]) =
     value match
       case Pair(a, b) =>
@@ -61,16 +65,16 @@ object Value:
         val (a, b) = F.unzip(value)
         (Ext(a), Ext(b))
 
-  def toEither[F[_], A, B](value: Value[F, A ++ B]): Either[Value[F, A], Value[F, B]] =
+  def toEither[F[_], A, B](value: Value[F, A ++ B])(using F: Compliant[F]): Either[Value[F, A], Value[F, B]] =
     value match
       case Value.Left(a)  => scala.Left(a)
       case Value.Right(b) => scala.Right(b)
-      case Ext(_) => UnhandledCase.raise(s"$value") // TODO: require evidence for F that makes it compliant
+      case Ext(value)     => F.toEither(value).left.map(Ext(_)).map(Ext(_))
 
-  def extractInPortId[F[_], A](value: Value[F, Reading[A]]): PromiseId[A] =
+  def extractInPortId[F[_], A](value: Value[F, Reading[A]])(using F: Compliant[F]): PromiseId[A] =
     value match
       case ReadingInput(pa) => pa
-      case Ext(_) => UnhandledCase.raise(s"$value") // TODO: require evidence for F that makes it compliant
+      case Ext(value) => F.extractInPortRef(value)
 
   given zippableValue[F[_]]: Zippable[**, Value[F, _]] with
     override def zip[A, B](fa: Value[F, A], fb: Value[F, B]): Value[F, A ** B] =

@@ -94,7 +94,7 @@ object RuntimeFlows {
     F: Focus[**, F],
     cont: Flow[Action, Val, F[A], B],
   )(using
-    Unzippable[**, Val],
+    Value.Compliant[Val],
   ): PropagateValueRes[Action, Val, F, B] = {
     given sh: Shuffled[Action, Val] =
       RuntimeFlows.shuffled[Action, Val]

@@ -33,7 +33,7 @@ object WorkflowInProgress {
     override def isReducible: Boolean = false
 
   sealed trait Incomplete[Action[_, _], Val[_], A] extends WorkflowInProgress[Action, Val, A] {
-    def crank(using Unzippable[**, Val]): CrankRes[Action, Val, A]
+    def crank(using Value.Compliant[Val]): CrankRes[Action, Val, A]
   }
 
   case class IncompleteImpl[Action[_, _], Val[_], X, Y, A](
@@ -44,7 +44,7 @@ object WorkflowInProgress {
     override def isReducible: Boolean =
       input.isPartiallyReady
 
-    override def crank(using Unzippable[**, Val]): CrankRes[Action, Val, A] =
+    override def crank(using Value.Compliant[Val]): CrankRes[Action, Val, A] =
       input match
         case i @ Input.Awaiting(_) =>
           CrankRes.AlreadyStuck(this)
