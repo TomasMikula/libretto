@@ -257,7 +257,7 @@ object RuntimeFlows {
                   val ref =
                     Value.extractPortId(value.as[Reading[a]])
                   PropagateValueRes.Transformed(
-                    Input.awaiting(ref),
+                    Input.awaitingInput(ref),
                     fromShuffled(pre[a] > post),
                   )
                 case other =>

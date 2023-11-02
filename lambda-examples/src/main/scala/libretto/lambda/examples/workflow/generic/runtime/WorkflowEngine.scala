@@ -30,9 +30,9 @@ class WorkflowEngine[Action[_, _], Val[_]](
     ref
   }
 
-  def completeReading[A](p: PortId[A], result: Try[Value[Val, A]]): Boolean =
-    if (persistor.completePromise(p, result))
-      processor.notify(WorkItem.ReadingComplete(p))
+  def completeReading[A](w: WorkflowRef[?], p: PortId[A], result: Value[Val, A]): Boolean =
+    if (persistor.completeReading(p, result))
+      processor.notify(WorkItem.ReadingComplete(w, p))
       true
     else
       false

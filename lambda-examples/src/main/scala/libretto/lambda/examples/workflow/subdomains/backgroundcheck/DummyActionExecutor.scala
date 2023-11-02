@@ -34,12 +34,12 @@ class DummyActionExecutor(
   ): Unit =
     val (addr, promResp) = Value.unpair(args)
     promResp match
-      case Value.PortNameValue(p) =>
+      case Value.PortNameValue(w, p) =>
         val pId: Value[Val, PersonalId] =
           personalId("1234")
         val hist: Value[Val, EmploymentHistory] =
           employmentHistory("Facebook, Microsoft, Amazon")
-        engine.completeReading(p, Success(Value.right(pId ** hist)))
+        engine.completeReading(w, p, Value.right(pId ** hist))
         onComplete(Success(Value.unit))
       case other =>
         throw AssertionError(s"Unexpected value of type InputPortRef[T]: $other")
@@ -50,10 +50,10 @@ class DummyActionExecutor(
   ): Unit =
     val (hist, ref) = Value.unpair(args)
     ref match
-      case Value.PortNameValue(ref) =>
+      case Value.PortNameValue(w, ref) =>
         val res: Value[Val, EmploymentVerificationResult] =
           employmentVerificationResult(true)
-        engine.completeReading(ref, Success(res))
+        engine.completeReading(w, ref, res)
         onComplete(Success(Value.unit))
       case other =>
         throw AssertionError(s"Unexpected value of type InputPortRef[T]: $other")

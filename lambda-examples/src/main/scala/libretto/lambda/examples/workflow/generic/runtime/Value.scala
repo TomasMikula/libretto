@@ -15,7 +15,7 @@ enum Value[F[_], A]:
   case Left [F[_], A, B](a: Value[F, A]) extends Value[F, A ++ B]
   case Right[F[_], A, B](b: Value[F, B]) extends Value[F, A ++ B]
 
-  case PortNameValue[F[_], A](pa: PortId[A]) extends Value[F, PortName[A]]
+  case PortNameValue[F[_], A](w: WorkflowRef[?], pa: PortId[A]) extends Value[F, PortName[A]]
   case ReadingInput[F[_], A](pa: PortId[A]) extends Value[F, Reading[A]]
 
   /** Extension point for domain-specific values. */
@@ -47,8 +47,8 @@ object Value:
   def right[F[_], A, B](value: Value[F, B]): Value[F, A ++ B] =
     Value.Right(value)
 
-  def portName[F[_], A](promiseId: PortId[A]): Value[F, PortName[A]] =
-    PortNameValue(promiseId)
+  def portName[F[_], A](w: WorkflowRef[?], promiseId: PortId[A]): Value[F, PortName[A]] =
+    PortNameValue(w, promiseId)
 
   def reading[F[_], A](pa: PortId[A]): Value[F, Reading[A]] =
     ReadingInput(pa)

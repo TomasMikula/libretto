@@ -2,6 +2,6 @@ package libretto.lambda.examples.workflow.generic.runtime
 
 import scala.util.Try
 
-enum PromiseState[Val[_], A]:
+enum ActionState[Val[_], A]:
   case Empty()
-  case Complete(result: Try[Value[Val, A]])
+  case Completed(result: Try[Value[Val, A]])

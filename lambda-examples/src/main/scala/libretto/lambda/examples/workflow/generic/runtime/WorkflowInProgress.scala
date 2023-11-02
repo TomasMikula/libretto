@@ -83,7 +83,7 @@ object WorkflowInProgress {
                     timeout,
                     timerId => {
                       IncompleteImpl(
-                        path.plugFold(Input.awaitingTimeout(pId, timerId)),
+                        path.plugFold(Input.awaitingInput(pId, timerId)),
                         cont,
                         resultAcc,
                       )
@@ -93,8 +93,8 @@ object WorkflowInProgress {
                   CrankRes.ActionRequest(
                     input,
                     action,
-                    py => IncompleteImpl(
-                      path.plugFold(Input.awaiting(py)),
+                    y => IncompleteImpl(
+                      path.plugFold(y),
                       cont,
                       resultAcc,
                     ),
@@ -115,7 +115,7 @@ object WorkflowInProgress {
     case AlreadyStuck(w: WorkflowInProgress.Incomplete[Action, Val, A])
     case Progressed(w: WorkflowInProgress[Action, Val, A])
     case Ask[Action[_, _], Val[_], X, A](
-      cont: PortId[X] => WorkflowInProgress[Action, Val, A],
+      cont: (Input[Val, PortName[X]], Input[Val, Reading[X]]) => WorkflowInProgress[Action, Val, A],
     ) extends CrankRes[Action, Val, A]
     case SetTimer[Action[_, _], Val[_], A](
       duration: FiniteDuration,
@@ -124,7 +124,7 @@ object WorkflowInProgress {
     case ActionRequest[Action[_, _], Val[_], X, Y, A](
       input: Value[Val, X],
       action: Action[X, Y],
-      cont: PortId[Y] => WorkflowInProgress[Action, Val, A],
+      cont: Input[Val, Y] => WorkflowInProgress[Action, Val, A],
     ) extends CrankRes[Action, Val, A]
 
   object CrankRes:
@@ -133,8 +133,8 @@ object WorkflowInProgress {
       cont: rtf.Flow[Action, Val, F[PortName[X] ** Reading[X]], Y],
       resultAcc: Capture[**, Value[Val, _], Y, A],
     ): CrankRes[Action, Val, A] =
-      CrankRes.Ask[Action, Val, X, A] { px =>
-        val newInput = remainingInput.plugFold(Input.portName(px) ** Input.reading(px))
+      CrankRes.Ask[Action, Val, X, A] { (px, rx) =>
+        val newInput = remainingInput.plugFold(px ** rx)
         IncompleteImpl(newInput, cont, resultAcc)
       }
 }

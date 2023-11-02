@@ -39,28 +39,35 @@ private[runtime] class Processor[Action[_, _], Val[_]](
     item match {
       case WorkItem.Wakeup(ref) =>
         persistor.modifyOpt(ref) { crankOpt(ref, _) }
-      case WorkItem.ReadingComplete(pid) =>
-        persistor.fetchResult(pid) match
+      case WorkItem.ReadingComplete(wf, pid) =>
+        persistor.fetchReadValue(pid) match
+          case Some(result) =>
+            supplyValue(wf, pid, result)
+          case None =>
+            Console.err.println(s"Non-existent promise $pid")
+      case WorkItem.ActionComplete(wf, id) =>
+        persistor.fetchActionResult(id) match
           case Some(result) =>
             result match
               case Success(value) =>
-                supplyResult(pid, value)
+                supplyValue(wf, id, value)
               case Failure(e) =>
-                failWorkflow(pid.workflow, e)
+                failWorkflow(wf, e)
           case None =>
-            Console.err.println(s"Non-existent promise $pid")
+            Console.err.println(s"Non-existent action run $id")
       case WorkItem.TimerElapsed(wRef, timerId) =>
         UnhandledCase.raise(s"$item")
     }
 
-  private def supplyResult[A](
-    pid: PortId[A],
+  private def supplyValue[R, A](
+    ref: WorkflowRef[R],
+    id: PortId[A] | ActionRunId[A],
     result: Value[Val, A],
   ): Unit =
-    persistor.modifyOpt(pid.workflow) {
+    persistor.modifyOpt(ref) {
       case WorkflowInProgress.IncompleteImpl(input, cont, resultAcc) =>
         input
-          .supplyResult(pid, result)
+          .supplyValue(id, result)
           .map { input =>
             WorkflowInProgress.IncompleteImpl(input, cont, resultAcc)
           }
@@ -104,8 +111,8 @@ private[runtime] class Processor[Action[_, _], Val[_]](
           case WIP.CrankRes.Progressed(w) =>
             CrankRes.Progressed(w)
           case ask: WIP.CrankRes.Ask[action, val_, x, a] =>
-            val promiseId = persistor.promise[x](ref)
-            val w1 = ask.cont(promiseId)
+            val px = persistor.newInputPort[x](ref)
+            val w1 = ask.cont(Input.portName(ref, px), Input.reading(px))
             CrankRes.Progressed(w1)
           case WIP.CrankRes.SetTimer(timeout, cont) =>
             val timerId = new TimerId
@@ -116,12 +123,12 @@ private[runtime] class Processor[Action[_, _], Val[_]](
             val w1 = cont(timerId)
             CrankRes.Progressed(w1)
           case req: WIP.CrankRes.ActionRequest[action, val_, x, y, a] =>
-            val promiseId = persistor.promise[y](ref)
+            val actionRunId = persistor.recordRunningAction[x, y](ref, req.input, req.action)
             worker.submit(req.input, req.action) { result =>
-              persistor.completePromise(promiseId, result)
-              workQueue.put(WorkItem.ReadingComplete(promiseId))
+              persistor.completeAction(actionRunId, result)
+              workQueue.put(WorkItem.ActionComplete(ref, actionRunId))
             }
-            val w1 = req.cont(promiseId)
+            val w1 = req.cont(Input.awaitingAction(actionRunId))
             CrankRes.Progressed(w1)
 
   private enum CrankRes[A]:

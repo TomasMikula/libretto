@@ -7,7 +7,8 @@ import scala.util.Try
 
 private[runtime] class Persistor[Action[_, _], Val[_]] {
   private var nextWorkflowId: Long = 1
-  private var nextPromiseId: Long = 1
+  private var nextPortId: Long = 1
+  private var nextActionId: Long = 1
 
   private enum Entry[A]:
     case Unlocked(sn: Long, w: WIP[Action, Val, A])
@@ -16,8 +17,11 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
   private val workflows: mutable.Map[WorkflowRef[?], Entry[?]] =
     mutable.Map.empty[WorkflowRef[?], Entry[?]]
 
-  private val promises: mutable.Map[PortId[?], PromiseState[Val, ?]] =
-    mutable.Map.empty[PortId[?], PromiseState[Val, ?]]
+  private val inputPorts: mutable.Map[PortId[?], InputPortState[Val, ?]] =
+    mutable.Map.empty[PortId[?], InputPortState[Val, ?]]
+
+  private val runningActions: mutable.Map[ActionRunId[?], ActionState[Val, ?]] =
+    mutable.Map.empty[ActionRunId[?], ActionState[Val, ?]]
 
   def insert[A, B](
     input: Value[Val, A],
@@ -130,34 +134,70 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
         }
     }
 
-  def promise[A](w: WorkflowRef[?]): PortId[A] =
+  def newInputPort[A](w: WorkflowRef[?]): PortId[A] =
     this.synchronized {
-      val id = PortId[A](w, nextPromiseId)
-      nextPromiseId += 1
-      promises.put(id, PromiseState.Empty())
+      val id = PortId[A](nextPortId)
+      nextPortId += 1
+      inputPorts.put(id, InputPortState.Empty())
       id
     }
 
-  def completePromise[A](id: PortId[A], result: Try[Value[Val, A]]): Boolean =
+  def completeReading[A](id: PortId[A], result: Value[Val, A]): Boolean =
     this.synchronized {
-      promises.get(id) match
+      inputPorts.get(id) match
         case None =>
           false
         case Some(value) =>
           value match
-            case PromiseState.Empty() =>
-              promises.put(id, PromiseState.Complete(result))
+            case InputPortState.Empty() =>
+              inputPorts.put(id, InputPortState.Completed(result))
               true
-            case PromiseState.Complete(_) =>
+            case InputPortState.Completed(_) =>
               false
     }
 
-  def fetchResult[A](id: PortId[A]): Option[Try[Value[Val, A]]] =
+  def fetchReadValue[A](id: PortId[A]): Option[Value[Val, A]] =
     this.synchronized {
-      promises.get(id).flatMap {
-        case PromiseState.Complete(result) =>
+      inputPorts.get(id).flatMap {
+        case InputPortState.Completed(result) =>
+          Some((result: Value[Val, ?]).asInstanceOf[Value[Val, A]])
+        case InputPortState.Empty() =>
+          None
+      }
+    }
+
+  def recordRunningAction[A, B](
+    w: WorkflowRef[?],
+    input: Value[Val, A],
+    action: Action[A, B],
+  ): ActionRunId[B] =
+    this.synchronized {
+      val id = ActionRunId[B](nextActionId)
+      nextActionId += 1
+      runningActions.put(id, ActionState.Empty())
+      id
+    }
+
+  def completeAction[A](id: ActionRunId[A], result: Try[Value[Val, A]]): Boolean =
+    this.synchronized {
+      runningActions.get(id) match
+        case None =>
+          false
+        case Some(value) =>
+          value match
+            case ActionState.Empty() =>
+              runningActions.put(id, ActionState.Completed(result))
+              true
+            case ActionState.Completed(_) =>
+              false
+    }
+
+  def fetchActionResult[A](id: ActionRunId[A]): Option[Try[Value[Val, A]]] =
+    this.synchronized {
+      runningActions.get(id).flatMap {
+        case ActionState.Completed(result) =>
           Some((result: Try[Value[Val, ?]]).asInstanceOf[Try[Value[Val, A]]])
-        case PromiseState.Empty() =>
+        case ActionState.Empty() =>
           None
       }
     }

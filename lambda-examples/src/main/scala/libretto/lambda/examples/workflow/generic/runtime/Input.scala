@@ -37,17 +37,17 @@ enum Input[Val[_], A]:
           case Found(path, value, ev) =>
             Found(path.inFst(z.a2), value, ev.inFst)
 
-  def supplyResult[X](
-    pid: PortId[X],
+  def supplyValue[X](
+    id: PortId[X] | ActionRunId[X],
     result: Value[Val, X],
   ): Option[Input[Val, A]] =
     this match
       case Ready(value) =>
         None
       case Awaiting(awaited) =>
-        awaited.supplyResult(pid, result)
+        awaited.supplyValue(id, result)
       case Zip(a1, a2) =>
-        (a1.supplyResult(pid, result), a2.supplyResult(pid, result)) match
+        (a1.supplyValue(id, result), a2.supplyValue(id, result)) match
           case (None   , None   ) => None
           case (Some(i), None   ) => Some(Zip(i, a2))
           case (None   , Some(j)) => Some(Zip(a1, j))
@@ -89,14 +89,17 @@ enum Input[Val[_], A]:
 
 
 object Input {
-  def awaiting[Val[_], A](pa: PortId[A]): Input[Val, A] =
-    Awaiting(AwaitedValues.Awaiting(pa))
+  def awaitingInput[Val[_], A](pa: PortId[A]): Input[Val, A] =
+    Awaiting(AwaitedValues.AwaitingInput(pa))
 
-  def awaitingTimeout[Val[_], A](pa: PortId[A], t: TimerId): Input[Val, A ++ Reading[A]] =
-    Awaiting(AwaitedValues.AwaitingTimeout(pa, t))
+  def awaitingInput[Val[_], A](pa: PortId[A], t: TimerId): Input[Val, A ++ Reading[A]] =
+    Awaiting(AwaitedValues.AwaitingInputWithTimeout(pa, t))
 
-  def portName[Val[_], A](pa: PortId[A]): Input[Val, PortName[A]] =
-    Ready(Value.portName(pa))
+  def awaitingAction[Val[_], A](id: ActionRunId[A]): Input[Val, A] =
+    Awaiting(AwaitedValues.AwaitingAction(id))
+
+  def portName[Val[_], A](w: WorkflowRef[?], pa: PortId[A]): Input[Val, PortName[A]] =
+    Ready(Value.portName(w, pa))
 
   def reading[Val[_], A](pa: PortId[A]): Input[Val, Reading[A]] =
     Ready(Value.reading(pa))
@@ -115,8 +118,9 @@ object Input {
 }
 
 enum AwaitedValues[Val[_], A]:
-  case Awaiting(promised: PortId[A])
-  case AwaitingTimeout(promised: PortId[A], t: TimerId) extends AwaitedValues[Val, A ++ Reading[A]]
+  case AwaitingInput(promised: PortId[A])
+  case AwaitingInputWithTimeout(promised: PortId[A], t: TimerId) extends AwaitedValues[Val, A ++ Reading[A]]
+  case AwaitingAction(id: ActionRunId[A])
   case Zip[Val[_], A1, A2](
     a1: AwaitedValues[Val, A1],
     a2: AwaitedValues[Val, A2],
@@ -125,24 +129,29 @@ enum AwaitedValues[Val[_], A]:
   def **[B](that: AwaitedValues[Val, B]): AwaitedValues[Val, A ** B] =
     Zip(this, that)
 
-  def supplyResult[X](
-    px: PortId[X],
-    result: Value[Val, X],
+  def supplyValue[X](
+    px: PortId[X] | ActionRunId[X],
+    value: Value[Val, X],
   ): Option[Input[Val, A]] =
     this match
-      case Awaiting(pa) =>
+      case AwaitingInput(pa) =>
         if (px == pa)
-          Some(Input.Ready(result.asInstanceOf[Value[Val, A]]))
+          Some(Input.Ready(value.asInstanceOf[Value[Val, A]]))
         else
           None
-      case AwaitingTimeout(pa, t) =>
+      case AwaitingInputWithTimeout(pa, t) =>
         if (px == pa)
-          Some(Input.Ready(Value.left(result).asInstanceOf[Value[Val, A]]))
+          Some(Input.Ready(Value.left(value).asInstanceOf[Value[Val, A]]))
           // TODO: cancel the timer
         else
           None
+      case AwaitingAction(pa) =>
+        if (px == pa)
+          Some(Input.Ready(value.asInstanceOf[Value[Val, A]]))
+        else
+          None
       case Zip(a1, a2) =>
-        (a1.supplyResult(px, result), a2.supplyResult(px, result)) match
+        (a1.supplyValue(px, value), a2.supplyValue(px, value)) match
           case (Some(i), Some(j)) => Some(Input.Zip(i, j))
           case (Some(i), None   ) => Some(Input.Zip(i, Input.Awaiting(a2)))
           case (None   , Some(j)) => Some(Input.Zip(Input.Awaiting(a1), j))

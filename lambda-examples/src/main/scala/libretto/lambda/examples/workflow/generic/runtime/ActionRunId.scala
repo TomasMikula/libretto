@@ -1,3 +1,3 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-case class PortId[A](value: Long)
+case class ActionRunId[R](value: Long)
