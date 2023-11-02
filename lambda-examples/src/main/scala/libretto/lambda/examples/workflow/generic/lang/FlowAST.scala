@@ -73,7 +73,7 @@ object FlowAST {
   case class DoWhile[Op[_, _], A, B](f: FlowAST[Op, A, A ++ B]) extends Work[Op, A, B]
   case class Delay[Op[_, _], A](duration: FiniteDuration) extends Work[Op, A, A]
 
-  case class Read[Op[_, _], A]() extends Work[Op, Unit, InputPortRef[A] ** Reading[A]]
+  case class Read[Op[_, _], A]() extends Work[Op, Unit, PortName[A] ** Reading[A]]
   case class ReadAwait[Op[_, _], A]() extends Work[Op, Reading[A], A]
   case class ReadAwaitTimeout[Op[_, _], A](duration: FiniteDuration) extends Work[Op, Reading[A], A ++ Reading[A]]
 

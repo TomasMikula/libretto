@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
-import libretto.lambda.examples.workflow.generic.lang.{**, InputPortRef}
+import libretto.lambda.examples.workflow.generic.lang.{**, PortName}
 import libretto.lambda.examples.workflow.generic.runtime.{ActionExecutor, Value, WorkflowEngine}
 import libretto.lambda.UnhandledCase
 import scala.util.{Success, Try}
@@ -29,31 +29,31 @@ class DummyActionExecutor(
         checkCivilRecord(input, onComplete)
 
   private def sendAcceptanceRequest(
-    args: Value[Val, EmailAddress ** InputPortRef[CandidateResponse]],
+    args: Value[Val, EmailAddress ** PortName[CandidateResponse]],
     onComplete: Try[Value[Val, Unit]] => Unit,
   ): Unit =
     val (addr, promResp) = Value.unpair(args)
     promResp match
-      case Value.InPortRef(p) =>
+      case Value.PortNameValue(p) =>
         val pId: Value[Val, PersonalId] =
           personalId("1234")
         val hist: Value[Val, EmploymentHistory] =
           employmentHistory("Facebook, Microsoft, Amazon")
-        engine.completePromise(p, Success(Value.right(pId ** hist)))
+        engine.completeReading(p, Success(Value.right(pId ** hist)))
         onComplete(Success(Value.unit))
       case other =>
         throw AssertionError(s"Unexpected value of type InputPortRef[T]: $other")
 
   private def notifyVerificationTeam(
-    args: Value[Val, EmploymentHistory ** InputPortRef[EmploymentVerificationResult]],
+    args: Value[Val, EmploymentHistory ** PortName[EmploymentVerificationResult]],
     onComplete: Try[Value[Val, Unit]] => Unit,
   ): Unit =
     val (hist, ref) = Value.unpair(args)
     ref match
-      case Value.InPortRef(ref) =>
+      case Value.PortNameValue(ref) =>
         val res: Value[Val, EmploymentVerificationResult] =
           employmentVerificationResult(true)
-        engine.completePromise(ref, Success(res))
+        engine.completeReading(ref, Success(res))
         onComplete(Success(Value.unit))
       case other =>
         throw AssertionError(s"Unexpected value of type InputPortRef[T]: $other")

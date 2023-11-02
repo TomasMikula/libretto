@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Projection, Spine, UnhandledCase, Unzippable, Zippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, InputPortRef, Reading, given}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, PortName, Reading, given}
 import libretto.lambda.util.TypeEq
 import libretto.lambda.util.TypeEq.{Refl, *}
 
@@ -38,7 +38,7 @@ enum Input[Val[_], A]:
             Found(path.inFst(z.a2), value, ev.inFst)
 
   def supplyResult[X](
-    pid: PromiseId[X],
+    pid: PortId[X],
     result: Value[Val, X],
   ): Option[Input[Val, A]] =
     this match
@@ -89,16 +89,16 @@ enum Input[Val[_], A]:
 
 
 object Input {
-  def awaiting[Val[_], A](pa: PromiseId[A]): Input[Val, A] =
+  def awaiting[Val[_], A](pa: PortId[A]): Input[Val, A] =
     Awaiting(AwaitedValues.Awaiting(pa))
 
-  def awaitingTimeout[Val[_], A](pa: PromiseId[A], t: TimerId): Input[Val, A ++ Reading[A]] =
+  def awaitingTimeout[Val[_], A](pa: PortId[A], t: TimerId): Input[Val, A ++ Reading[A]] =
     Awaiting(AwaitedValues.AwaitingTimeout(pa, t))
 
-  def inPortRef[Val[_], A](pa: PromiseId[A]): Input[Val, InputPortRef[A]] =
-    Ready(Value.inputPortRef(pa))
+  def portName[Val[_], A](pa: PortId[A]): Input[Val, PortName[A]] =
+    Ready(Value.portName(pa))
 
-  def reading[Val[_], A](pa: PromiseId[A]): Input[Val, Reading[A]] =
+  def reading[Val[_], A](pa: PortId[A]): Input[Val, Reading[A]] =
     Ready(Value.reading(pa))
 
   enum FindValueRes[Val[_], A]:
@@ -115,8 +115,8 @@ object Input {
 }
 
 enum AwaitedValues[Val[_], A]:
-  case Awaiting(promised: PromiseId[A])
-  case AwaitingTimeout(promised: PromiseId[A], t: TimerId) extends AwaitedValues[Val, A ++ Reading[A]]
+  case Awaiting(promised: PortId[A])
+  case AwaitingTimeout(promised: PortId[A], t: TimerId) extends AwaitedValues[Val, A ++ Reading[A]]
   case Zip[Val[_], A1, A2](
     a1: AwaitedValues[Val, A1],
     a2: AwaitedValues[Val, A2],
@@ -126,7 +126,7 @@ enum AwaitedValues[Val[_], A]:
     Zip(this, that)
 
   def supplyResult[X](
-    px: PromiseId[X],
+    px: PortId[X],
     result: Value[Val, X],
   ): Option[Input[Val, A]] =
     this match

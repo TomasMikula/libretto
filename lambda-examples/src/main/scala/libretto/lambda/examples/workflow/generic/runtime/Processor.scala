@@ -39,7 +39,7 @@ private[runtime] class Processor[Action[_, _], Val[_]](
     item match {
       case WorkItem.Wakeup(ref) =>
         persistor.modifyOpt(ref) { crankOpt(ref, _) }
-      case WorkItem.PromiseCompleted(pid) =>
+      case WorkItem.ReadingComplete(pid) =>
         persistor.fetchResult(pid) match
           case Some(result) =>
             result match
@@ -54,7 +54,7 @@ private[runtime] class Processor[Action[_, _], Val[_]](
     }
 
   private def supplyResult[A](
-    pid: PromiseId[A],
+    pid: PortId[A],
     result: Value[Val, A],
   ): Unit =
     persistor.modifyOpt(pid.workflow) {
@@ -119,7 +119,7 @@ private[runtime] class Processor[Action[_, _], Val[_]](
             val promiseId = persistor.promise[y](ref)
             worker.submit(req.input, req.action) { result =>
               persistor.completePromise(promiseId, result)
-              workQueue.put(WorkItem.PromiseCompleted(promiseId))
+              workQueue.put(WorkItem.ReadingComplete(promiseId))
             }
             val w1 = req.cont(promiseId)
             CrankRes.Progressed(w1)

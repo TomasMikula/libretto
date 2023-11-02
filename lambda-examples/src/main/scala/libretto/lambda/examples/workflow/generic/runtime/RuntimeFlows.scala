@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Capture, Focus, Knit, Knitted, Projection, Spine, SymmetricSemigroupalCategory, UnhandledCase, Unzippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, InputPortRef, Reading, given}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, PortName, Reading, given}
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import scala.concurrent.duration.FiniteDuration
@@ -235,8 +235,8 @@ object RuntimeFlows {
             case _: FlowAST.Read[op, x] =>
               v match
                 case Focus.Id() =>
-                  summon[W =:= (InputPortRef[x] ** Reading[x])]
-                  PropagateValueRes.Read(fromShuffled(pre[InputPortRef[x] ** Reading[x]] > post))
+                  summon[W =:= (PortName[x] ** Reading[x])]
+                  PropagateValueRes.Read(fromShuffled(pre[PortName[x] ** Reading[x]] > post))
                 case Focus.Fst(i) =>
                   UnhandledCase.raise(s"propagateValue into $f at $v")
                 case Focus.Snd(i) =>
@@ -255,7 +255,7 @@ object RuntimeFlows {
                   given (A =:= Reading[a]) =
                     summon[A =:= V[A]] andThen ev.flip andThen summon[VA =:= Reading[a]]
                   val ref =
-                    Value.extractInPortId(value.as[Reading[a]])
+                    Value.extractPortId(value.as[Reading[a]])
                   PropagateValueRes.Transformed(
                     Input.awaiting(ref),
                     fromShuffled(pre[a] > post),
@@ -429,7 +429,7 @@ object RuntimeFlows {
     ) extends PropagateValueRes[Action, Val, F, B]
 
     case class Read[Action[_, _], Val[_], F[_], Y, B](
-      cont: Flow[Action, Val, F[InputPortRef[Y] ** Reading[Y]], B]
+      cont: Flow[Action, Val, F[PortName[Y] ** Reading[Y]], B]
     ) extends PropagateValueRes[Action, Val, F, B]
 
     case class ReadAwaitTimeout[Action[_, _], Val[_], F[_], Y, B](

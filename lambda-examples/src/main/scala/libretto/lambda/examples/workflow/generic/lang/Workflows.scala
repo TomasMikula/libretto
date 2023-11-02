@@ -80,7 +80,7 @@ class Workflows[Action[_, _]] {
     def prj2[A, B]: Flow[A ** B, B] =
       FlowAST.Prj2()
 
-    def read[A]: Flow[Unit, InputPortRef[A] ** Reading[A]] =
+    def read[A]: Flow[Unit, PortName[A] ** Reading[A]] =
       FlowAST.Read()
 
     def readAwait[A]: Flow[Reading[A], A] =

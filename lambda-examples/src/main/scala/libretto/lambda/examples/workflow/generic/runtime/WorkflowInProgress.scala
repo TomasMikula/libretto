@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Capture, Focus, Knitted, Shuffled, Spine, Unzippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, InputPortRef, Reading, given}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, PortName, Reading, given}
 import libretto.lambda.examples.workflow.generic.runtime.Input.FindValueRes
 import libretto.lambda.examples.workflow.generic.runtime.{RuntimeFlows as rtf}
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
@@ -78,7 +78,7 @@ object WorkflowInProgress {
                 case pvr.Read(cont) =>
                   CrankRes.read(path, cont, resultAcc)
                 case pvr.ReadAwaitTimeout(toAwait, timeout, cont) =>
-                  val pId = Value.extractInPortId(toAwait)
+                  val pId = Value.extractPortId(toAwait)
                   CrankRes.SetTimer(
                     timeout,
                     timerId => {
@@ -115,7 +115,7 @@ object WorkflowInProgress {
     case AlreadyStuck(w: WorkflowInProgress.Incomplete[Action, Val, A])
     case Progressed(w: WorkflowInProgress[Action, Val, A])
     case Ask[Action[_, _], Val[_], X, A](
-      cont: PromiseId[X] => WorkflowInProgress[Action, Val, A],
+      cont: PortId[X] => WorkflowInProgress[Action, Val, A],
     ) extends CrankRes[Action, Val, A]
     case SetTimer[Action[_, _], Val[_], A](
       duration: FiniteDuration,
@@ -124,17 +124,17 @@ object WorkflowInProgress {
     case ActionRequest[Action[_, _], Val[_], X, Y, A](
       input: Value[Val, X],
       action: Action[X, Y],
-      cont: PromiseId[Y] => WorkflowInProgress[Action, Val, A],
+      cont: PortId[Y] => WorkflowInProgress[Action, Val, A],
     ) extends CrankRes[Action, Val, A]
 
   object CrankRes:
     def read[Action[_, _], Val[_], F[_], X, Y, A](
       remainingInput: Spine[**, Input[Val, _], F],
-      cont: rtf.Flow[Action, Val, F[InputPortRef[X] ** Reading[X]], Y],
+      cont: rtf.Flow[Action, Val, F[PortName[X] ** Reading[X]], Y],
       resultAcc: Capture[**, Value[Val, _], Y, A],
     ): CrankRes[Action, Val, A] =
       CrankRes.Ask[Action, Val, X, A] { px =>
-        val newInput = remainingInput.plugFold(Input.inPortRef(px) ** Input.reading(px))
+        val newInput = remainingInput.plugFold(Input.portName(px) ** Input.reading(px))
         IncompleteImpl(newInput, cont, resultAcc)
       }
 }

@@ -20,7 +20,8 @@ given BiInjective[**] with {
   */
 sealed trait ++[A, B]
 
-sealed trait InputPortRef[A]
+/** References an external input port. */
+sealed trait PortName[A]
 
 /** Value `A` to be read from an external input port */
 sealed trait Reading[A]

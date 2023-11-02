@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Projection, UnhandledCase, Unzippable, Zippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, InputPortRef, Reading}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, PortName, Reading}
 import libretto.lambda.util.Exists
 
 enum Value[F[_], A]:
@@ -15,8 +15,8 @@ enum Value[F[_], A]:
   case Left [F[_], A, B](a: Value[F, A]) extends Value[F, A ++ B]
   case Right[F[_], A, B](b: Value[F, B]) extends Value[F, A ++ B]
 
-  case InPortRef[F[_], A](pa: PromiseId[A]) extends Value[F, InputPortRef[A]]
-  case ReadingInput[F[_], A](pa: PromiseId[A]) extends Value[F, Reading[A]]
+  case PortNameValue[F[_], A](pa: PortId[A]) extends Value[F, PortName[A]]
+  case ReadingInput[F[_], A](pa: PortId[A]) extends Value[F, Reading[A]]
 
   /** Extension point for domain-specific values. */
   case Ext(value: F[A])
@@ -47,15 +47,15 @@ object Value:
   def right[F[_], A, B](value: Value[F, B]): Value[F, A ++ B] =
     Value.Right(value)
 
-  def inputPortRef[F[_], A](promiseId: PromiseId[A]): Value[F, InputPortRef[A]] =
-    InPortRef(promiseId)
+  def portName[F[_], A](promiseId: PortId[A]): Value[F, PortName[A]] =
+    PortNameValue(promiseId)
 
-  def reading[F[_], A](pa: PromiseId[A]): Value[F, Reading[A]] =
+  def reading[F[_], A](pa: PortId[A]): Value[F, Reading[A]] =
     ReadingInput(pa)
 
   trait Compliant[F[_]] extends Unzippable[**, F]:
     def toEither[A, B](value: F[A ++ B]): Either[F[A], F[B]]
-    def extractInPortRef[A](value: F[Reading[A]]): PromiseId[A]
+    def extractPortId[A](value: F[Reading[A]]): PortId[A]
 
   def unpair[F[_], A, B](value: Value[F, A ** B])(using F: Unzippable[**, F]): (Value[F, A], Value[F, B]) =
     value match
@@ -71,10 +71,10 @@ object Value:
       case Value.Right(b) => scala.Right(b)
       case Ext(value)     => F.toEither(value).left.map(Ext(_)).map(Ext(_))
 
-  def extractInPortId[F[_], A](value: Value[F, Reading[A]])(using F: Compliant[F]): PromiseId[A] =
+  def extractPortId[F[_], A](value: Value[F, Reading[A]])(using F: Compliant[F]): PortId[A] =
     value match
       case ReadingInput(pa) => pa
-      case Ext(value) => F.extractInPortRef(value)
+      case Ext(value) => F.extractPortId(value)
 
   given zippableValue[F[_]]: Zippable[**, Value[F, _]] with
     override def zip[A, B](fa: Value[F, A], fb: Value[F, B]): Value[F, A ** B] =

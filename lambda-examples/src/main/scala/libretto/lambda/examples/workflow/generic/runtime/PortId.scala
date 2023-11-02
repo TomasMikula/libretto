@@ -1,15 +1,15 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-sealed trait PromiseId[A]:
+sealed trait PortId[A]:
   type WorkflowResult
   def workflow: WorkflowRef[WorkflowResult]
 
-object PromiseId:
+object PortId:
   case class Impl[W, A](
     workflow: WorkflowRef[W],
     value: Long,
-  ) extends PromiseId[A]:
+  ) extends PortId[A]:
     override type WorkflowResult = W
 
-  def apply[A](w: WorkflowRef[?], value: Long): PromiseId[A] =
+  def apply[A](w: WorkflowRef[?], value: Long): PortId[A] =
     Impl(w, value)

@@ -16,8 +16,8 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
   private val workflows: mutable.Map[WorkflowRef[?], Entry[?]] =
     mutable.Map.empty[WorkflowRef[?], Entry[?]]
 
-  private val promises: mutable.Map[PromiseId[?], PromiseState[Val, ?]] =
-    mutable.Map.empty[PromiseId[?], PromiseState[Val, ?]]
+  private val promises: mutable.Map[PortId[?], PromiseState[Val, ?]] =
+    mutable.Map.empty[PortId[?], PromiseState[Val, ?]]
 
   def insert[A, B](
     input: Value[Val, A],
@@ -130,15 +130,15 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
         }
     }
 
-  def promise[A](w: WorkflowRef[?]): PromiseId[A] =
+  def promise[A](w: WorkflowRef[?]): PortId[A] =
     this.synchronized {
-      val id = PromiseId[A](w, nextPromiseId)
+      val id = PortId[A](w, nextPromiseId)
       nextPromiseId += 1
       promises.put(id, PromiseState.Empty())
       id
     }
 
-  def completePromise[A](id: PromiseId[A], result: Try[Value[Val, A]]): Boolean =
+  def completePromise[A](id: PortId[A], result: Try[Value[Val, A]]): Boolean =
     this.synchronized {
       promises.get(id) match
         case None =>
@@ -152,7 +152,7 @@ private[runtime] class Persistor[Action[_, _], Val[_]] {
               false
     }
 
-  def fetchResult[A](id: PromiseId[A]): Option[Try[Value[Val, A]]] =
+  def fetchResult[A](id: PortId[A]): Option[Try[Value[Val, A]]] =
     this.synchronized {
       promises.get(id).flatMap {
         case PromiseState.Complete(result) =>

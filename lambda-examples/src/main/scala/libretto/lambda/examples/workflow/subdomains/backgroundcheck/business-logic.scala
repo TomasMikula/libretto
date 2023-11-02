@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
-import libretto.lambda.examples.workflow.generic.lang.{**, InputPortRef, Reading}
+import libretto.lambda.examples.workflow.generic.lang.{**, PortName, Reading}
 import workflows.Flow.{doWhile, injectL, injectR, read, readAwait, readAwaitTimeout}
 
 import scala.concurrent.duration.*
@@ -24,7 +24,7 @@ def askForAcceptance: Flow[EmailAddress, CandidateResponse] =
     requestAcceptance(emailAddr ** inPort ** response)
   }
 
-def requestAcceptance: Flow[EmailAddress ** InputPortRef[CandidateResponse] ** Reading[CandidateResponse], CandidateResponse] =
+def requestAcceptance: Flow[EmailAddress ** PortName[CandidateResponse] ** Reading[CandidateResponse], CandidateResponse] =
   doWhile { case addr ** due ** promised =>
     returning(
       readAwaitTimeout(1.day)(promised) switch {

@@ -6,7 +6,7 @@ import libretto.lambda.examples.workflow.generic.runtime.Value
 import libretto.lambda.examples.workflow.generic.runtime.Value.Ext
 import libretto.lambda.examples.workflow.generic.lang.**
 import libretto.lambda.examples.workflow.generic.lang.++
-import libretto.lambda.examples.workflow.generic.runtime.PromiseId
+import libretto.lambda.examples.workflow.generic.runtime.PortId
 import libretto.lambda.examples.workflow.generic.lang.Reading
 
 enum Val[A]:
@@ -28,7 +28,7 @@ object Val:
       throw new AssertionError(s"Unexpected value representing a pair (`**`): $x")
     override def toEither[A, B](value: Val[A ++ B]): Either[Val[A], Val[B]] =
       throw new AssertionError(s"Unexpected value representing `++`: $value")
-    override def extractInPortRef[A](value: Val[Reading[A]]): PromiseId[A] =
+    override def extractPortId[A](value: Val[Reading[A]]): PortId[A] =
       throw new AssertionError(s"Unexpected value representing input port (`Reading[A]`): $value")
 
 type Value[A] = generic.runtime.Value[Val, A]
