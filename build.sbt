@@ -216,7 +216,7 @@ lazy val docs = project
   .dependsOn(core)
   .enablePlugins(MdocPlugin)
   .settings(
-    scalacOptions += "-Ykind-projector", // so that we can use '*' placeholder in the tutorial
+    scalacOptions ++= commonScalacOptions,
     mdocIn := file("tutorial"),
     mdocVariables := Map(
       "SCALA_VERSION" -> (ThisBuild / scalaVersion).value,
