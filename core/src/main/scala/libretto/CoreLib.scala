@@ -3118,10 +3118,19 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         switch(nil[U], par(f, self) > cons)
       }
 
-    def flatMap[A, B](f: A -⚬ LList[B]): LList[A] -⚬ LList[B] =
+    def flatMapConcat[A, B](f: A -⚬ LList[B]): LList[A] -⚬ LList[B] =
       rec { self =>
         switch(nil[B], par(f, self) > concat)
       }
+
+    def flatMapMerge[A, B](f: A -⚬ LList[B]): LList[A] -⚬ LList[B] =
+      rec { self =>
+        switch(nil[B], par(f, self) > merge)
+      }
+
+    /** Alias for [[flatMapConcat]]. */
+    def flatMap[A, B](f: A -⚬ LList[B]): LList[A] -⚬ LList[B] =
+      flatMapConcat(f)
 
     def mapS[S, T, U](f: (S |*| T) -⚬ (S |*| U)): (S |*| LList[T]) -⚬ (S |*| LList[U]) = rec { self =>
       switchWithL(
