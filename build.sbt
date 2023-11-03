@@ -63,20 +63,20 @@ val commonScalacOptions =
     "-Ykind-projector:underscores",
   )
 
-lazy val lambda = project
+lazy val lambda = crossProject(JVMPlatform, JSPlatform)
   .in(file("lambda"))
   .settings(
     name := "libretto-lambda",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % ScalatestVersion % Test,
+      "org.scalatest" %%% "scalatest" % ScalatestVersion % Test,
     ),
   )
 
 lazy val lambdaExamples = project
   .in(file("lambda-examples"))
   .dependsOn(
-    lambda,
+    lambda.jvm,
   )
   .settings(
     name := "libretto-lambda-examples",
@@ -90,7 +90,7 @@ lazy val lambdaExamples = project
 
 lazy val core = project
   .in(file("core"))
-  .dependsOn(lambda)
+  .dependsOn(lambda.jvm)
   .settings(
     name := "libretto-core",
     scalacOptions ++= commonScalacOptions,
@@ -208,7 +208,8 @@ lazy val root = project
     publish / skip := true,
   )
   .aggregate(
-    lambda,
+    lambda.jvm,
+    lambda.js,
     core,
     testing,
     coreTests,
@@ -228,50 +229,19 @@ lazy val docs = project
   .dependsOn(core)
   .enablePlugins(MdocPlugin)
   .settings(
-    scalacOptions += "-Ykind-projector", // so that we can use '*' placeholder in the tutorial
+    scalacOptions ++= commonScalacOptions,
     mdocIn := file("tutorial"),
     mdocVariables := Map(
       "SCALA_VERSION" -> (ThisBuild / scalaVersion).value,
     ),
     laikaSite := {
-      import cats.effect.IO
-      import cats.effect.unsafe.implicits.global
-      import laika.api.Transformer
-      import laika.format.{HTML, Markdown}
-      import laika.helium.Helium
-      import laika.helium.config.TextLink
-      import laika.io.implicits._
-      import laika.markdown.github.GitHubFlavor
-      import laika.parse.code.SyntaxHighlighting
-      import laika.theme.Theme
-
       // add a dependency on mdoc
       mdoc.toTask("").value
+
       val srcDir = mdocOut.value
       val tgtDir = target.value / "laika-site"
 
-      Transformer
-        .from(Markdown)
-        .to(HTML)
-        .withRawContent // support html content in input markdown documents
-        .using(GitHubFlavor, SyntaxHighlighting)
-        .parallel[IO]
-        .withTheme(
-          Helium.defaults
-            .site.topNavigationBar(
-              homeLink = TextLink.external("https://github.com/TomasMikula/libretto", "GitHub"),
-            )
-            .site.fontResources(/* Empty overrides Default! We use our custom CSS for the fonts. */)
-            .build
-        )
-        .build
-        .use { transformer =>
-          transformer
-            .fromDirectory(srcDir.absolutePath)
-            .toDirectory(tgtDir.absolutePath)
-            .transform
-        }
-        .unsafeRunSync()
+      LaikaMarkdownToHtml(srcDir.absolutePath, tgtDir.absolutePath)
 
       tgtDir
     },

@@ -9,7 +9,9 @@ import scala.util.Try
 class WorkflowEngine[Action[_, _], Val[_]](
   worker: ActionExecutor[Action, Val],
   scheduler: ScheduledExecutorService,
-)(using Unzippable[**, Val]) {
+)(using
+  Value.Compliant[Val],
+) {
   val persistor = new Persistor[Action, Val]
   val processor = Processor.start(persistor, worker, scheduler)
 
@@ -28,9 +30,9 @@ class WorkflowEngine[Action[_, _], Val[_]](
     ref
   }
 
-  def completePromise[A](p: PromiseId[A], result: Try[Value[Val, A]]): Boolean =
-    if (persistor.completePromise(p, result))
-      processor.notify(WorkItem.PromiseCompleted(p))
+  def completeReading[A](w: WorkflowRef[?], p: PortId[A], result: Value[Val, A]): Boolean =
+    if (persistor.completeReading(p, result))
+      processor.notify(WorkItem.ReadingComplete(w, p))
       true
     else
       false
@@ -43,6 +45,8 @@ object WorkflowEngine {
   def start[Action[_, _], Val[_]](
     worker: ActionExecutor[Action, Val],
     scheduler: ScheduledExecutorService,
-  )(using Unzippable[**, Val]): WorkflowEngine[Action, Val] =
+  )(using
+    Value.Compliant[Val],
+  ): WorkflowEngine[Action, Val] =
     new WorkflowEngine[Action, Val](worker, scheduler)
 }

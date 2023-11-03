@@ -2,8 +2,12 @@ package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
 import libretto.lambda.Unzippable
 import libretto.lambda.examples.workflow.generic
+import libretto.lambda.examples.workflow.generic.runtime.Value
 import libretto.lambda.examples.workflow.generic.runtime.Value.Ext
 import libretto.lambda.examples.workflow.generic.lang.**
+import libretto.lambda.examples.workflow.generic.lang.++
+import libretto.lambda.examples.workflow.generic.runtime.PortId
+import libretto.lambda.examples.workflow.generic.lang.Reading
 
 enum Val[A]:
   case EmailAddr(value: String) extends Val[EmailAddress]
@@ -19,9 +23,13 @@ enum Val[A]:
   ) extends Val[Report]
 
 object Val:
-  given Unzippable[**, Val] with
+  given Value.Compliant[Val] with
     override def unzip[A, B](x: Val[A ** B]): (Val[A], Val[B]) =
-      throw new AssertionError(s"Unexpected value representing pair: $x")
+      throw new AssertionError(s"Unexpected value representing a pair (`**`): $x")
+    override def toEither[A, B](value: Val[A ++ B]): Either[Val[A], Val[B]] =
+      throw new AssertionError(s"Unexpected value representing `++`: $value")
+    override def extractPortId[A](value: Val[Reading[A]]): PortId[A] =
+      throw new AssertionError(s"Unexpected value representing input port (`Reading[A]`): $value")
 
 type Value[A] = generic.runtime.Value[Val, A]
 

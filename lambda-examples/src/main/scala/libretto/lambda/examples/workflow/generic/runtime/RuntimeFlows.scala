@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Capture, Focus, Knit, Knitted, Projection, Spine, SymmetricSemigroupalCategory, UnhandledCase, Unzippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, InputPortRef, Reading, given}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, PortName, Reading, given}
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import scala.concurrent.duration.FiniteDuration
@@ -59,10 +59,14 @@ object RuntimeFlows {
     FlowAST.DistributeLR()
 
   def action[Op[_, _], Val[_], A, B](f: RuntimeAction[Op, Val, A, B]): Flow[Op, Val, A, B] =
-    FlowAST.DomainAction(f)
+    FlowAST.Ext(f)
 
   def distLR[Op[_, _], Val[_], A, B, C](captured: Value[Val, A]): Flow[Op, Val, B ++ C, (A ** B) ++ (A ** C)] =
     action(RuntimeAction.DistLR(captured))
+
+  extension [Op[_, _], Val[_], A, B](flow: Flow[Op, Val, A, B])
+    def >>>[C](that: Flow[Op, Val, B, C]): Flow[Op, Val, A, C] =
+      FlowAST.AndThen(flow, that)
 
   private type Work[Action[_, _], Val[_], A, B] =
     FlowAST.Work[RuntimeAction[Action, Val, _, _], A, B]
@@ -90,7 +94,7 @@ object RuntimeFlows {
     F: Focus[**, F],
     cont: Flow[Action, Val, F[A], B],
   )(using
-    Unzippable[**, Val],
+    Value.Compliant[Val],
   ): PropagateValueRes[Action, Val, F, B] = {
     given sh: Shuffled[Action, Val] =
       RuntimeFlows.shuffled[Action, Val]
@@ -231,8 +235,8 @@ object RuntimeFlows {
             case _: FlowAST.Read[op, x] =>
               v match
                 case Focus.Id() =>
-                  summon[W =:= (InputPortRef[x] ** Reading[x])]
-                  PropagateValueRes.Read(fromShuffled(pre[InputPortRef[x] ** Reading[x]] > post))
+                  summon[W =:= (PortName[x] ** Reading[x])]
+                  PropagateValueRes.Read(fromShuffled(pre[PortName[x] ** Reading[x]] > post))
                 case Focus.Fst(i) =>
                   UnhandledCase.raise(s"propagateValue into $f at $v")
                 case Focus.Snd(i) =>
@@ -251,9 +255,9 @@ object RuntimeFlows {
                   given (A =:= Reading[a]) =
                     summon[A =:= V[A]] andThen ev.flip andThen summon[VA =:= Reading[a]]
                   val ref =
-                    Value.extractInPortId(value.as[Reading[a]])
+                    Value.extractPortId(value.as[Reading[a]])
                   PropagateValueRes.Transformed(
-                    Input.awaiting(ref),
+                    Input.awaitingInput(ref),
                     fromShuffled(pre[a] > post),
                   )
                 case other =>
@@ -274,25 +278,24 @@ object RuntimeFlows {
                   // TODO: derive contradiction
                   UnhandledCase.raise(s"propagateValue $value into $other at $v")
 
-            case FlowAST.DomainAction(action) =>
+            case FlowAST.Ext(action) =>
               action match
-                case RuntimeAction.DomainAction(partialArgs, action) =>
+                case a @ RuntimeAction.DomainAction(action) =>
                   ev match { case TypeEq(Refl()) =>
                     v match
                       case Focus.Id() =>
-                        val args = partialArgs.complete(value).fold
                         PropagateValueRes.ActionRequest(
-                          args,
+                          value,
                           action,
                           fromShuffled(pre[W] > post),
                         )
-                      case v: Focus.Proper[prod, f] =>
-                        partialArgs.absorb(value, v) match
-                          case Capture.Absorbed.Impl(k, r) =>
+                      case v: Focus.Proper[prod, v] =>
+                        RuntimeAction.captureValue[Action, Val, V, A](value, v) match
+                          case Exists.Some((preCapture, k)) =>
+                            val f1 = toShuffled(RuntimeFlows.action(preCapture) >>> RuntimeFlows.action(a)).at(g)
                             val k1 = k.at(g)
                             pre.knitBw(k1) match
                               case Exists.Some((k0, pre1)) =>
-                                val f1 = toShuffled(RuntimeFlows.action(RuntimeAction.partiallyApplied(r, action))).at(g)
                                 val cont1 = fromShuffled(pre1 > f1 > post)
                                 PropagateValueRes.Absorbed(k0, cont1)
                   }
@@ -426,7 +429,7 @@ object RuntimeFlows {
     ) extends PropagateValueRes[Action, Val, F, B]
 
     case class Read[Action[_, _], Val[_], F[_], Y, B](
-      cont: Flow[Action, Val, F[InputPortRef[Y] ** Reading[Y]], B]
+      cont: Flow[Action, Val, F[PortName[Y] ** Reading[Y]], B]
     ) extends PropagateValueRes[Action, Val, F, B]
 
     case class ReadAwaitTimeout[Action[_, _], Val[_], F[_], Y, B](

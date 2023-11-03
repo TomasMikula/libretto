@@ -86,7 +86,9 @@ object Fun {
   }
 
   private val lambdas: libretto.lambda.Lambdas[Fun, Tuple2, Object] =
-    libretto.lambda.Lambdas[Fun, Tuple2, Object]
+    libretto.lambda.Lambdas[Fun, Tuple2, Object](
+      syntheticPairVar = (lbl1, lbl2) => new Object,
+    )
 
   opaque type LambdaContext = lambdas.Context
 
@@ -138,7 +140,7 @@ object Fun {
 
   // TODO: avoid the need to create auxiliary pairings
   private def zipExprs[A](es: Tupled[Tuple2, Expr, A])(using LambdaContext): Expr[A] =
-    es.fold([x, y] => (ex: Expr[x], ey: Expr[y]) => {
+    es.foldWith([x, y] => (ex: Expr[x], ey: Expr[y]) => {
       ex <*> ey
     })
 

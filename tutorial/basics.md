@@ -1140,13 +1140,13 @@ and the `nil` and `cons` constructors:
 ```scala mdoc
 object List {
   def nil[A]: One -⚬ List[A] =
-    injectL > pack[ListF[A, *]]
+    injectL > pack[ListF[A, _]]
 
   //     head --+       +-- tail
   //            |       |
   //            V       V
   def cons[A]: (A |*| List[A]) -⚬ List[A] =
-    injectR > pack[ListF[A, *]]
+    injectR > pack[ListF[A, _]]
 }
 ```
 
