@@ -63,20 +63,20 @@ val commonScalacOptions =
     "-Ykind-projector:underscores",
   )
 
-lazy val lambda = project
+lazy val lambda = crossProject(JVMPlatform, JSPlatform)
   .in(file("lambda"))
   .settings(
     name := "libretto-lambda",
     scalacOptions ++= commonScalacOptions,
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % ScalatestVersion % Test,
+      "org.scalatest" %%% "scalatest" % ScalatestVersion % Test,
     ),
   )
 
 lazy val lambdaExamples = project
   .in(file("lambda-examples"))
   .dependsOn(
-    lambda,
+    lambda.jvm,
   )
   .settings(
     name := "libretto-lambda-examples",
@@ -90,7 +90,7 @@ lazy val lambdaExamples = project
 
 lazy val core = project
   .in(file("core"))
-  .dependsOn(lambda)
+  .dependsOn(lambda.jvm)
   .settings(
     name := "libretto-core",
     scalacOptions ++= commonScalacOptions,
@@ -196,7 +196,8 @@ lazy val root = project
     publish / skip := true,
   )
   .aggregate(
-    lambda,
+    lambda.jvm,
+    lambda.js,
     core,
     testing,
     coreTests,
