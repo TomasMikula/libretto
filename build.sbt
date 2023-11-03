@@ -222,44 +222,13 @@ lazy val docs = project
       "SCALA_VERSION" -> (ThisBuild / scalaVersion).value,
     ),
     laikaSite := {
-      import cats.effect.IO
-      import cats.effect.unsafe.implicits.global
-      import laika.api.Transformer
-      import laika.format.{HTML, Markdown}
-      import laika.helium.Helium
-      import laika.helium.config.TextLink
-      import laika.io.implicits._
-      import laika.markdown.github.GitHubFlavor
-      import laika.parse.code.SyntaxHighlighting
-      import laika.theme.Theme
-
       // add a dependency on mdoc
       mdoc.toTask("").value
+
       val srcDir = mdocOut.value
       val tgtDir = target.value / "laika-site"
 
-      Transformer
-        .from(Markdown)
-        .to(HTML)
-        .withRawContent // support html content in input markdown documents
-        .using(GitHubFlavor, SyntaxHighlighting)
-        .parallel[IO]
-        .withTheme(
-          Helium.defaults
-            .site.topNavigationBar(
-              homeLink = TextLink.external("https://github.com/TomasMikula/libretto", "GitHub"),
-            )
-            .site.fontResources(/* Empty overrides Default! We use our custom CSS for the fonts. */)
-            .build
-        )
-        .build
-        .use { transformer =>
-          transformer
-            .fromDirectory(srcDir.absolutePath)
-            .toDirectory(tgtDir.absolutePath)
-            .transform
-        }
-        .unsafeRunSync()
+      LaikaMarkdownToHtml(srcDir.absolutePath, tgtDir.absolutePath)
 
       tgtDir
     },
