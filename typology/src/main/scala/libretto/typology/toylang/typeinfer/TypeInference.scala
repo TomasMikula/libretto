@@ -3657,6 +3657,18 @@ object TypeInference {
 
   type GenericType[T] = ConcreteType[T]
 
+  val tParamToType: TParamLabel -⚬ Val[Type] =
+    Labels.unwrapOriginalTP > mapVal(x => Type.abstractType(x))
+
+  val outputTParam: (TParamLabel |*| -[Done]) -⚬ Val[Type] =
+    λ { case lbl |*| nd =>
+      val (res |*| d) = tParamToType(lbl) :>> signalPosSnd
+      returning(
+        res,
+        d supplyTo nd,
+      )
+    }
+
   val closeTParam: (TParamLabel |*| -[Done]) -⚬ Done =
     λ { case lbl |*| nd =>
       val d1 |*| d2 = Labels.neglectTParam(lbl) > fork
@@ -3728,15 +3740,14 @@ object TypeInference {
 
   object Tools {
     val groundInstance: Tools[Done] =
-      val outputTParam: TParamLabel -⚬ Val[Type] =
-        Labels.unwrapOriginalTP > mapVal(x => Type.abstractType(x))
       Tools(
         join,
         fork,
+        fork,
         snd(invertOne) > ConcreteType.typeParam,
-        elimSnd > outputTParam,
+        fst(tParamToType) > awaitPosSnd,
         ConcreteType.typeParam,
-        λ { case lbl |*| u => returning(outputTParam(lbl), unInvertOne(u)) },
+        outputTParam,
         id[Done],
         closeTParam,
       )
@@ -3744,6 +3755,7 @@ object TypeInference {
     def apply[T](
       mergeT: (T |*| T) -⚬ T,
       splitT: T -⚬ (T |*| T),
+      splitTPreferred: T -⚬ (T |*| T),
       outletT: (TParamLabel |*| T) -⚬ ConcreteType[Done],
       outputT: (TParamLabel |*| T) -⚬ Val[Type],
       outletTParam: (TParamLabel |*| -[T]) -⚬ ConcreteType[Done],
@@ -3753,7 +3765,7 @@ object TypeInference {
     )(using
       T: Junction.Positive[T],
     ): Tools[T] =
-      ToolsImpl(mergeT, splitT, outletT, outputT, outletTParam, outputTParam, neglectT, neglectTParam)
+      ToolsImpl(mergeT, splitT, splitTPreferred, outletT, outputT, outletTParam, outputTParam, neglectT, neglectTParam)
   }
 
   private class ToolsImpl[T](
@@ -3883,7 +3895,7 @@ object TypeInference {
   ): M[One -⚬ (GenericType[T] |*| Val[TypedFun[A, B]] |*| GenericType[T])] = {
     println(s"reconstructTypes($f)")
     import gen.newVar
-    import tools.{label, mergeGenTap, mergeGenZap, outputGen  as output, unnestGen, given}
+    import tools.{label, mergeGen, mergeGenTap, mergeGenZap, outputGen  as output, unnestGen, given}
     import ConcreteType.{apply1T, fixT, int, isPair, isRecCall, pair, recCall, string}
 
     def reconstructTypes[A, B](f: Fun[A, B]): M[One -⚬ (GenericType[ReboundType[T]] |*| Val[TypedFun[A, B]] |*| GenericType[ReboundType[T]])] =
@@ -3921,7 +3933,7 @@ object TypeInference {
           λ.* { one =>
             val a |*| f |*| x1 = tf(one)
             val x2 |*| g |*| b = tg(one)
-            val x = output(mergeGenZap(x1 |*| x2))
+            val x = ConcreteType.output(outputTParam)(mergeGenZap(x1 |*| x2))
             val h = (f ** x ** g) :>> mapVal { case ((f, x), g) => TypedFun.andThen(f, x, g) }
             unnestGen(a) |*| h |*| unnestGen(b)
           }
@@ -4050,8 +4062,8 @@ object TypeInference {
               case Right(ab |*| a1) =>
                 isRecCall(ab) switch {
                   case Right(a0 |*| b0) =>
-                    val a = merge(a0 |*| a1)
-                    val b = merge(b0 |*| b1)
+                    val a = mergeGen(a0 |*| a1)
+                    val b = mergeGen(b0 |*| b1)
                     val h = f :>> mapVal { TypedFun.rec(_) }
                     a |*| h |*| b
                   case Left(ab) =>
