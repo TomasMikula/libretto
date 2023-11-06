@@ -3592,15 +3592,15 @@ object TypeInference {
         State(n => (n+1, AbstractTypeLabel(n)))
     }
 
-    given Tools[Done] = Tools.groundInstance
+    given tools: Tools = Tools.instance
 
     val res =
     reconstructTypes(f)
       .map { prg =>
         prg > λ { case a |*| f |*| b =>
           f
-            .waitFor(a :>> ConcreteType.close(closeTParam))
-            .waitFor(b :>> ConcreteType.close(closeTParam))
+            .waitFor(tools.closeGen(a))
+            .waitFor(tools.closeGen(b))
         }
       }
       .run(0)
@@ -3611,8 +3611,13 @@ object TypeInference {
   }
 
   object Tools {
-    val groundInstance: Tools[Done] =
-      Tools(
+    val instance: Tools =
+      ToolsImpl.groundInstance
+  }
+
+  private[typeinfer] object ToolsImpl {
+    val groundInstance: ToolsImpl[Done] =
+      ToolsImpl(
         join,
         fork,
         fst(tParamToType) > awaitPosSnd,
@@ -3620,21 +3625,9 @@ object TypeInference {
         id[Done],
         closeTParam,
       )
-
-    def apply[T](
-      mergeT: (T |*| T) -⚬ T,
-      splitT: T -⚬ (T |*| T),
-      outputT: (TParamLabel |*| T) -⚬ Val[Type],
-      outputTParam: (TParamLabel |*| -[T]) -⚬ Val[Type],
-      neglectT: T -⚬ Done,
-      neglectTParam: (TParamLabel |*| -[T]) -⚬ Done,
-    )(using
-      T: Junction.Positive[T],
-    ): Tools[T] =
-      ToolsImpl(mergeT, splitT, outputT, outputTParam, neglectT, neglectTParam)
   }
 
-  private class ToolsImpl[T](
+  private[typeinfer] class ToolsImpl[T](
     mergeT: (T |*| T) -⚬ T,
     splitT: T -⚬ (T |*| T),
     outputT: (TParamLabel |*| T) -⚬ Val[Type],
@@ -3643,22 +3636,37 @@ object TypeInference {
     neglectTParam: (TParamLabel |*| -[T]) -⚬ Done,
   )(using
     T: Junction.Positive[T],
-  ) extends Tools {
+  ) extends Tools { self =>
     override type Label = Labels.Label
     override type OutboundType = TypeEmitter[T]
     override type InboundType = ReboundType[T]
     override type OutwardType = ConcreteType[T]
 
-    override lazy val nested: Tools =
-      import ReboundType.junctionReboundType
-      ToolsImpl[ReboundType[T]](
-        ReboundType.merge(mergeT, outputT),
-        ReboundType.split(splitT, outputTParam),
-        fst(Labels.neglectTParam) > ReboundType.awaitPosFst > ReboundType.output(outputT),
-        ReboundType.probeApprox(outputTParam),
-        ReboundType.close(neglectT),
-        ReboundType.probeApprox(outputTParam) > neglect,
-      )
+    override lazy val nested: Nested =
+      new Nested {
+        override val tools: ToolsImpl[ReboundType[T]] =
+          import ReboundType.junctionReboundType
+          ToolsImpl[ReboundType[T]](
+            ReboundType.merge(mergeT, outputT),
+            ReboundType.split(splitT, outputTParam),
+            fst(Labels.neglectTParam) > ReboundType.awaitPosFst > ReboundType.output(outputT),
+            ReboundType.probeApprox(outputTParam),
+            ReboundType.close(neglectT),
+            ReboundType.probeApprox(outputTParam) > neglect,
+          )
+
+        override lazy val mergeLower: (tools.OutwardType |*| tools.OutwardType) -⚬ self.OutwardType =
+          ConcreteType.merge(splitT, outputTParam)
+
+        override lazy val mergeZap: (tools.OutwardType |*| tools.OutwardType) -⚬ Val[Type] =
+          ConcreteType.mergeZap0(splitT, outputTParam)
+
+        override lazy val unnest: tools.OutboundType -⚬ self.OutboundType =
+          TypeEmitter.generify > ConcreteType.abstractify[T]
+
+        override lazy val unnestOutward: tools.OutwardType -⚬ self.OutwardType =
+          ConcreteType.abstractify[T] > TypeEmitter.generify
+      }
 
     override lazy val abstractTypeTap: Label -⚬ (TypeEmitter[T] |*| Val[Type]) =
       TypeEmitter.abstractTypeTap(outputT)
@@ -3681,17 +3689,11 @@ object TypeInference {
     override lazy val merge: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
       TypeEmitter.merge(splitT, outputTParam)
 
-    override lazy val mergeGen: (GenericType[ReboundType[T]] |*| GenericType[ReboundType[T]]) -⚬ GenericType[T] =
-      ConcreteType.merge(splitT, outputTParam)
-
     // override lazy val mergeGenTap: (GenericType[ReboundType[T]] |*| GenericType[ReboundType[T]]) -⚬ (GenericType[T] |*| ConcreteType[Done]) =
     //   ConcreteType.mergeTap(splitT, splitTPreferred, outletT, outputT, outputTParam) > fst(TypeEmitter.generify)
 
     // override lazy val mergeGenTap: (GenericType[ReboundType[T]] |*| GenericType[ReboundType[T]]) -⚬ (GenericType[T] |*| Val[Type]) =
     //   ???
-
-    override lazy val mergeGenZap: (GenericType[ReboundType[T]] |*| GenericType[ReboundType[T]]) -⚬ Val[Type] =
-      ConcreteType.mergeZap0(splitT, outputTParam)
 
     // override lazy val mergeGen2: (GenericType[TypeEmitter[T]] |*| GenericType[TypeEmitter[T]]) -⚬ GenericType[T] =
     //   ConcreteType.merge2(split, outputTParam)
@@ -3714,12 +3716,6 @@ object TypeInference {
     override lazy val close: TypeEmitter[T] -⚬ Done =
       TypeEmitter.generify[T] > closeGen
 
-    override lazy val unnest: TypeEmitter[ReboundType[T]] -⚬ TypeEmitter[T] =
-      TypeEmitter.generify > ConcreteType.abstractify[T]
-
-    override lazy val unnestGen: GenericType[ReboundType[T]] -⚬ GenericType[T] =
-      ConcreteType.abstractify[T] > TypeEmitter.generify
-
     override lazy val debugPrintGradually: TypeEmitter[T] -⚬ Done =
       TypeEmitter.generify > ConcreteType.debugPrintGradually(outputTParam > printLine(_.toString))
 
@@ -3729,14 +3725,41 @@ object TypeInference {
     override lazy val pair: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
       TypeEmitter.pair
 
+    override lazy val pairOW: (OutwardType |*| OutwardType) -⚬ OutwardType =
+      ConcreteType.recCall[T]
+
     override lazy val isPair: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
       TypeEmitter.isPair
+
+    override lazy val isPairOW: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) =
+      ConcreteType.isPair[T]
+
+    override lazy val eitherOW: (GenericType[T] |*| GenericType[T]) -⚬ GenericType[T] =
+      ConcreteType.either[T]
 
     override lazy val recCall: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
       TypeEmitter.recCall
 
+    override lazy val recCallOW: (OutwardType |*| OutwardType) -⚬ OutwardType =
+      ConcreteType.recCall[T]
+
     override lazy val isRecCall: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
       TypeEmitter.isRecCall
+
+    override lazy val isRecCallOW: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) =
+      ConcreteType.isRecCall[T]
+
+    override def fixTOW[F[_]](F: TypeTag[F]): One -⚬ OutwardType =
+      ConcreteType.fixT(F)
+
+    override def apply1TOW[F[_]](F: TypeTag[F]): GenericType[T] -⚬ GenericType[T] =
+      ConcreteType.apply1T(F)
+
+    override lazy val intOW: Done -⚬ OutwardType =
+      ConcreteType.int[T]
+
+    override lazy val stringOW: Done -⚬ OutwardType =
+      ConcreteType.string[T]
   }
 
   def reconstructTypes[M[_], A, B](f: Fun[A, B])(using
@@ -3747,8 +3770,7 @@ object TypeInference {
   ): M[One -⚬ (tools.OutwardType |*| Val[TypedFun[A, B]] |*| tools.OutwardType)] = {
     println(s"reconstructTypes($f)")
     import gen.newVar
-    import tools.{label, outputGen  as output, pairOW, given}
-    import ConcreteType.{apply1T, fixT, int, isPair, isRecCall, pair, recCall, string}
+    import tools.{apply1TOW, fixTOW, intOW, label, outputGen  as output, pairOW, recCall, recCallOW, stringOW}
 
     val nested: tools.Nested = tools.nested
     import nested.{tools => nt}
@@ -3856,7 +3878,7 @@ object TypeInference {
           λ.* { one =>
             val a1 |*| f |*| b1 = tf(one)
             val a2 |*| g |*| b2 = tg(one)
-            val a = ConcreteType.either(a1 |*| a2)
+            val a = nt.eitherOW(a1 |*| a2)
             val b = nested.mergeLower(b1 |*| b2)
             val h = (f ** g) :>> mapVal { case (f, g) => TypedFun.either(f, g) }
             nested.unnestOutward(a) |*| h |*| b
@@ -3870,7 +3892,7 @@ object TypeInference {
             val l1 |*| lt |*| l2 = newAbstractTypeG(l)
             val        rt |*| r2 = newTypeParam(r)
             val f = (lt ** rt) :>> mapVal { case (lt, rt) => TypedFun.injectL[l, r](lt, rt) }
-            val b = ConcreteType.either(l2 |*| r2)
+            val b = tools.eitherOW(l2 |*| r2)
             (l1 |*| f |*| b)
           }
       case _: FunT.InjectR[arr, l, r] =>
@@ -3882,7 +3904,7 @@ object TypeInference {
             val        lt |*| l2 = newTypeParam(l)
             val r1 |*| rt |*| r2 = newAbstractTypeG(r)
             val f = (lt ** rt) :>> mapVal { case (lt, rt) => TypedFun.injectR[l, r](lt, rt) }
-            val b = ConcreteType.either(l2 |*| r2)
+            val b = tools.eitherOW(l2 |*| r2)
             (r1 |*| f |*| b)
           }
       case FunT.Distribute() =>
@@ -3890,8 +3912,8 @@ object TypeInference {
       case f: FunT.FixF[arr, f] =>
         Monad[M].pure(
           λ.* { one =>
-            val fixF = fixT[T, f](f.f)(one)
-            val fFixF = apply1T(f.f)(fixT[T, f](f.f)(one))
+            val fixF = fixTOW[f](f.f)(one)
+            val fFixF = apply1TOW(f.f)(fixTOW[f](f.f)(one))
             val tf = constantVal(TypedFun.fix[f](TypeTag.toTypeFun(f.f).vmap(Left(_))))
             fFixF |*| tf |*| fixF
           }
@@ -3899,8 +3921,8 @@ object TypeInference {
       case f: FunT.UnfixF[arr, f] =>
         Monad[M].pure(
           λ.* { one =>
-            val fixF = fixT[T, f](f.f)(one)
-            val fFixF = apply1T(f.f)(fixT[T, f](f.f)(one))
+            val fixF = fixTOW[f](f.f)(one)
+            val fFixF = apply1TOW(f.f)(fixTOW[f](f.f)(one))
             val tf = constantVal(TypedFun.unfix[f](TypeTag.toTypeFun(f.f).vmap(Left(_))))
             fixF |*| tf |*| fFixF
           }
@@ -3910,17 +3932,17 @@ object TypeInference {
           tf <- reconstructTypes(f)
         } yield
           tf > λ { case aba |*| f |*| b1 =>
-            isPair(aba) switch {
+            nt.isPairOW(aba) switch {
               case Right(ab |*| a1) =>
-                isRecCall(ab) switch {
+                nt.isRecCallOW(ab) switch {
                   case Right(a0 |*| b0) =>
-                    val a = mergeGen(a0 |*| a1)
-                    val b = mergeGen(b0 |*| b1)
+                    val a = nested.mergeLower(a0 |*| a1)
+                    val b = nested.mergeLower(b0 |*| b1)
                     val h = f :>> mapVal { TypedFun.rec(_) }
                     a |*| h |*| b
                   case Left(ab) =>
                     // (ab |*| f |*| a1 |*| b1) :>> crashNow(s"TODO (${summon[SourcePos]})")
-                    val d = (f ** output(unnestGen(ab)) ** output(unnestGen(a1)) ** output(unnestGen(b1)))
+                    val d = (f ** output(nested.unnestOutward(ab)) ** output(nested.unnestOutward(a1)) ** output(nested.unnestOutward(b1)))
                       :>> printLine { case (((f, ab), a1), b) =>
                         s"FUNCTION=${scala.util.Try(f.toString)}, IN-TYPE=($ab, $a1), OUT-TYPE=$b"
                       }
@@ -3928,7 +3950,7 @@ object TypeInference {
                 }
               case Left(aba) =>
                 import scala.concurrent.duration._
-                val d = (f ** output(unnestGen(aba)) ** output(unnestGen(b1)))
+                val d = (f ** output(nested.unnestOutward(aba)) ** output(nested.unnestOutward(b1)))
                   :>> printLine { case ((f, aba), b) =>
                     s"FUNCTION=${scala.util.Try(f.toString)}, IN-TYPE=$aba, OUT-TYPE=$b"
                   }
@@ -3945,7 +3967,7 @@ object TypeInference {
             val a1 |*| ta |*| a2 = newAbstractTypeG(va)
             val b1 |*| tb |*| b2 = newAbstractTypeG(vb)
             val tf = (ta ** tb) :>> mapVal { case (ta, tb) => TypedFun.recur[a, b](ta, tb) }
-            val tIn = pair(recCall(a1 |*| b1) |*| a2)
+            val tIn = pairOW(recCallOW(a1 |*| b1) |*| a2)
             tIn |*| tf |*| b2
           }
       case FunT.ConstInt(n) =>
@@ -3953,18 +3975,18 @@ object TypeInference {
       case FunT.AddInts() =>
         Monad[M].pure(
           λ.? { one =>
-            val a1 = constant(done > int[T])
-            val a2 = constant(done > int[T])
-            val b  = constant(done > int[T])
+            val a1 = constant(done > intOW)
+            val a2 = constant(done > intOW)
+            val b  = constant(done > intOW)
             val tf = constantVal(TypedFun.addInts)
-            pair(a1 |*| a2) |*| tf |*| b
+            pairOW(a1 |*| a2) |*| tf |*| b
           }
         )
       case FunT.IntToString() =>
         Monad[M].pure(
           λ.* { one =>
-            val a = done(one) :>> int[T]
-            val b = done(one) :>> string[T]
+            val a = done(one) :>> intOW
+            val b = done(one) :>> stringOW
             val tf = constantVal(TypedFun.intToString)
             a |*| tf |*| b
           }

@@ -17,16 +17,15 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
     import kit.{Outcome, expectDone, expectLeft, expectRight, expectVal}
     import Outcome.{assertEquals, assertLeft, assertRight, failure, success}
 
-    import TypeInference.{ConcreteType, Labels, ReboundType, RefinementRequest, Tools, Type, TypeEmitter}
-    import Labels.Label
+    import TypeInference.{ConcreteType, Labels, ReboundType, RefinementRequest, Tools, ToolsImpl, Type, TypeEmitter}
 
-    val tools = Tools.groundInstance
+    val tools = Tools.instance
     import tools.{
+      Label,
       abstractTypeTap,
       close,
       isPair,
       isRecCall,
-      makeAbstractType,
       merge,
       nested,
       newAbstractType,
@@ -34,17 +33,29 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       pair,
       recCall,
       split,
-      unnest,
     }
 
-    def mkLabel(n: Int): One -⚬ Label =
-      tools.label(AbstractTypeLabel(n))
+    val nested = tools.nested
+    import nested.{tools => nt}
+
+    val ti = ToolsImpl.groundInstance
+
+    extension (tools: Tools)
+      def mkLabel(n: Int): One -⚬ tools.Label =
+        tools.label(AbstractTypeLabel(n))
+
+      def lbl(n: Int)(using
+        SourcePos,
+        LambdaContext,
+      ): $[tools.Label] =
+        constant(mkLabel(n))
+
 
     def label(n: Int)(using
       SourcePos,
       LambdaContext,
-    ): $[Label] =
-      constant(mkLabel(n))
+    ): $[tools.Label] =
+      tools.lbl(n)
 
     def assertAbstract(t: Type)(using SourcePos): Outcome[AbstractTypeLabel] =
       t.value match {
@@ -57,7 +68,7 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
         assertEquals(label.value, expectedLabel)
       }
 
-    def assertLabelEquals(using exn: kit.bridge.Execution)(l: exn.OutPort[Label], expectedValue: Int)(using SourcePos): Outcome[Unit] =
+    def assertLabelEquals(using exn: kit.bridge.Execution)(l: exn.OutPort[ti.Label], expectedValue: Int)(using SourcePos): Outcome[Unit] =
       expectVal(OutPort.map(l)(Labels.unwrapOriginal)) flatMap { label =>
         assertRight(label) flatMap { label =>
           assertEquals(label.value, expectedValue)
@@ -86,11 +97,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "nested.newAbstractType" -> TestCase
         .interactWith {
           val prg: Done -⚬ Val[Type] = λ { d =>
-            val x1 |*| t |*| x2 = nested.newAbstractType(label(1))
+            val x1 |*| t |*| x2 = nt.newAbstractType(nt.lbl(1))
             t
               .waitFor(d)
-              .waitFor(nested.close(x1))
-              .waitFor(nested.close(x2))
+              .waitFor(nt.close(x1))
+              .waitFor(nt.close(x2))
           }
           prg
         }
@@ -104,11 +115,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "nested.newAbstractType unnest before close" -> TestCase
         .interactWith {
           val prg: Done -⚬ Val[Type] = λ { d =>
-            val x1 |*| t |*| x2 = nested.newAbstractType(label(1))
+            val x1 |*| t |*| x2 = nt.newAbstractType(nt.lbl(1))
             t
               .waitFor(d)
-              .waitFor(close(unnest(x1)))
-              .waitFor(close(unnest(x2)))
+              .waitFor(close(nested.unnest(x1)))
+              .waitFor(close(nested.unnest(x2)))
           }
           prg
         }
@@ -272,8 +283,8 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "split abstract type, refine one end with another abstract type" -> TestCase
         .interactWith {
           λ { start =>
-            val a |*| resp = makeAbstractType(label(2) waitFor start)
-            split(a) |*| resp
+            val a |*| resp = TypeEmitter.makeAbstractType[Done](ti.lbl(2) waitFor start)
+            ti.split(a) |*| resp
           }
         }
         .via { exn ?=> port =>
@@ -301,7 +312,7 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
 
             // refine the second one by another abstract type
             sink2 = OutPort.map(req2)(RefinementRequest.grant)
-            l0 = OutPort.constant(mkLabel(1))
+            l0 = OutPort.constant(ti.mkLabel(1))
             (t2, resp2) = OutPort.split(OutPort.map(l0)(ReboundType.makeAbstractType[Done]))
             () = OutPort.discardOne(OutPort.map(OutPort.pair(t2, sink2))(supply))
 
@@ -388,11 +399,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
           } yield ()
         },
 
-      "generify then abstractify" -> TestCase
+      "unnest" -> TestCase
         .interactWith {
           λ { d =>
-            val a |*| t = nested.abstractTypeTap(label(1))
-            val b = ConcreteType.abstractify(TypeEmitter.generify(a))
+            val a |*| t = nt.abstractTypeTap(nt.lbl(1))
+            val b = nested.unnest(a)
             output(b) |*| (t waitFor d)
           }
         }
@@ -406,13 +417,13 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
           } yield ()
         },
 
-      "split abstract type, generify, abstractify, merge" -> TestCase
+      "split abstract type, unnest, merge" -> TestCase
         .interactWith {
           λ { d =>
-            val a |*| t = nested.abstractTypeTap(label(1))
-            val a1 |*| a2 = nested.split(a)
-            val b1 = ConcreteType.abstractify(TypeEmitter.generify(a1))
-            val b2 = ConcreteType.abstractify(TypeEmitter.generify(a2))
+            val a |*| t = nt.abstractTypeTap(nt.lbl(1))
+            val a1 |*| a2 = nt.split(a)
+            val b1 = nested.unnest(a1)
+            val b2 = nested.unnest(a2)
             val b = merge(b1 |*| b2)
             output(b) |*| (t waitFor d)
           }
