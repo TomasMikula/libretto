@@ -17,7 +17,9 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
     import kit.{Outcome, expectDone, expectLeft, expectRight, expectVal}
     import Outcome.{assertEquals, assertLeft, assertRight, failure, success}
 
-    import TypeInference.{ConcreteType, Labels, ReboundType, RefinementRequest, Tools, ToolsImpl, Type, TypeEmitter}
+    import Tools.Labels
+    import Tools.ToolsImpl
+    import Tools.ToolsImpl.{ReboundType, RefinementRequest, Type, TypeEmitter}
 
     val tools = Tools.instance
     import tools.{
