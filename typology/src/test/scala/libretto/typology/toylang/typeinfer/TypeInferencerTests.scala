@@ -32,9 +32,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       nested,
       newAbstractType,
       output,
+      outputOW,
       pair,
       recCall,
       split,
+      tap,
     }
 
     val nested = tools.nested
@@ -453,10 +455,10 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
           val (t, ts) = OutPort.split(port)
           val (ta, tb) = OutPort.split(ts)
           for {
-            ab <- expectRight(OutPort.map(t)(isRecCall))
+            ab <- expectRight(OutPort.map(t)(tap > isRecCall))
             (a, b) = OutPort.split(ab)
-            ta1 <- expectVal(OutPort.map(a)(output))
-            tb1 <- expectVal(OutPort.map(b)(output))
+            ta1 <- expectVal(OutPort.map(a)(outputOW))
+            tb1 <- expectVal(OutPort.map(b)(outputOW))
             ta  <- expectVal(ta)
             tb  <- expectVal(tb)
             _ <- assertAbstractEquals(ta, 1)
@@ -480,14 +482,14 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
           val (t, ts)  = OutPort.split(port)
           val (ta, tb) = OutPort.split(ts)
           for {
-            fa <- expectRight(OutPort.map(t)(isPair))
+            fa <- expectRight(OutPort.map(t)(tap > isPair))
             (f, a2) = OutPort.split(fa)
             ab <- expectRight(OutPort.map(f)(isRecCall))
             (a1, b) = OutPort.split(ab)
 
-            ta1 = OutPort.map(a1)(output)
-            ta2 = OutPort.map(a2)(output)
-            tb0 = OutPort.map(b)(output)
+            ta1 = OutPort.map(a1)(outputOW)
+            ta2 = OutPort.map(a2)(outputOW)
+            tb0 = OutPort.map(b)(outputOW)
 
             ta1 <- expectVal(ta1)
             ta2 <- expectVal(ta2)
@@ -506,11 +508,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "construct and deconstruct (RecCall[A, B], A), merge after deconstruction" -> TestCase
         .interactWith {
           λ { start =>
-            val a |*| ta = abstractTypeTap(label(1))
-            val b |*| tb = abstractTypeTap(label(2))
-            val a1 |*| a2 = split(a)
-            val b1 |*| b2 = split(b)
-            pair(recCall(a1 |*| b1) |*| a2) |*| b2
+            val a |*| ta = nt.abstractTypeTap(nt.lbl(1))
+            val b |*| tb = nt.abstractTypeTap(nt.lbl(2))
+            val a1 |*| a2 = nt.split(a)
+            val b1 |*| b2 = nt.split(b)
+            nt.pair(nt.recCall(a1 |*| b1) |*| a2) |*| b2
               |*| (ta |*| tb.waitFor(start))
           }
         }
@@ -519,13 +521,13 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
           val (fa, b2) = OutPort.split(t)
           val (ta, tb) = OutPort.split(ts)
           for {
-            fa <- expectRight(OutPort.map(fa)(isPair))
+            fa <- expectRight(OutPort.map(fa)(nt.tap > nt.isPair))
             (f, a2) = OutPort.split(fa)
-            ab <- expectRight(OutPort.map(f)(isRecCall))
+            ab <- expectRight(OutPort.map(f)(nt.isRecCall))
             (a1, b1) = OutPort.split(ab)
 
-            a = OutPort.map(OutPort.pair(a1, a2))(merge)
-            b = OutPort.map(OutPort.pair(b1, b2))(merge)
+            a = OutPort.map(OutPort.pair(a1, a2))(nested.mergeLower)
+            b = OutPort.map(OutPort.pair(b1, OutPort.map(b2)(nt.tap)))(nested.mergeLower)
 
             ta1 = OutPort.map(a)(output)
             tb1 = OutPort.map(b)(output)

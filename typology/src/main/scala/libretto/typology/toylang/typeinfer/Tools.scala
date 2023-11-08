@@ -23,21 +23,21 @@ trait Tools { self =>
     val tools: Tools
     def unnest: tools.OutboundType -⚬ self.OutboundType
     def unnestOutward: tools.OutwardType -⚬ self.OutwardType
-    def mergeLower: (tools.OutwardType |*| tools.OutwardType) -⚬ self.OutwardType
+    def mergeLower: (tools.OutwardType |*| tools.OutwardType) -⚬ self.OutboundType
     def mergeZap: (tools.OutwardType |*| tools.OutwardType) -⚬ Val[Type]
   }
 
   def label(v: AbstractTypeLabel): One -⚬ Label
   def abstractTypeTap: Label -⚬ (OutboundType |*| Val[Type])
   def newAbstractType: Label -⚬ (OutboundType |*| Val[Type] |*| OutboundType)
-  def newAbstractTypeGen: Label -⚬ (OutwardType |*| Val[Type] |*| OutwardType)
-  def newTypeParam: Label -⚬ (Val[Type] |*| OutwardType)
   def merge: (OutboundType |*| OutboundType) -⚬ OutboundType
+  def mergeZap: (OutboundType |*| OutboundType) -⚬ Val[Type]
   def split: OutboundType -⚬ (OutboundType |*| OutboundType)
   def output: OutboundType -⚬ Val[Type]
-  def outputGen: OutwardType -⚬ Val[Type]
+  def outputOW: OutwardType -⚬ Val[Type]
   def close: OutboundType -⚬ Done
-  def closeGen: OutwardType -⚬ Done
+  def closeOW: OutwardType -⚬ Done
+  def tap: OutboundType -⚬ OutwardType
 
   /*
    * Language-specific operations.
@@ -48,16 +48,19 @@ trait Tools { self =>
   def debugPrintGradually: OutboundType -⚬ Done
   def pair: (OutboundType |*| OutboundType) -⚬ OutboundType
   def pairOW: (OutwardType |*| OutwardType) -⚬ OutwardType
-  def isPair: OutboundType -⚬ (OutboundType |+| (OutboundType |*| OutboundType))
-  def isPairOW: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType))
+  def isPair: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType))
   def recCall: (OutboundType |*| OutboundType) -⚬ OutboundType
   def recCallOW: (OutwardType |*| OutwardType) -⚬ OutwardType
-  def isRecCall: OutboundType -⚬ (OutboundType |+| (OutboundType |*| OutboundType))
-  def isRecCallOW: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType))
+  def isRecCall: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType))
+  def either: (OutboundType |*| OutboundType) -⚬ OutboundType
   def eitherOW: (OutwardType |*| OutwardType) -⚬ OutwardType
+  def int: Done -⚬ OutboundType
   def intOW: Done -⚬ OutwardType
+  def string: Done -⚬ OutboundType
   def stringOW: Done -⚬ OutwardType
+  def fixT[F[_]](F: TypeTag[F]): One -⚬ OutboundType
   def fixTOW[F[_]](F: TypeTag[F]): One -⚬ OutwardType
+  def apply1T[F[_]](F: TypeTag[F]): OutboundType -⚬ OutboundType
   def apply1TOW[F[_]](F: TypeTag[F]): OutwardType -⚬ OutwardType
 
   lazy val nested: Nested
@@ -1606,6 +1609,16 @@ object Tools {
         )
       }
 
+      def mergeLower[T](
+        splitT: T -⚬ (T |*| T),
+        outputTParam: (TParamLabel |*| -[T]) -⚬ Val[Type],
+      ): (ConcreteType[ReboundType[T]] |*| ConcreteType[ReboundType[T]]) -⚬ TypeEmitter[T] =
+        val abstractify = ConcreteType.abstractify[T]
+        par(abstractify, abstractify) > TypeEmitter.merge(
+          splitT,
+          outputTParam,
+        )
+
       def merge[T](
         splitT: T -⚬ (T |*| T),
         outputTParam: (TParamLabel |*| -[T]) -⚬ Val[Type],
@@ -3116,20 +3129,160 @@ object Tools {
       def pair[T]: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
         λ { case a |*| b => pack(TypeSkelet.nonAbstractType(NonAbstractType.pair(a |*| b))) }
 
-      def isPair[T]: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
-        unpack > dsl.either(
-          NonAbstractType.isPair > |+|.lmap(nonAbstractType),
-          abstractType > injectL,
-        )
+      def either[T]: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T]=
+        NonAbstractType.either > nonAbstractType
+
+      // def isPair[T]: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
+      //   unpack > dsl.either(
+      //     NonAbstractType.isPair > |+|.lmap(nonAbstractType),
+      //     abstractType > injectL,
+      //   )
 
       def recCall[T]: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
         λ { case a |*| b => pack(TypeSkelet.nonAbstractType(NonAbstractType.recCall(a |*| b))) }
 
-      def isRecCall[T]: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
-        unpack > dsl.either(
-          NonAbstractType.isRecCall > |+|.lmap(nonAbstractType),
-          abstractType > injectL,
-        )
+      // def isRecCall[T]: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
+      //   unpack > dsl.either(
+      //     NonAbstractType.isRecCall > |+|.lmap(nonAbstractType),
+      //     abstractType > injectL,
+      //   )
+
+      def fixT[T, F[_]](F: TypeTag[F]): One -⚬ TypeEmitter[T] =
+        NonAbstractType.fixT(F) > nonAbstractType
+
+      def apply1T[T, F[_]](F: TypeTag[F]): TypeEmitter[T] -⚬ TypeEmitter[T] =
+        apply1(TypeTag.toTypeFun(F))
+
+      def apply1[T](f: TypeTagF): TypeEmitter[T] -⚬ TypeEmitter[T] = {
+        // λ { t => NonAbstractType.apply1(constantVal(f) |*| t) :>> nonAbstractType }
+        val ct = compilationTarget[T]
+        import ct.Map_●
+        f.compile[ct.Arr, ct.as, TypeEmitter[T]](Map_●)(ct.typeAlgebra, Map_●).get(Map_●, Map_●) > awaitPosFst
+      }
+
+      class compilationTarget[T] {
+        type Arr[K, L] = K -⚬ (Done |*| L)
+
+        val category: SymmetricMonoidalCategory[Arr, |*|, One] =
+          new SymmetricMonoidalCategory[Arr, |*|, One] {
+
+            override def id[A]: Arr[A, A] =
+              dsl.introFst(done)
+
+            override def introFst[A]: Arr[A, One |*| A] =
+              dsl.andThen(dsl.introFst, dsl.introFst(done))
+
+            override def introSnd[A]: Arr[A, A |*| One] =
+              dsl.andThen(dsl.introSnd, dsl.introFst(done))
+
+            override def elimFst[A]: Arr[One |*| A, A] =
+              dsl.fst(done)
+
+            override def elimSnd[A]: Arr[A |*| One, A] =
+              dsl.andThen(dsl.swap, dsl.fst(done))
+
+            override def assocRL[A, B, C]: Arr[A |*| (B |*| C), (A |*| B) |*| C] =
+              dsl.andThen(dsl.assocRL, dsl.introFst(done))
+
+            override def assocLR[A, B, C]: Arr[(A |*| B) |*| C, A |*| (B |*| C)] =
+              dsl.andThen(dsl.assocLR, dsl.introFst(done))
+
+            override def swap[A, B]: Arr[A |*| B, B |*| A] =
+              dsl.andThen(dsl.swap, dsl.introFst(done))
+
+            override def andThen[A, B, C](
+              f: Arr[A, B],
+              g: Arr[B, C],
+            ): Arr[A, C] =
+              dsl.andThen(
+                dsl.andThen(f, dsl.snd(g)),
+                dsl.andThen(dsl.assocRL, dsl.fst(join)),
+              )
+
+            override def par[A1, A2, B1, B2](
+              f1: Arr[A1, B1],
+              f2: Arr[A2, B2],
+            ): Arr[A1 |*| A2, B1 |*| B2] =
+              dsl.andThen(
+                dsl.par(f1, f2),
+                λ { case (d1 |*| b1) |*| (d2 |*| b2) =>
+                  join(d1 |*| d2) |*| (b1 |*| b2)
+                },
+              )
+          }
+
+        val typeAlgebra: TypeAlgebra.Of[ScalaTypeParam, Arr, TypeEmitter[T], |*|, One] =
+          new TypeAlgebra[ScalaTypeParam, Arr] {
+            override type Type = TypeEmitter[T]
+            override type <*>[A, B] = A |*| B
+            override type None = One
+
+            override def unit: Arr[One, TypeEmitter[T]] =
+              done > λ { case +(d) => d |*| TypeEmitter.unit(d) }
+            override def int: Arr[One, TypeEmitter[T]] =
+              done > λ { case +(d) => d |*| TypeEmitter.int(d) }
+            override def string: Arr[One, TypeEmitter[T]] =
+              done > λ { case +(d) => d |*| TypeEmitter.string(d) }
+            override def pair: Arr[TypeEmitter[T] |*| TypeEmitter[T], TypeEmitter[T]] =
+              λ { case t |*| u => constant(done) |*| TypeEmitter.pair(t |*| u) }
+            override def sum: Arr[TypeEmitter[T] |*| TypeEmitter[T], TypeEmitter[T]] =
+              λ { case t |*| u => constant(done) |*| TypeEmitter.either(t |*| u) }
+            override def recCall: Arr[TypeEmitter[T] |*| TypeEmitter[T], TypeEmitter[T]] =
+              λ { case t |*| u => constant(done) |*| TypeEmitter.recCall(t |*| u) }
+            override def fix(f: TypeFun[●, ●]): Arr[One, TypeEmitter[T]] =
+              // const(f) > TypeEmitter.fix > introFst(done)
+              ???
+            override def abstractTypeName(name: ScalaTypeParam): Arr[One, TypeEmitter[T]] =
+              throw NotImplementedError(s"TODO (${summon[SourcePos]})")
+
+            override given category: SymmetricMonoidalCategory[Arr, |*|, One] =
+              compilationTarget.this.category
+          }
+
+        sealed trait as[K, Q]
+
+        case object Map_○ extends as[○, One]
+        case object Map_● extends as[●, TypeEmitter[T]]
+        case class Pair[K1, K2, Q1, Q2](
+          f1: K1 as Q1,
+          f2: K2 as Q2,
+        ) extends as[K1 × K2, Q1 |*| Q2]
+
+        given objectMap: MonoidalObjectMap[as, ×, ○, |*|, One] =
+          new MonoidalObjectMap[as, ×, ○, |*|, One] {
+
+            override def uniqueOutputType[A, B, C](f: as[A, B], g: as[A, C]): B =:= C =
+              (f, g) match {
+                case (Map_○, Map_○) => summon[B =:= C]
+                case (Map_●, Map_●) => summon[B =:= C]
+                case (Pair(f1, f2), Pair(g1, g2)) =>
+                  (uniqueOutputType(f1, g1), uniqueOutputType(f2, g2)) match {
+                    case (TypeEq(Refl()), TypeEq(Refl())) =>
+                      summon[B =:= C]
+                  }
+              }
+
+            override def pair[A1, A2, X1, X2](f1: as[A1, X1], f2: as[A2, X2]): as[A1 × A2, X1 |*| X2] =
+              Pair(f1, f2)
+
+            override def unpair[A1, A2, X](f: as[A1 × A2, X]): Unpaired[A1, A2, X] =
+              f match {
+                case Pair(f1, f2) => Unpaired.Impl(f1, f2)
+              }
+
+            override def unit: as[○, One] =
+              Map_○
+          }
+      }
+
+      def int[T]: Done -⚬ TypeEmitter[T] =
+        NonAbstractType.int > nonAbstractType
+
+      def string[T]: Done -⚬ TypeEmitter[T] =
+        NonAbstractType.string > nonAbstractType
+
+      def unit[T]: Done -⚬ TypeEmitter[T]=
+        NonAbstractType.unit > nonAbstractType
 
       def split_[T](
         mergeInbound: (ReboundType[T] |*| ReboundType[T]) -⚬ ReboundType[T],
@@ -3676,8 +3829,8 @@ object Tools {
             ReboundType.probeApprox(outputTParam) > neglect,
           )
 
-        override lazy val mergeLower: (tools.OutwardType |*| tools.OutwardType) -⚬ self.OutwardType =
-          ConcreteType.merge(splitT, outputTParam)
+        override lazy val mergeLower: (tools.OutwardType |*| tools.OutwardType) -⚬ self.OutboundType =
+          ConcreteType.mergeLower(splitT, outputTParam)
 
         override lazy val mergeZap: (tools.OutwardType |*| tools.OutwardType) -⚬ Val[Type] =
           ConcreteType.mergeZap0(splitT, outputTParam)
@@ -3700,15 +3853,18 @@ object Tools {
         TypeEmitter.generify(a) |*| t |*| TypeEmitter.generify(b)
       }
 
-    override lazy val newTypeParam: Label -⚬ (Val[Type] |*| ConcreteType[T]) =
-      λ { label =>
-        val l1 |*| l2 = Labels.split(label)
-        val nt |*| t = constant(demand[T])
-        outputT(Labels.generify(l1) |*| t) |*| ConcreteType.typeParam(Labels.generify(l2) |*| nt)
-      }
+    // override lazy val newTypeParam: Label -⚬ (Val[Type] |*| OutboundType) =
+    //   λ { label =>
+    //     val l1 |*| l2 = Labels.split(label)
+    //     val nt |*| t = constant(demand[T])
+    //     outputT(Labels.generify(l1) |*| t) |*| TypeEmitter.typeParam(Labels.generify(l2) |*| nt)
+    //   }
 
     override lazy val merge: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
       TypeEmitter.merge(splitT, outputTParam)
+
+    override lazy val mergeZap: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ Val[Type] =
+      TypeEmitter.merge(splitT, outputTParam) > output
 
     // override lazy val mergeGenTap: (GenericType[ReboundType[T]] |*| GenericType[ReboundType[T]]) -⚬ (GenericType[T] |*| ConcreteType[Done]) =
     //   ConcreteType.mergeTap(splitT, splitTPreferred, outletT, outputT, outputTParam) > fst(TypeEmitter.generify)
@@ -3725,17 +3881,20 @@ object Tools {
     // override lazy val outlet: TypeEmitter[T] -⚬ ConcreteType[Done] =
     //   TypeEmitter.outlet(outletTParam)
 
-    override lazy val outputGen: GenericType[T] -⚬ Val[Type] =
+    override lazy val tap: OutboundType -⚬ OutwardType =
+      TypeEmitter.generify
+
+    override lazy val outputOW: GenericType[T] -⚬ Val[Type] =
       ConcreteType.output(outputTParam)
 
     override lazy val output: TypeEmitter[T] -⚬ Val[Type] =
-      TypeEmitter.generify > outputGen
+      TypeEmitter.generify > outputOW
 
-    override lazy val closeGen: GenericType[T] -⚬ Done =
+    override lazy val closeOW: GenericType[T] -⚬ Done =
       ConcreteType.close[T](outputTParam > dsl.neglect)
 
     override lazy val close: TypeEmitter[T] -⚬ Done =
-      TypeEmitter.generify[T] > closeGen
+      TypeEmitter.generify[T] > closeOW
 
     override lazy val debugPrintGradually: TypeEmitter[T] -⚬ Done =
       TypeEmitter.generify > ConcreteType.debugPrintGradually(outputTParam > printLine(_.toString))
@@ -3749,11 +3908,14 @@ object Tools {
     override lazy val pairOW: (OutwardType |*| OutwardType) -⚬ OutwardType =
       ConcreteType.recCall[T]
 
-    override lazy val isPair: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
-      TypeEmitter.isPair
+    // override lazy val isPair: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
+    //   TypeEmitter.isPair
 
-    override lazy val isPairOW: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) =
+    override lazy val isPair: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) =
       ConcreteType.isPair[T]
+
+    override lazy val either: (OutboundType |*| OutboundType) -⚬ OutboundType =
+      TypeEmitter.either[T]
 
     override lazy val eitherOW: (GenericType[T] |*| GenericType[T]) -⚬ GenericType[T] =
       ConcreteType.either[T]
@@ -3764,20 +3926,32 @@ object Tools {
     override lazy val recCallOW: (OutwardType |*| OutwardType) -⚬ OutwardType =
       ConcreteType.recCall[T]
 
-    override lazy val isRecCall: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
-      TypeEmitter.isRecCall
+    // override lazy val isRecCall: TypeEmitter[T] -⚬ (TypeEmitter[T] |+| (TypeEmitter[T] |*| TypeEmitter[T])) =
+    //   TypeEmitter.isRecCall
 
-    override lazy val isRecCallOW: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) =
+    override lazy val isRecCall: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) =
       ConcreteType.isRecCall[T]
+
+    override def fixT[F[_]](F: TypeTag[F]): One -⚬ OutboundType =
+      TypeEmitter.fixT(F)
 
     override def fixTOW[F[_]](F: TypeTag[F]): One -⚬ OutwardType =
       ConcreteType.fixT(F)
 
+    override def apply1T[F[_]](F: TypeTag[F]): OutboundType -⚬ OutboundType =
+      TypeEmitter.apply1T(F)
+
     override def apply1TOW[F[_]](F: TypeTag[F]): GenericType[T] -⚬ GenericType[T] =
       ConcreteType.apply1T(F)
 
+    override lazy val int: Done -⚬ OutboundType =
+      TypeEmitter.int[T]
+
     override lazy val intOW: Done -⚬ OutwardType =
       ConcreteType.int[T]
+
+    override lazy val string: Done -⚬ OutboundType =
+      TypeEmitter.string[T]
 
     override lazy val stringOW: Done -⚬ OutwardType =
       ConcreteType.string[T]
