@@ -7,13 +7,16 @@ import libretto.scaletto.StarterKit._
 import libretto.typology.kinds.{×, ○, ●}
 import libretto.typology.toylang.terms.TypedFun
 import libretto.typology.toylang.types.{AbstractTypeLabel, ScalaTypeParam, TypeAlgebra, TypeTag}
+import libretto.scaletto.StarterKit
 
 trait Tools { self =>
   type Label
 
   type OutboundType
 
-  type InboundType
+  type SplittableType
+
+  type MergeableType
 
   type OutwardType
 
@@ -22,6 +25,8 @@ trait Tools { self =>
   trait Nested {
     val tools: Tools
     def unnest: tools.OutboundType -⚬ self.OutboundType
+    def unnestS: tools.SplittableType -⚬ self.OutboundType
+    def unnestM: tools.MergeableType -⚬ self.OutboundType
     def unnestOutward: tools.OutwardType -⚬ self.OutwardType
     def mergeLower: (tools.OutwardType |*| tools.OutwardType) -⚬ self.OutboundType
     def mergeZap: (tools.OutwardType |*| tools.OutwardType) -⚬ Val[Type]
@@ -29,15 +34,43 @@ trait Tools { self =>
 
   def label(v: AbstractTypeLabel): One -⚬ Label
   def abstractTypeTap: Label -⚬ (OutboundType |*| Val[Type])
-  def newAbstractType: Label -⚬ (OutboundType |*| Val[Type] |*| OutboundType)
-  def merge: (OutboundType |*| OutboundType) -⚬ OutboundType
-  def mergeZap: (OutboundType |*| OutboundType) -⚬ Val[Type]
-  def split: OutboundType -⚬ (OutboundType |*| OutboundType)
+  def mergeable: OutboundType -⚬ MergeableType
+  def splittable: OutboundType -⚬ SplittableType
+  // def newAbstractType: Label -⚬ (OutboundType |*| Val[Type] |*| OutboundType)
+  def merge: (MergeableType |*| MergeableType) -⚬ MergeableType
+  // def mergeZap: (OutboundType |*| OutboundType) -⚬ Val[Type]
+  def split: SplittableType -⚬ (SplittableType |*| SplittableType)
   def output: OutboundType -⚬ Val[Type]
   def outputOW: OutwardType -⚬ Val[Type]
   def close: OutboundType -⚬ Done
   def closeOW: OutwardType -⚬ Done
   def tap: OutboundType -⚬ OutwardType
+  def tapS: SplittableType -⚬ OutwardType
+  def tapM: MergeableType -⚬ OutwardType
+
+  def abstractTypeTapS: Label -⚬ (SplittableType |*| Val[Type]) =
+    abstractTypeTap > fst(splittable)
+
+  def abstractTypeTapM: Label -⚬ (MergeableType |*| Val[Type]) =
+    abstractTypeTap > fst(mergeable)
+
+  def abstractTypeSplit: Label -⚬ (SplittableType |*| Val[Type] |*| SplittableType) =
+    abstractTypeTapS > λ { case s |*| t =>
+      val s1 |*| s2 = split(s)
+      s1 |*| t |*| s2
+    }
+
+  def outputS: SplittableType -⚬ Val[Type] =
+    tapS > outputOW
+
+  def outputM: MergeableType -⚬ Val[Type] =
+    tapM > outputOW
+
+  def closeS: SplittableType -⚬ Done =
+    tapS > closeOW
+
+  def closeM: MergeableType -⚬ Done =
+    tapM > closeOW
 
   /*
    * Language-specific operations.
@@ -3813,7 +3846,9 @@ object Tools {
 
     override type Label = Labels.Label
     override type OutboundType = TypeEmitter[T]
-    override type InboundType = ReboundType[T]
+    override type SplittableType = TypeEmitter[T]
+    override type MergeableType = TypeEmitter[T]
+    // override type InboundType = ReboundType[T]
     override type OutwardType = ConcreteType[T]
 
     override lazy val nested: Nested =
@@ -3838,6 +3873,12 @@ object Tools {
         override lazy val unnest: tools.OutboundType -⚬ self.OutboundType =
           TypeEmitter.generify > ConcreteType.abstractify[T]
 
+        override def unnestM: tools.MergeableType -⚬ self.OutboundType =
+          unnest
+
+        override def unnestS: tools.SplittableType -⚬ self.OutboundType =
+          unnest
+
         override lazy val unnestOutward: tools.OutwardType -⚬ self.OutwardType =
           ConcreteType.abstractify[T] > TypeEmitter.generify
       }
@@ -3845,13 +3886,13 @@ object Tools {
     override lazy val abstractTypeTap: Label -⚬ (TypeEmitter[T] |*| Val[Type]) =
       TypeEmitter.abstractTypeTap(outputT)
 
-    override lazy val newAbstractType: Label -⚬ (TypeEmitter[T] |*| Val[Type] |*| TypeEmitter[T]) =
-      TypeEmitter.newAbstractType(mergeT, outputT)
+    // override lazy val newAbstractType: Label -⚬ (TypeEmitter[T] |*| Val[Type] |*| TypeEmitter[T]) =
+    //   TypeEmitter.newAbstractType(mergeT, outputT)
 
-    def newAbstractTypeGen: Label -⚬ (GenericType[T] |*| Val[Type] |*| GenericType[T]) =
-      newAbstractType > λ { case a |*| t |*| b =>
-        TypeEmitter.generify(a) |*| t |*| TypeEmitter.generify(b)
-      }
+    // def newAbstractTypeGen: Label -⚬ (GenericType[T] |*| Val[Type] |*| GenericType[T]) =
+    //   newAbstractType > λ { case a |*| t |*| b =>
+    //     TypeEmitter.generify(a) |*| t |*| TypeEmitter.generify(b)
+    //   }
 
     // override lazy val newTypeParam: Label -⚬ (Val[Type] |*| OutboundType) =
     //   λ { label =>
@@ -3860,11 +3901,17 @@ object Tools {
     //     outputT(Labels.generify(l1) |*| t) |*| TypeEmitter.typeParam(Labels.generify(l2) |*| nt)
     //   }
 
+    override def mergeable: OutboundType -⚬ MergeableType =
+      id
+
+    override def splittable: OutboundType -⚬ SplittableType =
+      id
+
     override lazy val merge: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ TypeEmitter[T] =
       TypeEmitter.merge(splitT, outputTParam)
 
-    override lazy val mergeZap: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ Val[Type] =
-      TypeEmitter.merge(splitT, outputTParam) > output
+    // override lazy val mergeZap: (TypeEmitter[T] |*| TypeEmitter[T]) -⚬ Val[Type] =
+    //   TypeEmitter.merge(splitT, outputTParam) > output
 
     // override lazy val mergeGenTap: (GenericType[ReboundType[T]] |*| GenericType[ReboundType[T]]) -⚬ (GenericType[T] |*| ConcreteType[Done]) =
     //   ConcreteType.mergeTap(splitT, splitTPreferred, outletT, outputT, outputTParam) > fst(TypeEmitter.generify)
@@ -3883,6 +3930,12 @@ object Tools {
 
     override lazy val tap: OutboundType -⚬ OutwardType =
       TypeEmitter.generify
+
+    override def tapM: MergeableType -⚬ OutwardType =
+      tap
+
+    override def tapS: SplittableType -⚬ OutwardType =
+      tap
 
     override lazy val outputOW: GenericType[T] -⚬ Val[Type] =
       ConcreteType.output(outputTParam)

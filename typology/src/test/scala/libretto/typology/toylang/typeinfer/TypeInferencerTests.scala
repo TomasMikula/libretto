@@ -24,23 +24,31 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
     val tools = Tools.instance
     import tools.{
       Label,
+      abstractTypeSplit,
       abstractTypeTap,
       close,
+      closeS,
       isPair,
       isRecCall,
       merge,
+      mergeable,
       nested,
-      newAbstractType,
       output,
+      outputM,
       outputOW,
+      outputS,
       pair,
       recCall,
       split,
+      splittable,
       tap,
     }
 
     val nested = tools.nested
-    import nested.{tools => nt}
+    import nested.{tools => nt, unnestM, unnestS}
+
+    val nn = nt.nested
+    import nn.{tools => nnt}
 
     val ti = ToolsImpl.groundInstance
 
@@ -83,11 +91,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "newAbstractType" -> TestCase
         .interactWith {
           val prg: Done -⚬ Val[Type] = λ { d =>
-            val x1 |*| t |*| x2 = newAbstractType(label(1))
+            val x1 |*| t |*| x2 = abstractTypeSplit(label(1))
             t
               .waitFor(d)
-              .waitFor(close(x1))
-              .waitFor(close(x2))
+              .waitFor(closeS(x1))
+              .waitFor(closeS(x2))
           }
           prg
         }
@@ -101,11 +109,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "nested.newAbstractType" -> TestCase
         .interactWith {
           val prg: Done -⚬ Val[Type] = λ { d =>
-            val x1 |*| t |*| x2 = nt.newAbstractType(nt.lbl(1))
+            val x1 |*| t |*| x2 = nt.abstractTypeSplit(nt.lbl(1))
             t
               .waitFor(d)
-              .waitFor(nt.close(x1))
-              .waitFor(nt.close(x2))
+              .waitFor(nt.closeS(x1))
+              .waitFor(nt.closeS(x2))
           }
           prg
         }
@@ -119,11 +127,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "nested.newAbstractType unnest before close" -> TestCase
         .interactWith {
           val prg: Done -⚬ Val[Type] = λ { d =>
-            val x1 |*| t |*| x2 = nt.newAbstractType(nt.lbl(1))
+            val x1 |*| t |*| x2 = nt.abstractTypeSplit(nt.lbl(1))
             t
               .waitFor(d)
-              .waitFor(close(nested.unnest(x1)))
-              .waitFor(close(nested.unnest(x2)))
+              .waitFor(close(nested.unnestS(x1)))
+              .waitFor(close(nested.unnestS(x2)))
           }
           prg
         }
@@ -139,8 +147,8 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
           val prg: Done -⚬ Val[Type] = λ { d =>
             val a |*| t1 = abstractTypeTap(label(1))
             val b |*| t2 = abstractTypeTap(label(2))
-            val t = merge(a |*| b)
-            output(t)
+            val t = merge(mergeable(a) |*| mergeable(b))
+            outputM(t)
               .waitFor(d)
               .waitFor(neglect(t1))
               .waitFor(neglect(t2))
@@ -160,8 +168,8 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
             val a |*| t1 = abstractTypeTap(label(1))
             val b |*| t2 = abstractTypeTap(label(2))
             val c |*| t3 = abstractTypeTap(label(3))
-            val t = merge(a |*| merge(b |*| c))
-            output(t) ** (t1 ** t2 ** t3)
+            val t = merge(mergeable(a) |*| merge(mergeable(b) |*| mergeable(c)))
+            outputM(t) ** (t1 ** t2 ** t3)
               .waitFor(d)
           }
         }
@@ -183,8 +191,8 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
             val b |*| t2 = abstractTypeTap(label(2))
             val c |*| t3 = abstractTypeTap(label(3))
             val d |*| t4 = abstractTypeTap(label(4))
-            val t = merge(merge(a |*| b) |*| merge(c |*| d))
-            output(t) ** ((t1 ** t2) ** (t3 ** t4))
+            val t = merge(merge(mergeable(a) |*| mergeable(b)) |*| merge(mergeable(c) |*| mergeable(d)))
+            outputM(t) ** ((t1 ** t2) ** (t3 ** t4))
               .waitFor(start)
           }
         }
@@ -204,8 +212,8 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
         .interactWith {
           λ { d =>
             val a |*| t = abstractTypeTap(label(1))
-            val x |*| y = split(a)
-            (t ** output(x) ** output(y))
+            val x |*| y = split(splittable(a))
+            (t ** outputS(x) ** outputS(y))
               .waitFor(d)
           }
         }
@@ -226,9 +234,9 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
         .interactWith {
           λ { d =>
             val a |*| t = abstractTypeTap(label(1))
-            val x |*| yz = split(a)
+            val x |*| yz = split(splittable(a))
             val y |*| z = split(yz)
-            (t ** output(x) ** output(y) ** output(z))
+            (t ** outputS(x) ** outputS(y) ** outputS(z))
               .waitFor(d)
           }
         }
@@ -247,10 +255,10 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
         .interactWith {
           λ { start =>
             val x |*| t = abstractTypeTap(label(1))
-            val ab |*| cd = split(x)
+            val ab |*| cd = split(splittable(x))
             val a |*| b = split(ab)
             val c |*| d = split(cd)
-            (t ** ((output(a) ** output(b)) ** (output(c) ** output(d))))
+            (t ** ((outputS(a) ** outputS(b)) ** (outputS(c) ** outputS(d))))
               .waitFor(start)
           }
         }
@@ -266,12 +274,33 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
           } yield ()
         },
 
+      "split and unnest abstract type" -> TestCase
+        .interactWith {
+          λ { d =>
+            val a |*| t = nt.abstractTypeTap(nt.lbl(1))
+            val a1 |*| a2 = nt.split(nt.splittable(a))
+            val b = merge(mergeable(unnestS(a1)) |*| mergeable(unnestS(a2)))
+            (t ** (output(unnestS(a1)) ** output(unnestS(a2))))
+              .waitFor(d)
+          }
+        }
+        .via { port =>
+          for {
+            ts <- expectVal(port)
+            (t, (a1, a2)) = ts
+            _ <- assertAbstractEquals(t, 1)
+            _ <- assertAbstractEquals(a1, 1)
+            _ <- assertAbstractEquals(a2, 1)
+          } yield ()
+        },
+
       "split and merge abstract type" -> TestCase
         .interactWith {
           λ { d =>
-            val a |*| t = abstractTypeTap(label(1))
-            val b = merge(split(a))
-            (t ** output(b))
+            val a |*| t = nt.abstractTypeTap(nt.lbl(1))
+            val a1 |*| a2 = nt.split(nt.splittable(a))
+            val b = merge(mergeable(unnestS(a1)) |*| mergeable(unnestS(a2)))
+            (t ** outputM(b))
               .waitFor(d)
           }
         }
@@ -360,11 +389,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "split abstract type, merge with another abstract type" -> TestCase
         .interactWith {
           λ { start =>
-            val a |*| ta = abstractTypeTap(label(1))
+            val a |*| ta = nt.abstractTypeTap(nt.lbl(1))
             val b |*| tb = abstractTypeTap(label(2))
-            val a1 |*| a2 = split(a)
-            val c = merge(a2 |*| b)
-            ((output(c) ** output(a1)) ** (ta ** tb))
+            val a1 |*| a2 = nt.split(nt.splittable(a))
+            val c = merge(mergeable(unnestS(a2)) |*| mergeable(b))
+            ((outputM(c) ** nt.outputS(a1)) ** (ta ** tb))
               .waitFor(start)
           }
         }
@@ -382,12 +411,12 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "split two abstract types, merge one from each" -> TestCase
         .interactWith {
           λ { start =>
-            val a |*| ta = abstractTypeTap(label(1))
-            val b |*| tb = abstractTypeTap(label(2))
-            val a1 |*| a2 = split(a)
-            val b1 |*| b2 = split(b)
-            val c = merge(a2 |*| b2)
-            (output(c) ** (output(a1) ** output(b1)) ** (ta ** tb))
+            val a |*| ta = nt.abstractTypeTap(nt.lbl(1))
+            val b |*| tb = nt.abstractTypeTap(nt.lbl(2))
+            val a1 |*| a2 = nt.split(nt.splittable(a))
+            val b1 |*| b2 = nt.split(nt.splittable(b))
+            val c = merge(mergeable(unnestS(a2)) |*| mergeable(unnestS(b2)))
+            (outputM(c) ** (nt.outputS(a1) ** nt.outputS(b1)) ** (ta ** tb))
               .waitFor(start)
           }
         }
@@ -425,11 +454,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
         .interactWith {
           λ { d =>
             val a |*| t = nt.abstractTypeTap(nt.lbl(1))
-            val a1 |*| a2 = nt.split(a)
-            val b1 = nested.unnest(a1)
-            val b2 = nested.unnest(a2)
-            val b = merge(b1 |*| b2)
-            output(b) |*| (t waitFor d)
+            val a1 |*| a2 = nt.split(nt.splittable(a))
+            val b1 = unnestS(a1)
+            val b2 = unnestS(a2)
+            val b = merge(mergeable(b1) |*| mergeable(b2))
+            outputM(b) |*| (t waitFor d)
           }
         }
         .via { port =>
@@ -471,10 +500,10 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "construct and deconstruct (RecCall[A, B], A)" -> TestCase
         .interactWith {
           λ { start =>
-            val a |*| ta = abstractTypeTap(label(1))
+            val a |*| ta = nt.abstractTypeTap(nt.lbl(1))
             val b |*| tb = abstractTypeTap(label(2))
-            val a1 |*| a2 = split(a)
-            pair(recCall(a1 |*| b) |*| a2)
+            val a1 |*| a2 = nt.split(nt.splittable(a))
+            pair(recCall(unnestS(a1) |*| b) |*| unnestS(a2))
               |*| (ta |*| tb.waitFor(start))
           }
         }
@@ -508,11 +537,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "construct and deconstruct (RecCall[A, B], A), merge after deconstruction" -> TestCase
         .interactWith {
           λ { start =>
-            val a |*| ta = nt.abstractTypeTap(nt.lbl(1))
-            val b |*| tb = nt.abstractTypeTap(nt.lbl(2))
-            val a1 |*| a2 = nt.split(a)
-            val b1 |*| b2 = nt.split(b)
-            nt.pair(nt.recCall(a1 |*| b1) |*| a2) |*| b2
+            val a |*| ta = nnt.abstractTypeTap(nnt.lbl(1))
+            val b |*| tb = nnt.abstractTypeTap(nnt.lbl(2))
+            val a1 |*| a2 = nnt.split(nnt.splittable(a))
+            val b1 |*| b2 = nnt.split(nnt.splittable(b))
+            nt.pair(nt.recCall(nn.unnestS(a1) |*| nn.unnestS(b1)) |*| nn.unnestS(a2)) |*| nn.unnestS(b2)
               |*| (ta |*| tb.waitFor(start))
           }
         }
