@@ -719,5 +719,5 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   }
 
   override class NotLinearException(msg: String) extends Exception(msg)
-  override class UnboundVariablesException(vs: Var.Set[VarOrigin]) extends Exception
+  override class UnboundVariablesException(vs: Var.Set[VarOrigin]) extends Exception(vs.list.mkString(", "))
 }
