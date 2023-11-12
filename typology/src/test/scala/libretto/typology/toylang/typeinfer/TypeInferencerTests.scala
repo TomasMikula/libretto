@@ -21,7 +21,9 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
     import Tools.ToolsImpl
     import Tools.ToolsImpl.{ReboundType, RefinementRequest, Type, TypeEmitter}
 
-    val tools = Tools.instance
+    val tools =
+      // Tools.instance
+      TypeInferencer.instance
     import tools.{
       Label,
       abstractTypeSplit,

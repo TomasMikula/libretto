@@ -143,7 +143,7 @@ object Tools {
 
     type TypeTagF = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, ●, ●]
 
-    private type NonAbstractTypeF[X] = (
+    private[typeinfer] type NonAbstractTypeF[X] = (
       Val[(Type, Type)] // type mismatch
       |+| Done // unit
       |+| Done // int
