@@ -1,20 +1,23 @@
 package libretto.typology.toylang.typeinfer
 
+import libretto.lambda.UnhandledCase
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.StarterKit.*
+import libretto.scaletto.StarterKit.$.*
 import libretto.scaletto.StarterKit
 import libretto.typology.toylang.terms.TypedFun.Type
 import libretto.typology.toylang.types.TypeTag
 import libretto.typology.toylang.types.{AbstractTypeLabel, ScalaTypeParam}
 import libretto.typology.toylang.typeinfer.Tools.ToolsImpl.NonAbstractTypeF
+import libretto.typology.toylang.typeinfer.Tools.ToolsImpl.NonAbstractType
 // import libretto.typology.toylang.types.{AbstractTypeLabel, ScalaTypeParam, TypeAlgebra, TypeTag}
 
 trait TypeInferencer extends Tools {
   type Tp
-
+  type TypeOutlet
 
   override type OutboundType = Tp
-  override type OutwardType = Tp
+  override type OutwardType = TypeOutlet
   override type MergeableType = Tp
   override type SplittableType = Tp
 
@@ -23,12 +26,24 @@ trait TypeInferencer extends Tools {
 }
 
 trait TypeOps[F[_]] {
-  def merge[A](f: (A |*| A) -⚬ A): (F[A] |*| F[A]) -⚬ F[A]
+  def map[A, B](f: A -⚬ B): F[A] -⚬ F[B]
+
+  // TODO: eliminate the output parameter
+  def merge[A](f: (A |*| A) -⚬ A, output: A -⚬ Val[Type]): (F[A] |*| F[A]) -⚬ F[A]
+
+  def split[A](f: A -⚬ (A |*| A)): F[A] -⚬ (F[A] |*| F[A])
+
   def output[A](f: A -⚬ Val[Type]): F[A] -⚬ Val[Type]
+
+  def close[A](f: A -⚬ Done): F[A] -⚬ Done
+
+  def awaitPosFst[A](f: (Done |*| A) -⚬ A): (Done |*| F[A]) -⚬ F[A]
+
+  def pair[A]: (A |*| A) -⚬ F[A]
+  def recCall[A]: (A |*| A) -⚬ F[A]
 }
 
 object TypeInferencer {
-  private type V = Either[ScalaTypeParam, AbstractTypeLabel]
 
   private given Ordering[Either[ScalaTypeParam, AbstractTypeLabel]] with {
     private val ScalaTypeParamOrdering =
@@ -48,33 +63,56 @@ object TypeInferencer {
 
   val labels = new Labels[Either[ScalaTypeParam, AbstractTypeLabel]]
 
-  val typeOps: TypeOps[Tools.ToolsImpl.NonAbstractTypeF] =
-    new TypeOps[Tools.ToolsImpl.NonAbstractTypeF] {
-      override def merge[A](f: (A |*| A) -⚬ A): (NonAbstractTypeF[A] |*| NonAbstractTypeF[A]) -⚬ NonAbstractTypeF[A] =
-        Tools.ToolsImpl.NonAbstractType.merge(f, ???)
+  val typeOps: TypeOps[NonAbstractTypeF] =
+    new TypeOps[NonAbstractTypeF] {
+      override def map[A, B](f: A -⚬ B): NonAbstractTypeF[A] -⚬ NonAbstractTypeF[B] =
+        NonAbstractType.map(f)
+
+      override def merge[A](
+        f: (A |*| A) -⚬ A,
+        output: A -⚬ Val[Type],
+      ): (NonAbstractTypeF[A] |*| NonAbstractTypeF[A]) -⚬ NonAbstractTypeF[A] =
+        NonAbstractType.merge(f, output)
+
+      override def split[A](f: A -⚬ (A |*| A)): NonAbstractTypeF[A] -⚬ (NonAbstractTypeF[A] |*| NonAbstractTypeF[A]) =
+        NonAbstractType.split(f)
 
       override def output[A](f: A -⚬ Val[Type]): NonAbstractTypeF[A] -⚬ Val[Type] =
-        Tools.ToolsImpl.NonAbstractType.output(f)
+        NonAbstractType.output(f)
+
+      override def close[A](f: A -⚬ Done): NonAbstractTypeF[A] -⚬ Done =
+        NonAbstractType.close(f)
+
+      override def awaitPosFst[A](f: (Done |*| A) -⚬ A): (Done |*| NonAbstractTypeF[A]) -⚬ NonAbstractTypeF[A] =
+        NonAbstractType.awaitPosFst(f)
+
+      override def pair[A]: (A |*| A) -⚬ NonAbstractTypeF[A] =
+        NonAbstractType.pair
+
+      override def recCall[A]: (A |*| A) -⚬ NonAbstractTypeF[A] =
+        NonAbstractType.recCall
     }
 
   def instance: TypeInferencer =
-    TypeInferencerImpl[V, Tools.ToolsImpl.NonAbstractTypeF, Done](
+    TypeInferencerImpl[NonAbstractTypeF, Done](
       labels,
       typeOps,
       mergeTypeParams = join,
       splitTypeParam = fork,
       typeParamTap = labels.unwrapOriginal > mapVal(x => Type.abstractType(x)) > signalPosFst,
       outputTypeParam = fst(labels.unwrapOriginal > mapVal(x => Type.abstractType(x))) > awaitPosSnd,
+      closeTypeParam = fst(labels.neglect) > join,
     )
 }
 
-class TypeInferencerImpl[V, F[_], P](
-  val labels: Labels[V],
+class TypeInferencerImpl[F[_], P](
+  val labels: Labels[Either[ScalaTypeParam, AbstractTypeLabel]], // TODO: make a type parameter
   F: TypeOps[F],
   mergeTypeParams: (P |*| P) -⚬ P,
   splitTypeParam: P -⚬ (P |*| P),
   typeParamTap: labels.Label -⚬ (P |*| Val[Type]),
   outputTypeParam: (labels.Label |*| P) -⚬ Val[Type],
+  closeTypeParam: (labels.Label |*| P) -⚬ Done,
 ) extends TypeInferencer { self =>
 
   override type Label = labels.Label
@@ -103,6 +141,7 @@ class TypeInferencerImpl[V, F[_], P](
   }
 
   override type Tp = Rec[[Tp] =>> AbsTp[Tp] |+| F[Tp]]
+  override type TypeOutlet = Rec[[X] =>> (Label |*| P) |+| F[X]]
 
   private def pack: (AbsTp[Tp] |+| F[Tp]) -⚬ Tp =
     dsl.pack[[X] =>> AbsTp[X] |+| F[X]]
@@ -146,7 +185,7 @@ class TypeInferencerImpl[V, F[_], P](
             case Left(b) =>
               mergeConcreteAbstract(split)(fa |*| b)
             case Right(fb) =>
-              concreteType(F.merge(self)(fa |*| fb))
+              concreteType(F.merge(self, output)(fa |*| fb))
           }
       }
     }
@@ -253,7 +292,7 @@ class TypeInferencerImpl[V, F[_], P](
     split: Tp -⚬ (Tp |*| Tp),
   ): (F[Tp] |*| AbsTp[Tp]) -⚬ Tp =
     λ { case t |*| (lbl |*| req) =>
-      val t1 |*| t2 = split(concreteType(t))
+      val t1 |*| t2 = split(concreteType(t).waitFor(labels.neglect(lbl)))
       returning(
         t1,
         req grant t2,
@@ -262,27 +301,92 @@ class TypeInferencerImpl[V, F[_], P](
 
   private def split_(
     merge: (Tp |*| Tp) -⚬ Tp,
-  ): Tp -⚬ (Tp |*| Tp) = ???
+  ): Tp -⚬ (Tp |*| Tp) = rec { self =>
+    λ { t =>
+      unpack(t) switch {
+        case Left(lbl |*| req) =>
+          val l1 |*| l2 = labels.split(lbl)
+          val t1 |*| resp1 = makeAbstractType(l1)
+          val t2 |*| resp2 = makeAbstractType(l2)
+          returning(
+            t1 |*| t2,
+            resp1.toEither switch {
+              case Left(t1) =>
+                resp2.toEither switch {
+                  case Left(t2) =>
+                    req grant merge(t1 |*| t2)
+                  case Right(req2) =>
+                    val t11 |*| t12 = self(t1)
+                    returning(
+                      req grant t11,
+                      injectL(t12) supplyTo req2,
+                    )
+                }
+              case Right(req1) =>
+                resp2.toEither switch {
+                  case Left(t2) =>
+                    val t21 |*| t22 = self(t2)
+                    returning(
+                      req grant t21,
+                      injectL(t22) supplyTo req1,
+                    )
+                  case Right(req2) =>
+                    req.decline switch {
+                      case Left(t) =>
+                        val t1 |*| t2 = self(t)
+                        returning(
+                          injectL(t1) supplyTo req1,
+                          injectL(t2) supplyTo req2,
+                        )
+                      case Right(p) =>
+                        val p1 |*| p2 = splitTypeParam(p)
+                        returning(
+                          injectR(p1) supplyTo req1,
+                          injectR(p2) supplyTo req2,
+
+                        )
+                    }
+                }
+            },
+          )
+        case Right(ft) =>
+          val ft1 |*| ft2 = F.split(self)(ft)
+          concreteType(ft1) |*| concreteType(ft2)
+      }
+    }
+  }
+
+  private def awaitPosFst: (Done |*| Tp) -⚬ Tp =
+    rec { self =>
+      λ { case d |*| t =>
+        unpack(t) switch {
+          case Left(lbl |*| req) => abstractType(lbl.waitFor(d) |*| req)
+          case Right(ft) => concreteType(F.awaitPosFst(self)(d |*| ft))
+        }
+      }
+    }
+
+  private given Junction.Positive[Tp] =
+    Junction.Positive.from(awaitPosFst)
 
   override def splittable: OutboundType -⚬ SplittableType = id
 
-  override def closeOW: OutwardType -⚬ StarterKit.Done = ???
+  override def int: StarterKit.Done -⚬ OutboundType = UnhandledCase.raise("")
 
-  override def int: StarterKit.Done -⚬ OutboundType = ???
+  override def tapM: MergeableType -⚬ OutwardType = tap
 
-  override def tapM: MergeableType -⚬ OutwardType = ???
+  override def either: (OutboundType |*| OutboundType) -⚬ OutboundType = UnhandledCase.raise("")
 
-  override def either: (OutboundType |*| OutboundType) -⚬ OutboundType = ???
+  override def tapS: SplittableType -⚬ OutwardType = tap
 
-  override def tapS: SplittableType -⚬ OutwardType = ???
+  override def eitherOW: (OutwardType |*| OutwardType) -⚬ OutwardType = UnhandledCase.raise("")
 
-  override def eitherOW: (OutwardType |*| OutwardType) -⚬ OutwardType = ???
+  override def recCallOW: (OutwardType |*| OutwardType) -⚬ OutwardType = UnhandledCase.raise("")
 
-  override def recCallOW: (OutwardType |*| OutwardType) -⚬ OutwardType = ???
+  override def pair: (OutboundType |*| OutboundType) -⚬ OutboundType =
+    F.pair > concreteType
 
-  override def pair: (OutboundType |*| OutboundType) -⚬ OutboundType = ???
-
-  override def isRecCall: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) = ???
+  override def isRecCall: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) = UnhandledCase.raise("")
 
   override def abstractTypeTap: Label -⚬ (Tp |*| Val[Type]) =
     λ { lbl =>
@@ -297,48 +401,232 @@ class TypeInferencerImpl[V, F[_], P](
         })
     }
 
-  override def close: OutboundType -⚬ StarterKit.Done = ???
+  override def close: OutboundType -⚬ Done = rec { self =>
+    λ { t =>
+      unpack(t) switch {
+        case Left(lbl |*| req) =>
+          req.decline switch {
+            case Left(t)  => join(self(t) |*| labels.neglect(lbl))
+            case Right(p) => closeTypeParam(lbl |*| p)
+          }
+        case Right(ft) =>
+          F.close(self)(ft)
+      }
+    }
+  }
 
-  override def pairOW: (OutwardType |*| OutwardType) -⚬ OutwardType = ???
+  override def closeOW: OutwardType -⚬ Done = rec { self =>
+    λ { t =>
+      dsl.unpack(t) switch {
+        case Left(tp)  => closeTypeParam(tp)
+        case Right(ft) => F.close(self)(ft)
+      }
+    }
+  }
 
-  override def debugPrintGradually: OutboundType -⚬ StarterKit.Done = ???
+  override def pairOW: (OutwardType |*| OutwardType) -⚬ OutwardType = UnhandledCase.raise("")
 
-  override def label(v: AbstractTypeLabel): StarterKit.One -⚬ Label = ???
+  override def debugPrintGradually: OutboundType -⚬ StarterKit.Done = UnhandledCase.raise("")
 
-  override def apply1TOW[F[_$4]](F: TypeTag[F]): OutwardType -⚬ OutwardType = ???
+  override def label(v: AbstractTypeLabel): One -⚬ Label =
+    labels.from(Right(v))
 
-  override def string: StarterKit.Done -⚬ OutboundType = ???
+  override def apply1TOW[F[_$4]](F: TypeTag[F]): OutwardType -⚬ OutwardType = UnhandledCase.raise("")
 
-  override lazy val nested: Nested =
+  override def string: StarterKit.Done -⚬ OutboundType = UnhandledCase.raise("")
+
+  override lazy val nested: Nested = {
+    type R = -[Tp] |+| Tp |+| (-[Tp] |*| Tp)
+    type Q = Label =⚬ R
+
+    val mergeQ: (Q |*| Q) -⚬ Q =
+      λ { case f1 |*| f2 =>
+        λ.closure { lbl =>
+          val l1 |*| l2 = labels.split(lbl)
+          val q1 = f1(l1)
+          val q2 = f2(l2)
+          q1 switch {
+            case Left(q1) =>
+              q1 switch {
+                case Left(nt1) =>
+                  q2 switch {
+                    case Left(q2) =>
+                      q2 switch {
+                        case Left(nt2) =>
+                          injectL(injectL(contrapositive(self.split)(factorOutInversion(nt1 |*| nt2))))
+                        case Right(t2) =>
+                          injectR(nt1 |*| t2)
+                      }
+                    case Right(nt2 |*| t2) =>
+                      val nt = contrapositive(self.split)(factorOutInversion(nt1 |*| nt2))
+                      injectR(nt |*| t2)
+                  }
+                case Right(t1) =>
+                  q2 switch {
+                    case Left(q2) =>
+                      q2 switch {
+                        case Left(nt2) =>
+                          injectR(nt2 |*| t1)
+                        case Right(t2) =>
+                          injectL(injectR(self.merge(t1 |*| t2)))
+                      }
+                    case Right(nt2 |*| t2) =>
+                      val t = self.merge(t1 |*| t2)
+                      injectR(nt2 |*| t)
+                  }
+              }
+            case Right(nt1 |*| t1) =>
+              q2 switch {
+                case Left(q2) =>
+                  q2 switch {
+                    case Left(nt2) =>
+                      val nt = contrapositive(self.split)(factorOutInversion(nt1 |*| nt2))
+                      injectR(nt |*| t1)
+                    case Right(t2) =>
+                      injectR(nt1 |*| self.merge(t1 |*| t2))
+                  }
+                case Right(nt2 |*| t2) =>
+                  val nt = contrapositive(self.split)(factorOutInversion(nt1 |*| nt2))
+                  val t = self.merge(t1 |*| t2)
+                  injectR(nt |*| t)
+              }
+          }
+        }
+      }
+
+    def splitQ0: (Label |*| Label |*| Q) -⚬ (R |*| R) =
+      λ { case l1 |*| l2 |*| f =>
+        labels.compare(l1 |*| l2) switch {
+          case Left(l) =>
+            // labels are the same
+            f(l) switch {
+              case Left(r) =>
+                r switch {
+                  case Left(nt) =>
+                    val nt1 |*| nt2 = contrapositive(self.merge)(nt) :>> distributeInversion
+                    injectL(injectL(nt1)) |*| injectL(injectL(nt2))
+                  case Right(t) =>
+                    val t1 |*| t2 = self.split(t)
+                    injectL(injectR(t1)) |*| injectL(injectR(t2))
+                }
+              case Right(nt |*| t) =>
+                // arbitrary split
+                injectL(injectL(nt)) |*| injectL(injectR(t))
+            }
+          case Right(res) =>
+            def go: R -⚬ (R |*| R) =
+              λ { r =>
+                r switch {
+                  case Left(r) =>
+                    r switch {
+                      case Left(nt) =>
+                        val nt1 |*| t1 = constant(demand[Tp])
+                        val t |*| t2 = self.split(t1)
+                        returning(
+                          injectL(injectL(nt1)) |*| injectL(injectR(t2)),
+                          t supplyTo nt,
+                        )
+                      case Right(t) =>
+                        val t1 |*| t2 = self.split(t)
+                        injectL(injectR(t1)) |*| injectL(injectR(t2))
+                    }
+                  case Right(nt |*| t) =>
+                    injectL(injectL(nt)) |*| injectL(injectR(t))
+                }
+              }
+            res switch {
+              case Left(l1) =>
+                go(f(l1))
+              case Right(l2) =>
+                go(f(l2)) :>> swap
+            }
+        }
+      }
+
+    val splitQ: Q -⚬ (Q |*| Q) =
+      λ { f =>
+        val nl1 |*| l1 = constant(demand[Label])
+        val nl2 |*| l2 = constant(demand[Label])
+        val r1 |*| r2 = splitQ0(l1 |*| l2 |*| f)
+        (nl1 |*| r1) |*| (nl2 |*| r2)
+      }
+
+    val qTap: labels.Label -⚬ (Q |*| Val[Type]) =
+      λ { case l0 =>
+        val res0: $[Label =⚬ (R |*| Val[Type])] =
+          λ.closure { l1 =>
+            val nt |*| t = constant(demand[Tp])
+            injectL(injectL(nt)) |*| self.output(t).waitFor(join(labels.neglect(l0) |*| labels.neglect(l1)))
+          }
+        res0 :>> assocRL
+      }
+
+    val outputQ: (labels.Label |*| Q) -⚬ Val[Type] = ???
+
+    val closeQ: (labels.Label |*| Q) -⚬ Done = ???
+
     new Nested {
-      override val tools: self.type = self
+      override val tools =
+        new TypeInferencerImpl[F, Q](
+          labels,
+          F,
+          mergeQ,
+          splitQ,
+          qTap,
+          outputQ,
+          closeQ,
+        )
 
-      override def mergeLower: (tools.OutwardType |*| tools.OutwardType) -⚬ OutboundType = self.merge
-      override def unnestM: tools.MergeableType -⚬ OutboundType = ???
+      override def lower: tools.OutwardType -⚬ InterimType =
+        UnhandledCase.raise("")
 
-      override def mergeZap: (OutwardType |*| OutwardType) -⚬ StarterKit.dsl.Val[Type] = ???
+      override def plant: InterimType -⚬ (OutboundType |*| OutwardType) =
+        UnhandledCase.raise("")
 
-      override def unnestOutward: OutwardType -⚬ OutwardType = ???
+      override def merge: (InterimType |*| InterimType) -⚬ InterimType =
+        UnhandledCase.raise("")
 
-      override def unnestS: tools.SplittableType -⚬ OutboundType = ???
+      override def mergeLower: (tools.OutwardType |*| tools.OutwardType) -⚬ OutboundType = UnhandledCase.raise("")
+      override def unnestM: tools.MergeableType -⚬ OutboundType = UnhandledCase.raise("")
 
-      override def unnest: OutboundType -⚬ OutboundType = ???
+      override def mergeZap: (tools.OutwardType |*| tools.OutwardType) -⚬ Val[Type] = UnhandledCase.raise("")
+
+      override def unnestOutward: tools.OutwardType -⚬ OutwardType = UnhandledCase.raise("")
+
+      override def unnestS: tools.SplittableType -⚬ OutboundType = UnhandledCase.raise("")
+
+      override def unnest: tools.OutboundType -⚬ OutboundType = UnhandledCase.raise("")
 
     }
+  }
 
-  override def tap: OutboundType -⚬ OutwardType = ???
+  override def tap: OutboundType -⚬ OutwardType = rec { self =>
+    λ { t =>
+      unpack(t) switch {
+        case Left(lbl |*| req) =>
+          import TypeOutlet.given
+          req.decline switch {
+            case Left(t)  => self(t) waitFor labels.neglect(lbl)
+            case Right(p) => TypeOutlet.typeParam(lbl |*| p)
+          }
+        case Right(ft) =>
+          TypeOutlet.concreteType(F.map(self)(ft))
+      }
+    }
+  }
 
-  override def stringOW: StarterKit.Done -⚬ OutwardType = ???
+  override def stringOW: StarterKit.Done -⚬ OutwardType = UnhandledCase.raise("")
 
-  override def fixTOW[F[_$2]](F: TypeTag[F]): StarterKit.One -⚬ OutwardType = ???
+  override def fixTOW[F[_$2]](F: TypeTag[F]): StarterKit.One -⚬ OutwardType = UnhandledCase.raise("")
 
-  override def recCall: (OutboundType |*| OutboundType) -⚬ OutboundType = ???
+  override def recCall: (OutboundType |*| OutboundType) -⚬ OutboundType =
+    F.recCall > concreteType
 
-  override def apply1T[F[_$3]](F: TypeTag[F]): OutboundType -⚬ OutboundType = ???
+  override def apply1T[F[_$3]](F: TypeTag[F]): OutboundType -⚬ OutboundType = UnhandledCase.raise("")
 
-  override def fixT[F[_$1]](F: TypeTag[F]): StarterKit.One -⚬ OutboundType = ???
+  override def fixT[F[_$1]](F: TypeTag[F]): StarterKit.One -⚬ OutboundType = UnhandledCase.raise("")
 
-  override def intOW: StarterKit.Done -⚬ OutwardType = ???
+  override def intOW: StarterKit.Done -⚬ OutwardType = UnhandledCase.raise("")
 
   override def output: Tp -⚬ Val[Type] = rec { self =>
     unpack > dsl.either(
@@ -352,14 +640,42 @@ class TypeInferencerImpl[V, F[_], P](
     )
   }
 
-  // def output[T, Y, X](
-  //   outputX: X -⚬ Val[Type],
-  //   outputNegT: (TParamLabel |*| -[T]) -⚬ Val[Type],
-  // ): TypeSkelet[T, Y, X] -⚬ Val[Type] =
+  override def outputOW: OutwardType -⚬ Val[Type] = rec { self =>
+    dsl.unpack > dsl.either(
+      outputTypeParam,
+      F.output(self),
+    )
+  }
 
-  override def isPair: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) = ???
+  override def isPair: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) = UnhandledCase.raise("")
 
-  override def outputOW: OutwardType -⚬ StarterKit.dsl.Val[Type] = ???
+  override def mergeable: OutboundType -⚬ MergeableType = id
 
-  override def mergeable: OutboundType -⚬ MergeableType = ???
+  object TypeOutlet {
+    def pack: ((Label |*| P) |+| F[TypeOutlet]) -⚬ TypeOutlet =
+      dsl.pack[[X] =>> (Label |*| P) |+| F[X]]
+
+    def unpack: TypeOutlet -⚬ ((Label |*| P) |+| F[TypeOutlet]) =
+      dsl.unpack
+
+    def typeParam: (Label |*| P) -⚬ TypeOutlet =
+      injectL > pack
+
+    def concreteType: F[TypeOutlet] -⚬ TypeOutlet =
+      injectR > pack
+
+    def awaitPosFst: (Done |*| TypeOutlet) -⚬ TypeOutlet = rec { self =>
+      λ { case d |*| t =>
+        unpack(t) switch {
+          case Left(lbl |*| p) =>
+            typeParam(lbl.waitFor(d) |*| p)
+          case Right(ft) =>
+            concreteType(F.awaitPosFst(self)(d |*| ft))
+        }
+      }
+    }
+
+    given Junction.Positive[TypeOutlet] =
+      Junction.Positive.from(awaitPosFst)
+  }
 }

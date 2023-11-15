@@ -8,6 +8,7 @@ import libretto.typology.kinds.{×, ○, ●}
 import libretto.typology.toylang.terms.TypedFun
 import libretto.typology.toylang.types.{AbstractTypeLabel, ScalaTypeParam, TypeAlgebra, TypeTag}
 import libretto.scaletto.StarterKit
+import libretto.lambda.UnhandledCase
 
 trait Tools { self =>
   type Label
@@ -23,7 +24,13 @@ trait Tools { self =>
   type Type = TypedFun.Type
 
   trait Nested {
+    type InterimType
+
     val tools: Tools
+
+    def lower: tools.OutwardType -⚬ InterimType
+    def plant: InterimType -⚬ (self.OutboundType |*| self.OutwardType)
+    def merge: (InterimType |*| InterimType) -⚬ InterimType
     def unnest: tools.OutboundType -⚬ self.OutboundType
     def unnestS: tools.SplittableType -⚬ self.OutboundType
     def unnestM: tools.MergeableType -⚬ self.OutboundType
@@ -3853,6 +3860,7 @@ object Tools {
 
     override lazy val nested: Nested =
       new Nested {
+
         override val tools: ToolsImpl[ReboundType[T]] =
           import ReboundType.junctionReboundType
           ToolsImpl[ReboundType[T]](
@@ -3881,6 +3889,12 @@ object Tools {
 
         override lazy val unnestOutward: tools.OutwardType -⚬ self.OutwardType =
           ConcreteType.abstractify[T] > TypeEmitter.generify
+
+        override def lower: tools.OutwardType -⚬ InterimType = UnhandledCase.raise("")
+
+        override def merge: (InterimType |*| InterimType) -⚬ InterimType = UnhandledCase.raise("")
+
+        override def plant: InterimType -⚬ (OutboundType |*| OutwardType) = UnhandledCase.raise("")
       }
 
     override lazy val abstractTypeTap: Label -⚬ (TypeEmitter[T] |*| Val[Type]) =
