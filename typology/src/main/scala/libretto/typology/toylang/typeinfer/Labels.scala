@@ -19,7 +19,7 @@ trait Labels[V] {
   given junctionLabel: Junction.Positive[Label]
 
   def generify: Label -⚬ TParamLabel
-  def abstractify: TParamLabel -⚬ Label // TODO: move to nested
+  def abstractify: TParamLabel -⚬ Label
   def neglectTParam: TParamLabel -⚬ Done
   val unwrapOriginalTP: TParamLabel -⚬ Val[V]
 
@@ -29,6 +29,14 @@ trait Labels[V] {
   def alsoDebugPrint(f: String => String): Label -⚬ Label
 
   def alsoDebugPrintTP(f: String => String): TParamLabel -⚬ TParamLabel
+
+  trait Nested {
+    val labels: Labels[V]
+
+    def promote: labels.Label -⚬ Label
+  }
+
+  def nested: Nested
 }
 
 object Labels {
@@ -36,28 +44,28 @@ object Labels {
     new LabelsImpl[V]
 }
 
-class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
-  enum Lbl:
+object LabelsImpl {
+  enum Lbl[V]:
     case Base(value: V, counter: AtomicInteger)
-    case Clone(base: Lbl, tag: Int)
-    case Abstracted(base: TParamLbl, counter: AtomicInteger)
+    case Clone(base: Lbl[V], tag: Int)
+    case Abstracted(base: TParamLbl[V], counter: AtomicInteger)
     import Lbl.Basal
-    def basal: Basal =
+    def basal: Basal[V] =
       this match
-        case Clone(base, _) => base.basal
-        case x: Base        => x
-        case x: Abstracted  => x
-    def mkClone(): Lbl =
+        case Clone(base, _)    => base.basal
+        case x: Base[V]        => x
+        case x: Abstracted[V]  => x
+    def mkClone(): Lbl[V] =
       this match
         case b @ Base(_, counter)       => Clone(b, counter.incrementAndGet())
         case b @ Abstracted(_, counter) => Clone(b, counter.incrementAndGet())
         case Clone(base, _)             => base.mkClone()
-    def declone: (Basal, List[Int]) =
-      def go(lbl: Lbl, acc: List[Int]): (Basal, List[Int]) =
+    def declone: (Basal[V], List[Int]) =
+      def go(lbl: Lbl[V], acc: List[Int]): (Basal[V], List[Int]) =
         lbl match
           case Clone(base, tag) => go(base, tag :: acc)
-          case x: Base          => (x, acc)
-          case x: Abstracted    => (x, acc)
+          case x: Base[V]       => (x, acc)
+          case x: Abstracted[V] => (x, acc)
       go(this, Nil)
     def originalBase: V =
       this match
@@ -70,15 +78,20 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
         case Base(value, _) => s"{$value}"
         case Clone(base, tag) => s"$base.$tag"
   end Lbl
-  enum TParamLbl:
-    case Promoted(base: Lbl)
+
+  enum TParamLbl[V]:
+    case Promoted(base: Lbl[V])
     override def toString =
       this match
         case Promoted(base) => s"[$base]"
   end TParamLbl
+
   object Lbl:
-    type Basal = Base | Abstracted
-    def compareBasal(a: Basal, b: Basal): Either[Basal, Either[Basal, Basal]] =
+    type Basal[V] = Base[V] | Abstracted[V]
+
+    def compareBasal[V](a: Basal[V], b: Basal[V])(using
+      V: Ordering[V],
+    ): Either[Basal[V], Either[Basal[V], Basal[V]]] =
       (a, b) match
         case (Base(x, _), Base(y, _)) =>
           V.compare(x, y) match {
@@ -95,12 +108,18 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
             case Left(z)         => Left(a)
             case Right(Left(_))  => Right(Left(a))
             case Right(Right(_)) => Right(Right(b))
-    def compareLax(a: Lbl, b: Lbl): Either[Lbl, Either[Lbl, Lbl]] =
+
+    def compareLax[V](a: Lbl[V], b: Lbl[V])(using
+      Ordering[V],
+    ): Either[Lbl[V], Either[Lbl[V], Lbl[V]]] =
       compareBasal(a.basal, b.basal) match
         case Left(_) => Left(a)
         case Right(Left(_))  => Right(Left(a))
         case Right(Right(_)) => Right(Right(b))
-    def compareStrict(a: Lbl, b: Lbl): Either[Lbl, Either[Lbl, Lbl]] =
+
+    def compareStrict[V](a: Lbl[V], b: Lbl[V])(using
+      Ordering[V],
+    ): Either[Lbl[V], Either[Lbl[V], Lbl[V]]] =
       val (x, xTags) = a.declone
       val (y, yTags) = b.declone
       compareBasal(x, y) match
@@ -113,6 +132,7 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
           Right(Left(a))
         case Right(Right(_)) =>
           Right(Right(b))
+
     private def compareLists[A](as: List[A], bs: List[A])(using A: Ordering[A]): Int =
       (as zip bs)
         .map { case (a, b) => A.compare(a, b) }
@@ -120,23 +140,33 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
           case Some(i) => i
           case None    => as.size compareTo bs.size
         }
+
   end Lbl
+
   object TParamLbl:
-    def compareStrict(a: TParamLbl, b: TParamLbl): Either[TParamLbl, Either[TParamLbl, TParamLbl]] =
+    def compareStrict[V](a: TParamLbl[V], b: TParamLbl[V])(using
+      Ordering[V],
+    ): Either[TParamLbl[V], Either[TParamLbl[V], TParamLbl[V]]] =
       (a, b) match
         case (Promoted(x), Promoted(y)) =>
           Lbl.compareStrict(x, y) match
             case Left(z)         => Left(Promoted(z))
             case Right(Left(x))  => Right(Left(Promoted(x)))
             case Right(Right(y)) => Right(Right(Promoted(y)))
-  opaque type Label       = Val[Lbl]
-  opaque type TParamLabel = Val[TParamLbl]
+  end TParamLbl
+}
+
+class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
+  import LabelsImpl.*
+
+  type Label       = Val[Lbl[V]]
+  type TParamLabel = Val[TParamLbl[V]]
   def create(v: V): One -⚬ Label =
     const(Lbl.Base(v, AtomicInteger(0)))
   def make(v: V)(using SourcePos, LambdaContext): $[Label] =
     constant(create(v)) > alsoPrintLine(x => s"Creating $x")
   val split: Label -⚬ (Label |*| Label) =
-    mapVal { (lbl: Lbl) =>
+    mapVal { (lbl: Lbl[V]) =>
       val res = (lbl.mkClone(), lbl.mkClone())
       println(s"$lbl split into $res")
       res
@@ -188,4 +218,17 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
     scalettoLib.junctionVal
   given junctionTParamLabel: Junction.Positive[TParamLabel] =
     scalettoLib.junctionVal
+
+  override lazy val nested: Nested =
+    new Nested {
+      override val labels: LabelsImpl[V] =
+        new LabelsImpl[V]
+
+      override val promote: labels.Label -⚬ Label =
+        mapVal { x =>
+          val res = Lbl.Abstracted(TParamLbl.Promoted(x), AtomicInteger(0))
+          println(s"$x promoted to $res")
+          res
+        }
+    }
 }
