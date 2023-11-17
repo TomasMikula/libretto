@@ -436,8 +436,12 @@ class TypeInferencerImpl[F[_], P](
   override def string: StarterKit.Done -⚬ OutboundType = UnhandledCase.raise("")
 
   override lazy val nested: Nested = {
+    val nl = labels.nested
+
+    type NLabel = nl.labels.Label
+
     type R = -[Tp] |+| Tp |+| (-[Tp] |*| Tp)
-    type Q = Label =⚬ R
+    type Q = NLabel =⚬ R
 
     val mergeWithAbstractResponse: (Tp |*| (Label |*| Refinement.Response[Tp])) -⚬ R =
       λ { case a |*| (bLbl |*| bResp) =>
@@ -478,7 +482,7 @@ class TypeInferencerImpl[F[_], P](
     val mergeQ: (Q |*| Q) -⚬ Q =
       λ { case f1 |*| f2 =>
         λ.closure { lbl =>
-          val l1 |*| l2 = labels.split(lbl)
+          val l1 |*| l2 = nl.labels.split(lbl)
           val q1 = f1(l1)
           val q2 = f2(l2)
           q1 switch {
@@ -530,9 +534,9 @@ class TypeInferencerImpl[F[_], P](
         }
       }
 
-    def splitQ0: (Label |*| Label |*| Q) -⚬ (R |*| R) =
+    def splitQ0: (NLabel |*| NLabel |*| Q) -⚬ (R |*| R) =
       λ { case l1 |*| l2 |*| f =>
-        labels.compare(l1 |*| l2) switch {
+        nl.labels.compare(l1 |*| l2) switch {
           case Left(l) =>
             // labels are the same
             f(l) switch {
@@ -581,30 +585,30 @@ class TypeInferencerImpl[F[_], P](
 
     val splitQ: Q -⚬ (Q |*| Q) =
       λ { f =>
-        val nl1 |*| l1 = constant(demand[Label])
-        val nl2 |*| l2 = constant(demand[Label])
+        val nl1 |*| l1 = constant(demand[NLabel])
+        val nl2 |*| l2 = constant(demand[NLabel])
         val r1 |*| r2 = splitQ0(l1 |*| l2 |*| f)
         (nl1 |*| r1) |*| (nl2 |*| r2)
       }
 
-    val qTap: labels.Label -⚬ (Q |*| Val[Type]) =
+    val qTap: NLabel -⚬ (Q |*| Val[Type]) =
       λ { case l0 =>
-        val res0: $[Label =⚬ (R |*| Val[Type])] =
+        val res0: $[NLabel =⚬ (R |*| Val[Type])] =
           λ.closure { l1 =>
             val nt |*| t = constant(demand[Tp])
-            injectL(injectL(nt)) |*| self.output(t).waitFor(join(labels.neglect(l0) |*| labels.neglect(l1)))
+            injectL(injectL(nt)) |*| self.output(t).waitFor(join(nl.labels.neglect(l0) |*| nl.labels.neglect(l1)))
           }
         res0 :>> assocRL
       }
 
-    val outputQ: (labels.Label |*| Q) -⚬ Val[Type] = ???
+    val outputQ: (NLabel |*| Q) -⚬ Val[Type] = ???
 
-    val closeQ: (labels.Label |*| Q) -⚬ Done = ???
+    val closeQ: (NLabel |*| Q) -⚬ Done = ???
 
     new Nested {
       override val tools =
         new TypeInferencerImpl[F, Q](
-          labels,
+          nl.labels,
           F,
           mergeQ,
           splitQ,

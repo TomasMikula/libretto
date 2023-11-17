@@ -17,7 +17,6 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
     import kit.{Outcome, expectDone, expectLeft, expectRight, expectVal}
     import Outcome.{assertEquals, assertLeft, assertRight, failure, success}
 
-    import Tools.Labels
     import Tools.ToolsImpl
     import Tools.ToolsImpl.{ReboundType, RefinementRequest, Type, TypeEmitter}
 
@@ -83,7 +82,7 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       }
 
     def assertLabelEquals(using exn: kit.bridge.Execution)(l: exn.OutPort[ti.Label], expectedValue: Int)(using SourcePos): Outcome[Unit] =
-      expectVal(OutPort.map(l)(Labels.unwrapOriginal)) flatMap { label =>
+      expectVal(OutPort.map(l)(Tools.labels.unwrapOriginal)) flatMap { label =>
         assertRight(label) flatMap { label =>
           assertEquals(label.value, expectedValue)
         }
