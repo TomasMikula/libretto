@@ -61,7 +61,7 @@ object TypeInferencer {
         case (Right(AbstractTypeLabel(x)), Right(AbstractTypeLabel(y))) => x compareTo y
   }
 
-  val labels = new Labels[Either[ScalaTypeParam, AbstractTypeLabel]]
+  val labels = Labels[Either[ScalaTypeParam, AbstractTypeLabel]]
 
   val typeOps: TypeOps[NonAbstractTypeF] =
     new TypeOps[NonAbstractTypeF] {
@@ -429,7 +429,7 @@ class TypeInferencerImpl[F[_], P](
   override def debugPrintGradually: OutboundType -⚬ StarterKit.Done = UnhandledCase.raise("")
 
   override def label(v: AbstractTypeLabel): One -⚬ Label =
-    labels.from(Right(v))
+    labels.create(Right(v))
 
   override def apply1TOW[F[_$4]](F: TypeTag[F]): OutwardType -⚬ OutwardType = UnhandledCase.raise("")
 

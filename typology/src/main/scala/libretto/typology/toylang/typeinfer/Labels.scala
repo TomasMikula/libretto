@@ -5,7 +5,38 @@ import libretto.scaletto.StarterKit._
 
 import java.util.concurrent.atomic.AtomicInteger
 
-class Labels[V](using V: Ordering[V]) {
+trait Labels[V] {
+  type Label
+
+  type TParamLabel // TODO: is necessary?
+
+  def create(v: V): One -⚬ Label
+  def split: Label -⚬ (Label |*| Label)
+  def compare: (Label |*| Label) -⚬ (Label |+| (Label |+| Label))
+  def neglect: Label -⚬ Done
+  def unwrapOriginal: Label -⚬ Val[V]
+
+  given junctionLabel: Junction.Positive[Label]
+
+  def generify: Label -⚬ TParamLabel
+  def abstractify: TParamLabel -⚬ Label // TODO: move to nested
+  def neglectTParam: TParamLabel -⚬ Done
+  val unwrapOriginalTP: TParamLabel -⚬ Val[V]
+
+  given junctionTParamLabel: Junction.Positive[TParamLabel]
+
+  def show: Label -⚬ Val[String]
+  def alsoDebugPrint(f: String => String): Label -⚬ Label
+
+  def alsoDebugPrintTP(f: String => String): TParamLabel -⚬ TParamLabel
+}
+
+object Labels {
+  def apply[V](using Ordering[V]) =
+    new LabelsImpl[V]
+}
+
+class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
   enum Lbl:
     case Base(value: V, counter: AtomicInteger)
     case Clone(base: Lbl, tag: Int)
@@ -100,10 +131,10 @@ class Labels[V](using V: Ordering[V]) {
             case Right(Right(y)) => Right(Right(Promoted(y)))
   opaque type Label       = Val[Lbl]
   opaque type TParamLabel = Val[TParamLbl]
-  def from(v: V): One -⚬ Label =
+  def create(v: V): One -⚬ Label =
     const(Lbl.Base(v, AtomicInteger(0)))
   def make(v: V)(using SourcePos, LambdaContext): $[Label] =
-    constant(from(v)) > alsoPrintLine(x => s"Creating $x")
+    constant(create(v)) > alsoPrintLine(x => s"Creating $x")
   val split: Label -⚬ (Label |*| Label) =
     mapVal { (lbl: Lbl) =>
       val res = (lbl.mkClone(), lbl.mkClone())
@@ -153,8 +184,8 @@ class Labels[V](using V: Ordering[V]) {
     alsoPrintLine(x => f(x.toString))
   def alsoDebugPrintTP(f: String => String): TParamLabel -⚬ TParamLabel =
     alsoPrintLine(x => f(x.toString))
-  given Junction.Positive[Label] =
+  given junctionLabel: Junction.Positive[Label] =
     scalettoLib.junctionVal
-  given Junction.Positive[TParamLabel] =
+  given junctionTParamLabel: Junction.Positive[TParamLabel] =
     scalettoLib.junctionVal
 }
