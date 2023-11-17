@@ -439,6 +439,42 @@ class TypeInferencerImpl[F[_], P](
     type R = -[Tp] |+| Tp |+| (-[Tp] |*| Tp)
     type Q = Label =⚬ R
 
+    val mergeWithAbstractResponse: (Tp |*| (Label |*| Refinement.Response[Tp])) -⚬ R =
+      λ { case a |*| (bLbl |*| bResp) =>
+        // The first arg `a` must be scrutinized first, as it may contain
+        // refinement request corresponding to the second argument,
+        // in which case the response in the second argument
+        // will not resolve until request is responded.
+
+        unpack(a) switch {
+          case Left(aLbl |*| aReq) =>
+            labels.compare(aLbl |*| bLbl) switch {
+              case Left(lbl) =>
+                // labels are same
+                ???
+              case Right(res) =>
+                res switch {
+                  case Left(aLbl) =>
+                    ???
+                  case Right(bLbl) =>
+                    ???
+                }
+            }
+          case Right(fa) =>
+            ???
+        }
+      }
+
+    val mergeInOut: ((Label |*| -[Tp]) |*| Tp) -⚬ R =
+      λ { case (aLbl |*| na) |*| b =>
+        val l1 |*| l2 = labels.split(aLbl)
+        val a |*| aResp = makeAbstractType(l1)
+        returning(
+          mergeWithAbstractResponse(b |*| (l2 |*| aResp)),
+          a supplyTo na,
+        )
+      }
+
     val mergeQ: (Q |*| Q) -⚬ Q =
       λ { case f1 |*| f2 =>
         λ.closure { lbl =>
