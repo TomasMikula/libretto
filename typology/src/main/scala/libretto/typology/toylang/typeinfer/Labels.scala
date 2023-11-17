@@ -4,6 +4,7 @@ import libretto.lambda.util.SourcePos
 import libretto.scaletto.StarterKit._
 
 import java.util.concurrent.atomic.AtomicInteger
+import libretto.scaletto.StarterKit
 
 trait Labels[V] {
   type Label
@@ -19,7 +20,11 @@ trait Labels[V] {
 
   given junctionLabel: Junction.Positive[Label]
 
+  def splitPreliminary: Preliminary -⚬ (Preliminary |*| Preliminary)
+  def testEqual: (Preliminary |*| Preliminary) -⚬ (Preliminary |+| (Preliminary |*| Preliminary))
   def neglectPreliminary: Preliminary -⚬ Done
+
+  given junctionPreliminary: Junction.Positive[Preliminary]
 
   def generify: Label -⚬ TParamLabel
   def abstractify: TParamLabel -⚬ Label
@@ -37,6 +42,7 @@ trait Labels[V] {
     val labels: Labels[V]
 
     def promote: labels.Label -⚬ Label
+    def preliminary: labels.Label -⚬ Preliminary
   }
 
   def nested: Nested
@@ -175,6 +181,12 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
       println(s"$lbl split into $res")
       res
     } > liftPair
+  override val splitPreliminary: Preliminary -⚬ (Preliminary |*| Preliminary) =
+    mapVal { (lbl: Lbl[V]) =>
+      val res = (lbl.mkClone(), lbl.mkClone())
+      println(s"Preliminary $lbl split into $res")
+      res
+    } > liftPair
   val compare: (Label |*| Label) -⚬ (Label |+| (Label |+| Label)) =
     λ { case a |*| b =>
       (a ** b) :>> mapVal { case (a, b) =>
@@ -186,6 +198,13 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
   val neglect: Label -⚬ Done =
     // dsl.neglect
     printLine(x => s"Neglecting $x")
+
+  override val testEqual: (Preliminary |*| Preliminary) -⚬ (Preliminary |+| (Preliminary |*| Preliminary)) =
+    λ { case a |*| b =>
+      (a ** b) :>> mapVal { case (a, b) =>
+        Lbl.compareLax(a, b).map(_ => (a, b))
+      } :>> liftEither :>> |+|.rmap(liftPair)
+    }
   override val neglectPreliminary: Preliminary -⚬ Done =
     // dsl.neglect
     printLine(x => s"Neglecting $x")
@@ -225,6 +244,8 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
     scalettoLib.junctionVal
   given junctionTParamLabel: Junction.Positive[TParamLabel] =
     scalettoLib.junctionVal
+  given junctionPreliminary: Junction.Positive[Preliminary] =
+    scalettoLib.junctionVal
 
   override lazy val nested: Nested =
     new Nested {
@@ -237,5 +258,8 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
           println(s"$x promoted to $res")
           res
         }
+
+      override def preliminary: labels.Label -⚬ Preliminary =
+        promote
     }
 }
