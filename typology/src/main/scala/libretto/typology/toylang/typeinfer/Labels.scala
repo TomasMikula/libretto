@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 trait Labels[V] {
   type Label
+  type Preliminary
 
   type TParamLabel // TODO: is necessary?
 
@@ -17,6 +18,8 @@ trait Labels[V] {
   def unwrapOriginal: Label -⚬ Val[V]
 
   given junctionLabel: Junction.Positive[Label]
+
+  def neglectPreliminary: Preliminary -⚬ Done
 
   def generify: Label -⚬ TParamLabel
   def abstractify: TParamLabel -⚬ Label
@@ -160,6 +163,7 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
   import LabelsImpl.*
 
   type Label       = Val[Lbl[V]]
+  type Preliminary = Val[Lbl[V]]
   type TParamLabel = Val[TParamLbl[V]]
   def create(v: V): One -⚬ Label =
     const(Lbl.Base(v, AtomicInteger(0)))
@@ -180,6 +184,9 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
       } :>> liftEither :>> |+|.rmap(liftEither)
     }
   val neglect: Label -⚬ Done =
+    // dsl.neglect
+    printLine(x => s"Neglecting $x")
+  override val neglectPreliminary: Preliminary -⚬ Done =
     // dsl.neglect
     printLine(x => s"Neglecting $x")
   val neglectTParam: TParamLabel -⚬ Done =

@@ -117,8 +117,6 @@ class TypeInferencerImpl[F[_], P](
 
   override type Label = labels.Label
 
-  type AbsTp[T] = Label |*| Refinement.Request[T]
-
   object Refinement {
     opaque type Request[T] = -[Response[T]]
     opaque type Response[T] = T |+| -[T |+| P]
@@ -140,6 +138,12 @@ class TypeInferencerImpl[F[_], P](
     }
   }
 
+  object AbsTp {
+    type Proper[T] = Label |*| Refinement.Request[T]
+    type Prelim[T] = labels.Preliminary |*| T
+  }
+  type AbsTp[T] = AbsTp.Proper[T] |+| AbsTp.Prelim[T]
+
   override type Tp = Rec[[Tp] =>> AbsTp[Tp] |+| F[Tp]]
   override type TypeOutlet = Rec[[X] =>> (Label |*| P) |+| F[X]]
 
@@ -149,8 +153,11 @@ class TypeInferencerImpl[F[_], P](
   private def unpack: Tp -⚬ (AbsTp[Tp] |+| F[Tp]) =
     dsl.unpack[[X] =>> AbsTp[X] |+| F[X]]
 
-  def abstractType: AbsTp[Tp] -⚬ Tp =
-    injectL > pack
+  def abstractType: (Label |*| Refinement.Request[Tp]) -⚬ Tp =
+    injectL > injectL > pack
+
+  def preliminary: (labels.Preliminary |*| Tp) -⚬ Tp =
+    injectR > injectL > pack
 
   def concreteType: F[Tp] -⚬ Tp =
     injectR > pack
@@ -195,6 +202,12 @@ class TypeInferencerImpl[F[_], P](
     merge: (Tp |*| Tp) -⚬ Tp,
     split: Tp -⚬ (Tp |*| Tp),
   ): (AbsTp[Tp] |*| AbsTp[Tp]) -⚬ Tp =
+    ???
+
+  private def mergeAbstractTypesProper(
+    merge: (Tp |*| Tp) -⚬ Tp,
+    split: Tp -⚬ (Tp |*| Tp),
+  ): (AbsTp.Proper[Tp] |*| AbsTp.Proper[Tp]) -⚬ Tp =
     λ { case (aLbl |*| aReq) |*| (bLbl |*| bReq) =>
       labels.compare(aLbl |*| bLbl) switch {
         case Left(lbl) =>
@@ -291,6 +304,11 @@ class TypeInferencerImpl[F[_], P](
   private def mergeConcreteAbstract(
     split: Tp -⚬ (Tp |*| Tp),
   ): (F[Tp] |*| AbsTp[Tp]) -⚬ Tp =
+    ???
+
+  private def mergeConcreteAbstractProper(
+    split: Tp -⚬ (Tp |*| Tp),
+  ): (F[Tp] |*| AbsTp.Proper[Tp]) -⚬ Tp =
     λ { case t |*| (lbl |*| req) =>
       val t1 |*| t2 = split(concreteType(t).waitFor(labels.neglect(lbl)))
       returning(
@@ -304,51 +322,8 @@ class TypeInferencerImpl[F[_], P](
   ): Tp -⚬ (Tp |*| Tp) = rec { self =>
     λ { t =>
       unpack(t) switch {
-        case Left(lbl |*| req) =>
-          val l1 |*| l2 = labels.split(lbl)
-          val t1 |*| resp1 = makeAbstractType(l1)
-          val t2 |*| resp2 = makeAbstractType(l2)
-          returning(
-            t1 |*| t2,
-            resp1.toEither switch {
-              case Left(t1) =>
-                resp2.toEither switch {
-                  case Left(t2) =>
-                    req grant merge(t1 |*| t2)
-                  case Right(req2) =>
-                    val t11 |*| t12 = self(t1)
-                    returning(
-                      req grant t11,
-                      injectL(t12) supplyTo req2,
-                    )
-                }
-              case Right(req1) =>
-                resp2.toEither switch {
-                  case Left(t2) =>
-                    val t21 |*| t22 = self(t2)
-                    returning(
-                      req grant t21,
-                      injectL(t22) supplyTo req1,
-                    )
-                  case Right(req2) =>
-                    req.decline switch {
-                      case Left(t) =>
-                        val t1 |*| t2 = self(t)
-                        returning(
-                          injectL(t1) supplyTo req1,
-                          injectL(t2) supplyTo req2,
-                        )
-                      case Right(p) =>
-                        val p1 |*| p2 = splitTypeParam(p)
-                        returning(
-                          injectR(p1) supplyTo req1,
-                          injectR(p2) supplyTo req2,
-
-                        )
-                    }
-                }
-            },
-          )
+        case Left(a) =>
+          splitAbstract(merge, self)(a)
         case Right(ft) =>
           val ft1 |*| ft2 = F.split(self)(ft)
           concreteType(ft1) |*| concreteType(ft2)
@@ -356,12 +331,74 @@ class TypeInferencerImpl[F[_], P](
     }
   }
 
+  private def splitAbstract(
+    merge: (Tp |*| Tp) -⚬ Tp,
+    split: Tp -⚬ (Tp |*| Tp),
+  ): AbsTp[Tp] -⚬ (Tp |*| Tp) =
+    ???
+
+  private def splitAbstractProper(
+    merge: (Tp |*| Tp) -⚬ Tp,
+    split: Tp -⚬ (Tp |*| Tp),
+  ): AbsTp.Proper[Tp] -⚬ (Tp |*| Tp) =
+    λ { case lbl |*| req =>
+      val l1 |*| l2 = labels.split(lbl)
+      val t1 |*| resp1 = makeAbstractType(l1)
+      val t2 |*| resp2 = makeAbstractType(l2)
+      returning(
+        t1 |*| t2,
+        resp1.toEither switch {
+          case Left(t1) =>
+            resp2.toEither switch {
+              case Left(t2) =>
+                req grant merge(t1 |*| t2)
+              case Right(req2) =>
+                val t11 |*| t12 = split(t1)
+                returning(
+                  req grant t11,
+                  injectL(t12) supplyTo req2,
+                )
+            }
+          case Right(req1) =>
+            resp2.toEither switch {
+              case Left(t2) =>
+                val t21 |*| t22 = split(t2)
+                returning(
+                  req grant t21,
+                  injectL(t22) supplyTo req1,
+                )
+              case Right(req2) =>
+                req.decline switch {
+                  case Left(t) =>
+                    val t1 |*| t2 = split(t)
+                    returning(
+                      injectL(t1) supplyTo req1,
+                      injectL(t2) supplyTo req2,
+                    )
+                  case Right(p) =>
+                    val p1 |*| p2 = splitTypeParam(p)
+                    returning(
+                      injectR(p1) supplyTo req1,
+                      injectR(p2) supplyTo req2,
+
+                    )
+                }
+            }
+        },
+      )
+    }
+
   private def awaitPosFst: (Done |*| Tp) -⚬ Tp =
     rec { self =>
       λ { case d |*| t =>
         unpack(t) switch {
-          case Left(lbl |*| req) => abstractType(lbl.waitFor(d) |*| req)
-          case Right(ft) => concreteType(F.awaitPosFst(self)(d |*| ft))
+          case Left(a) =>
+            a switch {
+              case Left(lbl |*| req) => abstractType(lbl.waitFor(d) |*| req)
+              case Right(lbl |*| t)  => preliminary(lbl |*| self(d |*| t))
+            }
+          case Right(ft) =>
+            concreteType(F.awaitPosFst(self)(d |*| ft))
         }
       }
     }
@@ -391,7 +428,7 @@ class TypeInferencerImpl[F[_], P](
   override def abstractTypeTap: Label -⚬ (Tp |*| Val[Type]) =
     λ { lbl =>
       val l1 |*| l2 = labels.split(lbl)
-      val res |*| resp =  makeAbstractType(l1)
+      val res |*| resp = makeAbstractType(l1)
         res |*| (resp.toEither switch {
           case Left(t) =>
             output(t) waitFor labels.neglect(l2)
@@ -404,10 +441,15 @@ class TypeInferencerImpl[F[_], P](
   override def close: OutboundType -⚬ Done = rec { self =>
     λ { t =>
       unpack(t) switch {
-        case Left(lbl |*| req) =>
-          req.decline switch {
-            case Left(t)  => join(self(t) |*| labels.neglect(lbl))
-            case Right(p) => closeTypeParam(lbl |*| p)
+        case Left(a) =>
+          a switch {
+            case Left(lbl |*| req) =>
+              req.decline switch {
+                case Left(t)  => join(self(t) |*| labels.neglect(lbl))
+                case Right(p) => closeTypeParam(lbl |*| p)
+              }
+            case Right(lbl |*| t) =>
+              join(labels.neglectPreliminary(lbl) |*| self(t))
           }
         case Right(ft) =>
           F.close(self)(ft)
@@ -443,41 +485,41 @@ class TypeInferencerImpl[F[_], P](
     type R = -[Tp] |+| Tp |+| (-[Tp] |*| Tp)
     type Q = NLabel =⚬ R
 
-    val mergeWithAbstractResponse: (Tp |*| (Label |*| Refinement.Response[Tp])) -⚬ R =
-      λ { case a |*| (bLbl |*| bResp) =>
-        // The first arg `a` must be scrutinized first, as it may contain
-        // refinement request corresponding to the second argument,
-        // in which case the response in the second argument
-        // will not resolve until request is responded.
+    // val mergeWithAbstractResponse: (Tp |*| (Label |*| Refinement.Response[Tp])) -⚬ R =
+    //   λ { case a |*| (bLbl |*| bResp) =>
+    //     // The first arg `a` must be scrutinized first, as it may contain
+    //     // refinement request corresponding to the second argument,
+    //     // in which case the response in the second argument
+    //     // will not resolve until request is responded.
 
-        unpack(a) switch {
-          case Left(aLbl |*| aReq) =>
-            labels.compare(aLbl |*| bLbl) switch {
-              case Left(lbl) =>
-                // labels are same
-                ???
-              case Right(res) =>
-                res switch {
-                  case Left(aLbl) =>
-                    ???
-                  case Right(bLbl) =>
-                    ???
-                }
-            }
-          case Right(fa) =>
-            ???
-        }
-      }
+    //     unpack(a) switch {
+    //       case Left(aLbl |*| aReq) =>
+    //         labels.compare(aLbl |*| bLbl) switch {
+    //           case Left(lbl) =>
+    //             // labels are same
+    //             ???
+    //           case Right(res) =>
+    //             res switch {
+    //               case Left(aLbl) =>
+    //                 ???
+    //               case Right(bLbl) =>
+    //                 ???
+    //             }
+    //         }
+    //       case Right(fa) =>
+    //         ???
+    //     }
+    //   }
 
-    val mergeInOut: ((Label |*| -[Tp]) |*| Tp) -⚬ R =
-      λ { case (aLbl |*| na) |*| b =>
-        val l1 |*| l2 = labels.split(aLbl)
-        val a |*| aResp = makeAbstractType(l1)
-        returning(
-          mergeWithAbstractResponse(b |*| (l2 |*| aResp)),
-          a supplyTo na,
-        )
-      }
+    // val mergeInOut: ((Label |*| -[Tp]) |*| Tp) -⚬ R =
+    //   λ { case (aLbl |*| na) |*| b =>
+    //     val l1 |*| l2 = labels.split(aLbl)
+    //     val a |*| aResp = makeAbstractType(l1)
+    //     returning(
+    //       mergeWithAbstractResponse(b |*| (l2 |*| aResp)),
+    //       a supplyTo na,
+    //     )
+    //   }
 
     val mergeQ: (Q |*| Q) -⚬ Q =
       λ { case f1 |*| f2 =>
@@ -643,11 +685,16 @@ class TypeInferencerImpl[F[_], P](
   override def tap: OutboundType -⚬ OutwardType = rec { self =>
     λ { t =>
       unpack(t) switch {
-        case Left(lbl |*| req) =>
-          import TypeOutlet.given
-          req.decline switch {
-            case Left(t)  => self(t) waitFor labels.neglect(lbl)
-            case Right(p) => TypeOutlet.typeParam(lbl |*| p)
+        case Left(a) =>
+          a switch {
+            case Left(lbl |*| req) =>
+              import TypeOutlet.given
+              req.decline switch {
+                case Left(t)  => self(t) waitFor labels.neglect(lbl)
+                case Right(p) => TypeOutlet.typeParam(lbl |*| p)
+              }
+            case Right(lbl |*| t) =>
+              self(t waitFor labels.neglectPreliminary(lbl))
           }
         case Right(ft) =>
           TypeOutlet.concreteType(F.map(self)(ft))
@@ -669,15 +716,22 @@ class TypeInferencerImpl[F[_], P](
   override def intOW: StarterKit.Done -⚬ OutwardType = UnhandledCase.raise("")
 
   override def output: Tp -⚬ Val[Type] = rec { self =>
-    unpack > dsl.either(
-      λ { case label |*| req => // abstract type
-        req.decline switch {
-          case Left(t)  => self(t) waitFor labels.neglect(label)
-          case Right(p) => outputTypeParam(label |*| p)
-        }
-      },
-      F.output(self),
-    )
+    λ { t =>
+      unpack(t) switch {
+        case Left(a) => // abstract type
+          a switch {
+            case Left(label |*| req) => // proper
+              req.decline switch {
+                case Left(t)  => self(t) waitFor labels.neglect(label)
+                case Right(p) => outputTypeParam(label |*| p)
+              }
+            case Right(label |*| t) => // preliminary
+              self(t) waitFor labels.neglectPreliminary(label)
+          }
+        case Right(ft) => // concrete type
+          F.output(self)(ft)
+      }
+    }
   }
 
   override def outputOW: OutwardType -⚬ Val[Type] = rec { self =>
