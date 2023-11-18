@@ -28,7 +28,7 @@ trait Tools { self =>
 
     val tools: Tools
 
-    def lower: tools.OutwardType -⚬ InterimType
+    def lower: tools.OutwardType -⚬ self.OutboundType
     def plant: InterimType -⚬ (self.OutboundType |*| self.OutwardType)
     def merge: (InterimType |*| InterimType) -⚬ InterimType
     def unnest: tools.OutboundType -⚬ self.OutboundType
@@ -41,6 +41,7 @@ trait Tools { self =>
 
   def label(v: AbstractTypeLabel): One -⚬ Label
   def abstractTypeTap: Label -⚬ (OutboundType |*| Val[Type])
+  def abstractLink: Label -⚬ (OutboundType |*| OutboundType)
   def mergeable: OutboundType -⚬ MergeableType
   def splittable: OutboundType -⚬ SplittableType
   // def newAbstractType: Label -⚬ (OutboundType |*| Val[Type] |*| OutboundType)
@@ -3890,7 +3891,7 @@ object Tools {
         override lazy val unnestOutward: tools.OutwardType -⚬ self.OutwardType =
           ConcreteType.abstractify[T] > TypeEmitter.generify
 
-        override def lower: tools.OutwardType -⚬ InterimType = UnhandledCase.raise("")
+        override def lower: tools.OutwardType -⚬ OutboundType = UnhandledCase.raise("")
 
         override def merge: (InterimType |*| InterimType) -⚬ InterimType = UnhandledCase.raise("")
 
@@ -3899,6 +3900,8 @@ object Tools {
 
     override lazy val abstractTypeTap: Label -⚬ (TypeEmitter[T] |*| Val[Type]) =
       TypeEmitter.abstractTypeTap(outputT)
+
+    override def abstractLink: Label -⚬ (OutboundType |*| OutboundType) = ???
 
     // override lazy val newAbstractType: Label -⚬ (TypeEmitter[T] |*| Val[Type] |*| TypeEmitter[T]) =
     //   TypeEmitter.newAbstractType(mergeT, outputT)

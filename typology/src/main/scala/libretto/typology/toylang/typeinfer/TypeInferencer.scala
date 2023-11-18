@@ -42,6 +42,9 @@ trait TypeOps[F[_]] {
 
   def pair[A]: (A |*| A) -⚬ F[A]
   def recCall[A]: (A |*| A) -⚬ F[A]
+
+  def isPair[A]: F[A] -⚬ (F[A] |+| (A |*| A))
+  def isRecCall[A]: F[A] -⚬ (F[A] |+| (A |*| A))
 }
 
 object TypeInferencer {
@@ -90,27 +93,59 @@ object TypeInferencer {
       override def pair[A]: (A |*| A) -⚬ NonAbstractTypeF[A] =
         NonAbstractType.pair
 
+      override def isPair[A]: NonAbstractTypeF[A] -⚬ (NonAbstractTypeF[A] |+| (A |*| A)) =
+        NonAbstractType.isPair
+
       override def recCall[A]: (A |*| A) -⚬ NonAbstractTypeF[A] =
         NonAbstractType.recCall
+
+      override def isRecCall[A]: NonAbstractTypeF[A] -⚬ (NonAbstractTypeF[A] |+| (A |*| A)) =
+        NonAbstractType.isRecCall
     }
 
   def instance: TypeInferencer =
     TypeInferencerImpl[NonAbstractTypeF, Done](
       labels,
       typeOps,
-      // mergeTypeParams = join,
       splitTypeParam = fork,
+      typeParamLink = labels.neglect > fork,
       typeParamTap = labels.unwrapOriginal > mapVal(x => Type.abstractType(x)) > signalPosFst,
       outputTypeParam = fst(labels.unwrapOriginal > mapVal(x => Type.abstractType(x))) > awaitPosSnd,
       closeTypeParam = fst(labels.neglect) > join,
     )
 }
 
-class TypeInferencerImpl[F[_], P](
-  val labels: Labels[Either[ScalaTypeParam, AbstractTypeLabel]], // TODO: make a type parameter
+object TypeInferencerImpl {
+  def apply[F[_], P](
+    labels: Labels[Either[ScalaTypeParam, AbstractTypeLabel]],
+    F: TypeOps[F],
+    splitTypeParam: P -⚬ (P |*| P),
+    typeParamLink: labels.Label -⚬ (P |*| P),
+    typeParamTap: labels.Label -⚬ (P |*| Val[Type]),
+    outputTypeParam: (labels.Label |*| P) -⚬ Val[Type],
+    closeTypeParam: (labels.Label |*| P) -⚬ Done,
+  ): TypeInferencerImpl[F, P, labels.type] =
+    new TypeInferencerImpl(
+      labels,
+      F,
+      splitTypeParam,
+      typeParamLink,
+      typeParamTap,
+      outputTypeParam,
+      closeTypeParam,
+    )
+}
+
+class TypeInferencerImpl[
+  F[_],
+  P,
+  Lbls <: Labels[Either[ScalaTypeParam, AbstractTypeLabel]], // TODO: make a type parameter
+](
+  val labels: Lbls,
   F: TypeOps[F],
   // mergeTypeParams: (P |*| P) -⚬ P,
   splitTypeParam: P -⚬ (P |*| P),
+  typeParamLink: labels.Label -⚬ (P |*| P),
   typeParamTap: labels.Label -⚬ (P |*| Val[Type]),
   outputTypeParam: (labels.Label |*| P) -⚬ Val[Type],
   closeTypeParam: (labels.Label |*| P) -⚬ Done,
@@ -163,7 +198,7 @@ class TypeInferencerImpl[F[_], P](
 
   object AbsTp {
     type Proper[T] = Label |*| Refinement.Request[T]
-    type Prelim[T] = labels.Preliminary |*| T
+    type Prelim[T] = Label |*| T
   }
   type AbsTp[T] = AbsTp.Proper[T] |+| AbsTp.Prelim[T]
 
@@ -179,7 +214,7 @@ class TypeInferencerImpl[F[_], P](
   def abstractType: (Label |*| Refinement.Request[Tp]) -⚬ Tp =
     injectL > injectL > pack
 
-  def preliminary: (labels.Preliminary |*| Tp) -⚬ Tp =
+  def preliminary: (Label |*| Tp) -⚬ Tp =
     injectR > injectL > pack
 
   def concreteType: F[Tp] -⚬ Tp =
@@ -232,14 +267,14 @@ class TypeInferencerImpl[F[_], P](
             case Left(b) =>
               mergeAbstractTypesProper(merge, split)(a |*| b)
             case Right(b) =>
-              (a |*| b) :>> crashNow(s"TODO (at ${summon[SourcePos]})")
+              mergeAbstractProperPreliminary(merge, split)(a |*| b)
           }
         case Right(a) =>
           b switch {
             case Left(b) =>
               (a |*| b) :>> crashNow(s"TODO (at ${summon[SourcePos]})")
             case Right(b) =>
-              (a |*| b) :>> crashNow(s"TODO (at ${summon[SourcePos]})")
+              mergePreliminaries(merge)(a |*| b)
           }
       }
     }
@@ -293,11 +328,11 @@ class TypeInferencerImpl[F[_], P](
           // )
 
           // Labels are same, i.e. both refer to the same type.
-          // Propagate one of them (arbitrary choice), close the other.
+          // Propagate one (arbitrary) of them, close the other.
           val aLbl |*| bLbl = labels.split(lbl)
           returning(
             abstractType(aLbl |*| aReq),
-            hackyDiscard(bReq.close(bLbl, close))
+            hackyDiscard(bReq.close(bLbl, close)),
           )
 
         case Right(res) =>
@@ -358,6 +393,55 @@ class TypeInferencerImpl[F[_], P](
       }
     }
 
+  private def mergeAbstractProperPreliminary(
+    merge: (Tp |*| Tp) -⚬ Tp,
+    split: Tp -⚬ (Tp |*| Tp),
+  ): (AbsTp.Proper[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
+    λ { case (aLbl |*| aReq) |*| (bLbl |*| b) =>
+      val bl1 |*| bl2 = labels.split(bLbl)
+      labels.compare(aLbl |*| bl1) switch {
+        case Left(lbl) =>
+          // Labels are equal, refer to the same type.
+          // Close the refinement request, propagate the preliminary.
+          returning(
+            b,
+            hackyDiscard(aReq.close(lbl, close) waitFor labels.neglect(bl2)),
+          )
+        case Right(res) =>
+          res switch {
+            case Left(aLbl) =>
+              // refinement request wins over preliminary,
+              // but must still propagate the preliminary immediately
+              preliminary(bl2 |*| merge(abstractType(aLbl |*| aReq) |*| b))
+            case Right(bLbl) =>
+              // preliminary refines the refinement request
+              val t1 |*| t2 = split(preliminary(bLbl |*| b))
+              returning(
+                t1 waitFor labels.neglect(bl2),
+                aReq grant t2,
+              )
+          }
+      }
+    }
+
+  private def mergePreliminaries(
+    merge: (Tp |*| Tp) -⚬ Tp,
+  ): (AbsTp.Prelim[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
+    λ { case (aLbl |*| a) |*| (bLbl |*| b) =>
+      labels.compare(aLbl |*| bLbl) switch {
+        case Left(lbl) =>
+          // labels are same
+          preliminary(lbl |*| merge(a |*| b))
+        case Right(res) =>
+          res switch {
+            case Left(aLbl) =>
+              preliminary(aLbl |*| merge(a |*| b))
+            case Right(bLbl) =>
+              preliminary(bLbl |*| merge(a |*| b))
+          }
+      }
+    }
+
   private def mergeConcreteAbstract(
     merge: (Tp |*| Tp) -⚬ Tp,
     split: Tp -⚬ (Tp |*| Tp),
@@ -385,9 +469,9 @@ class TypeInferencerImpl[F[_], P](
   private def mergeConcreteAbstractPrelim(
     merge: (Tp |*| Tp) -⚬ Tp,
   ): (F[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
-    // ignore the preliminary placeholder, merge with the proper type
+    // ignore the preliminary placeholder, merge with its follow-up
     λ { case ft |*| (lbl |*| t) =>
-      merge(concreteType(ft) |*| t.waitFor(labels.neglectPreliminary(lbl)))
+      merge(concreteType(ft) |*| t.waitFor(labels.neglect(lbl)))
     }
 
   private def split_(
@@ -419,7 +503,7 @@ class TypeInferencerImpl[F[_], P](
     split: Tp -⚬ (Tp |*| Tp),
   ): AbsTp.Prelim[Tp] -⚬ (Tp |*| Tp) =
     λ { case lbl |*| t =>
-      val l1 |*| l2 = labels.splitPreliminary(lbl)
+      val l1 |*| l2 = labels.split(lbl)
       val t1 |*| t2 = split(t)
       preliminary(l1 |*| t1) |*| preliminary(l2 |*| t2)
     }
@@ -510,7 +594,18 @@ class TypeInferencerImpl[F[_], P](
   override def pair: (OutboundType |*| OutboundType) -⚬ OutboundType =
     F.pair > concreteType
 
-  override def isRecCall: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) = UnhandledCase.raise("")
+  override def isRecCall: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) =
+    λ { t =>
+      TypeOutlet.unpack(t) switch {
+        case Left(p) =>
+          injectL(TypeOutlet.typeParam(p))
+        case Right(ft) =>
+          F.isRecCall(ft) switch {
+            case Left(ft)       => injectL(TypeOutlet.concreteType(ft))
+            case Right(a |*| b) => injectR(a |*| b)
+          }
+      }
+    }
 
   override def abstractTypeTap: Label -⚬ (Tp |*| Val[Type]) =
     λ { lbl =>
@@ -525,6 +620,39 @@ class TypeInferencerImpl[F[_], P](
         })
     }
 
+  override def abstractLink: Label -⚬ (Tp |*| Tp) =
+    λ { lbl =>
+      val l1 |*| l2 = labels.split(lbl)
+      val l3 |*| l4 = labels.split(l2)
+      val t1 |*| resp = makeAbstractType(l1)
+      val nt2 |*| t2 = curry(preliminary)(l3)
+      returning(
+        t1 |*| t2,
+        resp.toEither switch {
+          case Left(t) =>
+            // TODO: occurs check for `lbl` in `t`
+            t.waitFor(labels.neglect(l4)) supplyTo nt2
+          case Right(req1) =>
+            val l5 |*| l6 = labels.split(l4)
+            val t2 |*| resp = makeAbstractType(l5)
+            returning(
+              resp.toEither switch {
+                case Left(t) =>
+                  // TODO: occurs check for `lbl` in `t`
+                  injectL(t waitFor labels.neglect(l6)) supplyTo req1
+                case Right(req2) =>
+                  val p1 |*| p2 = typeParamLink(l6)
+                  returning(
+                    injectR(p1) supplyTo req1,
+                    injectR(p2) supplyTo req2,
+                  )
+              },
+              t2 supplyTo nt2,
+            )
+        },
+      )
+    }
+
   override def close: OutboundType -⚬ Done = rec { self =>
     λ { t =>
       unpack(t) switch {
@@ -536,7 +664,7 @@ class TypeInferencerImpl[F[_], P](
                 case Right(p) => closeTypeParam(lbl |*| p)
               }
             case Right(lbl |*| t) =>
-              join(labels.neglectPreliminary(lbl) |*| self(t))
+              join(labels.neglect(lbl) |*| self(t))
           }
         case Right(ft) =>
           F.close(self)(ft)
@@ -598,50 +726,50 @@ class TypeInferencerImpl[F[_], P](
     //     }
     //   }
 
-    val mergeInOut: (labels.Preliminary |*| -[Tp] |*| Tp) -⚬ R = rec { mergeInOut =>
-      λ { case p |*| na |*| b =>
-        val p1 |*| p2 = labels.splitPreliminary(p)
-        val nt1 |*| t1 = constant(demand[Tp])
-        returning(
-          unpack(b) switch {
-            case Left(b) =>
-              b switch {
-                case Left(b) => // abstract type proper
-                  // TODO: must check for presence of `p2` inside `a`
-                  val t1 |*| t2 = split(abstractType(b) waitFor labels.neglectPreliminary(p2))
-                  returning(
-                    injectL(injectR(t2)),
-                    t1 supplyTo nt1,
-                  )
-                case Right(lbl |*| t) => // preliminary type
-                  labels.testEqual(p2 |*| lbl) switch {
-                    case Left(p) =>
-                      // same preliminary type; close `t`, propagate the type demand
-                      val nt2 |*| t1 = λ.closure { (u: $[Tp]) =>
-                        u.waitFor(join(labels.neglectPreliminary(p) |*| self.close(t)))
-                      }
-                      returning(
-                        injectL(injectL(nt2)),
-                        t1 supplyTo nt1,
-                      )
-                    case Right(p2 |*| lbl) =>
-                      // different preliminary type
-                      // TODO: Why is it safe to ignore the preliminary label and wait for the next type?
-                      mergeInOut(p2.waitFor(labels.neglectPreliminary(lbl)) |*| nt1 |*| t)
-                  }
-              }
-            case Right(ft) =>
-              // TODO: must check for presence of `p2` inside `ft`
-              val t1 |*| t2 = split(concreteType(ft) waitFor labels.neglectPreliminary(p2))
-              returning(
-                injectL(injectR(t2)),
-                t1 supplyTo nt1,
-              )
-          },
-          preliminary(p1 |*| t1) supplyTo na,
-        )
-      }
-    }
+    // val mergeInOut: (labels.Preliminary |*| -[Tp] |*| Tp) -⚬ R = rec { mergeInOut =>
+    //   λ { case p |*| na |*| b =>
+    //     val p1 |*| p2 = labels.splitPreliminary(p)
+    //     val nt1 |*| t1 = constant(demand[Tp])
+    //     returning(
+    //       unpack(b) switch {
+    //         case Left(b) =>
+    //           b switch {
+    //             case Left(b) => // abstract type proper
+    //               // TODO: must check for presence of `p2` inside `a`
+    //               val t1 |*| t2 = split(abstractType(b) waitFor labels.neglectPreliminary(p2))
+    //               returning(
+    //                 injectL(injectR(t2)),
+    //                 t1 supplyTo nt1,
+    //               )
+    //             case Right(lbl |*| t) => // preliminary type
+    //               labels.testEqual(p2 |*| lbl) switch {
+    //                 case Left(p) =>
+    //                   // same preliminary type; close `t`, propagate the type demand
+    //                   val nt2 |*| t1 = λ.closure { (u: $[Tp]) =>
+    //                     u.waitFor(join(labels.neglectPreliminary(p) |*| self.close(t)))
+    //                   }
+    //                   returning(
+    //                     injectL(injectL(nt2)),
+    //                     t1 supplyTo nt1,
+    //                   )
+    //                 case Right(p2 |*| lbl) =>
+    //                   // different preliminary type
+    //                   // TODO: Why is it safe to ignore the preliminary label and wait for the next type?
+    //                   mergeInOut(p2.waitFor(labels.neglectPreliminary(lbl)) |*| nt1 |*| t)
+    //               }
+    //           }
+    //         case Right(ft) =>
+    //           // TODO: must check for presence of `p2` inside `ft`
+    //           val t1 |*| t2 = split(concreteType(ft) waitFor labels.neglectPreliminary(p2))
+    //           returning(
+    //             injectL(injectR(t2)),
+    //             t1 supplyTo nt1,
+    //           )
+    //       },
+    //       preliminary(p1 |*| t1) supplyTo na,
+    //     )
+    //   }
+    // }
 
     // val mergeQ: (Q |*| Q) -⚬ Q =
     //   λ { case f1 |*| f2 =>
@@ -759,6 +887,19 @@ class TypeInferencerImpl[F[_], P](
         (nl1 |*| r1) |*| (nl2 |*| r2)
       }
 
+    val qLink: NLabel -⚬ (Q |*| Q) =
+      λ { lbl =>
+        val nl1 |*| l1 = constant(demand[NLabel])
+        val nl2 |*| l2 = constant(demand[NLabel])
+        val ntp |*| tp = constant(demand[Tp])
+        val tp1 = tp waitFor joinAll(
+          nl.labels.neglect(lbl),
+          nl.labels.neglect(l1),
+          nl.labels.neglect(l2),
+        )
+        (nl1 |*| injectL(injectL(ntp))) |*| (nl2 |*| injectL(injectR(tp1)))
+      }
+
     val qTap: NLabel -⚬ (Q |*| Val[Type]) =
       λ { case l0 =>
         val res0: $[NLabel =⚬ (R |*| Val[Type])] =
@@ -827,19 +968,43 @@ class TypeInferencerImpl[F[_], P](
       }
 
     new Nested {
-      override val tools: TypeInferencerImpl[F, Q] =
-        new TypeInferencerImpl[F, Q](
+      override val tools: TypeInferencerImpl[F, Q, nl.labels.type] =
+        TypeInferencerImpl[F, Q](
           nl.labels,
           F,
           // mergeQ,
           splitQ,
+          qLink,
           qTap,
           outputQ,
           closeQ,
         )
 
-      override def lower: tools.OutwardType -⚬ InterimType =
-        UnhandledCase.raise("")
+      override def lower: tools.TypeOutlet -⚬ Tp = rec { self =>
+        λ { t =>
+          tools.TypeOutlet.unpack(t) switch {
+            case Left(lbl |*| f) =>
+              val l1 |*| l2 = tools.labels.split(lbl)
+              f(l1) switch {
+                case Left(r) =>
+                  r switch {
+                    case Left(nt) =>
+                      val t1 |*| t2 = abstractLink(nl.promote(l2))
+                      returning(
+                        t1,
+                        t2 supplyTo nt,
+                      )
+                    case Right(t) =>
+                      t waitFor nl.labels.neglect(l2)
+                  }
+                case Right(nt |*| t) =>
+                  (l2 |*| nt |*| t) :>> crashNow(s"TODO: eliminate (at ${summon[SourcePos]})")
+              }
+            case Right(ft) =>
+              concreteType(F.map(self)(ft))
+          }
+        }
+      }
 
       override def plant: InterimType -⚬ (OutboundType |*| OutwardType) =
         UnhandledCase.raise("")
@@ -847,7 +1012,9 @@ class TypeInferencerImpl[F[_], P](
       override def merge: (InterimType |*| InterimType) -⚬ InterimType =
         UnhandledCase.raise("")
 
-      override def mergeLower: (tools.OutwardType |*| tools.OutwardType) -⚬ OutboundType = UnhandledCase.raise("")
+      override def mergeLower: (tools.OutwardType |*| tools.OutwardType) -⚬ OutboundType =
+        λ { case a |*| b => self.merge(lower(a) |*| lower(b)) }
+
       override def unnestM: tools.MergeableType -⚬ OutboundType = unnest
 
       override def mergeZap: (tools.OutwardType |*| tools.OutwardType) -⚬ Val[Type] = UnhandledCase.raise("")
@@ -856,7 +1023,8 @@ class TypeInferencerImpl[F[_], P](
 
       override def unnestS: tools.SplittableType -⚬ OutboundType = unnest
 
-      override def unnest: tools.OutboundType -⚬ OutboundType = UnhandledCase.raise("")
+      override def unnest: tools.OutboundType -⚬ OutboundType =
+        tools.tap > lower
 
     }
   }
@@ -873,7 +1041,7 @@ class TypeInferencerImpl[F[_], P](
                 case Right(p) => TypeOutlet.typeParam(lbl |*| p)
               }
             case Right(lbl |*| t) =>
-              self(t waitFor labels.neglectPreliminary(lbl))
+              self(t waitFor labels.neglect(lbl))
           }
         case Right(ft) =>
           TypeOutlet.concreteType(F.map(self)(ft))
@@ -905,7 +1073,7 @@ class TypeInferencerImpl[F[_], P](
                 case Right(p) => outputTypeParam(label |*| p)
               }
             case Right(label |*| t) => // preliminary
-              self(t) waitFor labels.neglectPreliminary(label)
+              self(t) waitFor labels.neglect(label)
           }
         case Right(ft) => // concrete type
           F.output(self)(ft)
@@ -920,7 +1088,18 @@ class TypeInferencerImpl[F[_], P](
     )
   }
 
-  override def isPair: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) = UnhandledCase.raise("")
+  override def isPair: OutwardType -⚬ (OutwardType |+| (OutwardType |*| OutwardType)) =
+    λ { t =>
+      TypeOutlet.unpack(t) switch {
+        case Left(p) =>
+          injectL(TypeOutlet.typeParam(p))
+        case Right(ft) =>
+          F.isPair(ft) switch {
+            case Left(ft)         => injectL(TypeOutlet.concreteType(ft))
+            case Right(t1 |*| t2) => injectR(t1 |*| t2)
+          }
+      }
+    }
 
   override def mergeable: OutboundType -⚬ MergeableType = id
 
