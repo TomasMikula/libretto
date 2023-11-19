@@ -681,122 +681,72 @@ class TypeInferencerImpl[
 
     type NLabel = nl.labels.Label
 
-    type R = -[Tp] |+| Tp
-    type Q = NLabel =⚬ R
+    type Q = -[Tp] |+| Tp
 
-    def splitQ0: (NLabel |*| NLabel |*| Q) -⚬ (R |*| R) =
-      λ { case l1 |*| l2 |*| f =>
-        nl.labels.compare(l1 |*| l2) switch {
-          case Left(l) =>
-            // labels are the same
-            f(l) switch {
-              case Left(nt) =>
-                val nt1 |*| nt2 = contrapositive(self.merge)(nt) :>> distributeInversion
-                injectL(nt1) |*| injectL(nt2)
-              case Right(t) =>
-                val t1 |*| t2 = self.split(t)
-                injectR(t1) |*| injectR(t2)
-            }
-          case Right(res) =>
-            def go: R -⚬ (R |*| R) =
-              λ { r =>
-                r switch {
-                  case Left(nt) =>
-                    val nt1 |*| t1 = constant(demand[Tp])
-                    val t |*| t2 = self.split(t1)
-                    returning(
-                      injectL(nt1) |*| injectR(t2),
-                      t supplyTo nt,
-                    )
-                  case Right(t) =>
-                    val t1 |*| t2 = self.split(t)
-                    injectR(t1) |*| injectR(t2)
-                }
-              }
-            res switch {
-              case Left(l1) =>
-                go(f(l1))
-              case Right(l2) =>
-                go(f(l2)) :>> swap
-            }
+    def splitQ: Q -⚬ (Q |*| Q) =
+      λ { q =>
+        q switch {
+          case Left(nt) =>
+            val nt1 |*| nt2 = contrapositive(self.merge)(nt) :>> distributeInversion
+            injectL(nt1) |*| injectL(nt2)
+          case Right(t) =>
+            val t1 |*| t2 = self.split(t)
+            injectR(t1) |*| injectR(t2)
         }
-      }
-
-    val splitQ: Q -⚬ (Q |*| Q) =
-      λ { f =>
-        val nl1 |*| l1 = constant(demand[NLabel])
-        val nl2 |*| l2 = constant(demand[NLabel])
-        val r1 |*| r2 = splitQ0(l1 |*| l2 |*| f)
-        (nl1 |*| r1) |*| (nl2 |*| r2)
       }
 
     val qLink: NLabel -⚬ (Q |*| Q) =
       λ { lbl =>
-        val nl1 |*| l1 = constant(demand[NLabel])
-        val nl2 |*| l2 = constant(demand[NLabel])
         val ntp |*| tp = constant(demand[Tp])
-        val tp1 = tp waitFor joinAll(
-          nl.labels.neglect(lbl),
-          nl.labels.neglect(l1),
-          nl.labels.neglect(l2),
-        )
-        (nl1 |*| injectL(ntp)) |*| (nl2 |*| injectR(tp1))
+        val tp1 = tp waitFor nl.labels.neglect(lbl)
+        injectL(ntp) |*| injectR(tp1)
       }
 
     val qTap: NLabel -⚬ (Q |*| Val[Type]) =
       λ { case l0 =>
-        val res0: $[NLabel =⚬ (R |*| Val[Type])] =
-          λ.closure { l1 =>
-            val nt |*| t = constant(demand[Tp])
-            injectL(nt) |*| self.output(t).waitFor(join(nl.labels.neglect(l0) |*| nl.labels.neglect(l1)))
-          }
-        res0 :>> assocRL
+        val nt |*| t = constant(demand[Tp])
+        injectL(nt) |*| self.output(t).waitFor(nl.labels.neglect(l0))
       }
 
     val outputQ: (NLabel |*| Q) -⚬ Val[Type] = rec { outputQ =>
-      λ { case lbl |*| (nLbl |*| q) =>
-        val lbl1 |*| lbl2 = nl.labels.split(lbl)
-        returning(
-          q switch {
-            case Left(nt) =>
-              val l1 |*| l2 = nl.promote(lbl2) :>> labels.split
-              val t |*| resp = makeAbstractType(l1)
-              returning(
-                resp.toEither switch {
-                  case Left(t) =>
-                    self.output(t)
-                      .waitFor(labels.neglect(l2))
-                  case Right(req) =>
-                    val p |*| res = typeParamTap(l2)
-                    returning(
-                      res,
-                      injectR(p) supplyTo req,
-                    )
-                },
-                t supplyTo nt,
-              )
-            case Right(t) =>
-              self.output(t)
-                .waitFor(nl.labels.neglect(lbl2))
-          },
-          lbl1 supplyTo nLbl,
-        )
+      λ { case lbl |*| q =>
+        q switch {
+          case Left(nt) =>
+            val l1 |*| l2 = nl.promote(lbl) :>> labels.split
+            val t |*| resp = makeAbstractType(l1)
+            returning(
+              resp.toEither switch {
+                case Left(t) =>
+                  self.output(t)
+                    .waitFor(labels.neglect(l2))
+                case Right(req) =>
+                  val p |*| res = typeParamTap(l2)
+                  returning(
+                    res,
+                    injectR(p) supplyTo req,
+                  )
+              },
+              t supplyTo nt,
+            )
+          case Right(t) =>
+            self.output(t)
+              .waitFor(nl.labels.neglect(lbl))
+        }
       }
     }
 
     val closeQ: (NLabel |*| Q) -⚬ Done =
-      λ { case lbl |*| f =>
-        val l1 |*| l2 = nl.labels.split(lbl)
-        f(l1) switch {
+      λ { case lbl |*| q =>
+        q switch {
           case Left(nt) =>
-            val l3 |*| l4 = labels.split(nl.promote(l2))
-            val t |*| resp = makeAbstractType(l3)
+            val l1 |*| l2 = labels.split(nl.promote(lbl))
+            val t |*| resp = makeAbstractType(l1)
             returning(
-              resp.close(l4, close),
+              resp.close(l2, close),
               t supplyTo nt,
             )
           case Right(t) =>
-            join(close(t) |*| nl.labels.neglect(l2))
+            join(close(t) |*| nl.labels.neglect(lbl))
         }
       }
 
@@ -815,17 +765,16 @@ class TypeInferencerImpl[
       override def lower: tools.TypeOutlet -⚬ Tp = rec { self =>
         λ { t =>
           tools.TypeOutlet.unpack(t) switch {
-            case Left(lbl |*| f) =>
-              val l1 |*| l2 = tools.labels.split(lbl)
-              f(l1) switch {
+            case Left(lbl |*| q) =>
+              q switch {
                 case Left(nt) =>
-                  val t1 |*| t2 = abstractLink(nl.promote(l2))
+                  val t1 |*| t2 = abstractLink(nl.promote(lbl))
                   returning(
                     t1,
                     t2 supplyTo nt,
                   )
                 case Right(t) =>
-                  t waitFor nl.labels.neglect(l2)
+                  t waitFor nl.labels.neglect(lbl)
               }
             case Right(ft) =>
               concreteType(F.map(self)(ft))
