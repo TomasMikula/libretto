@@ -34,6 +34,7 @@ trait Labels[V] {
   given junctionTParamLabel: Junction.Positive[TParamLabel]
 
   def show: Label -⚬ Val[String]
+  def alsoShow: Label -⚬ (Label |*| Val[String])
   def alsoDebugPrint(f: String => String): Label -⚬ Label
 
   def alsoDebugPrintTP(f: String => String): TParamLabel -⚬ TParamLabel
@@ -232,6 +233,8 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
       println(s"$x converted to string")
       res
     )
+  override val alsoShow: Label -⚬ (Label |*| Val[String]) =
+    mapVal((x: Lbl[V]) => (x, x.toString)) > liftPair
   val unwrapOriginal: Label -⚬ Val[V] =
     mapVal(_.originalBase)
   val unwrapOriginalTP: TParamLabel -⚬ Val[V] =

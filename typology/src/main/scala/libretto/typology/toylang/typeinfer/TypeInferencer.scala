@@ -272,7 +272,7 @@ class TypeInferencerImpl[
         case Right(a) =>
           b switch {
             case Left(b) =>
-              (a |*| b) :>> crashNow(s"TODO (at ${summon[SourcePos]})")
+              mergeAbstractProperPreliminary(merge, split)(b |*| a)
             case Right(b) =>
               mergePreliminaries(merge)(a |*| b)
           }
@@ -398,7 +398,9 @@ class TypeInferencerImpl[
     split: Tp -⚬ (Tp |*| Tp),
   ): (AbsTp.Proper[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
     λ { case (aLbl |*| aReq) |*| (bLbl |*| b) =>
+      (labels.alsoShow(aLbl) |*| labels.alsoShow(bLbl)) match { case (aLbl |*| as) |*| (bLbl |*| bs) =>
       val bl1 |*| bl2 = labels.split(bLbl)
+      returning(
       labels.compare(aLbl |*| bl1) switch {
         case Left(lbl) =>
           // Labels are equal, refer to the same type.
@@ -421,6 +423,9 @@ class TypeInferencerImpl[
                 aReq grant t2,
               )
           }
+      },
+      (as ** bs) :>> printLine { case (as, bs) => s"Merging PROPER $as and PRELIMINARY $bs" } :>> hackyDiscard,
+      )
       }
     }
 
@@ -428,6 +433,8 @@ class TypeInferencerImpl[
     merge: (Tp |*| Tp) -⚬ Tp,
   ): (AbsTp.Prelim[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
     λ { case (aLbl |*| a) |*| (bLbl |*| b) =>
+      (labels.alsoShow(aLbl) |*| labels.alsoShow(bLbl)) match { case (aLbl |*| as) |*| (bLbl |*| bs) =>
+      returning(
       labels.compare(aLbl |*| bLbl) switch {
         case Left(lbl) =>
           // labels are same
@@ -435,10 +442,17 @@ class TypeInferencerImpl[
         case Right(res) =>
           res switch {
             case Left(aLbl) =>
-              preliminary(aLbl |*| merge(a |*| b))
+              val al1 |*| al2 = labels.split(aLbl)
+              val a1 = preliminary(al1 |*| a) // winner (`a`) must keep checking for its own label in the loser (`b`)
+              preliminary(al2 |*| merge(a1 |*| b))
             case Right(bLbl) =>
-              preliminary(bLbl |*| merge(a |*| b))
+              val bl1 |*| bl2 = labels.split(bLbl)
+              val b1 = preliminary(bl1 |*| b) // winner (`b`) must keep checking for its own label in the loser (`a`)
+              preliminary(bl2 |*| merge(a |*| b1))
           }
+      },
+      (as ** bs) :>> printLine { case (as, bs) => s"Merging PRELIMINARIES $as and $bs" } :>> hackyDiscard,
+      )
       }
     }
 
@@ -622,7 +636,8 @@ class TypeInferencerImpl[
 
   override def abstractLink: Label -⚬ (Tp |*| Tp) =
     λ { lbl =>
-      val l1 |*| l2 = labels.split(lbl)
+      val lbl1 = labels.alsoDebugPrint(s => s"Creating link for $s")(lbl)
+      val l1 |*| l2 = labels.split(lbl1)
       val l3 |*| l4 = labels.split(l2)
       val t1 |*| resp = makeAbstractType(l1)
       val nt2 |*| t2 = curry(preliminary)(l3)
@@ -631,17 +646,21 @@ class TypeInferencerImpl[
         resp.toEither switch {
           case Left(t) =>
             // TODO: occurs check for `lbl` in `t`
-            t.waitFor(labels.neglect(l4)) supplyTo nt2
+            val l4_ = l4 :>> labels.alsoDebugPrint(s => s"Link-req of $s returned as REFINED")
+            t.waitFor(labels.neglect(l4_)) supplyTo nt2
           case Right(req1) =>
+            val l4_ = l4 :>> labels.alsoDebugPrint(s => s"Link-req of $s returned as DECLINED. Sending opposite request.")
             val l5 |*| l6 = labels.split(l4)
             val t2 |*| resp = makeAbstractType(l5)
             returning(
               resp.toEither switch {
                 case Left(t) =>
                   // TODO: occurs check for `lbl` in `t`
-                  injectL(t waitFor labels.neglect(l6)) supplyTo req1
+                  val l6_ = l6 :>> labels.alsoDebugPrint(s => s"Op-req of $s returned as REFINED")
+                  injectL(t waitFor labels.neglect(l6_)) supplyTo req1
                 case Right(req2) =>
-                  val p1 |*| p2 = typeParamLink(l6)
+                  val l6_ = l6 :>> labels.alsoDebugPrint(s => s"Op-req of $s returned as DECLINED")
+                  val p1 |*| p2 = typeParamLink(l6_)
                   returning(
                     injectR(p1) supplyTo req1,
                     injectR(p2) supplyTo req2,

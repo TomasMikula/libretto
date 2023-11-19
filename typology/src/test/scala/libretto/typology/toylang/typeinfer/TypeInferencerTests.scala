@@ -402,10 +402,10 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
           for {
             ts <- expectVal(port)
             ((c, a), (t1, t2)) = ts
-            _ <- assertAbstractEquals(c, 1)
-            _ <- assertAbstractEquals(a, 1)
-            _ <- assertAbstractEquals(t1, 1)
-            _ <- assertAbstractEquals(t2, 1)
+            _ <- assertAbstractEquals(c, 2)
+            _ <- assertAbstractEquals(a, 2)
+            _ <- assertAbstractEquals(t1, 2)
+            _ <- assertAbstractEquals(t2, 2)
           } yield ()
         },
 
