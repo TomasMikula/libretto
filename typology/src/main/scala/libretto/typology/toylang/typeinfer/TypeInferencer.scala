@@ -11,7 +11,6 @@ import libretto.typology.toylang.types.{AbstractTypeLabel, ScalaTypeParam}
 import libretto.typology.toylang.typeinfer.Tools.ToolsImpl.NonAbstractTypeF
 import libretto.typology.toylang.typeinfer.Tools.ToolsImpl.NonAbstractType
 import scala.annotation.targetName
-// import libretto.typology.toylang.types.{AbstractTypeLabel, ScalaTypeParam, TypeAlgebra, TypeTag}
 
 trait TypeInferencer extends Tools {
   type Tp
@@ -143,7 +142,6 @@ class TypeInferencerImpl[
 ](
   val labels: Lbls,
   F: TypeOps[F],
-  // mergeTypeParams: (P |*| P) -⚬ P,
   splitTypeParam: P -⚬ (P |*| P),
   typeParamLink: labels.Label -⚬ (P |*| P),
   typeParamTap: labels.Label -⚬ (P |*| Val[Type]),
@@ -294,39 +292,6 @@ class TypeInferencerImpl[
     λ { case (aLbl |*| aReq) |*| (bLbl |*| bReq) =>
       labels.compare(aLbl |*| bLbl) switch {
         case Left(lbl) =>
-          // // labels are same => neither refines the other
-          // val res |*| resp = makeAbstractType(lbl)
-          // returning(
-          //   res,
-          //   resp.toEither switch {
-          //     case Left(t) =>
-          //       val t1 |*| t2 = split(t)
-          //       returning(
-          //         aReq grant t1,
-          //         bReq grant t2,
-          //       )
-          //     case Right(req) =>
-          //       val a = aReq.decline
-          //       val b = bReq.decline
-          //       a switch {
-          //         case Left(a) =>
-          //           b switch {
-          //             case Left(b) =>
-          //               injectL(merge(a |*| b)) supplyTo req
-          //             case Right(q) =>
-          //               (a |*| q |*| req) :>> crashNow(s"The same abstract type resolved to two different outcomes (at ${summon[SourcePos]})")
-          //           }
-          //         case Right(p) =>
-          //           b switch {
-          //             case Left(b) =>
-          //               (p |*| b |*| req) :>> crashNow(s"The same abstract type resolved to two different outcomes (at ${summon[SourcePos]})")
-          //             case Right(q) =>
-          //               injectR(mergeTypeParams(p |*| q)) supplyTo req
-          //           }
-          //       }
-          //   }
-          // )
-
           // Labels are same, i.e. both refer to the same type.
           // Propagate one (arbitrary) of them, close the other.
           val aLbl |*| bLbl = labels.split(lbl)
@@ -716,138 +681,8 @@ class TypeInferencerImpl[
 
     type NLabel = nl.labels.Label
 
-    type R = -[Tp] |+| Tp |+| (-[Tp] |*| Tp)
+    type R = -[Tp] |+| Tp
     type Q = NLabel =⚬ R
-
-    // val mergeWithAbstractResponse: (Tp |*| (Label |*| Refinement.Response[Tp])) -⚬ R =
-    //   λ { case a |*| (bLbl |*| bResp) =>
-    //     // The first arg `a` must be scrutinized first, as it may contain
-    //     // refinement request corresponding to the second argument,
-    //     // in which case the response in the second argument
-    //     // will not resolve until request is responded.
-
-    //     unpack(a) switch {
-    //       case Left(aLbl |*| aReq) =>
-    //         labels.compare(aLbl |*| bLbl) switch {
-    //           case Left(lbl) =>
-    //             // labels are same
-    //             ???
-    //           case Right(res) =>
-    //             res switch {
-    //               case Left(aLbl) =>
-    //                 ???
-    //               case Right(bLbl) =>
-    //                 ???
-    //             }
-    //         }
-    //       case Right(fa) =>
-    //         ???
-    //     }
-    //   }
-
-    // val mergeInOut: (labels.Preliminary |*| -[Tp] |*| Tp) -⚬ R = rec { mergeInOut =>
-    //   λ { case p |*| na |*| b =>
-    //     val p1 |*| p2 = labels.splitPreliminary(p)
-    //     val nt1 |*| t1 = constant(demand[Tp])
-    //     returning(
-    //       unpack(b) switch {
-    //         case Left(b) =>
-    //           b switch {
-    //             case Left(b) => // abstract type proper
-    //               // TODO: must check for presence of `p2` inside `a`
-    //               val t1 |*| t2 = split(abstractType(b) waitFor labels.neglectPreliminary(p2))
-    //               returning(
-    //                 injectL(injectR(t2)),
-    //                 t1 supplyTo nt1,
-    //               )
-    //             case Right(lbl |*| t) => // preliminary type
-    //               labels.testEqual(p2 |*| lbl) switch {
-    //                 case Left(p) =>
-    //                   // same preliminary type; close `t`, propagate the type demand
-    //                   val nt2 |*| t1 = λ.closure { (u: $[Tp]) =>
-    //                     u.waitFor(join(labels.neglectPreliminary(p) |*| self.close(t)))
-    //                   }
-    //                   returning(
-    //                     injectL(injectL(nt2)),
-    //                     t1 supplyTo nt1,
-    //                   )
-    //                 case Right(p2 |*| lbl) =>
-    //                   // different preliminary type
-    //                   // TODO: Why is it safe to ignore the preliminary label and wait for the next type?
-    //                   mergeInOut(p2.waitFor(labels.neglectPreliminary(lbl)) |*| nt1 |*| t)
-    //               }
-    //           }
-    //         case Right(ft) =>
-    //           // TODO: must check for presence of `p2` inside `ft`
-    //           val t1 |*| t2 = split(concreteType(ft) waitFor labels.neglectPreliminary(p2))
-    //           returning(
-    //             injectL(injectR(t2)),
-    //             t1 supplyTo nt1,
-    //           )
-    //       },
-    //       preliminary(p1 |*| t1) supplyTo na,
-    //     )
-    //   }
-    // }
-
-    // val mergeQ: (Q |*| Q) -⚬ Q =
-    //   λ { case f1 |*| f2 =>
-    //     λ.closure { lbl =>
-    //       val p0 |*| l = nl.labels.split(lbl)
-    //       val l1 |*| l2 = nl.labels.split(l)
-    //       val q1 = f1(l1)
-    //       val q2 = f2(l2)
-    //       val p = nl.preliminary(p0)
-    //       q1 switch {
-    //         case Left(q1) =>
-    //           q1 switch {
-    //             case Left(nt1) =>
-    //               q2 switch {
-    //                 case Left(q2) =>
-    //                   q2 switch {
-    //                     case Left(nt2) =>
-    //                       injectL(injectL(contrapositive(self.split)(factorOutInversion(nt1 |*| nt2))))
-    //                     case Right(t2) =>
-    //                       mergeInOut(p |*| nt1 |*| t2)
-    //                   }
-    //                 case Right(nt2 |*| t2) =>
-    //                   val nt = contrapositive(self.split)(factorOutInversion(nt1 |*| nt2))
-    //                   injectR(nt |*| t2)
-    //               }
-    //             case Right(t1) =>
-    //               q2 switch {
-    //                 case Left(q2) =>
-    //                   q2 switch {
-    //                     case Left(nt2) =>
-    //                       mergeInOut(p |*| nt2 |*| t1)
-    //                     case Right(t2) =>
-    //                       injectL(injectR(self.merge(t1 |*| t2)))
-    //                   }
-    //                 case Right(nt2 |*| t2) =>
-    //                   // val t = self.merge(t1 |*| t2)
-    //                   // injectR(nt2 |*| t)
-    //                   (p |*| t1 |*| nt2 |*| t2) :>> crashNow(s"TODO: eliminate (at ${summon[SourcePos]})")
-    //               }
-    //           }
-    //         case Right(nt1 |*| t1) =>
-    //           // q2 switch {
-    //           //   case Left(q2) =>
-    //           //     q2 switch {
-    //           //       case Left(nt2) =>
-    //           //         val nt = contrapositive(self.split)(factorOutInversion(nt1 |*| nt2))
-    //           //         injectR(nt |*| t1)
-    //           //       case Right(t2) =>
-    //           //         injectR(nt1 |*| self.merge(t1 |*| t2))
-    //           //     }
-    //           //   case Right(nt2 |*| t2) =>
-    //           //     val nt = contrapositive(self.split)(factorOutInversion(nt1 |*| nt2))
-    //           //     val t = self.merge(t1 |*| t2)
-    //           //     injectR(nt |*| t)
-    //           // }
-    //           (p |*| nt1 |*| t1 |*| q2) :>> crashNow(s"TODO: eliminate (at ${summon[SourcePos]})")
-    //       }
-    //     }
-    //   }
 
     def splitQ0: (NLabel |*| NLabel |*| Q) -⚬ (R |*| R) =
       λ { case l1 |*| l2 |*| f =>
@@ -855,38 +690,27 @@ class TypeInferencerImpl[
           case Left(l) =>
             // labels are the same
             f(l) switch {
-              case Left(r) =>
-                r switch {
-                  case Left(nt) =>
-                    val nt1 |*| nt2 = contrapositive(self.merge)(nt) :>> distributeInversion
-                    injectL(injectL(nt1)) |*| injectL(injectL(nt2))
-                  case Right(t) =>
-                    val t1 |*| t2 = self.split(t)
-                    injectL(injectR(t1)) |*| injectL(injectR(t2))
-                }
-              case Right(nt |*| t) =>
-                // arbitrary split
-                injectL(injectL(nt)) |*| injectL(injectR(t))
+              case Left(nt) =>
+                val nt1 |*| nt2 = contrapositive(self.merge)(nt) :>> distributeInversion
+                injectL(nt1) |*| injectL(nt2)
+              case Right(t) =>
+                val t1 |*| t2 = self.split(t)
+                injectR(t1) |*| injectR(t2)
             }
           case Right(res) =>
             def go: R -⚬ (R |*| R) =
               λ { r =>
                 r switch {
-                  case Left(r) =>
-                    r switch {
-                      case Left(nt) =>
-                        val nt1 |*| t1 = constant(demand[Tp])
-                        val t |*| t2 = self.split(t1)
-                        returning(
-                          injectL(injectL(nt1)) |*| injectL(injectR(t2)),
-                          t supplyTo nt,
-                        )
-                      case Right(t) =>
-                        val t1 |*| t2 = self.split(t)
-                        injectL(injectR(t1)) |*| injectL(injectR(t2))
-                    }
-                  case Right(nt |*| t) =>
-                    injectL(injectL(nt)) |*| injectL(injectR(t))
+                  case Left(nt) =>
+                    val nt1 |*| t1 = constant(demand[Tp])
+                    val t |*| t2 = self.split(t1)
+                    returning(
+                      injectL(nt1) |*| injectR(t2),
+                      t supplyTo nt,
+                    )
+                  case Right(t) =>
+                    val t1 |*| t2 = self.split(t)
+                    injectR(t1) |*| injectR(t2)
                 }
               }
             res switch {
@@ -916,7 +740,7 @@ class TypeInferencerImpl[
           nl.labels.neglect(l1),
           nl.labels.neglect(l2),
         )
-        (nl1 |*| injectL(injectL(ntp))) |*| (nl2 |*| injectL(injectR(tp1)))
+        (nl1 |*| injectL(ntp)) |*| (nl2 |*| injectR(tp1))
       }
 
     val qTap: NLabel -⚬ (Q |*| Val[Type]) =
@@ -924,7 +748,7 @@ class TypeInferencerImpl[
         val res0: $[NLabel =⚬ (R |*| Val[Type])] =
           λ.closure { l1 =>
             val nt |*| t = constant(demand[Tp])
-            injectL(injectL(nt)) |*| self.output(t).waitFor(join(nl.labels.neglect(l0) |*| nl.labels.neglect(l1)))
+            injectL(nt) |*| self.output(t).waitFor(join(nl.labels.neglect(l0) |*| nl.labels.neglect(l1)))
           }
         res0 :>> assocRL
       }
@@ -934,31 +758,26 @@ class TypeInferencerImpl[
         val lbl1 |*| lbl2 = nl.labels.split(lbl)
         returning(
           q switch {
-            case Left(q) =>
-              q switch {
-                case Left(nt) =>
-                  val l1 |*| l2 = nl.promote(lbl2) :>> labels.split
-                  val t |*| resp = makeAbstractType(l1)
-                  returning(
-                    resp.toEither switch {
-                      case Left(t) =>
-                        self.output(t)
-                          .waitFor(labels.neglect(l2))
-                      case Right(req) =>
-                        val p |*| res = typeParamTap(l2)
-                        returning(
-                          res,
-                          injectR(p) supplyTo req,
-                        )
-                    },
-                    t supplyTo nt,
-                  )
-                case Right(t) =>
-                  self.output(t)
-                    .waitFor(nl.labels.neglect(lbl2))
-              }
-            case Right(nt |*| t) =>
-              (lbl2 |*| nt |*| t) :>> crashNow(s"TODO: eliminate (at ${summon[SourcePos]})")
+            case Left(nt) =>
+              val l1 |*| l2 = nl.promote(lbl2) :>> labels.split
+              val t |*| resp = makeAbstractType(l1)
+              returning(
+                resp.toEither switch {
+                  case Left(t) =>
+                    self.output(t)
+                      .waitFor(labels.neglect(l2))
+                  case Right(req) =>
+                    val p |*| res = typeParamTap(l2)
+                    returning(
+                      res,
+                      injectR(p) supplyTo req,
+                    )
+                },
+                t supplyTo nt,
+              )
+            case Right(t) =>
+              self.output(t)
+                .waitFor(nl.labels.neglect(lbl2))
           },
           lbl1 supplyTo nLbl,
         )
@@ -969,20 +788,15 @@ class TypeInferencerImpl[
       λ { case lbl |*| f =>
         val l1 |*| l2 = nl.labels.split(lbl)
         f(l1) switch {
-          case Left(q) =>
-            q switch {
-              case Left(nt) =>
-                val l3 |*| l4 = labels.split(nl.promote(l2))
-                val t |*| resp = makeAbstractType(l3)
-                returning(
-                  resp.close(l4, close),
-                  t supplyTo nt,
-                )
-              case Right(t) =>
-                join(close(t) |*| nl.labels.neglect(l2))
-            }
-          case Right(nt |*| t) =>
-            (l2 |*| nt |*| t) :>> crashNow(s"TODO: eliminate (at ${summon[SourcePos]})")
+          case Left(nt) =>
+            val l3 |*| l4 = labels.split(nl.promote(l2))
+            val t |*| resp = makeAbstractType(l3)
+            returning(
+              resp.close(l4, close),
+              t supplyTo nt,
+            )
+          case Right(t) =>
+            join(close(t) |*| nl.labels.neglect(l2))
         }
       }
 
@@ -991,7 +805,6 @@ class TypeInferencerImpl[
         TypeInferencerImpl[F, Q](
           nl.labels,
           F,
-          // mergeQ,
           splitQ,
           qLink,
           qTap,
@@ -1005,31 +818,20 @@ class TypeInferencerImpl[
             case Left(lbl |*| f) =>
               val l1 |*| l2 = tools.labels.split(lbl)
               f(l1) switch {
-                case Left(r) =>
-                  r switch {
-                    case Left(nt) =>
-                      val t1 |*| t2 = abstractLink(nl.promote(l2))
-                      returning(
-                        t1,
-                        t2 supplyTo nt,
-                      )
-                    case Right(t) =>
-                      t waitFor nl.labels.neglect(l2)
-                  }
-                case Right(nt |*| t) =>
-                  (l2 |*| nt |*| t) :>> crashNow(s"TODO: eliminate (at ${summon[SourcePos]})")
+                case Left(nt) =>
+                  val t1 |*| t2 = abstractLink(nl.promote(l2))
+                  returning(
+                    t1,
+                    t2 supplyTo nt,
+                  )
+                case Right(t) =>
+                  t waitFor nl.labels.neglect(l2)
               }
             case Right(ft) =>
               concreteType(F.map(self)(ft))
           }
         }
       }
-
-      override def plant: InterimType -⚬ (OutboundType |*| OutwardType) =
-        UnhandledCase.raise("")
-
-      override def merge: (InterimType |*| InterimType) -⚬ InterimType =
-        UnhandledCase.raise("")
 
       override def mergeLower: (tools.OutwardType |*| tools.OutwardType) -⚬ OutboundType =
         λ { case a |*| b => self.merge(lower(a) |*| lower(b)) }

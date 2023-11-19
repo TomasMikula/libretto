@@ -8,7 +8,6 @@ import libretto.scaletto.StarterKit
 
 trait Labels[V] {
   type Label
-  type Preliminary
 
   type TParamLabel // TODO: is necessary?
 
@@ -19,12 +18,6 @@ trait Labels[V] {
   def unwrapOriginal: Label -⚬ Val[V]
 
   given junctionLabel: Junction.Positive[Label]
-
-  def splitPreliminary: Preliminary -⚬ (Preliminary |*| Preliminary)
-  def testEqual: (Preliminary |*| Preliminary) -⚬ (Preliminary |+| (Preliminary |*| Preliminary))
-  def neglectPreliminary: Preliminary -⚬ Done
-
-  given junctionPreliminary: Junction.Positive[Preliminary]
 
   def generify: Label -⚬ TParamLabel
   def abstractify: TParamLabel -⚬ Label
@@ -43,7 +36,6 @@ trait Labels[V] {
     val labels: Labels[V]
 
     def promote: labels.Label -⚬ Label
-    def preliminary: labels.Label -⚬ Preliminary
   }
 
   def nested: Nested
@@ -169,9 +161,8 @@ object LabelsImpl {
 class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
   import LabelsImpl.*
 
-  type Label       = Val[Lbl[V]]
-  type Preliminary = Val[Lbl[V]]
-  type TParamLabel = Val[TParamLbl[V]]
+  override type Label       = Val[Lbl[V]]
+  override type TParamLabel = Val[TParamLbl[V]]
   def create(v: V): One -⚬ Label =
     const(Lbl.Base(v, AtomicInteger(0)))
   def make(v: V)(using SourcePos, LambdaContext): $[Label] =
@@ -180,12 +171,6 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
     mapVal { (lbl: Lbl[V]) =>
       val res = (lbl.mkClone(), lbl.mkClone())
       println(s"$lbl split into $res")
-      res
-    } > liftPair
-  override val splitPreliminary: Preliminary -⚬ (Preliminary |*| Preliminary) =
-    mapVal { (lbl: Lbl[V]) =>
-      val res = (lbl.mkClone(), lbl.mkClone())
-      println(s"Preliminary $lbl split into $res")
       res
     } > liftPair
   val compare: (Label |*| Label) -⚬ (Label |+| (Label |+| Label)) =
@@ -200,15 +185,6 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
     // dsl.neglect
     printLine(x => s"Neglecting $x")
 
-  override val testEqual: (Preliminary |*| Preliminary) -⚬ (Preliminary |+| (Preliminary |*| Preliminary)) =
-    λ { case a |*| b =>
-      (a ** b) :>> mapVal { case (a, b) =>
-        Lbl.compareLax(a, b).map(_ => (a, b))
-      } :>> liftEither :>> |+|.rmap(liftPair)
-    }
-  override val neglectPreliminary: Preliminary -⚬ Done =
-    // dsl.neglect
-    printLine(x => s"Neglecting $x")
   val neglectTParam: TParamLabel -⚬ Done =
     // dsl.neglect
     printLine(x => s"Neglecting TParam $x")
@@ -247,8 +223,6 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
     scalettoLib.junctionVal
   given junctionTParamLabel: Junction.Positive[TParamLabel] =
     scalettoLib.junctionVal
-  given junctionPreliminary: Junction.Positive[Preliminary] =
-    scalettoLib.junctionVal
 
   override lazy val nested: Nested =
     new Nested {
@@ -261,8 +235,5 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
           println(s"$x promoted to $res")
           res
         }
-
-      override def preliminary: labels.Label -⚬ Preliminary =
-        promote
     }
 }
