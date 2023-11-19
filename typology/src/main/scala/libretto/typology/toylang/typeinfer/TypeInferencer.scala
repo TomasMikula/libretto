@@ -109,8 +109,8 @@ object TypeInferencer {
       splitTypeParam = fork,
       typeParamLink = labels.neglect > fork,
       typeParamTap = labels.unwrapOriginal > mapVal(x => Type.abstractType(x)) > signalPosFst,
-      outputTypeParam = fst(labels.unwrapOriginal > mapVal(x => Type.abstractType(x))) > awaitPosSnd,
-      closeTypeParam = fst(labels.neglect) > join,
+      outputTypeParam = fst(labels.unwrapOriginalTP > mapVal(x => Type.abstractType(x))) > awaitPosSnd,
+      closeTypeParam = fst(labels.neglectTParam) > join,
     )
 }
 
@@ -121,8 +121,8 @@ object TypeInferencerImpl {
     splitTypeParam: P -⚬ (P |*| P),
     typeParamLink: labels.Label -⚬ (P |*| P),
     typeParamTap: labels.Label -⚬ (P |*| Val[Type]),
-    outputTypeParam: (labels.Label |*| P) -⚬ Val[Type],
-    closeTypeParam: (labels.Label |*| P) -⚬ Done,
+    outputTypeParam: (labels.TParamLabel |*| P) -⚬ Val[Type],
+    closeTypeParam: (labels.TParamLabel |*| P) -⚬ Done,
   ): TypeInferencerImpl[F, P, labels.type] =
     new TypeInferencerImpl(
       labels,
@@ -145,11 +145,12 @@ class TypeInferencerImpl[
   splitTypeParam: P -⚬ (P |*| P),
   typeParamLink: labels.Label -⚬ (P |*| P),
   typeParamTap: labels.Label -⚬ (P |*| Val[Type]),
-  outputTypeParam: (labels.Label |*| P) -⚬ Val[Type],
-  closeTypeParam: (labels.Label |*| P) -⚬ Done,
+  outputTypeParam: (labels.TParamLabel |*| P) -⚬ Val[Type],
+  closeTypeParam: (labels.TParamLabel |*| P) -⚬ Done,
 ) extends TypeInferencer { self =>
 
   override type Label = labels.Label
+  type TParam = labels.TParamLabel
 
   object Refinement {
     opaque type Request[T] = -[Response[T]]
@@ -171,7 +172,7 @@ class TypeInferencerImpl[
           case Left(t) =>
             join(f(t) |*| labels.neglect(lbl))
           case Right(p) =>
-            closeTypeParam(lbl |*| p)
+            closeTypeParam(labels.generify(lbl) |*| p)
         }
     }
 
@@ -201,7 +202,7 @@ class TypeInferencerImpl[
   type AbsTp[T] = AbsTp.Proper[T] |+| AbsTp.Prelim[T]
 
   override type Tp = Rec[[Tp] =>> AbsTp[Tp] |+| F[Tp]]
-  override type TypeOutlet = Rec[[X] =>> (Label |*| P) |+| F[X]]
+  override type TypeOutlet = Rec[[X] =>> (TParam |*| P) |+| F[X]]
 
   private def pack: (AbsTp[Tp] |+| F[Tp]) -⚬ Tp =
     dsl.pack[[X] =>> AbsTp[X] |+| F[X]]
@@ -645,7 +646,7 @@ class TypeInferencerImpl[
             case Left(lbl |*| req) =>
               req.decline switch {
                 case Left(t)  => join(self(t) |*| labels.neglect(lbl))
-                case Right(p) => closeTypeParam(lbl |*| p)
+                case Right(p) => closeTypeParam(labels.generify(lbl) |*| p)
               }
             case Right(lbl |*| t) =>
               join(labels.neglect(lbl) |*| self(t))
@@ -679,7 +680,8 @@ class TypeInferencerImpl[
   override lazy val nested: Nested = {
     val nl = labels.nested
 
-    type NLabel = nl.labels.Label
+    type NLabel  = nl.labels.Label
+    type NTParam = nl.labels.TParamLabel
 
     type Q = -[Tp] |+| Tp
 
@@ -708,7 +710,7 @@ class TypeInferencerImpl[
         injectL(nt) |*| self.output(t).waitFor(nl.labels.neglect(l0))
       }
 
-    val outputQ: (NLabel |*| Q) -⚬ Val[Type] = rec { outputQ =>
+    val outputQ: (NTParam |*| Q) -⚬ Val[Type] = rec { outputQ =>
       λ { case lbl |*| q =>
         q switch {
           case Left(nt) =>
@@ -730,12 +732,12 @@ class TypeInferencerImpl[
             )
           case Right(t) =>
             self.output(t)
-              .waitFor(nl.labels.neglect(lbl))
+              .waitFor(nl.labels.neglectTParam(lbl))
         }
       }
     }
 
-    val closeQ: (NLabel |*| Q) -⚬ Done =
+    val closeQ: (NTParam |*| Q) -⚬ Done =
       λ { case lbl |*| q =>
         q switch {
           case Left(nt) =>
@@ -746,7 +748,7 @@ class TypeInferencerImpl[
               t supplyTo nt,
             )
           case Right(t) =>
-            join(close(t) |*| nl.labels.neglect(lbl))
+            join(close(t) |*| nl.labels.neglectTParam(lbl))
         }
       }
 
@@ -774,7 +776,7 @@ class TypeInferencerImpl[
                     t2 supplyTo nt,
                   )
                 case Right(t) =>
-                  t waitFor nl.labels.neglect(lbl)
+                  t waitFor nl.labels.neglectTParam(lbl)
               }
             case Right(ft) =>
               concreteType(F.map(self)(ft))
@@ -808,7 +810,7 @@ class TypeInferencerImpl[
               import TypeOutlet.given
               req.decline switch {
                 case Left(t)  => self(t) waitFor labels.neglect(lbl)
-                case Right(p) => TypeOutlet.typeParam(lbl |*| p)
+                case Right(p) => TypeOutlet.typeParam(labels.generify(lbl) |*| p)
               }
             case Right(lbl |*| t) =>
               self(t waitFor labels.neglect(lbl))
@@ -840,7 +842,7 @@ class TypeInferencerImpl[
             case Left(label |*| req) => // proper
               req.decline switch {
                 case Left(t)  => self(t) waitFor labels.neglect(label)
-                case Right(p) => outputTypeParam(label |*| p)
+                case Right(p) => outputTypeParam(labels.generify(label) |*| p)
               }
             case Right(label |*| t) => // preliminary
               self(t) waitFor labels.neglect(label)
@@ -874,13 +876,13 @@ class TypeInferencerImpl[
   override def mergeable: OutboundType -⚬ MergeableType = id
 
   object TypeOutlet {
-    def pack: ((Label |*| P) |+| F[TypeOutlet]) -⚬ TypeOutlet =
-      dsl.pack[[X] =>> (Label |*| P) |+| F[X]]
+    def pack: ((TParam |*| P) |+| F[TypeOutlet]) -⚬ TypeOutlet =
+      dsl.pack[[X] =>> (TParam |*| P) |+| F[X]]
 
-    def unpack: TypeOutlet -⚬ ((Label |*| P) |+| F[TypeOutlet]) =
+    def unpack: TypeOutlet -⚬ ((TParam |*| P) |+| F[TypeOutlet]) =
       dsl.unpack
 
-    def typeParam: (Label |*| P) -⚬ TypeOutlet =
+    def typeParam: (TParam |*| P) -⚬ TypeOutlet =
       injectL > pack
 
     def concreteType: F[TypeOutlet] -⚬ TypeOutlet =

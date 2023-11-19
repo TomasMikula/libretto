@@ -35,7 +35,7 @@ trait Labels[V] {
   trait Nested {
     val labels: Labels[V]
 
-    def promote: labels.Label -⚬ Label
+    def promote: labels.TParamLabel -⚬ Label
   }
 
   def nested: Nested
@@ -229,11 +229,7 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
       override val labels: LabelsImpl[V] =
         new LabelsImpl[V]
 
-      override val promote: labels.Label -⚬ Label =
-        mapVal { x =>
-          val res = Lbl.Abstracted(TParamLbl.Promoted(x), AtomicInteger(0))
-          println(s"$x promoted to $res")
-          res
-        }
+      override val promote: labels.TParamLabel -⚬ Label =
+        abstractify
     }
 }
