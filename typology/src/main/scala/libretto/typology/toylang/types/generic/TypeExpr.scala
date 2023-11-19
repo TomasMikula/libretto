@@ -87,6 +87,7 @@ sealed abstract class TypeExpr[V, ->>[_, _], K, L](using
         } yield PFix(pre, expr)
 
       case other =>
+        println(s"     !!!!!!!! OTHER: $other")
         throw new NotImplementedError(s"$other (${summon[SourcePos]})")
     }
   }

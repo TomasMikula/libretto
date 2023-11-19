@@ -18,7 +18,7 @@ sealed trait TypedFun[A, B] {
       case EitherF(f1, f2)     => Type.sum(f1.inType, f2.inType)
       case InjectL(ta, tb)     => ta
       case InjectR(ta, tb)     => tb
-      case Rec(f)              => ???
+      case Rec(ta, f)          => ta
       case Recur(ta, tb)       => Type.pair(Type.recCall(ta, tb), ta)
       case FixF(f)             => f(Type.fix(f))
       case UnfixF(f)           => Type.fix(f)
@@ -36,7 +36,7 @@ sealed trait TypedFun[A, B] {
       case EitherF(f1, f2)     => f1.outType
       case InjectL(ta, tb)     => Type.sum(ta, tb)
       case InjectR(ta, tb)     => Type.sum(ta, tb)
-      case Rec(f)              => f.outType
+      case Rec(ta, f)          => f.outType
       case Recur(ta, tb)       => tb
       case FixF(f)             => Type.fix(f)
       case UnfixF(f)           => f(Type.fix(f))
@@ -61,7 +61,7 @@ object TypedFun {
   case class EitherF[A1, A2, B](f1: TypedFun[A1, B], f2: TypedFun[A2, B]) extends TypedFun[Either[A1, A2], B]
   case class InjectL[A, B](ta: Type, tb: Type) extends TypedFun[A, Either[A, B]]
   case class InjectR[A, B](ta: Type, tb: Type) extends TypedFun[B, Either[A, B]]
-  case class Rec[A, B](f: TypedFun[(RecCall[A, B], A), B]) extends TypedFun[A, B]
+  case class Rec[A, B](ta: Type, f: TypedFun[(RecCall[A, B], A), B]) extends TypedFun[A, B]
   case class Recur[A, B](ta: Type, tb: Type) extends TypedFun[(RecCall[A, B], A), B]
   case class FixF[F[_]](f: TypeFun[●, ●]) extends TypedFun[F[Fix[F]], Fix[F]]
   case class UnfixF[F[_]](f: TypeFun[●, ●]) extends TypedFun[Fix[F], F[Fix[F]]]
@@ -78,7 +78,7 @@ object TypedFun {
   def either[A1, A2, B](f1: TypedFun[A1, B], f2: TypedFun[A2, B]): TypedFun[Either[A1, A2], B] = EitherF(f1, f2)
   def injectL[A, B](ta: Type, tb: Type): TypedFun[A, Either[A, B]] = InjectL(ta, tb)
   def injectR[A, B](ta: Type, tb: Type): TypedFun[B, Either[A, B]] = InjectR(ta, tb)
-  def rec[A, B](f: TypedFun[(RecCall[A, B], A), B]): TypedFun[A, B] = Rec(f)
+  def rec[A, B](ta: Type, f: TypedFun[(RecCall[A, B], A), B]): TypedFun[A, B] = Rec(ta, f)
   def recur[A, B](ta: Type, tb: Type): TypedFun[(RecCall[A, B], A), B] = Recur(ta, tb)
   def fix[F[_]](f: TypeFun[●, ●]): TypedFun[F[Fix[F]], Fix[F]] = FixF(f)
   def unfix[F[_]](f: TypeFun[●, ●]): TypedFun[Fix[F], F[Fix[F]]] = UnfixF(f)

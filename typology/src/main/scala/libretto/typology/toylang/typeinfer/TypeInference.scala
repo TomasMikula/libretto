@@ -17,15 +17,15 @@ object TypeInference {
         State(n => (n+1, AbstractTypeLabel(n)))
     }
 
-    given tools: Tools = TypeInferencer.instance
+    given tools: TypeInferencer = TypeInferencer.instance
 
     val res =
     reconstructTypes(f)
       .map { prg =>
         prg > λ { case a |*| f |*| b =>
-          f
-            .waitFor(tools.close(a))
-            .waitFor(tools.close(b))
+          (f :>> alsoPrintLine(f => s"RESULT of reconstructTypes: $f"))
+            .waitFor(tools.close(a) :>> printLine("INPUT closed"))
+            .waitFor(tools.close(b) :>> printLine("OUTPUT closed"))
         }
       }
       .run(0)
@@ -36,7 +36,7 @@ object TypeInference {
   }
 
   def reconstructTypes[M[_], A, B](f: Fun[A, B])(using
-    tools: Tools,
+    tools: TypeInferencer,
   )(using
     gen: VarGen[M, AbstractTypeLabel],
     M: Monad[M],
@@ -46,7 +46,7 @@ object TypeInference {
     import tools.{apply1T, fixT, int, label, output, outputOW, pair, pairOW, recCall, recCallOW, string}
     import Tools.ToolsImpl.Type
 
-    val nested: tools.Nested = tools.nested
+    val nested: tools.Nested1 = tools.nested
     import nested.{tools => nt, unnest, unnestS, unnestM}
 
     def reconstructTypes[A, B](f: Fun[A, B]): M[One -⚬ (nt.OutboundType |*| Val[TypedFun[A, B]] |*| nt.OutboundType)] =
@@ -212,8 +212,9 @@ object TypeInference {
                   case Right(a0 |*| b0) =>
                     val a = nested.mergeLower(a0 |*| a1)
                     val b = nested.mergeLower(b0 |*| nt.tap(b1))
-                    val h = f :>> mapVal { TypedFun.rec(_) }
-                    a |*| h |*| b
+                    val a_ |*| ta = tools.split(a) :>> snd(tools.output)
+                    val h = (ta ** f) :>> mapVal { case (ta, f) => println(s"OUTPUTTING arg of Rec: $f"); TypedFun.rec(ta, f) }
+                    a_ |*| h |*| b
                   case Left(ab) =>
                     // (ab |*| f |*| a1 |*| b1) :>> crashNow(s"TODO (${summon[SourcePos]})")
                     val d = (f ** outputOW(nested.unnestOutward(ab)) ** outputOW(nested.unnestOutward(a1)) ** output(nested.unnest(b1)))

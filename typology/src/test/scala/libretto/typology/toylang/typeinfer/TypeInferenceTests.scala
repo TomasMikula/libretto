@@ -10,6 +10,7 @@ import libretto.typology.toylang.typeinfer.TypeInference.inferTypes
 import libretto.typology.toylang.terms.{Fun, TypedFun}
 import libretto.typology.toylang.terms.Fun._
 import libretto.typology.toylang.types._
+import scala.concurrent.duration.*
 
 class TypeInferenceTests extends ScalatestStarterTestSuite {
   type Type          = libretto.typology.toylang.types.Type[AbstractTypeLabel]
@@ -181,7 +182,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
     import kit.{Outcome, expectVal}
     import Outcome.assertEquals
 
-    def testInferredTypes[A, B](f: Fun[A, B])(check: TypedFun[A, B] => Outcome[Unit]): TestCase[kit.type] =
+    def testInferredTypes[A, B](f: Fun[A, B])(check: TypedFun[A, B] => Outcome[Unit]): TestCase.Single[kit.type] =
       TestCase
         .interactWith { λ { start => constant(inferTypes(f)) waitFor start } }
         .via { expectVal(_).flatMap(check) }
@@ -448,13 +449,14 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
           } yield ()
         },
 
-      // "infer types of InfiniteList.map(intToString)" ->
-      //   testInferredTypes(InfiniteList.map(Fun.intToString)) { tf =>
-      //     for {
-      //       _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
-      //       _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.string))
-      //     } yield ()
-      //   },
+      "infer types of InfiniteList.map(intToString)" ->
+        testInferredTypes(InfiniteList.map(Fun.intToString)) { tf =>
+          println(s"GOT IT: $tf")
+          for {
+            _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
+            _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.string))
+          } yield ()
+        },
 
   // test("infer types of List.map(intToString)") {
   //   val (tIn, tOut) = reconstructTypes[List[Int], List[String]](List.map(Fun.intToString))

@@ -89,6 +89,7 @@ case class TypeExpr[V, K, L](value: generic.TypeExpr[V, TypeExpr[V, _, _], K, L]
       case gte.Fix(f, g) =>
         MappedMorphism(F.unit, tgt.fix(TypeFun(f, g)), map_●)
       case gte.PFix(f, g) =>
+        println(s"\n\n\n       !!!!!!! NOT IMPLEMENTED PFix (at ${summon[SourcePos]})\n\n\n")
         throw NotImplementedError(s"PFix($f, $g) at ${summon[SourcePos]}")
       case gte.AbstractType(label) =>
         MappedMorphism(F.unit, tgt.abstractTypeName(label), map_●)
@@ -127,6 +128,7 @@ case class TypeExpr[V, K, L](value: generic.TypeExpr[V, TypeExpr[V, _, _], K, L]
           MappedMorphism.par(a1, g1) > op1
         )
       case gte.TypeMismatch(a, b) =>
+        println(s"\n\n\n       !!!!!!! NOT IMPLEMENTED TypeMismatch (at ${summon[SourcePos]})\n\n\n")
         throw NotImplementedError(s"TypeMismatch($a, $b) at ${summon[SourcePos]}")
   }
 

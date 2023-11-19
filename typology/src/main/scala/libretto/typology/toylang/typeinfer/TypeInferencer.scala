@@ -21,8 +21,14 @@ trait TypeInferencer extends Tools {
   override type MergeableType = Tp
   override type SplittableType = Tp
 
-  def merge: (Tp |*| Tp) -⚬ Tp
-  def split: Tp -⚬ (Tp |*| Tp)
+  override def merge: (Tp |*| Tp) -⚬ Tp
+  override def split: Tp -⚬ (Tp |*| Tp)
+
+  trait Nested1 extends Nested {
+    override val tools: TypeInferencer
+  }
+
+  override lazy val nested: Nested1
 }
 
 trait TypeOps[F[_]] {
@@ -50,6 +56,7 @@ trait TypeOps[F[_]] {
   def apply1T[G[_], A](
     G: TypeTag[G],
     lift: F[A] -⚬ A,
+    absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ A),
   )(using Junction.Positive[A]): A -⚬ A
 
   def int[A]: Done -⚬ F[A]
@@ -120,8 +127,9 @@ object TypeInferencer {
       override def apply1T[G[_], A](
         G: TypeTag[G],
         lift: NonAbstractTypeF[A] -⚬ A,
+        absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ A),
       )(using Junction.Positive[A]): A -⚬ A =
-        NonAbstractType.apply1T(G, lift)
+        NonAbstractType.apply1T(G, lift, absType)
 
       override def int[A]: Done -⚬ NonAbstractTypeF[A] =
         NonAbstractType.int
@@ -135,9 +143,11 @@ object TypeInferencer {
       labels,
       typeOps,
       splitTypeParam = fork,
-      typeParamLink = labels.neglect > fork,
+      // typeParamLink = labels.neglect > fork,
+      typeParamLink = labels.show > printLine(s => s"FABRICATING 2 Done signals for $s") > fork,
       typeParamTap = labels.unwrapOriginal > mapVal(x => Type.abstractType(x)) > signalPosFst,
-      outputTypeParam = fst(labels.unwrapOriginalTP > mapVal(x => Type.abstractType(x))) > awaitPosSnd,
+      // outputTypeParam = fst(labels.unwrapOriginalTP > mapVal(x => Type.abstractType(x))) > awaitPosSnd,
+      outputTypeParam = fst(labels.unwrapOriginalTP > mapVal(x => { println(s"OUTPUTTING abstract type $x"); Type.abstractType(x) })) > awaitPosSnd > alsoPrintLine(t => s"OUTPUTTED abstract type $t"),
       closeTypeParam = fst(labels.neglectTParam) > join,
     )
 }
@@ -400,8 +410,8 @@ class TypeInferencerImpl[
           // Labels are equal, refer to the same type.
           // Close the refinement request, propagate the preliminary.
           returning(
-            b,
-            hackyDiscard(aReq.close(lbl, close) waitFor labels.neglect(bl2)),
+            preliminary(bl2 |*| b),
+            hackyDiscard(aReq.close(lbl, close)),
           )
         case Right(res) =>
           res switch {
@@ -477,9 +487,9 @@ class TypeInferencerImpl[
   private def mergeConcreteAbstractPrelim(
     merge: (Tp |*| Tp) -⚬ Tp,
   ): (F[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
-    // ignore the preliminary placeholder, merge with its follow-up
     λ { case ft |*| (lbl |*| t) =>
-      merge(concreteType(ft) |*| t.waitFor(labels.neglect(lbl)))
+      // merge(concreteType(ft) |*| t.waitFor(labels.neglect(lbl)))
+      preliminary(lbl |*| merge(concreteType(ft) |*| t))
     }
 
   private def split_(
@@ -646,7 +656,7 @@ class TypeInferencerImpl[
             t.waitFor(labels.neglect(l4_)) supplyTo nt2
           case Right(req1) =>
             val l4_ = l4 :>> labels.alsoDebugPrint(s => s"Link-req of $s returned as DECLINED. Sending opposite request.")
-            val l5 |*| l6 = labels.split(l4)
+            val l5 |*| l6 = labels.split(l4_)
             val t2 |*| resp = makeAbstractType(l5)
             returning(
               resp.toEither switch {
@@ -708,7 +718,7 @@ class TypeInferencerImpl[
   override def string: StarterKit.Done -⚬ OutboundType =
     F.string > concreteType
 
-  override lazy val nested: Nested = {
+  override lazy val nested: Nested1 = {
     val nl = labels.nested
 
     type NLabel  = nl.labels.Label
@@ -730,8 +740,9 @@ class TypeInferencerImpl[
 
     val qLink: NLabel -⚬ (Q |*| Q) =
       λ { lbl =>
+        val lbl_ = nl.labels.alsoDebugPrint(s => s"FABRICATING Tp link for $s")(lbl)
         val ntp |*| tp = constant(demand[Tp])
-        val tp1 = tp waitFor nl.labels.neglect(lbl)
+        val tp1 = tp waitFor nl.labels.neglect(lbl_)
         injectL(ntp) |*| injectR(tp1)
       }
 
@@ -783,7 +794,7 @@ class TypeInferencerImpl[
         }
       }
 
-    new Nested {
+    new Nested1 {
       override val tools: TypeInferencerImpl[F, Q, nl.labels.type] =
         TypeInferencerImpl[F, Q](
           nl.labels,
@@ -861,7 +872,15 @@ class TypeInferencerImpl[
     F.recCall > concreteType
 
   override def apply1T[G[_]](G: TypeTag[G]): OutboundType -⚬ OutboundType =
-    F.apply1T(G, concreteType)
+    F.apply1T(
+      G,
+      concreteType,
+      v => labels.create(v) > λ { lbl =>
+        val l1 |*| l2 = labels.split(lbl)
+        val t |*| resp = makeAbstractType(l1)
+        returning(t, hackyDiscard(resp.close(l2, close)))
+      }
+    )
 
   override def fixT[G[_]](G: TypeTag[G]): StarterKit.One -⚬ OutboundType =
     F.fixT(G) > concreteType

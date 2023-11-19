@@ -170,7 +170,7 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
   val split: Label -⚬ (Label |*| Label) =
     mapVal { (lbl: Lbl[V]) =>
       val res = (lbl.mkClone(), lbl.mkClone())
-      println(s"$lbl split into $res")
+      // println(s"$lbl split into $res")
       res
     } > liftPair
   val compare: (Label |*| Label) -⚬ (Label |+| (Label |+| Label)) =
@@ -182,8 +182,8 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
       } :>> liftEither :>> |+|.rmap(liftEither)
     }
   val neglect: Label -⚬ Done =
-    // dsl.neglect
-    printLine(x => s"Neglecting $x")
+    dsl.neglect
+    // printLine(x => s"Neglecting $x")
 
   val neglectTParam: TParamLabel -⚬ Done =
     // dsl.neglect

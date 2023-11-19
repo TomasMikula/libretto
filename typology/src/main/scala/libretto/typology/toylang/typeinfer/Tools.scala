@@ -1026,14 +1026,16 @@ object Tools {
       def apply1T[X, F[_]](
         F: TypeTag[F],
         lift: NonAbstractTypeF[X] -⚬ X,
+        absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ X),
       )(using Junction.Positive[X]): X -⚬ X =
-        apply1(TypeTag.toTypeFun(F), lift)
+        apply1(TypeTag.toTypeFun(F), lift, absType)
 
       def apply1[X](
         f: TypeTagF,
         lift: NonAbstractTypeF[X] -⚬ X,
+        absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ X),
       )(using J: Junction.Positive[X]): X -⚬ X = {
-        val ct = compilationTarget[X](lift)
+        val ct = compilationTarget[X](lift, absType)
         import ct.Map_●
         val g: ct.Arr[X, X] = f.compile[ct.Arr, ct.as, X](Map_●)(ct.typeAlgebra, Map_●).get(Map_●, Map_●)
         g > J.awaitPosFst
@@ -1457,6 +1459,7 @@ object Tools {
 
       class compilationTarget[T](
         lift: NonAbstractTypeF[T] -⚬ T,
+        absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ T),
       ) {
         type Arr[K, L] = K -⚬ (Done |*| L)
 
@@ -1528,9 +1531,10 @@ object Tools {
               λ { case t |*| u => constant(done) |*| lift(NonAbstractType.recCall(t |*| u)) }
             override def fix(f: TypeFun[●, ●]): Arr[One, T] =
               // const(f) > ConcreteType.fix > introFst(done)
+              println(s"\n\n     !!!!!!!! NOT IMPLEMENTED FIX\n\n")
               throw NotImplementedError(s"TODO (${summon[SourcePos]})")
             override def abstractTypeName(name: ScalaTypeParam): Arr[One, T] =
-              throw NotImplementedError(s"TODO (${summon[SourcePos]})")
+              absType(Left(name)) > introFst(done)
 
             override given category: SymmetricMonoidalCategory[Arr, |*|, One] =
               compilationTarget.this.category
