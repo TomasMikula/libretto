@@ -17,7 +17,7 @@ object TypeInference {
         State(n => (n+1, AbstractTypeLabel(n)))
     }
 
-    given tools: Tools = Tools.instance
+    given tools: Tools = TypeInferencer.instance
 
     val res =
     reconstructTypes(f)

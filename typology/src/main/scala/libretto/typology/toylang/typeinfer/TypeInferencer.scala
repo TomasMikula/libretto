@@ -44,6 +44,16 @@ trait TypeOps[F[_]] {
 
   def isPair[A]: F[A] -⚬ (F[A] |+| (A |*| A))
   def isRecCall[A]: F[A] -⚬ (F[A] |+| (A |*| A))
+
+  def either[A]: (A |*| A) -⚬ F[A]
+  def fixT[G[_], A](G: TypeTag[G]): One -⚬ F[A]
+  def apply1T[G[_], A](
+    G: TypeTag[G],
+    lift: F[A] -⚬ A,
+  )(using Junction.Positive[A]): A -⚬ A
+
+  def int[A]: Done -⚬ F[A]
+  def string[A]: Done -⚬ F[A]
 }
 
 object TypeInferencer {
@@ -100,6 +110,24 @@ object TypeInferencer {
 
       override def isRecCall[A]: NonAbstractTypeF[A] -⚬ (NonAbstractTypeF[A] |+| (A |*| A)) =
         NonAbstractType.isRecCall
+
+      override def either[A]: (A |*| A) -⚬ NonAbstractTypeF[A] =
+        NonAbstractType.either
+
+      override def fixT[G[_], A](G: TypeTag[G]): One -⚬ NonAbstractTypeF[A] =
+        NonAbstractType.fixT(G)
+
+      override def apply1T[G[_], A](
+        G: TypeTag[G],
+        lift: NonAbstractTypeF[A] -⚬ A,
+      )(using Junction.Positive[A]): A -⚬ A =
+        NonAbstractType.apply1T(G, lift)
+
+      override def int[A]: Done -⚬ NonAbstractTypeF[A] =
+        NonAbstractType.int
+
+      override def string[A]: Done -⚬ NonAbstractTypeF[A] =
+        NonAbstractType.string
     }
 
   def instance: TypeInferencer =
@@ -559,11 +587,13 @@ class TypeInferencerImpl[
 
   override def splittable: OutboundType -⚬ SplittableType = id
 
-  override def int: StarterKit.Done -⚬ OutboundType = UnhandledCase.raise("")
+  override def int: Done -⚬ OutboundType =
+    F.int > concreteType
 
   override def tapM: MergeableType -⚬ OutwardType = tap
 
-  override def either: (OutboundType |*| OutboundType) -⚬ OutboundType = UnhandledCase.raise("")
+  override def either: (OutboundType |*| OutboundType) -⚬ OutboundType =
+    F.either > concreteType
 
   override def tapS: SplittableType -⚬ OutwardType = tap
 
@@ -675,7 +705,8 @@ class TypeInferencerImpl[
 
   override def apply1TOW[F[_$4]](F: TypeTag[F]): OutwardType -⚬ OutwardType = UnhandledCase.raise("")
 
-  override def string: StarterKit.Done -⚬ OutboundType = UnhandledCase.raise("")
+  override def string: StarterKit.Done -⚬ OutboundType =
+    F.string > concreteType
 
   override lazy val nested: Nested = {
     val nl = labels.nested
@@ -791,7 +822,8 @@ class TypeInferencerImpl[
 
       override def mergeZap: (tools.OutwardType |*| tools.OutwardType) -⚬ Val[Type] = UnhandledCase.raise("")
 
-      override def unnestOutward: tools.OutwardType -⚬ OutwardType = UnhandledCase.raise("")
+      override def unnestOutward: tools.OutwardType -⚬ OutwardType =
+        lower > tap
 
       override def unnestS: tools.SplittableType -⚬ OutboundType = unnest
 
@@ -828,9 +860,11 @@ class TypeInferencerImpl[
   override def recCall: (OutboundType |*| OutboundType) -⚬ OutboundType =
     F.recCall > concreteType
 
-  override def apply1T[F[_$3]](F: TypeTag[F]): OutboundType -⚬ OutboundType = UnhandledCase.raise("")
+  override def apply1T[G[_]](G: TypeTag[G]): OutboundType -⚬ OutboundType =
+    F.apply1T(G, concreteType)
 
-  override def fixT[F[_$1]](F: TypeTag[F]): StarterKit.One -⚬ OutboundType = UnhandledCase.raise("")
+  override def fixT[G[_]](G: TypeTag[G]): StarterKit.One -⚬ OutboundType =
+    F.fixT(G) > concreteType
 
   override def intOW: StarterKit.Done -⚬ OutwardType = UnhandledCase.raise("")
 

@@ -1023,6 +1023,22 @@ object Tools {
       def fixT[X, F[_]](F: TypeTag[F]): One -⚬ NonAbstractTypeF[X] =
         fix ∘ const(TypeTag.toTypeFun(F))
 
+      def apply1T[X, F[_]](
+        F: TypeTag[F],
+        lift: NonAbstractTypeF[X] -⚬ X,
+      )(using Junction.Positive[X]): X -⚬ X =
+        apply1(TypeTag.toTypeFun(F), lift)
+
+      def apply1[X](
+        f: TypeTagF,
+        lift: NonAbstractTypeF[X] -⚬ X,
+      )(using J: Junction.Positive[X]): X -⚬ X = {
+        val ct = compilationTarget[X](lift)
+        import ct.Map_●
+        val g: ct.Arr[X, X] = f.compile[ct.Arr, ct.as, X](Map_●)(ct.typeAlgebra, Map_●).get(Map_●, Map_●)
+        g > J.awaitPosFst
+      }
+
       def string[X]: Done -⚬ NonAbstractTypeF[X] =
         injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
@@ -1437,6 +1453,123 @@ object Tools {
       ): Junction.Positive[NonAbstractTypeF[X]] with {
         override def awaitPosFst: (Done |*| NonAbstractTypeF[X]) -⚬ NonAbstractTypeF[X] =
           NonAbstractType.awaitPosFst[X](X.awaitPosFst)
+      }
+
+      class compilationTarget[T](
+        lift: NonAbstractTypeF[T] -⚬ T,
+      ) {
+        type Arr[K, L] = K -⚬ (Done |*| L)
+
+        val category: SymmetricMonoidalCategory[Arr, |*|, One] =
+          new SymmetricMonoidalCategory[Arr, |*|, One] {
+
+            override def id[A]: Arr[A, A] =
+              dsl.introFst(done)
+
+            override def introFst[A]: Arr[A, One |*| A] =
+              dsl.andThen(dsl.introFst, dsl.introFst(done))
+
+            override def introSnd[A]: Arr[A, A |*| One] =
+              dsl.andThen(dsl.introSnd, dsl.introFst(done))
+
+            override def elimFst[A]: Arr[One |*| A, A] =
+              dsl.fst(done)
+
+            override def elimSnd[A]: Arr[A |*| One, A] =
+              dsl.andThen(dsl.swap, dsl.fst(done))
+
+            override def assocRL[A, B, C]: Arr[A |*| (B |*| C), (A |*| B) |*| C] =
+              dsl.andThen(dsl.assocRL, dsl.introFst(done))
+
+            override def assocLR[A, B, C]: Arr[(A |*| B) |*| C, A |*| (B |*| C)] =
+              dsl.andThen(dsl.assocLR, dsl.introFst(done))
+
+            override def swap[A, B]: Arr[A |*| B, B |*| A] =
+              dsl.andThen(dsl.swap, dsl.introFst(done))
+
+            override def andThen[A, B, C](
+              f: Arr[A, B],
+              g: Arr[B, C],
+            ): Arr[A, C] =
+              dsl.andThen(
+                dsl.andThen(f, dsl.snd(g)),
+                dsl.andThen(dsl.assocRL, dsl.fst(join)),
+              )
+
+            override def par[A1, A2, B1, B2](
+              f1: Arr[A1, B1],
+              f2: Arr[A2, B2],
+            ): Arr[A1 |*| A2, B1 |*| B2] =
+              dsl.andThen(
+                dsl.par(f1, f2),
+                λ { case (d1 |*| b1) |*| (d2 |*| b2) =>
+                  join(d1 |*| d2) |*| (b1 |*| b2)
+                },
+              )
+          }
+
+        val typeAlgebra: TypeAlgebra.Of[ScalaTypeParam, Arr, T, |*|, One] =
+          new TypeAlgebra[ScalaTypeParam, Arr] {
+            override type Type = T
+            override type <*>[A, B] = A |*| B
+            override type None = One
+
+            override def unit: Arr[One, T] =
+              done > λ { case +(d) => d |*| lift(NonAbstractType.unit(d)) }
+            override def int: Arr[One, T] =
+              done > λ { case +(d) => d |*| lift(NonAbstractType.int(d)) }
+            override def string: Arr[One, T] =
+              done > λ { case +(d) => d |*| lift(NonAbstractType.string(d)) }
+            override def pair: Arr[T |*| T, T] =
+              λ { case t |*| u => constant(done) |*| lift(NonAbstractType.pair(t |*| u)) }
+            override def sum: Arr[T |*| T, T] =
+              λ { case t |*| u => constant(done) |*| lift(NonAbstractType.either(t |*| u)) }
+            override def recCall: Arr[T |*| T, T] =
+              λ { case t |*| u => constant(done) |*| lift(NonAbstractType.recCall(t |*| u)) }
+            override def fix(f: TypeFun[●, ●]): Arr[One, T] =
+              // const(f) > ConcreteType.fix > introFst(done)
+              throw NotImplementedError(s"TODO (${summon[SourcePos]})")
+            override def abstractTypeName(name: ScalaTypeParam): Arr[One, T] =
+              throw NotImplementedError(s"TODO (${summon[SourcePos]})")
+
+            override given category: SymmetricMonoidalCategory[Arr, |*|, One] =
+              compilationTarget.this.category
+          }
+
+        sealed trait as[K, Q]
+
+        case object Map_○ extends as[○, One]
+        case object Map_● extends as[●, T]
+        case class Pair[K1, K2, Q1, Q2](
+          f1: K1 as Q1,
+          f2: K2 as Q2,
+        ) extends as[K1 × K2, Q1 |*| Q2]
+
+        given objectMap: MonoidalObjectMap[as, ×, ○, |*|, One] =
+          new MonoidalObjectMap[as, ×, ○, |*|, One] {
+
+            override def uniqueOutputType[A, B, C](f: as[A, B], g: as[A, C]): B =:= C =
+              (f, g) match {
+                case (Map_○, Map_○) => summon[B =:= C]
+                case (Map_●, Map_●) => summon[B =:= C]
+                case (Pair(f1, f2), Pair(g1, g2)) =>
+                  (uniqueOutputType(f1, g1), uniqueOutputType(f2, g2)) match {
+                    case (TypeEq(Refl()), TypeEq(Refl())) =>
+                      summon[B =:= C]
+                  }
+              }
+
+            override def pair[A1, A2, X1, X2](f1: as[A1, X1], f2: as[A2, X2]): as[A1 × A2, X1 |*| X2] =
+              Pair(f1, f2)
+
+            override def unpair[A1, A2, X](f: as[A1 × A2, X]): Unpaired[A1, A2, X] =
+              f match {
+                case Pair(f1, f2) => Unpaired.Impl(f1, f2)
+              }
+
+            override def unit: as[○, One] =
+              Map_○
+          }
       }
     }
 
