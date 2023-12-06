@@ -789,7 +789,11 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
         p: Projection.Proper[|*|, B, C],
         f: [P, Q, R] => (P -> Q, Projection[|*|, Q, R]) => ProjectRes[P, R],
       ): ProjectRes[A1 |*| A2, C] =
-        UnhandledCase.raise(s"${this.getClass.getSimpleName}.projectProper")
+        tail.projectProper(p, f) match
+          case ProjectRes.Projected(p0, h) =>
+            SemiObstructed(~⚬.id[A1 |*| A2], semiHead, s, t).project(p0, f) match
+              case ProjectRes.Projected(q, g) =>
+                ProjectRes.Projected(q, g > h)
 
       override def chaseFwFst[F[_], X](i: Focus[|*|, F])(using ev: A1 =:= F[X]): ChaseFwRes.Blocked[[x] =>> F[x] |*| A2, X, B] =
         ev match { case TypeEq(Refl()) =>
