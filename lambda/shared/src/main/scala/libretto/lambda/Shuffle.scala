@@ -1910,8 +1910,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def xi_this_xi[X, C2, C3](h: XI[X, B1 |*| B2, A3, C2, C3]): (A1 |*| (X |*| (A2 |*| A3))) ~⚬ ((B1 |*| B2) |*| (C2 |*| C3)) =
         Xfer(Id(), XI(h.g).asShuffle, AssocRL(g))
 
-      override def xi_this_ixi[P1, P2, C1, C2, C3, C4](g: IXI[P1, P2, B1 |*| B2, A3, C1, C2, C3, C4]): (A1 |*| (P1 |*| P2 |*| (A2 |*| A3))) ~⚬ (C1 |*| C2 |*| (C3 |*| C4)) =
-        UnhandledCase.raise(s"${this.getClass.getSimpleName}.xi_this_ixi")
+      override def xi_this_ixi[P1, P2, C1, C2, C3, C4](
+        h: IXI[P1, P2, B1 |*| B2, A3, C1, C2, C3, C4],
+      ): (A1 |*| (P1 |*| P2 |*| (A2 |*| A3))) ~⚬ (C1 |*| C2 |*| (C3 |*| C4)) =
+        decompose(XI(g).asShuffle > h.g1.asShuffle) match
+          case Decomposition(f1, f2, f) => Xfer(f1, ixi > par(f2, h.g2.asShuffle), AssocRL(f))
 
       override def ixi_fstThis_assocLR[P1, P2, Q1, Q2, R2, R3](
         g2: TransferOpt[P1, P2, Q1, Q2],
