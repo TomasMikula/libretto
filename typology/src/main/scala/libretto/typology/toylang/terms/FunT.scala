@@ -21,6 +21,9 @@ object FunT {
 
   case class Distribute[->[_, _], A, B, C]() extends FunT[->, (A, Either[B, C]), Either[(A, B), (A, C)]]
 
+  case class Prj1[->[_, _], A, B]() extends FunT[->, (A, B), A]
+  case class Prj2[->[_, _], A, B]() extends FunT[->, (A, B), B]
+
   case class FixF[->[_, _], F[_]](f: TypeTag[F]) extends FunT[->, F[Fix[F]], Fix[F]]
   case class UnfixF[->[_, _], F[_]](f: TypeTag[F]) extends FunT[->, Fix[F], F[Fix[F]]]
 

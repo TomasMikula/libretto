@@ -34,20 +34,25 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
     def unfix[A](using TypeTag[A]): Fun[InfiniteList[A], (A, InfiniteList[A])] =
       Fun.unfix[(A, _)]
 
+    def fix_[A]: Fun[(A, InfiniteList[A]), InfiniteList[A]] =
+      fix[A](using TypeTag.ofTypeParam[A])
+
+    def unfix_[A]: Fun[InfiniteList[A], (A, InfiniteList[A])] =
+      unfix[A](using TypeTag.ofTypeParam[A])
+
     def sum: Fun[InfiniteList[Int], Int] =
       Fun.rec(Fun.snd(unfix[Int] > Fun.swap) > Fun.assocRL > Fun.fst(Fun.recur) > Fun.addInts)
 
-    def map[A, B](f: Fun[A, B]): Fun[InfiniteList[A], InfiniteList[B]] = {
-      given TypeTag[A] = TypeTag.ofTypeParam[A]
-      given TypeTag[B] = TypeTag.ofTypeParam[B]
-
+    def map[A, B](f: Fun[A, B])(using TypeTag[A], TypeTag[B]): Fun[InfiniteList[A], InfiniteList[B]] =
       Fun.recFun { map =>
         as => {
           val h <*> t = unfix[A](as)
           fix[B](f(h) <*> map(t))
         }
       }
-    }
+
+    def map_[A, B](f: Fun[A, B]): Fun[InfiniteList[A], InfiniteList[B]] =
+      map(f)(using TypeTag.ofTypeParam[A], TypeTag.ofTypeParam[B])
   }
 
   type ListF[A, X] = Either[Unit, (A, X)]
@@ -67,10 +72,10 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
     def tpe: TypeTagF =
       TypeTag.toTypeFun[List](summon[TypeTag[List]])
 
-    def map[A, B](f: Fun[A, B]): Fun[List[A], List[B]] = {
-      given TypeTag[A] = TypeTag.ofTypeParam[A]
-      given TypeTag[B] = TypeTag.ofTypeParam[B]
+    def tag[A](using TypeTag[A]): TypeTag[List[A]] =
+      TypeTag.app(TypeTag[List], TypeTag[A])
 
+    def map[A, B](f: Fun[A, B])(using TypeTag[A], TypeTag[B]): Fun[List[A], List[B]] =
       Fun.recFun { map =>
         as =>
           val bs =
@@ -82,6 +87,11 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
             }
           Fun.fix[ListF[B, *]](using ListF.typeTag[B])(bs)
       }
+
+    def map_[A, B](f: Fun[A, B]): Fun[List[A], List[B]] = {
+      given TypeTag[A] = TypeTag.ofTypeParam[A]
+      given TypeTag[B] = TypeTag.ofTypeParam[B]
+      map(f)
     }
   }
 
@@ -458,38 +468,77 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
           } yield ()
         },
 
-  // test("infer types of List.map(intToString)") {
-  //   val (tIn, tOut) = reconstructTypes[List[Int], List[String]](List.map(Fun.intToString))
+      "infer types of InfiniteList.unfix_[Int] > fst(intToString)" ->
+        testInferredTypes(InfiniteList.unfix_[Int] > Fun.fst(intToString)) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.outType, Type.pair(Type.string, InfiniteList.tpe(Type.int)))
+            _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
+          } yield ()
+        }.pending,
 
-  //   assert(tIn == List.tpe(Type.int))
-  //   assert(tOut == List.tpe(Type.string))
-  // }
+      "infer types of InfiniteList.map_(intToString)" ->
+        testInferredTypes(InfiniteList.map_(Fun.intToString)) { tf =>
+          println(s"GOT IT: $tf")
+          for {
+            _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
+            _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.string))
+          } yield ()
+        }.pending,
 
-  // test("infer types of List.map(List.map(intToString))") {
-  //   val (tIn, tOut) = reconstructTypes[List[List[Int]], List[List[String]]](List.map(List.map(Fun.intToString)))
+      "infer types of List.map(intToString)" ->
+        testInferredTypes(List.map(Fun.intToString)) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, List.tpe(Type.int))
+            _ <- Outcome.assertEquals(tf.outType, List.tpe(Type.string))
+          } yield ()
+        },
 
-  //   assert(tIn == List.tpe(List.tpe(Type.int)))
-  //   assert(tOut == List.tpe(List.tpe(Type.string)))
-  // }
+      "infer types of List.map_(intToString)" ->
+        testInferredTypes(List.map_(Fun.intToString)) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, List.tpe(Type.int))
+            _ <- Outcome.assertEquals(tf.outType, List.tpe(Type.string))
+          } yield ()
+        }.pending,
 
-  // test("infer types of nested Fix types: countNils") {
-  //   import List.{given TypeTag[List]}
+      "infer types of List.map(List.map(intToString))" ->
+        testInferredTypes(List.map(List.map(Fun.intToString))(using List.tag[Int], List.tag[String])) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, List.tpe(List.tpe(Type.int)))
+            _ <- Outcome.assertEquals(tf.outType, List.tpe(List.tpe(Type.string)))
+          } yield ()
+        },
 
-  //   val countNils: Fun[Fix[List], Int] =
-  //     Fun.rec { countNils =>
-  //       Fun.unfix[List] > Fun.unfix[ListF[Fix[List], *]](using ListF.typeTag[Fix[List]]) > Fun.either(
-  //         Fun.constInt(1),
-  //         Fun.par(
-  //           countNils,
-  //           Fun.fix[List] > countNils,
-  //         ) > Fun.addInts
-  //       )
-  //     }
+      "infer types of List.map_(List.map_(intToString))" ->
+        testInferredTypes(List.map_(List.map_(Fun.intToString))) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, List.tpe(List.tpe(Type.int)))
+            _ <- Outcome.assertEquals(tf.outType, List.tpe(List.tpe(Type.string)))
+          } yield ()
+        }.pending,
 
-  //   val (tIn, tOut) = reconstructTypes[Fix[List], Int](countNils)
+      "infer types of nested Fix types: countNils" -> {
+        import List.{given TypeTag[List]}
 
-  //   assert(tIn == Type.fix(List.tpe))
-  // }
+        val countNils: Fun[Fix[List], Int] =
+          Fun.recFun { countNils => x =>
+            val y = Fun.unfix[List](x)
+            val z = Fun.unfix[ListF[Fix[List], *]](using ListF.typeTag[Fix[List]])(y)
+            z switch {
+              case Left(u) =>
+                Fun.constInt(1)(u)
+              case Right(w <*> ws) =>
+                Fun.addInts(countNils(w) <*> countNils(Fun.fix[List](ws)))
+            }
+          }
+
+        testInferredTypes(countNils) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, Type.fix(List.tpe))
+            _ <- Outcome.assertEquals(tf.outType, Type.int)
+          } yield ()
+        }
+      },
 
   // test("infer types of NonEmptyTree.map(intToString)") {
   //   val (tIn, tOut) =

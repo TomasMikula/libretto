@@ -43,7 +43,7 @@ object TypeInference {
   ): M[One -⚬ (tools.OutboundType |*| Val[TypedFun[A, B]] |*| tools.OutboundType)] = {
     println(s"reconstructTypes($f)")
     import gen.newVar
-    import tools.{apply1T, fixT, int, label, output, outputOW, pair, pairOW, recCall, recCallOW, string}
+    import tools.{apply1T, either, fixT, int, label, output, outputOW, pair, pairOW, recCall, recCallOW, string}
     import Tools.ToolsImpl.Type
 
     val nested: tools.Nested1 = tools.nested
@@ -181,8 +181,48 @@ object TypeInference {
             val b = tools.either(l |*| unnestS(r2))
             (unnestS(r1) |*| f |*| b)
           }
-      case FunT.Distribute() =>
-        throw NotImplementedError(s"at ${summon[SourcePos]}")
+      case _: FunT.Distribute[arr, a, b, c] =>
+        for {
+          a <- newVar
+          b <- newVar
+          c <- newVar
+        } yield
+          λ.? { _ =>
+            val a1 |*| ta |*| a2 = newAbstractType(a)
+            val b1 |*| tb |*| b2 = newAbstractType(b)
+            val c1 |*| tc |*| c2 = newAbstractType(c)
+            val f = (ta ** tb ** tc) :>> mapVal { case ((a, b), c) => TypedFun.distribute[a, b, c](a, b, c) }
+            val in  = pair(unnestS(a1) |*| either(unnestS(b1) |*| unnestS(c1)))
+            val a3 |*| a4 = nt.split(a2)
+            val out = either(pair(unnestS(a3) |*| unnestS(b2)) |*| pair(unnestS(a4) |*| unnestS(c2)))
+            in |*| f |*| out
+          }
+      case _: FunT.Prj1[arr, a, b] =>
+        for {
+          a <- newVar
+          b <- newVar
+        } yield
+          λ.? { _ =>
+            val a1 |*| ta |*| a2 = newAbstractType(a)
+            val b1 |*| tb        = newTypeParam(b)
+            val f = (ta ** tb) :>> mapVal { case (a, b) => TypedFun.prj1[a, b](a, b) }
+            val in  = pair(unnestS(a1) |*| b1)
+            val out = unnestS(a2)
+            in |*| f |*| out
+          }
+      case _: FunT.Prj2[arr, a, b] =>
+        for {
+          a <- newVar
+          b <- newVar
+        } yield
+          λ.? { _ =>
+            val a1 |*| ta        = newTypeParam(a)
+            val b1 |*| tb |*| b2 = newAbstractType(b)
+            val f = (ta ** tb) :>> mapVal { case (a, b) => TypedFun.prj2[a, b](a, b) }
+            val in  = pair(a1 |*| unnestS(b1))
+            val out = unnestS(b2)
+            in |*| f |*| out
+          }
       case f: FunT.FixF[arr, f] =>
         Monad[M].pure(
           λ.* { one =>

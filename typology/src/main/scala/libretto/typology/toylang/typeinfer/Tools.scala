@@ -1530,9 +1530,7 @@ object Tools {
             override def recCall: Arr[T |*| T, T] =
               λ { case t |*| u => constant(done) |*| lift(NonAbstractType.recCall(t |*| u)) }
             override def fix(f: TypeFun[●, ●]): Arr[One, T] =
-              // const(f) > ConcreteType.fix > introFst(done)
-              println(s"\n\n     !!!!!!!! NOT IMPLEMENTED FIX\n\n")
-              throw NotImplementedError(s"TODO (${summon[SourcePos]})")
+              const(f) > NonAbstractType.fix > lift > introFst(done)
             override def abstractTypeName(name: ScalaTypeParam): Arr[One, T] =
               absType(Left(name)) > introFst(done)
 

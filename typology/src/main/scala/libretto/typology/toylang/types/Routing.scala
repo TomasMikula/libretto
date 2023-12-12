@@ -273,7 +273,9 @@ sealed trait Routing[K, L](using
       case ElimSnd() =>
         throw NotImplementedError(s"at ${summon[SourcePos]}")
       case AndThen(f, g) =>
-        throw NotImplementedError(s"at ${summon[SourcePos]}")
+        val f1 = f.compile[==>, F, |*|, One, Q](fk)()
+        val g1 = g.compile(f1.tgtMap)()
+        f1 > g1
       case Par(f1, f2) =>
         throw NotImplementedError(s"at ${summon[SourcePos]}")
       case Elim() =>

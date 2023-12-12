@@ -49,6 +49,12 @@ object Fun {
   def distributeL[A, B, C]: Fun[(A, Either[B, C]), Either[(A, B), (A, C)]] =
     Fun(FunT.Distribute())
 
+  def prj1[A, B]: Fun[(A, B), A] =
+    Fun(FunT.Prj1())
+
+  def prj2[A, B]: Fun[(A, B), B] =
+    Fun(FunT.Prj2())
+
   def fix[F[_]](using f: TypeTag[F]): Fun[F[Fix[F]], Fix[F]] =
     Fun(FunT.FixF[Fun, F](f))
 
@@ -88,6 +94,7 @@ object Fun {
   private val lambdas: libretto.lambda.Lambdas[Fun, Tuple2, Object] =
     libretto.lambda.Lambdas[Fun, Tuple2, Object](
       syntheticPairVar = (lbl1, lbl2) => new Object,
+      universalDiscard = Some([x, y] => (_: Unit) => Fun.prj2[x, y]),
     )
 
   opaque type LambdaContext = lambdas.Context
@@ -96,10 +103,10 @@ object Fun {
 
   def fun[A, B](f: LambdaContext ?=> Expr[A] => Expr[B]): Fun[A, B] = {
     import libretto.lambda.Lambdas
-    import Lambdas.Abstracted.{Closure, Exact, Failure}
+    import Lambdas.Delambdified.{Closure, Exact, Failure}
     import libretto.lambda.Var
 
-    lambdas.absTopLevel(new Object, f) match {
+    lambdas.delambdifyTopLevel(new Object, f) match {
       case Exact(f) =>
         f.fold
       case Closure(captured, f) =>
@@ -124,7 +131,7 @@ object Fun {
   extension [A, B](x: Expr[Either[A, B]]) {
     def switch[R](f: Either[Expr[A], Expr[B]] => Expr[R])(using LambdaContext): Expr[R] = {
       import libretto.lambda.Lambdas
-      import Lambdas.Abstracted.{Closure, Exact, Failure}
+      import Lambdas.Delambdified.{Closure, Exact, Failure}
 
       lambdas.switch[Either, Either[A, B], R](
         Sink[lambdas.VFun, Either, A, R]((new Object, (a: Expr[A]) => f(Left(a)))) <+> Sink((new Object, (b: Expr[B]) => f(Right(b)))),
