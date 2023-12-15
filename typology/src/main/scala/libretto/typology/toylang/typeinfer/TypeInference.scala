@@ -45,7 +45,7 @@ object TypeInference {
   ): M[One -⚬ (tools.Tp |*| Val[TypedFun[A, B]] |*| tools.Tp)] = {
     // println(s"reconstructTypes($f)")
     import gen.newVar
-    import tools.{apply1T, either, fixT, int, label, merge, output, pair, recCall, string, unit}
+    import tools.{apply1T, either, fixT, int, label, merge, output, pair, recCall, split, string, unit}
 
     val nested: tools.Nested = tools.nested
     import nested.{lower, tools => nt, unnest}
@@ -56,9 +56,9 @@ object TypeInference {
     def newAbstractType(v: AbstractTypeLabel)(using
       SourcePos,
       LambdaContext,
-    ): $[nt.Tp |*| Val[Type] |*| nt.Tp] =
-      constant(nt.label(Right(v))) :>> nt.abstractTypeTap :>> λ { case s |*| t =>
-        val s1 |*| s2 = nt.split(s)
+    ): $[tools.Tp |*| Val[Type] |*| tools.Tp] =
+      constant(label(Right(v))) :>> tools.abstractTypeTap :>> λ { case s |*| t =>
+        val s1 |*| s2 = split(s)
         s1 |*| t |*| s2
       }
 
@@ -75,7 +75,7 @@ object TypeInference {
         } yield
           λ.? { _ =>
             val a |*| t |*| b = newAbstractType(v)
-            unnest(a) |*| (t :>> mapVal(TypedFun.Id(_))) |*| unnest(b)
+            a |*| (t :>> mapVal(TypedFun.Id(_))) |*| b
           }
       case FunT.AndThen(f, g) =>
         for {
@@ -113,8 +113,8 @@ object TypeInference {
             val b1 |*| tb |*| b2 = newAbstractType(b)
             val c1 |*| tc |*| c2 = newAbstractType(c)
             val f = (ta ** tb ** tc) :>> mapVal { case ((a, b), c) => TypedFun.assocLR[a, b, c](a, b, c) }
-            val in  = pair(pair(unnest(a1) |*| unnest(b1)) |*| unnest(c1))
-            val out = pair(unnest(a2) |*| pair(unnest(b2) |*| unnest(c2)))
+            val in  = pair(pair(a1 |*| b1) |*| c1)
+            val out = pair(a2 |*| pair(b2 |*| c2))
             in |*| f |*| out
           }
         }
@@ -129,8 +129,8 @@ object TypeInference {
             val b1 |*| tb |*| b2 = newAbstractType(b)
             val c1 |*| tc |*| c2 = newAbstractType(c)
             val f = (ta ** tb ** tc) :>> mapVal { case ((a, b), c) => TypedFun.assocRL[a, b, c](a, b, c) }
-            val in  = pair(unnest(a1) |*| pair(unnest(b1) |*| unnest(c1)))
-            val out = pair(pair(unnest(a2) |*| unnest(b2)) |*| unnest(c2))
+            val in  = pair(a1 |*| pair(b1 |*| c1))
+            val out = pair(pair(a2 |*| b2) |*| c2)
             in |*| f |*| out
           }
         }
@@ -143,8 +143,8 @@ object TypeInference {
             val a1 |*| ta |*| a2 = newAbstractType(a)
             val b1 |*| tb |*| b2 = newAbstractType(b)
             val f = (ta ** tb) :>> mapVal { case (a, b) => TypedFun.swap[a, b](a, b) }
-            val in  = pair(unnest(a1) |*| unnest(b1))
-            val out = pair(unnest(b2) |*| unnest(a2))
+            val in  = pair(a1 |*| b1)
+            val out = pair(b2 |*| a2)
             in |*| f |*| out
           }
         }
@@ -170,8 +170,8 @@ object TypeInference {
             val l1 |*| lt |*| l2 = newAbstractType(ll)
             val r  |*| rt        = newTypeParam(rl)
             val f = (lt ** rt) :>> mapVal { case (lt, rt) => TypedFun.injectL[l, r](lt, rt) }
-            val b = tools.either(unnest(l2) |*| r)
-            (unnest(l1) |*| f |*| b)
+            val b = tools.either(l2 |*| r)
+            (l1 |*| f |*| b)
           }
       case _: FunT.InjectR[arr, l, r] =>
         for {
@@ -182,8 +182,8 @@ object TypeInference {
             val  l |*| lt        = newTypeParam(ll)
             val r1 |*| rt |*| r2 = newAbstractType(rl)
             val f = (lt ** rt) :>> mapVal { case (lt, rt) => TypedFun.injectR[l, r](lt, rt) }
-            val b = tools.either(l |*| unnest(r2))
-            (unnest(r1) |*| f |*| b)
+            val b = tools.either(l |*| r2)
+            (r1 |*| f |*| b)
           }
       case _: FunT.Distribute[arr, a, b, c] =>
         for {
@@ -196,9 +196,9 @@ object TypeInference {
             val b1 |*| tb |*| b2 = newAbstractType(b)
             val c1 |*| tc |*| c2 = newAbstractType(c)
             val f = (ta ** tb ** tc) :>> mapVal { case ((a, b), c) => TypedFun.distribute[a, b, c](a, b, c) }
-            val in  = pair(unnest(a1) |*| either(unnest(b1) |*| unnest(c1)))
-            val a3 |*| a4 = nt.split(a2)
-            val out = either(pair(unnest(a3) |*| unnest(b2)) |*| pair(unnest(a4) |*| unnest(c2)))
+            val in  = pair(a1 |*| either(b1 |*| c1))
+            val a3 |*| a4 = split(a2)
+            val out = either(pair(a3 |*| b2) |*| pair(a4 |*| c2))
             in |*| f |*| out
           }
       case _: FunT.Dup[arr, a] =>
@@ -207,11 +207,9 @@ object TypeInference {
         } yield
           λ.? { _ =>
             val a1 |*| ta |*| a2 = newAbstractType(a)
-            val a3 |*| a4 = nt.split(a2)
+            val a3 |*| a4 = split(a2)
             val f = ta :>> mapVal { a => TypedFun.dup[a](a) }
-            val in  = unnest(a1)
-            val out = pair(unnest(a3) |*| unnest(a4))
-            in |*| f |*| out
+            a1 |*| f |*| pair(a3 |*| a4)
           }
       case _: FunT.Prj1[arr, a, b] =>
         for {
@@ -222,9 +220,7 @@ object TypeInference {
             val a1 |*| ta |*| a2 = newAbstractType(a)
             val b1 |*| tb        = newTypeParam(b)
             val f = (ta ** tb) :>> mapVal { case (a, b) => TypedFun.prj1[a, b](a, b) }
-            val in  = pair(unnest(a1) |*| b1)
-            val out = unnest(a2)
-            in |*| f |*| out
+            pair(a1 |*| b1) |*| f |*| a2
           }
       case _: FunT.Prj2[arr, a, b] =>
         for {
@@ -235,9 +231,7 @@ object TypeInference {
             val a1 |*| ta        = newTypeParam(a)
             val b1 |*| tb |*| b2 = newAbstractType(b)
             val f = (ta ** tb) :>> mapVal { case (a, b) => TypedFun.prj2[a, b](a, b) }
-            val in  = pair(a1 |*| unnest(b1))
-            val out = unnest(b2)
-            in |*| f |*| out
+            pair(a1 |*| b1) |*| f |*| b2
           }
       case f: FunT.FixF[arr, f] =>
         Monad[M].pure(
@@ -301,8 +295,8 @@ object TypeInference {
             val a1 |*| ta |*| a2 = newAbstractType(va)
             val b1 |*| tb |*| b2 = newAbstractType(vb)
             val tf = (ta ** tb) :>> mapVal { case (ta, tb) => TypedFun.recur[a, b](ta, tb) }
-            val tIn = pair(recCall(unnest(a1) |*| unnest(b1)) |*| unnest(a2))
-            tIn |*| tf |*| unnest(b2)
+            val tIn = pair(recCall(a1 |*| b1) |*| a2)
+            tIn |*| tf |*| b2
           }
       case FunT.ConstInt(n) =>
         Monad[M].pure(
