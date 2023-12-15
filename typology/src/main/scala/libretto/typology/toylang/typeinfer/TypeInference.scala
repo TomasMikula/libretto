@@ -5,7 +5,7 @@ import libretto.lambda.util.Monad.syntax._
 import libretto.scaletto.StarterKit._
 import libretto.typology.toylang.terms.{Fun, FunT, TypedFun}
 import libretto.typology.toylang.terms.TypedFun.Type
-import libretto.typology.toylang.types.{AbstractTypeLabel, TypeTag}
+import libretto.typology.toylang.types.{AbstractTypeLabel, ScalaTypeParam, TypeTag}
 import libretto.typology.util.State
 
 object TypeInference {
@@ -18,7 +18,8 @@ object TypeInference {
         State(n => (n+1, AbstractTypeLabel(n)))
     }
 
-    given tools: TypeInferencer = TypeInferencer.instance
+    given tools: TypeInferencer[Either[ScalaTypeParam, AbstractTypeLabel]] =
+      TypeInferencer.instance
 
     val res =
     reconstructTypes(f)
@@ -37,7 +38,7 @@ object TypeInference {
   }
 
   def reconstructTypes[M[_], A, B](f: Fun[A, B])(using
-    tools: TypeInferencer,
+    tools: TypeInferencer[Either[ScalaTypeParam, AbstractTypeLabel]],
   )(using
     gen: VarGen[M, AbstractTypeLabel],
     M: Monad[M],
@@ -56,7 +57,7 @@ object TypeInference {
       SourcePos,
       LambdaContext,
     ): $[nt.Tp |*| Val[Type] |*| nt.Tp] =
-      constant(nt.label(v)) :>> nt.abstractTypeTap :>> λ { case s |*| t =>
+      constant(nt.label(Right(v))) :>> nt.abstractTypeTap :>> λ { case s |*| t =>
         val s1 |*| s2 = nt.split(s)
         s1 |*| t |*| s2
       }
@@ -65,7 +66,7 @@ object TypeInference {
       SourcePos,
       LambdaContext,
     ): $[tools.Tp |*| Val[Type]] =
-      tools.abstractTypeTap(constant(label(v)))
+      tools.abstractTypeTap(constant(label(Right(v))))
 
     f.value match {
       case FunT.IdFun() =>

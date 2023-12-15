@@ -7,7 +7,7 @@ import libretto.testing.scalatest.scaletto.ScalatestStarterTestSuite
 import libretto.testing.scaletto.StarterTestKit
 import libretto.testing.TestCase
 import libretto.typology.toylang.terms.TypedFun.Type
-import libretto.typology.toylang.types.AbstractTypeLabel
+import libretto.typology.toylang.types.{AbstractTypeLabel, ScalaTypeParam}
 import libretto.typology.toylang.types.generic.{TypeExpr => gte}
 
 class TypeInferencerTests extends ScalatestStarterTestSuite {
@@ -40,9 +40,9 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
     val nn = nt.nested
     import nn.{tools => nnt}
 
-    extension (tools: TypeInferencer)
+    extension (tools: TypeInferencer[Either[ScalaTypeParam, AbstractTypeLabel]])
       def mkLabel(n: Int): One -⚬ tools.Label =
-        tools.label(AbstractTypeLabel(n))
+        tools.label(Right(AbstractTypeLabel(n)))
 
       def lbl(n: Int)(using
         SourcePos,
