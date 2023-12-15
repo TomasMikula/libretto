@@ -90,7 +90,10 @@ extends AnyFunSuite
                             case None    => fail(message)
                           }
                         case Crash(e) =>
-                          fail(s"Crashed with ${e.getClass.getCanonicalName}: ${e.getMessage}", e)
+                          val posStr = e.getStackTrace().headOption
+                            .map(ste => s" (at ${ste.getFileName()}:${ste.getLineNumber()})")
+                            .getOrElse("")
+                          fail(s"Crashed with ${e.getClass.getCanonicalName}: ${e.getMessage}$posStr", e)
                         case TimedOut(d) =>
                           fail(s"Timed out after $d")
                       }
