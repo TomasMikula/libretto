@@ -6,7 +6,7 @@ import libretto.lambda.util.TypeEq.Refl
 import libretto.scaletto.StarterKit._
 import libretto.typology.kinds.{×, ○, ●}
 import libretto.typology.toylang.terms.TypedFun
-import libretto.typology.toylang.types.{AbstractTypeLabel, ScalaTypeParam, TypeAlgebra, TypeTag}
+import libretto.typology.toylang.types.{AbstractTypeLabel, ScalaTypeParam, TypeAlgebra, TypeFun, TypeTag}
 import libretto.scaletto.StarterKit
 import libretto.lambda.UnhandledCase
 
@@ -95,6 +95,7 @@ trait Tools { self =>
   def intOW: Done -⚬ OutwardType
   def string: Done -⚬ OutboundType
   def stringOW: Done -⚬ OutwardType
+  def unit: Done -⚬ OutboundType
   def fixT[F[_]](F: TypeTag[F]): One -⚬ OutboundType
   def fixTOW[F[_]](F: TypeTag[F]): One -⚬ OutwardType
   def apply1T[F[_]](F: TypeTag[F]): OutboundType -⚬ OutboundType
@@ -146,13 +147,14 @@ object Tools {
     // def  TypeFun = libretto.typology.toylang.types.TypeFun
 
     type TypeTagF = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, ●, ●]
+    type TypeTagPF = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, ● × ●, ●]
 
     private[typeinfer] type NonAbstractTypeF[X] = (
       Val[(Type, Type)] // type mismatch
       |+| Done // unit
       |+| Done // int
       |+| Done // string
-      |+| Val[TypeTagF] // fix
+      |+| (Val[TypeTagF] |+| (Val[TypeTagPF] |*| X)) // fix or pfix
       |+| (X |*| X) // recCall
       |+| (X |*| X) // either
       |+| (X |*| X) // pair
@@ -1018,26 +1020,37 @@ object Tools {
         injectL ∘ injectL ∘ injectR
 
       def fix[X]: Val[TypeTagF] -⚬ NonAbstractTypeF[X] =
-        injectL ∘ injectL ∘ injectL ∘ injectR
+        injectL ∘ injectL ∘ injectL ∘ injectR ∘ injectL
 
       def fixT[X, F[_]](F: TypeTag[F]): One -⚬ NonAbstractTypeF[X] =
         fix ∘ const(TypeTag.toTypeFun(F))
 
+      def pfix[X]: (Val[TypeTagPF] |*| X) -⚬ NonAbstractTypeF[X] =
+        injectL ∘ injectL ∘ injectL ∘ injectR ∘ injectR
+
       def apply1T[X, F[_]](
         F: TypeTag[F],
+        split: X -⚬ (X |*| X),
         lift: NonAbstractTypeF[X] -⚬ X,
         absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ X),
       )(using Junction.Positive[X]): X -⚬ X =
-        apply1(TypeTag.toTypeFun(F), lift, absType)
+        apply1(TypeTag.toTypeFun(F), split, lift, absType)
 
       def apply1[X](
         f: TypeTagF,
+        split: X -⚬ (X |*| X),
         lift: NonAbstractTypeF[X] -⚬ X,
         absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ X),
       )(using J: Junction.Positive[X]): X -⚬ X = {
-        val ct = compilationTarget[X](lift, absType)
+        val ct = compilationTarget[X](split, lift, absType)
         import ct.Map_●
-        val g: ct.Arr[X, X] = f.compile[ct.Arr, ct.as, X](Map_●)(ct.typeAlgebra, Map_●).get(Map_●, Map_●)
+        val g: ct.Arr[X, X] =
+          f.compile[ct.Arr, ct.as, X](
+            ct.typeAlgebra,
+            Map_●,
+            Map_●,
+            [k, q] => (kq: ct.as[k, q]) => ct.split[k, q](kq),
+          ).get(Map_●, Map_●)
         g > J.awaitPosFst
       }
 
@@ -1100,8 +1113,13 @@ object Tools {
                       recCall(g(r) |*| g(s))
                     case Left(t) =>
                       t switch {
-                        case Right(f) => // fix
-                          fix(f)
+                        case Right(t) => // fix or pfix
+                          t switch {
+                            case Left(f) => // fix
+                              fix(f)
+                            case Right(f |*| x) => // pfix
+                              pfix(f |*| g(x))
+                          }
                         case Left(t) =>
                           t switch {
                             case Right(d) => // string
@@ -1148,8 +1166,14 @@ object Tools {
                       recCall(r1 |*| s1) |*| recCall(r2 |*| s2)
                     case Left(t) =>
                       t switch {
-                        case Right(+(f)) => // fix
-                          fix(f) |*| fix(f)
+                        case Right(t) => // fix or pfix
+                          t switch {
+                            case Left(+(g)) => // fix
+                              fix(g) |*| fix(g)
+                            case Right(+(g) |*| t) => // pfix
+                              val t1 |*| t2 = f(t)
+                              pfix(g |*| t1) |*| pfix(g |*| t2)
+                          }
                         case Left(t) =>
                           t switch {
                             case Right(+(t)) => // string
@@ -1242,28 +1266,57 @@ object Tools {
                                   )
                                 case Left(b) =>
                                   a switch {
-                                    case Right(f) => // `a` is fix
+                                    case Right(a) => // `a` is fix or pfix
                                       b switch {
-                                        case Right(g) => // `b` is fix
-                                          ((f ** g) :>> mapVal { case (f, g) =>
-                                            if (f == g) Left(f)
-                                            else        Right((f, g))
-                                          } :>> liftEither) switch {
-                                            case Left(f)   => NonAbstractType.fix(f)
-                                            case Right(fg) => NonAbstractType.mismatch(fg :>> mapVal { case (f, g) => (Type.fix(f.vmap(Left(_))), Type.fix(g.vmap(Left(_)))) })
+                                        case Right(b) => // `b` is fix or pfix
+                                          a switch {
+                                            case Left(f) =>
+                                              b switch {
+                                                case Left(g) =>
+                                                  ((f ** g) :>> mapVal { case (f, g) =>
+                                                    if (f == g) Left(f)
+                                                    else        Right((f, g))
+                                                  } :>> liftEither) switch {
+                                                    case Left(f)   => NonAbstractType.fix(f)
+                                                    case Right(fg) => NonAbstractType.mismatch(fg :>> mapVal { case (f, g) => (Type.fix(f.vmap(Left(_))), Type.fix(g.vmap(Left(_)))) })
+                                                  }
+                                                case Right(g |*| y) =>
+                                                  (f |*| g |*| y) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
+                                              }
+                                            case Right(f |*| x) =>
+                                              b switch {
+                                                case Left(g) =>
+                                                  (f |*| x |*| g) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
+                                                case Right(h |*| y) =>
+                                                  ((f ** h) :>> mapVal { case (f, h) =>
+                                                    if (f == h) Left(f)
+                                                    else        Right((f, h))
+                                                  } :>> liftEither) switch {
+                                                    case Left(f)   => NonAbstractType.pfix(f |*| g(x |*| y))
+                                                    case Right(fh) => (fh |*| x |*| y) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
+                                                  }
+                                              }
                                           }
                                         case Left(b) =>
                                           NonAbstractType.mismatch(
-                                            (f :>> mapVal { f => Type.fix(f.vmap(Left(_))) })
+                                            (a switch {
+                                              case Left(f)        => f :>> mapVal { f => Type.fix(f.vmap(Left(_))) }
+                                              case Right(f |*| p) => (f ** outputXApprox(p)) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
+                                            })
                                             ** output(outputYApprox)(injectL(injectL(injectL(injectL(b)))))
                                           )
                                       }
                                     case Left(a) =>
                                       b switch {
-                                        case Right(g) => // `b` is fix
+                                        case Right(b) => // `b` is fix or pfix
                                           NonAbstractType.mismatch(
                                             output(outputXApprox)(injectL(injectL(injectL(injectL(a)))))
-                                            ** (g :>> mapVal { g => Type.fix(g.vmap(Left(_))) })
+                                            ** (b switch {
+                                              case Left(g) =>
+                                                g :>> mapVal { g => Type.fix(g.vmap(Left(_))) }
+                                              case Right(g |*| y) =>
+                                                (g |*| outputYApprox(y)) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
+                                            })
                                           )
                                         case Left(b) =>
                                           a switch {
@@ -1369,8 +1422,15 @@ object Tools {
                       }
                     case Left(x) =>
                       x switch {
-                        case Right(tf) => // fix
-                          tf :>> mapVal { tf => Type.fix(tf.vmap(Left(_))) }
+                        case Right(x) => // fix or pfix
+                          x switch {
+                            case Left(tf) =>
+                              tf :>> mapVal { tf => Type.fix(tf.vmap(Left(_))) }
+                            case Right(tf |*| p) =>
+                              (tf ** outputX(p)) :>> mapVal { case (tf, p) =>
+                                Type.fix(TypeFun.appFst(tf.vmap(Left(_)), TypeFun.fromExpr(p)))
+                              }
+                          }
                         case Left(x) =>
                           x switch {
                             case Right(x) => // string
@@ -1405,7 +1465,11 @@ object Tools {
               case Left(t) => t switch {
                 case Right(a |*| b) => join(closeX(a) |*| closeX(b))
                 case Left(t) => t switch {
-                  case Right(f) => neglect(f)
+                  case Right(t) =>
+                    t switch {
+                      case Left(f) => neglect(f)
+                      case Right(f |*| x) => join(neglect(f) |*| closeX(x))
+                    }
                   case Left(t) => t switch {
                     case Right(x) => x
                     case Left(t) => t switch {
@@ -1433,7 +1497,11 @@ object Tools {
               case Left(t) => t switch {
                 case Right(a |*| b) => recCall(g(d |*| a) |*| b)
                 case Left(t) => t switch {
-                  case Right(f) => fix(f waitFor d)
+                  case Right(t) =>
+                    t switch {
+                      case Left(f) => fix(f waitFor d)
+                      case Right(f |*| x) => pfix(f.waitFor(d) |*| x)
+                    }
                   case Left(t) => t switch {
                     case Right(x) => string(join(d |*| x))
                     case Left(t) => t switch {
@@ -1458,6 +1526,7 @@ object Tools {
       }
 
       class compilationTarget[T](
+        splitT: T -⚬ (T |*| T),
         lift: NonAbstractTypeF[T] -⚬ T,
         absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ T),
       ) {
@@ -1531,6 +1600,8 @@ object Tools {
               λ { case t |*| u => constant(done) |*| lift(NonAbstractType.recCall(t |*| u)) }
             override def fix(f: TypeFun[●, ●]): Arr[One, T] =
               const(f) > NonAbstractType.fix > lift > introFst(done)
+            override def pfix(f: TypeFun[● × ●, ●]): Arr[T, T] =
+              introFst(const(f)) > NonAbstractType.pfix > lift > introFst(done)
             override def abstractTypeName(name: ScalaTypeParam): Arr[One, T] =
               absType(Left(name)) > introFst(done)
 
@@ -1546,6 +1617,14 @@ object Tools {
           f1: K1 as Q1,
           f2: K2 as Q2,
         ) extends as[K1 × K2, Q1 |*| Q2]
+
+        def split[K, Q](kq: K as Q): Arr[Q, Q |*| Q] =
+          kq match {
+            case Map_● =>
+              splitT > introFst(done)
+            case other =>
+              UnhandledCase.raise(s"split($other)")
+          }
 
         given objectMap: MonoidalObjectMap[as, ×, ○, |*|, One] =
           new MonoidalObjectMap[as, ×, ○, |*|, One] {
@@ -1622,7 +1701,7 @@ object Tools {
         // λ { t => NonAbstractType.apply1(constantVal(f) |*| t) :>> nonAbstractType }
         val ct = compilationTarget[T]
         import ct.Map_●
-        f.compile[ct.Arr, ct.as, ConcreteType[T]](Map_●)(ct.typeAlgebra, Map_●).get(Map_●, Map_●) > awaitPosFst
+        f.compile[ct.Arr, ct.as, ConcreteType[T]](ct.typeAlgebra, Map_●, Map_●, ???).get(Map_●, Map_●) > awaitPosFst
       }
 
       class compilationTarget[T] {
@@ -1696,6 +1775,8 @@ object Tools {
               λ { case t |*| u => constant(done) |*| ConcreteType.recCall(t |*| u) }
             override def fix(f: TypeFun[●, ●]): Arr[One, ConcreteType[T]] =
               // const(f) > ConcreteType.fix > introFst(done)
+              ???
+            override def pfix(f: TypeFun[● × ●, ●]): Arr[ConcreteType[T], ConcreteType[T]] =
               ???
             override def abstractTypeName(name: ScalaTypeParam): Arr[One, ConcreteType[T]] =
               throw NotImplementedError(s"TODO (${summon[SourcePos]})")
@@ -3329,7 +3410,7 @@ object Tools {
         // λ { t => NonAbstractType.apply1(constantVal(f) |*| t) :>> nonAbstractType }
         val ct = compilationTarget[T]
         import ct.Map_●
-        f.compile[ct.Arr, ct.as, TypeEmitter[T]](Map_●)(ct.typeAlgebra, Map_●).get(Map_●, Map_●) > awaitPosFst
+        f.compile[ct.Arr, ct.as, TypeEmitter[T]](ct.typeAlgebra, Map_●, Map_●, ???).get(Map_●, Map_●) > awaitPosFst
       }
 
       class compilationTarget[T] {
@@ -3403,6 +3484,8 @@ object Tools {
               λ { case t |*| u => constant(done) |*| TypeEmitter.recCall(t |*| u) }
             override def fix(f: TypeFun[●, ●]): Arr[One, TypeEmitter[T]] =
               // const(f) > TypeEmitter.fix > introFst(done)
+              ???
+            override def pfix(f: TypeFun[● × ●, ●]): Arr[TypeEmitter[T], TypeEmitter[T]] =
               ???
             override def abstractTypeName(name: ScalaTypeParam): Arr[One, TypeEmitter[T]] =
               throw NotImplementedError(s"TODO (${summon[SourcePos]})")
@@ -4140,6 +4223,9 @@ object Tools {
 
     override def apply1TOW[F[_]](F: TypeTag[F]): GenericType[T] -⚬ GenericType[T] =
       ConcreteType.apply1T(F)
+
+    override lazy val unit: Done -⚬ OutboundType =
+      TypeEmitter.unit[T]
 
     override lazy val int: Done -⚬ OutboundType =
       TypeEmitter.int[T]

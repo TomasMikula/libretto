@@ -66,8 +66,9 @@ case class TypeExpr[V, K, L](value: generic.TypeExpr[V, TypeExpr[V, _, _], K, L]
   override def toString: String =
     value.toString
 
-  def compile[==>[_, _], F[_, _]](
+  def compile[==>[_, _], F[_, _], Q](
     tgt: TypeAlgebra[V, ==>],
+    fk: F[K, Q],
     map_● : F[●, tgt.Type],
   )(using
     F: MonoidalObjectMap[F, ×, ○, tgt.<*>, tgt.None],
@@ -89,41 +90,43 @@ case class TypeExpr[V, K, L](value: generic.TypeExpr[V, TypeExpr[V, _, _], K, L]
       case gte.Fix(f, g) =>
         MappedMorphism(F.unit, tgt.fix(TypeFun(f, g)), map_●)
       case gte.PFix(f, g) =>
-        println(s"\n\n\n       !!!!!!! NOT IMPLEMENTED PFix (at ${summon[SourcePos]})\n\n\n")
-        throw NotImplementedError(s"PFix($f, $g) at ${summon[SourcePos]}")
+        MappedMorphism(map_●, tgt.pfix(TypeFun(f, g)), map_●)
       case gte.AbstractType(label) =>
         MappedMorphism(F.unit, tgt.abstractTypeName(label), map_●)
       case gte.BiApp(op, a, b) =>
-        MappedMorphism(
-          F.unit,
-          tgt.category.introFst,
-          F.pair(F.unit, F.unit),
-        ) >
-        MappedMorphism.par(
-          a.compile(tgt, map_●),
-          b.compile(tgt, map_●),
-        ) >
-        TypeExpr(op).compile(tgt, map_●)
+        val args =
+          MappedMorphism(
+            F.unit,
+            tgt.category.introFst,
+            F.pair(F.unit, F.unit),
+          ) >
+          MappedMorphism.par(
+            a.compile(tgt, F.unit, map_●),
+            b.compile(tgt, F.unit, map_●),
+          )
+        args > TypeExpr(op).compile(tgt, args.tgtMap, map_●)
       case gte.AppFst(op, a) =>
-        val op1 = TypeExpr(op).compile(tgt, map_●)
-        val a1  = a.compile(tgt, map_●)
+        val a1  = a.compile(tgt, F.unit, map_●)
+        val op1 = TypeExpr(op).compile(tgt, F.pair(a1.tgtMap, fk), map_●)
         MappedMorphism.composeIntroFst(
           MappedMorphism.composeFst(op1, a1),
         )
       case gte.AppSnd(op, b) =>
-        val op1 = TypeExpr(op).compile(tgt, map_●)
-        val b1  = b.compile(tgt, map_●)
+        val b1  = b.compile(tgt, F.unit, map_●)
+        val op1 = TypeExpr(op).compile(tgt, F.pair(fk, b1.tgtMap), map_●)
         MappedMorphism.composeIntroSnd(
           MappedMorphism.composeSnd(op1, b1),
         )
-      case gte.ComposeSnd(op, g) =>
-        val op1 = TypeExpr(op).compile(tgt, map_●)
-        val g1  = g.compile(tgt, map_●)
-        MappedMorphism.composeSnd(op1, g1)
+      case x: gte.ComposeSnd[v, arr, k1, k2, l2, m] =>
+        F.unpair[k1, k2, Q](fk) match
+          case F.Unpaired.Impl(f1, f2) =>
+            val g = x.arg2.compile(tgt, f2, map_●)
+            val op = TypeExpr(x.op).compile(tgt, F.pair(f1, g.tgtMap), map_●)
+            MappedMorphism.composeSnd(op, g)
       case gte.AppCompose(op, a, g) =>
-        val op1 = TypeExpr(op).compile(tgt, map_●)
-        val a1  = a.compile(tgt, map_●)
-        val g1  = g.compile(tgt, map_●)
+        val a1  = a.compile(tgt, F.unit, map_●)
+        val g1  = g.compile(tgt, fk, map_●)
+        val op1 = TypeExpr(op).compile(tgt, F.pair(a1.tgtMap, g1.tgtMap), map_●)
         MappedMorphism.composeIntroFst(
           MappedMorphism.par(a1, g1) > op1
         )
@@ -206,7 +209,9 @@ object TypeExpr {
   def fix[V, K](f: Routing[●, K], g: TypeExpr[V, K, ●]): TypeExpr[V, ○, ●] =
     TypeExpr(generic.TypeExpr.Fix(f, g))
 
-  def pfix[V, K: ProperKind, X](f: Routing[K × ●, X], g: TypeExpr[V, X, ●]): TypeExpr[V, K, ●] =
+  // def pfix[V, K: ProperKind, X](f: Routing[K × ●, X], g: TypeExpr[V, X, ●]): TypeExpr[V, K, ●] =
+  //   TypeExpr(generic.TypeExpr.PFix(f, g))
+  def pfix[V, X](f: Routing[● × ●, X], g: TypeExpr[V, X, ●]): TypeExpr[V, ●, ●] =
     TypeExpr(generic.TypeExpr.PFix(f, g))
 
   def typeMismatch[V, K: Kind, L: OutputKind](a: TypeExpr[V, K, L], b: TypeExpr[V, K, L]): TypeExpr[V, K, L] =

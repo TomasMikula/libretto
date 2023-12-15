@@ -21,6 +21,7 @@ object FunT {
 
   case class Distribute[->[_, _], A, B, C]() extends FunT[->, (A, Either[B, C]), Either[(A, B), (A, C)]]
 
+  case class Dup[->[_, _], A]() extends FunT[->, A, (A, A)]
   case class Prj1[->[_, _], A, B]() extends FunT[->, (A, B), A]
   case class Prj2[->[_, _], A, B]() extends FunT[->, (A, B), B]
 

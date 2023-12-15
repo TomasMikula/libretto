@@ -49,6 +49,9 @@ object Fun {
   def distributeL[A, B, C]: Fun[(A, Either[B, C]), Either[(A, B), (A, C)]] =
     Fun(FunT.Distribute())
 
+  def dup[A]: Fun[A, (A, A)] =
+    Fun(FunT.Dup())
+
   def prj1[A, B]: Fun[(A, B), A] =
     Fun(FunT.Prj1())
 
@@ -94,6 +97,7 @@ object Fun {
   private val lambdas: libretto.lambda.Lambdas[Fun, Tuple2, Object] =
     libretto.lambda.Lambdas[Fun, Tuple2, Object](
       syntheticPairVar = (lbl1, lbl2) => new Object,
+      universalSplit = Some([x] => (_: Unit) => Fun.dup[x]),
       universalDiscard = Some([x, y] => (_: Unit) => Fun.prj2[x, y]),
     )
 

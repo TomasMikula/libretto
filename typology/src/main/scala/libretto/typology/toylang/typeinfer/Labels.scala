@@ -166,7 +166,7 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
   def create(v: V): One -⚬ Label =
     const(Lbl.Base(v, AtomicInteger(0)))
   def make(v: V)(using SourcePos, LambdaContext): $[Label] =
-    constant(create(v)) > alsoPrintLine(x => s"Creating $x")
+    constant(create(v)) // > alsoPrintLine(x => s"Creating $x")
   val split: Label -⚬ (Label |*| Label) =
     mapVal { (lbl: Lbl[V]) =>
       val res = (lbl.mkClone(), lbl.mkClone())
@@ -177,7 +177,7 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
     λ { case a |*| b =>
       (a ** b) :>> mapVal { case (a, b) =>
         val res = Lbl.compareLax(a, b)
-        println(s"comparing $a and $b resulted in $res")
+        // println(s"comparing $a and $b resulted in $res")
         res
       } :>> liftEither :>> |+|.rmap(liftEither)
     }
@@ -186,27 +186,27 @@ class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
     // printLine(x => s"Neglecting $x")
 
   val neglectTParam: TParamLabel -⚬ Done =
-    // dsl.neglect
-    printLine(x => s"Neglecting TParam $x")
+    dsl.neglect
+    // printLine(x => s"Neglecting TParam $x")
   val generify: Label -⚬ TParamLabel =
     // mapVal { TParamLbl.Promoted(_) }
     mapVal { x =>
       val res = TParamLbl.Promoted(x)
-      println(s"$x generified to $res")
+      // println(s"$x generified to $res")
       res
     }
   val abstractify: TParamLabel -⚬ Label =
     // mapVal { Lbl.Abstracted(_) }
     mapVal { x =>
       val res = Lbl.Abstracted(x, AtomicInteger(0))
-      println(s"$x abstractified to $res")
+      // println(s"$x abstractified to $res")
       res
     }
   val show: Label -⚬ Val[String] =
     // mapVal(_.toString)
     mapVal(x =>
       val res = x.toString
-      println(s"$x converted to string")
+      // println(s"$x converted to string")
       res
     )
   override val alsoShow: Label -⚬ (Label |*| Val[String]) =

@@ -15,6 +15,9 @@ sealed trait TypedFun[A, B] {
       case AssocLR(ta, tb, tc) => Type.pair(Type.pair(ta, tb), tc)
       case AssocRL(ta, tb, tc) => Type.pair(ta, Type.pair(tb, tc))
       case Swap(ta, tb)        => Type.pair(ta, tb)
+      case Prj1(ta, tb)        => Type.pair(ta, tb)
+      case Prj2(ta, tb)        => Type.pair(ta, tb)
+      case Dup(ta)             => ta
       case EitherF(f1, f2)     => Type.sum(f1.inType, f2.inType)
       case InjectL(ta, tb)     => ta
       case InjectR(ta, tb)     => tb
@@ -22,8 +25,10 @@ sealed trait TypedFun[A, B] {
       case Recur(ta, tb)       => Type.pair(Type.recCall(ta, tb), ta)
       case FixF(f)             => f(Type.fix(f))
       case UnfixF(f)           => Type.fix(f)
+      case ConstInt(_)         => Type.unit
       case IntToString         => Type.int
       case AddInts             => Type.pair(Type.int, Type.int)
+      case Distribute(a, b, c) => Type.pair(a, Type.sum(b, c))
 
   def outType: Type =
     this match
@@ -33,6 +38,9 @@ sealed trait TypedFun[A, B] {
       case AssocLR(ta, tb, tc) => Type.pair(ta, Type.pair(tb, tc))
       case AssocRL(ta, tb, tc) => Type.pair(Type.pair(ta, tb), tc)
       case Swap(ta, tb)        => Type.pair(tb, ta)
+      case Prj1(ta, tb)        => ta
+      case Prj2(ta, tb)        => tb
+      case Dup(ta)             => Type.pair(ta, ta)
       case EitherF(f1, f2)     => f1.outType
       case InjectL(ta, tb)     => Type.sum(ta, tb)
       case InjectR(ta, tb)     => Type.sum(ta, tb)
@@ -40,8 +48,10 @@ sealed trait TypedFun[A, B] {
       case Recur(ta, tb)       => tb
       case FixF(f)             => Type.fix(f)
       case UnfixF(f)           => f(Type.fix(f))
+      case ConstInt(_)         => Type.int
       case IntToString         => Type.string
       case AddInts             => Type.int
+      case Distribute(a, b, c) => Type.sum(Type.pair(a, b), Type.pair(a, c))
 }
 
 object TypedFun {
@@ -62,6 +72,7 @@ object TypedFun {
   case class InjectL[A, B](ta: Type, tb: Type) extends TypedFun[A, Either[A, B]]
   case class InjectR[A, B](ta: Type, tb: Type) extends TypedFun[B, Either[A, B]]
   case class Distribute[A, B, C](ta: Type, tb: Type, tc: Type) extends TypedFun[(A, Either[B, C]), Either[(A, B), (A, C)]]
+  case class Dup[A](ta: Type) extends TypedFun[A, (A, A)]
   case class Prj1[A, B](ta: Type, tb: Type) extends TypedFun[(A, B), A]
   case class Prj2[A, B](ta: Type, tb: Type) extends TypedFun[(A, B), B]
   case class Rec[A, B](ta: Type, f: TypedFun[(RecCall[A, B], A), B]) extends TypedFun[A, B]
@@ -69,6 +80,7 @@ object TypedFun {
   case class FixF[F[_]](f: TypeFun[●, ●]) extends TypedFun[F[Fix[F]], Fix[F]]
   case class UnfixF[F[_]](f: TypeFun[●, ●]) extends TypedFun[Fix[F], F[Fix[F]]]
 
+  case class ConstInt(n: Int) extends TypedFun[Unit, Int]
   case object IntToString extends TypedFun[Int, String]
   case object AddInts extends TypedFun[(Int, Int), Int]
 
@@ -82,6 +94,7 @@ object TypedFun {
   def injectL[A, B](ta: Type, tb: Type): TypedFun[A, Either[A, B]] = InjectL(ta, tb)
   def injectR[A, B](ta: Type, tb: Type): TypedFun[B, Either[A, B]] = InjectR(ta, tb)
   def distribute[A, B, C](ta: Type, tb: Type, tc: Type): TypedFun[(A, Either[B, C]), Either[(A, B), (A, C)]] = Distribute(ta, tb, tc)
+  def dup[A](ta: Type): TypedFun[A, (A, A)] = Dup(ta)
   def prj1[A, B](ta: Type, tb: Type): TypedFun[(A, B), A] = Prj1(ta, tb)
   def prj2[A, B](ta: Type, tb: Type): TypedFun[(A, B), B] = Prj2(ta, tb)
   def rec[A, B](ta: Type, f: TypedFun[(RecCall[A, B], A), B]): TypedFun[A, B] = Rec(ta, f)
@@ -89,6 +102,7 @@ object TypedFun {
   def fix[F[_]](f: TypeFun[●, ●]): TypedFun[F[Fix[F]], Fix[F]] = FixF(f)
   def unfix[F[_]](f: TypeFun[●, ●]): TypedFun[Fix[F], F[Fix[F]]] = UnfixF(f)
 
+  def constInt(n: Int): TypedFun[Unit, Int] = ConstInt(n)
   def intToString: TypedFun[Int, String] = IntToString
   def addInts: TypedFun[(Int, Int), Int] = AddInts
 }

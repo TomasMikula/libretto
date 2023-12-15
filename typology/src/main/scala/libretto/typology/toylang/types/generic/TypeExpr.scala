@@ -81,7 +81,7 @@ sealed abstract class TypeExpr[V, ->>[_, _], K, L](using
         } yield Fix(pre, expr)
 
       case pf @ PFix(pre, expr) =>
-        import pf.properInKind
+        // import pf.properInKind
         for {
           expr <- f(expr)
         } yield PFix(pre, expr)
@@ -338,12 +338,16 @@ object TypeExpr {
   case class Fix[V, ->>[_, _], K](f: Routing[●, K], g: K ->> ●) extends TypeExpr[V, ->>, ○, ●]
 
   // TODO: Make the representation normalized (part of initial routing may possibly be factored out)
-  case class PFix[V, ->>[_, _], K, X](
-    f: Routing[K × ●, X],
+  // case class PFix[V, ->>[_, _], K, X](
+  //   f: Routing[K × ●, X],
+  //   g: X ->> ●,
+  // )(using
+  //   val properInKind: ProperKind[K],
+  // ) extends TypeExpr[V, ->>, K, ●]
+  case class PFix[V, ->>[_, _], X](
+    f: Routing[● × ●, X],
     g: X ->> ●,
-  )(using
-    val properInKind: ProperKind[K],
-  ) extends TypeExpr[V, ->>, K, ●]
+  ) extends TypeExpr[V, ->>, ●, ●]
 
   case class AbstractType[V, ->>[_, _]](label: V) extends TypeExpr[V, ->>, ○, ●]
 

@@ -112,10 +112,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
     def tpe: TypeTagF =
       TypeTag.toTypeFun(typeTag)
 
-    def map[A, B](f: Fun[A, B]): Fun[NonEmptyTree[A], NonEmptyTree[B]] = {
-      given TypeTag[A] = TypeTag.ofTypeParam[A]
-      given TypeTag[B] = TypeTag.ofTypeParam[B]
-
+    def map_[A, B](f: Fun[A, B])(using TypeTag[A], TypeTag[B]): Fun[NonEmptyTree[A], NonEmptyTree[B]] = {
       Fun.rec(fun { case map <*> as =>
         val bs =
           Fun.unfix[NonEmptyTreeF[A, *]](using NonEmptyTreeF.typeTag[A])(as) switch {
@@ -126,6 +123,13 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
           }
         Fun.fix[NonEmptyTreeF[B, *]](using NonEmptyTreeF.typeTag[B])(bs)
       })
+    }
+
+    def map[A, B](f: Fun[A, B]): Fun[NonEmptyTree[A], NonEmptyTree[B]] = {
+      given TypeTag[A] = TypeTag.ofTypeParam[A]
+      given TypeTag[B] = TypeTag.ofTypeParam[B]
+
+      map_[A, B](f)
     }
   }
 
@@ -538,61 +542,69 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
             _ <- Outcome.assertEquals(tf.outType, Type.int)
           } yield ()
         }
+      }.pending,
+
+      "infer types of NonEmptyTree.map_(intToString)" ->
+        testInferredTypes(NonEmptyTree.map_(Fun.intToString)) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, NonEmptyTree.tpe(Type.int))
+            _ <- Outcome.assertEquals(tf.outType, NonEmptyTree.tpe(Type.string))
+          } yield ()
+        }.withTimeout(5.seconds),
+
+      "infer types of NonEmptyTree.map(intToString)" ->
+        testInferredTypes(NonEmptyTree.map(Fun.intToString)) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, NonEmptyTree.tpe(Type.int))
+            _ <- Outcome.assertEquals(tf.outType, NonEmptyTree.tpe(Type.string))
+          } yield ()
+        }.pending,
+
+      "infer types of Bifunctor[[x, y] =>> (Const[x, y], (y, x))].bimap" -> {
+        type F[X, Y] = (Const[X, Y], (Y, X))
+
+        object F {
+          def lmap[A, B, C](f: Fun[A, C]): Fun[F[A, B], F[C, B]] =
+            Fun.par(
+              Const.bifunctorConst.lmap(f),
+              Swap.bifunctorSwap[(*, *)].lmap(f),
+            )
+
+          def rmap[A, B, D](g: Fun[B, D]): Fun[F[A, B], F[A, D]] =
+            Fun.par(
+              Const.bifunctorConst.rmap(g),
+              Swap.bifunctorSwap[(*, *)].rmap(g)
+            )
+
+          def bimap[A, B, C, D](f: Fun[A, C], g: Fun[B, D]): Fun[F[A, B], F[C, D]] =
+            lmap(f) > rmap(g)
+
+          val tpe: TypeFun[● × ●, ●] =
+            TypeFun(
+              Routing.par(
+                Routing.dup[●],
+                Routing.dup[●],
+              ) > Routing.ixi > Routing.par(
+                Routing.elimSnd,
+                Routing.swap,
+              ): Routing[● × ●, ● × (● × ●)],
+              TypeExpr.composeSnd(TypeExpr.pair, TypeExpr.pair),
+            )
+
+          def tpeAt(a: Type, b: Type): Type =
+            TypeFun.appFst(tpe, TypeFun.fromExpr(a)).apply(b)
+        }
+
+        val f: Fun[F[Unit, Int], F[Int, String]] =
+          F.bimap(Fun.constInt(0), Fun.intToString)
+
+        testInferredTypes(f) { tf =>
+          for {
+            _ <- Outcome.assertEquals(tf.inType, F.tpeAt(Type.unit, Type.int))
+            _ <- Outcome.assertEquals(tf.outType, F.tpeAt(Type.int, Type.string))
+          } yield ()
+        }
       },
-
-  // test("infer types of NonEmptyTree.map(intToString)") {
-  //   val (tIn, tOut) =
-  //     reconstructTypes[NonEmptyTree[Int], NonEmptyTree[String]](
-  //       NonEmptyTree.map(Fun.intToString)
-  //     )
-
-  //   assert(tIn == NonEmptyTree.tpe(Type.int))
-  //   assert(tOut == NonEmptyTree.tpe(Type.string))
-  // }
-
-  // test("infer types of Bifunctor[[x, y] =>> (Const[x, y], (y, x))].bimap") {
-  //   type F[X, Y] = (Const[X, Y], (Y, X))
-
-  //   object F {
-  //     def lmap[A, B, C](f: Fun[A, C]): Fun[F[A, B], F[C, B]] =
-  //       Fun.par(
-  //         Const.bifunctorConst.lmap(f),
-  //         Swap.bifunctorSwap[(*, *)].lmap(f),
-  //       )
-
-  //     def rmap[A, B, D](g: Fun[B, D]): Fun[F[A, B], F[A, D]] =
-  //       Fun.par(
-  //         Const.bifunctorConst.rmap(g),
-  //         Swap.bifunctorSwap[(*, *)].rmap(g)
-  //       )
-
-  //     def bimap[A, B, C, D](f: Fun[A, C], g: Fun[B, D]): Fun[F[A, B], F[C, D]] =
-  //       lmap(f) > rmap(g)
-
-  //     val tpe: TypeFun[● × ●, ●] =
-  //       TypeFun(
-  //         Routing.par(
-  //           Routing.dup[●],
-  //           Routing.dup[●],
-  //         ) > Routing.ixi > Routing.par(
-  //           Routing.elimSnd,
-  //           Routing.swap,
-  //         ): Routing[● × ●, ● × (● × ●)],
-  //         TypeExpr.composeSnd(TypeExpr.pair, TypeExpr.pair),
-  //       )
-
-  //     def tpeAt(a: Type, b: Type): Type =
-  //       TypeFun.appFst(tpe, TypeFun.fromExpr(a)).apply(b)
-  //   }
-
-  //   val f: Fun[F[Unit, Int], F[Int, String]] =
-  //     F.bimap(Fun.constInt(0), Fun.intToString)
-
-  //   val (tIn, tOut) = reconstructTypes(f)
-
-  //   assert(tIn == F.tpeAt(Type.unit, Type.int))
-  //   assert(tOut == F.tpeAt(Type.int, Type.string))
-  // }
     )
   }
 }

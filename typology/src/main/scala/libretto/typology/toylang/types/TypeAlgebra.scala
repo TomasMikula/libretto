@@ -18,8 +18,9 @@ trait TypeAlgebra[V, ==>[_, _]] {
   def sum     : (Type <*> Type) ==> Type
   def recCall : (Type <*> Type) ==> Type
 
-  // XXX: crutch
+  // XXX: crutches
   def fix(f: TypeFun[V, ●, ●]): None ==> Type
+  def pfix(f: TypeFun[V, ● × ●, ●]): Type ==> Type
 
   def abstractTypeName(name: V): None ==> Type
 }

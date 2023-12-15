@@ -55,10 +55,12 @@ trait TypeOps[F[_]] {
   def fixT[G[_], A](G: TypeTag[G]): One -⚬ F[A]
   def apply1T[G[_], A](
     G: TypeTag[G],
+    split: A -⚬ (A |*| A),
     lift: F[A] -⚬ A,
     absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ A),
   )(using Junction.Positive[A]): A -⚬ A
 
+  def unit[A]: Done -⚬ F[A]
   def int[A]: Done -⚬ F[A]
   def string[A]: Done -⚬ F[A]
 }
@@ -126,10 +128,14 @@ object TypeInferencer {
 
       override def apply1T[G[_], A](
         G: TypeTag[G],
+        split: A -⚬ (A |*| A),
         lift: NonAbstractTypeF[A] -⚬ A,
         absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ A),
       )(using Junction.Positive[A]): A -⚬ A =
-        NonAbstractType.apply1T(G, lift, absType)
+        NonAbstractType.apply1T(G, split, lift, absType)
+
+      override def unit[A]: Done -⚬ NonAbstractTypeF[A] =
+        NonAbstractType.unit
 
       override def int[A]: Done -⚬ NonAbstractTypeF[A] =
         NonAbstractType.int
@@ -402,9 +408,9 @@ class TypeInferencerImpl[
     split: Tp -⚬ (Tp |*| Tp),
   ): (AbsTp.Proper[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
     λ { case (aLbl |*| aReq) |*| (bLbl |*| b) =>
-      (labels.alsoShow(aLbl) |*| labels.alsoShow(bLbl)) match { case (aLbl |*| as) |*| (bLbl |*| bs) =>
+      // (labels.alsoShow(aLbl) |*| labels.alsoShow(bLbl)) match { case (aLbl |*| as) |*| (bLbl |*| bs) =>
       val bl1 |*| bl2 = labels.split(bLbl)
-      returning(
+      // returning(
       labels.compare(aLbl |*| bl1) switch {
         case Left(lbl) =>
           // Labels are equal, refer to the same type.
@@ -427,18 +433,18 @@ class TypeInferencerImpl[
                 aReq grant t2,
               )
           }
-      },
-      (as ** bs) :>> printLine { case (as, bs) => s"Merging PROPER $as and PRELIMINARY $bs" } :>> hackyDiscard,
-      )
       }
+      // ,(as ** bs) :>> printLine { case (as, bs) => s"Merging PROPER $as and PRELIMINARY $bs" } :>> hackyDiscard,
+      // )
+      // }
     }
 
   private def mergePreliminaries(
     merge: (Tp |*| Tp) -⚬ Tp,
   ): (AbsTp.Prelim[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
     λ { case (aLbl |*| a) |*| (bLbl |*| b) =>
-      (labels.alsoShow(aLbl) |*| labels.alsoShow(bLbl)) match { case (aLbl |*| as) |*| (bLbl |*| bs) =>
-      returning(
+      // (labels.alsoShow(aLbl) |*| labels.alsoShow(bLbl)) match { case (aLbl |*| as) |*| (bLbl |*| bs) =>
+      // returning(
       labels.compare(aLbl |*| bLbl) switch {
         case Left(lbl) =>
           // labels are same
@@ -454,10 +460,10 @@ class TypeInferencerImpl[
               val b1 = preliminary(bl1 |*| b) // winner (`b`) must keep checking for its own label in the loser (`a`)
               preliminary(bl2 |*| merge(a |*| b1))
           }
-      },
-      (as ** bs) :>> printLine { case (as, bs) => s"Merging PRELIMINARIES $as and $bs" } :>> hackyDiscard,
-      )
       }
+      // ,(as ** bs) :>> printLine { case (as, bs) => s"Merging PRELIMINARIES $as and $bs" } :>> hackyDiscard,
+      // )
+      // }
     }
 
   private def mergeConcreteAbstract(
@@ -597,6 +603,9 @@ class TypeInferencerImpl[
 
   override def splittable: OutboundType -⚬ SplittableType = id
 
+  override def unit: Done -⚬ OutboundType =
+    F.unit > concreteType
+
   override def int: Done -⚬ OutboundType =
     F.int > concreteType
 
@@ -642,8 +651,8 @@ class TypeInferencerImpl[
 
   override def abstractLink: Label -⚬ (Tp |*| Tp) =
     λ { lbl =>
-      val lbl1 = labels.alsoDebugPrint(s => s"Creating link for $s")(lbl)
-      val l1 |*| l2 = labels.split(lbl1)
+      // val lbl1 = labels.alsoDebugPrint(s => s"Creating link for $s")(lbl)
+      val l1 |*| l2 = labels.split(lbl)
       val l3 |*| l4 = labels.split(l2)
       val t1 |*| resp = makeAbstractType(l1)
       val nt2 |*| t2 = curry(preliminary)(l3)
@@ -652,20 +661,20 @@ class TypeInferencerImpl[
         resp.toEither switch {
           case Left(t) =>
             // TODO: occurs check for `lbl` in `t`
-            val l4_ = l4 :>> labels.alsoDebugPrint(s => s"Link-req of $s returned as REFINED")
+            val l4_ = l4 //:>> labels.alsoDebugPrint(s => s"Link-req of $s returned as REFINED")
             t.waitFor(labels.neglect(l4_)) supplyTo nt2
           case Right(req1) =>
-            val l4_ = l4 :>> labels.alsoDebugPrint(s => s"Link-req of $s returned as DECLINED. Sending opposite request.")
+            val l4_ = l4 //:>> labels.alsoDebugPrint(s => s"Link-req of $s returned as DECLINED. Sending opposite request.")
             val l5 |*| l6 = labels.split(l4_)
             val t2 |*| resp = makeAbstractType(l5)
             returning(
               resp.toEither switch {
                 case Left(t) =>
                   // TODO: occurs check for `lbl` in `t`
-                  val l6_ = l6 :>> labels.alsoDebugPrint(s => s"Op-req of $s returned as REFINED")
+                  val l6_ = l6 //:>> labels.alsoDebugPrint(s => s"Op-req of $s returned as REFINED")
                   injectL(t waitFor labels.neglect(l6_)) supplyTo req1
                 case Right(req2) =>
-                  val l6_ = l6 :>> labels.alsoDebugPrint(s => s"Op-req of $s returned as DECLINED")
+                  val l6_ = l6 //:>> labels.alsoDebugPrint(s => s"Op-req of $s returned as DECLINED")
                   val p1 |*| p2 = typeParamLink(l6_)
                   returning(
                     injectR(p1) supplyTo req1,
@@ -740,7 +749,7 @@ class TypeInferencerImpl[
 
     val qLink: NLabel -⚬ (Q |*| Q) =
       λ { lbl =>
-        val lbl_ = nl.labels.alsoDebugPrint(s => s"FABRICATING Tp link for $s")(lbl)
+        val lbl_ = lbl //:>> nl.labels.alsoDebugPrint(s => s"FABRICATING Tp link for $s")
         val ntp |*| tp = constant(demand[Tp])
         val tp1 = tp waitFor nl.labels.neglect(lbl_)
         injectL(ntp) |*| injectR(tp1)
@@ -874,6 +883,7 @@ class TypeInferencerImpl[
   override def apply1T[G[_]](G: TypeTag[G]): OutboundType -⚬ OutboundType =
     F.apply1T(
       G,
+      split,
       concreteType,
       v => labels.create(v) > λ { lbl =>
         val l1 |*| l2 = labels.split(lbl)

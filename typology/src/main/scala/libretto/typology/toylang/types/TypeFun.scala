@@ -25,15 +25,16 @@ sealed trait TypeFun[V, K, L] {
     TypeFun.toExpr(this ∘ TypeFun.fromExpr(t))
 
   def compile[==>[_, _], F[_, _], Q](
-    fk: F[K, Q],
-  )(
     tgt: TypeAlgebra[V, ==>],
+    fk: F[K, Q],
     map_● : F[●, tgt.Type],
+    dupTypes: [k, q] => F[k, q] => (q ==> tgt.<*>[q, q]),
   )(using
     F: MonoidalObjectMap[F, ×, ○, tgt.<*>, tgt.None],
   ): MappedMorphism[==>, F, K, L] = {
     import tgt.given
-    pre.compile(fk)() > expr.compile(tgt, map_●)
+    val pre1 = pre.compile[==>, F, tgt.<*>, tgt.None, Q](fk)(dupTypes)
+    pre1 > expr.compile(tgt, pre1.tgtMap, map_●)
   }
 
   def vmap[W](f: V => W): TypeFun[W, K, L] =

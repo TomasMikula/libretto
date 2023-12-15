@@ -230,6 +230,7 @@ sealed trait Routing[K, L](using
   def compile[==>[_, _], F[_, _], |*|[_, _], One, Q](fk: F[K, Q])(
     // tgt: TypeAlgebra[==>],
     // map_● : F[●, tgt.Type],
+    dupTypes: [k, q] => F[k, q] => (q ==> (q |*| q)),
   )(using
     F: MonoidalObjectMap[F, ×, ○, |*|, One],
     cat: SymmetricMonoidalCategory[==>, |*|, One],
@@ -273,15 +274,15 @@ sealed trait Routing[K, L](using
       case ElimSnd() =>
         throw NotImplementedError(s"at ${summon[SourcePos]}")
       case AndThen(f, g) =>
-        val f1 = f.compile[==>, F, |*|, One, Q](fk)()
-        val g1 = g.compile(f1.tgtMap)()
+        val f1 = f.compile[==>, F, |*|, One, Q](fk)(dupTypes)
+        val g1 = g.compile[==>, F, |*|, One, f1.FB](f1.tgtMap)(dupTypes)
         f1 > g1
       case Par(f1, f2) =>
         throw NotImplementedError(s"at ${summon[SourcePos]}")
       case Elim() =>
         throw NotImplementedError(s"at ${summon[SourcePos]}")
       case Dup() =>
-        throw NotImplementedError(s"at ${summon[SourcePos]}")
+        MappedMorphism(fk, dupTypes(fk), F.pair(fk, fk))
   }
 }
 

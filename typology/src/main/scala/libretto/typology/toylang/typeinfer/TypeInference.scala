@@ -23,9 +23,9 @@ object TypeInference {
     reconstructTypes(f)
       .map { prg =>
         prg > λ { case a |*| f |*| b =>
-          (f :>> alsoPrintLine(f => s"RESULT of reconstructTypes: $f"))
-            .waitFor(tools.close(a) :>> printLine("INPUT closed"))
-            .waitFor(tools.close(b) :>> printLine("OUTPUT closed"))
+          (f /*:>> alsoPrintLine(f => s"RESULT of reconstructTypes: $f")*/)
+            .waitFor(tools.close(a) /*:>> printLine("INPUT closed")*/)
+            .waitFor(tools.close(b) /*:>> printLine("OUTPUT closed")*/)
         }
       }
       .run(0)
@@ -41,9 +41,9 @@ object TypeInference {
     gen: VarGen[M, AbstractTypeLabel],
     M: Monad[M],
   ): M[One -⚬ (tools.OutboundType |*| Val[TypedFun[A, B]] |*| tools.OutboundType)] = {
-    println(s"reconstructTypes($f)")
+    // println(s"reconstructTypes($f)")
     import gen.newVar
-    import tools.{apply1T, either, fixT, int, label, output, outputOW, pair, pairOW, recCall, recCallOW, string}
+    import tools.{apply1T, either, fixT, int, label, output, outputOW, pair, pairOW, recCall, recCallOW, string, unit}
     import Tools.ToolsImpl.Type
 
     val nested: tools.Nested1 = tools.nested
@@ -197,6 +197,18 @@ object TypeInference {
             val out = either(pair(unnestS(a3) |*| unnestS(b2)) |*| pair(unnestS(a4) |*| unnestS(c2)))
             in |*| f |*| out
           }
+      case _: FunT.Dup[arr, a] =>
+        for {
+          a <- newVar
+        } yield
+          λ.? { _ =>
+            val a1 |*| ta |*| a2 = newAbstractType(a)
+            val a3 |*| a4 = nt.split(a2)
+            val f = ta :>> mapVal { a => TypedFun.dup[a](a) }
+            val in  = unnestS(a1)
+            val out = pair(unnestS(a3) |*| unnestS(a4))
+            in |*| f |*| out
+          }
       case _: FunT.Prj1[arr, a, b] =>
         for {
           a <- newVar
@@ -253,7 +265,10 @@ object TypeInference {
                     val a = nested.mergeLower(a0 |*| a1)
                     val b = nested.mergeLower(b0 |*| nt.tap(b1))
                     val a_ |*| ta = tools.split(a) :>> snd(tools.output)
-                    val h = (ta ** f) :>> mapVal { case (ta, f) => println(s"OUTPUTTING arg of Rec: $f"); TypedFun.rec(ta, f) }
+                    val h = (ta ** f) :>> mapVal { case (ta, f) =>
+                      // println(s"OUTPUTTING arg of Rec: $f")
+                      TypedFun.rec(ta, f)
+                    }
                     a_ |*| h |*| b
                   case Left(ab) =>
                     // (ab |*| f |*| a1 |*| b1) :>> crashNow(s"TODO (${summon[SourcePos]})")
@@ -286,7 +301,14 @@ object TypeInference {
             tIn |*| tf |*| unnestS(b2)
           }
       case FunT.ConstInt(n) =>
-        throw NotImplementedError(s"at ${summon[SourcePos]}")
+        Monad[M].pure(
+          λ.* { one =>
+            val a = done(one) :>> unit
+            val b = done(one) :>> int
+            val tf = constantVal(TypedFun.constInt(n))
+            a |*| tf |*| b
+          }
+        )
       case FunT.AddInts() =>
         Monad[M].pure(
           λ.? { one =>
