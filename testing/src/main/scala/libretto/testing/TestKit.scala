@@ -87,6 +87,12 @@ trait TestKit {
         case Right(b) => success(b)
         case other    => failure(using pos)(s"Expected Right, got $other")
 
+    def assertMatches[A, B](using pos: SourcePos)(value: A)(f: PartialFunction[A, B]): Outcome[B] =
+      if (f.isDefinedAt(value))
+        success(f(value))
+      else
+        failure(using pos)(s"$value did not match the pattern")
+
     def assertSubstring(using pos: SourcePos)(substr: String, str: String): Outcome[Unit] =
       assert(using pos)(
         str contains substr,
