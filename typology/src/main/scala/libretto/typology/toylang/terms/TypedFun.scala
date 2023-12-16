@@ -1,8 +1,8 @@
 package libretto.typology.toylang.terms
 
-import libretto.lambda.util.SourcePos
-import libretto.typology.kinds.*
-import libretto.typology.toylang.types.{AbstractTypeLabel, Fix, RecCall, ScalaTypeParam, TypeTag}
+import libretto.typology.kinds.●
+import libretto.typology.toylang.types
+import libretto.typology.toylang.types.{Fix, Label, RecCall}
 
 sealed trait TypedFun[A, B] {
   import TypedFun._
@@ -55,12 +55,10 @@ sealed trait TypedFun[A, B] {
 }
 
 object TypedFun {
-  type Label = Either[ScalaTypeParam, AbstractTypeLabel]
-
-  type Type = libretto.typology.toylang.types.Type[Label]
-  def  Type = libretto.typology.toylang.types.Type
-  type TypeFun[K, L] = libretto.typology.toylang.types.TypeFun[Label, K, L]
-  def  TypeFun       = libretto.typology.toylang.types.TypeFun
+  type Type = types.Type[Label]
+  def  Type = types.Type
+  type TypeFun[K, L] = types.TypeFun[Label, K, L]
+  def  TypeFun       = types.TypeFun
 
   case class Id[A](typ: Type) extends TypedFun[A, A]
   case class AndThen[A, X, B](f: TypedFun[A, X], tx: Type, g: TypedFun[X, B]) extends TypedFun[A, B]

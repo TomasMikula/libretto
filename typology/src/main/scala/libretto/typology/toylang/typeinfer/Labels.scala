@@ -42,7 +42,7 @@ trait Labels[V] {
 }
 
 object Labels {
-  def apply[V](using Ordering[V]) =
+  def apply[V](using Ordering[V]): Labels[V] =
     new LabelsImpl[V]
 }
 

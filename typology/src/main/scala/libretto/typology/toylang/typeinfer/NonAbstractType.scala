@@ -7,7 +7,7 @@ import libretto.scaletto.StarterKit._
 import libretto.typology.kinds.{×, ○, ●}
 import libretto.typology.toylang.terms.TypedFun
 import libretto.typology.toylang.terms.TypedFun.Type
-import libretto.typology.toylang.types.{AbstractTypeLabel, ScalaTypeParam, TypeAlgebra, TypeFun, TypeTag}
+import libretto.typology.toylang.types.{Label, ScalaTypeParam, TypeAlgebra, TypeFun, TypeTag}
 import libretto.scaletto.StarterKit
 import libretto.lambda.UnhandledCase
 
@@ -49,7 +49,7 @@ private[typeinfer] object NonAbstractType {
     F: TypeTag[F],
     split: X -⚬ (X |*| X),
     lift: NonAbstractType[X] -⚬ X,
-    absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ X),
+    absType: Label => (One -⚬ X),
   )(using Junction.Positive[X]): X -⚬ X =
     apply1(TypeTag.toTypeFun(F), split, lift, absType)
 
@@ -57,7 +57,7 @@ private[typeinfer] object NonAbstractType {
     f: TypeTagF,
     split: X -⚬ (X |*| X),
     lift: NonAbstractType[X] -⚬ X,
-    absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ X),
+    absType: Label => (One -⚬ X),
   )(using J: Junction.Positive[X]): X -⚬ X = {
     val ct = compilationTarget[X](split, lift, absType)
     import ct.Map_●
@@ -294,8 +294,16 @@ private[typeinfer] object NonAbstractType {
                                                 if (f == g) Left(f)
                                                 else        Right((f, g))
                                               } :>> liftEither) switch {
-                                                case Left(f)   => NonAbstractType.fix(f)
-                                                case Right(fg) => NonAbstractType.mismatch(fg :>> mapVal { case (f, g) => (Type.fix(f.vmap(Left(_))), Type.fix(g.vmap(Left(_)))) })
+                                                case Left(f) =>
+                                                  NonAbstractType.fix(f)
+                                                case Right(fg) =>
+                                                  NonAbstractType.mismatch(
+                                                    fg :>> mapVal { case (f, g) =>
+                                                      ( Type.fix(f.vmap(Label.ScalaTParam(_)))
+                                                      , Type.fix(g.vmap(Label.ScalaTParam(_)))
+                                                      )
+                                                    }
+                                                  )
                                               }
                                             case Right(g |*| y) =>
                                               (f |*| g |*| y) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
@@ -317,7 +325,7 @@ private[typeinfer] object NonAbstractType {
                                     case Left(b) =>
                                       NonAbstractType.mismatch(
                                         (a switch {
-                                          case Left(f)        => f :>> mapVal { f => Type.fix(f.vmap(Left(_))) }
+                                          case Left(f)        => f :>> mapVal { f => Type.fix(f.vmap(Label.ScalaTParam(_))) }
                                           case Right(f |*| p) => (f ** outputXApprox(p)) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
                                         })
                                         ** output(outputYApprox)(injectL(injectL(injectL(injectL(b)))))
@@ -330,7 +338,7 @@ private[typeinfer] object NonAbstractType {
                                         output(outputXApprox)(injectL(injectL(injectL(injectL(a)))))
                                         ** (b switch {
                                           case Left(g) =>
-                                            g :>> mapVal { g => Type.fix(g.vmap(Left(_))) }
+                                            g :>> mapVal { g => Type.fix(g.vmap(Label.ScalaTParam(_))) }
                                           case Right(g |*| y) =>
                                             (g |*| outputYApprox(y)) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
                                         })
@@ -381,14 +389,14 @@ private[typeinfer] object NonAbstractType {
                                                               NonAbstractType.unit(join(x |*| y))
                                                             case Left(bx) => // `b` is type mismatch
                                                               val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
-                                                              val ta = x :>> constVal(Type.unit[TypedFun.Label])
+                                                              val ta = x :>> constVal(Type.unit[Label])
                                                               NonAbstractType.mismatch(ta ** tb)
                                                           }
                                                         case Left(ax) => // `a` is type mismatch
                                                           val ta = ax :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
                                                           b switch {
                                                             case Right(y) => // `b` is unit
-                                                              val tb = y :>> constVal(Type.unit[TypedFun.Label])
+                                                              val tb = y :>> constVal(Type.unit[Label])
                                                               NonAbstractType.mismatch(ta ** tb)
                                                             case Left(bx) => // `b` is type mismatch
                                                               val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
@@ -442,10 +450,10 @@ private[typeinfer] object NonAbstractType {
                     case Right(x) => // fix or pfix
                       x switch {
                         case Left(tf) =>
-                          tf :>> mapVal { tf => Type.fix(tf.vmap(Left(_))) }
+                          tf :>> mapVal { tf => Type.fix(tf.vmap(Label.ScalaTParam(_))) }
                         case Right(tf |*| p) =>
                           (tf ** outputX(p)) :>> mapVal { case (tf, p) =>
-                            Type.fix(TypeFun.appFst(tf.vmap(Left(_)), TypeFun.fromExpr(p)))
+                            Type.fix(TypeFun.appFst(tf.vmap(Label.ScalaTParam(_)), TypeFun.fromExpr(p)))
                           }
                       }
                     case Left(x) =>
@@ -545,7 +553,7 @@ private[typeinfer] object NonAbstractType {
   class compilationTarget[T](
     splitT: T -⚬ (T |*| T),
     lift: NonAbstractType[T] -⚬ T,
-    absType: Either[ScalaTypeParam, AbstractTypeLabel] => (One -⚬ T),
+    absType: Label => (One -⚬ T),
   ) {
     type Arr[K, L] = K -⚬ (Done |*| L)
 
@@ -620,7 +628,7 @@ private[typeinfer] object NonAbstractType {
         override def pfix(f: TypeFun[● × ●, ●]): Arr[T, T] =
           introFst(const(f)) > NonAbstractType.pfix > lift > introFst(done)
         override def abstractTypeName(name: ScalaTypeParam): Arr[One, T] =
-          absType(Left(name)) > introFst(done)
+          absType(Label.ScalaTParam(name)) > introFst(done)
 
         override given category: SymmetricMonoidalCategory[Arr, |*|, One] =
           compilationTarget.this.category
@@ -668,5 +676,28 @@ private[typeinfer] object NonAbstractType {
         override def unit: as[○, One] =
           Map_○
       }
+  }
+
+  given TypeOps[NonAbstractType, Label] with {
+    override def map[A, B](f: A -⚬ B): NonAbstractType[A] -⚬ NonAbstractType[B] =
+      NonAbstractType.map(f)
+
+    override def merge[A](
+      f: (A |*| A) -⚬ A,
+      output: A -⚬ Val[Type],
+    ): (NonAbstractType[A] |*| NonAbstractType[A]) -⚬ NonAbstractType[A] =
+      NonAbstractType.merge(f, output)
+
+    override def split[A](f: A -⚬ (A |*| A)): NonAbstractType[A] -⚬ (NonAbstractType[A] |*| NonAbstractType[A]) =
+      NonAbstractType.split(f)
+
+    override def output[A](f: A -⚬ Val[Type]): NonAbstractType[A] -⚬ Val[Type] =
+      NonAbstractType.output(f)
+
+    override def close[A](f: A -⚬ Done): NonAbstractType[A] -⚬ Done =
+      NonAbstractType.close(f)
+
+    override def awaitPosFst[A](f: (Done |*| A) -⚬ A): (Done |*| NonAbstractType[A]) -⚬ NonAbstractType[A] =
+      NonAbstractType.awaitPosFst(f)
   }
 }
