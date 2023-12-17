@@ -10,16 +10,16 @@ import libretto.typology.toylang.terms.TypedFun.Type
 import libretto.typology.toylang.types.{AbstractTypeLabel, Label}
 import libretto.typology.toylang.types.generic.{TypeExpr => gte}
 
-class TypeInferencerTests extends ScalatestStarterTestSuite {
+class PropagatorTests extends ScalatestStarterTestSuite {
 
   override def testCases(using kit: StarterTestKit): scala.List[(String, TestCase[kit.type])] = {
     import kit.{Outcome, expectDone, expectLeft, expectRight, expectVal}
     import Outcome.{assertEquals, assertLeft, assertMatches, assertRight, failure, success}
     import NonAbstractType.{isPair, isRecCall, pair, recCall, given}
 
-    val tools =
-      TypeInferencer.instance[NonAbstractType, Type, Label](Type.abstractType)
-    import tools.{
+    val pg =
+      Propagator.instance[NonAbstractType, Type, Label](Type.abstractType)
+    import pg.{
       Tp,
       abstractTypeTap,
       close,
@@ -32,13 +32,10 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       write,
     }
 
-    val nested = tools.nested
-    import nested.{lower, tools => nt, unnest}
+    val nested = pg.nested
+    import nested.{lower, propagator => npg, unnest}
 
-    val nn = nt.nested
-    import nn.{tools => nnt}
-
-    extension (tools: TypeInferencer[NonAbstractType, Type, Label])
+    extension (tools: Propagator[NonAbstractType, Type, Label])
       def mkLabel(n: Int): One -⚬ tools.Label =
         tools.label(Label.Abstr(AbstractTypeLabel(n)))
 
@@ -58,8 +55,8 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
     def label(n: Int)(using
       SourcePos,
       LambdaContext,
-    ): $[tools.Label] =
-      tools.lbl(n)
+    ): $[pg.Label] =
+      pg.lbl(n)
 
     def assertAbstract(t: Type)(using SourcePos): Outcome[AbstractTypeLabel] =
       t.value match {
@@ -73,11 +70,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       }
 
     def assertLabelEquals(using exn: kit.bridge.Execution)(
-      l: exn.OutPort[tools.Label],
+      l: exn.OutPort[pg.Label],
       expectedValue: Int,
     )(using SourcePos): Outcome[Unit] =
       for {
-        label <- expectVal(OutPort.map(l)(tools.unwrapLabel))
+        label <- expectVal(OutPort.map(l)(pg.unwrapLabel))
         label <- assertMatches(label) { case Label.Abstr(l) => l }
         u <- assertEquals(label.value, expectedValue)
       } yield u
@@ -86,7 +83,7 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "newAbstractType" -> TestCase
         .interactWith {
           val prg: Done -⚬ Val[Type] = λ { d =>
-            val x1 |*| t |*| x2 = tools.abstractTypeSplit(label(1))
+            val x1 |*| t |*| x2 = pg.abstractTypeSplit(label(1))
             t
               .waitFor(d)
               .waitFor(close(x1))
@@ -104,11 +101,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "nested.newAbstractType" -> TestCase
         .interactWith {
           val prg: Done -⚬ Val[Type] = λ { d =>
-            val x1 |*| t |*| x2 = nt.abstractTypeSplit(nt.lbl(1))
+            val x1 |*| t |*| x2 = npg.abstractTypeSplit(npg.lbl(1))
             t
               .waitFor(d)
-              .waitFor(nt.close(x1))
-              .waitFor(nt.close(x2))
+              .waitFor(npg.close(x1))
+              .waitFor(npg.close(x2))
           }
           prg
         }
@@ -122,7 +119,7 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "nested.newAbstractType unnest before close" -> TestCase
         .interactWith {
           val prg: Done -⚬ Val[Type] = λ { d =>
-            val x1 |*| t |*| x2 = nt.abstractTypeSplit(nt.lbl(1))
+            val x1 |*| t |*| x2 = npg.abstractTypeSplit(npg.lbl(1))
             t
               .waitFor(d)
               .waitFor(close(nested.unnest(x1)))
@@ -272,8 +269,8 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "split and unnest abstract type" -> TestCase
         .interactWith {
           λ { d =>
-            val a |*| t = nt.abstractTypeTap(nt.lbl(1))
-            val a1 |*| a2 = nt.split(a)
+            val a |*| t = npg.abstractTypeTap(npg.lbl(1))
+            val a1 |*| a2 = npg.split(a)
             val b = merge(unnest(a1) |*| unnest(a2))
             (t ** (output(unnest(a1)) ** output(unnest(a2))))
               .waitFor(d)
@@ -357,7 +354,7 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "unnest" -> TestCase
         .interactWith {
           λ { d =>
-            val a |*| t = nt.abstractTypeTap(nt.lbl(1))
+            val a |*| t = npg.abstractTypeTap(npg.lbl(1))
             val b = nested.unnest(a)
             output(b) |*| (t waitFor d)
           }
@@ -375,8 +372,8 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "split abstract type, unnest, merge" -> TestCase
         .interactWith {
           λ { d =>
-            val a |*| t = nt.abstractTypeTap(nt.lbl(1))
-            val a1 |*| a2 = nt.split(a)
+            val a |*| t = npg.abstractTypeTap(npg.lbl(1))
+            val a1 |*| a2 = npg.split(a)
             val b1 = unnest(a1)
             val b2 = unnest(a2)
             val b = merge(b1 |*| b2)
@@ -462,11 +459,11 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
       "construct and deconstruct (RecCall[A, B], A), merge after deconstruction" -> TestCase
         .interactWith {
           λ { start =>
-            val a |*| ta = nt.abstractTypeTap(nt.lbl(1))
-            val b |*| tb = nt.abstractTypeTap(nt.lbl(2))
-            val a1 |*| a2 = nt.split(a)
-            val b1 |*| b2 = nt.split(b)
-            nt.Tp(pair(nt.Tp(recCall(a1 |*| b1)) |*| a2)) |*| b2
+            val a |*| ta = npg.abstractTypeTap(npg.lbl(1))
+            val b |*| tb = npg.abstractTypeTap(npg.lbl(2))
+            val a1 |*| a2 = npg.split(a)
+            val b1 |*| b2 = npg.split(b)
+            npg.Tp(pair(npg.Tp(recCall(a1 |*| b1)) |*| a2)) |*| b2
               |*| (ta |*| tb.waitFor(start))
           }
         }
@@ -475,15 +472,15 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
           val (fa, b2) = OutPort.split(t)
           val (ta, tb) = OutPort.split(ts)
           for {
-            fa <- expectLeft(OutPort.map(fa)(nt.tap > nt.peek))
+            fa <- expectLeft(OutPort.map(fa)(npg.tap > npg.peek))
             fa <- expectRight(OutPort.map(fa)(isPair))
             (f, a2) = OutPort.split(fa)
-            f <- expectLeft(OutPort.map(f)(nt.peek))
+            f <- expectLeft(OutPort.map(f)(npg.peek))
             ab <- expectRight(OutPort.map(f)(isRecCall))
             (a1, b1) = OutPort.split(ab)
 
             a = OutPort.map(OutPort.pair(a1, a2))(par(lower, lower) > merge)
-            b = OutPort.map(OutPort.pair(b1, OutPort.map(b2)(nt.tap)))(par(lower, lower) > merge)
+            b = OutPort.map(OutPort.pair(b1, OutPort.map(b2)(npg.tap)))(par(lower, lower) > merge)
 
             ta1 = OutPort.map(a)(output)
             tb1 = OutPort.map(b)(output)

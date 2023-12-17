@@ -17,17 +17,17 @@ object TypeInference {
         State(n => (n+1, AbstractTypeLabel(n)))
     }
 
-    given tools: TypeInferencer[NonAbstractType, Type[Label], Label] =
+    given pg: Propagator[NonAbstractType, Type[Label], Label] =
       import NonAbstractType.given
-      TypeInferencer.instance[NonAbstractType, Type[Label], Label](Type.abstractType)
+      Propagator.instance[NonAbstractType, Type[Label], Label](Type.abstractType)
 
     val res =
     reconstructTypes(f)
       .map { prg =>
         prg > λ { case a |*| f |*| b =>
           (f /*:>> alsoPrintLine(f => s"RESULT of reconstructTypes: $f")*/)
-            .waitFor(tools.close(a) /*:>> printLine("INPUT closed")*/)
-            .waitFor(tools.close(b) /*:>> printLine("OUTPUT closed")*/)
+            .waitFor(pg.close(a) /*:>> printLine("INPUT closed")*/)
+            .waitFor(pg.close(b) /*:>> printLine("OUTPUT closed")*/)
         }
       }
       .run(0)
@@ -38,27 +38,27 @@ object TypeInference {
   }
 
   def reconstructTypes[M[_], A, B](f: Fun[A, B])(using
-    tools: TypeInferencer[NonAbstractType, Type[Label], Label],
+    pg: Propagator[NonAbstractType, Type[Label], Label],
   )(using
     gen: VarGen[M, AbstractTypeLabel],
     M: Monad[M],
-  ): M[One -⚬ (tools.Tp |*| Val[TypedFun[A, B]] |*| tools.Tp)] = {
+  ): M[One -⚬ (pg.Tp |*| Val[TypedFun[A, B]] |*| pg.Tp)] = {
     // println(s"reconstructTypes($f)")
     import gen.newVar
     import NonAbstractType.{either, fixT, int, pair, recCall, string, unit}
-    import tools.{Tp, TypeOutlet, label, merge, output, split}
+    import pg.{Tp, TypeOutlet, label, merge, output, split}
 
-    val nested: tools.Nested = tools.nested
-    import nested.{lower, tools => nt, unnest}
+    val nested: pg.Nested = pg.nested
+    import nested.{lower, propagator => npg, unnest}
 
-    def reconstructTypes[A, B](f: Fun[A, B]): M[One -⚬ (nt.Tp |*| Val[TypedFun[A, B]] |*| nt.Tp)] =
-      TypeInference.reconstructTypes(f)(using nt)
+    def reconstructTypes[A, B](f: Fun[A, B]): M[One -⚬ (npg.Tp |*| Val[TypedFun[A, B]] |*| npg.Tp)] =
+      TypeInference.reconstructTypes(f)(using npg)
 
     def newAbstractType(v: AbstractTypeLabel)(using
       SourcePos,
       LambdaContext,
-    ): $[tools.Tp |*| Val[Type[Label]] |*| tools.Tp] =
-      constant(label(Label.Abstr(v))) :>> tools.abstractTypeTap :>> λ { case s |*| t =>
+    ): $[pg.Tp |*| Val[Type[Label]] |*| pg.Tp] =
+      constant(label(Label.Abstr(v))) :>> pg.abstractTypeTap :>> λ { case s |*| t =>
         val s1 |*| s2 = split(s)
         s1 |*| t |*| s2
       }
@@ -66,15 +66,15 @@ object TypeInference {
     def newTypeParam(v: AbstractTypeLabel)(using
       SourcePos,
       LambdaContext,
-    ): $[tools.Tp |*| Val[Type[Label]]] =
-      tools.abstractTypeTap(constant(label(Label.Abstr(v))))
+    ): $[pg.Tp |*| Val[Type[Label]]] =
+      pg.abstractTypeTap(constant(label(Label.Abstr(v))))
 
     def apply1T[G[_]](G: TypeTag[G]): Tp -⚬ Tp =
       NonAbstractType.apply1T(
         G,
         split,
-        tools.lift,
-        v => label(v) > tools.abstractType,
+        pg.lift,
+        v => label(v) > pg.abstractType,
       )
 
     f.value match {
@@ -94,7 +94,7 @@ object TypeInference {
           λ.* { one =>
             val a |*| f |*| x1 = tf(one)
             val x2 |*| g |*| b = tg(one)
-            val x = nt.output(nt.merge(x1 |*| x2))
+            val x = npg.output(npg.merge(x1 |*| x2))
             val h = (f ** x ** g) :>> mapVal { case ((f, x), g) => TypedFun.andThen(f, x, g) }
             nested.unnest(a) |*| h |*| nested.unnest(b)
           }
@@ -106,8 +106,8 @@ object TypeInference {
           λ.* { one =>
             val a1 |*| f1 |*| b1 = tf1(one)
             val a2 |*| f2 |*| b2 = tf2(one)
-            val a = nt.Tp(pair(a1 |*| a2))
-            val b = nt.Tp(pair(b1 |*| b2))
+            val a = npg.Tp(pair(a1 |*| a2))
+            val b = npg.Tp(pair(b1 |*| b2))
             val f = (f1 ** f2) :>> mapVal { case (f1, f2) => TypedFun.par(f1, f2) }
             nested.unnest(a) |*| f |*| nested.unnest(b)
           }
@@ -165,8 +165,8 @@ object TypeInference {
           λ.* { one =>
             val a1 |*| f |*| b1 = tf(one)
             val a2 |*| g |*| b2 = tg(one)
-            val a = nt.Tp(either(a1 |*| a2))
-            val b = nt.merge(b1 |*| b2)
+            val a = npg.Tp(either(a1 |*| a2))
+            val b = npg.merge(b1 |*| b2)
             val h = (f ** g) :>> mapVal { case (f, g) => TypedFun.either(f, g) }
             unnest(a) |*| h |*| unnest(b)
           }
@@ -179,7 +179,7 @@ object TypeInference {
             val l1 |*| lt |*| l2 = newAbstractType(ll)
             val r  |*| rt        = newTypeParam(rl)
             val f = (lt ** rt) :>> mapVal { case (lt, rt) => TypedFun.injectL[l, r](lt, rt) }
-            val b = tools.Tp(either(l2 |*| r))
+            val b = pg.Tp(either(l2 |*| r))
             (l1 |*| f |*| b)
           }
       case _: FunT.InjectR[arr, l, r] =>
@@ -191,7 +191,7 @@ object TypeInference {
             val  l |*| lt        = newTypeParam(ll)
             val r1 |*| rt |*| r2 = newAbstractType(rl)
             val f = (lt ** rt) :>> mapVal { case (lt, rt) => TypedFun.injectR[l, r](lt, rt) }
-            val b = tools.Tp(either(l |*| r2))
+            val b = pg.Tp(either(l |*| r2))
             (r1 |*| f |*| b)
           }
       case _: FunT.Distribute[arr, a, b, c] =>
@@ -265,17 +265,17 @@ object TypeInference {
           tf <- reconstructTypes(f)
         } yield
           tf > λ { case aba |*| f |*| b1 =>
-            nt.peek(nt.tap(aba)) switch {
+            npg.peek(npg.tap(aba)) switch {
               case Left(aba) =>
                 NonAbstractType.isPair(aba) switch {
                   case Right(ab |*| a1) =>
-                    nt.peek(ab) switch {
+                    npg.peek(ab) switch {
                       case Left(ab) =>
                         NonAbstractType.isRecCall(ab) switch {
                           case Right(a0 |*| b0) =>
                             val a = merge(lower(a0) |*| lower(a1))
                             val b = merge(lower(b0) |*| unnest(b1))
-                            val a_ |*| ta = tools.split(a) :>> snd(tools.output)
+                            val a_ |*| ta = pg.split(a) :>> snd(pg.output)
                             val h = (ta ** f) :>> mapVal { case (ta, f) =>
                               // println(s"OUTPUTTING arg of Rec: $f")
                               TypedFun.rec(ta, f)
@@ -283,7 +283,7 @@ object TypeInference {
                             a_ |*| h |*| b
                           case Left(ab) =>
                             // (ab |*| f |*| a1 |*| b1) :>> crashNow(s"TODO (${summon[SourcePos]})")
-                            val d = (f ** output(lower(nt.outlet(ab))) ** output(lower(a1)) ** output(unnest(b1)))
+                            val d = (f ** output(lower(npg.outlet(ab))) ** output(lower(a1)) ** output(unnest(b1)))
                               :>> printLine { case (((f, ab), a1), b) =>
                                 s"FUNCTION=${scala.util.Try(f.toString)}, IN-TYPE=($ab, $a1), OUT-TYPE=$b"
                               }
@@ -294,7 +294,7 @@ object TypeInference {
                     }
                   case Left(aba) =>
                     import scala.concurrent.duration._
-                    val d = (f ** output(lower(nt.outlet(aba))) ** output(unnest(b1)))
+                    val d = (f ** output(lower(npg.outlet(aba))) ** output(unnest(b1)))
                       :>> printLine { case ((f, aba), b) =>
                         s"FUNCTION=${scala.util.Try(f.toString)}, IN-TYPE=$aba, OUT-TYPE=$b"
                       }

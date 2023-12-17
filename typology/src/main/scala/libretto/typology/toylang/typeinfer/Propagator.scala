@@ -4,7 +4,7 @@ import libretto.lambda.util.SourcePos
 import libretto.scaletto.StarterKit.*
 import scala.annotation.targetName
 
-trait TypeInferencer[F[_], T, V] {
+trait Propagator[F[_], T, V] {
   type Label
   type Tp
   type TypeOutlet
@@ -27,10 +27,10 @@ trait TypeInferencer[F[_], T, V] {
   def abstractType: Label -⚬ Tp
 
   trait Nested {
-    val tools: TypeInferencer[F, T, V]
+    val propagator: Propagator[F, T, V]
 
-    def lower: tools.TypeOutlet -⚬ Tp
-    def unnest: tools.Tp -⚬ Tp
+    def lower: propagator.TypeOutlet -⚬ Tp
+    def unnest: propagator.Tp -⚬ Tp
   }
 
   def nested: Nested
@@ -39,9 +39,9 @@ trait TypeInferencer[F[_], T, V] {
   given junctionPositiveTp: Junction.Positive[Tp]
 }
 
-object TypeInferencer {
+object Propagator {
 
-  def instance[F[_], T, V](tparam: V => T)(using TypeOps[F, T], Ordering[V]): TypeInferencer[F, T, V] =
+  def instance[F[_], T, V](tparam: V => T)(using TypeOps[F, T], Ordering[V]): Propagator[F, T, V] =
     val labels = Labels[V]
     TypeInferencerImpl[F, T, Done, V](
       labels,
@@ -91,7 +91,7 @@ class TypeInferencerImpl[
   typeParamTap: labels.Label -⚬ (P |*| Val[T]),
   outputTypeParam: (labels.TParamLabel |*| P) -⚬ Val[T],
   closeTypeParam: (labels.TParamLabel |*| P) -⚬ Done,
-) extends TypeInferencer[F, T, V] { self =>
+) extends Propagator[F, T, V] { self =>
 
   override type Label = labels.Label
   type TParam = labels.TParamLabel
@@ -666,7 +666,7 @@ class TypeInferencerImpl[
       }
 
     new Nested {
-      override val tools: TypeInferencerImpl[F, T, Q, V, nl.labels.type] =
+      override val propagator: TypeInferencerImpl[F, T, Q, V, nl.labels.type] =
         TypeInferencerImpl[F, T, Q, V](
           nl.labels,
           F,
@@ -677,9 +677,9 @@ class TypeInferencerImpl[
           closeQ,
         )
 
-      override def lower: tools.TypeOutlet -⚬ Tp = rec { self =>
+      override def lower: propagator.TypeOutlet -⚬ Tp = rec { self =>
         λ { t =>
-          tools.TypeOutlet.unpack(t) switch {
+          propagator.TypeOutlet.unpack(t) switch {
             case Left(lbl |*| q) =>
               q switch {
                 case Left(nt) =>
@@ -697,8 +697,8 @@ class TypeInferencerImpl[
         }
       }
 
-      override def unnest: tools.Tp -⚬ Tp =
-        tools.tap > lower
+      override def unnest: propagator.Tp -⚬ Tp =
+        propagator.tap > lower
     }
   }
 
