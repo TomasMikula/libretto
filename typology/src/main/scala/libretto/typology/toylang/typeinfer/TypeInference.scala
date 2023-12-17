@@ -17,9 +17,9 @@ object TypeInference {
         State(n => (n+1, AbstractTypeLabel(n)))
     }
 
-    given tools: TypeInferencer[NonAbstractType, Label] =
+    given tools: TypeInferencer[NonAbstractType, Type[Label], Label] =
       import NonAbstractType.given
-      TypeInferencer.instance[NonAbstractType, Label]
+      TypeInferencer.instance[NonAbstractType, Type[Label], Label](Type.abstractType)
 
     val res =
     reconstructTypes(f)
@@ -38,7 +38,7 @@ object TypeInference {
   }
 
   def reconstructTypes[M[_], A, B](f: Fun[A, B])(using
-    tools: TypeInferencer[NonAbstractType, Label],
+    tools: TypeInferencer[NonAbstractType, Type[Label], Label],
   )(using
     gen: VarGen[M, AbstractTypeLabel],
     M: Monad[M],

@@ -2,10 +2,9 @@ package libretto.typology.toylang.typeinfer
 
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.StarterKit.*
-import libretto.typology.toylang.types.Type
 import scala.annotation.targetName
 
-trait TypeInferencer[F[_], V] {
+trait TypeInferencer[F[_], T, V] {
   type Label
   type Tp
   type TypeOutlet
@@ -18,17 +17,17 @@ trait TypeInferencer[F[_], V] {
   def split: Tp -⚬ (Tp |*| Tp)
   def tap: Tp -⚬ TypeOutlet
   def peek: TypeOutlet -⚬ (F[TypeOutlet] |+| TypeOutlet)
-  def write: TypeOutlet -⚬ Val[Type[V]]
-  def output: Tp -⚬ Val[Type[V]] = tap > write
+  def write: TypeOutlet -⚬ Val[T]
+  def output: Tp -⚬ Val[T] = tap > write
   def close: Tp -⚬ Done
 
   def label(v: V): One -⚬ Label
   def unwrapLabel: Label -⚬ Val[V]
-  def abstractTypeTap: Label -⚬ (Tp |*| Val[Type[V]])
+  def abstractTypeTap: Label -⚬ (Tp |*| Val[T])
   def abstractType: Label -⚬ Tp
 
   trait Nested {
-    val tools: TypeInferencer[F, V]
+    val tools: TypeInferencer[F, T, V]
 
     def lower: tools.TypeOutlet -⚬ Tp
     def unnest: tools.Tp -⚬ Tp
@@ -42,31 +41,31 @@ trait TypeInferencer[F[_], V] {
 
 object TypeInferencer {
 
-  def instance[F[_], V](using TypeOps[F, V], Ordering[V]): TypeInferencer[F, V] =
+  def instance[F[_], T, V](tparam: V => T)(using TypeOps[F, T], Ordering[V]): TypeInferencer[F, T, V] =
     val labels = Labels[V]
-    TypeInferencerImpl[F, Done, V](
+    TypeInferencerImpl[F, T, Done, V](
       labels,
-      summon[TypeOps[F, V]],
+      summon[TypeOps[F, T]],
       splitTypeParam = fork,
       // typeParamLink = labels.neglect > fork,
       typeParamLink = labels.show > printLine(s => s"FABRICATING 2 Done signals for $s") > fork,
-      typeParamTap = labels.unwrapOriginal > mapVal(x => Type.abstractType(x)) > signalPosFst[Val[Type[V]]],
+      typeParamTap = labels.unwrapOriginal > mapVal(tparam) > signalPosFst[Val[T]],
       // outputTypeParam = fst(labels.unwrapOriginalTP > mapVal(x => Type.abstractType(x))) > awaitPosSnd,
-      outputTypeParam = fst(labels.unwrapOriginalTP > mapVal(x => { println(s"OUTPUTTING abstract type $x"); Type.abstractType(x) })) > awaitPosSnd > alsoPrintLine(t => s"OUTPUTTED abstract type $t"),
+      outputTypeParam = fst(labels.unwrapOriginalTP > mapVal(x => { println(s"OUTPUTTING abstract type $x"); tparam(x) })) > awaitPosSnd > alsoPrintLine(t => s"OUTPUTTED abstract type $t"),
       closeTypeParam = fst(labels.neglectTParam) > join,
     )
 }
 
 object TypeInferencerImpl {
-  def apply[F[_], P, V](
+  def apply[F[_], T, P, V](
     labels: Labels[V],
-    F: TypeOps[F, V],
+    F: TypeOps[F, T],
     splitTypeParam: P -⚬ (P |*| P),
     typeParamLink: labels.Label -⚬ (P |*| P),
-    typeParamTap: labels.Label -⚬ (P |*| Val[Type[V]]),
-    outputTypeParam: (labels.TParamLabel |*| P) -⚬ Val[Type[V]],
+    typeParamTap: labels.Label -⚬ (P |*| Val[T]),
+    outputTypeParam: (labels.TParamLabel |*| P) -⚬ Val[T],
     closeTypeParam: (labels.TParamLabel |*| P) -⚬ Done,
-  ): TypeInferencerImpl[F, P, V, labels.type] =
+  ): TypeInferencerImpl[F, T, P, V, labels.type] =
     new TypeInferencerImpl(
       labels,
       F,
@@ -80,18 +79,19 @@ object TypeInferencerImpl {
 
 class TypeInferencerImpl[
   F[_],
+  T,
   P,
   V,
   Lbls <: Labels[V],
 ](
   val labels: Lbls,
-  F: TypeOps[F, V],
+  F: TypeOps[F, T],
   splitTypeParam: P -⚬ (P |*| P),
   typeParamLink: labels.Label -⚬ (P |*| P),
-  typeParamTap: labels.Label -⚬ (P |*| Val[Type[V]]),
-  outputTypeParam: (labels.TParamLabel |*| P) -⚬ Val[Type[V]],
+  typeParamTap: labels.Label -⚬ (P |*| Val[T]),
+  outputTypeParam: (labels.TParamLabel |*| P) -⚬ Val[T],
   closeTypeParam: (labels.TParamLabel |*| P) -⚬ Done,
-) extends TypeInferencer[F, V] { self =>
+) extends TypeInferencer[F, T, V] { self =>
 
   override type Label = labels.Label
   type TParam = labels.TParamLabel
@@ -506,7 +506,7 @@ class TypeInferencerImpl[
   override given junctionPositiveTp: Junction.Positive[Tp] =
     Junction.Positive.from(awaitPosFst)
 
-  override def abstractTypeTap: Label -⚬ (Tp |*| Val[Type[V]]) =
+  override def abstractTypeTap: Label -⚬ (Tp |*| Val[T]) =
     λ { lbl =>
       val l1 |*| l2 = labels.split(lbl)
       val res |*| resp = makeAbstractType(l1)
@@ -617,13 +617,13 @@ class TypeInferencerImpl[
         injectL(ntp) |*| injectR(tp1)
       }
 
-    val qTap: NLabel -⚬ (Q |*| Val[Type[V]]) =
+    val qTap: NLabel -⚬ (Q |*| Val[T]) =
       λ { case l0 =>
         val nt |*| t = constant(demand[Tp])
         injectL(nt) |*| self.output(t).waitFor(nl.labels.neglect(l0))
       }
 
-    val outputQ: (NTParam |*| Q) -⚬ Val[Type[V]] = rec { outputQ =>
+    val outputQ: (NTParam |*| Q) -⚬ Val[T] = rec { outputQ =>
       λ { case lbl |*| q =>
         q switch {
           case Left(nt) =>
@@ -666,8 +666,8 @@ class TypeInferencerImpl[
       }
 
     new Nested {
-      override val tools: TypeInferencerImpl[F, Q, V, nl.labels.type] =
-        TypeInferencerImpl[F, Q, V](
+      override val tools: TypeInferencerImpl[F, T, Q, V, nl.labels.type] =
+        TypeInferencerImpl[F, T, Q, V](
           nl.labels,
           F,
           splitQ,
@@ -730,7 +730,7 @@ class TypeInferencerImpl[
       }
     }
 
-  override def write: TypeOutlet -⚬ Val[Type[V]] = rec { self =>
+  override def write: TypeOutlet -⚬ Val[T] = rec { self =>
     dsl.unpack > dsl.either(
       outputTypeParam,
       F.output(self),

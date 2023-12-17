@@ -678,7 +678,7 @@ private[typeinfer] object NonAbstractType {
       }
   }
 
-  given TypeOps[NonAbstractType, Label] with {
+  given TypeOps[NonAbstractType, Type] with {
     override def map[A, B](f: A -⚬ B): NonAbstractType[A] -⚬ NonAbstractType[B] =
       NonAbstractType.map(f)
 

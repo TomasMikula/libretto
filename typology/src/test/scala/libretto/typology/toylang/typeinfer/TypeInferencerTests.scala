@@ -18,7 +18,7 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
     import NonAbstractType.{isPair, isRecCall, pair, recCall, given}
 
     val tools =
-      TypeInferencer.instance[NonAbstractType, Label]
+      TypeInferencer.instance[NonAbstractType, Type, Label](Type.abstractType)
     import tools.{
       Tp,
       abstractTypeTap,
@@ -38,7 +38,7 @@ class TypeInferencerTests extends ScalatestStarterTestSuite {
     val nn = nt.nested
     import nn.{tools => nnt}
 
-    extension (tools: TypeInferencer[NonAbstractType, Label])
+    extension (tools: TypeInferencer[NonAbstractType, Type, Label])
       def mkLabel(n: Int): One -⚬ tools.Label =
         tools.label(Label.Abstr(AbstractTypeLabel(n)))
 
