@@ -6,19 +6,175 @@ import libretto.scaletto.StarterKit._
 import libretto.testing.scalatest.scaletto.ScalatestStarterTestSuite
 import libretto.testing.scaletto.StarterTestKit
 import libretto.testing.TestCase
-import libretto.typology.toylang.terms.TypedFun.Type
-import libretto.typology.toylang.types.{AbstractTypeLabel, Label}
-import libretto.typology.toylang.types.generic.{TypeExpr => gte}
 
 class PropagatorTests extends ScalatestStarterTestSuite {
 
+  case class Label(value: Int)
+  object Label:
+    given Ordering[Label] =
+      { (a, b) => a.value compare b.value }
+
+  enum Type:
+    case Pair(a: Type, b: Type)
+    case RecCall(a: Type, b: Type)
+    case Abstr(label: Label)
+    case Mismatch(x: Type, y: Type)
+
+  object InferenceSupport:
+    private type ITypeF[T, X] =
+      (T |*| T)     // pair
+      |+| (T |*| T) // recCall
+      |+| (X |*| X) // mismatch
+
+    opaque type IType[T] = Rec[ITypeF[T, _]]
+
+    private def pack[T]: ITypeF[T, IType[T]] -⚬ IType[T] =
+      dsl.pack[ITypeF[T, _]]
+
+    private def unpack[T]: IType[T] -⚬ ITypeF[T, IType[T]] =
+      dsl.unpack[ITypeF[T, _]]
+
+    def pair[X]: (X |*| X) -⚬ IType[X] =
+      injectL > injectL > pack
+
+    def recCall[X]: (X |*| X) -⚬ IType[X] =
+      injectR > injectL > pack
+
+    def mismatch[X]: (IType[X] |*| IType[X]) -⚬ IType[X] =
+      injectR > pack
+
+    def isPair[X]: IType[X] -⚬ (IType[X] |+| (X |*| X)) =
+      λ { t =>
+        unpack(t) switch {
+          case Right(xxx) => injectL(mismatch(xxx))
+          case Left(t) => t switch {
+            case Left(x |*| y) => injectR(x |*| y)
+            case Right(rc)     => injectL(recCall(rc))
+          }
+        }
+      }
+
+    def isRecCall[X]: IType[X] -⚬ (IType[X] |+| (X |*| X)) =
+      λ { t =>
+        unpack(t) switch {
+          case Right(xxx) => injectL(mismatch(xxx))
+          case Left(t) => t switch {
+            case Left(xy)      => injectL(pair(xy))
+            case Right(x |*| y) => injectR(x |*| y)
+          }
+        }
+      }
+
+    given TypeOps[IType, Type] with {
+
+      override def split[A](f: A -⚬ (A |*| A)): IType[A] -⚬ (IType[A] |*| IType[A]) =
+        rec { self =>
+          λ { case t =>
+            unpack(t) switch {
+              case Right(x |*| y) =>
+                val x1 |*| x2 = self(x)
+                val y1 |*| y2 = self(y)
+                mismatch(x1 |*| y1) |*| mismatch(x2 |*| y2)
+              case Left(t) => t switch {
+                case Left(a |*| b)  =>
+                  val a1 |*| a2 = f(a)
+                  val b1 |*| b2 = f(b)
+                  pair(a1 |*| b1) |*| pair(a2 |*| b2)
+                case Right(a |*| b) =>
+                  val a1 |*| a2 = f(a)
+                  val b1 |*| b2 = f(b)
+                  recCall(a1 |*| b1) |*| recCall(a2 |*| b2)
+              }
+            }
+          }
+        }
+
+      override def merge[A](f: (A |*| A) -⚬ A, output: A -⚬ Val[Type]): (IType[A] |*| IType[A]) -⚬ IType[A] =
+        λ { case a |*| b =>
+          unpack(a) switch {
+            case Right(xxx) => mismatch(mismatch(xxx) |*| b)
+            case Left(a) => a switch {
+              case Left(a1 |*| a2) =>
+                unpack(b) switch {
+                  case Right(yyy) => mismatch(pair(a1 |*| a2) |*| mismatch(yyy))
+                  case Left(b) => b switch {
+                    case Left(b1 |*| b2)  => pair(f(a1 |*| b1) |*| f(a2 |*| b2))
+                    case Right(bi |*| bo) => mismatch(pair(a1 |*| a2) |*| recCall(bi |*| bo))
+                  }
+                }
+              case Right(ai |*| ao) =>
+                unpack(b) switch {
+                  case Right(yyy) => mismatch(recCall(ai |*| ao) |*| mismatch(yyy))
+                  case Left(b) => b switch {
+                    case Left(b1 |*| b2)  => mismatch(recCall(ai |*| ao) |*| pair(b1 |*| b2))
+                    case Right(bi |*| bo) => recCall(f(ai |*| bi) |*| f(ao |*| bo))
+                  }
+                }
+            }
+          }
+        }
+
+      override def map[A, B](f: A -⚬ B): IType[A] -⚬ IType[B] =
+        rec { self =>
+          λ { t =>
+            unpack(t) switch {
+              case Right(x |*| y) => mismatch(self(x) |*| self(y))
+              case Left(t) => t switch {
+                case Left(a |*| b)  => pair(f(a) |*| f(b))
+                case Right(a |*| b) => recCall(f(a) |*| f(b))
+              }
+            }
+          }
+        }
+
+      override def output[A](f: A -⚬ Val[Type]): IType[A] -⚬ Val[Type] =
+        rec { self =>
+          λ {t =>
+            unpack(t) switch {
+              case Right(x |*| y) => (self(x) ** self(y)) :>> mapVal { case (x, y) => Type.Mismatch(x, y) }
+              case Left(t) => t switch {
+                case Left(a |*| b)  => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.Pair(a, b) }
+                case Right(a |*| b) => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.RecCall(a, b) }
+              }
+            }
+          }
+        }
+
+      override def close[A](f: A -⚬ Done): IType[A] -⚬ Done =
+        rec { self =>
+          λ {t =>
+            unpack(t) switch {
+              case Right(x |*| y) => (self(x) |*| self(y)) :>> join
+              case Left(t) => t switch {
+                case Left(a |*| b)  => (f(a) |*| f(b)) :>> join
+                case Right(a |*| b) => (f(a) |*| f(b)) :>> join
+              }
+            }
+          }
+        }
+
+      override def awaitPosFst[A](f: (Done |*| A) -⚬ A): (Done |*| IType[A]) -⚬ IType[A] =
+        rec { self =>
+          λ { case d |*| t =>
+            unpack(t) switch {
+              case Right(x |*| y) => mismatch(self(d |*| x) |*| y)
+              case Left(t) => t switch {
+                case Left(a |*| b)  => pair(f(d |*| a) |*| b)
+                case Right(a |*| b) => recCall(f(d |*| a) |*| b)
+              }
+            }
+          }
+        }
+    }
+
+  import InferenceSupport.{IType, isPair, isRecCall, pair, recCall}
+
   override def testCases(using kit: StarterTestKit): scala.List[(String, TestCase[kit.type])] = {
-    import kit.{Outcome, expectDone, expectLeft, expectRight, expectVal}
-    import Outcome.{assertEquals, assertLeft, assertMatches, assertRight, failure, success}
-    import NonAbstractType.{isPair, isRecCall, pair, recCall, given}
+    import kit.{Outcome, expectLeft, expectRight, expectVal}
+    import Outcome.{assertEquals, assertMatches, assertRight, failure, success}
 
     val pg =
-      Propagator.instance[NonAbstractType, Type, Label](Type.abstractType)
+      Propagator.instance[IType, Type, Label](Type.Abstr(_))
     import pg.{
       Tp,
       abstractTypeTap,
@@ -35,19 +191,19 @@ class PropagatorTests extends ScalatestStarterTestSuite {
     val nested = pg.nested
     import nested.{lower, propagator => npg, unnest}
 
-    extension (tools: Propagator[NonAbstractType, Type, Label])
-      def mkLabel(n: Int): One -⚬ tools.Label =
-        tools.label(Label.Abstr(AbstractTypeLabel(n)))
+    extension (pg: Propagator[IType, Type, Label])
+      def mkLabel(n: Int): One -⚬ pg.Label =
+        pg.label(Label(n))
 
       def lbl(n: Int)(using
         SourcePos,
         LambdaContext,
-      ): $[tools.Label] =
+      ): $[pg.Label] =
         constant(mkLabel(n))
 
-      def abstractTypeSplit: tools.Label -⚬ (tools.Tp |*| Val[Type] |*| tools.Tp) =
-        tools.abstractTypeTap > λ { case t |*| o =>
-          val t1 |*| t2 = tools.split(t)
+      def abstractTypeSplit: pg.Label -⚬ (pg.Tp |*| Val[Type] |*| pg.Tp) =
+        pg.abstractTypeTap > λ { case t |*| o =>
+          val t1 |*| t2 = pg.split(t)
           t1 |*| o |*| t2
         }
 
@@ -58,10 +214,10 @@ class PropagatorTests extends ScalatestStarterTestSuite {
     ): $[pg.Label] =
       pg.lbl(n)
 
-    def assertAbstract(t: Type)(using SourcePos): Outcome[AbstractTypeLabel] =
-      t.value match {
-        case gte.AbstractType(label) => assertMatches(label) { case Label.Abstr(l) => l}
-        case other                   => failure(s"Expected abstract type, got $other")
+    def assertAbstract(t: Type)(using SourcePos): Outcome[Label] =
+      t match {
+        case Type.Abstr(label) => success(label)
+        case other            => failure(s"Expected abstract type, got $other")
       }
 
     def assertAbstractEquals(t: Type, expectedLabel: Int)(using SourcePos): Outcome[Unit] =
@@ -75,7 +231,6 @@ class PropagatorTests extends ScalatestStarterTestSuite {
     )(using SourcePos): Outcome[Unit] =
       for {
         label <- expectVal(OutPort.map(l)(pg.unwrapLabel))
-        label <- assertMatches(label) { case Label.Abstr(l) => l }
         u <- assertEquals(label.value, expectedValue)
       } yield u
 
