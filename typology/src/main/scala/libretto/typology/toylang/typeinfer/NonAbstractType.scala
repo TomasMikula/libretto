@@ -220,11 +220,10 @@ private[typeinfer] object NonAbstractType {
   ): NonAbstractType[X] -⚬ (NonAbstractType[X] |*| NonAbstractType[X]) =
     splitMap(splitX)
 
-  def mergeWith[X, Y, Z](
-    g: (X |*| Y) -⚬ Z,
+  def merge[X](
+    g: (X |*| X) -⚬ X,
     outputXApprox: X -⚬ Val[Type],
-    outputYApprox: Y -⚬ Val[Type],
-  ): (NonAbstractType[X] |*| NonAbstractType[Y]) -⚬ NonAbstractType[Z] = {
+  ): (NonAbstractType[X] |*| NonAbstractType[X]) -⚬ NonAbstractType[X] = {
     λ { case a |*| b =>
       a switch {
         case Right(a1 |*| a2) => // `a` is a pair
@@ -234,7 +233,7 @@ private[typeinfer] object NonAbstractType {
             case Left(b) =>
               NonAbstractType.mismatch(
                 ((outputXApprox(a1) ** outputXApprox(a2)) :>> mapVal { case (a1, a2) => Type.pair(a1, a2) })
-                ** output(outputYApprox)(injectL(b))
+                ** output(outputXApprox)(injectL(b))
               )
           }
         case Left(a) =>
@@ -242,7 +241,7 @@ private[typeinfer] object NonAbstractType {
             case Right(b1 |*| b2) => // `b` is a pair
               NonAbstractType.mismatch(
                 output(outputXApprox)(injectL(a))
-                ** ((outputYApprox(b1) ** outputYApprox(b2)) :>> mapVal { case (b1, b2) => Type.pair(b1, b2) })
+                ** ((outputXApprox(b1) ** outputXApprox(b2)) :>> mapVal { case (b1, b2) => Type.pair(b1, b2) })
               )
             case Left(b) =>
               a switch {
@@ -253,7 +252,7 @@ private[typeinfer] object NonAbstractType {
                     case Left(b) =>
                       NonAbstractType.mismatch(
                         ((outputXApprox(p) ** outputXApprox(q)) :>> mapVal { case (p, q) => Type.sum(p, q) })
-                        ** output(outputYApprox)(injectL(injectL(b)))
+                        ** output(outputXApprox)(injectL(injectL(b)))
                       )
                   }
                 case Left(a) =>
@@ -261,7 +260,7 @@ private[typeinfer] object NonAbstractType {
                     case Right(r |*| s) => // `b` is either
                       NonAbstractType.mismatch(
                         output(outputXApprox)(injectL(injectL(a)))
-                        ** ((outputYApprox(r) ** outputYApprox(s)) :>> mapVal { case (r, s) => Type.sum(r, s) })
+                        ** ((outputXApprox(r) ** outputXApprox(s)) :>> mapVal { case (r, s) => Type.sum(r, s) })
                       )
                     case Left(b) =>
                       a switch {
@@ -272,7 +271,7 @@ private[typeinfer] object NonAbstractType {
                             case Left(b) =>
                               NonAbstractType.mismatch(
                                 ((outputXApprox(p) ** outputXApprox(q)) :>> mapVal { case (p, q) => Type.recCall(p, q) })
-                                ** output(outputYApprox)(injectL(injectL(injectL(b))))
+                                ** output(outputXApprox)(injectL(injectL(injectL(b))))
                               )
                           }
                         case Left(a) =>
@@ -280,7 +279,7 @@ private[typeinfer] object NonAbstractType {
                             case Right(r |*| s) => // `b` is RecCall
                               NonAbstractType.mismatch(
                                 output(outputXApprox)(injectL(injectL(injectL(a))))
-                                ** ((outputYApprox(r) ** outputYApprox(s)) :>> mapVal { case (r, s) => Type.recCall(r, s) })
+                                ** ((outputXApprox(r) ** outputXApprox(s)) :>> mapVal { case (r, s) => Type.recCall(r, s) })
                               )
                             case Left(b) =>
                               a switch {
@@ -329,7 +328,7 @@ private[typeinfer] object NonAbstractType {
                                           case Left(f)        => f :>> mapVal { f => Type.fix(f.vmap(Label.ScalaTParam(_))) }
                                           case Right(f |*| p) => (f ** outputXApprox(p)) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
                                         })
-                                        ** output(outputYApprox)(injectL(injectL(injectL(injectL(b)))))
+                                        ** output(outputXApprox)(injectL(injectL(injectL(injectL(b)))))
                                       )
                                   }
                                 case Left(a) =>
@@ -341,7 +340,7 @@ private[typeinfer] object NonAbstractType {
                                           case Left(g) =>
                                             g :>> mapVal { g => Type.fix(g.vmap(Label.ScalaTParam(_))) }
                                           case Right(g |*| y) =>
-                                            (g |*| outputYApprox(y)) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
+                                            (g |*| outputXApprox(y)) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
                                         })
                                       )
                                     case Left(b) =>
@@ -418,12 +417,6 @@ private[typeinfer] object NonAbstractType {
       }
     }
   }
-
-  def merge[X](
-    mergeX: (X |*| X) -⚬ X,
-    outputXApprox: X -⚬ Val[Type],
-  ): (NonAbstractType[X] |*| NonAbstractType[X]) -⚬ NonAbstractType[X] =
-    mergeWith[X, X, X](mergeX, outputXApprox, outputXApprox)
 
   def output[X](
     outputX: X -⚬ Val[Type],
