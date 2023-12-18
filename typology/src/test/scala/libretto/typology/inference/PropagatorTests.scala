@@ -90,7 +90,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
           }
         }
 
-      override def merge[A](f: (A |*| A) -⚬ A, output: A -⚬ Val[Type]): (IType[A] |*| IType[A]) -⚬ IType[A] =
+      override def merge[A](f: (A |*| A) -⚬ A): (IType[A] |*| IType[A]) -⚬ IType[A] =
         λ { case a |*| b =>
           unpack(a) switch {
             case Right(xxx) => mismatch(mismatch(xxx) |*| b)

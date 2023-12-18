@@ -16,8 +16,8 @@ type TypeFun[K, L] = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, K, 
 type TypeTagF = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, ●, ●]
 type TypeTagPF = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, ● × ●, ●]
 
-private[typeinfer] type NonAbstractType[X] = (
-  Val[(Type, Type)] // type mismatch
+private[typeinfer] type NonAbstractTypeF[X, T] = (
+  (T |*| T) // type mismatch
   |+| Done // unit
   |+| Done // int
   |+| Done // string
@@ -27,24 +27,32 @@ private[typeinfer] type NonAbstractType[X] = (
   |+| (X |*| X) // pair
 )
 
+private[typeinfer] type NonAbstractType[X] = Rec[NonAbstractTypeF[X, _]]
+
 private[typeinfer] object NonAbstractType {
+  private def pack[X]: NonAbstractTypeF[X, NonAbstractType[X]] -⚬ NonAbstractType[X] =
+    dsl.pack
+
+  private def unpack[X]: NonAbstractType[X] -⚬ NonAbstractTypeF[X, NonAbstractType[X]] =
+    dsl.unpack
+
   def pair[X]: (X |*| X) -⚬ NonAbstractType[X] =
-    injectR
+    pack ∘ injectR
 
   def either[X]: (X |*| X) -⚬ NonAbstractType[X] =
-    injectL ∘ injectR
+    pack ∘ injectL ∘ injectR
 
   def recCall[X]: (X |*| X) -⚬ NonAbstractType[X] =
-    injectL ∘ injectL ∘ injectR
+    pack ∘ injectL ∘ injectL ∘ injectR
 
   def fix[X]: Val[TypeTagF] -⚬ NonAbstractType[X] =
-    injectL ∘ injectL ∘ injectL ∘ injectR ∘ injectL
+    pack ∘ injectL ∘ injectL ∘ injectL ∘ injectR ∘ injectL
 
   def fixT[X, F[_]](F: TypeTag[F]): One -⚬ NonAbstractType[X] =
     fix ∘ const(TypeTag.toTypeFun(F))
 
   def pfix[X]: (Val[TypeTagPF] |*| X) -⚬ NonAbstractType[X] =
-    injectL ∘ injectL ∘ injectL ∘ injectR ∘ injectR
+    pack ∘ injectL ∘ injectL ∘ injectL ∘ injectR ∘ injectR
 
   def apply1T[X, F[_]](
     F: TypeTag[F],
@@ -73,30 +81,30 @@ private[typeinfer] object NonAbstractType {
   }
 
   def string[X]: Done -⚬ NonAbstractType[X] =
-    injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
+    pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
   def int[X]: Done -⚬ NonAbstractType[X] =
-    injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
+    pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
   def unit[X]: Done -⚬ NonAbstractType[X] =
-    injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
+    pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
 
-  def mismatch[X]: Val[(Type, Type)] -⚬ NonAbstractType[X] =
-    injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL
+  def mismatch[X]: (NonAbstractType[X] |*| NonAbstractType[X]) -⚬ NonAbstractType[X] =
+    pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL
 
   def isPair[X]: NonAbstractType[X] -⚬ (NonAbstractType[X] |+| (X |*| X)) =
     λ { t =>
-      t switch {
+      unpack(t) switch {
         case Right(r |*| s) => // pair
           injectR(r |*| s)
         case Left(t) =>
-          injectL(injectL(t))
+          injectL(pack(injectL(t)))
       }
     }
 
   def isRecCall[X]: NonAbstractType[X] -⚬ (NonAbstractType[X] |+| (X |*| X)) =
     λ { t =>
-      t switch {
+      unpack(t) switch {
         case Right(r |*| s) => // pair
           injectL(pair(r |*| s))
         case Left(t) =>
@@ -109,16 +117,16 @@ private[typeinfer] object NonAbstractType {
                   injectR(r |*| s)
                 case Left(t) =>
                   injectL(
-                    injectL(injectL(injectL(t)))
+                    pack(injectL(injectL(injectL(t))))
                   )
               }
           }
       }
     }
 
-  def map[X, Q](g: X -⚬ Q): NonAbstractType[X] -⚬ NonAbstractType[Q] =
+  def map[X, Q](g: X -⚬ Q): NonAbstractType[X] -⚬ NonAbstractType[Q] = rec { self =>
     λ { t =>
-      t switch {
+      unpack(t) switch {
         case Right(r |*| s) => // pair
           pair(g(r) |*| g(s))
         case Left(t) =>
@@ -150,8 +158,8 @@ private[typeinfer] object NonAbstractType {
                               t switch {
                                 case Right(d) => // unit
                                   unit(d)
-                                case Left(err) =>
-                                  mismatch(err)
+                                case Left(x |*| y) =>
+                                  mismatch(self(x) |*| self(y))
                               }
                           }
                       }
@@ -160,12 +168,13 @@ private[typeinfer] object NonAbstractType {
           }
       }
     }
+  }
 
   def splitMap[X, Y, Z](
     f: X -⚬ (Y |*| Z),
-  ): NonAbstractType[X] -⚬ (NonAbstractType[Y] |*| NonAbstractType[Z]) =
+  ): NonAbstractType[X] -⚬ (NonAbstractType[Y] |*| NonAbstractType[Z]) = rec { self =>
     λ { t =>
-      t switch {
+      unpack(t) switch {
         case Right(r |*| s) => // pair
           val r1 |*| r2 = f(r)
           val s1 |*| s2 = f(s)
@@ -204,8 +213,10 @@ private[typeinfer] object NonAbstractType {
                               t switch {
                                 case Right(+(t)) => // unit
                                   unit(t) |*| unit(t)
-                                case Left(err) =>
-                                  err :>> dsl.dup :>> par(mismatch, mismatch)
+                                case Left(x1 |*| x2) =>
+                                  val y1 |*| z1 = self(x1)
+                                  val y2 |*| z2 = self(x2)
+                                  mismatch(y1 |*| y2) |*| mismatch(z1 |*| z2)
                               }
                           }
                       }
@@ -214,6 +225,7 @@ private[typeinfer] object NonAbstractType {
           }
       }
     }
+  }
 
   def split[X](
     splitX: X -⚬ (X |*| X),
@@ -222,64 +234,60 @@ private[typeinfer] object NonAbstractType {
 
   def merge[X](
     g: (X |*| X) -⚬ X,
-    outputXApprox: X -⚬ Val[Type],
   ): (NonAbstractType[X] |*| NonAbstractType[X]) -⚬ NonAbstractType[X] = {
     λ { case a |*| b =>
-      a switch {
+      unpack(a) switch {
         case Right(a1 |*| a2) => // `a` is a pair
-          b switch {
+          unpack(b) switch {
             case Right(b1 |*| b2) => // `b` is a pair
-              NonAbstractType.pair(g(a1 |*| b1) |*| g(a2 |*| b2))
+              pair(g(a1 |*| b1) |*| g(a2 |*| b2))
             case Left(b) =>
-              NonAbstractType.mismatch(
-                ((outputXApprox(a1) ** outputXApprox(a2)) :>> mapVal { case (a1, a2) => Type.pair(a1, a2) })
-                ** output(outputXApprox)(injectL(b))
-              )
+              mismatch(pair(a1 |*| a2) |*| pack(injectL(b)))
           }
         case Left(a) =>
-          b switch {
+          unpack(b) switch {
             case Right(b1 |*| b2) => // `b` is a pair
-              NonAbstractType.mismatch(
-                output(outputXApprox)(injectL(a))
-                ** ((outputXApprox(b1) ** outputXApprox(b2)) :>> mapVal { case (b1, b2) => Type.pair(b1, b2) })
+              mismatch(
+                pack(injectL(a))
+                |*| pair(b1 |*| b2)
               )
             case Left(b) =>
               a switch {
                 case Right(p |*| q) => // `a` is either
                   b switch {
                     case Right(r |*| s) => // `b` is either
-                      NonAbstractType.either(g(p |*| r) |*| g(q |*| s))
+                      either(g(p |*| r) |*| g(q |*| s))
                     case Left(b) =>
-                      NonAbstractType.mismatch(
-                        ((outputXApprox(p) ** outputXApprox(q)) :>> mapVal { case (p, q) => Type.sum(p, q) })
-                        ** output(outputXApprox)(injectL(injectL(b)))
+                      mismatch(
+                        either(p |*| q)
+                        |*| pack(injectL(injectL(b)))
                       )
                   }
                 case Left(a) =>
                   b switch {
                     case Right(r |*| s) => // `b` is either
-                      NonAbstractType.mismatch(
-                        output(outputXApprox)(injectL(injectL(a)))
-                        ** ((outputXApprox(r) ** outputXApprox(s)) :>> mapVal { case (r, s) => Type.sum(r, s) })
+                      mismatch(
+                        pack(injectL(injectL(a)))
+                        |*| either(r |*| s)
                       )
                     case Left(b) =>
                       a switch {
                         case Right(p |*| q) => // `a` is RecCall
                           b switch {
                             case Right(r |*| s) => // `b` is RecCall
-                              NonAbstractType.recCall(g(p |*| r) |*| g(q |*| s))
+                              recCall(g(p |*| r) |*| g(q |*| s))
                             case Left(b) =>
-                              NonAbstractType.mismatch(
-                                ((outputXApprox(p) ** outputXApprox(q)) :>> mapVal { case (p, q) => Type.recCall(p, q) })
-                                ** output(outputXApprox)(injectL(injectL(injectL(b))))
+                              mismatch(
+                                recCall(p |*| q)
+                                |*| pack(injectL(injectL(injectL(b))))
                               )
                           }
                         case Left(a) =>
                           b switch {
                             case Right(r |*| s) => // `b` is RecCall
-                              NonAbstractType.mismatch(
-                                output(outputXApprox)(injectL(injectL(injectL(a))))
-                                ** ((outputXApprox(r) ** outputXApprox(s)) :>> mapVal { case (r, s) => Type.recCall(r, s) })
+                              mismatch(
+                                pack(injectL(injectL(injectL(a))))
+                                |*| recCall(r |*| s)
                               )
                             case Left(b) =>
                               a switch {
@@ -295,15 +303,9 @@ private[typeinfer] object NonAbstractType {
                                                 else        Right((f, g))
                                               } :>> liftEither) switch {
                                                 case Left(f) =>
-                                                  NonAbstractType.fix(f)
+                                                  fix(f)
                                                 case Right(fg) =>
-                                                  NonAbstractType.mismatch(
-                                                    fg :>> mapVal { case (f, g) =>
-                                                      ( Type.fix(f.vmap(Label.ScalaTParam(_)))
-                                                      , Type.fix(g.vmap(Label.ScalaTParam(_)))
-                                                      )
-                                                    }
-                                                  )
+                                                  mismatch(fg :>> liftPair :>> par(fix, fix))
                                               }
                                             case Right(g |*| y) =>
                                               (f |*| g |*| y) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
@@ -317,30 +319,28 @@ private[typeinfer] object NonAbstractType {
                                                 if (f == h) Left(f)
                                                 else        Right((f, h))
                                               } :>> liftEither) switch {
-                                                case Left(f)   => NonAbstractType.pfix(f |*| g(x |*| y))
+                                                case Left(f)   => pfix(f |*| g(x |*| y))
                                                 case Right(fh) => (fh |*| x |*| y) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
                                               }
                                           }
                                       }
                                     case Left(b) =>
-                                      NonAbstractType.mismatch(
+                                      mismatch(
                                         (a switch {
-                                          case Left(f)        => f :>> mapVal { f => Type.fix(f.vmap(Label.ScalaTParam(_))) }
-                                          case Right(f |*| p) => (f ** outputXApprox(p)) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
+                                          case Left(f)   => fix(f)
+                                          case Right(fp) => pfix(fp)
                                         })
-                                        ** output(outputXApprox)(injectL(injectL(injectL(injectL(b)))))
+                                        |*| pack(injectL(injectL(injectL(injectL(b)))))
                                       )
                                   }
                                 case Left(a) =>
                                   b switch {
                                     case Right(b) => // `b` is fix or pfix
-                                      NonAbstractType.mismatch(
-                                        output(outputXApprox)(injectL(injectL(injectL(injectL(a)))))
-                                        ** (b switch {
-                                          case Left(g) =>
-                                            g :>> mapVal { g => Type.fix(g.vmap(Label.ScalaTParam(_))) }
-                                          case Right(g |*| y) =>
-                                            (g |*| outputXApprox(y)) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
+                                      mismatch(
+                                        pack(injectL(injectL(injectL(injectL(a)))))
+                                        |*| (b switch {
+                                          case Left(g)   => fix(g)
+                                          case Right(gy) => pfix(gy)
                                         })
                                       )
                                     case Left(b) =>
@@ -348,59 +348,54 @@ private[typeinfer] object NonAbstractType {
                                         case Right(x) => // `a` is string
                                           b switch {
                                             case Right(y) => // `b` is string
-                                              NonAbstractType.string(join(x |*| y))
+                                              string(join(x |*| y))
                                             case Left(b) =>
-                                              NonAbstractType.mismatch(
-                                                (x :>> constVal(Type.string))
-                                                ** output(outputXApprox)(injectL(injectL(injectL(injectL(injectL(b))))))
+                                              mismatch(
+                                                string(x)
+                                                |*| pack(injectL(injectL(injectL(injectL(injectL(b))))))
                                               )
                                           }
                                         case Left(a) =>
                                           b switch {
                                             case Right(y) => // `b` is string
-                                              NonAbstractType.mismatch(
-                                                output(outputXApprox)(injectL(injectL(injectL(injectL(injectL(a))))))
-                                                ** (y :>> constVal(Type.string))
+                                              mismatch(
+                                                pack(injectL(injectL(injectL(injectL(injectL(a))))))
+                                                |*| string(y)
                                               )
                                             case Left(b) =>
                                               a switch {
                                                 case Right(x) => // `a` is int
                                                   b switch {
                                                     case Right(y) => // `b` is int
-                                                      NonAbstractType.int(join(x |*| y))
+                                                      int(join(x |*| y))
                                                     case Left(b) =>
-                                                      NonAbstractType.mismatch(
-                                                        (x :>> constVal(Type.int))
-                                                        ** output(outputXApprox)(injectL(injectL(injectL(injectL(injectL(injectL(b)))))))
+                                                      mismatch(
+                                                        int(x)
+                                                        |*| pack(injectL(injectL(injectL(injectL(injectL(injectL(b)))))))
                                                       )
                                                   }
                                                 case Left(a) =>
                                                   b switch {
                                                     case Right(y) => // `b` is int
-                                                      NonAbstractType.mismatch(
-                                                        output(outputXApprox)(injectL(injectL(injectL(injectL(injectL(injectL(a)))))))
-                                                        ** (y :>> constVal(Type.int))
+                                                      mismatch(
+                                                        pack(injectL(injectL(injectL(injectL(injectL(injectL(a)))))))
+                                                        |*| int(y)
                                                       )
                                                     case Left(b) =>
                                                       a switch {
                                                         case Right(x) => // `a` is unit
                                                           b switch {
                                                             case Right(y) => // `b` is unit
-                                                              NonAbstractType.unit(join(x |*| y))
+                                                              unit(join(x |*| y))
                                                             case Left(bx) => // `b` is type mismatch
-                                                              val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
-                                                              val ta = x :>> constVal(Type.unit[Label])
-                                                              NonAbstractType.mismatch(ta ** tb)
+                                                              mismatch(unit(x) |*| mismatch(bx))
                                                           }
                                                         case Left(ax) => // `a` is type mismatch
-                                                          val ta = ax :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
                                                           b switch {
                                                             case Right(y) => // `b` is unit
-                                                              val tb = y :>> constVal(Type.unit[Label])
-                                                              NonAbstractType.mismatch(ta ** tb)
+                                                              mismatch(mismatch(ax) |*| unit(y))
                                                             case Left(bx) => // `b` is type mismatch
-                                                              val tb = bx :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
-                                                              NonAbstractType.mismatch(ta ** tb)
+                                                              mismatch(mismatch(ax) |*| mismatch(bx))
                                                           }
                                                       }
                                                   }
@@ -420,9 +415,9 @@ private[typeinfer] object NonAbstractType {
 
   def output[X](
     outputX: X -⚬ Val[Type],
-  ): NonAbstractType[X] -⚬ Val[Type] =
+  ): NonAbstractType[X] -⚬ Val[Type] = rec { self =>
     λ { x =>
-      x switch {
+      unpack(x) switch {
         case Right(x1 |*| x2) => // pair
           (outputX(x1) ** outputX(x2)) :>> mapVal { case (t1, t2) =>
             Type.pair(t1, t2)
@@ -462,8 +457,8 @@ private[typeinfer] object NonAbstractType {
                               x switch {
                                 case Right(x) => // unit
                                   x :>> constVal(Type.unit)
-                                case Left(mismatch) =>
-                                  mismatch :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
+                                case Left(x |*| y) => // mismatch
+                                  (self(x) ** self(y)) :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
                               }
                           }
                       }
@@ -472,12 +467,13 @@ private[typeinfer] object NonAbstractType {
           }
       }
     }
+  }
 
   def close[X](
     closeX: X -⚬ Done,
-  ): NonAbstractType[X] -⚬ Done =
+  ): NonAbstractType[X] -⚬ Done = rec { self =>
     λ { t =>
-      t switch {
+      unpack(t) switch {
         case Right(a |*| b) => join(closeX(a) |*| closeX(b))
         case Left(t) => t switch {
           case Right(a |*| b) => join(closeX(a) |*| closeX(b))
@@ -495,7 +491,7 @@ private[typeinfer] object NonAbstractType {
                   case Right(x) => x
                   case Left(t) => t switch {
                     case Right(x) => x
-                    case Left(e) => neglect(e)
+                    case Left(x |*| y) => join(self(x) |*| self(y))
                   }
                 }
               }
@@ -504,12 +500,13 @@ private[typeinfer] object NonAbstractType {
         }
       }
     }
+  }
 
   def awaitPosFst[X](
     g: (Done |*| X) -⚬ X,
-  ): (Done |*| NonAbstractType[X]) -⚬ NonAbstractType[X] =
+  ): (Done |*| NonAbstractType[X]) -⚬ NonAbstractType[X] = rec { self =>
     λ { case d |*| t =>
-      t switch {
+      unpack(t) switch {
         case Right(a |*| b) => pair(g(d |*| a) |*| b)
         case Left(t) => t switch {
           case Right(a |*| b) => either(g(d |*| a) |*| b)
@@ -527,7 +524,7 @@ private[typeinfer] object NonAbstractType {
                   case Right(x) => int(join(d |*| x))
                   case Left(t) => t switch {
                     case Right(x) => unit(join(d |*| x))
-                    case Left(e) => mismatch(e waitFor d)
+                    case Left(x |*| y) => mismatch(self(d |*| x) |*| y)
                   }
                 }
               }
@@ -536,6 +533,7 @@ private[typeinfer] object NonAbstractType {
         }
       }
     }
+  }
 
   given junctionNonAbstractType[X](using
     X: Junction.Positive[X],
@@ -678,9 +676,8 @@ private[typeinfer] object NonAbstractType {
 
     override def merge[A](
       f: (A |*| A) -⚬ A,
-      output: A -⚬ Val[Type],
     ): (NonAbstractType[A] |*| NonAbstractType[A]) -⚬ NonAbstractType[A] =
-      NonAbstractType.merge(f, output)
+      NonAbstractType.merge(f)
 
     override def split[A](f: A -⚬ (A |*| A)): NonAbstractType[A] -⚬ (NonAbstractType[A] |*| NonAbstractType[A]) =
       NonAbstractType.split(f)

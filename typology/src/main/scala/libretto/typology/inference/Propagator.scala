@@ -199,7 +199,7 @@ private[inference] class PropagatorImpl[
             case Left(b) =>
               mergeConcreteAbstract(self, split)(fa |*| b)
             case Right(fb) =>
-              concreteType(F.merge(self, output)(fa |*| fb))
+              concreteType(F.merge(self)(fa |*| fb))
           }
       }
     }
