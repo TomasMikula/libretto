@@ -3,6 +3,7 @@ package libretto.typology.toylang.typeinfer
 import libretto.lambda.util.{Monad, SourcePos}
 import libretto.lambda.util.Monad.syntax._
 import libretto.scaletto.StarterKit._
+import libretto.typology.inference.Propagator
 import libretto.typology.toylang.terms.{Fun, FunT, TypedFun}
 import libretto.typology.toylang.types.{AbstractTypeLabel, Label, Type, TypeTag}
 import libretto.typology.util.State

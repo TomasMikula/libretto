@@ -1,4 +1,4 @@
-package libretto.typology.toylang.typeinfer
+package libretto.typology.inference
 
 import libretto.lambda.util.SourcePos
 import libretto.lambda.util.Monad.syntax._
@@ -6,6 +6,7 @@ import libretto.scaletto.StarterKit._
 import libretto.testing.scalatest.scaletto.ScalatestStarterTestSuite
 import libretto.testing.scaletto.StarterTestKit
 import libretto.testing.TestCase
+import libretto.typology.inference.Propagator
 
 class PropagatorTests extends ScalatestStarterTestSuite {
 
@@ -174,7 +175,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
     import Outcome.{assertEquals, assertMatches, assertRight, failure, success}
 
     val pg =
-      Propagator.instance[IType, Type, Label](Type.Abstr(_))
+      libretto.typology.inference.Propagator.instance[IType, Type, Label](Type.Abstr(_))
     import pg.{
       Tp,
       abstractTypeTap,

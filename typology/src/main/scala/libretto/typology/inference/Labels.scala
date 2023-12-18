@@ -1,4 +1,4 @@
-package libretto.typology.toylang.typeinfer
+package libretto.typology.inference
 
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.StarterKit._
@@ -46,7 +46,7 @@ object Labels {
     new LabelsImpl[V]
 }
 
-object LabelsImpl {
+private[inference] object LabelsImpl {
   enum Lbl[V]:
     case Base(value: V, counter: AtomicInteger)
     case Clone(base: Lbl[V], tag: Int)
@@ -158,7 +158,7 @@ object LabelsImpl {
   end TParamLbl
 }
 
-class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
+private[inference] class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
   import LabelsImpl.*
 
   override type Label       = Val[Lbl[V]]

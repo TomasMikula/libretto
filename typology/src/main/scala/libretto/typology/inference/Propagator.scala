@@ -1,4 +1,4 @@
-package libretto.typology.toylang.typeinfer
+package libretto.typology.inference
 
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.StarterKit.*
@@ -43,7 +43,7 @@ object Propagator {
 
   def instance[F[_], T, V](tparam: V => T)(using TypeOps[F, T], Ordering[V]): Propagator[F, T, V] =
     val labels = Labels[V]
-    TypeInferencerImpl[F, T, Done, V](
+    PropagatorImpl[F, T, Done, V](
       labels,
       summon[TypeOps[F, T]],
       splitTypeParam = fork,
@@ -56,7 +56,7 @@ object Propagator {
     )
 }
 
-object TypeInferencerImpl {
+private[inference] object PropagatorImpl {
   def apply[F[_], T, P, V](
     labels: Labels[V],
     F: TypeOps[F, T],
@@ -65,8 +65,8 @@ object TypeInferencerImpl {
     typeParamTap: labels.Label -⚬ (P |*| Val[T]),
     outputTypeParam: (labels.TParamLabel |*| P) -⚬ Val[T],
     closeTypeParam: (labels.TParamLabel |*| P) -⚬ Done,
-  ): TypeInferencerImpl[F, T, P, V, labels.type] =
-    new TypeInferencerImpl(
+  ): PropagatorImpl[F, T, P, V, labels.type] =
+    new PropagatorImpl(
       labels,
       F,
       splitTypeParam,
@@ -77,7 +77,7 @@ object TypeInferencerImpl {
     )
 }
 
-class TypeInferencerImpl[
+private[inference] class PropagatorImpl[
   F[_],
   T,
   P,
@@ -666,8 +666,8 @@ class TypeInferencerImpl[
       }
 
     new Nested {
-      override val propagator: TypeInferencerImpl[F, T, Q, V, nl.labels.type] =
-        TypeInferencerImpl[F, T, Q, V](
+      override val propagator: PropagatorImpl[F, T, Q, V, nl.labels.type] =
+        PropagatorImpl[F, T, Q, V](
           nl.labels,
           F,
           splitQ,

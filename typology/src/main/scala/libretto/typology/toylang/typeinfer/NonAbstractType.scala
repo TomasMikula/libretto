@@ -4,6 +4,7 @@ import libretto.lambda.{MonoidalObjectMap, SymmetricMonoidalCategory}
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.scaletto.StarterKit._
+import libretto.typology.inference.TypeOps
 import libretto.typology.kinds.{×, ○, ●}
 import libretto.typology.toylang.terms.TypedFun
 import libretto.typology.toylang.terms.TypedFun.Type

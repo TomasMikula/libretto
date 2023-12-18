@@ -1,4 +1,4 @@
-package libretto.typology.toylang.typeinfer
+package libretto.typology.inference
 
 import libretto.scaletto.StarterKit.*
 
