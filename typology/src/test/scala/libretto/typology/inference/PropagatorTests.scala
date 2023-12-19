@@ -652,6 +652,28 @@ class PropagatorTests extends ScalatestStarterTestSuite {
             _ <- assertAbstractEquals(tb1, 2)
           } yield ()
         },
+
+      "prevent a = (a, a)" -> TestCase
+        .interactWith {
+          λ { d =>
+            val a |*| t = abstractTypeTap(label(1))
+            val a1 |*| a2 = split(a)
+            val a3 |*| a4 = split(a2)
+            val aa = Tp(pair(a3 |*| a4))
+            val u = merge(a1 |*| aa)
+            (t ** output(u))
+              .waitFor(d)
+          }
+        }
+        .via { port =>
+          for {
+            tu <- expectVal(port)
+            (t, u) = tu
+            _ <- assertMatches(t) { case Type.Mismatch(_, _) => }
+            _ <- assertEquals(u, Type.Pair(Type.Abstr(Label(1)), Type.Abstr(Label(1))))
+          } yield ()
+        }
+        .pending,
     )
   }
 }
