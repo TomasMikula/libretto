@@ -32,50 +32,60 @@ trait Labels[V] {
 
 object Labels {
   def apply[V](using Ordering[V]): Labels[V] =
-    new LabelsImpl[V]
+    import LabelsImpl.Z
+    new LabelsImpl[V, Z]
 }
 
 private[inference] object LabelsImpl {
-  enum Lbl[V]:
+  sealed trait Z    // level 0
+  sealed trait S[N] // level N + 1
+
+  enum Lbl[V, ℓ]:
     case Base(value: V, counter: AtomicInteger)
-    case Clone(base: Lbl[V], tag: Int)
-    case Abstracted(base: Lbl[V], counter: AtomicInteger)
+    case Clone(base: Lbl[V, ℓ], tag: Int)
+    case Lowered(base: Lbl[V, S[ℓ]], counter: AtomicInteger)
+
     import Lbl.Basal
-    def basal: Basal[V] =
+
+    def basal: Basal[V, ℓ] =
       this match
-        case Clone(base, _)    => base.basal
-        case x: Base[V]        => x
-        case x: Abstracted[V]  => x
-    def mkClone(): Lbl[V] =
+        case Clone(base, _)     => base.basal
+        case x: Base[V, ℓ]    => x
+        case x: Lowered[V, ℓ] => x
+
+    def mkClone(): Lbl[V, ℓ] =
       this match
-        case b @ Base(_, counter)       => Clone(b, counter.incrementAndGet())
-        case b @ Abstracted(_, counter) => Clone(b, counter.incrementAndGet())
-        case Clone(base, _)             => base.mkClone()
-    def declone: (Basal[V], List[Int]) =
-      def go(lbl: Lbl[V], acc: List[Int]): (Basal[V], List[Int]) =
+        case b @ Base(_, counter)    => Clone(b, counter.incrementAndGet())
+        case b @ Lowered(_, counter) => Clone(b, counter.incrementAndGet())
+        case Clone(base, _)          => base.mkClone()
+
+    def declone: (Basal[V, ℓ], List[Int]) =
+      def go(lbl: Lbl[V, ℓ], acc: List[Int]): (Basal[V, ℓ], List[Int]) =
         lbl match
           case Clone(base, tag) => go(base, tag :: acc)
-          case x: Base[V]       => (x, acc)
-          case x: Abstracted[V] => (x, acc)
+          case x: Base[V, ℓ]    => (x, acc)
+          case x: Lowered[V, ℓ] => (x, acc)
       go(this, Nil)
+
     def originalBase: V =
       this match
         case Base(value, _) => value
         case Clone(base, tag) => base.originalBase
-        case Abstracted(base, _) => base.originalBase
+        case Lowered(base, _) => base.originalBase
+
     override def toString =
       this match
-        case Abstracted(base, _) => s"[$base]+"
-        case Base(value, _) => s"{$value}"
+        case Lowered(base, _) => s"[$base]+"
+        case Base(value, _)   => s"{$value}"
         case Clone(base, tag) => s"$base.$tag"
   end Lbl
 
   object Lbl:
-    type Basal[V] = Base[V] | Abstracted[V]
+    type Basal[V, ℓ] = Base[V, ℓ] | Lowered[V, ℓ]
 
-    def compareBasal[V](a: Basal[V], b: Basal[V])(using
+    def compareBasal[V, ℓ](a: Basal[V, ℓ], b: Basal[V, ℓ])(using
       V: Ordering[V],
-    ): Either[Basal[V], Either[Basal[V], Basal[V]]] =
+    ): Either[Basal[V, ℓ], Either[Basal[V, ℓ], Basal[V, ℓ]]] =
       (a, b) match
         case (Base(x, _), Base(y, _)) =>
           V.compare(x, y) match {
@@ -83,27 +93,27 @@ private[inference] object LabelsImpl {
             case i if i < 0 => Right(Left (a))
             case i if i > 0 => Right(Right(b))
           }
-        case (Base(_, _), Abstracted(_, _)) =>
+        case (Base(_, _), Lowered(_, _)) =>
           Right(Left(a))
-        case (Abstracted(_, _), Base(_, _)) =>
+        case (Lowered(_, _), Base(_, _)) =>
           Right(Right(b))
-        case (Abstracted(x, _), Abstracted(y, _)) =>
+        case (Lowered(x, _), Lowered(y, _)) =>
           compareStrict(x, y) match
             case Left(z)         => Left(a)
             case Right(Left(_))  => Right(Left(a))
             case Right(Right(_)) => Right(Right(b))
 
-    def compareLax[V](a: Lbl[V], b: Lbl[V])(using
+    def compareLax[V, ℓ](a: Lbl[V, ℓ], b: Lbl[V, ℓ])(using
       Ordering[V],
-    ): Either[Lbl[V], Either[Lbl[V], Lbl[V]]] =
+    ): Either[Lbl[V, ℓ], Either[Lbl[V, ℓ], Lbl[V, ℓ]]] =
       compareBasal(a.basal, b.basal) match
         case Left(_) => Left(a)
         case Right(Left(_))  => Right(Left(a))
         case Right(Right(_)) => Right(Right(b))
 
-    def compareStrict[V](a: Lbl[V], b: Lbl[V])(using
+    def compareStrict[V, ℓ](a: Lbl[V, ℓ], b: Lbl[V, ℓ])(using
       Ordering[V],
-    ): Either[Lbl[V], Either[Lbl[V], Lbl[V]]] =
+    ): Either[Lbl[V, ℓ], Either[Lbl[V, ℓ], Lbl[V, ℓ]]] =
       val (x, xTags) = a.declone
       val (y, yTags) = b.declone
       compareBasal(x, y) match
@@ -128,21 +138,24 @@ private[inference] object LabelsImpl {
   end Lbl
 }
 
-private[inference] class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
+private[inference] class LabelsImpl[V, ℓ](using V: Ordering[V]) extends Labels[V] {
   import LabelsImpl.*
 
-  override type Label = Val[Lbl[V]]
+  override type Label = Val[Lbl[V, ℓ]]
 
   def create(v: V): One -⚬ Label =
     const(Lbl.Base(v, AtomicInteger(0)))
+
   def make(v: V)(using SourcePos, LambdaContext): $[Label] =
     constant(create(v)) // > alsoPrintLine(x => s"Creating $x")
+
   val split: Label -⚬ (Label |*| Label) =
-    mapVal { (lbl: Lbl[V]) =>
+    mapVal { (lbl: Lbl[V, ℓ]) =>
       val res = (lbl.mkClone(), lbl.mkClone())
       // println(s"$lbl split into $res")
       res
     } > liftPair
+
   val compare: (Label |*| Label) -⚬ (Label |+| (Label |+| Label)) =
     λ { case a |*| b =>
       (a ** b) :>> mapVal { case (a, b) =>
@@ -151,12 +164,10 @@ private[inference] class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
         res
       } :>> liftEither :>> |+|.rmap(liftEither)
     }
+
   val neglect: Label -⚬ Done =
     dsl.neglect
     // printLine(x => s"Neglecting $x")
-
-  val lower: Label -⚬ Label =
-    mapVal { Lbl.Abstracted(_, AtomicInteger(0)) }
 
   val show: Label -⚬ Val[String] =
     // mapVal(_.toString)
@@ -165,21 +176,25 @@ private[inference] class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
       // println(s"$x converted to string")
       res
     )
+
   override val alsoShow: Label -⚬ (Label |*| Val[String]) =
-    mapVal((x: Lbl[V]) => (x, x.toString)) > liftPair
+    mapVal((x: Lbl[V, ℓ]) => (x, x.toString)) > liftPair
+
   val unwrapOriginal: Label -⚬ Val[V] =
     mapVal(_.originalBase)
+
   def alsoDebugPrint(f: String => String): Label -⚬ Label =
     alsoPrintLine(x => f(x.toString))
+
   given junctionLabel: Junction.Positive[Label] =
     scalettoLib.junctionVal
 
   override lazy val nested: Nested =
     new Nested {
-      override val labels: LabelsImpl[V] =
-        new LabelsImpl[V]
+      override val labels: LabelsImpl[V, S[ℓ]] =
+        new LabelsImpl[V, S[ℓ]]
 
       override val lower: labels.Label -⚬ Label =
-        LabelsImpl.this.lower
+        mapVal { Lbl.Lowered(_, AtomicInteger(0)) }
     }
 }
