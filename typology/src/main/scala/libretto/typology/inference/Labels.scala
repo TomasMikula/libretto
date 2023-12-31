@@ -39,7 +39,7 @@ private[inference] object LabelsImpl {
   enum Lbl[V]:
     case Base(value: V, counter: AtomicInteger)
     case Clone(base: Lbl[V], tag: Int)
-    case Abstracted(base: TParamLbl[V], counter: AtomicInteger)
+    case Abstracted(base: Lbl[V], counter: AtomicInteger)
     import Lbl.Basal
     def basal: Basal[V] =
       this match
@@ -62,20 +62,13 @@ private[inference] object LabelsImpl {
       this match
         case Base(value, _) => value
         case Clone(base, tag) => base.originalBase
-        case Abstracted(TParamLbl.Promoted(base), _) => base.originalBase
+        case Abstracted(base, _) => base.originalBase
     override def toString =
       this match
-        case Abstracted(base, _) => s"$base+"
+        case Abstracted(base, _) => s"[$base]+"
         case Base(value, _) => s"{$value}"
         case Clone(base, tag) => s"$base.$tag"
   end Lbl
-
-  enum TParamLbl[V]:
-    case Promoted(base: Lbl[V])
-    override def toString =
-      this match
-        case Promoted(base) => s"[$base]"
-  end TParamLbl
 
   object Lbl:
     type Basal[V] = Base[V] | Abstracted[V]
@@ -95,7 +88,7 @@ private[inference] object LabelsImpl {
         case (Abstracted(_, _), Base(_, _)) =>
           Right(Right(b))
         case (Abstracted(x, _), Abstracted(y, _)) =>
-          TParamLbl.compareStrict(x, y) match
+          compareStrict(x, y) match
             case Left(z)         => Left(a)
             case Right(Left(_))  => Right(Left(a))
             case Right(Right(_)) => Right(Right(b))
@@ -133,18 +126,6 @@ private[inference] object LabelsImpl {
         }
 
   end Lbl
-
-  object TParamLbl:
-    def compareStrict[V](a: TParamLbl[V], b: TParamLbl[V])(using
-      Ordering[V],
-    ): Either[TParamLbl[V], Either[TParamLbl[V], TParamLbl[V]]] =
-      (a, b) match
-        case (Promoted(x), Promoted(y)) =>
-          Lbl.compareStrict(x, y) match
-            case Left(z)         => Left(Promoted(z))
-            case Right(Left(x))  => Right(Left(Promoted(x)))
-            case Right(Right(y)) => Right(Right(Promoted(y)))
-  end TParamLbl
 }
 
 private[inference] class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
@@ -173,11 +154,10 @@ private[inference] class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
   val neglect: Label -⚬ Done =
     dsl.neglect
     // printLine(x => s"Neglecting $x")
+
   val lower: Label -⚬ Label =
-    mapVal { x =>
-      val y = TParamLbl.Promoted(x)
-      Lbl.Abstracted(y, AtomicInteger(0))
-    }
+    mapVal { Lbl.Abstracted(_, AtomicInteger(0)) }
+
   val show: Label -⚬ Val[String] =
     // mapVal(_.toString)
     mapVal(x =>
