@@ -9,8 +9,6 @@ import libretto.scaletto.StarterKit
 trait Labels[V] {
   type Label
 
-  type TParamLabel // TODO: is necessary?
-
   def create(v: V): One -⚬ Label
   def split: Label -⚬ (Label |*| Label)
   def compare: (Label |*| Label) -⚬ (Label |+| (Label |+| Label))
@@ -19,23 +17,13 @@ trait Labels[V] {
 
   given junctionLabel: Junction.Positive[Label]
 
-  def generify: Label -⚬ TParamLabel
-  def abstractify: TParamLabel -⚬ Label
-  def neglectTParam: TParamLabel -⚬ Done
-  val unwrapOriginalTP: TParamLabel -⚬ Val[V]
-
-  given junctionTParamLabel: Junction.Positive[TParamLabel]
-
   def show: Label -⚬ Val[String]
   def alsoShow: Label -⚬ (Label |*| Val[String])
   def alsoDebugPrint(f: String => String): Label -⚬ Label
 
-  def alsoDebugPrintTP(f: String => String): TParamLabel -⚬ TParamLabel
-
   trait Nested {
     val labels: Labels[V]
 
-    def promote: labels.TParamLabel -⚬ Label
     def lower: labels.Label -⚬ Label
   }
 
@@ -162,8 +150,8 @@ private[inference] object LabelsImpl {
 private[inference] class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
   import LabelsImpl.*
 
-  override type Label       = Val[Lbl[V]]
-  override type TParamLabel = Val[TParamLbl[V]]
+  override type Label = Val[Lbl[V]]
+
   def create(v: V): One -⚬ Label =
     const(Lbl.Base(v, AtomicInteger(0)))
   def make(v: V)(using SourcePos, LambdaContext): $[Label] =
@@ -185,23 +173,10 @@ private[inference] class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
   val neglect: Label -⚬ Done =
     dsl.neglect
     // printLine(x => s"Neglecting $x")
-
-  val neglectTParam: TParamLabel -⚬ Done =
-    dsl.neglect
-    // printLine(x => s"Neglecting TParam $x")
-  val generify: Label -⚬ TParamLabel =
-    // mapVal { TParamLbl.Promoted(_) }
+  val lower: Label -⚬ Label =
     mapVal { x =>
-      val res = TParamLbl.Promoted(x)
-      // println(s"$x generified to $res")
-      res
-    }
-  val abstractify: TParamLabel -⚬ Label =
-    // mapVal { Lbl.Abstracted(_) }
-    mapVal { x =>
-      val res = Lbl.Abstracted(x, AtomicInteger(0))
-      // println(s"$x abstractified to $res")
-      res
+      val y = TParamLbl.Promoted(x)
+      Lbl.Abstracted(y, AtomicInteger(0))
     }
   val show: Label -⚬ Val[String] =
     // mapVal(_.toString)
@@ -214,15 +189,9 @@ private[inference] class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
     mapVal((x: Lbl[V]) => (x, x.toString)) > liftPair
   val unwrapOriginal: Label -⚬ Val[V] =
     mapVal(_.originalBase)
-  val unwrapOriginalTP: TParamLabel -⚬ Val[V] =
-    mapVal { case TParamLbl.Promoted(x) => x.originalBase }
   def alsoDebugPrint(f: String => String): Label -⚬ Label =
     alsoPrintLine(x => f(x.toString))
-  def alsoDebugPrintTP(f: String => String): TParamLabel -⚬ TParamLabel =
-    alsoPrintLine(x => f(x.toString))
   given junctionLabel: Junction.Positive[Label] =
-    scalettoLib.junctionVal
-  given junctionTParamLabel: Junction.Positive[TParamLabel] =
     scalettoLib.junctionVal
 
   override lazy val nested: Nested =
@@ -230,10 +199,7 @@ private[inference] class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
       override val labels: LabelsImpl[V] =
         new LabelsImpl[V]
 
-      override val promote: labels.TParamLabel -⚬ Label =
-        abstractify
-
       override val lower: labels.Label -⚬ Label =
-        labels.generify > promote
+        LabelsImpl.this.lower
     }
 }
