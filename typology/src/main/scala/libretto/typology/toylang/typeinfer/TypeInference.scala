@@ -75,7 +75,7 @@ object TypeInference {
         G,
         split,
         pg.lift,
-        v => label(v) > pg.abstractType,
+        v => label(v) > pg.abstractTypeTap > snd(neglect) > awaitPosSnd,
       )
 
     f.value match {
