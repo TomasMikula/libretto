@@ -36,6 +36,7 @@ trait Labels[V] {
     val labels: Labels[V]
 
     def promote: labels.TParamLabel -⚬ Label
+    def lower: labels.Label -⚬ Label
   }
 
   def nested: Nested
@@ -231,5 +232,8 @@ private[inference] class LabelsImpl[V](using V: Ordering[V]) extends Labels[V] {
 
       override val promote: labels.TParamLabel -⚬ Label =
         abstractify
+
+      override val lower: labels.Label -⚬ Label =
+        labels.generify > promote
     }
 }

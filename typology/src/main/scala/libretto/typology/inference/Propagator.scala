@@ -43,16 +43,14 @@ object Propagator {
 
   def instance[F[_], T, V](tparam: V => T)(using TypeOps[F, T], Ordering[V]): Propagator[F, T, V] =
     val labels = Labels[V]
-    PropagatorImpl[F, T, Done, V](
+    PropagatorImpl[F, T, labels.Label, V](
       labels,
       summon[TypeOps[F, T]],
-      splitTypeParam = fork,
-      // typeParamLink = labels.neglect > fork,
-      typeParamLink = labels.show > printLine(s => s"FABRICATING 2 Done signals for $s") > fork,
-      typeParamTap = labels.unwrapOriginal > mapVal(tparam) > signalPosFst[Val[T]],
-      // outputTypeParam = fst(labels.unwrapOriginalTP > mapVal(x => Type.abstractType(x))) > awaitPosSnd,
-      outputTypeParam = fst(labels.unwrapOriginalTP > mapVal(x => { println(s"OUTPUTTING abstract type $x"); tparam(x) })) > awaitPosSnd > alsoPrintLine(t => s"OUTPUTTED abstract type $t"),
-      closeTypeParam = fst(labels.neglectTParam) > join,
+      splitTypeParam = labels.split,
+      typeParamLink = labels.split,
+      typeParamTap = labels.split > snd(labels.unwrapOriginal > mapVal(tparam)),
+      outputTypeParam = labels.unwrapOriginal > mapVal(x => { println(s"OUTPUTTING abstract type $x"); tparam(x) }) > alsoPrintLine(t => s"OUTPUTTED abstract type $t"),
+      closeTypeParam = labels.neglect,
     )
 }
 
@@ -63,8 +61,10 @@ private[inference] object PropagatorImpl {
     splitTypeParam: P -⚬ (P |*| P),
     typeParamLink: labels.Label -⚬ (P |*| P),
     typeParamTap: labels.Label -⚬ (P |*| Val[T]),
-    outputTypeParam: (labels.TParamLabel |*| P) -⚬ Val[T],
-    closeTypeParam: (labels.TParamLabel |*| P) -⚬ Done,
+    outputTypeParam: P -⚬ Val[T],
+    closeTypeParam: P -⚬ Done,
+  )(using
+    Junction.Positive[P],
   ): PropagatorImpl[F, T, P, V, labels.type] =
     new PropagatorImpl(
       labels,
@@ -89,12 +89,13 @@ private[inference] class PropagatorImpl[
   splitTypeParam: P -⚬ (P |*| P),
   typeParamLink: labels.Label -⚬ (P |*| P),
   typeParamTap: labels.Label -⚬ (P |*| Val[T]),
-  outputTypeParam: (labels.TParamLabel |*| P) -⚬ Val[T],
-  closeTypeParam: (labels.TParamLabel |*| P) -⚬ Done,
+  outputTypeParam: P -⚬ Val[T],
+  closeTypeParam: P -⚬ Done,
+)(using
+  Junction.Positive[P],
 ) extends Propagator[F, T, V] { self =>
 
   override type Label = labels.Label
-  type TParam = labels.TParamLabel
 
   object Refinement {
     opaque type Request[T] = -[Response[T]]
@@ -111,12 +112,12 @@ private[inference] class PropagatorImpl[
         die(req contramap injectR)
 
       @targetName("closeRefinementRequest")
-      def close(lbl: $[Label], f: T -⚬ Done)(using SourcePos, LambdaContext): $[Done] =
+      def close(f: T -⚬ Done)(using SourcePos, LambdaContext): $[Done] =
         req.decline switch {
           case Left(t) =>
-            join(f(t) |*| labels.neglect(lbl))
+            f(t)
           case Right(p) =>
-            closeTypeParam(labels.generify(lbl) |*| p)
+            closeTypeParam(p)
         }
     }
 
@@ -146,7 +147,7 @@ private[inference] class PropagatorImpl[
   type AbsTp[T] = AbsTp.Proper[T] |+| AbsTp.Prelim[T]
 
   override type Tp = Rec[[Tp] =>> AbsTp[Tp] |+| F[Tp]]
-  override type TypeOutlet = Rec[[X] =>> (TParam |*| P) |+| F[X]]
+  override type TypeOutlet = Rec[[X] =>> P |+| F[X]]
 
   private def pack: (AbsTp[Tp] |+| F[Tp]) -⚬ Tp =
     dsl.pack[[X] =>> AbsTp[X] |+| F[X]]
@@ -245,10 +246,9 @@ private[inference] class PropagatorImpl[
         case Left(lbl) =>
           // Labels are same, i.e. both refer to the same type.
           // Propagate one (arbitrary) of them, close the other.
-          val aLbl |*| bLbl = labels.split(lbl)
           returning(
-            abstType(aLbl |*| aReq),
-            hackyDiscard(bReq.close(bLbl, close)),
+            abstType(lbl |*| aReq),
+            hackyDiscard(bReq.close(close)),
           )
 
         case Right(res) =>
@@ -322,8 +322,8 @@ private[inference] class PropagatorImpl[
           // Labels are equal, refer to the same type.
           // Close the refinement request, propagate the preliminary.
           returning(
-            preliminary(bl2 |*| b),
-            hackyDiscard(aReq.close(lbl, close)),
+            preliminary(bl2.waitFor(labels.neglect(lbl)) |*| b),
+            hackyDiscard(aReq.close(close)),
           )
         case Right(res) =>
           res switch {
@@ -570,10 +570,13 @@ private[inference] class PropagatorImpl[
         case Left(a) =>
           a switch {
             case Left(lbl |*| req) =>
-              req.decline switch {
-                case Left(t)  => join(self(t) |*| labels.neglect(lbl))
-                case Right(p) => closeTypeParam(labels.generify(lbl) |*| p)
-              }
+              joinAll(
+                req.decline switch {
+                  case Left(t)  => self(t)
+                  case Right(p) => closeTypeParam(p)
+                },
+                labels.neglect(lbl),
+              )
             case Right(lbl |*| t) =>
               join(labels.neglect(lbl) |*| self(t))
           }
@@ -593,13 +596,13 @@ private[inference] class PropagatorImpl[
     val nl = labels.nested
 
     type NLabel  = nl.labels.Label
-    type NTParam = nl.labels.TParamLabel
 
-    type Q = -[Tp] |+| Tp
+    type Q = NLabel |*| (-[Tp] |+| Tp)
 
     def splitQ: Q -⚬ (Q |*| Q) =
-      λ { q =>
-        q switch {
+      λ { case lbl |*| q =>
+        val l1 |*| l2 = nl.labels.split(lbl)
+        val q1 |*| q2 = q switch {
           case Left(nt) =>
             val nt1 |*| nt2 = contrapositive(self.merge)(nt) :>> distributeInversion
             injectL(nt1) |*| injectL(nt2)
@@ -607,27 +610,29 @@ private[inference] class PropagatorImpl[
             val t1 |*| t2 = self.split(t)
             injectR(t1) |*| injectR(t2)
         }
+        (l1 |*| q1) |*| (l2 |*| q2)
       }
 
     val qLink: NLabel -⚬ (Q |*| Q) =
       λ { lbl =>
         val lbl_ = lbl //:>> nl.labels.alsoDebugPrint(s => s"FABRICATING Tp link for $s")
         val ntp |*| tp = constant(demand[Tp])
-        val tp1 = tp waitFor nl.labels.neglect(lbl_)
-        injectL(ntp) |*| injectR(tp1)
+        val tp1 = tp // waitFor nl.labels.neglect(lbl_)
+        val l1 |*| l2 = nl.labels.split(lbl_)
+        (l1 |*| injectL(ntp)) |*| (l2 |*| injectR(tp1))
       }
 
     val qTap: NLabel -⚬ (Q |*| Val[T]) =
       λ { case l0 =>
         val nt |*| t = constant(demand[Tp])
-        injectL(nt) |*| self.output(t).waitFor(nl.labels.neglect(l0))
+        (l0 |*| injectL(nt)) |*| self.output(t) // .waitFor(nl.labels.neglect(l0))
       }
 
-    val outputQ: (NTParam |*| Q) -⚬ Val[T] = rec { outputQ =>
+    val outputQ: Q -⚬ Val[T] = rec { outputQ =>
       λ { case lbl |*| q =>
         q switch {
           case Left(nt) =>
-            val l1 |*| l2 = nl.promote(lbl) :>> labels.split
+            val l1 |*| l2 = nl.lower(lbl) :>> labels.split
             val t |*| resp = makeAbstractType(l1)
             returning(
               resp.toEither switch {
@@ -645,23 +650,23 @@ private[inference] class PropagatorImpl[
             )
           case Right(t) =>
             self.output(t)
-              .waitFor(nl.labels.neglectTParam(lbl))
+              .waitFor(nl.labels.neglect(lbl))
         }
       }
     }
 
-    val closeQ: (NTParam |*| Q) -⚬ Done =
+    val closeQ: Q -⚬ Done =
       λ { case lbl |*| q =>
         q switch {
           case Left(nt) =>
-            val l1 |*| l2 = labels.split(nl.promote(lbl))
+            val l1 |*| l2 = labels.split(nl.lower(lbl))
             val t |*| resp = makeAbstractType(l1)
             returning(
               resp.close(l2, close),
               t supplyTo nt,
             )
           case Right(t) =>
-            join(close(t) |*| nl.labels.neglectTParam(lbl))
+            join(close(t) |*| nl.labels.neglect(lbl))
         }
       }
 
@@ -675,6 +680,8 @@ private[inference] class PropagatorImpl[
           qTap,
           outputQ,
           closeQ,
+        )(using
+          Junction.Positive.byFst,
         )
 
       override def lower: propagator.TypeOutlet -⚬ Tp = rec { self =>
@@ -683,13 +690,13 @@ private[inference] class PropagatorImpl[
             case Left(lbl |*| q) =>
               q switch {
                 case Left(nt) =>
-                  val t1 |*| t2 = abstractLink(nl.promote(lbl))
+                  val t1 |*| t2 = abstractLink(nl.lower(lbl))
                   returning(
                     t1,
                     t2 supplyTo nt,
                   )
                 case Right(t) =>
-                  t waitFor nl.labels.neglectTParam(lbl)
+                  t waitFor nl.labels.neglect(lbl)
               }
             case Right(ft) =>
               concreteType(F.map(self)(ft))
@@ -711,7 +718,7 @@ private[inference] class PropagatorImpl[
               import TypeOutlet.given
               req.decline switch {
                 case Left(t)  => self(t) waitFor labels.neglect(lbl)
-                case Right(p) => TypeOutlet.typeParam(labels.generify(lbl) |*| p)
+                case Right(p) => TypeOutlet.typeParam(p waitFor labels.neglect(lbl))
               }
             case Right(lbl |*| t) =>
               self(t waitFor labels.neglect(lbl))
@@ -738,13 +745,13 @@ private[inference] class PropagatorImpl[
   }
 
   object TypeOutlet {
-    def pack: ((TParam |*| P) |+| F[TypeOutlet]) -⚬ TypeOutlet =
-      dsl.pack[[X] =>> (TParam |*| P) |+| F[X]]
+    def pack: (P |+| F[TypeOutlet]) -⚬ TypeOutlet =
+      dsl.pack[[X] =>> P |+| F[X]]
 
-    def unpack: TypeOutlet -⚬ ((TParam |*| P) |+| F[TypeOutlet]) =
+    def unpack: TypeOutlet -⚬ (P |+| F[TypeOutlet]) =
       dsl.unpack
 
-    def typeParam: (TParam |*| P) -⚬ TypeOutlet =
+    def typeParam: P -⚬ TypeOutlet =
       injectL > pack
 
     def concreteType: F[TypeOutlet] -⚬ TypeOutlet =
@@ -753,8 +760,8 @@ private[inference] class PropagatorImpl[
     def awaitPosFst: (Done |*| TypeOutlet) -⚬ TypeOutlet = rec { self =>
       λ { case d |*| t =>
         unpack(t) switch {
-          case Left(lbl |*| p) =>
-            typeParam(lbl.waitFor(d) |*| p)
+          case Left(p) =>
+            typeParam(p waitFor d)
           case Right(ft) =>
             concreteType(F.awaitPosFst(self)(d |*| ft))
         }
