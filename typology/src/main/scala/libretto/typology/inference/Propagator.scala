@@ -48,7 +48,6 @@ object Propagator {
       summon[TypeOps[F, T]],
       splitTypeParam = labels.split,
       typeParamLink = labels.split,
-      typeParamTap = labels.split > snd(labels.unwrapOriginal > mapVal(tparam)),
       outputTypeParam = labels.unwrapOriginal > mapVal(x => { println(s"OUTPUTTING abstract type $x"); tparam(x) }) > alsoPrintLine(t => s"OUTPUTTED abstract type $t"),
       closeTypeParam = labels.neglect,
     )
@@ -60,7 +59,6 @@ private[inference] object PropagatorImpl {
     F: TypeOps[F, T],
     splitTypeParam: P -⚬ (P |*| P),
     typeParamLink: labels.Label -⚬ (P |*| P),
-    typeParamTap: labels.Label -⚬ (P |*| Val[T]),
     outputTypeParam: P -⚬ Val[T],
     closeTypeParam: P -⚬ Done,
   )(using
@@ -71,7 +69,6 @@ private[inference] object PropagatorImpl {
       F,
       splitTypeParam,
       typeParamLink,
-      typeParamTap,
       outputTypeParam,
       closeTypeParam,
     )
@@ -88,7 +85,6 @@ private[inference] class PropagatorImpl[
   F: TypeOps[F, T],
   splitTypeParam: P -⚬ (P |*| P),
   typeParamLink: labels.Label -⚬ (P |*| P),
-  typeParamTap: labels.Label -⚬ (P |*| Val[T]),
   outputTypeParam: P -⚬ Val[T],
   closeTypeParam: P -⚬ Done,
 )(using
@@ -131,10 +127,10 @@ private[inference] class PropagatorImpl[
           case Left(t) =>
             join(f(t) |*| labels.neglect(lbl))
           case Right(req) =>
-            val p |*| t = typeParamTap(lbl)
+            val p1 |*| p2 = typeParamLink(lbl)
             returning(
-              neglect(t),
-              injectR(p) supplyTo req,
+              closeTypeParam(p1),
+              injectR(p2) supplyTo req,
             )
         }
     }
@@ -514,8 +510,9 @@ private[inference] class PropagatorImpl[
           case Left(t) =>
             output(t) waitFor labels.neglect(l2)
           case Right(req) =>
-            val p |*| t = typeParamTap(l2)
-            returning(t, injectR(p) supplyTo req)
+            val p1 |*| p2 = typeParamLink(l2)
+            val t = outputTypeParam(p1)
+            returning(t, injectR(p2) supplyTo req)
         })
     }
 
@@ -615,17 +612,9 @@ private[inference] class PropagatorImpl[
 
     val qLink: NLabel -⚬ (Q |*| Q) =
       λ { lbl =>
-        val lbl_ = lbl //:>> nl.labels.alsoDebugPrint(s => s"FABRICATING Tp link for $s")
         val ntp |*| tp = constant(demand[Tp])
-        val tp1 = tp // waitFor nl.labels.neglect(lbl_)
-        val l1 |*| l2 = nl.labels.split(lbl_)
-        (l1 |*| injectL(ntp)) |*| (l2 |*| injectR(tp1))
-      }
-
-    val qTap: NLabel -⚬ (Q |*| Val[T]) =
-      λ { case l0 =>
-        val nt |*| t = constant(demand[Tp])
-        (l0 |*| injectL(nt)) |*| self.output(t) // .waitFor(nl.labels.neglect(l0))
+        val l1 |*| l2 = nl.labels.split(lbl)
+        (l1 |*| injectL(ntp)) |*| (l2 |*| injectR(tp))
       }
 
     val outputQ: Q -⚬ Val[T] = rec { outputQ =>
@@ -640,10 +629,10 @@ private[inference] class PropagatorImpl[
                   self.output(t)
                     .waitFor(labels.neglect(l2))
                 case Right(req) =>
-                  val p |*| res = typeParamTap(l2)
+                  val p1 |*| p2 = typeParamLink(l2)
                   returning(
-                    res,
-                    injectR(p) supplyTo req,
+                    outputTypeParam(p1),
+                    injectR(p2) supplyTo req,
                   )
               },
               t supplyTo nt,
@@ -677,7 +666,6 @@ private[inference] class PropagatorImpl[
           F,
           splitQ,
           qLink,
-          qTap,
           outputQ,
           closeQ,
         )(using
