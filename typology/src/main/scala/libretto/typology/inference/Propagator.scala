@@ -92,10 +92,11 @@ private[inference] class PropagatorImpl[
 ) extends Propagator[F, T, V] { self =>
 
   override type Label = labels.Label
+  override type TypeOutlet = Rec[[X] =>> P |+| F[X]]
 
   object Refinement {
     opaque type Request[T] = -[Response[T]]
-    opaque type Response[T] = T |+| -[T |+| P]
+    opaque type Response[T] = T |+| -[TypeOutlet]
 
     def makeRequest[T]: One -⚬ (Request[T] |*| Response[T]) =
       forevert
@@ -104,21 +105,16 @@ private[inference] class PropagatorImpl[
       def grant(t: $[T])(using SourcePos, LambdaContext): $[One] =
         injectL(t) supplyTo req
 
-      def decline(using SourcePos, LambdaContext): $[T |+| P] =
+      def decline(using SourcePos, LambdaContext): $[TypeOutlet] =
         die(req contramap injectR)
 
       @targetName("closeRefinementRequest")
-      def close(f: T -⚬ Done)(using SourcePos, LambdaContext): $[Done] =
-        req.decline switch {
-          case Left(t) =>
-            f(t)
-          case Right(p) =>
-            closeTypeParam(p)
-        }
+      def close(using SourcePos, LambdaContext): $[Done] =
+        TypeOutlet.close(req.decline)
     }
 
     extension [T](resp: $[Response[T]]) {
-      def toEither: $[T |+| -[T |+| P]] =
+      def toEither: $[T |+| -[TypeOutlet]] =
         resp
 
       @targetName("closeRefinementResponse")
@@ -130,7 +126,7 @@ private[inference] class PropagatorImpl[
             val p1 |*| p2 = typeParamLink(lbl)
             returning(
               closeTypeParam(p1),
-              injectR(p2) supplyTo req,
+              TypeOutlet.typeParam(p2) supplyTo req,
             )
         }
     }
@@ -143,7 +139,6 @@ private[inference] class PropagatorImpl[
   type AbsTp[T] = AbsTp.Proper[T] |+| AbsTp.Prelim[T]
 
   override type Tp = Rec[[Tp] =>> AbsTp[Tp] |+| F[Tp]]
-  override type TypeOutlet = Rec[[X] =>> P |+| F[X]]
 
   private def pack: (AbsTp[Tp] |+| F[Tp]) -⚬ Tp =
     dsl.pack[[X] =>> AbsTp[X] |+| F[X]]
@@ -244,7 +239,7 @@ private[inference] class PropagatorImpl[
           // Propagate one (arbitrary) of them, close the other.
           returning(
             abstType(lbl |*| aReq),
-            hackyDiscard(bReq.close(close)),
+            hackyDiscard(bReq.close),
           )
 
         case Right(res) =>
@@ -265,7 +260,7 @@ private[inference] class PropagatorImpl[
                         val t11 |*| t12 = split(t1)
                         returning(
                           aReq grant t11,
-                          injectL(t12) supplyTo req2,
+                          tap(t12) supplyTo req2,
                         )
                     }
                   case Right(req1) =>
@@ -274,23 +269,14 @@ private[inference] class PropagatorImpl[
                         val t21 |*| t22 = split(t2)
                         returning(
                           aReq grant t21,
-                          injectL(t22) supplyTo req1,
+                          tap(t22) supplyTo req1,
                         )
                       case Right(req2) =>
-                        aReq.decline switch {
-                          case Left(t) =>
-                            val t1 |*| t2 = split(t)
-                            returning(
-                              injectL(t1) supplyTo req1,
-                              injectL(t2) supplyTo req2,
-                            )
-                          case Right(p) =>
-                            val p1 |*| p2 = splitTypeParam(p)
-                            returning(
-                              injectR(p1) supplyTo req1,
-                              injectR(p2) supplyTo req2,
-                            )
-                        }
+                        val t1 |*| t2 = TypeOutlet.split(aReq.decline)
+                        returning(
+                          t1 supplyTo req1,
+                          t2 supplyTo req2,
+                        )
                     }
                 },
               )
@@ -319,7 +305,7 @@ private[inference] class PropagatorImpl[
           // Close the refinement request, propagate the preliminary.
           returning(
             preliminary(bl2.waitFor(labels.neglect(lbl)) |*| b),
-            hackyDiscard(aReq.close(close)),
+            hackyDiscard(aReq.close),
           )
         case Right(res) =>
           res switch {
@@ -452,7 +438,7 @@ private[inference] class PropagatorImpl[
                 val t11 |*| t12 = split(t1)
                 returning(
                   req grant t11,
-                  injectL(t12) supplyTo req2,
+                  tap(t12) supplyTo req2,
                 )
             }
           case Right(req1) =>
@@ -461,24 +447,14 @@ private[inference] class PropagatorImpl[
                 val t21 |*| t22 = split(t2)
                 returning(
                   req grant t21,
-                  injectL(t22) supplyTo req1,
+                  tap(t22) supplyTo req1,
                 )
               case Right(req2) =>
-                req.decline switch {
-                  case Left(t) =>
-                    val t1 |*| t2 = split(t)
-                    returning(
-                      injectL(t1) supplyTo req1,
-                      injectL(t2) supplyTo req2,
-                    )
-                  case Right(p) =>
-                    val p1 |*| p2 = splitTypeParam(p)
-                    returning(
-                      injectR(p1) supplyTo req1,
-                      injectR(p2) supplyTo req2,
-
-                    )
-                }
+                val t1 |*| t2 = TypeOutlet.split(req.decline)
+                returning(
+                  t1 supplyTo req1,
+                  t2 supplyTo req2,
+                )
             }
         },
       )
@@ -512,7 +488,7 @@ private[inference] class PropagatorImpl[
           case Right(req) =>
             val p1 |*| p2 = typeParamLink(l2)
             val t = outputTypeParam(p1)
-            returning(t, injectR(p2) supplyTo req)
+            returning(t, TypeOutlet.typeParam(p2) supplyTo req)
         })
     }
 
@@ -546,13 +522,13 @@ private[inference] class PropagatorImpl[
                 case Left(t) =>
                   // TODO: occurs check for `lbl` in `t`
                   val l6_ = l6 //:>> labels.alsoDebugPrint(s => s"Op-req of $s returned as REFINED")
-                  injectL(t waitFor labels.neglect(l6_)) supplyTo req1
+                  tap(t waitFor labels.neglect(l6_)) supplyTo req1
                 case Right(req2) =>
                   val l6_ = l6 //:>> labels.alsoDebugPrint(s => s"Op-req of $s returned as DECLINED")
                   val p1 |*| p2 = typeParamLink(l6_)
                   returning(
-                    injectR(p1) supplyTo req1,
-                    injectR(p2) supplyTo req2,
+                    TypeOutlet.typeParam(p1) supplyTo req1,
+                    TypeOutlet.typeParam(p2) supplyTo req2,
                   )
               },
               t2 supplyTo nt2,
@@ -568,10 +544,7 @@ private[inference] class PropagatorImpl[
           a switch {
             case Left(lbl |*| req) =>
               joinAll(
-                req.decline switch {
-                  case Left(t)  => self(t)
-                  case Right(p) => closeTypeParam(p)
-                },
+                TypeOutlet.close(req.decline),
                 labels.neglect(lbl),
               )
             case Right(lbl |*| t) =>
@@ -632,7 +605,7 @@ private[inference] class PropagatorImpl[
                   val p1 |*| p2 = typeParamLink(l2)
                   returning(
                     outputTypeParam(p1),
-                    injectR(p2) supplyTo req,
+                    TypeOutlet.typeParam(p2) supplyTo req,
                   )
               },
               t supplyTo nt,
@@ -704,10 +677,7 @@ private[inference] class PropagatorImpl[
           a switch {
             case Left(lbl |*| req) =>
               import TypeOutlet.given
-              req.decline switch {
-                case Left(t)  => self(t) waitFor labels.neglect(lbl)
-                case Right(p) => TypeOutlet.typeParam(p waitFor labels.neglect(lbl))
-              }
+              req.decline waitFor labels.neglect(lbl)
             case Right(lbl |*| t) =>
               self(t waitFor labels.neglect(lbl))
           }
@@ -744,6 +714,25 @@ private[inference] class PropagatorImpl[
 
     def concreteType: F[TypeOutlet] -⚬ TypeOutlet =
       injectR > pack
+
+    def split: TypeOutlet -⚬ (TypeOutlet |*| TypeOutlet) =
+      rec { self =>
+        λ { t =>
+          unpack(t) switch {
+            case Left(p) =>
+              val p1 |*| p2 = splitTypeParam(p)
+              typeParam(p1) |*| typeParam(p2)
+            case Right(ft) =>
+              val ft1 |*| ft2 = F.split(self)(ft)
+              concreteType(ft1) |*| concreteType(ft2)
+          }
+        }
+      }
+
+    def close: TypeOutlet -⚬ Done =
+      rec { self =>
+        unpack > either(closeTypeParam, F.close(self))
+      }
 
     def awaitPosFst: (Done |*| TypeOutlet) -⚬ TypeOutlet = rec { self =>
       λ { case d |*| t =>
