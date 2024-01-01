@@ -224,50 +224,15 @@ private[inference] class PropagatorImpl[
           )
 
         case Right(res) =>
-          def go: (Label |*| Refinement.Request[Tp] |*| Refinement.Request[Tp]) -⚬ Tp =
-            λ { case aLbl |*| aReq |*| bReq =>
-              val aLbl1 |*| aLbl2 = labels.split(aLbl)
-              val out1 |*| resp1 = makeAbstractType(aLbl1)
-              val out2 |*| resp2 = makeAbstractType(aLbl2)
-              returning(
-                out1,
-                bReq grant out2,
-                resp1.toEither switch {
-                  case Left(t1) =>
-                    resp2.toEither switch {
-                      case Left(t2) =>
-                        aReq grant merge(t1 |*| t2)
-                      case Right(req2) =>
-                        val t11 |*| t12 = split(t1)
-                        returning(
-                          aReq grant t11,
-                          tap(t12) supplyTo req2,
-                        )
-                    }
-                  case Right(req1) =>
-                    resp2.toEither switch {
-                      case Left(t2) =>
-                        val t21 |*| t22 = split(t2)
-                        returning(
-                          aReq grant t21,
-                          tap(t22) supplyTo req1,
-                        )
-                      case Right(req2) =>
-                        val t1 |*| t2 = TypeOutlet.split(aReq.decline)
-                        returning(
-                          t1 supplyTo req1,
-                          t2 supplyTo req2,
-                        )
-                    }
-                },
-              )
+          def go: (AbsTp.Proper[Tp] |*| Refinement.Request[Tp]) -⚬ Tp =
+            λ { case absTp |*| bReq =>
+              val t1 |*| t2 = splitAbstractProper(merge, split)(absTp)
+              returning(t1, bReq grant t2)
             }
 
           res switch {
-            case Left(aLbl) =>
-              go(aLbl |*| aReq |*| bReq)
-            case Right(bLbl) =>
-              go(bLbl |*| bReq |*| aReq)
+            case Left(aLbl)  => go(aLbl |*| aReq |*| bReq)
+            case Right(bLbl) => go(bLbl |*| bReq |*| aReq)
           }
       }
     }
