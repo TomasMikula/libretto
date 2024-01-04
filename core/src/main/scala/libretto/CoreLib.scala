@@ -497,6 +497,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
 
     object Positive {
+      def apply[A](using A: Junction.Positive[A]): Junction.Positive[A] =
+        A
+
       def from[A](await: (Done |*| A) -⚬ A): Junction.Positive[A] =
         new Junction.Positive[A] {
           override def awaitPosFst: (Done |*| A) -⚬ A =
@@ -538,6 +541,9 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     }
 
     object Negative {
+      def apply[A](using A: Junction.Negative[A]): Junction.Negative[A] =
+        A
+
       def from[A](await: A -⚬ (Need |*| A)): Junction.Negative[A] =
         new Junction.Negative[A] {
           override def awaitNegFst: A -⚬ (Need |*| A) =

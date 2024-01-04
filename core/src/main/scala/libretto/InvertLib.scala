@@ -32,6 +32,31 @@ class InvertLib[
       contrapositive(f)
   }
 
+  extension (jp: Junction.Positive.type) {
+    def insideInversion[A](using A: Junction.Positive[A]): Junction.Positive[-[A]] =
+      Junction.Positive.from {
+        λ { case d |*| na =>
+          demandTogether(dii(d) |*| na)
+            .contramap[A](λ { a =>
+              val nd |*| d = constant(forevert[Done])
+              nd |*| A.awaitPos(d |*| a)
+            })
+        }
+      }
+  }
+
+  extension (jn: Junction.Negative.type) {
+    def insideInversion[A](using A: Junction.Negative[A]): Junction.Negative[-[A]] =
+      Junction.Negative.from {
+        λ { na =>
+          na.contramap[-[Need] |*| A](λ { case nn |*| a =>
+            val n |*| a1 = A.awaitNeg(a)
+            returning(a, n supplyTo nn)
+          }) :>> demandSeparately :>> fst(die)
+        }
+      }
+  }
+
   extension (obj: Unlimited.type) {
     def pool[A](using Signaling.Positive[A]): LList1[A] -⚬ (Unlimited[A |*| -[A]] |*| LList1[A]) =
       Unlimited.poolBy[A, -[A]](forevert[A])
