@@ -465,7 +465,6 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
 
       "infer types of InfiniteList.map(intToString)" ->
         testInferredTypes(InfiniteList.map(Fun.intToString)) { tf =>
-          println(s"GOT IT: $tf")
           for {
             _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
             _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.string))
@@ -482,7 +481,6 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
 
       "infer types of InfiniteList.map_(intToString)" ->
         testInferredTypes(InfiniteList.map_(Fun.intToString)) { tf =>
-          println(s"GOT IT: $tf")
           for {
             _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
             _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.string))
