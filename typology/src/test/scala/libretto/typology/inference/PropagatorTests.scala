@@ -20,153 +20,210 @@ class PropagatorTests extends ScalatestStarterTestSuite {
     case RecCall(a: Type, b: Type)
     case Abstr(label: Label)
     case Mismatch(x: Type, y: Type)
+    case ForbiddenSelfRef(v: Label)
 
   object InferenceSupport:
-    private type ITypeF[T, X] =
+    private type ITypeF[V, T, X] =
       (T |*| T)     // pair
       |+| (T |*| T) // recCall
       |+| (X |*| X) // mismatch
+      |+| V         // forbidden self-reference
 
-    opaque type IType[T] = Rec[ITypeF[T, _]]
+    opaque type IType[V, T] = Rec[ITypeF[V, T, _]]
 
-    private def pack[T]: ITypeF[T, IType[T]] -⚬ IType[T] =
-      dsl.pack[ITypeF[T, _]]
+    private def pack[V, T]: ITypeF[V, T, IType[V, T]] -⚬ IType[V, T] =
+      dsl.pack[ITypeF[V, T, _]]
 
-    private def unpack[T]: IType[T] -⚬ ITypeF[T, IType[T]] =
-      dsl.unpack[ITypeF[T, _]]
+    private def unpack[V, T]: IType[V, T] -⚬ ITypeF[V, T, IType[V, T]] =
+      dsl.unpack[ITypeF[V, T, _]]
 
-    def pair[X]: (X |*| X) -⚬ IType[X] =
-      injectL > injectL > pack
+    def pair[V, X]: (X |*| X) -⚬ IType[V, X] =
+      injectL > injectL > injectL > pack
 
-    def recCall[X]: (X |*| X) -⚬ IType[X] =
+    def recCall[V, X]: (X |*| X) -⚬ IType[V, X] =
+      injectR > injectL > injectL > pack
+
+    def mismatch[V, X]: (IType[V, X] |*| IType[V, X]) -⚬ IType[V, X] =
       injectR > injectL > pack
 
-    def mismatch[X]: (IType[X] |*| IType[X]) -⚬ IType[X] =
+    def selfRef[V, X]: V -⚬ IType[V, X] =
       injectR > pack
 
-    def isPair[X]: IType[X] -⚬ (IType[X] |+| (X |*| X)) =
+    def isPair[V, X]: IType[V, X] -⚬ (IType[V, X] |+| (X |*| X)) =
       λ { t =>
         unpack(t) switch {
-          case Right(xxx) => injectL(mismatch(xxx))
+          case Right(xxx) => injectL(selfRef(xxx))
           case Left(t) => t switch {
-            case Left(x |*| y) => injectR(x |*| y)
-            case Right(rc)     => injectL(recCall(rc))
+            case Right(xxx) => injectL(mismatch(xxx))
+            case Left(t) => t switch {
+              case Left(x |*| y) => injectR(x |*| y)
+              case Right(rc)     => injectL(recCall(rc))
+            }
           }
         }
       }
 
-    def isRecCall[X]: IType[X] -⚬ (IType[X] |+| (X |*| X)) =
+    def isRecCall[V, X]: IType[V, X] -⚬ (IType[V, X] |+| (X |*| X)) =
       λ { t =>
         unpack(t) switch {
-          case Right(xxx) => injectL(mismatch(xxx))
+          case Right(xxx) => injectL(selfRef(xxx))
           case Left(t) => t switch {
-            case Left(xy)      => injectL(pair(xy))
-            case Right(x |*| y) => injectR(x |*| y)
+            case Right(xxx) => injectL(mismatch(xxx))
+            case Left(t) => t switch {
+              case Left(xy)      => injectL(pair(xy))
+              case Right(x |*| y) => injectR(x |*| y)
+            }
           }
         }
       }
 
-    given TypeOps[IType, Type] with {
+    given TypeOps[IType[Val[Label], _], Type, Label] with {
+      type IT[A] = IType[Val[Label], A]
 
-      override def split[A](f: A -⚬ (A |*| A)): IType[A] -⚬ (IType[A] |*| IType[A]) =
+      override def split[A](f: A -⚬ (A |*| A)): IT[A] -⚬ (IT[A] |*| IT[A]) =
         rec { self =>
           λ { case t =>
             unpack(t) switch {
-              case Right(x |*| y) =>
-                val x1 |*| x2 = self(x)
-                val y1 |*| y2 = self(y)
-                mismatch(x1 |*| y1) |*| mismatch(x2 |*| y2)
+              case Right(lbl) =>
+                val l1 |*| l2 = dup(lbl)
+                selfRef(l1) |*| selfRef(l2)
               case Left(t) => t switch {
-                case Left(a |*| b)  =>
-                  val a1 |*| a2 = f(a)
-                  val b1 |*| b2 = f(b)
-                  pair(a1 |*| b1) |*| pair(a2 |*| b2)
-                case Right(a |*| b) =>
-                  val a1 |*| a2 = f(a)
-                  val b1 |*| b2 = f(b)
-                  recCall(a1 |*| b1) |*| recCall(a2 |*| b2)
+                case Right(x |*| y) =>
+                  val x1 |*| x2 = self(x)
+                  val y1 |*| y2 = self(y)
+                  mismatch(x1 |*| y1) |*| mismatch(x2 |*| y2)
+                case Left(t) => t switch {
+                  case Left(a |*| b)  =>
+                    val a1 |*| a2 = f(a)
+                    val b1 |*| b2 = f(b)
+                    pair(a1 |*| b1) |*| pair(a2 |*| b2)
+                  case Right(a |*| b) =>
+                    val a1 |*| a2 = f(a)
+                    val b1 |*| b2 = f(b)
+                    recCall(a1 |*| b1) |*| recCall(a2 |*| b2)
+                }
               }
             }
           }
         }
 
-      override def merge[A](f: (A |*| A) -⚬ A): (IType[A] |*| IType[A]) -⚬ IType[A] =
+      override def merge[A](f: (A |*| A) -⚬ A): (IT[A] |*| IT[A]) -⚬ IT[A] =
         λ { case a |*| b =>
           unpack(a) switch {
-            case Right(xxx) => mismatch(mismatch(xxx) |*| b)
-            case Left(a) => a switch {
-              case Left(a1 |*| a2) =>
-                unpack(b) switch {
-                  case Right(yyy) => mismatch(pair(a1 |*| a2) |*| mismatch(yyy))
-                  case Left(b) => b switch {
-                    case Left(b1 |*| b2)  => pair(f(a1 |*| b1) |*| f(a2 |*| b2))
-                    case Right(bi |*| bo) => mismatch(pair(a1 |*| a2) |*| recCall(bi |*| bo))
-                  }
+            case Right(xxx) => mismatch(selfRef(xxx) |*| b)
+            case Left(a) => unpack(b) switch {
+              case Right(yyy) => mismatch(pack(injectL(a)) |*| selfRef(yyy))
+              case Left(b) => a switch {
+                case Right(xxx) => mismatch(mismatch(xxx) |*| pack(injectL(b)))
+                case Left(a) => a switch {
+                  case Left(a1 |*| a2) =>
+                    b switch {
+                      case Right(yyy) => mismatch(pair(a1 |*| a2) |*| mismatch(yyy))
+                      case Left(b) => b switch {
+                        case Left(b1 |*| b2)  => pair(f(a1 |*| b1) |*| f(a2 |*| b2))
+                        case Right(bi |*| bo) => mismatch(pair(a1 |*| a2) |*| recCall(bi |*| bo))
+                      }
+                    }
+                  case Right(ai |*| ao) =>
+                    b switch {
+                      case Right(yyy) => mismatch(recCall(ai |*| ao) |*| mismatch(yyy))
+                      case Left(b) => b switch {
+                        case Left(b1 |*| b2)  => mismatch(recCall(ai |*| ao) |*| pair(b1 |*| b2))
+                        case Right(bi |*| bo) => recCall(f(ai |*| bi) |*| f(ao |*| bo))
+                      }
+                    }
                 }
-              case Right(ai |*| ao) =>
-                unpack(b) switch {
-                  case Right(yyy) => mismatch(recCall(ai |*| ao) |*| mismatch(yyy))
-                  case Left(b) => b switch {
-                    case Left(b1 |*| b2)  => mismatch(recCall(ai |*| ao) |*| pair(b1 |*| b2))
-                    case Right(bi |*| bo) => recCall(f(ai |*| bi) |*| f(ao |*| bo))
-                  }
-                }
+              }
             }
           }
         }
 
-      override def map[A, B](f: A -⚬ B): IType[A] -⚬ IType[B] =
+      override def map[A, B](f: A -⚬ B): IT[A] -⚬ IT[B] =
         rec { self =>
           λ { t =>
             unpack(t) switch {
-              case Right(x |*| y) => mismatch(self(x) |*| self(y))
+              case Right(v) => selfRef(v)
               case Left(t) => t switch {
-                case Left(a |*| b)  => pair(f(a) |*| f(b))
-                case Right(a |*| b) => recCall(f(a) |*| f(b))
+                case Right(x |*| y) => mismatch(self(x) |*| self(y))
+                case Left(t) => t switch {
+                  case Left(a |*| b)  => pair(f(a) |*| f(b))
+                  case Right(a |*| b) => recCall(f(a) |*| f(b))
+                }
               }
             }
           }
         }
 
-      override def output[A](f: A -⚬ Val[Type]): IType[A] -⚬ Val[Type] =
+      override def mapWith[X, A, B](f: (X |*| A) -⚬ B)(using
+        X: CloseableCosemigroup[X],
+      ): (X |*| IT[A]) -⚬ IT[B] =
+        rec { self =>
+          λ { case +(x) |*| t =>
+            unpack(t) switch {
+              case Right(v) => selfRef(v waitFor X.close(x))
+              case Left(t) => t switch {
+                case Right(y |*| z) => mismatch(self(x |*| y) |*| self(x |*| z))
+                case Left(t) => t switch {
+                  case Left(a |*| b)  => pair(f(x |*| a) |*| f(x |*| b))
+                  case Right(a |*| b) => recCall(f(x |*| a) |*| f(x |*| b))
+                }
+              }
+            }
+          }
+        }
+
+      override def forbiddenSelfReference[A]: Val[Label] -⚬ IT[A] =
+        selfRef
+
+      override def output[A](f: A -⚬ Val[Type]): IT[A] -⚬ Val[Type] =
         rec { self =>
           λ {t =>
             unpack(t) switch {
-              case Right(x |*| y) => (self(x) ** self(y)) :>> mapVal { case (x, y) => Type.Mismatch(x, y) }
+              case Right(v) => v :>> mapVal { v => Type.ForbiddenSelfRef(v) }
               case Left(t) => t switch {
-                case Left(a |*| b)  => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.Pair(a, b) }
-                case Right(a |*| b) => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.RecCall(a, b) }
+                case Right(x |*| y) => (self(x) ** self(y)) :>> mapVal { case (x, y) => Type.Mismatch(x, y) }
+                case Left(t) => t switch {
+                  case Left(a |*| b)  => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.Pair(a, b) }
+                  case Right(a |*| b) => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.RecCall(a, b) }
+                }
               }
             }
           }
         }
 
-      override def close[A](f: A -⚬ Done): IType[A] -⚬ Done =
+      override def close[A](f: A -⚬ Done): IT[A] -⚬ Done =
         rec { self =>
-          λ {t =>
+          λ { t =>
             unpack(t) switch {
-              case Right(x |*| y) => (self(x) |*| self(y)) :>> join
+              case Right(v) => neglect(v)
               case Left(t) => t switch {
-                case Left(a |*| b)  => (f(a) |*| f(b)) :>> join
-                case Right(a |*| b) => (f(a) |*| f(b)) :>> join
+                case Right(x |*| y) => (self(x) |*| self(y)) :>> join
+                case Left(t) => t switch {
+                  case Left(a |*| b)  => (f(a) |*| f(b)) :>> join
+                  case Right(a |*| b) => (f(a) |*| f(b)) :>> join
+                }
               }
             }
           }
         }
 
-      override def awaitPosFst[A](f: (Done |*| A) -⚬ A): (Done |*| IType[A]) -⚬ IType[A] =
+      override def awaitPosFst[A](f: (Done |*| A) -⚬ A): (Done |*| IT[A]) -⚬ IT[A] =
         rec { self =>
           λ { case d |*| t =>
             unpack(t) switch {
-              case Right(x |*| y) => mismatch(self(d |*| x) |*| y)
+              case Right(v) => selfRef(v waitFor d)
               case Left(t) => t switch {
-                case Left(a |*| b)  => pair(f(d |*| a) |*| b)
-                case Right(a |*| b) => recCall(f(d |*| a) |*| b)
+                case Right(x |*| y) => mismatch(self(d |*| x) |*| y)
+                case Left(t) => t switch {
+                  case Left(a |*| b)  => pair(f(d |*| a) |*| b)
+                  case Right(a |*| b) => recCall(f(d |*| a) |*| b)
+                }
               }
             }
           }
         }
     }
+  end InferenceSupport
 
   import InferenceSupport.{IType, isPair, isRecCall, pair, recCall}
 
@@ -175,7 +232,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
     import Outcome.{assertEquals, assertMatches, assertRight, failure, success}
 
     val pg =
-      libretto.typology.inference.Propagator.instance[IType, Type, Label](Type.Abstr(_))
+      libretto.typology.inference.Propagator.instance[IType[Val[Label], _], Type, Label](Type.Abstr(_))
     import pg.{
       Tp,
       abstractTypeTap,
@@ -192,7 +249,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
     val nested = pg.nested
     import nested.{lower, propagator => npg, unnest}
 
-    extension (pg: Propagator[IType, Type, Label])
+    extension (pg: Propagator[IType[Val[Label], _], Type, Label])
       def mkLabel(n: Int): One -⚬ pg.Label =
         pg.label(Label(n))
 
@@ -670,10 +727,9 @@ class PropagatorTests extends ScalatestStarterTestSuite {
             tu <- expectVal(port)
             (t, u) = tu
             _ <- assertMatches(t) { case Type.Mismatch(_, _) => }
-            _ <- assertEquals(u, Type.Pair(Type.Abstr(Label(1)), Type.Abstr(Label(1))))
+            _ <- assertEquals(u, Type.Pair(Type.ForbiddenSelfRef(Label(1)), Type.ForbiddenSelfRef(Label(1))))
           } yield ()
-        }
-        .pending,
+        },
     )
   }
 }

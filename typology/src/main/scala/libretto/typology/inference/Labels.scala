@@ -1,7 +1,7 @@
 package libretto.typology.inference
 
 import libretto.lambda.util.SourcePos
-import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.{*, given}
 
 import java.util.concurrent.atomic.AtomicInteger
 import libretto.scaletto.StarterKit
@@ -11,11 +11,13 @@ trait Labels[V] {
 
   def create(v: V): One -⚬ Label
   def split: Label -⚬ (Label |*| Label)
+  def testEqual: (Label |*| Label) -⚬ (Label |+| (Label |*| Label))
   def compare: (Label |*| Label) -⚬ (Label |+| (Label |+| Label))
   def neglect: Label -⚬ Done
   def unwrapOriginal: Label -⚬ Val[V]
 
   given junctionLabel: Junction.Positive[Label]
+  given closeableCosemigroupLabel: CloseableCosemigroup[Label]
 
   def show: Label -⚬ Val[String]
   def alsoShow: Label -⚬ (Label |*| Val[String])
@@ -51,11 +53,8 @@ private[inference] object LabelsImpl {
 
     def compare[V, ℓ](a: IVar[V, ℓ], b: IVar[V, ℓ])(using
       Ordering[V],
-    ): Either[IVar[V, ℓ], Either[IVar[V, ℓ], IVar[V, ℓ]]] =
-      (a.lbl compare b.lbl) match
-        case Left(_)         => Left(a)
-        case Right(Left(_))  => Right(Left(a))
-        case Right(Right(_)) => Right(Right(b))
+    ): Int =
+      a.lbl compare b.lbl
 
     def lower[V, ℓ](a: IVar[V, S[ℓ]]): IVar[V, ℓ] =
       IVar(
@@ -80,23 +79,12 @@ private[inference] object LabelsImpl {
 
     def compare(that: Lbl[V, ℓ])(using
       V: Ordering[V],
-    ): Either[Lbl[V, ℓ], Either[Lbl[V, ℓ], Lbl[V, ℓ]]] =
+    ): Int =
       (this, that) match
-        case (Base(x), Base(y)) =>
-          V.compare(x, y) match {
-            case 0 => Left(this)
-            case i if i < 0 => Right(Left (this))
-            case i if i > 0 => Right(Right(that))
-          }
-        case (Base(_), Lowered(_, _)) =>
-          Right(Left(this))
-        case (Lowered(_, _), Base(_)) =>
-          Right(Right(that))
-        case (Lowered(x, _), Lowered(y, _)) =>
-          (x compare y) match
-            case Left(z)         => Left(this)
-            case Right(Left(_))  => Right(Left(this))
-            case Right(Right(_)) => Right(Right(that))
+        case (Base(x)      , Base(y)      ) => V.compare(x, y)
+        case (Base(_)      , Lowered(_, _)) => -1
+        case (Lowered(_, _), Base(_)      ) => 1
+        case (Lowered(x, _), Lowered(y, _)) => x compare y
   end Lbl
 }
 
@@ -115,9 +103,22 @@ private[inference] class LabelsImpl[V, ℓ](using V: Ordering[V]) extends Labels
     λ { case a |*| b =>
       (a ** b) :>> mapVal { case (a, b) =>
         val res = IVar.compare(a, b)
-        // println(s"comparing $a and $b resulted in $res")
-        res
+        res match
+          case 0 => Left(a)
+          case i if i < 0 => Right(Left(a))
+          case i if i > 0 => Right(Right(b))
       } :>> liftEither :>> |+|.rmap(liftEither)
+    }
+
+  override val testEqual: (Label |*| Label) -⚬ (Label |+| (Label |*| Label)) =
+    λ { case a |*| b =>
+      (a ** b) :>> mapVal { case (a, b) =>
+        val res = IVar.compare(a, b)
+        res match {
+          case 0 => Left(a)
+          case _ => Right((a, b))
+        }
+      } :>> liftEither :>> |+|.rmap(liftPair)
     }
 
   override val neglect: Label -⚬ Done =
@@ -143,6 +144,9 @@ private[inference] class LabelsImpl[V, ℓ](using V: Ordering[V]) extends Labels
 
   override given junctionLabel: Junction.Positive[Label] =
     scalettoLib.junctionVal
+
+  override given closeableCosemigroupLabel: CloseableCosemigroup[Label] =
+    closeableCosemigroupVal[IVar[V, ℓ]]
 
   override lazy val nested: Nested =
     new Nested {

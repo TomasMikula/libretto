@@ -43,6 +43,7 @@ sealed abstract class TypeExpr[V, ->>[_, _], K, L](using
       case x @ ComposeSnd(op, arg2) => import x.given; ComposeSnd(op.vcast[W], arg2)
       case x @ AppCompose(op, arg1, arg2) => import x.given; AppCompose(op.vcast[W], arg1, arg2)
       case TypeMismatch(a, b) => TypeMismatch(a, b)
+      case ForbiddenSelfReference(v) => ForbiddenSelfReference(f(v))
     }
 
   def translate[-->>[_, _]](f: [k, l] => (k ->> l) => (k -->> l)): TypeExpr[V, -->>, K, L] =
@@ -390,6 +391,10 @@ object TypeExpr {
     b: K ->> L,
   ) extends TypeExpr[V, ->>, K, L]
 
+  case class ForbiddenSelfReference[V, ->>[_, _], K: Kind, L: OutputKind](
+    v: V,
+  ) extends TypeExpr[V, ->>, K, L]
+
   def abstractType[V, ->>[_, _]](label: V): TypeExpr[V, ->>, ○, ●] =
     AbstractType(label)
 
@@ -434,4 +439,9 @@ object TypeExpr {
     b: K ->> L,
   ): TypeExpr[V, ->>, K, L] =
     TypeMismatch(a, b)
+
+  def forbiddenSelfReference[V, ->>[_, _], K: Kind, L: OutputKind](
+    v: V,
+  ): TypeExpr[V, ->>, K, L] =
+    ForbiddenSelfReference(v)
 }

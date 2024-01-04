@@ -28,6 +28,9 @@ object Type {
   def typeMismatch[V](a: Type[V], b: Type[V]): Type[V] =
     TypeExpr(generic.TypeExpr.typeMismatch(a, b))
 
+  def forbiddenSelfReference[V](v: V): Type[V] =
+    TypeExpr(generic.TypeExpr.forbiddenSelfReference(v))
+
   object Pair {
     def unapply[V](t: Type[V]): Option[(Type[V], Type[V])] =
       t.value match {

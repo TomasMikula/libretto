@@ -18,9 +18,9 @@ object TypeInference {
         State(n => (n+1, AbstractTypeLabel(n)))
     }
 
-    given pg: Propagator[NonAbstractType, Type[Label], Label] =
+    given pg: Propagator[NonAbstractType[Val[Label], _], Type[Label], Label] =
       import NonAbstractType.given
-      Propagator.instance[NonAbstractType, Type[Label], Label](Type.abstractType)
+      Propagator.instance[NonAbstractType[Val[Label], _], Type[Label], Label](Type.abstractType)
 
     val res =
     reconstructTypes(f)
@@ -39,7 +39,7 @@ object TypeInference {
   }
 
   def reconstructTypes[M[_], A, B](f: Fun[A, B])(using
-    pg: Propagator[NonAbstractType, Type[Label], Label],
+    pg: Propagator[NonAbstractType[Val[Label], _], Type[Label], Label],
   )(using
     gen: VarGen[M, AbstractTypeLabel],
     M: Monad[M],
@@ -246,8 +246,8 @@ object TypeInference {
       case f: FunT.FixF[arr, f] =>
         Monad[M].pure(
           λ.* { one =>
-            val fixF = Tp(fixT[Tp, f](f.f)(one))
-            val fFixF = apply1T(f.f)(Tp(fixT[Tp, f](f.f)(one)))
+            val fixF = Tp(fixT[Val[Label], Tp, f](f.f)(one))
+            val fFixF = apply1T(f.f)(Tp(fixT[Val[Label], Tp, f](f.f)(one)))
             val tf = constantVal(TypedFun.fix[f](TypeTag.toTypeFun(f.f).vmap(Label.ScalaTParam(_))))
             fFixF |*| tf |*| fixF
           }
@@ -255,8 +255,8 @@ object TypeInference {
       case f: FunT.UnfixF[arr, f] =>
         Monad[M].pure(
           λ.* { one =>
-            val fixF = Tp(fixT[Tp, f](f.f)(one))
-            val fFixF = apply1T(f.f)(Tp(fixT[Tp, f](f.f)(one)))
+            val fixF = Tp(fixT[Val[Label], Tp, f](f.f)(one))
+            val fFixF = apply1T(f.f)(Tp(fixT[Val[Label], Tp, f](f.f)(one)))
             val tf = constantVal(TypedFun.unfix[f](TypeTag.toTypeFun(f.f).vmap(Label.ScalaTParam(_))))
             fixF |*| tf |*| fFixF
           }

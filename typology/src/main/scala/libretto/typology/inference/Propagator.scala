@@ -40,21 +40,21 @@ trait Propagator[F[_], T, V] {
 
 object Propagator {
 
-  def instance[F[_], T, V](tparam: V => T)(using TypeOps[F, T], Ordering[V]): Propagator[F, T, V] =
+  def instance[F[_], T, V](tparam: V => T)(using TypeOps[F, T, V], Ordering[V]): Propagator[F, T, V] =
     val labels = Labels[V]
     PropagatorImpl[F, T, labels.Label, V](
       labels,
-      summon[TypeOps[F, T]],
+      summon[TypeOps[F, T, V]],
       splitTypeParam = labels.split,
       typeParamLink = labels.split,
-      outputTypeParam = labels.unwrapOriginal > mapVal(x => { println(s"OUTPUTTING abstract type $x"); tparam(x) }) > alsoPrintLine(t => s"OUTPUTTED abstract type $t"),
+      outputTypeParam = labels.unwrapOriginal > mapVal(tparam),
     )
 }
 
 private[inference] object PropagatorImpl {
   def apply[F[_], T, P, V](
     labels: Labels[V],
-    F: TypeOps[F, T],
+    F: TypeOps[F, T, V],
     splitTypeParam: P -⚬ (P |*| P),
     typeParamLink: labels.Label -⚬ (P |*| P),
     outputTypeParam: P -⚬ Val[T],
@@ -78,7 +78,7 @@ private[inference] class PropagatorImpl[
   Lbls <: Labels[V],
 ](
   val labels: Lbls,
-  F: TypeOps[F, T],
+  F: TypeOps[F, T, V],
   splitTypeParam: P -⚬ (P |*| P),
   typeParamLink: labels.Label -⚬ (P |*| P),
   outputTypeParam: P -⚬ Val[T],
@@ -111,6 +111,14 @@ private[inference] class PropagatorImpl[
     extension [T](resp: $[Response[T]])
       def toEither: $[T |+| -[TypeOutlet]] =
         resp
+
+      def mapWith[X, U](f: (X |*| T) -⚬ U)(x: $[X])(using SourcePos, LambdaContext)(using X: Closeable[X]): $[Response[U]] =
+        import TypeOutlet.given
+        given Junction.Positive[-[TypeOutlet]] = Junction.Positive.insideInversion[TypeOutlet]
+        resp switch {
+          case Left(t)  => injectL(f(x |*| t))
+          case Right(t) => injectR(t waitFor X.close(x))
+        }
   }
 
   object AbsTp {
@@ -143,7 +151,42 @@ private[inference] class PropagatorImpl[
     TypeOutlet.concreteType
 
   def makeAbstractType: Label -⚬ (Tp |*| Refinement.Response[Tp]) =
-    introSnd(Refinement.makeRequest) > assocRL > fst(abstType)
+    λ { case +(lbl) =>
+      val req |*| resp = constant(Refinement.makeRequest[Tp])
+      abstType(lbl |*| req) |*| resp.mapWith(occursCheck)(lbl)
+    }
+
+  private def occursCheck: (Label |*| Tp) -⚬ Tp = rec { self =>
+    λ { case lbl0 |*| t =>
+      unpack(t) switch {
+        case Left(absTp) =>
+          absTp switch {
+            case Left(lbl |*| req) =>
+              labels.testEqual(lbl0 |*| lbl) switch {
+                case Left(l) => // forbidden label found
+                  val +(v) = labels.unwrapOriginal(l)
+                  val t1 = concreteType(F.forbiddenSelfReference(v))
+                  val t2 = concreteType(F.forbiddenSelfReference(v))
+                  returning(t1, req grant t2)
+                case Right(lbl0 |*| lbl) =>
+                  abstType(lbl.waitFor(labels.neglect(lbl0)) |*| req)
+              }
+            case Right(lbl |*| t) => // preliminary
+              labels.testEqual(lbl0 |*| lbl) switch {
+                case Left(l) => // forbidden label found
+                  returning(
+                    concreteType(F.forbiddenSelfReference(labels.unwrapOriginal(l))),
+                    hackyDiscard(close(t)),
+                  )
+                case Right(lbl0 |*| lbl) =>
+                  preliminary(lbl |*| self(lbl0 |*| t))
+              }
+          }
+        case Right(ft) =>
+          concreteType(F.mapWith(self)(lbl0 |*| ft))
+      }
+    }
+  }
 
   override def merge: (Tp |*| Tp) -⚬ Tp =
     rec { self =>
