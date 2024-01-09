@@ -2,6 +2,7 @@ package libretto.lambda
 
 import libretto.lambda.util.{Exists, UniqueTypeArg}
 import scala.annotation.targetName
+import libretto.lambda.Bin.{Branch, Leaf}
 
 opaque type Tupled[|*|[_, _], F[_], A] =
   Bin[|*|, [x] =>> x, F, A]
@@ -82,5 +83,20 @@ object Tupled {
   given [|*|[_, _], F[_]]: Zippable[|*|, Tupled[|*|, F, _]] with {
     override def zip[A, B](fa: Tupled[|*|, F, A], fb: Tupled[|*|, F, B]): Tupled[|*|, F, A |*| B] =
       Tupled.zip(fa, fb)
+  }
+
+  object Atom {
+    def unapply[|*|[_, _], F[_], A](a: Tupled[|*|, F, A]): Option[F[A]] =
+      a match
+        case Leaf(a)      => Some(a)
+        case Branch(_, _) => None
+
+  }
+
+  object <*> {
+    def unapply[|*|[_, _], F[_], A, B](
+      ab: Tupled[|*|, F, A |*| B],
+    )(using F: Unzippable[|*|, F]): (Tupled[|*|, F, A], Tupled[|*|, F, B]) =
+      unzip(ab)
   }
 }
