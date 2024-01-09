@@ -88,6 +88,13 @@ package object kinds {
       kl match {
         case Kind.Prod(k, l) => Prod(k, l)
       }
+
+    def unpair[K, L](kl: Kind[K × L]): (ProperKind[K], ProperKind[L]) =
+      kl match
+        case Kind.Prod(k, l) => (k, l)
+
+    def cannotBeUnit(p: ProperKind[○]): Nothing =
+      throw AssertionError("Impossible")
   }
 
   /** Witnesses that `K` is a legal output kind of type functions. */
@@ -112,5 +119,8 @@ package object kinds {
 
     def apply[K](using OutputKind[K]): OutputKind[K] =
       summon[OutputKind[K]]
+
+    def cannotBePair[K, L](ab: OutputKind[K × L]): Nothing =
+      throw AssertionError("Impossible")
   }
 }

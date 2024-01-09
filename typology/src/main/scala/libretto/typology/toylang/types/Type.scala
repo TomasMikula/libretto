@@ -1,5 +1,6 @@
 package libretto.typology.toylang.types
 
+import libretto.lambda.Tupled.*
 import libretto.typology.kinds._
 
 type Type[V] = TypeExpr[V, ○, ●]
@@ -33,24 +34,33 @@ object Type {
   object Pair {
     def unapply[V](t: Type[V]): Option[(Type[V], Type[V])] =
       t match {
-        case TypeExpr.BiApp(TypeExpr.Pair(), a, b) => Some((a, b))
-        case _ => None
+        case TypeExpr.App(TypeExpr.Primitive.Pair(), args) =>
+          args match
+            case Atom(a) <*> Atom(b) => Some((a, b))
+        case _ =>
+          None
       }
   }
 
   object Sum {
     def unapply[V](t: Type[V]): Option[(Type[V], Type[V])] =
       t match {
-        case TypeExpr.BiApp(TypeExpr.Sum(), a, b) => Some((a, b))
-        case _ => None
+        case TypeExpr.App(TypeExpr.Primitive.Sum(), args) =>
+          args match
+            case Atom(a) <*> Atom(b) => Some((a, b))
+        case _ =>
+          None
       }
   }
 
   object RecCall {
     def unapply[V](t: Type[V]): Option[(Type[V], Type[V])] =
       t match {
-        case TypeExpr.BiApp(TypeExpr.RecCall(), a, b) => Some((a, b))
-        case _ => None
+        case TypeExpr.App(TypeExpr.Primitive.RecCall(), args) =>
+          args match
+            case Atom(a) <*> Atom(b) => Some((a, b))
+        case _ =>
+          None
       }
   }
 

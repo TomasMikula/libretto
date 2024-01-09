@@ -1,7 +1,8 @@
 package libretto.typology.toylang.types
 
-import libretto.lambda.{MappedMorphism, MonoidalObjectMap, SymmetricMonoidalCategory}
-import libretto.lambda.util.SourcePos
+import libretto.lambda.{MappedMorphism, MonoidalObjectMap, SymmetricMonoidalCategory, UnhandledCase}
+import libretto.lambda.util.{SourcePos, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds._
 
 sealed trait Routing[K, L](using
@@ -22,150 +23,7 @@ sealed trait Routing[K, L](using
   def snd[X](using ProperKind[X], ProperKind[K], ProperKind[L]): Routing[X × K, X × L] =
     Routing.snd(this)
 
-  def applyTo[TA[_], J](args: ArgIntro[TA, J, K]): ApplyRes[TA, J, ?, L] = {
-    import args.inKind
-
-    this match {
-      case Id() =>
-        ApplyRes(Id(), args)
-
-      case AndThen(f, g) =>
-        f.applyTo(args) match {
-          case ApplyRes(f1, args1) =>
-            g.applyTo(args1) match {
-              case ApplyRes(g1, args2) => ApplyRes(f1 > g1, args2)
-            }
-        }
-
-      case p: Par[k1, k2, l1, l2] =>
-        given ProperKind[l1] = Kind.fst(p.outKind)
-        given ProperKind[l2] = Kind.snd(p.outKind)
-
-        def go[K1, K2, L1: ProperKind, L2: ProperKind](
-          args: ArgIntro[TA, J, K1 × K2],
-          g1: Routing[K1, L1],
-          g2: Routing[K2, L2],
-        ): ApplyRes[TA, J, ?, L1 × L2] =
-          args match {
-            case i1: ArgIntro.IntroFst[TA, K1, J, K2] =>
-              given ProperKind[J] = i1.properInKind
-              val j1 = g1.applyTo0(i1.args)
-              g2.applyTo(i1.f) match {
-                case ApplyRes(r, j2) =>
-                  r.outKind.properKind match {
-                    case Left(_eq_○) => ApplyRes(Elim(), ArgIntro.introBoth(j1, j2.from(using _eq_○.flip)))
-                    case Right(k)    => ApplyRes(r, ArgIntro.introFst(j1, j2)(using k))
-                  }
-              }
-            case p @ ArgIntro.Par(f1, f2) =>
-              def go[J1: ProperKind, J2: ProperKind](f1: ArgIntro[TA, J1, K1], f2: ArgIntro[TA, J2, K2]): ApplyRes[TA, J1 × J2, ?, L1 × L2] =
-                ApplyRes.par(g1.applyTo(f1), g2.applyTo(f2))
-              go(f1, f2)(using Kind.fst(p.inKind), Kind.snd(p.inKind))
-            case other =>
-              throw new NotImplementedError(s"$other (${summon[SourcePos]})")
-          }
-
-        go[k1, k2, l1, l2](args, p.f1, p.f2)
-
-      case lr: AssocLR[k1, k2, k3] =>
-        def go[K1, K2, K3](args: ArgIntro[TA, J, (K1 × K2) × K3]): ArgIntro[TA, J, K1 × (K2 × K3)] = {
-          given ProperKind[K1] = Kind.fst(Kind.fst(args.outKind.kind).kind)
-          given ProperKind[K2] = Kind.snd(Kind.fst(args.outKind.kind).kind)
-          given ProperKind[K3] = Kind.snd(args.outKind.kind)
-
-          args match {
-            case i1 @ ArgIntro.IntroFst(args1, f) =>
-              given ProperKind[J] = i1.properInKind
-              args1 match {
-                case ArgIntro.IntroBoth(a, b) =>
-                  ArgIntro.introFst(a, ArgIntro.introFst(b, f))
-                case other =>
-                  throw new NotImplementedError(s"$other (${summon[SourcePos]})")
-              }
-            case p @ ArgIntro.Par(f1, f2) =>
-              def go[J1: ProperKind, J2: ProperKind](f1: ArgIntro[TA, J1, K1 × K2], f2: ArgIntro[TA, J2, K3]): ArgIntro[TA, J1 × J2, K1 × (K2 × K3)] =
-                f1 match {
-                  case ArgIntro.IntroFst(a, f12) =>
-                    ArgIntro.introFst(a, ArgIntro.par(f12, f2))
-                  case ArgIntro.IntroSnd(f11, b) =>
-                    ArgIntro.par(f11, ArgIntro.introFst(b, f2))
-                  case other =>
-                    throw new NotImplementedError(s"$other (${summon[SourcePos]})")
-                }
-              go(f1, f2)(using Kind.fst(p.inKind), Kind.snd(p.inKind))
-            case other =>
-              throw new NotImplementedError(s"$other (${summon[SourcePos]})")
-          }
-        }
-
-        ApplyRes(Id(), go[k1, k2, k3](args))
-
-      case rl: AssocRL[k1, k2, k3] =>
-        def go[K1, K2, K3](args: ArgIntro[TA, J, K1 × (K2 × K3)]): ArgIntro[TA, J, (K1 × K2) × K3] = {
-          given ProperKind[K1] = Kind.fst(args.outKind.kind)
-          given ProperKind[K2] = Kind.fst(Kind.snd(args.outKind.kind).kind)
-          given ProperKind[K3] = Kind.snd(Kind.snd(args.outKind.kind).kind)
-
-          args match {
-            case ArgIntro.IntroFst(a, f) =>
-              f match {
-                case ArgIntro.Id() =>
-                  ArgIntro.fst[TA, K2, K1 × K2, K3](ArgIntro.introFst[TA, K1, K2](a))
-                case p @ ArgIntro.Par(f1, f2) =>
-                  def go[J1: ProperKind, J2: ProperKind](f1: ArgIntro[TA, J1, K2], f2: ArgIntro[TA, J2, K3]): ArgIntro[TA, J1 × J2, (K1 × K2) × K3] =
-                    ArgIntro.par(ArgIntro.introFst(a, f1), f2)
-                  go(f1, f2)(using Kind.fst(p.inKind), Kind.snd(p.inKind))
-                case other =>
-                  throw new NotImplementedError(s"$other (${summon[SourcePos]})")
-              }
-            case other =>
-              throw new NotImplementedError(s"$other (${summon[SourcePos]})")
-          }
-        }
-
-        ApplyRes(Id(), go[k1, k2, k3](args))
-
-      case d @ Dup() =>
-        given OutputKind[K] = d.kind
-        args match {
-          case ArgIntro.Id() =>
-            ApplyRes(Dup[K](), ArgIntro.Id())
-          case other =>
-            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
-        }
-
-      case Swap() =>
-        args match {
-          case i1 @ ArgIntro.IntroFst(a, f) =>
-            given ProperKind[J] = i1.properInKind
-            ApplyRes(Id(), ArgIntro.introSnd(f, a))
-          case other =>
-            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
-        }
-
-      case ElimSnd() =>
-        args match {
-          case ArgIntro.IntroFst(a, _) =>
-            ApplyRes(Routing.elim[J], a)
-          case other =>
-            throw new NotImplementedError(s"$other (${summon[SourcePos]})")
-        }
-
-      case other =>
-        throw new NotImplementedError(s"applying $other to $args (${summon[SourcePos]})")
-    }
-  }
-
-  def applyTo0[TA[_]](args: ArgIntro[TA, ○, K]): ArgIntro[TA, ○, L] = {
-    this match {
-      case Id() => args
-      case AndThen(f, g) => g.applyTo0(f.applyTo0(args))
-      case Dup() => ArgIntro.introBoth(args, args)
-      case other => throw new NotImplementedError(s"$other (${summon[SourcePos]})")
-    }
-  }
-
-  def applyToTrans[F[_, _], J](f: ArgTrans[F, J, K]): AppTransRes[F, J, ?, L] = {
+  def applyToTrans[F[_, _], J](f: ArgTrans[F, J, K]): AppTransRes[F, J, L] = {
     import f.inKind
 
     this match {
@@ -173,9 +31,9 @@ sealed trait Routing[K, L](using
         AppTransRes(Id(), f)
       case AndThen(p, q) =>
         p.applyToTrans(f) match {
-          case AppTransRes(p, f) =>
+          case AppTransRes.Impl(p, f) =>
             q.applyToTrans(f) match {
-              case AppTransRes(q, f) =>
+              case AppTransRes.Impl(q, f) =>
                 AppTransRes(p > q, f)
             }
         }
@@ -189,12 +47,39 @@ sealed trait Routing[K, L](using
           f: ArgTrans[F, J, K1 × K2],
           g1: Routing[K1, L1],
           g2: Routing[K2, L2],
-        ): AppTransRes[F, J, ?, L1 × L2] =
+        ): AppTransRes[F, J, L1 × L2] =
           f match {
-            case ArgTrans.IntroFst(f1) =>
-              AppTransRes(g2, ArgTrans.introFst(g1.applyToTrans0(f1)))
+            case ArgTrans.IntroFst(f1, f2) =>
+              val h1 = g1.applyToTrans0(f1)
+              g2.applyToTrans(f2) match
+                case AppTransRes.Impl(r, h2) =>
+                  AppTransRes(r, ArgTrans.introFst(h1, h2))
             case ArgTrans.IntroBoth(f1, f2) =>
               AppTransRes(id, ArgTrans.introBoth(g1.applyToTrans0(f1), g2.applyToTrans0(f2)))
+            case f: ArgTrans.Fst[f, j1, k1, k2] =>
+              import f.inKind1
+              val r = g1.applyToTrans(f.f)
+              r.g.inKind.properKind match
+                case Left(ev) =>
+                  AppTransRes(elimFst[j1, K2] > g2, ArgTrans.introFst(r.g.from[○](using ev.flip)))
+                case Right(x) =>
+                  given ProperKind[r.X] = x
+                  AppTransRes(Par(r.f, g2), ArgTrans.fst(r.g))
+            case f: ArgTrans.Par[f, j1, j2, k1, k2] =>
+              import f.given
+              val r1 = g1.applyToTrans(f.f1)
+              val r2 = g2.applyToTrans(f.f2)
+              r1.f.outKind.properKind match
+                case Left(ev1) =>
+                  AppTransRes(elimFst[j1, j2] > r2.f, ArgTrans.introFst(r1.g.from[○](using ev1.flip), r2.g))
+                case Right(x) =>
+                  given ProperKind[r1.X] = x
+                  r2.f.outKind.properKind match
+                    case Left(ev2) =>
+                      AppTransRes(elimSnd[j1, j2] > r1.f, ArgTrans.introSnd(r1.g, r2.g.from[○](using ev2.flip)))
+                    case Right(y) =>
+                      given ProperKind[r2.X] = y
+                      AppTransRes(par(r1.f, r2.f), ArgTrans.par(r1.g, r2.g))
             case other =>
               throw new NotImplementedError(s"$other (${summon[SourcePos]})")
           }
@@ -216,14 +101,64 @@ sealed trait Routing[K, L](using
           case other =>
             throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
+      case ElimSnd() =>
+        f match {
+          case ArgTrans.IntroFst(f1, f2) =>
+            AppTransRes(elim, f1)
+          case other =>
+            UnhandledCase.raise(s"Applying $this to $f")
+        }
+      case a: AssocLR[k, l, m] =>
+        f match {
+          case f @ ArgTrans.IntroFst(f1, f2) =>
+            import f.given
+            f1 match
+              case ArgTrans.IntroBoth(f11, f12) =>
+                AppTransRes(id, ArgTrans.IntroFst(f11, ArgTrans.IntroFst(f12, f2)))
+              case other =>
+                UnhandledCase.raise(s"Applying $this to $f")
+          case f @ ArgTrans.Fst(f1) =>
+            import f.kind2
+            f1 match
+              case f1 @ ArgTrans.IntroSnd(f11, f12) =>
+                import f1.inKindProper
+                AppTransRes(id, ArgTrans.par(f11, ArgTrans.introFst[F, l, m](f12)))
+              case other =>
+                UnhandledCase.raise(s"Applying $this to $f")
+          case other =>
+            UnhandledCase.raise(s"Applying $this to $f")
+        }
+      case a: AssocRL[k, l, m] =>
+        import a.given
+        f match {
+          case ArgTrans.IntroFst(f1, f2) =>
+            f2 match
+              case ArgTrans.Id() =>
+                AppTransRes(id, ArgTrans.Fst[F, l, k × l, m](ArgTrans.IntroFst(f1, ArgTrans.Id[F, l]())))
+              case f2 @ ArgTrans.Snd(f22) =>
+                import f2.inKind2
+                AppTransRes(id, ArgTrans.Par(ArgTrans.IntroFst(f1, ArgTrans.Id[F, l]()), f22))
+              case other =>
+                UnhandledCase.raise(s"Applying $this to $f")
+          case other =>
+            UnhandledCase.raise(s"Applying $this to $f")
+        }
+      case Swap() =>
+        f match {
+          case f @ ArgTrans.IntroFst(f1, f2) =>
+            import f.given
+            AppTransRes(id, ArgTrans.IntroSnd(f2, f1))
+          case other =>
+            UnhandledCase.raise(s"Applying $this to $f")
+        }
       case other =>
-        throw new NotImplementedError(s"Applying $other to $f (${summon[SourcePos]})")
+        UnhandledCase.raise(s"Applying $other to $f")
     }
   }
 
   def applyToTrans0[F[_, _]](f: ArgTrans[F, ○, K]): ArgTrans[F, ○, L] =
     applyToTrans(f) match {
-      case AppTransRes(r, f) =>
+      case AppTransRes.Impl(r, f) =>
         proveId(r).substituteCo[ArgTrans[F, *, L]](f)
     }
 
@@ -301,7 +236,11 @@ object Routing {
 
   case class AssocLR[K: ProperKind, L: ProperKind, M: ProperKind]() extends Routing[(K × L) × M, K × (L × M)]
 
-  case class AssocRL[K: ProperKind, L: ProperKind, M: ProperKind]() extends Routing[K × (L × M), (K × L) × M]
+  case class AssocRL[K, L, M]()(using
+    val K: ProperKind[K],
+    val L: ProperKind[L],
+    val M: ProperKind[M],
+  ) extends Routing[K × (L × M), (K × L) × M]
 
   case class Swap[K: ProperKind, L: ProperKind]() extends Routing[K × L, L × K]
 
@@ -313,34 +252,25 @@ object Routing {
 
   case class Dup[K]()(using val kind: OutputKind[K]) extends Routing[K, K × K]
 
-  case class ApplyRes[TA[_], K, X, L](r: Routing[K, X], ai: ArgIntro[TA, X, L]) {
-    final type Pivot = X
-  }
-  object ApplyRes {
-    def par[TA[_], K1, K2, X1, X2, L1, L2](
-      a1: ApplyRes[TA, K1, X1, L1],
-      a2: ApplyRes[TA, K2, X2, L2],
-    )(using
-      k1: ProperKind[K1],
-      k2: ProperKind[K2],
-      l1: ProperKind[L1],
-      l2: ProperKind[L2],
-    ): ApplyRes[TA, K1 × K2, ?, L1 × L2] =
-      (a1.r.outKind.properKind, a2.r.outKind.properKind) match {
-        case (Left(x1_eq_○), Left(x2_eq_○)) =>
-          ApplyRes(Elim(), ArgIntro.introBoth(a1.ai.from(using x1_eq_○.flip), a2.ai.from(using x2_eq_○.flip)))
-        case (Left(x1_eq_○), Right(x2)) =>
-          ApplyRes(ElimFst[K1, K2]() > a2.r, ArgIntro.introFst(a1.ai.from(using x1_eq_○.flip), a2.ai)(using x2))
-        case (Right(x1), Left(x2_eq_○)) =>
-          ApplyRes(ElimSnd[K1, K2]() > a1.r, ArgIntro.introSnd(a1.ai, a2.ai.from(using x2_eq_○.flip))(using x1))
-        case (Right(x1), Right(x2)) =>
-          given ProperKind[X1] = x1
-          given ProperKind[X2] = x2
-          ApplyRes(Routing.par(a1.r, a2.r), ArgIntro.par(a1.ai, a2.ai))
-      }
-  }
+  sealed trait AppTransRes[F[_, _], K, L]:
+    type X
+    def f: Routing[K, X]
+    def g: ArgTrans[F, X, L]
 
-  case class AppTransRes[F[_, _], K, X, L](f: Routing[K, X], g: ArgTrans[F, X, L])
+  object AppTransRes {
+    case class Impl[F[_, _], K, Y, L](
+      f: Routing[K, Y],
+      g: ArgTrans[F, Y, L],
+    ) extends AppTransRes[F, K, L] {
+      override type X = Y
+    }
+
+    def apply[F[_, _], K, Y, L](
+      f: Routing[K, Y],
+      g: ArgTrans[F, Y, L],
+    ): AppTransRes[F, K, L] =
+      Impl(f, g)
+  }
 
   def id[K: Kind]: Routing[K, K] =
     Id()
