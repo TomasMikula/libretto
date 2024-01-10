@@ -26,7 +26,7 @@ sealed trait Routing[K, L](using
   def inSnd[X](using ProperKind[X], ProperKind[K], ProperKind[L]): Routing[X × K, X × L] =
     Routing.snd(this)
 
-  def applyTo[F[_, _], J](f: ArgTrans[F, J, K]): AppTransRes[F, J, L] = {
+  def applyTo[F[_, _], J](f: PartialArgs[F, J, K]): AppTransRes[F, J, L] = {
     import f.inKind
 
     this match {
@@ -47,42 +47,42 @@ sealed trait Routing[K, L](using
         given ProperKind[l2] = Kind.snd(p.outKind)
 
         def go[K1: ProperKind, K2: ProperKind, L1: ProperKind, L2: ProperKind](
-          f: ArgTrans[F, J, K1 × K2],
+          f: PartialArgs[F, J, K1 × K2],
           g1: Routing[K1, L1],
           g2: Routing[K2, L2],
         ): AppTransRes[F, J, L1 × L2] =
           f match {
-            case ArgTrans.IntroFst(f1, f2) =>
+            case PartialArgs.IntroFst(f1, f2) =>
               val h1 = g1.applyTo0(f1)
               g2.applyTo(f2) match
                 case AppTransRes.Impl(r, h2) =>
-                  AppTransRes(r, ArgTrans.introFst(h1, h2))
-            case ArgTrans.IntroBoth(f1, f2) =>
-              AppTransRes(id, ArgTrans.introBoth(g1.applyTo0(f1), g2.applyTo0(f2)))
-            case f: ArgTrans.Fst[f, j1, k1, k2] =>
+                  AppTransRes(r, PartialArgs.introFst(h1, h2))
+            case PartialArgs.IntroBoth(f1, f2) =>
+              AppTransRes(id, PartialArgs.introBoth(g1.applyTo0(f1), g2.applyTo0(f2)))
+            case f: PartialArgs.Fst[f, j1, k1, k2] =>
               import f.inKind1
               val r = g1.applyTo(f.f)
               r.g.inKind.properKind match
                 case Left(ev) =>
-                  AppTransRes(elimFst[j1, K2] > g2, ArgTrans.introFst(r.g.from[○](using ev.flip)))
+                  AppTransRes(elimFst[j1, K2] > g2, PartialArgs.introFst(r.g.from[○](using ev.flip)))
                 case Right(x) =>
                   given ProperKind[r.X] = x
-                  AppTransRes(Par(r.f, g2), ArgTrans.fst(r.g))
-            case f: ArgTrans.Par[f, j1, j2, k1, k2] =>
+                  AppTransRes(Par(r.f, g2), PartialArgs.fst(r.g))
+            case f: PartialArgs.Par[f, j1, j2, k1, k2] =>
               import f.given
               val r1 = g1.applyTo(f.f1)
               val r2 = g2.applyTo(f.f2)
               r1.f.outKind.properKind match
                 case Left(ev1) =>
-                  AppTransRes(elimFst[j1, j2] > r2.f, ArgTrans.introFst(r1.g.from[○](using ev1.flip), r2.g))
+                  AppTransRes(elimFst[j1, j2] > r2.f, PartialArgs.introFst(r1.g.from[○](using ev1.flip), r2.g))
                 case Right(x) =>
                   given ProperKind[r1.X] = x
                   r2.f.outKind.properKind match
                     case Left(ev2) =>
-                      AppTransRes(elimSnd[j1, j2] > r1.f, ArgTrans.introSnd(r1.g, r2.g.from[○](using ev2.flip)))
+                      AppTransRes(elimSnd[j1, j2] > r1.f, PartialArgs.introSnd(r1.g, r2.g.from[○](using ev2.flip)))
                     case Right(y) =>
                       given ProperKind[r2.X] = y
-                      AppTransRes(par(r1.f, r2.f), ArgTrans.par(r1.g, r2.g))
+                      AppTransRes(par(r1.f, r2.f), PartialArgs.par(r1.g, r2.g))
             case other =>
               throw new NotImplementedError(s"$other (${summon[SourcePos]})")
           }
@@ -91,41 +91,41 @@ sealed trait Routing[K, L](using
       case Dup() =>
         f.inKind.properKind match {
           case Left(j_eq_○) =>
-            val f0: ArgTrans[F, ○, K] = j_eq_○.substituteCo[ArgTrans[F, *, K]](f)
-            AppTransRes(id[J].to[○](using j_eq_○), ArgTrans.introBoth(f0, f0))
+            val f0: PartialArgs[F, ○, K] = j_eq_○.substituteCo[PartialArgs[F, *, K]](f)
+            AppTransRes(id[J].to[○](using j_eq_○), PartialArgs.introBoth(f0, f0))
           case Right(j) =>
             given ProperKind[J] = j
-            AppTransRes(dup[J], ArgTrans.par(f, f))
+            AppTransRes(dup[J], PartialArgs.par(f, f))
         }
       case ElimFst() =>
         f match {
-          case ArgTrans.IntroBoth(f1, f2) =>
+          case PartialArgs.IntroBoth(f1, f2) =>
             AppTransRes(id, f2)
           case other =>
             throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
       case ElimSnd() =>
         f match {
-          case ArgTrans.IntroFst(f1, f2) =>
+          case PartialArgs.IntroFst(f1, f2) =>
             AppTransRes(elim, f1)
           case other =>
             UnhandledCase.raise(s"Applying $this to $f")
         }
       case a: AssocLR[k, l, m] =>
         f match {
-          case f @ ArgTrans.IntroFst(f1, f2) =>
+          case f @ PartialArgs.IntroFst(f1, f2) =>
             import f.given
             f1 match
-              case ArgTrans.IntroBoth(f11, f12) =>
-                AppTransRes(id, ArgTrans.IntroFst(f11, ArgTrans.IntroFst(f12, f2)))
+              case PartialArgs.IntroBoth(f11, f12) =>
+                AppTransRes(id, PartialArgs.IntroFst(f11, PartialArgs.IntroFst(f12, f2)))
               case other =>
                 UnhandledCase.raise(s"Applying $this to $f")
-          case f @ ArgTrans.Fst(f1) =>
+          case f @ PartialArgs.Fst(f1) =>
             import f.kind2
             f1 match
-              case f1 @ ArgTrans.IntroSnd(f11, f12) =>
+              case f1 @ PartialArgs.IntroSnd(f11, f12) =>
                 import f1.inKindProper
-                AppTransRes(id, ArgTrans.par(f11, ArgTrans.introFst[F, l, m](f12)))
+                AppTransRes(id, PartialArgs.par(f11, PartialArgs.introFst[F, l, m](f12)))
               case other =>
                 UnhandledCase.raise(s"Applying $this to $f")
           case other =>
@@ -134,13 +134,13 @@ sealed trait Routing[K, L](using
       case a: AssocRL[k, l, m] =>
         import a.given
         f match {
-          case ArgTrans.IntroFst(f1, f2) =>
+          case PartialArgs.IntroFst(f1, f2) =>
             f2 match
-              case ArgTrans.Id() =>
-                AppTransRes(id, ArgTrans.Fst[F, l, k × l, m](ArgTrans.IntroFst(f1, ArgTrans.Id[F, l]())))
-              case f2 @ ArgTrans.Snd(f22) =>
+              case PartialArgs.Id() =>
+                AppTransRes(id, PartialArgs.Fst[F, l, k × l, m](PartialArgs.IntroFst(f1, PartialArgs.Id[F, l]())))
+              case f2 @ PartialArgs.Snd(f22) =>
                 import f2.inKind2
-                AppTransRes(id, ArgTrans.Par(ArgTrans.IntroFst(f1, ArgTrans.Id[F, l]()), f22))
+                AppTransRes(id, PartialArgs.Par(PartialArgs.IntroFst(f1, PartialArgs.Id[F, l]()), f22))
               case other =>
                 UnhandledCase.raise(s"Applying $this to $f")
           case other =>
@@ -148,9 +148,9 @@ sealed trait Routing[K, L](using
         }
       case Swap() =>
         f match {
-          case f @ ArgTrans.IntroFst(f1, f2) =>
+          case f @ PartialArgs.IntroFst(f1, f2) =>
             import f.given
-            AppTransRes(id, ArgTrans.IntroSnd(f2, f1))
+            AppTransRes(id, PartialArgs.IntroSnd(f2, f1))
           case other =>
             UnhandledCase.raise(s"Applying $this to $f")
         }
@@ -159,10 +159,10 @@ sealed trait Routing[K, L](using
     }
   }
 
-  private def applyTo0[F[_, _]](f: ArgTrans[F, ○, K]): ArgTrans[F, ○, L] =
+  private def applyTo0[F[_, _]](f: PartialArgs[F, ○, K]): PartialArgs[F, ○, L] =
     applyTo(f) match {
       case AppTransRes.Impl(r, f) =>
-        proveId(r).substituteCo[ArgTrans[F, *, L]](f)
+        proveId(r).substituteCo[PartialArgs[F, *, L]](f)
     }
 
   def compile[==>[_, _], F[_, _], |*|[_, _], One, Q](fk: F[K, Q])(
@@ -256,19 +256,19 @@ object Routing {
   sealed trait AppTransRes[F[_, _], K, L]:
     type X
     def f: Routing[K, X]
-    def g: ArgTrans[F, X, L]
+    def g: PartialArgs[F, X, L]
 
   object AppTransRes {
     case class Impl[F[_, _], K, Y, L](
       f: Routing[K, Y],
-      g: ArgTrans[F, Y, L],
+      g: PartialArgs[F, Y, L],
     ) extends AppTransRes[F, K, L] {
       override type X = Y
     }
 
     def apply[F[_, _], K, Y, L](
       f: Routing[K, Y],
-      g: ArgTrans[F, Y, L],
+      g: PartialArgs[F, Y, L],
     ): AppTransRes[F, K, L] =
       Impl(f, g)
   }

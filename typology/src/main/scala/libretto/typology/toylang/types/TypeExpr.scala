@@ -36,13 +36,13 @@ sealed abstract class TypeExpr[V, K, L](using
 
   def ∘[J](that: TypeExpr[V, J, K]): TypeExpr[V, J, L] =
     import that.given
-    applyTo(ArgTrans(that))
+    applyTo(PartialArgs(that))
 
   def after(that: TypeExpr[V, ○, K]): TypeExpr[V, ○, L] =
     this ∘ that
 
   def applyTo[J](
-    a: ArgTrans[TypeExpr[V, _, _], J, K],
+    a: PartialArgs[TypeExpr[V, _, _], J, K],
   ): TypeExpr[V, J, L] =
     a.inKind.properKind match {
       case Left(TypeEq(Refl())) => applyTo0(a)
@@ -50,28 +50,28 @@ sealed abstract class TypeExpr[V, K, L](using
     }
 
   private def applyTo0(
-    f: ArgTrans[TypeExpr[V, _, _], ○, K],
+    f: PartialArgs[TypeExpr[V, _, _], ○, K],
   ): TypeExpr[V, ○, L] =
     this match {
       case PFix(p, e) =>
-        p.applyTo(ArgTrans.introFst(f)) match {
+        p.applyTo(PartialArgs.introFst(f)) match {
           case Routing.AppTransRes.Impl(q, g) =>
             Fix(q, e.applyTo(g))
         }
       case PartialApp(op, g) =>
-        App(op, ArgTrans.extract((f > g)(TypeExpr.absorbArgs[V])))
+        App(op, PartialArgs.extract((f > g)(TypeExpr.absorbArgs[V])))
       case other =>
         throw new NotImplementedError(s"$other (${summon[SourcePos]})")
     }
 
   private def applyTo1[J: ProperKind](
-    f: ArgTrans[TypeExpr[V, _, _], J, K],
+    f: PartialArgs[TypeExpr[V, _, _], J, K],
   ): TypeExpr[V, J, L] =
     this match {
       case PartialApp(op, g) =>
         val h = (f > g)(absorbL = TypeExpr.absorbArgs[V])
         h.inKind.properKind match
-          case Left(TypeEq(Refl())) => App(op, ArgTrans.extract(h))
+          case Left(TypeEq(Refl())) => App(op, PartialArgs.extract(h))
           case Right(j)             => PartialApp(op, h)
       case Wrap(op) =>
         PartialApp(op, f)
@@ -205,7 +205,7 @@ object TypeExpr {
 
   case class PartialApp[V, K, L, M](
     f: Primitive[L, M],
-    args: ArgTrans[TypeExpr[V, _, _], K, L],
+    args: PartialArgs[TypeExpr[V, _, _], K, L],
   )(using
     val inKindProper: ProperKind[K],
   ) extends TypeExpr[V, K, M](using summon, f.outKind)
@@ -229,10 +229,10 @@ object TypeExpr {
     App(Primitive.Pair(), Tupled.atom(a) zip Tupled.atom(b))
 
   def pair1[V](a: TypeExpr[V, ○, ●]): TypeExpr[V, ●, ●] =
-    PartialApp(Primitive.Pair(), ArgTrans.introFst(ArgTrans(a)))
+    PartialApp(Primitive.Pair(), PartialArgs.introFst(PartialArgs(a)))
 
   def pair2[V](b: TypeExpr[V, ○, ●]): TypeExpr[V, ●, ●] =
-    PartialApp(Primitive.Pair(), ArgTrans.introSnd(ArgTrans(b)))
+    PartialApp(Primitive.Pair(), PartialArgs.introSnd(PartialArgs(b)))
 
   def sum[V]: TypeExpr[V, ● × ●, ●] =
     Wrap(Primitive.Sum())
@@ -241,10 +241,10 @@ object TypeExpr {
     App(Primitive.Sum(), Tupled.atom(a) zip Tupled.atom(b))
 
   def sum1[V](a: TypeExpr[V, ○, ●]): TypeExpr[V, ●, ●] =
-    PartialApp(Primitive.Sum(), ArgTrans.introFst(ArgTrans(a)))
+    PartialApp(Primitive.Sum(), PartialArgs.introFst(PartialArgs(a)))
 
   def sum2[V](b: TypeExpr[V, ○, ●]): TypeExpr[V, ●, ●] =
-    PartialApp(Primitive.Sum(), ArgTrans.introSnd(ArgTrans(b)))
+    PartialApp(Primitive.Sum(), PartialArgs.introSnd(PartialArgs(b)))
 
   def recCall[V](a: TypeExpr[V, ○, ●], b: TypeExpr[V, ○, ●]): TypeExpr[V, ○, ●] =
     App(Primitive.RecCall(), Tupled.atom(a) zip Tupled.atom(b))
@@ -292,7 +292,7 @@ object TypeExpr {
 
   private def absorbArgs[V] =
     [j, k, l] => (
-      a: ArgTrans[TypeExpr[V, _, _], j, k],
+      a: PartialArgs[TypeExpr[V, _, _], j, k],
       t: TypeExpr[V, k, l],
     ) => {
       t.applyTo(a)

@@ -15,7 +15,7 @@ sealed trait TypeFun[V, K, L] {
     import that.pre.outKind
     import that.expr.outKind
 
-    this.pre.applyTo[TypeExpr[V, _, _], that.X](ArgTrans(that.expr)) match {
+    this.pre.applyTo[TypeExpr[V, _, _], that.X](PartialArgs(that.expr)) match {
       case Routing.AppTransRes.Impl(q, e) =>
         TypeFun(that.pre > q, this.expr.applyTo(e))
     }
@@ -113,12 +113,12 @@ object TypeFun {
       f2.inKind.properKind match {
         case Left(x_eq_○) =>
           val f20: TypeExpr[V, ○, M] = x_eq_○.substituteCo[TypeExpr[V, _, M]](f2)
-          g1.applyTo(ArgTrans.introSnd(ArgTrans(f20))) match {
+          g1.applyTo(PartialArgs.introSnd(PartialArgs(f20))) match {
             case Routing.AppTransRes.Impl(g1, f21) =>
               TypeFun(Routing.elimSnd[K, L] > g1, g2.applyTo(f21))
           }
         case Right(given ProperKind[X]) =>
-          g1.applyTo(ArgTrans(f2).inSnd[K]) match {
+          g1.applyTo(PartialArgs(f2).inSnd[K]) match {
             case Routing.AppTransRes.Impl(g1, f2) =>
               TypeFun(f1.inSnd[K] > g1, g2.applyTo(f2))
           }
@@ -136,7 +136,7 @@ object TypeFun {
     given ProperKind[L] = Kind.snd(f.inKind)
 
     def go[X](a: TypeExpr[V, ○, K], f1: Routing[K × L, X], f2: TypeExpr[V, X, M]): TypeFun[V, L, M] = {
-      f1.applyTo(ArgTrans.introFst(ArgTrans(a))) match {
+      f1.applyTo(PartialArgs.introFst(PartialArgs(a))) match {
         case Routing.AppTransRes.Impl(f0, args) =>
           TypeFun(f0, f2.applyTo(args))
       }
