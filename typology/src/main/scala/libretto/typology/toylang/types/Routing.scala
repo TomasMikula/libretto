@@ -20,19 +20,22 @@ sealed trait Routing[K, L](using
   def >[M](that: Routing[L, M]): Routing[K, M] =
     AndThen(this, that)
 
-  def snd[X](using ProperKind[X], ProperKind[K], ProperKind[L]): Routing[X × K, X × L] =
+  def inFst[Y](using ProperKind[K], ProperKind[L], ProperKind[Y]): Routing[K × Y, L × Y] =
+    Routing.fst(this)
+
+  def inSnd[X](using ProperKind[X], ProperKind[K], ProperKind[L]): Routing[X × K, X × L] =
     Routing.snd(this)
 
-  def applyToTrans[F[_, _], J](f: ArgTrans[F, J, K]): AppTransRes[F, J, L] = {
+  def applyTo[F[_, _], J](f: ArgTrans[F, J, K]): AppTransRes[F, J, L] = {
     import f.inKind
 
     this match {
       case Id() =>
         AppTransRes(Id(), f)
       case AndThen(p, q) =>
-        p.applyToTrans(f) match {
+        p.applyTo(f) match {
           case AppTransRes.Impl(p, f) =>
-            q.applyToTrans(f) match {
+            q.applyTo(f) match {
               case AppTransRes.Impl(q, f) =>
                 AppTransRes(p > q, f)
             }
@@ -50,15 +53,15 @@ sealed trait Routing[K, L](using
         ): AppTransRes[F, J, L1 × L2] =
           f match {
             case ArgTrans.IntroFst(f1, f2) =>
-              val h1 = g1.applyToTrans0(f1)
-              g2.applyToTrans(f2) match
+              val h1 = g1.applyTo0(f1)
+              g2.applyTo(f2) match
                 case AppTransRes.Impl(r, h2) =>
                   AppTransRes(r, ArgTrans.introFst(h1, h2))
             case ArgTrans.IntroBoth(f1, f2) =>
-              AppTransRes(id, ArgTrans.introBoth(g1.applyToTrans0(f1), g2.applyToTrans0(f2)))
+              AppTransRes(id, ArgTrans.introBoth(g1.applyTo0(f1), g2.applyTo0(f2)))
             case f: ArgTrans.Fst[f, j1, k1, k2] =>
               import f.inKind1
-              val r = g1.applyToTrans(f.f)
+              val r = g1.applyTo(f.f)
               r.g.inKind.properKind match
                 case Left(ev) =>
                   AppTransRes(elimFst[j1, K2] > g2, ArgTrans.introFst(r.g.from[○](using ev.flip)))
@@ -67,8 +70,8 @@ sealed trait Routing[K, L](using
                   AppTransRes(Par(r.f, g2), ArgTrans.fst(r.g))
             case f: ArgTrans.Par[f, j1, j2, k1, k2] =>
               import f.given
-              val r1 = g1.applyToTrans(f.f1)
-              val r2 = g2.applyToTrans(f.f2)
+              val r1 = g1.applyTo(f.f1)
+              val r2 = g2.applyTo(f.f2)
               r1.f.outKind.properKind match
                 case Left(ev1) =>
                   AppTransRes(elimFst[j1, j2] > r2.f, ArgTrans.introFst(r1.g.from[○](using ev1.flip), r2.g))
@@ -156,15 +159,13 @@ sealed trait Routing[K, L](using
     }
   }
 
-  def applyToTrans0[F[_, _]](f: ArgTrans[F, ○, K]): ArgTrans[F, ○, L] =
-    applyToTrans(f) match {
+  private def applyTo0[F[_, _]](f: ArgTrans[F, ○, K]): ArgTrans[F, ○, L] =
+    applyTo(f) match {
       case AppTransRes.Impl(r, f) =>
         proveId(r).substituteCo[ArgTrans[F, *, L]](f)
     }
 
   def compile[==>[_, _], F[_, _], |*|[_, _], One, Q](fk: F[K, Q])(
-    // tgt: TypeAlgebra[==>],
-    // map_● : F[●, tgt.Type],
     dupTypes: [k, q] => F[k, q] => (q ==> (q |*| q)),
   )(using
     F: MonoidalObjectMap[F, ×, ○, |*|, One],

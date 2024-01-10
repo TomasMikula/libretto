@@ -36,28 +36,27 @@ sealed abstract class TypeExpr[V, K, L](using
 
   def ∘[J](that: TypeExpr[V, J, K]): TypeExpr[V, J, L] =
     import that.given
-    transCompose(ArgTrans(that))
+    applyTo(ArgTrans(that))
 
-  def applyTo(that: TypeExpr[V, ○, K]): TypeExpr[V, ○, L] =
-    import that.outKind
-    transCompose(ArgTrans(that))
+  def after(that: TypeExpr[V, ○, K]): TypeExpr[V, ○, L] =
+    this ∘ that
 
-  def transCompose[J](
+  def applyTo[J](
     a: ArgTrans[TypeExpr[V, _, _], J, K],
   ): TypeExpr[V, J, L] =
     a.inKind.properKind match {
-      case Left(TypeEq(Refl())) => transCompose0(a)
-      case Right(j)             => transCompose1(a)(using j)
+      case Left(TypeEq(Refl())) => applyTo0(a)
+      case Right(j)             => applyTo1(a)(using j)
     }
 
-  private def transCompose0(
+  private def applyTo0(
     f: ArgTrans[TypeExpr[V, _, _], ○, K],
   ): TypeExpr[V, ○, L] =
     this match {
       case PFix(p, e) =>
-        p.applyToTrans(ArgTrans.introFst(f)) match {
+        p.applyTo(ArgTrans.introFst(f)) match {
           case Routing.AppTransRes.Impl(q, g) =>
-            Fix(q, e.transCompose(g))
+            Fix(q, e.applyTo(g))
         }
       case PartialApp(op, g) =>
         App(op, ArgTrans.extract((f > g)(TypeExpr.absorbArgs[V])))
@@ -65,7 +64,7 @@ sealed abstract class TypeExpr[V, K, L](using
         throw new NotImplementedError(s"$other (${summon[SourcePos]})")
     }
 
-  private def transCompose1[J: ProperKind](
+  private def applyTo1[J: ProperKind](
     f: ArgTrans[TypeExpr[V, _, _], J, K],
   ): TypeExpr[V, J, L] =
     this match {
@@ -267,35 +266,6 @@ object TypeExpr {
   ): TypeExpr[V, K, L] =
     ForbiddenSelfReference(v)
 
-  def appCompose[V, K, L1, L2, M](
-    op: Primitive[L1 × L2, M],
-    arg1: TypeExpr[V, ○, L1],
-    arg2: TypeExpr[V, K, L2],
-  )(using
-    k: ProperKind[K],
-  ): TypeExpr[V, K, M] =
-    import arg1.given
-    import arg2.given
-    PartialApp(op, ArgTrans(arg2) introFst ArgTrans(arg1))
-
-  def composeSnd[V, K1, K2: ProperKind, L2, M](
-    op: Primitive[K1 × L2, M],
-    arg2: TypeExpr[V, K2, L2],
-  ): TypeExpr[V, K1 × K2, M] =
-    given ProperKind[K1] = ProperKind.unpair(op.inKind)._1
-    import arg2.given
-    PartialApp(op, ArgTrans(arg2).inSnd)
-
-  def composeSnd[V, L1, K2: ProperKind, L2, M](
-    op: TypeExpr[V, L1 × L2, M],
-    arg2: TypeExpr[V, K2, L2],
-  ): TypeExpr[V, L1 × K2, M] = {
-    import arg2.outKind
-    given ProperKind[L1] = Kind.fst(op.inKind)
-
-    op.transCompose(ArgTrans.snd(ArgTrans.lift(arg2)))
-  }
-
   def unit[V]: TypeExpr[V, ○, ●] =
     Wrap(Primitive.UnitType())
 
@@ -304,21 +274,6 @@ object TypeExpr {
 
   def string[V]: TypeExpr[V, ○, ●] =
     Wrap(Primitive.StringType())
-
-  def appFst[V, K1, K2, L](
-    op: Primitive[K1 × K2, L],
-    arg1: TypeExpr[V, ○, K1],
-  ): TypeExpr[V, K2, L] =
-    given ProperKind[K2] = ProperKind.unpair(op.inKind)._2
-    import arg1.given
-    PartialApp(op, ArgTrans.introFst(ArgTrans(arg1)))
-
-  def biApp[V, K1, K2, L](
-    op: Primitive[K1 × K2, L],
-    arg1: TypeExpr[V, ○, K1],
-    arg2: TypeExpr[V, ○, K2],
-  ): TypeExpr[V, ○, L] =
-    App(op, Tupled.atom(arg1) zip Tupled.atom(arg2))
 
   given semigroupoid[V]: Semigroupoid[TypeExpr[V, _, _]] with {
     override def andThen[A, B, C](
@@ -340,6 +295,6 @@ object TypeExpr {
       a: ArgTrans[TypeExpr[V, _, _], j, k],
       t: TypeExpr[V, k, l],
     ) => {
-      t.transCompose(a)
+      t.applyTo(a)
     }
 }
