@@ -107,6 +107,10 @@ sealed abstract class TypeExpr[V, K, L](using
               MappedMorphism(map_●, tgt.pfix(TypeFun(f, g)), map_●)
             case AbstractType(label) =>
               MappedMorphism(F.unit, tgt.abstractTypeName(label), map_●)
+            case TypeMismatch(a, b) =>
+              throw NotImplementedError(s"TypeMismatch($a, $b) at ${summon[SourcePos]}")
+            case ForbiddenSelfRef(v) =>
+              throw NotImplementedError(s"ForbiddenSelfReference($v) at ${summon[SourcePos]}")
         },
     )
 
@@ -134,17 +138,12 @@ sealed abstract class TypeExpr[V, K, L](using
             val op1 = compilePrimitive(fx, op)
             MappedMorphism(fk, args > op1.get(fx, op1.tgtMap), op1.tgtMap)
         }
-      case TypeMismatch(a, b) =>
-        throw NotImplementedError(s"TypeMismatch($a, $b) at ${summon[SourcePos]}")
-      case ForbiddenSelfReference(v) =>
-        throw NotImplementedError(s"ForbiddenSelfReference($v) at ${summon[SourcePos]}")
   }
 
   def vmap[W](f: V => W): TypeExpr[W, K, L] =
     this match {
-      case Wrap(p)                   => Wrap(p.vmap(f))
-      case TypeMismatch(a, b)        => TypeMismatch(a.vmap(f), b.vmap(f))
-      case ForbiddenSelfReference(v) => ForbiddenSelfReference(f(v))
+      case Wrap(p) =>
+        Wrap(p.vmap(f))
       case App(op, args) =>
         App(
           op.vmap(f),
@@ -171,6 +170,9 @@ object TypeExpr {
         case Pair()              => Pair()
         case Sum()               => Sum()
         case RecCall()           => RecCall()
+        case RecCall()           => RecCall()
+        case TypeMismatch(a, b)  => TypeMismatch(a.vmap(f), b.vmap(f))
+        case ForbiddenSelfRef(v) => ForbiddenSelfRef(f(v))
 
   }
 
@@ -195,6 +197,15 @@ object TypeExpr {
       f: Routing[● × ●, X],
       g: TypeExpr[V, X, ●],
     ) extends Primitive[V, ●, ●]
+
+    case class TypeMismatch[V, K: Kind, L: OutputKind](
+      a: TypeExpr[V, K, L],
+      b: TypeExpr[V, K, L],
+    ) extends Primitive[V, K, L]
+
+    case class ForbiddenSelfRef[V, K: Kind, L: OutputKind](
+      v: V,
+    ) extends Primitive[V, K, L]
   }
 
   case class Wrap[V, K, L](value: Primitive[V, K, L]) extends TypeExpr[V, K, L](using
@@ -206,15 +217,6 @@ object TypeExpr {
     f: Primitive[V, L, M],
     args: PartialArgs[TypeExpr[V, _, _], K, L],
   ) extends TypeExpr[V, K, M](using args.inKind, f.outKind)
-
-  case class TypeMismatch[V, K: Kind, L: OutputKind](
-    a: TypeExpr[V, K, L],
-    b: TypeExpr[V, K, L],
-  ) extends TypeExpr[V, K, L]
-
-  case class ForbiddenSelfReference[V, K: Kind, L: OutputKind](
-    v: V,
-  ) extends TypeExpr[V, K, L]
 
   def abstractType[V](label: V): TypeExpr[V, ○, ●] =
     Wrap(Primitive.AbstractType(label))
@@ -256,12 +258,12 @@ object TypeExpr {
     a: TypeExpr[V, K, L],
     b: TypeExpr[V, K, L],
   ): TypeExpr[V, K, L] =
-    TypeMismatch(a, b)
+    Wrap(Primitive.TypeMismatch(a, b))
 
   def forbiddenSelfReference[V, K: Kind, L: OutputKind](
     v: V,
   ): TypeExpr[V, K, L] =
-    ForbiddenSelfReference(v)
+    Wrap(Primitive.ForbiddenSelfRef(v))
 
   def unit[V]: TypeExpr[V, ○, ●] =
     Wrap(Primitive.UnitType())
