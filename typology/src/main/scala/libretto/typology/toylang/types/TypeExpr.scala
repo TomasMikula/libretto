@@ -55,7 +55,7 @@ sealed abstract class TypeExpr[V, K, L](using
     this match {
       case Wrap(p) =>
         App(p, f)
-      case PartialApp(op, g) =>
+      case App(op, g) =>
         App(op, (f > g)(TypeExpr.absorbArgs[V]))
       case other =>
         throw new NotImplementedError(s"$other (${summon[SourcePos]})")
@@ -65,13 +65,11 @@ sealed abstract class TypeExpr[V, K, L](using
     f: PartialArgs[TypeExpr[V, _, _], J, K],
   ): TypeExpr[V, J, L] =
     this match {
-      case PartialApp(op, g) =>
+      case App(op, g) =>
         val h = (f > g)(absorbL = TypeExpr.absorbArgs[V])
-        h.inKind.properKind match
-          case Left(TypeEq(Refl())) => App(op, h)
-          case Right(j)             => PartialApp(op, h)
+        App(op, h)
       case Wrap(op) =>
-        PartialApp(op, f)
+        App(op, f)
       case other =>
         throw new NotImplementedError(s"Composing $other after $f (${summon[SourcePos]})")
     }
@@ -136,12 +134,6 @@ sealed abstract class TypeExpr[V, K, L](using
             val op1 = compilePrimitive(fx, op)
             MappedMorphism(fk, args > op1.get(fx, op1.tgtMap), op1.tgtMap)
         }
-      case PartialApp(op, args) =>
-        args.foldTranslate[==>, tgt.<*>, tgt.None, F, Q](F.unit, fk, go) match {
-          case Exists.Some((args, fx)) =>
-            val op1 = compilePrimitive(fx, op)
-            MappedMorphism(fk, args > op1.get(fx, op1.tgtMap), op1.tgtMap)
-        }
       case TypeMismatch(a, b) =>
         throw NotImplementedError(s"TypeMismatch($a, $b) at ${summon[SourcePos]}")
       case ForbiddenSelfReference(v) =>
@@ -155,12 +147,6 @@ sealed abstract class TypeExpr[V, K, L](using
       case ForbiddenSelfReference(v) => ForbiddenSelfReference(f(v))
       case App(op, args) =>
         App(
-          op.vmap(f),
-          args.translate([x, y] => (t: TypeExpr[V, x, y]) => t.vmap(f)),
-        )
-      case p @ PartialApp(op, args) =>
-        import p.given
-        PartialApp(
           op.vmap(f),
           args.translate([x, y] => (t: TypeExpr[V, x, y]) => t.vmap(f)),
         )
@@ -216,17 +202,10 @@ object TypeExpr {
     value.outKind,
   )
 
-  case class App[V, K, L](
-    f: Primitive[V, K, L],
-    args: PartialArgs[TypeExpr[V, _, _], ○, K],
-  ) extends TypeExpr[V, ○, L](using summon, f.outKind)
-
-  case class PartialApp[V, K, L, M](
+  case class App[V, K, L, M](
     f: Primitive[V, L, M],
     args: PartialArgs[TypeExpr[V, _, _], K, L],
-  )(using
-    val inKindProper: ProperKind[K],
-  ) extends TypeExpr[V, K, M](using summon, f.outKind)
+  ) extends TypeExpr[V, K, M](using args.inKind, f.outKind)
 
   case class TypeMismatch[V, K: Kind, L: OutputKind](
     a: TypeExpr[V, K, L],
@@ -247,10 +226,10 @@ object TypeExpr {
     App(Primitive.Pair(), PartialArgs.introBoth(PartialArgs(a), PartialArgs(b)))
 
   def pair1[V](a: TypeExpr[V, ○, ●]): TypeExpr[V, ●, ●] =
-    PartialApp(Primitive.Pair(), PartialArgs.introFst(PartialArgs(a)))
+    App(Primitive.Pair(), PartialArgs.introFst(PartialArgs(a)))
 
   def pair2[V](b: TypeExpr[V, ○, ●]): TypeExpr[V, ●, ●] =
-    PartialApp(Primitive.Pair(), PartialArgs.introSnd(PartialArgs(b)))
+    App(Primitive.Pair(), PartialArgs.introSnd(PartialArgs(b)))
 
   def sum[V]: TypeExpr[V, ● × ●, ●] =
     Wrap(Primitive.Sum())
@@ -259,10 +238,10 @@ object TypeExpr {
     App(Primitive.Sum(), PartialArgs.introBoth(PartialArgs(a), PartialArgs(b)))
 
   def sum1[V](a: TypeExpr[V, ○, ●]): TypeExpr[V, ●, ●] =
-    PartialApp(Primitive.Sum(), PartialArgs.introFst(PartialArgs(a)))
+    App(Primitive.Sum(), PartialArgs.introFst(PartialArgs(a)))
 
   def sum2[V](b: TypeExpr[V, ○, ●]): TypeExpr[V, ●, ●] =
-    PartialApp(Primitive.Sum(), PartialArgs.introSnd(PartialArgs(b)))
+    App(Primitive.Sum(), PartialArgs.introSnd(PartialArgs(b)))
 
   def recCall[V](a: TypeExpr[V, ○, ●], b: TypeExpr[V, ○, ●]): TypeExpr[V, ○, ●] =
     App(Primitive.RecCall(), PartialArgs.introBoth(PartialArgs(a), PartialArgs(b)))
