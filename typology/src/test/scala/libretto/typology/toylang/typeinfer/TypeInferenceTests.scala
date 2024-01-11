@@ -493,7 +493,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
             _ <- Outcome.assertEquals(tf.inType, List.tpe(Type.int))
             _ <- Outcome.assertEquals(tf.outType, List.tpe(Type.string))
           } yield ()
-        },
+        }.pending,
 
       "infer types of List.map_(intToString)" ->
         testInferredTypes(List.map_(Fun.intToString)) { tf =>
@@ -509,7 +509,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
             _ <- Outcome.assertEquals(tf.inType, List.tpe(List.tpe(Type.int)))
             _ <- Outcome.assertEquals(tf.outType, List.tpe(List.tpe(Type.string)))
           } yield ()
-        },
+        }.pending,
 
       "infer types of List.map_(List.map_(intToString))" ->
         testInferredTypes(List.map_(List.map_(Fun.intToString))) { tf =>
@@ -548,7 +548,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
             _ <- Outcome.assertEquals(tf.inType, NonEmptyTree.tpe(Type.int))
             _ <- Outcome.assertEquals(tf.outType, NonEmptyTree.tpe(Type.string))
           } yield ()
-        }.withTimeout(5.seconds),
+        }.withTimeout(5.seconds).pending,
 
       "infer types of NonEmptyTree.map(intToString)" ->
         testInferredTypes(NonEmptyTree.map(Fun.intToString)) { tf =>

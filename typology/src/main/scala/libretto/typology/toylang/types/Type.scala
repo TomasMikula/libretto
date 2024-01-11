@@ -35,8 +35,9 @@ object Type {
     def unapply[V](t: Type[V]): Option[(Type[V], Type[V])] =
       t match {
         case TypeExpr.App(TypeExpr.Primitive.Pair(), args) =>
-          args match
-            case Atom(a) <*> Atom(b) => Some((a, b))
+          PartialArgs.extract(args) match
+            case Atom(a) <*> Atom(b) =>
+              Some((a, b))
         case _ =>
           None
       }
@@ -46,8 +47,9 @@ object Type {
     def unapply[V](t: Type[V]): Option[(Type[V], Type[V])] =
       t match {
         case TypeExpr.App(TypeExpr.Primitive.Sum(), args) =>
-          args match
-            case Atom(a) <*> Atom(b) => Some((a, b))
+          PartialArgs.extract(args) match
+            case Atom(a) <*> Atom(b) =>
+              Some((a, b))
         case _ =>
           None
       }
@@ -57,8 +59,9 @@ object Type {
     def unapply[V](t: Type[V]): Option[(Type[V], Type[V])] =
       t match {
         case TypeExpr.App(TypeExpr.Primitive.RecCall(), args) =>
-          args match
-            case Atom(a) <*> Atom(b) => Some((a, b))
+          PartialArgs.extract(args) match
+            case Atom(a) <*> Atom(b) =>
+              Some((a, b))
         case _ =>
           None
       }
@@ -67,7 +70,7 @@ object Type {
   object AbstractType {
     def unapply[V](t: Type[V]): Option[V] =
       t match {
-        case TypeExpr.AbstractType(v) => Some(v)
+        case TypeExpr.Wrap(TypeExpr.Primitive.AbstractType(v)) => Some(v)
         case _ => None
       }
   }

@@ -53,13 +53,10 @@ sealed abstract class TypeExpr[V, K, L](using
     f: PartialArgs[TypeExpr[V, _, _], ○, K],
   ): TypeExpr[V, ○, L] =
     this match {
-      case PFix(p, e) =>
-        p.applyTo(PartialArgs.introFst(f)) match {
-          case Routing.AppTransRes.Impl(q, g) =>
-            Fix(q, e.applyTo(g))
-        }
+      case Wrap(p) =>
+        App(p, f)
       case PartialApp(op, g) =>
-        App(op, PartialArgs.extract((f > g)(TypeExpr.absorbArgs[V])))
+        App(op, (f > g)(TypeExpr.absorbArgs[V]))
       case other =>
         throw new NotImplementedError(s"$other (${summon[SourcePos]})")
     }
@@ -71,7 +68,7 @@ sealed abstract class TypeExpr[V, K, L](using
       case PartialApp(op, g) =>
         val h = (f > g)(absorbL = TypeExpr.absorbArgs[V])
         h.inKind.properKind match
-          case Left(TypeEq(Refl())) => App(op, PartialArgs.extract(h))
+          case Left(TypeEq(Refl())) => App(op, h)
           case Right(j)             => PartialApp(op, h)
       case Wrap(op) =>
         PartialApp(op, f)
@@ -91,7 +88,7 @@ sealed abstract class TypeExpr[V, K, L](using
       fk,
       map_●,
       compilePrimitive =
-        [k, l, q] => (fk: F[k, q], p: Primitive[k, l]) => {
+        [k, l, q] => (fk: F[k, q], p: Primitive[V, k, l]) => {
           import Primitive.*
           p match
             case UnitType() =>
@@ -106,6 +103,12 @@ sealed abstract class TypeExpr[V, K, L](using
               MappedMorphism(F.pair(map_●, map_●), tgt.sum, map_●)
             case RecCall() =>
               MappedMorphism(F.pair(map_●, map_●), tgt.recCall, map_●)
+            case Fix(f, g) =>
+              MappedMorphism(F.unit, tgt.fix(TypeFun(f, g)), map_●)
+            case PFix(f, g) =>
+              MappedMorphism(map_●, tgt.pfix(TypeFun(f, g)), map_●)
+            case AbstractType(label) =>
+              MappedMorphism(F.unit, tgt.abstractTypeName(label), map_●)
         },
     )
 
@@ -113,31 +116,28 @@ sealed abstract class TypeExpr[V, K, L](using
     tgt: TypeAlgebra[V, ==>],
     fk: F[K, Q],
     map_● : F[●, tgt.Type],
-    compilePrimitive: [k, l, q] => (F[k, q], Primitive[k, l]) => MappedMorphism[==>, F, k, l],
+    compilePrimitive: [k, l, q] => (F[k, q], Primitive[V, k, l]) => MappedMorphism[==>, F, k, l],
   )(using
     F: MonoidalObjectMap[F, ×, ○, tgt.<*>, tgt.None],
   ): MappedMorphism[==>, F, K, L] = {
     import tgt.given
+
+    val go = [k, l, q] => (fkq: F[k, q], t: TypeExpr[V, k, l]) => {
+      val t1 = t.compile[==>, F, q](tgt, fkq, map_●, compilePrimitive)
+      Exists[[r] =>> (q ==> r, F[l, r]), t1.FB]((t1.get(fkq, t1.tgtMap), t1.tgtMap))
+    }
+
     this match
-      case Fix(f, g) =>
-        MappedMorphism(F.unit, tgt.fix(TypeFun(f, g)), map_●)
-      case PFix(f, g) =>
-        MappedMorphism(map_●, tgt.pfix(TypeFun(f, g)), map_●)
-      case AbstractType(label) =>
-        MappedMorphism(F.unit, tgt.abstractTypeName(label), map_●)
       case Wrap(op) =>
         compilePrimitive(fk, op)
       case App(op, args) =>
-        UnhandledCase.raise(s"${this}.compile")
+        args.foldTranslate[==>, tgt.<*>, tgt.None, F, Q](F.unit, fk, go) match {
+          case Exists.Some((args, fx)) =>
+            val op1 = compilePrimitive(fx, op)
+            MappedMorphism(fk, args > op1.get(fx, op1.tgtMap), op1.tgtMap)
+        }
       case PartialApp(op, args) =>
-        args.foldTranslate[==>, tgt.<*>, tgt.None, F, Q](
-          F.unit,
-          fk,
-          [k, l, q] => (fkq: F[k, q], t: TypeExpr[V, k, l]) => {
-            val t1 = t.compile[==>, F, q](tgt, fkq, map_●, compilePrimitive)
-            Exists[[r] =>> (q ==> r, F[l, r]), t1.FB]((t1.get(fkq, t1.tgtMap), t1.tgtMap))
-          },
-        ) match {
+        args.foldTranslate[==>, tgt.<*>, tgt.None, F, Q](F.unit, fk, go) match {
           case Exists.Some((args, fx)) =>
             val op1 = compilePrimitive(fx, op)
             MappedMorphism(fk, args > op1.get(fx, op1.tgtMap), op1.tgtMap)
@@ -150,61 +150,79 @@ sealed abstract class TypeExpr[V, K, L](using
 
   def vmap[W](f: V => W): TypeExpr[W, K, L] =
     this match {
-      case Wrap(f)                   => Wrap(f)
-      case AbstractType(v)           => AbstractType(f(v))
+      case Wrap(p)                   => Wrap(p.vmap(f))
       case TypeMismatch(a, b)        => TypeMismatch(a.vmap(f), b.vmap(f))
       case ForbiddenSelfReference(v) => ForbiddenSelfReference(f(v))
-      case Fix(g, h)                 => Fix(g, h.vmap(f))
-      case x @ PFix(g, h)            => import x.given; PFix(g, h.vmap(f))
       case App(op, args) =>
-        App(op, args.trans([x] => (t: TypeExpr[V, ○, x]) => t.vmap(f)))
+        App(
+          op.vmap(f),
+          args.translate([x, y] => (t: TypeExpr[V, x, y]) => t.vmap(f)),
+        )
       case p @ PartialApp(op, args) =>
         import p.given
-        PartialApp(op, args.translate([x, y] => (t: TypeExpr[V, x, y]) => t.vmap(f)))
+        PartialApp(
+          op.vmap(f),
+          args.translate([x, y] => (t: TypeExpr[V, x, y]) => t.vmap(f)),
+        )
     }
 }
 
 object TypeExpr {
-  sealed trait Primitive[K, L](using
+  sealed trait Primitive[V, K, L](using
     val inKind: Kind[K],
     val outKind: OutputKind[L],
-  )
+  ) {
+    import Primitive.*
 
-  object Primitive {
-    case class UnitType() extends Primitive[○, ●]
-    case class IntType() extends Primitive[○, ●]
-    case class StringType() extends Primitive[○, ●]
+    def vmap[W](f: V => W): Primitive[W, K, L] =
+      this match
+        case AbstractType(label) => AbstractType(f(label))
+        case Fix(g, h)           => Fix(g, h.vmap(f))
+        case x @ PFix(g, h)      => import x.given; PFix(g, h.vmap(f))
+        case UnitType()          => UnitType()
+        case IntType()           => IntType()
+        case StringType()        => StringType()
+        case Pair()              => Pair()
+        case Sum()               => Sum()
+        case RecCall()           => RecCall()
 
-    case class Pair() extends Primitive[● × ●, ●]
-    case class Sum() extends Primitive[● × ●, ●]
-    case class RecCall() extends Primitive[● × ●, ●]
   }
 
-  case class Fix[V, K](
-    f: Routing[●, K],
-    g: TypeExpr[V, K, ●],
-  ) extends TypeExpr[V, ○, ●]
+  object Primitive {
+    case class AbstractType[V](label: V) extends Primitive[V, ○, ●]
 
-  // TODO: Make the representation normalized (part of initial routing may possibly be factored out)
-  case class PFix[V, X](
-    f: Routing[● × ●, X],
-    g: TypeExpr[V, X, ●],
-  ) extends TypeExpr[V, ●, ●]
+    case class UnitType[V]() extends Primitive[V, ○, ●]
+    case class IntType[V]() extends Primitive[V, ○, ●]
+    case class StringType[V]() extends Primitive[V, ○, ●]
 
-  case class Wrap[V, K, L](value: Primitive[K, L]) extends TypeExpr[V, K, L](using
+    case class Pair[V]() extends Primitive[V, ● × ●, ●]
+    case class Sum[V]() extends Primitive[V, ● × ●, ●]
+    case class RecCall[V]() extends Primitive[V, ● × ●, ●]
+
+    case class Fix[V, K](
+      f: Routing[●, K],
+      g: TypeExpr[V, K, ●],
+    ) extends Primitive[V, ○, ●]
+
+    // TODO: Make the representation normalized (part of initial routing may possibly be factored out)
+    case class PFix[V, X](
+      f: Routing[● × ●, X],
+      g: TypeExpr[V, X, ●],
+    ) extends Primitive[V, ●, ●]
+  }
+
+  case class Wrap[V, K, L](value: Primitive[V, K, L]) extends TypeExpr[V, K, L](using
     value.inKind,
     value.outKind,
   )
 
-  case class AbstractType[V](label: V) extends TypeExpr[V, ○, ●]
-
   case class App[V, K, L](
-    f: Primitive[K, L],
-    args: Tupled[×, TypeExpr[V, ○, _], K],
+    f: Primitive[V, K, L],
+    args: PartialArgs[TypeExpr[V, _, _], ○, K],
   ) extends TypeExpr[V, ○, L](using summon, f.outKind)
 
   case class PartialApp[V, K, L, M](
-    f: Primitive[L, M],
+    f: Primitive[V, L, M],
     args: PartialArgs[TypeExpr[V, _, _], K, L],
   )(using
     val inKindProper: ProperKind[K],
@@ -220,13 +238,13 @@ object TypeExpr {
   ) extends TypeExpr[V, K, L]
 
   def abstractType[V](label: V): TypeExpr[V, ○, ●] =
-    AbstractType(label)
+    Wrap(Primitive.AbstractType(label))
 
   def pair[V]: TypeExpr[V, ● × ●, ●] =
     Wrap(Primitive.Pair())
 
   def pair[V](a: TypeExpr[V, ○, ●], b: TypeExpr[V, ○, ●]): TypeExpr[V, ○, ●] =
-    App(Primitive.Pair(), Tupled.atom(a) zip Tupled.atom(b))
+    App(Primitive.Pair(), PartialArgs.introBoth(PartialArgs(a), PartialArgs(b)))
 
   def pair1[V](a: TypeExpr[V, ○, ●]): TypeExpr[V, ●, ●] =
     PartialApp(Primitive.Pair(), PartialArgs.introFst(PartialArgs(a)))
@@ -238,7 +256,7 @@ object TypeExpr {
     Wrap(Primitive.Sum())
 
   def sum[V](a: TypeExpr[V, ○, ●], b: TypeExpr[V, ○, ●]): TypeExpr[V, ○, ●] =
-    App(Primitive.Sum(), Tupled.atom(a) zip Tupled.atom(b))
+    App(Primitive.Sum(), PartialArgs.introBoth(PartialArgs(a), PartialArgs(b)))
 
   def sum1[V](a: TypeExpr[V, ○, ●]): TypeExpr[V, ●, ●] =
     PartialApp(Primitive.Sum(), PartialArgs.introFst(PartialArgs(a)))
@@ -247,13 +265,13 @@ object TypeExpr {
     PartialApp(Primitive.Sum(), PartialArgs.introSnd(PartialArgs(b)))
 
   def recCall[V](a: TypeExpr[V, ○, ●], b: TypeExpr[V, ○, ●]): TypeExpr[V, ○, ●] =
-    App(Primitive.RecCall(), Tupled.atom(a) zip Tupled.atom(b))
+    App(Primitive.RecCall(), PartialArgs.introBoth(PartialArgs(a), PartialArgs(b)))
 
   def fix[V, K](f: Routing[●, K], g: TypeExpr[V, K, ●]): TypeExpr[V, ○, ●] =
-    Fix(f, g)
+    Wrap(Primitive.Fix(f, g))
 
   def pfix[V, X](f: Routing[● × ●, X], g: TypeExpr[V, X, ●]): TypeExpr[V, ●, ●] =
-    PFix(f, g)
+    Wrap(Primitive.PFix(f, g))
 
   def typeMismatch[V, K: Kind, L: OutputKind](
     a: TypeExpr[V, K, L],
