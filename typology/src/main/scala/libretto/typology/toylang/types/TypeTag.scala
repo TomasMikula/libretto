@@ -76,7 +76,7 @@ object TypeTag {
   }
 
   def diag: TypeTag[[x] =>> (x, x)] =
-    TypeFun(Routing.dup[●], TypeExpr.pair)
+    TypeFun(Routing.dup[●], TypeFun.pair)
 
   def toType[A](ta: TypeTag[A]): Type[ScalaTypeParam] =
     TypeFun.toExpr((ta: TypeFun[ScalaTypeParam, ?, ?]).asInstanceOf[TypeFun[ScalaTypeParam, ○, ●]])

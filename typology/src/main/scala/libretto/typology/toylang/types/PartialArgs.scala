@@ -1,6 +1,6 @@
 package libretto.typology.toylang.types
 
-import libretto.lambda.{MonoidalCategory, MonoidalObjectMap, Semigroupoid, Tupled, UnhandledCase}
+import libretto.lambda.{MonoidalCategory, MonoidalObjectMap, Tupled, UnhandledCase}
 import libretto.lambda.util.{Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds._

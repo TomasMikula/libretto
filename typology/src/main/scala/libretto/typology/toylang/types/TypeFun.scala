@@ -5,8 +5,10 @@ import libretto.typology.kinds._
 
 sealed trait TypeFun[V, K, L] {
   type X
+  type Expr[k, l] = TypeExpr[TypeConstructor[V, _, _], k, l]
+
   val pre: Routing[K, X]
-  val expr: TypeExpr[V, X, L]
+  val expr: Expr[X, L]
 
   given inKind: Kind[K] = pre.inKind
   given outKind: OutputKind[L] = expr.outKind
@@ -15,13 +17,13 @@ sealed trait TypeFun[V, K, L] {
     import that.pre.outKind
     import that.expr.outKind
 
-    this.pre.applyTo[TypeExpr[V, _, _], that.X](PartialArgs(that.expr)) match {
+    this.pre.applyTo[Expr, that.X](PartialArgs(that.expr)) match {
       case Routing.AppTransRes.Impl(q, e) =>
         TypeFun(that.pre > q, this.expr.applyTo(e))
     }
   }
 
-  def apply(t: TypeExpr[V, ○, K]): TypeExpr[V, ○, L] =
+  def apply(t: Expr[○, K]): Expr[○, L] =
     TypeFun.toExpr(this ∘ TypeFun.fromExpr(t))
 
   def compile[==>[_, _], F[_, _], Q](
@@ -33,86 +35,106 @@ sealed trait TypeFun[V, K, L] {
     F: MonoidalObjectMap[F, ×, ○, tgt.<*>, tgt.None],
   ): MappedMorphism[==>, F, K, L] = {
     import tgt.given
-    val pre1 = pre.compile[==>, F, tgt.<*>, tgt.None, Q](fk)(dupTypes)
-    pre1 > expr.compile(tgt, pre1.tgtMap, map_●)
+    val pre1: MappedMorphism[==>, F, K, X] =
+      pre.compile[==>, F, tgt.<*>, tgt.None, Q](fk)(dupTypes)
+    val expr1: MappedMorphism[==>, F, X, L] =
+      expr.compile(pre1.tgtMap, [k, l, q] => (fk: F[k, q], x: TypeConstructor[V, k, l]) => x.compile(tgt, fk, map_●))
+    pre1 > expr1
   }
 
   def vmap[W](f: V => W): TypeFun[W, K, L] =
-    TypeFun(pre, expr.vmap(f))
+    TypeFun(pre, expr.translate(TypeConstructor.vmap(f)))
 }
 
 object TypeFun {
-  def apply[V, K, P, L](r: Routing[K, P], f: TypeExpr[V, P, L]): TypeFun[V, K, L] =
+  def apply[V, K, P, L](r: Routing[K, P], f: TypeExpr[TypeConstructor[V, _, _], P, L]): TypeFun[V, K, L] =
     new TypeFun[V, K, L] {
       override type X = P
       override val pre = r
       override val expr = f
     }
 
-  def unapply[V, K, L](f: TypeFun[V, K, L]): (Routing[K, f.X], TypeExpr[V, f.X, L]) =
+  def apply[V, K, P, L](r: Routing[K, P], f: TypeFun[V, P, L]): TypeFun[V, K, L] =
+    TypeFun(r > f.pre, f.expr)
+
+  def unapply[V, K, L](f: TypeFun[V, K, L]): (Routing[K, f.X], TypeExpr[TypeConstructor[V, _, _], f.X, L]) =
     (f.pre, f.expr)
 
-  def fromExpr[V, K, L](e: TypeExpr[V, K, L]): TypeFun[V, K, L] = {
+  def fromExpr[V, K, L](e: TypeExpr[TypeConstructor[V, _, _], K, L]): TypeFun[V, K, L] = {
     import e.inKind
     TypeFun(Routing.id[K], e)
   }
 
-  def toExpr[V, L](f: TypeFun[V, ○, L]): TypeExpr[V, ○, L] =
-    Routing.proveId(f.pre).substituteCo[TypeExpr[V, _, L]](f.expr)
+  def toExpr[V, L](f: TypeFun[V, ○, L]): TypeExpr[TypeConstructor[V, _, _], ○, L] =
+    Routing.proveId(f.pre).substituteCo[TypeExpr[TypeConstructor[V, _, _], _, L]](f.expr)
 
   def unit[V]: TypeFun[V, ○, ●] =
-    fromExpr(TypeExpr.unit)
+    fromExpr(Type.unit)
 
   def int[V]: TypeFun[V, ○, ●] =
-    fromExpr(TypeExpr.int)
+    fromExpr(Type.int)
 
   def string[V]: TypeFun[V, ○, ●] =
-    fromExpr(TypeExpr.string)
+    fromExpr(Type.string)
 
   def pair[V]: TypeFun[V, ● × ●, ●] =
-    fromExpr(TypeExpr.pair)
+    fromExpr(Type.pair)
 
   def pair[V](a: TypeFun[V, ○, ●], b: TypeFun[V, ○, ●]): TypeFun[V, ○, ●] =
-    fromExpr(TypeExpr.pair(toExpr(a), toExpr(b)))
+    fromExpr(Type.pair(toExpr(a), toExpr(b)))
 
   def pair1[V](a: Type[V]): TypeFun[V, ●, ●] =
-    fromExpr(TypeExpr.pair1(a))
+    fromExpr(TypeExpr.App(TypeConstructor.Pair(), PartialArgs.introFst(PartialArgs(a))))
 
   def pair1[V](a: TypeFun[V, ○, ●]): TypeFun[V, ●, ●] =
     pair1(toExpr(a))
 
+  def pair2[V](b: Type[V]): TypeFun[V, ●, ●] =
+    fromExpr(TypeExpr.App(TypeConstructor.Pair(), PartialArgs.introSnd(PartialArgs(b))))
+
+  def pair2[V](b: TypeFun[V, ○, ●]): TypeFun[V, ●, ●] =
+    pair2(toExpr(b))
+
   def sum[V]: TypeFun[V, ● × ●, ●] =
-    fromExpr(TypeExpr.sum)
+    fromExpr(TypeExpr.Primitive(TypeConstructor.Sum()))
 
   def sum[V](a: TypeFun[V, ○, ●], b: TypeFun[V, ○, ●]): TypeFun[V, ○, ●] =
-    fromExpr(TypeExpr.sum(toExpr(a), toExpr(b)))
+    fromExpr(Type.sum(toExpr(a), toExpr(b)))
 
   def sum1[V](a: Type[V]): TypeFun[V, ●, ●] =
-    fromExpr(TypeExpr.sum1(a))
+    fromExpr(TypeExpr.App(TypeConstructor.Sum(), PartialArgs.introFst(PartialArgs(a))))
 
   def sum1[V](a: TypeFun[V, ○, ●]): TypeFun[V, ●, ●] =
     sum1(toExpr(a))
 
+  def sum2[V](b: Type[V]): TypeFun[V, ●, ●] =
+    fromExpr(TypeExpr.App(TypeConstructor.Sum(), PartialArgs.introSnd(PartialArgs(b))))
+
   def fix[V](f: TypeFun[V, ●, ●]): TypeFun[V, ○, ●] =
-    f match {
-      case TypeFun(pre, expr) => fromExpr(TypeExpr.fix(pre, expr))
-    }
+    fromExpr(Type.fix(f))
 
   def pfix[V](f: TypeFun[V, ● × ●, ●]): TypeFun[V, ●, ●] =
     f match {
-      case TypeFun(pre, expr) => fromExpr(TypeExpr.pfix(pre, expr))
+      case TypeFun(pre, expr) => fromExpr(TypeExpr.Primitive(TypeConstructor.PFix(pre, expr)))
     }
 
   def composeSnd[V, K, L, M, N](g: TypeFun[V, K × M, N], f: TypeFun[V, L, M])(using
     ProperKind[L],
   ): TypeFun[V, K × L, N] = {
-    def go[X, Y](f1: Routing[L, X], f2: TypeExpr[V, X, M], g1: Routing[K × M, Y], g2: TypeExpr[V, Y, N]): TypeFun[V, K × L, N] = {
+    def go[X, Y](
+      f1: Routing[L, X],
+      f2: TypeExpr[TypeConstructor[V, _, _], X, M],
+      g1: Routing[K × M, Y],
+      g2: TypeExpr[TypeConstructor[V, _, _], Y, N],
+    ): TypeFun[V, K × L, N] = {
       given ProperKind[K] = Kind.fst(g.inKind)
       given OutputKind[M] = f2.outKind
 
+      type Expr[k, l] = TypeExpr[TypeConstructor[V, _, _], k, l]
+
       f2.inKind.properKind match {
         case Left(x_eq_○) =>
-          val f20: TypeExpr[V, ○, M] = x_eq_○.substituteCo[TypeExpr[V, _, M]](f2)
+          val f20: Expr[○, M] = x_eq_○.substituteCo[Expr[_, M]](f2)
           g1.applyTo(PartialArgs.introSnd(PartialArgs(f20))) match {
             case Routing.AppTransRes.Impl(g1, f21) =>
               TypeFun(Routing.elimSnd[K, L] > g1, g2.applyTo(f21))
@@ -135,7 +157,9 @@ object TypeFun {
     given OutputKind[K] = a.outKind
     given ProperKind[L] = Kind.snd(f.inKind)
 
-    def go[X](a: TypeExpr[V, ○, K], f1: Routing[K × L, X], f2: TypeExpr[V, X, M]): TypeFun[V, L, M] = {
+    type Expr[k, l] = TypeExpr[TypeConstructor[V, _, _], k, l]
+
+    def go[X](a: Expr[○, K], f1: Routing[K × L, X], f2: Expr[X, M]): TypeFun[V, L, M] = {
       f1.applyTo(PartialArgs.introFst(PartialArgs(a))) match {
         case Routing.AppTransRes.Impl(f0, args) =>
           TypeFun(f0, f2.applyTo(args))
@@ -148,5 +172,5 @@ object TypeFun {
   }
 
   def abstractType[V](name: V): TypeFun[V, ○, ●] =
-    fromExpr(TypeExpr.abstractType(name))
+    fromExpr(TypeExpr.Primitive(TypeConstructor.AbstractType(name)))
 }

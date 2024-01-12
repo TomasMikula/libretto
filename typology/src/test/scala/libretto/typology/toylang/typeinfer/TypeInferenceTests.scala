@@ -586,7 +586,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
                 Routing.elimSnd,
                 Routing.swap,
               ): Routing[● × ●, ● × (● × ●)],
-              TypeExpr.pair.applyTo(PartialArgs.snd(PartialArgs(TypeExpr.pair))),
+              Type.pair.applyTo(PartialArgs.snd(PartialArgs(Type.pair))),
             )
 
           def tpeAt(a: Type, b: Type): Type =
