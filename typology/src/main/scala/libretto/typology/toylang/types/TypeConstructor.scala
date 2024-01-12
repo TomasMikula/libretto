@@ -24,38 +24,6 @@ sealed trait TypeConstructor[V, K, L](using
       case TypeMismatch(a, b)  => TypeMismatch(a.translate(go), b.translate(go))
       case ForbiddenSelfRef(v) => ForbiddenSelfRef(f(v))
     }
-
-  def compile[==>[_, _], F[_, _], Q](
-    tgt: TypeAlgebra[V, ==>],
-    fk: F[K, Q],
-    map_● : F[●, tgt.Type],
-  )(using
-    F: MonoidalObjectMap[F, ×, ○, tgt.<*>, tgt.None],
-  ): MappedMorphism[==>, F, K, L] =
-    this match {
-      case UnitType() =>
-        MappedMorphism(F.unit, tgt.unit, map_●)
-      case IntType() =>
-        MappedMorphism(F.unit, tgt.int, map_●)
-      case StringType() =>
-        MappedMorphism(F.unit, tgt.string, map_●)
-      case Pair() =>
-        MappedMorphism(F.pair(map_●, map_●), tgt.pair, map_●)
-      case Sum() =>
-        MappedMorphism(F.pair(map_●, map_●), tgt.sum, map_●)
-      case RecCall() =>
-        MappedMorphism(F.pair(map_●, map_●), tgt.recCall, map_●)
-      case Fix(f, g) =>
-        MappedMorphism(F.unit, tgt.fix(TypeFun(f, g)), map_●)
-      case PFix(f, g) =>
-        MappedMorphism(map_●, tgt.pfix(TypeFun(f, g)), map_●)
-      case AbstractType(label) =>
-        MappedMorphism(F.unit, tgt.abstractTypeName(label), map_●)
-      case TypeMismatch(a, b) =>
-        UnhandledCase.raise(s"TypeMismatch($a, $b)")
-      case ForbiddenSelfRef(v) =>
-        UnhandledCase.raise(s"ForbiddenSelfReference($v)")
-    }
 }
 
 object TypeConstructor {

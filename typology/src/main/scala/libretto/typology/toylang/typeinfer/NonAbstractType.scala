@@ -1,6 +1,6 @@
 package libretto.typology.toylang.typeinfer
 
-import libretto.lambda.{MonoidalObjectMap, SymmetricMonoidalCategory}
+import libretto.lambda.{MappedMorphism, MonoidalObjectMap, SymmetricMonoidalCategory}
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.scaletto.StarterKit._
@@ -8,7 +8,7 @@ import libretto.typology.inference.TypeOps
 import libretto.typology.kinds.{×, ○, ●}
 import libretto.typology.toylang.terms.TypedFun
 import libretto.typology.toylang.terms.TypedFun.Type
-import libretto.typology.toylang.types.{Label, ScalaTypeParam, TypeAlgebra, TypeFun, TypeTag}
+import libretto.typology.toylang.types.{Label, ScalaTypeParam, TypeConstructor, TypeFun, TypeTag}
 import libretto.scaletto.StarterKit
 import libretto.lambda.UnhandledCase
 
@@ -74,10 +74,10 @@ private[typeinfer] object NonAbstractType {
     val ct = compilationTarget[V, T](split, lift, absType)
     import ct.Map_●
     val g: ct.Arr[T, T] =
-      f.compile[ct.Arr, ct.as, T](
-        ct.typeAlgebra,
+      import ct.given
+      f.compile[ct.Arr, |*|, One, ct.as, T](
         Map_●,
-        Map_●,
+        ct.compilePrimitive,
         [k, q] => (kq: ct.as[k, q]) => ct.split[k, q](kq),
       ).get(Map_●, Map_●)
     g > J.awaitPosFst
@@ -659,7 +659,7 @@ private[typeinfer] object NonAbstractType {
   ) {
     type Arr[K, L] = K -⚬ (Done |*| L)
 
-    val category: SymmetricMonoidalCategory[Arr, |*|, One] =
+    given category: SymmetricMonoidalCategory[Arr, |*|, One] =
       new SymmetricMonoidalCategory[Arr, |*|, One] {
 
         override def id[A]: Arr[A, A] =
@@ -707,34 +707,64 @@ private[typeinfer] object NonAbstractType {
           )
       }
 
-    val typeAlgebra: TypeAlgebra.Of[ScalaTypeParam, Arr, T, |*|, One] =
-      new TypeAlgebra[ScalaTypeParam, Arr] {
-        override type Type = T
-        override type <*>[A, B] = A |*| B
-        override type None = One
+    object compiledPrimitives:
+      val unit: Arr[One, T] =
+        done > λ { case +(d) => d |*| lift(NonAbstractType.unit(d)) }
+      val int: Arr[One, T] =
+        done > λ { case +(d) => d |*| lift(NonAbstractType.int(d)) }
+      val string: Arr[One, T] =
+        done > λ { case +(d) => d |*| lift(NonAbstractType.string(d)) }
+      val pair: Arr[T |*| T, T] =
+        λ { case t |*| u => constant(done) |*| lift(NonAbstractType.pair(t |*| u)) }
+      val sum: Arr[T |*| T, T] =
+        λ { case t |*| u => constant(done) |*| lift(NonAbstractType.either(t |*| u)) }
+      val recCall: Arr[T |*| T, T] =
+        λ { case t |*| u => constant(done) |*| lift(NonAbstractType.recCall(t |*| u)) }
+      def fix(f: TypeFun[●, ●]): Arr[One, T] =
+        const(f) > NonAbstractType.fix > lift > introFst(done)
+      def pfix(f: TypeFun[● × ●, ●]): Arr[T, T] =
+        introFst(const(f)) > NonAbstractType.pfix > lift > introFst(done)
+      def abstractTypeName(name: ScalaTypeParam): Arr[One, T] =
+        absType(Label.ScalaTParam(name)) > introFst(done)
 
-        override def unit: Arr[One, T] =
-          done > λ { case +(d) => d |*| lift(NonAbstractType.unit(d)) }
-        override def int: Arr[One, T] =
-          done > λ { case +(d) => d |*| lift(NonAbstractType.int(d)) }
-        override def string: Arr[One, T] =
-          done > λ { case +(d) => d |*| lift(NonAbstractType.string(d)) }
-        override def pair: Arr[T |*| T, T] =
-          λ { case t |*| u => constant(done) |*| lift(NonAbstractType.pair(t |*| u)) }
-        override def sum: Arr[T |*| T, T] =
-          λ { case t |*| u => constant(done) |*| lift(NonAbstractType.either(t |*| u)) }
-        override def recCall: Arr[T |*| T, T] =
-          λ { case t |*| u => constant(done) |*| lift(NonAbstractType.recCall(t |*| u)) }
-        override def fix(f: TypeFun[●, ●]): Arr[One, T] =
-          const(f) > NonAbstractType.fix > lift > introFst(done)
-        override def pfix(f: TypeFun[● × ●, ●]): Arr[T, T] =
-          introFst(const(f)) > NonAbstractType.pfix > lift > introFst(done)
-        override def abstractTypeName(name: ScalaTypeParam): Arr[One, T] =
-          absType(Label.ScalaTParam(name)) > introFst(done)
-
-        override given category: SymmetricMonoidalCategory[Arr, |*|, One] =
-          compilationTarget.this.category
+    def doCompilePrimitive[k, l, q](
+      fk: k as q,
+      x: TypeConstructor[ScalaTypeParam, k, l],
+    ): MappedMorphism[Arr, as, k, l] = {
+      import TypeConstructor.{Pair as _, *}
+      val cp = compiledPrimitives
+      x match {
+        case UnitType() =>
+          MappedMorphism(Map_○, cp.unit, Map_●)
+        case IntType() =>
+          MappedMorphism(Map_○, cp.int, Map_●)
+        case StringType() =>
+          MappedMorphism(Map_○, cp.string, Map_●)
+        case TypeConstructor.Pair() =>
+          MappedMorphism(Pair(Map_●, Map_●), cp.pair, Map_●)
+        case Sum() =>
+          MappedMorphism(Pair(Map_●, Map_●), cp.sum, Map_●)
+        case RecCall() =>
+          MappedMorphism(Pair(Map_●, Map_●), cp.recCall, Map_●)
+        case Fix(f, g) =>
+          MappedMorphism(Map_○, cp.fix(TypeFun(f, g)), Map_●)
+        case PFix(f, g) =>
+          MappedMorphism(Map_●, cp.pfix(TypeFun(f, g)), Map_●)
+        case AbstractType(label) =>
+          MappedMorphism(Map_○, cp.abstractTypeName(label), Map_●)
+        case TypeMismatch(a, b) =>
+          UnhandledCase.raise(s"TypeMismatch($a, $b)")
+        case ForbiddenSelfRef(v) =>
+          UnhandledCase.raise(s"ForbiddenSelfReference($v)")
       }
+    }
+
+    val compilePrimitive: [k, l, q] => (k as q, TypeConstructor[ScalaTypeParam, k, l]) => MappedMorphism[Arr, as, k, l] =
+      [k, l, q] => (
+        fk: k as q,
+        x: TypeConstructor[ScalaTypeParam, k, l],
+      ) =>
+        doCompilePrimitive[k, l, q](fk, x)
 
     sealed trait as[K, Q]
 

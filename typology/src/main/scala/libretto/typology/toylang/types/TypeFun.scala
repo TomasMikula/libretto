@@ -2,6 +2,7 @@ package libretto.typology.toylang.types
 
 import libretto.lambda.{MappedMorphism, MonoidalObjectMap}
 import libretto.typology.kinds._
+import libretto.lambda.SymmetricMonoidalCategory
 
 sealed trait TypeFun[V, K, L] {
   type X
@@ -26,19 +27,18 @@ sealed trait TypeFun[V, K, L] {
   def apply(t: Expr[○, K]): Expr[○, L] =
     TypeFun.toExpr(this ∘ TypeFun.fromExpr(t))
 
-  def compile[==>[_, _], F[_, _], Q](
-    tgt: TypeAlgebra[V, ==>],
+  def compile[==>[_, _], <*>[_, _], One, F[_, _], Q](
     fk: F[K, Q],
-    map_● : F[●, tgt.Type],
-    dupTypes: [k, q] => F[k, q] => (q ==> tgt.<*>[q, q]),
+    compilePrimitive: [k, l, q] => (F[k, q], TypeConstructor[V, k, l]) => MappedMorphism[==>, F, k, l],
+    dupTypes: [k, q] => F[k, q] => (q ==> q <*> q),
   )(using
-    F: MonoidalObjectMap[F, ×, ○, tgt.<*>, tgt.None],
+    tgt: SymmetricMonoidalCategory[==>, <*>, One],
+    F: MonoidalObjectMap[F, ×, ○, <*>, One],
   ): MappedMorphism[==>, F, K, L] = {
-    import tgt.given
     val pre1: MappedMorphism[==>, F, K, X] =
-      pre.compile[==>, F, tgt.<*>, tgt.None, Q](fk)(dupTypes)
+      pre.compile[==>, F, <*>, One, Q](fk)(dupTypes)
     val expr1: MappedMorphism[==>, F, X, L] =
-      expr.compile(pre1.tgtMap, [k, l, q] => (fk: F[k, q], x: TypeConstructor[V, k, l]) => x.compile(tgt, fk, map_●))
+      expr.compile(pre1.tgtMap, compilePrimitive)
     pre1 > expr1
   }
 
