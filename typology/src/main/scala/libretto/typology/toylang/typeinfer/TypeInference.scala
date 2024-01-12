@@ -5,7 +5,7 @@ import libretto.lambda.util.Monad.syntax._
 import libretto.scaletto.StarterKit._
 import libretto.typology.inference.Propagator
 import libretto.typology.toylang.terms.{Fun, FunT, TypedFun}
-import libretto.typology.toylang.types.{AbstractTypeLabel, Label, Type, TypeTag}
+import libretto.typology.toylang.types.{AbstractTypeLabel, Label, Type, TypeConstructor, TypeTag}
 import libretto.typology.util.State
 
 object TypeInference {
@@ -248,7 +248,7 @@ object TypeInference {
           λ.* { one =>
             val fixF = Tp(fixT[Val[Label], Tp, f](f.f)(one))
             val fFixF = apply1T(f.f)(Tp(fixT[Val[Label], Tp, f](f.f)(one)))
-            val tf = constantVal(TypedFun.fix[f](TypeTag.toTypeFun(f.f).vmap(Label.ScalaTParam(_))))
+            val tf = constantVal(TypedFun.fix[f](TypeTag.toTypeFun(f.f).translate(TypeConstructor.vmap(Label.ScalaTParam(_)))))
             fFixF |*| tf |*| fixF
           }
         )
@@ -257,7 +257,7 @@ object TypeInference {
           λ.* { one =>
             val fixF = Tp(fixT[Val[Label], Tp, f](f.f)(one))
             val fFixF = apply1T(f.f)(Tp(fixT[Val[Label], Tp, f](f.f)(one)))
-            val tf = constantVal(TypedFun.unfix[f](TypeTag.toTypeFun(f.f).vmap(Label.ScalaTParam(_))))
+            val tf = constantVal(TypedFun.unfix[f](TypeTag.toTypeFun(f.f).translate(TypeConstructor.vmap(Label.ScalaTParam(_)))))
             fixF |*| tf |*| fFixF
           }
         )

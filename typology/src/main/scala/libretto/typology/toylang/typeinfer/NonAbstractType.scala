@@ -12,9 +12,9 @@ import libretto.typology.toylang.types.{Label, ScalaTypeParam, TypeConstructor, 
 import libretto.scaletto.StarterKit
 import libretto.lambda.UnhandledCase
 
-type TypeFun[K, L] = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, K, L]
-type TypeTagF = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, ●, ●]
-type TypeTagPF = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, ● × ●, ●]
+type TypeFun[K, L] = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, K, L]
+type TypeTagF = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, ●, ●]
+type TypeTagPF = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, ● × ●, ●]
 
 private[typeinfer] type NonAbstractTypeF[V, T, X] = (
   (
@@ -535,10 +535,10 @@ private[typeinfer] object NonAbstractType {
                     case Right(x) => // fix or pfix
                       x switch {
                         case Left(tf) =>
-                          tf :>> mapVal { tf => Type.fix(tf.vmap(Label.ScalaTParam(_))) }
+                          tf :>> mapVal { tf => Type.fix(tf.translate(TypeConstructor.vmap(Label.ScalaTParam(_)))) }
                         case Right(tf |*| p) =>
                           (tf ** outputElem(p)) :>> mapVal { case (tf, p) =>
-                            Type.fix(TypeFun.appFst(tf.vmap(Label.ScalaTParam(_)), TypeFun.fromExpr(p)))
+                            Type.fix(TypeFun.appFst(tf.translate(TypeConstructor.vmap(Label.ScalaTParam(_))), TypeFun.fromExpr(p)))
                           }
                       }
                     case Left(x) =>

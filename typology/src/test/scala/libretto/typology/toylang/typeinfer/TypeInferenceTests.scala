@@ -14,8 +14,8 @@ import scala.concurrent.duration.*
 
 class TypeInferenceTests extends ScalatestStarterTestSuite {
   type Type          = libretto.typology.toylang.types.Type[AbstractTypeLabel]
-  type TypeFun[K, L] = libretto.typology.toylang.types.TypeFun[AbstractTypeLabel, K, L]
-  type TypeTagF      = libretto.typology.toylang.types.TypeFun[ScalaTypeParam, ●, ●]
+  type TypeFun[K, L] = libretto.typology.toylang.types.Type.Fun[AbstractTypeLabel, K, L]
+  type TypeTagF      = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, ●, ●]
 
   def eitherBimap[A, B, C, D](f: Fun[A, C], g: Fun[B, D]): Fun[Either[A, B], Either[C, D]] =
     Fun.either(
@@ -26,7 +26,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
   type InfiniteList[A] = Fix[(A, _)]
   object InfiniteList {
     def tpe(elemType: Type): Type =
-      Type.fix(TypeFun.pair1(elemType))
+      Type.fix(Type.Fun.pair1(elemType))
 
     def fix[A](using TypeTag[A]): Fun[(A, InfiniteList[A]), InfiniteList[A]] =
       Fun.fix[(A, _)]

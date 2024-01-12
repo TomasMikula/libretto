@@ -34,7 +34,7 @@ object Type {
       ),
     )
 
-  def fix[V](f: TypeFun[V, ●, ●]): Type[V] =
+  def fix[V](f: TypeFun[TypeConstructor[V, _, _], ●, ●]): Type[V] =
     TypeExpr.Primitive(TypeConstructor.Fix(f.pre, f.expr))
 
   def recCall[V](a: Type[V], b: Type[V]): Type[V] =
@@ -97,5 +97,82 @@ object Type {
         case TypeExpr.Primitive(TypeConstructor.AbstractType(v)) => Some(v)
         case _ => None
       }
+  }
+
+  type Fun[V, K, L] = TypeFun[TypeConstructor[V, _, _], K, L]
+
+  object Fun {
+    import TypeFun.{fromExpr, toExpr}
+
+    def unit[V]: Type.Fun[V, ○, ●] =
+      fromExpr(Type.unit)
+
+    def int[V]: Type.Fun[V, ○, ●] =
+      fromExpr(Type.int)
+
+    def string[V]: Type.Fun[V, ○, ●] =
+      fromExpr(Type.string)
+
+    def pair[V]: Type.Fun[V, ● × ●, ●] =
+      fromExpr(Type.pair)
+
+    def pair[V](a: Type.Fun[V, ○, ●], b: Type.Fun[V, ○, ●]): Type.Fun[V, ○, ●] =
+      fromExpr(Type.pair(toExpr(a), toExpr(b)))
+
+    def pair1[V](a: Type[V]): Type.Fun[V, ●, ●] =
+      fromExpr(
+        TypeExpr.App(
+          TypeConstructor.Pair(),
+          PartialArgs.introFst(PartialArgs(a)),
+        )
+      )
+
+    def pair1[V](a: Type.Fun[V, ○, ●]): Type.Fun[V, ●, ●] =
+      pair1(toExpr(a))
+
+    def pair2[V](b: Type[V]): Type.Fun[V, ●, ●] =
+      fromExpr(
+        TypeExpr.App(
+          TypeConstructor.Pair(),
+          PartialArgs.introSnd(PartialArgs(b)),
+        )
+      )
+
+    def pair2[V](b: Type.Fun[V, ○, ●]): Type.Fun[V, ●, ●] =
+      pair2(toExpr(b))
+
+    def sum[V]: Type.Fun[V, ● × ●, ●] =
+      fromExpr(TypeExpr.Primitive(TypeConstructor.Sum()))
+
+    def sum[V](a: Type.Fun[V, ○, ●], b: Type.Fun[V, ○, ●]): Type.Fun[V, ○, ●] =
+      fromExpr(Type.sum(toExpr(a), toExpr(b)))
+
+    def sum1[V](a: Type[V]): Type.Fun[V, ●, ●] =
+      fromExpr(
+        TypeExpr.App(
+          TypeConstructor.Sum(),
+          PartialArgs.introFst(PartialArgs(a)),
+        )
+      )
+
+    def sum1[V](a: Type.Fun[V, ○, ●]): Type.Fun[V, ●, ●] =
+      sum1(toExpr(a))
+
+    def sum2[V](b: Type[V]): Type.Fun[V, ●, ●] =
+      fromExpr(
+        TypeExpr.App(
+          TypeConstructor.Sum(),
+          PartialArgs.introSnd(PartialArgs(b)),
+        )
+      )
+
+    def fix[V](f: Type.Fun[V, ●, ●]): Type.Fun[V, ○, ●] =
+      fromExpr(Type.fix(f))
+
+    def pfix[V](f: Type.Fun[V, ● × ●, ●]): Type.Fun[V, ●, ●] =
+      fromExpr(TypeExpr.Primitive(TypeConstructor.PFix(f.pre, f.expr)))
+
+    def abstractType[V](name: V): Type.Fun[V, ○, ●] =
+      fromExpr(TypeExpr.Primitive(TypeConstructor.AbstractType(name)))
   }
 }
