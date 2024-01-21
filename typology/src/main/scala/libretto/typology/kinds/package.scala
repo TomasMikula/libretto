@@ -1,5 +1,9 @@
 package libretto.typology
 
+import libretto.lambda.StrongZippable
+import libretto.lambda.util.{BiInjective, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
+
 package object kinds {
 
   /** Phantom type representing the kind of types. Unicode character U+25CF */
@@ -7,6 +11,11 @@ package object kinds {
 
   /** Phantom type representing a pair of kinds. Unicode character U+00D7. */
   sealed trait ×[K, L]
+  object × {
+    given BiInjective[×] with
+      override def unapply[A, B, X, Y](ev: (A × B) =:= (X × Y)): (A =:= X, B =:= Y) =
+        ev match { case TypeEq(Refl()) => (summon, summon) }
+  }
 
   /** Phantom type representing the "unit" kind. Neutral element for [[×]]. Unicode character U+25CB. */
   sealed trait ○
@@ -89,12 +98,20 @@ package object kinds {
         case Kind.Prod(k, l) => Prod(k, l)
       }
 
+    def unpair[K, L](kl: ProperKind[K × L]): (ProperKind[K], ProperKind[L]) =
+      kl match
+        case ProperKind.Prod(k, l) => (k, l)
+
     def unpair[K, L](kl: Kind[K × L]): (ProperKind[K], ProperKind[L]) =
       kl match
         case Kind.Prod(k, l) => (k, l)
 
     def cannotBeUnit(p: ProperKind[○]): Nothing =
       throw AssertionError("Impossible")
+
+    given StrongZippable[×, ProperKind] with
+      override def zip[A, B](a: ProperKind[A], b: ProperKind[B]): ProperKind[A × B] = a × b
+      override def unzip[A, B](ab: ProperKind[A × B]): (ProperKind[A], ProperKind[B]) = unpair(ab)
   }
 
   /** Witnesses that `K` is a legal output kind of type functions. */
