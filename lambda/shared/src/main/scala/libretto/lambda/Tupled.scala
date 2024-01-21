@@ -31,11 +31,18 @@ object Tupled {
     def asBin: Bin[|*|, [x] =>> x, F, A] =
       a
 
-    def foldMap[G[_]](
+    def foldMapWith[G[_]](
       map: [x] => F[x] => G[x],
       zip: [x, y] => (G[x], G[y]) => G[x |*| y],
     ): G[A] =
-      a.foldMap[G](map, zip)
+      a.foldMapWith[G](map, zip)
+
+    def foldMap[G[_]](
+      map: [x] => F[x] => G[x],
+    )(using
+      G: Zippable[|*|, G],
+    ): G[A] =
+      a.foldMap[G](map)
 
     def foldMap0[B](
       map: [x] => F[x] => B,
@@ -44,7 +51,7 @@ object Tupled {
       a.foldMap0[B](map, reduce)
 
     def foldWith(zip: [x, y] => (F[x], F[y]) => F[x |*| y]): F[A] =
-      foldMap[F]([x] => (fx: F[x]) => fx, zip)
+      foldMapWith[F]([x] => (fx: F[x]) => fx, zip)
 
     def fold(using F: Zippable[|*|, F]): F[A] =
       foldWith([x, y] => (fx: F[x], fy: F[y]) => F.zip(fx, fy))

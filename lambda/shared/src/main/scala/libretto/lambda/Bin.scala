@@ -36,11 +36,21 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
 
   def foldMap[G[_]](
     map: [x] => F[x] => G[T[x]],
+  )(using
+    G: Zippable[<*>, G],
+  ): G[A] =
+    foldMapWith(
+      map,
+      [x, y] => (gx: G[x], gy: G[y]) => G.zip(gx, gy),
+    )
+
+  def foldMapWith[G[_]](
+    map: [x] => F[x] => G[T[x]],
     zip: [x, y] => (G[x], G[y]) => G[x <*> y],
   ): G[A] =
     this match {
       case Leaf(a)      => map(a)
-      case Branch(l, r) => zip(l.foldMap(map, zip), r.foldMap(map, zip))
+      case Branch(l, r) => zip(l.foldMapWith(map, zip), r.foldMapWith(map, zip))
     }
 
   def foldMap0[B](
@@ -48,7 +58,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     reduce: (B, B) => B,
   ): B = {
     type G[x] = B
-    foldMap[G](map, [x, y] => (x: G[x], y: G[y]) => reduce(x, y))
+    foldMapWith[G](map, [x, y] => (x: G[x], y: G[y]) => reduce(x, y))
   }
 
   def partition[G[_], H[_]](
