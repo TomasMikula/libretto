@@ -1,6 +1,7 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Exists, SourcePos}
+import libretto.lambda.util.{Exists, SourcePos, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
 
 sealed trait Capture[**[_, _], F[_], A, B] {
   import Capture.*
@@ -32,6 +33,24 @@ sealed trait Capture[**[_, _], F[_], A, B] {
     Capture.fromFocus(path, value) match
       case Exists.Some((f, k)) =>
         Absorbed.Impl(k, f.to[A] > this)
+
+  def exposeCaptured(using sh: Shuffle[**]): Either[A =:= B, Capture.Exposed[sh.type, **, F, A, B]] =
+    import sh.~⚬
+    this match
+      case NoCapture() => Left(summon[A =:= B])
+      case CaptureFst(b1, f) =>
+        f.exposeCaptured match
+          case Left(TypeEq(Refl())) => Right(Capture.Exposed(b1, sh.TransferOpt.None()))
+          case Right(exp) => UnhandledCase.raise(s"$this.exposeCaptured")
+      case CaptureSnd(f, b2) =>
+        UnhandledCase.raise(s"$this.exposeCaptured")
+      case InFst(f) =>
+        UnhandledCase.raise(s"$this.exposeCaptured")
+      case InSnd(f) =>
+        UnhandledCase.raise(s"$this.exposeCaptured")
+      case Par(f1, f2) =>
+        UnhandledCase.raise(s"$this.exposeCaptured")
+
 }
 
 object Capture {
@@ -170,4 +189,29 @@ object Capture {
 
     def inSnd[X]: Absorbed[**, F, [x] =>> X ** P[x], X ** B] =
       this match { case Impl(k, r) => Impl(k.inSnd, r.inSnd) }
+
+  sealed trait Exposed[Sh <: Shuffle[**], **[_, _], F[_], A, B]:
+    type X
+    type Y1
+    type Y2
+    def ev: (Y1 ** Y2) =:= B
+    val shuffle: Sh
+    def captured: Tupled[**, F, X]
+    def route: shuffle.TransferOpt[X, A, Y1, Y2]
+
+  object Exposed:
+    def apply[**[_, _], F[_], P, A, B1, B2](using
+      sh: Shuffle[**],
+    )(
+      capt: Tupled[**, F, P],
+      rout: sh.TransferOpt[P, A, B1, B2],
+    ): Exposed[sh.type, **, F, A, B1 ** B2] =
+      new Exposed[sh.type, **, F, A, B1 ** B2]:
+        override type X = P
+        override type Y1 = B1
+        override type Y2 = B2
+        override def ev: (Y1 ** Y2) =:= (B1 ** B2) = summon
+        override val shuffle = sh
+        override def captured = capt
+        override def route = rout
 }
