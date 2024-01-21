@@ -38,15 +38,20 @@ object TypeConstructor {
   case class RecCall[V]() extends TypeConstructor[V, ● × ●, ●]
 
   case class Fix[V, K](
-    f: Routing[●, K],
-    g: TypeExpr[TypeConstructor[V, _, _], K, ●],
-  ) extends TypeConstructor[V, ○, ●]
+    m: Multiplier[×, ●, K],
+    g: TypeExpr.Open[TypeConstructor[V, _, _], K, ●],
+  ) extends TypeConstructor[V, ○, ●] {
+    override def vmap[W](f: V => W): Fix[W, K] =
+      Fix(m, g.translate(TypeConstructor.vmap(f)))
+  }
 
-  // TODO: Make the representation normalized (part of initial routing may possibly be factored out)
-  case class PFix[V, X](
-    f: Routing[● × ●, X],
-    g: TypeExpr[TypeConstructor[V, _, _], X, ●],
-  ) extends TypeConstructor[V, ●, ●]
+  case class PFix[V, P, X](
+    m: Multiplier[×, ●, X],
+    g: TypeExpr.Open.LTrimmed[TypeConstructor[V, _, _], P, X, ●],
+  ) extends TypeConstructor[V, P, ●](using g.inKind1.kind) {
+    override def vmap[W](f: V => W): PFix[W, P, X] =
+      PFix(m, g.translate(TypeConstructor.vmap(f)))
+  }
 
   case class TypeMismatch[V, K: Kind, L: OutputKind](
     a: TypeExpr[TypeConstructor[V, _, _], K, L],

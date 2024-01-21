@@ -1,16 +1,14 @@
 package libretto.typology.toylang.typeinfer
 
-import libretto.lambda.{MappedMorphism, MonoidalObjectMap, SymmetricMonoidalCategory}
+import libretto.lambda.{MappedMorphism, MonoidalObjectMap, SymmetricMonoidalCategory, UnhandledCase}
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.scaletto.StarterKit._
 import libretto.typology.inference.TypeOps
-import libretto.typology.kinds.{×, ○, ●}
+import libretto.typology.kinds.{Kind, ×, ○, ●}
 import libretto.typology.toylang.terms.TypedFun
-import libretto.typology.toylang.terms.TypedFun.Type
-import libretto.typology.toylang.types.{Label, ScalaTypeParam, TypeConstructor, TypeFun, TypeTag}
+import libretto.typology.toylang.types.{Label, Routing, ScalaTypeParam, Type, TypeConstructor, TypeExpr, TypeFun, TypeTag}
 import libretto.scaletto.StarterKit
-import libretto.lambda.UnhandledCase
 
 type TypeFun[K, L] = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, K, L]
 type TypeTagF = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, ●, ●]
@@ -24,7 +22,10 @@ private[typeinfer] type NonAbstractTypeF[V, T, X] = (
   |+| Done // unit
   |+| Done // int
   |+| Done // string
-  |+| (Val[TypeTagF] |+| (Val[TypeTagPF] |*| T)) // fix or pfix
+  |+| ( // fix or pfix
+    Val[TypeConstructor.Fix[ScalaTypeParam, ?]]
+    |+| (Val[TypeConstructor.PFix[ScalaTypeParam, ●, ?]] |*| T)
+  )
   |+| (T |*| T) // recCall
   |+| (T |*| T) // either
   |+| (T |*| T) // pair
@@ -48,40 +49,40 @@ private[typeinfer] object NonAbstractType {
   def recCall[V, T]: (T |*| T) -⚬ NonAbstractType[V, T] =
     pack ∘ injectL ∘ injectL ∘ injectR
 
-  def fix[V, T]: Val[TypeTagF] -⚬ NonAbstractType[V, T] =
+  def fix[V, T]: Val[TypeConstructor.Fix[ScalaTypeParam, ?]] -⚬ NonAbstractType[V, T] =
     pack ∘ injectL ∘ injectL ∘ injectL ∘ injectR ∘ injectL
 
-  def fixT[V, T, F[_]](F: TypeTag[F]): One -⚬ NonAbstractType[V, T] =
-    fix ∘ const(TypeTag.toTypeFun(F))
+  // def fixT[V, T, F[_]](F: TypeTag[F]): One -⚬ NonAbstractType[V, T] =
+  //   fix ∘ const(TypeTag.toTypeFun(F))
 
-  def pfix[V, T]: (Val[TypeTagPF] |*| T) -⚬ NonAbstractType[V, T] =
+  def pfix[V, T]: (Val[TypeConstructor.PFix[ScalaTypeParam, ●, ?]] |*| T) -⚬ NonAbstractType[V, T] =
     pack ∘ injectL ∘ injectL ∘ injectL ∘ injectR ∘ injectR
 
-  def apply1T[V, T, F[_]](
-    F: TypeTag[F],
-    split: T -⚬ (T |*| T),
-    lift: NonAbstractType[V, T] -⚬ T,
-    absType: Label => (One -⚬ T),
-  )(using Junction.Positive[T]): T -⚬ T =
-    apply1(TypeTag.toTypeFun(F), split, lift, absType)
+  // def apply1T[V, T, F[_]](
+  //   F: TypeTag[F],
+  //   split: T -⚬ (T |*| T),
+  //   lift: NonAbstractType[V, T] -⚬ T,
+  //   absType: Label => (One -⚬ T),
+  // )(using Junction.Positive[T]): T -⚬ T =
+  //   apply1(TypeTag.toTypeFun(F), split, lift, absType)
 
-  def apply1[V, T](
-    f: TypeTagF,
-    split: T -⚬ (T |*| T),
-    lift: NonAbstractType[V, T] -⚬ T,
-    absType: Label => (One -⚬ T),
-  )(using J: Junction.Positive[T]): T -⚬ T = {
-    val ct = compilationTarget[V, T](split, lift, absType)
-    import ct.Map_●
-    val g: ct.Arr[T, T] =
-      import ct.given
-      f.compile[ct.Arr, |*|, One, ct.as, T](
-        Map_●,
-        ct.compilePrimitive,
-        [k, q] => (kq: ct.as[k, q]) => ct.split[k, q](kq),
-      ).get(Map_●, Map_●)
-    g > J.awaitPosFst
-  }
+  // def apply1[V, T](
+  //   f: TypeTagF,
+  //   split: T -⚬ (T |*| T),
+  //   lift: NonAbstractType[V, T] -⚬ T,
+  //   absType: Label => (One -⚬ T),
+  // )(using J: Junction.Positive[T]): T -⚬ T = {
+  //   val ct = CompilationTarget[V, T](split, lift, absType)
+  //   import ct.Map_●
+  //   val g: ct.Arr[T, T] =
+  //     import ct.given
+  //     f.compile[ct.Arr, |*|, One, ct.as, T](
+  //       Map_●,
+  //       ct.compilePrimitive,
+  //       [k, q] => (kq: ct.as[k, q]) => ct.split[k, q](kq),
+  //     ).get(Map_●, Map_●)
+  //   g > J.awaitPosFst
+  // }
 
   def string[V, T]: Done -⚬ NonAbstractType[V, T] =
     pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
@@ -97,6 +98,28 @@ private[typeinfer] object NonAbstractType {
 
   def mismatch[V, T]: (NonAbstractType[V, T] |*| NonAbstractType[V, T]) -⚬ NonAbstractType[V, T] =
     pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL
+
+  def lift[V, T](
+    inject: NonAbstractType[V, T] -⚬ T,
+    absType: Label => (One -⚬ T),
+    t: Type[ScalaTypeParam],
+  )(using
+    J: Junction.Positive[T], // TODO: eliminate (compile directly to `One -⚬ T`)
+  ): One -⚬ T = {
+    import libretto.typology.toylang.types.{TypeConstructor => TC}
+
+    val ct = new CompilationTarget[V, T](inject, absType)
+    import ct.{Map_○, Map_●}
+
+    val g: ct.Arr[One, T] =
+      import ct.given
+      t.compile[ct.Arr, |*|, One, ct.as, One](
+        Map_○,
+        ct.compilePrimitive,
+      ).get(Map_○, Map_●)
+
+    g > J.awaitPosFst
+  }
 
   def isPair[V, T]: NonAbstractType[V, T] -⚬ (NonAbstractType[V, T] |+| (T |*| T)) =
     λ { t =>
@@ -509,9 +532,9 @@ private[typeinfer] object NonAbstractType {
   }
 
   def output[V, T](
-    outputElem: T -⚬ Val[Type],
-    selfRef: V -⚬ Val[Type],
-  ): NonAbstractType[V, T] -⚬ Val[Type] = rec { self =>
+    outputElem: T -⚬ Val[Type[Label]],
+    selfRef: V -⚬ Val[Type[Label]],
+  ): NonAbstractType[V, T] -⚬ Val[Type[Label]] = rec { self =>
     λ { x =>
       unpack(x) switch {
         case Right(x1 |*| x2) => // pair
@@ -534,11 +557,11 @@ private[typeinfer] object NonAbstractType {
                   x switch {
                     case Right(x) => // fix or pfix
                       x switch {
-                        case Left(tf) =>
-                          tf :>> mapVal { tf => Type.fix(tf.translate(TypeConstructor.vmap(Label.ScalaTParam(_)))) }
-                        case Right(tf |*| p) =>
-                          (tf ** outputElem(p)) :>> mapVal { case (tf, p) =>
-                            Type.fix(TypeFun.appFst(tf.translate(TypeConstructor.vmap(Label.ScalaTParam(_))), TypeFun.fromExpr(p)))
+                        case Left(f) =>
+                          f :>> mapVal { f => Type.fix(f.vmap(Label.ScalaTParam(_))) }
+                        case Right(pf |*| p) =>
+                          (pf ** outputElem(p)) :>> mapVal { case (pf, p) =>
+                            Type.Fun.pfix(pf.vmap(Label.ScalaTParam(_))).apply(p)
                           }
                       }
                     case Left(x) =>
@@ -652,12 +675,38 @@ private[typeinfer] object NonAbstractType {
       NonAbstractType.awaitPosFst[V, T](T.awaitPosFst, V.awaitPosFst)
   }
 
-  class compilationTarget[V, T](
-    splitT: T -⚬ (T |*| T),
+  class CompiledPrimitives[V, T](
+    lift: NonAbstractType[V, T] -⚬ T,
+    absType: Label => (One -⚬ T),
+  ):
+    val unit: One -⚬ T =
+      done > NonAbstractType.unit > lift
+    val int: One -⚬ T =
+      done > NonAbstractType.int > lift
+    val string: One -⚬ T =
+      done > NonAbstractType.string > lift
+    val pair: (T |*| T) -⚬ T =
+      NonAbstractType.pair > lift
+    val sum: (T |*| T) -⚬ T =
+      NonAbstractType.either > lift
+    val recCall: (T |*| T) -⚬ T =
+      NonAbstractType.recCall > lift
+    def fix[X](f: TypeConstructor.Fix[ScalaTypeParam, X]): One -⚬ T =
+      const(f) > NonAbstractType.fix > lift
+    def pfix[X](f: TypeConstructor.PFix[ScalaTypeParam, ●, X]): T -⚬ T =
+      λ { t =>
+        (constantVal(f) |*| t) :>> NonAbstractType.pfix :>> lift
+      }
+    def abstractTypeName(name: ScalaTypeParam): One -⚬ T =
+      absType(Label.ScalaTParam(name))
+
+  class CompilationTarget[V, T](
     lift: NonAbstractType[V, T] -⚬ T,
     absType: Label => (One -⚬ T),
   ) {
     type Arr[K, L] = K -⚬ (Done |*| L)
+
+    val cp = CompiledPrimitives(lift, absType)
 
     given category: SymmetricMonoidalCategory[Arr, |*|, One] =
       new SymmetricMonoidalCategory[Arr, |*|, One] {
@@ -707,51 +756,35 @@ private[typeinfer] object NonAbstractType {
           )
       }
 
-    object compiledPrimitives:
-      val unit: Arr[One, T] =
-        done > λ { case +(d) => d |*| lift(NonAbstractType.unit(d)) }
-      val int: Arr[One, T] =
-        done > λ { case +(d) => d |*| lift(NonAbstractType.int(d)) }
-      val string: Arr[One, T] =
-        done > λ { case +(d) => d |*| lift(NonAbstractType.string(d)) }
-      val pair: Arr[T |*| T, T] =
-        λ { case t |*| u => constant(done) |*| lift(NonAbstractType.pair(t |*| u)) }
-      val sum: Arr[T |*| T, T] =
-        λ { case t |*| u => constant(done) |*| lift(NonAbstractType.either(t |*| u)) }
-      val recCall: Arr[T |*| T, T] =
-        λ { case t |*| u => constant(done) |*| lift(NonAbstractType.recCall(t |*| u)) }
-      def fix(f: TypeFun[●, ●]): Arr[One, T] =
-        const(f) > NonAbstractType.fix > lift > introFst(done)
-      def pfix(f: TypeFun[● × ●, ●]): Arr[T, T] =
-        introFst(const(f)) > NonAbstractType.pfix > lift > introFst(done)
-      def abstractTypeName(name: ScalaTypeParam): Arr[One, T] =
-        absType(Label.ScalaTParam(name)) > introFst(done)
-
     def doCompilePrimitive[k, l, q](
       fk: k as q,
       x: TypeConstructor[ScalaTypeParam, k, l],
     ): MappedMorphism[Arr, as, k, l] = {
       import TypeConstructor.{Pair as _, *}
-      val cp = compiledPrimitives
       x match {
         case UnitType() =>
-          MappedMorphism(Map_○, cp.unit, Map_●)
+          MappedMorphism(Map_○, cp.unit > introFst(done), Map_●)
         case IntType() =>
-          MappedMorphism(Map_○, cp.int, Map_●)
+          MappedMorphism(Map_○, cp.int > introFst(done), Map_●)
         case StringType() =>
-          MappedMorphism(Map_○, cp.string, Map_●)
+          MappedMorphism(Map_○, cp.string > introFst(done), Map_●)
         case TypeConstructor.Pair() =>
-          MappedMorphism(Pair(Map_●, Map_●), cp.pair, Map_●)
+          MappedMorphism(Pair(Map_●, Map_●), cp.pair > introFst(done), Map_●)
         case Sum() =>
-          MappedMorphism(Pair(Map_●, Map_●), cp.sum, Map_●)
+          MappedMorphism(Pair(Map_●, Map_●), cp.sum > introFst(done), Map_●)
         case RecCall() =>
-          MappedMorphism(Pair(Map_●, Map_●), cp.recCall, Map_●)
-        case Fix(f, g) =>
-          MappedMorphism(Map_○, cp.fix(TypeFun(f, g)), Map_●)
-        case PFix(f, g) =>
-          MappedMorphism(Map_●, cp.pfix(TypeFun(f, g)), Map_●)
+          MappedMorphism(Pair(Map_●, Map_●), cp.recCall > introFst(done), Map_●)
+        case f @ Fix(_, _) =>
+          MappedMorphism(Map_○, cp.fix(f) > introFst(done), Map_●)
+        case p @ PFix(_, _) =>
+          p.inKind match
+            case Kind.Type =>
+              summon[k =:= ●]
+              MappedMorphism(Map_●, cp.pfix(p) > introFst(done), Map_●)
+            case other =>
+              UnhandledCase.raise(s"Unsupported recursive type parameterized by multiple types")
         case AbstractType(label) =>
-          MappedMorphism(Map_○, cp.abstractTypeName(label), Map_●)
+          MappedMorphism(Map_○, cp.abstractTypeName(label) > introFst(done), Map_●)
         case TypeMismatch(a, b) =>
           UnhandledCase.raise(s"TypeMismatch($a, $b)")
         case ForbiddenSelfRef(v) =>
@@ -775,7 +808,9 @@ private[typeinfer] object NonAbstractType {
       f2: K2 as Q2,
     ) extends as[K1 × K2, Q1 |*| Q2]
 
-    def split[K, Q](kq: K as Q): Arr[Q, Q |*| Q] =
+    def split[K, Q](splitT: T -⚬ (T |*| T))(
+      kq: K as Q,
+    ): Arr[Q, Q |*| Q] =
       kq match {
         case Map_● =>
           splitT > introFst(done)
@@ -810,7 +845,7 @@ private[typeinfer] object NonAbstractType {
       }
   }
 
-  given TypeOps[NonAbstractType[Val[Label], _], Type, Label] with {
+  given TypeOps[NonAbstractType[Val[Label], _], Type[Label], Label] with {
     override def map[A, B](f: A -⚬ B): NonAbstractType[Val[Label], A] -⚬ NonAbstractType[Val[Label], B] =
       NonAbstractType.map(f)
 
@@ -827,7 +862,7 @@ private[typeinfer] object NonAbstractType {
     override def split[A](f: A -⚬ (A |*| A)): NonAbstractType[Val[Label], A] -⚬ (NonAbstractType[Val[Label], A] |*| NonAbstractType[Val[Label], A]) =
       NonAbstractType.split(f)
 
-    override def output[A](f: A -⚬ Val[Type]): NonAbstractType[Val[Label], A] -⚬ Val[Type] =
+    override def output[A](f: A -⚬ Val[Type[Label]]): NonAbstractType[Val[Label], A] -⚬ Val[Type[Label]] =
       NonAbstractType.output(f, mapVal(Type.forbiddenSelfReference(_)))
 
     override def close[A](f: A -⚬ Done): NonAbstractType[Val[Label], A] -⚬ Done =

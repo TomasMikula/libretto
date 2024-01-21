@@ -1,6 +1,6 @@
 package libretto.typology.toylang.types
 
-import libretto.lambda.{MappedMorphism, MonoidalObjectMap, SymmetricMonoidalCategory, UnhandledCase}
+import libretto.lambda.{MappedMorphism, MonoidalObjectMap, Shuffle, SymmetricMonoidalCategory, UnhandledCase}
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds._
@@ -331,4 +331,49 @@ object Routing {
       case other =>
         throw new NotImplementedError(s"$other (${summon[SourcePos]})")
     }
+
+  def toMultiplier[K, L](r: Routing[K, L])(using
+    k: OutputKind[K],
+    l: ProperKind[L],
+  ): Multiplier[×, K, L] =
+    r match
+      case Id() =>
+        Multiplier.Id()
+      case AndThen(f, g) =>
+        UnhandledCase.raise(s"Routing.toMultiplier($r)")
+      case Par(f1, f2) =>
+        UnhandledCase.raise(s"Routing.toMultiplier($r)")
+      case AssocLR() =>
+        UnhandledCase.raise(s"Routing.toMultiplier($r)")
+      case AssocRL() =>
+        UnhandledCase.raise(s"Routing.toMultiplier($r)")
+      case Swap() =>
+        UnhandledCase.raise(s"Routing.toMultiplier($r)")
+      case Elim() =>
+        UnhandledCase.raise(s"Routing.toMultiplier($r)")
+      case ElimFst() =>
+        UnhandledCase.raise(s"Routing.toMultiplier($r)")
+      case ElimSnd() =>
+        UnhandledCase.raise(s"Routing.toMultiplier($r)")
+      case Dup() =>
+        UnhandledCase.raise(s"Routing.toMultiplier($r)")
+
+
+  def traceSnd[K1, K2, L](r: Routing[K1 × K2, L])(using
+    k2: OutputKind[K2],
+    l: ProperKind[L],
+  ): TraceSndRes[K1, K2, L] =
+    UnhandledCase.raise(s"Routing.traceSnd($r)")
+
+  sealed trait TraceSndRes[K1, K2, L]
+  object TraceSndRes {
+    case class FstEliminated[K1, K2, L](m: Multiplier[×, K2, L]) extends TraceSndRes[K1, K2, L]
+    case class SndEliminated[K1, K2, L](r: Routing[K1, L]) extends TraceSndRes[K1, K2, L]
+
+    class Traced[K1, K2, Q1, Q2, L1, L2](using sh: Shuffle[×])(
+      r: Routing[K1, Q1],
+      m: Multiplier[×, K2, Q2],
+      tr: sh.TransferOpt[Q1, Q2, L1, L2],
+    ) extends TraceSndRes[K1, K2, L1 × L2]
+  }
 }

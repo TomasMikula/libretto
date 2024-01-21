@@ -4,6 +4,8 @@ import libretto.lambda.{MonoidalCategory, MonoidalObjectMap, Tupled, UnhandledCa
 import libretto.lambda.util.{Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds._
+import libretto.typology.util.Either3
+import scala.annotation.targetName
 
 /** Represents partial type arguments.
  *
@@ -66,6 +68,17 @@ sealed trait PartialArgs[F[_, _], K, L] {
       case Id()                  => F.id
       case thiz: Proper[f, k, l] => thiz.foldProper
 
+  // def foldAbstractly(using F: PartialArgs.Abstractly[F]): F[K, L] =
+  //   this match
+  //     case Id() => F.id
+  //     case Lift(f) => UnhandledCase.raise(s"$this.foldAbstractly")
+  //     case Par(f1, f2) => UnhandledCase.raise(s"$this.foldAbstractly")
+  //     case Fst(f) => UnhandledCase.raise(s"$this.foldAbstractly")
+  //     case Snd(f) => UnhandledCase.raise(s"$this.foldAbstractly")
+  //     case IntroFst(f1, f2) => F.introFst(f1.foldAbstractly, f2.foldAbstractly)
+  //     case IntroSnd(f1, f2) => UnhandledCase.raise(s"$this.foldAbstractly")
+  //     case IntroBoth(f1, f2) => UnhandledCase.raise(s"$this.foldAbstractly")
+
   def foldTranslate[G[_, _]](h: [x, y] => F[x, y] => G[x, y])(using
     G: MonoidalCategory[G, ×, ○],
   ): G[K, L] =
@@ -103,6 +116,54 @@ sealed trait PartialArgs[F[_, _], K, L] {
 
   def extract(using ev: K =:= ○): Tupled[×, F[○, _], L] =
     PartialArgs.extract(this.from[○](using ev.flip))
+
+  def split[G[_, _], H[_, _]](
+    f: [k, l] => F[k, l] => Exists[[x] =>> (G[k, x], ProperKind[x], H[x, l])],
+  ): Exists[[X] =>> (PartialArgs[G, K, X], PartialArgs[H, X, L])] =
+    this match
+      case Id() =>
+        Exists((Id(), Id()))
+      case l @ Lift(p) =>
+        import l.given
+        f(p) match
+          case Exists.Some((g, x, h)) =>
+            Exists((Lift(g)(using summon, x), Lift(h)(using x.kind)))
+      case Par(f1, f2) =>
+        UnhandledCase.raise(s"$this.split")
+      case Fst(f) =>
+        UnhandledCase.raise(s"$this.split")
+      case Snd(f) =>
+        UnhandledCase.raise(s"$this.split")
+      case i @ IntroFst(f1, f2) =>
+        import i.given
+        (f1.split(f), f2.split(f)) match
+          case (Exists.Some((g1, h1)), Exists.Some((g2, h2))) =>
+            Exists((IntroFst(proper(g1), g2), par(h1, h2)(using g1.outKind, g2.outKind)))
+      case IntroSnd(f1, f2) =>
+        UnhandledCase.raise(s"$this.split")
+      case IntroBoth(f1, f2) =>
+        UnhandledCase.raise(s"$this.split")
+
+  // def split[G[_, _], H[_, _]](
+  //   f: [k, l] => F[k, l] => Either3[G[k, l], Exists[[x] =>> (G[k, x], H[x, l])], H[k, l]],
+  // ): Exists[[X] =>> (PartialArgs[G, K, X], PartialArgs[H, X, L])] =
+  //   this match
+  //     case Id() =>
+  //       UnhandledCase.raise(s"$this.split")
+  //     case Lift(f) =>
+  //       UnhandledCase.raise(s"$this.split")
+  //     case Par(f1, f2) =>
+  //       UnhandledCase.raise(s"$this.split")
+  //     case Fst(f) =>
+  //       UnhandledCase.raise(s"$this.split")
+  //     case Snd(f) =>
+  //       UnhandledCase.raise(s"$this.split")
+  //     case IntroFst(f1, f2) =>
+  //       UnhandledCase.raise(s"$this.split")
+  //     case IntroSnd(f1, f2) =>
+  //       UnhandledCase.raise(s"$this.split")
+  //     case IntroBoth(f1, f2) =>
+  //       UnhandledCase.raise(s"$this.split")
 }
 
 object PartialArgs {
@@ -154,10 +215,11 @@ object PartialArgs {
 
   case class Lift[F[_, _], K, L](f: F[K, L])(using
     k: Kind[K],
-    val outputKind: OutputKind[L],
+    // val outputKind: OutputKind[L],
+    override val outKind: ProperKind[L],
   ) extends PartialArgs.Proper[F, K, L] {
     override def inKind: Kind[K] = k
-    override def outKind: ProperKind[L] = outputKind.properKind
+    // override def outKind: ProperKind[L] = outputKind.properKind
 
     override def composeProper[J](that: Proper[F, J, K])(
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
@@ -273,10 +335,10 @@ object PartialArgs {
       UnhandledCase.raise(s"$that > $this")
   }
 
-  def apply[F[_, _], K: Kind, L: OutputKind](f: F[K, L]): PartialArgs.Proper[F, K, L] =
+  def apply[F[_, _], K: Kind, L: ProperKind](f: F[K, L]): PartialArgs.Proper[F, K, L] =
     lift(f)
 
-  def lift[F[_, _], K: Kind, L: OutputKind](f: F[K, L]): PartialArgs.Proper[F, K, L] =
+  def lift[F[_, _], K: Kind, L: ProperKind](f: F[K, L]): PartialArgs.Proper[F, K, L] =
     Lift(f)
 
   def par[F[_, _], K1: ProperKind, K2: ProperKind, L1, L2](
@@ -352,4 +414,45 @@ object PartialArgs {
       case _: Fst[f, k, l, m]        => throw new AssertionError("Impossible: ○ != k × m")
       case _: Snd[f, k, l, m]        => throw new AssertionError("Impossible: ○ != k × l")
 
+  def fromTupled[F[_, _], L](
+    fl: Tupled[×, F[○, _], L],
+    properOutKind: [l] => F[○, l] => ProperKind[l],
+  ): PartialArgs[F, ○, L] =
+    fl.foldMapWith[PartialArgs[F, ○, _]](
+      map = [x] => (fx: F[○, x]) =>
+        given ProperKind[x] = properOutKind(fx)
+        lift(fx),
+      zip = [x, y] => (x: PartialArgs[F, ○, x], y: PartialArgs[F, ○, y]) =>
+        introBoth(x, y)
+    )
+
+  def flatten[F[_, _], K, L](a: PartialArgs[PartialArgs[F, _, _], K, L]): PartialArgs[F, K, L] =
+    a match
+      case i @ Id() =>
+        import i.given
+        Id()
+      case Lift(f) =>
+        f
+      case Par(f1, f2) =>
+        UnhandledCase.raise(s"PartialArgs.flatten($a)")
+      case f: Fst[f, k, l, m] =>
+        import f.given
+        fst[F, k, l, m](flatten(f.f))
+      case Snd(f2) =>
+        UnhandledCase.raise(s"PartialArgs.flatten($a)")
+      case i @ IntroFst(f1, f2) =>
+        import i.given
+        IntroFst(proper(flatten(f1)), flatten(f2))
+      case IntroSnd(f1, f2) =>
+        UnhandledCase.raise(s"PartialArgs.flatten($a)")
+      case IntroBoth(f1, f2) =>
+        UnhandledCase.raise(s"PartialArgs.flatten($a)")
+
+  // trait Abstractly[PA[_, _]]:
+  //   def id[K]: PA[K, K]
+
+  //   def introFst[K, L, M](
+  //     f1: PA[○, K],
+  //     f2: PA[L, M],
+  //   ): PA[L, K × M]
 }

@@ -27,6 +27,11 @@ sealed trait TypeFun[TC[_, _], K, L] {
   def apply(t: Expr[○, K]): Expr[○, L] =
     TypeFun.toExpr(this ∘ TypeFun.fromExpr(t))
 
+  def applyTo[J](args: PartialArgs[Expr, J, K]): TypeFun[TC, J, L] =
+    this.pre.applyTo(args) match
+      case Routing.AppTransRes.Impl(p, a) =>
+        TypeFun(p, this.expr.applyTo(a))
+
   def translate[TC1[_, _]](f: [k, l] => TC[k, l] => TC1[k, l]): TypeFun[TC1, K, L] =
     TypeFun(pre, expr.translate(f))
 

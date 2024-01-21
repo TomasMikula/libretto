@@ -4,23 +4,52 @@ import libretto.lambda.{Sink, SymmetricSemigroupalCategory, Tupled}
 import libretto.lambda.util.SourcePos
 import libretto.typology.toylang.types.{Fix, RecCall, TypeTag}
 
-case class Fun[A, B](value: FunT[Fun, A, B]) {
+sealed trait Fun[A, B] {
   def >[C](that: Fun[B, C]): Fun[A, C] =
-    Fun(FunT.AndThen(this, that))
-
-  override def toString: String =
-    value.toString
+    Fun.AndThen(this, that)
 }
 
 object Fun {
+  case class IdFun[A]() extends Fun[A, A]
+
+  case class AndThen[A, B, C](f: Fun[A, B], g: Fun[B, C]) extends Fun[A, C]
+
+  case class Par[A1, A2, B1, B2](f1: Fun[A1, B1], f2: Fun[A2, B2]) extends Fun[(A1, A2), (B1, B2)]
+
+  case class AssocLR[A, B, C]() extends Fun[((A, B), C), (A, (B, C))]
+  case class AssocRL[A, B, C]() extends Fun[(A, (B, C)), ((A, B), C)]
+  case class Swap[A, B]() extends Fun[(A, B), (B, A)]
+
+  case class EitherF[A, B, C](f: Fun[A, C], g: Fun[B, C]) extends Fun[A Either B, C]
+  case class InjectL[A, B]() extends Fun[A, A Either B]
+  case class InjectR[A, B]() extends Fun[B, A Either B]
+
+  case class Distribute[A, B, C]() extends Fun[(A, Either[B, C]), Either[(A, B), (A, C)]]
+
+  case class Dup[A]() extends Fun[A, (A, A)]
+  case class Prj1[A, B]() extends Fun[(A, B), A]
+  case class Prj2[A, B]() extends Fun[(A, B), B]
+
+  case class FixF[F[_]](f: TypeTag[F]) extends Fun[F[Fix[F]], Fix[F]]
+  case class UnfixF[F[_]](f: TypeTag[F]) extends Fun[Fix[F], F[Fix[F]]]
+
+  case class Rec[A, B](f: Fun[(RecCall[A, B], A), B]) extends Fun[A, B]
+  case class Recur[A, B]() extends Fun[(RecCall[A, B], A), B]
+
+  case class ConstInt(n: Int) extends Fun[Unit, Int]
+
+  case class AddInts() extends Fun[(Int, Int), Int]
+
+  case class IntToString() extends Fun[Int, String]
+
   def id[A]: Fun[A, A] =
-    Fun(FunT.IdFun())
+    IdFun()
 
   def andThen[A, B, C](f: Fun[A, B], g: Fun[B, C]): Fun[A, C] =
-    Fun(FunT.AndThen(f, g))
+    AndThen(f, g)
 
   def par[A1, A2, B1, B2](f1: Fun[A1, B1], f2: Fun[A2, B2]): Fun[(A1, A2), (B1, B2)] =
-    Fun(FunT.Par(f1, f2))
+    Par(f1, f2)
 
   def fst[A1, A2, B1](f1: Fun[A1, B1]): Fun[(A1, A2), (B1, A2)] =
     par(f1, id)
@@ -29,43 +58,43 @@ object Fun {
     par(id, f2)
 
   def assocLR[A, B, C]: Fun[((A, B), C), (A, (B, C))] =
-    Fun(FunT.AssocLR())
+    AssocLR()
 
   def assocRL[A, B, C]: Fun[(A, (B, C)), ((A, B), C)] =
-    Fun(FunT.AssocRL())
+    AssocRL()
 
   def swap[A, B]: Fun[(A, B), (B, A)] =
-    Fun(FunT.Swap())
+    Swap()
 
   def injectL[A, B]: Fun[A, A Either B] =
-    Fun(FunT.InjectL())
+    InjectL()
 
   def injectR[A, B]: Fun[B, A Either B] =
-    Fun(FunT.InjectR())
+    InjectR()
 
   def either[A, B, C](f: Fun[A, C], g: Fun[B, C]): Fun[A Either B, C] =
-    Fun(FunT.EitherF(f, g))
+    EitherF(f, g)
 
   def distributeL[A, B, C]: Fun[(A, Either[B, C]), Either[(A, B), (A, C)]] =
-    Fun(FunT.Distribute())
+    Distribute()
 
   def dup[A]: Fun[A, (A, A)] =
-    Fun(FunT.Dup())
+    Dup()
 
   def prj1[A, B]: Fun[(A, B), A] =
-    Fun(FunT.Prj1())
+    Prj1()
 
   def prj2[A, B]: Fun[(A, B), B] =
-    Fun(FunT.Prj2())
+    Prj2()
 
   def fix[F[_]](using f: TypeTag[F]): Fun[F[Fix[F]], Fix[F]] =
-    Fun(FunT.FixF[Fun, F](f))
+    FixF[F](f)
 
   def unfix[F[_]](using f: TypeTag[F]): Fun[Fix[F], F[Fix[F]]] =
-    Fun(FunT.UnfixF[Fun, F](f))
+    UnfixF[F](f)
 
   def rec[A, B](f: Fun[(RecCall[A, B], A), B]): Fun[A, B] =
-    Fun(FunT.Rec(f))
+    Rec(f)
 
   def recFun[A, B](f: LambdaContext ?=> Expr[RecCall[A, B]] => Expr[A] => Expr[B]): Fun[A, B] = {
     val g: Fun[(RecCall[A, B], A), B] =
@@ -74,16 +103,16 @@ object Fun {
   }
 
   def recur[A, B]: Fun[(RecCall[A, B], A), B] =
-    Fun(FunT.Recur())
+    Recur()
 
   def constInt(n: Int): Fun[Unit, Int] =
-    Fun(FunT.ConstInt(n))
+    ConstInt(n)
 
   def addInts: Fun[(Int, Int), Int] =
-    Fun(FunT.AddInts())
+    AddInts()
 
   def intToString: Fun[Int, String] =
-    Fun(FunT.IntToString())
+    IntToString()
 
   private given SymmetricSemigroupalCategory[Fun, Tuple2] with {
     override def andThen[A, B, C](f: Fun[A, B], g: Fun[B, C]): Fun[A, C] = Fun.andThen(f, g)

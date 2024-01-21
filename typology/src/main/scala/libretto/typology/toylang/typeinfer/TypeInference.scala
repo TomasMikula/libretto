@@ -4,9 +4,9 @@ import libretto.lambda.util.{Monad, SourcePos}
 import libretto.lambda.util.Monad.syntax._
 import libretto.scaletto.StarterKit._
 import libretto.typology.inference.Propagator
-import libretto.typology.toylang.terms.{Fun, FunT, TypedFun}
-import libretto.typology.toylang.types.{AbstractTypeLabel, Label, Type, TypeConstructor, TypeTag}
-import libretto.typology.util.State
+import libretto.typology.toylang.terms.{Fun, TypedFun}
+import libretto.typology.toylang.types.{AbstractTypeLabel, Label, ScalaTypeParam, Type, TypeConstructor, TypeTag}
+import libretto.typology.util.{Either3, State}
 
 object TypeInference {
   def inferTypes[A, B](f: Fun[A, B]): One -⚬ Val[TypedFun[A, B]] = {
@@ -46,7 +46,7 @@ object TypeInference {
   ): M[One -⚬ (pg.Tp |*| Val[TypedFun[A, B]] |*| pg.Tp)] = {
     // println(s"reconstructTypes($f)")
     import gen.newVar
-    import NonAbstractType.{either, fixT, int, pair, recCall, string, unit}
+    import NonAbstractType.{either, /*fixT,*/ int, pair, recCall, string, unit}
     import pg.{Tp, TypeOutlet, label, merge, output, split}
 
     val nested: pg.Nested = pg.nested
@@ -70,16 +70,23 @@ object TypeInference {
     ): $[pg.Tp |*| Val[Type[Label]]] =
       pg.abstractTypeTap(constant(label(Label.Abstr(v))))
 
-    def apply1T[G[_]](G: TypeTag[G]): Tp -⚬ Tp =
-      NonAbstractType.apply1T(
-        G,
-        split,
-        pg.lift,
+    // def apply1T[G[_]](G: TypeTag[G]): Tp -⚬ Tp =
+    //   NonAbstractType.apply1T(
+    //     G,
+    //     split,
+    //     pg.lift,
+    //     v => label(v) > pg.abstractTypeTap > snd(neglect) > awaitPosSnd,
+    //   )
+
+    def liftType(t: Type[ScalaTypeParam]): One -⚬ Tp =
+      NonAbstractType.lift(
+        Tp,
         v => label(v) > pg.abstractTypeTap > snd(neglect) > awaitPosSnd,
+        t,
       )
 
-    f.value match {
-      case FunT.IdFun() =>
+    f match {
+      case Fun.IdFun() =>
         for {
           v <- newVar
         } yield
@@ -87,7 +94,7 @@ object TypeInference {
             val a |*| t |*| b = newAbstractType(v)
             a |*| (t :>> mapVal(TypedFun.Id(_))) |*| b
           }
-      case FunT.AndThen(f, g) =>
+      case Fun.AndThen(f, g) =>
         for {
           tf <- reconstructTypes(f)
           tg <- reconstructTypes(g)
@@ -99,7 +106,7 @@ object TypeInference {
             val h = (f ** x ** g) :>> mapVal { case ((f, x), g) => TypedFun.andThen(f, x, g) }
             nested.unnest(a) |*| h |*| nested.unnest(b)
           }
-      case FunT.Par(f1, f2) =>
+      case Fun.Par(f1, f2) =>
         for {
           tf1 <- reconstructTypes(f1)
           tf2 <- reconstructTypes(f2)
@@ -112,7 +119,7 @@ object TypeInference {
             val f = (f1 ** f2) :>> mapVal { case (f1, f2) => TypedFun.par(f1, f2) }
             nested.unnest(a) |*| f |*| nested.unnest(b)
           }
-      case _: FunT.AssocLR[arr, a, b, c] =>
+      case _: Fun.AssocLR[a, b, c] =>
         for {
           a <- newVar
           b <- newVar
@@ -128,7 +135,7 @@ object TypeInference {
             in |*| f |*| out
           }
         }
-      case _: FunT.AssocRL[arr, a, b, c] =>
+      case _: Fun.AssocRL[a, b, c] =>
         for {
           a <- newVar
           b <- newVar
@@ -144,7 +151,7 @@ object TypeInference {
             in |*| f |*| out
           }
         }
-      case _: FunT.Swap[arr, a, b] =>
+      case _: Fun.Swap[a, b] =>
         for {
           a <- newVar
           b <- newVar
@@ -158,7 +165,7 @@ object TypeInference {
             in |*| f |*| out
           }
         }
-      case FunT.EitherF(f, g) =>
+      case Fun.EitherF(f, g) =>
         for {
           tf <- reconstructTypes(f)
           tg <- reconstructTypes(g)
@@ -171,7 +178,7 @@ object TypeInference {
             val h = (f ** g) :>> mapVal { case (f, g) => TypedFun.either(f, g) }
             unnest(a) |*| h |*| unnest(b)
           }
-      case _: FunT.InjectL[arr, l, r] =>
+      case _: Fun.InjectL[l, r] =>
         for {
           ll <- newVar
           rl <- newVar
@@ -183,7 +190,7 @@ object TypeInference {
             val b = pg.Tp(either(l2 |*| r))
             (l1 |*| f |*| b)
           }
-      case _: FunT.InjectR[arr, l, r] =>
+      case _: Fun.InjectR[l, r] =>
         for {
           ll <- newVar
           rl <- newVar
@@ -195,7 +202,7 @@ object TypeInference {
             val b = pg.Tp(either(l |*| r2))
             (r1 |*| f |*| b)
           }
-      case _: FunT.Distribute[arr, a, b, c] =>
+      case _: Fun.Distribute[a, b, c] =>
         for {
           a <- newVar
           b <- newVar
@@ -211,7 +218,7 @@ object TypeInference {
             val out = Tp(either(Tp(pair(a3 |*| b2)) |*| Tp(pair(a4 |*| c2))))
             in |*| f |*| out
           }
-      case _: FunT.Dup[arr, a] =>
+      case _: Fun.Dup[a] =>
         for {
           a <- newVar
         } yield
@@ -221,7 +228,7 @@ object TypeInference {
             val f = ta :>> mapVal { a => TypedFun.dup[a](a) }
             a1 |*| f |*| Tp(pair(a3 |*| a4))
           }
-      case _: FunT.Prj1[arr, a, b] =>
+      case _: Fun.Prj1[a, b] =>
         for {
           a <- newVar
           b <- newVar
@@ -232,7 +239,7 @@ object TypeInference {
             val f = (ta ** tb) :>> mapVal { case (a, b) => TypedFun.prj1[a, b](a, b) }
             Tp(pair(a1 |*| b1)) |*| f |*| a2
           }
-      case _: FunT.Prj2[arr, a, b] =>
+      case _: Fun.Prj2[a, b] =>
         for {
           a <- newVar
           b <- newVar
@@ -243,25 +250,43 @@ object TypeInference {
             val f = (ta ** tb) :>> mapVal { case (a, b) => TypedFun.prj2[a, b](a, b) }
             Tp(pair(a1 |*| b1)) |*| f |*| b2
           }
-      case f: FunT.FixF[arr, f] =>
+      case f: Fun.FixF[f] =>
+        val tf = TypeTag.toTypeFun(f.f)
+        val tg = tf.translate(TypeConstructor.vmap(Label.ScalaTParam(_)))
+        val res: TypedFun[A, B] = TypedFun.fix[f](tg)
+        val fixF = Type.fix(tf)
+        val fFixF = tf(fixF)
+
         Monad[M].pure(
           λ.* { one =>
-            val fixF = Tp(fixT[Val[Label], Tp, f](f.f)(one))
-            val fFixF = apply1T(f.f)(Tp(fixT[Val[Label], Tp, f](f.f)(one)))
-            val tf = constantVal(TypedFun.fix[f](TypeTag.toTypeFun(f.f).translate(TypeConstructor.vmap(Label.ScalaTParam(_)))))
-            fFixF |*| tf |*| fixF
+            // val fixF = Tp(fixT[Val[Label], Tp, f](f.f)(one))
+            // val fFixF = apply1T(f.f)(Tp(fixT[Val[Label], Tp, f](f.f)(one)))
+            // val tf = constantVal(TypedFun.fix[f](TypeTag.toTypeFun(f.f).translate(TypeConstructor.vmap(Label.ScalaTParam(_)))))
+            // fFixF |*| tf |*| fixF
+            val a = constant(liftType(fFixF))
+            val b = constant(liftType( fixF))
+            a |*| constantVal(res) |*| b
           }
         )
-      case f: FunT.UnfixF[arr, f] =>
+      case f: Fun.UnfixF[f] =>
+        val tf = TypeTag.toTypeFun(f.f)
+        val tg = tf.translate(TypeConstructor.vmap(Label.ScalaTParam(_)))
+        val res: TypedFun[A, B] = TypedFun.unfix[f](tg)
+        val fixF = Type.fix(tf)
+        val fFixF = tf(fixF)
+
         Monad[M].pure(
           λ.* { one =>
-            val fixF = Tp(fixT[Val[Label], Tp, f](f.f)(one))
-            val fFixF = apply1T(f.f)(Tp(fixT[Val[Label], Tp, f](f.f)(one)))
-            val tf = constantVal(TypedFun.unfix[f](TypeTag.toTypeFun(f.f).translate(TypeConstructor.vmap(Label.ScalaTParam(_)))))
-            fixF |*| tf |*| fFixF
+            // val fixF = Tp(fixT[Val[Label], Tp, f](f.f)(one))
+            // val fFixF = apply1T(f.f)(Tp(fixT[Val[Label], Tp, f](f.f)(one)))
+            // val tf = constantVal(TypedFun.unfix[f](TypeTag.toTypeFun(f.f).translate(TypeConstructor.vmap(Label.ScalaTParam(_)))))
+            // fixF |*| tf |*| fFixF
+            val a = constant(liftType( fixF))
+            val b = constant(liftType(fFixF))
+            a |*| constantVal(res) |*| b
           }
         )
-      case FunT.Rec(f) =>
+      case Fun.Rec(f) =>
         for {
           tf <- reconstructTypes(f)
         } yield
@@ -306,7 +331,7 @@ object TypeInference {
                 (aba |*| f |*| b1) :>> crashNow(s"TODO (${summon[SourcePos]})")
             }
           }
-      case _: FunT.Recur[arr, a, b] =>
+      case _: Fun.Recur[a, b] =>
         for {
           va <- newVar
           vb <- newVar
@@ -318,7 +343,7 @@ object TypeInference {
             val tIn = Tp(pair(Tp(recCall(a1 |*| b1)) |*| a2))
             tIn |*| tf |*| b2
           }
-      case FunT.ConstInt(n) =>
+      case Fun.ConstInt(n) =>
         Monad[M].pure(
           λ.* { one =>
             val a = done(one) :>> unit :>> Tp
@@ -327,7 +352,7 @@ object TypeInference {
             a |*| tf |*| b
           }
         )
-      case FunT.AddInts() =>
+      case Fun.AddInts() =>
         Monad[M].pure(
           λ.? { one =>
             val a1 = constant(done > int > Tp)
@@ -337,7 +362,7 @@ object TypeInference {
             Tp(pair(a1 |*| a2)) |*| tf |*| b
           }
         )
-      case FunT.IntToString() =>
+      case Fun.IntToString() =>
         Monad[M].pure(
           λ.* { one =>
             val a = done(one) :>> int :>> Tp
