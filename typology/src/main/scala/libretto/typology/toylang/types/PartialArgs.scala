@@ -112,7 +112,15 @@ sealed trait PartialArgs[F[_, _], K, L] {
       case IntroSnd(f1, f2) =>
         UnhandledCase.raise(s"${this}.foldTranslate")
       case IntroBoth(f1, f2) =>
-        UnhandledCase.raise(s"${this}.foldTranslate")
+        summon[K =:= ○]
+        val ev: (Q =:= One) = Φ.uniqueOutputType(φ, φ0)
+        f1.foldTranslate[G, <*>, One, Φ, One](φ0, φ0, h) match
+          case Exists.Some((g1, φ1)) =>
+            f2.foldTranslate[G, <*>, One, Φ, One](φ0, φ0, h) match
+              case Exists.Some((g2, φ2)) =>
+                ev match { case TypeEq(Refl()) =>
+                  Exists((g1 > G.introSnd(g2), Φ.pair(φ1, φ2)))
+                }
 
   def extract(using ev: K =:= ○): Tupled[×, F[○, _], L] =
     PartialArgs.extract(this.from[○](using ev.flip))
@@ -433,8 +441,9 @@ object PartialArgs {
         Id()
       case Lift(f) =>
         f
-      case Par(f1, f2) =>
-        UnhandledCase.raise(s"PartialArgs.flatten($a)")
+      case p @ Par(f1, f2) =>
+        import p.given
+        par(flatten(f1), flatten(f2))
       case f: Fst[f, k, l, m] =>
         import f.given
         fst[F, k, l, m](flatten(f.f))

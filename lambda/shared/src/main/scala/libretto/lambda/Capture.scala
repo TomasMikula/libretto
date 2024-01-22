@@ -35,13 +35,12 @@ sealed trait Capture[**[_, _], F[_], A, B] {
         Absorbed.Impl(k, f.to[A] > this)
 
   def exposeCaptured(using sh: Shuffle[**]): Either[A =:= B, Capture.Exposed[sh.type, **, F, A, B]] =
-    import sh.~⚬
     this match
       case NoCapture() => Left(summon[A =:= B])
       case CaptureFst(b1, f) =>
         f.exposeCaptured match
           case Left(TypeEq(Refl())) => Right(Capture.Exposed(b1, sh.TransferOpt.None()))
-          case Right(exp) => UnhandledCase.raise(s"$this.exposeCaptured")
+          case Right(exp)           => Right(exp.alsoCaptureFst(b1))
       case CaptureSnd(f, b2) =>
         UnhandledCase.raise(s"$this.exposeCaptured")
       case InFst(f) =>
@@ -194,10 +193,12 @@ object Capture {
     type X
     type Y1
     type Y2
-    def ev: (Y1 ** Y2) =:= B
+    given ev: ((Y1 ** Y2) =:= B)
     val shuffle: Sh
     def captured: Tupled[**, F, X]
     def route: shuffle.TransferOpt[X, A, Y1, Y2]
+
+    def alsoCaptureFst[P](p: Tupled[**, F, P]): Exposed[Sh, **, F, A, P ** B]
 
   object Exposed:
     def apply[**[_, _], F[_], P, A, B1, B2](using
@@ -214,4 +215,10 @@ object Capture {
         override val shuffle = sh
         override def captured = capt
         override def route = rout
+
+        override def alsoCaptureFst[P](p: Tupled[**, F, P]): Exposed[sh.type, **, F, A, P ** (B1 ** B2)] =
+          Exposed(using shuffle)(
+            p zip captured,
+            shuffle.Transfer.AssocLR(route)
+          )
 }

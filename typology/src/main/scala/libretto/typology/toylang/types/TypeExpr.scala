@@ -309,7 +309,20 @@ object TypeExpr {
               throw AssertionError(s"Impossible (at ${summon[SourcePos]})") // TODO: use a precise, non-capturing representation of args
 
         case AssocLR(g) =>
-          UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+          args match
+            case Id() =>
+              UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+            case Lift(f) =>
+              UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+            case Par(f1, f2) =>
+              UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+            case Fst(f) =>
+              UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+            case Snd(f) =>
+              UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+            case IntroFst(_, _) | IntroSnd(_, _) | IntroBoth(_, _) =>
+              throw AssertionError(s"Impossible (at ${summon[SourcePos]})") // TODO: use a precise, non-capturing representation of args
+
         case AssocRL(g) =>
           UnhandledCase.raise(s"ltrimArgs($tr, $args)")
         case IX(g) =>
@@ -505,7 +518,10 @@ object TypeExpr {
       import PartialArgs.{extract => _, *}
       args match
         case Id() => Capture.NoCapture()
-        case Lift(f) => UnhandledCase.raise(s"Capt.foldArgs($args)")
+        case Lift(f) =>
+          f match
+            case Capt.Partial(c) => c
+            case Capt.Total(value) => ProperKind.cannotBeUnit(k)
         case Par(f1, f2) => UnhandledCase.raise(s"Capt.foldArgs($args)")
         case Fst(f) => UnhandledCase.raise(s"Capt.foldArgs($args)")
         case Snd(f) => UnhandledCase.raise(s"Capt.foldArgs($args)")
