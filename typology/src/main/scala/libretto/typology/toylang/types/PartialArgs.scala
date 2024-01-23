@@ -52,6 +52,12 @@ sealed trait PartialArgs[F[_, _], K, L] {
     absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
   ): Proper[F, J, L]
 
+  def inFst[Y](using ProperKind[K], ProperKind[Y]): PartialArgs[F, K × Y, L × Y] =
+    fst(this)
+
+  def inSnd[X](using ProperKind[X], ProperKind[K]): PartialArgs[F, X × K, X × L] =
+    snd(this)
+
   def introFst[M](f1: PartialArgs.Proper[F, ○, M])(using ProperKind[K]): PartialArgs.Proper[F, K, M × L] =
     IntroFst(f1, this)
 
@@ -193,12 +199,6 @@ object PartialArgs {
 
     override def to[M](using ev: L =:= M): PartialArgs.Proper[F, K, M] =
       ev.substituteCo[PartialArgs.Proper[F, K, _]](this)
-
-    def inFst[M](using ProperKind[K], ProperKind[M]): PartialArgs[F, K × M, L × M] =
-      PartialArgs.fst(this)
-
-    def inSnd[J](using ProperKind[J], ProperKind[K]): PartialArgs[F, J × K, J × L] =
-      PartialArgs.snd(this)
 
     def translateProper[G[_, _]](h: [x, y] => F[x, y] => G[x, y]): PartialArgs.Proper[G, K, L] =
       this match

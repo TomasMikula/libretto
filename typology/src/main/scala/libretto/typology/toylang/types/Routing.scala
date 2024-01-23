@@ -26,18 +26,23 @@ sealed trait Routing[K, L](using
   def inSnd[X](using ProperKind[X], ProperKind[K], ProperKind[L]): Routing[X × K, X × L] =
     Routing.snd(this)
 
-  def applyTo[F[_, _], J](f: PartialArgs[F, J, K]): AppTransRes[F, J, L] = {
+  def applyTo[J](m: Multiplier[×, J, K])(using
+    OutputKind[J],
+    ProperKind[L],
+  ): Multiplier[×, J, L]
+
+  def applyTo[F[_, _], J](f: PartialArgs[F, J, K]): AppRes[F, J, L] = {
     import f.inKind
 
     this match {
       case Id() =>
-        AppTransRes(Id(), f)
+        AppRes(Id(), f)
       case AndThen(p, q) =>
         p.applyTo(f) match {
-          case AppTransRes.Impl(p, f) =>
+          case AppRes.Impl(p, f) =>
             q.applyTo(f) match {
-              case AppTransRes.Impl(q, f) =>
-                AppTransRes(p > q, f)
+              case AppRes.Impl(q, f) =>
+                AppRes(p > q, f)
             }
         }
       case p: Par[k1, k2, l1, l2] =>
@@ -50,39 +55,39 @@ sealed trait Routing[K, L](using
           f: PartialArgs[F, J, K1 × K2],
           g1: Routing[K1, L1],
           g2: Routing[K2, L2],
-        ): AppTransRes[F, J, L1 × L2] =
+        ): AppRes[F, J, L1 × L2] =
           f match {
             case PartialArgs.IntroFst(f1, f2) =>
               val h1 = g1.applyTo0(f1)
               g2.applyTo(f2) match
-                case AppTransRes.Impl(r, h2) =>
-                  AppTransRes(r, PartialArgs.introFst(h1, h2))
+                case AppRes.Impl(r, h2) =>
+                  AppRes(r, PartialArgs.introFst(h1, h2))
             case PartialArgs.IntroBoth(f1, f2) =>
-              AppTransRes(id, PartialArgs.introBoth(g1.applyTo0(f1), g2.applyTo0(f2)))
+              AppRes(id, PartialArgs.introBoth(g1.applyTo0(f1), g2.applyTo0(f2)))
             case f: PartialArgs.Fst[f, j1, k1, k2] =>
               import f.inKind1
               val r = g1.applyTo(f.f)
               r.g.inKind.properKind match
                 case Left(ev) =>
-                  AppTransRes(elimFst[j1, K2] > g2, PartialArgs.introFst(r.g.from[○](using ev.flip)))
+                  AppRes(elimFst[j1, K2] > g2, PartialArgs.introFst(r.g.from[○](using ev.flip)))
                 case Right(x) =>
                   given ProperKind[r.X] = x
-                  AppTransRes(Par(r.f, g2), PartialArgs.fst(r.g))
+                  AppRes(Par(r.f, g2), PartialArgs.fst(r.g))
             case f: PartialArgs.Par[f, j1, j2, k1, k2] =>
               import f.given
               val r1 = g1.applyTo(f.f1)
               val r2 = g2.applyTo(f.f2)
               r1.f.outKind.properKind match
                 case Left(ev1) =>
-                  AppTransRes(elimFst[j1, j2] > r2.f, PartialArgs.introFst(r1.g.from[○](using ev1.flip), r2.g))
+                  AppRes(elimFst[j1, j2] > r2.f, PartialArgs.introFst(r1.g.from[○](using ev1.flip), r2.g))
                 case Right(x) =>
                   given ProperKind[r1.X] = x
                   r2.f.outKind.properKind match
                     case Left(ev2) =>
-                      AppTransRes(elimSnd[j1, j2] > r1.f, PartialArgs.introSnd(r1.g, r2.g.from[○](using ev2.flip)))
+                      AppRes(elimSnd[j1, j2] > r1.f, PartialArgs.introSnd(r1.g, r2.g.from[○](using ev2.flip)))
                     case Right(y) =>
                       given ProperKind[r2.X] = y
-                      AppTransRes(par(r1.f, r2.f), PartialArgs.par(r1.g, r2.g))
+                      AppRes(par(r1.f, r2.f), PartialArgs.par(r1.g, r2.g))
             case other =>
               throw new NotImplementedError(s"$other (${summon[SourcePos]})")
           }
@@ -92,22 +97,22 @@ sealed trait Routing[K, L](using
         f.inKind.properKind match {
           case Left(j_eq_○) =>
             val f0: PartialArgs[F, ○, K] = j_eq_○.substituteCo[PartialArgs[F, *, K]](f)
-            AppTransRes(id[J].to[○](using j_eq_○), PartialArgs.introBoth(f0, f0))
+            AppRes(id[J].to[○](using j_eq_○), PartialArgs.introBoth(f0, f0))
           case Right(j) =>
             given ProperKind[J] = j
-            AppTransRes(dup[J], PartialArgs.par(f, f))
+            AppRes(dup[J], PartialArgs.par(f, f))
         }
       case ElimFst() =>
         f match {
           case PartialArgs.IntroBoth(f1, f2) =>
-            AppTransRes(id, f2)
+            AppRes(id, f2)
           case other =>
             throw new NotImplementedError(s"$other (${summon[SourcePos]})")
         }
       case ElimSnd() =>
         f match {
           case PartialArgs.IntroFst(f1, f2) =>
-            AppTransRes(elim, f1)
+            AppRes(elim, f1)
           case other =>
             UnhandledCase.raise(s"Applying $this to $f")
         }
@@ -117,7 +122,7 @@ sealed trait Routing[K, L](using
             import f.given
             f1 match
               case PartialArgs.IntroBoth(f11, f12) =>
-                AppTransRes(id, PartialArgs.IntroFst(f11, PartialArgs.IntroFst(f12, f2)))
+                AppRes(id, PartialArgs.IntroFst(f11, PartialArgs.IntroFst(f12, f2)))
               case other =>
                 UnhandledCase.raise(s"Applying $this to $f")
           case f @ PartialArgs.Fst(f1) =>
@@ -125,7 +130,7 @@ sealed trait Routing[K, L](using
             f1 match
               case f1 @ PartialArgs.IntroSnd(f11, f12) =>
                 import f1.inKindProper
-                AppTransRes(id, PartialArgs.par(f11, PartialArgs.introFst[F, l, m](f12)))
+                AppRes(id, PartialArgs.par(f11, PartialArgs.introFst[F, l, m](f12)))
               case other =>
                 UnhandledCase.raise(s"Applying $this to $f")
           case other =>
@@ -137,10 +142,10 @@ sealed trait Routing[K, L](using
           case PartialArgs.IntroFst(f1, f2) =>
             f2 match
               case PartialArgs.Id() =>
-                AppTransRes(id, PartialArgs.Fst[F, l, k × l, m](PartialArgs.IntroFst(f1, PartialArgs.Id[F, l]())))
+                AppRes(id, PartialArgs.Fst[F, l, k × l, m](PartialArgs.IntroFst(f1, PartialArgs.Id[F, l]())))
               case f2 @ PartialArgs.Snd(f22) =>
                 import f2.inKind2
-                AppTransRes(id, PartialArgs.Par(PartialArgs.IntroFst(f1, PartialArgs.Id[F, l]()), f22))
+                AppRes(id, PartialArgs.Par(PartialArgs.IntroFst(f1, PartialArgs.Id[F, l]()), f22))
               case other =>
                 UnhandledCase.raise(s"Applying $this to $f")
           case other =>
@@ -150,7 +155,7 @@ sealed trait Routing[K, L](using
         f match {
           case f @ PartialArgs.IntroFst(f1, f2) =>
             import f.given
-            AppTransRes(id, PartialArgs.IntroSnd(f2, f1))
+            AppRes(id, PartialArgs.IntroSnd(f2, f1))
           case other =>
             UnhandledCase.raise(s"Applying $this to $f")
         }
@@ -161,8 +166,8 @@ sealed trait Routing[K, L](using
 
   private def applyTo0[F[_, _]](f: PartialArgs[F, ○, K]): PartialArgs[F, ○, L] =
     applyTo(f) match {
-      case AppTransRes.Impl(r, f) =>
-        proveId(r).substituteCo[PartialArgs[F, *, L]](f)
+      case AppRes.Impl(r, f) =>
+        proveId(r).substituteCo[PartialArgs[F, _, L]](f)
     }
 
   def compile[==>[_, _], F[_, _], |*|[_, _], One, Q](fk: F[K, Q])(
@@ -226,50 +231,117 @@ object Routing {
   case class AndThen[K, L, M](
     f: Routing[K, L],
     g: Routing[L, M],
-  ) extends Routing[K, M](using f.inKind, g.outKind)
+  ) extends Routing[K, M](using f.inKind, g.outKind) {
+    override def applyTo[J](m: Multiplier[×, J, K])(using
+      J: OutputKind[J],
+      M: ProperKind[M],
+    ): Multiplier[×, J, M] =
+      g.inKind.properKind match
+        case Left(TypeEq(Refl())) =>
+          proveId[M](g) match { case TypeEq(Refl()) =>
+            ProperKind.cannotBeUnit(M)
+          }
+        case Right(l) =>
+          given ProperKind[L] = l
+          g.applyTo(f.applyTo(m))
+  }
 
-  case class Id[K: Kind]() extends Routing[K, K]
+  case class Id[K: Kind]() extends Routing[K, K] {
+    override def applyTo[J](m: Multiplier[×, J, K])(using
+      OutputKind[J],
+      ProperKind[K],
+    ): Multiplier[×, J, K] =
+      m
+  }
 
   case class Par[K1: ProperKind, K2: ProperKind, L1: ProperKind, L2: ProperKind](
     f1: Routing[K1, L1],
     f2: Routing[K2, L2],
-  ) extends Routing[K1 × K2, L1 × L2]
+  ) extends Routing[K1 × K2, L1 × L2] {
+    override def applyTo[J](m: Multiplier[×, J, K1 × K2])(using
+      J: OutputKind[J],
+      L: ProperKind[L1 × L2],
+    ): Multiplier[×, J, L1 × L2] =
+      m match
+        case Multiplier.Id() =>
+          summon[J =:= (K1 × K2)]
+          OutputKind.cannotBePair(J: OutputKind[K1 × K2])
+        case Multiplier.Dup(m1, m2) =>
+          Multiplier.Dup(f1.applyTo(m1), f2.applyTo(m2))
+  }
 
-  case class AssocLR[K: ProperKind, L: ProperKind, M: ProperKind]() extends Routing[(K × L) × M, K × (L × M)]
+  case class AssocLR[K: ProperKind, L: ProperKind, M: ProperKind]() extends Routing[(K × L) × M, K × (L × M)] {
+    override def applyTo[J](m: Multiplier[×, J, (K × L) × M])(using
+      j: OutputKind[J],
+      klm: ProperKind[K × (L × M)],
+    ): Multiplier[×, J, K × (L × M)] =
+      m match
+        case Multiplier.Id() =>
+          summon[J =:= ((K × L) × M)]
+          OutputKind.cannotBePair(j: OutputKind[(K × L) × M])
+        case Multiplier.Dup(m1, m2) =>
+          m1 match
+            case Multiplier.Id() =>
+              summon[J =:= (K × L)]
+              OutputKind.cannotBePair(j: OutputKind[K × L])
+            case Multiplier.Dup(m11, m12) =>
+              Multiplier.Dup(m11, Multiplier.Dup(m12, m2))
+  }
 
   case class AssocRL[K, L, M]()(using
     val K: ProperKind[K],
     val L: ProperKind[L],
     val M: ProperKind[M],
-  ) extends Routing[K × (L × M), (K × L) × M]
+  ) extends Routing[K × (L × M), (K × L) × M] {
+    override def applyTo[J](m: Multiplier[×, J, K × (L × M)])(using
+      OutputKind[J],
+      ProperKind[(K × L) × M],
+    ): Multiplier[×, J, (K × L) × M] =
+      UnhandledCase.raise(s"$this.applyTo($m)")
+  }
 
-  case class Swap[K: ProperKind, L: ProperKind]() extends Routing[K × L, L × K]
+  case class Swap[K: ProperKind, L: ProperKind]() extends Routing[K × L, L × K] {
+    override def applyTo[J](m: Multiplier[[K, L] =>> K × L, J, K × L])(using OutputKind[J], ProperKind[L × K]): Multiplier[[K, L] =>> K × L, J, L × K] =
+      UnhandledCase.raise(s"$this.applyTo($m)")
+  }
 
-  case class Elim[K: ProperKind]() extends Routing[K, ○]
+  case class Elim[K: ProperKind]() extends Routing[K, ○] {
+    override def applyTo[J](m: Multiplier[[K, L] =>> K × L, J, K])(using OutputKind[J], ProperKind[○]): Multiplier[[K, L] =>> K × L, J, ○] =
+      UnhandledCase.raise(s"$this.applyTo($m)")
+  }
 
-  case class ElimFst[K: ProperKind, L: ProperKind]() extends Routing[K × L, L]
+  case class ElimFst[K: ProperKind, L: ProperKind]() extends Routing[K × L, L] {
+    override def applyTo[J](m: Multiplier[[K, L] =>> K × L, J, K × L])(using OutputKind[J], ProperKind[L]): Multiplier[[K, L] =>> K × L, J, L] =
+      UnhandledCase.raise(s"$this.applyTo($m)")
+  }
 
-  case class ElimSnd[K: ProperKind, L: ProperKind]() extends Routing[K × L, K]
+  case class ElimSnd[K: ProperKind, L: ProperKind]() extends Routing[K × L, K] {
+    override def applyTo[J](m: Multiplier[[K, L] =>> K × L, J, K × L])(using OutputKind[J], ProperKind[K]): Multiplier[[K, L] =>> K × L, J, K] =
+      UnhandledCase.raise(s"$this.applyTo($m)")
+  }
 
-  case class Dup[K]()(using val kind: OutputKind[K]) extends Routing[K, K × K]
+  case class Dup[K]()(using val kind: OutputKind[K]) extends Routing[K, K × K] {
+    override def applyTo[J](m: Multiplier[[K, L] =>> K × L, J, K])(using OutputKind[J], ProperKind[K × K]): Multiplier[[K, L] =>> K × L, J, K × K] =
+      UnhandledCase.raise(s"$this.applyTo($m)")
+  }
 
-  sealed trait AppTransRes[F[_, _], K, L]:
+  sealed trait AppRes[F[_, _], K, L]:
     type X
     def f: Routing[K, X]
     def g: PartialArgs[F, X, L]
 
-  object AppTransRes {
+  object AppRes {
     case class Impl[F[_, _], K, Y, L](
       f: Routing[K, Y],
       g: PartialArgs[F, Y, L],
-    ) extends AppTransRes[F, K, L] {
+    ) extends AppRes[F, K, L] {
       override type X = Y
     }
 
     def apply[F[_, _], K, Y, L](
       f: Routing[K, Y],
       g: PartialArgs[F, Y, L],
-    ): AppTransRes[F, K, L] =
+    ): AppRes[F, K, L] =
       Impl(f, g)
   }
 
@@ -336,28 +408,7 @@ object Routing {
     k: OutputKind[K],
     l: ProperKind[L],
   ): Multiplier[×, K, L] =
-    r match
-      case Id() =>
-        Multiplier.Id()
-      case AndThen(f, g) =>
-        UnhandledCase.raise(s"Routing.toMultiplier($r)")
-      case Par(f1, f2) =>
-        UnhandledCase.raise(s"Routing.toMultiplier($r)")
-      case AssocLR() =>
-        UnhandledCase.raise(s"Routing.toMultiplier($r)")
-      case AssocRL() =>
-        UnhandledCase.raise(s"Routing.toMultiplier($r)")
-      case Swap() =>
-        UnhandledCase.raise(s"Routing.toMultiplier($r)")
-      case Elim() =>
-        UnhandledCase.raise(s"Routing.toMultiplier($r)")
-      case ElimFst() =>
-        UnhandledCase.raise(s"Routing.toMultiplier($r)")
-      case ElimSnd() =>
-        UnhandledCase.raise(s"Routing.toMultiplier($r)")
-      case Dup() =>
-        UnhandledCase.raise(s"Routing.toMultiplier($r)")
-
+    r.applyTo(Multiplier.Id())
 
   def traceSnd[K1, K2, L](r: Routing[K1 × K2, L])(using
     k2: OutputKind[K2],

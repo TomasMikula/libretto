@@ -283,7 +283,9 @@ object TypeExpr {
                 RTotal(Id()(using j2), TransferOpt.None()),
               )
             case Lift(f) =>
-              UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+              ltrim(TransferOpt.None(), f) match
+                case Exists.Some((cap, base)) =>
+                  Opaque(cap, LTrimmed.Args.Expr(base))
             case Par(f1, f2) =>
               UnhandledCase.raise(s"ltrimArgs($tr, $args)")
             case Fst(f) =>
@@ -308,7 +310,33 @@ object TypeExpr {
             case IntroFst(_, _) | IntroSnd(_, _) | IntroBoth(_, _) =>
               throw AssertionError(s"Impossible (at ${summon[SourcePos]})") // TODO: use a precise, non-capturing representation of args
 
-        case AssocLR(g) =>
+        case a: AssocLR[i1, i2, i3, κ2, κ3] =>
+          summon[J1 =:= (i1 × i2)]
+          val (i1, i2) = ProperKind.unpair(j1: ProperKind[i1 × i2])
+          given ProperKind[i1] = i1
+          given ProperKind[i2] = i2
+          args match
+            case Id() =>
+              UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+            case Lift(f) =>
+              UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+            case Par(f1, f2) =>
+              UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+            case Fst(f) =>
+              UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+            case Snd(f) =>
+              ltrimArgs(a.g, f) match
+                case opq: Opaque[tc, i2, i3, x1, l2] =>
+                  Translucent[TC, J1, J2, i1 × x1, L](
+                    opq.trimmed.inSnd[i1],
+                    RPartial(opq.opaqueBase, TransferOpt.None()),
+                  )
+                case Translucent(trimmed, translucentBase) =>
+                  UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+            case IntroFst(_, _) | IntroSnd(_, _) | IntroBoth(_, _) =>
+              throw AssertionError(s"Impossible (at ${summon[SourcePos]})") // TODO: use a precise, non-capturing representation of args
+
+        case AssocRL(g) =>
           args match
             case Id() =>
               UnhandledCase.raise(s"ltrimArgs($tr, $args)")
@@ -323,8 +351,6 @@ object TypeExpr {
             case IntroFst(_, _) | IntroSnd(_, _) | IntroBoth(_, _) =>
               throw AssertionError(s"Impossible (at ${summon[SourcePos]})") // TODO: use a precise, non-capturing representation of args
 
-        case AssocRL(g) =>
-          UnhandledCase.raise(s"ltrimArgs($tr, $args)")
         case IX(g) =>
           UnhandledCase.raise(s"ltrimArgs($tr, $args)")
         case XI(g) =>
