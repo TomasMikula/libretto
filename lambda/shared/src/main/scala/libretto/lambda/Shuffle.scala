@@ -36,6 +36,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     def invert: B ~⚬ A
 
+    def proveId(inputIsAtomic: [x, y] => (A =:= (x |*| y)) => Nothing): A =:= B
+
     def fold[->[_, _]](using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B = {
       import ev.{andThen, id, par}
 
@@ -90,6 +92,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     ): Exists[[t] =>> (sh.~⚬[X, t], F[B, t])]
 
     def apply[F[_]](a: F[A])(using StrongZippable[|*|, F]): F[B]
+
+    def preShuffle[F[_, _], C](f: F[B, C])(using PairwiseRel[|*|, |*|, F]): Exists[[X] =>> (F[A, X], X ~⚬ C)]
   }
 
   object ~⚬ {
@@ -108,6 +112,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def ev: X =:= X =
         summon[X =:= X]
+
+      override def proveId(inputIsAtomic: [x, y] => (X =:= (x |*| y)) => Nothing): X =:= X =
+        summon
 
       override def projectProper[C](p: Projection.Proper[|*|, X, C]): ProjectProperRes[X, C] =
         ProjectProperRes.Projected[C, X, C](p, id[C])
@@ -128,6 +135,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def apply[F[_]](fx: F[X])(using StrongZippable[|*|, F]): F[X] =
         fx
+
+      override def preShuffle[F[_, _], C](f: F[X, C])(using
+        PairwiseRel[|*|, |*|, F],
+      ): Exists[[Y] =>> (F[X, Y], Y ~⚬ C)] =
+        Exists((f, Id()))
     }
 
     /** Non-[[Id]] combinators. */
@@ -148,6 +160,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     /** Two parallel operations, at least one of which is not [[Id]]. */
     case class Bimap[X1, X2, Y1, Y2](par: Par[X1, X2, Y1, Y2]) extends Composed[X1 |*| X2, Y1 |*| Y2] {
+      override def proveId(
+        inputIsAtomic: [x, y] => ((X1 |*| X2) =:= (x |*| y)) => Nothing,
+      ): (X1 |*| X2) =:= (Y1 |*| Y2) =
+        inputIsAtomic[X1, X2](summon)
+
       override def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: (X1 |*| X2) =:= F[T]): ChaseFwRes[F, T, Y1 |*| Y2] =
         par.chaseFw(i)
 
@@ -167,10 +184,29 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def apply[F[_]](a: F[X1 |*| X2])(using StrongZippable[|*|, F]): F[Y1 |*| Y2] =
         par(a)
+
+      override def preShuffle[F[_, _], C](f: F[Y1 |*| Y2, C])(using
+        F: PairwiseRel[|*|, |*|, F],
+      ): Exists[[P] =>> (F[X1 |*| X2, P], P ~⚬ C)] =
+        val (s1, s2) = par.components
+        F.unpair(f) match
+          case F.Unpaired.Impl(f1, f2) =>
+            (s1.preShuffle(f1), s2.preShuffle(f2)) match
+              case (Exists.Some((f1, s1)), Exists.Some((f2, s2))) =>
+                Exists((F.pair(f1, f2), ~⚬.par(s1, s2)))
     }
 
     /** An operator that transfers resources across inputs. */
-    case class Xfer[A1, A2, X1, X2, B1, B2](f1: A1 ~⚬ X1, f2: A2 ~⚬ X2, transfer: Transfer[X1, X2, B1, B2]) extends Composed[A1 |*| A2, B1 |*| B2] {
+    case class Xfer[A1, A2, X1, X2, B1, B2](
+      f1: A1 ~⚬ X1,
+      f2: A2 ~⚬ X2,
+      transfer: Transfer[X1, X2, B1, B2],
+    ) extends Composed[A1 |*| A2, B1 |*| B2] {
+      override def proveId(
+        inputIsAtomic: [x, y] => ((A1 |*| A2) =:= (x |*| y)) => Nothing,
+      ): (A1 |*| A2) =:= (B1 |*| B2) =
+        inputIsAtomic[A1, A2](summon)
+
       override def projectProper[C](p: Projection.Proper[|*|, B1 |*| B2, C]): ProjectProperRes[A1 |*| A2, C] =
         transfer.projectProper(p) match {
           case ProjectProperRes.Projected(px, t) =>
@@ -208,6 +244,17 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         val x2 = f2(a2)
         transfer(F.zip(x1, x2))
       }
+
+      override def preShuffle[F[_, _], C](f: F[B1 |*| B2, C])(using
+        F: PairwiseRel[|*|, |*|, F],
+      ): Exists[[X] =>> (F[A1 |*| A2, X], X ~⚬ C)] =
+        transfer.preShuffle(f) match
+          case Exists.Some((g, s)) =>
+            F.unpair(g) match
+              case F.Unpaired.Impl(g1, g2) =>
+                (f1.preShuffle(g1), f2.preShuffle(g2)) match
+                  case (Exists.Some((h1, s1)), Exists.Some((h2, s2))) =>
+                    Exists((F.pair(h1, h2), par(s1, s2) > s))
 
       override def translate[<*>[_,_], F[_,_], S](
         fa: F[A1 |*| A2, S],
@@ -707,6 +754,12 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     case Snd[X, Y, Z](f2: Composed[Y, Z]) extends Par[X, Y, X, Z]
     case Both[X1, X2, Y1, Y2](f1: Composed[X1, Y1], f2: Composed[X2, Y2]) extends Par[X1, X2, Y1, Y2]
 
+    def components: (X1 ~⚬ Y1, X2 ~⚬ Y2) =
+      this match
+        case Fst(f1)      => (f1, Id())
+        case Snd(f2)      => (Id(), f2)
+        case Both(f1, f2) => (f1, f2)
+
     def invert: Par[Y1, Y2, X1, X2] =
       this match {
         case Fst(f1)      => Fst(f1.invert)
@@ -859,6 +912,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     def fold[->[_, _]](using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2)
 
     def apply[F[_]](a: F[A1 |*| A2])(using F: StrongZippable[|*|, F]): F[B1 |*| B2]
+    def preShuffle[F[_, _], C](f: F[B1 |*| B2, C])(using PairwiseRel[|*|, |*|, F]): Exists[[Q] =>> (F[A1 |*| A2, Q], Q ~⚬ C)]
     def projectProper[C](p: Projection.Proper[|*|, B1 |*| B2, C]): ProjectProperRes[A1 |*| A2, C]
     def chaseFw[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2)): ChaseFwRes[F, T, B1 |*| B2]
     def chaseBw[G[_], T](i: Focus[|*|, G])(using ev: (B1 |*| B2) =:= G[T]): ChaseBwRes[A1 |*| A2, G, T]
@@ -990,6 +1044,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       override def apply[F[_]](a: F[A1 |*| A2])(using F: StrongZippable[|*|, F]): F[A1 |*| A2] =
         a
+
+      override def preShuffle[F[_, _], C](f: F[A1 |*| A2, C])(using
+        PairwiseRel[|*|, |*|, F],
+      ): Exists[[Q] =>> (F[A1 |*| A2, Q], Q ~⚬ C)] =
+        Exists((f, ~⚬.id))
 
       override def translateLR[<*>[_, _], F[_, _], S1, S2](
         fa1: F[A1, S1],
@@ -1206,6 +1265,13 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         val (x1, x2) = F.unzip(a)
         F.zip(x2, x1)
       }
+
+      override def preShuffle[F[_, _], C](f: F[X2 |*| X1, C])(using
+        F: PairwiseRel[|*|, |*|, F],
+      ): Exists[[Q] =>> (F[X1 |*| X2, Q], Q ~⚬ C)] =
+        F.unpair(f) match
+          case F.Unpaired.Impl(f2, f1) =>
+            Exists((F.pair(f1, f2), swap))
 
       override def translateLR[<*>[_, _], F[_, _], S1, S2](
         fx1: F[X1, S1],
@@ -1446,6 +1512,17 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         val (a1, a2)  = F.unzip(a12)
         F.zip(a1, g(F.zip(a2, a3)))
       }
+
+      override def preShuffle[F[_, _], C](f: F[A1 |*| (B2 |*| B3), C])(using
+        F: PairwiseRel[|*|, |*|, F],
+      ): Exists[[Q] =>> (F[(A1 |*| A2) |*| A3, Q], Q ~⚬ C)] =
+        F.unpair(f) match
+          case F.Unpaired.Impl(f1, f23) =>
+            g.preShuffle(f23) match
+              case Exists.Some((f23, g)) =>
+                F.unpair(f23) match
+                  case F.Unpaired.Impl(f2, f3) =>
+                    Exists((F.pair(F.pair(f1, f2), f3), assocLR > snd(g)))
 
       override def translateLR[<*>[_,_], F[_,_], S12, S3](
         fa12: F[A1 |*| A2, S12],
@@ -1721,6 +1798,17 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F.zip(g(F.zip(a1, a2)), a3)
       }
 
+      override def preShuffle[F[_, _], C](f: F[(B1 |*| B2) |*| A3, C])(using
+        F: PairwiseRel[|*|, |*|, F],
+      ): Exists[[Q] =>> (F[A1 |*| (A2 |*| A3), Q], Q ~⚬ C)] =
+        F.unpair(f) match
+          case F.Unpaired.Impl(f12, f3) =>
+            g.preShuffle(f12) match
+              case Exists.Some((f12, g)) =>
+                F.unpair(f12) match
+                  case F.Unpaired.Impl(f1, f2) =>
+                    Exists((F.pair(f1, F.pair(f2, f3)), assocRL > fst(g)))
+
       override def translateLR[<*>[_, _], F[_, _], S1, S23](
         fa1: F[A1, S1],
         fa23: F[A2 |*| A3, S23],
@@ -1993,6 +2081,17 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         val (a1, a2)  = F.unzip(a12)
         F.zip(g(F.zip(a1, a3)), a2)
       }
+
+      override def preShuffle[F[_, _], C](f: F[(B1 |*| B2) |*| A2, C])(using
+        F: PairwiseRel[|*|, |*|, F],
+      ): Exists[[Q] =>> (F[(A1 |*| A2) |*| A3, Q], Q ~⚬ C)] =
+        F.unpair(f) match
+          case F.Unpaired.Impl(f12, f3) =>
+            g.preShuffle(f12) match
+              case Exists.Some((f12, g)) =>
+                F.unpair(f12) match
+                  case F.Unpaired.Impl(f1, f2) =>
+                    Exists((F.pair(F.pair(f1, f3), f2), ix > fst(g)))
 
       override def translateLR[<*>[_, _], F[_, _], S12, S3](
         fa12: F[A1 |*| A2, S12],
@@ -2269,6 +2368,17 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         val (a2, a3)  = F.unzip(a23)
         F.zip(a2, g(F.zip(a1, a3)))
       }
+
+      override def preShuffle[F[_, _], C](f: F[A2 |*| (B2 |*| B3), C])(using
+        F: PairwiseRel[|*|, |*|, F],
+      ): Exists[[Q] =>> (F[A1 |*| (A2 |*| A3), Q], Q ~⚬ C)] =
+        F.unpair(f) match
+          case F.Unpaired.Impl(f1, f23) =>
+            g.preShuffle(f23) match
+              case Exists.Some((f23, g)) =>
+                F.unpair(f23) match
+                  case F.Unpaired.Impl(f2, f3) =>
+                    Exists((F.pair(f2, F.pair(f1, f3)), xi > snd(g)))
 
       override def translateLR[<*>[_, _], F[_, _], S1, S23](
         fa1: F[A1, S1],
@@ -2580,6 +2690,18 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         val (a3, a4)   = F.unzip(a34)
         F.zip(g1(F.zip(a1, a3)), g2(F.zip(a2, a4)))
       }
+
+      override def preShuffle[F[_, _], C](f: F[(B1 |*| B2) |*| (B3 |*| B4), C])(using
+        F: PairwiseRel[|*|, |*|, F],
+      ): Exists[[Q] =>> (F[(A1 |*| A2) |*| (A3 |*| A4), Q], Q ~⚬ C)] =
+        F.unpair(f) match
+          case F.Unpaired.Impl(f12, f34) =>
+            (g1.preShuffle(f12), g2.preShuffle(f34)) match
+              case (Exists.Some((f12, g1)), Exists.Some((f34, g2))) =>
+                (F.unpair(f12), F.unpair(f34)) match
+                  case (F.Unpaired.Impl(f1, f2), F.Unpaired.Impl(f3, f4)) =>
+                    Exists((F.pair(F.pair(f1, f3), F.pair(f2, f4)), ixi > par(g1, g2)))
+
 
       override def translateLR[<*>[_, _], F[_, _], S1, S2](
         fa12: F[A1 |*| A2, S1],
