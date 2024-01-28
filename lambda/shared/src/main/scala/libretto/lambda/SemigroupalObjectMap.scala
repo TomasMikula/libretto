@@ -6,11 +6,11 @@ import libretto.lambda.util.Functional
   *
   * @tparam |*| monoidal product in the source "category"
   * @tparam <*> monoidal product in the target "category"
-  * @tparam F mapping on objects.
+  * @tparam F relation on objects.
   *   `f: F[A, X]` means that object `A` of the source "category"
-  *   is mapped to object `X` in the target "category".
+  *   is _related_ to object `X` in the target "category".
   */
-trait SemigroupalObjectMap[|*|[_, _], <*>[_, _], F[_, _]] extends Functional[F] {
+trait PairwiseRel[|*|[_, _], <*>[_, _], F[_, _]] {
   sealed trait Unpaired[A1, A2, X] {
     type X1
     type X2
@@ -30,3 +30,7 @@ trait SemigroupalObjectMap[|*|[_, _], <*>[_, _], F[_, _]] extends Functional[F] 
   def pair[A1, A2, X1, X2](f1: F[A1, X1], f2: F[A2, X2]): F[A1 |*| A2, X1 <*> X2]
   def unpair[A1, A2, X](f: F[A1 |*| A2, X]): Unpaired[A1, A2, X]
 }
+
+trait SemigroupalObjectMap[|*|[_, _], <*>[_, _], F[_, _]]
+  extends PairwiseRel[|*|, <*>, F]
+     with Functional[F]
