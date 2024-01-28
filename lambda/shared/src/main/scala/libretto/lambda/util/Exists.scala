@@ -1,9 +1,11 @@
 package libretto.lambda.util
 
-sealed trait Exists[F[_]] {
+sealed trait ExistsCo[+F[_]] {
   type T
   val value: F[T]
 }
+
+sealed trait Exists[F[_]] extends ExistsCo[F]
 
 object Exists {
   case class Some[F[_], A](override val value: F[A]) extends Exists[F] {
