@@ -5,14 +5,171 @@ import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.scaletto.StarterKit._
 import libretto.typology.inference.TypeOps
-import libretto.typology.kinds.{Kind, ×, ○, ●}
+import libretto.typology.kinds.{Kind, ProperKind, ×, ○, ●}
 import libretto.typology.toylang.terms.TypedFun
+import libretto.typology.toylang.types
 import libretto.typology.toylang.types.{Label, Routing, ScalaTypeParam, Type, TypeConstructor, TypeExpr, TypeFun, TypeTag}
 import libretto.scaletto.StarterKit
 
 type TypeFun[K, L] = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, K, L]
 type TypeTagF = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, ●, ●]
 type TypeTagPF = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, ● × ●, ●]
+
+// private[typeinfer] type NonEmptyTreeF[A, X] = A |+| (X |*| X)
+// private[typeinfer] type NonEmptyTree[A] = Rec[NonEmptyTreeF[A, _]]
+
+private[typeinfer] type KindMismatch[Types] = Types |*| Types
+private[typeinfer] type TypesF[T, X] = KindMismatch[X] |+| (T |+| (X |*| X))
+private[typeinfer] type Types[T] = Rec[TypesF[T, _]]
+
+// private[typeinfer] object NonEmptyTree {
+//   def singleton[A]: A -⚬ NonEmptyTree[A] = pack ∘ injectL
+//   def branch[A]: (NonEmptyTree[A] |*| NonEmptyTree[A]) -⚬ NonEmptyTree[A] = pack ∘ injectR
+
+//   def map[A, B](f: A -⚬ B): NonEmptyTree[A] -⚬ NonEmptyTree[B] =
+//     rec { self =>
+//       unpack > either(
+//         f > singleton,
+//         par(self, self) > branch,
+//       )
+//     }
+
+//   def splitMap[A, B, C](f: A -⚬ (B |*| C)): NonEmptyTree[A] -⚬ (NonEmptyTree[B] |*| NonEmptyTree[C]) =
+//     rec { self =>
+//       unpack > either(
+//         f > par(singleton, singleton),
+//         par(self, self) > IXI > par(branch, branch),
+//       )
+//     }
+// }
+
+private[typeinfer] object Types {
+  def pack[T]: TypesF[T, Types[T]] -⚬ Types[T] = dsl.pack[TypesF[T, _]]
+
+  def singleType[T]: T -⚬ Types[T] = pack ∘ injectR ∘ injectL
+  def prod[T]: (Types[T] |*| Types[T]) -⚬ Types[T] = pack ∘ injectR ∘ injectR
+  def kindMismatch[T]: (Types[T] |*| Types[T]) -⚬ Types[T] = pack ∘ injectL
+
+  def map[T, U](f: T -⚬ U): Types[T] -⚬ Types[U] =
+    rec { self =>
+      λ { ts =>
+        unpack(ts) switch {
+          case Left(x |*| y) =>
+            kindMismatch(self(x) |*| self(y))
+          case Right(ts) =>
+            ts switch {
+              case Left(t) => singleType(f(t))
+              case Right(ts1 |*| ts2) => prod(self(ts1) |*| self(ts2))
+            }
+        }
+      }
+    }
+
+  def splitMap[T, U, V](f: T -⚬ (U |*| V)): Types[T] -⚬ (Types[U] |*| Types[V]) =
+    rec { self =>
+      λ { ts =>
+        unpack(ts) switch {
+          case Left(mismatch) =>
+            val x |*| y = mismatch
+            val xu |*| xv = self(x)
+            val yu |*| yv = self(y)
+            kindMismatch(xu |*| yu) |*| kindMismatch(xv |*| yv)
+          case Right(ts) =>
+            ts switch {
+              case Left(t) => f(t) :>> par(singleType, singleType)
+              case Right(ts1 |*| ts2) => (self(ts1) |*| self(ts2)) > IXI > par(prod, prod)
+            }
+        }
+      }
+    }
+
+  def mapWith[X, T, U](f: (X |*| T) -⚬ U)(using Cosemigroup[X]): (X |*| Types[T]) -⚬ Types[U] =
+    rec { self =>
+      λ { case +(x) |*| ts =>
+        unpack(ts) switch {
+          case Left(p |*| q) =>
+            kindMismatch(self(x |*| p) |*| self(x |*| q))
+          case Right(ts) =>
+            ts switch {
+              case Left(t) => singleType(f(x |*| t))
+              case Right(ts1 |*| ts2) => prod(self(x |*| ts1) |*| self(x |*| ts2))
+            }
+        }
+      }
+    }
+
+  def merge[T](f: (T |*| T) -⚬ T): (Types[T] |*| Types[T]) -⚬ Types[T] =
+    rec { self =>
+      λ { case ts |*| us =>
+        unpack(ts) switch {
+          case Right(ts) =>
+            unpack(us) switch {
+              case Right(us) =>
+                ts switch {
+                  case Left(t) =>
+                    us switch {
+                      case Left(u) =>
+                        singleType(f(t |*| u))
+                      case Right(us) =>
+                        kindMismatch(singleType(t) |*| prod(us))
+                    }
+                  case Right(ts1 |*| ts2) =>
+                    us switch {
+                      case Left(u) =>
+                        kindMismatch(prod(ts1 |*| ts2) |*| singleType(u))
+                      case Right(us1 |*| us2) =>
+                        prod(self(ts1 |*| us1) |*| self(ts2 |*| us2))
+                    }
+                }
+              case Left(ux) =>
+                kindMismatch(pack(injectR(ts)) |*| kindMismatch(ux))
+            }
+          case Left(tx) =>
+            kindMismatch(kindMismatch(tx) |*| us)
+        }
+      }
+    }
+
+  def output[T](
+    outputElem: T -⚬ Val[Type[Label]],
+  ): Types[T] -⚬ Val[types.Types[Label]] =
+    rec { self =>
+      λ { ts =>
+        unpack(ts) switch {
+          case Right(ts) =>
+            ts switch {
+              case Left(t) =>
+                outputElem(t) :>> mapVal { types.Types.SingleType(_) }
+              case Right(ts |*| us) =>
+                (self(ts) ** self(us)) :>> mapVal {
+                  case (ts, us) => types.Types.Product(ts, us)
+                }
+            }
+          case Left(x |*| y) =>
+            (self(x) ** self(y)) :>> mapVal {
+              case (x, y) => types.Types.KindMismatch(x, y)
+            }
+        }
+      }
+    }
+
+  def close[T](
+    closeElem: T -⚬ Done,
+  ): Types[T] -⚬ Done =
+    rec { self =>
+      λ { ts =>
+        unpack(ts) switch {
+          case Right(ts) =>
+            ts switch {
+              case Left(t) => closeElem(t)
+              case Right(t |*| u) => join(self(t) |*| self(u))
+            }
+          case Left(x |*| y) =>
+            join(self(x) |*| self(y))
+        }
+      }
+    }
+}
 
 private[typeinfer] type NonAbstractTypeF[V, T, X] = (
   (
@@ -24,7 +181,11 @@ private[typeinfer] type NonAbstractTypeF[V, T, X] = (
   |+| Done // string
   |+| ( // fix or pfix
     Val[TypeConstructor.Fix[ScalaTypeParam, ?]]
-    |+| (Val[TypeConstructor.PFix[ScalaTypeParam, ●, ?]] |*| T)
+
+    // Parameterized fixed point.
+    // The nesting of the types must correspond to the kinds of PFix type parameters.
+    // Once Libretto has existentials, can use them to ensure well-kindedness statically.
+    |+| (Val[TypeConstructor.PFix[ScalaTypeParam, ?, ?]] |*| Types[T])
   )
   |+| (T |*| T) // recCall
   |+| (T |*| T) // either
@@ -55,8 +216,11 @@ private[typeinfer] object NonAbstractType {
   // def fixT[V, T, F[_]](F: TypeTag[F]): One -⚬ NonAbstractType[V, T] =
   //   fix ∘ const(TypeTag.toTypeFun(F))
 
-  def pfix[V, T]: (Val[TypeConstructor.PFix[ScalaTypeParam, ●, ?]] |*| T) -⚬ NonAbstractType[V, T] =
+  def pfixs[V, T]: (Val[TypeConstructor.PFix[ScalaTypeParam, ?, ?]] |*| Types[T]) -⚬ NonAbstractType[V, T] =
     pack ∘ injectL ∘ injectL ∘ injectL ∘ injectR ∘ injectR
+
+  def pfix[V, T]: (Val[TypeConstructor.PFix[ScalaTypeParam, ●, ?]] |*| T) -⚬ NonAbstractType[V, T] =
+    pfixs ∘ par(mapVal(p => p), Types.singleType[T])
 
   // def apply1T[V, T, F[_]](
   //   F: TypeTag[F],
@@ -173,7 +337,7 @@ private[typeinfer] object NonAbstractType {
                         case Left(f) => // fix
                           fix(f)
                         case Right(f |*| x) => // pfix
-                          pfix(f |*| g(x))
+                          pfixs(f |*| Types.map(g)(x))
                       }
                     case Left(t) =>
                       t switch {
@@ -226,8 +390,8 @@ private[typeinfer] object NonAbstractType {
                       t switch {
                         case Left(f) => // fix
                           fix(f waitFor X.close(x))
-                        case Right(f |*| y) => // pfix
-                          pfix(f |*| g(x |*| y))
+                        case Right(f |*| ts) => // pfix
+                          pfixs(f |*| Types.mapWith(g)(x |*| ts))
                       }
                     case Left(t) =>
                       t switch {
@@ -288,8 +452,8 @@ private[typeinfer] object NonAbstractType {
                         case Left(+(g)) => // fix
                           fix(g) |*| fix(g)
                         case Right(+(g) |*| t) => // pfix
-                          val t1 |*| t2 = f(t)
-                          pfix(g |*| t1) |*| pfix(g |*| t2)
+                          val t1 |*| t2 = Types.splitMap(f)(t)
+                          pfixs(g |*| t1) |*| pfixs(g |*| t2)
                       }
                     case Left(t) =>
                       t switch {
@@ -416,7 +580,7 @@ private[typeinfer] object NonAbstractType {
                                                 if (f == h) Left(f)
                                                 else        Right((f, h))
                                               } :>> liftEither) switch {
-                                                case Left(f)   => pfix(f |*| g(x |*| y))
+                                                case Left(f)   => pfixs(f |*| Types.merge(g)(x |*| y))
                                                 case Right(fh) => (fh |*| x |*| y) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
                                               }
                                           }
@@ -425,7 +589,7 @@ private[typeinfer] object NonAbstractType {
                                       mismatch(
                                         (a switch {
                                           case Left(f)   => fix(f)
-                                          case Right(fp) => pfix(fp)
+                                          case Right(fp) => pfixs(fp)
                                         })
                                         |*| pack(injectL(injectL(injectL(injectL(b)))))
                                       )
@@ -437,7 +601,7 @@ private[typeinfer] object NonAbstractType {
                                         pack(injectL(injectL(injectL(injectL(a)))))
                                         |*| (b switch {
                                           case Left(g)   => fix(g)
-                                          case Right(gy) => pfix(gy)
+                                          case Right(gy) => pfixs(gy)
                                         })
                                       )
                                     case Left(b) =>
@@ -560,8 +724,8 @@ private[typeinfer] object NonAbstractType {
                         case Left(f) =>
                           f :>> mapVal { f => Type.fix(f.vmap(Label.ScalaTParam(_))) }
                         case Right(pf |*| p) =>
-                          (pf ** outputElem(p)) :>> mapVal { case (pf, p) =>
-                            Type.Fun.pfix(pf.vmap(Label.ScalaTParam(_))).apply(p)
+                          (pf ** Types.output(outputElem)(p)) :>> mapVal { case (pf, p) =>
+                            Type.Fun.pfixKindCheck(pf.vmap(Label.ScalaTParam(_)), p)
                           }
                       }
                     case Left(x) =>
@@ -608,7 +772,7 @@ private[typeinfer] object NonAbstractType {
               case Right(t) =>
                 t switch {
                   case Left(f) => neglect(f)
-                  case Right(f |*| x) => join(neglect(f) |*| closeElem(x))
+                  case Right(f |*| x) => join(neglect(f) |*| Types.close(closeElem)(x))
                 }
               case Left(t) => t switch {
                 case Right(x) => x
@@ -645,7 +809,7 @@ private[typeinfer] object NonAbstractType {
               case Right(t) =>
                 t switch {
                   case Left(f) => fix(f waitFor d)
-                  case Right(f |*| x) => pfix(f.waitFor(d) |*| x)
+                  case Right(f |*| x) => pfixs(f.waitFor(d) |*| x)
                 }
               case Left(t) => t switch {
                 case Right(x) => string(join(d |*| x))
@@ -693,10 +857,6 @@ private[typeinfer] object NonAbstractType {
       NonAbstractType.recCall > lift
     def fix[X](f: TypeConstructor.Fix[ScalaTypeParam, X]): One -⚬ T =
       const(f) > NonAbstractType.fix > lift
-    def pfix[X](f: TypeConstructor.PFix[ScalaTypeParam, ●, X]): T -⚬ T =
-      λ { t =>
-        (constantVal(f) |*| t) :>> NonAbstractType.pfix :>> lift
-      }
     def abstractTypeName(name: ScalaTypeParam): One -⚬ T =
       absType(Label.ScalaTParam(name))
 
@@ -756,6 +916,29 @@ private[typeinfer] object NonAbstractType {
           )
       }
 
+    def toTypes[P, Q](pq: P as Q)(using p: ProperKind[P]): Q -⚬ Types[T] =
+      pq match
+        case Map_○ =>
+          ProperKind.cannotBeUnit(p)
+        case Map_● =>
+          Types.singleType[T]
+        case π: Pair[p1, p2, q1, q2] =>
+          val (p1, p2) = ProperKind.unpair(p: ProperKind[p1 × p2])
+          par(
+            toTypes(π.f1)(using p1),
+            toTypes(π.f2)(using p2),
+          ) > Types.prod
+
+    def compilePFix[P, Q, X](
+      pq: P as Q,
+      f: TypeConstructor.PFix[ScalaTypeParam, P, X],
+    )(using
+      ProperKind[P],
+    ): Q -⚬ T =
+      λ { q =>
+        (constantVal(f) |*| toTypes(pq)(q)) :>> NonAbstractType.pfixs :>> lift
+      }
+
     def doCompilePrimitive[k, l, q](
       fk: k as q,
       x: TypeConstructor[ScalaTypeParam, k, l],
@@ -777,12 +960,8 @@ private[typeinfer] object NonAbstractType {
         case f @ Fix(_, _) =>
           MappedMorphism(Map_○, cp.fix(f) > introFst(done), Map_●)
         case p @ PFix(_, _) =>
-          p.inKind match
-            case Kind.Type =>
-              summon[k =:= ●]
-              MappedMorphism(Map_●, cp.pfix(p) > introFst(done), Map_●)
-            case other =>
-              UnhandledCase.raise(s"Unsupported recursive type parameterized by multiple types")
+          import p.g.inKind1
+          MappedMorphism(fk, compilePFix(fk, p) > introFst(done), Map_●)
         case AbstractType(label) =>
           MappedMorphism(Map_○, cp.abstractTypeName(label) > introFst(done), Map_●)
         case TypeMismatch(a, b) =>

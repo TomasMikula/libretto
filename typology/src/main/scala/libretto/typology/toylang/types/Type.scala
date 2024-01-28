@@ -320,6 +320,12 @@ object Type {
           given Kind[e.T] = args.outKind.kind
           TypeFun(Routing.id[●], pfix(pf).applyTo(args))
 
+    def pfixKindCheck[V, P, X](
+      f: TypeConstructor.PFix[V, P, X],
+      p: Types[V],
+    ): Type[V] =
+      UnhandledCase.raise(s"pfixKindCheck($f, $p)")
+
     def abstractType[V](name: V): Type.Fun[V, ○, ●] =
       fromExpr(TypeExpr.Primitive(TypeConstructor.AbstractType(name)))
   }

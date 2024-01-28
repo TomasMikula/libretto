@@ -291,7 +291,7 @@ object TypeExpr {
             case Fst(f) =>
               UnhandledCase.raise(s"ltrimArgs($tr, $args)")
             case Snd(f) =>
-              UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+              Translucent[TC, J1, J2, J1, L](Id(), RTotal(f, TransferOpt.None()))
             case IntroFst(_, _) | IntroSnd(_, _) | IntroBoth(_, _) =>
               throw AssertionError(s"Impossible (at ${summon[SourcePos]})") // TODO: use a precise, non-capturing representation of args
 

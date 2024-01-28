@@ -1,9 +1,10 @@
 package libretto.typology.toylang.types
 
-import libretto.lambda.{MonoidalCategory, MonoidalObjectMap, Tupled, UnhandledCase}
+import libretto.lambda.{MonoidalCategory, MonoidalObjectMap, Projection, Tupled, UnhandledCase}
 import libretto.lambda.util.{Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds._
+import libretto.typology.types.kindShuffle.~⚬
 import libretto.typology.util.Either3
 import scala.annotation.targetName
 
@@ -178,6 +179,63 @@ sealed trait PartialArgs[F[_, _], K, L] {
   //       UnhandledCase.raise(s"$this.split")
   //     case IntroBoth(f1, f2) =>
   //       UnhandledCase.raise(s"$this.split")
+
+  def project[M](p: Projection[×, L, M]): Exists[[X] =>> (Projection[×, K, X], PartialArgs[F, X, M])] =
+    p match
+      case Projection.Id() => Exists((Projection.Id(), this))
+      case p: Projection.Proper[pr, l, m] => projectProper(p)
+
+  protected def projectProper[M](p: Projection.Proper[×, L, M]): Exists[[X] =>> (Projection[×, K, X], PartialArgs[F, X, M])] =
+    UnhandledCase.raise(s"$this.projectProper($p)")
+
+  def multiply[LL](
+    m: Multipliers[L, LL],
+  ): Exists[[KK] =>> Exists[[X] =>> (Multipliers[K, KK], KK ~⚬ X, PartialArgs[F, X, LL])]] =
+    m match
+      case Multipliers.Single(m) =>
+        m match
+          case Multiplier.Id() => Exists(Exists(Multipliers.id, ~⚬.id, this))
+          case Multiplier.Dup(m1, m2) => UnhandledCase.raise(s"$this.multiply($m)")
+      case m @ Multipliers.Par(m1, m2) =>
+        this match
+          case Id() => Exists(Exists((m, ~⚬.id, Id()(using m.outKind))))
+          case Lift(f) =>
+            UnhandledCase.raise(s"$this.multiply($m)")
+          case Par(f1, f2) =>
+            UnhandledCase.raise(s"$this.multiply($m)")
+          case Fst(f) =>
+            UnhandledCase.raise(s"$this.multiply($m)")
+          case Snd(f) =>
+            UnhandledCase.raise(s"$this.multiply($m)")
+          case IntroFst(f1, f2) =>
+            UnhandledCase.raise(s"$this.multiply($m)")
+          case IntroSnd(f1, f2) =>
+            UnhandledCase.raise(s"$this.multiply($m)")
+          case IntroBoth(f1, f2) =>
+            (f1.multiply(m1), f2.multiply(m2)) match
+              case (Exists.Some(Exists.Some((m1, s1, a1))), Exists.Some(Exists.Some((m2, s2, a2)))) =>
+                Multipliers.proveId(m1) match
+                  case TypeEq(Refl()) =>
+                    Multipliers.proveId(m2) match
+                      case TypeEq(Refl()) =>
+                        s1.proveId(Kind.unitIsNotPair) match
+                          case TypeEq(Refl()) =>
+                            s2.proveId(Kind.unitIsNotPair) match
+                              case TypeEq(Refl()) =>
+                                Exists(Exists((Multipliers.id, ~⚬.id, introBoth(a1, a2))))
+
+      case Multipliers.None =>
+        ProperKind.cannotBeUnit(this.outKind)
+
+  def shuffle[M](s: L ~⚬ M): Exists[[X] =>> (K ~⚬ X, PartialArgs[F, X, M])] =
+    s match
+      case ~⚬.Id() =>
+        Exists((~⚬.id, this))
+      case ~⚬.Bimap(par) =>
+        UnhandledCase.raise(s"$this.shuffle($s)")
+      case ~⚬.Xfer(f1, f2, transfer) =>
+        UnhandledCase.raise(s"$this.shuffle($s)")
+
 }
 
 object PartialArgs {

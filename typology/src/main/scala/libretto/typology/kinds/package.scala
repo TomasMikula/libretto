@@ -67,10 +67,18 @@ package object kinds {
       kl match {
         case Prod(k, l) => l
       }
+
+    val unitIsNotPair: [x, y] => (○ =:= (x × y)) => Nothing =
+      [x, y] => (ev: ○ =:= (x × y)) => {
+        val k: ProperKind[○] = ev.substituteContra(ProperKind.fromProd(ev.substituteCo(summon[Kind[○]])))
+        ProperKind.cannotBeUnit(k)
+      }
   }
 
   /** Kind not containing the auxiliary unit kind [[○]]. */
   sealed trait ProperKind[K] {
+    import ProperKind.*
+
     def ×[L](l: ProperKind[L]): ProperKind[K × L] =
       ProperKind.Prod(this, l)
 
@@ -79,6 +87,14 @@ package object kinds {
         case ProperKind.Type       => Kind.Type
         case ProperKind.Prod(k, l) => Kind.Prod(k, l)
       }
+
+    def foldMap[F[_]](
+      map: [k] => OutputKind[k] => F[k],
+      zip: [k, l] => (F[k], F[l]) => F[k × l],
+    ): F[K] =
+      this match
+        case Type       => map(OutputKind.Type)
+        case Prod(k, l) => zip(k.foldMap(map, zip), l.foldMap(map, zip))
 
     override def toString: String =
       kind.toString
@@ -125,6 +141,10 @@ package object kinds {
       this match {
         case OutputKind.Type => ProperKind.Type
       }
+
+    def isNotPair: [x, y] => (K =:= (x × y)) => Nothing =
+      [x, y] => (ev: K =:= (x × y)) =>
+        OutputKind.cannotBePair(ev.substituteCo(OutputKind.this))
 
     override def toString: String =
       kind.toString
