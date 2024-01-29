@@ -94,7 +94,9 @@ object Multipliers {
         case Multiplier.Dup(n1, n2) => Multiplier.Dup(m1 after n1, m2 after n2)
 
     override def >[CC](that: Multipliers[AA × BB, CC]): Multipliers.Proper[A × B, CC] =
-      UnhandledCase.raise(s"$this > $that")
+      that match
+        case Par(n1, n2)   => Par(m1 > n1, m2 > n2)
+        case s @ Single(_) => OutputKind.cannotBePair(s.inKind)
 
     override def project[CC](
       p: Projection[×, AA × BB, CC],

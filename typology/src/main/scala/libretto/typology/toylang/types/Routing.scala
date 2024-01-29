@@ -487,46 +487,67 @@ object Routing {
   def untangle[K1, K2, L](r: Routing[K1 × K2, L]): UntangleRes[K1, K2, L] =
     import UntangleRes.*
 
-    // val (k1, k2) = ProperKind.unpair(r.inKind)
-    // given Kind[K1] = k1.kind
-    // given Kind[K2] = k2.kind
+    val (k1, k2) = ProperKind.unpair(r.inKind)
+    given Kind[K1] = k1.kind
+    given Kind[K2] = k2.kind
+    given Kind[L] = r.outKind
 
-    UnhandledCase.raise(s"Routing.untangle($r)")
-    // r match
-    //   case AndThen(f, g) =>
-    //     // f.outKind.properKind match
-    //     //   case Left(TypeEq(Refl())) =>
-    //     //     proveId(g) match { case TypeEq(Refl()) => ProperKind.cannotBeUnit(l) }
-    //     //   case Right(m) =>
-    //     //     traceSnd(f)(using summon, m) match
-    //     //       case Traced(r1, m2, tr) =>
-    //     //         ???
-    //     //       case other =>
-    //     //         UnhandledCase.raise(s"$other")
-    //     untangle(f) match
-    //       case Eliminated() => proveId(g) match { case TypeEq(Refl()) => Eliminated() }
-    //       case FstEliminated(f2) => FstEliminated(f2 > g)
-    //       case SndEliminated(f1) => SndEliminated(f1 > g)
-    //       case Decomposed(f1, f2, tr) => ???
+    r match
+      case Elim() =>
+        UntangleRes.Eliminated()
+      case Impl(p, m, s) =>
+        p match
+          case Projection.Id() =>
+            untangle(Projection.Id(), Projection.Id(), m, s)
+          case Projection.DiscardFst(p2) =>
+            UnhandledCase.raise(s"Routing.untangle($r)")
+          case Projection.DiscardSnd(p1) =>
+            UnhandledCase.raise(s"Routing.untangle($r)")
+          case Projection.Fst(p1) =>
+            UnhandledCase.raise(s"Routing.untangle($r)")
+          case Projection.Snd(p2) =>
+            UnhandledCase.raise(s"Routing.untangle($r)")
+          case Projection.Both(p1, p2) =>
+            UnhandledCase.raise(s"Routing.untangle($r)")
 
-    //   case Id() =>
-    //     Decomposed[K1, K2, K1, K2, K1, K2](Id(), Id(), kindShuffle.TransferOpt.None())
-    //   case Par(f1, f2) =>
-    //     UnhandledCase.raise(s"Routing.traceSnd($r)")
-    //   case AssocLR() =>
-    //     UnhandledCase.raise(s"Routing.traceSnd($r)")
-    //   case AssocRL() =>
-    //     UnhandledCase.raise(s"Routing.traceSnd($r)")
-    //   case Swap() =>
-    //     UnhandledCase.raise(s"Routing.traceSnd($r)")
-    //   case Elim() =>
-    //     UnhandledCase.raise(s"Routing.traceSnd($r)")
-    //   case ElimFst() =>
-    //     UnhandledCase.raise(s"Routing.traceSnd($r)")
-    //   case ElimSnd() =>
-    //     UnhandledCase.raise(s"Routing.traceSnd($r)")
-    //   case Dup() =>
-    //     UnhandledCase.raise(s"Routing.traceSnd($r)")
+  private def untangle[K1, K2, P1, P2, Q, L](
+    p1: Projection[×, K1, P1],
+    p2: Projection[×, K2, P2],
+    m: Multipliers[P1 × P2, Q],
+    s: Q ~⚬ L,
+  )(using
+    Kind[K1],
+    Kind[K2],
+    Kind[L],
+  ): UntangleRes[K1, K2, L] =
+    m match
+      case Multipliers.Par(m1, m2) =>
+        untangle(p1, p2, m1, m2, s)
+      case s @ Multipliers.Single(_) =>
+        OutputKind.cannotBePair(s.inKind)
+
+  private def untangle[K1, K2, P1, P2, Q1, Q2, L](
+    p1: Projection[×, K1, P1],
+    p2: Projection[×, K2, P2],
+    m1: Multipliers.Proper[P1, Q1],
+    m2: Multipliers.Proper[P2, Q2],
+    s: (Q1 × Q2) ~⚬ L,
+  )(using
+    Kind[K1],
+    Kind[K2],
+    Kind[L],
+  ): UntangleRes[K1, K2, L] =
+    ~⚬.decompose1(s) match
+      case ~⚬.Decomposition1(s1, s2, tr, ev @ TypeEq(Refl())) =>
+        val (r1, r2) =
+          ProperKind.unpair(
+            tr.asShuffle.invert.apply(ProperKind.fromProd(ev.substituteContra(summon[Kind[L]])))
+          )
+        UntangleRes.Decomposed(
+          Impl(p1, m1, s1)(using summon, r1.kind),
+          Impl(p2, m2, s2)(using summon, r2.kind),
+          tr,
+        )
 
   sealed trait UntangleRes[K1, K2, L]
   object UntangleRes {

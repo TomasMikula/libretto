@@ -105,7 +105,7 @@ object Type {
               case SndEliminated(r) =>
                 UnhandledCase.raise(s"pfixDecompose($f)")
               case r: Traced[k1, k2, q1, q2, l1, l2] =>
-                UnhandledCase.raise(s"pfixDecompose($f)")
+                UnhandledCase.raise(s"$r")
 
   // private type ClosedArgs[V, K, L] =
   //   PartialArgs[TypeExpr.Closed[TypeConstructor[V, _, _], _, _], K, L]
