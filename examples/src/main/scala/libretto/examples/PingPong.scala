@@ -76,7 +76,7 @@ object PingPong extends StarterApp {
   def alice: Done -⚬ Protocol = {
     id                                     .to [     Done                                        ] // (1)
       .>(aliceSays("sending ping"))        .to [     Done                                        ] // (2)
-      .>(constVal("ping"))                 .to [  Val["ping"]                                    ] // (3)
+      .>(constVal["ping"])                 .to [  Val["ping"]                                    ] // (3)
       .>(introSnd)                         .to [  Val["ping"] |*|               One              ] // (4)
       .>(snd(promise["pong"]))             .to [  Val["ping"] |*| (Neg["pong"]  |*| Val["pong"]) ] // (5)
       .>(assocRL)                          .to [ (Val["ping"] |*|  Neg["pong"]) |*| Val["pong"]  ] // (6)

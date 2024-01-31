@@ -1173,7 +1173,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
       G: Focus[|*|, G],
       D: Focus[|*|, D],
     ): Option[Tail[A, B |*| Y]] =
-      obstacle.maskInput.visit([CX] => (o: Op[CX, W], ev: CX =:= C[Var[X]]) => {
+      obstacle.maskInput.visit[Option[Tail[A, B |*| Y]]]([CX] => (o: Op[CX, W], ev: CX =:= C[Var[X]]) => {
         o match
           case o: Op.DupVar[v0] =>
             summon[W =:= (Var[v0] |*| Var[v0])]
@@ -1226,7 +1226,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
   object Unvar {
     case class SingleVar[V]() extends Unvar[Var[V], V] {
       override def uniqueOutType[C](that: Unvar[Var[V], C]): V =:= C =
-        that.maskInput.visit([VV] => (that: Unvar[VV, C], ev: VV =:= Var[V]) => {
+        that.maskInput.visit[V =:= C]([VV] => (that: Unvar[VV, C], ev: VV =:= Var[V]) => {
           that match {
             case _: SingleVar[v] =>
               (summon[Var[v] =:= VV] andThen ev) match { case Injective[Var](TypeEq(Refl())) =>
@@ -1240,7 +1240,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
 
     case class Par[A1, A2, X1, X2](u1: Unvar[A1, X1], u2: Unvar[A2, X2]) extends Unvar[A1 |*| A2, X1 |*| X2] {
       override def uniqueOutType[C](that: Unvar[A1 |*| A2, C]): (X1 |*| X2) =:= C =
-        that.maskInput.visit([A] => (that: Unvar[A, C], ev: A =:= (A1 |*| A2)) => {
+        that.maskInput.visit[(X1 |*| X2) =:= C]([A] => (that: Unvar[A, C], ev: A =:= (A1 |*| A2)) => {
           that match {
             case p: Par[a1, a2, c1, c2] =>
               (summon[(a1 |*| a2) =:= A] andThen ev)                match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>

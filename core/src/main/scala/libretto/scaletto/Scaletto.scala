@@ -108,6 +108,12 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
   def constVal[A](a: A): Done -⚬ Val[A]
   def constNeg[A](a: A): Neg[A] -⚬ Need
 
+  transparent inline def constVal[A]: Done -⚬ Val[A] =
+    constVal(scala.compiletime.constValue[A])
+
+  transparent inline def constNeg[A]: Neg[A] -⚬ Need =
+    constNeg(scala.compiletime.constValue[A])
+
   def neglect[A]: Val[A] -⚬ Done
   def inflate[A]: Need -⚬ Neg[A] =
     introFst(promise[A] > snd(neglect)) > assocLR > elimSnd(rInvertSignal)
