@@ -36,8 +36,8 @@ sealed trait Knit[**[_, _], F[_]] {
   def visit[R](
     caseKeepFst: [X] => (TypeEqK[F, **[X, *]], Res =:= X) => R,
     caseKeepSnd: [Y] => (TypeEqK[F, **[*, Y]], Res =:= Y) => R,
-    caseInFst: [F1[_], Y] => (k: Knit[**, F1], ev: TypeEqK[F, [x] =>> F1[x] ** Y], ev1: Res =:= (k.Res ** Y)) => R,
-    caseInSnd: [X, F2[_]] => (k: Knit[**, F2], ev: TypeEqK[F, [y] =>> X ** F2[y]], ev1: Res =:= (X ** k.Res)) => R,
+    caseInFst: [F1[_], Y] => (k: Knit[**, F1]) => (ev: TypeEqK[F, [x] =>> F1[x] ** Y], ev1: Res =:= (k.Res ** Y)) => R,
+    caseInSnd: [X, F2[_]] => (k: Knit[**, F2]) => (ev: TypeEqK[F, [y] =>> X ** F2[y]], ev1: Res =:= (X ** k.Res)) => R,
   ): R
 }
 
@@ -57,8 +57,8 @@ object Knit {
     override def visit[R](
       caseKeepFst: [X] => (TypeEqK[**[A, *], **[X, *]], Res =:= X) => R,
       caseKeepSnd: [Y] => (TypeEqK[**[A, *], **[*, Y]], Res =:= Y) => R,
-      caseInFst: [F1[_], Y] => (k: Knit[**, F1], ev: TypeEqK[**[A, *], [x] =>> F1[x] ** Y], ev1: Res =:= (k.Res ** Y)) => R,
-      caseInSnd: [X, F2[_]] => (k: Knit[**, F2], ev: TypeEqK[**[A, *], [y] =>> X ** F2[y]], ev1: Res =:= (X ** k.Res)) => R,
+      caseInFst: [F1[_], Y] => (k: Knit[**, F1]) => (ev: TypeEqK[**[A, *], [x] =>> F1[x] ** Y], ev1: Res =:= (k.Res ** Y)) => R,
+      caseInSnd: [X, F2[_]] => (k: Knit[**, F2]) => (ev: TypeEqK[**[A, *], [y] =>> X ** F2[y]], ev1: Res =:= (X ** k.Res)) => R,
     ): R =
       caseKeepFst[A](summon, summon)
   }
@@ -78,8 +78,8 @@ object Knit {
     override def visit[R](
       caseKeepFst: [X] => (TypeEqK[**[*, B], **[X, *]], Res =:= X) => R,
       caseKeepSnd: [Y] => (TypeEqK[**[*, B], **[*, Y]], Res =:= Y) => R,
-      caseInFst: [F1[_], Y] => (k: Knit[**, F1], ev: TypeEqK[**[*, B], [x] =>> F1[x] ** Y], ev1: Res =:= (k.Res ** Y)) => R,
-      caseInSnd: [X, F2[_]] => (k: Knit[**, F2], ev: TypeEqK[**[*, B], [y] =>> X ** F2[y]], ev1: Res =:= (X ** k.Res)) => R,
+      caseInFst: [F1[_], Y] => (k: Knit[**, F1]) => (ev: TypeEqK[**[*, B], [x] =>> F1[x] ** Y], ev1: Res =:= (k.Res ** Y)) => R,
+      caseInSnd: [X, F2[_]] => (k: Knit[**, F2]) => (ev: TypeEqK[**[*, B], [y] =>> X ** F2[y]], ev1: Res =:= (X ** k.Res)) => R,
     ): R =
       caseKeepSnd[B](summon, summon)
   }
@@ -99,10 +99,10 @@ object Knit {
     override def visit[R](
       caseKeepFst: [X] => (TypeEqK[[x] =>> F[x] ** B, **[X, *]], Res =:= X) => R,
       caseKeepSnd: [Y] => (TypeEqK[[x] =>> F[x] ** B, **[*, Y]], Res =:= Y) => R,
-      caseInFst: [F1[_], Y] => (k: Knit[**, F1], ev: TypeEqK[[x] =>> F[x] ** B, [x] =>> F1[x] ** Y], ev1: Res =:= (k.Res ** Y)) => R,
-      caseInSnd: [X, F2[_]] => (k: Knit[**, F2], ev: TypeEqK[[x] =>> F[x] ** B, [y] =>> X ** F2[y]], ev1: Res =:= (X ** k.Res)) => R,
+      caseInFst: [F1[_], Y] => (k: Knit[**, F1]) => (ev: TypeEqK[[x] =>> F[x] ** B, [x] =>> F1[x] ** Y], ev1: Res =:= (k.Res ** Y)) => R,
+      caseInSnd: [X, F2[_]] => (k: Knit[**, F2]) => (ev: TypeEqK[[x] =>> F[x] ** B, [y] =>> X ** F2[y]], ev1: Res =:= (X ** k.Res)) => R,
     ): R =
-      caseInFst[F, B](k, summon, summon)
+      caseInFst[F, B](k)(summon, summon)
   }
 
   class InFstImpl[**[_, _], F[_], B, A](override val k: Knitted[**, F, A]) extends InFst[**, F, B](k)
@@ -122,10 +122,10 @@ object Knit {
     override def visit[R](
       caseKeepFst: [X] => (TypeEqK[[y] =>> A ** G[y], **[X, *]], Res =:= X) => R,
       caseKeepSnd: [Y] => (TypeEqK[[y] =>> A ** G[y], **[*, Y]], Res =:= Y) => R,
-      caseInFst: [F1[_], Y] => (k: Knit[**, F1], ev: TypeEqK[[y] =>> A ** G[y], [x] =>> F1[x] ** Y], ev1: Res =:= (k.Res ** Y)) => R,
-      caseInSnd: [X, F2[_]] => (k: Knit[**, F2], ev: TypeEqK[[y] =>> A ** G[y], [y] =>> X ** F2[y]], ev1: Res =:= (X ** k.Res)) => R,
+      caseInFst: [F1[_], Y] => (k: Knit[**, F1]) => (ev: TypeEqK[[y] =>> A ** G[y], [x] =>> F1[x] ** Y], ev1: Res =:= (k.Res ** Y)) => R,
+      caseInSnd: [X, F2[_]] => (k: Knit[**, F2]) => (ev: TypeEqK[[y] =>> A ** G[y], [y] =>> X ** F2[y]], ev1: Res =:= (X ** k.Res)) => R,
     ): R =
-      caseInSnd[A, G](k, summon, summon)
+      caseInSnd[A, G](k)(summon, summon)
   }
 
   class InSndImpl[**[_, _], A, G[_], B](override val k: Knitted[**, G, B]) extends InSnd[**, A, G](k)

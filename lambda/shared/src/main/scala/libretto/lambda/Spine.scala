@@ -98,6 +98,7 @@ object Spine {
           ev4.substituteCo[H](f(snd)),
         caseInFst = [F1[_], Y] => (
           k1: Knit[|*|, F1],
+        ) => (
           ev: TypeEqK[[x] =>> F[x] |*| B, [x] =>> F1[x] |*| Y],
           ev1: k.Res =:= (k1.Res |*| Y),
         ) =>
@@ -110,6 +111,7 @@ object Spine {
           ev1.substituteContra[H](fst1 zip snd1),
         caseInSnd = [X, F2[_]] => (
           k2: Knit[|*|, F2],
+        ) => (
           ev: TypeEqK[[x] =>> F[x] |*| B, [y] =>> X |*| F2[y]],
           ev1: k.Res =:= (X |*| k2.Res),
         ) =>
@@ -150,6 +152,7 @@ object Spine {
           ev3(ev4.flip(())),
         caseInFst = [F1[_], Y] => (
           k1: Knit[|*|, F1],
+        ) => (
           ev1: TypeEqK[[y] =>> A |*| F[y], [x] =>> F1[x] |*| Y],
           ev2: k.Res =:= (k1.Res |*| Y),
         ) =>
@@ -161,6 +164,7 @@ object Spine {
           un(()),
         caseInSnd = [X, F2[_]] => (
           k2: Knit[|*|, F2],
+        ) => (
           ev1: TypeEqK[[y] =>> A |*| F[y], [y] =>> X |*| F2[y]],
           ev2: k.Res =:= (X |*| k2.Res),
         ) =>
