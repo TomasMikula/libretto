@@ -51,6 +51,9 @@ object Multiplier {
 
   }
 
+  def dup[×[_, _], A]: Multiplier[×, A, A × A] =
+    Dup(Id(), Id())
+
   def strongZippable[×[_, _], A](
     inputIsAtomic: [x, y] => (A =:= (x × y) => Nothing)
   ): StrongZippable[×, Multiplier[×, A, _]] =

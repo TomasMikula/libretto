@@ -5,6 +5,8 @@ import libretto.lambda.Tupled.*
 import libretto.lambda.util.{Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
+import libretto.typology.types.kindShuffle
+import libretto.typology.types.kindShuffle.TransferOpt
 import libretto.typology.util.Either3
 
 type Type[V] = TypeExpr[TypeConstructor[V, _, _], ○, ●]
@@ -82,10 +84,11 @@ object Type {
   ): Either3[
     Type.Fun[V, ●, ●],
     Nothing,
-    Exists[[Y] =>> (
-      PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ●, Y],
+    Exists[[X] =>> Exists[[Y] =>> (
+      Routing[●, X],
+      PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], X, Y],
       TypeConstructor.PFix[V, Y, ?],
-    )],
+    )]],
   ] =
     f.expr.open1 match
       case Left(t) =>
@@ -97,23 +100,36 @@ object Type {
           case Either3.Middle(x) =>
             Either3.Middle(x)
           case Either3.Right(Exists.Some((capt, expr))) =>
-            import expr.inKind2
-            import Routing.TraceSndRes.{FstEliminated, SndEliminated, Traced}
-            Routing.traceSnd(f.pre) match
-              case FstEliminated(m) =>
-                UnhandledCase.raise(s"pfixDecompose($f)")
-              case SndEliminated(r) =>
-                UnhandledCase.raise(s"pfixDecompose($f)")
-              case r: Traced[k1, k2, q1, q2, l1, l2] =>
-                UnhandledCase.raise(s"$r")
+            Either3.Right(pfixDecompose(capt, f.pre, expr))
+
+  def pfixDecompose[V, X, Y](
+    capt: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, X],
+    pre: Routing[● × ●, Y],
+    expr: TypeExpr.Open.LTrimmed[TypeConstructor[V, _, _], X, Y, ●],
+  ): Exists[[P] =>> Exists[[Q] =>> (
+    Routing[●, P],
+    PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], P, Q],
+    TypeConstructor.PFix[V, Q, ?],
+  )]] =
+    import expr.inKind2
+    import Routing.TraceSndRes.{FstEliminated, SndEliminated, Traced}
+    Routing.traceSnd(pre) match
+      case FstEliminated(m) =>
+        UnhandledCase.raise(s"pfixDecompose($capt, $pre, $expr)")
+      case SndEliminated(r) =>
+        UnhandledCase.raise(s"pfixDecompose($capt, $pre, $expr)")
+      case r: Traced[k1, k2, q1, q2, y1, y2] =>
+        summon[Y =:= (y1 × y2)]
+        TypeExpr.Open.LTrimmed.ltrimMore(r.tr, expr) match
+          case Exists.Some((args, expr)) =>
+            val args1 = args.translate([k, l] => (e: TypeExpr.Open[TypeConstructor[V, _, _], k, l]) => e.unopen)
+            Exists(Exists((r.r, PartialArgs.introFst(capt, args1), TypeConstructor.PFix(r.m, expr))))
 
   // private type ClosedArgs[V, K, L] =
   //   PartialArgs[TypeExpr.Closed[TypeConstructor[V, _, _], _, _], K, L]
 
   private type Capt[V, K, L] =
     TypeExpr.Capt[TypeConstructor[V, _, _], K, L]
-
-  import TypeExpr.Open.sh
 
   private def fixDecompose[V, K, X, L](
     cpt: Capt[V, K, X],
@@ -141,7 +157,7 @@ object Type {
 
   private def fixWithCapture[V, X, K, L1, L2, L](
     captured: Tupled[×, TypeConstructor[V, ○, _], X],
-    reorg: sh.TransferOpt[X, K, L1, L2],
+    reorg: TransferOpt[X, K, L1, L2],
     opn: OpenExpr[V, L1 × L2, L],
   ): Exists[[Y] =>> (
     PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, Y],
@@ -164,7 +180,7 @@ object Type {
         val cArgs1 =
           captured1.translate[TypeExpr[TypeConstructor[V, _, _], _, _]](
             [x, y] => (e: TypeExpr.Open[TypeConstructor[V, _, _], x, y]) =>
-              e.asRegular
+              e.unopen
           )
         val capture =
           (cArgs > cArgs1)(
@@ -316,9 +332,9 @@ object Type {
       pfixDecompose(f) match
         case Either3.Left(f) => f
         case Either3.Middle(value) => value
-        case Either3.Right(e @ Exists.Some((args, pf))) =>
-          given Kind[e.T] = args.outKind.kind
-          TypeFun(Routing.id[●], pfix(pf).applyTo(args))
+        case Either3.Right(Exists.Some(e2 @ Exists.Some((r, args, pf)))) =>
+          given Kind[e2.T] = args.outKind.kind
+          TypeFun(r, pfix(pf).applyTo(args))
 
     def pfixKindCheck[V, P, X](
       f: TypeConstructor.PFix[V, P, X],

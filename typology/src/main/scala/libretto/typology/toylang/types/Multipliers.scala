@@ -127,6 +127,9 @@ object Multipliers {
       case None => summon
       case p: Proper[a, aa] => ProperKind.cannotBeUnit(p.inputKind)
 
+  def dup[A](using OutputKind[A]): Multipliers.Proper[A, A × A] =
+    Single(Multiplier.dup)
+
   given PairwiseRel[×, ×, Multipliers.Proper] with
     override def pair[A1, A2, B1, B2](
       m1: Multipliers.Proper[A1, B1],

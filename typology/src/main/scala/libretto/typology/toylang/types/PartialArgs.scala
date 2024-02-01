@@ -75,17 +75,6 @@ sealed trait PartialArgs[F[_, _], K, L] {
       case Id()                  => F.id
       case thiz: Proper[f, k, l] => thiz.foldProper
 
-  // def foldAbstractly(using F: PartialArgs.Abstractly[F]): F[K, L] =
-  //   this match
-  //     case Id() => F.id
-  //     case Lift(f) => UnhandledCase.raise(s"$this.foldAbstractly")
-  //     case Par(f1, f2) => UnhandledCase.raise(s"$this.foldAbstractly")
-  //     case Fst(f) => UnhandledCase.raise(s"$this.foldAbstractly")
-  //     case Snd(f) => UnhandledCase.raise(s"$this.foldAbstractly")
-  //     case IntroFst(f1, f2) => F.introFst(f1.foldAbstractly, f2.foldAbstractly)
-  //     case IntroSnd(f1, f2) => UnhandledCase.raise(s"$this.foldAbstractly")
-  //     case IntroBoth(f1, f2) => UnhandledCase.raise(s"$this.foldAbstractly")
-
   def foldTranslate[G[_, _]](h: [x, y] => F[x, y] => G[x, y])(using
     G: MonoidalCategory[G, ×, ○],
   ): G[K, L] =
@@ -157,7 +146,9 @@ sealed trait PartialArgs[F[_, _], K, L] {
       case IntroSnd(f1, f2) =>
         UnhandledCase.raise(s"$this.split")
       case IntroBoth(f1, f2) =>
-        UnhandledCase.raise(s"$this.split")
+        (f1.split(f), f2.split(f)) match
+          case (Exists.Some((g1, h1)), Exists.Some((g2, h2))) =>
+            Exists((introBoth(g1, g2), par(h1, h2)(using g1.outKind, g2.outKind)))
 
   // def split[G[_, _], H[_, _]](
   //   f: [k, l] => F[k, l] => Either3[G[k, l], Exists[[x] =>> (G[k, x], H[x, l])], H[k, l]],
@@ -208,7 +199,13 @@ sealed trait PartialArgs[F[_, _], K, L] {
           case Snd(f) =>
             UnhandledCase.raise(s"$this.multiply($m)")
           case IntroFst(f1, f2) =>
-            UnhandledCase.raise(s"$this.multiply($m)")
+            (f1.multiply(m1), f2.multiply(m2)) match
+              case (Exists.Some(Exists.Some((m1, s1, a1))), Exists.Some(Exists.Some((m2, s2, a2)))) =>
+                Multipliers.proveId(m1) match
+                  case TypeEq(Refl()) =>
+                    s1.proveId(Kind.unitIsNotPair) match
+                      case TypeEq(Refl()) =>
+                        Exists(Exists((m2, s2, PartialArgs.introFst(a1, a2))))
           case IntroSnd(f1, f2) =>
             UnhandledCase.raise(s"$this.multiply($m)")
           case IntroBoth(f1, f2) =>
@@ -355,7 +352,7 @@ object PartialArgs {
         case IntroSnd(f1, f2) =>
           UnhandledCase.raise(s"$that")
         case IntroBoth(f1, f2) =>
-          UnhandledCase.raise(s"$that")
+          PartialArgs.introBoth(f1, (f2 > f)(absorbL))
   }
 
   case class IntroFst[F[_, _], K, L, M](
@@ -461,7 +458,7 @@ object PartialArgs {
   def introBoth[F[_, _], K, L](
     f1: PartialArgs[F, ○, K],
     f2: PartialArgs[F, ○, L],
-  ): PartialArgs[F, ○, K × L] =
+  ): PartialArgs.Proper[F, ○, K × L] =
     IntroBoth(proper(f1), proper(f2))
 
   def proper[F[_, _], L](f: PartialArgs[F, ○, L]): PartialArgs.Proper[F, ○, L] =
@@ -514,12 +511,4 @@ object PartialArgs {
         UnhandledCase.raise(s"PartialArgs.flatten($a)")
       case IntroBoth(f1, f2) =>
         UnhandledCase.raise(s"PartialArgs.flatten($a)")
-
-  // trait Abstractly[PA[_, _]]:
-  //   def id[K]: PA[K, K]
-
-  //   def introFst[K, L, M](
-  //     f1: PA[○, K],
-  //     f2: PA[L, M],
-  //   ): PA[L, K × M]
 }

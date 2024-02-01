@@ -4,6 +4,7 @@ import libretto.lambda.{Capture, MappedMorphism, MonoidalCategory, MonoidalObjec
 import libretto.lambda.util.{Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
+import libretto.typology.types.{kindShuffle => sh}
 import libretto.typology.util.Either3
 
 /**
@@ -199,8 +200,6 @@ object TypeExpr {
       f: [k, l] => TC[k, l] => TC1[k, l]
     ): TypeExpr.Open[TC1, K, L] =
       this match {
-        // case Open.Primitive(p) =>
-        //   Open.Primitive(f(p))
         case Open.App(op, args) =>
           Open.App(
             f(op),
@@ -208,19 +207,13 @@ object TypeExpr {
           )
       }
 
-    def asRegular: TypeExpr[TC, K, L] =
-      UnhandledCase.raise(s"$this.asRegular")
+    def unopen: TypeExpr[TC, K, L] =
+      this match
+        case Open.App(op, args) =>
+          TypeExpr.App(op, args.translate(Open.unopen[TC]))
   }
 
   object Open {
-    given sh: Shuffle[×] = new Shuffle[×]
-
-    // case class Primitive[TC[_, _], K, L](
-    //   value: TC[K, L],
-    // )(using
-    //   ProperKind[K],
-    //   OutputKind[L],
-    // ) extends TypeExpr.Open[TC, K, L]
 
     case class App[TC[_, _], K, L, M](
       f: TC[L, M],
@@ -237,6 +230,14 @@ object TypeExpr {
       OutputKind[L],
     ): TypeExpr.Open[TC, K, L] =
       App(op, PartialArgs.Id())
+
+    def translate[TC[_, _], TC1[_, _]](
+      f: [k, l] => TC[k, l] => TC1[k, l],
+    ): [k, l] => Open[TC, k, l] => Open[TC1, k, l] =
+      [k, l] => (x: Open[TC, k, l]) => x.translate(f)
+
+    def unopen[TC[_, _]]: [k, l] => Open[TC, k, l] => TypeExpr[TC, k, l] =
+      [k, l] => (e: Open[TC, k, l]) => e.unopen
 
     def ltrim[TC[_, _], J1, J2, K1, K2, L](
       tr: sh.TransferOpt[J1, J2, K1, K2],
@@ -288,12 +289,14 @@ object TypeExpr {
                   Opaque(cap, LTrimmed.Args.Expr(base))
             case Par(f1, f2) =>
               UnhandledCase.raise(s"ltrimArgs($tr, $args)")
-            case Fst(f) =>
-              UnhandledCase.raise(s"ltrimArgs($tr, $args)")
+            case f: Fst[f, k1, l1, k2] =>
+              summon[L =:= (l1 × K2)]
+              Translucent[TC, J1, J2, l1, L](f.f, RTotal[TC, l1, J2, J2, l1, J2](Id(), TransferOpt.None()))
             case Snd(f) =>
               Translucent[TC, J1, J2, J1, L](Id(), RTotal(f, TransferOpt.None()))
             case IntroFst(_, _) | IntroSnd(_, _) | IntroBoth(_, _) =>
-              throw AssertionError(s"Impossible (at ${summon[SourcePos]})") // TODO: use a precise, non-capturing representation of args
+              // TODO: use a precise, non-capturing representation of args to avoid this dead code
+              throw AssertionError(s"Impossible (at ${summon[SourcePos]})")
 
         case Swap() =>
           args match
@@ -328,10 +331,10 @@ object TypeExpr {
               ltrimArgs(a.g, f) match
                 case opq: Opaque[tc, i2, i3, x1, l2] =>
                   Translucent[TC, J1, J2, i1 × x1, L](
-                    opq.trimmed.inSnd[i1],
+                    opq.extruded.inSnd[i1],
                     RPartial(opq.opaqueBase, TransferOpt.None()),
                   )
-                case Translucent(trimmed, translucentBase) =>
+                case Translucent(extruded, translucentBase) =>
                   UnhandledCase.raise(s"ltrimArgs($tr, $args)")
             case IntroFst(_, _) | IntroSnd(_, _) | IntroBoth(_, _) =>
               throw AssertionError(s"Impossible (at ${summon[SourcePos]})") // TODO: use a precise, non-capturing representation of args
@@ -373,11 +376,6 @@ object TypeExpr {
             LTrimmed.App(f(op), args.translate(f))
           case LTrimmed.RApp(op, args) =>
             LTrimmed.RApp(f(op), args.translate(f))
-          // case RApp(op, tr, args) =>
-          //   RApp(f(op), tr, args.translate([x, y] => (t: TypeExpr.Open[TC, x, y]) => t.translate(f)))
-          // case r @ RAppLTrimmed(op, tr, args) =>
-          //   val (k1, k2) = ProperKind.unpair(r.inKind1.kind)
-          //   RAppLTrimmed(f(op), tr, args.translate(f))(using k1, k2)
     }
 
     object LTrimmed {
@@ -391,36 +389,44 @@ object TypeExpr {
 
       case class RApp[TC[_, _], K1, K2, L, M](
         op: TC[L, M],
-        args: Args.SemiTransparent[TC, K1, K2, L],
+        args: LTrimmed.Args.SemiTransparent[TC, K1, K2, L],
       )(using
         ProperKind[K1],
         ProperKind[K2],
       ) extends LTrimmed[TC, K1, K2, M]
 
-      // case class RApp[TC[_, _], K1, K2, Q2, L1, L2, M](
-      //   op: TC[L1 × L2, M],
-      //   tr: sh.TransferOpt[K1, Q2, L1, L2],
-      //   args: PartialArgs[TypeExpr.Open[TC, _, _], K2, Q2],
-      // )(using
-      //   ProperKind[K1],
-      //   ProperKind[K2],
-      // ) extends LTrimmed[TC, K1, K2, M]
-
-      // case class RAppLTrimmed[TC[_, _], K1, K2, K3, Q2, L1, L2, M](
-      //   op: TC[L1 × L2, M],
-      //   tr: sh.TransferOpt[K1, Q2, L1, L2],
-      //   args: LTrimmed.Args[TC, K2, K3, Q2],
-      // )(using
-      //   k1: ProperKind[K1],
-      //   k2: ProperKind[K2],
-      //   k3: ProperKind[K3],
-      // ) extends LTrimmed[TC, K1 × K2, K3, M]
+      def ltrimMore[TC[_, _], K1, K2, K3, Q2, Q3, L](
+        tr: sh.TransferOpt[K2, K3, Q2, Q3],
+        expr: LTrimmed[TC, K1, Q2 × Q3, L]
+      ): Exists[[P2] =>> (
+        PartialArgs[TypeExpr.Open[TC, _, _], K2, P2],
+        LTrimmed[TC, K1 × P2, K3, L],
+      )] =
+        given ProperKind[K3] = ProperKind.unpair(tr.asShuffle.invert(expr.inKind2))._2
+        expr match
+          case App(op, args) =>
+            UnhandledCase.raise(s"ltrimMore($tr, $expr)")
+          case RApp(op, args) =>
+            Args.SemiTransparent.ltrimMore(tr, args) match
+              case Exists.Some((extruded, args)) =>
+                Exists((extruded, RApp(op, args)(using expr.inKind1 × extruded.outKind)))
 
       sealed trait Args[TC[_, _], K1, K2, L] {
+        import Args.*
+
         def translate[TC1[_, _]](
           f: [k, l] => TC[k, l] => TC1[k, l]
         ): Args[TC1, K1, K2, L] =
-          UnhandledCase.raise(s"$this.translate")
+          this match
+            case Expr(value) =>
+              Expr(value.translate(f))
+            case IXI(a, b) =>
+              UnhandledCase.raise(s"$this.translate")
+            case XI(a, b) =>
+              UnhandledCase.raise(s"$this.translate")
+            case |/|(a, b) =>
+              UnhandledCase.raise(s"$this.translate")
+
       }
 
       object Args {
@@ -444,10 +450,16 @@ object TypeExpr {
         ) extends LTrimmed.Args[TC, K1, K2 × K3, L1 × L2]
 
         sealed trait SemiTransparent[TC[_, _], K1, K2, L] {
+          import SemiTransparent.*
+
           def translate[TC1[_, _]](
             f: [k, l] => TC[k, l] => TC1[k, l]
           ): SemiTransparent[TC1, K1, K2, L] =
-            UnhandledCase.raise(s"$this.translate")
+            val g = TypeExpr.Open.translate[TC, TC1](f)
+            this match
+              case RTotal(r, tr)   => RTotal(r.translate(g), tr)
+              case RPartial(r, tr) => RPartial(r.translate(f), tr)
+
         }
         object SemiTransparent {
           case class RTotal[TC[_, _], K1, K2, L2, M1, M2](
@@ -459,6 +471,24 @@ object TypeExpr {
             r: LTrimmed.Args[TC, K2, K3, L2],
             tr: sh.TransferOpt[K1, L2, M1, M2],
           ) extends SemiTransparent[TC, K1 × K2, K3, M1 × M2]
+
+          def ltrimMore[TC[_, _], K1, K2, K3, P2, P3, L](
+            tr: sh.TransferOpt[K2, K3, P2, P3],
+            args: SemiTransparent[TC, K1, P2 × P3, L]
+          ): Exists[[Q2] =>> (
+            PartialArgs[TypeExpr.Open[TC, _, _], K2, Q2],
+            SemiTransparent[TC, K1 × Q2, K3, L],
+          )] =
+            args match
+              case RTotal(r, tr2) =>
+                import PartialArgsRes.{Opaque, Translucent}
+                ltrimArgs(tr, r) match
+                  case Opaque(extruded, opaqueBase) =>
+                    Exists((extruded, RPartial(opaqueBase, tr2)))
+                  case x @ Translucent(extruded, translucentBase) =>
+                    UnhandledCase.raise(s"$x")
+              case RPartial(r, tr) =>
+                UnhandledCase.raise(s"ltrimMore($tr, $args)")
         }
       }
 
@@ -467,12 +497,12 @@ object TypeExpr {
 
       object PartialArgsRes {
         case class Opaque[TC[_, _], J1, J2, K1, L](
-          trimmed: PartialArgs[TypeExpr.Open[TC, _, _], J1, K1],
+          extruded: PartialArgs[TypeExpr.Open[TC, _, _], J1, K1],
           opaqueBase: LTrimmed.Args[TC, K1, J2, L],
         ) extends PartialArgsRes[TC, J1, J2, L]
 
         case class Translucent[TC[_, _], J1, J2, K1, L](
-          trimmed: PartialArgs[TypeExpr.Open[TC, _, _], J1, K1],
+          extruded: PartialArgs[TypeExpr.Open[TC, _, _], J1, K1],
           translucentBase: Args.SemiTransparent[TC, K1, J2, L],
         ) extends PartialArgsRes[TC, J1, J2, L]
       }
@@ -523,18 +553,6 @@ object TypeExpr {
           given ProperKind[K] = k
           Partial(foldArgsProper(args))
 
-      // import libretto.lambda.UnhandledCase
-      // import PartialArgs.*
-      // args match
-      //   case Id() => Capt.id
-      //   case Lift(f) => UnhandledCase.raise(s"Capt.foldArgs($args)")
-      //   case Par(f1, f2) => UnhandledCase.raise(s"Capt.foldArgs($args)")
-      //   case Fst(f) => UnhandledCase.raise(s"Capt.foldArgs($args)")
-      //   case Snd(f) => UnhandledCase.raise(s"Capt.foldArgs($args)")
-      //   case IntroFst(f1, f2) => UnhandledCase.raise(s"Capt.foldArgs($args)")
-      //   case IntroSnd(f1, f2) => UnhandledCase.raise(s"Capt.foldArgs($args)")
-      //   case IntroBoth(f1, f2) => UnhandledCase.raise(s"Capt.foldArgs($args)")
-
     private def foldArgsProper[TC[_, _], K, L](
       args: PartialArgs[Capt[TC, _, _], K, L],
     )(using
@@ -558,13 +576,4 @@ object TypeExpr {
           )
         case IntroSnd(f1, f2) => UnhandledCase.raise(s"Capt.foldArgs($args)")
         case IntroBoth(f1, f2) => UnhandledCase.raise(s"Capt.foldArgs($args)")
-
-    // given partialArgsAbstractly[TC[_, _]]: PartialArgs.Abstractly[Capt[TC, _, _]] with
-    //   override def id[K]: Capt[TC, K, K] =
-    //     Capt.id
-
-    //   override def introFst[K, L, M](
-    //     f1: Capt[TC, ○, K],
-    //     f2: Capt[TC, L, M],
-    //   ): Capt[TC, L, K × M] = ???
 }

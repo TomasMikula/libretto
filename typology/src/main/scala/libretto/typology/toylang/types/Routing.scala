@@ -444,16 +444,20 @@ object Routing {
   def elimSnd[K: ProperKind, L: ProperKind]: Routing[K × L, K] =
     UnhandledCase.raise(s"Routing.elimSnd")
 
-  def dup[K: ProperKind]: Routing[K, K × K] =
-    UnhandledCase.raise(s"Routing.dup")
-    // ProperKind[K] match {
-    //   case ProperKind.Type =>
-    //     Dup()(using OutputKind[●])
-    //   case ProperKind.Prod(k1, k2) =>
-    //     def go[K1, K2](using k1: ProperKind[K1], k2: ProperKind[K2]): Routing[K1 × K2, (K1 × K2) × (K1 × K2)] =
-    //       par(dup[K1], dup[K2]) > ixi
-    //     go(using k1, k2)
-    // }
+  def dup[K](using k: ProperKind[K]): Routing[K, K × K] =
+    dup0[K] match
+      case Exists.Some((m, s)) =>
+        Routing.Impl(Projection.Id(), m, s)
+
+  private def dup0[K](using k: ProperKind[K]): Exists[[X] =>> (Multipliers.Proper[K, X], X ~⚬ (K × K))] =
+    k match
+      case ProperKind.Type =>
+        summon[K =:= ●]
+        Exists((Multipliers.dup[●], ~⚬.id))
+      case ProperKind.Prod(k, l) =>
+        (dup0(using k), dup0(using l)) match
+          case (Exists.Some((m1, s1)), Exists.Some((m2, s2))) =>
+            Exists((Multipliers.Par(m1, m2), ~⚬.par(s1, s2) > ~⚬.ixi))
 
   def ixi[K1: ProperKind, K2: ProperKind, K3: ProperKind, K4: ProperKind]: Routing[(K1 × K2) × (K3 × K4), (K1 × K3) × (K2 × K4)] =
     assocLR[K1, K2, K3 × K4] > snd(assocRL[K2, K3, K4] > fst(swap) > assocLR) > assocRL
