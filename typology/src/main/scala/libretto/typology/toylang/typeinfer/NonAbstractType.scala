@@ -782,34 +782,11 @@ private[typeinfer] object NonAbstractType {
       NonAbstractType.awaitPosFst[V, T](T.awaitPosFst, V.awaitPosFst)
   }
 
-  class CompiledPrimitives[V, T](
-    lift: NonAbstractType[V, T] -⚬ T,
-    absType: Label => (One -⚬ T),
-  ):
-    val unit: One -⚬ T =
-      done > NonAbstractType.unit > lift
-    val int: One -⚬ T =
-      done > NonAbstractType.int > lift
-    val string: One -⚬ T =
-      done > NonAbstractType.string > lift
-    val pair: (T |*| T) -⚬ T =
-      NonAbstractType.pair > lift
-    val sum: (T |*| T) -⚬ T =
-      NonAbstractType.either > lift
-    val recCall: (T |*| T) -⚬ T =
-      NonAbstractType.recCall > lift
-    def fix[X](f: TypeConstructor.Fix[ScalaTypeParam, X]): One -⚬ T =
-      const(f) > NonAbstractType.fix > lift
-    def abstractTypeName(name: ScalaTypeParam): One -⚬ T =
-      absType(Label.ScalaTParam(name))
-
   class CompilationTarget[V, T](
     lift: NonAbstractType[V, T] -⚬ T,
     absType: Label => (One -⚬ T),
   ) {
     type Arr[K, L] = K -⚬ (Done |*| L)
-
-    val cp = CompiledPrimitives(lift, absType)
 
     given category: SymmetricMonoidalCategory[Arr, |*|, One] =
       new SymmetricMonoidalCategory[Arr, |*|, One] {
@@ -889,24 +866,24 @@ private[typeinfer] object NonAbstractType {
       import TypeConstructor.{Pair as _, *}
       x match {
         case UnitType() =>
-          MappedMorphism(Map_○, cp.unit > introFst(done), Map_●)
+          MappedMorphism(Map_○, done > NonAbstractType.unit > lift > introFst(done), Map_●)
         case IntType() =>
-          MappedMorphism(Map_○, cp.int > introFst(done), Map_●)
+          MappedMorphism(Map_○, done > NonAbstractType.int > lift > introFst(done), Map_●)
         case StringType() =>
-          MappedMorphism(Map_○, cp.string > introFst(done), Map_●)
+          MappedMorphism(Map_○, done > NonAbstractType.string > lift > introFst(done), Map_●)
         case TypeConstructor.Pair() =>
-          MappedMorphism(Pair(Map_●, Map_●), cp.pair > introFst(done), Map_●)
+          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.pair > lift > introFst(done), Map_●)
         case Sum() =>
-          MappedMorphism(Pair(Map_●, Map_●), cp.sum > introFst(done), Map_●)
+          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.either > lift > introFst(done), Map_●)
         case RecCall() =>
-          MappedMorphism(Pair(Map_●, Map_●), cp.recCall > introFst(done), Map_●)
+          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.recCall > lift > introFst(done), Map_●)
         case f @ Fix(_, _) =>
-          MappedMorphism(Map_○, cp.fix(f) > introFst(done), Map_●)
+          MappedMorphism(Map_○, const(f) > NonAbstractType.fix > lift > introFst(done), Map_●)
         case p @ PFix(_, _) =>
           import p.g.inKind1
           MappedMorphism(fk, compilePFix(fk, p) > introFst(done), Map_●)
         case AbstractType(label) =>
-          MappedMorphism(Map_○, cp.abstractTypeName(label) > introFst(done), Map_●)
+          MappedMorphism(Map_○, absType(Label.ScalaTParam(label)) > introFst(done), Map_●)
         case TypeMismatch(a, b) =>
           UnhandledCase.raise(s"TypeMismatch($a, $b)")
         case ForbiddenSelfRef(v) =>
