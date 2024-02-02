@@ -38,6 +38,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     def proveId(inputIsAtomic: [x, y] => (A =:= (x |*| y)) => Nothing): A =:= B
 
+    def proveIdBw(outputIsAtomic: [x, y] => (B =:= (x |*| y)) => Nothing): A =:= B =
+      this.invert.proveId(outputIsAtomic).flip
+
     def fold[->[_, _]](using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B = {
       import ev.{andThen, id, par}
 
