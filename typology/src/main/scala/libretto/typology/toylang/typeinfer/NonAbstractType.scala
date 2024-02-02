@@ -5,7 +5,7 @@ import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.scaletto.StarterKit._
 import libretto.typology.inference.TypeOps
-import libretto.typology.kinds.{Kind, ProperKind, ×, ○, ●}
+import libretto.typology.kinds.{Kinds, KindN, ×, ○, ●}
 import libretto.typology.toylang.terms.TypedFun
 import libretto.typology.toylang.types
 import libretto.typology.toylang.types.{Label, Routing, ScalaTypeParam, Type, TypeConstructor, TypeExpr, TypeFun, TypeTag}
@@ -781,14 +781,14 @@ private[typeinfer] object NonAbstractType {
     lift: NonAbstractType[V, T] -⚬ T,
     absType: Label => (One -⚬ T),
   ) {
-    def toTypes[P, Q](pq: P as Q)(using p: ProperKind[P]): Q -⚬ Types[T] =
+    def toTypes[P, Q](pq: P as Q)(using p: KindN[P]): Q -⚬ Types[T] =
       pq match
         case Map_○ =>
-          ProperKind.cannotBeUnit(p)
+          KindN.cannotBeUnit(p)
         case Map_● =>
           Types.singleType[T]
         case π: Pair[p1, p2, q1, q2] =>
-          val (p1, p2) = ProperKind.unpair(p: ProperKind[p1 × p2])
+          val (p1, p2) = KindN.unpair(p: KindN[p1 × p2])
           par(
             toTypes(π.f1)(using p1),
             toTypes(π.f2)(using p2),
@@ -798,7 +798,7 @@ private[typeinfer] object NonAbstractType {
       pq: P as Q,
       f: TypeConstructor.PFix[ScalaTypeParam, P, X],
     )(using
-      ProperKind[P],
+      KindN[P],
     ): Q -⚬ T =
       λ { q =>
         (constantVal(f) |*| toTypes(pq)(q)) :>> NonAbstractType.pfixs :>> lift

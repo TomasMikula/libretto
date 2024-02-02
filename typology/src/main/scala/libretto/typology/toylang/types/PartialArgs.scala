@@ -33,8 +33,8 @@ import scala.annotation.targetName
 sealed trait PartialArgs[F[_, _], K, L] {
   import PartialArgs.*
 
-  given inKind: Kind[K]
-  given outKind: ProperKind[L]
+  given inKind: Kinds[K]
+  given outKind: KindN[L]
 
   def from[J](using ev: J =:= K): PartialArgs[F, J, L] =
     ev.substituteContra[PartialArgs[F, _, L]](this)
@@ -53,16 +53,16 @@ sealed trait PartialArgs[F[_, _], K, L] {
     absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
   ): Proper[F, J, L]
 
-  def inFst[Y](using ProperKind[K], ProperKind[Y]): PartialArgs[F, K × Y, L × Y] =
+  def inFst[Y](using KindN[K], KindN[Y]): PartialArgs[F, K × Y, L × Y] =
     fst(this)
 
-  def inSnd[X](using ProperKind[X], ProperKind[K]): PartialArgs[F, X × K, X × L] =
+  def inSnd[X](using KindN[X], KindN[K]): PartialArgs[F, X × K, X × L] =
     snd(this)
 
-  def introFst[M](f1: PartialArgs.Proper[F, ○, M])(using ProperKind[K]): PartialArgs.Proper[F, K, M × L] =
+  def introFst[M](f1: PartialArgs.Proper[F, ○, M])(using KindN[K]): PartialArgs.Proper[F, K, M × L] =
     IntroFst(f1, this)
 
-  def introSnd[M](f2: PartialArgs.Proper[F, ○, M])(using ProperKind[K]): PartialArgs.Proper[F, K, L × M] =
+  def introSnd[M](f2: PartialArgs.Proper[F, ○, M])(using KindN[K]): PartialArgs.Proper[F, K, L × M] =
     IntroSnd(this, f2)
 
   def translate[G[_, _]](h: [x, y] => F[x, y] => G[x, y]): PartialArgs[G, K, L] =
@@ -122,7 +122,7 @@ sealed trait PartialArgs[F[_, _], K, L] {
     PartialArgs.extract(this.from[○](using ev.flip))
 
   def split[G[_, _], H[_, _]](
-    f: [k, l] => F[k, l] => Exists[[x] =>> (G[k, x], ProperKind[x], H[x, l])],
+    f: [k, l] => F[k, l] => Exists[[x] =>> (G[k, x], KindN[x], H[x, l])],
   ): Exists[[X] =>> (PartialArgs[G, K, X], PartialArgs[H, X, L])] =
     this match
       case Id() =>
@@ -131,7 +131,7 @@ sealed trait PartialArgs[F[_, _], K, L] {
         import l.given
         f(p) match
           case Exists.Some((g, x, h)) =>
-            Exists((Lift(g)(using summon, x), Lift(h)(using x.kind)))
+            Exists((Lift(g)(using summon, x), Lift(h)(using Kinds(x))))
       case Par(f1, f2) =>
         UnhandledCase.raise(s"$this.split")
       case Fst(f) =>
@@ -159,7 +159,7 @@ sealed trait PartialArgs[F[_, _], K, L] {
     UnhandledCase.raise(s"$this.projectProper($p)")
 
   def dup(using
-    OutputKind[L],
+    Kind[L],
   ): Exists[[KK] =>> Exists[[X] =>> (Multipliers[K, KK], KK ~⚬ X, PartialArgs[F, X, L × L])]] =
     this match
       case i @ Id() =>
@@ -167,11 +167,11 @@ sealed trait PartialArgs[F[_, _], K, L] {
           case Exists.Some((m, s)) =>
             Exists(Exists((m, s, Id())))
       case l @ Lift(f) =>
-        l.inKind.properKind match
+        l.inKind.nonEmpty match
           case Left(TypeEq(Refl())) =>
             Exists(Exists((Multipliers.id[○], ~⚬.id, IntroBoth(Lift(f), Lift(f)))))
           case Right(k) =>
-            given ProperKind[K] = k
+            given KindN[K] = k
             Multipliers.dup(k) match
               case Exists.Some((m, s)) =>
                 Exists(Exists((m, s, Par(Lift(f), Lift(f)))))
@@ -192,7 +192,7 @@ sealed trait PartialArgs[F[_, _], K, L] {
   def multiply[LL](
     m: Multiplier[×, L, LL],
   )(using
-    OutputKind[L]
+    Kind[L]
   ): Exists[[KK] =>> Exists[[X] =>> (Multipliers[K, KK], KK ~⚬ X, PartialArgs[F, X, LL])]] =
     m match
       case Multiplier.Id() =>
@@ -225,20 +225,20 @@ sealed trait PartialArgs[F[_, _], K, L] {
             import m2.outKind
             f1.multiply(m1) match
               case Exists.Some(y @ Exists.Some((m1, s1, a1))) =>
-                given ProperKind[y.T] = s1(m1(f.inKind1))
+                given KindN[y.T] = s1(m1(f.inKind1))
                 Exists(Exists((Multipliers.Par(m1.proper, m2), ~⚬.fst(s1), a1.inFst)))
           case f @ Snd(f2) =>
             import f.given
             f2.multiply(m2) match
               case Exists.Some(y @ Exists.Some((m2, s2, a2))) =>
-                given ProperKind[y.T] = s2(m2(f.inKind2))
+                given KindN[y.T] = s2(m2(f.inKind2))
                 Exists(Exists((Multipliers.Par(m1, m2.proper), ~⚬.snd(s2), a2.inSnd)))
           case IntroFst(f1, f2) =>
             (f1.multiply(m1), f2.multiply(m2)) match
               case (Exists.Some(Exists.Some((m1, s1, a1))), Exists.Some(Exists.Some((m2, s2, a2)))) =>
                 Multipliers.proveId(m1) match
                   case TypeEq(Refl()) =>
-                    s1.proveId(Kind.unitIsNotPair) match
+                    s1.proveId(Kinds.unitIsNotPair) match
                       case TypeEq(Refl()) =>
                         Exists(Exists((m2, s2, PartialArgs.introFst(a1, a2))))
           case IntroSnd(f1, f2) =>
@@ -246,7 +246,7 @@ sealed trait PartialArgs[F[_, _], K, L] {
               case (Exists.Some(Exists.Some((m1, s1, a1))), Exists.Some(Exists.Some((m2, s2, a2)))) =>
                 Multipliers.proveId(m2) match
                   case TypeEq(Refl()) =>
-                    s2.proveId(Kind.unitIsNotPair) match
+                    s2.proveId(Kinds.unitIsNotPair) match
                       case TypeEq(Refl()) =>
                         Exists(Exists((m1, s1, PartialArgs.introSnd(a1, a2))))
           case IntroBoth(f1, f2) =>
@@ -256,14 +256,14 @@ sealed trait PartialArgs[F[_, _], K, L] {
                   case TypeEq(Refl()) =>
                     Multipliers.proveId(m2) match
                       case TypeEq(Refl()) =>
-                        s1.proveId(Kind.unitIsNotPair) match
+                        s1.proveId(Kinds.unitIsNotPair) match
                           case TypeEq(Refl()) =>
-                            s2.proveId(Kind.unitIsNotPair) match
+                            s2.proveId(Kinds.unitIsNotPair) match
                               case TypeEq(Refl()) =>
                                 Exists(Exists((Multipliers.id, ~⚬.id, introBoth(a1, a2))))
 
       case Multipliers.None =>
-        ProperKind.cannotBeUnit(this.outKind)
+        KindN.cannotBeUnit(this.outKind)
 
   def shuffle[M](s: L ~⚬ M): Exists[[X] =>> (K ~⚬ X, PartialArgs[F, X, M])] =
     s match
@@ -281,10 +281,10 @@ sealed trait PartialArgs[F[_, _], K, L] {
 
 object PartialArgs {
   case class Id[F[_, _], K]()(using
-    val kind: ProperKind[K],
+    val kind: KindN[K],
   ) extends PartialArgs[F, K, K] {
-    override def inKind: Kind[K] = kind.kind
-    override def outKind: ProperKind[K] = kind
+    override def inKind: Kinds[K] = Kinds(kind)
+    override def outKind: KindN[K] = kind
 
     override def composeProper[J](that: Proper[F, J, K])(
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
@@ -321,11 +321,11 @@ object PartialArgs {
   }
 
   case class Lift[F[_, _], K, L](f: F[K, L])(using
-    k: Kind[K],
+    k: Kinds[K],
     // val outputKind: OutputKind[L],
-    override val outKind: ProperKind[L],
+    override val outKind: KindN[L],
   ) extends PartialArgs.Proper[F, K, L] {
-    override def inKind: Kind[K] = k
+    override def inKind: Kinds[K] = k
     // override def outKind: ProperKind[L] = outputKind.properKind
 
     override def composeProper[J](that: Proper[F, J, K])(
@@ -339,11 +339,11 @@ object PartialArgs {
     f1: PartialArgs.Proper[F, K1, L1],
     f2: PartialArgs.Proper[F, K2, L2],
   )(using
-    val inKind1: ProperKind[K1],
-    val inKind2: ProperKind[K2],
+    val inKind1: KindN[K1],
+    val inKind2: KindN[K2],
   ) extends PartialArgs.Proper[F, K1 × K2, L1 × L2] {
-    override def inKind: Kind[K1 × K2] = (ProperKind[K1] × ProperKind[K2]).kind
-    override def outKind: ProperKind[L1 × L2] = f1.outKind × f2.outKind
+    override def inKind: Kinds[K1 × K2] = Kinds(KindN[K1] × KindN[K2])
+    override def outKind: KindN[L1 × L2] = f1.outKind × f2.outKind
 
     override def composeProper[J](that: Proper[F, J, K1 × K2])(
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
@@ -354,11 +354,11 @@ object PartialArgs {
   case class Fst[F[_, _], K, L, M](
     f: PartialArgs.Proper[F, K, L],
   )(using
-    val inKind1: ProperKind[K],
-    val kind2: ProperKind[M]
+    val inKind1: KindN[K],
+    val kind2: KindN[M]
   ) extends PartialArgs.Proper[F, K × M, L × M] {
-    override def inKind: Kind[K × M] = (ProperKind[K] × ProperKind[M]).kind
-    override def outKind: ProperKind[L × M] = f.outKind × ProperKind[M]
+    override def inKind: Kinds[K × M] = Kinds(KindN[K] × KindN[M])
+    override def outKind: KindN[L × M] = f.outKind × KindN[M]
 
     override def composeProper[J](that: Proper[F, J, K × M])(
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
@@ -369,15 +369,15 @@ object PartialArgs {
   case class Snd[F[_, _], K, L, M](
     f: PartialArgs.Proper[F, L, M],
   )(using
-    val kind1: ProperKind[K],
-    val inKind2: ProperKind[L],
+    val kind1: KindN[K],
+    val inKind2: KindN[L],
   ) extends PartialArgs.Proper[F, K × L, K × M] {
-    override def inKind: Kind[K × L] = (ProperKind[K] × ProperKind[L]).kind
-    override def outKind: ProperKind[K × M] = ProperKind[K] × f.outKind
+    override def inKind: Kinds[K × L] = Kinds(KindN[K] × KindN[L])
+    override def outKind: KindN[K × M] = KindN[K] × f.outKind
 
-    def in1Kind: ProperKind[K] = ProperKind[K]
-    def in2Kind: ProperKind[L] = ProperKind[L]
-    def out2Kind: ProperKind[M] = f.outKind
+    def in1Kind: KindN[K] = KindN[K]
+    def in2Kind: KindN[L] = KindN[L]
+    def out2Kind: KindN[M] = f.outKind
 
     override def composeProper[J](that: Proper[F, J, K × L])(
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
@@ -403,10 +403,10 @@ object PartialArgs {
     f1: PartialArgs.Proper[F, ○, K],
     f2: PartialArgs[F, L, M],
   )(using
-    val inKindProper: ProperKind[L],
+    val inKindProper: KindN[L],
   ) extends PartialArgs.Proper[F, L, K × M] {
-    override def inKind: Kind[L] = ProperKind[L].kind
-    override def outKind: ProperKind[K × M] = f1.outKind × f2.outKind
+    override def inKind: Kinds[L] = Kinds(KindN[L])
+    override def outKind: KindN[K × M] = f1.outKind × f2.outKind
 
     override def composeProper[J](that: Proper[F, J, L])(
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
@@ -418,10 +418,10 @@ object PartialArgs {
     f1: PartialArgs[F, K, L],
     f2: PartialArgs.Proper[F, ○, M],
   )(using
-    val inKindProper: ProperKind[K],
+    val inKindProper: KindN[K],
   ) extends PartialArgs.Proper[F, K, L × M] {
-    override def inKind: Kind[K] = ProperKind[K].kind
-    override def outKind: ProperKind[L × M] = f1.outKind × f2.outKind
+    override def inKind: Kinds[K] = Kinds(KindN[K])
+    override def outKind: KindN[L × M] = f1.outKind × f2.outKind
 
     override def composeProper[J](that: Proper[F, J, K])(
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
@@ -433,8 +433,8 @@ object PartialArgs {
     f1: PartialArgs.Proper[F, ○, K],
     f2: PartialArgs.Proper[F, ○, L],
   ) extends PartialArgs.Proper[F, ○, K × L] {
-    override def inKind: Kind[○] = summon[Kind[○]]
-    override def outKind: ProperKind[K × L] = f1.outKind × f2.outKind
+    override def inKind: Kinds[○] = summon[Kinds[○]]
+    override def outKind: KindN[K × L] = f1.outKind × f2.outKind
 
     override def composeProper[J](that: Proper[F, J, ○])(
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
@@ -442,13 +442,13 @@ object PartialArgs {
       UnhandledCase.raise(s"$that > $this")
   }
 
-  def apply[F[_, _], K: Kind, L: ProperKind](f: F[K, L]): PartialArgs.Proper[F, K, L] =
+  def apply[F[_, _], K: Kinds, L: KindN](f: F[K, L]): PartialArgs.Proper[F, K, L] =
     lift(f)
 
-  def lift[F[_, _], K: Kind, L: ProperKind](f: F[K, L]): PartialArgs.Proper[F, K, L] =
+  def lift[F[_, _], K: Kinds, L: KindN](f: F[K, L]): PartialArgs.Proper[F, K, L] =
     Lift(f)
 
-  def par[F[_, _], K1: ProperKind, K2: ProperKind, L1, L2](
+  def par[F[_, _], K1: KindN, K2: KindN, L1, L2](
     f1: PartialArgs[F, K1, L1],
     f2: PartialArgs[F, K2, L2],
   ): PartialArgs[F, K1 × K2, L1 × L2] =
@@ -459,14 +459,14 @@ object PartialArgs {
       case (f1: Proper[f, k1, l1], f2: Proper[g, k2, l2]) => Par(f1, f2)
     }
 
-  def fst[F[_, _], K: ProperKind, L, M: ProperKind](
+  def fst[F[_, _], K: KindN, L, M: KindN](
     f: PartialArgs[F, K, L],
   ): PartialArgs[F, K × M, L × M] =
     f match
       case f: Proper[f, k, l] => Fst(f)
       case Id()               => Id[F, K × M]()
 
-  def snd[F[_, _], K: ProperKind, L: ProperKind, M](
+  def snd[F[_, _], K: KindN, L: KindN, M](
     f: PartialArgs[F, L, M],
   ): PartialArgs[F, K × L, K × M] =
     f match
@@ -477,11 +477,11 @@ object PartialArgs {
     f1: PartialArgs[F, ○, K],
     f2: PartialArgs[F, L, M],
   ): PartialArgs.Proper[F, L, K × M] =
-    f2.inKind.properKind match
+    f2.inKind.nonEmpty match
       case Left(TypeEq(Refl())) => IntroBoth(proper(f1), proper(f2))
       case Right(l)             => IntroFst(proper(f1), f2)(using l)
 
-  def introFst[F[_, _], K, L: ProperKind](
+  def introFst[F[_, _], K, L: KindN](
     f1: PartialArgs[F, ○, K],
   ): PartialArgs.Proper[F, L, K × L] =
     IntroFst(proper(f1), Id())
@@ -490,11 +490,11 @@ object PartialArgs {
     f1: PartialArgs[F, K, L],
     f2: PartialArgs[F, ○, M],
   ): PartialArgs.Proper[F, K, L × M] =
-    f1.inKind.properKind match
+    f1.inKind.nonEmpty match
       case Left(TypeEq(Refl())) => IntroBoth(proper(f1), proper(f2))
       case Right(k)             => IntroSnd(f1, proper(f2))(using k)
 
-  def introSnd[F[_, _], K: ProperKind, L](
+  def introSnd[F[_, _], K: KindN, L](
     f2: PartialArgs[F, ○, L],
   ): PartialArgs.Proper[F, K, K × L] =
     IntroSnd(Id(), proper(f2))
@@ -508,26 +508,26 @@ object PartialArgs {
   def proper[F[_, _], L](f: PartialArgs[F, ○, L]): PartialArgs.Proper[F, ○, L] =
     f match
       case f: Proper[f, o, l] => f
-      case i @ Id() => ProperKind.cannotBeUnit(i.kind)
+      case i @ Id() => KindN.cannotBeUnit(i.kind)
 
   def extract[F[_, _], L](f: PartialArgs[F, ○, L]): Tupled[×, F[○, _], L] =
     f match
       case Lift(f)              => Tupled.atom(f)
       case IntroBoth(f1, f2)    => extract(f1) zip extract(f2)
-      case i @ Id()             => ProperKind.cannotBeUnit(i.kind)
-      case i @ IntroFst(f1, f2) => ProperKind.cannotBeUnit(i.inKindProper)
-      case i @ IntroSnd(f1, f2) => ProperKind.cannotBeUnit(i.inKindProper)
+      case i @ Id()             => KindN.cannotBeUnit(i.kind)
+      case i @ IntroFst(f1, f2) => KindN.cannotBeUnit(i.inKindProper)
+      case i @ IntroSnd(f1, f2) => KindN.cannotBeUnit(i.inKindProper)
       case _: Par[f, k1, k2, l1, l2] => throw new AssertionError("Impossible: ○ != k1 × k2")
       case _: Fst[f, k, l, m]        => throw new AssertionError("Impossible: ○ != k × m")
       case _: Snd[f, k, l, m]        => throw new AssertionError("Impossible: ○ != k × l")
 
   def fromTupled[F[_, _], L](
     fl: Tupled[×, F[○, _], L],
-    properOutKind: [l] => F[○, l] => ProperKind[l],
+    properOutKind: [l] => F[○, l] => KindN[l],
   ): PartialArgs[F, ○, L] =
     fl.foldMapWith[PartialArgs[F, ○, _]](
       map = [x] => (fx: F[○, x]) =>
-        given ProperKind[x] = properOutKind(fx)
+        given KindN[x] = properOutKind(fx)
         lift(fx),
       zip = [x, y] => (x: PartialArgs[F, ○, x], y: PartialArgs[F, ○, y]) =>
         introBoth(x, y)
@@ -585,7 +585,7 @@ object PartialArgs {
     a match
       case i @ Id() =>
         val s = ~⚬.par(s1, s2)
-        given ProperKind[M1 × M2] = s(a.outKind)
+        given KindN[M1 × M2] = s(a.outKind)
         Exists((s, Id()))
       case Lift(f) =>
         UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
@@ -598,19 +598,19 @@ object PartialArgs {
       case IntroFst(f1, f2) =>
         (f1 shuffle s1, f2 shuffle s2) match
           case (Exists.Some((s1, f1)), Exists.Some((s2, f2))) =>
-            s1.proveId(Kind.unitIsNotPair) match
+            s1.proveId(Kinds.unitIsNotPair) match
               case TypeEq(Refl()) =>
                 Exists((s2, introFst(f1, f2)))
       case IntroSnd(f1, f2) =>
         (f1 shuffle s1, f2 shuffle s2) match
           case (Exists.Some((s1, f1)), Exists.Some((s2, f2))) =>
-            s2.proveId(Kind.unitIsNotPair) match
+            s2.proveId(Kinds.unitIsNotPair) match
               case TypeEq(Refl()) =>
                 Exists((s1, introSnd(f1, f2)))
       case IntroBoth(f1, f2) =>
         (f1 shuffle s1, f2 shuffle s2) match
           case (Exists.Some((s1, f1)), Exists.Some((s2, f2))) =>
-            (s1.proveId(Kind.unitIsNotPair), s2.proveId(Kind.unitIsNotPair)) match
+            (s1.proveId(Kinds.unitIsNotPair), s2.proveId(Kinds.unitIsNotPair)) match
               case (TypeEq(Refl()), TypeEq(Refl())) =>
                 Exists((~⚬.id, introBoth(f1, f2)))
 

@@ -156,14 +156,14 @@ object Type {
     val c: Tupled[×, TypeExpr[TypeConstructor[V, _, _], ○, _], X] =
       captured.trans[TypeExpr[TypeConstructor[V, _, _], ○, _]](
         [x] => (x: TypeConstructor[V, ○, x]) =>
-          given OutputKind[x] = x.outKind
+          given Kind[x] = x.outKind
           TypeExpr.Primitive(x)
       )
     val cArgs: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, X] =
       PartialArgs.fromTupled(
         c,
         properOutKind = [x] => (x: TypeExpr[TypeConstructor[V, _, _], ○, x]) =>
-          x.outKind.properKind,
+          KindN(x.outKind),
       )
     OpenTypeExpr.ltrim(reorg, opn) match
       case Exists.Some((captured1, ltrimmed)) =>
@@ -331,9 +331,9 @@ object Type {
       f: TypeConstructor.PFix[V, P, X],
       args: Types[V],
     ): Type[V] =
-      given ProperKind[P] = f.g.inKind1
-      given ProperKind[X] = f.g.inKind2
-      kindCheck(args, ProperKind[P]) match
+      given KindN[P] = f.g.inKind1
+      given KindN[X] = f.g.inKind2
+      kindCheck(args, KindN[P]) match
         case Left(msg) =>
           throw IllegalArgumentException(msg)
         case Right(args) =>
@@ -342,10 +342,10 @@ object Type {
 
     private def kindCheck[V, K](
       ts: Types[V],
-      k: ProperKind[K],
+      k: KindN[K],
     ): Either[String, PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, K]] =
       k match
-        case ProperKind.Type =>
+        case KindN.Type =>
           summon[K =:= ●]
           ts match
             case Types.SingleType(t) =>
@@ -354,10 +354,10 @@ object Type {
               Left(s"Expected a single type, got $t, $u (at ${summon[SourcePos]})")
             case e @ Types.KindMismatch(l, r) =>
               UnhandledCase.raise(s"$e")
-        case k: ProperKind.Prod[k1, k2] =>
+        case k: KindN.Prod[k1, k2] =>
           summon[K =:= (k1 × k2)]
-          given ProperKind[k1] = k.k
-          given ProperKind[k2] = k.l
+          given KindN[k1] = k.k
+          given KindN[k2] = k.l
           ts match
             case Types.Product(t, u) =>
               for

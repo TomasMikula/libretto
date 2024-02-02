@@ -13,8 +13,8 @@ import libretto.typology.types.{kindShuffle => sh}
  * In other words, there are no fully formed types (`TC[○, K]`) inside.
  */
 sealed trait OpenTypeExpr[TC[_, _], K, L](using
-  val inKind: ProperKind[K],
-  val outKind: OutputKind[L],
+  val inKind: KindN[K],
+  val outKind: Kind[L],
 ) {
   def translate[TC1[_, _]](
     f: [k, l] => TC[k, l] => TC1[k, l]
@@ -39,15 +39,15 @@ object OpenTypeExpr {
     f: TC[L, M],
     args: PartialArgs[OpenTypeExpr[TC, _, _], K, L],
   )(using
-    ProperKind[K],
-    OutputKind[M],
+    KindN[K],
+    Kind[M],
   ) extends OpenTypeExpr[TC, K, M]
 
   def primitive[TC[_, _], K, L](
     op: TC[K, L],
   )(using
-    ProperKind[K],
-    OutputKind[L],
+    KindN[K],
+    Kind[L],
   ): OpenTypeExpr[TC, K, L] =
     App(op, PartialArgs.Id())
 
@@ -69,11 +69,11 @@ object OpenTypeExpr {
     import t.given
     t match
       case TypeExpr.Primitive(f) =>
-        t.inKind.properKind match
+        t.inKind.nonEmpty match
           case Left(TypeEq(Refl())) =>
             Left(Closed.Impl(f))
           case Right(k) =>
-            given ProperKind[K] = k
+            given KindN[K] = k
             Right(Exists((Capt.id, OpenTypeExpr.primitive(f))))
 
       case TypeExpr.App(f, args) =>
@@ -81,11 +81,11 @@ object OpenTypeExpr {
           [k, l] => (f: TypeExpr[TC, k, l]) => {
             open(f) match
               case Left(t) =>
-                Exists((Capt.closed(t), t.outKind.properKind, PartialArgs.Id[OpenTypeExpr[TC, _, _], l]()(using t.outKind.properKind)))
-                  : Exists[[X] =>> (Capt[TC, k, X], ProperKind[X], PartialArgs[OpenTypeExpr[TC, _, _], X, l])]
+                Exists((Capt.closed(t), KindN(t.outKind), PartialArgs.Id[OpenTypeExpr[TC, _, _], l]()(using KindN(t.outKind))))
+                  : Exists[[X] =>> (Capt[TC, k, X], KindN[X], PartialArgs[OpenTypeExpr[TC, _, _], X, l])]
               case Right(Exists.Some((g, h))) =>
-                Exists.Some((g, h.inKind, PartialArgs(h)(using h.inKind.kind, h.outKind.properKind)))
-                  : Exists[[X] =>> (Capt[TC, k, X], ProperKind[X], PartialArgs[OpenTypeExpr[TC, _, _], X, l])]
+                Exists.Some((g, h.inKind, PartialArgs(h)(using Kinds(h.inKind), KindN(h.outKind))))
+                  : Exists[[X] =>> (Capt[TC, k, X], KindN[X], PartialArgs[OpenTypeExpr[TC, _, _], X, l])]
           }
         ) match {
           case Exists.Some((args0, args1)) =>
@@ -99,9 +99,9 @@ object OpenTypeExpr {
     PartialArgs[OpenTypeExpr[TC, _, _], J1, P],
     LTrimmed[TC, P, J2, L],
   )] =
-    val (j1, j2) = ProperKind.unpair(tr.asShuffle.invert(opn.inKind))
-    given ProperKind[J1] = j1
-    given ProperKind[J2] = j2
+    val (j1, j2) = KindN.unpair(tr.asShuffle.invert(opn.inKind))
+    given KindN[J1] = j1
+    given KindN[J2] = j2
     opn match
       case App(op, args) =>
         import LTrimmed.PartialArgsRes.{Opaque, Translucent}
@@ -121,9 +121,9 @@ object OpenTypeExpr {
     import LTrimmed.PartialArgsRes.{Opaque, Translucent}
     import LTrimmed.Args.SemiTransparent.{RPartial, RTotal}
 
-    val (j1, j2) = ProperKind.unpair(tr.asShuffle.invert(ProperKind.fromProd(args.inKind)))
-    given ProperKind[J1] = j1
-    given ProperKind[J2] = j2
+    val (j1, j2) = KindN.unpair(tr.asShuffle.invert(Kinds.nonEmpty(args.inKind)))
+    given KindN[J1] = j1
+    given KindN[J2] = j2
 
     tr match
       case TransferOpt.None() =>
@@ -168,9 +168,9 @@ object OpenTypeExpr {
 
       case a: AssocLR[i1, i2, i3, κ2, κ3] =>
         summon[J1 =:= (i1 × i2)]
-        val (i1, i2) = ProperKind.unpair(j1: ProperKind[i1 × i2])
-        given ProperKind[i1] = i1
-        given ProperKind[i2] = i2
+        val (i1, i2) = KindN.unpair(j1: KindN[i1 × i2])
+        given KindN[i1] = i1
+        given KindN[i2] = i2
         args match
           case Id() =>
             UnhandledCase.raise(s"ltrimArgs($tr, $args)")
@@ -216,10 +216,10 @@ object OpenTypeExpr {
   }
 
   sealed trait LTrimmed[TC[_, _], K1, K2, L](using
-    val inKind1: ProperKind[K1],
-    val inKind2: ProperKind[K2],
+    val inKind1: KindN[K1],
+    val inKind2: KindN[K2],
   ) {
-    given inKind: ProperKind[K1 × K2] = inKind1 × inKind2
+    given inKind: KindN[K1 × K2] = inKind1 × inKind2
 
     def translate[TC1[_, _]](
       f: [k, l] => TC[k, l] => TC1[k, l]
@@ -236,16 +236,16 @@ object OpenTypeExpr {
       op: TC[L, M],
       args: LTrimmed.Args[TC, K1, K2, L],
     )(using
-      ProperKind[K1],
-      ProperKind[K2],
+      KindN[K1],
+      KindN[K2],
     ) extends LTrimmed[TC, K1, K2, M]
 
     case class RApp[TC[_, _], K1, K2, L, M](
       op: TC[L, M],
       args: LTrimmed.Args.SemiTransparent[TC, K1, K2, L],
     )(using
-      ProperKind[K1],
-      ProperKind[K2],
+      KindN[K1],
+      KindN[K2],
     ) extends LTrimmed[TC, K1, K2, M]
 
     def ltrimMore[TC[_, _], K1, K2, K3, Q2, Q3, L](
@@ -255,7 +255,7 @@ object OpenTypeExpr {
       PartialArgs[OpenTypeExpr[TC, _, _], K2, P2],
       LTrimmed[TC, K1 × P2, K3, L],
     )] =
-      given ProperKind[K3] = ProperKind.unpair(tr.asShuffle.invert(expr.inKind2))._2
+      given KindN[K3] = KindN.unpair(tr.asShuffle.invert(expr.inKind2))._2
       expr match
         case App(op, args) =>
           UnhandledCase.raise(s"ltrimMore($tr, $expr)")
@@ -363,21 +363,21 @@ object OpenTypeExpr {
 
   enum Closed[TC[_, _], K, L]:
     case Impl[TC[_, _], L](value: TC[○, L])(using
-      val outKind: OutputKind[L],
+      val outKind: Kind[L],
     ) extends Closed[TC, ○, L]
 
-    def inKind: Kind[K] =
+    def inKind: Kinds[K] =
       this match
-        case Impl(_) => summon[Kind[○]]
+        case Impl(_) => summon[Kinds[○]]
 
-    def outKind: OutputKind[L]
+    def outKind: Kind[L]
 
   enum Capt[TC[_, _], K, L]:
-    case Partial(value: Capture[×, TC[○, _], K, L])(using val inKind: ProperKind[K])
+    case Partial(value: Capture[×, TC[○, _], K, L])(using val inKind: KindN[K])
     case Total[TC[_, _], L](value: Tupled[×, TC[○, _], L]) extends Capt[TC, ○, L]
 
   object Capt:
-    def id[TC[_, _], K](using ProperKind[K]): Capt[TC, K, K] =
+    def id[TC[_, _], K](using KindN[K]): Capt[TC, K, K] =
       Capt.Partial(Capture.NoCapture())
 
     def apply[TC[_, _], L](value: TC[○, L]): Capt[TC, ○, L] =
@@ -389,7 +389,7 @@ object OpenTypeExpr {
 
     def extract[TC[_, _], L](a: Capt[TC, ○, L]): Tupled[×, TC[○, _], L] =
       a match
-        case p @ Partial(_) => ProperKind.cannotBeUnit(p.inKind)
+        case p @ Partial(_) => KindN.cannotBeUnit(p.inKind)
         case Total(value)   => value
 
     def extract[TC[_, _], L](a: PartialArgs[Capt[TC, _, _], ○, L]): Tupled[×, TC[○, _], L] =
@@ -398,17 +398,17 @@ object OpenTypeExpr {
         .foldMap([x] => (x: Capt[TC, ○, x]) => extract(x))
 
     def foldArgs[TC[_, _], K, L](args: PartialArgs[Capt[TC, _, _], K, L]): Capt[TC, K, L] =
-      args.inKind.properKind match
+      args.inKind.nonEmpty match
         case Left(TypeEq(Refl())) =>
           Total(extract(args))
         case Right(k) =>
-          given ProperKind[K] = k
+          given KindN[K] = k
           Partial(foldArgsProper(args))
 
     private def foldArgsProper[TC[_, _], K, L](
       args: PartialArgs[Capt[TC, _, _], K, L],
     )(using
-      k: ProperKind[K],
+      k: KindN[K],
     ): Capture[×, TC[○, _], K, L] =
       import libretto.lambda.UnhandledCase
       import PartialArgs.{extract => _, *}
@@ -417,7 +417,7 @@ object OpenTypeExpr {
         case Lift(f) =>
           f match
             case Capt.Partial(c) => c
-            case Capt.Total(value) => ProperKind.cannotBeUnit(k)
+            case Capt.Total(value) => KindN.cannotBeUnit(k)
         case Par(f1, f2) => UnhandledCase.raise(s"Capt.foldArgs($args)")
         case Fst(f) => UnhandledCase.raise(s"Capt.foldArgs($args)")
         case Snd(f) => UnhandledCase.raise(s"Capt.foldArgs($args)")

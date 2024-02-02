@@ -8,8 +8,8 @@ import libretto.typology.types.kindShuffle
 import libretto.typology.types.kindShuffle.~⚬
 
 sealed trait Routing[K, L](using
-  val inKind: Kind[K],
-  val outKind: Kind[L],
+  val inKind: Kinds[K],
+  val outKind: Kinds[L],
 ) {
   import Routing.*
 
@@ -37,15 +37,15 @@ sealed trait Routing[K, L](using
                       case Exists.Some((n, s)) =>
                         Impl(p > q, m > n, s > t)
 
-  def inFst[Y](using ProperKind[K], ProperKind[L], ProperKind[Y]): Routing[K × Y, L × Y] =
+  def inFst[Y](using KindN[K], KindN[L], KindN[Y]): Routing[K × Y, L × Y] =
     Routing.fst(this)
 
-  def inSnd[X](using ProperKind[X], ProperKind[K], ProperKind[L]): Routing[X × K, X × L] =
+  def inSnd[X](using KindN[X], KindN[K], KindN[L]): Routing[X × K, X × L] =
     Routing.snd(this)
 
   def applyTo[J](m: Multiplier[×, J, K])(using
-    OutputKind[J],
-    ProperKind[L],
+    Kind[J],
+    KindN[L],
   ): Multiplier[×, J, L]
 
   def applyTo[F[_, _], J](f: PartialArgs[F, J, K]): AppRes[F, J, L] =
@@ -73,22 +73,22 @@ sealed trait Routing[K, L](using
 }
 
 object Routing {
-  case class Elim[K]()(using Kind[K]) extends Routing[K, ○] {
+  case class Elim[K]()(using Kinds[K]) extends Routing[K, ○] {
     override def applyTo[J](m: Multiplier[×, J, K])(using
-      j: OutputKind[J],
-      o: ProperKind[○],
+      j: Kind[J],
+      o: KindN[○],
     ): Multiplier[×, J, ○] =
-      ProperKind.cannotBeUnit(o)
+      KindN.cannotBeUnit(o)
   }
 
   case class Impl[K, P, Q, L](
     p: Projection[×, K, P],
     m: Multipliers.Proper[P, Q],
     s: Q ~⚬ L,
-  )(using Kind[K], Kind[L]) extends Routing[K, L] {
+  )(using Kinds[K], Kinds[L]) extends Routing[K, L] {
     override def applyTo[J](n: Multiplier[×, J, K])(using
-      j: OutputKind[J],
-      l: ProperKind[L],
+      j: Kind[J],
+      l: KindN[L],
     ): Multiplier[×, J, L] =
       val n1 = (n project p)(j.isNotPair)
       s(m after n1)(using Multiplier.strongZippable(j.isNotPair))
@@ -98,16 +98,16 @@ object Routing {
     p: Projection[×, K, P],
     m: Multipliers[P, Q],
     s: Q ~⚬ L,
-  )(using Kind[K], Kind[L]): Routing[K, L] =
+  )(using Kinds[K], Kinds[L]): Routing[K, L] =
     m match
       case m: Multipliers.Proper[p, q] =>
         Impl(p, m, s)
       case Multipliers.None =>
-        summon[Kind[L]].properKind match
+        summon[Kinds[L]].nonEmpty match
           case Left(TypeEq(Refl())) => Elim()
           case Right(l) =>
-            val q: ProperKind[Q] = s.invert(l)
-            ProperKind.cannotBeUnit(q)
+            val q: KindN[Q] = s.invert(l)
+            KindN.cannotBeUnit(q)
 
   sealed trait AppRes[F[_, _], K, L]:
     type X
@@ -129,12 +129,12 @@ object Routing {
       Impl(f, g)
   }
 
-  def id[K](using k: Kind[K]): Routing[K, K] =
-    k.properKind match
+  def id[K](using k: Kinds[K]): Routing[K, K] =
+    k.nonEmpty match
       case Left(TypeEq(Refl())) => Elim()
       case Right(k) => Impl(Projection.id, Multipliers.idProper(using k), ~⚬.id)
 
-  def par[K1: ProperKind, K2: ProperKind, L1: ProperKind, L2: ProperKind](
+  def par[K1: KindN, K2: KindN, L1: KindN, L2: KindN](
     f1: Routing[K1, L1],
     f2: Routing[K2, L2],
   ): Routing[K1 × K2, L1 × L2] =
@@ -142,51 +142,51 @@ object Routing {
       case (Impl(p1, m1, s1), Impl(p2, m2, s2)) =>
         Impl(Projection.par(p1, p2), Multipliers.Par(m1, m2), ~⚬.par(s1, s2))
       case (Elim(), _) =>
-        ProperKind.cannotBeUnit(ProperKind[L1])
+        KindN.cannotBeUnit(KindN[L1])
       case (_, Elim()) =>
-        ProperKind.cannotBeUnit(ProperKind[L2])
+        KindN.cannotBeUnit(KindN[L2])
 
 
-  def fst[K: ProperKind, L: ProperKind, M: ProperKind](f: Routing[K, L]): Routing[K × M, L × M] =
+  def fst[K: KindN, L: KindN, M: KindN](f: Routing[K, L]): Routing[K × M, L × M] =
     par(f, id)
 
-  def snd[K: ProperKind, L: ProperKind, M: ProperKind](f: Routing[L, M]): Routing[K × L, K × M] =
+  def snd[K: KindN, L: KindN, M: KindN](f: Routing[L, M]): Routing[K × L, K × M] =
     par(id, f)
 
-  def assocLR[K: ProperKind, L: ProperKind, M: ProperKind]: Routing[(K × L) × M, K × (L × M)] =
+  def assocLR[K: KindN, L: KindN, M: KindN]: Routing[(K × L) × M, K × (L × M)] =
     Impl(Projection.id, Multipliers.idProper, ~⚬.assocLR)
 
-  def assocRL[K: ProperKind, L: ProperKind, M: ProperKind]: Routing[K × (L × M), (K × L) × M] =
+  def assocRL[K: KindN, L: KindN, M: KindN]: Routing[K × (L × M), (K × L) × M] =
     Impl(Projection.id, Multipliers.idProper, ~⚬.assocRL)
 
-  def swap[K: ProperKind, L: ProperKind]: Routing[K × L, L × K] =
+  def swap[K: KindN, L: KindN]: Routing[K × L, L × K] =
     Impl(Projection.id, Multipliers.idProper, ~⚬.swap)
 
-  def elimFst[K: ProperKind, L: ProperKind]: Routing[K × L, L] =
+  def elimFst[K: KindN, L: KindN]: Routing[K × L, L] =
     Impl(Projection.discardFst, Multipliers.idProper, ~⚬.id)
 
-  def elimSnd[K: ProperKind, L: ProperKind]: Routing[K × L, K] =
+  def elimSnd[K: KindN, L: KindN]: Routing[K × L, K] =
     Impl(Projection.discardSnd, Multipliers.idProper, ~⚬.id)
 
-  def dup[K](using k: ProperKind[K]): Routing[K, K × K] =
+  def dup[K](using k: KindN[K]): Routing[K, K × K] =
     dup0[K] match
       case Exists.Some((m, s)) =>
         Routing.Impl(Projection.Id(), m, s)
 
-  private def dup0[K](using k: ProperKind[K]): Exists[[X] =>> (Multipliers.Proper[K, X], X ~⚬ (K × K))] =
+  private def dup0[K](using k: KindN[K]): Exists[[X] =>> (Multipliers.Proper[K, X], X ~⚬ (K × K))] =
     k match
-      case ProperKind.Type =>
+      case KindN.Type =>
         summon[K =:= ●]
         Exists((Multipliers.dup[●], ~⚬.id))
-      case ProperKind.Prod(k, l) =>
+      case KindN.Prod(k, l) =>
         (dup0(using k), dup0(using l)) match
           case (Exists.Some((m1, s1)), Exists.Some((m2, s2))) =>
             Exists((Multipliers.Par(m1, m2), ~⚬.par(s1, s2) > ~⚬.ixi))
 
-  def ixi[K1: ProperKind, K2: ProperKind, K3: ProperKind, K4: ProperKind]: Routing[(K1 × K2) × (K3 × K4), (K1 × K3) × (K2 × K4)] =
+  def ixi[K1: KindN, K2: KindN, K3: KindN, K4: KindN]: Routing[(K1 × K2) × (K3 × K4), (K1 × K3) × (K2 × K4)] =
     assocLR[K1, K2, K3 × K4] > snd(assocRL[K2, K3, K4] > fst(swap) > assocLR) > assocRL
 
-  def elim[K](using k: Kind[K]): Routing[K, ○] =
+  def elim[K](using k: Kinds[K]): Routing[K, ○] =
     Elim()
 
   def proveId[K](r: Routing[○, K]): K =:= ○ =
@@ -195,18 +195,18 @@ object Routing {
       case Impl(p, m, s) => UnhandledCase.raise(s"Routing.proveId($r)")
 
   def toMultiplier[K, L](r: Routing[K, L])(using
-    k: OutputKind[K],
-    l: ProperKind[L],
+    k: Kind[K],
+    l: KindN[L],
   ): Multiplier[×, K, L] =
     r.applyTo(Multiplier.Id())
 
   def untangle[K1, K2, L](r: Routing[K1 × K2, L]): UntangleRes[K1, K2, L] =
     import UntangleRes.*
 
-    val (k1, k2) = ProperKind.unpair(r.inKind)
-    given Kind[K1] = k1.kind
-    given Kind[K2] = k2.kind
-    given Kind[L] = r.outKind
+    val (k1, k2) = Kinds.unpair(r.inKind)
+    given Kinds[K1] = Kinds(k1)
+    given Kinds[K2] = Kinds(k2)
+    given Kinds[L] = r.outKind
 
     r match
       case Elim() =>
@@ -232,15 +232,15 @@ object Routing {
     m: Multipliers[P1 × P2, Q],
     s: Q ~⚬ L,
   )(using
-    Kind[K1],
-    Kind[K2],
-    Kind[L],
+    Kinds[K1],
+    Kinds[K2],
+    Kinds[L],
   ): UntangleRes[K1, K2, L] =
     m match
       case Multipliers.Par(m1, m2) =>
         untangle(p1, p2, m1, m2, s)
       case s @ Multipliers.Single(_) =>
-        OutputKind.cannotBePair(s.inKind)
+        Kind.cannotBePair(s.inKind)
 
   private def untangle[K1, K2, P1, P2, Q1, Q2, L](
     p1: Projection[×, K1, P1],
@@ -249,19 +249,19 @@ object Routing {
     m2: Multipliers.Proper[P2, Q2],
     s: (Q1 × Q2) ~⚬ L,
   )(using
-    Kind[K1],
-    Kind[K2],
-    Kind[L],
+    Kinds[K1],
+    Kinds[K2],
+    Kinds[L],
   ): UntangleRes[K1, K2, L] =
     ~⚬.decompose1(s) match
       case ~⚬.Decomposition1(s1, s2, tr, ev @ TypeEq(Refl())) =>
         val (r1, r2) =
-          ProperKind.unpair(
-            tr.asShuffle.invert.apply(ProperKind.fromProd(ev.substituteContra(summon[Kind[L]])))
+          KindN.unpair(
+            tr.asShuffle.invert.apply(Kinds.nonEmpty(ev.substituteContra(summon[Kinds[L]])))
           )
         UntangleRes.Decomposed(
-          Impl(p1, m1, s1)(using summon, r1.kind),
-          Impl(p2, m2, s2)(using summon, r2.kind),
+          Impl(p1, m1, s1)(using summon, Kinds(r1)),
+          Impl(p2, m2, s2)(using summon, Kinds(r2)),
           tr,
         )
 
@@ -278,16 +278,16 @@ object Routing {
   }
 
   def traceSnd[K1, K2, L](r: Routing[K1 × K2, L])(using
-    k2: OutputKind[K2],
-    l: ProperKind[L],
+    k2: Kind[K2],
+    l: KindN[L],
   ): TraceSndRes[K1, K2, L] =
     import TraceSndRes.{FstEliminated, SndEliminated, Traced}
     untangle(r) match
-      case UntangleRes.Eliminated() => ProperKind.cannotBeUnit(l)
+      case UntangleRes.Eliminated() => KindN.cannotBeUnit(l)
       case UntangleRes.FstEliminated(r2) => FstEliminated(toMultiplier(r2))
       case UntangleRes.SndEliminated(r1) => SndEliminated(r1)
       case UntangleRes.Decomposed(r1, r2, tr) =>
-        val (q1, q2) = ProperKind.unpair(tr.asShuffle.invert.apply(l))
+        val (q1, q2) = KindN.unpair(tr.asShuffle.invert.apply(l))
         Traced(r1, toMultiplier(r2)(using k2, q2), tr)
 
   sealed trait TraceSndRes[K1, K2, L]

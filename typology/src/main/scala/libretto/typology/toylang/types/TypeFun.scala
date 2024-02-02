@@ -11,8 +11,8 @@ sealed trait TypeFun[TC[_, _], K, L] {
   val pre: Routing[K, X]
   val expr: Expr[X, L]
 
-  given inKind: Kind[K] = pre.inKind
-  given outKind: OutputKind[L] = expr.outKind
+  given inKind: Kinds[K] = pre.inKind
+  given outKind: Kind[L] = expr.outKind
 
   def ∘[J](that: TypeFun[TC, J, K]): TypeFun[TC, J, L] = {
     import that.pre.outKind
@@ -74,7 +74,7 @@ object TypeFun {
     Routing.proveId(f.pre).substituteCo[TypeExpr[TC, _, L]](f.expr)
 
   def composeSnd[TC[_, _], K, L, M, N](g: TypeFun[TC, K × M, N], f: TypeFun[TC, L, M])(using
-    ProperKind[L],
+    KindN[L],
   ): TypeFun[TC, K × L, N] = {
     type Expr[k, l] = TypeExpr[TC, k, l]
 
@@ -84,17 +84,17 @@ object TypeFun {
       g1: Routing[K × M, Y],
       g2: Expr[Y, N],
     ): TypeFun[TC, K × L, N] = {
-      given ProperKind[K] = Kind.fst(g.inKind)
-      given OutputKind[M] = f2.outKind
+      given KindN[K] = Kinds.fstOf(g.inKind)
+      given Kind[M] = f2.outKind
 
-      f2.inKind.properKind match {
+      f2.inKind.nonEmpty match {
         case Left(x_eq_○) =>
           val f20: Expr[○, M] = x_eq_○.substituteCo[Expr[_, M]](f2)
           g1.applyTo(PartialArgs.introSnd(PartialArgs(f20))) match {
             case Routing.AppRes.Impl(g1, f21) =>
               TypeFun(Routing.elimSnd[K, L] > g1, g2.applyTo(f21))
           }
-        case Right(given ProperKind[X]) =>
+        case Right(given KindN[X]) =>
           g1.applyTo(PartialArgs(f2).inSnd[K]) match {
             case Routing.AppRes.Impl(g1, f2) =>
               TypeFun(f1.inSnd[K] > g1, g2.applyTo(f2))
@@ -109,8 +109,8 @@ object TypeFun {
   }
 
   def appFst[TC[_, _], K, L, M](f: TypeFun[TC, K × L, M], a: TypeFun[TC, ○, K]): TypeFun[TC, L, M] = {
-    given OutputKind[K] = a.outKind
-    given ProperKind[L] = Kind.snd(f.inKind)
+    given Kind[K] = a.outKind
+    given KindN[L] = Kinds.sndOf(f.inKind)
 
     type Expr[k, l] = TypeExpr[TC, k, l]
 

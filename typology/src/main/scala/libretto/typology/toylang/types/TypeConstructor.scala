@@ -4,8 +4,8 @@ import libretto.lambda.{MappedMorphism,  MonoidalObjectMap, UnhandledCase}
 import libretto.typology.kinds._
 
 sealed trait TypeConstructor[V, K, L](using
-  val inKind: Kind[K],
-  val outKind: OutputKind[L],
+  val inKind: Kinds[K],
+  val outKind: Kind[L],
 ) {
   import TypeConstructor.*
 
@@ -48,17 +48,17 @@ object TypeConstructor {
   case class PFix[V, P, X](
     m: Multiplier[×, ●, X],
     g: OpenTypeExpr.LTrimmed[TypeConstructor[V, _, _], P, X, ●],
-  ) extends TypeConstructor[V, P, ●](using g.inKind1.kind) {
+  ) extends TypeConstructor[V, P, ●](using Kinds(g.inKind1)) {
     override def vmap[W](f: V => W): PFix[W, P, X] =
       PFix(m, g.translate(TypeConstructor.vmap(f)))
   }
 
-  case class TypeMismatch[V, K: Kind, L: OutputKind](
+  case class TypeMismatch[V, K: Kinds, L: Kind](
     a: TypeExpr[TypeConstructor[V, _, _], K, L],
     b: TypeExpr[TypeConstructor[V, _, _], K, L],
   ) extends TypeConstructor[V, K, L]
 
-  case class ForbiddenSelfRef[V, K: Kind, L: OutputKind](
+  case class ForbiddenSelfRef[V, K: Kinds, L: Kind](
     v: V,
   ) extends TypeConstructor[V, K, L]
 

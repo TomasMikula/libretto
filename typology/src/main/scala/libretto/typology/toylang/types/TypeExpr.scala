@@ -18,8 +18,8 @@ import libretto.typology.kinds.*
  * @tparam L the output kind of the represented type constructor
  */
 sealed abstract class TypeExpr[TC[_, _], K, L](using
-  val inKind: Kind[K],
-  val outKind: OutputKind[L],
+  val inKind: Kinds[K],
+  val outKind: Kind[L],
 ) {
   import TypeExpr.*
 
@@ -100,15 +100,15 @@ object TypeExpr {
   case class Primitive[TC[_, _], K, L](
     value: TC[K, L],
   )(using
-    Kind[K],
-    OutputKind[L],
+    Kinds[K],
+    Kind[L],
   ) extends TypeExpr[TC, K, L]
 
   case class App[TC[_, _], K, L, M](
     f: TC[L, M],
     args: PartialArgs[TypeExpr[TC, _, _], K, L],
   )(using
-    OutputKind[M],
+    Kind[M],
   ) extends TypeExpr[TC, K, M](using args.inKind)
 
   given semigroupoid[TC[_, _]]: Semigroupoid[TypeExpr[TC, _, _]] with {
@@ -123,6 +123,6 @@ object TypeExpr {
     override def unzip[A, B](
       ab: TypeExpr[TC, ○, A × B],
     ): (TypeExpr[TC, ○, A], TypeExpr[TC, ○, B]) =
-      OutputKind.cannotBePair(ab.outKind)
+      Kind.cannotBePair(ab.outKind)
   }
 }
