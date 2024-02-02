@@ -47,70 +47,48 @@ object Type {
 
   def fix[V](f: TypeFun[TypeConstructor[V, _, _], ●, ●]): Type[V] =
     fixDecompose(f) match
-      case Either3.Left(t) =>
+      case FixDecomposed.NothingToFix(t) =>
         t
-      case Either3.Middle(n) =>
-        n
-      case Either3.Right(e @ Exists.Some((args, pf))) =>
-        given Kind[e.T] = args.outKind.kind
+      case FixDecomposed.CapturedArgs(args, pf) =>
         TypeFun.toExpr(Type.Fun.pfix(pf).applyTo(args))
 
   def fixDecompose[V](
     f: TypeFun[TypeConstructor[V, _, _], ●, ●],
-  ): Either3[
-    Type[V],
-    Nothing,
-    Exists[[Y] =>> (
-      PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, Y],
-      TypeConstructor.PFix[V, Y, ?],
-    )],
-  ] =
+  ): FixDecomposed[V] =
     f.expr.open match
       case Left(t) =>
         UnhandledCase.raise(s"nothing to fix")
       case Right(Exists.Some((cpt, opn))) =>
         fixDecompose(cpt, opn) match
           case Either3.Left(ev) =>
-            Either3.Left(f.expr.from(using ev.flip))
-          case Either3.Middle(x) =>
-            Either3.Middle(x)
+            FixDecomposed.NothingToFix(f.expr.from(using ev.flip))
+          case Either3.Middle(nothing) =>
+            nothing
           case Either3.Right(Exists.Some((capt, expr))) =>
             import expr.inKind2
             val m = Routing.toMultiplier(f.pre)
-            Either3.Right(Exists((capt, TypeConstructor.PFix(m, expr))))
+            FixDecomposed.CapturedArgs(capt, TypeConstructor.PFix(m, expr))
 
   def pfixDecompose[V](
     f: Type.Fun[V, ● × ●, ●],
-  ): Either3[
-    Type.Fun[V, ●, ●],
-    Nothing,
-    Exists[[X] =>> Exists[[Y] =>> (
-      Routing[●, X],
-      PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], X, Y],
-      TypeConstructor.PFix[V, Y, ?],
-    )]],
-  ] =
+  ): PFixDecomposed[V] =
     f.expr.open match
       case Left(t) =>
         UnhandledCase.raise(s"nothing to fix")
       case Right(Exists.Some((cpt, opn))) =>
         fixDecompose(cpt, opn) match
           case Either3.Left(ev) =>
-            Either3.Left(TypeFun(Routing.elim[●], f.expr.from(using ev.flip)))
+            PFixDecomposed.NothingToFix(TypeFun(Routing.elim[●], f.expr.from(using ev.flip)))
           case Either3.Middle(x) =>
-            Either3.Middle(x)
+            x
           case Either3.Right(Exists.Some((capt, expr))) =>
-            Either3.Right(pfixDecompose(capt, f.pre, expr))
+            pfixDecompose(capt, f.pre, expr)
 
   def pfixDecompose[V, X, Y](
     capt: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, X],
     pre: Routing[● × ●, Y],
     expr: TypeExpr.Open.LTrimmed[TypeConstructor[V, _, _], X, Y, ●],
-  ): Exists[[P] =>> Exists[[Q] =>> (
-    Routing[●, P],
-    PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], P, Q],
-    TypeConstructor.PFix[V, Q, ?],
-  )]] =
+  ): PFixDecomposed[V] =
     import expr.inKind2
     import Routing.TraceSndRes.{FstEliminated, SndEliminated, Traced}
     Routing.traceSnd(pre) match
@@ -123,7 +101,22 @@ object Type {
         TypeExpr.Open.LTrimmed.ltrimMore(r.tr, expr) match
           case Exists.Some((args, expr)) =>
             val args1 = args.translate([k, l] => (e: TypeExpr.Open[TypeConstructor[V, _, _], k, l]) => e.unopen)
-            Exists(Exists((r.r, PartialArgs.introFst(capt, args1), TypeConstructor.PFix(r.m, expr))))
+            PFixDecomposed.Decomposed(r.r, PartialArgs.introFst(capt, args1), TypeConstructor.PFix(r.m, expr))
+
+  enum FixDecomposed[V]:
+    case NothingToFix(constantType: Type[V])
+    case CapturedArgs[V, X](
+      args: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, X],
+      pfix: TypeConstructor.PFix[V, X, ?],
+    ) extends FixDecomposed[V]
+
+  enum PFixDecomposed[V]:
+    case NothingToFix(result: Type.Fun[V, ●, ●])
+    case Decomposed[V, X, Y](
+      paramRouting: Routing[●, X],
+      potentialCapture: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], X, Y],
+      pfix: TypeConstructor.PFix[V, Y, ?]
+    ) extends PFixDecomposed[V]
 
   private type Capt[V, K, L] =
     TypeExpr.Capt[TypeConstructor[V, _, _], K, L]
@@ -322,16 +315,14 @@ object Type {
     def fix[V](f: Type.Fun[V, ●, ●]): Type.Fun[V, ○, ●] =
       fromExpr(Type.fix(f))
 
-    def pfix[V, P, X](f: TypeConstructor.PFix[V, P, X])(using Kind[P]): Type.Fun[V, P, ●] =
+    def pfix[V, P, X](f: TypeConstructor.PFix[V, P, X]): Type.Fun[V, P, ●] =
+      import f.inKind
       fromExpr(TypeExpr.Primitive(f))
 
     def pfix[V](f: Type.Fun[V, ● × ●, ●]): Type.Fun[V, ●, ●] =
       pfixDecompose(f) match
-        case Either3.Left(f) => f
-        case Either3.Middle(value) => value
-        case Either3.Right(Exists.Some(e2 @ Exists.Some((r, args, pf)))) =>
-          given Kind[e2.T] = args.outKind.kind
-          TypeFun(r, pfix(pf).applyTo(args))
+        case PFixDecomposed.NothingToFix(f)         => f
+        case PFixDecomposed.Decomposed(r, args, pf) => TypeFun(r, pfix(pf).applyTo(args))
 
     /** Creates a PFix (parameterized fixed-point) type, if the type arguments `args` match the kinds `P`.
      *  Otherwise, throws an exception.
