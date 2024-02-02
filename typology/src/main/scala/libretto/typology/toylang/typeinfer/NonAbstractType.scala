@@ -210,22 +210,17 @@ private[typeinfer] object NonAbstractType {
     inject: NonAbstractType[V, T] -⚬ T,
     absType: Label => (One -⚬ T),
     t: Type[ScalaTypeParam],
-  )(using
-    J: Junction.Positive[T], // TODO: eliminate (compile directly to `One -⚬ T`)
   ): One -⚬ T = {
     import libretto.typology.toylang.types.{TypeConstructor => TC}
 
     val ct = new CompilationTarget[V, T](inject, absType)
     import ct.{Map_○, Map_●}
 
-    val g: ct.Arr[One, T] =
-      import ct.given
-      t.compile[ct.Arr, |*|, One, ct.as, One](
-        Map_○,
-        ct.compilePrimitive,
-      ).get(Map_○, Map_●)
-
-    g > J.awaitPosFst
+    t.compile[-⚬, |*|, One, ct.as, One](
+      Map_○,
+      ct.compilePrimitive,
+    )(using coreLib.category)
+      .get(Map_○, Map_●)
   }
 
   def isPair[V, T]: NonAbstractType[V, T] -⚬ (NonAbstractType[V, T] |+| (T |*| T)) =
@@ -786,56 +781,6 @@ private[typeinfer] object NonAbstractType {
     lift: NonAbstractType[V, T] -⚬ T,
     absType: Label => (One -⚬ T),
   ) {
-    type Arr[K, L] = K -⚬ (Done |*| L)
-
-    given category: SymmetricMonoidalCategory[Arr, |*|, One] =
-      new SymmetricMonoidalCategory[Arr, |*|, One] {
-
-        override def id[A]: Arr[A, A] =
-          dsl.introFst(done)
-
-        override def introFst[A]: Arr[A, One |*| A] =
-          dsl.andThen(dsl.introFst, dsl.introFst(done))
-
-        override def introSnd[A]: Arr[A, A |*| One] =
-          dsl.andThen(dsl.introSnd, dsl.introFst(done))
-
-        override def elimFst[A]: Arr[One |*| A, A] =
-          dsl.fst(done)
-
-        override def elimSnd[A]: Arr[A |*| One, A] =
-          dsl.andThen(dsl.swap, dsl.fst(done))
-
-        override def assocRL[A, B, C]: Arr[A |*| (B |*| C), (A |*| B) |*| C] =
-          dsl.andThen(dsl.assocRL, dsl.introFst(done))
-
-        override def assocLR[A, B, C]: Arr[(A |*| B) |*| C, A |*| (B |*| C)] =
-          dsl.andThen(dsl.assocLR, dsl.introFst(done))
-
-        override def swap[A, B]: Arr[A |*| B, B |*| A] =
-          dsl.andThen(dsl.swap, dsl.introFst(done))
-
-        override def andThen[A, B, C](
-          f: Arr[A, B],
-          g: Arr[B, C],
-        ): Arr[A, C] =
-          dsl.andThen(
-            dsl.andThen(f, dsl.snd(g)),
-            dsl.andThen(dsl.assocRL, dsl.fst(join)),
-          )
-
-        override def par[A1, A2, B1, B2](
-          f1: Arr[A1, B1],
-          f2: Arr[A2, B2],
-        ): Arr[A1 |*| A2, B1 |*| B2] =
-          dsl.andThen(
-            dsl.par(f1, f2),
-            λ { case (d1 |*| b1) |*| (d2 |*| b2) =>
-              join(d1 |*| d2) |*| (b1 |*| b2)
-            },
-          )
-      }
-
     def toTypes[P, Q](pq: P as Q)(using p: ProperKind[P]): Q -⚬ Types[T] =
       pq match
         case Map_○ =>
@@ -862,28 +807,28 @@ private[typeinfer] object NonAbstractType {
     def doCompilePrimitive[k, l, q](
       fk: k as q,
       x: TypeConstructor[ScalaTypeParam, k, l],
-    ): MappedMorphism[Arr, as, k, l] = {
+    ): MappedMorphism[-⚬, as, k, l] = {
       import TypeConstructor.{Pair as _, *}
       x match {
         case UnitType() =>
-          MappedMorphism(Map_○, done > NonAbstractType.unit > lift > introFst(done), Map_●)
+          MappedMorphism(Map_○, done > NonAbstractType.unit > lift, Map_●)
         case IntType() =>
-          MappedMorphism(Map_○, done > NonAbstractType.int > lift > introFst(done), Map_●)
+          MappedMorphism(Map_○, done > NonAbstractType.int > lift, Map_●)
         case StringType() =>
-          MappedMorphism(Map_○, done > NonAbstractType.string > lift > introFst(done), Map_●)
+          MappedMorphism(Map_○, done > NonAbstractType.string > lift, Map_●)
         case TypeConstructor.Pair() =>
-          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.pair > lift > introFst(done), Map_●)
+          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.pair > lift, Map_●)
         case Sum() =>
-          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.either > lift > introFst(done), Map_●)
+          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.either > lift, Map_●)
         case RecCall() =>
-          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.recCall > lift > introFst(done), Map_●)
+          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.recCall > lift, Map_●)
         case f @ Fix(_, _) =>
-          MappedMorphism(Map_○, const(f) > NonAbstractType.fix > lift > introFst(done), Map_●)
+          MappedMorphism(Map_○, const(f) > NonAbstractType.fix > lift, Map_●)
         case p @ PFix(_, _) =>
           import p.g.inKind1
-          MappedMorphism(fk, compilePFix(fk, p) > introFst(done), Map_●)
+          MappedMorphism(fk, compilePFix(fk, p), Map_●)
         case AbstractType(label) =>
-          MappedMorphism(Map_○, absType(Label.ScalaTParam(label)) > introFst(done), Map_●)
+          MappedMorphism(Map_○, absType(Label.ScalaTParam(label)), Map_●)
         case TypeMismatch(a, b) =>
           UnhandledCase.raise(s"TypeMismatch($a, $b)")
         case ForbiddenSelfRef(v) =>
@@ -891,7 +836,10 @@ private[typeinfer] object NonAbstractType {
       }
     }
 
-    val compilePrimitive: [k, l, q] => (k as q, TypeConstructor[ScalaTypeParam, k, l]) => MappedMorphism[Arr, as, k, l] =
+    val compilePrimitive: [k, l, q] => (
+      k as q,
+      TypeConstructor[ScalaTypeParam, k, l],
+    ) => MappedMorphism[-⚬, as, k, l] =
       [k, l, q] => (
         fk: k as q,
         x: TypeConstructor[ScalaTypeParam, k, l],
@@ -909,10 +857,10 @@ private[typeinfer] object NonAbstractType {
 
     def split[K, Q](splitT: T -⚬ (T |*| T))(
       kq: K as Q,
-    ): Arr[Q, Q |*| Q] =
+    ): Q -⚬ (Q |*| Q) =
       kq match {
         case Map_● =>
-          splitT > introFst(done)
+          splitT
         case other =>
           UnhandledCase.raise(s"split($other)")
       }
