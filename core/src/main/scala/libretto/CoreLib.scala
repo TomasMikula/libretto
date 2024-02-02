@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.lambda.Category
+import libretto.lambda.{Category, SymmetricMonoidalCategory}
 import libretto.lambda.util.SourcePos
 import libretto.util.unapply.*
 import libretto.util.{Equal, ∀}
@@ -15,13 +15,37 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   import dsl.*
   import dsl.$.*
 
-  val category: Category[-⚬] =
-    new Category[-⚬] {
+  val category: SymmetricMonoidalCategory[-⚬, |*|, One] =
+    new SymmetricMonoidalCategory[-⚬, |*|, One] {
       override def id[A]: A -⚬ A =
         dsl.id[A]
 
       override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C =
         dsl.andThen(f, g)
+
+      override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) =
+        dsl.assocLR
+
+      override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) =
+        dsl.assocRL
+
+      override def par[A1, A2, B1, B2](f1: A1 -⚬ B1, f2: A2 -⚬ B2): (A1 |*| A2) -⚬ (B1 |*| B2) =
+        dsl.par(f1, f2)
+
+      override def swap[A, B]: (A |*| B) -⚬ (B |*| A) =
+        dsl.swap
+
+      override def introFst[A]: A -⚬ (One |*| A) =
+        dsl.introFst
+
+      override def introSnd[A]: A -⚬ (A |*| One) =
+        dsl.introSnd
+
+      override def elimFst[A]: (One |*| A) -⚬ A =
+        dsl.elimFst
+
+      override def elimSnd[A]: (A |*| One) -⚬ A =
+        dsl.elimSnd
     }
 
   /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
