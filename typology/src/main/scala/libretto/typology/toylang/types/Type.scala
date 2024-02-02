@@ -2,7 +2,7 @@ package libretto.typology.toylang.types
 
 import libretto.lambda.{Shuffle, Tupled, UnhandledCase}
 import libretto.lambda.Tupled.*
-import libretto.lambda.util.{Exists, TypeEq}
+import libretto.lambda.util.{Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
 import libretto.typology.types.kindShuffle
@@ -65,7 +65,7 @@ object Type {
       TypeConstructor.PFix[V, Y, ?],
     )],
   ] =
-    f.expr.open1 match
+    f.expr.open match
       case Left(t) =>
         UnhandledCase.raise(s"nothing to fix")
       case Right(Exists.Some((cpt, opn))) =>
@@ -90,7 +90,7 @@ object Type {
       TypeConstructor.PFix[V, Y, ?],
     )]],
   ] =
-    f.expr.open1 match
+    f.expr.open match
       case Left(t) =>
         UnhandledCase.raise(s"nothing to fix")
       case Right(Exists.Some((cpt, opn))) =>
@@ -124,9 +124,6 @@ object Type {
           case Exists.Some((args, expr)) =>
             val args1 = args.translate([k, l] => (e: TypeExpr.Open[TypeConstructor[V, _, _], k, l]) => e.unopen)
             Exists(Exists((r.r, PartialArgs.introFst(capt, args1), TypeConstructor.PFix(r.m, expr))))
-
-  // private type ClosedArgs[V, K, L] =
-  //   PartialArgs[TypeExpr.Closed[TypeConstructor[V, _, _], _, _], K, L]
 
   private type Capt[V, K, L] =
     TypeExpr.Capt[TypeConstructor[V, _, _], K, L]
@@ -336,11 +333,51 @@ object Type {
           given Kind[e2.T] = args.outKind.kind
           TypeFun(r, pfix(pf).applyTo(args))
 
-    def pfixKindCheck[V, P, X](
+    /** Creates a PFix (parameterized fixed-point) type, if the type arguments `args` match the kinds `P`.
+     *  Otherwise, throws an exception.
+     */
+    def pfixUnsafe[V, P, X](
       f: TypeConstructor.PFix[V, P, X],
-      p: Types[V],
+      args: Types[V],
     ): Type[V] =
-      UnhandledCase.raise(s"pfixKindCheck($f, $p)")
+      given ProperKind[P] = f.g.inKind1
+      given ProperKind[X] = f.g.inKind2
+      kindCheck(args, ProperKind[P]) match
+        case Left(msg) =>
+          throw IllegalArgumentException(msg)
+        case Right(args) =>
+          TypeExpr.Primitive(f: TypeConstructor[V, P, ●])
+            .applyTo(args)
+
+    private def kindCheck[V, K](
+      ts: Types[V],
+      k: ProperKind[K],
+    ): Either[String, PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, K]] =
+      k match
+        case ProperKind.Type =>
+          summon[K =:= ●]
+          ts match
+            case Types.SingleType(t) =>
+              Right(PartialArgs(t)(using summon, k))
+            case Types.Product(t, u) =>
+              Left(s"Expected a single type, got $t, $u (at ${summon[SourcePos]})")
+            case e @ Types.KindMismatch(l, r) =>
+              UnhandledCase.raise(s"$e")
+        case k: ProperKind.Prod[k1, k2] =>
+          summon[K =:= (k1 × k2)]
+          given ProperKind[k1] = k.k
+          given ProperKind[k2] = k.l
+          ts match
+            case Types.Product(t, u) =>
+              for
+                t <- kindCheck(t, k.k)
+                u <- kindCheck(u, k.l)
+              yield
+                PartialArgs.introBoth(t, u)
+            case Types.SingleType(t) =>
+              Left(s"Expected types of kinds $k, got a single type argument $t")
+            case e @ Types.KindMismatch(l, r) =>
+              UnhandledCase.raise(s"$e")
 
     def abstractType[V](name: V): Type.Fun[V, ○, ●] =
       fromExpr(TypeExpr.Primitive(TypeConstructor.AbstractType(name)))

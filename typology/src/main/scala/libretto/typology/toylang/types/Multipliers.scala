@@ -1,6 +1,6 @@
 package libretto.typology.toylang.types
 
-import libretto.lambda.{PairwiseRel, Projection, UnhandledCase}
+import libretto.lambda.{PairwiseRel, Projection, StrongZippable, UnhandledCase}
 import libretto.lambda.util.{Exists, ExistsCo, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
@@ -11,11 +11,24 @@ sealed trait Multipliers[A, AA] {
 
   def >[BB](that: Multipliers[AA, BB]): Multipliers[A, BB]
 
+  def apply[F[_]](fa: F[A])(using StrongZippable[×, F]): F[AA]
+
   def project[BB](
     p: Projection[×, AA, BB],
   ): ExistsCo[[B] =>> (Projection[×, A, B], Multipliers[B, BB])]
 
   def preShuffle[Z](s: Z ~⚬ A): ExistsCo[[ZZ] =>> (Multipliers[Z, ZZ], ZZ ~⚬ AA)]
+
+  def from[Z](using ev: Z =:= A): Multipliers[Z, AA] =
+    ev.substituteContra[Multipliers[_, AA]](this)
+
+  def to[BB](using ev: AA =:= BB): Multipliers[A, BB] =
+    ev.substituteCo(this)
+
+  def proper(using ProperKind[A]): Multipliers.Proper[A, AA] =
+    this match
+      case p: Multipliers.Proper[a, aa] => p
+      case Multipliers.None => ProperKind.cannotBeUnit(ProperKind[A])
 }
 
 object Multipliers {
@@ -26,18 +39,22 @@ object Multipliers {
     override def >[BB](that: Multipliers[○, BB]): Multipliers[○, BB] =
       that
 
+    override def apply[F[_]](fa: F[○])(using StrongZippable[×, F]): F[○] =
+      fa
+
     override def project[BB](
       p: Projection[×, ○, BB],
     ): Exists[[B] =>> (Projection[×, ○, B], Multipliers[B, BB])] =
       UnhandledCase.raise(s"$this.project($p)")
 
-    override def preShuffle[Z](s: Z ~⚬ ○): ExistsCo[[ZZ] =>> (Multipliers[Z, ZZ], ZZ ~⚬ ○)] =
-      UnhandledCase.raise(s"$this.preShuffle($s)")
+    override def preShuffle[Z](s: Z ~⚬ ○): Exists[[ZZ] =>> (Multipliers[Z, ZZ], ZZ ~⚬ ○)] =
+      given (Z =:= ○) = s.proveIdBw(Kind.unitIsNotPair)
+      Exists((Multipliers.id[○].from[Z], ~⚬.id[○]))
   }
 
   sealed trait Proper[A, AA] extends Multipliers[A, AA] {
-    def inputKind: ProperKind[A]
-    def outKind: ProperKind[AA]
+    given inputKind: ProperKind[A]
+    given outKind: ProperKind[AA]
 
     override def >[BB](that: Multipliers[AA, BB]): Multipliers.Proper[A, BB]
 
@@ -67,6 +84,9 @@ object Multipliers {
 
     override def >[BB](that: Multipliers[AA, BB]): Proper[A, BB] =
       Single(that after value)
+
+    override def apply[F[_]](fa: F[A])(using StrongZippable[×, F]): F[AA] =
+      value.apply(fa)
 
     private lazy val inputIsAtomic: [x, y] => (A =:= (x × y)) => Nothing =
       [x, y] => (ev: A =:= (x × y)) => OutputKind.cannotBePair(ev.substituteCo(inKind))
@@ -98,14 +118,32 @@ object Multipliers {
         case Par(n1, n2)   => Par(m1 > n1, m2 > n2)
         case s @ Single(_) => OutputKind.cannotBePair(s.inKind)
 
+    override def apply[F[_]](fab: F[A × B])(using F: StrongZippable[×, F]): F[AA × BB] =
+      val (fa, fb) = F.unzip(fab)
+      F.zip(m1(fa), m2(fb))
+
     override def project[CC](
       p: Projection[×, AA × BB, CC],
     ): Exists[[C] =>> (Projection[×, A × B, C], Multipliers.Proper[C, CC])] =
       p match
         case Projection.Id() =>
           Exists((Projection.Id(), this))
-        case p =>
+        case Projection.DiscardFst(p2) =>
           UnhandledCase.raise(s"$this.project($p)")
+        case Projection.DiscardSnd(p1) =>
+          UnhandledCase.raise(s"$this.project($p)")
+        case Projection.Fst(p1) =>
+          m1.project(p1) match
+            case Exists.Some((p1, m1)) =>
+              Exists((p1.inFst, Par(m1, m2)))
+        case Projection.Snd(p2) =>
+          m2.project(p2) match
+            case Exists.Some((p2, m2)) =>
+              Exists((p2.inSnd, Par(m1, m2)))
+        case Projection.Both(p1, p2) =>
+          (m1.project(p1), m2.project(p2)) match
+            case (Exists.Some((p1, m1)), Exists.Some((p2, m2))) =>
+              Exists((Projection.par(p1, p2), Par(m1, m2)))
   }
 
   def id[A](a: OutputKind[A]): Multipliers.Proper[A, A] =
@@ -129,6 +167,15 @@ object Multipliers {
 
   def dup[A](using OutputKind[A]): Multipliers.Proper[A, A × A] =
     Single(Multiplier.dup)
+
+  def dup[A](a: ProperKind[A]): Exists[[X] =>> (Multipliers.Proper[A, X], X ~⚬ (A × A))] =
+    a match
+      case ProperKind.Type =>
+        Exists((dup[●], ~⚬.id))
+      case ProperKind.Prod(k, l) =>
+        (dup(k), dup(l)) match
+          case (Exists.Some((m1, s1)), Exists.Some((m2, s2))) =>
+            Exists((Par(m1, m2), ~⚬.par(s1, s2) > ~⚬.ixi))
 
   given PairwiseRel[×, ×, Multipliers.Proper] with
     override def pair[A1, A2, B1, B2](

@@ -11,37 +11,9 @@ import libretto.typology.toylang.types
 import libretto.typology.toylang.types.{Label, Routing, ScalaTypeParam, Type, TypeConstructor, TypeExpr, TypeFun, TypeTag}
 import libretto.scaletto.StarterKit
 
-type TypeFun[K, L] = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, K, L]
-type TypeTagF = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, ●, ●]
-type TypeTagPF = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, ● × ●, ●]
-
-// private[typeinfer] type NonEmptyTreeF[A, X] = A |+| (X |*| X)
-// private[typeinfer] type NonEmptyTree[A] = Rec[NonEmptyTreeF[A, _]]
-
 private[typeinfer] type KindMismatch[Types] = Types |*| Types
 private[typeinfer] type TypesF[T, X] = KindMismatch[X] |+| (T |+| (X |*| X))
 private[typeinfer] type Types[T] = Rec[TypesF[T, _]]
-
-// private[typeinfer] object NonEmptyTree {
-//   def singleton[A]: A -⚬ NonEmptyTree[A] = pack ∘ injectL
-//   def branch[A]: (NonEmptyTree[A] |*| NonEmptyTree[A]) -⚬ NonEmptyTree[A] = pack ∘ injectR
-
-//   def map[A, B](f: A -⚬ B): NonEmptyTree[A] -⚬ NonEmptyTree[B] =
-//     rec { self =>
-//       unpack > either(
-//         f > singleton,
-//         par(self, self) > branch,
-//       )
-//     }
-
-//   def splitMap[A, B, C](f: A -⚬ (B |*| C)): NonEmptyTree[A] -⚬ (NonEmptyTree[B] |*| NonEmptyTree[C]) =
-//     rec { self =>
-//       unpack > either(
-//         f > par(singleton, singleton),
-//         par(self, self) > IXI > par(branch, branch),
-//       )
-//     }
-// }
 
 private[typeinfer] object Types {
   def pack[T]: TypesF[T, Types[T]] -⚬ Types[T] = dsl.pack[TypesF[T, _]]
@@ -213,40 +185,11 @@ private[typeinfer] object NonAbstractType {
   def fix[V, T]: Val[TypeConstructor.Fix[ScalaTypeParam, ?]] -⚬ NonAbstractType[V, T] =
     pack ∘ injectL ∘ injectL ∘ injectL ∘ injectR ∘ injectL
 
-  // def fixT[V, T, F[_]](F: TypeTag[F]): One -⚬ NonAbstractType[V, T] =
-  //   fix ∘ const(TypeTag.toTypeFun(F))
-
   def pfixs[V, T]: (Val[TypeConstructor.PFix[ScalaTypeParam, ?, ?]] |*| Types[T]) -⚬ NonAbstractType[V, T] =
     pack ∘ injectL ∘ injectL ∘ injectL ∘ injectR ∘ injectR
 
   def pfix[V, T]: (Val[TypeConstructor.PFix[ScalaTypeParam, ●, ?]] |*| T) -⚬ NonAbstractType[V, T] =
     pfixs ∘ par(mapVal(p => p), Types.singleType[T])
-
-  // def apply1T[V, T, F[_]](
-  //   F: TypeTag[F],
-  //   split: T -⚬ (T |*| T),
-  //   lift: NonAbstractType[V, T] -⚬ T,
-  //   absType: Label => (One -⚬ T),
-  // )(using Junction.Positive[T]): T -⚬ T =
-  //   apply1(TypeTag.toTypeFun(F), split, lift, absType)
-
-  // def apply1[V, T](
-  //   f: TypeTagF,
-  //   split: T -⚬ (T |*| T),
-  //   lift: NonAbstractType[V, T] -⚬ T,
-  //   absType: Label => (One -⚬ T),
-  // )(using J: Junction.Positive[T]): T -⚬ T = {
-  //   val ct = CompilationTarget[V, T](split, lift, absType)
-  //   import ct.Map_●
-  //   val g: ct.Arr[T, T] =
-  //     import ct.given
-  //     f.compile[ct.Arr, |*|, One, ct.as, T](
-  //       Map_●,
-  //       ct.compilePrimitive,
-  //       [k, q] => (kq: ct.as[k, q]) => ct.split[k, q](kq),
-  //     ).get(Map_●, Map_●)
-  //   g > J.awaitPosFst
-  // }
 
   def string[V, T]: Done -⚬ NonAbstractType[V, T] =
     pack ∘ injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
@@ -725,7 +668,7 @@ private[typeinfer] object NonAbstractType {
                           f :>> mapVal { f => Type.fix(f.vmap(Label.ScalaTParam(_))) }
                         case Right(pf |*| p) =>
                           (pf ** Types.output(outputElem)(p)) :>> mapVal { case (pf, p) =>
-                            Type.Fun.pfixKindCheck(pf.vmap(Label.ScalaTParam(_)), p)
+                            Type.Fun.pfixUnsafe(pf.vmap(Label.ScalaTParam(_)), p)
                           }
                       }
                     case Left(x) =>

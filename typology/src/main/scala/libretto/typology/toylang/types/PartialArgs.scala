@@ -4,7 +4,7 @@ import libretto.lambda.{MonoidalCategory, MonoidalObjectMap, Projection, Tupled,
 import libretto.lambda.util.{Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds._
-import libretto.typology.types.kindShuffle.~⚬
+import libretto.typology.types.kindShuffle.{~⚬, Transfer}
 import libretto.typology.util.Either3
 import scala.annotation.targetName
 
@@ -150,27 +150,6 @@ sealed trait PartialArgs[F[_, _], K, L] {
           case (Exists.Some((g1, h1)), Exists.Some((g2, h2))) =>
             Exists((introBoth(g1, g2), par(h1, h2)(using g1.outKind, g2.outKind)))
 
-  // def split[G[_, _], H[_, _]](
-  //   f: [k, l] => F[k, l] => Either3[G[k, l], Exists[[x] =>> (G[k, x], H[x, l])], H[k, l]],
-  // ): Exists[[X] =>> (PartialArgs[G, K, X], PartialArgs[H, X, L])] =
-  //   this match
-  //     case Id() =>
-  //       UnhandledCase.raise(s"$this.split")
-  //     case Lift(f) =>
-  //       UnhandledCase.raise(s"$this.split")
-  //     case Par(f1, f2) =>
-  //       UnhandledCase.raise(s"$this.split")
-  //     case Fst(f) =>
-  //       UnhandledCase.raise(s"$this.split")
-  //     case Snd(f) =>
-  //       UnhandledCase.raise(s"$this.split")
-  //     case IntroFst(f1, f2) =>
-  //       UnhandledCase.raise(s"$this.split")
-  //     case IntroSnd(f1, f2) =>
-  //       UnhandledCase.raise(s"$this.split")
-  //     case IntroBoth(f1, f2) =>
-  //       UnhandledCase.raise(s"$this.split")
-
   def project[M](p: Projection[×, L, M]): Exists[[X] =>> (Projection[×, K, X], PartialArgs[F, X, M])] =
     p match
       case Projection.Id() => Exists((Projection.Id(), this))
@@ -179,25 +158,81 @@ sealed trait PartialArgs[F[_, _], K, L] {
   protected def projectProper[M](p: Projection.Proper[×, L, M]): Exists[[X] =>> (Projection[×, K, X], PartialArgs[F, X, M])] =
     UnhandledCase.raise(s"$this.projectProper($p)")
 
+  def dup(using
+    OutputKind[L],
+  ): Exists[[KK] =>> Exists[[X] =>> (Multipliers[K, KK], KK ~⚬ X, PartialArgs[F, X, L × L])]] =
+    this match
+      case i @ Id() =>
+        Multipliers.dup(i.kind) match
+          case Exists.Some((m, s)) =>
+            Exists(Exists((m, s, Id())))
+      case l @ Lift(f) =>
+        l.inKind.properKind match
+          case Left(TypeEq(Refl())) =>
+            Exists(Exists((Multipliers.id[○], ~⚬.id, IntroBoth(Lift(f), Lift(f)))))
+          case Right(k) =>
+            given ProperKind[K] = k
+            Multipliers.dup(k) match
+              case Exists.Some((m, s)) =>
+                Exists(Exists((m, s, Par(Lift(f), Lift(f)))))
+      case Par(f1, f2) =>
+        UnhandledCase.raise(s"$this.dup")
+      case Fst(f) =>
+        UnhandledCase.raise(s"$this.dup")
+      case Snd(f) =>
+        UnhandledCase.raise(s"$this.dup")
+      case IntroFst(f1, f2) =>
+        UnhandledCase.raise(s"$this.dup")
+      case IntroSnd(f1, f2) =>
+        UnhandledCase.raise(s"$this.dup")
+      case IntroBoth(f1, f2) =>
+        UnhandledCase.raise(s"$this.dup")
+
+
+  def multiply[LL](
+    m: Multiplier[×, L, LL],
+  )(using
+    OutputKind[L]
+  ): Exists[[KK] =>> Exists[[X] =>> (Multipliers[K, KK], KK ~⚬ X, PartialArgs[F, X, LL])]] =
+    m match
+      case Multiplier.Id() =>
+        Exists(Exists(Multipliers.id, ~⚬.id, this))
+      case Multiplier.Dup(m1, m2) =>
+        this.dup match
+          case Exists.Some(Exists.Some((m0, s0, a))) =>
+            a.multiply(Multipliers.Par(Multipliers.Single(m1), Multipliers.Single(m2))) match
+              case Exists.Some(Exists.Some((m1, s1, a1))) =>
+                m1.preShuffle(s0) match
+                  case Exists.Some((m1, s0)) =>
+                    Exists.Some(Exists.Some((m0 > m1, s0 > s1, a1)))
+
   def multiply[LL](
     m: Multipliers[L, LL],
   ): Exists[[KK] =>> Exists[[X] =>> (Multipliers[K, KK], KK ~⚬ X, PartialArgs[F, X, LL])]] =
     m match
-      case Multipliers.Single(m) =>
-        m match
-          case Multiplier.Id() => Exists(Exists(Multipliers.id, ~⚬.id, this))
-          case Multiplier.Dup(m1, m2) => UnhandledCase.raise(s"$this.multiply($m)")
+      case s @ Multipliers.Single(m) =>
+        this.multiply(m)(using s.inKind)
       case m @ Multipliers.Par(m1, m2) =>
+        import m1.outKind
         this match
           case Id() => Exists(Exists((m, ~⚬.id, Id()(using m.outKind))))
           case Lift(f) =>
             UnhandledCase.raise(s"$this.multiply($m)")
           case Par(f1, f2) =>
             UnhandledCase.raise(s"$this.multiply($m)")
-          case Fst(f) =>
-            UnhandledCase.raise(s"$this.multiply($m)")
-          case Snd(f) =>
-            UnhandledCase.raise(s"$this.multiply($m)")
+          case f @ Fst(f1) =>
+            import f.given
+            import m2.outKind
+            f1.multiply(m1) match
+              case Exists.Some(y @ Exists.Some((m1, s1, a1))) =>
+                given ProperKind[y.T] = s1(m1(f.inKind1))
+                Exists(Exists((Multipliers.Par(m1.proper, m2), ~⚬.fst(s1), a1.inFst)))
+          case f @ Snd(f2) =>
+            import f.given
+            f2.multiply(m2) match
+              case Exists.Some(y @ Exists.Some((m2, s2, a2))) =>
+                given ProperKind[y.T] = s2(m2(f.inKind2))
+                Exists(Exists((Multipliers.Par(m1, m2.proper), ~⚬.snd(s2), a2.inSnd)))
           case IntroFst(f1, f2) =>
             (f1.multiply(m1), f2.multiply(m2)) match
               case (Exists.Some(Exists.Some((m1, s1, a1))), Exists.Some(Exists.Some((m2, s2, a2)))) =>
@@ -207,7 +242,13 @@ sealed trait PartialArgs[F[_, _], K, L] {
                       case TypeEq(Refl()) =>
                         Exists(Exists((m2, s2, PartialArgs.introFst(a1, a2))))
           case IntroSnd(f1, f2) =>
-            UnhandledCase.raise(s"$this.multiply($m)")
+            (f1.multiply(m1), f2.multiply(m2)) match
+              case (Exists.Some(Exists.Some((m1, s1, a1))), Exists.Some(Exists.Some((m2, s2, a2)))) =>
+                Multipliers.proveId(m2) match
+                  case TypeEq(Refl()) =>
+                    s2.proveId(Kind.unitIsNotPair) match
+                      case TypeEq(Refl()) =>
+                        Exists(Exists((m1, s1, PartialArgs.introSnd(a1, a2))))
           case IntroBoth(f1, f2) =>
             (f1.multiply(m1), f2.multiply(m2)) match
               case (Exists.Some(Exists.Some((m1, s1, a1))), Exists.Some(Exists.Some((m2, s2, a2)))) =>
@@ -230,9 +271,12 @@ sealed trait PartialArgs[F[_, _], K, L] {
         Exists((~⚬.id, this))
       case ~⚬.Bimap(par) =>
         UnhandledCase.raise(s"$this.shuffle($s)")
-      case ~⚬.Xfer(f1, f2, transfer) =>
-        UnhandledCase.raise(s"$this.shuffle($s)")
-
+      case x: ~⚬.Xfer[l1, l2, x1, x2, m1, m2] =>
+        PartialArgs.biShuffle[F, K, l1, l2, x1, x2](this, x.f1, x.f2) match
+          case Exists.Some((s, f)) =>
+            PartialArgs.transfer(f, x.transfer) match
+              case Exists.Some((t, f)) =>
+                Exists((s > t, f))
 }
 
 object PartialArgs {
@@ -489,6 +533,27 @@ object PartialArgs {
         introBoth(x, y)
     )
 
+  def unpair[F[_, _], L1, L2](
+    a: PartialArgs[F, ○, L1 × L2],
+  ): (PartialArgs[F, ○, L1], PartialArgs[F, ○, L2]) =
+    a match
+      case IntroBoth(f1, f2) =>
+        (f1, f2)
+      case i: Id[f, k] =>
+        throw AssertionError("Unreachable case")
+      case Lift(f) =>
+        throw AssertionError("Unreachable case")
+      case Par(f1, f2) =>
+        throw AssertionError("Unreachable case")
+      case Fst(f) =>
+        throw AssertionError("Unreachable case")
+      case Snd(f) =>
+        throw AssertionError("Unreachable case")
+      case IntroFst(f1, f2) =>
+        throw AssertionError("Unreachable case")
+      case IntroSnd(f1, f2) =>
+        throw AssertionError("Unreachable case")
+
   def flatten[F[_, _], K, L](a: PartialArgs[PartialArgs[F, _, _], K, L]): PartialArgs[F, K, L] =
     a match
       case i @ Id() =>
@@ -511,4 +576,94 @@ object PartialArgs {
         UnhandledCase.raise(s"PartialArgs.flatten($a)")
       case IntroBoth(f1, f2) =>
         UnhandledCase.raise(s"PartialArgs.flatten($a)")
+
+  private def biShuffle[F[_, _], K, L1, L2, M1, M2](
+    a: PartialArgs[F, K, L1 × L2],
+    s1: L1 ~⚬ M1,
+    s2: L2 ~⚬ M2,
+  ): Exists[[X] =>> (K ~⚬ X, PartialArgs[F, X, M1 × M2])] =
+    a match
+      case i @ Id() =>
+        val s = ~⚬.par(s1, s2)
+        given ProperKind[M1 × M2] = s(a.outKind)
+        Exists((s, Id()))
+      case Lift(f) =>
+        UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
+      case Par(f1, f2) =>
+        UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
+      case Fst(f) =>
+        UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
+      case Snd(f) =>
+        UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
+      case IntroFst(f1, f2) =>
+        (f1 shuffle s1, f2 shuffle s2) match
+          case (Exists.Some((s1, f1)), Exists.Some((s2, f2))) =>
+            s1.proveId(Kind.unitIsNotPair) match
+              case TypeEq(Refl()) =>
+                Exists((s2, introFst(f1, f2)))
+      case IntroSnd(f1, f2) =>
+        (f1 shuffle s1, f2 shuffle s2) match
+          case (Exists.Some((s1, f1)), Exists.Some((s2, f2))) =>
+            s2.proveId(Kind.unitIsNotPair) match
+              case TypeEq(Refl()) =>
+                Exists((s1, introSnd(f1, f2)))
+      case IntroBoth(f1, f2) =>
+        (f1 shuffle s1, f2 shuffle s2) match
+          case (Exists.Some((s1, f1)), Exists.Some((s2, f2))) =>
+            (s1.proveId(Kind.unitIsNotPair), s2.proveId(Kind.unitIsNotPair)) match
+              case (TypeEq(Refl()), TypeEq(Refl())) =>
+                Exists((~⚬.id, introBoth(f1, f2)))
+
+  private def transfer[F[_, _], K, L1, L2, M1, M2](
+    a: PartialArgs[F, K, L1 × L2],
+    tr: Transfer[L1, L2, M1, M2],
+  ): Exists[[X] =>> (K ~⚬ X, PartialArgs[F, X, M1 × M2])] =
+    a match
+      case Id() =>
+        UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+      case Lift(f) =>
+        UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+      case Par(f1, f2) =>
+        UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+      case Fst(f) =>
+        UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+      case Snd(f) =>
+        UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+      case IntroFst(f1, f2) =>
+        tr match
+          case Transfer.Swap() =>
+            Exists(~⚬.id, introSnd(f2, f1))
+          case lr: Transfer.AssocLR[l11, l12, l2, x2, x3] =>
+            val (f11, f12) = unpair(f1.to[l11 × l12])
+            introFst(f12, f2).shuffle(lr.g.asShuffle) match
+              case Exists.Some((s, f2)) => Exists((s, introFst(f11, f2)))
+          case rl: Transfer.AssocRL[l1, l21, l22, x1, x2] =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+          case Transfer.IX(g) =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+          case Transfer.XI(g) =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+          case Transfer.IXI(g1, g2) =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+
+      case IntroSnd(f1, f2) =>
+        tr match
+          case Transfer.Swap() =>
+            Exists(~⚬.id, introFst(f2, f1))
+          case lr: Transfer.AssocLR[l11, l12, l2, x2, x3] =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+          case rl: Transfer.AssocRL[l1, l21, l22, x1, x2] =>
+            val (f21, f22) = unpair(f2.to[l21 × l22])
+            introSnd(f1, f21).shuffle(rl.g.asShuffle) match
+              case Exists.Some((s, f1)) => Exists((s, introSnd(f1, f22)))
+          case Transfer.IX(g) =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+          case Transfer.XI(g) =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+          case Transfer.IXI(g1, g2) =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+
+      case IntroBoth(f1, f2) =>
+        UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+
 }

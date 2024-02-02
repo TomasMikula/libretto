@@ -70,14 +70,6 @@ object TypeInference {
     ): $[pg.Tp |*| Val[Type[Label]]] =
       pg.abstractTypeTap(constant(label(Label.Abstr(v))))
 
-    // def apply1T[G[_]](G: TypeTag[G]): Tp -⚬ Tp =
-    //   NonAbstractType.apply1T(
-    //     G,
-    //     split,
-    //     pg.lift,
-    //     v => label(v) > pg.abstractTypeTap > snd(neglect) > awaitPosSnd,
-    //   )
-
     def liftType(t: Type[ScalaTypeParam]): One -⚬ Tp =
       NonAbstractType.lift(
         Tp,
@@ -259,10 +251,6 @@ object TypeInference {
 
         Monad[M].pure(
           λ.* { one =>
-            // val fixF = Tp(fixT[Val[Label], Tp, f](f.f)(one))
-            // val fFixF = apply1T(f.f)(Tp(fixT[Val[Label], Tp, f](f.f)(one)))
-            // val tf = constantVal(TypedFun.fix[f](TypeTag.toTypeFun(f.f).translate(TypeConstructor.vmap(Label.ScalaTParam(_)))))
-            // fFixF |*| tf |*| fixF
             val a = constant(liftType(fFixF))
             val b = constant(liftType( fixF))
             a |*| constantVal(res) |*| b
@@ -277,10 +265,6 @@ object TypeInference {
 
         Monad[M].pure(
           λ.* { one =>
-            // val fixF = Tp(fixT[Val[Label], Tp, f](f.f)(one))
-            // val fFixF = apply1T(f.f)(Tp(fixT[Val[Label], Tp, f](f.f)(one)))
-            // val tf = constantVal(TypedFun.unfix[f](TypeTag.toTypeFun(f.f).translate(TypeConstructor.vmap(Label.ScalaTParam(_)))))
-            // fixF |*| tf |*| fFixF
             val a = constant(liftType( fixF))
             val b = constant(liftType(fFixF))
             a |*| constantVal(res) |*| b

@@ -91,34 +91,6 @@ sealed abstract class TypeExpr[TC[_, _], K, L](using
 
   def open: Either[
     Closed[TC, K, L],
-    Exists[[X] =>> (PartialArgs[Closed[TC, _, _], K, X], TypeExpr.Open[TC, X, L])],
-  ] =
-    this match
-      case Primitive(f) =>
-        inKind.properKind match
-          case Left(TypeEq(Refl())) =>
-            Left(Closed.Impl(f))
-          case Right(k) =>
-            Right(Exists((PartialArgs.Id()(using k), TypeExpr.Open.primitive(f)(using k))))
-
-      case App(f, args) =>
-        args.split[PartialArgs[Closed[TC, _, _], _, _], PartialArgs[TypeExpr.Open[TC, _, _], _, _]](
-          [k, l] => (f: TypeExpr[TC, k, l]) => {
-            f.open match
-              case Left(t) =>
-                Exists((PartialArgs(t)(using t.inKind, t.outKind.properKind)), t.outKind.properKind, PartialArgs.Id[TypeExpr.Open[TC, _, _], l]()(using t.outKind.properKind))
-                  : Exists[[X] =>> (PartialArgs[Closed[TC, _, _], k, X], ProperKind[X], PartialArgs[TypeExpr.Open[TC, _, _], X, l])]
-              case Right(Exists.Some((g, h))) =>
-                Exists.Some((g, g.outKind, PartialArgs(h)(using h.inKind.kind, h.outKind.properKind)))
-                  : Exists[[X] =>> (PartialArgs[Closed[TC, _, _], k, X], ProperKind[X], PartialArgs[TypeExpr.Open[TC, _, _], X, l])]
-          }
-        ) match {
-          case Exists.Some((args0, args1)) =>
-            Right(Exists((PartialArgs.flatten(args0), TypeExpr.Open.App(f, PartialArgs.flatten(args1))(using args0.outKind))))
-        }
-
-  def open1: Either[
-    Closed[TC, K, L],
     Exists[[X] =>> (Capt[TC, K, X], TypeExpr.Open[TC, X, L])],
   ] =
     this match
@@ -133,7 +105,7 @@ sealed abstract class TypeExpr[TC[_, _], K, L](using
       case App(f, args) =>
         args.split[Capt[TC, _, _], PartialArgs[TypeExpr.Open[TC, _, _], _, _]](
           [k, l] => (f: TypeExpr[TC, k, l]) => {
-            f.open1 match
+            f.open match
               case Left(t) =>
                 Exists((Capt.closed(t), t.outKind.properKind, PartialArgs.Id[TypeExpr.Open[TC, _, _], l]()(using t.outKind.properKind)))
                   : Exists[[X] =>> (Capt[TC, k, X], ProperKind[X], PartialArgs[TypeExpr.Open[TC, _, _], X, l])]
