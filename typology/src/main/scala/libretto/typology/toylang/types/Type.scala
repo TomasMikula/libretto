@@ -12,7 +12,7 @@ import libretto.typology.util.Either3
 type Type[V] = TypeExpr[TypeConstructor[V, _, _], ○, ●]
 
 object Type {
-  type OpenExpr[V, K, L] = TypeExpr.Open[TypeConstructor[V, _, _], K, L]
+  type OpenExpr[V, K, L] = OpenTypeExpr[TypeConstructor[V, _, _], K, L]
 
   def unit[V]: Type[V]   = TypeExpr.Primitive(TypeConstructor.UnitType())
   def int[V]: Type[V]    = TypeExpr.Primitive(TypeConstructor.IntType())
@@ -55,7 +55,7 @@ object Type {
   def fixDecompose[V](
     f: TypeFun[TypeConstructor[V, _, _], ●, ●],
   ): FixDecomposed[V] =
-    f.expr.open match
+    OpenTypeExpr.open(f.expr) match
       case Left(t) =>
         UnhandledCase.raise(s"nothing to fix")
       case Right(Exists.Some((cpt, opn))) =>
@@ -72,7 +72,7 @@ object Type {
   def pfixDecompose[V](
     f: Type.Fun[V, ● × ●, ●],
   ): PFixDecomposed[V] =
-    f.expr.open match
+    OpenTypeExpr.open(f.expr) match
       case Left(t) =>
         UnhandledCase.raise(s"nothing to fix")
       case Right(Exists.Some((cpt, opn))) =>
@@ -87,7 +87,7 @@ object Type {
   def pfixDecompose[V, X, Y](
     capt: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, X],
     pre: Routing[● × ●, Y],
-    expr: TypeExpr.Open.LTrimmed[TypeConstructor[V, _, _], X, Y, ●],
+    expr: OpenTypeExpr.LTrimmed[TypeConstructor[V, _, _], X, Y, ●],
   ): PFixDecomposed[V] =
     import expr.inKind2
     import Routing.TraceSndRes.{FstEliminated, SndEliminated, Traced}
@@ -98,9 +98,9 @@ object Type {
         UnhandledCase.raise(s"pfixDecompose($capt, $pre, $expr)")
       case r: Traced[k1, k2, q1, q2, y1, y2] =>
         summon[Y =:= (y1 × y2)]
-        TypeExpr.Open.LTrimmed.ltrimMore(r.tr, expr) match
+        OpenTypeExpr.LTrimmed.ltrimMore(r.tr, expr) match
           case Exists.Some((args, expr)) =>
-            val args1 = args.translate([k, l] => (e: TypeExpr.Open[TypeConstructor[V, _, _], k, l]) => e.unopen)
+            val args1 = args.translate([k, l] => (e: OpenTypeExpr[TypeConstructor[V, _, _], k, l]) => e.unopen)
             PFixDecomposed.Decomposed(r.r, PartialArgs.introFst(capt, args1), TypeConstructor.PFix(r.m, expr))
 
   enum FixDecomposed[V]:
@@ -119,7 +119,7 @@ object Type {
     ) extends PFixDecomposed[V]
 
   private type Capt[V, K, L] =
-    TypeExpr.Capt[TypeConstructor[V, _, _], K, L]
+    OpenTypeExpr.Capt[TypeConstructor[V, _, _], K, L]
 
   private def fixDecompose[V, K, X, L](
     cpt: Capt[V, K, X],
@@ -129,13 +129,13 @@ object Type {
     Nothing,
     Exists[[Y] =>> (
       PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, Y],
-      TypeExpr.Open.LTrimmed[TypeConstructor[V, _, _], Y, K, L],
+      OpenTypeExpr.LTrimmed[TypeConstructor[V, _, _], Y, K, L],
     )],
   ] =
     cpt match
-      case TypeExpr.Capt.Total(captured) =>
+      case OpenTypeExpr.Capt.Total(captured) =>
         Either3.Left(summon[K =:= ○])
-      case TypeExpr.Capt.Partial(capture) =>
+      case OpenTypeExpr.Capt.Partial(capture) =>
         capture.exposeCaptured match
           case Left(TypeEq(Refl())) =>
             UnhandledCase.raise(s"fixDecompose($cpt, $opn)")
@@ -151,7 +151,7 @@ object Type {
     opn: OpenExpr[V, L1 × L2, L],
   ): Exists[[Y] =>> (
     PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, Y],
-    TypeExpr.Open.LTrimmed[TypeConstructor[V, _, _], Y, K, L],
+    OpenTypeExpr.LTrimmed[TypeConstructor[V, _, _], Y, K, L],
   )] = {
     val c: Tupled[×, TypeExpr[TypeConstructor[V, _, _], ○, _], X] =
       captured.trans[TypeExpr[TypeConstructor[V, _, _], ○, _]](
@@ -165,11 +165,11 @@ object Type {
         properOutKind = [x] => (x: TypeExpr[TypeConstructor[V, _, _], ○, x]) =>
           x.outKind.properKind,
       )
-    TypeExpr.Open.ltrim(reorg, opn) match
+    OpenTypeExpr.ltrim(reorg, opn) match
       case Exists.Some((captured1, ltrimmed)) =>
         val cArgs1 =
           captured1.translate[TypeExpr[TypeConstructor[V, _, _], _, _]](
-            [x, y] => (e: TypeExpr.Open[TypeConstructor[V, _, _], x, y]) =>
+            [x, y] => (e: OpenTypeExpr[TypeConstructor[V, _, _], x, y]) =>
               e.unopen
           )
         val capture =

@@ -39,7 +39,7 @@ object TypeConstructor {
 
   case class Fix[V, K](
     m: Multiplier[×, ●, K],
-    g: TypeExpr.Open[TypeConstructor[V, _, _], K, ●],
+    g: OpenTypeExpr[TypeConstructor[V, _, _], K, ●],
   ) extends TypeConstructor[V, ○, ●] {
     override def vmap[W](f: V => W): Fix[W, K] =
       Fix(m, g.translate(TypeConstructor.vmap(f)))
@@ -47,7 +47,7 @@ object TypeConstructor {
 
   case class PFix[V, P, X](
     m: Multiplier[×, ●, X],
-    g: TypeExpr.Open.LTrimmed[TypeConstructor[V, _, _], P, X, ●],
+    g: OpenTypeExpr.LTrimmed[TypeConstructor[V, _, _], P, X, ●],
   ) extends TypeConstructor[V, P, ●](using g.inKind1.kind) {
     override def vmap[W](f: V => W): PFix[W, P, X] =
       PFix(m, g.translate(TypeConstructor.vmap(f)))
