@@ -5,8 +5,6 @@ import libretto.lambda.util.{Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds._
 import libretto.typology.types.kindShuffle.{~⚬, Transfer}
-import libretto.typology.util.Either3
-import scala.annotation.targetName
 
 /** Represents partial type arguments.
  *
@@ -532,6 +530,27 @@ object PartialArgs {
       zip = [x, y] => (x: PartialArgs[F, ○, x], y: PartialArgs[F, ○, y]) =>
         introBoth(x, y)
     )
+
+  def cannotBeConstant[F[_, _], L](
+    args: PartialArgs[F, ○, L],
+    lemma: [l] => F[○, l] => Nothing,
+  ): Nothing =
+    cannotBeConstant(args, lemma, summon)
+
+  private def cannotBeConstant[F[_, _], K, L](
+    args: PartialArgs[F, K, L],
+    lemma: [l] => F[○, l] => Nothing,
+    ev: K =:= ○,
+  ): Nothing =
+    args match
+      case i @ Id()                  => ev match { case TypeEq(Refl()) => KindN.cannotBeUnit(i.kind) }
+      case Lift(f)                   => ev match { case TypeEq(Refl()) => lemma(f) }
+      case p: IntroFst[f, k, l, m]   => ev match { case TypeEq(Refl()) => KindN.cannotBeUnit(p.inKindProper) }
+      case p: IntroSnd[f, k, l, m]   => ev match { case TypeEq(Refl()) => KindN.cannotBeUnit(p.inKindProper) }
+      case p: Par[f, k1, k2, l1, l2] => KindN.cannotBeUnit(ev.substituteCo(p.inKind1 × p.inKind2))
+      case p: Fst[f, k1, k2, l1]     => KindN.cannotBeUnit(ev.substituteCo(p.inKind1 × p.kind2))
+      case p: Snd[f, k1, k2, l2]     => KindN.cannotBeUnit(ev.substituteCo(p.kind1 × p.inKind2))
+      case IntroBoth(f1, f2)         => cannotBeConstant(f1, lemma, ev)
 
   def unpair[F[_, _], L1, L2](
     a: PartialArgs[F, ○, L1 × L2],

@@ -51,6 +51,9 @@ object OpenTypeExpr {
   ): OpenTypeExpr[TC, K, L] =
     App(op, PartialArgs.Id())
 
+  def cannotBeConstant[TC[_, _]]: [L] => OpenTypeExpr[TC, ○, L] => Nothing =
+    [L] => (t: OpenTypeExpr[TC, ○, L]) => KindN.cannotBeUnit(t.inKind)
+
   def translate[TC[_, _], TC1[_, _]](
     f: [k, l] => TC[k, l] => TC1[k, l],
   ): [k, l] => OpenTypeExpr[TC, k, l] => OpenTypeExpr[TC1, k, l] =
@@ -58,7 +61,6 @@ object OpenTypeExpr {
 
   def unopen[TC[_, _]]: [k, l] => OpenTypeExpr[TC, k, l] => TypeExpr[TC, k, l] =
     [k, l] => (e: OpenTypeExpr[TC, k, l]) => e.unopen
-
 
   def open[TC[_, _], K, L](
     t: TypeExpr[TC, K, L],
@@ -143,9 +145,10 @@ object OpenTypeExpr {
             Translucent[TC, J1, J2, l1, L](f.f, RTotal[TC, l1, J2, J2, l1, J2](Id(), TransferOpt.None()))
           case Snd(f) =>
             Translucent[TC, J1, J2, J1, L](Id(), RTotal(f, TransferOpt.None()))
-          case IntroFst(_, _) | IntroSnd(_, _) | IntroBoth(_, _) =>
-            // TODO: use a precise, non-capturing representation of args to avoid this dead code
-            throw AssertionError(s"Impossible (at ${summon[SourcePos]})")
+          case IntroFst(f1, _) =>
+            PartialArgs.cannotBeConstant(f1, OpenTypeExpr.cannotBeConstant[TC])
+          case IntroSnd(_, f2) =>
+            PartialArgs.cannotBeConstant(f2, OpenTypeExpr.cannotBeConstant[TC])
 
       case Swap() =>
         args match
@@ -159,8 +162,10 @@ object OpenTypeExpr {
             UnhandledCase.raise(s"ltrimArgs($tr, $args)")
           case Snd(f) =>
             UnhandledCase.raise(s"ltrimArgs($tr, $args)")
-          case IntroFst(_, _) | IntroSnd(_, _) | IntroBoth(_, _) =>
-            throw AssertionError(s"Impossible (at ${summon[SourcePos]})") // TODO: use a precise, non-capturing representation of args
+          case IntroFst(f1, _) =>
+            PartialArgs.cannotBeConstant(f1, OpenTypeExpr.cannotBeConstant[TC])
+          case IntroSnd(_, f2) =>
+            PartialArgs.cannotBeConstant(f2, OpenTypeExpr.cannotBeConstant[TC])
 
       case a: AssocLR[i1, i2, i3, κ2, κ3] =>
         summon[J1 =:= (i1 × i2)]
@@ -185,8 +190,10 @@ object OpenTypeExpr {
                 )
               case Translucent(extruded, translucentBase) =>
                 UnhandledCase.raise(s"ltrimArgs($tr, $args)")
-          case IntroFst(_, _) | IntroSnd(_, _) | IntroBoth(_, _) =>
-            throw AssertionError(s"Impossible (at ${summon[SourcePos]})") // TODO: use a precise, non-capturing representation of args
+          case IntroFst(f1, _) =>
+            PartialArgs.cannotBeConstant(f1, OpenTypeExpr.cannotBeConstant[TC])
+          case IntroSnd(_, f2) =>
+            PartialArgs.cannotBeConstant(f2, OpenTypeExpr.cannotBeConstant[TC])
 
       case AssocRL(g) =>
         args match
@@ -200,8 +207,10 @@ object OpenTypeExpr {
             UnhandledCase.raise(s"ltrimArgs($tr, $args)")
           case Snd(f) =>
             UnhandledCase.raise(s"ltrimArgs($tr, $args)")
-          case IntroFst(_, _) | IntroSnd(_, _) | IntroBoth(_, _) =>
-            throw AssertionError(s"Impossible (at ${summon[SourcePos]})") // TODO: use a precise, non-capturing representation of args
+          case IntroFst(f1, _) =>
+            PartialArgs.cannotBeConstant(f1, OpenTypeExpr.cannotBeConstant[TC])
+          case IntroSnd(_, f2) =>
+            PartialArgs.cannotBeConstant(f2, OpenTypeExpr.cannotBeConstant[TC])
 
       case IX(g) =>
         UnhandledCase.raise(s"ltrimArgs($tr, $args)")
