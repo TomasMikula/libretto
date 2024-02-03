@@ -144,7 +144,7 @@ object OpenTypeExpr {
             UnhandledCase.raise(s"ltrimArgs($tr, $args)")
           case f: Fst[f, k1, l1, k2] =>
             summon[L =:= (l1 × K2)]
-            Translucent[TC, J1, J2, l1, L](f.f, RTotal[TC, l1, J2, J2, l1, J2](Id(), TransferOpt.None()))
+            Translucent[TC, J1, J2, l1, L](f.f, RTotal/*[TC, l1, J2, J2, l1, J2]*/(Id(), TransferOpt.None()))
           case Snd(f) =>
             Translucent[TC, J1, J2, J1, L](Id(), RTotal(f, TransferOpt.None()))
           case IntroFst(_, _) | IntroSnd(_, _) | IntroBoth(_, _) =>

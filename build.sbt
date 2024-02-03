@@ -1,6 +1,10 @@
 resolvers += Resolver.mavenCentral
 
+// StackOverflowError reproducible with each of the following versions:
 ThisBuild / scalaVersion := "3.3.1"
+//ThisBuild / scalaVersion := "3.3.2-RC3"
+//ThisBuild / scalaVersion := "3.4.0-RC4"
+//ThisBuild / scalaVersion := "3.4.1-RC1-bin-20240202-5850d2d-NIGHTLY"
 
 ThisBuild / organization := "dev.continuously.libretto"
 
