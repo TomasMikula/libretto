@@ -1,5 +1,6 @@
 resolvers += Resolver.mavenCentral
 
+// https://github.com/lampepfl/dotty/issues/19602
 // StackOverflowError reproducible with each of the following versions:
 ThisBuild / scalaVersion := "3.3.1"
 //ThisBuild / scalaVersion := "3.3.2-RC3"
