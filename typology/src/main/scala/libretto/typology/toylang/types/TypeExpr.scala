@@ -1,7 +1,8 @@
 package libretto.typology.toylang.types
 
 import libretto.lambda.{MappedMorphism, MonoidalCategory, MonoidalObjectMap, Semigroupoid, Unzippable}
-import libretto.lambda.util.Exists
+import libretto.lambda.util.{Exists, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
 
 /**
@@ -97,12 +98,11 @@ sealed abstract class TypeExpr[TC[_, _], K, L](using
 
 object TypeExpr {
 
-  case class Primitive[TC[_, _], K, L](
-    value: TC[K, L],
+  case class Primitive[TC[_, _], L](
+    value: TC[○, L],
   )(using
-    Kinds[K],
     Kind[L],
-  ) extends TypeExpr[TC, K, L]
+  ) extends TypeExpr[TC, ○, L]
 
   case class App[TC[_, _], K, L, M](
     f: TC[L, M],
@@ -110,6 +110,14 @@ object TypeExpr {
   )(using
     Kind[M],
   ) extends TypeExpr[TC, K, M](using args.inKind)
+
+  def lift[TC[_, _], K, L](f: TC[K, L])(using
+    Kinds[K],
+    Kind[L],
+  ): TypeExpr[TC, K, L] =
+    Kinds[K].nonEmpty match
+      case Left(TypeEq(Refl())) => Primitive(f)
+      case Right(k) => App(f, PartialArgs.Id()(using k))
 
   given semigroupoid[TC[_, _]]: Semigroupoid[TypeExpr[TC, _, _]] with {
     override def andThen[A, B, C](

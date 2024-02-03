@@ -14,12 +14,12 @@ type Type[V] = TypeExpr[TypeConstructor[V, _, _], ○, ●]
 object Type {
   type OpenExpr[V, K, L] = OpenTypeExpr[TypeConstructor[V, _, _], K, L]
 
-  def unit[V]: Type[V]   = TypeExpr.Primitive(TypeConstructor.UnitType())
-  def int[V]: Type[V]    = TypeExpr.Primitive(TypeConstructor.IntType())
-  def string[V]: Type[V] = TypeExpr.Primitive(TypeConstructor.StringType())
+  def unit[V]: Type[V]   = TypeExpr.lift(TypeConstructor.UnitType())
+  def int[V]: Type[V]    = TypeExpr.lift(TypeConstructor.IntType())
+  def string[V]: Type[V] = TypeExpr.lift(TypeConstructor.StringType())
 
   def pair[V]: TypeExpr[TypeConstructor[V, _, _], ● × ●, ●] =
-    TypeExpr.Primitive(TypeConstructor.Pair())
+    TypeExpr.lift(TypeConstructor.Pair())
 
   def pair[V](a: Type[V], b: Type[V]): Type[V] =
     TypeExpr.App(
@@ -31,7 +31,7 @@ object Type {
     )
 
   def sum[V]: TypeExpr[TypeConstructor[V, _, _], ● × ●, ●] =
-    TypeExpr.Primitive(TypeConstructor.Sum())
+    TypeExpr.lift(TypeConstructor.Sum())
 
   def sum[V](a: Type[V], b: Type[V]): Type[V] =
     TypeExpr.App(
@@ -43,7 +43,7 @@ object Type {
     )
 
   def fix[V, K](f: TypeConstructor.Fix[V, K]): Type[V] =
-    TypeExpr.Primitive(f)
+    TypeExpr.lift(f)
 
   def fix[V](f: TypeFun[TypeConstructor[V, _, _], ●, ●]): Type[V] =
     fixDecompose(f) match
@@ -288,7 +288,7 @@ object Type {
       pair2(toExpr(b))
 
     def sum[V]: Type.Fun[V, ● × ●, ●] =
-      fromExpr(TypeExpr.Primitive(TypeConstructor.Sum()))
+      fromExpr(TypeExpr.lift(TypeConstructor.Sum()))
 
     def sum[V](a: Type.Fun[V, ○, ●], b: Type.Fun[V, ○, ●]): Type.Fun[V, ○, ●] =
       fromExpr(Type.sum(toExpr(a), toExpr(b)))
@@ -317,7 +317,7 @@ object Type {
 
     def pfix[V, P, X](f: TypeConstructor.PFix[V, P, X]): Type.Fun[V, P, ●] =
       import f.inKind
-      fromExpr(TypeExpr.Primitive(f))
+      fromExpr(TypeExpr.lift(f))
 
     def pfix[V](f: Type.Fun[V, ● × ●, ●]): Type.Fun[V, ●, ●] =
       pfixDecompose(f) match
@@ -337,7 +337,7 @@ object Type {
         case Left(msg) =>
           throw IllegalArgumentException(msg)
         case Right(args) =>
-          TypeExpr.Primitive(f: TypeConstructor[V, P, ●])
+          TypeExpr.lift(f: TypeConstructor[V, P, ●])
             .applyTo(args)
 
     private def kindCheck[V, K](
@@ -371,6 +371,6 @@ object Type {
               UnhandledCase.raise(s"$e")
 
     def abstractType[V](name: V): Type.Fun[V, ○, ●] =
-      fromExpr(TypeExpr.Primitive(TypeConstructor.AbstractType(name)))
+      fromExpr(TypeExpr.lift(TypeConstructor.AbstractType(name)))
   }
 }

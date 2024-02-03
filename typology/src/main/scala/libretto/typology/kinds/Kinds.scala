@@ -29,6 +29,9 @@ object Kinds {
     override def nonEmpty: Either[K =:= ○, KindN[K]] = Right(value)
   }
 
+  def apply[K](using k: Kinds[K]): Kinds[K] =
+    k
+
   def apply[K](k: Kind[K]): Kinds[K] =
     k match {
       case Kind.Type => NonEmpty(KindN.Type)

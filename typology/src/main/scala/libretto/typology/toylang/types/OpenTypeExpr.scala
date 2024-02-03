@@ -69,12 +69,8 @@ object OpenTypeExpr {
     import t.given
     t match
       case TypeExpr.Primitive(f) =>
-        t.inKind.nonEmpty match
-          case Left(TypeEq(Refl())) =>
-            Left(Closed.Impl(f))
-          case Right(k) =>
-            given KindN[K] = k
-            Right(Exists((Capt.id, OpenTypeExpr.primitive(f))))
+        summon[K =:= ○]
+        Left(Closed.Impl(f))
 
       case TypeExpr.App(f, args) =>
         args.split[Capt[TC, _, _], PartialArgs[OpenTypeExpr[TC, _, _], _, _]](
