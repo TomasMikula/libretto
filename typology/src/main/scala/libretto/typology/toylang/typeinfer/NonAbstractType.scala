@@ -8,7 +8,8 @@ import libretto.typology.inference.TypeOps
 import libretto.typology.kinds.{Kinds, KindN, ×, ○, ●}
 import libretto.typology.toylang.terms.TypedFun
 import libretto.typology.toylang.types
-import libretto.typology.toylang.types.{Label, Routing, ScalaTypeParam, Type, TypeConstructor, TypeExpr, TypeFun, TypeTag}
+import libretto.typology.toylang.types.{Label, ScalaTypeParam, Type, TypeConstructor, TypeTag}
+import libretto.typology.types.{Routing, TypeExpr, TypeFun}
 import libretto.scaletto.StarterKit
 
 private[typeinfer] type KindMismatch[Types] = Types |*| Types

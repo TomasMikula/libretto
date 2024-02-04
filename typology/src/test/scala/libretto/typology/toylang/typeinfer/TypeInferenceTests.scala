@@ -5,11 +5,12 @@ import libretto.scaletto.StarterKit._
 import libretto.testing.scalatest.scaletto.ScalatestStarterTestSuite
 import libretto.testing.scaletto.StarterTestKit
 import libretto.testing.TestCase
-import libretto.typology.kinds._
+import libretto.typology.kinds.*
 import libretto.typology.toylang.typeinfer.TypeInference.inferTypes
 import libretto.typology.toylang.terms.{Fun, TypedFun}
-import libretto.typology.toylang.terms.Fun._
-import libretto.typology.toylang.types._
+import libretto.typology.toylang.terms.Fun.*
+import libretto.typology.toylang.types.*
+import libretto.typology.types.{PartialArgs, Routing, TypeFun}
 import scala.concurrent.duration.*
 
 class TypeInferenceTests extends ScalatestStarterTestSuite {

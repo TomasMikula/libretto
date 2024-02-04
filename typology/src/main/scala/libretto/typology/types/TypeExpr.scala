@@ -1,4 +1,4 @@
-package libretto.typology.toylang.types
+package libretto.typology.types
 
 import libretto.lambda.{MappedMorphism, MonoidalCategory, MonoidalObjectMap, Semigroupoid, Unzippable}
 import libretto.lambda.util.{Exists, TypeEq}

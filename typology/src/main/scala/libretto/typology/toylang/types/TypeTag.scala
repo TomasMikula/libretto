@@ -1,6 +1,7 @@
 package libretto.typology.toylang.types
 
-import libretto.typology.kinds._
+import libretto.typology.kinds.*
+import libretto.typology.types.{Routing, TypeFun}
 
 private type TypeCon[K, L] = TypeConstructor[ScalaTypeParam, K, L]
 

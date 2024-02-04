@@ -5,7 +5,7 @@ import libretto.lambda.Tupled.*
 import libretto.lambda.util.{Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
-import libretto.typology.types.kindShuffle
+import libretto.typology.types.{OpenTypeExpr, PartialArgs, Routing, TypeExpr, TypeFun, kindShuffle}
 import libretto.typology.types.kindShuffle.TransferOpt
 import libretto.typology.util.Either3
 

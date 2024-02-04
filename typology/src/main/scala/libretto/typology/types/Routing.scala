@@ -1,4 +1,4 @@
-package libretto.typology.toylang.types
+package libretto.typology.types
 
 import libretto.lambda.{MappedMorphism, MonoidalObjectMap, Projection, Shuffle, SymmetricMonoidalCategory, UnhandledCase}
 import libretto.lambda.util.{Exists, SourcePos, TypeEq}

@@ -1,6 +1,6 @@
-package libretto.typology.toylang.types
+package libretto.typology.types
 
-import libretto.lambda.{Projection, StrongZippable, UnhandledCase, Zippable}
+import libretto.lambda.{Projection, StrongZippable, Zippable}
 import libretto.lambda.util.Exists
 
 sealed trait Multiplier[×[_, _], A, AA] {

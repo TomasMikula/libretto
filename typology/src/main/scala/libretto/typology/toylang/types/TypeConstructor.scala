@@ -1,7 +1,8 @@
 package libretto.typology.toylang.types
 
 import libretto.lambda.{MappedMorphism,  MonoidalObjectMap, UnhandledCase}
-import libretto.typology.kinds._
+import libretto.typology.kinds.*
+import libretto.typology.types.{Multiplier, OpenTypeExpr, TypeExpr}
 
 sealed trait TypeConstructor[V, K, L](using
   val inKind: Kinds[K],

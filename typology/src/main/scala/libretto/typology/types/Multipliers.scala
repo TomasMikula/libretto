@@ -1,4 +1,4 @@
-package libretto.typology.toylang.types
+package libretto.typology.types
 
 import libretto.lambda.{PairwiseRel, Projection, StrongZippable, UnhandledCase}
 import libretto.lambda.util.{Exists, ExistsCo, TypeEq}
