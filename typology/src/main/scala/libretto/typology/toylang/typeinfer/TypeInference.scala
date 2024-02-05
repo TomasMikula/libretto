@@ -244,7 +244,7 @@ object TypeInference {
           }
       case f: Fun.FixF[f] =>
         val tf = TypeTag.toTypeFun(f.f)
-        val tg = tf.translate(TypeConstructor.vmap(Label.ScalaTParam(_)))
+        val tg = tf.vmap(Label.ScalaTParam(_))
         val res: TypedFun[A, B] = TypedFun.fix[f](tg)
         val fixF = Type.fix(tf)
         val fFixF = tf(fixF)
@@ -258,7 +258,7 @@ object TypeInference {
         )
       case f: Fun.UnfixF[f] =>
         val tf = TypeTag.toTypeFun(f.f)
-        val tg = tf.translate(TypeConstructor.vmap(Label.ScalaTParam(_)))
+        val tg = tf.vmap(Label.ScalaTParam(_))
         val res: TypedFun[A, B] = TypedFun.unfix[f](tg)
         val fixF = Type.fix(tf)
         val fFixF = tf(fixF)

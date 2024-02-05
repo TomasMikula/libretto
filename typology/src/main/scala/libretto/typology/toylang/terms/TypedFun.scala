@@ -1,9 +1,8 @@
 package libretto.typology.toylang.terms
 
 import libretto.typology.kinds.●
-import libretto.typology.toylang
+import libretto.typology.toylang.types
 import libretto.typology.toylang.types.{Fix, Label, RecCall, TypeConstructor}
-import libretto.typology.types
 
 sealed trait TypedFun[A, B] {
   import TypedFun.*
@@ -56,10 +55,10 @@ sealed trait TypedFun[A, B] {
 }
 
 object TypedFun {
-  type Type = toylang.types.Type[Label]
-  def  Type = toylang.types.Type
-  type TypeFun[K, L] = types.TypeFun[TypeConstructor[Label, _, _], K, L]
-  def  TypeFun       = types.TypeFun
+  type Type = types.Type[Label]
+  def  Type = types.Type
+  type TypeFun[K, L] = types.Type.Fun[Label, K, L]
+  def  TypeFun       = types.Type.Fun
 
   case class Id[A](typ: Type) extends TypedFun[A, A]
   case class AndThen[A, X, B](f: TypedFun[A, X], tx: Type, g: TypedFun[X, B]) extends TypedFun[A, B]

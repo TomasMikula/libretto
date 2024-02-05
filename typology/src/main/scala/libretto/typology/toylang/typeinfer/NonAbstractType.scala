@@ -778,7 +778,7 @@ private[typeinfer] object NonAbstractType {
       NonAbstractType.awaitPosFst[V, T](T.awaitPosFst, V.awaitPosFst)
   }
 
-  class CompilationTarget[V, T](
+  private class CompilationTarget[V, T](
     lift: NonAbstractType[V, T] -⚬ T,
     absType: Label => (One -⚬ T),
   ) {

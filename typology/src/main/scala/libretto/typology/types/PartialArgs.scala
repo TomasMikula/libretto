@@ -683,6 +683,22 @@ object PartialArgs {
             UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
 
       case IntroBoth(f1, f2) =>
-        UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+        tr match
+          case Transfer.Swap() =>
+            Exists(~⚬.id, introBoth(f2, f1))
+          case lr: Transfer.AssocLR[l11, l12, l2, x2, x3] =>
+            val (f11, f12) = unpair(f1.to[l11 × l12])
+            introBoth(f12, f2).shuffle(lr.g.asShuffle) match
+              case Exists.Some((s, f2)) =>
+                s.proveId(Kinds.unitIsNotPair) match
+                  case TypeEq(Refl()) => Exists((~⚬.id[○], introBoth(f11, f2)))
+          case rl: Transfer.AssocRL[l1, l21, l22, x1, x2] =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+          case Transfer.IX(g) =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+          case Transfer.XI(g) =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+          case Transfer.IXI(g1, g2) =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
 
 }

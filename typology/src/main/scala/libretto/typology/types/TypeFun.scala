@@ -24,6 +24,9 @@ sealed trait TypeFun[TC[_, _], K, L] {
     }
   }
 
+  def ∘[J](that: Routing[J, K]): TypeFun[TC, J, L] =
+    TypeFun(that > pre, expr)
+
   def apply(t: Expr[○, K]): Expr[○, L] =
     TypeFun.toExpr(this ∘ TypeFun.fromExpr(t))
 

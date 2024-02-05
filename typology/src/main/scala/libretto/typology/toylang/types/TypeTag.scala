@@ -5,86 +5,88 @@ import libretto.typology.types.{Routing, TypeFun}
 
 private type TypeCon[K, L] = TypeConstructor[ScalaTypeParam, K, L]
 
-opaque type TypeTag[A <: AnyKind] = TypeFun[TypeCon, ?, ?]
+opaque type TypeTag[A <: AnyKind] = Type.Fun[ScalaTypeParam, Any, Any]
 
 object TypeTag {
   def apply[A <: AnyKind](using a: TypeTag[A]): TypeTag[A] =
     a
 
-  given unit: TypeTag[Unit] = Type.Fun.unit
-  given int: TypeTag[Int] = Type.Fun.int
-  given string: TypeTag[String] = Type.Fun.string
+  given unit: TypeTag[Unit]     = (Type.Fun.unit: Type.Fun[ScalaTypeParam, ○, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
+  given int: TypeTag[Int]       = (Type.Fun.int: Type.Fun[ScalaTypeParam, ○, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
+  given string: TypeTag[String] = (Type.Fun.string: Type.Fun[ScalaTypeParam, ○, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
 
   given pair: TypeTag[Tuple2] =
-    Type.Fun.pair
+    (Type.Fun.pair: Type.Fun[ScalaTypeParam, ● × ●, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
 
   given pair[A, B](using a: TypeTag[A], b: TypeTag[B]): TypeTag[(A, B)] =
-    Type.Fun.pair(
-      (a: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ○, ●]],
-      (b: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ○, ●]],
-    )
+    (Type.Fun.pair(
+      (a: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ○, ●]],
+      (b: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ○, ●]],
+    ): Type.Fun[ScalaTypeParam, ○, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
 
   given pair1[A](using a: TypeTag[A]): TypeTag[(A, _)] =
-    Type.Fun.pair1(
-      (a: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ○, ●]]
-    )
+    (Type.Fun.pair1(
+      (a: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ○, ●]]
+    ): Type.Fun[ScalaTypeParam, ●, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
 
   given sum: TypeTag[Either] =
-    Type.Fun.sum
+    (Type.Fun.sum: Type.Fun[ScalaTypeParam, ● × ●, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
 
   given sum1[A](using a: TypeTag[A]): TypeTag[Either[A, _]] =
-    Type.Fun.sum1(
-      (a: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ○, ●]]
-    )
+    (Type.Fun.sum1(
+      (a: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ○, ●]]
+    ): Type.Fun[ScalaTypeParam, ●, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
 
   given fix[F[_]](using f: TypeTag[F]): TypeTag[Fix[F]] =
-    Type.Fun.fix(
-      (f: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ●, ●]]
-    )
+    (Type.Fun.fix(
+      (f: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ●, ●]]
+    ): Type.Fun[ScalaTypeParam, ○, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
 
   given pfix[F[_, _]](using f: TypeTag[F]): TypeTag[[x] =>> Fix[F[x, _]]] =
-    Type.Fun.pfix(
-      (f: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ● × ●, ●]]
-    )
+    (Type.Fun.pfix(
+      (f: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ● × ●, ●]]
+    ): Type.Fun[ScalaTypeParam, ●, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
 
   def compose[F[_], G[_]](f: TypeTag[F], g: TypeTag[G]): TypeTag[[x] =>> F[G[x]]] = {
-    val f1 = (f: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ●, ●]]
-    val g1 = (g: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ●, ●]]
-    f1 ∘ g1
+    val f1 = (f: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ●, ●]]
+    val g1 = (g: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ●, ●]]
+    ((f1 ∘ g1): Type.Fun[ScalaTypeParam, ●, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
   }
 
   def compose2[F[_], G[_, _]](f: TypeTag[F], g: TypeTag[G]): TypeTag[[x, y] =>> F[G[x, y]]] = {
-    val f1 = (f: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ●, ●]]
-    val g1 = (g: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ● × ●, ●]]
-    f1 ∘ g1
+    val f1 = (f: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ●, ●]]
+    val g1 = (g: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ● × ●, ●]]
+    ((f1 ∘ g1): Type.Fun[ScalaTypeParam, ● × ●, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
   }
 
   def composeSnd[F[_, _], H[_]](f: TypeTag[F], h: TypeTag[H]): TypeTag[[x, y] =>> F[x, H[y]]] = {
-    val f1 = (f: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ● × ●, ●]]
-    val h1 = (h: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ●, ●]]
-    TypeFun.composeSnd(f1, h1)
+    val f1 = (f: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ● × ●, ●]]
+    val h1 = (h: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ●, ●]]
+    (f1.applyTo(Type.Args(h1).inSnd): Type.Fun[ScalaTypeParam, ● × ●, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
   }
 
   def app[F[_], A](f: TypeTag[F], a: TypeTag[A]): TypeTag[F[A]] = {
-    val f1 = (f: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ●, ●]]
-    val a1 = (a: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ○, ●]]
-    TypeFun.fromExpr(f1(toType(a1)))
+    val f1 = (f: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ●, ●]]
+    val a1 = (a: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ○, ●]]
+    ((f1 ∘ a1): Type.Fun[ScalaTypeParam, ○, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
   }
 
   def appFst[F[_, _], A](f: TypeTag[F], a: TypeTag[A]): TypeTag[F[A, _]] = {
-    val f1 = (f: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ● × ●, ●]]
-    val a1 = (a: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ○, ●]]
-    TypeFun.appFst(f1, a1)
+    val f1 = (f: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ● × ●, ●]]
+    val a1 = (a: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ○, ●]]
+    (f1.applyTo(Type.Args.introFst(a1)): Type.Fun[ScalaTypeParam, ●, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
   }
 
   def diag: TypeTag[[x] =>> (x, x)] =
-    TypeFun(Routing.dup[●], Type.Fun.pair)
+    (Type.Fun.pair
+      .applyTo(Type.Args.dup)
+      : Type.Fun[ScalaTypeParam, ●, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
 
   def toType[A](ta: TypeTag[A]): Type[ScalaTypeParam] =
-    TypeFun.toExpr((ta: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ○, ●]])
+    Type.Fun.toType((ta: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ○, ●]])
 
-  def toTypeFun[F[_]](tf: TypeTag[F]): TypeFun[TypeCon, ●, ●] =
-    (tf: TypeFun[TypeCon, ?, ?]).asInstanceOf[TypeFun[TypeCon, ●, ●]]
+  def toTypeFun[F[_]](tf: TypeTag[F]): Type.Fun[ScalaTypeParam, ●, ●] =
+    (tf: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ●, ●]]
 
   import scala.{quoted => sq}
   private def fromTypeParam[T](using t: sq.Type[T], q: sq.Quotes): sq.Expr[TypeTag[T]] = {
@@ -99,13 +101,13 @@ object TypeTag {
         val file = pos.sourceFile.path
         val line = pos.startLine
         '{
-          Type.Fun.abstractType(
+          (Type.Fun.abstractType(
             ScalaTypeParam(
               filename = ${sq.Expr(file)},
               line = ${sq.Expr(line)},
               name = ${sq.Expr(name)},
             )
-          )
+          ): Type.Fun[ScalaTypeParam, ○, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
         }
       case _ =>
         sys.error(repr.show + " does not look like a type parameter")

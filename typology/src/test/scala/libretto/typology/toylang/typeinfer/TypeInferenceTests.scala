@@ -578,20 +578,23 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
           def bimap[A, B, C, D](f: Fun[A, C], g: Fun[B, D]): Fun[F[A, B], F[C, D]] =
             lmap(f) > rmap(g)
 
-          val tpe: TypeFun[● × ●, ●] =
-            TypeFun(
+          val tpe: TypeFun[● × ●, ●] = {
+            val f0: TypeFun[● × (● × ●), ●] =
+              Type.Fun.pair
+                .applyTo(Type.Args(Type.Fun.pair).inSnd)
+            val r: Routing[● × ●, ● × (● × ●)] =
               Routing.par(
                 Routing.dup[●],
                 Routing.dup[●],
               ) > Routing.ixi > Routing.par(
                 Routing.elimSnd,
                 Routing.swap,
-              ): Routing[● × ●, ● × (● × ●)],
-              Type.pair.applyTo(PartialArgs.snd(PartialArgs(Type.pair))),
-            )
+              )
+            f0 ∘ r
+          }
 
           def tpeAt(a: Type, b: Type): Type =
-            TypeFun.appFst(tpe, TypeFun.fromExpr(a)).apply(b)
+            tpe.apply(Type.Args.introBoth(a, b))
         }
 
         val f: Fun[F[Unit, Int], F[Int, String]] =
