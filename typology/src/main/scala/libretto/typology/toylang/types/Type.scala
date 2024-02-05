@@ -44,7 +44,7 @@ object Type {
       case FixDecomposed.NothingToFix(t) =>
         t
       case FixDecomposed.CapturedArgs(args, pf) =>
-        TypeFun.toExpr(Fun.pfix(pf).applyTo(args))
+        TypeFun.toExpr(args feedTo Fun.pfix(pf))
 
   def fixDecompose[V](
     f: TypeFun[TypeConstructor[V, _, _], ●, ●],
@@ -61,7 +61,7 @@ object Type {
           case Either3.Right(Exists.Some((capt, expr))) =>
             import expr.inKind2
             val m = Routing.toMultiplier(f.pre)
-            FixDecomposed.CapturedArgs(capt, TypeConstructor.PFix(m, expr))
+            FixDecomposed.CapturedArgs(Args(capt), TypeConstructor.PFix(m, expr))
 
   def pfixDecompose[V](
     f: Fun[V, ● × ●, ●],
@@ -78,7 +78,7 @@ object Type {
           case Either3.Right(Exists.Some((capt, expr))) =>
             pfixDecompose(capt, f.pre, expr)
 
-  def pfixDecompose[V, X, Y](
+  private def pfixDecompose[V, X, Y](
     capt: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, X],
     pre: Routing[● × ●, Y],
     expr: OpenTypeExpr.LTrimmed[TypeConstructor[V, _, _], X, Y, ●],
@@ -95,21 +95,20 @@ object Type {
         OpenTypeExpr.LTrimmed.ltrimMore(r.tr, expr) match
           case Exists.Some((args, expr)) =>
             val args1 = args.translate([k, l] => (e: OpenTypeExpr[TypeConstructor[V, _, _], k, l]) => e.unopen)
-            PFixDecomposed.Decomposed(r.r, PartialArgs.introFst(capt, args1), TypeConstructor.PFix(r.m, expr))
+            PFixDecomposed.Decomposed(Args.Impl(r.r, PartialArgs.introFst(capt, args1)), TypeConstructor.PFix(r.m, expr))
 
   enum FixDecomposed[V]:
     case NothingToFix(constantType: Type[V])
     case CapturedArgs[V, X](
-      args: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, X],
+      args: Args[V, ○, X],
       pfix: TypeConstructor.PFix[V, X, ?],
     ) extends FixDecomposed[V]
 
   enum PFixDecomposed[V]:
     case NothingToFix(result: Type.Fun[V, ●, ●])
-    case Decomposed[V, X, Y](
-      paramRouting: Routing[●, X],
-      potentialCapture: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], X, Y],
-      pfix: TypeConstructor.PFix[V, Y, ?]
+    case Decomposed[V, X](
+      args: Args[V, ●, X],
+      pfix: TypeConstructor.PFix[V, X, ?]
     ) extends PFixDecomposed[V]
 
   private type Capt[V, K, L] =
@@ -281,6 +280,12 @@ object Type {
             Impl(routing.inSnd[J], args.inSnd[J])
     }
 
+    private[Type] def apply[V, K, L](
+      args: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], K, L],
+    ): Args[V, K, L] =
+      import args.inKind
+      Impl(Routing.id[K], args)
+
     def apply[V](t: Type[V]): Args[V, ○, ●] =
       Impl(Routing.id[○], PartialArgs(t))
 
@@ -401,8 +406,10 @@ object Type {
 
     def pfix[V](f: Type.Fun[V, ● × ●, ●]): Type.Fun[V, ●, ●] =
       pfixDecompose(f) match
-        case PFixDecomposed.NothingToFix(f)         => f
-        case PFixDecomposed.Decomposed(r, args, pf) => TypeFun(r, pfix(pf).applyTo(args))
+        case PFixDecomposed.NothingToFix(f) =>
+          f
+        case PFixDecomposed.Decomposed(Args.Impl(r, args), pf) =>
+          TypeFun(r, pfix(pf).applyTo(args))
 
     /** Creates a PFix (parameterized fixed-point) type, if the type arguments `args` match the kinds `P`.
      *  Otherwise, throws an exception.
