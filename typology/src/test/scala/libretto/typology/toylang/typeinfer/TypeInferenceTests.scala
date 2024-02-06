@@ -581,7 +581,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
           val tpe: TypeFun[● × ●, ●] = {
             val f0: TypeFun[● × (● × ●), ●] =
               Type.Fun.pair
-                .applyTo(Type.Args(Type.Fun.pair).inSnd)
+                .applyTo(Type.Args(Type.Fun.pair).inSnd[●])
             val r: Routing[● × ●, ● × (● × ●)] =
               Routing.par(
                 Routing.dup[●],

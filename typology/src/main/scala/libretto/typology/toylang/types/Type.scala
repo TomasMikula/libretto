@@ -5,7 +5,7 @@ import libretto.lambda.Tupled.*
 import libretto.lambda.util.{Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
-import libretto.typology.types.{OpenTypeExpr, PartialArgs, Routing, TypeExpr, TypeFun, kindShuffle}
+import libretto.typology.types.{MultiTypeFun, OpenTypeExpr, PartialArgs, Routing, TypeExpr, TypeFun, kindShuffle}
 import libretto.typology.types.kindShuffle.TransferOpt
 import libretto.typology.util.Either3
 
@@ -44,10 +44,10 @@ object Type {
       case FixDecomposed.NothingToFix(t) =>
         t
       case FixDecomposed.CapturedArgs(args, pf) =>
-        TypeFun.toExpr(args feedTo Fun.pfix(pf))
+        TypeFun.toExpr(args > Fun.pfix(pf))
 
   def fixDecompose[V](
-    f: TypeFun[TypeConstructor[V, _, _], ●, ●],
+    f: Fun[V, ●, ●],
   ): FixDecomposed[V] =
     OpenTypeExpr.open(f.expr) match
       case Left(t) =>
@@ -95,7 +95,7 @@ object Type {
         OpenTypeExpr.LTrimmed.ltrimMore(r.tr, expr) match
           case Exists.Some((args, expr)) =>
             val args1 = args.translate([k, l] => (e: OpenTypeExpr[TypeConstructor[V, _, _], k, l]) => e.unopen)
-            PFixDecomposed.Decomposed(Args.Impl(r.r, PartialArgs.introFst(capt, args1)), TypeConstructor.PFix(r.m, expr))
+            PFixDecomposed.Decomposed(Args(r.r, PartialArgs.introFst(capt, args1)), TypeConstructor.PFix(r.m, expr))
 
   enum FixDecomposed[V]:
     case NothingToFix(constantType: Type[V])
@@ -249,91 +249,72 @@ object Type {
       (t: TypeExpr[TypeConstructor[V, _, _], ○, ●]).compile[==>, <*>, One, F, Q](fk, compilePrimitive)
   }
 
-  sealed trait Args[V, K, L] {
-    def feedTo[M](f: Fun[V, L, M]): Fun[V, K, M]
-    def inFst[M](using KindN[K], KindN[M]): Args[V, K × M, L × M]
-    def inSnd[J](using KindN[J], KindN[K]): Args[V, J × K, J × L]
-  }
+  opaque type Args[V, K, L] = MultiTypeFun[TypeConstructor[V, _, _], K, L]
 
   object Args {
-    private[Type] case class Impl[V, K, X, L](
-      routing: Routing[K, X],
-      args: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], X, L]
-    ) extends Args[V, K, L] {
-      override def feedTo[M](f: Fun[V, L, M]): Fun[V, K, M] =
-        f.applyTo(args) ∘ routing
-
-      override def inFst[M](using KindN[K], KindN[M]): Args[V, K × M, L × M] =
-        args.inKind.nonEmpty match
-          case Left(ev) =>
-            Impl(Routing.elimFst[K, M], PartialArgs.introFst(args.from[○](using ev.flip)))
-          case Right(x) =>
-            given KindN[X] = x
-            Impl(routing.inFst[M], args.inFst[M])
-
-      override def inSnd[J](using KindN[J], KindN[K]): Args[V, J × K, J × L] =
-        args.inKind.nonEmpty match
-          case Left(ev) =>
-            Impl(Routing.elimSnd[J, K], PartialArgs.introSnd(args.from[○](using ev.flip)))
-          case Right(x) =>
-            given KindN[X] = x
-            Impl(routing.inSnd[J], args.inSnd[J])
-    }
-
     private[Type] def apply[V, K, L](
       args: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], K, L],
     ): Args[V, K, L] =
-      import args.inKind
-      Impl(Routing.id[K], args)
+      MultiTypeFun(args)
+
+    private[Type] def apply[V, J, K, L](
+      r: Routing[J, K],
+      args: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], K, L],
+    ): Args[V, J, L] =
+      MultiTypeFun(r, args)
 
     def apply[V](t: Type[V]): Args[V, ○, ●] =
-      Impl(Routing.id[○], PartialArgs(t))
+      MultiTypeFun(t)
 
     def apply[V, K, L](f: Fun[V, K, L]): Args[V, K, L] =
-      import f.expr.inKind
-      import f.outKind
-      Impl(f.pre, PartialArgs(f.expr))
+      MultiTypeFun(f)
 
     def fst[V, K, L, M](f: Fun[V, K, L])(using KindN[K], KindN[M]): Args[V, K × M, L × M] =
-      Args(f).inFst
+      MultiTypeFun.fst(f)
 
     def snd[V, K, L, M](f: Fun[V, L, M])(using KindN[K], KindN[L]): Args[V, K × L, K × M] =
-      Args(f).inSnd
+      MultiTypeFun.snd(f)
 
-    def introFst[V, K, L](f: Fun[V, ○, K])(using KindN[K], KindN[L]): Args[V, L, K × L] =
-      val a = TypeFun.toExpr(f)
-      Impl(Routing.id[L], PartialArgs.introFst(PartialArgs(a)))
+    def introFst[V, K, L](f: Fun[V, ○, K])(using KindN[L]): Args[V, L, K × L] =
+      MultiTypeFun.introFst(f)
 
     def introSnd[V, K, L](f: Fun[V, ○, L])(using KindN[K]): Args[V, K, K × L] =
-      given KindN[L] = KindN(f.outKind)
-      val a = TypeFun.toExpr(f)
-      Impl(Routing.id[K], PartialArgs.introSnd(PartialArgs(a)))
+      MultiTypeFun.introSnd(f)
 
     def introBoth[V](a: Type[V], b: Type[V]): Args[V, ○, ● × ●] =
-      Impl(Routing.id[○], PartialArgs.introBoth(PartialArgs(a), PartialArgs(b)))
+      MultiTypeFun.introBoth(a, b)
 
     def introBoth[V, K, L](f: Fun[V, ○, K], g: Fun[V, ○, L]): Args[V, ○, K × L] =
-      given KindN[K] = KindN(f.outKind)
-      given KindN[L] = KindN(g.outKind)
-      val a = TypeFun.toExpr(f)
-      val b = TypeFun.toExpr(g)
-      Impl(Routing.id[○], PartialArgs.introBoth(PartialArgs(a), PartialArgs(b)))
+      MultiTypeFun.introBoth(f, g)
 
     def introBoth[V, K, L](a: Args[V, ○, K], b: Args[V, ○, L]): Args[V, ○, K × L] =
-      (a, b) match
-        case (Impl(r1, a1), Impl(r2, a2)) =>
-          (Routing.proveId(r1), Routing.proveId(r2)) match
-            case (TypeEq(Refl()), TypeEq(Refl())) =>
-              Impl(Routing.id[○], PartialArgs.introBoth(a1, a2))
+      MultiTypeFun.introBoth(a, b)
 
     def dup[V, K](using KindN[K]): Args[V, K, K × K] =
-      Impl(Routing.dup[K], PartialArgs.Id())
+      MultiTypeFun.dup
+
+    extension [V, K, L](f: Args[V, K, L]) {
+      def feedTo[M](g: Fun[V, L, M]): Fun[V, K, M] =
+        f > g
+
+      def inFst[M](using KindN[K], KindN[M]): Args[V, K × M, L × M] =
+        f.inFst[M]
+
+      def inSnd[J](using KindN[J], KindN[K]): Args[V, J × K, J × L] =
+        f.inSnd[J]
+    }
   }
 
   opaque type Fun[V, K, L] = TypeFun[TypeConstructor[V, _, _], K, L]
 
   object Fun {
     import TypeFun.{fromExpr, toExpr}
+
+    def lift[V, K, L](tc: TypeConstructor[V, K, L])(using
+      Kinds[K],
+      Kind[L],
+    ): Fun[V, K, L] =
+      fromExpr(TypeExpr.lift(tc))
 
     def unit[V]: Type.Fun[V, ○, ●] =
       fromExpr(Type.unit)
@@ -345,7 +326,7 @@ object Type {
       fromExpr(Type.string)
 
     def pair[V]: Type.Fun[V, ● × ●, ●] =
-      fromExpr(TypeExpr.lift(TypeConstructor.Pair()))
+      lift(TypeConstructor.Pair())
 
     def pair[V](a: Type.Fun[V, ○, ●], b: Type.Fun[V, ○, ●]): Type.Fun[V, ○, ●] =
       fromExpr(Type.pair(toExpr(a), toExpr(b)))
@@ -373,7 +354,7 @@ object Type {
       pair2(toExpr(b))
 
     def sum[V]: Type.Fun[V, ● × ●, ●] =
-      fromExpr(TypeExpr.lift(TypeConstructor.Sum()))
+      lift(TypeConstructor.Sum())
 
     def sum[V](a: Type.Fun[V, ○, ●], b: Type.Fun[V, ○, ●]): Type.Fun[V, ○, ●] =
       fromExpr(Type.sum(toExpr(a), toExpr(b)))
@@ -402,14 +383,14 @@ object Type {
 
     def pfix[V, P, X](f: TypeConstructor.PFix[V, P, X]): Fun[V, P, ●] =
       import f.inKind
-      fromExpr(TypeExpr.lift(f))
+      lift(f)
 
     def pfix[V](f: Type.Fun[V, ● × ●, ●]): Type.Fun[V, ●, ●] =
       pfixDecompose(f) match
         case PFixDecomposed.NothingToFix(f) =>
           f
-        case PFixDecomposed.Decomposed(Args.Impl(r, args), pf) =>
-          TypeFun(r, pfix(pf).applyTo(args))
+        case PFixDecomposed.Decomposed(args, pf) =>
+          args > pfix(pf)
 
     /** Creates a PFix (parameterized fixed-point) type, if the type arguments `args` match the kinds `P`.
      *  Otherwise, throws an exception.
@@ -474,7 +455,7 @@ object Type {
         f ∘ r
 
       def applyTo[J](args: Args[V, J, K]): Fun[V, J, L] =
-        args.feedTo(f)
+        args > f
 
       def vmap[W](g: V => W): Fun[W, K, L] =
         f.translate[TypeConstructor[W, _, _]](TypeConstructor.vmap(g))
@@ -482,7 +463,7 @@ object Type {
 
     extension [V, K](f: Fun[V, K, ●]) {
       def apply(args: Args[V, ○, K]): Type[V] =
-        toType(args.feedTo(f))
+        toType(args > f)
     }
 
     extension [V](f: Fun[V, ●, ●]) {

@@ -62,7 +62,7 @@ object TypeTag {
   def composeSnd[F[_, _], H[_]](f: TypeTag[F], h: TypeTag[H]): TypeTag[[x, y] =>> F[x, H[y]]] = {
     val f1 = (f: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ● × ●, ●]]
     val h1 = (h: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ●, ●]]
-    (f1.applyTo(Type.Args(h1).inSnd): Type.Fun[ScalaTypeParam, ● × ●, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
+    (f1.applyTo(Type.Args(h1).inSnd[●]): Type.Fun[ScalaTypeParam, ● × ●, ●]).asInstanceOf[Type.Fun[ScalaTypeParam, Any, Any]]
   }
 
   def app[F[_], A](f: TypeTag[F], a: TypeTag[A]): TypeTag[F[A]] = {
