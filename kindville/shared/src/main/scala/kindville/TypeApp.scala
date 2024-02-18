@@ -5,10 +5,7 @@ import scala.quoted.*
 sealed trait TypeApp[F <: AnyKind, +As, FAs]
 
 object TypeApp {
-  private case class Synthetic[F <: AnyKind, As, FAs]() extends TypeApp[F, As, FAs]
-
-  def nullary[A]: TypeApp[A, TNil, A] =
-    Synthetic.asInstanceOf
+  private case class MacroCertified[F <: AnyKind, As, FAs]() extends TypeApp[F, As, FAs]
 
   transparent inline def apply[F <: AnyKind, FAs]: TypeApp[F, ?, FAs] =
     ${ extractTypeArgs[F, FAs] }
@@ -39,7 +36,10 @@ object TypeApp {
             .appliedTo(List(fRepr, as, fasRepr))
             .asType
             .asInstanceOf[Type[TypeApp[F, ?, FAs]]]
-        '{ Synthetic[F, Nothing, FAs]() }.asExprOf(using resultType)
+        '{ MacroCertified[F, Nothing, FAs]() }.asExprOf(using resultType)
+      case f if f =:= fRepr =>
+        // F = FAs (F does not take type parameters)
+        '{ MacroCertified[F, TNil, FAs]() }
       case other =>
         val fStr   = Printer.TypeReprCode.show(fRepr)
         val fasStr = Printer.TypeReprCode.show(fasRepr)

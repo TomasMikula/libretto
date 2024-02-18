@@ -1,6 +1,7 @@
 package kindville
 
 import scala.quoted.*
+import scala.PolyFunction
 
 sealed trait *
 sealed trait ->[K, L]
@@ -15,6 +16,46 @@ extension [FA](fa: FA)
   transparent inline def unmask[F <: AnyKind, As](using ev: TypeApp[F, As, FA]): Any =
     ${ unmaskImpl('fa, 'ev) }
 
+/** Returns `[A1, ...] => F[A1, ...] => R`. */
+transparent inline def encoderOf[F <: AnyKind, R](
+  f: [As, FAs] => (FAs, TypeApp[F, As, FAs]) => R,
+  ): Any =
+    ${ encoderImpl[F, R]('f) }
+
+private[kindville] def encoderImpl[F <: AnyKind, R](
+  f: Expr[[As, FAs] => (FAs, TypeApp[F, As, FAs]) => R],
+)(using
+  Quotes,
+  Type[F],
+  Type[R],
+): Expr[Any] =
+  import quotes.reflect.*
+  TypeRepr.of[F] match
+    case bindingType @ TypeLambda(paramNames, paramBounds, body) =>
+      Expr(bindingType.typeSymbol != null)
+      val resultType: TypeRepr =
+        Refinement(
+          TypeRepr.of[PolyFunction],
+          "apply",
+          PolyType(paramNames)(
+            pt => paramBounds, // TODO: substitute //.map(_.substituteTypes(from = List(bindingType.typeSymbol), to = List(pt)).asInstanceOf[TypeBounds]),
+            pt => MethodType(
+              List("f"),
+            )(
+              _ => List(bindingType.appliedTo(List.range(0, paramNames.size).map(i => pt.param(i)))),
+              _ => TypeRepr.of[R],
+            ),
+          )
+        )
+      val t: Type[Any] = resultType.asType.asInstanceOf[Type[Any]]
+      '{ ??? }.asExprOf(using t)
+      // '{ [V] => (f: Map[Int, V]) => f.size }.asExprOf(using t)
+    case other =>
+      // val fs = Printer.TypeReprShortCode.show(other)
+      val fs = Printer.TypeReprStructure.show(other)
+      report.error(s"Implementation restriction: works only for type lambdas. Please, eta-expand $fs to a type lambda manually.")
+      '{ ??? }
+
 private[kindville] def unmaskImpl[F <: AnyKind, As, FA](
   fa: Expr[FA],
   ev: Expr[TypeApp[F, As, FA]],
@@ -22,7 +63,6 @@ private[kindville] def unmaskImpl[F <: AnyKind, As, FA](
   Quotes,
   Type[F],
   Type[As],
-//   Type[FA],
 ): Expr[Any] =
   import quotes.reflect.*
   val targs: List[Type[?]] = decodeTypeArgs[As](Type.of[As])
@@ -73,3 +113,24 @@ private[kindville] def cast[FA, F <: AnyKind](
       .asType
 
   expr.asExprOf(using resultType.asInstanceOf[Type[Any]])
+
+private[kindville] inline def termStructureOf[A](a: A): String =
+  ${ printTermStructure('a) }
+
+private[kindville] inline def typeStructureOf[A <: AnyKind]: String =
+  ${ printTypeStructure[A] }
+
+private def printTermStructure[A](a: Expr[A])(using Quotes): Expr[String] =
+  import quotes.reflect.*
+  Expr(Printer.TreeStructure.show(a.asTerm))
+  val x = '{ new PolyFunction { override def apply[x, y](m: Map[x, y]): Int = m.size } }
+  Expr(Printer.TreeStructure.show(x.asTerm))
+
+
+private def printTypeStructure[A <: AnyKind](using Quotes, Type[A]): Expr[String] =
+  import quotes.reflect.*
+  TypeRepr.of[A] match
+    case TypeLambda(_, _, AppliedType(_, args)) =>
+      Expr(args.collect { case ParamRef(binder, _) => Printer.TypeReprStructure.show(binder) }.head)
+    case _ =>
+      Expr(Printer.TypeReprStructure.show(TypeRepr.of[A]))
