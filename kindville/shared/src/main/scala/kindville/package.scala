@@ -2,6 +2,7 @@ package kindville
 
 import scala.quoted.*
 import scala.PolyFunction
+import scala.annotation.experimental
 
 sealed trait *
 sealed trait ->[K, L]
@@ -17,11 +18,13 @@ extension [FA](fa: FA)
     ${ unmaskImpl('fa, 'ev) }
 
 /** Returns `[A1, ...] => F[A1, ...] => R`. */
+@experimental
 transparent inline def encoderOf[F <: AnyKind, R](
   f: [As, FAs] => (FAs, TypeApp[F, As, FAs]) => R,
   ): Any =
     ${ encoderImpl[F, R]('f) }
 
+@experimental
 private[kindville] def encoderImpl[F <: AnyKind, R](
   f: Expr[[As, FAs] => (FAs, TypeApp[F, As, FAs]) => R],
 )(using
@@ -32,23 +35,56 @@ private[kindville] def encoderImpl[F <: AnyKind, R](
   import quotes.reflect.*
   TypeRepr.of[F] match
     case bindingType @ TypeLambda(paramNames, paramBounds, body) =>
-      Expr(bindingType.typeSymbol != null)
+      val applyMethodType: TypeRepr =
+        PolyType(paramNames)(
+          pt => paramBounds, // TODO: substitute //.map(_.substituteTypes(from = List(bindingType.typeSymbol), to = List(pt)).asInstanceOf[TypeBounds]),
+          pt => MethodType(
+            List("f"),
+          )(
+            _ => List(bindingType.appliedTo(List.range(0, paramNames.size).map(i => pt.param(i)))),
+            _ => TypeRepr.of[R],
+          ),
+        )
       val resultType: TypeRepr =
         Refinement(
           TypeRepr.of[PolyFunction],
           "apply",
-          PolyType(paramNames)(
-            pt => paramBounds, // TODO: substitute //.map(_.substituteTypes(from = List(bindingType.typeSymbol), to = List(pt)).asInstanceOf[TypeBounds]),
-            pt => MethodType(
-              List("f"),
-            )(
-              _ => List(bindingType.appliedTo(List.range(0, paramNames.size).map(i => pt.param(i)))),
-              _ => TypeRepr.of[R],
-            ),
-          )
+          applyMethodType,
         )
       val t: Type[Any] = resultType.asType.asInstanceOf[Type[Any]]
-      '{ ??? }.asExprOf(using t)
+      // '{ ??? }.asExprOf(using t)
+      val parents = List(TypeTree.of[Object], TypeTree.of[PolyFunction])
+      val clsSym = Symbol.newClass(
+        Symbol.spliceOwner,
+        name = "$anon",
+        parents = parents.map(_.tpe),
+        decls = cls => List(
+          Symbol.newMethod(cls, "apply", applyMethodType),
+        ),
+        selfType = None,
+      )
+      val applySym = clsSym.declaredMethod("apply").head
+      val applyDef =
+        DefDef(
+          applySym,
+          argss => {
+            val List(targs, args) = argss
+            Some(
+              ???
+              // TODO: f takes [As, FAs](FAs, TypeApp[F, As, FAs])
+              // f.asTerm
+              //   .appliedToTypeTrees(targs.map(_.asInstanceOf[TypeTree]))
+              //   .appliedToArgs(args.map(_.asInstanceOf[Term]))
+            )
+          },
+        )
+      val clsDef = ClassDef(clsSym, parents, List(applyDef))
+      val newCls = Apply(Select(New(TypeIdent(clsSym)), clsSym.primaryConstructor), args = Nil)
+      Block(
+        List(clsDef),
+        newCls
+      ).asExpr
+
       // '{ [V] => (f: Map[Int, V]) => f.size }.asExprOf(using t)
     case other =>
       // val fs = Printer.TypeReprShortCode.show(other)
