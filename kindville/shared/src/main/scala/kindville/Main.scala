@@ -1,5 +1,8 @@
 package kindville
 
+import scala.annotation.experimental
+
+@experimental
 @main
 def main: Unit =
   val seven: Int =
@@ -14,12 +17,13 @@ def main: Unit =
 
   // println(encoderOf[[P, Q] =>> Map[P, Q], Unit]([As, FAs] => (value: FAs, ev: TypeApp[Map, As, FAs]) => ()))
   // println(termStructureOf([x, y] => (m: Map[x, y]) => m.size))
-  println(typeStructureOf[[x, y] =>> Map[x, y]])
+  // println(typeStructureOf[[x, y] =>> Map[x, y]])
   // println(termStructureOf(new PolyFunction { override def apply[x, y](m: Map[x, y]): Int = m.size }))
-  println()
+
   val x: [A] => Map[Int, A] => Int =
     encoderOf[[Q] =>> Map[Int, Q], Int](
       [As, FAs] => (value: FAs, ev: TypeApp[[Q] =>> Map[Int, Q], As, FAs]) => 42,
     )
   println(x)
+  println(x[Char](Map(7 -> '7')))
   // println(encoderOf[[X, Y] => List[X] => Option[Y], Unit]([As, FAs] => (value: FAs, ev: TypeApp[[X, Y] => List[X] => Option[Y], As, FAs]) => ()))

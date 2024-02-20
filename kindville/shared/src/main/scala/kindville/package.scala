@@ -45,14 +45,6 @@ private[kindville] def encoderImpl[F <: AnyKind, R](
             _ => TypeRepr.of[R],
           ),
         )
-      val resultType: TypeRepr =
-        Refinement(
-          TypeRepr.of[PolyFunction],
-          "apply",
-          applyMethodType,
-        )
-      val t: Type[Any] = resultType.asType.asInstanceOf[Type[Any]]
-      // '{ ??? }.asExprOf(using t)
       val parents = List(TypeTree.of[Object], TypeTree.of[PolyFunction])
       val clsSym = Symbol.newClass(
         Symbol.spliceOwner,
@@ -69,13 +61,24 @@ private[kindville] def encoderImpl[F <: AnyKind, R](
           applySym,
           argss => {
             val List(targs, args) = argss
-            Some(
-              ???
-              // TODO: f takes [As, FAs](FAs, TypeApp[F, As, FAs])
-              // f.asTerm
-              //   .appliedToTypeTrees(targs.map(_.asInstanceOf[TypeTree]))
-              //   .appliedToArgs(args.map(_.asInstanceOf[Term]))
-            )
+            val typeArgs: List[TypeRepr] = targs.map(_.asInstanceOf[TypeTree].tpe)
+            val tAs = encodeTypeArgs(typeArgs)
+            val tFAs = AppliedType(TypeRepr.of[F], typeArgs)
+            val List(fas) = args
+            val body =
+              // f[As, FAs](fas, TypeApp[F, FAs])
+              Select
+                .unique(f.asTerm, "apply")
+                .appliedToTypes(List(tAs, tFAs))
+                .appliedTo(
+                  fas.asExpr.asTerm,
+                  TypeApp.extractTypeArgs(using
+                    quotes,
+                    Type.of[F],
+                    tFAs.asType.asInstanceOf[Type[Any]],
+                  ).asTerm,
+                )
+            Some(body)
           },
         )
       val clsDef = ClassDef(clsSym, parents, List(applyDef))
@@ -85,10 +88,9 @@ private[kindville] def encoderImpl[F <: AnyKind, R](
         newCls
       ).asExpr
 
-      // '{ [V] => (f: Map[Int, V]) => f.size }.asExprOf(using t)
     case other =>
-      // val fs = Printer.TypeReprShortCode.show(other)
-      val fs = Printer.TypeReprStructure.show(other)
+      val fs = Printer.TypeReprShortCode.show(other)
+      // val fs = Printer.TypeReprStructure.show(other)
       report.error(s"Implementation restriction: works only for type lambdas. Please, eta-expand $fs to a type lambda manually.")
       '{ ??? }
 
@@ -159,8 +161,6 @@ private[kindville] inline def typeStructureOf[A <: AnyKind]: String =
 private def printTermStructure[A](a: Expr[A])(using Quotes): Expr[String] =
   import quotes.reflect.*
   Expr(Printer.TreeStructure.show(a.asTerm))
-  val x = '{ new PolyFunction { override def apply[x, y](m: Map[x, y]): Int = m.size } }
-  Expr(Printer.TreeStructure.show(x.asTerm))
 
 
 private def printTypeStructure[A <: AnyKind](using Quotes, Type[A]): Expr[String] =

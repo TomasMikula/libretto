@@ -17,7 +17,7 @@ object TypeApp {
     summon[FA1 =:= FA1]
       .asInstanceOf[FA1 =:= FA2]
 
-  private def extractTypeArgs[F <: AnyKind, FAs](using
+  private[kindville] def extractTypeArgs[F <: AnyKind, FAs](using
     Quotes,
     Type[F],
     Type[FAs],
