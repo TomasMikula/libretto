@@ -25,11 +25,27 @@ extension [FA](fa: FA)
   transparent inline def visit[F <: AnyKind, As](using TypeApp[F, As, FA]): Any =
     ${ visitImpl[F, FA]('fa) }
 
+extension (f: PolyFunction)
+  transparent inline def at[As]: Nothing => Any =
+    ${ atImpl[As]('f) }
+
+private def atImpl[As](f: Expr[PolyFunction])(using
+  Quotes,
+  Type[As],
+): Expr[Nothing => Any] =
+  import quotes.reflect.*
+
+  Select
+    .unique(f.asTerm, "apply")
+    .appliedToTypes(decodeTypeArgs(Type.of[As]).map(TypeRepr.of(using _)))
+    .etaExpand(Symbol.spliceOwner)
+    .asExprOf[Nothing => Any]
+
 /** Returns `[A1, ...] => F[A1, ...] => R`. */
 @experimental
 transparent inline def encoderOf[F <: AnyKind, R](
   f: [As, FAs] => (FAs, TypeApp[F, As, FAs]) => R,
-): Any =
+): PolyFunction =
   ${ encoderImpl[F, R]('f) }
 
 @experimental
@@ -39,7 +55,7 @@ private[kindville] def encoderImpl[F <: AnyKind, R](
   Quotes,
   Type[F],
   Type[R],
-): Expr[Any] = {
+): Expr[PolyFunction] = {
   import quotes.reflect.*
 
   TypeRepr.of[F] match
@@ -59,13 +75,13 @@ private[kindville] def encoderImpl[F <: AnyKind, R](
             // f[As, FAs](fas, TypeApp[F, FAs])
             polyFunApply(f.asTerm)(tAs, tFAs)(
               fas,
-              TypeApp.unapplyFrom(using
+              TypeApp.inferArgsImpl(using
                 quotes,
                 Type.of[F],
                 tFAs.asType.asInstanceOf[Type[Any]],
               ).asTerm,
             )
-      ).asExpr
+      ).asExprOf[PolyFunction]
 
     case other =>
       val fs = Printer.TypeReprShortCode.show(other)
@@ -297,3 +313,15 @@ private def printTypeStructure[A <: AnyKind](using Quotes, Type[A]): Expr[String
       Expr(args.collect { case ParamRef(binder, _) => Printer.TypeReprStructure.show(binder) }.head)
     case _ =>
       Expr(Printer.TypeReprStructure.show(TypeRepr.of[A]))
+
+
+def foo[A]: FooSyntax[A] =
+  new FooSyntax[A]
+
+class FooSyntax[A]:
+  inline def bar[B]: String =
+    ${ barImpl[A, B] } // I want to deliver Type[A] captured by the call to foo[A]
+
+def barImpl[A, B](using Quotes, Type[A], Type[B]): Expr[String] =
+  import quotes.reflect.*
+  Expr(Printer.TypeReprStructure.show(TypeRepr.of[A]))

@@ -1,5 +1,7 @@
 package kindville.lib
 
+import kindville.*
+import kindville.TypeApp.*
 import org.scalatest.funsuite.AnyFunSuite
 import scala.annotation.experimental
 
@@ -12,7 +14,7 @@ class ExistsTests extends AnyFunSuite {
         .apply[Array[String], Array[Int]]((
           _.split("\\."),
           _.map(_.length),
-          _.fold(0)(_ + _),
+          _.sum,
         ))
 
     val visit = x.visit
@@ -23,6 +25,42 @@ class ExistsTests extends AnyFunSuite {
       }
 
     assert(n == 22)
+  }
+
+  test("Inferrability of: existential arguments at creation, result type of visit") {
+    val f: String        => Array[String] = _.split("\\.")
+    val g: Array[String] => Array[Int]    = _.map(_.length)
+    val h: Array[Int]    => Int           = _.sum
+
+    val x: Exists[[P, Q] =>> (String => P, P => Q, Q => Int)] =
+      // Not specifying arguments for P, Q explicitly.
+      // They are inferred to be Array[String], Array[Int], respectively.
+      Exists[[P, Q] =>> (String => P, P => Q, Q => Int)]((f, g, h))
+
+    val n =
+      // Not specifying result type of visit explicitly.
+      // It is inferred to be Int.
+      x.visit { [P, Q] => (fgh: (String => P, P => Q, Q => Int)) =>
+          val (f, g, h) = fgh
+          h(g(f("hello.kindville.citizens")))
+        }
+
+    assert(n == 22)
+  }
+
+  test("Inferrability of the result type F[A, ...]") {
+    Exists.types[String :: Int :: TNil]
+      .suchThat[Map[_, _]](Map.empty) // inferred type Map[String, Int]
+
+    // Proof:
+    // Let the type of `x` be inferred
+    val x =
+      Exists.types[String :: Int :: TNil]
+        .suchThat[Map[_, _]]
+
+    // The inferred type is assignable to `Map[String, Int] => Exists[Map]`
+    val y: Map[String, Int] => Exists[Map] =
+      x
   }
 
 }

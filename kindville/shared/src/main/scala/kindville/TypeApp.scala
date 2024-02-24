@@ -7,8 +7,11 @@ sealed trait TypeApp[F <: AnyKind, +As, FAs]
 object TypeApp {
   private case class MacroCertified[F <: AnyKind, As, FAs]() extends TypeApp[F, As, FAs]
 
-  transparent inline def apply[F <: AnyKind, FAs]: TypeApp[F, ?, FAs] =
-    ${ unapplyFrom[F, FAs] }
+  transparent inline def inferResult[F <: AnyKind, As]: TypeApp[F, As, ?] =
+    ${ inferResultImpl[F, As] }
+
+  transparent inline def inferArgs[F <: AnyKind, FAs]: TypeApp[F, ?, FAs] =
+    ${ inferArgsImpl[F, FAs] }
 
   def functional[F <: AnyKind, As, FA1, FA2](
     a1: TypeApp[F, As, FA1],
@@ -17,7 +20,33 @@ object TypeApp {
     summon[FA1 =:= FA1]
       .asInstanceOf[FA1 =:= FA2]
 
-  private[kindville] def unapplyFrom[F <: AnyKind, FAs](using
+  private[kindville] def inferResultImpl[F <: AnyKind, As](using
+    Quotes,
+    Type[F],
+    Type[As],
+  ): Expr[TypeApp[F, As, ?]] = {
+    import quotes.reflect.*
+
+    type FAs
+    given Type[FAs] =
+      TypeRepr.of[F]
+        .appliedTo(decodeTypeArgs(Type.of[As]).map(TypeRepr.of(using _)))
+        .asType
+        .asInstanceOf[Type[FAs]]
+    val resultType =
+      TypeRepr
+        .of[TypeApp]
+        .appliedTo(List(TypeRepr.of[F], TypeRepr.of[As], TypeRepr.of[FAs]))
+        .asType
+        .asInstanceOf[Type[TypeApp[F, As, FAs]]]
+    // '{ MacroCertified[F, As, FAs]() }.asExprOf(using resultType)
+    Typed(
+      '{ MacroCertified[F, As, FAs]() }.asTerm,
+      TypeTree.of(using resultType),
+    ).asExprOf(using resultType)
+  }
+
+  private[kindville] def inferArgsImpl[F <: AnyKind, FAs](using
     Quotes,
     Type[F],
     Type[FAs],
@@ -38,7 +67,7 @@ object TypeApp {
             .asInstanceOf[Type[TypeApp[F, ?, FAs]]]
         '{ MacroCertified[F, Nothing, FAs]() }.asExprOf(using resultType)
       case f if f =:= fRepr =>
-        // F = FAs (F does not take type parameters)
+        // F = FAs (i.e. F does not take type parameters)
         '{ MacroCertified[F, TNil, FAs]() }
       case other =>
         val fStr   = Printer.TypeReprCode.show(fRepr)
