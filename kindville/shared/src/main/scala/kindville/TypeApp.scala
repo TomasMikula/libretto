@@ -8,7 +8,7 @@ object TypeApp {
   private case class MacroCertified[F <: AnyKind, As, FAs]() extends TypeApp[F, As, FAs]
 
   transparent inline def apply[F <: AnyKind, FAs]: TypeApp[F, ?, FAs] =
-    ${ extractTypeArgs[F, FAs] }
+    ${ unapplyFrom[F, FAs] }
 
   def functional[F <: AnyKind, As, FA1, FA2](
     a1: TypeApp[F, As, FA1],
@@ -17,7 +17,7 @@ object TypeApp {
     summon[FA1 =:= FA1]
       .asInstanceOf[FA1 =:= FA2]
 
-  private[kindville] def extractTypeArgs[F <: AnyKind, FAs](using
+  private[kindville] def unapplyFrom[F <: AnyKind, FAs](using
     Quotes,
     Type[F],
     Type[FAs],

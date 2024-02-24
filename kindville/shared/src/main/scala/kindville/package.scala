@@ -13,16 +13,24 @@ sealed trait TNil
 sealed trait ofKind[F <: AnyKind, K]
 sealed trait ofKinds[As, Ks]
 
+private transparent inline def qr(using Quotes): quotes.reflect.type =
+  quotes.reflect
+
 extension [FA](fa: FA)
   transparent inline def unmask[F <: AnyKind, As](using ev: TypeApp[F, As, FA]): Any =
     ${ unmaskImpl('fa, 'ev) }
+
+  /** Returns `[R] => ([A1, ...] => F[A1, ...] => R) => R`. */
+  @experimental
+  transparent inline def visit[F <: AnyKind, As](using TypeApp[F, As, FA]): Any =
+    ${ visitImpl[F, FA]('fa) }
 
 /** Returns `[A1, ...] => F[A1, ...] => R`. */
 @experimental
 transparent inline def encoderOf[F <: AnyKind, R](
   f: [As, FAs] => (FAs, TypeApp[F, As, FAs]) => R,
-  ): Any =
-    ${ encoderImpl[F, R]('f) }
+): Any =
+  ${ encoderImpl[F, R]('f) }
 
 @experimental
 private[kindville] def encoderImpl[F <: AnyKind, R](
@@ -31,61 +39,32 @@ private[kindville] def encoderImpl[F <: AnyKind, R](
   Quotes,
   Type[F],
   Type[R],
-): Expr[Any] =
+): Expr[Any] = {
   import quotes.reflect.*
+
   TypeRepr.of[F] match
     case bindingType @ TypeLambda(paramNames, paramBounds, body) =>
-      val applyMethodType: TypeRepr =
-        PolyType(paramNames)(
-          pt => paramBounds, // TODO: substitute //.map(_.substituteTypes(from = List(bindingType.typeSymbol), to = List(pt)).asInstanceOf[TypeBounds]),
-          pt => MethodType(
-            List("f"),
-          )(
-            _ => List(bindingType.appliedTo(List.range(0, paramNames.size).map(i => pt.param(i)))),
-            _ => TypeRepr.of[R],
-          ),
-        )
-      val parents = List(TypeTree.of[Object], TypeTree.of[PolyFunction])
-      val clsSym = Symbol.newClass(
-        Symbol.spliceOwner,
-        name = "$anon",
-        parents = parents.map(_.tpe),
-        decls = cls => List(
-          Symbol.newMethod(cls, "apply", applyMethodType),
-        ),
-        selfType = None,
-      )
-      val applySym = clsSym.declaredMethod("apply").head
-      val applyDef =
-        DefDef(
-          applySym,
-          argss => {
-            val List(targs, args) = argss
-            val typeArgs: List[TypeRepr] = targs.map(_.asInstanceOf[TypeTree].tpe)
-            val tAs = encodeTypeArgs(typeArgs)
-            val tFAs = AppliedType(TypeRepr.of[F], typeArgs)
+      polyFun(
+        tParamNames  = paramNames,
+        tParamBounds = _ => paramBounds, // TODO: must perform substitution in order to work for interdependent type params
+        vParamNames  = List("f"),
+        vParamTypes  = tParams => List(bindingType.appliedTo(tParams)),
+        returnType   = _ => TypeRepr.of[R],
+        body =
+          (targs, args) =>
+            val tAs = encodeTypeArgs(targs)
+            val tFAs = AppliedType(TypeRepr.of[F], targs)
             val List(fas) = args
-            val body =
-              // f[As, FAs](fas, TypeApp[F, FAs])
-              Select
-                .unique(f.asTerm, "apply")
-                .appliedToTypes(List(tAs, tFAs))
-                .appliedTo(
-                  fas.asExpr.asTerm,
-                  TypeApp.extractTypeArgs(using
-                    quotes,
-                    Type.of[F],
-                    tFAs.asType.asInstanceOf[Type[Any]],
-                  ).asTerm,
-                )
-            Some(body)
-          },
-        )
-      val clsDef = ClassDef(clsSym, parents, List(applyDef))
-      val newCls = Apply(Select(New(TypeIdent(clsSym)), clsSym.primaryConstructor), args = Nil)
-      Block(
-        List(clsDef),
-        newCls
+
+            // f[As, FAs](fas, TypeApp[F, FAs])
+            polyFunApply(f.asTerm)(tAs, tFAs)(
+              fas,
+              TypeApp.unapplyFrom(using
+                quotes,
+                Type.of[F],
+                tFAs.asType.asInstanceOf[Type[Any]],
+              ).asTerm,
+            )
       ).asExpr
 
     case other =>
@@ -93,6 +72,155 @@ private[kindville] def encoderImpl[F <: AnyKind, R](
       // val fs = Printer.TypeReprStructure.show(other)
       report.error(s"Implementation restriction: works only for type lambdas. Please, eta-expand $fs to a type lambda manually.")
       '{ ??? }
+}
+
+@experimental
+private def visitImpl[F <: AnyKind, FAs](value: Expr[FAs])(using
+  Quotes,
+  Type[F],
+  Type[FAs],
+): Expr[Any] = {
+  import quotes.reflect.*
+
+  TypeRepr.of[F] match
+    case tf @ TypeLambda(paramNames, paramBounds, body) =>
+      polyFun(
+        tParamNames = List("R"),
+        tParamBounds = _ => List(TypeBounds.empty),
+        vParamNames = List("f"),
+        vParamTypes = outerTParams => List(
+          polyFunType(
+            paramNames,
+            _ => paramBounds,  // TODO: must perform substitution in order to work for interdependent type params
+            vParamNames = List("fa"),
+            vParamTypes = tparams => List(tf.appliedTo(tparams)),
+            returnType = _ => outerTParams.head,
+          )
+        ),
+        returnType = tparams => tparams.head,
+        body = (typeArgs, args) => {
+          val List(r) = typeArgs
+          val List(f) = args
+          val fFakeType =
+            polyFunType(List("Dummy"), _ => List(TypeBounds.empty), List("fa"), _ => List(TypeRepr.of[FAs]), _ => r)
+          val f1: Expr[[Dummy] => FAs => Any] =
+            Typed(f,  TypeTree.of(using fFakeType.asType)).asExprOf[[Dummy] => FAs => Any]
+          '{ $f1($value.asInstanceOf) }.asTerm
+        },
+      ).asExpr
+
+    case other =>
+      val fStr = Printer.TypeReprShortCode.show(other)
+      report.error(s"Implementation restriction: works only for type lambdas. Please, eta-expand $fStr to a type lambda manually.")
+      '{ ??? }
+}
+
+private def polyFunApply(using Quotes)(f: qr.Term)(targs: qr.TypeRepr*)(args: qr.Term*): qr.Term =
+  qr.Select
+    .unique(f, "apply")
+    .appliedToTypes(targs.toList)
+    .appliedToArgs(args.toList)
+
+private def polyFunApplyMethodType(using Quotes)(
+  tParamNames: List[String],
+  tParamBounds: qr.PolyType => List[qr.TypeBounds],
+  vParamNames: List[String],
+  vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
+  returnType: List[qr.TypeRepr] => qr.TypeRepr,
+): qr.PolyType = {
+  import qr.*
+
+  extension (pt: PolyType)
+    def params(n: Int): List[TypeRepr] =
+      List.range(0, n).map(pt.param(_))
+
+  val nTypeParams = tParamNames.length
+
+  PolyType(tParamNames)(
+    tParamBounds,
+    pt => MethodType(
+      vParamNames,
+    )(
+      mt => vParamTypes(pt.params(nTypeParams)),
+      mt => returnType(pt.params(nTypeParams)),
+    ),
+  )
+}
+
+private def polyFunType(using Quotes)(
+  tParamNames: List[String],
+  tParamBounds: qr.PolyType => List[qr.TypeBounds],
+  vParamNames: List[String],
+  vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
+  returnType: List[qr.TypeRepr] => qr.TypeRepr,
+): qr.TypeRepr =
+  qr.Refinement(
+    qr.TypeRepr.of[PolyFunction],
+    "apply",
+    polyFunApplyMethodType(tParamNames, tParamBounds, vParamNames, vParamTypes, returnType)
+  )
+
+/**
+  *
+  *
+  * @param tParamNames
+  * @param tParamBounds
+  * @param vParamTypes function that, given type parameters, constructs the types of value parameters
+  * @param returnType function that, given type parameters, constructs the return type
+  * @param body
+  * @return
+  */
+@experimental
+private def polyFun(using Quotes)(
+  tParamNames: List[String],
+  tParamBounds: qr.PolyType => List[qr.TypeBounds],
+  vParamNames: List[String],
+  vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
+  returnType: List[qr.TypeRepr] => qr.TypeRepr,
+  body: (List[qr.TypeRepr], List[qr.Term]) => qr.Term,
+): qr.Term = {
+  import qr.*
+
+  val parents =
+    List(TypeTree.of[Object], TypeTree.of[PolyFunction])
+
+  val clsSym =
+    Symbol.newClass(
+      Symbol.spliceOwner,
+      name = "$anon",
+      parents = parents.map(_.tpe),
+      decls = cls => List(
+        Symbol.newMethod(
+          cls,
+          "apply",
+          polyFunApplyMethodType(tParamNames, tParamBounds, vParamNames, vParamTypes, returnType),
+        ),
+      ),
+      selfType = None,
+    )
+
+  val applySym =
+    clsSym.declaredMethod("apply").head
+
+  val applyDef =
+    DefDef(
+      applySym,
+      argss => {
+        val List(targs, args) = argss
+        val typeArgs: List[TypeRepr] = targs.map(_.asInstanceOf[TypeTree].tpe)
+        val valArgs: List[Term] = args.map(_.asExpr.asTerm)
+        Some(body(typeArgs, valArgs))
+      },
+    )
+
+  val clsDef = ClassDef(clsSym, parents, List(applyDef))
+  val newCls = Apply(Select(New(TypeIdent(clsSym)), clsSym.primaryConstructor), args = Nil)
+
+  Block(
+    List(clsDef),
+    newCls,
+  )
+}
 
 private[kindville] def unmaskImpl[F <: AnyKind, As, FA](
   fa: Expr[FA],
@@ -104,7 +232,6 @@ private[kindville] def unmaskImpl[F <: AnyKind, As, FA](
 ): Expr[Any] =
   import quotes.reflect.*
   val targs: List[Type[?]] = decodeTypeArgs[As](Type.of[As])
-  Expr(Printer.TypeReprCode.show(TypeRepr.of[As]))
   cast(fa, Type.of[F], targs)
 
 private[kindville] def encodeTypeArgs(using Quotes)(args: List[quotes.reflect.TypeRepr]): quotes.reflect.TypeRepr =
