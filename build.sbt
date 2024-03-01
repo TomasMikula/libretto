@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-ThisBuild / scalaVersion := "3.3.3"
+ThisBuild / scalaVersion := "3.4.0"
 
 ThisBuild / organization := "dev.continuously.libretto"
 

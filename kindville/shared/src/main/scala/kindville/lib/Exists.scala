@@ -1,6 +1,6 @@
 package kindville.lib
 
-import kindville.{::, TNil, TypeApp, at, encoderOf, unmask, visit}
+import kindville.{::, TNil, TypeApp, atTypes, encoderOf, unmask, visit}
 import scala.annotation.experimental
 import scala.quoted.*
 
@@ -42,6 +42,6 @@ object Exists {
   final class ExistsTypes[As] {
     @experimental
     transparent inline def suchThat[F <: AnyKind]: Nothing => Any =
-      apply[F].at[As]
+      apply[F].atTypes[As]
   }
 }

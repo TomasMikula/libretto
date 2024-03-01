@@ -10,8 +10,8 @@ sealed trait ->[K, L]
 sealed trait ::[H <: AnyKind, T]
 sealed trait TNil
 
-sealed trait ofKind[F <: AnyKind, K]
-sealed trait ofKinds[As, Ks]
+infix sealed trait ofKind[F <: AnyKind, K]
+infix sealed trait ofKinds[As, Ks]
 
 private transparent inline def qr(using Quotes): quotes.reflect.type =
   quotes.reflect
@@ -25,11 +25,11 @@ extension [FA](fa: FA)
   transparent inline def visit[F <: AnyKind, As](using TypeApp[F, As, FA]): Any =
     ${ visitImpl[F, FA]('fa) }
 
-extension (f: PolyFunction)
-  transparent inline def at[As]: Nothing => Any =
+extension (f: Any)
+  transparent inline def atTypes[As]: Nothing => Any =
     ${ atImpl[As]('f) }
 
-private def atImpl[As](f: Expr[PolyFunction])(using
+private def atImpl[As](f: Expr[Any])(using
   Quotes,
   Type[As],
 ): Expr[Nothing => Any] =
@@ -45,7 +45,7 @@ private def atImpl[As](f: Expr[PolyFunction])(using
 @experimental
 transparent inline def encoderOf[F <: AnyKind, R](
   f: [As, FAs] => (FAs, TypeApp[F, As, FAs]) => R,
-): PolyFunction =
+): Any =
   ${ encoderImpl[F, R]('f) }
 
 @experimental
@@ -55,7 +55,7 @@ private[kindville] def encoderImpl[F <: AnyKind, R](
   Quotes,
   Type[F],
   Type[R],
-): Expr[PolyFunction] = {
+): Expr[Any] = {
   import quotes.reflect.*
 
   TypeRepr.of[F] match
@@ -81,7 +81,7 @@ private[kindville] def encoderImpl[F <: AnyKind, R](
                 tFAs.asType.asInstanceOf[Type[Any]],
               ).asTerm,
             )
-      ).asExprOf[PolyFunction]
+      ).asExpr
 
     case other =>
       val fs = Printer.TypeReprShortCode.show(other)
@@ -188,68 +188,6 @@ private def polyFunType(using Quotes)(
   */
 @experimental
 private def polyFun(using Quotes)(
-  tParamNames: List[String],
-  tParamBounds: qr.PolyType => List[qr.TypeBounds],
-  vParamNames: List[String],
-  vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
-  returnType: List[qr.TypeRepr] => qr.TypeRepr,
-  body: (List[qr.TypeRepr], List[qr.Term]) => qr.Term,
-): qr.Term = {
-  import qr.*
-
-  val parents =
-    List(TypeTree.of[Object], TypeTree.of[PolyFunction])
-
-  val clsSym =
-    Symbol.newClass(
-      Symbol.spliceOwner,
-      name = "$anon",
-      parents = parents.map(_.tpe),
-      decls = cls => List(
-        Symbol.newMethod(
-          cls,
-          "apply",
-          polyFunApplyMethodType(tParamNames, tParamBounds, vParamNames, vParamTypes, returnType),
-        ),
-      ),
-      selfType = None,
-    )
-
-  val applySym =
-    clsSym.declaredMethod("apply").head
-
-  val applyDef =
-    DefDef(
-      applySym,
-      argss => {
-        val List(targs, args) = argss
-        val typeArgs: List[TypeRepr] = targs.map(_.asInstanceOf[TypeTree].tpe)
-        val valArgs: List[Term] = args.map(_.asExpr.asTerm)
-        Some(body(typeArgs, valArgs))
-      },
-    )
-
-  val clsDef = ClassDef(clsSym, parents, List(applyDef))
-  val newCls = Apply(Select(New(TypeIdent(clsSym)), clsSym.primaryConstructor), args = Nil)
-
-  Block(
-    List(clsDef),
-    newCls,
-  )
-}
-
-/**
-  *
-  *
-  * @param tParamNames
-  * @param tParamBounds
-  * @param vParamTypes function that, given type parameters, constructs the types of value parameters
-  * @param returnType function that, given type parameters, constructs the return type
-  * @param body
-  * @return
-  */
-@experimental
-private def polyFun340(using Quotes)(
   tParamNames: List[String],
   tParamBounds: qr.PolyType => List[qr.TypeBounds],
   vParamNames: List[String],
