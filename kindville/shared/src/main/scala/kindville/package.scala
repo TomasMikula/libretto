@@ -238,6 +238,50 @@ private def polyFun(using Quotes)(
   )
 }
 
+/**
+  *
+  *
+  * @param tParamNames
+  * @param tParamBounds
+  * @param vParamTypes function that, given type parameters, constructs the types of value parameters
+  * @param returnType function that, given type parameters, constructs the return type
+  * @param body
+  * @return
+  */
+@experimental
+private def polyFun340(using Quotes)(
+  tParamNames: List[String],
+  tParamBounds: qr.PolyType => List[qr.TypeBounds],
+  vParamNames: List[String],
+  vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
+  returnType: List[qr.TypeRepr] => qr.TypeRepr,
+  body: (List[qr.TypeRepr], List[qr.Term]) => qr.Term,
+): qr.Term = {
+  import qr.*
+
+  val methSym =
+    Symbol.newMethod(
+      Symbol.spliceOwner,
+      name = "polyFunImpl",
+      tpe = polyFunApplyMethodType(tParamNames, tParamBounds, vParamNames, vParamTypes, returnType)
+    )
+
+  val meth =
+    DefDef(
+      methSym,
+      rhsFn = { case List(targTrees, argTrees) =>
+        val targs = targTrees.map(_.asInstanceOf[TypeTree].tpe)
+        val args  = argTrees.map(_.asInstanceOf[Term])
+        Some(body(targs, args))
+      },
+    )
+
+  Block(
+    List(meth),
+    Closure(Ident(methSym.termRef), tpe = None)
+  )
+}
+
 private[kindville] def unmaskImpl[F <: AnyKind, As, FA](
   fa: Expr[FA],
   ev: Expr[TypeApp[F, As, FA]],
