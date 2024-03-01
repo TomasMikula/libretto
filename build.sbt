@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-ThisBuild / scalaVersion := "3.3.2"
+ThisBuild / scalaVersion := "3.3.3"
 
 ThisBuild / organization := "dev.continuously.libretto"
 
@@ -200,6 +200,7 @@ lazy val typology = project
     name := "libretto-typology",
     publish / skip := true, // experimental project, do not publish
     scalacOptions ++= commonScalacOptions,
+    fork := true,
   )
 
 lazy val kindville = crossProject(JVMPlatform, JSPlatform)
