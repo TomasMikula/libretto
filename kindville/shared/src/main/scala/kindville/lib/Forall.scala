@@ -9,7 +9,7 @@ opaque type Forall[K, F <: AnyKind] =
   ]
 
 object Forall {
-  private[lib] type Code[K] =
+  private[lib] type Code = [K] =>>
     [⋅⋅[_]] =>>
       [F0[_]] =>>
         [A <: ⋅⋅[K]] => Unit => F0[⋅⋅[A]]

@@ -39,6 +39,11 @@ object Box {
   ): Expr[Any] =
     box.asExprOf(using decode[As, Code])
 
+  // TODO: use report.errorAndAbort after https://github.com/lampepfl/dotty/issues/19851 is fixed
+  private def errorAndAbort(msg: String)(using Quotes): Nothing =
+    quotes.reflect.report.error(msg)
+    ???
+
   private def decode[As, Code <: AnyKind](using
     Quotes,
     Type[As],
@@ -48,8 +53,7 @@ object Box {
 
     val args = decodeTypeArgs(Type.of[As])
 
-    report.warning("HERE")
-    TypeRepr.of[Code] match
+    TypeRepr.of[Code].dealias match
       case outer @ TypeLambda(auxNames, auxBounds, body) =>
         val List(_) = auxNames
         val List(_) = auxBounds
@@ -58,8 +62,72 @@ object Box {
           case inner @ TypeLambda(paramNames, paramBounds, body) =>
             require(paramNames.size == args.size)
             val params = List.range(0, args.size).map(inner.param(_))
-            body match
-              case other => report.errorAndAbort(s"Unhandled type ${Printer.TypeReprShortCode.show(other)}")
+            val substitutions = params zip (args.map(TypeRepr.of(using _)))
+            val decoding: Decoding[quotes.type] = Decoding()
+            decoding
+              .substitute(substitutions, body)
+              .asType
+              .asInstanceOf[Type[Any]]
       case other =>
-        report.errorAndAbort(s"Expected a type lambda, got ${Printer.TypeReprShortCode.show(other)}")
+        errorAndAbort(s"Expected a type lambda, got ${Printer.TypeReprShortCode.show(other)}")
+
+  private object Decoding {
+    def apply(using q: Quotes)(): Decoding[q.type] =
+      new Decoding[q.type]
+  }
+  private class Decoding[Q <: Quotes](using val q: Q) {
+    import q.reflect.*
+
+    enum ContextElem:
+      case Substitution(src: TypeRepr, tgt: TypeRepr)
+
+    def unsupportedType(using SourcePos)(t: TypeRepr): Nothing =
+      unsupported(s"type ${Printer.TypeReprShortCode.show(t)}")
+
+    def unsupported(using pos: SourcePos)(msg: String): Nothing =
+      errorAndAbort(s"Unsupported: $msg (at $pos)")
+
+    def unimplemented(using pos: SourcePos): Nothing =
+      unimplemented("Not yet implemented")
+
+    def unimplemented(using pos: SourcePos)(msg: String): Nothing =
+      errorAndAbort(s"$msg (at $pos)")
+
+    def shortCode(t: TypeRepr): String =
+      Printer.TypeReprShortCode.show(t)
+
+    def substitute(
+      substitutions: List[(TypeRepr, TypeRepr)],
+      body: TypeRepr,
+    ): TypeRepr =
+      subst(
+        substitutions.map { case (s, t) => ContextElem.Substitution(s, t) },
+        body
+      )
+
+    def subst(
+      context: List[ContextElem],
+      body: TypeRepr,
+    ): TypeRepr =
+      body match
+        case r @ Refinement(base, memName, memType) =>
+          if (base =:= TypeRepr.of[PolyFunction]) {
+            if (memName == "apply") {
+              substInPolyFunType(memType)
+            } else {
+              unsupportedType(r)
+            }
+          } else {
+            unsupportedType(r)
+          }
+        case other =>
+          unsupportedType(other)
+
+    private def substInPolyFunType(methType: TypeRepr): TypeRepr =
+      methType match
+        case PolyType(tParamNames, tParamBounds, MethodType(paramNames, paramTypes, returnType)) =>
+          unimplemented(s"${shortCode(methType)}")
+        case other =>
+          unsupported(s"PolyFunction refinement with apply method type ${shortCode(other)}")
+  }
 }
