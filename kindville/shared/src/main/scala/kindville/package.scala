@@ -290,20 +290,4 @@ private def printTermStructure[A](a: Expr[A])(using Quotes): Expr[String] =
 
 private def printTypeStructure[A <: AnyKind](using Quotes, Type[A]): Expr[String] =
   import quotes.reflect.*
-  TypeRepr.of[A] match
-    case TypeLambda(_, _, AppliedType(_, args)) =>
-      Expr(args.collect { case ParamRef(binder, _) => Printer.TypeReprStructure.show(binder) }.head)
-    case _ =>
-      Expr(Printer.TypeReprStructure.show(TypeRepr.of[A]))
-
-
-def foo[A]: FooSyntax[A] =
-  new FooSyntax[A]
-
-class FooSyntax[A]:
-  inline def bar[B]: String =
-    ${ barImpl[A, B] } // I want to deliver Type[A] captured by the call to foo[A]
-
-def barImpl[A, B](using Quotes, Type[A], Type[B]): Expr[String] =
-  import quotes.reflect.*
   Expr(Printer.TypeReprStructure.show(TypeRepr.of[A]))

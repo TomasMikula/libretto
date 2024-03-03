@@ -65,7 +65,7 @@ object Box {
             val substitutions = params zip (args.map(TypeRepr.of(using _)))
             val decoding: Decoding[quotes.type] = Decoding()
             decoding
-              .substitute(substitutions, body)
+              .substitute(marker, substitutions, body)
               .asType
               .asInstanceOf[Type[Any]]
       case other =>
@@ -87,25 +87,25 @@ object Box {
     def unsupported(using pos: SourcePos)(msg: String): Nothing =
       errorAndAbort(s"Unsupported: $msg (at $pos)")
 
-    def unimplemented(using pos: SourcePos): Nothing =
-      unimplemented("Not yet implemented")
-
     def unimplemented(using pos: SourcePos)(msg: String): Nothing =
-      errorAndAbort(s"$msg (at $pos)")
+      errorAndAbort(s"Not yet implemented: $msg (at $pos)")
 
     def shortCode(t: TypeRepr): String =
       Printer.TypeReprShortCode.show(t)
 
     def substitute(
+      marker: TypeRepr,
       substitutions: List[(TypeRepr, TypeRepr)],
       body: TypeRepr,
     ): TypeRepr =
       subst(
+        marker,
         substitutions.map { case (s, t) => ContextElem.Substitution(s, t) },
         body
       )
 
     def subst(
+      marker: TypeRepr,
       context: List[ContextElem],
       body: TypeRepr,
     ): TypeRepr =
@@ -113,7 +113,7 @@ object Box {
         case r @ Refinement(base, memName, memType) =>
           if (base =:= TypeRepr.of[PolyFunction]) {
             if (memName == "apply") {
-              substInPolyFunType(memType)
+              substInPolyFunType(marker, context, memType)
             } else {
               unsupportedType(r)
             }
@@ -123,11 +123,71 @@ object Box {
         case other =>
           unsupportedType(other)
 
-    private def substInPolyFunType(methType: TypeRepr): TypeRepr =
+    private def substInPolyFunType(
+      marker: TypeRepr,
+      ctx: List[ContextElem],
+      methType: TypeRepr,
+    ): TypeRepr =
       methType match
-        case PolyType(tParamNames, tParamBounds, MethodType(paramNames, paramTypes, returnType)) =>
+        case pt @ PolyType(tParamNames, tParamBounds, MethodType(paramNames, paramTypes, returnType)) =>
+          val (tParams1, ctx1) =
+            substTypeParams(
+              marker,
+              ctx,
+              (tParamNames zip tParamBounds).zipWithIndex map {
+                case ((n, b), i) => (n, b, pt.param(i))
+              },
+            )
           unimplemented(s"${shortCode(methType)}")
         case other =>
           unsupported(s"PolyFunction refinement with apply method type ${shortCode(other)}")
+
+    private def substTypeParams(
+      marker: TypeRepr,
+      ctx: List[ContextElem],
+      tParams: List[(String, TypeBounds, TypeRepr)],
+    ): (List[String], PolyType => (List[TypeBounds], List[ContextElem])) = {
+      enum PostExpansionParam:
+        case Original(name: String, bounds: TypeBounds)
+        case Expanded(params: List[(String, TypeBounds)])
+
+      def expandParams(i: Int, ps: List[(String, TypeBounds, TypeRepr)]): List[(PostExpansionParam, (TypeRepr, Int))] =
+        ps match
+          case Nil =>
+            Nil
+          case (name, bounds @ TypeBounds(lower, upper), origType) :: ps =>
+            upper match
+              case AppliedType(f, List(kinds)) if f =:= marker =>
+                unimplemented(s"Unimplemented expanded type param $name of kinds ${shortCode(kinds)}")
+              case _ =>
+                (PostExpansionParam.Original(name, bounds), (origType, i)) :: expandParams(i + 1, ps)
+
+      val (expandedTParams, replacements): (List[PostExpansionParam], List[(TypeRepr, Int)]) =
+        expandParams(0, tParams).unzip
+
+      val newSubstitutions: PolyType => List[ContextElem] =
+        pt => replacements.map { case (origType, i) =>
+          ContextElem.Substitution(origType, pt.param(i))
+        }
+
+      val (names, bounds) =
+        expandedTParams.flatMap:
+          case PostExpansionParam.Original(name, bounds) => (name, bounds) :: Nil
+          case PostExpansionParam.Expanded(params)       => params
+        .unzip
+
+      (names, pt => {
+        val ctx1 = newSubstitutions(pt) ::: ctx
+        val bounds1 = bounds.map(substBounds(marker, ctx1, _))
+        (bounds1, ctx1)
+      })
+    }
+
+    private def substBounds(
+      marker: TypeRepr,
+      ctx: List[ContextElem],
+      bounds: TypeBounds,
+    ): TypeBounds =
+      unimplemented(s"substBounds")
   }
 }

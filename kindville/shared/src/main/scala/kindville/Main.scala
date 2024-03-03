@@ -17,7 +17,7 @@ def main: Unit =
 
   // println(encoderOf[[P, Q] =>> Map[P, Q], Unit]([As, FAs] => (value: FAs, ev: TypeApp[Map, As, FAs]) => ()))
   // println(termStructureOf([x, y] => (m: Map[x, y]) => m.size))
-  // println(typeStructureOf[[x, y] =>> Map[x, y]])
+  println(typeStructureOf[[f[_], g[_[_]]] =>> Map[f[Int], g[f]]])
   // println(termStructureOf(new PolyFunction { override def apply[x, y](m: Map[x, y]): Int = m.size }))
 
   val x: [A] => Map[Int, A] => Int =
@@ -27,5 +27,3 @@ def main: Unit =
   // println(x)
   // println(x[Char](Map(7 -> '7')))
   // println(encoderOf[[X, Y] => List[X] => Option[Y], Unit]([As, FAs] => (value: FAs, ev: TypeApp[[X, Y] => List[X] => Option[Y], As, FAs]) => ()))
-
-  println(foo[Int :: String :: Char :: TNil].bar[String])
