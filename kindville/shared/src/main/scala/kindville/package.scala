@@ -5,7 +5,8 @@ import scala.PolyFunction
 import scala.annotation.experimental
 
 sealed trait *
-sealed trait ->[K, L]
+sealed trait -->[K, L]
+type ->[K, L] = (K :: TNil) --> L
 
 sealed trait ::[H <: AnyKind, T]
 sealed trait TNil
@@ -262,6 +263,39 @@ private[kindville] def decodeTypeArgs[As <: AnyKind](args: Type[As])(using Quote
         case other =>
           report.error(s"Cannot decode a list of type arguments from type ${Printer.TypeReprShortCode.show(repr)}")
           Nil
+
+private[kindville] def decodeKind(using Quotes)(k: qr.TypeRepr): qr.TypeBounds =
+  import qr.*
+
+  k match
+    case tp if tp =:= TypeRepr.of[*] =>
+      TypeBounds.empty
+    case AppliedType(f, args) if f =:= TypeRepr.of[-->] =>
+      args match
+        case inKs :: outK :: Nil =>
+          report.error(s"Unimplemented (at ${summon[SourcePos]})")
+          ???
+        case _ =>
+          report.errorAndAbort(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
+    case other =>
+      report.errorAndAbort(s"Could not decode ${Printer.TypeReprShortCode.show(other)} as a kind.")
+
+private[kindville] def decodeKinds(using Quotes)(kinds: qr.TypeRepr): List[qr.TypeBounds] =
+  import qr.*
+
+  kinds match
+    case tnil if tnil =:= TypeRepr.of[TNil] =>
+      Nil
+    case AppliedType(f, args) if f =:= TypeRepr.of[::] =>
+      args match
+        case k :: ks :: Nil =>
+          decodeKind(k) :: decodeKinds(ks)
+        case _ =>
+          report.error(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
+          Nil
+    case other =>
+      report.error(s"Cannot decode ${Printer.TypeReprShortCode.show(other)} as a list of kinds. Expected k1 :: k2 :: ... :: TNil")
+      Nil
 
 private[kindville] def cast[FA, F <: AnyKind](
   expr: Expr[FA],

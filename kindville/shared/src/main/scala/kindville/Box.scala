@@ -90,6 +90,9 @@ object Box {
     def unimplemented(using pos: SourcePos)(msg: String): Nothing =
       errorAndAbort(s"Not yet implemented: $msg (at $pos)")
 
+    def badUse(msg: String): Nothing =
+      errorAndAbort(msg)
+
     def shortCode(t: TypeRepr): String =
       Printer.TypeReprShortCode.show(t)
 
@@ -130,7 +133,7 @@ object Box {
     ): TypeRepr =
       methType match
         case pt @ PolyType(tParamNames, tParamBounds, MethodType(paramNames, paramTypes, returnType)) =>
-          val (tParams1, ctx1) =
+          val (tParamNames1, cont) =
             substTypeParams(
               marker,
               ctx,
@@ -151,23 +154,38 @@ object Box {
         case Original(name: String, bounds: TypeBounds)
         case Expanded(params: List[(String, TypeBounds)])
 
-      def expandParams(i: Int, ps: List[(String, TypeBounds, TypeRepr)]): List[(PostExpansionParam, (TypeRepr, Int))] =
+      def expandParam(name: String, kinds: TypeRepr): List[(String, TypeBounds)] =
+        decodeKinds(kinds)
+          .zipWithIndex
+          .map { case (bounds, i) =>
+            (name + "$" + i, bounds)
+          }
+
+      def expandParams(i: Int, ps: List[(String, TypeBounds, TypeRepr)]): List[(PostExpansionParam, (TypeRepr, PolyType => TypeRepr))] =
         ps match
           case Nil =>
             Nil
           case (name, bounds @ TypeBounds(lower, upper), origType) :: ps =>
             upper match
               case AppliedType(f, List(kinds)) if f =:= marker =>
-                unimplemented(s"Unimplemented expanded type param $name of kinds ${shortCode(kinds)}")
+                lower.asType match
+                  case '[Nothing] =>
+                    val expanded = expandParam(name, kinds)
+                    val n = expanded.size
+                    val replacement: PolyType => TypeRepr =
+                      pt => encodeTypeArgs(List.range(0, n).map(j => pt.param(i + j)))
+                    (PostExpansionParam.Expanded(expanded), (origType, replacement)) :: expandParams(i + n, ps)
+                  case other =>
+                    badUse(s"Cannot mix the \"spread\" upper bound (${shortCode(marker)}) with a lower bound (${shortCode(lower)})")
               case _ =>
-                (PostExpansionParam.Original(name, bounds), (origType, i)) :: expandParams(i + 1, ps)
+                (PostExpansionParam.Original(name, bounds), (origType, _.param(i))) :: expandParams(i + 1, ps)
 
-      val (expandedTParams, replacements): (List[PostExpansionParam], List[(TypeRepr, Int)]) =
+      val (expandedTParams, replacements): (List[PostExpansionParam], List[(TypeRepr, PolyType => TypeRepr)]) =
         expandParams(0, tParams).unzip
 
       val newSubstitutions: PolyType => List[ContextElem] =
-        pt => replacements.map { case (origType, i) =>
-          ContextElem.Substitution(origType, pt.param(i))
+        pt => replacements.map { case (origType, f) =>
+          ContextElem.Substitution(origType, f(pt))
         }
 
       val (names, bounds) =
