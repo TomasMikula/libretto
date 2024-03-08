@@ -55,6 +55,9 @@ object Box {
   def assertionFailed(using pos: SourcePos, q: Quotes)(msg: String): Nothing =
     errorAndAbort(s"Assertion failed: $msg (at $pos).\n\nPlease, report a bug.")
 
+  def unexpectedTypeParamType(using pos: SourcePos, q: Quotes)(t: qr.TypeRepr): Nothing =
+    assertionFailed(s"a type parameter that is not a ParamRef. Was ${qr.Printer.TypeReprStructure.show(t)}")
+
   private def decode[As, Code <: AnyKind](using
     Quotes,
     Type[As],
@@ -72,7 +75,12 @@ object Box {
         body match
           case inner @ TypeLambda(paramNames, paramBounds, body) =>
             require(paramNames.size == args.size)
-            val params = List.range(0, args.size).map(inner.param(_))
+            val params =
+              List.range(0, args.size).map { i =>
+                inner.param(i) match
+                  case pi @ ParamRef(_, _) => pi
+                  case other => unexpectedTypeParamType(other)
+              }
             val substitutions = params zip (args.map(TypeRepr.of(using _)))
             val decoding: Decoding[quotes.type] = Decoding()
             decoding
@@ -92,11 +100,11 @@ object Box {
     import q.reflect.*
 
     enum ContextElem:
-      case Substitution(src: TypeRepr, tgt: TypeRepr)
+      case Substitution(src: ParamRef, tgt: TypeRepr)
 
     def substitute(
       marker: TypeRepr,
-      substitutions: List[(TypeRepr, TypeRepr)],
+      substitutions: List[(ParamRef, TypeRepr)],
       body: TypeRepr,
     ): TypeRepr =
       subst(
@@ -157,7 +165,12 @@ object Box {
               marker,
               ctx,
               (tParamNames zip tParamBounds).zipWithIndex map {
-                case ((n, b), i) => (n, b, pt.param(i))
+                case ((n, b), i) =>
+                  pt.param(i) match
+                    case pi @ ParamRef(_, _) =>
+                      (n, b, pi)
+                    case other =>
+                      unexpectedTypeParamType(other)
               },
             )
 
@@ -189,7 +202,7 @@ object Box {
     private def substTypeParams(
       marker: TypeRepr,
       ctx: List[ContextElem],
-      tParams: List[(String, TypeBounds, TypeRepr)],
+      tParams: List[(String, TypeBounds, ParamRef)],
     ): (List[String], TParamsFun[(List[TypeBounds], List[ContextElem])]) = {
       enum PostExpansionParam:
         case Original(name: String, bounds: TypeBounds)
@@ -202,11 +215,11 @@ object Box {
             (name + "$" + i, bounds)
           }
 
-      def expandParams(i: Int, ps: List[(String, TypeBounds, TypeRepr)]): List[(PostExpansionParam, (TypeRepr, TParamsFun[TypeRepr]))] =
+      def expandParams(i: Int, ps: List[(String, TypeBounds, ParamRef)]): List[(PostExpansionParam, (ParamRef, TParamsFun[TypeRepr]))] =
         ps match
           case Nil =>
             Nil
-          case (name, bounds @ TypeBounds(lower, upper), origType) :: ps =>
+          case (name, bounds @ TypeBounds(lower, upper), origParam) :: ps =>
             upper match
               case AppliedType(f, List(kinds)) if f =:= marker =>
                 lower.asType match
@@ -215,13 +228,13 @@ object Box {
                     val n = expanded.size
                     val replacement: TParamsFun[TypeRepr] =
                       tparams => encodeTypeArgs(List.range(0, n).map(j => tparams(i + j)))
-                    (PostExpansionParam.Expanded(expanded), (origType, replacement)) :: expandParams(i + n, ps)
+                    (PostExpansionParam.Expanded(expanded), (origParam, replacement)) :: expandParams(i + n, ps)
                   case other =>
                     badUse(s"Cannot mix the \"spread\" upper bound (${shortCode(marker)}) with a lower bound (${shortCode(lower)})")
               case _ =>
-                (PostExpansionParam.Original(name, bounds), (origType, _(i))) :: expandParams(i + 1, ps)
+                (PostExpansionParam.Original(name, bounds), (origParam, _(i))) :: expandParams(i + 1, ps)
 
-      val (expandedTParams, replacements): (List[PostExpansionParam], List[(TypeRepr, TParamsFun[TypeRepr])]) =
+      val (expandedTParams, replacements): (List[PostExpansionParam], List[(ParamRef, TParamsFun[TypeRepr])]) =
         expandParams(0, tParams).unzip
 
       val newSubstitutions: TParamsFun[List[ContextElem]] =
