@@ -40,6 +40,21 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       case other =>
         badUse(s"Expected a type lambda, got ${shortCode(other)}")
 
+  def decodeTerm[As](
+    encoded: Term,
+  )(using
+    Type[As],
+  ): Term =
+    val args = decodeTypeArgs(Type.of[As])
+
+    encoded match
+      case PolyFun(tparams, params, retTp, body) =>
+        unimplemented(s"polymorphic function")
+      case i @ Inlined(_, _, _) =>
+        decodeTerm[As](i.underlying)
+      case other =>
+        unimplemented(s"Term ${encoded.show(using Printer.TreeStructure)}")
+
   def unsupportedType(using SourcePos, Quotes)(t: qr.TypeRepr): Nothing =
     unsupported(s"type ${shortCode(t)} (${qr.Printer.TypeReprStructure.show(t)})")
 
@@ -144,7 +159,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           val ctx1 = cont(tparams)._2
           subst(marker, ctx1, returnType)
 
-        polyFunType(
+        PolyFun.mkType(
           tParamNames1,
           tParamBounds1,
           paramNames,

@@ -17,6 +17,14 @@ infix sealed trait ofKinds[As, Ks]
 private transparent inline def qr(using Quotes): quotes.reflect.type =
   quotes.reflect
 
+transparent inline def decodeExpr[As](expr: Any): Any =
+  ${ decodeExprImpl[As]('expr) }
+
+private def decodeExprImpl[As](expr: Expr[Any])(using Quotes, Type[As]): Expr[Any] =
+  import quotes.reflect.*
+  val encoding = Encoding()
+  encoding.decodeTerm[As](expr.asTerm).asExpr
+
 extension [FA](fa: FA)
   transparent inline def unmask[F <: AnyKind, As](using ev: TypeApp[F, As, FA]): Any =
     ${ unmaskImpl('fa, 'ev) }
@@ -61,7 +69,7 @@ private[kindville] def encoderImpl[F <: AnyKind, R](
 
   TypeRepr.of[F] match
     case bindingType @ TypeLambda(paramNames, paramBounds, body) =>
-      polyFun(
+      PolyFun(
         tParamNames  = paramNames,
         tParamBounds = _ => paramBounds, // TODO: must perform substitution in order to work for interdependent type params
         vParamNames  = List("f"),
@@ -101,12 +109,12 @@ private def visitImpl[F <: AnyKind, FAs](value: Expr[FAs])(using
 
   TypeRepr.of[F] match
     case tf @ TypeLambda(paramNames, paramBounds, body) =>
-      polyFun(
+      PolyFun(
         tParamNames = List("R"),
         tParamBounds = _ => List(TypeBounds.empty),
         vParamNames = List("f"),
         vParamTypes = outerTParams => List(
-          polyFunType(
+          PolyFun.mkType(
             paramNames,
             _ => paramBounds,  // TODO: must perform substitution in order to work for interdependent type params
             vParamNames = List("fa"),
@@ -119,7 +127,7 @@ private def visitImpl[F <: AnyKind, FAs](value: Expr[FAs])(using
           val List(r) = typeArgs
           val List(f) = args
           val fFakeType =
-            polyFunType(List("Dummy"), _ => List(TypeBounds.empty), List("fa"), _ => List(TypeRepr.of[FAs]), _ => r)
+            PolyFun.mkType(List("Dummy"), _ => List(TypeBounds.empty), List("fa"), _ => List(TypeRepr.of[FAs]), _ => r)
           val f1: Expr[[Dummy] => FAs => Any] =
             Typed(f,  TypeTree.of(using fFakeType.asType)).asExprOf[[Dummy] => FAs => Any]
           '{ $f1($value.asInstanceOf) }.asTerm
@@ -137,89 +145,6 @@ private def polyFunApply(using Quotes)(f: qr.Term)(targs: qr.TypeRepr*)(args: qr
     .unique(f, "apply")
     .appliedToTypes(targs.toList)
     .appliedToArgs(args.toList)
-
-private def polyFunApplyMethodType(using Quotes)(
-  tParamNames: List[String],
-  tParamBounds: qr.PolyType => List[qr.TypeBounds],
-  vParamNames: List[String],
-  vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
-  returnType: List[qr.TypeRepr] => qr.TypeRepr,
-): qr.PolyType = {
-  import qr.*
-
-  extension (pt: PolyType)
-    def params(n: Int): List[TypeRepr] =
-      List.range(0, n).map(pt.param(_))
-
-  val nTypeParams = tParamNames.length
-
-  PolyType(tParamNames)(
-    tParamBounds,
-    pt => MethodType(
-      vParamNames,
-    )(
-      mt => vParamTypes(pt.params(nTypeParams)),
-      mt => returnType(pt.params(nTypeParams)),
-    ),
-  )
-}
-
-private def polyFunType(using Quotes)(
-  tParamNames: List[String],
-  tParamBounds: qr.PolyType => List[qr.TypeBounds],
-  vParamNames: List[String],
-  vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
-  returnType: List[qr.TypeRepr] => qr.TypeRepr,
-): qr.TypeRepr =
-  qr.Refinement(
-    qr.TypeRepr.of[PolyFunction],
-    "apply",
-    polyFunApplyMethodType(tParamNames, tParamBounds, vParamNames, vParamTypes, returnType)
-  )
-
-/**
-  *
-  *
-  * @param tParamNames
-  * @param tParamBounds
-  * @param vParamTypes function that, given type parameters, constructs the types of value parameters
-  * @param returnType function that, given type parameters, constructs the return type
-  * @param body
-  * @return
-  */
-@experimental
-private def polyFun(using Quotes)(
-  tParamNames: List[String],
-  tParamBounds: qr.PolyType => List[qr.TypeBounds],
-  vParamNames: List[String],
-  vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
-  returnType: List[qr.TypeRepr] => qr.TypeRepr,
-  body: (List[qr.TypeRepr], List[qr.Term]) => qr.Term,
-): qr.Term = {
-  import qr.*
-
-  val methSym =
-    Symbol.newMethod(
-      Symbol.spliceOwner,
-      name = "polyFunImpl",
-      tpe = polyFunApplyMethodType(tParamNames, tParamBounds, vParamNames, vParamTypes, returnType)
-    )
-
-  val meth =
-    DefDef(
-      methSym,
-      rhsFn = { case List(targTrees, argTrees) =>
-        val targs = targTrees.map(_.asInstanceOf[TypeTree].tpe)
-        val args  = argTrees.map(_.asInstanceOf[Term])
-        Some(body(targs, args))
-      },
-    )
-
-  Block(
-    List(meth),
-    Closure(Ident(methSym.termRef), tpe = None)
-  )
-}
 
 private[kindville] def unmaskImpl[F <: AnyKind, As, FA](
   fa: Expr[FA],

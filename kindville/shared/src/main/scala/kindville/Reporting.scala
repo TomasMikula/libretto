@@ -2,7 +2,8 @@ package kindville
 
 import scala.quoted.*
 
-object Reporting {
+private object Reporting {
+
   // TODO: use report.errorAndAbort after https://github.com/lampepfl/dotty/issues/19851 is fixed
   def errorAndAbort(msg: String)(using Quotes): Nothing =
     quotes.reflect.report.error(msg)
@@ -10,6 +11,9 @@ object Reporting {
 
   def shortCode(using Quotes)(t: qr.TypeRepr): String =
     qr.Printer.TypeReprShortCode.show(t)
+
+  def treeStruct(using Quotes)(t: qr.Tree): String =
+    qr.Printer.TreeStructure.show(t)
 
   def unsupported(using pos: SourcePos, q: Quotes)(msg: String): Nothing =
     errorAndAbort(s"Unsupported: $msg (at $pos).\nIf you have a use case for it, please request an enhancement.")
