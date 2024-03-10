@@ -101,6 +101,19 @@ object Box {
 
     enum ContextElem:
       case Substitution(src: ParamRef, tgt: TypeRepr)
+      case TypeArgExpansion(src: ParamRef, tgt: List[TypeRepr])
+
+    extension (ctx: List[ContextElem])
+      def substitutesTo: SubstitutionExtractor = SubstitutionExtractor(ctx)
+      def expandsTo: ExpansionExtractor = ExpansionExtractor(ctx)
+
+    class SubstitutionExtractor(ctx: List[ContextElem]):
+      def unapply(p: ParamRef): Option[TypeRepr] =
+        ctx.collectFirst { case ContextElem.Substitution(src, res) if src =:= p => res }
+
+    class ExpansionExtractor(ctx: List[ContextElem]):
+      def unapply(p: ParamRef): Option[List[TypeRepr]] =
+        ctx.collectFirst { case ContextElem.TypeArgExpansion(src, res) if src =:= p => res }
 
     def substitute(
       marker: TypeRepr,
@@ -144,12 +157,11 @@ object Box {
         case t if t =:= marker =>
           // TODO: return a typed error and produce a better error message with a context of the wrongly used spread operator
           badUse(s"Cannot use the spread operator ${shortCode(marker)} in this position: ${shortCode(body)}")
-        case p @ ParamRef(binder, i) =>
-          ctx.collectFirst:
-            case ContextElem.Substitution(src, tgt) if src =:= p => tgt
-          match
-            case Some(q) => q
-            case None    => p
+        case p @ ParamRef(_, _) =>
+          p match
+            case ctx.substitutesTo(q) => q
+            case ctx.expandsTo(qs)    => badUse(s"Invalid use of kind-expanded type argument ${shortCode(p)}. It can only be used in type argument position.")
+            case p                    => p
         case other =>
           unsupportedType(other)
 
@@ -215,7 +227,10 @@ object Box {
             (name + "$" + i, bounds)
           }
 
-      def expandParams(i: Int, ps: List[(String, TypeBounds, ParamRef)]): List[(PostExpansionParam, (ParamRef, TParamsFun[TypeRepr]))] =
+      def expandParams(
+        i: Int,
+        ps: List[(String, TypeBounds, ParamRef)],
+      ): List[(PostExpansionParam, TParamsFun[ContextElem])] =
         ps match
           case Nil =>
             Nil
@@ -226,21 +241,19 @@ object Box {
                   case '[Nothing] =>
                     val expanded = expandParam(name, kinds)
                     val n = expanded.size
-                    val replacement: TParamsFun[TypeRepr] =
-                      tparams => encodeTypeArgs(List.range(0, n).map(j => tparams(i + j)))
-                    (PostExpansionParam.Expanded(expanded), (origParam, replacement)) :: expandParams(i + n, ps)
+                    val replacement: TParamsFun[ContextElem] =
+                      tparams => ContextElem.TypeArgExpansion(origParam, List.range(0, n).map(j => tparams(i + j)))
+                    (PostExpansionParam.Expanded(expanded), replacement) :: expandParams(i + n, ps)
                   case other =>
                     badUse(s"Cannot mix the \"spread\" upper bound (${shortCode(marker)}) with a lower bound (${shortCode(lower)})")
               case _ =>
-                (PostExpansionParam.Original(name, bounds), (origParam, _(i))) :: expandParams(i + 1, ps)
+                (PostExpansionParam.Original(name, bounds), tps => ContextElem.Substitution(origParam, tps(i))) :: expandParams(i + 1, ps)
 
-      val (expandedTParams, replacements): (List[PostExpansionParam], List[(ParamRef, TParamsFun[TypeRepr])]) =
+      val (expandedTParams, replacements): (List[PostExpansionParam], List[TParamsFun[ContextElem]]) =
         expandParams(0, tParams).unzip
 
       val newSubstitutions: TParamsFun[List[ContextElem]] =
-        tparams => replacements.map { case (origType, f) =>
-          ContextElem.Substitution(origType, f(tparams))
-        }
+        tparams => replacements.map(_(tparams))
 
       val (names, bounds) =
         expandedTParams.flatMap:
@@ -263,11 +276,11 @@ object Box {
       targs.flatMap {
         case AppliedType(f, targs) =>
           if (f =:= marker) {
+            // encode the expanded argument (A --> A1, ...) into a single type A1 :: ...
             targs match
               case a :: Nil =>
-                val a1 = subst(marker, ctx, a)
-                decodeTypeArgs(a1.asType)
-                  .map(TypeRepr.of(using _))
+                // lookup in the substitution for `a` in context
+                unimplemented(s"encoding an expanded type argument into a single type")
               case other =>
                 assertionFailed(s"Expected 1 type argument to ${shortCode(f)}, got ${targs.size} (${targs.map(shortCode).mkString(", ")})")
           } else {
@@ -275,6 +288,13 @@ object Box {
             val targs1 = expandTypeArgs(marker, ctx, targs)
             AppliedType(f1, targs1) :: Nil
           }
+        case p @ ParamRef(_, _) =>
+          ctx
+            .collectFirst {
+              case ContextElem.TypeArgExpansion(src, res) if src =:= p =>
+                res
+            }
+            .getOrElse(subst(marker, ctx, p) :: Nil)
         case other =>
           subst(marker, ctx, other) :: Nil
       }
