@@ -1,0 +1,25 @@
+package kindville
+
+import scala.quoted.*
+
+object Reporting {
+  // TODO: use report.errorAndAbort after https://github.com/lampepfl/dotty/issues/19851 is fixed
+  def errorAndAbort(msg: String)(using Quotes): Nothing =
+    quotes.reflect.report.error(msg)
+    ???
+
+  def shortCode(using Quotes)(t: qr.TypeRepr): String =
+    qr.Printer.TypeReprShortCode.show(t)
+
+  def unsupported(using pos: SourcePos, q: Quotes)(msg: String): Nothing =
+    errorAndAbort(s"Unsupported: $msg (at $pos).\nIf you have a use case for it, please request an enhancement.")
+
+  def unimplemented(using pos: SourcePos, q: Quotes)(msg: String): Nothing =
+    errorAndAbort(s"Unhandled case: $msg (at $pos).\n\nPlease, request an enhancement.")
+
+  def badUse(using Quotes)(msg: String): Nothing =
+    errorAndAbort(msg)
+
+  def assertionFailed(using pos: SourcePos, q: Quotes)(msg: String): Nothing =
+    errorAndAbort(s"Assertion failed: $msg (at $pos).\n\nPlease, report a bug.")
+}
