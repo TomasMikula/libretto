@@ -9,7 +9,10 @@ private object Reporting {
     quotes.reflect.report.error(msg)
     ???
 
-  def shortCode(using Quotes)(t: qr.TypeRepr): String =
+  def typeShortCode[T <: AnyKind](using Quotes)(t: Type[T]): String =
+    typeShortCode(qr.TypeRepr.of(using t))
+
+  def typeShortCode(using Quotes)(t: qr.TypeRepr): String =
     qr.Printer.TypeReprShortCode.show(t)
 
   def treeStruct(using Quotes)(t: qr.Tree): String =
