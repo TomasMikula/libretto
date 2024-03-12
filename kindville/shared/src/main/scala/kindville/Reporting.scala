@@ -15,6 +15,9 @@ private object Reporting {
   def typeShortCode(using Quotes)(t: qr.TypeRepr): String =
     qr.Printer.TypeReprShortCode.show(t)
 
+  def treeShortCode(using Quotes)(t: qr.Tree): String =
+    qr.Printer.TreeShortCode.show(t)
+
   def treeStruct(using Quotes)(t: qr.Tree): String =
     qr.Printer.TreeStructure.show(t)
 

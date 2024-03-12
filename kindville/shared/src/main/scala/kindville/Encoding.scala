@@ -12,19 +12,25 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   import q.reflect.*
 
   enum ContextElem:
-    case Substitution(src: ParamRef | TypeRef, tgt: TypeRepr)
-    case TypeArgExpansion(src: ParamRef, tgt: List[TypeRepr])
+    case TypeSubstitution(src: ParamRef | TypeRef, tgt: TypeRepr)
+    case TypeArgExpansion(src: ParamRef | TypeRef, tgt: List[TypeRepr])
+    case TermSubstitution(src: TermRef, tgt: Term)
 
   extension (ctx: List[ContextElem])
-    def substitutesTo: SubstitutionExtractor = SubstitutionExtractor(ctx)
+    def substitutesTypeTo: TypeSubstitutionExtractor = TypeSubstitutionExtractor(ctx)
+    def substitutesTermTo: TermSubstitutionExtractor = TermSubstitutionExtractor(ctx)
     def expandsTo: ExpansionExtractor = ExpansionExtractor(ctx)
 
-  class SubstitutionExtractor(ctx: List[ContextElem]):
-    def unapply(p: ParamRef): Option[TypeRepr] =
-      ctx.collectFirst { case ContextElem.Substitution(src, res) if src =:= p => res }
+  class TypeSubstitutionExtractor(ctx: List[ContextElem]):
+    def unapply(p: ParamRef | TypeRef): Option[TypeRepr] =
+      ctx.collectFirst { case ContextElem.TypeSubstitution(src, res) if src =:= p => res }
+
+  class TermSubstitutionExtractor(ctx: List[ContextElem]):
+    def unapply(i: Ident): Option[Term] =
+      ctx.collectFirst { case ContextElem.TermSubstitution(src, res) if src.termSymbol == i.symbol => res }
 
   class ExpansionExtractor(ctx: List[ContextElem]):
-    def unapply(p: ParamRef): Option[List[TypeRepr]] =
+    def unapply(p: ParamRef | TypeRef): Option[List[TypeRepr]] =
       ctx.collectFirst { case ContextElem.TypeArgExpansion(src, res) if src =:= p => res }
 
   def unsupportedType(using SourcePos, Quotes)(t: qr.TypeRepr): Nothing =
@@ -55,7 +61,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
               }
             val substitutions =
               (params zip args) map {
-                case (s, t) => ContextElem.Substitution(s, TypeRepr.of(using t))
+                case (s, t) => ContextElem.TypeSubstitution(s, TypeRepr.of(using t))
               }
             decodeType(marker, substitutions, body)
               .asType
@@ -84,21 +90,20 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         val substitutions =
           (userTParams zip args) map {
             case ((_, _, typeRef), arg) =>
-              ContextElem.Substitution(typeRef, TypeRepr.of(using arg))
+              ContextElem.TypeSubstitution(typeRef, TypeRepr.of(using arg))
           }
         if (params.size != 1)
           badUse(s"Expected 1 value parameter of type Unit (to overcome Scala's implementation restriction of polymorphic functions). Got ${params.size}: ${params.map(_._1).mkString(", ")}")
         val dummyParam = params.head
-        if (dummyParam._1 != "_")
+        if (!dummyParam._1.startsWith("_$")) // compiler generated name for `_: T`
           badUse(s"The dummy parameter's name must be \"_\", was ${dummyParam._1}")
-        // decodeTerm(marker, substitutions, body)
-        unimplemented("polymorphic function")
+        decodeTerm(marker, substitutions, body)
       case i @ Inlined(_, _, _) =>
         decodeTerm[As](i.underlying)
       case other =>
         unimplemented(s"Term ${encoded.show(using Printer.TreeStructure)}")
 
-  def decodeType(
+  private def decodeType(
     marker: TypeRepr,
     ctx: List[ContextElem],
     body: TypeRepr,
@@ -118,24 +123,49 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         checkNonOccurrence(marker, ctx, parent)
         ref
       case AppliedType(f, targs) =>
-        // substitute in f
         val f1 = decodeType(marker, ctx, f)
-
-        // expand type args
         val targs1 = expandTypeArgs(marker, ctx, targs)
-
-        // f'[targs']
         AppliedType(f1, targs1)
       case t if t =:= marker =>
         // TODO: return a typed error and produce a better error message with a context of the wrongly used spread operator
         badUse(s"Cannot use the spread operator ${typeShortCode(marker)} in this position: ${typeShortCode(body)}")
       case p @ ParamRef(_, _) =>
         p match
-          case ctx.substitutesTo(q) => q
+          case ctx.substitutesTypeTo(q) => q
           case ctx.expandsTo(qs)    => badUse(s"Invalid use of kind-expanded type argument ${typeShortCode(p)}. It can only be used in type argument position.")
           case p                    => p
       case other =>
         unsupportedType(other)
+
+  private def decodeTerm(
+    marker: TypeRef,
+    ctx: List[ContextElem],
+    expr: Term,
+  ): Term =
+    expr match
+      case PolyFun(tparams, params, retTp, body) =>
+        decodePolyFun(marker, ctx, tparams, params, retTp, body)
+      case Apply(f, as) =>
+        val f1 = decodeTerm(marker, ctx, f)
+        val bs = as.map(decodeTerm(marker, ctx, _))
+        Apply(f1, bs)
+      case TypeApply(f, ts) =>
+        val f1 = decodeTerm(marker, ctx, f)
+        val us = expandTypeArgs(marker, ctx, ts.map(_.tpe))
+        TypeApply(f1, us.map(u => TypeTree.of(using u.asType)))
+      case Select(prefix, name) =>
+        val prefix1 = decodeTerm(marker, ctx, prefix)
+        try {
+          Select.unique(prefix1, name)
+        } catch {
+          e => unsupported(s"x.m for overloaded m. In ${treeShortCode(prefix1)}.$name")
+        }
+      case i @ Ident(x) =>
+        i match
+          case ctx.substitutesTermTo(j) => j
+          case i => i
+      case other =>
+        unimplemented(s"decodeTerm(${treeStruct(expr)})")
 
   private def decodePolyFunType(
     marker: TypeRepr,
@@ -152,7 +182,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
               case ((n, b), i) =>
                 pt.param(i) match
                   case pi @ ParamRef(_, _) =>
-                    (n, b, pi)
+                    (n, Left(b), pi)
                   case other =>
                     unexpectedTypeParamType(other)
             },
@@ -179,6 +209,51 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       case other =>
         unsupported(s"PolyFunction refinement with apply method type ${typeShortCode(other)}")
 
+  private def decodePolyFun(
+    marker: TypeRef,
+    ctx: List[ContextElem],
+    tparams: List[(String, TypeBoundsTree | LambdaTypeTree, TypeRef)], // (name, kind, reference)
+    params: List[(String, TypeTree, TermRef)],
+    returnType: TypeTree,
+    body: Term,
+  ): Term = {
+    val (tParamNames1, cont) =
+      decodeTypeParams(
+        marker,
+        ctx,
+        tparams map { case (n, t, ref) =>
+          t match
+            case b: TypeBoundsTree => (n, Left(b.tpe), ref)
+            case l: LambdaTypeTree => (n, Right(l), ref)
+        }
+      )
+
+    def tParamBounds1(pt: PolyType): List[TypeBounds] =
+      cont(pt.param)._1
+
+    val paramNames = params.map(_._1)
+
+    def paramTypes(tparams: Int => TypeRepr): List[TypeRepr] =
+      val ctx1 = cont(tparams)._2
+      params.map(t => decodeType(marker, ctx1, t._2.tpe))
+
+    def returnType1(tparams: Int => TypeRepr): TypeRepr =
+      val ctx1 = cont(tparams)._2
+      decodeType(marker, ctx1, returnType.tpe)
+
+    def paramSubstitutions(newParams: List[Term]): List[ContextElem.TermSubstitution] =
+      (params zip newParams).map { case (pOld, pNew) =>
+        ContextElem.TermSubstitution(pOld._3, pNew)
+      }
+
+    def body1(newTParams: Int => TypeRepr, newParams: List[Term]): Term =
+      val ctx1 = cont(newTParams)._2
+      val ctx2 = paramSubstitutions(newParams) ::: ctx1
+      decodeTerm(marker, ctx2, body)
+
+    PolyFun(tParamNames1, tParamBounds1, paramNames, paramTypes, returnType1, body1)
+  }
+
   /** Function from type parameters to `R`. */
   private type TParamsFun[R] =
     (getTParam: Int => TypeRepr) => R
@@ -186,7 +261,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   private def decodeTypeParams(
     marker: TypeRepr,
     ctx: List[ContextElem],
-    tParams: List[(String, TypeBounds, ParamRef)],
+    tParams: List[(String, Either[TypeBounds, LambdaTypeTree], ParamRef | TypeRef)],
   ): (List[String], TParamsFun[(List[TypeBounds], List[ContextElem])]) = {
     enum PostExpansionParam:
       case Original(name: String, bounds: TypeBounds)
@@ -201,12 +276,12 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
     def expandParams(
       i: Int,
-      ps: List[(String, TypeBounds, ParamRef)],
+      ps: List[(String, Either[TypeBounds, LambdaTypeTree], ParamRef | TypeRef)],
     ): List[(PostExpansionParam, TParamsFun[ContextElem])] =
       ps match
         case Nil =>
           Nil
-        case (name, bounds @ TypeBounds(lower, upper), origParam) :: ps =>
+        case (name, Left(TypeBounds(lower, upper)), origParam) :: ps =>
           upper match
             case AppliedType(f, List(kinds)) if f =:= marker =>
               lower.asType match
@@ -219,7 +294,12 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                 case other =>
                   badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(marker)}) with a lower bound (${typeShortCode(lower)})")
             case _ =>
-              (PostExpansionParam.Original(name, bounds), tps => ContextElem.Substitution(origParam, tps(i))) :: expandParams(i + 1, ps)
+              val bounds1 = TypeBounds(decodeType(marker, ctx, lower), decodeType(marker, ctx, upper))
+              ( PostExpansionParam.Original(name, bounds1)
+              , tps => ContextElem.TypeSubstitution(origParam, tps(i))
+              ) :: expandParams(i + 1, ps)
+        case (name, Right(ltt), origParam) :: ps =>
+          unimplemented(s"decoding of $name <: ${treeStruct(ltt)}")
 
     val (expandedTParams, replacements): (List[PostExpansionParam], List[TParamsFun[ContextElem]]) =
       expandParams(0, tParams).unzip
@@ -260,13 +340,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           val targs1 = expandTypeArgs(marker, ctx, targs)
           AppliedType(f1, targs1) :: Nil
         }
-      case p @ ParamRef(_, _) =>
-        ctx
-          .collectFirst {
-            case ContextElem.TypeArgExpansion(src, res) if src =:= p =>
-              res
-          }
-          .getOrElse(decodeType(marker, ctx, p) :: Nil)
+      case p: ParamRef =>
+        p match
+          case ctx.expandsTo(ps) => ps
+          case _                 => p :: Nil
+      case t: TypeRef =>
+        t match
+          case ctx.expandsTo(ts) => ts
+          case _                 => t :: Nil
       case other =>
         decodeType(marker, ctx, other) :: Nil
     }
