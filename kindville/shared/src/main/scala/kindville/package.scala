@@ -76,7 +76,7 @@ private[kindville] def encoderImpl[F <: AnyKind, R](
         vParamTypes  = tParams => List(bindingType.appliedTo(tParams)),
         returnType   = _ => TypeRepr.of[R],
         body =
-          (targs, args) =>
+          (targs, args, owner) =>
             val tAs = encodeTypeArgs(targs)
             val tFAs = AppliedType(TypeRepr.of[F], targs)
             val List(fas) = args
@@ -123,7 +123,7 @@ private def visitImpl[F <: AnyKind, FAs](value: Expr[FAs])(using
           )
         ),
         returnType = tparams => tparams.head,
-        body = (typeArgs, args) => {
+        body = (typeArgs, args, owner) => {
           val List(r) = typeArgs
           val List(f) = args
           val fFakeType =
