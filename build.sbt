@@ -208,7 +208,7 @@ lazy val kindville = crossProject(JVMPlatform, JSPlatform)
   .settings(
     name := "kindville",
     publish / skip := true, // experimental project, do not publish
-    scalacOptions ++= commonScalacOptions,
+    scalacOptions ++= commonScalacOptions ++ Seq("-explain", "-Xcheck-macros"),
     libraryDependencies ++= Seq(
       "org.scalatest" %%% "scalatest" % ScalatestVersion % Test,
     ),

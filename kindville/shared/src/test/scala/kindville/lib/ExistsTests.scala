@@ -1,16 +1,25 @@
 package kindville.lib
 
 import kindville.*
-import kindville.TypeApp.*
 import org.scalatest.funsuite.AnyFunSuite
-import scala.annotation.experimental
 
-@experimental
 class ExistsTests extends AnyFunSuite {
 
-  test("Exists[[P, Q] =>> (String => P, P => Q, Q => Int)]") {
-    val x: Exists[[P, Q] =>> (String => P, P => Q, Q => Int)] =
-      Exists[[P, Q] =>> (String => P, P => Q, Q => Int)]
+  test("ExistK[* :: TNil, [X] =>> Option[X]") {
+    val x: ExistK[* :: TNil, Option] =
+      ExistK[* :: TNil, [X] =>> Option[X]](Some(1))
+
+    val s =
+      x.visit[String] { [T] => (ot: Option[T]) =>
+        ot.toString
+      }
+
+    assert(s == "Some(1)")
+  }
+
+  test("ExistK[* :: * :: TNil, [P, Q] =>> (String => P, P => Q, Q => Int)]") {
+    val x: ExistK[* :: * :: TNil, [P, Q] =>> (String => P, P => Q, Q => Int)] =
+      ExistK[* :: * :: TNil, [P, Q] =>> (String => P, P => Q, Q => Int)]
         .apply[Array[String], Array[Int]]((
           _.split("\\."),
           _.map(_.length),
@@ -32,10 +41,10 @@ class ExistsTests extends AnyFunSuite {
     val g: Array[String] => Array[Int]    = _.map(_.length)
     val h: Array[Int]    => Int           = _.sum
 
-    val x: Exists[[P, Q] =>> (String => P, P => Q, Q => Int)] =
+    val x: ExistK[* :: * :: TNil, [P, Q] =>> (String => P, P => Q, Q => Int)] =
       // Not specifying arguments for P, Q explicitly.
       // They are inferred to be Array[String], Array[Int], respectively.
-      Exists[[P, Q] =>> (String => P, P => Q, Q => Int)]((f, g, h))
+      ExistK[* :: * :: TNil, [P, Q] =>> (String => P, P => Q, Q => Int)]((f, g, h))
 
     val n =
       // Not specifying result type of visit explicitly.
@@ -49,17 +58,17 @@ class ExistsTests extends AnyFunSuite {
   }
 
   test("Inferrability of the result type F[A, ...]") {
-    Exists.types[String :: Int :: TNil]
-      .suchThat[Map[_, _]](Map.empty) // inferred type Map[String, Int]
+    ExistK.types[String :: Int :: TNil]
+      .suchThat[* :: * :: TNil, Map[_, _]](Map.empty) // inferred type Map[String, Int]
 
     // Proof:
     // Let the type of `x` be inferred
     val x =
-      Exists.types[String :: Int :: TNil]
-        .suchThat[Map[_, _]]
+      ExistK.types[String :: Int :: TNil]
+        .suchThat[* :: * :: TNil, Map[_, _]]
 
     // The inferred type is assignable to `Map[String, Int] => Exists[Map]`
-    val y: Map[String, Int] => Exists[Map] =
+    val y: Map[String, Int] => ExistK[* :: * :: TNil, Map] =
       x
   }
 
