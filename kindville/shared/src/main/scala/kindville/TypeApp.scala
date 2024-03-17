@@ -1,5 +1,6 @@
 package kindville
 
+import kindville.Encoding.*
 import scala.quoted.*
 
 sealed trait TypeApp[F <: AnyKind, +As, FAs]

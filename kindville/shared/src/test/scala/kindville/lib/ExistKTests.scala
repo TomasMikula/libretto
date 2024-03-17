@@ -3,7 +3,7 @@ package kindville.lib
 import kindville.*
 import org.scalatest.funsuite.AnyFunSuite
 
-class ExistsTests extends AnyFunSuite {
+class ExistKTests extends AnyFunSuite {
 
   test("ExistK[* :: TNil, [X] =>> Option[X]") {
     val x: ExistK[* :: TNil, Option] =

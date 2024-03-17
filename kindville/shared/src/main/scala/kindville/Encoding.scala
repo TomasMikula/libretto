@@ -6,9 +6,75 @@ import kindville.Reporting.*
 private object Encoding {
   def apply(using q: Quotes)(): Encoding[q.type] =
     new Encoding[q.type]
+
+
+  def encodeTypeArgs(using Quotes)(args: List[quotes.reflect.TypeRepr]): quotes.reflect.TypeRepr =
+    import quotes.reflect.*
+    args match
+      case Nil => TypeRepr.of[TNil]
+      case t :: ts => TypeRepr.of[::].appliedTo(List(t, encodeTypeArgs(ts)))
+
+  def decodeTypeArgs[As <: AnyKind](args: Type[As])(using Quotes): List[Type[?]] =
+    import quotes.reflect.*
+
+    val cons = TypeRepr.of[::]
+
+    args match
+      case '[TNil] => Nil
+      case other =>
+        val repr = TypeRepr.of(using other)
+        repr match
+          case AppliedType(f, args) =>
+            f.asType match
+              case '[::] =>
+                args match
+                  case h :: t :: Nil =>
+                    h.asType :: decodeTypeArgs(t.asType)(using quotes)
+                  case _ =>
+                    report.errorAndAbort(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
+              case other =>
+                report.error(s"Cannot decode a list of type arguments from type ${Printer.TypeReprShortCode.show(repr)}")
+                Nil
+          case other =>
+            report.error(s"Cannot decode a list of type arguments from type ${Printer.TypeReprShortCode.show(repr)}")
+            Nil
+
+  def decodeKind(using Quotes)(k: qr.TypeRepr): qr.TypeBounds =
+    import qr.*
+
+    k match
+      case tp if tp =:= TypeRepr.of[*] =>
+        TypeBounds.empty
+      case AppliedType(f, args) if f =:= TypeRepr.of[-->] =>
+        args match
+          case inKs :: outK :: Nil =>
+            report.error(s"Unimplemented (at ${summon[SourcePos]})")
+            ???
+          case _ =>
+            report.errorAndAbort(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
+      case other =>
+        report.errorAndAbort(s"Could not decode ${Printer.TypeReprShortCode.show(other)} as a kind.")
+
+  def decodeKinds(using Quotes)(kinds: qr.TypeRepr): List[qr.TypeBounds] =
+    import qr.*
+
+    kinds match
+      case tnil if tnil =:= TypeRepr.of[TNil] =>
+        Nil
+      case AppliedType(f, args) if f =:= TypeRepr.of[::] =>
+        args match
+          case k :: ks :: Nil =>
+            decodeKind(k) :: decodeKinds(ks)
+          case _ =>
+            report.error(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
+            Nil
+      case other =>
+        report.error(s"Cannot decode ${Printer.TypeReprShortCode.show(other)} as a list of kinds. Expected k1 :: k2 :: ... :: TNil")
+        Nil
 }
 
 private class Encoding[Q <: Quotes](using val q: Q) {
+  import Encoding.*
   import q.reflect.*
 
   enum ContextElem:
