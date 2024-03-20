@@ -14,7 +14,7 @@ class ExistK[K, F <: AnyKind](
 }
 
 object ExistK {
-  private[lib] type Code[K] =
+  private[ExistK] type Code[K] =
     [⋅⋅[_]] =>> [F0[_]] =>>
       [R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R
 
