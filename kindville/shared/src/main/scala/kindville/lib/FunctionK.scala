@@ -5,7 +5,7 @@ import kindville.*
 class FunctionK[K, F <: AnyKind, G <: AnyKind](
   value: Box[F :: G :: TNil, FunctionK.Code[K]]
 ) {
-  transparent inline def apply =
+  transparent inline def apply(using inline di: DummyImplicit) =
     Box.unpack(value)
 
   transparent inline infix def andThen[H <: AnyKind](that: FunctionK[K, G, H]): Any =

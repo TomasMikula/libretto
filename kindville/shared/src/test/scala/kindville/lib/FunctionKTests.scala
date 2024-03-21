@@ -12,9 +12,9 @@ class FunctionKTests extends AnyFunSuite {
         [X] => (xs: List[X]) => xs.headOption
       )
 
-    assert(headOption.apply(List(1, 2, 3)) == Some(1))
-    assert(headOption.apply(List("1", "2", "3")) == Some("1"))
-    assert(headOption.apply(Nil) == None)
+    assert(headOption(List(1, 2, 3)) == Some(1))
+    assert(headOption(List("1", "2", "3")) == Some("1"))
+    assert(headOption(Nil) == None)
   }
 
   test("reverse andThen headOption") {
@@ -28,7 +28,7 @@ class FunctionKTests extends AnyFunSuite {
         [X] => (xs: List[X]) => xs.headOption
       )
 
-    val go = (reverse andThen headOption).apply
+    val go = reverse andThen headOption
 
     assert(go(List(1, 2, 3)) == Some(3))
     assert(go(List("1", "2", "3")) == Some("3"))
