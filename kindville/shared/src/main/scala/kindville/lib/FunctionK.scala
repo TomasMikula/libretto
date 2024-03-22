@@ -21,6 +21,9 @@ class FunctionK[K, F <: AnyKind, G <: AnyKind](
       this.apply,
       that.apply,
     )
+
+  transparent inline infix def after[E <: AnyKind](that: FunctionK[K, E, F]): Any =
+    that andThen this
 }
 
 object FunctionK {
