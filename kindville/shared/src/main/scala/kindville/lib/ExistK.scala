@@ -15,13 +15,13 @@ class ExistK[K, F <: AnyKind](
 
 object ExistK {
   private[ExistK] type Code[K] =
-    [⋅⋅[_]] =>> [F0[_]] =>>
+    [⋅⋅[_]] =>> [F0[_ <: ⋅⋅[K]]] =>>
       [R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R
 
   /** Returns `[A, ...] => F[A, ...] => ExistK[K, F]`. */
   transparent inline def apply[K, F <: AnyKind] =
     decodeExpr[F :: TNil](
-      [⋅⋅[_], F0[_]] =>
+      [⋅⋅[_], F0[_ <: ⋅⋅[K]]] =>
         (pack: ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[F :: TNil, Code[K]]) =>
           [A <: ⋅⋅[K]] => (fa: F0[A]) =>
             new ExistK[K, F](
@@ -39,7 +39,7 @@ object ExistK {
   final class ExistsTypes[As] {
     transparent inline def suchThat[K, F <: AnyKind]: Any =
       decodeExpr[F :: As :: TNil](
-        [⋅⋅[_], F0[_], A <: ⋅⋅[K]] =>
+        [⋅⋅[_], F0[_ <: ⋅⋅[K]], A <: ⋅⋅[K]] =>
           (create: [X <: ⋅⋅[K]] => F0[X] => ExistK[K, F]) =>
             create[A]
       )(apply[K, F])

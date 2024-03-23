@@ -25,7 +25,7 @@ transparent inline def decodeExpr[As](expr: Any)(inline args: Any*): Any =
 
 private def decodeFunImpl(funcode: Expr[Any])(using Quotes): Expr[Any] =
   val encoding = Encoding()
-  encoding.decodeTerm(funcode)
+  encoding.decodeFun(funcode)
 
 private def decodeExprImpl[As](expr: Expr[Any], args: Expr[Seq[Any]])(using Quotes, Type[As]): Expr[Any] =
   import quotes.reflect.*
