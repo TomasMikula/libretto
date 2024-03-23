@@ -18,7 +18,7 @@ private object PolyFun {
     */
   def apply(using Quotes)(
     tParamNames: List[String],
-    tParamBounds: qr.PolyType => List[qr.TypeBounds],
+    tParamBounds: (Int => qr.TypeRepr) => List[qr.TypeBounds],
     vParamNames: List[String],
     vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
     returnType: List[qr.TypeRepr] => qr.TypeRepr,
@@ -85,7 +85,7 @@ private object PolyFun {
 
   private def polyFunApplyMethodType(using Quotes)(
     tParamNames: List[String],
-    tParamBounds: qr.PolyType => List[qr.TypeBounds],
+    tParamBounds: (Int => qr.TypeRepr) => List[qr.TypeBounds],
     vParamNames: List[String],
     vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
     returnType: List[qr.TypeRepr] => qr.TypeRepr,
@@ -99,7 +99,7 @@ private object PolyFun {
     val nTypeParams = tParamNames.length
 
     PolyType(tParamNames)(
-      tParamBounds,
+      pt => tParamBounds(pt.param),
       pt => MethodType(
         vParamNames,
       )(
@@ -111,7 +111,7 @@ private object PolyFun {
 
   def mkType(using Quotes)(
     tParamNames: List[String],
-    tParamBounds: qr.PolyType => List[qr.TypeBounds],
+    tParamBounds: (Int => qr.TypeRepr) => List[qr.TypeBounds],
     vParamNames: List[String],
     vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
     returnType: List[qr.TypeRepr] => qr.TypeRepr,

@@ -340,8 +340,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             },
           )
 
-        def tParamBounds1(pt: PolyType): List[TypeBounds] =
-          cont(pt.param)._1
+        def tParamBounds1(tparams: Int => TypeRepr): List[TypeBounds] =
+          cont(tparams)._1
 
         def paramTypes1(tparams: Int => TypeRepr): List[TypeRepr] =
           val ctx1 = cont(tparams)._2
@@ -381,8 +381,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         }
       )
 
-    def tParamBounds1(pt: PolyType): List[TypeBounds] =
-      cont(pt.param)._1
+    def tParamBounds1(tparams: Int => TypeRepr): List[TypeBounds] =
+      cont(tparams)._1
 
     val paramNames = params.map(_._1)
 
