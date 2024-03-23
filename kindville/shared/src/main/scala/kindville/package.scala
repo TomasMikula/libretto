@@ -17,15 +17,22 @@ infix sealed trait ofKinds[As, Ks]
 private transparent inline def qr(using Quotes): quotes.reflect.type =
   quotes.reflect
 
+transparent inline def decodeFun(funcode: Any): Any =
+  ${ decodeFunImpl('funcode) }
+
 transparent inline def decodeExpr[As](expr: Any)(inline args: Any*): Any =
   ${ decodeExprImpl[As]('expr, 'args) }
+
+private def decodeFunImpl(funcode: Expr[Any])(using Quotes): Expr[Any] =
+  val encoding = Encoding()
+  encoding.decodeTerm(funcode)
 
 private def decodeExprImpl[As](expr: Expr[Any], args: Expr[Seq[Any]])(using Quotes, Type[As]): Expr[Any] =
   import quotes.reflect.*
   val encoding = Encoding()
   val as = unVarargs(args).toList
   encoding
-    .decodeTerm[As](expr, as)
+    .decodeParameterizedTerm[As](expr, as)
 
 private def unVarargs[T](args: Expr[Seq[T]])(using Quotes, Type[T]): Seq[Expr[T]] =
   import quotes.reflect.*

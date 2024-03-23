@@ -42,4 +42,15 @@ object FunctionK {
     )(
       Box.pack[F :: G :: TNil, Code[K]],
     )
+
+  transparent inline def make[K] =
+    decodeExpr[TNil](
+      [⋅⋅[_]] =>
+        (packer: [F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] => ([A <: ⋅⋅[K]] => F[A] => G[A]) => Box[F :: G :: TNil, Code[K]]) =>
+          [F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] =>
+            (f: [A <: ⋅⋅[K]] => F[A] => G[A]) =>
+              new FunctionK[K, F, G](
+                packer[F, G](f)
+              )
+    )(Box.packer[Code[K]])
 }

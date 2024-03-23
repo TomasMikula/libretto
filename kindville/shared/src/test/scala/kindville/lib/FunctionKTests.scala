@@ -38,4 +38,17 @@ class FunctionKTests extends AnyFunSuite {
     assert(go1(Nil) == None)
     assert(go2(Nil) == None)
   }
+
+  test("headOption, reverse, created via FunctionK.make[* :: TNil]") {
+    val mk = FunctionK.make[* :: TNil]
+
+    // check the inferred type of `mk`
+    val _ : [F[_], G[_]] => ([A] => F[A] => G[A]) => FunctionK[* :: TNil, F, G] =
+      mk
+
+    val headOption = mk[List, Option]([X] => xs => xs.headOption)
+    val reverse    = mk[List, List]  ([X] => xs => xs.reverse)
+
+    assert(headOption(reverse(List(1, 2, 3))) == Some(3))
+  }
 }
