@@ -45,4 +45,33 @@ class EncodingTests extends AnyFunSuite {
     assert(go(List(1, 2, 3), _.headOption) == Some(1))
   }
 
+  test("decodeFun([⋅⋅[_], F[_], G[_], A] => (fa: F[A], f: F[A] => G[A]) => f(fa))") {
+    val go: [F[_], G[_], A] => (F[A], F[A] => G[A]) => G[A] =
+      decodeFun([⋅⋅[_], F[_], G[_], A] => (fa: F[A], f: F[A] => G[A]) => f(fa))
+
+    assert(go(List(1, 2, 3), _.headOption) == Some(1))
+  }
+
+  test("decodeFun([⋅⋅[_], F[_ <: ⋅⋅[K]], A <: ⋅⋅[K]] => (fa: F[A]) => fa)") {
+    type K = * :: * :: TNil
+
+    val go: [F[_, _], A, B] => F[A, B] => F[A, B] =
+      decodeFun([⋅⋅[_], F[_ <: ⋅⋅[K]], A <: ⋅⋅[K]] => (fa: F[A]) => fa)
+
+    assert(go(Map(1 -> "a")) == Map(1 -> "a"))
+  }
+
+  test("decodeFun([⋅⋅[_], G[F[_ <: ⋅⋅[K]]], F[_ <: ⋅⋅[K]]] => (gf: G[F]) => gf)") {
+    type K = * :: * :: TNil
+
+    val go: [G[F[_, _]], F[_, _]] => G[F] => G[F] =
+      decodeFun([⋅⋅[_], G[F[_ <: ⋅⋅[K]]], F[_ <: ⋅⋅[K]]] => (gf: G[F]) => gf)
+
+    case class Foo[F[_, _]](f1: F[String, Int], f2: F[Int, Boolean])
+
+    val foo = Foo[Function1](_.length, i => (i % 2) == 0)
+    val bar = go(foo)
+    assert(bar == foo)
+  }
+
 }

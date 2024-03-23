@@ -58,7 +58,7 @@ private object Encoding {
   def decodeKinds(using Quotes)(kinds: qr.TypeRepr): List[Either[qr.TypeBounds, qr.LambdaTypeTree]] =
     import qr.*
 
-    kinds match
+    kinds.dealiasKeepOpaques match
       case tnil if tnil =:= TypeRepr.of[TNil] =>
         Nil
       case AppliedType(f, args) if f =:= TypeRepr.of[::] =>
