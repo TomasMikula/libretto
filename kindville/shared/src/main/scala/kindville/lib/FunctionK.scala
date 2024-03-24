@@ -3,7 +3,7 @@ package kindville.lib
 import kindville.*
 
 class FunctionK[K, F <: AnyKind, G <: AnyKind](
-  value: Box[F :: G :: TNil, FunctionK.Code[K]]
+  value: Box[FunctionK.Code[K], F :: G :: TNil]
 ) {
   transparent inline def apply(using inline di: DummyImplicit) =
     Box.unpack(value)
@@ -34,19 +34,19 @@ object FunctionK {
   transparent inline def apply[K, F <: AnyKind, G <: AnyKind] =
     decodeExpr[F :: G :: TNil](
       [⋅⋅[_], F0[_], G0[_]] =>
-        (pack: ([A <: ⋅⋅[K]] => F0[A] => G0[A]) => Box[F :: G :: TNil, Code[K]]) =>
+        (pack: ([A <: ⋅⋅[K]] => F0[A] => G0[A]) => Box[Code[K], F :: G :: TNil]) =>
           (f: [A <: ⋅⋅[K]] => F0[A] => G0[A]) =>
             new FunctionK[K, F, G](
               pack(f)
             )
     )(
-      Box.pack[F :: G :: TNil, Code[K]],
+      Box.pack[Code[K], F :: G :: TNil],
     )
 
   transparent inline def make[K] =
     decodeExpr[TNil](
       [⋅⋅[_]] =>
-        (packer: [F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] => ([A <: ⋅⋅[K]] => F[A] => G[A]) => Box[F :: G :: TNil, Code[K]]) =>
+        (packer: [F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] => ([A <: ⋅⋅[K]] => F[A] => G[A]) => Box[Code[K], F :: G :: TNil]) =>
           [F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] =>
             (f: [A <: ⋅⋅[K]] => F[A] => G[A]) =>
               new FunctionK[K, F, G](

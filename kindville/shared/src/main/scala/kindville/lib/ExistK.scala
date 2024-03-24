@@ -6,7 +6,7 @@ import kindville.{::, Box, TNil, decodeExpr}
 // https://github.com/scala/scala3/issues/13461#issuecomment-2002566051
 // is resolved
 class ExistK[K, F <: AnyKind](
-  value: Box[F :: TNil, ExistK.Code[K]]
+  value: Box[ExistK.Code[K], F :: TNil]
 ) {
   /** Returns `[R] => ([A, ...] => F[A, ...] => R) => R`. */
   transparent inline def visit: Any =
@@ -22,14 +22,14 @@ object ExistK {
   transparent inline def apply[K, F <: AnyKind] =
     decodeExpr[F :: TNil](
       [⋅⋅[_], F0[_ <: ⋅⋅[K]]] =>
-        (pack: ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[F :: TNil, Code[K]]) =>
+        (pack: ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F :: TNil]) =>
           [A <: ⋅⋅[K]] => (fa: F0[A]) =>
             new ExistK[K, F](
               pack(
                 [R] => (f: [X <: ⋅⋅[K]] => F0[X] => R) => f[A](fa)
               )
             )
-    )(Box.pack[F :: TNil, Code[K]])
+    )(Box.pack[Code[K], F :: TNil])
 
 
 

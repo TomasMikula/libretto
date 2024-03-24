@@ -161,9 +161,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       case other =>
         badUse(s"Expected a type lambda, got ${typeShortCode(other)}")
 
-  def decodeType[As, Code <: AnyKind](using
-    Type[As],
+  def decodeParameterizedType[Code <: AnyKind, As](using
     Type[Code],
+    Type[As],
   ): Type[Any] =
     val args = decodeTypeArgs(Type.of[As])
 

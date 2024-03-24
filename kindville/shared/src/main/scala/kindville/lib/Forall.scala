@@ -4,8 +4,8 @@ import kindville.{::, Box, TNil}
 
 opaque type Forall[K, F <: AnyKind] =
   Box[
-    F :: TNil,
     Forall.Code[K],
+    F :: TNil,
   ]
 
 object Forall {
@@ -15,7 +15,7 @@ object Forall {
         [A <: ⋅⋅[K]] => Unit => F0[A]
 
   transparent inline def apply[K, F <: AnyKind]: Nothing => Forall[K, F] =
-    Box.pack[F :: TNil, Code[K]]
+    Box.pack[Code[K], F :: TNil]
 
   extension [K, F <: AnyKind](f: Forall[K, F])
     transparent inline def at: Any =

@@ -6,11 +6,11 @@ object Box {
   transparent inline def packer[Code[⋅⋅[_]] <: AnyKind]: Any =
     ${ packerImpl[Code] }
 
-  transparent inline def pack[As, Code[⋅⋅[_]] <: AnyKind]: Nothing => Box[As, Code] =
-    ${ packImpl[As, Code] }
+  transparent inline def pack[Code[⋅⋅[_]] <: AnyKind, As]: Nothing => Box[Code, As] =
+    ${ packImpl[Code, As] }
 
-  transparent inline def unpack[As, Code[⋅⋅[_]] <: AnyKind](box: Box[As, Code]): Any =
-    ${ unpackImpl[As, Code]('box) }
+  transparent inline def unpack[Code[⋅⋅[_]] <: AnyKind, As](box: Box[Code, As]): Any =
+    ${ unpackImpl[Code, As]('box) }
 
   private def packerImpl[Code <: AnyKind](using
     Quotes,
@@ -26,8 +26,8 @@ object Box {
       TypeRepr
         .of[Box]
         .appliedTo(
-          Encoding.encodeTypeArgs(targs) ::
           TypeRepr.of[Code] ::
+          Encoding.encodeTypeArgs(targs) ::
           Nil
         )
 
@@ -44,22 +44,22 @@ object Box {
       },
     ).asExpr
 
-  private def packImpl[As, Code[⋅⋅[_]] <: AnyKind](using
+  private def packImpl[Code[⋅⋅[_]] <: AnyKind, As](using
     Quotes,
-    Type[As],
     Type[Code],
-  ): Expr[Nothing => Box[As, Code]] =
+    Type[As],
+  ): Expr[Nothing => Box[Code, As]] =
     import quotes.reflect.*
 
-    Encoding().decodeType[As, Code] match
+    Encoding().decodeParameterizedType[Code, As] match
       case '[t] =>
-        '{ (x: t) => x.asInstanceOf[Box[As, Code]] }
+        '{ (x: t) => x.asInstanceOf[Box[Code, As]] }
 
-  private def unpackImpl[As, Code[⋅⋅[_]] <: AnyKind](box: Expr[Box[As, Code]])(using
+  private def unpackImpl[Code[⋅⋅[_]] <: AnyKind, As](box: Expr[Box[Code, As]])(using
     Quotes,
-    Type[As],
     Type[Code],
+    Type[As],
   ): Expr[Any] =
-    Encoding().decodeType[As, Code] match
+    Encoding().decodeParameterizedType[Code, As] match
       case '[t] => '{ $box.asInstanceOf[t] }
 }
