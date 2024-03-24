@@ -3,13 +3,13 @@ package kindville
 import scala.quoted.*
 
 object Box {
-  transparent inline def packer[Code <: AnyKind]: Any =
+  transparent inline def packer[Code[⋅⋅[_]] <: AnyKind]: Any =
     ${ packerImpl[Code] }
 
-  transparent inline def pack[As, Code <: AnyKind]: Nothing => Box[As, Code] =
+  transparent inline def pack[As, Code[⋅⋅[_]] <: AnyKind]: Nothing => Box[As, Code] =
     ${ packImpl[As, Code] }
 
-  transparent inline def unpack[As, Code <: AnyKind](box: Box[As, Code]): Any =
+  transparent inline def unpack[As, Code[⋅⋅[_]] <: AnyKind](box: Box[As, Code]): Any =
     ${ unpackImpl[As, Code]('box) }
 
   private def packerImpl[Code <: AnyKind](using
@@ -44,7 +44,7 @@ object Box {
       },
     ).asExpr
 
-  private def packImpl[As, Code <: AnyKind](using
+  private def packImpl[As, Code[⋅⋅[_]] <: AnyKind](using
     Quotes,
     Type[As],
     Type[Code],
@@ -55,7 +55,7 @@ object Box {
       case '[t] =>
         '{ (x: t) => x.asInstanceOf[Box[As, Code]] }
 
-  private def unpackImpl[As, Code <: AnyKind](box: Expr[Box[As, Code]])(using
+  private def unpackImpl[As, Code[⋅⋅[_]] <: AnyKind](box: Expr[Box[As, Code]])(using
     Quotes,
     Type[As],
     Type[Code],
