@@ -5,8 +5,8 @@ import scala.PolyFunction
 import scala.annotation.experimental
 
 sealed trait *
-sealed trait -->[K, L]
-type ->[K, L] = (K :: TNil) --> L
+sealed trait ->>[K, L]
+type ->[K, L] = (K :: TNil) ->> L
 
 sealed trait ::[H <: AnyKind, T]
 sealed trait TNil

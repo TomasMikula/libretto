@@ -39,38 +39,52 @@ private object Encoding {
             report.error(s"Cannot decode a list of type arguments from type ${Printer.TypeReprShortCode.show(repr)}")
             Nil
 
-  def decodeKind(using Quotes)(k: qr.TypeRepr): Either[qr.TypeBounds, qr.LambdaTypeTree] =
+  def decodeKind(using Quotes)(k: qr.TypeRepr): Kind =
     import qr.*
 
     k match
       case tp if tp =:= TypeRepr.of[*] =>
-        Left(TypeBounds.empty)
-      case AppliedType(f, args) if f =:= TypeRepr.of[-->] =>
+        Kind.Tp
+      case AppliedType(f, args) if f =:= TypeRepr.of[->>] =>
         args match
           case inKs :: outK :: Nil =>
-            report.error(s"Unimplemented (at ${summon[SourcePos]})")
-            ???
+            Kind.arr(
+              decodeKinds(inKs),
+              decodeKind(outK)
+            )
           case _ =>
-            report.errorAndAbort(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
+            assertionFailed(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
       case other =>
-        report.errorAndAbort(s"Could not decode ${Printer.TypeReprShortCode.show(other)} as a kind.")
+        badUse(s"Could not decode ${Printer.TypeReprShortCode.show(other)} as a kind.")
 
-  def decodeKinds(using Quotes)(kinds: qr.TypeRepr): List[Either[qr.TypeBounds, qr.LambdaTypeTree]] =
+  def decodeKinds(using Quotes)(kinds: qr.TypeRepr): Kinds =
     import qr.*
 
     kinds.dealiasKeepOpaques match
       case tnil if tnil =:= TypeRepr.of[TNil] =>
-        Nil
+        Kinds.Empty
       case AppliedType(f, args) if f =:= TypeRepr.of[::] =>
         args match
           case k :: ks :: Nil =>
             decodeKind(k) :: decodeKinds(ks)
           case _ =>
-            report.error(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
-            Nil
+            assertionFailed(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
       case other =>
-        report.error(s"Cannot decode ${Printer.TypeReprShortCode.show(other)} as a list of kinds. Expected k1 :: k2 :: ... :: TNil")
-        Nil
+        badUse(s"Cannot decode ${Printer.TypeReprShortCode.show(other)} as a list of kinds. Expected k1 :: k2 :: ... :: TNil")
+
+  def kindToBounds(k: Kind)(using Quotes): Either[qr.TypeBounds, qr.LambdaTypeTree] =
+    import qr.*
+
+    k match
+      case Kind.Tp => Left(TypeBounds.empty)
+      case other   => unimplemented(s"$other")
+
+  def kindsToBounds(ks: Kinds)(using Quotes): List[Either[qr.TypeBounds, qr.LambdaTypeTree]] =
+    import qr.*
+
+    ks match
+      case Kinds.Empty      => Nil
+      case Kinds.Cons(h, t) => kindToBounds(h) :: kindsToBounds(t)
 }
 
 private class Encoding[Q <: Quotes](using val q: Q) {
@@ -564,15 +578,16 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ) = {
     enum PostExpansionParam:
       case Original(name: String, kind: Either[TypeBounds, LambdaTypeTree])
-      case Expanded(params: List[(String, Either[TypeBounds, LambdaTypeTree])])
+      case Expanded(params: List[(String, Kind)])
 
       def info: TParamExpansionInfo =
         this match
           case Original(_, _) => TParamExpansionInfo.Original
           case Expanded(ps)   => TParamExpansionInfo.Expanded(ps.size)
 
-    def expandParam(name: String, kinds: TypeRepr): List[(String, Either[TypeBounds, LambdaTypeTree])] =
+    def expandParam(name: String, kinds: TypeRepr): List[(String, Kind)] =
       decodeKinds(kinds)
+        .toList
         .zipWithIndex
         .map { case (bounds, i) =>
           (name + "$" + i, bounds)
@@ -609,7 +624,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     val (names, bounds) =
       expandedTParams.flatMap:
         case PostExpansionParam.Original(name, bounds) => (name, bounds) :: Nil
-        case PostExpansionParam.Expanded(params)       => params
+        case PostExpansionParam.Expanded(params)       => params.map { case (n, k) => (n, kindToBounds(k)) }
       .unzip
 
     (expandedTParams.map(_.info), names, pt => {
