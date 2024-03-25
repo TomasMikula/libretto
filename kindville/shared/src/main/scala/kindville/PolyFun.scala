@@ -51,7 +51,7 @@ private object PolyFun {
   }
 
   def unapply(using Quotes)(expr: qr.Term): Option[(
-    List[(String, qr.TypeBoundsTree | qr.LambdaTypeTree, qr.TypeRef)], // type params: (name, kind, reference)
+    List[(String, Either[qr.TypeBounds, qr.LambdaTypeTree], qr.TypeRef)], // type params: (name, kind, reference)
     List[(String, qr.TypeTree, qr.TermRef)], // value params
     qr.TypeTree,                             // return type
     qr.Term,                                 // body
@@ -67,8 +67,8 @@ private object PolyFun {
                 Some((
                   tparams.map { case t @ TypeDef(name, kind) =>
                     kind match
-                      case b: TypeBoundsTree => (name, b, t.symbol.typeRef)
-                      case l: LambdaTypeTree => (name, l, t.symbol.typeRef)
+                      case b: TypeBoundsTree => (name, Left(b.tpe), t.symbol.typeRef)
+                      case l: LambdaTypeTree => (name, Right(l), t.symbol.typeRef)
                       case other => assertionFailed(s"Unexpected representation of $name's kind: ${treeStruct(kind)}")
                   },
                   params.map { case v @ ValDef(name, tpe, _) => (name, tpe, v.symbol.termRef) },

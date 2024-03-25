@@ -21,13 +21,16 @@ transparent inline def decodeFun(funcode: Any): Any =
   ${ decodeFunImpl('funcode) }
 
 transparent inline def decodeExpr[As](expr: Any)(inline args: Any*): Any =
-  ${ decodeExprImpl[As]('expr, 'args) }
+  decodeCompositeExpr[[⋅⋅[_]] =>> As](expr)(args*)
+
+transparent inline def decodeCompositeExpr[As[⋅⋅[_]]](expr: Any)(inline args: Any*): Any =
+  ${ decodeCompositeExprImpl[As]('expr, 'args) }
 
 private def decodeFunImpl(funcode: Expr[Any])(using Quotes): Expr[Any] =
   val encoding = Encoding()
   encoding.decodeFun(funcode)
 
-private def decodeExprImpl[As](expr: Expr[Any], args: Expr[Seq[Any]])(using Quotes, Type[As]): Expr[Any] =
+private def decodeCompositeExprImpl[As[⋅⋅[_]]](expr: Expr[Any], args: Expr[Seq[Any]])(using Quotes, Type[As]): Expr[Any] =
   import quotes.reflect.*
   val encoding = Encoding()
   val as = unVarargs(args).toList
