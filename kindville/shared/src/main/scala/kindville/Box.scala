@@ -9,6 +9,15 @@ object Box {
   transparent inline def pack[Code[⋅⋅[_]] <: AnyKind, As]: Nothing => Box[Code, As] =
     ${ packImpl[Code, As] }
 
+  transparent inline def pacK[K, Code[⋅⋅[_]] <: AnyKind, As]: Any =
+    decodeCompositeExpr[[⋅⋅[_]] =>> Code[⋅⋅] :: As :: TNil](
+      [⋅⋅[_], Code0[As <: ⋅⋅[K]], A0 <: ⋅⋅[K]] =>
+        (packer: [X <: ⋅⋅[K]] => Code0[X] => Box[Code, ⋅⋅[X]]) =>
+          packer[A0]
+    )(
+      packer[Code],
+    )
+
   transparent inline def unpack[Code[⋅⋅[_]] <: AnyKind, As](box: Box[Code, As]): Any =
     ${ unpackImpl[Code, As]('box) }
 
