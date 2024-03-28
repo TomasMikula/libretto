@@ -7,6 +7,30 @@ class TypeEqK[K, F <: AnyKind, G <: AnyKind](
 ) {
   transparent inline def substituteCo =
     Box.unpack[TypeEqK.Code[K], F :: G :: TNil](value)
+
+  transparent inline def andThen[H <: AnyKind](that: TypeEqK[K, G, H]) =
+    decodeExpr[F :: G :: H :: TNil](
+      [⋅⋅[_], F <: ⋅⋅[K], G <: ⋅⋅[K], H <: ⋅⋅[K]] => (
+        thiz: TypeEqK[K, F, G],
+        subst: [M[X <: ⋅⋅[K]]] => M[G] => M[H]
+      ) =>
+        subst[[J <: ⋅⋅[K]] =>> TypeEqK[K, F, J]](thiz)
+    )(
+      this,
+      that.substituteCo
+    )
+
+  transparent inline def flip =
+    decodeExpr[F :: G :: TNil](
+      [⋅⋅[_], F <: ⋅⋅[K], G <: ⋅⋅[K]] => (
+        refl: [H <: ⋅⋅[K]] => Unit => TypeEqK[K, H, H],
+        subst: [M[X <: ⋅⋅[K]]] => M[F] => M[G]
+      ) =>
+        subst[[J <: ⋅⋅[K]] =>> TypeEqK[K, J, F]](refl[F](()))
+    )(
+      TypeEqK.refl[K],
+      this.substituteCo
+    )
 }
 
 object TypeEqK {
