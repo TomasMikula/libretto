@@ -40,37 +40,87 @@ private object Encoding {
             Nil
 
   def decodeKind(using Quotes)(k: qr.TypeRepr): Kind =
+    decodeKind_(k) match
+      case Right(k)  => k
+      case Left(msg) => badUse(msg)
+
+  private def decodeKind_(using Quotes)(k: qr.TypeRepr): Either[String, Kind] =
+    import qr.*
+    decodeKind__(k) match
+      case Some(res) => res
+      case None      => Left(s"Could not decode ${Printer.TypeReprShortCode.show(k)} as a kind.")
+
+  private def decodeKind__(using Quotes)(k: qr.TypeRepr): Option[Either[String, Kind]] =
     import qr.*
 
     k match
       case tp if tp =:= TypeRepr.of[*] =>
-        Kind.Tp
+        Some(Right(Kind.Tp))
       case AppliedType(f, args) if f =:= TypeRepr.of[->>] =>
         args match
           case inKs :: outK :: Nil =>
-            Kind.arr(
-              decodeKinds(inKs),
-              decodeKind(outK)
+            Some(
+              for
+                in <- decodeKindOrKinds_(inKs)
+                ks = in.left.map(Kinds.single).merge
+                l  <- decodeKind_(outK)
+              yield
+                Kind.arr(ks, l)
             )
           case _ =>
             assertionFailed(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
       case other =>
-        badUse(s"Could not decode ${Printer.TypeReprShortCode.show(other)} as a kind.")
+        None
 
   def decodeKinds(using Quotes)(kinds: qr.TypeRepr): Kinds =
+    decodeKinds_(kinds) match
+      case Right(ks) => ks
+      case Left(msg) => badUse(msg)
+
+  private def decodeKinds_(using Quotes)(kinds: qr.TypeRepr): Either[String, Kinds] =
+    import qr.*
+    decodeKinds__(kinds) match
+      case Some(res) => res
+      case None      => (new Exception).printStackTrace; Left(s"Cannot decode ${Printer.TypeReprShortCode.show(kinds)} as a list of kinds. Expected k1 :: k2 :: ... :: TNil")
+
+  private def decodeKinds__(using Quotes)(kinds: qr.TypeRepr): Option[Either[String, Kinds]] =
     import qr.*
 
     kinds.dealiasKeepOpaques match
       case tnil if tnil =:= TypeRepr.of[TNil] =>
-        Kinds.Empty
+        Some(Right(Kinds.Empty))
       case AppliedType(f, args) if f =:= TypeRepr.of[::] =>
         args match
           case k :: ks :: Nil =>
-            decodeKind(k) :: decodeKinds(ks)
+            Some(
+              for
+                k  <- decodeKind_(k)
+                ks <- decodeKinds_(ks)
+              yield
+                k :: ks
+            )
           case _ =>
             assertionFailed(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
       case other =>
-        badUse(s"Cannot decode ${Printer.TypeReprShortCode.show(other)} as a list of kinds. Expected k1 :: k2 :: ... :: TNil")
+        None
+
+  def decodeKindOrKinds(using Quotes)(ks: qr.TypeRepr): Either[Kind, Kinds] =
+    decodeKindOrKinds_(ks) match
+      case Right(r) => r
+      case Left(e)  => badUse(e)
+
+  def decodeKindOrKinds_(using Quotes)(ks: qr.TypeRepr): Either[String, Either[Kind, Kinds]] =
+    import qr.*
+
+    decodeKind__(ks) match
+      case Some(Right(k)) => Right(Left(k))
+      case Some(Left(e))  => Left(e)
+      case None =>
+        decodeKinds__(ks) match
+          case Some(Right(ks)) => Right(Right(ks))
+          case Some(Left(e))   => Left(e)
+          case None =>
+            Left(s"Could not decode ${Printer.TypeReprShortCode.show(ks)} as a kind(s).")
 
   def kindToBounds(k: Kind)(using Quotes): qr.TypeBounds =
     import qr.*
@@ -301,9 +351,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                 case AppliedType(f, List(kinds)) if f =:= marker =>
                   lower.asType match
                     case '[Nothing] =>
-                      val ts = decodeTypeArgs(t.asType)
-                      // TODO: check `ts` against `kinds`
-                      TypeArgExpansion(ref, ts.map(TypeRepr.of(using _)))
+                      decodeKindOrKinds(kinds) match
+                        case Left(k) =>
+                          // TODO: check `t` against `k`
+                          TypeSubstitution(ref, t)
+                        case Right(ks) =>
+                          val ts = decodeTypeArgs(t.asType)
+                          // TODO: check `ts` against `kinds`
+                          TypeArgExpansion(ref, ts.map(TypeRepr.of(using _)))
                     case other =>
                       badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(marker)}) with a lower bound (${typeShortCode(lower)})")
                 case _ =>
@@ -583,15 +638,17 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ) = {
     enum PostExpansionParam:
       case Original(name: String, kind: Either[TypeBounds, LambdaTypeTree])
-      case Expanded(params: List[(String, Kind)])
+      case Expanded(params: Either[(String, Kind), List[(String, Kind)]])
 
-    def expandParam(name: String, kinds: TypeRepr): List[(String, Kind)] =
-      decodeKinds(kinds)
-        .toList
-        .zipWithIndex
-        .map { case (bounds, i) =>
-          (name + "$" + i, bounds)
-        }
+    def expandParam(name: String, kinds: TypeRepr): Either[(String, Kind), List[(String, Kind)]] =
+      decodeKindOrKinds(kinds) match
+        case Left(kind)   => Left((name, kind))
+        case Right(kinds) => Right(
+          kinds
+            .toList
+            .zipWithIndex
+            .map { case (bounds, i) => (name + "$" + i, bounds) }
+        )
 
     def expandParams(
       i: Int,
@@ -604,7 +661,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           lower.asType match
             case '[Nothing] =>
               val expanded = expandParam(name, kinds)
-              val n = expanded.size
+              val n = expanded.fold(_ => 1, _.size)
               val replacement: TParamsFun[ContextElem] =
                 tparams => ContextElem.TypeArgExpansion(origParam, List.range(0, n).map(j => tparams(i + j)))
               (PostExpansionParam.Expanded(expanded), replacement) :: expandParams(i + n, ps)
@@ -624,7 +681,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     val (names, bounds) =
       expandedTParams.flatMap:
         case PostExpansionParam.Original(name, bounds) => (name, bounds) :: Nil
-        case PostExpansionParam.Expanded(params)       => params.map { case (n, k) => (n, Left(kindToBounds(k))) }
+        case PostExpansionParam.Expanded(Left((n, k))) => (n, Left(kindToBounds(k))) :: Nil
+        case PostExpansionParam.Expanded(Right(ps))    => ps.map { case (n, k) => (n, Left(kindToBounds(k))) }
       .unzip
 
     (names, pt => {

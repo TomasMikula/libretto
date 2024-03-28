@@ -44,3 +44,6 @@ private[kindville] object Kinds:
   ) extends Kinds {
     override type Label = K :: Ks
   }
+
+  def single(k: Kind): Kinds.Of[k.Label :: TNil] =
+    Cons(k, Kinds.Empty)
