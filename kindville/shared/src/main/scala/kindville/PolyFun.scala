@@ -109,17 +109,4 @@ private object PolyFun {
     )
   }
 
-  def mkType(using Quotes)(
-    tParamNames: List[String],
-    tParamBounds: (Int => qr.TypeRepr) => List[qr.TypeBounds],
-    vParamNames: List[String],
-    vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
-    returnType: List[qr.TypeRepr] => qr.TypeRepr,
-  ): qr.TypeRepr =
-    qr.Refinement(
-      qr.TypeRepr.of[PolyFunction],
-      "apply",
-      polyFunApplyMethodType(tParamNames, tParamBounds, vParamNames, vParamTypes, returnType)
-    )
-
 }

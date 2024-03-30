@@ -383,15 +383,15 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ): TypeRepr =
     body match
       case r @ Refinement(base, memName, memType) =>
-        if (base =:= TypeRepr.of[PolyFunction]) {
-          if (memName == "apply") {
-            decodePolyFunType(marker, ctx, memType)
-          } else {
-            unsupportedType(r)
-          }
-        } else {
-          unsupportedType(r)
-        }
+        Refinement(
+          decodeType(marker, ctx, base),
+          memName,
+          decodeType(marker, ctx, memType),
+        )
+      case pt: PolyType =>
+        decodePolyType(marker, ctx, pt)
+      case mt: MethodType =>
+        decodeMethodType(marker, ctx, mt)
       case AppliedType(f, targs) =>
         val f1 = decodeType(marker, ctx, f)
         val targs1 = expandTypeArgs(marker, ctx, targs)
@@ -433,6 +433,15 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           case ctx.substitutesTypeTo(u) => u
           case ctx.expandsTo(ts)        => badUse(s"Invalid use of kind-expanded type argument ${typeShortCode(t)}. It can only be used in type argument position.")
           case t                        => checkNonOccurrence(marker, ctx, parent); t
+      case TermRef(prefix, ident) =>
+        TermRef(decodeType(marker, ctx, prefix), ident)
+      case t: ThisType =>
+        t
+      case TypeBounds(lo, hi) =>
+        TypeBounds(
+          decodeType(marker, ctx, lo),
+          decodeType(marker, ctx, hi),
+        )
       case other =>
         unsupportedType(other)
 
@@ -496,47 +505,45 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       case other =>
         unimplemented(s"decodeTerm(${treeStruct(expr)})")
 
-  private def decodePolyFunType(
+  private def decodePolyType(
     marker: TypeRepr,
     ctx: List[ContextElem],
-    methType: TypeRepr,
-  ): TypeRepr =
-    methType match
-      case pt @ PolyType(tParamNames, tParamBounds, MethodType(paramNames, paramTypes, returnType)) =>
-        val (tParamNames1, cont) =
-          decodeTypeParams(
-            marker,
-            ctx,
-            (tParamNames zip tParamBounds).zipWithIndex map {
-              case ((n, b), i) =>
-                pt.param(i) match
-                  case pi @ ParamRef(_, _) =>
-                    (n, Left(b), pi)
-                  case other =>
-                    unexpectedTypeParamType(other)
-            },
-          )
+    pt: PolyType,
+  ): PolyType =
+    val PolyType(tParamNames, tParamBounds, body) = pt
 
-        def tParamBounds1(tparams: Int => TypeRepr): List[TypeBounds] =
-          cont(tparams)._1
+    val (tParamNames1, cont) =
+      decodeTypeParams(
+        marker,
+        ctx,
+        (tParamNames zip tParamBounds).zipWithIndex map {
+          case ((n, b), i) =>
+            pt.param(i) match
+              case pi @ ParamRef(_, _) =>
+                (n, Left(b), pi)
+              case other =>
+                unexpectedTypeParamType(other)
+        },
+      )
 
-        def paramTypes1(tparams: Int => TypeRepr): List[TypeRepr] =
-          val ctx1 = cont(tparams)._2
-          paramTypes.map(t => decodeType(marker, ctx1, t))
+    PolyType(tParamNames1)(
+      pt => cont(pt.param)._1,
+      pt => {
+        val ctx1 = cont(pt.param)._2
+        decodeType(marker, ctx1, body)
+      },
+    )
 
-        def returnType1(tparams: Int => TypeRepr): TypeRepr =
-          val ctx1 = cont(tparams)._2
-          decodeType(marker, ctx1, returnType)
-
-        PolyFun.mkType(
-          tParamNames1,
-          tParamBounds1,
-          paramNames,
-          paramTypes1,
-          returnType1,
-        )
-      case other =>
-        unsupported(s"PolyFunction refinement with apply method type ${typeShortCode(other)}")
+  private def decodeMethodType(
+    marker: TypeRepr,
+    ctx: List[ContextElem],
+    methType: MethodType,
+  ): MethodType =
+    val MethodType(paramNames, paramTypes, returnType) = methType
+    MethodType(paramNames)(
+      _ => paramTypes.map(t => decodeType(marker, ctx, t)),
+      _ => decodeType(marker, ctx, returnType)
+    )
 
   private def decodePolyFun(
     marker: TypeRef | ParamRef,
