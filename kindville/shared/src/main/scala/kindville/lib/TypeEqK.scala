@@ -42,12 +42,16 @@ object TypeEqK {
     [F <: ⋅⋅[K], G <: ⋅⋅[K]] =>>
       [H[X <: ⋅⋅[K]]] => H[F] => H[G]
 
+  case class Refl[K, F <: AnyKind]()(
+    subst: Box[TypeEqK.Code[K], F :: F :: TNil]
+  ) extends TypeEqK[K, F, F](subst)
+
   transparent inline def refl[K]: Any =
     decodeExpr[TNil](
       [⋅⋅[_]] =>
         (packer: [F <: ⋅⋅[K], G <: ⋅⋅[K]] => ([H[_ <: ⋅⋅[K]]] => H[F] => H[G]) => Box[Code[K], F :: G :: TNil]) =>
           [F <: ⋅⋅[K]] => (_: Unit) =>
-            new TypeEqK[K, F, F](
+            Refl[K, F]()(
               packer[F, F](
                 [H[_ <: ⋅⋅[K]]] => (hf: H[F]) => hf
               )
