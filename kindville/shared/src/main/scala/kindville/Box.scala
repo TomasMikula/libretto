@@ -6,6 +6,9 @@ object Box {
   transparent inline def packer[Code[⋅⋅[_]] <: AnyKind]: Any =
     ${ packerImpl[Code] }
 
+  transparent inline def unpacker[Code[⋅⋅[_]] <: AnyKind]: Any =
+    ${ unpackerImpl[Code] }
+
   transparent inline def pack[Code[⋅⋅[_]] <: AnyKind, As]: Nothing => Box[Code, As] =
     ${ packImpl[Code, As] }
 
@@ -21,6 +24,18 @@ object Box {
   transparent inline def unpack[Code[⋅⋅[_]] <: AnyKind, As](box: Box[Code, As]): Any =
     ${ unpackImpl[Code, As]('box) }
 
+  private def boxType(using Quotes)(
+    code: qr.TypeRepr,
+    args: List[qr.TypeRepr],
+  ): qr.TypeRepr =
+    qr.TypeRepr
+      .of[Box]
+      .appliedTo(
+        code ::
+        Encoding.encodeTypeArgs(args) ::
+        Nil
+      )
+
   private def packerImpl[Code <: AnyKind](using
     Quotes,
     Type[Code],
@@ -32,13 +47,7 @@ object Box {
     val TypeLambdaTemplate(names, bounds, body) = decodeTypeLambda[Code]
 
     def returnType(targs: List[TypeRepr]): TypeRepr =
-      TypeRepr
-        .of[Box]
-        .appliedTo(
-          TypeRepr.of[Code] ::
-          Encoding.encodeTypeArgs(targs) ::
-          Nil
-        )
+      boxType(TypeRepr.of[Code], targs)
 
     PolyFun(
       names,
@@ -48,6 +57,32 @@ object Box {
       tparams => returnType(tparams),
       (targs, args, owner) => {
         returnType(targs).asType match
+          case '[t] =>
+            '{ ${args(0).asExpr}.asInstanceOf[t] }.asTerm
+      },
+    ).asExpr
+
+  private def unpackerImpl[Code <: AnyKind](using
+    Quotes,
+    Type[Code],
+  ): Expr[Any] =
+    import quotes.reflect.*
+
+    val encoding = Encoding()
+    import encoding.{TypeLambdaTemplate, decodeTypeLambda}
+    val TypeLambdaTemplate(names, bounds, body) = decodeTypeLambda[Code]
+
+    def paramType(targs: List[TypeRepr]): TypeRepr =
+      boxType(TypeRepr.of[Code], targs)
+
+    PolyFun(
+      names,
+      bounds,
+      "x" :: Nil,
+      tparams => paramType(tparams) :: Nil,
+      tparams => body(tparams),
+      (targs, args, owner) => {
+        body(targs).asType match
           case '[t] =>
             '{ ${args(0).asExpr}.asInstanceOf[t] }.asTerm
       },
