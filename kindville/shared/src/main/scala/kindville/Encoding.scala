@@ -502,6 +502,18 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           case i => i
       case l: Literal =>
         l
+      case Repeated(as, tt) =>
+        Repeated(
+          as.map { a => decodeTerm(marker, ctx, owner, a) },
+          TypeTree.of(using decodeType(marker, ctx, tt.tpe).asType),
+        )
+      case Inlined(call, scope, term) =>
+        unsupported(
+          s"""Don't know what to do with an Inlined term.
+             |Term: ${expr.show}
+             |Tree structure: ${expr.show(using Printer.TreeStructure)}
+             |""".stripMargin
+        )
       case other =>
         unimplemented(s"decodeTerm(${treeStruct(expr)})")
 

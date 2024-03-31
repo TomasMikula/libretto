@@ -17,7 +17,7 @@ class FunctionK[K, F <: AnyKind, G <: AnyKind](
       ) =>
         make([A <: ⋅⋅[K]] => (fa: F0[A]) => g0(f0(fa)))
     )(
-      FunctionK.apply[K, F, H],
+      FunctionK[K, F, H],
       this.apply,
       that.apply,
     )
@@ -32,25 +32,19 @@ object FunctionK {
       [A <: ⋅⋅[K]] => F0[A] => G0[A]
 
   transparent inline def apply[K, F <: AnyKind, G <: AnyKind] =
-    decodeExpr[F :: G :: TNil](
-      [⋅⋅[_], F0[_], G0[_]] =>
-        (pack: ([A <: ⋅⋅[K]] => F0[A] => G0[A]) => Box[Code[K], F :: G :: TNil]) =>
-          (f: [A <: ⋅⋅[K]] => F0[A] => G0[A]) =>
-            new FunctionK[K, F, G](
-              pack(f)
-            )
-    )(
-      Box.pack[Code[K], F :: G :: TNil],
-    )
+    make[K]
+      .polyFunAt[F :: G :: TNil]
 
   transparent inline def make[K] =
-    decodeExpr[TNil](
-      [⋅⋅[_]] =>
-        (packer: [F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] => ([A <: ⋅⋅[K]] => F[A] => G[A]) => Box[Code[K], F :: G :: TNil]) =>
-          [F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] =>
-            (f: [A <: ⋅⋅[K]] => F[A] => G[A]) =>
-              new FunctionK[K, F, G](
-                packer[F, G](f)
-              )
-    )(Box.packer[Code[K]])
+    decodeFun(
+      [⋅⋅[_], F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] =>
+        (f: [A <: ⋅⋅[K]] => F[A] => G[A]) =>
+          new FunctionK[K, F, G](
+            Box.packer[Code[K]]
+              .polyFunApply[
+                F :: G :: TNil,
+                Box[Code[K], F :: G :: TNil]
+              ](f)
+          )
+    )
 }
