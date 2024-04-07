@@ -5,6 +5,7 @@ import libretto.{CoreLib, InvertLib}
 import libretto.lambda.util.SourcePos
 import libretto.util.Async
 import scala.annotation.targetName
+import scala.collection.immutable.{:: as NonEmptyList}
 import scala.concurrent.duration.*
 import scala.reflect.TypeTest
 import scala.util.Random
@@ -23,7 +24,7 @@ class ScalettoLib[
   CoreLib <: libretto.CoreLib[DSL],
 ](
   val dsl: DSL,
-  val coreLib: CoreLib with libretto.CoreLib[dsl.type],
+  val coreLib: CoreLib & libretto.CoreLib[dsl.type],
 ) {
   import dsl.*
   import dsl.$.*
@@ -308,8 +309,8 @@ class ScalettoLib[
   def constListOf1[A](a: A, as: A*): Done -⚬ LList[Val[A]] =
     constList1(a, as.toList) > LList1.toLList
 
-  def liftScalaList1[A]: Val[::[A]] -⚬ LList1[Val[A]] = rec { self =>
-    mapVal[::[A], Either[A, (A, ::[A])]] {
+  def liftScalaList1[A]: Val[NonEmptyList[A]] -⚬ LList1[Val[A]] = rec { self =>
+    mapVal[NonEmptyList[A], Either[A, (A, NonEmptyList[A])]] {
       case a0 :: Nil => Left(a0)
       case a0 :: a1 :: as => Right((a0, ::(a1, as)))
     } > liftEither > either(
@@ -328,7 +329,7 @@ class ScalettoLib[
   def constList1[A](a: A, as: List[A]): Done -⚬ LList1[Val[A]] =
     LList1.from(constVal(a), as.map(constVal))
 
-  def constList1[A](as: ::[A]): Done -⚬ LList1[Val[A]] = {
+  def constList1[A](as: NonEmptyList[A]): Done -⚬ LList1[Val[A]] = {
     val h :: t = as
     constList1(h, t)
   }
@@ -336,11 +337,11 @@ class ScalettoLib[
   def constList1Of[A](a: A, as: A*): Done -⚬ LList1[Val[A]] =
     constList1(a, as.toList)
 
-  def toScalaList1[A]: LList1[Val[A]] -⚬ Val[::[A]] =
+  def toScalaList1[A]: LList1[Val[A]] -⚬ Val[NonEmptyList[A]] =
     rec { self =>
       LList1.switch(
         case1 = mapVal(::(_, Nil)),
-        caseN = snd(self) > unliftPair > mapVal { case (h, t) => ::(h, t) },
+        caseN = snd(self) > unliftPair > mapVal { case (h, t) => NonEmptyList(h, t) },
       )
     }
 

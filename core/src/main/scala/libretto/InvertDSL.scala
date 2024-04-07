@@ -214,7 +214,7 @@ trait InvertDSL extends ClosedDSL {
   import $.*
 
   extension [A](a: $[A]) {
-    def supplyTo(out: $[-[A]])(using pos: SourcePos, ctx: LambdaContext): $[One] =
+    infix def supplyTo(out: $[-[A]])(using pos: SourcePos, ctx: LambdaContext): $[One] =
       $.zip(a, out)(pos) > supply
 
     def :>:(b: ??[A])(using
@@ -236,7 +236,7 @@ trait InvertDSL extends ClosedDSL {
   }
 
   extension [B](expr: $[-[B]]) {
-    def contramap[A](f: A -⚬ B)(using
+    infix def contramap[A](f: A -⚬ B)(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[-[A]] =
@@ -275,7 +275,7 @@ trait InvertDSL extends ClosedDSL {
       value :>: expr
 
     @targetName("alsoElimOut")
-    def alsoElim(that: ??[One])(using
+    infix def alsoElim(that: ??[One])(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): ??[B] =

@@ -1,7 +1,8 @@
 package libretto
 
 import libretto.lambda.util.SourcePos
-import libretto.util.Equal
+import libretto.util.{Equal, StaticValue}
+import libretto.util.unapply.Unapply
 
 trait CoreDSL {
   /** Libretto arrow, also called a ''component'' or a ''linear function''.
@@ -43,13 +44,72 @@ trait CoreDSL {
   type ⊕[A, B] = A |+| B
 
   /** Impossible resource. Analogous to [[Nothing]]. It is the identity element for [[|+|]]. */
-  type Zero
+  type Void
+
+  @deprecated("Renamed to Void")
+  type Zero = Void
 
   /** Choice between `A` and `B`.
     * The consumer chooses whether to get `A` or `B` (but can get only one of them).
     * The producer has to be ready to provide either of them.
     */
   type |&|[A, B]
+
+  /** Delimiter of fields in n-ary typedefs. */
+  type ::[A, B]
+
+  /** Used to describe named fields: `"label" of Type`. */
+  infix type of[Label, T]
+
+  type OneOf[Cases]
+
+  val OneOf: OneOfModule
+
+  trait OneOfModule {
+    type IsCaseOf[Label, Cases] <: { type Type }
+    type Injector[Label, A, Cases]
+    val Injector: InjectorModule
+
+    type Handlers[Cases, R]
+    val Handlers: HandlersModule
+
+    trait InjectorModule:
+      def apply[Label, Cases](c: IsCaseOf[Label, Cases]): Injector[Label, c.Type, Cases]
+
+    trait HandlersModule:
+      type Builder[Cases, RemainingCases, R]
+
+      def apply[Cases, R]: Builder[Cases, Cases, R]
+
+      extension [Cases, HLbl, H, T, R](b: Builder[Cases, (HLbl of H) :: T, R])
+        def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl)(h: H -⚬ R): Builder[Cases, T, R]
+
+      extension [Cases, R](b: Builder[Cases, Void, R])
+        def end: Handlers[Cases, R]
+
+    given headInjector[HLbl, H, Tail]: Injector[HLbl, H, (HLbl of H) :: Tail]
+    given tailInjector[Lbl, A, HLbl, H, Tail](using j: Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl of H) :: Tail]
+    given isCaseOf[Label, A, Cases](using i: Injector[Label, A, Cases]): IsCaseOf[Label, Cases] { type Type = A }
+
+    def inject[Label, A, Cases](using Injector[Label, A, Cases]): A -⚬ OneOf[Cases]
+    def switch[Cases, R](handlers: Handlers[Cases, R]): OneOf[Cases] -⚬ R
+
+    def peel[Label, A, Cases]: OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases])
+    def void: OneOf[Void] -⚬ Void
+
+    def extract[Label, A]: OneOf[(Label of A) :: Void] -⚬ A =
+      andThen(
+        peel[Label, A, Void],
+        either(id[A], andThen(void, absurd[A]))
+      )
+
+    def create[ADT](using u: Unapply[ADT, OneOf]): Creator[u.A] =
+      Creator[u.A]
+
+    class Creator[Cases]:
+      def from[Label](using c: IsCaseOf[Label, Cases]): c.Type -⚬ OneOf[Cases] =
+        inject(using Injector(c))
+  }
 
   /** Signal that travels in the direction of [[-⚬]], i.e. the positive direction.
     * It may signal completion of a (potentially effectful) computation.
@@ -143,6 +203,8 @@ trait CoreDSL {
     caseLeft:  A -⚬ C,
     caseRight: B -⚬ C,
   ): (A |+| B) -⚬ C
+
+  def absurd[A]: Void -⚬ A
 
   def chooseL[A, B]: (A |&| B) -⚬ A
   def chooseR[A, B]: (A |&| B) -⚬ B
@@ -455,7 +517,7 @@ trait CoreDSL {
     ): $[B] =
       a :>> f
 
-    def alsoElim(unit: $[One])(using
+    infix def alsoElim(unit: $[One])(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[A] =
@@ -479,14 +541,14 @@ trait CoreDSL {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[Done] =
-      joinAll(d, others: _*)(using pos)
+      joinAll(d, others*)(using pos)
   }
 
   def joinAll(a: $[Done], as: $[Done]*)(using pos: SourcePos, ctx: LambdaContext): $[Done] =
     as match {
       case Seq()  => a
       case Seq(b) => $.joinTwo(a, b)(pos)
-      case as     => joinAll($.joinTwo(a, as.head)(pos), as.tail: _*)
+      case as     => joinAll($.joinTwo(a, as.head)(pos), as.tail*)
     }
 
   extension [A, B](x: $[A |+| B]) {

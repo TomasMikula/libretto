@@ -29,11 +29,11 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
 
   extension [A](a: Expr[A]) {
     @targetName("exprMap")
-    def map[B](f: A -⚬ B)(resultVar: V)(using Context): Expr[B] =
+    infix def map[B](f: A -⚬ B)(resultVar: V)(using Context): Expr[B] =
       Expr.map(a, f)(resultVar)
 
     @targetName("exprZip")
-    def zip[B](b: Expr[B])(resultVar: V)(using Context): Expr[A |*| B] =
+    infix def zip[B](b: Expr[B])(resultVar: V)(using Context): Expr[A |*| B] =
       Expr.zip(a, b)(resultVar)
 
     @targetName("exprResultVar")

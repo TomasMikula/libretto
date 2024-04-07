@@ -345,6 +345,19 @@ private class ExecutionImpl(
             }
           go(this: Frontier[a1 |+| a2])
 
+        case -⚬.Absurd() =>
+          this.absurd
+
+        case -⚬.NArySumVoid() =>
+          this.void.absurd
+
+        case op: -⚬.NArySumPeel[lbl, a, cases] =>
+          (this: Frontier[OneOf[(lbl of a) :: cases]])
+            .narySumPeel
+
+        case -⚬.NAryInject(i) =>
+          i.absurd
+
         case _: -⚬.ChooseL[a1, a2] =>
           Frontier.chooseL[a1, a2](this)
 
@@ -1026,6 +1039,10 @@ private class ExecutionImpl(
           fa.map(_.crash(e))
         case Pack(f) =>
           f.crash(e)
+        case OneOfVoid(f) =>
+          f.absurd
+        case OneOfN(f) =>
+          f.crash(e)
       }
     }
   }
@@ -1042,6 +1059,13 @@ private class ExecutionImpl(
     case class Choice[A, B](a: () => Frontier[A], b: () => Frontier[B], onError: Throwable => Unit) extends Frontier[A |&| B]
     case class Deferred[A](f: Future[Frontier[A]]) extends Frontier[A]
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]
+    sealed trait Void extends Frontier[dsl.Void] {
+      def absurd[A]: Frontier[A]
+    }
+    case class OneOfVoid(f: Frontier[dsl.Void]) extends Frontier[OneOf[dsl.Void]]
+    case class OneOfN[Label, A, Cases](
+      f: Frontier[A |+| OneOf[Cases]],
+    ) extends Frontier[OneOf[(Label of A) :: Cases]]
 
     case class Value[A](a: A) extends Frontier[Val[A]]
 
@@ -1066,7 +1090,7 @@ private class ExecutionImpl(
       Deferred(Future.failed(new Exception(msg)))
 
     extension (n: Frontier[Need]) {
-      def fulfillWith(f: Future[Any])(using ExecutionContext): Unit =
+      infix def fulfillWith(f: Future[Any])(using ExecutionContext): Unit =
         n match {
           case NeedAsync(p) =>
             p.completeWith(f)
@@ -1084,7 +1108,7 @@ private class ExecutionImpl(
     }
 
     extension (n: Frontier[Pong]) {
-      def fulfillPongWith(f: Future[Any])(using ExecutionContext): Unit =
+      infix def fulfillPongWith(f: Future[Any])(using ExecutionContext): Unit =
         n match {
           case PongAsync(p) =>
             p.completeWith(f)
@@ -1108,6 +1132,26 @@ private class ExecutionImpl(
           case InjectR(b) => Future.successful(Right(b))
           case Deferred(fab) => fab.flatMap(_.futureEither)
         }
+    }
+
+    extension (f: Frontier[dsl.Void]) {
+      def absurd[A](using ExecutionContext): Frontier[A] =
+        f match
+          case Deferred(f) => Deferred(f.map(_.absurd[A]))
+    }
+
+    extension (f: Frontier[OneOf[dsl.Void]]) {
+      def void(using ExecutionContext): Frontier[dsl.Void] =
+        f match
+          case OneOfVoid(f) => f
+          case Deferred(f)  => Deferred(f.map(_.void))
+    }
+
+    extension [Label, A, Cases](f: Frontier[OneOf[(Label of A) :: Cases]]) {
+      def narySumPeel(using ExecutionContext): Frontier[A |+| OneOf[Cases]] =
+        f match
+          case OneOfN(f) => f
+          case Deferred(f) => Deferred(f.map(_.narySumPeel))
     }
 
     extension [A, B](f: Frontier[A |&| B]) {

@@ -10,11 +10,13 @@ import libretto.testing.{TestCase, TestExecutor, TestKit}
 import libretto.testing.scaletto.{ScalettoTestExecutor, ScalettoTestKit}
 import libretto.testing.scalatest.ScalatestSuite
 import libretto.util.Async
+import scala.collection.immutable.{:: => NonEmptyList}
+import scala.compiletime.uninitialized
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration.*
 
 class BasicTests extends ScalatestSuite[ScalettoTestKit] {
-  private var scheduler: ScheduledExecutorService = _
+  private var scheduler: ScheduledExecutorService = uninitialized
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -271,12 +273,12 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
             s"${i+1}.$c" -> TestCase { f > c.go > assertEquals(c.expected) }
           }
 
-        TestCase.multiple(cases: _*)
+        TestCase.multiple(cases*)
       },
 
       "LList.splitEvenOdd" -> TestCase {
         val prg: Done -⚬ Val[(List[Int], List[Int])] =
-          constListOf1(0, (1 to 20): _*) > LList.splitEvenOdd > par(toScalaList, toScalaList) > unliftPair
+          constListOf1(0, (1 to 20)*) > LList.splitEvenOdd > par(toScalaList, toScalaList) > unliftPair
 
         prg > assertEquals((0 to 20).toList.partition(_ % 2 == 0))
       },
@@ -340,7 +342,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
             s"$i.$j.$k.$l" -> TestCase { prg > assertEquals("1") }
           }
 
-        TestCase.multiple(cases: _*)
+        TestCase.multiple(cases*)
       },
 
       "release via registered function" -> {
@@ -497,7 +499,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
 
         val timed: Done -⚬ Val[(List[Millis], List[Millis])] = {
           // true, false, true, false, ...
-          val alternating: ::[Boolean] = (0 until (2*n)).map(_ % 2 == 0).toList.asInstanceOf[::[Boolean]]
+          val alternating: NonEmptyList[Boolean] = (0 until (2*n)).map(_ % 2 == 0).toList.asInstanceOf[NonEmptyList[Boolean]]
 
           constList1(alternating)
             .>(LList1.toLList)
@@ -537,10 +539,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         val delays =
           List(30, 20, 10, 50, 40, 0)
 
-        val elems: ::[Done -⚬ Val[Int]] =
+        val elems: NonEmptyList[Done -⚬ Val[Int]] =
           delays
             .map(n => delay(n.millis) > constVal(n))
-            .asInstanceOf[::[Done -⚬ Val[Int]]]
+            .asInstanceOf[NonEmptyList[Done -⚬ Val[Int]]]
 
         val prg: Done -⚬ LList[Val[Int]] =
           id                               [       Done       ]

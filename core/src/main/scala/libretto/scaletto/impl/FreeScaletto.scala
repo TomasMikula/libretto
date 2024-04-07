@@ -6,7 +6,7 @@ import libretto.lambda.Lambdas.Delambdified
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Monad.monadEither
-import libretto.util.Async
+import libretto.util.{Async, StaticValue}
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 
@@ -22,6 +22,7 @@ abstract class FreeScaletto {
   //  2. they are all distinct types (e.g. `One` can never be unified with `Done`).
   // Unfortunately, the Scala typechecker doesn't take advantage of this information anyway.
   final class One private()
+  final class Void private()
   final class Done private()
   final class Need private()
   final class Ping private()
@@ -32,6 +33,10 @@ abstract class FreeScaletto {
   final type |*|[A, B] = ConcurrentPair[A, B]
   final class |+|[A, B] private()
   final class |&|[A, B] private()
+  final class ::[A, B] private()
+  final infix class of[Label, T] private ()
+  final class NArySum[Cases] private()
+  final type OneOf[Cases] = NArySum[Cases]
   final class Rec[F[_]] private()
   final class Inverted[A] private()
   final type -[A] = Inverted[A]
@@ -43,6 +48,26 @@ abstract class FreeScaletto {
   given BiInjective[|*|] with {
     override def unapply[A, B, X, Y](ev: (A |*| B) =:= (X |*| Y)): (A =:= X, B =:= Y) =
       ev match { case TypeEq(Refl()) => (summon, summon) }
+  }
+
+  sealed trait NAryInjector[Label, A, Cases]:
+    final type Type = A
+
+    def absurd[T]: T
+
+  sealed trait NAryHandlerBuilder[Cases, RemainingCases, R]
+  object NAryHandlerBuilder {
+    case class Empty[Cases, R]() extends NAryHandlerBuilder[Cases, Cases, R]
+    case class Snoc[Cases, HLbl, H, T, R](
+      init: NAryHandlerBuilder[Cases, (HLbl of H) :: T, R],
+      last: H -⚬ R,
+    ) extends NAryHandlerBuilder[Cases, T, R]
+
+    def addHandler[Cases, HLbl, H, T, R](
+      b: NAryHandlerBuilder[Cases, (HLbl of H) :: T, R],
+      h: H -⚬ R,
+    ): NAryHandlerBuilder[Cases, T, R] =
+      Snoc(b, h)
   }
 
   object -⚬ {
@@ -62,6 +87,11 @@ abstract class FreeScaletto {
     case class InjectL[A, B]() extends (A -⚬ (A |+| B))
     case class InjectR[A, B]() extends (B -⚬ (A |+| B))
     case class EitherF[A, B, C](f: A -> C, g: B -> C) extends ((A |+| B) -⚬ C)
+    case class Absurd[A]() extends (Void -⚬ A)
+    case class NAryInject[Label, A, Cases](i: NAryInjector[Label, A, Cases]) extends (A -⚬ OneOf[Cases])
+    // case class NArySwitch[Cases, R](handlers: NAryHandlerBuilder[Cases, Void, R]) extends (OneOf[Cases] -⚬ R)
+    case class NArySumPeel[Label, A, Cases]() extends (OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases]))
+    case class NArySumVoid() extends (OneOf[Void] -⚬ Void)
     case class ChooseL[A, B]() extends ((A |&| B) -⚬ A)
     case class ChooseR[A, B]() extends ((A |&| B) -⚬ B)
     case class Choice[A, B, C](f: A -> B, g: A -> C) extends (A -⚬ (B |&| C))
@@ -218,6 +248,9 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   override def either[A, B, C](f: A -⚬ C, g: B -⚬ C): (A |+| B) -⚬ C =
     EitherF(f, g)
+
+  override def absurd[A]: Void -⚬ A =
+    Absurd()
 
   override def chooseL[A, B]: (A |&| B) -⚬ A =
     ChooseL()
@@ -423,6 +456,71 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   override def factorOutInversion[A, B]: (-[A] |*| -[B]) -⚬ -[A |*| B] =
     FactorOutInversion()
+
+  override object OneOf extends OneOfModule {
+    override type Injector[Label, A, Cases] = NAryInjector[Label, A, Cases]
+    override type IsCaseOf[Label, Cases] = NAryInjector[Label, ?, Cases]
+    override type Handlers[Cases, R] = NAryHandlerBuilder[Cases, Void, R]
+
+    override def inject[Label, A, Cases](using i: Injector[Label, A, Cases]): A -⚬ OneOf[Cases] =
+      NAryInject(i)
+
+    override def switch[Cases, R](handlers: Handlers[Cases, R]): OneOf[Cases] -⚬ R =
+      import NAryHandlerBuilder.{Empty, Snoc}
+
+      def go[RemainingCases](
+        handlers: Handlers.Builder[Cases, RemainingCases, R],
+        remaining: OneOf[RemainingCases] -⚬ R,
+      ): OneOf[Cases] -⚬ R =
+        handlers match
+          case Empty() =>
+            remaining
+          case Snoc(handlers, last) =>
+            go(
+              handlers,
+              andThen(peel, either(last, remaining))
+            )
+
+      go(handlers, andThen(void, absurd[R]))
+
+
+    override def peel[Label, A, Cases]: OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases]) =
+      NArySumPeel()
+
+    override def void: OneOf[Void] -⚬ Void =
+      NArySumVoid()
+
+    override object Injector extends InjectorModule {
+      override def apply[Label, Cases](c: IsCaseOf[Label, Cases]): Injector[Label, c.Type, Cases] =
+        c
+    }
+
+
+    override def headInjector[HLbl, H, Tail]: Injector[HLbl, H, (HLbl of H) :: Tail] =
+      ???
+
+    override def tailInjector[Lbl, A, HLbl, H, Tail](using j: Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl of H) :: Tail] =
+      ???
+
+    override def isCaseOf[Label, A, Cases](using i: Injector[Label, A, Cases]): IsCaseOf[Label, Cases] { type Type = A } =
+      ???
+
+    override object Handlers extends HandlersModule {
+      override type Builder[Cases, RemainingCases, R] =
+        NAryHandlerBuilder[Cases, RemainingCases, R]
+
+      override def apply[Cases, R]: Builder[Cases, Cases, R] =
+        NAryHandlerBuilder.Empty()
+
+      extension [Cases, R](b: Builder[Cases, Void, R])
+        override def end: Handlers[Cases, R] =
+          b
+
+      extension [Cases, HLbl, H, T, R](b: Builder[Cases, (HLbl of H) :: T, R])
+        override def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl)(h: H -⚬ R): Builder[Cases, T, R] =
+          NAryHandlerBuilder.addHandler(b, h)
+    }
+  }
 
   override object UInt31 extends UInt31Scaletto {
     override def apply(n: Int): Done -⚬ UInt31 = {

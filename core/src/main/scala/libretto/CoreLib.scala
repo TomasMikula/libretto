@@ -5,6 +5,7 @@ import libretto.lambda.util.SourcePos
 import libretto.util.unapply.*
 import libretto.util.{Equal, ∀}
 import scala.annotation.tailrec
+import scala.collection.immutable.{:: as NonEmptyList}
 
 object CoreLib {
   def apply(dsl: CoreDSL): CoreLib[dsl.type] =
@@ -1082,14 +1083,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def sequenceAfter(b: $[B])(using A: Deferrable.Positive[A], B: Signaling.Positive[B]): $[A |*| B] =
       (b |*| a) > sequence_PP[B, A] > swap
 
-    def waitFor(b: $[Done])(using A: Junction.Positive[A]): $[A] =
+    infix def waitFor(b: $[Done])(using A: Junction.Positive[A]): $[A] =
       (a |*| b) > awaitPosSnd
 
-    def deferUntil(b: $[Ping])(using A: Deferrable.Positive[A]): $[A] =
+    infix def deferUntil(b: $[Ping])(using A: Deferrable.Positive[A]): $[A] =
       (a |*| b) > awaitPingSnd
 
     /** Obstructs further interaction until a [[Ping]] is received. */
-    def blockUntil(b: $[Ping]): $[A] =
+    infix def blockUntil(b: $[Ping]): $[A] =
       blockOutportUntilPing(b |*| a)
   }
 
@@ -1278,7 +1279,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def awaitSnd(using Junction.Positive[A]): (S |*| Done) -⚬ S =
       swap > awaitFst
 
-    def andThen[B](that: Getter[A, B]): Getter[S, B] =
+    infix def andThen[B](that: Getter[A, B]): Getter[S, B] =
       new Getter[S, B] {
         override def getL[C](next: Getter[B, C])(using C: Cosemigroup[C]): S -⚬ (C |*| S) =
           self.getL(that andThen next)
@@ -1287,7 +1288,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
           self.extendJunction(using that.extendJunction)
       }
 
-    def compose[T](that: Getter[T, S]): Getter[T, A] =
+    infix def compose[T](that: Getter[T, S]): Getter[T, A] =
       that andThen this
 
     def |+|[T](that: Getter[T, A]): Getter[S |+| T, A] =
@@ -1337,7 +1338,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         def awaitPosFst: (Done |*| S) -⚬ S = write(A.awaitPosFst)
       }
 
-    def andThen[B](that: Lens[A, B]): Lens[S, B] =
+    infix def andThen[B](that: Lens[A, B]): Lens[S, B] =
       new Lens[S, B] {
         def modify[X, Y](f: (X |*| B) -⚬ (Y |*| B)): (X |*| S) -⚬ (Y |*| S) =
           Lens.this.modify(that.modify(f))
@@ -3455,7 +3456,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def from[S, T](head: S -⚬ T, tail: List[S -⚬ T])(using S: Cosemigroup[S]): S -⚬ LList1[T] =
       LList.fromList0(tail) > par(head, id) > cons
 
-    def from[S, T](fs: ::[S -⚬ T])(using S: Cosemigroup[S]): S -⚬ LList1[T] =
+    def from[S, T](fs: NonEmptyList[S -⚬ T])(using S: Cosemigroup[S]): S -⚬ LList1[T] =
       from(fs.head, fs.tail)
 
     def of[S, T](head: S -⚬ T, tail: (S -⚬ T)*)(using S: Cosemigroup[S]): S -⚬ LList1[T] =
@@ -4047,10 +4048,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   extension (acquiredLock: $[AcquiredLock])(using LambdaContext) {
-    def deferReleaseUntil(ping: $[Ping]): $[AcquiredLock] =
+    infix def deferReleaseUntil(ping: $[Ping]): $[AcquiredLock] =
       AcquiredLock.deferRelease(ping |*| acquiredLock)
 
-    def detainReleaseUntil(done: $[Done]): $[AcquiredLock] =
+    infix def detainReleaseUntil(done: $[Done]): $[AcquiredLock] =
       AcquiredLock.detainRelease(done |*| acquiredLock)
   }
 }

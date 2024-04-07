@@ -94,7 +94,7 @@ class InvertLib[
       }
     }
 
-    def raceWith[B, C](using SourcePos, LambdaContext)(b: ??[B])(using
+    infix def raceWith[B, C](using SourcePos, LambdaContext)(b: ??[B])(using
       Signaling.Positive[A],
       Signaling.Negative[B],
     )(f: LambdaContext ?=> Either[($[A], ??[B]), ($[A], ??[B])] => $[C]): $[C] = {
@@ -122,7 +122,7 @@ class InvertLib[
           }
       }
 
-    def raceWith[B, C](using SourcePos, LambdaContext)(b: $[B])(using
+    infix def raceWith[B, C](using SourcePos, LambdaContext)(b: $[B])(using
       Signaling.Negative[A],
       Signaling.Positive[B],
     )(f: LambdaContext ?=> Either[(??[A], $[B]), (??[A], $[B])] => ??[C]): ??[C] = {
