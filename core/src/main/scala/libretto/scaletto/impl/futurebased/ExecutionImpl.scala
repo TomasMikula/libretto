@@ -356,7 +356,7 @@ private class ExecutionImpl(
             .narySumPeel
 
         case -⚬.NAryInject(i) =>
-          i.absurd
+          NAryInject(this, i)
 
         case _: -⚬.ChooseL[a1, a2] =>
           Frontier.chooseL[a1, a2](this)
@@ -1033,6 +1033,8 @@ private class ExecutionImpl(
           a.crash(e)
         case InjectR(b) =>
           b.crash(e)
+        case NAryInject(a, _) =>
+          a.crash(e)
         case Choice(_, _, onError) =>
           onError(e)
         case Deferred(fa) =>
@@ -1056,6 +1058,7 @@ private class ExecutionImpl(
     case class Pair[A, B](a: Frontier[A], b: Frontier[B]) extends Frontier[A |*| B]
     case class InjectL[A, B](a: Frontier[A]) extends Frontier[A |+| B]
     case class InjectR[A, B](b: Frontier[B]) extends Frontier[A |+| B]
+    case class NAryInject[Label, A, Cases](a: Frontier[A], i: NAryInjector[Label, A, Cases]) extends Frontier[OneOf[Cases]]
     case class Choice[A, B](a: () => Frontier[A], b: () => Frontier[B], onError: Throwable => Unit) extends Frontier[A |&| B]
     case class Deferred[A](f: Future[Frontier[A]]) extends Frontier[A]
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]
@@ -1145,6 +1148,7 @@ private class ExecutionImpl(
         f match
           case OneOfVoid(f) => f
           case Deferred(f)  => Deferred(f.map(_.void))
+          case NAryInject(_, i) => i.nonVoidResult
     }
 
     extension [Label, A, Cases](f: Frontier[OneOf[(Label of A) :: Cases]]) {
@@ -1152,6 +1156,10 @@ private class ExecutionImpl(
         f match
           case OneOfN(f) => f
           case Deferred(f) => Deferred(f.map(_.narySumPeel))
+          case NAryInject(a, i) =>
+            i match
+              case NAryInjector.InHead() => InjectL(a)
+              case NAryInjector.InTail(j) => InjectR(NAryInject(a, j))
     }
 
     extension [A, B](f: Frontier[A |&| B]) {

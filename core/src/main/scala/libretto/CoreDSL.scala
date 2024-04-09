@@ -77,6 +77,7 @@ trait CoreDSL {
       def apply[Label, Cases](c: IsCaseOf[Label, Cases]): Injector[Label, c.Type, Cases]
 
     trait HandlersModule:
+      class InitialBuilder[Cases]
       type Builder[Cases, RemainingCases, R]
 
       def apply[Cases, R]: Builder[Cases, Cases, R]
@@ -86,6 +87,14 @@ trait CoreDSL {
 
       extension [Cases, R](b: Builder[Cases, Void, R])
         def end: Handlers[Cases, R]
+
+      extension [HLbl, H, T](b: InitialBuilder[(HLbl of H) :: T])
+        def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl): [R] => (H -⚬ R) => Builder[(HLbl of H) :: T, T, R] =
+          [R] => h => apply[(HLbl of H) :: T, R].caseOf[Lbl](h)
+
+      extension (b: InitialBuilder[Void])
+        def end[R]: Handlers[Void, R] =
+          apply[Void, R].end
 
     given headInjector[HLbl, H, Tail]: Injector[HLbl, H, (HLbl of H) :: Tail]
     given tailInjector[Lbl, A, HLbl, H, Tail](using j: Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl of H) :: Tail]
@@ -106,9 +115,16 @@ trait CoreDSL {
     def create[ADT](using u: Unapply[ADT, OneOf]): Creator[u.A] =
       Creator[u.A]
 
+    def switch[ADT](using u: Unapply[ADT, OneOf]): Switcher[u.A] =
+      Switcher[u.A]
+
     class Creator[Cases]:
       def from[Label](using c: IsCaseOf[Label, Cases]): c.Type -⚬ OneOf[Cases] =
         inject(using Injector(c))
+
+    class Switcher[Cases]:
+      def apply[R](handlers: Handlers.InitialBuilder[Cases] => Handlers[Cases, R]): OneOf[Cases] -⚬ R =
+        switch[Cases, R](handlers(Handlers.InitialBuilder[Cases]))
   }
 
   /** Signal that travels in the direction of [[-⚬]], i.e. the positive direction.

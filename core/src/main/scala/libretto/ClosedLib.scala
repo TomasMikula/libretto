@@ -14,7 +14,7 @@ class ClosedLib[
   CLib <: CoreLib[DSL],
 ](
   val dsl: DSL,
-  val coreLib: CLib with CoreLib[dsl.type],
+  val coreLib: CLib & CoreLib[dsl.type],
 ) { lib =>
   import dsl.*
   import coreLib.*

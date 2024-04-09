@@ -51,9 +51,21 @@ abstract class FreeScaletto {
   }
 
   sealed trait NAryInjector[Label, A, Cases]:
+    import NAryInjector.*
+
     final type Type = A
 
-    def absurd[T]: T
+    def nonVoidResult(using ev: Cases =:= Void): Nothing
+
+  object NAryInjector {
+    case class InHead[Label, A, Tail]() extends NAryInjector[Label, A, (Label of A) :: Tail]:
+      override def nonVoidResult(using ev: (Label of A) :: Tail =:= Void): Nothing =
+        throw new AssertionError(s"Impossible")
+
+    case class InTail[Label, A, HLbl, H, Tail](i: NAryInjector[Label, A, Tail]) extends NAryInjector[Label, A, (HLbl of H) :: Tail]:
+      override def nonVoidResult(using ev: (HLbl of H) :: Tail =:= Void): Nothing =
+        throw new AssertionError(s"Impossible")
+  }
 
   sealed trait NAryHandlerBuilder[Cases, RemainingCases, R]
   object NAryHandlerBuilder {
@@ -497,13 +509,13 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
 
     override def headInjector[HLbl, H, Tail]: Injector[HLbl, H, (HLbl of H) :: Tail] =
-      ???
+      NAryInjector.InHead()
 
     override def tailInjector[Lbl, A, HLbl, H, Tail](using j: Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl of H) :: Tail] =
-      ???
+      NAryInjector.InTail(j)
 
     override def isCaseOf[Label, A, Cases](using i: Injector[Label, A, Cases]): IsCaseOf[Label, Cases] { type Type = A } =
-      ???
+      i
 
     override object Handlers extends HandlersModule {
       override type Builder[Cases, RemainingCases, R] =
