@@ -67,6 +67,8 @@ trait CoreDSL {
 
   trait OneOfModule {
     type IsCaseOf[Label, Cases] <: { type Type }
+    type DistLR[A, Cases] <: { type Out }
+
     type Injector[Label, A, Cases]
     val Injector: InjectorModule
 
@@ -99,11 +101,17 @@ trait CoreDSL {
     given headInjector[HLbl, H, Tail]: Injector[HLbl, H, (HLbl of H) :: Tail]
     given tailInjector[Lbl, A, HLbl, H, Tail](using j: Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl of H) :: Tail]
     given isCaseOf[Label, A, Cases](using i: Injector[Label, A, Cases]): IsCaseOf[Label, Cases] { type Type = A }
+    given distLRVoid[A]: DistLR[A, Void] { type Out = Void }
+    given distLRCons[A, Label, H, Tail](using
+      tail: DistLR[A, Tail],
+    ): DistLR[A, (Label of H) :: Tail] { type Out = (Label of (A |*| H)) :: tail.Out }
 
     def inject[Label, A, Cases](using Injector[Label, A, Cases]): A -⚬ OneOf[Cases]
     def switch[Cases, R](handlers: Handlers[Cases, R]): OneOf[Cases] -⚬ R
+    def distLR[A, Cases](using ev: DistLR[A, Cases]): (A |*| OneOf[Cases]) -⚬ OneOf[ev.Out]
 
     def peel[Label, A, Cases]: OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases])
+    def unpeel[Label, A, Cases]: (A |+| OneOf[Cases]) -⚬ OneOf[(Label of A) :: Cases]
     def void: OneOf[Void] -⚬ Void
 
     def extract[Label, A]: OneOf[(Label of A) :: Void] -⚬ A =
@@ -573,6 +581,13 @@ trait CoreDSL {
       ctx: LambdaContext,
     ): $[C] =
       $.switchEither(x, f)(pos)
+  }
+
+  extension [Cases](x: $[OneOf[Cases]]) {
+    def switch[R](using LambdaContext)(
+      handlers: OneOf.Handlers.InitialBuilder[Cases] => OneOf.Handlers[Cases, R]
+    ): $[R] =
+      x :>> OneOf.Switcher[Cases].apply(handlers)
   }
 
   def constant[A](f: One -⚬ A)(using SourcePos, LambdaContext): $[A] =

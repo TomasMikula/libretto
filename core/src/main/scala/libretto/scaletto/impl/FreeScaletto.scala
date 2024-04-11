@@ -67,6 +67,24 @@ abstract class FreeScaletto {
         throw new AssertionError(s"Impossible")
   }
 
+  sealed trait NAryDistLR[A, Cases] {
+    type Out
+  }
+
+  object NAryDistLR {
+    case class Empty[A]() extends NAryDistLR[A, Void] { override type Out = Void }
+    case class Cons[A, HLbl, H, Tail, ATail](
+      tail: NAryDistLR[A, Tail] { type Out = ATail },
+    ) extends NAryDistLR[A, (HLbl of H) :: Tail] {
+      override type Out = (HLbl of (A |*| H)) :: ATail
+    }
+
+    def cons[A, HLbl, H, Tail](
+      tail: NAryDistLR[A, Tail],
+    ): NAryDistLR[A, (HLbl of H) :: Tail] { type Out = (HLbl of (A |*| H)) :: tail.Out } =
+      Cons[A, HLbl, H, Tail, tail.Out](tail)
+  }
+
   sealed trait NAryHandlerBuilder[Cases, RemainingCases, R]
   object NAryHandlerBuilder {
     case class Empty[Cases, R]() extends NAryHandlerBuilder[Cases, Cases, R]
@@ -101,8 +119,8 @@ abstract class FreeScaletto {
     case class EitherF[A, B, C](f: A -> C, g: B -> C) extends ((A |+| B) -⚬ C)
     case class Absurd[A]() extends (Void -⚬ A)
     case class NAryInject[Label, A, Cases](i: NAryInjector[Label, A, Cases]) extends (A -⚬ OneOf[Cases])
-    // case class NArySwitch[Cases, R](handlers: NAryHandlerBuilder[Cases, Void, R]) extends (OneOf[Cases] -⚬ R)
     case class NArySumPeel[Label, A, Cases]() extends (OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases]))
+    case class NArySumUnpeel[Label, A, Cases]() extends ((A |+| OneOf[Cases]) -⚬ OneOf[(Label of A) :: Cases])
     case class NArySumVoid() extends (OneOf[Void] -⚬ Void)
     case class ChooseL[A, B]() extends ((A |&| B) -⚬ A)
     case class ChooseR[A, B]() extends ((A |&| B) -⚬ B)
@@ -473,6 +491,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     override type Injector[Label, A, Cases] = NAryInjector[Label, A, Cases]
     override type IsCaseOf[Label, Cases] = NAryInjector[Label, ?, Cases]
     override type Handlers[Cases, R] = NAryHandlerBuilder[Cases, Void, R]
+    override type DistLR[A, Cases] = NAryDistLR[A, Cases]
 
     override def inject[Label, A, Cases](using i: Injector[Label, A, Cases]): A -⚬ OneOf[Cases] =
       NAryInject(i)
@@ -495,12 +514,40 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
       go(handlers, andThen(void, absurd[R]))
 
-
     override def peel[Label, A, Cases]: OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases]) =
       NArySumPeel()
 
+    override def unpeel[Label, A, Cases]: (A |+| OneOf[Cases]) -⚬ OneOf[(Label of A) :: Cases] =
+      NArySumUnpeel()
+
     override def void: OneOf[Void] -⚬ Void =
       NArySumVoid()
+
+    override def distLR[A, Cases](using ev: DistLR[A, Cases]): (A |*| OneOf[Cases]) -⚬ OneOf[ev.Out] =
+      distLR_[A, Cases, ev.Out]
+
+    private def distLR_[A, Cases, ACases](using ev: DistLR[A, Cases] { type Out = ACases }): (A |*| OneOf[Cases]) -⚬ OneOf[ACases] =
+      ev match
+        case NAryDistLR.Empty() =>
+          summon[Cases =:= Void]
+          andThen(
+            snd(andThen(void, absurd[-[A] |*| OneOf[ev.Out]])),
+            andThen(assocRL, andThen(fst(backvert), elimFst))
+          )
+        case c: NAryDistLR.Cons[a, n, h, t, at] =>
+          val ev1: (((n of (a |*| h)) :: at) =:= ACases) =
+            summon[((n of (a |*| h)) :: at) =:= c.Out] andThen summon[c.Out =:= ACases]
+          distLRIntoTail[A, n, h, t, at](c.tail).to(using ev1.liftCo[OneOf])
+
+    private def distLRIntoTail[A, HLbl, H, Tail, ATail](
+      ev: NAryDistLR[A, Tail] { type Out = ATail },
+    ): (A |*| OneOf[(HLbl of H) :: Tail]) -⚬ OneOf[(HLbl of (A |*| H)) :: ATail] =
+      λ { case a |*| cs =>
+        peel(cs) switch {
+          case Left(h)  => inject(using headInjector[HLbl, A |*| H, ATail])(a |*| h)
+          case Right(t) => (a |*| t) :>> distLR(using ev) :>> injectR :>> unpeel
+        }
+      }
 
     override object Injector extends InjectorModule {
       override def apply[Label, Cases](c: IsCaseOf[Label, Cases]): Injector[Label, c.Type, Cases] =
@@ -516,6 +563,14 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
     override def isCaseOf[Label, A, Cases](using i: Injector[Label, A, Cases]): IsCaseOf[Label, Cases] { type Type = A } =
       i
+
+    override def distLRCons[A, Label, H, Tail](using
+      tail: DistLR[A, Tail]
+    ): DistLR[A, (Label of H) :: Tail] { type Out = (Label of (A |*| H)) :: tail.Out } =
+      NAryDistLR.cons[A, Label, H, Tail](tail)
+
+    override def distLRVoid[A]: DistLR[A, Void] { type Out = Void } =
+      NAryDistLR.Empty[A]()
 
     override object Handlers extends HandlersModule {
       override type Builder[Cases, RemainingCases, R] =

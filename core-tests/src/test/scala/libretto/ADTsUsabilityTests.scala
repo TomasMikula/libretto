@@ -74,6 +74,21 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
           .caseOf["NonEmpty"](NonEmptyTree.foldMap(f, g) > Maybe.just)
           .end
         )
+
+      def concat[A]: (Tree[A] |*| Tree[A]) -⚬ Tree[A] =
+        λ { case t1 |*| t2 =>
+          (t1 |*| t2) :>> OneOf.distLR :>> OneOf.switch(_
+            .caseOf["Empty"](elimSnd)
+            .caseOf["NonEmpty"](λ { case t1 |*| net2 =>
+              ((net2 |*| t1) :>> OneOf.distLR).switch(_
+                .caseOf["Empty"](elimSnd)
+                .caseOf["NonEmpty"](λ { case (net2 |*| net1) => NonEmptyTree.branch(net1 |*| net2) })
+                .end
+              ) :>> nonEmpty
+            })
+            .end
+          )
+        }
     }
 
     List(
@@ -94,6 +109,27 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
           for {
             n <- expectVal(port)
             _ <- Outcome.assertEquals(n, 10)
+          } yield ()
+        },
+
+      "concatenate trees" ->
+        TestCase.interactWith {
+          import NonEmptyTree.{leaf, branch}
+          λ { case +(d) =>
+            val tree1 =
+              Tree.nonEmpty(branch(leaf(d :>> constVal(1)) |*| leaf(d :>> constVal(2))))
+            val tree2 =
+              Tree.nonEmpty(branch(leaf(d :>> constVal(3)) |*| leaf(d :>> constVal(4))))
+            val tree =
+              Tree.concat(tree1 |*| tree2)
+            tree
+              :>> Tree.foldMap(mapVal(_.toString), unliftPair > mapVal { case (a, b) => s"$a,$b" })
+              :>> Maybe.getOrElse(done > constVal(""))
+          }
+        }.via { port =>
+          for {
+            s <- expectVal(port)
+            _ <- Outcome.assertEquals(s, "1,2,3,4")
           } yield ()
         }
     )

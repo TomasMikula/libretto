@@ -355,6 +355,9 @@ private class ExecutionImpl(
           (this: Frontier[OneOf[(lbl of a) :: cases]])
             .narySumPeel
 
+        case op: -⚬.NArySumUnpeel[lbl, a, cases] =>
+          NArySumUnpeel[lbl, a, cases](this)
+
         case -⚬.NAryInject(i) =>
           NAryInject(this, i)
 
@@ -481,7 +484,7 @@ private class ExecutionImpl(
               case l @ InjectL(_) => Pair(PingNow, l)
               case r @ InjectR(_) => Pair(PingNow, r)
               case other =>
-                val decided = other.futureEither.map(_ => PingNow).asDeferredFrontier
+                val decided = other.switch(_ => PingNow)
                 Pair(decided, other)
             }
 
@@ -543,12 +546,10 @@ private class ExecutionImpl(
             case (x, InjectR(z)) => InjectR[x |*| y, x |*| z](Pair(x, z))
             case (x, fyz) =>
               fyz
-                .futureEither
-                .map[Frontier[(x |*| y) |+| (x |*| z)]] {
+                .switch[(x |*| y) |+| (x |*| z)] {
                   case Left(y) => InjectL(Pair(x, y))
                   case Right(z) => InjectR(Pair(x, z))
                 }
-                .asDeferredFrontier
           }
 
         case _: -⚬.CoDistributeL[x, y, z] =>
@@ -1043,7 +1044,7 @@ private class ExecutionImpl(
           f.crash(e)
         case OneOfVoid(f) =>
           f.absurd
-        case OneOfN(f) =>
+        case NArySumUnpeel(f) =>
           f.crash(e)
       }
     }
@@ -1066,7 +1067,7 @@ private class ExecutionImpl(
       def absurd[A]: Frontier[A]
     }
     case class OneOfVoid(f: Frontier[dsl.Void]) extends Frontier[OneOf[dsl.Void]]
-    case class OneOfN[Label, A, Cases](
+    case class NArySumUnpeel[Label, A, Cases](
       f: Frontier[A |+| OneOf[Cases]],
     ) extends Frontier[OneOf[(Label of A) :: Cases]]
 
@@ -1135,6 +1136,14 @@ private class ExecutionImpl(
           case InjectR(b) => Future.successful(Right(b))
           case Deferred(fab) => fab.flatMap(_.futureEither)
         }
+
+      def switch[C](
+        g: Either[Frontier[A], Frontier[B]] => Frontier[C]
+      )(using ExecutionContext): Frontier[C] =
+        f match
+          case InjectL(a) => g(Left(a))
+          case InjectR(b) => g(Right(b))
+          case Deferred(fab) => Deferred(fab.map(_.switch(g)))
     }
 
     extension (f: Frontier[dsl.Void]) {
@@ -1154,7 +1163,7 @@ private class ExecutionImpl(
     extension [Label, A, Cases](f: Frontier[OneOf[(Label of A) :: Cases]]) {
       def narySumPeel(using ExecutionContext): Frontier[A |+| OneOf[Cases]] =
         f match
-          case OneOfN(f) => f
+          case NArySumUnpeel(f) => f
           case Deferred(f) => Deferred(f.map(_.narySumPeel))
           case NAryInject(a, i) =>
             i match
