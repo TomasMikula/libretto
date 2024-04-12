@@ -21,14 +21,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
   import shuffled.{Shuffled as ≈⚬, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
 
-  override type AbstractFun[A, B] =
-    A ≈⚬ B
-
-  override object AbstractFun extends AbstractFuns {
-    override def fold[A, B](f: AbstractFun[A, B]): A -⚬ B =
-      f.fold
-  }
-
   type Var[A] = libretto.lambda.Var[V, A]
 
   override opaque type Context = ContextImpl[-⚬, |*|, V]
@@ -66,9 +58,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
       ctx.isDefiningFor(v)
   }
 
-  type CapturingFun[A, B] = libretto.lambda.CapturingFun[AbstractFun, |*|, Tupled[Expr, _], A, B]
+  private type Delambdified0[A, B] = Lambdas.Delambdified[Expr, |*|, ≈⚬, V, A, B]
+
+  type CapturingFun[A, B] = libretto.lambda.CapturingFun[≈⚬, |*|, Tupled[Expr, _], A, B]
   object CapturingFun {
-    def noCapture[A, B](f: AbstractFun[A, B]): CapturingFun[A, B] =
+    def noCapture[A, B](f: A ≈⚬ B): CapturingFun[A, B] =
       ll.CapturingFun.NoCapture(f)
 
     def id[A]: CapturingFun[A, A] =
@@ -103,10 +97,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
         case Prj2(f, _, _) => f.initialVars
       }
 
-    def map[C](f: B -⚬ C)(resultVar: Var[C]): Expr[C] =
+    infix def map[C](f: B -⚬ C)(resultVar: Var[C]): Expr[C] =
       Map(this, f, resultVar)
 
-    def zip[D](that: Expr[D])(resultVar: Var[B |*| D]): Expr[B |*| D] =
+    infix def zip[D](that: Expr[D])(resultVar: Var[B |*| D]): Expr[B |*| D] =
       Zip(this, that, resultVar)
 
     /** Goes from the end backwards (i.e. from the result variable towards inital variables)
@@ -234,8 +228,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
 
   override def eliminateLocalVariables[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Delambdified[A, B] =
     eliminateLocalVariablesFromForest(boundVar, Tupled.atom(expr))
+      .mapFun([X] => (f: X ≈⚬ B) => f.fold)
 
-  def eliminateLocalVariablesFromForest[A, B](boundVar: Var[A], exprs: Forest[B])(using Context): Delambdified[A, B] = {
+  def eliminateLocalVariablesFromForest[A, B](boundVar: Var[A], exprs: Forest[B])(using Context): Delambdified0[A, B] = {
     import Lambdas.Delambdified.{Closure, Exact, Failure}
 
     extractFunctionFromForest(boundVar, exprs) match {
@@ -250,9 +245,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
             def go[X, Y](
               boundary: Bin[|*|, [t] =>> t, InnerVarOrOuterExpr, X],
               captured: Tupled[Expr, Y],
-              f: AbstractFun[Y |*| A, B],
+              f: (Y |*| A) ≈⚬ B,
               alreadyEliminated: Var.Set[V],
-            ): (Delambdified[A, B], Var.Set[V]) =
+            ): (Delambdified0[A, B], Var.Set[V]) =
               boundary match {
                 case Bin.Leaf(Left(v)) =>
                   if (alreadyEliminated containsVar v)
@@ -301,7 +296,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
     distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
   )(using
     Context,
-  ): AbsRes[A, B] =
+  ): Delambdified[A, B] =
     switchImpl(cases, sum, distribute)
 
   private def bug(msg: String): Nothing =
@@ -312,7 +307,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
     exprs: Forest[B],
   )(using
     Context,
-  ): Delambdified[A, B] = {
+  ): Delambdified0[A, B] = {
     import Lambdas.Delambdified.{Closure, Exact, Failure}
     import HybridArrow.LinearRes
 
@@ -418,7 +413,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
     def to[C](using ev: B =:= C): HybridArrow[A, C] =
       ev.substituteCo(this)
 
-    def interweave[C](that: HybridArrow[A, C]): HybridArrow[A, B |*| C] = {
+    infix def interweave[C](that: HybridArrow[A, C]): HybridArrow[A, B |*| C] = {
       assert((this.v testEqual that.v).isDefined)
       HybridArrow(v, HybridArrow.dupVar[A] > tail.inFst)
         .weaveIn(that.tail.inSnd)
@@ -608,7 +603,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
     }
     object Op {
       sealed trait Affine[A, B] extends Op[A, B] {
-        def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using A =:= Var[X]): Option[Tail[A, B |*| C]]
+        infix def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using A =:= Var[X]): Option[Tail[A, B |*| C]]
         def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| B]]
         def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| B]]
         def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| B]]
@@ -1208,16 +1203,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
     }
 
     enum LinearRes[A, B] {
-      case Exact(f: AbstractFun[A, B])
-      case Closure[X, A, B](captured: Tupled[Expr, X], f: AbstractFun[X |*| A, B]) extends LinearRes[A, B]
+      case Exact(f: A ≈⚬ B)
+      case Closure[X, A, B](captured: Tupled[Expr, X], f: (X |*| A) ≈⚬ B) extends LinearRes[A, B]
       case Violation(e: LinearityViolation[V])
     }
   }
 
   sealed trait Unvar[A, B] {
-    def uniqueOutType[C](that: Unvar[A, C]): B =:= C
+    infix def uniqueOutType[C](that: Unvar[A, C]): B =:= C
 
-    def zip[C, D](that: Unvar[C, D]): Unvar[A |*| C, B |*| D] =
+    infix def zip[C, D](that: Unvar[C, D]): Unvar[A |*| C, B |*| D] =
       Unvar.Par(this, that)
 
     def maskInput: Masked[Unvar[_, B], A] =

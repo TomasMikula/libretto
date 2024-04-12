@@ -5,7 +5,7 @@ import libretto.lambda.util.{BiInjective, Exists, Injective}
 sealed trait Focus[|*|[_, _], F[_]] {
   import Focus.*
 
-  def compose[G[_]](that: Focus[|*|, G]): Focus[|*|, [x] =>> F[G[x]]] =
+  infix def compose[G[_]](that: Focus[|*|, G]): Focus[|*|, [x] =>> F[G[x]]] =
     this match {
       case Id()   => that
       case Fst(i) => (i compose that).inFst

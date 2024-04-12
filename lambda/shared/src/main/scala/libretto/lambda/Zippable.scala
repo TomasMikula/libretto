@@ -7,6 +7,6 @@ trait Zippable[|*|[_, _], F[_]] { self =>
 
   extension [A](fa: F[A])
     @targetName("zip_ext")
-    def zip[B](fb: F[B]): F[A |*| B] =
+    infix def zip[B](fb: F[B]): F[A |*| B] =
       self.zip(fa, fb)
 }

@@ -141,7 +141,7 @@ object Fun {
 
     lambdas.delambdifyTopLevel(new Object, f) match {
       case Exact(f) =>
-        f.fold
+        f
       case Closure(captured, f) =>
         val undefinedVars: Var.Set[Object] =
           lambdas.Expr.initialVars(captured)

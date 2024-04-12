@@ -32,7 +32,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
   sealed trait Shuffled[A, B] {
     def after[Z](that: Shuffled[Z, A]): Shuffled[Z, B]
-    def thenShuffle[C](that: B ~⚬ C): Shuffled[A, C]
+    infix def thenShuffle[C](that: B ~⚬ C): Shuffled[A, C]
     def afterShuffle[Z](that: Z ~⚬ A): Shuffled[Z, B]
     def foldMap[->>[_, _]](f: [x, y] => (x -> y) => (x ->> y))(using SymmetricSemigroupalCategory[->>, |*|]): A ->> B
     def inFst[Y]: Shuffled[A |*| Y, B |*| Y]

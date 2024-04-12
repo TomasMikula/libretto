@@ -119,7 +119,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
                 Exists((x, f > shuffled.par(f1, f2)))
     }
 
-  private def mergeIn[B, ->[_, _]](that: Bin[<*>, T, F, B])(
+  private infix def mergeIn[B, ->[_, _]](that: Bin[<*>, T, F, B])(
     dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
   )(using
     leafTest: UniqueTypeArg[F],
@@ -132,7 +132,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
         Exists((Branch(x, r), shuffled.fst(f1) > shuffled.Pure(g)))
     }
 
-  private def mergeIn0[B, ->[_, _]](that: Bin[<*>, T, F, B])(
+  private infix def mergeIn0[B, ->[_, _]](that: Bin[<*>, T, F, B])(
     dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
   )(using
     leafTest: UniqueTypeArg[F],
@@ -180,7 +180,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     ) extends MergeRes[A, B, -->, ==>]
   }
 
-  def product[B, ->[_, _]](that: Bin[<*>, T, F, B])(
+  infix def product[B, ->[_, _]](that: Bin[<*>, T, F, B])(
     discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y,
   )(using
     leafTest: UniqueTypeArg[F],
@@ -201,7 +201,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
         ))
     }
 
-  private def product0[B, ->[_, _]](that: Bin[<*>, T, F, B])(
+  private infix def product0[B, ->[_, _]](that: Bin[<*>, T, F, B])(
     discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y,
   )(using
     leafTest: UniqueTypeArg[F],

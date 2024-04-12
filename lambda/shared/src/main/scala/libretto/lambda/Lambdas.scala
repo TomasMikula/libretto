@@ -82,20 +82,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
       registerNonLinearOps(v)(None, Some(discard))
   }
 
-  type AbstractFun[A, B]
-  val AbstractFun: AbstractFuns
-
-  trait AbstractFuns {
-    def fold[A, B](f: AbstractFun[A, B]): A -⚬ B
-  }
-
-  extension [A, B](f: AbstractFun[A, B]) {
-    def fold: A -⚬ B =
-      AbstractFun.fold(f)
-  }
-
-  type Delambdified[A, B] = Lambdas.Delambdified[Expr, |*|, AbstractFun, V, A, B]
-  type AbsRes[A, B]       = Lambdas.Delambdified[Expr, |*|, -⚬,          V, A, B]
+  type Delambdified[A, B] = Lambdas.Delambdified[Expr, |*|, -⚬, V, A, B]
 
   protected def eliminateLocalVariables[A, B](
     boundVar: Var[V, A],
@@ -144,7 +131,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
   )(using
     Context,
-  ): AbsRes[A, B]
+  ): Delambdified[A, B]
 
   protected def switchImpl[<+>[_, _], A, B](
     cases: Sink[VFun, <+>, A, B],
@@ -154,15 +141,14 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     BiInjective[|*|],
     SymmetricSemigroupalCategory[-⚬, |*|],
     Context,
-  ): AbsRes[A, B] = {
-    val cases1: Sink[AbsRes, <+>, A, B] =
-      cases.map[AbsRes] { [X] => (vf: VFun[X, B]) =>
+  ): Delambdified[A, B] = {
+    val cases1: Sink[Delambdified, <+>, A, B] =
+      cases.map[Delambdified] { [X] => (vf: VFun[X, B]) =>
         delambdifyNested(vf._1, vf._2)
-          .mapFun([X] => (f: AbstractFun[X, B]) => f.fold)
       }
 
     cases1.reduce(
-      [x, y] => (f1: AbsRes[x, B], f2: AbsRes[y, B]) => {
+      [x, y] => (f1: Delambdified[x, B], f2: Delambdified[y, B]) => {
         import Lambdas.Delambdified.{Closure, Exact, Failure}
         (f1, f2) match {
           case (Exact(f1), Exact(f2)) =>
@@ -282,7 +268,7 @@ object Lambdas {
     sealed trait LinearityViolation[VarLabel] extends Error[VarLabel] {
       import LinearityViolation.*
 
-      def combine(that: LinearityViolation[VarLabel]): LinearityViolation[VarLabel] =
+      infix def combine(that: LinearityViolation[VarLabel]): LinearityViolation[VarLabel] =
         (this, that) match {
           case (Overused(s),     Overused(t)    ) => Overused(s merge t)
           case (Overused(s),     Underused(t)   ) => OverUnder(s, t)

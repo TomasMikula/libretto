@@ -144,7 +144,7 @@ object Fun {
     ): Fun[A, B] = {
       lambdas.delambdifyTopLevel(VarDesc("The variable bound by lambda expression", pos), f) match
         case Lambdas.Delambdified.Exact(f) =>
-          f.fold
+          f
         case Lambdas.Delambdified.Closure(captured, f) =>
           throw RuntimeException(
             s"Lambda expression at ${pos.filename}:${pos.line} " +

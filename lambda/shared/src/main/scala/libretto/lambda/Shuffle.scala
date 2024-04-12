@@ -960,7 +960,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         case p: Projection.Proper[|*|, b1b2, c] => projectProper(p).unproper
       }
 
-    def pairWith[X3, X4, Z1, Z2](
+    infix def pairWith[X3, X4, Z1, Z2](
       that: TransferOpt[X3, X4, Z1, Z2],
     ): BiTransferOpt[A1, A2, X3, X4, B1, B2, Z1, Z2]
 
@@ -3064,7 +3064,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
   }
 
   extension [A, B](ev: A =:= B) {
-    def zip[C, D](that: C =:= D): (A |*| C) =:= (B |*| D) =
+    infix def zip[C, D](that: C =:= D): (A |*| C) =:= (B |*| D) =
       TypeEq.zip(ev)(that)
   }
 }

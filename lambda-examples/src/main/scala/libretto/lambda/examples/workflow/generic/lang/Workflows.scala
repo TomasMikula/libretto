@@ -36,7 +36,7 @@ class Workflows[Action[_, _]] {
       f: LambdaContext ?=> Expr[A] => Expr[B],
     ): Flow[A, B] =
       lambdas.delambdifyTopLevel(VarOrigin.LambdaAbstraction(pos), f) match {
-        case Delambdified.Exact(g) => g.fold // TODO: should return "folded" already
+        case Delambdified.Exact(g) => g
         case Delambdified.Closure(x, g) => ???
         case Delambdified.Failure(e) => throw AssertionError(e)
       }

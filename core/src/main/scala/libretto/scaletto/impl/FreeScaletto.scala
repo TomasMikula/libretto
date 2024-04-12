@@ -738,7 +738,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
       lambdas.delambdifyTopLevel(a, f) match {
         case Exact(f) =>
-          f.fold
+          f
         case Closure(captured, f) =>
           val undefinedVars: Var.Set[VarOrigin] =
             lambdas.Expr.initialVars(captured)
@@ -760,10 +760,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
       lambdas.delambdifyNested[A, B](bindVar, f) match {
         case Closure(captured, f) =>
-          lambdas.Expr.mapTupled(captured, ℭ.curry(f.fold))(resultVar)
+          lambdas.Expr.mapTupled(captured, ℭ.curry(f))(resultVar)
         case Exact(f) =>
           val captured0 = $.one(using pos)
-          (captured0 map ℭ.curry(elimFst > f.fold))(resultVar)
+          (captured0 map ℭ.curry(elimFst > f))(resultVar)
         case Failure(e) =>
           raiseError(e)
       }

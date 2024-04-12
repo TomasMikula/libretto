@@ -11,7 +11,7 @@ class Var[P, A] private[lambda](
   val origin: P,
   val context: AnyRef, // XXX
 ) {
-  def testEqual[B](that: Var[P, B]): Option[A =:= B] =
+  infix def testEqual[B](that: Var[P, B]): Option[A =:= B] =
     if (this eq that) Some(summon[A =:= A].asInstanceOf[A =:= B])
     else None
 
@@ -23,16 +23,16 @@ object Var {
   opaque type Set[P] = sci.Set[Var[P, ?]]
   object Set {
     def apply[P](v: Var[P, ?], vs: Var[P, ?]*): Set[P] =
-      sci.Set((v +: vs): _*)
+      sci.Set((v +: vs)*)
 
     extension [P](vs: Var.Set[P]) {
-      def merge(ws: Var.Set[P]): Var.Set[P] =
+      infix def merge(ws: Var.Set[P]): Var.Set[P] =
         sci.Set.concat(vs, ws)
 
       def list: List[Var[P, ?]] =
         List.from(vs)
 
-      def containsVar[A](v: Var[P, A]): Boolean =
+      infix def containsVar[A](v: Var[P, A]): Boolean =
         (vs: sci.Set[Var[P, ?]]) contains v
 
       def +[A](v: Var[P, A]): Var.Set[P] =
