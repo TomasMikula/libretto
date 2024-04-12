@@ -203,6 +203,17 @@ lazy val typology = project
     fork := true,
   )
 
+lazy val kindville = crossProject(JVMPlatform, JSPlatform)
+  .in(file("kindville"))
+  .settings(
+    name := "kindville",
+    publish / skip := true, // experimental project, do not publish
+    scalacOptions ++= commonScalacOptions ++ Seq("-explain", "-Xcheck-macros"),
+    libraryDependencies ++= Seq(
+      "org.scalatest" %%% "scalatest" % ScalatestVersion % Test,
+    ),
+  )
+
 lazy val root = project
   .in(file("."))
   .settings(
@@ -220,6 +231,8 @@ lazy val root = project
     mashupExamples,
     librettoZio,
     typology,
+    kindville.jvm,
+    kindville.js,
   )
 
 lazy val laikaSite         = taskKey[File]("generates HTML from Markdown using Laika")
