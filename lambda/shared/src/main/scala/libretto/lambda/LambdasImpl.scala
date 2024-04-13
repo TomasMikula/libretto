@@ -224,13 +224,33 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
   }
 
   /** Multiple expression trees. */
-  type Forest[A] = Tupled[Expr, A]
+  private type Forest[A] = Bin[|*|, Var, Expr, A]
+
+  private object Forest {
+    def unvar[VA, A](f: Forest[VA], u: Unvar[VA, A]): Tupled[Expr, A] =
+      Tupled.fromBin(
+        f.relabelLeafs[[x] =>> x, Unvar, A](
+          u,
+          [X, IX] => (u: Unvar[Var[X], IX]) => u.uniqueOutType[X](Unvar.SingleVar[X]()),
+        )
+      )
+
+    def upvar[A](exprs: Tupled[Expr, A]): Exists[[VA] =>> (Forest[VA], Unvar[VA, A])] =
+      exprs.asBin.relabelLeafs[Var, [a, va] =>> Unvar[va, a]](
+        [X] => (_: Unit) => Unvar.SingleVar(),
+        [A1, A2, VA1, VA2] => (u1: Unvar[VA1, A1], u2: Unvar[VA2, A2]) => u1 zip u2,
+      ) match
+        case Exists.Some((u, f)) => Exists((f, u))
+  }
 
   override def eliminateLocalVariables[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Delambdified[A, B] =
     eliminateLocalVariablesFromForest(boundVar, Tupled.atom(expr))
       .mapFun([X] => (f: X ≈⚬ B) => f.fold)
 
-  def eliminateLocalVariablesFromForest[A, B](boundVar: Var[A], exprs: Forest[B])(using Context): Delambdified0[A, B] = {
+  private def eliminateLocalVariablesFromForest[A, B](
+    boundVar: Var[A],
+    exprs: Tupled[Expr, B],
+  )(using Context): Delambdified0[A, B] = {
     import Lambdas.Delambdified.{Closure, Exact, Failure}
 
     extractFunctionFromForest(boundVar, exprs) match {
@@ -304,61 +324,66 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
 
   private def extractFunctionFromForest[A, B](
     boundVar: Var[A],
-    exprs: Forest[B],
+    exprs: Tupled[Expr, B],
   )(using
     Context,
   ): Delambdified0[A, B] = {
     import Lambdas.Delambdified.{Closure, Exact, Failure}
     import HybridArrow.LinearRes
 
-    eliminateFromForest(boundVar, exprs) match {
-      case EliminatedFromForest.FoundEach(arr, u) =>
-        arr.extract(u) match
-          case LinearRes.Exact(f)      => Exact(f)
-          case LinearRes.Closure(x, f) => Closure(x, f)
-          case LinearRes.Violation(e)  => Failure(e)
-      case EliminatedFromForest.FoundSome(x, arr, u, s) =>
-        arr.extract(u) match
-          case LinearRes.Exact(f)      => Closure(x, snd(f) > pure(s))
-          case LinearRes.Closure(y, f) => Closure(x zip y, assocLR > snd(f) > pure(s))
-          case LinearRes.Violation(e)  => Failure(e)
-      case EliminatedFromForest.NotFound() =>
-        Context.getDiscard(boundVar) match
-          case Some(discardFst) => Closure(exprs, swap > lift(discardFst(())))
-          case None             => Failure(Error.underusedVar(boundVar))
+    Forest.upvar(exprs) match { case Exists.Some((exprs, u)) =>
+      eliminateFromForest(boundVar, exprs) match {
+        case EliminatedFromForest.FoundEach(arr) =>
+          arr.extract(u) match
+            case LinearRes.Exact(f)      => Exact(f)
+            case LinearRes.Closure(x, f) => Closure(x, f)
+            case LinearRes.Violation(e)  => Failure(e)
+        case EliminatedFromForest.FoundSome(x, arr, s) =>
+          s.preShuffle(u) match {
+            case Exists.Some((u, s)) =>
+              Unvar.objectMap.unpair(u) match
+                case Unvar.objectMap.Unpaired.Impl(u1, u2) =>
+                  arr.extract(u2) match
+                    case LinearRes.Exact(f)      => Closure(Forest.unvar(x, u1), snd(f) > pure(s))
+                    case LinearRes.Closure(y, f) => Closure(Forest.unvar(x, u1) zip y, assocLR > snd(f) > pure(s))
+                    case LinearRes.Violation(e)  => Failure(e)
+          }
+        case EliminatedFromForest.NotFound() =>
+          Context.getDiscard(boundVar) match
+            case Some(discardFst) => Closure(Forest.unvar(exprs, u), swap > lift(discardFst(())))
+            case None             => Failure(Error.underusedVar(boundVar))
+      }
     }
   }
 
-  private def eliminateFromForest[A, B](
+  private def eliminateFromForest[A, VB](
     boundVar: Var[A],
-    exprs: Forest[B],
+    exprs: Forest[VB],
   )(using
     Context,
-  ): EliminatedFromForest[A, B] = {
-    import Lambdas.Delambdified.{Closure, Exact, Failure}
+  ): EliminatedFromForest[A, VB] = {
     import EliminatedFromForest.{FoundEach, FoundSome, NotFound}
-    import libretto.lambda.{CapturingFun as cf}
 
-    exprs.asBin match {
+    exprs match {
       case Bin.Leaf(b) =>
         eliminate(boundVar, b) match
-          case EliminateRes.Found(arr) => FoundEach(arr, Unvar.SingleVar())
+          case EliminateRes.Found(arr) => FoundEach(arr)
           case EliminateRes.NotFound() => NotFound()
       case br: Bin.Branch[br, lf, f, b1, b2] =>
-        val b1 = Tupled.fromBin(br.l)
-        val b2 = Tupled.fromBin(br.r)
+        val b1 = br.l
+        val b2 = br.r
         ( eliminateFromForest(boundVar, b1)
         , eliminateFromForest(boundVar, b2)
         ) match {
-          case (FoundEach(f1, u1),       FoundEach(f2, u2)      ) => FoundEach(f1 interweave f2, u1 zip u2)
-          case (FoundEach(f1, u1),       FoundSome(y, f2, u2, t)) => FoundSome(y, f1 interweave f2, u1 zip u2, ~⚬.xi > ~⚬.snd(t))
-          case (FoundEach(f1, u1),       NotFound()             ) => FoundSome(b2, f1, u1, ~⚬.swap)
-          case (FoundSome(x, f1, u1, s), FoundEach(f2, u2)      ) => FoundSome(x, f1 interweave f2, u1 zip u2, ~⚬.assocRL > ~⚬.fst(s))
-          case (FoundSome(x, f1, u1, s), FoundSome(y, f2, u2, t)) => FoundSome(x zip y, f1 interweave f2, u1 zip u2, ~⚬.ixi > ~⚬.par(s, t))
-          case (FoundSome(x, f1, u1, s), NotFound()             ) => FoundSome(x zip b2, f1, u1, ~⚬.ix > ~⚬.fst(s))
-          case (NotFound(),              FoundEach(f2, u2)      ) => FoundSome(b1, f2, u2, ~⚬.id)
-          case (NotFound(),              FoundSome(y, f2, u2, t)) => FoundSome(b1 zip y, f2, u2, ~⚬.assocLR > ~⚬.snd(t))
-          case (NotFound(),              NotFound()             ) => NotFound()
+          case (FoundEach(f1),       FoundEach(f2)      ) => FoundEach(f1 interweave f2)
+          case (FoundEach(f1),       FoundSome(y, f2, t)) => FoundSome(y, f1 interweave f2, ~⚬.xi > ~⚬.snd(t))
+          case (FoundEach(f1),       NotFound()         ) => FoundSome(b2, f1, ~⚬.swap)
+          case (FoundSome(x, f1, s), FoundEach(f2)      ) => FoundSome(x, f1 interweave f2, ~⚬.assocRL > ~⚬.fst(s))
+          case (FoundSome(x, f1, s), FoundSome(y, f2, t)) => FoundSome(x zip y, f1 interweave f2, ~⚬.ixi > ~⚬.par(s, t))
+          case (FoundSome(x, f1, s), NotFound()         ) => FoundSome(x zip b2, f1, ~⚬.ix > ~⚬.fst(s))
+          case (NotFound(),          FoundEach(f2)      ) => FoundSome(b1, f2, ~⚬.id)
+          case (NotFound(),          FoundSome(y, f2, t)) => FoundSome(b1 zip y, f2, ~⚬.assocLR > ~⚬.snd(t))
+          case (NotFound(),          NotFound()         ) => NotFound()
         }
     }
   }
@@ -398,9 +423,15 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
     case NotFound()
   }
 
-  private enum EliminatedFromForest[A, B] {
-    case FoundEach[A, VB, B](arr: HybridArrow[A, VB], u: Unvar[VB, B]) extends EliminatedFromForest[A, B]
-    case FoundSome[A, VB, B, X, C](captured: Forest[X], arr: HybridArrow[A, VB], u: Unvar[VB, B], s: (X |*| B) ~⚬ C) extends EliminatedFromForest[A, C]
+  private enum EliminatedFromForest[A, VB] {
+    case FoundEach[A, VB](arr: HybridArrow[A, VB]) extends EliminatedFromForest[A, VB]
+
+    case FoundSome[A, VB, VX, VC](
+      captured: Forest[VX],
+      arr: HybridArrow[A, VB],
+      s: (VX |*| VB) ~⚬ VC,
+    ) extends EliminatedFromForest[A, VC]
+
     case NotFound()
   }
 
@@ -1249,7 +1280,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
         })
     }
 
-    val objectMap: SemigroupalObjectMap[|*|, |*|, Unvar] =
+    given objectMap: SemigroupalObjectMap[|*|, |*|, Unvar] =
       new SemigroupalObjectMap[|*|, |*|, Unvar] {
         override def uniqueOutputType[A, X, Y](f1: Unvar[A, X], f2: Unvar[A, Y]): X =:= Y =
           f1 uniqueOutType f2

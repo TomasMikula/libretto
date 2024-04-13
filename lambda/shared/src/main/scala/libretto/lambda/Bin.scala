@@ -34,6 +34,36 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
       case Branch(l, r) => Branch(l.mapLeafs(f), r.mapLeafs(f))
     }
 
+  def relabelLeafs[U[_], Tr[_, _]](
+    leafTr: [X] => Unit => Tr[T[X], U[X]],
+    parTr: [A1, A2, B1, B2] => (tr1: Tr[A1, B1], tr2: Tr[A2, B2]) => Tr[A1 <*> A2, B1 <*> B2],
+  ): Exists[[B] =>> (Tr[A, B], Bin[<*>, U, F, B])] =
+    this match
+      case l: Leaf[p, t, f, a] =>
+        Exists((leafTr[a](()), Leaf(l.value)))
+      case b: Branch[p, t, f, a1, a2] =>
+        (b.l.relabelLeafs[U, Tr](leafTr, parTr), b.r.relabelLeafs[U, Tr](leafTr, parTr)) match
+          case (Exists.Some((tr1, b1)), Exists.Some((tr2, b2))) =>
+            Exists((parTr(tr1, tr2), Branch(b1, b2)))
+
+  def relabelLeafs[U[_], Tr[_, _], B](
+    tr: Tr[A, B],
+    leafToLeaf: [X, UX] => Tr[T[X], UX] => (UX =:= U[X]),
+  )(using
+    rel: PairwiseRel[<*>, <*>, Tr],
+  ): Bin[<*>, U, F, B] =
+    this match
+      case l: Leaf[p, t, f, a] =>
+        leafToLeaf[a, B](tr) match { case TypeEq(Refl()) => Leaf(l.value) }
+      case b: Branch[p, t, f, a1, a2] =>
+        rel.unpair[a1, a2, B](tr) match {
+          case t @ rel.Unpaired.Impl(tr1, tr2) =>
+            Branch(
+              b.l.relabelLeafs[U, Tr, t.X1](tr1, leafToLeaf),
+              b.r.relabelLeafs[U, Tr, t.X2](tr2, leafToLeaf),
+            )
+        }
+
   def foldMap[G[_]](
     map: [x] => F[x] => G[T[x]],
   )(using
