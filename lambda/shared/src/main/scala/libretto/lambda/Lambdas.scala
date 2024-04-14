@@ -15,10 +15,9 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     def variable[A](a: Var[V, A]): Expr[A]
     def map[A, B](e: Expr[A], f: A -⚬ B)(resultVarName: V)(using Context): Expr[B]
     def zip[A, B](a: Expr[A], b: Expr[B])(resultVarName: V)(using Context): Expr[A |*| B]
+    def zipN[A](a: Tupled[Expr, A])(resultVarName: V)(using Context): Expr[A]
     def unzip[A, B](ab: Expr[A |*| B])(varName1: V, varName2: V)(using Context): (Expr[A], Expr[B])
     def const[A](introduce: [x] => Unit => x -⚬ (A |*| x))(varName: V)(using Context): Expr[A]
-
-    def mapTupled[A, B](a: Tupled[Expr, A], f: A -⚬ B)(resultVarName: V)(using Context): Expr[B]
 
     def resultVar[A](a: Expr[A]): Var[V, A]
     def initialVars[A](a: Expr[A]): Var.Set[V]
@@ -248,7 +247,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
 
 object Lambdas {
   def apply[-⚬[_, _], |*|[_, _], VarLabel](
-    syntheticPairVar: (VarLabel, VarLabel) => VarLabel,
     universalSplit  : Option[[X]    => Unit => X -⚬ (X |*| X)] = None,
     universalDiscard: Option[[X, Y] => Unit => (X |*| Y) -⚬ Y] = None,
   )(using
@@ -256,7 +254,6 @@ object Lambdas {
     inj: BiInjective[|*|],
   ): Lambdas[-⚬, |*|, VarLabel] =
     new LambdasImpl[-⚬, |*|, VarLabel](
-      syntheticPairVar,
       universalSplit,
       universalDiscard,
     )

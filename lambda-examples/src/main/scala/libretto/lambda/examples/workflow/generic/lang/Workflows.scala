@@ -107,7 +107,6 @@ class Workflows[Action[_, _]] {
 
   private val lambdas: Lambdas[Flow, **, VarOrigin] =
     Lambdas[Flow, **, VarOrigin](
-      syntheticPairVar = (x, y) => VarOrigin.SyntheticPair(x, y),
       universalSplit   = Some([X] => (_: Unit) => Flow.dup[X]),
       universalDiscard = Some([X, Y] => (_: Unit) => Flow.prj2[X, Y]),
     )
@@ -142,7 +141,9 @@ class Workflows[Action[_, _]] {
         distribute = [X, Y, Z] => (_: Unit) => Flow.distributeLR[X, Y, Z],
       ) match {
         case Delambdified.Exact(g) => g(expr)
-        case Delambdified.Closure(x, g) => lambdas.Expr.mapTupled(Tupled.zip(x, Tupled.atom(expr)), g)(VarOrigin.CapturingSwitch(pos))
+        case Delambdified.Closure(x, g) =>
+          val xa = lambdas.Expr.zipN(Tupled.zip(x, Tupled.atom(expr)))(VarOrigin.FunctionInputWithCapturedExpressions(pos))
+          lambdas.Expr.map(xa, g)(VarOrigin.CapturingSwitch(pos))
         case Delambdified.Failure(e) => throw AssertionError(e)
       }
 
@@ -175,4 +176,4 @@ object Workflows:
     case Left(pos: SourcePos)
     case Right(pos: SourcePos)
     case CapturingSwitch(pos: SourcePos)
-    case SyntheticPair(a: VarOrigin, b: VarOrigin)
+    case FunctionInputWithCapturedExpressions(pos: SourcePos)

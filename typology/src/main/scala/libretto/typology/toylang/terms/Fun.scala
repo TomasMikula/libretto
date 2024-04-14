@@ -125,7 +125,6 @@ object Fun {
 
   private val lambdas: libretto.lambda.Lambdas[Fun, Tuple2, Object] =
     libretto.lambda.Lambdas[Fun, Tuple2, Object](
-      syntheticPairVar = (lbl1, lbl2) => new Object,
       universalSplit = Some([x] => (_: Unit) => Fun.dup[x]),
       universalDiscard = Some([x, y] => (_: Unit) => Fun.prj2[x, y]),
     )

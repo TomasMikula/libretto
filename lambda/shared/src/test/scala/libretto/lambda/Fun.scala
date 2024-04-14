@@ -71,9 +71,7 @@ object Fun {
   }
 
   private val lambdas: Lambdas[Fun, **, VarDesc] =
-    Lambdas[Fun, **, VarDesc](
-      (x, y) => VarDesc(s"auxiliary pairing of ($x, $y)"),
-    )
+    Lambdas[Fun, **, VarDesc]()
 
   opaque type $[A] = lambdas.Expr[A]
   opaque type LambdaContext = lambdas.Context
@@ -124,7 +122,7 @@ object Fun {
         [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
       ) match {
         case Lambdas.Delambdified.Exact(f)      => f(ab)
-        case Lambdas.Delambdified.Closure(x, f) => lambdas.Expr.mapTupled(x zip Tupled.atom(ab), f)(VarDesc("switch with captured expressions", pos))
+        case Lambdas.Delambdified.Closure(x, f) => lambdas.Expr.map(lambdas.Expr.zipN(x zip Tupled.atom(ab))(VarDesc("function input with captured expressions")), f)(VarDesc("switch with captured expressions", pos))
         case Lambdas.Delambdified.Failure(e)    => raiseError(e)
       }
     }

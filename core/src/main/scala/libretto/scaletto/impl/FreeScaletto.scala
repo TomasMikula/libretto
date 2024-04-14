@@ -641,9 +641,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
   val lambdas: Lambdas[-⚬, |*|, VarOrigin] =
-    Lambdas[-⚬, |*|, VarOrigin](
-      syntheticPairVar = (x, y) => VarOrigin.Synthetic(s"auxiliary pairing of ($x, $y)"),
-    )
+    Lambdas[-⚬, |*|, VarOrigin]()
 
   override type $[A] = lambdas.Expr[A]
 
@@ -756,11 +754,13 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       import Delambdified.{Closure, Exact, Failure}
 
       val bindVar   = VarOrigin.Lambda(pos)
+      val captVar   = VarOrigin.CapturedVars(pos)
       val resultVar = VarOrigin.ClosureVal(pos)
 
       lambdas.delambdifyNested[A, B](bindVar, f) match {
         case Closure(captured, f) =>
-          lambdas.Expr.mapTupled(captured, ℭ.curry(f))(resultVar)
+          val x = lambdas.Expr.zipN(captured)(captVar)
+          lambdas.Expr.map(x, ℭ.curry(f))(resultVar)
         case Exact(f) =>
           val captured0 = $.one(using pos)
           (captured0 map ℭ.curry(elimFst > f))(resultVar)
@@ -867,7 +867,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     new ConcurrentPairInvertOps {}
 
   private def mapTupled[A, B](a: Tupled[|*|, lambdas.Expr, A], f: A -⚬ B)(pos: SourcePos)(using lambdas.Context): lambdas.Expr[B] =
-    lambdas.Expr.mapTupled(a, f)(VarOrigin.FunAppRes(pos))
+    lambdas.Expr.map(
+      lambdas.Expr.zipN(a)(VarOrigin.CapturedVars(pos)),
+      f
+    )(VarOrigin.FunAppRes(pos))
   private def raiseError(e: Lambdas.Error[VarOrigin]): Nothing = {
     import Lambdas.Error.Undefined
     import Lambdas.Error.LinearityViolation.{OverUnder, Overused, Underused}
