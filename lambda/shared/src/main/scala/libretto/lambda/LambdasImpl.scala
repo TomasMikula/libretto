@@ -547,18 +547,12 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
             import Unvar.{Par, SingleVar}
             override def map[A, B](op: VarOp[A, B]): Image[A, B] =
               op match {
-                case (vars, _: Op.Zip[a1, a2]) =>
-                  MappedMorphism(Par(SingleVar[a1](), SingleVar[a2]()), LinCheck.Success(CapturingFun.id), SingleVar[a1 |*| a2]())
                 case (vars, op: Op.ZipN[a, y]) =>
                   MappedMorphism(op.u, LinCheck.Success(CapturingFun.id), SingleVar[y]())
                 case (vars, op: Op.Map[a, b]) =>
                   MappedMorphism(SingleVar[a](), LinCheck.Success(CapturingFun.lift(op.f)), SingleVar[b]())
                 case (vars, _: Op.Unzip[a1, a2]) =>
                   MappedMorphism(SingleVar[a1 |*| a2](), LinCheck.Success(CapturingFun.id), Par(SingleVar[a1](), SingleVar[a2]()))
-                case (vars, op: Op.CaptureFst[a, x]) =>
-                  MappedMorphism(SingleVar[a](), LinCheck.Success(CapturingFun.captureFst(op.x)), SingleVar[x |*| a]())
-                case (vars, op: Op.CaptureSnd[a, x]) =>
-                  MappedMorphism(SingleVar[a](), LinCheck.Success(CapturingFun.captureSnd(op.x)), SingleVar[a |*| x]())
                 case (vars, op: Op.CaptureN[vx, va, vb, b]) =>
                   op.s.preShuffle(op.u) match
                     case Exists.Some((u, s)) =>
@@ -685,8 +679,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
         def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| B]]
         def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| B]]
         def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: A =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| B]]
-        def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using A =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| B]]
-        def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using A =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| B]]
         def capN_gcd_this[VX, T, VC, C](that: CaptureN[VX, Var[T], VC, C])(using A =:= Var[T]): Option[Tail[Var[T], Var[C] |*| B]]
         def zip1_gcd_this[T](that: ZipN[Var[T], T])(using A =:= Var[T]): Option[Tail[Var[T], Var[T] |*| B]]
 
@@ -697,42 +689,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
       }
 
       sealed trait Linear[A, B] extends Affine[A, B]
-
-      case class Zip[A1, A2](resultVar: Var[A1 |*| A2]) extends Op.Linear[Var[A1] |*| Var[A2], Var[A1 |*| A2]] {
-        override def terminalVars(a: Vars[Var[A1] |*| Var[A2]]): Vars[Var[A1 |*| A2]] =
-          Vars.atom(resultVar)
-
-        override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: (Var[A1] |*| Var[A2]) =:= Var[X]): Option[Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2] |*| C]] =
-          varIsNotPair(ev.flip)
-
-        override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[A1 |*| A2]]] =
-          varIsNotPair(ev.flip)
-
-        override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| Var[A1 |*| A2]]] =
-          varIsNotPair(ev.flip)
-
-        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A1 |*| A2]]] =
-          varIsNotPair(ev.flip)
-
-        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[A1 |*| A2]]] =
-          varIsNotPair(ev.flip)
-
-        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using ev: (Var[A1] |*| Var[A2]) =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A1 |*| A2]]] =
-          varIsNotPair(ev.flip)
-
-        override def capN_gcd_this[VX, T, VC, C](that: CaptureN[VX, Var[T], VC, C])(using (Var[A1] |*| Var[A2]) =:= Var[T]): Option[Tail[Var[T], Var[C] |*| Var[A1 |*| A2]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.capN_gcd_this")
-
-        override def zip1_gcd_this[T](that: ZipN[Var[T], T])(using (Var[A1] |*| Var[A2]) =:= Var[T]): Option[Tail[Var[T], Var[T] |*| Var[A1 |*| A2]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.zip1_gcd_this")
-
-        override def asZipN[VP1, VP2](using
-          ev: (Var[A1] |*| Var[A2]) =:= (VP1 |*| VP2),
-        ): Exists[[B0] =>> (ZipN[Var[A1] |*| Var[A2], B0], Var[A1 |*| A2] =:= Var[B0])] =
-          ev match
-            case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
-              Exists((ZipN(Unvar.Par(Unvar.SingleVar(), Unvar.SingleVar()), resultVar), summon))
-      }
 
       case class ZipN[VA, A](u: Unvar[VA, A], resultVar: Var[A]) extends Op.Linear[VA, Var[A]] {
         override def terminalVars(a: Vars[VA]): Vars[Var[A]] =
@@ -753,12 +709,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
 
         override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: VA =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.unzip_gcd_this")
-
-        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using VA =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[A]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap1_gcd_this")
-
-        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using VA =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
 
         override def capN_gcd_this[VX, T, VC, C](that: CaptureN[VX, Var[T], VC, C])(using VA =:= Var[T]): Option[Tail[Var[T], Var[C] |*| Var[A]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.capN_gcd_this")
@@ -795,12 +745,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
 
         override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[B]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.unzip_gcd_this")
-
-        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[B]]] =
-          None
-
-        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[B]]] =
-          None
 
         override def capN_gcd_this[VX, T, VC, C](that: CaptureN[VX, Var[T], VC, C])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[C] |*| Var[B]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.capN_gcd_this")
@@ -859,12 +803,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
                   bug(s"Variable ${that.resultVar2} appeared as a result of two different projections")
           }
 
-        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[A1]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap1_gcd_this")
-
-        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A1]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
-
         override def capN_gcd_this[VX, T, VC, C](that: CaptureN[VX, Var[T], VC, C])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[C] |*| Var[A1]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.capN_gcd_this")
 
@@ -914,12 +852,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
               bug(s"Variable ${that.resultVar1} appeared as a result of two different projections")
             case (None, Some(_)) =>
               bug(s"Variable ${that.resultVar2} appeared as a result of two different projections")
-
-        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[A2]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap1_gcd_this")
-
-        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A2]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
 
         override def capN_gcd_this[VX, T, VC, C](that: CaptureN[VX, Var[T], VC, C])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[C] |*| Var[A2]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.capN_gcd_this")
@@ -977,12 +909,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
             case (None, Some(_)) =>
               bug(s"Variable ${that.resultVar2} appeared as a result of two different projections")
 
-        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| (Var[A1] |*| Var[A2])]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap1_gcd_this")
-
-        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| (Var[A1] |*| Var[A2])]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
-
         override def capN_gcd_this[VX, T, VC, C](that: CaptureN[VX, Var[T], VC, C])(using Var[A1 |*| A2] =:= Var[T]): Option[Tail[Var[T], Var[C] |*| (Var[A1] |*| Var[A2])]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.capN_gcd_this")
 
@@ -1021,12 +947,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
         override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: VA =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[T2] |*| Var[B]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.unzip_gcd_this")
 
-        override def cap1_gcd_this[T, X](that: CaptureFst[T, X])(using VA =:= Var[T]): Option[Tail[Var[T], Var[X |*| T] |*| Var[B]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap1_gcd_this")
-
-        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using VA =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[B]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.cap2_gcd_this")
-
         override def capN_gcd_this[VX, T, VC, C](that: CaptureN[VX, Var[T], VC, C])(using VA =:= Var[T]): Option[Tail[Var[T], Var[C] |*| Var[B]]] =
           (that.resultVar testEqual this.resultVar) map {
             case TypeEq(Refl()) =>
@@ -1039,80 +959,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
         override def asZipN[VP1, VP2](using VA =:= (VP1 |*| VP2)): Exists[[B0] =>> (ZipN[VA, B0], Var[B] =:= Var[B0])] =
           // TODO: this will be problematic
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.asZipN")
-      }
-
-      case class CaptureFst[A, X](x: Expr[X], resultVar: Var[X |*| A]) extends Op.Linear[Var[A], Var[X |*| A]] {
-        override def terminalVars(a: Vars[Var[A]]): Vars[Var[X |*| A]] =
-          Vars.atom(resultVar)
-
-        override def gcdSimple[Q, C](that: Op.Affine[Var[Q], C])(using ev: Var[A] =:= Var[Q]): Option[Tail[Var[A], Var[X |*| A] |*| C]] =
-          that.cap1_gcd_this(this)(using ev.flip)
-
-        override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[X |*| A]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj1_gcd_this")
-
-        override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| Var[X |*| A]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj2_gcd_this")
-
-        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[X |*| A]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.unzip_gcd_this")
-
-        override def cap1_gcd_this[T, Y](that: CaptureFst[T, Y])(using ev: Var[A] =:= Var[T]): Option[Tail[Var[T], Var[Y |*| T] |*| Var[X |*| A]]] =
-          ev match { case Injective[Var](TypeEq(Refl())) =>
-            (that.resultVar testEqual this.resultVar) map {
-              case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
-                shOp.lift(this) > shOp.lift(DupVar[X |*| A]())
-            }
-          }
-
-        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[X |*| A]]] =
-          None
-
-        override def capN_gcd_this[VX, T, VC, C](that: CaptureN[VX, Var[T], VC, C])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[C] |*| Var[X |*| A]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.capN_gcd_this")
-
-        override def zip1_gcd_this[T](that: ZipN[Var[T], T])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T] |*| Var[X |*| A]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.zip1_gcd_this")
-
-        override def asZipN[VP1, VP2](using ev: Var[A] =:= (VP1 |*| VP2)): Exists[[B0] =>> (ZipN[Var[A], B0], Var[X |*| A] =:= Var[B0])] =
-          varIsNotPair(ev)
-      }
-
-      case class CaptureSnd[A, X](x: Expr[X], resultVar: Var[A |*| X]) extends Op.Linear[Var[A], Var[A |*| X]] {
-        override def terminalVars(a: Vars[Var[A]]): Vars[Var[A |*| X]] =
-          Vars.atom(resultVar)
-
-        override def gcdSimple[Q, C](that: Op.Affine[Var[Q], C])(using ev: Var[A] =:= Var[Q]): Option[Tail[Var[A], Var[A |*| X] |*| C]] =
-          that.cap2_gcd_this(this)(using ev.flip)
-
-        override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T1] |*| Var[A |*| X]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj1_gcd_this")
-
-        override def prj2_gcd_this[T1, T2](that: Prj2[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], Var[T2] |*| Var[A |*| X]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj2_gcd_this")
-
-        override def unzip_gcd_this[T1, T2](that: Unzip[T1, T2])(using ev: Var[A] =:= Var[T1 |*| T2]): Option[Tail[Var[T1 |*| T2], (Var[T1] |*| Var[T2]) |*| Var[A |*| X]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.unzip_gcd_this")
-
-        override def cap1_gcd_this[T, Y](that: CaptureFst[T, Y])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[Y |*| T] |*| Var[A |*| X]]] =
-          None
-
-        override def cap2_gcd_this[T, Y](that: CaptureSnd[T, Y])(using ev: Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T |*| Y] |*| Var[A |*| X]]] =
-          ev match { case Injective[Var](TypeEq(Refl())) =>
-            (that.resultVar testEqual this.resultVar) map {
-              case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
-                shOp.lift(this) > shOp.lift(DupVar())
-            }
-          }
-
-        override def capN_gcd_this[VX, T, VC, C](that: CaptureN[VX, Var[T], VC, C])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[C] |*| Var[A |*| X]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.capN_gcd_this")
-
-        override def zip1_gcd_this[T](that: ZipN[Var[T], T])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T] |*| Var[A |*| X]]] =
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.zip1_gcd_this")
-
-        override def asZipN[VP1, VP2](using ev: Var[A] =:= (VP1 |*| VP2)): Exists[[B0] =>> (ZipN[Var[A], B0], Var[A |*| X] =:= Var[B0])] =
-          varIsNotPair(ev)
       }
 
       val project: [t, u, v] => (op: Op[t, u], p: Projection[|*|, u, v]) => shOp.ProjectRes[t, v] =
@@ -1139,13 +985,10 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
 
         def apply[A, B](op: Op.Affine[A, B]): InputVarFocus[A, B] =
           op match {
-            case op: Zip[t, u]        => InputVarFocus[[x] =>> x |*| Var[u], t, Var[t |*| u]](op, Focus.fst) // arbitrarily picking the first input
-            case op: Unzip[t, u]      => InputVarFocus[[x] =>> x, t |*| u, Var[t] |*| Var[u]](op, Focus.id)
-            case op: Prj1[t, u]       => InputVarFocus[[x] =>> x, t |*| u, Var[t]](op, Focus.id)
-            case op: Prj2[t, u]       => InputVarFocus[[x] =>> x, t |*| u, Var[u]](op, Focus.id)
-            case op: Map[t, u]        => InputVarFocus[[x] =>> x, t, Var[u]](op, Focus.id)
-            case op: CaptureFst[t, u] => InputVarFocus[[x] =>> x, t, Var[u |*| t]](op, Focus.id)
-            case op: CaptureSnd[t, u] => InputVarFocus[[x] =>> x, t, Var[t |*| u]](op, Focus.id)
+            case op: Unzip[t, u] => InputVarFocus[[x] =>> x, t |*| u, Var[t] |*| Var[u]](op, Focus.id)
+            case op: Prj1[t, u]  => InputVarFocus[[x] =>> x, t |*| u, Var[t]](op, Focus.id)
+            case op: Prj2[t, u]  => InputVarFocus[[x] =>> x, t |*| u, Var[u]](op, Focus.id)
+            case op: Map[t, u]   => InputVarFocus[[x] =>> x, t, Var[u]](op, Focus.id)
             case op: CaptureN[x, a, b, c] =>
               op.s.preShuffle(op.u) match
                 case Exists.Some((u, s)) =>
@@ -1241,16 +1084,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
       shOp.lift(Op.Map(f, resultVar))
 
     def captureFst[A, X](x: Expr[X], resultVar: Var[X |*| A]): Tail[Var[A], Var[X |*| A]] =
-      shOp.lift(Op.CaptureFst(x, resultVar))
+      captureN(Bin.Leaf(x), ~⚬.id[Var[X] |*| Var[A]], Unvar.Par(Unvar.SingleVar(), Unvar.SingleVar()), resultVar)
+
+    def captureSnd[A, X](x: Expr[X], resultVar: Var[A |*| X]): Tail[Var[A], Var[A |*| X]] =
+      captureN(Bin.Leaf(x), ~⚬.swap[Var[X], Var[A]], Unvar.Par(Unvar.SingleVar(), Unvar.SingleVar()), resultVar)
 
     def captureN[VX, VA, VB, B](x: Forest[VX], s: (VX |*| VA) ~⚬ VB, u: Unvar[VB, B], resultVar: Var[B]): Tail[VA, Var[B]] =
       shOp.lift(Op.CaptureN(x, s, u, resultVar))
 
-    def captureSnd[A, X](x: Expr[X], resultVar: Var[A |*| X]): Tail[Var[A], Var[A |*| X]] =
-      shOp.lift(Op.CaptureSnd(x, resultVar))
-
     def zip[A1, A2](resultVar: Var[A1 |*| A2]): Tail[Var[A1] |*| Var[A2], Var[A1 |*| A2]] =
-      shOp.lift(Op.Zip(resultVar))
+      zipN(Unvar.Par(Unvar.SingleVar(), Unvar.SingleVar()), resultVar)
 
     def zipN[VA, A](u: Unvar[VA, A], resultVar: Var[A]): Tail[VA, Var[A]] =
       shOp.lift(Op.ZipN(u, resultVar))
@@ -1302,15 +1145,12 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
               ev1,
             )
           }
-        case Op.Zip(_)           => None
-        case Op.ZipN(_, _)       => None
-        case Op.CaptureFst(_, _) => None
-        case Op.CaptureSnd(_, _) => None
+        case Op.ZipN(_, _)           => None
+        case Op.Unzip(_, _)          => None
+        case Op.Map(_, _)            => None
+        case Op.Prj1(_, _)           => None
+        case Op.Prj2(_, _)           => None
         case Op.CaptureN(_, _, _, _) => None
-        case Op.Unzip(_, _)      => None
-        case Op.Map(_, _)        => None
-        case Op.Prj1(_, _)       => None
-        case Op.Prj2(_, _)       => None
     }
 
     def pullBumpDupVar[A, F[_], V, C[_], B, D[_], Y](
