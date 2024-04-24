@@ -143,13 +143,20 @@ Primitives for racing and recursion were added.
 
 ### Presentations
 
-**Typed Interaction with Session Types (using Scala and Libretto).** Functional Scala 2022 [[video](https://www.youtube.com/watch?v=IU_nb6yozas)] [[slides](https://continuously.dev/presentations/Typed_Interaction_with_Session_Types_20221201.pdf)]
+**Typed Interaction with Session Types (using Scala and Libretto).** Functional Scala 2022 [[video](https://www.youtube.com/watch?v=IU_nb6yozas)] [[slides](https://continuously.dev/presentations/Typed_Interaction_with_Session_Types_20221201.pdf)]\
+Shows how Libretto expresses session types.
 
-**Custom Stream Operators Made Safe And Simple with Libretto.** Scalar 2023 [[video](https://www.youtube.com/watch?v=iPn4iwSu5Sw)] [[slides](https://continuously.dev/presentations/Custom-Stream-Operators_20230324.pdf)]
+**Custom Stream Operators Made Safe And Simple with Libretto.** Scalar 2023 [[video](https://www.youtube.com/watch?v=iPn4iwSu5Sw)] [[slides](https://continuously.dev/presentations/Custom-Stream-Operators_20230324.pdf)]\
+Shows the expressiveness of Libretto in implementing stream operators. Presents examples that are hard to express in other stream libraries.
 
-**Concurrent All The Way Down (Functional Concurrency with Libretto).** LambdaDays 2023 [[slides](https://continuously.dev/presentations/Concurrent-All-The-Way-Down_20230606.pdf)]
+**Concurrent All The Way Down (Functional Concurrency with Libretto).** LambdaDays 2023 [[video](https://www.youtube.com/watch?v=jDCoR0o4qVY)] [[slides](https://continuously.dev/presentations/Concurrent-All-The-Way-Down_20230606.pdf)]\
+Concurrency without threads or side-effects.
 
-**When Your DSL Needs to Support User-Defined Domain Functions.** ScalaDays 2023 [[video](https://www.youtube.com/watch?v=caGbfOSvrGQ)] [[slides](https://continuously.dev/presentations/When_your_DSL_needs_to_support_user-defined_domain_functions_20230914.pdf)]
+**When Your DSL Needs to Support User-Defined Domain Functions.** ScalaDays 2023 [[video](https://www.youtube.com/watch?v=caGbfOSvrGQ)] [[slides](https://continuously.dev/presentations/When_your_DSL_needs_to_support_user-defined_domain_functions_20230914.pdf)]\
+Presents the DSL embedding technique behind Libretto: _delambdification_ followed by _"compiling to categories"_ (i.e. to point-free representation).
+
+**Monads Are Not About Sequencing.** Functional Scala 2023 [[video](https://www.youtube.com/watch?v=ncnP6y91NNo)] [[slides](https://continuously.dev/presentations/Monads-not-about-sequencing_20231201.pdf)]\
+One of the presented examples, the concurrent, non-deterministic Writer, is in Libretto.
 
 ## Caveats
 
