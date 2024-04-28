@@ -31,9 +31,9 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   def biInjectiveProduct: BiInjective[|*|] = summon
 
   sealed trait Shuffled[A, B] {
-    def after[Z](that: Shuffled[Z, A]): Shuffled[Z, B]
+    infix def after[Z](that: Shuffled[Z, A]): Shuffled[Z, B]
     infix def thenShuffle[C](that: B ~⚬ C): Shuffled[A, C]
-    def afterShuffle[Z](that: Z ~⚬ A): Shuffled[Z, B]
+    infix def afterShuffle[Z](that: Z ~⚬ A): Shuffled[Z, B]
     def foldMap[->>[_, _]](f: [x, y] => (x -> y) => (x ->> y))(using SymmetricSemigroupalCategory[->>, |*|]): A ->> B
     def inFst[Y]: Shuffled[A |*| Y, B |*| Y]
     def inSnd[X]: Shuffled[X |*| A, X |*| B]
@@ -66,6 +66,16 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
     def fold(using SymmetricSemigroupalCategory[->, |*|]): A -> B =
       foldMap[->]([x, y] => (f: x -> y) => f)
+
+    def foldMapA[G[_], ->>[_, _]](
+      f: [t, u] => (t -> u) => G[t ->> u],
+    )(using
+      G: Applicative[G],
+      cat: SymmetricSemigroupalCategory[->>, |*|],
+    ): G[A ->> B] =
+      this
+        .traverse[G, ->>](f)(using G, libretto.lambda.Shuffled(shuffle))
+        .map(_.fold)
 
     def at[F[_]](f: Focus[|*|, F]): Shuffled[F[A], F[B]] =
       f match {
@@ -415,7 +425,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
   sealed trait Plated[A, B] {
     import Plated.*
 
-    def afterPermeable[Z](that: Permeable[Z, A]): Plated.Preshuffled[Z, ?, B] =
+    infix def afterPermeable[Z](that: Permeable[Z, A]): Plated.Preshuffled[Z, ?, B] =
       that match {
         case Pure(s) =>
           Preshuffled(s, this)
@@ -423,7 +433,7 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
           Preshuffled(l, SemiCons(b1, b2, r, this))
       }
 
-    def thenPermeable[C](that: Permeable[B, C]): Plated.Postshuffled[A, ?, C] =
+    infix def thenPermeable[C](that: Permeable[B, C]): Plated.Postshuffled[A, ?, C] =
       that match {
         case Pure(s) =>
           Postshuffled(this, s)
@@ -1518,8 +1528,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     }
 
     sealed trait Blocked[F[_], X, B] extends ChaseFwRes[F, X, B] {
-      def andThen[C](that: Shuffled[B, C]): ChaseFwRes.Blocked[F, X, C]
-      def after[H[_]](H: Focus[|*|, H], h: [x] => Unit => Shuffled[H[x], F[x]]): ChaseFwRes.Blocked[H, X, B]
+      infix def andThen[C](that: Shuffled[B, C]): ChaseFwRes.Blocked[F, X, C]
+      infix def after[H[_]](H: Focus[|*|, H], h: [x] => Unit => Shuffled[H[x], F[x]]): ChaseFwRes.Blocked[H, X, B]
       def inFst[C, D](snd: Shuffled[C, D]): ChaseFwRes.Blocked[[x] =>> F[x] |*| C, X, B |*| D]
       def inSnd[P, Q](fst: Shuffled[P, Q]): ChaseFwRes.Blocked[[x] =>> P |*| F[x], X, Q |*| B]
 
@@ -1617,8 +1627,8 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     }
 
     sealed trait Blocked[A, G[_], X] extends ChaseBwRes[A, G, X] {
-      override def after[P](p: Shuffled[P, A]): ChaseBwRes.Blocked[P, G, X]
-      override def andThen[H[_]](H: Focus[|*|, H], h: [x] => Unit => Shuffled[G[x], H[x]]): ChaseBwRes.Blocked[A, H, X]
+      infix override def after[P](p: Shuffled[P, A]): ChaseBwRes.Blocked[P, G, X]
+      infix override def andThen[H[_]](H: Focus[|*|, H], h: [x] => Unit => Shuffled[G[x], H[x]]): ChaseBwRes.Blocked[A, H, X]
       override def inFst[P, Q](snd: Shuffled[P, Q]): ChaseBwRes.Blocked[A |*| P, [x] =>> G[x] |*| Q, X]
       override def inSnd[P, Q](fst: Shuffled[P, Q]): ChaseBwRes.Blocked[P |*| A, [x] =>> Q |*| G[x], X]
 
