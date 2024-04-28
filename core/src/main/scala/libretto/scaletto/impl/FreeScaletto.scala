@@ -1,12 +1,14 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{ClosedSymmetricMonoidalCategory, Lambdas, LambdasImpl, Sink, Tupled, Var}
+import libretto.lambda.{ClosedSymmetricMonoidalCategory, Lambdas, LambdasImpl, Shuffled, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Delambdified
-import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
+import libretto.lambda.Partitioning.Matcher
+import libretto.lambda.util.{Applicative, BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Monad.monadEither
 import libretto.util.{Async, StaticValue}
+import scala.collection.immutable.{:: as NonEmptyList}
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 
@@ -640,21 +642,67 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
-  val lambdas: Lambdas[-⚬, |*|, VarOrigin] =
-    Lambdas[-⚬, |*|, VarOrigin]()
+  private type PartialFun[A, B] =
+    (A -⚬ B) | Matcher[-⚬, |+|, A, B]
 
-  override type $[A] = lambdas.Expr[A]
+  private val psh: Shuffled[PartialFun, |*|] =
+    Shuffled[PartialFun, |*|]
 
-  override type LambdaContext = lambdas.Context
+  private type -?>[A, B] = psh.Shuffled[A, B]
+
+  private def partial[A, B](f: A -⚬ B): (A -?> B) =
+    psh.lift(f)
+
+  private def total[A, B](f: A -?> B): TotalRes[A -⚬ B] =
+    f.foldMapA(
+      [X, Y] => (g: PartialFun[X, Y]) => {
+        g match
+          case g: (X -⚬ Y) =>
+            TotalRes.success(g)
+          case m: Matcher[-⚬, |+|, X, Y] =>
+            m.isTotal match
+              case Some(g) => TotalRes.success(g)
+              case None => libretto.lambda.UnhandledCase.raise(s"Non-exhaustive matcher $m")
+      }
+    )
+
+  /** The result of extracting a total function from a partial one. */
+  private type TotalRes[T] = Either[NonEmptyList[(SourcePos, NonEmptyList[String])], T]
+  private object TotalRes {
+    def success[T](value: T): TotalRes[T] =
+      Right(value)
+
+    def zip[A, B](a: TotalRes[A], b: TotalRes[B]): TotalRes[(A, B)] =
+      (a, b) match
+        case (Right(a), Right(b)) => Right((a, b))
+        case (Right(a), Left(es)) => Left(es)
+        case (Left(es), Right(a)) => Left(es)
+        case (Left(e :: es), Left(fs)) => Left(NonEmptyList(e, es ::: fs))
+
+    given Applicative[TotalRes] with {
+      override def ap[A, B](ff: TotalRes[A => B])(fa: TotalRes[A]): TotalRes[B] =
+        TotalRes.zip(ff, fa).map { case (f, a) => f(a) }
+
+      override def pure[A](a: A): TotalRes[A] =
+        Right(a)
+    }
+  }
+
+  private val lambdas: Lambdas[-?>, |*|, VarOrigin] =
+    Lambdas[-?>, |*|, VarOrigin]()
+
+  override opaque type $[A] = lambdas.Expr[A]
+
+  override opaque type LambdaContext = lambdas.Context
 
   override val `$`: FunExprOps = new FunExprOps {
     override def one(using pos: SourcePos, ctx: lambdas.Context): $[One] =
-      lambdas.Expr.const([x] => (_: Unit) => introFst[x])(VarOrigin.OneIntro(pos))
+      lambdas.Expr.const([x] => (_: Unit) => partial(introFst[x]))(VarOrigin.OneIntro(pos))
 
     override def map[A, B](a: $[A])(f: A -⚬ B)(pos: SourcePos)(using
       lambdas.Context,
     ): $[B] =
-      (a map f)(VarOrigin.FunAppRes(pos))
+      (a map partial(f))(VarOrigin.FunAppRes(pos))
 
     override def zip[A, B](a: $[A], b: $[B])(
       pos: SourcePos,
@@ -683,15 +731,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       val f2: lambdas.Context ?=> $[B] => $[C] = ctx ?=> b => f(Right(b))
       val a = VarOrigin.Lambda(pos)
       val b = VarOrigin.Lambda(pos)
-      lambdas.switch(
+      switchSink(
+        ab,
         Sink[lambdas.VFun, |+|, A, C]((a, f1)) <+> Sink((b, f2)),
-        [X, Y] => (fx: X -⚬ C, fy: Y -⚬ C) => either(fx, fy),
-        [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
-      ) match {
-        case Delambdified.Exact(f)      => map(ab)(f)(pos)
-        case Delambdified.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(ab)), f)(pos)
-        case Delambdified.Failure(e)    => raiseError(e)
-      }
+      )(pos)
     }
 
     override def app[A, B](f: $[A =⚬ B], a: $[A])(
@@ -710,10 +753,35 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       lambdas.Context,
     ): $[A] = {
       val v = a.resultVar
-      lambdas.Context.registerNonLinearOps(v)(split, discard.map(f => [B] => (_: Unit) => elimFst[A, B](f)))
+      lambdas.Context.registerNonLinearOps(v)(
+        split.map(partial),
+        discard.map(f => [B] => (_: Unit) => partial(elimFst[A, B](f))),
+      )
       a
     }
   }
+
+  private def switchSink[A, R](
+    a: $[A],
+    cases: Sink[lambdas.VFun, |+|, A, R],
+  )(
+    pos: SourcePos,
+  )(using
+    lambdas.Context,
+  ): $[R] =
+    lambdas.switch(
+      cases,
+      [X, Y] => (fx: X -?> R, fy: Y -?> R) => {
+        TotalRes.zip(total(fx), total(fy)) match
+          case Right((fx, fy)) => partial(either(fx, fy))
+          case Left(es)        => raiseTotalityViolations(es)
+      },
+      [X, Y, Z] => (_: Unit) => partial(distributeL[X, Y, Z]),
+    ) match {
+      case Delambdified.Exact(f)      => lambdas.Expr.map(a, f)(VarOrigin.FunAppRes(pos))
+      case Delambdified.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)
+      case Delambdified.Failure(e)    => raiseError(e)
+    }
 
   override val λ = new LambdaOpsWithClosures {
     override def apply[A, B](using pos: SourcePos)(f: lambdas.Context ?=> $[A] => $[B]): A -⚬ B =
@@ -736,7 +804,9 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
       lambdas.delambdifyTopLevel(a, f) match {
         case Exact(f) =>
-          f
+          total(f) match
+            case Right(f) => f
+            case Left(es) => raiseTotalityViolations(es)
         case Closure(captured, f) =>
           val undefinedVars: Var.Set[VarOrigin] =
             lambdas.Expr.initialVars(captured)
@@ -759,11 +829,19 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
       lambdas.delambdifyNested[A, B](bindVar, f) match {
         case Closure(captured, f) =>
-          val x = lambdas.Expr.zipN(captured)(captVar)
-          lambdas.Expr.map(x, ℭ.curry(f))(resultVar)
+          total(f) match
+            case Right(f) =>
+              val x = lambdas.Expr.zipN(captured)(captVar)
+              lambdas.Expr.map(x, partial(ℭ.curry(f)))(resultVar)
+            case Left(es) =>
+              raiseTotalityViolations(es)
         case Exact(f) =>
-          val captured0 = $.one(using pos)
-          (captured0 map ℭ.curry(elimFst > f))(resultVar)
+          total(f) match
+            case Right(f) =>
+              val captured0 = $.one(using pos)
+              (captured0 map partial(ℭ.curry(elimFst > f)))(resultVar)
+            case Left(es) =>
+              raiseTotalityViolations(es)
         case Failure(e) =>
           raiseError(e)
       }
@@ -848,29 +926,25 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     a: $[Val[A]],
     cases: ValSwitch.Cases[A, A, R],
   )(pos: SourcePos)(using
-    lambdas.Context,
+    LambdaContext,
   ): $[R] =
     ValDecomposition.from(cases).compile match {
       case Exists.Some((partition, sink)) =>
-        lambdas.switch(
+        switchSink(
+          $.map(a)(partition)(pos),
           sink,
-          [X, Y] => (fx: X -⚬ R, fy: Y -⚬ R) => either(fx, fy),
-          [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
-        ) match {
-          case Delambdified.Exact(f)      => $.map(a)(partition > f)(pos)
-          case Delambdified.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), snd(partition) > f)(pos)
-          case Delambdified.Failure(e)    => raiseError(e)
-        }
+        )(pos)
     }
 
   override val |*| : ConcurrentPairInvertOps =
     new ConcurrentPairInvertOps {}
 
-  private def mapTupled[A, B](a: Tupled[|*|, lambdas.Expr, A], f: A -⚬ B)(pos: SourcePos)(using lambdas.Context): lambdas.Expr[B] =
+  private def mapTupled[A, B](a: Tupled[|*|, lambdas.Expr, A], f: A -?> B)(pos: SourcePos)(using lambdas.Context): lambdas.Expr[B] =
     lambdas.Expr.map(
       lambdas.Expr.zipN(a)(VarOrigin.CapturedVars(pos)),
-      f
+      f,
     )(VarOrigin.FunAppRes(pos))
+
   private def raiseError(e: Lambdas.Error[VarOrigin]): Nothing = {
     import Lambdas.Error.Undefined
     import Lambdas.Error.LinearityViolation.{OverUnder, Overused, Underused}
@@ -879,13 +953,19 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     def underusedMsg(vs: Var.Set[VarOrigin]) = s"Variables not fully consumed: ${vs.list.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"
 
     e match {
-      case Overused(vs)    => throw NotLinearException(overusedMsg(vs))
-      case Underused(vs)   => throw NotLinearException(underusedMsg(vs))
-      case OverUnder(o, u) => throw NotLinearException(s"${overusedMsg(o)}\n${underusedMsg(u)}")
+      case Overused(vs)    => throw LinearityException(overusedMsg(vs))
+      case Underused(vs)   => throw LinearityException(underusedMsg(vs))
+      case OverUnder(o, u) => throw LinearityException(s"${overusedMsg(o)}\n${underusedMsg(u)}")
       case Undefined(vs)   => throw UnboundVariablesException(vs)
     }
   }
 
-  override class NotLinearException(msg: String) extends Exception(msg)
-  override class UnboundVariablesException(vs: Var.Set[VarOrigin]) extends Exception(vs.list.mkString(", "))
+  private def raiseTotalityViolations(es: NonEmptyList[(SourcePos, NonEmptyList[String])]): Nothing =
+    libretto.lambda.UnhandledCase.raise(s"raiseTotalityViolations($es)")
+
+  abstract class MalformedException(msg: String) extends Exception(msg)
+
+  override class LinearityException(msg: String) extends MalformedException(msg)
+  override class UnboundVariablesException(vs: Var.Set[VarOrigin]) extends MalformedException(vs.list.mkString(", "))
+  override class TotalityException(msg: String) extends MalformedException(msg)
 }

@@ -409,9 +409,10 @@ trait CoreDSL {
       * This method then inspects how the input variable `a: $[A]` is used in the result `$[B]` and
       * infers a (point-free) construction of `A -⚬ B`.
       *
-      * @throws NotLinearException if the given function violates linearity, i.e. if the input variable
+      * @throws LinearityException if the given function violates linearity, i.e. if the input variable
       *   is not used exactly once.
       * @throws UnboundVariablesException if the result expression contains free variables (from outer [[λ]]s).
+      * @throws TotalityException if there are any non-exhaustive `switch`-es.
       */
     def apply[A, B](using SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
@@ -439,8 +440,11 @@ trait CoreDSL {
       apply { case *(a) => f(a) }
   }
 
-  type NotLinearException <: Throwable
-  type UnboundVariablesException <: Throwable
+  type MalformedException <: Throwable
+
+  type LinearityException <: MalformedException
+  type UnboundVariablesException <: MalformedException
+  type TotalityException <: MalformedException
 
   val $: $Ops
 
