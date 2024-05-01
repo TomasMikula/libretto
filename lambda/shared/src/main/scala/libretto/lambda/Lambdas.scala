@@ -4,6 +4,7 @@ import libretto.lambda.Lambdas.Error
 import libretto.lambda.Lambdas.Error.LinearityViolation
 import libretto.lambda.util.{Applicative, BiInjective, Exists, UniqueTypeArg}
 import scala.annotation.targetName
+import scala.collection.immutable.{:: as NonEmptyList}
 
 trait Lambdas[-⚬[_, _], |*|[_, _], V] {
   final type Tupled[F[_], A] = libretto.lambda.Tupled[|*|, F, A]
@@ -82,6 +83,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
   }
 
   type Delambdified[A, B] = Lambdas.Delambdified[Expr, |*|, -⚬, V, A, B]
+  type DelambdifiedSuccess[A, B] = Lambdas.Delambdified.Success[Expr, |*|, -⚬, V, A, B]
 
   protected def eliminateLocalVariables[A, B](
     boundVar: Var[V, A],
@@ -175,6 +177,86 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
         }
       }
     )
+  }
+
+  def leastCommonCapture[A, B](
+    fs: NonEmptyList[DelambdifiedSuccess[A, B]],
+  )(using
+    ctx: Context,
+    ssc: SymmetricSemigroupalCategory[-⚬, |*|],
+    inj: BiInjective[|*|],
+  ): Lambdas.Delambdified[Expr, |*|, [a, b] =>> NonEmptyList[a -⚬ b], V, A, B] = {
+    import Lambdas.Delambdified.{Closure, Exact, Failure}
+
+    val NonEmptyList(f0, tail) = fs
+
+    tail match {
+      case Nil =>
+        f0.mapFun[[a, b] =>> NonEmptyList[a -⚬ b]]([X] => NonEmptyList(_, Nil))
+      case tail @ NonEmptyList(_, _) =>
+        f0 match
+          case Exact(f) =>
+            leastCommonCapture(tail) match
+              case Exact(fs) =>
+                Exact(NonEmptyList(f, fs))
+              case Closure(captured, fs) =>
+                discarderOf(captured) match
+                  case Right(discardFst) => Closure(captured, NonEmptyList(discardFst(()) > f, fs))
+                  case Left(unusedVars)  => Failure(LinearityViolation.Underused(unusedVars))
+              case Failure(e) =>
+                Failure(e)
+
+          case Closure(captured, f) =>
+            leastCommonCapture(captured, tail) match
+              case Left(e) =>
+                Failure(e)
+              case Right(Exists.Some((p, Closure(y, fs)))) =>
+                Closure(y, NonEmptyList(ssc.fst(p) > f, fs))
+    }
+  }
+
+  private def leastCommonCapture[X, A, B](
+    acc: Tupled[Expr, X],
+    fs: List[DelambdifiedSuccess[A, B]],
+  )(using
+    ctx: Context,
+    ssc: SymmetricSemigroupalCategory[-⚬, |*|],
+    inj: BiInjective[|*|],
+  ): Either[
+    LinearityViolation[V],
+    Exists[[Y] =>> (
+      Y -⚬ X,
+      Lambdas.Delambdified.Closure[Expr, |*|, [a, b] =>> List[a -⚬ b], V, Y, A, B]
+    )]
+  ] = {
+    import Lambdas.Delambdified.{Closure, Exact, Failure}
+
+    fs match
+      case Nil =>
+        Right(Exists(ssc.id[X], Closure(acc, Nil)))
+      case f :: fs =>
+        f match
+          case Exact(f) =>
+            discarderOf(acc) match
+              case Left(unusedVars) =>
+                Left(LinearityViolation.Underused(unusedVars))
+              case Right(discardFst) =>
+                val g = discardFst(()) > f
+                leastCommonCapture(acc, fs)
+                  .map { case Exists.Some((p, Closure(y, gs))) =>
+                    Exists(p, Closure(y, (ssc.fst(p) > g) :: gs))
+                  }
+
+          case Closure(captured, f) =>
+            product(acc, captured) match
+              case LinCheck.Success(Exists.Some((y, p1, p2))) =>
+                leastCommonCapture(y, fs)
+                  .map { case Exists.Some((q, Closure(z, gs))) =>
+                    Exists((q > p1, Closure(z, (ssc.fst(q > p2) > f) :: gs)))
+                  }
+              case LinCheck.Failure(e) =>
+                Left(e)
+
   }
 
   private def discarderOf[A](a: Tupled[Expr, A])(using
@@ -323,18 +405,20 @@ object Lambdas {
   }
 
   object Delambdified {
-    case class Exact[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B](
-      f: AbsFun[A, B],
-    ) extends Delambdified[Exp, |*|, AbsFun, V, A, B]
+    sealed trait Success[Exp[_], |*|[_, _], ->[_, _], V, A, B] extends Delambdified[Exp, |*|, ->, V, A, B]
 
-    case class Closure[Exp[_], |*|[_, _], AbsFun[_, _], V, X, A, B](
+    case class Exact[Exp[_], |*|[_, _], ->[_, _], V, A, B](
+      f: A -> B,
+    ) extends Delambdified.Success[Exp, |*|, ->, V, A, B]
+
+    case class Closure[Exp[_], |*|[_, _], ->[_, _], V, X, A, B](
       captured: Tupled[|*|, Exp, X],
-      f: AbsFun[X |*| A, B],
-    ) extends Delambdified[Exp, |*|, AbsFun, V, A, B]
+      f: (X |*| A) -> B,
+    ) extends Delambdified.Success[Exp, |*|, ->, V, A, B]
 
-    case class Failure[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B](
+    case class Failure[Exp[_], |*|[_, _], ->[_, _], V, A, B](
       e: LinearityViolation[V],
-    ) extends Delambdified[Exp, |*|, AbsFun, V, A, B]
+    ) extends Delambdified[Exp, |*|, ->, V, A, B]
   }
 
   @deprecated("Renamed to Delambdified")

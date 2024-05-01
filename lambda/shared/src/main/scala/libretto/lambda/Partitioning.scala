@@ -14,7 +14,7 @@ trait Partitioning[->[_, _], <+>[_, _], T] {
 
 object Partitioning {
 
-  class Matcher[->[_, _], <+>[_, _], T, P](
+  class Partition[->[_, _], <+>[_, _], T, P](
     val partitioning: Partitioning[->, <+>, T],
     val partition:    partitioning.Partition[P],
   ) {

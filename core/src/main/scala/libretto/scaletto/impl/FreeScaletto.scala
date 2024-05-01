@@ -3,7 +3,7 @@ package libretto.scaletto.impl
 import libretto.scaletto.Scaletto
 import libretto.lambda.{ClosedSymmetricMonoidalCategory, Lambdas, LambdasImpl, Shuffled, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Delambdified
-import libretto.lambda.Partitioning.Matcher
+import libretto.lambda.Partitioning.Partition
 import libretto.lambda.util.{Applicative, BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Monad.monadEither
@@ -643,7 +643,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
   private type PartialFun[A, B] =
-    (A -⚬ B) | Matcher[-⚬, |+|, A, B]
+    (A -⚬ B) | Partition[-⚬, |+|, A, B]
 
   private val psh: Shuffled[PartialFun, |*|] =
     Shuffled[PartialFun, |*|]
@@ -659,10 +659,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         g match
           case g: (X -⚬ Y) =>
             TotalRes.success(g)
-          case m: Matcher[-⚬, |+|, X, Y] =>
-            m.isTotal match
+          case p: Partition[-⚬, |+|, X, Y] =>
+            p.isTotal match
               case Some(g) => TotalRes.success(g)
-              case None => libretto.lambda.UnhandledCase.raise(s"Non-exhaustive matcher $m")
+              case None => libretto.lambda.UnhandledCase.raise(s"Non-exhaustive matcher $p")
       }
     )
 
@@ -782,6 +782,25 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       case Delambdified.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)
       case Delambdified.Failure(e)    => raiseError(e)
     }
+
+  override def switch[A, R](using LambdaContext)(a: $[A])(
+    cases: (SourcePos, LambdaContext ?=> $[A] => $[R])*
+  ): $[R] = {
+    val cases1 =
+      cases.toList match
+        case Nil => throw IllegalArgumentException("switch must have at least 1 case")
+        case x :: xs => NonEmptyList(x, xs)
+
+    val (delams, failures) =
+      cases
+        .map { case (pos, f) => lambdas.delambdifyNested(VarOrigin.SwitchCase(pos), f) }
+        .partitionMap {
+          case f: Delambdified.Success[expr, p, arr, v, a, r] => Left(f)
+          case Delambdified.Failure(e) => Right(e)
+        }
+
+    libretto.lambda.UnhandledCase.raise(s"switch($a)($cases)")
+  }
 
   override val λ = new LambdaOpsWithClosures {
     override def apply[A, B](using pos: SourcePos)(f: lambdas.Context ?=> $[A] => $[B]): A -⚬ B =
