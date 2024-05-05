@@ -93,6 +93,17 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z],
     ): ProjectRes[A, C]
 
+    /** Extracts the maximum forest-shaped prefix
+     * at the given position satisfying the given predicate.
+     */
+    def extrudeInitForestAtWhile[F[_], X, ->>[_, _]](
+      pos: Focus[|*|, F],
+      pred: [x, y] => (x -> y) => Option[x ->> y],
+    )(using
+      A =:= F[X],
+    ): Exists[[Y] =>> (AForest[->>, |*|, X, Y], Shuffled[F[Y], B])] =
+      UnhandledCase.raise(s"${this.getClass.getSimpleName()}.extrudeInitForestAtWhile")
+
     def to[C](using ev: B =:= C): Shuffled[A, C] =
       ev.substituteCo(this)
 
@@ -1212,6 +1223,14 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
 
   def lift[X, Y](f: X -> Y): Shuffled[X, Y] =
     Impermeable(~⚬.id, Solid(f), ~⚬.id)
+
+  def fromForest[X, Y](f: AForest[->, |*|, X, Y]): Shuffled[X, Y] =
+    import libretto.lambda.AForest.{Empty, Node, Par}
+
+    f match
+      case Empty()      => id
+      case Node(f0, fs) => lift(f0) > fromForest(fs)
+      case Par(f1, f2)  => par(fromForest(f1), fromForest(f2))
 
   def extractSnd[F[_], X, Y](i: Focus[|*|, F]): Shuffled[F[X |*| Y], F[X] |*| Y] =
     i match {

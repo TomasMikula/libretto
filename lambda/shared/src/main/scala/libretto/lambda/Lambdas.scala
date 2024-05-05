@@ -2,9 +2,8 @@ package libretto.lambda
 
 import libretto.lambda.Lambdas.Error
 import libretto.lambda.Lambdas.Error.LinearityViolation
-import libretto.lambda.util.{Applicative, BiInjective, Exists, UniqueTypeArg}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, UniqueTypeArg}
 import scala.annotation.targetName
-import scala.collection.immutable.{:: as NonEmptyList}
 
 trait Lambdas[-⚬[_, _], |*|[_, _], V] {
   final type Tupled[F[_], A] = libretto.lambda.Tupled[|*|, F, A]
@@ -185,23 +184,31 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     ctx: Context,
     ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
+  ): Lambdas.Delambdified[Expr, |*|, [a, b] =>> NonEmptyList[a -⚬ b], V, A, B] =
+    leastCommonCapture(fs.head, fs.tail)
+
+  def leastCommonCapture[A, B](
+    head: DelambdifiedSuccess[A, B],
+    tail: List[DelambdifiedSuccess[A, B]],
+  )(using
+    ctx: Context,
+    ssc: SymmetricSemigroupalCategory[-⚬, |*|],
+    inj: BiInjective[|*|],
   ): Lambdas.Delambdified[Expr, |*|, [a, b] =>> NonEmptyList[a -⚬ b], V, A, B] = {
     import Lambdas.Delambdified.{Closure, Exact, Failure}
 
-    val NonEmptyList(f0, tail) = fs
-
     tail match {
       case Nil =>
-        f0.mapFun[[a, b] =>> NonEmptyList[a -⚬ b]]([X] => NonEmptyList(_, Nil))
-      case tail @ NonEmptyList(_, _) =>
-        f0 match
-          case Exact(f) =>
-            leastCommonCapture(tail) match
+        head.mapFun[[a, b] =>> NonEmptyList[a -⚬ b]]([X] => NonEmptyList(_, Nil))
+      case f1 :: fs =>
+        head match
+          case Exact(f0) =>
+            leastCommonCapture(f1, fs) match
               case Exact(fs) =>
-                Exact(NonEmptyList(f, fs))
+                Exact(f0 :: fs)
               case Closure(captured, fs) =>
                 discarderOf(captured) match
-                  case Right(discardFst) => Closure(captured, NonEmptyList(discardFst(()) > f, fs))
+                  case Right(discardFst) => Closure(captured, (discardFst(()) > f0) :: fs)
                   case Left(unusedVars)  => Failure(LinearityViolation.Underused(unusedVars))
               case Failure(e) =>
                 Failure(e)

@@ -12,7 +12,7 @@ import libretto.typology.types.kindShuffle.{~⚬, Transfer}
  * the resulting kind of the type constructor becomes `K -> M`.
  *
  * The representation is unique:
-  there is only 1 way to represent any given partial type arguments as [[ArgTrans]].
+  there is only 1 way to represent any given partial type arguments as [[PartialArgs]].
  *
  * A type argument might be provided fully, as `F[○, k]` (for some kind `k`);
  * or itself require further type arguments. For example,

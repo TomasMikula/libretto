@@ -12,7 +12,7 @@ import libretto.lambda.util.{BiInjective, SourcePos, TypeEqK}
  *
  * where ◯ is the hole, can be represented as
  *
- * `Spine[**, G, F]` where `F[X] = A ** (B ** (X ** C))`
+ * `Spine[Tuple2, G, F]` where `F[X] = (A, (B, (X, C)))`
  *
  * Like [[Focus]], a `Spine` defines a path into a tupled structure,
  * but `Spine` also contains data along the path.

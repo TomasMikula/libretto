@@ -579,28 +579,29 @@ trait CoreDSL {
       case as     => joinAll($.joinTwo(a, as.head)(pos), as.tail*)
     }
 
-  protected def switch[A, R](using LambdaContext)(a: $[A])(
+  protected def switch[A, R](using LambdaContext, SourcePos)(a: $[A])(
     cases: (SourcePos, LambdaContext ?=> $[A] => $[R])*
   ): $[R]
 
-  def switch[A](using ctx: LambdaContext)(a: $[A]): SwitchInit[A] =
-    SwitchInit(ctx, a)
+  def switch[A](using ctx: LambdaContext, pos: SourcePos)(a: $[A]): SwitchInit[A] =
+    SwitchInit(ctx, pos, a)
 
-  class SwitchInit[A](ctx: LambdaContext, a: $[A]) {
-    def is[R](using pos: SourcePos)(f: LambdaContext ?=> $[A] => $[R]): Switch[A, R] =
-      Switch(ctx, a, (pos, f) :: Nil)
+  class SwitchInit[A](ctx: LambdaContext, switchPos: SourcePos, a: $[A]) {
+    def is[R](using casePos: SourcePos)(f: LambdaContext ?=> $[A] => $[R]): Switch[A, R] =
+      Switch(ctx, switchPos, a, (casePos, f) :: Nil)
   }
 
   class Switch[A, R](
     ctx: LambdaContext,
+    pos: SourcePos,
     a: $[A],
     cases: List[(SourcePos, LambdaContext ?=> $[A] => $[R])],
   ) {
-    def is(using pos: SourcePos)(f: LambdaContext ?=> $[A] => $[R]): Switch[A, R] =
-      Switch(ctx, a, (pos, f) :: cases)
+    def is(using casePos: SourcePos)(f: LambdaContext ?=> $[A] => $[R]): Switch[A, R] =
+      Switch(ctx, pos, a, (casePos, f) :: cases)
 
     def end: $[R] =
-      switch(using ctx)(a)(cases.reverse*)
+      switch(using ctx, pos)(a)(cases.reverse*)
   }
 
   extension [A, B](x: $[A |+| B]) {

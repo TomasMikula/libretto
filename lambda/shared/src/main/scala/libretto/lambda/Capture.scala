@@ -12,9 +12,9 @@ sealed trait Capture[**[_, _], F[_], A, B] {
   def to[C](using ev: B =:= C): Capture[**, F, A, C] =
     ev.substituteCo(this)
 
-  def after[Z](that: Capture[**, F, Z, A])(using Unzippable[**, F]): Capture[**, F, Z, B]
+  infix def after[Z](that: Capture[**, F, Z, A])(using Unzippable[**, F]): Capture[**, F, Z, B]
 
-  def >[C](that: Capture[**, F, B, C])(using Unzippable[**, F]): Capture[**, F, A, C] =
+  infix def >[C](that: Capture[**, F, B, C])(using Unzippable[**, F]): Capture[**, F, A, C] =
     that after this
 
   def inFst[Y]: Capture[**, F, A ** Y, B ** Y]
@@ -67,7 +67,7 @@ object Capture {
       NoCapture()
 
   sealed trait Proper[**[_, _], F[_], A, B] extends Capture[**, F, A, B]:
-    override def after[Z](that: Capture[**, F, Z, A])(using Unzippable[**, F]): Capture.Proper[**, F, Z, B]
+    override infix def after[Z](that: Capture[**, F, Z, A])(using Unzippable[**, F]): Capture.Proper[**, F, Z, B]
 
     override def inFst[Y]: Capture[**, F, A ** Y, B ** Y] =
       Capture.InFst(this)

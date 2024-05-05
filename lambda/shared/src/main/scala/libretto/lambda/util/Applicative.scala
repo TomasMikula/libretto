@@ -33,4 +33,9 @@ object Applicative {
     def pure[F[_]](using F: Applicative[F]): F[A] =
       F.pure(a)
   }
+
+  def traverseList[A, F[_], B](as: List[A])(f: A => F[B])(using F: Applicative[F]): F[List[B]] =
+    as match
+      case Nil     => F.pure(Nil)
+      case a :: as => F.map2(f(a), traverseList(as)(f))(_ :: _)
 }

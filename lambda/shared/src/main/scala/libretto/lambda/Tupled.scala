@@ -25,7 +25,7 @@ object Tupled {
       a.mapLeafs(f)
 
     @targetName("zip_infix")
-    def zip[B](b: Tupled[|*|, F, B]): Tupled[|*|, F, A |*| B] =
+    infix def zip[B](b: Tupled[|*|, F, B]): Tupled[|*|, F, A |*| B] =
       Tupled.zip(a, b)
 
     def asBin: Bin[|*|, [x] =>> x, F, A] =

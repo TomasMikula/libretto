@@ -1,14 +1,13 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{ClosedSymmetricMonoidalCategory, Lambdas, LambdasImpl, Shuffled, Sink, Tupled, Var}
+import libretto.lambda.{AForest, ClosedSymmetricMonoidalCategory, Focus, Lambdas, LambdasImpl, Partitioning, Shuffled, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Delambdified
 import libretto.lambda.Partitioning.Partition
-import libretto.lambda.util.{Applicative, BiInjective, Exists, SourcePos, TypeEq}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Monad.monadEither
 import libretto.util.{Async, StaticValue}
-import scala.collection.immutable.{:: as NonEmptyList}
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 
@@ -642,13 +641,28 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
+  private type Extractor[A, B] =
+    Partition[-⚬, |+|, A, B]
+
+  private object Extractor {
+    def apply[T, P](
+      partitioning: Partitioning[-⚬, |+|, T],
+      partition:    partitioning.Partition[P],
+    ): Extractor[T, P] =
+      new Partition(partitioning, partition)
+  }
+
   private type PartialFun[A, B] =
-    (A -⚬ B) | Partition[-⚬, |+|, A, B]
+    (A -⚬ B) | Extractor[A, B]
 
   private val psh: Shuffled[PartialFun, |*|] =
     Shuffled[PartialFun, |*|]
 
   private type -?>[A, B] = psh.Shuffled[A, B]
+
+  private type Pattern[A, B] = AForest[Extractor, |*|, A, B]
+
+  private type LinearityViolation = Lambdas.Error.LinearityViolation[VarOrigin]
 
   private def partial[A, B](f: A -⚬ B): (A -?> B) =
     psh.lift(f)
@@ -677,7 +691,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         case (Right(a), Right(b)) => Right((a, b))
         case (Right(a), Left(es)) => Left(es)
         case (Left(es), Right(a)) => Left(es)
-        case (Left(e :: es), Left(fs)) => Left(NonEmptyList(e, es ::: fs))
+        case (Left(es), Left(fs)) => Left(es ++ fs)
 
     given Applicative[TotalRes] with {
       override def ap[A, B](ff: TotalRes[A => B])(fa: TotalRes[A]): TotalRes[B] =
@@ -783,24 +797,197 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       case Delambdified.Failure(e)    => raiseError(e)
     }
 
-  override def switch[A, R](using LambdaContext)(a: $[A])(
+  override def switch[A, R](using
+    ctx: LambdaContext,
+    switchPos: SourcePos,
+  )(
+    a: $[A],
+  )(
     cases: (SourcePos, LambdaContext ?=> $[A] => $[R])*
-  ): $[R] = {
-    val cases1 =
-      cases.toList match
-        case Nil => throw IllegalArgumentException("switch must have at least 1 case")
-        case x :: xs => NonEmptyList(x, xs)
+  ): $[R] =
+    cases.toList match
+      case Nil =>
+        throw IllegalArgumentException("switch must have at least 1 case")
+      case c :: cs =>
+        switchImpl(using ctx, switchPos)(a, NonEmptyList(c, cs))
+          .getOrThrow
 
-    val (delams, failures) =
-      cases
-        .map { case (pos, f) => lambdas.delambdifyNested(VarOrigin.SwitchCase(pos), f) }
-        .partitionMap {
-          case f: Delambdified.Success[expr, p, arr, v, a, r] => Left(f)
-          case Delambdified.Failure(e) => Right(e)
+  private case class NonExhaustiveness(
+    // pos: SourcePos,
+    // unhandledPatterns: NonEmptyList[Pattern[?, ?]],
+    extractor: Extractor[?, ?],
+  )
+
+  private enum SwitchRes[T] {
+    case Success(value: T)
+    case Failure(errors: NonEmptyList[LinearityViolation | NonExhaustiveness])
+
+    def flatMap[U](f: T => SwitchRes[U]): SwitchRes[U] =
+      this match
+        case Success(value) => f(value)
+        case Failure(es) => Failure(es)
+
+
+    def getOrThrow: T =
+      this match
+        case Success(value) => value
+        case Failure(errors) => libretto.lambda.UnhandledCase.raise(s"SwitchRes.getOrThrow(${errors.toList})")
+  }
+
+  private object SwitchRes {
+    def nonExhaustiveness[T](ext: Extractor[?, ?]): SwitchRes[T] =
+      failure(NonExhaustiveness(ext))
+
+    def misplacedExtractor[T](ext: Extractor[?, ?]): SwitchRes[T] =
+      libretto.lambda.UnhandledCase.raise(s"SwitchRes.misplacedExtractor($ext)")
+
+    def failure[T](e: LinearityViolation | NonExhaustiveness): SwitchRes[T] =
+      SwitchRes.Failure(NonEmptyList(e, Nil))
+
+    given Applicative[SwitchRes] with {
+      override def pure[A](a: A): SwitchRes[A] =
+        Success(a)
+
+      override def ap[A, B](ff: SwitchRes[A => B])(fa: SwitchRes[A]): SwitchRes[B] =
+        (ff, fa) match
+          case (Success(f), Success(a)) => Success(f(a))
+          case (Success(_), Failure(f)) => Failure(f)
+          case (Failure(e), Success(_)) => Failure(e)
+          case (Failure(e), Failure(f)) => Failure(e ++ f)
+    }
+  }
+
+  private def switchImpl[A, R](using
+    ctx: LambdaContext,
+    switchPos: SourcePos,
+  )(
+    a: $[A],
+    cases: NonEmptyList[(SourcePos, LambdaContext ?=> $[A] => $[R])],
+  ): SwitchRes[$[R]] = {
+    import SwitchRes.{Success, failure}
+
+    for {
+      // delambdify each case
+      delams: NonEmptyList[Delambdified.Success[$, |*|, -?>, VarOrigin, A, R]] <-
+        cases.traverse { case (pos, f) =>
+          lambdas.delambdifyNested(VarOrigin.SwitchCase(pos), f) match
+            case f: Delambdified.Success[expr, p, arr, v, a, r] => Success(f)
+            case Delambdified.Failure(e) => failure(e)
         }
 
-    libretto.lambda.UnhandledCase.raise(s"switch($a)($cases)")
+      // make each case capture the least common superset of captured expressions
+      delamN: Delambdified[$, |*|, [a, b] =>> NonEmptyList[a -?> b], VarOrigin, A, R] =
+        lambdas.leastCommonCapture(delams)
+
+      res <- switchDelambdified(a, delamN)
+    } yield res
   }
+
+  private def switchDelambdified[A, R](using
+    ctx: LambdaContext,
+    switchPos: SourcePos,
+  )(
+    a: $[A],
+    cases: Delambdified[$, |*|, [a, b] =>> NonEmptyList[a -?> b], VarOrigin, A, R],
+  ): SwitchRes[$[R]] = {
+    import libretto.lambda.Lambdas.Delambdified.{Exact, Closure, Failure}
+
+    // split each case into a (pattern, handler) pair
+    // and compile the resulting list of pairs
+    // (after extending the pattern to cover any captured expressions)
+
+    cases match
+      case Exact(fs) =>
+        for {
+          cases <- fs.traverse(extractPatternAt(Focus.id, _))
+          f     <- compilePatternMatch(cases)
+        } yield
+          (a map partial(f))(VarOrigin.SwitchOut(switchPos))
+
+      case cl: Closure[exp, prod, arr, v, x, a, r] =>
+        val xa: $[x |*| A] =
+          lambdas.Expr.zipN(cl.captured zip Tupled.atom(a))(VarOrigin.SwitchIn(switchPos))
+        for {
+          cases <- cl.f.traverse(extractPatternAt(Focus.snd, _))
+
+          // extend the patterns to the captured expressions
+          cases1: NonEmptyList[Exists[[XY] =>> (Pattern[x |*| A, XY], XY -⚬ R)]] =
+            cases.map { case Exists.Some((p, h)) => Exists((p.inSnd[x], h)) }
+
+          f <- compilePatternMatch(cases1)
+        } yield
+          lambdas.Expr.map(xa, partial(f))(VarOrigin.SwitchOut(switchPos))
+
+      case Failure(e) =>
+        SwitchRes.failure(e)
+  }
+
+  private def compilePatternMatch[A, R](
+    cases: NonEmptyList[Exists[[Y] =>> (Pattern[A, Y], Y -⚬ R)]],
+  ): SwitchRes[A -⚬ R] =
+    withFirstScrutineeOf(cases.head.value._1)(
+      { case TypeEq(Refl()) =>
+        // the first case catches all, remaining cases ignored
+        SwitchRes.Success(cases.head.value._2.from[A])
+      },
+      [F[_], T] => (
+        pos: Focus[|*|, F],
+        scr: Partitioning[-⚬, |+|, T],
+        ev:  A =:= F[T],
+      ) =>
+        ev match { case TypeEq(Refl()) =>
+          scr.compileAt(
+            pos,
+            [X] => (p: scr.Partition[X]) => {
+              val ext: Extractor[T, X] =
+                Partitioning.Partition(scr, p)
+              val matchingCases =
+                collectCompatibleCases[F, T, X, R](cases.toList, pos, ext)
+              matchingCases match
+                case Nil =>
+                  SwitchRes.nonExhaustiveness(Extractor(scr, p)) // TODO: include context of this extractor
+                case c :: cs =>
+                  compilePatternMatch[F[X], R](NonEmptyList(c, cs))
+            }
+          ).map(_.from[A])
+        }
+    )
+
+  private def withFirstScrutineeOf[A, B, R](p: Pattern[A, B])(
+    caseCatchAll: (A =:= B) => R,
+    caseProper: [F[_], T] => (Focus[|*|, F], Partitioning[-⚬, |+|, T], A =:= F[T]) => R,
+  ): R =
+    libretto.lambda.UnhandledCase.raise(s"withFirstScrutineeOf($p)")
+
+  private def collectCompatibleCases[F[_], T, U, R](
+    cases: List[Exists[[Y] =>> (Pattern[F[T], Y], Y -⚬ R)]],
+    pos: Focus[|*|, F],
+    ext: Extractor[T, U],
+  ): List[Exists[[Y] =>> (Pattern[F[U], Y], Y -⚬ R)]] =
+    libretto.lambda.UnhandledCase.raise(s"collectCompatibleCases($cases, $pos, $ext)")
+
+  private def extractPatternAt[F[_], A0, B](
+    pos: Focus[|*|, F],
+    f: F[A0] -?> B,
+  ): SwitchRes[Exists[[X] =>> (Pattern[A0, X], F[X] -⚬ B)]] =
+    f.extrudeInitForestAtWhile[F, A0, Extractor](
+      pos,
+      [X, Y] => (f: PartialFun[X, Y]) =>
+        f match {
+          case ex: Extractor[X, Y] => Some(ex)
+          case _ => None
+        }
+    ) match
+      case Exists.Some((pattern, handler)) =>
+        handler
+          .foldMapA[SwitchRes, -⚬](
+            [X, Y] => (f: PartialFun[X, Y]) =>
+              f match {
+                case f: (X -⚬ Y) => SwitchRes.Success(f)
+                case f: Extractor[x, y] => SwitchRes.misplacedExtractor(f)
+              }
+          )
+          .map(h => Exists((pattern, h)))
 
   override val λ = new LambdaOpsWithClosures {
     override def apply[A, B](using pos: SourcePos)(f: lambdas.Context ?=> $[A] => $[B]): A -⚬ B =
