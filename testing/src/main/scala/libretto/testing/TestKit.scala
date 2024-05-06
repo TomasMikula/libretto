@@ -110,7 +110,7 @@ trait TestKit {
 
     def traverseIterator[A, B](it: Iterator[A])(f: A => Outcome[B]): Outcome[List[B]] =
       if (it.hasNext) {
-        monadOutcome.flatMap(f(it.next()))(b => monadOutcome.map(traverseIterator(it)(f))(b :: _))
+        monadOutcome.flatMap(f(it.next()))(b => monadOutcome.map(traverseIterator(it)(f), b :: _))
       } else {
         success(Nil)
       }
@@ -121,7 +121,7 @@ trait TestKit {
     def traverseList[A, B](as: List[A])(f: A => Outcome[B]): Outcome[List[B]] =
       as match {
         case Nil => success(Nil)
-        case h :: t => monadOutcome.flatMap(f(h))(b => monadOutcome.map(traverseList(t)(f))(b :: _))
+        case h :: t => monadOutcome.flatMap(f(h))(b => monadOutcome.map(traverseList(t)(f), b :: _))
       }
 
     def zipWith[A, B, C](a: Outcome[A], b: Outcome[B])(f: (A, B) => C): Outcome[C] =

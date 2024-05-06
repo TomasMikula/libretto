@@ -31,12 +31,12 @@ sealed trait Sink[-->[_, _], <+>[_, _], A, B] {
       case Join(s1, s2) => g(s1.reduce(g), s2.reduce(g))
     }
 
-  def reduceM[M[_]: Monad](
+  def reduceM[M[_]: Monad: Applicative](
     g: [x, y] => (x --> B, y --> B) => M[(x <+> y) --> B]
   ): M[A --> B] =
     this match {
       case Arrow(f)     => Monad[M].pure(f)
-      case Join(s1, s2) => Monad[M].flatMap2(s1.reduceM(g), s2.reduceM(g))(g(_, _))
+      case Join(s1, s2) => (s1.reduceM(g) zipWith s2.reduceM(g))(g(_, _)).flatten
     }
 }
 

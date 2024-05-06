@@ -668,6 +668,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     psh.lift(f)
 
   private def total[A, B](f: A -?> B): TotalRes[A -⚬ B] =
+    import TotalRes.given
+
     f.foldMapA(
       [X, Y] => (g: PartialFun[X, Y]) => {
         g match

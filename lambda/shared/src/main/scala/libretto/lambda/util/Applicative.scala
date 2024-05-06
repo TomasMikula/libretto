@@ -20,8 +20,15 @@ trait Applicative[F[_]] { self =>
 
   extension [A](fa: F[A]) {
     @targetName("extMap")
-    def map[B](f: A => B): F[B] =
+    infix def map[B](f: A => B): F[B] =
       self.map(fa, f)
+
+    @targetName("extZip")
+    infix def zip[B](fb: F[B]): F[(A, B)] =
+      self.zip(fa, fb)
+
+    infix def zipWith[B, C](fb: F[B])(f: (A, B) => C): F[C] =
+      self.map2(fa, fb)(f)
   }
 }
 

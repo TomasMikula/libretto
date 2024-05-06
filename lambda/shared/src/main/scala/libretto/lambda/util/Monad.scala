@@ -1,24 +1,31 @@
 package libretto.lambda.util
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.annotation.targetName
 
 /** Witnesses that `F` is a monad in the category of Scala functions. */
-trait Monad[F[_]] extends Applicative[F] {
+trait Monad[F[_]] {
   def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B]
 
   def pure[A](a: A): F[A]
 
-  override def map[A, B](fa: F[A], f: A => B): F[B] =
+  def map[A, B](fa: F[A], f: A => B): F[B] =
     flatMap(fa)(a => pure(f(a)))
 
-  override def ap[A, B](ff: F[A => B])(fa: F[A]): F[B] =
-    flatMap(ff) { f => map(fa)(f) }
+  /** An [[Applicative]] derived from this Monad instance.
+   *
+   * Note that it is intentional that
+   *  - Monad is not made to `extend` Applicative.
+   *  - The Applicative derived from this Monad (i.e. this field) is not `given`.
+   * The reason is that we often want to use a different Applicative instance by default.
+   */
+  lazy val applicative: Applicative[F] =
+    Monad.deriveApplicative(using this)
 
-  def flatten[A](a: F[F[A]]): F[A] =
-    flatMap(a)(identity)
-
-  def flatMap2[A, B, C](fa: F[A], fb: F[B])(f: (A, B) => F[C]): F[C] =
-    flatten(map2(fa, fb)(f))
+  extension [A](ffa: F[F[A]]) {
+    def flatten: F[A] =
+      flatMap(ffa)(identity)
+  }
 }
 
 object Monad {
@@ -43,6 +50,15 @@ object Monad {
         map(_ => ())
     }
   }
+
+  def deriveApplicative[F[_]](using F: Monad[F]): Applicative[F] =
+    new Applicative[F] {
+      override def pure[A](a: A): F[A] =
+        F.pure(a)
+
+      override def ap[A, B](ff: F[A => B])(fa: F[A]): F[B] =
+        F.flatMap(ff) { f => F.map(fa, f) }
+    }
 
   given monadId: Monad[[A] =>> A] with {
     override def pure[A](a: A): A =
