@@ -1,5 +1,7 @@
 package libretto
 
+import libretto.lambda.Focus
+import libretto.lambda.Partitioning.Partition
 import libretto.lambda.util.SourcePos
 import libretto.util.{Equal, StaticValue}
 import libretto.util.unapply.Unapply
@@ -69,6 +71,9 @@ trait CoreDSL {
     type IsCaseOf[Label, Cases] <: { type Type }
     type DistLR[A, Cases] <: { type Out }
 
+    /** Witnesses that when the type of each case in `Cases` is wrapped in `F`, the result is `Out` */
+    type DistF[F[_], Cases] <: { type Out }
+
     type Injector[Label, A, Cases]
     val Injector: InjectorModule
 
@@ -105,10 +110,15 @@ trait CoreDSL {
     given distLRCons[A, Label, H, Tail](using
       tail: DistLR[A, Tail],
     ): DistLR[A, (Label of H) :: Tail] { type Out = (Label of (A |*| H)) :: tail.Out }
+    given distFVoid[F[_]]: DistF[F[_], Void] { type Out = Void }
+    given distFCons[F[_], Label, H, Tail](using
+      tail: DistF[F, Tail],
+    ): DistF[F, (Label of H) :: Tail] { type Out = (Label of F[H]) :: tail.Out }
 
     def inject[Label, A, Cases](using Injector[Label, A, Cases]): A -⚬ OneOf[Cases]
     def switch[Cases, R](handlers: Handlers[Cases, R]): OneOf[Cases] -⚬ R
     def distLR[A, Cases](using ev: DistLR[A, Cases]): (A |*| OneOf[Cases]) -⚬ OneOf[ev.Out]
+    def distF[F[_], Cases](using F: Focus[|*|, F], ev: DistF[F, Cases]): F[OneOf[Cases]] -⚬ OneOf[ev.Out]
 
     def peel[Label, A, Cases]: OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases])
     def unpeel[Label, A, Cases]: (A |+| OneOf[Cases]) -⚬ OneOf[(Label of A) :: Cases]
@@ -462,6 +472,10 @@ trait CoreDSL {
     def unzip[A, B](ab: $[A |*| B])(pos: SourcePos)(using
       LambdaContext,
     ): ($[A], $[B])
+
+    def matchAgainst[A, B](a: $[A], extractor: Partition[-⚬, |*|, A, B])(pos: SourcePos)(using
+      LambdaContext
+    ): $[B]
 
     def nonLinear[A](a: $[A])(
       split: Option[A -⚬ (A |*| A)],

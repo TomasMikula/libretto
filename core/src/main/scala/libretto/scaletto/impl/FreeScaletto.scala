@@ -524,6 +524,9 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     override def void: OneOf[Void] -⚬ Void =
       NArySumVoid()
 
+    override def distF[F[_], Cases](using F: Focus[|*|, F], ev: DistF[F, Cases]): F[OneOf[Cases]] -⚬ OneOf[ev.Out] =
+      libretto.lambda.UnhandledCase.raise("distF")
+
     override def distLR[A, Cases](using ev: DistLR[A, Cases]): (A |*| OneOf[Cases]) -⚬ OneOf[ev.Out] =
       distLR_[A, Cases, ev.Out]
 
@@ -572,6 +575,14 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
     override def distLRVoid[A]: DistLR[A, Void] { type Out = Void } =
       NAryDistLR.Empty[A]()
+
+    override def distFVoid[F[_]]: DistF[F, Void]{type Out = Void} =
+      libretto.lambda.UnhandledCase.raise("distFVoid")
+
+    override def distFCons[F[_], Label, H, Tail](using
+      tail: DistF[F, Tail],
+    ): DistF[F, (Label of H) :: Tail] { type Out = (Label of F[H]) :: tail.Out } =
+      libretto.lambda.UnhandledCase.raise("distFCons")
 
     override object Handlers extends HandlersModule {
       override type Builder[Cases, RemainingCases, R] =
@@ -642,11 +653,11 @@ object FreeScaletto extends FreeScaletto with Scaletto {
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
   private type Extractor[A, B] =
-    Partition[-⚬, |+|, A, B]
+    Partition[-⚬, |*|, A, B]
 
   private object Extractor {
     def apply[T, P](
-      partitioning: Partitioning[-⚬, |+|, T],
+      partitioning: Partitioning[-⚬, |*|, T],
       partition:    partitioning.Partition[P],
     ): Extractor[T, P] =
       new Partition(partitioning, partition)
@@ -736,6 +747,9 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         VarOrigin.Prj1(pos),
         VarOrigin.Prj2(pos),
       )
+
+    override def matchAgainst[A, B](a: $[A], extractor: Partition[-⚬, |*|, A, B])(pos: SourcePos)(using LambdaContext): $[B] =
+      lambdas.Expr.map(a, psh.lift(extractor))(VarOrigin.ExtractorRes(pos))
 
     override def switchEither[A, B, C](
       ab: $[A |+| B],
@@ -934,7 +948,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       },
       [F[_], T] => (
         pos: Focus[|*|, F],
-        scr: Partitioning[-⚬, |+|, T],
+        scr: Partitioning[-⚬, |*|, T],
         ev:  A =:= F[T],
       ) =>
         ev match { case TypeEq(Refl()) =>
@@ -957,7 +971,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   private def withFirstScrutineeOf[A, B, R](p: Pattern[A, B])(
     caseCatchAll: (A =:= B) => R,
-    caseProper: [F[_], T] => (Focus[|*|, F], Partitioning[-⚬, |+|, T], A =:= F[T]) => R,
+    caseProper: [F[_], T] => (Focus[|*|, F], Partitioning[-⚬, |*|, T], A =:= F[T]) => R,
   ): R =
     libretto.lambda.UnhandledCase.raise(s"withFirstScrutineeOf($p)")
 

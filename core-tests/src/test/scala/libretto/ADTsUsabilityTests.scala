@@ -1,5 +1,7 @@
 package libretto
 
+import libretto.lambda.{Focus, Partitioning}
+import libretto.lambda.util.{Applicative, SourcePos, TypeEqK}
 import libretto.lambda.util.Monad.syntax.*
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
@@ -89,6 +91,63 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             .end
           )
         }
+
+      def partitioning[A]: Partitioning[-⚬, |*|, Tree[A]] =
+        new PartitioningImpl
+
+      private sealed trait PartitionImpl[A, B]
+      private object PartitionImpl {
+        case class Empty[A]() extends PartitionImpl[A, One]
+        case class NonEmpty[A]() extends PartitionImpl[A, NonEmptyTree[A]]
+      }
+
+      private class PartitioningImpl[A] extends Partitioning[-⚬, |*|, Tree[A]] {
+        final override type Partition[B] = PartitionImpl[A, B]
+
+        private def dsl = kit.dsl
+
+        override def compileAt[F[_], G[_], R](
+          pos: Focus[|*|, F],
+          handle: [X] => Partition[X] => G[F[X] -⚬ R],
+        )(using
+          G: Applicative[G],
+        ): G[F[Tree[A]] -⚬ R] =
+          G.map2(
+            handle(PartitionImpl.Empty[A]()),
+            handle(PartitionImpl.NonEmpty[A]()),
+          ) { (handleEmpty, handleNonEmpty) =>
+            id[F[Tree[A]]] > OneOf.distF(using pos) > OneOf.switch(_
+              .caseOf["Empty"](handleEmpty)
+              .caseOf["NonEmpty"](handleNonEmpty)
+              .end
+            )
+          }
+
+        override def isTotal[P](p: Partition[P]): Option[Tree[A] -⚬ P] =
+          libretto.lambda.UnhandledCase.raise("isTotal")
+
+        override def sameAs(that: Partitioning[-⚬, |*|, Tree[A]]): Option[TypeEqK[this.Partition, that.Partition]] =
+          that match
+            case that1: (PartitioningImpl[A] & that.type) if (that1.dsl eq this.dsl) =>
+              Some(TypeEqK.refl[this.Partition]): Option[TypeEqK[this.Partition, that1.Partition]]
+            case _ =>
+              None
+      }
+
+      private object PartitioningImpl {
+        def apply[A]: PartitioningImpl[A] =
+          new PartitioningImpl[A]
+      }
+
+      object Empty {
+        def unapply[A](x: $[Tree[A]])(using pos: SourcePos, ctx: LambdaContext): Some[$[One]] =
+          Some($.matchAgainst(x, PartitioningImpl[A].partition(PartitionImpl.Empty[A]()))(pos))
+      }
+
+      object NonEmpty {
+        def unapply[A](x: $[Tree[A]])(using pos: SourcePos, ctx: LambdaContext): Some[$[NonEmptyTree[A]]] =
+          Some($.matchAgainst(x, PartitioningImpl[A].partition(PartitionImpl.NonEmpty[A]()))(pos))
+      }
     }
 
     List(

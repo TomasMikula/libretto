@@ -2,12 +2,10 @@ package libretto.lambda
 
 import libretto.lambda.util.{Applicative, TypeEqK}
 
-trait Partitioning[->[_, _], <+>[_, _], T] {
+trait Partitioning[->[_, _], <*>[_, _], T] {
   type Partition[P]
 
-  def union[P, Q](p: Partition[P], q: Partition[Q]): Partition[P <+> Q]
-
-  def compileAt[<*>[_, _], F[_], G[_], R](
+  def compileAt[F[_], G[_], R](
     pos: Focus[<*>, F],
     handle: [X] => Partition[X] => G[F[X] -> R],
   )(using
@@ -16,13 +14,16 @@ trait Partitioning[->[_, _], <+>[_, _], T] {
 
   def isTotal[P](p: Partition[P]): Option[T -> P]
 
-  def sameAs(that: Partitioning[->, <+>, T]): Option[TypeEqK[this.Partition, that.Partition]]
+  def sameAs(that: Partitioning[->, <*>, T]): Option[TypeEqK[this.Partition, that.Partition]]
+
+  def partition[P](p: Partition[P]): Partitioning.Partition[->, <*>, T, P] =
+    Partitioning.Partition(this, p)
 }
 
 object Partitioning {
 
-  class Partition[->[_, _], <+>[_, _], T, P](
-    val partitioning: Partitioning[->, <+>, T],
+  class Partition[->[_, _], <*>[_, _], T, P](
+    val partitioning: Partitioning[->, <*>, T],
     val partition:    partitioning.Partition[P],
   ) {
     def isTotal: Option[T -> P] =

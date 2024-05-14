@@ -39,6 +39,6 @@ object TypeEqK {
   given refl[F[_]]: TypeEqK[F, F] =
     Refl()
 
-  def ext[F[_], G[_]](f: [x] => Unit => F[x] =:= G[x]): TypeEqK[F[_], G[_]] =
+  def ext[F[_], G[_]](f: [x] => Unit => F[x] =:= G[x]): TypeEqK[F, G] =
     refl[F].asInstanceOf[TypeEqK[F, G]]
 }
