@@ -49,7 +49,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
 
       def foldMap[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): NonEmptyTree[A] -⚬ B =
         rec { self =>
-          unpack[A] > OneOf.switch(_
+          unpack[A] > OneOf.handle(_
             .caseOf["Leaf"](f)
             .caseOf["Branch"](par(self, self) > g)
             .end
@@ -70,19 +70,29 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
       def branch[A]: (NonEmptyTree[A] |*| NonEmptyTree[A]) -⚬ Tree[A] =
         NonEmptyTree.branch[A] > nonEmpty
 
-      def foldMap[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): Tree[A] -⚬ Maybe[B] =
-        OneOf.switch[Tree[A]](_
+      /** `foldMap` using barebones handling of cases in order. */
+      def foldMap_a[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): Tree[A] -⚬ Maybe[B] =
+        OneOf.handle[Tree[A]](_
           .caseOf["Empty"](Maybe.empty[B])
           .caseOf["NonEmpty"](NonEmptyTree.foldMap(f, g) > Maybe.just)
           .end
         )
 
-      def concat[A]: (Tree[A] |*| Tree[A]) -⚬ Tree[A] =
+      def foldMap_b[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): Tree[A] -⚬ Maybe[B] =
+        λ { ta =>
+          switch(ta)
+            .is { case Empty(u)     => Maybe.empty[B](u) }
+            .is { case NonEmpty(ta) => Maybe.just(NonEmptyTree.foldMap(f, g)(ta)) }
+            .end
+        }
+
+      /** `concat` using barebones handling of cases in order. */
+      def concat_a[A]: (Tree[A] |*| Tree[A]) -⚬ Tree[A] =
         λ { case t1 |*| t2 =>
-          (t1 |*| t2) :>> OneOf.distLR :>> OneOf.switch(_
+          (t1 |*| t2) :>> OneOf.distLR :>> OneOf.handle(_
             .caseOf["Empty"](elimSnd)
             .caseOf["NonEmpty"](λ { case t1 |*| net2 =>
-              ((net2 |*| t1) :>> OneOf.distLR).switch(_
+              ((net2 |*| t1) :>> OneOf.distLR).handle(_
                 .caseOf["Empty"](elimSnd)
                 .caseOf["NonEmpty"](λ { case (net2 |*| net1) => NonEmptyTree.branch(net1 |*| net2) })
                 .end
@@ -90,6 +100,15 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             })
             .end
           )
+        }
+
+      def concat_b[A]: (Tree[A] |*| Tree[A]) -⚬ Tree[A] =
+        λ { case t1 |*| t2 =>
+          switch(t1 |*| t2)
+            .is { case Empty(?(_)) |*| t2 => t2 }
+            .is { case t1 |*| Empty(?(_)) => t1 }
+            .is { case NonEmpty(t1) |*| NonEmpty(t2) => nonEmpty(NonEmptyTree.branch(t1 |*| t2)) }
+            .end
         }
 
       def partitioning[A]: Partitioning[-⚬, |*|, Tree[A]] =
@@ -116,12 +135,23 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             handle(PartitionImpl.Empty[A]()),
             handle(PartitionImpl.NonEmpty[A]()),
           ) { (handleEmpty, handleNonEmpty) =>
-            id[F[Tree[A]]] > OneOf.distF(using pos) > OneOf.switch(_
+            id[F[Tree[A]]] > OneOf.distF(using pos) > OneOf.handle(_
               .caseOf["Empty"](handleEmpty)
               .caseOf["NonEmpty"](handleNonEmpty)
               .end
             )
           }
+
+        override def samePartition[P, Q](p: PartitionImpl[A, P], q: PartitionImpl[A, Q]): Option[P =:= Q] =
+          (p, q) match
+            case (PartitionImpl.Empty(),    PartitionImpl.Empty()   ) => Some(summon[One =:= One])
+            case (PartitionImpl.NonEmpty(), PartitionImpl.NonEmpty()) => Some(summon[NonEmptyTree[A] =:= NonEmptyTree[A]])
+            case _ => None
+
+        override def reinject[P](p: PartitionImpl[A, P]): P -⚬ Tree[A] =
+          p match
+            case PartitionImpl.Empty() => empty[A]
+            case PartitionImpl.NonEmpty() => nonEmpty[A]
 
         override def isTotal[P](p: Partition[P]): Option[Tree[A] -⚬ P] =
           libretto.lambda.UnhandledCase.raise("isTotal")
@@ -151,7 +181,11 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
     }
 
     List(
-      "create and fold Tree" ->
+      "foldMap_a" -> Tree.foldMap_a[Val[Int], Val[Int]],
+      "foldMap_b" -> Tree.foldMap_b[Val[Int], Val[Int]],
+    ).map { case (desc, foldMap) =>
+
+      s"create and fold Tree ($desc)" ->
         TestCase.interactWith {
           import NonEmptyTree.{leaf, branch}
           λ { case +(d) =>
@@ -161,7 +195,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
                 branch(leaf(d :>> constVal(3)) |*| leaf(d :>> constVal(4)))
               )
             tree
-              :>> Tree.foldMap(id, unliftPair > mapVal { case (a, b) => a + b })
+              :>> foldMap(id, unliftPair > mapVal { case (a, b) => a + b })
               :>> Maybe.getOrElse(done > constVal(0))
           }
         }.via { port =>
@@ -169,9 +203,14 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             n <- expectVal(port)
             _ <- Outcome.assertEquals(n, 10)
           } yield ()
-        },
+        }
 
-      "concatenate trees" ->
+    } ++ List(
+      "concat_a" -> Tree.concat_a[Val[Int]],
+      "concat_b" -> Tree.concat_b[Val[Int]],
+    ).map { case (desc, concat) =>
+
+      s"concatenate trees ($desc)" ->
         TestCase.interactWith {
           import NonEmptyTree.{leaf, branch}
           λ { case +(d) =>
@@ -180,9 +219,9 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             val tree2 =
               Tree.nonEmpty(branch(leaf(d :>> constVal(3)) |*| leaf(d :>> constVal(4))))
             val tree =
-              Tree.concat(tree1 |*| tree2)
+              concat(tree1 |*| tree2)
             tree
-              :>> Tree.foldMap(mapVal(_.toString), unliftPair > mapVal { case (a, b) => s"$a,$b" })
+              :>> Tree.foldMap_a(mapVal(_.toString), unliftPair > mapVal { case (a, b) => s"$a,$b" })
               :>> Maybe.getOrElse(done > constVal(""))
           }
         }.via { port =>
@@ -191,7 +230,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             _ <- Outcome.assertEquals(s, "1,2,3,4")
           } yield ()
         }
-    )
+    }
   }
 
 }

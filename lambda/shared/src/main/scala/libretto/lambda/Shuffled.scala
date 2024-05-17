@@ -96,13 +96,37 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
     /** Extracts the maximum forest-shaped prefix
      * at the given position satisfying the given predicate.
      */
-    def extrudeInitForestAtWhile[F[_], X, ->>[_, _]](
+    def takeLeadingForestAtWhile[F[_], X, ->>[_, _]](
       pos: Focus[|*|, F],
       pred: [x, y] => (x -> y) => Option[x ->> y],
     )(using
-      A =:= F[X],
+      ev: A =:= F[X],
     ): Exists[[Y] =>> (AForest[->>, |*|, X, Y], Shuffled[F[Y], B])] =
-      UnhandledCase.raise(s"${this.getClass.getSimpleName()}.extrudeInitForestAtWhile")
+      chaseFw(pos) match
+        case ChaseFwRes.Transported(_, _) =>
+          Exists((AForest.Empty(), this.from(using ev.flip)))
+        case sp: ChaseFwRes.Split[f, x, x1, x2, b] =>
+          sp.ev match { case TypeEq(Refl()) =>
+            type F1[T] = F[T |*| x2]
+            takeLeadingForestAtWhile[F1, x1, ->>](pos compose Focus.fst, pred) match
+              case res1 @ Exists.Some((f1, s1)) =>
+                type F2[T] = F[res1.T |*| T]
+                s1.takeLeadingForestAtWhile[F2, x2, ->>](pos compose Focus.snd, pred) match
+                  case Exists.Some((f2, s2)) =>
+                    Exists((AForest.par(f1, f2), s2))
+          }
+        case r: ChaseFwRes.FedTo[f, x, v, w, g, b] =>
+          r.v match
+            case Focus.Id() =>
+              pred(r.f) match
+                case None =>
+                  Exists((AForest.Empty(), this.from(using ev.flip)))
+                case Some(f0) =>
+                  r.post.takeLeadingForestAtWhile[g, w, ->>](r.g, pred) match
+                    case Exists.Some((f1, s)) =>
+                      Exists.Some((AForest.Node(f0, f1), s.after(r.pre.apply)))
+            case Focus.Fst(_) | Focus.Snd(_) =>
+              Exists((AForest.Empty(), this.from(using ev.flip)))
 
     def to[C](using ev: B =:= C): Shuffled[A, C] =
       ev.substituteCo(this)

@@ -12,5 +12,11 @@ trait SemigroupalCategory[->[_, _], |*|[_, _]] extends Category[->] {
   extension [A, B](f: A -> B) {
     def inFst[X]: (A |*| X) -> (B |*| X) = fst(f)
     def inSnd[X]: (X |*| A) -> (X |*| B) = snd(f)
+
+    def at[F[_]](pos: Focus[|*|, F]): F[A] -> F[B] =
+      pos match
+        case Focus.Id()    => f
+        case Focus.Fst(p1) => fst(f.at(p1))
+        case Focus.Snd(p2) => snd(f.at(p2))
   }
 }

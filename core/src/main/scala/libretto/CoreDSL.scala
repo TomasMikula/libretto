@@ -116,7 +116,7 @@ trait CoreDSL {
     ): DistF[F, (Label of H) :: Tail] { type Out = (Label of F[H]) :: tail.Out }
 
     def inject[Label, A, Cases](using Injector[Label, A, Cases]): A -⚬ OneOf[Cases]
-    def switch[Cases, R](handlers: Handlers[Cases, R]): OneOf[Cases] -⚬ R
+    def handle[Cases, R](handlers: Handlers[Cases, R]): OneOf[Cases] -⚬ R
     def distLR[A, Cases](using ev: DistLR[A, Cases]): (A |*| OneOf[Cases]) -⚬ OneOf[ev.Out]
     def distF[F[_], Cases](using F: Focus[|*|, F], ev: DistF[F, Cases]): F[OneOf[Cases]] -⚬ OneOf[ev.Out]
 
@@ -133,16 +133,16 @@ trait CoreDSL {
     def create[ADT](using u: Unapply[ADT, OneOf]): Creator[u.A] =
       Creator[u.A]
 
-    def switch[ADT](using u: Unapply[ADT, OneOf]): Switcher[u.A] =
-      Switcher[u.A]
+    def handle[ADT](using u: Unapply[ADT, OneOf]): HandleInit[u.A] =
+      HandleInit[u.A]
 
     class Creator[Cases]:
       def from[Label](using c: IsCaseOf[Label, Cases]): c.Type -⚬ OneOf[Cases] =
         inject(using Injector(c))
 
-    class Switcher[Cases]:
+    class HandleInit[Cases]:
       def apply[R](handlers: Handlers.InitialBuilder[Cases] => Handlers[Cases, R]): OneOf[Cases] -⚬ R =
-        switch[Cases, R](handlers(Handlers.InitialBuilder[Cases]))
+        handle[Cases, R](handlers(Handlers.InitialBuilder[Cases]))
   }
 
   /** Signal that travels in the direction of [[-⚬]], i.e. the positive direction.
@@ -627,10 +627,10 @@ trait CoreDSL {
   }
 
   extension [Cases](x: $[OneOf[Cases]]) {
-    def switch[R](using LambdaContext)(
+    def handle[R](using LambdaContext)(
       handlers: OneOf.Handlers.InitialBuilder[Cases] => OneOf.Handlers[Cases, R]
     ): $[R] =
-      x :>> OneOf.Switcher[Cases].apply(handlers)
+      x :>> OneOf.HandleInit[Cases].apply(handlers)
   }
 
   def constant[A](f: One -⚬ A)(using SourcePos, LambdaContext): $[A] =

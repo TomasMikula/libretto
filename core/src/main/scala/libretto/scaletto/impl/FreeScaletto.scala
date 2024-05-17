@@ -4,8 +4,9 @@ import libretto.scaletto.Scaletto
 import libretto.lambda.{AForest, ClosedSymmetricMonoidalCategory, Focus, Lambdas, LambdasImpl, Partitioning, Shuffled, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Delambdified
 import libretto.lambda.Partitioning.Partition
-import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, TypeEq}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, TypeEq, Validated}
 import libretto.lambda.util.TypeEq.Refl
+import libretto.lambda.util.Validated.{Invalid, Valid}
 import libretto.lambda.util.Monad.monadEither
 import libretto.util.{Async, StaticValue}
 import scala.concurrent.duration.FiniteDuration
@@ -497,7 +498,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     override def inject[Label, A, Cases](using i: Injector[Label, A, Cases]): A -⚬ OneOf[Cases] =
       NAryInject(i)
 
-    override def switch[Cases, R](handlers: Handlers[Cases, R]): OneOf[Cases] -⚬ R =
+    override def handle[Cases, R](handlers: Handlers[Cases, R]): OneOf[Cases] -⚬ R =
       import NAryHandlerBuilder.{Empty, Snoc}
 
       def go[RemainingCases](
@@ -857,6 +858,9 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     def misplacedExtractor[T](ext: Extractor[?, ?]): SwitchRes[T] =
       libretto.lambda.UnhandledCase.raise(s"SwitchRes.misplacedExtractor($ext)")
 
+    def incompatibleExtractors[T](base: Extractor[?, ?], incompatible: NonEmptyList[Extractor[?, ?]]): SwitchRes[T] =
+      libretto.lambda.UnhandledCase.raise(s"SwitchRes.incompatibleExtractors($base, $incompatible)")
+
     def failure[T](e: LinearityViolation | NonExhaustiveness): SwitchRes[T] =
       SwitchRes.Failure(NonEmptyList(e, Nil))
 
@@ -957,13 +961,15 @@ object FreeScaletto extends FreeScaletto with Scaletto {
             [X] => (p: scr.Partition[X]) => {
               val ext: Extractor[T, X] =
                 Partitioning.Partition(scr, p)
-              val matchingCases =
-                collectCompatibleCases[F, T, X, R](cases.toList, pos, ext)
-              matchingCases match
-                case Nil =>
-                  SwitchRes.nonExhaustiveness(Extractor(scr, p)) // TODO: include context of this extractor
-                case c :: cs =>
-                  compilePatternMatch[F[X], R](NonEmptyList(c, cs))
+              collectMatchingCases[F, T, X, R](cases.toList, pos, ext) match
+                case Valid(matchingCases) =>
+                  matchingCases match
+                    case Nil =>
+                      SwitchRes.nonExhaustiveness(Extractor(scr, p)) // TODO: include context of this extractor
+                    case c :: cs =>
+                      compilePatternMatch[F[X], R](NonEmptyList(c, cs))
+                case Invalid(incompatibleExtractors) =>
+                  SwitchRes.incompatibleExtractors(ext, incompatibleExtractors)
             }
           ).map(_.from[A])
         }
@@ -973,20 +979,65 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     caseCatchAll: (A =:= B) => R,
     caseProper: [F[_], T] => (Focus[|*|, F], Partitioning[-⚬, |*|, T], A =:= F[T]) => R,
   ): R =
-    libretto.lambda.UnhandledCase.raise(s"withFirstScrutineeOf($p)")
+    p match
+      case AForest.Node(extr, _) =>
+        caseProper[[x] =>> x, A](Focus.id, extr.partitioning, summon)
+      case other =>
+        libretto.lambda.UnhandledCase.raise(s"withFirstScrutineeOf($other)")
 
-  private def collectCompatibleCases[F[_], T, U, R](
+  private def collectMatchingCases[F[_], T, U, R](
     cases: List[Exists[[Y] =>> (Pattern[F[T], Y], Y -⚬ R)]],
     pos: Focus[|*|, F],
     ext: Extractor[T, U],
-  ): List[Exists[[Y] =>> (Pattern[F[U], Y], Y -⚬ R)]] =
-    libretto.lambda.UnhandledCase.raise(s"collectCompatibleCases($cases, $pos, $ext)")
+  ): Validated[
+    Extractor[?, ?], // incompatible extractors at the given position
+    List[Exists[[Y] =>> (Pattern[F[U], Y], Y -⚬ R)]],
+  ] =
+    Applicative.traverseList(cases) {
+      case Exists.Some((pattern, handler)) =>
+        positExtractor(ext, pos, pattern, handler)
+    }.map(_.flatten)
+
+  private def positExtractor[T, U, F[_], Y, R](
+    ext: Extractor[T, U],
+    pos: Focus[|*|, F],
+    pattern: Pattern[F[T], Y],
+    handler: Y -⚬ R,
+  ): Validated[
+    Extractor[?, ?], // incompatible extractor at the given position in the given pattern
+    Option[Exists[[Y] =>> (Pattern[F[U], Y], Y -⚬ R)]],
+  ] =
+    pattern.focus(pos) match
+      case r: AForest.Focused.At[arr, pr, f, t, y, g] =>
+        summon[Y =:= g[y]]
+        val subpattern: Pattern[T, y] = r.target
+        subpattern match
+          case AForest.Empty() =>
+            summon[T =:= y]
+            val pattern1: Pattern[F[U], g[U]] = r.context[U]
+            val handler1: g[U] -⚬ R = ext.reinject.at(r.context.outFocus) > handler
+            Validated.Valid(Some(Exists((pattern1, handler1))))
+          case AForest.Node(ext1, subpattern1) =>
+            (ext sameAs ext1) match
+              case None =>
+                // incompatible partitionings
+                Validated.invalid(ext1)
+              case Some(None) =>
+                // non-matching partitions
+                Validated.Valid(None)
+              case Some(Some(TypeEq(Refl()))) =>
+                val pattern1 = r.context.plug(subpattern1)
+                Validated.Valid(Some(Exists((pattern1, handler))))
+          case AForest.Par(sp1, sp2) =>
+            libretto.lambda.UnhandledCase.raise(s"incompatible extractors: $ext vs ($sp1, $sp2)")
+      case AForest.Focused.IntoNode(fo, fi, node) =>
+        Validated.invalid(node.value)
 
   private def extractPatternAt[F[_], A0, B](
     pos: Focus[|*|, F],
     f: F[A0] -?> B,
   ): SwitchRes[Exists[[X] =>> (Pattern[A0, X], F[X] -⚬ B)]] =
-    f.extrudeInitForestAtWhile[F, A0, Extractor](
+    f.takeLeadingForestAtWhile[F, A0, Extractor](
       pos,
       [X, Y] => (f: PartialFun[X, Y]) =>
         f match {

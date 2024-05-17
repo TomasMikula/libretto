@@ -14,7 +14,11 @@ trait Partitioning[->[_, _], <*>[_, _], T] {
 
   def isTotal[P](p: Partition[P]): Option[T -> P]
 
-  def sameAs(that: Partitioning[->, <*>, T]): Option[TypeEqK[this.Partition, that.Partition]]
+  infix def sameAs(that: Partitioning[->, <*>, T]): Option[TypeEqK[this.Partition, that.Partition]]
+
+  def samePartition[P, Q](p: Partition[P], q: Partition[Q]): Option[P =:= Q]
+
+  def reinject[P](p: Partition[P]): P -> T
 
   def partition[P](p: Partition[P]): Partitioning.Partition[->, <*>, T, P] =
     Partitioning.Partition(this, p)
@@ -28,6 +32,19 @@ object Partitioning {
   ) {
     def isTotal: Option[T -> P] =
       partitioning.isTotal(partition)
+
+    def reinject: P -> T =
+      partitioning.reinject(partition)
+
+    infix def sameAs[Q](that: Partition[->, <*>, T, Q]): Option[Option[P =:= Q]] =
+      (this.partitioning sameAs that.partitioning)
+        .map { ev =>
+          this.partitioning.samePartition(this.partition, ev.flip.at[Q](that.partition))
+        }
   }
 
+  sealed trait RebaseRes[->[_, _], <*>[_, _], T, Q, P]
+  object RebaseRes {
+    case class Incompatible[->[_, _], <*>[_, _], T, Q, P]() extends RebaseRes[->, <*>, T, Q, P]
+  }
 }
