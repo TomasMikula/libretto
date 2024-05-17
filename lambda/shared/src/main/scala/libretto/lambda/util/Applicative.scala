@@ -18,6 +18,9 @@ trait Applicative[F[_]] { self =>
   def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)] =
     map2(fa, fb)((_, _))
 
+  protected def derivedAp[A, B](ff: F[A => B])(fa: F[A]): F[B] =
+    map(zip(ff, fa), _(_))
+
   extension [A](fa: F[A]) {
     @targetName("extMap")
     infix def map[B](f: A => B): F[B] =
