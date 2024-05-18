@@ -69,12 +69,18 @@ abstract class FreeScaletto {
         throw new AssertionError(s"Impossible")
   }
 
-  sealed trait NAryDistLR[A, Cases] {
+  sealed trait NAryDistLR[A, Cases] { self =>
     type Out
+
+    def extend[HLbl, H]: NAryDistLR[A, (HLbl of H) :: Cases]{type Out = (HLbl of (A |*| H)) :: self.Out} =
+      NAryDistLR.Cons(this)
   }
 
   object NAryDistLR {
-    case class Empty[A]() extends NAryDistLR[A, Void] { override type Out = Void }
+    case class Empty[A]() extends NAryDistLR[A, Void] {
+      override type Out = Void
+    }
+
     case class Cons[A, HLbl, H, Tail, ATail](
       tail: NAryDistLR[A, Tail] { type Out = ATail },
     ) extends NAryDistLR[A, (HLbl of H) :: Tail] {
@@ -85,6 +91,105 @@ abstract class FreeScaletto {
       tail: NAryDistLR[A, Tail],
     ): NAryDistLR[A, (HLbl of H) :: Tail] { type Out = (HLbl of (A |*| H)) :: tail.Out } =
       Cons[A, HLbl, H, Tail, tail.Out](tail)
+  }
+
+  sealed trait NAryDistRL[B, Cases] { self =>
+    type Out
+
+    def extend[HLbl, H]: NAryDistRL[B, (HLbl of H) :: Cases]{type Out = (HLbl of (H |*| B)) :: self.Out} =
+      NAryDistRL.Cons(this)
+  }
+
+  object NAryDistRL {
+    case class Empty[B]() extends NAryDistRL[B, Void] { override type Out = Void }
+    case class Cons[B, HLbl, H, Tail, BTail](
+      tail: NAryDistRL[B, Tail] { type Out = BTail },
+    ) extends NAryDistRL[B, (HLbl of H) :: Tail] {
+      override type Out = (HLbl of (H |*| B)) :: BTail
+    }
+  }
+
+  sealed trait NAryDistF[F[_], Cases] {
+    type Out
+
+    def operationalize(f: Focus[|*|, F]): NAryDistF.Operationalized[F, Cases] { type Out = NAryDistF.this.Out }
+  }
+
+  object NAryDistF {
+    case class Empty[F[_]]() extends NAryDistF[F, Void] {
+      override type Out = Void
+
+      override def operationalize(f: Focus[|*|, F]): Operationalized[F, Void]{type Out = Void} =
+        f match
+          case Focus.Id() =>
+            Id[Void]()
+          case f: Focus.Fst[pr, f1, b] =>
+            val d1: Operationalized[f1, Void]{type Out = Void} =
+              Empty[f1]().operationalize(f.i)
+            DistSnd[f1, b, Void, Void, Void](d1, NAryDistRL.Empty())
+          case f: Focus.Snd[pr, f2, a] =>
+            val d2: Operationalized[f2, Void]{type Out = Void} =
+              Empty[f2]().operationalize(f.i)
+            DistFst[a, f2, Void, Void, Void](d2, NAryDistLR.Empty())
+    }
+
+    case class Cons[F[_], HLbl, H, Tail, FTail](
+      tail: NAryDistF[F, Tail] { type Out = FTail },
+    ) extends NAryDistF[F, (HLbl of H) :: Tail] {
+      override type Out = (HLbl of F[H]) :: FTail
+
+      override def operationalize(f: Focus[|*|, F]): Operationalized[F, (HLbl of H) :: Tail]{type Out = (HLbl of F[H]) :: FTail} =
+        tail.operationalize(f).extend[HLbl, H]
+    }
+
+    /** Like [[NAryDistF]], witnesses that distributing `F` into `Cases` yields `Out`.
+     *  Unlike [[NAryDistF]], [[Operationalized]] is defined by induction over the structure of `F`
+     *  (as opposed to by induction over `Cases`). As such, it can be more readily used
+     *  to generate the distributing function `F[OneOf[Cases]] -⚬ OneOf[Out]`.
+     */
+    sealed trait Operationalized[F[_], Cases] { self =>
+      type Out
+
+      def extend[HLbl, H]: Operationalized[F, (HLbl of H) :: Cases]{type Out = (HLbl of F[H]) :: self.Out}
+    }
+
+    case class Id[Cases]() extends NAryDistF.Operationalized[[x] =>> x, Cases] {
+      override type Out = Cases
+
+      override def extend[HLbl, H]: Operationalized[[x] =>> x, (HLbl of H) :: Cases]{type Out = (HLbl of H) :: Cases} =
+        Id[(HLbl of H) :: Cases]()
+    }
+
+    case class DistFst[A, F2[_], Cases, F2Cases, Res](
+      distF2: NAryDistF.Operationalized[F2, Cases] { type Out = F2Cases },
+      dist1: NAryDistLR[A, F2Cases] { type Out = Res },
+    ) extends NAryDistF.Operationalized[[x] =>> A |*| F2[x], Cases] {
+      override type Out = Res
+
+      override def extend[HLbl, H]: Operationalized[[x] =>> A |*| F2[x], (HLbl of H) :: Cases]{type Out = (HLbl of (A |*| F2[H])) :: Res} =
+        val inner: Operationalized[F2, (HLbl of H) :: Cases]{type Out = (HLbl of F2[H]) :: F2Cases} =
+          distF2.extend[HLbl, H]
+        val outer: NAryDistLR[A, (HLbl of F2[H]) :: F2Cases]{type Out = (HLbl of (A |*| F2[H])) :: Res} =
+          dist1.extend[HLbl, F2[H]]
+        DistFst[A, F2, (HLbl of H) :: Cases, (HLbl of F2[H]) :: F2Cases, (HLbl of (A |*| F2[H])) :: Res](
+          inner,
+          outer,
+        )
+    }
+
+    case class DistSnd[F1[_], B, Cases, F1Cases, Res](
+      distF1: NAryDistF.Operationalized[F1, Cases] { type Out = F1Cases },
+      dist2: NAryDistRL[B, F1Cases] { type Out = Res },
+    ) extends NAryDistF.Operationalized[[x] =>> F1[x] |*| B, Cases] {
+      override type Out = Res
+
+      override def extend[HLbl, H]: Operationalized[[x] =>> F1[x] |*| B, (HLbl of H) :: Cases]{type Out = (HLbl of (F1[H] |*| B)) :: Res} =
+        val inner: Operationalized[F1, (HLbl of H) :: Cases]{type Out = (HLbl of F1[H]) :: F1Cases} =
+          distF1.extend[HLbl, H]
+        val outer: NAryDistRL[B, (HLbl of F1[H]) :: F1Cases]{type Out = (HLbl of (F1[H] |*| B)) :: Res} =
+          dist2.extend[HLbl, F1[H]]
+        DistSnd(inner, outer)
+    }
   }
 
   sealed trait NAryHandlerBuilder[Cases, RemainingCases, R]
@@ -494,6 +599,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     override type IsCaseOf[Label, Cases] = NAryInjector[Label, ?, Cases]
     override type Handlers[Cases, R] = NAryHandlerBuilder[Cases, Void, R]
     override type DistLR[A, Cases] = NAryDistLR[A, Cases]
+    override type DistF[F[_], Cases] = NAryDistF[F, Cases]
 
     override def inject[Label, A, Cases](using i: Injector[Label, A, Cases]): A -⚬ OneOf[Cases] =
       NAryInject(i)
@@ -526,7 +632,21 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       NArySumVoid()
 
     override def distF[F[_], Cases](using F: Focus[|*|, F], ev: DistF[F, Cases]): F[OneOf[Cases]] -⚬ OneOf[ev.Out] =
-      libretto.lambda.UnhandledCase.raise("distF")
+      distF(ev.operationalize(F))
+
+    private def distF[F[_], Cases](ev: NAryDistF.Operationalized[F, Cases]): F[OneOf[Cases]] -⚬ OneOf[ev.Out] =
+      ev match
+        case i: (NAryDistF.Id[cases] & ev.type) =>
+          val ev1: i.Out =:= ev.Out =
+            summon[ev.Out =:= i.Out].flip
+          val ev2: Cases =:= ev.Out =
+            summon[Cases =:= i.Out].andThen[ev.Out](ev1)
+          id[OneOf[Cases]]
+            .to[OneOf[ev.Out]](using ev2.liftCo[OneOf])
+        case NAryDistF.DistFst(inner, outer) =>
+          libretto.lambda.UnhandledCase.raise(s"distF($ev)")
+        case NAryDistF.DistSnd(inner, outer) =>
+          libretto.lambda.UnhandledCase.raise(s"distF($ev)")
 
     override def distLR[A, Cases](using ev: DistLR[A, Cases]): (A |*| OneOf[Cases]) -⚬ OneOf[ev.Out] =
       distLR_[A, Cases, ev.Out]
@@ -577,13 +697,13 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     override def distLRVoid[A]: DistLR[A, Void] { type Out = Void } =
       NAryDistLR.Empty[A]()
 
-    override def distFVoid[F[_]]: DistF[F, Void]{type Out = Void} =
-      libretto.lambda.UnhandledCase.raise("distFVoid")
+    override def distFVoid[F[_]]: DistF[F, Void]{ type Out = Void } =
+      NAryDistF.Empty()
 
     override def distFCons[F[_], Label, H, Tail](using
       tail: DistF[F, Tail],
     ): DistF[F, (Label of H) :: Tail] { type Out = (Label of F[H]) :: tail.Out } =
-      libretto.lambda.UnhandledCase.raise("distFCons")
+      NAryDistF.Cons(tail)
 
     override object Handlers extends HandlersModule {
       override type Builder[Cases, RemainingCases, R] =
@@ -982,6 +1102,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     p match
       case AForest.Node(extr, _) =>
         caseProper[[x] =>> x, A](Focus.id, extr.partitioning, summon)
+      case AForest.Empty() =>
+        caseCatchAll(summon)
       case other =>
         libretto.lambda.UnhandledCase.raise(s"withFirstScrutineeOf($other)")
 
