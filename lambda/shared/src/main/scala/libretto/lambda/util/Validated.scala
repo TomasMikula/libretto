@@ -25,6 +25,5 @@ object Validated {
     override def map[A, B](fa: Validated[E, A], f: A => B): Validated[E, B] = fa.map(f)
     override def zip[A, B](fa: Validated[E, A], fb: Validated[E, B]): Validated[E, (A, B)] = fa zip fb
     override def pure[A](a: A): Validated[E, A] = Valid(a)
-    override def ap[A, B](ff: Validated[E, A => B])(fa: Validated[E, A]): Validated[E, B] = derivedAp(ff)(fa)
   }
 }

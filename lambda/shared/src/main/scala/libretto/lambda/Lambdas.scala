@@ -322,9 +322,14 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
       override def pure[A](a: A): LinCheck[A] =
         Success(a)
 
-      override def ap[A, B](ff: LinCheck[A => B])(fa: LinCheck[A]): LinCheck[B] =
-        (ff, fa) match {
-          case (Success(f), Success(a)) => Success(f(a))
+      override def map[A, B](fa: LinCheck[A], f: A => B): LinCheck[B] =
+        fa match
+          case Success(a) => Success(f(a))
+          case Failure(e) => Failure(e)
+
+      override def zip[A, B](fa: LinCheck[A], fb: LinCheck[B]): LinCheck[(A, B)] =
+        (fa, fb) match {
+          case (Success(a), Success(b)) => Success((a, b))
           case (Success(_), Failure(e)) => Failure(e)
           case (Failure(e), Success(_)) => Failure(e)
           case (Failure(e), Failure(f)) => Failure(e combine f)

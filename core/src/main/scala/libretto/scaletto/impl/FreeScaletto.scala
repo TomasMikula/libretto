@@ -828,8 +828,11 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         case (Left(es), Left(fs)) => Left(es ++ fs)
 
     given Applicative[TotalRes] with {
-      override def ap[A, B](ff: TotalRes[A => B])(fa: TotalRes[A]): TotalRes[B] =
-        TotalRes.zip(ff, fa).map { case (f, a) => f(a) }
+      override def map[A, B](fa: TotalRes[A], f: A => B): TotalRes[B] =
+        fa.map(f)
+
+      override def zip[A, B](fa: TotalRes[A], fb: TotalRes[B]): TotalRes[(A, B)] =
+        TotalRes.zip(fa, fb)
 
       override def pure[A](a: A): TotalRes[A] =
         Right(a)
@@ -959,6 +962,11 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     case Success(value: T)
     case Failure(errors: NonEmptyList[LinearityViolation | NonExhaustiveness])
 
+    def map[U](f: T => U): SwitchRes[U] =
+      this match
+        case Success(value) => Success(f(value))
+        case Failure(es) => Failure(es)
+
     def flatMap[U](f: T => SwitchRes[U]): SwitchRes[U] =
       this match
         case Success(value) => f(value)
@@ -988,9 +996,12 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       override def pure[A](a: A): SwitchRes[A] =
         Success(a)
 
-      override def ap[A, B](ff: SwitchRes[A => B])(fa: SwitchRes[A]): SwitchRes[B] =
-        (ff, fa) match
-          case (Success(f), Success(a)) => Success(f(a))
+      override def map[A, B](fa: SwitchRes[A], f: A => B): SwitchRes[B] =
+        fa.map(f)
+
+      override def zip[A, B](fa: SwitchRes[A], fb: SwitchRes[B]): SwitchRes[(A, B)] =
+        (fa, fb) match
+          case (Success(a), Success(b)) => Success((a, b))
           case (Success(_), Failure(f)) => Failure(f)
           case (Failure(e), Success(_)) => Failure(e)
           case (Failure(e), Failure(f)) => Failure(e ++ f)

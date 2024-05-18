@@ -56,8 +56,11 @@ object Monad {
       override def pure[A](a: A): F[A] =
         F.pure(a)
 
-      override def ap[A, B](ff: F[A => B])(fa: F[A]): F[B] =
-        F.flatMap(ff) { f => F.map(fa, f) }
+      override def map[A, B](fa: F[A], f: A => B): F[B] =
+        F.map(fa, f)
+
+      override def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)] =
+        F.flatMap(fa) { a => F.map(fb, (a, _)) }
     }
 
   given monadId: Monad[[A] =>> A] with {
