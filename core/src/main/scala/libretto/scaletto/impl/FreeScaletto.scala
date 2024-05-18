@@ -794,7 +794,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   private type Pattern[A, B] = AForest[Extractor, |*|, A, B]
 
-  private type LinearityViolation = Lambdas.Error.LinearityViolation[VarOrigin]
+  private type LinearityViolation = Lambdas.LinearityViolation[VarOrigin]
 
   private def partial[A, B](f: A -⚬ B): (A -?> B) =
     psh.lift(f)
@@ -931,7 +931,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     ) match {
       case Delambdified.Exact(f)      => lambdas.Expr.map(a, f)(VarOrigin.FunAppRes(pos))
       case Delambdified.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)
-      case Delambdified.Failure(e)    => raiseError(e)
+      case Delambdified.Failure(e)    => raiseLinearityViolation(e)
     }
 
   override def switch[A, R](using
@@ -1203,11 +1203,9 @@ object FreeScaletto extends FreeScaletto with Scaletto {
             case Right(f) => f
             case Left(es) => raiseTotalityViolations(es)
         case Closure(captured, f) =>
-          val undefinedVars: Var.Set[VarOrigin] =
-            lambdas.Expr.initialVars(captured)
-          raiseError(Lambdas.Error.Undefined(undefinedVars))
+          raiseUndefinedVars(lambdas.Expr.initialVars(captured))
         case Failure(e) =>
-          raiseError(e)
+          raiseLinearityViolation(e)
       }
     }
 
@@ -1238,7 +1236,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
             case Left(es) =>
               raiseTotalityViolations(es)
         case Failure(e) =>
-          raiseError(e)
+          raiseLinearityViolation(e)
       }
     }
   }
@@ -1340,9 +1338,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       f,
     )(VarOrigin.FunAppRes(pos))
 
-  private def raiseError(e: Lambdas.Error[VarOrigin]): Nothing = {
-    import Lambdas.Error.Undefined
-    import Lambdas.Error.LinearityViolation.{OverUnder, Overused, Underused}
+  private def raiseLinearityViolation(e: LinearityViolation): Nothing = {
+    import Lambdas.LinearityViolation.{OverUnder, Overused, Underused}
 
     def overusedMsg(vs: Var.Set[VarOrigin])  = s"Variables used more than once: ${vs.list.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"
     def underusedMsg(vs: Var.Set[VarOrigin]) = s"Variables not fully consumed: ${vs.list.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"
@@ -1351,9 +1348,11 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       case Overused(vs)    => throw LinearityException(overusedMsg(vs))
       case Underused(vs)   => throw LinearityException(underusedMsg(vs))
       case OverUnder(o, u) => throw LinearityException(s"${overusedMsg(o)}\n${underusedMsg(u)}")
-      case Undefined(vs)   => throw UnboundVariablesException(vs)
     }
   }
+
+  private def raiseUndefinedVars(vs: Var.Set[VarOrigin]): Nothing =
+    throw UnboundVariablesException(vs)
 
   private def raiseTotalityViolations(es: NonEmptyList[(SourcePos, NonEmptyList[String])]): Nothing =
     libretto.lambda.UnhandledCase.raise(s"raiseTotalityViolations($es)")

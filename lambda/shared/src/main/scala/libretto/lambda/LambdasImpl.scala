@@ -1,8 +1,7 @@
 package libretto.lambda
 
 import libretto.{lambda as ll}
-import libretto.lambda.Lambdas.Error
-import libretto.lambda.Lambdas.Error.LinearityViolation
+import libretto.lambda.Lambdas.LinearityViolation
 import libretto.lambda.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
@@ -378,7 +377,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
         case EliminatedFromForest.NotFound() =>
           Context.getDiscard(boundVar) match
             case Some(discardFst) => Closure(Forest.unvar(exprs, u), swap > lift(discardFst(())))
-            case None             => Failure(Error.underusedVar(boundVar))
+            case None             => Failure(LinearityViolation.underusedVar(boundVar))
       }
     }
   }
@@ -569,7 +568,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
                     SingleVar[a](),
                     Context.getSplit(v) match {
                       case Some(split) => LinCheck.Success(CapturingFun.lift(split))
-                      case None        => LinCheck.Failure(Error.overusedVar(v))
+                      case None        => LinCheck.Failure(LinearityViolation.overusedVar(v))
                     },
                     Par(SingleVar[a](), SingleVar[a]()),
                   )
@@ -578,7 +577,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
                       case Some(discard) => LinCheck.Success(CapturingFun.noCapture(shuffled.swap > shuffled.lift(discard[a1](()))))
-                      case None          => LinCheck.Failure(Error.underusedVar(op.unusedVar))
+                      case None          => LinCheck.Failure(LinearityViolation.underusedVar(op.unusedVar))
                     },
                     SingleVar[a1](),
                   )
@@ -587,7 +586,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
                       case Some(discard) => LinCheck.Success(CapturingFun.lift(discard[a2](())))
-                      case None          => LinCheck.Failure(Error.underusedVar(op.unusedVar))
+                      case None          => LinCheck.Failure(LinearityViolation.underusedVar(op.unusedVar))
                     },
                     SingleVar[a2](),
                   )

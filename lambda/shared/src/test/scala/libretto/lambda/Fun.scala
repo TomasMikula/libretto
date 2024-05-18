@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.Lambdas.Error.LinearityViolation.{OverUnder, Overused, Underused}
+import libretto.lambda.Lambdas.LinearityViolation.{OverUnder, Overused, Underused}
 import libretto.lambda.util.{BiInjective, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
@@ -207,7 +207,7 @@ object Fun {
       }
       .mkString("\n")
 
-  private def raiseError(e: Lambdas.Error.LinearityViolation[VarDesc]): Nothing = {
+  private def raiseError(e: Lambdas.LinearityViolation[VarDesc]): Nothing = {
     e match
       case Overused(vars) =>
         throw RuntimeException(s"Variables used more than once:\n${printVars(vars)}")

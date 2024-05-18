@@ -1,7 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.Lambdas.Error
-import libretto.lambda.Lambdas.Error.LinearityViolation
+import libretto.lambda.Lambdas.LinearityViolation
 import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, UniqueTypeArg}
 import scala.annotation.targetName
 
@@ -300,7 +299,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
       [X, Y] => (x: Expr[X]) =>
         Context.getDiscard(x.resultVar) match {
           case Some(discardFst) => LinCheck.Success(discardFst[Y](()))
-          case None             => LinCheck.Failure(Error.underusedVar(x.resultVar))
+          case None             => LinCheck.Failure(LinearityViolation.underusedVar(x.resultVar))
         }
 
     (a product b)(discardFst) match
@@ -347,43 +346,35 @@ object Lambdas {
       universalDiscard,
     )
 
-  sealed trait Error[VarLabel]
-  object Error {
-    case class Undefined[VarLabel](vars: Var.Set[VarLabel]) extends Error[VarLabel]
+  sealed trait LinearityViolation[VarLabel] {
+    import LinearityViolation.*
 
-    sealed trait LinearityViolation[VarLabel] extends Error[VarLabel] {
-      import LinearityViolation.*
+    infix def combine(that: LinearityViolation[VarLabel]): LinearityViolation[VarLabel] =
+      (this, that) match {
+        case (Overused(s),     Overused(t)    ) => Overused(s merge t)
+        case (Overused(s),     Underused(t)   ) => OverUnder(s, t)
+        case (Overused(s),     OverUnder(t, u)) => OverUnder(s merge t, u)
+        case (Underused(s),    Overused(t)    ) => OverUnder(t, s)
+        case (Underused(s),    Underused(t)   ) => Underused(s merge t)
+        case (Underused(s),    OverUnder(t, u)) => OverUnder(t, s merge u)
+        case (OverUnder(s, t), Overused(u)    ) => OverUnder(s merge u, t)
+        case (OverUnder(s, t), Underused(u)   ) => OverUnder(s, t merge u)
+        case (OverUnder(s, t), OverUnder(u, v)) => OverUnder(s merge u, t merge v)
+      }
+  }
 
-      infix def combine(that: LinearityViolation[VarLabel]): LinearityViolation[VarLabel] =
-        (this, that) match {
-          case (Overused(s),     Overused(t)    ) => Overused(s merge t)
-          case (Overused(s),     Underused(t)   ) => OverUnder(s, t)
-          case (Overused(s),     OverUnder(t, u)) => OverUnder(s merge t, u)
-          case (Underused(s),    Overused(t)    ) => OverUnder(t, s)
-          case (Underused(s),    Underused(t)   ) => Underused(s merge t)
-          case (Underused(s),    OverUnder(t, u)) => OverUnder(t, s merge u)
-          case (OverUnder(s, t), Overused(u)    ) => OverUnder(s merge u, t)
-          case (OverUnder(s, t), Underused(u)   ) => OverUnder(s, t merge u)
-          case (OverUnder(s, t), OverUnder(u, v)) => OverUnder(s merge u, t merge v)
-        }
-    }
+  object LinearityViolation {
+    case class Overused[VarLabel](vars: Var.Set[VarLabel]) extends LinearityViolation[VarLabel]
 
-    object LinearityViolation {
-      case class Overused[VarLabel](vars: Var.Set[VarLabel]) extends LinearityViolation[VarLabel]
+    case class Underused[VarLabel](vars: Var.Set[VarLabel]) extends LinearityViolation[VarLabel]
 
-      case class Underused[VarLabel](vars: Var.Set[VarLabel]) extends LinearityViolation[VarLabel]
-
-      case class OverUnder[VarLabel](overused: Var.Set[VarLabel], underused: Var.Set[VarLabel]) extends LinearityViolation[VarLabel]
-    }
+    case class OverUnder[VarLabel](overused: Var.Set[VarLabel], underused: Var.Set[VarLabel]) extends LinearityViolation[VarLabel]
 
     def overusedVar[L, A](v: Var[L, A]): LinearityViolation[L] =
       LinearityViolation.Overused(Var.Set(v))
 
     def underusedVar[L, A](v: Var[L, A]): LinearityViolation[L] =
       LinearityViolation.Underused(Var.Set(v))
-
-    def undefinedVar[L, A](v: Var[L, A]): Error[L] =
-      Undefined(Var.Set(v))
   }
 
   sealed trait Delambdified[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B] {
