@@ -64,7 +64,7 @@ object Tupled {
     ): Exists[[X] =>> (Tupled[|*|, F, X], shuffled.Shuffled[X, A])] =
       a.deduplicateLeafs(dup)
 
-    infix def product[B, ->[_, _]](b: Tupled[|*|, F, B])(
+    infix def union[B, ->[_, _]](b: Tupled[|*|, F, B])(
       discardFst: [X, Y] => F[X] => (X |*| Y) -> Y,
     )(using
       F: UniqueTypeArg[F],
@@ -74,7 +74,7 @@ object Tupled {
       shuffled.Shuffled[P, A],
       shuffled.Shuffled[P, B],
     )] =
-      (a product b)(discardFst)
+      (a union b)(discardFst)
   }
 
   def unzip[|*|[_, _], F[_], A, B](

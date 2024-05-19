@@ -162,7 +162,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
               case Right(discardFst) => Closure(y, distribute(()) > sum(discardFst(()) > f1, f2))
               case Left(unusedVars)  => Failure(LinearityViolation.Underused(unusedVars))
           case (Closure(x, f1), Closure(y, f2)) =>
-            product(x, y) match
+            union(x, y) match
               case Valid(Exists.Some((p, p1, p2))) =>
                 Closure(p, distribute(()) > sum(p1.inFst > f1, p2.inFst > f2))
               case Invalid(e) =>
@@ -255,7 +255,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
                   }
 
           case Closure(captured, f) =>
-            product(acc, captured)
+            union(acc, captured)
               .flatMap { case Exists.Some((y, p1, p2)) =>
                 leastCommonCapture(y, fs)
                   .map { case Exists.Some((q, Closure(z, gs))) =>
@@ -282,7 +282,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
           case (Left(vs), Left(ws)) => Left(vs merge ws)
     }
 
-  private def product[A, B](
+  private def union[A, B](
     a: Tupled[Expr, A],
     b: Tupled[Expr, B],
   )(using
@@ -305,7 +305,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
           case None             => invalid(LinearityViolation.underusedVar(x.resultVar))
         }
 
-    (a product b)(discardFst) match
+    (a union b)(discardFst) match
       case Exists.Some((p, p1, p2)) =>
         Applicative[LinCheck].map2(
           p1.traverse[LinCheck, -⚬]([x, y] => (f: LinChecked[x, y]) => f),

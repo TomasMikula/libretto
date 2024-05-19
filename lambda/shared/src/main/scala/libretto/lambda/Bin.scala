@@ -210,7 +210,10 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     ) extends MergeRes[A, B, -->, ==>]
   }
 
-  infix def product[B, ->[_, _]](that: Bin[<*>, T, F, B])(
+  /** Returns a tree with the least common superset of leaves
+   * and projections to get back to each of the two inputs.
+   */
+  infix def union[B, ->[_, _]](that: Bin[<*>, T, F, B])(
     discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y,
   )(using
     leafTest: UniqueTypeArg[F],
@@ -220,10 +223,10 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     shuffled.Shuffled[P, A],
     shuffled.Shuffled[P, B],
   )] =
-    (this product0 that)(discardFst) match {
-      case ProductRes.Absorbed(x, p1, p2) =>
+    (this union0 that)(discardFst) match {
+      case UnionRes.Absorbed(x, p1, p2) =>
         Exists((x, p1, p2))
-      case ProductRes.WithRemainder(x, r, p1, p2) =>
+      case UnionRes.WithRemainder(x, r, p1, p2) =>
         Exists((
           Branch(x, r),
           r.discardAll(discardFst).inSnd > p1,
@@ -231,13 +234,13 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
         ))
     }
 
-  private infix def product0[B, ->[_, _]](that: Bin[<*>, T, F, B])(
+  private infix def union0[B, ->[_, _]](that: Bin[<*>, T, F, B])(
     discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y,
   )(using
     leafTest: UniqueTypeArg[F],
     shuffled: Shuffled[->, <*>],
-  ): ProductRes[A, B, shuffled.Shuffled] = {
-    import ProductRes.{Absorbed, WithRemainder}
+  ): UnionRes[A, B, shuffled.Shuffled] = {
+    import UnionRes.{Absorbed, WithRemainder}
     given shuffled.shuffle.type = shuffled.shuffle
     import shuffled.{Pure, assocLR, id, lift, par}
 
@@ -251,31 +254,31 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
           case that.FindRes.NotFound() =>
             WithRemainder(l, that, id, lift(discardFst(l.value)))
       case br: Branch[br, t, f, a1, a2] =>
-        (br.l product0 that)(discardFst) match
-          case br.l.ProductRes.Absorbed(p, p1, p2) =>
+        (br.l union0 that)(discardFst) match
+          case br.l.UnionRes.Absorbed(p, p1, p2) =>
             Absorbed(Branch(p, br.r), p1.inFst, br.r.discardAll(discardFst).inSnd > p2)
-          case br.l.ProductRes.WithRemainder(p, r, p1, p2) =>
-            (br.r product0 r)(discardFst) match
-              case br.r.ProductRes.Absorbed(q, q1, q2) =>
+          case br.l.UnionRes.WithRemainder(p, r, p1, p2) =>
+            (br.r union0 r)(discardFst) match
+              case br.r.UnionRes.Absorbed(q, q1, q2) =>
                 Absorbed(Branch(p, q), par(p1, q1), q2.inSnd > p2)
-              case br.r.ProductRes.WithRemainder(q, r, q1, q2) =>
+              case br.r.UnionRes.WithRemainder(q, r, q1, q2) =>
                 WithRemainder(Branch(p, q), r, par(p1, q1), assocLR > q2.inSnd > p2)
     }
   }
 
-  private enum ProductRes[A, B, -->[_, _]] {
+  private enum UnionRes[A, B, -->[_, _]] {
     case Absorbed[P, A, B, -->[_, _]](
       p: Bin[<*>, T, F, P],
       p1: P --> A,
       p2: P --> B,
-    ) extends ProductRes[A, B, -->]
+    ) extends UnionRes[A, B, -->]
 
     case WithRemainder[P, R, A0, B0, A, B, -->[_, _]](
       p: Bin[<*>, T, F, P],
       r: Bin[<*>, T, F, R],
       p1: P --> A,
       p2: (P <*> R) --> B,
-    ) extends ProductRes[A, B, -->]
+    ) extends UnionRes[A, B, -->]
   }
 
   private def discardAll[->[_, _]](discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y): DiscardingAll[->] =
