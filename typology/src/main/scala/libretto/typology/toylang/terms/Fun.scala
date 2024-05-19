@@ -123,8 +123,8 @@ object Fun {
     override def swap[A, B]: Fun[(A, B), (B, A)] = Fun.swap
   }
 
-  private val lambdas: libretto.lambda.Lambdas[Fun, Tuple2, Object] =
-    libretto.lambda.Lambdas[Fun, Tuple2, Object](
+  private val lambdas: libretto.lambda.Lambdas[Fun, Tuple2, Object, Unit] =
+    libretto.lambda.Lambdas[Fun, Tuple2, Object, Unit](
       universalSplit = Some([x] => (_: Unit) => Fun.dup[x]),
       universalDiscard = Some([x, y] => (_: Unit) => Fun.prj2[x, y]),
     )
@@ -138,7 +138,7 @@ object Fun {
     import Lambdas.Delambdified.{Closure, Exact, Failure}
     import libretto.lambda.Var
 
-    lambdas.delambdifyTopLevel(new Object, f) match {
+    lambdas.delambdifyTopLevel((), new Object, f) match {
       case Exact(f) =>
         f
       case Closure(captured, f) =>
@@ -166,7 +166,7 @@ object Fun {
       import Lambdas.Delambdified.{Closure, Exact, Failure}
 
       lambdas.switch[Either, Either[A, B], R](
-        Sink[lambdas.VFun, Either, A, R]((new Object, (a: Expr[A]) => f(Left(a)))) <+> Sink((new Object, (b: Expr[B]) => f(Right(b)))),
+        Sink[lambdas.VFun, Either, A, R](((), new Object, (a: Expr[A]) => f(Left(a)))) <+> Sink(((), new Object, (b: Expr[B]) => f(Right(b)))),
         [x, y] => (fx: Fun[x, R], fy: Fun[y, R]) => Fun.either(fx, fy),
         [x, y, z] => (_: Unit) => Fun.distributeL[x, y, z],
       ) match {

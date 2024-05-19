@@ -7,13 +7,13 @@ import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
-class LambdasImpl[-⚬[_, _], |*|[_, _], V](
+class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
   universalSplit  : Option[[X]    => Unit => X -⚬ (X |*| X)],
   universalDiscard: Option[[X, Y] => Unit => (X |*| Y) -⚬ Y],
 )(using
   ssc: SymmetricSemigroupalCategory[-⚬, |*|],
   inj: BiInjective[|*|],
-) extends Lambdas[-⚬, |*|, V] {
+) extends Lambdas[-⚬, |*|, V, C] {
 
   given shuffle: Shuffle[|*|] = Shuffle[|*|]
   given shuffled: Shuffled.With[-⚬, |*|, shuffle.type] = Shuffled[-⚬, |*|](shuffle)
@@ -22,13 +22,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
 
   type Var[A] = libretto.lambda.Var[V, A]
 
-  override opaque type Context = ContextImpl[-⚬, |*|, V]
+  override opaque type Context = ContextImpl[-⚬, |*|, V, C]
   override object Context extends Contexts {
-    override def fresh(): Context =
-      new ContextImpl[-⚬, |*|, V]
+    override def fresh(info: C): Context =
+      new ContextImpl[-⚬, |*|, V, C](info)
 
-    override def nested(parent: Context): Context =
-      new ContextImpl[-⚬, |*|, V](Some(parent))
+    override def nested(info: C, parent: Context): Context =
+      new ContextImpl[-⚬, |*|, V, C](info, Some(parent))
+
+    override def info(using ctx: Context): C =
+      ctx.info
 
     override def newVar[A](label: V)(using ctx: Context): Var[A] =
       ctx.newVar[A](label)
@@ -57,7 +60,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
       ctx.isDefiningFor(v)
   }
 
-  private type Delambdified0[A, B] = Lambdas.Delambdified[Expr, |*|, ≈⚬, V, A, B]
+  private type Delambdified0[A, B] = Lambdas.Delambdified[Expr, |*|, ≈⚬, V, C, A, B]
 
   type CapturingFun[A, B] = libretto.lambda.CapturingFun[≈⚬, |*|, Tupled[Expr, _], A, B]
   object CapturingFun {
@@ -353,7 +356,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
     boundVar: Var[A],
     exprs: Tupled[Expr, B],
   )(using
-    Context,
+    ctx: Context,
   ): Delambdified0[A, B] = {
     import Delambdified.{Closure, Exact, Failure}
 
@@ -377,7 +380,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
         case EliminatedFromForest.NotFound() =>
           Context.getDiscard(boundVar) match
             case Some(discardFst) => Closure(Forest.unvar(exprs, u), swap > lift(discardFst(())))
-            case None             => Failure(LinearityViolation.unusedVar(boundVar))
+            case None             => Failure(LinearityViolation.unusedVar(boundVar, Context.info))
       }
     }
   }
@@ -534,7 +537,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
           }
         )._1
 
-      type Arr[T, U] = Validated[LinearityViolation[V], CapturingFun[T, U]]
+      type Arr[T, U] = Validated[LinearityViolation[V, C], CapturingFun[T, U]]
       given shArr: Shuffled.With[Arr, |*|, shuffled.shuffle.type] =
         Shuffled[Arr, |*|](shuffled.shuffle)
 
@@ -577,7 +580,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
                       case Some(discard) => Valid(CapturingFun.noCapture(shuffled.swap > shuffled.lift(discard[a1](()))))
-                      case None          => invalid(LinearityViolation.unusedVar(op.unusedVar))
+                      case None          => invalid(LinearityViolation.unusedVar(op.unusedVar, Context.info))
                     },
                     SingleVar[a1](),
                   )
@@ -586,7 +589,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
                       case Some(discard) => Valid(CapturingFun.lift(discard[a2](())))
-                      case None          => invalid(LinearityViolation.unusedVar(op.unusedVar))
+                      case None          => invalid(LinearityViolation.unusedVar(op.unusedVar, Context.info))
                     },
                     SingleVar[a2](),
                   )
@@ -603,7 +606,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
       given shCFun: Shuffled.With[CapturingFun, |*|, shuffled.shuffle.type] =
         Shuffled[CapturingFun, |*|](shuffled.shuffle)
 
-      t2.traverse[Validated[LinearityViolation[V], _], CapturingFun](
+      t2.traverse[Validated[LinearityViolation[V, C], _], CapturingFun](
         [p, q] => op => op
       ) match {
         case Valid(t3) =>

@@ -794,7 +794,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
   private type Pattern[A, B] = AForest[Extractor, |*|, A, B]
 
-  private type LinearityViolation = Lambdas.LinearityViolation[VarOrigin]
+  private type LinearityViolation = Lambdas.LinearityViolation[VarOrigin, ScopeInfo]
 
   private def partial[A, B](f: A -⚬ B): (A -?> B) =
     psh.lift(f)
@@ -839,8 +839,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     }
   }
 
-  private val lambdas: Lambdas[-?>, |*|, VarOrigin] =
-    Lambdas[-?>, |*|, VarOrigin]()
+  private val lambdas: Lambdas[-?>, |*|, VarOrigin, ScopeInfo] =
+    Lambdas[-?>, |*|, VarOrigin, ScopeInfo]()
 
   override opaque type $[A] = lambdas.Expr[A]
 
@@ -885,9 +885,11 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       val f2: lambdas.Context ?=> $[B] => $[C] = ctx ?=> b => f(Right(b))
       val a = VarOrigin.Lambda(pos)
       val b = VarOrigin.Lambda(pos)
+      val sl = ScopeInfo.LeftCase(pos)
+      val sr = ScopeInfo.RightCase(pos)
       switchSink(
         ab,
-        Sink[lambdas.VFun, |+|, A, C]((a, f1)) <+> Sink((b, f2)),
+        Sink[lambdas.VFun, |+|, A, C]((sl, a, f1)) <+> Sink((sr, b, f2)),
       )(pos)
     }
 
@@ -1019,15 +1021,15 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
     for {
       // delambdify each case
-      delams: NonEmptyList[Delambdified.Success[$, |*|, -?>, VarOrigin, A, R]] <-
+      delams: NonEmptyList[Delambdified.Success[$, |*|, -?>, VarOrigin, ScopeInfo, A, R]] <-
         cases.traverse { case (pos, f) =>
-          lambdas.delambdifyNested(VarOrigin.SwitchCase(pos), f) match
-            case f: Delambdified.Success[expr, p, arr, v, a, r] => Success(f)
+          lambdas.delambdifyNested(ScopeInfo.SwitchCase(pos), VarOrigin.SwitchCase(pos), f) match
+            case f: Delambdified.Success[expr, p, arr, v, c, a, r] => Success(f)
             case Delambdified.Failure(es) => Failure(es)
         }
 
       // make each case capture the least common superset of captured expressions
-      delamN: Delambdified[$, |*|, [a, b] =>> NonEmptyList[a -?> b], VarOrigin, A, R] =
+      delamN: Delambdified[$, |*|, [a, b] =>> NonEmptyList[a -?> b], VarOrigin, ScopeInfo, A, R] =
         lambdas.leastCommonCapture(delams)
 
       res <- switchDelambdified(a, delamN)
@@ -1039,7 +1041,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     switchPos: SourcePos,
   )(
     a: $[A],
-    cases: Delambdified[$, |*|, [a, b] =>> NonEmptyList[a -?> b], VarOrigin, A, R],
+    cases: Delambdified[$, |*|, [a, b] =>> NonEmptyList[a -?> b], VarOrigin, ScopeInfo, A, R],
   ): SwitchRes[$[R]] = {
     import libretto.lambda.Lambdas.Delambdified.{Exact, Closure, Failure}
 
@@ -1055,7 +1057,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         } yield
           (a map partial(f))(VarOrigin.SwitchOut(switchPos))
 
-      case cl: Closure[exp, prod, arr, v, x, a, r] =>
+      case cl: Closure[exp, prod, arr, v, c, x, a, r] =>
         val xa: $[x |*| A] =
           lambdas.Expr.zipN(cl.captured zip Tupled.atom(a))(VarOrigin.SwitchIn(switchPos))
         for {
@@ -1206,9 +1208,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     ): A -⚬ B = {
       import Delambdified.{Closure, Exact, Failure}
 
+      val c = ScopeInfo.TopLevelLambda(pos)
       val a = VarOrigin.Lambda(pos)
 
-      lambdas.delambdifyTopLevel(a, f) match {
+      lambdas.delambdifyTopLevel(c, a, f) match {
         case Exact(f) =>
           total(f) match
             case Right(f) => f
@@ -1227,11 +1230,12 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     ): $[A =⚬ B] = {
       import Delambdified.{Closure, Exact, Failure}
 
+      val scopeInfo = ScopeInfo.NestedLambda(pos)
       val bindVar   = VarOrigin.Lambda(pos)
       val captVar   = VarOrigin.CapturedVars(pos)
       val resultVar = VarOrigin.ClosureVal(pos)
 
-      lambdas.delambdifyNested[A, B](bindVar, f) match {
+      lambdas.delambdifyNested[A, B](scopeInfo, bindVar, f) match {
         case Closure(captured, f) =>
           total(f) match
             case Right(f) =>
@@ -1263,8 +1267,9 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       f: LambdaContext ?=> $[Val[A]] => $[R],
     ) extends ValHandler[A, R] {
       override def compile: Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.VFun, |+|, AA, R])] = {
+        val scope = ScopeInfo.ValCase(pos)
         val label = VarOrigin.Lambda(pos)
-        Exists((id[Val[A]], Sink((label, f))))
+        Exists((id[Val[A]], Sink((scope, label, f))))
       }
     }
 
@@ -1280,7 +1285,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         val partition1: Val[A] -⚬ AA =
           mapVal(partition) > liftEither > either(injectL, tail.value._1 > injectR)
         val sink: Sink[lambdas.VFun, |+|, AA, R] =
-          Sink[lambdas.VFun, |+|, Val[H], R]((VarOrigin.Lambda(pos), f)) <+> tail.value._2
+          Sink[lambdas.VFun, |+|, Val[H], R]((ScopeInfo.ValCase(pos), VarOrigin.Lambda(pos), f)) <+> tail.value._2
         Exists((partition1, sink))
       }
     }
@@ -1394,9 +1399,10 @@ object FreeScaletto extends FreeScaletto with Scaletto {
           vs.list.map(v => s" - ${v.origin.print}")
         )
 
-      def unusedMsg[A](v: Var[A]): NonEmptyList[String] =
+      def unusedMsg[A](v: Var[A], exitedScope: ScopeInfo): NonEmptyList[String] =
         NonEmptyList.of(
           s"Unused variable: ${v.origin.print}",
+          s"When exiting scope: ${exitedScope.print}",
         )
 
       def unusedInBranchMsg(vs: Var.Set[VarOrigin]): NonEmptyList[String] =
@@ -1407,7 +1413,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
 
       e match
         case Overused(vs)       => overusedMsg(vs)
-        case Unused(v)          => unusedMsg(v)
+        case Unused(v, ctxInfo) => unusedMsg(v, ctxInfo)
         case UnusedInBranch(vs) => unusedInBranchMsg(vs)
     }
 

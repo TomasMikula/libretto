@@ -70,8 +70,8 @@ object Fun {
       VarDesc(desc, None)
   }
 
-  private val lambdas: Lambdas[Fun, **, VarDesc] =
-    Lambdas[Fun, **, VarDesc]()
+  private val lambdas: Lambdas[Fun, **, VarDesc, Unit] =
+    Lambdas[Fun, **, VarDesc, Unit]()
 
   opaque type $[A] = lambdas.Expr[A]
   opaque type LambdaContext = lambdas.Context
@@ -117,7 +117,7 @@ object Fun {
       val a = VarDesc("Variable bound by Left pattern", pos)
       val b = VarDesc("Variable bound by Right pattern", pos)
       lambdas.switch(
-        Sink[lambdas.VFun, ++, A, C]((a, f1)) <+> Sink((b, f2)),
+        Sink[lambdas.VFun, ++, A, C](((), a, f1)) <+> Sink(((), b, f2)),
         [X, Y] => (fx: Fun[X, C], fy: Fun[Y, C]) => either(fx, fy),
         [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
       ) match {
@@ -140,7 +140,7 @@ object Fun {
     def apply[A, B](using pos: SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
     ): Fun[A, B] = {
-      lambdas.delambdifyTopLevel(VarDesc("The variable bound by lambda expression", pos), f) match
+      lambdas.delambdifyTopLevel((), VarDesc("The variable bound by lambda expression", pos), f) match
         case Lambdas.Delambdified.Exact(f) =>
           f
         case Lambdas.Delambdified.Closure(captured, f) =>
@@ -206,12 +206,12 @@ object Fun {
   private def printVars(vs: Var.Set[VarDesc]): String =
     vs.list.map(v => s" - ${printVar(v)}").mkString("\n")
 
-  private def raiseErrors(es: NonEmptyList[Lambdas.LinearityViolation[VarDesc]]): Nothing = {
+  private def raiseErrors(es: NonEmptyList[Lambdas.LinearityViolation[VarDesc, Unit]]): Nothing = {
     val msgs =
       es.flatMap:
         case Overused(vars) =>
           NonEmptyList.of(s"Variables used more than once:\n${printVars(vars)}")
-        case Unused(v) =>
+        case Unused(v, ()) =>
           NonEmptyList.of(s"Unused variable: ${printVar(v)}")
         case UnusedInBranch(vars) =>
           NonEmptyList.of(s"Variables not used in all branches:\n${printVars(vars)}")

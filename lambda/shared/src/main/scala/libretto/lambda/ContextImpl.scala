@@ -2,8 +2,9 @@ package libretto.lambda
 
 import scala.collection.mutable
 
-class ContextImpl[-⚬[_, _], |*|[_, _], V](
-  parent: Option[ContextImpl[-⚬, |*|, V]] = None,
+class ContextImpl[-⚬[_, _], |*|[_, _], V, C](
+  val info: C,
+  parent: Option[ContextImpl[-⚬, |*|, V, C]] = None,
 ) {
   private case class Entry[A](
     split: Option[A -⚬ (A |*| A)],

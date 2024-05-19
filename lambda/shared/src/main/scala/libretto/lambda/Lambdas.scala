@@ -5,7 +5,11 @@ import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, Uni
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import scala.annotation.targetName
 
-trait Lambdas[-⚬[_, _], |*|[_, _], V] {
+/**
+  * @tparam V information associated with variables
+  * @tparam C information associated with lambda contexts (scopes)
+  */
+trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
   final type Tupled[F[_], A] = libretto.lambda.Tupled[|*|, F, A]
 
   type Expr[A]
@@ -49,9 +53,11 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
   val Context: Contexts
 
   trait Contexts {
-    def fresh(): Context
+    def fresh(info: C): Context
 
-    def nested(parent: Context): Context
+    def nested(info: C, parent: Context): Context
+
+    def info(using ctx: Context): C
 
     def newVar[A](label: V)(using Context): Var[V, A]
 
@@ -81,8 +87,8 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
       registerNonLinearOps(v)(None, Some(discard))
   }
 
-  type Delambdified[A, B] = Lambdas.Delambdified[Expr, |*|, -⚬, V, A, B]
-  type DelambdifiedSuccess[A, B] = Lambdas.Delambdified.Success[Expr, |*|, -⚬, V, A, B]
+  type Delambdified[A, B] = Lambdas.Delambdified[Expr, |*|, -⚬, V, C, A, B]
+  type DelambdifiedSuccess[A, B] = Lambdas.Delambdified.Success[Expr, |*|, -⚬, V, C, A, B]
 
   protected def eliminateLocalVariables[A, B](
     boundVar: Var[V, A],
@@ -98,32 +104,20 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
   }
 
   def delambdifyTopLevel[A, B](
+    freshCtxInfo: C,
     varName: V,
     f: Context ?=> Expr[A] => Expr[B],
   ): Delambdified[A, B] =
-    delambdify(varName, f)(using Context.fresh())
-
-  @deprecated("use delambdifyTopLevel")
-  def absTopLevel[A, B](
-    varName: V,
-    f: Context ?=> Expr[A] => Expr[B],
-  ): Delambdified[A, B] =
-    delambdifyTopLevel(varName, f)
+    delambdify(varName, f)(using Context.fresh(freshCtxInfo))
 
   def delambdifyNested[A, B](
+    nestedCtxInfo: C,
     varName: V,
     f: Context ?=> Expr[A] => Expr[B],
   )(using parent: Context): Delambdified[A, B] =
-    delambdify(varName, f)(using Context.nested(parent = parent))
+    delambdify(varName, f)(using Context.nested(nestedCtxInfo, parent = parent))
 
-  @deprecated("use delambdifyNested")
-  def absNested[A, B](
-    varName: V,
-    f: Context ?=> Expr[A] => Expr[B],
-  )(using parent: Context): Delambdified[A, B] =
-    delambdifyNested(varName, f)
-
-  type VFun[A, B] = (V, Context ?=> Expr[A] => Expr[B])
+  type VFun[A, B] = (C, V, Context ?=> Expr[A] => Expr[B])
 
   def switch[<+>[_, _], A, B](
     cases: Sink[VFun, <+>, A, B],
@@ -144,7 +138,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
   ): Delambdified[A, B] = {
     val cases1: Sink[Delambdified, <+>, A, B] =
       cases.map[Delambdified] { [X] => (vf: VFun[X, B]) =>
-        delambdifyNested(vf._1, vf._2)
+        delambdifyNested(vf._1, vf._2, vf._3)
       }
 
     cases1.reduce(
@@ -184,7 +178,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     ctx: Context,
     ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
-  ): Lambdas.Delambdified[Expr, |*|, [a, b] =>> NonEmptyList[a -⚬ b], V, A, B] =
+  ): Lambdas.Delambdified[Expr, |*|, [a, b] =>> NonEmptyList[a -⚬ b], V, C, A, B] =
     leastCommonCapture(fs.head, fs.tail)
 
   def leastCommonCapture[A, B](
@@ -194,7 +188,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     ctx: Context,
     ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
-  ): Lambdas.Delambdified[Expr, |*|, [a, b] =>> NonEmptyList[a -⚬ b], V, A, B] = {
+  ): Lambdas.Delambdified[Expr, |*|, [a, b] =>> NonEmptyList[a -⚬ b], V, C, A, B] = {
     import Lambdas.Delambdified.{Closure, Exact, Failure}
 
     tail match {
@@ -230,10 +224,10 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
   ): Validated[
-    LinearityViolation[V],
+    LinearityViolation[V, C],
     Exists[[Y] =>> (
       Y -⚬ X,
-      Lambdas.Delambdified.Closure[Expr, |*|, [a, b] =>> List[a -⚬ b], V, Y, A, B]
+      Lambdas.Delambdified.Closure[Expr, |*|, [a, b] =>> List[a -⚬ b], V, C, Y, A, B]
     )]
   ] = {
     import Lambdas.Delambdified.{Closure, Exact, Failure}
@@ -290,10 +284,10 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     BiInjective[|*|],
     SymmetricSemigroupalCategory[-⚬, |*|],
   ): Validated[
-    LinearityViolation[V],
+    LinearityViolation[V, C],
     Exists[[P] =>> (Tupled[Expr, P], P -⚬ A, P -⚬ B)]
   ] = {
-    type LinCheck[A] = Validated[LinearityViolation[V], A]
+    type LinCheck[A] = Validated[LinearityViolation[V, C], A]
     type LinChecked[X, Y] = LinCheck[X -⚬ Y]
     given shuffled: Shuffled[LinChecked, |*|] = Shuffled[LinChecked, |*|]
     given Shuffled.With[-⚬, |*|, shuffled.shuffle.type] = Shuffled[-⚬, |*|](shuffled.shuffle)
@@ -317,45 +311,45 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
 }
 
 object Lambdas {
-  def apply[-⚬[_, _], |*|[_, _], VarLabel](
+  def apply[-⚬[_, _], |*|[_, _], VarLabel, CtxLabel](
     universalSplit  : Option[[X]    => Unit => X -⚬ (X |*| X)] = None,
     universalDiscard: Option[[X, Y] => Unit => (X |*| Y) -⚬ Y] = None,
   )(using
     ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
-  ): Lambdas[-⚬, |*|, VarLabel] =
-    new LambdasImpl[-⚬, |*|, VarLabel](
+  ): Lambdas[-⚬, |*|, VarLabel, CtxLabel] =
+    new LambdasImpl[-⚬, |*|, VarLabel, CtxLabel](
       universalSplit,
       universalDiscard,
     )
 
-  enum LinearityViolation[VarLabel]:
+  enum LinearityViolation[VarLabel, CtxLabel]:
     case Overused(vars: Var.Set[VarLabel])
-    case Unused(v: Var[VarLabel, ?])
+    case Unused(v: Var[VarLabel, ?], exitedCtx: CtxLabel)
     case UnusedInBranch(vars: Var.Set[VarLabel])
 
   object LinearityViolation {
-    def overusedVar[L, A](v: Var[L, A]): LinearityViolation[L] =
+    def overusedVar[V, C, A](v: Var[V, A]): LinearityViolation[V, C] =
       Overused(Var.Set(v))
 
-    def unusedVar[L, A](v: Var[L, A]): LinearityViolation[L] =
-      Unused(v)
+    def unusedVar[V, C, A](v: Var[V, A], exitedCtx: C): LinearityViolation[V, C] =
+      Unused(v, exitedCtx)
 
-    def unusedInBranch[L, A](v: Var[L, A]): LinearityViolation[L] =
+    def unusedInBranch[V, C, A](v: Var[V, A]): LinearityViolation[V, C] =
       UnusedInBranch(Var.Set(v))
   }
 
-  sealed trait Delambdified[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B] {
+  sealed trait Delambdified[Exp[_], |*|[_, _], ->[_, _], V, C, A, B] {
     import Delambdified.*
 
-    def mapExpr[Exp2[_]](g: [X] => Exp[X] => Exp2[X]): Delambdified[Exp2, |*|, AbsFun, V, A, B] =
+    def mapExpr[Exp2[_]](g: [X] => Exp[X] => Exp2[X]): Delambdified[Exp2, |*|, ->, V, C, A, B] =
       this match {
         case Exact(f)             => Exact(f)
         case Closure(captured, f) => Closure(captured.trans(g), f)
         case Failure(e)           => Failure(e)
       }
 
-    def mapFun[->[_, _]](g: [X] => AbsFun[X, B] => (X -> B)): Delambdified[Exp, |*|, ->, V, A, B] =
+    def mapFun[->>[_, _]](g: [X] => (X -> B) => (X ->> B)): Delambdified[Exp, |*|, ->>, V, C, A, B] =
       this match {
         case Exact(f)      => Exact(g(f))
         case Closure(x, f) => Closure(x, g(f))
@@ -363,8 +357,8 @@ object Lambdas {
       }
 
     def toEither: Either[
-      NonEmptyList[LinearityViolation[V]],
-      CapturingFun[AbsFun, |*|, Tupled[|*|, Exp, *], A, B]
+      NonEmptyList[LinearityViolation[V, C]],
+      CapturingFun[->, |*|, Tupled[|*|, Exp, *], A, B]
     ] =
       this match {
         case Exact(f)      => Right(CapturingFun.NoCapture(f))
@@ -374,25 +368,25 @@ object Lambdas {
   }
 
   object Delambdified {
-    sealed trait Success[Exp[_], |*|[_, _], ->[_, _], V, A, B] extends Delambdified[Exp, |*|, ->, V, A, B]
+    sealed trait Success[Exp[_], |*|[_, _], ->[_, _], V, C, A, B] extends Delambdified[Exp, |*|, ->, V, C, A, B]
 
-    case class Exact[Exp[_], |*|[_, _], ->[_, _], V, A, B](
+    case class Exact[Exp[_], |*|[_, _], ->[_, _], V, C, A, B](
       f: A -> B,
-    ) extends Delambdified.Success[Exp, |*|, ->, V, A, B]
+    ) extends Delambdified.Success[Exp, |*|, ->, V, C, A, B]
 
-    case class Closure[Exp[_], |*|[_, _], ->[_, _], V, X, A, B](
+    case class Closure[Exp[_], |*|[_, _], ->[_, _], V, C, X, A, B](
       captured: Tupled[|*|, Exp, X],
       f: (X |*| A) -> B,
-    ) extends Delambdified.Success[Exp, |*|, ->, V, A, B]
+    ) extends Delambdified.Success[Exp, |*|, ->, V, C, A, B]
 
-    case class Failure[Exp[_], |*|[_, _], ->[_, _], V, A, B](
-      errors: NonEmptyList[LinearityViolation[V]],
-    ) extends Delambdified[Exp, |*|, ->, V, A, B]
+    case class Failure[Exp[_], |*|[_, _], ->[_, _], V, C, A, B](
+      errors: NonEmptyList[LinearityViolation[V, C]],
+    ) extends Delambdified[Exp, |*|, ->, V, C, A, B]
 
     object Failure {
-      def apply[Exp[_], |*|[_, _], ->[_, _], V, A, B](
-        e: LinearityViolation[V],
-      ): Delambdified[Exp, |*|, ->, V, A, B] =
+      def apply[Exp[_], |*|[_, _], ->[_, _], V, C, A, B](
+        e: LinearityViolation[V, C],
+      ): Delambdified[Exp, |*|, ->, V, C, A, B] =
         Failure(NonEmptyList.of(e))
     }
   }
