@@ -934,7 +934,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     ) match {
       case Delambdified.Exact(f)      => lambdas.Expr.map(a, f)(VarOrigin.FunAppRes(pos))
       case Delambdified.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)
-      case Delambdified.Failure(e)    => raiseLinearityViolation(e)
+      case Delambdified.Failure(e)    => assemblyError(e)
     }
 
   override def switch[A, R](using
@@ -950,17 +950,11 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         throw IllegalArgumentException("switch must have at least 1 case")
       case c :: cs =>
         switchImpl(using ctx, switchPos)(a, NonEmptyList(c, cs))
-          .getOrThrow
-
-  private case class NonExhaustiveness(
-    // pos: SourcePos,
-    // unhandledPatterns: NonEmptyList[Pattern[?, ?]],
-    extractor: Extractor[?, ?],
-  )
+          .getOrReportErrors
 
   private enum SwitchRes[T] {
     case Success(value: T)
-    case Failure(errors: NonEmptyList[LinearityViolation | NonExhaustiveness])
+    case Failure(errors: NonEmptyList[LinearityViolation | MisplacedExtractor | PatternMatchError])
 
     def map[U](f: T => U): SwitchRes[U] =
       this match
@@ -973,23 +967,29 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         case Failure(es) => Failure(es)
 
 
-    def getOrThrow: T =
+    def getOrReportErrors: T =
       this match
         case Success(value) => value
-        case Failure(errors) => libretto.lambda.UnhandledCase.raise(s"SwitchRes.getOrThrow(${errors.toList})")
+        case Failure(errors) => assemblyErrors(errors)
   }
+
+  private case class MisplacedExtractor(ext: Extractor[?, ?])
+
+  private enum PatternMatchError:
+    case IncompatibleExtractors(base: Extractor[?, ?], incompatible: NonEmptyList[Extractor[?, ?]])
+    case NonExhaustiveness(ext: Extractor[?, ?]) // TODO: include context
 
   private object SwitchRes {
     def nonExhaustiveness[T](ext: Extractor[?, ?]): SwitchRes[T] =
-      failure(NonExhaustiveness(ext))
+      failure(PatternMatchError.NonExhaustiveness(ext))
 
     def misplacedExtractor[T](ext: Extractor[?, ?]): SwitchRes[T] =
-      libretto.lambda.UnhandledCase.raise(s"SwitchRes.misplacedExtractor($ext)")
+      failure(MisplacedExtractor(ext))
 
     def incompatibleExtractors[T](base: Extractor[?, ?], incompatible: NonEmptyList[Extractor[?, ?]]): SwitchRes[T] =
-      libretto.lambda.UnhandledCase.raise(s"SwitchRes.incompatibleExtractors($base, $incompatible)")
+      failure(PatternMatchError.IncompatibleExtractors(base, incompatible))
 
-    def failure[T](e: LinearityViolation | NonExhaustiveness): SwitchRes[T] =
+    def failure[T](e: LinearityViolation | MisplacedExtractor | PatternMatchError): SwitchRes[T] =
       SwitchRes.Failure(NonEmptyList(e, Nil))
 
     given Applicative[SwitchRes] with {
@@ -1091,12 +1091,12 @@ object FreeScaletto extends FreeScaletto with Scaletto {
             pos,
             [X] => (p: scr.Partition[X]) => {
               val ext: Extractor[T, X] =
-                Partitioning.Partition(scr, p)
+                Extractor(scr, p)
               collectMatchingCases[F, T, X, R](cases.toList, pos, ext) match
                 case Valid(matchingCases) =>
                   matchingCases match
                     case Nil =>
-                      SwitchRes.nonExhaustiveness(Extractor(scr, p)) // TODO: include context of this extractor
+                      SwitchRes.nonExhaustiveness(ext) // TODO: include context of this extractor
                     case c :: cs =>
                       compilePatternMatch[F[X], R](NonEmptyList(c, cs))
                 case Invalid(incompatibleExtractors) =>
@@ -1216,7 +1216,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         case Closure(captured, f) =>
           raiseUndefinedVars(lambdas.Expr.initialVars(captured))
         case Failure(e) =>
-          raiseLinearityViolation(e)
+          assemblyError(e)
       }
     }
 
@@ -1247,7 +1247,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
             case Left(es) =>
               raiseTotalityViolations(es)
         case Failure(e) =>
-          raiseLinearityViolation(e)
+          assemblyError(e)
       }
     }
   }
@@ -1349,28 +1349,87 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       f,
     )(VarOrigin.FunAppRes(pos))
 
-  private def raiseLinearityViolation(e: LinearityViolation): Nothing = {
-    import Lambdas.LinearityViolation.{OverUnder, Overused, Underused}
+  private def assemblyError(e: UnboundVariables | LinearityViolation | MisplacedExtractor | PatternMatchError): Nothing =
+    assemblyErrors(NonEmptyList.of(e))
 
-    def overusedMsg(vs: Var.Set[VarOrigin])  = s"Variables used more than once: ${vs.list.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"
-    def underusedMsg(vs: Var.Set[VarOrigin]) = s"Variables not fully consumed: ${vs.list.map(v => s" - ${v.origin.print}").mkString("\n", "\n", "\n")}"
+  private def assemblyErrors(es: NonEmptyList[UnboundVariables | LinearityViolation | MisplacedExtractor | PatternMatchError]): Nothing =
+    throw AssemblyError(es)
 
-    e match {
-      case Overused(vs)    => throw LinearityException(overusedMsg(vs))
-      case Underused(vs)   => throw LinearityException(underusedMsg(vs))
-      case OverUnder(o, u) => throw LinearityException(s"${overusedMsg(o)}\n${underusedMsg(u)}")
+  override class AssemblyError private[FreeScaletto](
+    errors: NonEmptyList[UnboundVariables | LinearityViolation | MisplacedExtractor | PatternMatchError]
+  ) extends Exception(AssemblyError.formatMessages(errors))
+
+  private object AssemblyError {
+
+    def formatMessages(es: NonEmptyList[UnboundVariables | LinearityViolation | MisplacedExtractor | PatternMatchError]): String =
+      val lines =
+        es.toList.flatMap { e =>
+          val NonEmptyList(line0, lines) = formatMessage(e)
+          val l0 = s" * $line0"
+          val ls = lines.map(l => s"   $l")
+          l0 :: ls
+        }
+      ("Compilation errors:" :: lines).mkString("\n")
+
+    /** Returns a list of lines. */
+    def formatMessage(e: UnboundVariables | LinearityViolation | MisplacedExtractor | PatternMatchError): NonEmptyList[String] =
+      e match
+        case e: UnboundVariables   => unboundMsg(e)
+        case e: LinearityViolation => linearityMsg(e)
+        case e: MisplacedExtractor => misplacedExtMsg(e)
+        case e: PatternMatchError  => patmatMsg(e)
+
+    private def unboundMsg(e: UnboundVariables): NonEmptyList[String] =
+      NonEmptyList(
+        "Undefined variables (possibly from outer context):",
+        e.vs.list.map(v => s"- $v")
+      )
+
+    private def linearityMsg(e: LinearityViolation): NonEmptyList[String] = {
+      import Lambdas.LinearityViolation.{OverUnder, Overused, Underused}
+
+      def overusedMsg(vs: Var.Set[VarOrigin]): NonEmptyList[String] =
+        NonEmptyList(
+          "Variables used more than once:",
+          vs.list.map(v => s" - ${v.origin.print}")
+        )
+
+      def underusedMsg(vs: Var.Set[VarOrigin]): NonEmptyList[String] =
+        NonEmptyList(
+          "Variables not fully consumed:",
+          vs.list.map(v => s" - ${v.origin.print}")
+        )
+
+      e match
+        case Overused(vs)    => overusedMsg(vs)
+        case Underused(vs)   => underusedMsg(vs)
+        case OverUnder(o, u) => overusedMsg(o) ++ underusedMsg(u)
     }
+
+    private def misplacedExtMsg(e: MisplacedExtractor): NonEmptyList[String] =
+      NonEmptyList.of(s"Extractor used outside of switch pattern: ${e.ext.partition}") // TODO: report position
+
+    private def patmatMsg(e: PatternMatchError): NonEmptyList[String] =
+      e match
+        case PatternMatchError.IncompatibleExtractors(base, incompatibles) =>
+          "Use of incompatible extractors:" ::
+            s"    ${base.partition} (from ${base.partitioning})" ::
+            s"  is incompatible with" ::
+            incompatibles.map { ext =>
+              s"  - ${ext.partition} (from ${ext.partitioning})"
+            }
+        case PatternMatchError.NonExhaustiveness(ext) =>
+          NonEmptyList.of(
+            "Non-exhaustive pattern match. It would fail on",
+            s"  ${ext.partition}"
+          )
   }
 
   private def raiseUndefinedVars(vs: Var.Set[VarOrigin]): Nothing =
-    throw UnboundVariablesException(vs)
+    assemblyError(UnboundVariables(vs))
+
+  private case class UnboundVariables(vs: Var.Set[VarOrigin])
 
   private def raiseTotalityViolations(es: NonEmptyList[(SourcePos, NonEmptyList[String])]): Nothing =
     libretto.lambda.UnhandledCase.raise(s"raiseTotalityViolations($es)")
-
-  abstract class MalformedException(msg: String) extends Exception(msg)
-
-  override class LinearityException(msg: String) extends MalformedException(msg)
-  override class UnboundVariablesException(vs: Var.Set[VarOrigin]) extends MalformedException(vs.list.mkString(", "))
-  override class TotalityException(msg: String) extends MalformedException(msg)
 }
