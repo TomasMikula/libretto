@@ -1,7 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.Lambdas.LinearityViolation.{OverUnder, Overused, Underused}
-import libretto.lambda.util.{BiInjective, SourcePos, TypeEq}
+import libretto.lambda.util.{BiInjective, NonEmptyList, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
 sealed trait Fun[A, B] {
@@ -123,7 +123,7 @@ object Fun {
       ) match {
         case Lambdas.Delambdified.Exact(f)      => f(ab)
         case Lambdas.Delambdified.Closure(x, f) => lambdas.Expr.map(lambdas.Expr.zipN(x zip Tupled.atom(ab))(VarDesc("function input with captured expressions")), f)(VarDesc("switch with captured expressions", pos))
-        case Lambdas.Delambdified.Failure(e)    => raiseError(e)
+        case Lambdas.Delambdified.Failure(es)    => raiseErrors(es)
       }
     }
   }
@@ -150,8 +150,8 @@ object Fun {
               s"Captured:\n" +
               printVars(lambdas.Expr.initialVars(captured))
           )
-        case Lambdas.Delambdified.Failure(e) =>
-          raiseError(e)
+        case Lambdas.Delambdified.Failure(es) =>
+          raiseErrors(es)
     }
 
     def ?[A, B](using pos: SourcePos)(
@@ -207,17 +207,20 @@ object Fun {
       }
       .mkString("\n")
 
-  private def raiseError(e: Lambdas.LinearityViolation[VarDesc]): Nothing = {
-    e match
-      case Overused(vars) =>
-        throw RuntimeException(s"Variables used more than once:\n${printVars(vars)}")
-      case Underused(vars) =>
-        throw RuntimeException(s"Variables not fully consumed:\n${printVars(vars)}")
-      case OverUnder(overused, underused) =>
-        throw RuntimeException(
-          s"Variables used more than once:\n${printVars(overused)}\n" +
-          s"Variables not fully consumed:\n${printVars(underused)}"
-        )
+  private def raiseErrors(es: NonEmptyList[Lambdas.LinearityViolation[VarDesc]]): Nothing = {
+    val msgs =
+      es.flatMap:
+        case Overused(vars) =>
+          NonEmptyList.of(s"Variables used more than once:\n${printVars(vars)}")
+        case Underused(vars) =>
+          NonEmptyList.of(s"Variables not fully consumed:\n${printVars(vars)}")
+        case OverUnder(overused, underused) =>
+          NonEmptyList.of(
+            s"Variables used more than once:\n${printVars(overused)}",
+            s"Variables not fully consumed:\n${printVars(underused)}"
+          )
+    val msg = msgs.toList.mkString("\n")
+    throw RuntimeException(msg)
   }
 
   private enum Values[A] {

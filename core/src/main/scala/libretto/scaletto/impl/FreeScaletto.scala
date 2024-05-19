@@ -934,7 +934,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     ) match {
       case Delambdified.Exact(f)      => lambdas.Expr.map(a, f)(VarOrigin.FunAppRes(pos))
       case Delambdified.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)
-      case Delambdified.Failure(e)    => assemblyError(e)
+      case Delambdified.Failure(es)   => assemblyErrors(es)
     }
 
   override def switch[A, R](using
@@ -1015,7 +1015,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     a: $[A],
     cases: NonEmptyList[(SourcePos, LambdaContext ?=> $[A] => $[R])],
   ): SwitchRes[$[R]] = {
-    import SwitchRes.{Success, failure}
+    import SwitchRes.{Success, Failure}
 
     for {
       // delambdify each case
@@ -1023,7 +1023,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         cases.traverse { case (pos, f) =>
           lambdas.delambdifyNested(VarOrigin.SwitchCase(pos), f) match
             case f: Delambdified.Success[expr, p, arr, v, a, r] => Success(f)
-            case Delambdified.Failure(e) => failure(e)
+            case Delambdified.Failure(es) => Failure(es)
         }
 
       // make each case capture the least common superset of captured expressions
@@ -1069,8 +1069,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         } yield
           lambdas.Expr.map(xa, partial(f))(VarOrigin.SwitchOut(switchPos))
 
-      case Failure(e) =>
-        SwitchRes.failure(e)
+      case Failure(es) =>
+        SwitchRes.Failure(es)
   }
 
   private def compilePatternMatch[A, R](
@@ -1215,8 +1215,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
             case Left(es) => raiseTotalityViolations(es)
         case Closure(captured, f) =>
           raiseUndefinedVars(lambdas.Expr.initialVars(captured))
-        case Failure(e) =>
-          assemblyError(e)
+        case Failure(es) =>
+          assemblyErrors(es)
       }
     }
 
@@ -1246,8 +1246,8 @@ object FreeScaletto extends FreeScaletto with Scaletto {
               (captured0 map partial(ℭ.curry(elimFst > f)))(resultVar)
             case Left(es) =>
               raiseTotalityViolations(es)
-        case Failure(e) =>
-          assemblyError(e)
+        case Failure(es) =>
+          assemblyErrors(es)
       }
     }
   }

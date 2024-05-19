@@ -1,8 +1,9 @@
 package libretto.lambda
 
 import libretto.{lambda as ll}
-import libretto.lambda.Lambdas.LinearityViolation
-import libretto.lambda.util.{Applicative, BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
+import libretto.lambda.Lambdas.{Delambdified, LinearityViolation}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, Injective, Masked, NonEmptyList, TypeEq, UniqueTypeArg, Validated}
+import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
@@ -354,25 +355,24 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
   )(using
     Context,
   ): Delambdified0[A, B] = {
-    import Lambdas.Delambdified.{Closure, Exact, Failure}
-    import HybridArrow.LinearRes
+    import Delambdified.{Closure, Exact, Failure}
 
     Forest.upvar(exprs) match { case Exists.Some((exprs, u)) =>
       eliminateFromForest(boundVar, exprs) match {
         case EliminatedFromForest.FoundEach(arr) =>
           arr.extract(u) match
-            case LinearRes.Exact(f)      => Exact(f)
-            case LinearRes.Closure(x, f) => Closure(x, f)
-            case LinearRes.Violation(e)  => Failure(e)
+            case Exact(f)      => Exact(f)
+            case Closure(x, f) => Closure(x, f)
+            case Failure(es)   => Failure(es)
         case EliminatedFromForest.FoundSome(x, arr, s) =>
           s.preShuffle(u) match {
             case Exists.Some((u, s)) =>
               Unvar.objectMap.unpair(u) match
                 case Unvar.objectMap.Unpaired.Impl(u1, u2) =>
                   arr.extract(u2) match
-                    case LinearRes.Exact(f)      => Closure(Forest.unvar(x, u1), snd(f) > pure(s))
-                    case LinearRes.Closure(y, f) => Closure(Forest.unvar(x, u1) zip y, assocLR > snd(f) > pure(s))
-                    case LinearRes.Violation(e)  => Failure(e)
+                    case Exact(f)      => Closure(Forest.unvar(x, u1), snd(f) > pure(s))
+                    case Closure(y, f) => Closure(Forest.unvar(x, u1) zip y, assocLR > snd(f) > pure(s))
+                    case Failure(es)   => Failure(es)
           }
         case EliminatedFromForest.NotFound() =>
           Context.getDiscard(boundVar) match
@@ -524,7 +524,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
 
     def extract[Y](u: Unvar[B, Y])(using
       Context,
-    ): LinearRes[A, Y] = {
+    ): Delambdified0[A, Y] = {
       val t1: VTail[Var[A], B] =
         tail.sweepL[Vars, VarOp](
           Vars.atom(v),
@@ -534,7 +534,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
           }
         )._1
 
-      type Arr[T, U] = LinCheck[CapturingFun[T, U]]
+      type Arr[T, U] = Validated[LinearityViolation[V], CapturingFun[T, U]]
       given shArr: Shuffled.With[Arr, |*|, shuffled.shuffle.type] =
         Shuffled[Arr, |*|](shuffled.shuffle)
 
@@ -547,11 +547,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
             override def map[A, B](op: VarOp[A, B]): Image[A, B] =
               op match {
                 case (vars, op: Op.ZipN[a, y]) =>
-                  MappedMorphism(op.u, LinCheck.Success(CapturingFun.id), SingleVar[y]())
+                  MappedMorphism(op.u, Valid(CapturingFun.id), SingleVar[y]())
                 case (vars, op: Op.Map[a, b]) =>
-                  MappedMorphism(SingleVar[a](), LinCheck.Success(CapturingFun.lift(op.f)), SingleVar[b]())
+                  MappedMorphism(SingleVar[a](), Valid(CapturingFun.lift(op.f)), SingleVar[b]())
                 case (vars, _: Op.Unzip[a1, a2]) =>
-                  MappedMorphism(SingleVar[a1 |*| a2](), LinCheck.Success(CapturingFun.id), Par(SingleVar[a1](), SingleVar[a2]()))
+                  MappedMorphism(SingleVar[a1 |*| a2](), Valid(CapturingFun.id), Par(SingleVar[a1](), SingleVar[a2]()))
                 case (vars, op: Op.CaptureN[vx, va, vb, b]) =>
                   op.s.preShuffle(op.u) match
                     case Exists.Some((u, s)) =>
@@ -559,7 +559,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
                       val x = Forest.unvar(op.x, u12.f1)
                       MappedMorphism(
                         u12.f2,
-                        LinCheck.Success(CapturingFun.captureFst[u12.X1, u12.X2](x) > CapturingFun.fromShuffle(s.from(using u12.ev.flip))),
+                        Valid(CapturingFun.captureFst[u12.X1, u12.X2](x) > CapturingFun.fromShuffle(s.from(using u12.ev.flip))),
                         SingleVar[b](),
                       )
                 case (vars, op: Op.DupVar[a]) =>
@@ -567,8 +567,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
                   MappedMorphism(
                     SingleVar[a](),
                     Context.getSplit(v) match {
-                      case Some(split) => LinCheck.Success(CapturingFun.lift(split))
-                      case None        => LinCheck.Failure(LinearityViolation.overusedVar(v))
+                      case Some(split) => Valid(CapturingFun.lift(split))
+                      case None        => invalid(LinearityViolation.overusedVar(v))
                     },
                     Par(SingleVar[a](), SingleVar[a]()),
                   )
@@ -576,8 +576,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
                   MappedMorphism(
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
-                      case Some(discard) => LinCheck.Success(CapturingFun.noCapture(shuffled.swap > shuffled.lift(discard[a1](()))))
-                      case None          => LinCheck.Failure(LinearityViolation.underusedVar(op.unusedVar))
+                      case Some(discard) => Valid(CapturingFun.noCapture(shuffled.swap > shuffled.lift(discard[a1](()))))
+                      case None          => invalid(LinearityViolation.underusedVar(op.unusedVar))
                     },
                     SingleVar[a1](),
                   )
@@ -585,8 +585,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
                   MappedMorphism(
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
-                      case Some(discard) => LinCheck.Success(CapturingFun.lift(discard[a2](())))
-                      case None          => LinCheck.Failure(LinearityViolation.underusedVar(op.unusedVar))
+                      case Some(discard) => Valid(CapturingFun.lift(discard[a2](())))
+                      case None          => invalid(LinearityViolation.underusedVar(op.unusedVar))
                     },
                     SingleVar[a2](),
                   )
@@ -603,16 +603,16 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
       given shCFun: Shuffled.With[CapturingFun, |*|, shuffled.shuffle.type] =
         Shuffled[CapturingFun, |*|](shuffled.shuffle)
 
-      t2.traverse[LinCheck, CapturingFun](
-        [p, q] => (op: LinCheck[CapturingFun[p, q]]) => op
+      t2.traverse[Validated[LinearityViolation[V], _], CapturingFun](
+        [p, q] => op => op
       ) match {
-        case LinCheck.Success(t3) =>
+        case Valid(t3) =>
           t3.fold match {
-            case ll.CapturingFun.NoCapture(f)  => LinearRes.Exact(f)
-            case ll.CapturingFun.Closure(x, f) => LinearRes.Closure(x, f)
+            case ll.CapturingFun.NoCapture(f)  => Delambdified.Exact(f)
+            case ll.CapturingFun.Closure(x, f) => Delambdified.Closure(x, f)
           }
-        case LinCheck.Failure(e) =>
-          LinearRes.Violation(e)
+        case Invalid(es) =>
+          Delambdified.Failure(es)
       }
     }
   }
@@ -1273,12 +1273,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
               p.startsFromPair match
                 case Exists.Some(Exists.Some(ev)) =>
                   varIsNotPair(ev)
-    }
-
-    enum LinearRes[A, B] {
-      case Exact(f: A ≈⚬ B)
-      case Closure[X, A, B](captured: Tupled[Expr, X], f: (X |*| A) ≈⚬ B) extends LinearRes[A, B]
-      case Violation(e: LinearityViolation[V])
     }
   }
 

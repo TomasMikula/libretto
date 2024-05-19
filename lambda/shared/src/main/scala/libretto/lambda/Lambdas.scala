@@ -1,7 +1,8 @@
 package libretto.lambda
 
 import libretto.lambda.Lambdas.LinearityViolation
-import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, UniqueTypeArg}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, UniqueTypeArg, Validated}
+import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import scala.annotation.targetName
 
 trait Lambdas[-⚬[_, _], |*|[_, _], V] {
@@ -162,12 +163,12 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
               case Left(unusedVars)  => Failure(LinearityViolation.Underused(unusedVars))
           case (Closure(x, f1), Closure(y, f2)) =>
             product(x, y) match
-              case LinCheck.Success(Exists.Some((p, p1, p2))) =>
+              case Valid(Exists.Some((p, p1, p2))) =>
                 Closure(p, distribute(()) > sum(p1.inFst > f1, p2.inFst > f2))
-              case LinCheck.Failure(e) =>
+              case Invalid(e) =>
                 Failure(e)
           case (Failure(e1), Failure(e2)) =>
-            Failure(e1 combine e2)
+            Failure(e1 ++ e2)
           case (Failure(e1), _) =>
             Failure(e1)
           case (_, Failure(e2)) =>
@@ -214,9 +215,9 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
 
           case Closure(captured, f) =>
             leastCommonCapture(captured, tail) match
-              case Left(e) =>
+              case Invalid(e) =>
                 Failure(e)
-              case Right(Exists.Some((p, Closure(y, fs)))) =>
+              case Valid(Exists.Some((p, Closure(y, fs)))) =>
                 Closure(y, NonEmptyList(ssc.fst(p) > f, fs))
     }
   }
@@ -228,7 +229,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     ctx: Context,
     ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
-  ): Either[
+  ): Validated[
     LinearityViolation[V],
     Exists[[Y] =>> (
       Y -⚬ X,
@@ -239,13 +240,13 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
 
     fs match
       case Nil =>
-        Right(Exists(ssc.id[X], Closure(acc, Nil)))
+        Valid(Exists(ssc.id[X], Closure(acc, Nil)))
       case f :: fs =>
         f match
           case Exact(f) =>
             discarderOf(acc) match
               case Left(unusedVars) =>
-                Left(LinearityViolation.Underused(unusedVars))
+                invalid(LinearityViolation.Underused(unusedVars))
               case Right(discardFst) =>
                 val g = discardFst(()) > f
                 leastCommonCapture(acc, fs)
@@ -254,15 +255,13 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
                   }
 
           case Closure(captured, f) =>
-            product(acc, captured) match
-              case LinCheck.Success(Exists.Some((y, p1, p2))) =>
+            product(acc, captured)
+              .flatMap { case Exists.Some((y, p1, p2)) =>
                 leastCommonCapture(y, fs)
                   .map { case Exists.Some((q, Closure(z, gs))) =>
                     Exists((q > p1, Closure(z, (ssc.fst(q > p2) > f) :: gs)))
                   }
-              case LinCheck.Failure(e) =>
-                Left(e)
-
+              }
   }
 
   private def discarderOf[A](a: Tupled[Expr, A])(using
@@ -290,7 +289,11 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     Context,
     BiInjective[|*|],
     SymmetricSemigroupalCategory[-⚬, |*|],
-  ): LinCheck[Exists[[P] =>> (Tupled[Expr, P], P -⚬ A, P -⚬ B)]] = {
+  ): Validated[
+    LinearityViolation[V],
+    Exists[[P] =>> (Tupled[Expr, P], P -⚬ A, P -⚬ B)]
+  ] = {
+    type LinCheck[A] = Validated[LinearityViolation[V], A]
     type LinChecked[X, Y] = LinCheck[X -⚬ Y]
     given shuffled: Shuffled[LinChecked, |*|] = Shuffled[LinChecked, |*|]
     given Shuffled.With[-⚬, |*|, shuffled.shuffle.type] = Shuffled[-⚬, |*|](shuffled.shuffle)
@@ -298,8 +301,8 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
     val discardFst: [X, Y] => Expr[X] => LinChecked[X |*| Y, Y] =
       [X, Y] => (x: Expr[X]) =>
         Context.getDiscard(x.resultVar) match {
-          case Some(discardFst) => LinCheck.Success(discardFst[Y](()))
-          case None             => LinCheck.Failure(LinearityViolation.underusedVar(x.resultVar))
+          case Some(discardFst) => Valid(discardFst[Y](()))
+          case None             => invalid(LinearityViolation.underusedVar(x.resultVar))
         }
 
     (a product b)(discardFst) match
@@ -310,31 +313,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
         ) { (p1, p2) =>
           Exists((p, p1.fold, p2.fold))
         }
-  }
-
-  enum LinCheck[A] {
-    case Success(value: A)
-    case Failure(e: LinearityViolation[V])
-  }
-
-  object LinCheck {
-    given Applicative[LinCheck] with {
-      override def pure[A](a: A): LinCheck[A] =
-        Success(a)
-
-      override def map[A, B](fa: LinCheck[A], f: A => B): LinCheck[B] =
-        fa match
-          case Success(a) => Success(f(a))
-          case Failure(e) => Failure(e)
-
-      override def zip[A, B](fa: LinCheck[A], fb: LinCheck[B]): LinCheck[(A, B)] =
-        (fa, fb) match {
-          case (Success(a), Success(b)) => Success((a, b))
-          case (Success(_), Failure(e)) => Failure(e)
-          case (Failure(e), Success(_)) => Failure(e)
-          case (Failure(e), Failure(f)) => Failure(e combine f)
-        }
-    }
   }
 }
 
@@ -351,30 +329,12 @@ object Lambdas {
       universalDiscard,
     )
 
-  sealed trait LinearityViolation[VarLabel] {
-    import LinearityViolation.*
-
-    infix def combine(that: LinearityViolation[VarLabel]): LinearityViolation[VarLabel] =
-      (this, that) match {
-        case (Overused(s),     Overused(t)    ) => Overused(s merge t)
-        case (Overused(s),     Underused(t)   ) => OverUnder(s, t)
-        case (Overused(s),     OverUnder(t, u)) => OverUnder(s merge t, u)
-        case (Underused(s),    Overused(t)    ) => OverUnder(t, s)
-        case (Underused(s),    Underused(t)   ) => Underused(s merge t)
-        case (Underused(s),    OverUnder(t, u)) => OverUnder(t, s merge u)
-        case (OverUnder(s, t), Overused(u)    ) => OverUnder(s merge u, t)
-        case (OverUnder(s, t), Underused(u)   ) => OverUnder(s, t merge u)
-        case (OverUnder(s, t), OverUnder(u, v)) => OverUnder(s merge u, t merge v)
-      }
-  }
+  enum LinearityViolation[VarLabel]:
+    case Overused(vars: Var.Set[VarLabel])
+    case Underused(vars: Var.Set[VarLabel])
+    case OverUnder(overused: Var.Set[VarLabel], underused: Var.Set[VarLabel])
 
   object LinearityViolation {
-    case class Overused[VarLabel](vars: Var.Set[VarLabel]) extends LinearityViolation[VarLabel]
-
-    case class Underused[VarLabel](vars: Var.Set[VarLabel]) extends LinearityViolation[VarLabel]
-
-    case class OverUnder[VarLabel](overused: Var.Set[VarLabel], underused: Var.Set[VarLabel]) extends LinearityViolation[VarLabel]
-
     def overusedVar[L, A](v: Var[L, A]): LinearityViolation[L] =
       LinearityViolation.Overused(Var.Set(v))
 
@@ -399,7 +359,10 @@ object Lambdas {
         case Failure(e)    => Failure(e)
       }
 
-    def toEither: Either[LinearityViolation[V], CapturingFun[AbsFun, |*|, Tupled[|*|, Exp, *], A, B]] =
+    def toEither: Either[
+      NonEmptyList[LinearityViolation[V]],
+      CapturingFun[AbsFun, |*|, Tupled[|*|, Exp, *], A, B]
+    ] =
       this match {
         case Exact(f)      => Right(CapturingFun.NoCapture(f))
         case Closure(x, f) => Right(CapturingFun.Closure(x, f))
@@ -420,12 +383,14 @@ object Lambdas {
     ) extends Delambdified.Success[Exp, |*|, ->, V, A, B]
 
     case class Failure[Exp[_], |*|[_, _], ->[_, _], V, A, B](
-      e: LinearityViolation[V],
+      errors: NonEmptyList[LinearityViolation[V]],
     ) extends Delambdified[Exp, |*|, ->, V, A, B]
-  }
 
-  @deprecated("Renamed to Delambdified")
-  type Abstracted[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B] = Delambdified[Exp, |*|, AbsFun, V, A, B]
-  @deprecated("Renamed to Delambdified")
-  val Abstracted = Delambdified
+    object Failure {
+      def apply[Exp[_], |*|[_, _], ->[_, _], V, A, B](
+        e: LinearityViolation[V],
+      ): Delambdified[Exp, |*|, ->, V, A, B] =
+        Failure(NonEmptyList.of(e))
+    }
+  }
 }
