@@ -15,6 +15,11 @@ enum Validated[E, A] {
       case (Valid(_)   , Invalid(fs)) => Invalid(fs)
       case (Invalid(es), Valid(_)   ) => Invalid(es)
       case (Invalid(es), Invalid(fs)) => Invalid(es ++ fs)
+
+  def flatMap[B](f: A => Validated[E, B]): Validated[E, B] =
+    this match
+      case Valid(a)   => f(a)
+      case Invalid(e) => Invalid(e)
 }
 
 object Validated {
