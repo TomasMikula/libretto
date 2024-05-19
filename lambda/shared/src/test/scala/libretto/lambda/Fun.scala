@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.Lambdas.LinearityViolation.{OverUnder, Overused, Underused}
+import libretto.lambda.Lambdas.LinearityViolation.{Overused, Unused, UnusedInBranch}
 import libretto.lambda.util.{BiInjective, NonEmptyList, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
@@ -198,27 +198,23 @@ object Fun {
         case Values.SingleVal(b) => b
     }
 
+  private def printVar[A](v: Var[VarDesc, A]): String =
+    v.origin match
+      case VarDesc(desc, Some(pos)) => s"$desc at ${pos.filename}:${pos.line}"
+      case VarDesc(desc, None)      => desc
+
   private def printVars(vs: Var.Set[VarDesc]): String =
-    vs.list
-      .map(_.origin)
-      .map {
-        case VarDesc(desc, Some(pos)) => s" - $desc at ${pos.filename}:${pos.line}"
-        case VarDesc(desc, None)      => s" - $desc"
-      }
-      .mkString("\n")
+    vs.list.map(v => s" - ${printVar(v)}").mkString("\n")
 
   private def raiseErrors(es: NonEmptyList[Lambdas.LinearityViolation[VarDesc]]): Nothing = {
     val msgs =
       es.flatMap:
         case Overused(vars) =>
           NonEmptyList.of(s"Variables used more than once:\n${printVars(vars)}")
-        case Underused(vars) =>
-          NonEmptyList.of(s"Variables not fully consumed:\n${printVars(vars)}")
-        case OverUnder(overused, underused) =>
-          NonEmptyList.of(
-            s"Variables used more than once:\n${printVars(overused)}",
-            s"Variables not fully consumed:\n${printVars(underused)}"
-          )
+        case Unused(v) =>
+          NonEmptyList.of(s"Unused variable: ${printVar(v)}")
+        case UnusedInBranch(vars) =>
+          NonEmptyList.of(s"Variables not used in all branches:\n${printVars(vars)}")
     val msg = msgs.toList.mkString("\n")
     throw RuntimeException(msg)
   }

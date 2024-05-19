@@ -156,11 +156,11 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
           case (Closure(x, f1), Exact(f2)) =>
             discarderOf(x) match
               case Right(discardFst) => Closure(x, distribute(()) > sum(f1, discardFst(()) > f2))
-              case Left(unusedVars)  => Failure(LinearityViolation.Underused(unusedVars))
+              case Left(unusedVars)  => Failure(LinearityViolation.UnusedInBranch(unusedVars))
           case (Exact(f1), Closure(y, f2)) =>
             discarderOf(y) match
               case Right(discardFst) => Closure(y, distribute(()) > sum(discardFst(()) > f1, f2))
-              case Left(unusedVars)  => Failure(LinearityViolation.Underused(unusedVars))
+              case Left(unusedVars)  => Failure(LinearityViolation.UnusedInBranch(unusedVars))
           case (Closure(x, f1), Closure(y, f2)) =>
             union(x, y) match
               case Valid(Exists.Some((p, p1, p2))) =>
@@ -209,7 +209,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
               case Closure(captured, fs) =>
                 discarderOf(captured) match
                   case Right(discardFst) => Closure(captured, (discardFst(()) > f0) :: fs)
-                  case Left(unusedVars)  => Failure(LinearityViolation.Underused(unusedVars))
+                  case Left(unusedVars)  => Failure(LinearityViolation.UnusedInBranch(unusedVars))
               case Failure(e) =>
                 Failure(e)
 
@@ -246,7 +246,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
           case Exact(f) =>
             discarderOf(acc) match
               case Left(unusedVars) =>
-                invalid(LinearityViolation.Underused(unusedVars))
+                invalid(LinearityViolation.UnusedInBranch(unusedVars))
               case Right(discardFst) =>
                 val g = discardFst(()) > f
                 leastCommonCapture(acc, fs)
@@ -302,7 +302,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
       [X, Y] => (x: Expr[X]) =>
         Context.getDiscard(x.resultVar) match {
           case Some(discardFst) => Valid(discardFst[Y](()))
-          case None             => invalid(LinearityViolation.underusedVar(x.resultVar))
+          case None             => invalid(LinearityViolation.unusedInBranch(x.resultVar))
         }
 
     (a union b)(discardFst) match
@@ -331,15 +331,18 @@ object Lambdas {
 
   enum LinearityViolation[VarLabel]:
     case Overused(vars: Var.Set[VarLabel])
-    case Underused(vars: Var.Set[VarLabel])
-    case OverUnder(overused: Var.Set[VarLabel], underused: Var.Set[VarLabel])
+    case Unused(v: Var[VarLabel, ?])
+    case UnusedInBranch(vars: Var.Set[VarLabel])
 
   object LinearityViolation {
     def overusedVar[L, A](v: Var[L, A]): LinearityViolation[L] =
-      LinearityViolation.Overused(Var.Set(v))
+      Overused(Var.Set(v))
 
-    def underusedVar[L, A](v: Var[L, A]): LinearityViolation[L] =
-      LinearityViolation.Underused(Var.Set(v))
+    def unusedVar[L, A](v: Var[L, A]): LinearityViolation[L] =
+      Unused(v)
+
+    def unusedInBranch[L, A](v: Var[L, A]): LinearityViolation[L] =
+      UnusedInBranch(Var.Set(v))
   }
 
   sealed trait Delambdified[Exp[_], |*|[_, _], AbsFun[_, _], V, A, B] {

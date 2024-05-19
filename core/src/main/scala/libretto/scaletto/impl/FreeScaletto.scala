@@ -1386,7 +1386,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       )
 
     private def linearityMsg(e: LinearityViolation): NonEmptyList[String] = {
-      import Lambdas.LinearityViolation.{OverUnder, Overused, Underused}
+      import Lambdas.LinearityViolation.{Overused, Unused, UnusedInBranch}
 
       def overusedMsg(vs: Var.Set[VarOrigin]): NonEmptyList[String] =
         NonEmptyList(
@@ -1394,16 +1394,21 @@ object FreeScaletto extends FreeScaletto with Scaletto {
           vs.list.map(v => s" - ${v.origin.print}")
         )
 
-      def underusedMsg(vs: Var.Set[VarOrigin]): NonEmptyList[String] =
+      def unusedMsg[A](v: Var[A]): NonEmptyList[String] =
+        NonEmptyList.of(
+          s"Unused variable: ${v.origin.print}",
+        )
+
+      def unusedInBranchMsg(vs: Var.Set[VarOrigin]): NonEmptyList[String] =
         NonEmptyList(
-          "Variables not fully consumed:",
+          "Variables not used in all branches:",
           vs.list.map(v => s" - ${v.origin.print}")
         )
 
       e match
-        case Overused(vs)    => overusedMsg(vs)
-        case Underused(vs)   => underusedMsg(vs)
-        case OverUnder(o, u) => overusedMsg(o) ++ underusedMsg(u)
+        case Overused(vs)       => overusedMsg(vs)
+        case Unused(v)          => unusedMsg(v)
+        case UnusedInBranch(vs) => unusedInBranchMsg(vs)
     }
 
     private def misplacedExtMsg(e: MisplacedExtractor): NonEmptyList[String] =

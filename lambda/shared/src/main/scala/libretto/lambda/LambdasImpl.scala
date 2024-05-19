@@ -377,7 +377,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
         case EliminatedFromForest.NotFound() =>
           Context.getDiscard(boundVar) match
             case Some(discardFst) => Closure(Forest.unvar(exprs, u), swap > lift(discardFst(())))
-            case None             => Failure(LinearityViolation.underusedVar(boundVar))
+            case None             => Failure(LinearityViolation.unusedVar(boundVar))
       }
     }
   }
@@ -577,7 +577,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
                       case Some(discard) => Valid(CapturingFun.noCapture(shuffled.swap > shuffled.lift(discard[a1](()))))
-                      case None          => invalid(LinearityViolation.underusedVar(op.unusedVar))
+                      case None          => invalid(LinearityViolation.unusedVar(op.unusedVar))
                     },
                     SingleVar[a1](),
                   )
@@ -586,7 +586,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V](
                     SingleVar[a1 |*| a2](),
                     Context.getDiscard(op.unusedVar) match {
                       case Some(discard) => Valid(CapturingFun.lift(discard[a2](())))
-                      case None          => invalid(LinearityViolation.underusedVar(op.unusedVar))
+                      case None          => invalid(LinearityViolation.unusedVar(op.unusedVar))
                     },
                     SingleVar[a2](),
                   )

@@ -94,7 +94,7 @@ class LambdaTests extends AnyFunSuite {
         d1
       }
     }
-    assert(e.getMessage contains "not fully consumed")
+    assert(e.getMessage contains "Unused variable")
     assert(e.getMessage contains "The second half of untupling")
     assert(e.getMessage contains "LambdaTests.scala:93")
   }
@@ -140,7 +140,7 @@ class LambdaTests extends AnyFunSuite {
         one
       }
     }
-    assert(e.getMessage contains "not fully consumed")
+    assert(e.getMessage contains "Unused variable")
     assert(e.getMessage contains "The variable bound by lambda expression at")
     assert(e.getMessage contains "LambdaTests.scala:139")
   }
@@ -182,7 +182,7 @@ class LambdaTests extends AnyFunSuite {
     val e = intercept[Exception] {
       λ.+ { (_: $[One]) => one }
     }
-    assert(e.getMessage contains "not fully consumed")
+    assert(e.getMessage contains "Unused variable")
     assert(e.getMessage contains "variable bound by lambda expression at")
     assert(e.getMessage contains "LambdaTests.scala:183")
   }
