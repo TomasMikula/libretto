@@ -67,4 +67,7 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V, C](
       .get(v.asInstanceOf[Var[V, Any]])
       .asInstanceOf[Option[[x] => Unit => x -⚬ (A |*| x)]]
       .orElse(parent.flatMap(_.getConstant(v)))
+
+  override def toString: String =
+    info.toString
 }

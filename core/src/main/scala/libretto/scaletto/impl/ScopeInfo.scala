@@ -19,4 +19,6 @@ enum ScopeInfo {
       case RightCase(switchPos) => s"right case of switch at ${switchPos.filename}:${switchPos.line}"
       case ValCase(casePos) => s"Val case at ${casePos.filename}:${casePos.line}"
 
+  override def toString: String =
+    print
 }
