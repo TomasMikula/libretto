@@ -57,7 +57,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
 
     def isDefiningFor[A](v: Var[V, A])(using ctx: Context): Boolean
 
-    def registerNonLinearOps[A](v: Var[V, A])(
+    def registerNonLinearOps[A](a: Expr[A])(
       split: Option[A -⚬ (A |*| A)],
       discard: Option[[B] => Unit => (A |*| B) -⚬ B],
     )(using
@@ -74,11 +74,11 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V] {
 
     def getConstant[A](v: Var[V, A])(using Context): Option[[x] => Unit => x -⚬ (A |*| x)]
 
-    def registerSplit[A](v: Var[V, A])(split: A -⚬ (A |*| A))(using Context): Unit =
-      registerNonLinearOps(v)(Some(split), None)
+    def registerSplit[A](a: Expr[A])(split: A -⚬ (A |*| A))(using Context): Unit =
+      registerNonLinearOps(a)(Some(split), None)
 
-    def registerDiscard[A](v: Var[V, A])(discard: [B] => Unit => (A |*| B) -⚬ B)(using Context): Unit =
-      registerNonLinearOps(v)(None, Some(discard))
+    def registerDiscard[A](a: Expr[A])(discard: [B] => Unit => (A |*| B) -⚬ B)(using Context): Unit =
+      registerNonLinearOps(a)(None, Some(discard))
   }
 
   type Delambdified[A, B] = Lambdas.Delambdified[Expr, |*|, -⚬, V, A, B]

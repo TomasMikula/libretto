@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Injective, TypeEq, UniqueTypeArg}
+import libretto.lambda.util.{Exists, Injective, TypeEq, UniqueTypeArg}
 import libretto.lambda.util.TypeEq.Refl
 import scala.collection.{immutable as sci}
 
@@ -37,6 +37,33 @@ object Var {
 
       def +[A](v: Var[P, A]): Var.Set[P] =
         (vs: sci.Set[Var[P, ?]]) + v
+    }
+  }
+
+  /** A map of type-aligned entries `Var[V, A] -> F[A]`. */
+  opaque type Map[V, F[_]] = sci.Map[Var[V, Any], F[Any]]
+  object Map {
+    def empty[V, F[_]]: Var.Map[V, F] = sci.Map.empty
+
+    extension [V, F[_]](m: Var.Map[V, F]) {
+      private def reveal: sci.Map[Var[V, Any], F[Any]] =
+        m
+
+      def --(keys: Var.Set[V]): Var.Map[V, F] =
+        m.reveal.removedAll((keys: sci.Set[Var[V, ?]]).asInstanceOf[sci.Set[Var[V, Any]]])
+
+      def +[A](kv: (Var[V, A], F[A])): Var.Map[V, F] =
+        val k: Var[V, Any] = kv._1.asInstanceOf
+        val v: F[Any]      = kv._2.asInstanceOf
+        m.reveal.updated(k, v)
+
+      def foldLeft[Z](init: Z)(f: [A] => (Z, Var[V, A], F[A]) => Z): Z =
+        m.reveal.foldLeft(init) { (z, kv) =>
+          f[Any](z, kv._1, kv._2)
+        }
+
+      def values: List[Exists[F]] =
+        m.reveal.valuesIterator.map(f => Exists(f)).toList
     }
   }
 

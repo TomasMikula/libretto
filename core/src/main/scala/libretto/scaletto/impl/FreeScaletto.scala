@@ -709,8 +709,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     )(using
       lambdas.Context,
     ): $[A] = {
-      val v = a.resultVar
-      lambdas.Context.registerNonLinearOps(v)(split, discard.map(f => [B] => (_: Unit) => elimFst[A, B](f)))
+      lambdas.Context.registerNonLinearOps(a)(split, discard.map(f => [B] => (_: Unit) => elimFst[A, B](f)))
       a
     }
   }

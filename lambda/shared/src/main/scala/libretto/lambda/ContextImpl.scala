@@ -1,11 +1,14 @@
 package libretto.lambda
 
+import libretto.lambda.util.Exists
 import scala.collection.mutable
 
-class ContextImpl[-⚬[_, _], |*|[_, _], V](
-  parent: Option[ContextImpl[-⚬, |*|, V]] = None,
+class ContextImpl[-⚬[_, _], |*|[_, _], V, Expr[_]](
+  resultVar: [A] => Expr[A] => Var[V, A],
+  parent: Option[ContextImpl[-⚬, |*|, V, Expr]] = None,
 ) {
   private case class Entry[A](
+    expr: Expr[A],
     split: Option[A -⚬ (A |*| A)],
     discard: Option[[B] => Unit => (A |*| B) -⚬ B],
   )
@@ -24,19 +27,21 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V](
   def isDefiningFor[A](v: Var[V, A]): Boolean =
     v.context eq this
 
-  def register[A](v: Var[V, A])(
+  def register[A](expr: Expr[A])(
     split: Option[A -⚬ (A |*| A)],
     discard: Option[[B] => Unit => (A |*| B) -⚬ B],
   ): Unit =
+    val v: Var[V, A] = resultVar(expr)
     nonLinearOps.updateWith(
       v.asInstanceOf[Var[V, Any]],
     ) {
       case None =>
-        Some(Entry[A](split, discard).asInstanceOf[Entry[Any]])
+        Some(Entry[A](expr, split, discard).asInstanceOf[Entry[Any]])
       case Some(e0) =>
         val e = e0.asInstanceOf[Entry[A]]
         Some(
           Entry[A](
+            expr,
             split orElse e.split,
             discard orElse e.discard,
           ).asInstanceOf[Entry[Any]]
@@ -66,4 +71,13 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V](
       .get(v.asInstanceOf[Var[V, Any]])
       .asInstanceOf[Option[[x] => Unit => x -⚬ (A |*| x)]]
       .orElse(parent.flatMap(_.getConstant(v)))
+
+  def registeredDiscarders: Seq[Exists[[A] =>> (Expr[A], [B] => Unit => (A |*| B) -⚬ B)]] =
+    nonLinearOps
+      .valuesIterator
+      .collect[Exists[[A] =>> (Expr[A], [B] => Unit => (A |*| B) -⚬ B)]] {
+        case Entry(expr, _, Some(discard)) =>
+          Exists((expr, discard))
+      }
+      .toSeq
 }

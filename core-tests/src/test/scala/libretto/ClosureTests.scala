@@ -295,6 +295,32 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             }
           }
         },
+
+      "discard from a nested context" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ { (a: $[One]) =>
+              λ.closure { (d: $[Done]) =>
+                a match        // `a` was introduced in parent context
+                  case ?(_) => // but is discarded in this (nested) context
+                    d
+              }
+            }
+          }
+        },
+
+      "discard both projections from a nested context" ->
+        TestCase.pure {
+          Outcome.expectNotThrows {
+            λ { (a: $[One |*| One]) =>
+              λ.closure { (d: $[Done]) =>
+                a match                 // `a` was introduced in parent context
+                  case ?(_) |*| ?(_) => // but is decomposed and discarded in this (nested) context
+                    d
+              }
+            }
+          }
+        },
     )
   }
 }
