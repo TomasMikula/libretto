@@ -908,8 +908,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     )(using
       lambdas.Context,
     ): $[A] = {
-      val v = a.resultVar
-      lambdas.Context.registerNonLinearOps(v)(
+      lambdas.Context.registerNonLinearOps(a)(
         split.map(partial),
         discard.map(f => [B] => (_: Unit) => partial(elimFst[A, B](f))),
       )
@@ -967,7 +966,6 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       this match
         case Success(value) => f(value)
         case Failure(es) => Failure(es)
-
 
     def getOrReportErrors: T =
       this match

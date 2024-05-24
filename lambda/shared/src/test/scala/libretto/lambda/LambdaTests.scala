@@ -255,6 +255,15 @@ class LambdaTests extends AnyFunSuite {
     succeed
   }
 
+  test("discard both projections") {
+    λ { (a: $[One ** One]) =>
+      a match
+        case ?(_) ** ?(_) =>
+          one
+    }
+    succeed
+  }
+
   test("simple switch on ++") {
     λ { (a: $[One ++ One]) =>
       a switch {

@@ -22,13 +22,23 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
 
   type Var[A] = libretto.lambda.Var[V, A]
 
-  override opaque type Context = ContextImpl[-⚬, |*|, V, C]
+  override opaque type Context = ContextImpl[-⚬, |*|, V, C, Expr]
   override object Context extends Contexts {
+    private val getResultVar =
+      [A] => (a: Expr[A]) => a.resultVar
+
     override def fresh(info: C): Context =
-      new ContextImpl[-⚬, |*|, V, C](info)
+      new ContextImpl[-⚬, |*|, V, C, Expr](
+        info,
+        getResultVar,
+      )
 
     override def nested(info: C, parent: Context): Context =
-      new ContextImpl[-⚬, |*|, V, C](info, Some(parent))
+      new ContextImpl[-⚬, |*|, V, C, Expr](
+        info,
+        getResultVar,
+        Some(parent),
+      )
 
     override def info(using ctx: Context): C =
       ctx.info
@@ -36,11 +46,11 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
     override def newVar[A](label: V)(using ctx: Context): Var[A] =
       ctx.newVar[A](label)
 
-    override def registerNonLinearOps[A](v: Var[A])(
+    override def registerNonLinearOps[A](a: Expr[A])(
       split: Option[A -⚬ (A |*| A)],
       discard: Option[[B] => Unit => (A |*| B) -⚬ B],
     )(using ctx: Context): Unit =
-      ctx.register(v)(split, discard)
+      ctx.register(a)(split, discard)
 
     override def registerConstant[A](v: Var[A])(
       introduce: [x] => Unit => x -⚬ (A |*| x),
@@ -108,6 +118,15 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
         case Prj1(f, _, _) => f.initialVars
         case Prj2(f, _, _) => f.initialVars
       }
+
+    def allVars: Var.Set[V] =
+      this match
+        case Id(a) => Var.Set(a)
+        case Map(e, f, resultVar) => e.allVars + resultVar
+        case Zip(e1, e2, resultVar) => e1.allVars merge e2.allVars + resultVar
+        case ZipN(exprs, resultVar) => exprs.foldMap0([x] => ex => ex.allVars, _ merge _) + resultVar
+        case Prj1(a, a1, _) => a.allVars + a1
+        case Prj2(a, _, a2) => a.allVars + a2
 
     infix def map[C](f: B -⚬ C)(resultVar: Var[C]): Expr[C] =
       Map(this, f, resultVar)
@@ -273,9 +292,68 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
         case Exists.Some((u, f)) => Exists((f, u))
   }
 
-  override def eliminateLocalVariables[A, B](boundVar: Var[A], expr: Expr[B])(using Context): Delambdified[A, B] =
-    eliminateLocalVariablesFromForest(boundVar, Tupled.atom(expr))
-      .mapFun([X] => (f: X ≈⚬ B) => f.fold)
+  private type Discarder[A] =
+    [B] => Unit => (A |*| B) -⚬ B
+
+  override def eliminateLocalVariables[A, B](
+    boundVar: Var[A],
+    expr: Expr[B],
+  )(using
+    ctx: Context,
+  ): Delambdified[A, B] = {
+    // Before the actual elimination,
+    // include unused expressions with registered discarders.`
+
+    var usedVars: Var.Set[V] =
+      expr.allVars
+    var toElim: Var.Map[V, [A] =>> (Expr[A], Discarder[A])] =
+      Var.Map.empty
+
+    ctx.registeredDiscarders.foreach { case Exists.Some((exp, discarder)) =>
+      if (!usedVars.containsVar(exp.resultVar)) {
+        val expVars = exp.allVars
+
+        // remove expressions previously thought unused, but they now become used via `exp`
+        toElim = toElim -- expVars
+
+        toElim = toElim + (exp.resultVar, (exp, discarder))
+        usedVars = usedVars merge expVars
+      }
+    }
+
+    attachDiscarded(expr, toElim.values) match
+      case Exists.Some((exprs, discard)) =>
+        eliminateLocalVariablesFromForest(boundVar, exprs)
+          .mapFun([X] => f => f.fold)
+          .andThen(discard)
+  }
+
+  extension [A, B](res: Delambdified[A, B]) {
+    private def andThen[C](g: B -⚬ C): Delambdified[A, C] =
+      import Lambdas.Delambdified.{Closure, Exact, Failure}
+      res match
+        case Exact(f)      => Exact(f > g)
+        case Closure(x, f) => Closure(x, f > g)
+        case Failure(es)   => Failure(es)
+  }
+
+  private def attachDiscarded[B](
+    expr: Expr[B],
+    toElim: List[Exists[[X] =>> (Expr[X], Discarder[X])]],
+  ): Exists[[A] =>> (Tupled[Expr, A], A -⚬ B)] = {
+
+    val init: Exists[[A] =>> (Tupled[Expr, A], A -⚬ B)] =
+      Exists((Tupled.atom(expr), ssc.id[B]))
+
+    toElim.foldLeft(init) { (acc, ed) =>
+      (acc, ed) match {
+        case (e1 @ Exists.Some((acc, g)), e2 @ Exists.Some((exp, discarder))) =>
+          val acc1: Tupled[Expr, e2.T |*| e1.T] =
+            Tupled.atom(exp) zip acc
+          Exists((acc1, discarder(()) > g))
+      }
+    }
+  }
 
   private def eliminateLocalVariablesFromForest[A, B](
     boundVar: Var[A],

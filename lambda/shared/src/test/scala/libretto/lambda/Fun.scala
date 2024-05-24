@@ -172,22 +172,22 @@ object Fun {
 
   object ? {
     def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A]): Some[$[A]] = {
-      lambdas.Context.registerDiscard(a.resultVar)([X] => (_: Unit) => prj2[A, X])
+      lambdas.Context.registerDiscard(a)([X] => (_: Unit) => prj2[A, X])
       Some(a)
     }
   }
 
   object + {
     def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A]): Some[$[A]] = {
-      lambdas.Context.registerSplit(a.resultVar)(dup[A])
+      lambdas.Context.registerSplit(a)(dup[A])
       Some(a)
     }
   }
 
   object * {
     def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A]): Some[$[A]] = {
-      lambdas.Context.registerSplit(a.resultVar)(dup[A])
-      lambdas.Context.registerDiscard(a.resultVar)([X] => (_: Unit) => prj2[A, X])
+      lambdas.Context.registerSplit(a)(dup[A])
+      lambdas.Context.registerDiscard(a)([X] => (_: Unit) => prj2[A, X])
       Some(a)
     }
   }
