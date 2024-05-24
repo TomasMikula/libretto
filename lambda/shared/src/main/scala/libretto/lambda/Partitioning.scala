@@ -20,13 +20,13 @@ trait Partitioning[->[_, _], <*>[_, _], T] {
 
   def reinject[P](p: Partition[P]): P -> T
 
-  def partition[P](p: Partition[P]): Partitioning.Partition[->, <*>, T, P] =
-    Partitioning.Partition(this, p)
+  def extractor[P](p: Partition[P]): Partitioning.Extractor[->, <*>, T, P] =
+    Partitioning.Extractor(this, p)
 }
 
 object Partitioning {
 
-  class Partition[->[_, _], <*>[_, _], T, P](
+  class Extractor[->[_, _], <*>[_, _], T, P](
     val partitioning: Partitioning[->, <*>, T],
     val partition:    partitioning.Partition[P],
   ) {
@@ -36,7 +36,7 @@ object Partitioning {
     def reinject: P -> T =
       partitioning.reinject(partition)
 
-    infix def sameAs[Q](that: Partition[->, <*>, T, Q]): Option[Option[P =:= Q]] =
+    infix def sameAs[Q](that: Extractor[->, <*>, T, Q]): Option[Option[P =:= Q]] =
       (this.partitioning sameAs that.partitioning)
         .map { ev =>
           this.partitioning.samePartition(this.partition, ev.flip.at[Q](that.partition))

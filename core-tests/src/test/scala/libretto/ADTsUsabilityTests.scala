@@ -171,12 +171,12 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
 
       object Empty {
         def unapply[A](x: $[Tree[A]])(using pos: SourcePos, ctx: LambdaContext): Some[$[One]] =
-          Some($.matchAgainst(x, PartitioningImpl[A].partition(PartitionImpl.Empty[A]()))(pos))
+          Some($.matchAgainst(x, PartitioningImpl[A].extractor(PartitionImpl.Empty[A]()))(pos))
       }
 
       object NonEmpty {
         def unapply[A](x: $[Tree[A]])(using pos: SourcePos, ctx: LambdaContext): Some[$[NonEmptyTree[A]]] =
-          Some($.matchAgainst(x, PartitioningImpl[A].partition(PartitionImpl.NonEmpty[A]()))(pos))
+          Some($.matchAgainst(x, PartitioningImpl[A].extractor(PartitionImpl.NonEmpty[A]()))(pos))
       }
     }
 

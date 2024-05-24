@@ -3,7 +3,6 @@ package libretto.scaletto.impl
 import libretto.scaletto.Scaletto
 import libretto.lambda.{AForest, ClosedSymmetricMonoidalCategory, Focus, Lambdas, LambdasImpl, Partitioning, Shuffled, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Delambdified
-import libretto.lambda.Partitioning.Partition
 import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, TypeEq, Validated}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Validated.{Invalid, Valid}
@@ -814,14 +813,14 @@ object FreeScaletto extends Scaletto {
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
   private type Extractor[A, B] =
-    Partition[-⚬, |*|, A, B]
+    Partitioning.Extractor[-⚬, |*|, A, B]
 
   private object Extractor {
     def apply[T, P](
       partitioning: Partitioning[-⚬, |*|, T],
       partition:    partitioning.Partition[P],
     ): Extractor[T, P] =
-      new Partition(partitioning, partition)
+      partitioning.extractor(partition)
   }
 
   private type PartialFun[A, B] =
@@ -845,7 +844,7 @@ object FreeScaletto extends Scaletto {
         g match
           case g: (X -⚬ Y) =>
             TotalRes.success(g)
-          case p: Partition[-⚬, |+|, X, Y] =>
+          case p: Extractor[X, Y] =>
             p.isTotal match
               case Some(g) => TotalRes.success(g)
               case None => libretto.lambda.UnhandledCase.raise(s"Non-exhaustive matcher $p")
@@ -892,7 +891,7 @@ object FreeScaletto extends Scaletto {
         VarOrigin.Prj2(pos),
       )
 
-    override def matchAgainst[A, B](a: $[A], extractor: Partition[-⚬, |*|, A, B])(pos: SourcePos)(using LambdaContext): $[B] =
+    override def matchAgainst[A, B](a: $[A], extractor: Extractor[A, B])(pos: SourcePos)(using LambdaContext): $[B] =
       lambdas.Expr.map(a, psh.lift(extractor))(VarOrigin.ExtractorRes(pos))
 
     override def switchEither[A, B, C](

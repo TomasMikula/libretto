@@ -1,7 +1,7 @@
 package libretto
 
 import libretto.lambda.Focus
-import libretto.lambda.Partitioning.Partition
+import libretto.lambda.Partitioning.Extractor
 import libretto.lambda.util.SourcePos
 import libretto.util.{Equal, StaticValue}
 import libretto.util.unapply.Unapply
@@ -466,7 +466,7 @@ trait CoreDSL {
       LambdaContext,
     ): ($[A], $[B])
 
-    def matchAgainst[A, B](a: $[A], extractor: Partition[-⚬, |*|, A, B])(pos: SourcePos)(using
+    def matchAgainst[A, B](a: $[A], extractor: Extractor[-⚬, |*|, A, B])(pos: SourcePos)(using
       LambdaContext
     ): $[B]
 
