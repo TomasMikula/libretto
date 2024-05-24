@@ -840,8 +840,6 @@ object FreeScaletto extends Scaletto {
     psh.lift(f)
 
   private def total[A, B](f: A -?> B): TotalRes[A -⚬ B] =
-    import TotalRes.given
-
     f.foldMapA(
       [X, Y] => (g: PartialFun[X, Y]) => {
         g match
@@ -855,28 +853,10 @@ object FreeScaletto extends Scaletto {
     )
 
   /** The result of extracting a total function from a partial one. */
-  private type TotalRes[T] = Either[NonEmptyList[(SourcePos, NonEmptyList[String])], T]
+  private type TotalRes[T] = Validated[(SourcePos, NonEmptyList[String]), T]
   private object TotalRes {
     def success[T](value: T): TotalRes[T] =
-      Right(value)
-
-    def zip[A, B](a: TotalRes[A], b: TotalRes[B]): TotalRes[(A, B)] =
-      (a, b) match
-        case (Right(a), Right(b)) => Right((a, b))
-        case (Right(a), Left(es)) => Left(es)
-        case (Left(es), Right(a)) => Left(es)
-        case (Left(es), Left(fs)) => Left(es ++ fs)
-
-    given Applicative[TotalRes] with {
-      override def map[A, B](fa: TotalRes[A], f: A => B): TotalRes[B] =
-        fa.map(f)
-
-      override def zip[A, B](fa: TotalRes[A], fb: TotalRes[B]): TotalRes[(A, B)] =
-        TotalRes.zip(fa, fb)
-
-      override def pure[A](a: A): TotalRes[A] =
-        Right(a)
-    }
+      Valid(value)
   }
 
   private val lambdas: Lambdas[-?>, |*|, VarOrigin, ScopeInfo] =
@@ -967,9 +947,9 @@ object FreeScaletto extends Scaletto {
     lambdas.switch(
       cases,
       [X, Y] => (fx: X -?> R, fy: Y -?> R) => {
-        TotalRes.zip(total(fx), total(fy)) match
-          case Right((fx, fy)) => partial(either(fx, fy))
-          case Left(es)        => raiseTotalityViolations(es)
+        (total(fx) zip total(fy)) match
+          case Valid((fx, fy)) => partial(either(fx, fy))
+          case Invalid(es)     => raiseTotalityViolations(es)
       },
       [X, Y, Z] => (_: Unit) => partial(distributeL[X, Y, Z]),
     ) match {
@@ -1248,8 +1228,8 @@ object FreeScaletto extends Scaletto {
       lambdas.delambdifyTopLevel(c, a, f) match {
         case Exact(f) =>
           total(f) match
-            case Right(f) => f
-            case Left(es) => raiseTotalityViolations(es)
+            case Valid(f) => f
+            case Invalid(es) => raiseTotalityViolations(es)
         case Closure(captured, f) =>
           raiseUndefinedVars(lambdas.Expr.initialVars(captured))
         case Failure(es) =>
@@ -1272,17 +1252,17 @@ object FreeScaletto extends Scaletto {
       lambdas.delambdifyNested[A, B](scopeInfo, bindVar, f) match {
         case Closure(captured, f) =>
           total(f) match
-            case Right(f) =>
+            case Valid(f) =>
               val x = lambdas.Expr.zipN(captured)(captVar)
               lambdas.Expr.map(x, partial(ℭ.curry(f)))(resultVar)
-            case Left(es) =>
+            case Invalid(es) =>
               raiseTotalityViolations(es)
         case Exact(f) =>
           total(f) match
-            case Right(f) =>
+            case Valid(f) =>
               val captured0 = $.one(using pos)
               (captured0 map partial(ℭ.curry(elimFst > f)))(resultVar)
-            case Left(es) =>
+            case Invalid(es) =>
               raiseTotalityViolations(es)
         case Failure(es) =>
           assemblyErrors(es)
