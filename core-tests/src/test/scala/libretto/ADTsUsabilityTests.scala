@@ -71,14 +71,14 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
         NonEmptyTree.branch[A] > nonEmpty
 
       /** `foldMap` using barebones handling of cases in order. */
-      def foldMap_a[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): Tree[A] -⚬ Maybe[B] =
+      def foldMapBB[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): Tree[A] -⚬ Maybe[B] =
         OneOf.handle[Tree[A]](_
           .caseOf["Empty"](Maybe.empty[B])
           .caseOf["NonEmpty"](NonEmptyTree.foldMap(f, g) > Maybe.just)
           .end
         )
 
-      def foldMap_b[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): Tree[A] -⚬ Maybe[B] =
+      def foldMap[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): Tree[A] -⚬ Maybe[B] =
         λ { ta =>
           switch(ta)
             .is { case Empty(u)     => Maybe.empty[B](u) }
@@ -87,7 +87,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
         }
 
       /** `concat` using barebones handling of cases in order. */
-      def concat_a[A]: (Tree[A] |*| Tree[A]) -⚬ Tree[A] =
+      def concatBB[A]: (Tree[A] |*| Tree[A]) -⚬ Tree[A] =
         λ { case t1 |*| t2 =>
           (t1 |*| t2) :>> OneOf.distLR :>> OneOf.handle(_
             .caseOf["Empty"](elimSnd)
@@ -102,7 +102,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
           )
         }
 
-      def concat_b[A]: (Tree[A] |*| Tree[A]) -⚬ Tree[A] =
+      def concat[A]: (Tree[A] |*| Tree[A]) -⚬ Tree[A] =
         λ { case t1 |*| t2 =>
           switch(t1 |*| t2)
             .is { case Empty(?(_)) |*| t2 => t2 }
@@ -181,8 +181,8 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
     }
 
     List(
-      "foldMap_a" -> Tree.foldMap_a[Val[Int], Val[Int]],
-      "foldMap_b" -> Tree.foldMap_b[Val[Int], Val[Int]],
+      "foldMap_a" -> Tree.foldMapBB[Val[Int], Val[Int]],
+      "foldMap_b" -> Tree.foldMap[Val[Int], Val[Int]],
     ).map { case (desc, foldMap) =>
 
       s"create and fold Tree ($desc)" ->
@@ -206,8 +206,8 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
         }
 
     } ++ List(
-      "concat_a" -> Tree.concat_a[Val[Int]],
-      "concat_b" -> Tree.concat_b[Val[Int]],
+      "concat_a" -> Tree.concatBB[Val[Int]],
+      "concat_b" -> Tree.concat[Val[Int]],
     ).map { case (desc, concat) =>
 
       s"concatenate trees ($desc)" ->
@@ -221,7 +221,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             val tree =
               concat(tree1 |*| tree2)
             tree
-              :>> Tree.foldMap_a(mapVal(_.toString), unliftPair > mapVal { case (a, b) => s"$a,$b" })
+              :>> Tree.foldMapBB(mapVal(_.toString), unliftPair > mapVal { case (a, b) => s"$a,$b" })
               :>> Maybe.getOrElse(done > constVal(""))
           }
         }.via { port =>

@@ -12,11 +12,8 @@ import libretto.util.{Async, StaticValue}
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 
-abstract class FreeScaletto {
+object FreeScaletto extends Scaletto {
   sealed trait -⚬[A, B]
-
-  /** Type of nested arrows. */
-  type ->[A, B]
 
   // The following types are all "imaginary", never instantiated, but we declare them as classes,
   // so that the Scala typechecker can infer that
@@ -74,6 +71,9 @@ abstract class FreeScaletto {
 
     def extend[HLbl, H]: NAryDistLR[A, (HLbl of H) :: Cases]{type Out = (HLbl of (A |*| H)) :: self.Out} =
       NAryDistLR.Cons(this)
+
+    def compile: (A |*| OneOf[Cases]) -⚬ OneOf[Out] =
+      OneOf.distLR(using this)
   }
 
   object NAryDistLR {
@@ -98,6 +98,9 @@ abstract class FreeScaletto {
 
     def extend[HLbl, H]: NAryDistRL[B, (HLbl of H) :: Cases]{type Out = (HLbl of (H |*| B)) :: self.Out} =
       NAryDistRL.Cons(this)
+
+    def compile: (OneOf[Cases] |*| B) -⚬ OneOf[Out] =
+      OneOf.distRL(using this)
   }
 
   object NAryDistRL {
@@ -151,6 +154,8 @@ abstract class FreeScaletto {
       type Out
 
       def extend[HLbl, H]: Operationalized[F, (HLbl of H) :: Cases]{type Out = (HLbl of F[H]) :: self.Out}
+
+      def compile: F[OneOf[Cases]] -⚬ OneOf[Out]
     }
 
     case class Id[Cases]() extends NAryDistF.Operationalized[[x] =>> x, Cases] {
@@ -158,6 +163,9 @@ abstract class FreeScaletto {
 
       override def extend[HLbl, H]: Operationalized[[x] =>> x, (HLbl of H) :: Cases]{type Out = (HLbl of H) :: Cases} =
         Id[(HLbl of H) :: Cases]()
+
+      override def compile: OneOf[Cases] -⚬ OneOf[Cases] =
+        -⚬.Id[OneOf[Cases]]()
     }
 
     case class DistFst[A, F2[_], Cases, F2Cases, Res](
@@ -175,6 +183,16 @@ abstract class FreeScaletto {
           inner,
           outer,
         )
+
+      override def compile: (A |*| F2[OneOf[Cases]]) -⚬ OneOf[Res] =
+        import -⚬.{AndThen, Par}
+        AndThen(
+          Par(
+            -⚬.Id[A](),
+            distF2.compile
+          ),
+          dist1.compile,
+        )
     }
 
     case class DistSnd[F1[_], B, Cases, F1Cases, Res](
@@ -189,6 +207,16 @@ abstract class FreeScaletto {
         val outer: NAryDistRL[B, (HLbl of F1[H]) :: F1Cases]{type Out = (HLbl of (F1[H] |*| B)) :: Res} =
           dist2.extend[HLbl, F1[H]]
         DistSnd(inner, outer)
+
+      override def compile: (F1[OneOf[Cases]] |*| B) -⚬ OneOf[Res] =
+        import -⚬.{AndThen, Par}
+        AndThen(
+          Par(
+            distF1.compile,
+            -⚬.Id[B]()
+          ),
+          dist2.compile
+        )
     }
   }
 
@@ -209,10 +237,10 @@ abstract class FreeScaletto {
 
   object -⚬ {
     case class Id[A]() extends (A -⚬ A)
-    case class AndThen[A, B, C](f: A -> B, g: B -> C) extends (A -⚬ C)
+    case class AndThen[A, B, C](f: A -⚬ B, g: B -⚬ C) extends (A -⚬ C)
     case class Par[A1, A2, B1, B2](
-      f1: A1 -> B1,
-      f2: A2 -> B2,
+      f1: A1 -⚬ B1,
+      f2: A2 -⚬ B2,
     ) extends ((A1 |*| A2) -⚬ (B1 |*| B2))
     case class IntroFst[B]() extends (B -⚬ (One |*| B))
     case class IntroSnd[A]() extends (A -⚬ (A |*| One))
@@ -223,7 +251,7 @@ abstract class FreeScaletto {
     case class Swap[A, B]() extends ((A |*| B) -⚬ (B |*| A))
     case class InjectL[A, B]() extends (A -⚬ (A |+| B))
     case class InjectR[A, B]() extends (B -⚬ (A |+| B))
-    case class EitherF[A, B, C](f: A -> C, g: B -> C) extends ((A |+| B) -⚬ C)
+    case class EitherF[A, B, C](f: A -⚬ C, g: B -⚬ C) extends ((A |+| B) -⚬ C)
     case class Absurd[A]() extends (Void -⚬ A)
     case class NAryInject[Label, A, Cases](i: NAryInjector[Label, A, Cases]) extends (A -⚬ OneOf[Cases])
     case class NArySumPeel[Label, A, Cases]() extends (OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases]))
@@ -231,7 +259,7 @@ abstract class FreeScaletto {
     case class NArySumVoid() extends (OneOf[Void] -⚬ Void)
     case class ChooseL[A, B]() extends ((A |&| B) -⚬ A)
     case class ChooseR[A, B]() extends ((A |&| B) -⚬ B)
-    case class Choice[A, B, C](f: A -> B, g: A -> C) extends (A -⚬ (B |&| C))
+    case class Choice[A, B, C](f: A -⚬ B, g: A -⚬ C) extends (A -⚬ (B |&| C))
     case class PingF() extends (One -⚬ Ping)
     case class PongF() extends (Pong -⚬ One)
     case class DelayIndefinitely() extends (Done -⚬ RTerminus)
@@ -314,12 +342,8 @@ abstract class FreeScaletto {
       release2: Option[ScalaFunction[T, Unit]],
     ) extends ((Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])))
   }
-}
 
-object FreeScaletto extends FreeScaletto with Scaletto {
   import -⚬.*
-
-  override type ->[A, B] = A -⚬ B
 
   override type ScalaFun[A, B] = ScalaFunction[A, B]
 
@@ -599,6 +623,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
     override type IsCaseOf[Label, Cases] = NAryInjector[Label, ?, Cases]
     override type Handlers[Cases, R] = NAryHandlerBuilder[Cases, Void, R]
     override type DistLR[A, Cases] = NAryDistLR[A, Cases]
+    type DistRL[B, Cases] = NAryDistRL[B, Cases]
     override type DistF[F[_], Cases] = NAryDistF[F, Cases]
 
     override def inject[Label, A, Cases](using i: Injector[Label, A, Cases]): A -⚬ OneOf[Cases] =
@@ -635,18 +660,7 @@ object FreeScaletto extends FreeScaletto with Scaletto {
       distF(ev.operationalize(F))
 
     private def distF[F[_], Cases](ev: NAryDistF.Operationalized[F, Cases]): F[OneOf[Cases]] -⚬ OneOf[ev.Out] =
-      ev match
-        case i: (NAryDistF.Id[cases] & ev.type) =>
-          val ev1: i.Out =:= ev.Out =
-            summon[ev.Out =:= i.Out].flip
-          val ev2: Cases =:= ev.Out =
-            summon[Cases =:= i.Out].andThen[ev.Out](ev1)
-          id[OneOf[Cases]]
-            .to[OneOf[ev.Out]](using ev2.liftCo[OneOf])
-        case NAryDistF.DistFst(inner, outer) =>
-          libretto.lambda.UnhandledCase.raise(s"distF($ev)")
-        case NAryDistF.DistSnd(inner, outer) =>
-          libretto.lambda.UnhandledCase.raise(s"distF($ev)")
+      ev.compile
 
     override def distLR[A, Cases](using ev: DistLR[A, Cases]): (A |*| OneOf[Cases]) -⚬ OneOf[ev.Out] =
       distLR_[A, Cases, ev.Out]
@@ -671,6 +685,32 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         peel(cs) switch {
           case Left(h)  => inject(using headInjector[HLbl, A |*| H, ATail])(a |*| h)
           case Right(t) => (a |*| t) :>> distLR(using ev) :>> injectR :>> unpeel
+        }
+      }
+
+    def distRL[B, Cases](using ev: DistRL[B, Cases]): (OneOf[Cases] |*| B) -⚬ OneOf[ev.Out] =
+      distRL_[B, Cases, ev.Out]
+
+    private def distRL_[B, Cases, BCases](using ev: DistRL[B, Cases] { type Out = BCases }): (OneOf[Cases] |*| B) -⚬ OneOf[BCases] =
+      ev match
+        case NAryDistRL.Empty() =>
+          summon[Cases =:= Void]
+          andThen(
+            fst(andThen(void, absurd[OneOf[ev.Out] |*| -[B]])),
+            andThen(assocLR, andThen(snd(andThen(swap, backvert)), elimSnd))
+          )
+        case c: NAryDistRL.Cons[b, n, h, t, bt] =>
+          val ev1: (((n of (h |*| b)) :: bt) =:= BCases) =
+            summon[((n of (h |*| b)) :: bt) =:= c.Out] andThen summon[c.Out =:= BCases]
+          distRLIntoTail[B, n, h, t, bt](c.tail).to(using ev1.liftCo[OneOf])
+
+    private def distRLIntoTail[B, HLbl, H, Tail, BTail](
+      ev: NAryDistRL[B, Tail] { type Out = BTail },
+    ): (OneOf[(HLbl of H) :: Tail] |*| B) -⚬ OneOf[(HLbl of (H |*| B)) :: BTail] =
+      λ { case cs |*| b =>
+        peel(cs) switch {
+          case Left(h)  => inject(using headInjector[HLbl, H |*| B, BTail])(h |*| b)
+          case Right(t) => (t |*| b) :>> distRL(using ev) :>> injectR :>> unpeel
         }
       }
 
@@ -1115,8 +1155,33 @@ object FreeScaletto extends FreeScaletto with Scaletto {
         caseProper[[x] =>> x, A](Focus.id, extr.partitioning, summon)
       case AForest.Empty() =>
         caseCatchAll(summon)
-      case other =>
-        libretto.lambda.UnhandledCase.raise(s"withFirstScrutineeOf($other)")
+      case AForest.Par(p1, p2) =>
+        withFirstScrutineeOfPar(p1, p2)(caseCatchAll, caseProper)
+
+  private def withFirstScrutineeOfPar[A1, A2, B1, B2, R](
+    p1: Pattern[A1, B1],
+    p2: Pattern[A2, B2],
+  )(
+    caseCatchAll: ((A1 |*| A2) =:= (B1 |*| B2)) => R,
+    caseProper: [F[_], T] => (Focus[|*|, F], Partitioning[-⚬, |*|, T], (A1 |*| A2) =:= F[T]) => R,
+  ): R =
+    withFirstScrutineeOf(p1)(
+      caseProper = { [F1[_], T1] => (f1: Focus[|*|, F1], ex1: Partitioning[-⚬, |*|, T1], ev1: A1 =:= F1[T1]) =>
+        type F[T] = F1[T] |*| A2
+        caseProper[F, T1](f1.inFst[A2], ex1, ev1.liftCo[[t] =>> t |*| A2])
+      },
+      caseCatchAll = { case TypeEq(Refl()) =>
+        withFirstScrutineeOf(p2)(
+          caseProper = { [F2[_], T2] => (f2: Focus[|*|, F2], ex2: Partitioning[-⚬, |*|, T2], ev2: A2 =:= F2[T2]) =>
+            type F[T] = A1 |*| F2[T]
+            caseProper[F, T2](f2.inSnd[A1], ex2, ev2.liftCo[[t] =>> A1 |*| t])
+          },
+          caseCatchAll = { case TypeEq(Refl()) =>
+            caseCatchAll(summon)
+          },
+        )
+      },
+    )
 
   private def collectMatchingCases[F[_], T, U, R](
     cases: List[Exists[[Y] =>> (Pattern[F[T], Y], Y -⚬ R)]],
