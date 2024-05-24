@@ -993,31 +993,20 @@ object FreeScaletto extends Scaletto {
         switchImpl(using ctx, switchPos)(a, NonEmptyList(c, cs))
           .getOrReportErrors
 
-  private enum SwitchRes[T] {
-    case Success(value: T)
-    case Failure(errors: NonEmptyList[LinearityViolation | MisplacedExtractor | PatternMatchError])
-
-    def map[U](f: T => U): SwitchRes[U] =
-      this match
-        case Success(value) => Success(f(value))
-        case Failure(es) => Failure(es)
-
-    def flatMap[U](f: T => SwitchRes[U]): SwitchRes[U] =
-      this match
-        case Success(value) => f(value)
-        case Failure(es) => Failure(es)
-
-    def getOrReportErrors: T =
-      this match
-        case Success(value) => value
-        case Failure(errors) => assemblyErrors(errors)
-  }
-
   private case class MisplacedExtractor(ext: Extractor[?, ?])
 
   private enum PatternMatchError:
     case IncompatibleExtractors(base: Extractor[?, ?], incompatible: NonEmptyList[Extractor[?, ?]])
     case NonExhaustiveness(ext: Extractor[?, ?]) // TODO: include context
+
+  private type SwitchRes[T] = Validated[LinearityViolation | MisplacedExtractor | PatternMatchError, T]
+
+  extension [T](r: SwitchRes[T]) {
+    private def getOrReportErrors: T =
+      r match
+        case Valid(value) => value
+        case Invalid(errors) => assemblyErrors(errors)
+  }
 
   private object SwitchRes {
     def nonExhaustiveness[T](ext: Extractor[?, ?]): SwitchRes[T] =
@@ -1030,22 +1019,7 @@ object FreeScaletto extends Scaletto {
       failure(PatternMatchError.IncompatibleExtractors(base, incompatible))
 
     def failure[T](e: LinearityViolation | MisplacedExtractor | PatternMatchError): SwitchRes[T] =
-      SwitchRes.Failure(NonEmptyList(e, Nil))
-
-    given Applicative[SwitchRes] with {
-      override def pure[A](a: A): SwitchRes[A] =
-        Success(a)
-
-      override def map[A, B](fa: SwitchRes[A], f: A => B): SwitchRes[B] =
-        fa.map(f)
-
-      override def zip[A, B](fa: SwitchRes[A], fb: SwitchRes[B]): SwitchRes[(A, B)] =
-        (fa, fb) match
-          case (Success(a), Success(b)) => Success((a, b))
-          case (Success(_), Failure(f)) => Failure(f)
-          case (Failure(e), Success(_)) => Failure(e)
-          case (Failure(e), Failure(f)) => Failure(e ++ f)
-    }
+      Invalid(NonEmptyList(e, Nil))
   }
 
   private def switchImpl[A, R](using
@@ -1054,16 +1028,14 @@ object FreeScaletto extends Scaletto {
   )(
     a: $[A],
     cases: NonEmptyList[(SourcePos, LambdaContext ?=> $[A] => $[R])],
-  ): SwitchRes[$[R]] = {
-    import SwitchRes.{Success, Failure}
-
+  ): SwitchRes[$[R]] =
     for {
       // delambdify each case
       delams: NonEmptyList[Delambdified.Success[$, |*|, -?>, VarOrigin, ScopeInfo, A, R]] <-
         cases.traverse { case (pos, f) =>
           lambdas.delambdifyNested(ScopeInfo.SwitchCase(pos), VarOrigin.SwitchCase(pos), f) match
-            case f: Delambdified.Success[expr, p, arr, v, c, a, r] => Success(f)
-            case Delambdified.Failure(es) => Failure(es)
+            case f: Delambdified.Success[expr, p, arr, v, c, a, r] => Valid(f)
+            case Delambdified.Failure(es) => Invalid(es)
         }
 
       // make each case capture the least common superset of captured expressions
@@ -1072,7 +1044,6 @@ object FreeScaletto extends Scaletto {
 
       res <- switchDelambdified(a, delamN)
     } yield res
-  }
 
   private def switchDelambdified[A, R](using
     ctx: LambdaContext,
@@ -1110,7 +1081,7 @@ object FreeScaletto extends Scaletto {
           lambdas.Expr.map(xa, partial(f))(VarOrigin.SwitchOut(switchPos))
 
       case Failure(es) =>
-        SwitchRes.Failure(es)
+        Invalid(es)
   }
 
   private def compilePatternMatch[A, R](
@@ -1119,7 +1090,7 @@ object FreeScaletto extends Scaletto {
     withFirstScrutineeOf(cases.head.value._1)(
       { case TypeEq(Refl()) =>
         // the first case catches all, remaining cases ignored
-        SwitchRes.Success(cases.head.value._2.from[A])
+        Valid(cases.head.value._2.from[A])
       },
       [F[_], T] => (
         pos: Focus[|*|, F],
@@ -1248,7 +1219,7 @@ object FreeScaletto extends Scaletto {
           .foldMapA[SwitchRes, -⚬](
             [X, Y] => (f: PartialFun[X, Y]) =>
               f match {
-                case f: (X -⚬ Y) => SwitchRes.Success(f)
+                case f: (X -⚬ Y) => Valid(f)
                 case f: Extractor[x, y] => SwitchRes.misplacedExtractor(f)
               }
           )
