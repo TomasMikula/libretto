@@ -10,6 +10,8 @@ import libretto.lambda.util.Monad.monadEither
 import libretto.util.{Async, StaticValue}
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
+import libretto.lambda.util.TypeEqK
+import libretto.scaletto.impl.FreeScaletto.OneOf.Handlers
 
 object FreeScaletto extends Scaletto {
   sealed trait -⚬[A, B]
@@ -48,12 +50,47 @@ object FreeScaletto extends Scaletto {
       ev match { case TypeEq(Refl()) => (summon, summon) }
   }
 
-  sealed trait NAryInjector[Label, A, Cases]:
+  sealed trait OneOfCaseList[Cases] {
+    def distF[F[_]]: NAryDistF[F, Cases]
+  }
+
+  object OneOfCaseList {
+    case object VoidCaseList extends OneOfCaseList[Void] {
+      override def distF[F[_]]: NAryDistF[F, Void] =
+        NAryDistF.Empty()
+    }
+
+    case class ConsCaseList[HLbl, H, Tail](
+      tail: OneOfCaseList[Tail],
+    ) extends OneOfCaseList[(HLbl of H) :: Tail] {
+      override def distF[F[_]]: NAryDistF[F, (HLbl of H) :: Tail] =
+        val ft = tail.distF[F]
+        NAryDistF.Cons(ft)
+    }
+
+    def void: OneOfCaseList[Void] = VoidCaseList
+    def cons[HLbl, H, Tail](
+      tail: OneOfCaseList[Tail],
+    ): OneOfCaseList[(HLbl of H) :: Tail] =
+      ConsCaseList(tail)
+  }
+
+  sealed trait NAryInjector[Label, A, Cases] {
     import NAryInjector.*
 
     final type Type = A
 
     def nonVoidResult(using ev: Cases =:= Void): Nothing
+
+    def inTail[HLbl, H]: NAryInjector[Label, A, (HLbl of H):: Cases] =
+      InTail(this)
+
+    infix def testEqual[Lbl2, B](that: NAryInjector[Lbl2, B, Cases]): Option[A =:= B] =
+      (this, that) match
+        case (InHead(), InHead()) => Some(summon)
+        case (InTail(i), InTail(j)) => i testEqual j
+        case _ => None
+  }
 
   object NAryInjector {
     case class InHead[Label, A, Tail]() extends NAryInjector[Label, A, (Label of A) :: Tail]:
@@ -115,6 +152,18 @@ object FreeScaletto extends Scaletto {
     type Out
 
     def operationalize(f: Focus[|*|, F]): NAryDistF.Operationalized[F, Cases] { type Out = NAryDistF.this.Out }
+
+    def handlers[G[_], R](
+      h: [X] => NAryInjector[?, X, Cases] => G[F[X] -⚬ R],
+    )(using
+      G: Applicative[G],
+    ): G[OneOf.Handlers[Out, R]] =
+      handlers(h, G.pure(NAryHandlerBuilder.Empty[Out, R]()))
+
+    protected def handlers[FullOut, G[_]: Applicative, R](
+      h: [X] => NAryInjector[?, X, Cases] => G[F[X] -⚬ R],
+      acc: G[NAryHandlerBuilder[FullOut, Out, R]],
+    ): G[OneOf.Handlers[FullOut, R]]
   }
 
   object NAryDistF {
@@ -133,6 +182,14 @@ object FreeScaletto extends Scaletto {
             val d2: Operationalized[f2, Void]{type Out = Void} =
               Empty[f2]().operationalize(f.i)
             DistFst[a, f2, Void, Void, Void](d2, NAryDistLR.Empty())
+
+      override def handlers[FullOut, G[_], R](
+        h: [X] => NAryInjector[?, X, Void] => G[F[X] -⚬ R],
+        acc: G[NAryHandlerBuilder[FullOut, Void, R]],
+      )(using
+        G: Applicative[G],
+      ): G[OneOf.Handlers[FullOut, R]] =
+        acc
     }
 
     case class Cons[F[_], HLbl, H, Tail, FTail](
@@ -142,6 +199,24 @@ object FreeScaletto extends Scaletto {
 
       override def operationalize(f: Focus[|*|, F]): Operationalized[F, (HLbl of H) :: Tail]{type Out = (HLbl of F[H]) :: FTail} =
         tail.operationalize(f).extend[HLbl, H]
+
+      override protected def handlers[FullOut, G[_], R](
+        h: [X] => NAryInjector[?, X, (HLbl of H) :: Tail] => G[F[X] -⚬ R],
+        acc: G[NAryHandlerBuilder[FullOut, (HLbl of F[H]) :: FTail, R]],
+      )(using
+        G: Applicative[G],
+      ): G[Handlers[FullOut, R]] =
+        val h0: G[F[H] -⚬ R] =
+          h[H](NAryInjector.InHead())
+
+        val acc1: G[NAryHandlerBuilder[FullOut, FTail, R]] =
+          G.map2(acc, h0) { (acc, h0) => NAryHandlerBuilder.addHandler(acc, h0) }
+
+        val ht: [X] => NAryInjector[?, X, Tail] => G[F[X] -⚬ R] =
+          [X] => (i: NAryInjector[?, X, Tail]) =>
+            h[X](i.inTail)
+
+        tail.handlers[FullOut, G, R](ht, acc1)
     }
 
     /** Like [[NAryDistF]], witnesses that distributing `F` into `Cases` yields `Out`.
@@ -232,6 +307,49 @@ object FreeScaletto extends Scaletto {
       h: H -⚬ R,
     ): NAryHandlerBuilder[Cases, T, R] =
       Snoc(b, h)
+  }
+
+  private class OneOfPartitioning[Cases](
+    cases: OneOf.CaseList[Cases],
+  ) extends Partitioning[-⚬, |*|, OneOf[Cases]] {
+    override type Partition[A] = NAryInjector[?, A, Cases]
+
+    override def reinject[P](p: NAryInjector[?, P, Cases]): P -⚬ OneOf[Cases] =
+      OneOf.inject(using p)
+
+    override def isTotal[P](p: NAryInjector[?, P, Cases]): Option[NArySum[Cases] -⚬ P] =
+      libretto.lambda.UnhandledCase.raise("OneOfPartitioning.isTotal")
+
+    override def sameAs(
+      that: Partitioning[-⚬, |*|, NArySum[Cases]],
+    ): Option[TypeEqK[NAryInjector[?, _, Cases], that.Partition]] =
+      that match
+        case that1: (OneOfPartitioning[Cases] & that.type) =>
+          Some(TypeEqK.refl[this.Partition]): Option[TypeEqK[this.Partition, that1.Partition]]
+        case _ =>
+          None
+
+    override def samePartition[P, Q](
+      p: NAryInjector[?, P, Cases],
+      q: NAryInjector[?, Q, Cases],
+    ): Option[P =:= Q] =
+      p testEqual q
+
+    override def compileAt[F[_], G[_], R](
+      pos: Focus[|*|, F],
+      handle: [X] => Partition[X] => G[F[X] -⚬ R],
+    )(using
+      Applicative[G],
+    ): G[F[OneOf[Cases]] -⚬ R] =
+      val d: OneOf.DistF[F, Cases] =
+        cases.distF[F]
+
+      val handlers: G[OneOf.Handlers[d.Out, R]] =
+        d.handlers[G, R](handle)
+
+      handlers.map { handlers =>
+        OneOf.distF(using pos, d) > OneOf.handle(handlers)
+      }
   }
 
   object -⚬ {
@@ -618,6 +736,7 @@ object FreeScaletto extends Scaletto {
     FactorOutInversion()
 
   override object OneOf extends OneOfModule {
+    override type CaseList[Cases] = OneOfCaseList[Cases]
     override type Injector[Label, A, Cases] = NAryInjector[Label, A, Cases]
     override type IsCaseOf[Label, Cases] = NAryInjector[Label, ?, Cases]
     override type Handlers[Cases, R] = NAryHandlerBuilder[Cases, Void, R]
@@ -718,6 +837,11 @@ object FreeScaletto extends Scaletto {
         c
     }
 
+    override def voidCaseList: CaseList[Void] =
+      OneOfCaseList.void
+
+    override def consCaseList[HLbl, H, Tail](using t: CaseList[Tail]): CaseList[(HLbl of H) :: Tail] =
+      OneOfCaseList.cons(t)
 
     override def headInjector[HLbl, H, Tail]: Injector[HLbl, H, (HLbl of H) :: Tail] =
       NAryInjector.InHead()
@@ -758,6 +882,17 @@ object FreeScaletto extends Scaletto {
       extension [Cases, HLbl, H, T, R](b: Builder[Cases, (HLbl of H) :: T, R])
         override def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl)(h: H -⚬ R): Builder[Cases, T, R] =
           NAryHandlerBuilder.addHandler(b, h)
+    }
+
+    override opaque type Partitioning[Cases] <: libretto.lambda.Partitioning[-⚬, |*|, OneOf[Cases]] =
+      OneOfPartitioning[Cases]
+
+    override def partitioning[Cases](using ev: CaseList[Cases]): Partitioning[Cases] =
+      OneOfPartitioning(ev)
+
+    extension [Cases](p: Partitioning[Cases]) {
+      override def apply[C](using ev: IsCaseOf[C, Cases]): Extractor[OneOf[Cases], ev.Type] =
+        p.extractor[ev.Type](ev)
     }
   }
 

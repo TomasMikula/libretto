@@ -68,6 +68,11 @@ trait CoreDSL {
   val OneOf: OneOfModule
 
   trait OneOfModule {
+    /** Witnesses that `Cases` is a list of cases, usable in `OneOf`,
+     * i.e. that `Cases` is of the form `(Name1 of T1) :: ... :: Void`.
+     */
+    type CaseList[Cases]
+
     type IsCaseOf[Label, Cases] <: { type Type }
     type DistLR[A, Cases] <: { type Out }
 
@@ -103,6 +108,8 @@ trait CoreDSL {
         def end[R]: Handlers[Void, R] =
           apply[Void, R].end
 
+    given voidCaseList: CaseList[Void]
+    given consCaseList[HLbl, H, Tail](using t: CaseList[Tail]): CaseList[(HLbl of H) :: Tail]
     given headInjector[HLbl, H, Tail]: Injector[HLbl, H, (HLbl of H) :: Tail]
     given tailInjector[Lbl, A, HLbl, H, Tail](using j: Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl of H) :: Tail]
     given isCaseOf[Label, A, Cases](using i: Injector[Label, A, Cases]): IsCaseOf[Label, Cases] { type Type = A }
@@ -143,6 +150,20 @@ trait CoreDSL {
     class HandleInit[Cases]:
       def apply[R](handlers: Handlers.InitialBuilder[Cases] => Handlers[Cases, R]): OneOf[Cases] -⚬ R =
         handle[Cases, R](handlers(Handlers.InitialBuilder[Cases]))
+
+    type Partitioning[Cases] <: libretto.lambda.Partitioning[-⚬, |*|, OneOf[Cases]]
+
+    def partition[ADT](using
+      u: Unapply[ADT, OneOf],
+      ev: CaseList[u.A],
+    ): Partitioning[u.A] =
+      partitioning[u.A]
+
+    def partitioning[Cases](using ev: CaseList[Cases]): Partitioning[Cases]
+
+    extension [Cases](p: Partitioning[Cases]) {
+      def apply[C](using ev: IsCaseOf[C, Cases]): Extractor[-⚬, |*|, OneOf[Cases], ev.Type]
+    }
   }
 
   /** Signal that travels in the direction of [[-⚬]], i.e. the positive direction.
