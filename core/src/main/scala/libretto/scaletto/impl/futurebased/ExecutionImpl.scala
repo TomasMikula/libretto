@@ -1167,7 +1167,7 @@ private class ExecutionImpl(
           case Deferred(f) => Deferred(f.map(_.narySumPeel))
           case OneOfInject(a, i) =>
             i match
-              case OneOf.InjectorImpl.InHead() => InjectL(a)
+              case OneOf.InjectorImpl.InHead(_) => InjectL(a)
               case OneOf.InjectorImpl.InTail(j) => InjectR(OneOfInject(a, j))
     }
 

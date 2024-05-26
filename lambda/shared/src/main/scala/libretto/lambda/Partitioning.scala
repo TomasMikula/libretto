@@ -20,6 +20,8 @@ trait Partitioning[->[_, _], <*>[_, _], T] {
 
   def reinject[P](p: Partition[P]): P -> T
 
+  def showPartition[P](p: Partition[P]): String
+
   def extractor[P](p: Partition[P]): Partitioning.Extractor[->, <*>, T, P] =
     Partitioning.Extractor(this, p)
 }
@@ -41,6 +43,9 @@ object Partitioning {
         .map { ev =>
           this.partitioning.samePartition(this.partition, ev.flip.at[Q](that.partition))
         }
+
+    def show: String =
+      partitioning.showPartition(partition)
   }
 
   sealed trait RebaseRes[->[_, _], <*>[_, _], T, Q, P]

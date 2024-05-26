@@ -2,7 +2,8 @@ package libretto
 
 import libretto.lambda.Focus
 import libretto.lambda.Partitioning.Extractor
-import libretto.lambda.util.SourcePos
+import libretto.lambda.util.{SourcePos, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
 import libretto.util.{Equal, StaticValue}
 import libretto.util.unapply.Unapply
 
@@ -109,16 +110,18 @@ trait CoreDSL {
           apply[Void, R].end
 
     given voidCaseList: CaseList[Void]
-    given consCaseList[HLbl, H, Tail](using t: CaseList[Tail]): CaseList[(HLbl of H) :: Tail]
-    given headInjector[HLbl, H, Tail]: Injector[HLbl, H, (HLbl of H) :: Tail]
+    given consCaseList[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl], t: CaseList[Tail]): CaseList[(HLbl of H) :: Tail]
+    given headInjector[HLbl <: String, H, Tail](using l: StaticValue[HLbl]): Injector[HLbl, H, (HLbl of H) :: Tail]
     given tailInjector[Lbl, A, HLbl, H, Tail](using j: Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl of H) :: Tail]
     given isCaseOf[Label, A, Cases](using i: Injector[Label, A, Cases]): IsCaseOf[Label, Cases] { type Type = A }
     given distLRVoid[A]: DistLR[A, Void] { type Out = Void }
-    given distLRCons[A, Label, H, Tail](using
+    given distLRCons[A, Label <: String, H, Tail](using
+      label: StaticValue[Label],
       tail: DistLR[A, Tail],
     ): DistLR[A, (Label of H) :: Tail] { type Out = (Label of (A |*| H)) :: tail.Out }
     given distFVoid[F[_]]: DistF[F[_], Void] { type Out = Void }
-    given distFCons[F[_], Label, H, Tail](using
+    given distFCons[F[_], Label <: String, H, Tail](using
+      label: StaticValue[Label],
       tail: DistF[F, Tail],
     ): DistF[F, (Label of H) :: Tail] { type Out = (Label of F[H]) :: tail.Out }
 
@@ -645,6 +648,16 @@ trait CoreDSL {
       handlers: OneOf.Handlers.InitialBuilder[Cases] => OneOf.Handlers[Cases, R]
     ): $[R] =
       x :>> OneOf.HandleInit[Cases].apply(handlers)
+
+    def matchAgainst(using SourcePos, OneOf.CaseList[Cases], LambdaContext)(
+      label: String,
+    )(using
+      i: OneOf.IsCaseOf[label.type, Cases],
+    ): $[i.Type] =
+      $.matchAgainst(
+        x,
+        OneOf.partitioning[Cases][label.type],
+      )(summon[SourcePos])
   }
 
   def constant[A](f: One -⚬ A)(using SourcePos, LambdaContext): $[A] =
