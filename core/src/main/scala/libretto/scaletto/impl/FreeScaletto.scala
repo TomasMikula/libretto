@@ -979,8 +979,13 @@ object FreeScaletto extends Scaletto {
       partitioning.extractor(partition)
   }
 
+  private case class ExtractorOccurrence[A, B](
+    ext: Extractor[A, B],
+    pos: SourcePos,
+  )
+
   private type PartialFun[A, B] =
-    (A -⚬ B) | Extractor[A, B]
+    (A -⚬ B) | ExtractorOccurrence[A, B]
 
   private val psh: Shuffled[PartialFun, |*|] =
     Shuffled[PartialFun, |*|]
@@ -1000,8 +1005,8 @@ object FreeScaletto extends Scaletto {
         g match
           case g: (X -⚬ Y) =>
             TotalRes.success(g)
-          case p: Extractor[X, Y] =>
-            p.isTotal match
+          case p: ExtractorOccurrence[X, Y] =>
+            p.ext.isTotal match
               case Some(g) => TotalRes.success(g)
               case None => libretto.lambda.UnhandledCase.raise(s"Non-exhaustive matcher $p")
       }
@@ -1048,7 +1053,7 @@ object FreeScaletto extends Scaletto {
       )
 
     override def matchAgainst[A, B](a: $[A], extractor: Extractor[A, B])(pos: SourcePos)(using LambdaContext): $[B] =
-      lambdas.Expr.map(a, psh.lift(extractor))(VarOrigin.ExtractorRes(pos))
+      lambdas.Expr.map(a, psh.lift(ExtractorOccurrence(extractor, pos)))(VarOrigin.ExtractorRes(pos))
 
     override def switchEither[A, B, C](
       ab: $[A |+| B],
@@ -1128,7 +1133,7 @@ object FreeScaletto extends Scaletto {
         switchImpl(using ctx, switchPos)(a, NonEmptyList(c, cs))
           .getOrReportErrors
 
-  private case class MisplacedExtractor(ext: Extractor[?, ?])
+  private case class MisplacedExtractor(ext: ExtractorOccurrence[?, ?])
 
   private enum PatternMatchError:
     case IncompatibleExtractors(base: Extractor[?, ?], incompatible: NonEmptyList[Extractor[?, ?]])
@@ -1147,7 +1152,7 @@ object FreeScaletto extends Scaletto {
     def nonExhaustiveness[T](ext: Extractor[?, ?]): SwitchRes[T] =
       failure(PatternMatchError.NonExhaustiveness(ext))
 
-    def misplacedExtractor[T](ext: Extractor[?, ?]): SwitchRes[T] =
+    def misplacedExtractor[T](ext: ExtractorOccurrence[?, ?]): SwitchRes[T] =
       failure(MisplacedExtractor(ext))
 
     def incompatibleExtractors[T](base: Extractor[?, ?], incompatible: NonEmptyList[Extractor[?, ?]]): SwitchRes[T] =
@@ -1345,7 +1350,7 @@ object FreeScaletto extends Scaletto {
       pos,
       [X, Y] => (f: PartialFun[X, Y]) =>
         f match {
-          case ex: Extractor[X, Y] => Some(ex)
+          case eo: ExtractorOccurrence[X, Y] => Some(eo.ext)
           case _ => None
         }
     ) match
@@ -1355,7 +1360,7 @@ object FreeScaletto extends Scaletto {
             [X, Y] => (f: PartialFun[X, Y]) =>
               f match {
                 case f: (X -⚬ Y) => Valid(f)
-                case f: Extractor[x, y] => SwitchRes.misplacedExtractor(f)
+                case f: ExtractorOccurrence[x, y] => SwitchRes.misplacedExtractor(f)
               }
           )
           .map(h => Exists((pattern, h)))
@@ -1587,7 +1592,9 @@ object FreeScaletto extends Scaletto {
     }
 
     private def misplacedExtMsg(e: MisplacedExtractor): NonEmptyList[String] =
-      NonEmptyList.of(s"Extractor used outside of switch pattern: ${e.ext.show}") // TODO: report position
+      e match { case MisplacedExtractor(ExtractorOccurrence(ext, pos)) =>
+        NonEmptyList.of(s"Extractor used outside of switch pattern: ${ext.show} (at ${pos.filename}:${pos.line})")
+      }
 
     private def patmatMsg(e: PatternMatchError): NonEmptyList[String] =
       e match
