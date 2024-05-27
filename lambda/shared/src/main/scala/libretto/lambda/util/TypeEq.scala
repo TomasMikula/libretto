@@ -32,6 +32,9 @@ sealed trait TypeEqK[F[_], G[_]]:
   def flip: TypeEqK[G, F] =
     subst[[f[_]] =>> TypeEqK[f, F]](refl[F])
 
+  infix def andThen[H[_]](that: TypeEqK[G, H]): TypeEqK[F, H] =
+    that.subst(this)
+
 object TypeEqK {
   case class Refl[F[_]]() extends TypeEqK[F, F]:
     override def subst[H[_[_]]](hf: H[F]): H[F] = hf

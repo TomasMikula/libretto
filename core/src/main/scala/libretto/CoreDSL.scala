@@ -660,6 +660,13 @@ trait CoreDSL {
       )(summon[SourcePos])
   }
 
+  extension [F[_]](x: $[Rec[F]]) {
+    def unpackedMatchAgainst[B](ext: Extractor[-⚬, |*|, F[Rec[F]], B])(using
+      SourcePos,
+      LambdaContext,
+    ): $[B]
+  }
+
   def constant[A](f: One -⚬ A)(using SourcePos, LambdaContext): $[A] =
     f($.one)
 

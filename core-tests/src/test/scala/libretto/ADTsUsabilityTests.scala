@@ -47,13 +47,34 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
       def branch[A]: (NonEmptyTree[A] |*| NonEmptyTree[A]) -⚬ NonEmptyTree[A] =
         OneOf.create[NonEmptyTreeF[A, NonEmptyTree[A]]].from["Branch"] > pack[A]
 
-      def foldMap[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): NonEmptyTree[A] -⚬ B =
+      object Leaf {
+        def unapply[A](x: $[NonEmptyTree[A]])(using pos: SourcePos, ctx: LambdaContext): Some[$[A]] =
+          Some(x.unpackedMatchAgainst(OneOf.partition[NonEmptyTreeF[A, NonEmptyTree[A]]]["Leaf"]))
+      }
+
+      object Branch {
+        def unapply[A](x: $[NonEmptyTree[A]])(using pos: SourcePos, ctx: LambdaContext): Some[$[NonEmptyTree[A] |*| NonEmptyTree[A]]] =
+          Some(x.unpackedMatchAgainst(OneOf.partition[NonEmptyTreeF[A, NonEmptyTree[A]]]["Branch"]))
+      }
+
+      /** `foldMap` using barebones handling of cases in order. */
+      def foldMapBB[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): NonEmptyTree[A] -⚬ B =
         rec { self =>
           unpack[A] > OneOf.handle(_
             .caseOf["Leaf"](f)
             .caseOf["Branch"](par(self, self) > g)
             .end
           )
+        }
+
+      def foldMap[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): NonEmptyTree[A] -⚬ B =
+        rec { self =>
+          λ { ta =>
+            switch(ta)
+              .is { case Leaf(a) => f(a) }
+              .is { case Branch(l |*| r) => g(self(l) |*| self(r)) }
+              .end
+          }
         }
     }
 
@@ -74,7 +95,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
       def foldMapBB[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): Tree[A] -⚬ Maybe[B] =
         OneOf.handle[Tree[A]](_
           .caseOf["Empty"](Maybe.empty[B])
-          .caseOf["NonEmpty"](NonEmptyTree.foldMap(f, g) > Maybe.just)
+          .caseOf["NonEmpty"](NonEmptyTree.foldMapBB(f, g) > Maybe.just)
           .end
         )
 
@@ -113,18 +134,18 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
 
       object Empty {
         def unapply[A](x: $[Tree[A]])(using pos: SourcePos, ctx: LambdaContext): Some[$[One]] =
-          Some($.matchAgainst(x, OneOf.partition[Tree[A]]["Empty"])(pos))
+          Some(x.matchAgainst("Empty"))
       }
 
       object NonEmpty {
         def unapply[A](x: $[Tree[A]])(using pos: SourcePos, ctx: LambdaContext): Some[$[NonEmptyTree[A]]] =
-          Some($.matchAgainst(x, OneOf.partition[Tree[A]]["NonEmpty"])(pos))
+          Some(x.matchAgainst("NonEmpty"))
       }
     }
 
     List(
-      "foldMap_a" -> Tree.foldMapBB[Val[Int], Val[Int]],
-      "foldMap_b" -> Tree.foldMap[Val[Int], Val[Int]],
+      "foldMapBB" -> Tree.foldMapBB[Val[Int], Val[Int]],
+      "foldMap" -> Tree.foldMap[Val[Int], Val[Int]],
     ).map { case (desc, foldMap) =>
 
       s"create and fold Tree ($desc)" ->
@@ -148,8 +169,8 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
         }
 
     } ++ List(
-      "concat_a" -> Tree.concatBB[Val[Int]],
-      "concat_b" -> Tree.concat[Val[Int]],
+      "concatBB" -> Tree.concatBB[Val[Int]],
+      "concat" -> Tree.concat[Val[Int]],
     ).map { case (desc, concat) =>
 
       s"concatenate trees ($desc)" ->

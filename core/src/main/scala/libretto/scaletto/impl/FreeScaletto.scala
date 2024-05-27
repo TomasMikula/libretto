@@ -12,6 +12,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 import libretto.lambda.util.TypeEqK
 import libretto.scaletto.impl.FreeScaletto.OneOf.Handlers
+import libretto.lambda.Partitioning.SubFun
 
 object FreeScaletto extends Scaletto {
   sealed trait -⚬[A, B]
@@ -1094,6 +1095,44 @@ object FreeScaletto extends Scaletto {
       )
       a
     }
+  }
+
+  private sealed trait UnpackOnlyFun[A, B]:
+    def compile: (A -⚬ B)
+    def reverseCompile: (B -⚬ A)
+
+  private object UnpackOnlyFun {
+    case class Unpack[F[_]]() extends UnpackOnlyFun[Rec[F], F[Rec[F]]]:
+      override def compile: Rec[F] -⚬ F[Rec[F]] = unpack
+      override def reverseCompile: F[Rec[F]] -⚬ Rec[F] = pack
+
+    object UnpackOnlySubFun extends Partitioning.SubFun[-⚬, UnpackOnlyFun] {
+      override def compile[X, Y](f: UnpackOnlyFun[X, Y]): X -⚬ Y = f.compile
+      override def reverseCompile[X, Y](f: UnpackOnlyFun[X, Y]): Y -⚬ X = f.reverseCompile
+
+      override def sameAs[G[_,_]](that: SubFun[-⚬, G]): Option[[X, Y] => UnpackOnlyFun[X, Y] => G[X, Y]] =
+        that match
+          case UnpackOnlySubFun =>
+            Some([X, Y] => (f: UnpackOnlyFun[X, Y]) => f)
+          case _ =>
+            None
+
+      override def testEqual[X, Y, Z](f: UnpackOnlyFun[X, Y], g: UnpackOnlyFun[X, Z]): Option[Y =:= Z] =
+        (f, g) match
+          case (Unpack(), Unpack()) =>
+            Some(summon[Y =:= Z])
+    }
+
+    given Partitioning.SubFun[-⚬, UnpackOnlyFun] = UnpackOnlySubFun
+  }
+
+  extension [F[_]](x: $[Rec[F]]) {
+    override def unpackedMatchAgainst[B](ext: Extractor[F[Rec[F]], B])(using pos: SourcePos, ctx: LambdaContext): $[B] =
+      val ext1 =
+        ext.contramap[UnpackOnlyFun, Rec[F]](
+          UnpackOnlyFun.Unpack[F](),
+        )
+      $.matchAgainst(x, ext1)(pos)
   }
 
   private def switchSink[A, R](
