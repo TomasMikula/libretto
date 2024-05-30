@@ -126,6 +126,7 @@ trait CoreDSL {
     ): DistF[F, (Label of H) :: Tail] { type Out = (Label of F[H]) :: tail.Out }
 
     def inject[Label, A, Cases](using Injector[Label, A, Cases]): A -⚬ OneOf[Cases]
+    def inject[Cases](label: String)(using i: IsCaseOf[label.type, Cases]): i.Type -⚬ OneOf[Cases] = inject(using Injector(i))
     def handle[Cases, R](handlers: Handlers[Cases, R]): OneOf[Cases] -⚬ R
     def distLR[A, Cases](using ev: DistLR[A, Cases]): (A |*| OneOf[Cases]) -⚬ OneOf[ev.Out]
     def distF[F[_], Cases](using F: Focus[|*|, F], ev: DistF[F, Cases]): F[OneOf[Cases]] -⚬ OneOf[ev.Out]

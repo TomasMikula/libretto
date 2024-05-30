@@ -30,13 +30,13 @@ sealed trait AForest[->[_, _], <*>[_, _], A, B] {
 
   def focus[F[_], X](pos: Focus[<*>, F])(using
     in: BiInjective[<*>],
-    ev: A =:= F[X],
+    ev: F[X] =:= A,
   ): AForest.Focused[->, <*>, F, X, B] =
     import AForest.Focused
 
     pos match
       case Focus.Id() =>
-        Focused.At(AForest.Punched.Id(), this.from[X](using ev.flip))
+        Focused.At(AForest.Punched.Id(), this.from[X])
       case Focus.Fst(pos1) =>
         focusFst(pos1)
       case Focus.Snd(pos2) =>
@@ -46,14 +46,14 @@ sealed trait AForest[->[_, _], <*>[_, _], A, B] {
     f1: Focus[<*>, F1],
   )(using
     BiInjective[<*>],
-    A =:= (F1[X] <*> A2),
+    (F1[X] <*> A2) =:= A,
   ): AForest.Focused[->, <*>, [x] =>> F1[x] <*> A2, X, B]
 
   protected def focusSnd[A1, F2[_], X](
     f2: Focus[<*>, F2],
   )(using
     BiInjective[<*>],
-    A =:= (A1 <*> F2[X]),
+    (A1 <*> F2[X]) =:= A,
   ): AForest.Focused[->, <*>, [x] =>> A1 <*> F2[x], X, B]
 
   def from[Z](using ev: Z =:= A): AForest[->, <*>, Z, B] =
@@ -64,11 +64,23 @@ object AForest {
   case class Empty[->[_, _], <*>[_, _], A]() extends AForest[->, <*>, A, A] {
     override def nonEmpty = false
 
-    override protected def focusFst[F1[_], X, A2](f1: Focus[<*>, F1])(using BiInjective[<*>], A =:= F1[X] <*> A2): Focused[->, <*>, [x] =>> F1[x] <*> A2, X, A] =
-      UnhandledCase.raise(s"AForest.Empty.focusFst")
+    override protected def focusFst[F1[_], X, A2](f1: Focus[<*>, F1])(using
+      BiInjective[<*>],
+      (F1[X] <*> A2) =:= A,
+    ): Focused[->, <*>, [x] =>> F1[x] <*> A2, X, A] =
+      Empty[->, <*>, F1[X]]()
+        .focus[F1, X](f1)
+        .inFst(snd = Empty[->, <*>, A2]())
+        .to[A]
 
-    override protected def focusSnd[A1, F2[_], X](f2: Focus[<*>, F2])(using BiInjective[<*>], A =:= A1 <*> F2[X]): Focused[->, <*>, [x] =>> A1 <*> F2[x], X, A] =
-      UnhandledCase.raise(s"AForest.Empty.focusSnd")
+    override protected def focusSnd[A1, F2[_], X](f2: Focus[<*>, F2])(using
+      BiInjective[<*>],
+      (A1 <*> F2[X]) =:= A,
+    ): Focused[->, <*>, [x] =>> A1 <*> F2[x], X, A] =
+      Empty[->, <*>, F2[X]]()
+        .focus[F2, X](f2)
+        .inSnd(fst = Empty[->, <*>, A1]())
+        .to[A]
   }
 
   sealed trait NonEmpty[->[_, _], <*>[_, _], A, B] extends AForest[->, <*>, A, B] {
@@ -79,10 +91,16 @@ object AForest {
     value: A -> X,
     children: AForest[->, <*>, X, B],
   ) extends AForest.NonEmpty[->, <*>, A, B] {
-    override protected def focusFst[F1[_], X, A2](f1: Focus[<*>, F1])(using BiInjective[<*>], A =:= F1[X] <*> A2): Focused[->, <*>, [x] =>> F1[x] <*> A2, X, B] =
+    override protected def focusFst[F1[_], X, A2](f1: Focus[<*>, F1])(using
+      BiInjective[<*>],
+      (F1[X] <*> A2) =:= A,
+    ): Focused[->, <*>, [x] =>> F1[x] <*> A2, X, B] =
       UnhandledCase.raise(s"Node.focusFst")
 
-    override protected def focusSnd[A1, F2[_], X](f2: Focus[<*>, F2])(using BiInjective[<*>], A =:= A1 <*> F2[X]): Focused[->, <*>, [x] =>> A1 <*> F2[x], X, B] =
+    override protected def focusSnd[A1, F2[_], X](f2: Focus[<*>, F2])(using
+      BiInjective[<*>],
+      (A1 <*> F2[X]) =:= A,
+    ): Focused[->, <*>, [x] =>> A1 <*> F2[x], X, B] =
       UnhandledCase.raise(s"Node.focusSnd")
   }
 
@@ -94,19 +112,19 @@ object AForest {
 
     override protected def focusFst[F1[_], X, Y](pos1: Focus[<*>, F1])(using
       in: BiInjective[<*>],
-      ev: A1 <*> A2 =:= F1[X] <*> Y,
+      ev: (F1[X] <*> Y) =:= (A1 <*> A2),
     ): Focused[->, <*>, [x] =>> F1[x] <*> Y, X, B1 <*> B2] =
       ev match { case BiInjective[<*>](ev1, TypeEq(Refl())) =>
-        given (A1 =:= F1[X]) = ev1
+        given (F1[X] =:= A1) = ev1
         f1.focus(pos1).inFst(f2)
       }
 
     override protected def focusSnd[X, F2[_], Y](pos2: Focus[<*>, F2])(using
       in: BiInjective[<*>],
-      ev: A1 <*> A2 =:= X <*> F2[Y],
+      ev: (X <*> F2[Y]) =:= (A1 <*> A2),
     ): Focused[->, <*>, [x] =>> X <*> F2[x], Y, B1 <*> B2] =
       ev match { case BiInjective[<*>](TypeEq(Refl()), ev2) =>
-        given (A2 =:= F2[Y]) = ev2
+        given (F2[Y] =:= A2) = ev2
         f2.focus(pos2).inSnd(f1)
       }
   }
@@ -178,6 +196,9 @@ object AForest {
   sealed trait Focused[->[_, _], <*>[_, _], F[_], X, B] {
     def inFst[T, U](snd: AForest[->, <*>, T, U]): Focused[->, <*>, [x] =>> F[x] <*> T, X, B <*> U]
     def inSnd[T, U](fst: AForest[->, <*>, T, U]): Focused[->, <*>, [x] =>> T <*> F[x], X, U <*> B]
+
+    def to[C](using ev: B =:= C): Focused[->, <*>, F, X, C] =
+      ev.substituteCo(this)
   }
 
   object Focused {
