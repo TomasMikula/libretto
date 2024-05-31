@@ -71,7 +71,7 @@ object FreeScaletto extends Scaletto {
     case class OneOfInject[Label, A, Cases](i: OneOf.Injector[Label, A, Cases]) extends (A -⚬ OneOf[Cases])
     case class OneOfPeel[Label, A, Cases]() extends (OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases]))
     case class OneOfUnpeel[Label, A, Cases]() extends ((A |+| OneOf[Cases]) -⚬ OneOf[(Label of A) :: Cases])
-    case class OneOfVoid() extends (OneOf[Void] -⚬ Void)
+    case class OneOfExtractSingle[Lbl, A]() extends (OneOf[Lbl of A] -⚬ A)
     case class ChooseL[A, B]() extends ((A |&| B) -⚬ A)
     case class ChooseR[A, B]() extends ((A |&| B) -⚬ B)
     case class Choice[A, B, C](f: A -⚬ B, g: A -⚬ C) extends (A -⚬ (B |&| C))
@@ -454,8 +454,8 @@ object FreeScaletto extends Scaletto {
     override def unpeel[Label, A, Cases]: (A |+| OneOf[Cases]) -⚬ OneOf[(Label of A) :: Cases] =
       OneOfUnpeel()
 
-    override def void: OneOf[Void] -⚬ Void =
-      OneOfVoid()
+    override def extract[Label, A]: OneOf[Label of A] -⚬ A =
+      OneOfExtractSingle()
 
     override def distF[F[_], Cases](using F: Focus[|*|, F], ev: DistF[F, Cases]): F[OneOf[Cases]] -⚬ OneOf[ev.Out] =
       distF(ev.operationalize(F))
@@ -468,16 +468,23 @@ object FreeScaletto extends Scaletto {
 
     private def distLR_[A, Cases, ACases](using ev: DistLR[A, Cases] { type Out = ACases }): (A |*| OneOf[Cases]) -⚬ OneOf[ACases] =
       ev match
-        case DistLRImpl.Empty() =>
-          summon[Cases =:= Void]
-          andThen(
-            snd(andThen(void, absurd[-[A] |*| OneOf[ev.Out]])),
-            andThen(assocRL, andThen(fst(backvert), elimFst))
-          )
+        case s: DistLRImpl.Single[a, n, b] =>
+          summon[Cases =:= (n of b)]
+          val ev1: ((n of (A |*| b)) =:= ACases) =
+            summon[(n of (A |*| b)) =:= s.Out] andThen summon[s.Out =:= ACases]
+          distLRSingle(s.label).to(using ev1.liftCo[OneOf])
         case c: DistLRImpl.Cons[a, n, h, t, at] =>
           val ev1: (((n of (a |*| h)) :: at) =:= ACases) =
             summon[((n of (a |*| h)) :: at) =:= c.Out] andThen summon[c.Out =:= ACases]
           distLRIntoTail[A, n, h, t, at](c.hLbl, c.tail).to(using ev1.liftCo[OneOf])
+
+    private def distLRSingle[A, Lbl <: String, B](
+      lbl: Lbl,
+    ): (A |*| OneOf[Lbl of B]) -⚬ OneOf[Lbl of (A |*| B)] =
+      andThen(
+        extract[Lbl, B].inSnd[A],
+        inject(using InjectorImpl.Single(lbl)),
+      )
 
     private def distLRIntoTail[A, HLbl <: String, H, Tail, ATail](
       hLbl: HLbl,
@@ -495,16 +502,22 @@ object FreeScaletto extends Scaletto {
 
     private def distRL_[B, Cases, BCases](using ev: DistRL[B, Cases] { type Out = BCases }): (OneOf[Cases] |*| B) -⚬ OneOf[BCases] =
       ev match
-        case DistRLImpl.Empty() =>
-          summon[Cases =:= Void]
-          andThen(
-            fst(andThen(void, absurd[OneOf[ev.Out] |*| -[B]])),
-            andThen(assocLR, andThen(snd(andThen(swap, backvert)), elimSnd))
-          )
+        case s: DistRLImpl.Single[b, n, a] =>
+          val ev1: ((n of (a |*| B)) =:= BCases) =
+            summon[(n of (a |*| B)) =:= s.Out] andThen summon[s.Out =:= BCases]
+          distRLSingle(s.label).to(using ev1.liftCo[OneOf])
         case c: DistRLImpl.Cons[b, n, h, t, bt] =>
           val ev1: (((n of (h |*| b)) :: bt) =:= BCases) =
             summon[((n of (h |*| b)) :: bt) =:= c.Out] andThen summon[c.Out =:= BCases]
           distRLIntoTail[B, n, h, t, bt](c.hLbl, c.tail).to(using ev1.liftCo[OneOf])
+
+    private def distRLSingle[B, Lbl <: String, A](
+      lbl: Lbl,
+    ): (OneOf[Lbl of A] |*| B) -⚬ OneOf[Lbl of (A |*| B)] =
+      andThen(
+        extract[Lbl, A].inFst[B],
+        inject(using InjectorImpl.Single(lbl)),
+      )
 
     private def distRLIntoTail[B, HLbl <: String, H, Tail, BTail](
       hLbl: HLbl,
@@ -522,11 +535,14 @@ object FreeScaletto extends Scaletto {
         c
     }
 
-    override def voidCaseList: CaseList[Void] =
-      CaseListImpl.void
+    override def singleCaseList[Lbl <: String, A](using label: StaticValue[Lbl]): CaseList[Lbl of A] =
+      CaseListImpl.singleCase(label.value)
 
     override def consCaseList[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl], t: CaseList[Tail]): CaseList[(HLbl of H) :: Tail] =
       CaseListImpl.cons(hLbl.value, t)
+
+    override def singleInjector[Lbl <: String, A](using label: StaticValue[Lbl]): Injector[Lbl, A, Lbl of A] =
+      InjectorImpl.Single(label.value)
 
     override def headInjector[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): Injector[HLbl, H, (HLbl of H) :: Tail] =
       InjectorImpl.InHead(hLbl.value)
@@ -543,11 +559,13 @@ object FreeScaletto extends Scaletto {
     ): DistLR[A, (Label of H) :: Tail] { type Out = (Label of (A |*| H)) :: tail.Out } =
       DistLRImpl.cons[A, Label, H, Tail](label.value, tail)
 
-    override def distLRVoid[A]: DistLR[A, Void] { type Out = Void } =
-      DistLRImpl.Empty[A]()
+    override def distLRSingle[A, Label <: String, B](using
+      label: StaticValue[Label],
+    ): DistLR[A, Label of B] { type Out = Label of (A |*| B) } =
+      DistLRImpl.Single(label.value)
 
-    override def distFVoid[F[_]]: DistF[F, Void]{ type Out = Void } =
-      DistFImpl.Empty()
+    override def distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): DistF[F, Lbl of A]{ type Out = Lbl of F[A] } =
+      DistFImpl.Single(label.value)
 
     override def distFCons[F[_], Label <: String, H, Tail](using
       label: StaticValue[Label],
@@ -556,15 +574,27 @@ object FreeScaletto extends Scaletto {
       DistFImpl.Cons(label.value, tail)
 
     override object Handlers extends HandlersModule {
+      override def single[Lbl, A, R](h: A -⚬ R): Handlers[Lbl of A, R] =
+        HandlersImpl.Single(h)
+
+      override def cons[HLbl, H, T, R](
+        h: H -⚬ R,
+        t: Handlers[T, R],
+      ): Handlers[(HLbl of H) :: T, R] =
+        HandlersImpl.Cons(h, t)
+
+      override opaque type InitialBuilder[Cases] = Unit
+      override def initialBuilder[Cases]: InitialBuilder[Cases] = ()
+
       override type Builder[Cases, RemainingCases, R] =
         HandlersBuilder[Cases, RemainingCases, R]
 
       override def apply[Cases, R]: Builder[Cases, Cases, R] =
         HandlersBuilder.Empty()
 
-      extension [Cases, R](b: Builder[Cases, Void, R])
-        override def end: Handlers[Cases, R] =
-          HandlersBuilder.build(b)
+      extension [Cases, Lbl, A, R](b: Builder[Cases, Lbl of A, R])
+        override def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit)(h: A -⚬ R): Handlers[Cases, R] =
+          HandlersBuilder.build(b, h)
 
       extension [Cases, HLbl, H, T, R](b: Builder[Cases, (HLbl of H) :: T, R])
         override def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl)(h: H -⚬ R): Builder[Cases, T, R] =
@@ -587,9 +617,11 @@ object FreeScaletto extends Scaletto {
     }
 
     object CaseListImpl {
-      case object VoidCaseList extends CaseListImpl[Void] {
-        override def distF[F[_]]: DistFImpl[F, Void] =
-          DistFImpl.Empty()
+      case class SingleCaseList[Lbl <: String, A](
+        lbl: Lbl,
+      ) extends CaseListImpl[Lbl of A] {
+        override def distF[F[_]]: DistFImpl[F, Lbl of A] =
+          DistFImpl.Single(lbl)
       }
 
       case class ConsCaseList[HLbl <: String, H, Tail](
@@ -601,7 +633,11 @@ object FreeScaletto extends Scaletto {
           DistFImpl.Cons(hLbl, ft)
       }
 
-      def void: CaseListImpl[Void] = VoidCaseList
+      def singleCase[Lbl <: String, A](
+        lbl: Lbl,
+      ): CaseListImpl[Lbl of A] =
+        SingleCaseList(lbl)
+
       def cons[HLbl <: String, H, Tail](
         hLbl: HLbl,
         tail: CaseListImpl[Tail],
@@ -623,6 +659,7 @@ object FreeScaletto extends Scaletto {
 
       infix def testEqual[Lbl2, B](that: InjectorImpl[Lbl2, B, Cases]): Option[A =:= B] =
         (this, that) match
+          case (Single(_), Single(_)) => Some(summon)
           case (InHead(_), InHead(_)) => Some(summon)
           case (InTail(i), InTail(j)) => i testEqual j
           case _ => None
@@ -633,6 +670,12 @@ object FreeScaletto extends Scaletto {
         label: Label,
       ) extends InjectorImpl[Label, A, (Label of A) :: Tail]:
         override def nonVoidResult(using ev: (Label of A) :: Tail =:= Void): Nothing =
+          throw new AssertionError(s"Impossible")
+
+      case class Single[Label <: String, A](
+        label: Label,
+      ) extends InjectorImpl[Label, A, Label of A]:
+        override def nonVoidResult(using ev: (Label of A) =:= Void): Nothing =
           throw new AssertionError(s"Impossible")
 
       case class InTail[Label, A, HLbl, H, Tail](i: InjectorImpl[Label, A, Tail]) extends InjectorImpl[Label, A, (HLbl of H) :: Tail]:
@@ -653,8 +696,8 @@ object FreeScaletto extends Scaletto {
     }
 
     object DistLRImpl {
-      case class Empty[A]() extends DistLRImpl[A, Void] {
-        override type Out = Void
+      case class Single[A, Lbl <: String, B](label: Lbl) extends DistLRImpl[A, Lbl of B] {
+        override type Out = Lbl of (A |*| B)
       }
 
       case class Cons[A, HLbl <: String, H, Tail, ATail](
@@ -682,7 +725,12 @@ object FreeScaletto extends Scaletto {
     }
 
     object DistRLImpl {
-      case class Empty[B]() extends DistRLImpl[B, Void] { override type Out = Void }
+      case class Single[B, Lbl <: String, A](
+        label: Lbl,
+      ) extends DistRLImpl[B, Lbl of A] {
+        override type Out = Lbl of (A |*| B)
+      }
+
       case class Cons[B, HLbl <: String, H, Tail, BTail](
         hLbl: HLbl,
         tail: DistRLImpl[B, Tail] { type Out = BTail },
@@ -704,28 +752,31 @@ object FreeScaletto extends Scaletto {
     }
 
     object DistFImpl {
-      case class Empty[F[_]]() extends DistFImpl[F, Void] {
-        override type Out = Void
+      case class Single[F[_], Lbl <: String, A](
+        label: Lbl,
+      ) extends DistFImpl[F, Lbl of A] {
+        override type Out = Lbl of F[A]
 
-        override def operationalize(f: Focus[|*|, F]): Operationalized[F, Void]{type Out = Void} =
+        override def operationalize(f: Focus[|*|, F]): Operationalized[F, Lbl of A]{type Out = Lbl of F[A]} =
           f match
             case Focus.Id() =>
-              Id[Void]()
+              Id[Lbl of A]()
             case f: Focus.Fst[pr, f1, b] =>
-              val d1: Operationalized[f1, Void]{type Out = Void} =
-                Empty[f1]().operationalize(f.i)
-              DistSnd[f1, b, Void, Void, Void](d1, DistRLImpl.Empty())
+              val d1: Operationalized[f1, Lbl of A]{type Out = Lbl of f1[A]} =
+                Single[f1, Lbl, A](label).operationalize(f.i)
+              DistSnd[f1, b, Lbl of A, Lbl of f1[A], Lbl of F[A]](d1, DistRLImpl.Single(label))
             case f: Focus.Snd[pr, f2, a] =>
-              val d2: Operationalized[f2, Void]{type Out = Void} =
-                Empty[f2]().operationalize(f.i)
-              DistFst[a, f2, Void, Void, Void](d2, DistLRImpl.Empty())
+              val d2: Operationalized[f2, Lbl of A]{type Out = Lbl of f2[A]} =
+                Single[f2, Lbl, A](label).operationalize(f.i)
+              DistFst[a, f2, Lbl of A, Lbl of f2[A], Lbl of F[A]](d2, DistLRImpl.Single(label))
 
         override def handlers[G[_], R](
-          h: [X] => InjectorImpl[?, X, Void] => G[F[X] -⚬ R],
+          h: [X] => InjectorImpl[?, X, Lbl of A] => G[F[X] -⚬ R],
         )(using
           G: Applicative[G],
-        ): G[HandlersImpl[Void, R]] =
-          G.pure(HandlersImpl.Empty())
+        ): G[HandlersImpl[Lbl of F[A], R]] =
+          h(InjectorImpl.Single[Lbl, A](label))
+            .map(HandlersImpl.Single(_))
       }
 
       case class Cons[F[_], HLbl <: String, H, Tail, FTail](
@@ -841,8 +892,11 @@ object FreeScaletto extends Scaletto {
       ): HandlersBuilder[Cases, T, R] =
         Snoc(b, h)
 
-      def build[Cases, R](b: HandlersBuilder[Cases, Void, R]): HandlersImpl[Cases, R] =
-        build(b, HandlersImpl.Empty[R]())
+      def build[Cases, Lbl, Z, R](
+        b: HandlersBuilder[Cases, Lbl of Z, R],
+        h: Z -⚬ R,
+      ): HandlersImpl[Cases, R] =
+        build[Cases, Lbl of Z, R](b, HandlersImpl.Single(h))
 
       def build[Cases, Cases0, R](
         b: HandlersBuilder[Cases, Cases0, R],
@@ -858,10 +912,11 @@ object FreeScaletto extends Scaletto {
     }
 
     object HandlersImpl {
-      case class Empty[R]() extends HandlersImpl[Void, R] {
-        override def compile: OneOf[Void] -⚬ R =
-          andThen(OneOf.void, absurd[R])
+      case class Single[Lbl, A, R](h: A -⚬ R) extends HandlersImpl[Lbl of A, R] {
+        override def compile: OneOf[Lbl of A] -⚬ R =
+          andThen(OneOf.extract[Lbl, A], h)
       }
+
       case class Cons[HLbl, H, T, R](
         head: H -⚬ R,
         tail: HandlersImpl[T, R],
@@ -1176,7 +1231,7 @@ object FreeScaletto extends Scaletto {
 
   private enum PatternMatchError:
     case IncompatibleExtractors(base: Extractor[?, ?], incompatible: NonEmptyList[Extractor[?, ?]])
-    case NonExhaustiveness(ext: Extractor[?, ?]) // TODO: include context
+    case NonExhaustiveness(switchPos: SourcePos, ext: Extractor[?, ?]) // TODO: include context
 
   private type SwitchRes[T] = Validated[LinearityViolation | MisplacedExtractor | PatternMatchError, T]
 
@@ -1188,8 +1243,8 @@ object FreeScaletto extends Scaletto {
   }
 
   private object SwitchRes {
-    def nonExhaustiveness[T](ext: Extractor[?, ?]): SwitchRes[T] =
-      failure(PatternMatchError.NonExhaustiveness(ext))
+    def nonExhaustiveness[T](switchPos: SourcePos, ext: Extractor[?, ?]): SwitchRes[T] =
+      failure(PatternMatchError.NonExhaustiveness(switchPos, ext))
 
     def misplacedExtractor[T](ext: ExtractorOccurrence[?, ?]): SwitchRes[T] =
       failure(MisplacedExtractor(ext))
@@ -1241,7 +1296,7 @@ object FreeScaletto extends Scaletto {
       case Exact(fs) =>
         for {
           cases <- fs.traverse(extractPatternAt(Focus.id, _))
-          f     <- compilePatternMatch(cases)
+          f     <- compilePatternMatch(switchPos, cases)
         } yield
           (a map partial(f))(VarOrigin.SwitchOut(switchPos))
 
@@ -1255,7 +1310,7 @@ object FreeScaletto extends Scaletto {
           cases1: NonEmptyList[Exists[[XY] =>> (Pattern[x |*| A, XY], XY -⚬ R)]] =
             cases.map { case Exists.Some((p, h)) => Exists((p.inSnd[x], h)) }
 
-          f <- compilePatternMatch(cases1)
+          f <- compilePatternMatch(switchPos, cases1)
         } yield
           lambdas.Expr.map(xa, partial(f))(VarOrigin.SwitchOut(switchPos))
 
@@ -1264,6 +1319,7 @@ object FreeScaletto extends Scaletto {
   }
 
   private def compilePatternMatch[A, R](
+    switchPos: SourcePos,
     cases: NonEmptyList[Exists[[Y] =>> (Pattern[A, Y], Y -⚬ R)]],
   ): SwitchRes[A -⚬ R] =
     withFirstScrutineeOf(cases.head.value._1)(
@@ -1286,9 +1342,9 @@ object FreeScaletto extends Scaletto {
                 case Valid(matchingCases) =>
                   matchingCases match
                     case Nil =>
-                      SwitchRes.nonExhaustiveness(ext) // TODO: include context of this extractor
+                      SwitchRes.nonExhaustiveness(switchPos, ext) // TODO: include context of this extractor
                     case c :: cs =>
-                      compilePatternMatch[F[X], R](NonEmptyList(c, cs))
+                      compilePatternMatch[F[X], R](switchPos, NonEmptyList(c, cs))
                 case Invalid(incompatibleExtractors) =>
                   SwitchRes.incompatibleExtractors(ext, incompatibleExtractors)
             }
@@ -1644,10 +1700,10 @@ object FreeScaletto extends Scaletto {
             incompatibles.map { ext =>
               s"  - ${ext.partition} (from ${ext.partitioning})"
             }
-        case PatternMatchError.NonExhaustiveness(ext) =>
+        case PatternMatchError.NonExhaustiveness(switchPos, ext) =>
           NonEmptyList.of(
             "Non-exhaustive pattern match. It would fail on",
-            s"  ${ext.partition}"
+            s"  ${ext.show} (at ${switchPos.filename}:${switchPos.line})"
           )
   }
 

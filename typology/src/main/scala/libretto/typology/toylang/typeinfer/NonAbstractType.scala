@@ -4,7 +4,7 @@ import libretto.lambda.{MappedMorphism, MonoidalObjectMap, SymmetricMonoidalCate
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.scaletto.StarterKit._
-import libretto.scaletto.StarterKit.dsl.{of as ->, Void as end}
+import libretto.scaletto.StarterKit.dsl.{of as ->}
 import libretto.typology.inference.TypeOps
 import libretto.typology.kinds.{Kinds, KindN, ×, ○, ●}
 import libretto.typology.toylang.terms.TypedFun
@@ -18,8 +18,8 @@ private[typeinfer] type KindMismatch[Types] = Types |*| Types
 private[typeinfer] type TypesF[T, X] = OneOf[
   "singleType" -> T ::
   "prod" -> (X |*| X) ::
-  "kindMismatch" -> KindMismatch[X] ::
-end]
+  "kindMismatch" -> KindMismatch[X]
+]
 
 private[typeinfer] type Types[T] = Rec[TypesF[T, _]]
 
@@ -130,8 +130,8 @@ private[typeinfer] type FixOrPFix[T] = OneOf[
   // Parameterized fixed point.
   // The nesting of the types must correspond to the kinds of PFix type parameters.
   // Once Libretto has existentials, can use them to ensure well-kindedness statically.
-  "pfix" -> (Val[TypeConstructor.PFix[ScalaTypeParam, ?, ?]] |*| Types[T]) ::
-end]
+  "pfix" -> (Val[TypeConstructor.PFix[ScalaTypeParam, ?, ?]] |*| Types[T])
+]
 
 private[typeinfer] type NonAbstractTypeF[V, T, X] = OneOf[
   "error" -> NonAbstractType.TypeError[V, X] ::
@@ -141,16 +141,16 @@ private[typeinfer] type NonAbstractTypeF[V, T, X] = OneOf[
   "recType" -> FixOrPFix[T] ::
   "recCall" -> (T |*| T) ::
   "either" -> (T |*| T) ::
-  "pair" -> (T |*| T) ::
-end]
+  "pair" -> (T |*| T)
+]
 
 private[typeinfer] type NonAbstractType[V, T] = Rec[NonAbstractTypeF[V, T, _]]
 
 private[typeinfer] object NonAbstractType {
   type TypeError[V, X] = OneOf[
     "mismatch" -> (X |*| X) ::
-    "selfRef" -> V :: // forbidden self-reference
-  end]
+    "selfRef" -> V // forbidden self-reference
+  ]
 
   private def pack[V, T]: NonAbstractTypeF[V, T, NonAbstractType[V, T]] -⚬ NonAbstractType[V, T] =
     dsl.pack

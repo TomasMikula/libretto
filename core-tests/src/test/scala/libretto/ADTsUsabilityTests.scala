@@ -20,8 +20,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
     type NonEmptyTreeF[A, X] =
       OneOf[
         ("Leaf" of A) ::
-        ("Branch" of (X |*| X)) ::
-        Void
+        ("Branch" of (X |*| X))
       ]
 
     type NonEmptyTree[A] =
@@ -30,8 +29,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
     type Tree[A] =
       OneOf[
         ("Empty" of One) ::
-        ("NonEmpty" of NonEmptyTree[A]) ::
-        Void
+        ("NonEmpty" of NonEmptyTree[A])
       ]
 
     object NonEmptyTree {
@@ -63,7 +61,6 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
           unpack[A] > OneOf.handle(_
             .caseOf["Leaf"](f)
             .caseOf["Branch"](par(self, self) > g)
-            .end
           )
         }
 
@@ -118,7 +115,6 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
         OneOf.handle[Tree[A]](_
           .caseOf["Empty"](Maybe.empty[B])
           .caseOf["NonEmpty"](NonEmptyTree.foldMapBB(f, g) > Maybe.just)
-          .end
         )
 
       def foldMap[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): Tree[A] -⚬ Maybe[B] =
@@ -138,10 +134,8 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
               ((net2 |*| t1) :>> OneOf.distLR).handle(_
                 .caseOf["Empty"](elimSnd)
                 .caseOf["NonEmpty"](λ { case (net2 |*| net1) => NonEmptyTree.branch(net1 |*| net2) })
-                .end
               ) :>> nonEmpty
             })
-            .end
           )
         }
 

@@ -348,8 +348,8 @@ private class ExecutionImpl(
         case -⚬.Absurd() =>
           this.absurd
 
-        case -⚬.OneOfVoid() =>
-          this.void.absurd
+        case _: -⚬.OneOfExtractSingle[lbl, a] =>
+          (this: Frontier[OneOf[lbl of a]]).extractSingle
 
         case op: -⚬.OneOfPeel[lbl, a, cases] =>
           (this: Frontier[OneOf[(lbl of a) :: cases]])
@@ -1042,8 +1042,8 @@ private class ExecutionImpl(
           fa.map(_.crash(e))
         case Pack(f) =>
           f.crash(e)
-        case OneOfVoid(f) =>
-          f.absurd
+        case OneOfSingle(f) =>
+          f.crash(e)
         case OneOfUnpeel(f) =>
           f.crash(e)
       }
@@ -1066,7 +1066,7 @@ private class ExecutionImpl(
     sealed trait Void extends Frontier[dsl.Void] {
       def absurd[A]: Frontier[A]
     }
-    case class OneOfVoid(f: Frontier[dsl.Void]) extends Frontier[OneOf[dsl.Void]]
+    case class OneOfSingle[Lbl, A](f: Frontier[A]) extends Frontier[OneOf[Lbl of A]]
     case class OneOfUnpeel[Label, A, Cases](
       f: Frontier[A |+| OneOf[Cases]],
     ) extends Frontier[OneOf[(Label of A) :: Cases]]
@@ -1152,12 +1152,12 @@ private class ExecutionImpl(
           case Deferred(f) => Deferred(f.map(_.absurd[A]))
     }
 
-    extension (f: Frontier[OneOf[dsl.Void]]) {
-      def void(using ExecutionContext): Frontier[dsl.Void] =
+    extension [Lbl, A](f: Frontier[OneOf[Lbl of A]]) {
+      def extractSingle(using ExecutionContext): Frontier[A] =
         f match
-          case OneOfVoid(f) => f
-          case Deferred(f)  => Deferred(f.map(_.void))
-          case OneOfInject(_, i) => i.nonVoidResult
+          case OneOfSingle(f) => f
+          case Deferred(f)  => Deferred(f.map(_.extractSingle))
+          case OneOfInject(fa, OneOf.InjectorImpl.Single(_)) => fa
     }
 
     extension [Label, A, Cases](f: Frontier[OneOf[(Label of A) :: Cases]]) {

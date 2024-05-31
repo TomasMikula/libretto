@@ -70,7 +70,7 @@ trait CoreDSL {
 
   trait OneOfModule {
     /** Witnesses that `Cases` is a list of cases, usable in `OneOf`,
-     * i.e. that `Cases` is of the form `(Name1 of T1) :: ... :: Void`.
+     * i.e. that `Cases` is of the form `(Name1 of T1) :: ... :: (NameN of TN)`.
      */
     type CaseList[Cases]
 
@@ -90,7 +90,12 @@ trait CoreDSL {
       def apply[Label, Cases](c: IsCaseOf[Label, Cases]): Injector[Label, c.Type, Cases]
 
     trait HandlersModule:
-      class InitialBuilder[Cases]
+      def single[Lbl, A, R](h: A -⚬ R): Handlers[Lbl of A, R]
+      def cons[HLbl, H, T, R](h: H -⚬ R, t: Handlers[T, R]): Handlers[(HLbl of H) :: T, R]
+
+      type InitialBuilder[Cases]
+      def initialBuilder[Cases]: InitialBuilder[Cases]
+
       type Builder[Cases, RemainingCases, R]
 
       def apply[Cases, R]: Builder[Cases, Cases, R]
@@ -98,28 +103,29 @@ trait CoreDSL {
       extension [Cases, HLbl, H, T, R](b: Builder[Cases, (HLbl of H) :: T, R])
         def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl)(h: H -⚬ R): Builder[Cases, T, R]
 
-      extension [Cases, R](b: Builder[Cases, Void, R])
-        def end: Handlers[Cases, R]
+      extension [Cases, Lbl, A, R](b: Builder[Cases, Lbl of A, R])
+        def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit)(h: A -⚬ R): Handlers[Cases, R]
 
       extension [HLbl, H, T](b: InitialBuilder[(HLbl of H) :: T])
         def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl): [R] => (H -⚬ R) => Builder[(HLbl of H) :: T, T, R] =
           [R] => h => apply[(HLbl of H) :: T, R].caseOf[Lbl](h)
 
-      extension (b: InitialBuilder[Void])
-        def end[R]: Handlers[Void, R] =
-          apply[Void, R].end
+      extension [Lbl, A](b: InitialBuilder[Lbl of A])
+        def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit): [R] => (A -⚬ R) => Handlers[Lbl of A, R] =
+         [R] => h => apply[Lbl of A, R].caseOf[L](h)
 
-    given voidCaseList: CaseList[Void]
+    given singleCaseList[Lbl <: String, A](using StaticValue[Lbl]): CaseList[Lbl of A]
     given consCaseList[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl], t: CaseList[Tail]): CaseList[(HLbl of H) :: Tail]
-    given headInjector[HLbl <: String, H, Tail](using l: StaticValue[HLbl]): Injector[HLbl, H, (HLbl of H) :: Tail]
-    given tailInjector[Lbl, A, HLbl, H, Tail](using j: Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl of H) :: Tail]
+    given singleInjector[Lbl <: String, A](using StaticValue[Lbl]): Injector[Lbl, A, Lbl of A]
+    given headInjector[HLbl <: String, H, Tail](using StaticValue[HLbl]): Injector[HLbl, H, (HLbl of H) :: Tail]
+    given tailInjector[Lbl, A, HLbl, H, Tail](using Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl of H) :: Tail]
     given isCaseOf[Label, A, Cases](using i: Injector[Label, A, Cases]): IsCaseOf[Label, Cases] { type Type = A }
-    given distLRVoid[A]: DistLR[A, Void] { type Out = Void }
+    given distLRSingle[A, Label <: String, B](using StaticValue[Label]): DistLR[A, Label of B] { type Out = Label of (A |*| B) }
     given distLRCons[A, Label <: String, H, Tail](using
       label: StaticValue[Label],
       tail: DistLR[A, Tail],
     ): DistLR[A, (Label of H) :: Tail] { type Out = (Label of (A |*| H)) :: tail.Out }
-    given distFVoid[F[_]]: DistF[F[_], Void] { type Out = Void }
+    given distFSingle[F[_], Label <: String, A](using StaticValue[Label]): DistF[F[_], Label of A] { type Out = Label of F[A] }
     given distFCons[F[_], Label <: String, H, Tail](using
       label: StaticValue[Label],
       tail: DistF[F, Tail],
@@ -133,13 +139,8 @@ trait CoreDSL {
 
     def peel[Label, A, Cases]: OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases])
     def unpeel[Label, A, Cases]: (A |+| OneOf[Cases]) -⚬ OneOf[(Label of A) :: Cases]
-    def void: OneOf[Void] -⚬ Void
 
-    def extract[Label, A]: OneOf[(Label of A) :: Void] -⚬ A =
-      andThen(
-        peel[Label, A, Void],
-        either(id[A], andThen(void, absurd[A]))
-      )
+    def extract[Label, A]: OneOf[Label of A] -⚬ A
 
     def create[ADT](using u: Unapply[ADT, OneOf]): Creator[u.A] =
       Creator[u.A]
@@ -153,7 +154,7 @@ trait CoreDSL {
 
     class HandleInit[Cases]:
       def apply[R](handlers: Handlers.InitialBuilder[Cases] => Handlers[Cases, R]): OneOf[Cases] -⚬ R =
-        handle[Cases, R](handlers(Handlers.InitialBuilder[Cases]))
+        handle[Cases, R](handlers(Handlers.initialBuilder[Cases]))
 
     type Partitioning[Cases] <: libretto.lambda.Partitioning[-⚬, |*|, OneOf[Cases]]
 
