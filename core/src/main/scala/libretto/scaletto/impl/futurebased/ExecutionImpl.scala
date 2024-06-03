@@ -2,6 +2,7 @@ package libretto.scaletto.impl.futurebased
 
 import libretto.Scheduler
 import libretto.Executor.CancellationReason
+import libretto.lambda.EnumModule
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoExecution
 import libretto.scaletto.impl.{FreeScaletto, ScalaFunction, bug}
@@ -1157,7 +1158,7 @@ private class ExecutionImpl(
         f match
           case OneOfSingle(f) => f
           case Deferred(f)  => Deferred(f.map(_.extractSingle))
-          case OneOfInject(fa, OneOf.InjectorImpl.Single(_)) => fa
+          case OneOfInject(fa, EnumModule.Injector.Single(_)) => fa
     }
 
     extension [Label, A, Cases](f: Frontier[OneOf[(Label of A) :: Cases]]) {
@@ -1167,8 +1168,8 @@ private class ExecutionImpl(
           case Deferred(f) => Deferred(f.map(_.narySumPeel))
           case OneOfInject(a, i) =>
             i match
-              case OneOf.InjectorImpl.InHead(_) => InjectL(a)
-              case OneOf.InjectorImpl.InTail(j) => InjectR(OneOfInject(a, j))
+              case EnumModule.Injector.InHead(_) => InjectL(a)
+              case EnumModule.Injector.InTail(j) => InjectR(OneOfInject(a, j))
     }
 
     extension [A, B](f: Frontier[A |&| B]) {

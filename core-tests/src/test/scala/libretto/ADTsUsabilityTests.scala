@@ -40,10 +40,10 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
         dsl.unpack
 
       def leaf[A]: A -⚬ NonEmptyTree[A] =
-        OneOf.create[NonEmptyTreeF[A, NonEmptyTree[A]]].from["Leaf"] > pack[A]
+        OneOf.make[NonEmptyTreeF[A, NonEmptyTree[A]]]("Leaf") > pack[A]
 
       def branch[A]: (NonEmptyTree[A] |*| NonEmptyTree[A]) -⚬ NonEmptyTree[A] =
-        OneOf.create[NonEmptyTreeF[A, NonEmptyTree[A]]].from["Branch"] > pack[A]
+        OneOf.make[NonEmptyTreeF[A, NonEmptyTree[A]]]("Branch") > pack[A]
 
       object Leaf {
         def unapply[A](x: $[NonEmptyTree[A]])(using pos: SourcePos, ctx: LambdaContext): Some[$[A]] =
@@ -99,10 +99,10 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
 
     object Tree {
       def empty[A]: One -⚬ Tree[A] =
-        OneOf.create[Tree[A]].from["Empty"]
+        OneOf.make[Tree[A]]("Empty")
 
       def nonEmpty[A]: NonEmptyTree[A] -⚬ Tree[A] =
-        OneOf.create[Tree[A]].from["NonEmpty"]
+        OneOf.make[Tree[A]]("NonEmpty")
 
       def single[A]: A -⚬ Tree[A] =
         NonEmptyTree.leaf[A] > nonEmpty

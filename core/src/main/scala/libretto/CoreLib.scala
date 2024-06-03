@@ -2,7 +2,7 @@ package libretto
 
 import libretto.lambda.{Category, SymmetricMonoidalCategory}
 import libretto.lambda.util.SourcePos
-import libretto.util.unapply.*
+import libretto.lambda.util.unapply.*
 import libretto.util.{Equal, ∀}
 import scala.annotation.tailrec
 import scala.collection.immutable.{:: as NonEmptyList}

@@ -64,11 +64,6 @@ object Partitioning {
       Extractor(pg, partition)
   }
 
-  // sealed trait RebaseRes[->[_, _], <*>[_, _], T, Q, P]
-  // object RebaseRes {
-  //   case class Incompatible[->[_, _], <*>[_, _], T, Q, P]() extends RebaseRes[->, <*>, T, Q, P]
-  // }
-
   trait SubFun[->[_, _], F[_, _]] {
     infix def sameAs[G[_, _]](that: SubFun[->, G]): Option[[X, Y] => F[X, Y] => G[X, Y]]
     def testEqual[X, Y, Z](f: F[X, Y], g: F[X, Z]): Option[Y =:= Z]

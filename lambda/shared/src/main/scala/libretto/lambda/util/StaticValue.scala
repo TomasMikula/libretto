@@ -1,4 +1,4 @@
-package libretto.util
+package libretto.lambda.util
 
 class StaticValue[T] private(val value: T)
 

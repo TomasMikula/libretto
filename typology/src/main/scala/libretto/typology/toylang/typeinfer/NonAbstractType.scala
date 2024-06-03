@@ -3,6 +3,7 @@ package libretto.typology.toylang.typeinfer
 import libretto.lambda.{MappedMorphism, MonoidalObjectMap, SymmetricMonoidalCategory, UnhandledCase}
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
+import libretto.lambda.util.unapply.Unapply
 import libretto.scaletto.StarterKit._
 import libretto.scaletto.StarterKit.dsl.{of as ->}
 import libretto.typology.inference.TypeOps
@@ -11,7 +12,6 @@ import libretto.typology.toylang.terms.TypedFun
 import libretto.typology.toylang.types
 import libretto.typology.toylang.types.{Label, ScalaTypeParam, Type, TypeConstructor, TypeTag}
 import libretto.typology.types.{Routing, TypeExpr, TypeFun}
-import libretto.util.unapply.Unapply
 
 private[typeinfer] type KindMismatch[Types] = Types |*| Types
 
@@ -166,7 +166,7 @@ private[typeinfer] object NonAbstractType {
     i: OneOf.IsCaseOf[label.type, u.A]
   ): i.Type -⚬ NonAbstractTypeF[V, T, NonAbstractType[V, T]] =
     OneOf
-      .inject(using OneOf.Injector(i))
+      .inject(label)
       .to(using u.ev.flip)
 
   private def partition[V, T](using

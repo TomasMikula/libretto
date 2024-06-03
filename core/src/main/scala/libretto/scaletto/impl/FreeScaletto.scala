@@ -1,18 +1,17 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{AForest, ClosedSymmetricMonoidalCategory, Focus, Lambdas, LambdasImpl, Partitioning, Shuffled, Sink, Tupled, Var}
+import libretto.lambda.{AForest, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Partitioning, Shuffled, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Delambdified
-import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, TypeEq, Validated}
+import libretto.lambda.Partitioning.SubFun
+import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, StaticValue, TypeEq, Validated}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Validated.{Invalid, Valid}
 import libretto.lambda.util.Monad.monadEither
-import libretto.util.{Async, StaticValue}
+import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 import libretto.lambda.util.TypeEqK
-import libretto.scaletto.impl.FreeScaletto.OneOf.Handlers
-import libretto.lambda.Partitioning.SubFun
 
 object FreeScaletto extends Scaletto {
   sealed trait -⚬[A, B]
@@ -47,6 +46,16 @@ object FreeScaletto extends Scaletto {
   // biInjectivePair
   given BiInjective[|*|] with {
     override def unapply[A, B, X, Y](ev: (A |*| B) =:= (X |*| Y)): (A =:= X, B =:= Y) =
+      ev match { case TypeEq(Refl()) => (summon, summon) }
+  }
+
+  given BiInjective[::] with {
+    override def unapply[A, B, X, Y](ev: (A :: B) =:= (X :: Y)): (A =:= X, B =:= Y) =
+      ev match { case TypeEq(Refl()) => (summon, summon) }
+  }
+
+  given BiInjective[of] with {
+    override def unapply[A, B, X, Y](ev: (A of B) =:= (X of Y)): (A =:= X, B =:= Y) =
       ev match { case TypeEq(Refl()) => (summon, summon) }
   }
 
@@ -433,546 +442,6 @@ object FreeScaletto extends Scaletto {
   override def factorOutInversion[A, B]: (-[A] |*| -[B]) -⚬ -[A |*| B] =
     FactorOutInversion()
 
-  override object OneOf extends OneOfModule {
-    override type CaseList[Cases] = CaseListImpl[Cases]
-    override type Injector[Label, A, Cases] = InjectorImpl[Label, A, Cases]
-    override type IsCaseOf[Label, Cases] = InjectorImpl[Label, ?, Cases]
-    override type Handlers[Cases, R] = HandlersImpl[Cases, R]
-    override type DistLR[A, Cases] = DistLRImpl[A, Cases]
-    type DistRL[B, Cases] = DistRLImpl[B, Cases]
-    override type DistF[F[_], Cases] = DistFImpl[F, Cases]
-
-    override def inject[Label, A, Cases](using i: Injector[Label, A, Cases]): A -⚬ OneOf[Cases] =
-      OneOfInject(i)
-
-    override def handle[Cases, R](handlers: Handlers[Cases, R]): OneOf[Cases] -⚬ R =
-      handlers.compile
-
-    override def peel[Label, A, Cases]: OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases]) =
-      OneOfPeel()
-
-    override def unpeel[Label, A, Cases]: (A |+| OneOf[Cases]) -⚬ OneOf[(Label of A) :: Cases] =
-      OneOfUnpeel()
-
-    override def extract[Label, A]: OneOf[Label of A] -⚬ A =
-      OneOfExtractSingle()
-
-    override def distF[F[_], Cases](using F: Focus[|*|, F], ev: DistF[F, Cases]): F[OneOf[Cases]] -⚬ OneOf[ev.Out] =
-      distF(ev.operationalize(F))
-
-    private def distF[F[_], Cases](ev: DistFImpl.Operationalized[F, Cases]): F[OneOf[Cases]] -⚬ OneOf[ev.Out] =
-      ev.compile
-
-    override def distLR[A, Cases](using ev: DistLR[A, Cases]): (A |*| OneOf[Cases]) -⚬ OneOf[ev.Out] =
-      distLR_[A, Cases, ev.Out]
-
-    private def distLR_[A, Cases, ACases](using ev: DistLR[A, Cases] { type Out = ACases }): (A |*| OneOf[Cases]) -⚬ OneOf[ACases] =
-      ev match
-        case s: DistLRImpl.Single[a, n, b] =>
-          summon[Cases =:= (n of b)]
-          val ev1: ((n of (A |*| b)) =:= ACases) =
-            summon[(n of (A |*| b)) =:= s.Out] andThen summon[s.Out =:= ACases]
-          distLRSingle(s.label).to(using ev1.liftCo[OneOf])
-        case c: DistLRImpl.Cons[a, n, h, t, at] =>
-          val ev1: (((n of (a |*| h)) :: at) =:= ACases) =
-            summon[((n of (a |*| h)) :: at) =:= c.Out] andThen summon[c.Out =:= ACases]
-          distLRIntoTail[A, n, h, t, at](c.hLbl, c.tail).to(using ev1.liftCo[OneOf])
-
-    private def distLRSingle[A, Lbl <: String, B](
-      lbl: Lbl,
-    ): (A |*| OneOf[Lbl of B]) -⚬ OneOf[Lbl of (A |*| B)] =
-      andThen(
-        extract[Lbl, B].inSnd[A],
-        inject(using InjectorImpl.Single(lbl)),
-      )
-
-    private def distLRIntoTail[A, HLbl <: String, H, Tail, ATail](
-      hLbl: HLbl,
-      ev: DistLRImpl[A, Tail] { type Out = ATail },
-    ): (A |*| OneOf[(HLbl of H) :: Tail]) -⚬ OneOf[(HLbl of (A |*| H)) :: ATail] =
-      λ { case a |*| cs =>
-        peel(cs) switch {
-          case Left(h)  => inject(using InjectorImpl.InHead[HLbl, A |*| H, ATail](hLbl))(a |*| h)
-          case Right(t) => (a |*| t) :>> distLR(using ev) :>> injectR :>> unpeel
-        }
-      }
-
-    def distRL[B, Cases](using ev: DistRL[B, Cases]): (OneOf[Cases] |*| B) -⚬ OneOf[ev.Out] =
-      distRL_[B, Cases, ev.Out]
-
-    private def distRL_[B, Cases, BCases](using ev: DistRL[B, Cases] { type Out = BCases }): (OneOf[Cases] |*| B) -⚬ OneOf[BCases] =
-      ev match
-        case s: DistRLImpl.Single[b, n, a] =>
-          val ev1: ((n of (a |*| B)) =:= BCases) =
-            summon[(n of (a |*| B)) =:= s.Out] andThen summon[s.Out =:= BCases]
-          distRLSingle(s.label).to(using ev1.liftCo[OneOf])
-        case c: DistRLImpl.Cons[b, n, h, t, bt] =>
-          val ev1: (((n of (h |*| b)) :: bt) =:= BCases) =
-            summon[((n of (h |*| b)) :: bt) =:= c.Out] andThen summon[c.Out =:= BCases]
-          distRLIntoTail[B, n, h, t, bt](c.hLbl, c.tail).to(using ev1.liftCo[OneOf])
-
-    private def distRLSingle[B, Lbl <: String, A](
-      lbl: Lbl,
-    ): (OneOf[Lbl of A] |*| B) -⚬ OneOf[Lbl of (A |*| B)] =
-      andThen(
-        extract[Lbl, A].inFst[B],
-        inject(using InjectorImpl.Single(lbl)),
-      )
-
-    private def distRLIntoTail[B, HLbl <: String, H, Tail, BTail](
-      hLbl: HLbl,
-      ev: DistRLImpl[B, Tail] { type Out = BTail },
-    ): (OneOf[(HLbl of H) :: Tail] |*| B) -⚬ OneOf[(HLbl of (H |*| B)) :: BTail] =
-      λ { case cs |*| b =>
-        peel(cs) switch {
-          case Left(h)  => inject(using InjectorImpl.InHead[HLbl, H |*| B, BTail](hLbl))(h |*| b)
-          case Right(t) => (t |*| b) :>> distRL(using ev) :>> injectR :>> unpeel
-        }
-      }
-
-    override object Injector extends InjectorModule {
-      override def apply[Label, Cases](c: IsCaseOf[Label, Cases]): Injector[Label, c.Type, Cases] =
-        c
-    }
-
-    override def singleCaseList[Lbl <: String, A](using label: StaticValue[Lbl]): CaseList[Lbl of A] =
-      CaseListImpl.singleCase(label.value)
-
-    override def consCaseList[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl], t: CaseList[Tail]): CaseList[(HLbl of H) :: Tail] =
-      CaseListImpl.cons(hLbl.value, t)
-
-    override def singleInjector[Lbl <: String, A](using label: StaticValue[Lbl]): Injector[Lbl, A, Lbl of A] =
-      InjectorImpl.Single(label.value)
-
-    override def headInjector[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): Injector[HLbl, H, (HLbl of H) :: Tail] =
-      InjectorImpl.InHead(hLbl.value)
-
-    override def tailInjector[Lbl, A, HLbl, H, Tail](using j: Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl of H) :: Tail] =
-      InjectorImpl.InTail(j)
-
-    override def isCaseOf[Label, A, Cases](using i: Injector[Label, A, Cases]): IsCaseOf[Label, Cases] { type Type = A } =
-      i
-
-    override def distLRCons[A, Label <: String, H, Tail](using
-      label: StaticValue[Label],
-      tail: DistLR[A, Tail]
-    ): DistLR[A, (Label of H) :: Tail] { type Out = (Label of (A |*| H)) :: tail.Out } =
-      DistLRImpl.cons[A, Label, H, Tail](label.value, tail)
-
-    override def distLRSingle[A, Label <: String, B](using
-      label: StaticValue[Label],
-    ): DistLR[A, Label of B] { type Out = Label of (A |*| B) } =
-      DistLRImpl.Single(label.value)
-
-    override def distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): DistF[F, Lbl of A]{ type Out = Lbl of F[A] } =
-      DistFImpl.Single(label.value)
-
-    override def distFCons[F[_], Label <: String, H, Tail](using
-      label: StaticValue[Label],
-      tail: DistF[F, Tail],
-    ): DistF[F, (Label of H) :: Tail] { type Out = (Label of F[H]) :: tail.Out } =
-      DistFImpl.Cons(label.value, tail)
-
-    override object Handlers extends HandlersModule {
-      override def single[Lbl, A, R](h: A -⚬ R): Handlers[Lbl of A, R] =
-        HandlersImpl.Single(h)
-
-      override def cons[HLbl, H, T, R](
-        h: H -⚬ R,
-        t: Handlers[T, R],
-      ): Handlers[(HLbl of H) :: T, R] =
-        HandlersImpl.Cons(h, t)
-
-      override opaque type InitialBuilder[Cases] = Unit
-      override def initialBuilder[Cases]: InitialBuilder[Cases] = ()
-
-      override type Builder[Cases, RemainingCases, R] =
-        HandlersBuilder[Cases, RemainingCases, R]
-
-      override def apply[Cases, R]: Builder[Cases, Cases, R] =
-        HandlersBuilder.Empty()
-
-      extension [Cases, Lbl, A, R](b: Builder[Cases, Lbl of A, R])
-        override def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit)(h: A -⚬ R): Handlers[Cases, R] =
-          HandlersBuilder.build(b, h)
-
-      extension [Cases, HLbl, H, T, R](b: Builder[Cases, (HLbl of H) :: T, R])
-        override def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl)(h: H -⚬ R): Builder[Cases, T, R] =
-          HandlersBuilder.addHandler(b, h)
-    }
-
-    override opaque type Partitioning[Cases] <: libretto.lambda.Partitioning[-⚬, |*|, OneOf[Cases]] =
-      PartitioningImpl[Cases]
-
-    override def partitioning[Cases](using ev: CaseList[Cases]): Partitioning[Cases] =
-      PartitioningImpl(ev)
-
-    extension [Cases](p: Partitioning[Cases]) {
-      override def apply[C](using ev: IsCaseOf[C, Cases]): Extractor[OneOf[Cases], ev.Type] =
-        p.extractor[ev.Type](ev)
-    }
-
-    sealed trait CaseListImpl[Cases] {
-      def distF[F[_]]: DistFImpl[F, Cases]
-    }
-
-    object CaseListImpl {
-      case class SingleCaseList[Lbl <: String, A](
-        lbl: Lbl,
-      ) extends CaseListImpl[Lbl of A] {
-        override def distF[F[_]]: DistFImpl[F, Lbl of A] =
-          DistFImpl.Single(lbl)
-      }
-
-      case class ConsCaseList[HLbl <: String, H, Tail](
-        hLbl: HLbl,
-        tail: CaseListImpl[Tail],
-      ) extends CaseListImpl[(HLbl of H) :: Tail] {
-        override def distF[F[_]]: DistFImpl[F, (HLbl of H) :: Tail] =
-          val ft = tail.distF[F]
-          DistFImpl.Cons(hLbl, ft)
-      }
-
-      def singleCase[Lbl <: String, A](
-        lbl: Lbl,
-      ): CaseListImpl[Lbl of A] =
-        SingleCaseList(lbl)
-
-      def cons[HLbl <: String, H, Tail](
-        hLbl: HLbl,
-        tail: CaseListImpl[Tail],
-      ): CaseListImpl[(HLbl of H) :: Tail] =
-        ConsCaseList(hLbl, tail)
-    }
-
-    sealed trait InjectorImpl[Label, A, Cases] {
-      import InjectorImpl.*
-
-      final type Type = A
-
-      def label: Label & String
-
-      def nonVoidResult(using ev: Cases =:= Void): Nothing
-
-      def inTail[HLbl, H]: InjectorImpl[Label, A, (HLbl of H):: Cases] =
-        InTail(this)
-
-      infix def testEqual[Lbl2, B](that: InjectorImpl[Lbl2, B, Cases]): Option[A =:= B] =
-        (this, that) match
-          case (Single(_), Single(_)) => Some(summon)
-          case (InHead(_), InHead(_)) => Some(summon)
-          case (InTail(i), InTail(j)) => i testEqual j
-          case _ => None
-    }
-
-    object InjectorImpl {
-      case class InHead[Label <: String, A, Tail](
-        label: Label,
-      ) extends InjectorImpl[Label, A, (Label of A) :: Tail]:
-        override def nonVoidResult(using ev: (Label of A) :: Tail =:= Void): Nothing =
-          throw new AssertionError(s"Impossible")
-
-      case class Single[Label <: String, A](
-        label: Label,
-      ) extends InjectorImpl[Label, A, Label of A]:
-        override def nonVoidResult(using ev: (Label of A) =:= Void): Nothing =
-          throw new AssertionError(s"Impossible")
-
-      case class InTail[Label, A, HLbl, H, Tail](i: InjectorImpl[Label, A, Tail]) extends InjectorImpl[Label, A, (HLbl of H) :: Tail]:
-        override def label: Label & String = i.label
-
-        override def nonVoidResult(using ev: (HLbl of H) :: Tail =:= Void): Nothing =
-          throw new AssertionError(s"Impossible")
-    }
-
-    sealed trait DistLRImpl[A, Cases] { self =>
-      type Out
-
-      def extend[HLbl <: String, H](hLbl: HLbl): DistLRImpl[A, (HLbl of H) :: Cases]{type Out = (HLbl of (A |*| H)) :: self.Out} =
-        DistLRImpl.Cons(hLbl, this)
-
-      def compile: (A |*| OneOf[Cases]) -⚬ OneOf[Out] =
-        OneOf.distLR(using this)
-    }
-
-    object DistLRImpl {
-      case class Single[A, Lbl <: String, B](label: Lbl) extends DistLRImpl[A, Lbl of B] {
-        override type Out = Lbl of (A |*| B)
-      }
-
-      case class Cons[A, HLbl <: String, H, Tail, ATail](
-        hLbl: HLbl,
-        tail: DistLRImpl[A, Tail] { type Out = ATail },
-      ) extends DistLRImpl[A, (HLbl of H) :: Tail] {
-        override type Out = (HLbl of (A |*| H)) :: ATail
-      }
-
-      def cons[A, HLbl <: String, H, Tail](
-        hLbl: HLbl,
-        tail: DistLRImpl[A, Tail],
-      ): DistLRImpl[A, (HLbl of H) :: Tail] { type Out = (HLbl of (A |*| H)) :: tail.Out } =
-        Cons[A, HLbl, H, Tail, tail.Out](hLbl, tail)
-    }
-
-    sealed trait DistRLImpl[B, Cases] { self =>
-      type Out
-
-      def extend[HLbl <: String, H](hLbl: HLbl): DistRLImpl[B, (HLbl of H) :: Cases]{type Out = (HLbl of (H |*| B)) :: self.Out} =
-        DistRLImpl.Cons(hLbl, this)
-
-      def compile: (OneOf[Cases] |*| B) -⚬ OneOf[Out] =
-        OneOf.distRL(using this)
-    }
-
-    object DistRLImpl {
-      case class Single[B, Lbl <: String, A](
-        label: Lbl,
-      ) extends DistRLImpl[B, Lbl of A] {
-        override type Out = Lbl of (A |*| B)
-      }
-
-      case class Cons[B, HLbl <: String, H, Tail, BTail](
-        hLbl: HLbl,
-        tail: DistRLImpl[B, Tail] { type Out = BTail },
-      ) extends DistRLImpl[B, (HLbl of H) :: Tail] {
-        override type Out = (HLbl of (H |*| B)) :: BTail
-      }
-    }
-
-    sealed trait DistFImpl[F[_], Cases] {
-      type Out
-
-      def operationalize(f: Focus[|*|, F]): DistFImpl.Operationalized[F, Cases] { type Out = DistFImpl.this.Out }
-
-      def handlers[G[_], R](
-        h: [X] => InjectorImpl[?, X, Cases] => G[F[X] -⚬ R],
-      )(using
-        G: Applicative[G],
-      ): G[OneOf.Handlers[Out, R]]
-    }
-
-    object DistFImpl {
-      case class Single[F[_], Lbl <: String, A](
-        label: Lbl,
-      ) extends DistFImpl[F, Lbl of A] {
-        override type Out = Lbl of F[A]
-
-        override def operationalize(f: Focus[|*|, F]): Operationalized[F, Lbl of A]{type Out = Lbl of F[A]} =
-          f match
-            case Focus.Id() =>
-              Id[Lbl of A]()
-            case f: Focus.Fst[pr, f1, b] =>
-              val d1: Operationalized[f1, Lbl of A]{type Out = Lbl of f1[A]} =
-                Single[f1, Lbl, A](label).operationalize(f.i)
-              DistSnd[f1, b, Lbl of A, Lbl of f1[A], Lbl of F[A]](d1, DistRLImpl.Single(label))
-            case f: Focus.Snd[pr, f2, a] =>
-              val d2: Operationalized[f2, Lbl of A]{type Out = Lbl of f2[A]} =
-                Single[f2, Lbl, A](label).operationalize(f.i)
-              DistFst[a, f2, Lbl of A, Lbl of f2[A], Lbl of F[A]](d2, DistLRImpl.Single(label))
-
-        override def handlers[G[_], R](
-          h: [X] => InjectorImpl[?, X, Lbl of A] => G[F[X] -⚬ R],
-        )(using
-          G: Applicative[G],
-        ): G[HandlersImpl[Lbl of F[A], R]] =
-          h(InjectorImpl.Single[Lbl, A](label))
-            .map(HandlersImpl.Single(_))
-      }
-
-      case class Cons[F[_], HLbl <: String, H, Tail, FTail](
-        hLbl: HLbl,
-        tail: DistFImpl[F, Tail] { type Out = FTail },
-      ) extends DistFImpl[F, (HLbl of H) :: Tail] {
-        override type Out = (HLbl of F[H]) :: FTail
-
-        override def operationalize(f: Focus[|*|, F]): Operationalized[F, (HLbl of H) :: Tail]{type Out = (HLbl of F[H]) :: FTail} =
-          tail.operationalize(f).extend[HLbl, H](hLbl)
-
-        override def handlers[G[_], R](
-          h: [X] => InjectorImpl[?, X, (HLbl of H) :: Tail] => G[F[X] -⚬ R],
-        )(using
-          G: Applicative[G],
-        ): G[HandlersImpl[(HLbl of F[H]) :: FTail, R]] =
-          val h0: G[F[H] -⚬ R] =
-            h[H](InjectorImpl.InHead(hLbl))
-
-          val ht: [X] => InjectorImpl[?, X, Tail] => G[F[X] -⚬ R] =
-            [X] => (i: InjectorImpl[?, X, Tail]) =>
-              h[X](i.inTail)
-
-          G.map2(h0, tail.handlers(ht))(HandlersImpl.Cons(_, _))
-      }
-
-      /** Like [[DistFImpl]], witnesses that distributing `F` into `Cases` yields `Out`.
-       *  Unlike [[DistFImpl]], [[Operationalized]] is defined by induction over the structure of `F`
-       *  (as opposed to by induction over `Cases`). As such, it can be more readily used
-       *  to generate the distributing function `F[OneOf[Cases]] -⚬ OneOf[Out]`.
-       */
-      sealed trait Operationalized[F[_], Cases] { self =>
-        type Out
-
-        def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[F, (HLbl of H) :: Cases]{type Out = (HLbl of F[H]) :: self.Out}
-
-        def compile: F[OneOf[Cases]] -⚬ OneOf[Out]
-      }
-
-      case class Id[Cases]() extends DistFImpl.Operationalized[[x] =>> x, Cases] {
-        override type Out = Cases
-
-        override def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[[x] =>> x, (HLbl of H) :: Cases]{type Out = (HLbl of H) :: Cases} =
-          Id[(HLbl of H) :: Cases]()
-
-        override def compile: OneOf[Cases] -⚬ OneOf[Cases] =
-          -⚬.Id[OneOf[Cases]]()
-      }
-
-      case class DistFst[A, F2[_], Cases, F2Cases, Res](
-        distF2: DistFImpl.Operationalized[F2, Cases] { type Out = F2Cases },
-        dist1: DistLRImpl[A, F2Cases] { type Out = Res },
-      ) extends DistFImpl.Operationalized[[x] =>> A |*| F2[x], Cases] {
-        override type Out = Res
-
-        override def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[[x] =>> A |*| F2[x], (HLbl of H) :: Cases]{type Out = (HLbl of (A |*| F2[H])) :: Res} =
-          val inner: Operationalized[F2, (HLbl of H) :: Cases]{type Out = (HLbl of F2[H]) :: F2Cases} =
-            distF2.extend[HLbl, H](hLbl)
-          val outer: DistLRImpl[A, (HLbl of F2[H]) :: F2Cases]{type Out = (HLbl of (A |*| F2[H])) :: Res} =
-            dist1.extend[HLbl, F2[H]](hLbl)
-          DistFst[A, F2, (HLbl of H) :: Cases, (HLbl of F2[H]) :: F2Cases, (HLbl of (A |*| F2[H])) :: Res](
-            inner,
-            outer,
-          )
-
-        override def compile: (A |*| F2[OneOf[Cases]]) -⚬ OneOf[Res] =
-          import -⚬.{AndThen, Par}
-          AndThen(
-            Par(
-              -⚬.Id[A](),
-              distF2.compile
-            ),
-            dist1.compile,
-          )
-      }
-
-      case class DistSnd[F1[_], B, Cases, F1Cases, Res](
-        distF1: DistFImpl.Operationalized[F1, Cases] { type Out = F1Cases },
-        dist2: DistRLImpl[B, F1Cases] { type Out = Res },
-      ) extends DistFImpl.Operationalized[[x] =>> F1[x] |*| B, Cases] {
-        override type Out = Res
-
-        override def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[[x] =>> F1[x] |*| B, (HLbl of H) :: Cases]{type Out = (HLbl of (F1[H] |*| B)) :: Res} =
-          val inner: Operationalized[F1, (HLbl of H) :: Cases]{type Out = (HLbl of F1[H]) :: F1Cases} =
-            distF1.extend[HLbl, H](hLbl)
-          val outer: DistRLImpl[B, (HLbl of F1[H]) :: F1Cases]{type Out = (HLbl of (F1[H] |*| B)) :: Res} =
-            dist2.extend[HLbl, F1[H]](hLbl)
-          DistSnd(inner, outer)
-
-        override def compile: (F1[OneOf[Cases]] |*| B) -⚬ OneOf[Res] =
-          import -⚬.{AndThen, Par}
-          AndThen(
-            Par(
-              distF1.compile,
-              -⚬.Id[B]()
-            ),
-            dist2.compile
-          )
-      }
-    }
-
-    sealed trait HandlersBuilder[Cases, RemainingCases, R]
-    object HandlersBuilder {
-      case class Empty[Cases, R]() extends HandlersBuilder[Cases, Cases, R]
-      case class Snoc[Cases, HLbl, H, T, R](
-        init: HandlersBuilder[Cases, (HLbl of H) :: T, R],
-        last: H -⚬ R,
-      ) extends HandlersBuilder[Cases, T, R]
-
-      def addHandler[Cases, HLbl, H, T, R](
-        b: HandlersBuilder[Cases, (HLbl of H) :: T, R],
-        h: H -⚬ R,
-      ): HandlersBuilder[Cases, T, R] =
-        Snoc(b, h)
-
-      def build[Cases, Lbl, Z, R](
-        b: HandlersBuilder[Cases, Lbl of Z, R],
-        h: Z -⚬ R,
-      ): HandlersImpl[Cases, R] =
-        build[Cases, Lbl of Z, R](b, HandlersImpl.Single(h))
-
-      def build[Cases, Cases0, R](
-        b: HandlersBuilder[Cases, Cases0, R],
-        acc: HandlersImpl[Cases0, R],
-      ): HandlersImpl[Cases, R] =
-        b match
-          case Empty()          => acc
-          case Snoc(init, last) => build(init, HandlersImpl.Cons(last, acc))
-    }
-
-    sealed trait HandlersImpl[Cases, R] {
-      def compile: OneOf[Cases] -⚬ R
-    }
-
-    object HandlersImpl {
-      case class Single[Lbl, A, R](h: A -⚬ R) extends HandlersImpl[Lbl of A, R] {
-        override def compile: OneOf[Lbl of A] -⚬ R =
-          andThen(OneOf.extract[Lbl, A], h)
-      }
-
-      case class Cons[HLbl, H, T, R](
-        head: H -⚬ R,
-        tail: HandlersImpl[T, R],
-      ) extends HandlersImpl[(HLbl of H) :: T, R] {
-        override def compile: OneOf[(HLbl of H) :: T] -⚬ R =
-          andThen(OneOf.peel, either(head, tail.compile))
-      }
-    }
-
-    private class PartitioningImpl[Cases](
-      cases: OneOf.CaseList[Cases],
-    ) extends libretto.lambda.Partitioning[-⚬, |*|, OneOf[Cases]] {
-      override type Partition[A] = InjectorImpl[?, A, Cases]
-
-      override def showPartition[A](p: Partition[A]): String =
-        p.label
-
-      override def reinject[P](p: InjectorImpl[?, P, Cases]): P -⚬ OneOf[Cases] =
-        OneOf.inject(using p)
-
-      override def isTotal[P](p: InjectorImpl[?, P, Cases]): Option[OneOf[Cases] -⚬ P] =
-        libretto.lambda.UnhandledCase.raise("PartitioningImpl.isTotal")
-
-      override def sameAs(
-        that: libretto.lambda.Partitioning[-⚬, |*|, OneOf[Cases]],
-      ): Option[TypeEqK[InjectorImpl[?, _, Cases], that.Partition]] =
-        that match
-          case that1: (PartitioningImpl[Cases] & that.type) =>
-            Some(TypeEqK.refl[this.Partition]): Option[TypeEqK[this.Partition, that1.Partition]]
-          case _ =>
-            None
-
-      override def samePartition[P, Q](
-        p: InjectorImpl[?, P, Cases],
-        q: InjectorImpl[?, Q, Cases],
-      ): Option[P =:= Q] =
-        p testEqual q
-
-      override def compileAt[F[_], G[_], R](
-        pos: Focus[|*|, F],
-        handle: [X] => Partition[X] => G[F[X] -⚬ R],
-      )(using
-        Applicative[G],
-      ): G[F[OneOf[Cases]] -⚬ R] =
-        val d: OneOf.DistF[F, Cases] =
-          cases.distF[F]
-
-        val handlers: G[OneOf.Handlers[d.Out, R]] =
-          d.handlers[G, R](handle)
-
-        handlers.map { handlers =>
-          OneOf.distF(using pos, d) > OneOf.handle(handlers)
-        }
-    }
-  }
-
   override object UInt31 extends UInt31Scaletto {
     override def apply(n: Int): Done -⚬ UInt31 = {
       require(n >= 0, s"$n is negative")
@@ -1021,6 +490,37 @@ object FreeScaletto extends Scaletto {
     override def curry[A, B, C](f: (A |*| B) -⚬ C): A -⚬ (B =⚬ C)                            = FreeScaletto.this.curry(f)
     override def eval[A, B]: ((A =⚬ B) |*| A) -⚬ B                                           = FreeScaletto.this.eval[A, B]
   }
+
+  val cocat: CocartesianSemigroupalCategory[-⚬, |+|] =
+    new CocartesianSemigroupalCategory[-⚬, |+|] {
+      override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C = FreeScaletto.this.andThen(f, g)
+      override def id[A]: A -⚬ A                                  = FreeScaletto.this.id[A]
+
+      override def injectL[A, B]: A -⚬ (A |+| B)                         = FreeScaletto.this.injectL[A, B]
+      override def injectR[A, B]: B -⚬ (A |+| B)                         = FreeScaletto.this.injectR[A, B]
+      override def either[A, B, C](f: A -⚬ C, g: B -⚬ C): (A |+| B) -⚬ C = FreeScaletto.this.either(f, g)
+    }
+
+  val distribution: Distribution[-⚬, |*|, |+|] =
+    new Distribution[-⚬, |*|, |+|] {
+      override def distLR[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)) =
+        FreeScaletto.this.distributeL
+
+      override def distRL[A, B, C]: ((A |+| B) |*| C) -⚬ ((A |*| C) |+| (B |*| C)) =
+        FreeScaletto.this.distributeR
+    }
+
+  override val OneOf: EnumModule[-⚬, |*|, |+|, OneOf, ::, of] =
+    EnumModule[-⚬, |*|, |+|, OneOf, ::, of](
+      inj = [Label, A, Cases] => (i: EnumModule.Injector[::, of, Label, A, Cases]) => OneOfInject(i),
+      peel = [Label, A, Cases] => DummyImplicit ?=> OneOfPeel(),
+      unpeel = [Label, A, Cases] => DummyImplicit ?=> OneOfUnpeel(),
+      extract = [Label, A] => DummyImplicit ?=> OneOfExtractSingle(),
+    )(
+      ℭ,
+      cocat,
+      distribution,
+    )
 
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 

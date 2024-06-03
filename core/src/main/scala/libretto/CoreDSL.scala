@@ -1,11 +1,10 @@
 package libretto
 
-import libretto.lambda.Focus
+import libretto.lambda.{EnumModule, Focus}
 import libretto.lambda.Partitioning.Extractor
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
-import libretto.util.{Equal, StaticValue}
-import libretto.util.unapply.Unapply
+import libretto.util.Equal
 
 trait CoreDSL {
   /** Libretto arrow, also called a ''component'' or a ''linear function''.
@@ -66,110 +65,7 @@ trait CoreDSL {
 
   type OneOf[Cases]
 
-  val OneOf: OneOfModule
-
-  trait OneOfModule {
-    /** Witnesses that `Cases` is a list of cases, usable in `OneOf`,
-     * i.e. that `Cases` is of the form `(Name1 of T1) :: ... :: (NameN of TN)`.
-     */
-    type CaseList[Cases]
-
-    type IsCaseOf[Label, Cases] <: { type Type }
-    type DistLR[A, Cases] <: { type Out }
-
-    /** Witnesses that when the type of each case in `Cases` is wrapped in `F`, the result is `Out` */
-    type DistF[F[_], Cases] <: { type Out }
-
-    type Injector[Label, A, Cases]
-    val Injector: InjectorModule
-
-    type Handlers[Cases, R]
-    val Handlers: HandlersModule
-
-    trait InjectorModule:
-      def apply[Label, Cases](c: IsCaseOf[Label, Cases]): Injector[Label, c.Type, Cases]
-
-    trait HandlersModule:
-      def single[Lbl, A, R](h: A -⚬ R): Handlers[Lbl of A, R]
-      def cons[HLbl, H, T, R](h: H -⚬ R, t: Handlers[T, R]): Handlers[(HLbl of H) :: T, R]
-
-      type InitialBuilder[Cases]
-      def initialBuilder[Cases]: InitialBuilder[Cases]
-
-      type Builder[Cases, RemainingCases, R]
-
-      def apply[Cases, R]: Builder[Cases, Cases, R]
-
-      extension [Cases, HLbl, H, T, R](b: Builder[Cases, (HLbl of H) :: T, R])
-        def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl)(h: H -⚬ R): Builder[Cases, T, R]
-
-      extension [Cases, Lbl, A, R](b: Builder[Cases, Lbl of A, R])
-        def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit)(h: A -⚬ R): Handlers[Cases, R]
-
-      extension [HLbl, H, T](b: InitialBuilder[(HLbl of H) :: T])
-        def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl): [R] => (H -⚬ R) => Builder[(HLbl of H) :: T, T, R] =
-          [R] => h => apply[(HLbl of H) :: T, R].caseOf[Lbl](h)
-
-      extension [Lbl, A](b: InitialBuilder[Lbl of A])
-        def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit): [R] => (A -⚬ R) => Handlers[Lbl of A, R] =
-         [R] => h => apply[Lbl of A, R].caseOf[L](h)
-
-    given singleCaseList[Lbl <: String, A](using StaticValue[Lbl]): CaseList[Lbl of A]
-    given consCaseList[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl], t: CaseList[Tail]): CaseList[(HLbl of H) :: Tail]
-    given singleInjector[Lbl <: String, A](using StaticValue[Lbl]): Injector[Lbl, A, Lbl of A]
-    given headInjector[HLbl <: String, H, Tail](using StaticValue[HLbl]): Injector[HLbl, H, (HLbl of H) :: Tail]
-    given tailInjector[Lbl, A, HLbl, H, Tail](using Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl of H) :: Tail]
-    given isCaseOf[Label, A, Cases](using i: Injector[Label, A, Cases]): IsCaseOf[Label, Cases] { type Type = A }
-    given distLRSingle[A, Label <: String, B](using StaticValue[Label]): DistLR[A, Label of B] { type Out = Label of (A |*| B) }
-    given distLRCons[A, Label <: String, H, Tail](using
-      label: StaticValue[Label],
-      tail: DistLR[A, Tail],
-    ): DistLR[A, (Label of H) :: Tail] { type Out = (Label of (A |*| H)) :: tail.Out }
-    given distFSingle[F[_], Label <: String, A](using StaticValue[Label]): DistF[F[_], Label of A] { type Out = Label of F[A] }
-    given distFCons[F[_], Label <: String, H, Tail](using
-      label: StaticValue[Label],
-      tail: DistF[F, Tail],
-    ): DistF[F, (Label of H) :: Tail] { type Out = (Label of F[H]) :: tail.Out }
-
-    def inject[Label, A, Cases](using Injector[Label, A, Cases]): A -⚬ OneOf[Cases]
-    def inject[Cases](label: String)(using i: IsCaseOf[label.type, Cases]): i.Type -⚬ OneOf[Cases] = inject(using Injector(i))
-    def handle[Cases, R](handlers: Handlers[Cases, R]): OneOf[Cases] -⚬ R
-    def distLR[A, Cases](using ev: DistLR[A, Cases]): (A |*| OneOf[Cases]) -⚬ OneOf[ev.Out]
-    def distF[F[_], Cases](using F: Focus[|*|, F], ev: DistF[F, Cases]): F[OneOf[Cases]] -⚬ OneOf[ev.Out]
-
-    def peel[Label, A, Cases]: OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases])
-    def unpeel[Label, A, Cases]: (A |+| OneOf[Cases]) -⚬ OneOf[(Label of A) :: Cases]
-
-    def extract[Label, A]: OneOf[Label of A] -⚬ A
-
-    def create[ADT](using u: Unapply[ADT, OneOf]): Creator[u.A] =
-      Creator[u.A]
-
-    def handle[ADT](using u: Unapply[ADT, OneOf]): HandleInit[u.A] =
-      HandleInit[u.A]
-
-    class Creator[Cases]:
-      def from[Label](using c: IsCaseOf[Label, Cases]): c.Type -⚬ OneOf[Cases] =
-        inject(using Injector(c))
-
-    class HandleInit[Cases]:
-      def apply[R](handlers: Handlers.InitialBuilder[Cases] => Handlers[Cases, R]): OneOf[Cases] -⚬ R =
-        handle[Cases, R](handlers(Handlers.initialBuilder[Cases]))
-
-    type Partitioning[Cases] <: libretto.lambda.Partitioning[-⚬, |*|, OneOf[Cases]]
-
-    def partition[ADT](using
-      u: Unapply[ADT, OneOf],
-      ev: CaseList[u.A],
-    ): Partitioning[u.A] =
-      partitioning[u.A]
-
-    def partitioning[Cases](using ev: CaseList[Cases]): Partitioning[Cases]
-
-    extension [Cases](p: Partitioning[Cases]) {
-      def apply[C](using ev: IsCaseOf[C, Cases]): Extractor[-⚬, |*|, OneOf[Cases], ev.Type]
-    }
-  }
+  val OneOf: EnumModule[-⚬, |*|, |+|, OneOf, ::, of]
 
   /** Signal that travels in the direction of [[-⚬]], i.e. the positive direction.
     * It may signal completion of a (potentially effectful) computation.
@@ -643,6 +539,11 @@ trait CoreDSL {
       ctx: LambdaContext,
     ): $[C] =
       $.switchEither(x, f)(pos)
+  }
+
+  extension [Cases](p: OneOf.Partitioning[Cases]) {
+    def apply[C](using ev: OneOf.IsCaseOf[C, Cases]): Extractor[-⚬, |*|, OneOf[Cases], ev.Type] =
+      OneOf.caseExtractor[Cases, C](p, ev)
   }
 
   extension [Cases](x: $[OneOf[Cases]]) {
