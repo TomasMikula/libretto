@@ -4,18 +4,18 @@ import libretto.lambda.util.{Applicative, BiInjective, StaticValue, TypeEq, Type
 import libretto.lambda.util.TypeEqK.Refl
 import libretto.lambda.util.unapply.Unapply
 
-class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
-  inj: [Label, A, Cases] => EnumModule.Injector[::, of, Label, A, Cases] => (A -> Enum[Cases]),
-  peel: [Label, A, Cases] => DummyImplicit ?=> Enum[(Label of A) :: Cases] -> (A ++ Enum[Cases]),
-  unpeel: [Label, A, Cases] => DummyImplicit ?=> (A ++ Enum[Cases]) -> Enum[(Label of A) :: Cases],
-  extract: [Label, A] => DummyImplicit ?=> Enum[Label of A] -> A,
+class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ||[_, _], ::[_, _]](
+  inj: [Label, A, Cases] => EnumModule.Injector[||, ::, Label, A, Cases] => (A -> Enum[Cases]),
+  peel: [Label, A, Cases] => DummyImplicit ?=> Enum[(Label :: A) || Cases] -> (A ++ Enum[Cases]),
+  unpeel: [Label, A, Cases] => DummyImplicit ?=> (A ++ Enum[Cases]) -> Enum[(Label :: A) || Cases],
+  extract: [Label, A] => DummyImplicit ?=> Enum[Label :: A] -> A,
 )(
   cat: SemigroupalCategory[->, **],
   cocat: CocartesianSemigroupalCategory[->, ++],
   distr: Distribution[->, **, ++],
 )(using
+  BiInjective[||],
   BiInjective[::],
-  BiInjective[of],
 ) {
   import EnumModule.*
   import cocat.{either, injectL, injectR}
@@ -24,10 +24,10 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
 
   type Extractor[A, B] = libretto.lambda.Partitioning.Extractor[->, **, A, B]
 
-  type Injector[Label, A, Cases] = EnumModule.Injector[::, of, Label, A, Cases]
+  type Injector[Label, A, Cases] = EnumModule.Injector[||, ::, Label, A, Cases]
 
-  /** Witnesses that `Cases` is a list of cases, usable in `Enum`,
-   * i.e. that `Cases` is of the form `(Name1 of T1) :: ... :: (NameN of TN)`.
+  /** Witnesses that `Cases` is a list :: cases, usable in `Enum`,
+   * i.e. that `Cases` is :: the form `(Name1 :: T1) || ... || (NameN :: TN)`.
    */
   opaque type CaseList[Cases] = CaseListImpl[Cases]
 
@@ -63,51 +63,51 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
   def distRL[B, Cases](using ev: DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[ev.Out] =
     ev.compile
 
-  given singleCaseList[Lbl <: String, A](using label: StaticValue[Lbl]): CaseList[Lbl of A] =
+  given singleCaseList[Lbl <: String, A](using label: StaticValue[Lbl]): CaseList[Lbl :: A] =
     CaseListImpl.singleCase(label.value)
-  given consCaseList[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl], t: CaseList[Tail]): CaseList[(HLbl of H) :: Tail] =
+  given consCaseList[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl], t: CaseList[Tail]): CaseList[(HLbl :: H) || Tail] =
     CaseListImpl.cons(hLbl.value, t)
 
-  given singleInjector[Lbl <: String, A](using label: StaticValue[Lbl]): Injector[Lbl, A, Lbl of A] =
+  given singleInjector[Lbl <: String, A](using label: StaticValue[Lbl]): Injector[Lbl, A, Lbl :: A] =
     Injector.Single(label.value)
-  given headInjector[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): Injector[HLbl, H, (HLbl of H) :: Tail] =
+  given headInjector[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): Injector[HLbl, H, (HLbl :: H) || Tail] =
     Injector.InHead(hLbl.value)
-  given tailInjector[Lbl, A, HLbl, H, Tail](using j: Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl of H) :: Tail] =
+  given tailInjector[Lbl, A, HLbl, H, Tail](using j: Injector[Lbl, A, Tail]): Injector[Lbl, A, (HLbl :: H) || Tail] =
     Injector.InTail(j)
 
-  given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): IsCaseOf[Lbl, Lbl of A] { type Type = A } =
+  given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): IsCaseOf[Lbl, Lbl :: A] { type Type = A } =
     Injector.Single(label.value)
-  given isHeadCase[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): IsCaseOf[HLbl, (HLbl of H) :: Tail] { type Type = H } =
+  given isHeadCase[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): IsCaseOf[HLbl, (HLbl :: H) || Tail] { type Type = H } =
     Injector.InHead(hLbl.value)
-  given isTailInjector[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): IsCaseOf[Lbl, (HLbl of H) :: Tail] { type Type = j.Type } =
+  given isTailInjector[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): IsCaseOf[Lbl, (HLbl :: H) || Tail] { type Type = j.Type } =
     Injector.InTail(j)
 
   given distLRCons[A, Label <: String, H, Tail](using
     label: StaticValue[Label],
     tail: DistLR[A, Tail]
-  ): DistLR[A, (Label of H) :: Tail] { type Out = (Label of (A ** H)) :: tail.Out } =
+  ): DistLR[A, (Label :: H) || Tail] { type Out = (Label :: (A ** H)) || tail.Out } =
     DistLRImpl.cons[A, Label, H, Tail](label.value, tail)
 
   given distLRSingle[A, Label <: String, B](using
     label: StaticValue[Label],
-  ): DistLR[A, Label of B] { type Out = Label of (A ** B) } =
+  ): DistLR[A, Label :: B] { type Out = Label :: (A ** B) } =
     DistLRImpl.Single(label.value)
 
-  given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): DistF[F, Lbl of A]{ type Out = Lbl of F[A] } =
+  given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): DistF[F, Lbl :: A]{ type Out = Lbl :: F[A] } =
     DistFImpl.Single(label.value)
   given distFCons[F[_], Label <: String, H, Tail](using
     label: StaticValue[Label],
     tail: DistF[F, Tail],
-  ): DistF[F, (Label of H) :: Tail] { type Out = (Label of F[H]) :: tail.Out } =
+  ): DistF[F, (Label :: H) || Tail] { type Out = (Label :: F[H]) || tail.Out } =
     DistFImpl.Cons(label.value, tail)
 
   object Handlers {
-    def single[Lbl, A, R](h: A -> R): Handlers[Lbl of A, R] =
+    def single[Lbl, A, R](h: A -> R): Handlers[Lbl :: A, R] =
       HandlersImpl.Single(h)
     def cons[HLbl, H, T, R](
       h: H -> R,
       t: Handlers[T, R],
-    ): Handlers[(HLbl of H) :: T, R] =
+    ): Handlers[(HLbl :: H) || T, R] =
       HandlersImpl.Cons(h, t)
 
     def apply[Cases, R]: Builder[Cases, Cases, R] =
@@ -123,21 +123,21 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
     opaque type InitialBuilder[Cases] =
       Unit
 
-    extension [Cases, HLbl, H, T, R](b: Builder[Cases, (HLbl of H) :: T, R])
+    extension [Cases, HLbl, H, T, R](b: Builder[Cases, (HLbl :: H) || T, R])
       def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl)(h: H -> R): Builder[Cases, T, R] =
         HandlersBuilder.addHandler(b, h)
 
-    extension [Cases, Lbl, A, R](b: Builder[Cases, Lbl of A, R])
+    extension [Cases, Lbl, A, R](b: Builder[Cases, Lbl :: A, R])
       def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit)(h: A -> R): Handlers[Cases, R] =
         HandlersBuilder.build(b, h)
 
-    extension [HLbl, H, T](b: InitialBuilder[(HLbl of H) :: T])
-      def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl): [R] => (H -> R) => Builder[(HLbl of H) :: T, T, R] =
-        [R] => h => apply[(HLbl of H) :: T, R].caseOf[Lbl](h)
+    extension [HLbl, H, T](b: InitialBuilder[(HLbl :: H) || T])
+      def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl): [R] => (H -> R) => Builder[(HLbl :: H) || T, T, R] =
+        [R] => h => apply[(HLbl :: H) || T, R].caseOf[Lbl](h)
 
-    extension [Lbl, A](b: InitialBuilder[Lbl of A])
-      def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit): [R] => (A -> R) => Handlers[Lbl of A, R] =
-       [R] => h => apply[Lbl of A, R].caseOf[L](h)
+    extension [Lbl, A](b: InitialBuilder[Lbl :: A])
+      def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit): [R] => (A -> R) => Handlers[Lbl :: A, R] =
+       [R] => h => apply[Lbl :: A, R].caseOf[L](h)
   }
 
   opaque type Partitioning[Cases] <: libretto.lambda.Partitioning[->, **, Enum[Cases]] =
@@ -161,26 +161,26 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
   private object CaseListImpl {
     case class SingleCaseList[Lbl <: String, A](
       lbl: Lbl,
-    ) extends CaseListImpl[Lbl of A] {
-      override def distF[F[_]]: DistFImpl[F, Lbl of A] =
+    ) extends CaseListImpl[Lbl :: A] {
+      override def distF[F[_]]: DistFImpl[F, Lbl :: A] =
         DistFImpl.Single(lbl)
     }
     case class ConsCaseList[HLbl <: String, H, Tail](
       hLbl: HLbl,
       tail: CaseList[Tail],
-    ) extends CaseListImpl[(HLbl of H) :: Tail] {
-      override def distF[F[_]]: DistFImpl[F, (HLbl of H) :: Tail] =
+    ) extends CaseListImpl[(HLbl :: H) || Tail] {
+      override def distF[F[_]]: DistFImpl[F, (HLbl :: H) || Tail] =
         val ft = tail.distF[F]
         DistFImpl.Cons(hLbl, ft)
     }
     def singleCase[Lbl <: String, A](
       lbl: Lbl,
-    ): CaseList[Lbl of A] =
+    ): CaseList[Lbl :: A] =
       SingleCaseList(lbl)
     def cons[HLbl <: String, H, Tail](
       hLbl: HLbl,
       tail: CaseList[Tail],
-    ): CaseList[(HLbl of H) :: Tail] =
+    ): CaseList[(HLbl :: H) || Tail] =
       ConsCaseList(hLbl, tail)
   }
 
@@ -189,25 +189,25 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
 
     def compile: (A ** Enum[Cases]) -> Enum[Out]
 
-    def extend[HLbl <: String, H](hLbl: HLbl): DistLRImpl[A, (HLbl of H) :: Cases]{type Out = (HLbl of (A ** H)) :: self.Out} =
+    def extend[HLbl <: String, H](hLbl: HLbl): DistLRImpl[A, (HLbl :: H) || Cases]{type Out = (HLbl :: (A ** H)) || self.Out} =
       DistLRImpl.Cons(hLbl, this)
   }
 
   private object DistLRImpl {
-    case class Single[A, Lbl <: String, B](label: Lbl) extends DistLRImpl[A, Lbl of B] {
-      override type Out = Lbl of (A ** B)
+    case class Single[A, Lbl <: String, B](label: Lbl) extends DistLRImpl[A, Lbl :: B] {
+      override type Out = Lbl :: (A ** B)
 
-      override def compile: (A ** Enum[Lbl of B]) -> Enum[Out] =
+      override def compile: (A ** Enum[Lbl :: B]) -> Enum[Out] =
         extract[Lbl, B].inSnd[A] > inj(Injector.Single(label))
     }
 
     case class Cons[A, HLbl <: String, H, Tail, ATail](
       hLbl: HLbl,
       tail: DistLRImpl[A, Tail] { type Out = ATail },
-    ) extends DistLRImpl[A, (HLbl of H) :: Tail] {
-      override type Out = (HLbl of (A ** H)) :: ATail
+    ) extends DistLRImpl[A, (HLbl :: H) || Tail] {
+      override type Out = (HLbl :: (A ** H)) || ATail
 
-      override def compile: (A ** Enum[(HLbl of H) :: Tail]) -> Enum[Out] =
+      override def compile: (A ** Enum[(HLbl :: H) || Tail]) -> Enum[Out] =
         cat.snd(peel[HLbl, H, Tail]) > distr.distLR > either(
           inj(Injector.InHead(hLbl)),
           tail.compile > injectR > unpeel[HLbl, A ** H, ATail],
@@ -217,7 +217,7 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
     def cons[A, HLbl <: String, H, Tail](
       hLbl: HLbl,
       tail: DistLRImpl[A, Tail],
-    ): DistLRImpl[A, (HLbl of H) :: Tail] { type Out = (HLbl of (A ** H)) :: tail.Out } =
+    ): DistLRImpl[A, (HLbl :: H) || Tail] { type Out = (HLbl :: (A ** H)) || tail.Out } =
       Cons[A, HLbl, H, Tail, tail.Out](hLbl, tail)
   }
 
@@ -226,27 +226,27 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
 
     def compile: (Enum[Cases] ** B) -> Enum[Out]
 
-    def extend[HLbl <: String, H](hLbl: HLbl): DistRLImpl[B, (HLbl of H) :: Cases]{type Out = (HLbl of (H ** B)) :: self.Out} =
+    def extend[HLbl <: String, H](hLbl: HLbl): DistRLImpl[B, (HLbl :: H) || Cases]{type Out = (HLbl :: (H ** B)) || self.Out} =
       DistRLImpl.Cons(hLbl, this)
   }
 
   private object DistRLImpl {
     case class Single[B, Lbl <: String, A](
       label: Lbl,
-    ) extends DistRLImpl[B, Lbl of A] {
-      override type Out = Lbl of (A ** B)
+    ) extends DistRLImpl[B, Lbl :: A] {
+      override type Out = Lbl :: (A ** B)
 
-      override def compile: (Enum[Lbl of A] ** B) -> Enum[Out] =
+      override def compile: (Enum[Lbl :: A] ** B) -> Enum[Out] =
         extract[Lbl, A].inFst[B] > inj(Injector.Single(label))
     }
 
     case class Cons[B, HLbl <: String, H, Tail, BTail](
       hLbl: HLbl,
       tail: DistRLImpl[B, Tail] { type Out = BTail },
-    ) extends DistRLImpl[B, (HLbl of H) :: Tail] {
-      override type Out = (HLbl of (H ** B)) :: BTail
+    ) extends DistRLImpl[B, (HLbl :: H) || Tail] {
+      override type Out = (HLbl :: (H ** B)) || BTail
 
-      override def compile: (Enum[(HLbl of H) :: Tail] ** B) -> Enum[Out] =
+      override def compile: (Enum[(HLbl :: H) || Tail] ** B) -> Enum[Out] =
         cat.fst(peel[HLbl, H, Tail]) > distr.distRL > either(
           inj(Injector.InHead(hLbl)),
           tail.compile > injectR > unpeel[HLbl, H ** B, BTail],
@@ -267,25 +267,25 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
   private object DistFImpl {
     case class Single[F[_], Lbl <: String, A](
       label: Lbl,
-    ) extends DistFImpl[F, Lbl of A] {
-      override type Out = Lbl of F[A]
-      override def operationalize(f: Focus[**, F]): Operationalized[F, Lbl of A]{type Out = Lbl of F[A]} =
+    ) extends DistFImpl[F, Lbl :: A] {
+      override type Out = Lbl :: F[A]
+      override def operationalize(f: Focus[**, F]): Operationalized[F, Lbl :: A]{type Out = Lbl :: F[A]} =
         f match
           case Focus.Id() =>
-            Id[Lbl of A]()
+            Id[Lbl :: A]()
           case f: Focus.Fst[pr, f1, b] =>
-            val d1: Operationalized[f1, Lbl of A]{type Out = Lbl of f1[A]} =
+            val d1: Operationalized[f1, Lbl :: A]{type Out = Lbl :: f1[A]} =
               Single[f1, Lbl, A](label).operationalize(f.i)
-            DistSnd[f1, b, Lbl of A, Lbl of f1[A], Lbl of F[A]](d1, DistRLImpl.Single(label))
+            DistSnd[f1, b, Lbl :: A, Lbl :: f1[A], Lbl :: F[A]](d1, DistRLImpl.Single(label))
           case f: Focus.Snd[pr, f2, a] =>
-            val d2: Operationalized[f2, Lbl of A]{type Out = Lbl of f2[A]} =
+            val d2: Operationalized[f2, Lbl :: A]{type Out = Lbl :: f2[A]} =
               Single[f2, Lbl, A](label).operationalize(f.i)
-            DistFst[a, f2, Lbl of A, Lbl of f2[A], Lbl of F[A]](d2, DistLRImpl.Single(label))
+            DistFst[a, f2, Lbl :: A, Lbl :: f2[A], Lbl :: F[A]](d2, DistLRImpl.Single(label))
       override def handlers[G[_], R](
-        h: [X] => Injector[?, X, Lbl of A] => G[F[X] -> R],
+        h: [X] => Injector[?, X, Lbl :: A] => G[F[X] -> R],
       )(using
         G: Applicative[G],
-      ): G[HandlersImpl[Lbl of F[A], R]] =
+      ): G[HandlersImpl[Lbl :: F[A], R]] =
         h(Injector.Single(label))
           .map(HandlersImpl.Single(_))
     }
@@ -293,15 +293,15 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
     case class Cons[F[_], HLbl <: String, H, Tail, FTail](
       hLbl: HLbl,
       tail: DistFImpl[F, Tail] { type Out = FTail },
-    ) extends DistFImpl[F, (HLbl of H) :: Tail] {
-      override type Out = (HLbl of F[H]) :: FTail
-      override def operationalize(f: Focus[**, F]): Operationalized[F, (HLbl of H) :: Tail]{type Out = (HLbl of F[H]) :: FTail} =
+    ) extends DistFImpl[F, (HLbl :: H) || Tail] {
+      override type Out = (HLbl :: F[H]) || FTail
+      override def operationalize(f: Focus[**, F]): Operationalized[F, (HLbl :: H) || Tail]{type Out = (HLbl :: F[H]) || FTail} =
         tail.operationalize(f).extend[HLbl, H](hLbl)
       override def handlers[G[_], R](
-        h: [X] => Injector[?, X, (HLbl of H) :: Tail] => G[F[X] -> R],
+        h: [X] => Injector[?, X, (HLbl :: H) || Tail] => G[F[X] -> R],
       )(using
         G: Applicative[G],
-      ): G[HandlersImpl[(HLbl of F[H]) :: FTail, R]] =
+      ): G[HandlersImpl[(HLbl :: F[H]) || FTail, R]] =
         val h0: G[F[H] -> R] =
           h[H](Injector.InHead(hLbl))
         val ht: [X] => Injector[?, X, Tail] => G[F[X] -> R] =
@@ -311,20 +311,20 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
     }
 
     /** Like [[DistFImpl]], witnesses that distributing `F` into `Cases` yields `Out`.
-     *  Unlike [[DistFImpl]], [[Operationalized]] is defined by induction over the structure of `F`
+     *  Unlike [[DistFImpl]], [[Operationalized]] is defined by induction over the structure :: `F`
      *  (as opposed to by induction over `Cases`). As such, it can be more readily used
      *  to generate the distributing function `F[OneOf[Cases]] -> OneOf[Out]`.
      */
     sealed trait Operationalized[F[_], Cases] { self =>
       type Out
-      def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[F, (HLbl of H) :: Cases]{type Out = (HLbl of F[H]) :: self.Out}
+      def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[F, (HLbl :: H) || Cases]{type Out = (HLbl :: F[H]) || self.Out}
       def compile: F[Enum[Cases]] -> Enum[Out]
     }
 
     case class Id[Cases]() extends DistFImpl.Operationalized[[x] =>> x, Cases] {
       override type Out = Cases
-      override def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[[x] =>> x, (HLbl of H) :: Cases]{type Out = (HLbl of H) :: Cases} =
-        Id[(HLbl of H) :: Cases]()
+      override def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[[x] =>> x, (HLbl :: H) || Cases]{type Out = (HLbl :: H) || Cases} =
+        Id[(HLbl :: H) || Cases]()
       override def compile: Enum[Cases] -> Enum[Cases] =
         cat.id[Enum[Cases]]
     }
@@ -334,12 +334,12 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
       dist1: DistLRImpl[A, F2Cases] { type Out = Res },
     ) extends DistFImpl.Operationalized[[x] =>> A ** F2[x], Cases] {
       override type Out = Res
-      override def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[[x] =>> A ** F2[x], (HLbl of H) :: Cases]{type Out = (HLbl of (A ** F2[H])) :: Res} =
-        val inner: Operationalized[F2, (HLbl of H) :: Cases]{type Out = (HLbl of F2[H]) :: F2Cases} =
+      override def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[[x] =>> A ** F2[x], (HLbl :: H) || Cases]{type Out = (HLbl :: (A ** F2[H])) || Res} =
+        val inner: Operationalized[F2, (HLbl :: H) || Cases]{type Out = (HLbl :: F2[H]) || F2Cases} =
           distF2.extend[HLbl, H](hLbl)
-        val outer: DistLRImpl[A, (HLbl of F2[H]) :: F2Cases]{type Out = (HLbl of (A ** F2[H])) :: Res} =
+        val outer: DistLRImpl[A, (HLbl :: F2[H]) || F2Cases]{type Out = (HLbl :: (A ** F2[H])) || Res} =
           dist1.extend[HLbl, F2[H]](hLbl)
-        DistFst[A, F2, (HLbl of H) :: Cases, (HLbl of F2[H]) :: F2Cases, (HLbl of (A ** F2[H])) :: Res](
+        DistFst[A, F2, (HLbl :: H) || Cases, (HLbl :: F2[H]) || F2Cases, (HLbl :: (A ** F2[H])) || Res](
           inner,
           outer,
         )
@@ -359,10 +359,10 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
       dist2: DistRLImpl[B, F1Cases] { type Out = Res },
     ) extends DistFImpl.Operationalized[[x] =>> F1[x] ** B, Cases] {
       override type Out = Res
-      override def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[[x] =>> F1[x] ** B, (HLbl of H) :: Cases]{type Out = (HLbl of (F1[H] ** B)) :: Res} =
-        val inner: Operationalized[F1, (HLbl of H) :: Cases]{type Out = (HLbl of F1[H]) :: F1Cases} =
+      override def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[[x] =>> F1[x] ** B, (HLbl :: H) || Cases]{type Out = (HLbl :: (F1[H] ** B)) || Res} =
+        val inner: Operationalized[F1, (HLbl :: H) || Cases]{type Out = (HLbl :: F1[H]) || F1Cases} =
           distF1.extend[HLbl, H](hLbl)
-        val outer: DistRLImpl[B, (HLbl of F1[H]) :: F1Cases]{type Out = (HLbl of (F1[H] ** B)) :: Res} =
+        val outer: DistRLImpl[B, (HLbl :: F1[H]) || F1Cases]{type Out = (HLbl :: (F1[H] ** B)) || Res} =
           dist2.extend[HLbl, F1[H]](hLbl)
         DistSnd(inner, outer)
       override def compile: (F1[Enum[Cases]] ** B) -> Enum[Res] =
@@ -381,19 +381,19 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
   private object HandlersBuilder {
     case class Empty[Cases, R]() extends HandlersBuilder[Cases, Cases, R]
     case class Snoc[Cases, HLbl, H, T, R](
-      init: HandlersBuilder[Cases, (HLbl of H) :: T, R],
+      init: HandlersBuilder[Cases, (HLbl :: H) || T, R],
       last: H -> R,
     ) extends HandlersBuilder[Cases, T, R]
     def addHandler[Cases, HLbl, H, T, R](
-      b: HandlersBuilder[Cases, (HLbl of H) :: T, R],
+      b: HandlersBuilder[Cases, (HLbl :: H) || T, R],
       h: H -> R,
     ): HandlersBuilder[Cases, T, R] =
       Snoc(b, h)
     def build[Cases, Lbl, Z, R](
-      b: HandlersBuilder[Cases, Lbl of Z, R],
+      b: HandlersBuilder[Cases, Lbl :: Z, R],
       h: Z -> R,
     ): HandlersImpl[Cases, R] =
-      build[Cases, Lbl of Z, R](b, HandlersImpl.Single(h))
+      build[Cases, Lbl :: Z, R](b, HandlersImpl.Single(h))
     def build[Cases, Cases0, R](
       b: HandlersBuilder[Cases, Cases0, R],
       acc: HandlersImpl[Cases0, R],
@@ -408,15 +408,15 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
   }
 
   private object HandlersImpl {
-    case class Single[Lbl, A, R](h: A -> R) extends HandlersImpl[Lbl of A, R] {
-      override def compile: Enum[Lbl of A] -> R =
+    case class Single[Lbl, A, R](h: A -> R) extends HandlersImpl[Lbl :: A, R] {
+      override def compile: Enum[Lbl :: A] -> R =
         extract[Lbl, A] > h
     }
     case class Cons[HLbl, H, T, R](
       head: H -> R,
       tail: HandlersImpl[T, R],
-    ) extends HandlersImpl[(HLbl of H) :: T, R] {
-      override def compile: Enum[(HLbl of H) :: T] -> R =
+    ) extends HandlersImpl[(HLbl :: H) || T, R] {
+      override def compile: Enum[(HLbl :: H) || T] -> R =
         peel[HLbl, H, T] > either(head, tail.compile)
     }
   }
@@ -424,8 +424,8 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
   private class PartitioningImpl[Cases](
     cases: CaseList[Cases],
   )(using
+    BiInjective[||],
     BiInjective[::],
-    BiInjective[of],
   ) extends libretto.lambda.Partitioning[->, **, Enum[Cases]] {
     override type Partition[A] =
       Injector[?, A, Cases]
@@ -471,74 +471,74 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
 }
 
 object EnumModule {
-  sealed trait Injector[::[_, _], of[_, _], Label, A, Cases] {
+  sealed trait Injector[||[_, _], ::[_, _], Label, A, Cases] {
     import Injector.*
 
     final type Type = A
 
     def label: Label & String
 
-    def inTail[HLbl, H]: Injector[::, of, Label, A, (HLbl of H) :: Cases] =
+    def inTail[HLbl, H]: Injector[||, ::, Label, A, (HLbl :: H) || Cases] =
       InTail(this)
 
-    infix def testEqual[Lbl2, B](that: Injector[::, of, Lbl2, B, Cases])(using BiInjective[::],  BiInjective[of]): Option[A =:= B]
+    infix def testEqual[Lbl2, B](that: Injector[||, ::, Lbl2, B, Cases])(using BiInjective[||],  BiInjective[::]): Option[A =:= B]
 
-    protected def testEqualToSingle[Lbl2, B](using Cases =:= (Lbl2 of B), BiInjective[of]): Option[A =:= B]
+    protected def testEqualToSingle[Lbl2, B](using Cases =:= (Lbl2 :: B), BiInjective[::]): Option[A =:= B]
 
-    protected def testEqualToInHead[Lbl2, B, T](using Cases =:= ((Lbl2 of B) :: T), BiInjective[::], BiInjective[of]): Option[A =:= B]
+    protected def testEqualToInHead[Lbl2, B, T](using Cases =:= ((Lbl2 :: B) || T), BiInjective[||], BiInjective[::]): Option[A =:= B]
   }
 
   object Injector {
-    case class InHead[::[_, _], of[_, _], Label <: String, A, Tail](
+    case class InHead[||[_, _], ::[_, _], Label <: String, A, Tail](
       label: Label,
-    ) extends Injector[::, of, Label, A, (Label of A) :: Tail]:
-      override def testEqual[Lbl2, B](that: Injector[::, of, Lbl2, B, of[Label, A] :: Tail])(using BiInjective[::], BiInjective[of]): Option[A =:= B] =
+    ) extends Injector[||, ::, Label, A, (Label :: A) || Tail]:
+      override def testEqual[Lbl2, B](that: Injector[||, ::, Lbl2, B, (Label :: A) || Tail])(using BiInjective[||], BiInjective[::]): Option[A =:= B] =
         that.testEqualToInHead[Label, A, Tail].map(_.flip)
 
       override protected def testEqualToInHead[Lbl2, B, T](using
-        ev: (Label of A) :: Tail =:= (Lbl2 of B) :: T,
-        i: BiInjective[::],
-        j: BiInjective[of],
+        ev: (Label :: A || Tail) =:= (Lbl2 :: B || T),
+        i: BiInjective[||],
+        j: BiInjective[::],
       ): Option[A =:= B] =
-        ev match { case BiInjective[::](BiInjective[of](_, ev1), _) => Some(ev1) }
+        ev match { case BiInjective[||](BiInjective[::](_, ev1), _) => Some(ev1) }
 
-      override protected def testEqualToSingle[Lbl2, B](using of[Label, A] :: Tail =:= of[Lbl2, B], BiInjective[of]): Option[A =:= B] =
+      override protected def testEqualToSingle[Lbl2, B](using (Label :: A || Tail) =:= (Lbl2 :: B), BiInjective[::]): Option[A =:= B] =
         None
 
-    case class Single[::[_, _], of[_, _], Label <: String, A](
+    case class Single[||[_, _], ::[_, _], Label <: String, A](
       label: Label,
-    ) extends Injector[::, of, Label, A, Label of A]:
-      override def testEqual[Lbl2, B](that: Injector[::, of, Lbl2, B, Label of A])(using BiInjective[::], BiInjective[of]): Option[A =:= B] =
+    ) extends Injector[||, ::, Label, A, Label :: A]:
+      override def testEqual[Lbl2, B](that: Injector[||, ::, Lbl2, B, Label :: A])(using BiInjective[||], BiInjective[::]): Option[A =:= B] =
         that.testEqualToSingle[Label, A].map(_.flip)
 
       override protected def testEqualToSingle[Lbl2, B](using
-        ev: (Label of A) =:= (Lbl2 of B),
-        inj: BiInjective[of],
+        ev: (Label :: A) =:= (Lbl2 :: B),
+        inj: BiInjective[::],
       ): Option[A =:= B] =
-        ev match { case BiInjective[of](_, ev1) => Some(ev1) }
+        ev match { case BiInjective[::](_, ev1) => Some(ev1) }
 
-      override protected def testEqualToInHead[Lbl2, B, T](using of[Label, A] =:= of[Lbl2, B] :: T, BiInjective[::], BiInjective[of]): Option[A =:= B] =
+      override protected def testEqualToInHead[Lbl2, B, T](using (Label :: A) =:= (Lbl2 :: B || T), BiInjective[||], BiInjective[::]): Option[A =:= B] =
         None
 
-    case class InTail[::[_, _], of[_, _], Label, A, HLbl, H, Tail](
-      i: Injector[::, of, Label, A, Tail],
-    ) extends Injector[::, of, Label, A, (HLbl of H) :: Tail]:
+    case class InTail[||[_, _], ::[_, _], Label, A, HLbl, H, Tail](
+      i: Injector[||, ::, Label, A, Tail],
+    ) extends Injector[||, ::, Label, A, (HLbl :: H) || Tail]:
       override def label: Label & String = i.label
 
       override def testEqual[Lbl2, B](
-        that: Injector[::, of, Lbl2, B, (HLbl of H) :: Tail],
+        that: Injector[||, ::, Lbl2, B, (HLbl :: H) || Tail],
       )(using
+        BiInjective[||],
         BiInjective[::],
-        BiInjective[of],
       ): Option[A =:= B] =
         that match
           case InTail(j) => i testEqual j
           case _ => None
 
-      override protected def testEqualToSingle[Lbl2, B](using of[HLbl, H] :: Tail =:= of[Lbl2, B], BiInjective[of]): Option[A =:= B] =
+      override protected def testEqualToSingle[Lbl2, B](using (HLbl :: H || Tail) =:= (Lbl2 :: B), BiInjective[::]): Option[A =:= B] =
         None
 
-      override protected def testEqualToInHead[Lbl2, B, T](using of[HLbl, H] :: Tail =:= of[Lbl2, B] :: T, BiInjective[::], BiInjective[of]): Option[A =:= B] =
+      override protected def testEqualToInHead[Lbl2, B, T](using (HLbl :: H || Tail) =:= (Lbl2 :: B || T), BiInjective[||], BiInjective[::]): Option[A =:= B] =
         None
   }
 }
