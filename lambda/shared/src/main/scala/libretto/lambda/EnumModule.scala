@@ -55,67 +55,13 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
       handle[Cases, R](handlers(Handlers[Cases]))
 
   def distF[F[_], Cases](using F: Focus[**, F], ev: DistF[F, Cases]): F[Enum[Cases]] -> Enum[ev.Out] =
-    distF(ev.operationalize(F))
-
-  private def distF[F[_], Cases](ev: DistFImpl.Operationalized[F, Cases]): F[Enum[Cases]] -> Enum[ev.Out] =
-    ev.compile
+    ev.operationalize(F).compile
 
   def distLR[A, Cases](using ev: DistLR[A, Cases]): (A ** Enum[Cases]) -> Enum[ev.Out] =
-    distLR_[A, Cases, ev.Out]
-
-  private def distLR_[A, Cases, ACases](using ev: DistLR[A, Cases] { type Out = ACases }): (A ** Enum[Cases]) -> Enum[ACases] =
-    ev match
-      case s: DistLRImpl.Single[a, n, b] =>
-        summon[Cases =:= (n of b)]
-        val ev1: ((n of (A ** b)) =:= ACases) =
-          summon[(n of (A ** b)) =:= s.Out] andThen summon[s.Out =:= ACases]
-        distLRSingle(s.label).to(using ev1.liftCo[Enum])
-      case c: DistLRImpl.Cons[a, n, h, t, at] =>
-        val ev1: (((n of (a ** h)) :: at) =:= ACases) =
-          summon[((n of (a ** h)) :: at) =:= c.Out] andThen summon[c.Out =:= ACases]
-        distLRIntoTail[A, n, h, t, at](c.hLbl, c.tail).to(using ev1.liftCo[Enum])
-
-  private def distLRSingle[A, Lbl <: String, B](
-    lbl: Lbl,
-  ): (A ** Enum[Lbl of B]) -> Enum[Lbl of (A ** B)] =
-    extract[Lbl, B].inSnd[A] > inj(Injector.Single(lbl))
-
-  private def distLRIntoTail[A, HLbl <: String, H, Tail, ATail](
-    hLbl: HLbl,
-    ev: DistLRImpl[A, Tail] { type Out = ATail },
-  ): (A ** Enum[(HLbl of H) :: Tail]) -> Enum[(HLbl of (A ** H)) :: ATail] =
-    cat.snd(peel[HLbl, H, Tail]) > distr.distLR > either(
-      inj(Injector.InHead(hLbl)),
-      distLR(using ev) > injectR > unpeel[HLbl, A ** H, ATail],
-    )
+    ev.compile
 
   def distRL[B, Cases](using ev: DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[ev.Out] =
-    distRL_[B, Cases, ev.Out]
-
-  private def distRL_[B, Cases, BCases](using ev: DistRL[B, Cases] { type Out = BCases }): (Enum[Cases] ** B) -> Enum[BCases] =
-    ev match
-      case s: DistRLImpl.Single[b, n, a] =>
-        val ev1: ((n of (a ** B)) =:= BCases) =
-          summon[(n of (a ** B)) =:= s.Out] andThen summon[s.Out =:= BCases]
-        distRLSingle(s.label).to(using ev1.liftCo[Enum])
-      case c: DistRLImpl.Cons[b, n, h, t, bt] =>
-        val ev1: (((n of (h ** b)) :: bt) =:= BCases) =
-          summon[((n of (h ** b)) :: bt) =:= c.Out] andThen summon[c.Out =:= BCases]
-        distRLIntoTail[B, n, h, t, bt](c.hLbl, c.tail).to(using ev1.liftCo[Enum])
-
-  private def distRLSingle[B, Lbl <: String, A](
-    lbl: Lbl,
-  ): (Enum[Lbl of A] ** B) -> Enum[Lbl of (A ** B)] =
-    extract[Lbl, A].inFst[B] > inj(Injector.Single(lbl))
-
-  private def distRLIntoTail[B, HLbl <: String, H, Tail, BTail](
-    hLbl: HLbl,
-    ev: DistRLImpl[B, Tail] { type Out = BTail },
-  ): (Enum[(HLbl of H) :: Tail] ** B) -> Enum[(HLbl of (H ** B)) :: BTail] =
-    cat.fst(peel[HLbl, H, Tail]) > distr.distRL > either(
-      inj(Injector.InHead(hLbl)),
-      distRL(using ev) > injectR > unpeel[HLbl, H ** B, BTail],
-    )
+    ev.compile
 
   given singleCaseList[Lbl <: String, A](using label: StaticValue[Lbl]): CaseList[Lbl of A] =
     CaseListImpl.singleCase(label.value)
@@ -240,22 +186,34 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
 
   private sealed trait DistLRImpl[A, Cases] { self =>
     type Out
+
+    def compile: (A ** Enum[Cases]) -> Enum[Out]
+
     def extend[HLbl <: String, H](hLbl: HLbl): DistLRImpl[A, (HLbl of H) :: Cases]{type Out = (HLbl of (A ** H)) :: self.Out} =
       DistLRImpl.Cons(hLbl, this)
-    def compile: (A ** Enum[Cases]) -> Enum[Out] =
-      distLR(using this)
   }
 
   private object DistLRImpl {
     case class Single[A, Lbl <: String, B](label: Lbl) extends DistLRImpl[A, Lbl of B] {
       override type Out = Lbl of (A ** B)
+
+      override def compile: (A ** Enum[Lbl of B]) -> Enum[Out] =
+        extract[Lbl, B].inSnd[A] > inj(Injector.Single(label))
     }
+
     case class Cons[A, HLbl <: String, H, Tail, ATail](
       hLbl: HLbl,
       tail: DistLRImpl[A, Tail] { type Out = ATail },
     ) extends DistLRImpl[A, (HLbl of H) :: Tail] {
       override type Out = (HLbl of (A ** H)) :: ATail
+
+      override def compile: (A ** Enum[(HLbl of H) :: Tail]) -> Enum[Out] =
+        cat.snd(peel[HLbl, H, Tail]) > distr.distLR > either(
+          inj(Injector.InHead(hLbl)),
+          tail.compile > injectR > unpeel[HLbl, A ** H, ATail],
+        )
     }
+
     def cons[A, HLbl <: String, H, Tail](
       hLbl: HLbl,
       tail: DistLRImpl[A, Tail],
@@ -265,10 +223,11 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
 
   private sealed trait DistRLImpl[B, Cases] { self =>
     type Out
+
+    def compile: (Enum[Cases] ** B) -> Enum[Out]
+
     def extend[HLbl <: String, H](hLbl: HLbl): DistRLImpl[B, (HLbl of H) :: Cases]{type Out = (HLbl of (H ** B)) :: self.Out} =
       DistRLImpl.Cons(hLbl, this)
-    def compile: (Enum[Cases] ** B) -> Enum[Out] =
-      distRL(using this)
   }
 
   private object DistRLImpl {
@@ -276,12 +235,22 @@ class EnumModule[->[_, _], **[_, _], ++[_, _], Enum[_], ::[_, _], of[_, _]](
       label: Lbl,
     ) extends DistRLImpl[B, Lbl of A] {
       override type Out = Lbl of (A ** B)
+
+      override def compile: (Enum[Lbl of A] ** B) -> Enum[Out] =
+        extract[Lbl, A].inFst[B] > inj(Injector.Single(label))
     }
+
     case class Cons[B, HLbl <: String, H, Tail, BTail](
       hLbl: HLbl,
       tail: DistRLImpl[B, Tail] { type Out = BTail },
     ) extends DistRLImpl[B, (HLbl of H) :: Tail] {
       override type Out = (HLbl of (H ** B)) :: BTail
+
+      override def compile: (Enum[(HLbl of H) :: Tail] ** B) -> Enum[Out] =
+        cat.fst(peel[HLbl, H, Tail]) > distr.distRL > either(
+          inj(Injector.InHead(hLbl)),
+          tail.compile > injectR > unpeel[HLbl, H ** B, BTail],
+        )
     }
   }
 
