@@ -77,7 +77,7 @@ object FreeScaletto extends Scaletto {
     case class InjectR[A, B]() extends (B -⚬ (A |+| B))
     case class EitherF[A, B, C](f: A -⚬ C, g: B -⚬ C) extends ((A |+| B) -⚬ C)
     case class Absurd[A]() extends (Void -⚬ A)
-    case class OneOfInject[Label, A, Cases](i: OneOf.Injector[Label, A, Cases]) extends (A -⚬ OneOf[Cases])
+    case class OneOfInject[Label, A, Cases](i: EnumModule.Injector[::, of, Label, A, Cases]) extends (A -⚬ OneOf[Cases])
     case class OneOfPeel[Label, A, Cases]() extends (OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases]))
     case class OneOfUnpeel[Label, A, Cases]() extends ((A |+| OneOf[Cases]) -⚬ OneOf[(Label of A) :: Cases])
     case class OneOfExtractSingle[Lbl, A]() extends (OneOf[Lbl of A] -⚬ A)
@@ -510,13 +510,13 @@ object FreeScaletto extends Scaletto {
         FreeScaletto.this.distributeR
     }
 
-  override val OneOf: EnumModule[-⚬, |*|, |+|, OneOf, ::, of] =
-    EnumModule[-⚬, |*|, |+|, OneOf, ::, of](
+  override val OneOf: EnumModule[-⚬, |*|, OneOf, ::, of] =
+    EnumModule.fromBinarySums[-⚬, |*|, |+|, OneOf, ::, of](
       inj = [Label, A, Cases] => (i: EnumModule.Injector[::, of, Label, A, Cases]) => OneOfInject(i),
       peel = [Label, A, Cases] => DummyImplicit ?=> OneOfPeel(),
       unpeel = [Label, A, Cases] => DummyImplicit ?=> OneOfUnpeel(),
       extract = [Label, A] => DummyImplicit ?=> OneOfExtractSingle(),
-    )(
+    )(using
       ℭ,
       cocat,
       distribution,

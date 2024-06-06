@@ -1060,7 +1060,7 @@ private class ExecutionImpl(
     case class Pair[A, B](a: Frontier[A], b: Frontier[B]) extends Frontier[A |*| B]
     case class InjectL[A, B](a: Frontier[A]) extends Frontier[A |+| B]
     case class InjectR[A, B](b: Frontier[B]) extends Frontier[A |+| B]
-    case class OneOfInject[Label, A, Cases](a: Frontier[A], i: OneOf.Injector[Label, A, Cases]) extends Frontier[OneOf[Cases]]
+    case class OneOfInject[Label, A, Cases](a: Frontier[A], i: EnumModule.Injector[::, of, Label, A, Cases]) extends Frontier[OneOf[Cases]]
     case class Choice[A, B](a: () => Frontier[A], b: () => Frontier[B], onError: Throwable => Unit) extends Frontier[A |&| B]
     case class Deferred[A](f: Future[Frontier[A]]) extends Frontier[A]
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]

@@ -65,7 +65,7 @@ trait CoreDSL {
 
   type OneOf[Cases]
 
-  val OneOf: EnumModule[-⚬, |*|, |+|, OneOf, ::, of]
+  val OneOf: EnumModule[-⚬, |*|, OneOf, ::, of]
 
   /** Signal that travels in the direction of [[-⚬]], i.e. the positive direction.
     * It may signal completion of a (potentially effectful) computation.
