@@ -58,14 +58,14 @@ trait CoreDSL {
   type |&|[A, B]
 
   /** Delimiter of fields in n-ary typedefs. */
-  type ::[A, B]
+  type ||[A, B]
 
-  /** Used to describe named fields: `"label" of Type`. */
-  infix type of[Label, T]
+  /** Used to describe named fields: `"label" :: Type`. */
+  type ::[Label, T]
 
   type OneOf[Cases]
 
-  val OneOf: EnumModule[-⚬, |*|, OneOf, ::, of]
+  val OneOf: EnumModule.LeftAssociative[-⚬, |*|, OneOf, ||, ::]
 
   /** Signal that travels in the direction of [[-⚬]], i.e. the positive direction.
     * It may signal completion of a (potentially effectful) computation.

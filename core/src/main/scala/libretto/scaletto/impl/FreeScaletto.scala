@@ -33,8 +33,8 @@ object FreeScaletto extends Scaletto {
   final type |*|[A, B] = ConcurrentPair[A, B]
   final class |+|[A, B] private()
   final class |&|[A, B] private()
-  final class ::[A, B] private()
-  final infix class of[Label, T] private ()
+  final class ||[A, B] private()
+  final class ::[Label, T] private ()
   final class OneOf[Cases] private()
   final class Rec[F[_]] private()
   final class Inverted[A] private()
@@ -49,13 +49,18 @@ object FreeScaletto extends Scaletto {
       ev match { case TypeEq(Refl()) => (summon, summon) }
   }
 
-  given BiInjective[::] with {
-    override def unapply[A, B, X, Y](ev: (A :: B) =:= (X :: Y)): (A =:= X, B =:= Y) =
+  given BiInjective[||] with {
+    override def unapply[A, B, X, Y](ev: (A || B) =:= (X || Y)): (A =:= X, B =:= Y) =
       ev match { case TypeEq(Refl()) => (summon, summon) }
   }
 
-  given BiInjective[of] with {
-    override def unapply[A, B, X, Y](ev: (A of B) =:= (X of Y)): (A =:= X, B =:= Y) =
+  given biInjectiveFlippedSeparator: BiInjective[[x, y] =>> y || x] with {
+    override def unapply[A, B, X, Y](ev: (B || A) =:= (Y || X)): (A =:= X, B =:= Y) =
+      ev match { case TypeEq(Refl()) => (summon, summon) }
+  }
+
+  given BiInjective[::] with {
+    override def unapply[A, B, X, Y](ev: (A :: B) =:= (X :: Y)): (A =:= X, B =:= Y) =
       ev match { case TypeEq(Refl()) => (summon, summon) }
   }
 
@@ -77,10 +82,10 @@ object FreeScaletto extends Scaletto {
     case class InjectR[A, B]() extends (B -⚬ (A |+| B))
     case class EitherF[A, B, C](f: A -⚬ C, g: B -⚬ C) extends ((A |+| B) -⚬ C)
     case class Absurd[A]() extends (Void -⚬ A)
-    case class OneOfInject[Label, A, Cases](i: EnumModule.Injector[::, of, Label, A, Cases]) extends (A -⚬ OneOf[Cases])
-    case class OneOfPeel[Label, A, Cases]() extends (OneOf[(Label of A) :: Cases] -⚬ (A |+| OneOf[Cases]))
-    case class OneOfUnpeel[Label, A, Cases]() extends ((A |+| OneOf[Cases]) -⚬ OneOf[(Label of A) :: Cases])
-    case class OneOfExtractSingle[Lbl, A]() extends (OneOf[Lbl of A] -⚬ A)
+    case class OneOfInject[Label, A, Cases](i: EnumModule.Injector[[x, y] =>> y || x, ::, Label, A, Cases]) extends (A -⚬ OneOf[Cases])
+    case class OneOfPeel[Label, A, Cases]() extends (OneOf[Cases || (Label :: A)] -⚬ (A |+| OneOf[Cases]))
+    case class OneOfUnpeel[Label, A, Cases]() extends ((A |+| OneOf[Cases]) -⚬ OneOf[Cases || (Label :: A)])
+    case class OneOfExtractSingle[Lbl, A]() extends (OneOf[Lbl :: A] -⚬ A)
     case class ChooseL[A, B]() extends ((A |&| B) -⚬ A)
     case class ChooseR[A, B]() extends ((A |&| B) -⚬ B)
     case class Choice[A, B, C](f: A -⚬ B, g: A -⚬ C) extends (A -⚬ (B |&| C))
@@ -510,9 +515,9 @@ object FreeScaletto extends Scaletto {
         FreeScaletto.this.distributeR
     }
 
-  override val OneOf: EnumModule[-⚬, |*|, OneOf, ::, of] =
-    EnumModule.fromBinarySums[-⚬, |*|, |+|, OneOf, ::, of](
-      inj = [Label, A, Cases] => (i: EnumModule.Injector[::, of, Label, A, Cases]) => OneOfInject(i),
+  override val OneOf: EnumModule.LeftAssociative[-⚬, |*|, OneOf, ||, ::] =
+    EnumModule.fromBinarySums[-⚬, |*|, |+|, OneOf, [x, y] =>> y || x, ::](
+      inj = [Label, A, Cases] => (i: EnumModule.Injector[[x, y] =>> y || x, ::, Label, A, Cases]) => OneOfInject(i),
       peel = [Label, A, Cases] => DummyImplicit ?=> OneOfPeel(),
       unpeel = [Label, A, Cases] => DummyImplicit ?=> OneOfUnpeel(),
       extract = [Label, A] => DummyImplicit ?=> OneOfExtractSingle(),

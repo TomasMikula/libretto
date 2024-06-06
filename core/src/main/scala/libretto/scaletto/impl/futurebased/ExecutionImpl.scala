@@ -350,10 +350,10 @@ private class ExecutionImpl(
           this.absurd
 
         case _: -⚬.OneOfExtractSingle[lbl, a] =>
-          (this: Frontier[OneOf[lbl of a]]).extractSingle
+          (this: Frontier[OneOf[lbl :: a]]).extractSingle
 
         case op: -⚬.OneOfPeel[lbl, a, cases] =>
-          (this: Frontier[OneOf[(lbl of a) :: cases]])
+          (this: Frontier[OneOf[cases || (lbl :: a)]])
             .narySumPeel
 
         case op: -⚬.OneOfUnpeel[lbl, a, cases] =>
@@ -1060,17 +1060,17 @@ private class ExecutionImpl(
     case class Pair[A, B](a: Frontier[A], b: Frontier[B]) extends Frontier[A |*| B]
     case class InjectL[A, B](a: Frontier[A]) extends Frontier[A |+| B]
     case class InjectR[A, B](b: Frontier[B]) extends Frontier[A |+| B]
-    case class OneOfInject[Label, A, Cases](a: Frontier[A], i: EnumModule.Injector[::, of, Label, A, Cases]) extends Frontier[OneOf[Cases]]
+    case class OneOfInject[Label, A, Cases](a: Frontier[A], i: EnumModule.Injector[[x, y] =>> y || x, ::, Label, A, Cases]) extends Frontier[OneOf[Cases]]
     case class Choice[A, B](a: () => Frontier[A], b: () => Frontier[B], onError: Throwable => Unit) extends Frontier[A |&| B]
     case class Deferred[A](f: Future[Frontier[A]]) extends Frontier[A]
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]
     sealed trait Void extends Frontier[dsl.Void] {
       def absurd[A]: Frontier[A]
     }
-    case class OneOfSingle[Lbl, A](f: Frontier[A]) extends Frontier[OneOf[Lbl of A]]
+    case class OneOfSingle[Lbl, A](f: Frontier[A]) extends Frontier[OneOf[Lbl :: A]]
     case class OneOfUnpeel[Label, A, Cases](
       f: Frontier[A |+| OneOf[Cases]],
-    ) extends Frontier[OneOf[(Label of A) :: Cases]]
+    ) extends Frontier[OneOf[Cases || (Label :: A)]]
 
     case class Value[A](a: A) extends Frontier[Val[A]]
 
@@ -1153,7 +1153,7 @@ private class ExecutionImpl(
           case Deferred(f) => Deferred(f.map(_.absurd[A]))
     }
 
-    extension [Lbl, A](f: Frontier[OneOf[Lbl of A]]) {
+    extension [Lbl, A](f: Frontier[OneOf[Lbl :: A]]) {
       def extractSingle(using ExecutionContext): Frontier[A] =
         f match
           case OneOfSingle(f) => f
@@ -1161,7 +1161,7 @@ private class ExecutionImpl(
           case OneOfInject(fa, EnumModule.Injector.Single(_)) => fa
     }
 
-    extension [Label, A, Cases](f: Frontier[OneOf[(Label of A) :: Cases]]) {
+    extension [Label, A, Cases](f: Frontier[OneOf[Cases || (Label :: A)]]) {
       def narySumPeel(using ExecutionContext): Frontier[A |+| OneOf[Cases]] =
         f match
           case OneOfUnpeel(f) => f

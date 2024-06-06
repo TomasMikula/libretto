@@ -114,6 +114,9 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 }
 
 object EnumModule {
+  type LeftAssociative[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] =
+    EnumModule[->, **, Enum, [c1, c2] =>> c2 || c1, ::]
+
   sealed trait Injector[||[_, _], ::[_, _], Label, A, Cases] {
     import Injector.*
 

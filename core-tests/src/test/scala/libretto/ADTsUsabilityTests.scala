@@ -16,20 +16,19 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
 
     val coreLib = CoreLib(kit.dsl)
     import coreLib.{*, given}
+    import dsl.{|| as |}
 
-    type NonEmptyTreeF[A, X] =
-      OneOf[
-        ("Leaf" of A) ::
-        ("Branch" of (X |*| X))
+    type NonEmptyTreeF[A, X] = OneOf
+      [ "Leaf" :: A
+      | "Branch" :: (X |*| X)
       ]
 
     type NonEmptyTree[A] =
       Rec[NonEmptyTreeF[A, _]]
 
-    type Tree[A] =
-      OneOf[
-        ("Empty" of One) ::
-        ("NonEmpty" of NonEmptyTree[A])
+    type Tree[A] = OneOf
+      [ "Empty" :: One
+      | "NonEmpty" :: NonEmptyTree[A]
       ]
 
     object NonEmptyTree {
@@ -59,8 +58,8 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
       def foldMapBB[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): NonEmptyTree[A] -⚬ B =
         rec { self =>
           unpack[A] > OneOf.handle(_
-            .caseOf["Leaf"](f)
             .caseOf["Branch"](par(self, self) > g)
+            .caseOf["Leaf"](f)
           )
         }
 
@@ -113,8 +112,8 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
       /** `foldMap` using barebones handling of cases in order. */
       def foldMapBB[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): Tree[A] -⚬ Maybe[B] =
         OneOf.handle[Tree[A]](_
-          .caseOf["Empty"](Maybe.empty[B])
           .caseOf["NonEmpty"](NonEmptyTree.foldMapBB(f, g) > Maybe.just)
+          .caseOf["Empty"](Maybe.empty[B])
         )
 
       def foldMap[A, B](f: A -⚬ B, g: (B |*| B) -⚬ B): Tree[A] -⚬ Maybe[B] =
@@ -129,13 +128,13 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
       def concatBB[A]: (Tree[A] |*| Tree[A]) -⚬ Tree[A] =
         λ { case t1 |*| t2 =>
           (t1 |*| t2) :>> OneOf.distLR :>> OneOf.handle(_
-            .caseOf["Empty"](elimSnd)
             .caseOf["NonEmpty"](λ { case t1 |*| net2 =>
               ((net2 |*| t1) :>> OneOf.distLR).handle(_
-                .caseOf["Empty"](elimSnd)
                 .caseOf["NonEmpty"](λ { case (net2 |*| net1) => NonEmptyTree.branch(net1 |*| net2) })
+                .caseOf["Empty"](elimSnd)
               ) :>> nonEmpty
             })
+            .caseOf["Empty"](elimSnd)
           )
         }
 
