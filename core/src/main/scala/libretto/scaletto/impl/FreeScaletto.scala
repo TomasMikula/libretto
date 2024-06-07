@@ -1,7 +1,7 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{AForest, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Partitioning, Shuffled, Sink, Tupled, Var}
+import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Partitioning, Shuffled, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Delambdified
 import libretto.lambda.Partitioning.SubFun
 import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, StaticValue, TypeEq, Validated}
@@ -11,7 +11,6 @@ import libretto.lambda.util.Monad.monadEither
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
-import libretto.lambda.util.TypeEqK
 
 object FreeScaletto extends Scaletto {
   sealed trait -⚬[A, B]
@@ -770,15 +769,13 @@ object FreeScaletto extends Scaletto {
   ): SwitchRes[$[R]] =
     for {
       // delambdify each case
-      delams: NonEmptyList[Delambdified.Success[$, |*|, -?>, VarOrigin, ScopeInfo, A, R]] <-
+      delams: NonEmptyList[CapturingFun[-?>, |*|, Tupled[|*|, $, _], A, R]] <-
         cases.traverse { case (pos, f) =>
-          lambdas.delambdifyNested(ScopeInfo.SwitchCase(pos), VarOrigin.SwitchCase(pos), f) match
-            case f: Delambdified.Success[expr, p, arr, v, c, a, r] => Valid(f)
-            case Delambdified.Failure(es) => Invalid(es)
+          lambdas.delambdifyNested(ScopeInfo.SwitchCase(pos), VarOrigin.SwitchCase(pos), f).toValidated
         }
 
       // make each case capture the least common superset of captured expressions
-      delamN: Delambdified[$, |*|, [a, b] =>> NonEmptyList[a -?> b], VarOrigin, ScopeInfo, A, R] =
+      delamN: CapturingFun[[a, b] =>> NonEmptyList[a -?> b], |*|, Tupled[|*|, $, _], A, R] <-
         lambdas.leastCommonCapture(delams)
 
       res <- switchDelambdified(a, delamN)
@@ -789,23 +786,23 @@ object FreeScaletto extends Scaletto {
     switchPos: SourcePos,
   )(
     a: $[A],
-    cases: Delambdified[$, |*|, [a, b] =>> NonEmptyList[a -?> b], VarOrigin, ScopeInfo, A, R],
+    cases: CapturingFun[[a, b] =>> NonEmptyList[a -?> b], |*|, Tupled[|*|, $, _], A, R],
   ): SwitchRes[$[R]] = {
-    import libretto.lambda.Lambdas.Delambdified.{Exact, Closure, Failure}
+    import CapturingFun.{Closure, NoCapture}
 
     // split each case into a (pattern, handler) pair
     // and compile the resulting list of pairs
     // (after extending the pattern to cover any captured expressions)
 
     cases match
-      case Exact(fs) =>
+      case NoCapture(fs) =>
         for {
           cases <- fs.traverse(extractPatternAt(Focus.id, _))
           f     <- compilePatternMatch(switchPos, cases)
         } yield
           (a map partial(f))(VarOrigin.SwitchOut(switchPos))
 
-      case cl: Closure[exp, prod, arr, v, c, x, a, r] =>
+      case cl: Closure[arr, prod, exp, x, a, r] =>
         val xa: $[x |*| A] =
           lambdas.Expr.zipN(cl.captured zip Tupled.atom(a))(VarOrigin.SwitchIn(switchPos))
         for {
@@ -818,9 +815,6 @@ object FreeScaletto extends Scaletto {
           f <- compilePatternMatch(switchPos, cases1)
         } yield
           lambdas.Expr.map(xa, partial(f))(VarOrigin.SwitchOut(switchPos))
-
-      case Failure(es) =>
-        Invalid(es)
   }
 
   private def compilePatternMatch[A, R](

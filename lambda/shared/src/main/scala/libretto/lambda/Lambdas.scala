@@ -173,94 +173,42 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
   }
 
   def leastCommonCapture[A, B](
-    fs: NonEmptyList[DelambdifiedSuccess[A, B]],
-  )(using
-    ctx: Context,
-    ssc: SymmetricSemigroupalCategory[-⚬, |*|],
-    inj: BiInjective[|*|],
-  ): Lambdas.Delambdified[Expr, |*|, [a, b] =>> NonEmptyList[a -⚬ b], V, C, A, B] =
-    leastCommonCapture(fs.head, fs.tail)
-
-  def leastCommonCapture[A, B](
-    head: DelambdifiedSuccess[A, B],
-    tail: List[DelambdifiedSuccess[A, B]],
-  )(using
-    ctx: Context,
-    ssc: SymmetricSemigroupalCategory[-⚬, |*|],
-    inj: BiInjective[|*|],
-  ): Lambdas.Delambdified[Expr, |*|, [a, b] =>> NonEmptyList[a -⚬ b], V, C, A, B] = {
-    import Lambdas.Delambdified.{Closure, Exact, Failure}
-
-    tail match {
-      case Nil =>
-        head.mapFun[[a, b] =>> NonEmptyList[a -⚬ b]]([X] => NonEmptyList(_, Nil))
-      case f1 :: fs =>
-        head match
-          case Exact(f0) =>
-            leastCommonCapture(f1, fs) match
-              case Exact(fs) =>
-                Exact(f0 :: fs)
-              case Closure(captured, fs) =>
-                discarderOf(captured) match
-                  case Right(discardFst) => Closure(captured, (discardFst(()) > f0) :: fs)
-                  case Left(unusedVars)  => Failure(LinearityViolation.UnusedInBranch(unusedVars))
-              case Failure(e) =>
-                Failure(e)
-
-          case Closure(captured, f) =>
-            leastCommonCapture(captured, tail) match
-              case Invalid(e) =>
-                Failure(e)
-              case Valid(Exists.Some((p, Closure(y, fs)))) =>
-                Closure(y, NonEmptyList(ssc.fst(p) > f, fs))
-    }
-  }
-
-  private def leastCommonCapture[X, A, B](
-    acc: Tupled[Expr, X],
-    fs: List[DelambdifiedSuccess[A, B]],
+    f: CapturingFun[-⚬, |*|, Tupled[Expr, _], A, B],
+    g: CapturingFun[-⚬, |*|, Tupled[Expr, _], A, B],
   )(using
     ctx: Context,
     ssc: SymmetricSemigroupalCategory[-⚬, |*|],
     inj: BiInjective[|*|],
   ): Validated[
     LinearityViolation[V, C],
-    Exists[[Y] =>> (
-      Y -⚬ X,
-      Lambdas.Delambdified.Closure[Expr, |*|, [a, b] =>> List[a -⚬ b], V, C, Y, A, B]
-    )]
-  ] = {
-    import Lambdas.Delambdified.{Closure, Exact, Failure}
+    CapturingFun[[a, b] =>> (a -⚬ b, a -⚬ b), |*|, Tupled[Expr, _], A, B]
+  ] =
+    CapturingFun.leastCommonCapture(f, g)(getDiscarder, [X, Y] => union(_, _))
 
-    fs match
-      case Nil =>
-        Valid(Exists(ssc.id[X], Closure(acc, Nil)))
-      case f :: fs =>
-        f match
-          case Exact(f) =>
-            discarderOf(acc) match
-              case Left(unusedVars) =>
-                invalid(LinearityViolation.UnusedInBranch(unusedVars))
-              case Right(discardFst) =>
-                val g = discardFst(()) > f
-                leastCommonCapture(acc, fs)
-                  .map { case Exists.Some((p, Closure(y, gs))) =>
-                    Exists(p, Closure(y, (ssc.fst(p) > g) :: gs))
-                  }
+  def leastCommonCapture[A, B](
+    fs: NonEmptyList[CapturingFun[-⚬, |*|, Tupled[Expr, _], A, B]],
+  )(using
+    ctx: Context,
+    ssc: SymmetricSemigroupalCategory[-⚬, |*|],
+    inj: BiInjective[|*|],
+  ): Validated[
+    LinearityViolation[V, C],
+    CapturingFun[[a, b] =>> NonEmptyList[a -⚬ b], |*|, Tupled[Expr, _], A, B]
+  ] =
+    CapturingFun.leastCommonCapture(fs)(getDiscarder, [X, Y] => union(_, _))
 
-          case Closure(captured, f) =>
-            union(acc, captured)
-              .flatMap { case Exists.Some((y, p1, p2)) =>
-                leastCommonCapture(y, fs)
-                  .map { case Exists.Some((q, Closure(z, gs))) =>
-                    Exists((q > p1, Closure(z, (ssc.fst(q > p2) > f) :: gs)))
-                  }
-              }
-  }
+  private def getDiscarder(using
+    ctx: Context,
+    cat: SemigroupalCategory[-⚬, |*|],
+  ): [X] => Tupled[Expr, X] => Validated[LinearityViolation[V, C], [Y] => Unit => (X |*| Y) -⚬ Y] =
+    [X] => (fx: Tupled[Expr, X]) => discarderOf(fx) match {
+      case Right(discardFst) => Valid(discardFst)
+      case Left(unusedVars)  => invalid(LinearityViolation.UnusedInBranch(unusedVars))
+    }
 
   private def discarderOf[A](a: Tupled[Expr, A])(using
     ctx: Context,
-    ssc: SymmetricSemigroupalCategory[-⚬, |*|],
+    cat: SemigroupalCategory[-⚬, |*|],
   ): Either[Var.Set[V], [B] => Unit => (A |*| B) -⚬ B] =
     a.asBin match {
       case Bin.Leaf(x) =>
@@ -270,7 +218,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
           case None             => Left(Var.Set(v))
       case Bin.Branch(l, r) =>
         (discarderOf(Tupled.fromBin(l)), discarderOf(Tupled.fromBin(r))) match
-          case (Right(f), Right(g)) => Right([B] => (_: Unit) => ssc.fst(f(())) > g[B](()))
+          case (Right(f), Right(g)) => Right([B] => (_: Unit) => cat.fst(f(())) > g[B](()))
           case (Right(_), Left(ws)) => Left(ws)
           case (Left(vs), Right(_)) => Left(vs)
           case (Left(vs), Left(ws)) => Left(vs merge ws)
@@ -356,14 +304,14 @@ object Lambdas {
         case Failure(e)    => Failure(e)
       }
 
-    def toEither: Either[
-      NonEmptyList[LinearityViolation[V, C]],
-      CapturingFun[->, |*|, Tupled[|*|, Exp, *], A, B]
+    def toValidated: Validated[
+      LinearityViolation[V, C],
+      CapturingFun[->, |*|, Tupled[|*|, Exp, _], A, B]
     ] =
       this match {
-        case Exact(f)      => Right(CapturingFun.NoCapture(f))
-        case Closure(x, f) => Right(CapturingFun.Closure(x, f))
-        case Failure(e)    => Left(e)
+        case Exact(f)      => Valid(CapturingFun.NoCapture(f))
+        case Closure(x, f) => Valid(CapturingFun.Closure(x, f))
+        case Failure(es)   => Invalid(es)
       }
   }
 
