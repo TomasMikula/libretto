@@ -483,7 +483,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
     }
 
     /** Like [[DistFImpl]], witnesses that distributing `F` into `Cases` yields `Out`.
-     *  Unlike [[DistFImpl]], [[Operationalized]] is defined by induction over the structure :: `F`
+     *  Unlike [[DistFImpl]], [[Operationalized]] is defined by induction over the structure of `F`
      *  (as opposed to by induction over `Cases`). As such, it can be more readily used
      *  to generate the distributing function `F[OneOf[Cases]] -> OneOf[Out]`.
      */

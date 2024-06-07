@@ -1,10 +1,10 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Partitioning, Shuffled, Sink, Tupled, Var}
+import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Partitioning, SemigroupalCategory, Shuffled, Sink, Tupled, Var}
 import libretto.lambda.Lambdas.Delambdified
 import libretto.lambda.Partitioning.SubFun
-import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, StaticValue, TypeEq, Validated}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, StaticValue, TypeEq, TypeEqK, Validated}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Validated.{Invalid, Valid}
 import libretto.lambda.util.Monad.monadEither
@@ -507,6 +507,9 @@ object FreeScaletto extends Scaletto {
 
   val distribution: Distribution[-⚬, |*|, |+|] =
     new Distribution[-⚬, |*|, |+|] {
+      override val cat: SemigroupalCategory[-⚬, |*|] =
+        ℭ
+
       override def distLR[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)) =
         FreeScaletto.this.distributeL
 
@@ -654,6 +657,57 @@ object FreeScaletto extends Scaletto {
       )
       a
     }
+  }
+
+  private class CoproductPartitioning[A, B] extends Partitioning[-⚬, |*|, A |+| B] {
+    import CoproductPartitioning.Side
+
+    override type Partition[P] = Side[A |+| B, P]
+
+    override def compileAt[F[_], G[_], R](
+      pos: Focus[|*|, F],
+      handle: [X] => (x: Partition[X]) => G[F[X] -⚬ R],
+    )(using
+      Applicative[G],
+    ): G[F[A |+| B] -⚬ R] = {
+      val ha: G[F[A] -⚬ R] = handle(Side.Left())
+      val hb: G[F[B] -⚬ R] = handle(Side.Right())
+      (ha zip hb).map { case (ha, hb) =>
+        distribution.distF(using pos) > either(ha, hb)
+      }
+    }
+
+    override def reinject[P](p: Partition[P]): P -⚬ (A |+| B) =
+      p match
+        case Side.Left() => injectL
+        case Side.Right() => injectR
+
+    override def sameAs(that: Partitioning[-⚬, |*|, A |+| B]): Option[TypeEqK[this.Partition, that.Partition]] =
+      that match
+        case that1: (CoproductPartitioning[a, b] & that.type) =>
+          Some(TypeEqK.refl[this.Partition]): Option[TypeEqK[this.Partition, that1.Partition]]
+        case _ =>
+          None
+
+    override def samePartition[P, Q](p: Partition[P], q: Partition[Q]): Option[P =:= Q] =
+      (p, q) match
+        case (Side.Left(), Side.Left()) => Some(summon[A =:= A])
+        case (Side.Right(), Side.Right()) => Some(summon[B =:= B])
+        case _ => None
+
+    override def showPartition[P](p: Partition[P]): String =
+      p match
+        case Side.Left() => "Left"
+        case Side.Right() => "Right"
+
+    override def isTotal[P](p: Partition[P]): Option[(A |+| B) -⚬ P] =
+      libretto.lambda.UnhandledCase.raise(s"CoproductPartitioning.isTotal")
+  }
+
+  private object CoproductPartitioning {
+    enum Side[T, S]:
+      case Left[A, B]()  extends Side[A |+| B, A]
+      case Right[A, B]() extends Side[A |+| B, B]
   }
 
   private sealed trait UnpackOnlyFun[A, B]:
