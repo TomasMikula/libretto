@@ -222,6 +222,7 @@ lazy val root = project
   .aggregate(
     lambda.jvm,
     lambda.js,
+    lambdaExamples,
     core,
     testing,
     coreTests,

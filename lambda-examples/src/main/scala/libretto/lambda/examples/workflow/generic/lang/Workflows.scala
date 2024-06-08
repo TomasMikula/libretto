@@ -35,7 +35,7 @@ class Workflows[Action[_, _]] {
     )(
       f: LambdaContext ?=> Expr[A] => Expr[B],
     ): Flow[A, B] =
-      lambdas.delambdifyTopLevel(VarOrigin.LambdaAbstraction(pos), f) match {
+      lambdas.delambdifyTopLevel((), VarOrigin.LambdaAbstraction(pos), f) match {
         case Delambdified.Exact(g) => g
         case Delambdified.Closure(x, g) => ???
         case Delambdified.Failure(e) => throw AssertionError(e)
@@ -105,8 +105,8 @@ class Workflows[Action[_, _]] {
 
   }
 
-  private val lambdas: Lambdas[Flow, **, VarOrigin] =
-    Lambdas[Flow, **, VarOrigin](
+  private val lambdas: Lambdas[Flow, **, VarOrigin, Unit] =
+    Lambdas[Flow, **, VarOrigin, Unit](
       universalSplit   = Some([X] => (_: Unit) => Flow.dup[X]),
       universalDiscard = Some([X, Y] => (_: Unit) => Flow.prj2[X, Y]),
     )
@@ -131,12 +131,10 @@ class Workflows[Action[_, _]] {
     def switch[C](using pos: SourcePos)(
       f: LambdaContext ?=> Either[Expr[A], Expr[B]] => Expr[C],
     )(using LambdaContext): Expr[C] =
+      val fa = lambdas.delambdifyNested((), VarOrigin.Left(pos),  ctx ?=> (a: Expr[A]) => f(Left(a)))
+      val fb = lambdas.delambdifyNested((), VarOrigin.Right(pos), ctx ?=> (b: Expr[B]) => f(Right(b)))
       lambdas.switch[++, A ++ B, C](
-        cases = {
-          val left  = (VarOrigin.Left(pos))  -> ((c: LambdaContext) ?=> (a: Expr[A]) => f(Left(a)))
-          val right = (VarOrigin.Right(pos)) -> ((c: LambdaContext) ?=> (b: Expr[B]) => f(Right(b)))
-          Sink(Sink(left), Sink(right))
-        },
+        cases = Sink(fa) <+> Sink(fb),
         sum = [X, Y] => (f: Flow[X, C], g: Flow[Y, C]) => Flow.either(f, g),
         distribute = [X, Y, Z] => (_: Unit) => Flow.distributeLR[X, Y, Z],
       ) match {
