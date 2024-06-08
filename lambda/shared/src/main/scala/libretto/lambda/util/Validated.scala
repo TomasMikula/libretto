@@ -20,6 +20,11 @@ enum Validated[+E, A] {
     this match
       case Valid(a)   => f(a)
       case Invalid(e) => Invalid(e)
+
+  def valueOr[AA >: A](f: NonEmptyList[E] => AA): AA =
+    this match
+      case Valid(a) => a
+      case Invalid(es) => f(es)
 }
 
 object Validated {

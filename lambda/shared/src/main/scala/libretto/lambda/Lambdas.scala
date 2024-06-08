@@ -88,7 +88,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
   }
 
   type Delambdified[A, B] = Lambdas.Delambdified[Expr, |*|, -⚬, V, C, A, B]
-  type DelambdifiedSuccess[A, B] = Lambdas.Delambdified.Success[Expr, |*|, -⚬, V, C, A, B]
+  type DelambdifiedSuccess[A, B] = CapturingFun[-⚬, |*|, Tupled[Expr, _], A, B]
 
   protected def eliminateLocalVariables[A, B](
     boundVar: Var[V, A],
@@ -118,7 +118,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
     delambdify(varName, f)(using Context.nested(nestedCtxInfo, parent = parent))
 
   def switch[<+>[_, _], A, B](
-    cases: Sink[Delambdified, <+>, A, B],
+    cases: Sink[DelambdifiedSuccess, <+>, A, B],
     sum: [X, Y] => (X -⚬ B, Y -⚬ B) => (X <+> Y) -⚬ B,
     distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
   )(using
@@ -126,7 +126,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
   ): Delambdified[A, B]
 
   protected def switchImpl[<+>[_, _], A, B](
-    cases: Sink[Delambdified, <+>, A, B],
+    cases: Sink[DelambdifiedSuccess, <+>, A, B],
     sum: [X, Y] => (X -⚬ B, Y -⚬ B) => (X <+> Y) -⚬ B,
     distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
   )(using
@@ -134,34 +134,31 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
     SymmetricSemigroupalCategory[-⚬, |*|],
     Context,
   ): Delambdified[A, B] = {
-    cases.reduce(
-      [x, y] => (f1: Delambdified[x, B], f2: Delambdified[y, B]) => {
-        import Lambdas.Delambdified.{Closure, Exact, Failure}
+    import Applicative.*
+
+    Lambdas.Delambdified.fromValidated(
+    cases.reduceM[Validated[LinearityViolation[V, C], _]](
+      [x, y] => (f1: DelambdifiedSuccess[x, B], f2: DelambdifiedSuccess[y, B]) => {
+        import CapturingFun.{Closure, NoCapture}
         (f1, f2) match {
-          case (Exact(f1), Exact(f2)) =>
-            Exact(sum(f1, f2))
-          case (Closure(x, f1), Exact(f2)) =>
+          case (NoCapture(f1), NoCapture(f2)) =>
+            Valid(NoCapture(sum(f1, f2)))
+          case (Closure(x, f1), NoCapture(f2)) =>
             discarderOf(x) match
-              case Right(discardFst) => Closure(x, distribute(()) > sum(f1, discardFst(()) > f2))
-              case Left(unusedVars)  => Failure(LinearityViolation.UnusedInBranch(unusedVars))
-          case (Exact(f1), Closure(y, f2)) =>
+              case Right(discardFst) => Valid(Closure(x, distribute(()) > sum(f1, discardFst(()) > f2)))
+              case Left(unusedVars)  => invalid(LinearityViolation.UnusedInBranch(unusedVars))
+          case (NoCapture(f1), Closure(y, f2)) =>
             discarderOf(y) match
-              case Right(discardFst) => Closure(y, distribute(()) > sum(discardFst(()) > f1, f2))
-              case Left(unusedVars)  => Failure(LinearityViolation.UnusedInBranch(unusedVars))
+              case Right(discardFst) => Valid(Closure(y, distribute(()) > sum(discardFst(()) > f1, f2)))
+              case Left(unusedVars)  => invalid(LinearityViolation.UnusedInBranch(unusedVars))
           case (Closure(x, f1), Closure(y, f2)) =>
-            union(x, y) match
-              case Valid(Exists.Some((p, p1, p2))) =>
+            union(x, y)
+              .map { case Exists.Some((p, p1, p2)) =>
                 Closure(p, distribute(()) > sum(p1.inFst > f1, p2.inFst > f2))
-              case Invalid(e) =>
-                Failure(e)
-          case (Failure(e1), Failure(e2)) =>
-            Failure(e1 ++ e2)
-          case (Failure(e1), _) =>
-            Failure(e1)
-          case (_, Failure(e2)) =>
-            Failure(e2)
+              }
         }
       }
+    )
     )
   }
 
@@ -330,5 +327,13 @@ object Lambdas {
       ): Delambdified[Exp, |*|, ->, V, C, A, B] =
         Failure(NonEmptyList.of(e))
     }
+
+    def fromValidated[Exp[_], |*|[_, _], ->[_, _], V, C, A, B](
+      value: Validated[LinearityViolation[V, C], CapturingFun[->, |*|, Tupled[|*|, Exp, _], A, B]]
+    ): Delambdified[Exp, |*|, ->, V, C, A, B] =
+      value match
+        case Valid(CapturingFun.NoCapture(f)) => Exact(f)
+        case Valid(CapturingFun.Closure(x, f)) => Closure(x, f)
+        case Invalid(es) => Failure(es)
   }
 }

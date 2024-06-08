@@ -116,15 +116,19 @@ object Fun {
       val b = VarDesc("Variable bound by Right pattern", pos)
       val fa = lambdas.delambdifyNested((), a, ctx ?=> (a: $[A]) => f(Left(a)))
       val fb = lambdas.delambdifyNested((), b, ctx ?=> (b: $[B]) => f(Right(b)))
-      lambdas.switch(
-        Sink(fa) <+> Sink(fb),
-        [X, Y] => (fx: Fun[X, C], fy: Fun[Y, C]) => either(fx, fy),
-        [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
-      ) match {
-        case Lambdas.Delambdified.Exact(f)      => f(ab)
-        case Lambdas.Delambdified.Closure(x, f) => lambdas.Expr.map(lambdas.Expr.zipN(x zip Tupled.atom(ab))(VarDesc("function input with captured expressions")), f)(VarDesc("switch with captured expressions", pos))
-        case Lambdas.Delambdified.Failure(es)    => raiseErrors(es)
-      }
+      (fa.toValidated zip fb.toValidated)
+        .map { case (fa, fb) =>
+          lambdas.switch(
+            Sink(fa) <+> Sink(fb),
+            [X, Y] => (fx: Fun[X, C], fy: Fun[Y, C]) => either(fx, fy),
+            [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
+          ) match {
+            case Lambdas.Delambdified.Exact(f)      => f(ab)
+            case Lambdas.Delambdified.Closure(x, f) => lambdas.Expr.map(lambdas.Expr.zipN(x zip Tupled.atom(ab))(VarDesc("function input with captured expressions")), f)(VarDesc("switch with captured expressions", pos))
+            case Lambdas.Delambdified.Failure(es)    => raiseErrors(es)
+          }
+        }
+        .valueOr(raiseErrors)
     }
   }
 

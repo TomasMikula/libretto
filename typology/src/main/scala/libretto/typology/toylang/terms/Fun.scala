@@ -168,15 +168,19 @@ object Fun {
       val fa: lambdas.Delambdified[A, R] = lambdas.delambdifyNested((), new Object, (a: Expr[A]) => f(Left(a)))
       val fb: lambdas.Delambdified[B, R] = lambdas.delambdifyNested((), new Object, (b: Expr[B]) => f(Right(b)))
 
-      lambdas.switch[Either, Either[A, B], R](
-        Sink(fa) <+> Sink(fb),
-        [x, y] => (fx: Fun[x, R], fy: Fun[y, R]) => Fun.either(fx, fy),
-        [x, y, z] => (_: Unit) => Fun.distributeL[x, y, z],
-      ) match {
-        case Exact(f) => f(x)
-        case Closure(captured, f) => f(lambdas.Expr.zipN(Tupled.zip(captured, Tupled.atom(x)))(new Object))
-        case Failure(e) => throw new IllegalArgumentException(s"$e")
-      }
+      (fa.toValidated zip fb.toValidated)
+        .map { case (fa, fb) =>
+          lambdas.switch[Either, Either[A, B], R](
+            Sink(fa) <+> Sink(fb),
+            [x, y] => (fx: Fun[x, R], fy: Fun[y, R]) => Fun.either(fx, fy),
+            [x, y, z] => (_: Unit) => Fun.distributeL[x, y, z],
+          ) match {
+            case Exact(f) => f(x)
+            case Closure(captured, f) => f(lambdas.Expr.zipN(Tupled.zip(captured, Tupled.atom(x)))(new Object))
+            case Failure(e) => throw new IllegalArgumentException(s"$e")
+          }
+        }
+        .valueOr { es => throw IllegalArgumentException(s"$es") }
     }
   }
 

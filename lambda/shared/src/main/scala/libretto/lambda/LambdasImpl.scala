@@ -419,7 +419,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
   }
 
   override def switch[<+>[_, _], A, B](
-    cases: Sink[Delambdified, <+>, A, B],
+    cases: Sink[DelambdifiedSuccess, <+>, A, B],
     sum: [X, Y] => (X -⚬ B, Y -⚬ B) => (X <+> Y) -⚬ B,
     distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
   )(using

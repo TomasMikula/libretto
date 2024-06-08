@@ -133,17 +133,21 @@ class Workflows[Action[_, _]] {
     )(using LambdaContext): Expr[C] =
       val fa = lambdas.delambdifyNested((), VarOrigin.Left(pos),  ctx ?=> (a: Expr[A]) => f(Left(a)))
       val fb = lambdas.delambdifyNested((), VarOrigin.Right(pos), ctx ?=> (b: Expr[B]) => f(Right(b)))
-      lambdas.switch[++, A ++ B, C](
-        cases = Sink(fa) <+> Sink(fb),
-        sum = [X, Y] => (f: Flow[X, C], g: Flow[Y, C]) => Flow.either(f, g),
-        distribute = [X, Y, Z] => (_: Unit) => Flow.distributeLR[X, Y, Z],
-      ) match {
-        case Delambdified.Exact(g) => g(expr)
-        case Delambdified.Closure(x, g) =>
-          val xa = lambdas.Expr.zipN(Tupled.zip(x, Tupled.atom(expr)))(VarOrigin.FunctionInputWithCapturedExpressions(pos))
-          lambdas.Expr.map(xa, g)(VarOrigin.CapturingSwitch(pos))
-        case Delambdified.Failure(e) => throw AssertionError(e)
-      }
+      (fa.toValidated zip fb.toValidated)
+        .map { case (fa, fb) =>
+          lambdas.switch[++, A ++ B, C](
+            cases = Sink(fa) <+> Sink(fb),
+            sum = [X, Y] => (f: Flow[X, C], g: Flow[Y, C]) => Flow.either(f, g),
+            distribute = [X, Y, Z] => (_: Unit) => Flow.distributeLR[X, Y, Z],
+          ) match {
+            case Delambdified.Exact(g) => g(expr)
+            case Delambdified.Closure(x, g) =>
+              val xa = lambdas.Expr.zipN(Tupled.zip(x, Tupled.atom(expr)))(VarOrigin.FunctionInputWithCapturedExpressions(pos))
+              lambdas.Expr.map(xa, g)(VarOrigin.CapturingSwitch(pos))
+            case Delambdified.Failure(es) => throw AssertionError(es)
+          }
+        }
+        .valueOr { es => throw AssertionError(es) }
 
   def unit(using SourcePos, LambdaContext): Expr[Unit] =
     Expr(Flow.id[Unit])
