@@ -174,17 +174,11 @@ object Fun {
         [x, y, z] => (_: Unit) => Fun.distributeL[x, y, z],
       ) match {
         case Exact(f) => f(x)
-        case Closure(captured, f) => f(zipExprs(Tupled.zip(captured, Tupled.atom(x))))
+        case Closure(captured, f) => f(lambdas.Expr.zipN(Tupled.zip(captured, Tupled.atom(x)))(new Object))
         case Failure(e) => throw new IllegalArgumentException(s"$e")
       }
     }
   }
-
-  // TODO: avoid the need to create auxiliary pairings
-  private def zipExprs[A](es: Tupled[Tuple2, Expr, A])(using LambdaContext): Expr[A] =
-    es.foldWith([x, y] => (ex: Expr[x], ey: Expr[y]) => {
-      ex <*> ey
-    })
 
   extension [A, B](f: Expr[RecCall[A, B]]) {
     def apply(a: Expr[A])(using LambdaContext): Expr[B] =
