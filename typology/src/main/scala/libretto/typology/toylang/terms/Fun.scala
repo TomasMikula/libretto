@@ -2,6 +2,7 @@ package libretto.typology.toylang.terms
 
 import libretto.lambda.{CapturingFun, Sink, SymmetricSemigroupalCategory, Tupled}
 import libretto.lambda.util.SourcePos
+import libretto.lambda.util.Validated.{Invalid, Valid}
 import libretto.typology.toylang.types.{Fix, RecCall, TypeTag}
 
 sealed trait Fun[A, B] {
@@ -134,19 +135,18 @@ object Fun {
   opaque type Expr[A] = lambdas.Expr[A]
 
   def fun[A, B](f: LambdaContext ?=> Expr[A] => Expr[B]): Fun[A, B] = {
-    import libretto.lambda.Lambdas
-    import Lambdas.Delambdified.{Closure, Exact, Failure}
+    import CapturingFun.{Closure, NoCapture}
     import libretto.lambda.Var
 
     lambdas.delambdifyTopLevel((), new Object, f) match {
-      case Exact(f) =>
+      case Valid(NoCapture(f)) =>
         f
-      case Closure(captured, f) =>
+      case Valid(Closure(captured, f)) =>
         val undefinedVars: Var.Set[Object] =
           lambdas.Expr.initialVars(captured)
         throw new IllegalArgumentException(s"Undefined variables: $undefinedVars")
-      case Failure(e) =>
-        throw new IllegalArgumentException(s"$e")
+      case Invalid(es) =>
+        throw new IllegalArgumentException(s"$es")
     }
   }
 
@@ -167,7 +167,7 @@ object Fun {
       val fa: lambdas.Delambdified[A, R] = lambdas.delambdifyNested((), new Object, (a: Expr[A]) => f(Left(a)))
       val fb: lambdas.Delambdified[B, R] = lambdas.delambdifyNested((), new Object, (b: Expr[B]) => f(Right(b)))
 
-      (fa.toValidated zip fb.toValidated)
+      (fa zip fb)
         .flatMap { case (fa, fb) =>
           lambdas.switch[Either, Either[A, B], R](
             Sink(fa) <+> Sink(fb),

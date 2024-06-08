@@ -3,6 +3,7 @@ package libretto.lambda
 import libretto.lambda.Lambdas.LinearityViolation.{Overused, Unused, UnusedInBranch}
 import libretto.lambda.util.{BiInjective, NonEmptyList, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
+import libretto.lambda.util.Validated.{Invalid, Valid}
 
 sealed trait Fun[A, B] {
 
@@ -116,7 +117,7 @@ object Fun {
       val b = VarDesc("Variable bound by Right pattern", pos)
       val fa = lambdas.delambdifyNested((), a, ctx ?=> (a: $[A]) => f(Left(a)))
       val fb = lambdas.delambdifyNested((), b, ctx ?=> (b: $[B]) => f(Right(b)))
-      (fa.toValidated zip fb.toValidated)
+      (fa zip fb)
         .flatMap { case (fa, fb) =>
           lambdas.switch(
             Sink(fa) <+> Sink(fb),
@@ -145,16 +146,16 @@ object Fun {
       f: LambdaContext ?=> $[A] => $[B],
     ): Fun[A, B] = {
       lambdas.delambdifyTopLevel((), VarDesc("The variable bound by lambda expression", pos), f) match
-        case Lambdas.Delambdified.Exact(f) =>
+        case Valid(CapturingFun.NoCapture(f)) =>
           f
-        case Lambdas.Delambdified.Closure(captured, f) =>
+        case Valid(CapturingFun.Closure(captured, f)) =>
           throw RuntimeException(
             s"Lambda expression at ${pos.filename}:${pos.line} " +
               s"is not allowed to capture variables from an outer scope.\n" +
               s"Captured:\n" +
               printVars(lambdas.Expr.initialVars(captured))
           )
-        case Lambdas.Delambdified.Failure(es) =>
+        case Invalid(es) =>
           raiseErrors(es)
     }
 

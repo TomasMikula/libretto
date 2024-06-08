@@ -630,7 +630,7 @@ object FreeScaletto extends Scaletto {
       val sr = ScopeInfo.RightCase(pos)
       val fa = lambdas.delambdifyNested(sl, a, ctx ?=> (a: $[A]) => f(Left(a)))
       val fb = lambdas.delambdifyNested(sr, b, ctx ?=> (b: $[B]) => f(Right(b)))
-      (fa.toValidated zip fb.toValidated)
+      (fa zip fb)
         .flatMap { case (fa, fb) => switchSink(ab, Sink(fa) <+> Sink(fb))(pos) }
         .valueOr(assemblyErrors)
     }
@@ -822,8 +822,8 @@ object FreeScaletto extends Scaletto {
     for {
       // delambdify each case
       delams: NonEmptyList[CapturingFun[-?>, |*|, Tupled[|*|, $, _], A, R]] <-
-        cases.traverse { case (pos, f) =>
-          lambdas.delambdifyNested(ScopeInfo.SwitchCase(pos), VarOrigin.SwitchCase(pos), f).toValidated
+        cases.traverse[Validated[LinearityViolation, _]] { case (pos, f) =>
+          lambdas.delambdifyNested(ScopeInfo.SwitchCase(pos), VarOrigin.SwitchCase(pos), f)
         }
 
       // make each case capture the least common superset of captured expressions
@@ -1026,19 +1026,19 @@ object FreeScaletto extends Scaletto {
     private def compile[A, B](f: lambdas.Context ?=> $[A] => $[B])(
       pos: SourcePos,
     ): A -⚬ B = {
-      import Delambdified.{Closure, Exact, Failure}
+      import CapturingFun.{Closure, NoCapture}
 
       val c = ScopeInfo.TopLevelLambda(pos)
       val a = VarOrigin.Lambda(pos)
 
       lambdas.delambdifyTopLevel(c, a, f) match {
-        case Exact(f) =>
+        case Valid(NoCapture(f)) =>
           total(f) match
             case Valid(f) => f
             case Invalid(es) => raiseTotalityViolations(es)
-        case Closure(captured, f) =>
+        case Valid(Closure(captured, f)) =>
           raiseUndefinedVars(lambdas.Expr.initialVars(captured))
-        case Failure(es) =>
+        case Invalid(es) =>
           assemblyErrors(es)
       }
     }
@@ -1048,7 +1048,7 @@ object FreeScaletto extends Scaletto {
     )(using
       ctx: lambdas.Context,
     ): $[A =⚬ B] = {
-      import Delambdified.{Closure, Exact, Failure}
+      import CapturingFun.{Closure, NoCapture}
 
       val scopeInfo = ScopeInfo.NestedLambda(pos)
       val bindVar   = VarOrigin.Lambda(pos)
@@ -1056,21 +1056,21 @@ object FreeScaletto extends Scaletto {
       val resultVar = VarOrigin.ClosureVal(pos)
 
       lambdas.delambdifyNested[A, B](scopeInfo, bindVar, f) match {
-        case Closure(captured, f) =>
+        case Valid(Closure(captured, f)) =>
           total(f) match
             case Valid(f) =>
               val x = lambdas.Expr.zipN(captured)(captVar)
               lambdas.Expr.map(x, partial(ℭ.curry(f)))(resultVar)
             case Invalid(es) =>
               raiseTotalityViolations(es)
-        case Exact(f) =>
+        case Valid(NoCapture(f)) =>
           total(f) match
             case Valid(f) =>
               val captured0 = $.one(using pos)
               (captured0 map partial(ℭ.curry(elimFst > f)))(resultVar)
             case Invalid(es) =>
               raiseTotalityViolations(es)
-        case Failure(es) =>
+        case Invalid(es) =>
           assemblyErrors(es)
       }
     }
@@ -1096,7 +1096,6 @@ object FreeScaletto extends Scaletto {
         val scope = ScopeInfo.ValCase(pos)
         val label = VarOrigin.Lambda(pos)
         lambdas.delambdifyNested(scope, label, f)
-          .toValidated
           .map { g => Exists((id[Val[A]], Sink(g))) }
       }
     }
@@ -1112,7 +1111,7 @@ object FreeScaletto extends Scaletto {
         Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.DelambdifiedSuccess, |+|, AA, R])]
       ] = {
         val h = lambdas.delambdifyNested(ScopeInfo.ValCase(pos), VarOrigin.Lambda(pos), f)
-        (h.toValidated zip t.compile).map { case (h, t) =>
+        (h zip t.compile).map { case (h, t) =>
           type AA = Val[H] |+| t.T
           val partition1: Val[A] -⚬ AA =
             mapVal(partition) > liftEither > either(injectL, t.value._1 > injectR)

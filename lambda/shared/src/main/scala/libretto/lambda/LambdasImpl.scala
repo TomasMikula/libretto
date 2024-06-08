@@ -324,17 +324,12 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
     attachDiscarded(expr, toElim.values) match
       case Exists.Some((exprs, discard)) =>
         eliminateLocalVariablesFromForest(boundVar, exprs)
-          .mapFun([X] => f => f.fold)
-          .andThen(discard)
-  }
+          .toValidated
+          .map(_
+            .mapFun([X, Y] => f => f.fold)
+            .andThen(discard)
+          )
 
-  extension [A, B](res: Delambdified[A, B]) {
-    private def andThen[C](g: B -⚬ C): Delambdified[A, C] =
-      import Lambdas.Delambdified.{Closure, Exact, Failure}
-      res match
-        case Exact(f)      => Exact(f > g)
-        case Closure(x, f) => Closure(x, f > g)
-        case Failure(es)   => Failure(es)
   }
 
   private def attachDiscarded[B](

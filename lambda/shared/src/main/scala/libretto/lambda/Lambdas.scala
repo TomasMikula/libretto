@@ -87,8 +87,8 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
       registerNonLinearOps(a)(None, Some(discard))
   }
 
-  type Delambdified[A, B] = Lambdas.Delambdified[Expr, |*|, -⚬, V, C, A, B]
-  type DelambdifiedSuccess[A, B] = CapturingFun[-⚬, |*|, Tupled[Expr, _], A, B]
+  type DelambdifiedSuccess[A, B] = libretto.lambda.CapturingFun[-⚬, |*|, Tupled[Expr, _], A, B]
+  type Delambdified[A, B] = Validated[LinearityViolation[V, C], DelambdifiedSuccess[A, B]]
 
   protected def eliminateLocalVariables[A, B](
     boundVar: Var[V, A],

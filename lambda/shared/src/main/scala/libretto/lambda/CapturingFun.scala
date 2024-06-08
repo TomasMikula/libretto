@@ -9,6 +9,11 @@ sealed trait CapturingFun[-->[_, _], |*|[_, _], F[_], A, B] {
     this match
       case NoCapture(f) => NoCapture(h(f))
       case Closure(captured, f) => Closure(captured, h(f))
+
+  def andThen[C](g: B --> C)(using Semigroupoid[-->]): CapturingFun[-->, |*|, F, A, C] =
+    this match
+      case NoCapture(f) => NoCapture(f > g)
+      case Closure(x, f) => Closure(x, f > g)
 }
 
 object CapturingFun {

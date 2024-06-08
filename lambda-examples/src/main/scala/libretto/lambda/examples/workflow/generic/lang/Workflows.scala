@@ -3,6 +3,7 @@ package libretto.lambda.examples.workflow.generic.lang
 import libretto.lambda.{CapturingFun, Lambdas, Sink}
 import libretto.lambda.Lambdas.Delambdified
 import libretto.lambda.util.SourcePos
+import libretto.lambda.util.Validated.{Invalid, Valid}
 import libretto.lambda.Tupled
 
 import scala.concurrent.duration.FiniteDuration
@@ -36,9 +37,9 @@ class Workflows[Action[_, _]] {
       f: LambdaContext ?=> Expr[A] => Expr[B],
     ): Flow[A, B] =
       lambdas.delambdifyTopLevel((), VarOrigin.LambdaAbstraction(pos), f) match {
-        case Delambdified.Exact(g) => g
-        case Delambdified.Closure(x, g) => ???
-        case Delambdified.Failure(e) => throw AssertionError(e)
+        case Valid(CapturingFun.NoCapture(g)) => g
+        case Valid(CapturingFun.Closure(x, g)) => ???
+        case Invalid(e) => throw AssertionError(e)
       }
 
     def id[A]: Flow[A, A] =
@@ -133,7 +134,7 @@ class Workflows[Action[_, _]] {
     )(using LambdaContext): Expr[C] =
       val fa = lambdas.delambdifyNested((), VarOrigin.Left(pos),  ctx ?=> (a: Expr[A]) => f(Left(a)))
       val fb = lambdas.delambdifyNested((), VarOrigin.Right(pos), ctx ?=> (b: Expr[B]) => f(Right(b)))
-      (fa.toValidated zip fb.toValidated)
+      (fa zip fb)
         .flatMap { case (fa, fb) =>
           lambdas.switch[++, A ++ B, C](
             cases = Sink(fa) <+> Sink(fb),

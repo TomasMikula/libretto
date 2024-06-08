@@ -20,6 +20,15 @@ case class NonEmptyList[+A](head: A, tail: List[A]) {
 
   def traverse[F[_], B](f: A => F[B])(using F: Applicative[F]): F[NonEmptyList[B]] =
     F.map2(f(head), Applicative.traverseList(tail)(f))(NonEmptyList(_, _))
+
+  opaque type TraverseBuilder[F[_]] = Unit
+
+  def traverse[F[_]]: TraverseBuilder[F] =
+    ()
+
+  extension [F[_]](bf: TraverseBuilder[F])
+    def apply[B](f: A => F[B])(using Applicative[F]): F[NonEmptyList[B]] =
+      traverse[F, B](f)
 }
 
 object NonEmptyList {
