@@ -123,7 +123,10 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
     distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
   )(using
     Context,
-  ): Delambdified[A, B]
+  ): Validated[
+    LinearityViolation[V, C],
+    DelambdifiedSuccess[A, B]
+  ]
 
   protected def switchImpl[<+>[_, _], A, B](
     cases: Sink[DelambdifiedSuccess, <+>, A, B],
@@ -133,10 +136,12 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
     BiInjective[|*|],
     SymmetricSemigroupalCategory[-⚬, |*|],
     Context,
-  ): Delambdified[A, B] = {
+  ): Validated[
+    LinearityViolation[V, C],
+    DelambdifiedSuccess[A, B]
+  ] = {
     import Applicative.*
 
-    Lambdas.Delambdified.fromValidated(
     cases.reduceM[Validated[LinearityViolation[V, C], _]](
       [x, y] => (f1: DelambdifiedSuccess[x, B], f2: DelambdifiedSuccess[y, B]) => {
         import CapturingFun.{Closure, NoCapture}
@@ -158,7 +163,6 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
               }
         }
       }
-    )
     )
   }
 

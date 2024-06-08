@@ -631,7 +631,7 @@ object FreeScaletto extends Scaletto {
       val fa = lambdas.delambdifyNested(sl, a, ctx ?=> (a: $[A]) => f(Left(a)))
       val fb = lambdas.delambdifyNested(sr, b, ctx ?=> (b: $[B]) => f(Right(b)))
       (fa.toValidated zip fb.toValidated)
-        .map { case (fa, fb) => switchSink(ab, Sink(fa) <+> Sink(fb))(pos) }
+        .flatMap { case (fa, fb) => switchSink(ab, Sink(fa) <+> Sink(fb))(pos) }
         .valueOr(assemblyErrors)
     }
 
@@ -754,7 +754,7 @@ object FreeScaletto extends Scaletto {
     pos: SourcePos,
   )(using
     lambdas.Context,
-  ): $[R] =
+  ): Validated[LinearityViolation, $[R]] =
     lambdas.switch(
       cases,
       [X, Y] => (fx: X -?> R, fy: Y -?> R) => {
@@ -763,10 +763,9 @@ object FreeScaletto extends Scaletto {
           case Invalid(es)     => raiseTotalityViolations(es)
       },
       [X, Y, Z] => (_: Unit) => partial(distributeL[X, Y, Z]),
-    ) match {
-      case Delambdified.Exact(f)      => lambdas.Expr.map(a, f)(VarOrigin.FunAppRes(pos))
-      case Delambdified.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)
-      case Delambdified.Failure(es)   => assemblyErrors(es)
+    ).map {
+      case CapturingFun.NoCapture(f)  => lambdas.Expr.map(a, f)(VarOrigin.FunAppRes(pos))
+      case CapturingFun.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)
     }
 
   override def switch[A, R](using
@@ -1171,13 +1170,15 @@ object FreeScaletto extends Scaletto {
   )(pos: SourcePos)(using
     LambdaContext,
   ): $[R] =
-    ValDecomposition.from(cases).compile.map {
-      case Exists.Some((partition, sink)) =>
-        switchSink(
-          $.map(a)(partition)(pos),
-          sink,
-        )(pos)
-    }.valueOr(assemblyErrors)
+    ValDecomposition.from(cases).compile
+      .flatMap {
+        case Exists.Some((partition, sink)) =>
+          switchSink(
+            $.map(a)(partition)(pos),
+            sink,
+          )(pos)
+      }
+      .valueOr(assemblyErrors)
 
   override val |*| : ConcurrentPairInvertOps =
     new ConcurrentPairInvertOps {}

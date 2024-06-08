@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.lang
 
-import libretto.lambda.{Lambdas, Sink}
+import libretto.lambda.{CapturingFun, Lambdas, Sink}
 import libretto.lambda.Lambdas.Delambdified
 import libretto.lambda.util.SourcePos
 import libretto.lambda.Tupled
@@ -134,18 +134,18 @@ class Workflows[Action[_, _]] {
       val fa = lambdas.delambdifyNested((), VarOrigin.Left(pos),  ctx ?=> (a: Expr[A]) => f(Left(a)))
       val fb = lambdas.delambdifyNested((), VarOrigin.Right(pos), ctx ?=> (b: Expr[B]) => f(Right(b)))
       (fa.toValidated zip fb.toValidated)
-        .map { case (fa, fb) =>
+        .flatMap { case (fa, fb) =>
           lambdas.switch[++, A ++ B, C](
             cases = Sink(fa) <+> Sink(fb),
             sum = [X, Y] => (f: Flow[X, C], g: Flow[Y, C]) => Flow.either(f, g),
             distribute = [X, Y, Z] => (_: Unit) => Flow.distributeLR[X, Y, Z],
-          ) match {
-            case Delambdified.Exact(g) => g(expr)
-            case Delambdified.Closure(x, g) =>
-              val xa = lambdas.Expr.zipN(Tupled.zip(x, Tupled.atom(expr)))(VarOrigin.FunctionInputWithCapturedExpressions(pos))
-              lambdas.Expr.map(xa, g)(VarOrigin.CapturingSwitch(pos))
-            case Delambdified.Failure(es) => throw AssertionError(es)
-          }
+          )
+        }
+        .map {
+          case CapturingFun.NoCapture(g) => g(expr)
+          case CapturingFun.Closure(x, g) =>
+            val xa = lambdas.Expr.zipN(Tupled.zip(x, Tupled.atom(expr)))(VarOrigin.FunctionInputWithCapturedExpressions(pos))
+            lambdas.Expr.map(xa, g)(VarOrigin.CapturingSwitch(pos))
         }
         .valueOr { es => throw AssertionError(es) }
 

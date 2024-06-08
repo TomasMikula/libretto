@@ -424,7 +424,7 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
     distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
   )(using
     Context,
-  ): Delambdified[A, B] =
+  ): Validated[LinearityViolation[V, C], DelambdifiedSuccess[A, B]] =
     switchImpl(cases, sum, distribute)
 
   private def bug(msg: String): Nothing =

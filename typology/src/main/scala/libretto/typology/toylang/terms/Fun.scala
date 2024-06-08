@@ -1,6 +1,6 @@
 package libretto.typology.toylang.terms
 
-import libretto.lambda.{Sink, SymmetricSemigroupalCategory, Tupled}
+import libretto.lambda.{CapturingFun, Sink, SymmetricSemigroupalCategory, Tupled}
 import libretto.lambda.util.SourcePos
 import libretto.typology.toylang.types.{Fix, RecCall, TypeTag}
 
@@ -162,23 +162,22 @@ object Fun {
 
   extension [A, B](x: Expr[Either[A, B]]) {
     def switch[R](f: Either[Expr[A], Expr[B]] => Expr[R])(using LambdaContext): Expr[R] = {
-      import libretto.lambda.Lambdas
-      import Lambdas.Delambdified.{Closure, Exact, Failure}
+      import CapturingFun.{Closure, NoCapture}
 
       val fa: lambdas.Delambdified[A, R] = lambdas.delambdifyNested((), new Object, (a: Expr[A]) => f(Left(a)))
       val fb: lambdas.Delambdified[B, R] = lambdas.delambdifyNested((), new Object, (b: Expr[B]) => f(Right(b)))
 
       (fa.toValidated zip fb.toValidated)
-        .map { case (fa, fb) =>
+        .flatMap { case (fa, fb) =>
           lambdas.switch[Either, Either[A, B], R](
             Sink(fa) <+> Sink(fb),
             [x, y] => (fx: Fun[x, R], fy: Fun[y, R]) => Fun.either(fx, fy),
             [x, y, z] => (_: Unit) => Fun.distributeL[x, y, z],
-          ) match {
-            case Exact(f) => f(x)
-            case Closure(captured, f) => f(lambdas.Expr.zipN(Tupled.zip(captured, Tupled.atom(x)))(new Object))
-            case Failure(e) => throw new IllegalArgumentException(s"$e")
-          }
+          )
+        }
+        .map {
+          case NoCapture(f) => f(x)
+          case Closure(captured, f) => f(lambdas.Expr.zipN(Tupled.zip(captured, Tupled.atom(x)))(new Object))
         }
         .valueOr { es => throw IllegalArgumentException(s"$es") }
     }
