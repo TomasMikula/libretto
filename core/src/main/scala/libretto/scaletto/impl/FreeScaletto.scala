@@ -624,16 +624,13 @@ object FreeScaletto extends Scaletto {
     )(pos: SourcePos)(using
       lambdas.Context,
     ): $[C] = {
-      val f1: lambdas.Context ?=> $[A] => $[C] = ctx ?=> a => f(Left(a))
-      val f2: lambdas.Context ?=> $[B] => $[C] = ctx ?=> b => f(Right(b))
       val a = VarOrigin.Lambda(pos)
       val b = VarOrigin.Lambda(pos)
       val sl = ScopeInfo.LeftCase(pos)
       val sr = ScopeInfo.RightCase(pos)
-      switchSink(
-        ab,
-        Sink[lambdas.VFun, |+|, A, C]((sl, a, f1)) <+> Sink((sr, b, f2)),
-      )(pos)
+      val fa = lambdas.delambdifyNested(sl, a, ctx ?=> (a: $[A]) => f(Left(a)))
+      val fb = lambdas.delambdifyNested(sr, b, ctx ?=> (b: $[B]) => f(Right(b)))
+      switchSink(ab, Sink(fa) <+> Sink(fb))(pos)
     }
 
     override def app[A, B](f: $[A =⚬ B], a: $[A])(
@@ -750,7 +747,7 @@ object FreeScaletto extends Scaletto {
 
   private def switchSink[A, R](
     a: $[A],
-    cases: Sink[lambdas.VFun, |+|, A, R],
+    cases: Sink[lambdas.Delambdified, |+|, A, R],
   )(
     pos: SourcePos,
   )(using
@@ -1080,7 +1077,7 @@ object FreeScaletto extends Scaletto {
 
   /** Preprocessed [[ValSwitch]]. */
   private sealed trait ValHandler[A, R] {
-    def compile: Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.VFun, |+|, AA, R])]
+    def compile(using LambdaContext): Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.Delambdified, |+|, AA, R])]
   }
 
   private object ValDecomposition {
@@ -1088,10 +1085,11 @@ object FreeScaletto extends Scaletto {
       pos: SourcePos,
       f: LambdaContext ?=> $[Val[A]] => $[R],
     ) extends ValHandler[A, R] {
-      override def compile: Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.VFun, |+|, AA, R])] = {
+      override def compile(using LambdaContext): Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.Delambdified, |+|, AA, R])] = {
         val scope = ScopeInfo.ValCase(pos)
         val label = VarOrigin.Lambda(pos)
-        Exists((id[Val[A]], Sink((scope, label, f))))
+        val g = lambdas.delambdifyNested(scope, label, f)
+        Exists((id[Val[A]], Sink(g)))
       }
     }
 
@@ -1101,13 +1099,14 @@ object FreeScaletto extends Scaletto {
       f: LambdaContext ?=> $[Val[H]] => $[R],
       t: ValHandler[T, R],
     ) extends ValHandler[A, R] {
-      override def compile: Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.VFun, |+|, AA, R])] = {
+      override def compile(using LambdaContext): Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.Delambdified, |+|, AA, R])] = {
         val tail = t.compile
         type AA = Val[H] |+| tail.T
         val partition1: Val[A] -⚬ AA =
           mapVal(partition) > liftEither > either(injectL, tail.value._1 > injectR)
-        val sink: Sink[lambdas.VFun, |+|, AA, R] =
-          Sink[lambdas.VFun, |+|, Val[H], R]((ScopeInfo.ValCase(pos), VarOrigin.Lambda(pos), f)) <+> tail.value._2
+        val h = lambdas.delambdifyNested(ScopeInfo.ValCase(pos), VarOrigin.Lambda(pos), f)
+        val sink: Sink[lambdas.Delambdified, |+|, AA, R] =
+          Sink(h) <+> tail.value._2
         Exists((partition1, sink))
       }
     }

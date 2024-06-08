@@ -112,12 +112,12 @@ object Fun {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[C] = {
-      val f1: lambdas.Context ?=> $[A] => $[C] = ctx ?=> a => f(Left(a))
-      val f2: lambdas.Context ?=> $[B] => $[C] = ctx ?=> b => f(Right(b))
       val a = VarDesc("Variable bound by Left pattern", pos)
       val b = VarDesc("Variable bound by Right pattern", pos)
+      val fa = lambdas.delambdifyNested((), a, ctx ?=> (a: $[A]) => f(Left(a)))
+      val fb = lambdas.delambdifyNested((), b, ctx ?=> (b: $[B]) => f(Right(b)))
       lambdas.switch(
-        Sink[lambdas.VFun, ++, A, C](((), a, f1)) <+> Sink(((), b, f2)),
+        Sink(fa) <+> Sink(fb),
         [X, Y] => (fx: Fun[X, C], fy: Fun[Y, C]) => either(fx, fy),
         [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
       ) match {

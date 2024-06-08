@@ -165,8 +165,11 @@ object Fun {
       import libretto.lambda.Lambdas
       import Lambdas.Delambdified.{Closure, Exact, Failure}
 
+      val fa: lambdas.Delambdified[A, R] = lambdas.delambdifyNested((), new Object, (a: Expr[A]) => f(Left(a)))
+      val fb: lambdas.Delambdified[B, R] = lambdas.delambdifyNested((), new Object, (b: Expr[B]) => f(Right(b)))
+
       lambdas.switch[Either, Either[A, B], R](
-        Sink[lambdas.VFun, Either, A, R](((), new Object, (a: Expr[A]) => f(Left(a)))) <+> Sink(((), new Object, (b: Expr[B]) => f(Right(b)))),
+        Sink(fa) <+> Sink(fb),
         [x, y] => (fx: Fun[x, R], fy: Fun[y, R]) => Fun.either(fx, fy),
         [x, y, z] => (_: Unit) => Fun.distributeL[x, y, z],
       ) match {

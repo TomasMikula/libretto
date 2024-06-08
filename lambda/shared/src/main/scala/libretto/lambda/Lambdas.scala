@@ -117,10 +117,8 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
   )(using parent: Context): Delambdified[A, B] =
     delambdify(varName, f)(using Context.nested(nestedCtxInfo, parent = parent))
 
-  type VFun[A, B] = (C, V, Context ?=> Expr[A] => Expr[B])
-
   def switch[<+>[_, _], A, B](
-    cases: Sink[VFun, <+>, A, B],
+    cases: Sink[Delambdified, <+>, A, B],
     sum: [X, Y] => (X -⚬ B, Y -⚬ B) => (X <+> Y) -⚬ B,
     distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
   )(using
@@ -128,7 +126,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
   ): Delambdified[A, B]
 
   protected def switchImpl[<+>[_, _], A, B](
-    cases: Sink[VFun, <+>, A, B],
+    cases: Sink[Delambdified, <+>, A, B],
     sum: [X, Y] => (X -⚬ B, Y -⚬ B) => (X <+> Y) -⚬ B,
     distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
   )(using
@@ -136,12 +134,7 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
     SymmetricSemigroupalCategory[-⚬, |*|],
     Context,
   ): Delambdified[A, B] = {
-    val cases1: Sink[Delambdified, <+>, A, B] =
-      cases.map[Delambdified] { [X] => (vf: VFun[X, B]) =>
-        delambdifyNested(vf._1, vf._2, vf._3)
-      }
-
-    cases1.reduce(
+    cases.reduce(
       [x, y] => (f1: Delambdified[x, B], f2: Delambdified[y, B]) => {
         import Lambdas.Delambdified.{Closure, Exact, Failure}
         (f1, f2) match {
