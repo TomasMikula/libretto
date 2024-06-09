@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.lang
 
-import libretto.lambda.{Shuffled, SymmetricSemigroupalCategory}
+import libretto.lambda.{CocartesianSemigroupalCategory, Distribution, Shuffled, SymmetricSemigroupalCategory}
 import libretto.lambda.util.Masked
 
 import scala.concurrent.duration.FiniteDuration
@@ -13,6 +13,9 @@ sealed trait FlowAST[Op[_, _], A, B] {
 
   def maskInput: Masked[[a] =>> FlowAST[Op, a, B], A] =
     Masked(this)
+
+  def to[C](using ev: B =:= C): FlowAST[Op, A, C] =
+    ev.substituteCo(this)
 
   def translate[F[_, _]](h: [x, y] => Op[x, y] => F[x, y]): FlowAST[F, A, B] =
     this match {
@@ -87,6 +90,21 @@ object FlowAST {
     override def assocRL[A, B, C]: FlowAST[Op, A ** (B ** C), (A ** B) ** C] = AssocRL()
     override def par[A1, A2, B1, B2](f1: FlowAST[Op, A1, B1], f2: FlowAST[Op, A2, B2]): FlowAST[Op, A1 ** A2, B1 ** B2] = Par(f1, f2)
     override def swap[A, B]: FlowAST[Op, A ** B, B ** A] = Swap()
+  }
+
+  given cocat[Op[_, _]]: CocartesianSemigroupalCategory[FlowAST[Op, _, _], ++] with {
+    override def andThen[A, B, C](f: FlowAST[Op, A, B], g: FlowAST[Op, B, C]): FlowAST[Op, A, C] = AndThen(f, g)
+    override def id[A]: FlowAST[Op, A, A] = Id()
+    override def injectL[A, B]: FlowAST[Op, A, A ++ B] = InjectL()
+    override def injectR[A, B]: FlowAST[Op, B, A ++ B] = InjectR()
+    override def either[A, B, C](f: FlowAST[Op, A, C], g: FlowAST[Op, B, C]): FlowAST[Op, A ++ B, C] = Either(f, g)
+  }
+
+  given distr[Op[_, _]]: Distribution[FlowAST[Op, _, _], **, ++] with {
+    override val cat: SymmetricSemigroupalCategory[FlowAST[Op, _, _], **] = ssc[Op]
+    import cat.*
+    override def distLR[A, B, C]: FlowAST[Op, A ** (B ++ C), A ** B ++ A ** C] = DistributeLR()
+    override def distRL[A, B, C]: FlowAST[Op, (A ++ B) ** C, A ** C ++ B ** C] = swap[A ++ B, C] > distLR > cocat[Op].par(Swap(), Swap())
   }
 
   def shuffled[Op[_, _]]: Shuffled[Work[Op, _, _], **] =

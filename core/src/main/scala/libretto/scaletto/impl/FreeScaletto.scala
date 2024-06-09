@@ -754,14 +754,29 @@ object FreeScaletto extends Scaletto {
   )(using
     lambdas.Context,
   ): Validated[LinearityViolation, $[R]] =
+    given CocartesianSemigroupalCategory[-?>, |+|] with {
+      override def andThen[A, B, C](f: A -?> B, g: B -?> C): A -?> C = f > g
+      override def id[A]: A -?> A = psh.id
+      override def injectL[A, B]: A -?> (A |+| B) = partial(FreeScaletto.this.injectL)
+      override def injectR[A, B]: B -?> (A |+| B) = partial(FreeScaletto.this.injectR)
+      override def either[A, B, C](f: A -?> C, g: B -?> C): (A |+| B) -?> C =
+        (total(f) zip total(g)) match
+          case Valid((f, g)) => partial(FreeScaletto.this.either(f, g))
+          case Invalid(es)   => raiseTotalityViolations(es) // XXX
+    }
+
+    given Distribution[-?>, |*|, |+|] with {
+      override val cat: SemigroupalCategory[-?>, |*|] = summon
+
+      override def distLR[A, B, C]: (A |*| (B |+| C)) -?> ((A |*| B) |+| (A |*| C)) =
+        partial(FreeScaletto.this.distributeL)
+
+      override def distRL[A, B, C]: ((A |+| B) |*| C) -?> ((A |*| C) |+| (B |*| C)) =
+        partial(FreeScaletto.this.distributeR)
+    }
+
     lambdas.switch(
       cases,
-      [X, Y] => (fx: X -?> R, fy: Y -?> R) => {
-        (total(fx) zip total(fy)) match
-          case Valid((fx, fy)) => partial(either(fx, fy))
-          case Invalid(es)     => raiseTotalityViolations(es)
-      },
-      [X, Y, Z] => (_: Unit) => partial(distributeL[X, Y, Z]),
     ).map {
       case CapturingFun.NoCapture(f)  => lambdas.Expr.map(a, f)(VarOrigin.FunAppRes(pos))
       case CapturingFun.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)

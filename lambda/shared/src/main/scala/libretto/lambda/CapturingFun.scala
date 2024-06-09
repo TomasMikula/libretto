@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Applicative, Exists, Monad, NonEmptyList}
+import libretto.lambda.util.{Applicative, Exists, Monad, NonEmptyList, Validated}
 
 sealed trait CapturingFun[-->[_, _], |*|[_, _], F[_], A, B] {
   import CapturingFun.*
@@ -178,5 +178,43 @@ object CapturingFun {
                     Exists((q > p1, Closure(z, (cat.fst(q > p2) > f) :: gs)))
                   }
               }
+  }
+
+  def compileSink[-->[_, _], |*|[_, _], <+>[_, _], F[_], A, B, G[_]](
+    fs: Sink[CapturingFun[-->, |*|, F, _, _], <+>, A, B],
+  )(
+    discarderOf: [X] => F[X] => G[[Y] => Unit => (X |*| Y) --> Y],
+    union: [X, Y] => (F[X], F[Y]) => G[Exists[[Z] =>> (F[Z], Z --> X, Z --> Y)]],
+  )(using
+    cat: SemigroupalCategory[-->, |*|],
+    coc: CocartesianSemigroupalCategory[-->, <+>],
+    dis: Distribution[-->, |*|, <+>],
+    G: Applicative[G],
+    M: Monad[G],
+  ): G[CapturingFun[-->, |*|, F, A, B]] = {
+    import Applicative.*
+    import cat.*
+    import coc.either
+    import dis.distLR
+
+    fs.reduceM[G](
+      [x, y] => (f1: CapturingFun[-->, |*|, F, x, B], f2: CapturingFun[-->, |*|, F, y, B]) => {
+        (f1, f2) match {
+          case (NoCapture(f1), NoCapture(f2)) =>
+            NoCapture(coc.either(f1, f2)).pure
+          case (Closure(x, f1), NoCapture(f2)) =>
+            discarderOf(x).map :
+              discardFst => Closure(x, distLR > either(f1, discardFst(()) > f2))
+          case (NoCapture(f1), Closure(y, f2)) =>
+            discarderOf(y).map :
+              discardFst => Closure(y, distLR > either(discardFst(()) > f1, f2))
+          case (Closure(x, f1), Closure(y, f2)) =>
+            union(x, y)
+              .map { case Exists.Some((p, p1, p2)) =>
+                Closure(p, distLR > either(p1.inFst > f1, p2.inFst > f2))
+              }
+        }
+      }
+    )
   }
 }

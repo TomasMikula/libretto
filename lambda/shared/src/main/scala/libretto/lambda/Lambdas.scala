@@ -119,9 +119,9 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
 
   def switch[<+>[_, _], A, B](
     cases: Sink[DelambdifiedSuccess, <+>, A, B],
-    sum: [X, Y] => (X -⚬ B, Y -⚬ B) => (X <+> Y) -⚬ B,
-    distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
   )(using
+    CocartesianSemigroupalCategory[-⚬, <+>],
+    Distribution[-⚬, |*|, <+>],
     Context,
   ): Validated[
     LinearityViolation[V, C],
@@ -130,41 +130,17 @@ trait Lambdas[-⚬[_, _], |*|[_, _], V, C] {
 
   protected def switchImpl[<+>[_, _], A, B](
     cases: Sink[DelambdifiedSuccess, <+>, A, B],
-    sum: [X, Y] => (X -⚬ B, Y -⚬ B) => (X <+> Y) -⚬ B,
-    distribute: [X, Y, Z] => Unit => (X |*| (Y <+> Z)) -⚬ ((X |*| Y) <+> (X |*| Z))
   )(using
     BiInjective[|*|],
     SymmetricSemigroupalCategory[-⚬, |*|],
+    CocartesianSemigroupalCategory[-⚬, <+>],
+    Distribution[-⚬, |*|, <+>],
     Context,
   ): Validated[
     LinearityViolation[V, C],
     DelambdifiedSuccess[A, B]
-  ] = {
-    import Applicative.*
-
-    cases.reduceM[Validated[LinearityViolation[V, C], _]](
-      [x, y] => (f1: DelambdifiedSuccess[x, B], f2: DelambdifiedSuccess[y, B]) => {
-        import CapturingFun.{Closure, NoCapture}
-        (f1, f2) match {
-          case (NoCapture(f1), NoCapture(f2)) =>
-            Valid(NoCapture(sum(f1, f2)))
-          case (Closure(x, f1), NoCapture(f2)) =>
-            discarderOf(x) match
-              case Right(discardFst) => Valid(Closure(x, distribute(()) > sum(f1, discardFst(()) > f2)))
-              case Left(unusedVars)  => invalid(LinearityViolation.UnusedInBranch(unusedVars))
-          case (NoCapture(f1), Closure(y, f2)) =>
-            discarderOf(y) match
-              case Right(discardFst) => Valid(Closure(y, distribute(()) > sum(discardFst(()) > f1, f2)))
-              case Left(unusedVars)  => invalid(LinearityViolation.UnusedInBranch(unusedVars))
-          case (Closure(x, f1), Closure(y, f2)) =>
-            union(x, y)
-              .map { case Exists.Some((p, p1, p2)) =>
-                Closure(p, distribute(()) > sum(p1.inFst > f1, p2.inFst > f2))
-              }
-        }
-      }
-    )
-  }
+  ] =
+    CapturingFun.compileSink(cases)(getDiscarder, [X, Y] => union(_, _))
 
   def leastCommonCapture[A, B](
     f: CapturingFun[-⚬, |*|, Tupled[Expr, _], A, B],

@@ -136,9 +136,7 @@ class Workflows[Action[_, _]] {
       (fa zip fb)
         .flatMap { case (fa, fb) =>
           lambdas.switch[++, A ++ B, C](
-            cases = Sink(fa) <+> Sink(fb),
-            sum = [X, Y] => (f: Flow[X, C], g: Flow[Y, C]) => Flow.either(f, g),
-            distribute = [X, Y, Z] => (_: Unit) => Flow.distributeLR[X, Y, Z],
+            cases = Sink(fa) <+> Sink(fb)
           )
         }
         .map {

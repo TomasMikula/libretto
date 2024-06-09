@@ -6,7 +6,7 @@ import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Validated.{Invalid, Valid}
 
 sealed trait Fun[A, B] {
-
+  def >[C](that: Fun[B, C]): Fun[A, C] = Fun.andThen(this, that)
 }
 
 object Fun {
@@ -26,6 +26,8 @@ object Fun {
   case class Prj1[A, B]() extends Fun[A ** B, A]
   case class Prj2[A, B]() extends Fun[A ** B, B]
   case class Dup[A]() extends Fun[A, A ** A]
+  case class InjectL[A, B]() extends Fun[A, A ++ B]
+  case class InjectR[A, B]() extends Fun[B, A ++ B]
   case class HandleEither[A, B, C](f: Fun[A, C], g: Fun[B, C]) extends Fun[A ++ B, C]
   case class DistributeL[X, A, B]() extends Fun[X ** (A ++ B), (X ** A) ++ (X ** B)]
   case class MapVal[A, B](f: A => B) extends Fun[Val[A], Val[B]]
@@ -53,13 +55,27 @@ object Fun {
   def liftPair[A, B]: Fun[Val[(A, B)], Val[A] ** Val[B]] = LiftPair()
   def unliftPair[A, B]: Fun[Val[A] ** Val[B], Val[(A, B)]] = UnliftPair()
 
-  given SymmetricSemigroupalCategory[Fun, **] with {
+  given cat: SymmetricSemigroupalCategory[Fun, **] with {
     override def id[A]: Fun[A, A] = Fun.id[A]
     override def andThen[A, B, C](f: Fun[A, B], g: Fun[B, C]): Fun[A, C] = Fun.andThen(f, g)
     override def assocLR[A, B, C]: Fun[(A ** B) ** C, A ** (B ** C)] = Fun.assocLR
     override def assocRL[A, B, C]: Fun[A ** (B ** C), (A ** B) ** C] = Fun.assocRL
     override def par[A1, A2, B1, B2](f1: Fun[A1, B1], f2: Fun[A2, B2]): Fun[A1 ** A2, B1 ** B2] = Fun.par(f1, f2)
     override def swap[A, B]: Fun[A ** B, B ** A] = Fun.swap
+  }
+
+  given cocat: CocartesianSemigroupalCategory[Fun, ++] with {
+    override def id[A]: Fun[A, A] = Fun.id[A]
+    override def andThen[A, B, C](f: Fun[A, B], g: Fun[B, C]): Fun[A, C] = Fun.andThen(f, g)
+    override def injectL[A, B]: Fun[A, A ++ B] = InjectL()
+    override def injectR[A, B]: Fun[B, A ++ B] = InjectR()
+    override def either[A, B, C](f: Fun[A, C], g: Fun[B, C]): Fun[A ++ B, C] = HandleEither(f, g)
+  }
+
+  given Distribution[Fun, **, ++] with {
+    override val cat: SemigroupalCategory[Fun, [A, B] =>> A ** B] = Fun.cat
+    override def distLR[A, B, C]: Fun[A ** (B ++ C), A ** B ++ A ** C] = distributeL
+    override def distRL[A, B, C]: Fun[(A ++ B) ** C, A ** C ++ B ** C] = swap > distributeL > cocat.par(swap, swap)
   }
 
   private case class VarDesc(desc: String, pos: Option[SourcePos])
@@ -119,11 +135,7 @@ object Fun {
       val fb = lambdas.delambdifyNested((), b, ctx ?=> (b: $[B]) => f(Right(b)))
       (fa zip fb)
         .flatMap { case (fa, fb) =>
-          lambdas.switch(
-            Sink(fa) <+> Sink(fb),
-            [X, Y] => (fx: Fun[X, C], fy: Fun[Y, C]) => either(fx, fy),
-            [X, Y, Z] => (_: Unit) => distributeL[X, Y, Z],
-          )
+          lambdas.switch(Sink(fa) <+> Sink(fb))
         }
         .map {
           case CapturingFun.NoCapture(f)  => f(ab)
@@ -138,7 +150,7 @@ object Fun {
       a > f
 
     def /\[C](g: Fun[A, C]): Fun[A, B ** C] =
-      dup[A] > par(f, g)
+      andThen(dup[A], par(f, g))
   }
 
   object λ {

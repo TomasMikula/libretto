@@ -1,9 +1,10 @@
 package libretto.typology.toylang.terms
 
-import libretto.lambda.{CapturingFun, Sink, SymmetricSemigroupalCategory, Tupled}
+import libretto.lambda.{CapturingFun, CocartesianSemigroupalCategory, Distribution, Sink, SymmetricSemigroupalCategory, Tupled}
 import libretto.lambda.util.SourcePos
 import libretto.lambda.util.Validated.{Invalid, Valid}
 import libretto.typology.toylang.types.{Fix, RecCall, TypeTag}
+import libretto.lambda.SemigroupalCategory
 
 sealed trait Fun[A, B] {
   def >[C](that: Fun[B, C]): Fun[A, C] =
@@ -79,6 +80,9 @@ object Fun {
   def distributeL[A, B, C]: Fun[(A, Either[B, C]), Either[(A, B), (A, C)]] =
     Distribute()
 
+  def distributeR[A, B, C]: Fun[(Either[A, B], C), Either[(A, C), (B, C)]] =
+    swap > distributeL > cocat.par(swap, swap)
+
   def dup[A]: Fun[A, (A, A)] =
     Dup()
 
@@ -122,6 +126,20 @@ object Fun {
     override def assocLR[A, B, C]: Fun[((A, B), C), (A, (B, C))] = Fun.assocLR
     override def assocRL[A, B, C]: Fun[(A, (B, C)), ((A, B), C)] = Fun.assocRL
     override def swap[A, B]: Fun[(A, B), (B, A)] = Fun.swap
+  }
+
+  private given cocat: CocartesianSemigroupalCategory[Fun, Either] with {
+    override def andThen[A, B, C](f: Fun[A, B], g: Fun[B, C]): Fun[A, C] = Fun.andThen(f, g)
+    override def id[A]: Fun[A, A] = Fun.id[A]
+    override def injectL[A, B]: Fun[A, Either[A, B]] = Fun.injectL
+    override def injectR[A, B]: Fun[B, Either[A, B]] = Fun.injectR
+    override def either[A, B, C](f: Fun[A, C], g: Fun[B, C]): Fun[Either[A, B], C] = Fun.either(f, g)
+  }
+
+  private given Distribution[Fun, Tuple2, Either] with {
+    override val cat: SemigroupalCategory[Fun, Tuple2] = summon
+    override def distLR[A, B, C]: Fun[(A, Either[B, C]), Either[(A, B), (A, C)]] = Fun.distributeL
+    override def distRL[A, B, C]: Fun[(Either[A, B], C), Either[(A, C), (B, C)]] = Fun.distributeR
   }
 
   private val lambdas: libretto.lambda.Lambdas[Fun, Tuple2, Object, Unit] =
@@ -171,8 +189,8 @@ object Fun {
         .flatMap { case (fa, fb) =>
           lambdas.switch[Either, Either[A, B], R](
             Sink(fa) <+> Sink(fb),
-            [x, y] => (fx: Fun[x, R], fy: Fun[y, R]) => Fun.either(fx, fy),
-            [x, y, z] => (_: Unit) => Fun.distributeL[x, y, z],
+            // [x, y] => (fx: Fun[x, R], fy: Fun[y, R]) => Fun.either(fx, fy),
+            // [x, y, z] => (_: Unit) => Fun.distributeL[x, y, z],
           )
         }
         .map {
