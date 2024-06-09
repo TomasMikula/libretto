@@ -1,7 +1,7 @@
 package libretto.lambda
 
 import libretto.{lambda as ll}
-import libretto.lambda.Lambdas.{Delambdified, LinearityViolation}
+import libretto.lambda.Lambdas.LinearityViolation
 import libretto.lambda.util.{Applicative, BiInjective, Exists, Injective, Masked, NonEmptyList, TypeEq, UniqueTypeArg, Validated}
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.util.TypeEq.Refl
@@ -70,8 +70,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
       ctx.isDefiningFor(v)
   }
 
-  private type Delambdified0[A, B] = Lambdas.Delambdified[Expr, |*|, ≈⚬, V, C, A, B]
-
   type CapturingFun[A, B] = libretto.lambda.CapturingFun[≈⚬, |*|, Tupled[Expr, _], A, B]
   object CapturingFun {
     def noCapture[A, B](f: A ≈⚬ B): CapturingFun[A, B] =
@@ -98,6 +96,8 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
     def captureSnd[X, A](captured: Tupled[Expr, X]): CapturingFun[A, A |*| X] =
       ll.CapturingFun.Closure(captured, shuffled.swap)
   }
+
+  private type Delambdified0[A, B] = Validated[LinearityViolation[V, C], CapturingFun[A, B]]
 
   /**
    * AST of an expression, created by user code, before translation to point-free representation,
@@ -324,7 +324,6 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
     attachDiscarded(expr, toElim.values) match
       case Exists.Some((exprs, discard)) =>
         eliminateLocalVariablesFromForest(boundVar, exprs)
-          .toValidated
           .map(_
             .mapFun([X, Y] => f => f.fold)
             .andThen(discard)
@@ -354,9 +353,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
     boundVar: Var[A],
     exprs: Tupled[Expr, B],
   )(using Context): Delambdified0[A, B] = {
-    import Lambdas.Delambdified.{Closure, Exact, Failure}
+    import libretto.lambda.CapturingFun.{Closure, NoCapture}
 
-    extractFunctionFromForest(boundVar, exprs) match {
+    extractFunctionFromForest(boundVar, exprs) flatMap {
       case Closure(y, f) => // eliminate all constant expressions from captured expressions
         // split captured expressions at context boundary
         Expr.splitAt(y) { [t] => (v: Var[t]) =>
@@ -374,14 +373,13 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
               boundary match {
                 case Bin.Leaf(Left(v)) =>
                   if (alreadyEliminated containsVar v)
-                    (Closure(captured, f), alreadyEliminated)
+                    (Valid(Closure(captured, f)), alreadyEliminated)
                   else (
                     Context.getConstant(v) match {
                       case Some(intro) =>
-                        extractFunctionFromForest(v, captured) match
-                          case Exact(g)      => Exact(lift(intro[A](())) > fst(g) > f)
+                        extractFunctionFromForest(v, captured).map :
+                          case NoCapture(g)  => NoCapture(lift(intro[A](())) > fst(g) > f)
                           case Closure(x, g) => Closure(x, snd(lift(intro[A](()))) > assocRL > fst(g) > f)
-                          case Failure(e)    => Failure(e)
                       case None =>
                         bug(s"Unexpected variable that neither derives from λ nor is a constant")
                     },
@@ -390,26 +388,25 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
                 case Bin.Leaf(Right(x)) =>
                   val v = x.resultVar
                   if (alreadyEliminated containsVar v)
-                    (Closure(captured, f), alreadyEliminated)
+                    (Valid(Closure(captured, f)), alreadyEliminated)
                   else (
-                    extractFunctionFromForest(v, captured) match {
-                      case Exact(g)      => Closure(Tupled.atom(x), fst(g) > f)
+                    extractFunctionFromForest(v, captured).map {
+                      case NoCapture(g)  => Closure(Tupled.atom(x), fst(g) > f)
                       case Closure(y, g) => Closure(y zip Tupled.atom(x), fst(g) > f)
-                      case Failure(e)    => Failure(e)
                     },
                     alreadyEliminated + v
                   )
                 case Bin.Branch(l, r) =>
                   go(r, captured, f, alreadyEliminated) match {
-                    case (Closure(x, f), eliminatedVars) => go(l, x, f, eliminatedVars)
-                    case other                           => other
+                    case (Valid(Closure(x, f)), eliminatedVars) => go(l, x, f, eliminatedVars)
+                    case other                                  => other
                   }
               }
 
             go(x.asBin, y, f, Var.Set(boundVar))._1
         }
-      case other =>
-        other
+      case f @ NoCapture(_) =>
+        Valid(f)
     }
   }
 
@@ -431,29 +428,28 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
   )(using
     ctx: Context,
   ): Delambdified0[A, B] = {
-    import Delambdified.{Closure, Exact, Failure}
+    import libretto.lambda.CapturingFun.{Closure, NoCapture}
 
     Forest.upvar(exprs) match { case Exists.Some((exprs, u)) =>
       eliminateFromForest(boundVar, exprs) match {
         case EliminatedFromForest.FoundEach(arr) =>
-          arr.extract(u) match
-            case Exact(f)      => Exact(f)
+          arr.extract(u).map :
+            case NoCapture(f)  => NoCapture(f)
             case Closure(x, f) => Closure(x, f)
-            case Failure(es)   => Failure(es)
+
         case EliminatedFromForest.FoundSome(x, arr, s) =>
           s.preShuffle(u) match {
             case Exists.Some((u, s)) =>
               Unvar.objectMap.unpair(u) match
                 case Unvar.objectMap.Unpaired.Impl(u1, u2) =>
-                  arr.extract(u2) match
-                    case Exact(f)      => Closure(Forest.unvar(x, u1), snd(f) > pure(s))
+                  arr.extract(u2).map :
+                    case NoCapture(f)  => Closure(Forest.unvar(x, u1), snd(f) > pure(s))
                     case Closure(y, f) => Closure(Forest.unvar(x, u1) zip y, assocLR > snd(f) > pure(s))
-                    case Failure(es)   => Failure(es)
           }
         case EliminatedFromForest.NotFound() =>
           Context.getDiscard(boundVar) match
-            case Some(discardFst) => Closure(Forest.unvar(exprs, u), swap > lift(discardFst(())))
-            case None             => Failure(LinearityViolation.unusedVar(boundVar, Context.info))
+            case Some(discardFst) => Valid(Closure(Forest.unvar(exprs, u), swap > lift(discardFst(()))))
+            case None             => invalid(LinearityViolation.unusedVar(boundVar, Context.info))
       }
     }
   }
@@ -679,17 +675,9 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
       given shCFun: Shuffled.With[CapturingFun, |*|, shuffled.shuffle.type] =
         Shuffled[CapturingFun, |*|](shuffled.shuffle)
 
-      t2.traverse[Validated[LinearityViolation[V, C], _], CapturingFun](
-        [p, q] => op => op
-      ) match {
-        case Valid(t3) =>
-          t3.fold match {
-            case ll.CapturingFun.NoCapture(f)  => Delambdified.Exact(f)
-            case ll.CapturingFun.Closure(x, f) => Delambdified.Closure(x, f)
-          }
-        case Invalid(es) =>
-          Delambdified.Failure(es)
-      }
+      t2
+        .traverse[Validated[LinearityViolation[V, C], _], CapturingFun]([p, q] => op => op)
+        .map(_.fold)
     }
   }
 

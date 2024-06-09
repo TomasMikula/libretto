@@ -2,7 +2,6 @@ package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
 import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Partitioning, SemigroupalCategory, Shuffled, Sink, Tupled, Var}
-import libretto.lambda.Lambdas.Delambdified
 import libretto.lambda.Partitioning.SubFun
 import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, StaticValue, TypeEq, TypeEqK, Validated}
 import libretto.lambda.util.TypeEq.Refl

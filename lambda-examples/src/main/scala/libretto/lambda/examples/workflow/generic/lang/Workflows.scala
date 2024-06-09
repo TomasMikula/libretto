@@ -1,7 +1,6 @@
 package libretto.lambda.examples.workflow.generic.lang
 
 import libretto.lambda.{CapturingFun, Lambdas, Sink}
-import libretto.lambda.Lambdas.Delambdified
 import libretto.lambda.util.SourcePos
 import libretto.lambda.util.Validated.{Invalid, Valid}
 import libretto.lambda.Tupled
