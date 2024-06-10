@@ -84,6 +84,22 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
           }
         }
 
+      /** `skewLeft` using nested `switch`s (instead of nested patterns). */
+      def skewLeftNS[A]: NonEmptyTree[A] -⚬ NonEmptyTree[A] =
+        rec { self =>
+          λ { t =>
+            switch(t)
+              .is { case Leaf(a) => leaf(a) }
+              .is { case Branch(l |*| r) =>
+                switch(r)
+                  .is { case Leaf(a) => branch(self(l) |*| leaf(a)) }
+                  .is { case Branch(rl |*| rr) => self(branch(branch(l |*| rl) |*| rr)) }
+                  .end
+              }
+              .end
+          }
+        }
+
       def skewRight[A]: NonEmptyTree[A] -⚬ NonEmptyTree[A] =
         rec { self =>
           λ { t =>
@@ -94,6 +110,25 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
               .end
           }
         }
+
+      /** `skewRight` using nested `switch`s (instead of nested patterns). */
+      def skewRightNS[A]: NonEmptyTree[A] -⚬ NonEmptyTree[A] =
+        rec { self =>
+          λ { t =>
+            switch(t)
+              .is { case Branch(l |*| r) =>
+                switch(l)
+                  .is { case Branch(ll |*| lr) => self(branch(ll |*| branch(lr |*| r))) }
+                  .is { case Leaf(a) => branch(leaf(a) |*| self(r)) }
+                  .end
+              }
+              .is { case Leaf(a) => leaf(a) }
+              .end
+          }
+        }
+
+      def print[A](f: A -⚬ Val[String]): NonEmptyTree[A] -⚬ Val[String] =
+        foldMap(f, unliftPair > mapVal { case (l, r) => s"($l, $r)" })
     }
 
     object Tree {
@@ -144,6 +179,20 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             .is { case Empty(?(_)) |*| t2 => t2 }
             .is { case t1 |*| Empty(?(_)) => t1 }
             .is { case NonEmpty(t1) |*| NonEmpty(t2) => nonEmpty(NonEmptyTree.branch(t1 |*| t2)) }
+            .end
+        }
+
+      /** `concat` using nested `switch`s (instead of nested patterns). */
+      def concatNS[A]: (Tree[A] |*| Tree[A]) -⚬ Tree[A] =
+        λ { case t1 |*| t2 =>
+          switch(t2)
+            .is { case Empty(?(_)) => t1 }
+            .is { case NonEmpty(t2) =>
+              switch(t1)
+                .is { case Empty(?(_)) => nonEmpty(t2) }
+                .is { case NonEmpty(t1) => nonEmpty(NonEmptyTree.branch(t1 |*| t2)) }
+                .end
+            }
             .end
         }
 
@@ -212,6 +261,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
     } ++ List(
       "concatBB" -> Tree.concatBB[Val[Int]],
       "concat" -> Tree.concat[Val[Int]],
+      "concatNS" -> Tree.concatNS[Val[Int]],
     ).map { case (desc, concat) =>
 
       s"concatenate trees ($desc)" ->
@@ -226,27 +276,29 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             val tree =
               concat(tree1 |*| tree2)
             tree
-              :>> Tree.foldMapBB(mapVal(_.toString), unliftPair > mapVal { case (a, b) => s"$a,$b" })
-              :>> Maybe.getOrElse(done > constVal(""))
+              :>> Tree.print(mapVal(_.toString))
           }
         }.via { port =>
           for {
             s <- expectVal(port)
-            _ <- Outcome.assertEquals(s, "1,2,3,4")
+            _ <- Outcome.assertEquals(s, "((1, 2), (3, 4))")
           } yield ()
         }
 
     } ++ List(
-      "skewLeft, skewRight" -> TestCase
+      ("skewLeft, skewRight") -> (NonEmptyTree.skewLeft[Val[Int]], NonEmptyTree.skewRight[Val[Int]]),
+      ("skewLeftNS, skewRightNS") -> (NonEmptyTree.skewLeftNS[Val[Int]], NonEmptyTree.skewRightNS[Val[Int]]),
+    ).map { case (desc, (skewLeft, skewRight)) =>
+
+       s"skew trees ($desc)" -> TestCase
         .interactWith {
           import NonEmptyTree.{leaf, branch}
 
           λ { case +(d) =>
             given $[Done] = d
-            val tree1, tree2 =
-              Tree.nonEmpty((c(1) ++ c(2)) ++ (c(3) ++ c(4)))
-            val s1 = Tree.skewLeft (tree1) :>> Tree.print(mapVal(_.toString))
-            val s2 = Tree.skewRight(tree2) :>> Tree.print(mapVal(_.toString))
+            val tree1, tree2 = (c(1) ++ c(2)) ++ (c(3) ++ c(4))
+            val s1 = skewLeft (tree1) :>> NonEmptyTree.print(mapVal(_.toString))
+            val s2 = skewRight(tree2) :>> NonEmptyTree.print(mapVal(_.toString))
             s1 |*| s2
           }
         }
@@ -259,7 +311,8 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             _ <- Outcome.assertEquals(s2, "(1, (2, (3, 4)))")
           } yield ()
         }
-    )
+
+    }
   }
 
 }
