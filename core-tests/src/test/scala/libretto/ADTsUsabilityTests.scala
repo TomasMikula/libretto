@@ -178,6 +178,14 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
       }
     }
 
+    def c[A](using d: $[Done])(a: A)(using LambdaContext, SourcePos): $[NonEmptyTree[Val[A]]] =
+      d :>> constVal(a) :>> NonEmptyTree.leaf
+
+    extension [A](t: $[NonEmptyTree[A]]) {
+      def ++(u: $[NonEmptyTree[A]])(using LambdaContext, SourcePos): $[NonEmptyTree[A]] =
+        (t |*| u) :>> NonEmptyTree.branch
+    }
+
     List(
       "foldMapBB" -> Tree.foldMapBB[Val[Int], Val[Int]],
       "foldMap" -> Tree.foldMap[Val[Int], Val[Int]],
@@ -187,11 +195,9 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
         TestCase.interactWith {
           import NonEmptyTree.{leaf, branch}
           λ { case +(d) =>
+            given $[Done] = d
             val tree =
-              Tree.branch(
-                branch(leaf(d :>> constVal(1)) |*| leaf(d :>> constVal(2))) |*|
-                branch(leaf(d :>> constVal(3)) |*| leaf(d :>> constVal(4)))
-              )
+              Tree.nonEmpty((c(1) ++ c(2)) ++ (c(3) ++ c(4)))
             tree
               :>> foldMap(id, unliftPair > mapVal { case (a, b) => a + b })
               :>> Maybe.getOrElse(done > constVal(0))
@@ -212,10 +218,11 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
         TestCase.interactWith {
           import NonEmptyTree.{leaf, branch}
           λ { case +(d) =>
+            given $[Done] = d
             val tree1 =
-              Tree.nonEmpty(branch(leaf(d :>> constVal(1)) |*| leaf(d :>> constVal(2))))
+              Tree.nonEmpty(c(1) ++ c(2))
             val tree2 =
-              Tree.nonEmpty(branch(leaf(d :>> constVal(3)) |*| leaf(d :>> constVal(4))))
+              Tree.nonEmpty(c(3) ++ c(4))
             val tree =
               concat(tree1 |*| tree2)
             tree
@@ -235,11 +242,9 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
           import NonEmptyTree.{leaf, branch}
 
           λ { case +(d) =>
+            given $[Done] = d
             val tree1, tree2 =
-              Tree.branch(
-                branch(leaf(d :>> constVal(1)) |*| leaf(d :>> constVal(2))) |*|
-                branch(leaf(d :>> constVal(3)) |*| leaf(d :>> constVal(4)))
-              )
+              Tree.nonEmpty((c(1) ++ c(2)) ++ (c(3) ++ c(4)))
             val s1 = Tree.skewLeft (tree1) :>> Tree.print(mapVal(_.toString))
             val s2 = Tree.skewRight(tree2) :>> Tree.print(mapVal(_.toString))
             s1 |*| s2
