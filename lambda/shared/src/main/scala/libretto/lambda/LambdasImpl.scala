@@ -356,58 +356,112 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
     import libretto.lambda.CapturingFun.{Closure, NoCapture}
 
     extractFunctionFromForest(boundVar, exprs) flatMap {
-      case Closure(y, f) => // eliminate all constant expressions from captured expressions
-        // split captured expressions at context boundary
-        Expr.splitAt(y) { [t] => (v: Var[t]) =>
-          !Context.isDefiningFor(v)
-        } match {
-          case Exists.Some((x, y)) =>
-            type InnerVarOrOuterExpr[T] = Either[Var[T], Expr[T]]
-
-            def go[X, Y](
-              boundary: Bin[|*|, [t] =>> t, InnerVarOrOuterExpr, X],
-              captured: Tupled[Expr, Y],
-              f: (Y |*| A) ≈⚬ B,
-              alreadyEliminated: Var.Set[V],
-            ): (Delambdified0[A, B], Var.Set[V]) =
-              boundary match {
-                case Bin.Leaf(Left(v)) =>
-                  if (alreadyEliminated containsVar v)
-                    (Valid(Closure(captured, f)), alreadyEliminated)
-                  else (
-                    Context.getConstant(v) match {
-                      case Some(intro) =>
-                        extractFunctionFromForest(v, captured).map :
-                          case NoCapture(g)  => NoCapture(lift(intro[A](())) > fst(g) > f)
-                          case Closure(x, g) => Closure(x, snd(lift(intro[A](()))) > assocRL > fst(g) > f)
-                      case None =>
-                        bug(s"Unexpected variable that neither derives from λ nor is a constant")
-                    },
-                    alreadyEliminated + v
-                  )
-                case Bin.Leaf(Right(x)) =>
-                  val v = x.resultVar
-                  if (alreadyEliminated containsVar v)
-                    (Valid(Closure(captured, f)), alreadyEliminated)
-                  else (
-                    extractFunctionFromForest(v, captured).map {
-                      case NoCapture(g)  => Closure(Tupled.atom(x), fst(g) > f)
-                      case Closure(y, g) => Closure(y zip Tupled.atom(x), fst(g) > f)
-                    },
-                    alreadyEliminated + v
-                  )
-                case Bin.Branch(l, r) =>
-                  go(r, captured, f, alreadyEliminated) match {
-                    case (Valid(Closure(x, f)), eliminatedVars) => go(l, x, f, eliminatedVars)
-                    case other                                  => other
-                  }
-              }
-
-            go(x.asBin, y, f, Var.Set(boundVar))._1
-        }
+      case Closure(y, f) =>
+        minimizeCapture(y) map :
+          case Left(Exists.Some((x, f0))) =>
+            Closure(x, fst(f0) > f)
+          case Right(intro) =>
+            NoCapture(intro[A](()) > f)
       case f @ NoCapture(_) =>
         Valid(f)
     }
+  }
+
+  private def minimizeCapture[Y](
+    captured: Tupled[Expr, Y],
+  )(using
+    Context
+  ): Validated[
+    LinearityViolation[V, C],
+    Either[
+      Exists[[X] =>> (Tupled[Expr, X], X ≈⚬ Y)],
+      [B] => Unit => (B ≈⚬ (Y |*| B))
+    ]
+  ] =
+    // split captured expressions at context boundary
+    Expr.splitAt(captured) { [t] => (v: Var[t]) =>
+      !Context.isDefiningFor(v)
+    } match {
+      case Exists.Some((x, y)) =>
+        val (supposedConstants, captures) =
+          x.toList([x] => x => x).partitionMap(x => x)
+
+        // deduplicate
+        val uniqueConstants =
+          Var.Set.fromList(supposedConstants).list
+        val uniqueCaptures  =
+          captures
+            .foldLeft(Var.Map.empty[V, Expr])((acc, x) => acc + (x.resultVar, x))
+            .toList([x] => (v, ex) => ex)
+
+        // eliminate all constant expressions from captured expressions
+        eliminateConstants(uniqueConstants, y) flatMap {
+          case Right(intro) =>
+            Valid(Right(intro))
+          case Left(Exists.Some((x, g))) =>
+            // avoid capturing the same expression multiple times
+            deduplicateCaptures(uniqueCaptures, x) map :
+              case Exists.Some((x, f)) =>
+                Left(Exists((x, f > g)))
+        }
+    }
+
+  private def eliminateConstants[Y](
+    allegedConstants: List[Var[?]], // assumed unique
+    expr: Tupled[Expr, Y],
+  )(using
+    Context
+  ): Validated[
+    LinearityViolation[V, C],
+    Either[
+      Exists[[X] =>> (Tupled[Expr, X], X ≈⚬ Y)],
+      [B] => Unit => (B ≈⚬ (Y |*| B))
+    ]
+  ] = {
+    import libretto.lambda.CapturingFun.{Closure, NoCapture}
+
+    allegedConstants match
+      case Nil =>
+        Valid(Left(Exists((expr, shuffled.id))))
+      case v :: vs =>
+        Context.getConstant(v) match {
+          case None =>
+            bug(s"Unexpected variable that neither derives from λ nor is a constant")
+          case Some(intro) =>
+            eliminateConstants(vs, expr).flatMap {
+              case Left(Exists.Some((expr1, f))) =>
+                extractFunctionFromForest(v, expr1).map :
+                  case NoCapture(g)  => Right([B] => (_: Unit) => lift(intro[B](())) > fst(g > f))
+                  case Closure(x, g) => Left(Exists((x, lift(intro(())) > swap > g  > f)))
+              case Right(introVs) =>
+                bug(s"Unexpected elimination of the whole expression prior to eliminating constant $v. Expression: $expr")
+            }
+        }
+  }
+
+  private def deduplicateCaptures[Y](
+    captures: List[Expr[?]], // assumed unique
+    expr: Tupled[Expr, Y], // may contain multiple occurrences of any expression from `captures`
+  )(using
+    Context
+  ): Validated[
+    LinearityViolation[V, C],
+    Exists[[X] =>> (Tupled[Expr, X], X ≈⚬ Y)]
+  ] = {
+    import libretto.lambda.CapturingFun.{Closure, NoCapture}
+
+    captures match
+      case Nil =>
+        Valid(Exists((expr, shuffled.id)))
+      case x :: xs =>
+        deduplicateCaptures(xs, expr).flatMap {
+          case Exists.Some((expr1, f)) =>
+            val v = x.resultVar
+            extractFunctionFromForest(v, expr1).map {
+              case NoCapture(g)  => Exists((Tupled.atom(x), g > f))
+              case Closure(y, g) => Exists((y zip Tupled.atom(x), g > f))
+            }
+        }
   }
 
   override def switch[<+>[_, _], A, B](

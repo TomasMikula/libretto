@@ -22,8 +22,11 @@ class Var[P, A] private[lambda](
 object Var {
   opaque type Set[P] = sci.Set[Var[P, ?]]
   object Set {
-    def apply[P](v: Var[P, ?], vs: Var[P, ?]*): Set[P] =
-      sci.Set((v +: vs)*)
+    def apply[P](vs: Var[P, ?]*): Set[P] =
+      sci.Set.from(vs)
+
+    def fromList[P](vs: List[Var[P, ?]]): Set[P] =
+      sci.Set.from(vs)
 
     extension [P](vs: Var.Set[P]) {
       infix def merge(ws: Var.Set[P]): Var.Set[P] =
@@ -64,6 +67,9 @@ object Var {
 
       def values: List[Exists[F]] =
         m.reveal.valuesIterator.map(f => Exists(f)).toList
+
+      def toList[T](f: [x] => (Var[V, x], F[x]) => T): List[T] =
+        m.reveal.iterator.map { case (k, v) => f(k, v) }.toList
     }
   }
 
