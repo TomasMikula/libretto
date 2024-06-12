@@ -91,6 +91,14 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     foldMapWith[G](map, [x, y] => (x: G[x], y: G[y]) => reduce(x, y))
   }
 
+  def foldRight[B](b: B)(f: [x] => (F[x], B) => B): B =
+    this match
+      case Leaf(a) =>
+        f(a, b)
+      case Branch(l, r) =>
+        val b1 = r.foldRight(b)(f)
+        l.foldRight(b1)(f)
+
   def partition[G[_], H[_]](
     f: [x] => F[x] => Either[G[x], H[x]],
   )(using
