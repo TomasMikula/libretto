@@ -18,6 +18,40 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
     import coreLib.{*, given}
     import dsl.{|| as |}
 
+    type Maybe[A] = OneOf
+      [ "Empty" :: One
+      | "Just" :: A
+      ]
+
+    object Maybe {
+      object Empty {
+        def apply[A]: One -⚬ Maybe[A] =
+          OneOf.make[Maybe[A]]("Empty")
+
+        def unapply[A](using SourcePos, LambdaContext)(ma: $[Maybe[A]]): Some[$[One]] =
+          Some(ma.matchAgainst("Empty"))
+      }
+
+      object Just {
+        def apply[A]: A -⚬ Maybe[A] =
+          OneOf.make[Maybe[A]]("Just")
+
+        def unapply[A](using SourcePos, LambdaContext)(ma: $[Maybe[A]]): Some[$[A]] =
+          Some(ma.matchAgainst("Just"))
+      }
+
+      def empty[A]: One -⚬ Maybe[A] = Empty.apply[A]
+      def just[A]: A -⚬ Maybe[A] = Just.apply[A]
+
+      def getOrElse[A](ifEmpty: One -⚬ A): Maybe[A] -⚬ A =
+        λ { ma =>
+          switch(ma)
+            .is { case Just(a) => a }
+            .is { case Empty(unit) => ifEmpty(unit) }
+            .end
+        }
+    }
+
     type NonEmptyTreeF[A, X] = OneOf
       [ "Leaf" :: A
       | "Branch" :: (X |*| X)
