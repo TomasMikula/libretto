@@ -93,6 +93,17 @@ sealed abstract class Shuffled[->[_, _], |*|[_, _]](using BiInjective[|*|]) {
       f: [X, Y, Z] => (X -> Y, Projection[|*|, Y, Z]) => ProjectRes[X, Z],
     ): ProjectRes[A, C]
 
+    /** Extracts the maximum forest-shaped prefix at the given position. */
+    def takeLeadingForestAt[F[_], X](
+      pos: Focus[|*|, F],
+    )(using
+      ev: A =:= F[X],
+    ): Exists[[Y] =>> (AForest[->, |*|, X, Y], Shuffled[F[Y], B])] =
+      takeLeadingForestAtWhile[F, X, ->](
+        pos,
+        [x, y] => (f: x -> y) => Some(f),
+      )
+
     /** Extracts the maximum forest-shaped prefix
      * at the given position satisfying the given predicate.
      */

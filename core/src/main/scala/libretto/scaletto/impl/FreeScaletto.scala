@@ -623,15 +623,13 @@ object FreeScaletto extends Scaletto {
     )(pos: SourcePos)(using
       lambdas.Context,
     ): $[C] = {
-      val a = VarOrigin.Lambda(pos)
-      val b = VarOrigin.Lambda(pos)
-      val sl = ScopeInfo.LeftCase(pos)
-      val sr = ScopeInfo.RightCase(pos)
-      val fa = lambdas.delambdifyNested(sl, a, ctx ?=> (a: $[A]) => f(Left(a)))
-      val fb = lambdas.delambdifyNested(sr, b, ctx ?=> (b: $[B]) => f(Right(b)))
-      (fa zip fb)
-        .flatMap { case (fa, fb) => switchSink(ab, Sink(fa) <+> Sink(fb))(pos) }
-        .valueOr(assemblyErrors)
+      import CoproductPartitioning.Side
+      val p = new CoproductPartitioning[A, B]
+
+      switch(ab)(
+        (pos, ctx ?=> (ab: $[A |+| B]) => f(Left(matchAgainst(ab, p.extractor(Side.Left()))(pos)))),
+        (pos, ctx ?=> (ab: $[A |+| B]) => f(Right(matchAgainst(ab, p.extractor(Side.Right()))(pos)))),
+      )
     }
 
     override def app[A, B](f: $[A =⚬ B], a: $[A])(

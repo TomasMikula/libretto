@@ -58,6 +58,11 @@ sealed trait AForest[->[_, _], <*>[_, _], A, B] {
 
   def from[Z](using ev: Z =:= A): AForest[->, <*>, Z, B] =
     ev.substituteContra[AForest[->, <*>, _, B]](this)
+
+  def to[C](using ev: B =:= C): AForest[->, <*>, A, C] =
+    ev.substituteCo(this)
+
+  def foldMap[->>[_, _]](f: [X, Y] => (X -> Y) => (X ->> Y))(using SemigroupalCategory[->>, <*>]): A ->> B
 }
 
 object AForest {
@@ -81,6 +86,9 @@ object AForest {
         .focus[F2, X](f2)
         .inSnd(fst = Empty[->, <*>, A1]())
         .to[A]
+
+    override def foldMap[->>[_, _]](f: [X, Y] => (X -> Y) => (X ->> Y))(using cat: SemigroupalCategory[->>, <*>]): A ->> A =
+      cat.id[A]
   }
 
   sealed trait NonEmpty[->[_, _], <*>[_, _], A, B] extends AForest[->, <*>, A, B] {
@@ -102,6 +110,9 @@ object AForest {
       (A1 <*> F2[X]) =:= A,
     ): Focused[->, <*>, [x] =>> A1 <*> F2[x], X, B] =
       UnhandledCase.raise(s"Node.focusSnd")
+
+    override def foldMap[->>[_, _]](f: [X, Y] => (X -> Y) => (X ->> Y))(using cat: SemigroupalCategory[->>, <*>]): (A ->> B) =
+      f(value) > children.foldMap(f)
   }
 
   case class Par[->[_, _], <*>[_, _], A1, A2, B1, B2] private[AForest](
@@ -127,6 +138,9 @@ object AForest {
         given (F2[Y] =:= A2) = ev2
         f2.focus(pos2).inSnd(f1)
       }
+
+    override def foldMap[->>[_, _]](f: [X, Y] => (X -> Y) => (X ->> Y))(using cat: SemigroupalCategory[->>, <*>]): (A1 <*> A2) ->> (B1 <*> B2) =
+      cat.par(f1.foldMap(f), f2.foldMap(f))
   }
 
   def par[->[_, _], <*>[_, _], A1, A2, B1, B2](

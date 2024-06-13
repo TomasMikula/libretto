@@ -361,7 +361,13 @@ class LambdasImpl[-⚬[_, _], |*|[_, _], V, C](
           case Left(Exists.Some((x, f0))) =>
             Closure(x, fst(f0) > f)
           case Right(intro) =>
-            NoCapture(intro[A](()) > f)
+            // XXX somewhat arbitrary to take just leading forest.
+            // If anything, we should place introductions as late as possible,
+            // but after the initial forest will be sufficient to place them after
+            // any extractors of a pattern match.
+            f.takeLeadingForestAt(Focus.snd) match
+              case Exists.Some((f2, g)) =>
+                NoCapture(f2.foldMap([x, y] => lift(_)) > intro(()) > g)
       case f @ NoCapture(_) =>
         Valid(f)
     }
