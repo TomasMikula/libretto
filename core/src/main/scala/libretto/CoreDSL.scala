@@ -67,6 +67,8 @@ trait CoreDSL {
 
   val OneOf: EnumModule.LeftAssociative[-⚬, |*|, OneOf, ||, ::]
 
+  protected val SumPartitioning: libretto.lambda.CoproductPartitioning[-⚬, |*|, |+|]
+
   /** Signal that travels in the direction of [[-⚬]], i.e. the positive direction.
     * It may signal completion of a (potentially effectful) computation.
     * It cannot be ignored. (If this signal was the only handle to an (effectful) computation,
@@ -401,13 +403,6 @@ trait CoreDSL {
       LambdaContext,
     ): $[A]
 
-    def switchEither[A, B, C](
-      ab: $[A |+| B],
-      f: LambdaContext ?=> Either[$[A], $[B]] => $[C],
-    )(pos: SourcePos)(using
-      LambdaContext,
-    ): $[C]
-
     def eliminateFirst[A](unit: $[One], a: $[A])(
       pos: SourcePos,
     )(using LambdaContext): $[A] =
@@ -533,12 +528,31 @@ trait CoreDSL {
       switch(using ctx, pos)(a)(cases.reverse*)
   }
 
+  object InL {
+    def apply[A, B](using pos: SourcePos, ctx: LambdaContext)(a: $[A]): $[A |+| B] =
+      $.map(a)(injectL)(pos)
+
+    def unapply[A, B](using pos: SourcePos, ctx: LambdaContext)(ab: $[A |+| B]): Some[$[A]] =
+      Some($.matchAgainst(ab, SumPartitioning.Inl)(pos))
+  }
+
+  object InR {
+    def apply[A, B](using pos: SourcePos, ctx: LambdaContext)(b: $[B]): $[A |+| B] =
+      $.map(b)(injectR)(pos)
+
+    def unapply[A, B](using pos: SourcePos, ctx: LambdaContext)(ab: $[A |+| B]): Some[$[B]] =
+      Some($.matchAgainst(ab, SumPartitioning.Inr)(pos))
+  }
+
   extension [A, B](x: $[A |+| B]) {
-    def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
+    infix def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[C] =
-      $.switchEither(x, f)(pos)
+      CoreDSL.this.switch(using ctx, pos)(x)(
+        (pos, ctx ?=> { case InL(a) => f(Left(a)) }),
+        (pos, ctx ?=> { case InR(b) => f(Right(b)) }),
+      )
   }
 
   extension [Cases](p: OneOf.Partitioning[Cases]) {

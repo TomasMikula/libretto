@@ -134,7 +134,7 @@ object Wire {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[R] =
-      $.switchEither(w, f)(pos)
+      w switch f
   }
 
   def proper:       Proper -⚬ Wire = injectL > pack[WireF]
@@ -147,7 +147,7 @@ object Wire {
     pos: SourcePos,
     ctx: LambdaContext,
   ): $[R] =
-    $.switchEither(w :>> unpack[WireF], f)(pos)
+    (w :>> unpack[WireF]) switch f
 
   def read: Wire -⚬ Val[Result] = rec { read =>
     λ { w =>

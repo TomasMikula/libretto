@@ -532,7 +532,8 @@ object FreeScaletto extends Scaletto {
       distribution,
     )
 
-  val SumPartitioning = new CoproductPartitioning[-⚬, |*|, |+|](using ℭ, cocat, distribution)
+  override val SumPartitioning =
+    new CoproductPartitioning[-⚬, |*|, |+|](using ℭ, cocat, distribution)
 
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
@@ -622,17 +623,6 @@ object FreeScaletto extends Scaletto {
 
     override def matchAgainst[A, B](a: $[A], extractor: Extractor[A, B])(pos: SourcePos)(using LambdaContext): $[B] =
       lambdas.Expr.map(a, psh.lift(ExtractorOccurrence(extractor, pos)))(VarOrigin.ExtractorRes(pos))
-
-    override def switchEither[A, B, C](
-      ab: $[A |+| B],
-      f: lambdas.Context ?=> Either[$[A], $[B]] => $[C],
-    )(pos: SourcePos)(using
-      lambdas.Context,
-    ): $[C] =
-      switch(ab)(
-        (pos, ctx ?=> (ab: $[A |+| B]) => f(Left(matchAgainst(ab, SumPartitioning.Inl)(pos)))),
-        (pos, ctx ?=> (ab: $[A |+| B]) => f(Right(matchAgainst(ab, SumPartitioning.Inr)(pos)))),
-      )
 
     override def app[A, B](f: $[A =⚬ B], a: $[A])(
       pos: SourcePos,
