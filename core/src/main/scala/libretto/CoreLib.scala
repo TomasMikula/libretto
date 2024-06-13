@@ -1528,20 +1528,6 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         override def flatten[B]: (A |+| (A |+| B)) -⚬ (A |+| B) =
           either(injectL, id)
       }
-
-    extension [A, B](ab: $[A |+| B])(using LambdaContext) {
-      def switch[C](using SourcePos)(
-        caseLeft: A -⚬ C,
-        caseRight: B -⚬ C,
-      ): $[C] =
-        ab > either(caseLeft, caseRight)
-
-      def switchWith[X, C](x: $[X])(using SourcePos)(
-        caseLeft: (A |*| X) -⚬ C,
-        caseRight: (B |*| X) -⚬ C,
-      ): $[C] =
-        (ab |*| x) > switchWithR(caseLeft, caseRight)
-    }
   }
 
   object |&| {
