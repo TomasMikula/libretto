@@ -1,7 +1,7 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Partitioning, SemigroupalCategory, Shuffled, Sink, Tupled, Var}
+import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, CoproductPartitioning, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Partitioning, SemigroupalCategory, Shuffled, Sink, Tupled, Var}
 import libretto.lambda.Partitioning.SubFun
 import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, StaticValue, TypeEq, TypeEqK, Validated}
 import libretto.lambda.util.TypeEq.Refl
@@ -41,9 +41,13 @@ object FreeScaletto extends Scaletto {
   final class Res[A] private()
   final type UInt31 = Val[Int]
 
-  // biInjectivePair
   given BiInjective[|*|] with {
     override def unapply[A, B, X, Y](ev: (A |*| B) =:= (X |*| Y)): (A =:= X, B =:= Y) =
+      ev match { case TypeEq(Refl()) => (summon, summon) }
+  }
+
+  given BiInjective[|+|] with {
+    override def unapply[A, B, X, Y](ev: (A |+| B) =:= (X |+| Y)): (A =:= X, B =:= Y) =
       ev match { case TypeEq(Refl()) => (summon, summon) }
   }
 
@@ -528,6 +532,8 @@ object FreeScaletto extends Scaletto {
       distribution,
     )
 
+  val SumPartitioning = new CoproductPartitioning[-⚬, |*|, |+|](using ℭ, cocat, distribution)
+
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
   private type Extractor[A, B] =
@@ -622,15 +628,11 @@ object FreeScaletto extends Scaletto {
       f: lambdas.Context ?=> Either[$[A], $[B]] => $[C],
     )(pos: SourcePos)(using
       lambdas.Context,
-    ): $[C] = {
-      import CoproductPartitioning.Side
-      val p = new CoproductPartitioning[A, B]
-
+    ): $[C] =
       switch(ab)(
-        (pos, ctx ?=> (ab: $[A |+| B]) => f(Left(matchAgainst(ab, p.extractor(Side.Left()))(pos)))),
-        (pos, ctx ?=> (ab: $[A |+| B]) => f(Right(matchAgainst(ab, p.extractor(Side.Right()))(pos)))),
+        (pos, ctx ?=> (ab: $[A |+| B]) => f(Left(matchAgainst(ab, SumPartitioning.Inl)(pos)))),
+        (pos, ctx ?=> (ab: $[A |+| B]) => f(Right(matchAgainst(ab, SumPartitioning.Inr)(pos)))),
       )
-    }
 
     override def app[A, B](f: $[A =⚬ B], a: $[A])(
       pos: SourcePos,
@@ -653,57 +655,6 @@ object FreeScaletto extends Scaletto {
       )
       a
     }
-  }
-
-  private class CoproductPartitioning[A, B] extends Partitioning[-⚬, |*|, A |+| B] {
-    import CoproductPartitioning.Side
-
-    override type Partition[P] = Side[A |+| B, P]
-
-    override def compileAt[F[_], G[_], R](
-      pos: Focus[|*|, F],
-      handle: [X] => (x: Partition[X]) => G[F[X] -⚬ R],
-    )(using
-      Applicative[G],
-    ): G[F[A |+| B] -⚬ R] = {
-      val ha: G[F[A] -⚬ R] = handle(Side.Left())
-      val hb: G[F[B] -⚬ R] = handle(Side.Right())
-      (ha zip hb).map { case (ha, hb) =>
-        distribution.distF(using pos) > either(ha, hb)
-      }
-    }
-
-    override def reinject[P](p: Partition[P]): P -⚬ (A |+| B) =
-      p match
-        case Side.Left() => injectL
-        case Side.Right() => injectR
-
-    override def sameAs(that: Partitioning[-⚬, |*|, A |+| B]): Option[TypeEqK[this.Partition, that.Partition]] =
-      that match
-        case that1: (CoproductPartitioning[a, b] & that.type) =>
-          Some(TypeEqK.refl[this.Partition]): Option[TypeEqK[this.Partition, that1.Partition]]
-        case _ =>
-          None
-
-    override def samePartition[P, Q](p: Partition[P], q: Partition[Q]): Option[P =:= Q] =
-      (p, q) match
-        case (Side.Left(), Side.Left()) => Some(summon[A =:= A])
-        case (Side.Right(), Side.Right()) => Some(summon[B =:= B])
-        case _ => None
-
-    override def showPartition[P](p: Partition[P]): String =
-      p match
-        case Side.Left() => "Left"
-        case Side.Right() => "Right"
-
-    override def isTotal[P](p: Partition[P]): Option[(A |+| B) -⚬ P] =
-      libretto.lambda.UnhandledCase.raise(s"CoproductPartitioning.isTotal")
-  }
-
-  private object CoproductPartitioning {
-    enum Side[T, S]:
-      case Left[A, B]()  extends Side[A |+| B, A]
-      case Right[A, B]() extends Side[A |+| B, B]
   }
 
   private sealed trait UnpackOnlyFun[A, B]:
