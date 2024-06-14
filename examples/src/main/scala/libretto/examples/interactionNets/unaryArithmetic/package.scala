@@ -229,9 +229,6 @@ private def connectProper(
       connect(succ(o2) |*| out) alsoElim connect(n1 |*| n)
     }
 
-  def timesZero: (Wire |*| Wire) -⚬ One =
-    λ { case b |*| out => connect(constant(zero) |*| out) alsoElim erase(b) }
-
   def timesSucc: ((Wire |*| Wire) |*| Wire) -⚬ One =
     λ { case (b |*| out) |*| n =>
       val b1 |*| b2 = duplicate(b)
@@ -252,67 +249,65 @@ private def connectProper(
     λ { w => connect(w |*| constant(eraser)) }
 
   λ { case w1 |*| w2 =>
-    switch(w2)
-      .is { case Zero(?(_)) =>
-        switch(w1)
-          .is { case Zero(x) => x :>> undefined("0", "0") }
-          .is { case Succ(x) => x :>> undefined("0", "S") }
-          .is { case Plus(m1 |*| m2) => connect(m1 |*| m2) }
-          .is { case Times(m1 |*| m2) => timesZero(m1 |*| m2) }
-          .is { case Dup(o1 |*| o2) => dupZero(o1 |*| o2) }
-          .is { case Eraser(u) => u }
-          .end
-      }
-      .is { case Succ(n) =>
-        switch(w1)
-          .is { case Zero(x) => (x |*| n) :>> undefined("S", "0") }
-          .is { case Succ(x) => (x |*| n) :>> undefined("S", "S") }
-          .is { case Plus(m1 |*| m2) => plusSucc((m1 |*| m2) |*| n) }
-          .is { case Times(m1 |*| m2) => timesSucc((m1 |*| m2) |*| n) }
-          .is { case Dup(o1 |*| o2) => dupSucc((o1 |*| o2) |*| n) }
-          .is { case Eraser(?(_)) => erase(n) }
-          .end
-      }
-      .is { case Plus(n1 |*| n2) =>
-        switch(w1)
-          .is { case Zero(?(_)) => connect(n1 |*| n2) }
-          .is { case Succ(m0) => plusSucc((n1 |*| n2) |*| m0) }
-          .is { case Plus(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("+", "+") }
-          .is { case Times(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("+", "*") }
-          .is { case Dup(o1 |*| o2) => ((o1 |*| o2) |*| (n1 |*| n2)) :>> undefined("+", "δ") }
-          .is { case Eraser(?(_)) => erase(n1) alsoElim erase(n2) }
-          .end
-      }
-      .is { case Times(n1 |*| n2) =>
-        switch(w1)
-          .is { case Zero(?(_)) => timesZero(n1 |*| n2) }
-          .is { case Succ(m0) => timesSucc((n1 |*| n2) |*| m0) }
-          .is { case Plus(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("*", "+") }
-          .is { case Times(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("*", "*") }
-          .is { case Dup(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("*", "δ") }
-          .is { case Eraser(?(_)) => erase(n1) alsoElim erase(n2) }
-          .end
-      }
-      .is { case Dup(n1 |*| n2) =>
-        switch(w1)
-          .is { case Zero(?(_)) => dupZero(n1 |*| n2) }
-          .is { case Succ(m0) => dupSucc((n1 |*| n2) |*| m0) }
-          .is { case Plus(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("δ", "+") }
-          .is { case Times(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("δ", "*") }
-          .is { case Dup(m1 |*| m2) => connect(m1 |*| n1) alsoElim connect(m2 |*| n2) }
-          .is { case Eraser(?(_)) => erase(n1) alsoElim erase(n2) }
-          .end
-      }
-      .is { case Eraser(?(_)) =>
-        switch(w1)
-          .is { case Zero(u) => u }
-          .is { case Succ(m0) => erase(m0) }
-          .is { case Plus(m1 |*| m2) => erase(m1) alsoElim erase(m2) }
-          .is { case Times(m1 |*| m2) => erase(m1) alsoElim erase(m2) }
-          .is { case Dup(m1 |*| m2) => erase(m1) alsoElim erase(m2) }
-          .is { case Eraser(u) => u }
-          .end
-      }
+    switch(w1 |*| w2)
+      // adding 0 is just connecting input arg to output
+      .is { case Plus(m |*| out) |*| Zero(?(_)) => connect(m |*| out) }
+      .is { case Zero(?(_)) |*| Plus(n |*| out) => connect(n |*| out) }
+
+      // multiply by 0: erase input, send 0 to output
+      .is { case Times(m |*| out) |*| Zero(?(_)) => connect(zero(erase(m)) |*| out) }
+      .is { case Zero(?(_)) |*| Times(n |*| out) => connect(zero(erase(n)) |*| out) }
+
+      // adding successor
+      .is { case Plus(m |*| out) |*| Succ(n) => plusSucc((m |*| out) |*| n) }
+      .is { case Succ(m) |*| Plus(n |*| out) => plusSucc((n |*| out) |*| m) }
+
+      // multiplying by successor
+      .is { case Times(m |*| out) |*| Succ(n) => timesSucc((m |*| out) |*| n) }
+      .is { case Succ(m) |*| Times(n |*| out) => timesSucc((n |*| out) |*| m) }
+
+      // duplicating numbers
+      .is { case Dup(o1 |*| o2) |*| Zero(?(_)) => dupZero(o1 |*| o2) }
+      .is { case Dup(o1 |*| o2) |*| Succ(n)    => dupSucc((o1 |*| o2) |*| n) }
+      .is { case Zero(?(_)) |*| Dup(o1 |*| o2) => dupZero(o1 |*| o2) }
+      .is { case Succ(m0)   |*| Dup(o1 |*| o2) => dupSucc((o1 |*| o2) |*| m0) }
+
+      // interaction of 2 numbers is undefined
+      .is { case Zero(?(_)) |*| Zero(?(_)) => constant(undefined("0", "0")) }
+      .is { case Succ(m)    |*| Zero(?(_)) => m :>> undefined("S", "0") }
+      .is { case Zero(?(_)) |*| Succ(n)    => n :>> undefined("0", "S") }
+      .is { case Succ(m)    |*| Succ(n)    => (m |*| n) :>> undefined("S", "S") }
+
+      // interaction of 2 arithmetic operations is undefined
+      .is { case Plus(x)  |*| Plus(y)  => (x |*| y) :>> undefined("+", "+") }
+      .is { case Times(x) |*| Plus(y)  => (x |*| y) :>> undefined("*", "+") }
+      .is { case Plus(x)  |*| Times(y) => (x |*| y) :>> undefined("+", "*") }
+      .is { case Times(x) |*| Times(y) => (x |*| y) :>> undefined("*", "*") }
+
+      // duplication of arithmetic operations is undefined
+      .is { case Dup(x)   |*| Plus(y)  => (x |*| y) :>> undefined("δ", "+") }
+      .is { case Dup(x)   |*| Times(y) => (x |*| y) :>> undefined("δ", "*") }
+      .is { case Plus(x)  |*| Dup(y)   => (x |*| y) :>> undefined("+", "δ") }
+      .is { case Times(x) |*| Dup(y)   => (x |*| y) :>> undefined("*", "δ") }
+
+      // duplication of duplication is undefined as well
+      // (Note: in the (universal) interaction combinators,
+      //  it _is_ defined: it connects the wires pairwise.)
+      .is { case Dup(x) |*| Dup(y) => (x |*| y) :>> undefined("δ", "δ") }
+
+      // erasure
+      .is { case Eraser(u) |*| Zero(?(_))          => u }
+      .is { case Zero(u) |*| Eraser(?(_))          => u }
+      .is { case Eraser(?(_)) |*| Succ(n)          => erase(n) }
+      .is { case Succ(m) |*| Eraser(?(_))          => erase(m) }
+      .is { case Eraser(?(_)) |*| Plus(n |*| out)  => erase(n) alsoElim erase(out) }
+      .is { case Plus(m |*| out) |*| Eraser(?(_))  => erase(m) alsoElim erase(out) }
+      .is { case Eraser(?(_)) |*| Times(n |*| out) => erase(n) alsoElim erase(out) }
+      .is { case Times(m |*| out) |*| Eraser(?(_)) => erase(m) alsoElim erase(out) }
+      .is { case Eraser(?(_)) |*| Dup(o1 |*| o2)   => erase(o1) alsoElim erase(o2) }
+      .is { case Dup(o1 |*| o2) |*| Eraser(?(_))   => erase(o1) alsoElim erase(o2) }
+      .is { case Eraser(u) |*| Eraser(?(_))        => u }
+
       .end
   }
 }
