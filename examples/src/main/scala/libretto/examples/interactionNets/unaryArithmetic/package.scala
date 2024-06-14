@@ -1,9 +1,10 @@
 package libretto.examples.interactionNets.unaryArithmetic
 
+import libretto.lambda.Partitioning.Extractor
+import libretto.lambda.util.SourcePos
 import libretto.scaletto.StarterKit.*
 import libretto.scaletto.StarterKit.dsl.{|| as |}
 import libretto.scaletto.StarterKit.scalettoLib.given
-import libretto.lambda.util.SourcePos
 
 opaque type Wire = Rec[WireF]
 
@@ -11,52 +12,28 @@ private type WireF[X] = Wire.ProperF[X] |+| Wire.AuxiliaryF[X]
 
 object Wire {
   private[unaryArithmetic] type ProperF[X] = OneOf
-    [ "zero"  :: One
-    | "succ"  :: X
-    | "plus"  :: (X |*| X)
-    | "times" :: (X |*| X)
-    | "dup"   :: (X |*| X)
-    | "erase" :: One
+    [ "Zero"  :: One
+    | "Succ"  :: X
+    | "Plus"  :: (X |*| X)
+    | "Times" :: (X |*| X)
+    | "Dup"   :: (X |*| X)
+    | "Erase" :: One
     ]
 
   opaque type Proper = ProperF[Wire]
 
   object Proper {
     def unapply(using SourcePos, LambdaContext)(w: $[Wire]): Some[$[Proper]] =
-      Some(w.unpackedMatchAgainst(InL.extractor))
-
-    def zero  : One             -⚬ Proper = OneOf.make[Proper]("zero")
-    def succ  : Wire            -⚬ Proper = OneOf.make[Proper]("succ")
-    def plus  : (Wire |*| Wire) -⚬ Proper = OneOf.make[Proper]("plus")
-    def times : (Wire |*| Wire) -⚬ Proper = OneOf.make[Proper]("times")
-    def dup   : (Wire |*| Wire) -⚬ Proper = OneOf.make[Proper]("dup")
-    def eraser: One             -⚬ Proper = OneOf.make[Proper]("erase")
+      Some(w.unpackedMatchAgainst(InL))
 
     private val partitioning = OneOf.partition[Proper]
 
-    object Zero:
-      def unapply(using SourcePos, LambdaContext)(w: $[Proper]): Some[$[One]] =
-        Some($.matchAgainst(w, partitioning["zero"])(summon[SourcePos]))
-
-    object Succ:
-      def unapply(using SourcePos, LambdaContext)(w: $[Proper]): Some[$[Wire]] =
-        Some($.matchAgainst(w, partitioning["succ"])(summon[SourcePos]))
-
-    object Plus:
-      def unapply(using SourcePos, LambdaContext)(w: $[Proper]): Some[$[Wire |*| Wire]] =
-        Some($.matchAgainst(w, partitioning["plus"])(summon[SourcePos]))
-
-    object Times:
-      def unapply(using SourcePos, LambdaContext)(w: $[Proper]): Some[$[Wire |*| Wire]] =
-        Some($.matchAgainst(w, partitioning["times"])(summon[SourcePos]))
-
-    object Dup:
-      def unapply(using SourcePos, LambdaContext)(w: $[Proper]): Some[$[Wire |*| Wire]] =
-        Some($.matchAgainst(w, partitioning["dup"])(summon[SourcePos]))
-
-    object Eraser:
-      def unapply(using SourcePos, LambdaContext)(w: $[Proper]): Some[$[One]] =
-        Some($.matchAgainst(w, partitioning["erase"])(summon[SourcePos]))
+    val Zero:   Extractor[-⚬, |*|, Proper, One]           = partitioning["Zero"]
+    val Succ:   Extractor[-⚬, |*|, Proper, Wire]          = partitioning["Succ"]
+    val Plus:   Extractor[-⚬, |*|, Proper, Wire |*| Wire] = partitioning["Plus"]
+    val Times:  Extractor[-⚬, |*|, Proper, Wire |*| Wire] = partitioning["Times"]
+    val Dup:    Extractor[-⚬, |*|, Proper, Wire |*| Wire] = partitioning["Dup"]
+    val Eraser: Extractor[-⚬, |*|, Proper, One]           = partitioning["Erase"]
   }
 
   private[unaryArithmetic] type AuxiliaryF[X] =
@@ -73,15 +50,15 @@ object Wire {
 
   object Auxiliary {
     def unapply(using SourcePos, LambdaContext)(w: $[Wire]): Some[$[Auxiliary]] =
-      Some(w.unpackedMatchAgainst(InR.extractor))
+      Some(w.unpackedMatchAgainst(InR))
 
     object Redirect:
       def unapply(using pos: SourcePos, ctx: LambdaContext)(aux: $[Auxiliary]): Some[$[-[Wire]]] =
-        Some($.matchAgainst(aux, InL.extractor)(pos))
+        Some($.matchAgainst(aux, InL)(pos))
 
     object Outlet:
       def unapply(using pos: SourcePos, ctx: LambdaContext)(aux: $[Auxiliary]): Some[$[Outlet]] =
-        Some($.matchAgainst(aux, InR.extractor)(pos))
+        Some($.matchAgainst(aux, InR)(pos))
 
       def feed: (Wire |*| Outlet) -⚬ One =
         λ { case w |*| out =>
@@ -163,8 +140,8 @@ object Result {
       Zero
 }
 
-def zero: One  -⚬ Wire = Wire.Proper.zero > Wire.proper
-def succ: Wire -⚬ Wire = Wire.Proper.succ > Wire.proper
+def zero: One  -⚬ Wire = Wire.Proper.Zero() > Wire.proper
+def succ: Wire -⚬ Wire = Wire.Proper.Succ() > Wire.proper
 
 def liftInt(n: Int): One -⚬ Wire =
   if (n > 0)
@@ -185,13 +162,13 @@ def liftInt(n: Int): One -⚬ Wire =
   *
   * ```
   */
-def plus: (Wire |*| Wire) -⚬ Wire = Wire.Proper.plus > Wire.proper
+def plus: (Wire |*| Wire) -⚬ Wire = Wire.Proper.Plus() > Wire.proper
 
-def times: (Wire |*| Wire) -⚬ Wire = Wire.Proper.times > Wire.proper
+def times: (Wire |*| Wire) -⚬ Wire = Wire.Proper.Times() > Wire.proper
 
-def eraser: One -⚬ Wire = Wire.Proper.eraser > Wire.proper
+def eraser: One -⚬ Wire = Wire.Proper.Eraser() > Wire.proper
 
-def dup: (Wire |*| Wire) -⚬ Wire = Wire.Proper.dup > Wire.proper
+def dup: (Wire |*| Wire) -⚬ Wire = Wire.Proper.Dup() > Wire.proper
 
 def newWire: One -⚬ (Wire |*| Wire) = Wire.newWire
 

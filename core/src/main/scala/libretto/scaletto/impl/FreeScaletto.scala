@@ -676,13 +676,11 @@ object FreeScaletto extends Scaletto {
     given Partitioning.SubFun[-⚬, UnpackOnlyFun] = UnpackOnlySubFun
   }
 
-  extension [F[_]](x: $[Rec[F]]) {
-    override def unpackedMatchAgainst[B](ext: Extractor[F[Rec[F]], B])(using pos: SourcePos, ctx: LambdaContext): $[B] =
-      val ext1 =
-        ext.contramap[UnpackOnlyFun, Rec[F]](
-          UnpackOnlyFun.Unpack[F](),
-        )
-      $.matchAgainst(x, ext1)(pos)
+  extension [F[_], B](ext: Extractor[F[Rec[F]], B]) {
+    def afterUnpack: Extractor[Rec[F], B] =
+      ext.contramap[UnpackOnlyFun, Rec[F]](
+        UnpackOnlyFun.Unpack[F](),
+      )
   }
 
   private def switchSink[A, R](

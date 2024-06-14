@@ -533,27 +533,26 @@ trait CoreDSL {
       switch(using ctx, pos)(a)(cases.reverse*)
   }
 
-  object InL {
-    def apply[A, B](using pos: SourcePos, ctx: LambdaContext)(a: $[A]): $[A |+| B] =
-      $.map(a)(injectL)(pos)
+  extension [A, B](ext: Extractor[-⚬, |*|, A, B]) {
+    def unapply(using pos: SourcePos, ctx: LambdaContext)(a: $[A]): Some[$[B]] =
+      Some($.matchAgainst(a, ext)(pos))
 
-    def extractor[A, B]: Extractor[-⚬, |*|, A |+| B, A] =
-      SumPartitioning.Inl[A, B]
+    def apply(using pos: SourcePos, ctx: LambdaContext)(b: $[B]): $[A] =
+      $.map(b)(ext.reinject)(pos)
 
-    def unapply[A, B](using pos: SourcePos, ctx: LambdaContext)(ab: $[A |+| B]): Some[$[A]] =
-      Some($.matchAgainst(ab, extractor)(pos))
+    def apply(): B -⚬ A =
+      ext.reinject
   }
 
-  object InR {
-    def apply[A, B](using pos: SourcePos, ctx: LambdaContext)(b: $[B]): $[A |+| B] =
-      $.map(b)(injectR)(pos)
-
-    def extractor[A, B]: Extractor[-⚬, |*|, A |+| B, B] =
-      SumPartitioning.Inr[A, B]
-
-    def unapply[A, B](using pos: SourcePos, ctx: LambdaContext)(ab: $[A |+| B]): Some[$[B]] =
-      Some($.matchAgainst(ab, extractor)(pos))
+  extension [F[_], B](ext: Extractor[-⚬, |*|, F[Rec[F]], B]) {
+    def afterUnpack: Extractor[-⚬, |*|, Rec[F], B]
   }
+
+  def InL[A, B]: Extractor[-⚬, |*|, A |+| B, A] =
+    SumPartitioning.Inl[A, B]
+
+  def InR[A, B]: Extractor[-⚬, |*|, A |+| B, B] =
+    SumPartitioning.Inr[A, B]
 
   extension [A, B](x: $[A |+| B]) {
     infix def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
@@ -590,9 +589,10 @@ trait CoreDSL {
 
   extension [F[_]](x: $[Rec[F]]) {
     def unpackedMatchAgainst[B](ext: Extractor[-⚬, |*|, F[Rec[F]], B])(using
-      SourcePos,
-      LambdaContext,
-    ): $[B]
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[B] =
+      $.matchAgainst(x, ext.afterUnpack)(pos)
   }
 
   def constant[A](f: One -⚬ A)(using SourcePos, LambdaContext): $[A] =
