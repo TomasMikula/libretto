@@ -1,6 +1,7 @@
 package libretto.examples.interactionNets.unaryArithmetic
 
 import libretto.scaletto.StarterKit.*
+import libretto.scaletto.StarterKit.dsl.{|| as |}
 import libretto.scaletto.StarterKit.scalettoLib.given
 import libretto.lambda.util.SourcePos
 
@@ -9,94 +10,53 @@ opaque type Wire = Rec[WireF]
 private type WireF[X] = Wire.ProperF[X] |+| Wire.AuxiliaryF[X]
 
 object Wire {
-  private[unaryArithmetic] type ProperF[X] =
-    /* zero  */ One
-    /* succ  */ |+| X
-    /* plus  */ |+| (X |*| X)
-    /* times */ |+| (X |*| X)
-    /* dup   */ |+| (X |*| X)
-    /* erase */ |+| One
+  private[unaryArithmetic] type ProperF[X] = OneOf
+    [ "zero"  :: One
+    | "succ"  :: X
+    | "plus"  :: (X |*| X)
+    | "times" :: (X |*| X)
+    | "dup"   :: (X |*| X)
+    | "erase" :: One
+    ]
 
   opaque type Proper = ProperF[Wire]
 
   object Proper {
-    def zero  : One             -⚬ Proper = injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectL
-    def succ  : Wire            -⚬ Proper = injectL ∘ injectL ∘ injectL ∘ injectL ∘ injectR
-    def plus  : (Wire |*| Wire) -⚬ Proper = injectL ∘ injectL ∘ injectL ∘ injectR
-    def times : (Wire |*| Wire) -⚬ Proper = injectL ∘ injectL ∘ injectR
-    def dup   : (Wire |*| Wire) -⚬ Proper = injectL ∘ injectR
-    def eraser: One             -⚬ Proper = injectR
+    def unapply(using SourcePos, LambdaContext)(w: $[Wire]): Some[$[Proper]] =
+      Some(w.unpackedMatchAgainst(InL.extractor))
 
-    def switchWith[A, R](
-      caseZero: A -⚬ R,
-      caseSucc: (A |*| Wire) -⚬ R,
-      casePlus: (A |*| (Wire |*| Wire)) -⚬ R,
-      caseTimes: (A |*| (Wire |*| Wire)) -⚬ R,
-      caseDup: (A |*| (Wire |*| Wire)) -⚬ R,
-      caseEraser: A -⚬ R,
-    ): (A |*| Proper) -⚬ R =
-      λ { case a |*| p =>
-        p switch {
-          case Right(?(eraser)) =>
-            caseEraser(a)
-          case Left(p) =>
-            p switch {
-              case Right(dup) =>
-                caseDup(a |*| dup)
-              case Left(p) =>
-                p switch {
-                  case Right(times) =>
-                    caseTimes(a |*| times)
-                  case Left(p) =>
-                    p switch {
-                      case Right(plus) =>
-                        casePlus(a |*| plus)
-                      case Left(p) =>
-                        p switch {
-                          case Right(succ) =>
-                            caseSucc(a |*| succ)
-                          case Left(?(zero)) =>
-                            caseZero(a)
-                        }
-                    }
-                }
-            }
-        }
-      }
+    def zero  : One             -⚬ Proper = OneOf.make[Proper]("zero")
+    def succ  : Wire            -⚬ Proper = OneOf.make[Proper]("succ")
+    def plus  : (Wire |*| Wire) -⚬ Proper = OneOf.make[Proper]("plus")
+    def times : (Wire |*| Wire) -⚬ Proper = OneOf.make[Proper]("times")
+    def dup   : (Wire |*| Wire) -⚬ Proper = OneOf.make[Proper]("dup")
+    def eraser: One             -⚬ Proper = OneOf.make[Proper]("erase")
 
-    def switchWithR[B, T](
-      caseZero: B -⚬ T,
-      caseSucc: (Wire |*| B) -⚬ T,
-      casePlus: ((Wire |*| Wire) |*| B) -⚬ T,
-      caseTimes: ((Wire |*| Wire) |*| B) -⚬ T,
-      caseDup: ((Wire |*| Wire) |*| B) -⚬ T,
-      caseEraser: B -⚬ T,
-    ): (Proper |*| B) -⚬ T =
-      swap > switchWith(
-        caseZero,
-        swap > caseSucc,
-        swap > casePlus,
-        swap > caseTimes,
-        swap > caseDup,
-        caseEraser,
-      )
+    private val partitioning = OneOf.partition[Proper]
 
-    def switch[R](
-      caseZero: One -⚬ R,
-      caseSucc: Wire -⚬ R,
-      casePlus: (Wire |*| Wire) -⚬ R,
-      caseTimes: (Wire |*| Wire) -⚬ R,
-      caseDup: (Wire |*| Wire) -⚬ R,
-      caseEraser: One -⚬ R,
-    ): Proper -⚬ R =
-      introFst[Proper] > switchWith(
-        caseZero,
-        elimFst > caseSucc,
-        elimFst > casePlus,
-        elimFst > caseTimes,
-        elimFst > caseDup,
-        caseEraser,
-      )
+    object Zero:
+      def unapply(using SourcePos, LambdaContext)(w: $[Proper]): Some[$[One]] =
+        Some($.matchAgainst(w, partitioning["zero"])(summon[SourcePos]))
+
+    object Succ:
+      def unapply(using SourcePos, LambdaContext)(w: $[Proper]): Some[$[Wire]] =
+        Some($.matchAgainst(w, partitioning["succ"])(summon[SourcePos]))
+
+    object Plus:
+      def unapply(using SourcePos, LambdaContext)(w: $[Proper]): Some[$[Wire |*| Wire]] =
+        Some($.matchAgainst(w, partitioning["plus"])(summon[SourcePos]))
+
+    object Times:
+      def unapply(using SourcePos, LambdaContext)(w: $[Proper]): Some[$[Wire |*| Wire]] =
+        Some($.matchAgainst(w, partitioning["times"])(summon[SourcePos]))
+
+    object Dup:
+      def unapply(using SourcePos, LambdaContext)(w: $[Proper]): Some[$[Wire |*| Wire]] =
+        Some($.matchAgainst(w, partitioning["dup"])(summon[SourcePos]))
+
+    object Eraser:
+      def unapply(using SourcePos, LambdaContext)(w: $[Proper]): Some[$[One]] =
+        Some($.matchAgainst(w, partitioning["erase"])(summon[SourcePos]))
   }
 
   private[unaryArithmetic] type AuxiliaryF[X] =
@@ -111,30 +71,28 @@ object Wire {
 
   opaque type Outlet = OutletF[Wire]
 
-  object Outlet {
-    def feedProper: (Proper |*| Outlet) -⚬ One =
-      λ { case p |*| out =>
-        injectL(p) supplyTo out
-      }
-
-    def feed: (Wire |*| Outlet) -⚬ One =
-      λ { case w |*| out =>
-        properOrLink(w) supplyTo out
-      }
-  }
-
   object Auxiliary {
+    def unapply(using SourcePos, LambdaContext)(w: $[Wire]): Some[$[Auxiliary]] =
+      Some(w.unpackedMatchAgainst(InR.extractor))
+
+    object Redirect:
+      def unapply(using pos: SourcePos, ctx: LambdaContext)(aux: $[Auxiliary]): Some[$[-[Wire]]] =
+        Some($.matchAgainst(aux, InL.extractor)(pos))
+
+    object Outlet:
+      def unapply(using pos: SourcePos, ctx: LambdaContext)(aux: $[Auxiliary]): Some[$[Outlet]] =
+        Some($.matchAgainst(aux, InR.extractor)(pos))
+
+      def feed: (Wire |*| Outlet) -⚬ One =
+        λ { case w |*| out =>
+          properOrLink(w) supplyTo out
+        }
+
     def redirect: -[Wire] -⚬ Auxiliary =
       injectL
 
     def outlet: -[Proper |+| LinkId] -⚬ Auxiliary =
       injectR
-
-    def switch[R](w: $[Auxiliary])(f: LambdaContext ?=> Either[$[-[Wire]], $[Outlet]] => $[R])(using
-      pos: SourcePos,
-      ctx: LambdaContext,
-    ): $[R] =
-      w switch f
   }
 
   def proper:       Proper -⚬ Wire = injectL > pack[WireF]
@@ -143,24 +101,19 @@ object Wire {
   def newWire: One -⚬ (Wire |*| Wire) =
     forevert[Wire] > fst(Auxiliary.redirect > auxiliary)
 
-  def switch[R](w: $[Wire])(f: LambdaContext ?=> Either[$[Proper], $[Auxiliary]] => $[R])(using
-    pos: SourcePos,
-    ctx: LambdaContext,
-  ): $[R] =
-    (w :>> unpack[WireF]) switch f
-
   def read: Wire -⚬ Val[Result] = rec { read =>
     λ { w =>
       properOrLink(w) switch {
         case Left(pw) =>
-          pw :>> Proper.switch(
-            caseZero = const(Result.Zero),
-            caseSucc = read > mapVal(Result.Succ(_)),
-            casePlus = par(read, read) > unliftPair > mapVal { case (b, out) => Result.Plus(b, out) },
-            caseTimes = par(read, read) > unliftPair > mapVal { case (b, out) => Result.Times(b, out) },
-            caseDup = par(read, read) > unliftPair > mapVal { case (x, y) => Result.Dup(x, y) },
-            caseEraser = const(Result.Eraser),
-          )
+          import Proper.*
+          switch(pw)
+            .is { case Zero(?(_))       => constantVal(Result.Zero) }
+            .is { case Succ(w)          => read(w) :>> mapVal(Result.Succ(_)) }
+            .is { case Plus(w1 |*| w2)  => (read(w1) ** read(w2)) :>> mapVal { case (b, out) => Result.Plus(b, out) } }
+            .is { case Times(w1 |*| w2) => (read(w1) ** read(w2)) :>> mapVal { case (b, out) => Result.Times(b, out) } }
+            .is { case Dup(w1 |*| w2)   => (read(w1) ** read(w2)) :>> mapVal { case (x, y) => Result.Dup(x, y) } }
+            .is { case Eraser(?(_))     => constantVal(Result.Eraser) }
+            .end
         case Right(lnk) =>
           lnk :>> mapVal(Result.Link(_))
       }
@@ -169,29 +122,28 @@ object Wire {
 
   private def properOrLink: Wire -⚬ (Proper |+| LinkId) =
     λ { w =>
-      Wire.switch(w) {
-        case Left(p) =>
-          injectL(p)
-        case Right(aux) =>
-          Auxiliary.switch(aux) {
-            case Left(redir) =>
-              val (promised |*| res) = forevert[Proper |+| LinkId]($.one)
-              res alsoElim (
-                auxiliary(Auxiliary.outlet(promised)) supplyTo redir
-              )
-            case Right(outlet) =>
-              val linkId = new AnyRef
-              constantVal(linkId) match {
-                case +(lnk) =>
-                  injectR(lnk)
-                    .alsoElim(injectR(lnk) supplyTo outlet)
-              }
+      switch(w)
+        .is { case Proper(p) => injectL(p) }
+        .is { case Auxiliary(Redirect(redir)) =>
+          val (promised |*| res) = forevert[Proper |+| LinkId]($.one)
+          res alsoElim (
+            auxiliary(Auxiliary.outlet(promised)) supplyTo redir
+          )
+        }
+        .is { case Auxiliary(Outlet(outlet)) =>
+          val linkId = new AnyRef
+          constantVal(linkId) match {
+            case +(lnk) =>
+              injectR(lnk)
+                .alsoElim(injectR(lnk) supplyTo outlet)
           }
-      }
+        }
+        .end
     }
 }
 
-import Wire.Outlet
+import Wire.{Auxiliary, Proper}
+import Wire.Auxiliary.{Outlet, Redirect}
 
 enum Result {
   case Zero
@@ -247,22 +199,13 @@ def readResult: Wire -⚬ Val[Result] = Wire.read
 
 def connect: (Wire |*| Wire) -⚬ One = rec { self =>
   λ { case (w1 |*| w2) =>
-    Wire.switch(w1) {
-      case Left(proper1) =>
-        Wire.switch(w2) {
-          case Left(proper2) => connectProper(self)(proper1 |*| proper2)
-          case Right(aux2) =>
-            Wire.Auxiliary.switch(aux2) {
-              case Left(redirect) => Wire.proper(proper1) supplyTo redirect
-              case Right(outlet)  => Outlet.feedProper(proper1 |*| outlet)
-            }
-        }
-      case Right(aux1) =>
-        Wire.Auxiliary.switch(aux1) {
-          case Left(redirect) => w2 supplyTo redirect
-          case Right(outlet)  => Outlet.feed(w2 |*| outlet)
-        }
-    }
+    switch(w1 |*| w2)
+      .is { case Proper(p1) |*| Proper(p2)      => connectProper(self)(p1 |*| p2) }
+      .is { case Auxiliary(Redirect(r1)) |*| w2 => w2 supplyTo r1 }
+      .is { case w1 |*| Auxiliary(Redirect(r2)) => w1 supplyTo r2 }
+      .is { case Auxiliary(Outlet(o1)) |*| w2   => Outlet.feed(w2 |*| o1) }
+      .is { case w1 |*| Auxiliary(Outlet(o2))   => Outlet.feed(w1 |*| o2) }
+      .end
   }
 }
 
@@ -270,6 +213,8 @@ def connect: (Wire |*| Wire) -⚬ One = rec { self =>
 private def connectProper(
   connect: (Wire |*| Wire) -⚬ One,
 ): (Wire.Proper |*| Wire.Proper) -⚬ One = {
+  import Proper.{Zero, Succ, Plus, Times, Dup, Eraser}
+
   def duplicate: Wire -⚬ (Wire |*| Wire) =
     λ { w =>
       val a1 |*| a2 = constant(newWire)
@@ -306,62 +251,70 @@ private def connectProper(
   def erase: Wire -⚬ One =
     λ { w => connect(w |*| constant(eraser)) }
 
-  Wire.Proper.switchWith(
-    caseZero =
-      Wire.Proper.switch(
-        caseZero = undefined("0", "0"),
-        caseSucc = undefined("0", "S"),
-        casePlus = connect,
-        caseTimes = timesZero,
-        caseDup = dupZero,
-        caseEraser = id[One],
-      ),
-    caseSucc =
-      Wire.Proper.switchWithR(
-        caseZero = undefined("S", "0"),
-        caseSucc = undefined("S", "S"),
-        casePlus = plusSucc,
-        caseTimes = timesSucc,
-        caseDup = dupSucc,
-        caseEraser = erase,
-      ),
-    casePlus =
-      Wire.Proper.switchWithR(
-        caseZero = connect,
-        caseSucc = swap > plusSucc,
-        casePlus = undefined("+", "+"),
-        caseTimes = undefined("+", "*"),
-        caseDup = undefined("+", "δ"),
-        caseEraser = parToOne(erase, erase),
-      ),
-    caseTimes =
-      Wire.Proper.switchWithR(
-        caseZero = swap > timesZero,
-        caseSucc = swap > timesSucc,
-        casePlus = undefined("*", "+"),
-        caseTimes = undefined("*", "*"),
-        caseDup = undefined("*", "δ"),
-        caseEraser = parToOne(erase, erase),
-      ),
-    caseDup =
-      Wire.Proper.switchWithR(
-        caseZero = dupZero,
-        caseSucc = swap > dupSucc,
-        casePlus = undefined("δ", "+"),
-        caseTimes = undefined("δ", "*"),
-        caseDup = λ { case (a1 |*| a2) |*| (b1 |*| b2) => connect(a1 |*| b1) alsoElim connect(a2 |*| b2) },
-        caseEraser = parToOne(erase, erase),
-      ),
-    caseEraser =
-      Wire.Proper.switch(
-        caseZero = id[One],
-        caseSucc = erase,
-        casePlus = parToOne(erase, erase),
-        caseTimes = parToOne(erase, erase),
-        caseDup = parToOne(erase, erase),
-        caseEraser = id[One],
-      ),
-  )
+  λ { case w1 |*| w2 =>
+    switch(w2)
+      .is { case Zero(?(_)) =>
+        switch(w1)
+          .is { case Zero(x) => x :>> undefined("0", "0") }
+          .is { case Succ(x) => x :>> undefined("0", "S") }
+          .is { case Plus(m1 |*| m2) => connect(m1 |*| m2) }
+          .is { case Times(m1 |*| m2) => timesZero(m1 |*| m2) }
+          .is { case Dup(o1 |*| o2) => dupZero(o1 |*| o2) }
+          .is { case Eraser(u) => u }
+          .end
+      }
+      .is { case Succ(n) =>
+        switch(w1)
+          .is { case Zero(x) => (x |*| n) :>> undefined("S", "0") }
+          .is { case Succ(x) => (x |*| n) :>> undefined("S", "S") }
+          .is { case Plus(m1 |*| m2) => plusSucc((m1 |*| m2) |*| n) }
+          .is { case Times(m1 |*| m2) => timesSucc((m1 |*| m2) |*| n) }
+          .is { case Dup(o1 |*| o2) => dupSucc((o1 |*| o2) |*| n) }
+          .is { case Eraser(?(_)) => erase(n) }
+          .end
+      }
+      .is { case Plus(n1 |*| n2) =>
+        switch(w1)
+          .is { case Zero(?(_)) => connect(n1 |*| n2) }
+          .is { case Succ(m0) => plusSucc((n1 |*| n2) |*| m0) }
+          .is { case Plus(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("+", "+") }
+          .is { case Times(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("+", "*") }
+          .is { case Dup(o1 |*| o2) => ((o1 |*| o2) |*| (n1 |*| n2)) :>> undefined("+", "δ") }
+          .is { case Eraser(?(_)) => erase(n1) alsoElim erase(n2) }
+          .end
+      }
+      .is { case Times(n1 |*| n2) =>
+        switch(w1)
+          .is { case Zero(?(_)) => timesZero(n1 |*| n2) }
+          .is { case Succ(m0) => timesSucc((n1 |*| n2) |*| m0) }
+          .is { case Plus(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("*", "+") }
+          .is { case Times(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("*", "*") }
+          .is { case Dup(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("*", "δ") }
+          .is { case Eraser(?(_)) => erase(n1) alsoElim erase(n2) }
+          .end
+      }
+      .is { case Dup(n1 |*| n2) =>
+        switch(w1)
+          .is { case Zero(?(_)) => dupZero(n1 |*| n2) }
+          .is { case Succ(m0) => dupSucc((n1 |*| n2) |*| m0) }
+          .is { case Plus(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("δ", "+") }
+          .is { case Times(m1 |*| m2) => ((m1 |*| m2) |*| (n1 |*| n2)) :>> undefined("δ", "*") }
+          .is { case Dup(m1 |*| m2) => connect(m1 |*| n1) alsoElim connect(m2 |*| n2) }
+          .is { case Eraser(?(_)) => erase(n1) alsoElim erase(n2) }
+          .end
+      }
+      .is { case Eraser(?(_)) =>
+        switch(w1)
+          .is { case Zero(u) => u }
+          .is { case Succ(m0) => erase(m0) }
+          .is { case Plus(m1 |*| m2) => erase(m1) alsoElim erase(m2) }
+          .is { case Times(m1 |*| m2) => erase(m1) alsoElim erase(m2) }
+          .is { case Dup(m1 |*| m2) => erase(m1) alsoElim erase(m2) }
+          .is { case Eraser(u) => u }
+          .end
+      }
+      .end
+  }
 }
 
 private def undefined[A, B](agent1: String, agent2: String): A -⚬ B =

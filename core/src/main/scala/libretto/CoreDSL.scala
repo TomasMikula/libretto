@@ -510,6 +510,11 @@ trait CoreDSL {
   def switch[A](using ctx: LambdaContext, pos: SourcePos)(a: $[A]): SwitchInit[A] =
     SwitchInit(ctx, pos, a)
 
+  /** An alias for `switch` for when `switch` is ambiguous. */
+  @deprecated("Should not be necessary, as switch should never be ambiguous. Use switch instead.")
+  def when[A](using ctx: LambdaContext, pos: SourcePos)(a: $[A]): SwitchInit[A] =
+    switch[A](a)
+
   class SwitchInit[A](ctx: LambdaContext, switchPos: SourcePos, a: $[A]) {
     def is[R](using casePos: SourcePos)(f: LambdaContext ?=> $[A] => $[R]): Switch[A, R] =
       Switch(ctx, switchPos, a, (casePos, f) :: Nil)
@@ -532,16 +537,22 @@ trait CoreDSL {
     def apply[A, B](using pos: SourcePos, ctx: LambdaContext)(a: $[A]): $[A |+| B] =
       $.map(a)(injectL)(pos)
 
+    def extractor[A, B]: Extractor[-⚬, |*|, A |+| B, A] =
+      SumPartitioning.Inl[A, B]
+
     def unapply[A, B](using pos: SourcePos, ctx: LambdaContext)(ab: $[A |+| B]): Some[$[A]] =
-      Some($.matchAgainst(ab, SumPartitioning.Inl)(pos))
+      Some($.matchAgainst(ab, extractor)(pos))
   }
 
   object InR {
     def apply[A, B](using pos: SourcePos, ctx: LambdaContext)(b: $[B]): $[A |+| B] =
       $.map(b)(injectR)(pos)
 
+    def extractor[A, B]: Extractor[-⚬, |*|, A |+| B, B] =
+      SumPartitioning.Inr[A, B]
+
     def unapply[A, B](using pos: SourcePos, ctx: LambdaContext)(ab: $[A |+| B]): Some[$[B]] =
-      Some($.matchAgainst(ab, SumPartitioning.Inr)(pos))
+      Some($.matchAgainst(ab, extractor)(pos))
   }
 
   extension [A, B](x: $[A |+| B]) {
