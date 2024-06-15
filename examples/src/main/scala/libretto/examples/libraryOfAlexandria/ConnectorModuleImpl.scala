@@ -62,10 +62,11 @@ object ConnectorModuleImpl extends ConnectorModule {
 
     λ { case conn |*| id =>
       val conn1 |*| rsOpt = (conn |*| id) :>> tryEffectAcquireWr(scalaFetch, Some(rsClose))
-      rsOpt either {
-        case Left(notFound) =>
+      switch ( rsOpt )
+        .is { case InL(notFound) =>
           conn1.releaseWhen(neglect(notFound)) :>> ValSource.empty[Page]
-        case Right(rs) =>
+        }
+        .is { case InR(rs) =>
           val (pagesClosed |*| pages) =
             resultSetSource(rs) :>> ValSource.notifyUpstreamClosed
 
@@ -74,7 +75,8 @@ object ConnectorModuleImpl extends ConnectorModule {
 
           // for the downstream, delay the pages closed signal until connection is closed
           ValSource.delayClosedBy(connClosed |*| pages)
-      }
+        }
+        .end
     }
   }
 
@@ -86,10 +88,10 @@ object ConnectorModuleImpl extends ConnectorModule {
             closing := rs :>> release
           case Right(pulling) =>
             pulling :=
-              nextPage(rs) either {
-                case Left(closed)       => ValSource.Polled.empty[Page](closed)
-                case Right(page |*| rs) => ValSource.Polled.cons(page |*| self(rs))
-              }
+              switch ( nextPage(rs) )
+                .is { case InL(closed)      => ValSource.Polled.empty[Page](closed) }
+                .is { case InR(page |*| rs) => ValSource.Polled.cons(page |*| self(rs)) }
+                .end
         }
       }
     }
@@ -100,10 +102,10 @@ object ConnectorModuleImpl extends ConnectorModule {
       ScalaFun.blocking { rs => rs.next().toRight(left = ()) }
 
     effectRd(nextPageScala) > λ { case rs |*| pageOpt =>
-      liftEither(pageOpt) either {
-        case Left(end)   => injectL(rs releaseWhen neglect(end))
-        case Right(page) => injectR(page |*| rs)
-      }
+      switch ( liftEither(pageOpt) )
+        .is { case InL(end)  => injectL(rs releaseWhen neglect(end)) }
+        .is { case InR(page) => injectR(page |*| rs) }
+        .end
     }
   }
 }

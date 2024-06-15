@@ -17,49 +17,53 @@ object DogTreatsFactory {
 
         onPoll =
           λ { case (toys |*| bones |*| biscuits) =>
-            poll(toys) either {
-              case Left(done) =>
+            switch ( poll(toys) )
+              .is { case InL(done) =>
                 // no toys left
                 Polled.empty(joinAll(done, close(bones), close(biscuits)))
-
-              case Right(toy |*| toys) =>
+              }
+              .is { case InR(toy |*| toys) =>
                 // got a toy
-                poll(bones) either {
-                  case Left(done) =>
+                switch ( poll(bones) )
+                  .is { case InL(done) =>
                     // no bones left
                     Polled.empty(joinAll(done, neglect(toy), close(toys), close(biscuits)))
-                  case Right(bone |*| bones) =>
+                  }
+                  .is { case InR(bone |*| bones) =>
                     // got a bone
-                    Bone.classifySize(bone) either {
-                      case Left(largeBone) =>
+                    switch ( Bone.classifySize(bone) )
+                      .is { case InL(largeBone) =>
                         // got a large bone
-                        pullThreeBiscuits(biscuits) either {
-                          case Left(done) =>
+                        switch ( pullThreeBiscuits(biscuits) )
+                          .is { case InL(done) =>
                             // not enough biscuits
                             Polled.empty(joinAll(done, neglect(toy), neglect(largeBone), close(toys), close(bones)))
-                          case Right(biscuit3 |*| biscuits) =>
+                          }
+                          .is { case InR(biscuit3 |*| biscuits) =>
                             // got three biscuits
                             Polled.cons(
                               TreatsPack.largeBone(toy, largeBone, biscuit3) |*|
                               self(toys |*| bones |*| biscuits)
                             )
-                        }
-                      case Right(smallBone) =>
+                          }.end
+                      }
+                      .is { case InR(smallBone) =>
                         // got a small bone
-                        pullFiveBiscuits(biscuits) either {
-                            case Left(done) =>
-                              // not enough biscuits
-                              Polled.empty(joinAll(done, neglect(toy), neglect(smallBone), close(toys), close(bones)))
-                            case Right(biscuit5 |*| biscuits) =>
-                              // got five biscuits
-                              Polled.cons(
-                                TreatsPack.smallBone(toy, smallBone, biscuit5) |*|
-                                self(toys |*| bones |*| biscuits)
-                              )
-                        }
-                    }
-                }
-            }
+                        switch ( pullFiveBiscuits(biscuits) )
+                          .is { case InL(done) =>
+                            // not enough biscuits
+                            Polled.empty(joinAll(done, neglect(toy), neglect(smallBone), close(toys), close(bones)))
+                          }
+                          .is { case InR(biscuit5 |*| biscuits) =>
+                            // got five biscuits
+                            Polled.cons(
+                              TreatsPack.smallBone(toy, smallBone, biscuit5) |*|
+                              self(toys |*| bones |*| biscuits)
+                            )
+                          }.end
+                      }.end
+                  }.end
+              }.end
           },
       )
     }
@@ -69,22 +73,18 @@ object DogTreatsFactory {
     import ValSource.poll
 
     λ { biscuits =>
-      poll(biscuits) either {
-        case Left(done) =>
-          injectL(done)
-        case Right(b1 |*| biscuits) =>
-          poll(biscuits) either {
-            case Left(done) =>
-              joinAll(done, neglect(b1)) > injectL
-            case Right(b2 |*| biscuits) =>
-              poll(biscuits) either {
-                case Left(done) =>
-                  joinAll(done, neglect(b1), neglect(b2)) > injectL
-                case Right(b3 |*| biscuits) =>
-                  (Biscuit3(b1, b2, b3) |*| biscuits) > injectR
-              }
-          }
-      }
+      switch ( poll(biscuits) )
+        .is { case InL(done) => InL(done) }
+        .is { case InR(b1 |*| biscuits) =>
+          switch ( poll(biscuits) )
+            .is { case InL(done) => InL(joinAll(done, neglect(b1))) }
+            .is { case InR(b2 |*| biscuits) =>
+              switch ( poll(biscuits) )
+                .is { case InL(done) => InL(joinAll(done, neglect(b1), neglect(b2))) }
+                .is { case InR(b3 |*| biscuits) => InR(Biscuit3(b1, b2, b3) |*| biscuits) }
+                .end
+            }.end
+        }.end
     }
   }
 
@@ -92,23 +92,22 @@ object DogTreatsFactory {
     import ValSource.poll
 
     λ { biscuits =>
-      pullThreeBiscuits(biscuits) either {
-        case Left(done) =>
-          injectL(done)
-        case Right(biscuit3 |*| biscuits) =>
-          poll(biscuits) either {
-            case Left(done) =>
-              joinAll(done, neglect(biscuit3)) > injectL
-            case Right(b4 |*| biscuits) =>
-              poll(biscuits) either {
-                case Left(done) =>
-                  joinAll(done, neglect(biscuit3), neglect(b4)) > injectL
-                case Right(b5 |*| biscuits) =>
+      switch ( pullThreeBiscuits(biscuits) )
+        .is { case InL(done) => InL(done) }
+        .is { case InR(biscuit3 |*| biscuits) =>
+          switch ( poll(biscuits) )
+            .is { case InL(done) => InL(joinAll(done, neglect(biscuit3))) }
+            .is { case InR(b4 |*| biscuits) =>
+              switch ( poll(biscuits) )
+                .is { case InL(done) =>
+                  InL(joinAll(done, neglect(biscuit3), neglect(b4)))
+                }
+                .is { case InR(b5 |*| biscuits) =>
                   val biscuit5 = (biscuit3 ** b4 ** b5) > mapVal { case (((b1, b2, b3), b4), b5) => (b1, b2, b3, b4, b5) }
-                  injectR(biscuit5 |*| biscuits)
-              }
-          }
-      }
+                  InR(biscuit5 |*| biscuits)
+                }.end
+            }.end
+        }.end
     }
   }
 

@@ -39,17 +39,17 @@ object Customer {
 
   private def tryGetDishAndProceed: SectionMain -⚬ (Maybe[MainDish] |*| SectionPayment) =
     λ { mainSection =>
-      SectionMain
-        .getMainDish(mainSection)
-        .either {
-          case Left(dish |*| mainSection) =>
-            val paySection = SectionMain.proceedToPayment(mainSection)
-            val someDish   = Maybe.just(dish)
-            someDish |*| paySection
-          case Right(paySection) =>
-            val noDish = Maybe.empty[MainDish](one)
-            noDish |*| paySection
+      switch ( SectionMain.getMainDish(mainSection) )
+        .is { case InL(dish |*| mainSection) =>
+          val paySection = SectionMain.proceedToPayment(mainSection)
+          val someDish   = Maybe.just(dish)
+          someDish |*| paySection
         }
+        .is { case InR(paySection) =>
+          val noDish = Maybe.empty[MainDish](one)
+          noDish |*| paySection
+        }
+        .end
     }
 
 }
