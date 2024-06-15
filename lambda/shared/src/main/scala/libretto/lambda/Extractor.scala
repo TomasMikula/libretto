@@ -26,3 +26,14 @@ class Extractor[->[_, _], <*>[_, _], T, P](
     val pg = partitioning.contramap(f)
     Extractor(pg, partition)
 }
+
+object Extractor {
+
+  class Via[->[_, _], <*>[_, _], T, P](
+    delegate: Extractor[->, <*>, T, P],
+  ) extends Extractor[->, <*>, T, P](
+    delegate.partitioning,
+    delegate.partition,
+  )
+
+}

@@ -22,18 +22,16 @@ object Wire {
 
   opaque type Proper = ProperF[Wire]
 
-  object Proper {
-    def unapply(using SourcePos, LambdaContext)(w: $[Wire]): Some[$[Proper]] =
-      Some(w.unpackedMatchAgainst(InL))
+  object Proper extends Extractor.Via[-⚬, |*|, Wire, Proper](InL.afterUnpack) {
+    private val cases =
+      OneOf.partition[Proper]
 
-    private val partitioning = OneOf.partition[Proper]
-
-    val Zero:   Extractor[-⚬, |*|, Proper, One]           = partitioning["Zero"]
-    val Succ:   Extractor[-⚬, |*|, Proper, Wire]          = partitioning["Succ"]
-    val Plus:   Extractor[-⚬, |*|, Proper, Wire |*| Wire] = partitioning["Plus"]
-    val Times:  Extractor[-⚬, |*|, Proper, Wire |*| Wire] = partitioning["Times"]
-    val Dup:    Extractor[-⚬, |*|, Proper, Wire |*| Wire] = partitioning["Dup"]
-    val Eraser: Extractor[-⚬, |*|, Proper, One]           = partitioning["Erase"]
+    val Zero:   Extractor[-⚬, |*|, Proper, One]           = cases["Zero"]
+    val Succ:   Extractor[-⚬, |*|, Proper, Wire]          = cases["Succ"]
+    val Plus:   Extractor[-⚬, |*|, Proper, Wire |*| Wire] = cases["Plus"]
+    val Times:  Extractor[-⚬, |*|, Proper, Wire |*| Wire] = cases["Times"]
+    val Dup:    Extractor[-⚬, |*|, Proper, Wire |*| Wire] = cases["Dup"]
+    val Eraser: Extractor[-⚬, |*|, Proper, One]           = cases["Erase"]
   }
 
   private[unaryArithmetic] type AuxiliaryF[X] =
@@ -48,18 +46,11 @@ object Wire {
 
   opaque type Outlet = OutletF[Wire]
 
-  object Auxiliary {
-    def unapply(using SourcePos, LambdaContext)(w: $[Wire]): Some[$[Auxiliary]] =
-      Some(w.unpackedMatchAgainst(InR))
+  object Auxiliary extends Extractor.Via[-⚬, |*|, Wire, Auxiliary](InR.afterUnpack) {
 
-    object Redirect:
-      def unapply(using pos: SourcePos, ctx: LambdaContext)(aux: $[Auxiliary]): Some[$[-[Wire]]] =
-        Some($.matchAgainst(aux, InL)(pos))
+    object Redirect extends Extractor.Via[-⚬, |*|, Auxiliary, -[Wire]](InL)
 
-    object Outlet:
-      def unapply(using pos: SourcePos, ctx: LambdaContext)(aux: $[Auxiliary]): Some[$[Outlet]] =
-        Some($.matchAgainst(aux, InR)(pos))
-
+    object Outlet extends Extractor.Via[-⚬, |*|, Auxiliary, Outlet](InR):
       def feed: (Wire |*| Outlet) -⚬ One =
         λ { case w |*| out =>
           properOrLink(w) supplyTo out
