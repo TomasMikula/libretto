@@ -554,6 +554,12 @@ trait CoreDSL {
     SumPartitioning.Inr[A, B]
 
   extension [A, B](x: $[A |+| B]) {
+    @deprecated("""Use the more general pattern-matching:
+      switch(expr)
+        .is { case InL(a) => ... }
+        .is { case InR(b) => ... }
+        .end
+    """)
     infix def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
       pos: SourcePos,
       ctx: LambdaContext,

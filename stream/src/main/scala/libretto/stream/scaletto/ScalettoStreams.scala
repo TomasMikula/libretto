@@ -347,12 +347,12 @@ abstract class ScalettoStreams {
       val goFst: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) =
         λ { src =>
           producing { case (out1 |*| out2) =>
-            (ValSource.fromChoice >>: out1) switch {
+            (ValSource.fromChoice >>: out1) choose {
               case Left(closing)  =>
                 (src :>: out2) alsoElim (done >>: closing)
               case Right(polling1) =>
                 val polled = ValSource.poll(src)
-                (ValSource.fromChoice >>: out2) switch {
+                (ValSource.fromChoice >>: out2) choose {
                   case Left(closing2) =>
                     (polled :>: polling1) alsoElim (done >>: closing2)
                   case Right(polling2) =>
@@ -364,7 +364,7 @@ abstract class ScalettoStreams {
 
       λ { src =>
         producing { case out1 |*| out2 =>
-          (selectBy(ValSource.notifyAction[A]) >>: (out1 |*| out2)) switch {
+          (selectBy(ValSource.notifyAction[A]) >>: (out1 |*| out2)) choose {
             case Left (out1 |*| out2) => goFst(src) :>: (out1 |*| out2)
             case Right(out1 |*| out2) => goFst(src) :>: (out2 |*| out1)
           }

@@ -298,8 +298,8 @@ trait InvertDSL extends ClosedDSL {
   }
 
   extension [A, B](x: $[-[A |&| B]]) {
-    @targetName("switch_-|&|")
-    def switch[C](f: LambdaContext ?=> Either[$[-[A]], $[-[B]]] => $[C])(using
+    @targetName("choose_-|&|")
+    def choose[C](f: LambdaContext ?=> Either[$[-[A]], $[-[B]]] => $[C])(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[C] =
@@ -307,8 +307,8 @@ trait InvertDSL extends ClosedDSL {
   }
 
   extension [A, B](x: ??[A |&| B]) {
-    @targetName("switch_|&|")
-    def switch[C](f: LambdaContext ?=> Either[??[A], ??[B]] => ??[C])(using
+    @targetName("choose_|&|")
+    def choose[C](f: LambdaContext ?=> Either[??[A], ??[B]] => ??[C])(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): ??[C] =

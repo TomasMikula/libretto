@@ -10,10 +10,10 @@ object SunflowerProcessingFacility {
       // give names to the outputs
       producing { case seedsOut |*| oilOut =>
         // race the outputs by which one acts (i.e. pulls or closes) first
-        (selectBy(notifyAction, notifyAction) >>: (seedsOut |*| oilOut)) switch {
+        (selectBy(notifyAction, notifyAction) >>: (seedsOut |*| oilOut)) choose {
           // seed output acted first
           case Left (seedsOut |*| oilOut) =>
-            (fromChoice >>: seedsOut) switch {
+            (fromChoice >>: seedsOut) choose {
               case Left(closingSeeds) =>
                 returning(
                   oilOut       := sunflowers :>> oilOnlyMode,
@@ -21,21 +21,23 @@ object SunflowerProcessingFacility {
                 )
               case Right(pullingSeeds) =>
                 (pullingSeeds |*| oilOut) :=
-                  pull3(sunflowers) switch {
-                    case Right(sunflower3 |*| sunflowers) =>
+                  when ( pull3(sunflowers) )
+                    .is { case InR(sunflower3 |*| sunflowers) =>
                       // got 3 sunflowers, let's roast the seeds and package them
                       val seedsPack = roastSeedsAndPack(sunflower3)
                       // operate recursively on the rest of the input source
                       val seedsPacks |*| oilBottles = self(sunflowers)
                       Polled.cons(seedsPack |*| seedsPacks) |*| oilBottles
-                    case Left(+(closed)) =>
+                    }
+                    .is { case InL(+(closed)) =>
                       // no more sunflowers
                       Polled.empty(closed) |*| ValSource.empty(closed)
-                  }
+                    }
+                    .end
             }
           // oil output acted first
           case Right(seedsOut |*| oilOut) =>
-            (fromChoice >>: oilOut) switch {
+            (fromChoice >>: oilOut) choose {
               case Left(closingOil) =>
                 returning(
                   seedsOut   := sunflowers :>> seedsOnlyMode,
@@ -43,14 +45,16 @@ object SunflowerProcessingFacility {
                 )
               case Right(pullingOil) =>
                 (seedsOut |*| pullingOil) :=
-                  pull5(sunflowers) switch {
-                    case Right(sunflower5 |*| sunflowers) =>
+                  when ( pull5(sunflowers) )
+                    .is { case InR(sunflower5 |*| sunflowers) =>
                       val oilBottle = makeOil(sunflower5)
                       val seedsPacks |*| oilBottles = self(sunflowers)
                       seedsPacks |*| Polled.cons(oilBottle |*| oilBottles)
-                    case Left(+(closed)) =>
+                    }
+                    .is { case InL(+(closed)) =>
                       ValSource.empty(closed) |*| Polled.empty(closed)
-                  }
+                    }
+                    .end
             }
         }
       }
@@ -60,14 +64,14 @@ object SunflowerProcessingFacility {
   private def oilOnlyMode: ValSource[Sunflower] -⚬ ValSource[OilBottle] = rec { self =>
     λ { sunflowers =>
       producing { oilOut =>
-        (fromChoice >>: oilOut) switch {
+        (fromChoice >>: oilOut) choose {
           case Left(closing) =>
             closing := ValSource.close(sunflowers)
           case Right(pulling) =>
-            pulling := pull5(sunflowers) switch {
-              case Left(closed)       => Polled.empty(closed)
-              case Right(sf5 |*| sfs) => Polled.cons(makeOil(sf5) |*| self(sfs))
-            }
+            pulling := when ( pull5(sunflowers) )
+              .is { case InL(closed)      => Polled.empty(closed) }
+              .is { case InR(sf5 |*| sfs) => Polled.cons(makeOil(sf5) |*| self(sfs)) }
+              .end
         }
       }
     }
@@ -76,14 +80,14 @@ object SunflowerProcessingFacility {
   private def seedsOnlyMode: ValSource[Sunflower] -⚬ ValSource[SeedsPack] = rec { self =>
     λ { sunflowers =>
       producing { seedsOut =>
-        (fromChoice >>: seedsOut) switch {
+        (fromChoice >>: seedsOut) choose {
           case Left(closing) =>
             closing := ValSource.close(sunflowers)
           case Right(pulling) =>
-            pulling := pull3(sunflowers) switch {
-              case Left(closed)       => Polled.empty(closed)
-              case Right(sf3 |*| sfs) => Polled.cons(roastSeedsAndPack(sf3) |*| self(sfs))
-            }
+            pulling := when ( pull3(sunflowers) )
+              .is { case InL(closed)      => Polled.empty(closed) }
+              .is { case InR(sf3 |*| sfs) => Polled.cons(roastSeedsAndPack(sf3) |*| self(sfs)) }
+              .end
         }
       }
     }
@@ -94,43 +98,36 @@ object SunflowerProcessingFacility {
 
   private def pull3: ValSource[Sunflower] -⚬ (Done |+| (Val[Sunflower3] |*| ValSource[Sunflower])) =
     λ { src =>
-      poll(src) switch {
-        case Left(closed) =>
-          injectL(closed)
-        case Right(sf1 |*| tail) =>
-          poll(tail) switch {
-            case Left(closed) =>
-              injectL(joinAll(neglect(sf1), closed))
-            case Right(sf2 |*| tail) =>
-              poll(tail) switch {
-                case Left(closed) =>
-                  injectL(joinAll(neglect(sf1), neglect(sf2), closed))
-                case Right(sf3 |*| tail) =>
-                  injectR(tuple(sf1, sf2, sf3) |*| tail)
-              }
-          }
-      }
+      when ( poll(src) )
+        .is { case InL(closed) => InL(closed) }
+        .is { case InR(sf1 |*| tail) =>
+          when ( poll(tail) )
+            .is { case InL(closed) => InL(joinAll(neglect(sf1), closed)) }
+            .is { case InR(sf2 |*| tail) =>
+              when ( poll(tail) )
+                .is { case InL(closed) => InL(joinAll(neglect(sf1), neglect(sf2), closed)) }
+                .is { case InR(sf3 |*| tail) => InR(tuple(sf1, sf2, sf3) |*| tail) }
+                .end
+            }.end
+        }.end
     }
 
   private def pull5: ValSource[Sunflower] -⚬ (Done |+| (Val[Sunflower5] |*| ValSource[Sunflower])) =
     λ { src =>
-      pull3(src) switch {
-        case Left(closed) =>
-          injectL(closed)
-        case Right(sf3 |*| tail) =>
-          poll(tail) switch {
-            case Left(closed) =>
-              injectL(joinAll(neglect(sf3), closed))
-            case Right(sf4 |*| tail) =>
-              poll(tail) switch {
-                case Left(closed) =>
-                  injectL(joinAll(neglect(sf3), neglect(sf4), closed))
-                case Right(sf5 |*| tail) =>
+      when ( pull3(src) )
+        .is { case InL(closed) => InL(closed) }
+        .is { case InR(sf3 |*| tail) =>
+          when( poll(tail) )
+            .is { case InL(closed) => InL(joinAll(neglect(sf3), closed)) }
+            .is { case InR(sf4 |*| tail) =>
+              when( poll(tail) )
+                .is { case InL(closed) => InL(joinAll(neglect(sf3), neglect(sf4), closed)) }
+                .is { case InR(sf5 |*| tail) =>
                   val res = tuple(sf3, sf4, sf5) > mapVal { case ((s1, s2, s3), s4, s5) => (s1, s2, s3, s4, s5) }
-                  injectR(res |*| tail)
-              }
-          }
-      }
+                  InR(res |*| tail)
+                }.end
+            }.end
+        }.end
     }
 
   private def roastSeedsAndPack: Val[Sunflower3] -⚬ Val[SeedsPack] =

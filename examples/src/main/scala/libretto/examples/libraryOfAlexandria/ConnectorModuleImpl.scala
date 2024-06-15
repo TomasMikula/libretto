@@ -81,7 +81,7 @@ object ConnectorModuleImpl extends ConnectorModule {
   private def resultSetSource: Res[vendor.ResultSet[Page]] -⚬ ValSource[Page] = rec { self =>
     λ { rs =>
       producing { pages =>
-        (ValSource.fromChoice >>: pages) switch {
+        (ValSource.fromChoice >>: pages) choose {
           case Left(closing) =>
             closing := rs :>> release
           case Right(pulling) =>

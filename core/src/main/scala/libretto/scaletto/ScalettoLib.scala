@@ -123,7 +123,7 @@ class ScalettoLib[
       producing { case outAs |*| outDone =>
         (outAs raceWith as) {
           case Left((outAs, as)) =>
-            (Endless.fromChoice >>: outAs) switch {
+            (Endless.fromChoice >>: outAs) choose {
               case Left(end) => // no more reads
                 returning(
                   end := one,
