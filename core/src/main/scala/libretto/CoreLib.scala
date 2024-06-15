@@ -1237,12 +1237,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     import dsl.Comonoid.comonoidPing
 
     λ { case p |*| (a |*| b) =>
-      race[Ping, A](p |*| a) either {
-        case Left(?(_) |*| a) =>
-          injectL(a |*| b)
-        case Right(?(_) |*| a) =>
-          race[A, B](a |*| b)
-      }
+      switch ( race[Ping, A](p |*| a) )
+        .is { case InL(?(_) |*| a) => InL(a |*| b) }
+        .is { case InR(?(_) |*| a) => race[A, B](a |*| b) }
+        .end
     }
   }
 
@@ -1253,12 +1251,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     import dsl.Comonoid.comonoidPing
 
     λ { case a |*| (p |*| b) =>
-      race[A, Ping](a |*| p) either {
-        case Left(a |*| ?(_)) =>
-          injectL(a |*| b)
-        case Right(a |*| p) =>
-          injectR(race[A, C](a |*| f(p |*| b)))
-      }
+      switch ( race[A, Ping](a |*| p) )
+        .is { case InL(a |*| ?(_)) => InL(a |*| b) }
+        .is { case InR(a |*| p)    => InR(race[A, C](a |*| f(p |*| b))) }
+        .end
     }
   }
 
@@ -2156,13 +2152,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         .>(|+|.bimap(ifTrue, ifFalse))  .to[        B     |+|        C     ]
   }
 
-  import Bool.*
-
   def testBy[A, B, K: Cosemigroup: Junction.Positive](
     aKey: Getter[A, K],
     bKey: Getter[B, K],
     pred: (K |*| K) -⚬ Bool,
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) = {
+    import Bool.*
+
     val awaitL: (Done |*| (A |*| B)) -⚬ (A |*| B) =
       (aKey compose Transportive.fst[B].lens[A]).awaitFst
 
@@ -3206,10 +3202,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         λ.? { _ => constant(nil[A]) |*| constant(nil[B]) },
         λ { case x |*| t =>
           val as |*| bs = self(t)
-          x either {
-            case Left(a)  => cons(a |*| as) |*| bs
-            case Right(b) => as |*| cons(b |*| bs)
-          }
+          dsl.switch ( x )
+            .is { case InL(a) => cons(a |*| as) |*| bs }
+            .is { case InR(b) => as |*| cons(b |*| bs) }
+            .end
         },
       )
     }
@@ -3350,18 +3346,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
      */
     def merge[T]: (LList[T] |*| LList[T]) -⚬ LList[T] = rec { self =>
       λ { case as |*| bs =>
-        race(as |*| bs) either {
-          case Left(as |*| bs) =>
-            uncons(as) either {
-              case Left(?(one))    => bs
-              case Right(a |*| as) => cons(a |*| self(as |*| bs))
-            }
-          case Right(as |*| bs) =>
-            uncons(bs) either {
-              case Left(?(one)) => as
-              case Right(b |*| bs) => cons(b |*| self(as |*| bs))
-            }
-        }
+        dsl.switch ( race(as |*| bs) )
+          .is { case InL(as |*| bs) =>
+            dsl.switch ( uncons(as) )
+              .is { case InL(?(one))   => bs }
+              .is { case InR(a |*| as) => cons(a |*| self(as |*| bs)) }
+              .end
+          }
+          .is { case InL(as |*| bs) =>
+            dsl.switch ( uncons(bs) )
+              .is { case InL(?(one)) => as }
+              .is { case InR(b |*| bs) => cons(b |*| self(as |*| bs)) }
+              .end
+          }
+          .end
       }
     }
 
@@ -3375,15 +3373,17 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def insertBySignal[T](using Signaling.Positive[T]): (T |*| LList[T]) -⚬ LList[T] =
       rec { self =>
         λ { case a |*| as =>
-          race[T, LList[T]](a |*| as) either {
-            case Left(a |*| as) =>
+          dsl.switch ( race[T, LList[T]](a |*| as) )
+            .is { case InL(a |*| as) =>
               cons(a |*| as)
-            case Right(a |*| as) =>
-              uncons(as) either {
-                case Left(?(one))     => singletonOnSignal(a)
-                case Right(a1 |*| as) => cons(a1 |*| self(a |*| as))
-              }
-          }
+            }
+            .is { case InR(a |*| as) =>
+              dsl.switch ( uncons(as) )
+                .is { case InL(?(one))     => singletonOnSignal(a) }
+                .is { case InR(a1 |*| as) => cons(a1 |*| self(a |*| as)) }
+                .end
+            }
+            .end
         }
       }
 
@@ -3393,10 +3393,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       // to bubble to the front. Could be improved to O(log(n)) steps to bubble any element and O(n*log(n)) total
       // complexity by using a heap data structure.
       λ { as =>
-        uncons(as) either {
-          case Left(one)       => nil(one)
-          case Right(a |*| as) => insertBySignal(a |*| self(as))
-        }
+        dsl.switch ( uncons(as) )
+          .is { case InL(one)      => nil(one) }
+          .is { case InR(a |*| as) => insertBySignal(a |*| self(as)) }
+          .end
       }
     }
 
@@ -3713,13 +3713,13 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       rec { self =>
         λ { case b |*| as =>
           val p |*| b1 = b :>> notifyPosFst
-          injectLOnPing[Endless[A], One](p |*| as) either {
-            case Left(as) =>
+          switch ( injectLOnPing[Endless[A], One](p |*| as) )
+            .is { case InL(as) =>
               val h |*| t = pull(as)
               self(f(b1 |*| h) |*| t)
-            case Right(?(_)) =>
-              b1
-          }
+            }
+            .is { case InR(?(_)) => b1 }
+            .end
         }
       }
 
@@ -3773,24 +3773,26 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         λ { case (a |*| as) |*| bs =>
           val po |*| pi = constant(lInvertPongPing)
           val res: $[One |&| (A |*| Endless[A])] =
-            race[Ping, A](pi |*| a) either {
-              case Left(?(_) |*| a) =>
+            switch ( race[Ping, A](pi |*| a) )
+              .is { case InL(?(_) |*| a) =>
                 (a |*| as |*| bs) :>> choice(
                   λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
                   λ { case   a  |*| as |*| bs =>
                     val b |*| bs1 = pull(bs)
-                    race[A, A](a |*| b) either {
-                      case Left(a |*| b)  => a |*| self(pull(as) |*| unpull[A](b |*| bs1))
-                      case Right(a |*| b) => b |*| self((a |*| as) |*| bs1)
-                    }
+                    switch ( race[A, A](a |*| b) )
+                      .is { case InL(a |*| b)  => a |*| self(pull(as) |*| unpull[A](b |*| bs1)) }
+                      .is { case InR(a |*| b) => b |*| self((a |*| as) |*| bs1) }
+                      .end
                   },
                 )
-              case Right(?(_) |*| a) =>
+              }
+              .is { case InR(?(_) |*| a) =>
                 (a |*| as |*| bs) :>> choice(
                   λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
                   λ { case   a  |*| as |*| bs => a |*| self(pull(as) |*| bs) },
                 )
-            }
+              }
+              .end
           (po |*| res) :>> notifyChoice :>> pack
         }
       }
