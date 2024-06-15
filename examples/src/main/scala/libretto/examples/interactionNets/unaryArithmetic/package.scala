@@ -1,6 +1,6 @@
 package libretto.examples.interactionNets.unaryArithmetic
 
-import libretto.lambda.Partitioning.Extractor
+import libretto.lambda.Extractor
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.StarterKit.*
 import libretto.scaletto.StarterKit.dsl.{|| as |}

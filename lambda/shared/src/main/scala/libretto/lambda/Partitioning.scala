@@ -23,9 +23,6 @@ trait Partitioning[->[_, _], <*>[_, _], T] { self =>
 
   def showPartition[P](p: Partition[P]): String
 
-  def extractor[P](p: Partition[P]): Partitioning.Extractor[->, <*>, T, P] =
-    Partitioning.Extractor(this, p)
-
   def contramap[Fun[_, _], S](
     f: Fun[S, T],
   )(using
@@ -36,33 +33,6 @@ trait Partitioning[->[_, _], <*>[_, _], T] { self =>
 }
 
 object Partitioning {
-
-  class Extractor[->[_, _], <*>[_, _], T, P](
-    val partitioning: Partitioning[->, <*>, T],
-    val partition:    partitioning.Partition[P],
-  ) {
-    def isTotal: Option[T -> P] =
-      partitioning.isTotal(partition)
-
-    def reinject: P -> T =
-      partitioning.reinject(partition)
-
-    infix def sameAs[Q](that: Extractor[->, <*>, T, Q]): Option[Option[P =:= Q]] =
-      (this.partitioning sameAs that.partitioning)
-        .map { ev =>
-          this.partitioning.samePartition(this.partition, ev.flip.at[Q](that.partition))
-        }
-
-    def show: String =
-      partitioning.showPartition(partition)
-
-    def contramap[Fun[_, _], S](f: Fun[S, T])(using
-      SubFun[->, Fun],
-      SemigroupalCategory[->, <*>],
-    ): Extractor[->, <*>, S, P] =
-      val pg = partitioning.contramap(f)
-      Extractor(pg, partition)
-  }
 
   trait SubFun[->[_, _], F[_, _]] {
     infix def sameAs[G[_, _]](that: SubFun[->, G]): Option[[X, Y] => F[X, Y] => G[X, Y]]

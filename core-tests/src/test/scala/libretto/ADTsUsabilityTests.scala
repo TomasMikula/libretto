@@ -1,7 +1,6 @@
 package libretto
 
-import libretto.lambda.{Focus, Partitioning}
-import libretto.lambda.Partitioning.Extractor
+import libretto.lambda.{Extractor, Focus, Partitioning}
 import libretto.lambda.util.{Applicative, SourcePos, TypeEqK}
 import libretto.lambda.util.Monad.syntax.*
 import libretto.testing.TestCase

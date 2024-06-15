@@ -538,14 +538,14 @@ object FreeScaletto extends Scaletto {
   type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
   private type Extractor[A, B] =
-    Partitioning.Extractor[-⚬, |*|, A, B]
+    libretto.lambda.Extractor[-⚬, |*|, A, B]
 
   private object Extractor {
     def apply[T, P](
       partitioning: Partitioning[-⚬, |*|, T],
       partition:    partitioning.Partition[P],
     ): Extractor[T, P] =
-      partitioning.extractor(partition)
+      libretto.lambda.Extractor(partitioning, partition)
   }
 
   private case class ExtractorOccurrence[A, B](

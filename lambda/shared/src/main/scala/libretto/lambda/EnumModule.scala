@@ -1,6 +1,5 @@
 package libretto.lambda
 
-import libretto.lambda.Partitioning.Extractor
 import libretto.lambda.util.{Applicative, BiInjective, StaticValue, TypeEq, TypeEqK}
 import libretto.lambda.util.TypeEqK.Refl
 import libretto.lambda.util.unapply.Unapply
@@ -324,8 +323,11 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
   override def partitioning[Cases](using ev: CaseList[Cases]): Partitioning[Cases] =
     PartitioningImpl(ev)
 
-  override def caseExtractor[Cases, C](p: Partitioning[Cases], ev: IsCaseOf[C, Cases]): Extractor[->, **, Enum[Cases], ev.Type] =
-    p.extractor[ev.Type](ev)
+  override def caseExtractor[Cases, C](
+    p: Partitioning[Cases],
+    ev: IsCaseOf[C, Cases],
+  ): Extractor[->, **, Enum[Cases], ev.Type] =
+    Extractor(p, ev)
 
   private sealed trait CaseListImpl[Cases] {
     def distF[F[_]]: DistFImpl[F, Cases]

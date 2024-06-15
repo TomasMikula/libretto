@@ -1,7 +1,6 @@
 package libretto
 
-import libretto.lambda.{EnumModule, Focus}
-import libretto.lambda.Partitioning.Extractor
+import libretto.lambda.{EnumModule, Extractor, Focus}
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.util.Equal

@@ -1,6 +1,5 @@
 package libretto.lambda
 
-import libretto.lambda.Partitioning.Extractor
 import libretto.lambda.util.{Applicative, BiInjective, TypeEqK}
 
 class CoproductPartitioning[->[_, _], **[_, _], ++[_, _]](using
@@ -12,10 +11,10 @@ class CoproductPartitioning[->[_, _], **[_, _], ++[_, _]](using
   import cocat.{either, injectL, injectR}
 
   def Inl[A, B]: Extractor[->, **, A ++ B, A] =
-    new CoproductPartitioning[A, B].extractor(Side.Left())
+    Extractor(new CoproductPartitioning[A, B], Side.Left())
 
   def Inr[A, B]: Extractor[->, **, A ++ B, B] =
-    new CoproductPartitioning[A, B].extractor(Side.Right())
+    Extractor(new CoproductPartitioning[A, B], Side.Right())
 
   private final class CoproductPartitioning[A, B] extends Partitioning[->, **, A ++ B] {
 
