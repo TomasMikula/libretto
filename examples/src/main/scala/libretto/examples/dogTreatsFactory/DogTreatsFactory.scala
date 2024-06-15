@@ -17,23 +17,23 @@ object DogTreatsFactory {
 
         onPoll =
           λ { case (toys |*| bones |*| biscuits) =>
-            poll(toys) switch {
+            poll(toys) either {
               case Left(done) =>
                 // no toys left
                 Polled.empty(joinAll(done, close(bones), close(biscuits)))
 
               case Right(toy |*| toys) =>
                 // got a toy
-                poll(bones) switch {
+                poll(bones) either {
                   case Left(done) =>
                     // no bones left
                     Polled.empty(joinAll(done, neglect(toy), close(toys), close(biscuits)))
                   case Right(bone |*| bones) =>
                     // got a bone
-                    Bone.classifySize(bone) switch {
+                    Bone.classifySize(bone) either {
                       case Left(largeBone) =>
                         // got a large bone
-                        pullThreeBiscuits(biscuits) switch {
+                        pullThreeBiscuits(biscuits) either {
                           case Left(done) =>
                             // not enough biscuits
                             Polled.empty(joinAll(done, neglect(toy), neglect(largeBone), close(toys), close(bones)))
@@ -46,7 +46,7 @@ object DogTreatsFactory {
                         }
                       case Right(smallBone) =>
                         // got a small bone
-                        pullFiveBiscuits(biscuits) switch {
+                        pullFiveBiscuits(biscuits) either {
                             case Left(done) =>
                               // not enough biscuits
                               Polled.empty(joinAll(done, neglect(toy), neglect(smallBone), close(toys), close(bones)))
@@ -69,15 +69,15 @@ object DogTreatsFactory {
     import ValSource.poll
 
     λ { biscuits =>
-      poll(biscuits) switch {
+      poll(biscuits) either {
         case Left(done) =>
           injectL(done)
         case Right(b1 |*| biscuits) =>
-          poll(biscuits) switch {
+          poll(biscuits) either {
             case Left(done) =>
               joinAll(done, neglect(b1)) > injectL
             case Right(b2 |*| biscuits) =>
-              poll(biscuits) switch {
+              poll(biscuits) either {
                 case Left(done) =>
                   joinAll(done, neglect(b1), neglect(b2)) > injectL
                 case Right(b3 |*| biscuits) =>
@@ -92,15 +92,15 @@ object DogTreatsFactory {
     import ValSource.poll
 
     λ { biscuits =>
-      pullThreeBiscuits(biscuits) switch {
+      pullThreeBiscuits(biscuits) either {
         case Left(done) =>
           injectL(done)
         case Right(biscuit3 |*| biscuits) =>
-          poll(biscuits) switch {
+          poll(biscuits) either {
             case Left(done) =>
               joinAll(done, neglect(biscuit3)) > injectL
             case Right(b4 |*| biscuits) =>
-              poll(biscuits) switch {
+              poll(biscuits) either {
                 case Left(done) =>
                   joinAll(done, neglect(biscuit3), neglect(b4)) > injectL
                 case Right(b5 |*| biscuits) =>

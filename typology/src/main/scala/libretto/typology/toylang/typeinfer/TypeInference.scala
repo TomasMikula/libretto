@@ -275,13 +275,13 @@ object TypeInference {
           tf <- reconstructTypes(f)
         } yield
           tf > λ { case aba |*| f |*| b1 =>
-            npg.peek(npg.tap(aba)) switch {
+            npg.peek(npg.tap(aba)) either {
               case Left(aba) =>
-                NonAbstractType.isPair(aba) switch {
+                NonAbstractType.isPair(aba) either {
                   case Right(ab |*| a1) =>
-                    npg.peek(ab) switch {
+                    npg.peek(ab) either {
                       case Left(ab) =>
-                        NonAbstractType.isRecCall(ab) switch {
+                        NonAbstractType.isRecCall(ab) either {
                           case Right(a0 |*| b0) =>
                             val a = merge(lower(a0) |*| lower(a1))
                             val b = merge(lower(b0) |*| unnest(b1))

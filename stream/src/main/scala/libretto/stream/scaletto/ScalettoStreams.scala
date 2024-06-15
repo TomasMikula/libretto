@@ -107,7 +107,7 @@ abstract class ScalettoStreams {
 
       val poll: (Val[List[A]] |*| Detained[T]) -⚬ Polled[T, A] =
         λ { case as |*| t =>
-          as > mapVal(uncons) > optionToPMaybe > PMaybe.toEither switch {
+          as > mapVal(uncons) > optionToPMaybe > PMaybe.toEither either {
             case Left(nil)      => t.releaseWhen(nil) > Polled.empty[T, A]
             case Right(a ** as) => Polled.cons(a |*| fromList(as |*| t))
           }
@@ -218,7 +218,7 @@ abstract class ScalettoStreams {
 
       val poll: Val[List[A]] -⚬ Polled[A] =
         λ { as =>
-          as > mapVal(uncons) > optionToPMaybe > PMaybe.toEither switch {
+          as > mapVal(uncons) > optionToPMaybe > PMaybe.toEither either {
             case Left(nil)     => nil > Polled.empty[A]
             case Right(h ** t) => Polled.cons(h |*| fromList(t))
           }
@@ -243,7 +243,7 @@ abstract class ScalettoStreams {
     def toList[A]: ValSource[A] -⚬ Val[List[A]] = {
       def go: (ValSource[A] |*| Val[List[A]]) -⚬ Val[List[A]] = rec { self =>
         λ { case as |*| acc =>
-          poll(as) switch {
+          poll(as) either {
             case Left(closed) =>
               val res = acc > mapVal(_.reverse)
               res waitFor closed
@@ -297,7 +297,7 @@ abstract class ScalettoStreams {
 
         val poll:(Val[S] |*| ValSource[A]) -⚬ (Done |+| (Val[B] |*| ValSource[B])) =
           λ { case (s |*| as) =>
-            ValSource.poll(as) switch {
+            ValSource.poll(as) either {
               case Left(closed) =>
                 injectL(neglect(s) alsoJoin closed)
               case Right(a |*| as) =>
@@ -388,7 +388,7 @@ abstract class ScalettoStreams {
             case downstreamPong |*| out =>
               val downstreamActing = downstreamPong.asInput(lInvertPongPing)
               out :=
-                race[Ping, Polled[A]](downstreamActing |*| as) switch {
+                race[Ping, Polled[A]](downstreamActing |*| as) either {
                   case Left(?(_) |*| as) => // downstream acting
                     as :>> ValSource.from(Polled.close, id)
                   case Right(?(_) |*| as) => // upstream response
@@ -442,7 +442,7 @@ abstract class ScalettoStreams {
         λ { case ((k |*| out) |*| tree) =>
           val drain: $[ValDrain[V]] =
             ValDrain.fromInvertedSource(out)
-          drain.toEither switch {
+          drain.toEither either {
             case Left(closing)  => tree alsoElim rInvertSignal(neglect(k) |*| closing)
             case Right(pulling) => addPulling((k |*| pulling) |*| tree)
           }
@@ -488,7 +488,7 @@ abstract class ScalettoStreams {
         goRec: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done,
       ): ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done =
         λ { case ((polled |*| kSubs) |*| tree) =>
-          polled switch {
+          polled either {
             case Left(closed) =>
               joinAll(
                 closed,
@@ -507,7 +507,7 @@ abstract class ScalettoStreams {
 
       val forward: (Polled[A] |*| DT[K, V]) -⚬ Done =
         λ { case (polled |*| tree) =>
-          tree switch {
+          tree either {
             case Left(empty) => Polled.close(polled) alsoJoin empty
             case Right(tree) => feedToNEDT(polled |*| tree)
           }
@@ -517,7 +517,7 @@ abstract class ScalettoStreams {
         goRec: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done,
       ): ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done =
         λ { case (vals |*| subs) |*| tree =>
-          subs switch {
+          subs either {
             case Left(closed) =>
               forward(vals |*| tree) alsoJoin closed
             case Right(sub |*| subs) =>
@@ -532,7 +532,7 @@ abstract class ScalettoStreams {
           SignalingJunction.Positive.byFst[Val[K], -[ValSource[V]]]
 
         λ { case (vals |*| subs) |*| tree =>
-          ((vals |*| subs) > lib.race) switch {
+          ((vals |*| subs) > lib.race) either {
             case Left (vals |*| subs) => onUpstream(self)((vals |*| subs) |*| tree)
             case Right(vals |*| subs) => onSubs(self)((vals |*| subs) |*| tree)
           }
@@ -580,7 +580,7 @@ abstract class ScalettoStreams {
         dupSource: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]),
       ): Polled[A] -⚬ (Polled[A] |*| Polled[A]) =
         λ { polled =>
-          polled switch {
+          polled either {
             case Left(+(closed)) =>
               Polled.empty(closed) |*| Polled.empty(closed)
             case Right(+(a) |*| as) =>
@@ -623,7 +623,7 @@ abstract class ScalettoStreams {
       val goPulling: (ValDrain.Pulling[A] |*| ValDrain[A]) -⚬ ValDrain[A] =
         λ { case (pulling1 |*| drain2) =>
           ValDrain.pulling(
-            drain2.toEither switch {
+            drain2.toEither either {
               case Left(closing2)  => pulling1 alsoElim (closing2 > need)
               case Right(pulling2) => contraDupPullings(pulling1 |*| pulling2)
             }
@@ -632,14 +632,14 @@ abstract class ScalettoStreams {
 
       val goFst: (ValDrain[A] |*| ValDrain[A]) -⚬ ValDrain[A] =
         λ { case (drain1 |*| drain2) =>
-          drain1.toEither switch {
+          drain1.toEither either {
             case Left(closing)  => drain2 alsoElim (closing > need)
             case Right(pulling) => goPulling(pulling |*| drain2)
           }
         }
 
       λ { (drains: $[ValDrain[A] |*| ValDrain[A]]) =>
-        drains > raceBy(ValDrain.notifyReady) switch {
+        drains > raceBy(ValDrain.notifyReady) either {
           case Left (dr1 |*| dr2) => goFst(dr1 |*| dr2)
           case Right(dr1 |*| dr2) => goFst(dr2 |*| dr1)
         }
@@ -719,11 +719,11 @@ abstract class ScalettoStreams {
     */
   def relayCompletion[A, B]: (ValSource[A] |*| ValDrain[B]) -⚬ (One |+| ((Val[A] |*| ValSource[A]) |*| (Neg[B] |*| ValDrain[B]))) =
     λ { case (src |*| drn) =>
-      drn.toEither switch {
+      drn.toEither either {
         case Left(closing) =>
           injectL(rInvertSignal(ValSource.close(src) |*| closing))
         case Right(pulling) =>
-          ValSource.poll(src) switch {
+          ValSource.poll(src) either {
             case Left(closed) =>
               injectL(rInvertSignal(closed |*| ValDrain.Pulling.close(pulling)))
             case Right(a |*| as) =>

@@ -41,7 +41,7 @@ object Customer {
     λ { mainSection =>
       SectionMain
         .getMainDish(mainSection)
-        .switch {
+        .either {
           case Left(dish |*| mainSection) =>
             val paySection = SectionMain.proceedToPayment(mainSection)
             val someDish   = Maybe.just(dish)

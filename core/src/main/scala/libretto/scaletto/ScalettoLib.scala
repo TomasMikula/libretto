@@ -137,7 +137,7 @@ class ScalettoLib[
             }
           case Right((outAs, as)) =>
             (outAs |*| outDone) :=
-              LList.uncons(as) switch {
+              LList.uncons(as) either {
                 case Left(?(_)) => // no more writes
                   a :>> Endless.unfold(dup) :>> snd(neglect)
                 case Right(a1 |*| as) => // write

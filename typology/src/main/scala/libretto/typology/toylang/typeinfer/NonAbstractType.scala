@@ -390,7 +390,7 @@ private[typeinfer] object NonAbstractType {
           ((f ** g) :>> mapVal { case (f, g) =>
             if (f == g) Left(f)
             else        Right((f, g))
-          } :>> liftEither) switch {
+          } :>> liftEither) either {
             case Left(f) =>
               fix(f)
             case Right(fg) =>
@@ -401,7 +401,7 @@ private[typeinfer] object NonAbstractType {
           ((f ** h) :>> mapVal { case (f, h) =>
             if (f == h) Left(f)
             else        Right((f, h))
-          } :>> liftEither) switch {
+          } :>> liftEither) either {
             case Left(f)   => pfixs(f |*| Types.merge(g)(x |*| y))
             case Right(fh) => (fh |*| x |*| y) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
           }

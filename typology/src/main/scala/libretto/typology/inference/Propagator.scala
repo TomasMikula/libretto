@@ -115,7 +115,7 @@ private[inference] class PropagatorImpl[
       def mapWith[X, U](f: (X |*| T) -⚬ U)(x: $[X])(using SourcePos, LambdaContext)(using X: Closeable[X]): $[Response[U]] =
         import TypeOutlet.given
         given Junction.Positive[-[TypeOutlet]] = Junction.Positive.insideInversion[TypeOutlet]
-        resp switch {
+        resp either {
           case Left(t)  => injectL(f(x |*| t))
           case Right(t) => injectR(t waitFor X.close(x))
         }
@@ -158,11 +158,11 @@ private[inference] class PropagatorImpl[
 
   private def occursCheck: (Label |*| Tp) -⚬ Tp = rec { self =>
     λ { case lbl0 |*| t =>
-      unpack(t) switch {
+      unpack(t) either {
         case Left(absTp) =>
-          absTp switch {
+          absTp either {
             case Left(lbl |*| req) =>
-              labels.testEqual(lbl0 |*| lbl) switch {
+              labels.testEqual(lbl0 |*| lbl) either {
                 case Left(l) => // forbidden label found
                   val +(v) = labels.unwrapOriginal(l)
                   val t1 = concreteType(F.forbiddenSelfReference(v))
@@ -172,7 +172,7 @@ private[inference] class PropagatorImpl[
                   abstType(lbl.waitFor(labels.neglect(lbl0)) |*| req)
               }
             case Right(lbl |*| t) => // preliminary
-              labels.testEqual(lbl0 |*| lbl) switch {
+              labels.testEqual(lbl0 |*| lbl) either {
                 case Left(l) => // forbidden label found
                   returning(
                     concreteType(F.forbiddenSelfReference(labels.unwrapOriginal(l))),
@@ -202,16 +202,16 @@ private[inference] class PropagatorImpl[
     split: Tp -⚬ (Tp |*| Tp),
   ): (Tp |*| Tp) -⚬ Tp = rec { self =>
     par(unpack, unpack) > λ { case a |*| b =>
-      a switch {
+      a either {
         case Left(a) =>
-          b switch {
+          b either {
             case Left(b) =>
               mergeAbstractTypes(self, split)(a |*| b)
             case Right(fb) =>
               mergeConcreteAbstract(self, split)(fb |*| a)
           }
         case Right(fa) =>
-          b switch {
+          b either {
             case Left(b) =>
               mergeConcreteAbstract(self, split)(fa |*| b)
             case Right(fb) =>
@@ -226,16 +226,16 @@ private[inference] class PropagatorImpl[
     split: Tp -⚬ (Tp |*| Tp),
   ): (AbsTp[Tp] |*| AbsTp[Tp]) -⚬ Tp =
     λ { case a |*| b =>
-      a switch {
+      a either {
         case Left(a) =>
-          b switch {
+          b either {
             case Left(b) =>
               mergeAbstractTypesProper(merge, split)(a |*| b)
             case Right(b) =>
               mergeAbstractProperPreliminary(merge, split)(a |*| b)
           }
         case Right(a) =>
-          b switch {
+          b either {
             case Left(b) =>
               mergeAbstractProperPreliminary(merge, split)(b |*| a)
             case Right(b) =>
@@ -257,7 +257,7 @@ private[inference] class PropagatorImpl[
     split: Tp -⚬ (Tp |*| Tp),
   ): (AbsTp.Proper[Tp] |*| AbsTp.Proper[Tp]) -⚬ Tp =
     λ { case (aLbl |*| aReq) |*| (bLbl |*| bReq) =>
-      labels.compare(aLbl |*| bLbl) switch {
+      labels.compare(aLbl |*| bLbl) either {
         case Left(lbl) =>
           // Labels are same, i.e. both refer to the same type.
           // Propagate one (arbitrary) of them, close the other.
@@ -273,7 +273,7 @@ private[inference] class PropagatorImpl[
               returning(t1, bReq grant t2)
             }
 
-          res switch {
+          res either {
             case Left(aLbl)  => go(aLbl |*| aReq |*| bReq)
             case Right(bLbl) => go(bLbl |*| bReq |*| aReq)
           }
@@ -288,7 +288,7 @@ private[inference] class PropagatorImpl[
       // (labels.alsoShow(aLbl) |*| labels.alsoShow(bLbl)) match { case (aLbl |*| as) |*| (bLbl |*| bs) =>
       val bl1 |*| bl2 = labels.split(bLbl)
       // returning(
-      labels.compare(aLbl |*| bl1) switch {
+      labels.compare(aLbl |*| bl1) either {
         case Left(lbl) =>
           // Labels are equal, refer to the same type.
           // Close the refinement request, propagate the preliminary.
@@ -297,7 +297,7 @@ private[inference] class PropagatorImpl[
             hackyDiscard(aReq.close),
           )
         case Right(res) =>
-          res switch {
+          res either {
             case Left(aLbl) =>
               // refinement request wins over preliminary,
               // but must still propagate the preliminary immediately
@@ -322,12 +322,12 @@ private[inference] class PropagatorImpl[
     λ { case (aLbl |*| a) |*| (bLbl |*| b) =>
       // (labels.alsoShow(aLbl) |*| labels.alsoShow(bLbl)) match { case (aLbl |*| as) |*| (bLbl |*| bs) =>
       // returning(
-      labels.compare(aLbl |*| bLbl) switch {
+      labels.compare(aLbl |*| bLbl) either {
         case Left(lbl) =>
           // labels are same
           preliminary(lbl |*| merge(a |*| b))
         case Right(res) =>
-          res switch {
+          res either {
             case Left(aLbl) =>
               val al1 |*| al2 = labels.split(aLbl)
               val a1 = preliminary(al1 |*| a) // winner (`a`) must keep checking for its own label in the loser (`b`)
@@ -348,7 +348,7 @@ private[inference] class PropagatorImpl[
     split: Tp -⚬ (Tp |*| Tp),
   ): (F[Tp] |*| AbsTp[Tp]) -⚬ Tp =
     λ { case a |*| b =>
-      b switch {
+      b either {
         case Left(b) =>
           mergeConcreteAbstractProper(split)(a |*| b)
         case Right(b) =>
@@ -378,7 +378,7 @@ private[inference] class PropagatorImpl[
     merge: (Tp |*| Tp) -⚬ Tp,
   ): Tp -⚬ (Tp |*| Tp) = rec { self =>
     λ { t =>
-      unpack(t) switch {
+      unpack(t) either {
         case Left(a) =>
           splitAbstract(merge, self)(a)
         case Right(ft) =>
@@ -393,7 +393,7 @@ private[inference] class PropagatorImpl[
     split: Tp -⚬ (Tp |*| Tp),
   ): AbsTp[Tp] -⚬ (Tp |*| Tp) =
     λ { a =>
-      a switch {
+      a either {
         case Left(a)  => splitAbstractProper(merge, split)(a)
         case Right(a) => splitPreliminary(split)(a)
       }
@@ -418,9 +418,9 @@ private[inference] class PropagatorImpl[
       val t2 |*| resp2 = makeAbstractType(l2)
       returning(
         t1 |*| t2,
-        resp1.toEither switch {
+        resp1.toEither either {
           case Left(t1) =>
-            resp2.toEither switch {
+            resp2.toEither either {
               case Left(t2) =>
                 req grant merge(t1 |*| t2)
               case Right(req2) =>
@@ -431,7 +431,7 @@ private[inference] class PropagatorImpl[
                 )
             }
           case Right(req1) =>
-            resp2.toEither switch {
+            resp2.toEither either {
               case Left(t2) =>
                 val t21 |*| t22 = split(t2)
                 returning(
@@ -452,9 +452,9 @@ private[inference] class PropagatorImpl[
   private def awaitPosFst: (Done |*| Tp) -⚬ Tp =
     rec { self =>
       λ { case d |*| t =>
-        unpack(t) switch {
+        unpack(t) either {
           case Left(a) =>
-            a switch {
+            a either {
               case Left(lbl |*| req) => abstType(lbl.waitFor(d) |*| req)
               case Right(lbl |*| t)  => preliminary(lbl |*| self(d |*| t))
             }
@@ -471,7 +471,7 @@ private[inference] class PropagatorImpl[
     λ { lbl =>
       val l1 |*| l2 = labels.split(lbl)
       val res |*| resp = makeAbstractType(l1)
-        res |*| (resp.toEither switch {
+        res |*| (resp.toEither either {
           case Left(t) =>
             output(t) waitFor labels.neglect(l2)
           case Right(req) =>
@@ -490,7 +490,7 @@ private[inference] class PropagatorImpl[
       val nt2 |*| t2 = curry(preliminary)(l3)
       returning(
         t1 |*| t2,
-        resp.toEither switch {
+        resp.toEither either {
           case Left(t) =>
             // TODO: occurs check for `lbl` in `t`
             val l4_ = l4 //:>> labels.alsoDebugPrint(s => s"Link-req of $s returned as REFINED")
@@ -500,7 +500,7 @@ private[inference] class PropagatorImpl[
             val l5 |*| l6 = labels.split(l4_)
             val t2 |*| resp = makeAbstractType(l5)
             returning(
-              resp.toEither switch {
+              resp.toEither either {
                 case Left(t) =>
                   // TODO: occurs check for `lbl` in `t`
                   val l6_ = l6 //:>> labels.alsoDebugPrint(s => s"Op-req of $s returned as REFINED")
@@ -521,9 +521,9 @@ private[inference] class PropagatorImpl[
 
   override def close: Tp -⚬ Done = rec { self =>
     λ { t =>
-      unpack(t) switch {
+      unpack(t) either {
         case Left(a) =>
-          a switch {
+          a either {
             case Left(lbl |*| req) =>
               joinAll(
                 TypeOutlet.close(req.decline),
@@ -554,7 +554,7 @@ private[inference] class PropagatorImpl[
     def splitQ: Q -⚬ (Q |*| Q) =
       λ { case lbl |*| q =>
         val l1 |*| l2 = nl.labels.split(lbl)
-        val q1 |*| q2 = q switch {
+        val q1 |*| q2 = q either {
           case Left(nt) =>
             val nt1 |*| nt2 = contrapositive(self.merge)(nt) :>> distributeInversion
             injectL(nt1) |*| injectL(nt2)
@@ -574,7 +574,7 @@ private[inference] class PropagatorImpl[
 
     val outputQ: Q -⚬ Val[T] =
       λ { case lbl |*| q =>
-        q switch {
+        q either {
           case Left(nt) =>
             val t |*| t0 = abstractTypeTap(nl.lower(lbl))
             returning(t0, t supplyTo nt)
@@ -598,9 +598,9 @@ private[inference] class PropagatorImpl[
 
       override def lower: propagator.TypeOutlet -⚬ Tp = rec { self =>
         λ { t =>
-          propagator.TypeOutlet.unpack(t) switch {
+          propagator.TypeOutlet.unpack(t) either {
             case Left(lbl |*| q) =>
-              q switch {
+              q either {
                 case Left(nt) =>
                   val t1 |*| t2 = abstractLink(nl.lower(lbl))
                   returning(
@@ -623,9 +623,9 @@ private[inference] class PropagatorImpl[
 
   override def tap: Tp -⚬ TypeOutlet = rec { self =>
     λ { t =>
-      unpack(t) switch {
+      unpack(t) either {
         case Left(a) =>
-          a switch {
+          a either {
             case Left(lbl |*| req) =>
               import TypeOutlet.given
               req.decline waitFor labels.neglect(lbl)
@@ -640,7 +640,7 @@ private[inference] class PropagatorImpl[
 
   override def peek: TypeOutlet -⚬ (F[TypeOutlet] |+| TypeOutlet) =
     λ { t =>
-      TypeOutlet.unpack(t) switch {
+      TypeOutlet.unpack(t) either {
         case Left(p)   => injectR(TypeOutlet.typeParam(p))
         case Right(ft) => injectL(ft)
       }
@@ -669,7 +669,7 @@ private[inference] class PropagatorImpl[
     def split: TypeOutlet -⚬ (TypeOutlet |*| TypeOutlet) =
       rec { self =>
         λ { t =>
-          unpack(t) switch {
+          unpack(t) either {
             case Left(p) =>
               val p1 |*| p2 = splitTypeParam(p)
               typeParam(p1) |*| typeParam(p2)
@@ -687,7 +687,7 @@ private[inference] class PropagatorImpl[
 
     def awaitPosFst: (Done |*| TypeOutlet) -⚬ TypeOutlet = rec { self =>
       λ { case d |*| t =>
-        unpack(t) switch {
+        unpack(t) either {
           case Left(p) =>
             typeParam(p waitFor d)
           case Right(ft) =>

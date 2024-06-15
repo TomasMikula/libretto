@@ -49,7 +49,7 @@ class InvertStreams[DSL <: InvertDSL, Lib <: CoreLib[DSL]](
 
     def onCloseAwait[A]: (Done |*| Drain[A]) -⚬ Drain[A] = rec { self =>
       λ { case (d |*| drain) =>
-        toEither(drain) switch {
+        toEither(drain) either {
           case Left(closing) =>
             Drain.closed(needAbsorbDone(closing |*| d))
           case Right(pulling) =>

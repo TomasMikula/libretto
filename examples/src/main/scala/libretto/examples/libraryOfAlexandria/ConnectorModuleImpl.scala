@@ -62,7 +62,7 @@ object ConnectorModuleImpl extends ConnectorModule {
 
     λ { case conn |*| id =>
       val conn1 |*| rsOpt = (conn |*| id) :>> tryEffectAcquireWr(scalaFetch, Some(rsClose))
-      rsOpt switch {
+      rsOpt either {
         case Left(notFound) =>
           conn1.releaseWhen(neglect(notFound)) :>> ValSource.empty[Page]
         case Right(rs) =>
@@ -86,7 +86,7 @@ object ConnectorModuleImpl extends ConnectorModule {
             closing := rs :>> release
           case Right(pulling) =>
             pulling :=
-              nextPage(rs) switch {
+              nextPage(rs) either {
                 case Left(closed)       => ValSource.Polled.empty[Page](closed)
                 case Right(page |*| rs) => ValSource.Polled.cons(page |*| self(rs))
               }
@@ -100,7 +100,7 @@ object ConnectorModuleImpl extends ConnectorModule {
       ScalaFun.blocking { rs => rs.next().toRight(left = ()) }
 
     effectRd(nextPageScala) > λ { case rs |*| pageOpt =>
-      liftEither(pageOpt) switch {
+      liftEither(pageOpt) either {
         case Left(end)   => injectL(rs releaseWhen neglect(end))
         case Right(page) => injectR(page |*| rs)
       }

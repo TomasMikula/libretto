@@ -71,8 +71,8 @@ object Wire {
 
   def read: Wire -⚬ Val[Result] = rec { read =>
     λ { w =>
-      properOrLink(w) switch {
-        case Left(pw) =>
+      switch ( properOrLink(w) )
+        .is { case InL(pw) =>
           import Proper.*
           switch(pw)
             .is { case Zero(?(_))       => constantVal(Result.Zero) }
@@ -82,9 +82,11 @@ object Wire {
             .is { case Dup(w1 |*| w2)   => (read(w1) ** read(w2)) :>> mapVal { case (x, y) => Result.Dup(x, y) } }
             .is { case Eraser(?(_))     => constantVal(Result.Eraser) }
             .end
-        case Right(lnk) =>
+        }
+        .is { case InR(lnk) =>
           lnk :>> mapVal(Result.Link(_))
-      }
+        }
+        .end
     }
   }
 

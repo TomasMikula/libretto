@@ -87,7 +87,7 @@ class InvertLib[
         case ping |*| a =>
           (notifyNegFst >>: b) match {
             case pong |*| b =>
-              (racePair(ping |*| pong.asInput(lInvertPongPing)) switch {
+              (racePair(ping |*| pong.asInput(lInvertPongPing)) either {
                 case Left(?(_))  => injectL(a)
                 case Right(?(_)) => injectR(a)
               }, b)
@@ -99,7 +99,7 @@ class InvertLib[
       Signaling.Negative[B],
     )(f: LambdaContext ?=> Either[($[A], ??[B]), ($[A], ??[B])] => $[C]): $[C] = {
       val (aa, bb) = race[B](b)
-      aa switch {
+      aa either {
         case Left(a)  => f(Left((a, bb)))
         case Right(a) => f(Right((a, bb)))
       }

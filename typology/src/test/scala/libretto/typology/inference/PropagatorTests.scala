@@ -51,11 +51,11 @@ class PropagatorTests extends ScalatestStarterTestSuite {
 
     def isPair[V, X]: IType[V, X] -⚬ (IType[V, X] |+| (X |*| X)) =
       λ { t =>
-        unpack(t) switch {
+        unpack(t) either {
           case Right(xxx) => injectL(selfRef(xxx))
-          case Left(t) => t switch {
+          case Left(t) => t either {
             case Right(xxx) => injectL(mismatch(xxx))
-            case Left(t) => t switch {
+            case Left(t) => t either {
               case Left(x |*| y) => injectR(x |*| y)
               case Right(rc)     => injectL(recCall(rc))
             }
@@ -65,11 +65,11 @@ class PropagatorTests extends ScalatestStarterTestSuite {
 
     def isRecCall[V, X]: IType[V, X] -⚬ (IType[V, X] |+| (X |*| X)) =
       λ { t =>
-        unpack(t) switch {
+        unpack(t) either {
           case Right(xxx) => injectL(selfRef(xxx))
-          case Left(t) => t switch {
+          case Left(t) => t either {
             case Right(xxx) => injectL(mismatch(xxx))
-            case Left(t) => t switch {
+            case Left(t) => t either {
               case Left(xy)      => injectL(pair(xy))
               case Right(x |*| y) => injectR(x |*| y)
             }
@@ -83,16 +83,16 @@ class PropagatorTests extends ScalatestStarterTestSuite {
       override def split[A](f: A -⚬ (A |*| A)): IT[A] -⚬ (IT[A] |*| IT[A]) =
         rec { self =>
           λ { case t =>
-            unpack(t) switch {
+            unpack(t) either {
               case Right(lbl) =>
                 val l1 |*| l2 = dup(lbl)
                 selfRef(l1) |*| selfRef(l2)
-              case Left(t) => t switch {
+              case Left(t) => t either {
                 case Right(x |*| y) =>
                   val x1 |*| x2 = self(x)
                   val y1 |*| y2 = self(y)
                   mismatch(x1 |*| y1) |*| mismatch(x2 |*| y2)
-                case Left(t) => t switch {
+                case Left(t) => t either {
                   case Left(a |*| b)  =>
                     val a1 |*| a2 = f(a)
                     val b1 |*| b2 = f(b)
@@ -109,25 +109,25 @@ class PropagatorTests extends ScalatestStarterTestSuite {
 
       override def merge[A](f: (A |*| A) -⚬ A): (IT[A] |*| IT[A]) -⚬ IT[A] =
         λ { case a |*| b =>
-          unpack(a) switch {
+          unpack(a) either {
             case Right(xxx) => mismatch(selfRef(xxx) |*| b)
-            case Left(a) => unpack(b) switch {
+            case Left(a) => unpack(b) either {
               case Right(yyy) => mismatch(pack(injectL(a)) |*| selfRef(yyy))
-              case Left(b) => a switch {
+              case Left(b) => a either {
                 case Right(xxx) => mismatch(mismatch(xxx) |*| pack(injectL(b)))
-                case Left(a) => a switch {
+                case Left(a) => a either {
                   case Left(a1 |*| a2) =>
-                    b switch {
+                    b either {
                       case Right(yyy) => mismatch(pair(a1 |*| a2) |*| mismatch(yyy))
-                      case Left(b) => b switch {
+                      case Left(b) => b either {
                         case Left(b1 |*| b2)  => pair(f(a1 |*| b1) |*| f(a2 |*| b2))
                         case Right(bi |*| bo) => mismatch(pair(a1 |*| a2) |*| recCall(bi |*| bo))
                       }
                     }
                   case Right(ai |*| ao) =>
-                    b switch {
+                    b either {
                       case Right(yyy) => mismatch(recCall(ai |*| ao) |*| mismatch(yyy))
-                      case Left(b) => b switch {
+                      case Left(b) => b either {
                         case Left(b1 |*| b2)  => mismatch(recCall(ai |*| ao) |*| pair(b1 |*| b2))
                         case Right(bi |*| bo) => recCall(f(ai |*| bi) |*| f(ao |*| bo))
                       }
@@ -141,11 +141,11 @@ class PropagatorTests extends ScalatestStarterTestSuite {
       override def map[A, B](f: A -⚬ B): IT[A] -⚬ IT[B] =
         rec { self =>
           λ { t =>
-            unpack(t) switch {
+            unpack(t) either {
               case Right(v) => selfRef(v)
-              case Left(t) => t switch {
+              case Left(t) => t either {
                 case Right(x |*| y) => mismatch(self(x) |*| self(y))
-                case Left(t) => t switch {
+                case Left(t) => t either {
                   case Left(a |*| b)  => pair(f(a) |*| f(b))
                   case Right(a |*| b) => recCall(f(a) |*| f(b))
                 }
@@ -159,11 +159,11 @@ class PropagatorTests extends ScalatestStarterTestSuite {
       ): (X |*| IT[A]) -⚬ IT[B] =
         rec { self =>
           λ { case +(x) |*| t =>
-            unpack(t) switch {
+            unpack(t) either {
               case Right(v) => selfRef(v waitFor X.close(x))
-              case Left(t) => t switch {
+              case Left(t) => t either {
                 case Right(y |*| z) => mismatch(self(x |*| y) |*| self(x |*| z))
-                case Left(t) => t switch {
+                case Left(t) => t either {
                   case Left(a |*| b)  => pair(f(x |*| a) |*| f(x |*| b))
                   case Right(a |*| b) => recCall(f(x |*| a) |*| f(x |*| b))
                 }
@@ -178,11 +178,11 @@ class PropagatorTests extends ScalatestStarterTestSuite {
       override def output[A](f: A -⚬ Val[Type]): IT[A] -⚬ Val[Type] =
         rec { self =>
           λ {t =>
-            unpack(t) switch {
+            unpack(t) either {
               case Right(v) => v :>> mapVal { v => Type.ForbiddenSelfRef(v) }
-              case Left(t) => t switch {
+              case Left(t) => t either {
                 case Right(x |*| y) => (self(x) ** self(y)) :>> mapVal { case (x, y) => Type.Mismatch(x, y) }
-                case Left(t) => t switch {
+                case Left(t) => t either {
                   case Left(a |*| b)  => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.Pair(a, b) }
                   case Right(a |*| b) => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.RecCall(a, b) }
                 }
@@ -194,11 +194,11 @@ class PropagatorTests extends ScalatestStarterTestSuite {
       override def close[A](f: A -⚬ Done): IT[A] -⚬ Done =
         rec { self =>
           λ { t =>
-            unpack(t) switch {
+            unpack(t) either {
               case Right(v) => neglect(v)
-              case Left(t) => t switch {
+              case Left(t) => t either {
                 case Right(x |*| y) => (self(x) |*| self(y)) :>> join
-                case Left(t) => t switch {
+                case Left(t) => t either {
                   case Left(a |*| b)  => (f(a) |*| f(b)) :>> join
                   case Right(a |*| b) => (f(a) |*| f(b)) :>> join
                 }
@@ -210,11 +210,11 @@ class PropagatorTests extends ScalatestStarterTestSuite {
       override def awaitPosFst[A](f: (Done |*| A) -⚬ A): (Done |*| IT[A]) -⚬ IT[A] =
         rec { self =>
           λ { case d |*| t =>
-            unpack(t) switch {
+            unpack(t) either {
               case Right(v) => selfRef(v waitFor d)
-              case Left(t) => t switch {
+              case Left(t) => t either {
                 case Right(x |*| y) => mismatch(self(d |*| x) |*| y)
-                case Left(t) => t switch {
+                case Left(t) => t either {
                   case Left(a |*| b)  => pair(f(d |*| a) |*| b)
                   case Right(a |*| b) => recCall(f(d |*| a) |*| b)
                 }

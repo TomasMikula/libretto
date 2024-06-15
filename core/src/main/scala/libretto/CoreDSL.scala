@@ -560,7 +560,7 @@ trait CoreDSL {
         .is { case InR(b) => ... }
         .end
     """)
-    infix def switch[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
+    infix def either[C](f: LambdaContext ?=> Either[$[A], $[B]] => $[C])(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[C] =

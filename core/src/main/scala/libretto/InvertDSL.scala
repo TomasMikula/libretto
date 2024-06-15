@@ -303,7 +303,7 @@ trait InvertDSL extends ClosedDSL {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[C] =
-      (x > distributeInversionInto_|&|) switch f
+      (x > distributeInversionInto_|&|) either f
   }
 
   extension [A, B](x: ??[A |&| B]) {
@@ -312,7 +312,7 @@ trait InvertDSL extends ClosedDSL {
       pos: SourcePos,
       ctx: LambdaContext,
     ): ??[C] =
-      (x > distributeInversionInto_|&|) switch f
+      (x > distributeInversionInto_|&|) either f
   }
 
   extension [A](a: ??[-[A]]) {

@@ -133,7 +133,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
     def toLList[T, A]: SourceT[T, A] -⚬ (LList[A] |*| T) = rec { self =>
       λ { src =>
-        poll(src) switch {
+        poll(src) either {
           case Left(t) =>
             constant(LList.nil) |*| t
           case Right(a |*| tl) =>
@@ -156,7 +156,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
         val onPoll: (SourceT[T, A] |*| SourceT[T, A]) -⚬ Polled[T, A] =
           λ { case src1 |*| src2 =>
-            poll(src1) switch {
+            poll(src1) either {
               case Left(t) =>
                 poll(carryOver(t |*| src2))
               case Right(a |*| as) =>
@@ -179,7 +179,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       def go: (Ping |*| SourceT[T, Ping |*| A]) -⚬ SourceT[T, A] = rec { go =>
         val onPoll: SourceT[T, Ping |*| A] -⚬ Polled[T, A] =
           λ { as =>
-            poll(as) switch {
+            poll(as) either {
               case Left(t) =>
                 Polled.empty(t)
               case Right((p |*| a) |*| as) =>
@@ -196,7 +196,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def fold[T, A](using A: Monoid[A]): SourceT[T, A] -⚬ (A |*| T) = {
       def go: (A |*| SourceT[T, A]) -⚬ (A |*| T) = rec { go =>
         λ { case a0 |*| as =>
-          poll(as) switch {
+          poll(as) either {
             case Left(t)          => a0 |*| t
             case Right(a1 |*| as) => go((A.combine(a0 |*| a1)) |*| as)
           }
@@ -219,14 +219,14 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       require(n > 0, s"n must be positive")
 
       λ { src =>
-        poll(src) switch {
+        poll(src) either {
           case Left(t) =>
             injectL(constant(LList.nil[A]) |*| t)
           case Right(a |*| as) =>
             if (n == 1)
               injectR(LList1.singleton(a) |*| as)
             else
-              pullN(n-1)(as) switch {
+              pullN(n-1)(as) either {
                 case Left(as |*| t)     => injectL(LList.cons(a |*| as) |*| t)
                 case Right(as |*| tail) => injectR(LList1.cons1(a |*| as) |*| tail)
               }
@@ -263,7 +263,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           par(UInt31.increment, close)
         val onPoll: (UInt31 |*| SourceT[T, A]) -⚬ (UInt31 |*| Polled[T, A]) =
           λ { case n0 |*| src =>
-            poll(src) switch {
+            poll(src) either {
               case Left(t) =>
                 UInt31.increment(n0) |*| Polled.empty(t)
               case Right(a |*| as) =>
@@ -275,7 +275,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       }
 
       λ { case n |*| src =>
-        UInt31.decrement(n) switch {
+        UInt31.decrement(n) either {
           case Left(done) =>
             UInt31(0)(done) |*| empty(close(src))
           case Right(n0) =>
@@ -390,7 +390,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
       val onPoll: (Pong |*| Source[A]) -⚬ Polled[A] =
         λ { case pong |*| src =>
-          poll(src) switch {
+          poll(src) either {
             case Left(closed) =>
               Polled.empty(closed) alsoElim dsl.pong(pong)
             case Right(a |*| as) =>
@@ -411,7 +411,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
       val onPoll: Source[A] -⚬ (Ping |*| Polled[A]) =
         λ { src =>
-          poll(src) switch {
+          poll(src) either {
             case Left(closed) =>
               closed :>> notifyDoneL :>> snd(Polled.empty)
             case Right(a |*| as) =>
@@ -469,7 +469,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
         val onPoll: (X |*| Source[A]) -⚬ Polled[B] =
           λ { case +(x) |*| as =>
-            poll(as) switch {
+            poll(as) either {
               case Left(closed) =>
                 Polled.empty(joinAll(X.close(x), closed))
               case Right(a |*| as) =>
@@ -566,12 +566,12 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
       val bothPolled: Source[A |+| B] -⚬ (Polled[A] |*| Polled[B]) =
         λ { src =>
-          poll(src) switch {
+          poll(src) either {
             case Left(+(closed)) =>
               Polled.empty[A](closed) |*| Polled.empty[B](closed)
             case Right(h |*| t) =>
               val (ta |*| tb) = partition(t)
-              h switch {
+              h either {
                 case Left(a)  => Polled.cons(a |*| ta) |*| poll(tb)
                 case Right(b) => poll(ta) |*| Polled.cons(b |*| tb)
               }
@@ -600,16 +600,16 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
           def onPoll: (Polled[A] |*| Source[A]) -⚬ Polled[A] =
             λ { case as |*| bs =>
-              ((as |*| poll(bs)) :>> raceBy(notifyEither)) switch {
+              ((as |*| poll(bs)) :>> raceBy(notifyEither)) either {
                 case Left(as |*| bs) => // `as` ready
-                  as switch {
+                  as either {
                     case Left(closed) =>
                       Polled.delayClosedBy(closed |*| bs)
                     case Right(a |*| as) =>
                       Polled.cons(a |*| continue(as |*| Polled.unpoll(bs)))
                   }
                 case Right(as |*| bs) => // `bs` ready
-                  bs switch {
+                  bs either {
                     case Left(closed) =>
                       Polled.delayClosedBy(closed |*| as)
                     case Right(b |*| bs) =>
@@ -635,11 +635,11 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           λ { case downstreamActing |*| (as |*| bs) =>
             (as :>> notifyEither) match {
               case aReady |*| as =>
-                ((downstreamActing |*| aReady) :>> racePair) switch {
+                ((downstreamActing |*| aReady) :>> racePair) either {
                   case Left(?(_)) => // downstream acting
                     goDownstream(as |*| bs)
                   case Right(?(_)) => // `as` ready
-                    as switch {
+                    as either {
                       case Left(closed) =>
                         Source.delayClosedBy(closed |*| bs)
                       case Right(a |*| as) =>
@@ -766,11 +766,11 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def takeForeach[X, A]: (LList[X] |*| Source[A]) -⚬ (LList[X |*| A] |*| LList[X] |*| Done) =
       rec { takeForeach =>
         λ { case (xs |*| as) =>
-          LList.uncons(xs) switch {
+          LList.uncons(xs) either {
             case Left(*(unit)) =>
               LList.nil(unit) |*| LList.nil(unit) |*| Source.close(as)
             case Right(x |*| xs) =>
-              Source.poll(as) switch {
+              Source.poll(as) either {
                 case Left(done) =>
                   LList.nil(one) |*| LList.cons(x |*| xs) |*| done
                 case Right(a |*| as) =>
@@ -807,7 +807,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
 
       val onPoll: (Source[A] |*| Detained[T]) -⚬ SourceT.Polled[T, A] =
         λ { case as |*| t =>
-          poll(as) switch {
+          poll(as) either {
             case Left(closed)    => SourceT.Polled.empty(t releaseWhen closed)
             case Right(a |*| as) => SourceT.Polled.cons(a |*| self(as |*| t))
           }
