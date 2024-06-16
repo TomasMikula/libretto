@@ -749,7 +749,7 @@ object FreeScaletto extends Scaletto {
     ctx: LambdaContext,
     switchPos: SourcePos,
   )(
-    a: $[A],
+    scrutinee: $[A],
     cases: NonEmptyList[(SourcePos, LambdaContext ?=> $[A] => $[R])],
   ): SwitchRes[$[R]] =
     for {
@@ -763,16 +763,27 @@ object FreeScaletto extends Scaletto {
       delamN: CapturingFun[[a, b] =>> NonEmptyList[a -?> b], |*|, Tupled[|*|, $, _], A, R] <-
         lambdas.leastCommonCapture(delams)
 
-      res <- switchDelambdified(a, delamN)
-    } yield res
+      res <- switchDelambdified(delamN).emap {
+        case e: MisplacedExtractor => e
+        case e: patmat.PatternMatchError => PatternMatchError(switchPos, e)
+      }
+    } yield {
+      import CapturingFun.{Closure, NoCapture}
 
-  private def switchDelambdified[A, R](using
-    ctx: LambdaContext,
-    switchPos: SourcePos,
-  )(
-    a: $[A],
+      res match
+        case NoCapture(f) =>
+          (scrutinee map partial(f))(VarOrigin.SwitchOut(switchPos))
+        case Closure(x, f) =>
+          val xa = lambdas.Expr.zipN(x zip Tupled.atom(scrutinee))(VarOrigin.SwitchIn(switchPos))
+          lambdas.Expr.map(xa, partial(f))(VarOrigin.SwitchOut(switchPos))
+    }
+
+  private def switchDelambdified[A, R](
     cases: CapturingFun[[a, b] =>> NonEmptyList[a -?> b], |*|, Tupled[|*|, $, _], A, R],
-  ): SwitchRes[$[R]] = {
+  ): Validated[
+    MisplacedExtractor | patmat.PatternMatchError,
+    CapturingFun[-⚬, |*|, Tupled[|*|, $, _], A, R]
+  ] = {
     import CapturingFun.{Closure, NoCapture}
 
     // split each case into a (pattern, handler) pair
@@ -784,13 +795,10 @@ object FreeScaletto extends Scaletto {
         for {
           cases <- fs.traverse(extractPatternAt(Focus.id, _))
           f     <- patmat.compilePatternMatch(cases)
-                     .emap(PatternMatchError(switchPos, _))
         } yield
-          (a map partial(f))(VarOrigin.SwitchOut(switchPos))
+          NoCapture(f)
 
       case cl: Closure[arr, prod, exp, x, a, r] =>
-        val xa: $[x |*| A] =
-          lambdas.Expr.zipN(cl.captured zip Tupled.atom(a))(VarOrigin.SwitchIn(switchPos))
         for {
           cases <- cl.f.traverse(extractPatternAt(Focus.snd, _))
 
@@ -799,15 +807,14 @@ object FreeScaletto extends Scaletto {
             cases.map { case Exists.Some((p, h)) => Exists((p.inSnd[x], h)) }
 
           f <- patmat.compilePatternMatch(cases1)
-                 .emap(PatternMatchError(switchPos, _))
         } yield
-          lambdas.Expr.map(xa, partial(f))(VarOrigin.SwitchOut(switchPos))
+          Closure(cl.captured, f)
   }
 
   private def extractPatternAt[F[_], A0, B](
     pos: Focus[|*|, F],
     f: F[A0] -?> B,
-  ): SwitchRes[Exists[[X] =>> (Pattern[A0, X], F[X] -⚬ B)]] =
+  ): Validated[MisplacedExtractor, Exists[[X] =>> (Pattern[A0, X], F[X] -⚬ B)]] =
     f.takeLeadingForestAtWhile[F, A0, Extractor](
       pos,
       [X, Y] => (f: PartialFun[X, Y]) =>
@@ -818,7 +825,7 @@ object FreeScaletto extends Scaletto {
     ) match
       case Exists.Some((pattern, handler)) =>
         handler
-          .foldMapA[SwitchRes, -⚬](
+          .foldMapA[Validated[MisplacedExtractor, _], -⚬](
             [X, Y] => (f: PartialFun[X, Y]) =>
               f match {
                 case f: (X -⚬ Y) => Valid(f)
