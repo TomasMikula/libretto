@@ -1,11 +1,11 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, CoproductPartitioning, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Partitioning, SemigroupalCategory, Shuffled, Sink, Tupled, Var}
+import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, CoproductPartitioning, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Partitioning, PatternMatching, SemigroupalCategory, Shuffled, Sink, Tupled, Var}
 import libretto.lambda.Partitioning.SubFun
 import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, StaticValue, TypeEq, TypeEqK, Validated}
 import libretto.lambda.util.TypeEq.Refl
-import libretto.lambda.util.Validated.{Invalid, Valid}
+import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.util.Monad.monadEither
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
@@ -535,18 +535,18 @@ object FreeScaletto extends Scaletto {
   override val SumPartitioning =
     new CoproductPartitioning[-⚬, |*|, |+|](using ℭ, cocat, distribution)
 
-  type Var[A] = libretto.lambda.Var[VarOrigin, A]
+  private val patmat =
+    new PatternMatching[-⚬, |*|]
+
+  import patmat.{Pattern, PatternMatchError}
+
+  private type Var[A] = libretto.lambda.Var[VarOrigin, A]
 
   private type Extractor[A, B] =
     libretto.lambda.Extractor[-⚬, |*|, A, B]
 
-  private object Extractor {
-    def apply[T, P](
-      partitioning: Partitioning[-⚬, |*|, T],
-      partition:    partitioning.Partition[P],
-    ): Extractor[T, P] =
-      libretto.lambda.Extractor(partitioning, partition)
-  }
+  private val Extractor =
+    libretto.lambda.Extractor
 
   private case class ExtractorOccurrence[A, B](
     ext: Extractor[A, B],
@@ -560,8 +560,6 @@ object FreeScaletto extends Scaletto {
     Shuffled[PartialFun, |*|]
 
   private type -?>[A, B] = psh.Shuffled[A, B]
-
-  private type Pattern[A, B] = AForest[Extractor, |*|, A, B]
 
   private type LinearityViolation = Lambdas.LinearityViolation[VarOrigin, ScopeInfo]
 
@@ -736,9 +734,7 @@ object FreeScaletto extends Scaletto {
 
   private case class MisplacedExtractor(ext: ExtractorOccurrence[?, ?])
 
-  private enum PatternMatchError:
-    case IncompatibleExtractors(base: Extractor[?, ?], incompatible: NonEmptyList[Extractor[?, ?]])
-    case NonExhaustiveness(switchPos: SourcePos, ext: Extractor[?, ?]) // TODO: include context
+  private case class PatternMatchError(switchPos: SourcePos, error: patmat.PatternMatchError)
 
   private type SwitchRes[T] = Validated[LinearityViolation | MisplacedExtractor | PatternMatchError, T]
 
@@ -747,20 +743,6 @@ object FreeScaletto extends Scaletto {
       r match
         case Valid(value) => value
         case Invalid(errors) => assemblyErrors(errors)
-  }
-
-  private object SwitchRes {
-    def nonExhaustiveness[T](switchPos: SourcePos, ext: Extractor[?, ?]): SwitchRes[T] =
-      failure(PatternMatchError.NonExhaustiveness(switchPos, ext))
-
-    def misplacedExtractor[T](ext: ExtractorOccurrence[?, ?]): SwitchRes[T] =
-      failure(MisplacedExtractor(ext))
-
-    def incompatibleExtractors[T](base: Extractor[?, ?], incompatible: NonEmptyList[Extractor[?, ?]]): SwitchRes[T] =
-      failure(PatternMatchError.IncompatibleExtractors(base, incompatible))
-
-    def failure[T](e: LinearityViolation | MisplacedExtractor | PatternMatchError): SwitchRes[T] =
-      Invalid(NonEmptyList(e, Nil))
   }
 
   private def switchImpl[A, R](using
@@ -801,7 +783,8 @@ object FreeScaletto extends Scaletto {
       case NoCapture(fs) =>
         for {
           cases <- fs.traverse(extractPatternAt(Focus.id, _))
-          f     <- compilePatternMatch(switchPos, cases)
+          f     <- patmat.compilePatternMatch(cases)
+                     .emap(PatternMatchError(switchPos, _))
         } yield
           (a map partial(f))(VarOrigin.SwitchOut(switchPos))
 
@@ -815,129 +798,11 @@ object FreeScaletto extends Scaletto {
           cases1: NonEmptyList[Exists[[XY] =>> (Pattern[x |*| A, XY], XY -⚬ R)]] =
             cases.map { case Exists.Some((p, h)) => Exists((p.inSnd[x], h)) }
 
-          f <- compilePatternMatch(switchPos, cases1)
+          f <- patmat.compilePatternMatch(cases1)
+                 .emap(PatternMatchError(switchPos, _))
         } yield
           lambdas.Expr.map(xa, partial(f))(VarOrigin.SwitchOut(switchPos))
   }
-
-  private def compilePatternMatch[A, R](
-    switchPos: SourcePos,
-    cases: NonEmptyList[Exists[[Y] =>> (Pattern[A, Y], Y -⚬ R)]],
-  ): SwitchRes[A -⚬ R] =
-    withFirstScrutineeOf(cases.head.value._1)(
-      { case TypeEq(Refl()) =>
-        // the first case catches all, remaining cases ignored
-        Valid(cases.head.value._2.from[A])
-      },
-      [F[_], T] => (
-        pos: Focus[|*|, F],
-        scr: Partitioning[-⚬, |*|, T],
-        ev:  A =:= F[T],
-      ) =>
-        ev match { case TypeEq(Refl()) =>
-          scr.compileAt(
-            pos,
-            [X] => (p: scr.Partition[X]) => {
-              val ext: Extractor[T, X] =
-                Extractor(scr, p)
-              collectMatchingCases[F, T, X, R](cases.toList, pos, ext) match
-                case Valid(matchingCases) =>
-                  matchingCases match
-                    case Nil =>
-                      SwitchRes.nonExhaustiveness(switchPos, ext) // TODO: include context of this extractor
-                    case c :: cs =>
-                      compilePatternMatch[F[X], R](switchPos, NonEmptyList(c, cs))
-                case Invalid(incompatibleExtractors) =>
-                  SwitchRes.incompatibleExtractors(ext, incompatibleExtractors)
-            }
-          ).map(_.from[A])
-        }
-    )
-
-  private def withFirstScrutineeOf[A, B, R](p: Pattern[A, B])(
-    caseCatchAll: (A =:= B) => R,
-    caseProper: [F[_], T] => (Focus[|*|, F], Partitioning[-⚬, |*|, T], A =:= F[T]) => R,
-  ): R =
-    p match
-      case AForest.Node(extr, _) =>
-        caseProper[[x] =>> x, A](Focus.id, extr.partitioning, summon)
-      case AForest.Empty() =>
-        caseCatchAll(summon)
-      case AForest.Par(p1, p2) =>
-        withFirstScrutineeOfPar(p1, p2)(caseCatchAll, caseProper)
-
-  private def withFirstScrutineeOfPar[A1, A2, B1, B2, R](
-    p1: Pattern[A1, B1],
-    p2: Pattern[A2, B2],
-  )(
-    caseCatchAll: ((A1 |*| A2) =:= (B1 |*| B2)) => R,
-    caseProper: [F[_], T] => (Focus[|*|, F], Partitioning[-⚬, |*|, T], (A1 |*| A2) =:= F[T]) => R,
-  ): R =
-    withFirstScrutineeOf(p1)(
-      caseProper = { [F1[_], T1] => (f1: Focus[|*|, F1], ex1: Partitioning[-⚬, |*|, T1], ev1: A1 =:= F1[T1]) =>
-        type F[T] = F1[T] |*| A2
-        caseProper[F, T1](f1.inFst[A2], ex1, ev1.liftCo[[t] =>> t |*| A2])
-      },
-      caseCatchAll = { case TypeEq(Refl()) =>
-        withFirstScrutineeOf(p2)(
-          caseProper = { [F2[_], T2] => (f2: Focus[|*|, F2], ex2: Partitioning[-⚬, |*|, T2], ev2: A2 =:= F2[T2]) =>
-            type F[T] = A1 |*| F2[T]
-            caseProper[F, T2](f2.inSnd[A1], ex2, ev2.liftCo[[t] =>> A1 |*| t])
-          },
-          caseCatchAll = { case TypeEq(Refl()) =>
-            caseCatchAll(summon)
-          },
-        )
-      },
-    )
-
-  private def collectMatchingCases[F[_], T, U, R](
-    cases: List[Exists[[Y] =>> (Pattern[F[T], Y], Y -⚬ R)]],
-    pos: Focus[|*|, F],
-    ext: Extractor[T, U],
-  ): Validated[
-    Extractor[?, ?], // incompatible extractors at the given position
-    List[Exists[[Y] =>> (Pattern[F[U], Y], Y -⚬ R)]],
-  ] =
-    Applicative.traverseList(cases) {
-      case Exists.Some((pattern, handler)) =>
-        positExtractor(ext, pos, pattern, handler)
-    }.map(_.flatten)
-
-  private def positExtractor[T, U, F[_], Y, R](
-    ext: Extractor[T, U],
-    pos: Focus[|*|, F],
-    pattern: Pattern[F[T], Y],
-    handler: Y -⚬ R,
-  ): Validated[
-    Extractor[?, ?], // incompatible extractor at the given position in the given pattern
-    Option[Exists[[Y] =>> (Pattern[F[U], Y], Y -⚬ R)]],
-  ] =
-    pattern.focus(pos) match
-      case r: AForest.Focused.At[arr, pr, f, t, y, g] =>
-        summon[Y =:= g[y]]
-        val subpattern: Pattern[T, y] = r.target
-        subpattern match
-          case AForest.Empty() =>
-            summon[T =:= y]
-            val pattern1: Pattern[F[U], g[U]] = r.context[U]
-            val handler1: g[U] -⚬ R = ext.reinject.at(r.context.outFocus) > handler
-            Validated.Valid(Some(Exists((pattern1, handler1))))
-          case AForest.Node(ext1, subpattern1) =>
-            (ext sameAs ext1) match
-              case None =>
-                // incompatible partitionings
-                Validated.invalid(ext1)
-              case Some(None) =>
-                // non-matching partitions
-                Validated.Valid(None)
-              case Some(Some(TypeEq(Refl()))) =>
-                val pattern1 = r.context.plug(subpattern1)
-                Validated.Valid(Some(Exists((pattern1, handler))))
-          case AForest.Par(sp1, sp2) =>
-            libretto.lambda.UnhandledCase.raise(s"incompatible extractors: $ext vs ($sp1, $sp2)")
-      case AForest.Focused.IntoNode(fo, fi, node) =>
-        Validated.invalid(node.value)
 
   private def extractPatternAt[F[_], A0, B](
     pos: Focus[|*|, F],
@@ -957,7 +822,7 @@ object FreeScaletto extends Scaletto {
             [X, Y] => (f: PartialFun[X, Y]) =>
               f match {
                 case f: (X -⚬ Y) => Valid(f)
-                case f: ExtractorOccurrence[x, y] => SwitchRes.misplacedExtractor(f)
+                case f: ExtractorOccurrence[x, y] => invalid(MisplacedExtractor(f))
               }
           )
           .map(h => Exists((pattern, h)))
@@ -1208,15 +1073,19 @@ object FreeScaletto extends Scaletto {
       }
 
     private def patmatMsg(e: PatternMatchError): NonEmptyList[String] =
-      e match
-        case PatternMatchError.IncompatibleExtractors(base, incompatibles) =>
+      import patmat.PatternMatchError.{IncompatibleExtractors, NonExhaustiveness}
+
+      val PatternMatchError(switchPos, error) = e
+
+      error match
+        case IncompatibleExtractors(base, incompatibles) =>
           "Use of incompatible extractors:" ::
             s"    ${base.partition} (from ${base.partitioning})" ::
             s"  is incompatible with" ::
             incompatibles.map { ext =>
               s"  - ${ext.partition} (from ${ext.partitioning})"
             }
-        case PatternMatchError.NonExhaustiveness(switchPos, ext) =>
+        case NonExhaustiveness(ext) =>
           NonEmptyList.of(
             "Non-exhaustive pattern match. It would fail on",
             s"  ${ext.show} (at ${switchPos.filename}:${switchPos.line})"

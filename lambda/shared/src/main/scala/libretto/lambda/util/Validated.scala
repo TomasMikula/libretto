@@ -9,6 +9,11 @@ enum Validated[+E, A] {
       case Valid(a)    => Valid(f(a))
       case Invalid(es) => Invalid(es)
 
+  def emap[F](f: E => F): Validated[F, A] =
+    this match
+      case Valid(a)    => Valid(a)
+      case Invalid(es) => Invalid(es.map(f))
+
   infix def zip[E1 >: E, B](that: Validated[E1, B]): Validated[E1, (A, B)] =
     (this, that) match
       case (Valid(a)   , Valid(b)   ) => Valid((a, b))
