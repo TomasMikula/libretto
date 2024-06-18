@@ -5,7 +5,7 @@ import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 
 class PatternMatching[-⚬[_, _], |*|[_, _]](using
-  SemigroupalCategory[-⚬, |*|],
+  SymmetricSemigroupalCategory[-⚬, |*|],
   BiInjective[|*|],
 ) {
   import libretto.lambda.Extractor
@@ -142,4 +142,65 @@ class PatternMatching[-⚬[_, _], |*|[_, _]](using
             libretto.lambda.UnhandledCase.raise(s"incompatible extractors: $ext vs ($sp1, $sp2)")
       case AForest.Focused.IntoNode(fo, fi, node) =>
         Validated.invalid(node.value)
+
+  /** For functions represented as [[Shuffled]] of some arrows `->>`, this method itself
+   * detects the pattern part of each function (as the initial tree of [[Extractor]]s)
+   * and subsequently compiles them as a pattern matching.
+   * This may be more convenient than [[compilePatternMatch]], where the separation between
+   * pattern and handler is provided by the caller.
+   */
+  def detectPatternsAndCompile[->>[_, _], Expr[_], A, R, E >: PatternMatchError](using
+    sh: Shuffled[->>, |*|],
+  )(
+    cases: CapturingFun[[a, b] =>> NonEmptyList[sh.Shuffled[a, b]], |*|, Expr, A, R],
+  )(
+    isExtractor: [X, Y] => (X ->> Y) => Option[Extractor[X, Y]],
+    compile: [X, Y] => (X ->> Y) => Validated[E, X -⚬ Y],
+  ): Validated[
+    E,
+    CapturingFun[-⚬, |*|, Expr, A, R]
+  ] = {
+    import CapturingFun.{Closure, NoCapture}
+
+    // split each case into a (pattern, handler) pair
+    // and compile the resulting list of pairs
+    // (after extending the pattern to cover any captured expressions)
+
+    cases match
+      case NoCapture(fs) =>
+        for {
+          cases <- fs.traverse(extractPatternAt(Focus.id, _, isExtractor, compile))
+          f     <- compilePatternMatch(cases)
+        } yield
+          NoCapture(f)
+
+      case cl: Closure[arr, prod, exp, x, a, r] =>
+        for {
+          cases <- cl.f.traverse(extractPatternAt(Focus.snd, _, isExtractor, compile))
+
+          // extend the patterns to the captured expressions
+          cases1: NonEmptyList[Exists[[XY] =>> (Pattern[x |*| A, XY], XY -⚬ R)]] =
+            cases.map { case Exists.Some((p, h)) => Exists((p.inSnd[x], h)) }
+
+          f <- compilePatternMatch(cases1)
+        } yield
+          Closure(cl.captured, f)
+  }
+
+  private def extractPatternAt[->>[_, _], F[_], A0, B, E >: PatternMatchError](using
+    sh: Shuffled[->>, |*|],
+  )(
+    pos: Focus[|*|, F],
+    f: sh.Shuffled[F[A0], B],
+    isExtractor: [X, Y] => (X ->> Y) => Option[Extractor[X, Y]],
+    compile: [X, Y] => (X ->> Y) => Validated[E, X -⚬ Y],
+  ): Validated[E, Exists[[X] =>> (Pattern[A0, X], F[X] -⚬ B)]] =
+    f.takeLeadingForestAtWhile[F, A0, Extractor](
+      pos,
+      isExtractor,
+    ) match
+      case Exists.Some((pattern, handler)) =>
+        handler
+          .foldMapA[Validated[E, _], -⚬](compile)
+          .map(h => Exists((pattern, h)))
 }

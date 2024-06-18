@@ -729,7 +729,7 @@ object FreeScaletto extends Scaletto {
       case Nil =>
         throw IllegalArgumentException("switch must have at least 1 case")
       case c :: cs =>
-        switchImpl(using ctx, switchPos)(a, NonEmptyList(c, cs))
+        switchImpl(switchPos, a, NonEmptyList(c, cs))
           .getOrReportErrors
 
   private case class MisplacedExtractor(ext: ExtractorOccurrence[?, ?])
@@ -747,8 +747,8 @@ object FreeScaletto extends Scaletto {
 
   private def switchImpl[A, R](using
     ctx: LambdaContext,
-    switchPos: SourcePos,
   )(
+    switchPos: SourcePos,
     scrutinee: $[A],
     cases: NonEmptyList[(SourcePos, LambdaContext ?=> $[A] => $[R])],
   ): SwitchRes[$[R]] =
@@ -783,56 +783,23 @@ object FreeScaletto extends Scaletto {
   ): Validated[
     MisplacedExtractor | patmat.PatternMatchError,
     CapturingFun[-⚬, |*|, Tupled[|*|, $, _], A, R]
-  ] = {
-    import CapturingFun.{Closure, NoCapture}
-
-    // split each case into a (pattern, handler) pair
-    // and compile the resulting list of pairs
-    // (after extending the pattern to cover any captured expressions)
-
-    cases match
-      case NoCapture(fs) =>
-        for {
-          cases <- fs.traverse(extractPatternAt(Focus.id, _))
-          f     <- patmat.compilePatternMatch(cases)
-        } yield
-          NoCapture(f)
-
-      case cl: Closure[arr, prod, exp, x, a, r] =>
-        for {
-          cases <- cl.f.traverse(extractPatternAt(Focus.snd, _))
-
-          // extend the patterns to the captured expressions
-          cases1: NonEmptyList[Exists[[XY] =>> (Pattern[x |*| A, XY], XY -⚬ R)]] =
-            cases.map { case Exists.Some((p, h)) => Exists((p.inSnd[x], h)) }
-
-          f <- patmat.compilePatternMatch(cases1)
-        } yield
-          Closure(cl.captured, f)
-  }
-
-  private def extractPatternAt[F[_], A0, B](
-    pos: Focus[|*|, F],
-    f: F[A0] -?> B,
-  ): Validated[MisplacedExtractor, Exists[[X] =>> (Pattern[A0, X], F[X] -⚬ B)]] =
-    f.takeLeadingForestAtWhile[F, A0, Extractor](
-      pos,
-      [X, Y] => (f: PartialFun[X, Y]) =>
-        f match {
-          case eo: ExtractorOccurrence[X, Y] => Some(eo.ext)
-          case _ => None
-        }
-    ) match
-      case Exists.Some((pattern, handler)) =>
-        handler
-          .foldMapA[Validated[MisplacedExtractor, _], -⚬](
-            [X, Y] => (f: PartialFun[X, Y]) =>
-              f match {
-                case f: (X -⚬ Y) => Valid(f)
-                case f: ExtractorOccurrence[x, y] => invalid(MisplacedExtractor(f))
-              }
-          )
-          .map(h => Exists((pattern, h)))
+  ] =
+    patmat.detectPatternsAndCompile[PartialFun, Tupled[|*|, $, _], A, R, MisplacedExtractor | patmat.PatternMatchError](using psh)(
+      cases,
+    )(
+      isExtractor =
+        [X, Y] => (f: PartialFun[X, Y]) =>
+          f match {
+            case eo: ExtractorOccurrence[X, Y] => Some(eo.ext)
+            case _ => None
+          },
+      compile =
+        [X, Y] => (f: PartialFun[X, Y]) =>
+          f match {
+            case f: (X -⚬ Y) => Valid(f)
+            case f: ExtractorOccurrence[x, y] => invalid(MisplacedExtractor(f))
+          },
+    )
 
   override val λ = new LambdaOpsWithClosures {
     override def apply[A, B](using pos: SourcePos)(f: lambdas.Context ?=> $[A] => $[B]): A -⚬ B =
