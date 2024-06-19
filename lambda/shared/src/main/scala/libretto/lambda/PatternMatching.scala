@@ -4,17 +4,17 @@ import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, Typ
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 
-class PatternMatching[-⚬[_, _], |*|[_, _]](using
-  SymmetricSemigroupalCategory[-⚬, |*|],
-  BiInjective[|*|],
+class PatternMatching[->[_, _], **[_, _]](using
+  SymmetricSemigroupalCategory[->, **],
+  BiInjective[**],
 ) {
   import libretto.lambda.Extractor
 
   type Extractor[A, B] =
-    libretto.lambda.Extractor[-⚬, |*|, A, B]
+    libretto.lambda.Extractor[->, **, A, B]
 
   type Pattern[A, B] =
-    AForest[Extractor, |*|, A, B]
+    AForest[Extractor, **, A, B]
 
   enum PatternMatchError:
     case IncompatibleExtractors(base: Extractor[?, ?], incompatible: NonEmptyList[Extractor[?, ?]])
@@ -23,10 +23,10 @@ class PatternMatching[-⚬[_, _], |*|[_, _]](using
   import PatternMatchError.*
 
   def compilePatternMatch[A, R](
-    cases: NonEmptyList[Exists[[Y] =>> (Pattern[A, Y], Y -⚬ R)]],
+    cases: NonEmptyList[Exists[[Y] =>> (Pattern[A, Y], Y -> R)]],
   ): Validated[
     PatternMatchError,
-    A -⚬ R
+    A -> R
   ] =
     withFirstScrutineeOf(cases.head.value._1)(
       { case TypeEq(Refl()) =>
@@ -34,8 +34,8 @@ class PatternMatching[-⚬[_, _], |*|[_, _]](using
         Valid(cases.head.value._2.from[A])
       },
       [F[_], T] => (
-        pos: Focus[|*|, F],
-        scr: Partitioning[-⚬, |*|, T],
+        pos: Focus[**, F],
+        scr: Partitioning[->, **, T],
         ev:  A =:= F[T],
       ) =>
         ev match { case TypeEq(Refl()) =>
@@ -60,7 +60,7 @@ class PatternMatching[-⚬[_, _], |*|[_, _]](using
 
   private def withFirstScrutineeOf[A, B, R](p: Pattern[A, B])(
     caseCatchAll: (A =:= B) => R,
-    caseProper: [F[_], T] => (Focus[|*|, F], Partitioning[-⚬, |*|, T], A =:= F[T]) => R,
+    caseProper: [F[_], T] => (Focus[**, F], Partitioning[->, **, T], A =:= F[T]) => R,
   ): R =
     p match
       case AForest.Node(extr, _) =>
@@ -74,19 +74,19 @@ class PatternMatching[-⚬[_, _], |*|[_, _]](using
     p1: Pattern[A1, B1],
     p2: Pattern[A2, B2],
   )(
-    caseCatchAll: ((A1 |*| A2) =:= (B1 |*| B2)) => R,
-    caseProper: [F[_], T] => (Focus[|*|, F], Partitioning[-⚬, |*|, T], (A1 |*| A2) =:= F[T]) => R,
+    caseCatchAll: ((A1 ** A2) =:= (B1 ** B2)) => R,
+    caseProper: [F[_], T] => (Focus[**, F], Partitioning[->, **, T], (A1 ** A2) =:= F[T]) => R,
   ): R =
     withFirstScrutineeOf(p1)(
-      caseProper = { [F1[_], T1] => (f1: Focus[|*|, F1], ex1: Partitioning[-⚬, |*|, T1], ev1: A1 =:= F1[T1]) =>
-        type F[T] = F1[T] |*| A2
-        caseProper[F, T1](f1.inFst[A2], ex1, ev1.liftCo[[t] =>> t |*| A2])
+      caseProper = { [F1[_], T1] => (f1: Focus[**, F1], ex1: Partitioning[->, **, T1], ev1: A1 =:= F1[T1]) =>
+        type F[T] = F1[T] ** A2
+        caseProper[F, T1](f1.inFst[A2], ex1, ev1.liftCo[[t] =>> t ** A2])
       },
       caseCatchAll = { case TypeEq(Refl()) =>
         withFirstScrutineeOf(p2)(
-          caseProper = { [F2[_], T2] => (f2: Focus[|*|, F2], ex2: Partitioning[-⚬, |*|, T2], ev2: A2 =:= F2[T2]) =>
-            type F[T] = A1 |*| F2[T]
-            caseProper[F, T2](f2.inSnd[A1], ex2, ev2.liftCo[[t] =>> A1 |*| t])
+          caseProper = { [F2[_], T2] => (f2: Focus[**, F2], ex2: Partitioning[->, **, T2], ev2: A2 =:= F2[T2]) =>
+            type F[T] = A1 ** F2[T]
+            caseProper[F, T2](f2.inSnd[A1], ex2, ev2.liftCo[[t] =>> A1 ** t])
           },
           caseCatchAll = { case TypeEq(Refl()) =>
             caseCatchAll(summon)
@@ -96,12 +96,12 @@ class PatternMatching[-⚬[_, _], |*|[_, _]](using
     )
 
   private def collectMatchingCases[F[_], T, U, R](
-    cases: List[Exists[[Y] =>> (Pattern[F[T], Y], Y -⚬ R)]],
-    pos: Focus[|*|, F],
+    cases: List[Exists[[Y] =>> (Pattern[F[T], Y], Y -> R)]],
+    pos: Focus[**, F],
     ext: Extractor[T, U],
   ): Validated[
     Extractor[?, ?], // incompatible extractors at the given position
-    List[Exists[[Y] =>> (Pattern[F[U], Y], Y -⚬ R)]],
+    List[Exists[[Y] =>> (Pattern[F[U], Y], Y -> R)]],
   ] =
     Applicative.traverseList(cases) {
       case Exists.Some((pattern, handler)) =>
@@ -110,12 +110,12 @@ class PatternMatching[-⚬[_, _], |*|[_, _]](using
 
   private def positExtractor[T, U, F[_], Y, R](
     ext: Extractor[T, U],
-    pos: Focus[|*|, F],
+    pos: Focus[**, F],
     pattern: Pattern[F[T], Y],
-    handler: Y -⚬ R,
+    handler: Y -> R,
   ): Validated[
     Extractor[?, ?], // incompatible extractor at the given position in the given pattern
-    Option[Exists[[Y] =>> (Pattern[F[U], Y], Y -⚬ R)]],
+    Option[Exists[[Y] =>> (Pattern[F[U], Y], Y -> R)]],
   ] =
     pattern.focus(pos) match
       case r: AForest.Focused.At[arr, pr, f, t, y, g] =>
@@ -125,7 +125,7 @@ class PatternMatching[-⚬[_, _], |*|[_, _]](using
           case AForest.Empty() =>
             summon[T =:= y]
             val pattern1: Pattern[F[U], g[U]] = r.context[U]
-            val handler1: g[U] -⚬ R = ext.reinject.at(r.context.outFocus) > handler
+            val handler1: g[U] -> R = ext.reinject.at(r.context.outFocus) > handler
             Validated.Valid(Some(Exists((pattern1, handler1))))
           case AForest.Node(ext1, subpattern1) =>
             (ext sameAs ext1) match
@@ -150,15 +150,15 @@ class PatternMatching[-⚬[_, _], |*|[_, _]](using
    * pattern and handler is provided by the caller.
    */
   def detectPatternsAndCompile[->>[_, _], Expr[_], A, R, E >: PatternMatchError](using
-    sh: Shuffled[->>, |*|],
+    sh: Shuffled[->>, **],
   )(
-    cases: CapturingFun[[a, b] =>> NonEmptyList[sh.Shuffled[a, b]], |*|, Expr, A, R],
+    cases: CapturingFun[[a, b] =>> NonEmptyList[sh.Shuffled[a, b]], **, Expr, A, R],
   )(
     isExtractor: [X, Y] => (X ->> Y) => Option[Extractor[X, Y]],
-    compile: [X, Y] => (X ->> Y) => Validated[E, X -⚬ Y],
+    compile: [X, Y] => (X ->> Y) => Validated[E, X -> Y],
   ): Validated[
     E,
-    CapturingFun[-⚬, |*|, Expr, A, R]
+    CapturingFun[->, **, Expr, A, R]
   ] = {
     import CapturingFun.{Closure, NoCapture}
 
@@ -179,7 +179,7 @@ class PatternMatching[-⚬[_, _], |*|[_, _]](using
           cases <- cl.f.traverse(extractPatternAt(Focus.snd, _, isExtractor, compile))
 
           // extend the patterns to the captured expressions
-          cases1: NonEmptyList[Exists[[XY] =>> (Pattern[x |*| A, XY], XY -⚬ R)]] =
+          cases1: NonEmptyList[Exists[[XY] =>> (Pattern[x ** A, XY], XY -> R)]] =
             cases.map { case Exists.Some((p, h)) => Exists((p.inSnd[x], h)) }
 
           f <- compilePatternMatch(cases1)
@@ -188,19 +188,19 @@ class PatternMatching[-⚬[_, _], |*|[_, _]](using
   }
 
   private def extractPatternAt[->>[_, _], F[_], A0, B, E >: PatternMatchError](using
-    sh: Shuffled[->>, |*|],
+    sh: Shuffled[->>, **],
   )(
-    pos: Focus[|*|, F],
+    pos: Focus[**, F],
     f: sh.Shuffled[F[A0], B],
     isExtractor: [X, Y] => (X ->> Y) => Option[Extractor[X, Y]],
-    compile: [X, Y] => (X ->> Y) => Validated[E, X -⚬ Y],
-  ): Validated[E, Exists[[X] =>> (Pattern[A0, X], F[X] -⚬ B)]] =
+    compile: [X, Y] => (X ->> Y) => Validated[E, X -> Y],
+  ): Validated[E, Exists[[X] =>> (Pattern[A0, X], F[X] -> B)]] =
     f.takeLeadingForestAtWhile[F, A0, Extractor](
       pos,
       isExtractor,
     ) match
       case Exists.Some((pattern, handler)) =>
         handler
-          .foldMapA[Validated[E, _], -⚬](compile)
+          .foldMapA[Validated[E, _], ->](compile)
           .map(h => Exists((pattern, h)))
 }
