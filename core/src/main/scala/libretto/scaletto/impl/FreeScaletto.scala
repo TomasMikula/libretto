@@ -710,8 +710,11 @@ object FreeScaletto extends Scaletto {
         partial(FreeScaletto.this.distributeR)
     }
 
-    lambdas.switch(
+    CapturingFun.compileSink(
       cases,
+    )(
+      lambdas.compoundDiscarder,
+      lambdas.exprUniter,
     ).map {
       case CapturingFun.NoCapture(f)  => lambdas.Expr.map(a, f)(VarOrigin.FunAppRes(pos))
       case CapturingFun.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)
@@ -825,7 +828,7 @@ object FreeScaletto extends Scaletto {
 
       // make each case capture the least common superset of captured expressions
       delamN: CapturingFun[[a, b] =>> NonEmptyList[a -?> b], |*|, Tupled[|*|, $, _], A, R] <-
-        lambdas.leastCommonCapture(delams)
+        CapturingFun.leastCommonCapture(delams)(lambdas.compoundDiscarder, lambdas.exprUniter)
 
       res <-
         patmat.detectPatternsAndCompile[PartialFun, Tupled[|*|, $, _], A, R, MisplacedExtractor | patmat.PatternMatchError](using psh)(

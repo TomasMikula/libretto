@@ -135,9 +135,9 @@ class Workflows[Action[_, _]] {
       val fb = lambdas.delambdifyNested((), VarOrigin.Right(pos), ctx ?=> (b: Expr[B]) => f(Right(b)))
       (fa zip fb)
         .flatMap { case (fa, fb) =>
-          lambdas.switch[++, A ++ B, C](
-            cases = Sink(fa) <+> Sink(fb)
-          )
+          CapturingFun.compileSink(
+            Sink(fa) <+> Sink(fb)
+          )(lambdas.compoundDiscarder, lambdas.exprUniter)
         }
         .map {
           case CapturingFun.NoCapture(g) => g(expr)

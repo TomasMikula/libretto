@@ -135,7 +135,7 @@ object Fun {
       val fb = lambdas.delambdifyNested((), b, ctx ?=> (b: $[B]) => f(Right(b)))
       (fa zip fb)
         .flatMap { case (fa, fb) =>
-          lambdas.switch(Sink(fa) <+> Sink(fb))
+          CapturingFun.compileSink(Sink(fa) <+> Sink(fb))(lambdas.compoundDiscarder, lambdas.exprUniter)
         }
         .map {
           case CapturingFun.NoCapture(f)  => f(ab)

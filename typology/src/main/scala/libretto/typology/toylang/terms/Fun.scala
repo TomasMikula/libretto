@@ -188,9 +188,9 @@ object Fun {
 
       (fa zip fb)
         .flatMap { case (fa, fb) =>
-          lambdas.switch[Either, Either[A, B], R](
+          CapturingFun.compileSink(
             Sink(fa) <+> Sink(fb),
-          )
+          )(lambdas.compoundDiscarder, lambdas.exprUniter)
         }
         .map {
           case NoCapture(f) => f(x)

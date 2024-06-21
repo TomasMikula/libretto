@@ -135,60 +135,29 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
   ] =
     delambdify(varName, f)(using Context.nested(nestedCtxInfo, parent = parent))
 
-  def switch[++[_, _], A, B](
-    cases: Sink[Delambdified, ++, A, B],
-  )(using
-    CocartesianSemigroupalCategory[->, ++],
-    Distribution[->, **, ++],
-    Context,
-  ): Validated[
-    LinearityViolation,
-    Delambdified[A, B]
-  ]
+  def compoundDiscarder(using
+    ctx: Context,
+    cat: SemigroupalCategory[->, **],
+  ): [X] => Tupled[Expr, X] => Validated[LinearityViolation.UnusedInBranch[V, C], [Y] => Unit => (X ** Y) -> Y] =
+    getDiscarder
 
-  protected def switchImpl[++[_, _], A, B](
-    cases: Sink[Delambdified, ++, A, B],
-  )(using
+  def exprUniter(using
+    Context,
     BiInjective[**],
     SymmetricSemigroupalCategory[->, **],
-    CocartesianSemigroupalCategory[->, ++],
-    Distribution[->, **, ++],
-    Context,
-  ): Validated[
-    LinearityViolation,
-    Delambdified[A, B]
+  ): [A, B] => (
+    Tupled[Expr, A],
+    Tupled[Expr, B],
+  ) => Validated[
+    LinearityViolation.UnusedInBranch[V, C],
+    Exists[[P] =>> (Tupled[Expr, P], P -> A, P -> B)]
   ] =
-    CapturingFun.compileSink(cases)(getDiscarder, [X, Y] => union(_, _))
-
-  def leastCommonCapture[A, B](
-    f: CapturingFun[->, **, Tupled[Expr, _], A, B],
-    g: CapturingFun[->, **, Tupled[Expr, _], A, B],
-  )(using
-    ctx: Context,
-    ssc: SymmetricSemigroupalCategory[->, **],
-    inj: BiInjective[**],
-  ): Validated[
-    LinearityViolation,
-    CapturingFun[[a, b] =>> (a -> b, a -> b), **, Tupled[Expr, _], A, B]
-  ] =
-    CapturingFun.leastCommonCapture(f, g)(getDiscarder, [X, Y] => union(_, _))
-
-  def leastCommonCapture[A, B](
-    fs: NonEmptyList[CapturingFun[->, **, Tupled[Expr, _], A, B]],
-  )(using
-    ctx: Context,
-    ssc: SymmetricSemigroupalCategory[->, **],
-    inj: BiInjective[**],
-  ): Validated[
-    LinearityViolation,
-    CapturingFun[[a, b] =>> NonEmptyList[a -> b], **, Tupled[Expr, _], A, B]
-  ] =
-    CapturingFun.leastCommonCapture(fs)(getDiscarder, [X, Y] => union(_, _))
+    [A, B] => union(_, _)
 
   private def getDiscarder(using
     ctx: Context,
     cat: SemigroupalCategory[->, **],
-  ): [X] => Tupled[Expr, X] => Validated[LinearityViolation, [Y] => Unit => (X ** Y) -> Y] =
+  ): [X] => Tupled[Expr, X] => Validated[LinearityViolation.UnusedInBranch[V, C], [Y] => Unit => (X ** Y) -> Y] =
     [X] => (fx: Tupled[Expr, X]) => discarderOf(fx) match {
       case Right(discardFst) => Valid(discardFst)
       case Left(unusedVars)  => invalid(LinearityViolation.UnusedInBranch(unusedVars))
@@ -220,10 +189,10 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
     BiInjective[**],
     SymmetricSemigroupalCategory[->, **],
   ): Validated[
-    LinearityViolation,
+    LinearityViolation.UnusedInBranch[V, C],
     Exists[[P] =>> (Tupled[Expr, P], P -> A, P -> B)]
   ] = {
-    type LinCheck[A] = Validated[LinearityViolation, A]
+    type LinCheck[A] = Validated[LinearityViolation.UnusedInBranch[V, C], A]
     type LinChecked[X, Y] = LinCheck[X -> Y]
     given shuffled: Shuffled[LinChecked, **] = Shuffled[LinChecked, **]
     given Shuffled.With[->, **, shuffled.shuffle.type] = Shuffled[->, **](shuffled.shuffle)
@@ -271,7 +240,7 @@ object Lambdas {
     def unusedVar[V, C, A](v: Var[V, A], exitedCtx: C): LinearityViolation[V, C] =
       Unused(v, exitedCtx)
 
-    def unusedInBranch[V, C, A](v: Var[V, A]): LinearityViolation[V, C] =
+    def unusedInBranch[V, C, A](v: Var[V, A]): LinearityViolation.UnusedInBranch[V, C] =
       UnusedInBranch(Var.Set(v))
   }
 }

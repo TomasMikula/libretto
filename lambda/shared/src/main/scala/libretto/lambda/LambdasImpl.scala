@@ -469,15 +469,6 @@ class LambdasImpl[->[_, _], **[_, _], V, C](
         }
   }
 
-  override def switch[<+>[_, _], A, B](
-    cases: Sink[Delambdified, <+>, A, B],
-  )(using
-    CocartesianSemigroupalCategory[->, <+>],
-    Distribution[->, **, <+>],
-    Context,
-  ): Validated[LinearityViolation, Delambdified[A, B]] =
-    switchImpl(cases)
-
   private def bug(msg: String): Nothing =
     throw new AssertionError(msg)
 
