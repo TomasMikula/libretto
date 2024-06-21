@@ -131,8 +131,8 @@ object Fun {
     ): $[C] = {
       val a = VarDesc("Variable bound by Left pattern", pos)
       val b = VarDesc("Variable bound by Right pattern", pos)
-      val fa = lambdas.delambdifyNested((), a, ctx ?=> (a: $[A]) => f(Left(a)))
-      val fb = lambdas.delambdifyNested((), b, ctx ?=> (b: $[B]) => f(Right(b)))
+      val fa = lambdas.delambdifyFoldNested((), a, ctx ?=> (a: $[A]) => f(Left(a)))
+      val fb = lambdas.delambdifyFoldNested((), b, ctx ?=> (b: $[B]) => f(Right(b)))
       (fa zip fb)
         .flatMap { case (fa, fb) =>
           CapturingFun.compileSink(Sink(fa) <+> Sink(fb))(lambdas.compoundDiscarder, lambdas.exprUniter)
@@ -157,7 +157,7 @@ object Fun {
     def apply[A, B](using pos: SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
     ): Fun[A, B] = {
-      lambdas.delambdifyTopLevel((), VarDesc("The variable bound by lambda expression", pos), f) match
+      lambdas.delambdifyFoldTopLevel((), VarDesc("The variable bound by lambda expression", pos), f) match
         case Valid(CapturingFun.NoCapture(f)) =>
           f
         case Valid(CapturingFun.Closure(captured, f)) =>

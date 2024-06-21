@@ -10,6 +10,7 @@ import libretto.lambda.util.Monad.monadEither
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
+import libretto.lambda.SymmetricSemigroupalCategory
 
 object FreeScaletto extends Scaletto {
   sealed trait -⚬[A, B]
@@ -563,20 +564,18 @@ object FreeScaletto extends Scaletto {
 
   private type LinearityViolation = Lambdas.LinearityViolation[VarOrigin, ScopeInfo]
 
-  private def partial[A, B](f: A -⚬ B): (A -?> B) =
-    psh.lift(f)
+  private def total[A, B](f: PartialFun[A, B]): TotalRes[A -⚬ B] =
+    f match
+      case g: (A -⚬ B) =>
+        TotalRes.success(g)
+      case p: ExtractorOccurrence[A, B] =>
+        p.ext.isTotal match
+          case Some(g) => TotalRes.success(g)
+          case None => libretto.lambda.UnhandledCase.raise(s"Non-exhaustive matcher $p")
 
-  private def total[A, B](f: A -?> B): TotalRes[A -⚬ B] =
+  private def foldTotal[A, B](f: A -?> B): TotalRes[A -⚬ B] =
     f.foldMapA(
-      [X, Y] => (g: PartialFun[X, Y]) => {
-        g match
-          case g: (X -⚬ Y) =>
-            TotalRes.success(g)
-          case p: ExtractorOccurrence[X, Y] =>
-            p.ext.isTotal match
-              case Some(g) => TotalRes.success(g)
-              case None => libretto.lambda.UnhandledCase.raise(s"Non-exhaustive matcher $p")
-      }
+      [X, Y] => (g: PartialFun[X, Y]) => total(g)
     )
 
   /** The result of extracting a total function from a partial one. */
@@ -586,8 +585,8 @@ object FreeScaletto extends Scaletto {
       Valid(value)
   }
 
-  private val lambdas: Lambdas[-?>, |*|, VarOrigin, ScopeInfo] =
-    Lambdas[-?>, |*|, VarOrigin, ScopeInfo]()
+  private val lambdas: Lambdas[PartialFun, |*|, VarOrigin, ScopeInfo] { val shuffled: psh.type } =
+    Lambdas.using(psh)[VarOrigin, ScopeInfo]()
 
   override opaque type $[A] = lambdas.Expr[A]
 
@@ -595,12 +594,12 @@ object FreeScaletto extends Scaletto {
 
   override val `$`: FunExprOps = new FunExprOps {
     override def one(using pos: SourcePos, ctx: lambdas.Context): $[One] =
-      lambdas.Expr.const([x] => (_: Unit) => partial(introFst[x]))(VarOrigin.OneIntro(pos))
+      lambdas.Expr.const([x] => (_: Unit) => introFst[x])(VarOrigin.OneIntro(pos))
 
     override def map[A, B](a: $[A])(f: A -⚬ B)(pos: SourcePos)(using
       lambdas.Context,
     ): $[B] =
-      (a map partial(f))(VarOrigin.FunAppRes(pos))
+      (a map f)(VarOrigin.FunAppRes(pos))
 
     override def zip[A, B](a: $[A], b: $[B])(
       pos: SourcePos,
@@ -620,7 +619,7 @@ object FreeScaletto extends Scaletto {
       )
 
     override def matchAgainst[A, B](a: $[A], extractor: Extractor[A, B])(pos: SourcePos)(using LambdaContext): $[B] =
-      lambdas.Expr.map(a, psh.lift(ExtractorOccurrence(extractor, pos)))(VarOrigin.ExtractorRes(pos))
+      lambdas.Expr.map(a, ExtractorOccurrence(extractor, pos))(VarOrigin.ExtractorRes(pos))
 
     override def app[A, B](f: $[A =⚬ B], a: $[A])(
       pos: SourcePos,
@@ -638,8 +637,8 @@ object FreeScaletto extends Scaletto {
       lambdas.Context,
     ): $[A] = {
       lambdas.Context.registerNonLinearOps(a)(
-        split.map(partial),
-        discard.map(f => [B] => (_: Unit) => partial(elimFst[A, B](f))),
+        split,
+        discard.map(f => [B] => (_: Unit) => elimFst[A, B](f)),
       )
       a
     }
@@ -681,22 +680,39 @@ object FreeScaletto extends Scaletto {
       )
   }
 
+  private given SymmetricSemigroupalCategory[PartialFun, |*|] with {
+    override def id[A]: PartialFun[A, A] = FreeScaletto.id
+    override def assocLR[A, B, C]: PartialFun[(A |*| B) |*| C, A |*| (B |*| C)] = FreeScaletto.this.assocLR
+    override def assocRL[A, B, C]: PartialFun[A |*| (B |*| C), (A |*| B) |*| C] = FreeScaletto.this.assocRL
+    override def swap[A, B]: PartialFun[A |*| B, B |*| A] = FreeScaletto.this.swap
+    override def andThen[A, B, C](f: PartialFun[A, B], g: PartialFun[B, C]): PartialFun[A, C] =
+      (total(f) zip total(g)) match
+        case Valid((f, g)) => FreeScaletto.this.andThen(f, g)
+        case Invalid(es) => raiseTotalityViolations(es) // XXX
+    override def par[A1, A2, B1, B2](f1: PartialFun[A1, B1], f2: PartialFun[A2, B2]): PartialFun[A1 |*| A2, B1 |*| B2] =
+      (total(f1) zip total(f2)) match
+        case Valid((f1, f2)) => FreeScaletto.this.par(f1, f2)
+        case Invalid(es) => raiseTotalityViolations(es) // XXX
+  }
+
   private def switchSink[A, R](
     a: $[A],
-    cases: Sink[lambdas.Delambdified, |+|, A, R],
+    cases: Sink[lambdas.Delambdifold, |+|, A, R],
   )(
     pos: SourcePos,
   )(using
     lambdas.Context,
-  ): Validated[LinearityViolation, $[R]] =
+  ): Validated[LinearityViolation, $[R]] = {
+    type -?>[X, Y] = PartialFun[X, Y]
+
     given CocartesianSemigroupalCategory[-?>, |+|] with {
       override def andThen[A, B, C](f: A -?> B, g: B -?> C): A -?> C = f > g
-      override def id[A]: A -?> A = psh.id
-      override def injectL[A, B]: A -?> (A |+| B) = partial(FreeScaletto.this.injectL)
-      override def injectR[A, B]: B -?> (A |+| B) = partial(FreeScaletto.this.injectR)
+      override def id[A]: A -?> A = FreeScaletto.id
+      override def injectL[A, B]: A -?> (A |+| B) = FreeScaletto.this.injectL
+      override def injectR[A, B]: B -?> (A |+| B) = FreeScaletto.this.injectR
       override def either[A, B, C](f: A -?> C, g: B -?> C): (A |+| B) -?> C =
         (total(f) zip total(g)) match
-          case Valid((f, g)) => partial(FreeScaletto.this.either(f, g))
+          case Valid((f, g)) => FreeScaletto.this.either(f, g)
           case Invalid(es)   => raiseTotalityViolations(es) // XXX
     }
 
@@ -704,10 +720,10 @@ object FreeScaletto extends Scaletto {
       override val cat: SemigroupalCategory[-?>, |*|] = summon
 
       override def distLR[A, B, C]: (A |*| (B |+| C)) -?> ((A |*| B) |+| (A |*| C)) =
-        partial(FreeScaletto.this.distributeL)
+        FreeScaletto.this.distributeL
 
       override def distRL[A, B, C]: ((A |+| B) |*| C) -?> ((A |*| C) |+| (B |*| C)) =
-        partial(FreeScaletto.this.distributeR)
+        FreeScaletto.this.distributeR
     }
 
     CapturingFun.compileSink(
@@ -719,6 +735,7 @@ object FreeScaletto extends Scaletto {
       case CapturingFun.NoCapture(f)  => lambdas.Expr.map(a, f)(VarOrigin.FunAppRes(pos))
       case CapturingFun.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)
     }
+  }
 
   override def switch[A, R](using
     ctx: LambdaContext,
@@ -801,10 +818,10 @@ object FreeScaletto extends Scaletto {
     delambdifyAndCompile(cases)(isExtractor, compile)
       .map {
         case NoCapture(f) =>
-          (scrutinee map partial(f))(switchOutput)
+          (scrutinee map f)(switchOutput)
         case Closure(x, f) =>
           val xa = lambdas.Expr.zipN(x zip Tupled.atom(scrutinee))(switchInput)
-          lambdas.Expr.map(xa, partial(f))(switchOutput)
+          lambdas.Expr.map(xa, f)(switchOutput)
       }
   }
 
@@ -828,7 +845,7 @@ object FreeScaletto extends Scaletto {
 
       // make each case capture the least common superset of captured expressions
       delamN: CapturingFun[[a, b] =>> NonEmptyList[a -?> b], |*|, Tupled[|*|, $, _], A, R] <-
-        CapturingFun.leastCommonCapture(delams)(lambdas.compoundDiscarder, lambdas.exprUniter)
+        CapturingFun.leastCommonCapture(delams)(lambdas.compoundDiscarderSh, lambdas.exprUniterSh)
 
       res <-
         patmat.detectPatternsAndCompile[PartialFun, Tupled[|*|, $, _], A, R, MisplacedExtractor | patmat.PatternMatchError](using psh)(
@@ -858,7 +875,7 @@ object FreeScaletto extends Scaletto {
 
       lambdas.delambdifyTopLevel(c, a, f) match {
         case Valid(NoCapture(f)) =>
-          total(f) match
+          foldTotal(f) match
             case Valid(f) => f
             case Invalid(es) => raiseTotalityViolations(es)
         case Valid(Closure(captured, f)) =>
@@ -882,17 +899,17 @@ object FreeScaletto extends Scaletto {
 
       lambdas.delambdifyNested[A, B](scopeInfo, bindVar, f) match {
         case Valid(Closure(captured, f)) =>
-          total(f) match
+          foldTotal(f) match
             case Valid(f) =>
               val x = lambdas.Expr.zipN(captured)(captVar)
-              lambdas.Expr.map(x, partial(ℭ.curry(f)))(resultVar)
+              lambdas.Expr.map(x, ℭ.curry(f))(resultVar)
             case Invalid(es) =>
               raiseTotalityViolations(es)
         case Valid(NoCapture(f)) =>
-          total(f) match
+          foldTotal(f) match
             case Valid(f) =>
               val captured0 = $.one(using pos)
-              (captured0 map partial(ℭ.curry(elimFst > f)))(resultVar)
+              (captured0 map ℭ.curry(elimFst > f))(resultVar)
             case Invalid(es) =>
               raiseTotalityViolations(es)
         case Invalid(es) =>
@@ -905,7 +922,7 @@ object FreeScaletto extends Scaletto {
   private sealed trait ValHandler[A, R] {
     def compile(using LambdaContext): Validated[
       LinearityViolation,
-      Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.Delambdified, |+|, AA, R])]
+      Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.Delambdifold, |+|, AA, R])]
     ]
   }
 
@@ -916,11 +933,11 @@ object FreeScaletto extends Scaletto {
     ) extends ValHandler[A, R] {
       override def compile(using LambdaContext): Validated[
         LinearityViolation,
-        Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.Delambdified, |+|, AA, R])]
+        Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.Delambdifold, |+|, AA, R])]
       ] = {
         val scope = ScopeInfo.ValCase(pos)
         val label = VarOrigin.Lambda(pos)
-        lambdas.delambdifyNested(scope, label, f)
+        lambdas.delambdifyFoldNested(scope, label, f)
           .map { g => Exists((id[Val[A]], Sink(g))) }
       }
     }
@@ -933,14 +950,14 @@ object FreeScaletto extends Scaletto {
     ) extends ValHandler[A, R] {
       override def compile(using LambdaContext): Validated[
         LinearityViolation,
-        Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.Delambdified, |+|, AA, R])]
+        Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.Delambdifold, |+|, AA, R])]
       ] = {
-        val h = lambdas.delambdifyNested(ScopeInfo.ValCase(pos), VarOrigin.Lambda(pos), f)
+        val h = lambdas.delambdifyFoldNested(ScopeInfo.ValCase(pos), VarOrigin.Lambda(pos), f)
         (h zip t.compile).map { case (h, t) =>
           type AA = Val[H] |+| t.T
           val partition1: Val[A] -⚬ AA =
             mapVal(partition) > liftEither > either(injectL, t.value._1 > injectR)
-          val sink: Sink[lambdas.Delambdified, |+|, AA, R] =
+          val sink: Sink[lambdas.Delambdifold, |+|, AA, R] =
             Sink(h) <+> t.value._2
           Exists((partition1, sink))
         }
@@ -1007,7 +1024,7 @@ object FreeScaletto extends Scaletto {
   override val |*| : ConcurrentPairInvertOps =
     new ConcurrentPairInvertOps {}
 
-  private def mapTupled[A, B](a: Tupled[|*|, lambdas.Expr, A], f: A -?> B)(pos: SourcePos)(using lambdas.Context): lambdas.Expr[B] =
+  private def mapTupled[A, B](a: Tupled[|*|, lambdas.Expr, A], f: PartialFun[A, B])(pos: SourcePos)(using lambdas.Context): lambdas.Expr[B] =
     lambdas.Expr.map(
       lambdas.Expr.zipN(a)(VarOrigin.CapturedVars(pos)),
       f,

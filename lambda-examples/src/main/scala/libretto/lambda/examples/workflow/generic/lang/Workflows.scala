@@ -35,7 +35,7 @@ class Workflows[Action[_, _]] {
     )(
       f: LambdaContext ?=> Expr[A] => Expr[B],
     ): Flow[A, B] =
-      lambdas.delambdifyTopLevel((), VarOrigin.LambdaAbstraction(pos), f) match {
+      lambdas.delambdifyFoldTopLevel((), VarOrigin.LambdaAbstraction(pos), f) match {
         case Valid(CapturingFun.NoCapture(g)) => g
         case Valid(CapturingFun.Closure(x, g)) => ???
         case Invalid(e) => throw AssertionError(e)
@@ -131,8 +131,8 @@ class Workflows[Action[_, _]] {
     def switch[C](using pos: SourcePos)(
       f: LambdaContext ?=> Either[Expr[A], Expr[B]] => Expr[C],
     )(using LambdaContext): Expr[C] =
-      val fa = lambdas.delambdifyNested((), VarOrigin.Left(pos),  ctx ?=> (a: Expr[A]) => f(Left(a)))
-      val fb = lambdas.delambdifyNested((), VarOrigin.Right(pos), ctx ?=> (b: Expr[B]) => f(Right(b)))
+      val fa = lambdas.delambdifyFoldNested((), VarOrigin.Left(pos),  ctx ?=> (a: Expr[A]) => f(Left(a)))
+      val fb = lambdas.delambdifyFoldNested((), VarOrigin.Right(pos), ctx ?=> (b: Expr[B]) => f(Right(b)))
       (fa zip fb)
         .flatMap { case (fa, fb) =>
           CapturingFun.compileSink(

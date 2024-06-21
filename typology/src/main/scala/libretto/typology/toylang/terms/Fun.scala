@@ -156,7 +156,7 @@ object Fun {
     import CapturingFun.{Closure, NoCapture}
     import libretto.lambda.Var
 
-    lambdas.delambdifyTopLevel((), new Object, f) match {
+    lambdas.delambdifyFoldTopLevel((), new Object, f) match {
       case Valid(NoCapture(f)) =>
         f
       case Valid(Closure(captured, f)) =>
@@ -181,10 +181,10 @@ object Fun {
   extension [A, B](x: Expr[Either[A, B]]) {
     def switch[R](f: Either[Expr[A], Expr[B]] => Expr[R])(using LambdaContext): Expr[R] = {
       import CapturingFun.{Closure, NoCapture}
-      import lambdas.{Delambdified, LinearityViolation}
+      import lambdas.{Delambdifold, LinearityViolation}
 
-      val fa: Validated[LinearityViolation, Delambdified[A, R]] = lambdas.delambdifyNested((), new Object, (a: Expr[A]) => f(Left(a)))
-      val fb: Validated[LinearityViolation, Delambdified[B, R]] = lambdas.delambdifyNested((), new Object, (b: Expr[B]) => f(Right(b)))
+      val fa: Validated[LinearityViolation, Delambdifold[A, R]] = lambdas.delambdifyFoldNested((), new Object, (a: Expr[A]) => f(Left(a)))
+      val fb: Validated[LinearityViolation, Delambdifold[B, R]] = lambdas.delambdifyFoldNested((), new Object, (b: Expr[B]) => f(Right(b)))
 
       (fa zip fb)
         .flatMap { case (fa, fb) =>

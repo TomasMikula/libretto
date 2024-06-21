@@ -10,6 +10,9 @@ import scala.annotation.targetName
   * @tparam C information associated with lambda contexts (scopes)
   */
 trait Lambdas[->[_, _], **[_, _], V, C] {
+  val shuffled: Shuffled[->, **]
+  import shuffled.{Shuffled as ~>}
+
   final type Tupled[F[_], A] = libretto.lambda.Tupled[**, F, A]
 
   type Expr[A]
@@ -88,7 +91,11 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
   }
 
   type LinearityViolation = Lambdas.LinearityViolation[V, C]
-  type Delambdified[A, B] = CapturingFun[->, **, Tupled[Expr, _], A, B]
+  type Delambdified[A, B] = CapturingFun[~>, **, Tupled[Expr, _], A, B]
+  type Delambdifold[A, B] = CapturingFun[->, **, Tupled[Expr, _], A, B]
+
+  private def delambdifold[A, B](f: Delambdified[A, B])(using SymmetricSemigroupalCategory[->, **]): Delambdifold[A, B] =
+    f.mapFun[->]([X, Y] => (g: X ~> Y) => g.fold)
 
   protected def eliminateLocalVariables[A, B](
     boundVar: Var[V, A],
@@ -123,6 +130,19 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
   ] =
     delambdify(varName, f)(using Context.fresh(freshCtxInfo))
 
+  def delambdifyFoldTopLevel[A, B](
+    freshCtxInfo: C,
+    varName: V,
+    f: Context ?=> Expr[A] => Expr[B],
+  )(using
+    SymmetricSemigroupalCategory[->, **],
+  ): Validated[
+    LinearityViolation,
+    Delambdifold[A, B]
+  ] =
+    delambdifyTopLevel(freshCtxInfo, varName, f)
+      .map(delambdifold)
+
   def delambdifyNested[A, B](
     nestedCtxInfo: C,
     varName: V,
@@ -135,10 +155,29 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
   ] =
     delambdify(varName, f)(using Context.nested(nestedCtxInfo, parent = parent))
 
+  def delambdifyFoldNested[A, B](
+    nestedCtxInfo: C,
+    varName: V,
+    f: Context ?=> Expr[A] => Expr[B],
+  )(using
+    parent: Context,
+    cat: SymmetricSemigroupalCategory[->, **],
+  ): Validated[
+    LinearityViolation,
+    Delambdifold[A, B]
+  ] =
+    delambdifyNested(nestedCtxInfo, varName, f)
+      .map(delambdifold)
+
   def compoundDiscarder(using
     ctx: Context,
-    cat: SemigroupalCategory[->, **],
+    cat: SymmetricSemigroupalCategory[->, **],
   ): [X] => Tupled[Expr, X] => Validated[LinearityViolation.UnusedInBranch[V, C], [Y] => Unit => (X ** Y) -> Y] =
+    [X] => x => compoundDiscarderSh(x).map(f => [Y] => (u: Unit) => f[Y](u).fold)
+
+  def compoundDiscarderSh(using
+    ctx: Context,
+  ): [X] => Tupled[Expr, X] => Validated[LinearityViolation.UnusedInBranch[V, C], [Y] => Unit => (X ** Y) ~> Y] =
     getDiscarder
 
   def exprUniter(using
@@ -152,12 +191,23 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
     LinearityViolation.UnusedInBranch[V, C],
     Exists[[P] =>> (Tupled[Expr, P], P -> A, P -> B)]
   ] =
+    [A, B] => (a, b) => exprUniterSh(a, b).map { case Exists.Some((p, p1, p2)) => Exists((p, p1.fold, p2.fold))}
+
+  def exprUniterSh(using
+    Context,
+    BiInjective[**],
+  ): [A, B] => (
+    Tupled[Expr, A],
+    Tupled[Expr, B],
+  ) => Validated[
+    LinearityViolation.UnusedInBranch[V, C],
+    Exists[[P] =>> (Tupled[Expr, P], P ~> A, P ~> B)]
+  ] =
     [A, B] => union(_, _)
 
   private def getDiscarder(using
     ctx: Context,
-    cat: SemigroupalCategory[->, **],
-  ): [X] => Tupled[Expr, X] => Validated[LinearityViolation.UnusedInBranch[V, C], [Y] => Unit => (X ** Y) -> Y] =
+  ): [X] => Tupled[Expr, X] => Validated[LinearityViolation.UnusedInBranch[V, C], [Y] => Unit => (X ** Y) ~> Y] =
     [X] => (fx: Tupled[Expr, X]) => discarderOf(fx) match {
       case Right(discardFst) => Valid(discardFst)
       case Left(unusedVars)  => invalid(LinearityViolation.UnusedInBranch(unusedVars))
@@ -165,21 +215,25 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
 
   private def discarderOf[A](a: Tupled[Expr, A])(using
     ctx: Context,
-    cat: SemigroupalCategory[->, **],
-  ): Either[Var.Set[V], [B] => Unit => (A ** B) -> B] =
+  ): Either[Var.Set[V], [B] => Unit => (A ** B) ~> B] =
     a.asBin match {
       case Bin.Leaf(x) =>
         val v = x.resultVar
         Context.getDiscard(v) match
-          case Some(discardFst) => Right(discardFst)
+          case Some(discardFst) => Right(liftDiscarder(discardFst))
           case None             => Left(Var.Set(v))
       case Bin.Branch(l, r) =>
         (discarderOf(Tupled.fromBin(l)), discarderOf(Tupled.fromBin(r))) match
-          case (Right(f), Right(g)) => Right([B] => (_: Unit) => cat.fst(f(())) > g[B](()))
+          case (Right(f), Right(g)) => Right([B] => (_: Unit) => f(()).inFst > g[B](()))
           case (Right(_), Left(ws)) => Left(ws)
           case (Left(vs), Right(_)) => Left(vs)
           case (Left(vs), Left(ws)) => Left(vs merge ws)
     }
+
+  private def liftDiscarder[X](
+    f: [Y] => Unit => (X ** Y) -> Y,
+  ):   [Y] => Unit => (X ** Y) ~> Y =
+    [Y] => (_: Unit) => shuffled.lift(f[Y](()))
 
   private def union[A, B](
     a: Tupled[Expr, A],
@@ -187,15 +241,13 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
   )(using
     Context,
     BiInjective[**],
-    SymmetricSemigroupalCategory[->, **],
   ): Validated[
     LinearityViolation.UnusedInBranch[V, C],
-    Exists[[P] =>> (Tupled[Expr, P], P -> A, P -> B)]
+    Exists[[P] =>> (Tupled[Expr, P], P ~> A, P ~> B)]
   ] = {
     type LinCheck[A] = Validated[LinearityViolation.UnusedInBranch[V, C], A]
     type LinChecked[X, Y] = LinCheck[X -> Y]
-    given shuffled: Shuffled[LinChecked, **] = Shuffled[LinChecked, **]
-    given Shuffled.With[->, **, shuffled.shuffle.type] = Shuffled[->, **](shuffled.shuffle)
+    given shuffledA: Shuffled.With[LinChecked, **, shuffled.shuffle.type] = Shuffled[LinChecked, **](shuffled.shuffle)
 
     val discardFst: [X, Y] => Expr[X] => LinChecked[X ** Y, Y] =
       [X, Y] => (x: Expr[X]) =>
@@ -207,26 +259,41 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
     (a union b)(discardFst) match
       case Exists.Some((p, p1, p2)) =>
         Applicative[LinCheck].map2(
-          p1.traverse[LinCheck, ->]([x, y] => (f: LinChecked[x, y]) => f),
-          p2.traverse[LinCheck, ->]([x, y] => (f: LinChecked[x, y]) => f),
+          p1.traverse[LinCheck, ->]([x, y] => (f: LinChecked[x, y]) => f)(using shuffled),
+          p2.traverse[LinCheck, ->]([x, y] => (f: LinChecked[x, y]) => f)(using shuffled),
         ) { (p1, p2) =>
-          Exists((p, p1.fold, p2.fold))
+          Exists((p, p1, p2))
         }
   }
 }
 
 object Lambdas {
+  class LambdasFactory[->[_, _], **[_, _], SHUFFLED <: Shuffled[->, **]](sh: SHUFFLED) {
+    def apply[VarLabel, CtxLabel](
+      universalSplit  : Option[[X]    => Unit => X -> (X ** X)] = None,
+      universalDiscard: Option[[X, Y] => Unit => (X ** Y) -> Y] = None,
+    )(using
+      inj: BiInjective[**],
+    ): Lambdas[->, **, VarLabel, CtxLabel] { val shuffled: SHUFFLED } =
+      new LambdasImpl[->, **, VarLabel, CtxLabel, sh.type](
+        sh,
+        universalSplit,
+        universalDiscard,
+      )
+  }
+
+  def using[->[_, _], **[_, _]](
+    sh: Shuffled[->, **],
+  ): LambdasFactory[->, **, sh.type] =
+    LambdasFactory(sh)
+
   def apply[->[_, _], **[_, _], VarLabel, CtxLabel](
     universalSplit  : Option[[X]    => Unit => X -> (X ** X)] = None,
     universalDiscard: Option[[X, Y] => Unit => (X ** Y) -> Y] = None,
   )(using
-    ssc: SymmetricSemigroupalCategory[->, **],
     inj: BiInjective[**],
   ): Lambdas[->, **, VarLabel, CtxLabel] =
-    new LambdasImpl[->, **, VarLabel, CtxLabel](
-      universalSplit,
-      universalDiscard,
-    )
+    using(Shuffled[->, **])(universalSplit, universalDiscard)
 
   enum LinearityViolation[VarLabel, CtxLabel]:
     case Overused(vars: Var.Set[VarLabel])

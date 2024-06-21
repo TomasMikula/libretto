@@ -7,15 +7,14 @@ import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
-class LambdasImpl[->[_, _], **[_, _], V, C](
+class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
+  override val shuffled: SHUFFLED,
   universalSplit  : Option[[X]    => Unit => X -> (X ** X)],
   universalDiscard: Option[[X, Y] => Unit => (X ** Y) -> Y],
 )(using
-  ssc: SymmetricSemigroupalCategory[->, **],
   inj: BiInjective[**],
 ) extends Lambdas[->, **, V, C] {
 
-  given shuffled: Shuffled[->, **] = Shuffled[->, **]
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
   import shuffled.{Shuffled as ≈⚬, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
 
@@ -324,7 +323,6 @@ class LambdasImpl[->[_, _], **[_, _], V, C](
       case Exists.Some((exprs, discard)) =>
         eliminateLocalVariablesFromForest(boundVar, exprs)
           .map(_
-            .mapFun([X, Y] => f => f.fold)
             .andThen(discard)
           )
 
@@ -333,17 +331,17 @@ class LambdasImpl[->[_, _], **[_, _], V, C](
   private def attachDiscarded[B](
     expr: Expr[B],
     toElim: List[Exists[[X] =>> (Expr[X], Discarder[X])]],
-  ): Exists[[A] =>> (Tupled[Expr, A], A -> B)] = {
+  ): Exists[[A] =>> (Tupled[Expr, A], A ≈⚬ B)] = {
 
-    val init: Exists[[A] =>> (Tupled[Expr, A], A -> B)] =
-      Exists((Tupled.atom(expr), ssc.id[B]))
+    val init: Exists[[A] =>> (Tupled[Expr, A], A ≈⚬ B)] =
+      Exists((Tupled.atom(expr), shuffled.id[B]))
 
     toElim.foldLeft(init) { (acc, ed) =>
       (acc, ed) match {
         case (e1 @ Exists.Some((acc, g)), e2 @ Exists.Some((exp, discarder))) =>
           val acc1: Tupled[Expr, e2.T ** e1.T] =
             Tupled.atom(exp) zip acc
-          Exists((acc1, discarder(()) > g))
+          Exists((acc1, shuffled.lift(discarder(())) > g))
       }
     }
   }
