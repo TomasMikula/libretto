@@ -16,7 +16,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
 ) extends Lambdas[->, **, V, C] {
 
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
-  import shuffled.{Shuffled as ≈⚬, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
+  import shuffled.{Shuffled as ~>, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
 
   type Var[A] = libretto.lambda.Var[V, A]
 
@@ -68,9 +68,9 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
       ctx.isDefiningFor(v)
   }
 
-  type CapturingFun[A, B] = libretto.lambda.CapturingFun[≈⚬, **, Tupled[Expr, _], A, B]
+  type CapturingFun[A, B] = libretto.lambda.CapturingFun[~>, **, Tupled[Expr, _], A, B]
   object CapturingFun {
-    def noCapture[A, B](f: A ≈⚬ B): CapturingFun[A, B] =
+    def noCapture[A, B](f: A ~> B): CapturingFun[A, B] =
       ll.CapturingFun.NoCapture(f)
 
     def id[A]: CapturingFun[A, A] =
@@ -331,9 +331,9 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
   private def attachDiscarded[B](
     expr: Expr[B],
     toElim: List[Exists[[X] =>> (Expr[X], Discarder[X])]],
-  ): Exists[[A] =>> (Tupled[Expr, A], A ≈⚬ B)] = {
+  ): Exists[[A] =>> (Tupled[Expr, A], A ~> B)] = {
 
-    val init: Exists[[A] =>> (Tupled[Expr, A], A ≈⚬ B)] =
+    val init: Exists[[A] =>> (Tupled[Expr, A], A ~> B)] =
       Exists((Tupled.atom(expr), shuffled.id[B]))
 
     toElim.foldLeft(init) { (acc, ed) =>
@@ -377,8 +377,8 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
   ): Validated[
     LinearityViolation,
     Either[
-      Exists[[X] =>> (Tupled[Expr, X], X ≈⚬ Y)],
-      [B] => Unit => (B ≈⚬ (Y ** B))
+      Exists[[X] =>> (Tupled[Expr, X], X ~> Y)],
+      [B] => Unit => (B ~> (Y ** B))
     ]
   ] =
     // split captured expressions at context boundary
@@ -417,8 +417,8 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
   ): Validated[
     LinearityViolation,
     Either[
-      Exists[[X] =>> (Tupled[Expr, X], X ≈⚬ Y)],
-      [B] => Unit => (B ≈⚬ (Y ** B))
+      Exists[[X] =>> (Tupled[Expr, X], X ~> Y)],
+      [B] => Unit => (B ~> (Y ** B))
     ]
   ] = {
     import libretto.lambda.CapturingFun.{Closure, NoCapture}
@@ -449,7 +449,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
     Context
   ): Validated[
     LinearityViolation,
-    Exists[[X] =>> (Tupled[Expr, X], X ≈⚬ Y)]
+    Exists[[X] =>> (Tupled[Expr, X], X ~> Y)]
   ] = {
     import libretto.lambda.CapturingFun.{Closure, NoCapture}
 
