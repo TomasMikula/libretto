@@ -95,8 +95,6 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
       ll.CapturingFun.Closure(captured, shuffled.swap)
   }
 
-  private type Delambdified0[A, B] = Validated[LinearityViolation, CapturingFun[A, B]]
-
   /**
    * AST of an expression, created by user code, before translation to point-free representation,
    * containing intermediate [[Var]]s.
@@ -349,7 +347,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
   private def eliminateLocalVariablesFromForest[A, B](
     boundVar: Var[A],
     exprs: Tupled[Expr, B],
-  )(using Context): Delambdified0[A, B] = {
+  )(using Context): Validated[LinearityViolation, CapturingFun[A, B]] = {
     import libretto.lambda.CapturingFun.{Closure, NoCapture}
 
     extractFunctionFromForest(boundVar, exprs) flatMap {
@@ -475,7 +473,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
     exprs: Tupled[Expr, B],
   )(using
     ctx: Context,
-  ): Delambdified0[A, B] = {
+  ): Validated[LinearityViolation, CapturingFun[A, B]] = {
     import libretto.lambda.CapturingFun.{Closure, NoCapture}
 
     Forest.upvar(exprs) match { case Exists.Some((exprs, u)) =>
@@ -644,7 +642,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
 
     def extract[Y](u: Unvar[B, Y])(using
       Context,
-    ): Delambdified0[A, Y] = {
+    ): Validated[LinearityViolation, CapturingFun[A, Y]] = {
       val t1: VTail[Var[A], B] =
         tail.sweepL[Vars, VarOp](
           Vars.atom(v),
