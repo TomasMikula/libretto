@@ -203,4 +203,67 @@ class PatternMatching[->[_, _], **[_, _]](using
         handler
           .foldMapA[Validated[E, _], ->](compile)
           .map(h => Exists((pattern, h)))
+
+  def forLambdas[->>[_, _], V, C, E >: Lambdas.LinearityViolation[V, C] | PatternMatchError](
+    lambdas: Lambdas[->>, **, V, C],
+  )(
+    isExtractor: [X, Y] => (X ->> Y) => Option[Extractor[X, Y]],
+    lower: [X, Y] => (X ->> Y) => Validated[E, X -> Y],
+    lift: [X, Y] => (X -> Y) => (X ->> Y),
+  ): ForLambdas[->>, V, C, lambdas.type, E] =
+    ForLambdas[->>, V, C, lambdas.type, E](lambdas)(isExtractor, lower, lift)
+
+  class ForLambdas[->>[_, _], V, C, LAMBDAS <: Lambdas[->>, **, V, C], E >: Lambdas.LinearityViolation[V, C] | PatternMatchError](
+    val lambdas: LAMBDAS,
+  )(
+    isExtractor: [X, Y] => (X ->> Y) => Option[Extractor[X, Y]],
+    lower: [X, Y] => (X ->> Y) => Validated[E, X -> Y],
+    lift: [X, Y] => (X -> Y) => (X ->> Y),
+  ) {
+    import lambdas.{Context => LambdaContext, Expr => $, LinearityViolation}
+    import lambdas.shuffled
+    import lambdas.shuffled.{Shuffled as ~>}
+
+    def delambdifyAndCompile[A, R](
+      scrutinee: $[A],
+      switchInput: V,
+      switchOutput: V,
+      cases: NonEmptyList[(C, V, LambdaContext ?=> $[A] => $[R])],
+    )(using
+      ctx: LambdaContext,
+    ): Validated[E, $[R]] = {
+      import CapturingFun.{Closure, NoCapture}
+
+      delambdifyAndCompile(cases)
+        .map {
+          case NoCapture(f) =>
+            (scrutinee map lift(f))(switchOutput)
+          case Closure(x, f) =>
+            val xa = lambdas.Expr.zipN(x zip Tupled.atom(scrutinee))(switchInput)
+            lambdas.Expr.map(xa, lift(f))(switchOutput)
+        }
+    }
+
+    private def delambdifyAndCompile[A, R](
+      cases: NonEmptyList[(C, V, LambdaContext ?=> $[A] => $[R])],
+    )(using
+      ctx: LambdaContext,
+    ): Validated[E, CapturingFun[->, **, Tupled[**, $, _], A, R]] =
+      for {
+        // delambdify each case
+        delams: NonEmptyList[CapturingFun[~>, **, Tupled[**, $, _], A, R]] <-
+          cases.traverse[Validated[LinearityViolation, _]] { case (scopeInfo, v, f) =>
+            lambdas.delambdifyNested(scopeInfo, v, f)
+          }
+
+        // make each case capture the least common superset of captured expressions
+        delamN: CapturingFun[[a, b] =>> NonEmptyList[a ~> b], **, Tupled[**, $, _], A, R] <-
+          CapturingFun.leastCommonCapture(delams)(lambdas.compoundDiscarderSh, lambdas.exprUniterSh)
+
+        res <-
+          detectPatternsAndCompile[->>, Tupled[**, $, _], A, R, E](using shuffled)(
+            delamN,
+          )(isExtractor, lower)
+      } yield res
+  }
 }

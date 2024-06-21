@@ -779,79 +779,29 @@ object FreeScaletto extends Scaletto {
     val cases1: NonEmptyList[(ScopeInfo, VarOrigin, LambdaContext ?=> $[A] => $[R])] =
       cases.map { case (pos, f) => (ScopeInfo.SwitchCase(pos), VarOrigin.SwitchCase(pos), f) }
 
-    delambdifyAndCompile(scrutinee, inVar, cases1, outVar)(
-      isExtractor =
-        [X, Y] => (f: PartialFun[X, Y]) =>
-          f match {
-            case eo: ExtractorOccurrence[X, Y] => Some(eo.ext)
-            case _ => None
-          },
-      compile =
-        [X, Y] => (f: PartialFun[X, Y]) =>
-          f match {
-            case f: (X -⚬ Y) => Valid(f)
-            case f: ExtractorOccurrence[x, y] => invalid(MisplacedExtractor(f))
-          },
-    ).emap {
+    patmat
+      .forLambdas(lambdas)(
+        isExtractor =
+          [X, Y] => (f: PartialFun[X, Y]) =>
+            f match {
+              case eo: ExtractorOccurrence[X, Y] => Some(eo.ext)
+              case _ => None
+            },
+        lower =
+          [X, Y] => (f: PartialFun[X, Y]) =>
+            f match {
+              case f: (X -⚬ Y) => Valid(f)
+              case f: ExtractorOccurrence[x, y] => invalid(MisplacedExtractor(f))
+            },
+        lift = [X, Y] => (f: X -⚬ Y) => (f: PartialFun[X, Y]),
+      )
+      .delambdifyAndCompile(scrutinee, inVar, outVar, cases1)
+      .emap {
         case e: LinearityViolation => e
         case e: MisplacedExtractor => e
         case e: patmat.PatternMatchError => PatternMatchError(switchPos, e)
       }
   }
-
-  private def delambdifyAndCompile[A, R](
-    scrutinee: $[A],
-    switchInput: VarOrigin,
-    cases: NonEmptyList[(ScopeInfo, VarOrigin, LambdaContext ?=> $[A] => $[R])],
-    switchOutput: VarOrigin,
-  )(
-    isExtractor: [X, Y] => PartialFun[X, Y] => Option[Extractor[X, Y]],
-    compile: [X, Y] => PartialFun[X, Y] => Validated[MisplacedExtractor, X -⚬ Y],
-  )(using
-    ctx: LambdaContext,
-  ): Validated[
-    LinearityViolation | MisplacedExtractor | patmat.PatternMatchError,
-    $[R]
-  ] = {
-    import CapturingFun.{Closure, NoCapture}
-
-    delambdifyAndCompile(cases)(isExtractor, compile)
-      .map {
-        case NoCapture(f) =>
-          (scrutinee map f)(switchOutput)
-        case Closure(x, f) =>
-          val xa = lambdas.Expr.zipN(x zip Tupled.atom(scrutinee))(switchInput)
-          lambdas.Expr.map(xa, f)(switchOutput)
-      }
-  }
-
-  private def delambdifyAndCompile[A, R](
-    cases: NonEmptyList[(ScopeInfo, VarOrigin, LambdaContext ?=> $[A] => $[R])],
-  )(
-    isExtractor: [X, Y] => PartialFun[X, Y] => Option[Extractor[X, Y]],
-    compile: [X, Y] => PartialFun[X, Y] => Validated[MisplacedExtractor, X -⚬ Y],
-  )(using
-    ctx: LambdaContext,
-  ): Validated[
-    LinearityViolation | MisplacedExtractor | patmat.PatternMatchError,
-    CapturingFun[-⚬, |*|, Tupled[|*|, $, _], A, R]
-  ] =
-    for {
-      // delambdify each case
-      delams: NonEmptyList[CapturingFun[-?>, |*|, Tupled[|*|, $, _], A, R]] <-
-        cases.traverse[Validated[LinearityViolation, _]] { case (scopeInfo, v, f) =>
-          lambdas.delambdifyNested(scopeInfo, v, f)
-        }
-
-      // make each case capture the least common superset of captured expressions
-      delamN: CapturingFun[[a, b] =>> NonEmptyList[a -?> b], |*|, Tupled[|*|, $, _], A, R] <-
-        CapturingFun.leastCommonCapture(delams)(lambdas.compoundDiscarderSh, lambdas.exprUniterSh)
-
-      res <-
-        patmat.detectPatternsAndCompile[PartialFun, Tupled[|*|, $, _], A, R, MisplacedExtractor | patmat.PatternMatchError](using psh)(
-          delamN,
-        )(isExtractor, compile)
-    } yield res
 
   override val λ = new LambdaOpsWithClosures {
     override def apply[A, B](using pos: SourcePos)(f: lambdas.Context ?=> $[A] => $[B]): A -⚬ B =
