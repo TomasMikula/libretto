@@ -87,18 +87,28 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
       registerNonLinearOps(a)(None, Some(discard))
   }
 
-  type DelambdifiedSuccess[A, B] = libretto.lambda.CapturingFun[->, **, Tupled[Expr, _], A, B]
-  type Delambdified[A, B] = Validated[LinearityViolation[V, C], DelambdifiedSuccess[A, B]]
+  type LinearityViolation = Lambdas.LinearityViolation[V, C]
+  type Delambdified[A, B] = CapturingFun[->, **, Tupled[Expr, _], A, B]
 
   protected def eliminateLocalVariables[A, B](
     boundVar: Var[V, A],
     expr: Expr[B],
-  )(using Context): Delambdified[A, B]
+  )(using
+    Context,
+  ): Validated[
+    LinearityViolation,
+    Delambdified[A, B]
+  ]
 
   private def delambdify[A, B](
     varName: V,
     f: Context ?=> Expr[A] => Expr[B],
-  )(using Context): Delambdified[A, B] = {
+  )(using
+    Context,
+  ): Validated[
+    LinearityViolation,
+    Delambdified[A, B]
+  ] = {
     val bindVar = Context.newVar[A](varName)
     eliminateLocalVariables(bindVar, f(Expr.variable(bindVar)))
   }
@@ -107,29 +117,37 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
     freshCtxInfo: C,
     varName: V,
     f: Context ?=> Expr[A] => Expr[B],
-  ): Delambdified[A, B] =
+  ): Validated[
+    LinearityViolation,
+    Delambdified[A, B]
+  ] =
     delambdify(varName, f)(using Context.fresh(freshCtxInfo))
 
   def delambdifyNested[A, B](
     nestedCtxInfo: C,
     varName: V,
     f: Context ?=> Expr[A] => Expr[B],
-  )(using parent: Context): Delambdified[A, B] =
+  )(using
+    parent: Context,
+  ): Validated[
+    LinearityViolation,
+    Delambdified[A, B]
+  ] =
     delambdify(varName, f)(using Context.nested(nestedCtxInfo, parent = parent))
 
   def switch[++[_, _], A, B](
-    cases: Sink[DelambdifiedSuccess, ++, A, B],
+    cases: Sink[Delambdified, ++, A, B],
   )(using
     CocartesianSemigroupalCategory[->, ++],
     Distribution[->, **, ++],
     Context,
   ): Validated[
-    LinearityViolation[V, C],
-    DelambdifiedSuccess[A, B]
+    LinearityViolation,
+    Delambdified[A, B]
   ]
 
   protected def switchImpl[++[_, _], A, B](
-    cases: Sink[DelambdifiedSuccess, ++, A, B],
+    cases: Sink[Delambdified, ++, A, B],
   )(using
     BiInjective[**],
     SymmetricSemigroupalCategory[->, **],
@@ -137,8 +155,8 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
     Distribution[->, **, ++],
     Context,
   ): Validated[
-    LinearityViolation[V, C],
-    DelambdifiedSuccess[A, B]
+    LinearityViolation,
+    Delambdified[A, B]
   ] =
     CapturingFun.compileSink(cases)(getDiscarder, [X, Y] => union(_, _))
 
@@ -150,7 +168,7 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
     ssc: SymmetricSemigroupalCategory[->, **],
     inj: BiInjective[**],
   ): Validated[
-    LinearityViolation[V, C],
+    LinearityViolation,
     CapturingFun[[a, b] =>> (a -> b, a -> b), **, Tupled[Expr, _], A, B]
   ] =
     CapturingFun.leastCommonCapture(f, g)(getDiscarder, [X, Y] => union(_, _))
@@ -162,7 +180,7 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
     ssc: SymmetricSemigroupalCategory[->, **],
     inj: BiInjective[**],
   ): Validated[
-    LinearityViolation[V, C],
+    LinearityViolation,
     CapturingFun[[a, b] =>> NonEmptyList[a -> b], **, Tupled[Expr, _], A, B]
   ] =
     CapturingFun.leastCommonCapture(fs)(getDiscarder, [X, Y] => union(_, _))
@@ -170,7 +188,7 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
   private def getDiscarder(using
     ctx: Context,
     cat: SemigroupalCategory[->, **],
-  ): [X] => Tupled[Expr, X] => Validated[LinearityViolation[V, C], [Y] => Unit => (X ** Y) -> Y] =
+  ): [X] => Tupled[Expr, X] => Validated[LinearityViolation, [Y] => Unit => (X ** Y) -> Y] =
     [X] => (fx: Tupled[Expr, X]) => discarderOf(fx) match {
       case Right(discardFst) => Valid(discardFst)
       case Left(unusedVars)  => invalid(LinearityViolation.UnusedInBranch(unusedVars))
@@ -202,10 +220,10 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
     BiInjective[**],
     SymmetricSemigroupalCategory[->, **],
   ): Validated[
-    LinearityViolation[V, C],
+    LinearityViolation,
     Exists[[P] =>> (Tupled[Expr, P], P -> A, P -> B)]
   ] = {
-    type LinCheck[A] = Validated[LinearityViolation[V, C], A]
+    type LinCheck[A] = Validated[LinearityViolation, A]
     type LinChecked[X, Y] = LinCheck[X -> Y]
     given shuffled: Shuffled[LinChecked, **] = Shuffled[LinChecked, **]
     given Shuffled.With[->, **, shuffled.shuffle.type] = Shuffled[->, **](shuffled.shuffle)

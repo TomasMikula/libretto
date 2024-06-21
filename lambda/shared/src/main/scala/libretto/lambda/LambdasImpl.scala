@@ -15,8 +15,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C](
   inj: BiInjective[**],
 ) extends Lambdas[->, **, V, C] {
 
-  given shuffle: Shuffle[**] = Shuffle[**]
-  given shuffled: Shuffled.With[->, **, shuffle.type] = Shuffled[->, **](shuffle)
+  given shuffled: Shuffled[->, **] = Shuffled[->, **]
   import shuffled.shuffle.{~⚬, Transfer, TransferOpt}
   import shuffled.{Shuffled as ≈⚬, assocLR, assocRL, fst, id, ix, ixi, lift, par, pure, snd, swap, xi}
 
@@ -97,7 +96,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C](
       ll.CapturingFun.Closure(captured, shuffled.swap)
   }
 
-  private type Delambdified0[A, B] = Validated[LinearityViolation[V, C], CapturingFun[A, B]]
+  private type Delambdified0[A, B] = Validated[LinearityViolation, CapturingFun[A, B]]
 
   /**
    * AST of an expression, created by user code, before translation to point-free representation,
@@ -300,7 +299,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C](
     expr: Expr[B],
   )(using
     ctx: Context,
-  ): Delambdified[A, B] = {
+  ): Validated[LinearityViolation, Delambdified[A, B]] = {
     // Before the actual elimination,
     // include unused expressions with registered discarders.`
 
@@ -378,7 +377,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C](
   )(using
     Context
   ): Validated[
-    LinearityViolation[V, C],
+    LinearityViolation,
     Either[
       Exists[[X] =>> (Tupled[Expr, X], X ≈⚬ Y)],
       [B] => Unit => (B ≈⚬ (Y ** B))
@@ -418,7 +417,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C](
   )(using
     Context
   ): Validated[
-    LinearityViolation[V, C],
+    LinearityViolation,
     Either[
       Exists[[X] =>> (Tupled[Expr, X], X ≈⚬ Y)],
       [B] => Unit => (B ≈⚬ (Y ** B))
@@ -451,7 +450,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C](
   )(using
     Context
   ): Validated[
-    LinearityViolation[V, C],
+    LinearityViolation,
     Exists[[X] =>> (Tupled[Expr, X], X ≈⚬ Y)]
   ] = {
     import libretto.lambda.CapturingFun.{Closure, NoCapture}
@@ -471,12 +470,12 @@ class LambdasImpl[->[_, _], **[_, _], V, C](
   }
 
   override def switch[<+>[_, _], A, B](
-    cases: Sink[DelambdifiedSuccess, <+>, A, B],
+    cases: Sink[Delambdified, <+>, A, B],
   )(using
     CocartesianSemigroupalCategory[->, <+>],
     Distribution[->, **, <+>],
     Context,
-  ): Validated[LinearityViolation[V, C], DelambdifiedSuccess[A, B]] =
+  ): Validated[LinearityViolation, Delambdified[A, B]] =
     switchImpl(cases)
 
   private def bug(msg: String): Nothing =
@@ -666,7 +665,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C](
           }
         )._1
 
-      type Arr[T, U] = Validated[LinearityViolation[V, C], CapturingFun[T, U]]
+      type Arr[T, U] = Validated[LinearityViolation, CapturingFun[T, U]]
       given shArr: Shuffled.With[Arr, **, shuffled.shuffle.type] =
         Shuffled[Arr, **](shuffled.shuffle)
 
@@ -736,7 +735,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C](
         Shuffled[CapturingFun, **](shuffled.shuffle)
 
       t2
-        .traverse[Validated[LinearityViolation[V, C], _], CapturingFun]([p, q] => op => op)
+        .traverse[Validated[LinearityViolation, _], CapturingFun]([p, q] => op => op)
         .map(_.fold)
     }
   }

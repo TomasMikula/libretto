@@ -1,7 +1,7 @@
 package libretto.typology.toylang.terms
 
 import libretto.lambda.{CapturingFun, CocartesianSemigroupalCategory, Distribution, Sink, SymmetricSemigroupalCategory, Tupled}
-import libretto.lambda.util.SourcePos
+import libretto.lambda.util.{SourcePos, Validated}
 import libretto.lambda.util.Validated.{Invalid, Valid}
 import libretto.typology.toylang.types.{Fix, RecCall, TypeTag}
 import libretto.lambda.SemigroupalCategory
@@ -181,16 +181,15 @@ object Fun {
   extension [A, B](x: Expr[Either[A, B]]) {
     def switch[R](f: Either[Expr[A], Expr[B]] => Expr[R])(using LambdaContext): Expr[R] = {
       import CapturingFun.{Closure, NoCapture}
+      import lambdas.{Delambdified, LinearityViolation}
 
-      val fa: lambdas.Delambdified[A, R] = lambdas.delambdifyNested((), new Object, (a: Expr[A]) => f(Left(a)))
-      val fb: lambdas.Delambdified[B, R] = lambdas.delambdifyNested((), new Object, (b: Expr[B]) => f(Right(b)))
+      val fa: Validated[LinearityViolation, Delambdified[A, R]] = lambdas.delambdifyNested((), new Object, (a: Expr[A]) => f(Left(a)))
+      val fb: Validated[LinearityViolation, Delambdified[B, R]] = lambdas.delambdifyNested((), new Object, (b: Expr[B]) => f(Right(b)))
 
       (fa zip fb)
         .flatMap { case (fa, fb) =>
           lambdas.switch[Either, Either[A, B], R](
             Sink(fa) <+> Sink(fb),
-            // [x, y] => (fx: Fun[x, R], fy: Fun[y, R]) => Fun.either(fx, fy),
-            // [x, y, z] => (_: Unit) => Fun.distributeL[x, y, z],
           )
         }
         .map {
