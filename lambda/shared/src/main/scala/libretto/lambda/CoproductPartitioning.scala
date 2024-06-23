@@ -2,7 +2,10 @@ package libretto.lambda
 
 import libretto.lambda.util.{Applicative, BiInjective, TypeEqK}
 
-class CoproductPartitioning[->[_, _], **[_, _], ++[_, _]](using
+class CoproductPartitioning[->[_, _], **[_, _], ++[_, _]](
+  lName: String,
+  rName: String,
+)(using
   cat: SemigroupalCategory[->, **],
   cocat: CocartesianSemigroupalCategory[->, ++],
   distribution: Distribution[->, **, ++],
@@ -59,8 +62,8 @@ class CoproductPartitioning[->[_, _], **[_, _], ++[_, _]](using
 
     override def showPartition[P](p: Partition[P]): String =
       p match
-        case Side.Left() => "Left"
-        case Side.Right() => "Right"
+        case Side.Left()  => lName
+        case Side.Right() => rName
 
     override def isTotal[P](p: Partition[P]): Option[(A ++ B) -> P] =
       libretto.lambda.UnhandledCase.raise(s"CoproductPartitioning.isTotal")

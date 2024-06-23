@@ -534,7 +534,7 @@ object FreeScaletto extends Scaletto {
     )
 
   override val SumPartitioning =
-    new CoproductPartitioning[-⚬, |*|, |+|](using ℭ, cocat, distribution)
+    new CoproductPartitioning[-⚬, |*|, |+|]("InL", "InR")(using ℭ, cocat, distribution)
 
   private val patmat =
     new PatternMatching[-⚬, |*|]
