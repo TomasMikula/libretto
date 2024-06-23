@@ -20,6 +20,11 @@ given BiInjective[**] with {
   */
 sealed trait ++[A, B]
 
+given BiInjective[++] with {
+  override def unapply[A, B, X, Y](ev: A ++ B =:= X ++ Y): (A =:= X, B =:= Y) =
+    ev match { case TypeEq(Refl()) => (summon, summon) }
+}
+
 /** References an external input port. */
 sealed trait PortName[A]
 

@@ -7,15 +7,17 @@ import scala.concurrent.duration.*
 
 val backgroundCheck: Flow[EmailAddress, Report] =
   Flow { candidate =>
-    askForAcceptance(candidate) switch {
-      case Left(_) =>
+    askForAcceptance(candidate) switch (
+      is { case InL(_) =>
         Report.candidateDeclined(candidate)
-      case Right(personalId ** employmentHistory) =>
+      },
+      is { case InR(personalId ** employmentHistory) =>
         val criminalReport = checkCriminalRecord(personalId)
         val civilReport    = checkCivilRecord(personalId)
         val employmentCert = verifyEmploymentHistory(employmentHistory)
         Report.results(criminalReport ** civilReport ** employmentCert)
-    }
+      },
+    )
   }
 
 def askForAcceptance: Flow[EmailAddress, CandidateResponse] =
@@ -27,10 +29,10 @@ def askForAcceptance: Flow[EmailAddress, CandidateResponse] =
 def requestAcceptance: Flow[EmailAddress ** PortName[CandidateResponse] ** Reading[CandidateResponse], CandidateResponse] =
   doWhile { case addr ** due ** promised =>
     returning(
-      readAwaitTimeout(1.day)(promised) switch {
-        case Left(resp) => injectR(resp)
-        case Right(p)   => injectL(addr ** due ** p)
-      },
+      readAwaitTimeout(1.day)(promised) switch (
+        is { case InL(resp) => InR(resp) },
+        is { case InR(p)    => InL(addr ** due ** p) },
+      ),
       sendAcceptanceRequest(addr ** due),
     )
   }

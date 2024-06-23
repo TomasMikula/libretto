@@ -101,7 +101,7 @@ object CapturingFun {
     cat: SemigroupalCategory[-->, |*|],
     G: Applicative[G],
     M: Monad[G],
-  ):G[CapturingFun[[a, b] =>> NonEmptyList[a --> b], |*|, F, A, B]] =
+  ): G[CapturingFun[[a, b] =>> NonEmptyList[a --> b], |*|, F, A, B]] =
     leastCommonCapture(fs.head, fs.tail)(discarderOf, union)
 
   def leastCommonCapture[-->[_, _], |*|[_, _], F[_], X, A, B, G[_]](
@@ -130,7 +130,7 @@ object CapturingFun {
                 G.pure(NoCapture(f0 :: fs))
               case Closure(captured, fs) =>
                 discarderOf(captured)
-                  .map { discardFst => Closure(captured, (discardFst(()) > f0) :: fs) }
+                  .map { discardFst => Closure(captured, (f0.inSnd > discardFst(())) :: fs) }
             }
 
           case Closure(captured, f) =>
@@ -165,7 +165,7 @@ object CapturingFun {
           case NoCapture(f) =>
             (discarderOf(acc) zip leastCommonCapture(acc, fs)(discarderOf, union))
               .map { case (discardFst, Exists.Some((p, Closure(y, gs)))) =>
-                val g = discardFst(()) > f
+                val g = f.inSnd > discardFst(())
                 Exists(p, Closure(y, (cat.fst(p) > g) :: gs))
               }
 

@@ -1,8 +1,8 @@
 package libretto.lambda.examples.workflow.generic.lang
 
-import libretto.lambda.{CapturingFun, Lambdas, Sink}
-import libretto.lambda.util.SourcePos
-import libretto.lambda.util.Validated.{Invalid, Valid}
+import libretto.lambda.{CapturingFun, CoproductPartitioning, Lambdas, PatternMatching, Sink}
+import libretto.lambda.util.{NonEmptyList, SourcePos, Validated}
+import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.Tupled
 
 import scala.concurrent.duration.FiniteDuration
@@ -17,8 +17,62 @@ class Workflows[Action[_, _]] {
 
   opaque type Flow[A, B] = FlowAST[Action, A, B]
 
+  private type Extractor[A, B] = libretto.lambda.Extractor[Flow, **, A, B]
+  private case class ExtractorOccurrence[A, B](pos: SourcePos, extractor: Extractor[A, B])
+  private type PartialFlow[A, B] = Flow[A, B] | ExtractorOccurrence[A, B]
+
   def astOf[A, B](f: Flow[A, B]): FlowAST[Action, A, B] =
     f
+
+  private val lambdas: Lambdas[PartialFlow, **, VarOrigin, Unit] =
+    Lambdas[PartialFlow, **, VarOrigin, Unit](
+      universalSplit   = Some([X] => (_: Unit) => Flow.dup[X]),
+      universalDiscard = Some([X, Y] => (_: Unit) => Flow.prj2[X, Y]),
+    )
+
+  private val patmat =
+    new PatternMatching[Flow, **]
+
+  private val patmatForLambdas =
+    patmat.forLambdas(lambdas)(
+      isExtractor = [X, Y] => (f: PartialFlow[X, Y]) =>
+        f match {
+          // case ExtractorOccurrence(pos, ext) => Some(ext .asInstanceOf[Extractor[X, Y]])
+          case o: ExtractorOccurrence[X, Y] => Some(o.extractor)
+          case _ => None
+        },
+      lower =
+        [X, Y] => (f: PartialFlow[X, Y]) =>
+          f match {
+            case f: Flow[X, Y] => Valid(f)
+            case ExtractorOccurrence(p, e) => invalid(MisplacedExtractor(p, e))
+          },
+      lift = [X, Y] => (f: Flow[X, Y]) => (f: PartialFlow[X, Y]),
+    )
+
+  opaque type Expr[A]       = lambdas.Expr[A]
+  opaque type LambdaContext = lambdas.Context
+
+  import lambdas.LinearityViolation
+  import lambdas.shuffled.{Shuffled as ~>}
+
+  private case class MisplacedExtractor(pos: SourcePos, ext: Extractor[?, ?])
+  private case class IllegalCapture[X](pos: SourcePos, captured: Tupled[**, Expr, X])
+
+  private type CapturingFun[A, B] = libretto.lambda.CapturingFun[Flow, **, Tupled[**, Expr, _], A, B]
+
+  private def total[A, B](f: PartialFlow[A, B]): Validated[MisplacedExtractor, Flow[A, B]] =
+    f match
+      case f: Flow[A, B] => Valid(f)
+      case ExtractorOccurrence(pos, ext) => invalid(MisplacedExtractor(pos, ext))
+
+  private def foldTotal[A, B](f: lambdas.Delambdified[A, B]): Validated[MisplacedExtractor, CapturingFun[A, B]] =
+    import CapturingFun.{Closure, NoCapture}
+
+    f match
+      case NoCapture(f)  => f.foldMapA([x, y] => total(_)).map(NoCapture(_))
+      case Closure(x, f) => f.foldMapA([x, y] => total(_)).map(Closure(x, _))
+
 
   extension [A, B](f: Flow[A, B]) {
     def apply(using pos: SourcePos)(a: Expr[A])(using LambdaContext): Expr[B] =
@@ -35,11 +89,23 @@ class Workflows[Action[_, _]] {
     )(
       f: LambdaContext ?=> Expr[A] => Expr[B],
     ): Flow[A, B] =
-      lambdas.delambdifyFoldTopLevel((), VarOrigin.LambdaAbstraction(pos), f) match {
-        case Valid(CapturingFun.NoCapture(g)) => g
-        case Valid(CapturingFun.Closure(x, g)) => ???
-        case Invalid(e) => throw AssertionError(e)
-      }
+      compile(pos, f)
+        .valueOr { es => throw NotImplementedError(s"Unhandled assembly errors: $es") }
+
+    private def compile[A, B](
+      pos: SourcePos,
+      f: LambdaContext ?=> Expr[A] => Expr[B],
+    ): Validated[
+      LinearityViolation | MisplacedExtractor | IllegalCapture[?],
+      Flow[A, B]
+    ] =
+      lambdas
+        .delambdifyTopLevel((), VarOrigin.LambdaAbstraction(pos), f)
+        .flatMap(foldTotal)
+        .flatMap {
+          case CapturingFun.NoCapture(g) => Valid(g)
+          case CapturingFun.Closure(x, g) => invalid(IllegalCapture(pos, x))
+        }
 
     def id[A]: Flow[A, A] =
       FlowAST.Id()
@@ -105,15 +171,6 @@ class Workflows[Action[_, _]] {
 
   }
 
-  private val lambdas: Lambdas[Flow, **, VarOrigin, Unit] =
-    Lambdas[Flow, **, VarOrigin, Unit](
-      universalSplit   = Some([X] => (_: Unit) => Flow.dup[X]),
-      universalDiscard = Some([X, Y] => (_: Unit) => Flow.prj2[X, Y]),
-    )
-
-  opaque type Expr[A]       = lambdas.Expr[A]
-  opaque type LambdaContext = lambdas.Context
-
   object Expr {
     /** Alias for [[constant]]. */
     def apply[A](using SourcePos)(f: Flow[Unit, A])(using LambdaContext): Expr[A] =
@@ -123,29 +180,59 @@ class Workflows[Action[_, _]] {
       lambdas.Expr.const([x] => (_: Unit) => Flow.introFst[x, A](f))(VarOrigin.ConstantExpr(pos))
   }
 
+  class Case[A, R](
+    val pos: SourcePos,
+    val f: LambdaContext ?=> Expr[A] => Expr[R],
+  )
+
+  def is[A, R](using pos: SourcePos)(f: LambdaContext ?=> Expr[A] => Expr[R]): Case[A, R] =
+    Case(pos, f)
+
   extension [A](a: Expr[A])
     def **[B](using pos: SourcePos)(b: Expr[B])(using LambdaContext): Expr[A ** B] =
       lambdas.Expr.zip(a, b)(VarOrigin.Tuple(pos))
 
-  extension [A, B](expr: Expr[A ++ B])
-    def switch[C](using pos: SourcePos)(
-      f: LambdaContext ?=> Either[Expr[A], Expr[B]] => Expr[C],
-    )(using LambdaContext): Expr[C] =
-      val fa = lambdas.delambdifyFoldNested((), VarOrigin.Left(pos),  ctx ?=> (a: Expr[A]) => f(Left(a)))
-      val fb = lambdas.delambdifyFoldNested((), VarOrigin.Right(pos), ctx ?=> (b: Expr[B]) => f(Right(b)))
-      (fa zip fb)
-        .flatMap { case (fa, fb) =>
-          CapturingFun.compileSink(
-            Sink(fa) <+> Sink(fb)
-          )(lambdas.compoundDiscarder, lambdas.exprUniter)
-        }
-        .map {
-          case CapturingFun.NoCapture(g) => g(expr)
-          case CapturingFun.Closure(x, g) =>
-            val xa = lambdas.Expr.zipN(Tupled.zip(x, Tupled.atom(expr)))(VarOrigin.FunctionInputWithCapturedExpressions(pos))
-            lambdas.Expr.map(xa, g)(VarOrigin.CapturingSwitch(pos))
-        }
-        .valueOr { es => throw AssertionError(es) }
+    infix def switch[R](using switchPos: SourcePos, ctx: LambdaContext)(
+      case0: Case[A, R],
+      cases: Case[A, R]*
+    ): Expr[R] =
+      patmatForLambdas
+        .delambdifyAndCompile(
+          a,
+          VarOrigin.CapturingSwitch(switchPos),
+          VarOrigin.SwitchResult(switchPos),
+          NonEmptyList(case0, cases.toList)
+            .map { c => ((), VarOrigin.SwitchCase(c.pos), c.f) }
+        )
+        .valueOr { es => raiseErrors(s"Failed to compile pattern match at ${switchPos.filename}:${switchPos.line}", es) }
+
+  private val EitherPartitioning =
+    CoproductPartitioning[Flow, **, ++]("InL", "InR")
+
+  def InL[A, B]: Extractor[A ++ B, A] =
+    EitherPartitioning.Inl[A, B]
+
+  def InR[A, B]: Extractor[A ++ B, B] =
+    EitherPartitioning.Inr[A, B]
+
+  extension [A, B](ext: Extractor[A, B]) {
+    def unapply(using pos: SourcePos, ctx: LambdaContext)(a: Expr[A]): Some[Expr[B]] =
+      val b = lambdas.Expr.map(a, ExtractorOccurrence(pos, ext))(VarOrigin.ExtractorResult(pos))
+
+      // register an explicit discarder, so that delambdification of
+      //   case Foo(_) => bar
+      // knows about the pattern `Foo(_)` and does not treat the case as
+      //   case _ => bar
+      lambdas.Context.registerDiscard(b)([Y] => (_: Unit) => Flow.prj2[B, Y])
+
+      Some(b)
+
+    def apply(using pos: SourcePos, ctx: LambdaContext)(b: Expr[B]): Expr[A] =
+      lambdas.Expr.map(b, ext.reinject)(VarOrigin.ConstructorResult(pos))
+
+    def apply(): Flow[B, A] =
+      ext.reinject
+  }
 
   def unit(using SourcePos, LambdaContext): Expr[Unit] =
     Expr(Flow.id[Unit])
@@ -162,6 +249,34 @@ class Workflows[Action[_, _]] {
         case Nil     => a
         case c :: cs => go(Flow.prj1(a ** c), cs)
     go(a, cmds.toList)
+
+  private class AssemblyError(msg: String) extends Exception(msg)
+
+  private def raiseErrors(
+    summary: String,
+    es: NonEmptyList[lambdas.LinearityViolation | MisplacedExtractor | patmat.PatternMatchError]
+  ): Nothing =
+    val msg = formatMessages(es)
+    throw AssemblyError(summary + "\n" + msg)
+
+  private def formatMessages(es: NonEmptyList[lambdas.LinearityViolation | MisplacedExtractor | patmat.PatternMatchError]): String =
+    es
+      .map { e =>
+        val NonEmptyList(line0, lines) = formatMessage(e)
+        (s"- $line0" :: lines.map("  " + _))
+          .mkString("\n")
+      }
+      .toList
+      .mkString("\n")
+
+  private def formatMessage(e: lambdas.LinearityViolation | MisplacedExtractor | patmat.PatternMatchError): NonEmptyList[String] =
+    e match
+      case e: lambdas.LinearityViolation =>
+        ???
+      case MisplacedExtractor(pos, ext) =>
+        NonEmptyList.of(s"Extractor ${ext.show} used outside pattern match (at ${pos.filename}:${pos.line})")
+      case e: patmat.PatternMatchError =>
+        ???
 }
 
 object Workflows:
@@ -175,5 +290,9 @@ object Workflows:
     case Prj2(pos: SourcePos)
     case Left(pos: SourcePos)
     case Right(pos: SourcePos)
-    case CapturingSwitch(pos: SourcePos)
     case FunctionInputWithCapturedExpressions(pos: SourcePos)
+    case CapturingSwitch(pos: SourcePos)
+    case SwitchResult(switchPos: SourcePos)
+    case SwitchCase(pos: SourcePos)
+    case ExtractorResult(pos: SourcePos)
+    case ConstructorResult(pos: SourcePos)
