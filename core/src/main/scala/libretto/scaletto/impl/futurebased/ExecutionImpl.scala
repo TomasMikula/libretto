@@ -2,7 +2,7 @@ package libretto.scaletto.impl.futurebased
 
 import libretto.Scheduler
 import libretto.Executor.CancellationReason
-import libretto.lambda.EnumModule
+import libretto.lambda.{EnumModule, Member}
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoExecution
 import libretto.scaletto.impl.{FreeScaletto, ScalaFunction, bug}
@@ -1060,7 +1060,7 @@ private class ExecutionImpl(
     case class Pair[A, B](a: Frontier[A], b: Frontier[B]) extends Frontier[A |*| B]
     case class InjectL[A, B](a: Frontier[A]) extends Frontier[A |+| B]
     case class InjectR[A, B](b: Frontier[B]) extends Frontier[A |+| B]
-    case class OneOfInject[Label, A, Cases](a: Frontier[A], i: EnumModule.Injector[[x, y] =>> y || x, ::, Label, A, Cases]) extends Frontier[OneOf[Cases]]
+    case class OneOfInject[Label, A, Cases](a: Frontier[A], i: Member[[x, y] =>> y || x, ::, Label, A, Cases]) extends Frontier[OneOf[Cases]]
     case class Choice[A, B](a: () => Frontier[A], b: () => Frontier[B], onError: Throwable => Unit) extends Frontier[A |&| B]
     case class Deferred[A](f: Future[Frontier[A]]) extends Frontier[A]
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]
@@ -1158,7 +1158,7 @@ private class ExecutionImpl(
         f match
           case OneOfSingle(f) => f
           case Deferred(f)  => Deferred(f.map(_.extractSingle))
-          case OneOfInject(fa, EnumModule.Injector.Single(_)) => fa
+          case OneOfInject(fa, Member.Single(_)) => fa
     }
 
     extension [Label, A, Cases](f: Frontier[OneOf[Cases || (Label :: A)]]) {
@@ -1168,8 +1168,8 @@ private class ExecutionImpl(
           case Deferred(f) => Deferred(f.map(_.narySumPeel))
           case OneOfInject(a, i) =>
             i match
-              case EnumModule.Injector.InHead(_) => InjectL(a)
-              case EnumModule.Injector.InTail(j) => InjectR(OneOfInject(a, j))
+              case Member.InHead(_) => InjectL(a)
+              case Member.InTail(j) => InjectR(OneOfInject(a, j))
     }
 
     extension [A, B](f: Frontier[A |&| B]) {

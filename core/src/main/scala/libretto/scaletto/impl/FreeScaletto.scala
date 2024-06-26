@@ -1,7 +1,7 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, CoproductPartitioning, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Partitioning, PatternMatching, SemigroupalCategory, Shuffled, Sink, Tupled, Var}
+import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, CoproductPartitioning, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Member, Partitioning, PatternMatching, SemigroupalCategory, Shuffled, Sink, Tupled, Var}
 import libretto.lambda.Partitioning.SubFun
 import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, StaticValue, TypeEq, TypeEqK, Validated}
 import libretto.lambda.util.TypeEq.Refl
@@ -85,7 +85,7 @@ object FreeScaletto extends Scaletto {
     case class InjectR[A, B]() extends (B -⚬ (A |+| B))
     case class EitherF[A, B, C](f: A -⚬ C, g: B -⚬ C) extends ((A |+| B) -⚬ C)
     case class Absurd[A]() extends (Void -⚬ A)
-    case class OneOfInject[Label, A, Cases](i: EnumModule.Injector[[x, y] =>> y || x, ::, Label, A, Cases]) extends (A -⚬ OneOf[Cases])
+    case class OneOfInject[Label, A, Cases](i: Member[[x, y] =>> y || x, ::, Label, A, Cases]) extends (A -⚬ OneOf[Cases])
     case class OneOfPeel[Label, A, Cases]() extends (OneOf[Cases || (Label :: A)] -⚬ (A |+| OneOf[Cases]))
     case class OneOfUnpeel[Label, A, Cases]() extends ((A |+| OneOf[Cases]) -⚬ OneOf[Cases || (Label :: A)])
     case class OneOfExtractSingle[Lbl, A]() extends (OneOf[Lbl :: A] -⚬ A)
@@ -523,7 +523,7 @@ object FreeScaletto extends Scaletto {
 
   override val OneOf: EnumModule.LeftAssociative[-⚬, |*|, OneOf, ||, ::] =
     EnumModule.fromBinarySums[-⚬, |*|, |+|, OneOf, [x, y] =>> y || x, ::](
-      inj = [Label, A, Cases] => (i: EnumModule.Injector[[x, y] =>> y || x, ::, Label, A, Cases]) => OneOfInject(i),
+      inj = [Label, A, Cases] => (i: Member[[x, y] =>> y || x, ::, Label, A, Cases]) => OneOfInject(i),
       peel = [Label, A, Cases] => DummyImplicit ?=> OneOfPeel(),
       unpeel = [Label, A, Cases] => DummyImplicit ?=> OneOfUnpeel(),
       extract = [Label, A] => DummyImplicit ?=> OneOfExtractSingle(),

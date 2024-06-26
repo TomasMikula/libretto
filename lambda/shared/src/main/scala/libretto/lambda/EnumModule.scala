@@ -116,94 +116,8 @@ object EnumModule {
   type LeftAssociative[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] =
     EnumModule[->, **, Enum, [c1, c2] =>> c2 || c1, ::]
 
-  sealed trait Injector[||[_, _], ::[_, _], Label, A, Cases] {
-    import Injector.*
-
-    final type Type = A
-
-    def label: Label & String
-
-    def inTail[HLbl, H]: Injector[||, ::, Label, A, (HLbl :: H) || Cases] =
-      InTail(this)
-
-    infix def testEqual[Lbl2, B](that: Injector[||, ::, Lbl2, B, Cases])(using BiInjective[||],  BiInjective[::]): Option[A =:= B]
-
-    protected def testEqualToSingle[Lbl2, B](using Cases =:= (Lbl2 :: B), BiInjective[::]): Option[A =:= B]
-
-    protected def testEqualToInHead[Lbl2, B, T](using Cases =:= ((Lbl2 :: B) || T), BiInjective[||], BiInjective[::]): Option[A =:= B]
-  }
-
-  object Injector {
-    case class InHead[||[_, _], ::[_, _], Label <: String, A, Tail](
-      label: Label,
-    ) extends Injector[||, ::, Label, A, (Label :: A) || Tail]:
-      override def testEqual[Lbl2, B](that: Injector[||, ::, Lbl2, B, (Label :: A) || Tail])(using BiInjective[||], BiInjective[::]): Option[A =:= B] =
-        that.testEqualToInHead[Label, A, Tail].map(_.flip)
-
-      override protected def testEqualToInHead[Lbl2, B, T](using
-        ev: (Label :: A || Tail) =:= (Lbl2 :: B || T),
-        i: BiInjective[||],
-        j: BiInjective[::],
-      ): Option[A =:= B] =
-        ev match { case BiInjective[||](BiInjective[::](_, ev1), _) => Some(ev1) }
-
-      override protected def testEqualToSingle[Lbl2, B](using (Label :: A || Tail) =:= (Lbl2 :: B), BiInjective[::]): Option[A =:= B] =
-        None
-
-    case class Single[||[_, _], ::[_, _], Label <: String, A](
-      label: Label,
-    ) extends Injector[||, ::, Label, A, Label :: A]:
-      override def testEqual[Lbl2, B](that: Injector[||, ::, Lbl2, B, Label :: A])(using BiInjective[||], BiInjective[::]): Option[A =:= B] =
-        that.testEqualToSingle[Label, A].map(_.flip)
-
-      override protected def testEqualToSingle[Lbl2, B](using
-        ev: (Label :: A) =:= (Lbl2 :: B),
-        inj: BiInjective[::],
-      ): Option[A =:= B] =
-        ev match { case BiInjective[::](_, ev1) => Some(ev1) }
-
-      override protected def testEqualToInHead[Lbl2, B, T](using (Label :: A) =:= (Lbl2 :: B || T), BiInjective[||], BiInjective[::]): Option[A =:= B] =
-        None
-
-    case class InTail[||[_, _], ::[_, _], Label, A, HLbl, H, Tail](
-      i: Injector[||, ::, Label, A, Tail],
-    ) extends Injector[||, ::, Label, A, (HLbl :: H) || Tail]:
-      override def label: Label & String = i.label
-
-      override def testEqual[Lbl2, B](
-        that: Injector[||, ::, Lbl2, B, (HLbl :: H) || Tail],
-      )(using
-        BiInjective[||],
-        BiInjective[::],
-      ): Option[A =:= B] =
-        that match
-          case InTail(j) => i testEqual j
-          case _ => None
-
-      override protected def testEqualToSingle[Lbl2, B](using (HLbl :: H || Tail) =:= (Lbl2 :: B), BiInjective[::]): Option[A =:= B] =
-        None
-
-      override protected def testEqualToInHead[Lbl2, B, T](using (HLbl :: H || Tail) =:= (Lbl2 :: B || T), BiInjective[||], BiInjective[::]): Option[A =:= B] =
-        None
-
-    given singleInjector[||[_, _], ::[_, _], Lbl <: String, A](using
-      label: StaticValue[Lbl],
-    ): Injector[||, ::, Lbl, A, Lbl :: A] =
-      Injector.Single(label.value)
-
-    given headInjector[||[_, _], ::[_, _], HLbl <: String, H, Tail](using
-      hLbl: StaticValue[HLbl],
-    ): Injector[||, ::, HLbl, H, (HLbl :: H) || Tail] =
-      Injector.InHead(hLbl.value)
-
-    given tailInjector[||[_, _], ::[_, _], Lbl, A, HLbl, H, Tail](using
-     j: Injector[||, ::, Lbl, A, Tail],
-    ): Injector[||, ::, Lbl, A, (HLbl :: H) || Tail] =
-      Injector.InTail(j)
-  }
-
   def fromBinarySums[->[_, _], **[_, _], ++[_, _], Enum[_], ||[_, _], ::[_, _]](
-    inj: [Label, A, Cases] => EnumModule.Injector[||, ::, Label, A, Cases] => (A -> Enum[Cases]),
+    inj: [Label, A, Cases] => Member[||, ::, Label, A, Cases] => (A -> Enum[Cases]),
     peel: [Label, A, Cases] => DummyImplicit ?=> Enum[(Label :: A) || Cases] -> (A ++ Enum[Cases]),
     unpeel: [Label, A, Cases] => DummyImplicit ?=> (A ++ Enum[Cases]) -> Enum[(Label :: A) || Cases],
     extract: [Label, A] => DummyImplicit ?=> Enum[Label :: A] -> A,
@@ -218,7 +132,7 @@ object EnumModule {
 }
 
 private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enum[_], ||[_, _], ::[_, _]](
-  inj: [Label, A, Cases] => EnumModule.Injector[||, ::, Label, A, Cases] => (A -> Enum[Cases]),
+  inj: [Label, A, Cases] => Member[||, ::, Label, A, Cases] => (A -> Enum[Cases]),
   peel: [Label, A, Cases] => DummyImplicit ?=> Enum[(Label :: A) || Cases] -> (A ++ Enum[Cases]),
   unpeel: [Label, A, Cases] => DummyImplicit ?=> (A ++ Enum[Cases]) -> Enum[(Label :: A) || Cases],
   extract: [Label, A] => DummyImplicit ?=> Enum[Label :: A] -> A,
@@ -235,7 +149,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
 
   given SemigroupalCategory[->, **] = cat
 
-  private type Injector[Label, A, Cases] = EnumModule.Injector[||, ::, Label, A, Cases]
+  private type Injector[Label, A, Cases] = libretto.lambda.Member[||, ::, Label, A, Cases]
 
   override opaque type CaseList[Cases] = CaseListImpl[Cases]
 
@@ -269,11 +183,11 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
     CaseListImpl.cons(hLbl.value, t)
 
   override given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): IsCaseOf[Lbl, Lbl :: A] { type Type = A } =
-    Injector.Single(label.value)
+    Member.Single(label.value)
   override given isHeadCase[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): IsCaseOf[HLbl, (HLbl :: H) || Tail] { type Type = H } =
-    Injector.InHead(hLbl.value)
+    Member.InHead(hLbl.value)
   override given isTailInjector[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): IsCaseOf[Lbl, (HLbl :: H) || Tail] { type Type = j.Type } =
-    Injector.InTail(j)
+    Member.InTail(j)
 
   override given distLRCons[A, Label <: String, H, Tail](using
     label: StaticValue[Label],
@@ -372,7 +286,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       override type Out = Lbl :: (A ** B)
 
       override def compile: (A ** Enum[Lbl :: B]) -> Enum[Out] =
-        extract[Lbl, B].inSnd[A] > inj(Injector.Single(label))
+        extract[Lbl, B].inSnd[A] > inj(Member.Single(label))
     }
 
     case class Cons[A, HLbl <: String, H, Tail, ATail](
@@ -383,7 +297,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
 
       override def compile: (A ** Enum[(HLbl :: H) || Tail]) -> Enum[Out] =
         cat.snd(peel[HLbl, H, Tail]) > distr.distLR > either(
-          inj(Injector.InHead(hLbl)),
+          inj(Member.InHead(hLbl)),
           tail.compile > injectR > unpeel[HLbl, A ** H, ATail],
         )
     }
@@ -411,7 +325,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       override type Out = Lbl :: (A ** B)
 
       override def compile: (Enum[Lbl :: A] ** B) -> Enum[Out] =
-        extract[Lbl, A].inFst[B] > inj(Injector.Single(label))
+        extract[Lbl, A].inFst[B] > inj(Member.Single(label))
     }
 
     case class Cons[B, HLbl <: String, H, Tail, BTail](
@@ -422,7 +336,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
 
       override def compile: (Enum[(HLbl :: H) || Tail] ** B) -> Enum[Out] =
         cat.fst(peel[HLbl, H, Tail]) > distr.distRL > either(
-          inj(Injector.InHead(hLbl)),
+          inj(Member.InHead(hLbl)),
           tail.compile > injectR > unpeel[HLbl, H ** B, BTail],
         )
     }
@@ -460,7 +374,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       )(using
         G: Applicative[G],
       ): G[HandlersImpl[Lbl :: F[A], R]] =
-        h(Injector.Single(label))
+        h(Member.Single(label))
           .map(HandlersImpl.Single(_))
     }
 
@@ -477,7 +391,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
         G: Applicative[G],
       ): G[HandlersImpl[(HLbl :: F[H]) || FTail, R]] =
         val h0: G[F[H] -> R] =
-          h[H](Injector.InHead(hLbl))
+          h[H](Member.InHead(hLbl))
         val ht: [X] => Injector[?, X, Tail] => G[F[X] -> R] =
           [X] => (i: Injector[?, X, Tail]) =>
             h[X](i.inTail)
