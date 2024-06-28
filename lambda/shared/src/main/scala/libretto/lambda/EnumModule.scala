@@ -110,6 +110,11 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
     partitioning[u.A]
 
   def caseExtractor[Cases, C](p: Partitioning[Cases], ev: IsCaseOf[C, Cases]): Extractor[->, **, Enum[Cases], ev.Type]
+
+  extension [Cases](p: Partitioning[Cases]) {
+    def apply[C](using ev: IsCaseOf[C, Cases]): Extractor[->, **, Enum[Cases], ev.Type] =
+      caseExtractor[Cases, C](p, ev)
+  }
 }
 
 object EnumModule {

@@ -570,11 +570,6 @@ trait CoreDSL {
       )
   }
 
-  extension [Cases](p: OneOf.Partitioning[Cases]) {
-    def apply[C](using ev: OneOf.IsCaseOf[C, Cases]): Extractor[-⚬, |*|, OneOf[Cases], ev.Type] =
-      OneOf.caseExtractor[Cases, C](p, ev)
-  }
-
   extension [Cases](x: $[OneOf[Cases]]) {
     def handle[R](using LambdaContext)(
       handlers: OneOf.Handlers.InitialBuilder[Cases] => OneOf.Handlers[Cases, R]
