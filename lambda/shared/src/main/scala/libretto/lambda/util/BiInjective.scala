@@ -2,6 +2,9 @@ package libretto.lambda.util
 
 trait BiInjective[F[_, _]] {
   def unapply[A, B, X, Y](ev: F[A, B] =:= F[X, Y]): (A =:= X, B =:= Y)
+
+  def flip: BiInjective[[x, y] =>> F[y, x]] =
+    new BiInjective.Flipped[F](this)
 }
 
 object BiInjective {
@@ -18,5 +21,10 @@ object BiInjective {
   given BiInjective[Tuple2] with {
     override def unapply[A, B, X, Y](ev: (A, B) =:= (X, Y)): (A =:= X, B =:= Y) =
       ev match { case TypeEq(TypeEq.Refl()) => (summon, summon) }
+  }
+
+  private class Flipped[F[_, _]](underlying: BiInjective[F]) extends BiInjective[[x, y] =>> F[y, x]] {
+    override def unapply[A, B, X, Y](ev: F[B, A] =:= F[Y, X]): (A =:= X, B =:= Y) =
+      underlying.unapply(ev).swap
   }
 }

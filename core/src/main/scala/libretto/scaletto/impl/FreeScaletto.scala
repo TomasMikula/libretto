@@ -57,10 +57,8 @@ object FreeScaletto extends Scaletto {
       ev match { case TypeEq(Refl()) => (summon, summon) }
   }
 
-  given biInjectiveFlippedSeparator: BiInjective[[x, y] =>> y || x] with {
-    override def unapply[A, B, X, Y](ev: (B || A) =:= (Y || X)): (A =:= X, B =:= Y) =
-      ev match { case TypeEq(Refl()) => (summon, summon) }
-  }
+  given biInjectiveFlippedSeparator: BiInjective[[x, y] =>> y || x] =
+    BiInjective[||].flip
 
   given BiInjective[::] with {
     override def unapply[A, B, X, Y](ev: (A :: B) =:= (X :: Y)): (A =:= X, B =:= Y) =
