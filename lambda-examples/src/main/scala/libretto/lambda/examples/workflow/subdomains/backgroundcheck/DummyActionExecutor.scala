@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
-import libretto.lambda.examples.workflow.generic.lang.{**, PortName}
+import libretto.lambda.examples.workflow.generic.lang.{**, ::, ||, Enum, PortName}
 import libretto.lambda.examples.workflow.generic.runtime.{ActionExecutor, Value, WorkflowEngine}
 import libretto.lambda.UnhandledCase
 import scala.util.{Success, Try}
@@ -39,7 +39,7 @@ class DummyActionExecutor(
           personalId("1234")
         val hist: Value[Val, EmploymentHistory] =
           employmentHistory("Facebook, Microsoft, Amazon")
-        engine.completeReading(w, p, Value.right(pId ** hist))
+        engine.completeReading(w, p, Value.ofEnum[CandidateResponse]["Accepted"](pId ** hist))
         onComplete(Success(Value.unit))
       case other =>
         throw AssertionError(s"Unexpected value of type InputPortRef[T]: $other")

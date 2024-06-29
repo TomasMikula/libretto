@@ -2,12 +2,10 @@ package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
 import libretto.lambda.Unzippable
 import libretto.lambda.examples.workflow.generic
-import libretto.lambda.examples.workflow.generic.runtime.Value
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, Enum, Reading}
+import libretto.lambda.examples.workflow.generic.runtime.{PortId, Value}
 import libretto.lambda.examples.workflow.generic.runtime.Value.Ext
-import libretto.lambda.examples.workflow.generic.lang.**
-import libretto.lambda.examples.workflow.generic.lang.++
-import libretto.lambda.examples.workflow.generic.runtime.PortId
-import libretto.lambda.examples.workflow.generic.lang.Reading
+import libretto.lambda.util.Exists
 
 enum Val[A]:
   case EmailAddr(value: String) extends Val[EmailAddress]
@@ -30,6 +28,8 @@ object Val:
       throw new AssertionError(s"Unexpected value representing `++`: $value")
     override def extractPortId[A](value: Val[Reading[A]]): PortId[A] =
       throw new AssertionError(s"Unexpected value representing input port (`Reading[A]`): $value")
+    override def revealCase[Cases](value: Val[Enum[Cases]]): Exists[[Lbl] =>> Exists[[A] =>> Value.Inject[Val, Lbl, A, Cases]]] =
+      throw new AssertionError(s"Unexpected value representing `Enum`: $value")
 
 type Value[A] = generic.runtime.Value[Val, A]
 

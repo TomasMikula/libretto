@@ -1,8 +1,9 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{Projection, UnhandledCase, Unzippable, Zippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, PortName, Reading}
+import libretto.lambda.{EnumModule, Member, Projection, UnhandledCase, Unzippable, Zippable}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::, Enum, PortName, Reading}
 import libretto.lambda.util.Exists
+import libretto.lambda.util.unapply.Unapply
 
 enum Value[F[_], A]:
   case One[F[_]]() extends Value[F, Unit]
@@ -14,6 +15,11 @@ enum Value[F[_], A]:
 
   case Left [F[_], A, B](a: Value[F, A]) extends Value[F, A ++ B]
   case Right[F[_], A, B](b: Value[F, B]) extends Value[F, A ++ B]
+
+  case Inject[F[_], Label, A, Cases](
+    i: Member[[x, y] =>> y || x, ::, Label, A, Cases],
+    a: Value[F, A],
+  ) extends Value[F, Enum[Cases]]
 
   case PortNameValue[F[_], A](w: WorkflowRef[?], pa: PortId[A]) extends Value[F, PortName[A]]
   case ReadingInput[F[_], A](pa: PortId[A]) extends Value[F, Reading[A]]
@@ -47,6 +53,41 @@ object Value:
   def right[F[_], A, B](value: Value[F, B]): Value[F, A ++ B] =
     Value.Right(value)
 
+  def ofEnum[F[_], Label, A, Cases](
+    i: Member[[x, y] =>> y || x, ::, Label, A, Cases],
+    a: Value[F, A],
+  ): Value[F, Enum[Cases]] =
+    Value.Inject(i, a)
+
+  def ofEnum[T](using u: Unapply[T, Enum]): ValueOfEnumBuilder[u.A] =
+    ValueOfEnumBuilder[u.A]
+
+  class ValueOfEnumBuilder[Cases]:
+    def apply[Lbl](using m: Member[[x, y] =>> y || x, ::, Lbl, ?, Cases]): ValueOfEnumCaseBuilder[Lbl, m.Type, Cases] =
+      ValueOfEnumCaseBuilder[Lbl, m.Type, Cases](m)
+
+  class ValueOfEnumCaseBuilder[Lbl, A, Cases](m: Member[[x, y] =>> y || x, ::, Lbl, A, Cases]):
+    def apply[F[_]](a: Value[F, A]): Value[F, Enum[Cases]] =
+      Value.ofEnum(m, a)
+
+  def peel[F[_], Lbl0, A0, Tail](v: Value[F, Enum[Tail || (Lbl0 :: A0)]])(using Compliant[F]): Value[F, A0 ++ Enum[Tail]] =
+    revealCase(v) match
+      case Exists.Some(Exists.Some(inj)) =>
+        peelInject(inj)
+
+  private def peelInject[F[_], Lbl, A, Lbl0, A0, Tail](
+    inj: Inject[F, Lbl, A, Tail || (Lbl0 :: A0)]
+  ): Value[F, A0 ++ Enum[Tail]] =
+    inj.i match
+      case Member.InHead(_) =>
+        summon[Lbl =:= Lbl0]
+        summon[A =:= A0]
+        Value.Left(inj.a)
+      case Member.InTail(i) =>
+        Value.Right(Inject(i, inj.a))
+      case Member.Single(_) =>
+        throw AssertionError(s"Impossible: would mean that `a || b` = `c :: d`")
+
   def portName[F[_], A](w: WorkflowRef[?], promiseId: PortId[A]): Value[F, PortName[A]] =
     PortNameValue(w, promiseId)
 
@@ -56,6 +97,7 @@ object Value:
   trait Compliant[F[_]] extends Unzippable[**, F]:
     def toEither[A, B](value: F[A ++ B]): Either[F[A], F[B]]
     def extractPortId[A](value: F[Reading[A]]): PortId[A]
+    def revealCase[Cases](value: F[Enum[Cases]]): Exists[[Lbl] =>> Exists[[A] =>> Value.Inject[F, Lbl, A, Cases]]]
 
   def unpair[F[_], A, B](value: Value[F, A ** B])(using F: Unzippable[**, F]): (Value[F, A], Value[F, B]) =
     value match
@@ -70,6 +112,19 @@ object Value:
       case Value.Left(a)  => scala.Left(a)
       case Value.Right(b) => scala.Right(b)
       case Ext(value)     => F.toEither(value).left.map(Ext(_)).map(Ext(_))
+
+  def revealCase[F[_], Cases](
+    v: Value[F, Enum[Cases]]
+  )(using
+    F: Compliant[F],
+  ): Exists[[Lbl] =>> Exists[[A] =>> Value.Inject[F, Lbl, A, Cases]]] =
+    v match
+      case Inject(i, a) =>
+        Exists(Exists(Inject(i, a)))
+      case Ext(value) =>
+        F.revealCase(value)
+      case One() | Pair(_, _) | Left(_) | Right(_) | PortNameValue(_, _) | ReadingInput(_) =>
+        throw AssertionError(s"Impossible for $v to represent an Enum value")
 
   def extractPortId[F[_], A](value: Value[F, Reading[A]])(using F: Compliant[F]): PortId[A] =
     value match

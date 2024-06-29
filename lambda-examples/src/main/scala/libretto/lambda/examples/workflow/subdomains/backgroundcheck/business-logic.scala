@@ -8,10 +8,10 @@ import scala.concurrent.duration.*
 val backgroundCheck: Flow[EmailAddress, Report] =
   Flow { candidate =>
     askForAcceptance(candidate) switch (
-      is { case InL(_) =>
+      is { case CandidateResponse.Declined(_) =>
         Report.candidateDeclined(candidate)
       },
-      is { case InR(personalId ** employmentHistory) =>
+      is { case CandidateResponse.Accepted(personalId ** employmentHistory) =>
         val criminalReport = checkCriminalRecord(personalId)
         val civilReport    = checkCivilRecord(personalId)
         val employmentCert = verifyEmploymentHistory(employmentHistory)

@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.lang
 
-import libretto.lambda.{CocartesianSemigroupalCategory, Distribution, Shuffled, SymmetricSemigroupalCategory}
+import libretto.lambda.{CocartesianSemigroupalCategory, Distribution, Member, Shuffled, SymmetricSemigroupalCategory}
 import libretto.lambda.util.Masked
 
 import scala.concurrent.duration.FiniteDuration
@@ -33,6 +33,10 @@ sealed trait FlowAST[Op[_, _], A, B] {
       case _: AssocRL[op, x, y, z]      => AssocRL[F, x, y, z]()
       case _: InjectL[op, x, y]         => InjectL[F, x, y]()
       case _: InjectR[op, x, y]         => InjectR[F, x, y]()
+      case i: Inject[op, l, a, cases]   => Inject[F, l, a, cases](i.i)
+      case _: Peel[op, l, a, cases]     => Peel[F, l, a, cases]()
+      case _: Unpeel[op, l, a, cases]   => Unpeel[F, l, a, cases]()
+      case _: Extract[op, l, a]         => Extract[F, l, a]()
       case _: Prj1[op, x, y]            => Prj1[F, x, y]()
       case _: Prj2[op, x, y]            => Prj2[F, x, y]()
       case Dup()                        => Dup()
@@ -75,6 +79,10 @@ object FlowAST {
   case class InjectL[Op[_, _], A, B]() extends Work[Op, A, A ++ B]
   case class InjectR[Op[_, _], A, B]() extends Work[Op, B, A ++ B]
   case class Either[Op[_, _], A, B, C](f: FlowAST[Op, A, C], g: FlowAST[Op, B, C]) extends Work[Op, A ++ B, C]
+  case class Inject[Op[_, _], Label, A, Cases](i: Member[[x, y] =>> y || x, ::, Label, A, Cases]) extends Work[Op, A, Enum[Cases]]
+  case class Peel[Op[_, _], Label, A, Cases]() extends Work[Op, Enum[Cases || (Label :: A)], A ++ Enum[Cases]]
+  case class Unpeel[Op[_, _], Label, A, Cases]() extends Work[Op, A ++ Enum[Cases], Enum[Cases || (Label :: A)]]
+  case class Extract[Op[_, _], Label, A]() extends Work[Op, Enum[Label :: A], A]
   case class DistributeLR[Op[_, _], A, B, C]() extends Work[Op, A ** (B ++ C), (A ** B) ++ (A ** C)]
   case class DoWhile[Op[_, _], A, B](f: FlowAST[Op, A, A ++ B]) extends Work[Op, A, B]
   case class Delay[Op[_, _], A](duration: FiniteDuration) extends Work[Op, A, A]

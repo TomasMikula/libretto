@@ -1,6 +1,7 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
-import libretto.lambda.examples.workflow.generic.lang.*
+import libretto.lambda.examples.workflow.generic.lang.{|| as |, *}
+import workflows.Enum
 
 type EmailAddress
 type PersonalId
@@ -10,7 +11,14 @@ type CivilRecord
 type EmploymentVerificationResult
 type Report
 
-type CandidateResponse = Unit ++ (PersonalId ** EmploymentHistory)
+type CandidateResponse = Enum
+  [ "Declined" :: Unit
+  | "Accepted" :: (PersonalId ** EmploymentHistory)
+  ]
+
+object CandidateResponse:
+  val Declined = Enum.partition[CandidateResponse]["Declined"]
+  val Accepted = Enum.partition[CandidateResponse]["Accepted"]
 
 enum Action[A, B]:
   case SendAcceptanceRequest extends Action[EmailAddress ** PortName[CandidateResponse], Unit]

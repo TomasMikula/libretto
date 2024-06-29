@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.lang
 
-import libretto.lambda.{CapturingFun, CoproductPartitioning, Lambdas, PatternMatching, Sink}
-import libretto.lambda.util.{NonEmptyList, SourcePos, Validated}
+import libretto.lambda.{CapturingFun, CoproductPartitioning, EnumModule, Lambdas, Member, PatternMatching, Sink}
+import libretto.lambda.util.{BiInjective, NonEmptyList, SourcePos, Validated}
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.Tupled
 
@@ -48,6 +48,17 @@ class Workflows[Action[_, _]] {
             case ExtractorOccurrence(p, e) => invalid(MisplacedExtractor(p, e))
           },
       lift = [X, Y] => (f: Flow[X, Y]) => (f: PartialFlow[X, Y]),
+    )
+
+  private given BiInjective[[x, y] =>> y || x] =
+    BiInjective[||].flip
+
+  val Enum =
+    EnumModule.fromBinarySums[Flow, **, ++, Enum, [x, y] =>> y || x, ::](
+      inj     = [Label, A, Cases] => (i: Member[[x, y] =>> y || x, ::, Label, A, Cases]) => Flow.inject(i),
+      peel    = [Label, A, Cases] => (_: DummyImplicit) ?=> Flow.peel,
+      unpeel  = [Label, A, Cases] => (_: DummyImplicit) ?=> Flow.unpeel,
+      extract = [Label, A]        => (_: DummyImplicit) ?=> Flow.extract,
     )
 
   opaque type Expr[A]       = lambdas.Expr[A]
@@ -133,6 +144,18 @@ class Workflows[Action[_, _]] {
 
     def either[A, B, C](f: Flow[A, C], g: Flow[B, C]): Flow[A ++ B, C] =
       FlowAST.Either(f, g)
+
+    def inject[Label, A, Cases](i: Member[[x, y] =>> y || x, ::, Label, A, Cases]): Flow[A, Enum[Cases]] =
+      FlowAST.Inject(i)
+
+    def peel[Label, A, Cases]: Flow[Enum[Cases || (Label :: A)], A ++ Enum[Cases]] =
+      FlowAST.Peel()
+
+    def unpeel[Label, A, Cases]: Flow[A ++ Enum[Cases], Enum[Cases || (Label :: A)]] =
+      FlowAST.Unpeel()
+
+    def extract[Label, A]: Flow[Enum[Label :: A], A] =
+      FlowAST.Extract()
 
     def distributeLR[A, B, C]: Flow[A ** (B ++ C), (A ** B) ++ (A ** C)] =
       FlowAST.DistributeLR()

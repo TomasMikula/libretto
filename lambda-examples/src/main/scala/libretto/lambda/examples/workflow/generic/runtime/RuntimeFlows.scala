@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Capture, Focus, Knit, Knitted, Projection, Spine, SymmetricSemigroupalCategory, UnhandledCase, Unzippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, PortName, Reading, given}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::, Enum, FlowAST, PortName, Reading, given}
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import scala.concurrent.duration.FiniteDuration
@@ -182,28 +182,42 @@ object RuntimeFlows {
       case i: FlowAST.InjectL[op, x, y] =>
         summon[VA =:= x]
         summon[W =:= (x ++ y)]
+        given (V[A] =:= x) = ev.flip
         v match
           case Focus.Id() =>
-            FeedValueRes.Complete(
-              Input.Ready(Value.left[Val, x, y](ev.substituteContra(value))),
-            )
-          case v: Focus.Proper[**, V] =>
-            RuntimeAction.captureValue[Action, Val, V, A](value, v) match
-              case Exists.Some((collector, k)) =>
-                given (V[A] =:= x) = ev.flip
-                FeedValueRes.Absorbed(k, action(collector).to[x] >>> i)
-
-      case i: FlowAST.InjectR[op, x, y] =>
-        summon[VA =:= y]
-        v match
-          case Focus.Id() =>
-            val result = Input.Ready(Value.right[Val, x, y](ev.substituteContra(value)))
+            val result = Input.Ready(Value.left[Val, x, y](value.as[x]))
             FeedValueRes.Complete(result)
           case v: Focus.Proper[**, V] =>
             RuntimeAction.captureValue[Action, Val, V, A](value, v) match
               case Exists.Some((collector, k)) =>
-                given (V[A] =:= y) = ev.flip
+                FeedValueRes.Absorbed(k, action(collector).to[x] >>> i)
+
+      case i: FlowAST.InjectR[op, x, y] =>
+        summon[VA =:= y]
+        summon[W =:= (x ++ y)]
+        given (V[A] =:= y) = ev.flip
+        v match
+          case Focus.Id() =>
+            val result = Input.Ready(Value.right[Val, x, y](value.as[y]))
+            FeedValueRes.Complete(result)
+          case v: Focus.Proper[**, V] =>
+            RuntimeAction.captureValue[Action, Val, V, A](value, v) match
+              case Exists.Some((collector, k)) =>
                 FeedValueRes.Absorbed(k, action(collector).to[y] >>> i)
+
+      case i: FlowAST.Inject[op, lbl, a, cases] =>
+        summon[VA =:= a]
+        summon[W =:= Enum[cases]]
+        given (V[A] =:= a) = ev.flip
+        v match
+          case Focus.Id() =>
+            summon[V[A] =:= A]
+            val result = Input.Ready(Value.ofEnum(i.i, value.as[VA]))
+            FeedValueRes.Complete(result)
+          case v: Focus.Proper[**, V] =>
+            RuntimeAction.captureValue[Action, Val, V, A](value, v) match
+              case Exists.Some((collector, k)) =>
+                FeedValueRes.Absorbed(k, action(collector).to[a] >>> i)
 
       case e: FlowAST.Either[op, x, y, w] =>
         v match
@@ -217,6 +231,19 @@ object RuntimeFlows {
                 FeedValueRes.Transformed(Input.Ready(y), e.g)
           case other =>
             throw AssertionError(s"Impossible: would mean that `++` = `**`")
+
+      case p: FlowAST.Peel[op, lbl, a, t] =>
+        summon[VA =:= Enum[t || (lbl :: a)]]
+        given (V[A] =:= Enum[t || (lbl :: a)]) = ev.flip
+        v match
+          case Focus.Id() =>
+            val v: Value[Val, Enum[t || (lbl :: a)]] = value.as[VA]
+            val result = Value.peel(v)
+            FeedValueRes.Complete(Input.Ready(result))
+          case v: Focus.Proper[**, V] =>
+            RuntimeAction.captureValue[Action, Val, V, A](value, v) match
+              case Exists.Some((collector, k)) =>
+                FeedValueRes.Absorbed(k, action(collector).to[VA] >>> p)
 
       case f1: FlowAST.DistributeLR[op, x, y, z] =>
         summon[VA =:= (x ** (y ++ z))]

@@ -25,6 +25,25 @@ given BiInjective[++] with {
     ev match { case TypeEq(Refl()) => (summon, summon) }
 }
 
+/** Used for declaring members of an ADT. */
+sealed trait ::[Name, Type]
+
+given BiInjective[::] with {
+  override def unapply[A, B, X, Y](ev: A :: B =:= X :: Y): (A =:= X, B =:= Y) =
+    ev match { case TypeEq(Refl()) => (summon, summon) }
+}
+
+/** Used as a separator of members of an ADT. */
+sealed trait ||[A, B]
+
+given BiInjective[||] with {
+  override def unapply[A, B, X, Y](ev: (A || B) =:= (X || Y)): (A =:= X, B =:= Y) =
+    ev match { case TypeEq(Refl()) => (summon, summon) }
+}
+
+/** Domain-level user-definable sum type. */
+sealed trait Enum[Cases]
+
 /** References an external input port. */
 sealed trait PortName[A]
 
