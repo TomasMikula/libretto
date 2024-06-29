@@ -122,14 +122,41 @@ object RuntimeFlows {
   )(using
     Value.Compliant[Val],
   ): PropagateValueRes[Action, Val, F, B] =
-    f.maskInput.visit { [VA] => (f: Work[Action, Val, VA, W], ev: VA =:= V[A]) => f match
+    feedValue[Action, Val, V, A, W](value, v, f) match {
+      case FeedValueRes.Complete(result) =>
+        PropagateValueRes.Transformed(result, fromShuffled(pre.plug[W] > post))
+      case FeedValueRes.Transformed(newInput, cont) =>
+        PropagateValueRes.Transformed(newInput, fromShuffled(pre.plug > toShuffled(cont).at(g) > post))
+      case FeedValueRes.Absorbed(k, cont) =>
+        pre.knitBw(k.at(g)) match
+          case Exists.Some((k1, pre1)) =>
+            PropagateValueRes.Absorbed(k1, fromShuffled(pre1 > toShuffled(cont).at(g) > post))
+      case FeedValueRes.Shrunk(newInput, p) =>
+        project(pre.plug, p.at(g)) match
+          case sh.ProjectRes.Projected(p0, pre1) =>
+            PropagateValueRes.Shrunk(newInput, p0, fromShuffled(pre1 > post))
+      case _: FeedValueRes.Read[act, vl, x] =>
+        PropagateValueRes.Read(fromShuffled(pre.plug[PortName[x] ** Reading[x]] > post))
+      case FeedValueRes.ReadAwaitTimeout(toAwait, timeout) =>
+        PropagateValueRes.ReadAwaitTimeout(toAwait, timeout, fromShuffled(pre.plug > post))
+      case FeedValueRes.ActionRequest(input, action) =>
+        PropagateValueRes.ActionRequest(input, action, fromShuffled(pre.plug > post))
+    }
+
+  private def feedValue[Action[_, _], Val[_], V[_], A, W](using sh: Shuffled[Action, Val])(
+    value: Value[Val, A],
+    v: Focus[**, V],
+    f: Work[Action, Val, V[A], W],
+  )(using
+    Value.Compliant[Val],
+  ): FeedValueRes[Action, Val, V, W] =
+    f.maskInput.visit[FeedValueRes[Action, Val, V, W]] { [VA] => (f: Work[Action, Val, VA, W], ev: VA =:= V[A]) => f match
       case FlowAST.Dup() =>
         ev match { case TypeEq(Refl()) =>
           v match
             case Focus.Id() =>
               val i = Input.Ready(value)
-              val cont1 = fromShuffled(pre.plug[A ** A] > post)
-              PropagateValueRes.Transformed(i ** i, cont1)
+              FeedValueRes.Complete(i ** i)
             case Focus.Fst(i) =>
               UnhandledCase.raise(s"propagateValue into $f at $v")
             case Focus.Snd(i) =>
@@ -139,60 +166,44 @@ object RuntimeFlows {
       case _: FlowAST.Prj1[op, x, y] =>
         summon[VA =:= (x ** y)]
         summon[W =:= x]
-        val pre1: sh.Shuffled[F[A], G[x ** y]] = pre[A].to(using ev.flip.liftCo[G])
-        val p: Projection.Proper[**, G[x ** y], G[x]] = Projection.discardSnd[**, x, y].at(g)
-        project(pre1, p) match
-          case sh.ProjectRes.Projected(p0, pre2) =>
-            PropagateValueRes.Shrunk(Input.Ready(value), p0, fromShuffled(pre2 > post))
+        FeedValueRes.Shrunk(
+          Input.Ready(value),
+          Projection.discardSnd[**, x, y].from(using ev.flip)
+        )
 
       case _: FlowAST.Prj2[op, x, y] =>
         summon[VA =:= (x ** y)]
         summon[W =:= y]
-        val pre1: sh.Shuffled[F[A], G[x ** y]] = pre[A].to(using ev.flip.liftCo[G])
-        val p: Projection.Proper[**, G[x ** y], G[y]] = Projection.discardFst[**, x, y].at(g)
-        project(pre1, p) match
-          case sh.ProjectRes.Projected(p0, pre2) =>
-            PropagateValueRes.Shrunk(Input.Ready(value), p0, fromShuffled(pre2 > post))
+        FeedValueRes.Shrunk(
+          Input.Ready(value),
+          Projection.discardFst[**, x, y].from(using ev.flip)
+        )
 
       case i: FlowAST.InjectL[op, x, y] =>
         summon[VA =:= x]
+        summon[W =:= (x ++ y)]
         v match
           case Focus.Id() =>
-            PropagateValueRes.Transformed(
-              Input.Ready(Value.left(ev.substituteContra(value))),
-              fromShuffled(pre[x ++ y] > post),
+            FeedValueRes.Complete(
+              Input.Ready(Value.left[Val, x, y](ev.substituteContra(value))),
             )
           case v: Focus.Proper[**, V] =>
             RuntimeAction.captureValue[Action, Val, V, A](value, v) match
               case Exists.Some((collector, k)) =>
-                given (V[A] =:= x) = ev.flip andThen summon[VA =:= x]
-                pre.knitBw(k.at(g)) match
-                  case Exists.Some((k1, pre1)) =>
-                    val i1 = action(collector).to[x] >>> i
-                    PropagateValueRes.Absorbed(
-                      k1,
-                      fromShuffled(pre1 > toShuffled(i1).at(g) > post),
-                    )
+                given (V[A] =:= x) = ev.flip
+                FeedValueRes.Absorbed(k, action(collector).to[x] >>> i)
 
       case i: FlowAST.InjectR[op, x, y] =>
         summon[VA =:= y]
         v match
           case Focus.Id() =>
-            PropagateValueRes.Transformed(
-              Input.Ready(Value.right(ev.substituteContra(value))),
-              fromShuffled(pre[x ++ y] > post),
-            )
+            val result = Input.Ready(Value.right[Val, x, y](ev.substituteContra(value)))
+            FeedValueRes.Complete(result)
           case v: Focus.Proper[**, V] =>
             RuntimeAction.captureValue[Action, Val, V, A](value, v) match
               case Exists.Some((collector, k)) =>
-                given (V[A] =:= y) = ev.flip andThen summon[VA =:= y]
-                pre.knitBw(k.at(g)) match
-                  case Exists.Some((k1, pre1)) =>
-                    val i1 = action(collector).to[y] >>> i
-                    PropagateValueRes.Absorbed(
-                      k1,
-                      fromShuffled(pre1 > toShuffled(i1).at(g) > post),
-                    )
+                given (V[A] =:= y) = ev.flip
+                FeedValueRes.Absorbed(k, action(collector).to[y] >>> i)
 
       case e: FlowAST.Either[op, x, y, w] =>
         v match
@@ -201,17 +212,11 @@ object RuntimeFlows {
             val xy: Value[Val, x ++ y] = axy.substituteCo(value)
             Value.toEither(xy) match
               case Left(x) =>
-                PropagateValueRes.Transformed(
-                  Input.Ready(x),
-                  fromShuffled(pre[x] > toShuffled(e.f).at(g) > post),
-                )
+                FeedValueRes.Transformed(Input.Ready(x), e.f)
               case Right(y) =>
-                PropagateValueRes.Transformed(
-                  Input.Ready(y),
-                  fromShuffled(pre[y] > toShuffled(e.g).at(g) > post),
-                )
+                FeedValueRes.Transformed(Input.Ready(y), e.g)
           case other =>
-            throw AssertionError(s"Impossible: would meant that `++` = `**`")
+            throw AssertionError(s"Impossible: would mean that `++` = `**`")
 
       case f1: FlowAST.DistributeLR[op, x, y, z] =>
         summon[VA =:= (x ** (y ++ z))]
@@ -219,7 +224,7 @@ object RuntimeFlows {
           case v: Focus.Fst[p, v1, yz] =>
             (summon[(x ** (y ++ z)) =:= VA] andThen ev andThen summon[V[A] =:= (v1[A] ** yz)]) match
               case BiInjective[**](TypeEq(Refl()), TypeEq(Refl())) =>
-                feedDistributeeLR[Action, Val, F, v1, y, z, G, A, B](value, pre, v.i, post, g)
+                feedDistributeeLR[Action, Val, v1, A, y, z](value, v.i)
           case Focus.Snd(i) =>
             UnhandledCase.raise(s"propagateValue into $f at $v")
           case Focus.Id() =>
@@ -231,7 +236,7 @@ object RuntimeFlows {
             ev match { case TypeEq(Refl()) =>
               summon[W =:= (Unit ** A)]
               val input = Input.Ready(Value.unit) ** Input.Ready(value)
-              PropagateValueRes.Transformed(input, fromShuffled(pre[Unit ** A] > post))
+              FeedValueRes.Complete(input)
             }
           case Focus.Fst(i) =>
             UnhandledCase.raise(s"propagateValue into $f at $v")
@@ -239,20 +244,18 @@ object RuntimeFlows {
             UnhandledCase.raise(s"propagateValue into $f at $v")
 
       case _: FlowAST.Read[op, x] =>
+        summon[VA =:= Unit]
         v match
           case Focus.Id() =>
             summon[W =:= (PortName[x] ** Reading[x])]
-            PropagateValueRes.Read(fromShuffled(pre[PortName[x] ** Reading[x]] > post))
-          case Focus.Fst(i) =>
-            UnhandledCase.raise(s"propagateValue into $f at $v")
-          case Focus.Snd(i) =>
-            UnhandledCase.raise(s"propagateValue into $f at $v")
+            FeedValueRes.Read[Action, Val, x]()
+          case Focus.Fst(_) | Focus.Snd(_) =>
+            throw AssertionError(s"Impossible: would mean that `Unit` = `a ** b`")
 
       case FlowAST.DoWhile(body) =>
         ev match { case TypeEq(Refl()) =>
           val f1 = body >>> FlowAST.Either(FlowAST.DoWhile(body), FlowAST.Id())
-          val cont = fromShuffled(pre[A] > toShuffled(f1).at(g) > post)
-          PropagateValueRes.Transformed[Action, Val, F, A, B](Input.Ready(value), cont)
+          FeedValueRes.Transformed(Input.Ready(value), f1)
         }
 
       case read: FlowAST.ReadAwait[op, a] =>
@@ -262,27 +265,20 @@ object RuntimeFlows {
               summon[A =:= V[A]] andThen ev.flip andThen summon[VA =:= Reading[a]]
             val ref =
               Value.extractPortId(value.as[Reading[a]])
-            PropagateValueRes.Transformed(
-              Input.awaitingInput(ref),
-              fromShuffled(pre[a] > post),
-            )
+            FeedValueRes.Complete(Input.awaitingInput(ref))
           case other =>
-            // TODO: derive contradiction
-            UnhandledCase.raise(s"propagateValue $value into $other at $v")
+            throw AssertionError(s"Impossible: would mean that `Reading[a]` = `x ** y`")
 
       case read: FlowAST.ReadAwaitTimeout[op, a] =>
         v match
           case Focus.Id() =>
             val ev1: Reading[a] =:= A =
               summon[Reading[a] =:= VA] andThen ev
-            val cont: Flow[Action, Val, F[a ++ Reading[a]], B] =
-              fromShuffled(pre[a ++ Reading[a]] > post)
             val awaited: Value[Val, Reading[a]] =
               ev1.substituteContra[Value[Val, _]](value)
-            PropagateValueRes.ReadAwaitTimeout[Action, Val, F, a, B](awaited, read.duration, cont)
+            FeedValueRes.ReadAwaitTimeout[Action, Val, a](awaited, read.duration)
           case other =>
-            // TODO: derive contradiction
-            UnhandledCase.raise(s"propagateValue $value into $other at $v")
+            throw AssertionError(s"Impossible: would mean that `Reading[a]` = `x ** y`")
 
       case FlowAST.Ext(action) =>
         action match
@@ -290,20 +286,11 @@ object RuntimeFlows {
             ev match { case TypeEq(Refl()) =>
               v match
                 case Focus.Id() =>
-                  PropagateValueRes.ActionRequest(
-                    value,
-                    action,
-                    fromShuffled(pre[W] > post),
-                  )
+                  FeedValueRes.ActionRequest(value, action)
                 case v: Focus.Proper[prod, v] =>
                   RuntimeAction.captureValue[Action, Val, V, A](value, v) match
                     case Exists.Some((preCapture, k)) =>
-                      val f1 = toShuffled(RuntimeFlows.action(preCapture) >>> RuntimeFlows.action(a)).at(g)
-                      val k1 = k.at(g)
-                      pre.knitBw(k1) match
-                        case Exists.Some((k0, pre1)) =>
-                          val cont1 = fromShuffled(pre1 > f1 > post)
-                          PropagateValueRes.Absorbed(k0, cont1)
+                      FeedValueRes.Absorbed(k, RuntimeFlows.action(preCapture) >>> RuntimeFlows.action(a))
             }
           case d: RuntimeAction.DistLR[op, val_, x, y, z] =>
             v match
@@ -311,19 +298,15 @@ object RuntimeFlows {
                 def go[X, Y, Z](
                   x: Value[Val, X],
                   yz: Value[Val, Y ++ Z],
-                  post: sh.Shuffled[G[(X ** Y) ++ (X ** Z)], B],
-                ): PropagateValueRes[Action, Val, F, B] =
-                  val input: Value[Val, (X ** Y) ++ (X ** Z)] =
+                ): FeedValueRes[Action, Val, [x] =>> x, (X ** Y) ++ (X ** Z)] =
+                  val res: Value[Val, (X ** Y) ++ (X ** Z)] =
                     Value.toEither(yz) match
                       case Left(y)  => Value.left(x ** y)
                       case Right(z) => Value.right(x ** z)
-                  PropagateValueRes.Transformed(
-                    Input.Ready(input),
-                    fromShuffled(pre[(X ** Y) ++ (X ** Z)] > post),
-                  )
+                  FeedValueRes.Complete(Input.Ready(res))
 
                 val yz: Value[Val, y ++ z] = ev.flip.substituteCo[Value[Val, _]](value)
-                go[x, y, z](d.x, yz, post)
+                go[x, y, z](d.x, yz)
 
               case other =>
                 throw AssertionError(s"Impossible, would mean that `++` = `**`")
@@ -331,56 +314,42 @@ object RuntimeFlows {
           case RuntimeAction.ValueCollector(f) =>
             v match
               case Focus.Id() =>
-                PropagateValueRes.Transformed(
-                  Input.Ready(f.complete(ev.substituteContra(value)).fold),
-                  fromShuffled(pre[W] > post),
-                )
+                val res: Value[Val, W] = f.complete(ev.substituteContra(value)).fold
+                FeedValueRes.Complete(Input.Ready(res))
               case v: Focus.Proper[**, V] =>
                 given (V[A] =:= VA) = ev.flip
                 f.absorb[V, A](value, v) match
                   case Capture.Absorbed.Impl(k, f1) =>
-                    pre.knitBw(k.at(g)) match
-                      case Exists.Some((k1, pre1)) =>
-                        val f2 = toShuffled(RuntimeFlows.action(RuntimeAction.ValueCollector(f1))).at(g)
-                        PropagateValueRes.Absorbed(k1, fromShuffled(pre1 > f2 > post))
+                    FeedValueRes.Absorbed(k, RuntimeFlows.action(RuntimeAction.ValueCollector(f1)))
 
       case other =>
         UnhandledCase.raise(s"propagateValue $value into $other at $v")
     }
 
-  private def feedDistributeeLR[Action[_, _], Val[_], F[_], V[_], Y, Z, G[_], A, B](using sh: Shuffled[Action, Val])(
+  private def feedDistributeeLR[Action[_, _], Val[_], V[_], A, Y, Z](using sh: Shuffled[Action, Val])(
     value: Value[Val, A],
-    pre: sh.Punched[F, [a] =>> G[V[a] ** (Y ++ Z)]],
     v: Focus[**, V],
-    post: sh.Shuffled[G[(V[A] ** Y) ++ (V[A] ** Z)], B],
-    g: Focus[**, G],
-  ): PropagateValueRes[Action, Val, F, B] =
+  ): FeedValueRes[Action, Val, [a] =>> V[a] ** (Y ++ Z), (V[A] ** Y) ++ (V[A] ** Z)] =
     v match
       case Focus.Id() =>
         summon[V[A] =:= A]
-        val k: Knitted[**, [a] =>> G[a ** (Y ++ Z)], G[Y ++ Z]] =
-          Knitted.keepSnd[**, Y ++ Z].at[G](g)
-        pre.knitBw(k) match
-          case Exists.Some((k, f)) =>
-            val op = RuntimeFlows.distLR[Action, Val, A, Y, Z](value)
-            val post1 = toShuffled(op).at(g) > post
-            PropagateValueRes.Absorbed(k, fromShuffled(f > post1))
+        val k: Knitted[**, [a] =>> a ** (Y ++ Z), Y ++ Z] =
+          Knitted.keepSnd[**, Y ++ Z]
+        val op = RuntimeFlows.distLR[Action, Val, A, Y, Z](value)
+        FeedValueRes.Absorbed(k, op)
       case v: Focus.Proper[pr, v] =>
         val ev = v.provePair[A]
         type P = ev.T
         type Q = ev.value.T
         given ev1: (V[A] =:= (P ** Q)) =
           ev.value.value
-        val pre1: sh.Shuffled[F[A], G[(P ** Q) ** (Y ++ Z)]] =
-          pre[A].to(using ev1.liftCo[[x] =>> G[x ** (Y ++ Z)]])
         val distSeparately: Flow[Action, Val, (P ** Q) ** (Y ++ Z), ((P ** Q) ** Y) ++ ((P ** Q) ** Z)] =
           assocLR >>> snd(distributeLR) >>> distributeLR >>> eitherBimap(assocRL, assocRL)
-        val distSeparately1: Flow[Action, Val, (P ** Q) ** (Y ++ Z), (V[A] ** Y) ++ (V[A] ** Z)] =
-          distSeparately.to(using ev1.liftContra[[x] =>> (x ** Y) ++ (x ** Z)])
-        PropagateValueRes.Transformed(
-          Input.Ready(value),
-          fromShuffled(pre1 > toShuffled(distSeparately1).at(g) > post)
-        )
+        val distSeparately1: Flow[Action, Val, V[A] ** (Y ++ Z), (V[A] ** Y) ++ (V[A] ** Z)] =
+          distSeparately
+            .from[V[A] ** (Y ++ Z)](using ev1.liftCo[[x] =>> x ** (Y ++ Z)])
+            .to[(V[A] ** Y) ++ (V[A] ** Z)](using ev1.liftContra[[x] =>> (x ** Y) ++ (x ** Z)])
+        FeedValueRes.Transformed(Input.Ready(value), distSeparately1)
 
   private def project[Action[_, _], Val[_], A, B, C](using sh: Shuffled[Action, Val])(
     f: sh.Shuffled[A, B],
@@ -447,5 +416,42 @@ object RuntimeFlows {
       action: Action[X, Y],
       cont: Flow[Action, Val, F[Y], B],
     ) extends PropagateValueRes[Action, Val, F, B]
+  }
+
+  /** Result of feeding `X`-typed value into `Work[V[X], W]`, for some type `X`. */
+  sealed trait FeedValueRes[Action[_, _], Val[_], V[_], W]
+
+  object FeedValueRes {
+    case class Complete[Action[_, _], Val[_], W](
+      result: Input[Val, W],
+    ) extends FeedValueRes[Action, Val, [x] =>> x, W]
+
+    case class Transformed[Action[_, _], Val[_], V[_], X, W](
+      newInput: Input[Val, X],
+      f: Flow[Action, Val, V[X], W],
+    ) extends FeedValueRes[Action, Val, V, W]
+
+    case class Absorbed[Action[_, _], Val[_], V[_], V0, W](
+      k: Knitted[**, V, V0],
+      f: Flow[Action, Val, V0, W],
+    ) extends FeedValueRes[Action, Val, V, W]
+
+    case class Shrunk[Action[_, _], Val[_], V[_], X, W](
+      newValue: Input[Val, X],
+      p: Projection[**, V[X], W],
+    ) extends FeedValueRes[Action, Val, V, W]
+
+    case class Read[Action[_, _], Val[_], X]()
+    extends FeedValueRes[Action, Val, [x] =>> x, PortName[X] ** Reading[X]]
+
+    case class ReadAwaitTimeout[Action[_, _], Val[_], X](
+      toAwait: Value[Val, Reading[X]],
+      timeout: FiniteDuration,
+    ) extends FeedValueRes[Action, Val, [x] =>> x, X ++ Reading[X]]
+
+    case class ActionRequest[Action[_, _], Val[_], F[_], X, Y](
+      input: Value[Val, X],
+      action: Action[X, Y],
+    ) extends FeedValueRes[Action, Val, [x] =>> x, Y]
   }
 }

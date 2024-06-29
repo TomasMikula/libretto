@@ -14,6 +14,9 @@ sealed trait FlowAST[Op[_, _], A, B] {
   def maskInput: Masked[[a] =>> FlowAST[Op, a, B], A] =
     Masked(this)
 
+  def from[Z](using ev: Z =:= A): FlowAST[Op, Z, B] =
+    ev.substituteContra[FlowAST[Op, _, B]](this)
+
   def to[C](using ev: B =:= C): FlowAST[Op, A, C] =
     ev.substituteCo(this)
 
