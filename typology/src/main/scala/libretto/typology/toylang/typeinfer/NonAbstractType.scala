@@ -352,24 +352,26 @@ private[typeinfer] object NonAbstractType {
         .is { case Either(p |*| q) |*| Either(r |*| s) => Either(g(p |*| r) |*| g(q |*| s)) }
         .is { case RecCall(p |*| q) |*| RecCall(r |*| s) => RecCall(g(p |*| r) |*| g(q |*| s)) }
         .is { case RecType(Fix(f)) |*| RecType(Fix(g)) =>
-          ((f ** g) :>> mapVal { case (f, g) =>
-            if (f == g) Left(f)
-            else        Right((f, g))
-          } :>> liftEither) either {
-            case Left(f) =>
-              fix(f)
-            case Right(fg) =>
-              mismatch(fg :>> liftPair :>> par(fix, fix))
-          }
+          val fg =
+            (f ** g) :>> mapVal { case (f, g) =>
+              if (f == g) Left(f)
+              else        Right((f, g))
+            } :>> liftEither
+          switch(fg)
+            .is { case InL(f)  => fix(f) }
+            .is { case InR(fg) => mismatch(fg :>> liftPair :>> par(fix, fix)) }
+            .end
         }
         .is { case RecType(PFix(f |*| x)) |*| RecType(PFix(h |*| y)) =>
-          ((f ** h) :>> mapVal { case (f, h) =>
-            if (f == h) Left(f)
-            else        Right((f, h))
-          } :>> liftEither) either {
-            case Left(f)   => pfixs(f |*| Types.merge(g)(x |*| y))
-            case Right(fh) => (fh |*| x |*| y) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
-          }
+          val fh =
+            (f ** h) :>> mapVal { case (f, h) =>
+              if (f == h) Left(f)
+              else        Right((f, h))
+            } :>> liftEither
+          switch(fh)
+            .is { case InL(f)  => pfixs(f |*| Types.merge(g)(x |*| y)) }
+            .is { case InR(fh) => (fh |*| x |*| y) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})") }
+            .end
         }
         .is { case String(x) |*| String(y) => String(join(x |*| y)) }
         .is { case Int(x) |*| Int(y) => Int(join(x |*| y)) }
