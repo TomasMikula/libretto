@@ -5,7 +5,7 @@ import workflows.Flow.{doWhile, injectL, injectR, read, readAwait, readAwaitTime
 
 import scala.concurrent.duration.*
 
-val backgroundCheck: Flow[EmailAddress, Report] =
+lazy val backgroundCheck: Flow[EmailAddress, Report] =
   Flow { candidate =>
     askForAcceptance(candidate) switch (
       is { case CandidateResponse.Declined(_) =>
