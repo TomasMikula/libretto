@@ -188,9 +188,7 @@ object RuntimeFlows {
             val result = Input.Ready(Value.left[Val, x, y](value.as[x]))
             FeedValueRes.Complete(result)
           case v: Focus.Proper[**, V] =>
-            RuntimeAction.captureValue[Action, Val, V, A](value, v) match
-              case Exists.Some((collector, k)) =>
-                FeedValueRes.Absorbed(k, action(collector).to[x] >>> i)
+            collectingInput(value, v, i.from[V[A]])
 
       case i: FlowAST.InjectR[op, x, y] =>
         summon[VA =:= y]
@@ -201,9 +199,7 @@ object RuntimeFlows {
             val result = Input.Ready(Value.right[Val, x, y](value.as[y]))
             FeedValueRes.Complete(result)
           case v: Focus.Proper[**, V] =>
-            RuntimeAction.captureValue[Action, Val, V, A](value, v) match
-              case Exists.Some((collector, k)) =>
-                FeedValueRes.Absorbed(k, action(collector).to[y] >>> i)
+            collectingInput(value, v, i.from[V[A]])
 
       case i: FlowAST.Inject[op, lbl, a, cases] =>
         summon[VA =:= a]
@@ -215,9 +211,7 @@ object RuntimeFlows {
             val result = Input.Ready(Value.ofEnum(i.i, value.as[VA]))
             FeedValueRes.Complete(result)
           case v: Focus.Proper[**, V] =>
-            RuntimeAction.captureValue[Action, Val, V, A](value, v) match
-              case Exists.Some((collector, k)) =>
-                FeedValueRes.Absorbed(k, action(collector).to[a] >>> i)
+            collectingInput(value, v, i.from[V[A]])
 
       case e: FlowAST.Either[op, x, y, w] =>
         v match
@@ -241,9 +235,7 @@ object RuntimeFlows {
             val result = Value.peel(v)
             FeedValueRes.Complete(Input.Ready(result))
           case v: Focus.Proper[**, V] =>
-            RuntimeAction.captureValue[Action, Val, V, A](value, v) match
-              case Exists.Some((collector, k)) =>
-                FeedValueRes.Absorbed(k, action(collector).to[VA] >>> p)
+            collectingInput(value, v, p.from[V[A]])
 
       case f1: FlowAST.DistributeLR[op, x, y, z] =>
         summon[VA =:= (x ** (y ++ z))]
@@ -315,9 +307,7 @@ object RuntimeFlows {
                 case Focus.Id() =>
                   FeedValueRes.ActionRequest(value, action)
                 case v: Focus.Proper[prod, v] =>
-                  RuntimeAction.captureValue[Action, Val, V, A](value, v) match
-                    case Exists.Some((preCapture, k)) =>
-                      FeedValueRes.Absorbed(k, RuntimeFlows.action(preCapture) >>> RuntimeFlows.action(a))
+                  collectingInput(value, v, RuntimeFlows.action(a))
             }
           case d: RuntimeAction.DistLR[op, val_, x, y, z] =>
             v match
@@ -352,6 +342,15 @@ object RuntimeFlows {
       case other =>
         UnhandledCase.raise(s"propagateValue $value into $other at $v")
     }
+
+  private def collectingInput[Action[_, _], Val[_], V[_], A, W](
+    a: Value[Val, A],
+    v: Focus.Proper[**, V],
+    cont: Flow[Action, Val, V[A], W],
+  ): FeedValueRes[Action, Val, V, W] =
+    RuntimeAction.captureValue[Action, Val, V, A](a, v) match
+      case Exists.Some((collector, k)) =>
+        FeedValueRes.Absorbed(k, action(collector) >>> cont)
 
   private def feedDistributeeLR[Action[_, _], Val[_], V[_], A, Y, Z](using sh: Shuffled[Action, Val])(
     value: Value[Val, A],
