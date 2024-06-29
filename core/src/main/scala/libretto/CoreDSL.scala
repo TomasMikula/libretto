@@ -570,31 +570,6 @@ trait CoreDSL {
       )
   }
 
-  extension [Cases](x: $[OneOf[Cases]]) {
-    def handle[R](using LambdaContext)(
-      handlers: OneOf.Handlers.InitialBuilder[Cases] => OneOf.Handlers[Cases, R]
-    ): $[R] =
-      x :>> OneOf.HandleInit[Cases].apply(handlers)
-
-    def matchAgainst(using SourcePos, OneOf.CaseList[Cases], LambdaContext)(
-      label: String,
-    )(using
-      i: OneOf.IsCaseOf[label.type, Cases],
-    ): $[i.Type] =
-      $.matchAgainst(
-        x,
-        OneOf.partitioning[Cases][label.type],
-      )(summon[SourcePos])
-  }
-
-  extension [F[_]](x: $[Rec[F]]) {
-    def unpackedMatchAgainst[B](ext: Extractor[-⚬, |*|, F[Rec[F]], B])(using
-      pos: SourcePos,
-      ctx: LambdaContext,
-    ): $[B] =
-      $.matchAgainst(x, ext.afterUnpack)(pos)
-  }
-
   def constant[A](f: One -⚬ A)(using SourcePos, LambdaContext): $[A] =
     f($.one)
 

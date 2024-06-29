@@ -1,6 +1,6 @@
 package libretto.typology.toylang.typeinfer
 
-import libretto.lambda.{MappedMorphism, MonoidalObjectMap, SymmetricMonoidalCategory, UnhandledCase}
+import libretto.lambda.{Extractor, MappedMorphism, MonoidalObjectMap, SymmetricMonoidalCategory, UnhandledCase}
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.unapply.Unapply
@@ -24,31 +24,22 @@ private[typeinfer] type TypesF[T, X] = OneOf
 private[typeinfer] type Types[T] = Rec[TypesF[T, _]]
 
 private[typeinfer] object Types {
-  def pack[T]: TypesF[T, Types[T]] -⚬ Types[T] = dsl.pack[TypesF[T, _]]
+  def SingleType[T]: Extractor[-⚬, |*|, Types[T],T] =
+    OneOf.partition[TypesF[T, Types[T]]]["singleType"].afterUnpack
 
-  def singleType[T]: T -⚬ Types[T] = pack ∘ OneOf.inject("singleType")
-  def prod[T]: (Types[T] |*| Types[T]) -⚬ Types[T] = pack ∘ OneOf.inject("prod")
-  def kindMismatch[T]: (Types[T] |*| Types[T]) -⚬ Types[T] = pack ∘ OneOf.inject("kindMismatch")
+  def Prod[T]: Extractor[-⚬, |*|, Types[T], Types[T] |*| Types[T]] =
+    OneOf.partition[TypesF[T, Types[T]]]["prod"].afterUnpack
 
-  object SingleType:
-    def unapply[T](ts: $[Types[T]])(using SourcePos, LambdaContext): Some[$[T]] =
-      Some(ts.unpackedMatchAgainst(OneOf.partition[TypesF[T, Types[T]]]["singleType"]))
-
-  object Prod:
-    def unapply[T](ts: $[Types[T]])(using SourcePos, LambdaContext): Some[$[Types[T] |*| Types[T]]] =
-      Some(ts.unpackedMatchAgainst(OneOf.partition[TypesF[T, Types[T]]]["prod"]))
-
-  object KindMismatch:
-    def unapply[T](ts: $[Types[T]])(using SourcePos, LambdaContext): Some[$[KindMismatch[Types[T]]]] =
-      Some(ts.unpackedMatchAgainst(OneOf.partition[TypesF[T, Types[T]]]["kindMismatch"]))
+  def KindMismatch[T]: Extractor[-⚬, |*|, Types[T], KindMismatch[Types[T]]] =
+    OneOf.partition[TypesF[T, Types[T]]]["kindMismatch"].afterUnpack
 
   def map[T, U](f: T -⚬ U): Types[T] -⚬ Types[U] =
     rec { self =>
       λ { ts =>
         switch(ts)
-          .is { case KindMismatch(x |*| y) => kindMismatch(self(x) |*| self(y)) }
-          .is { case SingleType(t) => singleType(f(t)) }
-          .is { case Prod(ts1 |*| ts2) => prod(self(ts1) |*| self(ts2)) }
+          .is { case KindMismatch(x |*| y) => KindMismatch(self(x) |*| self(y)) }
+          .is { case SingleType(t) => SingleType(f(t)) }
+          .is { case Prod(ts1 |*| ts2) => Prod(self(ts1) |*| self(ts2)) }
           .end
       }
     }
@@ -61,10 +52,17 @@ private[typeinfer] object Types {
             val x |*| y = mismatch
             val xu |*| xv = self(x)
             val yu |*| yv = self(y)
-            kindMismatch(xu |*| yu) |*| kindMismatch(xv |*| yv)
+            KindMismatch(xu |*| yu) |*| KindMismatch(xv |*| yv)
           }
-          .is { case SingleType(t) => f(t) :>> par(singleType, singleType) }
-          .is { case Prod(ts1 |*| ts2) => (self(ts1) |*| self(ts2)) > IXI > par(prod, prod) }
+          .is { case SingleType(t) =>
+            val u |*| v = f(t)
+            SingleType(u) |*| SingleType(v)
+          }
+          .is { case Prod(ts1 |*| ts2) =>
+            val (u1 |*| v1) = self(ts1)
+            val (u2 |*| v2) = self(ts2)
+            Prod(u1 |*| u2) |*| Prod(v1 |*| v2)
+          }
           .end
       }
     }
@@ -73,9 +71,9 @@ private[typeinfer] object Types {
     rec { self =>
       λ { case +(x) |*| ts =>
         switch(ts)
-          .is { case KindMismatch(p |*| q) => kindMismatch(self(x |*| p) |*| self(x |*| q)) }
-          .is { case SingleType(t) => singleType(f(x |*| t)) }
-          .is { case Prod(ts1 |*| ts2) => prod(self(x |*| ts1) |*| self(x |*| ts2)) }
+          .is { case KindMismatch(p |*| q) => KindMismatch(self(x |*| p) |*| self(x |*| q)) }
+          .is { case SingleType(t) => SingleType(f(x |*| t)) }
+          .is { case Prod(ts1 |*| ts2) => Prod(self(x |*| ts1) |*| self(x |*| ts2)) }
           .end
       }
     }
@@ -84,9 +82,9 @@ private[typeinfer] object Types {
     rec { self =>
       λ { case ts |*| us =>
         switch(ts |*| us)
-          .is { case SingleType(t) |*| SingleType(u) => singleType(f(t |*| u)) }
-          .is { case Prod(t1 |*| t2) |*| Prod(u1 |*| u2) => prod(self(t1 |*| u1) |*| self(t2 |*| u2)) }
-          .is { case ts |*| us => kindMismatch(ts |*| us) }
+          .is { case SingleType(t) |*| SingleType(u) => SingleType(f(t |*| u)) }
+          .is { case Prod(t1 |*| t2) |*| Prod(u1 |*| u2) => Prod(self(t1 |*| u1) |*| self(t2 |*| u2)) }
+          .is { case ts |*| us => KindMismatch(ts |*| us) }
           .end
       }
     }
@@ -175,89 +173,56 @@ private[typeinfer] object NonAbstractType {
   ): OneOf.Partitioning[u.A] =
     OneOf.partition[NonAbstractTypeF[V, T, NonAbstractType[V, T]]]
 
-  def pair[V, T]: (T |*| T) -⚬ NonAbstractType[V, T] =
-    pack ∘ inject[V, T]("pair")
+  def Pair[V, T]: Extractor[-⚬, |*|, NonAbstractType[V, T], T |*| T] =
+    partition[V, T]["pair"].afterUnpack
 
-  object Pair:
-    def unapply[V, T](t: $[NonAbstractType[V, T]])(using SourcePos, LambdaContext): Some[$[T |*| T]] =
-      Some(t.unpackedMatchAgainst(partition[V, T]["pair"]))
+  def Either[V, T]: Extractor[-⚬, |*|, NonAbstractType[V, T], T |*| T] =
+    partition[V, T]["either"].afterUnpack
 
-  def either[V, T]: (T |*| T) -⚬ NonAbstractType[V, T] =
-    pack ∘ inject[V, T]("either")
-
-  object Either:
-    def unapply[V, T](t: $[NonAbstractType[V, T]])(using SourcePos, LambdaContext): Some[$[T |*| T]] =
-      Some(t.unpackedMatchAgainst(partition[V, T]["either"]))
-
-  def recCall[V, T]: (T |*| T) -⚬ NonAbstractType[V, T] =
-    pack ∘ inject[V, T]("recCall")
-
-  object RecCall:
-    def unapply[V, T](t: $[NonAbstractType[V, T]])(using SourcePos, LambdaContext): Some[$[T |*| T]] =
-      Some(t.unpackedMatchAgainst(partition[V, T]["recCall"]))
+  def RecCall[V, T]: Extractor[-⚬, |*|, NonAbstractType[V, T], T |*| T] =
+    partition[V, T]["recCall"].afterUnpack
 
   def fix[V, T]: Val[TypeConstructor.Fix[ScalaTypeParam, ?]] -⚬ NonAbstractType[V, T] =
-    pack ∘ inject[V, T]("recType") ∘ OneOf.inject("fix")
+    RecType.reinject ∘ Fix.reinject
 
   def pfixs[V, T]: (Val[TypeConstructor.PFix[ScalaTypeParam, ?, ?]] |*| Types[T]) -⚬ NonAbstractType[V, T] =
-    pack ∘ inject[V, T]("recType") ∘ OneOf.inject("pfix")
+    RecType.reinject ∘ PFix.reinject
 
   def pfix[V, T]: (Val[TypeConstructor.PFix[ScalaTypeParam, ●, ?]] |*| T) -⚬ NonAbstractType[V, T] =
-    pfixs ∘ par(mapVal(p => p), Types.singleType[T])
+    pfixs ∘ par(mapVal(p => p), Types.SingleType[T].reinject)
 
-  object RecType:
-    def unapply[V, T](t: $[NonAbstractType[V, T]])(using SourcePos, LambdaContext): Some[$[FixOrPFix[T]]] =
-      Some(t.unpackedMatchAgainst(partition[V, T]["recType"]))
+  def RecType[V, T]: Extractor[-⚬, |*|, NonAbstractType[V, T], FixOrPFix[T]] =
+    partition[V, T]["recType"].afterUnpack
 
-  object Fix:
-    def unapply[T](t: $[FixOrPFix[T]])(using SourcePos, LambdaContext): Some[$[Val[TypeConstructor.Fix[ScalaTypeParam, ?]]]] =
-      Some(t.matchAgainst("fix"))
+  def Fix[T]: Extractor[-⚬, |*|, FixOrPFix[T], Val[TypeConstructor.Fix[ScalaTypeParam, ?]]] =
+    OneOf.partition[FixOrPFix[T]]["fix"]
 
-  object PFix:
-    def unapply[T](t: $[FixOrPFix[T]])(using SourcePos, LambdaContext): Some[$[Val[TypeConstructor.PFix[ScalaTypeParam, ?, ?]] |*| Types[T]]] =
-      Some(t.matchAgainst("pfix"))
+  def PFix[T]: Extractor[-⚬, |*|, FixOrPFix[T], Val[TypeConstructor.PFix[ScalaTypeParam, ?, ?]] |*| Types[T]] =
+    OneOf.partition[FixOrPFix[T]]["pfix"]
 
-  def string[V, T]: Done -⚬ NonAbstractType[V, T] =
-    pack ∘ inject[V, T]("string")
+  def String[V, T]: Extractor[-⚬, |*|, NonAbstractType[V, T], Done] =
+    partition[V, T]["string"].afterUnpack
 
-  object String:
-    def unapply[V, T](t: $[NonAbstractType[V, T]])(using SourcePos, LambdaContext): Some[$[Done]] =
-      Some(t.unpackedMatchAgainst(partition[V, T]["string"]))
+  def Int[V, T]: Extractor[-⚬, |*|, NonAbstractType[V, T], Done] =
+    partition[V, T]["int"].afterUnpack
 
-  def int[V, T]: Done -⚬ NonAbstractType[V, T] =
-    pack ∘ inject[V, T]("int")
-
-  object Int:
-    def unapply[V, T](t: $[NonAbstractType[V, T]])(using SourcePos, LambdaContext): Some[$[Done]] =
-      Some(t.unpackedMatchAgainst(partition[V, T]["int"]))
-
-  def unit[V, T]: Done -⚬ NonAbstractType[V, T] =
-    pack ∘ inject[V, T]("unit")
-
-  object Unit:
-    def unapply[V, T](t: $[NonAbstractType[V, T]])(using SourcePos, LambdaContext): Some[$[Done]] =
-      Some(t.unpackedMatchAgainst(partition[V, T]["unit"]))
-
-  def error[V, T]: TypeError[V, NonAbstractType[V, T]] -⚬ NonAbstractType[V, T] =
-    pack ∘ inject[V, T]("error")
+  def Unit[V, T]: Extractor[-⚬, |*|, NonAbstractType[V, T], Done] =
+    partition[V, T]["unit"].afterUnpack
 
   def forbiddenSelfReference[V, T]: V -⚬ NonAbstractType[V, T] =
-     error ∘ OneOf.inject("selfRef")
+     Error.reinject ∘ ForbiddenSelfRef.reinject
 
   def mismatch[V, T]: (NonAbstractType[V, T] |*| NonAbstractType[V, T]) -⚬ NonAbstractType[V, T] =
-    error ∘ OneOf.inject("mismatch")
+    Error.reinject ∘ TypeMismatch.reinject
 
-  object Error:
-    def unapply[V, T](t: $[NonAbstractType[V, T]])(using SourcePos, LambdaContext): Some[$[TypeError[V, NonAbstractType[V, T]]]] =
-      Some(t.unpackedMatchAgainst(partition[V, T]["error"]))
+  def Error[V, T]: Extractor[-⚬, |*|, NonAbstractType[V, T], TypeError[V, NonAbstractType[V, T]]] =
+    partition[V, T]["error"].afterUnpack
 
-  object TypeMismatch:
-    def unapply[V, T](e: $[TypeError[V, NonAbstractType[V, T]]])(using SourcePos, LambdaContext): Some[$[NonAbstractType[V, T] |*| NonAbstractType[V, T]]] =
-      Some(e.matchAgainst("mismatch"))
+  def TypeMismatch[V, T]: Extractor[-⚬, |*|, TypeError[V, NonAbstractType[V, T]], NonAbstractType[V, T] |*| NonAbstractType[V, T]] =
+    OneOf.partition[TypeError[V, NonAbstractType[V, T]]]["mismatch"]
 
-  object ForbiddenSelfRef:
-    def unapply[V, T](e: $[TypeError[V, NonAbstractType[V, T]]])(using SourcePos, LambdaContext): Some[$[V]] =
-      Some(e.matchAgainst("selfRef"))
+  def ForbiddenSelfRef[V, T]: Extractor[-⚬, |*|, TypeError[V, NonAbstractType[V, T]], V] =
+    OneOf.partition[TypeError[V, NonAbstractType[V, T]]]["selfRef"]
 
   def lift[V, T](
     inject: NonAbstractType[V, T] -⚬ T,
@@ -295,14 +260,14 @@ private[typeinfer] object NonAbstractType {
   def map[V, T, U](g: T -⚬ U): NonAbstractType[V, T] -⚬ NonAbstractType[V, U] = rec { self =>
     λ { t =>
       switch(t)
-        .is { case Pair(r |*| s) => pair(g(r) |*| g(s)) }
-        .is { case Either(r |*| s) => either(g(r) |*| g(s)) }
-        .is { case RecCall(r |*| s) => recCall(g(r) |*| g(s)) }
+        .is { case Pair(r |*| s) => Pair(g(r) |*| g(s)) }
+        .is { case Either(r |*| s) => Either(g(r) |*| g(s)) }
+        .is { case RecCall(r |*| s) => RecCall(g(r) |*| g(s)) }
         .is { case RecType(Fix(f)) => fix(f) }
         .is { case RecType(PFix(f |*| x)) => pfixs(f |*| Types.map(g)(x)) }
-        .is { case String(d) => string(d) }
-        .is { case Int(d) => int(d) }
-        .is { case Unit(d) => unit(d) }
+        .is { case String(d) => String(d) }
+        .is { case Int(d) => Int(d) }
+        .is { case Unit(d) => Unit(d) }
         .is { case Error(TypeMismatch(x |*| y)) => mismatch(self(x) |*| self(y)) }
         .is { case Error(ForbiddenSelfRef(v)) => forbiddenSelfReference(v) }
         .end
@@ -315,14 +280,14 @@ private[typeinfer] object NonAbstractType {
   ): (X |*| NonAbstractType[V, A]) -⚬ NonAbstractType[V, B] = rec { self =>
     λ { case +(x) |*| t =>
       switch(t)
-        .is { case Pair(r |*| s) => pair(g(x |*| r) |*| g(x |*| s)) }
-        .is { case Either(r |*| s) => either(g(x |*| r) |*| g(x |*| s)) }
-        .is { case RecCall(r |*| s) => recCall(g(x |*| r) |*| g(x |*| s)) }
+        .is { case Pair(r |*| s) => Pair(g(x |*| r) |*| g(x |*| s)) }
+        .is { case Either(r |*| s) => Either(g(x |*| r) |*| g(x |*| s)) }
+        .is { case RecCall(r |*| s) => RecCall(g(x |*| r) |*| g(x |*| s)) }
         .is { case RecType(Fix(f)) => fix(f waitFor X.close(x)) }
         .is { case RecType(PFix(f |*| ts)) => pfixs(f |*| Types.mapWith(g)(x |*| ts)) }
-        .is { case String(d) => string(d waitFor X.close(x)) }
-        .is { case Int(d) => int(d waitFor X.close(x)) }
-        .is { case Unit(d) => unit(d waitFor X.close(x)) }
+        .is { case String(d) => String(d waitFor X.close(x)) }
+        .is { case Int(d) => Int(d waitFor X.close(x)) }
+        .is { case Unit(d) => Unit(d waitFor X.close(x)) }
         .is { case Error(TypeMismatch(y |*| z)) => mismatch(self(x |*| y) |*| self(x |*| z)) }
         .is { case Error(ForbiddenSelfRef(v)) => forbiddenSelfReference(v waitFor X.close(x)) }
         .end
@@ -339,26 +304,26 @@ private[typeinfer] object NonAbstractType {
         .is { case Pair(r |*| s) =>
           val r1 |*| r2 = f(r)
           val s1 |*| s2 = f(s)
-          pair(r1 |*| s1) |*| pair(r2 |*| s2)
+          Pair(r1 |*| s1) |*| Pair(r2 |*| s2)
         }
         .is { case Either(r |*| s) =>
           val r1 |*| r2 = f(r)
           val s1 |*| s2 = f(s)
-          either(r1 |*| s1) |*| either(r2 |*| s2)
+          Either(r1 |*| s1) |*| Either(r2 |*| s2)
         }
         .is { case RecCall(r |*| s) =>
           val r1 |*| r2 = f(r)
           val s1 |*| s2 = f(s)
-          recCall(r1 |*| s1) |*| recCall(r2 |*| s2)
+          RecCall(r1 |*| s1) |*| RecCall(r2 |*| s2)
         }
         .is { case RecType(Fix(+(g))) => fix(g) |*| fix(g) }
         .is { case RecType(PFix(+(g) |*| t)) =>
           val t1 |*| t2 = Types.splitMap(f)(t)
           pfixs(g |*| t1) |*| pfixs(g |*| t2)
         }
-        .is { case String(+(t)) => string(t) |*| string(t) }
-        .is { case Int(+(t)) => int(t) |*| int(t) }
-        .is { case Unit(+(t)) => unit(t) |*| unit(t) }
+        .is { case String(+(t)) => String(t) |*| String(t) }
+        .is { case Int(+(t)) => Int(t) |*| Int(t) }
+        .is { case Unit(+(t)) => Unit(t) |*| Unit(t) }
         .is { case Error(ForbiddenSelfRef(+(v))) =>
           forbiddenSelfReference(v) |*| forbiddenSelfReference(v)
         }
@@ -383,9 +348,9 @@ private[typeinfer] object NonAbstractType {
   ): (NonAbstractType[V, T] |*| NonAbstractType[V, T]) -⚬ NonAbstractType[V, T] = {
     λ { case a |*| b =>
       switch(a |*| b)
-        .is { case Pair(a1 |*| a2) |*| Pair(b1 |*| b2) => pair(g(a1 |*| b1) |*| g(a2 |*| b2)) }
-        .is { case Either(p |*| q) |*| Either(r |*| s) => either(g(p |*| r) |*| g(q |*| s)) }
-        .is { case RecCall(p |*| q) |*| RecCall(r |*| s) => recCall(g(p |*| r) |*| g(q |*| s)) }
+        .is { case Pair(a1 |*| a2) |*| Pair(b1 |*| b2) => Pair(g(a1 |*| b1) |*| g(a2 |*| b2)) }
+        .is { case Either(p |*| q) |*| Either(r |*| s) => Either(g(p |*| r) |*| g(q |*| s)) }
+        .is { case RecCall(p |*| q) |*| RecCall(r |*| s) => RecCall(g(p |*| r) |*| g(q |*| s)) }
         .is { case RecType(Fix(f)) |*| RecType(Fix(g)) =>
           ((f ** g) :>> mapVal { case (f, g) =>
             if (f == g) Left(f)
@@ -406,11 +371,11 @@ private[typeinfer] object NonAbstractType {
             case Right(fh) => (fh |*| x |*| y) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})")
           }
         }
-        .is { case String(x) |*| String(y) => string(join(x |*| y)) }
-        .is { case Int(x) |*| Int(y) => int(join(x |*| y)) }
-        .is { case Unit(x) |*| Unit(y) => unit(join(x |*| y)) }
+        .is { case String(x) |*| String(y) => String(join(x |*| y)) }
+        .is { case Int(x) |*| Int(y) => Int(join(x |*| y)) }
+        .is { case Unit(x) |*| Unit(y) => Unit(join(x |*| y)) }
         .is { case Error(a) |*| Error(b) =>
-          mismatch(error(a) |*| error(b)) // TODO: support multiple error accumulation instead
+          mismatch(Error(a) |*| Error(b)) // TODO: support multiple error accumulation instead
         }
         .is { case a |*| b => mismatch(a |*| b) }
         .end
@@ -483,14 +448,14 @@ private[typeinfer] object NonAbstractType {
   ): (Done |*| NonAbstractType[V, T]) -⚬ NonAbstractType[V, T] = rec { self =>
     λ { case d |*| t =>
       switch(t)
-        .is { case Pair(a |*| b) => pair(g(d |*| a) |*| b) }
-        .is { case Either(a |*| b) => either(g(d |*| a) |*| b) }
-        .is { case RecCall(a |*| b) => recCall(g(d |*| a) |*| b) }
+        .is { case Pair(a |*| b) => Pair(g(d |*| a) |*| b) }
+        .is { case Either(a |*| b) => Either(g(d |*| a) |*| b) }
+        .is { case RecCall(a |*| b) => RecCall(g(d |*| a) |*| b) }
         .is { case RecType(Fix(f)) => fix(f waitFor d) }
         .is { case RecType(PFix(f |*| x)) => pfixs(f.waitFor(d) |*| x) }
-        .is { case String(x) => string(join(d |*| x)) }
-        .is { case Int(x) => int(join(d |*| x)) }
-        .is { case Unit(x) => unit(join(d |*| x)) }
+        .is { case String(x) => String(join(d |*| x)) }
+        .is { case Int(x) => Int(join(d |*| x)) }
+        .is { case Unit(x) => Unit(join(d |*| x)) }
         .is { case Error(ForbiddenSelfRef(v)) => forbiddenSelfReference(h(d |*| v)) }
         .is { case Error(TypeMismatch(x |*| y)) => mismatch(self(d |*| x) |*| y) }
         .end
@@ -514,13 +479,13 @@ private[typeinfer] object NonAbstractType {
         case Map_○ =>
           KindN.cannotBeUnit(p)
         case Map_● =>
-          Types.singleType[T]
+          Types.SingleType[T].reinject
         case π: Pair[p1, p2, q1, q2] =>
           val (p1, p2) = KindN.unpair(p: KindN[p1 × p2])
           par(
             toTypes(π.f1)(using p1),
             toTypes(π.f2)(using p2),
-          ) > Types.prod
+          ) > Types.Prod.reinject
 
     def compilePFix[P, Q, X](
       pq: P as Q,
@@ -539,17 +504,17 @@ private[typeinfer] object NonAbstractType {
       import TypeConstructor.{Pair as _, *}
       x match {
         case UnitType() =>
-          MappedMorphism(Map_○, done > NonAbstractType.unit > lift, Map_●)
+          MappedMorphism(Map_○, done > Unit.reinject > lift, Map_●)
         case IntType() =>
-          MappedMorphism(Map_○, done > NonAbstractType.int > lift, Map_●)
+          MappedMorphism(Map_○, done > Int.reinject > lift, Map_●)
         case StringType() =>
-          MappedMorphism(Map_○, done > NonAbstractType.string > lift, Map_●)
+          MappedMorphism(Map_○, done > String.reinject > lift, Map_●)
         case TypeConstructor.Pair() =>
-          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.pair > lift, Map_●)
+          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.Pair.reinject > lift, Map_●)
         case Sum() =>
-          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.either > lift, Map_●)
+          MappedMorphism(Pair(Map_●, Map_●), Either.reinject > lift, Map_●)
         case TypeConstructor.RecCall() =>
-          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.recCall > lift, Map_●)
+          MappedMorphism(Pair(Map_●, Map_●), NonAbstractType.RecCall.reinject > lift, Map_●)
         case f @ TypeConstructor.Fix(_, _) =>
           MappedMorphism(Map_○, const(f) > NonAbstractType.fix > lift, Map_●)
         case p @ TypeConstructor.PFix(_, _) =>

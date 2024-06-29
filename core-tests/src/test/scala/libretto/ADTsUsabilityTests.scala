@@ -163,7 +163,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
         λ { case t1 |*| t2 =>
           (t1 |*| t2) :>> OneOf.distLR :>> OneOf.handle(_
             .caseOf["NonEmpty"](λ { case t1 |*| net2 =>
-              ((net2 |*| t1) :>> OneOf.distLR).handle(_
+              ((net2 |*| t1) :>> OneOf.distLR) :>> OneOf.handle(_
                 .caseOf["NonEmpty"](λ { case (net2 |*| net1) => NonEmptyTree.Branch(net1 |*| net2) })
                 .caseOf["Empty"](elimSnd)
               ) :>> NonEmpty()
