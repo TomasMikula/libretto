@@ -144,10 +144,10 @@ private[inference] class PropagatorImpl[
   private def concreteType: F[Tp] -⚬ Tp =
     injectR > pack
 
-  override def lift: F[Tp] -⚬ Tp =
+  override val lift: F[Tp] -⚬ Tp =
     concreteType
 
-  override def outlet: F[TypeOutlet] -⚬ TypeOutlet =
+  override val outlet: F[TypeOutlet] -⚬ TypeOutlet =
     TypeOutlet.concreteType
 
   def makeAbstractType: Label -⚬ (Tp |*| Refinement.Response[Tp]) =
@@ -188,12 +188,12 @@ private[inference] class PropagatorImpl[
     }
   }
 
-  override def merge: (Tp |*| Tp) -⚬ Tp =
+  override lazy val merge: (Tp |*| Tp) -⚬ Tp =
     rec { self =>
       merge_(split_(self))
     }
 
-  override def split: Tp -⚬ (Tp |*| Tp) =
+  override lazy val split: Tp -⚬ (Tp |*| Tp) =
     rec { self =>
       split_(merge_(self))
     }
@@ -467,7 +467,7 @@ private[inference] class PropagatorImpl[
   override given junctionPositiveTp: Junction.Positive[Tp] =
     Junction.Positive.from(awaitPosFst)
 
-  override def abstractTypeTap: Label -⚬ (Tp |*| Val[T]) =
+  override lazy val abstractTypeTap: Label -⚬ (Tp |*| Val[T]) =
     λ { lbl =>
       val l1 |*| l2 = labels.split(lbl)
       val res |*| resp = makeAbstractType(l1)
@@ -519,7 +519,7 @@ private[inference] class PropagatorImpl[
       )
     }
 
-  override def close: Tp -⚬ Done = rec { self =>
+  override val close: Tp -⚬ Done = rec { self =>
     λ { t =>
       unpack(t) either {
         case Left(a) =>
@@ -551,7 +551,7 @@ private[inference] class PropagatorImpl[
 
     type Q = NLabel |*| (-[Tp] |+| Tp)
 
-    def splitQ: Q -⚬ (Q |*| Q) =
+    val splitQ: Q -⚬ (Q |*| Q) =
       λ { case lbl |*| q =>
         val l1 |*| l2 = nl.labels.split(lbl)
         val q1 |*| q2 = q either {
@@ -596,7 +596,7 @@ private[inference] class PropagatorImpl[
           Junction.Positive.byFst,
         )
 
-      override def lower: propagator.TypeOutlet -⚬ Tp = rec { self =>
+      override val lower: propagator.TypeOutlet -⚬ Tp = rec { self =>
         λ { t =>
           propagator.TypeOutlet.unpack(t) either {
             case Left(lbl |*| q) =>
@@ -621,7 +621,7 @@ private[inference] class PropagatorImpl[
     }
   }
 
-  override def tap: Tp -⚬ TypeOutlet = rec { self =>
+  override val tap: Tp -⚬ TypeOutlet = rec { self =>
     λ { t =>
       unpack(t) either {
         case Left(a) =>
@@ -638,7 +638,7 @@ private[inference] class PropagatorImpl[
     }
   }
 
-  override def peek: TypeOutlet -⚬ (F[TypeOutlet] |+| TypeOutlet) =
+  override val peek: TypeOutlet -⚬ (F[TypeOutlet] |+| TypeOutlet) =
     λ { t =>
       TypeOutlet.unpack(t) either {
         case Left(p)   => injectR(TypeOutlet.typeParam(p))
@@ -646,7 +646,7 @@ private[inference] class PropagatorImpl[
       }
     }
 
-  override def write: TypeOutlet -⚬ Val[T] = rec { self =>
+  override val write: TypeOutlet -⚬ Val[T] = rec { self =>
     dsl.unpack > dsl.either(
       outputTypeParam,
       F.output(self),
@@ -654,19 +654,19 @@ private[inference] class PropagatorImpl[
   }
 
   object TypeOutlet {
-    def pack: (P |+| F[TypeOutlet]) -⚬ TypeOutlet =
+    private val pack: (P |+| F[TypeOutlet]) -⚬ TypeOutlet =
       dsl.pack[[X] =>> P |+| F[X]]
 
-    def unpack: TypeOutlet -⚬ (P |+| F[TypeOutlet]) =
+    val unpack: TypeOutlet -⚬ (P |+| F[TypeOutlet]) =
       dsl.unpack
 
-    def typeParam: P -⚬ TypeOutlet =
+    val typeParam: P -⚬ TypeOutlet =
       injectL > pack
 
-    def concreteType: F[TypeOutlet] -⚬ TypeOutlet =
+    val concreteType: F[TypeOutlet] -⚬ TypeOutlet =
       injectR > pack
 
-    def split: TypeOutlet -⚬ (TypeOutlet |*| TypeOutlet) =
+    val split: TypeOutlet -⚬ (TypeOutlet |*| TypeOutlet) =
       rec { self =>
         λ { t =>
           unpack(t) either {
@@ -680,12 +680,12 @@ private[inference] class PropagatorImpl[
         }
       }
 
-    def close: TypeOutlet -⚬ Done =
+    val close: TypeOutlet -⚬ Done =
       rec { self =>
         unpack > either(outputTypeParam > neglect, F.close(self))
       }
 
-    def awaitPosFst: (Done |*| TypeOutlet) -⚬ TypeOutlet = rec { self =>
+    val awaitPosFst: (Done |*| TypeOutlet) -⚬ TypeOutlet = rec { self =>
       λ { case d |*| t =>
         unpack(t) either {
           case Left(p) =>

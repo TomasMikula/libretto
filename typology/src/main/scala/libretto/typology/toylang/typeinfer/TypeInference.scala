@@ -9,26 +9,27 @@ import libretto.typology.toylang.types.{AbstractTypeLabel, Label, ScalaTypeParam
 import libretto.typology.util.{Either3, State}
 
 object TypeInference {
+
+  private given VarGen[State[Int, *], AbstractTypeLabel] with {
+    override def newVar: State[Int, AbstractTypeLabel] =
+      State(n => (n+1, AbstractTypeLabel(n)))
+  }
+
+  private given pg: Propagator[NonAbstractType[Val[Label], _], Type[Label], Label] =
+    import NonAbstractType.given
+    Propagator.instance[NonAbstractType[Val[Label], _], Type[Label], Label](Type.abstractType)
+
   def inferTypes[A, B](f: Fun[A, B]): One -⚬ Val[TypedFun[A, B]] = {
     println(s"inferTypes($f)")
     val t0 = System.currentTimeMillis()
-
-    given VarGen[State[Int, *], AbstractTypeLabel] with {
-      override def newVar: State[Int, AbstractTypeLabel] =
-        State(n => (n+1, AbstractTypeLabel(n)))
-    }
-
-    given pg: Propagator[NonAbstractType[Val[Label], _], Type[Label], Label] =
-      import NonAbstractType.given
-      Propagator.instance[NonAbstractType[Val[Label], _], Type[Label], Label](Type.abstractType)
 
     val res =
     reconstructTypes(f)
       .map { prg =>
         prg > λ { case a |*| f |*| b =>
-          (f /*:>> alsoPrintLine(f => s"RESULT of reconstructTypes: $f")*/)
-            .waitFor(pg.close(a) /*:>> printLine("INPUT closed")*/)
-            .waitFor(pg.close(b) /*:>> printLine("OUTPUT closed")*/)
+          f
+            .waitFor(pg.close(a))
+            .waitFor(pg.close(b))
         }
       }
       .run(0)
@@ -44,7 +45,6 @@ object TypeInference {
     gen: VarGen[M, AbstractTypeLabel],
     M: Monad[M],
   ): M[One -⚬ (pg.Tp |*| Val[TypedFun[A, B]] |*| pg.Tp)] = {
-    // println(s"reconstructTypes($f)")
     import gen.newVar
     import NonAbstractType.{Either, Int, Pair, RecCall, String, Unit}
     import pg.{Tp, TypeOutlet, label, merge, output, split}
@@ -309,7 +309,6 @@ object TypeInference {
                         s"FUNCTION=${scala.util.Try(f.toString)}, IN-TYPE=$aba, OUT-TYPE=$b"
                       }
                     d :>> fork :>> crashWhenDone(s"TODO (${summon[SourcePos]})")
-                    // (d |*| b1) :>> crashNow(s"TODO (${summon[SourcePos]})")
                 }
               case Right(aba) =>
                 (aba |*| f |*| b1) :>> crashNow(s"TODO (${summon[SourcePos]})")
