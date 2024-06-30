@@ -1,6 +1,6 @@
 package libretto.typology.inference
 
-import libretto.lambda.Partitioning
+import libretto.lambda.{Extractor, Partitioning}
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.StarterKit.{|| as |, *}
 import scala.annotation.targetName
@@ -98,17 +98,27 @@ private[inference] class PropagatorImpl[
 
   object Refinement {
     opaque type Request[T] = -[Response[T]]
-    opaque type Response[T] = T |+| -[TypeOutlet]
+
+    opaque type Response[T] = OneOf
+      [ "Granted"  :: T
+      | "Declined" :: -[TypeOutlet]
+      ]
+
+    object Response {
+      def Granted[T] : Extractor[-⚬, |*|, Response[T], T]             = OneOf.partition[Response[T]]["Granted"]
+      def Declined[T]: Extractor[-⚬, |*|, Response[T], -[TypeOutlet]] = OneOf.partition[Response[T]]["Declined"]
+    }
+    import Response.*
 
     def makeRequest[T]: One -⚬ (Request[T] |*| Response[T]) =
       forevert
 
     extension [T](req: $[Request[T]]) {
       def grant(t: $[T])(using SourcePos, LambdaContext): $[One] =
-        injectL(t) supplyTo req
+        Granted(t) supplyTo req
 
       def decline(using SourcePos, LambdaContext): $[TypeOutlet] =
-        die(req contramap injectR)
+        die(req contramap Declined.reinject)
 
       @targetName("closeRefinementRequest")
       def close(using SourcePos, LambdaContext): $[Done] =
@@ -116,16 +126,15 @@ private[inference] class PropagatorImpl[
     }
 
     extension [T](resp: $[Response[T]])
-      def toEither: $[T |+| -[TypeOutlet]] =
-        resp
-
       def mapWith[X, U](f: (X |*| T) -⚬ U)(x: $[X])(using SourcePos, LambdaContext)(using X: Closeable[X]): $[Response[U]] =
         given Junction.Positive[-[TypeOutlet]] = Junction.Positive.insideInversion[TypeOutlet]
-        resp either {
-          case Left(t)  => injectL(f(x |*| t))
-          case Right(t) => injectR(t waitFor X.close(x))
-        }
+        switch(resp)
+          .is { case Granted(t)  => Granted(f(x |*| t)) }
+          .is { case Declined(t) => Declined(t waitFor X.close(x)) }
+          .end
   }
+
+  import Refinement.Response.{Declined, Granted}
 
   type Negotiation[T] = OneOf
     [ "Preliminary" :: Negotiation.Preliminary[T]
@@ -385,34 +394,32 @@ private[inference] class PropagatorImpl[
       val t2 |*| resp2 = makeAbstractType(l2)
       returning(
         t1 |*| t2,
-        resp1.toEither either {
-          case Left(t1) =>
-            resp2.toEither either {
-              case Left(t2) =>
-                req grant merge(t1 |*| t2)
-              case Right(req2) =>
-                val t11 |*| t12 = split(t1)
-                returning(
-                  req grant t11,
-                  tap(t12) supplyTo req2,
-                )
-            }
-          case Right(req1) =>
-            resp2.toEither either {
-              case Left(t2) =>
-                val t21 |*| t22 = split(t2)
-                returning(
-                  req grant t21,
-                  tap(t22) supplyTo req1,
-                )
-              case Right(req2) =>
-                val t1 |*| t2 = TypeOutlet.split(req.decline)
-                returning(
-                  t1 supplyTo req1,
-                  t2 supplyTo req2,
-                )
-            }
-        },
+        switch(resp1 |*| resp2)
+          .is { case Granted(t1) |*| Granted(t2) =>
+            req grant merge(t1 |*| t2)
+          }
+          .is { case Granted(t1) |*| Declined(req2) =>
+            val t11 |*| t12 = split(t1)
+            returning(
+              req grant t11,
+              tap(t12) supplyTo req2,
+            )
+          }
+          .is { case Declined(req1) |*| Granted(t2) =>
+            val t21 |*| t22 = split(t2)
+            returning(
+              req grant t21,
+              tap(t22) supplyTo req1,
+            )
+          }
+          .is { case Declined(req1) |*| Declined(req2) =>
+            val t1 |*| t2 = TypeOutlet.split(req.decline)
+            returning(
+              t1 supplyTo req1,
+              t2 supplyTo req2,
+            )
+          }
+          .end,
       )
     }
 
@@ -436,51 +443,53 @@ private[inference] class PropagatorImpl[
     λ { lbl =>
       val l1 |*| l2 = labels.split(lbl)
       val res |*| resp = makeAbstractType(l1)
-        res |*| (resp.toEither either {
-          case Left(t) =>
+        res |*| (switch(resp)
+          .is { case Granted(t) =>
             output(t) waitFor labels.neglect(l2)
-          case Right(req) =>
+          }
+          .is { case Declined(req) =>
             val p1 |*| p2 = typeParamLink(l2)
             val t = outputTypeParam(p1)
             returning(t, TypeOutlet.Abstract(p2) supplyTo req)
-        })
+          }
+          .end
+        )
     }
 
   private def abstractLink: Label -⚬ (Tp |*| Tp) =
     λ { lbl =>
-      // val lbl1 = labels.alsoDebugPrint(s => s"Creating link for $s")(lbl)
       val l1 |*| l2 = labels.split(lbl)
       val l3 |*| l4 = labels.split(l2)
       val t1 |*| resp = makeAbstractType(l1)
       val nt2 |*| t2 = curry(preliminary)(l3)
       returning(
         t1 |*| t2,
-        resp.toEither either {
-          case Left(t) =>
+        switch(resp)
+          .is { case Granted(t) =>
             // TODO: occurs check for `lbl` in `t`
-            val l4_ = l4 //:>> labels.alsoDebugPrint(s => s"Link-req of $s returned as REFINED")
-            t.waitFor(labels.neglect(l4_)) supplyTo nt2
-          case Right(req1) =>
-            val l4_ = l4 //:>> labels.alsoDebugPrint(s => s"Link-req of $s returned as DECLINED. Sending opposite request.")
-            val l5 |*| l6 = labels.split(l4_)
+            t.waitFor(labels.neglect(l4)) supplyTo nt2
+          }
+          .is { case Declined(req1) =>
+            val l5 |*| l6 = labels.split(l4)
             val t2 |*| resp = makeAbstractType(l5)
             returning(
-              resp.toEither either {
-                case Left(t) =>
+              switch(resp)
+                .is { case Granted(t) =>
                   // TODO: occurs check for `lbl` in `t`
-                  val l6_ = l6 //:>> labels.alsoDebugPrint(s => s"Op-req of $s returned as REFINED")
-                  tap(t waitFor labels.neglect(l6_)) supplyTo req1
-                case Right(req2) =>
-                  val l6_ = l6 //:>> labels.alsoDebugPrint(s => s"Op-req of $s returned as DECLINED")
-                  val p1 |*| p2 = typeParamLink(l6_)
+                  tap(t waitFor labels.neglect(l6)) supplyTo req1
+                }
+                .is { case Declined(req2) =>
+                  val p1 |*| p2 = typeParamLink(l6)
                   returning(
                     TypeOutlet.Abstract(p1) supplyTo req1,
                     TypeOutlet.Abstract(p2) supplyTo req2,
                   )
-              },
+                }
+                .end,
               t2 supplyTo nt2,
             )
-        },
+          }
+          .end,
       )
     }
 
