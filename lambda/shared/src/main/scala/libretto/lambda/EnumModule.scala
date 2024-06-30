@@ -13,6 +13,7 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   type CaseList[Cases]
 
   type IsCaseOf[Label, Cases] <: { type Type }
+  type EnumPartition[Cases, P]
   type Handlers[Cases, R]
   type DistLR[A, Cases] <: { type Out }
   type DistRL[B, Cases] <: { type Out }
@@ -45,7 +46,7 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 
   given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): IsCaseOf[Lbl, Lbl :: A] { type Type = A }
   given isHeadCase[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): IsCaseOf[HLbl, (HLbl :: H) || Tail] { type Type = H }
-  given isTailInjector[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): IsCaseOf[Lbl, (HLbl :: H) || Tail] { type Type = j.Type }
+  given isTailCase[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): IsCaseOf[Lbl, (HLbl :: H) || Tail] { type Type = j.Type }
 
   given distLRCons[A, Label <: String, H, Tail](using
     label: StaticValue[Label],
@@ -99,7 +100,9 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
        [R] => h => apply[Lbl :: A, R].caseOf[L](h)
   }
 
-  type Partitioning[Cases] <: libretto.lambda.Partitioning[->, **, Enum[Cases]]
+  type Partitioning[Cases] <: libretto.lambda.Partitioning[->, **, Enum[Cases]] {
+    type Partition[P] = EnumPartition[Cases, P]
+  }
 
   def partitioning[Cases](using ev: CaseList[Cases]): Partitioning[Cases]
 
@@ -109,11 +112,20 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   ): Partitioning[u.A] =
     partitioning[u.A]
 
-  def caseExtractor[Cases, C](p: Partitioning[Cases], ev: IsCaseOf[C, Cases]): Extractor[->, **, Enum[Cases], ev.Type]
+  def toPartition[Cases, C](ev: IsCaseOf[C, Cases]): EnumPartition[Cases, ev.Type]
+
+  def extractorOf[T, Cases](
+    p: libretto.lambda.Partitioning[->, **, T] { type Partition[P] = EnumPartition[Cases, P] },
+  )(
+    label: String,
+  )(using
+    ev: IsCaseOf[label.type, Cases],
+  ): Extractor[->, **, T, ev.Type] =
+    Extractor(p, toPartition(ev))
 
   extension [Cases](p: Partitioning[Cases]) {
     def apply[C](using ev: IsCaseOf[C, Cases]): Extractor[->, **, Enum[Cases], ev.Type] =
-      caseExtractor[Cases, C](p, ev)
+      Extractor(p, toPartition(ev))
   }
 }
 
@@ -159,12 +171,15 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
   override opaque type CaseList[Cases] = CaseListImpl[Cases]
 
   override opaque type IsCaseOf[Label, Cases] <: { type Type } = Injector[Label, ?, Cases]
+  override opaque type EnumPartition[Cases, P] = Injector[?, P, Cases]
   override opaque type Handlers[Cases, R] = HandlersImpl[Cases, R]
   override opaque type DistLR[A, Cases] <: { type Out } = DistLRImpl[A, Cases]
   override opaque type DistRL[B, Cases] <: { type Out } = DistRLImpl[B, Cases]
   override opaque type DistF[F[_], Cases] <: { type Out } = DistFImpl[F, Cases]
 
-  override opaque type Partitioning[Cases] <: libretto.lambda.Partitioning[->, **, Enum[Cases]] =
+  override opaque type Partitioning[Cases] <: libretto.lambda.Partitioning[->, **, Enum[Cases]] {
+    type Partition[P] = EnumPartition[Cases, P]
+  } =
     PartitioningImpl[Cases]
 
   override def inject[Cases](label: String)(using c: IsCaseOf[label.type, Cases]): c.Type -> Enum[Cases] =
@@ -191,7 +206,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
     Member.Single(label.value)
   override given isHeadCase[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): IsCaseOf[HLbl, (HLbl :: H) || Tail] { type Type = H } =
     Member.InHead(hLbl.value)
-  override given isTailInjector[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): IsCaseOf[Lbl, (HLbl :: H) || Tail] { type Type = j.Type } =
+  override given isTailCase[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): IsCaseOf[Lbl, (HLbl :: H) || Tail] { type Type = j.Type } =
     Member.InTail(j)
 
   override given distLRCons[A, Label <: String, H, Tail](using
@@ -242,11 +257,10 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
   override def partitioning[Cases](using ev: CaseList[Cases]): Partitioning[Cases] =
     PartitioningImpl(ev)
 
-  override def caseExtractor[Cases, C](
-    p: Partitioning[Cases],
+  override def toPartition[Cases, C](
     ev: IsCaseOf[C, Cases],
-  ): Extractor[->, **, Enum[Cases], ev.Type] =
-    Extractor(p, ev)
+  ): EnumPartition[Cases, ev.Type] =
+    ev
 
   private sealed trait CaseListImpl[Cases] {
     def distF[F[_]]: DistFImpl[F, Cases]
