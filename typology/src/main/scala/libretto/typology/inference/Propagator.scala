@@ -10,9 +10,9 @@ trait Propagator[F[_], T, V] {
   type Tp
   type TypeOutlet
 
-  def Tp: F[Tp] -⚬ Tp = lift
+  def Tp: F[Tp] -⚬ Tp = typeFormer
 
-  def lift: F[Tp] -⚬ Tp
+  def typeFormer: F[Tp] -⚬ Tp
   def outlet: F[TypeOutlet] -⚬ TypeOutlet
   def merge: (Tp |*| Tp) -⚬ Tp
   def split: Tp -⚬ (Tp |*| Tp)
@@ -127,15 +127,27 @@ private[inference] class PropagatorImpl[
         }
   }
 
-  object AbsTp {
-    type Proper[T] = Label |*| Refinement.Request[T]
-    type Prelim[T] = Label |*| T
+  type Negotiation[T] = OneOf
+    [ "Preliminary" :: Negotiation.Preliminary[T]
+    | "Request"     :: Negotiation.Request[T]
+    ]
+
+  object Negotiation {
+    // send forth a preliminary label; the type that comes afterwards will be more refined than the given label
+    type Preliminary[T] = Label |*| T
+
+    // request a refinement. The response sent back must be more refined that the given label
+    type Request[T] = Label |*| Refinement.Request[T]
+
+    def Preliminary[T] = OneOf.partition[Negotiation[T]]["Preliminary"]
+    def Request[T]     = OneOf.partition[Negotiation[T]]["Request"]
   }
-  type AbsTp[T] = AbsTp.Proper[T] |+| AbsTp.Prelim[T]
+
+  import Negotiation.*
 
   private type TpF[Tp] = OneOf
     [ "TypeFormer" :: F[Tp]
-    | "TypeBroker" :: AbsTp[Tp]
+    | "TypeBroker" :: Negotiation[Tp]
     ]
 
   override opaque type Tp = Rec[TpF]
@@ -143,16 +155,16 @@ private[inference] class PropagatorImpl[
   private val tpPartitioning =
     recPartitioning[TpF](OneOf.partition[TpF[Tp]])
 
-  val TypeFormer = OneOf.extractorOf(tpPartitioning)("TypeFormer")
-  val TypeBroker = OneOf.extractorOf(tpPartitioning)("TypeBroker")
+  private val TypeFormer = OneOf.extractorOf(tpPartitioning)("TypeFormer")
+  private val TypeBroker = OneOf.extractorOf(tpPartitioning)("TypeBroker")
 
-  private def abstType: (Label |*| Refinement.Request[Tp]) -⚬ Tp =
-    injectL > TypeBroker.reinject
+  private def refinementRequest: (Label |*| Refinement.Request[Tp]) -⚬ Tp =
+    Negotiation.Request.reinject > TypeBroker.reinject
 
   private def preliminary: (Label |*| Tp) -⚬ Tp =
-    injectR > TypeBroker.reinject
+    Negotiation.Preliminary.reinject > TypeBroker.reinject
 
-  override val lift: F[Tp] -⚬ Tp =
+  override val typeFormer: F[Tp] -⚬ Tp =
     TypeFormer.reinject
 
   override val outlet: F[TypeOutlet] -⚬ TypeOutlet =
@@ -161,13 +173,13 @@ private[inference] class PropagatorImpl[
   def makeAbstractType: Label -⚬ (Tp |*| Refinement.Response[Tp]) =
     λ { case +(lbl) =>
       val req |*| resp = constant(Refinement.makeRequest[Tp])
-      abstType(lbl |*| req) |*| resp.mapWith(occursCheck)(lbl)
+      refinementRequest(lbl |*| req) |*| resp.mapWith(occursCheck)(lbl)
     }
 
   private def occursCheck: (Label |*| Tp) -⚬ Tp = rec { self =>
     λ { case lbl0 |*| t =>
       switch(t)
-        .is { case TypeBroker(InL(lbl |*| req)) =>
+        .is { case TypeBroker(Negotiation.Request(lbl |*| req)) =>
           switch( labels.testEqual(lbl0 |*| lbl) )
             .is { case InL(l) => // forbidden label found
               val +(v) = labels.unwrapOriginal(l)
@@ -176,11 +188,11 @@ private[inference] class PropagatorImpl[
               returning(t1, req grant t2)
             }
             .is { case InR(lbl0 |*| lbl) =>
-              abstType(lbl.waitFor(labels.neglect(lbl0)) |*| req)
+              refinementRequest(lbl.waitFor(labels.neglect(lbl0)) |*| req)
             }
             .end
         }
-        .is { case TypeBroker(InR(lbl |*| t)) => // preliminary
+        .is { case TypeBroker(Negotiation.Preliminary(lbl |*| t)) =>
           switch( labels.testEqual(lbl0 |*| lbl) )
             .is { case InL(l) => // forbidden label found
               returning(
@@ -215,7 +227,7 @@ private[inference] class PropagatorImpl[
   ): (Tp |*| Tp) -⚬ Tp = rec { self =>
     λ { case a |*| b =>
       switch(a |*| b)
-        .is { case TypeBroker(a) |*| TypeBroker(b) => mergeAbstractTypes(self, split)(a |*| b) }
+        .is { case TypeBroker(a) |*| TypeBroker(b) => mergeNegotiations(self, split)(a |*| b) }
         .is { case TypeBroker(a) |*| TypeFormer(b) => mergeConcreteAbstract(self, split)(b |*| a) }
         .is { case TypeFormer(a) |*| TypeBroker(b) => mergeConcreteAbstract(self, split)(a |*| b) }
         .is { case TypeFormer(a) |*| TypeFormer(b) => TypeFormer(F.merge(self)(a |*| b)) }
@@ -223,16 +235,16 @@ private[inference] class PropagatorImpl[
     }
   }
 
-  private def mergeAbstractTypes(
+  private def mergeNegotiations(
     merge: (Tp |*| Tp) -⚬ Tp,
     split: Tp -⚬ (Tp |*| Tp),
-  ): (AbsTp[Tp] |*| AbsTp[Tp]) -⚬ Tp =
+  ): (Negotiation[Tp] |*| Negotiation[Tp]) -⚬ Tp =
     λ { case a |*| b =>
       switch( a |*| b )
-        .is { case InL(a) |*| InL(b) => mergeAbstractTypesProper(merge, split)(a |*| b) }
-        .is { case InL(a) |*| InR(b) => mergeAbstractProperPreliminary(merge, split)(a |*| b) }
-        .is { case InR(a) |*| InL(b) => mergeAbstractProperPreliminary(merge, split)(b |*| a) }
-        .is { case InR(a) |*| InR(b) => mergePreliminaries(merge)(a |*| b) }
+        .is { case Request(a)     |*| Request(b)     => mergeRequests(merge, split)(a |*| b) }
+        .is { case Request(a)     |*| Preliminary(b) => mergeRequestPreliminary(merge, split)(a |*| b) }
+        .is { case Preliminary(a) |*| Request(b)     => mergeRequestPreliminary(merge, split)(b |*| a) }
+        .is { case Preliminary(a) |*| Preliminary(b) => mergePreliminaries(merge)(a |*| b) }
         .end
     }
 
@@ -244,24 +256,24 @@ private[inference] class PropagatorImpl[
       rInvertSignal(d |*| n)
     }
 
-  private def mergeAbstractTypesProper(
+  private def mergeRequests(
     merge: (Tp |*| Tp) -⚬ Tp,
     split: Tp -⚬ (Tp |*| Tp),
-  ): (AbsTp.Proper[Tp] |*| AbsTp.Proper[Tp]) -⚬ Tp =
+  ): (Negotiation.Request[Tp] |*| Negotiation.Request[Tp]) -⚬ Tp =
     λ { case (aLbl |*| aReq) |*| (bLbl |*| bReq) =>
       switch( labels.compare(aLbl |*| bLbl) )
         .is { case InL(lbl) =>
           // Labels are same, i.e. both refer to the same type.
           // Propagate one (arbitrary) of them, close the other.
           returning(
-            abstType(lbl |*| aReq),
+            refinementRequest(lbl |*| aReq),
             hackyDiscard(bReq.close),
           )
         }
         .is { case InR(res) =>
-          def go: (AbsTp.Proper[Tp] |*| Refinement.Request[Tp]) -⚬ Tp =
+          def go: (Negotiation.Request[Tp] |*| Refinement.Request[Tp]) -⚬ Tp =
             λ { case absTp |*| bReq =>
-              val t1 |*| t2 = splitAbstractProper(merge, split)(absTp)
+              val t1 |*| t2 = splitRequest(merge, split)(absTp)
               returning(t1, bReq grant t2)
             }
 
@@ -273,10 +285,10 @@ private[inference] class PropagatorImpl[
         .end
     }
 
-  private def mergeAbstractProperPreliminary(
+  private def mergeRequestPreliminary(
     merge: (Tp |*| Tp) -⚬ Tp,
     split: Tp -⚬ (Tp |*| Tp),
-  ): (AbsTp.Proper[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
+  ): (Negotiation.Request[Tp] |*| Negotiation.Preliminary[Tp]) -⚬ Tp =
     λ { case (aLbl |*| aReq) |*| (bLbl |*| b) =>
       val bl1 |*| bl2 = labels.split(bLbl)
       switch( labels.compare(aLbl |*| bl1) )
@@ -291,7 +303,7 @@ private[inference] class PropagatorImpl[
         .is { case InR(InL(aLbl)) =>
           // refinement request wins over preliminary,
           // but must still propagate the preliminary immediately
-          preliminary(bl2 |*| merge(abstType(aLbl |*| aReq) |*| b))
+          preliminary(bl2 |*| merge(refinementRequest(aLbl |*| aReq) |*| b))
         }
         .is { case InR(InR(bLbl)) =>
           // preliminary refines the refinement request
@@ -306,7 +318,7 @@ private[inference] class PropagatorImpl[
 
   private def mergePreliminaries(
     merge: (Tp |*| Tp) -⚬ Tp,
-  ): (AbsTp.Prelim[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
+  ): (Negotiation.Preliminary[Tp] |*| Negotiation.Preliminary[Tp]) -⚬ Tp =
     λ { case (aLbl |*| a) |*| (bLbl |*| b) =>
       switch( labels.compare(aLbl |*| bLbl) )
         .is { case InL(lbl) =>
@@ -329,30 +341,17 @@ private[inference] class PropagatorImpl[
   private def mergeConcreteAbstract(
     merge: (Tp |*| Tp) -⚬ Tp,
     split: Tp -⚬ (Tp |*| Tp),
-  ): (F[Tp] |*| AbsTp[Tp]) -⚬ Tp =
+  ): (F[Tp] |*| Negotiation[Tp]) -⚬ Tp =
     λ { case a |*| b =>
       switch(b)
-        .is { case InL(b) => mergeConcreteAbstractProper(split)(a |*| b) }
-        .is { case InR(b) => mergeConcreteAbstractPrelim(merge)(a |*| b) }
+        .is { case Request(lbl |*| req) =>
+          val a1 |*| a2 = split(TypeFormer(a).waitFor(labels.neglect(lbl)))
+          returning(a1, req grant a2)
+        }
+        .is { case Preliminary(lbl |*| b) =>
+          preliminary(lbl |*| merge(TypeFormer(a) |*| b))
+        }
         .end
-    }
-
-  private def mergeConcreteAbstractProper(
-    split: Tp -⚬ (Tp |*| Tp),
-  ): (F[Tp] |*| AbsTp.Proper[Tp]) -⚬ Tp =
-    λ { case t |*| (lbl |*| req) =>
-      val t1 |*| t2 = split(TypeFormer(t).waitFor(labels.neglect(lbl)))
-      returning(
-        t1,
-        req grant t2,
-      )
-    }
-
-  private def mergeConcreteAbstractPrelim(
-    merge: (Tp |*| Tp) -⚬ Tp,
-  ): (F[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
-    λ { case ft |*| (lbl |*| t) =>
-      preliminary(lbl |*| merge(TypeFormer(ft) |*| t))
     }
 
   private def split_(
@@ -360,8 +359,13 @@ private[inference] class PropagatorImpl[
   ): Tp -⚬ (Tp |*| Tp) = rec { self =>
     λ { t =>
       switch(t)
-        .is { case TypeBroker(a) =>
-          splitAbstract(merge, self)(a)
+        .is { case TypeBroker(Request(req)) =>
+          splitRequest(merge, self)(req)
+        }
+        .is { case TypeBroker(Preliminary(lbl |*| t)) =>
+          val l1 |*| l2 = labels.split(lbl)
+          val t1 |*| t2 = self(t)
+          preliminary(l1 |*| t1) |*| preliminary(l2 |*| t2)
         }
         .is { case TypeFormer(ft) =>
           val ft1 |*| ft2 = F.split(self)(ft)
@@ -371,30 +375,10 @@ private[inference] class PropagatorImpl[
     }
   }
 
-  private def splitAbstract(
+  private def splitRequest(
     merge: (Tp |*| Tp) -⚬ Tp,
     split: Tp -⚬ (Tp |*| Tp),
-  ): AbsTp[Tp] -⚬ (Tp |*| Tp) =
-    λ { a =>
-      switch(a)
-        .is { case InL(a) => splitAbstractProper(merge, split)(a) }
-        .is { case InR(a) => splitPreliminary(split)(a) }
-        .end
-    }
-
-  private def splitPreliminary(
-    split: Tp -⚬ (Tp |*| Tp),
-  ): AbsTp.Prelim[Tp] -⚬ (Tp |*| Tp) =
-    λ { case lbl |*| t =>
-      val l1 |*| l2 = labels.split(lbl)
-      val t1 |*| t2 = split(t)
-      preliminary(l1 |*| t1) |*| preliminary(l2 |*| t2)
-    }
-
-  private def splitAbstractProper(
-    merge: (Tp |*| Tp) -⚬ Tp,
-    split: Tp -⚬ (Tp |*| Tp),
-  ): AbsTp.Proper[Tp] -⚬ (Tp |*| Tp) =
+  ): Negotiation.Request[Tp] -⚬ (Tp |*| Tp) =
     λ { case lbl |*| req =>
       val l1 |*| l2 = labels.split(lbl)
       val t1 |*| resp1 = makeAbstractType(l1)
@@ -433,12 +417,14 @@ private[inference] class PropagatorImpl[
     }
 
   private def awaitPosFst: (Done |*| Tp) -⚬ Tp =
+    import Negotiation.{Preliminary, Request}
+
     rec { self =>
       λ { case d |*| t =>
         switch(t)
-          .is { case TypeBroker(InL(lbl |*| req)) => abstType(lbl.waitFor(d) |*| req) }
-          .is { case TypeBroker(InR(lbl |*| t))   => preliminary(lbl |*| self(d |*| t)) }
-          .is { case TypeFormer(ft)               => TypeFormer(F.awaitPosFst(self)(d |*| ft)) }
+          .is { case TypeBroker(Request(lbl |*| req))   => refinementRequest(lbl.waitFor(d) |*| req) }
+          .is { case TypeBroker(Preliminary(lbl |*| t)) => preliminary(lbl |*| self(d |*| t)) }
+          .is { case TypeFormer(ft)                     => TypeFormer(F.awaitPosFst(self)(d |*| ft)) }
           .end
       }
     }
@@ -499,13 +485,16 @@ private[inference] class PropagatorImpl[
     }
 
   override val close: Tp -⚬ Done = rec { self =>
+    import Negotiation.{Preliminary, Request}
     λ { t =>
       switch(t)
-        .is { case TypeBroker(InL(lbl |*| req)) =>
+        .is { case TypeBroker(Request(lbl |*| req)) =>
           joinAll(TypeOutlet.close(req.decline), labels.neglect(lbl))
         }
-        .is { case TypeBroker(InR(lbl |*| t)) => join(labels.neglect(lbl) |*| self(t)) }
-        .is { case TypeFormer(ft)             => F.close(self)(ft) }
+        .is { case TypeBroker(Preliminary(lbl |*| t)) =>
+          join(labels.neglect(lbl) |*| self(t))
+        }
+        .is { case TypeFormer(ft) => F.close(self)(ft) }
         .end
     }
   }
@@ -598,11 +587,12 @@ private[inference] class PropagatorImpl[
   }
 
   override val tap: Tp -⚬ TypeOutlet = rec { self =>
+    import Negotiation.{Preliminary, Request}
     λ { t =>
       switch(t)
-        .is { case TypeBroker(InL(lbl |*| req)) => req.decline waitFor labels.neglect(lbl) }
-        .is { case TypeBroker(InR(lbl |*| t))   => self(t waitFor labels.neglect(lbl)) }
-        .is { case TypeFormer(ft)               => TypeOutlet.TypeFormer(F.map(self)(ft)) }
+        .is { case TypeBroker(Request(lbl |*| req))   => req.decline waitFor labels.neglect(lbl) }
+        .is { case TypeBroker(Preliminary(lbl |*| t)) => self(t waitFor labels.neglect(lbl)) }
+        .is { case TypeFormer(ft)                     => TypeOutlet.TypeFormer(F.map(self)(ft)) }
         .end
     }
   }
