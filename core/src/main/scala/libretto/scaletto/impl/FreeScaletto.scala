@@ -671,12 +671,12 @@ object FreeScaletto extends Scaletto {
     given Partitioning.SubFun[-⚬, UnpackOnlyFun] = UnpackOnlySubFun
   }
 
-  extension [F[_], B](ext: Extractor[F[Rec[F]], B]) {
-    def afterUnpack: Extractor[Rec[F], B] =
-      ext.contramap[UnpackOnlyFun, Rec[F]](
-        UnpackOnlyFun.Unpack[F](),
-      )
-  }
+  override def recPartitioning[F[_]](
+    p: Partitioning[-⚬, |*|, F[Rec[F]]],
+  ): Partitioning[-⚬, |*|, Rec[F]] { type Partition[P] = p.Partition[P] } =
+    p.contramap[UnpackOnlyFun, Rec[F]](
+      UnpackOnlyFun.Unpack[F]()
+    )
 
   private given SymmetricSemigroupalCategory[PartialFun, |*|] with {
     override def id[A]: PartialFun[A, A] = FreeScaletto.id

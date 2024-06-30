@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.lambda.{EnumModule, Extractor, Focus}
+import libretto.lambda.{EnumModule, Extractor, Focus, Partitioning}
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.util.Equal
@@ -543,8 +543,13 @@ trait CoreDSL {
       ext.reinject
   }
 
+  def recPartitioning[F[_]](
+    p: Partitioning[-⚬, |*|, F[Rec[F]]]
+  ): Partitioning[-⚬, |*|, Rec[F]] { type Partition[P] = p.Partition[P] }
+
   extension [F[_], B](ext: Extractor[-⚬, |*|, F[Rec[F]], B]) {
-    def afterUnpack: Extractor[-⚬, |*|, Rec[F], B]
+    def afterUnpack: Extractor[-⚬, |*|, Rec[F], B] =
+      Extractor(recPartitioning(ext.partitioning), ext.partition)
   }
 
   def InL[A, B]: Extractor[-⚬, |*|, A |+| B, A] =
