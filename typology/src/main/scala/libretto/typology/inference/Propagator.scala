@@ -1,7 +1,8 @@
 package libretto.typology.inference
 
+import libretto.lambda.Partitioning
 import libretto.lambda.util.SourcePos
-import libretto.scaletto.StarterKit.*
+import libretto.scaletto.StarterKit.{|| as |, *}
 import scala.annotation.targetName
 
 trait Propagator[F[_], T, V] {
@@ -87,7 +88,13 @@ private[inference] class PropagatorImpl[
 ) extends Propagator[F, T, V] { self =>
 
   override type Label = labels.Label
-  override type TypeOutlet = Rec[[X] =>> P |+| F[X]]
+
+  private type TypeOutletF[X] = OneOf
+    [ "TypeFormer" :: F[X]
+    | "Abstract"   :: P
+    ]
+
+  override opaque type TypeOutlet = Rec[TypeOutletF]
 
   object Refinement {
     opaque type Request[T] = -[Response[T]]
@@ -113,7 +120,6 @@ private[inference] class PropagatorImpl[
         resp
 
       def mapWith[X, U](f: (X |*| T) -⚬ U)(x: $[X])(using SourcePos, LambdaContext)(using X: Closeable[X]): $[Response[U]] =
-        import TypeOutlet.given
         given Junction.Positive[-[TypeOutlet]] = Junction.Positive.insideInversion[TypeOutlet]
         resp either {
           case Left(t)  => injectL(f(x |*| t))
@@ -127,28 +133,30 @@ private[inference] class PropagatorImpl[
   }
   type AbsTp[T] = AbsTp.Proper[T] |+| AbsTp.Prelim[T]
 
-  override type Tp = Rec[[Tp] =>> AbsTp[Tp] |+| F[Tp]]
+  private type TpF[Tp] = OneOf
+    [ "TypeFormer" :: F[Tp]
+    | "TypeBroker" :: AbsTp[Tp]
+    ]
 
-  private def pack: (AbsTp[Tp] |+| F[Tp]) -⚬ Tp =
-    dsl.pack[[X] =>> AbsTp[X] |+| F[X]]
+  override opaque type Tp = Rec[TpF]
 
-  private def unpack: Tp -⚬ (AbsTp[Tp] |+| F[Tp]) =
-    dsl.unpack[[X] =>> AbsTp[X] |+| F[X]]
+  private val tpPartitioning =
+    recPartitioning[TpF](OneOf.partition[TpF[Tp]])
+
+  val TypeFormer = OneOf.extractorOf(tpPartitioning)("TypeFormer")
+  val TypeBroker = OneOf.extractorOf(tpPartitioning)("TypeBroker")
 
   private def abstType: (Label |*| Refinement.Request[Tp]) -⚬ Tp =
-    injectL > injectL > pack
+    injectL > TypeBroker.reinject
 
   private def preliminary: (Label |*| Tp) -⚬ Tp =
-    injectR > injectL > pack
-
-  private def concreteType: F[Tp] -⚬ Tp =
-    injectR > pack
+    injectR > TypeBroker.reinject
 
   override val lift: F[Tp] -⚬ Tp =
-    concreteType
+    TypeFormer.reinject
 
   override val outlet: F[TypeOutlet] -⚬ TypeOutlet =
-    TypeOutlet.concreteType
+    TypeOutlet.TypeFormer.reinject
 
   def makeAbstractType: Label -⚬ (Tp |*| Refinement.Response[Tp]) =
     λ { case +(lbl) =>
@@ -158,33 +166,37 @@ private[inference] class PropagatorImpl[
 
   private def occursCheck: (Label |*| Tp) -⚬ Tp = rec { self =>
     λ { case lbl0 |*| t =>
-      unpack(t) either {
-        case Left(absTp) =>
-          absTp either {
-            case Left(lbl |*| req) =>
-              labels.testEqual(lbl0 |*| lbl) either {
-                case Left(l) => // forbidden label found
-                  val +(v) = labels.unwrapOriginal(l)
-                  val t1 = concreteType(F.forbiddenSelfReference(v))
-                  val t2 = concreteType(F.forbiddenSelfReference(v))
-                  returning(t1, req grant t2)
-                case Right(lbl0 |*| lbl) =>
-                  abstType(lbl.waitFor(labels.neglect(lbl0)) |*| req)
-              }
-            case Right(lbl |*| t) => // preliminary
-              labels.testEqual(lbl0 |*| lbl) either {
-                case Left(l) => // forbidden label found
-                  returning(
-                    concreteType(F.forbiddenSelfReference(labels.unwrapOriginal(l))),
-                    hackyDiscard(close(t)),
-                  )
-                case Right(lbl0 |*| lbl) =>
-                  preliminary(lbl |*| self(lbl0 |*| t))
-              }
-          }
-        case Right(ft) =>
-          concreteType(F.mapWith(self)(lbl0 |*| ft))
-      }
+      switch(t)
+        .is { case TypeBroker(InL(lbl |*| req)) =>
+          switch( labels.testEqual(lbl0 |*| lbl) )
+            .is { case InL(l) => // forbidden label found
+              val +(v) = labels.unwrapOriginal(l)
+              val t1 = TypeFormer(F.forbiddenSelfReference(v))
+              val t2 = TypeFormer(F.forbiddenSelfReference(v))
+              returning(t1, req grant t2)
+            }
+            .is { case InR(lbl0 |*| lbl) =>
+              abstType(lbl.waitFor(labels.neglect(lbl0)) |*| req)
+            }
+            .end
+        }
+        .is { case TypeBroker(InR(lbl |*| t)) => // preliminary
+          switch( labels.testEqual(lbl0 |*| lbl) )
+            .is { case InL(l) => // forbidden label found
+              returning(
+                TypeFormer(F.forbiddenSelfReference(labels.unwrapOriginal(l))),
+                hackyDiscard(close(t)),
+              )
+            }
+            .is { case InR(lbl0 |*| lbl) =>
+              preliminary(lbl |*| self(lbl0 |*| t))
+            }
+            .end
+        }
+        .is { case TypeFormer(ft) =>
+          TypeFormer(F.mapWith(self)(lbl0 |*| ft))
+        }
+        .end
     }
   }
 
@@ -201,23 +213,13 @@ private[inference] class PropagatorImpl[
   private def merge_(
     split: Tp -⚬ (Tp |*| Tp),
   ): (Tp |*| Tp) -⚬ Tp = rec { self =>
-    par(unpack, unpack) > λ { case a |*| b =>
-      a either {
-        case Left(a) =>
-          b either {
-            case Left(b) =>
-              mergeAbstractTypes(self, split)(a |*| b)
-            case Right(fb) =>
-              mergeConcreteAbstract(self, split)(fb |*| a)
-          }
-        case Right(fa) =>
-          b either {
-            case Left(b) =>
-              mergeConcreteAbstract(self, split)(fa |*| b)
-            case Right(fb) =>
-              concreteType(F.merge(self)(fa |*| fb))
-          }
-      }
+    λ { case a |*| b =>
+      switch(a |*| b)
+        .is { case TypeBroker(a) |*| TypeBroker(b) => mergeAbstractTypes(self, split)(a |*| b) }
+        .is { case TypeBroker(a) |*| TypeFormer(b) => mergeConcreteAbstract(self, split)(b |*| a) }
+        .is { case TypeFormer(a) |*| TypeBroker(b) => mergeConcreteAbstract(self, split)(a |*| b) }
+        .is { case TypeFormer(a) |*| TypeFormer(b) => TypeFormer(F.merge(self)(a |*| b)) }
+        .end
     }
   }
 
@@ -226,22 +228,12 @@ private[inference] class PropagatorImpl[
     split: Tp -⚬ (Tp |*| Tp),
   ): (AbsTp[Tp] |*| AbsTp[Tp]) -⚬ Tp =
     λ { case a |*| b =>
-      a either {
-        case Left(a) =>
-          b either {
-            case Left(b) =>
-              mergeAbstractTypesProper(merge, split)(a |*| b)
-            case Right(b) =>
-              mergeAbstractProperPreliminary(merge, split)(a |*| b)
-          }
-        case Right(a) =>
-          b either {
-            case Left(b) =>
-              mergeAbstractProperPreliminary(merge, split)(b |*| a)
-            case Right(b) =>
-              mergePreliminaries(merge)(a |*| b)
-          }
-      }
+      switch( a |*| b )
+        .is { case InL(a) |*| InL(b) => mergeAbstractTypesProper(merge, split)(a |*| b) }
+        .is { case InL(a) |*| InR(b) => mergeAbstractProperPreliminary(merge, split)(a |*| b) }
+        .is { case InR(a) |*| InL(b) => mergeAbstractProperPreliminary(merge, split)(b |*| a) }
+        .is { case InR(a) |*| InR(b) => mergePreliminaries(merge)(a |*| b) }
+        .end
     }
 
   /** Ignores the input via a (local) deadlock. */
@@ -257,27 +249,28 @@ private[inference] class PropagatorImpl[
     split: Tp -⚬ (Tp |*| Tp),
   ): (AbsTp.Proper[Tp] |*| AbsTp.Proper[Tp]) -⚬ Tp =
     λ { case (aLbl |*| aReq) |*| (bLbl |*| bReq) =>
-      labels.compare(aLbl |*| bLbl) either {
-        case Left(lbl) =>
+      switch( labels.compare(aLbl |*| bLbl) )
+        .is { case InL(lbl) =>
           // Labels are same, i.e. both refer to the same type.
           // Propagate one (arbitrary) of them, close the other.
           returning(
             abstType(lbl |*| aReq),
             hackyDiscard(bReq.close),
           )
-
-        case Right(res) =>
+        }
+        .is { case InR(res) =>
           def go: (AbsTp.Proper[Tp] |*| Refinement.Request[Tp]) -⚬ Tp =
             λ { case absTp |*| bReq =>
               val t1 |*| t2 = splitAbstractProper(merge, split)(absTp)
               returning(t1, bReq grant t2)
             }
 
-          res either {
-            case Left(aLbl)  => go(aLbl |*| aReq |*| bReq)
-            case Right(bLbl) => go(bLbl |*| bReq |*| aReq)
-          }
-      }
+          switch(res)
+            .is { case InL(aLbl)  => go(aLbl |*| aReq |*| bReq) }
+            .is { case InR(bLbl) => go(bLbl |*| bReq |*| aReq) }
+            .end
+        }
+        .end
     }
 
   private def mergeAbstractProperPreliminary(
@@ -285,62 +278,52 @@ private[inference] class PropagatorImpl[
     split: Tp -⚬ (Tp |*| Tp),
   ): (AbsTp.Proper[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
     λ { case (aLbl |*| aReq) |*| (bLbl |*| b) =>
-      // (labels.alsoShow(aLbl) |*| labels.alsoShow(bLbl)) match { case (aLbl |*| as) |*| (bLbl |*| bs) =>
       val bl1 |*| bl2 = labels.split(bLbl)
-      // returning(
-      labels.compare(aLbl |*| bl1) either {
-        case Left(lbl) =>
+      switch( labels.compare(aLbl |*| bl1) )
+        .is { case InL(lbl) =>
           // Labels are equal, refer to the same type.
           // Close the refinement request, propagate the preliminary.
           returning(
             preliminary(bl2.waitFor(labels.neglect(lbl)) |*| b),
             hackyDiscard(aReq.close),
           )
-        case Right(res) =>
-          res either {
-            case Left(aLbl) =>
-              // refinement request wins over preliminary,
-              // but must still propagate the preliminary immediately
-              preliminary(bl2 |*| merge(abstType(aLbl |*| aReq) |*| b))
-            case Right(bLbl) =>
-              // preliminary refines the refinement request
-              val t1 |*| t2 = split(preliminary(bLbl |*| b))
-              returning(
-                t1 waitFor labels.neglect(bl2),
-                aReq grant t2,
-              )
-          }
-      }
-      // ,(as ** bs) :>> printLine { case (as, bs) => s"Merging PROPER $as and PRELIMINARY $bs" } :>> hackyDiscard,
-      // )
-      // }
+        }
+        .is { case InR(InL(aLbl)) =>
+          // refinement request wins over preliminary,
+          // but must still propagate the preliminary immediately
+          preliminary(bl2 |*| merge(abstType(aLbl |*| aReq) |*| b))
+        }
+        .is { case InR(InR(bLbl)) =>
+          // preliminary refines the refinement request
+          val t1 |*| t2 = split(preliminary(bLbl |*| b))
+          returning(
+            t1 waitFor labels.neglect(bl2),
+            aReq grant t2,
+          )
+        }
+        .end
     }
 
   private def mergePreliminaries(
     merge: (Tp |*| Tp) -⚬ Tp,
   ): (AbsTp.Prelim[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
     λ { case (aLbl |*| a) |*| (bLbl |*| b) =>
-      // (labels.alsoShow(aLbl) |*| labels.alsoShow(bLbl)) match { case (aLbl |*| as) |*| (bLbl |*| bs) =>
-      // returning(
-      labels.compare(aLbl |*| bLbl) either {
-        case Left(lbl) =>
+      switch( labels.compare(aLbl |*| bLbl) )
+        .is { case InL(lbl) =>
           // labels are same
           preliminary(lbl |*| merge(a |*| b))
-        case Right(res) =>
-          res either {
-            case Left(aLbl) =>
-              val al1 |*| al2 = labels.split(aLbl)
-              val a1 = preliminary(al1 |*| a) // winner (`a`) must keep checking for its own label in the loser (`b`)
-              preliminary(al2 |*| merge(a1 |*| b))
-            case Right(bLbl) =>
-              val bl1 |*| bl2 = labels.split(bLbl)
-              val b1 = preliminary(bl1 |*| b) // winner (`b`) must keep checking for its own label in the loser (`a`)
-              preliminary(bl2 |*| merge(a |*| b1))
-          }
-      }
-      // ,(as ** bs) :>> printLine { case (as, bs) => s"Merging PRELIMINARIES $as and $bs" } :>> hackyDiscard,
-      // )
-      // }
+        }
+        .is { case InR(InL(aLbl)) =>
+          val al1 |*| al2 = labels.split(aLbl)
+          val a1 = preliminary(al1 |*| a) // winner (`a`) must keep checking for its own label in the loser (`b`)
+          preliminary(al2 |*| merge(a1 |*| b))
+        }
+        .is { case InR(InR(bLbl)) =>
+          val bl1 |*| bl2 = labels.split(bLbl)
+          val b1 = preliminary(bl1 |*| b) // winner (`b`) must keep checking for its own label in the loser (`a`)
+          preliminary(bl2 |*| merge(a |*| b1))
+        }
+        .end
     }
 
   private def mergeConcreteAbstract(
@@ -348,19 +331,17 @@ private[inference] class PropagatorImpl[
     split: Tp -⚬ (Tp |*| Tp),
   ): (F[Tp] |*| AbsTp[Tp]) -⚬ Tp =
     λ { case a |*| b =>
-      b either {
-        case Left(b) =>
-          mergeConcreteAbstractProper(split)(a |*| b)
-        case Right(b) =>
-          mergeConcreteAbstractPrelim(merge)(a |*| b)
-      }
+      switch(b)
+        .is { case InL(b) => mergeConcreteAbstractProper(split)(a |*| b) }
+        .is { case InR(b) => mergeConcreteAbstractPrelim(merge)(a |*| b) }
+        .end
     }
 
   private def mergeConcreteAbstractProper(
     split: Tp -⚬ (Tp |*| Tp),
   ): (F[Tp] |*| AbsTp.Proper[Tp]) -⚬ Tp =
     λ { case t |*| (lbl |*| req) =>
-      val t1 |*| t2 = split(concreteType(t).waitFor(labels.neglect(lbl)))
+      val t1 |*| t2 = split(TypeFormer(t).waitFor(labels.neglect(lbl)))
       returning(
         t1,
         req grant t2,
@@ -371,20 +352,22 @@ private[inference] class PropagatorImpl[
     merge: (Tp |*| Tp) -⚬ Tp,
   ): (F[Tp] |*| AbsTp.Prelim[Tp]) -⚬ Tp =
     λ { case ft |*| (lbl |*| t) =>
-      preliminary(lbl |*| merge(concreteType(ft) |*| t))
+      preliminary(lbl |*| merge(TypeFormer(ft) |*| t))
     }
 
   private def split_(
     merge: (Tp |*| Tp) -⚬ Tp,
   ): Tp -⚬ (Tp |*| Tp) = rec { self =>
     λ { t =>
-      unpack(t) either {
-        case Left(a) =>
+      switch(t)
+        .is { case TypeBroker(a) =>
           splitAbstract(merge, self)(a)
-        case Right(ft) =>
+        }
+        .is { case TypeFormer(ft) =>
           val ft1 |*| ft2 = F.split(self)(ft)
-          concreteType(ft1) |*| concreteType(ft2)
-      }
+          TypeFormer(ft1) |*| TypeFormer(ft2)
+        }
+        .end
     }
   }
 
@@ -393,10 +376,10 @@ private[inference] class PropagatorImpl[
     split: Tp -⚬ (Tp |*| Tp),
   ): AbsTp[Tp] -⚬ (Tp |*| Tp) =
     λ { a =>
-      a either {
-        case Left(a)  => splitAbstractProper(merge, split)(a)
-        case Right(a) => splitPreliminary(split)(a)
-      }
+      switch(a)
+        .is { case InL(a) => splitAbstractProper(merge, split)(a) }
+        .is { case InR(a) => splitPreliminary(split)(a) }
+        .end
     }
 
   private def splitPreliminary(
@@ -452,15 +435,11 @@ private[inference] class PropagatorImpl[
   private def awaitPosFst: (Done |*| Tp) -⚬ Tp =
     rec { self =>
       λ { case d |*| t =>
-        unpack(t) either {
-          case Left(a) =>
-            a either {
-              case Left(lbl |*| req) => abstType(lbl.waitFor(d) |*| req)
-              case Right(lbl |*| t)  => preliminary(lbl |*| self(d |*| t))
-            }
-          case Right(ft) =>
-            concreteType(F.awaitPosFst(self)(d |*| ft))
-        }
+        switch(t)
+          .is { case TypeBroker(InL(lbl |*| req)) => abstType(lbl.waitFor(d) |*| req) }
+          .is { case TypeBroker(InR(lbl |*| t))   => preliminary(lbl |*| self(d |*| t)) }
+          .is { case TypeFormer(ft)               => TypeFormer(F.awaitPosFst(self)(d |*| ft)) }
+          .end
       }
     }
 
@@ -477,7 +456,7 @@ private[inference] class PropagatorImpl[
           case Right(req) =>
             val p1 |*| p2 = typeParamLink(l2)
             val t = outputTypeParam(p1)
-            returning(t, TypeOutlet.typeParam(p2) supplyTo req)
+            returning(t, TypeOutlet.Abstract(p2) supplyTo req)
         })
     }
 
@@ -509,8 +488,8 @@ private[inference] class PropagatorImpl[
                   val l6_ = l6 //:>> labels.alsoDebugPrint(s => s"Op-req of $s returned as DECLINED")
                   val p1 |*| p2 = typeParamLink(l6_)
                   returning(
-                    TypeOutlet.typeParam(p1) supplyTo req1,
-                    TypeOutlet.typeParam(p2) supplyTo req2,
+                    TypeOutlet.Abstract(p1) supplyTo req1,
+                    TypeOutlet.Abstract(p2) supplyTo req2,
                   )
               },
               t2 supplyTo nt2,
@@ -521,20 +500,13 @@ private[inference] class PropagatorImpl[
 
   override val close: Tp -⚬ Done = rec { self =>
     λ { t =>
-      unpack(t) either {
-        case Left(a) =>
-          a either {
-            case Left(lbl |*| req) =>
-              joinAll(
-                TypeOutlet.close(req.decline),
-                labels.neglect(lbl),
-              )
-            case Right(lbl |*| t) =>
-              join(labels.neglect(lbl) |*| self(t))
-          }
-        case Right(ft) =>
-          F.close(self)(ft)
-      }
+      switch(t)
+        .is { case TypeBroker(InL(lbl |*| req)) =>
+          joinAll(TypeOutlet.close(req.decline), labels.neglect(lbl))
+        }
+        .is { case TypeBroker(InR(lbl |*| t)) => join(labels.neglect(lbl) |*| self(t)) }
+        .is { case TypeFormer(ft)             => F.close(self)(ft) }
+        .end
     }
   }
 
@@ -554,14 +526,16 @@ private[inference] class PropagatorImpl[
     val splitQ: Q -⚬ (Q |*| Q) =
       λ { case lbl |*| q =>
         val l1 |*| l2 = nl.labels.split(lbl)
-        val q1 |*| q2 = q either {
-          case Left(nt) =>
+        val q1 |*| q2 = switch(q)
+          .is { case InL(nt) =>
             val nt1 |*| nt2 = contrapositive(self.merge)(nt) :>> distributeInversion
             injectL(nt1) |*| injectL(nt2)
-          case Right(t) =>
+          }
+          .is { case InR(t) =>
             val t1 |*| t2 = self.split(t)
             injectR(t1) |*| injectR(t2)
-        }
+          }
+          .end
         (l1 |*| q1) |*| (l2 |*| q2)
       }
 
@@ -574,14 +548,16 @@ private[inference] class PropagatorImpl[
 
     val outputQ: Q -⚬ Val[T] =
       λ { case lbl |*| q =>
-        q either {
-          case Left(nt) =>
+        switch(q)
+          .is { case InL(nt) =>
             val t |*| t0 = abstractTypeTap(nl.lower(lbl))
             returning(t0, t supplyTo nt)
-          case Right(t) =>
+          }
+          .is { case InR(t) =>
             self.output(t)
               .waitFor(nl.labels.neglect(lbl))
-        }
+          }
+          .end
       }
 
     new Nested {
@@ -598,21 +574,21 @@ private[inference] class PropagatorImpl[
 
       override val lower: propagator.TypeOutlet -⚬ Tp = rec { self =>
         λ { t =>
-          propagator.TypeOutlet.unpack(t) either {
-            case Left(lbl |*| q) =>
-              q either {
-                case Left(nt) =>
-                  val t1 |*| t2 = abstractLink(nl.lower(lbl))
-                  returning(
-                    t1,
-                    t2 supplyTo nt,
-                  )
-                case Right(t) =>
-                  t waitFor nl.labels.neglect(lbl)
-              }
-            case Right(ft) =>
-              concreteType(F.map(self)(ft))
-          }
+          switch(t)
+            .is { case propagator.TypeOutlet.Abstract(lbl |*| InL(nt)) =>
+              val t1 |*| t2 = abstractLink(nl.lower(lbl))
+              returning(
+                t1,
+                t2 supplyTo nt,
+              )
+            }
+            .is { case propagator.TypeOutlet.Abstract(lbl |*| InR(t)) =>
+              t waitFor nl.labels.neglect(lbl)
+            }
+            .is { case propagator.TypeOutlet.TypeFormer(ft) =>
+              TypeFormer(F.map(self)(ft))
+            }
+            .end
         }
       }
 
@@ -623,80 +599,72 @@ private[inference] class PropagatorImpl[
 
   override val tap: Tp -⚬ TypeOutlet = rec { self =>
     λ { t =>
-      unpack(t) either {
-        case Left(a) =>
-          a either {
-            case Left(lbl |*| req) =>
-              import TypeOutlet.given
-              req.decline waitFor labels.neglect(lbl)
-            case Right(lbl |*| t) =>
-              self(t waitFor labels.neglect(lbl))
-          }
-        case Right(ft) =>
-          TypeOutlet.concreteType(F.map(self)(ft))
-      }
+      switch(t)
+        .is { case TypeBroker(InL(lbl |*| req)) => req.decline waitFor labels.neglect(lbl) }
+        .is { case TypeBroker(InR(lbl |*| t))   => self(t waitFor labels.neglect(lbl)) }
+        .is { case TypeFormer(ft)               => TypeOutlet.TypeFormer(F.map(self)(ft)) }
+        .end
     }
   }
 
   override val peek: TypeOutlet -⚬ (F[TypeOutlet] |+| TypeOutlet) =
     λ { t =>
-      TypeOutlet.unpack(t) either {
-        case Left(p)   => injectR(TypeOutlet.typeParam(p))
-        case Right(ft) => injectL(ft)
-      }
+      switch(t)
+        .is { case TypeOutlet.Abstract(p)    => injectR(TypeOutlet.Abstract(p)) }
+        .is { case TypeOutlet.TypeFormer(ft) => injectL(ft) }
+        .end
     }
 
   override val write: TypeOutlet -⚬ Val[T] = rec { self =>
-    dsl.unpack > dsl.either(
-      outputTypeParam,
-      F.output(self),
-    )
+    λ { switch(_)
+      .is { case TypeOutlet.Abstract(p) => outputTypeParam(p) }
+      .is { case TypeOutlet.TypeFormer(t) => F.output(self)(t) }
+      .end
+    }
   }
 
   object TypeOutlet {
-    private val pack: (P |+| F[TypeOutlet]) -⚬ TypeOutlet =
-      dsl.pack[[X] =>> P |+| F[X]]
+    private val partitioning =
+      recPartitioning[TypeOutletF](OneOf.partition[TypeOutletF[TypeOutlet]])
 
-    val unpack: TypeOutlet -⚬ (P |+| F[TypeOutlet]) =
-      dsl.unpack
-
-    val typeParam: P -⚬ TypeOutlet =
-      injectL > pack
-
-    val concreteType: F[TypeOutlet] -⚬ TypeOutlet =
-      injectR > pack
+    val TypeFormer = OneOf.extractorOf(partitioning)("TypeFormer")
+    val Abstract   = OneOf.extractorOf(partitioning)("Abstract")
 
     val split: TypeOutlet -⚬ (TypeOutlet |*| TypeOutlet) =
       rec { self =>
         λ { t =>
-          unpack(t) either {
-            case Left(p) =>
+          switch(t)
+            .is { case Abstract(p) =>
               val p1 |*| p2 = splitTypeParam(p)
-              typeParam(p1) |*| typeParam(p2)
-            case Right(ft) =>
+              Abstract(p1) |*| Abstract(p2)
+            }
+            .is { case TypeFormer(ft) =>
               val ft1 |*| ft2 = F.split(self)(ft)
-              concreteType(ft1) |*| concreteType(ft2)
-          }
+              TypeFormer(ft1) |*| TypeFormer(ft2)
+            }
+            .end
         }
       }
 
     val close: TypeOutlet -⚬ Done =
       rec { self =>
-        unpack > either(outputTypeParam > neglect, F.close(self))
+        λ { switch(_)
+          .is { case Abstract(p)   => neglect(outputTypeParam(p)) }
+          .is { case TypeFormer(t) => F.close(self)(t) }
+          .end
+        }
       }
 
     val awaitPosFst: (Done |*| TypeOutlet) -⚬ TypeOutlet = rec { self =>
       λ { case d |*| t =>
-        unpack(t) either {
-          case Left(p) =>
-            typeParam(p waitFor d)
-          case Right(ft) =>
-            concreteType(F.awaitPosFst(self)(d |*| ft))
-        }
+        switch(t)
+          .is { case Abstract(p)    => Abstract(p waitFor d) }
+          .is { case TypeFormer(ft) => TypeFormer(F.awaitPosFst(self)(d |*| ft)) }
+          .end
       }
     }
-
-    given Junction.Positive[TypeOutlet] =
-      Junction.Positive.from(awaitPosFst)
   }
+
+  private given Junction.Positive[TypeOutlet] =
+    Junction.Positive.from(TypeOutlet.awaitPosFst)
 }
