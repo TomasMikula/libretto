@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Applicative, Exists, Monad, NonEmptyList, Validated}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, Monad, NonEmptyList, UniqueTypeArg, Validated}
 
 sealed trait CapturingFun[-->[_, _], |*|[_, _], F[_], A, B] {
   import CapturingFun.*
@@ -93,28 +93,30 @@ object CapturingFun {
   }
 
   def leastCommonCapture[-->[_, _], |*|[_, _], F[_], A, B, G[_]](
-    fs: NonEmptyList[CapturingFun[-->, |*|, F, A, B]],
+    fs: NonEmptyList[CapturingFun[-->, |*|, Tupled[|*|, F, _], A, B]],
   )(
-    discarderOf: [X] => F[X] => G[[Y] => Unit => (X |*| Y) --> Y],
-    union: [X, Y] => (F[X], F[Y]) => G[Exists[[Z] =>> (F[Z], Z --> X, Z --> Y)]],
+    discarderOf: [X] => F[X] => G[[Y] => DummyImplicit ?=> (X |*| Y) --> Y],
   )(using
-    cat: SemigroupalCategory[-->, |*|],
+    cat: SymmetricSemigroupalCategory[-->, |*|],
+    inj: BiInjective[|*|],
+    F: UniqueTypeArg[F],
     G: Applicative[G],
     M: Monad[G],
-  ): G[CapturingFun[[a, b] =>> NonEmptyList[a --> b], |*|, F, A, B]] =
-    leastCommonCapture(fs.head, fs.tail)(discarderOf, union)
+  ): G[CapturingFun[[a, b] =>> NonEmptyList[a --> b], |*|, Tupled[|*|, F, _], A, B]] =
+    leastCommonCapture(fs.head, fs.tail)(new Discarder(discarderOf)/*, union*/)
 
-  def leastCommonCapture[-->[_, _], |*|[_, _], F[_], X, A, B, G[_]](
-    head: CapturingFun[-->, |*|, F, A, B],
-    tail: List[CapturingFun[-->, |*|, F, A, B]],
+  private def leastCommonCapture[-->[_, _], |*|[_, _], F[_], X, A, B, G[_]](
+    head: CapturingFun[-->, |*|, Tupled[|*|, F, _], A, B],
+    tail: List[CapturingFun[-->, |*|, Tupled[|*|, F, _], A, B]],
   )(
-    discarderOf: [X] => F[X] => G[[Y] => Unit => (X |*| Y) --> Y],
-    union: [X, Y] => (F[X], F[Y]) => G[Exists[[Z] =>> (F[Z], Z --> X, Z --> Y)]],
+    discarder: Discarder[-->, |*|, F, G],
   )(using
-    cat: SemigroupalCategory[-->, |*|],
+    cat: SymmetricSemigroupalCategory[-->, |*|],
+    inj: BiInjective[|*|],
+    F: UniqueTypeArg[F],
     G: Applicative[G],
     M: Monad[G],
-  ): G[CapturingFun[[a, b] =>> NonEmptyList[a --> b], |*|, F, A, B]] = {
+  ): G[CapturingFun[[a, b] =>> NonEmptyList[a --> b], |*|, Tupled[|*|, F, _], A, B]] = {
 
     tail match {
       case Nil =>
@@ -125,16 +127,16 @@ object CapturingFun {
         head match
           case NoCapture(f0) =>
             import Monad.syntax.*
-            leastCommonCapture(f1, fs)(discarderOf, union).flatMap {
+            leastCommonCapture(f1, fs)(discarder/*, union*/).flatMap {
               case NoCapture(fs) =>
                 G.pure(NoCapture(f0 :: fs))
               case Closure(captured, fs) =>
-                discarderOf(captured)
-                  .map { discardFst => Closure(captured, (f0.inSnd > discardFst(())) :: fs) }
+                discarder.multiDiscard(captured)
+                  .map { discardFst => Closure(captured, (f0.inSnd > discardFst[B]) :: fs) }
             }
 
           case Closure(captured, f) =>
-            leastCommonCapture(captured, tail)(discarderOf, union)
+            leastCommonCapture(captured, tail)(discarder)
               .map { case Exists.Some((p, Closure(y, fs))) =>
                 Closure(y, NonEmptyList(cat.fst(p) > f, fs))
               }
@@ -142,19 +144,20 @@ object CapturingFun {
   }
 
   private def leastCommonCapture[-->[_, _], |*|[_, _], F[_], X, A, B, G[_]](
-    acc: F[X],
-    fs: List[CapturingFun[-->, |*|, F, A, B]],
+    acc: Tupled[|*|, F, X],
+    fs: List[CapturingFun[-->, |*|, Tupled[|*|, F, _], A, B]],
   )(
-    discarderOf: [X] => F[X] => G[[Y] => Unit => (X |*| Y) --> Y],
-    union: [X, Y] => (F[X], F[Y]) => G[Exists[[Z] =>> (F[Z], Z --> X, Z --> Y)]],
+    discarder: Discarder[-->, |*|, F, G],
   )(using
-    cat: SemigroupalCategory[-->, |*|],
+    cat: SymmetricSemigroupalCategory[-->, |*|],
+    inj: BiInjective[|*|],
+    F: UniqueTypeArg[F],
     G: Applicative[G],
     M: Monad[G],
   ): G[
     Exists[[Y] =>> (
       Y --> X,
-      Closure[[a, b] =>> List[a --> b], |*|, F, Y, A, B]
+      Closure[[a, b] =>> List[a --> b], |*|, Tupled[|*|, F, _], Y, A, B]
     )]
   ] = {
     fs match
@@ -163,53 +166,106 @@ object CapturingFun {
       case f :: fs =>
         f match
           case NoCapture(f) =>
-            (discarderOf(acc) zip leastCommonCapture(acc, fs)(discarderOf, union))
+            (discarder.multiDiscard(acc) zip leastCommonCapture(acc, fs)(discarder/*, union*/))
               .map { case (discardFst, Exists.Some((p, Closure(y, gs)))) =>
-                val g = f.inSnd > discardFst(())
+                val g = f.inSnd > discardFst[B]
                 Exists(p, Closure(y, (cat.fst(p) > g) :: gs))
               }
 
           case Closure(captured, f) =>
             import Monad.syntax.*
-            union(acc, captured)
+            discarder.union(acc, captured)
               .flatMap { case Exists.Some((y, p1, p2)) =>
-                leastCommonCapture(y, fs)(discarderOf, union)
+                leastCommonCapture(y, fs)(discarder/*, union*/)
                   .map { case Exists.Some((q, Closure(z, gs))) =>
                     Exists((q > p1, Closure(z, (cat.fst(q > p2) > f) :: gs)))
                   }
               }
   }
 
+  private class Discarder[-->[_, _], |*|[_, _], F[_], G[_]](
+    elemDiscarder: [X] => F[X] => G[[Y] => DummyImplicit ?=> (X |*| Y) --> Y],
+  ) {
+    def multiDiscard[A](
+      exprs: Tupled[|*|, F, A],
+    )(using
+      SemigroupalCategory[-->, |*|],
+      Applicative[G],
+    ): G[[B] => DummyImplicit ?=> (A |*| B) --> B] =
+      exprs.asBin match {
+        case Bin.Leaf(x) =>
+          elemDiscarder(x)
+        case Bin.Branch(l, r) =>
+          Applicative[G].map2(
+            multiDiscard(Tupled.fromBin(l)),
+            multiDiscard(Tupled.fromBin(r)),
+          ) { (f, g) =>
+            [B] => (_: DummyImplicit) ?=> f.apply.inFst > g[B]
+          }
+      }
+
+    def union[A, B](
+      a: Tupled[|*|, F, A],
+      b: Tupled[|*|, F, B],
+    )(using
+      SymmetricSemigroupalCategory[-->, |*|],
+      BiInjective[|*|],
+      UniqueTypeArg[F],
+      Applicative[G],
+    ): G[Exists[[S] =>> (Tupled[|*|, F, S], S --> A, S --> B)]] = {
+      type GArr[X, Y] = G[X --> Y]
+      given shuffledG: Shuffled[GArr, |*|] = Shuffled[GArr, |*|]
+
+      val discardFst: [X, Y] => F[X] => GArr[X |*| Y, Y] =
+        [X, Y] => fx => elemDiscarder[X](fx).map(_[Y])
+
+      (a union b)(discardFst) match
+        case Exists.Some((p, p1, p2)) =>
+          Applicative[G].map2(
+            p1.foldMapA[G, -->]([x, y] => (f: G[x --> y]) => f),
+            p2.foldMapA[G, -->]([x, y] => (f: G[x --> y]) => f),
+          ) { (p1, p2) =>
+            Exists((p, p1, p2))
+          }
+    }
+  }
+
   def compileSink[-->[_, _], |*|[_, _], <+>[_, _], F[_], A, B, G[_]](
-    fs: Sink[CapturingFun[-->, |*|, F, _, _], <+>, A, B],
+    fs: Sink[CapturingFun[-->, |*|, Tupled[|*|, F,_], _, _], <+>, A, B],
   )(
-    discarderOf: [X] => F[X] => G[[Y] => Unit => (X |*| Y) --> Y],
-    union: [X, Y] => (F[X], F[Y]) => G[Exists[[Z] =>> (F[Z], Z --> X, Z --> Y)]],
+    discarderOf: [X] => F[X] => G[[Y] => DummyImplicit ?=> (X |*| Y) --> Y],
   )(using
-    cat: SemigroupalCategory[-->, |*|],
+    cat: SymmetricSemigroupalCategory[-->, |*|],
     coc: CocartesianSemigroupalCategory[-->, <+>],
     dis: Distribution[-->, |*|, <+>],
+    inj: BiInjective[|*|],
+    F: UniqueTypeArg[F],
     G: Applicative[G],
     M: Monad[G],
-  ): G[CapturingFun[-->, |*|, F, A, B]] = {
+  ): G[CapturingFun[-->, |*|, Tupled[|*|, F,_], A, B]] = {
     import Applicative.*
     import cat.*
     import coc.either
     import dis.distLR
 
+    val discarder = new Discarder[-->, |*|, F, G](discarderOf)
+
     fs.reduceM[G](
-      [x, y] => (f1: CapturingFun[-->, |*|, F, x, B], f2: CapturingFun[-->, |*|, F, y, B]) => {
+      [x, y] => (
+        f1: CapturingFun[-->, |*|, Tupled[|*|, F,_], x, B],
+        f2: CapturingFun[-->, |*|, Tupled[|*|, F,_], y, B],
+      ) => {
         (f1, f2) match {
           case (NoCapture(f1), NoCapture(f2)) =>
             NoCapture(coc.either(f1, f2)).pure
           case (Closure(x, f1), NoCapture(f2)) =>
-            discarderOf(x).map :
-              discardFst => Closure(x, distLR > either(f1, discardFst(()) > f2))
+            discarder.multiDiscard(x).map :
+              discardFst => Closure(x, distLR > either(f1, discardFst.apply > f2))
           case (NoCapture(f1), Closure(y, f2)) =>
-            discarderOf(y).map :
-              discardFst => Closure(y, distLR > either(discardFst(()) > f1, f2))
+            discarder.multiDiscard(y).map :
+              discardFst => Closure(y, distLR > either(discardFst.apply > f1, f2))
           case (Closure(x, f1), Closure(y, f2)) =>
-            union(x, y)
+            discarder.union(x, y)
               .map { case Exists.Some((p, p1, p2)) =>
                 Closure(p, distLR > either(p1.inFst > f1, p2.inFst > f2))
               }

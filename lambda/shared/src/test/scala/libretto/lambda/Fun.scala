@@ -3,7 +3,7 @@ package libretto.lambda
 import libretto.lambda.Lambdas.LinearityViolation.{Overused, Unused, UnusedInBranch}
 import libretto.lambda.util.{BiInjective, NonEmptyList, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
-import libretto.lambda.util.Validated.{Invalid, Valid}
+import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 
 sealed trait Fun[A, B] {
   def >[C](that: Fun[B, C]): Fun[A, C] = Fun.andThen(this, that)
@@ -135,7 +135,11 @@ object Fun {
       val fb = lambdas.delambdifyFoldNested((), b, ctx ?=> (b: $[B]) => f(Right(b)))
       (fa zip fb)
         .flatMap { case (fa, fb) =>
-          CapturingFun.compileSink(Sink(fa) <+> Sink(fb))(lambdas.compoundDiscarder, lambdas.exprUniter)
+          CapturingFun.compileSink(Sink(fa) <+> Sink(fb))(
+            [X] => x => lambdas.Context.getDiscard(x.resultVar) match
+              case Some(discardFst) => Valid(discardFst)
+              case None => invalid(Lambdas.LinearityViolation.unusedInBranch[VarDesc, Unit, X](x.resultVar))
+          )
         }
         .map {
           case CapturingFun.NoCapture(f)  => f(ab)
@@ -189,7 +193,7 @@ object Fun {
 
   object ? {
     def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A]): Some[$[A]] = {
-      lambdas.Context.registerDiscard(a)([X] => (_: Unit) => prj2[A, X])
+      lambdas.Context.registerDiscard(a)([X] => _ ?=> prj2[A, X])
       Some(a)
     }
   }
@@ -204,7 +208,7 @@ object Fun {
   object * {
     def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A]): Some[$[A]] = {
       lambdas.Context.registerSplit(a)(dup[A])
-      lambdas.Context.registerDiscard(a)([X] => (_: Unit) => prj2[A, X])
+      lambdas.Context.registerDiscard(a)([X] => _ ?=> prj2[A, X])
       Some(a)
     }
   }

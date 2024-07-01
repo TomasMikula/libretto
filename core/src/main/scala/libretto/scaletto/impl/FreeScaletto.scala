@@ -636,7 +636,7 @@ object FreeScaletto extends Scaletto {
     ): $[A] = {
       lambdas.Context.registerNonLinearOps(a)(
         split,
-        discard.map(f => [B] => (_: Unit) => elimFst[A, B](f)),
+        discard.map(f => [B] => (_: DummyImplicit) ?=> elimFst[A, B](f)),
       )
       a
     }
@@ -724,11 +724,18 @@ object FreeScaletto extends Scaletto {
         FreeScaletto.this.distributeR
     }
 
-    CapturingFun.compileSink(
+    val exprDiscarder: [X] => lambdas.Expr[X] => Validated[
+      Lambdas.LinearityViolation.UnusedInBranch[VarOrigin, ScopeInfo],
+      [Y] => DummyImplicit ?=> PartialFun[X |*| Y, Y],
+    ] =
+      [X] => x => lambdas.Context.getDiscard(x.resultVar) match
+        case Some(discardFst) => Valid(discardFst)
+        case None => invalid(Lambdas.LinearityViolation.unusedInBranch(x.resultVar))
+
+    CapturingFun.compileSink[PartialFun, |*|, |+|, lambdas.Expr, A, R, Validated[LinearityViolation, _]](
       cases,
     )(
-      lambdas.compoundDiscarder,
-      lambdas.exprUniter,
+      exprDiscarder,
     ).map {
       case CapturingFun.NoCapture(f)  => lambdas.Expr.map(a, f)(VarOrigin.FunAppRes(pos))
       case CapturingFun.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)

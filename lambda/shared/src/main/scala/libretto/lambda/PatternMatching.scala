@@ -258,12 +258,22 @@ class PatternMatching[->[_, _], **[_, _]](using
 
         // make each case capture the least common superset of captured expressions
         delamN: CapturingFun[[a, b] =>> NonEmptyList[a ~> b], **, Tupled[**, $, _], A, R] <-
-          CapturingFun.leastCommonCapture(delams)(lambdas.compoundDiscarderSh, lambdas.exprUniterSh)
+          CapturingFun.leastCommonCapture(delams)(exprDiscarder)
 
         res <-
           detectPatternsAndCompile[->>, Tupled[**, $, _], A, R, E](using shuffled)(
             delamN,
           )(isExtractor, lower)
       } yield res
+
+    private def exprDiscarder(using
+      LambdaContext
+    ): [X] => lambdas.Expr[X] => Validated[
+      Lambdas.LinearityViolation.UnusedInBranch[V, C],
+      [Y] => DummyImplicit ?=> (X ** Y) ~> Y,
+    ] =
+      [X] => x => LambdaContext.getDiscardSh(x.resultVar) match
+        case Some(discardFst) => Valid(discardFst)
+        case None => invalid(Lambdas.LinearityViolation.unusedInBranch(x.resultVar))
   }
 }

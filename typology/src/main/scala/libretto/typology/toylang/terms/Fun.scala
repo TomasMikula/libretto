@@ -1,10 +1,9 @@
 package libretto.typology.toylang.terms
 
-import libretto.lambda.{CapturingFun, CocartesianSemigroupalCategory, Distribution, Sink, SymmetricSemigroupalCategory, Tupled}
+import libretto.lambda.{CapturingFun, CocartesianSemigroupalCategory, Distribution, Lambdas, Sink, SemigroupalCategory, SymmetricSemigroupalCategory, Tupled}
 import libretto.lambda.util.{SourcePos, Validated}
-import libretto.lambda.util.Validated.{Invalid, Valid}
+import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.typology.toylang.types.{Fix, RecCall, TypeTag}
-import libretto.lambda.SemigroupalCategory
 
 sealed trait Fun[A, B] {
   def >[C](that: Fun[B, C]): Fun[A, C] =
@@ -142,8 +141,8 @@ object Fun {
     override def distRL[A, B, C]: Fun[(Either[A, B], C), Either[(A, C), (B, C)]] = Fun.distributeR
   }
 
-  private val lambdas: libretto.lambda.Lambdas[Fun, Tuple2, Object, Unit] =
-    libretto.lambda.Lambdas[Fun, Tuple2, Object, Unit](
+  private val lambdas: Lambdas[Fun, Tuple2, Object, Unit] =
+    Lambdas[Fun, Tuple2, Object, Unit](
       universalSplit = Some([x] => (_: Unit) => Fun.dup[x]),
       universalDiscard = Some([x, y] => (_: Unit) => Fun.prj2[x, y]),
     )
@@ -186,11 +185,19 @@ object Fun {
       val fa: Validated[LinearityViolation, Delambdifold[A, R]] = lambdas.delambdifyFoldNested((), new Object, (a: Expr[A]) => f(Left(a)))
       val fb: Validated[LinearityViolation, Delambdifold[B, R]] = lambdas.delambdifyFoldNested((), new Object, (b: Expr[B]) => f(Right(b)))
 
+      val exprDiscarder: [X] => Expr[X] => Validated[
+        Lambdas.LinearityViolation.UnusedInBranch[Object, Unit],
+        [Y] => DummyImplicit ?=> Fun[(X, Y), Y],
+      ] =
+        [X] => x => lambdas.Context.getDiscard(x.resultVar) match
+          case Some(discardFst) => Valid(discardFst)
+          case None => invalid(Lambdas.LinearityViolation.unusedInBranch(x.resultVar))
+
       (fa zip fb)
         .flatMap { case (fa, fb) =>
           CapturingFun.compileSink(
             Sink(fa) <+> Sink(fb),
-          )(lambdas.compoundDiscarder, lambdas.exprUniter)
+          )(exprDiscarder)
         }
         .map {
           case NoCapture(f) => f(x)

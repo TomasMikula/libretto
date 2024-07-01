@@ -246,7 +246,7 @@ class Workflows[Action[_, _]] {
       //   case Foo(_) => bar
       // knows about the pattern `Foo(_)` and does not treat the case as
       //   case _ => bar
-      lambdas.Context.registerDiscard(b)([Y] => (_: Unit) => Flow.prj2[B, Y])
+      lambdas.Context.registerDiscard(b)([Y] => _ ?=> Flow.prj2[B, Y])
 
       Some(b)
 

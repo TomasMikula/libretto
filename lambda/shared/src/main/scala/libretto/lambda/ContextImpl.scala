@@ -11,7 +11,7 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V, C, Expr[_]](
   private case class Entry[A](
     expr: Expr[A],
     split: Option[A -⚬ (A |*| A)],
-    discard: Option[[B] => Unit => (A |*| B) -⚬ B],
+    discard: Option[[B] => DummyImplicit ?=> (A |*| B) -⚬ B],
   )
 
   private type Intro[A] = [x] => Unit => x -⚬ (A |*| x)
@@ -30,7 +30,7 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V, C, Expr[_]](
 
   def register[A](expr: Expr[A])(
     split: Option[A -⚬ (A |*| A)],
-    discard: Option[[B] => Unit => (A |*| B) -⚬ B],
+    discard: Option[[B] => DummyImplicit ?=> (A |*| B) -⚬ B],
   ): Unit =
     val v: Var[V, A] = resultVar(expr)
     nonLinearOps.updateWith(
@@ -62,7 +62,7 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V, C, Expr[_]](
       .flatMap(_.asInstanceOf[Entry[A]].split)
       .orElse(parent.flatMap(_.getSplit(v)))
 
-  def getDiscard[A](v: Var[V, A]): Option[[B] => Unit => (A |*| B) -⚬ B] =
+  def getDiscard[A](v: Var[V, A]): Option[[B] => DummyImplicit ?=> (A |*| B) -⚬ B] =
     nonLinearOps.get(v.asInstanceOf[Var[V, Any]])
       .flatMap(_.asInstanceOf[Entry[A]].discard)
       .orElse(parent.flatMap(_.getDiscard(v)))
@@ -73,10 +73,10 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V, C, Expr[_]](
       .asInstanceOf[Option[[x] => Unit => x -⚬ (A |*| x)]]
       .orElse(parent.flatMap(_.getConstant(v)))
 
-  def registeredDiscarders: Seq[Exists[[A] =>> (Expr[A], [B] => Unit => (A |*| B) -⚬ B)]] =
+  def registeredDiscarders: Seq[Exists[[A] =>> (Expr[A], [B] => DummyImplicit ?=> (A |*| B) -⚬ B)]] =
     nonLinearOps
       .valuesIterator
-      .collect[Exists[[A] =>> (Expr[A], [B] => Unit => (A |*| B) -⚬ B)]] {
+      .collect[Exists[[A] =>> (Expr[A], [B] => DummyImplicit ?=> (A |*| B) -⚬ B)]] {
         case Entry(expr, _, Some(discard)) =>
           Exists((expr, discard))
       }

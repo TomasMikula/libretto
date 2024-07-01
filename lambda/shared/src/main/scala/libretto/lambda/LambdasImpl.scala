@@ -46,7 +46,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
 
     override def registerNonLinearOps[A](a: Expr[A])(
       split: Option[A -> (A ** A)],
-      discard: Option[[B] => Unit => (A ** B) -> B],
+      discard: Option[[B] => DummyImplicit ?=> (A ** B) -> B],
     )(using ctx: Context): Unit =
       ctx.register(a)(split, discard)
 
@@ -58,8 +58,8 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
     override def getSplit[A](v: Var[A])(using ctx: Context): Option[A -> (A ** A)] =
       ctx.getSplit(v) orElse universalSplit.map(_[A](()))
 
-    override def getDiscard[A](v: Var[A])(using ctx: Context): Option[[B] => Unit => (A ** B) -> B] =
-      ctx.getDiscard(v) orElse universalDiscard.map(f => [B] => (_: Unit) => f[A, B](()))
+    override def getDiscard[A](v: Var[A])(using ctx: Context): Option[[B] => DummyImplicit ?=> (A ** B) -> B] =
+      ctx.getDiscard(v) orElse universalDiscard.map(f => [B] => (_: DummyImplicit) ?=> f[A, B](()))
 
     override def getConstant[A](v: Var[A])(using ctx: Context): Option[[x] => Unit => x -> (A ** x)] =
       ctx.getConstant(v)
@@ -289,7 +289,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
   }
 
   private type Discarder[A] =
-    [B] => Unit => (A ** B) -> B
+    [B] => DummyImplicit ?=> (A ** B) -> B
 
   override def eliminateLocalVariables[A, B](
     boundVar: Var[A],
@@ -339,7 +339,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
         case (e1 @ Exists.Some((acc, g)), e2 @ Exists.Some((exp, discarder))) =>
           val acc1: Tupled[Expr, e2.T ** e1.T] =
             Tupled.atom(exp) zip acc
-          Exists((acc1, shuffled.lift(discarder(())) > g))
+          Exists((acc1, shuffled.lift(discarder.apply) > g))
       }
     }
   }
@@ -494,7 +494,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
           }
         case EliminatedFromForest.NotFound() =>
           Context.getDiscard(boundVar) match
-            case Some(discardFst) => Valid(Closure(Forest.unvar(exprs, u), swap > lift(discardFst(()))))
+            case Some(discardFst) => Valid(Closure(Forest.unvar(exprs, u), swap > lift(discardFst.apply)))
             case None             => invalid(LinearityViolation.unusedVar(boundVar, Context.info))
       }
     }
@@ -694,7 +694,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
                   MappedMorphism(
                     SingleVar[a1 ** a2](),
                     Context.getDiscard(op.unusedVar) match {
-                      case Some(discard) => Valid(CapturingFun.noCapture(shuffled.swap > shuffled.lift(discard[a1](()))))
+                      case Some(discard) => Valid(CapturingFun.noCapture(shuffled.swap > shuffled.lift(discard[a1])))
                       case None          => invalid(LinearityViolation.unusedVar(op.unusedVar, Context.info))
                     },
                     SingleVar[a1](),
@@ -703,7 +703,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
                   MappedMorphism(
                     SingleVar[a1 ** a2](),
                     Context.getDiscard(op.unusedVar) match {
-                      case Some(discard) => Valid(CapturingFun.lift(discard[a2](())))
+                      case Some(discard) => Valid(CapturingFun.lift(discard[a2]))
                       case None          => invalid(LinearityViolation.unusedVar(op.unusedVar, Context.info))
                     },
                     SingleVar[a2](),
