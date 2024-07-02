@@ -69,6 +69,7 @@ class Workflows[Action[_, _]] {
 
   private case class MisplacedExtractor(pos: SourcePos, ext: Extractor[?, ?])
   private case class IllegalCapture[X](pos: SourcePos, captured: Tupled[**, Expr, X])
+  private type UnusedInBranch = PatternMatching.UnusedInBranch[VarOrigin, Unit]
 
   private type CapturingFun[A, B] = libretto.lambda.CapturingFun[Flow, **, Tupled[**, Expr, _], A, B]
 
@@ -277,12 +278,12 @@ class Workflows[Action[_, _]] {
 
   private def raiseErrors(
     summary: String,
-    es: NonEmptyList[lambdas.LinearityViolation | MisplacedExtractor | patmat.PatternMatchError]
+    es: NonEmptyList[lambdas.LinearityViolation | UnusedInBranch | MisplacedExtractor | patmat.PatternMatchError]
   ): Nothing =
     val msg = formatMessages(es)
     throw AssemblyError(summary + "\n" + msg)
 
-  private def formatMessages(es: NonEmptyList[lambdas.LinearityViolation | MisplacedExtractor | patmat.PatternMatchError]): String =
+  private def formatMessages(es: NonEmptyList[lambdas.LinearityViolation | UnusedInBranch | MisplacedExtractor | patmat.PatternMatchError]): String =
     es
       .map { e =>
         val NonEmptyList(line0, lines) = formatMessage(e)
@@ -292,9 +293,11 @@ class Workflows[Action[_, _]] {
       .toList
       .mkString("\n")
 
-  private def formatMessage(e: lambdas.LinearityViolation | MisplacedExtractor | patmat.PatternMatchError): NonEmptyList[String] =
+  private def formatMessage(e: lambdas.LinearityViolation | UnusedInBranch | MisplacedExtractor | patmat.PatternMatchError): NonEmptyList[String] =
     e match
       case e: lambdas.LinearityViolation =>
+        ???
+      case e: UnusedInBranch =>
         ???
       case MisplacedExtractor(pos, ext) =>
         NonEmptyList.of(s"Extractor ${ext.show} used outside pattern match (at ${pos.filename}:${pos.line})")

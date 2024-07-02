@@ -206,7 +206,6 @@ object Lambdas {
   enum LinearityViolation[VarLabel, CtxLabel]:
     case Overused(vars: Var.Set[VarLabel])
     case Unused(v: Var[VarLabel, ?], exitedCtx: CtxLabel)
-    case UnusedInBranch(vars: Var.Set[VarLabel])
 
   object LinearityViolation {
     def overusedVar[V, C, A](v: Var[V, A]): LinearityViolation[V, C] =
@@ -215,7 +214,5 @@ object Lambdas {
     def unusedVar[V, C, A](v: Var[V, A], exitedCtx: C): LinearityViolation[V, C] =
       Unused(v, exitedCtx)
 
-    def unusedInBranch[V, C, A](v: Var[V, A]): LinearityViolation.UnusedInBranch[V, C] =
-      UnusedInBranch(Var.Set(v))
   }
 }

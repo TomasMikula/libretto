@@ -1,6 +1,7 @@
 package libretto.typology.toylang.terms
 
 import libretto.lambda.{CapturingFun, CocartesianSemigroupalCategory, Distribution, Lambdas, Sink, SemigroupalCategory, SymmetricSemigroupalCategory, Tupled}
+import libretto.lambda.PatternMatching.UnusedInBranch
 import libretto.lambda.util.{SourcePos, Validated}
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.typology.toylang.types.{Fix, RecCall, TypeTag}
@@ -186,12 +187,12 @@ object Fun {
       val fb: Validated[LinearityViolation, Delambdifold[B, R]] = lambdas.delambdifyFoldNested((), new Object, (b: Expr[B]) => f(Right(b)))
 
       val exprDiscarder: [X] => Expr[X] => Validated[
-        Lambdas.LinearityViolation.UnusedInBranch[Object, Unit],
+        UnusedInBranch[Object, Unit],
         [Y] => DummyImplicit ?=> Fun[(X, Y), Y],
       ] =
         [X] => x => lambdas.Context.getDiscard(x.resultVar) match
           case Some(discardFst) => Valid(discardFst)
-          case None => invalid(Lambdas.LinearityViolation.unusedInBranch(x.resultVar))
+          case None => invalid(UnusedInBranch(x.resultVar))
 
       (fa zip fb)
         .flatMap { case (fa, fb) =>

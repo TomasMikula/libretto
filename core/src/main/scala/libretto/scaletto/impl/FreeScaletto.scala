@@ -693,6 +693,8 @@ object FreeScaletto extends Scaletto {
         case Invalid(es) => raiseTotalityViolations(es) // XXX
   }
 
+  private type UnusedInBranch = PatternMatching.UnusedInBranch[VarOrigin, ScopeInfo]
+
   private def switchSink[A, R](
     a: $[A],
     cases: Sink[lambdas.Delambdifold, |+|, A, R],
@@ -700,7 +702,7 @@ object FreeScaletto extends Scaletto {
     pos: SourcePos,
   )(using
     lambdas.Context,
-  ): Validated[LinearityViolation, $[R]] = {
+  ): Validated[UnusedInBranch, $[R]] = {
     type -?>[X, Y] = PartialFun[X, Y]
 
     given CocartesianSemigroupalCategory[-?>, |+|] with {
@@ -725,14 +727,14 @@ object FreeScaletto extends Scaletto {
     }
 
     val exprDiscarder: [X] => lambdas.Expr[X] => Validated[
-      Lambdas.LinearityViolation.UnusedInBranch[VarOrigin, ScopeInfo],
+      UnusedInBranch,
       [Y] => DummyImplicit ?=> PartialFun[X |*| Y, Y],
     ] =
       [X] => x => lambdas.Context.getDiscard(x.resultVar) match
         case Some(discardFst) => Valid(discardFst)
-        case None => invalid(Lambdas.LinearityViolation.unusedInBranch(x.resultVar))
+        case None => invalid(PatternMatching.UnusedInBranch(x.resultVar))
 
-    CapturingFun.compileSink[PartialFun, |*|, |+|, lambdas.Expr, A, R, Validated[LinearityViolation, _]](
+    CapturingFun.compileSink[PartialFun, |*|, |+|, lambdas.Expr, A, R, Validated[UnusedInBranch, _]](
       cases,
     )(
       exprDiscarder,
@@ -988,16 +990,16 @@ object FreeScaletto extends Scaletto {
   private def assemblyError(e: UnboundVariables | LinearityViolation | MisplacedExtractor | PatternMatchError): Nothing =
     assemblyErrors(NonEmptyList.of(e))
 
-  private def assemblyErrors(es: NonEmptyList[UnboundVariables | LinearityViolation | MisplacedExtractor | PatternMatchError]): Nothing =
+  private def assemblyErrors(es: NonEmptyList[UnboundVariables | LinearityViolation | UnusedInBranch | MisplacedExtractor | PatternMatchError]): Nothing =
     throw AssemblyError(es)
 
   override class AssemblyError private[FreeScaletto](
-    errors: NonEmptyList[UnboundVariables | LinearityViolation | MisplacedExtractor | PatternMatchError]
+    errors: NonEmptyList[UnboundVariables | LinearityViolation | UnusedInBranch | MisplacedExtractor | PatternMatchError]
   ) extends Exception(AssemblyError.formatMessages(errors))
 
   private object AssemblyError {
 
-    def formatMessages(es: NonEmptyList[UnboundVariables | LinearityViolation | MisplacedExtractor | PatternMatchError]): String =
+    def formatMessages(es: NonEmptyList[UnboundVariables | LinearityViolation | UnusedInBranch | MisplacedExtractor | PatternMatchError]): String =
       val lines =
         es.toList.flatMap { e =>
           val NonEmptyList(line0, lines) = formatMessage(e)
@@ -1008,10 +1010,11 @@ object FreeScaletto extends Scaletto {
       ("Compilation errors:" :: lines).mkString("\n")
 
     /** Returns a list of lines. */
-    def formatMessage(e: UnboundVariables | LinearityViolation | MisplacedExtractor | PatternMatchError): NonEmptyList[String] =
+    def formatMessage(e: UnboundVariables | LinearityViolation | UnusedInBranch | MisplacedExtractor | PatternMatchError): NonEmptyList[String] =
       e match
         case e: UnboundVariables   => unboundMsg(e)
         case e: LinearityViolation => linearityMsg(e)
+        case e: UnusedInBranch     => unusedInBranchMsg(e)
         case e: MisplacedExtractor => misplacedExtMsg(e)
         case e: PatternMatchError  => patmatMsg(e)
 
@@ -1022,7 +1025,7 @@ object FreeScaletto extends Scaletto {
       )
 
     private def linearityMsg(e: LinearityViolation): NonEmptyList[String] = {
-      import Lambdas.LinearityViolation.{Overused, Unused, UnusedInBranch}
+      import Lambdas.LinearityViolation.{Overused, Unused}
 
       def overusedMsg(vs: Var.Set[VarOrigin]): NonEmptyList[String] =
         NonEmptyList(
@@ -1036,17 +1039,16 @@ object FreeScaletto extends Scaletto {
           s"When exiting scope: ${exitedScope.print}",
         )
 
-      def unusedInBranchMsg(vs: Var.Set[VarOrigin]): NonEmptyList[String] =
-        NonEmptyList(
-          "Variables not used in all branches:",
-          vs.list.map(v => s" - ${v.origin.print}")
-        )
-
       e match
         case Overused(vs)       => overusedMsg(vs)
         case Unused(v, ctxInfo) => unusedMsg(v, ctxInfo)
-        case UnusedInBranch(vs) => unusedInBranchMsg(vs)
     }
+
+    def unusedInBranchMsg(e: UnusedInBranch): NonEmptyList[String] =
+      val UnusedInBranch(v) = e
+      NonEmptyList.of(
+        s"Variable not used in all branches: ${v.origin.print}"
+      )
 
     private def misplacedExtMsg(e: MisplacedExtractor): NonEmptyList[String] =
       e match { case MisplacedExtractor(ExtractorOccurrence(ext, pos)) =>

@@ -8,6 +8,7 @@ class PatternMatching[->[_, _], **[_, _]](using
   SymmetricSemigroupalCategory[->, **],
   BiInjective[**],
 ) {
+  import PatternMatching.UnusedInBranch
   import libretto.lambda.Extractor
 
   type Extractor[A, B] =
@@ -204,7 +205,7 @@ class PatternMatching[->[_, _], **[_, _]](using
           .foldMapA[Validated[E, _], ->](compile)
           .map(h => Exists((pattern, h)))
 
-  def forLambdas[->>[_, _], V, C, E >: Lambdas.LinearityViolation[V, C] | PatternMatchError](
+  def forLambdas[->>[_, _], V, C, E >: Lambdas.LinearityViolation[V, C] | UnusedInBranch[V, C] | PatternMatchError](
     lambdas: Lambdas[->>, **, V, C],
   )(
     isExtractor: [X, Y] => (X ->> Y) => Option[Extractor[X, Y]],
@@ -213,7 +214,13 @@ class PatternMatching[->[_, _], **[_, _]](using
   ): ForLambdas[->>, V, C, lambdas.type, E] =
     ForLambdas[->>, V, C, lambdas.type, E](lambdas)(isExtractor, lower, lift)
 
-  class ForLambdas[->>[_, _], V, C, LAMBDAS <: Lambdas[->>, **, V, C], E >: Lambdas.LinearityViolation[V, C] | PatternMatchError](
+  class ForLambdas[
+    ->>[_, _],
+    V,
+    C,
+    LAMBDAS <: Lambdas[->>, **, V, C],
+    E >: Lambdas.LinearityViolation[V, C] | UnusedInBranch[V, C] | PatternMatchError,
+  ](
     val lambdas: LAMBDAS,
   )(
     isExtractor: [X, Y] => (X ->> Y) => Option[Extractor[X, Y]],
@@ -269,11 +276,15 @@ class PatternMatching[->[_, _], **[_, _]](using
     private def exprDiscarder(using
       LambdaContext
     ): [X] => lambdas.Expr[X] => Validated[
-      Lambdas.LinearityViolation.UnusedInBranch[V, C],
+      UnusedInBranch[V, C],
       [Y] => DummyImplicit ?=> (X ** Y) ~> Y,
     ] =
       [X] => x => LambdaContext.getDiscardSh(x.resultVar) match
         case Some(discardFst) => Valid(discardFst)
-        case None => invalid(Lambdas.LinearityViolation.unusedInBranch(x.resultVar))
+        case None => invalid(UnusedInBranch(x.resultVar))
   }
+}
+
+object PatternMatching {
+  case class UnusedInBranch[V, C](v: Var[V, ?])
 }

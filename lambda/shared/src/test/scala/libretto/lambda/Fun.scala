@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.Lambdas.LinearityViolation.{Overused, Unused, UnusedInBranch}
+import libretto.lambda.Lambdas.LinearityViolation.{Overused, Unused}
 import libretto.lambda.util.{BiInjective, NonEmptyList, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
@@ -138,7 +138,7 @@ object Fun {
           CapturingFun.compileSink(Sink(fa) <+> Sink(fb))(
             [X] => x => lambdas.Context.getDiscard(x.resultVar) match
               case Some(discardFst) => Valid(discardFst)
-              case None => invalid(Lambdas.LinearityViolation.unusedInBranch[VarDesc, Unit, X](x.resultVar))
+              case None => invalid(UnusedInBranch(x.resultVar))
           )
         }
         .map {
@@ -219,6 +219,8 @@ object Fun {
         case Values.SingleVal(b) => b
     }
 
+  private case class UnusedInBranch(v: Var[VarDesc, ?])
+
   private def printVar[A](v: Var[VarDesc, A]): String =
     v.origin match
       case VarDesc(desc, Some(pos)) => s"$desc at ${pos.filename}:${pos.line}"
@@ -227,15 +229,17 @@ object Fun {
   private def printVars(vs: Var.Set[VarDesc]): String =
     vs.list.map(v => s" - ${printVar(v)}").mkString("\n")
 
-  private def raiseErrors(es: NonEmptyList[Lambdas.LinearityViolation[VarDesc, Unit]]): Nothing = {
+  private def raiseErrors(
+    es: NonEmptyList[Lambdas.LinearityViolation[VarDesc, Unit] | UnusedInBranch],
+  ): Nothing = {
     val msgs =
       es.flatMap:
         case Overused(vars) =>
           NonEmptyList.of(s"Variables used more than once:\n${printVars(vars)}")
         case Unused(v, ()) =>
           NonEmptyList.of(s"Unused variable: ${printVar(v)}")
-        case UnusedInBranch(vars) =>
-          NonEmptyList.of(s"Variables not used in all branches:\n${printVars(vars)}")
+        case UnusedInBranch(v) =>
+          NonEmptyList.of(s"Variables not used in all branches:\n${printVar(v)}")
     val msg = msgs.toList.mkString("\n")
     throw RuntimeException(msg)
   }
