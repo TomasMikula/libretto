@@ -186,19 +186,11 @@ object Fun {
       val fa: Validated[LinearityViolation, Delambdifold[A, R]] = lambdas.delambdifyFoldNested((), new Object, (a: Expr[A]) => f(Left(a)))
       val fb: Validated[LinearityViolation, Delambdifold[B, R]] = lambdas.delambdifyFoldNested((), new Object, (b: Expr[B]) => f(Right(b)))
 
-      val exprDiscarder: [X] => Expr[X] => Validated[
-        UnusedInBranch[Object, Unit],
-        [Y] => DummyImplicit ?=> Fun[(X, Y), Y],
-      ] =
-        [X] => x => lambdas.Context.getDiscard(x.resultVar) match
-          case Some(discardFst) => Valid(discardFst)
-          case None => invalid(UnusedInBranch(x.resultVar))
-
       (fa zip fb)
         .flatMap { case (fa, fb) =>
-          CapturingFun.compileSink(
-            Sink(fa) <+> Sink(fb),
-          )(exprDiscarder)
+          val sa = Sink[[x, y] =>> (Unit, CapturingFun[Fun, Tuple2, Tupled[Tuple2, Expr, _], x, y]), Either, A, R](((), fa))
+          val sb = Sink[[x, y] =>> (Unit, CapturingFun[Fun, Tuple2, Tupled[Tuple2, Expr, _], x, y]), Either, B, R](((), fb))
+          CapturingFun.compileSink(sa <+> sb)(lambdas.Context.exprDiscarder)
         }
         .map {
           case NoCapture(f) => f(x)

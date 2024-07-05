@@ -258,33 +258,25 @@ class PatternMatching[->[_, _], **[_, _]](using
     ): Validated[E, CapturingFun[->, **, Tupled[**, $, _], A, R]] =
       for {
         // delambdify each case
-        delams: NonEmptyList[CapturingFun[~>, **, Tupled[**, $, _], A, R]] <-
+        delams: NonEmptyList[(C, CapturingFun[~>, **, Tupled[**, $, _], A, R])] <-
           cases.traverse[Validated[LinearityViolation, _]] { case (scopeInfo, v, f) =>
             lambdas.delambdifyNested(scopeInfo, v, f)
+              .map((scopeInfo, _))
           }
 
         // make each case capture the least common superset of captured expressions
         delamN: CapturingFun[[a, b] =>> NonEmptyList[a ~> b], **, Tupled[**, $, _], A, R] <-
-          CapturingFun.leastCommonCapture(delams)(exprDiscarder)
+          CapturingFun.leastCommonCapture(delams)(lambdas.Context.exprDiscarderSh)
+            .emap { case (c, exprs) => UnusedInBranch(Var.Set.fromList(exprs.toList.map(_.value.resultVar)), c) }
 
         res <-
           detectPatternsAndCompile[->>, Tupled[**, $, _], A, R, E](using shuffled)(
             delamN,
           )(isExtractor, lower)
       } yield res
-
-    private def exprDiscarder(using
-      LambdaContext
-    ): [X] => lambdas.Expr[X] => Validated[
-      UnusedInBranch[V, C],
-      [Y] => DummyImplicit ?=> (X ** Y) ~> Y,
-    ] =
-      [X] => x => LambdaContext.getDiscardSh(x.resultVar) match
-        case Some(discardFst) => Valid(discardFst)
-        case None => invalid(UnusedInBranch(x.resultVar))
   }
 }
 
 object PatternMatching {
-  case class UnusedInBranch[V, C](v: Var[V, ?])
+  case class UnusedInBranch[V, B](v: Var.Set[V], branch: B)
 }

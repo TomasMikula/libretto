@@ -697,7 +697,7 @@ object FreeScaletto extends Scaletto {
 
   private def switchSink[A, R](
     a: $[A],
-    cases: Sink[lambdas.Delambdifold, |+|, A, R],
+    cases: Sink[[x, y] =>> (ScopeInfo, lambdas.Delambdifold[x, y]), |+|, A, R],
   )(
     pos: SourcePos,
   )(using
@@ -726,21 +726,15 @@ object FreeScaletto extends Scaletto {
         FreeScaletto.this.distributeR
     }
 
-    val exprDiscarder: [X] => lambdas.Expr[X] => Validated[
-      UnusedInBranch,
-      [Y] => DummyImplicit ?=> PartialFun[X |*| Y, Y],
-    ] =
-      [X] => x => lambdas.Context.getDiscard(x.resultVar) match
-        case Some(discardFst) => Valid(discardFst)
-        case None => invalid(PatternMatching.UnusedInBranch(x.resultVar))
-
-    CapturingFun.compileSink[PartialFun, |*|, |+|, lambdas.Expr, A, R, Validated[UnusedInBranch, _]](
+    CapturingFun.compileSink[PartialFun, |*|, |+|, lambdas.Expr, ScopeInfo, A, R](
       cases,
     )(
-      exprDiscarder,
+      lambdas.Context.exprDiscarder,
     ).map {
       case CapturingFun.NoCapture(f)  => lambdas.Expr.map(a, f)(VarOrigin.FunAppRes(pos))
       case CapturingFun.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)
+    }.emap { case (c, exprs) =>
+      PatternMatching.UnusedInBranch(Var.Set.fromList(exprs.toList.map(_.value.resultVar)), c)
     }
   }
 
@@ -879,7 +873,7 @@ object FreeScaletto extends Scaletto {
   private sealed trait ValHandler[A, R] {
     def compile(using LambdaContext): Validated[
       LinearityViolation,
-      Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.Delambdifold, |+|, AA, R])]
+      Exists[[AA] =>> (Val[A] -⚬ AA, Sink[[x, y] =>> (ScopeInfo, lambdas.Delambdifold[x, y]), |+|, AA, R])]
     ]
   }
 
@@ -890,12 +884,12 @@ object FreeScaletto extends Scaletto {
     ) extends ValHandler[A, R] {
       override def compile(using LambdaContext): Validated[
         LinearityViolation,
-        Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.Delambdifold, |+|, AA, R])]
+        Exists[[AA] =>> (Val[A] -⚬ AA, Sink[[x, y] =>> (ScopeInfo, lambdas.Delambdifold[x, y]), |+|, AA, R])]
       ] = {
         val scope = ScopeInfo.ValCase(pos)
         val label = VarOrigin.Lambda(pos)
         lambdas.delambdifyFoldNested(scope, label, f)
-          .map { g => Exists((id[Val[A]], Sink(g))) }
+          .map { g => Exists((id[Val[A]], Sink((scope, g)))) }
       }
     }
 
@@ -907,15 +901,16 @@ object FreeScaletto extends Scaletto {
     ) extends ValHandler[A, R] {
       override def compile(using LambdaContext): Validated[
         LinearityViolation,
-        Exists[[AA] =>> (Val[A] -⚬ AA, Sink[lambdas.Delambdifold, |+|, AA, R])]
+        Exists[[AA] =>> (Val[A] -⚬ AA, Sink[[x, y] =>> (ScopeInfo, lambdas.Delambdifold[x, y]), |+|, AA, R])]
       ] = {
-        val h = lambdas.delambdifyFoldNested(ScopeInfo.ValCase(pos), VarOrigin.Lambda(pos), f)
+        val scope = ScopeInfo.ValCase(pos)
+        val h = lambdas.delambdifyFoldNested(scope, VarOrigin.Lambda(pos), f)
         (h zip t.compile).map { case (h, t) =>
           type AA = Val[H] |+| t.T
           val partition1: Val[A] -⚬ AA =
             mapVal(partition) > liftEither > either(injectL, t.value._1 > injectR)
-          val sink: Sink[lambdas.Delambdifold, |+|, AA, R] =
-            Sink(h) <+> t.value._2
+          val sink: Sink[[x, y] =>> (ScopeInfo, lambdas.Delambdifold[x, y]), |+|, AA, R] =
+            Sink.Join(Sink((scope, h)), t.value._2)
           Exists((partition1, sink))
         }
       }
@@ -1045,9 +1040,11 @@ object FreeScaletto extends Scaletto {
     }
 
     def unusedInBranchMsg(e: UnusedInBranch): NonEmptyList[String] =
-      val UnusedInBranch(v) = e
-      NonEmptyList.of(
-        s"Variable not used in all branches: ${v.origin.print}"
+      val UnusedInBranch(vs, scope) = e
+      val pos = scope.sourcePos
+      NonEmptyList(
+        s"Case at ${pos.filename}:${pos.line} has unused variables which are used by some of the other branches:",
+        vs.list.map(v => s" - ${v.origin.print}")
       )
 
     private def misplacedExtMsg(e: MisplacedExtractor): NonEmptyList[String] =
