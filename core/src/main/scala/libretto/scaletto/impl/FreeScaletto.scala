@@ -202,13 +202,18 @@ object FreeScaletto extends Scaletto {
     Id()
 
   override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C =
-    AndThen(f, g)
+    (f, g) match
+      case (Id(), g) => g
+      case (f, Id()) => f
+      case _         => AndThen(f, g)
 
   override def par[A, B, C, D](
     f: A -⚬ B,
     g: C -⚬ D,
   ): (A |*| C) -⚬ (B |*| D) =
-    Par(f, g)
+    (f, g) match
+      case (Id(), Id()) => Id()
+      case _            => Par(f, g)
 
   override def introFst[B]: B -⚬ (One |*| B) =
     IntroFst()
