@@ -86,6 +86,12 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
         [B] => (_: DummyImplicit) ?=> shuffled.lift(discardFst[B])
       }
 
+    def exprDiscarder(using Context): [X] => Expr[X] => Option[[Y] => DummyImplicit ?=> (X ** Y) -> Y] =
+      [X] => x => getDiscard(x.resultVar)
+
+    def exprDiscarderSh(using Context): [X] => Expr[X] => Option[[Y] => DummyImplicit ?=> (X ** Y) ~> Y] =
+      [X] => x => getDiscardSh(x.resultVar)
+
     def getConstant[A](v: Var[V, A])(using Context): Option[[x] => Unit => x -> (A ** x)]
 
     def registerSplit[A](a: Expr[A])(split: A -> (A ** A))(using Context): Unit =

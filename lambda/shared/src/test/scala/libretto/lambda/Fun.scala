@@ -1,7 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.Lambdas.LinearityViolation.{Overused, Unused}
-import libretto.lambda.util.{BiInjective, NonEmptyList, SourcePos, TypeEq}
+import libretto.lambda.util.{BiInjective, Exists, NonEmptyList, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 
@@ -135,11 +135,11 @@ object Fun {
       val fb = lambdas.delambdifyFoldNested((), b, ctx ?=> (b: $[B]) => f(Right(b)))
       (fa zip fb)
         .flatMap { case (fa, fb) =>
-          CapturingFun.compileSink(Sink(fa) <+> Sink(fb))(
-            [X] => x => lambdas.Context.getDiscard(x.resultVar) match
-              case Some(discardFst) => Valid(discardFst)
-              case None => invalid(UnusedInBranch(x.resultVar))
-          )
+          val sa = Sink[[x, y] =>> (Unit, CapturingFun[Fun, **, Tupled[**, $, _], x, y]), ++, A, C](((), fa))
+          val sb = Sink[[x, y] =>> (Unit, CapturingFun[Fun, **, Tupled[**, $, _], x, y]), ++, B, C](((), fb))
+          CapturingFun.compileSink[Fun, **, ++, $, Unit, A ++ B, C](sa <+> sb)(
+            lambdas.Context.exprDiscarder
+          ).emap { case ((), vs) => unusedInBranch(vs) }
         }
         .map {
           case CapturingFun.NoCapture(f)  => f(ab)
@@ -219,7 +219,10 @@ object Fun {
         case Values.SingleVal(b) => b
     }
 
-  private case class UnusedInBranch(v: Var[VarDesc, ?])
+  private case class UnusedInBranch(vars: Var.Set[VarDesc])
+
+  private def unusedInBranch(vs: NonEmptyList[Exists[lambdas.Expr[_]]]): UnusedInBranch =
+    UnusedInBranch(Var.Set.fromList(vs.toList.map(_.value.resultVar)))
 
   private def printVar[A](v: Var[VarDesc, A]): String =
     v.origin match
@@ -238,8 +241,8 @@ object Fun {
           NonEmptyList.of(s"Variables used more than once:\n${printVars(vars)}")
         case Unused(v, ()) =>
           NonEmptyList.of(s"Unused variable: ${printVar(v)}")
-        case UnusedInBranch(v) =>
-          NonEmptyList.of(s"Variables not used in all branches:\n${printVar(v)}")
+        case UnusedInBranch(vs) =>
+          NonEmptyList.of(s"Variables not used in all branches:\n${printVars(vs)}")
     val msg = msgs.toList.mkString("\n")
     throw RuntimeException(msg)
   }

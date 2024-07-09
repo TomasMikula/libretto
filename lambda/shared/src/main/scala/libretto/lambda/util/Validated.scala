@@ -30,6 +30,11 @@ enum Validated[+E, A] {
     this match
       case Valid(a) => a
       case Invalid(es) => f(es)
+
+  def recoverWith[F, AA >: A](f: NonEmptyList[E] => Validated[F, AA]): Validated[F, AA] =
+    this match
+      case Valid(a) => Valid(a)
+      case Invalid(es) => f(es)
 }
 
 object Validated {
