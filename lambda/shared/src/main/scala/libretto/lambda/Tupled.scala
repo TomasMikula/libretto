@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Exists, UniqueTypeArg}
+import libretto.lambda.util.{ClampEq, Exists}
 import scala.annotation.targetName
 import libretto.lambda.Bin.{Branch, Leaf}
 
@@ -65,7 +65,7 @@ object Tupled {
     def deduplicateLeafs[->[_, _]](
       dup: [x] => F[x] => x -> (x |*| x),
     )(using
-      F: UniqueTypeArg[F],
+      F: ClampEq[F],
       shuffled: Shuffled[->, |*|],
     ): Exists[[X] =>> (Tupled[|*|, F, X], shuffled.Shuffled[X, A])] =
       a.deduplicateLeafs(dup)
@@ -73,7 +73,7 @@ object Tupled {
     infix def union[B, ->[_, _]](b: Tupled[|*|, F, B])(
       discardFst: [X, Y] => F[X] => (X |*| Y) -> Y,
     )(using
-      F: UniqueTypeArg[F],
+      F: ClampEq[F],
       shuffled: Shuffled[->, |*|],
     ): Exists[[P] =>> (
       Tupled[|*|, F, P],

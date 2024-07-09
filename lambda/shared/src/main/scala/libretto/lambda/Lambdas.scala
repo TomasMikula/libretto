@@ -1,7 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.Lambdas.LinearityViolation
-import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, UniqueTypeArg, Validated}
+import libretto.lambda.util.{Applicative, BiInjective, ClampEq, Exists, NonEmptyList, Validated}
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import scala.annotation.targetName
 
@@ -47,9 +47,9 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
       Expr.resultVar(a)
   }
 
-  given UniqueTypeArg[Expr] with {
+  given ClampEq[Expr] with {
     override def testEqual[A, B](a: Expr[A], b: Expr[B]): Option[A =:= B] =
-      summon[UniqueTypeArg[Var[V, _]]].testEqual(a.resultVar, b.resultVar)
+      summon[ClampEq[Var[V, _]]].testEqual(a.resultVar, b.resultVar)
   }
 
   type Context

@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Applicative, BiInjective, Exists, Monad, NonEmptyList, UniqueTypeArg, Validated}
+import libretto.lambda.util.{Applicative, BiInjective, ClampEq, Exists, Monad, NonEmptyList, Validated}
 import libretto.lambda.util.Validated.{Valid, invalid}
 
 sealed trait CapturingFun[-->[_, _], |*|[_, _], F[_], A, B] {
@@ -108,7 +108,7 @@ object CapturingFun {
   )(using
     cat: SymmetricSemigroupalCategory[-->, |*|],
     inj: BiInjective[|*|],
-    F: UniqueTypeArg[F],
+    F: ClampEq[F],
   ): Validated[
     (C, NonEmptyList[Exists[F]]),
     CapturingFun[[a, b] =>> NonEmptyList[a --> b], |*|, Tupled[|*|, F, _], A, B]
@@ -128,7 +128,7 @@ object CapturingFun {
   )(using
     cat: SymmetricSemigroupalCategory[-->, |*|],
     inj: BiInjective[|*|],
-    F: UniqueTypeArg[F],
+    F: ClampEq[F],
   ): Validated[
     (C, NonEmptyList[Exists[F]]),
     Either[
@@ -151,7 +151,7 @@ object CapturingFun {
     fs: NonEmptyList[(C, CapturingFun[-->, |*|, Tupled[|*|, F, _], A, B])],
   )(using
     sh: Shuffled[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
-    F: UniqueTypeArg[F],
+    F: ClampEq[F],
   ): CapturingFun[[a, b] =>> NonEmptyList[(C, sh.Shuffled[a, b])], |*|, Tupled[|*|, F, _], A, B] =
 
     def elim[X](x: Tupled[|*|, F, X]): sh.Shuffled[X |*| B, B] =
@@ -180,7 +180,7 @@ object CapturingFun {
     fs: Sink[[x, y] =>> (C, CapturingFun[-->, |*|, Tupled[|*|, F,_], x, y]), <+>, A, B],
   )(using
     sh: Shuffled[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
-    F: UniqueTypeArg[F],
+    F: ClampEq[F],
   ): Either[
     Sink[[x, y] =>> (C, sh.Shuffled[x, y]), <+>, A, B], // no capture
     Exists[[X] =>> ( // closure
@@ -291,7 +291,7 @@ object CapturingFun {
     b: Tupled[|*|, F, B],
   )(using
     sh: Shuffled[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
-    F: UniqueTypeArg[F],
+    F: ClampEq[F],
   ): Exists[[S] =>> (Tupled[|*|, F, S], sh.Shuffled[S, A], sh.Shuffled[S, B])] = {
     type GArr[X, Y] = Either[Elim[|*|, F, X, Y], X --> Y]
 
@@ -310,7 +310,7 @@ object CapturingFun {
     coc: CocartesianSemigroupalCategory[-->, <+>],
     dis: Distribution[-->, |*|, <+>],
     inj: BiInjective[|*|],
-    F: UniqueTypeArg[F],
+    F: ClampEq[F],
   ): Validated[
     (C, NonEmptyList[Exists[F]]),
     CapturingFun[-->, |*|, Tupled[|*|, F, _], A, B]

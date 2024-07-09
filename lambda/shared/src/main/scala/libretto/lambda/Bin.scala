@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{BiInjective, Exists, Injective, Masked, TypeEq, UniqueTypeArg}
+import libretto.lambda.util.{BiInjective, ClampEq, Exists, Injective, Masked, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
 /**
@@ -143,7 +143,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
   def deduplicateLeafs[->[_, _]](
     dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
   )(using
-    leafTest: UniqueTypeArg[F],
+    leafTest: ClampEq[F],
     shuffled: Shuffled[->, <*>],
   ): Exists[[X] =>> (Bin[<*>, T, F, X], shuffled.Shuffled[X, A])] =
     this match {
@@ -160,7 +160,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
   private infix def mergeIn[B, ->[_, _]](that: Bin[<*>, T, F, B])(
     dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
   )(using
-    leafTest: UniqueTypeArg[F],
+    leafTest: ClampEq[F],
     shuffled: Shuffled[->, <*>],
   ): Exists[[X] =>> (Bin[<*>, T, F, X], shuffled.Shuffled[X, A <*> B])] =
     (this mergeIn0 that)(dup) match {
@@ -173,7 +173,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
   private infix def mergeIn0[B, ->[_, _]](that: Bin[<*>, T, F, B])(
     dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
   )(using
-    leafTest: UniqueTypeArg[F],
+    leafTest: ClampEq[F],
     shuffled: Shuffled[->, <*>],
   ): MergeRes[A, B, shuffled.shuffle.~⚬, shuffled.Shuffled] = {
     import MergeRes.{Absorbed, WithRemainder}
@@ -224,7 +224,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
   infix def union[B, ->[_, _]](that: Bin[<*>, T, F, B])(
     discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y,
   )(using
-    leafTest: UniqueTypeArg[F],
+    leafTest: ClampEq[F],
     shuffled: Shuffled[->, <*>],
   ): Exists[[P] =>> (
     Bin[<*>, T, F, P],
@@ -245,7 +245,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
   private infix def union0[B, ->[_, _]](that: Bin[<*>, T, F, B])(
     discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y,
   )(using
-    leafTest: UniqueTypeArg[F],
+    leafTest: ClampEq[F],
     shuffled: Shuffled[->, <*>],
   ): UnionRes[A, B, shuffled.Shuffled] = {
     import UnionRes.{Absorbed, WithRemainder}
@@ -302,7 +302,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
   }
 
   private def find[X](x: F[X])(using
-    leafTest: UniqueTypeArg[F],
+    leafTest: ClampEq[F],
     shuffle: Shuffle[<*>],
   ): FindRes[A, X, shuffle.~⚬] = {
     import FindRes.*

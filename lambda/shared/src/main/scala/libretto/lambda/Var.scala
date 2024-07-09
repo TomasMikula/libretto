@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Exists, Injective, TypeEq, UniqueTypeArg}
+import libretto.lambda.util.{ClampEq, Exists, Injective, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import scala.collection.{immutable as sci}
 
@@ -78,7 +78,7 @@ object Var {
       ev match { case TypeEq(Refl()) => Tuple1(summon[A =:= B]) }
   }
 
-  given [P]: UniqueTypeArg[Var[P, _]] with {
+  given [P]: ClampEq[Var[P, _]] with {
     override def testEqual[A, B](a: Var[P, A], b: Var[P, B]): Option[A =:= B] =
       a testEqual b
   }

@@ -2,7 +2,7 @@ package libretto.lambda
 
 import libretto.{lambda as ll}
 import libretto.lambda.Lambdas.LinearityViolation
-import libretto.lambda.util.{Applicative, BiInjective, Exists, Injective, Masked, NonEmptyList, TypeEq, UniqueTypeArg, Validated}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, Injective, Masked, NonEmptyList, TypeEq, Validated}
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
