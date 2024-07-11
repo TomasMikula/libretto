@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.lambda.{Category, SymmetricMonoidalCategory}
+import libretto.lambda.{Category, Extractor, SymmetricMonoidalCategory}
 import libretto.lambda.util.SourcePos
 import libretto.lambda.util.unapply.*
 import libretto.util.{Equal, ∀}
@@ -3053,17 +3053,20 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   opaque type LList[T] = Rec[LListF[T, *]]
 
   object LList {
+    def Nil[T] : Extractor[-⚬, |*|, LList[T],   One         ] = InL.afterUnpack
+    def Cons[T]: Extractor[-⚬, |*|, LList[T], T |*| LList[T]] = InR.afterUnpack
+
     private def unpack[T]: LList[T] -⚬ LListF[T, LList[T]] = dsl.unpack
     private def pack[T]  : LListF[T, LList[T]] -⚬ LList[T] = dsl.pack
 
     def nil[T]: One -⚬ LList[T] =
-      injectL > pack
+      Nil[T].reinject
 
     def cons[T]: (T |*| LList[T]) -⚬ LList[T] =
-      injectR > pack
+      Cons[T].reinject
 
     def singleton[T]: T -⚬ LList[T] =
-      introSnd(nil[T]) > cons[T]
+      λ { t => Cons(t |*| Nil(one)) }
 
     def uncons[T]: LList[T] -⚬ (One |+| (T |*| LList[T])) =
       unpack
@@ -3076,7 +3079,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       @tailrec def go(rfs: List[S -⚬ T], acc: S -⚬ (S |*| LList[T])): S -⚬ (S |*| LList[T]) =
         rfs match {
           case head :: tail => go(tail, S.split > par(id, acc > par(head, id) > cons))
-          case Nil => acc
+          case scala.Nil => acc
         }
 
       go(fs.reverse, id[S] > introSnd(nil[T]))
@@ -3108,18 +3111,14 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       fromList0(List.fill(n)(f))
     }
 
-    def switch[T, R](
-      caseNil: One -⚬ R,
-      caseCons: (T |*| LList[T]) -⚬ R,
-    ): LList[T] -⚬ R =
-      uncons[T] > either(caseNil, caseCons)
-
+    @deprecated("Use pattern matching")
     def switchWithL[A, T, R](
       caseNil: A -⚬ R,
       caseCons: (A |*| (T |*| LList[T])) -⚬ R,
     ): (A |*| LList[T]) -⚬ R =
       par(id, uncons[T]) > distributeL > either(elimSnd > caseNil, caseCons)
 
+    @deprecated("Use pattern matching")
     def switchWithR[A, T, R](
       caseNil: A -⚬ R,
       caseCons: ((T |*| LList[T]) |*| A) -⚬ R,
@@ -3128,54 +3127,75 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     def map[T, U](f: T -⚬ U): LList[T] -⚬ LList[U] =
       rec { self =>
-        switch(nil[U], par(f, self) > cons)
+        λ { ts =>
+          switch(ts)
+            .is { case Nil(u)         => Nil(u) }
+            .is { case Cons(t |*| ts) => Cons(f(t) |*| self(ts)) }
+            .end
+        }
       }
 
     def flatMapConcat[A, B](f: A -⚬ LList[B]): LList[A] -⚬ LList[B] =
-      rec { self =>
-        switch(nil[B], par(f, self) > concat)
-      }
+      rec { self => λ { as =>
+        switch(as)
+          .is { case Nil(u)         => Nil(u) }
+          .is { case Cons(a |*| as) => concat(f(a) |*| self(as)) }
+          .end
+      }}
 
     def flatMapMerge[A, B](f: A -⚬ LList[B]): LList[A] -⚬ LList[B] =
-      rec { self =>
-        switch(nil[B], par(f, self) > merge)
-      }
+      rec { self => λ { as =>
+        switch(as)
+          .is { case Nil(u)         => Nil(u) }
+          .is { case Cons(a |*| as) => merge(f(a) |*| self(as)) }
+          .end
+      }}
 
     /** Alias for [[flatMapConcat]]. */
     def flatMap[A, B](f: A -⚬ LList[B]): LList[A] -⚬ LList[B] =
       flatMapConcat(f)
 
-    def mapS[S, T, U](f: (S |*| T) -⚬ (S |*| U)): (S |*| LList[T]) -⚬ (S |*| LList[U]) = rec { self =>
-      switchWithL(
-        caseNil = id[S] > introSnd(nil[U]),
-        caseCons = assocRL > fst(f > swap) > assocLR > snd(self) > XI > snd(cons[U]),
-      )
-    }
+    def mapS[S, T, U](f: (S |*| T) -⚬ (S |*| U)): (S |*| LList[T]) -⚬ (S |*| LList[U]) =
+      rec { self => λ { case s |*| ts =>
+        switch(ts)
+          .is { case Nil(u) =>
+            s |*| Nil(u)
+          }
+          .is { case Cons(t |*| ts) =>
+            val s1 |*| u  = f(s |*| t)
+            val s2 |*| us = self(s1 |*| ts)
+            s2 |*| Cons(u |*| us)
+          }
+          .end
+      }}
 
-    def mapSAppend[S, T, U](f: (S |*| T) -⚬ (S |*| U), tail: S -⚬ LList[U]): (S |*| LList[T]) -⚬ LList[U] = rec { self =>
-      switchWithL(
-        caseNil = tail,
-        caseCons = assocRL > fst(f > swap) > assocLR > snd(self)> cons[U],
-      )
-    }
-
-    def actOn[S, A](act: (S |*| A) -⚬ S): (S |*| LList[A]) -⚬ S = rec { self =>
-      switchWithL(
-        caseNil  = id[S],
-        caseCons = assocRL > par(act, id) > self
-      )
-    }
+    def mapSAppend[S, T, U](f: (S |*| T) -⚬ (S |*| U), tail: S -⚬ LList[U]): (S |*| LList[T]) -⚬ LList[U] =
+      rec { self => λ { case s |*| ts =>
+        switch(ts)
+          .is { case Nil(?(_)) => tail(s) }
+          .is { case Cons(t |*| ts) =>
+            val s1 |*| u  = f(s |*| t)
+            val us = self(s1 |*| ts)
+            Cons(u |*| us)
+          }
+          .end
+      }}
 
     def foldMap0[T, U](f: T -⚬ U)(using U: Semigroup[U]): LList[T] -⚬ Maybe[U] =
-      switch(
-        caseNil  = Maybe.empty[U],
-        caseCons = par(f, id) > actOn[U, T](par(id, f) > U.combine) > Maybe.just[U],
-      )
+      λ { ts =>
+        switch(ts)
+          .is { case Nil(u) => Maybe.empty[U](u) }
+          .is { case Cons(t |*| ts) => Maybe.just(foldL[U, T](snd(f) > U.combine)(f(t) |*| ts)) }
+          .end
+      }
 
     def foldMap[T, U](f: T -⚬ U)(using U: Monoid[U]): LList[T] -⚬ U =
-      rec { self =>
-        switch(U.unit, par(f, self) > U.combine)
-      }
+      rec { self => λ { ts =>
+        switch(ts)
+          .is { case Nil(u) => U.unit(u) }
+          .is { case Cons(t |*| ts) => U.combine(f(t) |*| self(ts)) }
+          .end
+      }}
 
     def fold0[T](using T: Semigroup[T]): LList[T] -⚬ Maybe[T] =
       foldMap0(id[T])
@@ -3183,32 +3203,35 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def fold[T](using T: Monoid[T]): LList[T] -⚬ T =
       foldMap(id[T])
 
-    def foldL[S, T](f: (S |*| T) -⚬ S): (S |*| LList[T]) -⚬ S = rec { self =>
-      switchWithL(
-        caseNil = id[S],
-        caseCons = assocRL > fst(f) > self
-      )
-    }
+    def foldL[S, T](f: (S |*| T) -⚬ S): (S |*| LList[T]) -⚬ S =
+      rec { self => λ { case s |*| ts =>
+        switch(ts)
+          .is { case Nil(?(_))      => s }
+          .is { case Cons(t |*| ts) => self(f(s |*| t) |*| ts) }
+          .end
+      }}
 
-    def concat[T]: (LList[T] |*| LList[T]) -⚬ LList[T] = rec { self =>
-      switchWithR(
-        caseNil  = id[LList[T]],
-        caseCons = assocLR > par(id, self) > cons,
-      )
-    }
+    def concat[T]: (LList[T] |*| LList[T]) -⚬ LList[T] =
+      rec { self => λ { case xs |*| ys =>
+        switch(xs)
+          .is { case Nil(?(_))      => ys }
+          .is { case Cons(x |*| xs) => Cons(x |*| self(xs |*| ys)) }
+          .end
+      }}
 
-    def partition[A, B]: LList[A |+| B] -⚬ (LList[A] |*| LList[B]) = rec { self =>
-      switch(
-        λ.? { _ => constant(nil[A]) |*| constant(nil[B]) },
-        λ { case x |*| t =>
-          val as |*| bs = self(t)
-          dsl.switch ( x )
-            .is { case InL(a) => cons(a |*| as) |*| bs }
-            .is { case InR(b) => as |*| cons(b |*| bs) }
-            .end
-        },
-      )
-    }
+    def partition[A, B]: LList[A |+| B] -⚬ (LList[A] |*| LList[B]) =
+      rec { self => λ { xs =>
+        switch(xs)
+          .is { case Nil(?(_)) => constant(nil[A]) |*| constant(nil[B]) }
+          .is { case Cons(x |*| t) =>
+            val as |*| bs = self(t)
+            switch ( x )
+              .is { case InL(a) => cons(a |*| as) |*| bs }
+              .is { case InR(b) => as |*| cons(b |*| bs) }
+              .end
+          }
+          .end
+      }}
 
     def consMaybe[T]: (Maybe[T] |*| LList[T]) -⚬ LList[T] =
       id[Maybe[T] |*| LList[T]]             .to[ (One |+|                T) |*| LList[T] ]
@@ -3216,9 +3239,12 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         .>(either(elimFst, cons))           .to[                 LList[T]                ]
 
     def collect[T, U](f: T -⚬ Maybe[U]): LList[T] -⚬ LList[U] =
-      rec { self =>
-        switch(nil[U], par(f, self) > consMaybe)
-      }
+      rec { self => λ { ts =>
+        switch(ts)
+          .is { case Nil(u) => Nil(u) }
+          .is { case Cons(t |*| ts) => consMaybe(f(t) |*| self(ts)) }
+          .end
+      }}
 
     def transform[T, A, U](f: (A |*| T) -⚬ U)(using A: Comonoid[A]): (A |*| LList[T]) -⚬ LList[U] =
       rec { self =>
@@ -3261,15 +3287,16 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         switchWithL(caseNil, caseCons)
       }
 
-    def unzip[A, B]: LList[A |*| B] -⚬ (LList[A] |*| LList[B]) = rec { self =>
-      val caseNil: One -⚬ (LList[A] |*| LList[B]) =
-        parFromOne(nil[A], nil[B])
-
-      val caseCons: ((A |*| B) |*| LList[A |*| B]) -⚬ (LList[A] |*| LList[B]) =
-        par(id, self) > IXI > par(cons, cons)
-
-      switch(caseNil, caseCons)
-    }
+    def unzip[A, B]: LList[A |*| B] -⚬ (LList[A] |*| LList[B]) =
+      rec { self => λ { xs =>
+        switch(xs)
+          .is { case Nil(*(u)) => Nil(u) |*| Nil(u) }
+          .is { case Cons((a |*| b) |*| xs) =>
+            val as |*| bs = self(xs)
+            Cons(a |*| as) |*| Cons(b |*| bs)
+          }
+          .end
+      }}
 
     def splitAt[A](i: Int): LList[A] -⚬ (LList[A] |*| LList[A]) = {
       require(i >= 0, s"i must not be negative, was $i")
@@ -3282,28 +3309,32 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
         )
     }
 
-    def splitEvenOdd[A]: LList[A] -⚬ (LList[A] |*| LList[A]) = rec { self =>
-      val caseCons: (A |*| LList[A]) -⚬ (LList[A] |*| LList[A]) =
-        switchWithL(
-          caseNil  = singleton[A] > introSnd(nil[A]),
-          caseCons = assocRL > par(id, self) > IXI > par(cons, cons),
-        )
-
-      switch(
-        caseNil  = parFromOne(nil[A], nil[A]),
-        caseCons = caseCons,
-      )
-    }
+    def splitEvenOdd[A]: LList[A] -⚬ (LList[A] |*| LList[A]) =
+      rec { self => λ { as =>
+        switch(as)
+          .is { case Nil(*(u))          => Nil(u) |*| Nil(u) }
+          .is { case Cons(a |*| Nil(u)) => singleton(a) |*| Nil(u) }
+          .is { case Cons(a0 |*| Cons(a1 |*| as)) =>
+            val as0 |*| as1 = self(as)
+            Cons(a0 |*| as0) |*| Cons(a1 |*| as1)
+          }
+          .end
+      }}
 
     private def waveL[A, S, B](
       init: A -⚬ S,
       f: (S |*| A) -⚬ (B |*| S),
       last: S -⚬ B,
     ): LList[A] -⚬ LList[B] =
-      switch(
-        caseNil  = nil[B],
-        caseCons = fst(init) > mapSAppend(f > swap, last > singleton),
-      )
+      λ { as =>
+        switch(as)
+          .is { case Nil(u) => Nil(u) }
+          .is { case Cons(a |*| as) =>
+            val s0 = init(a)
+            mapSAppend(f > swap, last > singleton)(s0 |*| as)
+          }
+          .end
+      }
 
     /** Shifts all the elements of a list by "half" to the left,
      *  moving the first half of the first element to the end of the list.
@@ -3470,10 +3501,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       assocRL > fst(f > swap) > assocLR > snd(LList.mapSAppend(f, tail))
 
     def foldMap[T, U](f: T -⚬ U)(using U: Semigroup[U]): LList1[T] -⚬ U =
-      par(f, id) > LList.actOn[U, T](par(id, f) > U.combine)
+      par(f, id) > LList.foldL[U, T](par(id, f) > U.combine)
 
     def fold[T](using T: Semigroup[T]): LList1[T] -⚬ T =
-      LList.actOn[T, T](T.combine)
+      LList.foldL[T, T](T.combine)
 
     def closeAll[T](using T: Closeable[T]): LList1[T] -⚬ Done =
       foldMap(T.close)

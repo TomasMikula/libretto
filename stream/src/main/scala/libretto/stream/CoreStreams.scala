@@ -353,12 +353,14 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
         onPoll  = Polled.singleton[A],
       )
 
-    def fromLList[A](neglect: A -⚬ Done): LList[A] -⚬ Source[A] = rec { self =>
-      LList.switch(
-        caseNil  = done          > Source.empty[A],
-        caseCons = par(id, self) > Source.cons(neglect),
-      )
-    }
+    def fromLList[A](neglect: A -⚬ Done): LList[A] -⚬ Source[A] =
+      rec { self => λ { as =>
+        switch( as )
+          .is { case LList.Nil(u) => Source.empty[A](done(u)) }
+          .is { case LList.Cons(a |*| as) => Source.cons(neglect)(a |*| self(as)) }
+          .end
+      }}
+
     def fromLList[A](using A: Closeable[A]): LList[A] -⚬ Source[A] =
       fromLList(A.close)
 
@@ -700,12 +702,12 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
     def mergeAll[A](using
       Closeable[A],
     ): LList[Source[A]] -⚬ Source[A] =
-      rec { self =>
-        LList.switch(
-          caseNil = done > Source.empty,
-          caseCons = par(id, self) > merge,
-        )
-      }
+      rec { self => λ { srcs =>
+        switch( srcs )
+          .is { case LList.Nil(u)         => Source.empty(done(u)) }
+          .is { case LList.Cons(s |*| ss) => (s |*| self(ss)) :>> merge }
+          .end
+      }}
 
     def prefetch[A](n: Int)(
       discardPrefetched: A -⚬ Done,
