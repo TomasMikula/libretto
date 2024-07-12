@@ -36,6 +36,7 @@ object FreeScaletto extends Scaletto {
   final class ::[Label, T] private ()
   final class OneOf[Cases] private()
   final class Rec[F[_]] private()
+  final class RecCall[A, B] private()
   final class Inverted[A] private()
   final type -[A] = Inverted[A]
   final class Val[A] private()
@@ -123,6 +124,10 @@ object FreeScaletto extends Scaletto {
     case class RecF[A, B](f: (A -⚬ B) => (A -⚬ B)) extends (A -⚬ B) { self =>
       val recursed: A -⚬ B = f(self)
     }
+    case class RecFun[A, B](f: (RecCall[A, B] |*| A) -⚬ B) extends (A -⚬ B)
+    case class InvokeRecCall[A, B]() extends ((RecCall[A, B] |*| A) -⚬ B)
+    case class IgnoreRecCall[A, B]() extends (RecCall[A, B] -⚬ One)
+    case class DupRecCall[A, B]() extends (RecCall[A, B] -⚬ (RecCall[A, B] |*| RecCall[A, B]))
     case class Pack[F[_]]() extends (F[Rec[F]] -⚬ Rec[F])
     case class Unpack[F[_]]() extends (Rec[F] -⚬ F[Rec[F]])
     case class RacePair() extends ((Ping |*| Ping) -⚬ (One |+| One))
@@ -349,6 +354,17 @@ object FreeScaletto extends Scaletto {
 
   override def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B =
     RecF(f)
+
+  override def rec[A, B](f: (RecCall[A, B] |*| A) -⚬ B): A -⚬ B =
+    RecFun(f)
+
+  override def recCall[A, B]: (RecCall[A, B] |*| A) -⚬ B =
+    InvokeRecCall()
+
+  override def comonoidRecCall[A, B]: Comonoid[RecCall[A, B]] =
+    new Comonoid[RecCall[A, B]]:
+      override def counit: RecCall[A, B] -⚬ One = IgnoreRecCall()
+      override def split: RecCall[A, B] -⚬ (RecCall[A, B] |*| RecCall[A, B]) = DupRecCall()
 
   override def unpack[F[_]]: Rec[F] -⚬ F[Rec[F]] =
     Unpack()
@@ -762,7 +778,7 @@ object FreeScaletto extends Scaletto {
 
   private case class PatternMatchError(switchPos: SourcePos, error: patmat.PatternMatchError)
 
-  private type SwitchRes[T] = Validated[LinearityViolation | MisplacedExtractor | PatternMatchError, T]
+  private type SwitchRes[T] = Validated[LinearityViolation | UnusedInBranch | MisplacedExtractor | PatternMatchError, T]
 
   extension [T](r: SwitchRes[T]) {
     private def getOrReportErrors: T =
@@ -804,6 +820,7 @@ object FreeScaletto extends Scaletto {
       .delambdifyAndCompile(scrutinee, inVar, outVar, cases1)
       .emap {
         case e: LinearityViolation => e
+        case e: UnusedInBranch => e
         case e: MisplacedExtractor => e
         case e: patmat.PatternMatchError => PatternMatchError(switchPos, e)
       }
@@ -1048,7 +1065,7 @@ object FreeScaletto extends Scaletto {
       val UnusedInBranch(vs, scope) = e
       val pos = scope.sourcePos
       NonEmptyList(
-        s"Case at ${pos.filename}:${pos.line} has unused variables which are used by some of the other branches:",
+        s"Case at ${pos.filename}:${pos.line} has unused variables which are used by some of the other cases:",
         vs.list.map(v => s" - ${v.origin.print}")
       )
 

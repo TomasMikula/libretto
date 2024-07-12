@@ -104,7 +104,11 @@ trait CoreDSL {
     */
   type LTerminus
 
+  /** Used to define recursive types. */
   type Rec[F[_]]
+
+  /** Interface to recursive invocation of a recursive function. */
+  type RecCall[A, B]
 
   /** Unsigned (i.e. non-negative) integer up to 31 bits.
     * Behavior on overflow is undefined.
@@ -309,7 +313,16 @@ trait CoreDSL {
   def rInvertTerminus: (RTerminus |*| LTerminus) -⚬ One
   def lInvertTerminus: One -⚬ (LTerminus |*| RTerminus)
 
+  @deprecated("Uses non-eliminatable Scala function. Use the `rec` variant without Scala function, or `λ.rec`.")
   def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B
+
+  def rec[A, B](f: (RecCall[A, B] |*| A) -⚬ B): A -⚬ B
+
+  /** A recursive invocation of a surrounding recursive function. */
+  def recCall[A, B]: (RecCall[A, B] |*| A) -⚬ B
+
+  /** A recursive call is available any number of times. */
+  given comonoidRecCall[A, B]: Comonoid[RecCall[A, B]]
 
   /** Hides one level of a recursive type definition. */
   def pack[F[_]]: F[Rec[F]] -⚬ Rec[F]
@@ -347,6 +360,12 @@ trait CoreDSL {
     def apply[A, B](using SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
     ): A -⚬ B
+
+    def rec[A, B](using SourcePos)(
+      f: LambdaContext ?=> $[RecCall[A, B]] => $[A] => $[B],
+    ): A -⚬ B =
+      val g: (RecCall[A, B] |*| A) -⚬ B = apply { case ?(self) |*| a => f(self)(a) }
+      CoreDSL.this.rec(g)
 
     def ?[A, B](using SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
@@ -485,6 +504,11 @@ trait CoreDSL {
       ctx: LambdaContext,
     ): $[X |*| A] =
       a > introFst(f)
+  }
+
+  extension [A, B](f: $[RecCall[A, B]]) {
+    def apply(using pos: SourcePos, ctx: LambdaContext)(a: $[A]): $[B] =
+      recCall(f |*| a)
   }
 
   extension (d: $[Done]) {

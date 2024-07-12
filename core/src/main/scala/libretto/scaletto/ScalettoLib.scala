@@ -320,12 +320,12 @@ class ScalettoLib[
   }
 
   def toScalaList[A]: LList[Val[A]] -⚬ Val[List[A]] =
-    rec { self => λ { as =>
+    λ.rec { self => as =>
       switch(as)
         .is { case LList.Nil(u)         => const(List.empty[A])(u) }
         .is { case LList.Cons(a |*| as) => unliftPair(a |*| self(as)) :>> mapVal(_ :: _) }
         .end
-    }}
+    }
 
   def constList1[A](a: A, as: List[A]): Done -⚬ LList1[Val[A]] =
     LList1.from(constVal(a), as.map(constVal))
