@@ -469,4 +469,9 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
       val pos: SourcePos,
     ) extends Cases[A, A0 | A1, R]
   }
+
+  /** Returns the size of the given program, in further unspecified units.
+   * Useful only for approximate relative comparisons.
+   */
+  def sizeOf[A, B](f: A -⚬ B): Long
 }

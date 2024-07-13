@@ -19,6 +19,32 @@ object TypeInference {
     import NonAbstractType.given
     Propagator.instance[NonAbstractType[Val[Label], _], Type[Label], Label](Type.abstractType)
 
+  {
+    def go[F[_], T, L](i: Int, n: Int, pg: Propagator[F, T, L]): Unit =
+      if (i < n) {
+        println(s"Priming propagator level ${i+1}")
+        val t0 = System.currentTimeMillis()
+        val pgn = pg.nested.propagator
+        val t1 = System.currentTimeMillis()
+        println(s"  propagator took ${t1 - t0}ms")
+        val merge = pgn.merge
+        val t2 = System.currentTimeMillis()
+        println(s"  merge took ${t2 - t1}ms")
+        val split = pgn.split
+        val t3 = System.currentTimeMillis()
+        println(s"  split took ${t3 - t2}ms")
+        println(s"  TOTAL: ${t3 - t0}ms")
+        val mergeSize = sizeOf(merge)
+        val splitSize = sizeOf(split)
+        println("  size:")
+        println(s"    merge: $mergeSize")
+        println(s"    split: $splitSize")
+        go(i+1, n, pgn)
+      }
+
+    go(0, 24, pg)
+  }
+
   def inferTypes[A, B](f: Fun[A, B]): One -⚬ Val[TypedFun[A, B]] = {
     println(s"inferTypes($f)")
     val t0 = System.currentTimeMillis()
@@ -36,6 +62,7 @@ object TypeInference {
 
     val t1 = System.currentTimeMillis()
     println(s"inferTypes assembly took ${t1 - t0}ms")
+    println(s"  size: ${sizeOf(res)}")
     res
   }
 

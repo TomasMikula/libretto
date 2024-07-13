@@ -13,7 +13,97 @@ import scala.reflect.TypeTest
 import libretto.lambda.SymmetricSemigroupalCategory
 
 object FreeScaletto extends Scaletto {
-  sealed trait -⚬[A, B]
+  sealed trait -⚬[A, B] {
+
+    lazy val size: Long =
+      this match
+        case -⚬.Id() => 1
+        case -⚬.AndThen(f, g) => 1 + f.size + g.size
+        case -⚬.Par(f1, f2) => 1 + f1.size + f2.size
+        case -⚬.IntroFst() => 1
+        case -⚬.IntroSnd() => 1
+        case -⚬.ElimFst() => 1
+        case -⚬.ElimSnd() => 1
+        case -⚬.AssocLR() => 1
+        case -⚬.AssocRL() => 1
+        case -⚬.Swap() => 1
+        case -⚬.InjectL() => 1
+        case -⚬.InjectR() => 1
+        case -⚬.EitherF(f, g) => 1 + f.size + g.size
+        case -⚬.Absurd() => 1
+        case -⚬.OneOfInject(i) => 1
+        case -⚬.OneOfPeel() => 1
+        case -⚬.OneOfUnpeel() => 1
+        case -⚬.OneOfExtractSingle() => 1
+        case -⚬.ChooseL() => 1
+        case -⚬.ChooseR() => 1
+        case -⚬.Choice(f, g) => 1 + f.size + g.size
+        case -⚬.PingF() => 1
+        case -⚬.PongF() => 1
+        case -⚬.DelayIndefinitely() => 1
+        case -⚬.RegressInfinitely() => 1
+        case -⚬.Fork() => 1
+        case -⚬.Join() => 1
+        case -⚬.ForkNeed() => 1
+        case -⚬.JoinNeed() => 1
+        case -⚬.NotifyDoneL() => 1
+        case -⚬.NotifyNeedL() => 1
+        case -⚬.ForkPing() => 1
+        case -⚬.ForkPong() => 1
+        case -⚬.JoinPing() => 1
+        case -⚬.JoinPong() => 1
+        case -⚬.StrengthenPing() => 1
+        case -⚬.StrengthenPong() => 1
+        case -⚬.JoinRTermini() => 1
+        case -⚬.JoinLTermini() => 1
+        case -⚬.NotifyEither() => 1
+        case -⚬.NotifyChoice() => 1
+        case -⚬.InjectLOnPing() => 1
+        case -⚬.ChooseLOnPong() => 1
+        case -⚬.DistributeL() => 1
+        case -⚬.CoDistributeL() => 1
+        case -⚬.RInvertSignal() => 1
+        case -⚬.LInvertSignal() => 1
+        case -⚬.RInvertPingPong() => 1
+        case -⚬.LInvertPongPing() => 1
+        case -⚬.RInvertTerminus() => 1
+        case -⚬.LInvertTerminus() => 1
+        case -⚬.RecF(f) => 1 + f(-⚬.Id().asInstanceOf[A -⚬ B]).size // XXX
+        case -⚬.RecFun(f) => 1 + f.size
+        case -⚬.InvokeRecCall() => 1
+        case -⚬.IgnoreRecCall() => 1
+        case -⚬.DupRecCall() => 1
+        case -⚬.Pack() => 1
+        case -⚬.Unpack() => 1
+        case -⚬.RacePair() => 1
+        case -⚬.SelectPair() => 1
+        case -⚬.Forevert() => 1
+        case -⚬.Backvert() => 1
+        case -⚬.DistributeInversion() => 1
+        case -⚬.FactorOutInversion() => 1
+        case -⚬.CrashWhenDone(msg) => 1
+        case -⚬.Delay() => 1
+        case -⚬.LiftEither() => 1
+        case -⚬.LiftPair() => 1
+        case -⚬.UnliftPair() => 1
+        case -⚬.MapVal(f) => 1
+        case -⚬.ConstVal(a) => 1
+        case -⚬.ConstNeg(a) => 1
+        case -⚬.Neglect() => 1
+        case -⚬.NotifyVal() => 1
+        case -⚬.NotifyNeg() => 1
+        case -⚬.DebugPrint(msg) => 1
+        case -⚬.Acquire(acquire, release) => 1
+        case -⚬.TryAcquire(acquire, release) => 1
+        case -⚬.Release() => 1
+        case -⚬.ReleaseWith(f) => 1
+        case -⚬.Effect(f) => 1
+        case -⚬.EffectWr(f) => 1
+        case -⚬.TryEffectAcquire(f, release) => 1
+        case -⚬.TryTransformResource(f, release) => 1
+        case -⚬.TrySplitResource(f, release1, release2) => 1
+
+  }
 
   // The following types are all "imaginary", never instantiated, but we declare them as classes,
   // so that the Scala typechecker can infer that
@@ -468,6 +558,9 @@ object FreeScaletto extends Scaletto {
 
   override def factorOutInversion[A, B]: (-[A] |*| -[B]) -⚬ -[A |*| B] =
     FactorOutInversion()
+
+  override def sizeOf[A, B](f: A -⚬ B): Long =
+    f.size
 
   override object UInt31 extends UInt31Scaletto {
     override def apply(n: Int): Done -⚬ UInt31 = {
