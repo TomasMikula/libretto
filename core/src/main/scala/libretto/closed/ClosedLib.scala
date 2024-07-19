@@ -1,4 +1,6 @@
-package libretto
+package libretto.closed
+
+import libretto.CoreLib
 
 object ClosedLib {
   def apply(

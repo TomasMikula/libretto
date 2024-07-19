@@ -1,4 +1,6 @@
-package libretto
+package libretto.closed
+
+import libretto.CoreExecution
 
 trait ClosedExecution[DSL <: ClosedDSL] extends CoreExecution[DSL] {
   import dsl.=⚬

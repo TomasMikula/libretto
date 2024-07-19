@@ -1,4 +1,6 @@
-package libretto
+package libretto.closed
+
+import libretto.CoreBridge
 
 trait ClosedBridge extends CoreBridge {
   override type Dsl <: ClosedDSL

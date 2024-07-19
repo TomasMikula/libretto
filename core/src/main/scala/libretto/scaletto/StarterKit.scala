@@ -1,7 +1,8 @@
 package libretto.scaletto
 
 import java.util.concurrent.{Executor as JExecutor, Executors, ScheduledExecutorService}
-import libretto.{CoreLib, ClosedLib}
+import libretto.CoreLib
+import libretto.closed.ClosedLib
 import libretto.invert.InvertLib
 import libretto.scaletto.impl.FreeScaletto
 import libretto.scaletto.impl.futurebased.{BridgeImpl, FutureExecutor}

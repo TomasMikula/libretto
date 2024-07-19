@@ -1,6 +1,6 @@
 package libretto.scaletto
 
-import libretto.{ClosedBridge, ClosedExecution}
+import libretto.closed.{ClosedBridge, ClosedExecution}
 import libretto.util.Async
 
 trait ScalettoBridge extends ClosedBridge {
