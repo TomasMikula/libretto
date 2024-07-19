@@ -4,16 +4,6 @@ import libretto.util.Async
 import scala.annotation.targetName
 import scala.concurrent.duration.FiniteDuration
 
-/** Defines interface to interact with a running Libretto program. */
-trait CoreBridge {
-  type Dsl <: CoreDSL
-
-  val dsl: Dsl
-
-  /** Handle to a running Libretto program. */
-  type Execution <: CoreExecution[dsl.type]
-}
-
 trait CoreExecution[DSL <: CoreDSL] {
   val dsl: DSL
   import dsl.*
@@ -90,33 +80,4 @@ trait CoreExecution[DSL <: CoreDSL] {
 
     def supplyChoice[A, B](port: InPort[A |&| B]): Async[Either[Throwable, Either[InPort[A], InPort[B]]]]
   }
-}
-
-object CoreBridge {
-  type Of[DSL <: CoreDSL] = CoreBridge { type Dsl = DSL }
-}
-
-trait ClosedBridge extends CoreBridge {
-  override type Dsl <: ClosedDSL
-
-  override type Execution <: ClosedExecution[dsl.type]
-}
-
-trait ClosedExecution[DSL <: ClosedDSL] extends CoreExecution[DSL] {
-  import dsl.=⚬
-
-  override val OutPort: ClosedOutPorts
-  override val InPort:  ClosedInPorts
-
-  trait ClosedOutPorts extends OutPorts {
-    def functionInputOutput[I, O](port: OutPort[I =⚬ O]): (InPort[I], OutPort[O])
-  }
-
-  trait ClosedInPorts extends InPorts {
-    def functionInputOutput[I, O](port: InPort[I =⚬ O]): (OutPort[I], InPort[O])
-  }
-}
-
-object ClosedBridge {
-  type Of[DSL <: ClosedDSL] = ClosedBridge { type Dsl = DSL }
 }
