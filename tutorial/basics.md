@@ -1195,7 +1195,7 @@ object List {
     //                         |
     //                         V
     rec[List[A], List[B]] { (mapTail: List[A] -⚬ List[B]) =>
-      unpack > either(
+      unpack[ListF[A, _]] > either(
         nil[B],
         par(f, mapTail) > cons[B],
       )
