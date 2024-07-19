@@ -4,6 +4,7 @@ import libretto.CoreLib
 import libretto.lambda.util.Monad.syntax.*
 import libretto.scaletto.ScalettoLib
 import libretto.stream.CoreStreams
+import libretto.stream.invert.InvertStreams
 import libretto.stream.scaletto.ScalettoStreams
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit

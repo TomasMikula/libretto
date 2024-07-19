@@ -1,9 +1,10 @@
 package libretto.stream.scaletto
 
-import libretto.{CoreLib, InvertLib}
+import libretto.CoreLib
+import libretto.invert.InvertLib
 import libretto.lambda.util.{Exists, SourcePos}
 import libretto.scaletto.{Scaletto, ScalettoLib}
-import libretto.stream.InvertStreams
+import libretto.stream.invert.InvertStreams
 import scala.annotation.{tailrec, targetName}
 import scala.concurrent.duration.FiniteDuration
 
@@ -44,12 +45,12 @@ abstract class ScalettoStreams {
   type Dsl           <: Scaletto
   type CoreLib       <: libretto.CoreLib[Dsl]
   type ScalettoLib   <: libretto.scaletto.ScalettoLib[Dsl, CoreLib]
-  type InvertStreams <: libretto.stream.InvertStreams[Dsl, CoreLib]
+  type InvertStreams <: libretto.stream.invert.InvertStreams[Dsl, CoreLib]
 
   val dsl: Dsl
   val coreLib: CoreLib & libretto.CoreLib[dsl.type]
   val scalettoLib: ScalettoLib & libretto.scaletto.ScalettoLib[dsl.type, coreLib.type]
-  val underlying: InvertStreams & libretto.stream.InvertStreams[dsl.type, coreLib.type]
+  val underlying: InvertStreams & libretto.stream.invert.InvertStreams[dsl.type, coreLib.type]
 
   private lazy val invertLib = InvertLib(coreLib)
   import invertLib.inversionDuality

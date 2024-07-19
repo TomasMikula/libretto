@@ -1,5 +1,6 @@
-package libretto
+package libretto.invert
 
+import libretto.CoreLib
 import libretto.lambda.util.SourcePos
 
 object InvertLib {

@@ -1,7 +1,8 @@
 package libretto.scaletto
 
 import java.util.concurrent.atomic.AtomicLong
-import libretto.{CoreLib, InvertLib}
+import libretto.CoreLib
+import libretto.invert.InvertLib
 import libretto.lambda.util.SourcePos
 import libretto.util.Async
 import scala.annotation.targetName

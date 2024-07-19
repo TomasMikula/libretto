@@ -1,5 +1,6 @@
-package libretto
+package libretto.invert
 
+import libretto.{ClosedDSL, CoreLib}
 import libretto.lambda.util.SourcePos
 import scala.annotation.targetName
 

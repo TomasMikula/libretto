@@ -1,6 +1,8 @@
-package libretto.stream
+package libretto.stream.invert
 
-import libretto.{InvertDSL, CoreLib}
+import libretto.CoreLib
+import libretto.invert.InvertDSL
+import libretto.stream.CoreStreams
 import libretto.util.∀
 
 object InvertStreams {

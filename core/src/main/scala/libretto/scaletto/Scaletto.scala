@@ -1,6 +1,7 @@
 package libretto.scaletto
 
-import libretto.{CoreLib, CrashDSL, InvertDSL, TimerDSL}
+import libretto.{CoreLib, CrashDSL, TimerDSL}
+import libretto.invert.InvertDSL
 import libretto.lambda.util.SourcePos
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
