@@ -76,31 +76,27 @@ class MutualRecursionTests extends ScalatestScalettoTestSuite {
     // mutually recursive with the nested function `go`
     // (that it could easily be rewritten without mutual recursion is beside the point)
     def sigmas[Σ, Δ](using Δ: Closeable[Δ]): ΣΔList[Σ, Δ] -⚬ (LList1[Σ] |*| Done) =
-      rec { sigmas =>
-        λ { xs =>
-            switch(xs)
-            .is { case ΣΔList.extract(σ0 |*| InL(u)) => LList1(σ0) |*| done(u) }
-            .is { case ΣΔList.extract(σ0 |*| InR(δs)) =>
-              val go: TerminatedNEL[Δ, ΣΔList[Σ, Δ]] -⚬ (LList1[Σ] |*| Done) =
-                rec { go =>
-                  λ { δs =>
-                    switch(δs)
-                      .is { case TerminatedNEL.extract(δ |*| InL(xs)) =>
-                        val σs |*| d = sigmas(xs) // calling outer recursive function `sigmas` from the inner one (`go`)
-                        σs |*| join(d |*| Δ.close(δ))
-                      }
-                      .is { case TerminatedNEL.extract(δ |*| InR(δs)) =>
-                        val σs |*| d = go(δs) // calling inner recursive function `go`
-                        σs |*| join(d |*| Δ.close(δ))
-                      }
-                      .end
+      λ.rec { sigmas => xs =>
+        switch(xs)
+          .is { case ΣΔList.extract(σ0 |*| InL(u)) => LList1(σ0) |*| done(u) }
+          .is { case ΣΔList.extract(σ0 |*| InR(δs)) =>
+            val go: LocalFun[TerminatedNEL[Δ, ΣΔList[Σ, Δ]], LList1[Σ] |*| Done] =
+              λ.recLocal { go => δs =>
+                switch(δs)
+                  .is { case TerminatedNEL.extract(δ |*| InL(xs)) =>
+                    val σs |*| d = sigmas(xs) // calling outer recursive function `sigmas` from the inner one (`go`)
+                    σs |*| join(d |*| Δ.close(δ))
                   }
-                }
-              val σs |*| d = go(δs)
-              LList1.cons1(σ0 |*| σs) |*| d
-            }
-            .end
-        }
+                  .is { case TerminatedNEL.extract(δ |*| InR(δs)) =>
+                    val σs |*| d = go(δs) // calling inner recursive function `go`
+                    σs |*| join(d |*| Δ.close(δ))
+                  }
+                  .end
+              }
+            val σs |*| d = go(δs)
+            LList1.cons1(σ0 |*| σs) |*| d
+          }
+          .end
       }
 
     List(

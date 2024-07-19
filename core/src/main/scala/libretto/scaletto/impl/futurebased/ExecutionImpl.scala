@@ -612,20 +612,60 @@ private class ExecutionImpl(
           Pair(RecOccurrence(f), this).extend(f)
 
         case _: -⚬.InvokeRecCall[x, b] =>
-          // (RecCall[x, B] |*| x) -⚬ B
           val (rc, x) = (this: Frontier[RecCall[x, B] |*| x]).splitPair
-          rc.toRecOccurrence match
-            case Left(r)   =>                      Pair(r, x).extend(r.f)
-            case Right(fr) => Deferred(fr.map(r => Pair(r, x).extend(r.f)))
+
+          def go[X, Y](rc: Frontier[RecCall[X, Y]], x: Frontier[X]): Frontier[Y] =
+            rc match
+              case r @ RecOccurrence(f)                     => Pair(r, x).extend(f)
+              case ParameterizedRecOccurrence(p, _, _, prc) => go(prc, Pair(p, x))
+              case Deferred(f)                              => Deferred(f.map(go(_, x)))
+
+          go(rc, x)
 
         case _: -⚬.IgnoreRecCall[x, y] =>
-          Frontier.One
+          def go[X, Y](rc: Frontier[RecCall[X, Y]]): Frontier[One] =
+            rc match
+              case RecOccurrence(_) =>
+                Frontier.One
+              case ParameterizedRecOccurrence(p, disP, dupP, prc) =>
+                p.extend(disP)
+                go(prc)
+              case Deferred(f) =>
+                Deferred(f.map(go))
+
+          go(this: Frontier[RecCall[x, y]])
 
         case _: -⚬.DupRecCall[x, y] =>
-          // could just return Pair(this, this), but being defensive
-          (this: Frontier[RecCall[x, y]]).toRecOccurrence match
-            case Left(r) => Pair(r, r)
-            case Right(fr) => Deferred(fr.map(r => Pair(r, r)))
+          summon[A =:= RecCall[x, y]]
+          summon[B =:= (RecCall[x, y] |*| RecCall[x, y])]
+
+          def go[X, Y](rc: Frontier[RecCall[X, Y]]): Frontier[RecCall[X, Y] |*| RecCall[X, Y]] =
+            rc match
+              case r @ RecOccurrence(_) =>
+                Pair(r, r)
+              case ParameterizedRecOccurrence(p, disP, dupP, prc) =>
+                val (p1, p2) = p.extend(dupP).splitPair
+                val (rc1, rc2) = go(prc).splitPair
+                Pair(
+                  ParameterizedRecOccurrence(p1, disP, dupP, rc1),
+                  ParameterizedRecOccurrence(p2, disP, dupP, rc2),
+                )
+              case Deferred(f) =>
+                Deferred(f.map(go))
+
+          go[x, y](this)
+
+        case f: -⚬.CaptureIntoRecCall[x, a, b] =>
+          summon[A =:= (RecCall[x |*| a, b] |*| x)]
+          summon[B =:= RecCall[a, b]]
+
+          val (rc, x) = (this: Frontier[RecCall[x |*| a, b] |*| x]).splitPair
+          ParameterizedRecOccurrence[x, a, b](
+            x,
+            f.discardCapture,
+            f.splitCapture,
+            rc,
+          )
 
         case _: -⚬.Pack[f] =>
           Pack[f](this: Frontier[f[Rec[f]]])
@@ -1068,6 +1108,9 @@ private class ExecutionImpl(
           f.crash(e)
         case RecOccurrence(f) =>
           // has not been invoked yet, do nothing
+        case ParameterizedRecOccurrence(p, _, _, rc) =>
+          p.crash(e)
+          rc.crash(e)
       }
     }
   }
@@ -1086,6 +1129,12 @@ private class ExecutionImpl(
     case class Deferred[A](f: Future[Frontier[A]]) extends Frontier[A]
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]
     case class RecOccurrence[A, B](f: (RecCall[A, B] |*| A) -⚬ B) extends Frontier[RecCall[A, B]]
+    case class ParameterizedRecOccurrence[P, A, B](
+      p: Frontier[P],
+      discardParam: P -⚬ One,
+      splitParam: P -⚬ (P |*| P),
+      recCall: Frontier[RecCall[P |*| A, B]],
+    ) extends Frontier[RecCall[A, B]]
     sealed trait Void extends Frontier[dsl.Void] {
       def absurd[A]: Frontier[A]
     }
@@ -1233,13 +1282,6 @@ private class ExecutionImpl(
             val fab = f.map(_.splitPair)
             (Deferred(fab.map(_._1)), Deferred(fab.map(_._2)))
         }
-    }
-
-    extension [A, B](f: Frontier[RecCall[A, B]]) {
-      def toRecOccurrence: Either[RecOccurrence[A, B], Future[RecOccurrence[A, B]]] =
-        f match
-          case r @ RecOccurrence(_) => Left(r)
-          case Deferred(f) => Right(f.flatMap(_.toRecOccurrence.fold(Future.successful, identity)))
     }
 
     extension (f: Frontier[Done]) {

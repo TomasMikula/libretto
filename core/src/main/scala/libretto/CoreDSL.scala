@@ -4,6 +4,7 @@ import libretto.lambda.{EnumModule, Extractor, Focus, Partitioning}
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.util.Equal
+import scala.annotation.targetName
 
 trait CoreDSL {
   /** Libretto arrow, also called a ''component'' or a ''linear function''.
@@ -119,6 +120,21 @@ trait CoreDSL {
 
   /** The type of auxiliary placeholder variables used in construction of [[λ]]-expressions. */
   type $[A]
+
+  /** A function that may be used only locally within the scope of outer [[λ]]-expression.
+   *
+   * Like `A -⚬ B`, it exists only at the meta level.
+   * Unlike `A -⚬ B`, `LocalFun[A, B]` may have captured resources.
+   *
+   * It's use is similar to that of a function object expression `$[A =⚬ B]` (from [[ClosedDSL]]),
+   * but unlike it, `LocalFun[A, B]`
+   *  - does not require existence of function objects in the language;
+   *  - cannot be returned from an outer `λ` (as only expressions (`$[T]`)
+   *    can be returned, but you'll never have a `$[LocalFun[A, B]]`);
+   *  - may be used any number of times, as long as any resources captured by the `LocalFun`
+   *    can be used any number of times and have the non-linear operations registered (via [[?]], [[+]], [[*]] extractors).
+   */
+  type LocalFun[A, B]
 
   def id[A]: A -⚬ A
 
@@ -364,8 +380,16 @@ trait CoreDSL {
     def rec[A, B](using SourcePos)(
       f: LambdaContext ?=> $[RecCall[A, B]] => $[A] => $[B],
     ): A -⚬ B =
-      val g: (RecCall[A, B] |*| A) -⚬ B = apply { case ?(self) |*| a => f(self)(a) }
+      val g: (RecCall[A, B] |*| A) -⚬ B = apply { case *(self) |*| a => f(self)(a) }
       CoreDSL.this.rec(g)
+
+    def local[A, B](using SourcePos, LambdaContext)(
+      f: LambdaContext ?=> $[A] => $[B],
+    ): LocalFun[A, B]
+
+    def recLocal[A, B](using SourcePos, LambdaContext)(
+      f: LambdaContext ?=> $[RecCall[A, B]] => $[A] => $[B],
+    ): LocalFun[A, B]
 
     def ?[A, B](using SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
@@ -397,6 +421,10 @@ trait CoreDSL {
     def one(using SourcePos, LambdaContext): $[One]
 
     def map[A, B](a: $[A])(f: A -⚬ B)(pos: SourcePos)(using
+      LambdaContext,
+    ): $[B]
+
+    def mapLocal[A, B](a: $[A])(f: LocalFun[A, B])(pos: SourcePos)(using
       LambdaContext,
     ): $[B]
 
@@ -459,11 +487,21 @@ trait CoreDSL {
   }
 
   extension [A, B](f: A -⚬ B) {
+    @targetName("applyFun")
     def apply(a: $[A])(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[B] =
       $.map(a)(f)(pos)
+  }
+
+  extension [A, B](f: LocalFun[A, B]) {
+    @targetName("applyLocalFun")
+    def apply(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    )(a: $[A]): $[B] =
+      $.mapLocal(a)(f)(pos)
   }
 
   extension [A](a: $[A]) {
@@ -507,6 +545,7 @@ trait CoreDSL {
   }
 
   extension [A, B](f: $[RecCall[A, B]]) {
+    @targetName("applyRecCall")
     def apply(using pos: SourcePos, ctx: LambdaContext)(a: $[A]): $[B] =
       recCall(f |*| a)
   }

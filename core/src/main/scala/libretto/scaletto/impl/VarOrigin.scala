@@ -21,6 +21,7 @@ sealed trait VarOrigin {
       case SwitchOut(SourcePos(p, _, l))    => s"The result of switch expression at $p:$l"
       case OneIntro(SourcePos(p, _, l))     => s"The unit introduced at $p:$l"
       case NonLinearOps(SourcePos(p, _, l)) => s"The variable equipped with non-linear ops at $p:$l"
+      case CapturedVarsAndFunArg(SourcePos(p, _, l)) => s"Aggregate of captured expressions and function argument at $p:$l"
     }
 }
 
@@ -33,6 +34,7 @@ object VarOrigin {
   case class Prj2(pos: SourcePos) extends VarOrigin
   case class Lambda(pos: SourcePos) extends VarOrigin
   case class CapturedVars(pos: SourcePos) extends VarOrigin
+  case class CapturedVarsAndFunArg(pos: SourcePos) extends VarOrigin
   case class ClosureVal(pos: SourcePos) extends VarOrigin
   case class SwitchIn(pos: SourcePos) extends VarOrigin
   case class SwitchCase(pos: SourcePos) extends VarOrigin
