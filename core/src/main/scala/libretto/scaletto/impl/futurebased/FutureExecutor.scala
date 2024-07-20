@@ -1,13 +1,13 @@
 package libretto.scaletto.impl.futurebased
 
 import java.util.concurrent.{Executor as JExecutor, Executors, ExecutorService, ScheduledExecutorService}
-import libretto.{Executing, Scheduler}
+import libretto.Executing
 import libretto.Executor.CancellationReason
 import libretto.lambda.Tupled
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoExecutor
 import libretto.scaletto.impl.FreeScaletto
-import libretto.util.Async
+import libretto.util.{Async, Scheduler}
 import scala.concurrent.ExecutionContext
 
 object FutureExecutor {

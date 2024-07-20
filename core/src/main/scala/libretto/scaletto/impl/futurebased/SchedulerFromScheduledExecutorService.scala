@@ -1,7 +1,7 @@
 package libretto.scaletto.impl.futurebased
 
 import java.util.concurrent.ScheduledExecutorService
-import libretto.Scheduler
+import libretto.util.Scheduler
 import scala.concurrent.duration.FiniteDuration
 
 class SchedulerFromScheduledExecutorService(

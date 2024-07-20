@@ -1,6 +1,6 @@
 package libretto.testing
 
-import libretto.Scheduler
+import libretto.util.Scheduler
 import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration.{FiniteDuration, DurationInt}

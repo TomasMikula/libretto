@@ -1,11 +1,11 @@
 package libretto.scaletto.impl.futurebased
 
-import libretto.{Executing, Scheduler}
+import libretto.Executing
 import libretto.Executor.CancellationReason
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.{ScalettoBridge, ScalettoExecution}
 import libretto.scaletto.impl.FreeScaletto
-import libretto.util.Async
+import libretto.util.{Async, Scheduler}
 import scala.concurrent.ExecutionContext
 
 object BridgeImpl extends ScalettoBridge {

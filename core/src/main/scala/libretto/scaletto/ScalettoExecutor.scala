@@ -1,6 +1,7 @@
 package libretto.scaletto
 
-import libretto.{Executor, Scheduler}
+import libretto.Executor
+import libretto.util.Scheduler
 
 trait ScalettoExecutor extends Executor { self =>
   override type Dsl <: Scaletto
