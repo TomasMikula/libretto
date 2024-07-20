@@ -1,7 +1,8 @@
 package libretto.testing
 
-import libretto.{CoreBridge, CoreDSL, ExecutionParams}
+import libretto.{CoreBridge, CoreDSL}
 import libretto.cats.Monad
+import libretto.exec.ExecutionParams
 import libretto.lambda.util.{Monad as ScalaMonad, SourcePos}
 import libretto.lambda.util.Monad.syntax.*
 import libretto.util.Async
@@ -160,7 +161,7 @@ trait TestKit {
   ): Outcome[Unit]
 
   type ExecutionParam[A]
-  type ExecutionParams[A] = libretto.ExecutionParams[ExecutionParam, A]
+  type ExecutionParams[A] = libretto.exec.ExecutionParams[ExecutionParam, A]
 
   transparent inline def OutPort(using exn: Execution): exn.OutPort.type =
     exn.OutPort

@@ -1,7 +1,7 @@
 package libretto.scaletto.impl.futurebased
 
-import libretto.Executing
-import libretto.Executor.CancellationReason
+import libretto.exec.Executing
+import libretto.exec.Executor.CancellationReason
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.{ScalettoBridge, ScalettoExecution}
 import libretto.scaletto.impl.FreeScaletto

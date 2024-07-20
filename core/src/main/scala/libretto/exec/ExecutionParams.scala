@@ -1,4 +1,4 @@
-package libretto
+package libretto.exec
 
 import libretto.lambda.Tupled
 import libretto.lambda.util.{Exists, TypeEq}

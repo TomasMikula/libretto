@@ -8,11 +8,11 @@ trait ClosedExecution[DSL <: ClosedDSL] extends CoreExecution[DSL] {
   override val OutPort: ClosedOutPorts
   override val InPort:  ClosedInPorts
 
-  trait ClosedOutPorts extends OutPorts {
+  trait ClosedOutPorts extends CoreOutPorts {
     def functionInputOutput[I, O](port: OutPort[I =⚬ O]): (InPort[I], OutPort[O])
   }
 
-  trait ClosedInPorts extends InPorts {
+  trait ClosedInPorts extends CoreInPorts {
     def functionInputOutput[I, O](port: InPort[I =⚬ O]): (OutPort[I], InPort[O])
   }
 }

@@ -1,6 +1,6 @@
 package libretto.testing
 
-import libretto.ExecutionParams
+import libretto.exec.ExecutionParams
 import libretto.lambda.util.SourcePos
 import libretto.testing.TestKit.dsl
 import scala.concurrent.duration.*

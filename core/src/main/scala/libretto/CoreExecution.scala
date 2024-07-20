@@ -1,20 +1,17 @@
 package libretto
 
+import libretto.exec.Execution
 import libretto.util.Async
 import scala.annotation.targetName
 import scala.concurrent.duration.FiniteDuration
 
-trait CoreExecution[DSL <: CoreDSL] {
-  val dsl: DSL
+trait CoreExecution[DSL <: CoreDSL] extends Execution[DSL] {
+  override val InPort: CoreInPorts
+  override val OutPort: CoreOutPorts
+
   import dsl.*
 
-  type OutPort[A]
-  val OutPort: OutPorts
-
-  type InPort[A]
-  val InPort: InPorts
-
-  trait OutPorts {
+  trait CoreOutPorts extends OutPorts {
     def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B]
 
     def pair[A, B](a: OutPort[A], b: OutPort[B]): OutPort[A |*| B]
@@ -59,7 +56,7 @@ trait CoreExecution[DSL <: CoreDSL] {
       OutPort.discardOne(ev.substituteCo(port))
   }
 
-  trait InPorts {
+  trait CoreInPorts extends InPorts {
     def contramap[A, B](port: InPort[B])(f: A -⚬ B): InPort[A]
 
     def pair[A, B](a: InPort[A], b: InPort[B]): InPort[A |*| B]

@@ -1,19 +1,13 @@
-package libretto
+package libretto.exec
 
 import libretto.lambda.util.SourcePos
 import libretto.util.Async
 
-final class Executing[BRIDGE <: CoreBridge & Singleton, A, B](using val bridge: BRIDGE)(
-  val execution: bridge.Execution,
-  val inPort: execution.InPort[A],
-  val outPort: execution.OutPort[B],
-)
-
 trait Executor { self =>
   import Executor.CancellationReason
 
-  val dsl: CoreDSL
-  val bridge: CoreBridge.Of[dsl.type]
+  val dsl: { type -⚬[A, B] }
+  val bridge: Bridge.Of[dsl.type]
 
   import dsl.-⚬
   import bridge.Execution
@@ -24,7 +18,7 @@ trait Executor { self =>
     */
   type ExecutionParam[A]
 
-  type ExecutionParams[A] = libretto.ExecutionParams[ExecutionParam, A]
+  type ExecutionParams[A] = libretto.exec.ExecutionParams[ExecutionParam, A]
 
   def execute[A, B, P](
     prg: A -⚬ B,
@@ -40,23 +34,20 @@ trait Executor { self =>
     * If the execution completes normally, the returned [[Async]] may never complete.
     */
   def watchForCancellation(execution: Execution): Async[CancellationReason]
-
-  def narrow: Executor.Of[dsl.type, bridge.type] =
-    this
 }
 
 object Executor {
-  type Of[DSL <: CoreDSL, BRIDGE <: CoreBridge.Of[DSL]] =
+  type Of[DSL <: { type -⚬[A, B] }, BRIDGE <: Bridge.Of[DSL]] =
     Executor {
       val dsl: DSL
       val bridge: BRIDGE
     }
 
   trait Factory {
-    type Dsl <: CoreDSL
+    type Dsl <: { type -⚬[A, B] }
     val dsl: Dsl
 
-    type Bridge <: CoreBridge.Of[dsl.type]
+    type Bridge <: libretto.exec.Bridge.Of[dsl.type]
     val bridge: Bridge
 
     type ExecutorResource
@@ -68,7 +59,7 @@ object Executor {
   }
 
   object Factory {
-    type Of[DSL <: CoreDSL, BRIDGE <: CoreBridge.Of[DSL]] =
+    type Of[DSL <: { type -⚬[A, B] }, BRIDGE <: Bridge.Of[DSL]] =
       Factory { type Dsl = DSL; type Bridge = BRIDGE }
   }
 

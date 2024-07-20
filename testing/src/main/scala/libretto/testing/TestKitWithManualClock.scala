@@ -4,5 +4,5 @@ trait TestKitWithManualClock extends TestKit {
   def manualClockParam: ExecutionParam[ManualClock]
 
   def manualClock: ExecutionParams[ManualClock] =
-    libretto.ExecutionParams.wrap(manualClockParam)
+    libretto.exec.ExecutionParams.wrap(manualClockParam)
 }

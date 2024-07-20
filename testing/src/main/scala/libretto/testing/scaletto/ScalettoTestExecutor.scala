@@ -1,8 +1,9 @@
 package libretto.testing.scaletto
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
-import libretto.{CoreLib, ExecutionParams}
+import libretto.CoreLib
 import libretto.cats.Monad
+import libretto.exec.ExecutionParams
 import libretto.lambda.util.{Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.scaletto.{Scaletto, ScalettoBridge, ScalettoExecutor, StarterKit}
@@ -75,14 +76,14 @@ object ScalettoTestExecutor {
   object ExecutionParam {
     case object ManualClockParam extends ExecutionParam[ManualClock]
 
-    def adapt[A, P[_]](p: ExecutionParams[ExecutionParam, A])(using
-      ep: ScalettoExecutor.ExecutionParam[P],
+    def adapt[A, P[_]](p: ExecutionParams[ExecutionParam, A])(
+      sp: libretto.util.Scheduler => P[Unit],
     ): Exists[[X] =>> (ExecutionParams[P, X], X => A)] =
       p.adapt { [X] => (x: ExecutionParam[X]) =>
         x match {
           case ManualClockParam =>
             val (clock, scheduler) = ManualClock.scheduler()
-            Exists((ep.scheduler(scheduler), _ => clock))
+            Exists((sp(scheduler), _ => clock))
         }
       }
   }
@@ -91,7 +92,7 @@ object ScalettoTestExecutor {
     exec: ScalettoExecutor,
   ): TestExecutor[ScalettoTestKit.Of[exec.dsl.type]] = {
     val kit = ScalettoTestKitFromBridge[exec.dsl.type, exec.bridge.type](exec.dsl, exec.bridge)
-    fromKitAndExecutor(kit, exec.narrow)
+    fromKitAndExecutor(kit, exec)
   }
 
   def fromKitAndExecutor(
@@ -115,8 +116,8 @@ object ScalettoTestExecutor {
         postStop: Y => Outcome[Unit],
         timeout: FiniteDuration,
       ): TestResult[Unit] = {
-        val p: Exists[[X] =>> (libretto.ExecutionParams[exr.ExecutionParam, X], X => P)] =
-          ScalettoTestExecutor.ExecutionParam.adapt(params)(using exr.ExecutionParam)
+        val p: Exists[[X] =>> (libretto.exec.ExecutionParams[exr.ExecutionParam, X], X => P)] =
+          ScalettoTestExecutor.ExecutionParam.adapt(params)(exr.schedulerParam)
 
         TestExecutor
           .usingExecutor(exr)

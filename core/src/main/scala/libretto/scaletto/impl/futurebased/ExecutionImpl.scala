@@ -1,6 +1,6 @@
 package libretto.scaletto.impl.futurebased
 
-import libretto.Executor.CancellationReason
+import libretto.exec.Executor.CancellationReason
 import libretto.lambda.{EnumModule, Member}
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoExecution

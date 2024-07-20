@@ -1,13 +1,10 @@
 package libretto
 
-/** Defines interface to interact with a running Libretto program. */
-trait CoreBridge {
-  type Dsl <: CoreDSL
+import libretto.exec.Bridge
 
-  val dsl: Dsl
-
-  /** Handle to a running Libretto program. */
-  type Execution <: CoreExecution[dsl.type]
+trait CoreBridge extends Bridge {
+  override type Dsl <: CoreDSL
+  override type Execution <: CoreExecution[dsl.type]
 }
 
 object CoreBridge {

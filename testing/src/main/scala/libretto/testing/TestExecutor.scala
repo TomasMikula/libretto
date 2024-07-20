@@ -1,7 +1,8 @@
 package libretto.testing
 
-import libretto.{CoreDSL, ExecutionParams, Executor}
-import libretto.Executor.CancellationReason
+import libretto.{CoreBridge, CoreDSL, CoreExecutor}
+import libretto.exec.ExecutionParams
+import libretto.exec.Executor.CancellationReason
 import libretto.lambda.util.Monad
 import libretto.lambda.util.Monad.syntax.*
 import libretto.util.Async
@@ -105,10 +106,10 @@ object TestExecutor {
     }
   }
 
-  def usingExecutor(executor: Executor): UsingExecutor[executor.type] =
+  def usingExecutor(executor: CoreExecutor): UsingExecutor[executor.type] =
     new UsingExecutor[executor.type](executor)
 
-  class UsingExecutor[E <: Executor](val executor: E) {
+  class UsingExecutor[E <: CoreExecutor](val executor: E) {
     import executor.ExecutionParams
     import executor.bridge.Execution
     import executor.dsl.*

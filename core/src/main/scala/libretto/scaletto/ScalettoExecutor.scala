@@ -1,16 +1,14 @@
 package libretto.scaletto
 
-import libretto.Executor
+import libretto.CoreExecutor
+import libretto.exec.Executor
 import libretto.util.Scheduler
 
-trait ScalettoExecutor extends Executor { self =>
+trait ScalettoExecutor extends CoreExecutor { self =>
   override val dsl: Scaletto
   override val bridge: ScalettoBridge.Of[dsl.type]
 
-  val ExecutionParam: ScalettoExecutor.ExecutionParam[ExecutionParam]
-
-  override def narrow: ScalettoExecutor.Of[dsl.type, bridge.type] =
-    this
+  def schedulerParam(s: Scheduler): ExecutionParam[Unit]
 }
 
 object ScalettoExecutor {
@@ -35,9 +33,6 @@ object ScalettoExecutor {
     type Of[DSL <: Scaletto, BRIDGE <: ScalettoBridge.Of[DSL]] =
       Factory { type Dsl = DSL; type Bridge = BRIDGE }
   }
-
-  trait ExecutionParam[P[_]]:
-    def scheduler(s: Scheduler): P[Unit]
 
   val defaultFactory: ScalettoExecutor.Factory =
     libretto.scaletto.impl.futurebased.FutureExecutor.defaultFactory

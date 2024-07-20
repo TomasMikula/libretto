@@ -1,8 +1,8 @@
 package libretto.scaletto.impl.futurebased
 
 import java.util.concurrent.{Executor as JExecutor, Executors, ExecutorService, ScheduledExecutorService}
-import libretto.Executing
-import libretto.Executor.CancellationReason
+import libretto.exec.Executing
+import libretto.exec.Executor.CancellationReason
 import libretto.lambda.Tupled
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoExecutor
@@ -22,10 +22,7 @@ object FutureExecutor {
   }
 
   type ExecutionParam[A] = SchedulerParam[A]
-  object ExecutionParam extends ScalettoExecutor.ExecutionParam[ExecutionParam] {
-    override def scheduler(s: Scheduler): ExecutionParam[Unit] =
-      SchedulerParam(s)
-
+  object ExecutionParam {
     def extract[A](pa: Tupled[Tuple2, ExecutionParam, A]): (Scheduler, A) = {
       type G[X] = (Scheduler, X)
 
@@ -89,8 +86,9 @@ class FutureExecutor(
   override val bridge: BridgeImpl.type = BridgeImpl
 
   override type ExecutionParam[A] = FutureExecutor.ExecutionParam[A]
-  override val ExecutionParam: ScalettoExecutor.ExecutionParam[ExecutionParam] =
-    FutureExecutor.ExecutionParam
+
+  override def schedulerParam(s: Scheduler): ExecutionParam[Unit] =
+    FutureExecutor.SchedulerParam(s)
 
   import dsl.-⚬
   import bridge.{Execution, cancelExecution}
