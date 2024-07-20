@@ -1,5 +1,6 @@
 package libretto.testing
 
+import libretto.ExecutionParams
 import libretto.lambda.util.SourcePos
 import libretto.testing.TestKit.dsl
 import scala.concurrent.duration.*
@@ -19,7 +20,7 @@ object TestCase {
 
   sealed trait SingleProgram[TK <: TestKit] extends Single[TK] {
     val testKit: TK
-    import testKit.{ExecutionParam, Outcome}
+    import testKit.{ExecutionParams, Outcome}
     import testKit.dsl.*
     import testKit.bridge.Execution
 
@@ -29,7 +30,7 @@ object TestCase {
 
     val body: Done -⚬ O
 
-    val params: ExecutionParam[P]
+    val params: ExecutionParams[P]
 
     val conductor: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[X]
 
@@ -60,7 +61,7 @@ object TestCase {
 
   def parameterizedExecAndCheck[TK <: TestKit, A, Q, B](using kit: TK)(
     body0: dsl.-⚬[dsl.Done, A],
-    params0: kit.ExecutionParam[Q],
+    params0: kit.ExecutionParams[Q],
     conductor0: (exn: kit.bridge.Execution) ?=> (exn.OutPort[A], Q) => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
     timeout0: FiniteDuration = 1.second,
@@ -84,7 +85,7 @@ object TestCase {
   ): TestCase.Single[kit.type] =
     parameterizedExecAndCheck[kit.type, A, Unit, B](
       body0,
-      kit.ExecutionParam.unit,
+      ExecutionParams.unit,
       (pa, _) => conductor0(pa),
       postStop0,
     )
@@ -102,7 +103,7 @@ object TestCase {
 
   def parameterizedExec[O, P](using kit: TestKit)(
     body: kit.dsl.-⚬[kit.dsl.Done, O],
-    params: kit.ExecutionParam[P],
+    params: kit.ExecutionParams[P],
     conduct: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit],
   ): TestCase.Single[kit.type] =
     parameterizedExecAndCheck[kit.type, O, P, Unit](body, params, conduct(_, _), kit.monadOutcome.pure)
@@ -126,7 +127,7 @@ object TestCase {
     pure(body, timeout)
 
   def configure[P](using kit: TestKit)(
-    params: kit.ExecutionParam[P],
+    params: kit.ExecutionParams[P],
   ): Configure[kit.type, P] =
     Configure(kit, params)
 
@@ -135,7 +136,7 @@ object TestCase {
 
   class Configure[TK <: TestKit, P](
     val kit: TK,
-    val params: kit.ExecutionParam[P],
+    val params: kit.ExecutionParams[P],
   ) {
     def interactWith[O](body: kit.dsl.-⚬[kit.dsl.Done, O]): InteractWithConfigured[kit.type, O, P] =
       InteractWithConfigured(kit, body, params)
@@ -158,7 +159,7 @@ object TestCase {
   class InteractWithConfigured[TK <: TestKit, O, P](
     val kit: TK,
     val body: kit.dsl.-⚬[kit.dsl.Done, O],
-    val params: kit.ExecutionParam[P],
+    val params: kit.ExecutionParams[P],
   ) {
     def via(conductor: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit]): TestCase[kit.type] =
       TestCase.parameterizedExec(using kit)(body, params, conductor(_, _))

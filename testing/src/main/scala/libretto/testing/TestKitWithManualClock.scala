@@ -1,5 +1,8 @@
 package libretto.testing
 
 trait TestKitWithManualClock extends TestKit {
-  override val ExecutionParam: ManualClockParams[ExecutionParam]
+  def manualClockParam: ExecutionParam[ManualClock]
+
+  def manualClock: ExecutionParams[ManualClock] =
+    libretto.ExecutionParams.wrap(manualClockParam)
 }

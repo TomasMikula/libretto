@@ -26,15 +26,16 @@ trait Executor { self =>
     * @tparam A returned to the caller when execution starts
     */
   type ExecutionParam[A]
-  val  ExecutionParam: ExecutionParams[ExecutionParam]
+
+  type ExecutionParams[A] = libretto.ExecutionParams[ExecutionParam, A]
 
   def execute[A, B, P](
     prg: A -⚬ B,
-    params: ExecutionParam[P],
+    params: ExecutionParams[P],
   ): (Executing[bridge.type, A, B], P)
 
   final def execute[A, B](prg: A -⚬ B): Executing[bridge.type, A, B] =
-    execute(prg, ExecutionParam.unit)._1
+    execute(prg, ExecutionParams.unit)._1
 
   def cancel(using pos: SourcePos)(execution: Execution): Async[Unit]
 

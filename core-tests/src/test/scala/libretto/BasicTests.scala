@@ -562,7 +562,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
             .map(e.OutPort.discardOne(_))
 
         TestCase
-          .configure(ExecutionParam.manualClock)
+          .configure(manualClock)
           .interactWith(prg)
           .via { (port, clock) =>
             for {

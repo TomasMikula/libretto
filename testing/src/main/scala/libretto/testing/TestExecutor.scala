@@ -1,6 +1,6 @@
 package libretto.testing
 
-import libretto.{CoreDSL, Executor}
+import libretto.{CoreDSL, ExecutionParams, Executor}
 import libretto.Executor.CancellationReason
 import libretto.lambda.util.Monad
 import libretto.lambda.util.Monad.syntax.*
@@ -10,7 +10,7 @@ import scala.concurrent.duration.FiniteDuration
 trait TestExecutor[+TK <: TestKit] { self =>
   val testKit: TK
 
-  import testKit.{ExecutionParam, Outcome}
+  import testKit.{ExecutionParams, Outcome}
   import testKit.dsl.*
   import testKit.bridge.Execution
 
@@ -18,7 +18,7 @@ trait TestExecutor[+TK <: TestKit] { self =>
 
   def execpAndCheck[O, P, X](
     body: Done -⚬ O,
-    params: ExecutionParam[P],
+    params: ExecutionParams[P],
     conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[X],
     postStopCheck: X => Outcome[Unit],
     timeout: FiniteDuration,
@@ -35,7 +35,7 @@ trait TestExecutor[+TK <: TestKit] { self =>
     postStopCheck: X => Outcome[Unit],
     timeout: FiniteDuration,
   ): TestResult[Unit] =
-    execpAndCheck[O, Unit, X](body, ExecutionParam.unit, (po, _) => conduct(po), postStopCheck, timeout)
+    execpAndCheck[O, Unit, X](body, ExecutionParams.unit, (po, _) => conduct(po), postStopCheck, timeout)
 
   def exec[O](
     body: Done -⚬ O,
@@ -109,13 +109,13 @@ object TestExecutor {
     new UsingExecutor[executor.type](executor)
 
   class UsingExecutor[E <: Executor](val executor: E) {
-    import executor.ExecutionParam
+    import executor.ExecutionParams
     import executor.bridge.Execution
     import executor.dsl.*
 
     def runTestCase[O, P, X](
       body: Done -⚬ O,
-      params: ExecutionParam[P],
+      params: ExecutionParams[P],
       conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Async[TestResult[X]],
       postStop: X => Async[TestResult[Unit]],
       timeout: FiniteDuration,

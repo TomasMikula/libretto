@@ -2,14 +2,14 @@ package libretto.testing.scaletto
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
 import libretto.{CoreLib, ExecutionParams, Monad}
-import libretto.lambda.util.SourcePos
+import libretto.lambda.util.{Exists, SourcePos, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
 import libretto.scaletto.{Scaletto, ScalettoBridge, ScalettoExecutor, StarterKit}
-import libretto.testing.{ManualClock, ManualClockParams, TestExecutor, TestResult}
+import libretto.testing.{ManualClock, TestExecutor, TestResult}
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 
 object ScalettoTestExecutor {
-  import ExecutionParam.Instantiation
 
   class ScalettoTestKitFromBridge[DSL <: Scaletto, Bridge <: ScalettoBridge.Of[DSL]](
     val dsl0: DSL,
@@ -25,8 +25,9 @@ object ScalettoTestExecutor {
       override type Assertion[A] = Val[String] |+| A
 
       override type ExecutionParam[A] = ScalettoTestExecutor.ExecutionParam[A]
-      override val ExecutionParam: ManualClockParams[ExecutionParam] =
-        ScalettoTestExecutor.ExecutionParam.manualClockParamsInstance
+
+      override def manualClockParam: ExecutionParam[ManualClock] =
+        ExecutionParam.ManualClockParam
 
       private val coreLib = CoreLib(this.dsl)
       import coreLib.{Monad as _, *}
@@ -68,55 +69,21 @@ object ScalettoTestExecutor {
       }
   }
 
-  opaque type ExecutionParam[A] = ExecutionParams.Free[ExecutionParam.F, A]
+  sealed trait ExecutionParam[A]
+
   object ExecutionParam {
-    sealed trait F[A]
-    case object ManualClockParam extends F[ManualClock]
+    case object ManualClockParam extends ExecutionParam[ManualClock]
 
-    def manualClock: ExecutionParam[ManualClock] =
-      ExecutionParams.Free.wrap(ManualClockParam)
-
-    given manualClockParamsInstance: ManualClockParams[ExecutionParam] with {
-      override def unit =
-        ExecutionParams.Free.unit
-      override def pair[A, B](a: ExecutionParam[A], b: ExecutionParam[B]): ExecutionParam[(A, B)] =
-        ExecutionParams.Free.pair(a, b)
-      override def manualClock: ExecutionParam[ManualClock] =
-        ExecutionParams.Free.wrap(ManualClockParam)
-    }
-
-    def instantiate[A, P[_]](p: ExecutionParam[A])(using
-      ep: ScalettoExecutor.ExecutionParams[P],
-    ): Instantiation[A, P] = {
-      import ExecutionParams.Free.{Ext, One, Zip}
-
-      p match {
-        case _: One[F] =>
-          Instantiation[P, Unit, Unit](ep.unit, _ => ())
-        case z: Zip[F, a, b] =>
-          val (ia, ib) = (instantiate(z.a), instantiate(z.b))
-          Instantiation[P, (ia.X, ib.X), A](ep.pair(ia.px, ib.px), { case (x, y) => (ia.get(x), ib.get(y)) })
-        case Ext(ManualClockParam) =>
-          val (clock, scheduler) = ManualClock.scheduler()
-          Instantiation[P, Unit, ManualClock](ep.scheduler(scheduler), _ => clock)
-      }
-    }
-
-    sealed abstract class Instantiation[A, P[_]] {
-      type X
-
-      val px: P[X]
-      def get(x: X): A
-    }
-
-    object Instantiation {
-      def apply[P[_], X0, A](px0: P[X0], f: X0 => A): Instantiation[A, P] =
-        new Instantiation[A, P] {
-          override type X = X0
-          override val px = px0
-          override def get(x: X) = f(x)
+    def adapt[A, P[_]](p: ExecutionParams[ExecutionParam, A])(using
+      ep: ScalettoExecutor.ExecutionParam[P],
+    ): Exists[[X] =>> (ExecutionParams[P, X], X => A)] =
+      p.adapt { [X] => (x: ExecutionParam[X]) =>
+        x match {
+          case ManualClockParam =>
+            val (clock, scheduler) = ManualClock.scheduler()
+            Exists((ep.scheduler(scheduler), _ => clock))
         }
-    }
+      }
   }
 
   def fromExecutor(
@@ -136,26 +103,26 @@ object ScalettoTestExecutor {
 
       override val testKit: kit.type = kit
 
-      import testKit.{ExecutionParam, Outcome}
+      import testKit.{ExecutionParams, Outcome}
       import testKit.dsl.*
       import testKit.bridge.Execution
 
       override def execpAndCheck[O, P, Y](
         body: Done -⚬ O,
-        params: ExecutionParam[P],
+        params: ExecutionParams[P],
         conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[Y],
         postStop: Y => Outcome[Unit],
         timeout: FiniteDuration,
       ): TestResult[Unit] = {
-        val p: Instantiation[P, exr.ExecutionParam] =
-          ScalettoTestExecutor.ExecutionParam.instantiate(params)(using exr.ExecutionParam)
+        val p: Exists[[X] =>> (libretto.ExecutionParams[exr.ExecutionParam, X], X => P)] =
+          ScalettoTestExecutor.ExecutionParam.adapt(params)(using exr.ExecutionParam)
 
         TestExecutor
           .usingExecutor(exr)
-          .runTestCase[O, p.X, Y](
+          .runTestCase[O, p.T, Y](
             body,
-            p.px,
-            (port, x) => Outcome.toAsyncTestResult(conduct(port, p.get(x))),
+            p.value._1,
+            (port, x) => Outcome.toAsyncTestResult(conduct(port, p.value._2(x))),
             postStop andThen Outcome.toAsyncTestResult,
             timeout,
           )

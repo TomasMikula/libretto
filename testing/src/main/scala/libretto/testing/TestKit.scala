@@ -159,7 +159,7 @@ trait TestKit {
   ): Outcome[Unit]
 
   type ExecutionParam[A]
-  val ExecutionParam: ExecutionParams[ExecutionParam]
+  type ExecutionParams[A] = libretto.ExecutionParams[ExecutionParam, A]
 
   transparent inline def OutPort(using exn: Execution): exn.OutPort.type =
     exn.OutPort

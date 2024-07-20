@@ -6,7 +6,7 @@ trait ScalettoExecutor extends Executor { self =>
   override type Dsl <: Scaletto
   override type Bridge <: ScalettoBridge.Of[dsl.type]
 
-  override val ExecutionParam: ScalettoExecutor.ExecutionParams[ExecutionParam]
+  val ExecutionParam: ScalettoExecutor.ExecutionParam[ExecutionParam]
 
   override def narrow: ScalettoExecutor.Of[dsl.type, bridge.type] =
     new ScalettoExecutor {
@@ -35,7 +35,7 @@ object ScalettoExecutor {
       Factory { type Dsl = DSL; type Bridge = BRIDGE }
   }
 
-  trait ExecutionParams[P[_]] extends libretto.ExecutionParams[P]:
+  trait ExecutionParam[P[_]]:
     def scheduler(s: Scheduler): P[Unit]
 
   val defaultFactory: ScalettoExecutor.Factory =

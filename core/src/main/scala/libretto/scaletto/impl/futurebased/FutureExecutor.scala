@@ -1,8 +1,9 @@
 package libretto.scaletto.impl.futurebased
 
 import java.util.concurrent.{Executor as JExecutor, Executors, ExecutorService, ScheduledExecutorService}
-import libretto.{Executing, ExecutionParams, Scheduler}
+import libretto.{Executing, Scheduler}
 import libretto.Executor.CancellationReason
+import libretto.lambda.Tupled
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoExecutor
 import libretto.scaletto.impl.FreeScaletto
@@ -20,29 +21,18 @@ object FutureExecutor {
     new FutureExecutor(ec, sc, blockingEC)
   }
 
-  type ExecutionParam[A] = ExecutionParams.Free[SchedulerParam, A]
-  object ExecutionParam extends ScalettoExecutor.ExecutionParams[ExecutionParam] {
-    override def unit: ExecutionParam[Unit] =
-      ExecutionParams.Free.unit
-    override def pair[A, B](a: ExecutionParam[A], b: ExecutionParam[B]): ExecutionParam[(A, B)] =
-      ExecutionParams.Free.pair(a, b)
+  type ExecutionParam[A] = SchedulerParam[A]
+  object ExecutionParam extends ScalettoExecutor.ExecutionParam[ExecutionParam] {
     override def scheduler(s: Scheduler): ExecutionParam[Unit] =
-      ExecutionParams.Free.wrap(SchedulerParam(s))
+      SchedulerParam(s)
 
-    def extract[A](pa: ExecutionParam[A]): (Option[Scheduler], A) = {
-      import ExecutionParams.Free.{One, Zip, Ext}
-      pa match {
-        case Ext(sp @ SchedulerParam(scheduler)) =>
-          (Some(scheduler), sp.fromUnit(()))
-        case _: One[SchedulerParam] =>
-          (None, ())
-        case z: Zip[SchedulerParam, a, b] =>
-          (extract[a](z.a), extract[b](z.b)) match {
-            case ((None, a), (s, b)) => (s, (a, b))
-            case ((s, a), (None, b)) => (s, (a, b))
-            case ((Some(s1), a), (Some(s2), b)) => throw new IllegalArgumentException("Scheduler specified twice")
-          }
-      }
+    def extract[A](pa: Tupled[Tuple2, ExecutionParam, A]): (Scheduler, A) = {
+      type G[X] = (Scheduler, X)
+
+      pa.foldMapWith(
+        [X] => (x: SchedulerParam[X]) => (x.scheduler, x.fromUnit(())),
+        { [X, Y] => (x: G[X], y: G[Y]) => (x._1, (x._2, y._2)) }
+      )
     }
   }
 
@@ -102,7 +92,7 @@ class FutureExecutor(
   override val bridge = BridgeImpl
 
   override type ExecutionParam[A] = FutureExecutor.ExecutionParam[A]
-  override val ExecutionParam: ScalettoExecutor.ExecutionParams[ExecutionParam] =
+  override val ExecutionParam: ScalettoExecutor.ExecutionParam[ExecutionParam] =
     FutureExecutor.ExecutionParam
 
   import dsl.-⚬
@@ -110,10 +100,11 @@ class FutureExecutor(
 
   override def execute[A, B, P](
     prg: A -⚬ B,
-    params: ExecutionParam[P],
+    params: ExecutionParams[P],
   ): (Executing[bridge.type, A, B], P) = {
-    val (schedOpt, p) = FutureExecutor.ExecutionParam.extract(params)
-    val sched = schedOpt.getOrElse(scheduler)
+    val (sched, p) = params.asTupled match
+      case Left(ev) => (scheduler, ev.flip(()))
+      case Right(ps) => FutureExecutor.ExecutionParam.extract(ps)
     val executing = BridgeImpl.execute(prg)(ec, sched, blockingEC)
     (executing, p)
   }
