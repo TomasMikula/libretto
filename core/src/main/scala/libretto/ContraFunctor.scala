@@ -9,8 +9,8 @@ trait ContraFunctor[->[_, _], F[_]] { self =>
   def lift[A, B](f: A -> B): F[B] -> F[A]
 
   /** Composition with a covariant functor. Results in a contravariant functor. */
-  def ∘[G[_]](that: Functor[->, G]): ContraFunctor[->, λ[x => F[G[x]]]] =
-    new ContraFunctor[->, λ[x => F[G[x]]]] {
+  def ∘[G[_]](that: Functor[->, G]): ContraFunctor[->, [x] =>> F[G[x]]] =
+    new ContraFunctor[->, [x] =>> F[G[x]]] {
       override val category =
         self.category
 
@@ -19,8 +19,8 @@ trait ContraFunctor[->[_, _], F[_]] { self =>
     }
 
   /** Composition with another contravariant functor. Results in a covariant functor. */
-  def ∘[G[_]](that: ContraFunctor[->, G]): Functor[->, λ[x => F[G[x]]]] =
-    new Functor[->, λ[x => F[G[x]]]] {
+  def ∘[G[_]](that: ContraFunctor[->, G]): Functor[->, [x] =>> F[G[x]]] =
+    new Functor[->, [x] =>> F[G[x]]] {
       override val category =
         self.category
 

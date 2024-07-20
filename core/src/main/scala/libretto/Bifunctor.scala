@@ -8,8 +8,8 @@ trait Bifunctor[->[_, _], F[_, _]] { self =>
 
   def lift[A, B, C, D](f: A -> B, g: C -> D): F[A, C] -> F[B, D]
 
-  def fst[B]: Functor[->, F[*, B]] =
-    new Functor[->, F[*, B]] {
+  def fst[B]: Functor[->, F[_, B]] =
+    new Functor[->, F[_, B]] {
       override val category =
         self.category
 
@@ -17,8 +17,8 @@ trait Bifunctor[->[_, _], F[_, _]] { self =>
         Bifunctor.this.lift[A1, A2, B, B](f, this.category.id[B])
     }
 
-  def snd[A]: Functor[->, F[A, *]] =
-    new Functor[->, F[A, *]] {
+  def snd[A]: Functor[->, F[A, _]] =
+    new Functor[->, F[A, _]] {
       override val category =
         self.category
 
@@ -26,8 +26,8 @@ trait Bifunctor[->[_, _], F[_, _]] { self =>
         Bifunctor.this.lift[A, A, B1, B2](this.category.id[A], g)
     }
 
-  def inside[G[_]](using G: Functor[->, G]): Bifunctor[->, λ[(x, y) => G[F[x, y]]]] =
-    new Bifunctor[->, λ[(x, y) => G[F[x, y]]]] {
+  def inside[G[_]](using G: Functor[->, G]): Bifunctor[->, [x, y] =>> G[F[x, y]]] =
+    new Bifunctor[->, [x, y] =>> G[F[x, y]]] {
       override val category =
         self.category
 
