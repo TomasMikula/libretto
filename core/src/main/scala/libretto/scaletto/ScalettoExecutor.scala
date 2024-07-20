@@ -4,25 +4,25 @@ import libretto.Executor
 import libretto.util.Scheduler
 
 trait ScalettoExecutor extends Executor { self =>
-  override type Dsl <: Scaletto
-  override type Bridge <: ScalettoBridge.Of[dsl.type]
+  override val dsl: Scaletto
+  override val bridge: ScalettoBridge.Of[dsl.type]
 
   val ExecutionParam: ScalettoExecutor.ExecutionParam[ExecutionParam]
 
   override def narrow: ScalettoExecutor.Of[dsl.type, bridge.type] =
-    new ScalettoExecutor {
-      override type Dsl = self.dsl.type
-      override type Bridge = self.bridge.type
-
-      export self.{dsl, bridge, ExecutionParam, execute, cancel, watchForCancellation}
-    }
+    this
 }
 
 object ScalettoExecutor {
-  type OfDsl[DSL <: Scaletto] = ScalettoExecutor { type Dsl = DSL }
+  type OfDsl[DSL <: Scaletto] = ScalettoExecutor {
+    val dsl: DSL
+  }
 
   type Of[DSL <: Scaletto, BRIDGE <: ScalettoBridge.Of[DSL]] =
-    ScalettoExecutor { type Dsl = DSL; type Bridge = BRIDGE }
+    ScalettoExecutor {
+      val dsl: DSL
+      val bridge: BRIDGE
+    }
 
   trait Factory extends Executor.Factory {
     override type Dsl <: Scaletto

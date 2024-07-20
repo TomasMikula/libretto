@@ -85,11 +85,8 @@ class FutureExecutor(
   blockingEC: ExecutionContext,
 ) extends ScalettoExecutor {
 
-  override type Dsl = FreeScaletto.type
-  override type Bridge = BridgeImpl.type
-
-  override val dsl = FreeScaletto
-  override val bridge = BridgeImpl
+  override val dsl: FreeScaletto.type = FreeScaletto
+  override val bridge: BridgeImpl.type = BridgeImpl
 
   override type ExecutionParam[A] = FutureExecutor.ExecutionParam[A]
   override val ExecutionParam: ScalettoExecutor.ExecutionParam[ExecutionParam] =

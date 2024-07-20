@@ -10,7 +10,7 @@ import scala.concurrent.ExecutionContext
 
 object BridgeImpl extends ScalettoBridge {
   override type Dsl = FreeScaletto.type
-  override val dsl = FreeScaletto
+  override val dsl: FreeScaletto.type = FreeScaletto
   import dsl.-⚬
 
   override opaque type Execution <: ScalettoExecution[dsl.type] = ExecutionImpl
