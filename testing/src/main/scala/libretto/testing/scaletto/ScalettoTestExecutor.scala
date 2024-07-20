@@ -86,7 +86,7 @@ object ScalettoTestExecutor {
     }
 
     def instantiate[A, P[_]](p: ExecutionParam[A])(using
-      ep: ExecutionParams.WithScheduler[P],
+      ep: ScalettoExecutor.ExecutionParams[P],
     ): Instantiation[A, P] = {
       import ExecutionParams.Free.{Ext, One, Zip}
 

@@ -21,7 +21,7 @@ object FutureExecutor {
   }
 
   type ExecutionParam[A] = ExecutionParams.Free[SchedulerParam, A]
-  object ExecutionParam extends ExecutionParams.WithScheduler[ExecutionParam] {
+  object ExecutionParam extends ScalettoExecutor.ExecutionParams[ExecutionParam] {
     override def unit: ExecutionParam[Unit] =
       ExecutionParams.Free.unit
     override def pair[A, B](a: ExecutionParam[A], b: ExecutionParam[B]): ExecutionParam[(A, B)] =
@@ -102,7 +102,7 @@ class FutureExecutor(
   override val bridge = BridgeImpl
 
   override type ExecutionParam[A] = FutureExecutor.ExecutionParam[A]
-  override val ExecutionParam: ExecutionParams.WithScheduler[ExecutionParam] =
+  override val ExecutionParam: ScalettoExecutor.ExecutionParams[ExecutionParam] =
     FutureExecutor.ExecutionParam
 
   import dsl.-⚬

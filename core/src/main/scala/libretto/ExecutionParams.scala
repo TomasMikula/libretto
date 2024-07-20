@@ -21,13 +21,4 @@ object ExecutionParams {
     def wrap[Q[_], A](qa: Q[A]): Free[Q, A] =
       Ext(qa)
   }
-
-  given executionParamsFree[Q[_]]: ExecutionParams[[x] =>> Free[Q, x]] with {
-    override def unit: Free[Q, Unit] = Free.unit[Q]
-    override def pair[A, B](a: Free[Q, A], b: Free[Q, B]): Free[Q, (A, B)] = Free.pair(a, b)
-  }
-
-  trait WithScheduler[P[_]] extends ExecutionParams[P] {
-    def scheduler(s: Scheduler): P[Unit]
-  }
 }
