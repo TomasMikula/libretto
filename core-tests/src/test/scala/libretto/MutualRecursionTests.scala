@@ -26,7 +26,7 @@ class MutualRecursionTests extends ScalatestScalettoTestSuite {
     object TerminatedNEL {
       def extract[A, T]: Extractor[-⚬, |*|, TerminatedNEL[A, T], A |*| (T |+| TerminatedNEL[A, T])] =
         Extractor
-          .identity[-⚬, |*|, A |*| (T |+| TerminatedNEL[A, T])](using coreLib.category)
+          .identity[-⚬, |*|, A |*| (T |+| TerminatedNEL[A, T])](using dsl.category)
           .afterUnpack
 
       /** Alias for [[extract]]. */
@@ -46,7 +46,7 @@ class MutualRecursionTests extends ScalatestScalettoTestSuite {
 
       def extract[Σ, Δ]: Extractor[-⚬, |*|, ΣΔList[Σ, Δ], Σ |*| Tail[Σ, Δ]] =
         Extractor
-          .identity(using coreLib.category)
+          .identity(using dsl.category)
           .afterUnpack
 
       /** Alias for [[extract]]. */

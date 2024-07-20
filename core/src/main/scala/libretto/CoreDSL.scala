@@ -1,10 +1,12 @@
 package libretto
 
-import libretto.lambda.{EnumModule, Extractor, Focus, Partitioning}
+import libretto.cats.{Functor, Monad}
+import libretto.lambda.{EnumModule, Extractor, Focus, MonoidalCategory, Partitioning, SymmetricMonoidalCategory}
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.util.Equal
 import scala.annotation.targetName
+import libretto.lambda.SemigroupalCategory
 
 trait CoreDSL {
   /** Libretto arrow, also called a ''component'' or a ''linear function''.
@@ -358,6 +360,39 @@ trait CoreDSL {
     */
   def selectPair: (One |&| One) -⚬ (Pong |*| Pong)
 
+  def category: SymmetricMonoidalCategory[-⚬, |*|, One] =
+    new SymmetricMonoidalCategory[-⚬, |*|, One] {
+      override def id[A]: A -⚬ A =
+        CoreDSL.this.id[A]
+
+      override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C =
+        CoreDSL.this.andThen(f, g)
+
+      override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) =
+        CoreDSL.this.assocLR
+
+      override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) =
+        CoreDSL.this.assocRL
+
+      override def par[A1, A2, B1, B2](f1: A1 -⚬ B1, f2: A2 -⚬ B2): (A1 |*| A2) -⚬ (B1 |*| B2) =
+        CoreDSL.this.par(f1, f2)
+
+      override def swap[A, B]: (A |*| B) -⚬ (B |*| A) =
+        CoreDSL.this.swap
+
+      override def introFst[A]: A -⚬ (One |*| A) =
+        CoreDSL.this.introFst
+
+      override def introSnd[A]: A -⚬ (A |*| One) =
+        CoreDSL.this.introSnd
+
+      override def elimFst[A]: (One |*| A) -⚬ A =
+        CoreDSL.this.elimFst
+
+      override def elimSnd[A]: (A |*| One) -⚬ A =
+        CoreDSL.this.elimSnd
+    }
+
   type LambdaContext
 
   val λ: LambdaOps
@@ -671,103 +706,58 @@ trait CoreDSL {
       Some($.nonLinear(a)(Some(A.split), Some(A.discard))(pos))
   }
 
-  trait Affine[A] {
-    def discard: A -⚬ One
+  type Affine[A] = cats.Affine[-⚬, One, A]
+  val Affine = cats.Affine
+
+  trait Cosemigroup[A] extends cats.Cosemigroup[-⚬, |*|, A]:
+    override def cat: SemigroupalCategory[-⚬, |*|] = category
+
+  trait Comonoid[A] extends cats.Comonoid[-⚬, |*|, One, A] with Cosemigroup[A]:
+    override def cat: MonoidalCategory[-⚬, |*|, One] = category
+
+  given affineOne: Affine[One] =
+    Affine.from(id[One])
+
+  given affinePair[A, B](using A: Affine[A], B: Affine[B]): Affine[A |*| B] =
+    Affine.from(andThen(par(A.discard, B.discard), elimFst))
+
+  given affineEither[A, B](using A: Affine[A], B: Affine[B]): Affine[A |+| B] =
+    Affine.from(either(A.discard, B.discard))
+
+  given cosemigroupDone: Cosemigroup[Done] with {
+    override def split: Done -⚬ (Done |*| Done) = fork
   }
 
-  object Affine {
-    def apply[A](using ev: Affine[A]): Affine[A] =
-      ev
-
-    def from[A](f: A -⚬ One): Affine[A] =
-      new Affine[A] {
-        override def discard: A -⚬ One =
-          f
-      }
-
-    given affineOne: Affine[One] =
-      from(id[One])
-
-    given affinePair[A, B](using A: Affine[A], B: Affine[B]): Affine[A |*| B] =
-      from(andThen(par(A.discard, B.discard), elimFst))
-
-    given affineEither[A, B](using A: Affine[A], B: Affine[B]): Affine[A |+| B] =
-      from(either(A.discard, B.discard))
+  given cosemigroupPing: Cosemigroup[Ping] with {
+    override def split: Ping -⚬ (Ping |*| Ping) = forkPing
   }
 
-  trait Cosemigroup[A] {
-    def split: A -⚬ (A |*| A)
-
-    def law_coAssociativity: Equal[ A -⚬ ((A |*| A) |*| A) ] =
-      Equal(
-        andThen(split, par(split, id[A])),
-        andThen(andThen(split, par(id[A], split)), assocRL),
-      )
+  given cosemigroupNeed: Cosemigroup[Need] with {
+    override def split: Need -⚬ (Need |*| Need) = joinNeed
   }
 
-  object Cosemigroup {
-    def apply[A](using ev: Cosemigroup[A]): Cosemigroup[A] =
-      ev
-
-    given cosemigroupDone: Cosemigroup[Done] with {
-      override def split: Done -⚬ (Done |*| Done) = fork
-    }
-
-    given cosemigroupPing: Cosemigroup[Ping] with {
-      override def split: Ping -⚬ (Ping |*| Ping) = forkPing
-    }
-
-    given cosemigroupNeed: Cosemigroup[Need] with {
-      override def split: Need -⚬ (Need |*| Need) = joinNeed
-    }
-
-    given cosemigroupPong: Cosemigroup[Pong] with {
-      override def split: Pong -⚬ (Pong |*| Pong) = joinPong
-    }
+  given cosemigroupPong: Cosemigroup[Pong] with {
+    override def split: Pong -⚬ (Pong |*| Pong) = joinPong
   }
 
-  trait Comonoid[A] extends Cosemigroup[A] with Affine[A] {
-    def counit: A -⚬ One
-
-    override def discard: A -⚬ One =
-      counit
-
-    def law_leftCounit: Equal[ A -⚬ (One |*| A) ] =
-      Equal(
-        andThen(this.split, par(counit, id[A])),
-        introFst,
-      )
-
-    def law_rightCounit: Equal[ A -⚬ (A |*| One) ] =
-      Equal(
-        andThen(this.split, par(id[A], counit)),
-        introSnd,
-      )
+  given comonoidOne: Comonoid[One] with {
+    override def counit: One -⚬ One = id[One]
+    override def split: One -⚬ (One |*| One) = introSnd[One]
   }
 
-  object Comonoid {
-    def apply[A](using ev: Comonoid[A]): Comonoid[A] =
-      ev
+  given comonoidPing: Comonoid[Ping] with {
+    override def split  : Ping -⚬ (Ping |*| Ping) = forkPing
+    override def counit : Ping -⚬ One             = dismissPing
+  }
 
-    given comonoidOne: Comonoid[One] with {
-      override def counit: One -⚬ One = id[One]
-      override def split: One -⚬ (One |*| One) = introSnd[One]
-    }
+  given comonoidNeed: Comonoid[Need] with {
+    override def split  : Need -⚬ (Need |*| Need) = joinNeed
+    override def counit : Need -⚬ One             = need
+  }
 
-    given comonoidPing: Comonoid[Ping] with {
-      override def split  : Ping -⚬ (Ping |*| Ping) = forkPing
-      override def counit : Ping -⚬ One             = dismissPing
-    }
-
-    given comonoidNeed: Comonoid[Need] with {
-      override def split  : Need -⚬ (Need |*| Need) = joinNeed
-      override def counit : Need -⚬ One             = need
-    }
-
-    given comonoidPong: Comonoid[Pong] with {
-      override def split  : Pong -⚬ (Pong |*| Pong) = joinPong
-      override def counit : Pong -⚬ One             = pong
-    }
+  given comonoidPong: Comonoid[Pong] with {
+    override def split  : Pong -⚬ (Pong |*| Pong) = joinPong
+    override def counit : Pong -⚬ One             = pong
   }
 
   implicit class FunctorOps[F[_], A](fa: $[F[A]]) {

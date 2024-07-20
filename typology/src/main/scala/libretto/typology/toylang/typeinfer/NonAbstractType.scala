@@ -237,7 +237,7 @@ private[typeinfer] object NonAbstractType {
     t.compile[-⚬, |*|, One, ct.as, One](
       Map_○,
       ct.compilePrimitive,
-    )(using coreLib.category)
+    )(using dsl.category)
       .get(Map_○, Map_●)
   }
 

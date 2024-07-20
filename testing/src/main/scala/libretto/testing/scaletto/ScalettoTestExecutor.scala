@@ -1,7 +1,8 @@
 package libretto.testing.scaletto
 
 import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
-import libretto.{CoreLib, ExecutionParams, Monad}
+import libretto.{CoreLib, ExecutionParams}
+import libretto.cats.Monad
 import libretto.lambda.util.{Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.scaletto.{Scaletto, ScalettoBridge, ScalettoExecutor, StarterKit}

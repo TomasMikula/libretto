@@ -16,8 +16,8 @@ object BinarySearchTree {
 
 class BinarySearchTree[DSL <: Scaletto, CLib <: CoreLib[DSL], SLib <: ScalettoLib[DSL, CLib]](
   val dsl: DSL,
-  val coreLib: CLib with CoreLib[dsl.type],
-  val scalettoLib: SLib with ScalettoLib[dsl.type, coreLib.type],
+  val coreLib: CLib & CoreLib[dsl.type],
+  val scalettoLib: SLib & ScalettoLib[dsl.type, coreLib.type],
 ) {
   import dsl.*
   import coreLib.*
@@ -387,7 +387,7 @@ class BinarySearchTree[DSL <: Scaletto, CLib <: CoreLib[DSL], SLib <: ScalettoLi
 
   private trait Absorptive[F[_]] extends Functor[F] { F =>
     override val category: Category[-⚬] =
-      coreLib.category
+      dsl.category
 
     def absorbOrNeglectL[A, B](using CloseableCosemigroup[A]): (A |*| F[B]) -⚬ F[A |*| B]
     def absorbL[A, B, C](combine: (A |*| B) -⚬ C, recover: (A |*| Done) -⚬ C): (A |*| F[B]) -⚬ F[C]

@@ -1,4 +1,4 @@
-package libretto
+package libretto.cats
 
 import libretto.lambda.Category
 

@@ -1,4 +1,4 @@
-package libretto
+package libretto.cats
 
 /** Witnesses that `F` is a comonad in the category `->`. */
 trait Comonad[->[_, _], F[_]] extends Functor[->, F] {

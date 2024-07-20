@@ -1,6 +1,7 @@
 package libretto.testing
 
-import libretto.{CoreBridge, CoreDSL, ExecutionParams, Monad}
+import libretto.{CoreBridge, CoreDSL, ExecutionParams}
+import libretto.cats.Monad
 import libretto.lambda.util.{Monad as ScalaMonad, SourcePos}
 import libretto.lambda.util.Monad.syntax.*
 import libretto.util.Async

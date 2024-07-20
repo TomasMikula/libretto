@@ -25,7 +25,7 @@ class ClosedLib[
   def input[C]: ContraFunctor[[x] =>> x =⚬ C] =
     new ContraFunctor[[x] =>> x =⚬ C] {
       override val category =
-        coreLib.category
+        dsl.category
 
       override def lift[A, B](f: A -⚬ B): (B =⚬ C) -⚬ (A =⚬ C) =
         id                         [ (B =⚬ C) |*| A ]
@@ -39,7 +39,7 @@ class ClosedLib[
   def output[A]: Functor[[x] =>> A =⚬ x] =
     new Functor[[x] =>> A =⚬ x] {
       override val category =
-        coreLib.category
+        dsl.category
 
       override def lift[B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
         out(f)

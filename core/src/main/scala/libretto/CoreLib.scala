@@ -1,5 +1,6 @@
 package libretto
 
+import libretto.cats.{Bifunctor, Comonad, ContraFunctor, Functor, Monad}
 import libretto.lambda.{Category, Extractor, SymmetricMonoidalCategory}
 import libretto.lambda.util.SourcePos
 import libretto.lambda.util.unapply.*
@@ -15,39 +16,6 @@ object CoreLib {
 class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   import dsl.*
   import dsl.$.*
-
-  val category: SymmetricMonoidalCategory[-⚬, |*|, One] =
-    new SymmetricMonoidalCategory[-⚬, |*|, One] {
-      override def id[A]: A -⚬ A =
-        dsl.id[A]
-
-      override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C =
-        dsl.andThen(f, g)
-
-      override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) =
-        dsl.assocLR
-
-      override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) =
-        dsl.assocRL
-
-      override def par[A1, A2, B1, B2](f1: A1 -⚬ B1, f2: A2 -⚬ B2): (A1 |*| A2) -⚬ (B1 |*| B2) =
-        dsl.par(f1, f2)
-
-      override def swap[A, B]: (A |*| B) -⚬ (B |*| A) =
-        dsl.swap
-
-      override def introFst[A]: A -⚬ (One |*| A) =
-        dsl.introFst
-
-      override def introSnd[A]: A -⚬ (A |*| One) =
-        dsl.introSnd
-
-      override def elimFst[A]: (One |*| A) -⚬ A =
-        dsl.elimFst
-
-      override def elimSnd[A]: (A |*| One) -⚬ A =
-        dsl.elimSnd
-    }
 
   /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
     * It must hold that
@@ -135,27 +103,27 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     ev.lInvert
 
   type Functor[F[_]] =
-    libretto.Functor[-⚬, F]
+    libretto.cats.Functor[-⚬, F]
 
   object Functor {
     def apply[F[_]: Functor]: Functor[F] =
-      libretto.Functor[-⚬, F]
+      libretto.cats.Functor[-⚬, F]
   }
 
   type ContraFunctor[F[_]] =
-    libretto.ContraFunctor[-⚬, F]
+    libretto.cats.ContraFunctor[-⚬, F]
 
   object ContraFunctor {
     def apply[F[_]: ContraFunctor]: ContraFunctor[F] =
-      libretto.ContraFunctor[-⚬, F]
+      libretto.cats.ContraFunctor[-⚬, F]
   }
 
   type Bifunctor[F[_, _]] =
-    libretto.Bifunctor[-⚬, F]
+    libretto.cats.Bifunctor[-⚬, F]
 
   object Bifunctor {
     def apply[F[_, _]: Bifunctor]: Bifunctor[F] =
-      libretto.Bifunctor[-⚬, F]
+      libretto.cats.Bifunctor[-⚬, F]
   }
 
   /** Functor from category [[-⚬]] to the category `=>` of Scala functions.
@@ -290,7 +258,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     given Transportive[Detained] with {
       override val category: Category[-⚬] =
-        lib.category
+        dsl.category
 
       override def lift[A, B](f: A -⚬ B): Detained[A] -⚬ Detained[B] =
         snd(f)
@@ -1233,30 +1201,24 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   def racePreferred[A, B](using
     A: Signaling.Positive[A],
     B: Signaling.Positive[B],
-  ): (Ping |*| (A |*| B)) -⚬ ((A |*| B) |+| (A |*| B)) = {
-    import dsl.Comonoid.comonoidPing
-
+  ): (Ping |*| (A |*| B)) -⚬ ((A |*| B) |+| (A |*| B)) =
     λ { case p |*| (a |*| b) =>
       switch ( race[Ping, A](p |*| a) )
         .is { case InL(?(_) |*| a) => InL(a |*| b) }
         .is { case InR(?(_) |*| a) => race[A, B](a |*| b) }
         .end
     }
-  }
 
   def raceHandicap[A, B, C](f: (Ping |*| B) -⚬ C)(using
     A: Signaling.Positive[A],
     C: Signaling.Positive[C],
-  ): (A |*| (Ping |*| B)) -⚬ ((A |*| B) |+| ((A |*| C) |+| (A |*| C))) = {
-    import dsl.Comonoid.comonoidPing
-
+  ): (A |*| (Ping |*| B)) -⚬ ((A |*| B) |+| ((A |*| C) |+| (A |*| C))) =
     λ { case a |*| (p |*| b) =>
       switch ( race[A, Ping](a |*| p) )
         .is { case InL(a |*| ?(_)) => InL(a |*| b) }
         .is { case InR(a |*| p)    => InR(race[A, C](a |*| f(p |*| b))) }
         .end
     }
-  }
 
   trait Getter[S, A] { self =>
     def getL[B](that: Getter[A, B])(using B: Cosemigroup[B]): S -⚬ (B |*| S)
@@ -1406,7 +1368,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Pair is covariant in the first argument. */
     def fst[B]: Transportive[λ[x => x |*| B]] =
       new Transportive[λ[x => x |*| B]] {
-        override val category: Category[-⚬] = lib.category
+        override val category: Category[-⚬] = dsl.category
         def lift[A1, A2](f: A1 -⚬ A2): (A1 |*| B) -⚬ (A2 |*| B) = par(f, id)
         def inL[A1, A2]: (A1 |*| (A2 |*| B)) -⚬ ((A1 |*| A2) |*| B) = assocRL
         def outL[A1, A2]: ((A1 |*| A2) |*| B) -⚬ (A1 |*| (A2 |*| B)) = assocLR
@@ -1415,7 +1377,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     /** Pair is covariant in the second argument. */
     def snd[A]: Transportive[λ[x => A |*| x]] =
       new Transportive[λ[x => A |*| x]] {
-        override val category: Category[-⚬] = lib.category
+        override val category: Category[-⚬] = dsl.category
         def lift[B1, B2](f: B1 -⚬ B2): (A |*| B1) -⚬ (A |*| B2) = par(id, f)
         def inL[B1, B2]: (B1 |*| (A |*| B2)) -⚬ (A |*| (B1 |*| B2)) =
           assocRL[B1, A, B2] > dsl.fst(swap) > assocLR
@@ -1427,7 +1389,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   type Id[A] = A
 
   given Transportive[Id] with {
-    override val category: Category[-⚬] = lib.category
+    override val category: Category[-⚬] = dsl.category
     def lift[A, B](f: A -⚬ B): Id[A] -⚬ Id[B] = f
     def inL[A, B]: (A |*| Id[B]) -⚬ Id[A |*| B] = id
     def outL[A, B]: Id[A |*| B] -⚬ (A |*| Id[B]) = id
@@ -1499,7 +1461,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     val bifunctor: Bifunctor[|+|] =
       new Bifunctor[|+|] {
         override val category =
-          lib.category
+          dsl.category
 
         override def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |+| C )-⚬ (B |+| D) =
           bimap(f, g)
@@ -1513,7 +1475,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def right[A]: Monad[[x] =>> A |+| x] =
       new Monad[[x] =>> A |+| x] {
         override val category: Category[-⚬] =
-          lib.category
+          dsl.category
 
         override def pure[B]: B -⚬ (A |+| B) =
           injectR
@@ -1580,7 +1542,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     val bifunctor: Bifunctor[|&|] =
       new Bifunctor[|&|] {
         override val category =
-          lib.category
+          dsl.category
 
         override def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): (A |&| C) -⚬ (B |&| D) =
           bimap(f, g)
@@ -2206,7 +2168,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def bifunctorCompared: Bifunctor[Compared] =
       new Bifunctor[Compared] {
         override val category =
-          lib.category
+          dsl.category
 
         def lift[A, B, C, D](f: A -⚬ B, g: C -⚬ D): Compared[A, C] -⚬ Compared[B, D] = {
           Bifunctor[|+|].lift(
@@ -2417,7 +2379,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     given monadMaybe: Monad[Maybe] =
       new Monad[Maybe] {
         override val category: Category[-⚬] =
-          lib.category
+          dsl.category
 
         override def lift[A, B](f: A -⚬ B): Maybe[A] -⚬ Maybe[B] =
           |+|.bimap(id[One], f)
@@ -2548,7 +2510,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     given Monad[Multiple] with {
       override val category: Category[-⚬] =
-        lib.category
+        dsl.category
 
       override def lift[A, B](f: A -⚬ B): Multiple[A] -⚬ Multiple[B] =
         Multiple.map(f)
@@ -2691,7 +2653,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
 
     given Comonad[Unlimited] with {
       override val category: Category[-⚬] =
-        lib.category
+        dsl.category
 
       override def lift[A, B](f: A -⚬ B): Unlimited[A] -⚬ Unlimited[B] =
         Unlimited.map(f)
@@ -2774,7 +2736,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     given comonadPUnlimited: Comonad[PUnlimited] =
       new Comonad[PUnlimited] {
         override val category: Category[-⚬] =
-          lib.category
+          dsl.category
 
         override def lift[A, B](f: A -⚬ B): PUnlimited[A] -⚬ PUnlimited[B] =
           PUnlimited.map(f)
@@ -3027,10 +2989,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   }
 
   type Monad[F[_]] =
-    libretto.Monad[-⚬, F]
+    libretto.cats.Monad[-⚬, F]
 
   type Comonad[F[_]] =
-    libretto.Comonad[-⚬, F]
+    libretto.cats.Comonad[-⚬, F]
 
   def getFst[A, B](using A: Cosemigroup[A]): (A |*| B) -⚬ (A |*| (A |*| B)) =
     id                             [     A     |*| B  ]
@@ -3800,8 +3762,6 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       A: Signaling.Positive[A],
       aff: Affine[A],
     ): (Endless[A] |*| Endless[A]) -⚬ Endless[A] = {
-      import Comonoid.comonoidPing
-
       def go: ((A |*| Endless[A]) |*| Endless[A]) -⚬ Endless[A] = rec { self =>
         λ { case (a |*| as) |*| bs =>
           val po |*| pi = constant(lInvertPongPing)

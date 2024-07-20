@@ -1,4 +1,4 @@
-package libretto
+package libretto.cats
 
 /** Witnesses that `F` is a monad in the category `->`. */
 trait Monad[->[_, _], F[_]] extends Functor[->, F] {

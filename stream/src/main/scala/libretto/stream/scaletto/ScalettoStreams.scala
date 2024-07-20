@@ -63,7 +63,6 @@ abstract class ScalettoStreams {
   import scalettoLib.{*, given}
   import underlying.*
   import Tree.*
-  import Comonoid.given
 
   export underlying.{lib => _, dsl => _, *}
 

@@ -758,8 +758,8 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       choice(onClose, onPoll) > coDistributeR > fst(fromChoice)
     }
 
-    def tap[A](using Cosemigroup[A]): Source[A] -⚬ (Source[A] |*| LList[A]) =
-      tapMap(Cosemigroup[A].split)
+    def tap[A](using A: Cosemigroup[A]): Source[A] -⚬ (Source[A] |*| LList[A]) =
+      tapMap(A.split)
 
     /** For each element of the input list, pull one element from the input source.
      *  If the input source runs out of elements before the input list does,
