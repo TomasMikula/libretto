@@ -96,18 +96,9 @@ trait TestKit {
 
     def assertSubstring(using pos: SourcePos)(substr: String, str: String): Outcome[Unit] =
       assert(using pos)(
-        str contains substr,
+        str.contains(substr),
         s"'$str' did not contain '$substr'",
       )
-
-    def map[A, B](fa: Outcome[A])(f: A => B): Outcome[B] =
-      fa.map(_.map(f))
-
-    def flatMap[A, B](fa: Outcome[A])(f: A => Outcome[B]): Outcome[B] =
-      fa.flatMap {
-        case TestResult.Success(a)   => f(a)
-        case TestResult.Failures(es) => Async.now(TestResult.Failures(es))
-      }
 
     def traverseIterator[A, B](it: Iterator[A])(f: A => Outcome[B]): Outcome[List[B]] =
       if (it.hasNext) {
@@ -140,7 +131,28 @@ trait TestKit {
           if (f(a)) Outcome.success(a)
           else      Outcome.failure(using pos)(s"$a did not pass the filter")
         }
+
+      def map[B](f: A => B): Outcome[B] =
+        outcome.map(_.map(f))
+
+      def flatMap[B](f: A => Outcome[B]): Outcome[B] =
+        outcome.flatMap {
+          case TestResult.Success(a)   => f(a)
+          case TestResult.Failures(es) => Async.now(TestResult.Failures(es))
+        }
     }
+
+    // not given to avoid clash of Monad's extension methods `map`, `flatMap`
+    // with the same extension methods directly on Outcome
+    val monadOutcome: ScalaMonad[Outcome] =
+      new ScalaMonad[Outcome] {
+        override def pure[A](a: A): Outcome[A] =
+          success(a)
+
+        extension [A](fa: Outcome[A])
+          override def flatMap[B](f: A => Outcome[B]): Outcome[B] =
+            Outcome.flatMap(fa)(f)
+      }
   }
 
   val bridge: CoreBridge.Of[dsl.type]
@@ -167,15 +179,6 @@ trait TestKit {
 
   transparent inline def InPort(using exn: Execution): exn.InPort.type =
     exn.InPort
-
-  given monadOutcome: ScalaMonad[Outcome] with {
-    override def pure[A](a: A): Outcome[A] =
-      Async.now(TestResult.success(a))
-
-    extension [A](fa: Outcome[A])
-      override def flatMap[B](f: A => Outcome[B]): Outcome[B] =
-        Outcome.flatMap(fa)(f)
-  }
 
   def splitOut[A, B](using exn: Execution)(port: exn.OutPort[A |*| B]): Outcome[(exn.OutPort[A], exn.OutPort[B])] =
     Outcome.success(exn.OutPort.split(port))

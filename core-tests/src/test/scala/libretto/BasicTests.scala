@@ -47,6 +47,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     import coreLib.{*, given}
     import scalettoLib.{*, given}
     import kit.bridge.Execution
+    import Outcome.monadOutcome.*
 
     def raceKeepWinner[A](
       prg1: Done -⚬ Val[A],

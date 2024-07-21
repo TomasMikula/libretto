@@ -22,7 +22,7 @@ enum TestResult[A] {
       case Failures(es) => Failures(es)
     }
 
-  def zipWith[B, C](that: TestResult[B])(f: (A, B) => C): TestResult[C] =
+  infix def zipWith[B, C](that: TestResult[B])(f: (A, B) => C): TestResult[C] =
     (this, that) match {
       case (Success(a), Success(b))         => Success(f(a, b))
       case (Success(_), Failures(y))        => Failures(y)

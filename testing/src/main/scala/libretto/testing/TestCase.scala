@@ -93,20 +93,20 @@ object TestCase {
   def apply(using kit: TestKit)(
     body: dsl.-⚬[dsl.Done, kit.Assertion[dsl.Done]],
   )(using pos: SourcePos): TestCase.Single[kit.type] =
-    apply[kit.Assertion[dsl.Done], Unit](body, kit.extractOutcome(_), kit.monadOutcome.pure)
+    apply[kit.Assertion[dsl.Done], Unit](body, kit.extractOutcome(_), kit.Outcome.success)
 
   def apply[O](using kit: TestKit)(
     body: kit.dsl.-⚬[kit.dsl.Done, O],
     conduct: (exn: kit.bridge.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit],
   ): TestCase.Single[kit.type] =
-    apply[O, Unit](body, conduct(_), kit.monadOutcome.pure)
+    apply[O, Unit](body, conduct(_), kit.Outcome.success)
 
   def parameterizedExec[O, P](using kit: TestKit)(
     body: kit.dsl.-⚬[kit.dsl.Done, O],
     params: kit.ExecutionParams[P],
     conduct: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit],
   ): TestCase.Single[kit.type] =
-    parameterizedExecAndCheck[kit.type, O, P, Unit](body, params, conduct(_, _), kit.monadOutcome.pure)
+    parameterizedExecAndCheck[kit.type, O, P, Unit](body, params, conduct(_, _), kit.Outcome.success)
 
   def multiple[TK <: TestKit](
     cases: (String, TestCase[TK])*,

@@ -42,7 +42,7 @@ trait TestExecutor[+TK <: TestKit] { self =>
     conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[Unit],
     timeout: FiniteDuration,
   ): TestResult[Unit] =
-    execAndCheck[O, Unit](body, conduct(_), testKit.monadOutcome.pure, timeout)
+    execAndCheck[O, Unit](body, conduct(_), testKit.Outcome.success, timeout)
 
   def narrow: TestExecutor[testKit.type] =
     new TestExecutor[testKit.type] {
