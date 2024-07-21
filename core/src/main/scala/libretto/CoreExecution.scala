@@ -16,8 +16,6 @@ trait CoreExecution[DSL <: CoreDSL] {
   import dsl.*
 
   trait CoreOutPorts {
-    def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B]
-
     def pair[A, B](a: OutPort[A], b: OutPort[B]): OutPort[A |*| B]
 
     def split[A, B](port: OutPort[A |*| B]): (OutPort[A], OutPort[B])

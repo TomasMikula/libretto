@@ -32,12 +32,12 @@ object BridgeImpl extends ScalettoBridge {
     exn.watchForCancellation()
 
   extension [I](using exn: Execution)(port: exn.InPort[I]) {
-    override def contramap[H](f: H -⚬ I): exn.InPort[H] =
+    override def prepend[H](f: H -⚬ I): exn.InPort[H] =
       exn.InPort.contramap(port)(f)
   }
 
   extension [O](using exn: Execution)(port: exn.OutPort[O]) {
-    override def map[P](f: O -⚬ P): exn.OutPort[P] =
+    override def append[P](f: O -⚬ P): exn.OutPort[P] =
       exn.OutPort.map(port)(f)
   }
 }
