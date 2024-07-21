@@ -20,7 +20,7 @@ class OutPort[A](
       ZStream.unfoldZIO(port) { port =>
         Port
           .awaitEither(
-            port.map(ValSource.poll)
+            port.append(ValSource.poll)
           )
           .toZIO.absolve.orDie
           .flatMap {

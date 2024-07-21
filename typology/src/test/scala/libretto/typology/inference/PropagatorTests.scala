@@ -231,6 +231,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
 
   override def testCases(using kit: StarterTestKit): scala.List[(String, TestCase[kit.type])] = {
     import kit.{Outcome, expectLeft, expectRight, expectVal}
+    import kit.bridge.*
     import Outcome.{assertEquals, assertMatches, assertRight, failure, success}
 
     val pg =
@@ -290,7 +291,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
       expectedValue: Int,
     )(using SourcePos): Outcome[Unit] =
       for {
-        label <- expectVal(l.map(pg.unwrapLabel))
+        label <- expectVal(l.append(pg.unwrapLabel))
         u <- assertEquals(label.value, expectedValue)
       } yield u
 
@@ -614,17 +615,15 @@ class PropagatorTests extends ScalatestStarterTestSuite {
               |*| (ta |*| tb.waitFor(start))
           }
         }
-        // XXX: avoiding compilation error "cannot establish a reference to InteractWith[...]#kit"
-        .match { case tmp => tmp
         .via { port =>
           val (t, ts) = OutPort.split(port)
           val (ta, tb) = OutPort.split(ts)
           for {
-            ab <- expectLeft(t.map(tap > peek))
-            ab <- expectRight(ab.map(isRecCall))
+            ab <- expectLeft(t.append(tap > peek))
+            ab <- expectRight(ab.append(isRecCall))
             (a, b) = OutPort.split(ab)
-            ta1 <- expectVal(a.map(write))
-            tb1 <- expectVal(b.map(write))
+            ta1 <- expectVal(a.append(write))
+            tb1 <- expectVal(b.append(write))
             ta  <- expectVal(ta)
             tb  <- expectVal(tb)
             _ <- assertAbstractEquals(ta, 1)
@@ -632,7 +631,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
             _ <- assertAbstractEquals(tb, 2)
             _ <- assertAbstractEquals(tb1, 2)
           } yield ()
-        }},
+        },
 
       "construct and deconstruct (RecCall[A, B], A)" -> TestCase
         .interactWith {
@@ -644,22 +643,20 @@ class PropagatorTests extends ScalatestStarterTestSuite {
               |*| (ta |*| tb.waitFor(start))
           }
         }
-        // XXX: avoiding compilation error "cannot establish a reference to InteractWith[...]#kit"
-        .match { case tmp => tmp
         .via { port =>
           val (t, ts)  = OutPort.split(port)
           val (ta, tb) = OutPort.split(ts)
           for {
-            fa <- expectLeft(t.map(tap > peek))
-            fa <- expectRight(fa.map(isPair))
+            fa <- expectLeft(t.append(tap > peek))
+            fa <- expectRight(fa.append(isPair))
             (f, a2) = OutPort.split(fa)
-            ab <- expectLeft(f.map(peek))
-            ab <- expectRight(ab.map(isRecCall))
+            ab <- expectLeft(f.append(peek))
+            ab <- expectRight(ab.append(isRecCall))
             (a1, b) = OutPort.split(ab)
 
-            ta1 = a1.map(write)
-            ta2 = a2.map(write)
-            tb0 = b.map(write)
+            ta1 = a1.append(write)
+            ta2 = a2.append(write)
+            tb0 = b.append(write)
 
             ta1 <- expectVal(ta1)
             ta2 <- expectVal(ta2)
@@ -673,7 +670,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
             _ <- assertAbstractEquals(tb, 2)
             _ <- assertAbstractEquals(tb0, 2)
           } yield ()
-        }},
+        },
 
       "construct and deconstruct (RecCall[A, B], A), merge after deconstruction" -> TestCase
         .interactWith {
@@ -686,25 +683,23 @@ class PropagatorTests extends ScalatestStarterTestSuite {
               |*| (ta |*| tb.waitFor(start))
           }
         }
-        // XXX: avoiding compilation error "cannot establish a reference to InteractWith[...]#kit"
-        .match { case tmp => tmp
         .via { port =>
           val (t, ts)  = OutPort.split(port)
           val (fa, b2) = OutPort.split(t)
           val (ta, tb) = OutPort.split(ts)
           for {
-            fa <- expectLeft(fa.map(npg.tap > npg.peek))
-            fa <- expectRight(fa.map(isPair))
+            fa <- expectLeft(fa.append(npg.tap > npg.peek))
+            fa <- expectRight(fa.append(isPair))
             (f, a2) = OutPort.split(fa)
-            f <- expectLeft(f.map(npg.peek))
-            ab <- expectRight(f.map(isRecCall))
+            f <- expectLeft(f.append(npg.peek))
+            ab <- expectRight(f.append(isRecCall))
             (a1, b1) = OutPort.split(ab)
 
-            a = OutPort.pair(a1, a2).map(par(lower, lower) > merge)
-            b = OutPort.pair(b1, b2.map(npg.tap)).map(par(lower, lower) > merge)
+            a = OutPort.pair(a1, a2).append(par(lower, lower) > merge)
+            b = OutPort.pair(b1, b2.append(npg.tap)).append(par(lower, lower) > merge)
 
-            ta1 = a.map(output)
-            tb1 = b.map(output)
+            ta1 = a.append(output)
+            tb1 = b.append(output)
 
             ta1 <- expectVal(ta1)
             tb1 <- expectVal(tb1)
@@ -716,7 +711,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
             _ <- assertAbstractEquals(tb, 2)
             _ <- assertAbstractEquals(tb1, 2)
           } yield ()
-        }},
+        },
 
       "prevent a = (a, a)" -> TestCase
         .interactWith {

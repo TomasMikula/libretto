@@ -141,7 +141,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         .via { port =>
           for {
             (need, res0) <- splitOut(port)
-            (ping, res1) <- splitOut(bridge.map(res0)(notifyEither))
+            (ping, res1) <- splitOut(bridge.append(res0)(notifyEither))
             _ <- expectNoPing_(ping, 10.millis)
             _ = OutPort.supplyNeed(need)
             d <- expectLeft(res1)
@@ -552,20 +552,18 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
 
         def expectNext(using e: Execution)(port: e.OutPort[LList[Val[Int]]], value: Int)(using SourcePos): Outcome[e.OutPort[LList[Val[Int]]]] =
           for {
-            ht <- expectRight(port.map(LList.uncons))
+            ht <- expectRight(port.append(LList.uncons))
             (h, t) = e.OutPort.split(ht)
             _ <- expectVal(h).assertEquals(value)
           } yield t
 
         def expectNil(using e: Execution)(port: e.OutPort[LList[Val[Int]]])(using SourcePos): Outcome[Unit] =
-          expectLeft(port.map(LList.uncons))
+          expectLeft(port.append(LList.uncons))
             .map(e.OutPort.discardOne(_))
 
         TestCase
           .configure(manualClock)
           .interactWith(prg)
-          // XXX: otherwise getting compilation error: "cannot establish a reference to InteractWithConfigured[...]#kit"
-          .match { case tmp => tmp
           .via { (port, clock) =>
             for {
               t <- expectNext(port, 0)
@@ -581,7 +579,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
               t <- expectNext(t, 50)
               _ <- expectNil(t)
             } yield ()
-          }}
+          }
       },
 
       "endless fibonacci" -> {
@@ -931,10 +929,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           // write numbers 0..N-1 at maximum speed
           val input: One -⚬ LList1[Val[Int]] =
             done > constList1(0, List.range(1, N))
-          OutPort.discardOne(bridge.map(snk)(λ { nis => constant(input) supplyTo nis }))
+          OutPort.discardOne(bridge.append(snk)(λ { nis => constant(input) supplyTo nis }))
 
           // read N numbers at maximum speed
-          val out = bridge.map(src)(Endless.take(N) > toScalaList)
+          val out = bridge.append(src)(Endless.take(N) > toScalaList)
 
           // check that at least N/2 values were equal to the last written value (N-1)
           for {

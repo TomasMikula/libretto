@@ -218,7 +218,7 @@ trait TestKit {
     Outcome.map(
       expectNoPing(port, duration)
     ) { port =>
-      val p1 = port.map(dsl.dismissPing)
+      val p1 = port.append(dsl.dismissPing)
       exn.OutPort.discardOne(p1)
     }
 

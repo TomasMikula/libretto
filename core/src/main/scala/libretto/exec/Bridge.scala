@@ -16,18 +16,10 @@ trait Bridge {
 
   extension [I](using exn: Execution)(port: exn.InPort[I]) {
     def prepend[H](f: H -⚬ I): exn.InPort[H]
-
-    /** Alias for [[prepend]]. */
-    final def contramap[H](f: H -⚬ I): exn.InPort[H] =
-      port.prepend(f)
   }
 
   extension [O](using exn: Execution)(port: exn.OutPort[O]) {
     infix def append[P](f: O -⚬ P): exn.OutPort[P]
-
-    /** Alias for [[append]]. */
-    final infix def map[P](f: O -⚬ P): exn.OutPort[P] =
-      port append f
   }
 }
 

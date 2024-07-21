@@ -13,6 +13,7 @@ import scala.concurrent.duration.*
 class StreamsTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
     import kit.{Outcome, dsl, expectDone, expectRight, expectVal, splitOut}
+    import kit.bridge.*
     import kit.Outcome.{assertEquals, success}
 
     val coreLib = CoreLib(dsl)
@@ -205,18 +206,16 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             }
 
           prg
-        // }.via { port =>
-        // XXX: avoiding compilation error "cannot establish a reference to InteractWith[...]#kit"
-        }.match { case tmp => tmp.via : port =>
+        }.via { port =>
           for {
             (srcs, drn)  <- splitOut(port)
             (src1, src2) <- splitOut(srcs)
-            p1           =  src1 map ValSource.poll
-            pulling      <- expectRight(drn map ValDrain.toEither) // checking pull before src2 acts
+            p1           =  src1 append ValSource.poll
+            pulling      <- expectRight(drn append ValDrain.toEither) // checking pull before src2 acts
             // close everything
-            _  = (pulling map ValDrain.Pulling.close map need).discard
-            d1 <- expectDone(src2 map ValSource.close)
-            d2 <- expectDone(p1 map ValSource.Polled.close)
+            _  = (pulling append ValDrain.Pulling.close append need).discard
+            d1 <- expectDone(src2 append ValSource.close)
+            d2 <- expectDone(p1 append ValSource.Polled.close)
           } yield success(())
         },
 
