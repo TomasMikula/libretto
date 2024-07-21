@@ -52,7 +52,7 @@ sealed trait Ztuff[A] {
     inPort: exn.InPort[ValSource[X]],
   ): ZIO[Any, Nothing, Unit] = {
     def unpack(p: exn.InPort[ValSource[X]]): exn.InPort[Done |&| (Done |+| (Val[X] |*| ValSource[X]))] =
-      exn.InPort.contramap(p)(ValSource.fromChoice)
+      p.contramap(ValSource.fromChoice)
 
     exn.InPort
       .supplyChoice(unpack(inPort))

@@ -48,7 +48,7 @@ private class ExecutionImpl(
     watchCancellation
 
   override object OutPort extends ScalettoOutPorts {
-    override def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B] =
+    def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B] =
       port.extendBy(f)(using resourceRegistry)
 
     override def pair[A, B](a: OutPort[A], b: OutPort[B]): OutPort[A |*| B] =
@@ -133,7 +133,7 @@ private class ExecutionImpl(
   }
 
   override object InPort extends ScalettoInPorts {
-    override def contramap[A, B](port: InPort[B])(f: A -⚬ B): InPort[A] =
+    def contramap[A, B](port: InPort[B])(f: A -⚬ B): InPort[A] =
       a => port(a.extendBy(f)(using resourceRegistry))
 
     override def pair[A, B](fa: InPort[A], fb: InPort[B]): InPort[A |*| B] =

@@ -698,7 +698,7 @@ abstract class ScalettoStreams {
       drain > ValDrain.toEither
 
     @targetName("ValDrainOnCloseAwait")
-    def onCloseAwait(using SourcePos, LambdaContext)(that: $[Done]): $[ValDrain[A]] =
+    infix def onCloseAwait(using SourcePos, LambdaContext)(that: $[Done]): $[ValDrain[A]] =
       (that |*| drain) > ValDrain.onCloseAwait
   }
 

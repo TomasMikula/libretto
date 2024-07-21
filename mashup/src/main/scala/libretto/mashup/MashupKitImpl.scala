@@ -353,7 +353,8 @@ object MashupKitImpl extends MashupKit { kit =>
       val executing = executor.execute(prg)
       type EXN = executing.execution.type
       val execution: EXN = executing.execution
-      new Executing(new ExecutionImpl[EXN](execution), executing.inPort, executing.outPort)
+      val exnImpl = new ExecutionImpl[EXN](using execution)
+      new Executing(exnImpl, executing.inPort, executing.outPort)
     }
 
     sealed trait Value[A]
@@ -415,13 +416,13 @@ object MashupKitImpl extends MashupKit { kit =>
     }
 
 
-    private class ExecutionImpl[EXN <: executor.bridge.Execution](val underlying: EXN) extends MashupExecution {
+    private class ExecutionImpl[EXN <: executor.bridge.Execution](using val underlying: EXN) extends MashupExecution {
       override type InPort[A]  = underlying.InPort[A]
       override type OutPort[A] = underlying.OutPort[A]
 
       override object InPort extends InPorts {
         override def contramap[A, B](port: InPort[B])(f: Fun[A, B]): InPort[A] =
-          underlying.InPort.contramap(port)(f)
+          port.contramap(f)
 
         override def split[A, B](port: InPort[A ** B]): (InPort[A], InPort[B]) =
           underlying.InPort.split(port)
@@ -438,7 +439,7 @@ object MashupKitImpl extends MashupKit { kit =>
         override def unlimitedAwaitChoice[A](
           port: InPort[Unlimited[A]],
         ): Async[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]] = {
-          val port1 = underlying.InPort.contramap(port)(StarterKit.coreLib.Unlimited.fromChoice[A])
+          val port1 = port.contramap(StarterKit.coreLib.Unlimited.fromChoice[A])
           underlying.InPort.supplyChoice(port1)
             .flatMap {
               case Left(e) =>
@@ -488,7 +489,7 @@ object MashupKitImpl extends MashupKit { kit =>
 
       override object OutPort extends OutPorts {
         override def map[A, B](port: OutPort[A])(f: Fun[A, B]): OutPort[B] =
-          underlying.OutPort.map(port)(f)
+          port.map(f)
 
         override def split[A, B](port: OutPort[A ** B]): (OutPort[A], OutPort[B]) =
           underlying.OutPort.split(port)
@@ -506,15 +507,15 @@ object MashupKitImpl extends MashupKit { kit =>
           underlying.OutPort.chooseRight(port)
 
         override def unlimitedIgnore[A](port: OutPort[Unlimited[A]]): Unit = {
-          val port1 = underlying.OutPort.map(port)(StarterKit.coreLib.Unlimited.discard[A])
+          val port1 = port.map(StarterKit.coreLib.Unlimited.discard[A])
           underlying.OutPort.discardOne(port1)
         }
 
         override def unlimitedGetSingle[A](port: OutPort[Unlimited[A]]): OutPort[A] =
-          underlying.OutPort.map(port)(StarterKit.coreLib.Unlimited.single[A])
+          port.map(StarterKit.coreLib.Unlimited.single[A])
 
         override def unlimitedSplit[A](port: OutPort[Unlimited[A]]): (OutPort[Unlimited[A]], OutPort[Unlimited[A]]) = {
-          val ports = underlying.OutPort.map(port)(StarterKit.coreLib.Unlimited.split)
+          val ports = port.map(StarterKit.coreLib.Unlimited.split)
           underlying.OutPort.split(ports)
         }
 

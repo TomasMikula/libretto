@@ -205,7 +205,9 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             }
 
           prg
-        }.via { port =>
+        // }.via { port =>
+        // XXX: avoiding compilation error "cannot establish a reference to InteractWith[...]#kit"
+        }.match { case tmp => tmp.via : port =>
           for {
             (srcs, drn)  <- splitOut(port)
             (src1, src2) <- splitOut(srcs)

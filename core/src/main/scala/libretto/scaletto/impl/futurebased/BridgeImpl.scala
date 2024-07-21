@@ -30,4 +30,14 @@ object BridgeImpl extends ScalettoBridge {
 
   def watchForCancellation(exn: Execution): Async[CancellationReason] =
     exn.watchForCancellation()
+
+  extension [I](using exn: Execution)(port: exn.InPort[I]) {
+    override def contramap[H](f: H -⚬ I): exn.InPort[H] =
+      exn.InPort.contramap(port)(f)
+  }
+
+  extension [O](using exn: Execution)(port: exn.OutPort[O]) {
+    override def map[P](f: O -⚬ P): exn.OutPort[P] =
+      exn.OutPort.map(port)(f)
+  }
 }

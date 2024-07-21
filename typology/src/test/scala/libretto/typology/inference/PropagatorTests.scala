@@ -290,7 +290,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
       expectedValue: Int,
     )(using SourcePos): Outcome[Unit] =
       for {
-        label <- expectVal(OutPort.map(l)(pg.unwrapLabel))
+        label <- expectVal(l.map(pg.unwrapLabel))
         u <- assertEquals(label.value, expectedValue)
       } yield u
 
@@ -614,7 +614,9 @@ class PropagatorTests extends ScalatestStarterTestSuite {
               |*| (ta |*| tb.waitFor(start))
           }
         }
-        .via { port =>
+        // .via { port =>
+        // XXX: avoiding compilation error "cannot establish a reference to InteractWith[...]#kit"
+        .match { case tmp => tmp.via { port =>
           val (t, ts) = OutPort.split(port)
           val (ta, tb) = OutPort.split(ts)
           for {
@@ -630,7 +632,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
             _ <- assertAbstractEquals(tb, 2)
             _ <- assertAbstractEquals(tb1, 2)
           } yield ()
-        },
+        }},
 
       "construct and deconstruct (RecCall[A, B], A)" -> TestCase
         .interactWith {
@@ -642,7 +644,9 @@ class PropagatorTests extends ScalatestStarterTestSuite {
               |*| (ta |*| tb.waitFor(start))
           }
         }
-        .via { port =>
+        // .via { port =>
+        // XXX: avoiding compilation error "cannot establish a reference to InteractWith[...]#kit"
+        .match { case tmp => tmp.via { port =>
           val (t, ts)  = OutPort.split(port)
           val (ta, tb) = OutPort.split(ts)
           for {
@@ -669,7 +673,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
             _ <- assertAbstractEquals(tb, 2)
             _ <- assertAbstractEquals(tb0, 2)
           } yield ()
-        },
+        }},
 
       "construct and deconstruct (RecCall[A, B], A), merge after deconstruction" -> TestCase
         .interactWith {
@@ -682,7 +686,9 @@ class PropagatorTests extends ScalatestStarterTestSuite {
               |*| (ta |*| tb.waitFor(start))
           }
         }
-        .via { port =>
+        // .via { port =>
+        // XXX: avoiding compilation error "cannot establish a reference to InteractWith[...]#kit"
+        .match { case tmp => tmp.via { port =>
           val (t, ts)  = OutPort.split(port)
           val (fa, b2) = OutPort.split(t)
           val (ta, tb) = OutPort.split(ts)
@@ -710,7 +716,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
             _ <- assertAbstractEquals(tb, 2)
             _ <- assertAbstractEquals(tb1, 2)
           } yield ()
-        },
+        }},
 
       "prevent a = (a, a)" -> TestCase
         .interactWith {

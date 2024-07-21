@@ -13,12 +13,14 @@ class OutPort[A](
 ) {
   import execution.{OutPort as Port}
 
+  private given execution.type = execution
+
   def zstream[X](using ev: A =:= ValSource[X]): UStream[X] = {
     def go(port: Port[ValSource[X]]): UStream[X] =
       ZStream.unfoldZIO(port) { port =>
         Port
           .awaitEither(
-            Port.map(port)(ValSource.poll)
+            port.map(ValSource.poll)
           )
           .toZIO.absolve.orDie
           .flatMap {

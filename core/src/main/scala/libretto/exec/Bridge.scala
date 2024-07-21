@@ -7,7 +7,20 @@ trait Bridge {
   val dsl: Dsl
 
   /** Handle to a running Libretto program. */
-  type Execution <: libretto.exec.Execution[dsl.type]
+  type Execution <: {
+    type InPort[A]
+    type OutPort[B]
+  }
+
+  import dsl.-⚬
+
+  extension [I](using exn: Execution)(port: exn.InPort[I]) {
+    def contramap[H](f: H -⚬ I): exn.InPort[H]
+  }
+
+  extension [O](using exn: Execution)(port: exn.OutPort[O]) {
+    infix def map[P](f: O -⚬ P): exn.OutPort[P]
+  }
 }
 
 object Bridge {
