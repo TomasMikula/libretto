@@ -12,7 +12,7 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
    */
   type CaseList[Cases]
 
-  type IsCaseOf[Label, Cases] <: { type Type }
+  type IsCaseOf[Label, Cases] <: AnyRef with { type Type }
   type EnumPartition[Cases, P]
   type Handlers[Cases, R]
   type DistLR[A, Cases] <: { type Out }
@@ -44,25 +44,25 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   given singleCaseList[Lbl <: String, A](using label: StaticValue[Lbl]): CaseList[Lbl :: A]
   given consCaseList[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl], t: CaseList[Tail]): CaseList[(HLbl :: H) || Tail]
 
-  given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): IsCaseOf[Lbl, Lbl :: A] { type Type = A }
-  given isHeadCase[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): IsCaseOf[HLbl, (HLbl :: H) || Tail] { type Type = H }
-  given isTailCase[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): IsCaseOf[Lbl, (HLbl :: H) || Tail] { type Type = j.Type }
+  given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A })
+  given isHeadCase[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): (IsCaseOf[HLbl, (HLbl :: H) || Tail] with { type Type = H })
+  given isTailCase[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): (IsCaseOf[Lbl, (HLbl :: H) || Tail] with { type Type = j.Type })
 
   given distLRCons[A, Label <: String, H, Tail](using
     label: StaticValue[Label],
     tail: DistLR[A, Tail]
-  ): DistLR[A, (Label :: H) || Tail] { type Out = (Label :: (A ** H)) || tail.Out }
+  ): (DistLR[A, (Label :: H) || Tail] with { type Out = (Label :: (A ** H)) || tail.Out })
 
   given distLRSingle[A, Label <: String, B](using
     label: StaticValue[Label],
-  ): DistLR[A, Label :: B] { type Out = Label :: (A ** B) }
+  ): (DistLR[A, Label :: B] with { type Out = Label :: (A ** B) })
 
-  given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): DistF[F, Lbl :: A]{ type Out = Lbl :: F[A] }
+  given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): (DistF[F, Lbl :: A] with { type Out = Lbl :: F[A] })
 
   given distFCons[F[_], Label <: String, H, Tail](using
     label: StaticValue[Label],
     tail: DistF[F, Tail],
-  ): DistF[F, (Label :: H) || Tail] { type Out = (Label :: F[H]) || tail.Out }
+  ): (DistF[F, (Label :: H) || Tail] with { type Out = (Label :: F[H]) || tail.Out })
 
   val Handlers: HandlersModule
 
@@ -202,30 +202,30 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
   override given consCaseList[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl], t: CaseList[Tail]): CaseList[(HLbl :: H) || Tail] =
     CaseListImpl.cons(hLbl.value, t)
 
-  override given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): IsCaseOf[Lbl, Lbl :: A] { type Type = A } =
+  override given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A }) =
     Member.Single(label.value)
-  override given isHeadCase[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): IsCaseOf[HLbl, (HLbl :: H) || Tail] { type Type = H } =
+  override given isHeadCase[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): (IsCaseOf[HLbl, (HLbl :: H) || Tail] with { type Type = H }) =
     Member.InHead(hLbl.value)
-  override given isTailCase[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): IsCaseOf[Lbl, (HLbl :: H) || Tail] { type Type = j.Type } =
+  override given isTailCase[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): (IsCaseOf[Lbl, (HLbl :: H) || Tail] with { type Type = j.Type }) =
     Member.InTail(j)
 
   override given distLRCons[A, Label <: String, H, Tail](using
     label: StaticValue[Label],
     tail: DistLR[A, Tail]
-  ): DistLR[A, (Label :: H) || Tail] { type Out = (Label :: (A ** H)) || tail.Out } =
+  ): (DistLR[A, (Label :: H) || Tail] with { type Out = (Label :: (A ** H)) || tail.Out }) =
     DistLRImpl.cons[A, Label, H, Tail](label.value, tail)
 
   override given distLRSingle[A, Label <: String, B](using
     label: StaticValue[Label],
-  ): DistLR[A, Label :: B] { type Out = Label :: (A ** B) } =
+  ): (DistLR[A, Label :: B] with { type Out = Label :: (A ** B) }) =
     DistLRImpl.Single(label.value)
 
-  override given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): DistF[F, Lbl :: A]{ type Out = Lbl :: F[A] } =
+  override given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): (DistF[F, Lbl :: A] with { type Out = Lbl :: F[A] }) =
     DistFImpl.Single(label.value)
   override given distFCons[F[_], Label <: String, H, Tail](using
     label: StaticValue[Label],
     tail: DistF[F, Tail],
-  ): DistF[F, (Label :: H) || Tail] { type Out = (Label :: F[H]) || tail.Out } =
+  ): (DistF[F, (Label :: H) || Tail] with { type Out = (Label :: F[H]) || tail.Out }) =
     DistFImpl.Cons(label.value, tail)
 
   override object Handlers extends HandlersModule {

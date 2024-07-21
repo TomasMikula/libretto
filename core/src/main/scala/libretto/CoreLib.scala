@@ -3277,7 +3277,7 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
       λ.rec { self => as =>
         switch(as)
           .is { case Nil(*(u))          => Nil(u) |*| Nil(u) }
-          .is { case Cons(a |*| Nil(u)) => singleton(a) |*| Nil(u) }
+          .is { case Cons(a |*| Nil(u)) => singleton[A](a) |*| Nil(u) }
           .is { case Cons(a0 |*| Cons(a1 |*| as)) =>
             val as0 |*| as1 = self(as)
             Cons(a0 |*| as0) |*| Cons(a1 |*| as1)

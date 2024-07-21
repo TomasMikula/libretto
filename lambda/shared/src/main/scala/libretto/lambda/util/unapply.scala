@@ -20,7 +20,7 @@ object unapply {
         override def ev: FX =:= F[X] = summon[FX =:= FX].asInstanceOf[FX =:= F[X]]
       }
 
-    given [F[_], X]: Unapply[F[X], F] { type A = X } =
+    given [F[_], X]: (Unapply[F[X], F] with { type A = X }) =
       apply[F, X]
 
     transparent inline given derive[FX, F[_]]: Unapply[FX, F] =

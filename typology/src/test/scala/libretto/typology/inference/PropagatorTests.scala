@@ -51,7 +51,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
     def isPair[V, X]: IType[V, X] -⚬ (IType[V, X] |+| (X |*| X)) =
       λ { t =>
         unpack(t) either {
-          case Right(xxx) => injectL(selfRef(xxx))
+          case Right(xxx) => injectL(selfRef[V, X](xxx))
           case Left(t) => t either {
             case Right(xxx) => injectL(mismatch(xxx))
             case Left(t) => t either {
@@ -65,7 +65,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
     def isRecCall[V, X]: IType[V, X] -⚬ (IType[V, X] |+| (X |*| X)) =
       λ { t =>
         unpack(t) either {
-          case Right(xxx) => injectL(selfRef(xxx))
+          case Right(xxx) => injectL(selfRef[V, X](xxx))
           case Left(t) => t either {
             case Right(xxx) => injectL(mismatch(xxx))
             case Left(t) => t either {
@@ -78,6 +78,9 @@ class PropagatorTests extends ScalatestStarterTestSuite {
 
     given TypeOps[IType[Val[Label], _], Type, Label] with {
       type IT[A] = IType[Val[Label], A]
+
+      private def selfRef[A]: Val[Label] -⚬ IT[A] =
+        InferenceSupport.selfRef[Val[Label], A]
 
       override def split[A](f: A -⚬ (A |*| A)): IT[A] -⚬ (IT[A] |*| IT[A]) =
         rec { self =>

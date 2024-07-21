@@ -242,7 +242,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
           λ { case elems |*| closed =>
             (closed |*| elems) > LList.switchWithL(
               Polled.empty,
-              λ { case closed |*| (h |*| t) => Polled.cons(LList1.cons(h |*| t) |*| SourceT.empty(closed)) },
+              λ { case closed |*| (h |*| t) => Polled.cons(LList1.cons(h |*| t) |*| SourceT.empty[T, LList1[A]](closed)) },
             )
           },
           snd(self) > Polled.cons[T, LList1[A]],
@@ -277,7 +277,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       λ { case n |*| src =>
         UInt31.decrement(n) either {
           case Left(done) =>
-            UInt31(0)(done) |*| empty(close(src))
+            UInt31(0)(done) |*| empty[T, A](close(src))
           case Right(n0) =>
             go1(n0 |*| src)
         }
