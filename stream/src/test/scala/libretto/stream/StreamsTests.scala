@@ -1,7 +1,6 @@
 package libretto.stream
 
 import libretto.CoreLib
-import libretto.lambda.util.Monad.syntax.*
 import libretto.scaletto.ScalettoLib
 import libretto.stream.CoreStreams
 import libretto.stream.invert.InvertStreams

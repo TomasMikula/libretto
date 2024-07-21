@@ -17,10 +17,11 @@ object State {
     override def pure[A](a: A): State[S, A] =
       s => (s, a)
 
-    override def flatMap[A, B](fa: State[S, A])(f: A => State[S, B]): State[S, B] =
-      s => {
-        val (s1, a) = fa(s)
-        f(a)(s1)
-      }
+    extension [A](fa: State[S, A])
+      override def flatMap[B](f: A => State[S, B]): State[S, B] =
+        s => {
+          val (s1, a) = fa(s)
+          f(a)(s1)
+        }
   }
 }

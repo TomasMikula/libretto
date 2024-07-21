@@ -5,12 +5,23 @@ import scala.annotation.targetName
 
 /** Witnesses that `F` is a monad in the category of Scala functions. */
 trait Monad[F[_]] {
-  def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B]
-
   def pure[A](a: A): F[A]
 
-  def map[A, B](fa: F[A], f: A => B): F[B] =
-    flatMap(fa)(a => pure(f(a)))
+  extension [A](fa: F[A]) {
+    def flatMap[B](f: A => F[B]): F[B]
+
+    def map[B](f: A => B): F[B] =
+      flatMap(a => pure(f(a)))
+
+    def *>[B](fb: F[B]): F[B] =
+      flatMap(_ => fb)
+
+    def >>[B](fb: => F[B]): F[B] =
+      flatMap(_ => fb)
+
+    def void: F[Unit] =
+      map(_ => ())
+  }
 
   /** An [[Applicative]] derived from this Monad instance.
    *
@@ -32,58 +43,42 @@ object Monad {
   def apply[F[_]](using Monad[F]): Monad[F] =
     summon
 
-  object syntax {
-    extension [F[_], A](fa: F[A])(using F: Monad[F]) {
-      def map[B](f: A => B): F[B] =
-        F.map(fa, f)
-
-      def flatMap[B](f: A => F[B]): F[B] =
-        F.flatMap(fa)(f)
-
-      def *>[B](fb: F[B]): F[B] =
-        flatMap(_ => fb)
-
-      def >>[B](fb: => F[B]): F[B] =
-        flatMap(_ => fb)
-
-      def void: F[Unit] =
-        map(_ => ())
-    }
-  }
-
   def deriveApplicative[F[_]](using F: Monad[F]): Applicative[F] =
     new Applicative[F] {
       override def pure[A](a: A): F[A] =
         F.pure(a)
 
       override def map[A, B](fa: F[A], f: A => B): F[B] =
-        F.map(fa, f)
+        F.map(fa)(f)
 
       override def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)] =
-        F.flatMap(fa) { a => F.map(fb, (a, _)) }
+        F.flatMap(fa) { a => F.map(fb)((a, _)) }
     }
 
   given monadId: Monad[[A] =>> A] with {
     override def pure[A](a: A): A =
       a
 
-    override def flatMap[A, B](a: A)(f: A => B): B =
-      f(a)
+    extension [A](a: A)
+      override def flatMap[B](f: A => B): B =
+        f(a)
   }
 
   given monadEither[E]: Monad[[A] =>> Either[E, A]] with {
     override def pure[A](a: A): Either[E, A] =
       Right(a)
 
-    override def flatMap[A, B](fa: Either[E, A])(f: A => Either[E, B]): Either[E, B] =
-      fa.flatMap(f)
+    extension [A](fa: Either[E, A])
+      override def flatMap[B](f: A => Either[E, B]): Either[E, B] =
+        fa.flatMap(f)
   }
 
   given monadFuture(using ec: ExecutionContext): Monad[Future] with {
       override def pure[A](a: A): Future[A] =
         Future.successful(a)
 
-      override def flatMap[A, B](fa: Future[A])(f: A => Future[B]): Future[B] =
-        fa.flatMap(f)(using ec)
+      extension [A](fa: Future[A])
+        override def flatMap[B](f: A => Future[B]): Future[B] =
+          fa.flatMap(f)(using ec)
     }
 }

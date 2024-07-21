@@ -1,8 +1,7 @@
 package libretto.typology.inference
 
 import libretto.lambda.util.SourcePos
-import libretto.lambda.util.Monad.syntax._
-import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.*
 import libretto.testing.scalatest.scaletto.ScalatestStarterTestSuite
 import libretto.testing.scaletto.StarterTestKit
 import libretto.testing.TestCase

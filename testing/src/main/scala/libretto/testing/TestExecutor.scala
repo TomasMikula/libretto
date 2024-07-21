@@ -4,7 +4,6 @@ import libretto.{CoreBridge, CoreDSL, CoreExecutor}
 import libretto.exec.ExecutionParams
 import libretto.exec.Executor.CancellationReason
 import libretto.lambda.util.Monad
-import libretto.lambda.util.Monad.syntax.*
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 

@@ -1,7 +1,6 @@
 package libretto.testing.scaletto
 
 import libretto.CoreLib
-import libretto.lambda.util.Monad.syntax.*
 import libretto.scaletto.{Scaletto, ScalettoBridge}
 import libretto.testing.TestKit.dsl
 import libretto.testing.{TestKitOps, TestKitWithManualClock, TestResult}

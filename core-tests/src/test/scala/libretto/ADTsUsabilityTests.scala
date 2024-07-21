@@ -2,7 +2,6 @@ package libretto
 
 import libretto.lambda.{Extractor, Focus, Partitioning}
 import libretto.lambda.util.{Applicative, SourcePos, TypeEqK}
-import libretto.lambda.util.Monad.syntax.*
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
 import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite

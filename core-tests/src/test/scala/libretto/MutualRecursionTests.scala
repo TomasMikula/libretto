@@ -1,7 +1,6 @@
 package libretto
 
 import libretto.lambda.Extractor
-import libretto.lambda.util.Monad.syntax.*
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoLib
 import libretto.testing.TestCase

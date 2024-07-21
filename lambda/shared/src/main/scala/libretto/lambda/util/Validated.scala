@@ -48,8 +48,9 @@ object Validated {
   }
 
   given monad[E]: Monad[Validated[E, _]] with {
-    override def flatMap[A, B](fa: Validated[E, A])(f: A => Validated[E, B]): Validated[E, B] =
-      fa.flatMap(f)
+    extension [A](fa: Validated[E, A])
+      override def flatMap[B](f: A => Validated[E, B]): Validated[E, B] =
+        fa.flatMap(f)
 
     override def pure[A](a: A): Validated[E, A] =
       Valid(a)

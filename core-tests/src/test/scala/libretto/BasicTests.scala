@@ -4,7 +4,6 @@ import java.util.concurrent.{Executors, ScheduledExecutorService}
 import java.util.concurrent.atomic.AtomicInteger
 import libretto.cats.Functor.*
 import libretto.lambda.util.SourcePos
-import libretto.lambda.util.Monad.syntax.*
 import libretto.scaletto.ScalettoLib
 import libretto.testing.{TestCase, TestExecutor, TestKit}
 import libretto.testing.scaletto.{ScalettoTestExecutor, ScalettoTestKit}

@@ -1,7 +1,6 @@
 package libretto.typology.toylang.typeinfer
 
 import libretto.lambda.util.{Monad, SourcePos}
-import libretto.lambda.util.Monad.syntax._
 import libretto.scaletto.StarterKit._
 import libretto.typology.inference.Propagator
 import libretto.typology.toylang.terms.{Fun, TypedFun}

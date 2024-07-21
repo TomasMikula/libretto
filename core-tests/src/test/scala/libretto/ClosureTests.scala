@@ -1,6 +1,5 @@
 package libretto
 
-import libretto.lambda.util.Monad.syntax.*
 import libretto.scaletto.ScalettoLib
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
@@ -278,7 +277,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             }
             _ <- Outcome.assertSubstring("used more than once", e.getMessage)
             _ <- Outcome.assertSubstring("variable bound by lambda", e.getMessage)
-            _ <- Outcome.assertSubstring("ClosureTests.scala:270", e.getMessage)
+            _ <- Outcome.assertSubstring("ClosureTests.scala:269", e.getMessage)
           } yield ()
         },
 
