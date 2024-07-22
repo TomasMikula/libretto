@@ -121,11 +121,12 @@ object TestExecutor {
       timeout: FiniteDuration,
     ): TestResult[Unit] = {
       val (executing, p) = executor.execute(body, params)
-      import executing.{execution, inPort, outPort}
+      import executing.{bridge, execution, inPort, outPort}
+      given execution.type = execution
 
       val res0: TestResult[X] =
         try {
-          execution.InPort.supplyDone(inPort)
+          inPort.supplyDone()
 
           val properResult: Async[TestResult[X]] =
             conduct(using execution)(outPort, p)

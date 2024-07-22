@@ -18,16 +18,15 @@ class OutPort[A](
   def zstream[X](using ev: A =:= ValSource[X]): UStream[X] = {
     def go(port: Port[ValSource[X]]): UStream[X] =
       ZStream.unfoldZIO(port) { port =>
-        Port
-          .awaitEither(
-            port.append(ValSource.poll)
-          )
+        port
+          .append(ValSource.poll)
+          .awaitEither()
           .toZIO.absolve.orDie
           .flatMap {
             case Left(port) =>
-              Port.awaitDone(port).toZIO.absolve.orDie.as(None)
+              port.awaitDone().toZIO.absolve.orDie.as(None)
             case Right(port) =>
-              val (px, pxs) = Port.split(port)
+              val (px, pxs) = port.unzip()
               Port.awaitVal(px).toZIO.absolve.orDie.map(x => Some((x, pxs)))
           }
       }
@@ -36,7 +35,7 @@ class OutPort[A](
   }
 
   def unpair[X, Y](using ev: A =:= (X |*| Y)): (OutPort[X], OutPort[Y]) = {
-    val (x, y) = Port.split(ev.substituteCo(port))
+    val (x, y) = ev.substituteCo(port).unzip()
     val px = OutPort(bridge, execution, x)
     val py = OutPort(bridge, execution, y)
     (px, py)

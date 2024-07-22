@@ -158,7 +158,7 @@ trait TestKit {
   val bridge: CoreBridge.Of[dsl.type]
 
   import dsl.{-⚬, |*|, |+|, Done, Ping}
-  import bridge.Execution
+  import bridge.*
 
   type Assertion[A]
 
@@ -174,29 +174,20 @@ trait TestKit {
   type ExecutionParam[A]
   type ExecutionParams[A] = libretto.exec.ExecutionParams[ExecutionParam, A]
 
-  transparent inline def OutPort(using exn: Execution): exn.OutPort.type =
-    exn.OutPort
-
-  transparent inline def InPort(using exn: Execution): exn.InPort.type =
-    exn.InPort
-
-  def splitOut[A, B](using exn: Execution)(port: exn.OutPort[A |*| B]): Outcome[(exn.OutPort[A], exn.OutPort[B])] =
-    Outcome.success(exn.OutPort.split(port))
-
   def expectDone(using exn: Execution)(port: exn.OutPort[Done]): Outcome[Unit] =
-    exn.OutPort.awaitDone(port).map {
+    port.awaitDone().map {
       case Left(e)   => TestResult.crash(e)
       case Right(()) => TestResult.success(())
     }
 
   def expectCrashDone(using exn: Execution, pos: SourcePos)(port: exn.OutPort[Done]): Outcome[Throwable] =
-    exn.OutPort.awaitDone(port).map {
+    port.awaitDone().map {
       case Left(e)   => TestResult.success(e)
       case Right(()) => TestResult.failed(using pos)("Expected crash, but got Done")
     }
 
   def expectPing(using exn: Execution)(port: exn.OutPort[Ping]): Outcome[Unit] =
-    exn.OutPort.awaitPing(port).map {
+    port.awaitPing().map {
       case Left(e)   => TestResult.crash(e)
       case Right(()) => TestResult.success(())
     }
@@ -205,7 +196,7 @@ trait TestKit {
     port: exn.OutPort[Ping],
     duration: FiniteDuration,
   ): Outcome[exn.OutPort[Ping]] =
-    exn.OutPort.awaitNoPing(port, duration).map {
+    port.awaitNoPing(duration).map {
       case Left(Left(e))   => TestResult.crash(e)
       case Left(Right(())) => TestResult.failed(using pos)(s"Expected no Ping for $duration, but got Ping")
       case Right(port)     => TestResult.success(port)
@@ -219,18 +210,18 @@ trait TestKit {
       expectNoPing(port, duration)
     ) { port =>
       val p1 = port.append(dsl.dismissPing)
-      exn.OutPort.discardOne(p1)
+      p1.discardOne()
     }
 
   def expectLeft[A, B](using exn: Execution, pos: SourcePos)(port: exn.OutPort[A |+| B]): Outcome[exn.OutPort[A]] =
-    exn.OutPort.awaitEither(port).map {
+    port.awaitEither().map {
       case Left(e)         => TestResult.crash(e)
       case Right(Left(p))  => TestResult.success(p)
       case Right(Right(_)) => TestResult.failed(using pos)("Expected Left, but got Right")
     }
 
   def expectRight[A, B](using exn: Execution, pos: SourcePos)(port: exn.OutPort[A |+| B]): Outcome[exn.OutPort[B]] =
-    exn.OutPort.awaitEither(port).map {
+    port.awaitEither().map {
       case Left(e)         => TestResult.crash(e)
       case Right(Left(_))  => TestResult.failed(using pos)("Expected Right, but got Left")
       case Right(Right(p)) => TestResult.success(p)

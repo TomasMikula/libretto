@@ -39,14 +39,14 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     )
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{OutPort as _, *}
+    import kit.*
     import dsl.*
     import dsl.$.*
     val coreLib = CoreLib(dsl)
     val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
     import coreLib.{*, given}
     import scalettoLib.{*, given}
-    import kit.bridge.Execution
+    import kit.bridge.*
     import Outcome.monadOutcome.*
 
     def raceKeepWinner[A](
@@ -139,11 +139,11 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           prg
         }
         .via { port =>
+          val (need, res0) = port.unzip()
+          val (ping, res1) = res0.append(notifyEither).unzip()
           for {
-            (need, res0) <- splitOut(port)
-            (ping, res1) <- splitOut(bridge.append(res0)(notifyEither))
             _ <- expectNoPing_(ping, 10.millis)
-            _ = OutPort.supplyNeed(need)
+            _ = need.supplyNeed()
             d <- expectLeft(res1)
             _ <- expectDone(d)
           } yield ()
@@ -182,7 +182,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           .via { port =>
             for {
               rightPort       <- expectRight(port)
-              ports           <- splitOut(rightPort)
+              ports           = rightPort.unzip()
               (pCrash, pDone) = ports
               _               <- expectDone(pDone)
               _               <- expectCrashDone(pCrash)
@@ -553,13 +553,13 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         def expectNext(using e: Execution)(port: e.OutPort[LList[Val[Int]]], value: Int)(using SourcePos): Outcome[e.OutPort[LList[Val[Int]]]] =
           for {
             ht <- expectRight(port.append(LList.uncons))
-            (h, t) = e.OutPort.split(ht)
+            (h, t) = ht.unzip()
             _ <- expectVal(h).assertEquals(value)
           } yield t
 
         def expectNil(using e: Execution)(port: e.OutPort[LList[Val[Int]]])(using SourcePos): Outcome[Unit] =
           expectLeft(port.append(LList.uncons))
-            .map(e.OutPort.discardOne(_))
+            .map(_.discardOne())
 
         TestCase
           .configure(manualClock)
@@ -921,15 +921,18 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
               (nis |*| out) |*| join(d |*| d1)
             }
           prg
-        }.via { port =>
+        }
+        .via { port =>
           val N = 100
-          val (snkSrc, d) = OutPort.split(port)
-          val (snk, src)  = OutPort.split(snkSrc)
+          val (snkSrc, d) = port.unzip()
+          val (snk, src)  = snkSrc.unzip()
 
           // write numbers 0..N-1 at maximum speed
           val input: One -⚬ LList1[Val[Int]] =
             done > constList1(0, List.range(1, N))
-          OutPort.discardOne(bridge.append(snk)(λ { nis => constant(input) supplyTo nis }))
+          snk
+            .append(λ { nis => constant(input) supplyTo nis })
+            .discardOne()
 
           // read N numbers at maximum speed
           val out = bridge.append(src)(Endless.take(N) > toScalaList)

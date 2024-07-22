@@ -12,7 +12,7 @@ import scala.concurrent.duration.*
 
 class StreamsTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{Outcome, dsl, expectDone, expectRight, expectVal, splitOut}
+    import kit.{Outcome, dsl, expectDone, expectRight, expectVal}
     import kit.bridge.*
     import kit.Outcome.{assertEquals, success}
 
@@ -206,14 +206,15 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             }
 
           prg
-        }.via { port =>
+        }
+        .via { port =>
+          val (srcs, drn)  = port.unzip()
+          val (src1, src2) = srcs.unzip()
+          val p1           = src1 append ValSource.poll
           for {
-            (srcs, drn)  <- splitOut(port)
-            (src1, src2) <- splitOut(srcs)
-            p1           =  src1 append ValSource.poll
-            pulling      <- expectRight(drn append ValDrain.toEither) // checking pull before src2 acts
+            pulling <- expectRight(drn append ValDrain.toEither) // checking pull before src2 acts
             // close everything
-            _  = (pulling append ValDrain.Pulling.close append need).discard
+            _  = (pulling append ValDrain.Pulling.close append need).discardOne()
             d1 <- expectDone(src2 append ValSource.close)
             d2 <- expectDone(p1 append ValSource.Polled.close)
           } yield success(())
@@ -231,12 +232,12 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           prg
         }
         .via { port =>
+          val (signals, outputs) = port.unzip()
+          val (out1, out2) = outputs.unzip()
+          val (pong, done) = signals.unzip()
           for {
-            (signals, outputs) <- splitOut(port)
-            (out1, out2) <- splitOut(outputs)
-            (pong, done) <- splitOut(signals)
             res1 <- expectVal(out1) // the first n should be output before the first poll
-            _ = OutPort.supplyPong(pong)
+            _ = pong.supplyPong()
             res2 <- expectVal(out2)
             _ <- expectDone(done)
             _ <- Outcome.assertAll(
@@ -278,8 +279,8 @@ class StreamsTests extends ScalatestScalettoTestSuite {
         TestCase
           .interactWith(prg)
           .via { port =>
+            val (done, ref) = port.unzip()
             for {
-              (done, ref) <- splitOut(port)
               _ <- expectDone(done)
               ref <- expectVal(ref)
               Counter(k, m) = ref.get()

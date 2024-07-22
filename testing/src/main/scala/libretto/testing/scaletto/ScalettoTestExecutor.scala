@@ -51,8 +51,8 @@ object ScalettoTestExecutor {
       ): Outcome[Unit] = {
         import TestResult.{crash, success as succeed, failed as fail}
         Outcome.asyncTestResult(
-          exn.OutPort
-            .awaitEither[Val[String], Done](outPort)
+          outPort
+            .awaitEither()
             .flatMap {
               case Left(e) =>
                 Async.now(crash(e))
@@ -62,7 +62,7 @@ object ScalettoTestExecutor {
                   case Right(msg) => fail(using pos)(msg)
                 }
               case Right(Right(d)) =>
-                exn.OutPort.awaitDone(d).map {
+                d.awaitDone().map {
                   case Left(e)   => crash(e)
                   case Right(()) => succeed(())
                 }

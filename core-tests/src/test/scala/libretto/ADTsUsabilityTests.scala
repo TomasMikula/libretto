@@ -9,7 +9,7 @@ import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
 class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{OutPort as _, *}
+    import kit.*
     import kit.dsl.*
     import kit.dsl.given
 
@@ -286,15 +286,16 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             s1 |*| s2
           }
         }
+        .match { case tmp => tmp // XXX: avoiding compilation error "cannot establish a reference to InteractWith[...]#kit"
         .via { port =>
-          val (p1, p2) = OutPort.split(port)
+          val (p1, p2) = port.unzip()
           for {
             s1 <- expectVal(p1)
             s2 <- expectVal(p2)
             _ <- Outcome.assertEquals(s1, "(((1, 2), 3), 4)")
             _ <- Outcome.assertEquals(s2, "(1, (2, (3, 4)))")
           } yield ()
-        }
+        }}
 
     }
   }

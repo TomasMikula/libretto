@@ -57,8 +57,9 @@ abstract class AbstractStarterKit(
 
     val executing = exec.execute(blueprint)
     import executing.{execution, inPort, outPort}
+    given execution.type = execution
 
-    execution.InPort.supplyDone(inPort)
+    inPort.supplyDone()
     Async
       .toFuture { execution.OutPort.awaitVal(outPort) }
       .flatMap {

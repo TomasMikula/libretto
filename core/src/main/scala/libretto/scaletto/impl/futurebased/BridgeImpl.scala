@@ -7,11 +7,12 @@ import libretto.scaletto.{ScalettoBridge, ScalettoExecution}
 import libretto.scaletto.impl.FreeScaletto
 import libretto.util.{Async, Scheduler}
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.FiniteDuration
 
 object BridgeImpl extends ScalettoBridge {
   override type Dsl = FreeScaletto.type
   override val dsl: FreeScaletto.type = FreeScaletto
-  import dsl.-⚬
+  import dsl.{-⚬, |*|, |+|, |&|, Done, One, Need, Ping, Pong}
 
   override opaque type Execution <: ScalettoExecution[dsl.type] = ExecutionImpl
 
@@ -34,10 +35,86 @@ object BridgeImpl extends ScalettoBridge {
   extension [I](using exn: Execution)(port: exn.InPort[I]) {
     override def prepend[H](f: H -⚬ I): exn.InPort[H] =
       exn.InPort.contramap(port)(f)
+
+    override def zipIn[J](that: exn.InPort[J]): (exn.InPort[I |*| J]) =
+      exn.InPort.pair(port, that)
   }
 
-  extension [O](using exn: Execution)(port: exn.OutPort[O]) {
-    override def append[P](f: O -⚬ P): exn.OutPort[P] =
+  extension (using exn: Execution)(port: exn.InPort[One]) {
+    override def dischargeOne(): Unit =
+      exn.InPort.discardOne(port)
+  }
+
+  extension (using exn: Execution)(port: exn.InPort[Done]) {
+    override def supplyDone(): Unit =
+      exn.InPort.supplyDone(port)
+  }
+
+  extension [A, B](using exn: Execution)(port: exn.InPort[A |*| B]) {
+    override def unzipIn(): (exn.InPort[A], exn.InPort[B]) =
+      exn.InPort.split(port)
+  }
+
+  extension [A, B](using exn: Execution)(port: exn.InPort[A |+| B]) {
+    override def injectLeft(): exn.InPort[A]  = exn.InPort.supplyLeft(port)
+    override def injectRight(): exn.InPort[B] = exn.InPort.supplyRight(port)
+  }
+
+  extension [A, B](using exn: Execution)(port: exn.InPort[A |&| B]) {
+    def awaitChoice(): Async[Either[Throwable, Either[exn.InPort[A], exn.InPort[B]]]] =
+      exn.InPort.supplyChoice(port)
+  }
+
+  extension [A](using exn: Execution)(port: exn.OutPort[A]) {
+    override def append[B](f: A -⚬ B): exn.OutPort[B] =
       exn.OutPort.map(port)(f)
+
+    override def zip[B](that: exn.OutPort[B]): exn.OutPort[A |*| B] =
+      exn.OutPort.pair(port, that)
+  }
+
+  extension (using exn: Execution)(port: exn.OutPort[One]) {
+    override def discardOne(): Unit =
+      exn.OutPort.discardOne(port)
+  }
+
+  extension (using exn: Execution)(port: exn.OutPort[Done]) {
+    override def awaitDone(): Async[Either[Throwable, Unit]] =
+      exn.OutPort.awaitDone(port)
+  }
+
+  extension (using exn: Execution)(port: exn.OutPort[Ping]) {
+    override def awaitPing(): Async[Either[Throwable, Unit]] =
+      exn.OutPort.awaitPing(port)
+
+    override def awaitNoPing(
+      duration: FiniteDuration,
+    ): Async[Either[Either[Throwable, Unit], exn.OutPort[Ping]]] =
+      exn.OutPort.awaitNoPing(port, duration)
+  }
+
+  extension (using exn: Execution)(port: exn.OutPort[Need]) {
+    override def supplyNeed(): Unit =
+      exn.OutPort.supplyNeed(port)
+  }
+
+  extension (using exn: Execution)(port: exn.OutPort[Pong]) {
+    override def supplyPong(): Unit =
+      exn.OutPort.supplyPong(port)
+  }
+
+  extension [A, B](using exn: Execution)(port: exn.OutPort[A |*| B]) {
+    override def unzip(): (exn.OutPort[A], exn.OutPort[B]) =
+      exn.OutPort.split(port)
+  }
+
+  extension [A, B](using exn: Execution)(port: exn.OutPort[A |+| B]) {
+    override def awaitEither(): Async[Either[Throwable, Either[exn.OutPort[A], exn.OutPort[B]]]] =
+      exn.OutPort.awaitEither(port)
+  }
+
+  extension [A, B](using exn: Execution)(port: exn.OutPort[A |&| B]) {
+    override def chooseLeft(): exn.OutPort[A]  = exn.OutPort.chooseLeft(port)
+    override def chooseRight(): exn.OutPort[B] = exn.OutPort.chooseRight(port)
   }
 }

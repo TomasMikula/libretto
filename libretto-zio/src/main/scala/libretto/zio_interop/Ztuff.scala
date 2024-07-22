@@ -37,7 +37,7 @@ sealed trait Ztuff[A] {
   )(inPort: exn.InPort[A]): ZIO[Any, Nothing, Unit] =
     this match {
       case p: Pair[x, y] =>
-        val (inPort1, inPort2) = exn.InPort.split[x, y](inPort)
+        val (inPort1, inPort2) = (inPort: exn.InPort[x |*| y]).unzipIn()
         (p._1 feedTo inPort1) &> (p._2 feedTo inPort2)
 
       case ZioUStream(s) =>
@@ -54,30 +54,30 @@ sealed trait Ztuff[A] {
     def unpack(p: exn.InPort[ValSource[X]]): exn.InPort[Done |&| (Done |+| (Val[X] |*| ValSource[X]))] =
       p.prepend(ValSource.fromChoice)
 
-    exn.InPort
-      .supplyChoice(unpack(inPort))
+    unpack(inPort)
+      .awaitChoice()
       .toZIO.absolve.orDie
       .flatMap {
         case Left(port) =>
           // no pull, ignore the input stream altogether
-          ZIO.succeed(exn.InPort.supplyDone(port))
+          ZIO.succeed(port.supplyDone())
         case Right(port) =>
           type S = Option[exn.InPort[Done |+| (Val[X] |*| ValSource[X])]]
           stream
             .runFoldWhileZIO(Some(port): S)(_.isDefined) { (optPort, elem) =>
               val Some(port) = optPort: @unchecked
-              val (pa, ps) = exn.InPort.split(exn.InPort.supplyRight(port))
+              val (pa, ps) = port.injectRight().unzipIn()
               exn.InPort.supplyVal(pa, elem)
-              exn.InPort.supplyChoice(unpack(ps)).toZIO.absolve.orDie.map {
+              unpack(ps).awaitChoice().toZIO.absolve.orDie.map {
                 case Left(port) =>
-                  exn.InPort.supplyDone(port)
+                  port.supplyDone()
                   None
                 case Right(port) =>
                   Some(port)
               }
             }
             .map {
-              case Some(port) => exn.InPort.supplyDone(exn.InPort.supplyLeft(port))
+              case Some(port) => port.injectLeft().supplyDone()
               case None       => ()
             }
       }

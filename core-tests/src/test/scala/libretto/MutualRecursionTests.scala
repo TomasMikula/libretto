@@ -11,7 +11,7 @@ import scala.annotation.targetName
 class MutualRecursionTests extends ScalatestScalettoTestSuite {
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{OutPort as _, *}
+    import kit.*
     import kit.dsl.{*, given}
 
     val coreLib = CoreLib(kit.dsl)

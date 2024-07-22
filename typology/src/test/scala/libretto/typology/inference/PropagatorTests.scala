@@ -576,7 +576,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
           }
         }
         .via { port =>
-          val (b, t) = OutPort.split(port)
+          val (b, t) = port.unzip()
           for {
             b <- expectVal(b)
             t <- expectVal(t)
@@ -597,7 +597,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
           }
         }
         .via { port =>
-          val (b, t) = OutPort.split(port)
+          val (b, t) = port.unzip()
           for {
             b <- expectVal(b)
             t <- expectVal(t)
@@ -616,12 +616,12 @@ class PropagatorTests extends ScalatestStarterTestSuite {
           }
         }
         .via { port =>
-          val (t, ts) = OutPort.split(port)
-          val (ta, tb) = OutPort.split(ts)
+          val (t, ts) = port.unzip()
+          val (ta, tb) = ts.unzip()
           for {
             ab <- expectLeft(t.append(tap > peek))
             ab <- expectRight(ab.append(isRecCall))
-            (a, b) = OutPort.split(ab)
+            (a, b) = ab.unzip()
             ta1 <- expectVal(a.append(write))
             tb1 <- expectVal(b.append(write))
             ta  <- expectVal(ta)
@@ -644,15 +644,15 @@ class PropagatorTests extends ScalatestStarterTestSuite {
           }
         }
         .via { port =>
-          val (t, ts)  = OutPort.split(port)
-          val (ta, tb) = OutPort.split(ts)
+          val (t, ts)  = port.unzip()
+          val (ta, tb) = ts.unzip()
           for {
             fa <- expectLeft(t.append(tap > peek))
             fa <- expectRight(fa.append(isPair))
-            (f, a2) = OutPort.split(fa)
+            (f, a2) = fa.unzip()
             ab <- expectLeft(f.append(peek))
             ab <- expectRight(ab.append(isRecCall))
-            (a1, b) = OutPort.split(ab)
+            (a1, b) = ab.unzip()
 
             ta1 = a1.append(write)
             ta2 = a2.append(write)
@@ -684,19 +684,19 @@ class PropagatorTests extends ScalatestStarterTestSuite {
           }
         }
         .via { port =>
-          val (t, ts)  = OutPort.split(port)
-          val (fa, b2) = OutPort.split(t)
-          val (ta, tb) = OutPort.split(ts)
+          val (t, ts)  = port.unzip()
+          val (fa, b2) = t.unzip()
+          val (ta, tb) = ts.unzip()
           for {
             fa <- expectLeft(fa.append(npg.tap > npg.peek))
             fa <- expectRight(fa.append(isPair))
-            (f, a2) = OutPort.split(fa)
+            (f, a2) = fa.unzip()
             f <- expectLeft(f.append(npg.peek))
             ab <- expectRight(f.append(isRecCall))
-            (a1, b1) = OutPort.split(ab)
+            (a1, b1) = ab.unzip()
 
-            a = OutPort.pair(a1, a2).append(par(lower, lower) > merge)
-            b = OutPort.pair(b1, b2.append(npg.tap)).append(par(lower, lower) > merge)
+            a = (a1 zip a2).append(par(lower, lower) > merge)
+            b = (b1 zip b2.append(npg.tap)).append(par(lower, lower) > merge)
 
             ta1 = a.append(output)
             tb1 = b.append(output)

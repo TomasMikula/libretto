@@ -1,18 +1,20 @@
 package libretto.closed
 
-import libretto.CoreExecution
-
-trait ClosedExecution[DSL <: ClosedDSL] extends CoreExecution[DSL] {
+trait ClosedExecution[DSL <: ClosedDSL] {
+  val dsl: DSL
   import dsl.=⚬
 
-  override val OutPort: ClosedOutPorts
-  override val InPort:  ClosedInPorts
+  type InPort[A]
+  type OutPort[B]
 
-  trait ClosedOutPorts extends CoreOutPorts {
+  val OutPort: ClosedOutPorts
+  val InPort:  ClosedInPorts
+
+  trait ClosedOutPorts {
     def functionInputOutput[I, O](port: OutPort[I =⚬ O]): (InPort[I], OutPort[O])
   }
 
-  trait ClosedInPorts extends CoreInPorts {
+  trait ClosedInPorts {
     def functionInputOutput[I, O](port: InPort[I =⚬ O]): (OutPort[I], InPort[O])
   }
 }

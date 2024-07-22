@@ -51,20 +51,20 @@ private class ExecutionImpl(
     def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B] =
       port.extendBy(f)(using resourceRegistry)
 
-    override def pair[A, B](a: OutPort[A], b: OutPort[B]): OutPort[A |*| B] =
+    def pair[A, B](a: OutPort[A], b: OutPort[B]): OutPort[A |*| B] =
       Frontier.Pair(a, b)
 
-    override def split[A, B](port: OutPort[A |*| B]): (OutPort[A], OutPort[B]) =
+    def split[A, B](port: OutPort[A |*| B]): (OutPort[A], OutPort[B]) =
       port.splitPair
 
-    override def constant[A](obj: One -⚬ A): OutPort[A] =
+    def constant[A](obj: One -⚬ A): OutPort[A] =
       Frontier.One.extendBy(obj)(using resourceRegistry)
 
-    override def discardOne(port: OutPort[One]): Unit = {
+    def discardOne(port: OutPort[One]): Unit = {
       // do nothing
     }
 
-    override def awaitDone(port: OutPort[Done]): Async[Either[Throwable, Unit]] = {
+    def awaitDone(port: OutPort[Done]): Async[Either[Throwable, Unit]] = {
       val (complete, res) = Async.promiseLinear[Either[Throwable, Unit]]
       port.toFutureDone.onComplete {
         case Success(Frontier.DoneNow) => complete(Right(()))
@@ -73,7 +73,7 @@ private class ExecutionImpl(
       res
     }
 
-    override def awaitPing(port: OutPort[Ping]): Async[Either[Throwable, Unit]] = {
+    def awaitPing(port: OutPort[Ping]): Async[Either[Throwable, Unit]] = {
       val (complete, res) = Async.promiseLinear[Either[Throwable, Unit]]
       port.toFuturePing.onComplete {
         case Success(Frontier.PingNow) => complete(Right(()))
@@ -82,7 +82,7 @@ private class ExecutionImpl(
       res
     }
 
-    override def awaitNoPing(
+    def awaitNoPing(
       port: OutPort[Ping],
       duration: FiniteDuration,
     ): Async[Either[Either[Throwable, Unit], OutPort[Ping]]] = {
@@ -95,13 +95,13 @@ private class ExecutionImpl(
       res
     }
 
-    override def supplyNeed(port: OutPort[Need]): Unit =
+    def supplyNeed(port: OutPort[Need]): Unit =
       port.fulfillWith(Future.successful(()))
 
-    override def supplyPong(port: OutPort[Pong]): Unit =
+    def supplyPong(port: OutPort[Pong]): Unit =
       port.fulfillPongWith(Future.successful(()))
 
-    override def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]] = {
+    def awaitEither[A, B](port: OutPort[A |+| B]): Async[Either[Throwable, Either[OutPort[A], OutPort[B]]]] = {
       val (complete, res) = Async.promiseLinear[Either[Throwable, Either[OutPort[A], OutPort[B]]]]
       port.futureEither.onComplete {
         case Success(res) => complete(Right(res))
@@ -110,10 +110,10 @@ private class ExecutionImpl(
       res
     }
 
-    override def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A] =
+    def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A] =
       port.chooseL
 
-    override def chooseRight[A, B](port: OutPort[A |&| B]): OutPort[B] =
+    def chooseRight[A, B](port: OutPort[A |&| B]): OutPort[B] =
       port.chooseR
 
     override def functionInputOutput[I, O](port: OutPort[I =⚬ O]): (InPort[I], OutPort[O]) = {
@@ -136,14 +136,14 @@ private class ExecutionImpl(
     def contramap[A, B](port: InPort[B])(f: A -⚬ B): InPort[A] =
       a => port(a.extendBy(f)(using resourceRegistry))
 
-    override def pair[A, B](fa: InPort[A], fb: InPort[B]): InPort[A |*| B] =
+    def pair[A, B](fa: InPort[A], fb: InPort[B]): InPort[A |*| B] =
       { ab =>
         val (a, b) = ab.splitPair
         fa(a)
         fb(b)
       }
 
-    override def split[A, B](port: InPort[A |*| B]): (InPort[A], InPort[B]) = {
+    def split[A, B](port: InPort[A |*| B]): (InPort[A], InPort[B]) = {
       val (fna, fa) = Frontier.promise[A]
       val (fnb, fb) = Frontier.promise[B]
       port(Frontier.Pair(fa, fb))
@@ -153,31 +153,31 @@ private class ExecutionImpl(
       )
     }
 
-    override def constant[A](f: A -⚬ One): InPort[A] =
+    def constant[A](f: A -⚬ One): InPort[A] =
       fa => OutPort.discardOne(OutPort.map(fa)(f))
 
-    override def discardOne(port: InPort[One]): Unit =
+    def discardOne(port: InPort[One]): Unit =
       port(Frontier.One)
 
-    override def supplyDone(port: InPort[Done]): Unit =
+    def supplyDone(port: InPort[Done]): Unit =
       port(Frontier.DoneNow)
 
-    override def supplyPing(port: InPort[Ping]): Unit =
+    def supplyPing(port: InPort[Ping]): Unit =
       port(Frontier.PingNow)
 
-    override def supplyLeft[A, B](port: InPort[A |+| B]): InPort[A] = {
+    def supplyLeft[A, B](port: InPort[A |+| B]): InPort[A] = {
       val (fna, fa) = Frontier.promise[A]
       port(Frontier.InjectL(fa))
       fa => fna.fulfill(fa)
     }
 
-    override def supplyRight[A, B](port: InPort[A |+| B]): InPort[B] = {
+    def supplyRight[A, B](port: InPort[A |+| B]): InPort[B] = {
       val (fnb, fb) = Frontier.promise[B]
       port(Frontier.InjectR(fb))
       fb => fnb.fulfill(fb)
     }
 
-    override def supplyChoice[A, B](port: InPort[A |&| B]): Async[Either[Throwable, Either[InPort[A], InPort[B]]]] = {
+    def supplyChoice[A, B](port: InPort[A |&| B]): Async[Either[Throwable, Either[InPort[A], InPort[B]]]] = {
       val (complete, res) = Async.promiseLinear[Either[Throwable, Either[InPort[A], InPort[B]]]]
 
       port(Frontier.Choice(

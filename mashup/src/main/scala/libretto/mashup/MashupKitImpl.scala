@@ -425,37 +425,37 @@ object MashupKitImpl extends MashupKit { kit =>
           port.prepend(f)
 
         override def split[A, B](port: InPort[A ** B]): (InPort[A], InPort[B]) =
-          underlying.InPort.split(port)
+          port.unzipIn()
 
         override def emptyResourceIgnore(port: InPort[EmptyResource]): Unit =
-          underlying.InPort.discardOne(port)
+          port.dischargeOne()
 
         override def functionInputOutput[I, O](port: InPort[I --> O]): (OutPort[I], InPort[O]) =
             underlying.InPort.functionInputOutput(port)
 
         override def choiceAwait[A, B](port: InPort[A |&| B]): Async[Try[Either[InPort[A], InPort[B]]]] =
-          underlying.InPort.supplyChoice(port).map(_.toTry)
+          port.awaitChoice().map(_.toTry)
 
         override def unlimitedAwaitChoice[A](
           port: InPort[Unlimited[A]],
         ): Async[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]] = {
           val port1 = port.prepend(StarterKit.coreLib.Unlimited.fromChoice[A])
-          underlying.InPort.supplyChoice(port1)
+          port1.awaitChoice()
             .flatMap {
               case Left(e) =>
                 Async.now(Failure(e))
               case Right(Left(empty)) =>
-                underlying.InPort.discardOne(empty)
+                empty.dischargeOne()
                 Async.now(Success(None))
               case Right(Right(port)) =>
-                underlying.InPort.supplyChoice(port)
+                port.awaitChoice()
                   .flatMap {
                     case Left(e) =>
                       Async.now(Failure(e))
                     case Right(Left(portSingle)) =>
                       Async.now(Success(Some(Left(portSingle))))
                     case Right(Right(portSplit)) =>
-                      val (port1, port2) = underlying.InPort.split(portSplit)
+                      val (port1, port2) = portSplit.unzipIn()
                       Async.now(Success(Some(Right((port1, port2)))))
                   }
             }
@@ -469,16 +469,16 @@ object MashupKitImpl extends MashupKit { kit =>
 
         override def valueSupply[A](port: InPort[A], value: Value[A]): Unit =
           value match {
-            case Value.Unit        => underlying.InPort.discardOne(port)
+            case Value.Unit        => port.dischargeOne()
             case Value.Txt(value)  => underlying.InPort.supplyVal[String](port, value)
             case Value.F64(value)  => underlying.InPort.supplyVal[Double](port, value)
-            case Value.EmptyRecord => underlying.InPort.discardOne(port)
+            case Value.EmptyRecord => port.dischargeOne()
             case p: Value.Pair[x, y]  =>
-              val (px, py) = underlying.InPort.split[x, y](port)
+              val (px, py) = (port: InPort[x |*| y]).unzipIn()
               valueSupply(px, p.a)
               valueSupply(py, p.b)
             case ext: Value.ExtendRecord[x, ?, y] =>
-              val (initPort, lastPort) = underlying.InPort.split[x, y](port)
+              val (initPort, lastPort) = (port: InPort[x |*| y]).unzipIn()
               valueSupply(initPort, ext.init)
               valueSupply(lastPort, ext.last)
           }
@@ -492,32 +492,32 @@ object MashupKitImpl extends MashupKit { kit =>
           port.append(f)
 
         override def split[A, B](port: OutPort[A ** B]): (OutPort[A], OutPort[B]) =
-          underlying.OutPort.split(port)
+          port.unzip()
 
         override def emptyResourceIgnore(port: OutPort[EmptyResource]): Unit =
-          underlying.OutPort.discardOne(port)
+          port.discardOne()
 
         override def functionInputOutput[I, O](port: OutPort[I --> O]): (InPort[I], OutPort[O]) =
           underlying.OutPort.functionInputOutput(port)
 
         override def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A] =
-          underlying.OutPort.chooseLeft(port)
+          port.chooseLeft()
 
         override def chooseRight[A, B](port: OutPort[A |&| B]): OutPort[B] =
-          underlying.OutPort.chooseRight(port)
+          port.chooseRight()
 
-        override def unlimitedIgnore[A](port: OutPort[Unlimited[A]]): Unit = {
-          val port1 = port.append(StarterKit.coreLib.Unlimited.discard[A])
-          underlying.OutPort.discardOne(port1)
-        }
+        override def unlimitedIgnore[A](port: OutPort[Unlimited[A]]): Unit =
+          port
+            .append(StarterKit.coreLib.Unlimited.discard[A])
+            .discardOne()
 
         override def unlimitedGetSingle[A](port: OutPort[Unlimited[A]]): OutPort[A] =
           port.append(StarterKit.coreLib.Unlimited.single[A])
 
-        override def unlimitedSplit[A](port: OutPort[Unlimited[A]]): (OutPort[Unlimited[A]], OutPort[Unlimited[A]]) = {
-          val ports = port.append(StarterKit.coreLib.Unlimited.split)
-          underlying.OutPort.split(ports)
-        }
+        override def unlimitedSplit[A](port: OutPort[Unlimited[A]]): (OutPort[Unlimited[A]], OutPort[Unlimited[A]]) =
+          port
+            .append(StarterKit.coreLib.Unlimited.split)
+            .unzip()
 
         override def float64Get(port: OutPort[Float64]): Async[Try[Double]] =
           underlying.OutPort.awaitVal(port).map(_.toTry)
@@ -529,13 +529,13 @@ object MashupKitImpl extends MashupKit { kit =>
           ev.readFrom(using RuntimeImpl.this, ExecutionImpl.this)(port)
 
         override def recordIgnoreEmpty(port: OutPort[Record[EmptyResource]]): Unit =
-          underlying.OutPort.discardOne(port)
+          port.discardOne()
 
         override def recordGetSingle[N <: String, T](port: OutPort[Record[N of T]]): OutPort[T] =
           port
 
         override def recordUnsnoc[A, N <: String, T](port: OutPort[A ### (N of T)]): (OutPort[A], OutPort[T]) =
-          underlying.OutPort.split(port)
+          port.unzip()
       }
     }
   }
