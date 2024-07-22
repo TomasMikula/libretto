@@ -5,7 +5,15 @@ import libretto.CoreBridge
 trait ClosedBridge extends CoreBridge {
   override type Dsl <: ClosedDSL
 
-  override type Execution <: ClosedExecution[dsl.type]
+  import dsl.=⚬
+
+  extension [I, O](using exn: Execution)(port: exn.InPort[I =⚬ O]) {
+    def simulateFunction(): (exn.OutPort[I], exn.InPort[O])
+  }
+
+  extension [I, O](using exn: Execution)(port: exn.OutPort[I =⚬ O]) {
+    def useFunction(): (exn.InPort[I], exn.OutPort[O])
+  }
 }
 
 object ClosedBridge {

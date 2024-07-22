@@ -116,7 +116,7 @@ private class ExecutionImpl(
     def chooseRight[A, B](port: OutPort[A |&| B]): OutPort[B] =
       port.chooseR
 
-    override def functionInputOutput[I, O](port: OutPort[I =⚬ O]): (InPort[I], OutPort[O]) = {
+    def functionInputOutput[I, O](port: OutPort[I =⚬ O]): (InPort[I], OutPort[O]) = {
       val (in, out) = port.splitPair
       val in2: InPort[I] = i => in.fulfill(i)
       (in2, out)
@@ -197,7 +197,7 @@ private class ExecutionImpl(
       res
     }
 
-    override def functionInputOutput[I, O](port: InPort[I =⚬ O]): (OutPort[I], InPort[O]) = {
+    def functionInputOutput[I, O](port: InPort[I =⚬ O]): (OutPort[I], InPort[O]) = {
       val (ni, i) = Frontier.promise[I]
       val (no, o) = Frontier.promise[O]
       port(Frontier.Pair(ni, o))

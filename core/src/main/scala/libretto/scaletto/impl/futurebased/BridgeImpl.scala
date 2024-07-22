@@ -12,7 +12,7 @@ import scala.concurrent.duration.FiniteDuration
 object BridgeImpl extends ScalettoBridge {
   override type Dsl = FreeScaletto.type
   override val dsl: FreeScaletto.type = FreeScaletto
-  import dsl.{-⚬, |*|, |+|, |&|, Done, One, Need, Ping, Pong}
+  import dsl.{-⚬, =⚬, |*|, |+|, |&|, Done, One, Need, Ping, Pong}
 
   override opaque type Execution <: ScalettoExecution[dsl.type] = ExecutionImpl
 
@@ -116,5 +116,15 @@ object BridgeImpl extends ScalettoBridge {
   extension [A, B](using exn: Execution)(port: exn.OutPort[A |&| B]) {
     override def chooseLeft(): exn.OutPort[A]  = exn.OutPort.chooseLeft(port)
     override def chooseRight(): exn.OutPort[B] = exn.OutPort.chooseRight(port)
+  }
+
+  extension [I, O](using exn: Execution)(port: exn.InPort[I =⚬ O]) {
+    override def simulateFunction(): (exn.OutPort[I], exn.InPort[O]) =
+      exn.InPort.functionInputOutput(port)
+  }
+
+  extension [I, O](using exn: Execution)(port: exn.OutPort[I =⚬ O]) {
+    override def useFunction(): (exn.InPort[I], exn.OutPort[O]) =
+      exn.OutPort.functionInputOutput(port)
   }
 }

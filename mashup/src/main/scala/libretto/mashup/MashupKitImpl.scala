@@ -431,7 +431,7 @@ object MashupKitImpl extends MashupKit { kit =>
           port.dischargeOne()
 
         override def functionInputOutput[I, O](port: InPort[I --> O]): (OutPort[I], InPort[O]) =
-            underlying.InPort.functionInputOutput(port)
+          port.simulateFunction()
 
         override def choiceAwait[A, B](port: InPort[A |&| B]): Async[Try[Either[InPort[A], InPort[B]]]] =
           port.awaitChoice().map(_.toTry)
@@ -498,7 +498,7 @@ object MashupKitImpl extends MashupKit { kit =>
           port.discardOne()
 
         override def functionInputOutput[I, O](port: OutPort[I --> O]): (InPort[I], OutPort[O]) =
-          underlying.OutPort.functionInputOutput(port)
+          port.useFunction()
 
         override def chooseLeft[A, B](port: OutPort[A |&| B]): OutPort[A] =
           port.chooseLeft()
