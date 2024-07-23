@@ -3,7 +3,7 @@ package libretto.scaletto.impl.futurebased
 import libretto.exec.Executing
 import libretto.exec.Executor.CancellationReason
 import libretto.lambda.util.SourcePos
-import libretto.scaletto.{ScalettoBridge, ScalettoExecution}
+import libretto.scaletto.ScalettoBridge
 import libretto.scaletto.impl.FreeScaletto
 import libretto.util.{Async, Scheduler}
 import scala.concurrent.ExecutionContext
@@ -12,9 +12,12 @@ import scala.concurrent.duration.FiniteDuration
 object BridgeImpl extends ScalettoBridge {
   override type Dsl = FreeScaletto.type
   override val dsl: FreeScaletto.type = FreeScaletto
-  import dsl.{-⚬, =⚬, |*|, |+|, |&|, Done, One, Need, Ping, Pong}
+  import dsl.{-⚬, =⚬, |*|, |+|, |&|, Done, One, Need, Ping, Pong, Val}
 
-  override opaque type Execution <: ScalettoExecution[dsl.type] = ExecutionImpl
+  override opaque type Execution <: {
+    type InPort[A]
+    type OutPort[B]
+  } = ExecutionImpl
 
   def execute[A, B](prg: A -⚬ B)(
     ec: ExecutionContext,
@@ -126,5 +129,15 @@ object BridgeImpl extends ScalettoBridge {
   extension [I, O](using exn: Execution)(port: exn.OutPort[I =⚬ O]) {
     override def useFunction(): (exn.InPort[I], exn.OutPort[O]) =
       exn.OutPort.functionInputOutput(port)
+  }
+
+  extension [A](using exn: Execution)(port: exn.InPort[Val[A]]) {
+    override def supplyVal(value: A): Unit =
+      exn.InPort.supplyVal(port, value)
+  }
+
+  extension [A](using exn: Execution)(port: exn.OutPort[Val[A]]) {
+    override def awaitVal(): Async[Either[Throwable, A]] =
+      exn.OutPort.awaitVal(port)
   }
 }

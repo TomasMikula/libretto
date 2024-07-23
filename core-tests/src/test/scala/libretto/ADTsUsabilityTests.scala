@@ -12,6 +12,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
     import kit.*
     import kit.dsl.*
     import kit.dsl.given
+    import kit.bridge.*
 
     val coreLib = CoreLib(kit.dsl)
     import coreLib.{*, given}
@@ -286,7 +287,6 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             s1 |*| s2
           }
         }
-        .match { case tmp => tmp // XXX: avoiding compilation error "cannot establish a reference to InteractWith[...]#kit"
         .via { port =>
           val (p1, p2) = port.unzip()
           for {
@@ -295,7 +295,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             _ <- Outcome.assertEquals(s1, "(((1, 2), 3), 4)")
             _ <- Outcome.assertEquals(s2, "(1, (2, (3, 4)))")
           } yield ()
-        }}
+        }
 
     }
   }

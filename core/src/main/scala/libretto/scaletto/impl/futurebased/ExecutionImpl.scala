@@ -3,7 +3,6 @@ package libretto.scaletto.impl.futurebased
 import libretto.exec.Executor.CancellationReason
 import libretto.lambda.{EnumModule, Member}
 import libretto.lambda.util.SourcePos
-import libretto.scaletto.ScalettoExecution
 import libretto.scaletto.impl.{FreeScaletto, ScalaFunction, bug}
 import libretto.util.{Async, Scheduler}
 import scala.concurrent.duration.FiniteDuration
@@ -16,14 +15,14 @@ private class ExecutionImpl(
 )(using
   ec: ExecutionContext,
   scheduler: Scheduler,
-) extends ScalettoExecution[FreeScaletto.type] {
+) {
   import ResourceRegistry.*
 
-  override val dsl = FreeScaletto
+  val dsl = FreeScaletto
   import dsl.*
 
-  override opaque type OutPort[A] = Frontier[A]
-  override opaque type InPort[A] = Frontier[A] => Unit
+  opaque type OutPort[A] = Frontier[A]
+  opaque type InPort[A] = Frontier[A] => Unit
 
   private val (notifyOnCancel, watchCancellation) =
     Async.promise[CancellationReason]
@@ -47,7 +46,7 @@ private class ExecutionImpl(
   def watchForCancellation(): Async[CancellationReason] =
     watchCancellation
 
-  override object OutPort extends ScalettoOutPorts {
+  object OutPort {
     def map[A, B](port: OutPort[A])(f: A -⚬ B): OutPort[B] =
       port.extendBy(f)(using resourceRegistry)
 
@@ -122,7 +121,7 @@ private class ExecutionImpl(
       (in2, out)
     }
 
-    override def awaitVal[A](port: OutPort[Val[A]]): Async[Either[Throwable, A]] = {
+    def awaitVal[A](port: OutPort[Val[A]]): Async[Either[Throwable, A]] = {
       val (complete, res) = Async.promiseLinear[Either[Throwable, A]]
       port.toFutureValue.onComplete {
         case Success(a) => complete(Right(a))
@@ -132,7 +131,7 @@ private class ExecutionImpl(
     }
   }
 
-  override object InPort extends ScalettoInPorts {
+  object InPort {
     def contramap[A, B](port: InPort[B])(f: A -⚬ B): InPort[A] =
       a => port(a.extendBy(f)(using resourceRegistry))
 
@@ -204,7 +203,7 @@ private class ExecutionImpl(
       (i, o => no.fulfill(o))
     }
 
-    override def supplyVal[A](port: InPort[Val[A]], value: A): Unit =
+    def supplyVal[A](port: InPort[Val[A]], value: A): Unit =
       port(Frontier.Value(value))
   }
 

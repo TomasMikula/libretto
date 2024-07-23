@@ -420,6 +420,8 @@ object MashupKitImpl extends MashupKit { kit =>
       override type InPort[A]  = underlying.InPort[A]
       override type OutPort[A] = underlying.OutPort[A]
 
+      import executor.bridge.*
+
       override object InPort extends InPorts {
         override def contramap[A, B](port: InPort[B])(f: Fun[A, B]): InPort[A] =
           port.prepend(f)
@@ -462,16 +464,16 @@ object MashupKitImpl extends MashupKit { kit =>
         }
 
         override def float64Supply(port: InPort[Float64], value: Double): Unit =
-          underlying.InPort.supplyVal(port, value)
+          port.supplyVal(value)
 
         override def textSupply(port: InPort[Text], value: String): Unit =
-          underlying.InPort.supplyVal(port, value)
+          port.supplyVal(value)
 
         override def valueSupply[A](port: InPort[A], value: Value[A]): Unit =
           value match {
             case Value.Unit        => port.dischargeOne()
-            case Value.Txt(value)  => underlying.InPort.supplyVal[String](port, value)
-            case Value.F64(value)  => underlying.InPort.supplyVal[Double](port, value)
+            case Value.Txt(value)  => (port: InPort[Val[String]]).supplyVal(value)
+            case Value.F64(value)  => (port: InPort[Val[Double]]).supplyVal(value)
             case Value.EmptyRecord => port.dischargeOne()
             case p: Value.Pair[x, y]  =>
               val (px, py) = (port: InPort[x |*| y]).unzipIn()
@@ -520,10 +522,10 @@ object MashupKitImpl extends MashupKit { kit =>
             .unzip()
 
         override def float64Get(port: OutPort[Float64]): Async[Try[Double]] =
-          underlying.OutPort.awaitVal(port).map(_.toTry)
+          port.awaitVal().map(_.toTry)
 
         override def textGet(port: OutPort[Text]): Async[Try[String]] =
-          underlying.OutPort.awaitVal(port).map(_.toTry)
+          port.awaitVal().map(_.toTry)
 
         override def valueGet[A](port: OutPort[A])(using ev: ValueType[A]): Async[Try[Value[A]]] =
           ev.readFrom(using RuntimeImpl.this, ExecutionImpl.this)(port)

@@ -11,6 +11,7 @@ class OutPort[A](
   val execution: bridge.Execution,
   val port: execution.OutPort[A],
 ) {
+  import bridge.*
   import execution.{OutPort as Port}
 
   private given execution.type = execution
@@ -27,7 +28,7 @@ class OutPort[A](
               port.awaitDone().toZIO.absolve.orDie.as(None)
             case Right(port) =>
               val (px, pxs) = port.unzip()
-              Port.awaitVal(px).toZIO.absolve.orDie.map(x => Some((x, pxs)))
+              px.awaitVal().toZIO.absolve.orDie.map(x => Some((x, pxs)))
           }
       }
 

@@ -56,12 +56,12 @@ abstract class AbstractStarterKit(
     val exec = executor(blockingExecutor)(mainExecutor)
 
     val executing = exec.execute(blueprint)
-    import executing.{execution, inPort, outPort}
+    import executing.{bridge, execution, inPort, outPort}
     given execution.type = execution
 
     inPort.supplyDone()
     Async
-      .toFuture { execution.OutPort.awaitVal(outPort) }
+      .toFuture { outPort.awaitVal() }
       .flatMap {
         case Right(a) => Future.successful(a)
         case Left(e)  => Future.failed(e)

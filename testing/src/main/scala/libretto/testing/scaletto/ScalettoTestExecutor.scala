@@ -50,6 +50,7 @@ object ScalettoTestExecutor {
         outPort: exn.OutPort[Assertion[Done]],
       ): Outcome[Unit] = {
         import TestResult.{crash, success as succeed, failed as fail}
+        import bridge.*
         Outcome.asyncTestResult(
           outPort
             .awaitEither()
@@ -57,7 +58,7 @@ object ScalettoTestExecutor {
               case Left(e) =>
                 Async.now(crash(e))
               case Right(Left(msg)) =>
-                exn.OutPort.awaitVal(msg).map {
+                msg.awaitVal().map {
                   case Left(e)    => crash(e)
                   case Right(msg) => fail(using pos)(msg)
                 }

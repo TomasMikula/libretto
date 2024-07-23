@@ -11,7 +11,7 @@ trait ScalettoTestKit extends TestKitWithManualClock {
   override val bridge: ScalettoBridge.Of[dsl.type]
 
   import dsl.*
-  import bridge.Execution
+  import bridge.*
 
   private lazy val coreLib = CoreLib(dsl)
   import coreLib.*
@@ -43,7 +43,7 @@ trait ScalettoTestKit extends TestKitWithManualClock {
 
   def expectVal[A](using exn: Execution)(port: exn.OutPort[Val[A]]): Outcome[A] =
     Outcome.asyncTestResult(
-      exn.OutPort.awaitVal(port).map {
+      port.awaitVal().map {
         case Left(e)  => TestResult.crash(e)
         case Right(a) => TestResult.success(a)
       }

@@ -67,7 +67,7 @@ sealed trait Ztuff[A] {
             .runFoldWhileZIO(Some(port): S)(_.isDefined) { (optPort, elem) =>
               val Some(port) = optPort: @unchecked
               val (pa, ps) = port.injectRight().unzipIn()
-              exn.InPort.supplyVal(pa, elem)
+              pa.supplyVal(elem)
               unpack(ps).awaitChoice().toZIO.absolve.orDie.map {
                 case Left(port) =>
                   port.supplyDone()

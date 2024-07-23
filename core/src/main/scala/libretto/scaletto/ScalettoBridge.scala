@@ -6,25 +6,14 @@ import libretto.util.Async
 trait ScalettoBridge extends ClosedBridge {
   override type Dsl <: Scaletto
 
-  override type Execution <: ScalettoExecution[dsl.type]
-}
-
-trait ScalettoExecution[DSL <: Scaletto] {
-  type InPort[A]
-  type OutPort[B]
-
-  val dsl: DSL
   import dsl.Val
 
-  val OutPort: ScalettoOutPorts
-  val InPort:  ScalettoInPorts
-
-  trait ScalettoOutPorts {
-    def awaitVal[A](port: OutPort[Val[A]]): Async[Either[Throwable, A]]
+  extension [A](using exn: Execution)(port: exn.InPort[Val[A]]) {
+    def supplyVal(value: A): Unit
   }
 
-  trait ScalettoInPorts {
-    def supplyVal[A](port: InPort[Val[A]], value: A): Unit
+  extension [A](using exn: Execution)(port: exn.OutPort[Val[A]]) {
+    def awaitVal(): Async[Either[Throwable, A]]
   }
 }
 
