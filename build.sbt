@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-ThisBuild / scalaVersion := "3.5.0-RC4"
+ThisBuild / scalaVersion := "3.5.0-RC5"
 
 ThisBuild / organization := "dev.continuously.libretto"
 
@@ -60,7 +60,7 @@ val ZioHttpVersion = "3.0.0-RC2"
 val commonScalacOptions =
   Seq(
     "-deprecation",
-    "-Ykind-projector:underscores",
+    "-Xkind-projector:underscores",
   )
 
 lazy val lambda = crossProject(JVMPlatform, JSPlatform)
