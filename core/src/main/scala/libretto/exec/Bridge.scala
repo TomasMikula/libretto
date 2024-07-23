@@ -7,10 +7,7 @@ trait Bridge {
   val dsl: Dsl
 
   /** Handle to a running Libretto program. */
-  type Execution <: {
-    type InPort[A]
-    type OutPort[B]
-  }
+  type Execution <: libretto.exec.Execution
 
   import dsl.-⚬
 

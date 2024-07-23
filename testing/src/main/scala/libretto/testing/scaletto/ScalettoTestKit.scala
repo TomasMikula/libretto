@@ -11,7 +11,7 @@ trait ScalettoTestKit extends TestKitWithManualClock {
   override val bridge: ScalettoBridge.Of[dsl.type]
 
   import dsl.*
-  import bridge.*
+  import bridge.Execution
 
   private lazy val coreLib = CoreLib(dsl)
   import coreLib.*

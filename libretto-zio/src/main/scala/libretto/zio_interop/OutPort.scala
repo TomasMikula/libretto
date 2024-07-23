@@ -11,7 +11,6 @@ class OutPort[A](
   val execution: bridge.Execution,
   val port: execution.OutPort[A],
 ) {
-  import bridge.*
   import execution.{OutPort as Port}
 
   private given execution.type = execution

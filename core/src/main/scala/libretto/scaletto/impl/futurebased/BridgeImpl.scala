@@ -14,10 +14,8 @@ object BridgeImpl extends ScalettoBridge {
   override val dsl: FreeScaletto.type = FreeScaletto
   import dsl.{-⚬, =⚬, |*|, |+|, |&|, Done, One, Need, Ping, Pong, Val}
 
-  override opaque type Execution <: {
-    type InPort[A]
-    type OutPort[B]
-  } = ExecutionImpl
+  override opaque type Execution <: libretto.exec.Execution =
+    ExecutionImpl
 
   def execute[A, B](prg: A -⚬ B)(
     ec: ExecutionContext,

@@ -56,7 +56,7 @@ abstract class AbstractStarterKit(
     val exec = executor(blockingExecutor)(mainExecutor)
 
     val executing = exec.execute(blueprint)
-    import executing.{bridge, execution, inPort, outPort}
+    import executing.{execution, inPort, outPort}
     given execution.type = execution
 
     inPort.supplyDone()

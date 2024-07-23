@@ -1,5 +1,6 @@
 package libretto.scaletto.impl.futurebased
 
+import libretto.exec.Execution
 import libretto.exec.Executor.CancellationReason
 import libretto.lambda.{EnumModule, Member}
 import libretto.lambda.util.SourcePos
@@ -15,14 +16,14 @@ private class ExecutionImpl(
 )(using
   ec: ExecutionContext,
   scheduler: Scheduler,
-) {
+) extends Execution {
   import ResourceRegistry.*
 
   val dsl = FreeScaletto
   import dsl.*
 
-  opaque type OutPort[A] = Frontier[A]
-  opaque type InPort[A] = Frontier[A] => Unit
+  override opaque type OutPort[A] = Frontier[A]
+  override opaque type InPort[A] = Frontier[A] => Unit
 
   private val (notifyOnCancel, watchCancellation) =
     Async.promise[CancellationReason]

@@ -420,8 +420,6 @@ object MashupKitImpl extends MashupKit { kit =>
       override type InPort[A]  = underlying.InPort[A]
       override type OutPort[A] = underlying.OutPort[A]
 
-      import executor.bridge.*
-
       override object InPort extends InPorts {
         override def contramap[A, B](port: InPort[B])(f: Fun[A, B]): InPort[A] =
           port.prepend(f)
