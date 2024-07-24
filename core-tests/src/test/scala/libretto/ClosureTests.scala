@@ -10,7 +10,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
     import kit.dsl.*
     import kit.dsl.$.*
     import kit.Outcome
-    import kit.Outcome.expectNotThrows
+    import kit.Outcome.{assertEquals, expectNotThrows}
 
     val coreLib = CoreLib(kit.dsl)
     val scalettoLib = ScalettoLib(kit.dsl, coreLib)
@@ -80,7 +80,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
           prg
         }.via {
-          _.expectVal.assertEquals("abcabc")
+          _.expectVal.flatMap(assertEquals(_, "abcabc"))
         },
 
       "some closure 3" ->
@@ -96,7 +96,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             f(s)
           }
         }.via {
-          _.expectVal.assertEquals("abcabc")
+          _.expectVal.flatMap(assertEquals(_, "abcabc"))
         },
 
       "`one` expression in a closure" ->
@@ -118,7 +118,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
           p2
         }.via {
-          _.expectVal.assertEquals(43)
+          _.expectVal.flatMap(assertEquals(_, 43))
         },
 
       "non-capturing 'closure' (higher-order function)" ->

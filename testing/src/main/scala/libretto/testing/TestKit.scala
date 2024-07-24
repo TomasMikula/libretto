@@ -123,9 +123,6 @@ trait TestKit {
       outcomes.foldRight(Outcome.success(()))(zipWith(_, _)((_, _) => ()))
 
     extension [A](outcome: Outcome[A]) {
-      def assertEquals(using pos: SourcePos)(expected: A): Outcome[Unit] =
-        Outcome.flatMap(outcome)(a => Outcome.assertEquals(a, expected)(using pos))
-
       def withFilter(f: A => Boolean)(using pos: SourcePos): Outcome[A] =
         Outcome.flatMap(outcome) { a =>
           if (f(a)) Outcome.success(a)

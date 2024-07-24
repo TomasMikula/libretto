@@ -554,7 +554,8 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           for {
             ht <- port.append(LList.uncons).expectRight
             (h, t) = ht.unzip()
-            _ <- h.expectVal.assertEquals(value)
+            h <- h.expectVal
+            _ <- Outcome.assertEquals(h, value)
           } yield t
 
         def expectNil(using e: Execution)(port: e.OutPort[LList[Val[Int]]])(using SourcePos): Outcome[Unit] =

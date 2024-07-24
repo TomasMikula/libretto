@@ -29,13 +29,13 @@ class StreamsTests extends ScalatestScalettoTestSuite {
     List(
       "toList ⚬ fromList = id" -> TestCase
         .interactWith { ValSource.fromList(List(1, 2, 3, 4, 5, 6)) > ValSource.toList }
-        .via { _.expectVal.assertEquals(List(1, 2, 3, 4, 5, 6)) },
+        .via { _.expectVal.flatMap(assertEquals(_, List(1, 2, 3, 4, 5, 6))) },
 
       "ValSource.map" -> TestCase
         .interactWith {
           ValSource.fromList(List(1, 2, 3)) > ValSource.map(_.toString) > ValSource.toList
         }.via {
-          _.expectVal.assertEquals(List("1", "2", "3"))
+          _.expectVal.flatMap(assertEquals(_, List("1", "2", "3")))
         },
 
       "partition" -> TestCase
@@ -46,7 +46,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             .>(par(ValSource.toList, ValSource.toList))
             .>(unliftPair)
         }.via {
-          _.expectVal.assertEquals((List(2, 4, 6), List(1, 3, 5)))
+          _.expectVal.flatMap(assertEquals(_, (List(2, 4, 6), List(1, 3, 5))))
         },
 
       "concat" -> TestCase
@@ -55,7 +55,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             .>(ValSource.concat)
             .>(ValSource.toList)
         }.via {
-          _.expectVal.assertEquals(List(1, 2, 3 ,4, 5, 6))
+          _.expectVal.flatMap(assertEquals(_, List(1, 2, 3 ,4, 5, 6)))
         },
 
       "merge" -> TestCase
@@ -68,7 +68,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             .>(ValSource.toList)
             .>(mapVal(_.toSet))
         }.via {
-          _.expectVal.assertEquals(Set(1, 2, 3, 4, 5, 6))
+          _.expectVal.flatMap(assertEquals(_, Set(1, 2, 3, 4, 5, 6)))
         },
 
       "mergeAll" -> TestCase
@@ -161,11 +161,16 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             val (out1 |*| out2) = dup(src)
             toList(out1) ** toList(out2)
           }
-        }.via {
-          _.expectVal.assertEquals((
-            List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
-            List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
-          ))
+        }.via { port =>
+          port.expectVal.flatMap { actual =>
+            assertEquals(
+              actual,
+              expected = (
+                List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+                List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+              )
+            )
+          }
         },
 
       "broadcastByKey" -> TestCase
@@ -191,7 +196,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
 
           prg > mapVal(_.toSet)
         }.via {
-          _.expectVal.assertEquals(Set("foo", "fooo", "pho", "phoo", "boo"))
+          _.expectVal.flatMap(assertEquals(_, Set("foo", "fooo", "pho", "phoo", "boo")))
         },
 
       "ValueDrain.contraDup pulls as soon as either one pulls" -> TestCase
