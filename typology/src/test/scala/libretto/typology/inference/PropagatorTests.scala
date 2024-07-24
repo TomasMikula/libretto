@@ -231,7 +231,6 @@ class PropagatorTests extends ScalatestStarterTestSuite {
 
   override def testCases(using kit: StarterTestKit): scala.List[(String, TestCase[kit.type])] = {
     import kit.{Outcome, expectLeft, expectRight, expectVal}
-    import kit.bridge.*
     import Outcome.{assertEquals, assertMatches, assertRight, failure, success}
 
     val pg =

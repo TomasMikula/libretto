@@ -12,7 +12,6 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
     import kit.*
     import kit.dsl.*
     import kit.dsl.given
-    import kit.bridge.*
 
     val coreLib = CoreLib(kit.dsl)
     import coreLib.{*, given}

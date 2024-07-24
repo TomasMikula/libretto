@@ -146,8 +146,12 @@ object TestCase {
     val kit: TK,
     val body: kit.dsl.-⚬[kit.dsl.Done, O],
   ) {
-    def via(conductor: (exn: kit.bridge.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit]): TestCase.Single[kit.type] =
-      TestCase(using kit)(body, conductor(_))
+    def via(
+      // otherwise superfluous given kit.bridge.type provided to work around
+      // https://github.com/scala/scala3/issues/21269
+      conductor: (bridge: kit.bridge.type, exn: kit.bridge.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit]
+    ): TestCase.Single[kit.type] =
+      TestCase(using kit)(body, conductor(using kit.bridge)(_))
 
     def via[X](
       conductor: (exn: kit.bridge.Execution) ?=> exn.OutPort[O] => kit.Outcome[X],

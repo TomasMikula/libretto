@@ -13,7 +13,6 @@ import scala.concurrent.duration.*
 class StreamsTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
     import kit.{Outcome, dsl, expectDone, expectRight, expectVal}
-    import kit.bridge.*
     import kit.Outcome.{assertEquals, success}
 
     val coreLib = CoreLib(dsl)

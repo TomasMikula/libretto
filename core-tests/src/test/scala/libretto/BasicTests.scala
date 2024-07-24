@@ -46,7 +46,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
     import coreLib.{*, given}
     import scalettoLib.{*, given}
-    import kit.bridge.*
+    import kit.bridge.Execution
     import Outcome.monadOutcome.*
 
     def raceKeepWinner[A](
