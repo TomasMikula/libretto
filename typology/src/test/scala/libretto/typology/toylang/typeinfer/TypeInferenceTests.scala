@@ -193,13 +193,13 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
   }
 
   override def testCases(using kit: StarterTestKit): scala.List[(String, TestCase[kit.type])] = {
-    import kit.{Outcome, expectVal}
+    import kit.Outcome
     import Outcome.assertEquals
 
     def testInferredTypes[A, B](f: Fun[A, B])(check: TypedFun[A, B] => Outcome[Unit]): TestCase.Single[kit.type] =
       TestCase
         .interactWith { λ { start => constant(inferTypes(f)) waitFor start } }
-        .via { expectVal(_).flatMap(check) }
+        .via { _.expectVal.flatMap(check) }
 
     scala.List(
       "infer types of id > intToString > id" ->

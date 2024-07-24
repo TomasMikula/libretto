@@ -230,7 +230,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
   import InferenceSupport.{IType, isPair, isRecCall, pair, recCall}
 
   override def testCases(using kit: StarterTestKit): scala.List[(String, TestCase[kit.type])] = {
-    import kit.{Outcome, expectLeft, expectRight, expectVal}
+    import kit.Outcome
     import Outcome.{assertEquals, assertMatches, assertRight, failure, success}
 
     val pg =
@@ -290,7 +290,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
       expectedValue: Int,
     )(using SourcePos): Outcome[Unit] =
       for {
-        label <- expectVal(l.append(pg.unwrapLabel))
+        label <- l.append(pg.unwrapLabel).expectVal
         u <- assertEquals(label.value, expectedValue)
       } yield u
 
@@ -308,7 +308,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            t <- expectVal(port)
+            t <- port.expectVal
             _ <- assertAbstractEquals(t, 1)
           } yield ()
         },
@@ -326,7 +326,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            t <- expectVal(port)
+            t <- port.expectVal
             _ <- assertAbstractEquals(t, 1)
           } yield ()
         },
@@ -344,7 +344,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            t <- expectVal(port)
+            t <- port.expectVal
             _ <- assertAbstractEquals(t, 1)
           } yield ()
         },
@@ -364,7 +364,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            t <- expectVal(port)
+            t <- port.expectVal
             _ <- assertAbstractEquals(t, 1)
           } yield ()
         },
@@ -382,7 +382,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            ts <- expectVal(port)
+            ts <- port.expectVal
             (t, ((a, b), c)) = ts
             _ <- assertAbstractEquals(t, 1)
             _ <- assertAbstractEquals(a, 1)
@@ -405,7 +405,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            ts <- expectVal(port)
+            ts <- port.expectVal
             (t, ((a, b), (c, d))) = ts
             _ <- assertAbstractEquals(t, 1)
             _ <- assertAbstractEquals(a, 1)
@@ -426,7 +426,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            ts <- expectVal(port)
+            ts <- port.expectVal
             ((t, x), y) = ts
             vt <- assertAbstract(t)
             vx <- assertAbstract(x)
@@ -449,7 +449,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            ts <- expectVal(port)
+            ts <- port.expectVal
             (((t, x), y), z) = ts
             _ <- assertAbstractEquals(t, 1)
             _ <- assertAbstractEquals(x, 1)
@@ -471,7 +471,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            ts <- expectVal(port)
+            ts <- port.expectVal
             (t, ((a, b), (c, d))) = ts
             _ <- assertAbstractEquals(t, 1)
             _ <- assertAbstractEquals(a, 1)
@@ -493,7 +493,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            ts <- expectVal(port)
+            ts <- port.expectVal
             (t, (a1, a2)) = ts
             _ <- assertAbstractEquals(t, 1)
             _ <- assertAbstractEquals(a1, 1)
@@ -513,7 +513,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            ts <- expectVal(port)
+            ts <- port.expectVal
             (t, b) = ts
             _ <- assertAbstractEquals(t, 1)
             _ <- assertAbstractEquals(b, 1)
@@ -533,7 +533,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            ts <- expectVal(port)
+            ts <- port.expectVal
             ((c, a), (t1, t2)) = ts
             _ <- assertAbstractEquals(c, 1)
             _ <- assertAbstractEquals(a, 1)
@@ -556,7 +556,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            ts <- expectVal(port)
+            ts <- port.expectVal
             ((t, (a, b)), (t1, t2)) = ts
             _ <- assertAbstractEquals(t, 1)
             _ <- assertAbstractEquals(a, 1)
@@ -577,8 +577,8 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         .via { port =>
           val (b, t) = port.unzip()
           for {
-            b <- expectVal(b)
-            t <- expectVal(t)
+            b <- b.expectVal
+            t <- t.expectVal
             _ <- assertAbstractEquals(b, 1)
             _ <- assertAbstractEquals(t, 1)
           } yield ()
@@ -598,8 +598,8 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         .via { port =>
           val (b, t) = port.unzip()
           for {
-            b <- expectVal(b)
-            t <- expectVal(t)
+            b <- b.expectVal
+            t <- t.expectVal
             _ <- assertAbstractEquals(b, 1)
             _ <- assertAbstractEquals(t, 1)
           } yield ()
@@ -618,13 +618,13 @@ class PropagatorTests extends ScalatestStarterTestSuite {
           val (t, ts) = port.unzip()
           val (ta, tb) = ts.unzip()
           for {
-            ab <- expectLeft(t.append(tap > peek))
-            ab <- expectRight(ab.append(isRecCall))
+            ab <- t.append(tap > peek).expectLeft
+            ab <- ab.append(isRecCall).expectRight
             (a, b) = ab.unzip()
-            ta1 <- expectVal(a.append(write))
-            tb1 <- expectVal(b.append(write))
-            ta  <- expectVal(ta)
-            tb  <- expectVal(tb)
+            ta1 <- a.append(write).expectVal
+            tb1 <- b.append(write).expectVal
+            ta  <- ta.expectVal
+            tb  <- tb.expectVal
             _ <- assertAbstractEquals(ta, 1)
             _ <- assertAbstractEquals(ta1, 1)
             _ <- assertAbstractEquals(tb, 2)
@@ -646,22 +646,22 @@ class PropagatorTests extends ScalatestStarterTestSuite {
           val (t, ts)  = port.unzip()
           val (ta, tb) = ts.unzip()
           for {
-            fa <- expectLeft(t.append(tap > peek))
-            fa <- expectRight(fa.append(isPair))
+            fa <- t.append(tap > peek).expectLeft
+            fa <- fa.append(isPair).expectRight
             (f, a2) = fa.unzip()
-            ab <- expectLeft(f.append(peek))
-            ab <- expectRight(ab.append(isRecCall))
+            ab <- f.append(peek).expectLeft
+            ab <- ab.append(isRecCall).expectRight
             (a1, b) = ab.unzip()
 
             ta1 = a1.append(write)
             ta2 = a2.append(write)
             tb0 = b.append(write)
 
-            ta1 <- expectVal(ta1)
-            ta2 <- expectVal(ta2)
-            tb0 <- expectVal(tb0)
-            ta  <- expectVal(ta)
-            tb  <- expectVal(tb)
+            ta1 <- ta1.expectVal
+            ta2 <- ta2.expectVal
+            tb0 <- tb0.expectVal
+            ta  <- ta.expectVal
+            tb  <- tb.expectVal
 
             _ <- assertAbstractEquals(ta, 1)
             _ <- assertAbstractEquals(ta1, 1)
@@ -687,11 +687,11 @@ class PropagatorTests extends ScalatestStarterTestSuite {
           val (fa, b2) = t.unzip()
           val (ta, tb) = ts.unzip()
           for {
-            fa <- expectLeft(fa.append(npg.tap > npg.peek))
-            fa <- expectRight(fa.append(isPair))
+            fa <- fa.append(npg.tap > npg.peek).expectLeft
+            fa <- fa.append(isPair).expectRight
             (f, a2) = fa.unzip()
-            f <- expectLeft(f.append(npg.peek))
-            ab <- expectRight(f.append(isRecCall))
+            f <- f.append(npg.peek).expectLeft
+            ab <- f.append(isRecCall).expectRight
             (a1, b1) = ab.unzip()
 
             a = (a1 zip a2).append(par(lower, lower) > merge)
@@ -700,10 +700,10 @@ class PropagatorTests extends ScalatestStarterTestSuite {
             ta1 = a.append(output)
             tb1 = b.append(output)
 
-            ta1 <- expectVal(ta1)
-            tb1 <- expectVal(tb1)
-            ta  <- expectVal(ta)
-            tb  <- expectVal(tb)
+            ta1 <- ta1.expectVal
+            tb1 <- tb1.expectVal
+            ta  <- ta.expectVal
+            tb  <- tb.expectVal
 
             _ <- assertAbstractEquals(ta, 1)
             _ <- assertAbstractEquals(ta1, 1)
@@ -726,7 +726,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
         }
         .via { port =>
           for {
-            tu <- expectVal(port)
+            tu <- port.expectVal
             (t, u) = tu
             _ <- assertMatches(t) { case Type.Mismatch(_, _) => }
             _ <- assertEquals(u, Type.Pair(Type.ForbiddenSelfRef(Label(1)), Type.ForbiddenSelfRef(Label(1))))

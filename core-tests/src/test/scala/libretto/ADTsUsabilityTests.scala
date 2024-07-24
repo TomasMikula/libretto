@@ -1,7 +1,7 @@
 package libretto
 
-import libretto.lambda.{Extractor, Focus, Partitioning}
-import libretto.lambda.util.{Applicative, SourcePos, TypeEqK}
+import libretto.lambda.Extractor
+import libretto.lambda.util.SourcePos
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
 import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
@@ -9,7 +9,7 @@ import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
 class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.*
+    import kit.Outcome
     import kit.dsl.*
     import kit.dsl.given
 
@@ -241,7 +241,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
           }
         }.via { port =>
           for {
-            n <- expectVal(port)
+            n <- port.expectVal
             _ <- Outcome.assertEquals(n, 10)
           } yield ()
         }
@@ -264,7 +264,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
           }
         }.via { port =>
           for {
-            s <- expectVal(port)
+            s <- port.expectVal
             _ <- Outcome.assertEquals(s, "((1, 2), (3, 4))")
           } yield ()
         }
@@ -289,8 +289,8 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
         .via { port =>
           val (p1, p2) = port.unzip()
           for {
-            s1 <- expectVal(p1)
-            s2 <- expectVal(p2)
+            s1 <- p1.expectVal
+            s2 <- p2.expectVal
             _ <- Outcome.assertEquals(s1, "(((1, 2), 3), 4)")
             _ <- Outcome.assertEquals(s2, "(1, (2, (3, 4)))")
           } yield ()

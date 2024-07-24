@@ -39,7 +39,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     )
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.*
+    import kit.{Assertion, Outcome, dsl, assertEquals, assertLeft, leftOrCrash, manualClock, rightOrCrash, success}
     import dsl.*
     import dsl.$.*
     val coreLib = CoreLib(dsl)
@@ -142,10 +142,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           val (need, res0) = port.unzip()
           val (ping, res1) = res0.append(notifyEither).unzip()
           for {
-            _ <- expectNoPing_(ping, 10.millis)
+            _ <- ping.expectNoPingThenIgnore(10.millis)
             _ = need.supplyNeed()
-            d <- expectLeft(res1)
-            _ <- expectDone(d)
+            d <- res1.expectLeft
+            _ <- d.expectDone
           } yield ()
         },
 
@@ -166,7 +166,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         .interactWith(crashd("boom!"))
         .via { port =>
           for {
-            e <- expectCrashDone(port)
+            e <- port.expectCrashDone
             _ <- Outcome.assertEquals(e.getMessage, "boom!")
           } yield ()
         },
@@ -181,11 +181,11 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           .interactWith(prg)
           .via { port =>
             for {
-              rightPort       <- expectRight(port)
+              rightPort       <- port.expectRight
               ports           = rightPort.unzip()
               (pCrash, pDone) = ports
-              _               <- expectDone(pDone)
-              _               <- expectCrashDone(pCrash)
+              _               <- pDone.expectDone
+              _               <- pCrash.expectCrashDone
             } yield ()
           }
       },
@@ -199,7 +199,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         }
         .via { port =>
           for {
-            e <- expectCrashDone(port)
+            e <- port.expectCrashDone
             _ <- Outcome.assertEquals(e.getMessage, "oops")
           } yield ()
         },
@@ -354,7 +354,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
 
           prg
         }.via { port =>
-          expectDone(port) >> {
+          port.expectDone >> {
             ref.get() match {
               case "released" => Outcome.success(())
               case other      => Outcome.failure(s"Unexpected value: '$other'")
@@ -388,7 +388,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
             prg
           }
           .via { port =>
-            expectDone(port) >> {
+            port.expectDone >> {
               val logEntries: List[String] = store.get().reverse
 
               Outcome.assertEquals(logEntries.take(2),       List("acquire A", "split A -> (B, C)")) >>
@@ -437,7 +437,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           .via(
             port =>
               for {
-                e <- expectCrashDone(port)
+                e <- port.expectCrashDone
                 _ <- Outcome.assertEquals(e.getMessage, "Boom!")
               } yield (),
             postStop = _ => {
@@ -478,7 +478,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           .interactWith(prg)
           .via { port =>
             for {
-              res <- expectVal(port)
+              res <- port.expectVal
               _   <- Outcome.assertEquals(res, 6)
               _   <- Outcome.assertEquals(releaseCounter.get(), 1)
             } yield ()
@@ -517,7 +517,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           .interactWith(prg)
           .via { port =>
             for {
-              results <- expectVal(port)
+              results <- port.expectVal
 
               (startMillis, (sleepEnds, pureEnds)) = results
               sleepDurations = sleepEnds.map(_.value - startMillis.value)
@@ -552,13 +552,15 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
 
         def expectNext(using e: Execution)(port: e.OutPort[LList[Val[Int]]], value: Int)(using SourcePos): Outcome[e.OutPort[LList[Val[Int]]]] =
           for {
-            ht <- expectRight(port.append(LList.uncons))
+            ht <- port.append(LList.uncons).expectRight
             (h, t) = ht.unzip()
-            _ <- expectVal(h).assertEquals(value)
+            _ <- h.expectVal.assertEquals(value)
           } yield t
 
         def expectNil(using e: Execution)(port: e.OutPort[LList[Val[Int]]])(using SourcePos): Outcome[Unit] =
-          expectLeft(port.append(LList.uncons))
+          port
+            .append(LList.uncons)
+            .expectLeft
             .map(_.discardOne())
 
         TestCase
@@ -605,7 +607,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
               fibonacci > par(Endless.split > par(take(10), take(10)) > unliftPair, id) > awaitPosSnd
             }.via { port =>
               for {
-                results <- expectVal(port)
+                results <- port.expectVal
                 (fibs1, fibs2) = results
                 _ <- Outcome.assert(fibs1.sorted == fibs1)
                 _ <- Outcome.assert(fibs2.sorted == fibs2)
@@ -653,7 +655,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           .interactWith(prg)
           .via { port =>
             for {
-              pairs <- expectVal(port)
+              pairs <- port.expectVal
 
               // each client appears exactly once
               _ <- Outcome.assert(pairs.size == nClients)
@@ -704,7 +706,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         }
         .via { port =>
           for {
-            ns <- expectVal(port)
+            ns <- port.expectVal
             _  <- Outcome.assert(ns.size == ClientCount, s"${ns.size} != $ClientCount")
             _  <- Outcome.assert(ns.forall(_ <= LeaseCount), s"contains values greater than $LeaseCount: ${ns.filter(_ >= LeaseCount)}")
             _  <- Outcome.assert(ns.contains(LeaseCount), s"Number of granted leases hasn't reached the full capacity of $LeaseCount. Maximum reached was ${ns.max}: $ns")
@@ -939,7 +941,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
 
           // check that at least N/2 values were equal to the last written value (N-1)
           for {
-            is <- expectVal(out)
+            is <- out.expectVal
             _  <- Outcome.assert(is.count(_ == N-1) >= N/2, s"Expected ${N/2}+ values to be ${N-1}, got $is")
           } yield ()
         },

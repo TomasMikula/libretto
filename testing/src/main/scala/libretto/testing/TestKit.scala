@@ -174,58 +174,59 @@ trait TestKit {
   type ExecutionParam[A]
   type ExecutionParams[A] = libretto.exec.ExecutionParams[ExecutionParam, A]
 
-  def expectDone(using exn: Execution)(port: exn.OutPort[Done]): Outcome[Unit] =
-    port.awaitDone().map {
-      case Left(e)   => TestResult.crash(e)
-      case Right(()) => TestResult.success(())
-    }
+  extension (using exn: Execution, pos: SourcePos)(port: exn.OutPort[Done]) {
+    def expectDone: Outcome[Unit] =
+      port.awaitDone().map {
+        case Left(e)   => TestResult.crash(e)
+        case Right(()) => TestResult.success(())
+      }
 
-  def expectCrashDone(using exn: Execution, pos: SourcePos)(port: exn.OutPort[Done]): Outcome[Throwable] =
-    port.awaitDone().map {
-      case Left(e)   => TestResult.success(e)
-      case Right(()) => TestResult.failed(using pos)("Expected crash, but got Done")
-    }
+    def expectCrashDone: Outcome[Throwable] =
+      port.awaitDone().map {
+        case Left(e)   => TestResult.success(e)
+        case Right(()) => TestResult.failed(using pos)("Expected crash, but got Done")
+      }
+  }
 
-  def expectPing(using exn: Execution)(port: exn.OutPort[Ping]): Outcome[Unit] =
-    port.awaitPing().map {
-      case Left(e)   => TestResult.crash(e)
-      case Right(()) => TestResult.success(())
-    }
+  extension (using exn: Execution, pos: SourcePos)(port: exn.OutPort[Ping]) {
+    def expectPing: Outcome[Unit] =
+      port.awaitPing().map {
+        case Left(e)   => TestResult.crash(e)
+        case Right(()) => TestResult.success(())
+      }
 
-  def expectNoPing(using exn: Execution, pos: SourcePos)(
-    port: exn.OutPort[Ping],
-    duration: FiniteDuration,
-  ): Outcome[exn.OutPort[Ping]] =
-    port.awaitNoPing(duration).map {
-      case Left(Left(e))   => TestResult.crash(e)
-      case Left(Right(())) => TestResult.failed(using pos)(s"Expected no Ping for $duration, but got Ping")
-      case Right(port)     => TestResult.success(port)
-    }
+    def expectNoPingFor(duration: FiniteDuration): Outcome[exn.OutPort[Ping]] =
+      port.awaitNoPing(duration).map {
+        case Left(Left(e))   => TestResult.crash(e)
+        case Left(Right(())) => TestResult.failed(using pos)(s"Expected no Ping for $duration, but got Ping")
+        case Right(port)     => TestResult.success(port)
+      }
 
-  def expectNoPing_(using exn: Execution, pos: SourcePos)(
-    port: exn.OutPort[Ping],
-    duration: FiniteDuration,
-  ): Outcome[Unit] =
-    Outcome.map(
-      expectNoPing(port, duration)
-    ) { port =>
-      val p1 = port.append(dsl.dismissPing)
-      p1.discardOne()
-    }
+    def expectNoPingThenIgnore(duration: FiniteDuration): Outcome[Unit] =
+      Outcome.map(
+        port.expectNoPingFor(duration)
+      ) { port =>
+        port
+          .append(dsl.dismissPing)
+          .discardOne()
+      }
+  }
 
-  def expectLeft[A, B](using exn: Execution, pos: SourcePos)(port: exn.OutPort[A |+| B]): Outcome[exn.OutPort[A]] =
-    port.awaitEither().map {
-      case Left(e)         => TestResult.crash(e)
-      case Right(Left(p))  => TestResult.success(p)
-      case Right(Right(_)) => TestResult.failed(using pos)("Expected Left, but got Right")
-    }
+  extension [A, B](using exn: Execution, pos: SourcePos)(port: exn.OutPort[A |+| B]) {
+    def expectLeft: Outcome[exn.OutPort[A]] =
+      port.awaitEither().map {
+        case Left(e)         => TestResult.crash(e)
+        case Right(Left(p))  => TestResult.success(p)
+        case Right(Right(_)) => TestResult.failed(using pos)("Expected Left, but got Right")
+      }
 
-  def expectRight[A, B](using exn: Execution, pos: SourcePos)(port: exn.OutPort[A |+| B]): Outcome[exn.OutPort[B]] =
-    port.awaitEither().map {
-      case Left(e)         => TestResult.crash(e)
-      case Right(Left(_))  => TestResult.failed(using pos)("Expected Right, but got Left")
-      case Right(Right(p)) => TestResult.success(p)
-    }
+    def expectRight: Outcome[exn.OutPort[B]] =
+      port.awaitEither().map {
+        case Left(e)         => TestResult.crash(e)
+        case Right(Left(_))  => TestResult.failed(using pos)("Expected Right, but got Left")
+        case Right(Right(p)) => TestResult.success(p)
+      }
+  }
 }
 
 object TestKit extends TestKitOps

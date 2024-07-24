@@ -41,13 +41,15 @@ trait ScalettoTestKit extends TestKitWithManualClock {
       .>( dsl.liftEither )
       .>( either(neglect > failure, neglect > success) )
 
-  def expectVal[A](using exn: Execution)(port: exn.OutPort[Val[A]]): Outcome[A] =
-    Outcome.asyncTestResult(
-      port.awaitVal().map {
-        case Left(e)  => TestResult.crash(e)
-        case Right(a) => TestResult.success(a)
-      }
-    )
+  extension [A](using exn: Execution)(port: exn.OutPort[Val[A]]) {
+    def expectVal: Outcome[A] =
+      Outcome.asyncTestResult(
+        port.awaitVal().map {
+          case Left(e)  => TestResult.crash(e)
+          case Right(a) => TestResult.success(a)
+        }
+      )
+  }
 }
 
 object ScalettoTestKit extends ScalettoTestKitOps {

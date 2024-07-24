@@ -11,7 +11,7 @@ import scala.annotation.targetName
 class MutualRecursionTests extends ScalatestScalettoTestSuite {
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.*
+    import kit.Outcome
     import kit.dsl.{*, given}
 
     val coreLib = CoreLib(kit.dsl)
@@ -118,9 +118,9 @@ class MutualRecursionTests extends ScalatestScalettoTestSuite {
           }
         }.via { port =>
           for {
-            ss <- expectVal(port)
+            ss <- port.expectVal
             _ <- Outcome.assertEquals(ss, List("A", "B", "C", "D", "E"))
-          } yield success
+          } yield ()
         }
     )
   }

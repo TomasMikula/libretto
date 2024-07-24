@@ -12,7 +12,7 @@ import scala.concurrent.duration.*
 
 class StreamsTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{Outcome, dsl, expectDone, expectRight, expectVal}
+    import kit.{Outcome, dsl}
     import kit.Outcome.{assertEquals, success}
 
     val coreLib = CoreLib(dsl)
@@ -29,13 +29,13 @@ class StreamsTests extends ScalatestScalettoTestSuite {
     List(
       "toList ⚬ fromList = id" -> TestCase
         .interactWith { ValSource.fromList(List(1, 2, 3, 4, 5, 6)) > ValSource.toList }
-        .via { expectVal(_).assertEquals(List(1, 2, 3, 4, 5, 6)) },
+        .via { _.expectVal.assertEquals(List(1, 2, 3, 4, 5, 6)) },
 
       "ValSource.map" -> TestCase
         .interactWith {
           ValSource.fromList(List(1, 2, 3)) > ValSource.map(_.toString) > ValSource.toList
         }.via {
-          expectVal(_).assertEquals(List("1", "2", "3"))
+          _.expectVal.assertEquals(List("1", "2", "3"))
         },
 
       "partition" -> TestCase
@@ -46,7 +46,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             .>(par(ValSource.toList, ValSource.toList))
             .>(unliftPair)
         }.via {
-          expectVal(_).assertEquals((List(2, 4, 6), List(1, 3, 5)))
+          _.expectVal.assertEquals((List(2, 4, 6), List(1, 3, 5)))
         },
 
       "concat" -> TestCase
@@ -55,7 +55,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             .>(ValSource.concat)
             .>(ValSource.toList)
         }.via {
-          expectVal(_).assertEquals(List(1, 2, 3 ,4, 5, 6))
+          _.expectVal.assertEquals(List(1, 2, 3 ,4, 5, 6))
         },
 
       "merge" -> TestCase
@@ -68,7 +68,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             .>(ValSource.toList)
             .>(mapVal(_.toSet))
         }.via {
-          expectVal(_).assertEquals(Set(1, 2, 3, 4, 5, 6))
+          _.expectVal.assertEquals(Set(1, 2, 3, 4, 5, 6))
         },
 
       "mergeAll" -> TestCase
@@ -84,7 +84,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             .>(ValSource.toList)
         }.via { port =>
           for {
-            res <- expectVal(port)
+            res <- port.expectVal
             _   <- assertEquals(res.toSet, Set(1, 2, 3, 4, 5, 6, 7, 8, 9))
             (res1, res2) = res.splitAt(6)
             _   <- assertEquals(res1.toSet, Set(1, 2, 3, 7, 8, 9))
@@ -114,7 +114,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             }
             .via { port =>
               for {
-                res <- expectVal(port)
+                res <- port.expectVal
                 n = res.count(_ == "a")
                 _ <- check(n)
               } yield ()
@@ -162,7 +162,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
             toList(out1) ** toList(out2)
           }
         }.via {
-          expectVal(_).assertEquals((
+          _.expectVal.assertEquals((
             List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
             List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
           ))
@@ -191,7 +191,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
 
           prg > mapVal(_.toSet)
         }.via {
-          expectVal(_).assertEquals(Set("foo", "fooo", "pho", "phoo", "boo"))
+          _.expectVal.assertEquals(Set("foo", "fooo", "pho", "phoo", "boo"))
         },
 
       "ValueDrain.contraDup pulls as soon as either one pulls" -> TestCase
@@ -211,11 +211,11 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           val (src1, src2) = srcs.unzip()
           val p1           = src1 append ValSource.poll
           for {
-            pulling <- expectRight(drn append ValDrain.toEither) // checking pull before src2 acts
+            pulling <- (drn append ValDrain.toEither).expectRight // checking pull before src2 acts
             // close everything
             _  = (pulling append ValDrain.Pulling.close append need).discardOne()
-            d1 <- expectDone(src2 append ValSource.close)
-            d2 <- expectDone(p1 append ValSource.Polled.close)
+            d1 <- (src2 append ValSource.close).expectDone
+            d2 <- (p1 append ValSource.Polled.close).expectDone
           } yield success(())
         },
 
@@ -235,10 +235,10 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           val (out1, out2) = outputs.unzip()
           val (pong, done) = signals.unzip()
           for {
-            res1 <- expectVal(out1) // the first n should be output before the first poll
+            res1 <- out1.expectVal // the first n should be output before the first poll
             _ = pong.supplyPong()
-            res2 <- expectVal(out2)
-            _ <- expectDone(done)
+            res2 <- out2.expectVal
+            _ <- done.expectDone
             _ <- Outcome.assertAll(
               Outcome.assertEquals(res1, List.range(0, n)),
               Outcome.assertEquals(res2, List.empty),
@@ -280,8 +280,8 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           .via { port =>
             val (done, ref) = port.unzip()
             for {
-              _ <- expectDone(done)
-              ref <- expectVal(ref)
+              _ <- done.expectDone
+              ref <- ref.expectVal
               Counter(k, m) = ref.get()
               _ <- assertEquals(k, 0)
               _ <- assertEquals(m, n)

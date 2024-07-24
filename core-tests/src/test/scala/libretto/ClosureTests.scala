@@ -9,7 +9,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
     import kit.dsl.*
     import kit.dsl.$.*
-    import kit.{Outcome, expectVal}
+    import kit.Outcome
     import kit.Outcome.expectNotThrows
 
     val coreLib = CoreLib(kit.dsl)
@@ -80,7 +80,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
           prg
         }.via {
-          expectVal(_).assertEquals("abcabc")
+          _.expectVal.assertEquals("abcabc")
         },
 
       "some closure 3" ->
@@ -96,7 +96,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             f(s)
           }
         }.via {
-          expectVal(_).assertEquals("abcabc")
+          _.expectVal.assertEquals("abcabc")
         },
 
       "`one` expression in a closure" ->
@@ -118,7 +118,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
           p2
         }.via {
-          expectVal(_).assertEquals(43)
+          _.expectVal.assertEquals(43)
         },
 
       "non-capturing 'closure' (higher-order function)" ->
