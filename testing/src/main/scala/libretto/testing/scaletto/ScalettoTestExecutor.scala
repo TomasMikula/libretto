@@ -1,14 +1,9 @@
 package libretto.testing.scaletto
 
-import java.util.concurrent.{Executors, ExecutorService, ScheduledExecutorService}
-import libretto.CoreLib
-import libretto.cats.Monad
 import libretto.exec.ExecutionParams
-import libretto.lambda.util.{Exists, SourcePos, TypeEq}
-import libretto.lambda.util.TypeEq.Refl
-import libretto.scaletto.{Scaletto, ScalettoBridge, ScalettoExecutor, StarterKit}
+import libretto.lambda.util.Exists
+import libretto.scaletto.{Scaletto, ScalettoBridge, ScalettoExecutor}
 import libretto.testing.{ManualClock, TestExecutor, TestResult}
-import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 
 object ScalettoTestExecutor {
@@ -21,10 +16,6 @@ object ScalettoTestExecutor {
 
       override val dsl: bridge0.dsl.type = bridge0.dsl
       override val bridge: bridge0.type = bridge0
-      import dsl.*
-      import bridge.Execution
-
-      // override type Assertion[A] = Val[String] |+| A
 
       override type ExecutionParam[A] = ScalettoTestExecutor.ExecutionParam[A]
 
@@ -49,16 +40,10 @@ object ScalettoTestExecutor {
       }
   }
 
-  def fromExecutor(
-    exec: ScalettoExecutor,
-  ): TestExecutor[ScalettoTestKit.Of[exec.dsl.type]] = {
-    val kit = ScalettoTestKitFromBridge[exec.dsl.type, exec.bridge.type](exec.dsl, exec.bridge)
-    fromKitAndExecutor(kit, exec)
-  }
-
   def fromKitAndExecutor(
-    kit: ScalettoTestKit { type ExecutionParam[A] = ScalettoTestExecutor.ExecutionParam[A] },
+    kit: ScalettoTestKit,
     exr: ScalettoExecutor.Of[kit.dsl.type, kit.bridge.type],
+    adaptParams: [A] => kit.ExecutionParams[A] => Exists[[X] =>> (exr.ExecutionParams[X], X => A)],
   ): TestExecutor[kit.type] =
     new TestExecutor[kit.type] {
       override val name: String =
@@ -77,18 +62,17 @@ object ScalettoTestExecutor {
         postStop: Y => Outcome[Unit],
         timeout: FiniteDuration,
       ): TestResult[Unit] = {
-        val p: Exists[[X] =>> (libretto.exec.ExecutionParams[exr.ExecutionParam, X], X => P)] =
-          ScalettoTestExecutor.ExecutionParam.adapt(params)(exr.schedulerParam)
-
-        TestExecutor
-          .usingExecutor(exr)
-          .runTestCase[O, p.T, Y](
-            body,
-            p.value._1,
-            (port, x) => Outcome.toAsyncTestResult(conduct(port, p.value._2(x))),
-            postStop andThen Outcome.toAsyncTestResult,
-            timeout,
-          )
+        adaptParams(params) match
+          case e @ Exists.Some((params, adapter)) =>
+            TestExecutor
+              .usingExecutor(exr)
+              .runTestCase[O, e.T, Y](
+                body,
+                params,
+                (port, x) => Outcome.toAsyncTestResult(conduct(port, adapter(x))),
+                postStop andThen Outcome.toAsyncTestResult,
+                timeout,
+              )
       }
 
       override def check(
@@ -99,16 +83,6 @@ object ScalettoTestExecutor {
           .usingExecutor(exr)
           .runTestCase(() => Outcome.toAsyncTestResult(body()), timeout)
     }
-
-  def fromJavaExecutors(
-    scheduler: ScheduledExecutorService,
-    blockingExecutor: ExecutorService,
-  ): TestExecutor[ScalettoTestKit] = {
-    val executor0: ScalettoExecutor.OfDsl[StarterKit.dsl.type] =
-      StarterKit.executor(blockingExecutor)(scheduler)
-
-    fromExecutor(executor0)
-  }
 
   def defaultFactory(
     ef: ScalettoExecutor.Factory,
@@ -127,7 +101,10 @@ object ScalettoTestExecutor {
 
       override def create(): ExecutorResource = {
         val executor = ef.create()
-        val testExecutor = fromKitAndExecutor(testKit, ef.access(executor))
+        val exr = ef.access(executor)
+        val adaptParams: [A] => testKit.ExecutionParams[A] => Exists[[X] =>> (exr.ExecutionParams[X], X => A)] =
+          [A] => ScalettoTestExecutor.ExecutionParam.adapt(_)(exr.schedulerParam)
+        val testExecutor = fromKitAndExecutor(testKit, exr, adaptParams)
         (executor, testExecutor)
       }
 
