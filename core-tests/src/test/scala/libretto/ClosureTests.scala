@@ -10,7 +10,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
     import kit.dsl.*
     import kit.dsl.$.*
     import kit.Outcome
-    import kit.Outcome.{assertEquals, expectNotThrows}
+    import kit.Outcome.{assertEquals, assertNotThrows}
 
     val coreLib = CoreLib(kit.dsl)
     val scalettoLib = ScalettoLib(kit.dsl, coreLib)
@@ -20,7 +20,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
     List(
       "simplest closure" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             val f: Done -⚬ (Done =⚬ (Done |*| Done)) =
               λ { d1 =>
                 λ.closure { d2 =>
@@ -33,7 +33,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "some closure 0" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             val f: (Done |*| Done) -⚬ (Done |*| Done) =
               λ { d =>
                 val (d1 |*| d2) = d
@@ -49,7 +49,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "some closure 1" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             val f: Done -⚬ (Done |*| Done) =
               λ { d =>
                 val (d1 |*| d2) = d > fork
@@ -138,7 +138,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "closure capturing semigroupal variable" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             λ.+ { (a: $[Done]) =>
               λ.closure { (b: $[Done]) =>
                 a |*| b |*| a
@@ -149,7 +149,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "closure with semigroupal variable" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             λ { (a: $[Done]) =>
               λ.closure.+ { (b: $[Done]) =>
                 b |*| a |*| b
@@ -160,7 +160,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "nested closures with semigroupal variables" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             λ.+ { (a: $[Done]) =>
               λ.closure.+ { (b: $[Done]) =>
                 λ.closure.+ { (c: $[Done]) =>
@@ -189,7 +189,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "capture one-expression" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             λ { (a: $[Done]) =>
               val b: $[Done] = one > done
               λ.closure { (c: $[Done]) =>
@@ -201,7 +201,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "return only captured one-expression" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             λ.? { (_: $[One]) =>
               val b: $[Done] = one > done
               λ.closure.? { (_: $[One]) =>
@@ -213,7 +213,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "capture one-expression into another one-expression" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             λ.? { (_: $[One]) =>
               val b = one > done
               λ.closure.? { (_: $[One]) =>
@@ -226,7 +226,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "capture two one-expressions into another one-expression" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             λ.? { (_: $[One]) =>
               val b = one > done
               val c = one > done
@@ -239,7 +239,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "fork a one-expression inside closure" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             λ { (a: $[Done]) =>
               λ.closure { (b: $[Done]) =>
                 val (c |*| d) = one > done > fork
@@ -252,7 +252,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "one-expression whose part is consumed outside and part inside a closure" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             λ { (a: $[Done]) =>
               val (b |*| c) = one > done > fork
               λ.closure { (d: $[Done]) =>
@@ -265,7 +265,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
       "non-linearity in nested context does not affect parent context" ->
         TestCase.pure {
           for {
-            e <- Outcome.expectThrows {
+            e <- Outcome.assertThrows {
               λ { (a: $[Done]) =>
                 λ.closure { (b: $[Done]) =>
                   a match {
@@ -283,7 +283,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "semigroup evidence in nested scope" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             λ { (a: $[Done]) =>
               λ.closure { (b: $[Done]) =>
                 a match {
@@ -297,7 +297,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "discard from a nested context" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             λ { (a: $[One]) =>
               λ.closure { (d: $[Done]) =>
                 a match        // `a` was introduced in parent context
@@ -310,7 +310,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
 
       "discard both projections from a nested context" ->
         TestCase.pure {
-          Outcome.expectNotThrows {
+          Outcome.assertNotThrows {
             λ { (a: $[One |*| One]) =>
               λ.closure { (d: $[Done]) =>
                 a match                 // `a` was introduced in parent context
