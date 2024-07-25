@@ -3,6 +3,7 @@ package libretto.scaletto
 import java.util.concurrent.{Executor as JExecutor, Executors, ScheduledExecutorService}
 import libretto.CoreLib
 import libretto.closed.ClosedLib
+import libretto.crash.CrashLib
 import libretto.invert.InvertLib
 import libretto.scaletto.impl.FreeScaletto
 import libretto.scaletto.impl.futurebased.{BridgeImpl, FutureExecutor}
@@ -37,6 +38,9 @@ abstract class AbstractStarterKit(
 
   val invertLib: InvertLib[coreLib.type] =
     InvertLib(coreLib)
+
+  val crashLib: CrashLib[dsl.type] =
+    CrashLib(dsl)
 
   def executor(blockingExecutor: JExecutor)(
     scheduler: ScheduledExecutorService,

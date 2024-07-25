@@ -3,6 +3,7 @@ package libretto.examples.diningPhilosophers
 import libretto.scaletto.StarterKit.dsl.*
 import libretto.scaletto.StarterKit.dsl.$.*
 import libretto.scaletto.StarterKit.coreLib.*
+import libretto.scaletto.StarterKit.crashLib.*
 import libretto.testing.scaletto.StarterTestKit
 import libretto.testing.scalatest.scaletto.ScalatestStarterTestSuite
 import libretto.testing.TestCase
@@ -14,9 +15,7 @@ class DiningPhilosophersTests extends ScalatestStarterTestSuite {
   given heldForkReadiness: SignalingJunction.Positive[HeldFork] =
     ForksProvider.heldForkReadiness
 
-  override def testCases(using kit: StarterTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{leftOrCrash, rightOrCrash}
-
+  override def testCases(using kit: StarterTestKit): List[(String, TestCase[kit.type])] =
     List(
       "SharedFork: successful pick up (left)" -> TestCase.awaitDone {
         val prg: Done -⚬ Done =
@@ -48,5 +47,4 @@ class DiningPhilosophersTests extends ScalatestStarterTestSuite {
         prg
       },
     )
-  }
 }

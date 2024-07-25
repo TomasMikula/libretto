@@ -3,6 +3,7 @@ package libretto
 import java.util.concurrent.{Executors, ScheduledExecutorService}
 import java.util.concurrent.atomic.AtomicInteger
 import libretto.cats.Functor.*
+import libretto.crash.CrashLib
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoLib
 import libretto.testing.{TestCase, TestExecutor, TestKit}
@@ -39,13 +40,15 @@ class BasicTests extends ScalatestScalettoTestSuite {
     )
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{Outcome, dsl, leftOrCrash, manualClock, rightOrCrash}
+    import kit.{Outcome, dsl, manualClock}
     import dsl.*
     import dsl.$.*
     val coreLib = CoreLib(dsl)
     val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
+    val crashLib = CrashLib(dsl)
     import coreLib.{*, given}
     import scalettoLib.{*, given}
+    import crashLib.{leftOrCrash, rightOrCrash}
     import kit.bridge.Execution
     import Outcome.assertEquals
     import Outcome.monadOutcome.*
