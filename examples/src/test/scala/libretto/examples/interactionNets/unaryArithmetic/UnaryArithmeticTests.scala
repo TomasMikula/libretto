@@ -9,7 +9,9 @@ import libretto.testing.TestCase
 class UnaryArithmeticTests extends ScalatestStarterTestSuite {
 
   private def testOp(x: Int, y: Int)(expected: Int)(op: (Wire |*| Wire) -⚬ Wire)(using kit: StarterTestKit): TestCase[kit.type] =
-    TestCase {
+    import kit.Outcome.assertEquals
+
+    TestCase.awaitVal {
       val prg: Done -⚬ Val[Result] =
         λ { start =>
           val a = constant(liftInt(x))
@@ -20,7 +22,9 @@ class UnaryArithmeticTests extends ScalatestStarterTestSuite {
             .alsoElim(connect(a |*| op(b |*| out1)))
         }
 
-      prg > kit.assertEquals(Result.liftInt(expected))
+      prg
+    }.checkThat {
+      assertEquals(_, Result.liftInt(expected))
     }
 
   private def testAddition(x: Int, y: Int)(using kit: StarterTestKit): TestCase[kit.type] =

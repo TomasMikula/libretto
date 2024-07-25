@@ -15,20 +15,20 @@ class DiningPhilosophersTests extends ScalatestStarterTestSuite {
     ForksProvider.heldForkReadiness
 
   override def testCases(using kit: StarterTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{leftOrCrash, rightOrCrash, success}
+    import kit.{leftOrCrash, rightOrCrash}
 
     List(
-      "SharedFork: successful pick up (left)" -> TestCase {
+      "SharedFork: successful pick up (left)" -> TestCase.awaitDone {
         val prg: Done -⚬ Done =
           mkSharedFork > par(
             tryPickUp > leftOrCrash("Failed to pick up the fork.") > putDown > letGo,
             letGo,
           ) > join
 
-        prg > success
+        prg
       },
 
-      "SharedFork cannot be picked up twice" -> TestCase {
+      "SharedFork cannot be picked up twice" -> TestCase.awaitDone {
         val prg: Done -⚬ Done =
           λ { start =>
             val (lFork |*| rFork) =
@@ -45,7 +45,7 @@ class DiningPhilosophersTests extends ScalatestStarterTestSuite {
             )
           }
 
-        prg > success
+        prg
       },
     )
   }

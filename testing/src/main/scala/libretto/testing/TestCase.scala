@@ -90,10 +90,10 @@ object TestCase {
       postStop0,
     )
 
-  def apply(using kit: TestKit)(
-    body: dsl.-⚬[dsl.Done, kit.Assertion[dsl.Done]],
+  def awaitDone(using kit: TestKit)(
+    body: dsl.-⚬[dsl.Done, dsl.Done],
   )(using pos: SourcePos): TestCase.Single[kit.type] =
-    apply[kit.Assertion[dsl.Done], Unit](body, kit.extractOutcome(_), kit.Outcome.success)
+    apply[dsl.Done, Unit](body, _.expectDone, kit.Outcome.success)
 
   def apply[O](using kit: TestKit)(
     body: kit.dsl.-⚬[kit.dsl.Done, O],

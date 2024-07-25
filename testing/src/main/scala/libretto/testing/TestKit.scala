@@ -157,17 +157,6 @@ trait TestKit {
   import dsl.{-⚬, |*|, |+|, Done, Ping}
   import bridge.*
 
-  type Assertion[A]
-
-  def success[A]: A -⚬ Assertion[A]
-  def failure[A]: Done -⚬ Assertion[A]
-
-  given monadAssertion: Monad[-⚬, Assertion]
-
-  def extractOutcome(using exn: Execution, pos: SourcePos)(
-    outPort: exn.OutPort[Assertion[Done]],
-  ): Outcome[Unit]
-
   type ExecutionParam[A]
   type ExecutionParams[A] = libretto.exec.ExecutionParams[ExecutionParam, A]
 
@@ -237,7 +226,4 @@ trait TestKitOps {
 
   transparent inline def bridge(using kit: TestKit): kit.bridge.type =
     kit.bridge
-
-  def success(using kit: TestKit): kit.dsl.-⚬[kit.dsl.Done, kit.Assertion[dsl.Done]] =
-    kit.success
 }

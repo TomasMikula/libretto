@@ -122,7 +122,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         },
 
       "non-capturing 'closure' (higher-order function)" ->
-        TestCase {
+        TestCase.awaitDone {
           val f: Done -⚬ (Done |*| (Done =⚬ Done)) =
             λ { x =>
               x |*| (
@@ -133,7 +133,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
             λ { case d |*| f =>
               f(d)
             }
-          λ { d => kit.success(g(f(d))) }
+          λ { d => g(f(d)) }
         },
 
       "closure capturing semigroupal variable" ->

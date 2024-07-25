@@ -7,14 +7,14 @@ import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoLib
 import libretto.testing.{TestCase, TestExecutor, TestKit}
 import libretto.testing.scaletto.{ScalettoTestExecutor, ScalettoTestKit}
-import libretto.testing.scalatest.ScalatestSuite
+import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
 import libretto.util.Async
 import scala.collection.immutable.{:: => NonEmptyList}
 import scala.compiletime.uninitialized
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration.*
 
-class BasicTests extends ScalatestSuite[ScalettoTestKit] {
+class BasicTests extends ScalatestScalettoTestSuite {
   private var scheduler: ScheduledExecutorService = uninitialized
 
   protected override def beforeAll(): Unit = {
@@ -39,7 +39,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     )
 
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
-    import kit.{Assertion, Outcome, dsl, assertEquals, assertLeft, leftOrCrash, manualClock, rightOrCrash, success}
+    import kit.{Outcome, dsl, leftOrCrash, manualClock, rightOrCrash}
     import dsl.*
     import dsl.$.*
     val coreLib = CoreLib(dsl)
@@ -47,6 +47,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
     import coreLib.{*, given}
     import scalettoLib.{*, given}
     import kit.bridge.Execution
+    import Outcome.assertEquals
     import Outcome.monadOutcome.*
 
     def raceKeepWinner[A](
@@ -60,34 +61,35 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         )
 
     List(
-      "done" -> TestCase {
-        introFst(done) > join > success
+      "done" -> TestCase.awaitDone {
+        introFst(done) > join
       },
 
-      "join ⚬ fork" -> TestCase {
-        fork > join > success
+      "join ⚬ fork" -> TestCase.awaitDone {
+        fork > join
       },
 
-      "notifyDoneR, forkPing, joinPing, strengthenPing, join" -> TestCase {
-        notifyDoneR > snd(forkPing > joinPing > strengthenPing) > join > success
+      "notifyDoneR, forkPing, joinPing, strengthenPing, join" -> TestCase.awaitDone {
+        notifyDoneR > snd(forkPing > joinPing > strengthenPing) > join
       },
 
-      "joinNeed, strengthenPong, joinPong, forkPong, notifyNeedR" -> TestCase {
-        def unreverse(prg: Need -⚬ Need): Done -⚬ Done =
-          introSnd(lInvertSignal > fst(prg)) > assocRL > elimFst(rInvertSignal)
+      "joinNeed, strengthenPong, joinPong, forkPong, notifyNeedR" -> TestCase
+        .awaitDone {
+          def unreverse(prg: Need -⚬ Need): Done -⚬ Done =
+            introSnd(lInvertSignal > fst(prg)) > assocRL > elimFst(rInvertSignal)
 
-        unreverse(joinNeed > snd(strengthenPong > joinPong > forkPong) > notifyNeedR) > success
-      },
+          unreverse(joinNeed > snd(strengthenPong > joinPong > forkPong) > notifyNeedR)
+        },
 
-      "constVal" -> TestCase {
-        constVal(5) > assertEquals(5)
-      },
+      "constVal" -> TestCase
+        .awaitVal { constVal(5) }
+        .checkThat { assertEquals(_, 5) },
 
-      "unliftEither" -> TestCase {
-        constVal(42) > injectR > unliftEither > assertEquals(Right(42))
-      },
+      "unliftEither" -> TestCase
+        .awaitVal { constVal(42) > injectR > unliftEither }
+        .checkThat { assertEquals(_, Right(42)) },
 
-      "liftPair, liftNegPair" -> TestCase {
+      "liftPair, liftNegPair" -> TestCase.awaitVal {
         val prg: Done -⚬ Val[(String, Int)] =
           id                                       [       Done                                                                           ]
             .>(constVal(("foo", 42)))           .to[     Val[(String, Int)]                                                               ]
@@ -96,10 +98,12 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
             .>.fst(par(liftPair, liftNegPair))  .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| Val[(String, Int)]  ]
             .>.fst(rInvert).>(elimFst)          .to[                                                                  Val[(String, Int)]  ]
 
-        prg > assertEquals(("foo", 42))
+        prg
+      }.checkThat {
+        assertEquals(_, ("foo", 42))
       },
 
-      "unliftPair, unliftNegPair" -> TestCase {
+      "unliftPair, unliftNegPair" -> TestCase.awaitVal {
         val lInvert: One -⚬ ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) =
           coreLib.lInvert
 
@@ -112,10 +116,12 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
             .>(elimFst(fulfill))                       .to[                                                                   Val[String] |*| Val[Int]   ]
             .>(unliftPair)                             .to[                                                                      Val[(String, Int)]      ]
 
-        prg > assertEquals(("foo", 42))
+        prg
+      }.checkThat {
+         assertEquals(_, ("foo", 42))
       },
 
-      "inflate" -> TestCase {
+      "inflate" -> TestCase.awaitDone {
         val prg: Done -⚬ Done =
           id                                 [    Done                           ]
             .>(constVal(42))              .to[  Val[Int]                         ]
@@ -124,7 +130,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
             .>.fst.snd(inflate)           .to[ (Val[Int] |*| Neg[Int]) |*| Done  ]
             .>(elimFst(fulfill))          .to[                             Done  ]
 
-        prg > success
+        prg
       },
 
       "delayed injectL" -> TestCase
@@ -149,7 +155,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           } yield ()
         },
 
-      "delayed chooseL" -> TestCase {
+      "delayed chooseL" -> TestCase.awaitVal {
         // 'A' delayed by 40 millis
         val a: Done -⚬ Val[Char] =
           delay(40.millis) > constVal('A')
@@ -159,7 +165,9 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         val b: Done -⚬ Val[Char] =
           forkMap(delay(30.millis), choice(delay(20.millis), id)) > awaitPosChooseL > constVal('B')
 
-        raceKeepWinner(a, b) > assertEquals('A')
+        raceKeepWinner(a, b)
+      }.checkThat {
+         assertEquals(_, 'A')
       },
 
       "crashd" -> TestCase
@@ -204,12 +212,12 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
           } yield ()
         },
 
-      "crashd in non-executed |+| has no effect" -> TestCase {
-        injectL[Done, Done] > either(id, crashd("bang!")) > success
+      "crashd in non-executed |+| has no effect" -> TestCase.awaitDone {
+        injectL[Done, Done] > either(id, crashd("bang!"))
       },
 
-      "crashd in non-chosen |&| alternative has no effect" -> TestCase {
-        choice(id, crashd("bang!")) > chooseL > success
+      "crashd in non-chosen |&| alternative has no effect" -> TestCase.awaitDone {
+        choice(id, crashd("bang!")) > chooseL
       },
 
       "coDistribute" -> {
@@ -270,20 +278,24 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
             (f, i) <- Seq(coDistributed1, coDistributed2).zipWithIndex
             c <- combinations
           } yield {
-            s"${i+1}.$c" -> TestCase { f > c.go > assertEquals(c.expected) }
+            s"${i+1}.$c" -> TestCase
+              .awaitVal { f > c.go }
+              .checkThat { assertEquals(_, c.expected) }
           }
 
         TestCase.multiple(cases*)
       },
 
-      "LList.splitEvenOdd" -> TestCase {
+      "LList.splitEvenOdd" -> TestCase.awaitVal {
         val prg: Done -⚬ Val[(List[Int], List[Int])] =
           constListOf1(0, (1 to 20)*) > LList.splitEvenOdd > par(toScalaList, toScalaList) > unliftPair
 
-        prg > assertEquals((0 to 20).toList.partition(_ % 2 == 0))
+        prg
+      }.checkThat {
+        assertEquals(_, (0 to 20).toList.partition(_ % 2 == 0))
       },
 
-      "LList.halfRotateL" -> TestCase {
+      "LList.halfRotateL" -> TestCase.awaitVal {
         val prg: Done -⚬ Val[List[(Int, Int)]] =
           constListOf1((0, 1), (2, 3), (4, 5))
             .>(LList.map(liftPair))
@@ -291,7 +303,9 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
             .>(LList.map(unliftPair))
             .>(toScalaList)
 
-        prg > assertEquals(List((1, 2), (3, 4), (5, 0)))
+        prg
+      }.checkThat {
+        assertEquals(_, List((1, 2), (3, 4), (5, 0)))
       },
 
       "acquire - effect - transform - release" -> {
@@ -339,7 +353,9 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
                 .>(mvarToString)
                 .>(releaseMVar)
 
-            s"$i.$j.$k.$l" -> TestCase { prg > assertEquals("1") }
+            s"$i.$j.$k.$l" -> TestCase
+              .awaitVal { prg }
+              .checkThat { assertEquals(_, "1") }
           }
 
         TestCase.multiple(cases*)
@@ -600,9 +616,9 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
 
         TestCase.multiple(
           "take 20" ->
-            TestCase {
-              fibonacci > par(take(20), id) > awaitPosSnd > assertEquals(expected)
-            },
+            TestCase
+              .awaitVal { fibonacci > par(take(20), id) > awaitPosSnd }
+              .checkThat { assertEquals(_, expected) },
           "split & take 10 from each" ->
             TestCase.interactWith[Val[(List[Int], List[Int])]] {
               fibonacci > par(Endless.split > par(take(10), take(10)) > unliftPair, id) > awaitPosSnd
@@ -715,21 +731,25 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         }
       },
 
-      "backvert then forevert" -> TestCase {
+      "backvert then forevert" -> TestCase.awaitVal {
         val prg: Done -⚬ Val[String] =
           constVal("abc") > introSnd(forevert[Val[String]]) > assocRL > elimFst(backvert[Val[String]])
 
-        prg > assertEquals("abc")
+        prg
+      }.checkThat {
+        assertEquals(_, "abc")
       },
 
-      "distributeInversion, factorOutInversion" -> TestCase {
+      "distributeInversion, factorOutInversion" -> TestCase.awaitVal {
         val prg: Done -⚬ Val[(String, Int)] =
           fork > par(constVal("1") > dii, constVal(1) > dii) > factorOutInversion > contrapositive(distributeInversion) > die > unliftPair
 
-        prg > assertEquals(("1", 1))
+        prg
+      }.checkThat {
+        assertEquals(_, ("1", 1))
       },
 
-      "demandTogether > demandSeparately = id" -> TestCase {
+      "demandTogether > demandSeparately = id" -> TestCase.awaitDone {
         // namely, check that demandTogether does not delay processing until both demands are supplied
 
         val joinThenSplitDemands: (-[Done] |*| -[Done]) -⚬ (-[Done] |*| -[Done]) =
@@ -749,10 +769,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
               .alsoElim(supply(done1 |*| nDone4))
           }
 
-        prg > success
+        prg
       },
 
-      "notifyChoice in reverse" -> TestCase {
+      "notifyChoice in reverse" -> TestCase.awaitVal {
         def notifyInvChoice[A, B]: -[A |&| B] -⚬ (Ping |*| -[A |&| B]) =
           contrapositive(notifyChoice) > demandSeparately > fst(invertedPongAsPing)
 
@@ -777,17 +797,19 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
               .alsoElim(one)
           }
 
-        prg > assertEquals(100)
+        prg
+      }.checkThat {
+        assertEquals(_, 100)
       },
 
-      "unContrapositive" -> TestCase {
+      "unContrapositive" -> TestCase.awaitDone {
         val prg: Done -⚬ Done =
           unContrapositive(id[-[Done]])
 
-        prg > success
+        prg
       },
 
-      "demandChosen" -> TestCase {
+      "demandChosen" -> TestCase.awaitVal {
         val supplyChosen: -[Val[String] |&| Val[Int]] -⚬ -[Done] =
           demandChosen > either(
             contrapositive(constVal("foo")),
@@ -797,37 +819,39 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         val prg: Done -⚬ Val[Int] =
           introSnd(demand[Val[String] |&| Val[Int]] > par(supplyChosen, chooseR)) > assocRL > elimFst(supply)
 
-        prg > assertEquals(42)
+        prg
+      }.checkThat {
+        assertEquals(_, 42)
       },
 
-      "doneAsInvertedNeed" -> TestCase {
+      "doneAsInvertedNeed" -> TestCase.awaitDone {
         val prg: Done -⚬ Done =
           doneAsInvertedNeed > invertedNeedAsDone
 
-        prg > success
+        prg
       },
 
-      "pingAsInvertedPong" -> TestCase {
+      "pingAsInvertedPong" -> TestCase.awaitDone {
         val f: Ping -⚬ Ping =
           pingAsInvertedPong > invertedPongAsPing
 
         val prg: Done -⚬ Done =
           notifyDoneL > fst(f) > awaitPingFst
 
-        prg > success
+        prg
       },
 
-      "needAsInvertedDone" -> TestCase {
+      "needAsInvertedDone" -> TestCase.awaitDone {
         val f: Need -⚬ Need =
           needAsInvertedDone > invertedDoneAsNeed
 
         val prg: Done -⚬ Done =
           introSnd(lInvertSignal > fst(f)) > assocRL > elimFst(rInvertSignal)
 
-        prg > success
+        prg
       },
 
-      "pongAsInvertedPing" -> TestCase {
+      "pongAsInvertedPing" -> TestCase.awaitDone {
         val f: Pong -⚬ Pong =
           pongAsInvertedPing > invertedPingAsPong
 
@@ -837,10 +861,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
         val prg: Done -⚬ Done =
           notifyDoneL > fst(g) > awaitPingFst
 
-        prg > success
+        prg
       },
 
-      "triple inversion" -> TestCase {
+      "triple inversion" -> TestCase.awaitDone {
         val prg: Done -⚬ Done =
           λ { d =>
             val (d1 |*| (nnd |*| nd)) = d.also(demand[-[Done]])
@@ -849,10 +873,10 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
               .alsoElim(supply(nnd |*| nnnd))
           }
 
-        prg > success
+        prg
       },
 
-      "on the demand side, demandSeparately, then supply one to the other" -> TestCase {
+      "on the demand side, demandSeparately, then supply one to the other" -> TestCase.awaitDone {
         val prg: Done -⚬ Done =
           λ { d =>
             val (d1 |*| ((n_nd_d: $[-[-[Done] |*| Done]]) |*| (nd |*| d2))) =
@@ -865,18 +889,20 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
               .alsoElim(supply(d1 |*| nd))
           }
 
-        prg > success
-      },
-
-      "Lock: successful acquire and release" -> TestCase {
-        val prg: Done -⚬ Assertion[Done] =
-          Lock.newLock > Lock.tryAcquire > assertLeft(ifRight = Lock.close) >- AcquiredLock.release >- Lock.close
-
         prg
       },
 
-      "Lock: only 1 client can acquire at a time" -> TestCase {
-        val prg: Done -⚬ Assertion[Done] =
+      "Lock: successful acquire and release" -> TestCase
+        .interactWith {
+          val prg: Done -⚬ (Done |+| Lock) =
+            Lock.newLock > Lock.tryAcquire > |+|.lmap(AcquiredLock.release > Lock.close)
+
+          prg
+        }
+        .via { _.expectLeft flatMap (_.expectDone) },
+
+      "Lock: only 1 client can acquire at a time" -> TestCase.awaitDone {
+        val prg: Done -⚬ Done =
           λ { start =>
             val (lLock |*| rLock) =
               start > Lock.newLock > Lock.share
@@ -893,13 +919,13 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
             val rLock1 =
               AcquiredLock.release(acquiredRLock deferReleaseUntil pingOnAttempted)
 
-            join( Lock.close(lLock1) |*| Lock.close(rLock1) ) > success
+            join( Lock.close(lLock1) |*| Lock.close(rLock1) )
           }
 
         prg
       },
 
-      "Lock: Everyone acquires the lock eventually" -> TestCase {
+      "Lock: Everyone acquires the lock eventually" -> TestCase.awaitDone {
         val prg: Done -⚬ Done =
           Lock.newLock > Lock.share > par(
             Lock.share > par(
@@ -912,7 +938,7 @@ class BasicTests extends ScalatestSuite[ScalettoTestKit] {
             ),
           ) > joinMap(join, join)
 
-        prg > success
+        prg
       },
 
       "latestValue" ->

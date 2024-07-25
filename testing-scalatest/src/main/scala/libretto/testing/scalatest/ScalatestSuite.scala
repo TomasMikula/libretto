@@ -23,7 +23,7 @@ extends AnyFunSuite
 
     def getExecutor(): TestExecutor[factory.testKit.type] =
       executor.map(factory.access(_)).getOrElse {
-        throw new IllegalStateException(s"TestExecutor ${factory.name} not  initialzed.")
+        throw new IllegalStateException(s"TestExecutor ${factory.name} not initialzed.")
       }
   }
 

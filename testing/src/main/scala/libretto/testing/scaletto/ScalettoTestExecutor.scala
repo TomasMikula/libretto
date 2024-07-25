@@ -24,51 +24,12 @@ object ScalettoTestExecutor {
       import dsl.*
       import bridge.Execution
 
-      override type Assertion[A] = Val[String] |+| A
+      // override type Assertion[A] = Val[String] |+| A
 
       override type ExecutionParam[A] = ScalettoTestExecutor.ExecutionParam[A]
 
       override def manualClockParam: ExecutionParam[ManualClock] =
         ExecutionParam.ManualClockParam
-
-      private val coreLib = CoreLib(this.dsl)
-      import coreLib.{Monad as _, *}
-
-      override def success[A]: A -⚬ Assertion[A] =
-        injectR
-
-      override def failure[A]: Done -⚬ Assertion[A] =
-        failure("Failed")
-
-      override def failure[A](msg: String): Done -⚬ Assertion[A] =
-        constVal(msg) > injectL
-
-      override def monadAssertion: Monad[-⚬, Assertion] =
-        |+|.right[Val[String]]
-
-      override def extractOutcome(using exn: Execution, pos: SourcePos)(
-        outPort: exn.OutPort[Assertion[Done]],
-      ): Outcome[Unit] = {
-        import TestResult.{crash, success as succeed, failed as fail}
-        Outcome.asyncTestResult(
-          outPort
-            .awaitEither()
-            .flatMap {
-              case Left(e) =>
-                Async.now(crash(e))
-              case Right(Left(msg)) =>
-                msg.awaitVal().map {
-                  case Left(e)    => crash(e)
-                  case Right(msg) => fail(using pos)(msg)
-                }
-              case Right(Right(d)) =>
-                d.awaitDone().map {
-                  case Left(e)   => crash(e)
-                  case Right(()) => succeed(())
-                }
-            }
-        )
-      }
   }
 
   sealed trait ExecutionParam[A]
