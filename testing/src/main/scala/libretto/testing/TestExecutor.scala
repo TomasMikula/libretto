@@ -1,9 +1,9 @@
 package libretto.testing
 
 import libretto.{CoreBridge, CoreDSL, CoreExecutor}
-import libretto.exec.ExecutionParams
+import libretto.exec.{ExecutionParams, Executor}
 import libretto.exec.Executor.CancellationReason
-import libretto.lambda.util.Monad
+import libretto.lambda.util.Exists
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 
@@ -105,73 +105,120 @@ object TestExecutor {
     }
   }
 
-  def usingExecutor(executor: CoreExecutor): UsingExecutor[executor.type] =
-    new UsingExecutor[executor.type](executor)
+  def forKit(kit: TestKit): ForKit[kit.type, kit.ExecutionParam] =
+    ForKit(kit, adaptParam = [A] => pa => Exists((pa, identity)))
 
-  class UsingExecutor[E <: CoreExecutor](val executor: E) {
-    import executor.ExecutionParams
-    import executor.bridge.Execution
-    import executor.dsl.*
+  class ForKit[TK <: TestKit, P[_]](
+    val kit: TK,
+    adaptParam: [A] => kit.ExecutionParam[A] => Exists[[X] =>> (P[X], X => A)],
+  ):
+    def adaptParams[Q[_]](f: [A] => P[A] => Exists[[X] =>> (Q[X], X => A)]): ForKit[TK, Q] =
+      ForKit(
+        kit,
+        adaptParam = [A] => (ka: kit.ExecutionParam[A]) =>
+          adaptParam(ka) match
+            case Exists.Some((py, h)) =>
+              f(py) match
+                case Exists.Some((qx, g)) =>
+                  Exists((qx, g andThen h))
+      )
 
-    def runTestCase[O, P, X](
-      body: Done -⚬ O,
-      params: ExecutionParams[P],
-      conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Async[TestResult[X]],
-      postStop: X => Async[TestResult[Unit]],
-      timeout: FiniteDuration,
-    ): TestResult[Unit] = {
-      val (executing, p) = executor.execute(body, params)
-      import executing.{bridge, execution, inPort, outPort}
-      given execution.type = execution
+    def usingExecutor(
+      exr: Executor.Of[kit.dsl.type, kit.bridge.type] with { type ExecutionParam[A] = P[A] },
+    ): UsingKitAndExecutor[TK, P] =
+      UsingKitAndExecutor(kit, adaptParam, exr)
 
-      val res0: TestResult[X] =
-        try {
-          inPort.supplyDone()
+  class UsingKitAndExecutor[TK <: TestKit, P[_]](
+    val kit: TK,
+    adaptParam: [A] => kit.ExecutionParam[A] => Exists[[X] =>> (P[X], X => A)],
+    executor: Executor.Of[kit.dsl.type, kit.bridge.type] with { type ExecutionParam[A] = P[A] },
+  ):
+    def make(name: String): TestExecutor[TK] =
+      val name1 = name
+      new TestExecutor[kit.type] {
+        override val name: String = name1
+        override val testKit: kit.type = kit
 
-          val properResult: Async[TestResult[X]] =
-            conduct(using execution)(outPort, p)
+        import testKit.{ExecutionParams, Outcome}
+        import testKit.dsl.*
+        import testKit.bridge.Execution
 
-          val cancellationResult: Async[TestResult[X]] =
-            executor.watchForCancellation(execution).map {
-              case CancellationReason.Bug(msg, cause) =>
-                TestResult.crash(new RuntimeException(msg, cause.getOrElse(null)))
-              case CancellationReason.User(pos) =>
-                TestResult.crash(new AssertionError(s"Unexpected call to cancel at ${pos.filename}:${pos.line}"))
+        override def execpAndCheck[O, P, Y](
+          body: Done -⚬ O,
+          params: ExecutionParams[P],
+          conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[Y],
+          postStop: Y => Outcome[Unit],
+          timeout: FiniteDuration,
+        ): TestResult[Unit] =
+          params.adapt(adaptParam) match
+            case e @ Exists.Some((params, adaptResult)) =>
+              runOnExecutor[O, e.T, Y](
+                  body,
+                  params,
+                  (port, x) => Outcome.toAsyncTestResult(conduct(port, adaptResult(x))),
+                  postStop andThen Outcome.toAsyncTestResult,
+                  timeout,
+                )
+
+        private def runOnExecutor[O, A, X](
+          body: Done -⚬ O,
+          params: executor.ExecutionParams[A],
+          conduct: (exn: Execution) ?=> (exn.OutPort[O], A) => Async[TestResult[X]],
+          postStop: X => Async[TestResult[Unit]],
+          timeout: FiniteDuration,
+        ): TestResult[Unit] = {
+          val (executing, a) = executor.execute(body, params)
+          import executing.{bridge, execution, inPort, outPort}
+          given execution.type = execution
+
+          val res0: TestResult[X] =
+            try {
+              inPort.supplyDone()
+
+              val properResult: Async[TestResult[X]] =
+                conduct(using execution)(outPort, a)
+
+              val cancellationResult: Async[TestResult[X]] =
+                executor.watchForCancellation(execution).map {
+                  case CancellationReason.Bug(msg, cause) =>
+                    TestResult.crash(new RuntimeException(msg, cause.getOrElse(null)))
+                  case CancellationReason.User(pos) =>
+                    TestResult.crash(new AssertionError(s"Unexpected call to cancel at ${pos.filename}:${pos.line}"))
+                }
+
+              val result: Async[TestResult[X]] =
+                Async.race_(properResult, cancellationResult)
+
+              Async
+                .await(timeout)(result)
+                .getOrElse(TestResult.timedOut(timeout))
+            } catch {
+              case e => TestResult.crash(e)
+            } finally {
+              executor.cancel(execution)
             }
 
-          val result: Async[TestResult[X]] =
-            Async.race_(properResult, cancellationResult)
-
-          Async
-            .await(timeout)(result)
-            .getOrElse(TestResult.timedOut(timeout))
-        } catch {
-          case e => TestResult.crash(e)
-        } finally {
-          executor.cancel(execution)
+          res0.flatMap { x =>
+            try {
+              Async
+                .await(timeout) { postStop(x) }
+                .getOrElse(TestResult.timedOut(timeout))
+            } catch {
+              case e => TestResult.crash(e)
+            }
+          }
         }
 
-      res0.flatMap { x =>
-        try {
-          Async
-            .await(timeout) { postStop(x) }
-            .getOrElse(TestResult.timedOut(timeout))
-        } catch {
-          case e => TestResult.crash(e)
-        }
+        override def check(
+          body: () => Outcome[Unit],
+          timeout: FiniteDuration,
+        ): TestResult[Unit] =
+          try {
+            Async
+              .await(timeout)(Outcome.toAsyncTestResult(body()))
+              .getOrElse(TestResult.timedOut(timeout))
+          } catch {
+            case e => TestResult.crash(e)
+          }
       }
-    }
-
-    def runTestCase(
-      body: () => Async[TestResult[Unit]],
-      timeout: FiniteDuration,
-    ): TestResult[Unit] =
-      try {
-        Async
-          .await(timeout)(body())
-          .getOrElse(TestResult.timedOut(timeout))
-      } catch {
-        case e => TestResult.crash(e)
-      }
-  }
 }
