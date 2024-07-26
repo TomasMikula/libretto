@@ -1,4 +1,4 @@
-package libretto
+package libretto.core
 
 import libretto.cats.{Bifunctor, Comonad, ContraFunctor, Functor, Monad}
 import libretto.lambda.{Category, Extractor, SymmetricMonoidalCategory}

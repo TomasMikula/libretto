@@ -1,6 +1,6 @@
 package libretto.crash
 
-import libretto.CoreLib
+import libretto.core.CoreLib
 
 object CrashLib {
   def apply(

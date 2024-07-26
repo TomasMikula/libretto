@@ -1,7 +1,7 @@
 package libretto.scaletto
 
 import java.util.concurrent.atomic.AtomicLong
-import libretto.CoreLib
+import libretto.core.CoreLib
 import libretto.invert.InvertLib
 import libretto.lambda.util.SourcePos
 import libretto.util.Async
@@ -22,10 +22,10 @@ object ScalettoLib {
 
 class ScalettoLib[
   DSL <: Scaletto,
-  CoreLib <: libretto.CoreLib[DSL],
+  CoreLib <: libretto.core.CoreLib[DSL],
 ](
   val dsl: DSL,
-  val coreLib: CoreLib & libretto.CoreLib[dsl.type],
+  val coreLib: CoreLib & libretto.core.CoreLib[dsl.type],
 ) {
   import dsl.*
   import dsl.$.*

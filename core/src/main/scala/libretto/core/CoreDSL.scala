@@ -1,4 +1,4 @@
-package libretto
+package libretto.core
 
 import libretto.cats.{Functor, Monad}
 import libretto.lambda.{EnumModule, Extractor, Focus, MonoidalCategory, Partitioning, SymmetricMonoidalCategory}
@@ -706,13 +706,13 @@ trait CoreDSL {
       Some($.nonLinear(a)(Some(A.split), Some(A.discard))(pos))
   }
 
-  type Affine[A] = cats.Affine[-⚬, One, A]
-  val Affine = cats.Affine
+  type Affine[A] = libretto.cats.Affine[-⚬, One, A]
+  val Affine = libretto.cats.Affine
 
-  trait Cosemigroup[A] extends cats.Cosemigroup[-⚬, |*|, A]:
+  trait Cosemigroup[A] extends libretto.cats.Cosemigroup[-⚬, |*|, A]:
     override def cat: SemigroupalCategory[-⚬, |*|] = category
 
-  trait Comonoid[A] extends cats.Comonoid[-⚬, |*|, One, A] with Cosemigroup[A]:
+  trait Comonoid[A] extends libretto.cats.Comonoid[-⚬, |*|, One, A] with Cosemigroup[A]:
     override def cat: MonoidalCategory[-⚬, |*|, One] = category
 
   given affineOne: Affine[One] =

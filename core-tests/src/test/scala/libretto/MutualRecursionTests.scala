@@ -1,5 +1,6 @@
 package libretto
 
+import libretto.core.CoreLib
 import libretto.lambda.Extractor
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoLib

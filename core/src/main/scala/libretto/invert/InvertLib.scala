@@ -1,6 +1,6 @@
 package libretto.invert
 
-import libretto.CoreLib
+import libretto.core.CoreLib
 import libretto.lambda.util.SourcePos
 
 object InvertLib {
@@ -11,7 +11,7 @@ object InvertLib {
 }
 
 class InvertLib[
-  CoreLib <: libretto.CoreLib[? <: InvertDSL],
+  CoreLib <: libretto.core.CoreLib[? <: InvertDSL],
 ](
   val coreLib: CoreLib,
 ) {

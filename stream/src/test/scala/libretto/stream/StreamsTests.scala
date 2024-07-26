@@ -1,8 +1,8 @@
 package libretto.stream
 
-import libretto.CoreLib
+import libretto.core.CoreLib
 import libretto.scaletto.ScalettoLib
-import libretto.stream.CoreStreams
+import libretto.stream.core.CoreStreams
 import libretto.stream.invert.InvertStreams
 import libretto.stream.scaletto.ScalettoStreams
 import libretto.testing.TestCase

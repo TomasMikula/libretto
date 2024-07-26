@@ -1,6 +1,6 @@
-package libretto.stream
+package libretto.stream.core
 
-import libretto.{CoreDSL, CoreLib}
+import libretto.core.{CoreDSL, CoreLib}
 import libretto.lambda.util.Exists
 
 object CoreStreams {

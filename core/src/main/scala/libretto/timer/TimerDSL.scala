@@ -1,6 +1,6 @@
 package libretto.timer
 
-import libretto.{CoreDSL, CoreLib}
+import libretto.core.{CoreDSL, CoreLib}
 import scala.concurrent.duration.FiniteDuration
 
 trait TimerDSL extends CoreDSL {

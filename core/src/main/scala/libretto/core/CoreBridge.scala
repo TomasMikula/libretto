@@ -1,4 +1,4 @@
-package libretto
+package libretto.core
 
 import libretto.exec.Bridge
 import libretto.util.Async

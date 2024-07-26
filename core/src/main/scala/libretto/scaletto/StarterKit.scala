@@ -1,8 +1,8 @@
 package libretto.scaletto
 
 import java.util.concurrent.{Executor as JExecutor, Executors, ScheduledExecutorService}
-import libretto.CoreLib
 import libretto.closed.ClosedLib
+import libretto.core.CoreLib
 import libretto.crash.CrashLib
 import libretto.exec.{Executor, SupportsCustomScheduler}
 import libretto.invert.InvertLib

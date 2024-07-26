@@ -3,6 +3,7 @@ package libretto
 import java.util.concurrent.{Executors, ScheduledExecutorService}
 import java.util.concurrent.atomic.AtomicInteger
 import libretto.cats.Functor.*
+import libretto.core.CoreLib
 import libretto.crash.CrashLib
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.ScalettoLib

@@ -1,4 +1,4 @@
-package libretto.stream
+package libretto.stream.core
 
 import libretto.scaletto.StarterKit
 

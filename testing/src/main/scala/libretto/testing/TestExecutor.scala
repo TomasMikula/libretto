@@ -1,6 +1,5 @@
 package libretto.testing
 
-import libretto.{CoreBridge, CoreDSL}
 import libretto.exec.{ExecutionParams, Executor}
 import libretto.exec.Executor.CancellationReason
 import libretto.lambda.util.Exists

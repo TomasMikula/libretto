@@ -1,6 +1,6 @@
 package libretto.stream.scaletto
 
-import libretto.CoreLib
+import libretto.core.CoreLib
 import libretto.lambda.Category
 import libretto.scaletto.{Scaletto, ScalettoLib}
 

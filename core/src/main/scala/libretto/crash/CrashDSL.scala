@@ -1,6 +1,6 @@
 package libretto.crash
 
-import libretto.{CoreDSL, CoreLib}
+import libretto.core.{CoreDSL, CoreLib}
 
 trait CrashDSL extends CoreDSL {
   /** Starts propagating an error downstream (which might be through both the in-port and the out-port).

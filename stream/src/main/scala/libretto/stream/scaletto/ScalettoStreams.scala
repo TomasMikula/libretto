@@ -1,6 +1,6 @@
 package libretto.stream.scaletto
 
-import libretto.CoreLib
+import libretto.core.CoreLib
 import libretto.invert.InvertLib
 import libretto.lambda.util.{Exists, SourcePos}
 import libretto.scaletto.{Scaletto, ScalettoLib}
@@ -43,12 +43,12 @@ object ScalettoStreams {
 
 abstract class ScalettoStreams {
   type Dsl           <: Scaletto
-  type CoreLib       <: libretto.CoreLib[Dsl]
+  type CoreLib       <: libretto.core.CoreLib[Dsl]
   type ScalettoLib   <: libretto.scaletto.ScalettoLib[Dsl, CoreLib]
   type InvertStreams <: libretto.stream.invert.InvertStreams[Dsl, CoreLib]
 
   val dsl: Dsl
-  val coreLib: CoreLib & libretto.CoreLib[dsl.type]
+  val coreLib: CoreLib & libretto.core.CoreLib[dsl.type]
   val scalettoLib: ScalettoLib & libretto.scaletto.ScalettoLib[dsl.type, coreLib.type]
   val underlying: InvertStreams & libretto.stream.invert.InvertStreams[dsl.type, coreLib.type]
 

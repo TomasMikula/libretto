@@ -1,7 +1,7 @@
 package libretto.invert
 
-import libretto.CoreLib
 import libretto.closed.ClosedDSL
+import libretto.core.CoreLib
 import libretto.lambda.util.SourcePos
 import scala.annotation.targetName
 

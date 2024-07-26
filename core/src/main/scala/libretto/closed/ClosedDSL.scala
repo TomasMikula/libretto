@@ -1,6 +1,6 @@
 package libretto.closed
 
-import libretto.CoreDSL
+import libretto.core.CoreDSL
 import libretto.lambda.util.SourcePos
 
 /** Extension of [[CoreDSL]] that adds support for "functions as data" (`=⚬`).

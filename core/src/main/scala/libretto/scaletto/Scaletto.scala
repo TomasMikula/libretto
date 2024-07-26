@@ -1,6 +1,6 @@
 package libretto.scaletto
 
-import libretto.CoreLib
+import libretto.core.CoreLib
 import libretto.crash.CrashDSL
 import libretto.timer.TimerDSL
 import libretto.invert.InvertDSL
