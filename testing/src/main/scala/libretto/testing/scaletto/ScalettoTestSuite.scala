@@ -1,9 +1,10 @@
 package libretto.testing.scaletto
 
-import libretto.testing.{TestCase, TestExecutor, TestSuite}
+import libretto.testing.{TestCase, TestExecutor}
+import libretto.testing.core.AbstractCoreTestSuite
 
 /** Test suite where all tests are written using [[ScalaTestKit]] (and thus [[libretto.ScalaDSL]]). */
-trait AbstractScalettoTestSuite[TK <: ScalettoTestKit] extends TestSuite[TK] {
+trait AbstractScalettoTestSuite[TK <: ScalettoTestKit] extends AbstractCoreTestSuite[TK] {
 
   extension (TC: TestCase.type)
     def awaitVal[A](using kit: ScalettoTestKit)(

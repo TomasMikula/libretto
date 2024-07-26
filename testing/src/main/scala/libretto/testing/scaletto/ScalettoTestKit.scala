@@ -3,8 +3,9 @@ package libretto.testing.scaletto
 import libretto.scaletto.{Scaletto, ScalettoBridge}
 import libretto.testing.TestKit.dsl
 import libretto.testing.{SupportsManualClock, TestKitOps, TestKitWithManualClock, TestResult}
+import libretto.testing.core.CoreTestKit
 
-trait ScalettoTestKit extends TestKitWithManualClock {
+trait ScalettoTestKit extends CoreTestKit with TestKitWithManualClock {
   override type Dsl <: Scaletto
 
   override val bridge: ScalettoBridge.Of[dsl.type]

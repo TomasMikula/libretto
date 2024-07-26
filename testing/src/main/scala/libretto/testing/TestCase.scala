@@ -20,7 +20,7 @@ object TestCase {
 
   sealed trait SingleProgram[TK <: TestKit] extends Single[TK] {
     val testKit: TK
-    import testKit.{ExecutionParams, Outcome}
+    import testKit.{DefaultInput, ExecutionParams, Outcome}
     import testKit.dsl.*
     import testKit.bridge.Execution
 
@@ -28,7 +28,7 @@ object TestCase {
     type P
     type X
 
-    val body: Done -⚬ O
+    val body: DefaultInput -⚬ O
 
     val params: ExecutionParams[P]
 
@@ -60,7 +60,7 @@ object TestCase {
   ) extends TestCase[TK]
 
   def parameterizedExecAndCheck[TK <: TestKit, A, Q, B](using kit: TK)(
-    body0: dsl.-⚬[dsl.Done, A],
+    body0: dsl.-⚬[kit.DefaultInput, A],
     params0: kit.ExecutionParams[Q],
     conductor0: (exn: kit.bridge.Execution) ?=> (exn.OutPort[A], Q) => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
@@ -79,7 +79,7 @@ object TestCase {
     }
 
   private def apply[A, B](using kit: TestKit)(
-    body0: dsl.-⚬[dsl.Done, A],
+    body0: dsl.-⚬[kit.DefaultInput, A],
     conductor0: (exn: kit.bridge.Execution) ?=> exn.OutPort[A] => kit.Outcome[B],
     postStop0: B => kit.Outcome[Unit],
   ): TestCase.Single[kit.type] =
@@ -90,19 +90,14 @@ object TestCase {
       postStop0,
     )
 
-  def awaitDone(using kit: TestKit)(
-    body: dsl.-⚬[dsl.Done, dsl.Done],
-  )(using pos: SourcePos): TestCase.Single[kit.type] =
-    apply[dsl.Done, Unit](body, _.expectDone, kit.Outcome.success)
-
   def apply[O](using kit: TestKit)(
-    body: kit.dsl.-⚬[kit.dsl.Done, O],
+    body: kit.dsl.-⚬[kit.DefaultInput, O],
     conduct: (exn: kit.bridge.Execution) ?=> exn.OutPort[O] => kit.Outcome[Unit],
   ): TestCase.Single[kit.type] =
     apply[O, Unit](body, conduct(_), kit.Outcome.success)
 
   def parameterizedExec[O, P](using kit: TestKit)(
-    body: kit.dsl.-⚬[kit.dsl.Done, O],
+    body: kit.dsl.-⚬[kit.DefaultInput, O],
     params: kit.ExecutionParams[P],
     conduct: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit],
   ): TestCase.Single[kit.type] =
@@ -131,20 +126,20 @@ object TestCase {
   ): Configure[kit.type, P] =
     Configure(kit, params)
 
-  def interactWith[O](using kit: TestKit)(body: kit.dsl.-⚬[kit.dsl.Done, O]): InteractWith[kit.type, O] =
+  def interactWith[O](using kit: TestKit)(body: kit.dsl.-⚬[kit.DefaultInput, O]): InteractWith[kit.type, O] =
     InteractWith(kit, body)
 
   class Configure[TK <: TestKit, P](
     val kit: TK,
     val params: kit.ExecutionParams[P],
   ) {
-    def interactWith[O](body: kit.dsl.-⚬[kit.dsl.Done, O]): InteractWithConfigured[kit.type, O, P] =
+    def interactWith[O](body: kit.dsl.-⚬[kit.DefaultInput, O]): InteractWithConfigured[kit.type, O, P] =
       InteractWithConfigured(kit, body, params)
   }
 
   class InteractWith[TK <: TestKit, O](
     val kit: TK,
-    val body: kit.dsl.-⚬[kit.dsl.Done, O],
+    val body: kit.dsl.-⚬[kit.DefaultInput, O],
   ) {
     def via(
       // otherwise superfluous given kit.bridge.type provided to work around
@@ -162,7 +157,7 @@ object TestCase {
 
   class InteractWithConfigured[TK <: TestKit, O, P](
     val kit: TK,
-    val body: kit.dsl.-⚬[kit.dsl.Done, O],
+    val body: kit.dsl.-⚬[kit.DefaultInput, O],
     val params: kit.ExecutionParams[P],
   ) {
     def via(conductor: (exn: kit.bridge.Execution) ?=> (exn.OutPort[O], P) => kit.Outcome[Unit]): TestCase[kit.type] =

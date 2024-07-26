@@ -1,17 +1,23 @@
 package libretto.testing
 
 import libretto.cats.Monad
-import libretto.core.{CoreBridge, CoreDSL}
-import libretto.exec.ExecutionParams
+import libretto.exec.{Bridge, ExecutionParams}
 import libretto.lambda.util.{Monad as ScalaMonad, SourcePos}
 import libretto.util.Async
 import scala.annotation.targetName
 import scala.concurrent.duration.FiniteDuration
 
 trait TestKit {
-  type Dsl <: CoreDSL
+  type Dsl <: { type -⚬[A, B] }
 
   val dsl: Dsl
+  val bridge: Bridge.Of[dsl.type]
+
+  type ExecutionParam[A]
+  type ExecutionParams[A] = libretto.exec.ExecutionParams[ExecutionParam, A]
+
+  type DefaultInput
+  def supplyDefaultInput(using exn: bridge.Execution)(inPort: exn.InPort[DefaultInput]): Unit
 
   opaque type Outcome[A] = Async[TestResult[A]]
   object Outcome {
@@ -149,68 +155,6 @@ trait TestKit {
         extension [A](fa: Outcome[A])
           override def flatMap[B](f: A => Outcome[B]): Outcome[B] =
             Outcome.flatMap(fa)(f)
-      }
-  }
-
-  val bridge: CoreBridge.Of[dsl.type]
-
-  import dsl.{-⚬, |*|, |+|, Done, Ping}
-  import bridge.*
-
-  type ExecutionParam[A]
-  type ExecutionParams[A] = libretto.exec.ExecutionParams[ExecutionParam, A]
-
-  extension (using exn: Execution, pos: SourcePos)(port: exn.OutPort[Done]) {
-    def expectDone: Outcome[Unit] =
-      port.awaitDone().map {
-        case Left(e)   => TestResult.crash(e)
-        case Right(()) => TestResult.success(())
-      }
-
-    def expectCrashDone: Outcome[Throwable] =
-      port.awaitDone().map {
-        case Left(e)   => TestResult.success(e)
-        case Right(()) => TestResult.failed(using pos)("Expected crash, but got Done")
-      }
-  }
-
-  extension (using exn: Execution, pos: SourcePos)(port: exn.OutPort[Ping]) {
-    def expectPing: Outcome[Unit] =
-      port.awaitPing().map {
-        case Left(e)   => TestResult.crash(e)
-        case Right(()) => TestResult.success(())
-      }
-
-    def expectNoPingFor(duration: FiniteDuration): Outcome[exn.OutPort[Ping]] =
-      port.awaitNoPing(duration).map {
-        case Left(Left(e))   => TestResult.crash(e)
-        case Left(Right(())) => TestResult.failed(using pos)(s"Expected no Ping for $duration, but got Ping")
-        case Right(port)     => TestResult.success(port)
-      }
-
-    def expectNoPingThenIgnore(duration: FiniteDuration): Outcome[Unit] =
-      Outcome.map(
-        port.expectNoPingFor(duration)
-      ) { port =>
-        port
-          .append(dsl.dismissPing)
-          .discardOne()
-      }
-  }
-
-  extension [A, B](using exn: Execution, pos: SourcePos)(port: exn.OutPort[A |+| B]) {
-    def expectLeft: Outcome[exn.OutPort[A]] =
-      port.awaitEither().map {
-        case Left(e)         => TestResult.crash(e)
-        case Right(Left(p))  => TestResult.success(p)
-        case Right(Right(_)) => TestResult.failed(using pos)("Expected Left, but got Right")
-      }
-
-    def expectRight: Outcome[exn.OutPort[B]] =
-      port.awaitEither().map {
-        case Left(e)         => TestResult.crash(e)
-        case Right(Left(_))  => TestResult.failed(using pos)("Expected Right, but got Left")
-        case Right(Right(p)) => TestResult.success(p)
       }
   }
 }

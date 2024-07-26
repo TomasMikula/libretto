@@ -9,14 +9,14 @@ import scala.concurrent.duration.FiniteDuration
 trait TestExecutor[+TK <: TestKit] { self =>
   val testKit: TK
 
-  import testKit.{ExecutionParams, Outcome}
+  import testKit.{DefaultInput, ExecutionParams, Outcome}
   import testKit.dsl.*
   import testKit.bridge.Execution
 
   def name: String
 
   def execpAndCheck[O, P, X](
-    body: Done -⚬ O,
+    body: DefaultInput -⚬ O,
     params: ExecutionParams[P],
     conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[X],
     postStopCheck: X => Outcome[Unit],
@@ -29,7 +29,7 @@ trait TestExecutor[+TK <: TestKit] { self =>
   ): TestResult[Unit]
 
   def execAndCheck[O, X](
-    body: Done -⚬ O,
+    body: DefaultInput -⚬ O,
     conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[X],
     postStopCheck: X => Outcome[Unit],
     timeout: FiniteDuration,
@@ -37,7 +37,7 @@ trait TestExecutor[+TK <: TestKit] { self =>
     execpAndCheck[O, Unit, X](body, ExecutionParams.unit, (po, _) => conduct(po), postStopCheck, timeout)
 
   def exec[O](
-    body: Done -⚬ O,
+    body: DefaultInput -⚬ O,
     conduct: (exn: Execution) ?=> exn.OutPort[O] => Outcome[Unit],
     timeout: FiniteDuration,
   ): TestResult[Unit] =
@@ -132,6 +132,8 @@ object TestExecutor {
     adaptParam: [A] => kit.ExecutionParam[A] => Exists[[X] =>> (P[X], X => A)],
     executor: Executor.Of[kit.dsl.type, kit.bridge.type] with { type ExecutionParam[A] = P[A] },
   ):
+    import kit.DefaultInput
+
     def make(name: String): TestExecutor[TK] =
       val name1 = name
       new TestExecutor[kit.type] {
@@ -143,7 +145,7 @@ object TestExecutor {
         import testKit.bridge.Execution
 
         override def execpAndCheck[O, P, Y](
-          body: Done -⚬ O,
+          body: DefaultInput -⚬ O,
           params: ExecutionParams[P],
           conduct: (exn: Execution) ?=> (exn.OutPort[O], P) => Outcome[Y],
           postStop: Y => Outcome[Unit],
@@ -160,7 +162,7 @@ object TestExecutor {
                 )
 
         private def runOnExecutor[O, A, X](
-          body: Done -⚬ O,
+          body: DefaultInput -⚬ O,
           params: executor.ExecutionParams[A],
           conduct: (exn: Execution) ?=> (exn.OutPort[O], A) => Async[TestResult[X]],
           postStop: X => Async[TestResult[Unit]],
@@ -172,7 +174,7 @@ object TestExecutor {
 
           val res0: TestResult[X] =
             try {
-              inPort.supplyDone()
+              kit.supplyDefaultInput(inPort)
 
               val properResult: Async[TestResult[X]] =
                 conduct(using execution)(outPort, a)
