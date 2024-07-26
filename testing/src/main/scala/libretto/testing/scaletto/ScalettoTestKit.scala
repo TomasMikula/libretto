@@ -2,7 +2,7 @@ package libretto.testing.scaletto
 
 import libretto.scaletto.{Scaletto, ScalettoBridge}
 import libretto.testing.TestKit.dsl
-import libretto.testing.{TestKitOps, TestKitWithManualClock, TestResult}
+import libretto.testing.{SupportsManualClock, TestKitOps, TestKitWithManualClock, TestResult}
 
 trait ScalettoTestKit extends TestKitWithManualClock {
   override type Dsl <: Scaletto
@@ -24,5 +24,32 @@ trait ScalettoTestKit extends TestKitWithManualClock {
 }
 
 object ScalettoTestKit extends TestKitOps {
-  type Of[DSL <: Scaletto] = ScalettoTestKit { type Dsl = DSL }
+  type OfDsl[DSL <: Scaletto] =
+    ScalettoTestKit { type Dsl = DSL }
+
+  type Of[DSL <: Scaletto, BRDG <: ScalettoBridge.Of[DSL]] =
+    OfDsl[DSL] { val bridge: BRDG }
+
+  type Ofp[DSL <: Scaletto, BRDG <: ScalettoBridge.Of[DSL], P[_]] =
+    Of[DSL, BRDG] { type ExecutionParam[A] = P[A] }
+
+  def fromBridge[P[_]](
+    dsl: Scaletto,
+    bridge: ScalettoBridge.Of[dsl.type],
+    manualClockSupport: SupportsManualClock[P],
+  ): ScalettoTestKit.Ofp[bridge.dsl.type, bridge.type, P] =
+    new ScalettoTestKitFromBridge(dsl, bridge, manualClockSupport)
+
+  private class ScalettoTestKitFromBridge[DSL <: Scaletto, Bridge <: ScalettoBridge.Of[DSL], P[_]](
+    val dsl0: DSL,
+    val bridge0: Bridge & ScalettoBridge.Of[dsl0.type],
+    override val manualClockSupport: SupportsManualClock[P],
+  ) extends ScalettoTestKit {
+      override type Dsl = bridge.dsl.type
+
+      override val dsl: bridge0.dsl.type = bridge0.dsl
+      override val bridge: bridge0.type = bridge0
+
+      override type ExecutionParam[A] = P[A]
+  }
 }

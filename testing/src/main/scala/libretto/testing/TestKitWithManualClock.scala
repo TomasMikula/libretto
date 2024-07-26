@@ -1,8 +1,11 @@
 package libretto.testing
 
 trait TestKitWithManualClock extends TestKit {
-  def manualClockParam: ExecutionParam[ManualClock]
+  def manualClockSupport: SupportsManualClock[ExecutionParam]
 
   def manualClock: ExecutionParams[ManualClock] =
-    libretto.exec.ExecutionParams.wrap(manualClockParam)
+    libretto.exec.ExecutionParams.wrap(manualClockSupport.manualClock)
 }
+
+trait SupportsManualClock[P[_]]:
+  def manualClock: P[ManualClock]
