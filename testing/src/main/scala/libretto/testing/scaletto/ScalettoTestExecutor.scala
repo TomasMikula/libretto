@@ -1,6 +1,6 @@
 package libretto.testing.scaletto
 
-import libretto.exec.ExecutionParams
+import libretto.exec.{ExecutionParams, SupportsCustomScheduler}
 import libretto.lambda.util.Exists
 import libretto.scaletto.{Scaletto, ScalettoBridge, ScalettoExecutor}
 import libretto.testing.{ManualClock, SupportsManualClock, TestExecutor}
@@ -29,6 +29,8 @@ object ScalettoTestExecutor {
 
   def defaultFactory(
     ef: ScalettoExecutor.Factory,
+  )(using
+    ep: SupportsCustomScheduler[ef.ExecutionParam],
   ): TestExecutor.Factory[ScalettoTestKit.OfDsl[ef.dsl.type]] =
     new TestExecutor.Factory[ScalettoTestKit.OfDsl[ef.dsl.type]] {
       override val testKit: ScalettoTestKit.Ofp[ef.dsl.type, ef.bridge.type, ExecutionParam] =
@@ -47,7 +49,7 @@ object ScalettoTestExecutor {
         val exr = ef.access(executor)
         val testExecutor = TestExecutor
           .forKit(testKit)
-          .adaptParams[exr.ExecutionParam](ExecutionParam.adaptParam(exr.schedulerParam))
+          .adaptParams[exr.ExecutionParam](ExecutionParam.adaptParam(ep.scheduler))
           .usingExecutor(exr)
           .make(name)
         (executor, testExecutor)
@@ -58,7 +60,11 @@ object ScalettoTestExecutor {
     }
 
   val defaultFactory: TestExecutor.Factory[ScalettoTestKit] =
-    defaultFactory(ScalettoExecutor.defaultFactory)
+    ScalettoExecutor.withDefaultFactory {
+      (fac: ScalettoExecutor.Factory) =>
+        (ev: SupportsCustomScheduler[fac.ExecutionParam]) =>
+          defaultFactory(fac)(using ev)
+    }
 
   lazy val global: TestExecutor[ScalettoTestKit] =
     defaultFactory.access(defaultFactory.create())

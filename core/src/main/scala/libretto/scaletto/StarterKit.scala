@@ -4,6 +4,7 @@ import java.util.concurrent.{Executor as JExecutor, Executors, ScheduledExecutor
 import libretto.CoreLib
 import libretto.closed.ClosedLib
 import libretto.crash.CrashLib
+import libretto.exec.SupportsCustomScheduler
 import libretto.invert.InvertLib
 import libretto.scaletto.impl.FreeScaletto
 import libretto.scaletto.impl.futurebased.{BridgeImpl, FutureExecutor}
@@ -26,6 +27,8 @@ abstract class AbstractStarterKit(
   val bridge: ScalettoBridge.Of[dsl.type],
   val executorFactory: ScalettoExecutor.Factory.Of[dsl.type, bridge.type],
   val executor0: (ScheduledExecutorService, JExecutor) => ScalettoExecutor.Of[dsl.type, bridge.type],
+)(using
+  val supportsCustomScheduler: SupportsCustomScheduler[executorFactory.ExecutionParam],
 ) {
   val coreLib: CoreLib[dsl.type] =
     CoreLib(dsl)

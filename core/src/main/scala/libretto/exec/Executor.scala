@@ -43,6 +43,9 @@ object Executor {
       val bridge: BRIDGE
     }
 
+  type Ofp[DSL <: { type -⚬[A, B] }, BRIDGE <: Bridge.Of[DSL], P[_]] =
+    Of[DSL, BRIDGE] { type ExecutionParam[A] = P[A] }
+
   trait Factory {
     type Dsl <: { type -⚬[A, B] }
     val dsl: Dsl
@@ -50,11 +53,13 @@ object Executor {
     type Bridge <: libretto.exec.Bridge.Of[dsl.type]
     val bridge: Bridge
 
+    type ExecutionParam[A]
+
     type ExecutorResource
 
     def name: String
     def create(): ExecutorResource
-    def access(r: ExecutorResource): Executor.Of[dsl.type, bridge.type]
+    def access(r: ExecutorResource): Executor.Ofp[dsl.type, bridge.type, ExecutionParam]
     def shutdown(r: ExecutorResource): Unit
   }
 
