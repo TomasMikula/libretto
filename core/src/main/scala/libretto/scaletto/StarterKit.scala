@@ -4,7 +4,7 @@ import java.util.concurrent.{Executor as JExecutor, Executors, ScheduledExecutor
 import libretto.CoreLib
 import libretto.closed.ClosedLib
 import libretto.crash.CrashLib
-import libretto.exec.SupportsCustomScheduler
+import libretto.exec.{Executor, SupportsCustomScheduler}
 import libretto.invert.InvertLib
 import libretto.scaletto.impl.FreeScaletto
 import libretto.scaletto.impl.futurebased.{BridgeImpl, FutureExecutor}
@@ -25,8 +25,8 @@ class StarterKit extends AbstractStarterKit(
 abstract class AbstractStarterKit(
   val dsl: Scaletto,
   val bridge: ScalettoBridge.Of[dsl.type],
-  val executorFactory: ScalettoExecutor.Factory.Of[dsl.type, bridge.type],
-  val executor0: (ScheduledExecutorService, JExecutor) => ScalettoExecutor.Of[dsl.type, bridge.type],
+  val executorFactory: Executor.Factory.Of[dsl.type, bridge.type],
+  val executor0: (ScheduledExecutorService, JExecutor) => Executor.Of[dsl.type, bridge.type],
 )(using
   val supportsCustomScheduler: SupportsCustomScheduler[executorFactory.ExecutionParam],
 ) {
@@ -47,7 +47,7 @@ abstract class AbstractStarterKit(
 
   def executor(blockingExecutor: JExecutor)(
     scheduler: ScheduledExecutorService,
-  ): ScalettoExecutor.Of[dsl.type, bridge.type] =
+  ): Executor.Of[dsl.type, bridge.type] =
     executor0(scheduler, blockingExecutor)
 
   export dsl.*

@@ -1,7 +1,8 @@
 package libretto.mashup
 
-import libretto.scaletto.{ScalettoExecutor, StarterKit}
+import libretto.exec.Executor
 import libretto.lambda.util.SourcePos
+import libretto.scaletto.StarterKit
 import libretto.util.Async
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -342,7 +343,7 @@ object MashupKitImpl extends MashupKit { kit =>
   }
 
   private class RuntimeImpl(
-    executor: ScalettoExecutor.OfDsl[StarterKit.dsl.type],
+    executor: Executor.Of[StarterKit.dsl.type, StarterKit.bridge.type],
   ) extends MashupRuntime[dsl.type] {
     override val dsl: kit.dsl.type = kit.dsl
     import dsl.{-->, **, ###, |&|, EmptyResource, Float64, Fun, Record, Text, Unlimited, ValueType, of}

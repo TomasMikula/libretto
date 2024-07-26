@@ -1,11 +1,10 @@
 package libretto.scaletto.impl.futurebased
 
 import java.util.concurrent.{Executor as JExecutor, Executors, ExecutorService, ScheduledExecutorService}
-import libretto.exec.{Executing, SupportsCustomScheduler}
+import libretto.exec.{Executing, Executor, SupportsCustomScheduler}
 import libretto.exec.Executor.CancellationReason
 import libretto.lambda.Tupled
 import libretto.lambda.util.SourcePos
-import libretto.scaletto.ScalettoExecutor
 import libretto.scaletto.impl.FreeScaletto
 import libretto.util.{Async, Scheduler}
 import scala.concurrent.ExecutionContext
@@ -14,7 +13,7 @@ object FutureExecutor {
   def apply(
     scheduler: ScheduledExecutorService,
     blockingExecutor: JExecutor,
-  ): ScalettoExecutor.Ofp[FreeScaletto.type, BridgeImpl.type, ExecutionParam] = {
+  ): Executor.Ofp[FreeScaletto.type, BridgeImpl.type, ExecutionParam] = {
     val ec = ExecutionContext.fromExecutor(scheduler)
     val sc = new SchedulerFromScheduledExecutorService(scheduler)
     val blockingEC = ExecutionContext.fromExecutor(blockingExecutor)
@@ -42,8 +41,8 @@ object FutureExecutor {
       SchedulerParam(s)
   }
 
-  val defaultFactory: ScalettoExecutor.Factory.Ofp[FreeScaletto.type, BridgeImpl.type, ExecutionParam] =
-    new ScalettoExecutor.Factory {
+  val defaultFactory: Executor.Factory.Ofp[FreeScaletto.type, BridgeImpl.type, ExecutionParam] =
+    new Executor.Factory {
       override type Dsl = FreeScaletto.type
       override type Bridge = BridgeImpl.type
 
@@ -53,12 +52,12 @@ object FutureExecutor {
       override type ExecutionParam[A] = FutureExecutor.ExecutionParam[A]
 
       override type ExecutorResource =
-        (ScheduledExecutorService, ExecutorService, ScalettoExecutor.Ofp[dsl.type, bridge.type, ExecutionParam])
+        (ScheduledExecutorService, ExecutorService, Executor.Ofp[dsl.type, bridge.type, ExecutionParam])
 
       override def name: String =
         "FutureExecutor.defaultFactory"
 
-      override def access(r: ExecutorResource): ScalettoExecutor.Ofp[dsl.type, bridge.type, ExecutionParam] =
+      override def access(r: ExecutorResource): Executor.Ofp[dsl.type, bridge.type, ExecutionParam] =
         r._3
 
       override def create(): ExecutorResource = {
@@ -87,7 +86,7 @@ class FutureExecutor(
   ec: ExecutionContext,
   scheduler: Scheduler,
   blockingEC: ExecutionContext,
-) extends ScalettoExecutor {
+) extends Executor {
 
   override val dsl: FreeScaletto.type = FreeScaletto
   override val bridge: BridgeImpl.type = BridgeImpl

@@ -64,8 +64,14 @@ object Executor {
   }
 
   object Factory {
-    type Of[DSL <: { type -⚬[A, B] }, BRIDGE <: Bridge.Of[DSL]] =
-      Factory { type Dsl = DSL; type Bridge = BRIDGE }
+    type Of[DSL, BRIDGE] =
+      Factory {
+        type Dsl    <: DSL    & { type -⚬[A, B] }
+        type Bridge <: BRIDGE & libretto.exec.Bridge.Of[dsl.type]
+      }
+
+    type Ofp[DSL, BRIDGE, P[_]] =
+      Of[DSL, BRIDGE] { type ExecutionParam[A] = P[A] }
   }
 
   enum CancellationReason {
