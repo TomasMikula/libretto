@@ -1,109 +1,142 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, CoproductPartitioning, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Member, Partitioning, PatternMatching, SemigroupalCategory, Shuffled, Sink, Tupled, Var}
+import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, CoproductPartitioning, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Member, Partitioning, PatternMatching, SemigroupalCategory, Shuffled, Sink, SymmetricSemigroupalCategory, Tupled, Var}
 import libretto.lambda.Partitioning.SubFun
 import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, SourcePos, StaticValue, TypeEq, TypeEqK, Validated}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.util.Monad.monadEither
 import libretto.util.Async
+import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
-import libretto.lambda.SymmetricSemigroupalCategory
 
 object FreeScaletto extends Scaletto {
   sealed trait -⚬[A, B] {
 
-    lazy val size: Long =
+    private[FreeScaletto] lazy val sizeAndRefs: SizeAndRefs =
+      import SizeAndRefs.one
       this match
-        case -⚬.Id() => 1
-        case -⚬.AndThen(f, g) => 1 + f.size + g.size
-        case -⚬.Par(f1, f2) => 1 + f1.size + f2.size
-        case -⚬.IntroFst() => 1
-        case -⚬.IntroSnd() => 1
-        case -⚬.ElimFst() => 1
-        case -⚬.ElimSnd() => 1
-        case -⚬.AssocLR() => 1
-        case -⚬.AssocRL() => 1
-        case -⚬.Swap() => 1
-        case -⚬.InjectL() => 1
-        case -⚬.InjectR() => 1
-        case -⚬.EitherF(f, g) => 1 + f.size + g.size
-        case -⚬.Absurd() => 1
-        case -⚬.OneOfInject(i) => 1
-        case -⚬.OneOfPeel() => 1
-        case -⚬.OneOfUnpeel() => 1
-        case -⚬.OneOfExtractSingle() => 1
-        case -⚬.ChooseL() => 1
-        case -⚬.ChooseR() => 1
-        case -⚬.Choice(f, g) => 1 + f.size + g.size
-        case -⚬.PingF() => 1
-        case -⚬.PongF() => 1
-        case -⚬.DelayIndefinitely() => 1
-        case -⚬.RegressInfinitely() => 1
-        case -⚬.Fork() => 1
-        case -⚬.Join() => 1
-        case -⚬.ForkNeed() => 1
-        case -⚬.JoinNeed() => 1
-        case -⚬.NotifyDoneL() => 1
-        case -⚬.NotifyNeedL() => 1
-        case -⚬.ForkPing() => 1
-        case -⚬.ForkPong() => 1
-        case -⚬.JoinPing() => 1
-        case -⚬.JoinPong() => 1
-        case -⚬.StrengthenPing() => 1
-        case -⚬.StrengthenPong() => 1
-        case -⚬.JoinRTermini() => 1
-        case -⚬.JoinLTermini() => 1
-        case -⚬.NotifyEither() => 1
-        case -⚬.NotifyChoice() => 1
-        case -⚬.InjectLOnPing() => 1
-        case -⚬.ChooseLOnPong() => 1
-        case -⚬.DistributeL() => 1
-        case -⚬.CoDistributeL() => 1
-        case -⚬.RInvertSignal() => 1
-        case -⚬.LInvertSignal() => 1
-        case -⚬.RInvertPingPong() => 1
-        case -⚬.LInvertPongPing() => 1
-        case -⚬.RInvertTerminus() => 1
-        case -⚬.LInvertTerminus() => 1
-        case -⚬.RecF(f) => 1 + f(-⚬.Id().asInstanceOf[A -⚬ B]).size // XXX
-        case -⚬.RecFun(f) => 1 + f.size
-        case -⚬.InvokeRecCall() => 1
-        case -⚬.IgnoreRecCall() => 1
-        case -⚬.DupRecCall() => 1
-        case -⚬.Pack() => 1
-        case -⚬.Unpack() => 1
-        case -⚬.RacePair() => 1
-        case -⚬.SelectPair() => 1
-        case -⚬.Forevert() => 1
-        case -⚬.Backvert() => 1
-        case -⚬.DistributeInversion() => 1
-        case -⚬.FactorOutInversion() => 1
-        case -⚬.CrashWhenDone(msg) => 1
-        case -⚬.Delay() => 1
-        case -⚬.LiftEither() => 1
-        case -⚬.LiftPair() => 1
-        case -⚬.UnliftPair() => 1
-        case -⚬.MapVal(f) => 1
-        case -⚬.ConstVal(a) => 1
-        case -⚬.ConstNeg(a) => 1
-        case -⚬.Neglect() => 1
-        case -⚬.NotifyVal() => 1
-        case -⚬.NotifyNeg() => 1
-        case -⚬.DebugPrint(msg) => 1
-        case -⚬.Acquire(acquire, release) => 1
-        case -⚬.TryAcquire(acquire, release) => 1
-        case -⚬.Release() => 1
-        case -⚬.ReleaseWith(f) => 1
-        case -⚬.Effect(f) => 1
-        case -⚬.EffectWr(f) => 1
-        case -⚬.TryEffectAcquire(f, release) => 1
-        case -⚬.TryTransformResource(f, release) => 1
-        case -⚬.TrySplitResource(f, release1, release2) => 1
+        case -⚬.Id() => one
+        case -⚬.AndThen(f, g) => one + f.sizeAndRefs + g.sizeAndRefs
+        case -⚬.Par(f1, f2) => one + f1.sizeAndRefs + f2.sizeAndRefs
+        case -⚬.IntroFst() => one
+        case -⚬.IntroSnd() => one
+        case -⚬.ElimFst() => one
+        case -⚬.ElimSnd() => one
+        case -⚬.AssocLR() => one
+        case -⚬.AssocRL() => one
+        case -⚬.Swap() => one
+        case -⚬.InjectL() => one
+        case -⚬.InjectR() => one
+        case -⚬.EitherF(f, g) => one + f.sizeAndRefs + g.sizeAndRefs
+        case -⚬.Absurd() => one
+        case -⚬.OneOfInject(i) => one
+        case -⚬.OneOfPeel() => one
+        case -⚬.OneOfUnpeel() => one
+        case -⚬.OneOfExtractSingle() => one
+        case -⚬.ChooseL() => one
+        case -⚬.ChooseR() => one
+        case -⚬.Choice(f, g) => one + f.sizeAndRefs + g.sizeAndRefs
+        case -⚬.PingF() => one
+        case -⚬.PongF() => one
+        case -⚬.DelayIndefinitely() => one
+        case -⚬.RegressInfinitely() => one
+        case -⚬.Fork() => one
+        case -⚬.Join() => one
+        case -⚬.ForkNeed() => one
+        case -⚬.JoinNeed() => one
+        case -⚬.NotifyDoneL() => one
+        case -⚬.NotifyNeedL() => one
+        case -⚬.ForkPing() => one
+        case -⚬.ForkPong() => one
+        case -⚬.JoinPing() => one
+        case -⚬.JoinPong() => one
+        case -⚬.StrengthenPing() => one
+        case -⚬.StrengthenPong() => one
+        case -⚬.JoinRTermini() => one
+        case -⚬.JoinLTermini() => one
+        case -⚬.NotifyEither() => one
+        case -⚬.NotifyChoice() => one
+        case -⚬.InjectLOnPing() => one
+        case -⚬.ChooseLOnPong() => one
+        case -⚬.DistributeL() => one
+        case -⚬.CoDistributeL() => one
+        case -⚬.RInvertSignal() => one
+        case -⚬.LInvertSignal() => one
+        case -⚬.RInvertPingPong() => one
+        case -⚬.LInvertPongPing() => one
+        case -⚬.RInvertTerminus() => one
+        case -⚬.LInvertTerminus() => one
+        case -⚬.RecF(f) => one + f(-⚬.Id().asInstanceOf[A -⚬ B]).sizeAndRefs // XXX
+        case -⚬.RecFun(f) => one + f.sizeAndRefs
+        case -⚬.InvokeRecCall() => one
+        case -⚬.IgnoreRecCall() => one
+        case -⚬.DupRecCall() => one
+        case -⚬.CaptureIntoRecCall(elim, split) => one + elim.sizeAndRefs + split.sizeAndRefs
+        case -⚬.FunRef(id, f) => SizeAndRefs(1, Map(id -> f))
+        case -⚬.Pack() => one
+        case -⚬.Unpack() => one
+        case -⚬.RacePair() => one
+        case -⚬.SelectPair() => one
+        case -⚬.Forevert() => one
+        case -⚬.Backvert() => one
+        case -⚬.DistributeInversion() => one
+        case -⚬.FactorOutInversion() => one
+        case -⚬.CrashWhenDone(msg) => one
+        case -⚬.Delay() => one
+        case -⚬.LiftEither() => one
+        case -⚬.LiftPair() => one
+        case -⚬.UnliftPair() => one
+        case -⚬.MapVal(f) => one
+        case -⚬.ConstVal(a) => one
+        case -⚬.ConstNeg(a) => one
+        case -⚬.Neglect() => one
+        case -⚬.NotifyVal() => one
+        case -⚬.NotifyNeg() => one
+        case -⚬.DebugPrint(msg) => one
+        case -⚬.Acquire(acquire, release) => one
+        case -⚬.TryAcquire(acquire, release) => one
+        case -⚬.Release() => one
+        case -⚬.ReleaseWith(f) => one
+        case -⚬.Effect(f) => one
+        case -⚬.EffectWr(f) => one
+        case -⚬.TryEffectAcquire(f, release) => one
+        case -⚬.TryTransformResource(f, release) => one
+        case -⚬.TrySplitResource(f, release1, release2) => one
 
+    lazy val size: Long =
+      val SizeAndRefs(n, refs) = this.sizeAndRefs
+      computeSize(n, Set.empty, refs.toList)
   }
+
+  private case class SizeAndRefs(size: Long, refs: Map[Object, ? -⚬ ?]):
+    def +(that: SizeAndRefs): SizeAndRefs =
+      SizeAndRefs(this.size + that.size, this.refs ++ that.refs)
+
+    def +(n: Int): SizeAndRefs =
+      SizeAndRefs(size + n, refs)
+
+  private object SizeAndRefs {
+    def apply(n: Int): SizeAndRefs =
+      SizeAndRefs(n, Map.empty)
+
+    val one: SizeAndRefs =
+      SizeAndRefs(1)
+  }
+
+  @tailrec
+  private def computeSize(acc: Long, counted: Set[Object], togo: List[(Object, ? -⚬ ?)]): Long =
+    togo match
+      case Nil =>
+        acc
+      case (id, f) :: tail =>
+        if (counted.contains(id))
+          computeSize(acc, counted, tail)
+        else
+          val SizeAndRefs(n, refs) = f.sizeAndRefs
+          computeSize(acc + n, counted + id, refs.toList ::: tail)
 
   // The following types are all "imaginary", never instantiated, but we declare them as classes,
   // so that the Scala typechecker can infer that
@@ -226,6 +259,9 @@ object FreeScaletto extends Scaletto {
     case class Unpack[F[_]]() extends (Rec[F] -⚬ F[Rec[F]])
     case class RacePair() extends ((Ping |*| Ping) -⚬ (One |+| One))
     case class SelectPair() extends ((One |&| One) -⚬ (Pong |*| Pong))
+
+    // XXX: use a proper Id type
+    case class FunRef[A, B](id: Object, f: A -⚬ B) extends (A -⚬ B)
 
     case class Forevert[A]() extends (One -⚬ (-[A] |*| A))
     case class Backvert[A]() extends ((A |*| -[A]) -⚬ One)
@@ -471,6 +507,9 @@ object FreeScaletto extends Scaletto {
 
   override def selectPair: (One |&| One) -⚬ (Pong |*| Pong) =
     SelectPair()
+
+  override def sharedCode[A, B](f: A -⚬ B): A -⚬ B =
+    FunRef(new Object, f) // XXX use a proper ID
 
   override def crashWhenDone[A, B](msg: String): (Done |*| A) -⚬ B =
     CrashWhenDone(msg)

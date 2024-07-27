@@ -604,6 +604,9 @@ private class ExecutionImpl(
             Deferred(p.future.map(_ => PingNow)),
           )
 
+        case -⚬.FunRef(_, f) =>
+          this.extend(f) // TODO: should be guarded, i.e. expanded only when needed
+
         case r @ -⚬.RecF(_) =>
           this.extend(r.recursed)
 

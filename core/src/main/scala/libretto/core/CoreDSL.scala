@@ -360,6 +360,9 @@ trait CoreDSL {
     */
   def selectPair: (One |&| One) -⚬ (Pong |*| Pong)
 
+  // TODO: make it `named(Id)(A -⚬ B)`, using a unique identifier
+  def sharedCode[A, B](f: A -⚬ B): A -⚬ B
+
   def category: SymmetricMonoidalCategory[-⚬, |*|, One] =
     new SymmetricMonoidalCategory[-⚬, |*|, One] {
       override def id[A]: A -⚬ A =

@@ -976,6 +976,13 @@ class BasicTests extends ScalatestScalettoTestSuite {
             _  <- Outcome.assert(is.count(_ == N-1) >= N/2, s"Expected ${N/2}+ values to be ${N-1}, got $is")
           } yield ()
         },
+
+      "shared code" -> TestCase.awaitDone {
+        val sharedPart: Done -⚬ Done =
+          sharedCode(fork > swap > join)
+
+        fork > par(sharedPart, sharedPart) > join
+      },
     )
   }
 }
