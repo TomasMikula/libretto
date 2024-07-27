@@ -1,20 +1,21 @@
 package libretto.testing.scaletto
 
-import libretto.exec.{ExecutionParams, Executor, SupportsCustomScheduler}
+import libretto.exec.{Executor, SupportsCustomScheduler}
 import libretto.lambda.util.Exists
 import libretto.scaletto.{Scaletto, ScalettoBridge, ScalettoExecutor}
-import libretto.testing.{ManualClock, SupportsManualClock, TestExecutor}
+import libretto.testing.{ManualClock, SupportsManualClock, TestExecutor, TestKit}
 import scala.concurrent.duration.FiniteDuration
 
 object ScalettoTestExecutor {
 
   sealed trait ExecutionParam[A]
 
-  object ExecutionParam extends SupportsManualClock[ExecutionParam] {
+  object ExecutionParam {
     case object ManualClockParam extends ExecutionParam[ManualClock]
 
-    override def manualClock: ExecutionParam[ManualClock] =
-      ManualClockParam
+    given SupportsManualClock[ExecutionParam] with
+      override def manualClock: ExecutionParam[ManualClock] =
+        ManualClockParam
 
     def adaptParam[P[_]](
       schedulerParam: libretto.util.Scheduler => P[Unit],
@@ -31,33 +32,12 @@ object ScalettoTestExecutor {
     ef: Executor.Factory.Of[Scaletto, ScalettoBridge],
   )(using
     ep: SupportsCustomScheduler[ef.ExecutionParam],
-  ): TestExecutor.Factory[ScalettoTestKit.OfDsl[ef.dsl.type]] =
-    new TestExecutor.Factory[ScalettoTestKit.OfDsl[ef.dsl.type]] {
-      override val testKit: ScalettoTestKit.Ofp[ef.dsl.type, ef.bridge.type, ExecutionParam] =
-        ScalettoTestKit.fromBridge[ExecutionParam](ef.dsl, ef.bridge, ExecutionParam)
-
-      override def name: String =
-        s"ScalettoTestExecutor.defaultFactory(${ef.name})"
-
-      override type ExecutorResource = (ef.ExecutorResource, TestExecutor[testKit.type])
-
-      override def access(r: ExecutorResource): TestExecutor[testKit.type] =
-        r._2
-
-      override def create(): ExecutorResource = {
-        val executor = ef.create()
-        val exr = ef.access(executor)
-        val testExecutor = TestExecutor
-          .forKit(testKit)
-          .adaptParams[exr.ExecutionParam](ExecutionParam.adaptParam(ep.scheduler))
-          .usingExecutor(exr)
-          .make(name)
-        (executor, testExecutor)
-      }
-
-      override def shutdown(r: ExecutorResource): Unit =
-        ef.shutdown(r._1)
-    }
+  ): TestExecutor.Factory[ScalettoTestKit & TestKit.OfDsl[ef.dsl.type]] =
+    TestExecutor.Factory.from[Scaletto, ScalettoBridge, ScalettoTestKit, ExecutionParam](
+      ef,
+      ScalettoTestKit.factory[ExecutionParam],
+      ExecutionParam.adaptParam(ep.scheduler),
+    )
 
   val defaultFactory: TestExecutor.Factory[ScalettoTestKit] =
     ScalettoExecutor.withDefaultFactory {

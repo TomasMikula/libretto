@@ -1,6 +1,6 @@
 package libretto.testing
 
-import libretto.exec.{ExecutionParams, Executor}
+import libretto.exec.{Bridge, ExecutionParams, Executor}
 import libretto.exec.Executor.CancellationReason
 import libretto.lambda.util.Exists
 import libretto.util.Async
@@ -50,8 +50,10 @@ trait TestExecutor[+TK <: TestKit] { self =>
 }
 
 object TestExecutor {
-  trait Factory[+TK <: TestKit] {
-    val testKit: TK
+  trait Factory[+TK <: libretto.testing.TestKit] {
+    type TestKit <: TK
+    val testKit: TestKit
+
     def name: String
 
     type ExecutorResource
@@ -65,6 +67,7 @@ object TestExecutor {
     /** Performs no initialization or shutdown. */
     def noOp[TK <: TestKit](executor: TestExecutor[TK]): Factory[TK] =
       new Factory[TK] {
+        override type TestKit = TK
         override val testKit: executor.testKit.type = executor.testKit
         override def name: String = executor.name
         override type ExecutorResource = TestExecutor[testKit.type]
@@ -86,6 +89,7 @@ object TestExecutor {
       }
 
       new Factory[TK] {
+        override type TestKit = TK
         override val testKit: kit.type = kit
         override def name: String = factoryName
         override type ExecutorResource = TestExecutorWithShutdown
@@ -102,6 +106,41 @@ object TestExecutor {
           executor.shutdown()
       }
     }
+
+    def from[DSL <: { type -⚬[A, B] }, BRIDGE <: Bridge, TK <: TestKit, P[_]](
+      ef: Executor.Factory.Of[DSL, BRIDGE],
+      kf: TestKit.Factory[DSL, BRIDGE, TK, P],
+      adaptParam: [A] => P[A] => Exists[[X] =>> (ef.ExecutionParam[X], X => A)],
+    ): Factory[TK & TestKit.Ofp[ef.dsl.type, ef.bridge.type, P]] =
+      new Factory[TK & TestKit.Ofp[ef.dsl.type, ef.bridge.type, P]] {
+        override type TestKit =
+          TK & TestKit.Ofp[ef.dsl.type, ef.bridge.type, P]
+
+        override val testKit: TestKit =
+          kf.create(ef.dsl, ef.bridge)
+
+        override def name: String =
+          s"TestExecutor(${ef.name},${kf.name})"
+
+        override type ExecutorResource = (ef.ExecutorResource, TestExecutor[testKit.type])
+
+        override def access(r: ExecutorResource): TestExecutor[testKit.type] =
+          r._2
+
+        override def create(): ExecutorResource = {
+          val executor = ef.create()
+          val exr = ef.access(executor)
+          val testExecutor = TestExecutor
+            .forKit(testKit)
+            .adaptParams[exr.ExecutionParam](adaptParam)
+            .usingExecutor(exr)
+            .make(name)
+          (executor, testExecutor)
+        }
+
+        override def shutdown(r: ExecutorResource): Unit =
+          ef.shutdown(r._1)
+      }
   }
 
   def forKit(kit: TestKit): ForKit[kit.type, kit.ExecutionParam] =

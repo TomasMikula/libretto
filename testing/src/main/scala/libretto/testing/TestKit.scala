@@ -159,9 +159,19 @@ trait TestKit {
   }
 }
 
-object TestKit extends TestKitOps
+object TestKit {
+  type OfDsl[DSL <: { type -⚬[A, B] }] =
+    TestKit { type Dsl = DSL }
 
-trait TestKitOps {
+  type Of[DSL <: { type -⚬[A, B] }, BRIDGE <: Bridge.Of[DSL]] =
+    OfDsl[DSL] {
+      val dsl: Dsl // re-declare just to avoid ambiguous reference to `dsl` on the next line
+      val bridge: BRIDGE & Bridge.Of[dsl.type]
+    }
+
+  type Ofp[DSL <: { type -⚬[A, B] }, BRIDGE <: Bridge.Of[DSL], P[_]] =
+    Of[DSL, BRIDGE] { type ExecutionParam[A] = P[A] }
+
   transparent inline def givenInstance(using kit: TestKit): kit.type =
     kit
 
@@ -170,4 +180,13 @@ trait TestKitOps {
 
   transparent inline def bridge(using kit: TestKit): kit.bridge.type =
     kit.bridge
+
+  trait Factory[DSL <: { type -⚬[A, B] }, BRIDGE <: Bridge, TK <: TestKit, P[_]] {
+    def name: String
+
+    def create(
+      dsl: DSL,
+      bridge: (BRIDGE & Bridge.Of[dsl.type]),
+    ): (TK & TestKit.Ofp[dsl.type, bridge.type, P])
+  }
 }

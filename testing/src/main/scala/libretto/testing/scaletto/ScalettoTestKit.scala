@@ -1,8 +1,9 @@
 package libretto.testing.scaletto
 
+import libretto.exec.Bridge
 import libretto.scaletto.{Scaletto, ScalettoBridge}
-import libretto.testing.TestKit.dsl
-import libretto.testing.{SupportsManualClock, TestKitOps, TestKitWithManualClock, TestResult}
+import libretto.testing.TestKit
+import libretto.testing.{SupportsManualClock, TestKitWithManualClock, TestResult}
 import libretto.testing.core.CoreTestKit
 
 trait ScalettoTestKit extends CoreTestKit with TestKitWithManualClock {
@@ -24,21 +25,25 @@ trait ScalettoTestKit extends CoreTestKit with TestKitWithManualClock {
   }
 }
 
-object ScalettoTestKit extends TestKitOps {
-  type OfDsl[DSL <: Scaletto] =
-    ScalettoTestKit { type Dsl = DSL }
+object ScalettoTestKit {
 
-  type Of[DSL <: Scaletto, BRDG <: ScalettoBridge.Of[DSL]] =
-    OfDsl[DSL] { val bridge: BRDG }
+  def factory[P[_]](using SupportsManualClock[P]): TestKit.Factory[Scaletto, ScalettoBridge, ScalettoTestKit, P] =
+    new TestKit.Factory[Scaletto, ScalettoBridge, ScalettoTestKit, P] {
+      override def name =
+        "ScalettoTestKit.factory"
 
-  type Ofp[DSL <: Scaletto, BRDG <: ScalettoBridge.Of[DSL], P[_]] =
-    Of[DSL, BRDG] { type ExecutionParam[A] = P[A] }
+      override def create(
+        dsl: Scaletto,
+        bridge: ScalettoBridge & Bridge.Of[dsl.type],
+      ): ScalettoTestKit & TestKit.Ofp[dsl.type, bridge.type, P] =
+        fromBridge[P](dsl, bridge, summon)
+    }
 
-  def fromBridge[P[_]](
+  private def fromBridge[P[_]](
     dsl: Scaletto,
     bridge: ScalettoBridge.Of[dsl.type],
     manualClockSupport: SupportsManualClock[P],
-  ): ScalettoTestKit.Ofp[bridge.dsl.type, bridge.type, P] =
+  ): ScalettoTestKit & TestKit.Ofp[bridge.dsl.type, bridge.type, P] =
     new ScalettoTestKitFromBridge(dsl, bridge, manualClockSupport)
 
   private class ScalettoTestKitFromBridge[DSL <: Scaletto, Bridge <: ScalettoBridge.Of[DSL], P[_]](
