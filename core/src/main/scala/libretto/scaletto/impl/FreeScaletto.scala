@@ -14,6 +14,8 @@ import scala.reflect.TypeTest
 
 object FreeScaletto extends Scaletto {
   sealed trait -⚬[A, B] {
+    def >[C](that: B -⚬ C): A -⚬ C =
+      andThen(this, that)
 
     private[FreeScaletto] lazy val sizeAndRefs: SizeAndRefs =
       import SizeAndRefs.one
@@ -69,7 +71,7 @@ object FreeScaletto extends Scaletto {
         case -⚬.LInvertPongPing() => one
         case -⚬.RInvertTerminus() => one
         case -⚬.LInvertTerminus() => one
-        case -⚬.RecF(f) => one + f(-⚬.Id().asInstanceOf[A -⚬ B]).sizeAndRefs // XXX
+        case r: -⚬.RecF[A, B] => one + r.f(-⚬.Id().asInstanceOf[A -⚬ B]).sizeAndRefs // XXX
         case -⚬.RecFun(f) => one + f.sizeAndRefs
         case -⚬.InvokeSub() => one
         case -⚬.IgnoreSub() => one
@@ -244,8 +246,14 @@ object FreeScaletto extends Scaletto {
     case class LInvertPongPing() extends (One -⚬ (Pong |*| Ping))
     case class RInvertTerminus() extends ((RTerminus |*| LTerminus) -⚬ One)
     case class LInvertTerminus() extends (One -⚬ (LTerminus |*| RTerminus))
-    case class RecF[A, B](f: (A -⚬ B) => (A -⚬ B)) extends (A -⚬ B) { self =>
+    class RecF[A, B](val f: (A -⚬ B) => (A -⚬ B)) extends (A -⚬ B) { self =>
       val recursed: A -⚬ B = f(self)
+
+      infix def testEqual[X, Y](that: RecF[X, Y]): Option[(A =:= X, B =:= Y)] =
+        Option.when(this eq that)((
+          summon[A =:= A].asInstanceOf[A =:= X],
+          summon[B =:= B].asInstanceOf[B =:= Y],
+        ))
     }
     case class RecFun[A, B](f: (Sub[A, B] |*| A) -⚬ B) extends (A -⚬ B)
     case class CaptureIntoSub[X, A, B](
@@ -483,7 +491,11 @@ object FreeScaletto extends Scaletto {
     LInvertTerminus()
 
   override def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B =
-    RecF(f)
+    val placeholder = RecF(f)
+    val body = placeholder.recursed
+    elimSelfRef(placeholder, body) match
+      case None => body
+      case Some(h) => RecFun(h)
 
   override def rec[A, B](f: (Sub[A, B] |*| A) -⚬ B): A -⚬ B =
     RecFun(f)
@@ -638,6 +650,78 @@ object FreeScaletto extends Scaletto {
     override def toInt: UInt31 -⚬ Val[Int] =
       id
   }
+
+  private def elimSelfRef[X, Y, A, B](
+    ref: RecF[X, Y],
+    f: A -⚬ B,
+  ): Option[(Sub[X, Y] |*| A) -⚬ B] =
+    type SXY = Sub[X, Y]
+    f match
+      case AndThen(g, h) =>
+        (elimSelfRef(ref, g), elimSelfRef(ref, h)) match
+          case (None   , None   ) => None
+          case (Some(g), None   ) => Some(AndThen(g, h))
+          case (None   , Some(h)) => Some(AndThen(Par(Id(), g), h))
+          case (Some(g), Some(h)) => Some(AndThen(AndThen(Par(DupSub(), Id()), AssocLR()), AndThen(Par(Id(), g), h)))
+      case p: Par[a1, a2, b1, b2] =>
+        (elimSelfRef(ref, p.f1), elimSelfRef(ref, p.f2)) match
+          case (None    , None    ) => None
+          case (Some(f1), None    ) => Some(AndThen(AssocRL[SXY, a1, a2](), Par(f1, p.f2)))
+          case (None    , Some(f2)) => Some(AndThen(𝒞.xi[SXY, a1, a2], Par(p.f1, f2)))
+          case (Some(f1), Some(f2)) => Some(AndThen(AndThen(Par(DupSub(), Id()), 𝒞.ixi[SXY, SXY, a1, a2]), Par(f1, f2)))
+      case f: EitherF[a1, a2, b] =>
+        (elimSelfRef(ref, f.f), elimSelfRef(ref, f.g)) match
+          case (None   , None   ) => None
+          case (Some(g), None   ) => Some(AndThen(DistributeL[SXY, a1, a2](), EitherF(g, AndThen(𝒞.elimFst(IgnoreSub()), f.g))))
+          case (None   , Some(h)) => Some(AndThen(DistributeL[SXY, a1, a2](), EitherF(AndThen(𝒞.elimFst(IgnoreSub()), f.f), h)))
+          case (Some(g), Some(h)) => Some(AndThen(DistributeL[SXY, a1, a2](), EitherF(g, h)))
+      case f: Choice[a, b1, b2] =>
+        (elimSelfRef(ref, f.f), elimSelfRef(ref, f.g)) match
+          case (None   , None   ) => None
+          case (Some(g), None   ) => Some(Choice(g, AndThen(𝒞.elimFst(IgnoreSub()), f.g)))
+          case (None   , Some(h)) => Some(Choice(AndThen(𝒞.elimFst(IgnoreSub()), f.f), h))
+          case (Some(g), Some(h)) => Some(Choice(g, h))
+      case RecFun(g) =>
+        elimSelfRef(ref, g) map { h =>
+          val dupSXY: (Sub[SXY |*| A, B] |*| (SXY |*| A)) -⚬ ((Sub[SXY |*| A, B] |*| SXY) |*| (SXY |*| A)) =
+            𝒞.snd(𝒞.fst(DupSub[X, Y]()) > assocLR) > assocRL
+          val captureSXY: ((Sub[SXY |*| A, B] |*| SXY) |*| (SXY |*| A)) -⚬ (Sub[A, B] |*| (SXY |*| A)) =
+            𝒞.fst(CaptureIntoSub[Sub[X, Y], A, B](IgnoreSub[X, Y](), DupSub[X, Y]()))
+          val h1: (Sub[SXY |*| A, B] |*| (SXY |*| A)) -⚬ B =
+            dupSXY > captureSXY > 𝒞.xi > h
+          RecFun[SXY |*| A, B](h1)
+        }
+      case CaptureIntoSub(discard, split) =>
+        (elimSelfRef(ref, discard), elimSelfRef(ref, split)) match
+          case (None, None) => None
+          case (Some(d), _) => libretto.lambda.UnhandledCase.raise(s"Recursive call in discarder of the captured expression")
+          case (_, Some(s)) => libretto.lambda.UnhandledCase.raise(s"Recursive call in splitter of the captured expression")
+      case ref1: RecF[a, b] =>
+        (ref1 testEqual ref) map:
+          case (TypeEq(Refl()), TypeEq(Refl())) =>
+            summon[X =:= A]
+            summon[Y =:= B]
+            InvokeSub[X, Y](): (Sub[X, Y] |*| A) -⚬ B
+      case f @ FunRef(_, _) =>
+        // TODO: make FunRef acyclic by construction
+        None
+
+      case Id() | IntroFst() | IntroSnd() | ElimFst() | ElimSnd() | AssocLR() | AssocRL()
+         | Swap() | InjectL() | InjectR() | Absurd() | OneOfInject(_) | OneOfPeel()
+         | OneOfUnpeel() | OneOfExtractSingle() | ChooseL() | ChooseR() | PingF() | PongF()
+         | DelayIndefinitely() | RegressInfinitely() | Fork() | Join() | ForkNeed() | JoinNeed()
+         | NotifyDoneL() | NotifyNeedL() | ForkPing() | ForkPong() | JoinPing() | JoinPong()
+         | StrengthenPing() | StrengthenPong() | JoinRTermini() | JoinLTermini()
+         | NotifyEither() | NotifyChoice() | InjectLOnPing() | ChooseLOnPong()
+         | DistributeL() | CoDistributeL() | RInvertSignal() | LInvertSignal()
+         | RInvertPingPong() | LInvertPongPing() | RInvertTerminus() | LInvertTerminus()
+         | InvokeSub() | IgnoreSub() | DupSub() | Pack() | Unpack()
+         | RacePair() | SelectPair() | Forevert() | Backvert() | DistributeInversion() | FactorOutInversion()
+         | CrashWhenDone(_) | Delay() | LiftEither() | LiftPair() | UnliftPair()
+         | MapVal(_) | ConstVal(_) | ConstNeg(_) | Neglect() | NotifyVal() | NotifyNeg()
+         | DebugPrint(_) | Acquire(_, _) | TryAcquire(_, _) | Release() | ReleaseWith(_)
+         | Effect(_) | EffectWr(_) | TryEffectAcquire(_, _) | TryTransformResource(_, _) | TrySplitResource(_, _, _) =>
+        None
 
   given 𝒞: ClosedSymmetricMonoidalCategory[-⚬, |*|, One, =⚬] with {
     override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C                              = FreeScaletto.this.andThen(f, g)

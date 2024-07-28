@@ -607,7 +607,7 @@ private class ExecutionImpl(
         case -⚬.FunRef(_, f) =>
           this.extend(f) // TODO: should be guarded, i.e. expanded only when needed
 
-        case r @ -⚬.RecF(_) =>
+        case r: -⚬.RecF[A, B] =>
           this.extend(r.recursed)
 
         case -⚬.RecFun(f) =>
