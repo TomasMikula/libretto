@@ -71,10 +71,10 @@ object FreeScaletto extends Scaletto {
         case -⚬.LInvertTerminus() => one
         case -⚬.RecF(f) => one + f(-⚬.Id().asInstanceOf[A -⚬ B]).sizeAndRefs // XXX
         case -⚬.RecFun(f) => one + f.sizeAndRefs
-        case -⚬.InvokeRecCall() => one
-        case -⚬.IgnoreRecCall() => one
-        case -⚬.DupRecCall() => one
-        case -⚬.CaptureIntoRecCall(elim, split) => one + elim.sizeAndRefs + split.sizeAndRefs
+        case -⚬.InvokeSub() => one
+        case -⚬.IgnoreSub() => one
+        case -⚬.DupSub() => one
+        case -⚬.CaptureIntoSub(elim, split) => one + elim.sizeAndRefs + split.sizeAndRefs
         case -⚬.FunRef(id, f) => SizeAndRefs(1, Map(id -> f))
         case -⚬.Pack() => one
         case -⚬.Unpack() => one
@@ -159,7 +159,7 @@ object FreeScaletto extends Scaletto {
   final class ::[Label, T] private ()
   final class OneOf[Cases] private()
   final class Rec[F[_]] private()
-  final class RecCall[A, B] private()
+  final class Sub[A, B] private()
   final class Inverted[A] private()
   final type -[A] = Inverted[A]
   final class Val[A] private()
@@ -247,14 +247,14 @@ object FreeScaletto extends Scaletto {
     case class RecF[A, B](f: (A -⚬ B) => (A -⚬ B)) extends (A -⚬ B) { self =>
       val recursed: A -⚬ B = f(self)
     }
-    case class RecFun[A, B](f: (RecCall[A, B] |*| A) -⚬ B) extends (A -⚬ B)
-    case class CaptureIntoRecCall[X, A, B](
+    case class RecFun[A, B](f: (Sub[A, B] |*| A) -⚬ B) extends (A -⚬ B)
+    case class CaptureIntoSub[X, A, B](
       discardCapture: X -⚬ One,
       splitCapture: X -⚬ (X |*| X),
-    ) extends ((RecCall[X |*| A, B] |*| X) -⚬ RecCall[A, B])
-    case class InvokeRecCall[A, B]() extends ((RecCall[A, B] |*| A) -⚬ B)
-    case class IgnoreRecCall[A, B]() extends (RecCall[A, B] -⚬ One)
-    case class DupRecCall[A, B]() extends (RecCall[A, B] -⚬ (RecCall[A, B] |*| RecCall[A, B]))
+    ) extends ((Sub[X |*| A, B] |*| X) -⚬ Sub[A, B])
+    case class InvokeSub[A, B]() extends ((Sub[A, B] |*| A) -⚬ B)
+    case class IgnoreSub[A, B]() extends (Sub[A, B] -⚬ One)
+    case class DupSub[A, B]() extends (Sub[A, B] -⚬ (Sub[A, B] |*| Sub[A, B]))
     case class Pack[F[_]]() extends (F[Rec[F]] -⚬ Rec[F])
     case class Unpack[F[_]]() extends (Rec[F] -⚬ F[Rec[F]])
     case class RacePair() extends ((Ping |*| Ping) -⚬ (One |+| One))
@@ -485,16 +485,16 @@ object FreeScaletto extends Scaletto {
   override def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B =
     RecF(f)
 
-  override def rec[A, B](f: (RecCall[A, B] |*| A) -⚬ B): A -⚬ B =
+  override def rec[A, B](f: (Sub[A, B] |*| A) -⚬ B): A -⚬ B =
     RecFun(f)
 
-  override def recCall[A, B]: (RecCall[A, B] |*| A) -⚬ B =
-    InvokeRecCall()
+  override def invoke[A, B]: (Sub[A, B] |*| A) -⚬ B =
+    InvokeSub()
 
-  override def comonoidRecCall[A, B]: Comonoid[RecCall[A, B]] =
-    new Comonoid[RecCall[A, B]]:
-      override def counit: RecCall[A, B] -⚬ One = IgnoreRecCall()
-      override def split: RecCall[A, B] -⚬ (RecCall[A, B] |*| RecCall[A, B]) = DupRecCall()
+  override def comonoidSub[A, B]: Comonoid[Sub[A, B]] =
+    new Comonoid[Sub[A, B]]:
+      override def counit: Sub[A, B] -⚬ One = IgnoreSub()
+      override def split: Sub[A, B] -⚬ (Sub[A, B] |*| Sub[A, B]) = DupSub()
 
   override def unpack[F[_]]: Rec[F] -⚬ F[Rec[F]] =
     Unpack()
@@ -747,7 +747,7 @@ object FreeScaletto extends Scaletto {
 
   override opaque type LambdaContext = lambdas.Context
 
-  override opaque type LocalFun[A, B] = CapturingFun[-⚬, |*|, Tupled[|*|, $, _], A, B]
+  override opaque type MetaFun[A, B] = CapturingFun[-⚬, |*|, Tupled[|*|, $, _], A, B]
 
   override val `$`: FunExprOps = new FunExprOps {
     override def one(using pos: SourcePos, ctx: lambdas.Context): $[One] =
@@ -758,7 +758,7 @@ object FreeScaletto extends Scaletto {
     ): $[B] =
       (a map f)(VarOrigin.FunAppRes(pos))
 
-    override def mapLocal[A, B](a: $[A])(f: LocalFun[A, B])(pos: SourcePos)(using
+    override def mapMeta[A, B](a: $[A])(f: MetaFun[A, B])(pos: SourcePos)(using
       lambdas.Context,
     ): $[B] =
       f match
@@ -978,16 +978,16 @@ object FreeScaletto extends Scaletto {
     override def apply[A, B](using pos: SourcePos)(f: lambdas.Context ?=> $[A] => $[B]): A -⚬ B =
       compile(f)(pos)
 
-    override def local[A, B](using pos: SourcePos, ctx: lambdas.Context)(f: lambdas.Context ?=> $[A] => $[B]): LocalFun[A, B] =
-      compileLocal(f)(pos)
+    override def local[A, B](using pos: SourcePos, ctx: lambdas.Context)(f: lambdas.Context ?=> $[A] => $[B]): MetaFun[A, B] =
+      compileMeta(f)(pos)
 
     override def recLocal[A, B](using pos: SourcePos, ctx: LambdaContext)(
-      f: LambdaContext ?=> $[RecCall[A, B]] => $[A] => $[B],
-    ): LocalFun[A, B] =
-      given Comonoid[RecCall[A, B]] =
-        comonoidRecCall[A, B]
+      f: LambdaContext ?=> $[Sub[A, B]] => $[A] => $[B],
+    ): MetaFun[A, B] =
+      given Comonoid[Sub[A, B]] =
+        comonoidSub[A, B]
 
-      val g: LocalFun[RecCall[A, B] |*| A, B] =
+      val g: MetaFun[Sub[A, B] |*| A, B] =
         local { case *(self) |*| a => f(self)(a) }
 
       import CapturingFun.{Closure, NoCapture}
@@ -1001,21 +1001,21 @@ object FreeScaletto extends Scaletto {
     private def recLocalWithCapture[X, A, B](
       recFunPos: SourcePos,
       x: Tupled[|*|, $, X],
-      f: (X |*| (RecCall[A, B] |*| A)) -⚬ B
+      f: (X |*| (Sub[A, B] |*| A)) -⚬ B
     )(using
       LambdaContext
-    ): LocalFun[A, B] =
+    ): MetaFun[A, B] =
       val dupX: X -⚬ (X |*| X) =
         multiDup(x)
           .valueOr { vs => assemblyError(MissingDupForRecFun(recFunPos, vs)) }
       val elimX: X -⚬ One =
         multiDiscard(x)
           .valueOr { vs => assemblyError(MissingDiscardForRecFun(recFunPos, vs)) }
-      val g: (RecCall[X |*| A, B] |*| (X |*| A)) -⚬ B =
+      val g: (Sub[X |*| A, B] |*| (X |*| A)) -⚬ B =
         λ { case h |*| (x |*| a) =>
           val x1 |*| x2 = dupX(x)
-          val h1: $[RecCall[A, B]] =
-            (h |*| x1) :>> CaptureIntoRecCall(elimX, dupX)
+          val h1: $[Sub[A, B]] =
+            (h |*| x1) :>> CaptureIntoSub(elimX, dupX)
           f(x2 |*| (h1 |*| a))
         }
       val h: (X |*| A) -⚬ B =
@@ -1085,11 +1085,11 @@ object FreeScaletto extends Scaletto {
       }
     }
 
-    private def compileLocal[A, B](f: lambdas.Context ?=> $[A] => $[B])(
+    private def compileMeta[A, B](f: lambdas.Context ?=> $[A] => $[B])(
       pos: SourcePos,
     )(using
       ctx: lambdas.Context,
-    ): LocalFun[A, B] = {
+    ): MetaFun[A, B] = {
       val c = ScopeInfo.NestedLambda(pos)
       val a = VarOrigin.Lambda(pos)
 

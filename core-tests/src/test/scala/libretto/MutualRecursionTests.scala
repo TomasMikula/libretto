@@ -80,7 +80,7 @@ class MutualRecursionTests extends ScalatestScalettoTestSuite {
         switch(xs)
           .is { case ΣΔList.extract(σ0 |*| InL(u)) => LList1(σ0) |*| done(u) }
           .is { case ΣΔList.extract(σ0 |*| InR(δs)) =>
-            val go: LocalFun[TerminatedNEL[Δ, ΣΔList[Σ, Δ]], LList1[Σ] |*| Done] =
+            val go: MetaFun[TerminatedNEL[Δ, ΣΔList[Σ, Δ]], LList1[Σ] |*| Done] =
               λ.recLocal { go => δs =>
                 switch(δs)
                   .is { case TerminatedNEL.extract(δ |*| InL(xs)) =>

@@ -110,8 +110,16 @@ trait CoreDSL {
   /** Used to define recursive types. */
   type Rec[F[_]]
 
-  /** Interface to recursive invocation of a recursive function. */
-  type RecCall[A, B]
+  /** Represents a callable subroutine (subprogram) accessible from inside the program.
+   *
+   * It can be used (called) any number of times.
+   * It is similar to a function object `A =⚬ B`, but unlike `A =⚬ B`, `Sub[A, B]`:
+   *  - can be used any number of times (thus more similar to `Unlimited[A =⚬ B]`)
+   *  - does not require the language (DSL) to support function objects,
+   *  - (by the nature of the operations introducing `Sub[A, B]`) the called subprogram
+   *    can be resolved statically (or at "link time").
+   */
+  type Sub[A, B]
 
   /** Unsigned (i.e. non-negative) integer up to 31 bits.
     * Behavior on overflow is undefined.
@@ -123,20 +131,21 @@ trait CoreDSL {
   /** The type of auxiliary placeholder variables used in construction of [[λ]]-expressions. */
   type $[A]
 
-  /** A function that may be used only locally within the scope of outer [[λ]]-expression.
+  /** An auxiliary function that may be used only locally within the scope of outer [[λ]]-expression.
+   * It is eliminated during assembly of the program, i.e. it does not exist inside a program.
    *
    * Like `A -⚬ B`, it exists only at the meta level.
-   * Unlike `A -⚬ B`, `LocalFun[A, B]` may have captured resources.
+   * Unlike `A -⚬ B`, `MetaFun[A, B]` may have captured resources.
    *
    * It's use is similar to that of a function object expression `$[A =⚬ B]` (from [[ClosedDSL]]),
-   * but unlike it, `LocalFun[A, B]`
+   * but unlike it, `MetaFun[A, B]`
    *  - does not require existence of function objects in the language;
    *  - cannot be returned from an outer `λ` (as only expressions (`$[T]`)
-   *    can be returned, but you'll never have a `$[LocalFun[A, B]]`);
-   *  - may be used any number of times, as long as any resources captured by the `LocalFun`
+   *    can be returned, but you'll never have a `$[MetaFun[A, B]]`);
+   *  - may be used any number of times, as long as any resources captured by the `MetaFun`
    *    can be used any number of times and have the non-linear operations registered (via [[?]], [[+]], [[*]] extractors).
    */
-  type LocalFun[A, B]
+  type MetaFun[A, B]
 
   def id[A]: A -⚬ A
 
@@ -334,13 +343,13 @@ trait CoreDSL {
   @deprecated("Uses non-eliminatable Scala function. Use the `rec` variant without Scala function, or `λ.rec`.")
   def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B
 
-  def rec[A, B](f: (RecCall[A, B] |*| A) -⚬ B): A -⚬ B
+  def rec[A, B](f: (Sub[A, B] |*| A) -⚬ B): A -⚬ B
 
-  /** A recursive invocation of a surrounding recursive function. */
-  def recCall[A, B]: (RecCall[A, B] |*| A) -⚬ B
+  /** An invocation of a subroutine. */
+  def invoke[A, B]: (Sub[A, B] |*| A) -⚬ B
 
-  /** A recursive call is available any number of times. */
-  given comonoidRecCall[A, B]: Comonoid[RecCall[A, B]]
+  /** A subroutine is available any number of times. */
+  given comonoidSub[A, B]: Comonoid[Sub[A, B]]
 
   /** Hides one level of a recursive type definition. */
   def pack[F[_]]: F[Rec[F]] -⚬ Rec[F]
@@ -416,18 +425,21 @@ trait CoreDSL {
     ): A -⚬ B
 
     def rec[A, B](using SourcePos)(
-      f: LambdaContext ?=> $[RecCall[A, B]] => $[A] => $[B],
+      f: LambdaContext ?=> $[Sub[A, B]] => $[A] => $[B],
     ): A -⚬ B =
-      val g: (RecCall[A, B] |*| A) -⚬ B = apply { case *(self) |*| a => f(self)(a) }
+      val g: (Sub[A, B] |*| A) -⚬ B = apply { case *(self) |*| a => f(self)(a) }
       CoreDSL.this.rec(g)
 
+    /** An weaker form of closure that can be used only within the scope of the outer `λ`
+     *  (i.e. it cannot returned from the outer `λ`).
+     */
     def local[A, B](using SourcePos, LambdaContext)(
       f: LambdaContext ?=> $[A] => $[B],
-    ): LocalFun[A, B]
+    ): MetaFun[A, B]
 
     def recLocal[A, B](using SourcePos, LambdaContext)(
-      f: LambdaContext ?=> $[RecCall[A, B]] => $[A] => $[B],
-    ): LocalFun[A, B]
+      f: LambdaContext ?=> $[Sub[A, B]] => $[A] => $[B],
+    ): MetaFun[A, B]
 
     def ?[A, B](using SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
@@ -462,7 +474,7 @@ trait CoreDSL {
       LambdaContext,
     ): $[B]
 
-    def mapLocal[A, B](a: $[A])(f: LocalFun[A, B])(pos: SourcePos)(using
+    def mapMeta[A, B](a: $[A])(f: MetaFun[A, B])(pos: SourcePos)(using
       LambdaContext,
     ): $[B]
 
@@ -533,13 +545,13 @@ trait CoreDSL {
       $.map(a)(f)(pos)
   }
 
-  extension [A, B](f: LocalFun[A, B]) {
-    @targetName("applyLocalFun")
+  extension [A, B](f: MetaFun[A, B]) {
+    @targetName("applyMetaFun")
     def apply(using
       pos: SourcePos,
       ctx: LambdaContext,
     )(a: $[A]): $[B] =
-      $.mapLocal(a)(f)(pos)
+      $.mapMeta(a)(f)(pos)
   }
 
   extension [A](a: $[A]) {
@@ -582,10 +594,10 @@ trait CoreDSL {
       a > introFst(f)
   }
 
-  extension [A, B](f: $[RecCall[A, B]]) {
-    @targetName("applyRecCall")
+  extension [A, B](f: $[Sub[A, B]]) {
+    @targetName("applySub")
     def apply(using pos: SourcePos, ctx: LambdaContext)(a: $[A]): $[B] =
-      recCall(f |*| a)
+      invoke(f |*| a)
   }
 
   extension (d: $[Done]) {

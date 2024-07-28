@@ -613,56 +613,56 @@ private class ExecutionImpl(
         case -⚬.RecFun(f) =>
           Pair(RecOccurrence(f), this).extend(f)
 
-        case _: -⚬.InvokeRecCall[x, b] =>
-          val (rc, x) = (this: Frontier[RecCall[x, B] |*| x]).splitPair
+        case _: -⚬.InvokeSub[x, b] =>
+          val (rc, x) = (this: Frontier[Sub[x, B] |*| x]).splitPair
 
-          def go[X, Y](rc: Frontier[RecCall[X, Y]], x: Frontier[X]): Frontier[Y] =
+          def go[X, Y](rc: Frontier[Sub[X, Y]], x: Frontier[X]): Frontier[Y] =
             rc match
-              case r @ RecOccurrence(f)                     => Pair(r, x).extend(f)
-              case ParameterizedRecOccurrence(p, _, _, prc) => go(prc, Pair(p, x))
-              case Deferred(f)                              => Deferred(f.map(go(_, x)))
+              case r @ RecOccurrence(f)           => Pair(r, x).extend(f)
+              case ParameterizedSub(p, _, _, prc) => go(prc, Pair(p, x))
+              case Deferred(f)                    => Deferred(f.map(go(_, x)))
 
           go(rc, x)
 
-        case _: -⚬.IgnoreRecCall[x, y] =>
-          def go[X, Y](rc: Frontier[RecCall[X, Y]]): Frontier[One] =
+        case _: -⚬.IgnoreSub[x, y] =>
+          def go[X, Y](rc: Frontier[Sub[X, Y]]): Frontier[One] =
             rc match
               case RecOccurrence(_) =>
                 Frontier.One
-              case ParameterizedRecOccurrence(p, disP, dupP, prc) =>
+              case ParameterizedSub(p, disP, dupP, prc) =>
                 p.extend(disP)
                 go(prc)
               case Deferred(f) =>
                 Deferred(f.map(go))
 
-          go(this: Frontier[RecCall[x, y]])
+          go(this: Frontier[Sub[x, y]])
 
-        case _: -⚬.DupRecCall[x, y] =>
-          summon[A =:= RecCall[x, y]]
-          summon[B =:= (RecCall[x, y] |*| RecCall[x, y])]
+        case _: -⚬.DupSub[x, y] =>
+          summon[A =:= Sub[x, y]]
+          summon[B =:= (Sub[x, y] |*| Sub[x, y])]
 
-          def go[X, Y](rc: Frontier[RecCall[X, Y]]): Frontier[RecCall[X, Y] |*| RecCall[X, Y]] =
+          def go[X, Y](rc: Frontier[Sub[X, Y]]): Frontier[Sub[X, Y] |*| Sub[X, Y]] =
             rc match
               case r @ RecOccurrence(_) =>
                 Pair(r, r)
-              case ParameterizedRecOccurrence(p, disP, dupP, prc) =>
+              case ParameterizedSub(p, disP, dupP, prc) =>
                 val (p1, p2) = p.extend(dupP).splitPair
                 val (rc1, rc2) = go(prc).splitPair
                 Pair(
-                  ParameterizedRecOccurrence(p1, disP, dupP, rc1),
-                  ParameterizedRecOccurrence(p2, disP, dupP, rc2),
+                  ParameterizedSub(p1, disP, dupP, rc1),
+                  ParameterizedSub(p2, disP, dupP, rc2),
                 )
               case Deferred(f) =>
                 Deferred(f.map(go))
 
           go[x, y](this)
 
-        case f: -⚬.CaptureIntoRecCall[x, a, b] =>
-          summon[A =:= (RecCall[x |*| a, b] |*| x)]
-          summon[B =:= RecCall[a, b]]
+        case f: -⚬.CaptureIntoSub[x, a, b] =>
+          summon[A =:= (Sub[x |*| a, b] |*| x)]
+          summon[B =:= Sub[a, b]]
 
-          val (rc, x) = (this: Frontier[RecCall[x |*| a, b] |*| x]).splitPair
-          ParameterizedRecOccurrence[x, a, b](
+          val (rc, x) = (this: Frontier[Sub[x |*| a, b] |*| x]).splitPair
+          ParameterizedSub[x, a, b](
             x,
             f.discardCapture,
             f.splitCapture,
@@ -1110,7 +1110,7 @@ private class ExecutionImpl(
           f.crash(e)
         case RecOccurrence(f) =>
           // has not been invoked yet, do nothing
-        case ParameterizedRecOccurrence(p, _, _, rc) =>
+        case ParameterizedSub(p, _, _, rc) =>
           p.crash(e)
           rc.crash(e)
       }
@@ -1130,13 +1130,13 @@ private class ExecutionImpl(
     case class Choice[A, B](a: () => Frontier[A], b: () => Frontier[B], onError: Throwable => Unit) extends Frontier[A |&| B]
     case class Deferred[A](f: Future[Frontier[A]]) extends Frontier[A]
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]
-    case class RecOccurrence[A, B](f: (RecCall[A, B] |*| A) -⚬ B) extends Frontier[RecCall[A, B]]
-    case class ParameterizedRecOccurrence[P, A, B](
+    case class RecOccurrence[A, B](f: (Sub[A, B] |*| A) -⚬ B) extends Frontier[Sub[A, B]]
+    case class ParameterizedSub[P, A, B](
       p: Frontier[P],
       discardParam: P -⚬ One,
       splitParam: P -⚬ (P |*| P),
-      recCall: Frontier[RecCall[P |*| A, B]],
-    ) extends Frontier[RecCall[A, B]]
+      sub: Frontier[Sub[P |*| A, B]],
+    ) extends Frontier[Sub[A, B]]
     sealed trait Void extends Frontier[dsl.Void] {
       def absurd[A]: Frontier[A]
     }
