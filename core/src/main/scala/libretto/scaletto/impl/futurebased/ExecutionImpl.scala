@@ -4,7 +4,7 @@ import libretto.exec.Execution
 import libretto.exec.Executor.CancellationReason
 import libretto.lambda.{EnumModule, Member}
 import libretto.lambda.util.SourcePos
-import libretto.scaletto.impl.{FreeScaletto, ScalaFunction, bug}
+import libretto.scaletto.impl.{-⚬, FreeScaletto, ScalaFunction, bug}
 import libretto.util.{Async, Scheduler}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
