@@ -4,7 +4,7 @@ import libretto.exec.Execution
 import libretto.exec.Executor.CancellationReason
 import libretto.lambda.{EnumModule, Member}
 import libretto.lambda.util.SourcePos
-import libretto.scaletto.impl.{-⚬, FreeScaletto, ScalaFunction, bug}
+import libretto.scaletto.impl.{-⚬, Fun, FreeScaletto, ScalaFunction, bug}
 import libretto.util.{Async, Scheduler}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -281,59 +281,63 @@ private class ExecutionImpl(
       }
 
       f match {
-        case -⚬.Id() =>
+        case r: -⚬.RecF[A, B] =>
+          this.extend(r.recursed)
+        case -⚬.Regular(f) => f match
+
+        case Fun.Id() =>
           this
 
-        case -⚬.AndThen(f, g) =>
+        case Fun.AndThen(f, g) =>
           this.extend(f).extend(g)
 
-        case op: -⚬.Par[a1, a2, b1, b2] =>
+        case op: Fun.Par[-⚬, a1, a2, b1, b2] =>
           val (a1, a2) = (this: Frontier[a1 |*| a2]).splitPair
           Pair(
             a1.extend(op.f1),
             a2.extend(op.f2),
           )
 
-        case -⚬.IntroFst() =>
+        case Fun.IntroFst() =>
           Pair(One, this)
 
-        case -⚬.IntroSnd() =>
+        case Fun.IntroSnd() =>
           Pair(this, One)
 
-        case _: -⚬.ElimFst[x] =>
+        case _: Fun.ElimFst[x] =>
           (this: Frontier[One |*| x])
             .splitPair
             ._2
 
-        case _: -⚬.ElimSnd[x] =>
+        case _: Fun.ElimSnd[x] =>
           (this: Frontier[x |*| One])
             .splitPair
             ._1
 
-        case _: -⚬.AssocLR[x, y, z] =>
+        case _: Fun.AssocLR[x, y, z] =>
           // ((x |*| y) |*| z) -⚬ (x |*| (y |*| z))
           val (xy, z) = (this: Frontier[(x |*| y) |*| z]).splitPair
           val (x, y)  = xy.splitPair
           Pair(x, Pair(y, z))
 
-        case _: -⚬.AssocRL[x, y, z] =>
+        case _: Fun.AssocRL[x, y, z] =>
           // (x |*| (y |*| z)) -⚬ ((x |*| y) |*| z)
           val (x, yz) = (this: Frontier[x |*| (y |*| z)]).splitPair
           val (y, z) = yz.splitPair
           Pair(Pair(x, y), z)
 
-        case _: -⚬.Swap[x, y] =>
+        case _: Fun.Swap[x, y] =>
           val (x, y) = (this: Frontier[x |*| y]).splitPair
           Pair(y, x)
 
-        case _: -⚬.InjectL[x, y] =>
+        case _: Fun.InjectL[x, y] =>
           InjectL[x, y](this)
 
-        case _: -⚬.InjectR[x, y] =>
+        case _: Fun.InjectR[x, y] =>
           InjectR[x, y](this)
 
-        case op: -⚬.EitherF[a1, a2, b] =>
-          val -⚬.EitherF(f, g) = op
+        case op: Fun.EitherF[-⚬, a1, a2, b] =>
+          val Fun.EitherF(f, g) = op
           def go(a12: Frontier[a1 |+| a2]): Frontier[B] =
             a12 match {
               case InjectL(a1) =>
@@ -345,57 +349,57 @@ private class ExecutionImpl(
             }
           go(this: Frontier[a1 |+| a2])
 
-        case -⚬.Absurd() =>
+        case Fun.Absurd() =>
           this.absurd
 
-        case _: -⚬.OneOfExtractSingle[lbl, a] =>
+        case _: Fun.OneOfExtractSingle[lbl, a] =>
           (this: Frontier[OneOf[lbl :: a]]).extractSingle
 
-        case op: -⚬.OneOfPeel[lbl, a, cases] =>
+        case op: Fun.OneOfPeel[lbl, a, cases] =>
           (this: Frontier[OneOf[cases || (lbl :: a)]])
             .narySumPeel
 
-        case op: -⚬.OneOfUnpeel[lbl, a, cases] =>
+        case op: Fun.OneOfUnpeel[lbl, a, cases] =>
           OneOfUnpeel[lbl, a, cases](this)
 
-        case -⚬.OneOfInject(i) =>
+        case Fun.OneOfInject(i) =>
           OneOfInject(this, i)
 
-        case _: -⚬.ChooseL[a1, a2] =>
+        case _: Fun.ChooseL[a1, a2] =>
           Frontier.chooseL[a1, a2](this)
 
-        case _: -⚬.ChooseR[a1, a2] =>
+        case _: Fun.ChooseR[a1, a2] =>
           Frontier.chooseR[a1, a2](this)
 
-        case op: -⚬.Choice[x1, x2, y] =>
-          val -⚬.Choice(f, g) = op
+        case op: Fun.Choice[-⚬, x1, x2, y] =>
+          val Fun.Choice(f, g) = op
           Choice(
             () => this.extendBy(f),
             () => this.extendBy(g),
             onError = this.crash(_),
           )
 
-        case -⚬.PingF() =>
+        case Fun.PingF() =>
           // Ignore `this`. It ends in `One`, so it does not need to be taken care of.
           PingNow
 
-        case -⚬.PongF() =>
+        case Fun.PongF() =>
           this.fulfillPongWith(Future.successful(()))
           One
 
-        case f @ -⚬.DelayIndefinitely() =>
+        case f @ Fun.DelayIndefinitely() =>
           bug(s"Did not expect to be able to construct a program that uses $f")
 
-        case f @ -⚬.RegressInfinitely() =>
+        case f @ Fun.RegressInfinitely() =>
           bug(s"Did not expect to be able to construct a program that uses $f")
 
-        case -⚬.Fork() =>
+        case Fun.Fork() =>
           Pair(this, this)
 
-        case -⚬.ForkPing() =>
+        case Fun.ForkPing() =>
           Pair(this, this)
 
-        case -⚬.NotifyDoneL() =>
+        case Fun.NotifyDoneL() =>
           // Done -⚬ (Ping |*| Done)
           val d: Frontier[Done] = this
           val wd: Frontier[Ping] = d match {
@@ -404,7 +408,7 @@ private class ExecutionImpl(
           }
           Pair(wd, d)
 
-        case -⚬.Join() =>
+        case Fun.Join() =>
           def go(f1: Frontier[Done], f2: Frontier[Done]): Frontier[Done] =
             (f1, f2) match {
               case (DoneNow, d2) => d2
@@ -415,7 +419,7 @@ private class ExecutionImpl(
           val (d1, d2) = (this: Frontier[Done |*| Done]).splitPair
           go(d1, d2)
 
-        case -⚬.JoinPing() =>
+        case Fun.JoinPing() =>
           // (Ping |*| Ping) -⚬ Ping
 
           def go(f1: Frontier[Ping], f2: Frontier[Ping]): Frontier[Ping] =
@@ -429,21 +433,21 @@ private class ExecutionImpl(
           val (d1, d2) = (this: Frontier[Ping |*| Ping]).splitPair
           go(d1, d2)
 
-        case -⚬.ForkNeed() =>
+        case Fun.ForkNeed() =>
           val p = Promise[Any]()
           val (n1, n2) = (this: Frontier[Need |*| Need]).splitPair
           n1 fulfillWith p.future
           n2 fulfillWith p.future
           NeedAsync(p)
 
-        case -⚬.ForkPong() =>
+        case Fun.ForkPong() =>
           val p = Promise[Any]()
           val (p1, p2) = (this: Frontier[Pong |*| Pong]).splitPair
           p1 fulfillPongWith p.future
           p2 fulfillPongWith p.future
           PongAsync(p)
 
-        case -⚬.NotifyNeedL() =>
+        case Fun.NotifyNeedL() =>
           // (Pong |*| Need) -⚬ Need
           val (wn, n) = (this: Frontier[Pong |*| Need]).splitPair
           val p = Promise[Any]()
@@ -451,32 +455,32 @@ private class ExecutionImpl(
           n fulfillWith p.future
           NeedAsync(p)
 
-        case -⚬.JoinNeed() =>
+        case Fun.JoinNeed() =>
           val p1 = Promise[Any]()
           val p2 = Promise[Any]()
           this.fulfillWith(p1.future zip p2.future)
           Pair(NeedAsync(p1), NeedAsync(p2))
 
-        case -⚬.JoinPong() =>
+        case Fun.JoinPong() =>
           val p1 = Promise[Any]()
           val p2 = Promise[Any]()
           this.fulfillPongWith(p1.future zip p2.future)
           Pair(PongAsync(p1), PongAsync(p2))
 
-        case -⚬.StrengthenPing() =>
+        case Fun.StrengthenPing() =>
           // Ping -⚬ Done
           this match {
             case PingNow => DoneNow
             case other => other.toFuturePing.map { case PingNow => DoneNow }.asDeferredFrontier
           }
 
-        case -⚬.StrengthenPong() =>
+        case Fun.StrengthenPong() =>
           // Need -⚬ Pong
           val p = Promise[Any]()
           this.fulfillWith(p.future)
           PongAsync(p)
 
-        case _: -⚬.NotifyEither[x, y] =>
+        case _: Fun.NotifyEither[x, y] =>
           // (x |+| y) -⚬ (Ping |*| (x |+| y))
 
           def go(xy: Frontier[x |+| y]): Frontier[Ping |*| (x |+| y)] =
@@ -490,7 +494,7 @@ private class ExecutionImpl(
 
           go(this: Frontier[x |+| y])
 
-        case _: -⚬.NotifyChoice[x, y] =>
+        case _: Fun.NotifyChoice[x, y] =>
           // (Pong |*| (x |&| y)) -⚬ (x |&| y)
           (this: Frontier[Pong |*| (x |&| y)]).splitPair match {
             case (n, c) =>
@@ -510,7 +514,7 @@ private class ExecutionImpl(
               )
           }
 
-        case _: -⚬.InjectLOnPing[x, y] =>
+        case _: Fun.InjectLOnPing[x, y] =>
           // (Ping |*| x) -⚬ (x |+| y)
 
           val (p, x) = (this: Frontier[Ping |*| x]).splitPair
@@ -524,7 +528,7 @@ private class ExecutionImpl(
                 .asDeferredFrontier
           }
 
-        case _: -⚬.ChooseLOnPong[x, y] =>
+        case _: Fun.ChooseLOnPong[x, y] =>
           // (x |&| y) -⚬ (Pong |*| x)
           val Choice(fx, fy, onError) = (this: Frontier[x |&| y]).asChoice
           val pp = Promise[Any]()
@@ -538,7 +542,7 @@ private class ExecutionImpl(
           }
           Pair(PongAsync(pp), Deferred(px.future))
 
-        case _: -⚬.DistributeL[x, y, z] =>
+        case _: Fun.DistributeL[x, y, z] =>
           // (x |*| (y |+| z)) -⚬ ((x |*| y) |+| (x |*| z))
 
           (this: Frontier[x |*| (y |+| z)]).splitPair match {
@@ -552,7 +556,7 @@ private class ExecutionImpl(
                 }
           }
 
-        case _: -⚬.CoDistributeL[x, y, z] =>
+        case _: Fun.CoDistributeL[x, y, z] =>
           // ((x |*| y) |&| (x |*| z)) -⚬ (x |*| (y |&| z))
           (this: Frontier[(x |*| y) |&| (x |*| z)]).asChoice match {
             case Choice(f, g, onError) =>
@@ -574,19 +578,19 @@ private class ExecutionImpl(
               Pair(Deferred(px.future), Choice(chooseL, chooseR, onError1))
           }
 
-        case -⚬.RInvertSignal() =>
+        case Fun.RInvertSignal() =>
           // (Done |*| Need) -⚬ One
           val (d, n) = (this: Frontier[Done |*| Need]).splitPair
           n fulfillWith d.toFutureDone
           One
 
-        case -⚬.RInvertPingPong() =>
+        case Fun.RInvertPingPong() =>
           // (Ping |*| Pong) -⚬ One
           val (d, n) = (this: Frontier[Ping |*| Pong]).splitPair
           n fulfillPongWith d.toFuturePing
           One
 
-        case -⚬.LInvertSignal() =>
+        case Fun.LInvertSignal() =>
           // One -⚬ (Need |*| Done)
           this.awaitIfDeferred
           val p = Promise[Any]()
@@ -595,7 +599,7 @@ private class ExecutionImpl(
             Deferred(p.future.map(_ => DoneNow)),
           )
 
-        case -⚬.LInvertPongPing() =>
+        case Fun.LInvertPongPing() =>
           // One -⚬ (Pong |*| Ping)
           this.awaitIfDeferred
           val p = Promise[Any]()
@@ -604,16 +608,13 @@ private class ExecutionImpl(
             Deferred(p.future.map(_ => PingNow)),
           )
 
-        case -⚬.FunRef(_, f) =>
+        case Fun.FunRef(_, f) =>
           this.extend(f) // TODO: should be guarded, i.e. expanded only when needed
 
-        case r: -⚬.RecF[A, B] =>
-          this.extend(r.recursed)
-
-        case -⚬.RecFun(f) =>
+        case Fun.RecFun(f) =>
           Pair(RecOccurrence(f), this).extend(f)
 
-        case _: -⚬.InvokeSub[x, b] =>
+        case _: Fun.InvokeSub[x, b] =>
           val (rc, x) = (this: Frontier[Sub[x, B] |*| x]).splitPair
 
           def go[X, Y](rc: Frontier[Sub[X, Y]], x: Frontier[X]): Frontier[Y] =
@@ -624,7 +625,7 @@ private class ExecutionImpl(
 
           go(rc, x)
 
-        case _: -⚬.IgnoreSub[x, y] =>
+        case _: Fun.IgnoreSub[x, y] =>
           def go[X, Y](rc: Frontier[Sub[X, Y]]): Frontier[One] =
             rc match
               case RecOccurrence(_) =>
@@ -637,7 +638,7 @@ private class ExecutionImpl(
 
           go(this: Frontier[Sub[x, y]])
 
-        case _: -⚬.DupSub[x, y] =>
+        case _: Fun.DupSub[x, y] =>
           summon[A =:= Sub[x, y]]
           summon[B =:= (Sub[x, y] |*| Sub[x, y])]
 
@@ -657,7 +658,7 @@ private class ExecutionImpl(
 
           go[x, y](this)
 
-        case f: -⚬.CaptureIntoSub[x, a, b] =>
+        case f: Fun.CaptureIntoSub[-⚬, x, a, b] =>
           summon[A =:= (Sub[x |*| a, b] |*| x)]
           summon[B =:= Sub[a, b]]
 
@@ -669,10 +670,10 @@ private class ExecutionImpl(
             rc,
           )
 
-        case _: -⚬.Pack[f] =>
+        case _: Fun.Pack[f] =>
           Pack[f](this: Frontier[f[Rec[f]]])
 
-        case _: -⚬.Unpack[f] =>
+        case _: Fun.Unpack[f] =>
           def go(f: Frontier[Rec[f]]): Frontier[f[Rec[f]]] =
             f match {
               case Pack(f) => f
@@ -680,7 +681,7 @@ private class ExecutionImpl(
             }
           go(this: Frontier[Rec[f]])
 
-        case -⚬.RacePair() =>
+        case Fun.RacePair() =>
           def go(x: Frontier[Ping], y: Frontier[Ping]): Frontier[One |+| One] =
             (x, y) match {
               case (PingNow, y) => InjectL(One) // y is ignored
@@ -707,7 +708,7 @@ private class ExecutionImpl(
           val (x, y) = (this: Frontier[Ping |*| Ping]).splitPair
           go(x, y)
 
-        case -⚬.SelectPair() =>
+        case Fun.SelectPair() =>
           // XXX: not left-biased. What does it even mean, precisely, for a racing operator to be biased?
           val Choice(f, g, onError) = (this: Frontier[One |&| One]).asChoice
           val p1 = Promise[Any]()
@@ -721,7 +722,7 @@ private class ExecutionImpl(
           }
           Pair(PongAsync(p1), PongAsync(p2))
 
-        case op: -⚬.CrashWhenDone[x, b] =>
+        case op: Fun.CrashWhenDone[x, b] =>
           // (Done |*| x) -⚬ B
 
           val (d, x) = (this: Frontier[Done |*| x]).splitPair
@@ -737,7 +738,7 @@ private class ExecutionImpl(
             }
             .asDeferredFrontier
 
-        case -⚬.Delay() =>
+        case Fun.Delay() =>
           // Val[FiniteDuration] -⚬ Done
           (this: Frontier[Val[FiniteDuration]])
             .toFutureValue
@@ -748,7 +749,7 @@ private class ExecutionImpl(
             }
             .asDeferredFrontier
 
-        case _: -⚬.LiftEither[a1, a2] =>
+        case _: Fun.LiftEither[a1, a2] =>
           def go[X, Y](xy: Either[X, Y]): Frontier[Val[X] |+| Val[Y]] =
             xy match {
               case Left(x)  => InjectL(Value(x))
@@ -759,7 +760,7 @@ private class ExecutionImpl(
             case a        => a.toFutureValue.map(go).asDeferredFrontier
           }
 
-        case _: -⚬.LiftPair[a1, a2] =>
+        case _: Fun.LiftPair[a1, a2] =>
           // Val[(a1, a2)] -⚬ (Val[a1] |*| Val[a2])
           (this: Frontier[Val[(a1, a2)]]) match {
             case Value((a1, a2)) =>
@@ -772,36 +773,36 @@ private class ExecutionImpl(
               )
           }
 
-        case _: -⚬.UnliftPair[x, y] =>
+        case _: Fun.UnliftPair[x, y] =>
           // (Val[x] |*| Val[y]) -⚬ Val[(x, y)]
           val (x, y) = Frontier.splitPair(this: Frontier[Val[x] |*| Val[y]])
           (x.toFutureValue zip y.toFutureValue).toValFrontier
 
-        case op: -⚬.MapVal[x, y] =>
+        case op: Fun.MapVal[x, y] =>
           (this: Frontier[Val[x]])
             .toFutureValue
             .flatMap(op.f.runFuture)
             .toValFrontier
 
-        case -⚬.ConstVal(a) =>
+        case Fun.ConstVal(a) =>
           this
             .toFutureDone
             .map(_ => a)
             .toValFrontier
 
-        case op: -⚬.ConstNeg[x] =>
+        case op: Fun.ConstNeg[x] =>
           val pu = Promise[Any]()
           (this: Frontier[Neg[x]])
             .completeWith(pu.future.map(_ => op.a))
           NeedAsync(pu)
 
-        case _: -⚬.Neglect[x] =>
+        case _: Fun.Neglect[x] =>
           (this: Frontier[Val[x]])
             .toFutureValue
             .map(_ => DoneNow)
             .asDeferredFrontier
 
-        case _: -⚬.NotifyVal[x] =>
+        case _: Fun.NotifyVal[x] =>
           // Val[x] -⚬ (Ping |*| Val[x])
           val (fd: Frontier[Ping], fx: Frontier[Val[x]]) =
             (this: Frontier[Val[x]]) match {
@@ -812,13 +813,13 @@ private class ExecutionImpl(
             }
           Pair(fd, fx)
 
-        case _: -⚬.NotifyNeg[x] =>
+        case _: Fun.NotifyNeg[x] =>
           // (Pong |*| Neg[x]) -⚬ Neg[x]
           val (n, x) = (this: Frontier[Pong |*| Neg[x]]).splitPair
           n fulfillPongWith x.future
           x
 
-        case -⚬.DebugPrint(msg) =>
+        case Fun.DebugPrint(msg) =>
           // Ping -⚬ One
           this.toFuturePing.onComplete {
             case Success(PingNow) => println(msg)
@@ -826,19 +827,19 @@ private class ExecutionImpl(
           }
           One
 
-        case f @ -⚬.JoinRTermini() =>
+        case f @ Fun.JoinRTermini() =>
           bug(s"Did not expect to be able to construct a program that uses $f")
 
-        case f @ -⚬.JoinLTermini() =>
+        case f @ Fun.JoinLTermini() =>
           bug(s"Did not expect to be able to construct a program that uses $f")
 
-        case f @ -⚬.RInvertTerminus() =>
+        case f @ Fun.RInvertTerminus() =>
           bug(s"Did not expect to be able to construct a program that uses $f")
 
-        case f @ -⚬.LInvertTerminus() =>
+        case f @ Fun.LInvertTerminus() =>
           bug(s"Did not expect to be able to construct a program that uses $f")
 
-        case op: -⚬.Acquire[x, r, y] =>
+        case op: Fun.Acquire[x, r, y] =>
           // Val[x] -⚬ (Res[r] |*| Val[y])
 
           val acquire: ScalaFun[x, (r, y)]       = op.acquire
@@ -856,7 +857,7 @@ private class ExecutionImpl(
             case x => x.toFutureValue.map(go).asDeferredFrontier
           }
 
-        case op: -⚬.TryAcquire[x, r, y, e] =>
+        case op: Fun.TryAcquire[x, r, y, e] =>
           // Val[x] -⚬ (Val[e] |+| (Res[r] |*| Val[y]))
 
           val acquire: ScalaFun[x, Either[e, (r, y)]] = op.acquire
@@ -882,7 +883,7 @@ private class ExecutionImpl(
             case x => x.toFutureValue.map(go).asDeferredFrontier
           }
 
-        case op: -⚬.Effect[r, x, y] =>
+        case op: Fun.Effect[r, x, y] =>
           // (Res[r] |*| Val[x]) -⚬ (Res[r] |*| Val[y])
 
           val f: ScalaFun[(r, x), y] =
@@ -899,7 +900,7 @@ private class ExecutionImpl(
             case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
           }
 
-        case op: -⚬.EffectWr[r, x] =>
+        case op: Fun.EffectWr[r, x] =>
           // (Res[r] |*| Val[x]) -⚬ Res[r]
 
           val f: ScalaFun[(r, x), Unit] =
@@ -916,7 +917,7 @@ private class ExecutionImpl(
             case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
           }
 
-        case op: -⚬.TryTransformResource[r, x, s, y, e] =>
+        case op: Fun.TryTransformResource[r, x, s, y, e] =>
           // (Res[r] |*| Val[x]) -⚬ (Val[e] |+| (Res[s] |*| Val[y]))
 
           val f: ScalaFunction[(r, x), Either[e, (s, y)]] = op.f
@@ -944,7 +945,7 @@ private class ExecutionImpl(
             case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
           }
 
-        case op: -⚬.TryEffectAcquire[r, x, s, y, e] =>
+        case op: Fun.TryEffectAcquire[r, x, s, y, e] =>
           // (Res[r] |*| Val[x]) -⚬ (Res[r] |*| (Val[e] |+| (Res[s] |*| Val[y])))
           val f: ScalaFunction[(r, x), Either[e, (s, y)]] = op.f
           val releaseS: Option[ScalaFunction[s, Unit]]     = op.release
@@ -965,7 +966,7 @@ private class ExecutionImpl(
             case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
           }
 
-        case op: -⚬.TrySplitResource[r, x, s, t, y, e] =>
+        case op: Fun.TrySplitResource[r, x, s, t, y, e] =>
           // (Res[r] |*| Val[x]) -⚬ (Val[e] |+| ((Res[s] |*| Res[t]) |*| Val[y]))
 
           val f: ScalaFun[(r, x), Either[e, (s, t, y)]] = op.f
@@ -996,7 +997,7 @@ private class ExecutionImpl(
             case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
           }
 
-        case op: -⚬.ReleaseWith[r, x, y] =>
+        case op: Fun.ReleaseWith[r, x, y] =>
           // (Res[r] |*| Val[x]) -⚬ Val[]
 
           val release: ScalaFun[(r, x), y] =
@@ -1013,7 +1014,7 @@ private class ExecutionImpl(
             case (r, x) => (r.toFutureRes zipWith x.toFutureValue)(go).asDeferredFrontier
           }
 
-        case _: -⚬.Release[r] =>
+        case _: Fun.Release[r] =>
           // Res[R] -⚬ Done
 
           def go(r: ResFrontier[r]): Frontier[Done] =
@@ -1037,14 +1038,14 @@ private class ExecutionImpl(
             case r => r.toFutureRes.map(go).asDeferredFrontier
           }
 
-        case _: -⚬.Backvert[x] =>
+        case _: Fun.Backvert[x] =>
           // (x |*| -[x]) -⚬ One
 
           val (fw, bw) = (this: Frontier[x |*| -[x]]).splitPair
           bw.fulfill(fw)
           One
 
-        case _: -⚬.Forevert[x] =>
+        case _: Fun.Forevert[x] =>
           // One -⚬ (-[x] |*| x)
 
           this.awaitIfDeferred
@@ -1055,7 +1056,7 @@ private class ExecutionImpl(
             Deferred(pfx.future),
           )
 
-        case _: -⚬.DistributeInversion[x, y] =>
+        case _: Fun.DistributeInversion[x, y] =>
           // -[x |*| y] -⚬ (-[x] |*| -[y])
 
           val px = Promise[Frontier[x]]()
@@ -1066,7 +1067,7 @@ private class ExecutionImpl(
 
           Pair(Backwards(px), Backwards(py))
 
-        case _: -⚬.FactorOutInversion[x, y] =>
+        case _: Fun.FactorOutInversion[x, y] =>
           // (-[x] |*| -[y]) -⚬ -[x |*| y]
 
           val (fpx, fpy) = (this: Frontier[-[x] |*| -[y]]).splitPair

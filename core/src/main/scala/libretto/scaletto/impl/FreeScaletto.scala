@@ -35,6 +35,7 @@ object FreeScaletto extends Scaletto {
   override type -⚬[A, B] = libretto.scaletto.impl.-⚬[A, B]
 
   import -⚬.{*, given}
+  import Fun.*
 
   override type ScalaFun[A, B] = ScalaFunction[A, B]
 
@@ -60,7 +61,7 @@ object FreeScaletto extends Scaletto {
   }
 
   override def id[A]: A -⚬ A =
-    Id()
+    -⚬.id[A]
 
   override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C =
     f > g
@@ -72,256 +73,256 @@ object FreeScaletto extends Scaletto {
     -⚬.par(f, g)
 
   override def introFst[B]: B -⚬ (One |*| B) =
-    IntroFst()
+    -⚬.𝒞.introFst[B]
 
   override def introSnd[A]: A -⚬ (A |*| One) =
-    IntroSnd()
+    -⚬.𝒞.introSnd[A]
 
   override def elimFst[B]: (One |*| B) -⚬ B =
-    ElimFst()
+    -⚬.𝒞.elimFst[B]
 
   override def elimSnd[A]: (A |*| One) -⚬ A =
-    ElimSnd()
+    -⚬.𝒞.elimSnd[A]
 
   override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) =
-    AssocLR()
+    -⚬.𝒞.assocLR
 
   override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) =
-    AssocRL()
+    -⚬.𝒞.assocRL
 
   override def swap[A, B]: (A |*| B) -⚬ (B |*| A) =
-    Swap()
+    -⚬.𝒞.swap
 
   override def injectL[A, B]: A -⚬ (A |+| B) =
-    InjectL()
+    -⚬.cocat.injectL
 
   override def injectR[A, B]: B -⚬ (A |+| B) =
-    InjectR()
+    -⚬.cocat.injectR
 
   override def either[A, B, C](f: A -⚬ C, g: B -⚬ C): (A |+| B) -⚬ C =
-    EitherF(f, g)
+    -⚬.cocat.either(f, g)
 
   override def absurd[A]: Void -⚬ A =
-    Absurd()
+    Regular(Absurd())
 
   override def chooseL[A, B]: (A |&| B) -⚬ A =
-    ChooseL()
+    Regular(ChooseL())
 
   override def chooseR[A, B]: (A |&| B) -⚬ B =
-    ChooseR()
+    Regular(ChooseR())
 
   override def choice[A, B, C](f: A -⚬ B, g: A -⚬ C): A -⚬ (B |&| C) =
-    Choice(f, g)
+    -⚬.choice(f, g)
 
   override def ping: One -⚬ Ping =
-    PingF()
+    Regular(PingF())
 
   override def pong: Pong -⚬ One =
-    PongF()
+    Regular(PongF())
 
   override def delayIndefinitely: Done -⚬ RTerminus =
-    DelayIndefinitely()
+    Regular(DelayIndefinitely())
 
   override def regressInfinitely: LTerminus -⚬ Need =
-    RegressInfinitely()
+    Regular(RegressInfinitely())
 
   override def fork: Done -⚬ (Done |*| Done) =
-    Fork()
+    Regular(Fork())
 
   override def join: (Done |*| Done) -⚬ Done =
-    Join()
+    Regular(Join())
 
   override def forkNeed: (Need |*| Need) -⚬ Need =
-    ForkNeed()
+    Regular(ForkNeed())
 
   override def joinNeed: Need -⚬ (Need |*| Need) =
-    JoinNeed()
+    Regular(JoinNeed())
 
   override def notifyDoneL: Done -⚬ (Ping |*| Done) =
-    NotifyDoneL()
+    Regular(NotifyDoneL())
 
   override def notifyNeedL: (Pong |*| Need) -⚬ Need =
-    NotifyNeedL()
+    Regular(NotifyNeedL())
 
   override def forkPing: Ping -⚬ (Ping |*| Ping) =
-    ForkPing()
+    Regular(ForkPing())
 
   override def forkPong: (Pong |*| Pong) -⚬ Pong =
-    ForkPong()
+    Regular(ForkPong())
 
   override def joinPing: (Ping |*| Ping) -⚬ Ping =
-    JoinPing()
+    Regular(JoinPing())
 
   override def joinPong: Pong -⚬ (Pong |*| Pong) =
-    JoinPong()
+    Regular(JoinPong())
 
   override def strengthenPing: Ping -⚬ Done =
-    StrengthenPing()
+    Regular(StrengthenPing())
 
   override def strengthenPong: Need -⚬ Pong =
-    StrengthenPong()
+    Regular(StrengthenPong())
 
   override def joinRTermini: (RTerminus |*| RTerminus) -⚬ RTerminus =
-    JoinRTermini()
+    Regular(JoinRTermini())
 
   override def joinLTermini: LTerminus -⚬ (LTerminus |*| LTerminus) =
-    JoinLTermini()
+    Regular(JoinLTermini())
 
   override def notifyEither[A, B]: (A |+| B) -⚬ (Ping |*| (A |+| B)) =
-    NotifyEither()
+    Regular(NotifyEither())
 
   override def notifyChoice[A, B]: (Pong |*| (A |&| B)) -⚬ (A |&| B) =
-    NotifyChoice()
+    Regular(NotifyChoice())
 
   override def injectLOnPing[A, B]: (Ping |*| A) -⚬ (A |+| B) =
-    InjectLOnPing()
+    Regular(InjectLOnPing())
 
   override def chooseLOnPong[A, B]: (A |&| B) -⚬ (Pong |*| A) =
-    ChooseLOnPong()
+    Regular(ChooseLOnPong())
 
   override def distributeL[A, B, C]: (A |*| (B |+| C)) -⚬ ((A |*| B) |+| (A |*| C)) =
-    DistributeL()
+    Regular(DistributeL())
 
   override def coDistributeL[A, B, C]: ((A |*| B) |&| (A |*| C)) -⚬ (A |*| (B |&| C)) =
-    CoDistributeL()
+    Regular(CoDistributeL())
 
   override def rInvertSignal: (Done |*| Need) -⚬ One =
-    RInvertSignal()
+    Regular(RInvertSignal())
 
   override def lInvertSignal: One -⚬ (Need |*| Done) =
-    LInvertSignal()
+    Regular(LInvertSignal())
 
   override def rInvertPingPong: (Ping |*| Pong) -⚬ One =
-    RInvertPingPong()
+    Regular(RInvertPingPong())
 
   override def lInvertPongPing: One -⚬ (Pong |*| Ping) =
-    LInvertPongPing()
+    Regular(LInvertPongPing())
 
   override def rInvertTerminus: (RTerminus |*| LTerminus) -⚬ One =
-    RInvertTerminus()
+    Regular(RInvertTerminus())
 
   override def lInvertTerminus: One -⚬ (LTerminus |*| RTerminus) =
-    LInvertTerminus()
+    Regular(LInvertTerminus())
 
   override def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B =
     -⚬.rec(f)
 
   override def rec[A, B](f: (Sub[A, B] |*| A) -⚬ B): A -⚬ B =
-    RecFun(f)
+    Regular(RecFun(f))
 
   override def invoke[A, B]: (Sub[A, B] |*| A) -⚬ B =
-    InvokeSub()
+    Regular(InvokeSub())
 
   override def comonoidSub[A, B]: Comonoid[Sub[A, B]] =
     new Comonoid[Sub[A, B]]:
-      override def counit: Sub[A, B] -⚬ One = IgnoreSub()
-      override def split: Sub[A, B] -⚬ (Sub[A, B] |*| Sub[A, B]) = DupSub()
+      override def counit: Sub[A, B] -⚬ One = -⚬.ignoreSub
+      override def split: Sub[A, B] -⚬ (Sub[A, B] |*| Sub[A, B]) = -⚬.dupSub
 
   override def unpack[F[_]]: Rec[F] -⚬ F[Rec[F]] =
-    Unpack()
+    Regular(Unpack())
 
   override def pack[F[_]]: F[Rec[F]] -⚬ Rec[F] =
-    Pack()
+    Regular(Pack())
 
   override def racePair: (Ping |*| Ping) -⚬ (One |+| One) =
-    RacePair()
+    Regular(RacePair())
 
   override def selectPair: (One |&| One) -⚬ (Pong |*| Pong) =
-    SelectPair()
+    Regular(SelectPair())
 
   override def sharedCode[A, B](f: A -⚬ B): A -⚬ B =
-    FunRef(new Object, f) // XXX use a proper ID
+    Regular(FunRef(new Object, f)) // XXX use a proper ID
 
   override def crashWhenDone[A, B](msg: String): (Done |*| A) -⚬ B =
-    CrashWhenDone(msg)
+    Regular(CrashWhenDone(msg))
 
   override def delay: Val[FiniteDuration] -⚬ Done =
-    Delay()
+    Regular(Delay())
 
   override def liftEither[A, B]: Val[Either[A, B]] -⚬ (Val[A] |+| Val[B]) =
-    LiftEither()
+    Regular(LiftEither())
 
   override def liftPair[A, B]: Val[(A, B)] -⚬ (Val[A] |*| Val[B]) =
-    LiftPair()
+    Regular(LiftPair())
 
   override def unliftPair[A, B]: (Val[A] |*| Val[B]) -⚬ Val[(A, B)] =
-    UnliftPair()
+    Regular(UnliftPair())
 
   override def mapVal[A, B](f: ScalaFun[A, B]): Val[A] -⚬ Val[B] =
-    MapVal(f)
+    Regular(MapVal(f))
 
   override def constVal[A](a: A): Done -⚬ Val[A] =
-    ConstVal(a)
+    Regular(ConstVal(a))
 
   override def constNeg[A](a: A): Neg[A] -⚬ Need =
-    ConstNeg(a)
+    Regular(ConstNeg(a))
 
   override def neglect[A]: Val[A] -⚬ Done =
-    Neglect()
+    Regular(Neglect())
 
   override def notifyVal[A]: Val[A] -⚬ (Ping |*| Val[A]) =
-    NotifyVal()
+    Regular(NotifyVal())
 
   override def notifyNeg[A]: (Pong |*| Neg[A]) -⚬ Neg[A] =
-    NotifyNeg()
+    Regular(NotifyNeg())
 
   override def debugPrint(msg: String): Ping -⚬ One =
-    DebugPrint(msg)
+    Regular(DebugPrint(msg))
 
   override def acquire[A, R, B](
     acquire: ScalaFun[A, (R, B)],
     release: Option[ScalaFun[R, Unit]],
   ): Val[A] -⚬ (Res[R] |*| Val[B]) =
-    Acquire(acquire, release)
+    Regular(Acquire(acquire, release))
 
   override def tryAcquire[A, R, B, E](
     acquire: ScalaFun[A, Either[E, (R, B)]],
     release: Option[ScalaFun[R, Unit]],
   ): Val[A] -⚬ (Val[E] |+| (Res[R] |*| Val[B])) =
-    TryAcquire(acquire, release)
+    Regular(TryAcquire(acquire, release))
 
   override def release[R]: Res[R] -⚬ Done =
-    Release()
+    Regular(Release())
 
   override def releaseWith[R, A, B](f: ScalaFunction[(R, A), B]): (Res[R] |*| Val[A]) -⚬ Val[B] =
-    ReleaseWith(f)
+    Regular(ReleaseWith(f))
 
   override def effect[R, A, B](f: ScalaFunction[(R, A), B]): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| Val[B]) =
-    Effect(f)
+    Regular(Effect(f))
 
   override def effectWr[R, A](f: ScalaFunction[(R, A), Unit]): (Res[R] |*| Val[A]) -⚬ Res[R] =
-    EffectWr(f)
+    Regular(EffectWr(f))
 
   override def tryEffectAcquire[R, A, S, B, E](
     f: ScalaFunction[(R, A), Either[E, (S, B)]],
     release: Option[ScalaFunction[S, Unit]],
   ): (Res[R] |*| Val[A]) -⚬ (Res[R] |*| (Val[E] |+| (Res[S] |*| Val[B]))) =
-    TryEffectAcquire(f, release)
+    Regular(TryEffectAcquire(f, release))
 
   override def tryTransformResource[R, A, S, B, E](
     f: ScalaFunction[(R, A), Either[E, (S, B)]],
     release: Option[ScalaFunction[S, Unit]],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| (Res[S] |*| Val[B])) =
-    TryTransformResource(f, release)
+    Regular(TryTransformResource(f, release))
 
   override def trySplitResource[R, A, S, T, B, E](
     f: ScalaFunction[(R, A), Either[E, (S, T, B)]],
     release1: Option[ScalaFunction[S, Unit]],
     release2: Option[ScalaFunction[T, Unit]],
   ): (Res[R] |*| Val[A]) -⚬ (Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])) =
-    TrySplitResource(f, release1, release2)
+    Regular(TrySplitResource(f, release1, release2))
 
   override def forevert[A]: One -⚬ (-[A] |*| A) =
-    Forevert()
+    Regular(Forevert())
 
   override def backvert[A]: (A |*| -[A]) -⚬ One =
-    Backvert()
+    Regular(Backvert())
 
   override def distributeInversion[A, B]: -[A |*| B] -⚬ (-[A] |*| -[B]) =
-    DistributeInversion()
+    Regular(DistributeInversion())
 
   override def factorOutInversion[A, B]: (-[A] |*| -[B]) -⚬ -[A |*| B] =
-    FactorOutInversion()
+    Regular(FactorOutInversion())
 
   override def sizeOf[A, B](f: A -⚬ B): Long =
     f.size
@@ -362,10 +363,10 @@ object FreeScaletto extends Scaletto {
 
   override val OneOf: EnumModule.LeftAssociative[-⚬, |*|, OneOf, ||, ::] =
     EnumModule.fromBinarySums[-⚬, |*|, |+|, OneOf, [x, y] =>> y || x, ::](
-      inj = [Label, A, Cases] => (i: Member[[x, y] =>> y || x, ::, Label, A, Cases]) => OneOfInject(i),
-      peel = [Label, A, Cases] => DummyImplicit ?=> OneOfPeel(),
-      unpeel = [Label, A, Cases] => DummyImplicit ?=> OneOfUnpeel(),
-      extract = [Label, A] => DummyImplicit ?=> OneOfExtractSingle(),
+      inj = [Label, A, Cases] => (i: Member[[x, y] =>> y || x, ::, Label, A, Cases]) => Regular(OneOfInject(i)),
+      peel = [Label, A, Cases] => DummyImplicit ?=> Regular(OneOfPeel()),
+      unpeel = [Label, A, Cases] => DummyImplicit ?=> Regular(OneOfUnpeel()),
+      extract = [Label, A] => DummyImplicit ?=> Regular(OneOfExtractSingle()),
     )(using
       𝒞,
       cocat,
@@ -678,7 +679,7 @@ object FreeScaletto extends Scaletto {
 
       g match
         case NoCapture(g) =>
-          NoCapture(RecFun(g))
+          NoCapture(FreeScaletto.rec(g))
         case Closure(x, g) =>
           recLocalWithCapture(pos, x, g)
 
@@ -699,11 +700,11 @@ object FreeScaletto extends Scaletto {
         λ { case h |*| (x |*| a) =>
           val x1 |*| x2 = dupX(x)
           val h1: $[Sub[A, B]] =
-            (h |*| x1) :>> CaptureIntoSub(elimX, dupX)
+            (h |*| x1) :>> captureIntoSub(elimX, dupX)
           f(x2 |*| (h1 |*| a))
         }
       val h: (X |*| A) -⚬ B =
-        RecFun(g)
+        FreeScaletto.rec(g)
       CapturingFun.Closure(x, h)
 
     private def multiDup[X](x: Tupled[|*|, $, X])(using lambdas.Context): Validated[Var[?], X -⚬ (X |*| X)] =
