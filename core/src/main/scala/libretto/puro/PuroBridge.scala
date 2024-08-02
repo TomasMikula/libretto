@@ -1,11 +1,11 @@
-package libretto.core
+package libretto.puro
 
 import libretto.exec.Bridge
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 
-trait CoreBridge extends Bridge {
-  override type Dsl <: CoreDSL
+trait PuroBridge extends Bridge {
+  override type Dsl <: Puro
 
   import dsl.{|*|, |+|, |&|, Done, One, Need, Ping, Pong}
 
@@ -76,6 +76,6 @@ trait CoreBridge extends Bridge {
   }
 }
 
-object CoreBridge {
-  type Of[DSL <: CoreDSL] = CoreBridge { type Dsl = DSL }
+object PuroBridge {
+  type Of[DSL <: Puro] = PuroBridge { type Dsl = DSL }
 }

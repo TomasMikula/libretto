@@ -1,28 +1,28 @@
 package libretto.stream.scaletto
 
-import libretto.core.CoreLib
 import libretto.lambda.Category
+import libretto.puro.PuroLib
 import libretto.scaletto.{Scaletto, ScalettoLib}
 
 object BinarySearchTree {
   def apply(
     dsl: Scaletto,
-    coreLib: CoreLib[dsl.type],
-    scalettoLib: ScalettoLib[dsl.type, coreLib.type],
+    puroLib: PuroLib[dsl.type],
+    scalettoLib: ScalettoLib[dsl.type, puroLib.type],
   )
-  : BinarySearchTree[dsl.type, coreLib.type, scalettoLib.type] =
-    new BinarySearchTree(dsl, coreLib, scalettoLib)
+  : BinarySearchTree[dsl.type, puroLib.type, scalettoLib.type] =
+    new BinarySearchTree(dsl, puroLib, scalettoLib)
 }
 
-class BinarySearchTree[DSL <: Scaletto, CLib <: CoreLib[DSL], SLib <: ScalettoLib[DSL, CLib]](
+class BinarySearchTree[DSL <: Scaletto, PLib <: PuroLib[DSL], SLib <: ScalettoLib[DSL, PLib]](
   val dsl: DSL,
-  val coreLib: CLib & CoreLib[dsl.type],
-  val scalettoLib: SLib & ScalettoLib[dsl.type, coreLib.type],
+  val puroLib: PLib & PuroLib[dsl.type],
+  val scalettoLib: SLib & ScalettoLib[dsl.type, puroLib.type],
 ) {
   import dsl.*
-  import coreLib.*
-  import coreLib.Bool.*
-  import coreLib.Compared.*
+  import puroLib.*
+  import puroLib.Bool.*
+  import puroLib.Compared.*
   import scalettoLib.{*, given}
 
   private def fstLens[A, B]: Lens[A |*| B, A] =

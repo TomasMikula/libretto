@@ -1,23 +1,23 @@
 package libretto.stream.invert
 
-import libretto.core.CoreLib
 import libretto.invert.InvertDSL
-import libretto.stream.core.CoreStreams
+import libretto.puro.PuroLib
+import libretto.stream.puro.PuroStreams
 import libretto.util.∀
 
 object InvertStreams {
   def apply(
     dsl: InvertDSL,
-    lib: CoreLib[dsl.type],
+    lib: PuroLib[dsl.type],
   )
   : InvertStreams[dsl.type, lib.type] =
     new InvertStreams(dsl, lib)
 }
 
-class InvertStreams[DSL <: InvertDSL, Lib <: CoreLib[DSL]](
+class InvertStreams[DSL <: InvertDSL, Lib <: PuroLib[DSL]](
   override val dsl: DSL,
-  override val lib: Lib with CoreLib[dsl.type],
-) extends CoreStreams[DSL, Lib](dsl, lib) {
+  override val lib: Lib & PuroLib[dsl.type],
+) extends PuroStreams[DSL, Lib](dsl, lib) {
   import dsl.*
   import dsl.$.*
   import lib.*

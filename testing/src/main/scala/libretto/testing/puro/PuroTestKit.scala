@@ -1,14 +1,14 @@
-package libretto.testing.core
+package libretto.testing.puro
 
-import libretto.core.{CoreDSL, CoreBridge}
 import libretto.lambda.util.SourcePos
+import libretto.puro.{Puro, PuroBridge}
 import libretto.testing.{TestKit, TestResult}
 import scala.concurrent.duration.FiniteDuration
 
-trait CoreTestKit extends TestKit {
-  override type Dsl <: CoreDSL
+trait PuroTestKit extends TestKit {
+  override type Dsl <: Puro
 
-  override val bridge: CoreBridge.Of[dsl.type]
+  override val bridge: PuroBridge.Of[dsl.type]
 
   import dsl.{-⚬, |*|, |+|, Done, Ping}
   import bridge.*

@@ -1,20 +1,20 @@
-package libretto.stream.core
+package libretto.stream.puro
 
-import libretto.core.{CoreDSL, CoreLib}
+import libretto.puro.{Puro, PuroLib}
 import libretto.lambda.util.Exists
 
-object CoreStreams {
+object PuroStreams {
   def apply(
-    dsl: CoreDSL,
-    lib: CoreLib[dsl.type],
+    dsl: Puro,
+    lib: PuroLib[dsl.type],
   )
-  : CoreStreams[dsl.type, lib.type] =
-    new CoreStreams(dsl, lib)
+  : PuroStreams[dsl.type, lib.type] =
+    new PuroStreams(dsl, lib)
 }
 
-class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
+class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
   val dsl: DSL,
-  val lib: Lib with CoreLib[dsl.type],
+  val lib: Lib & PuroLib[dsl.type],
 ) {
   import dsl.*
   import dsl.$.*
@@ -365,7 +365,7 @@ class CoreStreams[DSL <: CoreDSL, Lib <: CoreLib[DSL]](
       fromLList(A.close)
 
     def of[A](as: (One -⚬ A)*)(using Closeable[A]): One -⚬ Source[A] =
-      LList.of(as: _*) > fromLList
+      LList.of(as*) > fromLList
 
     def repeatedly[A, B](f: A -⚬ B)(using A: CloseableCosemigroup[A]): A -⚬ Source[B] =
       rec { self =>

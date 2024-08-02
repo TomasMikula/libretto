@@ -1,25 +1,25 @@
 package libretto.closed
 
-import libretto.core.CoreLib
+import libretto.puro.PuroLib
 
 object ClosedLib {
   def apply(
     dsl: ClosedDSL,
-    coreLib: CoreLib[dsl.type],
+    puroLib: PuroLib[dsl.type],
   )
-  : ClosedLib[dsl.type, coreLib.type] =
-    new ClosedLib(dsl, coreLib)
+  : ClosedLib[dsl.type, puroLib.type] =
+    new ClosedLib(dsl, puroLib)
 }
 
 class ClosedLib[
   DSL <: ClosedDSL,
-  CLib <: CoreLib[DSL],
+  PLib <: PuroLib[DSL],
 ](
   val dsl: DSL,
-  val coreLib: CLib & CoreLib[dsl.type],
+  val puroLib: PLib & PuroLib[dsl.type],
 ) { lib =>
   import dsl.*
-  import coreLib.*
+  import puroLib.*
 
   /** Function object (internal hom) is contravariant in the input type. */
   def input[C]: ContraFunctor[[x] =>> x =⚬ C] =

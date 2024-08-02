@@ -1,8 +1,8 @@
 package libretto.crash
 
-import libretto.core.{CoreDSL, CoreLib}
+import libretto.puro.{Puro, PuroLib}
 
-trait CrashDSL extends CoreDSL {
+trait CrashDSL extends Puro {
   /** Starts propagating an error downstream (which might be through both the in-port and the out-port).
     *
     * Use only for irrecoverable errors.
@@ -15,7 +15,7 @@ trait CrashDSL extends CoreDSL {
     */
   def crashWhenDone[A, B](msg: String): (Done |*| A) -⚬ B
 
-  private val lib = CoreLib(this)
+  private val lib = PuroLib(this)
   import lib.*
 
   def crashWhenNeed[A, B](msg: String): A -⚬ (Need |*| B) =

@@ -3,7 +3,7 @@ package libretto.examples.canteen
 import libretto.examples.canteen.Protocol.*
 import libretto.scaletto.StarterKit.*
 import libretto.scaletto.StarterKit.$.*
-import libretto.scaletto.StarterKit.coreLib.*
+import libretto.scaletto.StarterKit.puroLib.*
 
 object Customer {
 

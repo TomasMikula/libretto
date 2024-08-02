@@ -5,7 +5,7 @@ import libretto.scaletto.StarterKit
 val DefaultStreams =
   ScalettoStreams(
     StarterKit.dsl,
-    StarterKit.coreLib,
+    StarterKit.puroLib,
     StarterKit.scalettoLib,
     libretto.stream.invert.DefaultStreams,
   )

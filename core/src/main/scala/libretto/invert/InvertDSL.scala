@@ -1,8 +1,8 @@
 package libretto.invert
 
 import libretto.closed.ClosedDSL
-import libretto.core.CoreLib
 import libretto.lambda.util.SourcePos
+import libretto.puro.PuroLib
 import scala.annotation.targetName
 
 trait InvertDSL extends ClosedDSL {
@@ -73,8 +73,8 @@ trait InvertDSL extends ClosedDSL {
     */
   def factorOutInversion[A, B]: (-[A] |*| -[B]) -⚬ -[A |*| B]
 
-  private val coreLib = CoreLib(this)
-  import coreLib.*
+  private val puroLib = PuroLib(this)
+  import puroLib.*
 
   override type =⚬[A, B] = -[A] |*| B
 

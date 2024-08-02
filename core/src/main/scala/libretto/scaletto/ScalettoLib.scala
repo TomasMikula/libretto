@@ -1,9 +1,9 @@
 package libretto.scaletto
 
 import java.util.concurrent.atomic.AtomicLong
-import libretto.core.CoreLib
 import libretto.invert.InvertLib
 import libretto.lambda.util.SourcePos
+import libretto.puro.PuroLib
 import libretto.util.Async
 import scala.annotation.targetName
 import scala.collection.immutable.{:: as NonEmptyList}
@@ -14,24 +14,24 @@ import scala.util.Random
 object ScalettoLib {
   def apply(
     dsl: Scaletto,
-    coreLib: CoreLib[dsl.type],
+    puroLib: PuroLib[dsl.type],
   )
-  : ScalettoLib[dsl.type, coreLib.type] =
-    new ScalettoLib(dsl, coreLib)
+  : ScalettoLib[dsl.type, puroLib.type] =
+    new ScalettoLib(dsl, puroLib)
 }
 
 class ScalettoLib[
   DSL <: Scaletto,
-  CoreLib <: libretto.core.CoreLib[DSL],
+  PuroLib <: libretto.puro.PuroLib[DSL],
 ](
   val dsl: DSL,
-  val coreLib: CoreLib & libretto.core.CoreLib[dsl.type],
+  val puroLib: PuroLib & libretto.puro.PuroLib[dsl.type],
 ) {
   import dsl.*
   import dsl.$.*
-  import coreLib.*
+  import puroLib.*
 
-  private val invertLib = InvertLib(coreLib)
+  private val invertLib = InvertLib(puroLib)
   import invertLib.*
 
   object Val {
@@ -281,7 +281,7 @@ class ScalettoLib[
     lteqBy(aKey, bKey).>.right(swap)
 
   given [A : Ordering]: Comparable[Val[A], Val[A]] with {
-    import coreLib.given, Compared.*, Either as ⊻
+    import puroLib.given, Compared.*, Either as ⊻
 
     private val scalaCompare: ((A, A)) => ((A, A) ⊻ ((A, A) ⊻ (A, A))) =
       { (a1, a2) =>

@@ -1,9 +1,9 @@
-package libretto.stream.core
+package libretto.stream.puro
 
 import libretto.scaletto.StarterKit
 
 val DefaultStreams =
-  CoreStreams(
+  PuroStreams(
     StarterKit.dsl,
-    StarterKit.coreLib,
+    StarterKit.puroLib,
   )

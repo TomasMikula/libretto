@@ -1,4 +1,4 @@
-package libretto.core
+package libretto.puro
 
 import libretto.cats.{Functor, Monad}
 import libretto.lambda.{EnumModule, Extractor, Focus, MonoidalCategory, Partitioning, SymmetricMonoidalCategory}
@@ -8,7 +8,7 @@ import libretto.util.Equal
 import scala.annotation.targetName
 import libretto.lambda.SemigroupalCategory
 
-trait CoreDSL {
+trait Puro {
   /** Libretto arrow, also called a ''component'' or a ''linear function''.
     *
     * ```
@@ -380,34 +380,34 @@ trait CoreDSL {
   def category: SymmetricMonoidalCategory[-⚬, |*|, One] =
     new SymmetricMonoidalCategory[-⚬, |*|, One] {
       override def id[A]: A -⚬ A =
-        CoreDSL.this.id[A]
+        Puro.this.id[A]
 
       override def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C =
-        CoreDSL.this.andThen(f, g)
+        Puro.this.andThen(f, g)
 
       override def assocLR[A, B, C]: ((A |*| B) |*| C) -⚬ (A |*| (B |*| C)) =
-        CoreDSL.this.assocLR
+        Puro.this.assocLR
 
       override def assocRL[A, B, C]: (A |*| (B |*| C)) -⚬ ((A |*| B) |*| C) =
-        CoreDSL.this.assocRL
+        Puro.this.assocRL
 
       override def par[A1, A2, B1, B2](f1: A1 -⚬ B1, f2: A2 -⚬ B2): (A1 |*| A2) -⚬ (B1 |*| B2) =
-        CoreDSL.this.par(f1, f2)
+        Puro.this.par(f1, f2)
 
       override def swap[A, B]: (A |*| B) -⚬ (B |*| A) =
-        CoreDSL.this.swap
+        Puro.this.swap
 
       override def introFst[A]: A -⚬ (One |*| A) =
-        CoreDSL.this.introFst
+        Puro.this.introFst
 
       override def introSnd[A]: A -⚬ (A |*| One) =
-        CoreDSL.this.introSnd
+        Puro.this.introSnd
 
       override def elimFst[A]: (One |*| A) -⚬ A =
-        CoreDSL.this.elimFst
+        Puro.this.elimFst
 
       override def elimSnd[A]: (A |*| One) -⚬ A =
-        CoreDSL.this.elimSnd
+        Puro.this.elimSnd
     }
 
   type LambdaContext
@@ -433,7 +433,7 @@ trait CoreDSL {
       f: LambdaContext ?=> $[Sub[A, B]] => $[A] => $[B],
     ): A -⚬ B =
       val g: (Sub[A, B] |*| A) -⚬ B = apply { case *(self) |*| a => f(self)(a) }
-      CoreDSL.this.rec(g)
+      Puro.this.rec(g)
 
     /** An weaker form of closure that can be used only within the scope of the outer `λ`
      *  (i.e. it cannot returned from the outer `λ`).
@@ -517,7 +517,7 @@ trait CoreDSL {
     def joinTwo(a: $[Done], b: $[Done])(
       pos: SourcePos,
     )(using LambdaContext): $[Done] =
-      map(zip(a, b)(pos))(CoreDSL.this.join)(pos)
+      map(zip(a, b)(pos))(Puro.this.join)(pos)
   }
 
   val |*| : ConcurrentPairOps
@@ -687,7 +687,7 @@ trait CoreDSL {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[C] =
-      CoreDSL.this.switch(using ctx, pos)(x)(
+      Puro.this.switch(using ctx, pos)(x)(
         (pos, ctx ?=> { case InL(a) => f(Left(a)) }),
         (pos, ctx ?=> { case InR(b) => f(Right(b)) }),
       )

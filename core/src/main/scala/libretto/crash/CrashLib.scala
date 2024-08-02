@@ -1,6 +1,6 @@
 package libretto.crash
 
-import libretto.core.CoreLib
+import libretto.puro.PuroLib
 
 object CrashLib {
   def apply(
@@ -17,8 +17,8 @@ class CrashLib[
 ) { lib =>
   import dsl.*
 
-  private val coreLib = CoreLib(dsl)
-  import coreLib.*
+  private val puroLib = PuroLib(dsl)
+  import puroLib.*
 
   def leftOrCrash[A, B](msg: String = "Expected Left, was Right"): (A |+| B) -⚬ A =
     |+|.signalR > either(id[A], crashWhenDone[B, A](msg))

@@ -1,8 +1,8 @@
 package libretto
 
-import libretto.core.CoreLib
 import libretto.lambda.Extractor
 import libretto.lambda.util.SourcePos
+import libretto.puro.PuroLib
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
 import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
@@ -14,8 +14,8 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
     import kit.dsl.*
     import kit.dsl.given
 
-    val coreLib = CoreLib(kit.dsl)
-    import coreLib.{*, given}
+    val puroLib = PuroLib(kit.dsl)
+    import puroLib.{*, given}
     import dsl.{|| as |}
 
     type Maybe[A] = OneOf

@@ -1,12 +1,12 @@
 package libretto.timer
 
-import libretto.core.{CoreDSL, CoreLib}
+import libretto.puro.{Puro, PuroLib}
 import scala.concurrent.duration.FiniteDuration
 
-trait TimerDSL extends CoreDSL {
+trait TimerDSL extends Puro {
   def delay(d: FiniteDuration): Done -⚬ Done
 
-  private val lib = CoreLib(this)
+  private val lib = PuroLib(this)
   import lib.*
 
   def delayNeed(d: FiniteDuration): Need -⚬ Need = {

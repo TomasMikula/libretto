@@ -3,9 +3,9 @@ package libretto
 import java.util.concurrent.{Executors, ScheduledExecutorService}
 import java.util.concurrent.atomic.AtomicInteger
 import libretto.cats.Functor.*
-import libretto.core.CoreLib
 import libretto.crash.CrashLib
 import libretto.lambda.util.SourcePos
+import libretto.puro.PuroLib
 import libretto.scaletto.ScalettoLib
 import libretto.testing.{TestCase, TestExecutor, TestKit}
 import libretto.testing.scaletto.{ScalettoTestExecutor, ScalettoTestKit}
@@ -44,10 +44,10 @@ class BasicTests extends ScalatestScalettoTestSuite {
     import kit.{Outcome, dsl, manualClock}
     import dsl.*
     import dsl.$.*
-    val coreLib = CoreLib(dsl)
-    val scalettoLib = ScalettoLib(dsl: dsl.type, coreLib)
+    val puroLib = PuroLib(dsl)
+    val scalettoLib = ScalettoLib(dsl: dsl.type, puroLib)
     val crashLib = CrashLib(dsl)
-    import coreLib.{*, given}
+    import puroLib.{*, given}
     import scalettoLib.{*, given}
     import crashLib.{leftOrCrash, rightOrCrash}
     import kit.bridge.Execution
@@ -109,7 +109,7 @@ class BasicTests extends ScalatestScalettoTestSuite {
 
       "unliftPair, unliftNegPair" -> TestCase.awaitVal {
         val lInvert: One -⚬ ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) =
-          coreLib.lInvert
+          puroLib.lInvert
 
         val prg: Done -⚬ Val[(String, Int)] =
           id                                              [               Done                                                                           ]

@@ -1,8 +1,8 @@
 package libretto
 
-import libretto.core.CoreLib
 import libretto.lambda.Extractor
 import libretto.lambda.util.SourcePos
+import libretto.puro.PuroLib
 import libretto.scaletto.ScalettoLib
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
@@ -15,9 +15,9 @@ class MutualRecursionTests extends ScalatestScalettoTestSuite {
     import kit.Outcome
     import kit.dsl.{*, given}
 
-    val coreLib = CoreLib(kit.dsl)
-    val scalettoLib = ScalettoLib(kit.dsl, coreLib)
-    import coreLib.{*, given}
+    val puroLib = PuroLib(kit.dsl)
+    val scalettoLib = ScalettoLib(kit.dsl, puroLib)
+    import puroLib.{*, given}
     import scalettoLib.{*, given}
 
     /** A non-empty list of `A`'s, followed by a terminator of type `T`. */

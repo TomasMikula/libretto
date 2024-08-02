@@ -2,7 +2,7 @@ package libretto.examples.diningPhilosophers
 
 import libretto.scaletto.StarterKit.dsl.*
 import libretto.scaletto.StarterKit.dsl.$.*
-import libretto.scaletto.StarterKit.coreLib.*
+import libretto.scaletto.StarterKit.puroLib.*
 import libretto.scaletto.StarterKit.crashLib.*
 import libretto.testing.scaletto.StarterTestKit
 import libretto.testing.scalatest.scaletto.ScalatestStarterTestSuite

@@ -1,22 +1,22 @@
 package libretto.invert
 
-import libretto.core.CoreLib
 import libretto.lambda.util.SourcePos
+import libretto.puro.PuroLib
 
 object InvertLib {
   def apply(
-    coreLib: CoreLib[? <: InvertDSL],
-  ): InvertLib[coreLib.type] =
-    new InvertLib[coreLib.type](coreLib)
+    puroLib: PuroLib[? <: InvertDSL],
+  ): InvertLib[puroLib.type] =
+    new InvertLib[puroLib.type](puroLib)
 }
 
 class InvertLib[
-  CoreLib <: libretto.core.CoreLib[? <: InvertDSL],
+  PuroLib <: libretto.puro.PuroLib[? <: InvertDSL],
 ](
-  val coreLib: CoreLib,
+  val puroLib: PuroLib,
 ) {
-  import coreLib.dsl.*
-  import coreLib.*
+  import puroLib.dsl.*
+  import puroLib.*
 
   def inversionDuality[A]: Dual[A, -[A]] =
     new Dual[A, -[A]] {
@@ -78,7 +78,7 @@ class InvertLib[
       Signaling.Positive[A],
       Signaling.Positive[B],
     ): $[(A |*| B) |+| (A |*| B)] =
-      coreLib.race[A, B](a |*| b)
+      puroLib.race[A, B](a |*| b)
 
     def race[B](using SourcePos, LambdaContext)(b: ??[B])(using
       Signaling.Positive[A],
@@ -140,6 +140,6 @@ class InvertLib[
       Signaling.Negative[A],
       Signaling.Negative[B],
     ): ??[(A |*| B) |&| (A |*| B)] =
-      coreLib.select[A, B] >>: (a |*| b)
+      puroLib.select[A, B] >>: (a |*| b)
   }
 }

@@ -10,7 +10,7 @@ import java.util.concurrent.ScheduledExecutorService
 
 object MashupKitImpl extends MashupKit { kit =>
   import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, >, Done, One, Val, chooseL, chooseR, liftPair, mapVal, par, unliftPair}
-  import StarterKit.coreLib.Junction
+  import StarterKit.puroLib.Junction
 
   override object dsl extends MashupDsl {
     override type Fun[A, B] = A -⚬ B // for now, let's just use libretto's linear functions
@@ -40,7 +40,7 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override type ValueType[A] = ValueTypeImpl[A]
 
-    override type Unlimited[A] = StarterKit.coreLib.Unlimited[A]
+    override type Unlimited[A] = StarterKit.puroLib.Unlimited[A]
 
     override type Pick[A, K <: String & Singleton] = AbstractPick[A, K]
 
@@ -158,7 +158,7 @@ object MashupKitImpl extends MashupKit { kit =>
       ): Expr[A] = {
         import A.junction
         import StarterKit.dsl.$
-        import StarterKit.coreLib.awaitPosSnd
+        import StarterKit.puroLib.awaitPosSnd
         $.map($.zip(a, B.neglect(b)(using pos))(pos))(awaitPosSnd)(pos)
       }
 
@@ -176,11 +176,11 @@ object MashupKitImpl extends MashupKit { kit =>
     }
 
     override object Unlimited extends Unlimiteds {
-      export StarterKit.coreLib.Unlimited.{discard, duplicate, map, single => getSingle, split}
+      export StarterKit.puroLib.Unlimited.{discard, duplicate, map, single => getSingle, split}
     }
 
     override def comonoidUnlimited[A]: Comonoid[Unlimited[A]] = {
-      val A = StarterKit.coreLib.Unlimited.comonoidUnlimited[A]
+      val A = StarterKit.puroLib.Unlimited.comonoidUnlimited[A]
       new Comonoid[Unlimited[A]] {
         export A.{split, counit}
       }
@@ -440,7 +440,7 @@ object MashupKitImpl extends MashupKit { kit =>
         override def unlimitedAwaitChoice[A](
           port: InPort[Unlimited[A]],
         ): Async[Try[Option[Either[InPort[A], (InPort[Unlimited[A]], InPort[Unlimited[A]])]]]] = {
-          val port1 = port.prepend(StarterKit.coreLib.Unlimited.fromChoice[A])
+          val port1 = port.prepend(StarterKit.puroLib.Unlimited.fromChoice[A])
           port1.awaitChoice()
             .flatMap {
               case Left(e) =>
@@ -509,15 +509,15 @@ object MashupKitImpl extends MashupKit { kit =>
 
         override def unlimitedIgnore[A](port: OutPort[Unlimited[A]]): Unit =
           port
-            .append(StarterKit.coreLib.Unlimited.discard[A])
+            .append(StarterKit.puroLib.Unlimited.discard[A])
             .discardOne()
 
         override def unlimitedGetSingle[A](port: OutPort[Unlimited[A]]): OutPort[A] =
-          port.append(StarterKit.coreLib.Unlimited.single[A])
+          port.append(StarterKit.puroLib.Unlimited.single[A])
 
         override def unlimitedSplit[A](port: OutPort[Unlimited[A]]): (OutPort[Unlimited[A]], OutPort[Unlimited[A]]) =
           port
-            .append(StarterKit.coreLib.Unlimited.split)
+            .append(StarterKit.puroLib.Unlimited.split)
             .unzip()
 
         override def float64Get(port: OutPort[Float64]): Async[Try[Double]] =

@@ -1,6 +1,6 @@
 package libretto
 
-import libretto.core.CoreLib
+import libretto.puro.PuroLib
 import libretto.scaletto.ScalettoLib
 import libretto.testing.TestCase
 import libretto.testing.scaletto.ScalettoTestKit
@@ -13,9 +13,9 @@ class ClosureTests extends ScalatestScalettoTestSuite {
     import kit.Outcome
     import kit.Outcome.{assertEquals, assertNotThrows}
 
-    val coreLib = CoreLib(kit.dsl)
-    val scalettoLib = ScalettoLib(kit.dsl, coreLib)
-    import coreLib.*
+    val puroLib = PuroLib(kit.dsl)
+    val scalettoLib = ScalettoLib(kit.dsl, puroLib)
+    import puroLib.*
     import scalettoLib.{*, given}
 
     List(

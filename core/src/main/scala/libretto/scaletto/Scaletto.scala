@@ -1,7 +1,7 @@
 package libretto.scaletto
 
-import libretto.core.CoreLib
 import libretto.crash.CrashDSL
+import libretto.puro.PuroLib
 import libretto.timer.TimerDSL
 import libretto.invert.InvertDSL
 import libretto.lambda.util.SourcePos
@@ -72,7 +72,7 @@ trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
       ScalaFun.adaptWith(f)(pre, post)
   }
 
-  private val lib = CoreLib(this)
+  private val lib = PuroLib(this)
   import lib.*
 
   /** Creates an entangled pair of demand ([[Neg]]) and supply ([[Val]]) such that when the demand is fulfilled

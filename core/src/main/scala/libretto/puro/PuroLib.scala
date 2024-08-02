@@ -1,4 +1,4 @@
-package libretto.core
+package libretto.puro
 
 import libretto.cats.{Bifunctor, Comonad, ContraFunctor, Functor, Monad}
 import libretto.lambda.{Category, Extractor, SymmetricMonoidalCategory}
@@ -8,12 +8,12 @@ import libretto.util.{Equal, ∀}
 import scala.annotation.tailrec
 import scala.collection.immutable.{:: as NonEmptyList}
 
-object CoreLib {
-  def apply(dsl: CoreDSL): CoreLib[dsl.type] =
-    new CoreLib(dsl)
+object PuroLib {
+  def apply(dsl: Puro): PuroLib[dsl.type] =
+    new PuroLib(dsl)
 }
 
-class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
+class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
   import dsl.*
   import dsl.$.*
 

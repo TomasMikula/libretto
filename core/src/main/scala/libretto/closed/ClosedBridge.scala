@@ -1,8 +1,8 @@
 package libretto.closed
 
-import libretto.core.CoreBridge
+import libretto.puro.PuroBridge
 
-trait ClosedBridge extends CoreBridge {
+trait ClosedBridge extends PuroBridge {
   override type Dsl <: ClosedDSL
 
   import dsl.=⚬
