@@ -194,8 +194,8 @@ private[inference] class PropagatorImpl[
 
   private lazy val occursCheck: (Label |*| Tp) -⚬ Tp =
     sharedCode {
-      rec { self =>
-        λ { case lbl0 |*| t =>
+      λ.rec { self =>
+        { case lbl0 |*| t =>
           switch(t)
             .is { case TypeBroker(Negotiation.Request(lbl |*| req)) =>
               switch( labels.testEqual(lbl0 |*| lbl) )
@@ -224,7 +224,7 @@ private[inference] class PropagatorImpl[
                 .end
             }
             .is { case TypeFormer(ft) =>
-              TypeFormer(F.mapWith(self)(lbl0 |*| ft))
+              TypeFormer(F.mapWith[Label, Tp, Tp](self)(lbl0 |*| ft))
             }
             .end
         }
@@ -500,8 +500,8 @@ private[inference] class PropagatorImpl[
     import Negotiation.{Preliminary, Request}
 
     sharedCode {
-      rec { self =>
-        λ { case d |*| t =>
+      λ.rec { self =>
+        { case d |*| t =>
           switch(t)
             .is { case TypeBroker(Request(lbl |*| req))   => refinementRequest(lbl.waitFor(d) |*| req) }
             .is { case TypeBroker(Preliminary(lbl |*| t)) => preliminary(lbl |*| self(d |*| t)) }
@@ -576,8 +576,8 @@ private[inference] class PropagatorImpl[
     import Negotiation.{Preliminary, Request}
 
     sharedCode {
-      rec { self =>
-        λ { t =>
+      λ.rec { self =>
+        { t =>
           switch(t)
             .is { case TypeBroker(Request(lbl |*| req)) =>
               joinAll(TypeOutlet.close(req.decline), labels.neglect(lbl))
@@ -661,24 +661,22 @@ private[inference] class PropagatorImpl[
 
       override val lower: propagator.TypeOutlet -⚬ Tp =
         sharedCode {
-          rec { self =>
-            λ { t =>
-              switch(t)
-                .is { case propagator.TypeOutlet.Abstract(lbl |*| InL(nt)) =>
-                  val t1 |*| t2 = abstractLink(nl.lower(lbl))
-                  returning(
-                    t1,
-                    t2 supplyTo nt,
-                  )
-                }
-                .is { case propagator.TypeOutlet.Abstract(lbl |*| InR(t)) =>
-                  t waitFor nl.labels.neglect(lbl)
-                }
-                .is { case propagator.TypeOutlet.TypeFormer(ft) =>
-                  TypeFormer(F.map(self)(ft))
-                }
-                .end
-            }
+          λ.rec { self =>
+            switch(_)
+              .is { case propagator.TypeOutlet.Abstract(lbl |*| InL(nt)) =>
+                val t1 |*| t2 = abstractLink(nl.lower(lbl))
+                returning(
+                  t1,
+                  t2 supplyTo nt,
+                )
+              }
+              .is { case propagator.TypeOutlet.Abstract(lbl |*| InR(t)) =>
+                t waitFor nl.labels.neglect(lbl)
+              }
+              .is { case propagator.TypeOutlet.TypeFormer(ft) =>
+                TypeFormer(F.map(self)(ft))
+              }
+              .end
           }
         }
 
@@ -691,15 +689,13 @@ private[inference] class PropagatorImpl[
 
   override val tap: Tp -⚬ TypeOutlet =
     sharedCode {
-      rec { self =>
+      λ.rec { self =>
         import Negotiation.{Preliminary, Request}
-        λ { t =>
-          switch(t)
-            .is { case TypeBroker(Request(lbl |*| req))   => req.decline waitFor labels.neglect(lbl) }
-            .is { case TypeBroker(Preliminary(lbl |*| t)) => self(t waitFor labels.neglect(lbl)) }
-            .is { case TypeFormer(ft)                     => TypeOutlet.TypeFormer(F.map(self)(ft)) }
-            .end
-        }
+        switch(_)
+          .is { case TypeBroker(Request(lbl |*| req))   => req.decline waitFor labels.neglect(lbl) }
+          .is { case TypeBroker(Preliminary(lbl |*| t)) => self(t waitFor labels.neglect(lbl)) }
+          .is { case TypeFormer(ft)                     => TypeOutlet.TypeFormer(F.map(self)(ft)) }
+          .end
       }
     }
 
@@ -715,8 +711,8 @@ private[inference] class PropagatorImpl[
 
   override val write: TypeOutlet -⚬ Val[T] =
     sharedCode {
-      rec { self =>
-        λ { switch(_)
+      λ.rec { self =>
+        { switch(_)
           .is { case TypeOutlet.Abstract(p) => outputTypeParam(p) }
           .is { case TypeOutlet.TypeFormer(t) => F.output(self)(t) }
           .end
@@ -751,8 +747,8 @@ private[inference] class PropagatorImpl[
 
     val close: TypeOutlet -⚬ Done =
       sharedCode {
-        rec { self =>
-          λ { switch(_)
+        λ.rec { self =>
+          { switch(_)
             .is { case Abstract(p)   => neglect(outputTypeParam(p)) }
             .is { case TypeFormer(t) => F.close(self)(t) }
             .end
@@ -762,8 +758,8 @@ private[inference] class PropagatorImpl[
 
     val awaitPosFst: (Done |*| TypeOutlet) -⚬ TypeOutlet =
       sharedCode {
-        rec { self =>
-          λ { case d |*| t =>
+        λ.rec { self =>
+          { case d |*| t =>
             switch(t)
               .is { case Abstract(p)    => Abstract(p waitFor d) }
               .is { case TypeFormer(ft) => TypeFormer(F.awaitPosFst(self)(d |*| ft)) }

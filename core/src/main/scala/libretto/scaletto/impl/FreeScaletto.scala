@@ -1067,7 +1067,7 @@ object FreeScaletto extends Scaletto {
         case MissingDupForRecFun(pos, vs) =>
           NonEmptyList(
             s"Recursive function definition at ${pos.filename}:${pos.line} captures the following variables which lack the ability to be duplicated:",
-            vs.list.map { v =>  s"  - ${v.origin}" }
+            vs.list.map { v =>  s"  - ${v.origin.print}" }
             ::: List(
               "Note: duplication is needed for potential recursive invocation.",
               "Consider using the `case *(a)` extractor for each of the varaibles to register a Comonoid instance."
@@ -1076,7 +1076,7 @@ object FreeScaletto extends Scaletto {
         case MissingDiscardForRecFun(pos, vs) =>
           NonEmptyList(
             s"Recursive function definition at ${pos.filename}:${pos.line} captures the following variables which lack the ability to be discarded:",
-            vs.list.map { v =>  s"  - ${v.origin}" }
+            vs.list.map { v =>  s"  - ${v.origin.print}" }
             ::: List(
               "Note: discarding is needed when there's no more recursive invocation.",
               "Consider using the `case *(a)` extractor for each of the varaibles to register a Comonoid instance."

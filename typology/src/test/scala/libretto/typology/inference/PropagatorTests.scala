@@ -142,36 +142,32 @@ class PropagatorTests extends ScalatestStarterTestSuite {
           }
         }
 
-      override def map[A, B](f: A -⚬ B): IT[A] -⚬ IT[B] =
-        rec { self =>
-          λ { t =>
-            unpack(t) either {
-              case Right(v) => selfRef(v)
-              case Left(t) => t either {
-                case Right(x |*| y) => mismatch(self(x) |*| self(y))
-                case Left(t) => t either {
-                  case Left(a |*| b)  => pair(f(a) |*| f(b))
-                  case Right(a |*| b) => recCall(f(a) |*| f(b))
-                }
-              }
+      override def map[A, B]: Sub[A, B] -⚬ (IT[A] =⚬ IT[B]) =
+        λ { case *(f) =>
+          λ.closure.rec { self =>
+            { t =>
+              switch ( unpack(t) )
+                .is { case InR(v)                 => selfRef(v) }
+                .is { case InL(InR(x |*| y))      => mismatch(self(x) |*| self(y)) }
+                .is { case InL(InL(InL(a |*| b))) => pair(f(a) |*| f(b)) }
+                .is { case InL(InL(InR(a |*| b))) => recCall(f(a) |*| f(b)) }
+                .end
             }
           }
         }
 
-      override def mapWith[X, A, B](f: (X |*| A) -⚬ B)(using
+      override def mapWith[X, A, B](using
         X: CloseableCosemigroup[X],
-      ): (X |*| IT[A]) -⚬ IT[B] =
-        rec { self =>
-          λ { case +(x) |*| t =>
-            unpack(t) either {
-              case Right(v) => selfRef(v waitFor X.close(x))
-              case Left(t) => t either {
-                case Right(y |*| z) => mismatch(self(x |*| y) |*| self(x |*| z))
-                case Left(t) => t either {
-                  case Left(a |*| b)  => pair(f(x |*| a) |*| f(x |*| b))
-                  case Right(a |*| b) => recCall(f(x |*| a) |*| f(x |*| b))
-                }
-              }
+      ): Sub[X |*| A, B] -⚬ ((X |*| IT[A]) =⚬ IT[B]) =
+        λ { case *(f) =>
+          λ.closure.rec { self =>
+            { case +(x) |*| t =>
+              switch ( unpack(t) )
+                .is { case InR(v)                 => selfRef(v waitFor X.close(x)) }
+                .is { case InL(InR(y |*| z))      => mismatch(self(x |*| y) |*| self(x |*| z)) }
+                .is { case InL(InL(InL(a |*| b))) => pair(f(x |*| a) |*| f(x |*| b)) }
+                .is { case InL(InL(InR(a |*| b))) => recCall(f(x |*| a) |*| f(x |*| b)) }
+                .end
             }
           }
         }
@@ -179,50 +175,44 @@ class PropagatorTests extends ScalatestStarterTestSuite {
       override def forbiddenSelfReference[A]: Val[Label] -⚬ IT[A] =
         selfRef
 
-      override def output[A](f: A -⚬ Val[Type]): IT[A] -⚬ Val[Type] =
-        rec { self =>
-          λ {t =>
-            unpack(t) either {
-              case Right(v) => v :>> mapVal { v => Type.ForbiddenSelfRef(v) }
-              case Left(t) => t either {
-                case Right(x |*| y) => (self(x) ** self(y)) :>> mapVal { case (x, y) => Type.Mismatch(x, y) }
-                case Left(t) => t either {
-                  case Left(a |*| b)  => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.Pair(a, b) }
-                  case Right(a |*| b) => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.RecCall(a, b) }
-                }
-              }
+      override def output[A]: Sub[A, Val[Type]] -⚬ (IT[A] =⚬ Val[Type]) =
+        λ { case *(f) =>
+          λ.closure.rec { self =>
+            { t =>
+              switch ( unpack(t) )
+                .is { case InR(v)                 => v :>> mapVal { v => Type.ForbiddenSelfRef(v) } }
+                .is { case InL(InR(x |*| y))      => (self(x) ** self(y)) :>> mapVal { case (x, y) => Type.Mismatch(x, y) } }
+                .is { case InL(InL(InL(a |*| b))) => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.Pair(a, b) } }
+                .is { case InL(InL(InR(a |*| b))) => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.RecCall(a, b) } }
+                .end
             }
           }
         }
 
-      override def close[A](f: A -⚬ Done): IT[A] -⚬ Done =
-        rec { self =>
-          λ { t =>
-            unpack(t) either {
-              case Right(v) => neglect(v)
-              case Left(t) => t either {
-                case Right(x |*| y) => (self(x) |*| self(y)) :>> join
-                case Left(t) => t either {
-                  case Left(a |*| b)  => (f(a) |*| f(b)) :>> join
-                  case Right(a |*| b) => (f(a) |*| f(b)) :>> join
-                }
-              }
+      override def close[A]: Sub[A, Done] -⚬ (IT[A] =⚬ Done) =
+        λ { case *(f) =>
+          λ.closure.rec { self =>
+            { t =>
+              switch ( unpack(t) )
+                .is { case InR(v)                 => neglect(v) }
+                .is { case InL(InR(x |*| y))      => (self(x) |*| self(y)) :>> join }
+                .is { case InL(InL(InL(a |*| b))) => (f(a) |*| f(b)) :>> join }
+                .is { case InL(InL(InR(a |*| b))) => (f(a) |*| f(b)) :>> join }
+                .end
             }
           }
         }
 
-      override def awaitPosFst[A](f: (Done |*| A) -⚬ A): (Done |*| IT[A]) -⚬ IT[A] =
-        rec { self =>
-          λ { case d |*| t =>
-            unpack(t) either {
-              case Right(v) => selfRef(v waitFor d)
-              case Left(t) => t either {
-                case Right(x |*| y) => mismatch(self(d |*| x) |*| y)
-                case Left(t) => t either {
-                  case Left(a |*| b)  => pair(f(d |*| a) |*| b)
-                  case Right(a |*| b) => recCall(f(d |*| a) |*| b)
-                }
-              }
+      override def awaitPosFst[A]: Sub[Done |*| A, A] -⚬ ((Done |*| IT[A]) =⚬ IT[A]) =
+        λ { case *(f) =>
+          λ.closure.rec { self =>
+            { case d |*| t =>
+              switch ( unpack(t) )
+                .is { case InR(v)                 => selfRef(v waitFor d) }
+                .is { case InL(InR(x |*| y))      => mismatch(self(d |*| x) |*| y) }
+                .is { case InL(InL(InL(a |*| b))) => pair(f(d |*| a) |*| b) }
+                .is { case InL(InL(InR(a |*| b))) => recCall(f(d |*| a) |*| b) }
+                .end
             }
           }
         }

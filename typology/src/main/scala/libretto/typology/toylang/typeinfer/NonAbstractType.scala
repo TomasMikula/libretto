@@ -34,10 +34,10 @@ private[typeinfer] object Types {
   def KindMismatch[T]: Extractor[-⚬, |*|, Types[T], KindMismatch[Types[T]]] =
     OneOf.partition[TypesF[T, Types[T]]]["kindMismatch"].afterUnpack
 
-  def map[T, U](f: T -⚬ U): Types[T] -⚬ Types[U] =
-    rec { self =>
-      λ { ts =>
-        switch(ts)
+  def map[T, U]: Sub[T, U] -⚬ (Types[T] =⚬ Types[U]) =
+    λ { case *(f) =>
+      λ.closure.rec { self =>
+        switch(_)
           .is { case KindMismatch(x |*| y) => KindMismatch(self(x) |*| self(y)) }
           .is { case SingleType(t) => SingleType(f(t)) }
           .is { case Prod(ts1 |*| ts2) => Prod(self(ts1) |*| self(ts2)) }
@@ -68,14 +68,16 @@ private[typeinfer] object Types {
       }
     }
 
-  def mapWith[X, T, U](f: (X |*| T) -⚬ U)(using Cosemigroup[X]): (X |*| Types[T]) -⚬ Types[U] =
-    rec { self =>
-      λ { case +(x) |*| ts =>
-        switch(ts)
-          .is { case KindMismatch(p |*| q) => KindMismatch(self(x |*| p) |*| self(x |*| q)) }
-          .is { case SingleType(t) => SingleType(f(x |*| t)) }
-          .is { case Prod(ts1 |*| ts2) => Prod(self(x |*| ts1) |*| self(x |*| ts2)) }
-          .end
+  def mapWith[X, T, U](using Cosemigroup[X]): Sub[X |*| T, U] -⚬ ((X |*| Types[T]) =⚬ Types[U]) =
+    λ { case *(f) =>
+      λ.closure.rec { self =>
+        { case +(x) |*| ts =>
+          switch(ts)
+            .is { case KindMismatch(p |*| q) => KindMismatch(self(x |*| p) |*| self(x |*| q)) }
+            .is { case SingleType(t) => SingleType(f(x |*| t)) }
+            .is { case Prod(ts1 |*| ts2) => Prod(self(x |*| ts1) |*| self(x |*| ts2)) }
+            .end
+        }
       }
     }
 
@@ -92,35 +94,39 @@ private[typeinfer] object Types {
       }
     }
 
-  def output[T](
-    outputElem: T -⚬ Val[Type[Label]],
-  ): Types[T] -⚬ Val[types.Types[Label]] =
-    rec { self =>
-      λ { ts =>
-        switch(ts)
-          .is { case SingleType(t) =>
-            outputElem(t) :>> mapVal { types.Types.SingleType(_) }
-          }
-          .is { case Prod(ts |*| us) =>
-            (self(ts) ** self(us)) :>> mapVal { case (ts, us) => types.Types.Product(ts, us) }
-          }
-          .is { case KindMismatch(x |*| y) =>
-            (self(x) ** self(y)) :>> mapVal { case (x, y) => types.Types.KindMismatch(x, y) }
-          }
-          .end
+  def output[T]: (
+    /* outputElem: */ Sub[T, Val[Type[Label]]]
+  ) -⚬ (Types[T] =⚬ Val[types.Types[Label]]) =
+    λ { case *(outputElem) =>
+      λ.closure.rec { self =>
+        { ts =>
+          switch(ts)
+            .is { case SingleType(t) =>
+              outputElem(t) :>> mapVal { types.Types.SingleType(_) }
+            }
+            .is { case Prod(ts |*| us) =>
+              (self(ts) ** self(us)) :>> mapVal { case (ts, us) => types.Types.Product(ts, us) }
+            }
+            .is { case KindMismatch(x |*| y) =>
+              (self(x) ** self(y)) :>> mapVal { case (x, y) => types.Types.KindMismatch(x, y) }
+            }
+            .end
+        }
       }
     }
 
-  def close[T](
-    closeElem: T -⚬ Done,
-  ): Types[T] -⚬ Done =
-    rec { self =>
-      λ { ts =>
-        switch(ts)
-          .is { case SingleType(t) => closeElem(t) }
-          .is { case Prod(t |*| u) => join(self(t) |*| self(u)) }
-          .is { case KindMismatch(x |*| y) => join(self(x) |*| self(y)) }
-          .end
+  def close[T]: (
+    /* closeElem: */ Sub[T, Done]
+  ) -⚬ (Types[T] =⚬ Done) =
+    λ { case *(closeElem) =>
+      λ.closure.rec { self =>
+        { ts =>
+          switch(ts)
+            .is { case SingleType(t) => closeElem(t) }
+            .is { case Prod(t |*| u) => join(self(t) |*| self(u)) }
+            .is { case KindMismatch(x |*| y) => join(self(x) |*| self(y)) }
+            .end
+        }
       }
     }
 }
@@ -260,42 +266,46 @@ private[typeinfer] object NonAbstractType {
         .end
     }
 
-  def map[V, T, U](g: T -⚬ U): NonAbstractType[V, T] -⚬ NonAbstractType[V, U] = rec { self =>
-    λ { t =>
-      switch(t)
-        .is { case Pair(r |*| s) => Pair(g(r) |*| g(s)) }
-        .is { case Either(r |*| s) => Either(g(r) |*| g(s)) }
-        .is { case RecCall(r |*| s) => RecCall(g(r) |*| g(s)) }
-        .is { case RecType(Fix(f)) => fix(f) }
-        .is { case RecType(PFix(f |*| x)) => pfixs(f |*| Types.map(g)(x)) }
-        .is { case String(d) => String(d) }
-        .is { case Int(d) => Int(d) }
-        .is { case Unit(d) => Unit(d) }
-        .is { case Error(TypeMismatch(x |*| y)) => mismatch(self(x) |*| self(y)) }
-        .is { case Error(ForbiddenSelfRef(v)) => forbiddenSelfReference(v) }
-        .end
+  def map[V, T, U]: Sub[T, U] -⚬ (NonAbstractType[V, T] =⚬ NonAbstractType[V, U]) =
+    λ { case *(g) =>
+      λ.closure.rec { self =>
+        switch(_)
+          .is { case Pair(r |*| s) => Pair(g(r) |*| g(s)) }
+          .is { case Either(r |*| s) => Either(g(r) |*| g(s)) }
+          .is { case RecCall(r |*| s) => RecCall(g(r) |*| g(s)) }
+          .is { case RecType(Fix(f)) => fix(f) }
+          .is { case RecType(PFix(f |*| x)) => pfixs(f |*| Types.map(g)(x)) }
+          .is { case String(d) => String(d) }
+          .is { case Int(d) => Int(d) }
+          .is { case Unit(d) => Unit(d) }
+          .is { case Error(TypeMismatch(x |*| y)) => mismatch(self(x) |*| self(y)) }
+          .is { case Error(ForbiddenSelfRef(v)) => forbiddenSelfReference(v) }
+          .end
+      }
     }
-  }
 
-  def mapWith[V, X, A, B](g: (X |*| A) -⚬ B)(using
+  def mapWith[V, X, A, B](using
     X: CloseableCosemigroup[X],
     V: Junction.Positive[V],
-  ): (X |*| NonAbstractType[V, A]) -⚬ NonAbstractType[V, B] = rec { self =>
-    λ { case +(x) |*| t =>
-      switch(t)
-        .is { case Pair(r |*| s) => Pair(g(x |*| r) |*| g(x |*| s)) }
-        .is { case Either(r |*| s) => Either(g(x |*| r) |*| g(x |*| s)) }
-        .is { case RecCall(r |*| s) => RecCall(g(x |*| r) |*| g(x |*| s)) }
-        .is { case RecType(Fix(f)) => fix(f waitFor X.close(x)) }
-        .is { case RecType(PFix(f |*| ts)) => pfixs(f |*| Types.mapWith(g)(x |*| ts)) }
-        .is { case String(d) => String(d waitFor X.close(x)) }
-        .is { case Int(d) => Int(d waitFor X.close(x)) }
-        .is { case Unit(d) => Unit(d waitFor X.close(x)) }
-        .is { case Error(TypeMismatch(y |*| z)) => mismatch(self(x |*| y) |*| self(x |*| z)) }
-        .is { case Error(ForbiddenSelfRef(v)) => forbiddenSelfReference(v waitFor X.close(x)) }
-        .end
+  ): Sub[X |*| A, B] -⚬ ((X |*| NonAbstractType[V, A]) =⚬ NonAbstractType[V, B]) =
+    λ { case *(g) =>
+      λ.closure.rec { self =>
+        { case +(x) |*| t =>
+          switch(t)
+            .is { case Pair(r |*| s) => Pair(g(x |*| r) |*| g(x |*| s)) }
+            .is { case Either(r |*| s) => Either(g(x |*| r) |*| g(x |*| s)) }
+            .is { case RecCall(r |*| s) => RecCall(g(x |*| r) |*| g(x |*| s)) }
+            .is { case RecType(Fix(f)) => fix(f waitFor X.close(x)) }
+            .is { case RecType(PFix(f |*| ts)) => pfixs(f |*| Types.mapWith(g)(x |*| ts)) }
+            .is { case String(d) => String(d waitFor X.close(x)) }
+            .is { case Int(d) => Int(d waitFor X.close(x)) }
+            .is { case Unit(d) => Unit(d waitFor X.close(x)) }
+            .is { case Error(TypeMismatch(y |*| z)) => mismatch(self(x |*| y) |*| self(x |*| z)) }
+            .is { case Error(ForbiddenSelfRef(v)) => forbiddenSelfReference(v waitFor X.close(x)) }
+            .end
+        }
+      }
     }
-  }
 
   def splitMap[V, T, Y, Z](using
     Cosemigroup[V],
@@ -385,93 +395,102 @@ private[typeinfer] object NonAbstractType {
         .end
     }}
 
-  def output[V, T](
-    outputElem: T -⚬ Val[Type[Label]],
-    selfRef: V -⚬ Val[Type[Label]],
-  ): NonAbstractType[V, T] -⚬ Val[Type[Label]] = rec { self =>
-    λ { x =>
-      switch(x)
-        .is { case Pair(x1 |*| x2) =>
-          (outputElem(x1) ** outputElem(x2)) :>> mapVal { case (t1, t2) =>
-            Type.pair(t1, t2)
-          }
+  def output[V, T]: (
+    /* outputElem: */ Sub[T, Val[Type[Label]]] |*|
+    /* selfRef:    */ Sub[V, Val[Type[Label]]]
+  ) -⚬ (NonAbstractType[V, T] =⚬ Val[Type[Label]]) =
+    λ { case *(outputElem) |*| *(selfRef) =>
+      λ.closure.rec { self =>
+        { x =>
+          switch(x)
+            .is { case Pair(x1 |*| x2) =>
+              (outputElem(x1) ** outputElem(x2)) :>> mapVal { case (t1, t2) =>
+                Type.pair(t1, t2)
+              }
+            }
+            .is { case Either(a |*| b) =>
+              (outputElem(a) ** outputElem(b)) :>> mapVal { case (a, b) =>
+                Type.pair(a, b)
+              }
+            }
+            .is { case RecCall(a |*| b) =>
+              (outputElem(a) ** outputElem(b)) :>> mapVal { case (a, b) =>
+                Type.recCall(a, b)
+              }
+            }
+            .is { case RecType(Fix(f)) =>
+              f :>> mapVal { f => Type.fix(f.vmap(Label.ScalaTParam(_))) }
+            }
+            .is { case RecType(PFix(pf |*| p)) =>
+              (pf ** Types.output(outputElem)(p)) :>> mapVal { case (pf, p) =>
+                Type.Fun.pfixUnsafe(pf.vmap(Label.ScalaTParam(_)), p)
+              }
+            }
+            .is { case String(x) => x :>> constVal(Type.string) }
+            .is { case Int(x) => x :>> constVal(Type.int) }
+            .is { case Unit(x) => x :>> constVal(Type.unit) }
+            .is { case Error(ForbiddenSelfRef(v)) => selfRef(v) }
+            .is { case Error(TypeMismatch(x |*| y)) =>
+              (self(x) ** self(y)) :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
+            }
+            .end
         }
-        .is { case Either(a |*| b) =>
-          (outputElem(a) ** outputElem(b)) :>> mapVal { case (a, b) =>
-            Type.pair(a, b)
-          }
-        }
-        .is { case RecCall(a |*| b) =>
-          (outputElem(a) ** outputElem(b)) :>> mapVal { case (a, b) =>
-            Type.recCall(a, b)
-          }
-        }
-        .is { case RecType(Fix(f)) =>
-          f :>> mapVal { f => Type.fix(f.vmap(Label.ScalaTParam(_))) }
-        }
-        .is { case RecType(PFix(pf |*| p)) =>
-          (pf ** Types.output(outputElem)(p)) :>> mapVal { case (pf, p) =>
-            Type.Fun.pfixUnsafe(pf.vmap(Label.ScalaTParam(_)), p)
-          }
-        }
-        .is { case String(x) => x :>> constVal(Type.string) }
-        .is { case Int(x) => x :>> constVal(Type.int) }
-        .is { case Unit(x) => x :>> constVal(Type.unit) }
-        .is { case Error(ForbiddenSelfRef(v)) => selfRef(v) }
-        .is { case Error(TypeMismatch(x |*| y)) =>
-          (self(x) ** self(y)) :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
-        }
-        .end
+      }
     }
-  }
 
-  def close[V, T](
-    closeElem: T -⚬ Done,
-    closeVar: V -⚬ Done,
-  ): NonAbstractType[V, T] -⚬ Done = rec { self =>
-    λ { t =>
-      switch(t)
-        .is { case Pair(a |*| b) => join(closeElem(a) |*| closeElem(b)) }
-        .is { case Either(a |*| b) => join(closeElem(a) |*| closeElem(b)) }
-        .is { case RecCall(a |*| b) => join(closeElem(a) |*| closeElem(b)) }
-        .is { case RecType(Fix(f)) => neglect(f) }
-        .is { case RecType(PFix(f |*| x)) => join(neglect(f) |*| Types.close(closeElem)(x)) }
-        .is { case String(x) => x }
-        .is { case Int(x) => x }
-        .is { case Unit(x) => x }
-        .is { case Error(ForbiddenSelfRef(v)) => closeVar(v) }
-        .is { case Error(TypeMismatch(x |*| y)) => join(self(x) |*| self(y)) }
-        .end
+  def close[V, T]: (
+    /* closeElem: */ Sub[T, Done] |*|
+    /* closeVar: */  Sub[V, Done]
+  ) -⚬ (NonAbstractType[V, T] =⚬ Done) =
+    λ { case *(closeElem) |*| *(closeVar) =>
+      λ.closure.rec { self =>
+        { t =>
+          switch(t)
+            .is { case Pair(a |*| b) => join(closeElem(a) |*| closeElem(b)) }
+            .is { case Either(a |*| b) => join(closeElem(a) |*| closeElem(b)) }
+            .is { case RecCall(a |*| b) => join(closeElem(a) |*| closeElem(b)) }
+            .is { case RecType(Fix(f)) => neglect(f) }
+            .is { case RecType(PFix(f |*| x)) => join(neglect(f) |*| Types.close(closeElem)(x)) }
+            .is { case String(x) => x }
+            .is { case Int(x) => x }
+            .is { case Unit(x) => x }
+            .is { case Error(ForbiddenSelfRef(v)) => closeVar(v) }
+            .is { case Error(TypeMismatch(x |*| y)) => join(self(x) |*| self(y)) }
+            .end
+        }
+      }
     }
-  }
 
-  def awaitPosFst[V, T](
-    g: (Done |*| T) -⚬ T,
-    h: (Done |*| V) -⚬ V,
-  ): (Done |*| NonAbstractType[V, T]) -⚬ NonAbstractType[V, T] = rec { self =>
-    λ { case d |*| t =>
-      switch(t)
-        .is { case Pair(a |*| b) => Pair(g(d |*| a) |*| b) }
-        .is { case Either(a |*| b) => Either(g(d |*| a) |*| b) }
-        .is { case RecCall(a |*| b) => RecCall(g(d |*| a) |*| b) }
-        .is { case RecType(Fix(f)) => fix(f waitFor d) }
-        .is { case RecType(PFix(f |*| x)) => pfixs(f.waitFor(d) |*| x) }
-        .is { case String(x) => String(join(d |*| x)) }
-        .is { case Int(x) => Int(join(d |*| x)) }
-        .is { case Unit(x) => Unit(join(d |*| x)) }
-        .is { case Error(ForbiddenSelfRef(v)) => forbiddenSelfReference(h(d |*| v)) }
-        .is { case Error(TypeMismatch(x |*| y)) => mismatch(self(d |*| x) |*| y) }
-        .end
+  def awaitPosFst[V, T]: (
+    Sub[Done |*| T, T] |*|
+    Sub[Done |*| V, V]
+  ) -⚬ ((Done |*| NonAbstractType[V, T]) =⚬ NonAbstractType[V, T]) =
+    λ { case *(g) |*| *(h) =>
+      λ.closure.rec { self =>
+        { case d |*| t =>
+          switch(t)
+            .is { case Pair(a |*| b) => Pair(g(d |*| a) |*| b) }
+            .is { case Either(a |*| b) => Either(g(d |*| a) |*| b) }
+            .is { case RecCall(a |*| b) => RecCall(g(d |*| a) |*| b) }
+            .is { case RecType(Fix(f)) => fix(f waitFor d) }
+            .is { case RecType(PFix(f |*| x)) => pfixs(f.waitFor(d) |*| x) }
+            .is { case String(x) => String(join(d |*| x)) }
+            .is { case Int(x) => Int(join(d |*| x)) }
+            .is { case Unit(x) => Unit(join(d |*| x)) }
+            .is { case Error(ForbiddenSelfRef(v)) => forbiddenSelfReference(h(d |*| v)) }
+            .is { case Error(TypeMismatch(x |*| y)) => mismatch(self(d |*| x) |*| y) }
+            .end
+        }
+      }
     }
-  }
 
-  given junctionNonAbstractType[V, T](using
-    T: Junction.Positive[T],
-    V: Junction.Positive[V],
-  ): Junction.Positive[NonAbstractType[V, T]] with {
-    override def awaitPosFst: (Done |*| NonAbstractType[V, T]) -⚬ NonAbstractType[V, T] =
-      NonAbstractType.awaitPosFst[V, T](T.awaitPosFst, V.awaitPosFst)
-  }
+  // given junctionNonAbstractType[V, T](using
+  //   T: Junction.Positive[T],
+  //   V: Junction.Positive[V],
+  // ): Junction.Positive[NonAbstractType[V, T]] with {
+  //   override def awaitPosFst: (Done |*| NonAbstractType[V, T]) -⚬ NonAbstractType[V, T] =
+  //     NonAbstractType.awaitPosFst[V, T](T.awaitPosFst, V.awaitPosFst)
+  // }
 
   private class CompilationTarget[V, T](
     lift: NonAbstractType[V, T] -⚬ T,
@@ -589,13 +608,13 @@ private[typeinfer] object NonAbstractType {
   }
 
   given TypeOps[NonAbstractType[Val[Label], _], Type[Label], Label] with {
-    override def map[A, B](f: A -⚬ B): NonAbstractType[Val[Label], A] -⚬ NonAbstractType[Val[Label], B] =
-      NonAbstractType.map(f)
+    override def map[A, B]: Sub[A, B] -⚬ (NonAbstractType[Val[Label], A] =⚬ NonAbstractType[Val[Label], B]) =
+      NonAbstractType.map
 
-    override def mapWith[X, A, B](
-      f: (X |*| A) -⚬ B,
-    )(using CloseableCosemigroup[X]): (X |*| NonAbstractType[Val[Label], A]) -⚬ NonAbstractType[Val[Label], B] =
-      NonAbstractType.mapWith(f)
+    override def mapWith[X, A, B](using CloseableCosemigroup[X]): (
+      Sub[X |*| A, B]
+    ) -⚬ ((X |*| NonAbstractType[Val[Label], A]) =⚬ NonAbstractType[Val[Label], B]) =
+      NonAbstractType.mapWith
 
     override def merge[A]: (
       Sub[A |*| A, A]
@@ -607,16 +626,19 @@ private[typeinfer] object NonAbstractType {
     ) -⚬ (NonAbstractType[Val[Label], A] =⚬ (NonAbstractType[Val[Label], A] |*| NonAbstractType[Val[Label], A])) =
       NonAbstractType.split
 
-    override def output[A](f: A -⚬ Val[Type[Label]]): NonAbstractType[Val[Label], A] -⚬ Val[Type[Label]] =
-      NonAbstractType.output(f, mapVal(Type.forbiddenSelfReference(_)))
+    override def output[A]: Sub[A, Val[Type[Label]]] -⚬ (NonAbstractType[Val[Label], A] =⚬ Val[Type[Label]]) =
+      introSnd(sub(mapVal(Type.forbiddenSelfReference[Label](_)))) >
+      NonAbstractType.output
 
-    override def close[A](f: A -⚬ Done): NonAbstractType[Val[Label], A] -⚬ Done =
-      NonAbstractType.close(f, neglect)
+    override def close[A]: Sub[A, Done] -⚬ (NonAbstractType[Val[Label], A] =⚬ Done) =
+      introSnd(sub(neglect)) >
+      NonAbstractType.close
 
     override def forbiddenSelfReference[A]: Val[Label] -⚬ NonAbstractType[Val[Label], A] =
       NonAbstractType.forbiddenSelfReference
 
-    override def awaitPosFst[A](f: (Done |*| A) -⚬ A): (Done |*| NonAbstractType[Val[Label], A]) -⚬ NonAbstractType[Val[Label], A] =
-      NonAbstractType.awaitPosFst(f, summon[Junction.Positive[Val[Label]]].awaitPosFst)
+    override def awaitPosFst[A]: Sub[Done |*| A, A] -⚬ ((Done |*| NonAbstractType[Val[Label], A]) =⚬ NonAbstractType[Val[Label], A]) =
+      introSnd(sub(summon[Junction.Positive[Val[Label]]].awaitPosFst)) >
+      NonAbstractType.awaitPosFst
   }
 }
