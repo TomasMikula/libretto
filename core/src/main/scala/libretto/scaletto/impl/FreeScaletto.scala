@@ -1088,7 +1088,7 @@ object FreeScaletto extends Scaletto {
       NonEmptyList(
         s"Library code defininition at ${defnPos.filename}:${defnPos.line} attempts to capture self-references to parent recursive functions:",
         refs.map { ref =>
-          val p = ref.pos
+          val p = ref.defnPos
           s" - Recursive function defined at ${p.filename}:${p.line}"
         }.toList
       ) :+ s"Consider rewriting the library function as taking a `Sub`-routine instead of capturing a self-reference."
@@ -1116,7 +1116,7 @@ object FreeScaletto extends Scaletto {
 
   private case class ForbiddenCaptureOfRecursiveCallsIntoLibCode(
     libCodeDefnPos: SourcePos,
-    capturedRefs: NonEmptyList[-⚬.RecF[?, ?]],
+    capturedRefs: NonEmptyList[-⚬.SelfRef[?, ?]],
   )
 
   private def raiseTotalityViolations(es: NonEmptyList[(SourcePos, NonEmptyList[String])]): Nothing =

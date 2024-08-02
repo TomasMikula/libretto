@@ -281,8 +281,9 @@ private class ExecutionImpl(
       }
 
       f match {
-        case r: -⚬.RecF[A, B] =>
-          this.extend(r.recursed)
+        case r: -⚬.SelfRef[A, B] =>
+          // TODO: (?) Interpret a Blueprint instead, to make this case unrepresentable?
+          bug(s"Trying to execute a program with recursive self-references.")
 
         case -⚬.FunRef(_, f) =>
           // TODO: should be guarded, i.e. expanded only when needed

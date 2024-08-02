@@ -194,10 +194,12 @@ sealed trait -⚬[A, B] {
     import SizeAndRefs.one
 
     this match
-      case r: RecF[A, B] =>
-        one + r.f(Regular(Id()).asInstanceOf[A -⚬ B]).sizeAndRefs // XXX
+      case r: SelfRef[A, B] =>
+        one
       case FunRef(id, f) =>
         SizeAndRefs(1, Map(id -> f))
+      case ConstSub(f) =>
+        one + f.sizeAndRefs
       case Regular(f) =>
         one + f.foldMonoid([X, Y] => (g: X -⚬ Y) => g.sizeAndRefs)
 
@@ -205,9 +207,9 @@ sealed trait -⚬[A, B] {
     val SizeAndRefs(n, refs) = this.sizeAndRefs
     computeSize(n, Set.empty, refs.toList)
 
-  def blueprint: Validated[RecF[?, ?], Blueprint[A, B]] =
+  def blueprint: Validated[SelfRef[?, ?], Blueprint[A, B]] =
     this match
-      case r: RecF[A, B] =>
+      case r: SelfRef[A, B] =>
         invalid(r)
       case FunRef(id, f) =>
         Valid(Blueprint.FunRef(id, f))
@@ -233,13 +235,11 @@ object -⚬ {
     f: Blueprint[A, B],
   ) extends (One -⚬ Sub[A, B])
 
-  class RecF[A, B](
-    val pos: SourcePos,
-    val f: (A -⚬ B) => (A -⚬ B),
-  ) extends (A -⚬ B) { self =>
-    val recursed: A -⚬ B = f(self)
+  class SelfRef[A, B](
+    val defnPos: SourcePos,
+  ) extends (A -⚬ B) {
 
-    infix def testEqual[X, Y](that: RecF[X, Y]): Option[(A =:= X, B =:= Y)] =
+    infix def testEqual[X, Y](that: SelfRef[X, Y]): Option[(A =:= X, B =:= Y)] =
       Option.when(this eq that)((
         summon[A =:= A].asInstanceOf[A =:= X],
         summon[B =:= B].asInstanceOf[B =:= Y],
@@ -355,20 +355,20 @@ object -⚬ {
     pos: SourcePos,
     f: (A -⚬ B) => (A -⚬ B),
   ): A -⚬ B =
-    val placeholder = RecF(pos, f)
-    val body = placeholder.recursed
+    val placeholder = SelfRef[A, B](pos)
+    val body = f(placeholder)
     elimSelfRef(placeholder, body) match
       case None => body
       case Some(h) => Regular(RecFun(h))
 
   private def elimSelfRef[X, Y, A, B](
-    ref: RecF[X, Y],
+    ref: SelfRef[X, Y],
     f: A -⚬ B,
   ): Option[(Sub[X, Y] |*| A) -⚬ B] = {
     type SXY = Sub[X, Y]
 
     f match
-      case ref1: RecF[a, b] =>
+      case ref1: SelfRef[a, b] =>
         (ref1 testEqual ref) map:
           case (TypeEq(Refl()), TypeEq(Refl())) =>
             summon[X =:= A]
