@@ -1,14 +1,46 @@
 package libretto.scaletto.impl
 
 import libretto.lambda.{ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, Distribution, Member, SemigroupalCategory}
-import libretto.lambda.util.TypeEq
+import libretto.lambda.util.{Applicative, SourcePos, TypeEq, Validated}
 import libretto.lambda.util.TypeEq.Refl
+import libretto.lambda.util.Validated.{Valid, invalid}
 import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
 
 import phantoms.*
 
-sealed trait Fun[+ ->[_, _], A, B]
+sealed trait Fun[+ ->[_, _], A, B] {
+  import Fun.*
+
+  def translateA[->>[_, _], G[_]](
+    h: [X, Y] => (X -> Y) => G[X ->> Y],
+  )(using
+    G: Applicative[G],
+  ): G[Fun[->>, A, B]] =
+    this match
+      case l: Leaf[A, B] => G.pure(l: Fun[->>, A, B])
+      case AndThen(f, g) => G.map2(h(f), h(g)) { AndThen(_, _) }
+      case Par(f1, f2) => G.map2(h(f1), h(f2)) { Par(_, _) }
+      case EitherF(f, g) => G.map2(h(f), h(g)) { EitherF(_, _) }
+      case Choice(f, g) => G.map2(h(f), h(g)) { Choice(_, _) }
+      case c: CaptureIntoSub[arr, x, a, b] => G.map2(h(c.discardCapture), h(c.splitCapture)) { CaptureIntoSub[->>, x, a, b](_, _) }
+      case RecFun(f) => h(f).map { RecFun(_) }
+
+  def foldMonoid[M](
+    h: [X, Y] => (X -> Y) => M,
+  )(using
+    M: Monoid[M],
+  ): M = {
+    this match
+      case _: Leaf[A, B] => M.unit
+      case AndThen(f, g) => h(f) <> h(g)
+      case Par(f1, f2) => h(f1) <> h(f2)
+      case EitherF(f, g) => h(f) <> h(g)
+      case Choice(f, g) => h(f) <> h(g)
+      case CaptureIntoSub(dis, spl) => h(dis) <> h(spl)
+      case RecFun(f) => h(f)
+  }
+}
 
 object Fun {
   sealed trait Leaf[A, B] extends Fun[Nothing, A, B]
@@ -41,11 +73,6 @@ object Fun {
     discardCapture: X -> One,
     splitCapture: X -> (X |*| X),
   ) extends Fun[->, Sub[X |*| A, B] |*| X, Sub[A, B]]
-
-  case class FunRef[->[_, _], A, B](
-    id: Object, // XXX: use a proper Id type
-    f: A -> B,
-  ) extends Fun[->, A, B]
 
   case class Id[A]() extends Leaf[A, A]
   case class IntroFst[B]() extends Leaf[B, One |*| B]
@@ -152,6 +179,10 @@ object Fun {
   ) extends Leaf[Res[R] |*| Val[A], Val[E] |+| ((Res[S] |*| Res[T]) |*| Val[B])]
 }
 
+/** Libretto function representation, allowing for auxiliary constructs like self-references.
+ *
+ * @see [[Blueprint]] which does not allow self-references
+ */
 sealed trait -⚬[A, B] {
   import -⚬.*
   import Fun.*
@@ -165,98 +196,27 @@ sealed trait -⚬[A, B] {
     this match
       case r: RecF[A, B] =>
         one + r.f(Regular(Id()).asInstanceOf[A -⚬ B]).sizeAndRefs // XXX
+      case FunRef(id, f) =>
+        SizeAndRefs(1, Map(id -> f))
       case Regular(f) =>
-        f match
-          case Id() => one
-          case AndThen(f, g) => one + f.sizeAndRefs + g.sizeAndRefs
-          case p: Par[arr, a1, a2, b1, b2] => one + p.f1.asInstanceOf[a1 -⚬ b1].sizeAndRefs + p.f2.asInstanceOf[a2 -⚬ b2].sizeAndRefs
-          case IntroFst() => one
-          case IntroSnd() => one
-          case ElimFst() => one
-          case ElimSnd() => one
-          case AssocLR() => one
-          case AssocRL() => one
-          case Swap() => one
-          case InjectL() => one
-          case InjectR() => one
-          case e: EitherF[arr, a, b, c] => one + e.f.asInstanceOf[a -⚬ c].sizeAndRefs + e.g.asInstanceOf[b -⚬ c].sizeAndRefs
-          case Absurd() => one
-          case OneOfInject(i) => one
-          case OneOfPeel() => one
-          case OneOfUnpeel() => one
-          case OneOfExtractSingle() => one
-          case ChooseL() => one
-          case ChooseR() => one
-          case c: Choice[arr, a, b, c] => one + c.f.asInstanceOf[a -⚬ b].sizeAndRefs + c.g.asInstanceOf[a -⚬ c].sizeAndRefs
-          case PingF() => one
-          case PongF() => one
-          case DelayIndefinitely() => one
-          case RegressInfinitely() => one
-          case Fork() => one
-          case Join() => one
-          case ForkNeed() => one
-          case JoinNeed() => one
-          case NotifyDoneL() => one
-          case NotifyNeedL() => one
-          case ForkPing() => one
-          case ForkPong() => one
-          case JoinPing() => one
-          case JoinPong() => one
-          case StrengthenPing() => one
-          case StrengthenPong() => one
-          case JoinRTermini() => one
-          case JoinLTermini() => one
-          case NotifyEither() => one
-          case NotifyChoice() => one
-          case InjectLOnPing() => one
-          case ChooseLOnPong() => one
-          case DistributeL() => one
-          case CoDistributeL() => one
-          case RInvertSignal() => one
-          case LInvertSignal() => one
-          case RInvertPingPong() => one
-          case LInvertPongPing() => one
-          case RInvertTerminus() => one
-          case LInvertTerminus() => one
-          case RecFun(f) => one + f.sizeAndRefs
-          case InvokeSub() => one
-          case IgnoreSub() => one
-          case DupSub() => one
-          case c: CaptureIntoSub[arr, x, a, b] => one + c.discardCapture.asInstanceOf[x -⚬ One].sizeAndRefs + c.splitCapture.asInstanceOf[x -⚬ (x |*| x)].sizeAndRefs
-          case FunRef(id, f) => SizeAndRefs(1, Map(id -> f))
-          case Pack() => one
-          case Unpack() => one
-          case RacePair() => one
-          case SelectPair() => one
-          case Forevert() => one
-          case Backvert() => one
-          case DistributeInversion() => one
-          case FactorOutInversion() => one
-          case CrashWhenDone(msg) => one
-          case Delay() => one
-          case LiftEither() => one
-          case LiftPair() => one
-          case UnliftPair() => one
-          case MapVal(f) => one
-          case ConstVal(a) => one
-          case ConstNeg(a) => one
-          case Neglect() => one
-          case NotifyVal() => one
-          case NotifyNeg() => one
-          case DebugPrint(msg) => one
-          case Acquire(acquire, release) => one
-          case TryAcquire(acquire, release) => one
-          case Release() => one
-          case ReleaseWith(f) => one
-          case Effect(f) => one
-          case EffectWr(f) => one
-          case TryEffectAcquire(f, release) => one
-          case TryTransformResource(f, release) => one
-          case TrySplitResource(f, release1, release2) => one
+        one + f.foldMonoid([X, Y] => (g: X -⚬ Y) => g.sizeAndRefs)
 
   lazy val size: Long =
     val SizeAndRefs(n, refs) = this.sizeAndRefs
     computeSize(n, Set.empty, refs.toList)
+
+  def blueprint: Validated[RecF[?, ?], Blueprint[A, B]] =
+    this match
+      case r: RecF[A, B] =>
+        invalid(r)
+      case FunRef(id, f) =>
+        Valid(Blueprint.FunRef(id, f))
+      case ConstSub(f) =>
+        Valid(Blueprint.ConstSub(f))
+      case Regular(f) =>
+        f
+          .translateA([X, Y] => _.blueprint)
+          .map(Blueprint.Regular(_))
 }
 
 object -⚬ {
@@ -264,7 +224,19 @@ object -⚬ {
 
   case class Regular[A, B](value: Fun[-⚬, A, B]) extends (A -⚬ B)
 
-  class RecF[A, B](val f: (A -⚬ B) => (A -⚬ B)) extends (A -⚬ B) { self =>
+  case class FunRef[A, B](
+    id: Object, // XXX: use a proper Id type
+    f: Blueprint[A, B],
+  ) extends (A -⚬ B)
+
+  case class ConstSub[A, B](
+    f: Blueprint[A, B],
+  ) extends (One -⚬ Sub[A, B])
+
+  class RecF[A, B](
+    val pos: SourcePos,
+    val f: (A -⚬ B) => (A -⚬ B),
+  ) extends (A -⚬ B) { self =>
     val recursed: A -⚬ B = f(self)
 
     infix def testEqual[X, Y](that: RecF[X, Y]): Option[(A =:= X, B =:= Y)] =
@@ -357,8 +329,33 @@ object -⚬ {
   ): (Sub[X |*| A, B] |*| X) -⚬ Sub[A, B] =
     Regular(CaptureIntoSub(discardCapture, splitCapture))
 
-  def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B =
-    val placeholder = RecF(f)
+  def fromBlueprint[A, B](f: Blueprint[A, B]): A -⚬ B =
+    f match
+      case Blueprint.FunRef(id, f) =>
+        FunRef(id, f)
+      case Blueprint.ConstSub(f) =>
+        ConstSub(f)
+      case Blueprint.Regular(f) =>
+        Regular(
+          f match
+            case l: Leaf[A, B] => l: Fun[-⚬, A, B]
+            case AndThen(f, g) => AndThen(fromBlueprint(f), fromBlueprint(g))
+            case Par(f, g) => Par(fromBlueprint(f), fromBlueprint(g))
+            case EitherF(f, g) => EitherF(fromBlueprint(f), fromBlueprint(g))
+            case Choice(f, g) => Choice(fromBlueprint(f), fromBlueprint(g))
+            case RecFun(f) => RecFun(fromBlueprint(f))
+            case c: CaptureIntoSub[arr, x, a, b] =>
+              CaptureIntoSub[-⚬, x, a, b](
+                fromBlueprint(c.discardCapture),
+                fromBlueprint(c.splitCapture)
+              )
+        )
+
+  def rec[A, B](
+    pos: SourcePos,
+    f: (A -⚬ B) => (A -⚬ B),
+  ): A -⚬ B =
+    val placeholder = RecF(pos, f)
     val body = placeholder.recursed
     elimSelfRef(placeholder, body) match
       case None => body
@@ -377,6 +374,10 @@ object -⚬ {
             summon[X =:= A]
             summon[Y =:= B]
             Regular(InvokeSub[X, Y]()): (Sub[X, Y] |*| A) -⚬ B
+
+      case FunRef(_, _) | ConstSub(_) =>
+        // FunRef and ConstSub are acyclic by construction
+        None
 
       case Regular(f) =>
         f match
@@ -419,45 +420,13 @@ object -⚬ {
               case (None, None) => None
               case (Some(d), _) => libretto.lambda.UnhandledCase.raise(s"Recursive call in discarder of the captured expression")
               case (_, Some(s)) => libretto.lambda.UnhandledCase.raise(s"Recursive call in splitter of the captured expression")
-          case f @ FunRef(_, _) =>
-            // TODO: make FunRef acyclic by construction
+
+          case _: Leaf[A, B] =>
             None
-
-          case Id() | IntroFst() | IntroSnd() | ElimFst() | ElimSnd() | AssocLR() | AssocRL()
-            | Swap() | InjectL() | InjectR() | Absurd() | OneOfInject(_) | OneOfPeel()
-            | OneOfUnpeel() | OneOfExtractSingle() | ChooseL() | ChooseR() | PingF() | PongF()
-            | DelayIndefinitely() | RegressInfinitely() | Fork() | Join() | ForkNeed() | JoinNeed()
-            | NotifyDoneL() | NotifyNeedL() | ForkPing() | ForkPong() | JoinPing() | JoinPong()
-            | StrengthenPing() | StrengthenPong() | JoinRTermini() | JoinLTermini()
-            | NotifyEither() | NotifyChoice() | InjectLOnPing() | ChooseLOnPong()
-            | DistributeL() | CoDistributeL() | RInvertSignal() | LInvertSignal()
-            | RInvertPingPong() | LInvertPongPing() | RInvertTerminus() | LInvertTerminus()
-            | InvokeSub() | IgnoreSub() | DupSub() | Pack() | Unpack()
-            | RacePair() | SelectPair() | Forevert() | Backvert() | DistributeInversion() | FactorOutInversion()
-            | CrashWhenDone(_) | Delay() | LiftEither() | LiftPair() | UnliftPair()
-            | MapVal(_) | ConstVal(_) | ConstNeg(_) | Neglect() | NotifyVal() | NotifyNeg()
-            | DebugPrint(_) | Acquire(_, _) | TryAcquire(_, _) | Release() | ReleaseWith(_)
-            | Effect(_) | EffectWr(_) | TryEffectAcquire(_, _) | TryTransformResource(_, _) | TrySplitResource(_, _, _) =>
-            None
-  }
-
-  private[-⚬] case class SizeAndRefs(size: Long, refs: Map[Object, ? -⚬ ?]):
-    def +(that: SizeAndRefs): SizeAndRefs =
-      SizeAndRefs(this.size + that.size, this.refs ++ that.refs)
-
-    def +(n: Int): SizeAndRefs =
-      SizeAndRefs(size + n, refs)
-
-  private[-⚬] object SizeAndRefs {
-    def apply(n: Int): SizeAndRefs =
-      SizeAndRefs(n, Map.empty)
-
-    val one: SizeAndRefs =
-      SizeAndRefs(1)
   }
 
   @tailrec
-  private[-⚬] def computeSize(acc: Long, counted: Set[Object], togo: List[(Object, ? -⚬ ?)]): Long =
+  private[-⚬] def computeSize(acc: Long, counted: Set[Object], togo: List[(Object, Blueprint[?, ?])]): Long =
     togo match
       case Nil =>
         acc
@@ -467,4 +436,49 @@ object -⚬ {
         else
           val SizeAndRefs(n, refs) = f.sizeAndRefs
           computeSize(acc + n, counted + id, refs.toList ::: tail)
+}
+
+/** A representation of Libretto functions. Unlike [[-⚬]], it is a proper blueprint
+ * in that it does not exploit cycles in the (Scala-level) object graph.
+ */
+enum Blueprint[A, B]:
+  case Regular(value: Fun[Blueprint, A, B])
+
+  case FunRef(
+    id: Object, // XXX: use a proper Id type
+    f: Blueprint[A, B],
+  )
+
+  case ConstSub[A, B](
+    f: Blueprint[A, B],
+  ) extends Blueprint[One, Sub[A, B]]
+
+  private[impl] lazy val sizeAndRefs: SizeAndRefs =
+    import SizeAndRefs.one
+
+    this match
+      case FunRef(id, f) =>
+        SizeAndRefs(1, Map(id -> f))
+      case ConstSub(f) =>
+        one + f.sizeAndRefs
+      case Regular(f) =>
+        one + f.foldMonoid([X, Y] => (g: Blueprint[X, Y]) => g.sizeAndRefs)
+
+private[impl] case class SizeAndRefs(size: Long, refs: Map[Object, Blueprint[?, ?]]):
+  def +(that: SizeAndRefs): SizeAndRefs =
+    SizeAndRefs(this.size + that.size, this.refs ++ that.refs)
+
+  def +(n: Int): SizeAndRefs =
+    SizeAndRefs(size + n, refs)
+
+private[impl] object SizeAndRefs {
+  def apply(n: Int): SizeAndRefs =
+    SizeAndRefs(n, Map.empty)
+
+  val one: SizeAndRefs =
+    SizeAndRefs(1)
+
+  given Monoid[SizeAndRefs] with
+    override def unit: SizeAndRefs = SizeAndRefs(0, Map.empty)
+    override def combine(l: SizeAndRefs, r: SizeAndRefs): SizeAndRefs = l + r
 }

@@ -4,6 +4,9 @@ case class NonEmptyList[+A](head: A, tail: List[A]) {
   def ::[A0 >: A](a0: A0): NonEmptyList[A0] =
     NonEmptyList(a0, head :: tail)
 
+  def :+[A0 >: A](last: A0): NonEmptyList[A0] =
+    NonEmptyList(head, tail :+ last)
+
   def ++[A0 >: A](that: NonEmptyList[A0]): NonEmptyList[A0] =
     NonEmptyList(head, tail ::: that.toList)
 

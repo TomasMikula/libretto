@@ -9,9 +9,9 @@ trait TypeOps[F[_], T, V] {
     CloseableCosemigroup[X],
   ): (X |*| F[A]) -⚬ F[B]
 
-  def merge[A](f: (A |*| A) -⚬ A): (F[A] |*| F[A]) -⚬ F[A]
+  def merge[A]: Sub[A |*| A, A] -⚬ ((F[A] |*| F[A]) =⚬ F[A])
 
-  def split[A](f: A -⚬ (A |*| A)): F[A] -⚬ (F[A] |*| F[A])
+  def split[A]: Sub[A, A |*| A] -⚬ (F[A] =⚬ (F[A] |*| F[A]))
 
   def output[A](f: A -⚬ Val[T]): F[A] -⚬ Val[T]
 

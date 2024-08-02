@@ -82,9 +82,9 @@ class PropagatorTests extends ScalatestStarterTestSuite {
       private def selfRef[A]: Val[Label] -⚬ IT[A] =
         InferenceSupport.selfRef[Val[Label], A]
 
-      override def split[A](f: A -⚬ (A |*| A)): IT[A] -⚬ (IT[A] |*| IT[A]) =
-        rec { self =>
-          λ { case t =>
+      override def split[A]: Sub[A, A |*| A] -⚬ (IT[A] =⚬ (IT[A] |*| IT[A])) =
+        λ { case *(f) =>
+          λ.closure.rec { self => t =>
             unpack(t) either {
               case Right(lbl) =>
                 val l1 |*| l2 = dup(lbl)
@@ -109,31 +109,33 @@ class PropagatorTests extends ScalatestStarterTestSuite {
           }
         }
 
-      override def merge[A](f: (A |*| A) -⚬ A): (IT[A] |*| IT[A]) -⚬ IT[A] =
-        λ { case a |*| b =>
-          unpack(a) either {
-            case Right(xxx) => mismatch(selfRef(xxx) |*| b)
-            case Left(a) => unpack(b) either {
-              case Right(yyy) => mismatch(pack(injectL(a)) |*| selfRef(yyy))
-              case Left(b) => a either {
-                case Right(xxx) => mismatch(mismatch(xxx) |*| pack(injectL(b)))
-                case Left(a) => a either {
-                  case Left(a1 |*| a2) =>
-                    b either {
-                      case Right(yyy) => mismatch(pair(a1 |*| a2) |*| mismatch(yyy))
-                      case Left(b) => b either {
-                        case Left(b1 |*| b2)  => pair(f(a1 |*| b1) |*| f(a2 |*| b2))
-                        case Right(bi |*| bo) => mismatch(pair(a1 |*| a2) |*| recCall(bi |*| bo))
+      override def merge[A]: Sub[A |*| A, A] -⚬ ((IT[A] |*| IT[A]) =⚬ IT[A]) =
+        λ { case *(f) =>
+          λ.closure { case a |*| b =>
+            unpack(a) either {
+              case Right(xxx) => mismatch(selfRef(xxx) |*| b)
+              case Left(a) => unpack(b) either {
+                case Right(yyy) => mismatch(pack(injectL(a)) |*| selfRef(yyy))
+                case Left(b) => a either {
+                  case Right(xxx) => mismatch(mismatch(xxx) |*| pack(injectL(b)))
+                  case Left(a) => a either {
+                    case Left(a1 |*| a2) =>
+                      b either {
+                        case Right(yyy) => mismatch(pair(a1 |*| a2) |*| mismatch(yyy))
+                        case Left(b) => b either {
+                          case Left(b1 |*| b2)  => pair(f(a1 |*| b1) |*| f(a2 |*| b2))
+                          case Right(bi |*| bo) => mismatch(pair(a1 |*| a2) |*| recCall(bi |*| bo))
+                        }
                       }
-                    }
-                  case Right(ai |*| ao) =>
-                    b either {
-                      case Right(yyy) => mismatch(recCall(ai |*| ao) |*| mismatch(yyy))
-                      case Left(b) => b either {
-                        case Left(b1 |*| b2)  => mismatch(recCall(ai |*| ao) |*| pair(b1 |*| b2))
-                        case Right(bi |*| bo) => recCall(f(ai |*| bi) |*| f(ao |*| bo))
+                    case Right(ai |*| ao) =>
+                      b either {
+                        case Right(yyy) => mismatch(recCall(ai |*| ao) |*| mismatch(yyy))
+                        case Left(b) => b either {
+                          case Left(b1 |*| b2)  => mismatch(recCall(ai |*| ao) |*| pair(b1 |*| b2))
+                          case Right(bi |*| bo) => recCall(f(ai |*| bi) |*| f(ao |*| bo))
+                        }
                       }
-                    }
+                  }
                 }
               }
             }

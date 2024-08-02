@@ -237,7 +237,7 @@ object Fun {
   ): Nothing = {
     val msgs =
       es.flatMap:
-        case Overused(vars) =>
+        case Overused(vars, ()) =>
           NonEmptyList.of(s"Variables used more than once:\n${printVars(vars)}")
         case Unused(v, ()) =>
           NonEmptyList.of(s"Unused variable: ${printVar(v)}")

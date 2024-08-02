@@ -341,7 +341,7 @@ trait CoreDSL {
   def lInvertTerminus: One -⚬ (LTerminus |*| RTerminus)
 
   @deprecated("Uses non-eliminatable Scala function. Use the `rec` variant without Scala function, or `λ.rec`.")
-  def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B
+  def rec[A, B](using pos: SourcePos)(f: (A -⚬ B) => (A -⚬ B)): A -⚬ B
 
   def rec[A, B](f: (Sub[A, B] |*| A) -⚬ B): A -⚬ B
 
@@ -350,6 +350,11 @@ trait CoreDSL {
 
   /** A subroutine is available any number of times. */
   given comonoidSub[A, B]: Comonoid[Sub[A, B]]
+
+  def sub[A, B](using pos: SourcePos)(f: A -⚬ B): One -⚬ Sub[A, B]
+
+  def subroutine[A, B](f: A -⚬ B)(using SourcePos, LambdaContext): $[Sub[A, B]] =
+    constant(sub(f))
 
   /** Hides one level of a recursive type definition. */
   def pack[F[_]]: F[Rec[F]] -⚬ Rec[F]
@@ -370,7 +375,7 @@ trait CoreDSL {
   def selectPair: (One |&| One) -⚬ (Pong |*| Pong)
 
   // TODO: make it `named(Id)(A -⚬ B)`, using a unique identifier
-  def sharedCode[A, B](f: A -⚬ B): A -⚬ B
+  def sharedCode[A, B](using SourcePos)(f: A -⚬ B): A -⚬ B
 
   def category: SymmetricMonoidalCategory[-⚬, |*|, One] =
     new SymmetricMonoidalCategory[-⚬, |*|, One] {
@@ -776,8 +781,11 @@ trait CoreDSL {
   }
 
   implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
-    def map[B](f: $[A] => $[B])(using F: Functor[-⚬, F], ctx: LambdaContext): $[F[B]] =
-      fa > F.lift(λ(f))
+    def map[B](using SourcePos, LambdaContext)(f: A -⚬ B)(using F: Functor[-⚬, F]): $[F[B]] =
+      fa :>> F.lift(f)
+
+    def map[B](using SourcePos, LambdaContext)(f: $[A] => $[B])(using Functor[-⚬, F]): $[F[B]] =
+      map(λ(f))
 
     def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F], ctx: LambdaContext): $[F[B]] =
       fa > F.liftF(λ(f))

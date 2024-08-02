@@ -3,6 +3,7 @@ package libretto.typology.inference
 import libretto.lambda.{Extractor, Partitioning}
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.StarterKit.{|| as |, *}
+import libretto.scaletto.StarterKit.$.*
 import scala.annotation.targetName
 
 trait Propagator[F[_], T, V] {
@@ -232,45 +233,68 @@ private[inference] class PropagatorImpl[
 
   override lazy val merge: (Tp |*| Tp) -⚬ Tp =
     sharedCode {
-      rec { self =>
-        val split = sharedCode { split_(self) }
-        merge_(split)
+      λ.rec { self => a_b =>
+        val merge: $[Unlimited[(Tp |*| Tp) =⚬ Tp]] =
+          Unlimited(self).map(fun)
+        val split: $[Unlimited[Tp =⚬ (Tp |*| Tp)]] =
+          Unlimited(merge).map(split_)
+        merge_(split)(a_b)
       }
     }
 
   override lazy val split: Tp -⚬ (Tp |*| Tp) =
     sharedCode {
-      rec { self =>
-        val merge = sharedCode { merge_(self) }
-        split_(merge)
+      λ.rec { self => a =>
+        val split: $[Unlimited[Tp =⚬ (Tp |*| Tp)]] =
+          Unlimited(self).map(fun)
+        val merge: $[Unlimited[(Tp |*| Tp) =⚬ Tp]] =
+          Unlimited(split).map(merge_)
+        split_(merge)(a)
       }
     }
 
-  private def merge_(
-    split: Tp -⚬ (Tp |*| Tp),
-  ): (Tp |*| Tp) -⚬ Tp = rec { self =>
-    λ { case a |*| b =>
-      switch(a |*| b)
-        .is { case TypeBroker(a) |*| TypeBroker(b) => mergeNegotiations(self, split)(a |*| b) }
-        .is { case TypeBroker(a) |*| TypeFormer(b) => mergeConcreteAbstract(self, split)(b |*| a) }
-        .is { case TypeFormer(a) |*| TypeBroker(b) => mergeConcreteAbstract(self, split)(a |*| b) }
-        .is { case TypeFormer(a) |*| TypeFormer(b) => TypeFormer(F.merge(self)(a |*| b)) }
-        .end
+  private lazy val merge_ : (
+    /* split: */ Unlimited[Tp =⚬ (Tp |*| Tp)]
+  ) -⚬ (
+    (Tp |*| Tp) =⚬ Tp
+  ) =
+    sharedCode {
+      λ { case *(split) =>
+        λ.closure.rec { self =>
+          val merge: $[Optionally[(Tp |*| Tp) =⚬ Tp]] =
+            Optionally(self).map(fun) match { case ?(m) => m }
+
+          val splitOpt =
+            split.optionally
+
+          { case a |*| b =>
+            switch(a |*| b)
+              .is { case TypeBroker(a) |*| TypeBroker(b) => mergeNegotiations(merge, splitOpt)(a, b) }
+              .is { case TypeBroker(a) |*| TypeFormer(b) => mergeConcreteAbstract(merge, splitOpt)(b, a) }
+              .is { case TypeFormer(a) |*| TypeBroker(b) => mergeConcreteAbstract(merge, splitOpt)(a, b) }
+              .is { case TypeFormer(a) |*| TypeFormer(b) => TypeFormer(F.merge(self)(a |*| b)) }
+              .end
+          }
+        }
+      }
     }
-  }
 
   private def mergeNegotiations(
-    merge: (Tp |*| Tp) -⚬ Tp,
-    split: Tp -⚬ (Tp |*| Tp),
-  ): (Negotiation[Tp] |*| Negotiation[Tp]) -⚬ Tp =
-    λ { case a |*| b =>
-      switch( a |*| b )
-        .is { case Request(a)     |*| Request(b)     => mergeRequests(merge, split)(a |*| b) }
-        .is { case Request(a)     |*| Preliminary(b) => mergeRequestPreliminary(merge, split)(a |*| b) }
-        .is { case Preliminary(a) |*| Request(b)     => mergeRequestPreliminary(merge, split)(b |*| a) }
-        .is { case Preliminary(a) |*| Preliminary(b) => mergePreliminaries(merge)(a |*| b) }
-        .end
-    }
+    merge: $[Optionally[(Tp |*| Tp) =⚬ Tp]],
+    split: $[Optionally[Tp =⚬ (Tp |*| Tp)]],
+  )(
+    a: $[Negotiation[Tp]],
+    b: $[Negotiation[Tp]],
+  )(using
+    LambdaContext
+  ): $[Tp] = split match { case ?(split) =>
+    switch( a |*| b )
+      .is { case Request(a)     |*| Request(b)     => mergeRequests(merge, split)(a, b) }
+      .is { case Request(a)     |*| Preliminary(b) => mergeRequestPreliminary(merge, split)(a, b) }
+      .is { case Preliminary(a) |*| Request(b)     => mergeRequestPreliminary(merge, split)(b, a) }
+      .is { case Preliminary(a) |*| Preliminary(b) => mergePreliminaries(merge.get)(a |*| b) }
+      .end
+  }
 
   /** Ignores the input via a (local) deadlock. */
   private val hackyDiscard: Done -⚬ One =
@@ -283,69 +307,83 @@ private[inference] class PropagatorImpl[
     }
 
   private def mergeRequests(
-    merge: (Tp |*| Tp) -⚬ Tp,
-    split: Tp -⚬ (Tp |*| Tp),
-  ): (Negotiation.Request[Tp] |*| Negotiation.Request[Tp]) -⚬ Tp =
-    λ { case (aLbl |*| aReq) |*| (bLbl |*| bReq) =>
-      switch( labels.compare(aLbl |*| bLbl) )
-        .is { case InL(lbl) =>
-          // Labels are same, i.e. both refer to the same type.
-          // Propagate one (arbitrary) of them, close the other.
-          returning(
-            refinementRequest(lbl |*| aReq),
-            hackyDiscard(bReq.close),
-          )
-        }
-        .is { case InR(res) =>
-          def go: (Negotiation.Request[Tp] |*| Refinement.Request[Tp]) -⚬ Tp =
-            λ { case absTp |*| bReq =>
-              val t1 |*| t2 = splitRequest(merge, split)(absTp)
-              returning(t1, bReq grant t2)
-            }
+    merge: $[Optionally[(Tp |*| Tp) =⚬ Tp]],
+    split: $[Optionally[Tp =⚬ (Tp |*| Tp)]],
+  )(
+    nr1: $[Negotiation.Request[Tp]],
+    nr2: $[Negotiation.Request[Tp]],
+  )(using
+    LambdaContext,
+  ): $[Tp] = (merge, split) match { case (?(merge), ?(split)) =>
+    val aLbl |*| aReq = nr1
+    val bLbl |*| bReq = nr2
+    switch( labels.compare(aLbl |*| bLbl) )
+      .is { case InL(lbl) =>
+        // Labels are same, i.e. both refer to the same type.
+        // Propagate one (arbitrary) of them, close the other.
+        returning(
+          refinementRequest(lbl |*| aReq),
+          hackyDiscard(bReq.close),
+        )
+      }
+      .is { case InR(res) =>
+        val go: $[(Negotiation.Request[Tp] |*| Refinement.Request[Tp]) =⚬ Tp] =
+          λ.closure { case absTp |*| bReq =>
+            val t1 |*| t2 = splitRequest(merge, split)(absTp)
+            returning(t1, bReq grant t2)
+          }
 
-          switch(res)
-            .is { case InL(aLbl)  => go(aLbl |*| aReq |*| bReq) }
-            .is { case InR(bLbl) => go(bLbl |*| bReq |*| aReq) }
-            .end
-        }
-        .end
-    }
+        switch(res)
+          .is { case InL(aLbl)  => go(aLbl |*| aReq |*| bReq) }
+          .is { case InR(bLbl) => go(bLbl |*| bReq |*| aReq) }
+          .end
+      }
+      .end
+  }
 
   private def mergeRequestPreliminary(
-    merge: (Tp |*| Tp) -⚬ Tp,
-    split: Tp -⚬ (Tp |*| Tp),
-  ): (Negotiation.Request[Tp] |*| Negotiation.Preliminary[Tp]) -⚬ Tp =
-    λ { case (aLbl |*| aReq) |*| (bLbl |*| b) =>
-      val bl1 |*| bl2 = labels.split(bLbl)
-      switch( labels.compare(aLbl |*| bl1) )
-        .is { case InL(lbl) =>
-          // Labels are equal, refer to the same type.
-          // Close the refinement request, propagate the preliminary.
-          returning(
-            preliminary(bl2.waitFor(labels.neglect(lbl)) |*| b),
-            hackyDiscard(aReq.close),
-          )
-        }
-        .is { case InR(InL(aLbl)) =>
-          // refinement request wins over preliminary,
-          // but must still propagate the preliminary immediately
-          preliminary(bl2 |*| merge(refinementRequest(aLbl |*| aReq) |*| b))
-        }
-        .is { case InR(InR(bLbl)) =>
-          // preliminary refines the refinement request
-          val t1 |*| t2 = split(preliminary(bLbl |*| b))
-          returning(
-            t1 waitFor labels.neglect(bl2),
-            aReq grant t2,
-          )
-        }
-        .end
-    }
+    merge: $[Optionally[(Tp |*| Tp) =⚬ Tp]],
+    split: $[Optionally[Tp =⚬ (Tp |*| Tp)]],
+  )(
+    r1: $[Negotiation.Request[Tp]],
+    r2: $[Negotiation.Preliminary[Tp]],
+  )(using
+    LambdaContext
+  ): $[Tp] = (merge, split) match { case (?(merge), ?(split)) =>
+    val aLbl |*| aReq = r1
+    val bLbl |*| b = r2
+    val bl1 |*| bl2 = labels.split(bLbl)
+    switch( labels.compare(aLbl |*| bl1) )
+      .is { case InL(lbl) =>
+        // Labels are equal, refer to the same type.
+        // Close the refinement request, propagate the preliminary.
+        returning(
+          preliminary(bl2.waitFor(labels.neglect(lbl)) |*| b),
+          hackyDiscard(aReq.close),
+        )
+      }
+      .is { case InR(InL(aLbl)) =>
+        // refinement request wins over preliminary,
+        // but must still propagate the preliminary immediately
+        preliminary(bl2 |*| merge.get(refinementRequest(aLbl |*| aReq) |*| b))
+      }
+      .is { case InR(InR(bLbl)) =>
+        // preliminary refines the refinement request
+        val t1 |*| t2 = split.get(preliminary(bLbl |*| b))
+        returning(
+          t1 waitFor labels.neglect(bl2),
+          aReq grant t2,
+        )
+      }
+      .end
+  }
 
   private def mergePreliminaries(
-    merge: (Tp |*| Tp) -⚬ Tp,
-  ): (Negotiation.Preliminary[Tp] |*| Negotiation.Preliminary[Tp]) -⚬ Tp =
-    λ { case (aLbl |*| a) |*| (bLbl |*| b) =>
+    merge: $[(Tp |*| Tp) =⚬ Tp],
+  )(using
+    LambdaContext,
+  ): $[(Negotiation.Preliminary[Tp] |*| Negotiation.Preliminary[Tp]) =⚬ Tp] =
+    λ.closure { case (aLbl |*| a) |*| (bLbl |*| b) =>
       switch( labels.compare(aLbl |*| bLbl) )
         .is { case InL(lbl) =>
           // labels are same
@@ -365,80 +403,98 @@ private[inference] class PropagatorImpl[
     }
 
   private def mergeConcreteAbstract(
-    merge: (Tp |*| Tp) -⚬ Tp,
-    split: Tp -⚬ (Tp |*| Tp),
-  ): (F[Tp] |*| Negotiation[Tp]) -⚬ Tp =
-    λ { case a |*| b =>
-      switch(b)
-        .is { case Request(lbl |*| req) =>
-          val a1 |*| a2 = split(TypeFormer(a).waitFor(labels.neglect(lbl)))
-          returning(a1, req grant a2)
-        }
-        .is { case Preliminary(lbl |*| b) =>
-          preliminary(lbl |*| merge(TypeFormer(a) |*| b))
-        }
-        .end
-    }
-
-  private def split_(
-    merge: (Tp |*| Tp) -⚬ Tp,
-  ): Tp -⚬ (Tp |*| Tp) = rec { self =>
-    λ { t =>
-      switch(t)
-        .is { case TypeBroker(Request(req)) =>
-          splitRequest(merge, self)(req)
-        }
-        .is { case TypeBroker(Preliminary(lbl |*| t)) =>
-          val l1 |*| l2 = labels.split(lbl)
-          val t1 |*| t2 = self(t)
-          preliminary(l1 |*| t1) |*| preliminary(l2 |*| t2)
-        }
-        .is { case TypeFormer(ft) =>
-          val ft1 |*| ft2 = F.split(self)(ft)
-          TypeFormer(ft1) |*| TypeFormer(ft2)
-        }
-        .end
-    }
+    merge: $[Optionally[(Tp |*| Tp) =⚬ Tp]],
+    split: $[Optionally[Tp =⚬ (Tp |*| Tp)]],
+  )(
+    a: $[F[Tp]],
+    b: $[Negotiation[Tp]],
+  )(using
+    LambdaContext
+  ): $[Tp] = (merge, split) match { case (?(merge), ?(split)) =>
+    switch(b)
+      .is { case Request(lbl |*| req) =>
+        val a1 |*| a2 = split.get(TypeFormer(a).waitFor(labels.neglect(lbl)))
+        returning(a1, req grant a2)
+      }
+      .is { case Preliminary(lbl |*| b) =>
+        preliminary(lbl |*| merge.get(TypeFormer(a) |*| b))
+      }
+      .end
   }
 
-  private def splitRequest(
-    merge: (Tp |*| Tp) -⚬ Tp,
-    split: Tp -⚬ (Tp |*| Tp),
-  ): Negotiation.Request[Tp] -⚬ (Tp |*| Tp) =
-    λ { case lbl |*| req =>
-      val l1 |*| l2 = labels.split(lbl)
-      val t1 |*| resp1 = makeAbstractType(l1)
-      val t2 |*| resp2 = makeAbstractType(l2)
-      returning(
-        t1 |*| t2,
-        switch(resp1 |*| resp2)
-          .is { case Granted(t1) |*| Granted(t2) =>
-            req grant merge(t1 |*| t2)
-          }
-          .is { case Granted(t1) |*| Declined(req2) =>
-            val t11 |*| t12 = split(t1)
-            returning(
-              req grant t11,
-              tap(t12) supplyTo req2,
-            )
-          }
-          .is { case Declined(req1) |*| Granted(t2) =>
-            val t21 |*| t22 = split(t2)
-            returning(
-              req grant t21,
-              tap(t22) supplyTo req1,
-            )
-          }
-          .is { case Declined(req1) |*| Declined(req2) =>
-            val t1 |*| t2 = TypeOutlet.split(req.decline)
-            returning(
-              t1 supplyTo req1,
-              t2 supplyTo req2,
-            )
-          }
-          .end,
-      )
+  private lazy val split_ : (
+    /* merge: */ Unlimited[(Tp |*| Tp) =⚬ Tp]
+  ) -⚬ (
+    Tp =⚬ (Tp |*| Tp)
+  ) =
+    sharedCode {
+      λ { case *(merge) =>
+        λ.closure.rec { self => t =>
+          switch(t)
+            .is { case TypeBroker(Request(req)) =>
+              splitRequest(
+                merge.optionally,
+                Optionally(self).map(fun)
+              )(req)
+            }
+            .is { case TypeBroker(Preliminary(lbl |*| t)) =>
+              val l1 |*| l2 = labels.split(lbl)
+              val t1 |*| t2 = self(t)
+              preliminary(l1 |*| t1) |*| preliminary(l2 |*| t2)
+            }
+            .is { case TypeFormer(ft) =>
+              val ft1 |*| ft2 = F.split(self)(ft)
+              TypeFormer(ft1) |*| TypeFormer(ft2)
+            }
+            .end
+        }
+      }
     }
+
+  private def splitRequest(
+    merge: $[Optionally[(Tp |*| Tp) =⚬ Tp]],
+    split: $[Optionally[Tp =⚬ (Tp |*| Tp)]],
+  )(
+    nr: $[Negotiation.Request[Tp]]
+  )(using
+    LambdaContext
+  ):
+    $[Tp |*| Tp]
+  = (merge, split) match { case (?(merge), ?(split)) =>
+    val lbl |*| req = nr
+    val l1 |*| l2 = labels.split(lbl)
+    val t1 |*| resp1 = makeAbstractType(l1)
+    val t2 |*| resp2 = makeAbstractType(l2)
+    returning(
+      t1 |*| t2,
+      switch(resp1 |*| resp2)
+        .is { case Granted(t1) |*| Granted(t2) =>
+          req grant merge.get(t1 |*| t2)
+        }
+        .is { case Granted(t1) |*| Declined(req2) =>
+          val t11 |*| t12 = split.get(t1)
+          returning(
+            req grant t11,
+            tap(t12) supplyTo req2,
+          )
+        }
+        .is { case Declined(req1) |*| Granted(t2) =>
+          val t21 |*| t22 = split.get(t2)
+          returning(
+            req grant t21,
+            tap(t22) supplyTo req1,
+          )
+        }
+        .is { case Declined(req1) |*| Declined(req2) =>
+          val t1 |*| t2 = TypeOutlet.split(req.decline)
+          returning(
+            t1 supplyTo req1,
+            t2 supplyTo req2,
+          )
+        }
+        .end,
+    )
+  }
 
   private val awaitPosFst: (Done |*| Tp) -⚬ Tp =
     import Negotiation.{Preliminary, Request}
@@ -677,8 +733,8 @@ private[inference] class PropagatorImpl[
 
     val split: TypeOutlet -⚬ (TypeOutlet |*| TypeOutlet) =
       sharedCode {
-        rec { self =>
-          λ { t =>
+        λ.rec { self =>
+          { t =>
             switch(t)
               .is { case Abstract(p) =>
                 val p1 |*| p2 = splitTypeParam(p)

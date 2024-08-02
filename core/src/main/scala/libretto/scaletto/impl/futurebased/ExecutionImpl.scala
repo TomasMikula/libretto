@@ -4,7 +4,7 @@ import libretto.exec.Execution
 import libretto.exec.Executor.CancellationReason
 import libretto.lambda.{EnumModule, Member}
 import libretto.lambda.util.SourcePos
-import libretto.scaletto.impl.{-⚬, Fun, FreeScaletto, ScalaFunction, bug}
+import libretto.scaletto.impl.{-⚬, Blueprint, Fun, FreeScaletto, ScalaFunction, bug}
 import libretto.util.{Async, Scheduler}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -283,6 +283,14 @@ private class ExecutionImpl(
       f match {
         case r: -⚬.RecF[A, B] =>
           this.extend(r.recursed)
+
+        case -⚬.FunRef(_, f) =>
+          // TODO: should be guarded, i.e. expanded only when needed
+          this.extend(-⚬.fromBlueprint(f))
+
+        case -⚬.ConstSub(f) =>
+          Frontier.ConstSub(f)
+
         case -⚬.Regular(f) => f match
 
         case Fun.Id() =>
@@ -608,9 +616,6 @@ private class ExecutionImpl(
             Deferred(p.future.map(_ => PingNow)),
           )
 
-        case Fun.FunRef(_, f) =>
-          this.extend(f) // TODO: should be guarded, i.e. expanded only when needed
-
         case Fun.RecFun(f) =>
           Pair(RecOccurrence(f), this).extend(f)
 
@@ -619,6 +624,7 @@ private class ExecutionImpl(
 
           def go[X, Y](rc: Frontier[Sub[X, Y]], x: Frontier[X]): Frontier[Y] =
             rc match
+              case ConstSub(f)                    => x.extend(-⚬.fromBlueprint(f))
               case r @ RecOccurrence(f)           => Pair(r, x).extend(f)
               case ParameterizedSub(p, _, _, prc) => go(prc, Pair(p, x))
               case Deferred(f)                    => Deferred(f.map(go(_, x)))
@@ -628,7 +634,7 @@ private class ExecutionImpl(
         case _: Fun.IgnoreSub[x, y] =>
           def go[X, Y](rc: Frontier[Sub[X, Y]]): Frontier[One] =
             rc match
-              case RecOccurrence(_) =>
+              case RecOccurrence(_) | ConstSub(_) =>
                 Frontier.One
               case ParameterizedSub(p, disP, dupP, prc) =>
                 p.extend(disP)
@@ -644,6 +650,8 @@ private class ExecutionImpl(
 
           def go[X, Y](rc: Frontier[Sub[X, Y]]): Frontier[Sub[X, Y] |*| Sub[X, Y]] =
             rc match
+              case c @ ConstSub(_) =>
+                Pair(c, c)
               case r @ RecOccurrence(_) =>
                 Pair(r, r)
               case ParameterizedSub(p, disP, dupP, prc) =>
@@ -1109,7 +1117,7 @@ private class ExecutionImpl(
           f.crash(e)
         case OneOfUnpeel(f) =>
           f.crash(e)
-        case RecOccurrence(f) =>
+        case RecOccurrence(_) | ConstSub(_) =>
           // has not been invoked yet, do nothing
         case ParameterizedSub(p, _, _, rc) =>
           p.crash(e)
@@ -1131,6 +1139,7 @@ private class ExecutionImpl(
     case class Choice[A, B](a: () => Frontier[A], b: () => Frontier[B], onError: Throwable => Unit) extends Frontier[A |&| B]
     case class Deferred[A](f: Future[Frontier[A]]) extends Frontier[A]
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]
+    case class ConstSub[A, B](f: Blueprint[A, B]) extends Frontier[Sub[A, B]]
     case class RecOccurrence[A, B](f: (Sub[A, B] |*| A) -⚬ B) extends Frontier[Sub[A, B]]
     case class ParameterizedSub[P, A, B](
       p: Frontier[P],

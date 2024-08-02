@@ -2405,8 +2405,34 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     def optIn[A]: Optionally[A] -⚬ A =
       chooseR
 
+    def fromChoice[A]: (One |&| A) -⚬ Optionally[A] =
+      id
+
     def fromDiscardable[A](discard: A -⚬ One): A -⚬ Optionally[A] =
       choice(discard, id)
+
+    def fromAffine[A](using A: Affine[A]): A -⚬ Optionally[A] =
+      fromDiscardable(A.discard)
+
+    def apply[A](using SourcePos, LambdaContext)(a: $[A])(using A: Affine[A]): $[Optionally[A]] =
+      fromAffine[A](a) match
+        case ?(oa) => oa
+
+    extension [A](a: $[Optionally[A]])
+      def get(using SourcePos, LambdaContext): $[A] =
+        optIn(a)
+
+    given Functor[Optionally] with {
+      override val category = dsl.category
+
+      override def lift[A, B](f: A -⚬ B): Optionally[A] -⚬ Optionally[B] =
+        choice(optOut, optIn > f)
+    }
+
+    given affine[A]: Affine[Optionally[A]] with {
+      override def discard: Optionally[A] -⚬ One =
+        optOut[A]
+    }
   }
 
   opaque type PMaybe[A] = Done |+| A
@@ -2528,6 +2554,10 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
   /** Unlimited supply of `A`s. The consumer chooses how many `A`s to consume. */
   opaque type Unlimited[A] = Rec[UnlimitedF[A, *]]
   object Unlimited {
+    def apply[A](using SourcePos, LambdaContext)(a: $[A])(using Comonoid[A]): $[Unlimited[A]] =
+      fromComonoid[A](a) match
+        case *(ua) => ua
+
     private def unpack[A]: Unlimited[A] -⚬ UnlimitedF[A, Unlimited[A]] =
       dsl.unpack
 
@@ -2676,6 +2706,15 @@ class CoreLib[DSL <: CoreDSL](val dsl: DSL) { lib =>
     given deferrableUnlimited[A]: Deferrable.Negative[Unlimited[A]] with {
       override def awaitPongFst: Unlimited[A] -⚬ (Pong |*| Unlimited[A]) =
         unpack > delayChoiceUntilPong > snd(pack[UnlimitedF[A, *]])
+    }
+
+    def toOptionally[A]: Unlimited[A] -⚬ Optionally[A] =
+      unpack > |&|.rmap(chooseL) > Optionally.fromChoice
+
+    extension [A](a: $[Unlimited[A]]) {
+      def optionally(using SourcePos, LambdaContext): $[Optionally[A]] =
+        import Optionally.affine
+        toOptionally(a) match { case ?(oa) => oa }
     }
   }
 

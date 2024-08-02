@@ -4,7 +4,8 @@ import libretto.lambda.{Extractor, MappedMorphism, MonoidalObjectMap, SymmetricM
 import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.unapply.Unapply
-import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.*
+import libretto.scaletto.StarterKit.$.*
 import libretto.scaletto.StarterKit.dsl.{|| as |}
 import libretto.typology.inference.TypeOps
 import libretto.typology.kinds.{Kinds, KindN, ×, ○, ●}
@@ -44,9 +45,9 @@ private[typeinfer] object Types {
       }
     }
 
-  def splitMap[T, U, V](f: T -⚬ (U |*| V)): Types[T] -⚬ (Types[U] |*| Types[V]) =
-    rec { self =>
-      λ { ts =>
+  def splitMap[T, U, V]: Sub[T, U |*| V] -⚬ (Types[T] =⚬ (Types[U] |*| Types[V])) =
+    λ { case *(f) =>
+      λ.closure.rec { self => ts =>
         switch(ts)
           .is { case KindMismatch(mismatch) =>
             val x |*| y = mismatch
@@ -78,14 +79,16 @@ private[typeinfer] object Types {
       }
     }
 
-  def merge[T](f: (T |*| T) -⚬ T): (Types[T] |*| Types[T]) -⚬ Types[T] =
-    rec { self =>
-      λ { case ts |*| us =>
-        switch(ts |*| us)
-          .is { case SingleType(t) |*| SingleType(u) => SingleType(f(t |*| u)) }
-          .is { case Prod(t1 |*| t2) |*| Prod(u1 |*| u2) => Prod(self(t1 |*| u1) |*| self(t2 |*| u2)) }
-          .is { case ts |*| us => KindMismatch(ts |*| us) }
-          .end
+  def merge[T]: Sub[T |*| T, T] -⚬ ((Types[T] |*| Types[T]) =⚬ Types[T]) =
+    λ { case *(f) =>
+      λ.closure.rec { self =>
+        { case ts |*| us =>
+          switch(ts |*| us)
+            .is { case SingleType(t) |*| SingleType(u) => SingleType(f(t |*| u)) }
+            .is { case Prod(t1 |*| t2) |*| Prod(u1 |*| u2) => Prod(self(t1 |*| u1) |*| self(t2 |*| u2)) }
+            .is { case ts |*| us => KindMismatch(ts |*| us) }
+            .end
+        }
       }
     }
 
@@ -294,12 +297,12 @@ private[typeinfer] object NonAbstractType {
     }
   }
 
-  def splitMap[V, T, Y, Z](
-    f: T -⚬ (Y |*| Z),
-  )(using
+  def splitMap[V, T, Y, Z](using
     Cosemigroup[V],
-  ): NonAbstractType[V, T] -⚬ (NonAbstractType[V, Y] |*| NonAbstractType[V, Z]) = rec { self =>
-    λ { t =>
+  ): (
+    Sub[T, Y |*| Z],
+  ) -⚬ (NonAbstractType[V, T] =⚬ (NonAbstractType[V, Y] |*| NonAbstractType[V, Z])) =
+    λ { case *(f) => λ.closure.rec { self => t =>
       switch(t)
         .is { case Pair(r |*| s) =>
           val r1 |*| r2 = f(r)
@@ -333,20 +336,19 @@ private[typeinfer] object NonAbstractType {
           mismatch(y1 |*| y2) |*| mismatch(z1 |*| z2)
         }
         .end
-    }
-  }
+    }}
 
-  def split[V, T](
-    splitElem: T -⚬ (T |*| T),
-  )(using
+  def split[V, T](using
     Cosemigroup[V],
-  ): NonAbstractType[V, T] -⚬ (NonAbstractType[V, T] |*| NonAbstractType[V, T]) =
-    splitMap(splitElem)
+  ): (
+    Sub[T, T |*| T],
+  ) -⚬ (NonAbstractType[V, T] =⚬ (NonAbstractType[V, T] |*| NonAbstractType[V, T])) =
+    splitMap[V, T, T, T]
 
-  def merge[V, T](
-    g: (T |*| T) -⚬ T,
-  ): (NonAbstractType[V, T] |*| NonAbstractType[V, T]) -⚬ NonAbstractType[V, T] = {
-    λ { case a |*| b =>
+  def merge[V, T]: (
+    Sub[T |*| T, T],
+  ) -⚬ ((NonAbstractType[V, T] |*| NonAbstractType[V, T]) =⚬ NonAbstractType[V, T]) =
+    λ { case *(g) => λ.closure { case a |*| b =>
       switch(a |*| b)
         .is { case Pair(a1 |*| a2) |*| Pair(b1 |*| b2) => Pair(g(a1 |*| b1) |*| g(a2 |*| b2)) }
         .is { case Either(p |*| q) |*| Either(r |*| s) => Either(g(p |*| r) |*| g(q |*| s)) }
@@ -381,8 +383,7 @@ private[typeinfer] object NonAbstractType {
         }
         .is { case a |*| b => mismatch(a |*| b) }
         .end
-    }
-  }
+    }}
 
   def output[V, T](
     outputElem: T -⚬ Val[Type[Label]],
@@ -596,13 +597,15 @@ private[typeinfer] object NonAbstractType {
     )(using CloseableCosemigroup[X]): (X |*| NonAbstractType[Val[Label], A]) -⚬ NonAbstractType[Val[Label], B] =
       NonAbstractType.mapWith(f)
 
-    override def merge[A](
-      f: (A |*| A) -⚬ A,
-    ): (NonAbstractType[Val[Label], A] |*| NonAbstractType[Val[Label], A]) -⚬ NonAbstractType[Val[Label], A] =
-      NonAbstractType.merge(f)
+    override def merge[A]: (
+      Sub[A |*| A, A]
+    ) -⚬ ((NonAbstractType[Val[Label], A] |*| NonAbstractType[Val[Label], A]) =⚬ NonAbstractType[Val[Label], A]) =
+      NonAbstractType.merge
 
-    override def split[A](f: A -⚬ (A |*| A)): NonAbstractType[Val[Label], A] -⚬ (NonAbstractType[Val[Label], A] |*| NonAbstractType[Val[Label], A]) =
-      NonAbstractType.split(f)
+    override def split[A]: (
+      Sub[A, A |*| A]
+    ) -⚬ (NonAbstractType[Val[Label], A] =⚬ (NonAbstractType[Val[Label], A] |*| NonAbstractType[Val[Label], A])) =
+      NonAbstractType.split
 
     override def output[A](f: A -⚬ Val[Type[Label]]): NonAbstractType[Val[Label], A] -⚬ Val[Type[Label]] =
       NonAbstractType.output(f, mapVal(Type.forbiddenSelfReference(_)))

@@ -210,12 +210,12 @@ object Lambdas {
     using(Shuffled[->, **])(universalSplit, universalDiscard)
 
   enum LinearityViolation[VarLabel, CtxLabel]:
-    case Overused(vars: Var.Set[VarLabel])
+    case Overused(vars: Var.Set[VarLabel], exitedCtx: CtxLabel)
     case Unused(v: Var[VarLabel, ?], exitedCtx: CtxLabel)
 
   object LinearityViolation {
-    def overusedVar[V, C, A](v: Var[V, A]): LinearityViolation[V, C] =
-      Overused(Var.Set(v))
+    def overusedVar[V, C, A](v: Var[V, A], exitedCtx: C): LinearityViolation[V, C] =
+      Overused(Var.Set(v), exitedCtx)
 
     def unusedVar[V, C, A](v: Var[V, A], exitedCtx: C): LinearityViolation[V, C] =
       Unused(v, exitedCtx)

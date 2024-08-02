@@ -686,7 +686,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
                     SingleVar[a](),
                     Context.getSplit(v) match {
                       case Some(split) => Valid(CapturingFun.lift(split))
-                      case None        => invalid(LinearityViolation.overusedVar(v))
+                      case None        => invalid(LinearityViolation.overusedVar(v, Context.info))
                     },
                     Par(SingleVar[a](), SingleVar[a]()),
                   )
@@ -791,7 +791,13 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
         def capN_gcd_this[VX, T, VC, C](that: CaptureN[VX, Var[T], VC, C])(using A =:= Var[T]): Option[Tail[Var[T], Var[C] ** B]]
         def zip1_gcd_this[T](that: ZipN[Var[T], T])(using A =:= Var[T]): Option[Tail[Var[T], Var[T] ** B]]
 
-        def asZipN[VP1, VP2](using A =:= (VP1 ** VP2)): Exists[[B0] =>> (ZipN[A, B0], B =:= Var[B0])]
+        def asZipOrCapture[VP1, VP2](using A =:= (VP1 ** VP2)): Exists[[B0] =>> (
+          Either[
+            ZipN[A, B0],
+            CaptureN[?, A, ?, B0]
+          ],
+          B =:= Var[B0]
+        )]
 
         override def from[Z](using ev: Z =:= A): Op.Affine[Z, B] = ev.substituteContra[Op.Affine[_, B]](this)
         override def to[C](using ev: B =:= C): Op.Affine[A, C]   = ev.substituteCo(this)
@@ -829,8 +835,8 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
             case u: Unvar.Par[va1, va2, a1, a2] =>
               varIsNotPair[T, va1, va2](ev.flip)
 
-        override def asZipN[VP1, VP2](using VA =:= (VP1 ** VP2)): Exists[[B0] =>> (ZipN[VA, B0], Var[A] =:= Var[B0])] =
-          Exists((this, summon))
+        override def asZipOrCapture[VP1, VP2](using VA =:= (VP1 ** VP2)): Exists[[B0] =>> (Either[ZipN[VA, B0], CaptureN[?, VA, ?, B0]], Var[A] =:= Var[B0])] =
+          Exists((Left(this), summon))
       }
 
       case class Map[A, B](f: A -> B, resultVar: Var[B]) extends Op.Linear[Var[A], Var[B]] {
@@ -861,7 +867,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
         override def zip1_gcd_this[T](that: ZipN[Var[T], T])(using Var[A] =:= Var[T]): Option[Tail[Var[T], Var[T] ** Var[B]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.zip1_gcd_this")
 
-        override def asZipN[VP1, VP2](using ev: Var[A] =:= (VP1 ** VP2)): Exists[[B0] =>> (ZipN[Var[A], B0], Var[B] =:= Var[B0])] =
+        override def asZipOrCapture[VP1, VP2](using ev: Var[A] =:= (VP1 ** VP2)) =
           varIsNotPair(ev)
       }
 
@@ -918,7 +924,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
         override def zip1_gcd_this[T](that: ZipN[Var[T], T])(using Var[A1 ** A2] =:= Var[T]): Option[Tail[Var[T], Var[T] ** Var[A1]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.zip1_gcd_this")
 
-        override def asZipN[VP1, VP2](using ev: Var[A1 ** A2] =:= (VP1 ** VP2)): Exists[[B0] =>> (ZipN[Var[A1 ** A2], B0], Var[A1] =:= Var[B0])] =
+        override def asZipOrCapture[VP1, VP2](using ev: Var[A1 ** A2] =:= (VP1 ** VP2)) =
           varIsNotPair(ev)
       }
 
@@ -968,7 +974,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
         override def zip1_gcd_this[T](that: ZipN[Var[T], T])(using Var[A1 ** A2] =:= Var[T]): Option[Tail[Var[T], Var[T] ** Var[A2]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.zip1_gcd_this")
 
-        override def asZipN[VP1, VP2](using ev: Var[A1 ** A2] =:= (VP1 ** VP2)): Exists[[B0] =>> (ZipN[Var[A1 ** A2], B0], Var[A2] =:= Var[B0])] =
+        override def asZipOrCapture[VP1, VP2](using ev: Var[A1 ** A2] =:= (VP1 ** VP2)) =
           varIsNotPair(ev)
       }
 
@@ -1024,7 +1030,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
         override def zip1_gcd_this[T](that: ZipN[Var[T], T])(using Var[A1 ** A2] =:= Var[T]): Option[Tail[Var[T], Var[T] ** (Var[A1] ** Var[A2])]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.zip1_gcd_this")
 
-        override def asZipN[VP1, VP2](using ev: Var[A1 ** A2] =:= (VP1 ** VP2)): Exists[[B0] =>> (ZipN[Var[A1 ** A2], B0], (Var[A1] ** Var[A2]) =:= Var[B0])] =
+        override def asZipOrCapture[VP1, VP2](using ev: Var[A1 ** A2] =:= (VP1 ** VP2)) =
           varIsNotPair(ev)
       }
 
@@ -1065,9 +1071,8 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
         override def zip1_gcd_this[T](that: ZipN[Var[T], T])(using VA =:= Var[T]): Option[Tail[Var[T], Var[T] ** Var[B]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.zip1_gcd_this")
 
-        override def asZipN[VP1, VP2](using VA =:= (VP1 ** VP2)): Exists[[B0] =>> (ZipN[VA, B0], Var[B] =:= Var[B0])] =
-          // TODO: this will be problematic
-          UnhandledCase.raise(s"${this.getClass.getSimpleName}.asZipN")
+        override def asZipOrCapture[VP1, VP2](using VA =:= (VP1 ** VP2)): Exists[[B0] =>> (Either[ZipN[VA, B0], CaptureN[?, VA, ?, B0]], Var[B] =:= Var[B0])] =
+          Exists((Right(this), summon))
       }
 
       val project: [t, u, v] => (op: Op[t, u], p: Projection[**, u, v]) => shOp.ProjectRes[t, v] =
@@ -1135,17 +1140,49 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
           case (Focus.Id(), Focus.Id()) =>
             f gcdSimple g
           case (c: Focus.Fst[p, c1, y], d: Focus.Fst[q, d1, z]) =>
-            f.asZipN[c1[Var[X]], y] match
-              case Exists.Some((z1, TypeEq(Refl()))) =>
-                g.asZipN[d1[Var[X]], z] match
-                  case Exists.Some((z2, TypeEq(Refl()))) =>
-                    gcdZipNs(z1, z2)
+            f.asZipOrCapture[c1[Var[X]], y] match
+              case Exists.Some((zc1, TypeEq(Refl()))) =>
+                g.asZipOrCapture[d1[Var[X]], z] match
+                  case Exists.Some((zc2, TypeEq(Refl()))) =>
+                    (zc1, zc2) match
+                      case (Left(z1), Left(z2)) =>
+                        gcdZipNs(z1, z2)
+                      case (Right(c1), Right(c2)) =>
+                        gcdCaptureNs(c1, c2)
+                      case (Left(z1), Right(c2)) =>
+                        assert(
+                          (z1.resultVar testEqual c2.resultVar).isEmpty,
+                          s"Bug: same result variable of $z1 and $c2"
+                        )
+                        None
+                      case (Right(c1), Left(z2)) =>
+                        assert(
+                          (c1.resultVar testEqual z2.resultVar).isEmpty,
+                          s"Bug: same result variable of $c1 and $z2"
+                        )
+                        None
           case (c: Focus.Snd[p, c2, y], d: Focus.Snd[q, d2, z]) =>
-            f.asZipN[y, c2[Var[X]]] match
-              case Exists.Some((z1, TypeEq(Refl()))) =>
-                g.asZipN[z, d2[Var[X]]] match
-                  case Exists.Some((z2, TypeEq(Refl()))) =>
-                    gcdZipNs(z1, z2)
+            f.asZipOrCapture[y, c2[Var[X]]] match
+              case Exists.Some((zc1, TypeEq(Refl()))) =>
+                g.asZipOrCapture[z, d2[Var[X]]] match
+                  case Exists.Some((zc2, TypeEq(Refl()))) =>
+                    (zc1, zc2) match
+                      case (Left(z1), Left(z2)) =>
+                        gcdZipNs(z1, z2)
+                      case (Right(c1), Right(c2)) =>
+                        gcdCaptureNs(c1, c2)
+                      case (Left(z1), Right(c2)) =>
+                        assert(
+                          (z1.resultVar testEqual c2.resultVar).isEmpty,
+                          s"Bug: same result variable of $z1 and $c2"
+                        )
+                        None
+                      case (Right(c1), Left(z2)) =>
+                        assert(
+                          (c1.resultVar testEqual z2.resultVar).isEmpty,
+                          s"Bug: same result variable of $c1 and $z2"
+                        )
+                        None
           case _ =>
             None
         }
@@ -1158,6 +1195,15 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
         (za.resultVar testEqual zb.resultVar) map {
           case TypeEq(Refl()) =>
             shOp.lift(za) > shOp.lift(DupVar())
+        }
+
+      private def gcdCaptureNs[VX1, VA1, VB1, B1, VX2, VA2, VB2, B2](
+        c1: CaptureN[VX1, VA1, VB1, B1],
+        c2: CaptureN[VX2, VA2, VB2, B2],
+      ): Option[Tail[VA1, Var[B1] ** Var[B2]]] =
+        (c1.resultVar testEqual c2.resultVar) map {
+          case TypeEq(Refl()) =>
+            shOp.lift(c1) > shOp.lift(DupVar())
         }
     }
 

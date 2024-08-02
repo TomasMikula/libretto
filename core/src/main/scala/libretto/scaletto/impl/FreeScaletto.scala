@@ -204,8 +204,8 @@ object FreeScaletto extends Scaletto {
   override def lInvertTerminus: One -⚬ (LTerminus |*| RTerminus) =
     Regular(LInvertTerminus())
 
-  override def rec[A, B](f: (A -⚬ B) => (A -⚬ B)): A -⚬ B =
-    -⚬.rec(f)
+  override def rec[A, B](using pos: SourcePos)(f: (A -⚬ B) => (A -⚬ B)): A -⚬ B =
+    -⚬.rec(pos, f)
 
   override def rec[A, B](f: (Sub[A, B] |*| A) -⚬ B): A -⚬ B =
     Regular(RecFun(f))
@@ -230,8 +230,19 @@ object FreeScaletto extends Scaletto {
   override def selectPair: (One |&| One) -⚬ (Pong |*| Pong) =
     Regular(SelectPair())
 
-  override def sharedCode[A, B](f: A -⚬ B): A -⚬ B =
-    Regular(FunRef(new Object, f)) // XXX use a proper ID
+  override def sharedCode[A, B](using pos: SourcePos)(f: A -⚬ B): A -⚬ B =
+    f.blueprint match
+      case Valid(f) =>
+        FunRef(new Object, f) // XXX use a proper ID
+      case Invalid(es) =>
+        assemblyError(ForbiddenCaptureOfRecursiveCallsIntoLibCode(pos, es))
+
+  override def sub[A, B](using pos: SourcePos)(f: A -⚬ B): One -⚬ Sub[A, B] =
+    f.blueprint match
+      case Valid(f) =>
+        ConstSub(f)
+      case Invalid(es) =>
+        assemblyError(ForbiddenCaptureOfRecursiveCallsIntoLibCode(pos, es))
 
   override def crashWhenDone[A, B](msg: String): (Done |*| A) -⚬ B =
     Regular(CrashWhenDone(msg))
@@ -748,6 +759,22 @@ object FreeScaletto extends Scaletto {
           f: lambdas.Context ?=> $[A] => $[B],
         ): $[A =⚬ B] =
           compileClosure(f)(pos)(using ctx)
+
+        override def rec[A, B](using pos: SourcePos, ctx: LambdaContext)(
+          f: LambdaContext ?=> $[Sub[A, B]] => $[A] => $[B],
+        ): $[A =⚬ B] = {
+          import CapturingFun.{Closure, NoCapture}
+
+          val captVar   = VarOrigin.CapturedVars(pos)
+          val resultVar = VarOrigin.ClosureVal(pos)
+
+          recLocal(f) match
+            case NoCapture(f) =>
+              constant(obj(f))
+            case Closure(captured, f) =>
+              val x = lambdas.Expr.zipN(captured)(captVar)
+              lambdas.Expr.map(x, 𝒞.curry(f))(resultVar)
+        }
       }
 
     private def compile[A, B](f: lambdas.Context ?=> $[A] => $[B])(
@@ -764,7 +791,7 @@ object FreeScaletto extends Scaletto {
             case Valid(f) => f
             case Invalid(es) => raiseTotalityViolations(es)
         case Valid(Closure(captured, f)) =>
-          raiseUndefinedVars(lambdas.Expr.initialVars(captured))
+          assemblyError(UnboundVariables(c, lambdas.Expr.initialVars(captured)))
         case Invalid(es) =>
           assemblyErrors(es)
       }
@@ -935,7 +962,13 @@ object FreeScaletto extends Scaletto {
     )(VarOrigin.FunAppRes(pos))
 
   private type AssemblyErrorData =
-    UnboundVariables | LinearityViolation | UnusedInBranch | MisplacedExtractor | PatternMatchError | MissingComonoidOpForRecFun
+    UnboundVariables
+    | LinearityViolation
+    | UnusedInBranch
+    | MisplacedExtractor
+    | PatternMatchError
+    | MissingComonoidOpForRecFun
+    | ForbiddenCaptureOfRecursiveCallsIntoLibCode
 
   private def assemblyError(e: AssemblyErrorData): Nothing =
     assemblyErrors(NonEmptyList.of(e))
@@ -968,19 +1001,21 @@ object FreeScaletto extends Scaletto {
         case e: MisplacedExtractor => misplacedExtMsg(e)
         case e: PatternMatchError  => patmatMsg(e)
         case e: MissingComonoidOpForRecFun => missingComonoidForRecFunMsg(e)
+        case e: ForbiddenCaptureOfRecursiveCallsIntoLibCode => forbiddenCaptureOfRecursiveCallsIntoLibCodeMsg(e)
 
     private def unboundMsg(e: UnboundVariables): NonEmptyList[String] =
+      val UnboundVariables(scope, vs) = e
       NonEmptyList(
-        "Undefined variables (possibly from outer context):",
-        e.vs.list.map(v => s"- $v")
+        s"Undefined variables (possibly from outer context) when compiling ${scope.print}:",
+        vs.list.map(v => s"- $v") :+ "Consider using λ.closure instead."
       )
 
     private def linearityMsg(e: LinearityViolation): NonEmptyList[String] = {
       import Lambdas.LinearityViolation.{Overused, Unused}
 
-      def overusedMsg(vs: Var.Set[VarOrigin]): NonEmptyList[String] =
+      def overusedMsg(vs: Var.Set[VarOrigin], exitedScope: ScopeInfo): NonEmptyList[String] =
         NonEmptyList(
-          "Variables used more than once:",
+          s"Variables used more than once when compiling ${exitedScope.print}:",
           vs.list.map(v => s" - ${v.origin.print}")
         )
 
@@ -991,8 +1026,8 @@ object FreeScaletto extends Scaletto {
         )
 
       e match
-        case Overused(vs)       => overusedMsg(vs)
-        case Unused(v, ctxInfo) => unusedMsg(v, ctxInfo)
+        case Overused(vs, ctxInfo) => overusedMsg(vs, ctxInfo)
+        case Unused(v, ctxInfo)    => unusedMsg(v, ctxInfo)
     }
 
     def unusedInBranchMsg(e: UnusedInBranch): NonEmptyList[String] =
@@ -1047,12 +1082,19 @@ object FreeScaletto extends Scaletto {
               "Consider using the `case *(a)` extractor for each of the varaibles to register a Comonoid instance."
             )
           )
+
+    private def forbiddenCaptureOfRecursiveCallsIntoLibCodeMsg(e: ForbiddenCaptureOfRecursiveCallsIntoLibCode): NonEmptyList[String] =
+      val ForbiddenCaptureOfRecursiveCallsIntoLibCode(defnPos, refs) = e
+      NonEmptyList(
+        s"Library code defininition at ${defnPos.filename}:${defnPos.line} attempts to capture self-references to parent recursive functions:",
+        refs.map { ref =>
+          val p = ref.pos
+          s" - Recursive function defined at ${p.filename}:${p.line}"
+        }.toList
+      ) :+ s"Consider rewriting the library function as taking a `Sub`-routine instead of capturing a self-reference."
   }
 
-  private def raiseUndefinedVars(vs: Var.Set[VarOrigin]): Nothing =
-    assemblyError(UnboundVariables(vs))
-
-  private case class UnboundVariables(vs: Var.Set[VarOrigin])
+  private case class UnboundVariables(scope: ScopeInfo, vs: Var.Set[VarOrigin])
 
   private sealed trait MissingComonoidOpForRecFun
 
@@ -1071,6 +1113,11 @@ object FreeScaletto extends Scaletto {
     def apply(recFunPos: SourcePos, vs: NonEmptyList[Var[?]]): MissingDiscardForRecFun =
       MissingDiscardForRecFun(recFunPos, Var.Set.fromList(vs.toList))
   }
+
+  private case class ForbiddenCaptureOfRecursiveCallsIntoLibCode(
+    libCodeDefnPos: SourcePos,
+    capturedRefs: NonEmptyList[-⚬.RecF[?, ?]],
+  )
 
   private def raiseTotalityViolations(es: NonEmptyList[(SourcePos, NonEmptyList[String])]): Nothing =
     libretto.lambda.UnhandledCase.raise(s"raiseTotalityViolations($es)")

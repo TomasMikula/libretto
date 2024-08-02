@@ -28,6 +28,9 @@ trait ClosedDSL extends CoreDSL {
   def out[A, B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
     curry(andThen(eval[A, B], f))
 
+  def fun[A, B]: Sub[A, B] -⚬ (A =⚬ B) =
+    curry(invoke)
+
   override val λ: LambdaOpsWithClosures
 
   trait LambdaOpsWithClosures extends LambdaOps {
@@ -40,6 +43,10 @@ trait ClosedDSL extends CoreDSL {
       */
     def apply[A, B](using SourcePos, LambdaContext)(
       f: LambdaContext ?=> $[A] => $[B],
+    ): $[A =⚬ B]
+
+    def rec[A, B](using SourcePos, LambdaContext)(
+      f: LambdaContext ?=> $[Sub[A, B]] => $[A] => $[B],
     ): $[A =⚬ B]
 
     def ?[A, B](using SourcePos, LambdaContext)(
