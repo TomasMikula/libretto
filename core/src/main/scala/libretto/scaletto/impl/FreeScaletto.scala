@@ -443,7 +443,7 @@ object FreeScaletto extends Scaletto {
 
   override opaque type LambdaContext = lambdas.Context
 
-  override opaque type MetaFun[A, B] = CapturingFun[-⚬, |*|, Tupled[|*|, $, _], A, B]
+  private type MetaFun[A, B] = CapturingFun[-⚬, |*|, Tupled[|*|, $, _], A, B]
 
   override val `$`: $Ops = new $Ops {
     override def one(using pos: SourcePos, ctx: lambdas.Context): $[One] =
@@ -453,16 +453,6 @@ object FreeScaletto extends Scaletto {
       lambdas.Context,
     ): $[B] =
       (a map f)(VarOrigin.FunAppRes(pos))
-
-    override def mapMeta[A, B](a: $[A])(f: MetaFun[A, B])(pos: SourcePos)(using
-      lambdas.Context,
-    ): $[B] =
-      f match
-        case CapturingFun.NoCapture(f) =>
-          (a map f)(VarOrigin.FunAppRes(pos))
-        case CapturingFun.Closure(x, f) =>
-          val xa = lambdas.Expr.zipN(x zip Tupled.atom(a))(VarOrigin.CapturedVarsAndFunArg(pos))
-          lambdas.Expr.map(xa, f)(VarOrigin.FunAppRes(pos))
 
     override def zip[A, B](a: $[A], b: $[B])(
       pos: SourcePos,
@@ -674,17 +664,17 @@ object FreeScaletto extends Scaletto {
     override def apply[A, B](using pos: SourcePos)(f: lambdas.Context ?=> $[A] => $[B]): A -⚬ B =
       compile(f)(pos)
 
-    override def local[A, B](using pos: SourcePos, ctx: lambdas.Context)(f: lambdas.Context ?=> $[A] => $[B]): MetaFun[A, B] =
-      compileMeta(f)(pos)
-
-    override def recLocal[A, B](using pos: SourcePos, ctx: LambdaContext)(
+    private def recLocal[A, B](using pos: SourcePos, ctx: LambdaContext)(
       f: LambdaContext ?=> $[Sub[A, B]] => $[A] => $[B],
     ): MetaFun[A, B] =
       given Comonoid[Sub[A, B]] =
         comonoidSub[A, B]
 
+      val f1: LambdaContext ?=> $[Sub[A, B] |*| A] => $[B] =
+        { case *(self) |*| a => f(self)(a) }
+
       val g: MetaFun[Sub[A, B] |*| A, B] =
-        local { case *(self) |*| a => f(self)(a) }
+        compileMeta(f1)(pos)
 
       import CapturingFun.{Closure, NoCapture}
 

@@ -154,22 +154,6 @@ trait Puro {
 
   opaque type ??[A] = $[-[A]]
 
-  /** An auxiliary function that may be used only locally within the scope of outer [[λ]]-expression.
-   * It is eliminated during assembly of the program, i.e. it does not exist inside a program.
-   *
-   * Like `A -⚬ B`, it exists only at the meta level.
-   * Unlike `A -⚬ B`, `MetaFun[A, B]` may have captured resources.
-   *
-   * It's use is similar to that of a function object expression `$[A =⚬ B]` (from [[ClosedDSL]]),
-   * but unlike it, `MetaFun[A, B]`
-   *  - does not require existence of function objects in the language;
-   *  - cannot be returned from an outer `λ` (as only expressions (`$[T]`)
-   *    can be returned, but you'll never have a `$[MetaFun[A, B]]`);
-   *  - may be used any number of times, as long as any resources captured by the `MetaFun`
-   *    can be used any number of times and have the non-linear operations registered (via [[?]], [[+]], [[*]] extractors).
-   */
-  type MetaFun[A, B]
-
   def id[A]: A -⚬ A
 
   def andThen[A, B, C](f: A -⚬ B, g: B -⚬ C): A -⚬ C
@@ -669,17 +653,6 @@ trait Puro {
       val g: (Sub[A, B] |*| A) -⚬ B = apply { case *(self) |*| a => f(self)(a) }
       Puro.this.rec(g)
 
-    /** An weaker form of closure that can be used only within the scope of the outer `λ`
-     *  (i.e. it cannot returned from the outer `λ`).
-     */
-    def local[A, B](using SourcePos, LambdaContext)(
-      f: LambdaContext ?=> $[A] => $[B],
-    ): MetaFun[A, B]
-
-    def recLocal[A, B](using SourcePos, LambdaContext)(
-      f: LambdaContext ?=> $[Sub[A, B]] => $[A] => $[B],
-    ): MetaFun[A, B]
-
     def ?[A, B](using SourcePos)(
       f: LambdaContext ?=> $[A] => $[B],
     )(using
@@ -761,10 +734,6 @@ trait Puro {
     def one(using SourcePos, LambdaContext): $[One]
 
     def map[A, B](a: $[A])(f: A -⚬ B)(pos: SourcePos)(using
-      LambdaContext,
-    ): $[B]
-
-    def mapMeta[A, B](a: $[A])(f: MetaFun[A, B])(pos: SourcePos)(using
       LambdaContext,
     ): $[B]
 
@@ -878,15 +847,6 @@ trait Puro {
     @targetName("contramapOut")
     def >>:(expr: ??[B])(using SourcePos, LambdaContext): ??[A] =
       expr contramap f
-  }
-
-  extension [A, B](f: MetaFun[A, B]) {
-    @targetName("applyMetaFun")
-    def apply(using
-      pos: SourcePos,
-      ctx: LambdaContext,
-    )(a: $[A]): $[B] =
-      $.mapMeta(a)(f)(pos)
   }
 
   extension [A](a: $[A]) {
