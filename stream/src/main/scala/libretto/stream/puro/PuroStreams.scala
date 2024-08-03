@@ -19,17 +19,17 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
   import dsl.*
   import lib.{*, given}
 
-  type StreamLeaderF[S, T, A, X]   = S |+| (T |&| (A |*| X))
-  type StreamFollowerF[S, T, A, X] = S |&| (T |+| (A |*| X))
+  private type StreamLeaderF[S, T, A, X]   = S |+| (T |&| (A |*| X))
+  private type StreamFollowerF[S, T, A, X] = S |&| (T |+| (A |*| X))
 
-  type StreamLeader[S, T, A]   = Rec[StreamLeaderF[S, T, A, _]]
-  type StreamFollower[S, T, A] = Rec[StreamFollowerF[S, T, A, _]]
+  opaque type StreamLeader[S, T, A]   = Rec[StreamLeaderF[S, T, A, _]]
+  opaque type StreamFollower[S, T, A] = Rec[StreamFollowerF[S, T, A, _]]
 
   opaque type StreamT[T, A] = StreamLeader[T, T, A]
   opaque type SourceT[T, A] = StreamFollower[T, T, A]
 
-  type Stream[A] = StreamT[Done, A]
-  type Source[A] = SourceT[Done, A]
+  opaque type Stream[A] = StreamT[Done, A]
+  opaque type Source[A] = SourceT[Done, A]
 
   opaque type Drain[A] = StreamT[Need, -[A]]
   opaque type Sink[A]  = SourceT[Need, -[A]]
@@ -300,6 +300,9 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
 
     def fromFollower[A]: StreamFollower[Done, Done, A] -⚬ Source[A] = id
     def toFollower[A]  : Source[A] -⚬ StreamFollower[Done, Done, A] = id
+
+    def fromSourceT[A]: SourceT[Done, A] -⚬ Source[A] = id
+    def toSourceT[A]  : Source[A] -⚬ SourceT[Done, A] = id
 
     def fromChoice[A]: (Done |&| Polled[A]) -⚬ Source[A] =
       dsl.pack[StreamFollowerF[Done, Done, A, _]]

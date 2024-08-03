@@ -264,7 +264,7 @@ abstract class ScalettoStreams {
     }
 
     def take[A](n: Int): ValSource[A] -⚬ ValSource[A] =
-      ValSourceT.take[Done, A](n) > fst(neglect) > delayClosedBy
+      Source.toSourceT > ValSourceT.take[Done, A](n) > par(neglect, Source.fromSourceT) > delayClosedBy
 
     def forEachSequentially[A](f: Val[A] -⚬ Done): ValSource[A] -⚬ Done =
       Source.forEachSequentially[Val[A]](f)
