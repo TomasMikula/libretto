@@ -1218,14 +1218,8 @@ trait Puro {
     override def counit : Pong -⚬ One             = pong
   }
 
-  implicit class FunctorOps[F[_], A](fa: $[F[A]]) {
-    def map[B](using SourcePos, LambdaContext)(f: A -⚬ B)(using F: Functor[-⚬, F]): $[F[B]] =
+  extension [F[_], A](fa: $[F[A]])(using F: Functor[-⚬, F]) {
+    def map[B](using SourcePos, LambdaContext)(f: A -⚬ B): $[F[B]] =
       fa :>> F.lift(f)
-
-    def map[B](using SourcePos, LambdaContext)(f: $[A] => $[B])(using Functor[-⚬, F]): $[F[B]] =
-      map(λ(f))
-
-    def flatMap[B](f: $[A] => $[F[B]])(using F: Monad[-⚬, F], ctx: LambdaContext): $[F[B]] =
-      fa > F.liftF(λ(f))
   }
 }

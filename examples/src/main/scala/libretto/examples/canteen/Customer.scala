@@ -16,8 +16,8 @@ object Customer {
       paySection(card)
         .waitFor(
           joinAll(
-            soupOpt .map(eatSoup(_))     .getOrElse(done),
-            dishOpt .map(eatMainDish(_)) .getOrElse(done),
+            soupOpt .map(eatSoup)     .getOrElse(done),
+            dishOpt .map(eatMainDish) .getOrElse(done),
           )
         )
     }

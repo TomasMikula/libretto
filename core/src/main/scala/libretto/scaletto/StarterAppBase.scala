@@ -1,6 +1,6 @@
 package libretto.scaletto
 
 abstract class StarterAppBase {
-  export StarterKit.*
+  export StarterKit.{map as _, *}
   export StarterKit.scalettoLib.given
 }
