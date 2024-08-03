@@ -1,7 +1,6 @@
 package libretto.examples.diningPhilosophers
 
 import libretto.scaletto.StarterKit.*
-import libretto.scaletto.StarterKit.$.*
 import scala.concurrent.duration.*
 import scala.util.Random
 
@@ -22,7 +21,7 @@ class Philosophers[ForksImpl <: Forks](val forks: ForksImpl) {
   def behavior(name: String)(cycles: Int): (SharedFork |*| SharedFork) -⚬ Done = {
     // turn the meta-level value `cycles` into a constant libretto expression
     def constCycles(using LambdaContext): $[Val[Int]] =
-      one > const(cycles)
+      $.one > const(cycles)
 
     λ { (forks: $[SharedFork |*| SharedFork]) =>
       run(name)(forks |*| constCycles)

@@ -12,7 +12,6 @@ object Customers {
 class Customers[SupermarketImpl <: SupermarketInterface](
   val supermarket: SupermarketImpl,
 ) {
-  import libretto.scaletto.StarterKit.$.*
   import supermarket.{*, given}
   import supermarket.goods.*
 

@@ -1,7 +1,6 @@
 package libretto.examples.diningPhilosophers
 
 import libretto.scaletto.StarterKit.*
-import libretto.scaletto.StarterKit.$.*
 
 trait Forks {
   /** Interface to a fork. The fork itself may be shared among multiple philosophers,

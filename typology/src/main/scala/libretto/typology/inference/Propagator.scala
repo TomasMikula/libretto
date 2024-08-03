@@ -3,7 +3,6 @@ package libretto.typology.inference
 import libretto.lambda.{Extractor, Partitioning}
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.StarterKit.{|| as |, *}
-import libretto.scaletto.StarterKit.$.*
 import scala.annotation.targetName
 
 trait Propagator[F[_], T, V] {

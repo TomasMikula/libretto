@@ -1,7 +1,6 @@
 package libretto.examples.diningPhilosophers
 
 import libretto.scaletto.StarterKit.*
-import libretto.scaletto.StarterKit.$.*
 
 /** Implements `Forks`.
   * Internally, it represents a fork as a lock from the core library.

@@ -4,7 +4,6 @@ import libretto.scaletto.StarterApp
 import libretto.stream.scaletto.DefaultStreams.ValSource
 
 object Main extends StarterApp {
-  import $.*
   import scalettoLib.printLine
 
   val nLargeBones = 20

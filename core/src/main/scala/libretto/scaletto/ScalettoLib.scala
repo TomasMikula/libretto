@@ -27,7 +27,6 @@ class ScalettoLib[
   val puroLib: PuroLib & libretto.puro.PuroLib[dsl.type],
 ) {
   import dsl.*
-  import dsl.$.*
   import puroLib.*
 
   object Val {
@@ -123,7 +122,7 @@ class ScalettoLib[
             (Endless.fromChoice >>: outAs) choose {
               case Left(end) => // no more reads
                 returning(
-                  end := one,
+                  end := $.one,
                   outDone := LList1.cons(a |*| as) :>> LList1.closeAll,
                 )
               case Right(na |*| nas) => // read

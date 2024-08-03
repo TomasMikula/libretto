@@ -20,7 +20,6 @@ class StreamsTests extends ScalatestScalettoTestSuite {
     val scalettoStreams = ScalettoStreams(kit.dsl, puroLib, scalettoLib, puroStreams)
 
     import dsl.*
-    import dsl.$.*
     import puroLib.*
     import scalettoLib.{*, given}
     import scalettoStreams.*

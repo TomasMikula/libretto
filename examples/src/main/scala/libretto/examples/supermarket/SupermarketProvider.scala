@@ -6,7 +6,6 @@ import libretto.examples.supermarket.money.*
 import scala.concurrent.duration.*
 
 object SupermarketProvider extends SupermarketInterface {
-  import libretto.scaletto.StarterKit.$.*
 
   override val goods: Goods.type = Goods
   import goods.*

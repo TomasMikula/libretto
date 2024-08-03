@@ -17,7 +17,6 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
   val lib: Lib & PuroLib[dsl.type],
 ) {
   import dsl.*
-  import dsl.$.*
   import lib.{*, given}
 
   type StreamLeaderF[S, T, A, X]   = S |+| (T |&| (A |*| X))
@@ -438,7 +437,7 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
 
     def delayable[A](using Junction.Positive[A]): Source[A] -⚬ (Need |*| Source[A]) =
       λ { src =>
-        val (n |*| d) = one > lInvertSignal
+        val (n |*| d) = $.one > lInvertSignal
         n |*| ((d |*| src) > delayBy)
       }
 
@@ -720,8 +719,8 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
       val tokensDuality: Dual[LList[Done], NegTokens] = tokenInvertor.value
 
       λ { as =>
-        val initialTokens: $[LList[Done]]  = LList.fill(n)(done)(one)
-        val (negTokens |*| returnedTokens) = tokensDuality.lInvert(one)
+        val initialTokens: $[LList[Done]]  = LList.fill(n)(done)($.one)
+        val (negTokens |*| returnedTokens) = tokensDuality.lInvert($.one)
         val tokens: $[LList[Done]]         = LList.concat(initialTokens |*| returnedTokens)
         val (shutdownPong |*| as1)         = Source.takeUntilPong(as)
         val (buffer |*| upstreamClosed) =
@@ -777,7 +776,7 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
             case Right(x |*| xs) =>
               Source.poll(as) either {
                 case Left(done) =>
-                  LList.nil(one) |*| LList.cons(x |*| xs) |*| done
+                  LList.nil($.one) |*| LList.cons(x |*| xs) |*| done
                 case Right(a |*| as) =>
                   val (xas |*| leftovers |*| done) = takeForeach(xs |*| as)
                   LList.cons((x |*| a) |*| xas) |*| leftovers |*| done

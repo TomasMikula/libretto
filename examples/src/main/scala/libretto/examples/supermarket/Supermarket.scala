@@ -23,7 +23,6 @@ import libretto.scaletto.StarterApp
  *    - the type `Shopping` is a protocol between the store and the customer
  */
 object Supermarket extends StarterApp {
-  import $.*
   import money.CoinBank
   import SupermarketProvider.Supermarket
 

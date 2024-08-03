@@ -2,7 +2,6 @@ package libretto.examples.canteen
 
 import libretto.examples.canteen.Protocol.*
 import libretto.scaletto.StarterKit.*
-import libretto.scaletto.StarterKit.$.*
 import libretto.scaletto.StarterKit.puroLib.*
 
 object Customer {
@@ -32,7 +31,7 @@ object Customer {
         },
       caseRight =
         λ { mainSection =>
-          val noSoup = Maybe.empty[Soup](one)
+          val noSoup = Maybe.empty[Soup]($.one)
           noSoup |*| mainSection
         },
     )
@@ -46,7 +45,7 @@ object Customer {
           someDish |*| paySection
         }
         .is { case InR(paySection) =>
-          val noDish = Maybe.empty[MainDish](one)
+          val noDish = Maybe.empty[MainDish]($.one)
           noDish |*| paySection
         }
         .end

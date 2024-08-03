@@ -54,7 +54,6 @@ abstract class ScalettoStreams {
   private lazy val Tree = BinarySearchTree(dsl, puroLib, scalettoLib)
 
   import dsl.*
-  import dsl.$.*
   import puroLib.*
   import scalettoLib.{*, given}
   import underlying.*
@@ -251,7 +250,7 @@ abstract class ScalettoStreams {
       }
 
       λ { as =>
-        val nil = one > const(List.empty[A])
+        val nil = $.one > const(List.empty[A])
         go(as |*| nil)
       }
     }
@@ -306,7 +305,7 @@ abstract class ScalettoStreams {
       }
 
       λ { as =>
-        val s = one > const(initialState)
+        val s = $.one > const(initialState)
         inner(s |*| as)
       }
     }
@@ -539,7 +538,7 @@ abstract class ScalettoStreams {
         go(
           ValSource.poll(vals) |*|
           Source.poll(subscribers) |*|
-          one > done > Tree.empty[K, ValDrain.Pulling[V]]
+          $.one > done > Tree.empty[K, ValDrain.Pulling[V]]
         )
       }
     }
@@ -551,7 +550,7 @@ abstract class ScalettoStreams {
         lInvertSource
 
       λ { src =>
-        val (subscriptions |*| subscribers) = one > lInvert
+        val (subscriptions |*| subscribers) = $.one > lInvert
         subscribers |*| subscribeByKey(f)(src |*| subscriptions)
       }
     }

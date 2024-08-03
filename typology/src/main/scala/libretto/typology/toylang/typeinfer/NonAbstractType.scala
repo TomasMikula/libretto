@@ -5,7 +5,6 @@ import libretto.lambda.util.{SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.unapply.Unapply
 import libretto.scaletto.StarterKit.*
-import libretto.scaletto.StarterKit.$.*
 import libretto.scaletto.StarterKit.dsl.{|| as |}
 import libretto.typology.inference.TypeOps
 import libretto.typology.kinds.{Kinds, KindN, ×, ○, ●}

@@ -32,11 +32,10 @@ Libretto.
 
 ### Imports
 
-The code snippets below use these imports:
+The code snippets below use this import:
 
 ```scala mdoc
 import libretto.scaletto.StarterKit.dsl.*
-import libretto.scaletto.StarterKit.dsl.$.*
 ```
 
 ```scala mdoc:invisible
@@ -1037,9 +1036,9 @@ val h: B -⚬ One = ???
   val c2: $[C] = f(a)
 
   val ((a2: $[A]) |*| (d: $[D])) =
-    // `one: $[One]` is a constant expression (i.e. not built from other expressions)
+    // `$.one: $[One]` is a constant expression (i.e. not built from other expressions)
     // that can be used as an argument to functions taking `One`, such as `g`
-    a |*| g(one)
+    a |*| g($.one)
     // Without `one`, we could equivalently write
     a also g
     // which is a shortcut for

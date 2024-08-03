@@ -15,7 +15,6 @@ object PuroLib {
 
 class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
   import dsl.*
-  import dsl.$.*
 
   /** Evidence that `A` flowing in one direction is equivalent to to `B` flowing in the opposite direction.
     * It must hold that
@@ -3159,7 +3158,7 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
       Cons[T].reinject
 
     def singleton[T]: T -⚬ LList[T] =
-      λ { t => Cons(t |*| Nil(one)) }
+      λ { t => Cons(t |*| Nil($.one)) }
 
     def uncons[T]: LList[T] -⚬ (One |+| (T |*| LList[T])) =
       unpack

@@ -1,7 +1,6 @@
 package libretto.examples.tv
 
 import libretto.scaletto.StarterKit.*
-import libretto.scaletto.StarterKit.$.*
 import libretto.stream.scaletto.DefaultStreams.*
 import TvChannel.{Cooking, Discovery, Sport}
 import TvInterface.*

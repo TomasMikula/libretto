@@ -3,7 +3,6 @@ package libretto.examples.diningPhilosophers
 import libretto.scaletto.StarterApp
 
 object DiningPhilosophers extends StarterApp {
-  import $.*
 
   val philosophers = Philosophers(ForksProvider)
   import philosophers.{behavior as philosopher}

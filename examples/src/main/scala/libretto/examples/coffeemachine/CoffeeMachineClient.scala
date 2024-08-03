@@ -8,7 +8,6 @@ import scala.concurrent.duration.*
  */
 object CoffeeMachineClient {
   import Protocol.*
-  import $.*
 
   val useCoffeeMachine: CoffeeMachine -⚬ Done = {
     def go: (Done |*| CoffeeMachine) -⚬ Done = rec { repeat =>

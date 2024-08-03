@@ -43,7 +43,6 @@ class BasicTests extends ScalatestScalettoTestSuite {
   override def testCases(using kit: ScalettoTestKit): List[(String, TestCase[kit.type])] = {
     import kit.{Outcome, dsl, manualClock}
     import dsl.*
-    import dsl.$.*
     val puroLib = PuroLib(dsl)
     val scalettoLib = ScalettoLib(dsl: dsl.type, puroLib)
     val crashLib = CrashLib(dsl)

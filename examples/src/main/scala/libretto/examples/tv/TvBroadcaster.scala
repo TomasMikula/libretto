@@ -1,7 +1,6 @@
 package libretto.examples.tv
 
 import libretto.scaletto.StarterKit.*
-import libretto.scaletto.StarterKit.$.*
 import libretto.stream.scaletto.DefaultStreams.*
 import TvChannel.{Cooking, Discovery, Sport}
 import TvInterface.{Channels, Tv, TvStream}
@@ -18,7 +17,7 @@ object TvBroadcaster {
     def go(ch: TvChannel): Done -⚬ TvStream =
       λ.+ { d =>
         val vidSrc = d :>> videoSource(ch)
-        val repeat = one :>> Detained.thunk(makeTv)
+        val repeat = $.one :>> Detained.thunk(makeTv)
         ValSource.terminateWith(vidSrc |*| repeat)
       }
 
