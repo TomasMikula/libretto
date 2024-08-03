@@ -809,14 +809,6 @@ trait Puro {
     )(using
       LambdaContext,
     ): $[B]
-
-    implicit class ClosureOps[A, B](f: $[A =⚬ B]) {
-      def apply(a: $[A])(using
-        pos: SourcePos,
-        ctx: LambdaContext,
-      ): $[B] =
-        app(f, a)(pos)
-    }
   }
 
   val |*| : ConcurrentPairOps
@@ -955,6 +947,14 @@ trait Puro {
       val (nb, b) = $.unzip(constant(demand[B]))(pos)
       returning(nb, rInvert(a |*| b))
     }
+  }
+
+  extension [A, B](f: $[A =⚬ B]) {
+    def apply(a: $[A])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): $[B] =
+      $.app(f, a)(pos)
   }
 
   extension [B](expr: $[-[B]]) {
