@@ -33,10 +33,10 @@ class DiningPhilosophersTests extends ScalatestStarterTestSuite {
               mkSharedFork(start)
 
             val (heldRFork |*| rAcquired) =
-              tryPickUp(rFork) > leftOrCrash("Failed to pick up the fork.") > notifyPosSnd
+              tryPickUp(rFork) |> leftOrCrash("Failed to pick up the fork.") > notifyPosSnd
 
             val (lFork1 |*| lAttempted) =
-              (lFork blockUntil rAcquired) > tryPickUp > notifyPosSnd > fst(rightOrCrash("Succeeded in picking up shared fork twice simultaneously"))
+              (lFork blockUntil rAcquired) |> tryPickUp > notifyPosSnd > fst(rightOrCrash("Succeeded in picking up shared fork twice simultaneously"))
 
             join( letGo(lFork1)
               |*| letGo(putDown(heldRFork deferUntil lAttempted))

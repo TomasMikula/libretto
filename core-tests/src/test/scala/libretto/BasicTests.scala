@@ -702,7 +702,7 @@ class BasicTests extends ScalatestScalettoTestSuite {
               val pool: $[LeasePool] = LeasePool.fromList(LList1.fill(LeaseCount)(id[Done])(start))
               val counter: $[Counter] = constVal(new AtomicInteger(0))(start)
               val counters: $[LList1[Counter]] = LList1.fill(ClientCount)(id)(counter)
-              val (pool1 |*| lease_counters) = (pool |*| counters) > LList1.mapS(
+              val (pool1 |*| lease_counters) = (pool |*| counters) |> LList1.mapS(
                 λ { case pool |*| cntr =>
                   val (lease |*| pool1) = LeasePool.acquireLease(pool)
                   pool1 |*| (lease |*| cntr)
@@ -714,12 +714,12 @@ class BasicTests extends ScalatestScalettoTestSuite {
                 λ { case lease |*| counter =>
                   Lease.notifyAcquired(lease) match
                     case ping |*| lease =>
-                      val (counter1 ** n) = (counter deferUntil ping) > mapVal(n => (n, n.incrementAndGet()))
-                      val decremented = counter1 > signalPosFst > fst(delay(5.millis)) > awaitPosFst > mapVal(_.decrementAndGet) > neglect
+                      val (counter1 ** n) = (counter deferUntil ping) |> mapVal(n => (n, n.incrementAndGet()))
+                      val decremented = counter1 |> signalPosFst |> fst(delay(5.millis)) |> awaitPosFst |> mapVal(_.decrementAndGet) |> neglect
                       n alsoElim (Lease.releaseBy(decremented |*| lease))
                 }
               val res: $[Val[List[Int]]] =
-                lease_counters > LList1.map(client) > LList1.toLList > toScalaList
+                lease_counters |> LList1.map(client) |> LList1.toLList |> toScalaList
               res waitFor LeasePool.close(pool1)
             }
           prg
@@ -785,18 +785,18 @@ class BasicTests extends ScalatestScalettoTestSuite {
               start.also(demand[Val[String] |&| Val[Int]])
 
             val (ping |*| demand2) =
-              demand1 > notifyInvChoice
+              demand1 |> notifyInvChoice
 
             val one: $[One] =
-              (start1 |*| demandChosen(demand2)) > |+|.switchWithL(
+              (start1 |*| demandChosen(demand2)) |> |+|.switchWithL(
                 caseLeft  = λ { case (start1 |*| strDemand) => supply(constVal("x")(start1) |*| strDemand) },
                 caseRight = λ { case (start1 |*| intDemand) => supply(constVal(100)(start1) |*| intDemand) },
               )
 
             val res: $[Val[Int]] =
-              offer1 > chooseR
+              offer1 |> chooseR
 
-            ((ping |*| res) > awaitPingFst)
+            ((ping |*| res) |> awaitPingFst)
               .alsoElim(one)
           }
 
@@ -871,7 +871,7 @@ class BasicTests extends ScalatestScalettoTestSuite {
         val prg: Done -⚬ Done =
           λ { d =>
             val (d1 |*| (nnd |*| nd)) = d.also(demand[-[Done]])
-            val (nnnd |*| nnd2) = supply(d1 |*| nd) > demand[-[-[Done]]]
+            val (nnnd |*| nnd2) = supply(d1 |*| nd) |> demand[-[-[Done]]]
             die(nnd2)
               .alsoElim(supply(nnd |*| nnnd))
           }
@@ -908,15 +908,15 @@ class BasicTests extends ScalatestScalettoTestSuite {
         val prg: Done -⚬ Done =
           λ { start =>
             val (lLock |*| rLock) =
-              start > Lock.newLock > Lock.share
+              start |> Lock.newLock |> Lock.share
 
             // one lock can be acquired
             val (acquiredRLock |*| acquiredRNotification) =
-              Lock.tryAcquire(rLock) > leftOrCrash() > notifyPosSnd
+              Lock.tryAcquire(rLock) |> leftOrCrash() |> notifyPosSnd
 
             // second acquisition attempt fails
             val (lLock1 |*| pingOnAttempted) =
-              (lLock blockUntil acquiredRNotification) > Lock.tryAcquire > notifyPosSnd > fst(rightOrCrash())
+              (lLock blockUntil acquiredRNotification) |> Lock.tryAcquire |> notifyPosSnd |> fst(rightOrCrash())
 
             // release the acquired lock, but only after the second acquisition attempt
             val rLock1 =

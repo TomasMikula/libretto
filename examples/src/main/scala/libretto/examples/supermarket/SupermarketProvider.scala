@@ -37,11 +37,11 @@ object SupermarketProvider extends SupermarketInterface {
 
       // delay supply of goods until basket is obtained
       val (basket1 |*| goodsSupply1) =
-        (basket |*| goodsSupply) > sequence_PN[Basket, GoodsSupply]
+        (basket |*| goodsSupply) |> sequence_PN[Basket, GoodsSupply]
 
       val (basketNumber |*| basket2) = serialNumber(basket1)
       val basket3 = basket2 waitFor {
-        basketNumber > printLine(n => s"${Console.RED}+1${Console.RESET} basket $n is now in use")
+        basketNumber |> printLine(n => s"${Console.RED}+1${Console.RESET} basket $n is now in use")
       }
 
       (empty |*| ((basket3 |*| negBasket) |*| (goodsSupply1 |*| coinSink)))
@@ -51,7 +51,7 @@ object SupermarketProvider extends SupermarketInterface {
     λ { case (unit |*| ((basket |*| negBasket) |*| (goodsSupply |*| coinSink))) =>
       val (basketNumber |*| basket1) = serialNumber(basket)
       val basket2 = basket1 waitFor {
-        basketNumber > printLine(n => s"${Console.GREEN}-1${Console.RESET} basket $n is now available")
+        basketNumber |> printLine(n => s"${Console.GREEN}-1${Console.RESET} basket $n is now available")
       }
       unit
         .alsoElim(returnBasket(basket2 |*| negBasket))
@@ -92,7 +92,7 @@ object SupermarketProvider extends SupermarketInterface {
     λ { goodsSupply =>
       val (itemSelection |*| goodsSupply1) = Unlimited.getSome(goodsSupply)
       val item: $[Item]                    = chooseItem(itemSelection)
-      (item > delayUsing(randomDelay)) |*| goodsSupply1
+      (item |> delayUsing(randomDelay)) |*| goodsSupply1
     }
 
   private def randomDelay: Done -⚬ Done =
@@ -104,10 +104,10 @@ object SupermarketProvider extends SupermarketInterface {
     λ { case (items |*| (basket |*| (goodsSupply |*| coinSink))) =>
       // don't let the customer pick an item before basket is ready
       val (basket1 |*| goodsSupply1) =
-        (basket |*| goodsSupply) > sequence_PN
+        (basket |*| goodsSupply) |> sequence_PN
 
       val (item |*| goodsSupply2) =
-        goodsSupply1 > supplyItem(pick)
+        goodsSupply1 |> supplyItem(pick)
 
       // don't make basket ready again before item is obtained
       val (item1 |*| basket2) =
@@ -146,7 +146,7 @@ object SupermarketProvider extends SupermarketInterface {
 
   def openSupermarket(capacity: Int): Done -⚬ (Supermarket |*| CoinBank) =
     λ { trigger =>
-      val ((trigger1 |*| trigger2) |*| one) = fork(trigger) > introSnd
+      val ((trigger1 |*| trigger2) |*| one) = fork(trigger) |> introSnd
 
       // make only as many baskets as there are permitted concurrently shopping customers
       val baskets: $[LList1[Basket]] =
@@ -156,7 +156,7 @@ object SupermarketProvider extends SupermarketInterface {
       // When the pool is empty, next customer will not obtain a basket until a basket is returned to the pool.
       // `collectedBaskets` will become available once there's no chance that anyone will still use them.
       val ((basketSupply: $[Unlimited[BorrowedBasket]]) |*| (collectedBaskets: $[LList1[Basket]])) =
-        baskets > Unlimited.pool
+        baskets |> Unlimited.pool
 
       // `goodsSupplyClosed` will signal once there's no chance that anyone still needs it.
       val ((goodsSupply: $[GoodsSupply]) |*| (goodsSupplyClosed: $[Done])) =
@@ -169,16 +169,16 @@ object SupermarketProvider extends SupermarketInterface {
       // Since `GoodsSupply` is a comonoid, it can be split arbitrarily
       // and given to an unlimited number of customers
       val unlimitedGoodsSupply: $[Unlimited[GoodsSupply]] =
-        goodsSupply > Unlimited.fromComonoid
+        goodsSupply |> Unlimited.fromComonoid
 
       // Since `CoinSink` is a comonoid, it can be split arbitrarily
       // and given to an unlimited number of customers
       val unlimitedCoinSinks: $[Unlimited[CoinSink]] =
-        coinSink > Unlimited.fromComonoid
+        coinSink |> Unlimited.fromComonoid
 
       val unlimitedShopping: $[Unlimited[One |*| (BorrowedBasket |*| (GoodsSupply |*| CoinSink))]] = {
         import Unlimited.{zip, map}
-        zip(basketSupply |*| zip(unlimitedGoodsSupply |*| unlimitedCoinSinks)) > map(introFst)
+        zip(basketSupply |*| zip(unlimitedGoodsSupply |*| unlimitedCoinSinks)) |> map(introFst)
       }
 
       // wait for goods supply to shut down and all baskets returned before returning today's revenue

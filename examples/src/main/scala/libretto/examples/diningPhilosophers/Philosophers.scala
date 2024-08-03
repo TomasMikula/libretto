@@ -21,7 +21,7 @@ class Philosophers[ForksImpl <: Forks](val forks: ForksImpl) {
   def behavior(name: String)(cycles: Int): (SharedFork |*| SharedFork) -⚬ Done = {
     // turn the meta-level value `cycles` into a constant libretto expression
     def constCycles(using LambdaContext): $[Val[Int]] =
-      $.one > const(cycles)
+      constantVal(cycles)
 
     λ { (forks: $[SharedFork |*| SharedFork]) =>
       run(name)(forks |*| constCycles)
@@ -32,7 +32,7 @@ class Philosophers[ForksImpl <: Forks](val forks: ForksImpl) {
     rec { run =>
       λ { case (forks |*| cycles) =>
         // decrement the number of cycles and then "pattern match" on the result
-        (dec(cycles) |*| forks) > PMaybe.switchWithR(
+        (dec(cycles) |*| forks) |> PMaybe.switchWithR(
           caseNone =
             // cycles was already 0
             λ { case (done |*| (fork1 |*| fork2)) =>
@@ -71,7 +71,7 @@ class Philosophers[ForksImpl <: Forks](val forks: ForksImpl) {
           // failed to pick up the forks; think for a bit and then try again
           λ { case (failed |*| (lFork |*| rFork)) =>
             val (thought |*| thoughtPing) = when(failed) { think(name) > notifyDoneR }
-            val (lPing |*| rPing) = thoughtPing > split
+            val (lPing |*| rPing) = thoughtPing |> split
             val (eaten |*| forks) =
               eatOnce((lFork blockUntil lPing) |*| (rFork blockUntil rPing))
             join(thought |*| eaten) |*| forks
@@ -92,17 +92,17 @@ class Philosophers[ForksImpl <: Forks](val forks: ForksImpl) {
     ) =
     λ { case (lFork |*| rFork) =>
       // try to pick up the left fork and then "pattern match" on the result
-      (tryPickUp(lFork) |*| rFork) > |+|.switchWithR(
+      (tryPickUp(lFork) |*| rFork) |> |+|.switchWithR(
         caseLeft =
           // succeeded to pick up the left fork
           λ { case (lHeldFork |*| rFork) =>
             // try to pick up the right fork and then "pattern match" on the result
-            (lHeldFork |*| tryPickUp(rFork)) > |+|.switchWithL(
+            (lHeldFork |*| tryPickUp(rFork)) |> |+|.switchWithL(
               caseLeft =
                 // succeeded to pick up the right fork
                 λ { case (lHeldFork |*| rHeldFork) =>
                   // eat with forks, then put down the forks and return success (via `injectL`)
-                  eat(name)(lHeldFork |*| rHeldFork) >
+                  eat(name)(lHeldFork |*| rHeldFork) |>
                     λ { case (eaten |*| (lhf |*| rhf)) =>
                       injectL(eaten |*| (putDown(lhf) |*| putDown(rhf)))
                     }
@@ -126,8 +126,8 @@ class Philosophers[ForksImpl <: Forks](val forks: ForksImpl) {
 
   private def eat(name: String): (HeldFork |*| HeldFork) -⚬ (Done |*| (HeldFork |*| HeldFork)) =
     λ { case (lFork |*| rFork) =>
-      val (lFork1 |*| lReady) = lFork > signalDone
-      val (rFork1 |*| rReady) = rFork > signalDone
+      val (lFork1 |*| lReady) = lFork |> signalDone
+      val (rFork1 |*| rReady) = rFork |> signalDone
 
       val eaten: $[Done] =
         // eat only after both forks are ready
@@ -137,7 +137,7 @@ class Philosophers[ForksImpl <: Forks](val forks: ForksImpl) {
 
       // split the `eaten` Done signal into three
       val (done |*| (lDone |*| rDone)) =
-        eaten > (id /\ (id /\ id))
+        eaten |> (id /\ (id /\ id))
 
       // hold up the forks until eating is done
       (done |*| ((lFork1 waitFor lDone) |*| (rFork1 waitFor rDone)))

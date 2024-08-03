@@ -52,7 +52,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
           Outcome.assertNotThrows {
             val f: Done -⚬ (Done |*| Done) =
               λ { d =>
-                val (d1 |*| d2) = d > fork
+                val (d1 |*| d2) = d |> fork
                 val f: $[Done =⚬ (Done |*| Done)] =
                   λ.closure { d3 =>
                     d3 |*| d2
@@ -67,10 +67,10 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         TestCase.interactWith {
           val f: Done -⚬ (Val[String] =⚬ Val[String]) =
             λ { (d: $[Done]) =>
-              val n: $[Val[Int]] = d > constVal(2)
+              val n: $[Val[Int]] = d |> constVal(2)
               val f: $[Val[String] =⚬ Val[String]] =
                 λ.closure { s =>
-                  (n |*| s) > unliftPair > mapVal { case (n, s) => s.repeat(n) }
+                  (n |*| s) |> unliftPair |> mapVal { case (n, s) => s.repeat(n) }
                 }
               f
             }
@@ -86,13 +86,13 @@ class ClosureTests extends ScalatestScalettoTestSuite {
       "some closure 3" ->
         TestCase.interactWith {
           λ { (d: $[Done]) =>
-            val (d1 |*| d2) = d > fork
-            val n: $[Val[Int]] = d1 > constVal(2)
+            val (d1 |*| d2) = d |> fork
+            val n: $[Val[Int]] = d1 |> constVal(2)
             val f: $[Val[String] =⚬ Val[String]] =
               λ.closure { s =>
-                (n |*| s) > unliftPair > mapVal { case (n, s) => s.repeat(n) }
+                (n |*| s) |> unliftPair |> mapVal { case (n, s) => s.repeat(n) }
               }
-            val s = d2 > constVal("abc")
+            val s = d2 |> constVal("abc")
             f(s)
           }
         }.via {
@@ -104,15 +104,15 @@ class ClosureTests extends ScalatestScalettoTestSuite {
           val p1: Done -⚬ (-[Val[Int]] |*| Val[Int]) =
             λ { d =>
               λ.closure { (i: $[Val[Int]]) =>
-                val j = $.one > done > constVal(1)
-                val res = (i ** j) > mapVal(_ + _)
-                (res |*| d) > awaitPosSnd
+                val j = $.one |> done |> constVal(1)
+                val res = (i ** j) |> mapVal(_ + _)
+                (res |*| d) |> awaitPosSnd
               }
             }
 
           val p2: Done -⚬ Val[Int] =
             p1 > λ { case (out |*| in) =>
-              val x = $.one > done > constVal(42)
+              val x = $.one |> done |> constVal(42)
               in alsoElim supply(x |*| out)
             }
 
@@ -191,7 +191,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         TestCase.pure {
           Outcome.assertNotThrows {
             λ { (a: $[Done]) =>
-              val b: $[Done] = $.one > done
+              val b: $[Done] = $.one |> done
               λ.closure { (c: $[Done]) =>
                 a |*| b |*| c
               }
@@ -203,7 +203,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         TestCase.pure {
           Outcome.assertNotThrows {
             λ.from[One] { case ?(_) =>
-              val b: $[Done] = $.one > done
+              val b: $[Done] = $.one |> done
               λ.closure.from[One] { case ?(_) =>
                 b
               }
@@ -215,9 +215,9 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         TestCase.pure {
           Outcome.assertNotThrows {
             λ.from[One] { case ?(_) =>
-              val b = $.one > done
+              val b = $.one |> done
               λ.closure.from[One] { case ?(_) =>
-                val c = $.one > done
+                val c = $.one |> done
                 b |*| c
               }
             }
@@ -228,8 +228,8 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         TestCase.pure {
           Outcome.assertNotThrows {
             λ.from[One] { case ?(_) =>
-              val b = $.one > done
-              val c = $.one > done
+              val b = $.one |> done
+              val c = $.one |> done
               λ.closure.from[One] { case ?(_) =>
                 b |*| c
               }
@@ -242,7 +242,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
           Outcome.assertNotThrows {
             λ { (a: $[Done]) =>
               λ.closure { (b: $[Done]) =>
-                val (c |*| d) = $.one > done > fork
+                val (c |*| d) = $.one |> done |> fork
                 a |*| b |*| c |*| d
               }
             }
@@ -254,7 +254,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         TestCase.pure {
           Outcome.assertNotThrows {
             λ { (a: $[Done]) =>
-              val (b |*| c) = $.one > done > fork
+              val (b |*| c) = $.one |> done |> fork
               λ.closure { (d: $[Done]) =>
                 c |*| d
               } |*| (a |*| b)

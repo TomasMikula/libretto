@@ -17,14 +17,14 @@ object Main extends StarterApp {
 
   override def blueprint: Done -⚬ Done =
     λ { case +(trigger) =>
-      val toys     = trigger > ValSource.fromList(inToys)
-      val bones    = trigger > ValSource.fromList(inBones)
-      val biscuits = trigger > ValSource.fromList(inBiscuits)
+      val toys     = trigger |> ValSource.fromList(inToys)
+      val bones    = trigger |> ValSource.fromList(inBones)
+      val biscuits = trigger |> ValSource.fromList(inBiscuits)
 
       val treatsPacks: $[ValSource[TreatsPack]] =
         DogTreatsFactory.packagingLine(toys |*| bones |*| biscuits)
 
-      treatsPacks > ValSource.forEachSequentially {
+      treatsPacks |> ValSource.forEachSequentially {
         printLine { pack => s"$pack" }
       }
     }

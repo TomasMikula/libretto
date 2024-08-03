@@ -155,7 +155,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           import ValSource.{dup, toList}
 
           λ { (start: $[Done]) =>
-            val src = start > ValSource.of(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+            val src = start |> ValSource.of(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
             val (out1 |*| out2) = dup(src)
             toList(out1) ** toList(out2)
           }
@@ -201,8 +201,8 @@ class StreamsTests extends ScalatestScalettoTestSuite {
         .interactWith {
           val prg: Done -⚬ (ValSource[Unit] |*| ValSource[Unit] |*| ValDrain[Unit]) =
             λ { start =>
-              val (src1 |*| drn1) = $.one > lInvertValSource[Unit]
-              val (src2 |*| drn2) = $.one > lInvertValSource[Unit]
+              val (src1 |*| drn1) = $.one |> lInvertValSource[Unit]
+              val (src2 |*| drn2) = $.one |> lInvertValSource[Unit]
               val drn = ValDrain.contraDup(drn1 |*| drn2)
               (src1 |*| src2) |*| (drn onCloseAwait start)
             }

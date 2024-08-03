@@ -42,7 +42,7 @@ object Supermarket extends StarterApp {
       // await all customers
       // (`Done` signal is a monoid, so a list of `Done` can be combined into a single `Done`)
       val customersDone: $[Done] =
-        customerHandles > LList.fold
+        customerHandles |> LList.fold
 
       // wait for all customers to finish shopping before opening the coin bank
       val finalCoinBank: $[CoinBank] =
@@ -51,7 +51,7 @@ object Supermarket extends StarterApp {
       val revenue: $[Val[Int]] =
         money.openCoinBank(finalCoinBank)
 
-      revenue > printLine(n => s"Made $n coins")
+      revenue |> printLine(n => s"Made $n coins")
     }
 
   /** Blueprints for customer behaviors. */

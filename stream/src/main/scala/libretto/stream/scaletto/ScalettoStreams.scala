@@ -102,8 +102,8 @@ abstract class ScalettoStreams {
 
       val poll: (Val[List[A]] |*| Detained[T]) -⚬ Polled[T, A] =
         λ { case as |*| t =>
-          as > mapVal(uncons) > optionToPMaybe > PMaybe.toEither either {
-            case Left(nil)      => t.releaseWhen(nil) > Polled.empty[T, A]
+          as |> mapVal(uncons) |> optionToPMaybe |> PMaybe.toEither either {
+            case Left(nil)      => t.releaseWhen(nil) |> Polled.empty[T, A]
             case Right(a ** as) => Polled.cons(a |*| fromList(as |*| t))
           }
         }
@@ -213,8 +213,8 @@ abstract class ScalettoStreams {
 
       val poll: Val[List[A]] -⚬ Polled[A] =
         λ { as =>
-          as > mapVal(uncons) > optionToPMaybe > PMaybe.toEither either {
-            case Left(nil)     => nil > Polled.empty[A]
+          as |> mapVal(uncons) |> optionToPMaybe |> PMaybe.toEither either {
+            case Left(nil)     => nil |> Polled.empty[A]
             case Right(h ** t) => Polled.cons(h |*| fromList(t))
           }
         }
@@ -240,17 +240,17 @@ abstract class ScalettoStreams {
         λ { case as |*| acc =>
           poll(as) either {
             case Left(closed) =>
-              val res = acc > mapVal(_.reverse)
+              val res = acc |> mapVal(_.reverse)
               res waitFor closed
             case Right(h |*| t) =>
-              val acc1 = (h ** acc) > mapVal(_ :: _)
+              val acc1 = (h ** acc) |> mapVal(_ :: _)
               self(t |*| acc1)
           }
         }
       }
 
       λ { as =>
-        val nil = $.one > const(List.empty[A])
+        val nil = $.one |> const(List.empty[A])
         go(as |*| nil)
       }
     }
@@ -305,7 +305,7 @@ abstract class ScalettoStreams {
       }
 
       λ { as =>
-        val s = $.one > const(initialState)
+        val s = $.one |> const(initialState)
         inner(s |*| as)
       }
     }
@@ -477,7 +477,7 @@ abstract class ScalettoStreams {
       type KSubs = Val[K] |*| -[ValSource[V]]
 
       val discardSubscriber: KSubs -⚬ One =
-        λ { case (k |*| out) => (k > dsl.neglect > ValSource.empty[V]) supplyTo out }
+        λ { case (k |*| out) => (k |> dsl.neglect |> ValSource.empty[V]) supplyTo out }
 
       def onUpstream(
         goRec: ((Polled[A] |*| Source.Polled[KSubs]) |*| DT[K, V]) -⚬ Done,
@@ -527,7 +527,7 @@ abstract class ScalettoStreams {
           SignalingJunction.Positive.byFst[Val[K], -[ValSource[V]]]
 
         λ { case (vals |*| subs) |*| tree =>
-          ((vals |*| subs) > lib.race) either {
+          ((vals |*| subs) |> lib.race) either {
             case Left (vals |*| subs) => onUpstream(self)((vals |*| subs) |*| tree)
             case Right(vals |*| subs) => onSubs(self)((vals |*| subs) |*| tree)
           }
@@ -538,7 +538,7 @@ abstract class ScalettoStreams {
         go(
           ValSource.poll(vals) |*|
           Source.poll(subscribers) |*|
-          $.one > done > Tree.empty[K, ValDrain.Pulling[V]]
+          ($.one |> done |> Tree.empty[K, ValDrain.Pulling[V]])
         )
       }
     }
@@ -550,7 +550,7 @@ abstract class ScalettoStreams {
         lInvertSource
 
       λ { src =>
-        val (subscriptions |*| subscribers) = $.one > lInvert
+        val (subscriptions |*| subscribers) = $.one |> lInvert
         subscribers |*| subscribeByKey(f)(src |*| subscriptions)
       }
     }
@@ -619,7 +619,7 @@ abstract class ScalettoStreams {
         λ { case (pulling1 |*| drain2) =>
           ValDrain.pulling(
             drain2.toEither either {
-              case Left(closing2)  => pulling1 alsoElim (closing2 > need)
+              case Left(closing2)  => pulling1 alsoElim (closing2 |> need)
               case Right(pulling2) => contraDupPullings(pulling1 |*| pulling2)
             }
           )
@@ -628,13 +628,13 @@ abstract class ScalettoStreams {
       val goFst: (ValDrain[A] |*| ValDrain[A]) -⚬ ValDrain[A] =
         λ { case (drain1 |*| drain2) =>
           drain1.toEither either {
-            case Left(closing)  => drain2 alsoElim (closing > need)
+            case Left(closing)  => drain2 alsoElim (closing |> need)
             case Right(pulling) => goPulling(pulling |*| drain2)
           }
         }
 
       λ { (drains: $[ValDrain[A] |*| ValDrain[A]]) =>
-        drains > raceBy(ValDrain.notifyReady) either {
+        drains |> raceBy(ValDrain.notifyReady) either {
           case Left (dr1 |*| dr2) => goFst(dr1 |*| dr2)
           case Right(dr1 |*| dr2) => goFst(dr2 |*| dr1)
         }
@@ -661,7 +661,7 @@ abstract class ScalettoStreams {
 
       def supply[A]: (Val[A] |*| Pulling[A]) -⚬ (Need |+| Pulling[A]) =
         λ { case (a |*| pulling) =>
-          val na |*| drain = pulling > warrant
+          val na |*| drain = pulling |> warrant
           drain.toEither alsoElim (a supplyTo na)
         }
 
@@ -690,11 +690,11 @@ abstract class ScalettoStreams {
   extension [A](drain: $[ValDrain[A]]) {
     @targetName("ValDrainToEither")
     def toEither(using SourcePos, LambdaContext): $[Need |+| ValDrain.Pulling[A]] =
-      drain > ValDrain.toEither
+      drain |> ValDrain.toEither
 
     @targetName("ValDrainOnCloseAwait")
     infix def onCloseAwait(using SourcePos, LambdaContext)(that: $[Done]): $[ValDrain[A]] =
-      (that |*| drain) > ValDrain.onCloseAwait
+      (that |*| drain) |> ValDrain.onCloseAwait
   }
 
   def rInvertValDrain[A]: (ValDrain[A] |*| ValSource[A]) -⚬ One =

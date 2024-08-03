@@ -23,14 +23,14 @@ object CoffeeMachineProvider {
   private def serveEspresso: Done -⚬ (EspressoOptions =⚬ Val[Beverage]) =
     λ { ready =>
       λ.closure { espressoOptions =>
-        (espressoOptions waitFor ready) > makeEspresso
+        (espressoOptions waitFor ready) |> makeEspresso
       }
     }
 
   private def serveLatte: Done -⚬ (LatteOptions =⚬ Val[Beverage]) =
     λ { ready =>
       λ.closure { latteOptions =>
-        (latteSpec(latteOptions) waitFor ready) > makeLatte
+        (latteSpec(latteOptions) waitFor ready) |> makeLatte
       }
     }
 
@@ -44,7 +44,7 @@ object CoffeeMachineProvider {
 
   private def latteSpec: LatteOptions -⚬ Val[LatteSpec] =
     λ { case size |*| shotCount |*| flavor =>
-      unliftPair(unliftPair(size |*| shotCount) |*| flavor) > mapVal {
+      unliftPair(unliftPair(size |*| shotCount) |*| flavor) |> mapVal {
         case ((a, b), c) => (a, b, c)
       }
     }

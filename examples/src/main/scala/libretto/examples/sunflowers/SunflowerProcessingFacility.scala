@@ -123,7 +123,7 @@ object SunflowerProcessingFacility {
               switch( poll(tail) )
                 .is { case InL(closed) => InL(joinAll(neglect(sf3), neglect(sf4), closed)) }
                 .is { case InR(sf5 |*| tail) =>
-                  val res = tuple(sf3, sf4, sf5) > mapVal { case ((s1, s2, s3), s4, s5) => (s1, s2, s3, s4, s5) }
+                  val res = tuple(sf3, sf4, sf5) |> mapVal { case ((s1, s2, s3), s4, s5) => (s1, s2, s3, s4, s5) }
                   InR(res |*| tail)
                 }.end
             }.end

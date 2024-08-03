@@ -28,7 +28,7 @@ class Customers[SupermarketImpl <: SupermarketInterface](
 
     λ { (supermarket: $[Supermarket]) =>
       val ((shopping) |*| (basketObtained)) =
-        enterAndObtainBasket(supermarket) > basketReadiness.signalDone
+        enterAndObtainBasket(supermarket) |> basketReadiness.signalDone
 
       val logged: $[Done] =
         when(basketObtained) {
@@ -36,7 +36,7 @@ class Customers[SupermarketImpl <: SupermarketInterface](
         }
 
       val (shopping1 |*| beerAdded) =
-        shopping > addBeerToBasket > addBeerToBasket > basketReadiness.signalDone
+        shopping |> addBeerToBasket > addBeerToBasket > basketReadiness.signalDone
 
       val logged1: $[Done] =
         when(join(logged |*| beerAdded)) {
@@ -44,7 +44,7 @@ class Customers[SupermarketImpl <: SupermarketInterface](
         }
 
       val (shopping2 |*| tpAdded) =
-        shopping1 > addToiletPaperToBasket > basketReadiness.signalDone
+        shopping1 |> addToiletPaperToBasket > basketReadiness.signalDone
 
       val logged2: $[Done] =
         when(join(logged1 |*| tpAdded)) {
@@ -64,7 +64,7 @@ class Customers[SupermarketImpl <: SupermarketInterface](
         payForBeer(coin3 |*| shopping4)
 
       val (shopping6 |*| paid) =
-        shopping5 > basketReadiness.signalDone
+        shopping5 |> basketReadiness.signalDone
 
       val logged3: $[Done] =
         when(paid) {
@@ -72,16 +72,16 @@ class Customers[SupermarketImpl <: SupermarketInterface](
         }
 
       val shoppingFinished: $[Done] =
-        (returnBasketAndLeave(shopping6) |*| logged3) > elimFst >
+        (returnBasketAndLeave(shopping6) |*| logged3) |> elimFst >
           printLine(s"$who returned the basket")
 
       val beer1Drunk: $[Done] =
-        drink(beer1 waitFor shoppingFinished) > printLine(s"🍺 $who drank the 1st beer")
+        drink(beer1 waitFor shoppingFinished) |> printLine(s"🍺 $who drank the 1st beer")
 
       val beer2Drunk: $[Done] =
-        drink(beer2 waitFor beer1Drunk) > printLine(s"🍺 $who drank the 2nd beer")
+        drink(beer2 waitFor beer1Drunk) |> printLine(s"🍺 $who drank the 2nd beer")
 
-      useTP(tp waitFor beer2Drunk) > printLine(s"🧻 $who used the toilet paper")
+      useTP(tp waitFor beer2Drunk) |> printLine(s"🧻 $who used the toilet paper")
     }
   }
 

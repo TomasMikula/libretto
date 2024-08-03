@@ -1063,19 +1063,19 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
 
   extension [A](a: $[A])(using LambdaContext) {
     def sequence[B](b: $[B])(using A: Signaling.Positive[A], B: Deferrable.Positive[B]): $[A |*| B] =
-      (a |*| b) > sequence_PP
+      (a |*| b) |> sequence_PP
 
     def sequence[B](f: Done -⚬ B)(using A: Signaling.Positive[A]): $[A |*| B] =
-      a > signalPosSnd > snd(f)
+      a |> signalPosSnd |> snd(f)
 
     def sequenceAfter[B](b: $[B])(using A: Deferrable.Positive[A], B: Signaling.Positive[B]): $[A |*| B] =
-      (b |*| a) > sequence_PP[B, A] > swap
+      (b |*| a) |> sequence_PP[B, A] |> swap
 
     infix def waitFor(b: $[Done])(using A: Junction.Positive[A]): $[A] =
-      (a |*| b) > awaitPosSnd
+      (a |*| b) |> awaitPosSnd
 
     infix def deferUntil(b: $[Ping])(using A: Deferrable.Positive[A]): $[A] =
-      (a |*| b) > awaitPingSnd
+      (a |*| b) |> awaitPingSnd
 
     /** Obstructs further interaction until a [[Ping]] is received. */
     infix def blockUntil(b: $[Ping]): $[A] =
@@ -1151,7 +1151,7 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
   }
 
   def when[A](trigger: $[Done])(f: Done -⚬ A)(using LambdaContext): $[A] =
-    trigger > f
+    trigger |> f
 
   /** Races the two [[Done]] signals and
     *  - produces left if the first signal wins, in which case it returns the second signal that still

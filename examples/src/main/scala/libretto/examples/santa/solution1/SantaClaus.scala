@@ -35,7 +35,7 @@ object SantaClaus extends StarterApp {
 
     def act: Type -⚬ (Done |*| Type) =
       λ { as =>
-        val names |*| as1 = unzipBy(fst(getName) > assocLR)(as) > fst(toScalaList1)
+        val names |*| as1 = unzipBy(fst(getName) > assocLR)(as) |> fst(toScalaList1)
         val +(done)       = names :>> printLine(formatMsg) :>> delayRandomMs(50, 100)
         val as2           = transform(useUntil)(done |*| as1)
         done |*| as2

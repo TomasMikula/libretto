@@ -397,37 +397,37 @@ trait Scaletto extends Puro with TimerDSL with CrashDSL {
   def debugPrint(msg: String): Ping -⚬ One
 
   def constantVal[A](a: A)(using SourcePos, LambdaContext): $[Val[A]] =
-    constant(done) > constVal(a)
+    constant(done) |> constVal(a)
 
   def tuple[A, B](a: $[Val[A]], b: $[Val[B]])(using
     SourcePos,
     LambdaContext,
   ): $[Val[(A, B)]] =
-    (a |*| b) > unliftPair
+    (a |*| b) |> unliftPair
 
   def tuple[A, B, C](a: $[Val[A]], b: $[Val[B]], c: $[Val[C]])(using
     SourcePos,
     LambdaContext,
   ): $[Val[(A, B, C)]] =
-    tuple(tuple(a, b), c) > mapVal { case ((a, b), c) => (a, b, c) }
+    tuple(tuple(a, b), c) |> mapVal { case ((a, b), c) => (a, b, c) }
 
   def tuple[A, B, C, D](a: $[Val[A]], b: $[Val[B]], c: $[Val[C]], d: $[Val[D]])(using
     SourcePos,
     LambdaContext,
   ): $[Val[(A, B, C, D)]] =
-    tuple(tuple(a, b), tuple(c, d)) > mapVal { case ((a, b), (c, d)) => (a, b, c, d) }
+    tuple(tuple(a, b), tuple(c, d)) |> mapVal { case ((a, b), (c, d)) => (a, b, c, d) }
 
   def tuple[A, B, C, D, E](a: $[Val[A]], b: $[Val[B]], c: $[Val[C]], d: $[Val[D]], e: $[Val[E]])(using
     SourcePos,
     LambdaContext,
   ): $[Val[(A, B, C, D, E)]] =
-    tuple(tuple(a, b, c), tuple(d, e)) > mapVal { case ((a, b, c), (d, e)) => (a, b, c, d, e) }
+    tuple(tuple(a, b, c), tuple(d, e)) |> mapVal { case ((a, b, c), (d, e)) => (a, b, c, d, e) }
 
   def tuple[A, B, C, D, E, F](a: $[Val[A]], b: $[Val[B]], c: $[Val[C]], d: $[Val[D]], e: $[Val[E]], f: $[Val[F]])(using
     SourcePos,
     LambdaContext,
   ): $[Val[(A, B, C, D, E, F)]] =
-    tuple(tuple(a, b, c), tuple(d, e, f)) > mapVal { case ((a, b, c), (d, e, f)) => (a, b, c, d, e, f) }
+    tuple(tuple(a, b, c), tuple(d, e, f)) |> mapVal { case ((a, b, c), (d, e, f)) => (a, b, c, d, e, f) }
 
   class ValSwitchInit[A](a: $[Val[A]], pos: SourcePos)(using LambdaContext) {
     def Case[A0 <: A](using tt: TypeTest[A, A0], casePos: SourcePos): ValSwitchInitCase[A, A0] =

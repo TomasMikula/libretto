@@ -816,7 +816,7 @@ trait Puro {
       $.map(a)(f)(pos)
 
     /** Alias for [[:>>]] */
-    def >[B](f: A -⚬ B)(using
+    def |>[B](f: A -⚬ B)(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[B] =
@@ -832,22 +832,22 @@ trait Puro {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[A |*| B] =
-      a > introSnd(f)
+      a |> introSnd(f)
 
     def alsoFst[X](f: One -⚬ X)(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[X |*| A] =
-      a > introFst(f)
+      a |> introFst(f)
 
     infix def supplyTo(out: $[-[A]])(using pos: SourcePos, ctx: LambdaContext): $[One] =
-      $.zip(a, out)(pos) > supply
+      $.zip(a, out)(pos) |> supply
 
     def :>:(b: ??[A])(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): ??[One] =
-      (a supplyTo b) > invertOne
+      (a supplyTo b) |> invertOne
 
     def alsoElimInv(x: $[-[One]])(using pos: SourcePos, ctx: LambdaContext): $[A] =
       a alsoElim (backvert($.one |*| x))
@@ -880,7 +880,7 @@ trait Puro {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[A] =
-      $.unzip($.one > lInvert)(pos) match {
+      $.unzip($.one |> lInvert)(pos) match {
         case (a, b) => a alsoElim (b supplyTo expr)
       }
   }
@@ -891,7 +891,7 @@ trait Puro {
       pos: SourcePos,
       ctx: LambdaContext,
     ): ??[B |*| C] =
-      $.zip(expr, that)(pos) > demandTogether
+      $.zip(expr, that)(pos) |> demandTogether
 
     @targetName("set")
     def := (value: $[B])(using
@@ -905,7 +905,7 @@ trait Puro {
       pos: SourcePos,
       ctx: LambdaContext,
     ): ??[B] =
-      $.eliminateSecond(expr,  that > unInvertOne)(pos)
+      $.eliminateSecond(expr,  that |> unInvertOne)(pos)
 
     def asInput[A](lInvert: One -⚬ (B |*| A))(using
       pos: SourcePos,
@@ -929,7 +929,7 @@ trait Puro {
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[C] =
-      (x > distributeInversionInto_|&|) either f
+      (x |> distributeInversionInto_|&|) either f
   }
 
   extension [A, B](x: ??[A |&| B]) {
@@ -938,7 +938,7 @@ trait Puro {
       pos: SourcePos,
       ctx: LambdaContext,
     ): ??[C] =
-      (x > distributeInversionInto_|&|) either f
+      (x |> distributeInversionInto_|&|) either f
   }
 
   extension [A](a: ??[-[A]]) {

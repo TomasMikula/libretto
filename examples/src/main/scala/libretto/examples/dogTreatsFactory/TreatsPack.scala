@@ -1,6 +1,6 @@
 package libretto.examples.dogTreatsFactory
 
-import libretto.scaletto.StarterKit.{$, >, LambdaContext, Val, mapVal}
+import libretto.scaletto.StarterKit.{$, >, |>, LambdaContext, Val, mapVal}
 
 enum TreatsPack {
   case LargeBone(
@@ -24,12 +24,12 @@ enum TreatsPack {
 
 object TreatsPack {
   def largeBone(toy: $[Val[Toy]], bone: $[Val[Bone.Large]], biscuits: $[Val[Biscuit3]])(using LambdaContext): $[Val[TreatsPack]] =
-    (toy ** bone ** biscuits) > mapVal {
+    (toy ** bone ** biscuits) |> mapVal {
       case ((toy, bone), biscuits) => TreatsPack.LargeBone(toy, bone, biscuits)
     }
 
   def smallBone(toy: $[Val[Toy]], bone: $[Val[Bone.Small]], biscuits: $[Val[Biscuit5]])(using LambdaContext): $[Val[TreatsPack]] =
-    (toy ** bone ** biscuits) > mapVal {
+    (toy ** bone ** biscuits) |> mapVal {
       case ((toy, bone), biscuits) => TreatsPack.SmallBone(toy, bone, biscuits)
     }
 }
@@ -44,7 +44,7 @@ def Biscuit3(
 )(using
   LambdaContext,
 ): $[Val[Biscuit3]] =
-  (b1 ** b2 ** b3) > mapVal { case ((b1, b2), b3) => (b1, b2, b3) }
+  (b1 ** b2 ** b3) |> mapVal { case ((b1, b2), b3) => (b1, b2, b3) }
 
 def Biscuit5(
   b1: $[Val[Biscuit]],
@@ -55,4 +55,4 @@ def Biscuit5(
 )(using
   LambdaContext,
 ): $[Val[Biscuit5]] =
-  (b1 ** b2 ** b3 ** b4 ** b5) > mapVal { case ((((b1, b2), b3), b4), b5) => (b1, b2, b3, b4, b5) }
+  (b1 ** b2 ** b3 ** b4 ** b5) |> mapVal { case ((((b1, b2), b3), b4), b5) => (b1, b2, b3, b4, b5) }

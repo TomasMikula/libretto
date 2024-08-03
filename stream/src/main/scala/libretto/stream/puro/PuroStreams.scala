@@ -242,7 +242,7 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
       val onPull: SourceT[T, A] -⚬ Polled[T, LList1[A]] =
         pullN(groupSize) > either(
           λ { case elems |*| closed =>
-            (closed |*| elems) > LList.switchWithL(
+            (closed |*| elems) |> LList.switchWithL(
               Polled.empty,
               λ { case closed |*| (h |*| t) => Polled.cons(LList1.cons(h |*| t) |*| SourceT.empty[T, LList1[A]](closed)) },
             )
@@ -440,8 +440,8 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
 
     def delayable[A](using Junction.Positive[A]): Source[A] -⚬ (Need |*| Source[A]) =
       λ { src =>
-        val (n |*| d) = $.one > lInvertSignal
-        n |*| ((d |*| src) > delayBy)
+        val (n |*| d) = $.one |> lInvertSignal
+        n |*| ((d |*| src) |> delayBy)
       }
 
     /** Delays the final [[Done]] signal (signaling end of stream or completed [[close]]) until the given [[Done]]
@@ -727,11 +727,11 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
         val tokens: $[LList[Done]]         = LList.concat(initialTokens |*| returnedTokens)
         val (shutdownPong |*| as1)         = Source.takeUntilPong(as)
         val (buffer |*| upstreamClosed) =
-          takeForeach(tokens |*| as1) > assocLR > snd(joinMap(LList.fold, id))
+          takeForeach(tokens |*| as1) |> assocLR |> snd(joinMap(LList.fold, id))
         val bufferOut: $[Source[Done |*| A]] =
-          buffer > Source.fromLList(joinMap(id, discardPrefetched))
+          buffer |> Source.fromLList(joinMap(id, discardPrefetched))
         val bufferedAs: $[Source[A]] =
-          (bufferOut > tapMap(swap)) match
+          (bufferOut |> tapMap(swap)) match
             case (as |*| releasedTokens) =>
               as alsoElim (tokensDuality.rInvert(releasedTokens |*| negTokens))
         Source.notifyDownstreamClosed(

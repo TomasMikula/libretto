@@ -9,7 +9,7 @@ import scala.util.{Failure, Success, Try}
 import java.util.concurrent.ScheduledExecutorService
 
 object MashupKitImpl extends MashupKit { kit =>
-  import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, >, Done, One, Val, chooseL, chooseR, liftPair, mapVal, par, unliftPair}
+  import StarterKit.dsl.{-⚬, =⚬, |*|, |+|, >, |>, Done, One, Val, chooseL, chooseR, liftPair, mapVal, par, unliftPair}
   import StarterKit.puroLib.Junction
 
   override object dsl extends MashupDsl {
@@ -104,14 +104,14 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override object Text extends Texts {
       def apply(value: String)(using pos: SourcePos, ctx: LambdaContext): Expr[Text] =
-        StarterKit.dsl.$.one(using pos) > StarterKit.dsl.done > StarterKit.dsl.constVal(value)
+        StarterKit.dsl.$.one(using pos) |> StarterKit.dsl.done |> StarterKit.dsl.constVal(value)
     }
 
     override object Float64 extends Float64s {
       import StarterKit.dsl.$.{map, zip}
 
       override def apply(value: Double)(using pos: SourcePos, ctx: LambdaContext): Expr[Float64] =
-        StarterKit.dsl.$.one(using pos) > StarterKit.dsl.done > StarterKit.dsl.constVal(value)
+        StarterKit.dsl.$.one(using pos) |> StarterKit.dsl.done |> StarterKit.dsl.constVal(value)
 
       override def add(a: Expr[Float64], b: Expr[Float64])(using
         pos: SourcePos,
@@ -175,9 +175,9 @@ object MashupKitImpl extends MashupKit { kit =>
         StarterKit.dsl.$.map(a)(f)(pos)
 
       override def debugPrint[A](s: String, expr: Expr[A])(using A: ValueType[A])(using LambdaContext): Expr[A] =
-        expr >
-          A.toScalaValue >
-          StarterKit.scalettoLib.alsoPrintLine(v => s"$s: $v") >
+        expr |>
+          A.toScalaValue |>
+          StarterKit.scalettoLib.alsoPrintLine(v => s"$s: $v") |>
           A.fromScalaValue
     }
 

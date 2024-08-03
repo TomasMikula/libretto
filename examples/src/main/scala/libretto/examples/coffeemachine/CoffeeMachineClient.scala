@@ -57,8 +57,8 @@ object CoffeeMachineClient {
     )
 
     λ { case (trigger |*| machine) =>
-      val item: $[Item] = trigger > prompt(msg, dict)
-      (item |*| machine) > Item.switchWithR(
+      val item: $[Item] = trigger |> prompt(msg, dict)
+      (item |*| machine) |> Item.switchWithR(
         caseEspresso = getEspresso > injectL,
         caseLatte    = getLatte    > injectL,
         caseQuit     = quit        > injectR,
@@ -78,7 +78,7 @@ object CoffeeMachineClient {
 
   private def quit: (Done |*| CoffeeMachine) -⚬ Done =
     λ { case (trigger |*| machine) =>
-      (trigger |*| CoffeeMachine.chooseQuit(machine)) > join
+      (trigger |*| CoffeeMachine.chooseQuit(machine)) |> join
     }
 
   private def promptLatteOptions: Done -⚬ LatteOptions =

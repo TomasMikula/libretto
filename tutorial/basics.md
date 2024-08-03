@@ -1031,7 +1031,7 @@ val h: B -⚬ One = ???
   val ab1: $[A |*| B] = a |*| b
 
   // pass expression `a` to Libretto function `f`
-  val c1: $[C] = a > f
+  val c1: $[C] = a |> f
   // or equivalently, apply Libretto function `f` to expression `a`
   val c2: $[C] = f(a)
 
@@ -1042,12 +1042,12 @@ val h: B -⚬ One = ???
     // Without `one`, we could equivalently write
     a also g
     // which is a shortcut for
-    a > introSnd > snd(g)
+    a |> introSnd > snd(g)
 
   // `alsoElim` is shortcut for eliminating `$[One]`
   val a3: $[A] = a alsoElim h(b)
   // equivalent to
-  (a |*| h(b)) > elimSnd
+  (a |*| h(b)) |> elimSnd
 }
 ```
 
@@ -1083,7 +1083,7 @@ object MyApp {
   val prg: Done -⚬ Done =
     λ { start =>
       // some complex program composed of many sub-programs
-      start > delay(1.hour)
+      start |> delay(1.hour)
     }
 }
 ```

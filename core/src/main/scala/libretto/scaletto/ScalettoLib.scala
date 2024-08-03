@@ -569,7 +569,7 @@ class ScalettoLib[
 
   object ** {
     def unapply[A, B](ab: $[Val[(A, B)]])(using SourcePos, LambdaContext): ($[Val[A]], $[Val[B]]) =
-      val a |*| b = ab > liftPair
+      val a |*| b = ab |> liftPair
       (a, b)
   }
 

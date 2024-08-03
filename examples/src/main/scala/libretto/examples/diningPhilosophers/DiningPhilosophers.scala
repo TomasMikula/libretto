@@ -33,6 +33,6 @@ object DiningPhilosophers extends StarterApp {
       // Wait for all philosophers to complete.
       // (`Done` signal forms a semigroup (via `join`-ing the signals) and thus
       // a non-empty list of them can be folded into a single `Done` signal.)
-      philosopherProcesses > LList1.fold
+      philosopherProcesses |> LList1.fold
     }
 }

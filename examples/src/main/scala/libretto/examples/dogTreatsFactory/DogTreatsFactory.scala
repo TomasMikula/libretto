@@ -103,7 +103,7 @@ object DogTreatsFactory {
                   InL(joinAll(done, neglect(biscuit3), neglect(b4)))
                 }
                 .is { case InR(b5 |*| biscuits) =>
-                  val biscuit5 = (biscuit3 ** b4 ** b5) > mapVal { case (((b1, b2, b3), b4), b5) => (b1, b2, b3, b4, b5) }
+                  val biscuit5 = (biscuit3 ** b4 ** b5) |> mapVal { case (((b1, b2, b3), b4), b5) => (b1, b2, b3, b4, b5) }
                   InR(biscuit5 |*| biscuits)
                 }.end
             }.end
