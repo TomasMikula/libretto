@@ -75,7 +75,7 @@ object SantaClaus extends StarterApp {
   }
 
   override def blueprint: Done -⚬ Done =
-    λ.+ { start =>
+    λ { case +(start) =>
       val reindeers : $[LList1[Reindeer]] = start :>> constList1Of("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9")
       val elves     : $[LList1[Elf]]      = start :>> constList1Of("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10")
       val reindeers1 = reindeers :>> map(vacation) :>> sortBySignal

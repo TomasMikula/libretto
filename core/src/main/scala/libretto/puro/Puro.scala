@@ -612,26 +612,21 @@ trait Puro {
       val g: (Sub[A, B] |*| A) -⚬ B = apply { case *(self) |*| a => f(self)(a) }
       Puro.this.rec(g)
 
-    def ?[A, B](using SourcePos)(
-      f: LambdaContext ?=> $[A] => $[B],
-    )(using
-      Affine[A],
-    ): A -⚬ B =
-      apply { case ?(a) => f(a) }
+    /** Auxiliary method to specify the type of input port. */
+    def from[A]: LambdaFrom[A] =
+      LambdaFrom[A]
 
-    def +[A, B](using SourcePos)(
-      f: LambdaContext ?=> $[A] => $[B],
-    )(using
-      Cosemigroup[A],
-    ): A -⚬ B =
-      apply { case +(a) => f(a) }
+    class LambdaFrom[A] {
+      def apply[B](using SourcePos)(
+        f: LambdaContext ?=> $[A] => $[B],
+      ): A -⚬ B =
+        LambdaOps.this.apply[A, B](f)
 
-    def *[A, B](using SourcePos)(
-      f: LambdaContext ?=> $[A] => $[B],
-    )(using
-      Comonoid[A],
-    ): A -⚬ B =
-      apply { case *(a) => f(a) }
+      def rec[B](using SourcePos)(
+        f: LambdaContext ?=> $[Sub[A, B]] => $[A] => $[B],
+      ): A -⚬ B =
+        LambdaOps.this.rec[A, B](f)
+    }
   }
 
   trait ClosureOps {
@@ -646,26 +641,21 @@ trait Puro {
       f: LambdaContext ?=> $[Sub[A, B]] => $[A] => $[B],
     ): $[A =⚬ B]
 
-    def ?[A, B](using SourcePos, LambdaContext)(
-      f: LambdaContext ?=> $[A] => $[B],
-    )(using
-      Affine[A],
-    ): $[A =⚬ B] =
-      apply { case ?(a) => f(a) }
+    /** Auxiliary method to specify the type of input port. */
+    def from[A]: ClosureFrom[A] =
+      ClosureFrom[A]
 
-    def +[A, B](using SourcePos, LambdaContext)(
+    class ClosureFrom[A] {
+      def apply[B](using SourcePos, LambdaContext)(
       f: LambdaContext ?=> $[A] => $[B],
-    )(using
-      Cosemigroup[A],
     ): $[A =⚬ B] =
-      apply { case +(a) => f(a) }
+        ClosureOps.this.apply[A, B](f)
 
-    def *[A, B](using SourcePos, LambdaContext)(
-      f: LambdaContext ?=> $[A] => $[B],
-    )(using
-      Comonoid[A],
+      def rec[B](using SourcePos, LambdaContext)(
+      f: LambdaContext ?=> $[Sub[A, B]] => $[A] => $[B],
     ): $[A =⚬ B] =
-      apply { case *(a) => f(a) }
+        ClosureOps.this.rec[A, B](f)
+    }
   }
 
   object producing {

@@ -13,7 +13,7 @@ object Provider {
     rec { soupSection =>
       SectionSoup.from(
         onSoupRequest =
-          λ.+ { done =>
+          λ { case +(done) =>
             injectL( makeSoup(done) |*| soupSection(done) )
           },
         goToMainDishes =
@@ -25,7 +25,7 @@ object Provider {
     rec { mainSection =>
       SectionMain.from(
         onDishRequest =
-          λ.+ { done =>
+          λ { case +(done) =>
             injectL( makeMainDish(done) |*| mainSection(done) )
           },
         goToPayment =

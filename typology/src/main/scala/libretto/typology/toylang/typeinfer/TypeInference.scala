@@ -108,7 +108,7 @@ object TypeInference {
         for {
           v <- newVar
         } yield
-          λ.? { _ =>
+          λ { case ?(_) =>
             val a |*| t |*| b = newAbstractType(v)
             a |*| (t :>> mapVal(TypedFun.Id(_))) |*| b
           }
@@ -117,7 +117,7 @@ object TypeInference {
           tf <- reconstructTypes(f)
           tg <- reconstructTypes(g)
         } yield
-          λ.* { one =>
+          λ { case *(one) =>
             val a |*| f |*| x1 = tf(one)
             val x2 |*| g |*| b = tg(one)
             val x = npg.output(npg.merge(x1 |*| x2))
@@ -129,7 +129,7 @@ object TypeInference {
           tf1 <- reconstructTypes(f1)
           tf2 <- reconstructTypes(f2)
         } yield
-          λ.* { one =>
+          λ { case *(one) =>
             val a1 |*| f1 |*| b1 = tf1(one)
             val a2 |*| f2 |*| b2 = tf2(one)
             val a = npg.Tp(Pair(a1 |*| a2))
@@ -143,7 +143,7 @@ object TypeInference {
           b <- newVar
           c <- newVar
         } yield {
-          λ.? { _ =>
+          λ { case ?(_) =>
             val a1 |*| ta |*| a2 = newAbstractType(a)
             val b1 |*| tb |*| b2 = newAbstractType(b)
             val c1 |*| tc |*| c2 = newAbstractType(c)
@@ -159,7 +159,7 @@ object TypeInference {
           b <- newVar
           c <- newVar
         } yield {
-          λ.? { _ =>
+          λ { case ?(_) =>
             val a1 |*| ta |*| a2 = newAbstractType(a)
             val b1 |*| tb |*| b2 = newAbstractType(b)
             val c1 |*| tc |*| c2 = newAbstractType(c)
@@ -174,7 +174,7 @@ object TypeInference {
           a <- newVar
           b <- newVar
         } yield {
-          λ.? { _ =>
+          λ { case ?(_) =>
             val a1 |*| ta |*| a2 = newAbstractType(a)
             val b1 |*| tb |*| b2 = newAbstractType(b)
             val f = (ta ** tb) :>> mapVal { case (a, b) => TypedFun.swap[a, b](a, b) }
@@ -188,7 +188,7 @@ object TypeInference {
           tf <- reconstructTypes(f)
           tg <- reconstructTypes(g)
         } yield
-          λ.* { one =>
+          λ { case *(one) =>
             val a1 |*| f |*| b1 = tf(one)
             val a2 |*| g |*| b2 = tg(one)
             val a = npg.Tp(Either(a1 |*| a2))
@@ -201,7 +201,7 @@ object TypeInference {
           ll <- newVar
           rl <- newVar
         } yield
-          λ.? { _ =>
+          λ { case ?(_) =>
             val l1 |*| lt |*| l2 = newAbstractType(ll)
             val r  |*| rt        = newTypeParam(rl)
             val f = (lt ** rt) :>> mapVal { case (lt, rt) => TypedFun.injectL[l, r](lt, rt) }
@@ -213,7 +213,7 @@ object TypeInference {
           ll <- newVar
           rl <- newVar
         } yield
-          λ.? { _ =>
+          λ { case ?(_) =>
             val  l |*| lt        = newTypeParam(ll)
             val r1 |*| rt |*| r2 = newAbstractType(rl)
             val f = (lt ** rt) :>> mapVal { case (lt, rt) => TypedFun.injectR[l, r](lt, rt) }
@@ -226,7 +226,7 @@ object TypeInference {
           b <- newVar
           c <- newVar
         } yield
-          λ.? { _ =>
+          λ { case ?(_) =>
             val a1 |*| ta |*| a2 = newAbstractType(a)
             val b1 |*| tb |*| b2 = newAbstractType(b)
             val c1 |*| tc |*| c2 = newAbstractType(c)
@@ -240,7 +240,7 @@ object TypeInference {
         for {
           a <- newVar
         } yield
-          λ.? { _ =>
+          λ { case ?(_) =>
             val a1 |*| ta |*| a2 = newAbstractType(a)
             val a3 |*| a4 = split(a2)
             val f = ta :>> mapVal { a => TypedFun.dup[a](a) }
@@ -251,7 +251,7 @@ object TypeInference {
           a <- newVar
           b <- newVar
         } yield
-          λ.? { _ =>
+          λ { case ?(_) =>
             val a1 |*| ta |*| a2 = newAbstractType(a)
             val b1 |*| tb        = newTypeParam(b)
             val f = (ta ** tb) :>> mapVal { case (a, b) => TypedFun.prj1[a, b](a, b) }
@@ -262,7 +262,7 @@ object TypeInference {
           a <- newVar
           b <- newVar
         } yield
-          λ.? { _ =>
+          λ { case ?(_) =>
             val a1 |*| ta        = newTypeParam(a)
             val b1 |*| tb |*| b2 = newAbstractType(b)
             val f = (ta ** tb) :>> mapVal { case (a, b) => TypedFun.prj2[a, b](a, b) }
@@ -276,7 +276,7 @@ object TypeInference {
         val fFixF = tf(fixF)
 
         Monad[M].pure(
-          λ.* { one =>
+          λ { case *(one) =>
             val a = constant(liftType(fFixF))
             val b = constant(liftType( fixF))
             a |*| constantVal(res) |*| b
@@ -290,7 +290,7 @@ object TypeInference {
         val fFixF = tf(fixF)
 
         Monad[M].pure(
-          λ.* { one =>
+          λ { case *(one) =>
             val a = constant(liftType( fixF))
             val b = constant(liftType(fFixF))
             a |*| constantVal(res) |*| b
@@ -345,7 +345,7 @@ object TypeInference {
           va <- newVar
           vb <- newVar
         } yield
-          λ.? { _ =>
+          λ { case ?(_) =>
             val a1 |*| ta |*| a2 = newAbstractType(va)
             val b1 |*| tb |*| b2 = newAbstractType(vb)
             val tf = (ta ** tb) :>> mapVal { case (ta, tb) => TypedFun.recur[a, b](ta, tb) }
@@ -354,7 +354,7 @@ object TypeInference {
           }
       case Fun.ConstInt(n) =>
         Monad[M].pure(
-          λ.* { one =>
+          λ { case *(one) =>
             val a = Unit(done(one)) :>> Tp
             val b = Int(done(one)) :>> Tp
             val tf = constantVal(TypedFun.constInt(n))
@@ -363,7 +363,7 @@ object TypeInference {
         )
       case Fun.AddInts() =>
         Monad[M].pure(
-          λ.? { one =>
+          λ { case ?(_) =>
             val a1 = constant(done > Int.reinject > Tp)
             val a2 = constant(done > Int.reinject > Tp)
             val b  = constant(done > Int.reinject > Tp)
@@ -373,7 +373,7 @@ object TypeInference {
         )
       case Fun.IntToString() =>
         Monad[M].pure(
-          λ.* { one =>
+          λ { case *(one) =>
             val a = Int(done(one)) :>> Tp
             val b = String(done(one)) :>> Tp
             val tf = constantVal(TypedFun.intToString)

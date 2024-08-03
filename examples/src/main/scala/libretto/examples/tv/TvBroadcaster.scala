@@ -15,7 +15,7 @@ object TvBroadcaster {
 
   private def on(makeTv: Done -⚬ Tv): Done -⚬ Channels = {
     def go(ch: TvChannel): Done -⚬ TvStream =
-      λ.+ { d =>
+      λ { case +(d) =>
         val vidSrc = d :>> videoSource(ch)
         val repeat = $.one :>> Detained.thunk(makeTv)
         ValSource.terminateWith(vidSrc |*| repeat)

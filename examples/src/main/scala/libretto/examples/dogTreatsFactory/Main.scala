@@ -16,7 +16,7 @@ object Main extends StarterApp {
   val inBiscuits = List.fill(nBiscuits)(Biscuit())
 
   override def blueprint: Done -⚬ Done =
-    λ.+ { trigger =>
+    λ { case +(trigger) =>
       val toys     = trigger > ValSource.fromList(inToys)
       val bones    = trigger > ValSource.fromList(inBones)
       val biscuits = trigger > ValSource.fromList(inBiscuits)

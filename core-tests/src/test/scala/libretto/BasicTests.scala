@@ -696,7 +696,7 @@ class BasicTests extends ScalatestScalettoTestSuite {
         val ClientCount = 100
         TestCase.interactWith {
           val prg: Done -⚬ Val[List[Int]] =
-            λ.+ { start =>
+            λ { case +(start) =>
               type Counter = Val[AtomicInteger]
 
               val pool: $[LeasePool] = LeasePool.fromList(LList1.fill(LeaseCount)(id[Done])(start))

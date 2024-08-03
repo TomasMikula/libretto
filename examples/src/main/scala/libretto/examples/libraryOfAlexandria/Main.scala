@@ -32,7 +32,7 @@ object Main extends StarterApp {
 
   override def blueprint: Done -⚬ Done = {
     val downloader = Downloader(ConnectorModuleImpl)
-    λ.+ { start =>
+    λ { case +(start) =>
       val connector = ConnectorModuleImpl.createConnector(start)
       val scrollIds = ValSource.fromList(ScrollIds)(start)
       (connector |*| scrollIds)

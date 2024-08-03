@@ -139,7 +139,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
       "closure capturing semigroupal variable" ->
         TestCase.pure {
           Outcome.assertNotThrows {
-            λ.+ { (a: $[Done]) =>
+            λ.from[Done] { case +(a) =>
               λ.closure { (b: $[Done]) =>
                 a |*| b |*| a
               }
@@ -151,7 +151,7 @@ class ClosureTests extends ScalatestScalettoTestSuite {
         TestCase.pure {
           Outcome.assertNotThrows {
             λ { (a: $[Done]) =>
-              λ.closure.+ { (b: $[Done]) =>
+              λ.closure.from[Done] { case +(b) =>
                 b |*| a |*| b
               }
             }
@@ -161,25 +161,25 @@ class ClosureTests extends ScalatestScalettoTestSuite {
       "nested closures with semigroupal variables" ->
         TestCase.pure {
           Outcome.assertNotThrows {
-            λ.+ { (a: $[Done]) =>
-              λ.closure.+ { (b: $[Done]) =>
-                λ.closure.+ { (c: $[Done]) =>
-                  λ.closure.+ { (d: $[Done]) =>
+            λ.from[Done] { case +(a) =>
+              λ.closure.from[Done] { case +(b) =>
+                λ.closure.from[Done] { case +(c) =>
+                  λ.closure.from[Done] { case +(d) =>
                     ((c |*| d) |*| (b |*| a)) |*| ((d |*| (a |*| a)) |*| (c |*| b))
                   } |*|
-                  λ.closure.+ { (d: $[Done]) =>
+                  λ.closure.from[Done] { case +(d) =>
                     ((c |*| d) |*| (b |*| a)) |*| ((d |*| (a |*| a)) |*| (c |*| b))
                   }
                 } |*|
-                λ.closure.+ { (d: $[Done]) =>
+                λ.closure.from[Done] { case +(d) =>
                   (d |*| (b |*| a)) |*| ((d |*| (a |*| a)) |*| b)
                 }
               } |*|
-              λ.closure.+ { (c: $[Done]) =>
-                λ.closure.+ { (d: $[Done]) =>
+              λ.closure.from[Done] { case +(c) =>
+                λ.closure.from[Done] { case +(d) =>
                   ((a |*| d) |*| a) |*| ((d |*| (c |*| a)) |*| (c |*| c))
                 } |*|
-                λ.closure.+ { (d: $[Done]) =>
+                λ.closure.from[Done] { case +(d) =>
                   ((c |*| d) |*| (d |*| a)) |*| ((d |*| (a |*| a)) |*| c)
                 }
               }
@@ -202,9 +202,9 @@ class ClosureTests extends ScalatestScalettoTestSuite {
       "return only captured one-expression" ->
         TestCase.pure {
           Outcome.assertNotThrows {
-            λ.? { (_: $[One]) =>
+            λ.from[One] { case ?(_) =>
               val b: $[Done] = $.one > done
-              λ.closure.? { (_: $[One]) =>
+              λ.closure.from[One] { case ?(_) =>
                 b
               }
             }
@@ -214,9 +214,9 @@ class ClosureTests extends ScalatestScalettoTestSuite {
       "capture one-expression into another one-expression" ->
         TestCase.pure {
           Outcome.assertNotThrows {
-            λ.? { (_: $[One]) =>
+            λ.from[One] { case ?(_) =>
               val b = $.one > done
-              λ.closure.? { (_: $[One]) =>
+              λ.closure.from[One] { case ?(_) =>
                 val c = $.one > done
                 b |*| c
               }
@@ -227,10 +227,10 @@ class ClosureTests extends ScalatestScalettoTestSuite {
       "capture two one-expressions into another one-expression" ->
         TestCase.pure {
           Outcome.assertNotThrows {
-            λ.? { (_: $[One]) =>
+            λ.from[One] { case ?(_) =>
               val b = $.one > done
               val c = $.one > done
-              λ.closure.? { (_: $[One]) =>
+              λ.closure.from[One] { case ?(_) =>
                 b |*| c
               }
             }

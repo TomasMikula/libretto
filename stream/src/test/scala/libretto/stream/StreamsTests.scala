@@ -101,7 +101,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
         ): TestCase.Single[kit.type] =
           TestCase
             .interactWith {
-              λ.+ { start =>
+              λ { case +(start) =>
                 val as = start :>> ValSource.fromList(List.fill(N)("a"))
                 val as1 = if (slowedProducer1) as :>> Source.mapSequentially(delayVal(3.millis)) else as
                 val bs = start :>> ValSource.fromList(List.fill(N)("b"))
@@ -267,7 +267,7 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           ) > ValSource.singleton
 
         val prg: Done -⚬ (Done |*| Val[AtomicReference[Counter]]) =
-          constVal(new AtomicReference(Counter())) > λ.+ { counter =>
+          constVal(new AtomicReference(Counter())) > λ { case +(counter) =>
             val done = counter
               :>> ValSource.repeatedly(mapVal[AtomicReference[Counter], AtomicReference[Counter]] { ref => ref.updateAndGet(_.inc); ref })
               :>> Source.map(singletonAndCloseLater)
