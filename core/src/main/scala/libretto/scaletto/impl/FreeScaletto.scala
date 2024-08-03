@@ -335,6 +335,9 @@ object FreeScaletto extends Scaletto {
   override def factorOutInversion[A, B]: (-[A] |*| -[B]) -⚬ -[A |*| B] =
     Regular(FactorOutInversion())
 
+  override def category: ClosedSymmetricMonoidalCategory[-⚬, |*|, One, =⚬] =
+    𝒞
+
   override def sizeOf[A, B](f: A -⚬ B): Long =
     f.size
 
