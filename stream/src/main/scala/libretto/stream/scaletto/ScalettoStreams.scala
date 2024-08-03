@@ -1,10 +1,9 @@
 package libretto.stream.scaletto
 
-import libretto.invert.InvertLib
 import libretto.lambda.util.{Exists, SourcePos}
 import libretto.puro.PuroLib
 import libretto.scaletto.{Scaletto, ScalettoLib}
-import libretto.stream.invert.InvertStreams
+import libretto.stream.puro.PuroStreams
 import scala.annotation.{tailrec, targetName}
 import scala.concurrent.duration.FiniteDuration
 
@@ -13,47 +12,44 @@ object ScalettoStreams {
     DSL <: Scaletto,
     Lib <: PuroLib[DSL],
     SLib <: ScalettoLib[DSL, Lib],
-    Streams <: InvertStreams[DSL, Lib],
+    Streams <: PuroStreams[DSL, Lib],
   ] = ScalettoStreams {
     type Dsl           = DSL
     type PuroLib       = Lib
     type ScalettoLib   = SLib
-    type InvertStreams = Streams
+    type PuroStreams = Streams
   }
 
   def apply(
     scaletto: Scaletto,
     lib: PuroLib[scaletto.type],
     sLib: ScalettoLib[scaletto.type, lib.type],
-    iStreams: InvertStreams[scaletto.type, lib.type],
+    pStreams: PuroStreams[scaletto.type, lib.type],
   )
-  : ScalettoStreams.Of[scaletto.type, lib.type, sLib.type, iStreams.type] =
+  : ScalettoStreams.Of[scaletto.type, lib.type, sLib.type, pStreams.type] =
     new ScalettoStreams {
-      override type Dsl           = scaletto.type
-      override type PuroLib       = lib.type
-      override type ScalettoLib   = sLib.type
-      override type InvertStreams = iStreams.type
+      override type Dsl         = scaletto.type
+      override type PuroLib     = lib.type
+      override type ScalettoLib = sLib.type
+      override type PuroStreams = pStreams.type
 
       override val dsl         = scaletto
       override val puroLib     = lib
       override val scalettoLib = sLib
-      override val underlying  = iStreams
+      override val underlying  = pStreams
     }
 }
 
 abstract class ScalettoStreams {
-  type Dsl           <: Scaletto
-  type PuroLib       <: libretto.puro.PuroLib[Dsl]
-  type ScalettoLib   <: libretto.scaletto.ScalettoLib[Dsl, PuroLib]
-  type InvertStreams <: libretto.stream.invert.InvertStreams[Dsl, PuroLib]
+  type Dsl         <: Scaletto
+  type PuroLib     <: libretto.puro.PuroLib[Dsl]
+  type ScalettoLib <: libretto.scaletto.ScalettoLib[Dsl, PuroLib]
+  type PuroStreams <: libretto.stream.puro.PuroStreams[Dsl, PuroLib]
 
   val dsl: Dsl
   val puroLib: PuroLib & libretto.puro.PuroLib[dsl.type]
   val scalettoLib: ScalettoLib & libretto.scaletto.ScalettoLib[dsl.type, puroLib.type]
-  val underlying: InvertStreams & libretto.stream.invert.InvertStreams[dsl.type, puroLib.type]
-
-  private lazy val invertLib = InvertLib(puroLib)
-  import invertLib.inversionDuality
+  val underlying: PuroStreams & libretto.stream.puro.PuroStreams[dsl.type, puroLib.type]
 
   private lazy val Tree = BinarySearchTree(dsl, puroLib, scalettoLib)
 

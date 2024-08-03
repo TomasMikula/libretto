@@ -1,10 +1,8 @@
 package libretto.scaletto
 
 import java.util.concurrent.{Executor as JExecutor, Executors, ScheduledExecutorService}
-import libretto.closed.ClosedLib
 import libretto.crash.CrashLib
 import libretto.exec.{Executor, SupportsCustomScheduler}
-import libretto.invert.InvertLib
 import libretto.puro.PuroLib
 import libretto.scaletto.impl.FreeScaletto
 import libretto.scaletto.impl.futurebased.{BridgeImpl, FutureExecutor}
@@ -36,12 +34,6 @@ abstract class AbstractStarterKit(
   val scalettoLib: ScalettoLib[dsl.type, puroLib.type] =
     ScalettoLib(dsl, puroLib)
 
-  val closedLib: ClosedLib[dsl.type, puroLib.type] =
-    ClosedLib(dsl, puroLib)
-
-  val invertLib: InvertLib[puroLib.type] =
-    InvertLib(puroLib)
-
   val crashLib: CrashLib[dsl.type] =
     CrashLib(dsl)
 
@@ -53,8 +45,6 @@ abstract class AbstractStarterKit(
   export dsl.*
   export puroLib.{dsl => _, *}
   export scalettoLib.{dsl => _, puroLib => _, *, given}
-  export closedLib.{dsl => _, puroLib => _, *}
-  export invertLib.{puroLib => _, *}
 
   def runScalaAsync[A](blueprint: Done -⚬ Val[A]): Future[A] = {
     val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())

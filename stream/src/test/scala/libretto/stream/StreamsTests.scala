@@ -2,7 +2,6 @@ package libretto.stream
 
 import libretto.puro.PuroLib
 import libretto.scaletto.ScalettoLib
-import libretto.stream.invert.InvertStreams
 import libretto.stream.puro.PuroStreams
 import libretto.stream.scaletto.ScalettoStreams
 import libretto.testing.TestCase
@@ -17,8 +16,8 @@ class StreamsTests extends ScalatestScalettoTestSuite {
 
     val puroLib = PuroLib(dsl)
     val scalettoLib = ScalettoLib(dsl: dsl.type, puroLib)
-    val invertStreams = InvertStreams(dsl, puroLib)
-    val scalettoStreams = ScalettoStreams(kit.dsl, puroLib, scalettoLib, invertStreams)
+    val puroStreams = PuroStreams(dsl, puroLib)
+    val scalettoStreams = ScalettoStreams(kit.dsl, puroLib, scalettoLib, puroStreams)
 
     import dsl.*
     import dsl.$.*

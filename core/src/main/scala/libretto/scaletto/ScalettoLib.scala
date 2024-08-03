@@ -1,7 +1,6 @@
 package libretto.scaletto
 
 import java.util.concurrent.atomic.AtomicLong
-import libretto.invert.InvertLib
 import libretto.lambda.util.SourcePos
 import libretto.puro.PuroLib
 import libretto.util.Async
@@ -30,9 +29,6 @@ class ScalettoLib[
   import dsl.*
   import dsl.$.*
   import puroLib.*
-
-  private val invertLib = InvertLib(puroLib)
-  import invertLib.*
 
   object Val {
     def isEq[A](a: A): Val[A] -⚬ (Val[a.type] |+| Val[A]) =

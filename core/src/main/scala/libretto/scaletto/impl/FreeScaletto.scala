@@ -445,7 +445,7 @@ object FreeScaletto extends Scaletto {
 
   override opaque type MetaFun[A, B] = CapturingFun[-⚬, |*|, Tupled[|*|, $, _], A, B]
 
-  override val `$`: FunExprOps = new FunExprOps {
+  override val `$`: $Ops = new $Ops {
     override def one(using pos: SourcePos, ctx: lambdas.Context): $[One] =
       lambdas.Expr.const([x] => (_: Unit) => introFst[x])(VarOrigin.OneIntro(pos))
 
@@ -670,7 +670,7 @@ object FreeScaletto extends Scaletto {
       }
   }
 
-  override val λ = new LambdaOpsWithClosures {
+  override val λ = new LambdaOps {
     override def apply[A, B](using pos: SourcePos)(f: lambdas.Context ?=> $[A] => $[B]): A -⚬ B =
       compile(f)(pos)
 
@@ -952,8 +952,8 @@ object FreeScaletto extends Scaletto {
       }
       .valueOr(assemblyErrors)
 
-  override val |*| : ConcurrentPairInvertOps =
-    new ConcurrentPairInvertOps {}
+  override val |*| : ConcurrentPairOps =
+    new ConcurrentPairOps {}
 
   private def mapTupled[A, B](a: Tupled[|*|, lambdas.Expr, A], f: PartialFun[A, B])(pos: SourcePos)(using lambdas.Context): lambdas.Expr[B] =
     lambdas.Expr.map(

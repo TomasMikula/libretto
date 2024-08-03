@@ -1,9 +1,9 @@
 package libretto.scaletto
 
-import libretto.closed.ClosedBridge
+import libretto.puro.PuroBridge
 import libretto.util.Async
 
-trait ScalettoBridge extends ClosedBridge {
+trait ScalettoBridge extends PuroBridge {
   override type Dsl <: Scaletto
 
   import dsl.Val

@@ -7,5 +7,5 @@ val DefaultStreams =
     StarterKit.dsl,
     StarterKit.puroLib,
     StarterKit.scalettoLib,
-    libretto.stream.invert.DefaultStreams,
+    libretto.stream.puro.DefaultStreams,
   )

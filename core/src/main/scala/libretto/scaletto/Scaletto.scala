@@ -1,19 +1,18 @@
 package libretto.scaletto
 
 import libretto.crash.CrashDSL
-import libretto.puro.PuroLib
+import libretto.puro.{Puro, PuroLib}
 import libretto.timer.TimerDSL
-import libretto.invert.InvertDSL
 import libretto.lambda.util.SourcePos
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.TypeTest
 
 /** Supports manipulating Scala values via pure Scala functions.
-  * Also extends [[InvertDSL]] (and thus [[ClosedDSL]]), [[TimerDSL]] and [[CrashDSL]],
+  * Also extends [[TimerDSL]] and [[CrashDSL]],
   * since these are expected to be possible on a target platform that already supports Scala functions.
   */
-trait Scaletto extends TimerDSL with CrashDSL with InvertDSL {
+trait Scaletto extends Puro with TimerDSL with CrashDSL {
   /** Scala value of type `A`.
     *
     * Somewhat analogous to [[scala.concurrent.Future]].

@@ -531,6 +531,17 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
 
       def rec[F[_]](f: Junction.Positive[Rec[F]] => Junction.Positive[F[Rec[F]]]): Junction.Positive[Rec[F]] =
         from(dsl.rec(g => par(id, unpack) > f(from(g)).awaitPosFst > pack))
+
+      def insideInversion[A](using A: Junction.Positive[A]): Junction.Positive[-[A]] =
+        Junction.Positive.from {
+          λ { case d |*| na =>
+            demandTogether(dii(d) |*| na)
+              .contramap[A](λ { a =>
+                val nd |*| d = constant(forevert[Done])
+                nd |*| A.awaitPos(d |*| a)
+              })
+          }
+        }
     }
 
     object Negative {
@@ -575,6 +586,16 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
 
       def rec[F[_]](f: Junction.Negative[Rec[F]] => Junction.Negative[F[Rec[F]]]): Junction.Negative[Rec[F]] =
         from(dsl.rec(g => unpack > f(from(g)).awaitNegFst > par(id, pack)))
+
+      def insideInversion[A](using A: Junction.Negative[A]): Junction.Negative[-[A]] =
+        Junction.Negative.from {
+          λ { na =>
+            na.contramap[-[Need] |*| A](λ { case nn |*| a =>
+              val n |*| a1 = A.awaitNeg(a)
+              returning(a, n supplyTo nn)
+            }) :>> demandSeparately :>> fst(die)
+          }
+        }
     }
 
     /** [[Positive]] junction can be made to await a negative (i.e. [[Need]]) signal,
@@ -1041,14 +1062,14 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
   def sequence_NN[A, B](using A: Signaling.Negative[A], B: Deferrable.Negative[B]): (A |*| B) -⚬ (A |*| B) =
     snd(awaitPongFst) > assocRL > fst(notifyNegSnd)
 
-  extension [A, B](a: $[A])(using LambdaContext) {
-    def sequence(b: $[B])(using A: Signaling.Positive[A], B: Deferrable.Positive[B]): $[A |*| B] =
+  extension [A](a: $[A])(using LambdaContext) {
+    def sequence[B](b: $[B])(using A: Signaling.Positive[A], B: Deferrable.Positive[B]): $[A |*| B] =
       (a |*| b) > sequence_PP
 
-    def sequence(f: Done -⚬ B)(using A: Signaling.Positive[A]): $[A |*| B] =
+    def sequence[B](f: Done -⚬ B)(using A: Signaling.Positive[A]): $[A |*| B] =
       a > signalPosSnd > snd(f)
 
-    def sequenceAfter(b: $[B])(using A: Deferrable.Positive[A], B: Signaling.Positive[B]): $[A |*| B] =
+    def sequenceAfter[B](b: $[B])(using A: Deferrable.Positive[A], B: Signaling.Positive[B]): $[A |*| B] =
       (b |*| a) > sequence_PP[B, A] > swap
 
     infix def waitFor(b: $[Done])(using A: Junction.Positive[A]): $[A] =
@@ -1060,6 +1081,74 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     /** Obstructs further interaction until a [[Ping]] is received. */
     infix def blockUntil(b: $[Ping]): $[A] =
       blockOutportUntilPing(b |*| a)
+
+    def raceAgainst[B](using SourcePos)(b: $[B])(using
+      Signaling.Positive[A],
+      Signaling.Positive[B],
+    ): $[(A |*| B) |+| (A |*| B)] =
+      lib.race[A, B](a |*| b)
+
+    def raceAgainstInv[B](using SourcePos)(b: ??[B])(using
+      Signaling.Positive[A],
+      Signaling.Negative[B],
+    ): ($[A |+| A], ??[B]) =
+      (a :>> notifyPosFst) match {
+        case ping |*| a =>
+          (notifyNegFst >>: b) match {
+            case pong |*| b =>
+              ( switch ( racePair(ping |*| pong.asInput(lInvertPongPing)) )
+                  .is { case InL(?(_)) => InL(a) }
+                  .is { case InR(?(_)) => InR(a) }
+                  .end
+              , b
+              )
+      }
+    }
+
+    infix def raceAgainstInvWith[B, C](using SourcePos)(b: ??[B])(using
+      Signaling.Positive[A],
+      Signaling.Negative[B],
+    )(f: LambdaContext ?=> Either[($[A], ??[B]), ($[A], ??[B])] => $[C]): $[C] = {
+      val (aa, bb) = raceAgainstInv[B](b)
+      switch ( aa )
+        .is { case InL(a) => f(Left((a, bb))) }
+        .is { case InR(a) => f(Right((a, bb))) }
+        .end
+    }
+  }
+
+  extension [A](a: ??[A]) {
+    def raceAgainstStraight[B](using SourcePos, LambdaContext)(b: $[B])(using
+      Signaling.Negative[A],
+      Signaling.Positive[B],
+    ): (??[A |&| A], $[B]) =
+      (notifyNegFst >>: a) match {
+        case pong |*| a =>
+          (b :>> notifyPosFst) match {
+            case ping |*| b =>
+              ((selectPair >>: (pong |*| ping.asOutput(rInvertPingPong))) choose {
+                case Left(one)  => (chooseL >>: a) alsoElim one
+                case Right(one) => (chooseR >>: a) alsoElim one
+              }, b)
+          }
+      }
+
+    infix def raceWith[B, C](using SourcePos, LambdaContext)(b: $[B])(using
+      Signaling.Negative[A],
+      Signaling.Positive[B],
+    )(f: LambdaContext ?=> Either[(??[A], $[B]), (??[A], $[B])] => ??[C]): ??[C] = {
+      val (aa, bb) = raceAgainstStraight[B](b)
+      aa choose {
+        case Left(a)  => f(Left((a, bb)))
+        case Right(a) => f(Right((a, bb)))
+      }
+    }
+
+    def raceAgainst[B](using SourcePos, LambdaContext)(b: ??[B])(using
+      Signaling.Negative[A],
+      Signaling.Negative[B],
+    ): ??[(A |*| B) |&| (A |*| B)] =
+      lib.select[A, B] >>: (a |*| b)
   }
 
   def when[A](trigger: $[Done])(f: Done -⚬ A)(using LambdaContext): $[A] =
@@ -1138,15 +1227,15 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
   ): ((A |*| B) |*| Y) -⚬ C =
     par(race[A, B], id) > distributeR > either(caseFstWins, caseSndWins)
 
-  def raceAgainstL[A](using A: SignalingJunction.Positive[A]): (Done |*| A) -⚬ (A |+| A) =
+  def raceAgainstDoneL[A](using A: SignalingJunction.Positive[A]): (Done |*| A) -⚬ (A |+| A) =
     id                                               [  Done        |*|            A  ]
       .>.snd(A.signalPos).>(assocRL)              .to[ (Done        |*|  Done) |*| A  ]
       .>.fst(raceDone)                            .to[ (Done        |+|  Done) |*| A  ]
       .>(distributeR)                             .to[ (Done |*| A) |+| (Done  |*| A) ]
       .>(|+|.bimap(A.awaitPos, A.awaitPos))       .to[           A  |+|            A  ]
 
-  def raceAgainstR[A](using A: SignalingJunction.Positive[A]): (A |*| Done) -⚬ (A |+| A) =
-    swap > raceAgainstL > |+|.swap
+  def raceAgainstDoneR[A](using A: SignalingJunction.Positive[A]): (A |*| Done) -⚬ (A |+| A) =
+    swap > raceAgainstDoneL > |+|.swap
 
   def selectBy[A, B](
     notifyA: ((Pong |*| A) -⚬ A),
@@ -2676,6 +2765,9 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     ): LList1[A] -⚬ (Unlimited[A |*| Ā] |*| LList1[A]) =
       unfold(LList1.borrow(lInvert))
 
+    def pool[A](using Signaling.Positive[A]): LList1[A] -⚬ (Unlimited[A |*| -[A]] |*| LList1[A]) =
+      Unlimited.poolBy[A, -[A]](forevert[A])
+
     given comonoidUnlimited[A]: Comonoid[Unlimited[A]] with {
       def counit : Unlimited[A] -⚬ One                             = Unlimited.discard
       def split  : Unlimited[A] -⚬ (Unlimited[A] |*| Unlimited[A]) = Unlimited.split
@@ -3846,6 +3938,14 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
       lInvert: One -⚬ (Ā |*| A),
     ): LList1[A] -⚬ (Endless[A |*| Ā] |*| LList1[A]) =
       unfold(LList1.borrow(lInvert))
+
+    def pool[A](using Signaling.Positive[A]): LList1[A] -⚬ (Endless[A |*| -[A]] |*| LList1[A]) =
+      poolBy[A, -[A]](forevert[A])
+
+    def poolReset[A, B](reset: B -⚬ A)(using
+      Signaling.Positive[A]
+    ): LList1[A] -⚬ (Endless[A |*| -[B]] |*| LList1[A]) =
+      poolBy[A, -[B]](forevert[B] > snd(reset))
   }
 
   def listEndlessDuality[A, Ā](ev: Dual[A, Ā]): Dual[LList[A], Endless[Ā]] =
@@ -4073,5 +4173,97 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
 
     infix def detainReleaseUntil(done: $[Done]): $[AcquiredLock] =
       AcquiredLock.detainRelease(done |*| acquiredLock)
+  }
+
+  /** Function object (internal hom) is contravariant in the input type. */
+  def input[C]: ContraFunctor[[x] =>> x =⚬ C] =
+    new ContraFunctor[[x] =>> x =⚬ C] {
+      override val category =
+        dsl.category
+
+      override def lift[A, B](f: A -⚬ B): (B =⚬ C) -⚬ (A =⚬ C) =
+        id                         [ (B =⚬ C) |*| A ]
+          .>.snd(f)             .to[ (B =⚬ C) |*| B ]
+          .>(eval)              .to[       C        ]
+          .as[ ((B =⚬ C) |*| A)  -⚬        C        ]
+          .curry
+    }
+
+  /** Function object (internal hom) is covariant in the output type. */
+  def output[A]: Functor[[x] =>> A =⚬ x] =
+    new Functor[[x] =>> A =⚬ x] {
+      override val category =
+        dsl.category
+
+      override def lift[B, C](f: B -⚬ C): (A =⚬ B) -⚬ (A =⚬ C) =
+        out(f)
+    }
+
+  extension [A, B](f: A -⚬ B) {
+    def curry[A1, A2](using ev: A =:= (A1 |*| A2)): A1 -⚬ (A2 =⚬ B) =
+      dsl.curry(ev.substituteCo[λ[x => x -⚬ B]](f))
+
+    def uncurry[B1, B2](using ev: B =:= (B1 =⚬ B2)): (A |*| B1) -⚬ B2 =
+      dsl.uncurry(ev.substituteCo(f))
+  }
+
+  extension [F[_], A, B](f: FocusedCo[F, A =⚬ B]) {
+    def input: FocusedContra[λ[x => F[x =⚬ B]], A] =
+      f.zoomContra(lib.input[B])
+
+    def output: FocusedCo[λ[x => F[A =⚬ x]], B] =
+      f.zoomCo(lib.output[A])
+  }
+
+  extension [F[_], A, B](f: FocusedContra[F, A =⚬ B]) {
+    def input: FocusedCo[λ[x => F[x =⚬ B]], A] =
+      f.zoomContra(lib.input[B])
+
+    def output: FocusedContra[λ[x => F[A =⚬ x]], B] =
+      f.zoomCo(lib.output[A])
+  }
+
+  def zapPremises[A, Ā, B, C](using ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
+    id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
+      .>(introSnd(ev.lInvert))   .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (Ā |*| A) ]
+      .>.snd(swap)               .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
+      .>(IXI)                    .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
+      .>(par(eval, eval))        .to[        B         |*|        C         ]
+  }
+
+  /** Given `A` and `B` concurrently (`A |*| B`), we can suggest that `A` be consumed before `B`
+    * by turning it into `Ā =⚬ B`, where `Ā` is the dual of `A`.
+    */
+  def unveilSequentially[A, Ā, B](using ev: Dual[A, Ā]): (A |*| B) -⚬ (Ā =⚬ B) =
+    id[(A |*| B) |*| Ā]           .to[ (A |*|  B) |*| Ā  ]
+      .>(assocLR)                 .to[  A |*| (B  |*| Ā) ]
+      .>.snd(swap)                .to[  A |*| (Ā  |*| B) ]
+      .>(assocRL)                 .to[ (A |*|  Ā) |*| B  ]
+      .>(elimFst(ev.rInvert))     .to[                B  ]
+      .as[ ((A |*| B) |*| Ā) -⚬ B ]
+      .curry
+
+  /** Make a function `A =⚬ B` ''"absorb"'' a `C` and return it as part of its output, i.e. `A =⚬ (B |*| C)`. */
+  def absorbR[A, B, C]: ((A =⚬ B) |*| C) -⚬ (A =⚬ (B |*| C)) =
+    id[((A =⚬ B) |*| C) |*| A]  .to[ ((A =⚬ B) |*| C) |*| A ]
+      .>(assocLR)               .to[ (A =⚬ B) |*| (C |*| A) ]
+      .>.snd(swap)              .to[ (A =⚬ B) |*| (A |*| C) ]
+      .>(assocRL)               .to[ ((A =⚬ B) |*| A) |*| C ]
+      .>.fst(eval)              .to[        B         |*| C ]
+      .as[ (((A =⚬ B) |*| C) |*| A) -⚬ (B |*| C) ]
+      .curry
+
+  def inversionDuality[A]: Dual[A, -[A]] =
+    new Dual[A, -[A]] {
+      override val rInvert: (A |*| -[A]) -⚬ One = backvert[A]
+      override val lInvert: One -⚬ (-[A] |*| A) = forevert[A]
+    }
+
+  given ContraFunctor[-] with {
+    override val category =
+      dsl.category
+
+    override def lift[A, B](f: A -⚬ B): -[B] -⚬ -[A] =
+      contrapositive(f)
   }
 }

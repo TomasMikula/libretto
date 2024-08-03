@@ -7,7 +7,7 @@ import scala.concurrent.duration.FiniteDuration
 trait PuroBridge extends Bridge {
   override type Dsl <: Puro
 
-  import dsl.{|*|, |+|, |&|, Done, One, Need, Ping, Pong}
+  import dsl.{|*|, |+|, |&|, =⚬, Done, One, Need, Ping, Pong}
 
   extension [I](using exn: Execution)(port: exn.InPort[I]) {
     def zipIn[J](j: exn.InPort[J]): exn.InPort[I |*| J]
@@ -73,6 +73,14 @@ trait PuroBridge extends Bridge {
   extension [A, B](using exn: Execution)(port: exn.OutPort[A |&| B]) {
     def chooseLeft(): exn.OutPort[A]
     def chooseRight(): exn.OutPort[B]
+  }
+
+  extension [I, O](using exn: Execution)(port: exn.InPort[I =⚬ O]) {
+    def simulateFunction(): (exn.OutPort[I], exn.InPort[O])
+  }
+
+  extension [I, O](using exn: Execution)(port: exn.OutPort[I =⚬ O]) {
+    def useFunction(): (exn.InPort[I], exn.OutPort[O])
   }
 }
 
