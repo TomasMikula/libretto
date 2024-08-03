@@ -71,9 +71,6 @@ trait Puro {
   /** Impossible resource. Analogous to [[Nothing]]. It is the identity element for [[|+|]]. */
   type Void
 
-  @deprecated("Renamed to Void")
-  type Zero = Void
-
   /** Choice between `A` and `B`.
     * The consumer chooses whether to get `A` or `B` (but can get only one of them).
     * The producer has to be ready to provide either of them.
@@ -550,7 +547,6 @@ trait Puro {
   def fun[A, B]: Sub[A, B] -⚬ (A =⚬ B) =
     curry(invoke)
 
-  @deprecated("Uses non-eliminatable Scala function. Use the `rec` variant without Scala function, or `λ.rec`.")
   def rec[A, B](using pos: SourcePos)(f: (A -⚬ B) => (A -⚬ B)): A -⚬ B
 
   def rec[A, B](f: (Sub[A, B] |*| A) -⚬ B): A -⚬ B
@@ -1021,11 +1017,6 @@ trait Puro {
 
   def switch[A](using ctx: LambdaContext, pos: SourcePos)(a: $[A]): SwitchInit[A] =
     SwitchInit(ctx, pos, a)
-
-  /** An alias for `switch` for when `switch` is ambiguous. */
-  @deprecated("Should not be necessary, as switch should never be ambiguous. Use switch instead.")
-  def when[A](using ctx: LambdaContext, pos: SourcePos)(a: $[A]): SwitchInit[A] =
-    switch[A](a)
 
   class SwitchInit[A](ctx: LambdaContext, switchPos: SourcePos, a: $[A]) {
     def is[R](using casePos: SourcePos)(f: LambdaContext ?=> $[A] => $[R]): Switch[A, R] =

@@ -565,10 +565,6 @@ class ScalettoLib[
   extension [A](a: $[Val[A]])(using LambdaContext) {
     def **[B](b: $[Val[B]])(using SourcePos): $[Val[(A, B)]] =
       unliftPair(a |*| b)
-
-    @deprecated("Renamed to **")
-    def *[B](b: $[Val[B]])(using SourcePos): $[Val[(A, B)]] =
-      a ** b
   }
 
   object ** {

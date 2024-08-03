@@ -727,10 +727,4 @@ abstract class ScalettoStreams {
           }
       }
     }
-
-  @deprecated("Renamed to ValSource")
-  type Pollable[A] = ValSource[A]
-
-  @deprecated("Renamed to ValSource")
-  val Pollable: ValSource.type = ValSource
 }

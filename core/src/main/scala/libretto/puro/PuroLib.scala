@@ -3214,13 +3214,6 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     ): (A |*| LList[T]) -⚬ R =
       par(id, uncons[T]) > distributeL > either(elimSnd > caseNil, caseCons)
 
-    @deprecated("Use pattern matching")
-    def switchWithR[A, T, R](
-      caseNil: A -⚬ R,
-      caseCons: ((T |*| LList[T]) |*| A) -⚬ R,
-    ): (LList[T] |*| A) -⚬ R =
-      swap > switchWithL(caseNil, swap > caseCons)
-
     def map[T, U](f: T -⚬ U): LList[T] -⚬ LList[U] =
       λ.rec { self => ts =>
         switch(ts)
@@ -3949,11 +3942,17 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
 
   def listEndlessDuality[A, Ā](ev: Dual[A, Ā]): Dual[LList[A], Endless[Ā]] =
     new Dual[LList[A], Endless[Ā]] {
-      override val rInvert: (LList[A] |*| Endless[Ā]) -⚬ One = rec { self =>
-        LList.switchWithR(
-          caseNil  = Endless.close[Ā],
-          caseCons = snd(Endless.pull) > IXI > elimFst(ev.rInvert) > self,
-        )
+      override val rInvert: (LList[A] |*| Endless[Ā]) -⚬ One =
+        λ.rec { self =>
+          { case as |*| ns =>
+            switch( as )
+              .is { case LList.Nil(?(_)) => Endless.close(ns) }
+              .is { case LList.Cons(a |*| as1) =>
+                val n |*| ns1 = Endless.pull(ns)
+                returning(self(as1 |*| ns1), ev.rInvert(a |*| n))
+              }
+              .end
+          }
       }
 
       override val lInvert: One -⚬ (Endless[Ā] |*| LList[A]) = rec { self =>

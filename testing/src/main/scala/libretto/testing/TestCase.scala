@@ -114,13 +114,6 @@ object TestCase {
   ): TestCase[kit.type] =
     new Pure[kit.type](kit, () => body, timeout)
 
-  @deprecated("Use pure instead", since="0.2-M5")
-  def testOutcome[TK <: TestKit](using kit: TestKit)(
-    body: => kit.Outcome[Unit],
-    timeout: FiniteDuration = 1.second,
-  ): TestCase[kit.type] =
-    pure(body, timeout)
-
   def configure[P](using kit: TestKit)(
     params: kit.ExecutionParams[P],
   ): Configure[kit.type, P] =
