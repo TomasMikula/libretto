@@ -1,6 +1,6 @@
 package libretto.examples.dogTreatsFactory
 
-import libretto.scaletto.StarterKit.{-⚬, |+|, Val, id, liftEither, mapVal}
+import libretto.scaletto.StarterKit.{-⚬, |+|, >, Val, id, liftEither, mapVal}
 
 enum Bone {
   case Large()

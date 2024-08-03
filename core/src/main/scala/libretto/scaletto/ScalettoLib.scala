@@ -95,12 +95,12 @@ class ScalettoLib[
 
   def mergeDemands[A]: (Neg[A] |*| Neg[A]) -⚬ Neg[A] =
     id                                         [                                       Neg[A] |*| Neg[A]   ]
-      .>(introFst(promise[A]))              .to[ (Neg[A] |*|        Val[A]      ) |*| (Neg[A] |*| Neg[A])  ]
-      .>(assocLR)                           .to[  Neg[A] |*| (      Val[A]        |*| (Neg[A] |*| Neg[A])) ]
-      .>.snd.fst(dup)                       .to[  Neg[A] |*| ((Val[A] |*| Val[A]) |*| (Neg[A] |*| Neg[A])) ]
-      .>.snd(IXI)                           .to[  Neg[A] |*| ((Val[A] |*| Neg[A]) |*| (Val[A] |*| Neg[A])) ]
-      .>.snd(parToOne(fulfill, fulfill))    .to[  Neg[A] |*|                      One                      ]
-      .>(elimSnd)                           .to[  Neg[A]                                                   ]
+      ./>(introFst(promise[A]))             .to[ (Neg[A] |*|        Val[A]      ) |*| (Neg[A] |*| Neg[A])  ]
+      ./>(assocLR)                          .to[  Neg[A] |*| (      Val[A]        |*| (Neg[A] |*| Neg[A])) ]
+      ./>.snd.fst(dup)                      .to[  Neg[A] |*| ((Val[A] |*| Val[A]) |*| (Neg[A] |*| Neg[A])) ]
+      ./>.snd(IXI)                          .to[  Neg[A] |*| ((Val[A] |*| Neg[A]) |*| (Val[A] |*| Neg[A])) ]
+      ./>.snd(parToOne(fulfill, fulfill))   .to[  Neg[A] |*|                      One                      ]
+      ./>(elimSnd)                          .to[  Neg[A]                                                   ]
 
   def delayVal[A](by: Done -⚬ Done): Val[A] -⚬ Val[A] =
     signalPosFst > par(by, id) > awaitPosFst
@@ -182,16 +182,16 @@ class ScalettoLib[
 
   def maybeToOption[A]: Maybe[Val[A]] -⚬ Val[Option[A]] =
     Maybe.toEither[Val[A]]                .to[    One    |+| Val[A] ]
-      .>.left(const(()))                  .to[ Val[Unit] |+| Val[A] ]
-      .>(unliftEither)                    .to[ Val[Either[Unit, A]] ]
-      .>(mapVal(_.toOption))              .to[ Val[Option[A]]       ]
+      ./>.left(const(()))                 .to[ Val[Unit] |+| Val[A] ]
+      ./>(unliftEither)                   .to[ Val[Either[Unit, A]] ]
+      ./>(mapVal(_.toOption))             .to[ Val[Option[A]]       ]
 
   def optionToPMaybe[A]: Val[Option[A]] -⚬ PMaybe[Val[A]] =
     id                                       [ Val[Option[      A]] ]
-      .>(mapVal(_.toRight(())))           .to[ Val[Either[Unit, A]] ]
-      .>(liftEither)                      .to[ Val[Unit] |+| Val[A] ]
-      .>.left(dsl.neglect)                .to[   Done    |+| Val[A] ]
-      .>(PMaybe.fromEither)               .to[     PMaybe[Val[A]]   ]
+      ./>(mapVal(_.toRight(())))          .to[ Val[Either[Unit, A]] ]
+      ./>(liftEither)                     .to[ Val[Unit] |+| Val[A] ]
+      ./>.left(dsl.neglect)               .to[   Done    |+| Val[A] ]
+      ./>(PMaybe.fromEither)              .to[     PMaybe[Val[A]]   ]
 
   def pMaybeToOption[A]: PMaybe[Val[A]] -⚬ Val[Option[A]] =
     PMaybe.switch(
@@ -273,7 +273,7 @@ class ScalettoLib[
     bKey: Getter[B, Val[K]],
   )
   : (A |*| B) -⚬ ((A |*| B) |+| (B |*| A)) =
-    lteqBy(aKey, bKey).>.right(swap)
+    lteqBy(aKey, bKey)./>.right(swap)
 
   given [A : Ordering]: Comparable[Val[A], Val[A]] with {
     import puroLib.given, Compared.*, Either as ⊻
@@ -289,11 +289,11 @@ class ScalettoLib[
 
     override def compare: (Val[A] |*| Val[A]) -⚬ Compared[Val[A], Val[A]] =
       id                                                           [              Val[A] |*| Val[A]                                        ]
-        .>(unliftPair)                                          .to[ Val[               (A, A)                                           ] ]
-        .>(mapVal(scalaCompare))                                .to[ Val[(A   ,      A) Either (  (A   ,      A) Either   (A   ,      A))] ]
-        .>(liftEither).>.right(liftEither)                      .to[ Val[(A   ,      A)] |+| (Val[(A   ,      A)] |+| Val[(A   ,      A)]) ]
-        .>(|+|.bimap(liftPair, |+|.bimap(liftPair, liftPair)))  .to[ (Val[A] |*| Val[A]) |+| ((Val[A] |*| Val[A]) |+| (Val[A] |*| Val[A])) ]
-        .>(either(lt, either(equiv, gt)))                       .to[                Compared[Val[A], Val[A]]                               ]
+        ./>(unliftPair)                                         .to[ Val[               (A, A)                                           ] ]
+        ./>(mapVal(scalaCompare))                               .to[ Val[(A   ,      A) Either (  (A   ,      A) Either   (A   ,      A))] ]
+        ./>(liftEither)./>.right(liftEither)                    .to[ Val[(A   ,      A)] |+| (Val[(A   ,      A)] |+| Val[(A   ,      A)]) ]
+        ./>(|+|.bimap(liftPair, |+|.bimap(liftPair, liftPair))) .to[ (Val[A] |*| Val[A]) |+| ((Val[A] |*| Val[A]) |+| (Val[A] |*| Val[A])) ]
+        ./>(either(lt, either(equiv, gt)))                      .to[                Compared[Val[A], Val[A]]                               ]
   }
 
   def constList[A](as: List[A]): One -⚬ LList[Val[A]] =
@@ -413,7 +413,7 @@ class ScalettoLib[
       .>(introSnd(const(())))
       .>(splitResource(f1, release1, release2))
       .>(assocLR)
-      .>.snd(effectWr((_, _) => ()))
+      .>(snd(effectWr((_, _) => ())))
   }
 
   def splitResource0[R, S, T](

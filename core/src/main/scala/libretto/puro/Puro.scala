@@ -837,6 +837,9 @@ trait Puro {
     ): $[B] =
       $.map(a)(f)(pos)
 
+    def >[C](g: B -⚬ C): A -⚬ C =
+      andThen(f, g)
+
     @targetName("contramapOut")
     def >>:(expr: ??[B])(using SourcePos, LambdaContext): ??[A] =
       expr contramap f

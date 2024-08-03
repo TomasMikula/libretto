@@ -197,10 +197,10 @@ abstract class ScalettoStreams {
 
     def delay[A](d: FiniteDuration): ValSource[A] -⚬ ValSource[A] = {
       id                                           [          ValSource[A] ]
-        .<(notifyAction)                      .from[ Pong |*| ValSource[A] ]
-        .<.fst(strengthenPong)                .from[ Need |*| ValSource[A] ]
-        .<.fst(delayNeed(d))                  .from[ Need |*| ValSource[A] ]
-        .<(delayable)                         .from[          ValSource[A] ]
+        ./<(notifyAction)                     .from[ Pong |*| ValSource[A] ]
+        ./<.fst(strengthenPong)               .from[ Need |*| ValSource[A] ]
+        ./<.fst(delayNeed(d))                 .from[ Need |*| ValSource[A] ]
+        ./<(delayable)                        .from[          ValSource[A] ]
     }
 
     def fromList[A]: Val[List[A]] -⚬ ValSource[A] = rec { fromList =>
@@ -408,12 +408,12 @@ abstract class ScalettoStreams {
       type NeDT[K, V] = NonEmptyTree[K, ValDrain.Pulling[V]]
 
       def dispatch[K, V](using Ordering[K]): ((Val[K] |*| Val[V]) |*| DT[K, V]) -⚬ (Done |*| DT[K, V]) =
-        Tree.update(ValDrain.Pulling.supply[V].>.left(need > done) > PMaybe.fromEither)
-          .>.fst(PMaybe.neglect)
+        Tree.update(ValDrain.Pulling.supply[V]./>.left(need > done) > PMaybe.fromEither)
+          .>(fst(PMaybe.neglect))
 
       def dispatchNE[K: Ordering, V]: ((Val[K] |*| Val[V]) |*| NeDT[K, V]) -⚬ PMaybe[NeDT[K, V]] =
         NonEmptyTree.update(
-          ValDrain.Pulling.supply[V].>.left(need > done) > PMaybe.fromEither,
+          ValDrain.Pulling.supply[V]./>.left(need > done) > PMaybe.fromEither,
           ifAbsent = neglect,
         )
 
@@ -421,7 +421,7 @@ abstract class ScalettoStreams {
         f: Val[A] -⚬ (Val[K] |*| Val[V]),
       ): (Val[A] |*| NeDT[K, V]) -⚬ PMaybe[NeDT[K, V]] =
         id                                     [       Val[A]        |*| NeDT[K, V]  ]
-          .>.fst(f)                         .to[ (Val[K] |*| Val[V]) |*| NeDT[K, V]  ]
+          .>(fst(f))                        .to[ (Val[K] |*| Val[V]) |*| NeDT[K, V]  ]
           .>(dispatchNE)                    .to[                  PMaybe[NeDT[K, V]] ]
 
       def addPulling[K, V](using Ordering[K]): ((Val[K] |*| ValDrain.Pulling[V]) |*| DT[K, V]) -⚬ DT[K, V] =
@@ -453,16 +453,16 @@ abstract class ScalettoStreams {
         val onDemand: Drain.Pulling[Val[K] |*| -[ValSource[V]]] -⚬ (Drain[Val[K] |*| -[ValSource[V]]] |*| ValSource[V]) =
           id                                       [           Drain.Pulling[Val[K] |*| -[ValSource[V]]]                     ]
             .>(Drain.Pulling.warrant)           .to[ -[Val[K]  |*|   -[ValSource[V]]]  |*| Drain[Val[K] |*| -[ValSource[V]]] ]
-            .>.fst(distributeInversion)         .to[ -[Val[K]] |*| -[-[ValSource[V]]]  |*| Drain[Val[K] |*| -[ValSource[V]]] ]
-            .>.fst(elimFst(constNeg(k) > need)) .to[               -[-[ValSource[V]]]  |*| Drain[Val[K] |*| -[ValSource[V]]] ]
-            .>.fst(die)                         .to[                   ValSource[V]    |*| Drain[Val[K] |*| -[ValSource[V]]] ]
+            .>(fst(distributeInversion))        .to[ -[Val[K]] |*| -[-[ValSource[V]]]  |*| Drain[Val[K] |*| -[ValSource[V]]] ]
+            .>(fst(elimFst(constNeg(k) > need))).to[               -[-[ValSource[V]]]  |*| Drain[Val[K] |*| -[ValSource[V]]] ]
+            .>(fst(die))                        .to[                   ValSource[V]    |*| Drain[Val[K] |*| -[ValSource[V]]] ]
             .>(swap)                            .to[ Drain[Val[K] |*| -[ValSource[V]]] |*|           ValSource[V]            ]
 
         val onUnsubscribed: Need -⚬ (Drain[Val[K] |*| -[ValSource[V]]] |*| ValSource[V]) =
           id[Need] > Drain.closed > introSnd(done > ValSource.empty[V])
 
         id[ Drain[Val[K] |*| -[ValSource[V]]] |*| Done ]
-          .>.fst(Drain.switch(onUnsubscribed, onDemand))
+          .>(fst(Drain.switch(onUnsubscribed, onDemand)))
           .>(IX)
       }
     }

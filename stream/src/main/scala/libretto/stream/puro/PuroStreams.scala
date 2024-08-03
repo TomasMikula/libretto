@@ -323,10 +323,10 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
       unpack > chooseR
 
     def delayedPoll[A: Junction.Positive]: (Done |*| Source[A]) -⚬ Polled[A] =
-      id                                       [ Done |*|     Source[A]        ]
-        .>.snd(unpack)                      .to[ Done |*| (Done |&| Polled[A]) ]
-        .>(chooseRWhenDone)                 .to[ Done |*|           Polled[A]  ]
-        .>(Polled.delayBy[A])               .to[                    Polled[A]  ]
+      id                                      [ Done |*|     Source[A]        ]
+        .>(snd(unpack))                    .to[ Done |*| (Done |&| Polled[A]) ]
+        .>(chooseRWhenDone)                .to[ Done |*|           Polled[A]  ]
+        .>(Polled.delayBy[A])              .to[                    Polled[A]  ]
 
     def toLList[A]: Source[A] -⚬ (LList[A] |*| Done) =
       SourceT.toLList
@@ -433,7 +433,7 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
     /** Delays the first action ([[poll]] or [[close]]) until the [[Done]] signal completes. */
     def delayBy[A](using ev: Junction.Positive[A]): (Done |*| Source[A]) -⚬ Source[A] =
       id                                           [  Done |*|      Source[A]                  ]
-        .>.snd(toChoice)                        .to[  Done |*| (Done  |&|           Polled[A]) ]
+        .>(snd(toChoice))                       .to[  Done |*| (Done  |&|           Polled[A]) ]
         .>(delayChoiceUntilDone)                .to[ (Done |*|  Done) |&| (Done |*| Polled[A]) ]
         .>(|&|.bimap(join, Polled.delayBy[A]))  .to[       Done       |&|           Polled[A]  ]
         .>(fromChoice)                          .to[               Source[A]                   ]
@@ -449,7 +449,7 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
       */
     def delayClosedBy[A]: (Done |*| Source[A]) -⚬ Source[A] = rec { self =>
       id                                                     [  Done |*|      Source[A]                  ]
-        .>.snd(unpack)                                    .to[  Done |*| (Done  |&|           Polled[A]) ]
+        .>(snd(unpack))                                   .to[  Done |*| (Done  |&|           Polled[A]) ]
         .>(coFactorL)                                     .to[ (Done |*|  Done) |&| (Done |*| Polled[A]) ]
         .>(|&|.bimap(join, Polled.delayClosedBy_(self)))  .to[       Done       |&|           Polled[A]  ]
         .>(fromChoice)                                    .to[               Source[A]                   ]
@@ -464,7 +464,7 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
       Detained(delayClosedBy)
 
     def map[A, B](f: A -⚬ B): Source[A] -⚬ Source[B] = rec { self =>
-      from(close[A], poll[A].>.right(par(f, self)))
+      from(close[A], poll[A]./>.right(par(f, self)))
     }
 
     def mapWith[X, A, B](f: (X |*| A) -⚬ B)(using
@@ -589,12 +589,12 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
         id                                     [                  Source[A |+| B]                   ]
           .>(choice(sndClosed, bothPolled)) .to[ (Polled[A] |*| Done) |&| (Polled[A] |*| Polled[B]) ]
           .>(coDistributeL)                 .to[  Polled[A] |*| (Done |&|                Polled[B]) ]
-          .>.snd(fromChoice)                .to[  Polled[A] |*|    Source[B]                        ]
+          .>(snd(fromChoice))               .to[  Polled[A] |*|    Source[B]                        ]
 
       id                                     [                  Source[A |+| B]                   ]
         .>(choice(fstClosed, fstPolled))  .to[ (Done |*| Source[B]) |&| (Polled[A] |*| Source[B]) ]
         .>(coDistributeR)                 .to[ (Done                |&| Polled[A]) |*| Source[B]  ]
-        .>.fst(fromChoice)                .to[                     Source[A]       |*| Source[B]  ]
+        .>(fst(fromChoice))               .to[                     Source[A]       |*| Source[B]  ]
     }
 
     private def merge[A](continue: (Source[A] |*| Source[A]) -⚬ Source[A])(using
@@ -857,19 +857,19 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
 
       def delayBy[A](using ev: Junction.Positive[A]): (Done |*| Polled[A]) -⚬ Polled[A] =
         id[Done |*| Polled[A]]          .to[  Done |*| (Done |+|           (A |*| Source[A])) ]
-          .>(distributeL)               .to[ (Done |*| Done) |+| (Done |*| (A |*| Source[A])) ]
-          .>.left(join)                 .to[      Done       |+| (Done |*| (A |*| Source[A])) ]
-          .>.right(assocRL)             .to[      Done       |+| ((Done |*| A) |*| Source[A]) ]
-          .>.right.fst(ev.awaitPosFst)  .to[      Done       |+| (          A  |*| Source[A]) ]
+          ./>(distributeL)              .to[ (Done |*| Done) |+| (Done |*| (A |*| Source[A])) ]
+          ./>.left(join)                .to[      Done       |+| (Done |*| (A |*| Source[A])) ]
+          ./>.right(assocRL)            .to[      Done       |+| ((Done |*| A) |*| Source[A]) ]
+          ./>.right.fst(ev.awaitPosFst) .to[      Done       |+| (          A  |*| Source[A]) ]
 
       def delayClosedBy_[A](
         delaySourceClosed: (Done |*| Source[A]) -⚬ Source[A],
       ): (Done |*| Polled[A]) -⚬ Polled[A] =
         id[Done |*| Polled[A]]                .to[  Done |*| (Done |+|           (A |*| Source[A])) ]
-          .>(distributeL)                     .to[ (Done |*| Done) |+| (Done |*| (A |*| Source[A])) ]
-          .>.left(join)                       .to[      Done       |+| (Done |*| (A |*| Source[A])) ]
-          .>.right(XI)                        .to[      Done       |+| (A |*| (Done |*| Source[A])) ]
-          .>.right.snd(delaySourceClosed)     .to[      Done       |+| (A |*|           Source[A] ) ]
+          ./>(distributeL)                    .to[ (Done |*| Done) |+| (Done |*| (A |*| Source[A])) ]
+          ./>.left(join)                      .to[      Done       |+| (Done |*| (A |*| Source[A])) ]
+          ./>.right(XI)                       .to[      Done       |+| (A |*| (Done |*| Source[A])) ]
+          ./>.right.snd(delaySourceClosed)    .to[      Done       |+| (A |*|           Source[A] ) ]
 
       def delayClosedBy[A]: (Done |*| Polled[A]) -⚬ Polled[A] =
         delayClosedBy_(Source.delayClosedBy)
@@ -883,9 +883,9 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
           val caseCont: (Source[A] |*| B) -⚬ (Done |*| Maybe[B]) =
             par(Source.poll, id) > self
           id                                             [ (     A    |*| Source[A]) |*| B  ]
-            .>.fst(swap)                              .to[ (Source[A] |*|     A    ) |*| B  ]
+            .>(fst(swap))                             .to[ (Source[A] |*|     A    ) |*| B  ]
             .>(assocLR)                               .to[  Source[A] |*| (   A      |*| B) ]
-            .>.snd(f)                                 .to[  Source[A] |*|        PMaybe[B]  ]
+            .>(snd(f))                                .to[  Source[A] |*|        PMaybe[B]  ]
             .>(PMaybe.switchWithL(caseStop, caseCont)).to[         Done |*| Maybe[B]        ]
         }
 

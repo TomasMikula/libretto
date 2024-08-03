@@ -91,7 +91,7 @@ object CoffeeMachine extends StarterApp { app =>
     id                                       [                                           Done  ]
       .>(introFst(promise[ShotCount]))    .to[ (Neg[ShotCount]  |*|  Val[ShotCount]) |*| Done  ]
       .>(assocLR)                         .to[  Neg[ShotCount]  |*| (Val[ShotCount]  |*| Done) ]
-      .>.snd(makeBeverage(espresso))      .to[  Neg[ShotCount]  |*| (Val[Beverage]   |*| Done) ]
+      .>(snd(makeBeverage(espresso)))     .to[  Neg[ShotCount]  |*| (Val[Beverage]   |*| Done) ]
                                           .to[  ShotCountChoice |*| (Val[Beverage]   |*| Done) ]
       .>(assocRL)                         .to[ (ShotCountChoice |*|  Val[Beverage])  |*| Done  ]
                                           .to[             EspressoMenu              |*| Done  ]
@@ -100,8 +100,8 @@ object CoffeeMachine extends StarterApp { app =>
     id                                       [                                                 Done  ]
       .>(introFst(promise[LatteParams]))  .to[ (Neg[LatteParams]    |*|  Val[LatteParams]) |*| Done  ]
       .>(assocLR)                         .to[  Neg[LatteParams]    |*| (Val[LatteParams]  |*| Done) ]
-      .>.fst(collectLatteParams)          .to[    LatteOptions      |*| (Val[LatteParams]  |*| Done) ]
-      .>.snd(makeBeverage(latte))         .to[    LatteOptions      |*| (Val[Beverage]     |*| Done) ]
+      .>(fst(collectLatteParams))         .to[    LatteOptions      |*| (Val[LatteParams]  |*| Done) ]
+      .>(snd(makeBeverage(latte)))        .to[    LatteOptions      |*| (Val[Beverage]     |*| Done) ]
       .>(assocRL)                         .to[   (LatteOptions      |*|  Val[Beverage])    |*| Done  ]
                                           .to[                   LatteMenu                 |*| Done  ]
 
@@ -130,9 +130,9 @@ object CoffeeMachine extends StarterApp { app =>
   def collectLatteParams: Neg[LatteParams] -⚬ LatteOptions =
     id                                                           [                       LatteOptions                      ]
                                                             .from[ (Neg[Size] |*| Neg[ShotCount]) |*| Neg[Option[Flavor]]  ]
-      .<.fst(liftNegPair)                                   .from[ Neg[ (Size   ,     ShotCount)] |*| Neg[Option[Flavor]]  ]
-      .<(liftNegPair)                                       .from[ Neg[((Size   ,     ShotCount)   ,      Option[Flavor])] ]
-      .<(contramapNeg { case ((a, b), c) => (a, b, c) })    .from[ Neg[( Size   ,     ShotCount    ,      Option[Flavor])] ]
+      ./<.fst(liftNegPair)                                  .from[ Neg[ (Size   ,     ShotCount)] |*| Neg[Option[Flavor]]  ]
+      ./<(liftNegPair)                                      .from[ Neg[((Size   ,     ShotCount)   ,      Option[Flavor])] ]
+      ./<(contramapNeg { case ((a, b), c) => (a, b, c) })   .from[ Neg[( Size   ,     ShotCount    ,      Option[Flavor])] ]
                                                             .from[ Neg[              LatteParams                         ] ]
 
   val useCoffeeMachine: CoffeeMachine -⚬ Done = {
@@ -183,13 +183,13 @@ object CoffeeMachine extends StarterApp { app =>
     id                                 [  Done |*|             EspressoMenu            ]
                                     .to[  Done |*| (ShotCountChoice |*| Val[Beverage]) ]
       .>(assocRL)                   .to[ (Done |*| ShotCountChoice) |*| Val[Beverage]  ]
-      .>.fst(promptShot)            .to[       Done                 |*| Val[Beverage]  ]
+      .>(fst(promptShot))           .to[       Done                 |*| Val[Beverage]  ]
       .>(joinMap(id, serve))        .to[                           Done                ]
 
   def getLatte: (Done |*| LatteMenu) -⚬ Done =
     id                               [ Done |*|                                               LatteMenu                 ]
                                   .to[ Done |*| (((SizeChoice |*| ShotCountChoice) |*| FlavorChoice) |*| Val[Beverage]) ]
-      .>.snd(assocLR > assocLR)   .to[ Done |*| (SizeChoice |*| (ShotCountChoice |*| (FlavorChoice |*| Val[Beverage]))) ]
+      .>(snd(assocLR > assocLR))  .to[ Done |*| (SizeChoice |*| (ShotCountChoice |*| (FlavorChoice |*| Val[Beverage]))) ]
       .>(VI(promptSize))          .to[      Done            |*| (ShotCountChoice |*| (FlavorChoice |*| Val[Beverage]))  ]
       .>(VI(promptShot))          .to[                      Done                 |*| (FlavorChoice |*| Val[Beverage])   ]
       .>(VI(promptFlavor))        .to[                                           Done              |*| Val[Beverage]    ]
@@ -209,7 +209,7 @@ object CoffeeMachine extends StarterApp { app =>
     }
 
     id[Done |*| ShotCountChoice]    .to[    Done        |*| Neg[ShotCount] ]
-      .>.fst(prompt(msg, parse))    .to[ Val[ShotCount] |*| Neg[ShotCount] ]
+      .>(fst(prompt(msg, parse)))   .to[ Val[ShotCount] |*| Neg[ShotCount] ]
       .>(fulfillAndSignal)          .to[                Done               ]
   }
 
@@ -229,7 +229,7 @@ object CoffeeMachine extends StarterApp { app =>
     }
 
     id[Done |*| SizeChoice]         .to[    Done   |*| Neg[Size] ]
-      .>.fst(prompt(msg, parse))    .to[ Val[Size] |*| Neg[Size] ]
+      .>(fst(prompt(msg, parse)))   .to[ Val[Size] |*| Neg[Size] ]
       .>(fulfillAndSignal)          .to[           Done          ]
   }
 
@@ -249,7 +249,7 @@ object CoffeeMachine extends StarterApp { app =>
     }
 
     id[Done |*| FlavorChoice]       .to[    Done             |*| Neg[Option[Flavor]] ]
-      .>.fst(prompt(msg, parse))    .to[ Val[Option[Flavor]] |*| Neg[Option[Flavor]] ]
+      .>(fst(prompt(msg, parse)))   .to[ Val[Option[Flavor]] |*| Neg[Option[Flavor]] ]
       .>(fulfillAndSignal)          .to[                     Done                    ]
   }
 

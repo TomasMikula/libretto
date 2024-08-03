@@ -98,8 +98,8 @@ class BasicTests extends ScalatestScalettoTestSuite {
             .>(constVal(("foo", 42)))           .to[     Val[(String, Int)]                                                               ]
             .>(introSnd(promise))               .to[     Val[(String, Int)]      |*| (   Neg[(String, Int)]       |*| Val[(String, Int)]) ]
             .>(assocRL)                         .to[ (   Val[(String, Int)]      |*|     Neg[(String, Int)]     ) |*| Val[(String, Int)]  ]
-            .>.fst(par(liftPair, liftNegPair))  .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| Val[(String, Int)]  ]
-            .>.fst(rInvert).>(elimFst)          .to[                                                                  Val[(String, Int)]  ]
+            .>(fst(par(liftPair, liftNegPair))) .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| Val[(String, Int)]  ]
+            .>(fst(rInvert)).>(elimFst)         .to[                                                                  Val[(String, Int)]  ]
 
         prg
       }.checkThat {
@@ -113,9 +113,9 @@ class BasicTests extends ScalatestScalettoTestSuite {
         val prg: Done -⚬ Val[(String, Int)] =
           id                                              [               Done                                                                           ]
             .>(forkMap(constVal("foo"), constVal(42))) .to[   Val[String] |*| Val[Int]                                                                   ]
-            .>(introSnd).>.snd(lInvert)                .to[  (Val[String] |*| Val[Int]) |*| ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) ]
+            .>(introSnd).>(snd(lInvert))               .to[  (Val[String] |*| Val[Int]) |*| ((Neg[String] |*| Neg[Int])  |*| (Val[String] |*| Val[Int])) ]
             .>(assocRL)                                .to[ ((Val[String] |*| Val[Int]) |*|  (Neg[String] |*| Neg[Int])) |*| (Val[String] |*| Val[Int])  ]
-            .>.fst(par(unliftPair, unliftNegPair))     .to[ (    Val[(String, Int)]     |*|      Neg[(String, Int)]    ) |*| (Val[String] |*| Val[Int])  ]
+            .>(fst(par(unliftPair, unliftNegPair)))    .to[ (    Val[(String, Int)]     |*|      Neg[(String, Int)]    ) |*| (Val[String] |*| Val[Int])  ]
             .>(elimFst(fulfill))                       .to[                                                                   Val[String] |*| Val[Int]   ]
             .>(unliftPair)                             .to[                                                                      Val[(String, Int)]      ]
 
@@ -130,7 +130,7 @@ class BasicTests extends ScalatestScalettoTestSuite {
             .>(constVal(42))              .to[  Val[Int]                         ]
             .>(introSnd(lInvertSignal))   .to[  Val[Int] |*| ( Need    |*| Done) ]
             .>(assocRL)                   .to[ (Val[Int] |*|   Need  ) |*| Done  ]
-            .>.fst.snd(inflate)           .to[ (Val[Int] |*| Neg[Int]) |*| Done  ]
+            .>(fst(snd(inflate)))         .to[ (Val[Int] |*| Neg[Int]) |*| Done  ]
             .>(elimFst(fulfill))          .to[                             Done  ]
 
         prg
@@ -185,7 +185,7 @@ class BasicTests extends ScalatestScalettoTestSuite {
       "crashd waits for its trigger" -> {
         val prg: Done -⚬ ((Done |*| Done) |+| (Done |*| Done)) =
           fork
-            .>.fst(delay(10.millis) > crashd("Boom!"))
+            .>(fst(delay(10.millis) > crashd("Boom!")))
             .>( race )
 
         TestCase
@@ -488,9 +488,9 @@ class BasicTests extends ScalatestScalettoTestSuite {
           constVal(0)
             .>(RefCounted.acquire0(new AtomicInteger(_), _ => releaseCounter.incrementAndGet))
             .>(RefCounted.dupRef)
-            .>.snd(RefCounted.dupRef)
+            .>(snd(RefCounted.dupRef))
             .>(par(incGetClose, par(incGetClose, incGetClose)))
-            .>.snd(unliftPair > mapVal(t => t._1 + t._2))
+            .>(snd(unliftPair > mapVal(t => t._1 + t._2)))
             .>(unliftPair > mapVal(t => t._1 + t._2))
 
         TestCase
@@ -646,8 +646,8 @@ class BasicTests extends ScalatestScalettoTestSuite {
 
         def client(cid: ClientId): (Val[ResourceId] |*| Neg[ResourceId]) -⚬ Val[(ClientId, ResourceId)] =
           id                             [                            Val[ResourceId]             |*| Neg[ResourceId]  ]
-            .>.fst(delayVal(1.milli)) .to[                            Val[ResourceId]             |*| Neg[ResourceId]  ]
-            .>.fst(dup).>(assocLR)    .to[                   Val[ResourceId] |*| (Val[ResourceId] |*| Neg[ResourceId]) ]
+            .>(fst(delayVal(1.milli))).to[                            Val[ResourceId]             |*| Neg[ResourceId]  ]
+            .>(fst(dup).>(assocLR))   .to[                   Val[ResourceId] |*| (Val[ResourceId] |*| Neg[ResourceId]) ]
             .>(elimSnd(fulfill))      .to[                   Val[ResourceId]                                           ]
             .>(introFst(const(cid)))  .to[ Val[ClientId] |*| Val[ResourceId]                                           ]
             .>(unliftPair)            .to[ Val[(ClientId, ResourceId)]                                                 ]

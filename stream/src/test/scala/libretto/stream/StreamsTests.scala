@@ -187,8 +187,8 @@ class StreamsTests extends ScalatestScalettoTestSuite {
               .>(ValSource.delay(10.millis)) // delay so that subscribers have some time to subscribe
               .>(broadcastByKey(byLength))
               .>(subscribe(3))
-              .>.fst(subscribe(4))
-              .>(assocLR).>.snd(ValSource.merge)
+              .>(fst(subscribe(4)))
+              .>(assocLR).>(snd(ValSource.merge))
               .>(par(closeBroadcast, ValSource.toList))
               .>(awaitPosFst)
 

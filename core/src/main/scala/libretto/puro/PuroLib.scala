@@ -502,7 +502,7 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
         from(join)
 
       def byFst[A, B](using A: Junction.Positive[A]): Junction.Positive[A |*| B] =
-        from(assocRL.>.fst(A.awaitPosFst))
+        from(assocRL > fst(A.awaitPosFst))
 
       def bySnd[A, B](using B: Junction.Positive[B]): Junction.Positive[A |*| B] =
         from(XI > par(id[A], B.awaitPosFst))
@@ -604,9 +604,9 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
       new Negative[A] {
         override def awaitNegFst: A -⚬ (Need |*| A) =
           id                                 [                      A  ]
-            .>(introFst(lInvertSignal))   .to[ (Need |*|  Done) |*| A  ]
-            .>(assocLR)                   .to[  Need |*| (Done  |*| A) ]
-            .>.snd(A.awaitPosFst)         .to[  Need |*|            A  ]
+            ./>(introFst(lInvertSignal))  .to[ (Need |*|  Done) |*| A  ]
+            ./>(assocLR)                  .to[  Need |*| (Done  |*| A) ]
+            ./>.snd(A.awaitPosFst)        .to[  Need |*|            A  ]
       }
 
     /** [[Negative]] junction can be made to await a positive (i.e. [[Done]]) signal,
@@ -616,9 +616,9 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
       new Positive[A] {
         override def awaitPosFst: (Done |*| A) -⚬ A =
           id                                 [  Done |*|            A  ]
-            .>.snd(A.awaitNegFst)         .to[  Done |*| (Need  |*| A) ]
-            .>(assocRL)                   .to[ (Done |*|  Need) |*| A  ]
-            .>(elimFst(rInvertSignal))    .to[                      A  ]
+            ./>.snd(A.awaitNegFst)        .to[  Done |*| (Need  |*| A) ]
+            ./>(assocRL)                  .to[ (Done |*|  Need) |*| A  ]
+            ./>(elimFst(rInvertSignal))   .to[                      A  ]
       }
   }
 
@@ -740,7 +740,7 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
         from(forkPong)
 
       def byFst[A, B](using A: Signaling.Negative[A]): Signaling.Negative[A |*| B] =
-        from(assocRL.>.fst(A.notifyNegFst))
+        from(assocRL > fst(A.notifyNegFst))
 
       def bySnd[A, B](using B: Signaling.Negative[B]): Signaling.Negative[A |*| B] =
         from(XI > par(id[A], B.notifyNegFst))
@@ -772,9 +772,9 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
       new Negative[A] {
         override def notifyNegFst: (Pong |*| A) -⚬ A =
           id                                         [  Pong |*|            A  ]
-            .>.snd(A.notifyPosFst)                .to[  Pong |*| (Ping  |*| A) ]
-            .>(assocRL)                           .to[ (Pong |*|  Ping) |*| A  ]
-            .>(elimFst(swap > rInvertPingPong))   .to[                      A  ]
+            ./>.snd(A.notifyPosFst)               .to[  Pong |*| (Ping  |*| A) ]
+            ./>(assocRL)                          .to[ (Pong |*|  Ping) |*| A  ]
+            ./>(elimFst(swap > rInvertPingPong))  .to[                      A  ]
       }
 
     /** [[Signaling.Negative]] can be made to produce a positive (i.e. [[Done]]) signal,
@@ -784,9 +784,9 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
       new Positive[A] {
         override def notifyPosFst: A -⚬ (Ping |*| A) =
           id                                         [                      A  ]
-            .>(introFst(lInvertPongPing > swap))  .to[ (Ping |*|  Pong) |*| A  ]
-            .>(assocLR)                           .to[  Ping |*| (Pong  |*| A) ]
-            .>.snd(A.notifyNegFst)                .to[  Ping |*|            A  ]
+            ./>(introFst(lInvertPongPing > swap)) .to[ (Ping |*|  Pong) |*| A  ]
+            ./>(assocLR)                          .to[  Ping |*| (Pong  |*| A) ]
+            ./>.snd(A.notifyNegFst)               .to[  Ping |*|            A  ]
       }
   }
 
@@ -1179,23 +1179,23 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     * selects the left signal from the in-port.
     */
   def selectNeed: (Need |&| Need) -⚬ (Need |*| Need) =
-    id                                       [           Need  |*|           Need  ]
-      .<(par(notifyNeedL, notifyNeedL)) .from[ (Pong |*| Need) |*| (Pong |*| Need) ]
-      .<(IXI)                           .from[ (Pong |*| Pong) |*| (Need |*| Need) ]
-      .<(par(selectPair, joinNeed))     .from[ ( One |&| One ) |*|      Need       ]
-      .<(coDistributeR)                 .from[  (One |*| Need) |&| (One |*| Need)  ]
-      .<(|&|.bimap(introFst, introFst)) .from[           Need  |&|          Need   ]
+    id                                        [           Need  |*|           Need  ]
+      ./<(par(notifyNeedL, notifyNeedL)) .from[ (Pong |*| Need) |*| (Pong |*| Need) ]
+      ./<(IXI)                           .from[ (Pong |*| Pong) |*| (Need |*| Need) ]
+      ./<(par(selectPair, joinNeed))     .from[ ( One |&| One ) |*|      Need       ]
+      ./<(coDistributeR)                 .from[  (One |*| Need) |&| (One |*| Need)  ]
+      ./<(|&|.bimap(introFst, introFst)) .from[           Need  |&|          Need   ]
 
   def raceBy[A, B](
     notifyA: A -⚬ (Ping |*| A),
     notifyB: B -⚬ (Ping |*| B),
   ): (A |*| B) -⚬ ((A |*| B) |+| (A |*| B)) =
     id                                               [                  A  |*|           B         ]
-      .>(par(notifyA, notifyB))                   .to[        (Ping |*| A) |*| (Ping |*| B)        ]
-      .>(IXI)                                     .to[        (Ping |*| Ping) |*| (A |*| B)        ]
-      .>.fst(racePair)                            .to[        ( One |+| One ) |*| (A |*| B)        ]
-      .>(distributeR)                             .to[ (One |*| (A |*| B)) |+| (One |*| (A |*| B)) ]
-      .>(|+|.bimap(elimFst, elimFst))             .to[          (A |*| B)  |+|          (A |*| B)  ]
+      ./>(par(notifyA, notifyB))                  .to[        (Ping |*| A) |*| (Ping |*| B)        ]
+      ./>(IXI)                                    .to[        (Ping |*| Ping) |*| (A |*| B)        ]
+      ./>.fst(racePair)                           .to[        ( One |+| One ) |*| (A |*| B)        ]
+      ./>(distributeR)                            .to[ (One |*| (A |*| B)) |+| (One |*| (A |*| B)) ]
+      ./>(|+|.bimap(elimFst, elimFst))            .to[          (A |*| B)  |+|          (A |*| B)  ]
 
   def raceBy[A](
     notify: A -⚬ (Ping |*| A),
@@ -1228,10 +1228,10 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
 
   def raceAgainstDoneL[A](using A: SignalingJunction.Positive[A]): (Done |*| A) -⚬ (A |+| A) =
     id                                               [  Done        |*|            A  ]
-      .>.snd(A.signalPos).>(assocRL)              .to[ (Done        |*|  Done) |*| A  ]
-      .>.fst(raceDone)                            .to[ (Done        |+|  Done) |*| A  ]
-      .>(distributeR)                             .to[ (Done |*| A) |+| (Done  |*| A) ]
-      .>(|+|.bimap(A.awaitPos, A.awaitPos))       .to[           A  |+|            A  ]
+      ./>.snd(A.signalPos).>(assocRL)             .to[ (Done        |*|  Done) |*| A  ]
+      ./>.fst(raceDone)                           .to[ (Done        |+|  Done) |*| A  ]
+      ./>(distributeR)                            .to[ (Done |*| A) |+| (Done  |*| A) ]
+      ./>(|+|.bimap(A.awaitPos, A.awaitPos))      .to[           A  |+|            A  ]
 
   def raceAgainstDoneR[A](using A: SignalingJunction.Positive[A]): (A |*| Done) -⚬ (A |+| A) =
     swap > raceAgainstDoneL > |+|.swap
@@ -1241,11 +1241,11 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     notifyB: ((Pong |*| B) -⚬ B),
   ): ((A |*| B) |&| (A |*| B)) -⚬ (A |*| B) =
     id                                               [          (A |*| B)  |&|          (A |*| B)  ]
-      .>(|&|.bimap(introFst, introFst))           .to[ (One |*| (A |*| B)) |&| (One |*| (A |*| B)) ]
-      .>(coDistributeR)                           .to[        ( One |&| One ) |*| (A |*| B)        ]
-      .>.fst(selectPair)                          .to[        (Pong |*| Pong) |*| (A |*| B)        ]
-      .>(IXI)                                     .to[        (Pong |*| A) |*| (Pong |*| B)        ]
-      .>(par(notifyA, notifyB))                   .to[                  A  |*|           B         ]
+      ./>(|&|.bimap(introFst, introFst))          .to[ (One |*| (A |*| B)) |&| (One |*| (A |*| B)) ]
+      ./>(coDistributeR)                          .to[        ( One |&| One ) |*| (A |*| B)        ]
+      ./>.fst(selectPair)                         .to[        (Pong |*| Pong) |*| (A |*| B)        ]
+      ./>(IXI)                                    .to[        (Pong |*| A) |*| (Pong |*| B)        ]
+      ./>(par(notifyA, notifyB))                  .to[                  A  |*|           B         ]
 
   def selectBy[A](
     notify: (Pong |*| A) -⚬ A,
@@ -1278,10 +1278,10 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
 
   def selectAgainstL[A](using A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (Need |*| A) =
     id                                               [  Need        |*|            A  ]
-      .<.snd(A.signalNeg).<(assocLR)            .from[ (Need        |*|  Need) |*| A  ]
-      .<.fst(selectNeed)                        .from[ (Need        |&|  Need) |*| A  ]
-      .<(coDistributeR)                         .from[ (Need |*| A) |&| (Need  |*| A) ]
-      .<(|&|.bimap(A.awaitNeg, A.awaitNeg))     .from[           A  |&|            A  ]
+      ./<.snd(A.signalNeg)./<(assocLR)          .from[ (Need        |*|  Need) |*| A  ]
+      ./<.fst(selectNeed)                       .from[ (Need        |&|  Need) |*| A  ]
+      ./<(coDistributeR)                        .from[ (Need |*| A) |&| (Need  |*| A) ]
+      ./<(|&|.bimap(A.awaitNeg, A.awaitNeg))    .from[           A  |&|            A  ]
 
   def selectAgainstR[A](using A: SignalingJunction.Negative[A]): (A |&| A) -⚬ (A |*| Need) =
     |&|.swap > selectAgainstL > swap
@@ -1405,9 +1405,9 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
       new Lens[Rec[F], F[Rec[F]]] {
         def modify[X, Y](f: (X |*| F[Rec[F]]) -⚬ (Y |*| F[Rec[F]])): (X |*| Rec[F]) -⚬ (Y |*| Rec[F]) =
           id[X |*| Rec[F]]
-            .>.snd(unpack)
-            .>(f)
-            .>.snd(pack)
+            ./>.snd(unpack)
+            ./>(f)
+            ./>.snd(pack)
       }
   }
 
@@ -1665,11 +1665,11 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     def ∘[Z](g: Z -⚬ A): Z -⚬ B = dsl.andThen(g, self)
 
     /** Focuses on function's output. */
-    def > : FocusedCo[[x] =>> A -⚬ x, B] =
+    def /> : FocusedCo[[x] =>> A -⚬ x, B] =
       new FocusedCo[[x] =>> A -⚬ x, B](self)
 
     /** Focuses on function's input. */
-    def < : FocusedContra[[x] =>> x -⚬ B, A] =
+    def /< : FocusedContra[[x] =>> x -⚬ B, A] =
       new FocusedContra[[x] =>> x -⚬ B, A](self)
   }
 
@@ -1799,11 +1799,11 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
   //                     |    /   \    |
                        ((A|*|C)|*|(B|*|D)) =
     id                             [ (A |*| B) |*| (C |*| D) ]
-      .>(assocLR)               .to[ A |*| (B |*| (C |*| D)) ]
-      .>.snd(assocRL)           .to[ A |*| ((B |*| C) |*| D) ]
-      .>.snd.fst(swap)          .to[ A |*| ((C |*| B) |*| D) ]
-      .>.snd(assocLR)           .to[ A |*| (C |*| (B |*| D)) ]
-      .>(assocRL)               .to[ (A |*| C) |*| (B |*| D) ]
+      ./>(assocLR)              .to[ A |*| (B |*| (C |*| D)) ]
+      ./>.snd(assocRL)          .to[ A |*| ((B |*| C) |*| D) ]
+      ./>.snd.fst(swap)         .to[ A |*| ((C |*| B) |*| D) ]
+      ./>.snd(assocLR)          .to[ A |*| (C |*| (B |*| D)) ]
+      ./>(assocRL)              .to[ (A |*| C) |*| (B |*| D) ]
 
   def IX[A, B, C]: ((A|*|B)|*| C) -⚬
     //               |    \   /
@@ -1858,18 +1858,18 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     */
   def matchingChoiceLR[A, B, C, D]: ((A |+| B) |*| (C |&| D)) -⚬ ((A |*| C) |+| (B |*| D)) =
     id[(A |+| B) |*| (C |&| D)]
-      .>(distributeR)          .to[(A |*| (C |&| D)) |+| (B |*| (C |&| D))]
-      .>.left.snd(chooseL)     .to[(A |*|  C       ) |+| (B |*| (C |&| D))]
-      .>.right.snd(chooseR)    .to[(A |*|  C       ) |+| (B |*|        D )]
+      ./>(distributeR)          .to[(A |*| (C |&| D)) |+| (B |*| (C |&| D))]
+      ./>.left.snd(chooseL)     .to[(A |*|  C       ) |+| (B |*| (C |&| D))]
+      ./>.right.snd(chooseR)    .to[(A |*|  C       ) |+| (B |*|        D )]
 
   /** From the choice ''available'' on the left (`A |&| B`), choose the one corresponding to the choice ''made''
     * on the right (`C |+| D`): if on the right there is `C`, choose `A`, if on the right there is `D`, choose `B`.
     */
   def matchingChoiceRL[A, B, C, D]: ((A |&| B) |*| (C |+| D)) -⚬ ((A |*| C) |+| (B |*| D)) =
     id[(A |&| B) |*| (C |+| D)]
-      .>(distributeL)          .to[((A |&| B) |*| C) |+| ((A |&| B) |*| D)]
-      .>.left.fst(chooseL)     .to[( A        |*| C) |+| ((A |&| B) |*| D)]
-      .>.right.fst(chooseR)    .to[( A        |*| C) |+| (       B  |*| D)]
+      ./>(distributeL)          .to[((A |&| B) |*| C) |+| ((A |&| B) |*| D)]
+      ./>.left.fst(chooseL)     .to[( A        |*| C) |+| ((A |&| B) |*| D)]
+      ./>.right.fst(chooseR)    .to[( A        |*| C) |+| (       B  |*| D)]
 
   /** Present a choice between two pairs (`(A |*| B) |&| (C |*| D)`) as a choice (`A |&| C`) between the first
     * parts of the respective pairs and on the side provide the other part of the chosen input pair, i.e. either
@@ -1877,9 +1877,9 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     */
   def subordinateSnd[A, B, C, D]: ((A |*| B) |&| (C |*| D)) -⚬ ((A |&| C) |*| (B |+| D)) =
     id                                 [ (A |*|  B       ) |&| (C |*|        D ) ]
-      .>.choiceL.snd(injectL)       .to[ (A |*| (B |+| D)) |&| (C |*|        D ) ]
-      .>.choiceR.snd(injectR)       .to[ (A |*| (B |+| D)) |&| (C |*| (B |+| D)) ]
-      .>(coDistributeR)
+      ./>.choiceL.snd(injectL)      .to[ (A |*| (B |+| D)) |&| (C |*|        D ) ]
+      ./>.choiceR.snd(injectR)      .to[ (A |*| (B |+| D)) |&| (C |*| (B |+| D)) ]
+      ./>(coDistributeR)
 
   /** Present a choice between two pairs (`(A |*| B) |&| (C |*| D)`) as a choice (`B |&| D`) between the second
     * parts of the respective pairs and on the side provide the other part of the chosen input pair, i.e. either
@@ -1887,9 +1887,9 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     */
   def subordinateFst[A, B, C, D]: ((A |*| B) |&| (C |*| D)) -⚬ ((A |+| C) |*| (B |&| D)) =
     id                                 [ ( A        |*|  B) |&| (       C  |*| D) ]
-      .>.choiceL.fst(injectL)       .to[ ((A |+| C) |*|  B) |&| (       C  |*| D) ]
-      .>.choiceR.fst(injectR)       .to[ ((A |+| C) |*|  B) |&| ((A |+| C) |*| D) ]
-      .>(coDistributeL)             .to[  (A |+| C) |*| (B  |&|                D) ]
+      ./>.choiceL.fst(injectL)      .to[ ((A |+| C) |*|  B) |&| (       C  |*| D) ]
+      ./>.choiceR.fst(injectR)      .to[ ((A |+| C) |*|  B) |&| ((A |+| C) |*| D) ]
+      ./>(coDistributeL)            .to[  (A |+| C) |*| (B  |&|                D) ]
 
   /** Notifies when the [[|+|]] is decided _and_ the present side notifies using the respective given function. */
   def notifyEitherAndSides[A, B](
@@ -1897,11 +1897,11 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     notifyR: B -⚬ (Ping |*| B),
   ): (A |+| B) -⚬ (Ping |*| (A |+| B)) =
     id                                           [                      A  |+|           B   ]
-      .>(|+|.bimap(notifyL, notifyR))         .to[            (Ping |*| A) |+| (Ping |*| B)  ]
-      .>(notifyEither)                        .to[  Ping |*| ((Ping |*| A) |+| (Ping |*| B)) ]
-      .>.snd(factorL)                         .to[  Ping |*| (Ping  |*| (A |+|           B)) ]
-      .>(assocRL)                             .to[ (Ping |*|  Ping) |*| (A |+|           B)  ]
-      .>.fst(joinPing)                        .to[      Ping        |*| (A |+|           B)  ]
+      ./>(|+|.bimap(notifyL, notifyR))        .to[            (Ping |*| A) |+| (Ping |*| B)  ]
+      ./>(notifyEither)                       .to[  Ping |*| ((Ping |*| A) |+| (Ping |*| B)) ]
+      ./>.snd(factorL)                        .to[  Ping |*| (Ping  |*| (A |+|           B)) ]
+      ./>(assocRL)                            .to[ (Ping |*|  Ping) |*| (A |+|           B)  ]
+      ./>.fst(joinPing)                       .to[      Ping        |*| (A |+|           B)  ]
 
   /** Notifies when the [[|+|]] is decided _and_ the present side notifies. */
   def notifyEitherAndSides[A, B](using
@@ -1939,12 +1939,12 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     notifyL: (Pong |*| A) -⚬ A,
     notifyR: (Pong |*| B) -⚬ B,
   ): (Pong |*| (A |&| B)) -⚬ (A |&| B) =
-    id                                       [                      A  |&|           B   ]
-      .<(|&|.bimap(notifyL, notifyR))   .from[            (Pong |*| A) |&| (Pong |*| B)  ]
-      .<(notifyChoice)                  .from[  Pong |*| ((Pong |*| A) |&| (Pong |*| B)) ]
-      .<.snd(coFactorL)                 .from[  Pong |*| (Pong  |*| (A |&|           B)) ]
-      .<(assocLR)                       .from[ (Pong |*|  Pong) |*| (A |&|           B)  ]
-      .<.fst(joinPong)                  .from[      Pong        |*| (A |&|           B)  ]
+    id                                        [                      A  |&|           B   ]
+      ./<(|&|.bimap(notifyL, notifyR))   .from[            (Pong |*| A) |&| (Pong |*| B)  ]
+      ./<(notifyChoice)                  .from[  Pong |*| ((Pong |*| A) |&| (Pong |*| B)) ]
+      ./<.snd(coFactorL)                 .from[  Pong |*| (Pong  |*| (A |&|           B)) ]
+      ./<(assocLR)                       .from[ (Pong |*|  Pong) |*| (A |&|           B)  ]
+      ./<.fst(joinPong)                  .from[      Pong        |*| (A |&|           B)  ]
 
   /** Notifies when the choice ([[|&|]]) is made _and_ the chosen side notifies. */
   def notifyChoiceAndSides[A, B](using
@@ -2002,28 +2002,28 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     snd(chooseROnPong) > assocRL > elimFst(rInvertPingPong)
 
   def chooseLWhenDone[A, B]: (Done |*| (A |&| B)) -⚬ (Done |*| A) =
-    id                                                     [ Done |*| (                    A   |&| B) ]
-      .>.snd.choiceL(introFst(lInvertSignal) > assocLR) .to[ Done |*| ((Need |*| (Done |*| A)) |&| B) ]
-      .>.snd(chooseLWhenNeed)                           .to[ Done |*|  (Need |*| (Done |*| A))        ]
-      .>(assocRL).>(elimFst(rInvertSignal))             .to[                      Done |*| A          ]
+    id                                                      [ Done |*| (                    A   |&| B) ]
+      ./>.snd.choiceL(introFst(lInvertSignal) > assocLR) .to[ Done |*| ((Need |*| (Done |*| A)) |&| B) ]
+      ./>.snd(chooseLWhenNeed)                           .to[ Done |*|  (Need |*| (Done |*| A))        ]
+      ./>(assocRL).>(elimFst(rInvertSignal))             .to[                      Done |*| A          ]
 
   def chooseRWhenDone[A, B]: (Done |*| (A |&| B)) -⚬ (Done |*| B) =
-    id                                                     [ Done |*| (A |&|                     B  ) ]
-      .>.snd.choiceR(introFst(lInvertSignal) > assocLR) .to[ Done |*| (A |&| (Need |*| (Done |*| B))) ]
-      .>.snd(chooseRWhenNeed)                           .to[ Done |*|        (Need |*| (Done |*| B))  ]
-      .>(assocRL > elimFst(rInvertSignal))              .to[                            Done |*| B    ]
+    id                                                      [ Done |*| (A |&|                     B  ) ]
+      ./>.snd.choiceR(introFst(lInvertSignal) > assocLR) .to[ Done |*| (A |&| (Need |*| (Done |*| B))) ]
+      ./>.snd(chooseRWhenNeed)                           .to[ Done |*|        (Need |*| (Done |*| B))  ]
+      ./>(assocRL > elimFst(rInvertSignal))              .to[                            Done |*| B    ]
 
   def injectLWhenNeed[A, B]: (Need |*| A) -⚬ (Need |*| (A |+| B)) =
-    id                                                     [                      Need |*| A   ]
-      .>(introFst(lInvertSignal)).>(assocLR)            .to[ Need |*|  (Done |*| (Need |*| A)) ]
-      .>.snd(injectLWhenDone)                           .to[ Need |*| ((Done |*| (Need |*| A)) |+| B) ]
-      .>.snd.left(assocRL > elimFst(rInvertSignal))     .to[ Need |*| (                    A   |+| B) ]
+    id                                                      [                      Need |*| A   ]
+      ./>(introFst(lInvertSignal)).>(assocLR)            .to[ Need |*|  (Done |*| (Need |*| A)) ]
+      ./>.snd(injectLWhenDone)                           .to[ Need |*| ((Done |*| (Need |*| A)) |+| B) ]
+      ./>.snd.left(assocRL > elimFst(rInvertSignal))     .to[ Need |*| (                    A   |+| B) ]
 
   def injectRWhenNeed[A, B]: (Need |*| B) -⚬ (Need |*| (A |+| B)) =
-    id                                                     [                            Need |*| B    ]
-      .>(introFst(lInvertSignal)).>(assocLR)            .to[ Need |*|        (Done |*| (Need |*| B))  ]
-      .>.snd(injectRWhenDone)                           .to[ Need |*| (A |+| (Done |*| (Need |*| B))) ]
-      .>.snd.right(assocRL > elimFst(rInvertSignal))    .to[ Need |*| (A |+|                     B  ) ]
+    id                                                      [                            Need |*| B    ]
+      ./>(introFst(lInvertSignal)).>(assocLR)            .to[ Need |*|        (Done |*| (Need |*| B))  ]
+      ./>.snd(injectRWhenDone)                           .to[ Need |*| (A |+| (Done |*| (Need |*| B))) ]
+      ./>.snd.right(assocRL > elimFst(rInvertSignal))    .to[ Need |*| (A |+|                     B  ) ]
 
   def delayEitherUntilPing[A, B]: (Ping |*| (A |+| B)) -⚬ (A |+| B) =
     distributeL > either(injectLOnPing, injectROnPing)
@@ -2088,11 +2088,11 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     * the given [[Junction.Positive]].
     */
   def awaitInjectL[A, B](using A: Junction.Positive[A]): (Done |*| A) -⚬ (A |+| B) =
-    injectLWhenDone.>.left(A.awaitPos)
+    injectLWhenDone./>.left(A.awaitPos)
 
   /** Analogous to [[joinInjectL]], but injects to the right. */
   def awaitInjectR[A, B](using B: Junction.Positive[B]): (Done |*| B) -⚬ (A |+| B) =
-    injectRWhenDone.>.right(B.awaitPos)
+    injectRWhenDone./>.right(B.awaitPos)
 
   /** Chooses the left alternative `A` of the choice `A |&| B`, but only after the `Need` signal from the first
     * out-port arrives. Until then, the producer of `A |&| B` will see it as undecided. This is different from
@@ -2100,11 +2100,11 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     * is chosen.
     */
   def awaitChooseL[A, B](using A: Junction.Negative[A]): (A |&| B) -⚬ (Need |*| A) =
-    id[A |&| B].>.choiceL(A.awaitNeg) > chooseLWhenNeed
+    id[A |&| B]./>.choiceL(A.awaitNeg) > chooseLWhenNeed
 
   /** Analogous to [[awaitChooseL]], but chooses the right side. */
   def awaitChooseR[A, B](using B: Junction.Negative[B]): (A |&| B) -⚬ (Need |*| B) =
-    id[A |&| B].>.choiceR(B.awaitNeg) > chooseRWhenNeed
+    id[A |&| B]./>.choiceR(B.awaitNeg) > chooseRWhenNeed
 
   /** Analogous to [[awaitChooseL]], but awaits a positive (i.e. [[Done]]) signal. */
   def awaitPosChooseL[A, B](using A: Junction.Positive[A]): (Done |*| (A |&| B)) -⚬ A =
@@ -2213,10 +2213,10 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
       (aKey compose Transportive.fst[B].lens[A]).awaitFst
 
     id[A |*| B]
-      .>(par(aKey.getL, bKey.getL))
-      .>(IXI)
-      .>.fst(pred)
-      .>(ifThenElse(awaitL, awaitL))
+      ./>(par(aKey.getL, bKey.getL))
+      ./>(IXI)
+      ./>.fst(pred)
+      ./>(ifThenElse(awaitL, awaitL))
   }
 
   object Compared {
@@ -2242,16 +2242,16 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
       caseGt: ((A |*| B) |*| C) -⚬ D,
     ): (Compared[A, B] |*| C) -⚬ D =
       id[ Compared[A, B] |*| C ]                    .to[ ((A |*| B)        |+| ( (A |*| B)        |+|  (A |*| B))) |*| C   ]
-        .>(distributeR).>.right(distributeR)        .to[ ((A |*| B) |*| C) |+| (((A |*| B) |*| C) |+| ((A |*| B)   |*| C)) ]
-        .>(either(caseLt, either(caseEq, caseGt)))  .to[                    D                                              ]
+        ./>(distributeR)./>.right(distributeR)      .to[ ((A |*| B) |*| C) |+| (((A |*| B) |*| C) |+| ((A |*| B)   |*| C)) ]
+        ./>(either(caseLt, either(caseEq, caseGt))) .to[                    D                                              ]
 
     def enrichWith[A, B, C, S, T](
       f: ((A |*| B) |*| C) -⚬ (S |*| T),
     )
     : (Compared[A, B] |*| C) -⚬ Compared[S, T] =
       id[ Compared[A, B] |*| C ]                .to[ ((A |*| B)        |+| ( (A |*| B)        |+|  (A |*| B))) |*| C   ]
-        .>(distributeR).>.right(distributeR)    .to[ ((A |*| B) |*| C) |+| (((A |*| B) |*| C) |+| ((A |*| B)   |*| C)) ]
-        .>(|+|.bimap(f, |+|.bimap(f, f)))       .to[     (S |*| T)     |+| (    (S |*| T)     |+|      (S |*| T)     ) ]
+        ./>(distributeR)./>.right(distributeR)  .to[ ((A |*| B) |*| C) |+| (((A |*| B) |*| C) |+| ((A |*| B)   |*| C)) ]
+        ./>(|+|.bimap(f, |+|.bimap(f, f)))      .to[     (S |*| T)     |+| (    (S |*| T)     |+|      (S |*| T)     ) ]
 
     def bifunctorCompared: Bifunctor[Compared] =
       new Bifunctor[Compared] {
@@ -2295,18 +2295,18 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     ): Comparable[S, T] =
       new Comparable[S, T] {
         private val absorb: ((A |*| B) |*| (S |*| T)) -⚬ (S |*| T) =
-          id                                   [ (A    |*| B) |*| (S    |*| T) ]
-            .>(IXI)                         .to[ (A    |*| S) |*| (B    |*| T) ]
-            .>.fst.fst(A.close)             .to[ (Done |*| S) |*| (B    |*| T) ]
-            .>.snd.fst(B.close)             .to[ (Done |*| S) |*| (Done |*| T) ]
-            .>(par(f.awaitFst, g.awaitFst)) .to[           S  |*|           T  ]
+          id                                    [ (A    |*| B) |*| (S    |*| T) ]
+            ./>(IXI)                         .to[ (A    |*| S) |*| (B    |*| T) ]
+            ./>.fst.fst(A.close)             .to[ (Done |*| S) |*| (B    |*| T) ]
+            ./>.snd.fst(B.close)             .to[ (Done |*| S) |*| (Done |*| T) ]
+            ./>(par(f.awaitFst, g.awaitFst)) .to[           S  |*|           T  ]
 
         override def compare: (S |*| T) -⚬ Compared[S, T] = {
           id[ S |*| T ]
-            .>(par(f.getL, g.getL))
-            .>(IXI)
-            .>.fst(self.compare)
-            .>(Compared.enrichWith(absorb))
+            ./>(par(f.getL, g.getL))
+            ./>(IXI)
+            ./>.fst(self.compare)
+            ./>(Compared.enrichWith(absorb))
         }
       }
   }
@@ -2732,8 +2732,8 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
 
     def unfold[S, A](f: S -⚬ (A |*| S)): S -⚬ (Unlimited[A] |*| S) =
       id                                     [                  S ]
-        .>(Endless.unfold(f))             .to[  Endless[A]  |*| S ]
-        .>.fst(Endless.toUnlimited[A])    .to[ Unlimited[A] |*| S ]
+        ./>(Endless.unfold(f))            .to[  Endless[A]  |*| S ]
+        ./>.fst(Endless.toUnlimited[A])   .to[ Unlimited[A] |*| S ]
 
     def discardWhenDone[A]: (Done |*| Unlimited[A]) -⚬ Done =
       snd(unpack) > chooseLWhenDone > elimSnd
@@ -3126,14 +3126,14 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
 
   def getFst[A, B](using A: Cosemigroup[A]): (A |*| B) -⚬ (A |*| (A |*| B)) =
     id                             [     A     |*| B  ]
-      .>.fst(A.split)           .to[ (A |*| A) |*| B  ]
-      .>(assocLR)               .to[  A |*| (A |*| B) ]
+      ./>.fst(A.split)          .to[ (A |*| A) |*| B  ]
+      ./>(assocLR)              .to[  A |*| (A |*| B) ]
 
   def getSnd[A, B](using B: Cosemigroup[B]): (A |*| B) -⚬ (B |*| (A |*| B)) =
     id                             [  A |*|     B     ]
-      .>.snd(B.split)           .to[  A |*| (B |*| B) ]
-      .>(assocRL)               .to[ (A |*| B) |*| B  ]
-      .>(swap)                  .to[  B |*| (A |*| B) ]
+      ./>.snd(B.split)          .to[  A |*| (B |*| B) ]
+      ./>(assocRL)              .to[ (A |*| B) |*| B  ]
+      ./>(swap)                 .to[  B |*| (A |*| B) ]
 
   def discardFst[A, B](using A: Comonoid[A]): (A |*| B) -⚬ B =
     elimFst(A.counit)
@@ -3440,7 +3440,7 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
      */
     def halfRotateL[A, B]: LList[A |*| B] -⚬ LList[B |*| A] = {
       val f: ((B |*| A) |*| (A |*| B)) -⚬ ((B |*| A) |*| (B |*| A)) =
-        IXI.>.snd(swap)
+        IXI > snd(swap)
 
       waveL[A |*| B, B |*| A, B |*| A](
         init = swap,
@@ -3747,10 +3747,10 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
         val onPull: Endless[A] -⚬ ((A |*| Endless[A]) |*| Endless[A]) =
           pull > par(id, self) > assocRL
 
-        id                                   [                    Endless[A]                 |*| Endless[A]  ]
-          .<.fst(pack)                  .from[ (One                 |&|  (A |*| Endless[A])) |*| Endless[A]  ]
-          .<(coDistributeR)             .from[ (One |*| Endless[A]) |&| ((A |*| Endless[A])  |*| Endless[A]) ]
-          .<(choice(onClose, onPull))   .from[                   Endless[A]                                  ]
+        id                                    [                    Endless[A]                 |*| Endless[A]  ]
+          ./<.fst(pack)                  .from[ (One                 |&|  (A |*| Endless[A])) |*| Endless[A]  ]
+          ./<(coDistributeR)             .from[ (One |*| Endless[A]) |&| ((A |*| Endless[A])  |*| Endless[A]) ]
+          ./<(choice(onClose, onPull))   .from[                   Endless[A]                                  ]
       }
 
       val onSndAction: Endless[A] -⚬ (Endless[A] |*| Endless[A]) =
@@ -4181,8 +4181,8 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
 
       override def lift[A, B](f: A -⚬ B): (B =⚬ C) -⚬ (A =⚬ C) =
         id                         [ (B =⚬ C) |*| A ]
-          .>.snd(f)             .to[ (B =⚬ C) |*| B ]
-          .>(eval)              .to[       C        ]
+          ./>.snd(f)            .to[ (B =⚬ C) |*| B ]
+          ./>(eval)             .to[       C        ]
           .as[ ((B =⚬ C) |*| A)  -⚬        C        ]
           .curry
     }
@@ -4223,10 +4223,10 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
 
   def zapPremises[A, Ā, B, C](using ev: Dual[A, Ā]): ((A =⚬ B) |*| (Ā =⚬ C)) -⚬ (B |*| C) = {
     id                              [  (A =⚬ B) |*| (Ā =⚬ C)                ]
-      .>(introSnd(ev.lInvert))   .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (Ā |*| A) ]
-      .>.snd(swap)               .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
-      .>(IXI)                    .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
-      .>(par(eval, eval))        .to[        B         |*|        C         ]
+      ./>(introSnd(ev.lInvert))  .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (Ā |*| A) ]
+      ./>.snd(swap)              .to[ ((A =⚬ B) |*| (Ā =⚬ C)) |*| (A |*| Ā) ]
+      ./>(IXI)                   .to[ ((A =⚬ B) |*| A) |*| ((Ā =⚬ C) |*| Ā) ]
+      ./>(par(eval, eval))       .to[        B         |*|        C         ]
   }
 
   /** Given `A` and `B` concurrently (`A |*| B`), we can suggest that `A` be consumed before `B`
@@ -4234,20 +4234,20 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     */
   def unveilSequentially[A, Ā, B](using ev: Dual[A, Ā]): (A |*| B) -⚬ (Ā =⚬ B) =
     id[(A |*| B) |*| Ā]           .to[ (A |*|  B) |*| Ā  ]
-      .>(assocLR)                 .to[  A |*| (B  |*| Ā) ]
-      .>.snd(swap)                .to[  A |*| (Ā  |*| B) ]
-      .>(assocRL)                 .to[ (A |*|  Ā) |*| B  ]
-      .>(elimFst(ev.rInvert))     .to[                B  ]
+      ./>(assocLR)                .to[  A |*| (B  |*| Ā) ]
+      ./>.snd(swap)               .to[  A |*| (Ā  |*| B) ]
+      ./>(assocRL)                .to[ (A |*|  Ā) |*| B  ]
+      ./>(elimFst(ev.rInvert))    .to[                B  ]
       .as[ ((A |*| B) |*| Ā) -⚬ B ]
       .curry
 
   /** Make a function `A =⚬ B` ''"absorb"'' a `C` and return it as part of its output, i.e. `A =⚬ (B |*| C)`. */
   def absorbR[A, B, C]: ((A =⚬ B) |*| C) -⚬ (A =⚬ (B |*| C)) =
     id[((A =⚬ B) |*| C) |*| A]  .to[ ((A =⚬ B) |*| C) |*| A ]
-      .>(assocLR)               .to[ (A =⚬ B) |*| (C |*| A) ]
-      .>.snd(swap)              .to[ (A =⚬ B) |*| (A |*| C) ]
-      .>(assocRL)               .to[ ((A =⚬ B) |*| A) |*| C ]
-      .>.fst(eval)              .to[        B         |*| C ]
+      ./>(assocLR)              .to[ (A =⚬ B) |*| (C |*| A) ]
+      ./>.snd(swap)             .to[ (A =⚬ B) |*| (A |*| C) ]
+      ./>(assocRL)              .to[ ((A =⚬ B) |*| A) |*| C ]
+      ./>.fst(eval)             .to[        B         |*| C ]
       .as[ (((A =⚬ B) |*| C) |*| A) -⚬ (B |*| C) ]
       .curry
 
