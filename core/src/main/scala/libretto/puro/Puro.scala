@@ -134,11 +134,8 @@ trait Puro {
   /** Represents a callable subroutine (subprogram) accessible from inside the program.
    *
    * It can be used (called) any number of times.
-   * It is similar to a function object `A =⚬ B`, but unlike `A =⚬ B`, `Sub[A, B]`:
-   *  - can be used any number of times (thus more similar to `Unlimited[A =⚬ B]`)
-   *  - does not require the language (DSL) to support function objects,
-   *  - (by the nature of the operations introducing `Sub[A, B]`) the called subprogram
-   *    can be resolved statically (or at "link time").
+   * As such, it is a more convenient equivalent of `Unlimited[A =⚬ B]`,
+   * with an extension method to invoke the subroutine.
    */
   type Sub[A, B]
 
