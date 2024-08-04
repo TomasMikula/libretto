@@ -778,15 +778,13 @@ object FreeScaletto extends Scaletto {
       val c = ScopeInfo.TopLevelLambda(pos)
       val a = VarOrigin.Lambda(pos)
 
-      lambdas.delambdifyTopLevel(c, a, f) match {
-        case Valid(NoCapture(f)) =>
-          foldTotal(f) match
-            case Valid(f) => f
-            case Invalid(es) => raiseTotalityViolations(es)
-        case Valid(Closure(captured, f)) =>
+      metaFunOrError(
+        lambdas.delambdifyTopLevel(c, a, f)
+      ) match {
+        case NoCapture(f) =>
+          f
+        case Closure(captured, f) =>
           assemblyError(UnboundVariables(c, lambdas.Expr.initialVars(captured)))
-        case Invalid(es) =>
-          assemblyErrors(es)
       }
     }
 
@@ -798,14 +796,9 @@ object FreeScaletto extends Scaletto {
       val c = ScopeInfo.NestedLambda(pos)
       val a = VarOrigin.Lambda(pos)
 
-      lambdas.delambdifyNested(c, a, f) match {
-        case Valid(f) =>
-          f.traverseFun([x, y] => f => foldTotal(f)) match
-            case Valid(f) => f
-            case Invalid(es) => raiseTotalityViolations(es)
-        case Invalid(es) =>
-          assemblyErrors(es)
-      }
+      metaFunOrError(
+        lambdas.delambdifyNested(c, a, f)
+      )
     }
 
     private def compileClosure[A, B](f: lambdas.Context ?=> $[A] => $[B])(
@@ -820,25 +813,28 @@ object FreeScaletto extends Scaletto {
       val captVar   = VarOrigin.CapturedVars(pos)
       val resultVar = VarOrigin.ClosureVal(pos)
 
-      lambdas.delambdifyNested[A, B](scopeInfo, bindVar, f) match {
-        case Valid(Closure(captured, f)) =>
-          foldTotal(f) match
-            case Valid(f) =>
-              val x = lambdas.Expr.zipN(captured)(captVar)
-              lambdas.Expr.map(x, 𝒞.curry(f))(resultVar)
-            case Invalid(es) =>
-              raiseTotalityViolations(es)
-        case Valid(NoCapture(f)) =>
-          foldTotal(f) match
-            case Valid(f) =>
-              val captured0 = $.one(using pos)
-              (captured0 map 𝒞.curry(elimFst > f))(resultVar)
-            case Invalid(es) =>
-              raiseTotalityViolations(es)
-        case Invalid(es) =>
-          assemblyErrors(es)
+      metaFunOrError(
+        lambdas.delambdifyNested[A, B](scopeInfo, bindVar, f)
+      ) match {
+        case Closure(captured, f) =>
+          val x = lambdas.Expr.zipN(captured)(captVar)
+          lambdas.Expr.map(x, 𝒞.curry(f))(resultVar)
+        case NoCapture(f) =>
+          val captured0 = $.one(using pos)
+          (captured0 map 𝒞.curry(elimFst > f))(resultVar)
       }
     }
+
+    private def metaFunOrError[A, B](
+      res: Validated[LinearityViolation, lambdas.Delambdified[A, B]]
+    ): MetaFun[A, B] =
+      res match
+        case Invalid(es) =>
+          assemblyErrors(es)
+        case Valid(f) =>
+          f.traverseFun([x, y] => f => foldTotal(f)) match
+            case Invalid(es) => raiseTotalityViolations(es)
+            case Valid(f) => f
   }
 
   /** Preprocessed [[ValSwitch]]. */
