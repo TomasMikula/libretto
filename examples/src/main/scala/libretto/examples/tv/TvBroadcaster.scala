@@ -16,17 +16,17 @@ object TvBroadcaster {
   private def on(makeTv: Done -⚬ Tv): Done -⚬ Channels = {
     def go(ch: TvChannel): Done -⚬ TvStream =
       λ { case +(d) =>
-        val vidSrc = d :>> videoSource(ch)
-        val repeat = $.one :>> Detained.thunk(makeTv)
+        val vidSrc = d |> videoSource(ch)
+        val repeat = $.one |> Detained.thunk(makeTv)
         ValSource.terminateWith(vidSrc |*| repeat)
       }
 
     λ { start =>
       λ.closure { ch =>
         switch(ch)
-          .Case[Discovery] { ch => join(start |*| neglect(ch)) :>> go(Discovery()) }
-          .Case[Cooking]   { ch => join(start |*| neglect(ch)) :>> go(Cooking())   }
-          .Case[Sport]     { ch => join(start |*| neglect(ch)) :>> go(Sport())     }
+          .Case[Discovery] { ch => join(start |*| neglect(ch)) |> go(Discovery()) }
+          .Case[Cooking]   { ch => join(start |*| neglect(ch)) |> go(Cooking())   }
+          .Case[Sport]     { ch => join(start |*| neglect(ch)) |> go(Sport())     }
           .endswitch
       }
     }

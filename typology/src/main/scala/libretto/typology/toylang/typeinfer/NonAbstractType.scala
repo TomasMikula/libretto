@@ -101,13 +101,13 @@ private[typeinfer] object Types {
         { ts =>
           switch(ts)
             .is { case SingleType(t) =>
-              outputElem(t) :>> mapVal { types.Types.SingleType(_) }
+              outputElem(t) |> mapVal { types.Types.SingleType(_) }
             }
             .is { case Prod(ts |*| us) =>
-              (self(ts) ** self(us)) :>> mapVal { case (ts, us) => types.Types.Product(ts, us) }
+              (self(ts) ** self(us)) |> mapVal { case (ts, us) => types.Types.Product(ts, us) }
             }
             .is { case KindMismatch(x |*| y) =>
-              (self(x) ** self(y)) :>> mapVal { case (x, y) => types.Types.KindMismatch(x, y) }
+              (self(x) ** self(y)) |> mapVal { case (x, y) => types.Types.KindMismatch(x, y) }
             }
             .end
         }
@@ -364,24 +364,24 @@ private[typeinfer] object NonAbstractType {
         .is { case RecCall(p |*| q) |*| RecCall(r |*| s) => RecCall(g(p |*| r) |*| g(q |*| s)) }
         .is { case RecType(Fix(f)) |*| RecType(Fix(g)) =>
           val fg =
-            (f ** g) :>> mapVal { case (f, g) =>
+            (f ** g) |> mapVal { case (f, g) =>
               if (f == g) Left(f)
               else        Right((f, g))
-            } :>> liftEither
+            } |> liftEither
           switch(fg)
             .is { case InL(f)  => fix(f) }
-            .is { case InR(fg) => mismatch(fg :>> liftPair :>> par(fix, fix)) }
+            .is { case InR(fg) => mismatch(fg |> liftPair > par(fix, fix)) }
             .end
         }
         .is { case RecType(PFix(f |*| x)) |*| RecType(PFix(h |*| y)) =>
           val fh =
-            (f ** h) :>> mapVal { case (f, h) =>
+            (f ** h) |> mapVal { case (f, h) =>
               if (f == h) Left(f)
               else        Right((f, h))
-            } :>> liftEither
+            } |> liftEither
           switch(fh)
             .is { case InL(f)  => pfixs(f |*| Types.merge(g)(x |*| y)) }
-            .is { case InR(fh) => (fh |*| x |*| y) :>> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})") }
+            .is { case InR(fh) => (fh |*| x |*| y) |> crashNow(s"TODO type mismatch (at ${summon[SourcePos]})") }
             .end
         }
         .is { case String(x) |*| String(y) => String(join(x |*| y)) }
@@ -403,34 +403,34 @@ private[typeinfer] object NonAbstractType {
         { x =>
           switch(x)
             .is { case Pair(x1 |*| x2) =>
-              (outputElem(x1) ** outputElem(x2)) :>> mapVal { case (t1, t2) =>
+              (outputElem(x1) ** outputElem(x2)) |> mapVal { case (t1, t2) =>
                 Type.pair(t1, t2)
               }
             }
             .is { case Either(a |*| b) =>
-              (outputElem(a) ** outputElem(b)) :>> mapVal { case (a, b) =>
+              (outputElem(a) ** outputElem(b)) |> mapVal { case (a, b) =>
                 Type.pair(a, b)
               }
             }
             .is { case RecCall(a |*| b) =>
-              (outputElem(a) ** outputElem(b)) :>> mapVal { case (a, b) =>
+              (outputElem(a) ** outputElem(b)) |> mapVal { case (a, b) =>
                 Type.recCall(a, b)
               }
             }
             .is { case RecType(Fix(f)) =>
-              f :>> mapVal { f => Type.fix(f.vmap(Label.ScalaTParam(_))) }
+              f |> mapVal { f => Type.fix(f.vmap(Label.ScalaTParam(_))) }
             }
             .is { case RecType(PFix(pf |*| p)) =>
-              (pf ** Types.output(outputElem)(p)) :>> mapVal { case (pf, p) =>
+              (pf ** Types.output(outputElem)(p)) |> mapVal { case (pf, p) =>
                 Type.Fun.pfixUnsafe(pf.vmap(Label.ScalaTParam(_)), p)
               }
             }
-            .is { case String(x) => x :>> constVal(Type.string) }
-            .is { case Int(x) => x :>> constVal(Type.int) }
-            .is { case Unit(x) => x :>> constVal(Type.unit) }
+            .is { case String(x) => x |> constVal(Type.string) }
+            .is { case Int(x) => x |> constVal(Type.int) }
+            .is { case Unit(x) => x |> constVal(Type.unit) }
             .is { case Error(ForbiddenSelfRef(v)) => selfRef(v) }
             .is { case Error(TypeMismatch(x |*| y)) =>
-              (self(x) ** self(y)) :>> mapVal { case (t, u) => Type.typeMismatch(t, u) }
+              (self(x) ** self(y)) |> mapVal { case (t, u) => Type.typeMismatch(t, u) }
             }
             .end
         }
@@ -515,7 +515,7 @@ private[typeinfer] object NonAbstractType {
       KindN[P],
     ): Q -⚬ T =
       λ { q =>
-        (constantVal(f) |*| toTypes(pq)(q)) :>> NonAbstractType.pfixs :>> lift
+        (constantVal(f) |*| toTypes(pq)(q)) |> NonAbstractType.pfixs > lift
       }
 
     def doCompilePrimitive[k, l, q](

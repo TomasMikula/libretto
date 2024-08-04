@@ -161,12 +161,12 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
       /** `concat` using barebones handling of cases in order. */
       def concatBB[A]: (Tree[A] |*| Tree[A]) -⚬ Tree[A] =
         λ { case t1 |*| t2 =>
-          (t1 |*| t2) :>> OneOf.distLR :>> OneOf.handle(_
+          (t1 |*| t2) |> OneOf.distLR |> OneOf.handle(_
             .caseOf["NonEmpty"](λ { case t1 |*| net2 =>
-              ((net2 |*| t1) :>> OneOf.distLR) :>> OneOf.handle(_
+              ((net2 |*| t1) |> OneOf.distLR) |> OneOf.handle(_
                 .caseOf["NonEmpty"](λ { case (net2 |*| net1) => NonEmptyTree.Branch(net1 |*| net2) })
                 .caseOf["Empty"](elimSnd)
-              ) :>> NonEmpty()
+              ) |> NonEmpty()
             })
             .caseOf["Empty"](elimSnd)
           )
@@ -217,11 +217,11 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
     }
 
     def c[A](using d: $[Done])(a: A)(using LambdaContext, SourcePos): $[NonEmptyTree[Val[A]]] =
-      d :>> constVal(a) :>> NonEmptyTree.Leaf()
+      d |> constVal(a) > NonEmptyTree.Leaf()
 
     extension [A](t: $[NonEmptyTree[A]]) {
       def ++(u: $[NonEmptyTree[A]])(using LambdaContext, SourcePos): $[NonEmptyTree[A]] =
-        (t |*| u) :>> NonEmptyTree.Branch()
+        (t |*| u) |> NonEmptyTree.Branch()
     }
 
     List(
@@ -237,8 +237,8 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             val tree =
               Tree.NonEmpty((c(1) ++ c(2)) ++ (c(3) ++ c(4)))
             tree
-              :>> foldMap(id, unliftPair > mapVal { case (a, b) => a + b })
-              :>> Maybe.getOrElse(done > constVal(0))
+              |> foldMap(id, unliftPair > mapVal { case (a, b) => a + b })
+              |> Maybe.getOrElse(done > constVal(0))
           }
         }.via { port =>
           for {
@@ -261,7 +261,7 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
             val tree1 = Tree.NonEmpty(c(1) ++ c(2))
             val tree2 = Tree.NonEmpty(c(3) ++ c(4))
             val tree  = concat(tree1 |*| tree2)
-            tree :>> Tree.print(mapVal(_.toString))
+            tree |> Tree.print(mapVal(_.toString))
           }
         }.via { port =>
           for {
@@ -282,8 +282,8 @@ class ADTsUsabilityTests extends ScalatestScalettoTestSuite {
           λ { case +(d) =>
             given $[Done] = d
             val tree1, tree2 = (c(1) ++ c(2)) ++ (c(3) ++ c(4))
-            val s1 = skewLeft (tree1) :>> NonEmptyTree.print(mapVal(_.toString))
-            val s2 = skewRight(tree2) :>> NonEmptyTree.print(mapVal(_.toString))
+            val s1 = skewLeft (tree1) |> NonEmptyTree.print(mapVal(_.toString))
+            val s2 = skewRight(tree2) |> NonEmptyTree.print(mapVal(_.toString))
             s1 |*| s2
           }
         }

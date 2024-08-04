@@ -61,14 +61,14 @@ object ConnectorModuleImpl extends ConnectorModule {
       ScalaFun.blocking(_.earlyClose())
 
     λ { case conn |*| id =>
-      val conn1 |*| rsOpt = (conn |*| id) :>> tryEffectAcquireWr(scalaFetch, Some(rsClose))
+      val conn1 |*| rsOpt = (conn |*| id) |> tryEffectAcquireWr(scalaFetch, Some(rsClose))
       switch ( rsOpt )
         .is { case InL(notFound) =>
-          conn1.releaseWhen(neglect(notFound)) :>> ValSource.empty[Page]
+          conn1.releaseWhen(neglect(notFound)) |> ValSource.empty[Page]
         }
         .is { case InR(rs) =>
           val (pagesClosed |*| pages) =
-            resultSetSource(rs) :>> ValSource.notifyUpstreamClosed
+            resultSetSource(rs) |> ValSource.notifyUpstreamClosed
 
           // closing connection only after the result set is closed
           val connClosed = conn1 releaseOnPing pagesClosed
@@ -83,9 +83,9 @@ object ConnectorModuleImpl extends ConnectorModule {
   private def resultSetSource: Res[vendor.ResultSet[Page]] -⚬ ValSource[Page] = rec { self =>
     λ { rs =>
       producing { pages =>
-        (ValSource.fromChoice >>: pages) choose {
+        (ValSource.fromChoice >| pages) choose {
           case Left(closing) =>
-            closing := rs :>> release
+            closing := rs |> release
           case Right(pulling) =>
             pulling :=
               switch ( nextPage(rs) )

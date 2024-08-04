@@ -12,14 +12,14 @@ object TvViewer {
       val video = watch(tv)(constant(done > pickChannel(Discovery())))
       consume(60)(video) match
         case done |*| tv =>
-          val video = watch(tv)(done :>> pickChannel(Cooking()))
+          val video = watch(tv)(done |> pickChannel(Cooking()))
           consume(30)(video) match
             case done |*| tv =>
-              val video = watch(tv)(done :>> pickChannel(Sport()))
+              val video = watch(tv)(done |> pickChannel(Sport()))
               consume(15)(video) match
                 case done |*| tv =>
                   joinAll(
-                    done :>> printLine(s"Done with TV."),
+                    done |> printLine(s"Done with TV."),
                     turnOff(tv),
                   )
     }
@@ -29,7 +29,7 @@ object TvViewer {
 
   private def consume(length: Int): TvStream -⚬ (Done |*| Tv) =
     ValSourceT.take(length) > λ { case n0 |*| src =>
-      val (done |*| tv) = src :>> ValSourceT.forEachSequentially(consumeFrame)
+      val (done |*| tv) = src |> ValSourceT.forEachSequentially(consumeFrame)
       join(neglect(n0) |*| done) |*| tv
     }
 

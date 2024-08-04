@@ -12,15 +12,15 @@ object SantaClaus extends StarterApp {
   opaque type Elf      = Val[String]
 
   def vacation: Reindeer -⚬ Reindeer = λ { rndr =>
-    rndr :>> alsoPrintLine(r => s"$r going on vacation")
-         :>> delayValRandomMs(100, 200)
-         :>> alsoPrintLine(r => s"$r returned from vacation")
+    rndr |> alsoPrintLine(r => s"$r going on vacation")
+         |> delayValRandomMs(100, 200)
+         |> alsoPrintLine(r => s"$r returned from vacation")
   }
 
   def makeToys: Elf -⚬ Elf = λ { elf =>
-    elf :>> alsoPrintLine(e => s"$e making toys")
-        :>> delayValRandomMs(30, 50)
-        :>> alsoPrintLine(e => s"$e needs consultation")
+    elf |> alsoPrintLine(e => s"$e making toys")
+        |> delayValRandomMs(30, 50)
+        |> alsoPrintLine(e => s"$e needs consultation")
   }
 
   class Group[A](
@@ -36,7 +36,7 @@ object SantaClaus extends StarterApp {
     def act: Type -⚬ (Done |*| Type) =
       λ { as =>
         val names |*| as1 = unzipBy(fst(getName) > assocLR)(as) |> fst(toScalaList1)
-        val +(done)       = names :>> printLine(formatMsg) :>> delayRandomMs(50, 100)
+        val +(done)       = names |> printLine(formatMsg) |> delayRandomMs(50, 100)
         val as2           = transform(useUntil)(done |*| as1)
         done |*| as2
       }
@@ -76,15 +76,15 @@ object SantaClaus extends StarterApp {
 
   override def blueprint: Done -⚬ Done =
     λ { case +(start) =>
-      val reindeers : $[LList1[Reindeer]] = start :>> constList1Of("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9")
-      val elves     : $[LList1[Elf]]      = start :>> constList1Of("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10")
-      val reindeers1 = reindeers :>> map(vacation) :>> sortBySignal
-      val elves1     = elves     :>> map(makeToys) :>> sortBySignal
-      val rGroups |*| releasedReindeers = reindeers1 :>> Endless.poolReset(vacation) :>> fst(groupMap(9, RGroup.make))
-      val eGroups |*| releasedElves     = elves1     :>> Endless.poolReset(makeToys) :>> fst(groupMap(3, EGroup.make))
+      val reindeers : $[LList1[Reindeer]] = start |> constList1Of("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9")
+      val elves     : $[LList1[Elf]]      = start |> constList1Of("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10")
+      val reindeers1 = reindeers |> map(vacation) |> sortBySignal
+      val elves1     = elves     |> map(makeToys) |> sortBySignal
+      val rGroups |*| releasedReindeers = reindeers1 |> Endless.poolReset(vacation) |> fst(groupMap(9, RGroup.make))
+      val eGroups |*| releasedElves     = elves1     |> Endless.poolReset(makeToys) |> fst(groupMap(3, EGroup.make))
       val groups: $[Endless[RGroup |+| EGroup]] = mergeEitherPreferred[RGroup, EGroup](rGroups |*| eGroups)
       joinAll(
-        groups :>> santa(nCycles = 20),
+        groups |> santa(nCycles = 20),
         closeAll(releasedReindeers),
         closeAll(releasedElves),
       )

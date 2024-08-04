@@ -10,15 +10,15 @@ object SantaClaus extends StarterApp {
   opaque type Elf      = Val[String]
 
   def vacation: Reindeer -⚬ Reindeer = λ { rndr =>
-    rndr :>> alsoPrintLine(r => s"$r going on vacation")
-         :>> delayValRandomMs(100, 200)
-         :>> alsoPrintLine(r => s"$r returned from vacation")
+    rndr |> alsoPrintLine(r => s"$r going on vacation")
+         |> delayValRandomMs(100, 200)
+         |> alsoPrintLine(r => s"$r returned from vacation")
   }
 
   def makeToys: Elf -⚬ Elf = λ { elf =>
-    elf :>> alsoPrintLine(e => s"$e making toys")
-        :>> delayValRandomMs(30, 50)
-        :>> alsoPrintLine(e => s"$e needs consultation")
+    elf |> alsoPrintLine(e => s"$e making toys")
+        |> delayValRandomMs(30, 50)
+        |> alsoPrintLine(e => s"$e needs consultation")
   }
 
   opaque type ReindeerGroup = Val[NonEmptyList[String]]
@@ -51,13 +51,13 @@ object SantaClaus extends StarterApp {
 
   def pipeline(nCycles: Int): (LList[Reindeer] |*| LList[Elf]) -⚬ ((LList[Reindeer] |*| LList[Elf]) |*| Done) =
     λ { case reindeers |*| elves =>
-      val rGrps = reindeers :>> (LList.map(vacation) > LList.sortBySignal > Source.fromLList > Source.groups(9) > Source.map(ReindeerGroup.make))
-      val eGrps = elves     :>> (LList.map(makeToys) > LList.sortBySignal > Source.fromLList > Source.groups(3) > Source.map(ElfGroup.make))
-      val pings |*| outGrps = (rGrps |*| eGrps) :>> (Source.mergeEitherPreferred[ReindeerGroup, ElfGroup] > santa > Source.tapMap(notifyEither))
+      val rGrps = reindeers |> (LList.map(vacation) > LList.sortBySignal > Source.fromLList > Source.groups(9) > Source.map(ReindeerGroup.make))
+      val eGrps = elves     |> (LList.map(makeToys) > LList.sortBySignal > Source.fromLList > Source.groups(3) > Source.map(ElfGroup.make))
+      val pings |*| outGrps = (rGrps |*| eGrps) |> (Source.mergeEitherPreferred[ReindeerGroup, ElfGroup] > santa > Source.tapMap(notifyEither))
       val outRGs |*| outEGs = LList.partition(outGrps)
-      val outRs = outRGs :>> LList.flatMap(ReindeerGroup.ungroup > LList1.toLList)
-      val outEs = outEGs :>> LList.flatMap(ElfGroup.ungroup > LList1.toLList)
-      (outRs |*| outEs) |*| (pings :>> Source.take(nCycles) :>> Source.drain)
+      val outRs = outRGs |> LList.flatMap(ReindeerGroup.ungroup > LList1.toLList)
+      val outEs = outEGs |> LList.flatMap(ElfGroup.ungroup > LList1.toLList)
+      (outRs |*| outEs) |*| (pings |> Source.take(nCycles) |> Source.drain)
     }
 
   def go(nCycles: Int): (LList[Reindeer] |*| LList[Elf]) -⚬ Done =
@@ -71,8 +71,8 @@ object SantaClaus extends StarterApp {
 
   override def blueprint: Done -⚬ Done =
     λ { case +(start) =>
-      val reindeers = start :>> constListOf1("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9")
-      val elves     = start :>> constListOf1("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10")
+      val reindeers = start |> constListOf1("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9")
+      val elves     = start |> constListOf1("E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10")
       go(nCycles = 20)(reindeers |*| elves)
     }
 }

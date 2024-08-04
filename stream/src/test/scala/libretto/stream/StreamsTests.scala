@@ -102,12 +102,12 @@ class StreamsTests extends ScalatestScalettoTestSuite {
           TestCase
             .interactWith {
               λ { case +(start) =>
-                val as = start :>> ValSource.fromList(List.fill(N)("a"))
-                val as1 = if (slowedProducer1) as :>> Source.mapSequentially(delayVal(3.millis)) else as
-                val bs = start :>> ValSource.fromList(List.fill(N)("b"))
+                val as = start |> ValSource.fromList(List.fill(N)("a"))
+                val as1 = if (slowedProducer1) as |> Source.mapSequentially(delayVal(3.millis)) else as
+                val bs = start |> ValSource.fromList(List.fill(N)("b"))
                 val cs = merge(as1 |*| bs)
-                val cs1 = if (slowConsumer) cs :>> Source.mapSequentially(delayVal(4.millis)) else cs
-                cs1 :>> ValSource.take(N) :>> ValSource.toList
+                val cs1 = if (slowConsumer) cs |> Source.mapSequentially(delayVal(4.millis)) else cs
+                cs1 |> ValSource.take(N) > ValSource.toList
               }
             }
             .via { port =>
@@ -269,12 +269,12 @@ class StreamsTests extends ScalatestScalettoTestSuite {
         val prg: Done -⚬ (Done |*| Val[AtomicReference[Counter]]) =
           constVal(new AtomicReference(Counter())) > λ { case +(counter) =>
             val done = counter
-              :>> ValSource.repeatedly(mapVal[AtomicReference[Counter], AtomicReference[Counter]] { ref => ref.updateAndGet(_.inc); ref })
-              :>> Source.map(singletonAndCloseLater)
-              :>> Source.prefetch(n - 1)(Source.close)
-              :>> Source.flatten
-              :>> ValSource.take(N)
-              :>> ValSource.forEachSequentially(neglect)
+              |> ValSource.repeatedly(mapVal[AtomicReference[Counter], AtomicReference[Counter]] { ref => ref.updateAndGet(_.inc); ref })
+              |> Source.map(singletonAndCloseLater)
+              |> Source.prefetch(n - 1)(Source.close)
+              |> Source.flatten
+              |> ValSource.take(N)
+              |> ValSource.forEachSequentially(neglect)
             done |*| counter
           }
 

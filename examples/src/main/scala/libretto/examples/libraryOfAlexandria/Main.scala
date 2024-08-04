@@ -36,8 +36,8 @@ object Main extends StarterApp {
       val connector = ConnectorModuleImpl.createConnector(start)
       val scrollIds = ValSource.fromList(ScrollIds)(start)
       (connector |*| scrollIds)
-      :>> downloader.downloadAll(prepareAhead = 10)
-      :>> ValSource.forEachSequentially(printPage)
+      |> downloader.downloadAll(prepareAhead = 10)
+      |> ValSource.forEachSequentially(printPage)
     }
   }
 

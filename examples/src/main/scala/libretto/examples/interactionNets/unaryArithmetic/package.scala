@@ -76,15 +76,15 @@ object Wire {
           import Proper.*
           switch(pw)
             .is { case Zero(?(_))       => constantVal(Result.Zero) }
-            .is { case Succ(w)          => read(w) :>> mapVal(Result.Succ(_)) }
-            .is { case Plus(w1 |*| w2)  => (read(w1) ** read(w2)) :>> mapVal { case (b, out) => Result.Plus(b, out) } }
-            .is { case Times(w1 |*| w2) => (read(w1) ** read(w2)) :>> mapVal { case (b, out) => Result.Times(b, out) } }
-            .is { case Dup(w1 |*| w2)   => (read(w1) ** read(w2)) :>> mapVal { case (x, y) => Result.Dup(x, y) } }
+            .is { case Succ(w)          => read(w) |> mapVal(Result.Succ(_)) }
+            .is { case Plus(w1 |*| w2)  => (read(w1) ** read(w2)) |> mapVal { case (b, out) => Result.Plus(b, out) } }
+            .is { case Times(w1 |*| w2) => (read(w1) ** read(w2)) |> mapVal { case (b, out) => Result.Times(b, out) } }
+            .is { case Dup(w1 |*| w2)   => (read(w1) ** read(w2)) |> mapVal { case (x, y) => Result.Dup(x, y) } }
             .is { case Eraser(?(_))     => constantVal(Result.Eraser) }
             .end
         }
         .is { case InR(lnk) =>
-          lnk :>> mapVal(Result.Link(_))
+          lnk |> mapVal(Result.Link(_))
         }
         .end
     }
@@ -244,26 +244,26 @@ private def connectProper(
 
       // interaction of 2 numbers is undefined
       .is { case Zero(?(_)) |*| Zero(?(_)) => constant(undefined("0", "0")) }
-      .is { case Succ(m)    |*| Zero(?(_)) => m :>> undefined("S", "0") }
-      .is { case Zero(?(_)) |*| Succ(n)    => n :>> undefined("0", "S") }
-      .is { case Succ(m)    |*| Succ(n)    => (m |*| n) :>> undefined("S", "S") }
+      .is { case Succ(m)    |*| Zero(?(_)) => m |> undefined("S", "0") }
+      .is { case Zero(?(_)) |*| Succ(n)    => n |> undefined("0", "S") }
+      .is { case Succ(m)    |*| Succ(n)    => (m |*| n) |> undefined("S", "S") }
 
       // interaction of 2 arithmetic operations is undefined
-      .is { case Plus(x)  |*| Plus(y)  => (x |*| y) :>> undefined("+", "+") }
-      .is { case Times(x) |*| Plus(y)  => (x |*| y) :>> undefined("*", "+") }
-      .is { case Plus(x)  |*| Times(y) => (x |*| y) :>> undefined("+", "*") }
-      .is { case Times(x) |*| Times(y) => (x |*| y) :>> undefined("*", "*") }
+      .is { case Plus(x)  |*| Plus(y)  => (x |*| y) |> undefined("+", "+") }
+      .is { case Times(x) |*| Plus(y)  => (x |*| y) |> undefined("*", "+") }
+      .is { case Plus(x)  |*| Times(y) => (x |*| y) |> undefined("+", "*") }
+      .is { case Times(x) |*| Times(y) => (x |*| y) |> undefined("*", "*") }
 
       // duplication of arithmetic operations is undefined
-      .is { case Dup(x)   |*| Plus(y)  => (x |*| y) :>> undefined("δ", "+") }
-      .is { case Dup(x)   |*| Times(y) => (x |*| y) :>> undefined("δ", "*") }
-      .is { case Plus(x)  |*| Dup(y)   => (x |*| y) :>> undefined("+", "δ") }
-      .is { case Times(x) |*| Dup(y)   => (x |*| y) :>> undefined("*", "δ") }
+      .is { case Dup(x)   |*| Plus(y)  => (x |*| y) |> undefined("δ", "+") }
+      .is { case Dup(x)   |*| Times(y) => (x |*| y) |> undefined("δ", "*") }
+      .is { case Plus(x)  |*| Dup(y)   => (x |*| y) |> undefined("+", "δ") }
+      .is { case Times(x) |*| Dup(y)   => (x |*| y) |> undefined("*", "δ") }
 
       // duplication of duplication is undefined as well
       // (Note: in the (universal) interaction combinators,
       //  it _is_ defined: it connects the wires pairwise.)
-      .is { case Dup(x) |*| Dup(y) => (x |*| y) :>> undefined("δ", "δ") }
+      .is { case Dup(x) |*| Dup(y) => (x |*| y) |> undefined("δ", "δ") }
 
       // erasure
       .is { case Eraser(u) |*| Zero(?(_))          => u }

@@ -704,7 +704,7 @@ object FreeScaletto extends Scaletto {
         λ { case h |*| (x |*| a) =>
           val x1 |*| x2 = dupX(x)
           val h1: $[Sub[A, B]] =
-            (h |*| x1) :>> captureIntoSub(elimX, dupX)
+            (h |*| x1) |> captureIntoSub(elimX, dupX)
           f(x2 |*| (h1 |*| a))
         }
       val h: (X |*| A) -⚬ B =

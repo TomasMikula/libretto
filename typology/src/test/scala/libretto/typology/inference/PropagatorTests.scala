@@ -180,10 +180,10 @@ class PropagatorTests extends ScalatestStarterTestSuite {
           λ.closure.rec { self =>
             { t =>
               switch ( unpack(t) )
-                .is { case InR(v)                 => v :>> mapVal { v => Type.ForbiddenSelfRef(v) } }
-                .is { case InL(InR(x |*| y))      => (self(x) ** self(y)) :>> mapVal { case (x, y) => Type.Mismatch(x, y) } }
-                .is { case InL(InL(InL(a |*| b))) => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.Pair(a, b) } }
-                .is { case InL(InL(InR(a |*| b))) => (f(a) ** f(b)) :>> mapVal { case (a, b) => Type.RecCall(a, b) } }
+                .is { case InR(v)                 => v |> mapVal { v => Type.ForbiddenSelfRef(v) } }
+                .is { case InL(InR(x |*| y))      => (self(x) ** self(y)) |> mapVal { case (x, y) => Type.Mismatch(x, y) } }
+                .is { case InL(InL(InL(a |*| b))) => (f(a) ** f(b)) |> mapVal { case (a, b) => Type.Pair(a, b) } }
+                .is { case InL(InL(InR(a |*| b))) => (f(a) ** f(b)) |> mapVal { case (a, b) => Type.RecCall(a, b) } }
                 .end
             }
           }
@@ -195,9 +195,9 @@ class PropagatorTests extends ScalatestStarterTestSuite {
             { t =>
               switch ( unpack(t) )
                 .is { case InR(v)                 => neglect(v) }
-                .is { case InL(InR(x |*| y))      => (self(x) |*| self(y)) :>> join }
-                .is { case InL(InL(InL(a |*| b))) => (f(a) |*| f(b)) :>> join }
-                .is { case InL(InL(InR(a |*| b))) => (f(a) |*| f(b)) :>> join }
+                .is { case InL(InR(x |*| y))      => (self(x) |*| self(y)) |> join }
+                .is { case InL(InL(InL(a |*| b))) => (f(a) |*| f(b)) |> join }
+                .is { case InL(InL(InR(a |*| b))) => (f(a) |*| f(b)) |> join }
                 .end
             }
           }

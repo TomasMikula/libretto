@@ -171,7 +171,7 @@ object CoffeeMachine extends StarterApp { app =>
     val quit:       (Val[Quit    ] |*|              Done               ) -⚬ Done = fst(neglect) > join
 
     λ { case start |*| menu =>
-      switch(start :>> prompt(msg, parse))
+      switch(start |> prompt(msg, parse))
         .Case[Espresso] { e => goEspresso(e |*| chooseL(chooseL(menu))) }
         .Case[Latte]    { l => goLatte   (l |*| chooseR(chooseL(menu))) }
         .Case[Quit]     { q => quit      (q |*| chooseR(menu))          }

@@ -420,7 +420,7 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
         λ { src =>
           poll(src) either {
             case Left(closed) =>
-              closed :>> notifyDoneL :>> snd(Polled.empty)
+              closed |> notifyDoneL > snd(Polled.empty)
             case Right(a |*| as) =>
               val (ping |*| as1) = self(as)
               ping |*| Polled.cons(a |*| as1)
@@ -607,7 +607,7 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
 
           def onPoll: (Polled[A] |*| Source[A]) -⚬ Polled[A] =
             λ { case as |*| bs =>
-              ((as |*| poll(bs)) :>> raceBy(notifyEither)) either {
+              ((as |*| poll(bs)) |> raceBy(notifyEither)) either {
                 case Left(as |*| bs) => // `as` ready
                   as either {
                     case Left(closed) =>
@@ -640,9 +640,9 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
 
         def go1: (Ping |*| (Polled[A] |*| Source[A])) -⚬ Source[A] =
           λ { case downstreamActing |*| (as |*| bs) =>
-            (as :>> notifyEither) match {
+            (as |> notifyEither) match {
               case aReady |*| as =>
-                ((downstreamActing |*| aReady) :>> racePair) either {
+                ((downstreamActing |*| aReady) |> racePair) either {
                   case Left(?(_)) => // downstream acting
                     goDownstream(as |*| bs)
                   case Right(?(_)) => // `as` ready
@@ -710,7 +710,7 @@ class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
       rec { self => λ { srcs =>
         switch( srcs )
           .is { case LList.Nil(u)         => Source.empty(done(u)) }
-          .is { case LList.Cons(s |*| ss) => (s |*| self(ss)) :>> merge }
+          .is { case LList.Cons(s |*| ss) => (s |*| self(ss)) |> merge }
           .end
       }}
 

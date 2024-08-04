@@ -609,7 +609,7 @@ private[inference] class PropagatorImpl[
           val l1 |*| l2 = nl.labels.split(lbl)
           val q1 |*| q2 = switch(q)
             .is { case InL(nt) =>
-              val nt1 |*| nt2 = contrapositive(self.merge)(nt) :>> distributeInversion
+              val nt1 |*| nt2 = contrapositive(self.merge)(nt) |> distributeInversion
               injectL(nt1) |*| injectL(nt2)
             }
             .is { case InR(t) =>

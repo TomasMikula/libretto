@@ -101,24 +101,24 @@ private[inference] class LabelsImpl[V, ℓ](using V: Ordering[V]) extends Labels
 
   override val compare: (Label |*| Label) -⚬ (Label |+| (Label |+| Label)) =
     λ { case a |*| b =>
-      (a ** b) :>> mapVal { case (a, b) =>
+      (a ** b) |> mapVal { case (a, b) =>
         val res = IVar.compare(a, b)
         res match
           case 0 => Left(a)
           case i if i < 0 => Right(Left(a))
           case i if i > 0 => Right(Right(b))
-      } :>> liftEither :>> |+|.rmap(liftEither)
+      } |> liftEither |> |+|.rmap(liftEither)
     }
 
   override val testEqual: (Label |*| Label) -⚬ (Label |+| (Label |*| Label)) =
     λ { case a |*| b =>
-      (a ** b) :>> mapVal { case (a, b) =>
+      (a ** b) |> mapVal { case (a, b) =>
         val res = IVar.compare(a, b)
         res match {
           case 0 => Left(a)
           case _ => Right((a, b))
         }
-      } :>> liftEither :>> |+|.rmap(liftPair)
+      } |> liftEither |> |+|.rmap(liftPair)
     }
 
   override val neglect: Label -⚬ Done =

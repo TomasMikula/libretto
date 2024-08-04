@@ -592,7 +592,7 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
             na.contramap[-[Need] |*| A](λ { case nn |*| a =>
               val n |*| a1 = A.awaitNeg(a)
               returning(a, n supplyTo nn)
-            }) :>> demandSeparately :>> fst(die)
+            }) |> demandSeparately > fst(die)
           }
         }
     }
@@ -1091,9 +1091,9 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
       Signaling.Positive[A],
       Signaling.Negative[B],
     ): ($[A |+| A], ??[B]) =
-      (a :>> notifyPosFst) match {
+      (a |> notifyPosFst) match {
         case ping |*| a =>
-          (notifyNegFst >>: b) match {
+          (notifyNegFst >| b) match {
             case pong |*| b =>
               ( switch ( racePair(ping |*| pong.asInput(lInvertPongPing)) )
                   .is { case InL(?(_)) => InL(a) }
@@ -1121,13 +1121,13 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
       Signaling.Negative[A],
       Signaling.Positive[B],
     ): (??[A |&| A], $[B]) =
-      (notifyNegFst >>: a) match {
+      (notifyNegFst >| a) match {
         case pong |*| a =>
-          (b :>> notifyPosFst) match {
+          (b |> notifyPosFst) match {
             case ping |*| b =>
-              ((selectPair >>: (pong |*| ping.asOutput(rInvertPingPong))) choose {
-                case Left(one)  => (chooseL >>: a) alsoElim one
-                case Right(one) => (chooseR >>: a) alsoElim one
+              ((selectPair >| (pong |*| ping.asOutput(rInvertPingPong))) choose {
+                case Left(one)  => (chooseL >| a) alsoElim one
+                case Right(one) => (chooseR >| a) alsoElim one
               }, b)
           }
       }
@@ -1147,7 +1147,7 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
       Signaling.Negative[A],
       Signaling.Negative[B],
     ): ??[(A |*| B) |&| (A |*| B)] =
-      lib.select[A, B] >>: (a |*| b)
+      lib.select[A, B] >| (a |*| b)
   }
 
   def when[A](trigger: $[Done])(f: Done -⚬ A)(using LambdaContext): $[A] =
@@ -3830,7 +3830,7 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     ): (B |*| Endless[A]) -⚬ B =
       rec { self =>
         λ { case b |*| as =>
-          val p |*| b1 = b :>> notifyPosFst
+          val p |*| b1 = b |> notifyPosFst
           switch ( injectLOnPing[Endless[A], One](p |*| as) )
             .is { case InL(as) =>
               val h |*| t = pull(as)
@@ -3891,7 +3891,7 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
           val res: $[One |&| (A |*| Endless[A])] =
             switch ( race[Ping, A](pi |*| a) )
               .is { case InL(?(_) |*| a) =>
-                (a |*| as |*| bs) :>> choice(
+                (a |*| as |*| bs) |> choice(
                   λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
                   λ { case   a  |*| as |*| bs =>
                     val b |*| bs1 = pull(bs)
@@ -3903,13 +3903,13 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
                 )
               }
               .is { case InR(?(_) |*| a) =>
-                (a |*| as |*| bs) :>> choice(
+                (a |*| as |*| bs) |> choice(
                   λ { case ?(_) |*| as |*| bs => close(as) alsoElim close(bs) },
                   λ { case   a  |*| as |*| bs => a |*| self(pull(as) |*| bs) },
                 )
               }
               .end
-          (po |*| res) :>> notifyChoice :>> pack
+          (po |*| res) |> notifyChoice > pack
         }
       }
 

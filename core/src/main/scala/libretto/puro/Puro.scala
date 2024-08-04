@@ -796,6 +796,13 @@ trait Puro {
     def >[C](g: B -⚬ C): A -⚬ C =
       andThen(f, g)
 
+    /** "Prepend" this function `A -⚬ B` to a demand `??[B]`, reducing it to a demand `??[A]`. */
+    @targetName("contramapOutput")
+    def >|(expr: ??[B])(using SourcePos, LambdaContext): ??[A] =
+      expr contramap f
+
+    /** Reduce the demand for `B` to a demand for `A` by the function `A -⚬ B`. */
+    @deprecated("Renamed to >|")
     @targetName("contramapOut")
     def >>:(expr: ??[B])(using SourcePos, LambdaContext): ??[A] =
       expr contramap f
@@ -808,19 +815,20 @@ trait Puro {
     ): $[A |*| B] =
       $.zip(a, b)(pos)
 
-    /** Reverse application: pass this expression into the given function. */
+    /** Alias for [[|>]] */
+    @deprecated("Renamed to |>")
     def :>>[B](f: A -⚬ B)(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[B] =
-      $.map(a)(f)(pos)
+      a |> f
 
-    /** Alias for [[:>>]] */
+    /** Pipeline operator: pass this expression into the given function. */
     def |>[B](f: A -⚬ B)(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[B] =
-      a :>> f
+      $.map(a)(f)(pos)
 
     infix def alsoElim(unit: $[One])(using
       pos: SourcePos,
@@ -843,7 +851,14 @@ trait Puro {
     infix def supplyTo(out: $[-[A]])(using pos: SourcePos, ctx: LambdaContext): $[One] =
       $.zip(a, out)(pos) |> supply
 
+    @deprecated("Renamed to =:")
     def :>:(b: ??[A])(using
+      pos: SourcePos,
+      ctx: LambdaContext,
+    ): ??[One] =
+      (a supplyTo b) |> invertOne
+
+    def =:(b: ??[A])(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): ??[One] =
@@ -898,7 +913,7 @@ trait Puro {
       pos: SourcePos,
       ctx: LambdaContext,
     ): ??[One] =
-      value :>: expr
+      value =: expr
 
     @targetName("alsoElimOut")
     infix def alsoElim(that: ??[One])(using
@@ -1127,6 +1142,6 @@ trait Puro {
 
   extension [F[_], A](fa: $[F[A]])(using F: Functor[-⚬, F]) {
     def map[B](using SourcePos, LambdaContext)(f: A -⚬ B): $[F[B]] =
-      fa :>> F.lift(f)
+      fa |> F.lift(f)
   }
 }

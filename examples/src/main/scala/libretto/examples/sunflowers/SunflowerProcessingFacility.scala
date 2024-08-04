@@ -10,13 +10,13 @@ object SunflowerProcessingFacility {
       // give names to the outputs
       producing { case seedsOut |*| oilOut =>
         // race the outputs by which one acts (i.e. pulls or closes) first
-        (selectBy(notifyAction, notifyAction) >>: (seedsOut |*| oilOut)) choose {
+        (selectBy(notifyAction, notifyAction) >| (seedsOut |*| oilOut)) choose {
           // seed output acted first
           case Left (seedsOut |*| oilOut) =>
-            (fromChoice >>: seedsOut) choose {
+            (fromChoice >| seedsOut) choose {
               case Left(closingSeeds) =>
                 returning(
-                  oilOut       := sunflowers :>> oilOnlyMode,
+                  oilOut       := sunflowers |> oilOnlyMode,
                   closingSeeds := constant(done),
                 )
               case Right(pullingSeeds) =>
@@ -37,10 +37,10 @@ object SunflowerProcessingFacility {
             }
           // oil output acted first
           case Right(seedsOut |*| oilOut) =>
-            (fromChoice >>: oilOut) choose {
+            (fromChoice >| oilOut) choose {
               case Left(closingOil) =>
                 returning(
-                  seedsOut   := sunflowers :>> seedsOnlyMode,
+                  seedsOut   := sunflowers |> seedsOnlyMode,
                   closingOil := constant(done),
                 )
               case Right(pullingOil) =>
@@ -64,7 +64,7 @@ object SunflowerProcessingFacility {
   private def oilOnlyMode: ValSource[Sunflower] -⚬ ValSource[OilBottle] = rec { self =>
     λ { sunflowers =>
       producing { oilOut =>
-        (fromChoice >>: oilOut) choose {
+        (fromChoice >| oilOut) choose {
           case Left(closing) =>
             closing := ValSource.close(sunflowers)
           case Right(pulling) =>
@@ -80,7 +80,7 @@ object SunflowerProcessingFacility {
   private def seedsOnlyMode: ValSource[Sunflower] -⚬ ValSource[SeedsPack] = rec { self =>
     λ { sunflowers =>
       producing { seedsOut =>
-        (fromChoice >>: seedsOut) choose {
+        (fromChoice >| seedsOut) choose {
           case Left(closing) =>
             closing := ValSource.close(sunflowers)
           case Right(pulling) =>

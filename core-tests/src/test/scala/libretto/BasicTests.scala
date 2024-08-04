@@ -142,7 +142,7 @@ class BasicTests extends ScalatestScalettoTestSuite {
           val prg: Done -⚬ (Need |*| (Done |+| Nothing)) =
             λ { start =>
               val n |*| d = constant(lInvertSignal)
-              val res = (d |*| start) :>> awaitInjectL
+              val res = (d |*| start) |> awaitInjectL
               n |*| res
             }
           prg

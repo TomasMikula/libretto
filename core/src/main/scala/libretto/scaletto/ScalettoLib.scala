@@ -119,11 +119,11 @@ class ScalettoLib[
       producing { case outAs |*| outDone =>
         (outAs raceWith as) {
           case Left((outAs, as)) =>
-            (Endless.fromChoice >>: outAs) choose {
+            (Endless.fromChoice >| outAs) choose {
               case Left(end) => // no more reads
                 returning(
                   end := $.one,
-                  outDone := LList1.cons(a |*| as) :>> LList1.closeAll,
+                  outDone := LList1.cons(a |*| as) |> LList1.closeAll,
                 )
               case Right(na |*| nas) => // read
                 returning(
@@ -135,7 +135,7 @@ class ScalettoLib[
             (outAs |*| outDone) :=
               LList.uncons(as) either {
                 case Left(?(_)) => // no more writes
-                  a :>> Endless.unfold(dup) :>> snd(neglect)
+                  a |> Endless.unfold(dup) > snd(neglect)
                 case Right(a1 |*| as) => // write
                   self((a1 waitFor neglect(a)) |*| as)
               }
@@ -319,7 +319,7 @@ class ScalettoLib[
     λ.rec { self => as =>
       switch(as)
         .is { case LList.Nil(u)         => const(List.empty[A])(u) }
-        .is { case LList.Cons(a |*| as) => unliftPair(a |*| self(as)) :>> mapVal(_ :: _) }
+        .is { case LList.Cons(a |*| as) => unliftPair(a |*| self(as)) |> mapVal(_ :: _) }
         .end
     }
 
@@ -442,7 +442,7 @@ class ScalettoLib[
   extension [R](r: $[Res[R]])(using LambdaContext) {
     @targetName("releaseResourceWhen")
     def releaseWhen(d: $[Done])(using SourcePos): $[Done] =
-      (r |*| constVal(())(d)) :>> effectWr((_, _) => ()) :>> release
+      (r |*| constVal(())(d)) |> effectWr((_, _) => ()) |> release
 
     def releaseOnPing(p: $[Ping])(using SourcePos): $[Done] =
       releaseWhen(strengthenPing(p))
@@ -476,8 +476,8 @@ class ScalettoLib[
     def releaseWhenDone[R]: (Done |*| RefCounted[R]) -⚬ Done =
       λ { case done |*| res =>
         (res |*| constVal(())(done))
-        :>> effectWr((_, _) => ())
-        :>> release
+        |> effectWr((_, _) => ())
+        |> release
       }
 
     def releaseOnPing[R]: (Ping |*| RefCounted[R]) -⚬ Done =

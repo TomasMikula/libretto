@@ -342,16 +342,16 @@ abstract class ScalettoStreams {
       val goFst: ValSource[A] -⚬ (ValSource[A] |*| ValSource[A]) =
         λ { src =>
           producing { case (out1 |*| out2) =>
-            (ValSource.fromChoice >>: out1) choose {
+            (ValSource.fromChoice >| out1) choose {
               case Left(closing)  =>
-                (src :>: out2) alsoElim (done >>: closing)
+                (src =: out2) alsoElim (done >| closing)
               case Right(polling1) =>
                 val polled = ValSource.poll(src)
-                (ValSource.fromChoice >>: out2) choose {
+                (ValSource.fromChoice >| out2) choose {
                   case Left(closing2) =>
-                    (polled :>: polling1) alsoElim (done >>: closing2)
+                    (polled =: polling1) alsoElim (done >| closing2)
                   case Right(polling2) =>
-                    Polled.dup(self)(polled) :>: (polling1 |*| polling2)
+                    Polled.dup(self)(polled) =: (polling1 |*| polling2)
                 }
             }
           }
@@ -359,9 +359,9 @@ abstract class ScalettoStreams {
 
       λ { src =>
         producing { case out1 |*| out2 =>
-          (selectBy(ValSource.notifyAction[A]) >>: (out1 |*| out2)) choose {
-            case Left (out1 |*| out2) => goFst(src) :>: (out1 |*| out2)
-            case Right(out1 |*| out2) => goFst(src) :>: (out2 |*| out1)
+          (selectBy(ValSource.notifyAction[A]) >| (out1 |*| out2)) choose {
+            case Left (out1 |*| out2) => goFst(src) =: (out1 |*| out2)
+            case Right(out1 |*| out2) => goFst(src) =: (out2 |*| out1)
           }
         }
       }
@@ -379,15 +379,15 @@ abstract class ScalettoStreams {
     def dropUntilFirstDemand[A]: ValSource[A] -⚬ ValSource[A] = rec { self =>
       poll > λ { as =>
         producing { out =>
-          (notifyAction >>: out) match {
+          (notifyAction >| out) match {
             case downstreamPong |*| out =>
               val downstreamActing = downstreamPong.asInput(lInvertPongPing)
               out :=
                 race[Ping, Polled[A]](downstreamActing |*| as) either {
                   case Left(?(_) |*| as) => // downstream acting
-                    as :>> ValSource.from(Polled.close, id)
+                    as |> ValSource.from(Polled.close, id)
                   case Right(?(_) |*| as) => // upstream response
-                    as :>> either(ValSource.empty, fst(neglect) > ValSource.delayBy > self)
+                    as |> either(ValSource.empty, fst(neglect) > ValSource.delayBy > self)
                 }
           }
         }
