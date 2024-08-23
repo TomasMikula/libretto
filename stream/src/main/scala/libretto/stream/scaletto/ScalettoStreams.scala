@@ -12,44 +12,30 @@ object ScalettoStreams {
     DSL <: Scaletto,
     Lib <: PuroLib[DSL],
     SLib <: ScalettoLib[DSL, Lib],
-    Streams <: PuroStreams[DSL, Lib],
+    Streams <: PuroStreams.Of[DSL, Lib],
   ] = ScalettoStreams {
-    type Dsl           = DSL
-    type PuroLib       = Lib
-    type ScalettoLib   = SLib
-    type PuroStreams = Streams
+    val dsl           : DSL
+    val puroLib       : Lib
+    val scalettoLib   : SLib
+    val underlying    : Streams
   }
 
   def apply(
     scaletto: Scaletto,
     lib: PuroLib[scaletto.type],
     sLib: ScalettoLib[scaletto.type, lib.type],
-    pStreams: PuroStreams[scaletto.type, lib.type],
+    pStreams: PuroStreams.Of[scaletto.type, lib.type],
   )
   : ScalettoStreams.Of[scaletto.type, lib.type, sLib.type, pStreams.type] =
-    new ScalettoStreams {
-      override type Dsl         = scaletto.type
-      override type PuroLib     = lib.type
-      override type ScalettoLib = sLib.type
-      override type PuroStreams = pStreams.type
-
-      override val dsl         = scaletto
-      override val puroLib     = lib
-      override val scalettoLib = sLib
-      override val underlying  = pStreams
-    }
+    new ScalettoStreams(scaletto, lib, sLib, pStreams)
 }
 
-abstract class ScalettoStreams {
-  type Dsl         <: Scaletto
-  type PuroLib     <: libretto.puro.PuroLib[Dsl]
-  type ScalettoLib <: libretto.scaletto.ScalettoLib[Dsl, PuroLib]
-  type PuroStreams <: libretto.stream.puro.PuroStreams[Dsl, PuroLib]
-
-  val dsl: Dsl
-  val puroLib: PuroLib & libretto.puro.PuroLib[dsl.type]
-  val scalettoLib: ScalettoLib & libretto.scaletto.ScalettoLib[dsl.type, puroLib.type]
-  val underlying: PuroStreams & libretto.stream.puro.PuroStreams[dsl.type, puroLib.type]
+class ScalettoStreams(
+  tracked val dsl: Scaletto,
+  tracked val puroLib: PuroLib[dsl.type],
+  tracked val scalettoLib: ScalettoLib[dsl.type, puroLib.type],
+  tracked val underlying: PuroStreams.Of[dsl.type, puroLib.type],
+) {
 
   private val Tree = BinarySearchTree(dsl, puroLib, scalettoLib)
 

@@ -4,17 +4,16 @@ import libretto.puro.{Puro, PuroLib}
 import libretto.lambda.util.Exists
 
 object PuroStreams {
-  def apply(
-    dsl: Puro,
-    lib: PuroLib[dsl.type],
-  )
-  : PuroStreams[dsl.type, lib.type] =
-    new PuroStreams(dsl, lib)
+  type Of[DSL <: Puro, Lib <: PuroLib[DSL]] =
+    PuroStreams {
+      val dsl: DSL
+      val lib: Lib
+    }
 }
 
-class PuroStreams[DSL <: Puro, Lib <: PuroLib[DSL]](
-  val dsl: DSL,
-  val lib: Lib & PuroLib[dsl.type],
+class PuroStreams(
+  tracked val dsl: Puro,
+  tracked val lib: PuroLib[dsl.type],
 ) {
   import dsl.*
   import lib.{*, given}

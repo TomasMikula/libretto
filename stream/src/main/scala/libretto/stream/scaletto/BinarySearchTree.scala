@@ -5,19 +5,18 @@ import libretto.puro.PuroLib
 import libretto.scaletto.{Scaletto, ScalettoLib}
 
 object BinarySearchTree {
-  def apply(
-    dsl: Scaletto,
-    puroLib: PuroLib[dsl.type],
-    scalettoLib: ScalettoLib[dsl.type, puroLib.type],
-  )
-  : BinarySearchTree[dsl.type, puroLib.type, scalettoLib.type] =
-    new BinarySearchTree(dsl, puroLib, scalettoLib)
+  type Of[DSL <: Scaletto, PLib <: PuroLib[DSL], SLib <: ScalettoLib[DSL, PLib]] =
+    BinarySearchTree {
+      val dsl: DSL
+      val puroLib: PLib
+      val scalettoLib: SLib
+    }
 }
 
-class BinarySearchTree[DSL <: Scaletto, PLib <: PuroLib[DSL], SLib <: ScalettoLib[DSL, PLib]](
-  val dsl: DSL,
-  val puroLib: PLib & PuroLib[dsl.type],
-  val scalettoLib: SLib & ScalettoLib[dsl.type, puroLib.type],
+class BinarySearchTree(
+  tracked val dsl: Scaletto,
+  tracked val puroLib: PuroLib[dsl.type],
+  tracked val scalettoLib: ScalettoLib[dsl.type, puroLib.type],
 ) {
   import dsl.*
   import puroLib.*

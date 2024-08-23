@@ -61,6 +61,8 @@ val commonScalacOptions =
   Seq(
     "-deprecation",
     "-Xkind-projector:underscores",
+    "-source:future",
+    "-experimental",
   )
 
 lazy val lambda = crossProject(JVMPlatform, JSPlatform)
@@ -132,7 +134,9 @@ lazy val stream = project
   )
   .settings(
     name := "libretto-stream",
-    scalacOptions ++= commonScalacOptions,
+    scalacOptions ++= commonScalacOptions ++ Seq(
+      "-language:experimental.modularity",
+    ),
   )
 
 lazy val examples = project
