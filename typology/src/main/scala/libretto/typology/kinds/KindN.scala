@@ -24,7 +24,7 @@ sealed trait KindN[K] {
       case Type       => "●"
       case Prod(k, l) => s"($k × $l)"
 
-  def testEqual[L](that: KindN[L]): Option[K =:= L] =
+  infix def testEqual[L](that: KindN[L]): Option[K =:= L] =
     (this, that) match
       case (KindN.Type, KindN.Type) =>
         Some(implicitly[● =:= ●])

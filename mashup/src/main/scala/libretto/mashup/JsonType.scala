@@ -24,7 +24,7 @@ object JsonType {
         case Json.Num(value) =>
           val d = value.doubleValue()
           val value1 = java.math.BigDecimal.valueOf(d)
-          (value1 compareTo value) match {
+          (value1.compareTo(value)) match {
             case 0 => Right(rt.Value.float64(d))
             case _ => Left(s"The JSON number $value cannot be represented as Float64 without loss of precision (got ${java.lang.Double.toString(d)}).")
           }

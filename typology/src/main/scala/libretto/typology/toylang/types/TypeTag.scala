@@ -88,9 +88,9 @@ object TypeTag {
   def toTypeFun[F[_]](tf: TypeTag[F]): Type.Fun[ScalaTypeParam, ●, ●] =
     (tf: Type.Fun[ScalaTypeParam, Any, Any]).asInstanceOf[Type.Fun[ScalaTypeParam, ●, ●]]
 
-  import scala.{quoted => sq}
+  import scala.{quoted as sq}
   private def fromTypeParam[T](using t: sq.Type[T], q: sq.Quotes): sq.Expr[TypeTag[T]] = {
-    import q.reflect._
+    import q.reflect.*
 
     val repr = TypeRepr.of[T]
     val pos = repr.typeSymbol.pos

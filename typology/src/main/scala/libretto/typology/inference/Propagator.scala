@@ -114,7 +114,7 @@ private[inference] class PropagatorImpl[
       forevert
 
     extension [T](req: $[Request[T]]) {
-      def grant(t: $[T])(using SourcePos, LambdaContext): $[One] =
+      infix def grant(t: $[T])(using SourcePos, LambdaContext): $[One] =
         Granted(t) supplyTo req
 
       def decline(using SourcePos, LambdaContext): $[TypeOutlet] =

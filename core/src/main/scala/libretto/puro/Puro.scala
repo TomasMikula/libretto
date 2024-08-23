@@ -891,7 +891,7 @@ trait Puro {
     ): $[-[A]] =
       $.map(expr)(contrapositive(f))(pos)
 
-    def unInvertWith[A](lInvert: One -⚬ (A |*| B))(using
+    infix def unInvertWith[A](lInvert: One -⚬ (A |*| B))(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[A] =
@@ -971,7 +971,7 @@ trait Puro {
   }
 
   extension (d: $[Done]) {
-    def alsoJoin(others: $[Done]*)(using
+    infix def alsoJoin(others: $[Done]*)(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): $[Done] =

@@ -1,6 +1,6 @@
 package libretto.typology.toylang.typeinfer
 
-import libretto.scaletto.StarterKit.{fun => _, *}
+import libretto.scaletto.StarterKit.{fun as _, *}
 import libretto.testing.scalatest.scaletto.ScalatestStarterTestSuite
 import libretto.testing.scaletto.StarterTestKit
 import libretto.testing.TestCase

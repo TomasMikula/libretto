@@ -8,38 +8,40 @@ object unapply {
     def ev: FA =:= F[A]
   }
 
-  object Unapply {
+  object Unapply extends UnapplyLowPriorityGiven {
     def apply[F[_], X]: Unapply[F[X], F] { type A = X } = new Unapply[F[X], F] {
       type A = X
       val ev: F[X] =:= F[A] = summon
     }
 
-    private def forced[FX, F[_], X]: Unapply[FX, F] { type A = X } =
-      new Unapply[FX, F] {
-        override type A = X
-        override def ev: FX =:= F[X] = summon[FX =:= FX].asInstanceOf[FX =:= F[X]]
-      }
-
     given [F[_], X]: (Unapply[F[X], F] with { type A = X }) =
       apply[F, X]
+  }
 
+  trait UnapplyLowPriorityGiven {
     transparent inline given derive[FX, F[_]]: Unapply[FX, F] =
       ${ unapplyImpl[FX, F] }
-
-    private def unapplyImpl[FX, F[_]](using Quotes, Type[FX], Type[F]): Expr[Unapply[FX, F]] =
-      import quotes.reflect.{Unapply => _, *}
-
-      Type.of[FX] match
-        case '[F[x]] =>
-          '{ Unapply[F, x] }.asExprOf[Unapply[FX, F] { type A = x }]
-        case _ =>
-          TypeRepr.of[FX].dealiasKeepOpaques match
-            case AppliedType(f, List(x)) if f =:= TypeRepr.of[F] =>
-              x.asType match
-                case '[x] => '{ forced[FX, F, x] }
-            case other =>
-              report.errorAndAbort(s"Cannot prove that ${TypeRepr.of[FX].show} or ${other.show} is an application of ${TypeRepr.of[F].show}")
   }
+
+  private def unapplyForced[FX, F[_], X]: Unapply[FX, F] { type A = X } =
+    new Unapply[FX, F] {
+      override type A = X
+      override def ev: FX =:= F[X] = summon[FX =:= FX].asInstanceOf[FX =:= F[X]]
+    }
+
+  private def unapplyImpl[FX, F[_]](using Quotes, Type[FX], Type[F]): Expr[Unapply[FX, F]] =
+    import quotes.reflect.{Unapply as _, *}
+
+    Type.of[FX] match
+      case '[F[x]] =>
+        '{ Unapply[F, x] }.asExprOf[Unapply[FX, F] { type A = x }]
+      case _ =>
+        TypeRepr.of[FX].dealiasKeepOpaques match
+          case AppliedType(f, List(x)) if f =:= TypeRepr.of[F] =>
+            x.asType match
+              case '[x] => '{ unapplyForced[FX, F, x] }
+          case other =>
+            report.errorAndAbort(s"Cannot prove that ${TypeRepr.of[FX].show} or ${other.show} is an application of ${TypeRepr.of[F].show}")
 
   trait Unapply2[FAB, F[_, _]] {
     type A

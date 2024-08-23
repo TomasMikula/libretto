@@ -19,6 +19,6 @@ object Label {
           ScalaTypeParamOrdering.compare((f1, l1, n1), (f2, l2, n2))
         case (ScalaTParam(_), Abstr(_)) => -1
         case (Abstr(_), ScalaTParam(_)) => 1
-        case (Abstr(AbstractTypeLabel(x)), Abstr(AbstractTypeLabel(y))) => x compareTo y
+        case (Abstr(AbstractTypeLabel(x)), Abstr(AbstractTypeLabel(y))) => x.compareTo(y)
   }
 }

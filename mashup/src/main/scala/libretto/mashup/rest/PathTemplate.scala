@@ -137,7 +137,7 @@ object PathTemplate {
 
   sealed trait Segment[I] {
     def readFrom(using rt: Runtime, exn: rt.Execution)(port: exn.OutPort[I]): Async[Try[String]]
-    def matches(segment: Path.Segment)(using rt: Runtime): Option[rt.Value[I]]
+    infix def matches(segment: Path.Segment)(using rt: Runtime): Option[rt.Value[I]]
   }
 
   case class Constant(segment: String) extends PathTemplate.Segment[EmptyResource] {

@@ -31,7 +31,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           }
       }
 
-    def after[Z](that: Z ~⚬ A): Z ~⚬ B =
+    infix def after[Z](that: Z ~⚬ A): Z ~⚬ B =
       that > this
 
     def invert: B ~⚬ A
@@ -493,21 +493,21 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     }
 
     sealed trait ChaseBwRes[A, G[_], X] {
-      def after[Z](f: Z ~⚬ A): ChaseBwRes[Z, G, X]
-      def andThen[H[_]](H: Focus[|*|, H], h: [x] => Unit => G[x] ~⚬ H[x]): ChaseBwRes[A, H, X]
+      infix def after[Z](f: Z ~⚬ A): ChaseBwRes[Z, G, X]
+      infix def andThen[H[_]](H: Focus[|*|, H], h: [x] => Unit => G[x] ~⚬ H[x]): ChaseBwRes[A, H, X]
       def inFst[B, C](snd: B ~⚬ C): ChaseBwRes[A |*| B, [x] =>> G[x] |*| C, X]
       def inSnd[Y, Z](fst: Y ~⚬ Z): ChaseBwRes[Y |*| A, [x] =>> Z |*| G[x], X]
 
-      def andThen[H[_]](h: Punched[G, H]): ChaseBwRes[A, H, X] = andThen(h.focusOut, [x] => (_: Unit) => h[x])
+      infix def andThen[H[_]](h: Punched[G, H]): ChaseBwRes[A, H, X] = andThen(h.focusOut, [x] => (_: Unit) => h[x])
       def inFst[B]: ChaseBwRes[A |*| B, [x] =>> G[x] |*| B, X] = inFst(id[B])
       def inSnd[Z]: ChaseBwRes[Z |*| A, [x] =>> Z |*| G[x], X] = inSnd(id[Z])
 
-      def afterAssocLR[A1, A2, A3](using (A2 |*| A3) =:= A): ChaseBwRes[(A1 |*| A2) |*| A3, [x] =>> A1 |*| G[x], X]
-      def afterAssocRL[A1, A2, A3](using (A1 |*| A2) =:= A): ChaseBwRes[A1 |*| (A2 |*| A3), [x] =>> G[x] |*| A3, X]
-      def afterXI[A1, A2, A3](using (A1 |*| A3) =:= A): ChaseBwRes[A1 |*| (A2 |*| A3), [x] =>> A2 |*| G[x], X]
-      def afterIX[A1, A2, A3](using (A1 |*| A3) =:= A): ChaseBwRes[(A1 |*| A2) |*| A3, [x] =>> G[x] |*| A2, X]
-      def afterIXI1[A1, A2, A3, A4](using (A1 |*| A3) =:= A): ChaseBwRes[(A1 |*| A2) |*| (A3 |*| A4), [x] =>> G[x] |*| (A2 |*| A4), X]
-      def afterIXI2[A1, A2, A3, A4](using (A2 |*| A4) =:= A): ChaseBwRes[(A1 |*| A2) |*| (A3 |*| A4), [x] =>> (A1 |*| A3) |*| G[x], X]
+      infix def afterAssocLR[A1, A2, A3](using (A2 |*| A3) =:= A): ChaseBwRes[(A1 |*| A2) |*| A3, [x] =>> A1 |*| G[x], X]
+      infix def afterAssocRL[A1, A2, A3](using (A1 |*| A2) =:= A): ChaseBwRes[A1 |*| (A2 |*| A3), [x] =>> G[x] |*| A3, X]
+      infix def afterXI[A1, A2, A3](using (A1 |*| A3) =:= A): ChaseBwRes[A1 |*| (A2 |*| A3), [x] =>> A2 |*| G[x], X]
+      infix def afterIX[A1, A2, A3](using (A1 |*| A3) =:= A): ChaseBwRes[(A1 |*| A2) |*| A3, [x] =>> G[x] |*| A2, X]
+      infix def afterIXI1[A1, A2, A3, A4](using (A1 |*| A3) =:= A): ChaseBwRes[(A1 |*| A2) |*| (A3 |*| A4), [x] =>> G[x] |*| (A2 |*| A4), X]
+      infix def afterIXI2[A1, A2, A3, A4](using (A2 |*| A4) =:= A): ChaseBwRes[(A1 |*| A2) |*| (A3 |*| A4), [x] =>> (A1 |*| A3) |*| G[x], X]
     }
 
     object ChaseBwRes {
@@ -1086,37 +1086,37 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
   sealed trait Transfer[A1, A2, B1, B2] extends TransferOpt[A1, A2, B1, B2] {
     import Transfer.*
 
-    def after[Z1, Z2](that: Transfer[Z1, Z2, A1, A2]): (Z1 |*| Z2) ~⚬ (B1 |*| B2)
+    infix def after[Z1, Z2](that: Transfer[Z1, Z2, A1, A2]): (Z1 |*| Z2) ~⚬ (B1 |*| B2)
 
     def thenBi[C1, C2](g1: B1 ~⚬ C1, g2: B2 ~⚬ C2): Xfer[A1, A2, ?, ?, C1, C2]
 
     def thenSwap: (A1 |*| A2) ~⚬ (B2 |*| B1)
 
-    def thenAssocLR[B11, B12, C2, C3](
+    infix def thenAssocLR[B11, B12, C2, C3](
       that: AssocLR[B11, B12, B2, C2, C3],
     )(using
       ev: B1 =:= (B11 |*| B12),
     ): (A1 |*| A2) ~⚬ (B11 |*| (C2 |*| C3))
 
-    def thenAssocRL[B21, B22, C1, C2](
+    infix def thenAssocRL[B21, B22, C1, C2](
       that: AssocRL[B1, B21, B22, C1, C2],
     )(using
       ev: B2 =:= (B21 |*| B22),
     ): (A1 |*| A2) ~⚬ ((C1 |*| C2) |*| B22)
 
-    def thenIX[B11, B12, C1, C2](
+    infix def thenIX[B11, B12, C1, C2](
       that: IX[B11, B12, B2, C1, C2],
     )(using
       ev: B1 =:= (B11 |*| B12),
     ): (A1 |*| A2) ~⚬ ((C1 |*| C2) |*| B12)
 
-    def thenXI[B21, B22, C2, C3](
+    infix def thenXI[B21, B22, C2, C3](
       that: XI[B1, B21, B22, C2, C3],
     )(using
       ev: B2 =:= (B21 |*| B22),
     ): (A1 |*| A2) ~⚬ (B21 |*| (C2 |*| C3))
 
-    def thenIXI[B11, B12, B21, B22, C1, C2, C3, C4](
+    infix def thenIXI[B11, B12, B21, B22, C1, C2, C3, C4](
       that: IXI[B11, B12, B21, B22, C1, C2, C3, C4]
     )(using
       ev1: B1 =:= (B11 |*| B12),

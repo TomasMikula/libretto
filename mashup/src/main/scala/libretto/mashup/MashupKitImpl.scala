@@ -20,7 +20,7 @@ object MashupKitImpl extends MashupKit { kit =>
     // TODO: later distinguish between product on *data* types and monoidal product on resources
     override type **[A, B] = A |*| B
 
-    override type or[A, B] = A |+| B
+    override infix type or[A, B] = A |+| B
 
     override type -->[A, B] = A =⚬ B
 
@@ -34,7 +34,7 @@ object MashupKitImpl extends MashupKit { kit =>
 
     override type ###[A, B] = A |*| B
 
-    override type of[Name <: String, T] = T
+    override infix type of[Name <: String, T] = T
 
     override type |&|[A, B] = StarterKit.dsl.|&|[A, B]
 
@@ -182,7 +182,7 @@ object MashupKitImpl extends MashupKit { kit =>
     }
 
     override object Unlimited extends Unlimiteds {
-      export StarterKit.puroLib.Unlimited.{discard, duplicate, map, single => getSingle, split}
+      export StarterKit.puroLib.Unlimited.{discard, duplicate, map, single as getSingle, split}
     }
 
     override def comonoidUnlimited[A]: Comonoid[Unlimited[A]] = {

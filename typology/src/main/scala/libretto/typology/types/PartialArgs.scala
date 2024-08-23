@@ -3,7 +3,7 @@ package libretto.typology.types
 import libretto.lambda.{MonoidalCategory, MonoidalObjectMap, Projection, Tupled, UnhandledCase}
 import libretto.lambda.util.{Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
-import libretto.typology.kinds._
+import libretto.typology.kinds.*
 import libretto.typology.types.kindShuffle.{~⚬, Transfer}
 
 /** Represents partial type arguments.
@@ -47,7 +47,7 @@ sealed trait PartialArgs[F[_, _], K, L] {
       case Id() => that
       case thiz: Proper[f, k, l] => (that composeProper thiz)(absorbL)
 
-  def composeProper[J](that: Proper[F, J, K])(
+  infix def composeProper[J](that: Proper[F, J, K])(
     absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
   ): Proper[F, J, L]
 
@@ -263,7 +263,7 @@ sealed trait PartialArgs[F[_, _], K, L] {
       case Multipliers.None =>
         KindN.cannotBeUnit(this.outKind)
 
-  def shuffle[M](s: L ~⚬ M): Exists[[X] =>> (K ~⚬ X, PartialArgs[F, X, M])] =
+  infix def shuffle[M](s: L ~⚬ M): Exists[[X] =>> (K ~⚬ X, PartialArgs[F, X, M])] =
     s match
       case ~⚬.Id() =>
         Exists((~⚬.id, this))

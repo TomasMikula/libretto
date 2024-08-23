@@ -11,7 +11,7 @@ sealed trait Multiplier[×[_, _], A, AA] {
       case Id()        => fa
       case Dup(m1, m2) => m1(fa) zip m2(fa)
 
-  def project[B](p: Projection[×, AA, B])(
+  infix def project[B](p: Projection[×, AA, B])(
     inputIsAtomic: [x, y] => (A =:= (x × y)) => Nothing,
   ): Multiplier[×, A, B] =
     p match

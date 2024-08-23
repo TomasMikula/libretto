@@ -271,7 +271,7 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
   }
 
   extension [A](a: $[Detained[A]]) {
-    def releaseWhen(trigger: $[Done])(using LambdaContext): $[A] =
+    infix def releaseWhen(trigger: $[Done])(using LambdaContext): $[A] =
       Detained.releaseBy(trigger |*| a)
   }
 
@@ -1062,13 +1062,13 @@ class PuroLib[DSL <: Puro](val dsl: DSL) { lib =>
     snd(awaitPongFst) > assocRL > fst(notifyNegSnd)
 
   extension [A](a: $[A])(using LambdaContext) {
-    def sequence[B](b: $[B])(using A: Signaling.Positive[A], B: Deferrable.Positive[B]): $[A |*| B] =
+    infix def sequence[B](b: $[B])(using A: Signaling.Positive[A], B: Deferrable.Positive[B]): $[A |*| B] =
       (a |*| b) |> sequence_PP
 
-    def sequence[B](f: Done -⚬ B)(using A: Signaling.Positive[A]): $[A |*| B] =
+    infix def sequence[B](f: Done -⚬ B)(using A: Signaling.Positive[A]): $[A |*| B] =
       a |> signalPosSnd |> snd(f)
 
-    def sequenceAfter[B](b: $[B])(using A: Deferrable.Positive[A], B: Signaling.Positive[B]): $[A |*| B] =
+    infix def sequenceAfter[B](b: $[B])(using A: Deferrable.Positive[A], B: Signaling.Positive[B]): $[A |*| B] =
       (b |*| a) |> sequence_PP[B, A] |> swap
 
     infix def waitFor(b: $[Done])(using A: Junction.Positive[A]): $[A] =

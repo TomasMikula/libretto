@@ -227,7 +227,7 @@ class PatternMatching[->[_, _], **[_, _]](using
     lower: [X, Y] => (X ->> Y) => Validated[E, X -> Y],
     lift: [X, Y] => (X -> Y) => (X ->> Y),
   ) {
-    import lambdas.{Context => LambdaContext, Expr => $, LinearityViolation}
+    import lambdas.{Context as LambdaContext, Expr as $, LinearityViolation}
     import lambdas.shuffled
     import lambdas.shuffled.{Shuffled as ~>}
 

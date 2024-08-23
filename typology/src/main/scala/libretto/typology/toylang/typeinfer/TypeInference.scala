@@ -1,7 +1,7 @@
 package libretto.typology.toylang.typeinfer
 
 import libretto.lambda.util.{Monad, SourcePos}
-import libretto.scaletto.StarterKit._
+import libretto.scaletto.StarterKit.*
 import libretto.typology.inference.Propagator
 import libretto.typology.toylang.terms.{Fun, TypedFun}
 import libretto.typology.toylang.types.{AbstractTypeLabel, Label, ScalaTypeParam, Type, TypeConstructor, TypeTag}
@@ -76,7 +76,7 @@ object TypeInference {
     import pg.{Tp, TypeOutlet, label, merge, output, split}
 
     val nested: pg.Nested = pg.nested
-    import nested.{lower, propagator => npg, unnest}
+    import nested.{lower, propagator as npg, unnest}
 
     def reconstructTypes[A, B](f: Fun[A, B]): M[One -⚬ (npg.Tp |*| Val[TypedFun[A, B]] |*| npg.Tp)] =
       TypeInference.reconstructTypes(f)(using npg)
@@ -329,7 +329,7 @@ object TypeInference {
                         (ab |*| a1 |*| f |*| b1) |> crashNow(s"TODO (${summon[SourcePos]})")
                     }
                   case Left(aba) =>
-                    import scala.concurrent.duration._
+                    import scala.concurrent.duration.*
                     val d = (f ** output(lower(npg.outlet(aba))) ** output(unnest(b1)))
                       |> printLine { case ((f, aba), b) =>
                         s"FUNCTION=${scala.util.Try(f.toString)}, IN-TYPE=$aba, OUT-TYPE=$b"

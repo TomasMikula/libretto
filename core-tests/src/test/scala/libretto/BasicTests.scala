@@ -11,7 +11,7 @@ import libretto.testing.{TestCase, TestExecutor, TestKit}
 import libretto.testing.scaletto.{ScalettoTestExecutor, ScalettoTestKit}
 import libretto.testing.scalatest.scaletto.ScalatestScalettoTestSuite
 import libretto.util.Async
-import scala.collection.immutable.{:: => NonEmptyList}
+import scala.collection.immutable.{:: as NonEmptyList}
 import scala.compiletime.uninitialized
 import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration.*

@@ -10,7 +10,7 @@ trait MashupDsl {
 
   type EmptyResource
 
-  type or[A, B]
+  infix type or[A, B]
 
   /** Higher-order function, i.e. one that occurs on input or output of [[Fun]]s. */
   type -->[A, B]
@@ -21,7 +21,7 @@ trait MashupDsl {
 
   type Expr[A]
 
-  type of[Name <: String, T]
+  infix type of[Name <: String, T]
 
   type Record[Fields]
 
@@ -155,7 +155,7 @@ trait MashupDsl {
   val ### : RecordExtractor
 
   trait SingleFieldExtractor {
-    def unapply[N <: String & Singleton, T](
+    infix def unapply[N <: String & Singleton, T](
       field: Expr[Record[N of T]],
     )(using
       N: ConstValue[N],
@@ -176,7 +176,7 @@ trait MashupDsl {
     ): Expr[pick.T] =
       Expr.map(a, pick.asFun)(pos)
 
-    def alsoElim(empty: Expr[EmptyResource])(using
+    infix def alsoElim(empty: Expr[EmptyResource])(using
       pos: SourcePos,
       ctx: LambdaContext,
     ): Expr[A] =

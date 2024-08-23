@@ -3,7 +3,7 @@ package libretto.typology.types
 import libretto.lambda.{MappedMorphism, MonoidalObjectMap, Projection, Shuffle, SymmetricMonoidalCategory, UnhandledCase}
 import libretto.lambda.util.{Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
-import libretto.typology.kinds._
+import libretto.typology.kinds.*
 import libretto.typology.types.kindShuffle
 import libretto.typology.types.kindShuffle.~⚬
 

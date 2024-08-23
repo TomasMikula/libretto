@@ -77,7 +77,7 @@ private[inference] object LabelsImpl {
         case Lowered(base, tag) => s"$base.$tag"
         case Base(value)        => s"{$value}"
 
-    def compare(that: Lbl[V, ℓ])(using
+    infix def compare(that: Lbl[V, ℓ])(using
       V: Ordering[V],
     ): Int =
       (this, that) match

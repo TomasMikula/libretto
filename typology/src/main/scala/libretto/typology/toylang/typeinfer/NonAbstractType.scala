@@ -237,7 +237,7 @@ private[typeinfer] object NonAbstractType {
     absType: Label => (One -⚬ T),
     t: Type[ScalaTypeParam],
   ): One -⚬ T = {
-    import libretto.typology.toylang.types.{TypeConstructor => TC}
+    import libretto.typology.toylang.types.{TypeConstructor as TC}
 
     val ct = new CompilationTarget[V, T](inject, absType)
     import ct.{Map_○, Map_●}

@@ -31,7 +31,7 @@ sealed trait Ztuff[A] {
   def through_[B](f: A -⚬ B): ZIO[Scope, Nothing, OutPort[B]] =
     through(f).map(_._2)
 
-  private def feedTo(using
+  private infix def feedTo(using
     bridge: ScalettoBridge.Of[StarterKit.dsl.type],
     exn: bridge.Execution,
   )(inPort: exn.InPort[A]): ZIO[Any, Nothing, Unit] =

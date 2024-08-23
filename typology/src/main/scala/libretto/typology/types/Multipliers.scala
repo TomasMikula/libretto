@@ -7,7 +7,7 @@ import libretto.typology.kinds.*
 import libretto.typology.types.kindShuffle.~⚬
 
 sealed trait Multipliers[A, AA] {
-  def after[A0](m: Multiplier[×, A0, A])(using Kind[A0]): Multiplier[×, A0, AA]
+  infix def after[A0](m: Multiplier[×, A0, A])(using Kind[A0]): Multiplier[×, A0, AA]
 
   def >[BB](that: Multipliers[AA, BB]): Multipliers[A, BB]
 

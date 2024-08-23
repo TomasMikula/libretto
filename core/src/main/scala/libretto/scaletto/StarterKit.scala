@@ -43,8 +43,8 @@ abstract class AbstractStarterKit(
     executor0(scheduler, blockingExecutor)
 
   export dsl.*
-  export puroLib.{dsl => _, *}
-  export scalettoLib.{dsl => _, puroLib => _, *, given}
+  export puroLib.{dsl as _, *}
+  export scalettoLib.{dsl as _, puroLib as _, *, given}
 
   def runScalaAsync[A](blueprint: Done -⚬ Val[A]): Future[A] = {
     val mainExecutor = Executors.newScheduledThreadPool(Runtime.getRuntime.availableProcessors())

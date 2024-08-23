@@ -241,7 +241,7 @@ class PropagatorTests extends ScalatestStarterTestSuite {
     }
 
     val nested = pg.nested
-    import nested.{lower, propagator => npg, unnest}
+    import nested.{lower, propagator as npg, unnest}
 
     extension (pg: Propagator[IType[Val[Label], _], Type, Label])
       def mkLabel(n: Int): One -⚬ pg.Label =

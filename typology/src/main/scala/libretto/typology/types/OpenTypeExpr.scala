@@ -4,7 +4,7 @@ import libretto.lambda.{Capture, Tupled, UnhandledCase}
 import libretto.lambda.util.{Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
-import libretto.typology.types.{kindShuffle => sh}
+import libretto.typology.types.{kindShuffle as sh}
 
 /** A tree-shaped composition of (proper) type constructors
  * where any embedded primitive type constructor
@@ -416,7 +416,7 @@ object OpenTypeExpr {
       k: KindN[K],
     ): Capture[×, TC[○, _], K, L] =
       import libretto.lambda.UnhandledCase
-      import PartialArgs.{extract => _, *}
+      import PartialArgs.{extract as _, *}
       args match
         case Id() => Capture.NoCapture()
         case Lift(f) =>

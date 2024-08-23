@@ -35,7 +35,7 @@ trait PuroBridge extends Bridge {
   }
 
   extension [A](using exn: Execution)(port: exn.OutPort[A]) {
-    def zip[B](b: exn.OutPort[B]): exn.OutPort[A |*| B]
+    infix def zip[B](b: exn.OutPort[B]): exn.OutPort[A |*| B]
   }
 
   extension (using exn: Execution)(port: exn.OutPort[One]) {

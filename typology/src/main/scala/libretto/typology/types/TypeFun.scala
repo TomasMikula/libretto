@@ -1,7 +1,7 @@
 package libretto.typology.types
 
 import libretto.lambda.{MappedMorphism, MonoidalObjectMap}
-import libretto.typology.kinds._
+import libretto.typology.kinds.*
 import libretto.lambda.SymmetricMonoidalCategory
 
 sealed trait TypeFun[TC[_, _], K, L] {

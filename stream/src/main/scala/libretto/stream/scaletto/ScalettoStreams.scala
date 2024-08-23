@@ -51,7 +51,7 @@ abstract class ScalettoStreams {
   val scalettoLib: ScalettoLib & libretto.scaletto.ScalettoLib[dsl.type, puroLib.type]
   val underlying: PuroStreams & libretto.stream.puro.PuroStreams[dsl.type, puroLib.type]
 
-  private lazy val Tree = BinarySearchTree(dsl, puroLib, scalettoLib)
+  private val Tree = BinarySearchTree(dsl, puroLib, scalettoLib)
 
   import dsl.*
   import puroLib.*
@@ -59,7 +59,7 @@ abstract class ScalettoStreams {
   import underlying.*
   import Tree.*
 
-  export underlying.{lib => _, dsl => _, *}
+  export underlying.{lib as _, dsl as _, *}
 
   type ValSourceT[T, A] = SourceT[T, Val[A]]
 

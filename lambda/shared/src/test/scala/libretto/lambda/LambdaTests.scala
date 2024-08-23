@@ -94,9 +94,9 @@ class LambdaTests extends AnyFunSuite {
         d1
       }
     }
-    assert(e.getMessage contains "Unused variable")
-    assert(e.getMessage contains "The second half of untupling")
-    assert(e.getMessage contains "LambdaTests.scala:93")
+    assert(e.getMessage `contains` "Unused variable")
+    assert(e.getMessage `contains` "The second half of untupling")
+    assert(e.getMessage `contains` "LambdaTests.scala:93")
   }
 
   test("overused variable") {
@@ -105,9 +105,9 @@ class LambdaTests extends AnyFunSuite {
         elimFst(trigger ** trigger)
       }
     }
-    assert(e.getMessage contains "used more than once")
-    assert(e.getMessage contains "The variable bound by lambda expression at")
-    assert(e.getMessage contains "LambdaTests.scala:104")
+    assert(e.getMessage `contains` "used more than once")
+    assert(e.getMessage `contains` "The variable bound by lambda expression at")
+    assert(e.getMessage `contains` "LambdaTests.scala:104")
   }
 
   test("`one` expression") {
@@ -140,9 +140,9 @@ class LambdaTests extends AnyFunSuite {
         one
       }
     }
-    assert(e.getMessage contains "Unused variable")
-    assert(e.getMessage contains "The variable bound by lambda expression at")
-    assert(e.getMessage contains "LambdaTests.scala:139")
+    assert(e.getMessage `contains` "Unused variable")
+    assert(e.getMessage `contains` "The variable bound by lambda expression at")
+    assert(e.getMessage `contains` "LambdaTests.scala:139")
   }
 
   test("affine variable: unused") {
@@ -163,9 +163,9 @@ class LambdaTests extends AnyFunSuite {
     val e = intercept[Exception] {
       λ.? { (x: $[One]) => x ** x }
     }
-    assert(e.getMessage contains "used more than once")
-    assert(e.getMessage contains "variable bound by lambda expression at")
-    assert(e.getMessage contains "LambdaTests.scala:164")
+    assert(e.getMessage `contains` "used more than once")
+    assert(e.getMessage `contains` "variable bound by lambda expression at")
+    assert(e.getMessage `contains` "LambdaTests.scala:164")
   }
 
   test("cosemigroupal variable: used once") {
@@ -182,9 +182,9 @@ class LambdaTests extends AnyFunSuite {
     val e = intercept[Exception] {
       λ.+ { (_: $[One]) => one }
     }
-    assert(e.getMessage contains "Unused variable")
-    assert(e.getMessage contains "variable bound by lambda expression at")
-    assert(e.getMessage contains "LambdaTests.scala:183")
+    assert(e.getMessage `contains` "Unused variable")
+    assert(e.getMessage `contains` "variable bound by lambda expression at")
+    assert(e.getMessage `contains` "LambdaTests.scala:183")
   }
 
   test("cosemigroupal variable: used twice, with a twist") {
@@ -204,9 +204,9 @@ class LambdaTests extends AnyFunSuite {
         x ** x
       }
     }
-    assert(e.getMessage contains "used more than once")
-    assert(e.getMessage contains "The result of function application")
-    assert(e.getMessage contains "LambdaTests.scala:203")
+    assert(e.getMessage `contains` "used more than once")
+    assert(e.getMessage `contains` "The result of function application")
+    assert(e.getMessage `contains` "LambdaTests.scala:203")
   }
 
   test("comonoidal variable: used once") {

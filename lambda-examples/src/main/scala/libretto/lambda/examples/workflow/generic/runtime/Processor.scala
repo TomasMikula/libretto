@@ -2,7 +2,7 @@ package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{UnhandledCase, Unzippable}
 import libretto.lambda.examples.workflow.generic.lang.**
-import libretto.lambda.examples.workflow.generic.runtime.{WorkflowInProgress => WIP}
+import libretto.lambda.examples.workflow.generic.runtime.{WorkflowInProgress as WIP}
 import libretto.lambda.util.SourcePos
 
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, ScheduledExecutorService, TimeUnit}

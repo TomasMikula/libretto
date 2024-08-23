@@ -441,10 +441,10 @@ class ScalettoLib[
 
   extension [R](r: $[Res[R]])(using LambdaContext) {
     @targetName("releaseResourceWhen")
-    def releaseWhen(d: $[Done])(using SourcePos): $[Done] =
+    infix def releaseWhen(d: $[Done])(using SourcePos): $[Done] =
       (r |*| constVal(())(d)) |> effectWr((_, _) => ()) |> release
 
-    def releaseOnPing(p: $[Ping])(using SourcePos): $[Done] =
+    infix def releaseOnPing(p: $[Ping])(using SourcePos): $[Done] =
       releaseWhen(strengthenPing(p))
   }
 
