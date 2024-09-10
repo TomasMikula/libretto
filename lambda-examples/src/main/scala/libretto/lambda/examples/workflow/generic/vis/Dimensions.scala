@@ -28,7 +28,7 @@ trait Dimensions {
     def apply(l: Length, b: Breadth): AspectRatio
 
   extension (r: AspectRatio)
-    def scaleToFit(breadth: Int, length: Int): (Int, Int)
+    def scaleToFit(maxBreadth: Int, maxLength: Int): (Int, Int)
 }
 
 object Dimensions {

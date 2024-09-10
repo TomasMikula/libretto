@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.vis
 
-object RationalDimensions extends Dimensions {
+private[vis] object RationalDimensions extends Dimensions {
   import Dimensions.*
 
   /** Breadth, in abstract units. Must be positive. */

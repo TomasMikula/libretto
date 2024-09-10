@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.vis
 
 // TODO: normalize (i.e. eliminate common divisors)
-case class PositiveRational(
+private case class PositiveRational(
   numerator: Long,
   denominator: Long,
 ) {
@@ -66,7 +66,7 @@ case class PositiveRational(
     s"($numerator / $denominator)"
 }
 
-object PositiveRational {
+private object PositiveRational {
   val One = PositiveRational(1L, 1L)
 
   def min(a: PositiveRational, b: PositiveRational): PositiveRational =
