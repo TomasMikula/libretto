@@ -31,7 +31,10 @@ object VisualizationToSVG {
           height.pixels match
             case 0      => 0.0
             case height => scaleToFit(textW, textH, width.pixels, height).toDouble
-        SVG.Transformed(text, SVG.Transform.Scale(scale))
+        SVG.Group(
+          SVG.RectOutline(width, height, math.min(width.pixels / 20.0, height.pixels / 20.0), "red"),
+          SVG.Transformed(text, SVG.Transform.Scale(scale))
+        )
 
   private def renderSeq(seq: Visualization.Seq, width: Px, height: Px): SVG =
     val Visualization.Seq(a, b) = seq

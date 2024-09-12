@@ -98,6 +98,25 @@ object SVG {
     override def xmlContent =
       value
 
+  case class RectOutline(w: Px, h: Px, thickness: Double, color: String) extends SVG.Proper {
+
+    override def xmlTag: String = "rect"
+
+    override def xmlContent: String | List[SVG] = Nil
+
+    override def xmlAttributes: Map[String, String] =
+      import Px.*
+      Map(
+        "x" -> "0",
+        "y" -> "0",
+        "width" -> s"${w.pixels}",
+        "height" -> s"${h.pixels}",
+        "fill-opacity" -> "0",
+        "stroke" -> color,
+        "stroke-width" -> s"${thickness}",
+      )
+  }
+
   enum Transform:
     case Scale(value: Double)
     case Translate(dx: Double, dy: Double)
