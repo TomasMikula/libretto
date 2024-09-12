@@ -20,11 +20,18 @@ sealed trait SVG {
     s"<$xmlTag"
       + xmlAttributes
         .map { case (k, v) => s"$k=\"$v\"" }
-        .mkString(" ", " ", " ")
+        .mkString(" ", " ", "")
       + content.fold("/>")(str => s">$str</$xmlTag>")
 
   def writeTo(fileName: String): Unit =
-    val fullXmlString = s"""<svg xmlns="http://www.w3.org/2000/svg">\n$xmlString\n</svg>"""
+    val fullXmlString =
+      s"""<svg xmlns="http://www.w3.org/2000/svg">
+         |$SCRIPT
+         |<g id="content">
+         |$xmlString
+         |</g>
+         |</svg>
+         """.stripMargin
     val bytes = fullXmlString.getBytes(StandardCharsets.UTF_8)
     val path = Paths.get(fileName)
     Files.write(path, bytes)
@@ -124,4 +131,43 @@ object SVG {
   def xmlTextEscape(s: String): String =
     s.replace("<", "&lt;")
      .replace("&", "&amp;")
+
+  private[SVG] val SCRIPT =
+    """<script>
+    |// <![CDATA[
+    |
+    |window.onload = function() {
+    |  var svg = document.rootElement
+    |  var content = document.getElementById("content");
+    |
+    |  var scaleTransform = svg.createSVGTransform();
+    |  var translateTransform = svg.createSVGTransform();
+    |  content.transform.baseVal.appendItem(translateTransform);
+    |  content.transform.baseVal.appendItem(scaleTransform);
+    |
+    |  var scale = 1.0;
+    |  var tx = 0;
+    |  var ty = 0;
+    |  svg.onwheel = function(evt) {
+    |    console.log(evt);
+    |    var x = evt.offsetX
+    |    var y = evt.offsetY
+    |
+    |    var ds = Math.pow(1.01, evt.deltaY)
+    |
+    |    console.log("x="+x+" y="+y);
+    |    console.log("old: scale=" + scale + " tx=" + tx + " ty=" + ty);
+    |    tx = x - ds * (x - tx);
+    |    ty = y - ds * (y - ty);
+    |    scale = ds * scale;
+    |    console.log("new: scale=" + scale + " tx=" + tx + " ty=" + ty);
+    |
+    |    scaleTransform.setScale(scale, scale);
+    |    translateTransform.setTranslate(tx, ty);
+    |  }
+    |}
+    |
+    |// ]]>
+    |</script>
+    """.stripMargin
 }
