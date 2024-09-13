@@ -6,11 +6,7 @@ import libretto.lambda.examples.workflow.generic.vis.SVG.*
 import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily.Monospace
 
 object VisualizationToSVG {
-  private val W = 640
-  private val H = 480
-
-  /** Render to a default bounding rectangle. */
-  def renderSVG(g: Visualization): SVG =
+  def renderSVGToFit(g: Visualization, W: Int, H: Int): SVG =
     val r = g.aspectRatio
     val (w, h) = r.scaleToFit(W, H)
 

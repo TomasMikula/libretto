@@ -23,9 +23,9 @@ sealed trait SVG {
         .mkString(" ", " ", "")
       + content.fold("/>")(str => s">$str</$xmlTag>")
 
-  def writeTo(fileName: String): Unit =
+  def writeTo(fileName: String, width: Int, height: Int): Unit =
     val fullXmlString =
-      s"""<svg xmlns="http://www.w3.org/2000/svg">
+      s"""<svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height">
          |$SCRIPT
          |<g id="content">
          |$xmlString
