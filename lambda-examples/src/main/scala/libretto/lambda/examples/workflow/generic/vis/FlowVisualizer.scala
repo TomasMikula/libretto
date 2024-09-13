@@ -14,6 +14,9 @@ object FlowVisualizer {
         Visualization.Seq(visualizeAst(g), visualizeAst(h))
       case FlowAST.Par(g, h) =>
         Visualization.Par(visualizeAst(g), visualizeAst(h))
+      case FlowAST.Either(g, h) =>
+        // XXX: this is not a correct visualization of Either
+        Visualization.Par(visualizeAst(g), visualizeAst(h))
       case other =>
         Visualization.Unimplemented(other.getClass.getSimpleName())
 }

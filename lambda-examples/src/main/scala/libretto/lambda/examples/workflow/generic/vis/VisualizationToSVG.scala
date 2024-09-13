@@ -13,7 +13,7 @@ object VisualizationToSVG {
     renderSVG(g, Px(w), Px(h))
 
   def renderSVG(g: Visualization, width: Px, height: Px): SVG =
-    println(s"rendering into $width x $height")
+    println(s"rendering ${g.getClass.getSimpleName} into $width x $height")
     g match
       case seq: Visualization.Seq =>
         renderSeq(seq, width, height)
@@ -29,7 +29,7 @@ object VisualizationToSVG {
             case height => scaleToFit(textW, textH, width.pixels, height).toDouble
         SVG.Group(
           SVG.RectOutline(width, height, math.min(width.pixels / 20.0, height.pixels / 20.0), "red"),
-          SVG.Transformed(text, SVG.Transform.Scale(scale))
+          text.scale(scale)
         )
 
   private def renderSeq(seq: Visualization.Seq, width: Px, height: Px): SVG =
@@ -41,7 +41,7 @@ object VisualizationToSVG {
           renderSVG(a, width * k, Px(ha)),
           renderSVG(b, width * k, Px(hb)).translate(0.0, ha),
         )
-        if (k == 1) then g else g.scale(k)
+        if (k == 1) then g else g.scale(1.0/k)
   end renderSeq
 
   private def renderPar(par: Visualization.Par, width: Px, height: Px): SVG =
@@ -53,7 +53,7 @@ object VisualizationToSVG {
           renderSVG(a, Px(wa), height * k),
           renderSVG(b, Px(wb), height * k).translate(wa, 0.0),
         )
-        if (k == 1) then g else g.scale(k)
+        if (k == 1) then g else g.scale(1.0/k)
   end renderPar
 
   private def scaleToFit(srcW: Int, srcH: Int, tgtW: Int, tgtH: Int): Double =

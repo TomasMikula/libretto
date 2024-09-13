@@ -5,5 +5,11 @@ import libretto.lambda.examples.workflow.generic.vis.{Visualizable, Visualizatio
 given Visualizable[Action] with {
   extension [A, B](f: Action[A, B])
     override def visualize: Visualization =
-      Visualization.Unimplemented(f.getClass.getSimpleName)
+      val label =
+        Option(f.getClass.getSimpleName)
+          .filter(_.nonEmpty)
+          .orElse(Option(f.toString))
+          .filter(_.nonEmpty)
+          .getOrElse("<unnamed>")
+      Visualization.Unimplemented(label)
 }

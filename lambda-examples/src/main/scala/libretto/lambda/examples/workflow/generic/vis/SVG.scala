@@ -40,8 +40,10 @@ sealed trait SVG {
     transform(Transform.Translate(dx, dy))
 
   def scale(s: Double): SVG =
-    println(s"scaling by $s")
-    transform(Transform.Scale(s))
+    scale(s, s)
+
+  def scale(sx: Double, sy: Double): SVG =
+    transform(Transform.Scale(sx, sy))
 
   def transform(t: Transform): SVG =
     this match
@@ -119,12 +121,12 @@ object SVG {
   }
 
   enum Transform:
-    case Scale(value: Double)
+    case Scale(sx: Double, sy: Double)
     case Translate(dx: Double, dy: Double)
 
     def attributeValue: String =
       this match
-        case Scale(value) => s"scale($value)"
+        case Scale(sx, sy) => s"scale($sx $sy)"
         case Translate(dx, dy) => s"translate($dx $dy)"
 
   enum FontFamily:

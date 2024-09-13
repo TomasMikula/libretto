@@ -12,6 +12,8 @@ sealed trait Visualization {
 
 object Visualization {
   case class Unimplemented(label: String) extends Visualization:
+    require(label.nonEmpty, "Label must not be empty string")
+
     override def length: Length = Length.one
     override def breadth: Breadth = Breadth.one
 
