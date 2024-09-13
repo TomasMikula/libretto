@@ -111,9 +111,10 @@ object SVG {
         "y" -> "0",
         "width" -> s"${w.pixels}",
         "height" -> s"${h.pixels}",
-        "fill-opacity" -> "0",
+        "fill" -> "none",
         "stroke" -> color,
-        "stroke-width" -> s"${thickness}",
+        "stroke-width" -> s"${2 * thickness}", // the outer half will be clipped
+        "clip-path" -> "fill-box",
       )
   }
 
