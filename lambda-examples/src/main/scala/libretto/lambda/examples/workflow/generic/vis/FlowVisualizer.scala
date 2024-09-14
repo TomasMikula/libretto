@@ -17,6 +17,14 @@ object FlowVisualizer {
       case FlowAST.Either(g, h) =>
         // XXX: this is not a correct visualization of Either
         Visualization.Par(visualizeAst(g), visualizeAst(h))
+      case FlowAST.DoWhile(g) =>
+        Visualization.Seq(
+          Visualization.Seq(
+            Visualization.Unimplemented("do"),
+            visualizeAst(g),
+          ),
+          Visualization.Unimplemented("whileLeft"),
+        )
       case other =>
         Visualization.Unimplemented(other.getClass.getSimpleName())
 }
