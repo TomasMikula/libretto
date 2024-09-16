@@ -10,12 +10,12 @@ object Morph {
     override def invert: Morph[X, X] = this
   }
 
-  case class Co[X, Y](f: Y Refines X) extends Morph[X, Y] {
+  case class Co[X, Y](f: X IsRefinedBy Y) extends Morph[X, Y] {
     override def invert: Morph[Y, X] =
       Contra(f)
   }
 
-  case class Contra[X, Y](f: X Refines Y) extends Morph[X, Y] {
+  case class Contra[X, Y](f: Y IsRefinedBy X) extends Morph[X, Y] {
     override def invert: Morph[Y, X] =
       Co(f)
   }

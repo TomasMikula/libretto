@@ -9,7 +9,7 @@ trait Approximation[approximates[_, _]] {
   extension [X, A](x: X `approximates` A)
     infix def unify[Y](y: Y `approximates` A): Exists[[Z] =>> (
       Z `approximates` A,
-      Z Refines X,
-      Z Refines Y,
+      X IsRefinedBy Z,
+      Y IsRefinedBy Z,
     )]
 }

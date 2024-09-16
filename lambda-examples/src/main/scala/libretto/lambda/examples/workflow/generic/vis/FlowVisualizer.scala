@@ -52,7 +52,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                       z1 coarsenBy w1, // could equivalently use `z2 coarsenBy w2`
                       Visualization.Seq(
                         Visualization.par[++](vg, vh),
-                        Morph.par[++](w1.toMorph, w2.toMorph),
+                        Morph.par[++](Morph.Contra(w1), Morph.Contra(w2)),
                         Visualization.Merge(),
                       ),
                     )))
