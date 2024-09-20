@@ -7,5 +7,4 @@ object Wire:
     throw AssertionError("Impossible: Wire =:= Tuple2[X, Y]")
 
 val DefaultDimensions: Dimensions =
-//   RationalDimensions
   SquaredDimensions
