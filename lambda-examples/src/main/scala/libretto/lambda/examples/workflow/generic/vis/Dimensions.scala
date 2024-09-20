@@ -15,14 +15,14 @@ trait Dimensions {
     def one: Breadth
     def max(a: Breadth, b: Breadth): Breadth
     def cram(a: Breadth, b: Breadth): Breadth
-    def divideProportionally(N: Int)(a: Breadth, b: Breadth): IntegralProportions
+    def divideProportionally(N: Int)(as: Breadth*): IntegralProportions
 
   trait LengthModule:
     def zero: Length
     def one: Length
     def max(a: Length, b: Length): Length
     def cram(a: Length, b: Length): Length
-    def divideProportionally(N: Int)(a: Length, b: Length): IntegralProportions
+    def divideProportionally(N: Int)(as: Length*): IntegralProportions
 
   trait AspectRatioModule:
     def apply(l: Length, b: Breadth): AspectRatio
