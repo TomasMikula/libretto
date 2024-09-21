@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.vis
 
 import libretto.lambda.examples.workflow.generic.vis.DefaultDimensions.*
-import libretto.lambda.examples.workflow.generic.vis.SVG.*
+import libretto.lambda.examples.workflow.generic.vis.Px.*
 import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily.Monospace
 import libretto.lambda.examples.workflow.generic.vis.util.{IntegralProportions, leastCommonMultiple}
 
@@ -23,6 +23,8 @@ object VisualizationToSVG {
         renderSeq(seq, edges, height)
       case par: Visualization.Par[bin, x1, x2, y1, y2] =>
         renderPar(par, edges, height)
+      case Visualization.ConnectorsOverlay(_, _) =>
+        renderUnimplemented("/\\/X", edges.pixelBreadth, height)
       case Visualization.Merge() =>
         renderSVG(Visualization.Unimplemented("Merge"), edges, height)
       case Visualization.Unimplemented(label) =>

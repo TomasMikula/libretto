@@ -1,6 +1,7 @@
 package libretto.lambda.examples.workflow.generic.vis
 
 import libretto.lambda.examples.workflow.generic.vis.DefaultDimensions.*
+import IOProportions.EdgeProportions
 
 sealed trait Visualization[X, Y] {
   def ioProportions: IOProportions[X, Y]
@@ -19,6 +20,17 @@ object Visualization {
 
     override def length: Length = Length.one
     override def ioProportions: IOProportions[X, Y] = IOProportions.Unimplemented(Breadth.one)
+
+  case class Blank[X, Y](
+    inEdge: EdgeProportions[X],
+    outEdge: EdgeProportions[Y],
+  ) extends Visualization[X, Y] {
+    override def ioProportions: IOProportions[X, Y] =
+      IOProportions.Separate(inEdge, outEdge)
+
+    override def length: Length =
+      Length.one
+  }
 
   case class Seq[X, Y1, Y2, Z](
     a: Visualization[X, Y1],
@@ -45,6 +57,17 @@ object Visualization {
     override def length: Length =
       Length.max(a.length, b.length)
 
+  case class ConnectorsOverlay[X, Y](
+    back: Visualization[X, Y],
+    front: List[Connector[X, Y]],
+  ) extends Visualization[X, Y] {
+    override def ioProportions: IOProportions[X, Y] =
+      back.ioProportions
+
+    override def length: Length =
+      Length.max(back.length, Length.one)
+  }
+
   case class Merge[∙[_, _], X]() extends Visualization[X ∙ X, X]:
     override def ioProportions: IOProportions[X ∙ X, X] =
       IOProportions.Unimplemented(
@@ -57,6 +80,17 @@ object Visualization {
 
   def par[∙[_, _]]: ParBuilder[∙] =
     ParBuilder[∙]
+
+  def connectors[X, Y](
+    in: EdgeProportions[X],
+    out: EdgeProportions[Y],
+  )(
+    connectors: Connector[X, Y]*
+  ): Visualization[X, Y] =
+    ConnectorsOverlay(
+      Blank(in, out),
+      connectors.toList,
+    )
 
   class ParBuilder[∙[_, _]]:
     def apply[X1, X2, Y1, Y2](

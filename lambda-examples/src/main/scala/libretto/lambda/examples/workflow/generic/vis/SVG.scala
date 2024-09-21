@@ -136,9 +136,6 @@ object SVG {
       this match
         case Monospace => "monospace"
 
-  extension (n: Int)
-    def px: Px = Px(n)
-
   def xmlTextEscape(s: String): String =
     s.replace("<", "&lt;")
      .replace("&", "&amp;")

@@ -15,10 +15,14 @@ sealed trait IOLayout[I, O] {
 object IOLayout {
   sealed trait EdgeLayout[X] {
     def pixelBreadth: Px
+    def *(k: Int): EdgeLayout[X]
   }
 
   object EdgeLayout {
-    case class Unimplemented[X](pixelBreadth: Px) extends EdgeLayout[X]
+    case class Unimplemented[X](pixelBreadth: Px) extends EdgeLayout[X] {
+      override def *(k: Int): EdgeLayout[X] =
+        Unimplemented(pixelBreadth * k)
+    }
 
     case class Par[∙[_, _], X1, X2](
       l1: EdgeLayout[X1],
@@ -26,7 +30,21 @@ object IOLayout {
     ) extends EdgeLayout[X1 ∙ X2] {
       override def pixelBreadth: Px =
         l1.pixelBreadth + l2.pixelBreadth
+
+      override def *(k: Int): EdgeLayout[X1 ∙ X2] =
+        Par(l1 * k, l2 * k)
     }
+
+    case class SingleWire(pre: Px, wire: Px, post: Px) extends EdgeLayout[Wire] {
+      override def pixelBreadth: Px = pre + wire + post
+      override def *(k: Int): EdgeLayout[Wire] = SingleWire(pre * k, wire * k, post * k)
+    }
+
+    def wire(pre: Px, wire: Px, post: Px): EdgeLayout[Wire] =
+      SingleWire(pre, wire, post)
+
+    def pair[X, Y](x: EdgeLayout[X], y: EdgeLayout[Y]): EdgeLayout[(X, Y)] =
+      Par(x, y)
   }
 
   case class Unimplemented[X, Y](pixelBreadth: Px) extends IOLayout[X, Y] {
@@ -39,6 +57,17 @@ object IOLayout {
     override def *(k: Int): IOLayout[X, Y] =
       require(k > 0)
       Unimplemented(pixelBreadth * k)
+  }
+
+  case class Separate[I, O](
+    inEdge: EdgeLayout[I],
+    outEdge: EdgeLayout[O],
+  ) extends IOLayout[I, O] {
+    override def pixelBreadth: Px =
+      Px.max(inEdge.pixelBreadth, outEdge.pixelBreadth)
+
+    override def *(k: Int): IOLayout[I, O] =
+      Separate(inEdge * k, outEdge * k)
   }
 
   case class Par[∙[_, _], I1, I2, O1, O2](

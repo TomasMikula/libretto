@@ -1,8 +1,10 @@
 package libretto.lambda.examples.workflow.generic.vis
 
-import libretto.lambda.examples.workflow.generic.lang.{++, FlowAST, Workflows}
+import libretto.lambda.examples.workflow.generic.lang.{++, **, FlowAST, Workflows}
 import libretto.lambda.util.Exists
 import libretto.lambda.util.Exists.{Some as ∃}
+
+import IOProportions.EdgeProportions
 
 object FlowVisualizer {
   def apply[Op[_, _]](using
@@ -74,6 +76,22 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                     Visualization.Unimplemented("whileLeft"),
                   )
                 )))
+      case _: FlowAST.Swap[op, x, y] =>
+        summon[A =:= (x ** y)]
+        summon[B =:= (y ** x)]
+        val v: (Wire, Wire) Approximates A = Approximates.Initial[x]() pair Approximates.Initial[y]()
+        val w: (Wire, Wire) Approximates B = Approximates.Initial[y]() pair Approximates.Initial[x]()
+        Exists(Exists((
+          v,
+          w,
+          Visualization.connectors(
+            EdgeProportions.unitWire pair EdgeProportions.unitWire,
+            EdgeProportions.unitWire pair EdgeProportions.unitWire,
+          )(
+            Connector.Across(WirePick.fst, WirePick.snd),
+            Connector.Across(WirePick.snd, WirePick.fst),
+          )
+        )))
       case other =>
         Visualizer.unimplemented(other.getClass.getSimpleName())
 }
