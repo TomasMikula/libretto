@@ -1,9 +1,9 @@
 package libretto.lambda.examples.workflow.generic.vis
 
 import libretto.lambda.examples.workflow.generic.vis.DefaultDimensions.*
-import libretto.lambda.examples.workflow.generic.vis.Dimensions.*
 import libretto.lambda.examples.workflow.generic.vis.SVG.*
 import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily.Monospace
+import libretto.lambda.examples.workflow.generic.vis.util.{IntegralProportions, leastCommonMultiple}
 
 import IOLayout.EdgeLayout
 
@@ -86,7 +86,7 @@ object VisualizationToSVG {
             val List(wa, wb) = sizes
             val (i, la) = a.ioProportions.layout(Px(wa))
             val (j, lb) = b.ioProportions.layout(Px(wb))
-            val (i2, j2, k2) = leastCommonMultiple(i, j)
+            val (_, _, k2) = leastCommonMultiple(i, j)
             val g = SVG.Group(
               renderSVG(a, la, height * k * k2),
               renderSVG(b, lb, height * k * k2).translate(la.pixelBreadth.pixels, 0.0),
@@ -107,33 +107,4 @@ object VisualizationToSVG {
     val scaleW = tgtW.toDouble / srcW
     val scaleH = tgtH.toDouble / srcH
     math.min(scaleW, scaleH)
-
-  private def leastCommonMultiple(a: Int, b: Int): (Int, Int, Int) =
-    require(a > 0)
-    require(b > 0)
-    if (a == b)
-      println(s"leastCommonMultiple($a, $b) = (1, 1, $a)")
-      (1, 1, a)
-    else if (a > b)
-      println(s"leastCommonMultiple($a, $b) = ${leastCommonMultiple(a, 1, a, b, 1, b)}")
-      leastCommonMultiple(a, 1, a, b, 1, b)
-    else
-      val (j, i, k) = leastCommonMultiple(b, 1, b, a, 1, a)
-      assert(j > 0)
-      assert(i > 0)
-      assert(k > 0)
-      println(s"leastCommonMultiple($a, $b) = ($i, $j, $k)")
-      (i, j, k)
-
-  private def leastCommonMultiple(a: Int, i: Int, ai: Int, b: Int, j: Int, bj: Int): (Int, Int, Int) =
-    require(a > b)
-    require(ai > bj)
-    val k = (ai - bj) / b
-    val bj1 = (j + k) * b
-    if (bj1 == ai)
-      (i, j+k, ai)
-    else
-      assert(bj1 < ai)
-      assert(bj1 + b > ai)
-      leastCommonMultiple(a, i+1, ai + a, b, j+k, bj1)
 }

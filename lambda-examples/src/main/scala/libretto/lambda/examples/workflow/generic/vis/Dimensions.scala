@@ -1,8 +1,8 @@
 package libretto.lambda.examples.workflow.generic.vis
 
-trait Dimensions {
-  import Dimensions.*
+import libretto.lambda.examples.workflow.generic.vis.util.IntegralProportions
 
+trait Dimensions {
   type Breadth
   type Length
   type AspectRatio
@@ -29,14 +29,4 @@ trait Dimensions {
 
   extension (r: AspectRatio)
     def scaleToFit(maxBreadth: Int, maxLength: Int): (Int, Int)
-}
-
-object Dimensions {
-  case class IntegralProportions(
-    scalingFactor: Int,
-    sizes: List[Int],
-  ) {
-    require(scalingFactor > 0)
-    require(sizes.forall(_ >= 0))
-  }
 }
