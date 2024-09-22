@@ -54,8 +54,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                       z1 coarsenBy w1, // could equivalently use `z2 coarsenBy w2`
                       Visualization.Seq(
                         Visualization.par[++](vg, vh),
-                        Morph.par[++](Morph.Contra(w1), Morph.Contra(w2)),
-                        Visualization.Merge(),
+                        Morph.par[++](Morph.Unrefine(w1), Morph.Unrefine(w2)),
+                        Visualization.merge2(EdgeProportions.default(w1.inDesc)),
                       ),
                     )))
       case FlowAST.DoWhile(g) =>

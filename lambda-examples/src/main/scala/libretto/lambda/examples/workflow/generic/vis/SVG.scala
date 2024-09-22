@@ -120,6 +120,34 @@ object SVG {
       )
   }
 
+  case class Path(cmds: Path.Command*) extends SVG.Proper {
+    override def xmlTag: String = "path"
+
+    override def xmlContent: String | List[SVG] = Nil
+
+    override def xmlAttributes: Map[String, String] =
+      Map(
+        "d" -> cmds.map(_.stringValue).mkString(" "),
+        "fill" -> "black",
+        "stroke" -> "none",
+      )
+  }
+
+  object Path {
+    enum Command:
+      case MoveTo(x: Px, y: Px)
+      case LineTo(x: Px, y: Px)
+      case CurveTo(c1x: Px | Double, c1y: Px | Double, c2x: Px | Double, c2y: Px | Double, tgtX: Px, tgtY: Px)
+      case Close
+
+      def stringValue: String =
+        this match
+          case MoveTo(x, y) => s"M $x $y"
+          case LineTo(x, y) => s"L $x $y"
+          case CurveTo(c1x, c1y, c2x, c2y, tgtX, tgtY) => s"C $c1x $c1y, $c2x $c2y, $tgtX $tgtY"
+          case Close => "Z"
+  }
+
   enum Transform:
     case Scale(sx: Double, sy: Double)
     case Translate(dx: Double, dy: Double)

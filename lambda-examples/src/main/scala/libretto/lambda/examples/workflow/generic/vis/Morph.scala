@@ -14,18 +14,18 @@ object Morph {
     override def length: Length = Length.zero
   }
 
-  case class Co[X, Y](f: X IsRefinedBy Y) extends Morph[X, Y] {
+  case class Refine[X, Y](f: X IsRefinedBy Y) extends Morph[X, Y] {
     override def invert: Morph[Y, X] =
-      Contra(f)
+      Unrefine(f)
 
     override def length: Length =
       // TODO
       Length.one
   }
 
-  case class Contra[X, Y](f: Y IsRefinedBy X) extends Morph[X, Y] {
+  case class Unrefine[X, Y](f: Y IsRefinedBy X) extends Morph[X, Y] {
     override def invert: Morph[Y, X] =
-      Co(f)
+      Refine(f)
 
     override def length: Length =
       // TODO

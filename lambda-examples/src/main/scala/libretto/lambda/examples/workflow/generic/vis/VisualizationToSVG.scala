@@ -23,10 +23,14 @@ object VisualizationToSVG {
         renderSeq(seq, edges, height)
       case par: Visualization.Par[bin, x1, x2, y1, y2] =>
         renderPar(par, edges, height)
-      case Visualization.ConnectorsOverlay(_, _) =>
-        renderUnimplemented("/\\/X", edges.pixelBreadth, height)
-      case Visualization.Merge() =>
-        renderSVG(Visualization.Unimplemented("Merge"), edges, height)
+      case Visualization.ConnectorsOverlay(base, connectors) =>
+        val conns = renderConnectors(connectors, edges, height)
+        base match
+          case Left(vis) =>
+            val v = renderSVG(vis, edges, height)
+            SVG.Group(v, conns)
+          case Right(props) =>
+            conns
       case Visualization.Unimplemented(label) =>
         renderUnimplemented(label, edges.pixelBreadth, height)
 
@@ -97,6 +101,40 @@ object VisualizationToSVG {
       case other =>
         throw IllegalArgumentException(s"To render a Par, IOLayout.Par must be used. Was: $other")
   end renderPar
+
+  private def renderConnectors[X, Y](
+    connectors: List[Connector[X, Y]],
+    boundary: IOLayout[X, Y],
+    height: Px,
+  ): SVG =
+    val (inEdge, outEdge) = boundary.separate
+    SVG.Group(
+      connectors.map(renderConnector(_, inEdge, outEdge, height)),
+    )
+
+  private def renderConnector[I, O](
+    connector: Connector[I, O],
+    inEdge: EdgeLayout[I],
+    outEdge: EdgeLayout[O],
+    height: Px,
+  ): SVG = {
+    import SVG.Path.Command.*
+
+    connector match
+      case Connector.Across(src, tgt) =>
+        val (xi, wi) = inEdge.coordsOf(src)
+        val (xo, wo) = outEdge.coordsOf(tgt)
+        val xi2 = xi + wi
+        val xo2 = xo + wo
+        val ym: Double = height.pixels / 2.0
+        SVG.Path(
+          MoveTo(xi, 0.px),
+          CurveTo(xi, ym, xo, ym, xo, height),
+          LineTo(xo2, height),
+          CurveTo(xo2, ym, xi2, ym, xi2, 0.px),
+          Close
+        )
+  }
 
   private def renderMorph[X, Y](m: Morph[X, Y], layoutX: EdgeLayout[X], layoutY: EdgeLayout[Y], height: Px): SVG =
     renderUnimplemented(s"Morph.${m.getClass.getSimpleName}", layoutX.pixelBreadth, height)

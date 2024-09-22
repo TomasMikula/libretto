@@ -4,6 +4,8 @@ import libretto.lambda.util.Exists
 import libretto.lambda.util.Exists.{Some as ∃}
 
 infix sealed trait IsRefinedBy[X, Y] {
+  def inDesc: EdgeDesc[X]
+
   infix def pair[V, W](that: V IsRefinedBy W): (X, V) IsRefinedBy (Y, W) =
     IsRefinedBy.Pair(this, that)
 
@@ -20,36 +22,44 @@ infix sealed trait IsRefinedBy[X, Y] {
 }
 
 object IsRefinedBy {
-  case class Id[X]() extends IsRefinedBy[X, X] {
+  case class Id[X](desc: EdgeDesc[X]) extends IsRefinedBy[X, X] {
+    override def inDesc: EdgeDesc[X] =
+      desc
+
     override def greatestCommonCoarsening[W](
       that: W IsRefinedBy X,
     ): Exists[[V] =>> (V IsRefinedBy X, V IsRefinedBy W)] =
-      Exists((that, Id[W]()))
+      Exists((that, Id[W](that.inDesc)))
 
     override def morph[W](that: W IsRefinedBy X): Morph[X, W] =
-      Morph.Contra(that)
+      Morph.Unrefine(that)
   }
 
   case class Terminal[X]() extends (Wire IsRefinedBy X) {
+    override def inDesc: EdgeDesc[Wire] = EdgeDesc.SingleWire
+
     override def greatestCommonCoarsening[W](
       that: W IsRefinedBy X,
     ): Exists[[V] =>> (V IsRefinedBy Wire, V IsRefinedBy W)] =
-      Exists((Id[Wire](), Terminal[W]()))
+      Exists((id[Wire], Terminal[W]()))
 
     override def morph[W](that: W IsRefinedBy X): Morph[Wire, W] =
-      Morph.Co(Terminal[W]())
+      Morph.Refine(Terminal[W]())
   }
 
   case class Pair[X1, X2, Y1, Y2](
     f1: X1 IsRefinedBy Y1,
     f2: X2 IsRefinedBy Y2,
   ) extends IsRefinedBy[(X1, X2), (Y1, Y2)] {
+    override def inDesc: EdgeDesc[(X1, X2)] =
+      EdgeDesc.binary[Tuple2, X1, X2](f1.inDesc, f2.inDesc)
+
     override def greatestCommonCoarsening[W](
       that: W IsRefinedBy (Y1, Y2),
     ): Exists[[V] =>> (V IsRefinedBy (X1, X2), V IsRefinedBy W)] =
       that match
-        case Id() => Exists((Id(), this))
-        case Terminal() => Exists((Terminal(), Id()))
+        case Id(_) => Exists((Id(inDesc), this))
+        case Terminal() => Exists((Terminal(), id[Wire]))
         case Pair(g1, g2) => greatestCommonCoarseningPair(g1, g2)
 
     private def greatestCommonCoarseningPair[W1, W2](
@@ -64,8 +74,8 @@ object IsRefinedBy {
       that: W IsRefinedBy (Y1, Y2),
     ): Morph[(X1, X2), W] =
       that match
-        case Id() => Morph.Co(this)
-        case Terminal() => Morph.Contra(Terminal())
+        case Id(_) => Morph.Refine(this)
+        case Terminal() => Morph.Unrefine(Terminal())
         case Pair(g1, g2) => morphToPair(g1, g2)
 
     private def morphToPair[W1, W2](
@@ -75,8 +85,8 @@ object IsRefinedBy {
       Morph.par(f1 morph g1, f2 morph g2)
   }
 
-  def id[X]: (X IsRefinedBy X) =
-    Id()
+  def id[X](using EdgeDesc[X]): (X IsRefinedBy X) =
+    Id[X](summon)
 
   def anythingRefinesWire[X]: (Wire IsRefinedBy X) =
     Terminal()

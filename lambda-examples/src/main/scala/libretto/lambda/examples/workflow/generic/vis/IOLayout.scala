@@ -16,12 +16,20 @@ object IOLayout {
   sealed trait EdgeLayout[X] {
     def pixelBreadth: Px
     def *(k: Int): EdgeLayout[X]
+
+    /** Returns the offset and breadth of the given wire on this edge. */
+    def coordsOf(wire: WirePick[X]): (Px, Px)
   }
 
   object EdgeLayout {
     case class Unimplemented[X](pixelBreadth: Px) extends EdgeLayout[X] {
       override def *(k: Int): EdgeLayout[X] =
         Unimplemented(pixelBreadth * k)
+
+      override def coordsOf(wire: WirePick[X]): (Px, Px) = (
+        Px(pixelBreadth.pixels     / 3),
+        Px(pixelBreadth.pixels * 2 / 3),
+      )
     }
 
     case class Par[∙[_, _], X1, X2](
@@ -33,11 +41,34 @@ object IOLayout {
 
       override def *(k: Int): EdgeLayout[X1 ∙ X2] =
         Par(l1 * k, l2 * k)
+
+      override def coordsOf(wire: WirePick[X1 ∙ X2]): (Px, Px) =
+        wire.switch(
+          caseId = (ev: (X1 ∙ X2) =:= Wire) ?=> ???,
+          caseInl = [∘[_, _], A, B] => (ev: (X1 ∙ X2) =:= (A ∘ B)) ?=> (fst: WirePick[A]) => {
+            l1
+              .asInstanceOf[EdgeLayout[A]] // XXX: unsound without knowing that ∙ and ∘ are class types
+              .coordsOf(fst)
+          },
+          caseInr = [∘[_, _], A, B] => (ev: (X1 ∙ X2) =:= (A ∘ B)) ?=> (snd: WirePick[B]) => {
+            val (offset, breadth) = l2
+              .asInstanceOf[EdgeLayout[B]] // XXX: unsound without knowing that ∙ and ∘ are class types
+              .coordsOf(snd)
+            (offset + l1.pixelBreadth, breadth)
+          },
+        )
     }
 
     case class SingleWire(pre: Px, wire: Px, post: Px) extends EdgeLayout[Wire] {
       override def pixelBreadth: Px = pre + wire + post
       override def *(k: Int): EdgeLayout[Wire] = SingleWire(pre * k, wire * k, post * k)
+
+      override def coordsOf(pick: WirePick[Wire]): (Px, Px) =
+        pick.switch(
+          caseId = (pre, wire),
+          caseInl = [∘[_, _], A, B] => (ev: Wire =:= (A ∘ B)) ?=> _ => Wire.isNotBinary[∘, A, B],
+          caseInr = [∘[_, _], A, B] => (ev: Wire =:= (A ∘ B)) ?=> _ => Wire.isNotBinary[∘, A, B],
+        )
     }
 
     def wire(pre: Px, wire: Px, post: Px): EdgeLayout[Wire] =

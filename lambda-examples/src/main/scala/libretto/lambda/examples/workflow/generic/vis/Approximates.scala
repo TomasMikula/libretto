@@ -7,6 +7,8 @@ import libretto.lambda.util.Exists.{Some as ∃}
 infix sealed trait Approximates[X, A] {
   import Approximates.*
 
+  def inDesc: EdgeDesc[X]
+
   infix def pair[Y, B](that: Approximates[Y, B]): Approximates[(X, Y), A ** B] =
     Pair(this, that)
 
@@ -16,7 +18,7 @@ infix sealed trait Approximates[X, A] {
   infix def coarsenBy[W](that: W IsRefinedBy X): W Approximates A =
     import IsRefinedBy as R
     that match
-      case R.Id() => this
+      case R.Id(_) => this
       case R.Terminal() => Initial()
       case R.Pair(g1, g2) => coarsenByPair(g1, g2)
 
@@ -32,9 +34,11 @@ infix sealed trait Approximates[X, A] {
 
 object Approximates {
   case class Initial[A]() extends Approximates[Wire, A] {
+    override def inDesc: EdgeDesc[Wire] =
+      EdgeDesc.SingleWire
 
     override def leastCommonRefinement[Y](that: Y Approximates A): Exists[[Z] =>> (Z Approximates A, Wire IsRefinedBy Z, Y IsRefinedBy Z)] =
-      Exists((that, IsRefinedBy.anythingRefinesWire[Y], IsRefinedBy.id[Y]))
+      Exists((that, IsRefinedBy.anythingRefinesWire[Y], IsRefinedBy.Id[Y](that.inDesc)))
 
     override protected def coarsenByPair[W1, W2, X1, X2](
       g1: W1 IsRefinedBy X1,
@@ -49,6 +53,9 @@ object Approximates {
     f1: X1 Approximates A1,
     f2: X2 Approximates A2,
   ) extends Approximates[(X1, X2), A1 ** A2] {
+    override def inDesc: EdgeDesc[(X1, X2)] =
+      EdgeDesc.binary(f1.inDesc, f2.inDesc)
+
     override def leastCommonRefinement[Y](
       that: Y Approximates (A1 ** A2),
     ): Exists[[Z] =>> (
@@ -59,7 +66,7 @@ object Approximates {
       that match
         case Initial() =>
           summon[Y =:= Wire]
-          Exists((this, IsRefinedBy.id[(X1, X2)], IsRefinedBy.anythingRefinesWire[(X1, X2)]))
+          Exists((this, IsRefinedBy.Id[(X1, X2)](inDesc), IsRefinedBy.anythingRefinesWire[(X1, X2)]))
         case Pair(f1, f2) =>
           leastCommonRefinementPair(f1, f2)
 
@@ -88,6 +95,9 @@ object Approximates {
     f1: X1 Approximates A1,
     f2: X2 Approximates A2,
   ) extends Approximates[X1 ∙ X2, A1 ∙ A2] {
+    override def inDesc: EdgeDesc[X1 ∙ X2] =
+      EdgeDesc.binary(f1.inDesc, f2.inDesc)
+
     override def leastCommonRefinement[Y](
       that: Y Approximates A1 ∙ A2,
     ): Exists[[Z] =>> (
@@ -110,7 +120,7 @@ object Approximates {
       Initial[A]()
 
     extension [X, A](x: X Approximates A)
-      override def unify[Y](
+      override infix def unify[Y](
         y: Y Approximates A,
       ): Exists[[Z] =>> (Z Approximates A, X IsRefinedBy Z, Y IsRefinedBy Z)] =
         x leastCommonRefinement y
@@ -124,6 +134,6 @@ object Approximates {
   )]] =
     f match
       case Initial() => Exists(Exists((Initial[A](), Initial[B](), IsRefinedBy.Terminal())))
-      case Pairwise(f1, f2) => Exists(Exists((f1, f2, IsRefinedBy.id)))
+      case Pairwise(f1, f2) => Exists(Exists((f1, f2, IsRefinedBy.Id(f.inDesc))))
 
 }

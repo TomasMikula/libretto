@@ -5,11 +5,14 @@ import scala.annotation.tailrec
 import DefaultDimensions.Breadth
 import IOLayout.EdgeLayout
 import Px.px
-import util.leastCommonMultiple
-import libretto.lambda.examples.workflow.generic.vis.util.IntegralProportions
+import util.{IntegralProportions, leastCommonMultiple}
 
 sealed trait IOProportions[I, O] {
+  import IOProportions.*
+
   def totalBreadth: Breadth
+  def inEdge: EdgeProportions[I]
+  def outEdge: EdgeProportions[O]
   def layout(availableBreadth: Px): (Int, IOLayout[I, O])
   def layoutFw(inLayout: EdgeLayout[I]): (Int, IOLayout[I, O])
   def layoutBw(outLayout: EdgeLayout[O]): (Int, IOLayout[I, O])
@@ -34,6 +37,11 @@ object IOProportions {
   }
 
   object EdgeProportions {
+    case class Unimplemented[X](totalBreadth: Breadth) extends EdgeProportions[X] {
+      override def layout(availableBreadth: Px): (Int, EdgeLayout[X]) =
+        (1, EdgeLayout.Unimplemented(availableBreadth))
+    }
+
     case object UnitWire extends EdgeProportions[Wire] {
       override def totalBreadth: Breadth = Breadth.one
 
@@ -76,11 +84,36 @@ object IOProportions {
       }
     }
 
+    case class Binary[∙[_, _], X1, X2](x1: EdgeProportions[X1], x2: EdgeProportions[X2]) extends EdgeProportions[X1 ∙ X2] {
+      override def totalBreadth: Breadth =
+        Breadth.cram(x1.totalBreadth, x2.totalBreadth)
+
+      override def layout(availableBreadth: Px): (Int, EdgeLayout[X1 ∙ X2]) = {
+        Breadth.divideProportionally(availableBreadth.pixels)(x1.totalBreadth, x2.totalBreadth) match
+          case IntegralProportions(i, List(w1, w2)) =>
+            val (j1, layout1) = x1.layout(w1.px)
+            val (j2, layout2) = x2.layout(w2.px)
+            val (k1, k2, m) = leastCommonMultiple(j1, j2)
+            (i * m, EdgeLayout.Par(layout1 * k1, layout2 * k2))
+      }
+    }
+
     def unitWire: EdgeProportions[Wire] =
       UnitWire
+
+    def default[X](x: EdgeDesc[X]): EdgeProportions[X] =
+      x match
+        case EdgeDesc.SingleWire => UnitWire
+
   }
 
   case class Unimplemented[I, O](totalBreadth: Breadth) extends IOProportions[I, O] {
+    override def inEdge: EdgeProportions[I] =
+      EdgeProportions.Unimplemented(totalBreadth)
+
+    override def outEdge: EdgeProportions[O] =
+      EdgeProportions.Unimplemented(totalBreadth)
+
     override def layout(availableBreadth: Px): (Int, IOLayout[I, O]) =
       (1, IOLayout.Unimplemented(availableBreadth))
 
@@ -92,24 +125,65 @@ object IOProportions {
   }
 
   case class Separate[I, O](
-    in: EdgeProportions[I],
-    out: EdgeProportions[O],
+    inEdge: EdgeProportions[I],
+    outEdge: EdgeProportions[O],
   ) extends IOProportions[I, O] {
     override def totalBreadth: Breadth =
-      Breadth.max(in.totalBreadth, out.totalBreadth)
+      Breadth.max(inEdge.totalBreadth, outEdge.totalBreadth)
 
     override def layout(availableBreadth: Px): (Int, IOLayout[I, O]) =
-      val (ki, iLayout) = in.layout(availableBreadth)
-      val (ko, oLayout) = out.layout(availableBreadth)
+      val (ki, iLayout) = inEdge.layout(availableBreadth)
+      val (ko, oLayout) = outEdge.layout(availableBreadth)
       val (li, lo, m) = leastCommonMultiple(ki, ko)
       (m, IOLayout.Separate(iLayout * li, oLayout * lo))
 
     override def layoutFw(iLayout: EdgeLayout[I]): (Int, IOLayout[I, O]) =
-      val (ko, oLayout) = out.layout(iLayout.pixelBreadth)
+      val (ko, oLayout) = outEdge.layout(iLayout.pixelBreadth)
       (ko, IOLayout.Separate(iLayout * ko, oLayout))
 
     override def layoutBw(oLayout: EdgeLayout[O]): (Int, IOLayout[I, O]) =
-      val (ki, iLayout) = in.layout(oLayout.pixelBreadth)
+      val (ki, iLayout) = inEdge.layout(oLayout.pixelBreadth)
       (ki, IOLayout.Separate(iLayout, oLayout * ki))
+  }
+
+  case class Par[∙[_, _], X1, X2, Y1, Y2](
+    p1: IOProportions[X1, Y1],
+    p2: IOProportions[X2, Y2],
+  ) extends IOProportions[X1 ∙ X2, Y1 ∙ Y2] {
+    override def totalBreadth: Breadth =
+      Breadth.cram(p1.totalBreadth, p2.totalBreadth)
+
+    override def inEdge: EdgeProportions[X1 ∙ X2] =
+      EdgeProportions.Binary(p1.inEdge, p2.inEdge)
+
+    override def outEdge: EdgeProportions[Y1 ∙ Y2] =
+      EdgeProportions.Binary(p1.outEdge, p2.outEdge)
+
+    override def layout(availableBreadth: Px): (Int, IOLayout[X1 ∙ X2, Y1 ∙ Y2]) = ???
+
+    override def layoutFw(inLayout: EdgeLayout[X1 ∙ X2]): (Int, IOLayout[X1 ∙ X2, Y1 ∙ Y2]) =
+      inLayout match
+        case EdgeLayout.Par(l1, l2) =>
+          val (i1, layout1) = p1.layoutFw(l1)
+          val (i2, layout2) = p2.layoutFw(l2)
+          val (j1, j2, m) = leastCommonMultiple(i1, i2)
+          (m, IOLayout.Par(layout1 * j1, layout2 * j2))
+        case EdgeLayout.SingleWire(pre, wire, post) =>
+          throw AssertionError(s"Wire =:= (X1 ∙ X2) is impossible (unless ∙ is not a class type)")
+        case EdgeLayout.Unimplemented(pixelBreadth) =>
+          (1, IOLayout.Unimplemented(pixelBreadth))
+
+    override def layoutBw(outLayout: EdgeLayout[Y1 ∙ Y2]): (Int, IOLayout[X1 ∙ X2, Y1 ∙ Y2]) =
+      outLayout match
+        case EdgeLayout.Par(l1, l2) =>
+          val (i1, layout1) = p1.layoutBw(l1)
+          val (i2, layout2) = p2.layoutBw(l2)
+          val (j1, j2, m) = leastCommonMultiple(i1, i2)
+          (m, IOLayout.Par(layout1 * j1, layout2 * j2))
+        case EdgeLayout.SingleWire(pre, wire, post) =>
+          throw AssertionError(s"Wire =:= (Y1 ∙ Y2) is impossible (unless ∙ is not a class type)")
+        case EdgeLayout.Unimplemented(pixelBreadth) =>
+          (1, IOLayout.Unimplemented(pixelBreadth))
+
   }
 }

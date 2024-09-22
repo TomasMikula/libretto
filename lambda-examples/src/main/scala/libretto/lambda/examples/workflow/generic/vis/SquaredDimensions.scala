@@ -27,9 +27,9 @@ private[vis] object SquaredDimensions extends Dimensions {
     override def max(a: Breadth, b: Breadth): Breadth =
       if a.squaredValue >= b.squaredValue then a else b
 
-    override def cram(a: Breadth, b: Breadth): Breadth =
-      // cram(a, b) = sqrt(a^2 + b^2)
-      Breadth(a.squaredValue + b.squaredValue)
+    override def cram(a: Breadth, as: Breadth*): Breadth =
+      // cram(a, b, ...) = sqrt(a^2 + b^2 + ...)
+      Breadth(a.squaredValue + as.iterator.map(_.squaredValue).sum)
 
     override def divideProportionally(N: Int)(as: Breadth*): IntegralProportions =
       IntegralProportions.divideProportionally(N)(as.map(_.doubleValue).toArray)
@@ -40,9 +40,9 @@ private[vis] object SquaredDimensions extends Dimensions {
 
     override def one: Length = Length(1L)
 
-    override def cram(a: Length, b: Length): Length =
-      // cram(a, b) = sqrt(a^2 + b^2)
-      Length(a.squaredValue + b.squaredValue)
+    override def cram(as: Length*): Length =
+      // cram(a, b, ...) = sqrt(a^2 + b^2 + ...)
+      Length(as.iterator.map(_.squaredValue).sum)
 
     override def divideProportionally(N: Int)(as: Length*): IntegralProportions =
       IntegralProportions.divideProportionally(N)(as.map(_.doubleValue).toArray)
