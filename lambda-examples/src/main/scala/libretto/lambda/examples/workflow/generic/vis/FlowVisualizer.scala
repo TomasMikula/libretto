@@ -79,8 +79,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
       case _: FlowAST.Swap[op, x, y] =>
         summon[A =:= (x ** y)]
         summon[B =:= (y ** x)]
-        val v: (Wire, Wire) Approximates A = Approximates.Initial[x]() pair Approximates.Initial[y]()
-        val w: (Wire, Wire) Approximates B = Approximates.Initial[y]() pair Approximates.Initial[x]()
+        val v: (Wire ** Wire) Approximates A = Approximates.Initial[x]() pair Approximates.Initial[y]()
+        val w: (Wire ** Wire) Approximates B = Approximates.Initial[y]() pair Approximates.Initial[x]()
         Exists(Exists((
           v,
           w,
@@ -88,8 +88,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
             EdgeProportions.unitWire pair EdgeProportions.unitWire,
             EdgeProportions.unitWire pair EdgeProportions.unitWire,
           )(
-            Connector.Across(WirePick.fst, WirePick.snd),
-            Connector.Across(WirePick.snd, WirePick.fst),
+            Connector.Across(WirePick.pickL, WirePick.pickR),
+            Connector.Across(WirePick.pickR, WirePick.pickL),
           )
         )))
       case other =>

@@ -101,8 +101,11 @@ object Visualization {
 
   private def wiresOf[X](x: EdgeProportions[X]): List[WirePick[X]] =
     x match
-      case EdgeProportions.UnitWire => WirePick.Id :: Nil
-      case EdgeProportions.Pair(x1, x2) => wiresOf(x1).map(_.inFst) ++ wiresOf(x2).map(_.inSnd)
-      case EdgeProportions.Binary(_, _) => ???
+      case EdgeProportions.UnitWire =>
+        WirePick.Id :: Nil
+      case x: EdgeProportions.Binary[op, x1, x2] =>
+        wiresOf(x.x1).map(_.inl[op, x2]) ++ wiresOf(x.x2).map(_.inr[op, x1])
+      case EdgeProportions.Unimplemented(_) =>
+        ???
 }
 

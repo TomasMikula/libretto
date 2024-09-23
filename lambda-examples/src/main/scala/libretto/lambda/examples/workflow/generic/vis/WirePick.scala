@@ -3,8 +3,10 @@ package libretto.lambda.examples.workflow.generic.vis
 sealed trait WirePick[X] {
   import WirePick.*
 
-  def inFst[B]: WirePick[(X, B)] = Inl(this)
-  def inSnd[A]: WirePick[(A, X)] = Inr(this)
+  def inl[∙[_, _], B]: WirePick[X ∙ B] = Inl(this)
+  def inr[∙[_, _], A]: WirePick[A ∙ X] = Inr(this)
+  def inFst[B]: WirePick[(X, B)] = inl[Tuple2, B]
+  def inSnd[A]: WirePick[(A, X)] = inr[Tuple2, A]
 
   def switch[R](
     caseId: (X =:= Wire) ?=> R,
@@ -41,6 +43,6 @@ object WirePick {
       caseInr[∙, A, B](r)
   }
 
-  def fst[B]: WirePick[(Wire, B)] = Inl(Id)
-  def snd[A]: WirePick[(A, Wire)] = Inr(Id)
+  def pickL[∙[_, _], B]: WirePick[Wire ∙ B] = Inl(Id)
+  def pickR[∙[_, _], A]: WirePick[A ∙ Wire] = Inr(Id)
 }

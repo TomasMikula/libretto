@@ -32,8 +32,8 @@ object IOProportions {
     def totalBreadth: Breadth
     def layout(availableBreadth: Px): (Int, EdgeLayout[X])
 
-    infix def pair[Y](that: EdgeProportions[Y]): EdgeProportions[(X, Y)] =
-      EdgeProportions.Pair(this, that)
+    infix def pair[∙[_, _], Y](that: EdgeProportions[Y]): EdgeProportions[X ∙ Y] =
+      EdgeProportions.Binary(this, that)
   }
 
   object EdgeProportions {
@@ -67,20 +67,6 @@ object IOProportions {
             place(scaleAcc * 2, scaledAvailableBreadth * 2, wireWidth * 2)
 
         go(1, availableBreadth)
-      }
-    }
-
-    case class Pair[X1, X2](x1: EdgeProportions[X1], x2: EdgeProportions[X2]) extends EdgeProportions[(X1, X2)] {
-      override def totalBreadth: Breadth =
-        Breadth.cram(x1.totalBreadth, x2.totalBreadth)
-
-      override def layout(availableBreadth: Px): (Int, EdgeLayout[(X1, X2)]) = {
-        Breadth.divideProportionally(availableBreadth.pixels)(x1.totalBreadth, x2.totalBreadth) match
-          case IntegralProportions(i, List(w1, w2)) =>
-            val (j1, layout1) = x1.layout(w1.px)
-            val (j2, layout2) = x2.layout(w2.px)
-            val (k1, k2, m) = leastCommonMultiple(j1, j2)
-            (i * m, EdgeLayout.pair(layout1 * k1, layout2 * k2))
       }
     }
 

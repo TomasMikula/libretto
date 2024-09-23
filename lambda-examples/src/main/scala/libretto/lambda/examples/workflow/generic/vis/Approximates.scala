@@ -9,8 +9,8 @@ infix sealed trait Approximates[X, A] {
 
   def inDesc: EdgeDesc[X]
 
-  infix def pair[Y, B](that: Approximates[Y, B]): Approximates[(X, Y), A ** B] =
-    Pair(this, that)
+  infix def pair[Y, B](that: Approximates[Y, B]): Approximates[X ** Y, A ** B] =
+    Pairwise(this, that)
 
   def ++[Y, B](that: Approximates[Y, B]): Approximates[X ++ Y, A ++ B] =
     Pairwise(this, that)
@@ -20,14 +20,14 @@ infix sealed trait Approximates[X, A] {
     that match
       case R.Id(_) => this
       case R.Terminal() => Initial()
-      case R.Pair(g1, g2) => coarsenByPair(g1, g2)
+      case p: R.Pairwise[op, w1, w2, x1, x2] => coarsenByPair[op, w1, w2, x1, x2](p.f1, p.f2)
 
-  protected def coarsenByPair[W1, W2, X1, X2](
+  protected def coarsenByPair[∙[_, _], W1, W2, X1, X2](
     g1: W1 IsRefinedBy X1,
     g2: W2 IsRefinedBy X2,
   )(using
-    X =:= (X1, X2),
-  ): (W1, W2) Approximates A
+    X =:= (X1 ∙ X2),
+  ): (W1 ∙ W2) Approximates A
 
   infix def leastCommonRefinement[Y](that: Y Approximates A): Exists[[Z] =>> (Z Approximates A, X IsRefinedBy Z, Y IsRefinedBy Z)]
 }
@@ -40,54 +40,12 @@ object Approximates {
     override def leastCommonRefinement[Y](that: Y Approximates A): Exists[[Z] =>> (Z Approximates A, Wire IsRefinedBy Z, Y IsRefinedBy Z)] =
       Exists((that, IsRefinedBy.anythingRefinesWire[Y], IsRefinedBy.Id[Y](that.inDesc)))
 
-    override protected def coarsenByPair[W1, W2, X1, X2](
+    override protected def coarsenByPair[∙[_, _], W1, W2, X1, X2](
       g1: W1 IsRefinedBy X1,
       g2: W2 IsRefinedBy X2,
     )(using
-      ev: Wire =:= (X1, X2),
-    ): (W1, W2) Approximates A =
-      ???
-  }
-
-  case class Pair[X1, X2, A1, A2](
-    f1: X1 Approximates A1,
-    f2: X2 Approximates A2,
-  ) extends Approximates[(X1, X2), A1 ** A2] {
-    override def inDesc: EdgeDesc[(X1, X2)] =
-      EdgeDesc.binary(f1.inDesc, f2.inDesc)
-
-    override def leastCommonRefinement[Y](
-      that: Y Approximates (A1 ** A2),
-    ): Exists[[Z] =>> (
-      Z Approximates A1 ** A2,
-      (X1, X2) IsRefinedBy Z,
-      Y IsRefinedBy Z,
-    )] =
-      that match
-        case Initial() =>
-          summon[Y =:= Wire]
-          Exists((this, IsRefinedBy.Id[(X1, X2)](inDesc), IsRefinedBy.anythingRefinesWire[(X1, X2)]))
-        case Pair(f1, f2) =>
-          leastCommonRefinementPair(f1, f2)
-
-    private def leastCommonRefinementPair[Y1, Y2](
-      g1: Y1 Approximates A1,
-      g2: Y2 Approximates A2,
-    ): Exists[[Z] =>> (
-      Z Approximates A1 ** A2,
-      (X1, X2) IsRefinedBy Z,
-      (Y1, Y2) IsRefinedBy Z,
-    )] =
-      (f1 leastCommonRefinement g1, f2 leastCommonRefinement g2) match
-        case (∃((z1, zf1, zg1)), ∃((z2, zf2, zg2))) =>
-          Exists((Pair(z1, z2), zf1 pair zf2, zg1 pair zg2))
-
-    override protected def coarsenByPair[W1, W2, Y1, Y2](
-      g1: W1 IsRefinedBy Y1,
-      g2: W2 IsRefinedBy Y2,
-    )(using
-      (X1, X2) =:= (Y1, Y2),
-    ): (W1, W2) Approximates (A1 ** A2) =
+      ev: Wire =:= (X1 ∙ X2),
+    ): (W1 ∙ W2) Approximates A =
       ???
   }
 
@@ -99,20 +57,38 @@ object Approximates {
       EdgeDesc.binary(f1.inDesc, f2.inDesc)
 
     override def leastCommonRefinement[Y](
-      that: Y Approximates A1 ∙ A2,
+      that: Y Approximates (A1 ∙ A2),
     ): Exists[[Z] =>> (
       Z Approximates (A1 ∙ A2),
       (X1 ∙ X2) IsRefinedBy Z,
       Y IsRefinedBy Z,
     )] =
-      ???
+      that match
+        case Initial() =>
+          summon[Y =:= Wire]
+          Exists((this, IsRefinedBy.Id[X1 ∙ X2](inDesc), IsRefinedBy.anythingRefinesWire[X1 ∙ X2]))
+        case Pairwise(f1, f2) =>
+          leastCommonRefinementPairwise(f1, f2)
 
-    override protected def coarsenByPair[W1, W2, Y1, Y2](
+    private def leastCommonRefinementPairwise[Y1, Y2](
+      g1: Y1 Approximates A1,
+      g2: Y2 Approximates A2,
+    ): Exists[[Z] =>> (
+      Z Approximates (A1 ∙ A2),
+      (X1 ∙ X2) IsRefinedBy Z,
+      (Y1 ∙ Y2) IsRefinedBy Z,
+    )] =
+      (f1 leastCommonRefinement g1, f2 leastCommonRefinement g2) match
+        case (∃((z1, zf1, zg1)), ∃((z2, zf2, zg2))) =>
+          Exists((Pairwise(z1, z2), zf1 pair zf2, zg1 pair zg2))
+
+    override protected def coarsenByPair[∘[_, _], W1, W2, Y1, Y2](
       g1: W1 IsRefinedBy Y1,
       g2: W2 IsRefinedBy Y2,
     )(using
-      (X1 ∙ X2) =:= (Y1, Y2),
-    ): (W1, W2) Approximates (A1 ∙ A2) = ???
+      (X1 ∙ X2) =:= (Y1 ∘ Y2),
+    ): (W1 ∘ W2) Approximates (A1 ∙ A2) =
+      ???
   }
 
   given Approximation[Approximates] with {
