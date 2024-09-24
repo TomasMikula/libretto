@@ -69,10 +69,10 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                   Visualization.Seq(
                     Visualization.Seq(
                       Visualization.Unimplemented("do"),
-                      Morph.id,
+                      Morph.id(using x.inDesc),
                       vg,
                     ),
-                    Morph.id,
+                    Morph.id(using xy.inDesc),
                     Visualization.Unimplemented("whileLeft"),
                   )
                 )))

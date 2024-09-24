@@ -9,7 +9,7 @@ sealed trait Morph[X, Y] {
 }
 
 object Morph {
-  case class Id[X]() extends Morph[X, X] {
+  case class Id[X](desc: EdgeDesc[X]) extends Morph[X, X] {
     override def invert: Morph[X, X] = this
     override def length: Length = Length.one
   }
@@ -41,8 +41,8 @@ object Morph {
       Length.max(f1.length, f2.length)
   }
 
-  def id[X]: Morph[X, X] =
-    Id()
+  def id[X](using EdgeDesc[X]): Morph[X, X] =
+    Id(summon)
 
   def par[∙[_, _]]: ParBuilder[∙] =
     ParBuilder[∙]

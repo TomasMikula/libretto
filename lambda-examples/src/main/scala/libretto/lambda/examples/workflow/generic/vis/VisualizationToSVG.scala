@@ -73,7 +73,7 @@ object VisualizationToSVG {
         val List(ha, hm, hb) = sizes
         val g = SVG.Group(
           renderSVG(a, layoutAk * l, Px(ha)),
-          renderMorph(m, layoutY1 * l, layoutY2 * l, Px(hm)).translate(0.0, ha),
+          renderMorph(m, layoutY1 * l, layoutY2 * l, 0.px, 0.px, Px(hm)).translate(0.0, ha),
           renderSVG(b, layoutBk * l, Px(hb)).translate(0.0, ha + hm),
         )
         if (k * l == 1) then g else g.scale(1.0/(k*l))
@@ -113,13 +113,15 @@ object VisualizationToSVG {
   ): SVG =
     val (inEdge, outEdge) = boundary.separate
     SVG.Group(
-      connectors.map(renderConnector(_, inEdge, outEdge, height)),
+      connectors.map(renderConnector(_, inEdge, outEdge, 0.px, 0.px, height)),
     )
 
   private def renderConnector[I, O](
     connector: Connector[I, O],
     inEdge: EdgeLayout[I],
     outEdge: EdgeLayout[O],
+    iOffset: Px,
+    oOffset: Px,
     height: Px,
   ): SVG = {
     import SVG.Path.Command.*
@@ -128,12 +130,14 @@ object VisualizationToSVG {
       case Connector.Across(src, tgt) =>
         val (xi, wi) = inEdge.coordsOf(src)
         val (xo, wo) = outEdge.coordsOf(tgt)
-        val xi2 = xi + wi
-        val xo2 = xo + wo
+        val xi1 = iOffset + xi
+        val xi2 = xi1 + wi
+        val xo1 = oOffset + xo
+        val xo2 = xo1 + wo
         val ym: Double = height.pixels / 2.0
         SVG.Path(
-          MoveTo(xi, 0.px),
-          CurveTo(xi, ym, xo, ym, xo, height),
+          MoveTo(xi1, 0.px),
+          CurveTo(xi1, ym, xo1, ym, xo1, height),
           LineTo(xo2, height),
           CurveTo(xo2, ym, xi2, ym, xi2, 0.px),
           Close
@@ -144,9 +148,52 @@ object VisualizationToSVG {
     m: Morph[X, Y],
     iLayout: EdgeLayout[X],
     oLayout: EdgeLayout[Y],
+    iOffset: Px,
+    oOffset: Px,
     height: Px,
   ): SVG =
-    renderUnimplemented(s"Morph.${m.getClass.getSimpleName}", iLayout.pixelBreadth, height)
+    m match
+      case Morph.Id(desc) =>
+        renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
+      case Morph.Refine(f) =>
+        renderUnimplemented(s"Morph.${m.getClass.getSimpleName}", iLayout.pixelBreadth, height)
+          .translate(iOffset.pixels, 0.0)
+      case Morph.Unrefine(f) =>
+        renderUnimplemented(s"Morph.${m.getClass.getSimpleName}", iLayout.pixelBreadth, height)
+          .translate(iOffset.pixels, 0.0)
+      case p: Morph.Par[op, x1, x2, y1, y2] =>
+        val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
+        val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
+        val g1 = renderMorph(p.f1, i1, o1, iOffset, oOffset, height)
+        val g2 = renderMorph(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+        SVG.Group(g1, g2)
+
+  private def renderIdentity[X](
+    x: EdgeDesc[X],
+    iLayout: EdgeLayout[X],
+    oLayout: EdgeLayout[X],
+    iOffset: Px,
+    oOffset: Px,
+    height: Px,
+  ): SVG =
+    x match
+      case EdgeDesc.SingleWire =>
+        summon[X =:= Wire]
+        renderConnector[X, X](
+          Connector.Across(WirePick.Id, WirePick.Id),
+          iLayout,
+          oLayout,
+          iOffset,
+          oOffset,
+          height,
+        )
+      case x: EdgeDesc.Binary[op, x1, x2] =>
+        summon[X =:= op[x1, x2]]
+        val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
+        val (o1, o2) = EdgeLayout.split[op, x1, x2](oLayout)
+        val g1 = renderIdentity(x.x1, i1, o1, iOffset, oOffset, height)
+        val g2 = renderIdentity(x.x2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+        SVG.Group(g1, g2)
 
   private def scaleToFit(srcW: Int, srcH: Int, tgtW: Int, tgtH: Int): Double =
     require(srcW >  0)

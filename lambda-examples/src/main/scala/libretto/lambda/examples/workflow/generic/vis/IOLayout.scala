@@ -27,8 +27,8 @@ object IOLayout {
         Unimplemented(pixelBreadth * k)
 
       override def coordsOf(wire: WirePick[X]): (Px, Px) = (
-        Px(pixelBreadth.pixels     / 3),
-        Px(pixelBreadth.pixels * 2 / 3),
+        Px(pixelBreadth.pixels * 6 / 13),
+        Px(pixelBreadth.pixels     / 13),
       )
     }
 
@@ -76,6 +76,17 @@ object IOLayout {
 
     def pair[X, Y](x: EdgeLayout[X], y: EdgeLayout[Y]): EdgeLayout[(X, Y)] =
       Par(x, y)
+
+    // TODO: for soundness, require evidence that ∙ is a class type
+    def split[∙[_, _], X1, X2](x: EdgeLayout[X1 ∙ X2]): (EdgeLayout[X1], EdgeLayout[X2]) =
+      x match
+        case Par(l1, l2) => (l1, l2)
+        case Unimplemented(pixelBreadth) =>
+          val b1 = pixelBreadth.pixels / 2
+          val b2 = pixelBreadth.pixels - b1
+          (Unimplemented(Px(b1)), Unimplemented(Px(b2)))
+        case SingleWire(pre, wire, post) =>
+          throw AssertionError(s"Impossible Wire =:= (X1 ∙ X2). Unless ∙ is not a class type.")
   }
 
   case class Unimplemented[X, Y](pixelBreadth: Px) extends IOLayout[X, Y] {
