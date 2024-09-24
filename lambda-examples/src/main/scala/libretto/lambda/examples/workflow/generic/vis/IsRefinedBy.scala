@@ -35,16 +35,16 @@ object IsRefinedBy {
       Morph.Unrefine(that)
   }
 
-  case class Terminal[X]() extends (Wire IsRefinedBy X) {
+  case class Initial[X](outDesc: EdgeDesc[X]) extends (Wire IsRefinedBy X) {
     override def inDesc: EdgeDesc[Wire] = EdgeDesc.SingleWire
 
     override def greatestCommonCoarsening[W](
       that: W IsRefinedBy X,
     ): Exists[[V] =>> (V IsRefinedBy Wire, V IsRefinedBy W)] =
-      Exists((id[Wire], Terminal[W]()))
+      Exists((id[Wire], Initial[W](that.inDesc)))
 
     override def morph[W](that: W IsRefinedBy X): Morph[Wire, W] =
-      Morph.Refine(Terminal[W]())
+      Morph.Refine(Initial[W](that.inDesc))
   }
 
   case class Pairwise[∙[_, _], X1, X2, Y1, Y2](
@@ -59,7 +59,7 @@ object IsRefinedBy {
     ): Exists[[V] =>> (V IsRefinedBy (X1 ∙ X2), V IsRefinedBy W)] =
       that match
         case Id(_) => Exists((Id(inDesc), this))
-        case Terminal() => Exists((Terminal(), id[Wire]))
+        case Initial(_) => Exists((Initial(inDesc), id[Wire]))
         case Pairwise(g1, g2) => greatestCommonCoarseningPairwise(g1, g2)
 
     private def greatestCommonCoarseningPairwise[W1, W2](
@@ -75,7 +75,7 @@ object IsRefinedBy {
     ): Morph[(X1 ∙ X2), W] =
       that match
         case Id(_) => Morph.Refine(this)
-        case Terminal() => Morph.Unrefine(Terminal())
+        case Initial(_) => Morph.Unrefine(Initial(inDesc))
         case Pairwise(g1, g2) => morphToBinaryOp(g1, g2)
 
     private def morphToBinaryOp[W1, W2](
@@ -88,6 +88,6 @@ object IsRefinedBy {
   def id[X](using EdgeDesc[X]): (X IsRefinedBy X) =
     Id[X](summon)
 
-  def anythingRefinesWire[X]: (Wire IsRefinedBy X) =
-    Terminal()
+  def anythingRefinesWire[X](using EdgeDesc[X]): (Wire IsRefinedBy X) =
+    Initial[X](summon)
 }

@@ -54,7 +54,6 @@ object VisualizationToSVG {
   ): SVG =
     val Visualization.Seq(a, m, b) = seq
 
-    val width = edges.pixelBreadth
     val (layoutX, layoutZ) = edges.separate
     val ioA = a.ioProportions
     val ioB = b.ioProportions
@@ -64,13 +63,18 @@ object VisualizationToSVG {
 
     val (ki, kj, k) = leastCommonMultiple(i, j)
 
+    val layoutAk = layoutA * ki
+    val layoutBk = layoutB * kj
+    val layoutY1 = layoutAk.outEdge
+    val layoutY2 = layoutBk.inEdge
+
     Length.divideProportionally((height * k).pixels)(a.length, m.length, b.length) match
       case IntegralProportions(l, sizes) =>
         val List(ha, hm, hb) = sizes
         val g = SVG.Group(
-          renderSVG(a, layoutA * ki * l, Px(ha)),
-          renderMorph(m, layoutA.outEdge, layoutB.inEdge, Px(hm)).translate(0.0, ha),
-          renderSVG(b, layoutB * kj * l, Px(hb)).translate(0.0, ha + hm),
+          renderSVG(a, layoutAk * l, Px(ha)),
+          renderMorph(m, layoutY1 * l, layoutY2 * l, Px(hm)).translate(0.0, ha),
+          renderSVG(b, layoutBk * l, Px(hb)).translate(0.0, ha + hm),
         )
         if (k * l == 1) then g else g.scale(1.0/(k*l))
   end renderSeq
@@ -136,8 +140,13 @@ object VisualizationToSVG {
         )
   }
 
-  private def renderMorph[X, Y](m: Morph[X, Y], layoutX: EdgeLayout[X], layoutY: EdgeLayout[Y], height: Px): SVG =
-    renderUnimplemented(s"Morph.${m.getClass.getSimpleName}", layoutX.pixelBreadth, height)
+  private def renderMorph[X, Y](
+    m: Morph[X, Y],
+    iLayout: EdgeLayout[X],
+    oLayout: EdgeLayout[Y],
+    height: Px,
+  ): SVG =
+    renderUnimplemented(s"Morph.${m.getClass.getSimpleName}", iLayout.pixelBreadth, height)
 
   private def scaleToFit(srcW: Int, srcH: Int, tgtW: Int, tgtH: Int): Double =
     require(srcW >  0)

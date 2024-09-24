@@ -19,7 +19,7 @@ infix sealed trait Approximates[X, A] {
     import IsRefinedBy as R
     that match
       case R.Id(_) => this
-      case R.Terminal() => Initial()
+      case R.Initial(_) => Initial()
       case p: R.Pairwise[op, w1, w2, x1, x2] => coarsenByPair[op, w1, w2, x1, x2](p.f1, p.f2)
 
   protected def coarsenByPair[∙[_, _], W1, W2, X1, X2](
@@ -38,7 +38,7 @@ object Approximates {
       EdgeDesc.SingleWire
 
     override def leastCommonRefinement[Y](that: Y Approximates A): Exists[[Z] =>> (Z Approximates A, Wire IsRefinedBy Z, Y IsRefinedBy Z)] =
-      Exists((that, IsRefinedBy.anythingRefinesWire[Y], IsRefinedBy.Id[Y](that.inDesc)))
+      Exists((that, IsRefinedBy.Initial[Y](that.inDesc), IsRefinedBy.Id[Y](that.inDesc)))
 
     override protected def coarsenByPair[∙[_, _], W1, W2, X1, X2](
       g1: W1 IsRefinedBy X1,
@@ -66,7 +66,7 @@ object Approximates {
       that match
         case Initial() =>
           summon[Y =:= Wire]
-          Exists((this, IsRefinedBy.Id[X1 ∙ X2](inDesc), IsRefinedBy.anythingRefinesWire[X1 ∙ X2]))
+          Exists((this, IsRefinedBy.Id[X1 ∙ X2](inDesc), IsRefinedBy.Initial[X1 ∙ X2](inDesc)))
         case Pairwise(f1, f2) =>
           leastCommonRefinementPairwise(f1, f2)
 
@@ -109,7 +109,13 @@ object Approximates {
     X IsRefinedBy (Xa ++ Xb),
   )]] =
     f match
-      case Initial() => Exists(Exists((Initial[A](), Initial[B](), IsRefinedBy.Terminal())))
-      case Pairwise(f1, f2) => Exists(Exists((f1, f2, IsRefinedBy.Id(f.inDesc))))
+      case Initial() =>
+        Exists(Exists((
+          Initial[A](),
+          Initial[B](),
+          IsRefinedBy.Initial(EdgeDesc.binary(EdgeDesc.wire, EdgeDesc.wire))
+        )))
+      case Pairwise(f1, f2) =>
+        Exists(Exists((f1, f2, IsRefinedBy.Id(f.inDesc))))
 
 }
