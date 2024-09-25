@@ -1,14 +1,24 @@
 package libretto.lambda.examples.workflow.generic.vis
 
-sealed trait EdgeDesc[X]
+import DefaultDimensions.Length
+
+sealed trait EdgeDesc[X]:
+  def depth: Length
 
 object EdgeDesc {
-  case object SingleWire extends EdgeDesc[Wire]
+  case object SingleWire extends EdgeDesc[Wire]:
+    override def depth: Length =
+      Length.one
 
   case class Binary[∙[_, _], X1, X2](
     x1: EdgeDesc[X1],
     x2: EdgeDesc[X2],
-  ) extends EdgeDesc[X1 ∙ X2]
+  ) extends EdgeDesc[X1 ∙ X2]:
+    override def depth: Length =
+      Length.cram(
+        Length.one,
+        Length.max(x1.depth, x2.depth)
+      )
 
   given wire: EdgeDesc[Wire] =
     SingleWire

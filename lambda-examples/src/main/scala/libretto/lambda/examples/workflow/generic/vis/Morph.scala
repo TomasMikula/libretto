@@ -59,18 +59,8 @@ object Morph {
       case IsRefinedBy.Id(desc) =>
         Length.one
       case IsRefinedBy.Initial(desc) =>
-        depthOf(desc)
+        desc.depth
       case IsRefinedBy.Pairwise(f1, f2) =>
         Length.max(lengthOf(f1), lengthOf(f2))
-
-  private def depthOf[X](desc: EdgeDesc[X]): Length =
-    desc match
-      case EdgeDesc.SingleWire =>
-        Length.one
-      case EdgeDesc.Binary(x1, x2) =>
-        Length.cram(
-          Length.one,
-          Length.max(depthOf(x1), depthOf(x2))
-        )
 
 }

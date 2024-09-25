@@ -6,6 +6,7 @@ import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily.Monospace
 import libretto.lambda.examples.workflow.generic.vis.util.{IntegralProportions, leastCommonMultiple}
 
 import IOLayout.EdgeLayout
+import IOProportions.EdgeProportions
 
 object VisualizationToSVG {
   def renderSVGToFit(g: Visualization[?, ?], W: Int, H: Int): SVG =
@@ -156,8 +157,7 @@ object VisualizationToSVG {
       case Morph.Id(desc) =>
         renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
       case Morph.Refine(f) =>
-        renderUnimplemented(s"Morph.${m.getClass.getSimpleName}", iLayout.pixelBreadth, height)
-          .translate(iOffset.pixels, 0.0)
+        renderRefine(f, iLayout, oLayout, iOffset, oOffset, height)
       case Morph.Unrefine(f) =>
         renderUnimplemented(s"Morph.${m.getClass.getSimpleName}", iLayout.pixelBreadth, height)
           .translate(iOffset.pixels, 0.0)
@@ -179,7 +179,7 @@ object VisualizationToSVG {
     x match
       case EdgeDesc.SingleWire =>
         summon[X =:= Wire]
-        renderConnector[X, X](
+        renderConnector[Wire, Wire](
           Connector.Across(WirePick.Id, WirePick.Id),
           iLayout,
           oLayout,
@@ -193,6 +193,73 @@ object VisualizationToSVG {
         val (o1, o2) = EdgeLayout.split[op, x1, x2](oLayout)
         val g1 = renderIdentity(x.x1, i1, o1, iOffset, oOffset, height)
         val g2 = renderIdentity(x.x2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+        SVG.Group(g1, g2)
+
+  private def renderFanOut[Y](
+    y: EdgeDesc[Y],
+    iLayout: EdgeLayout[Wire],
+    oLayout: EdgeLayout[Y],
+    iOffset: Px,
+    oOffset: Px,
+    height: Px,
+  ): SVG =
+    y match
+      case EdgeDesc.SingleWire =>
+        summon[Y =:= Wire]
+        renderConnector[Wire, Wire](
+          Connector.Across(WirePick.Id, WirePick.Id),
+          iLayout,
+          oLayout,
+          iOffset,
+          oOffset,
+          height,
+        )
+      case p: EdgeDesc.Binary[op, y1, y2] =>
+        summon[Y =:= op[y1, y2]]
+        val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
+        val (i1, w1) = EdgeProportions.unitWire.layout(o1.pixelBreadth)
+        val (i2, w2) = EdgeProportions.unitWire.layout(o2.pixelBreadth)
+        val (ki1, ki2, k) = leastCommonMultiple(i1, i2)
+        Length.divideProportionally((height * k).pixels)(
+          Length.one,
+          Length.max(p.x1.depth, p.x2.depth)
+        ) match
+          case IntegralProportions(l, List(h1, h2)) =>
+            val ikl = iLayout * k * l
+            val wl1 = w1 * ki1 * l
+            val wl2 = w2 * ki2 * l
+            val wl = EdgeLayout.Par[op, Wire, Wire](wl1, wl2)
+            val y1 = o1 * k * l
+            val y2 = o2 * k * l
+            val c1 = Connector.Across[Wire, op[Wire, Wire]](WirePick.Id, WirePick.pickL)
+            val c2 = Connector.Across[Wire, op[Wire, Wire]](WirePick.Id, WirePick.pickR)
+            val g1 = renderConnector(c1, ikl, wl, iOffset * k * l, oOffset * k * l, h1.px)
+            val g2 = renderConnector(c2, ikl, wl, iOffset * k * l, oOffset * k * l, h1.px)
+            val g3 = renderFanOut(p.x1, wl1, y1, iOffset * k * l, oOffset * k * l, h2.px).translate(0, h1)
+            val g4 = renderFanOut(p.x2, wl2, y2, iOffset * k * l + wl1.pixelBreadth, oOffset * k * l + y1.pixelBreadth, h2.px).translate(0, h1)
+            val g = SVG.Group(g1, g2, g3, g4)
+            if (k * l == 1) g else g.scale(1.0/(k*l))
+
+  private def renderRefine[X, Y](
+    f: IsRefinedBy[X, Y],
+    iLayout: EdgeLayout[X],
+    oLayout: EdgeLayout[Y],
+    iOffset: Px,
+    oOffset: Px,
+    height: Px,
+  ): SVG =
+    f match
+      case IsRefinedBy.Id(desc) =>
+        renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
+      case IsRefinedBy.Initial(outDesc) =>
+        renderFanOut(outDesc, iLayout, oLayout, iOffset, oOffset, height)
+      case p: IsRefinedBy.Pairwise[op, x1, x2, y1, y2] =>
+        summon[X =:= op[x1, x2]]
+        summon[Y =:= op[y1, y2]]
+        val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
+        val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
+        val g1 = renderRefine(p.f1, i1, o1, iOffset, oOffset, height)
+        val g2 = renderRefine(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
         SVG.Group(g1, g2)
 
   private def scaleToFit(srcW: Int, srcH: Int, tgtW: Int, tgtH: Int): Double =
