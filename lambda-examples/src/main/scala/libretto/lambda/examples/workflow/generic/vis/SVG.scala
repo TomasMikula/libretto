@@ -4,171 +4,27 @@ import java.nio.file.{Paths, Files}
 import java.nio.charset.StandardCharsets
 import libretto.lambda.util.NonEmptyList
 
-/** Representation of a _subset_ of SVG. */
-sealed trait SVG {
-  import SVG.*
+case class SVGDocument(contentElem: SVGElem) {
+  import SVGDocument.*
 
-  def xmlTag: String
-  def xmlAttributes: Map[String, String]
-  def xmlContent: String | List[SVG]
-
-  def xmlString: String =
-    val content: Option[String] = xmlContent match
-      case text: String     => Some(xmlTextEscape(text))
-      case Nil              => None
-      case elems: List[SVG] => Some(elems.map(_.xmlString).mkString("\n", "\n", "\n"))
-    s"<$xmlTag"
-      + xmlAttributes
-        .map { case (k, v) => s"$k=\"$v\"" }
-        .mkString(" ", " ", "")
-      + content.fold("/>")(str => s">$str</$xmlTag>")
-
-  def writeTo(fileName: String, width: Int, height: Int): Unit =
+  def writeTo(fileName: String, width: Int, height: Int): Unit = {
     val fullXmlString =
       s"""<svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height">
          |$SCRIPT
          |<g id="content">
-         |$xmlString
+         |${contentElem.xmlString}
          |</g>
          |</svg>
          """.stripMargin
     val bytes = fullXmlString.getBytes(StandardCharsets.UTF_8)
     val path = Paths.get(fileName)
     Files.write(path, bytes)
+  }
 
-  def translate(dx: Double, dy: Double): SVG =
-    transform(Transform.Translate(dx, dy))
-
-  def scale(s: Double): SVG =
-    scale(s, s)
-
-  def scale(sx: Double, sy: Double): SVG =
-    transform(Transform.Scale(sx, sy))
-
-  def transform(t: Transform): SVG =
-    this match
-      case Transformed(obj, ts) => Transformed(obj, t :: ts)
-      case obj: Proper          => Transformed(obj, t)
 }
 
-object SVG {
-  /* An auxiliary node for Scala representation.
-   * In xml and DOM, transform is represented as an attribute on another element. */
-  case class Transformed(obj: SVG.Proper, transforms: NonEmptyList[Transform]) extends SVG:
-    override def xmlTag = obj.xmlTag
-
-    override lazy val xmlAttributes =
-      obj.xmlAttributes.updated("transform", transforms.map(_.attributeValue).toList.mkString(" "))
-
-    override def xmlContent = obj.xmlContent
-  end Transformed
-
-  object Transformed:
-    def apply(obj: SVG.Proper, t: Transform): Transformed =
-      Transformed(obj, NonEmptyList.of(t))
-
-  sealed trait Proper extends SVG
-
-  case class Group(children: List[SVG]) extends Proper:
-    override def xmlTag = "g"
-    override def xmlAttributes = Map.empty[String, String]
-    override def xmlContent = children
-
-  object Group:
-    def apply(children: SVG*): Group =
-      Group(children.toList)
-
-  case class Text(
-    value: String,
-    x: Px,
-    y: Px,
-    fontFamily: FontFamily,
-    fontSize: Px,
-  ) extends SVG.Proper :
-    import Px.*
-
-    override def xmlTag =
-      "text"
-
-    override def xmlAttributes =
-      Map(
-        "x" -> String.valueOf(x.pixels),
-        "y" -> String.valueOf(y.pixels),
-        "style" -> s"font-family: ${fontFamily.cssValue}; font-size: ${fontSize.pixels}px"
-      )
-
-    override def xmlContent =
-      value
-
-  case class RectOutline(w: Px, h: Px, thickness: Double, color: String) extends SVG.Proper {
-
-    override def xmlTag: String = "rect"
-
-    override def xmlContent: String | List[SVG] = Nil
-
-    override def xmlAttributes: Map[String, String] =
-      import Px.*
-      Map(
-        "x" -> "0",
-        "y" -> "0",
-        "width" -> s"${w.pixels}",
-        "height" -> s"${h.pixels}",
-        "fill" -> "none",
-        "stroke" -> color,
-        "stroke-width" -> s"${2 * thickness}", // the outer half will be clipped
-        "clip-path" -> "fill-box",
-      )
-  }
-
-  case class Path(cmds: Path.Command*) extends SVG.Proper {
-    override def xmlTag: String = "path"
-
-    override def xmlContent: String | List[SVG] = Nil
-
-    override def xmlAttributes: Map[String, String] =
-      Map(
-        "d" -> cmds.map(_.stringValue).mkString(" "),
-        "fill" -> "black",
-        "stroke" -> "none",
-      )
-  }
-
-  object Path {
-    enum Command:
-      case MoveTo(x: Px, y: Px)
-      case LineTo(x: Px, y: Px)
-      case CurveTo(c1x: Px | Double, c1y: Px | Double, c2x: Px | Double, c2y: Px | Double, tgtX: Px, tgtY: Px)
-      case Close
-
-      def stringValue: String =
-        this match
-          case MoveTo(x, y) => s"M $x $y"
-          case LineTo(x, y) => s"L $x $y"
-          case CurveTo(c1x, c1y, c2x, c2y, tgtX, tgtY) => s"C $c1x $c1y, $c2x $c2y, $tgtX $tgtY"
-          case Close => "Z"
-  }
-
-  enum Transform:
-    case Scale(sx: Double, sy: Double)
-    case Translate(dx: Double, dy: Double)
-
-    def attributeValue: String =
-      this match
-        case Scale(sx, sy) => s"scale($sx $sy)"
-        case Translate(dx, dy) => s"translate($dx $dy)"
-
-  enum FontFamily:
-    case Monospace
-
-    def cssValue: String =
-      this match
-        case Monospace => "monospace"
-
-  def xmlTextEscape(s: String): String =
-    s.replace("<", "&lt;")
-     .replace("&", "&amp;")
-
-  private[SVG] val SCRIPT =
+object SVGDocument {
+  private[SVGDocument] val SCRIPT =
     """<script>
     |// <![CDATA[
     |
@@ -206,4 +62,179 @@ object SVG {
     |// ]]>
     |</script>
     """.stripMargin
+}
+
+sealed trait SVGNode {
+  def xmlString: String
+}
+
+object SVGNode {
+  case class TextContent(value: String) extends SVGNode {
+    override def xmlString: String =
+      SVG.xmlTextEscape(value)
+  }
+
+  case class Comment(text: String) extends SVGNode {
+    require(!text.contains("--"), "Silly rule that XML comments may not contain double hyphen (--)")
+
+    override def xmlString: String =
+      s"<!-- $text -->"
+
+  }
+}
+
+/** Representation of a _subset_ of SVG. */
+sealed trait SVGElem extends SVGNode {
+  import SVG.*
+  import SVGElem.*
+
+  def xmlTag: String
+  def xmlAttributes: Map[String, String]
+  def xmlContent: List[SVGNode]
+
+  override def xmlString: String =
+    val content: Option[String] = xmlContent match
+      case Nil                  => None
+      case elems: List[SVGNode] => Some(elems.map(_.xmlString).mkString("\n", "\n", "\n"))
+    s"<$xmlTag"
+      + xmlAttributes
+        .map { case (k, v) => s"$k=\"$v\"" }
+        .mkString(" ", " ", "")
+      + content.fold("/>")(str => s">$str</$xmlTag>")
+
+  def translate(dx: Double, dy: Double): SVGElem =
+    transform(Transform.Translate(dx, dy))
+
+  def scale(s: Double): SVGElem =
+    scale(s, s)
+
+  def scale(sx: Double, sy: Double): SVGElem =
+    transform(Transform.Scale(sx, sy))
+
+  def transform(t: Transform): SVGElem =
+    this match
+      case Transformed(obj, ts) => Transformed(obj, t :: ts)
+      case obj: ElemProper      => Transformed(obj, t)
+}
+
+object SVGElem {
+  import SVG.*
+
+  /* An auxiliary node for Scala representation.
+   * In xml and DOM, transform is represented as an attribute on another element. */
+  case class Transformed(obj: ElemProper, transforms: NonEmptyList[Transform]) extends SVGElem:
+    override def xmlTag = obj.xmlTag
+
+    override lazy val xmlAttributes =
+      obj.xmlAttributes.updated("transform", transforms.map(_.attributeValue).toList.mkString(" "))
+
+    override def xmlContent = obj.xmlContent
+  end Transformed
+
+  object Transformed:
+    def apply(obj: ElemProper, t: Transform): Transformed =
+      Transformed(obj, NonEmptyList.of(t))
+
+  sealed trait ElemProper extends SVGElem
+
+  case class Group(children: List[SVGNode]) extends ElemProper:
+    override def xmlTag = "g"
+    override def xmlAttributes = Map.empty[String, String]
+    override def xmlContent = children
+
+  object Group:
+    def apply(children: SVGNode*): Group =
+      Group(children.toList)
+
+  case class Text(
+    value: String,
+    x: Px,
+    y: Px,
+    fontFamily: FontFamily,
+    fontSize: Px,
+  ) extends ElemProper :
+    import Px.*
+
+    override def xmlTag =
+      "text"
+
+    override def xmlAttributes =
+      Map(
+        "x" -> String.valueOf(x.pixels),
+        "y" -> String.valueOf(y.pixels),
+        "style" -> s"font-family: ${fontFamily.cssValue}; font-size: ${fontSize.pixels}px"
+      )
+
+    override def xmlContent =
+      List(SVGNode.TextContent(value))
+
+  case class RectOutline(w: Px, h: Px, thickness: Double, color: String) extends ElemProper {
+
+    override def xmlTag: String = "rect"
+
+    override def xmlContent: List[SVGNode] = Nil
+
+    override def xmlAttributes: Map[String, String] =
+      import Px.*
+      Map(
+        "x" -> "0",
+        "y" -> "0",
+        "width" -> s"${w.pixels}",
+        "height" -> s"${h.pixels}",
+        "fill" -> "none",
+        "stroke" -> color,
+        "stroke-width" -> s"${2 * thickness}", // the outer half will be clipped
+        "clip-path" -> "fill-box",
+      )
+  }
+
+  case class Path(cmds: Path.Command*) extends ElemProper {
+    override def xmlTag: String = "path"
+
+    override def xmlContent: List[SVGNode] = Nil
+
+    override def xmlAttributes: Map[String, String] =
+      Map(
+        "d" -> cmds.map(_.stringValue).mkString(" "),
+        "fill" -> "black",
+        "stroke" -> "none",
+      )
+  }
+
+  object Path {
+    enum Command:
+      case MoveTo(x: Px, y: Px)
+      case LineTo(x: Px, y: Px)
+      case CurveTo(c1x: Px | Double, c1y: Px | Double, c2x: Px | Double, c2y: Px | Double, tgtX: Px, tgtY: Px)
+      case Close
+
+      def stringValue: String =
+        this match
+          case MoveTo(x, y) => s"M $x $y"
+          case LineTo(x, y) => s"L $x $y"
+          case CurveTo(c1x, c1y, c2x, c2y, tgtX, tgtY) => s"C $c1x $c1y, $c2x $c2y, $tgtX $tgtY"
+          case Close => "Z"
+  }
+}
+
+object SVG {
+  enum Transform:
+    case Scale(sx: Double, sy: Double)
+    case Translate(dx: Double, dy: Double)
+
+    def attributeValue: String =
+      this match
+        case Scale(sx, sy) => s"scale($sx $sy)"
+        case Translate(dx, dy) => s"translate($dx $dy)"
+
+  enum FontFamily:
+    case Monospace
+
+    def cssValue: String =
+      this match
+        case Monospace => "monospace"
+
+  def xmlTextEscape(s: String): String =
+    s.replace("<", "&lt;")
+     .replace("&", "&amp;")
 }

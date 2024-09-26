@@ -9,15 +9,17 @@ import IOLayout.EdgeLayout
 import IOProportions.EdgeProportions
 
 object VisualizationToSVG {
-  def renderSVGToFit(g: Visualization[?, ?], W: Int, H: Int): SVG =
+  def renderSVGToFit(g: Visualization[?, ?], W: Int, H: Int): SVGDocument =
     val edges = g.ioProportions
     val r = AspectRatio(g.length, edges.totalBreadth)
     val (w, h) = r.scaleToFit(W, H)
     val (k, layout) = edges.layout(w.px)
 
-    renderSVG(g, layout, Px(h) * k)
+    SVGDocument(
+      renderSVG(g, layout, Px(h) * k)
+    )
 
-  def renderSVG[X, Y](g: Visualization[X, Y], edges: IOLayout[X, Y], height: Px): SVG =
+  def renderSVG[X, Y](g: Visualization[X, Y], edges: IOLayout[X, Y], height: Px): SVGElem =
     println(s"rendering ${g.getClass.getSimpleName} into ${edges.pixelBreadth} x $height")
     g match
       case seq: Visualization.Seq[x, y1, y2, z] =>
@@ -29,22 +31,22 @@ object VisualizationToSVG {
         base match
           case Left(vis) =>
             val v = renderSVG(vis, edges, height)
-            SVG.Group(v, conns)
+            SVGElem.Group(v, conns)
           case Right(props) =>
             conns
       case Visualization.Unimplemented(label) =>
         renderUnimplemented(label, edges.pixelBreadth, height)
 
-  private def renderUnimplemented[X, Y](label: String, width: Px, height: Px): SVG =
-    val text = SVG.Text(label, x = 0.px, y = 20.px, Monospace, fontSize = 20.px)
+  private def renderUnimplemented[X, Y](label: String, width: Px, height: Px): SVGElem =
+    val text = SVGElem.Text(label, x = 0.px, y = 20.px, Monospace, fontSize = 20.px)
     val textH = text.fontSize.pixels
     val textW = (label.length * textH * 3 + 4) / 5 // XXX: just a guess that character width is 3/5 of font size
     val scale =
       height.pixels match
         case 0      => 0.0
         case height => scaleToFit(textW, textH, width.pixels, height).toDouble
-    SVG.Group(
-      SVG.RectOutline(width, height, math.min(width.pixels / 20.0, height.pixels / 20.0), "red"),
+    SVGElem.Group(
+      SVGElem.RectOutline(width, height, math.min(width.pixels / 20.0, height.pixels / 20.0), "red"),
       text.scale(scale)
     )
 
@@ -52,7 +54,7 @@ object VisualizationToSVG {
     seq: Visualization.Seq[X, Y1, Y2, Z],
     edges: IOLayout[X, Z],
     height: Px,
-  ): SVG =
+  ): SVGElem =
     val Visualization.Seq(a, m, b) = seq
 
     val (layoutX, layoutZ) = edges.separate
@@ -72,7 +74,7 @@ object VisualizationToSVG {
     Length.divideProportionally((height * k).pixels)(a.length, m.length, b.length) match
       case IntegralProportions(l, sizes) =>
         val List(ha, hm, hb) = sizes
-        val g = SVG.Group(
+        val g = SVGElem.Group(
           renderSVG(a, layoutAk * l, Px(ha)),
           renderMorph(m, layoutY1 * l, layoutY2 * l, 0.px, 0.px, Px(hm)).translate(0.0, ha),
           renderSVG(b, layoutBk * l, Px(hb)).translate(0.0, ha + hm),
@@ -84,13 +86,13 @@ object VisualizationToSVG {
     par: Visualization.Par[∙, X1, X2, Y1, Y2],
     edges: IOLayout[X1 ∙ X2, Y1 ∙ Y2],
     height: Px,
-  ): SVG =
+  ): SVGElem =
     val Visualization.Par(a, b) = par
     edges match
       case IOLayout.Par(la, lb) =>
         val ga = renderSVG(a, la, height)
         val gb = renderSVG(b, lb, height)
-        SVG.Group(ga, gb.translate(la.pixelBreadth.pixels, 0.0))
+        SVGElem.Group(ga, gb.translate(la.pixelBreadth.pixels, 0.0))
       case IOLayout.Unimplemented(width) =>
         Breadth.divideProportionally(width.pixels)(a.breadth, b.breadth) match
           case IntegralProportions(k, sizes) =>
@@ -98,7 +100,7 @@ object VisualizationToSVG {
             val (i, la) = a.ioProportions.layout(Px(wa))
             val (j, lb) = b.ioProportions.layout(Px(wb))
             val (_, _, k2) = leastCommonMultiple(i, j)
-            val g = SVG.Group(
+            val g = SVGElem.Group(
               renderSVG(a, la, height * k * k2),
               renderSVG(b, lb, height * k * k2).translate(la.pixelBreadth.pixels, 0.0),
             )
@@ -111,9 +113,9 @@ object VisualizationToSVG {
     connectors: List[Connector[X, Y]],
     boundary: IOLayout[X, Y],
     height: Px,
-  ): SVG =
+  ): SVGElem =
     val (inEdge, outEdge) = boundary.separate
-    SVG.Group(
+    SVGElem.Group(
       connectors.map(renderConnector(_, inEdge, outEdge, 0.px, 0.px, height)),
     )
 
@@ -124,8 +126,8 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
-  ): SVG = {
-    import SVG.Path.Command.*
+  ): SVGElem = {
+    import SVGElem.Path.Command.*
 
     connector match
       case Connector.Across(src, tgt) =>
@@ -136,7 +138,7 @@ object VisualizationToSVG {
         val xo1 = oOffset + xo
         val xo2 = xo1 + wo
         val ym: Double = height.pixels / 2.0
-        SVG.Path(
+        SVGElem.Path(
           MoveTo(xi1, 0.px),
           CurveTo(xi1, ym, xo1, ym, xo1, height),
           LineTo(xo2, height),
@@ -152,7 +154,7 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
-  ): SVG =
+  ): SVGElem =
     m match
       case Morph.Id(desc) =>
         renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
@@ -166,7 +168,7 @@ object VisualizationToSVG {
         val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
         val g1 = renderMorph(p.f1, i1, o1, iOffset, oOffset, height)
         val g2 = renderMorph(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
-        SVG.Group(g1, g2)
+        SVGElem.Group(g1, g2)
 
   private def renderIdentity[X](
     x: EdgeDesc[X],
@@ -175,7 +177,7 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
-  ): SVG =
+  ): SVGElem =
     x match
       case EdgeDesc.SingleWire =>
         summon[X =:= Wire]
@@ -193,7 +195,7 @@ object VisualizationToSVG {
         val (o1, o2) = EdgeLayout.split[op, x1, x2](oLayout)
         val g1 = renderIdentity(x.x1, i1, o1, iOffset, oOffset, height)
         val g2 = renderIdentity(x.x2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
-        SVG.Group(g1, g2)
+        SVGElem.Group(g1, g2)
 
   private def renderFanOut[Y](
     y: EdgeDesc[Y],
@@ -202,7 +204,7 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
-  ): SVG =
+  ): SVGElem =
     y match
       case EdgeDesc.SingleWire =>
         summon[Y =:= Wire]
@@ -237,7 +239,7 @@ object VisualizationToSVG {
             val g2 = renderConnector(c2, ikl, wl, iOffset * k * l, oOffset * k * l, h1.px)
             val g3 = renderFanOut(p.x1, wl1, y1, iOffset * k * l, oOffset * k * l, h2.px).translate(0, h1)
             val g4 = renderFanOut(p.x2, wl2, y2, iOffset * k * l + wl1.pixelBreadth, oOffset * k * l + y1.pixelBreadth, h2.px).translate(0, h1)
-            val g = SVG.Group(g1, g2, g3, g4)
+            val g = SVGElem.Group(g1, g2, g3, g4)
             if (k * l == 1) g else g.scale(1.0/(k*l))
 
   private def renderRefine[X, Y](
@@ -247,7 +249,7 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
-  ): SVG =
+  ): SVGElem =
     f match
       case IsRefinedBy.Id(desc) =>
         renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
@@ -260,7 +262,7 @@ object VisualizationToSVG {
         val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
         val g1 = renderRefine(p.f1, i1, o1, iOffset, oOffset, height)
         val g2 = renderRefine(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
-        SVG.Group(g1, g2)
+        SVGElem.Group(g1, g2)
 
   private def scaleToFit(srcW: Int, srcH: Int, tgtW: Int, tgtH: Int): Double =
     require(srcW >  0)
