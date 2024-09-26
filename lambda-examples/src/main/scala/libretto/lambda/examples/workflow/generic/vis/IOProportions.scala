@@ -37,11 +37,6 @@ object IOProportions {
   }
 
   object EdgeProportions {
-    case class Unimplemented[X](totalBreadth: Breadth) extends EdgeProportions[X] {
-      override def layout(availableBreadth: Px): (Int, EdgeLayout[X]) =
-        (1, EdgeLayout.Unimplemented(availableBreadth))
-    }
-
     case object UnitWire extends EdgeProportions[Wire] {
       override def totalBreadth: Breadth = Breadth.one
 
@@ -89,25 +84,10 @@ object IOProportions {
 
     def default[X](x: EdgeDesc[X]): EdgeProportions[X] =
       x match
-        case EdgeDesc.SingleWire => UnitWire
-
-  }
-
-  case class Unimplemented[I, O](totalBreadth: Breadth) extends IOProportions[I, O] {
-    override def inEdge: EdgeProportions[I] =
-      EdgeProportions.Unimplemented(totalBreadth)
-
-    override def outEdge: EdgeProportions[O] =
-      EdgeProportions.Unimplemented(totalBreadth)
-
-    override def layout(availableBreadth: Px): (Int, IOLayout[I, O]) =
-      (1, IOLayout.Unimplemented(availableBreadth))
-
-    override def layoutFw(inLayout: EdgeLayout[I]): (Int, IOLayout[I, O]) =
-      (1, IOLayout.Unimplemented(inLayout.pixelBreadth))
-
-    override def layoutBw(outLayout: EdgeLayout[O]): (Int, IOLayout[I, O]) =
-      (1, IOLayout.Unimplemented(outLayout.pixelBreadth))
+        case EdgeDesc.SingleWire =>
+          UnitWire
+        case p: EdgeDesc.Binary[op, x1, x2] =>
+          Binary[op, x1, x2](default(p.x1), default(p.x2))
   }
 
   case class Separate[I, O](
@@ -156,8 +136,6 @@ object IOProportions {
           (m, IOLayout.Par(layout1 * j1, layout2 * j2))
         case EdgeLayout.SingleWire(pre, wire, post) =>
           throw AssertionError(s"Wire =:= (X1 ∙ X2) is impossible (unless ∙ is not a class type)")
-        case EdgeLayout.Unimplemented(pixelBreadth) =>
-          (1, IOLayout.Unimplemented(pixelBreadth))
 
     override def layoutBw(outLayout: EdgeLayout[Y1 ∙ Y2]): (Int, IOLayout[X1 ∙ X2, Y1 ∙ Y2]) =
       outLayout match
@@ -168,8 +146,6 @@ object IOProportions {
           (m, IOLayout.Par(layout1 * j1, layout2 * j2))
         case EdgeLayout.SingleWire(pre, wire, post) =>
           throw AssertionError(s"Wire =:= (Y1 ∙ Y2) is impossible (unless ∙ is not a class type)")
-        case EdgeLayout.Unimplemented(pixelBreadth) =>
-          (1, IOLayout.Unimplemented(pixelBreadth))
 
   }
 }

@@ -15,11 +15,20 @@ sealed trait Visualization[X, Y] {
 }
 
 object Visualization {
-  case class Unimplemented[X, Y](label: String) extends Visualization[X, Y]:
+  case class Unimplemented[X, Y](
+    label: String,
+    inEdge: EdgeDesc[X],
+    outEdge: EdgeDesc[Y],
+  ) extends Visualization[X, Y]:
     require(label.nonEmpty, "Label must not be empty string")
 
     override def length: Length = Length.one
-    override def ioProportions: IOProportions[X, Y] = IOProportions.Unimplemented(Breadth.one)
+
+    override def ioProportions: IOProportions[X, Y] =
+      IOProportions.Separate(
+        EdgeProportions.default(inEdge),
+        EdgeProportions.default(outEdge),
+      )
 
   case class Seq[X, Y1, Y2, Z](
     a: Visualization[X, Y1],
@@ -105,7 +114,5 @@ object Visualization {
         WirePick.Id :: Nil
       case x: EdgeProportions.Binary[op, x1, x2] =>
         wiresOf(x.x1).map(_.inl[op, x2]) ++ wiresOf(x.x2).map(_.inr[op, x1])
-      case EdgeProportions.Unimplemented(_) =>
-        ???
 }
 

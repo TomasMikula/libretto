@@ -68,12 +68,12 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                   y,
                   Visualization.Seq(
                     Visualization.Seq(
-                      Visualization.Unimplemented("do"),
+                      Visualization.Unimplemented("do", x.inDesc, x.inDesc),
                       Morph.id(using x.inDesc),
                       vg,
                     ),
                     Morph.id(using xy.inDesc),
-                    Visualization.Unimplemented("whileLeft"),
+                    Visualization.Unimplemented("whileLeft", xy.inDesc, y.inDesc),
                   )
                 )))
       case _: FlowAST.Swap[op, x, y] =>

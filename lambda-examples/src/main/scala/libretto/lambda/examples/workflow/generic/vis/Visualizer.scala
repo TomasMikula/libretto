@@ -24,6 +24,6 @@ object Visualizer {
     Exists(Exists((
       appr.lump[A],
       appr.lump[B],
-      Visualization.Unimplemented(label),
+      Visualization.Unimplemented(label, EdgeDesc.wire, EdgeDesc.wire),
     )))
 }

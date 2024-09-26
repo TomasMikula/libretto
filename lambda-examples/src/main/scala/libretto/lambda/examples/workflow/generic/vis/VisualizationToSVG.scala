@@ -34,7 +34,7 @@ object VisualizationToSVG {
             SVGElem.Group(v, conns)
           case Right(props) =>
             conns
-      case Visualization.Unimplemented(label) =>
+      case Visualization.Unimplemented(label, _, _) =>
         renderUnimplemented(label, edges.pixelBreadth, height)
 
   private def renderUnimplemented[X, Y](label: String, width: Px, height: Px): SVGElem =
@@ -93,18 +93,6 @@ object VisualizationToSVG {
         val ga = renderSVG(a, la, height)
         val gb = renderSVG(b, lb, height)
         SVGElem.Group(ga, gb.translate(la.pixelBreadth.pixels, 0.0))
-      case IOLayout.Unimplemented(width) =>
-        Breadth.divideProportionally(width.pixels)(a.breadth, b.breadth) match
-          case IntegralProportions(k, sizes) =>
-            val List(wa, wb) = sizes
-            val (i, la) = a.ioProportions.layout(Px(wa))
-            val (j, lb) = b.ioProportions.layout(Px(wb))
-            val (_, _, k2) = leastCommonMultiple(i, j)
-            val g = SVGElem.Group(
-              renderSVG(a, la, height * k * k2),
-              renderSVG(b, lb, height * k * k2).translate(la.pixelBreadth.pixels, 0.0),
-            )
-            if (k * k2 == 1) then g else g.scale(1.0/(k*k2))
       case other =>
         throw IllegalArgumentException(s"To render a Par, IOLayout.Par must be used. Was: $other")
   end renderPar
