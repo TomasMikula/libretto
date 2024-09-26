@@ -161,8 +161,7 @@ object VisualizationToSVG {
       case Morph.Refine(f) =>
         renderRefine(f, iLayout, oLayout, iOffset, oOffset, height)
       case Morph.Unrefine(f) =>
-        renderUnimplemented(s"Morph.${m.getClass.getSimpleName}", iLayout.pixelBreadth, height)
-          .translate(iOffset.pixels, 0.0)
+        renderUnrefine(f, iLayout, oLayout, iOffset, oOffset, height)
       case p: Morph.Par[op, x1, x2, y1, y2] =>
         val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
         val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
@@ -245,8 +244,56 @@ object VisualizationToSVG {
             val g = SVGElem.Group(g1, g2, g3, g4)
             if (k * l == 1) g else g.scale(1.0/(k*l))
 
+  private def renderFanIn[X](
+    x: EdgeDesc[X],
+    iLayout: EdgeLayout[X],
+    oLayout: EdgeLayout[Wire],
+    iOffset: Px,
+    oOffset: Px,
+    height: Px,
+  ): SVGElem =
+    x match
+      case EdgeDesc.SingleWire =>
+        summon[X =:= Wire]
+        renderConnector[Wire, Wire](
+          Connector.Across(WirePick.Id, WirePick.Id),
+          iLayout,
+          oLayout,
+          iOffset,
+          oOffset,
+          height,
+        )
+      case p: EdgeDesc.Binary[op, x1, x2] =>
+        summon[X =:= op[x1, x2]]
+        val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
+        val (j1, w1) = EdgeProportions.unitWire.layout(i1.pixelBreadth)
+        val (j2, w2) = EdgeProportions.unitWire.layout(i2.pixelBreadth)
+        val (kj1, kj2, k) = leastCommonMultiple(j1, j2)
+        Length.divideProportionally((height * k).pixels)(
+          Length.max(p.x1.depth, p.x2.depth),
+          Length.one,
+        ) match
+          case IntegralProportions(l, List(h1, h2)) =>
+            val okl = oLayout * k * l
+            val wl1 = w1 * kj1 * l
+            val wl2 = w2 * kj2 * l
+            val wl = EdgeLayout.Par[op, Wire, Wire](wl1, wl2)
+            val x1 = i1 * k * l
+            val x2 = i2 * k * l
+            val iOff = iOffset * k * l
+            val oOff = oOffset * k * l
+            val mOff = Px((iOff * h1 + oOff * h2).pixels / (h1 + h2))
+            val c1 = Connector.Across[op[Wire, Wire], Wire](WirePick.pickL, WirePick.Id)
+            val c2 = Connector.Across[op[Wire, Wire], Wire](WirePick.pickR, WirePick.Id)
+            val g1 = renderConnector(c1, wl, okl, mOff, oOff, h2.px).translate(0, h1)
+            val g2 = renderConnector(c2, wl, okl, mOff, oOff, h2.px).translate(0, h1)
+            val g3 = renderFanIn(p.x1, x1, wl1, iOff, mOff, h1.px)
+            val g4 = renderFanIn(p.x2, x2, wl2, iOff + x1.pixelBreadth, mOff + wl1.pixelBreadth, h1.px)
+            val g = SVGElem.Group(g1, g2, g3, g4)
+            if (k * l == 1) g else g.scale(1.0/(k*l))
+
   private def renderRefine[X, Y](
-    f: IsRefinedBy[X, Y],
+    f: X IsRefinedBy Y,
     iLayout: EdgeLayout[X],
     oLayout: EdgeLayout[Y],
     iOffset: Px,
@@ -265,6 +312,29 @@ object VisualizationToSVG {
         val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
         val g1 = renderRefine(p.f1, i1, o1, iOffset, oOffset, height)
         val g2 = renderRefine(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+        SVGElem.Group(g1, g2)
+
+  private def renderUnrefine[X, Y](
+    f: Y IsRefinedBy X,
+    iLayout: EdgeLayout[X],
+    oLayout: EdgeLayout[Y],
+    iOffset: Px,
+    oOffset: Px,
+    height: Px,
+  ): SVGElem =
+    f match
+      case IsRefinedBy.Id(desc) =>
+        renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
+      case IsRefinedBy.Initial(x) =>
+        summon[Y =:= Wire]
+        renderFanIn(x, iLayout, oLayout, iOffset, oOffset, height)
+      case p: IsRefinedBy.Pairwise[op, y1, y2, x1, x2] =>
+        summon[X =:= op[x1, x2]]
+        summon[Y =:= op[y1, y2]]
+        val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
+        val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
+        val g1 = renderUnrefine(p.f1, i1, o1, iOffset, oOffset, height)
+        val g2 = renderUnrefine(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
         SVGElem.Group(g1, g2)
 
   private def scaleToFit(srcW: Int, srcH: Int, tgtW: Int, tgtH: Int): Double =
