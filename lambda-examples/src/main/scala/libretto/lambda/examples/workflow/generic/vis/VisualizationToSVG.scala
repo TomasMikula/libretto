@@ -233,12 +233,15 @@ object VisualizationToSVG {
             val wl = EdgeLayout.Par[op, Wire, Wire](wl1, wl2)
             val y1 = o1 * k * l
             val y2 = o2 * k * l
+            val iOff = iOffset * k * l
+            val oOff = oOffset * k * l
+            val mOff = Px((iOff * h1 + oOff * h2).pixels / (h1 + h2))
             val c1 = Connector.Across[Wire, op[Wire, Wire]](WirePick.Id, WirePick.pickL)
             val c2 = Connector.Across[Wire, op[Wire, Wire]](WirePick.Id, WirePick.pickR)
-            val g1 = renderConnector(c1, ikl, wl, iOffset * k * l, oOffset * k * l, h1.px)
-            val g2 = renderConnector(c2, ikl, wl, iOffset * k * l, oOffset * k * l, h1.px)
-            val g3 = renderFanOut(p.x1, wl1, y1, iOffset * k * l, oOffset * k * l, h2.px).translate(0, h1)
-            val g4 = renderFanOut(p.x2, wl2, y2, iOffset * k * l + wl1.pixelBreadth, oOffset * k * l + y1.pixelBreadth, h2.px).translate(0, h1)
+            val g1 = renderConnector(c1, ikl, wl, iOff, mOff, h1.px)
+            val g2 = renderConnector(c2, ikl, wl, iOff, mOff, h1.px)
+            val g3 = renderFanOut(p.x1, wl1, y1, mOff, oOff, h2.px).translate(0, h1)
+            val g4 = renderFanOut(p.x2, wl2, y2, mOff + wl1.pixelBreadth, oOff + y1.pixelBreadth, h2.px).translate(0, h1)
             val g = SVGElem.Group(g1, g2, g3, g4)
             if (k * l == 1) g else g.scale(1.0/(k*l))
 
