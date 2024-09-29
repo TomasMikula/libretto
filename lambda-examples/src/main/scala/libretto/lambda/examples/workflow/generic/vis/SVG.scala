@@ -168,6 +168,21 @@ object SVGElem {
     override def xmlContent =
       List(SVGNode.TextContent(value))
 
+  case class Rect(w: Px, h: Px, color: String = "black") extends ElemProper {
+    override def xmlTag: String = "rect"
+    override def xmlContent: List[SVGNode] = Nil
+
+    override def xmlAttributes: Map[String, String] =
+      Map(
+        "x" -> "0",
+        "y" -> "0",
+        "width" -> s"${w.pixels}",
+        "height" -> s"${h.pixels}",
+        "fill" -> color,
+        "stroke" -> "none",
+      )
+  }
+
   case class RectOutline(w: Px, h: Px, thickness: Double, color: String) extends ElemProper {
 
     override def xmlTag: String = "rect"
@@ -175,7 +190,6 @@ object SVGElem {
     override def xmlContent: List[SVGNode] = Nil
 
     override def xmlAttributes: Map[String, String] =
-      import Px.*
       Map(
         "x" -> "0",
         "y" -> "0",
@@ -186,6 +200,22 @@ object SVGElem {
         "stroke-width" -> s"${2 * thickness}", // the outer half will be clipped
         "clip-path" -> "fill-box",
       )
+  }
+
+  case class Circle(radius: Px, fill: String, strokeWidth: Double, strokeColor: String = "black") extends ElemProper {
+    override def xmlTag: String = "circle"
+    override def xmlContent: List[SVGNode] = Nil
+
+    override def xmlAttributes: Map[String, String] =
+      Map(
+        "cx" -> "0",
+        "cy" -> "0",
+        "r" -> s"${radius.pixels}",
+        "fill" -> fill,
+        "stroke" -> s"$strokeColor",
+        "stroke-width" -> s"$strokeWidth",
+      )
+
   }
 
   case class Path(cmds: Path.Command*) extends ElemProper {

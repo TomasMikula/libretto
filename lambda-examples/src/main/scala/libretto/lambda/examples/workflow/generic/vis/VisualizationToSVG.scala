@@ -134,6 +134,31 @@ object VisualizationToSVG {
           CurveTo(xo2, ym, xi2, ym, xi2, 0.px),
           Close
         )
+
+      case Connector.StudIn(src) =>
+        val H = 20
+        val k =
+          if (height.pixels >= H)
+            1
+          else
+            math.ceil(H.toDouble / height.pixels).toInt
+
+        println(s"render StudIn($src) into ${inEdge.pixelBreadth} x $height, k = $k")
+
+        val (xi, wi) = (inEdge * k).coordsOf(src)
+        val xi1 = iOffset * k + xi
+        val ym = (height * k).pixels / 2
+        val cx = xi1 + Px(wi.pixels / 2)
+        val g =
+          SVGElem.Group(
+            SVGElem.Rect(wi, ym.px).translate(xi1.pixels, 0),
+            SVGElem.Circle(
+              radius = wi, // TODO: should take height into account
+              fill = "white",
+              strokeWidth = wi.pixels / 2.0,
+            ).translate(cx.pixels, ym)
+          )
+        if k == 1 then g else g.scale(1.0 / k)
   }
 
   private def renderMorph[X, Y](

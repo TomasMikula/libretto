@@ -9,4 +9,8 @@ object Connector {
     src: WirePick[X],
     tgt: WirePick[Y],
   ) extends Connector[X, Y]
+
+  case class StudIn[X, Y](
+    src: WirePick[X],
+  ) extends Connector[X, Y]
 }

@@ -163,6 +163,54 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           )
         )))
 
+      case _: FlowAST.Prj1[op, x, y] =>
+        summon[A =:= (x ** y)]
+        summon[B =:= x]
+
+        import Approximates.Initial
+        import EdgeProportions.unitWire
+        import Connector.{Across, StudIn}
+        import WirePick.{pickL, pickR}
+
+        val v: (Wire ** Wire) Approximates A = Initial[x]() pair Initial[y]()
+        val w: Wire Approximates B = Initial[x]()
+
+        Exists(Exists((
+          v,
+          w,
+          Visualization.connectors(
+            unitWire pair unitWire,
+            unitWire,
+          )(
+            Across(pickL, WirePick.Id),
+            StudIn(pickR),
+          )
+        )))
+
+      case _: FlowAST.Prj2[op, x, y] =>
+        summon[A =:= (x ** y)]
+        summon[B =:= y]
+
+        import Approximates.Initial
+        import EdgeProportions.unitWire
+        import Connector.{Across, StudIn}
+        import WirePick.{pickL, pickR}
+
+        val v: (Wire ** Wire) Approximates A = Initial[x]() pair Initial[y]()
+        val w: Wire Approximates B = Initial[y]()
+
+        Exists(Exists((
+          v,
+          w,
+          Visualization.connectors(
+            unitWire pair unitWire,
+            unitWire,
+          )(
+            Across(pickR, WirePick.Id),
+            StudIn(pickL),
+          )
+        )))
+
       case other =>
         Visualizer.unimplemented(other.getClass.getSimpleName())
 }
