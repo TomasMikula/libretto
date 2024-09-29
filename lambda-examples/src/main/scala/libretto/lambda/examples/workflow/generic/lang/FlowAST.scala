@@ -9,7 +9,7 @@ sealed trait FlowAST[Op[_, _], A, B] {
   import FlowAST.*
 
   def >>>[C](that: FlowAST[Op, B, C]): FlowAST[Op, A, C] =
-    FlowAST.AndThen(this, that)
+    FlowAST.andThen(this, that)
 
   def maskInput: Masked[[a] =>> FlowAST[Op, a, B], A] =
     Masked(this)
@@ -96,15 +96,15 @@ object FlowAST {
 
   given ssc[Op[_, _]]: SymmetricSemigroupalCategory[FlowAST[Op, _, _], **] with {
     override def id[A]: FlowAST[Op, A, A] = Id()
-    override def andThen[A, B, C](f: FlowAST[Op, A, B], g: FlowAST[Op, B, C]): FlowAST[Op, A, C] = AndThen(f, g)
+    override def andThen[A, B, C](f: FlowAST[Op, A, B], g: FlowAST[Op, B, C]): FlowAST[Op, A, C] = FlowAST.andThen(f, g)
     override def assocLR[A, B, C]: FlowAST[Op, (A ** B) ** C, A ** (B ** C)] = AssocLR()
     override def assocRL[A, B, C]: FlowAST[Op, A ** (B ** C), (A ** B) ** C] = AssocRL()
-    override def par[A1, A2, B1, B2](f1: FlowAST[Op, A1, B1], f2: FlowAST[Op, A2, B2]): FlowAST[Op, A1 ** A2, B1 ** B2] = Par(f1, f2)
+    override def par[A1, A2, B1, B2](f1: FlowAST[Op, A1, B1], f2: FlowAST[Op, A2, B2]): FlowAST[Op, A1 ** A2, B1 ** B2] = FlowAST.par(f1, f2)
     override def swap[A, B]: FlowAST[Op, A ** B, B ** A] = Swap()
   }
 
   given cocat[Op[_, _]]: CocartesianSemigroupalCategory[FlowAST[Op, _, _], ++] with {
-    override def andThen[A, B, C](f: FlowAST[Op, A, B], g: FlowAST[Op, B, C]): FlowAST[Op, A, C] = AndThen(f, g)
+    override def andThen[A, B, C](f: FlowAST[Op, A, B], g: FlowAST[Op, B, C]): FlowAST[Op, A, C] = FlowAST.andThen(f, g)
     override def id[A]: FlowAST[Op, A, A] = Id()
     override def injectL[A, B]: FlowAST[Op, A, A ++ B] = InjectL()
     override def injectR[A, B]: FlowAST[Op, B, A ++ B] = InjectR()
@@ -127,4 +127,21 @@ object FlowAST {
     f: shuffled.Shuffled[A, B],
   ): FlowAST[Op[_, _], A, B] =
     f.foldMap[FlowAST[Op, _, _]]([x, y] => (w: Work[Op, x, y]) => w)
+
+  def andThen[Op[_, _], A, B, C](
+    f: FlowAST[Op, A, B],
+    g: FlowAST[Op, B, C],
+  ): FlowAST[Op, A, C] =
+    (f, g) match
+      case (Id(), g) => g
+      case (f, Id()) => f
+      case (f, g) => AndThen(f, g)
+
+  def par[Op[_, _], A1, A2, B1, B2](
+    f1: FlowAST[Op, A1, B1],
+    f2: FlowAST[Op, A2, B2],
+  ): FlowAST[Op, A1 ** A2, B1 ** B2] =
+    (f1, f2) match
+      case (Id(), Id()) => Id()
+      case (f1, f2) => Par(f1, f2)
 }
