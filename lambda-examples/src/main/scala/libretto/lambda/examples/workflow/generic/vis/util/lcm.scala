@@ -14,7 +14,6 @@ def leastCommonMultiple(a: Int, b: Int): (Int, Int, Int) = {
       (i, j, m)
   assert(a * i == m)
   assert(b * j == m)
-  println(s"leastCommonMultiple($a, $b) = $res")
   res
 }
 

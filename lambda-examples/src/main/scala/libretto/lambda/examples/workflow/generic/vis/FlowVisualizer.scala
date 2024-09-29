@@ -24,13 +24,14 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
       visualizeAst(f.ast)
 
   private def visualizeAst[A, B](f: FlowAST[Op, A, B]): Exists[[X] =>> Exists[[Y] =>> (
-      X Approximates A,
-      Y Approximates B,
-      Visualization[X, Y]
-    )]] =
+    X Approximates A,
+    Y Approximates B,
+    Visualization[X, Y],
+  )]] =
     f match
       case FlowAST.Ext(action) =>
         action.visualize
+
       case FlowAST.AndThen(g, h) =>
         (visualizeAst(g), visualizeAst(h)) match
           case (∃(∃((x, y1, vg))), ∃(∃((y2, z, vh)))) =>
@@ -38,10 +39,12 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
               case ∃((y, y1, y2)) =>
                 val m = y1 morph y2
                 Exists(Exists((x, z, Visualization.Seq(vg, m, vh))))
+
       case FlowAST.Par(g, h) =>
         (visualizeAst(g), visualizeAst(h)) match
           case (∃(∃((x1, y1, vg))), ∃(∃((x2, y2, vh)))) =>
             Exists(Exists((x1 pair x2, y1 pair y2, Visualization.Par(vg, vh))))
+
       case FlowAST.Either(g, h) =>
         (visualizeAst(g), visualizeAst(h)) match
           case (∃(∃((x, z1, vg))), ∃(∃((y, z2, vh)))) =>
@@ -58,6 +61,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                         Visualization.merge2(EdgeProportions.default(w1.inDesc)),
                       ),
                     )))
+
       case FlowAST.DoWhile(g) =>
         visualizeAst(g) match
           case ∃(∃((x, xy, vg))) =>
@@ -76,6 +80,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                     Visualization.Unimplemented("whileLeft", xy.inDesc, y.inDesc),
                   )
                 )))
+
       case _: FlowAST.Swap[op, x, y] =>
         summon[A =:= (x ** y)]
         summon[B =:= (y ** x)]
@@ -92,6 +97,57 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
             Connector.Across(WirePick.pickR, WirePick.pickL),
           )
         )))
+
+      case _: FlowAST.AssocLR[op, x, y, z] =>
+        summon[A =:= ((x ** y) ** z)]
+        summon[B =:= (x ** (y ** z))]
+
+        import Approximates.Initial
+        import EdgeProportions.unitWire
+        import Connector.Across
+        import WirePick.{pickL, pickR}
+
+        val v: ((Wire ** Wire) ** Wire) Approximates A = (Initial[x]() pair Initial[y]()) pair Initial[z]()
+        val w: (Wire ** (Wire ** Wire)) Approximates B = Initial[x]() pair (Initial[y]() pair Initial[z]())
+
+        Exists(Exists((
+          v,
+          w,
+          Visualization.connectors(
+            (unitWire pair unitWire) pair unitWire,
+            unitWire pair (unitWire pair unitWire),
+          )(
+            Across(pickL.inl, pickL),
+            Across(pickR.inl, pickL.inr),
+            Across(pickR, pickR.inr),
+          )
+        )))
+
+      case _: FlowAST.AssocRL[op, x, y, z] =>
+        summon[A =:= (x ** (y ** z))]
+        summon[B =:= ((x ** y) ** z)]
+
+        import Approximates.Initial
+        import EdgeProportions.unitWire
+        import Connector.Across
+        import WirePick.{pickL, pickR}
+
+        val v: (Wire ** (Wire ** Wire)) Approximates A = Initial[x]() pair (Initial[y]() pair Initial[z]())
+        val w: ((Wire ** Wire) ** Wire) Approximates B = (Initial[x]() pair Initial[y]()) pair Initial[z]()
+
+        Exists(Exists((
+          v,
+          w,
+          Visualization.connectors(
+            unitWire pair (unitWire pair unitWire),
+            (unitWire pair unitWire) pair unitWire,
+          )(
+            Across(pickL, pickL.inl),
+            Across(pickL.inr, pickR.inl),
+            Across(pickR.inr, pickR),
+          )
+        )))
+
       case other =>
         Visualizer.unimplemented(other.getClass.getSimpleName())
 }

@@ -115,6 +115,7 @@ object VisualizationToSVG {
     oOffset: Px,
     height: Px,
   ): SVGElem = {
+    println(s"renderConnector into ${inEdge.pixelBreadth} x $height")
     import SVGElem.Path.Command.*
 
     connector match
@@ -143,6 +144,7 @@ object VisualizationToSVG {
     oOffset: Px,
     height: Px,
   ): SVGElem =
+    println(s"renderMorph into ${iLayout.pixelBreadth} x $height")
     m match
       case Morph.Id(desc) =>
         renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
@@ -192,6 +194,7 @@ object VisualizationToSVG {
     oOffset: Px,
     height: Px,
   ): SVGElem =
+    println(s"renderFanOut into ${iLayout.pixelBreadth} x $height")
     y match
       case EdgeDesc.SingleWire =>
         summon[Y =:= Wire]
@@ -240,6 +243,7 @@ object VisualizationToSVG {
     oOffset: Px,
     height: Px,
   ): SVGElem =
+    println(s"renderFanIn into ${iLayout.pixelBreadth} x $height")
     x match
       case EdgeDesc.SingleWire =>
         summon[X =:= Wire]
@@ -288,6 +292,7 @@ object VisualizationToSVG {
     oOffset: Px,
     height: Px,
   ): SVGElem =
+    println(s"renderRefine into ${iLayout.pixelBreadth} x $height")
     f match
       case IsRefinedBy.Id(desc) =>
         renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
@@ -310,6 +315,7 @@ object VisualizationToSVG {
     oOffset: Px,
     height: Px,
   ): SVGElem =
+    println(s"renderUnrefine into ${iLayout.pixelBreadth} x $height")
     f match
       case IsRefinedBy.Id(desc) =>
         renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
