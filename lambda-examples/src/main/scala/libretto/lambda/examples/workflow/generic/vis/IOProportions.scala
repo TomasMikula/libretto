@@ -55,9 +55,10 @@ object IOProportions {
 
         def place(scaleAcc: Int, scaledAvailableBreadth: Px, wireWidth: Px): (Int, EdgeLayout[Wire]) =
           val whiteSpace = scaledAvailableBreadth.pixels - wireWidth.pixels
-          if (whiteSpace % 2 == 0)
-            val pad = whiteSpace / 2
-            (scaleAcc, EdgeLayout.wire(pad.px, wireWidth, pad.px))
+          if (whiteSpace % 2 == 0 || whiteSpace > 20)
+            val pre  = whiteSpace / 2
+            val post = whiteSpace - pre
+            (scaleAcc, EdgeLayout.wire(pre.px, wireWidth, post.px))
           else
             place(scaleAcc * 2, scaledAvailableBreadth * 2, wireWidth * 2)
 
