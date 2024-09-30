@@ -15,10 +15,14 @@ object EdgeDesc {
     x2: EdgeDesc[X2],
   ) extends EdgeDesc[X1 ∙ X2]:
     override def depth: Length =
-      Length.cram(
-        Length.one,
-        Length.max(x1.depth, x2.depth)
-      )
+      (x1, x2) match
+        case (SingleWire, SingleWire) =>
+          Length.one
+        case _ =>
+          Length.cram(
+            Length.one,
+            Length.max(x1.depth, x2.depth)
+          )
 
   given wire: EdgeDesc[Wire] =
     SingleWire

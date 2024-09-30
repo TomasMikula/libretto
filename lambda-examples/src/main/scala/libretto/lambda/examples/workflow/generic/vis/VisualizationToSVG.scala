@@ -237,7 +237,7 @@ object VisualizationToSVG {
         val g2 = renderIdentity(x.x2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
         SVGElem.Group(g1, g2)
 
-  private def renderFanOut[Y](
+  private def renderFanOutOrId[Y](
     y: EdgeDesc[Y],
     iLayout: EdgeLayout[Wire],
     oLayout: EdgeLayout[Y],
@@ -245,7 +245,6 @@ object VisualizationToSVG {
     oOffset: Px,
     height: Px,
   ): SVGElem =
-    println(s"renderFanOut into ${iLayout.pixelBreadth} x $height")
     y match
       case EdgeDesc.SingleWire =>
         summon[Y =:= Wire]
@@ -258,35 +257,56 @@ object VisualizationToSVG {
           height,
         )
       case p: EdgeDesc.Binary[op, y1, y2] =>
-        summon[Y =:= op[y1, y2]]
-        val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
-        val (i1, w1) = EdgeProportions.unitWire.layout(o1.pixelBreadth)
-        val (i2, w2) = EdgeProportions.unitWire.layout(o2.pixelBreadth)
-        val (ki1, ki2, k) = leastCommonMultiple(i1, i2)
+        renderFanOut(p, iLayout, oLayout, iOffset, oOffset, height)
+
+  private def renderFanOut[∙[_, _], Y1, Y2](
+    y: EdgeDesc.Binary[∙, Y1, Y2],
+    iLayout: EdgeLayout[Wire],
+    oLayout: EdgeLayout[Y1 ∙ Y2],
+    iOffset: Px,
+    oOffset: Px,
+    height: Px,
+  ): SVGElem = {
+    println(s"renderFanOut into ${iLayout.pixelBreadth} x $height")
+    val c1 = Connector.Across[Wire, Wire ∙ Wire](WirePick.Id, WirePick.pickL)
+    val c2 = Connector.Across[Wire, Wire ∙ Wire](WirePick.Id, WirePick.pickR)
+    val (o1, o2) = EdgeLayout.split(oLayout)
+    val (i1, w1) = EdgeProportions.unitWire.layout(o1.pixelBreadth)
+    val (i2, w2) = EdgeProportions.unitWire.layout(o2.pixelBreadth)
+    val (ki1, ki2, k) = leastCommonMultiple(i1, i2)
+    (y.x1, y.x2) match {
+      case (EdgeDesc.SingleWire, EdgeDesc.SingleWire) =>
+        summon[Y1 =:= Wire]
+        summon[Y2 =:= Wire]
+        val g1 = renderConnector(c1, iLayout * k, oLayout * k, iOffset * k, oOffset * k, height)
+        val g2 = renderConnector(c2, iLayout * k, oLayout * k, iOffset * k, oOffset * k, height)
+        val g = SVGElem.Group(g1, g2)
+        if k == 1 then g else g.scale(1.0 / k)
+      case _ =>
         Length.divideProportionally((height * k).pixels)(
           Length.one,
-          Length.max(p.x1.depth, p.x2.depth)
+          Length.max(y.x1.depth, y.x2.depth)
         ) match
           case IntegralProportions(l, List(h1, h2)) =>
             val ikl = iLayout * k * l
             val wl1 = w1 * ki1 * l
             val wl2 = w2 * ki2 * l
-            val wl = EdgeLayout.Par[op, Wire, Wire](wl1, wl2)
+            val wl = EdgeLayout.Par[∙, Wire, Wire](wl1, wl2)
             val y1 = o1 * k * l
             val y2 = o2 * k * l
             val iOff = iOffset * k * l
             val oOff = oOffset * k * l
             val mOff = Px((iOff * h1 + oOff * h2).pixels / (h1 + h2))
-            val c1 = Connector.Across[Wire, op[Wire, Wire]](WirePick.Id, WirePick.pickL)
-            val c2 = Connector.Across[Wire, op[Wire, Wire]](WirePick.Id, WirePick.pickR)
             val g1 = renderConnector(c1, ikl, wl, iOff, mOff, h1.px)
             val g2 = renderConnector(c2, ikl, wl, iOff, mOff, h1.px)
-            val g3 = renderFanOut(p.x1, wl1, y1, mOff, oOff, h2.px).translate(0, h1)
-            val g4 = renderFanOut(p.x2, wl2, y2, mOff + wl1.pixelBreadth, oOff + y1.pixelBreadth, h2.px).translate(0, h1)
+            val g3 = renderFanOutOrId(y.x1, wl1, y1, mOff, oOff, h2.px).translate(0, h1)
+            val g4 = renderFanOutOrId(y.x2, wl2, y2, mOff + wl1.pixelBreadth, oOff + y1.pixelBreadth, h2.px).translate(0, h1)
             val g = SVGElem.Group(g1, g2, g3, g4)
             if (k * l == 1) g else g.scale(1.0/(k*l))
+    }
+  }
 
-  private def renderFanIn[X](
+  private def renderFanInOrId[X](
     x: EdgeDesc[X],
     iLayout: EdgeLayout[X],
     oLayout: EdgeLayout[Wire],
@@ -294,7 +314,6 @@ object VisualizationToSVG {
     oOffset: Px,
     height: Px,
   ): SVGElem =
-    println(s"renderFanIn into ${iLayout.pixelBreadth} x $height")
     x match
       case EdgeDesc.SingleWire =>
         summon[X =:= Wire]
@@ -307,33 +326,54 @@ object VisualizationToSVG {
           height,
         )
       case p: EdgeDesc.Binary[op, x1, x2] =>
-        summon[X =:= op[x1, x2]]
-        val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
-        val (j1, w1) = EdgeProportions.unitWire.layout(i1.pixelBreadth)
-        val (j2, w2) = EdgeProportions.unitWire.layout(i2.pixelBreadth)
-        val (kj1, kj2, k) = leastCommonMultiple(j1, j2)
+        renderFanIn(p, iLayout, oLayout, iOffset, oOffset, height)
+
+  private def renderFanIn[∙[_, _], X1, X2](
+    x: EdgeDesc.Binary[∙, X1, X2],
+    iLayout: EdgeLayout[X1 ∙ X2],
+    oLayout: EdgeLayout[Wire],
+    iOffset: Px,
+    oOffset: Px,
+    height: Px,
+  ): SVGElem = {
+    println(s"renderFanIn into ${iLayout.pixelBreadth} x $height")
+    val c1 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickL, WirePick.Id)
+    val c2 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickR, WirePick.Id)
+    val (i1, i2) = EdgeLayout.split(iLayout)
+    val (j1, w1) = EdgeProportions.unitWire.layout(i1.pixelBreadth)
+    val (j2, w2) = EdgeProportions.unitWire.layout(i2.pixelBreadth)
+    val (kj1, kj2, k) = leastCommonMultiple(j1, j2)
+    (x.x1, x.x2) match {
+      case (EdgeDesc.SingleWire, EdgeDesc.SingleWire) =>
+        summon[X1 =:= Wire]
+        summon[X2 =:= Wire]
+        val g1 = renderConnector(c1, iLayout * k, oLayout * k, iOffset * k, oOffset * k, height)
+        val g2 = renderConnector(c2, iLayout * k, oLayout * k, iOffset * k, oOffset * k, height)
+        val g = SVGElem.Group(g1, g2)
+        if k == 1 then g else g.scale(1.0 / k)
+      case _ =>
         Length.divideProportionally((height * k).pixels)(
-          Length.max(p.x1.depth, p.x2.depth),
+          Length.max(x.x1.depth, x.x2.depth),
           Length.one,
         ) match
           case IntegralProportions(l, List(h1, h2)) =>
             val okl = oLayout * k * l
             val wl1 = w1 * kj1 * l
             val wl2 = w2 * kj2 * l
-            val wl = EdgeLayout.Par[op, Wire, Wire](wl1, wl2)
+            val wl = EdgeLayout.Par[∙, Wire, Wire](wl1, wl2)
             val x1 = i1 * k * l
             val x2 = i2 * k * l
             val iOff = iOffset * k * l
             val oOff = oOffset * k * l
             val mOff = Px((iOff * h1 + oOff * h2).pixels / (h1 + h2))
-            val c1 = Connector.Across[op[Wire, Wire], Wire](WirePick.pickL, WirePick.Id)
-            val c2 = Connector.Across[op[Wire, Wire], Wire](WirePick.pickR, WirePick.Id)
             val g1 = renderConnector(c1, wl, okl, mOff, oOff, h2.px).translate(0, h1)
             val g2 = renderConnector(c2, wl, okl, mOff, oOff, h2.px).translate(0, h1)
-            val g3 = renderFanIn(p.x1, x1, wl1, iOff, mOff, h1.px)
-            val g4 = renderFanIn(p.x2, x2, wl2, iOff + x1.pixelBreadth, mOff + wl1.pixelBreadth, h1.px)
+            val g3 = renderFanInOrId(x.x1, x1, wl1, iOff, mOff, h1.px)
+            val g4 = renderFanInOrId(x.x2, x2, wl2, iOff + x1.pixelBreadth, mOff + wl1.pixelBreadth, h1.px)
             val g = SVGElem.Group(g1, g2, g3, g4)
             if (k * l == 1) g else g.scale(1.0/(k*l))
+    }
+  }
 
   private def renderRefine[X, Y](
     f: X IsRefinedBy Y,
@@ -348,7 +388,7 @@ object VisualizationToSVG {
       case IsRefinedBy.Id(desc) =>
         renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
       case IsRefinedBy.Initial(outDesc) =>
-        renderFanOut(outDesc, iLayout, oLayout, iOffset, oOffset, height)
+        renderFanOutOrId(outDesc, iLayout, oLayout, iOffset, oOffset, height)
       case p: IsRefinedBy.Pairwise[op, x1, x2, y1, y2] =>
         summon[X =:= op[x1, x2]]
         summon[Y =:= op[y1, y2]]
@@ -372,7 +412,7 @@ object VisualizationToSVG {
         renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
       case IsRefinedBy.Initial(x) =>
         summon[Y =:= Wire]
-        renderFanIn(x, iLayout, oLayout, iOffset, oOffset, height)
+        renderFanInOrId(x, iLayout, oLayout, iOffset, oOffset, height)
       case p: IsRefinedBy.Pairwise[op, y1, y2, x1, x2] =>
         summon[X =:= op[x1, x2]]
         summon[Y =:= op[y1, y2]]
