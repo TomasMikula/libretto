@@ -159,6 +159,32 @@ object VisualizationToSVG {
             ).translate(cx.pixels, ym)
           )
         if k == 1 then g else g.scale(1.0 / k)
+
+      case Connector.StudOut(tgt) =>
+        val H = 20
+        val k =
+          if (height.pixels >= H)
+            1
+          else
+            math.ceil(H.toDouble / height.pixels).toInt
+
+        println(s"render StudOut($tgt) into ${outEdge.pixelBreadth} x $height, k = $k")
+
+        val (xi, wi) = (outEdge * k).coordsOf(tgt)
+        val xi1 = oOffset * k + xi
+        val hk = height * k
+        val ym = hk.pixels / 2
+        val cx = xi1 + Px(wi.pixels / 2)
+        val g =
+          SVGElem.Group(
+            SVGElem.Rect(wi, ym.px).translate(xi1.pixels, hk.pixels - ym),
+            SVGElem.Circle(
+              radius = wi, // TODO: should take height into account
+              fill = "white",
+              strokeWidth = wi.pixels / 2.0,
+            ).translate(cx.pixels, hk.pixels - ym)
+          )
+        if k == 1 then g else g.scale(1.0 / k)
   }
 
   private def renderMorph[X, Y](

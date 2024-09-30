@@ -13,4 +13,8 @@ object Connector {
   case class StudIn[X, Y](
     src: WirePick[X],
   ) extends Connector[X, Y]
+
+  case class StudOut[X, Y](
+    tgt: WirePick[Y],
+  ) extends Connector[X, Y]
 }
