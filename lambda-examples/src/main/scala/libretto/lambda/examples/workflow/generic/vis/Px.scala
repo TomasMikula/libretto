@@ -10,10 +10,14 @@ object Px {
   def max(a: Px, b: Px): Px =
     math.max(a, b)
 
+  def min(a: Px, b: Px): Px =
+    math.min(a, b)
+
   extension (x: Px)
     def pixels: Int = x
     def +(y: Px): Px = Px(x + y)
     def *(k: Int): Px = Px(x * k)
+    def /(k: Int): Px = { require(k > 0); Px(x / k) }
 
   extension (n: Int)
     def px: Px = Px(n)

@@ -2,7 +2,8 @@ package libretto.lambda.examples.workflow.generic.vis
 
 import libretto.lambda.examples.workflow.generic.vis.DefaultDimensions.*
 import libretto.lambda.examples.workflow.generic.vis.Px.*
-import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily.Monospace
+import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily.{Monospace, Serif}
+import libretto.lambda.examples.workflow.generic.vis.SVG.TextAnchor
 import libretto.lambda.examples.workflow.generic.vis.util.{IntegralProportions, leastCommonMultiple}
 
 import IOLayout.EdgeLayout
@@ -34,6 +35,8 @@ object VisualizationToSVG {
             SVGElem.Group(v, conns)
           case Right(props) =>
             conns
+      case Visualization.Text(value, props) =>
+        renderText(value, edges.pixelBreadth, height, 0.6)
       case Visualization.Unimplemented(label, _, _) =>
         renderUnimplemented(label, edges.pixelBreadth, height)
 
@@ -49,6 +52,37 @@ object VisualizationToSVG {
       SVGElem.RectOutline(width, height, math.min(width.pixels / 20.0, height.pixels / 20.0), "red"),
       text.scale(scale)
     )
+
+  /** Render horizontally centered text, at the bottom of the given width x height rectangle.
+   *
+   * @param textHeightProportion maximum proportion of vertical space to be taken by the text. Must be from (0.0, 1.0].
+   */
+  private def renderText(value: String, width: Px, height: Px, textHeightProportion: Double): SVGElem = {
+    require(width.pixels > 0)
+    require(height.pixels > 0)
+    require(textHeightProportion >  0.0)
+    require(textHeightProportion <= 1.0)
+
+    if (textHeightProportion == 1.0)
+      renderText(value, width, height, height)
+    else
+      IntegralProportions.divideProportionally(height.pixels)(Array(
+        textHeightProportion,
+        1.0 - textHeightProportion,
+      )) match
+        case IntegralProportions(k, List(textH, vPad)) =>
+          val g = renderText(value, width * k, height * k, textH.px)
+          if k == 1 then g else g.scale(1.0 / k)
+  }
+
+  private def renderText(value: String, width: Px, height: Px, textHeight: Px): SVGElem = {
+    require(0 < textHeight.pixels)
+    require(    textHeight.pixels <= height.pixels)
+
+    val maxTextHeight = (width.pixels * 5 - 4) / (3 * value.length) // XXX: just a guess that character width is 3/5 of font size
+    val fontSize = Px.min(textHeight, maxTextHeight.px)
+    SVGElem.Text(value, x = width / 2, y = height, Serif, fontSize, TextAnchor.Middle)
+  }
 
   private def renderSeq[X, Y1, Y2, Z](
     seq: Visualization.Seq[X, Y1, Y2, Z],

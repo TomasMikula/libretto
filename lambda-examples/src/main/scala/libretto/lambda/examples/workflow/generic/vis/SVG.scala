@@ -152,6 +152,7 @@ object SVGElem {
     y: Px,
     fontFamily: FontFamily,
     fontSize: Px,
+    textAnchor: TextAnchor = TextAnchor.Start,
   ) extends ElemProper :
     import Px.*
 
@@ -162,7 +163,8 @@ object SVGElem {
       Map(
         "x" -> String.valueOf(x.pixels),
         "y" -> String.valueOf(y.pixels),
-        "style" -> s"font-family: ${fontFamily.cssValue}; font-size: ${fontSize.pixels}px"
+        "style" -> s"font-family: ${fontFamily.cssValue}; font-size: ${fontSize.pixels}px",
+        "text-anchor" -> textAnchor.cssValue,
       )
 
     override def xmlContent =
@@ -259,10 +261,26 @@ object SVG {
 
   enum FontFamily:
     case Monospace
+    case Serif
+    case SansSerif
 
     def cssValue: String =
       this match
         case Monospace => "monospace"
+        case Serif => "serif"
+        case SansSerif => "sans-serif"
+
+  enum TextAnchor:
+    case Start
+    case Middle
+    case End
+
+    def cssValue: String =
+      this match
+        case Start => "start"
+        case Middle => "middle"
+        case End => "end"
+
 
   def xmlTextEscape(s: String): String =
     s.replace("<", "&lt;")

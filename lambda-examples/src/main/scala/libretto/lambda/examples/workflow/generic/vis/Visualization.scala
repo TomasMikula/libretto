@@ -70,7 +70,13 @@ object Visualization {
       base match
         case Left(vis) => Length.max(vis.length, Length.one)
         case Right(props) => Length.one
+  }
 
+  case class Text[X, Y](
+    value: String,
+    ioProportions: IOProportions[X, Y],
+  ) extends Visualization[X, Y] {
+    override def length: Length = Length.one
   }
 
   def par[∙[_, _]]: ParBuilder[∙] =
@@ -93,6 +99,22 @@ object Visualization {
       Right(IOProportions.Separate(in, out)),
       connectors.toList,
     )
+
+  def connectors[X, Y](
+    back: Visualization[X, Y],
+  )(
+    connectors: Connector[X, Y]*
+  ): Visualization[X, Y] =
+    ConnectorsOverlay(
+      Left(back),
+      connectors.toList,
+    )
+
+  def text[X, Y](value: String)(
+    iProps: EdgeProportions[X],
+    oProps: EdgeProportions[Y],
+  ): Visualization[X, Y] =
+    Text(value, IOProportions.Separate(iProps, oProps))
 
   def merge2[∙[_, _], X](x: EdgeProportions[X]): Visualization[X ∙ X, X] =
     connectors(
