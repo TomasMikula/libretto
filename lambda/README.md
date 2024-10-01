@@ -2,7 +2,7 @@
 
 Libretto Lambda lets DSL authors
  - give lambda (i.e. anonymous function) syntax to the DSL users;
- - _"delambdify"_ the lambda expressions and prodoce point-free representation of DSL programs;
+ - _"delambdify"_ the lambda expressions and produce a point-free representation of DSL programs;
  - thereby avoiding the inherent complexities of dealing with variable bindings.
 
 The point-free representation is a composition of arrows of a certain category.
