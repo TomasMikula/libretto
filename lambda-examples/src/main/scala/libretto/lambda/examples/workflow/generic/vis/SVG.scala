@@ -4,6 +4,8 @@ import java.nio.file.{Paths, Files}
 import java.nio.charset.StandardCharsets
 import libretto.lambda.util.NonEmptyList
 
+import Px.*
+
 case class SVGDocument(contentElem: SVGElem) {
   import SVGDocument.*
 
@@ -170,38 +172,44 @@ object SVGElem {
     override def xmlContent =
       List(SVGNode.TextContent(value))
 
-  case class Rect(w: Px, h: Px, color: String = "black") extends ElemProper {
+  case class Rect(
+    x: Px,
+    y: Px,
+    w: Px,
+    h: Px,
+    fill: Option[Color],
+    stroke: Option[Stroke],
+    clipPath: Option[ClipPath],
+  ) extends ElemProper {
     override def xmlTag: String = "rect"
+
     override def xmlContent: List[SVGNode] = Nil
 
     override def xmlAttributes: Map[String, String] =
       Map(
-        "x" -> "0",
-        "y" -> "0",
+        "x" -> s"${x.pixels}",
+        "y" -> s"${y.pixels}",
         "width" -> s"${w.pixels}",
         "height" -> s"${h.pixels}",
-        "fill" -> color,
-        "stroke" -> "none",
-      )
+        "fill" -> fill.fold("none")(_.cssValue),
+      ) ++ (stroke match
+        case None =>
+          List("stroke" -> "none")
+        case Some(Stroke(width, color)) =>
+          List(
+            "stroke" -> s"${color.cssValue}",
+            "stroke-width" -> s"$width",
+          )
+      ) ++ clipPath.map(p => "clip-path" -> p.cssValue)
   }
 
-  case class RectOutline(w: Px, h: Px, thickness: Double, color: String) extends ElemProper {
+  object Rect {
+    def solid(w: Px, h: Px, color: Color): Rect =
+      Rect(0.px, 0.px, w, h, fill = Some(color), stroke = None, clipPath = None)
 
-    override def xmlTag: String = "rect"
-
-    override def xmlContent: List[SVGNode] = Nil
-
-    override def xmlAttributes: Map[String, String] =
-      Map(
-        "x" -> "0",
-        "y" -> "0",
-        "width" -> s"${w.pixels}",
-        "height" -> s"${h.pixels}",
-        "fill" -> "none",
-        "stroke" -> color,
-        "stroke-width" -> s"${2 * thickness}", // the outer half will be clipped
-        "clip-path" -> "fill-box",
-      )
+    def outlineInner(w: Px, h: Px, thickness: Double, color: Color): Rect =
+      val strokeWidth = thickness * 2 // the outer half will be clipped
+      Rect(0.px, 0.px, w, h, fill = None, stroke = Some(Stroke(strokeWidth, color)), Some(ClipPath.FillBox))
   }
 
   case class Circle(radius: Px, fill: String, strokeWidth: Double, strokeColor: String = "black") extends ElemProper {
@@ -281,6 +289,24 @@ object SVG {
         case Middle => "middle"
         case End => "end"
 
+  enum Color:
+    case Black
+    case Red
+
+    def cssValue: String =
+      this match
+        case Black => "black"
+        case Red => "red"
+
+
+  case class Stroke(width: Double, color: Color)
+
+  enum ClipPath:
+    case FillBox
+
+    def cssValue: String =
+      this match
+        case FillBox =>  "fill-box"
 
   def xmlTextEscape(s: String): String =
     s.replace("<", "&lt;")

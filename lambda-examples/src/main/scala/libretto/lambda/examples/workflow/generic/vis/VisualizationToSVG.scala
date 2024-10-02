@@ -3,7 +3,7 @@ package libretto.lambda.examples.workflow.generic.vis
 import libretto.lambda.examples.workflow.generic.vis.DefaultDimensions.*
 import libretto.lambda.examples.workflow.generic.vis.Px.*
 import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily.{Monospace, Serif}
-import libretto.lambda.examples.workflow.generic.vis.SVG.TextAnchor
+import libretto.lambda.examples.workflow.generic.vis.SVG.{Color, TextAnchor}
 import libretto.lambda.examples.workflow.generic.vis.util.{IntegralProportions, leastCommonMultiple}
 
 import IOLayout.EdgeLayout
@@ -49,7 +49,7 @@ object VisualizationToSVG {
         case 0      => 0.0
         case height => scaleToFit(textW, textH, width.pixels, height).toDouble
     SVGElem.Group(
-      SVGElem.RectOutline(width, height, math.min(width.pixels / 20.0, height.pixels / 20.0), "red"),
+      SVGElem.Rect.outlineInner(width, height, math.min(width.pixels / 20.0, height.pixels / 20.0), Color.Red),
       text.scale(scale)
     )
 
@@ -185,7 +185,7 @@ object VisualizationToSVG {
         val cx = xi1 + Px(wi.pixels / 2)
         val g =
           SVGElem.Group(
-            SVGElem.Rect(wi, ym.px).translate(xi1.pixels, 0),
+            SVGElem.Rect.solid(wi, ym.px, Color.Black).translate(xi1.pixels, 0),
             SVGElem.Circle(
               radius = wi, // TODO: should take height into account
               fill = "white",
@@ -211,7 +211,7 @@ object VisualizationToSVG {
         val cx = xi1 + Px(wi.pixels / 2)
         val g =
           SVGElem.Group(
-            SVGElem.Rect(wi, ym.px).translate(xi1.pixels, hk.pixels - ym),
+            SVGElem.Rect.solid(wi, ym.px, Color.Black).translate(xi1.pixels, hk.pixels - ym),
             SVGElem.Circle(
               radius = wi, // TODO: should take height into account
               fill = "white",
