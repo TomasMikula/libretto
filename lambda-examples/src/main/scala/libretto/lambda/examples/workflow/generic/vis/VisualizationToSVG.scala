@@ -3,7 +3,7 @@ package libretto.lambda.examples.workflow.generic.vis
 import libretto.lambda.examples.workflow.generic.vis.DefaultDimensions.*
 import libretto.lambda.examples.workflow.generic.vis.Px.*
 import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily.{Monospace, Serif}
-import libretto.lambda.examples.workflow.generic.vis.SVG.{Color, TextAnchor}
+import libretto.lambda.examples.workflow.generic.vis.SVG.{Color, Stroke, TextAnchor}
 import libretto.lambda.examples.workflow.generic.vis.util.{IntegralProportions, leastCommonMultiple}
 
 import IOLayout.EdgeLayout
@@ -188,8 +188,8 @@ object VisualizationToSVG {
             SVGElem.Rect.solid(wi, ym.px, Color.Black).translate(xi1.pixels, 0),
             SVGElem.Circle(
               radius = wi, // TODO: should take height into account
-              fill = "white",
-              strokeWidth = wi.pixels / 2.0,
+              fill = Some(Color.White),
+              stroke = Some(Stroke(wi.pixels / 2.0, Color.Black)),
             ).translate(cx.pixels, ym)
           )
         if k == 1 then g else g.scale(1.0 / k)
@@ -214,8 +214,8 @@ object VisualizationToSVG {
             SVGElem.Rect.solid(wi, ym.px, Color.Black).translate(xi1.pixels, hk.pixels - ym),
             SVGElem.Circle(
               radius = wi, // TODO: should take height into account
-              fill = "white",
-              strokeWidth = wi.pixels / 2.0,
+              fill = Some(Color.White),
+              stroke = Some(Stroke(wi.pixels / 2.0, Color.Black)),
             ).translate(cx.pixels, hk.pixels - ym)
           )
         if k == 1 then g else g.scale(1.0 / k)

@@ -197,7 +197,7 @@ object SVGElem {
           List("stroke" -> "none")
         case Some(Stroke(width, color)) =>
           List(
-            "stroke" -> s"${color.cssValue}",
+            "stroke" -> color.cssValue,
             "stroke-width" -> s"$width",
           )
       ) ++ clipPath.map(p => "clip-path" -> p.cssValue)
@@ -212,7 +212,7 @@ object SVGElem {
       Rect(0.px, 0.px, w, h, fill = None, stroke = Some(Stroke(strokeWidth, color)), Some(ClipPath.FillBox))
   }
 
-  case class Circle(radius: Px, fill: String, strokeWidth: Double, strokeColor: String = "black") extends ElemProper {
+  case class Circle(radius: Px, fill: Option[Color], stroke: Option[Stroke]) extends ElemProper {
     override def xmlTag: String = "circle"
     override def xmlContent: List[SVGNode] = Nil
 
@@ -221,11 +221,16 @@ object SVGElem {
         "cx" -> "0",
         "cy" -> "0",
         "r" -> s"${radius.pixels}",
-        "fill" -> fill,
-        "stroke" -> s"$strokeColor",
-        "stroke-width" -> s"$strokeWidth",
+        "fill" -> fill.fold("none")(_.cssValue),
+      ) ++ (stroke match
+        case None =>
+          List("stroke" -> "none")
+        case Some(Stroke(width, color)) =>
+          List(
+            "stroke" -> color.cssValue,
+            "stroke-width" -> s"$width",
+          )
       )
-
   }
 
   case class Path(cmds: Path.Command*) extends ElemProper {
@@ -291,11 +296,13 @@ object SVG {
 
   enum Color:
     case Black
+    case White
     case Red
 
     def cssValue: String =
       this match
         case Black => "black"
+        case White => "white"
         case Red => "red"
 
 
