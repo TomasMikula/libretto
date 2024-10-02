@@ -30,6 +30,23 @@ object Visualization {
         EdgeProportions.default(outEdge),
       )
 
+  case class LabeledBox[X, Y](
+    inEdge: EdgeDesc[X],
+    outEdge: EdgeDesc[Y],
+    label: String,
+    fill: Option[Color],
+  ) extends Visualization[X, Y] {
+    require(label.nonEmpty, "Label must not be empty string")
+
+    override def length: Length = Length.one
+
+    override def ioProportions: IOProportions[X, Y] =
+      IOProportions.Separate(
+        EdgeProportions.default(inEdge),
+        EdgeProportions.default(outEdge),
+      )
+  }
+
   case class Seq[X, Y1, Y2, Z](
     a: Visualization[X, Y1],
     m: Morph[Y1, Y2],
@@ -75,6 +92,7 @@ object Visualization {
   case class Text[X, Y](
     value: String,
     ioProportions: IOProportions[X, Y],
+    vpos: VPos,
   ) extends Visualization[X, Y] {
     override def length: Length = Length.one
   }
@@ -114,7 +132,7 @@ object Visualization {
     iProps: EdgeProportions[X],
     oProps: EdgeProportions[Y],
   ): Visualization[X, Y] =
-    Text(value, IOProportions.Separate(iProps, oProps))
+    Text(value, IOProportions.Separate(iProps, oProps), VPos.Bottom)
 
   def merge2[∙[_, _], X](x: EdgeProportions[X]): Visualization[X ∙ X, X] =
     connectors(

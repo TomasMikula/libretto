@@ -294,17 +294,15 @@ object SVG {
         case Middle => "middle"
         case End => "end"
 
-  enum Color:
-    case Black
-    case White
-    case Red
-
+  extension (c: Color) {
     def cssValue: String =
-      this match
+      import Color.*
+      c match
         case Black => "black"
         case White => "white"
         case Red => "red"
-
+        case RGB(r, g, b) => s"rgb($r, $g, $b)"
+  }
 
   case class Stroke(width: Double, color: Color)
 

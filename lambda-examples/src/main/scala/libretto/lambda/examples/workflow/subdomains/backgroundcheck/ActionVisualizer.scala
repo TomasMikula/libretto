@@ -1,10 +1,14 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
 import libretto.lambda.examples.workflow.generic.lang.{**, PortName}
-import libretto.lambda.examples.workflow.generic.vis.{Approximates, Visualization, Visualizer, Wire}
+import libretto.lambda.examples.workflow.generic.vis.{Approximates, Color, Visualization, Visualizer, Wire}
 import libretto.lambda.util.Exists
 
 given Visualizer[Action, Approximates] with {
+  import Visualization.LabeledBox
+
+  private val COLOR = Color.rgb(251, 159, 251)
+
   extension [A, B](f: Action[A, B])
     override def visualize: Exists[[X] =>> Exists[[Y] =>> (
       X Approximates A,
@@ -24,7 +28,7 @@ given Visualizer[Action, Approximates] with {
           Exists(Exists((
             v,
             w,
-            Visualization.Unimplemented("SendAcceptanceRequest", v.inDesc, w.inDesc)
+            LabeledBox(v.inDesc, w.inDesc, "SendAcceptanceRequest", Some(COLOR))
           )))
 
         case Action.NotifyVerificationTeam =>
@@ -39,7 +43,7 @@ given Visualizer[Action, Approximates] with {
           Exists(Exists((
             v,
             w,
-            Visualization.Unimplemented("NotifyVerificationTeam", v.inDesc, w.inDesc)
+            LabeledBox(v.inDesc, w.inDesc, "NotifyVerificationTeam", Some(COLOR))
           )))
 
         case Action.ReportCandidateDeclined =>
@@ -52,7 +56,7 @@ given Visualizer[Action, Approximates] with {
           Exists(Exists((
             v,
             w,
-            Visualization.Unimplemented("ReportCandidateDeclined", v.inDesc, w.inDesc)
+            LabeledBox(v.inDesc, w.inDesc, "ReportCandidateDeclined", Some(COLOR))
           )))
 
         case Action.CreateReport =>
@@ -69,7 +73,7 @@ given Visualizer[Action, Approximates] with {
           Exists(Exists((
             v,
             w,
-            Visualization.Unimplemented("CreateReport", v.inDesc, w.inDesc)
+            LabeledBox(v.inDesc, w.inDesc, "CreateReport", Some(COLOR))
           )))
 
         case Action.CheckCriminalRecord =>
@@ -82,7 +86,7 @@ given Visualizer[Action, Approximates] with {
           Exists(Exists((
             v,
             w,
-            Visualization.Unimplemented("CheckCriminalRecord", v.inDesc, w.inDesc)
+            LabeledBox(v.inDesc, w.inDesc, "CheckCriminalRecord", Some(COLOR))
           )))
 
         case Action.CheckCivilRecord =>
@@ -95,7 +99,7 @@ given Visualizer[Action, Approximates] with {
           Exists(Exists((
             v,
             w,
-            Visualization.Unimplemented("CheckCivilRecord", v.inDesc, w.inDesc)
+            LabeledBox(v.inDesc, w.inDesc, "CheckCivilRecord", Some(COLOR))
           )))
     }
 }
