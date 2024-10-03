@@ -1,6 +1,9 @@
 package libretto.lambda.examples.workflow.generic.vis
 
 import libretto.lambda.examples.workflow.generic.vis.DefaultDimensions.*
+import scala.math.Ordering.Implicits.*
+
+import Breadth.given
 import IOProportions.EdgeProportions
 
 sealed trait Visualization[X, Y] {
@@ -40,11 +43,21 @@ object Visualization {
 
     override def length: Length = Length.one
 
-    override def ioProportions: IOProportions[X, Y] =
-      IOProportions.Separate(
-        EdgeProportions.default(inEdge),
-        EdgeProportions.default(outEdge),
-      )
+    override def ioProportions: IOProportions[X, Y] = {
+      // 1 unit for each 4 characters
+      val minBreadth = Breadth.cramNUnits(label.length / 4)
+
+      val baseProps =
+        IOProportions.Separate(
+          EdgeProportions.default(inEdge),
+          EdgeProportions.default(outEdge),
+        )
+
+      if (baseProps.totalBreadth < minBreadth)
+        IOProportions.Weighted(minBreadth, baseProps)
+      else
+        baseProps
+    }
   }
 
   case class Seq[X, Y1, Y2, Z](

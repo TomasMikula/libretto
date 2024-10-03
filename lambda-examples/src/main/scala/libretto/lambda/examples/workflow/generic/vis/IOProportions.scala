@@ -80,6 +80,11 @@ object IOProportions {
       }
     }
 
+    case class Weighted[X](weight: Breadth, base: EdgeProportions[X]) extends EdgeProportions[X] {
+      override def totalBreadth: Breadth = weight
+      override def layout(availableBreadth: Px): (Int, EdgeLayout[X]) = base.layout(availableBreadth)
+    }
+
     def unitWire: EdgeProportions[Wire] =
       UnitWire
 
@@ -147,6 +152,27 @@ object IOProportions {
           (m, IOLayout.Par(layout1 * j1, layout2 * j2))
         case EdgeLayout.SingleWire(pre, wire, post) =>
           throw AssertionError(s"Wire =:= (Y1 ∙ Y2) is impossible (unless ∙ is not a class type)")
+  }
 
+  case class Weighted[X, Y](
+    weight: Breadth,
+    base: IOProportions[X, Y],
+  ) extends IOProportions[X, Y] {
+    override def totalBreadth: Breadth = weight
+
+    override def inEdge: EdgeProportions[X] =
+      EdgeProportions.Weighted(weight, base.inEdge)
+
+    override def outEdge: EdgeProportions[Y] =
+      EdgeProportions.Weighted(weight, base.outEdge)
+
+    override def layout(availableBreadth: Px): (Int, IOLayout[X, Y]) =
+      base.layout(availableBreadth)
+
+    override def layoutFw(inLayout: EdgeLayout[X]): (Int, IOLayout[X, Y]) =
+      base.layoutFw(inLayout)
+
+    override def layoutBw(outLayout: EdgeLayout[Y]): (Int, IOLayout[X, Y]) =
+      base.layoutBw(outLayout)
   }
 }

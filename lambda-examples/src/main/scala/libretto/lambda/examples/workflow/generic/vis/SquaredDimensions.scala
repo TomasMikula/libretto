@@ -33,6 +33,9 @@ private[vis] object SquaredDimensions extends Dimensions {
 
     override def divideProportionally(N: Int)(as: Breadth*): IntegralProportions =
       IntegralProportions.divideProportionally(N)(as.map(_.doubleValue).toArray)
+
+    override given ordering: Ordering[Breadth] =
+      Ordering.by(_.squaredValue)
   }
 
   object Length extends LengthModule {
@@ -50,6 +53,8 @@ private[vis] object SquaredDimensions extends Dimensions {
     override def max(a: Length, b: Length): Length =
       if a.squaredValue >= b.squaredValue then a else b
 
+    override given ordering: Ordering[Length] =
+      Ordering.by(_.squaredValue)
   }
 
   object AspectRatio extends AspectRatioModule {
