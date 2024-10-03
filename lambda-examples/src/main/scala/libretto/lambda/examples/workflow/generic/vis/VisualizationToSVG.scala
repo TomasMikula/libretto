@@ -42,7 +42,8 @@ object VisualizationToSVG {
       case Visualization.LabeledBox(i, o, label, fillOpt) =>
         val width = edges.pixelBreadth
         val strokeWidth = math.min(width.pixels / 20.0, height.pixels / 20.0)
-        val rect = SVGElem.Rect(0.px, 0.px, width, height, fillOpt, Some(Stroke(strokeWidth, Color.Black)), clipPath = None)
+        val r = 0.15 * math.min(width.pixels, height.pixels)
+        val rect = SVGElem.Rect(0.px, 0.px, width, height, fillOpt, Some(Stroke(strokeWidth, Color.Black)), clipPath = None, rx = Some(r), ry = Some(r))
         val txt = renderText(label, width, height, 0.6, VPos.Middle, Monospace)
         SVGElem.Group(rect, txt)
       case Visualization.Unimplemented(label, _, _) =>

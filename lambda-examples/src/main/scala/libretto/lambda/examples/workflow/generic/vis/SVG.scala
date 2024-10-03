@@ -180,6 +180,8 @@ object SVGElem {
     fill: Option[Color],
     stroke: Option[Stroke],
     clipPath: Option[ClipPath],
+    rx: Option[Double] = None,
+    ry: Option[Double] = None,
   ) extends ElemProper {
     override def xmlTag: String = "rect"
 
@@ -201,6 +203,8 @@ object SVGElem {
             "stroke-width" -> s"$width",
           )
       ) ++ clipPath.map(p => "clip-path" -> p.cssValue)
+        ++ rx.map(rx => "rx" -> rx.toString)
+        ++ ry.map(ry => "ry" -> ry.toString)
   }
 
   object Rect {
