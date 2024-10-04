@@ -166,12 +166,12 @@ object VisualizationToSVG {
     import SVGElem.Path.Command.*
 
     connector match
-      case Connector.Across(src, tgt) =>
+      case Connector.Across(src, tgt, Connector.Style(color)) =>
         val (xi, wi) = inEdge.coordsOf(src)
         val (xo, wo) = outEdge.coordsOf(tgt)
-        curvyTrapezoid(iOffset + xi, wi, oOffset + xo, wo, height, Color.Black)
+        curvyTrapezoid(iOffset + xi, wi, oOffset + xo, wo, height, color)
 
-      case Connector.StudIn(src) =>
+      case Connector.StudIn(src, Connector.Style(color)) =>
         val H = 20
         val k =
           if (height.pixels >= H)
@@ -187,16 +187,16 @@ object VisualizationToSVG {
         val cx = xi1 + Px(wi.pixels / 2)
         val g =
           SVGElem.Group(
-            SVGElem.Rect.solid(wi, ym.px, Color.Black).translate(xi1.pixels, 0),
+            SVGElem.Rect.solid(wi, ym.px, color).translate(xi1.pixels, 0),
             SVGElem.Circle(
               radius = wi, // TODO: should take height into account
               fill = Some(Color.White),
-              stroke = Some(Stroke(wi.pixels / 2.0, Color.Black)),
+              stroke = Some(Stroke(wi.pixels / 2.0, color)),
             ).translate(cx.pixels, ym)
           )
         if k == 1 then g else g.scale(1.0 / k)
 
-      case Connector.StudOut(tgt) =>
+      case Connector.StudOut(tgt, Connector.Style(color)) =>
         val H = 20
         val k =
           if (height.pixels >= H)
@@ -213,11 +213,11 @@ object VisualizationToSVG {
         val cx = xi1 + Px(wi.pixels / 2)
         val g =
           SVGElem.Group(
-            SVGElem.Rect.solid(wi, ym.px, Color.Black).translate(xi1.pixels, hk.pixels - ym),
+            SVGElem.Rect.solid(wi, ym.px, color).translate(xi1.pixels, hk.pixels - ym),
             SVGElem.Circle(
               radius = wi, // TODO: should take height into account
               fill = Some(Color.White),
-              stroke = Some(Stroke(wi.pixels / 2.0, Color.Black)),
+              stroke = Some(Stroke(wi.pixels / 2.0, color)),
             ).translate(cx.pixels, hk.pixels - ym)
           )
         if k == 1 then g else g.scale(1.0 / k)

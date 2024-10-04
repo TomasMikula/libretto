@@ -213,6 +213,24 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           )
         )))
 
+      case _: FlowAST.DistributeLR[op, x, y, z] =>
+        summon[A =:= x ** (y ++ z)]
+        summon[B =:= (x ** y) ++ (x ** z)]
+
+        Exists(Exists((
+          lump[x] pair (lump[y] ++ lump[z]),
+          (lump[x] pair lump[y]) ++ (lump[x] pair lump[z]),
+          Visualization.connectors(
+            unitSize pair (unitSize pair unitSize),
+            (unitSize pair unitSize) pair (unitSize pair unitSize),
+          )(
+            Across(pickL.inr, pickR.inl).fill(Color.rgb(0, 90, 147)),
+            Across(pickR.inr, pickR.inr).fill(Color.rgb(255, 187, 49)),
+            Across(pickL, pickL.inl),
+            Across(pickL, pickL.inr),
+          )
+        )))
+
       case other =>
         Visualizer.unimplemented(other.getClass.getSimpleName())
 }

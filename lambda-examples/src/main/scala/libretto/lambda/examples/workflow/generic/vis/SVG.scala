@@ -324,10 +324,15 @@ object SVG {
     def cssValue: String =
       import Color.*
       c match
+        case RGB(r, g, b) => s"rgb($r, $g, $b)"
         case Black => "black"
         case White => "white"
         case Red => "red"
-        case RGB(r, g, b) => s"rgb($r, $g, $b)"
+        case Green => "green"
+        case Blue => "blue"
+        case Cyan => "cyan"
+        case Magenta => "magenta"
+        case Yellow => "yellow"
   }
 
   case class Stroke(width: Double, color: Color)
