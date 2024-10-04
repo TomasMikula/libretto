@@ -125,7 +125,7 @@ object FlowAST {
     shuffled: Shuffled[FlowAST.Work[Op, _, _], **],
   )(
     f: shuffled.Shuffled[A, B],
-  ): FlowAST[Op[_, _], A, B] =
+  ): FlowAST[Op, A, B] =
     f.foldMap[FlowAST[Op, _, _]]([x, y] => (w: Work[Op, x, y]) => w)
 
   def andThen[Op[_, _], A, B, C](
@@ -144,4 +144,12 @@ object FlowAST {
     (f1, f2) match
       case (Id(), Id()) => Id()
       case (f1, f2) => Par(f1, f2)
+
+  // TODO: have a normalized representation. Then this method will become superfluous.
+  /** _Might_ simplify the FlowAST. */
+  def shakeUp[Op[_, _], A, B](
+    f: FlowAST[Op, A, B],
+  ): FlowAST[Op, A, B] =
+    given Shuffled[Work[Op, _, _], **] = shuffled[Op]
+    fromShuffled(f.toShuffled)
 }

@@ -7,7 +7,7 @@ object RenderSVG {
   def main(args: Array[String]): Unit =
     val W = 800
     val H = 800
-    FlowVisualizer[Action].visualize(backgroundCheck) match
+    FlowVisualizer[Action].visualize(backgroundCheck.shakeUp) match
       case ∃(∃((_, _, graphic))) =>
         VisualizationToSVG
           .renderSVGToFit(graphic, W, H)

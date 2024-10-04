@@ -24,9 +24,13 @@ class Workflows[Action[_, _]] {
   def astOf[A, B](f: Flow[A, B]): FlowAST[Action, A, B] =
     f
 
-  extension [A, B](f: Flow[A, B])
+  extension [A, B](f: Flow[A, B]) {
     def ast: FlowAST[Action, A, B] =
       f
+
+    def shakeUp: Flow[A, B] =
+      FlowAST.shakeUp(f)
+  }
 
   private val lambdas: Lambdas[PartialFlow, **, VarOrigin, Unit] =
     Lambdas[PartialFlow, **, VarOrigin, Unit](
