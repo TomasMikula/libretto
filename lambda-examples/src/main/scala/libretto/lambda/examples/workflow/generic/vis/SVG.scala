@@ -13,6 +13,7 @@ case class SVGDocument(contentElem: SVGElem) {
     val fullXmlString =
       s"""<svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height">
          |$SCRIPT
+         |<rect x="0" y="0" width="${width}px" height="${height}px" fill="rgb(240 240 240)" stroke="black" stroke-width="1px"/>
          |<g id="content">
          |${contentElem.xmlString}
          |</g>
