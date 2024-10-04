@@ -169,18 +169,7 @@ object VisualizationToSVG {
       case Connector.Across(src, tgt) =>
         val (xi, wi) = inEdge.coordsOf(src)
         val (xo, wo) = outEdge.coordsOf(tgt)
-        val xi1 = iOffset + xi
-        val xi2 = xi1 + wi
-        val xo1 = oOffset + xo
-        val xo2 = xo1 + wo
-        val ym: Double = height.pixels / 2.0
-        SVGElem.Path(
-          MoveTo(xi1, 0.px),
-          CurveTo(xi1, ym, xo1, ym, xo1, height),
-          LineTo(xo2, height),
-          CurveTo(xo2, ym, xi2, ym, xi2, 0.px),
-          Close
-        )
+        curvyTrapezoid(iOffset + xi, wi, oOffset + xo, wo, height, Color.Black)
 
       case Connector.StudIn(src) =>
         val H = 20
