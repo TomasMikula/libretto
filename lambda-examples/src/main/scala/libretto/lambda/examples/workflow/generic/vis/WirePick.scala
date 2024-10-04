@@ -43,6 +43,7 @@ object WirePick {
       caseInr[∙, A, B](r)
   }
 
+  def pickId: WirePick[Wire] = Id
   def pickL[∙[_, _], B]: WirePick[Wire ∙ B] = Inl(Id)
   def pickR[∙[_, _], A]: WirePick[A ∙ Wire] = Inr(Id)
 }

@@ -338,8 +338,8 @@ object VisualizationToSVG {
     val c1 = Connector.Across[Wire, Wire ∙ Wire](WirePick.Id, WirePick.pickL)
     val c2 = Connector.Across[Wire, Wire ∙ Wire](WirePick.Id, WirePick.pickR)
     val (o1, o2) = EdgeLayout.split(oLayout)
-    val (i1, w1) = EdgeProportions.unitWire.layout(o1.pixelBreadth)
-    val (i2, w2) = EdgeProportions.unitWire.layout(o2.pixelBreadth)
+    val (i1, w1) = EdgeProportions.unitSize.layout(o1.pixelBreadth)
+    val (i2, w2) = EdgeProportions.unitSize.layout(o2.pixelBreadth)
     val (ki1, ki2, k) = leastCommonMultiple(i1, i2)
     (y.x1, y.x2) match {
       case (EdgeDesc.SingleWire, EdgeDesc.SingleWire) =>
@@ -407,8 +407,8 @@ object VisualizationToSVG {
     val c1 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickL, WirePick.Id)
     val c2 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickR, WirePick.Id)
     val (i1, i2) = EdgeLayout.split(iLayout)
-    val (j1, w1) = EdgeProportions.unitWire.layout(i1.pixelBreadth)
-    val (j2, w2) = EdgeProportions.unitWire.layout(i2.pixelBreadth)
+    val (j1, w1) = EdgeProportions.unitSize.layout(i1.pixelBreadth)
+    val (j2, w2) = EdgeProportions.unitSize.layout(i2.pixelBreadth)
     val (kj1, kj2, k) = leastCommonMultiple(j1, j2)
     (x.x1, x.x2) match {
       case (EdgeDesc.SingleWire, EdgeDesc.SingleWire) =>

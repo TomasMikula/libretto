@@ -4,7 +4,11 @@ import libretto.lambda.examples.workflow.generic.lang.{++, **, FlowAST, Workflow
 import libretto.lambda.util.Exists
 import libretto.lambda.util.Exists.{Some as ∃}
 
+import Approximates.lump
+import Connector.{Across, StudIn, StudOut}
 import IOProportions.EdgeProportions
+import EdgeProportions.unitSize
+import WirePick.{pickId, pickL, pickR}
 
 object FlowVisualizer {
   def apply[Op[_, _]](using
@@ -83,33 +87,29 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
 
       case FlowAST.Id() =>
         summon[A =:= B]
-        val v: Wire Approximates A = Approximates.Initial[A]()
-        val w: Wire Approximates B = Approximates.Initial[B]()
         Exists(Exists((
-          v,
-          w,
+          lump[A],
+          lump[B],
           Visualization.connectors(
-            EdgeProportions.unitWire,
-            EdgeProportions.unitWire,
+            unitSize,
+            unitSize,
           )(
-            Connector.Across(WirePick.Id, WirePick.Id),
+            Across(pickId, pickId),
           )
         )))
 
       case _: FlowAST.Swap[op, x, y] =>
         summon[A =:= (x ** y)]
         summon[B =:= (y ** x)]
-        val v: (Wire ** Wire) Approximates A = Approximates.Initial[x]() pair Approximates.Initial[y]()
-        val w: (Wire ** Wire) Approximates B = Approximates.Initial[y]() pair Approximates.Initial[x]()
         Exists(Exists((
-          v,
-          w,
+          lump[x] pair lump[y],
+          lump[y] pair lump[x],
           Visualization.connectors(
-            EdgeProportions.unitWire pair EdgeProportions.unitWire,
-            EdgeProportions.unitWire pair EdgeProportions.unitWire,
+            unitSize pair unitSize,
+            unitSize pair unitSize,
           )(
-            Connector.Across(WirePick.pickL, WirePick.pickR),
-            Connector.Across(WirePick.pickR, WirePick.pickL),
+            Across(pickL, pickR),
+            Across(pickR, pickL),
           )
         )))
 
@@ -117,20 +117,12 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[A =:= ((x ** y) ** z)]
         summon[B =:= (x ** (y ** z))]
 
-        import Approximates.Initial
-        import EdgeProportions.unitWire
-        import Connector.Across
-        import WirePick.{pickL, pickR}
-
-        val v: ((Wire ** Wire) ** Wire) Approximates A = (Initial[x]() pair Initial[y]()) pair Initial[z]()
-        val w: (Wire ** (Wire ** Wire)) Approximates B = Initial[x]() pair (Initial[y]() pair Initial[z]())
-
         Exists(Exists((
-          v,
-          w,
+          (lump[x] pair lump[y]) pair lump[z],
+          lump[x] pair (lump[y] pair lump[z]),
           Visualization.connectors(
-            (unitWire pair unitWire) pair unitWire,
-            unitWire pair (unitWire pair unitWire),
+            (unitSize pair unitSize) pair unitSize,
+            unitSize pair (unitSize pair unitSize),
           )(
             Across(pickL.inl, pickL),
             Across(pickR.inl, pickL.inr),
@@ -142,20 +134,12 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[A =:= (x ** (y ** z))]
         summon[B =:= ((x ** y) ** z)]
 
-        import Approximates.Initial
-        import EdgeProportions.unitWire
-        import Connector.Across
-        import WirePick.{pickL, pickR}
-
-        val v: (Wire ** (Wire ** Wire)) Approximates A = Initial[x]() pair (Initial[y]() pair Initial[z]())
-        val w: ((Wire ** Wire) ** Wire) Approximates B = (Initial[x]() pair Initial[y]()) pair Initial[z]()
-
         Exists(Exists((
-          v,
-          w,
+          lump[x] pair (lump[y] pair lump[z]),
+          (lump[x] pair lump[y]) pair lump[z],
           Visualization.connectors(
-            unitWire pair (unitWire pair unitWire),
-            (unitWire pair unitWire) pair unitWire,
+            unitSize pair (unitSize pair unitSize),
+            (unitSize pair unitSize) pair unitSize,
           )(
             Across(pickL, pickL.inl),
             Across(pickL.inr, pickR.inl),
@@ -167,22 +151,14 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[A =:= (x ** y)]
         summon[B =:= x]
 
-        import Approximates.Initial
-        import EdgeProportions.unitWire
-        import Connector.{Across, StudIn}
-        import WirePick.{pickL, pickR}
-
-        val v: (Wire ** Wire) Approximates A = Initial[x]() pair Initial[y]()
-        val w: Wire Approximates B = Initial[x]()
-
         Exists(Exists((
-          v,
-          w,
+          lump[x] pair lump[y],
+          lump[x],
           Visualization.connectors(
-            unitWire pair unitWire,
-            unitWire,
+            unitSize pair unitSize,
+            unitSize,
           )(
-            Across(pickL, WirePick.Id),
+            Across(pickL, pickId),
             StudIn(pickR),
           )
         )))
@@ -191,22 +167,14 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[A =:= (x ** y)]
         summon[B =:= y]
 
-        import Approximates.Initial
-        import EdgeProportions.unitWire
-        import Connector.{Across, StudIn}
-        import WirePick.{pickL, pickR}
-
-        val v: (Wire ** Wire) Approximates A = Initial[x]() pair Initial[y]()
-        val w: Wire Approximates B = Initial[y]()
-
         Exists(Exists((
-          v,
-          w,
+          lump[x] pair lump[y],
+          lump[y],
           Visualization.connectors(
-            unitWire pair unitWire,
-            unitWire,
+            unitSize pair unitSize,
+            unitSize,
           )(
-            Across(pickR, WirePick.Id),
+            Across(pickR, pickId),
             StudIn(pickL),
           )
         )))
@@ -215,22 +183,14 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[A =:= x]
         summon[B =:= (Unit ** x)]
 
-        import Approximates.Initial
-        import EdgeProportions.unitWire
-        import Connector.{Across, StudOut}
-        import WirePick.{pickL, pickR}
-
-        val v: Wire Approximates A = Initial[x]()
-        val w: (Wire ** Wire) Approximates B = Initial[Unit]() pair Initial[x]()
-
         Exists(Exists((
-          v,
-          w,
+          lump[x],
+          lump[Unit] pair lump[x],
           Visualization.connectors(
-            unitWire,
-            unitWire pair unitWire,
+            unitSize,
+            unitSize pair unitSize,
           )(
-            Across(WirePick.Id, pickR),
+            Across(pickId, pickR),
             StudOut(pickL),
           )
         )))
@@ -239,25 +199,17 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[A =:= x]
         summon[B =:= (x ** x)]
 
-        import Approximates.Initial
-        import EdgeProportions.unitWire
-        import Connector.Across
-        import WirePick.{pickL, pickR}
-
-        val v: Wire Approximates A = Initial[x]()
-        val w: (Wire ** Wire) Approximates B = Initial[x]() pair Initial[x]()
-
         Exists(Exists((
-          v,
-          w,
+          lump[x],
+          lump[x] pair lump[x],
           Visualization.connectors(
             back = Visualization.text("Δ")(
-              unitWire,
-              unitWire pair unitWire,
+              unitSize,
+              unitSize pair unitSize,
             )
           )(
-            Across(WirePick.Id, pickL),
-            Across(WirePick.Id, pickR),
+            Across(pickId, pickL),
+            Across(pickId, pickR),
           )
         )))
 

@@ -91,6 +91,9 @@ object Approximates {
       ???
   }
 
+  def lump[A]: Wire Approximates A =
+    Initial()
+
   given Approximation[Approximates] with {
     override def lump[A] =
       Initial[A]()

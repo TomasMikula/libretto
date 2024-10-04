@@ -85,7 +85,7 @@ object IOProportions {
       override def layout(availableBreadth: Px): (Int, EdgeLayout[X]) = base.layout(availableBreadth)
     }
 
-    def unitWire: EdgeProportions[Wire] =
+    def unitSize: EdgeProportions[Wire] =
       UnitWire
 
     def default[X](x: EdgeDesc[X]): EdgeProportions[X] =
