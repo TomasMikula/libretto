@@ -234,6 +234,29 @@ object VisualizationToSVG {
         if k == 1 then g else g.scale(1.0 / k)
   }
 
+  private def curvyTrapezoid(
+    xi: Px,
+    wi: Px,
+    xo: Px,
+    wo: Px,
+    h: Px,
+    fill: Color = Color.Black,
+  ): SVGElem = {
+    import SVGElem.Path.Command.*
+
+    val xi2 = xi + wi
+    val xo2 = xo + wo
+    val ym: Double = h.pixels / 2.0
+    SVGElem.Path(
+      fill,
+      MoveTo(xi, 0.px),
+      CurveTo(xi, ym, xo, ym, xo, h),
+      LineTo(xo2, h),
+      CurveTo(xo2, ym, xi2, ym, xi2, 0.px),
+      Close
+    )
+  }
+
   private def renderMorph[X, Y](
     m: Morph[X, Y],
     iLayout: EdgeLayout[X],
@@ -241,21 +264,29 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
-  ): SVGElem =
-    println(s"renderMorph into ${iLayout.pixelBreadth} x $height")
-    m match
-      case Morph.Id(desc) =>
-        renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
-      case Morph.Refine(f) =>
-        renderRefine(f, iLayout, oLayout, iOffset, oOffset, height)
-      case Morph.Unrefine(f) =>
-        renderUnrefine(f, iLayout, oLayout, iOffset, oOffset, height)
-      case p: Morph.Par[op, x1, x2, y1, y2] =>
-        val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
-        val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
-        val g1 = renderMorph(p.f1, i1, o1, iOffset, oOffset, height)
-        val g2 = renderMorph(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
-        SVGElem.Group(g1, g2)
+  ): SVGElem = {
+    // hidden background for debugging purposes
+    val hiddenBackground =
+      curvyTrapezoid(iOffset, iLayout.pixelBreadth, oOffset, oLayout.pixelBreadth, height, Color.Red)
+        .hidden
+
+    val content =
+      m match
+        case Morph.Id(desc) =>
+          renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
+        case Morph.Refine(f) =>
+          renderRefine(f, iLayout, oLayout, iOffset, oOffset, height)
+        case Morph.Unrefine(f) =>
+          renderUnrefine(f, iLayout, oLayout, iOffset, oOffset, height)
+        case p: Morph.Par[op, x1, x2, y1, y2] =>
+          val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
+          val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
+          val g1 = renderMorph(p.f1, i1, o1, iOffset, oOffset, height)
+          val g2 = renderMorph(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+          SVGElem.Group(g1, g2)
+
+    SVGElem.Group(hiddenBackground, content)
+  }
 
   private def renderIdentity[X](
     x: EdgeDesc[X],

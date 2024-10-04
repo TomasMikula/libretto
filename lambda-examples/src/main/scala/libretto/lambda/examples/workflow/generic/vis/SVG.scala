@@ -117,6 +117,14 @@ sealed trait SVGElem extends SVGNode {
     this match
       case Transformed(obj, ts) => Transformed(obj, t :: ts)
       case obj: ElemProper      => Transformed(obj, t)
+      case Hidden(obj)          => obj.transform(t).hidden
+
+  def hidden: SVGElem =
+    this match
+      case p: ElemProper  => Hidden(p)
+      case t: Transformed => Hidden(t)
+      case h: Hidden      => h
+
 }
 
 object SVGElem {
@@ -136,6 +144,13 @@ object SVGElem {
   object Transformed:
     def apply(obj: ElemProper, t: Transform): Transformed =
       Transformed(obj, NonEmptyList.of(t))
+
+  case class Hidden(obj: ElemProper | Transformed) extends SVGElem:
+    override def xmlTag: String = obj.xmlTag
+    override def xmlContent: List[SVGNode] = obj.xmlContent
+    override def xmlAttributes: Map[String, String] =
+      obj.xmlAttributes
+        .updated("display", "none")
 
   sealed trait ElemProper extends SVGElem
 
@@ -237,7 +252,10 @@ object SVGElem {
       )
   }
 
-  case class Path(cmds: Path.Command*) extends ElemProper {
+  case class Path(
+    fill: Color,
+    cmds: Path.Command*,
+  ) extends ElemProper {
     override def xmlTag: String = "path"
 
     override def xmlContent: List[SVGNode] = Nil
@@ -245,7 +263,7 @@ object SVGElem {
     override def xmlAttributes: Map[String, String] =
       Map(
         "d" -> cmds.map(_.stringValue).mkString(" "),
-        "fill" -> "black",
+        "fill" -> fill.cssValue,
         "stroke" -> "none",
       )
   }
@@ -263,6 +281,9 @@ object SVGElem {
           case LineTo(x, y) => s"L $x $y"
           case CurveTo(c1x, c1y, c2x, c2y, tgtX, tgtY) => s"C $c1x $c1y, $c2x $c2y, $tgtX $tgtY"
           case Close => "Z"
+
+    def apply(cmds: Path.Command*): Path =
+      Path(Color.Black, cmds*)
   }
 }
 
