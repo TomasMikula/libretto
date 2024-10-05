@@ -229,7 +229,7 @@ object VisualizationToSVG {
     xo: Px,
     wo: Px,
     h: Px,
-    fill: Color = Color.Black,
+    fill: Color | ColorGradient = Color.Black,
   ): SVGElem = {
     import SVGElem.Path.Command.*
 

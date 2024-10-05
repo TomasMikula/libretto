@@ -4,8 +4,8 @@ sealed trait Connector[X, Y] {
   def style: Connector.Style
   def styled(style: Connector.Style): Connector[X, Y]
 
-  def fill(color: Color): Connector[X, Y] =
-    styled(this.style.copy(fill = color))
+  def fill(fill: Color | ColorGradient): Connector[X, Y] =
+    styled(this.style.copy(fill = fill))
 }
 
 object Connector {
@@ -32,7 +32,7 @@ object Connector {
   }
 
   case class Style(
-    fill: Color,
+    fill: Color | ColorGradient,
   )
 
   object Style {

@@ -13,6 +13,12 @@ case class SVGDocument(contentElem: SVGElem) {
     val fullXmlString =
       s"""<svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height">
          |$SCRIPT
+         | <defs>
+         |   <linearGradient id="gradient-vertical-white-black" x1="0" y1="0" x2="0" y2="1">
+         |     <stop offset="0%" stop-color="white"/>
+         |     <stop offset="100%" stop-color="black"/>
+         |   </linearGradient>
+         | </defs>
          |<rect x="0" y="0" width="${width}px" height="${height}px" fill="rgb(240 240 240)" stroke="black" stroke-width="1px"/>
          |<g id="content">
          |${contentElem.xmlString}
@@ -193,7 +199,7 @@ object SVGElem {
     y: Px,
     w: Px,
     h: Px,
-    fill: Option[Color],
+    fill: Option[Color | ColorGradient],
     stroke: Option[Stroke],
     clipPath: Option[ClipPath],
     rx: Option[Double] = None,
@@ -209,13 +215,13 @@ object SVGElem {
         "y" -> s"${y.pixels}",
         "width" -> s"${w.pixels}",
         "height" -> s"${h.pixels}",
-        "fill" -> fill.fold("none")(_.cssValue),
+        "fill" -> fill.fold("none")(fillCssValue),
       ) ++ (stroke match
         case None =>
           List("stroke" -> "none")
-        case Some(Stroke(width, color)) =>
+        case Some(Stroke(width, fill)) =>
           List(
-            "stroke" -> color.cssValue,
+            "stroke" -> fillCssValue(fill),
             "stroke-width" -> s"$width",
           )
       ) ++ clipPath.map(p => "clip-path" -> p.cssValue)
@@ -224,8 +230,8 @@ object SVGElem {
   }
 
   object Rect {
-    def solid(w: Px, h: Px, color: Color): Rect =
-      Rect(0.px, 0.px, w, h, fill = Some(color), stroke = None, clipPath = None)
+    def solid(w: Px, h: Px, fill: Color | ColorGradient): Rect =
+      Rect(0.px, 0.px, w, h, fill = Some(fill), stroke = None, clipPath = None)
 
     def outlineInner(w: Px, h: Px, thickness: Double, color: Color): Rect =
       val strokeWidth = thickness * 2 // the outer half will be clipped
@@ -245,16 +251,16 @@ object SVGElem {
       ) ++ (stroke match
         case None =>
           List("stroke" -> "none")
-        case Some(Stroke(width, color)) =>
+        case Some(Stroke(width, fill)) =>
           List(
-            "stroke" -> color.cssValue,
+            "stroke" -> fillCssValue(fill),
             "stroke-width" -> s"$width",
           )
       )
   }
 
   case class Path(
-    fill: Color,
+    fill: Color | ColorGradient,
     cmds: Path.Command*,
   ) extends ElemProper {
     override def xmlTag: String = "path"
@@ -264,7 +270,7 @@ object SVGElem {
     override def xmlAttributes: Map[String, String] =
       Map(
         "d" -> cmds.map(_.stringValue).mkString(" "),
-        "fill" -> fill.cssValue,
+        "fill" -> fillCssValue(fill),
         "stroke" -> "none",
       )
   }
@@ -335,7 +341,7 @@ object SVG {
         case Yellow => "yellow"
   }
 
-  case class Stroke(width: Double, color: Color)
+  case class Stroke(width: Double, color: Color | ColorGradient)
 
   enum ClipPath:
     case FillBox
@@ -344,7 +350,22 @@ object SVG {
       this match
         case FillBox =>  "fill-box"
 
+  def fillCssValue(fill: Color | ColorGradient): String =
+    fill match
+      case c: Color => c.cssValue
+      case g: ColorGradient => gradientCssValue(g)
+
+  def gradientCssValue(g: ColorGradient): String =
+    g match
+      case ColorGradient.VerticalWhiteBlack => Predef.GradientVerticalWhiteBlack.cssValue
+
   def xmlTextEscape(s: String): String =
     s.replace("<", "&lt;")
      .replace("&", "&amp;")
+
+  object Predef {
+    object GradientVerticalWhiteBlack:
+      val cssValue: String = "url(#gradient-vertical-white-black)"
+  }
+
 }

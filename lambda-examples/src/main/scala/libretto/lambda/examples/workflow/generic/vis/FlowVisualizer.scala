@@ -226,8 +226,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           )(
             Across(pickL.inr, pickR.inl).fill(Color.rgb(0, 90, 147)),
             Across(pickR.inr, pickR.inr).fill(Color.rgb(255, 187, 49)),
-            Across(pickL, pickL.inl),
-            Across(pickL, pickL.inr),
+            Across(pickL, pickL.inl).fill(ColorGradient.VerticalWhiteBlack),
+            Across(pickL, pickL.inr).fill(ColorGradient.VerticalWhiteBlack),
           )
         )))
 
