@@ -17,12 +17,16 @@ object FlowVisualizer {
     visOp: Visualizer[Op, Approximates],
   ): FlowVisualizer[Op, workflows.Flow] =
     new FlowVisualizer[Op, workflows.Flow]
+
+  private[FlowVisualizer] val ColorCaseLeft  = Color.rgba(0, 119, 183, 0.25)
+  private[FlowVisualizer] val ColorCaseRight = Color.rgba(252, 190, 51, 0.25)
 }
 
 class FlowVisualizer[Op[_, _], F[_, _]](using
   val workflows: Workflows[Op] { type Flow[A, B] = F[A, B] },
   visOp: Visualizer[Op, Approximates],
 ) extends Visualizer[F, Approximates] {
+  import FlowVisualizer.*
 
   extension [A, B](f: F[A, B])
     override def visualize =
@@ -61,7 +65,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                       x ++ y,
                       z1 coarsenBy w1, // could equivalently use `z2 coarsenBy w2`
                       Visualization.Seq(
-                        Visualization.par[++](vg, vh),
+                        Visualization.par[++](vg.withBackground(ColorCaseLeft), vh.withBackground(ColorCaseRight)),
                         Adaptoid.par[++](Adaptoid.Collapse(w1), Adaptoid.Collapse(w2)),
                         Visualization.merge2(EdgeProportions.default(w1.inDesc)),
                       ),
@@ -230,8 +234,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
             )(
               Across(pickL.inr, pickR.inl),
               Across(pickR.inr, pickR.inr),
-              TrapezoidArea(EdgeSegment.pickL.inr, EdgeSegment.pickL, Color.rgba(0, 119, 183, 0.25)),
-              TrapezoidArea(EdgeSegment.pickR.inr, EdgeSegment.pickR, Color.rgba(252, 190, 51, 0.25)),
+              TrapezoidArea(EdgeSegment.pickL.inr, EdgeSegment.pickL, ColorCaseLeft),
+              TrapezoidArea(EdgeSegment.pickR.inr, EdgeSegment.pickR, ColorCaseRight),
               Across(pickL, pickL.inl).fill(ColorGradient.VerticalWhiteBlack),
               Across(pickL, pickL.inr).fill(ColorGradient.VerticalWhiteBlack),
             )

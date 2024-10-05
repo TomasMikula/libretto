@@ -15,6 +15,9 @@ sealed trait Visualization[X, Y] {
 
   def aspectRatio: AspectRatio =
     AspectRatio(length, breadth)
+
+  def withBackground(fill: Color, stroke: Option[Color] = None): Visualization[X, Y] =
+    Visualization.WithBackgroundBox(Some(fill), stroke, this)
 }
 
 object Visualization {
