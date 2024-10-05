@@ -33,6 +33,19 @@ object Visualization {
         EdgeProportions.default(outEdge),
       )
 
+  case class FillBox[X, Y](
+    inEdge: EdgeProportions[X],
+    outEdge: EdgeProportions[Y],
+    length: Length,
+    fill: Option[Color],
+    stroke: Option[Color],
+  ) extends Visualization[X, Y] {
+    require(fill.nonEmpty || stroke.nonEmpty, "fill and stroke must not both be undefined")
+
+    override def ioProportions: IOProportions[X, Y] =
+      IOProportions.Separate(inEdge, outEdge)
+  }
+
   case class LabeledBox[X, Y](
     inEdge: EdgeDesc[X],
     outEdge: EdgeDesc[Y],
@@ -89,7 +102,7 @@ object Visualization {
 
   case class ConnectorsOverlay[X, Y](
     base: Either[Visualization[X, Y], IOProportions[X, Y]],
-    front: List[Connector[X, Y]],
+    front: List[Connector[X, Y] | TrapezoidArea[X, Y]],
   ) extends Visualization[X, Y] {
     override def ioProportions: IOProportions[X, Y] =
       base match
@@ -124,7 +137,7 @@ object Visualization {
     in: EdgeProportions[X],
     out: EdgeProportions[Y],
   )(
-    connectors: Connector[X, Y]*
+    connectors: (Connector[X, Y] | TrapezoidArea[X, Y])*
   ): Visualization[X, Y] =
     ConnectorsOverlay(
       Right(IOProportions.Separate(in, out)),
@@ -134,7 +147,7 @@ object Visualization {
   def connectors[X, Y](
     back: Visualization[X, Y],
   )(
-    connectors: Connector[X, Y]*
+    connectors: (Connector[X, Y] | TrapezoidArea[X, Y])*
   ): Visualization[X, Y] =
     ConnectorsOverlay(
       Left(back),

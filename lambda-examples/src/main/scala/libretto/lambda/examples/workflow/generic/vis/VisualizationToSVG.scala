@@ -46,6 +46,10 @@ object VisualizationToSVG {
         val rect = SVGElem.Rect(0.px, 0.px, width, height, fillOpt, Some(Stroke(strokeWidth, Color.Black)), clipPath = None, rx = Some(r), ry = Some(r))
         val txt = renderText(label, width, height, 0.6, VPos.Middle, Monospace)
         SVGElem.Group(rect, txt)
+      case Visualization.FillBox(i, o, l, fillOpt, strokeOpt) =>
+        val width = edges.pixelBreadth
+        val strokeWidth = math.min(width.pixels / 20.0, height.pixels / 20.0)
+        SVGElem.Rect(0.px, 0.px, width, height, fillOpt, strokeOpt.map(Stroke(strokeWidth, _)), clipPath = Some(SVG.ClipPath.FillBox))
       case Visualization.Unimplemented(label, _, _) =>
         renderUnimplemented(label, edges.pixelBreadth, height)
 
@@ -145,7 +149,7 @@ object VisualizationToSVG {
   end renderPar
 
   private def renderConnectors[X, Y](
-    connectors: List[Connector[X, Y]],
+    connectors: List[Connector[X, Y] | TrapezoidArea[X, Y]],
     boundary: IOLayout[X, Y],
     height: Px,
   ): SVGElem =
@@ -155,7 +159,7 @@ object VisualizationToSVG {
     )
 
   private def renderConnector[I, O](
-    connector: Connector[I, O],
+    connector: Connector[I, O] | TrapezoidArea[I, O],
     inEdge: EdgeLayout[I],
     outEdge: EdgeLayout[O],
     iOffset: Px,
@@ -166,12 +170,25 @@ object VisualizationToSVG {
     import SVGElem.Path.Command.*
 
     connector match
-      case Connector.Across(src, tgt, Connector.Style(color)) =>
-        val (xi, wi) = inEdge.coordsOf(src)
-        val (xo, wo) = outEdge.coordsOf(tgt)
-        curvyTrapezoid(iOffset + xi, wi, oOffset + xo, wo, height, color)
+      case ta: TrapezoidArea[I, O] =>
+        val TrapezoidArea(src, tgt, fill) = ta
+        val srcCoords = inEdge.coordsOf(src).offset(iOffset)
+        val tgtCoords = outEdge.coordsOf(tgt).offset(oOffset)
+        curvyTrapezoid(srcCoords.x, srcCoords.width, tgtCoords.x, tgtCoords.width, height, fill)
 
-      case Connector.StudIn(src, Connector.Style(color)) =>
+      case Connector.Across(src, tgt, Connector.Across.Style(fill, areaFill)) =>
+        val srcCoords = inEdge.coordsOf(src).offset(iOffset)
+        val tgtCoords = outEdge.coordsOf(tgt).offset(oOffset)
+        val conn = curvyTrapezoid(srcCoords.wireX, srcCoords.wireWidth, tgtCoords.wireX, tgtCoords.wireWidth, height, fill)
+        areaFill match {
+          case None =>
+            conn
+          case Some(areaFill) =>
+            val area = curvyTrapezoid(srcCoords.segmentX, srcCoords.segmentWidth, tgtCoords.segmentX, tgtCoords.segmentWidth, height, areaFill)
+            SVGElem.Group(area, conn)
+        }
+
+      case Connector.StudIn(src) =>
         val H = 20
         val k =
           if (height.pixels >= H)
@@ -181,22 +198,23 @@ object VisualizationToSVG {
 
         println(s"render StudIn($src) into ${inEdge.pixelBreadth} x $height, k = $k")
 
-        val (xi, wi) = (inEdge * k).coordsOf(src)
+        val srcCoords = (inEdge * k).coordsOf(src)
+        val (xi, wi) = (srcCoords.wireX, srcCoords.wireWidth)
         val xi1 = iOffset * k + xi
         val ym = (height * k).pixels / 2
         val cx = xi1 + Px(wi.pixels / 2)
         val g =
           SVGElem.Group(
-            SVGElem.Rect.solid(wi, ym.px, color).translate(xi1.pixels, 0),
+            SVGElem.Rect.solid(wi, ym.px, Color.Black).translate(xi1.pixels, 0),
             SVGElem.Circle(
               radius = wi, // TODO: should take height into account
               fill = Some(Color.White),
-              stroke = Some(Stroke(wi.pixels / 2.0, color)),
+              stroke = Some(Stroke(wi.pixels / 2.0, Color.Black)),
             ).translate(cx.pixels, ym)
           )
         if k == 1 then g else g.scale(1.0 / k)
 
-      case Connector.StudOut(tgt, Connector.Style(color)) =>
+      case Connector.StudOut(tgt) =>
         val H = 20
         val k =
           if (height.pixels >= H)
@@ -206,18 +224,19 @@ object VisualizationToSVG {
 
         println(s"render StudOut($tgt) into ${outEdge.pixelBreadth} x $height, k = $k")
 
-        val (xi, wi) = (outEdge * k).coordsOf(tgt)
+        val tgtCoords = (outEdge * k).coordsOf(tgt)
+        val (xi, wi) = (tgtCoords.wireX, tgtCoords.wireWidth)
         val xi1 = oOffset * k + xi
         val hk = height * k
         val ym = hk.pixels / 2
         val cx = xi1 + Px(wi.pixels / 2)
         val g =
           SVGElem.Group(
-            SVGElem.Rect.solid(wi, ym.px, color).translate(xi1.pixels, hk.pixels - ym),
+            SVGElem.Rect.solid(wi, ym.px, Color.Black).translate(xi1.pixels, hk.pixels - ym),
             SVGElem.Circle(
               radius = wi, // TODO: should take height into account
               fill = Some(Color.White),
-              stroke = Some(Stroke(wi.pixels / 2.0, color)),
+              stroke = Some(Stroke(wi.pixels / 2.0, Color.Black)),
             ).translate(cx.pixels, hk.pixels - ym)
           )
         if k == 1 then g else g.scale(1.0 / k)

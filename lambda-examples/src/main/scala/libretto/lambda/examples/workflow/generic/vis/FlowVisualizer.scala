@@ -6,6 +6,7 @@ import libretto.lambda.util.Exists.{Some as ∃}
 
 import Approximates.lump
 import Connector.{Across, StudIn, StudOut}
+import DefaultDimensions.Length
 import IOProportions.EdgeProportions
 import EdgeProportions.unitSize
 import WirePick.{pickId, pickL, pickR}
@@ -221,11 +222,18 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[x] pair (lump[y] ++ lump[z]),
           (lump[x] pair lump[y]) ++ (lump[x] pair lump[z]),
           Visualization.connectors(
-            unitSize pair (unitSize pair unitSize),
-            (unitSize pair unitSize) pair (unitSize pair unitSize),
+            Visualization.FillBox(
+              unitSize pair (unitSize pair unitSize),
+              (unitSize pair unitSize) pair (unitSize pair unitSize),
+              Length.one,
+              fill = None,
+              stroke = Some(Color.Black),
+            ),
           )(
-            Across(pickL.inr, pickR.inl).fill(Color.rgb(0, 90, 147)),
-            Across(pickR.inr, pickR.inr).fill(Color.rgb(255, 187, 49)),
+            Across(pickL.inr, pickR.inl),
+            Across(pickR.inr, pickR.inr),
+            TrapezoidArea(EdgeSegment.pickL.inr, EdgeSegment.pickL, Color.rgba(0, 119, 183, 0.25)),
+            TrapezoidArea(EdgeSegment.pickR.inr, EdgeSegment.pickR, Color.rgba(252, 190, 51, 0.25)),
             Across(pickL, pickL.inl).fill(ColorGradient.VerticalWhiteBlack),
             Across(pickL, pickL.inr).fill(ColorGradient.VerticalWhiteBlack),
           )

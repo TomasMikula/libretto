@@ -1,41 +1,39 @@
 package libretto.lambda.examples.workflow.generic.vis
 
-sealed trait Connector[X, Y] {
-  def style: Connector.Style
-  def styled(style: Connector.Style): Connector[X, Y]
-
-  def fill(fill: Color | ColorGradient): Connector[X, Y] =
-    styled(this.style.copy(fill = fill))
-}
+sealed trait Connector[X, Y]
 
 object Connector {
   case class Across[X, Y](
     src: WirePick[X],
     tgt: WirePick[Y],
-    style: Connector.Style = Connector.Style.default,
+    style: Across.Style = Across.Style.default,
   ) extends Connector[X, Y] {
-    override def styled(style: Style): Connector[X, Y] = copy(style = style)
+    def styled(style: Across.Style): Connector[X, Y] =
+      copy(style = style)
+
+    def fill(fill: Color | ColorGradient): Connector[X, Y] =
+      styled(this.style.copy(fill = fill))
+
+    def floodArea(fill: Color | ColorGradient): Connector[X, Y] =
+      styled(this.style.copy(areaFill = Some(fill)))
+  }
+
+  object Across {
+    case class Style(
+      fill: Color | ColorGradient,
+      areaFill: Option[Color | ColorGradient],
+    )
+
+    object Style {
+      def default: Style = Style(Color.Black, areaFill = None)
+    }
   }
 
   case class StudIn[X, Y](
     src: WirePick[X],
-    style: Connector.Style = Connector.Style.default,
-  ) extends Connector[X, Y] {
-    override def styled(style: Style): Connector[X, Y] = copy(style = style)
-  }
+  ) extends Connector[X, Y]
 
   case class StudOut[X, Y](
     tgt: WirePick[Y],
-    style: Connector.Style = Connector.Style.default,
-  ) extends Connector[X, Y] {
-    override def styled(style: Style): Connector[X, Y] = copy(style = style)
-  }
-
-  case class Style(
-    fill: Color | ColorGradient,
-  )
-
-  object Style {
-    def default: Style = Style(Color.Black)
-  }
+  ) extends Connector[X, Y]
 }

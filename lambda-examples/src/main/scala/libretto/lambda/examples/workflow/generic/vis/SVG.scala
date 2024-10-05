@@ -331,6 +331,7 @@ object SVG {
       import Color.*
       c match
         case RGB(r, g, b) => s"rgb($r, $g, $b)"
+        case RGBA(r, g, b, a) => s"rgba($r, $g, $b, $a)"
         case Black => "black"
         case White => "white"
         case Red => "red"
@@ -341,7 +342,7 @@ object SVG {
         case Yellow => "yellow"
   }
 
-  case class Stroke(width: Double, color: Color | ColorGradient)
+  case class Stroke(width: Double, color: Color)
 
   enum ClipPath:
     case FillBox
