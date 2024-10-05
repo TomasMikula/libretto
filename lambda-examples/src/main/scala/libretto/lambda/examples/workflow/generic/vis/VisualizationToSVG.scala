@@ -266,7 +266,7 @@ object VisualizationToSVG {
   }
 
   private def renderMorph[X, Y](
-    m: Morph[X, Y],
+    m: Adaptoid[X, Y],
     iLayout: EdgeLayout[X],
     oLayout: EdgeLayout[Y],
     iOffset: Px,
@@ -280,13 +280,13 @@ object VisualizationToSVG {
 
     val content =
       m match
-        case Morph.Id(desc) =>
+        case Adaptoid.Id(desc) =>
           renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
-        case Morph.Refine(f) =>
-          renderRefine(f, iLayout, oLayout, iOffset, oOffset, height)
-        case Morph.Unrefine(f) =>
-          renderUnrefine(f, iLayout, oLayout, iOffset, oOffset, height)
-        case p: Morph.Par[op, x1, x2, y1, y2] =>
+        case Adaptoid.Expand(f) =>
+          renderExpand(f, iLayout, oLayout, iOffset, oOffset, height)
+        case Adaptoid.Collapse(f) =>
+          renderCollapse(f, iLayout, oLayout, iOffset, oOffset, height)
+        case p: Adaptoid.Par[op, x1, x2, y1, y2] =>
           val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
           val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
           val g1 = renderMorph(p.f1, i1, o1, iOffset, oOffset, height)
@@ -461,7 +461,7 @@ object VisualizationToSVG {
     }
   }
 
-  private def renderRefine[X, Y](
+  private def renderExpand[X, Y](
     f: X IsRefinedBy Y,
     iLayout: EdgeLayout[X],
     oLayout: EdgeLayout[Y],
@@ -469,7 +469,7 @@ object VisualizationToSVG {
     oOffset: Px,
     height: Px,
   ): SVGElem =
-    println(s"renderRefine into ${iLayout.pixelBreadth} x $height")
+    println(s"renderExpand into ${iLayout.pixelBreadth} x $height")
     f match
       case IsRefinedBy.Id(desc) =>
         renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
@@ -480,11 +480,11 @@ object VisualizationToSVG {
         summon[Y =:= op[y1, y2]]
         val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
         val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
-        val g1 = renderRefine(p.f1, i1, o1, iOffset, oOffset, height)
-        val g2 = renderRefine(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+        val g1 = renderExpand(p.f1, i1, o1, iOffset, oOffset, height)
+        val g2 = renderExpand(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
         SVGElem.Group(g1, g2)
 
-  private def renderUnrefine[X, Y](
+  private def renderCollapse[X, Y](
     f: Y IsRefinedBy X,
     iLayout: EdgeLayout[X],
     oLayout: EdgeLayout[Y],
@@ -492,7 +492,7 @@ object VisualizationToSVG {
     oOffset: Px,
     height: Px,
   ): SVGElem =
-    println(s"renderUnrefine into ${iLayout.pixelBreadth} x $height")
+    println(s"renderCollapse into ${iLayout.pixelBreadth} x $height")
     f match
       case IsRefinedBy.Id(desc) =>
         renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
@@ -504,8 +504,8 @@ object VisualizationToSVG {
         summon[Y =:= op[y1, y2]]
         val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
         val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
-        val g1 = renderUnrefine(p.f1, i1, o1, iOffset, oOffset, height)
-        val g2 = renderUnrefine(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+        val g1 = renderCollapse(p.f1, i1, o1, iOffset, oOffset, height)
+        val g2 = renderCollapse(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
         SVGElem.Group(g1, g2)
 
   private def scaleToFit(srcW: Int, srcH: Int, tgtW: Int, tgtH: Int): Double =

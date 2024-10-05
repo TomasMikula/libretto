@@ -18,7 +18,7 @@ infix sealed trait IsRefinedBy[X, Y] {
   )]
 
   /** Two (potentially different) coarsenings of `Y` can be morphed into each other. */
-  infix def morph[W](that: W IsRefinedBy Y): Morph[X, W]
+  infix def morph[W](that: W IsRefinedBy Y): Adaptoid[X, W]
 }
 
 object IsRefinedBy {
@@ -31,8 +31,8 @@ object IsRefinedBy {
     ): Exists[[V] =>> (V IsRefinedBy X, V IsRefinedBy W)] =
       Exists((that, Id[W](that.inDesc)))
 
-    override def morph[W](that: W IsRefinedBy X): Morph[X, W] =
-      Morph.Unrefine(that)
+    override def morph[W](that: W IsRefinedBy X): Adaptoid[X, W] =
+      Adaptoid.Collapse(that)
   }
 
   case class Initial[X](outDesc: EdgeDesc[X]) extends (Wire IsRefinedBy X) {
@@ -43,8 +43,8 @@ object IsRefinedBy {
     ): Exists[[V] =>> (V IsRefinedBy Wire, V IsRefinedBy W)] =
       Exists((id[Wire], Initial[W](that.inDesc)))
 
-    override def morph[W](that: W IsRefinedBy X): Morph[Wire, W] =
-      Morph.Refine(Initial[W](that.inDesc))
+    override def morph[W](that: W IsRefinedBy X): Adaptoid[Wire, W] =
+      Adaptoid.Expand(Initial[W](that.inDesc))
   }
 
   case class Pairwise[∙[_, _], X1, X2, Y1, Y2](
@@ -72,17 +72,17 @@ object IsRefinedBy {
 
     override def morph[W](
       that: W IsRefinedBy (Y1 ∙ Y2),
-    ): Morph[(X1 ∙ X2), W] =
+    ): Adaptoid[(X1 ∙ X2), W] =
       that match
-        case Id(_) => Morph.Refine(this)
-        case Initial(_) => Morph.Unrefine(Initial(inDesc))
+        case Id(_) => Adaptoid.Expand(this)
+        case Initial(_) => Adaptoid.Collapse(Initial(inDesc))
         case Pairwise(g1, g2) => morphToBinaryOp(g1, g2)
 
     private def morphToBinaryOp[W1, W2](
       g1: W1 IsRefinedBy Y1,
       g2: W2 IsRefinedBy Y2,
-    ): Morph[X1 ∙ X2, W1 ∙ W2] =
-      Morph.par(f1 morph g1, f2 morph g2)
+    ): Adaptoid[X1 ∙ X2, W1 ∙ W2] =
+      Adaptoid.par(f1 morph g1, f2 morph g2)
   }
 
   def id[X](using EdgeDesc[X]): (X IsRefinedBy X) =

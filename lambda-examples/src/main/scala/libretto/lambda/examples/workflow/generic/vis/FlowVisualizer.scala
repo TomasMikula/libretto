@@ -62,7 +62,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                       z1 coarsenBy w1, // could equivalently use `z2 coarsenBy w2`
                       Visualization.Seq(
                         Visualization.par[++](vg, vh),
-                        Morph.par[++](Morph.Unrefine(w1), Morph.Unrefine(w2)),
+                        Adaptoid.par[++](Adaptoid.Collapse(w1), Adaptoid.Collapse(w2)),
                         Visualization.merge2(EdgeProportions.default(w1.inDesc)),
                       ),
                     )))
@@ -78,10 +78,10 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                   Visualization.Seq(
                     Visualization.Seq(
                       Visualization.Unimplemented("do", x.inDesc, x.inDesc),
-                      Morph.id(using x.inDesc),
+                      Adaptoid.id(using x.inDesc),
                       vg,
                     ),
-                    Morph.id(using xy.inDesc),
+                    Adaptoid.id(using xy.inDesc),
                     Visualization.Unimplemented("whileLeft", xy.inDesc, y.inDesc),
                   )
                 )))

@@ -75,7 +75,7 @@ object Visualization {
 
   case class Seq[X, Y1, Y2, Z](
     a: Visualization[X, Y1],
-    m: Morph[Y1, Y2],
+    m: Adaptoid[Y1, Y2],
     b: Visualization[Y2, Z],
   ) extends Visualization[X, Z]:
     override def ioProportions: IOProportions[X, Z] =
