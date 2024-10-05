@@ -2,6 +2,7 @@ package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
 import libretto.lambda.examples.workflow.generic.lang.{**, PortName}
 import libretto.lambda.examples.workflow.generic.vis.{Approximates, Color, Visualization, Visualizer, Wire}
+import libretto.lambda.examples.workflow.generic.vis.Approximates.lump
 import libretto.lambda.util.Exists
 
 given Visualizer[Action, Approximates] with {
@@ -21,9 +22,9 @@ given Visualizer[Action, Approximates] with {
           summon[B =:= Unit]
 
           val v: (Wire ** Wire) Approximates A =
-            Approximates.Initial[EmailAddress]() pair Approximates.Initial[PortName[CandidateResponse]]()
+            lump[EmailAddress] ** lump[PortName[CandidateResponse]]
           val w: Wire Approximates B =
-            Approximates.Initial[Unit]()
+            lump[Unit]
 
           Exists(Exists((
             v,
@@ -36,9 +37,9 @@ given Visualizer[Action, Approximates] with {
           summon[B =:= Unit]
 
           val v: (Wire ** Wire) Approximates A =
-            Approximates.Initial[EmploymentHistory]() pair Approximates.Initial[PortName[EmploymentVerificationResult]]()
+            lump[EmploymentHistory] ** lump[PortName[EmploymentVerificationResult]]
           val w: Wire Approximates B =
-            Approximates.Initial[Unit]()
+            lump[Unit]
 
           Exists(Exists((
             v,
@@ -50,8 +51,8 @@ given Visualizer[Action, Approximates] with {
           summon[A =:= EmailAddress]
           summon[B =:= Report]
 
-          val v: Wire Approximates A = Approximates.Initial[EmailAddress]()
-          val w: Wire Approximates B = Approximates.Initial[Report]()
+          val v: Wire Approximates A = lump[EmailAddress]
+          val w: Wire Approximates B = lump[Report]
 
           Exists(Exists((
             v,
@@ -64,11 +65,11 @@ given Visualizer[Action, Approximates] with {
           summon[B =:= Report]
 
           val v: (Wire ** Wire ** Wire) Approximates A =
-            Approximates.Initial[CriminalRecord]() pair
-            Approximates.Initial[CivilRecord]() pair
-            Approximates.Initial[EmploymentVerificationResult]()
+            lump[CriminalRecord] **
+            lump[CivilRecord] **
+            lump[EmploymentVerificationResult]
           val w: Wire Approximates B =
-            Approximates.Initial[Report]()
+            lump[Report]
 
           Exists(Exists((
             v,
@@ -80,8 +81,8 @@ given Visualizer[Action, Approximates] with {
           summon[A =:= PersonalId]
           summon[B =:= CriminalRecord]
 
-          val v: Wire Approximates A = Approximates.Initial[PersonalId]()
-          val w: Wire Approximates B = Approximates.Initial[CriminalRecord]()
+          val v: Wire Approximates A = lump[PersonalId]
+          val w: Wire Approximates B = lump[CriminalRecord]
 
           Exists(Exists((
             v,
@@ -93,8 +94,8 @@ given Visualizer[Action, Approximates] with {
           summon[A =:= PersonalId]
           summon[B =:= CivilRecord]
 
-          val v: Wire Approximates A = Approximates.Initial[PersonalId]()
-          val w: Wire Approximates B = Approximates.Initial[CivilRecord]()
+          val v: Wire Approximates A = lump[PersonalId]
+          val w: Wire Approximates B = lump[CivilRecord]
 
           Exists(Exists((
             v,

@@ -32,8 +32,11 @@ object IOProportions {
     def totalBreadth: Breadth
     def layout(availableBreadth: Px): (Int, EdgeLayout[X])
 
-    infix def pair[∙[_, _], Y](that: EdgeProportions[Y]): EdgeProportions[X ∙ Y] =
+    infix def combine[∙[_, _], Y](that: EdgeProportions[Y]): EdgeProportions[X ∙ Y] =
       EdgeProportions.Binary(this, that)
+
+    def ∙[∙[_, _], Y](that: EdgeProportions[Y]): EdgeProportions[X ∙ Y] =
+      this combine that
   }
 
   object EdgeProportions {

@@ -52,7 +52,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
       case FlowAST.Par(g, h) =>
         (visualizeAst(g), visualizeAst(h)) match
           case (∃(∃((x1, y1, vg))), ∃(∃((x2, y2, vh)))) =>
-            Exists(Exists((x1 pair x2, y1 pair y2, Visualization.Par(vg, vh))))
+            Exists(Exists((x1 ** x2, y1 ** y2, Visualization.Par(vg, vh))))
 
       case FlowAST.Either(g, h) =>
         (visualizeAst(g), visualizeAst(h)) match
@@ -107,11 +107,11 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[A =:= (x ** y)]
         summon[B =:= (y ** x)]
         Exists(Exists((
-          lump[x] pair lump[y],
-          lump[y] pair lump[x],
+          lump[x] ** lump[y],
+          lump[y] ** lump[x],
           Visualization.connectors(
-            unitSize pair unitSize,
-            unitSize pair unitSize,
+            unitSize ∙ unitSize,
+            unitSize ∙ unitSize,
           )(
             Across(pickL, pickR),
             Across(pickR, pickL),
@@ -123,11 +123,11 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[B =:= (x ** (y ** z))]
 
         Exists(Exists((
-          (lump[x] pair lump[y]) pair lump[z],
-          lump[x] pair (lump[y] pair lump[z]),
+          (lump[x] ** lump[y]) ** lump[z],
+          lump[x] ** (lump[y] ** lump[z]),
           Visualization.connectors(
-            (unitSize pair unitSize) pair unitSize,
-            unitSize pair (unitSize pair unitSize),
+            (unitSize ∙ unitSize) ∙ unitSize,
+            unitSize ∙ (unitSize ∙ unitSize),
           )(
             Across(pickL.inl, pickL),
             Across(pickR.inl, pickL.inr),
@@ -140,11 +140,11 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[B =:= ((x ** y) ** z)]
 
         Exists(Exists((
-          lump[x] pair (lump[y] pair lump[z]),
-          (lump[x] pair lump[y]) pair lump[z],
+          lump[x] ** (lump[y] ** lump[z]),
+          (lump[x] ** lump[y]) ** lump[z],
           Visualization.connectors(
-            unitSize pair (unitSize pair unitSize),
-            (unitSize pair unitSize) pair unitSize,
+            unitSize ∙ (unitSize ∙ unitSize),
+            (unitSize ∙ unitSize) ∙ unitSize,
           )(
             Across(pickL, pickL.inl),
             Across(pickL.inr, pickR.inl),
@@ -157,10 +157,10 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[B =:= x]
 
         Exists(Exists((
-          lump[x] pair lump[y],
+          lump[x] ** lump[y],
           lump[x],
           Visualization.connectors(
-            unitSize pair unitSize,
+            unitSize ∙ unitSize,
             unitSize,
           )(
             Across(pickL, pickId),
@@ -173,10 +173,10 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[B =:= y]
 
         Exists(Exists((
-          lump[x] pair lump[y],
+          lump[x] ** lump[y],
           lump[y],
           Visualization.connectors(
-            unitSize pair unitSize,
+            unitSize ∙ unitSize,
             unitSize,
           )(
             Across(pickR, pickId),
@@ -190,10 +190,10 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
 
         Exists(Exists((
           lump[x],
-          lump[Unit] pair lump[x],
+          lump[Unit] ** lump[x],
           Visualization.connectors(
             unitSize,
-            unitSize pair unitSize,
+            unitSize ∙ unitSize,
           )(
             Across(pickId, pickR),
             StudOut(pickL),
@@ -206,11 +206,11 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
 
         Exists(Exists((
           lump[x],
-          lump[x] pair lump[x],
+          lump[x] ** lump[x],
           Visualization.connectors(
             back = Visualization.text("Δ")(
               unitSize,
-              unitSize pair unitSize,
+              unitSize ∙ unitSize,
             )
           )(
             Across(pickId, pickL),
@@ -223,14 +223,14 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[B =:= (x ** y) ++ (x ** z)]
 
         Exists(Exists((
-          lump[x] pair (lump[y] ++ lump[z]),
-          (lump[x] pair lump[y]) ++ (lump[x] pair lump[z]),
+          lump[x] ** (lump[y] ++ lump[z]),
+          (lump[x] ** lump[y]) ++ (lump[x] ** lump[z]),
           Visualization.WithBackgroundBox(
             fill = None,
             stroke = Some(Color.Black),
             Visualization.connectors(
-              unitSize pair (unitSize pair unitSize),
-              (unitSize pair unitSize) pair (unitSize pair unitSize),
+              unitSize ∙ (unitSize ∙ unitSize),
+              (unitSize ∙ unitSize) ∙ (unitSize ∙ unitSize),
             )(
               Across(pickL.inr, pickR.inl),
               Across(pickR.inr, pickR.inr),
@@ -251,7 +251,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[h] ++ lump[Enum[cases]],
           Visualization.connectors(
             unitSize,
-            unitSize pair unitSize,
+            unitSize ∙ unitSize,
           )(
             TrapezoidArea(WirePick.pickId.midpoint, WirePick.pickL.post, ColorCaseLeft),
             TrapezoidArea(WirePick.pickId.midpoint, WirePick.pickR.pre, ColorCaseRight),

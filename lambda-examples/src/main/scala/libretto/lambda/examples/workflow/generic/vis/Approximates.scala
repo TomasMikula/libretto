@@ -9,7 +9,7 @@ infix sealed trait Approximates[X, A] {
 
   def inDesc: EdgeDesc[X]
 
-  infix def pair[Y, B](that: Approximates[Y, B]): Approximates[X ** Y, A ** B] =
+  def **[Y, B](that: Approximates[Y, B]): Approximates[X ** Y, A ** B] =
     Pairwise(this, that)
 
   def ++[Y, B](that: Approximates[Y, B]): Approximates[X ++ Y, A ++ B] =
