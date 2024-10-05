@@ -33,17 +33,18 @@ object Visualization {
         EdgeProportions.default(outEdge),
       )
 
-  case class FillBox[X, Y](
-    inEdge: EdgeProportions[X],
-    outEdge: EdgeProportions[Y],
-    length: Length,
+  case class WithBackgroundBox[X, Y](
     fill: Option[Color],
     stroke: Option[Color],
+    front: Visualization[X, Y]
   ) extends Visualization[X, Y] {
     require(fill.nonEmpty || stroke.nonEmpty, "fill and stroke must not both be undefined")
 
     override def ioProportions: IOProportions[X, Y] =
-      IOProportions.Separate(inEdge, outEdge)
+      front.ioProportions
+
+    override def length: Length =
+      front.length
   }
 
   case class LabeledBox[X, Y](

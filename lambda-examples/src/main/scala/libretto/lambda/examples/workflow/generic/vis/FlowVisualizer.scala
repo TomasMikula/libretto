@@ -221,21 +221,20 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         Exists(Exists((
           lump[x] pair (lump[y] ++ lump[z]),
           (lump[x] pair lump[y]) ++ (lump[x] pair lump[z]),
-          Visualization.connectors(
-            Visualization.FillBox(
+          Visualization.WithBackgroundBox(
+            fill = None,
+            stroke = Some(Color.Black),
+            Visualization.connectors(
               unitSize pair (unitSize pair unitSize),
               (unitSize pair unitSize) pair (unitSize pair unitSize),
-              Length.one,
-              fill = None,
-              stroke = Some(Color.Black),
-            ),
-          )(
-            Across(pickL.inr, pickR.inl),
-            Across(pickR.inr, pickR.inr),
-            TrapezoidArea(EdgeSegment.pickL.inr, EdgeSegment.pickL, Color.rgba(0, 119, 183, 0.25)),
-            TrapezoidArea(EdgeSegment.pickR.inr, EdgeSegment.pickR, Color.rgba(252, 190, 51, 0.25)),
-            Across(pickL, pickL.inl).fill(ColorGradient.VerticalWhiteBlack),
-            Across(pickL, pickL.inr).fill(ColorGradient.VerticalWhiteBlack),
+            )(
+              Across(pickL.inr, pickR.inl),
+              Across(pickR.inr, pickR.inr),
+              TrapezoidArea(EdgeSegment.pickL.inr, EdgeSegment.pickL, Color.rgba(0, 119, 183, 0.25)),
+              TrapezoidArea(EdgeSegment.pickR.inr, EdgeSegment.pickR, Color.rgba(252, 190, 51, 0.25)),
+              Across(pickL, pickL.inl).fill(ColorGradient.VerticalWhiteBlack),
+              Across(pickL, pickL.inr).fill(ColorGradient.VerticalWhiteBlack),
+            )
           )
         )))
 

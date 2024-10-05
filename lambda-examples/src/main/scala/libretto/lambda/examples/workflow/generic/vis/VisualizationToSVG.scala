@@ -46,10 +46,11 @@ object VisualizationToSVG {
         val rect = SVGElem.Rect(0.px, 0.px, width, height, fillOpt, Some(Stroke(strokeWidth, Color.Black)), clipPath = None, rx = Some(r), ry = Some(r))
         val txt = renderText(label, width, height, 0.6, VPos.Middle, Monospace)
         SVGElem.Group(rect, txt)
-      case Visualization.FillBox(i, o, l, fillOpt, strokeOpt) =>
+      case Visualization.WithBackgroundBox(fillOpt, strokeOpt, front) =>
         val width = edges.pixelBreadth
         val strokeWidth = math.min(width.pixels / 20.0, height.pixels / 20.0)
-        SVGElem.Rect(0.px, 0.px, width, height, fillOpt, strokeOpt.map(Stroke(strokeWidth, _)), clipPath = Some(SVG.ClipPath.FillBox))
+        val back = SVGElem.Rect(0.px, 0.px, width, height, fillOpt, strokeOpt.map(Stroke(strokeWidth, _)), clipPath = Some(SVG.ClipPath.FillBox))
+        SVGElem.Group(back, renderSVG(front, edges, height))
       case Visualization.Unimplemented(label, _, _) =>
         renderUnimplemented(label, edges.pixelBreadth, height)
 
