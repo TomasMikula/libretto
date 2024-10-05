@@ -168,8 +168,8 @@ object Visualization {
       wiresOf(x)
         .flatMap { i =>
           List(
-            Connector.Across(WirePick.Inl(i), i),
-            Connector.Across(WirePick.Inr(i), i),
+            Connector.Across(i.inl, i),
+            Connector.Across(i.inr, i),
           )
         } *
     )
@@ -177,7 +177,7 @@ object Visualization {
   private def wiresOf[X](x: EdgeProportions[X]): List[WirePick[X]] =
     x match
       case EdgeProportions.UnitWire =>
-        WirePick.Id :: Nil
+        WirePick.pickId :: Nil
       case x: EdgeProportions.Binary[op, x1, x2] =>
         wiresOf(x.x1).map(_.inl[op, x2]) ++ wiresOf(x.x2).map(_.inr[op, x1])
 }

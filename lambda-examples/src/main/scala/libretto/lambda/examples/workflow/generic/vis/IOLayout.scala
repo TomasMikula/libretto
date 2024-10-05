@@ -17,8 +17,17 @@ object IOLayout {
     def pixelBreadth: Px
     def *(k: Int): EdgeLayout[X]
 
-    def coordsOf(wire: WirePick[X]): EdgeLayout.WireCoords
-    def coordsOf[W](seg: EdgeSegment[W, X]): EdgeLayout.SegmentCoords
+    def locate[W](seg: EdgeSegment[W, X]): (Px, EdgeLayout[W])
+    def wireCoords(using ev: X =:= Wire): EdgeLayout.WireCoords
+
+    def segmentCoords[W](seg: EdgeSegment[W, X]): EdgeLayout.SegmentCoords =
+      val (x, w) = locate(seg)
+      EdgeLayout.SegmentCoords(x, w.pixelBreadth)
+
+    def wireCoords(wire: WirePick[X]): EdgeLayout.WireCoords =
+      val seg: EdgeSegment[Wire, X] = wire
+      val (x, w) = locate(seg)
+      w.wireCoords.offset(x)
   }
 
   object EdgeLayout {
@@ -32,56 +41,29 @@ object IOLayout {
       override def *(k: Int): EdgeLayout[X1 ∙ X2] =
         Par(l1 * k, l2 * k)
 
-      override def coordsOf(wire: WirePick[X1 ∙ X2]): WireCoords =
-        wire.switch(
-          caseId = (ev: (X1 ∙ X2) =:= Wire) ?=> ???,
-          caseInl = [∘[_, _], A, B] => (ev: (X1 ∙ X2) =:= (A ∘ B)) ?=> (fst: WirePick[A]) => {
-            l1
-              .asInstanceOf[EdgeLayout[A]] // XXX: unsound without knowing that ∙ and ∘ are class types
-              .coordsOf(fst)
-          },
-          caseInr = [∘[_, _], A, B] => (ev: (X1 ∙ X2) =:= (A ∘ B)) ?=> (snd: WirePick[B]) => {
-            l2
-              .asInstanceOf[EdgeLayout[B]] // XXX: unsound without knowing that ∙ and ∘ are class types
-              .coordsOf(snd)
-              .offset(l1.pixelBreadth)
-          },
-        )
+      override def locate[W](seg: EdgeSegment[W, X1 ∙ X2]): (Px, EdgeLayout[W]) =
+        seg match
+          case EdgeSegment.Id()   => (Px(0), this)
+          case EdgeSegment.Inl(l) => l1.locate(l)
+          case EdgeSegment.Inr(r) => l2.locate(r) match { case (x, w) => (l1.pixelBreadth + x, w) }
 
-      override def coordsOf[W](seg: EdgeSegment[W, X1 ∙ X2]): SegmentCoords =
-        seg.switch(
-          caseId = (ev: W =:= (X1 ∙ X2)) ?=> SegmentCoords(x = Px(0), pixelBreadth),
-          caseInl = [∘[_, _], Y1, Q] => (ev: (X1 ∙ X2) =:= (Y1 ∘ Q)) ?=> (fst: EdgeSegment[W, Y1]) => {
-            l1
-              .asInstanceOf[EdgeLayout[Y1]] // XXX: unsound without knowing that ∙ and ∘ are class types
-              .coordsOf(fst)
-          },
-          caseInr = [∘[_, _], Y2, P] => (ev: (X1 ∙ X2) =:= (P ∘ Y2)) ?=> (snd: EdgeSegment[W, Y2]) => {
-            l2
-              .asInstanceOf[EdgeLayout[Y2]] // XXX: unsound without knowing that ∙ and ∘ are class types
-              .coordsOf(snd)
-              .offset(l1.pixelBreadth)
-          },
-        )
+      override def wireCoords(using ev: (X1 ∙ X2) =:= Wire): WireCoords =
+        Wire.isNotBinary(using ev.flip)
     }
 
     case class SingleWire(pre: Px, wire: Px, post: Px) extends EdgeLayout[Wire] {
       override def pixelBreadth: Px = pre + wire + post
       override def *(k: Int): EdgeLayout[Wire] = SingleWire(pre * k, wire * k, post * k)
 
-      override def coordsOf(pick: WirePick[Wire]): WireCoords =
-        pick.switch(
-          caseId = WireCoords(Px(0), pre, wire, post),
-          caseInl = [∘[_, _], A, B] => (ev: Wire =:= (A ∘ B)) ?=> _ => Wire.isNotBinary[∘, A, B],
-          caseInr = [∘[_, _], A, B] => (ev: Wire =:= (A ∘ B)) ?=> _ => Wire.isNotBinary[∘, A, B],
+      override def locate[W](seg: EdgeSegment[W, Wire]): (Px, EdgeLayout[W]) =
+        seg.switch(
+          caseId = (ev: W =:= Wire) ?=> (Px(0), ev.substituteContra(this)),
+          caseInl = [∘[_, _], Y1, Q] => (ev: Wire =:= (Y1 ∘ Q)) ?=> _ => Wire.isNotBinary[∘, Y1, Q],
+          caseInr = [∘[_, _], Y2, P] => (ev: Wire =:= (P ∘ Y2)) ?=> _ => Wire.isNotBinary[∘, P, Y2],
         )
 
-      override def coordsOf[W](seg: EdgeSegment[W, Wire]): SegmentCoords =
-        seg.switch(
-          caseId = SegmentCoords(Px(0), pixelBreadth),
-          caseInl = [∘[_, _], Y1, Q] => (ev: Wire =:= (Y1 ∘ Q)) ?=> (l: EdgeSegment[W, Y1]) => Wire.isNotBinary[∘, Y1, Q],
-          caseInr = [∘[_, _], Y2, P] => (ev: Wire =:= (P ∘ Y2)) ?=> (l: EdgeSegment[W, Y2]) => Wire.isNotBinary[∘, P, Y2],
-        )
+      override def wireCoords(using ev: Wire =:= Wire): WireCoords =
+        WireCoords(Px(0), pre, wire, post)
     }
 
     case class WireCoords(segmentX: Px, pre: Px, wireWidth: Px, post: Px) {

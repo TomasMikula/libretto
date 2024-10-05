@@ -172,13 +172,13 @@ object VisualizationToSVG {
     connector match
       case ta: TrapezoidArea[I, O] =>
         val TrapezoidArea(src, tgt, fill) = ta
-        val srcCoords = inEdge.coordsOf(src).offset(iOffset)
-        val tgtCoords = outEdge.coordsOf(tgt).offset(oOffset)
+        val srcCoords = inEdge.segmentCoords(src).offset(iOffset)
+        val tgtCoords = outEdge.segmentCoords(tgt).offset(oOffset)
         curvyTrapezoid(srcCoords.x, srcCoords.width, tgtCoords.x, tgtCoords.width, height, fill)
 
       case Connector.Across(src, tgt, Connector.Across.Style(fill, areaFill)) =>
-        val srcCoords = inEdge.coordsOf(src).offset(iOffset)
-        val tgtCoords = outEdge.coordsOf(tgt).offset(oOffset)
+        val srcCoords = inEdge.wireCoords(src).offset(iOffset)
+        val tgtCoords = outEdge.wireCoords(tgt).offset(oOffset)
         val conn = curvyTrapezoid(srcCoords.wireX, srcCoords.wireWidth, tgtCoords.wireX, tgtCoords.wireWidth, height, fill)
         areaFill match {
           case None =>
@@ -198,7 +198,7 @@ object VisualizationToSVG {
 
         println(s"render StudIn($src) into ${inEdge.pixelBreadth} x $height, k = $k")
 
-        val srcCoords = (inEdge * k).coordsOf(src)
+        val srcCoords = (inEdge * k).wireCoords(src)
         val (xi, wi) = (srcCoords.wireX, srcCoords.wireWidth)
         val xi1 = iOffset * k + xi
         val ym = (height * k).pixels / 2
@@ -224,7 +224,7 @@ object VisualizationToSVG {
 
         println(s"render StudOut($tgt) into ${outEdge.pixelBreadth} x $height, k = $k")
 
-        val tgtCoords = (outEdge * k).coordsOf(tgt)
+        val tgtCoords = (outEdge * k).wireCoords(tgt)
         val (xi, wi) = (tgtCoords.wireX, tgtCoords.wireWidth)
         val xi1 = oOffset * k + xi
         val hk = height * k
@@ -308,7 +308,7 @@ object VisualizationToSVG {
       case EdgeDesc.SingleWire =>
         summon[X =:= Wire]
         renderConnector[Wire, Wire](
-          Connector.Across(WirePick.Id, WirePick.Id),
+          Connector.Across(WirePick.pickId, WirePick.pickId),
           iLayout,
           oLayout,
           iOffset,
@@ -335,7 +335,7 @@ object VisualizationToSVG {
       case EdgeDesc.SingleWire =>
         summon[Y =:= Wire]
         renderConnector[Wire, Wire](
-          Connector.Across(WirePick.Id, WirePick.Id),
+          Connector.Across(WirePick.pickId, WirePick.pickId),
           iLayout,
           oLayout,
           iOffset,
@@ -354,8 +354,8 @@ object VisualizationToSVG {
     height: Px,
   ): SVGElem = {
     println(s"renderFanOut into ${iLayout.pixelBreadth} x $height")
-    val c1 = Connector.Across[Wire, Wire ∙ Wire](WirePick.Id, WirePick.pickL)
-    val c2 = Connector.Across[Wire, Wire ∙ Wire](WirePick.Id, WirePick.pickR)
+    val c1 = Connector.Across[Wire, Wire ∙ Wire](WirePick.pickId, WirePick.pickL)
+    val c2 = Connector.Across[Wire, Wire ∙ Wire](WirePick.pickId, WirePick.pickR)
     val (o1, o2) = EdgeLayout.split(oLayout)
     val (i1, w1) = EdgeProportions.unitSize.layout(o1.pixelBreadth)
     val (i2, w2) = EdgeProportions.unitSize.layout(o2.pixelBreadth)
@@ -404,7 +404,7 @@ object VisualizationToSVG {
       case EdgeDesc.SingleWire =>
         summon[X =:= Wire]
         renderConnector[Wire, Wire](
-          Connector.Across(WirePick.Id, WirePick.Id),
+          Connector.Across(WirePick.pickId, WirePick.pickId),
           iLayout,
           oLayout,
           iOffset,
@@ -423,8 +423,8 @@ object VisualizationToSVG {
     height: Px,
   ): SVGElem = {
     println(s"renderFanIn into ${iLayout.pixelBreadth} x $height")
-    val c1 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickL, WirePick.Id)
-    val c2 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickR, WirePick.Id)
+    val c1 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickL, WirePick.pickId)
+    val c2 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickR, WirePick.pickId)
     val (i1, i2) = EdgeLayout.split(iLayout)
     val (j1, w1) = EdgeProportions.unitSize.layout(i1.pixelBreadth)
     val (j2, w2) = EdgeProportions.unitSize.layout(i2.pixelBreadth)
