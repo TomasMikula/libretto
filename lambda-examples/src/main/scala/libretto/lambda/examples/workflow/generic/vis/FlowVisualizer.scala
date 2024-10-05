@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.vis
 
-import libretto.lambda.examples.workflow.generic.lang.{++, **, FlowAST, Workflows}
+import libretto.lambda.examples.workflow.generic.lang.{++, **, ::, ||, Enum, FlowAST, Workflows}
 import libretto.lambda.util.Exists
 import libretto.lambda.util.Exists.{Some as ∃}
 
@@ -239,6 +239,24 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
               Across(pickL, pickL.inl).fill(ColorGradient.VerticalWhiteBlack),
               Across(pickL, pickL.inr).fill(ColorGradient.VerticalWhiteBlack),
             )
+          )
+        )))
+
+      case _: FlowAST.Peel[op, lbl, h, cases] =>
+        summon[A =:= Enum[cases || (lbl :: h)]]
+        summon[B =:= (h ++ Enum[cases])]
+
+        Exists(Exists((
+          lump[A],
+          lump[h] ++ lump[Enum[cases]],
+          Visualization.connectors(
+            unitSize,
+            unitSize pair unitSize,
+          )(
+            TrapezoidArea(WirePick.pickId.midpoint, WirePick.pickL.post, ColorCaseLeft),
+            TrapezoidArea(WirePick.pickId.midpoint, WirePick.pickR.pre, ColorCaseRight),
+            Across(pickId, pickL),
+            Across(pickId, pickR),
           )
         )))
 

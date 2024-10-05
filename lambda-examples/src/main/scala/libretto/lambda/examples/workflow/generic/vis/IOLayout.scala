@@ -14,15 +14,31 @@ sealed trait IOLayout[I, O] {
 
 object IOLayout {
   sealed trait EdgeLayout[X] {
+    import EdgeLayout.*
+
     def pixelBreadth: Px
     def *(k: Int): EdgeLayout[X]
 
     def locate[W](seg: EdgeSegment[W, X]): (Px, EdgeLayout[W])
-    def wireCoords(using ev: X =:= Wire): EdgeLayout.WireCoords
+    def wireCoords(using ev: X =:= Wire): WireCoords
 
-    def segmentCoords[W](seg: EdgeSegment[W, X]): EdgeLayout.SegmentCoords =
-      val (x, w) = locate(seg)
-      EdgeLayout.SegmentCoords(x, w.pixelBreadth)
+    def segmentCoords[W](seg: EdgeSegment[W, X] | EdgeSegment.SubWire[X]): SegmentCoords =
+      seg match
+        case seg: EdgeSegment[W, X] =>
+          val (x, wl) = locate(seg)
+          SegmentCoords(x, wl.pixelBreadth)
+        case seg: EdgeSegment.SubWire[X] =>
+          seg match
+            case EdgeSegment.SubWire.Pre(seg) =>
+              wireCoords(seg) match
+                case WireCoords(x, pre, w, post) => SegmentCoords(x, pre)
+            case EdgeSegment.SubWire.Post(seg) =>
+              wireCoords(seg) match
+                case WireCoords(x, pre, w, post) => SegmentCoords(x + pre + w, post)
+            case EdgeSegment.SubWire.MidPoint(seg) =>
+              wireCoords(seg) match
+                case WireCoords(x, pre, w, post) =>
+                  SegmentCoords(x + pre + w/2, Px(0))
 
     def wireCoords(wire: WirePick[X]): EdgeLayout.WireCoords =
       val seg: EdgeSegment[Wire, X] = wire

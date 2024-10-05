@@ -156,10 +156,10 @@ object VisualizationToSVG {
   ): SVGElem =
     val (inEdge, outEdge) = boundary.separate
     SVGElem.Group(
-      connectors.map(renderConnector(_, inEdge, outEdge, 0.px, 0.px, height)),
+      connectors.map(renderConnectorOrArea(_, inEdge, outEdge, 0.px, 0.px, height)),
     )
 
-  private def renderConnector[I, O](
+  private def renderConnectorOrArea[I, O](
     connector: Connector[I, O] | TrapezoidArea[I, O],
     inEdge: EdgeLayout[I],
     outEdge: EdgeLayout[O],
@@ -167,16 +167,29 @@ object VisualizationToSVG {
     oOffset: Px,
     height: Px,
   ): SVGElem = {
-    println(s"renderConnector into ${inEdge.pixelBreadth} x $height")
+    println(s"renderConnectorOrArea into ${inEdge.pixelBreadth} x $height")
     import SVGElem.Path.Command.*
 
     connector match
+      case conn: Connector[I, O] =>
+        renderConnector(conn, inEdge, outEdge, iOffset, oOffset, height)
       case ta: TrapezoidArea[I, O] =>
-        val TrapezoidArea(src, tgt, fill) = ta
-        val srcCoords = inEdge.segmentCoords(src).offset(iOffset)
-        val tgtCoords = outEdge.segmentCoords(tgt).offset(oOffset)
-        curvyTrapezoid(srcCoords.x, srcCoords.width, tgtCoords.x, tgtCoords.width, height, fill)
+        ta match
+          case TrapezoidArea.Impl(src, tgt, fill) =>
+            val srcCoords = inEdge.segmentCoords(src).offset(iOffset)
+            val tgtCoords = outEdge.segmentCoords(tgt).offset(oOffset)
+            curvyTrapezoid(srcCoords.x, srcCoords.width, tgtCoords.x, tgtCoords.width, height, fill)
+  }
 
+  private def renderConnector[I, O](
+    connector: Connector[I, O],
+    inEdge: EdgeLayout[I],
+    outEdge: EdgeLayout[O],
+    iOffset: Px,
+    oOffset: Px,
+    height: Px,
+  ): SVGElem = {
+    connector match
       case Connector.Across(src, tgt, Connector.Across.Style(fill, areaFill)) =>
         val srcCoords = inEdge.wireCoords(src).offset(iOffset)
         val tgtCoords = outEdge.wireCoords(tgt).offset(oOffset)
