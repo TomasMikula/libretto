@@ -260,6 +260,24 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           )
         )))
 
+      case _: FlowAST.Unpeel[op, lbl, h, cases] =>
+        summon[A =:= (h ++ Enum[cases])]
+        summon[B =:= Enum[cases || (lbl :: h)]]
+
+        Exists(Exists((
+          lump[h] ++ lump[Enum[cases]],
+          lump[B],
+          Visualization.connectors(
+            unitSize ∙ unitSize,
+            unitSize,
+          )(
+            TrapezoidArea(WirePick.pickL.post, WirePick.pickId.midpoint, ColorCaseLeft),
+            TrapezoidArea(WirePick.pickR.pre, WirePick.pickId.midpoint, ColorCaseRight),
+            Across(pickL, pickId),
+            Across(pickR, pickId),
+          )
+        )))
+
       case other =>
         Visualizer.unimplemented(other.getClass.getSimpleName())
 }
