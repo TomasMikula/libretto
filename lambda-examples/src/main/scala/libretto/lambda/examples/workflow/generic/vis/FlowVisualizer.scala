@@ -278,6 +278,21 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           )
         )))
 
+      case _: FlowAST.Extract[op, lbl, h] =>
+        summon[A =:= Enum[lbl :: h]]
+        summon[B =:= h]
+
+        Exists(Exists((
+          lump[A],
+          lump[B],
+          Visualization.connectors(
+            unitSize,
+            unitSize,
+          )(
+            Across(pickId, pickId)
+          )
+        )))
+
       case other =>
         Visualizer.unimplemented(other.getClass.getSimpleName())
 }
