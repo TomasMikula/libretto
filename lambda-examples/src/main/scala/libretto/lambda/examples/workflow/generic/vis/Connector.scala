@@ -11,17 +11,17 @@ object Connector {
     def styled(style: Across.Style): Connector[X, Y] =
       copy(style = style)
 
-    def fill(fill: Color | ColorGradient): Connector[X, Y] =
+    def fill(fill: Color | PredefinedFill): Connector[X, Y] =
       styled(this.style.copy(fill = fill))
 
-    def floodArea(fill: Color | ColorGradient): Connector[X, Y] =
+    def floodArea(fill: Color | PredefinedFill): Connector[X, Y] =
       styled(this.style.copy(areaFill = Some(fill)))
   }
 
   object Across {
     case class Style(
-      fill: Color | ColorGradient,
-      areaFill: Option[Color | ColorGradient],
+      fill: Color | PredefinedFill,
+      areaFill: Option[Color | PredefinedFill],
     )
 
     object Style {
@@ -34,6 +34,10 @@ object Connector {
   ) extends Connector[X, Y]
 
   case class StudOut[X, Y](
+    tgt: WirePick[Y],
+  ) extends Connector[X, Y]
+
+  case class NoEntryOut[X, Y](
     tgt: WirePick[Y],
   ) extends Connector[X, Y]
 }

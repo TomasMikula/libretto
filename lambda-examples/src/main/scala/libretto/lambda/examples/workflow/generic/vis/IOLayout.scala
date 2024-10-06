@@ -29,16 +29,32 @@ object IOLayout {
           SegmentCoords(x, wl.pixelBreadth)
         case seg: EdgeSegment.SubWire[X] =>
           seg match
+            case EdgeSegment.SubWire.WireOnly(seg) =>
+              wireCoords(seg) match
+                case WireCoords(x, pre, w, post) => SegmentCoords(x + pre, w)
             case EdgeSegment.SubWire.Pre(seg) =>
               wireCoords(seg) match
                 case WireCoords(x, pre, w, post) => SegmentCoords(x, pre)
             case EdgeSegment.SubWire.Post(seg) =>
               wireCoords(seg) match
                 case WireCoords(x, pre, w, post) => SegmentCoords(x + pre + w, post)
+            case EdgeSegment.SubWire.WireAndPre(seg) =>
+              wireCoords(seg) match
+                case WireCoords(x, pre, w, post) => SegmentCoords(x, pre + w)
+            case EdgeSegment.SubWire.WireAndPost(seg) =>
+              wireCoords(seg) match
+                case WireCoords(x, pre, w, post) => SegmentCoords(x + pre, w + post)
             case EdgeSegment.SubWire.MidPoint(seg) =>
               wireCoords(seg) match
+                case WireCoords(x, pre, w, post) => SegmentCoords(x + pre + w/2, Px(0))
+            case EdgeSegment.SubWire.WireLHalf(seg) =>
+              wireCoords(seg) match
+                case WireCoords(x, pre, w, post) => SegmentCoords(x + pre, w/2)
+            case EdgeSegment.SubWire.WireRHalf(seg) =>
+              wireCoords(seg) match
                 case WireCoords(x, pre, w, post) =>
-                  SegmentCoords(x + pre + w/2, Px(0))
+                  val w2 = Px(w.pixels - w.pixels/2)
+                  SegmentCoords(x + pre + w/2, w2)
 
     def wireCoords(wire: WirePick[X]): EdgeLayout.WireCoords =
       val seg: EdgeSegment[Wire, X] = wire

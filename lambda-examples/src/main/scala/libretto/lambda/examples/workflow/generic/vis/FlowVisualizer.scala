@@ -5,7 +5,7 @@ import libretto.lambda.util.Exists
 import libretto.lambda.util.Exists.{Some as ∃}
 
 import Approximates.lump
-import Connector.{Across, StudIn, StudOut}
+import Connector.{Across, NoEntryOut, StudIn, StudOut}
 import DefaultDimensions.Length
 import IOProportions.EdgeProportions
 import EdgeProportions.unitSize
@@ -53,6 +53,42 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         (visualizeAst(g), visualizeAst(h)) match
           case (∃(∃((x1, y1, vg))), ∃(∃((x2, y2, vh)))) =>
             Exists(Exists((x1 ** x2, y1 ** y2, Visualization.Par(vg, vh))))
+
+      case _: FlowAST.InjectL[op, x, y] =>
+        summon[A =:= x]
+        summon[B =:= (x ++ y)]
+
+        Exists(Exists((
+          lump[A],
+          lump[x] ++ lump[y],
+          Visualization.connectors(
+            unitSize,
+            unitSize ∙ unitSize,
+          )(
+            TrapezoidArea(pickId.midpoint, pickL.post, ColorCaseLeft),
+            TrapezoidArea(pickId.wireRHalf, pickR, Color.White),
+            Across(pickId, pickL),
+            NoEntryOut(pickR),
+          )
+        )))
+
+      case _: FlowAST.InjectR[op, x, y] =>
+        summon[A =:= y]
+        summon[B =:= (x ++ y)]
+
+        Exists(Exists((
+          lump[A],
+          lump[x] ++ lump[y],
+          Visualization.connectors(
+            unitSize,
+            unitSize ∙ unitSize,
+          )(
+            TrapezoidArea(pickId.midpoint, pickR.pre, ColorCaseRight),
+            TrapezoidArea(pickId.wireLHalf, pickL, Color.White),
+            Across(pickId, pickR),
+            NoEntryOut(pickL),
+          )
+        )))
 
       case FlowAST.Either(g, h) =>
         (visualizeAst(g), visualizeAst(h)) match
@@ -236,8 +272,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
               Across(pickR.inr, pickR.inr),
               TrapezoidArea(EdgeSegment.pickL.inr, EdgeSegment.pickL, ColorCaseLeft),
               TrapezoidArea(EdgeSegment.pickR.inr, EdgeSegment.pickR, ColorCaseRight),
-              Across(pickL, pickL.inl).fill(ColorGradient.VerticalWhiteBlack),
-              Across(pickL, pickL.inr).fill(ColorGradient.VerticalWhiteBlack),
+              Across(pickL, pickL.inl).fill(PredefinedFill.GradientVerticalWhiteBlack),
+              Across(pickL, pickL.inr).fill(PredefinedFill.GradientVerticalWhiteBlack),
             )
           )
         )))

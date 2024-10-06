@@ -13,12 +13,18 @@ case class SVGDocument(contentElem: SVGElem) {
     val fullXmlString =
       s"""<svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height">
          |$SCRIPT
-         | <defs>
-         |   <linearGradient id="gradient-vertical-white-black" x1="0" y1="0" x2="0" y2="1">
-         |     <stop offset="0%" stop-color="white"/>
-         |     <stop offset="100%" stop-color="black"/>
-         |   </linearGradient>
-         | </defs>
+         |<defs>
+         |  <linearGradient id="gradient-vertical-white-black" x1="0" y1="0" x2="0" y2="1">
+         |    <stop offset="0%" stop-color="white"/>
+         |    <stop offset="100%" stop-color="black"/>
+         |  </linearGradient>
+         |  <pattern id="pattern-road-block" width=".25" height="1" patternContentUnits="objectBoundingBox">
+         |    <path fill="yellow" d="M 0 0 L 0 0.5 L 0.125 0 Z"/>
+         |    <path fill="black" d="M 0.125 0 L 0 0.5 L 0 1 L 0.25 0 Z"/>
+         |    <path fill="yellow" d="M 0.25 0 L 0 1 L 0.125 1 L 0.25 0.5 Z"/>
+         |    <path fill="black" d="M 0.25 0.5 L 0.125 1 L 0.25 1 Z"/>
+         |  </pattern>
+         |</defs>
          |<rect x="0" y="0" width="${width}px" height="${height}px" fill="rgb(240 240 240)" stroke="black" stroke-width="1px"/>
          |<g id="content">
          |${contentElem.xmlString}
@@ -199,7 +205,7 @@ object SVGElem {
     y: Px,
     w: Px,
     h: Px,
-    fill: Option[Color | ColorGradient],
+    fill: Option[Color | PredefinedFill],
     stroke: Option[Stroke],
     clipPath: Option[ClipPath],
     rx: Option[Double] = None,
@@ -230,7 +236,7 @@ object SVGElem {
   }
 
   object Rect {
-    def solid(w: Px, h: Px, fill: Color | ColorGradient): Rect =
+    def solid(w: Px, h: Px, fill: Color | PredefinedFill): Rect =
       Rect(0.px, 0.px, w, h, fill = Some(fill), stroke = None, clipPath = None)
 
     def outlineInner(w: Px, h: Px, thickness: Double, color: Color): Rect =
@@ -260,7 +266,7 @@ object SVGElem {
   }
 
   case class Path(
-    fill: Color | ColorGradient,
+    fill: Color | PredefinedFill,
     cmds: Path.Command*,
   ) extends ElemProper {
     override def xmlTag: String = "path"
@@ -351,22 +357,17 @@ object SVG {
       this match
         case FillBox =>  "fill-box"
 
-  def fillCssValue(fill: Color | ColorGradient): String =
+  def fillCssValue(fill: Color | PredefinedFill): String =
     fill match
       case c: Color => c.cssValue
-      case g: ColorGradient => gradientCssValue(g)
+      case f: PredefinedFill => predefinedFillCssValue(f)
 
-  def gradientCssValue(g: ColorGradient): String =
+  def predefinedFillCssValue(g: PredefinedFill): String =
     g match
-      case ColorGradient.VerticalWhiteBlack => Predef.GradientVerticalWhiteBlack.cssValue
+      case PredefinedFill.GradientVerticalWhiteBlack => "url(#gradient-vertical-white-black)"
+      case PredefinedFill.PatternRoadBlock           => "url(#pattern-road-block)"
 
   def xmlTextEscape(s: String): String =
     s.replace("<", "&lt;")
      .replace("&", "&amp;")
-
-  object Predef {
-    object GradientVerticalWhiteBlack:
-      val cssValue: String = "url(#gradient-vertical-white-black)"
-  }
-
 }
