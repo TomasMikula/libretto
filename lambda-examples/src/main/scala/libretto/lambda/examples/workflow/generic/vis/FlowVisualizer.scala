@@ -278,6 +278,16 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           )
         )))
 
+      case i: FlowAST.Inject[op, lbl, x, cases] =>
+        summon[A =:= x]
+        summon[B =:= Enum[cases]]
+
+        Exists(Exists((
+          lump[A],
+          lump[B],
+          Visualization.LabeledBox(EdgeDesc.wire, EdgeDesc.wire, i.i.label + "(_)", fill = Some(Color.rgb(200, 200, 200)))
+        )))
+
       case _: FlowAST.Peel[op, lbl, h, cases] =>
         summon[A =:= Enum[cases || (lbl :: h)]]
         summon[B =:= (h ++ Enum[cases])]
