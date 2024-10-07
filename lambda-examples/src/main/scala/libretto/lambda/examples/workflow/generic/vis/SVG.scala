@@ -120,6 +120,18 @@ sealed trait SVGElem extends SVGNode {
   def translate(dx: Double, dy: Double): SVGElem =
     transform(Transform.Translate(dx, dy))
 
+  def translateX(dx: Double): SVGElem =
+    translate(dx, 0.0)
+
+  def translateY(dy: Double): SVGElem =
+    translate(0.0, dy)
+
+  def optTranslateX(dx: Double): SVGElem =
+    if dx == 0.0 then this else translateX(dx)
+
+  def optTranslateY(dy: Double): SVGElem =
+    if dy == 0.0 then this else translateY(dy)
+
   def scale(s: Double): SVGElem =
     scale(s, s)
 

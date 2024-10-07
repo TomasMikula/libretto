@@ -47,7 +47,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
             (y1 unify y2) match
               case ∃((y, y1, y2)) =>
                 val m = y1 morph y2
-                Exists(Exists((x, z, Visualization.Seq(vg, m, vh))))
+                Exists(Exists((x, z, Visualization.Sequence(vg, Visualization.Adapt(m), vh))))
 
       case FlowAST.Par(g, h) =>
         (visualizeAst(g), visualizeAst(h)) match
@@ -100,9 +100,9 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                     Exists(Exists((
                       x ++ y,
                       z1 coarsenBy w1, // could equivalently use `z2 coarsenBy w2`
-                      Visualization.Seq(
+                      Visualization.Sequence(
                         Visualization.par[++](vg.withBackground(ColorCaseLeft), vh.withBackground(ColorCaseRight)),
-                        Adaptoid.par[++](Adaptoid.Collapse(w1), Adaptoid.Collapse(w2)),
+                        Visualization.Adapt(Adaptoid.par[++](Adaptoid.Collapse(w1), Adaptoid.Collapse(w2))), // TODO: avoid if identity
                         Visualization.merge2(EdgeProportions.default(w1.inDesc)),
                       ),
                     )))
@@ -115,13 +115,9 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                 Exists(Exists((
                   x,
                   y,
-                  Visualization.Seq(
-                    Visualization.Seq(
-                      Visualization.Unimplemented("do", x.inDesc, x.inDesc),
-                      Adaptoid.id(using x.inDesc),
-                      vg,
-                    ),
-                    Adaptoid.id(using xy.inDesc),
+                  Visualization.Sequence(
+                    Visualization.Unimplemented("do", x.inDesc, x.inDesc),
+                    vg,
                     Visualization.Unimplemented("whileLeft", xy.inDesc, y.inDesc),
                   )
                 )))

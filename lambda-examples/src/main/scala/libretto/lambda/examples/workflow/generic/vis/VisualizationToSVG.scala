@@ -25,8 +25,8 @@ object VisualizationToSVG {
   def renderSVG[X, Y](g: Visualization[X, Y], edges: IOLayout[X, Y], height: Px): SVGElem =
     println(s"rendering ${g.getClass.getSimpleName} into ${edges.pixelBreadth} x $height")
     g match
-      case seq: Visualization.Seq[x, y1, y2, z] =>
-        renderSeq(seq, edges, height)
+      case seq: Visualization.Sequence[x, y] =>
+        renderSequence(seq, edges, height)
       case par: Visualization.Par[bin, x1, x2, y1, y2] =>
         renderPar(par, edges, height)
       case Visualization.ConnectorsOverlay(base, connectors) =>
@@ -51,6 +51,9 @@ object VisualizationToSVG {
         val strokeWidth = math.min(width.pixels / 20.0, height.pixels / 20.0)
         val back = SVGElem.Rect(0.px, 0.px, width, height, fillOpt, strokeOpt.map(Stroke(strokeWidth, _)), clipPath = Some(SVG.ClipPath.FillBox))
         SVGElem.Group(back, renderSVG(front, edges, height))
+      case Visualization.Adapt(f) =>
+        val (i, o) = edges.separate
+        renderAdapt(f, i, o, 0.px, 0.px, height)
       case Visualization.Unimplemented(label, _, _) =>
         renderUnimplemented(label, edges.pixelBreadth, height)
 
@@ -102,37 +105,84 @@ object VisualizationToSVG {
     SVGElem.Text(value, x = width / 2, y = y, fontFamily, fontSize, TextAnchor.Middle)
   }
 
-  private def renderSeq[X, Y1, Y2, Z](
-    seq: Visualization.Seq[X, Y1, Y2, Z],
-    edges: IOLayout[X, Z],
+  private def renderSequence[X, Y](
+    seq: Visualization.Sequence[X, Y],
+    edges: IOLayout[X, Y],
     height: Px,
-  ): SVGElem =
-    val Visualization.Seq(a, m, b) = seq
+  ): SVGElem = {
+    Length.divideProportionally(height.pixels)(seq.lengths*) match
+      case IntegralProportions(k, heights) =>
+        assert(heights.size == seq.size)
+        val (l, vs) = renderSequence(seq, edges.inEdge * k, edges.outEdge * k, heights.map(Px(_)), yOffset = 0.px)
+        val g = SVGElem.Group(vs)
+        val kl = k * l
+        if (kl == 1) then g else g.scale(1.0 / kl)
+  }
 
-    val (layoutX, layoutZ) = edges.separate
-    val ioA = a.ioProportions
-    val ioB = b.ioProportions
+  private def renderSequence[X, Y](
+    seq: Visualization.Sequence[X, Y],
+    iLayout: EdgeLayout[X],
+    oLayout: EdgeLayout[Y],
+    heights: List[Px],
+    yOffset: Px,
+  ): (Int, List[SVGElem]) = {
+    require(heights.size == seq.size)
 
-    val (i, layoutA) = ioA.layoutFw(layoutX)
-    val (j, layoutB) = ioB.layoutBw(layoutZ)
+    seq match
+      case Visualization.Sequence.Two(fst, flexiSnd) =>
+        ???
+        val (k, fstLayout) = fst.ioProportions.layoutFw(iLayout)
+        val h1 = heights.head * k
+        val yk = yOffset * k
+        val fstVis = renderSVG(fst, fstLayout, h1).optTranslateY(yk.pixels)
+        val sndVis = renderSVG(flexiSnd, IOLayout.Separate(fstLayout.outEdge, oLayout * k), heights(1) * k).translateY((yk + h1).pixels)
+        (k, List(fstVis, sndVis))
+      case Visualization.Sequence.TwoFlexiFst(flexiFst, snd) =>
+        val (k, sndLayout) = snd.ioProportions.layoutBw(oLayout)
+        val yk = yOffset * k
+        val h1 = heights.head * k
+        val sndVis = renderSVG(snd, sndLayout, heights(1) * k).translateY((yk + h1).pixels)
+        val fstVis = renderSVG(flexiFst, IOLayout.Separate(iLayout * k, sndLayout.inEdge), h1).optTranslateY(yk.pixels)
+        (k, List(fstVis, sndVis))
+      case Visualization.Sequence.Cons(head, tail) =>
+        val (k, headLayout) = head.ioProportions.layoutFw(iLayout)
+        val yk = yOffset * k
+        val h1 = heights.head * k
+        val headVis = renderSVG(head, headLayout, h1).optTranslateY(yk.pixels)
+        val (l, tailViss) = renderSequence(tail, headLayout.outEdge, oLayout * k, heights.tail.map(_ * k), yk + h1)
+        val hv = if (l == 1) then headVis else headVis.scale(l)
+        (k * l, hv :: tailViss)
+      case Visualization.Sequence.ConsFlexiHead(head, tail) =>
+        val (k, mLayout, tailViss) = renderSequenceBw(tail, oLayout, heights.tail, yOffset + heights.head)
+        val headVis = renderSVG(head, IOLayout.Separate(iLayout * k, mLayout), heights.head * k).optTranslateY((yOffset * k).pixels)
+        (k, headVis :: tailViss)
+  }
 
-    val (ki, kj, k) = leastCommonMultiple(i, j)
+  private def renderSequenceBw[X, Y](
+    seq: Visualization.Sequence[X, Y],
+    oLayout: EdgeLayout[Y],
+    heights: List[Px],
+    yOffset: Px,
+  ): (Int, EdgeLayout[X], List[SVGElem]) = {
+    require(heights.size == seq.size)
 
-    val layoutAk = layoutA * ki
-    val layoutBk = layoutB * kj
-    val layoutY1 = layoutAk.outEdge
-    val layoutY2 = layoutBk.inEdge
-
-    Length.divideProportionally((height * k).pixels)(a.length, m.length, b.length) match
-      case IntegralProportions(l, sizes) =>
-        val List(ha, hm, hb) = sizes
-        val g = SVGElem.Group(
-          renderSVG(a, layoutAk * l, Px(ha)),
-          renderMorph(m, layoutY1 * l, layoutY2 * l, 0.px, 0.px, Px(hm)).translate(0.0, ha),
-          renderSVG(b, layoutBk * l, Px(hb)).translate(0.0, ha + hm),
-        )
-        if (k * l == 1) then g else g.scale(1.0/(k*l))
-  end renderSeq
+    seq match
+      case Visualization.Sequence.TwoFlexiFst(fst, snd) =>
+        ???
+      case Visualization.Sequence.Two(fst, flexiSnd) =>
+        // give the preferred layout to the first, non-flexi element
+        val (k, fstLayout) = fst.ioProportions.layout(oLayout.pixelBreadth)
+        val h1 = heights(0) * k
+        val h2 = heights(1) * k
+        val yk = yOffset * k
+        val fstVis = renderSVG(fst, fstLayout, h1).optTranslateY(yk.pixels)
+        val sndVis = renderSVG(flexiSnd, IOLayout.Separate(fstLayout.outEdge, oLayout * k), h2).translateY((yk + h1).pixels)
+        (k, fstLayout.inEdge, List(fstVis, sndVis))
+      case Visualization.Sequence.Cons(head, tail) =>
+        ???
+      case Visualization.Sequence.ConsFlexiHead(head, tail) =>
+        ???
+  }
 
   private def renderPar[∙[_, _], X1, X2, Y1, Y2](
     par: Visualization.Par[∙, X1, X2, Y1, Y2],
@@ -287,7 +337,7 @@ object VisualizationToSVG {
     )
   }
 
-  private def renderMorph[X, Y](
+  private def renderAdapt[X, Y](
     m: Adaptoid[X, Y],
     iLayout: EdgeLayout[X],
     oLayout: EdgeLayout[Y],
@@ -311,8 +361,8 @@ object VisualizationToSVG {
         case p: Adaptoid.Par[op, x1, x2, y1, y2] =>
           val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
           val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
-          val g1 = renderMorph(p.f1, i1, o1, iOffset, oOffset, height)
-          val g2 = renderMorph(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+          val g1 = renderAdapt(p.f1, i1, o1, iOffset, oOffset, height)
+          val g2 = renderAdapt(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
           SVGElem.Group(g1, g2)
 
     SVGElem.Group(hiddenBackground, content)

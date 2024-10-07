@@ -6,12 +6,16 @@ import DefaultDimensions.Length
 sealed trait Adaptoid[X, Y] {
   def invert: Adaptoid[Y, X]
   def length: Length
+  def inDesc: EdgeDesc[X]
+  def outDesc: EdgeDesc[Y]
 }
 
 object Adaptoid {
   case class Id[X](desc: EdgeDesc[X]) extends Adaptoid[X, X] {
     override def invert: Adaptoid[X, X] = this
     override def length: Length = Length.one
+    override def inDesc: EdgeDesc[X] = desc
+    override def outDesc: EdgeDesc[X] = desc
   }
 
   case class Expand[X, Y](f: X IsRefinedBy Y) extends Adaptoid[X, Y] {
@@ -20,6 +24,9 @@ object Adaptoid {
 
     override def length: Length =
       lengthOf(f)
+
+    override def inDesc: EdgeDesc[X] = f.inDesc
+    override def outDesc: EdgeDesc[Y] = f.outDesc
   }
 
   case class Collapse[X, Y](f: Y IsRefinedBy X) extends Adaptoid[X, Y] {
@@ -28,6 +35,9 @@ object Adaptoid {
 
     override def length: Length =
       lengthOf(f)
+
+    override def inDesc: EdgeDesc[X] = f.outDesc
+    override def outDesc: EdgeDesc[Y] = f.inDesc
   }
 
   case class Par[∙[_, _], X1, X2, Y1, Y2](
@@ -39,6 +49,9 @@ object Adaptoid {
 
     override def length: Length =
       Length.max(f1.length, f2.length)
+
+    override def inDesc: EdgeDesc[X1 ∙ X2] = EdgeDesc.binary(f1.inDesc, f2.inDesc)
+    override def outDesc: EdgeDesc[Y1 ∙ Y2] = EdgeDesc.binary(f1.outDesc, f2.outDesc)
   }
 
   def id[X](using EdgeDesc[X]): Adaptoid[X, X] =

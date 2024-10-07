@@ -5,6 +5,7 @@ import libretto.lambda.util.Exists.{Some as ∃}
 
 infix sealed trait IsRefinedBy[X, Y] {
   def inDesc: EdgeDesc[X]
+  def outDesc: EdgeDesc[Y]
 
   infix def pair[∙[_, _], V, W](that: V IsRefinedBy W): (X ∙ V) IsRefinedBy (Y ∙ W) =
     IsRefinedBy.Pairwise(this, that)
@@ -24,6 +25,9 @@ infix sealed trait IsRefinedBy[X, Y] {
 object IsRefinedBy {
   case class Id[X](desc: EdgeDesc[X]) extends IsRefinedBy[X, X] {
     override def inDesc: EdgeDesc[X] =
+      desc
+
+    override def outDesc: EdgeDesc[X] =
       desc
 
     override def greatestCommonCoarsening[W](
@@ -51,8 +55,11 @@ object IsRefinedBy {
     f1: X1 IsRefinedBy Y1,
     f2: X2 IsRefinedBy Y2,
   ) extends IsRefinedBy[X1 ∙ X2, Y1 ∙ Y2] {
-    override def inDesc: EdgeDesc[(X1 ∙ X2)] =
+    override def inDesc: EdgeDesc[X1 ∙ X2] =
       EdgeDesc.binary(f1.inDesc, f2.inDesc)
+
+    override def outDesc: EdgeDesc[Y1 ∙ Y2] =
+      EdgeDesc.binary(f1.outDesc, f2.outDesc)
 
     override def greatestCommonCoarsening[W](
       that: W IsRefinedBy (Y1 ∙ Y2),
