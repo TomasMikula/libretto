@@ -197,9 +197,9 @@ object Visualization {
       Length.max(a.length, b.length)
 
   case class ConnectorsOverlay[X, Y](
-    base: Either[Visualization[X, Y], IOProportions[X, Y]],
+    base: Either[Visualization.Flexi[X, Y], IOProportions[X, Y]],
     front: List[Connector[X, Y] | TrapezoidArea[X, Y]],
-  ) extends Visualization[X, Y] {
+  ) extends Visualization.Flexi[X, Y] {
     override def ioProportions: IOProportions[X, Y] =
       base match
         case Left(vis) => vis.ioProportions
@@ -215,7 +215,7 @@ object Visualization {
     value: String,
     ioProportions: IOProportions[X, Y],
     vpos: VPos,
-  ) extends Visualization[X, Y] {
+  ) extends Visualization.Flexi[X, Y] {
     override def length: Length = Length.one
   }
 
@@ -234,17 +234,17 @@ object Visualization {
     out: EdgeProportions[Y],
   )(
     connectors: (Connector[X, Y] | TrapezoidArea[X, Y])*
-  ): Visualization[X, Y] =
+  ): Visualization.Flexi[X, Y] =
     ConnectorsOverlay(
       Right(IOProportions.Separate(in, out)),
       connectors.toList,
     )
 
   def connectors[X, Y](
-    back: Visualization[X, Y],
+    back: Visualization.Flexi[X, Y],
   )(
     connectors: (Connector[X, Y] | TrapezoidArea[X, Y])*
-  ): Visualization[X, Y] =
+  ): Visualization.Flexi[X, Y] =
     ConnectorsOverlay(
       Left(back),
       connectors.toList,
@@ -253,7 +253,7 @@ object Visualization {
   def text[X, Y](value: String)(
     iProps: EdgeProportions[X],
     oProps: EdgeProportions[Y],
-  ): Visualization[X, Y] =
+  ): Visualization.Flexi[X, Y] =
     Text(value, IOProportions.Separate(iProps, oProps), VPos.Bottom)
 
   def merge2[∙[_, _], X](x: EdgeProportions[X]): Visualization[X ∙ X, X] =
