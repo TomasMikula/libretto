@@ -44,10 +44,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
       case FlowAST.AndThen(g, h) =>
         (visualizeAst(g), visualizeAst(h)) match
           case (∃(∃((x, y1, vg))), ∃(∃((y2, z, vh)))) =>
-            (y1 unify y2) match
-              case ∃((y, y1, y2)) =>
-                val m = y1 morph y2
-                Exists(Exists((x, z, Visualization.Sequence(vg, Visualization.Adapt(m), vh))))
+            val m = y1 adaptTo y2
+            Exists(Exists((x, z, Visualization.Sequence(vg, Visualization.Adapt(m), vh))))
 
       case FlowAST.Par(g, h) =>
         (visualizeAst(g), visualizeAst(h)) match

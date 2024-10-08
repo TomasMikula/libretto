@@ -12,4 +12,8 @@ trait Approximation[approximates[_, _]] {
       X IsRefinedBy Z,
       Y IsRefinedBy Z,
     )]
+
+    infix def adaptTo[Y](y: Y `approximates` A): Adaptoid[X, Y] =
+      (x unify y) match
+        case Exists.Some((_, xz, yz)) => xz morph yz
 }
