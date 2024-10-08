@@ -108,17 +108,34 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
       case FlowAST.DoWhile(g) =>
         visualizeAst(g) match
           case ∃(∃((x, xy, vg))) =>
-            Approximates.unplus(xy) match
-              case ∃(∃((x1, y, _))) =>
-                Exists(Exists((
-                  x,
-                  y,
+            Exists(Exists((
+              lump[A],
+              lump[B],
+              Visualization.Sequence(
+                Visualization.connectors(
+                  unitSize,
+                  unitSize ∙ unitSize,
+                )(
+                  Connector.Across(pickId, pickR),
+                  Connector.LoopOut(pickL, pickR),
+                ),
+                Visualization.par[**](
+                  Visualization.connectors(unitSize, unitSize)(Connector.Across(pickId, pickId)),
                   Visualization.Sequence(
-                    Visualization.Unimplemented("do", x.inDesc, x.inDesc),
+                    Visualization.Adapt(lump[A] adaptTo x),
                     vg,
-                    Visualization.Unimplemented("whileLeft", xy.inDesc, y.inDesc),
-                  )
-                )))
+                    Visualization.Adapt(xy adaptTo (lump[A] ++ lump[B])),
+                  ),
+                ),
+                Visualization.connectors(
+                  unitSize ∙ (unitSize ∙ unitSize),
+                  unitSize,
+                )(
+                  Connector.Across(pickR.inr, pickId),
+                  Connector.LoopIn(pickL.inr, pickL),
+                ),
+              )
+            )))
 
       case FlowAST.Id() =>
         summon[A =:= B]

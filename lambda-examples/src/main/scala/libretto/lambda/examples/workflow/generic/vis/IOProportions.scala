@@ -134,7 +134,16 @@ object IOProportions {
     override def outEdge: EdgeProportions[Y1 ∙ Y2] =
       EdgeProportions.Binary(p1.outEdge, p2.outEdge)
 
-    override def layout(availableBreadth: Px): (Int, IOLayout[X1 ∙ X2, Y1 ∙ Y2]) = ???
+    override def layout(availableBreadth: Px): (Int, IOLayout[X1 ∙ X2, Y1 ∙ Y2]) =
+      Breadth.divideProportionally(availableBreadth.pixels)(
+        p1.totalBreadth,
+        p2.totalBreadth,
+      ) match {
+        case IntegralProportions(k, List(w1, w2)) =>
+          val (k1, l1) = p1.layout(w1.px)
+          val (k2, l2) = p2.layout(w2.px * k1)
+          (k * k1 * k2, IOLayout.Par(l1 * k2, l2))
+      }
 
     override def layoutFw(inLayout: EdgeLayout[X1 ∙ X2]): (Int, IOLayout[X1 ∙ X2, Y1 ∙ Y2]) =
       inLayout match

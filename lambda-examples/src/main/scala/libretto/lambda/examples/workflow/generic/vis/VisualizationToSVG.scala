@@ -7,6 +7,7 @@ import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily
 import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily.{Monospace, Serif}
 import libretto.lambda.examples.workflow.generic.vis.SVG.{Stroke, TextAnchor}
 import libretto.lambda.examples.workflow.generic.vis.util.{IntegralProportions, leastCommonMultiple}
+import scala.math.Ordering.Implicits.*
 
 import IOLayout.EdgeLayout
 import IOProportions.EdgeProportions
@@ -251,6 +252,60 @@ object VisualizationToSVG {
             val area = curvyTrapezoid(srcCoords.segmentX, srcCoords.segmentWidth, tgtCoords.segmentX, tgtCoords.segmentWidth, height, areaFill)
             SVGElem.Group(area, conn)
         }
+
+      case Connector.LoopIn(src, tgt) =>
+        import SVGElem.Path.Command.*
+
+        val srcCoords = inEdge.wireCoords(src).offset(iOffset)
+        val tgtCoords = inEdge.wireCoords(tgt).offset(iOffset)
+        val sx1 = srcCoords.wireX
+        val sw = srcCoords.wireWidth
+        val sx2 = sx1 + sw
+        val tx1 = tgtCoords.wireX
+        val tw = tgtCoords.wireWidth
+        val tx2 = tx1 + tw
+        val ym = height.pixels / 2.0
+        val yms = math.max(0.0, ym - sw.pixels)
+        val ymt = math.max(0.0, ym - tw.pixels)
+        val (sy1, sy2, ty1, ty2) =
+          if (sx1 < tx1) // source to the left of target
+            (ym, yms, ymt, ym)
+          else
+            (yms, ym, ym, ymt)
+        SVGElem.Path(
+          MoveTo(sx1, 0.px),
+          CurveTo(sx1, sy1, tx2, ty2, tx2, 0.px),
+          LineTo(tx1, 0.px),
+          CurveTo(tx1, ty1, sx2, sy2, sx2, 0.px),
+          Close,
+        )
+
+      case Connector.LoopOut(src, tgt) =>
+        import SVGElem.Path.Command.*
+
+        val srcCoords = outEdge.wireCoords(src).offset(oOffset)
+        val tgtCoords = outEdge.wireCoords(tgt).offset(oOffset)
+        val sx1 = srcCoords.wireX
+        val sw = srcCoords.wireWidth
+        val sx2 = sx1 + sw
+        val tx1 = tgtCoords.wireX
+        val tw = tgtCoords.wireWidth
+        val tx2 = tx1 + tw
+        val ym = height.pixels / 2.0
+        val yms = math.min(height.pixels, ym + sw.pixels)
+        val ymt = math.min(height.pixels, ym + tw.pixels)
+        val (sy1, sy2, ty1, ty2) =
+          if (sx1 < tx1) // source to the left of target
+            (ym, yms, ymt, ym)
+          else
+            (yms, ym, ym, ymt)
+        SVGElem.Path(
+          MoveTo(sx1, height),
+          CurveTo(sx1, sy1, tx2, ty2, tx2, height),
+          LineTo(tx1, height),
+          CurveTo(tx1, ty1, sx2, sy2, sx2, height),
+          Close,
+        )
 
       case Connector.StudIn(src) =>
         val H = 20

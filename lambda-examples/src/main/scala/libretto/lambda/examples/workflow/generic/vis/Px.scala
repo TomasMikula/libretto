@@ -21,4 +21,6 @@ object Px {
 
   extension (n: Int)
     def px: Px = Px(n)
+
+  given Ordering[Px] = Ordering.Int
 }

@@ -29,6 +29,16 @@ object Connector {
     }
   }
 
+  case class LoopIn[X, Y](
+    src: WirePick[X],
+    tgt: WirePick[X],
+  ) extends Connector[X, Y]
+
+  case class LoopOut[X, Y](
+    src: WirePick[Y],
+    tgt: WirePick[Y],
+  ) extends Connector[X, Y]
+
   case class StudIn[X, Y](
     src: WirePick[X],
   ) extends Connector[X, Y]
