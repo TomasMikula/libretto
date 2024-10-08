@@ -400,10 +400,10 @@ object VisualizationToSVG {
     oOffset: Px,
     height: Px,
   ): SVGElem = {
-    // hidden background for debugging purposes
+    // hidden-by-default background for debugging purposes
     val hiddenBackground =
       curvyTrapezoid(iOffset, iLayout.pixelBreadth, oOffset, oLayout.pixelBreadth, height, Color.Red)
-        .hidden
+        .debugOnly
 
     val content =
       m match

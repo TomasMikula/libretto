@@ -13,6 +13,11 @@ case class SVGDocument(contentElem: SVGElem) {
     val fullXmlString =
       s"""<svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height">
          |$SCRIPT
+         |<style>
+         |  .debug {
+         |    display: none;
+         |  }
+         |</style>
          |<defs>
          |  <linearGradient id="gradient-vertical-white-black" x1="0" y1="0" x2="0" y2="1">
          |    <stop offset="0%" stop-color="white"/>
@@ -142,14 +147,15 @@ sealed trait SVGElem extends SVGNode {
     this match
       case Transformed(obj, ts) => Transformed(obj, t :: ts)
       case obj: ElemProper      => Transformed(obj, t)
-      case Hidden(obj)          => obj.transform(t).hidden
+      case WithClasses(obj, cs) => obj.transform(t).withClasses(cs)
 
-  def hidden: SVGElem =
+  def debugOnly: SVGElem =
+    withClasses("debug" :: Nil)
+
+  def withClasses(classes: List[String]): SVGElem =
     this match
-      case p: ElemProper  => Hidden(p)
-      case t: Transformed => Hidden(t)
-      case h: Hidden      => h
-
+      case e: (ElemProper | Transformed) => WithClasses(e, classes)
+      case WithClasses(elem, cs)    => WithClasses(elem, cs ++ classes)
 }
 
 object SVGElem {
@@ -170,12 +176,19 @@ object SVGElem {
     def apply(obj: ElemProper, t: Transform): Transformed =
       Transformed(obj, NonEmptyList.of(t))
 
-  case class Hidden(obj: ElemProper | Transformed) extends SVGElem:
+  case class WithClasses(
+    obj: ElemProper | Transformed,
+    classes: List[String],
+  ) extends SVGElem:
     override def xmlTag: String = obj.xmlTag
     override def xmlContent: List[SVGNode] = obj.xmlContent
     override def xmlAttributes: Map[String, String] =
+      val classesStr = classes.map(xmlTextEscape).mkString(" ")
       obj.xmlAttributes
-        .updated("display", "none")
+        .updatedWith("class") {
+          case None => Some(classesStr)
+          case Some(s) => Some(s"$s $classesStr")
+        }
 
   sealed trait ElemProper extends SVGElem
 
@@ -381,5 +394,12 @@ object SVG {
 
   def xmlTextEscape(s: String): String =
     s.replace("<", "&lt;")
+     .replace("&", "&amp;")
+
+  def xmlEscape(s: String): String =
+    s.replace("\"", "&quot;")
+     .replace("'", "&apos;")
+     .replace("<", "&lt;")
+     .replace(">", "&gt;")
      .replace("&", "&amp;")
 }
