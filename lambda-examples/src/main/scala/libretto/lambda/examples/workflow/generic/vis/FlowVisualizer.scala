@@ -61,7 +61,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
             unitSize,
             unitSize ∙ unitSize,
           )(
-            TrapezoidArea(pickId.midpoint, pickL.post, ColorCaseLeft),
+            TrapezoidArea(pickId.wireLHalf, pickL, ColorCaseLeft),
             TrapezoidArea(pickId.wireRHalf, pickR, Color.White),
             Across(pickId, pickL),
             NoEntryOut(pickR),
@@ -79,7 +79,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
             unitSize,
             unitSize ∙ unitSize,
           )(
-            TrapezoidArea(pickId.midpoint, pickR.pre, ColorCaseRight),
+            TrapezoidArea(pickId.wireRHalf, pickR, ColorCaseRight),
             TrapezoidArea(pickId.wireLHalf, pickL, Color.White),
             Across(pickId, pickR),
             NoEntryOut(pickL),
@@ -308,8 +308,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
             unitSize,
             unitSize ∙ unitSize,
           )(
-            TrapezoidArea(WirePick.pickId.midpoint, WirePick.pickL.post, ColorCaseLeft),
-            TrapezoidArea(WirePick.pickId.midpoint, WirePick.pickR.pre, ColorCaseRight),
+            TrapezoidArea(WirePick.pickId.wireLHalf, WirePick.pickL, ColorCaseLeft),
+            TrapezoidArea(WirePick.pickId.wireRHalf, WirePick.pickR, ColorCaseRight),
             Across(pickId, pickL),
             Across(pickId, pickR),
           )
@@ -326,8 +326,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
             unitSize ∙ unitSize,
             unitSize,
           )(
-            TrapezoidArea(WirePick.pickL.post, WirePick.pickId.midpoint, ColorCaseLeft),
-            TrapezoidArea(WirePick.pickR.pre, WirePick.pickId.midpoint, ColorCaseRight),
+            TrapezoidArea(WirePick.pickL, WirePick.pickId.wireLHalf, ColorCaseLeft),
+            TrapezoidArea(WirePick.pickR, WirePick.pickId.wireRHalf, ColorCaseRight),
             Across(pickL, pickId),
             Across(pickR, pickId),
           )
