@@ -20,44 +20,41 @@ object VisualizationToSVG {
     val (k, layout) = edges.layout(w.px)
 
     SVGDocument(
-      renderSVG(g, layout, Px(h) * k, AmbientStyle.empty)
+      renderSVG(g, layout, Px(h) * k)
     )
 
-  def renderSVG[X, Y](g: Visualization[X, Y], edges: IOLayout[X, Y], height: Px, ambientStyle: AmbientStyle): SVGElem =
+  def renderSVG[X, Y](g: Visualization[X, Y], edges: IOLayout[X, Y], height: Px): SVGElem =
     println(s"rendering ${g.getClass.getSimpleName} into ${edges.pixelBreadth} x $height")
     g match
       case seq: Visualization.Sequence[x, y] =>
-        renderSequence(seq, edges, height, ambientStyle)
+        renderSequence(seq, edges, height)
       case par: Visualization.Par[bin, x1, x2, y1, y2] =>
-        renderPar(par, edges, height, ambientStyle)
+        renderPar(par, edges, height)
       case Visualization.ConnectorsOverlay(base, connectors) =>
+        val conns = renderConnectors(connectors, edges, height)
         base match
           case Left(vis) =>
-            val back = renderSVG(vis, edges, height, ambientStyle)
-            val conns = renderConnectors(connectors, edges, height, AmbientStyle.empty)
+            val back = renderSVG(vis, edges, height)
             SVGElem.Group(back, conns)
           case Right(props) =>
-            renderConnectors(connectors, edges, height, ambientStyle)
+            conns
       case Visualization.Text(value, props, vpos) =>
-        // TODO: should we render the ambient behind the text?
         renderText(value, edges.pixelBreadth, height, 0.6, vpos, Serif)
       case Visualization.LabeledBox(i, o, label, fillOpt) =>
         val width = edges.pixelBreadth
         val strokeWidth = math.min(width.pixels / 20.0, height.pixels / 20.0)
         val r = 0.15 * math.min(width.pixels, height.pixels)
-        // TODO: should we render the ambient behind the box?
         val rect = SVGElem.Rect(0.px, 0.px, width, height, fillOpt, Some(Stroke(strokeWidth, Color.Black)), clipPath = None, rx = Some(r), ry = Some(r))
         val txt = renderText(label, width, height, 0.6, VPos.Middle, Monospace)
         SVGElem.Group(rect, txt)
       case Visualization.WithBackgroundBox(fillOpt, strokeOpt, front) =>
         val width = edges.pixelBreadth
         val strokeWidth = math.min(width.pixels / 20.0, height.pixels / 20.0)
-        // TODO: should we render the ambient behind the background box?
         val back = SVGElem.Rect(0.px, 0.px, width, height, fillOpt, strokeOpt.map(Stroke(strokeWidth, _)), clipPath = Some(SVG.ClipPath.FillBox))
-        SVGElem.Group(back, renderSVG(front, edges, height, AmbientStyle.empty)) // the background box establishes an empty ambient style
+        SVGElem.Group(back, renderSVG(front, edges, height))
       case Visualization.Adapt(f) =>
         val (i, o) = edges.separate
-        renderAdapt(f, i, o, 0.px, 0.px, height, ambientStyle)
+        renderAdapt(f, i, o, 0.px, 0.px, height)
       case Visualization.Unimplemented(label, _, _) =>
         renderUnimplemented(label, edges.pixelBreadth, height)
 
@@ -113,12 +110,11 @@ object VisualizationToSVG {
     seq: Visualization.Sequence[X, Y],
     edges: IOLayout[X, Y],
     height: Px,
-    ambientStyle: AmbientStyle,
   ): SVGElem = {
     Length.divideProportionally(height.pixels)(seq.lengths*) match
       case IntegralProportions(k, heights) =>
         assert(heights.size == seq.size)
-        val (l, vs) = renderSequence(seq, edges.inEdge * k, edges.outEdge * k, heights.map(Px(_)), yOffset = 0.px, ambientStyle)
+        val (l, vs) = renderSequence(seq, edges.inEdge * k, edges.outEdge * k, heights.map(Px(_)), yOffset = 0.px)
         val g = SVGElem.Group(vs)
         val kl = k * l
         if (kl == 1) then g else g.scale(1.0 / kl)
@@ -130,7 +126,6 @@ object VisualizationToSVG {
     oLayout: EdgeLayout[Y],
     heights: List[Px],
     yOffset: Px,
-    ambientStyle: AmbientStyle,
   ): (Int, List[SVGElem]) = {
     require(heights.size == seq.size)
 
@@ -140,27 +135,27 @@ object VisualizationToSVG {
         val (k, fstLayout) = fst.ioProportions.layoutFw(iLayout)
         val h1 = heights.head * k
         val yk = yOffset * k
-        val fstVis = renderSVG(fst, fstLayout, h1, ambientStyle).optTranslateY(yk.pixels)
-        val sndVis = renderSVG(flexiSnd, IOLayout.Separate(fstLayout.outEdge, oLayout * k), heights(1) * k, ambientStyle).translateY((yk + h1).pixels)
+        val fstVis = renderSVG(fst, fstLayout, h1).optTranslateY(yk.pixels)
+        val sndVis = renderSVG(flexiSnd, IOLayout.Separate(fstLayout.outEdge, oLayout * k), heights(1) * k).translateY((yk + h1).pixels)
         (k, List(fstVis, sndVis))
       case Visualization.Sequence.TwoFlexiFst(flexiFst, snd) =>
         val (k, sndLayout) = snd.ioProportions.layoutBw(oLayout)
         val yk = yOffset * k
         val h1 = heights.head * k
-        val sndVis = renderSVG(snd, sndLayout, heights(1) * k, ambientStyle).translateY((yk + h1).pixels)
-        val fstVis = renderSVG(flexiFst, IOLayout.Separate(iLayout * k, sndLayout.inEdge), h1, ambientStyle).optTranslateY(yk.pixels)
+        val sndVis = renderSVG(snd, sndLayout, heights(1) * k).translateY((yk + h1).pixels)
+        val fstVis = renderSVG(flexiFst, IOLayout.Separate(iLayout * k, sndLayout.inEdge), h1).optTranslateY(yk.pixels)
         (k, List(fstVis, sndVis))
       case Visualization.Sequence.Cons(head, tail) =>
         val (k, headLayout) = head.ioProportions.layoutFw(iLayout)
         val yk = yOffset * k
         val h1 = heights.head * k
-        val headVis = renderSVG(head, headLayout, h1, ambientStyle).optTranslateY(yk.pixels)
-        val (l, tailViss) = renderSequence(tail, headLayout.outEdge, oLayout * k, heights.tail.map(_ * k), yk + h1, ambientStyle)
+        val headVis = renderSVG(head, headLayout, h1).optTranslateY(yk.pixels)
+        val (l, tailViss) = renderSequence(tail, headLayout.outEdge, oLayout * k, heights.tail.map(_ * k), yk + h1)
         val hv = if (l == 1) then headVis else headVis.scale(l)
         (k * l, hv :: tailViss)
       case Visualization.Sequence.ConsFlexiHead(head, tail) =>
-        val (k, mLayout, tailViss) = renderSequenceBw(tail, oLayout, heights.tail, yOffset + heights.head, ambientStyle)
-        val headVis = renderSVG(head, IOLayout.Separate(iLayout * k, mLayout), heights.head * k, ambientStyle).optTranslateY((yOffset * k).pixels)
+        val (k, mLayout, tailViss) = renderSequenceBw(tail, oLayout, heights.tail, yOffset + heights.head)
+        val headVis = renderSVG(head, IOLayout.Separate(iLayout * k, mLayout), heights.head * k).optTranslateY((yOffset * k).pixels)
         (k, headVis :: tailViss)
   }
 
@@ -169,7 +164,6 @@ object VisualizationToSVG {
     oLayout: EdgeLayout[Y],
     heights: List[Px],
     yOffset: Px,
-    ambientStyle: AmbientStyle,
   ): (Int, EdgeLayout[X], List[SVGElem]) = {
     require(heights.size == seq.size)
 
@@ -182,8 +176,8 @@ object VisualizationToSVG {
         val h1 = heights(0) * k
         val h2 = heights(1) * k
         val yk = yOffset * k
-        val fstVis = renderSVG(fst, fstLayout, h1, ambientStyle).optTranslateY(yk.pixels)
-        val sndVis = renderSVG(flexiSnd, IOLayout.Separate(fstLayout.outEdge, oLayout * k), h2, ambientStyle).translateY((yk + h1).pixels)
+        val fstVis = renderSVG(fst, fstLayout, h1).optTranslateY(yk.pixels)
+        val sndVis = renderSVG(flexiSnd, IOLayout.Separate(fstLayout.outEdge, oLayout * k), h2).translateY((yk + h1).pixels)
         (k, fstLayout.inEdge, List(fstVis, sndVis))
       case Visualization.Sequence.Cons(head, tail) =>
         ???
@@ -195,16 +189,17 @@ object VisualizationToSVG {
     par: Visualization.Par[∙, X1, X2, Y1, Y2],
     edges: IOLayout[X1 ∙ X2, Y1 ∙ Y2],
     height: Px,
-    ambientStyle: AmbientStyle,
   ): SVGElem = {
     val Visualization.Par(op, a, b) = par
-    val lStyle = AmbientStyle.leftOf(op) over ambientStyle
-    val rStyle = AmbientStyle.rightOf(op) over ambientStyle
+    val lStyle = AmbientStyle.leftOf(op)
+    val rStyle = AmbientStyle.rightOf(op)
     edges match
       case IOLayout.Par(la, lb) =>
-        val ga = renderSVG(a, la, height, lStyle)
-        val gb = renderSVG(b, lb, height, rStyle)
-        SVGElem.Group(ga, gb.translate(la.pixelBreadth.pixels, 0.0))
+        val amb1 = renderAmbient(lStyle, la, height)
+        val amb2 = renderAmbient(rStyle, lb, height).map(_.translate(la.pixelBreadth.pixels, 0.0))
+        val ga = renderSVG(a, la, height)
+        val gb = renderSVG(b, lb, height).translate(la.pixelBreadth.pixels, 0.0)
+        SVGElem.Group(amb1 ++: amb2 ++: List(ga, gb))
       case other =>
         throw IllegalArgumentException(s"To render a Par, IOLayout.Par must be used. Was: $other")
   }
@@ -213,10 +208,9 @@ object VisualizationToSVG {
     connectors: List[Connector[X, Y] | TrapezoidArea[X, Y]],
     boundary: IOLayout[X, Y],
     height: Px,
-    ambientStyle: AmbientStyle,
   ): SVGElem =
     val (i, o) = boundary.separate
-    renderConnectors(connectors, i, o, 0.px, 0.px, height, ambientStyle)
+    renderConnectors(connectors, i, o, 0.px, 0.px, height) //, ambientStyle)
 
   private def renderConnectors[X, Y](
     connectors: List[Connector[X, Y] | TrapezoidArea[X, Y]],
@@ -225,13 +219,10 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
-    ambientStyle: AmbientStyle,
-  ): SVGElem = {
-    val amb = renderAmbient(ambientStyle, iLayout, oLayout, iOffset, oOffset, height)
+  ): SVGElem =
     SVGElem.Group(
-      amb ++: connectors.map(renderConnectorOrArea(_, iLayout, oLayout, iOffset, oOffset, height)),
+      connectors.map(renderConnectorOrArea(_, iLayout, oLayout, iOffset, oOffset, height)),
     )
-  }
 
   private def renderConnectorOrArea[I, O](
     connector: Connector[I, O] | TrapezoidArea[I, O],
@@ -417,6 +408,14 @@ object VisualizationToSVG {
 
   private def renderAmbient[X, Y](
     s: AmbientStyle,
+    ioLayout: IOLayout[X, Y],
+    height: Px,
+  ): Option[SVGElem] =
+    val (i, o) = ioLayout.separate
+    renderAmbient(s, i, o, 0.px, 0.px, height)
+
+  private def renderAmbient[X, Y](
+    s: AmbientStyle,
     iLayout: EdgeLayout[X],
     oLayout: EdgeLayout[Y],
     iOffset: Px,
@@ -463,15 +462,11 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
-    ambientStyle: AmbientStyle,
   ): SVGElem = {
     // hidden-by-default background for debugging purposes
     val hiddenBackground =
       curvyTrapezoid(iOffset, iLayout.pixelBreadth, oOffset, oLayout.pixelBreadth, height, Color.Red)
         .debugOnly
-
-    val amb =
-      renderAmbient(ambientStyle, iLayout, oLayout, iOffset, oOffset, height)
 
     val content =
       m match
@@ -486,11 +481,13 @@ object VisualizationToSVG {
           val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
           val lStyle = AmbientStyle.leftOf(p.op)
           val rStyle = AmbientStyle.rightOf(p.op)
-          val g1 = renderAdapt(p.f1, i1, o1, iOffset, oOffset, height, lStyle)
-          val g2 = renderAdapt(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height, rStyle)
-          SVGElem.Group(g1, g2)
+          val amb1 = renderAmbient(lStyle, i1, o1, iOffset, oOffset, height)
+          val amb2 = renderAmbient(rStyle, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+          val g1 = renderAdapt(p.f1, i1, o1, iOffset, oOffset, height)
+          val g2 = renderAdapt(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+          SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
 
-    SVGElem.Group(hiddenBackground :: amb ++: List(content))
+    SVGElem.Group(hiddenBackground, content)
   }
 
   private def renderIdentity[X](
