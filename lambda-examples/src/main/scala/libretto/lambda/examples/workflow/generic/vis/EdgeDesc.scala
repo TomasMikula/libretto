@@ -10,11 +10,13 @@ object EdgeDesc {
     override def depth: Length =
       Length.one
 
+  sealed trait Composite[X] extends EdgeDesc[X]
+
   case class Binary[∙[_, _], X1, X2](
     op: OpTag[∙],
     x1: EdgeDesc[X1],
     x2: EdgeDesc[X2],
-  ) extends EdgeDesc[X1 ∙ X2]:
+  ) extends EdgeDesc.Composite[X1 ∙ X2]:
     override def depth: Length =
       (x1, x2) match
         case (SingleWire, SingleWire) =>

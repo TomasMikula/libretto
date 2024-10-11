@@ -39,16 +39,16 @@ object IsRefinedBy {
       Adaptoid.Collapse(that)
   }
 
-  case class Initial[X](outDesc: EdgeDesc[X]) extends (Wire IsRefinedBy X) {
+  case class Initial[X](outDesc: EdgeDesc.Composite[X]) extends (Wire IsRefinedBy X) {
     override def inDesc: EdgeDesc[Wire] = EdgeDesc.SingleWire
 
     override def greatestCommonCoarsening[W](
       that: W IsRefinedBy X,
     ): Exists[[V] =>> (V IsRefinedBy Wire, V IsRefinedBy W)] =
-      Exists((id[Wire], Initial[W](that.inDesc)))
+      Exists((id[Wire], initial[W](that.inDesc)))
 
     override def morph[W](that: W IsRefinedBy X): Adaptoid[Wire, W] =
-      Adaptoid.Expand(Initial[W](that.inDesc))
+      Adaptoid.Expand(initial[W](that.inDesc))
   }
 
   case class Pairwise[∙[_, _], X1, X2, Y1, Y2](
@@ -69,7 +69,7 @@ object IsRefinedBy {
     ): Exists[[V] =>> (V IsRefinedBy (X1 ∙ X2), V IsRefinedBy W)] =
       that match
         case Id(_) => Exists((Id(inDesc), this))
-        case Initial(_) => Exists((Initial(inDesc), id[Wire]))
+        case Initial(_) => Exists((initial(inDesc), id[Wire]))
         case Pairwise(_, g1, g2) => greatestCommonCoarseningPairwise(g1, g2)
 
     private def greatestCommonCoarseningPairwise[W1, W2](
@@ -85,7 +85,7 @@ object IsRefinedBy {
     ): Adaptoid[(X1 ∙ X2), W] =
       that match
         case Id(_) => Adaptoid.Expand(this)
-        case Initial(_) => Adaptoid.Collapse(Initial(inDesc))
+        case Initial(_) => Adaptoid.Collapse(initial(inDesc))
         case Pairwise(_, g1, g2) => morphToBinaryOp(g1, g2)
 
     private def morphToBinaryOp[W1, W2](
@@ -98,6 +98,11 @@ object IsRefinedBy {
   def id[X](using EdgeDesc[X]): (X IsRefinedBy X) =
     Id[X](summon)
 
+  def initial[X](x: EdgeDesc[X]): (Wire IsRefinedBy X) =
+    x match
+      case w @ EdgeDesc.SingleWire  => Id(w)
+      case c: EdgeDesc.Composite[X] => Initial[X](c)
+
   def anythingRefinesWire[X](using EdgeDesc[X]): (Wire IsRefinedBy X) =
-    Initial[X](summon)
+    initial[X](summon)
 }
