@@ -445,14 +445,8 @@ object VisualizationToSVG {
     o: EdgeLayout.SegmentCoords,
     height: Px,
   ): Option[SVGElem] = {
-    val AmbientStyle(bg, base) = s
-    val bgVis = bg map { curvyTrapezoid(i.x, i.width, o.x, o.width, height, _) }
-    val baseVis = base flatMap { renderAmbient(_, i, o, height) }
-    (bgVis, baseVis) match
-      case (Some(a), Some(b)) => Some(SVGElem.Group(a, b))
-      case (Some(a), None)    => Some(a)
-      case (None, Some(b))    => Some(b)
-      case (None, None)       => None
+    val AmbientStyle(bg) = s
+    bg map { curvyTrapezoid(i.x, i.width, o.x, o.width, height, _) }
   }
 
   private def renderAdapt[X, Y](
