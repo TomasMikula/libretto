@@ -557,8 +557,8 @@ object VisualizationToSVG {
     ambientStyle: AmbientStyle,
   ): SVGElem = {
     println(s"renderFanOut into ${iLayout.pixelBreadth} x $height")
-    val lStyle = AmbientStyle.leftOf(y.op) over ambientStyle
-    val rStyle = AmbientStyle.rightOf(y.op) over ambientStyle
+    val lStyle = AmbientStyle.leftOf(y.op)
+    val rStyle = AmbientStyle.rightOf(y.op)
     val c1 = Connector.Across[Wire, Wire ∙ Wire](WirePick.pickId, WirePick.pickL)
     val c2 = Connector.Across[Wire, Wire ∙ Wire](WirePick.pickId, WirePick.pickR)
     val (o1, o2) = EdgeLayout.split(oLayout)
@@ -574,11 +574,13 @@ object VisualizationToSVG {
       case (EdgeDesc.SingleWire, EdgeDesc.SingleWire) =>
         summon[Y1 =:= Wire]
         summon[Y2 =:= Wire]
-        val amb1 = renderAmbient(lStyle, EdgeSegment.pickId.lHalf, EdgeSegment.pickL, ik, ok, iok, ook, hk)
-        val amb2 = renderAmbient(rStyle, EdgeSegment.pickId.rHalf, EdgeSegment.pickR, ik, ok, iok, ook, hk)
+        val ambB1 = renderAmbient(ambientStyle, EdgeSegment.pickId.lHalf, EdgeSegment.pickL, ik, ok, iok, ook, hk)
+        val ambB2 = renderAmbient(ambientStyle, EdgeSegment.pickId.rHalf, EdgeSegment.pickR, ik, ok, iok, ook, hk)
+        val ambF1 = renderAmbient(lStyle, EdgeSegment.pickId.wireLHalf, EdgeSegment.pickL, ik, ok, iok, ook, hk)
+        val ambF2 = renderAmbient(rStyle, EdgeSegment.pickId.wireRHalf, EdgeSegment.pickR, ik, ok, iok, ook, hk)
         val g1 = renderConnector(c1, ik, ok, iok, ook, hk)
         val g2 = renderConnector(c2, ik, ok, iok, ook, hk)
-        val g = SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
+        val g = SVGElem.Group(ambB1 ++: ambB2 ++: ambF1 ++: ambF2 ++: List(g1, g2))
         if k == 1 then g else g.scale(1.0 / k)
       case _ =>
         Length.divideProportionally(hk.pixels)(
@@ -595,13 +597,17 @@ object VisualizationToSVG {
             val iOff = iok * l
             val oOff = ook * l
             val mOff = Px((iOff * h1 + oOff * h2).pixels / (h1 + h2))
-            val amb1 = renderAmbient(lStyle, EdgeSegment.pickId.lHalf, EdgeSegment.pickL, ikl, wl, iOff, mOff, h1.px)
-            val amb2 = renderAmbient(rStyle, EdgeSegment.pickId.rHalf, EdgeSegment.pickR, ikl, wl, iOff, mOff, h1.px)
+            val ambB1 = renderAmbient(ambientStyle, EdgeSegment.pickId.lHalf, EdgeSegment.pickL, ikl, wl, iOff, mOff, h1.px)
+            val ambB2 = renderAmbient(ambientStyle, EdgeSegment.pickId.rHalf, EdgeSegment.pickR, ikl, wl, iOff, mOff, h1.px)
+            val ambF1 = renderAmbient(lStyle, EdgeSegment.pickId.wireLHalf, EdgeSegment.pickL, ikl, wl, iOff, mOff, h1.px)
+            val ambF2 = renderAmbient(rStyle, EdgeSegment.pickId.wireRHalf, EdgeSegment.pickR, ikl, wl, iOff, mOff, h1.px)
             val g1 = renderConnector(c1, ikl, wl, iOff, mOff, h1.px)
             val g2 = renderConnector(c2, ikl, wl, iOff, mOff, h1.px)
-            val g3 = renderFanOutOrId(y.x1, wl1, y1, mOff, oOff, h2.px, lStyle).translate(0, h1)
-            val g4 = renderFanOutOrId(y.x2, wl2, y2, mOff + wl1.pixelBreadth, oOff + y1.pixelBreadth, h2.px, rStyle).translate(0, h1)
-            val g = SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2, g3, g4))
+            val lStyleCombo = lStyle over ambientStyle
+            val rStyleCombo = rStyle over ambientStyle
+            val g3 = renderFanOutOrId(y.x1, wl1, y1, mOff, oOff, h2.px, lStyleCombo).translate(0, h1)
+            val g4 = renderFanOutOrId(y.x2, wl2, y2, mOff + wl1.pixelBreadth, oOff + y1.pixelBreadth, h2.px, rStyleCombo).translate(0, h1)
+            val g = SVGElem.Group(ambB1 ++: ambB2 ++: ambF1 ++: ambF2 ++: List(g1, g2, g3, g4))
             if (k * l == 1) g else g.scale(1.0/(k*l))
     }
   }
@@ -640,8 +646,8 @@ object VisualizationToSVG {
     ambientStyle: AmbientStyle,
   ): SVGElem = {
     println(s"renderFanIn into ${iLayout.pixelBreadth} x $height")
-    val lStyle = AmbientStyle.leftOf(x.op) over ambientStyle
-    val rStyle = AmbientStyle.rightOf(x.op) over ambientStyle
+    val lStyle = AmbientStyle.leftOf(x.op)
+    val rStyle = AmbientStyle.rightOf(x.op)
     val c1 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickL, WirePick.pickId)
     val c2 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickR, WirePick.pickId)
     val (i1, i2) = EdgeLayout.split(iLayout)
@@ -657,11 +663,13 @@ object VisualizationToSVG {
       case (EdgeDesc.SingleWire, EdgeDesc.SingleWire) =>
         summon[X1 =:= Wire]
         summon[X2 =:= Wire]
-        val amb1 = renderAmbient(lStyle, EdgeSegment.pickL, EdgeSegment.pickId.lHalf, ik, ok, iok, ook, hk)
-        val amb2 = renderAmbient(rStyle, EdgeSegment.pickR, EdgeSegment.pickId.rHalf, ik, ok, iok, ook, hk)
+        val ambB1 = renderAmbient(ambientStyle, EdgeSegment.pickL, EdgeSegment.pickId.lHalf, ik, ok, iok, ook, hk)
+        val ambB2 = renderAmbient(ambientStyle, EdgeSegment.pickR, EdgeSegment.pickId.rHalf, ik, ok, iok, ook, hk)
+        val ambF1 = renderAmbient(lStyle, EdgeSegment.pickL, EdgeSegment.pickId.wireLHalf, ik, ok, iok, ook, hk)
+        val ambF2 = renderAmbient(rStyle, EdgeSegment.pickR, EdgeSegment.pickId.wireRHalf, ik, ok, iok, ook, hk)
         val g1 = renderConnector(c1, ik, ok, iok, ook, hk)
         val g2 = renderConnector(c2, ik, ok, iok, ook, hk)
-        val g = SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
+        val g = SVGElem.Group(ambB1 ++: ambB2 ++: ambF1 ++: ambF2 ++: List(g1, g2))
         if k == 1 then g else g.scale(1.0 / k)
       case _ =>
         Length.divideProportionally(hk.pixels)(
@@ -678,13 +686,17 @@ object VisualizationToSVG {
             val iOff = iok * l
             val oOff = ook * l
             val mOff = Px((iOff * h1 + oOff * h2).pixels / (h1 + h2))
-            val amb1 = renderAmbient(lStyle, EdgeSegment.pickL, EdgeSegment.pickId.lHalf, wl, okl, mOff, oOff, h2.px).map(_.translate(0, h1))
-            val amb2 = renderAmbient(rStyle, EdgeSegment.pickR, EdgeSegment.pickId.rHalf, wl, okl, mOff, oOff, h2.px).map(_.translate(0, h1))
+            val ambB1 = renderAmbient(ambientStyle, EdgeSegment.pickL, EdgeSegment.pickId.lHalf, wl, okl, mOff, oOff, h2.px).map(_.translate(0, h1))
+            val ambB2 = renderAmbient(ambientStyle, EdgeSegment.pickR, EdgeSegment.pickId.rHalf, wl, okl, mOff, oOff, h2.px).map(_.translate(0, h1))
+            val ambF1 = renderAmbient(lStyle, EdgeSegment.pickL, EdgeSegment.pickId.wireLHalf, wl, okl, mOff, oOff, h2.px).map(_.translate(0, h1))
+            val ambF2 = renderAmbient(rStyle, EdgeSegment.pickR, EdgeSegment.pickId.wireRHalf, wl, okl, mOff, oOff, h2.px).map(_.translate(0, h1))
             val g1 = renderConnector(c1, wl, okl, mOff, oOff, h2.px).translate(0, h1)
             val g2 = renderConnector(c2, wl, okl, mOff, oOff, h2.px).translate(0, h1)
-            val g3 = renderFanInOrId(x.x1, x1, wl1, iOff, mOff, h1.px, lStyle)
-            val g4 = renderFanInOrId(x.x2, x2, wl2, iOff + x1.pixelBreadth, mOff + wl1.pixelBreadth, h1.px, rStyle)
-            val g = SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2, g3, g4))
+            val lStyleCombo = lStyle over ambientStyle
+            val rStyleCombo = lStyle over ambientStyle
+            val g3 = renderFanInOrId(x.x1, x1, wl1, iOff, mOff, h1.px, lStyleCombo)
+            val g4 = renderFanInOrId(x.x2, x2, wl2, iOff + x1.pixelBreadth, mOff + wl1.pixelBreadth, h1.px, rStyleCombo)
+            val g = SVGElem.Group(ambB1 ++: ambB2 ++: ambF1 ++: ambF2 ++: List(g1, g2, g3, g4))
             if (k * l == 1) g else g.scale(1.0/(k*l))
     }
   }
