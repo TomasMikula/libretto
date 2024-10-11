@@ -41,11 +41,14 @@ object Adaptoid {
   }
 
   case class Par[∙[_, _], X1, X2, Y1, Y2](
+    op: OpTag[∙],
     f1: Adaptoid[X1, Y1],
     f2: Adaptoid[X2, Y2],
   ) extends Adaptoid[X1 ∙ X2, Y1 ∙ Y2] {
+    private given OpTag[∙] = op
+
     override def invert: Adaptoid[Y1 ∙ Y2, X1 ∙ X2] =
-      Par(f1.invert, f2.invert)
+      Par(op, f1.invert, f2.invert)
 
     override def length: Length =
       Length.max(f1.length, f2.length)
@@ -57,15 +60,15 @@ object Adaptoid {
   def id[X](using EdgeDesc[X]): Adaptoid[X, X] =
     Id(summon)
 
-  def par[∙[_, _]]: ParBuilder[∙] =
+  def par[∙[_, _]](using OpTag[∙]): ParBuilder[∙] =
     ParBuilder[∙]
 
-  class ParBuilder[∙[_, _]]:
+  class ParBuilder[∙[_, _]](using op: OpTag[∙]):
     def apply[X1, X2, Y1, Y2](
       f1: Adaptoid[X1, Y1],
       f2: Adaptoid[X2, Y2],
     ): Adaptoid[X1 ∙ X2, Y1 ∙ Y2] =
-      Par(f1, f2)
+      Par(op, f1, f2)
 
   private def lengthOf[X, Y](f: X IsRefinedBy Y): Length =
     f match
@@ -73,7 +76,7 @@ object Adaptoid {
         Length.one
       case IsRefinedBy.Initial(desc) =>
         desc.depth
-      case IsRefinedBy.Pairwise(f1, f2) =>
+      case IsRefinedBy.Pairwise(_, f1, f2) =>
         Length.max(lengthOf(f1), lengthOf(f2))
 
 }

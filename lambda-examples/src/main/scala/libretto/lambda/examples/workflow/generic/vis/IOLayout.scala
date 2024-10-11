@@ -47,6 +47,14 @@ object IOLayout {
             case EdgeSegment.SubWire.MidPoint(seg) =>
               wireCoords(seg) match
                 case WireCoords(x, pre, w, post) => SegmentCoords(x + pre + w/2, Px(0))
+            case EdgeSegment.SubWire.LHalf(seg) =>
+              wireCoords(seg) match
+                case WireCoords(x, pre, w, post) => SegmentCoords(x, pre + w/2)
+            case EdgeSegment.SubWire.RHalf(seg) =>
+              wireCoords(seg) match
+                case WireCoords(x, pre, w, post) =>
+                  val w2 = Px(w.pixels - w.pixels/2)
+                  SegmentCoords(x + pre + w/2, w2 + post)
             case EdgeSegment.SubWire.WireLHalf(seg) =>
               wireCoords(seg) match
                 case WireCoords(x, pre, w, post) => SegmentCoords(x + pre, w/2)

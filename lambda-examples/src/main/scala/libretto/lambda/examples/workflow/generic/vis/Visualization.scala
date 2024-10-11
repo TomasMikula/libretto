@@ -184,6 +184,7 @@ object Visualization {
   }
 
   case class Par[∙[_, _], X1, X2, Y1, Y2](
+    op: OpTag[∙],
     a: Visualization[X1, Y1],
     b: Visualization[X2, Y2],
   ) extends Visualization[X1 ∙ X2, Y1 ∙ Y2]:
@@ -219,15 +220,15 @@ object Visualization {
     override def length: Length = Length.one
   }
 
-  def par[∙[_, _]]: ParBuilder[∙] =
+  def par[∙[_, _]](using OpTag[∙]): ParBuilder[∙] =
     ParBuilder[∙]
 
-  class ParBuilder[∙[_, _]]:
+  class ParBuilder[∙[_, _]](using op: OpTag[∙]):
     def apply[X1, X2, Y1, Y2](
       a: Visualization[X1, Y1],
       b: Visualization[X2, Y2],
     ): Visualization[X1 ∙ X2, Y1 ∙ Y2] =
-      Par(a, b)
+      Par(op, a, b)
 
   def connectors[X, Y](
     in: EdgeProportions[X],

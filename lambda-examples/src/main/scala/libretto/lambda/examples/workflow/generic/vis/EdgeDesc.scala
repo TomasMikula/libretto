@@ -11,6 +11,7 @@ object EdgeDesc {
       Length.one
 
   case class Binary[∙[_, _], X1, X2](
+    op: OpTag[∙],
     x1: EdgeDesc[X1],
     x2: EdgeDesc[X2],
   ) extends EdgeDesc[X1 ∙ X2]:
@@ -27,9 +28,11 @@ object EdgeDesc {
   given wire: EdgeDesc[Wire] =
     SingleWire
 
-  def binary[∙[_, _], X1, X2](
+  def binary[∙[_, _], X1, X2](using
+    op: OpTag[∙],
+  )(
     x1: EdgeDesc[X1],
     x2: EdgeDesc[X2],
   ): EdgeDesc[X1 ∙ X2] =
-    Binary(x1, x2)
+    Binary(op, x1, x2)
 }

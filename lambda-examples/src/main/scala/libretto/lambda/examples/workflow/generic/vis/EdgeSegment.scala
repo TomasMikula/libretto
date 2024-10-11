@@ -11,6 +11,12 @@ sealed trait EdgeSegment[X, Y] {
   def midpoint(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
     EdgeSegment.SubWire.MidPoint(ev.substituteCo[EdgeSegment[_, Y]](this))
 
+  def lHalf(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
+    EdgeSegment.SubWire.LHalf(ev.substituteCo[EdgeSegment[_, Y]](this))
+
+  def rHalf(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
+    EdgeSegment.SubWire.RHalf(ev.substituteCo[EdgeSegment[_, Y]](this))
+
   def wireLHalf(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
     EdgeSegment.SubWire.WireLHalf(ev.substituteCo[EdgeSegment[_, Y]](this))
 
@@ -73,6 +79,8 @@ object EdgeSegment {
   object SubWire {
     case class WireOnly[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
     case class MidPoint[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
+    case class LHalf[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
+    case class RHalf[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
     case class WireLHalf[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
     case class WireRHalf[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
     case class Pre[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]

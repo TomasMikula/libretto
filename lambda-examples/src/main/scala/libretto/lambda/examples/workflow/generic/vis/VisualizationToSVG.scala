@@ -20,41 +20,44 @@ object VisualizationToSVG {
     val (k, layout) = edges.layout(w.px)
 
     SVGDocument(
-      renderSVG(g, layout, Px(h) * k)
+      renderSVG(g, layout, Px(h) * k, AmbientStyle.empty)
     )
 
-  def renderSVG[X, Y](g: Visualization[X, Y], edges: IOLayout[X, Y], height: Px): SVGElem =
+  def renderSVG[X, Y](g: Visualization[X, Y], edges: IOLayout[X, Y], height: Px, ambientStyle: AmbientStyle): SVGElem =
     println(s"rendering ${g.getClass.getSimpleName} into ${edges.pixelBreadth} x $height")
     g match
       case seq: Visualization.Sequence[x, y] =>
-        renderSequence(seq, edges, height)
+        renderSequence(seq, edges, height, ambientStyle)
       case par: Visualization.Par[bin, x1, x2, y1, y2] =>
-        renderPar(par, edges, height)
+        renderPar(par, edges, height, ambientStyle)
       case Visualization.ConnectorsOverlay(base, connectors) =>
-        val conns = renderConnectors(connectors, edges, height)
         base match
           case Left(vis) =>
-            val v = renderSVG(vis, edges, height)
-            SVGElem.Group(v, conns)
+            val back = renderSVG(vis, edges, height, ambientStyle)
+            val conns = renderConnectors(connectors, edges, height, AmbientStyle.empty)
+            SVGElem.Group(back, conns)
           case Right(props) =>
-            conns
+            renderConnectors(connectors, edges, height, ambientStyle)
       case Visualization.Text(value, props, vpos) =>
+        // TODO: should we render the ambient behind the text?
         renderText(value, edges.pixelBreadth, height, 0.6, vpos, Serif)
       case Visualization.LabeledBox(i, o, label, fillOpt) =>
         val width = edges.pixelBreadth
         val strokeWidth = math.min(width.pixels / 20.0, height.pixels / 20.0)
         val r = 0.15 * math.min(width.pixels, height.pixels)
+        // TODO: should we render the ambient behind the box?
         val rect = SVGElem.Rect(0.px, 0.px, width, height, fillOpt, Some(Stroke(strokeWidth, Color.Black)), clipPath = None, rx = Some(r), ry = Some(r))
         val txt = renderText(label, width, height, 0.6, VPos.Middle, Monospace)
         SVGElem.Group(rect, txt)
       case Visualization.WithBackgroundBox(fillOpt, strokeOpt, front) =>
         val width = edges.pixelBreadth
         val strokeWidth = math.min(width.pixels / 20.0, height.pixels / 20.0)
+        // TODO: should we render the ambient behind the background box?
         val back = SVGElem.Rect(0.px, 0.px, width, height, fillOpt, strokeOpt.map(Stroke(strokeWidth, _)), clipPath = Some(SVG.ClipPath.FillBox))
-        SVGElem.Group(back, renderSVG(front, edges, height))
+        SVGElem.Group(back, renderSVG(front, edges, height, AmbientStyle.empty)) // the background box establishes an empty ambient style
       case Visualization.Adapt(f) =>
         val (i, o) = edges.separate
-        renderAdapt(f, i, o, 0.px, 0.px, height)
+        renderAdapt(f, i, o, 0.px, 0.px, height, ambientStyle)
       case Visualization.Unimplemented(label, _, _) =>
         renderUnimplemented(label, edges.pixelBreadth, height)
 
@@ -110,11 +113,12 @@ object VisualizationToSVG {
     seq: Visualization.Sequence[X, Y],
     edges: IOLayout[X, Y],
     height: Px,
+    ambientStyle: AmbientStyle,
   ): SVGElem = {
     Length.divideProportionally(height.pixels)(seq.lengths*) match
       case IntegralProportions(k, heights) =>
         assert(heights.size == seq.size)
-        val (l, vs) = renderSequence(seq, edges.inEdge * k, edges.outEdge * k, heights.map(Px(_)), yOffset = 0.px)
+        val (l, vs) = renderSequence(seq, edges.inEdge * k, edges.outEdge * k, heights.map(Px(_)), yOffset = 0.px, ambientStyle)
         val g = SVGElem.Group(vs)
         val kl = k * l
         if (kl == 1) then g else g.scale(1.0 / kl)
@@ -126,6 +130,7 @@ object VisualizationToSVG {
     oLayout: EdgeLayout[Y],
     heights: List[Px],
     yOffset: Px,
+    ambientStyle: AmbientStyle,
   ): (Int, List[SVGElem]) = {
     require(heights.size == seq.size)
 
@@ -135,27 +140,27 @@ object VisualizationToSVG {
         val (k, fstLayout) = fst.ioProportions.layoutFw(iLayout)
         val h1 = heights.head * k
         val yk = yOffset * k
-        val fstVis = renderSVG(fst, fstLayout, h1).optTranslateY(yk.pixels)
-        val sndVis = renderSVG(flexiSnd, IOLayout.Separate(fstLayout.outEdge, oLayout * k), heights(1) * k).translateY((yk + h1).pixels)
+        val fstVis = renderSVG(fst, fstLayout, h1, ambientStyle).optTranslateY(yk.pixels)
+        val sndVis = renderSVG(flexiSnd, IOLayout.Separate(fstLayout.outEdge, oLayout * k), heights(1) * k, ambientStyle).translateY((yk + h1).pixels)
         (k, List(fstVis, sndVis))
       case Visualization.Sequence.TwoFlexiFst(flexiFst, snd) =>
         val (k, sndLayout) = snd.ioProportions.layoutBw(oLayout)
         val yk = yOffset * k
         val h1 = heights.head * k
-        val sndVis = renderSVG(snd, sndLayout, heights(1) * k).translateY((yk + h1).pixels)
-        val fstVis = renderSVG(flexiFst, IOLayout.Separate(iLayout * k, sndLayout.inEdge), h1).optTranslateY(yk.pixels)
+        val sndVis = renderSVG(snd, sndLayout, heights(1) * k, ambientStyle).translateY((yk + h1).pixels)
+        val fstVis = renderSVG(flexiFst, IOLayout.Separate(iLayout * k, sndLayout.inEdge), h1, ambientStyle).optTranslateY(yk.pixels)
         (k, List(fstVis, sndVis))
       case Visualization.Sequence.Cons(head, tail) =>
         val (k, headLayout) = head.ioProportions.layoutFw(iLayout)
         val yk = yOffset * k
         val h1 = heights.head * k
-        val headVis = renderSVG(head, headLayout, h1).optTranslateY(yk.pixels)
-        val (l, tailViss) = renderSequence(tail, headLayout.outEdge, oLayout * k, heights.tail.map(_ * k), yk + h1)
+        val headVis = renderSVG(head, headLayout, h1, ambientStyle).optTranslateY(yk.pixels)
+        val (l, tailViss) = renderSequence(tail, headLayout.outEdge, oLayout * k, heights.tail.map(_ * k), yk + h1, ambientStyle)
         val hv = if (l == 1) then headVis else headVis.scale(l)
         (k * l, hv :: tailViss)
       case Visualization.Sequence.ConsFlexiHead(head, tail) =>
-        val (k, mLayout, tailViss) = renderSequenceBw(tail, oLayout, heights.tail, yOffset + heights.head)
-        val headVis = renderSVG(head, IOLayout.Separate(iLayout * k, mLayout), heights.head * k).optTranslateY((yOffset * k).pixels)
+        val (k, mLayout, tailViss) = renderSequenceBw(tail, oLayout, heights.tail, yOffset + heights.head, ambientStyle)
+        val headVis = renderSVG(head, IOLayout.Separate(iLayout * k, mLayout), heights.head * k, ambientStyle).optTranslateY((yOffset * k).pixels)
         (k, headVis :: tailViss)
   }
 
@@ -164,6 +169,7 @@ object VisualizationToSVG {
     oLayout: EdgeLayout[Y],
     heights: List[Px],
     yOffset: Px,
+    ambientStyle: AmbientStyle,
   ): (Int, EdgeLayout[X], List[SVGElem]) = {
     require(heights.size == seq.size)
 
@@ -176,8 +182,8 @@ object VisualizationToSVG {
         val h1 = heights(0) * k
         val h2 = heights(1) * k
         val yk = yOffset * k
-        val fstVis = renderSVG(fst, fstLayout, h1).optTranslateY(yk.pixels)
-        val sndVis = renderSVG(flexiSnd, IOLayout.Separate(fstLayout.outEdge, oLayout * k), h2).translateY((yk + h1).pixels)
+        val fstVis = renderSVG(fst, fstLayout, h1, ambientStyle).optTranslateY(yk.pixels)
+        val sndVis = renderSVG(flexiSnd, IOLayout.Separate(fstLayout.outEdge, oLayout * k), h2, ambientStyle).translateY((yk + h1).pixels)
         (k, fstLayout.inEdge, List(fstVis, sndVis))
       case Visualization.Sequence.Cons(head, tail) =>
         ???
@@ -189,26 +195,43 @@ object VisualizationToSVG {
     par: Visualization.Par[∙, X1, X2, Y1, Y2],
     edges: IOLayout[X1 ∙ X2, Y1 ∙ Y2],
     height: Px,
-  ): SVGElem =
-    val Visualization.Par(a, b) = par
+    ambientStyle: AmbientStyle,
+  ): SVGElem = {
+    val Visualization.Par(op, a, b) = par
+    val lStyle = AmbientStyle.leftOf(op) over ambientStyle
+    val rStyle = AmbientStyle.rightOf(op) over ambientStyle
     edges match
       case IOLayout.Par(la, lb) =>
-        val ga = renderSVG(a, la, height)
-        val gb = renderSVG(b, lb, height)
+        val ga = renderSVG(a, la, height, lStyle)
+        val gb = renderSVG(b, lb, height, rStyle)
         SVGElem.Group(ga, gb.translate(la.pixelBreadth.pixels, 0.0))
       case other =>
         throw IllegalArgumentException(s"To render a Par, IOLayout.Par must be used. Was: $other")
-  end renderPar
+  }
 
   private def renderConnectors[X, Y](
     connectors: List[Connector[X, Y] | TrapezoidArea[X, Y]],
     boundary: IOLayout[X, Y],
     height: Px,
+    ambientStyle: AmbientStyle,
   ): SVGElem =
-    val (inEdge, outEdge) = boundary.separate
+    val (i, o) = boundary.separate
+    renderConnectors(connectors, i, o, 0.px, 0.px, height, ambientStyle)
+
+  private def renderConnectors[X, Y](
+    connectors: List[Connector[X, Y] | TrapezoidArea[X, Y]],
+    iLayout: EdgeLayout[X],
+    oLayout: EdgeLayout[Y],
+    iOffset: Px,
+    oOffset: Px,
+    height: Px,
+    ambientStyle: AmbientStyle,
+  ): SVGElem = {
+    val amb = renderAmbient(ambientStyle, iLayout, oLayout, iOffset, oOffset, height)
     SVGElem.Group(
-      connectors.map(renderConnectorOrArea(_, inEdge, outEdge, 0.px, 0.px, height)),
+      amb ++: connectors.map(renderConnectorOrArea(_, iLayout, oLayout, iOffset, oOffset, height)),
     )
+  }
 
   private def renderConnectorOrArea[I, O](
     connector: Connector[I, O] | TrapezoidArea[I, O],
@@ -392,6 +415,47 @@ object VisualizationToSVG {
     )
   }
 
+  private def renderAmbient[X, Y](
+    s: AmbientStyle,
+    iLayout: EdgeLayout[X],
+    oLayout: EdgeLayout[Y],
+    iOffset: Px,
+    oOffset: Px,
+    height: Px,
+  ): Option[SVGElem] =
+    renderAmbient(s, EdgeSegment.pickId, EdgeSegment.pickId, iLayout, oLayout, iOffset, oOffset, height)
+
+  private def renderAmbient[X, Y](
+    s: AmbientStyle,
+    iSeg: EdgeSegment[?, X] | EdgeSegment.SubWire[X],
+    oSeg: EdgeSegment[?, Y] | EdgeSegment.SubWire[Y],
+    iLayout: EdgeLayout[X],
+    oLayout: EdgeLayout[Y],
+    iOffset: Px,
+    oOffset: Px,
+    height: Px,
+  ): Option[SVGElem] = {
+    val i = iLayout.segmentCoords(iSeg).offset(iOffset)
+    val o = oLayout.segmentCoords(oSeg).offset(oOffset)
+    renderAmbient(s, i, o, height)
+  }
+
+  private def renderAmbient[X, Y](
+    s: AmbientStyle,
+    i: EdgeLayout.SegmentCoords,
+    o: EdgeLayout.SegmentCoords,
+    height: Px,
+  ): Option[SVGElem] = {
+    val AmbientStyle(bg, base) = s
+    val bgVis = bg map { curvyTrapezoid(i.x, i.width, o.x, o.width, height, _) }
+    val baseVis = base flatMap { renderAmbient(_, i, o, height) }
+    (bgVis, baseVis) match
+      case (Some(a), Some(b)) => Some(SVGElem.Group(a, b))
+      case (Some(a), None)    => Some(a)
+      case (None, Some(b))    => Some(b)
+      case (None, None)       => None
+  }
+
   private def renderAdapt[X, Y](
     m: Adaptoid[X, Y],
     iLayout: EdgeLayout[X],
@@ -399,6 +463,7 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
+    ambientStyle: AmbientStyle,
   ): SVGElem = {
     // hidden-by-default background for debugging purposes
     val hiddenBackground =
@@ -408,16 +473,18 @@ object VisualizationToSVG {
     val content =
       m match
         case Adaptoid.Id(desc) =>
-          renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
+          renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height, ambientStyle)
         case Adaptoid.Expand(f) =>
-          renderExpand(f, iLayout, oLayout, iOffset, oOffset, height)
+          renderExpand(f, iLayout, oLayout, iOffset, oOffset, height, ambientStyle)
         case Adaptoid.Collapse(f) =>
-          renderCollapse(f, iLayout, oLayout, iOffset, oOffset, height)
+          renderCollapse(f, iLayout, oLayout, iOffset, oOffset, height, ambientStyle)
         case p: Adaptoid.Par[op, x1, x2, y1, y2] =>
           val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
           val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
-          val g1 = renderAdapt(p.f1, i1, o1, iOffset, oOffset, height)
-          val g2 = renderAdapt(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+          val lStyle = AmbientStyle.leftOf(p.op) over ambientStyle
+          val rStyle = AmbientStyle.rightOf(p.op) over ambientStyle
+          val g1 = renderAdapt(p.f1, i1, o1, iOffset, oOffset, height, lStyle)
+          val g2 = renderAdapt(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height, rStyle)
           SVGElem.Group(g1, g2)
 
     SVGElem.Group(hiddenBackground, content)
@@ -430,11 +497,12 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
+    ambientStyle: AmbientStyle,
   ): SVGElem =
     x match
       case EdgeDesc.SingleWire =>
         summon[X =:= Wire]
-        renderConnector[Wire, Wire](
+        val c = renderConnector[Wire, Wire](
           Connector.Across(WirePick.pickId, WirePick.pickId),
           iLayout,
           oLayout,
@@ -442,12 +510,17 @@ object VisualizationToSVG {
           oOffset,
           height,
         )
+        renderAmbient(ambientStyle, iLayout, oLayout, iOffset, oOffset, height) match
+          case Some(amb) => SVGElem.Group(amb, c)
+          case None      => c
       case x: EdgeDesc.Binary[op, x1, x2] =>
         summon[X =:= op[x1, x2]]
         val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
         val (o1, o2) = EdgeLayout.split[op, x1, x2](oLayout)
-        val g1 = renderIdentity(x.x1, i1, o1, iOffset, oOffset, height)
-        val g2 = renderIdentity(x.x2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+        val lStyle = AmbientStyle.leftOf(x.op) over ambientStyle
+        val rStyle = AmbientStyle.rightOf(x.op) over ambientStyle
+        val g1 = renderIdentity(x.x1, i1, o1, iOffset, oOffset, height, lStyle)
+        val g2 = renderIdentity(x.x2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height, rStyle)
         SVGElem.Group(g1, g2)
 
   private def renderFanOutOrId[Y](
@@ -457,20 +530,22 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
+    ambientStyle: AmbientStyle,
   ): SVGElem =
     y match
       case EdgeDesc.SingleWire =>
         summon[Y =:= Wire]
-        renderConnector[Wire, Wire](
-          Connector.Across(WirePick.pickId, WirePick.pickId),
+        renderIdentity[Wire](
+          EdgeDesc.SingleWire,
           iLayout,
           oLayout,
           iOffset,
           oOffset,
           height,
+          ambientStyle,
         )
       case p: EdgeDesc.Binary[op, y1, y2] =>
-        renderFanOut(p, iLayout, oLayout, iOffset, oOffset, height)
+        renderFanOut(p, iLayout, oLayout, iOffset, oOffset, height, ambientStyle)
 
   private def renderFanOut[∙[_, _], Y1, Y2](
     y: EdgeDesc.Binary[∙, Y1, Y2],
@@ -479,42 +554,54 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
+    ambientStyle: AmbientStyle,
   ): SVGElem = {
     println(s"renderFanOut into ${iLayout.pixelBreadth} x $height")
+    val lStyle = AmbientStyle.leftOf(y.op) over ambientStyle
+    val rStyle = AmbientStyle.rightOf(y.op) over ambientStyle
     val c1 = Connector.Across[Wire, Wire ∙ Wire](WirePick.pickId, WirePick.pickL)
     val c2 = Connector.Across[Wire, Wire ∙ Wire](WirePick.pickId, WirePick.pickR)
     val (o1, o2) = EdgeLayout.split(oLayout)
     val (i1, w1) = EdgeProportions.unitSize.layout(o1.pixelBreadth)
     val (i2, w2) = EdgeProportions.unitSize.layout(o2.pixelBreadth)
     val (ki1, ki2, k) = leastCommonMultiple(i1, i2)
+    val ik = iLayout * k
+    val ok = oLayout * k
+    val iok = iOffset * k
+    val ook = oOffset * k
+    val hk = height * k
     (y.x1, y.x2) match {
       case (EdgeDesc.SingleWire, EdgeDesc.SingleWire) =>
         summon[Y1 =:= Wire]
         summon[Y2 =:= Wire]
-        val g1 = renderConnector(c1, iLayout * k, oLayout * k, iOffset * k, oOffset * k, height)
-        val g2 = renderConnector(c2, iLayout * k, oLayout * k, iOffset * k, oOffset * k, height)
-        val g = SVGElem.Group(g1, g2)
+        val amb1 = renderAmbient(lStyle, EdgeSegment.pickId.lHalf, EdgeSegment.pickL, ik, ok, iok, ook, hk)
+        val amb2 = renderAmbient(rStyle, EdgeSegment.pickId.rHalf, EdgeSegment.pickR, ik, ok, iok, ook, hk)
+        val g1 = renderConnector(c1, ik, ok, iok, ook, hk)
+        val g2 = renderConnector(c2, ik, ok, iok, ook, hk)
+        val g = SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
         if k == 1 then g else g.scale(1.0 / k)
       case _ =>
-        Length.divideProportionally((height * k).pixels)(
+        Length.divideProportionally(hk.pixels)(
           Length.one,
           Length.max(y.x1.depth, y.x2.depth)
         ) match
           case IntegralProportions(l, List(h1, h2)) =>
-            val ikl = iLayout * k * l
+            val ikl = ik * l
             val wl1 = w1 * ki1 * l
             val wl2 = w2 * ki2 * l
             val wl = EdgeLayout.Par[∙, Wire, Wire](wl1, wl2)
             val y1 = o1 * k * l
             val y2 = o2 * k * l
-            val iOff = iOffset * k * l
-            val oOff = oOffset * k * l
+            val iOff = iok * l
+            val oOff = ook * l
             val mOff = Px((iOff * h1 + oOff * h2).pixels / (h1 + h2))
+            val amb1 = renderAmbient(lStyle, EdgeSegment.pickId.lHalf, EdgeSegment.pickL, ikl, wl, iOff, mOff, h1.px)
+            val amb2 = renderAmbient(rStyle, EdgeSegment.pickId.rHalf, EdgeSegment.pickR, ikl, wl, iOff, mOff, h1.px)
             val g1 = renderConnector(c1, ikl, wl, iOff, mOff, h1.px)
             val g2 = renderConnector(c2, ikl, wl, iOff, mOff, h1.px)
-            val g3 = renderFanOutOrId(y.x1, wl1, y1, mOff, oOff, h2.px).translate(0, h1)
-            val g4 = renderFanOutOrId(y.x2, wl2, y2, mOff + wl1.pixelBreadth, oOff + y1.pixelBreadth, h2.px).translate(0, h1)
-            val g = SVGElem.Group(g1, g2, g3, g4)
+            val g3 = renderFanOutOrId(y.x1, wl1, y1, mOff, oOff, h2.px, lStyle).translate(0, h1)
+            val g4 = renderFanOutOrId(y.x2, wl2, y2, mOff + wl1.pixelBreadth, oOff + y1.pixelBreadth, h2.px, rStyle).translate(0, h1)
+            val g = SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2, g3, g4))
             if (k * l == 1) g else g.scale(1.0/(k*l))
     }
   }
@@ -526,20 +613,22 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
+    ambientStyle: AmbientStyle,
   ): SVGElem =
     x match
       case EdgeDesc.SingleWire =>
         summon[X =:= Wire]
-        renderConnector[Wire, Wire](
-          Connector.Across(WirePick.pickId, WirePick.pickId),
+        renderIdentity[Wire](
+          EdgeDesc.SingleWire,
           iLayout,
           oLayout,
           iOffset,
           oOffset,
           height,
+          ambientStyle,
         )
       case p: EdgeDesc.Binary[op, x1, x2] =>
-        renderFanIn(p, iLayout, oLayout, iOffset, oOffset, height)
+        renderFanIn(p, iLayout, oLayout, iOffset, oOffset, height, ambientStyle)
 
   private def renderFanIn[∙[_, _], X1, X2](
     x: EdgeDesc.Binary[∙, X1, X2],
@@ -548,42 +637,54 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
+    ambientStyle: AmbientStyle,
   ): SVGElem = {
     println(s"renderFanIn into ${iLayout.pixelBreadth} x $height")
+    val lStyle = AmbientStyle.leftOf(x.op) over ambientStyle
+    val rStyle = AmbientStyle.rightOf(x.op) over ambientStyle
     val c1 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickL, WirePick.pickId)
     val c2 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickR, WirePick.pickId)
     val (i1, i2) = EdgeLayout.split(iLayout)
     val (j1, w1) = EdgeProportions.unitSize.layout(i1.pixelBreadth)
     val (j2, w2) = EdgeProportions.unitSize.layout(i2.pixelBreadth)
     val (kj1, kj2, k) = leastCommonMultiple(j1, j2)
+    val ik = iLayout * k
+    val ok = oLayout * k
+    val iok = iOffset * k
+    val ook = oOffset * k
+    val hk = height * k
     (x.x1, x.x2) match {
       case (EdgeDesc.SingleWire, EdgeDesc.SingleWire) =>
         summon[X1 =:= Wire]
         summon[X2 =:= Wire]
-        val g1 = renderConnector(c1, iLayout * k, oLayout * k, iOffset * k, oOffset * k, height)
-        val g2 = renderConnector(c2, iLayout * k, oLayout * k, iOffset * k, oOffset * k, height)
-        val g = SVGElem.Group(g1, g2)
+        val amb1 = renderAmbient(lStyle, EdgeSegment.pickL, EdgeSegment.pickId.lHalf, ik, ok, iok, ook, hk)
+        val amb2 = renderAmbient(rStyle, EdgeSegment.pickR, EdgeSegment.pickId.rHalf, ik, ok, iok, ook, hk)
+        val g1 = renderConnector(c1, ik, ok, iok, ook, hk)
+        val g2 = renderConnector(c2, ik, ok, iok, ook, hk)
+        val g = SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
         if k == 1 then g else g.scale(1.0 / k)
       case _ =>
-        Length.divideProportionally((height * k).pixels)(
+        Length.divideProportionally(hk.pixels)(
           Length.max(x.x1.depth, x.x2.depth),
           Length.one,
         ) match
           case IntegralProportions(l, List(h1, h2)) =>
-            val okl = oLayout * k * l
+            val okl = ok * l
             val wl1 = w1 * kj1 * l
             val wl2 = w2 * kj2 * l
             val wl = EdgeLayout.Par[∙, Wire, Wire](wl1, wl2)
             val x1 = i1 * k * l
             val x2 = i2 * k * l
-            val iOff = iOffset * k * l
-            val oOff = oOffset * k * l
+            val iOff = iok * l
+            val oOff = ook * l
             val mOff = Px((iOff * h1 + oOff * h2).pixels / (h1 + h2))
+            val amb1 = renderAmbient(lStyle, EdgeSegment.pickL, EdgeSegment.pickId.lHalf, wl, okl, mOff, oOff, h2.px).map(_.translate(0, h1))
+            val amb2 = renderAmbient(rStyle, EdgeSegment.pickR, EdgeSegment.pickId.rHalf, wl, okl, mOff, oOff, h2.px).map(_.translate(0, h1))
             val g1 = renderConnector(c1, wl, okl, mOff, oOff, h2.px).translate(0, h1)
             val g2 = renderConnector(c2, wl, okl, mOff, oOff, h2.px).translate(0, h1)
-            val g3 = renderFanInOrId(x.x1, x1, wl1, iOff, mOff, h1.px)
-            val g4 = renderFanInOrId(x.x2, x2, wl2, iOff + x1.pixelBreadth, mOff + wl1.pixelBreadth, h1.px)
-            val g = SVGElem.Group(g1, g2, g3, g4)
+            val g3 = renderFanInOrId(x.x1, x1, wl1, iOff, mOff, h1.px, lStyle)
+            val g4 = renderFanInOrId(x.x2, x2, wl2, iOff + x1.pixelBreadth, mOff + wl1.pixelBreadth, h1.px, rStyle)
+            val g = SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2, g3, g4))
             if (k * l == 1) g else g.scale(1.0/(k*l))
     }
   }
@@ -595,20 +696,23 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
+    ambientStyle: AmbientStyle,
   ): SVGElem =
     println(s"renderExpand into ${iLayout.pixelBreadth} x $height")
     f match
       case IsRefinedBy.Id(desc) =>
-        renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
+        renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height, ambientStyle)
       case IsRefinedBy.Initial(outDesc) =>
-        renderFanOutOrId(outDesc, iLayout, oLayout, iOffset, oOffset, height)
+        renderFanOutOrId(outDesc, iLayout, oLayout, iOffset, oOffset, height, ambientStyle)
       case p: IsRefinedBy.Pairwise[op, x1, x2, y1, y2] =>
         summon[X =:= op[x1, x2]]
         summon[Y =:= op[y1, y2]]
         val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
         val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
-        val g1 = renderExpand(p.f1, i1, o1, iOffset, oOffset, height)
-        val g2 = renderExpand(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+        val lStyle = AmbientStyle.leftOf(p.op) over ambientStyle
+        val rStyle = AmbientStyle.rightOf(p.op) over ambientStyle
+        val g1 = renderExpand(p.f1, i1, o1, iOffset, oOffset, height, lStyle)
+        val g2 = renderExpand(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height, rStyle)
         SVGElem.Group(g1, g2)
 
   private def renderCollapse[X, Y](
@@ -618,21 +722,24 @@ object VisualizationToSVG {
     iOffset: Px,
     oOffset: Px,
     height: Px,
+    ambientStyle: AmbientStyle,
   ): SVGElem =
     println(s"renderCollapse into ${iLayout.pixelBreadth} x $height")
     f match
       case IsRefinedBy.Id(desc) =>
-        renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height)
+        renderIdentity(desc, iLayout, oLayout, iOffset, oOffset, height, ambientStyle)
       case IsRefinedBy.Initial(x) =>
         summon[Y =:= Wire]
-        renderFanInOrId(x, iLayout, oLayout, iOffset, oOffset, height)
+        renderFanInOrId(x, iLayout, oLayout, iOffset, oOffset, height, ambientStyle)
       case p: IsRefinedBy.Pairwise[op, y1, y2, x1, x2] =>
         summon[X =:= op[x1, x2]]
         summon[Y =:= op[y1, y2]]
         val (i1, i2) = EdgeLayout.split[op, x1, x2](iLayout)
         val (o1, o2) = EdgeLayout.split[op, y1, y2](oLayout)
-        val g1 = renderCollapse(p.f1, i1, o1, iOffset, oOffset, height)
-        val g2 = renderCollapse(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height)
+        val lStyle = AmbientStyle.leftOf(p.op) over ambientStyle
+        val rStyle = AmbientStyle.rightOf(p.op) over ambientStyle
+        val g1 = renderCollapse(p.f1, i1, o1, iOffset, oOffset, height, lStyle)
+        val g2 = renderCollapse(p.f2, i2, o2, iOffset + i1.pixelBreadth, oOffset + o1.pixelBreadth, height, rStyle)
         SVGElem.Group(g1, g2)
 
   private def scaleToFit(srcW: Int, srcH: Int, tgtW: Int, tgtH: Int): Double =

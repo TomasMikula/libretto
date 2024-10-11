@@ -10,10 +10,10 @@ infix sealed trait Approximates[X, A] {
   def inDesc: EdgeDesc[X]
 
   def **[Y, B](that: Approximates[Y, B]): Approximates[X ** Y, A ** B] =
-    Pairwise(this, that)
+    Pairwise(summon, this, that)
 
   def ++[Y, B](that: Approximates[Y, B]): Approximates[X ++ Y, A ++ B] =
-    Pairwise(this, that)
+    Pairwise(summon, this, that)
 
   infix def coarsenBy[W](that: W IsRefinedBy X): W Approximates A =
     import IsRefinedBy as R
@@ -50,9 +50,12 @@ object Approximates {
   }
 
   case class Pairwise[∙[_, _], X1, X2, A1, A2](
+    op: OpTag[∙],
     f1: X1 Approximates A1,
     f2: X2 Approximates A2,
   ) extends Approximates[X1 ∙ X2, A1 ∙ A2] {
+    private given OpTag[∙] = op
+
     override def inDesc: EdgeDesc[X1 ∙ X2] =
       EdgeDesc.binary(f1.inDesc, f2.inDesc)
 
@@ -67,7 +70,7 @@ object Approximates {
         case Initial() =>
           summon[Y =:= Wire]
           Exists((this, IsRefinedBy.Id[X1 ∙ X2](inDesc), IsRefinedBy.Initial[X1 ∙ X2](inDesc)))
-        case Pairwise(f1, f2) =>
+        case Pairwise(_, f1, f2) =>
           leastCommonRefinementPairwise(f1, f2)
 
     private def leastCommonRefinementPairwise[Y1, Y2](
@@ -80,7 +83,7 @@ object Approximates {
     )] =
       (f1 leastCommonRefinement g1, f2 leastCommonRefinement g2) match
         case (∃((z1, zf1, zg1)), ∃((z2, zf2, zg2))) =>
-          Exists((Pairwise(z1, z2), zf1 pair zf2, zg1 pair zg2))
+          Exists((Pairwise(op, z1, z2), zf1 par zf2, zg1 par zg2))
 
     override protected def coarsenByPair[∘[_, _], W1, W2, Y1, Y2](
       g1: W1 IsRefinedBy Y1,
@@ -116,9 +119,9 @@ object Approximates {
         Exists(Exists((
           Initial[A](),
           Initial[B](),
-          IsRefinedBy.Initial(EdgeDesc.binary(EdgeDesc.wire, EdgeDesc.wire))
+          IsRefinedBy.Initial(EdgeDesc.binary(using summon[OpTag[++]])(EdgeDesc.wire, EdgeDesc.wire))
         )))
-      case Pairwise(f1, f2) =>
+      case Pairwise(_, f1, f2) =>
         Exists(Exists((f1, f2, IsRefinedBy.Id(f.inDesc))))
 
 }

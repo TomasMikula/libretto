@@ -7,8 +7,8 @@ infix sealed trait IsRefinedBy[X, Y] {
   def inDesc: EdgeDesc[X]
   def outDesc: EdgeDesc[Y]
 
-  infix def pair[∙[_, _], V, W](that: V IsRefinedBy W): (X ∙ V) IsRefinedBy (Y ∙ W) =
-    IsRefinedBy.Pairwise(this, that)
+  infix def par[∙[_, _], V, W](that: V IsRefinedBy W)(using op: OpTag[∙]): (X ∙ V) IsRefinedBy (Y ∙ W) =
+    IsRefinedBy.Pairwise(op, this, that)
 
   /** Returns the most refined `V` such that `V` is a coarsening of both `X` and `W`. */
   infix def greatestCommonCoarsening[W](
@@ -52,9 +52,12 @@ object IsRefinedBy {
   }
 
   case class Pairwise[∙[_, _], X1, X2, Y1, Y2](
+    op: OpTag[∙],
     f1: X1 IsRefinedBy Y1,
     f2: X2 IsRefinedBy Y2,
   ) extends IsRefinedBy[X1 ∙ X2, Y1 ∙ Y2] {
+    private given OpTag[∙] = op
+
     override def inDesc: EdgeDesc[X1 ∙ X2] =
       EdgeDesc.binary(f1.inDesc, f2.inDesc)
 
@@ -67,7 +70,7 @@ object IsRefinedBy {
       that match
         case Id(_) => Exists((Id(inDesc), this))
         case Initial(_) => Exists((Initial(inDesc), id[Wire]))
-        case Pairwise(g1, g2) => greatestCommonCoarseningPairwise(g1, g2)
+        case Pairwise(_, g1, g2) => greatestCommonCoarseningPairwise(g1, g2)
 
     private def greatestCommonCoarseningPairwise[W1, W2](
       g1: W1 IsRefinedBy Y1,
@@ -75,7 +78,7 @@ object IsRefinedBy {
     ): Exists[[V] =>> (V IsRefinedBy (X1 ∙ X2), V IsRefinedBy (W1 ∙ W2))] =
       (f1 greatestCommonCoarsening g1, f2 greatestCommonCoarsening g2) match
         case (∃((wf1, wg1)), ∃((wf2, wg2))) =>
-          Exists((Pairwise(wf1, wf2), Pairwise(wg1, wg2)))
+          Exists((Pairwise(op, wf1, wf2), Pairwise(op, wg1, wg2)))
 
     override def morph[W](
       that: W IsRefinedBy (Y1 ∙ Y2),
@@ -83,13 +86,13 @@ object IsRefinedBy {
       that match
         case Id(_) => Adaptoid.Expand(this)
         case Initial(_) => Adaptoid.Collapse(Initial(inDesc))
-        case Pairwise(g1, g2) => morphToBinaryOp(g1, g2)
+        case Pairwise(_, g1, g2) => morphToBinaryOp(g1, g2)
 
     private def morphToBinaryOp[W1, W2](
       g1: W1 IsRefinedBy Y1,
       g2: W2 IsRefinedBy Y2,
     ): Adaptoid[X1 ∙ X2, W1 ∙ W2] =
-      Adaptoid.par(f1 morph g1, f2 morph g2)
+      Adaptoid.par(using op)(f1 morph g1, f2 morph g2)
   }
 
   def id[X](using EdgeDesc[X]): (X IsRefinedBy X) =

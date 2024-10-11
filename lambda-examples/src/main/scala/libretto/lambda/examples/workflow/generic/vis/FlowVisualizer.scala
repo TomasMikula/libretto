@@ -9,6 +9,7 @@ import Connector.{Across, NoEntryOut, StudIn, StudOut}
 import DefaultDimensions.Length
 import IOProportions.EdgeProportions
 import EdgeProportions.unitSize
+import StyleDefs.{ColorCaseLeft, ColorCaseRight}
 import WirePick.{pickId, pickL, pickR}
 
 object FlowVisualizer {
@@ -17,9 +18,6 @@ object FlowVisualizer {
     visOp: Visualizer[Op, Approximates],
   ): FlowVisualizer[Op, workflows.Flow] =
     new FlowVisualizer[Op, workflows.Flow]
-
-  private[FlowVisualizer] val ColorCaseLeft  = Color.rgba(0, 119, 183, 0.25)
-  private[FlowVisualizer] val ColorCaseRight = Color.rgba(252, 190, 51, 0.25)
 }
 
 class FlowVisualizer[Op[_, _], F[_, _]](using
@@ -50,7 +48,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
       case FlowAST.Par(g, h) =>
         (visualizeAst(g), visualizeAst(h)) match
           case (∃(∃((x1, y1, vg))), ∃(∃((x2, y2, vh)))) =>
-            Exists(Exists((x1 ** x2, y1 ** y2, Visualization.Par(vg, vh))))
+            Exists(Exists((x1 ** x2, y1 ** y2, Visualization.par[**](vg, vh))))
 
       case _: FlowAST.InjectL[op, x, y] =>
         summon[A =:= x]
