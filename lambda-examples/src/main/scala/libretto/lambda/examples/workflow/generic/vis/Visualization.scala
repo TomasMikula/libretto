@@ -256,26 +256,5 @@ object Visualization {
     oProps: EdgeProportions[Y],
   ): Visualization.Flexi[X, Y] =
     Text(value, IOProportions.Separate(iProps, oProps), VPos.Bottom)
-
-  def merge2[∙[_, _], X](x: EdgeProportions[X]): Visualization[X ∙ X, X] =
-    connectors(
-      EdgeProportions.Binary(x, x),
-      x
-    )(
-      wiresOf(x)
-        .flatMap { i =>
-          List(
-            Connector.Across(i.inl, i),
-            Connector.Across(i.inr, i),
-          )
-        } *
-    )
-
-  private def wiresOf[X](x: EdgeProportions[X]): List[WirePick[X]] =
-    x match
-      case EdgeProportions.UnitWire =>
-        WirePick.pickId :: Nil
-      case x: EdgeProportions.Binary[op, x1, x2] =>
-        wiresOf(x.x1).map(_.inl[op, x2]) ++ wiresOf(x.x2).map(_.inr[op, x1])
 }
 

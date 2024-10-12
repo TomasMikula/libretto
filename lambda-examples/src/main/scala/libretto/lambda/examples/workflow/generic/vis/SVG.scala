@@ -5,8 +5,10 @@ import java.nio.charset.StandardCharsets
 import libretto.lambda.util.NonEmptyList
 
 import Px.*
+import StyleDefs.{ColorCaseLeft, ColorCaseRight}
 
 case class SVGDocument(contentElem: SVGElem) {
+  import SVG.*
   import SVGDocument.*
 
   def writeTo(fileName: String, width: Int, height: Int): Unit = {
@@ -22,6 +24,14 @@ case class SVGDocument(contentElem: SVGElem) {
          |  <linearGradient id="gradient-vertical-white-black" x1="0" y1="0" x2="0" y2="1">
          |    <stop offset="0%" stop-color="white"/>
          |    <stop offset="100%" stop-color="black"/>
+         |  </linearGradient>
+         |  <linearGradient id="gradient-vertical-fade-out-left" x1="0" y1="0" x2="0" y2="1">
+         |    <stop offset="0%" stop-color="${ColorCaseLeft.cssValue}"/>
+         |    <stop offset="100%" stop-color="${ColorCaseLeft.cssValue}" stop-opacity="0"/>
+         |  </linearGradient>
+         |  <linearGradient id="gradient-vertical-fade-out-right" x1="0" y1="0" x2="0" y2="1">
+         |    <stop offset="0%" stop-color="${ColorCaseRight.cssValue}"/>
+         |    <stop offset="100%" stop-color="${ColorCaseRight.cssValue}" stop-opacity="0"/>
          |  </linearGradient>
          |  <pattern id="pattern-road-block" width=".25" height="1" patternContentUnits="objectBoundingBox">
          |    <path fill="yellow" d="M 0 0 L 0 0.5 L 0.125 0 Z"/>
@@ -388,9 +398,12 @@ object SVG {
       case f: PredefinedFill => predefinedFillCssValue(f)
 
   def predefinedFillCssValue(g: PredefinedFill): String =
+    import PredefinedFill.*
     g match
-      case PredefinedFill.GradientVerticalWhiteBlack => "url(#gradient-vertical-white-black)"
-      case PredefinedFill.PatternRoadBlock           => "url(#pattern-road-block)"
+      case GradientVerticalWhiteBlack => "url(#gradient-vertical-white-black)"
+      case VerticalFadeOutLeft        => "url(#gradient-vertical-fade-out-left)"
+      case VerticalFadeOutRight       => "url(#gradient-vertical-fade-out-right)"
+      case PatternRoadBlock           => "url(#pattern-road-block)"
 
   def xmlTextEscape(s: String): String =
     s.replace("<", "&lt;")

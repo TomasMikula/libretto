@@ -9,6 +9,7 @@ import Connector.{Across, NoEntryOut, StudIn, StudOut}
 import DefaultDimensions.Length
 import IOProportions.EdgeProportions
 import EdgeProportions.unitSize
+import PredefinedFill.{GradientVerticalWhiteBlack, VerticalFadeOutLeft, VerticalFadeOutRight}
 import StyleDefs.{ColorCaseLeft, ColorCaseRight}
 import WirePick.{pickId, pickL, pickR}
 
@@ -34,7 +35,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
     X Approximates A,
     Y Approximates B,
     Visualization[X, Y],
-  )]] =
+  )]] = {
     f match
       case FlowAST.Ext(action) =>
         action.visualize
@@ -99,7 +100,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                       Visualization.Sequence(
                         Visualization.par[++](vg, vh),
                         Visualization.Adapt(Adaptoid.par[++](Adaptoid.Collapse(w1), Adaptoid.Collapse(w2))), // TODO: avoid if identity
-                        Visualization.merge2(EdgeProportions.default(w1.inDesc)),
+                        merge(EdgeProportions.default(w1.inDesc)),
                       ),
                     )))
 
@@ -281,8 +282,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
               Across(pickR.inr, pickR.inr),
               TrapezoidArea(EdgeSegment.pickL.inr, EdgeSegment.pickL, ColorCaseLeft),
               TrapezoidArea(EdgeSegment.pickR.inr, EdgeSegment.pickR, ColorCaseRight),
-              Across(pickL, pickL.inl).fill(PredefinedFill.GradientVerticalWhiteBlack),
-              Across(pickL, pickL.inr).fill(PredefinedFill.GradientVerticalWhiteBlack),
+              Across(pickL, pickL.inl).fill(GradientVerticalWhiteBlack),
+              Across(pickL, pickL.inr).fill(GradientVerticalWhiteBlack),
             )
           )
         )))
@@ -350,4 +351,32 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
 
       case other =>
         Visualizer.unimplemented(other.getClass.getSimpleName())
+  }
+
+  def merge[∙[_, _], X](x: EdgeProportions[X]): Visualization[X ∙ X, X] =
+    Visualization.connectors(
+      EdgeProportions.Binary(x, x),
+      x
+    )(
+      List(
+        TrapezoidArea(EdgeSegment.pickL, EdgeSegment.pickId, VerticalFadeOutLeft),
+        TrapezoidArea(EdgeSegment.pickR, EdgeSegment.pickId, VerticalFadeOutRight),
+      ) ++
+      wiresOf(x)
+        .flatMap { i =>
+          List(
+            Connector.Across(i.inl, i),
+            Connector.Across(i.inr, i),
+          )
+        } *
+    )
+
+  private def wiresOf[X](x: EdgeProportions[X]): List[WirePick[X]] =
+    x match
+      case EdgeProportions.UnitWire =>
+        WirePick.pickId :: Nil
+      case x: EdgeProportions.Binary[op, x1, x2] =>
+        wiresOf(x.x1).map(_.inl[op, x2]) ++ wiresOf(x.x2).map(_.inr[op, x1])
+      case EdgeProportions.Weighted(_, base) =>
+        wiresOf(base)
 }
