@@ -56,16 +56,19 @@ object EdgeStretch {
     override def inr[∙[_, _], L]: PointOf[L ∙ X] = EndOf[L ∙ X]()
   }
 
-  sealed trait InnerPointOf[X] extends PointOf[X]
+  sealed trait InnerPointOf[X] extends PointOf[X] {
+    override def inl[∙[_, _], R]: InnerPointOf[X ∙ R]
+    override def inr[∙[_, _], L]: InnerPointOf[L ∙ X]
+  }
   object InnerPointOf {
     case class Between[∙[_, _], X1, X2, Y](seg: EdgeSegment[X1 ∙ X2, Y]) extends InnerPointOf[Y] {
-      override def inl[∙[_, _], R]: PointOf[Y ∙ R] = Between(seg.inl)
-      override def inr[∙[_, _], L]: PointOf[L ∙ Y] = Between(seg.inr)
+      override def inl[∙[_, _], R]: InnerPointOf[Y ∙ R] = Between(seg.inl)
+      override def inr[∙[_, _], L]: InnerPointOf[L ∙ Y] = Between(seg.inr)
     }
 
     case class SubWire[X](seg: EdgeSegment[Wire, X], p: SubWirePoint) extends InnerPointOf[X] {
-      override def inl[∙[_, _], R]: PointOf[X ∙ R] = SubWire(seg.inl, p)
-      override def inr[∙[_, _], L]: PointOf[L ∙ X] = SubWire(seg.inr, p)
+      override def inl[∙[_, _], R]: InnerPointOf[X ∙ R] = SubWire(seg.inl, p)
+      override def inr[∙[_, _], L]: InnerPointOf[L ∙ X] = SubWire(seg.inr, p)
     }
 
     enum SubWirePoint:
@@ -90,6 +93,12 @@ object EdgeStretch {
 
   def wireSegment: EdgeStretch[Wire] =
     EdgeStretch.segment(EdgeSegment.pickId[Wire])
+
+  def wireOnly[X](seg: EdgeSegment[Wire, X]): EdgeStretch[X] =
+    EdgeStretch.Line(seg, Demarcation.SubWire.WireOnly)
+
+  def wireOnly: EdgeStretch[Wire] =
+    wireOnly(EdgeSegment.pickId)
 
   def wireMidPoint[X](seg: EdgeSegment[Wire, X]): EdgeStretch[X] =
     SinglePoint(InnerPointOf.SubWire(seg, SubWirePoint.WireMid))
@@ -144,4 +153,30 @@ object EdgeStretch {
 
   def wireAndPost: EdgeStretch[Wire] =
     wireAndPost(EdgeSegment.pickId)
+
+  /** Tightest stretch containing all wires. */
+  def trimPadding[X](x: EdgeDesc[X]): EdgeStretch[X] =
+    x match
+      case EdgeDesc.SingleWire =>
+        EdgeStretch.wireOnly
+      case x: EdgeDesc.Binary[op, x1, x2] =>
+        EdgeStretch.Line(
+          EdgeSegment.pickId,
+          EdgeStretch.Demarcation.Inner[op, x1, x2](
+            wiresStartPoint(x.x1),
+            wiresEndPoint(x.x2),
+          ),
+        )
+
+  private def wiresStartPoint[X](x: EdgeDesc[X]): EdgeStretch.InnerPointOf[X] =
+    import EdgeStretch.InnerPointOf.SubWirePoint.WireBegin
+    x match
+      case EdgeDesc.SingleWire => EdgeStretch.InnerPointOf.SubWire(EdgeSegment.pickId, WireBegin)
+      case x: EdgeDesc.Binary[op, x1, x2] => wiresStartPoint(x.x1).inl[op, x2]
+
+  private def wiresEndPoint[X](x: EdgeDesc[X]): EdgeStretch.InnerPointOf[X] =
+    import EdgeStretch.InnerPointOf.SubWirePoint.WireEnd
+    x match
+      case EdgeDesc.SingleWire => EdgeStretch.InnerPointOf.SubWire(EdgeSegment.pickId, WireEnd)
+      case x: EdgeDesc.Binary[op, x1, x2] => wiresEndPoint(x.x2).inr[op, x1]
 }

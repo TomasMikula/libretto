@@ -354,13 +354,14 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
   }
 
   def merge[X](x: EdgeDesc[X]): Visualization[X ++ X, X] =
+    val tgt = EdgeStretch.trimPadding(x)
     Visualization.connectors(
       x ++ x,
       x
     )(
       List(
-        TrapezoidArea(EdgeStretch.pickL, EdgeStretch.whole, VerticalFadeOutLeft),
-        TrapezoidArea(EdgeStretch.pickR, EdgeStretch.whole, VerticalFadeOutRight),
+        TrapezoidArea(EdgeStretch.pickL, tgt, VerticalFadeOutLeft),
+        TrapezoidArea(EdgeStretch.pickR, tgt, VerticalFadeOutRight),
       ) ++
       wiresOf(x)
         .flatMap { i =>
