@@ -103,32 +103,32 @@ object Visualization {
         Cons(head, this)
     }
 
-    case class Two[X, Y, Z](
-      fst: Visualization[X, Y],
-      snd: Visualization.Flexi[Y, Z],
-    ) extends Sequence[X, Z] {
-      override def size = 2
-      override def lengths: List[Length] = List(fst.length, snd.length)
+    case class Single[X, Y](
+      elem: Visualization[X, Y],
+    ) extends Sequence[X, Y] {
+      override def size = 1
+      override def lengths: List[Length] = List(elem.length)
 
-      override protected def inProportions: EdgeProportions[X] = fst.ioProportions.inEdge
-      override protected def outProportions: EdgeProportions[Z] = snd.ioProportions.outEdge
+      override protected def inProportions: EdgeProportions[X] = elem.ioProportions.inEdge
+      override protected def outProportions: EdgeProportions[Y] = elem.ioProportions.outEdge
     }
 
-    case class TwoFlexiFst[X, Y, Z](
-      fst: Visualization.Flexi[X, Y],
-      snd: Visualization[Y, Z],
-    ) extends Sequence.FlexiHead[X, Z] {
-      override def size = 2
-      override def lengths: List[Length] = List(fst.length, snd.length)
+    case class SingleFlexi[X, Y](
+      elem: Visualization.Flexi[X, Y],
+    ) extends Sequence.FlexiHead[X, Y] {
+      override def size = 1
+      override def lengths: List[Length] = List(elem.length)
 
-      override protected def inProportions: EdgeProportions[X] = fst.ioProportions.inEdge
-      override protected def outProportions: EdgeProportions[Z] = snd.ioProportions.outEdge
+      override protected def inProportions: EdgeProportions[X] = elem.ioProportions.inEdge
+      override protected def outProportions: EdgeProportions[Y] = elem.ioProportions.outEdge
     }
+
+    sealed trait Multi[X, Y] extends Sequence[X, Y]
 
     case class Cons[X, Y, Z](
       head: Visualization[X, Y],
       tail: Sequence.FlexiHead[Y, Z],
-    ) extends Sequence[X, Z] {
+    ) extends Sequence.Multi[X, Z] {
       override lazy val size = 1 + tail.size
       override lazy val lengths: List[Length] = head.length :: tail.lengths
 
@@ -139,7 +139,7 @@ object Visualization {
     case class ConsFlexiHead[X, Y, Z](
       head: Visualization.Flexi[X, Y],
       tail: Sequence[Y, Z],
-    ) extends Sequence.FlexiHead[X, Z] {
+    ) extends Sequence.FlexiHead[X, Z] with Sequence.Multi[X, Z] {
       override lazy val size = 1 + tail.size
       override lazy val lengths: List[Length] = head.length :: tail.lengths
 
@@ -151,27 +151,27 @@ object Visualization {
       v1: Visualization.Flexi[X, Y],
       v2: Visualization[Y, Z],
     ): Sequence.FlexiHead[X, Z] =
-      TwoFlexiFst(v1, v2)
+      ConsFlexiHead(v1, Single(v2))
 
     def apply[X, Y, Z](
       v1: Visualization[X, Y],
       v2: Visualization.Flexi[Y, Z],
     ): Sequence[X, Z] =
-      Two(v1, v2)
+      Cons(v1, SingleFlexi(v2))
 
     def apply[W, X, Y, Z](
       v1: Visualization[W, X],
       v2: Visualization.Flexi[X, Y],
       v3: Visualization[Y, Z],
     ): Sequence[W, Z] =
-      v1 :: TwoFlexiFst(v2, v3)
+      v1 :: v2 :: Single(v3)
 
     def apply[W, X, Y, Z](
       v1: Visualization.Flexi[W, X],
       v2: Visualization[X, Y],
       v3: Visualization.Flexi[Y, Z],
     ): Sequence.FlexiHead[W, Z] =
-      v1 :: Two(v2, v3)
+      v1 :: v2 :: SingleFlexi(v3)
   }
 
   case class Adapt[X, Y](f: Adaptoid[X, Y]) extends Visualization.Flexi[X, Y] {

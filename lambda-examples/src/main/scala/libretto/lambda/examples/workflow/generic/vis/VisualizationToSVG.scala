@@ -111,17 +111,23 @@ object VisualizationToSVG {
     edges: IOLayout[X, Y],
     height: Px,
   ): SVGElem = {
-    Length.divideProportionally(height.pixels)(seq.lengths*) match
-      case IntegralProportions(k, heights) =>
-        assert(heights.size == seq.size)
-        val (l, vs) = renderSequence(seq, edges.inEdge * k, edges.outEdge * k, heights.map(Px(_)), yOffset = 0.px)
-        val g = SVGElem.Group(vs)
-        val kl = k * l
-        if (kl == 1) then g else g.scale(1.0 / kl)
+    seq match
+      case Visualization.Sequence.Single(elem) =>
+        renderSVG(elem, edges, height)
+      case Visualization.Sequence.SingleFlexi(elem) =>
+        renderSVG(elem, edges, height)
+      case seq: Visualization.Sequence.Multi[X, Y] =>
+        Length.divideProportionally(height.pixels)(seq.lengths*) match
+          case IntegralProportions(k, heights) =>
+            assert(heights.size == seq.size)
+            val (l, vs) = renderSequence(seq, edges.inEdge * k, edges.outEdge * k, heights.map(Px(_)), yOffset = 0.px)
+            val g = SVGElem.Group(vs)
+            val kl = k * l
+            if (kl == 1) then g else g.scale(1.0 / kl)
   }
 
   private def renderSequence[X, Y](
-    seq: Visualization.Sequence[X, Y],
+    seq: Visualization.Sequence.Multi[X, Y] | Visualization.Sequence.FlexiHead[X, Y],
     iLayout: EdgeLayout[X],
     oLayout: EdgeLayout[Y],
     heights: List[Px],
@@ -130,21 +136,10 @@ object VisualizationToSVG {
     require(heights.size == seq.size)
 
     seq match
-      case Visualization.Sequence.Two(fst, flexiSnd) =>
-        ???
-        val (k, fstLayout) = fst.ioProportions.layoutFw(iLayout)
-        val h1 = heights.head * k
-        val yk = yOffset * k
-        val fstVis = renderSVG(fst, fstLayout, h1).optTranslateY(yk.pixels)
-        val sndVis = renderSVG(flexiSnd, IOLayout.Separate(fstLayout.outEdge, oLayout * k), heights(1) * k).translateY((yk + h1).pixels)
-        (k, List(fstVis, sndVis))
-      case Visualization.Sequence.TwoFlexiFst(flexiFst, snd) =>
-        val (k, sndLayout) = snd.ioProportions.layoutBw(oLayout)
-        val yk = yOffset * k
-        val h1 = heights.head * k
-        val sndVis = renderSVG(snd, sndLayout, heights(1) * k).translateY((yk + h1).pixels)
-        val fstVis = renderSVG(flexiFst, IOLayout.Separate(iLayout * k, sndLayout.inEdge), h1).optTranslateY(yk.pixels)
-        (k, List(fstVis, sndVis))
+      case Visualization.Sequence.SingleFlexi(elem) =>
+        val List(h) = heights
+        val vis = renderSVG(elem, IOLayout.Separate(iLayout, oLayout), h).optTranslateY(yOffset.pixels)
+        (1, vis :: Nil)
       case Visualization.Sequence.Cons(head, tail) =>
         val (k, headLayout) = head.ioProportions.layoutFw(iLayout)
         val yk = yOffset * k
@@ -168,19 +163,23 @@ object VisualizationToSVG {
     require(heights.size == seq.size)
 
     seq match
-      case Visualization.Sequence.TwoFlexiFst(fst, snd) =>
+      case Visualization.Sequence.SingleFlexi(elem) =>
         ???
-      case Visualization.Sequence.Two(fst, flexiSnd) =>
-        // give the preferred layout to the first, non-flexi element
-        val (k, fstLayout) = fst.ioProportions.layout(oLayout.pixelBreadth)
-        val h1 = heights(0) * k
-        val h2 = heights(1) * k
+      case Visualization.Sequence.Single(elem) =>
+        val List(h) = heights
+        val (k, layout) = elem.ioProportions.layoutBw(oLayout)
         val yk = yOffset * k
-        val fstVis = renderSVG(fst, fstLayout, h1).optTranslateY(yk.pixels)
-        val sndVis = renderSVG(flexiSnd, IOLayout.Separate(fstLayout.outEdge, oLayout * k), h2).translateY((yk + h1).pixels)
-        (k, fstLayout.inEdge, List(fstVis, sndVis))
+        (k, layout.inEdge, renderSVG(elem, layout, h * k).optTranslateY(yk.pixels) :: Nil)
       case Visualization.Sequence.Cons(head, tail) =>
-        ???
+        // give the preferred layout to the first, non-flexi element
+        val (k, headLayout) = head.ioProportions.layout(oLayout.pixelBreadth)
+        val h0 = heights(0) * k
+        val hs = heights.tail.map(_ * k)
+        val yk = yOffset * k
+        val hVis = renderSVG(head, headLayout, h0).optTranslateY(yk.pixels)
+        val (l, tViss) = renderSequence(tail, headLayout.outEdge, oLayout * k, hs, yk + h0)
+        val hv = if (l == 1) then hVis else hVis.scale(l)
+        (k * l, headLayout.inEdge * l, hv :: tViss)
       case Visualization.Sequence.ConsFlexiHead(head, tail) =>
         ???
   }
