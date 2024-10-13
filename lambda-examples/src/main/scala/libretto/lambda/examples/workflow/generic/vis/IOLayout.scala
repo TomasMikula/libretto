@@ -21,53 +21,56 @@ object IOLayout {
 
     def locate[W](seg: EdgeSegment[W, X]): (Px, EdgeLayout[W])
     def wireCoords(using ev: X =:= Wire): WireCoords
-
-    def segmentCoords[W](seg: EdgeSegment[W, X] | EdgeSegment.SubWire[X]): SegmentCoords =
-      seg match
-        case seg: EdgeSegment[W, X] =>
-          val (x, wl) = locate(seg)
-          SegmentCoords(x, wl.pixelBreadth)
-        case seg: EdgeSegment.SubWire[X] =>
-          seg match
-            case EdgeSegment.SubWire.WireOnly(seg) =>
-              wireCoords(seg) match
-                case WireCoords(x, pre, w, post) => SegmentCoords(x + pre, w)
-            case EdgeSegment.SubWire.Pre(seg) =>
-              wireCoords(seg) match
-                case WireCoords(x, pre, w, post) => SegmentCoords(x, pre)
-            case EdgeSegment.SubWire.Post(seg) =>
-              wireCoords(seg) match
-                case WireCoords(x, pre, w, post) => SegmentCoords(x + pre + w, post)
-            case EdgeSegment.SubWire.WireAndPre(seg) =>
-              wireCoords(seg) match
-                case WireCoords(x, pre, w, post) => SegmentCoords(x, pre + w)
-            case EdgeSegment.SubWire.WireAndPost(seg) =>
-              wireCoords(seg) match
-                case WireCoords(x, pre, w, post) => SegmentCoords(x + pre, w + post)
-            case EdgeSegment.SubWire.MidPoint(seg) =>
-              wireCoords(seg) match
-                case WireCoords(x, pre, w, post) => SegmentCoords(x + pre + w/2, Px(0))
-            case EdgeSegment.SubWire.LHalf(seg) =>
-              wireCoords(seg) match
-                case WireCoords(x, pre, w, post) => SegmentCoords(x, pre + w/2)
-            case EdgeSegment.SubWire.RHalf(seg) =>
-              wireCoords(seg) match
-                case WireCoords(x, pre, w, post) =>
-                  val w2 = Px(w.pixels - w.pixels/2)
-                  SegmentCoords(x + pre + w/2, w2 + post)
-            case EdgeSegment.SubWire.WireLHalf(seg) =>
-              wireCoords(seg) match
-                case WireCoords(x, pre, w, post) => SegmentCoords(x + pre, w/2)
-            case EdgeSegment.SubWire.WireRHalf(seg) =>
-              wireCoords(seg) match
-                case WireCoords(x, pre, w, post) =>
-                  val w2 = Px(w.pixels - w.pixels/2)
-                  SegmentCoords(x + pre + w/2, w2)
+    def asSingleWire(using X =:= Wire): EdgeLayout.SingleWire
 
     def wireCoords(wire: WirePick[X]): EdgeLayout.WireCoords =
       val seg: EdgeSegment[Wire, X] = wire
       val (x, w) = locate(seg)
       w.wireCoords.offset(x)
+
+    def coordsOf(str: EdgeStretch[X]): SegmentCoords =
+      str match
+        case EdgeStretch.SinglePoint(p) =>
+          SegmentCoords(locatePoint(p), Px(0))
+        case EdgeStretch.Line(leastCover, demarcation) =>
+          val (offset, w) = locate(leastCover)
+          w.coordsOf(demarcation).offset(offset)
+
+    private def coordsOf(dem: EdgeStretch.Demarcation[X]): SegmentCoords =
+      import EdgeStretch.{Demarcation => Dem}
+      dem match
+        case Dem.Whole() =>
+          SegmentCoords(Px(0), this.pixelBreadth)
+        case ld: Dem.Leading[op, x1, x2] =>
+          val (l1, l2) = EdgeLayout.split[op, x1, x2](this)
+          SegmentCoords(Px(0), l1.pixelBreadth + l2.locatePoint(ld.to))
+        case tr: Dem.Trailing[op, x1, x2] =>
+          val (l1, l2) = EdgeLayout.split[op, x1, x2](this)
+          val x = l1.locatePoint(tr.from)
+          val w = Px(this.pixelBreadth.pixels - x.pixels)
+          SegmentCoords(x, w)
+        case inn: Dem.Inner[op, x1, x2] =>
+          val (l1, l2) = EdgeLayout.split[op, x1, x2](this)
+          val x1 = l1.locatePoint(inn.from)
+          val x2 = l2.locatePoint(inn.to) + l1.pixelBreadth
+          val w = Px(x2.pixels - x1.pixels)
+          SegmentCoords(x1, w)
+        case sub: Dem.SubWire =>
+          this.asSingleWire.subwireCoords(sub)
+
+    def locatePoint(p: EdgeStretch.PointOf[X]): Px = {
+      import EdgeStretch.InnerPointOf
+      p match
+        case EdgeStretch.StartOf() => Px(0)
+        case EdgeStretch.EndOf() => pixelBreadth
+        case bw: EdgeStretch.InnerPointOf.Between[op, x1, x2, y] =>
+          val (offset, layout) = locate(bw.seg)
+          val (l1, _) = EdgeLayout.split[op, x1, x2](layout)
+          offset + l1.pixelBreadth
+        case EdgeStretch.InnerPointOf.SubWire(seg, p) =>
+          val (offset, layout) = locate(seg)
+          offset + layout.asSingleWire.locatePoint(p)
+    }
   }
 
   object EdgeLayout {
@@ -89,6 +92,9 @@ object IOLayout {
 
       override def wireCoords(using ev: (X1 ∙ X2) =:= Wire): WireCoords =
         Wire.isNotBinary(using ev.flip)
+
+      override def asSingleWire(using ev: (X1 ∙ X2) =:= Wire): SingleWire =
+        Wire.isNotBinary(using ev.flip)
     }
 
     case class SingleWire(pre: Px, wire: Px, post: Px) extends EdgeLayout[Wire] {
@@ -104,6 +110,39 @@ object IOLayout {
 
       override def wireCoords(using ev: Wire =:= Wire): WireCoords =
         WireCoords(Px(0), pre, wire, post)
+
+      override def asSingleWire(using Wire =:= Wire): SingleWire =
+        this
+
+      private[EdgeLayout] def subwireCoords(
+        sub: EdgeStretch.Demarcation.SubWire,
+      ): SegmentCoords = {
+        import EdgeStretch.Demarcation.SubWire
+
+        sub match
+          case SubWire.Pre         => SegmentCoords(Px(0), pre)
+          case SubWire.WireLHalf   => SegmentCoords(pre, wire.lHalf)
+          case SubWire.WireRHalf   => SegmentCoords(pre + wire.lHalf, wire.rHalf)
+          case SubWire.Post        => SegmentCoords(pre + wire, post)
+          case SubWire.LHalf       => SegmentCoords(Px(0), pre + wire.lHalf)
+          case SubWire.RHalf       => SegmentCoords(pre + wire.lHalf, wire.rHalf + post)
+          case SubWire.WireOnly    => SegmentCoords(pre, wire)
+          case SubWire.WireAndPre  => SegmentCoords(Px(0), pre + wire)
+          case SubWire.WireAndPost => SegmentCoords(pre, wire + post)
+      }
+
+      private[EdgeLayout] def locatePoint(p: EdgeStretch.InnerPointOf.SubWirePoint): Px = {
+        import EdgeStretch.InnerPointOf.SubWirePoint.*
+
+        p match
+          case WireBegin => pre
+          case WireMid   => pre + wire.lHalf
+          case WireEnd   => pre + wire
+      }
+
+      extension (w: Px)
+        private def lHalf: Px = w/2
+        private def rHalf: Px = Px(w.pixels - w.pixels/2)
     }
 
     case class WireCoords(segmentX: Px, pre: Px, wireWidth: Px, post: Px) {

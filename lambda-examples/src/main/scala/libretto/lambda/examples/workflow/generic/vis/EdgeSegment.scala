@@ -5,35 +5,6 @@ sealed trait EdgeSegment[X, Y] {
 
   def inl[∙[_, _], B]: EdgeSegment[X, Y ∙ B] = Inl(this)
   def inr[∙[_, _], A]: EdgeSegment[X, A ∙ Y] = Inr(this)
-  def inFst[B]: EdgeSegment[X, (Y, B)] = inl[Tuple2, B]
-  def inSnd[A]: EdgeSegment[X, (A, Y)] = inr[Tuple2, A]
-
-  def midpoint(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
-    EdgeSegment.SubWire.MidPoint(ev.substituteCo[EdgeSegment[_, Y]](this))
-
-  def lHalf(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
-    EdgeSegment.SubWire.LHalf(ev.substituteCo[EdgeSegment[_, Y]](this))
-
-  def rHalf(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
-    EdgeSegment.SubWire.RHalf(ev.substituteCo[EdgeSegment[_, Y]](this))
-
-  def wireLHalf(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
-    EdgeSegment.SubWire.WireLHalf(ev.substituteCo[EdgeSegment[_, Y]](this))
-
-  def wireRHalf(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
-    EdgeSegment.SubWire.WireRHalf(ev.substituteCo[EdgeSegment[_, Y]](this))
-
-  def pre(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
-    EdgeSegment.SubWire.Pre(ev.substituteCo[EdgeSegment[_, Y]](this))
-
-  def post(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
-    EdgeSegment.SubWire.Post(ev.substituteCo[EdgeSegment[_, Y]](this))
-
-  def wireAndPre(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
-    EdgeSegment.SubWire.WireAndPre(ev.substituteCo[EdgeSegment[_, Y]](this))
-
-  def wireAndPost(using ev: X =:= Wire): EdgeSegment.SubWire[Y] =
-    EdgeSegment.SubWire.WireAndPost(ev.substituteCo[EdgeSegment[_, Y]](this))
 
   def switch[R](
     caseId: (X =:= Y) ?=> R,
@@ -52,7 +23,9 @@ object EdgeSegment {
       caseId
   }
 
-  case class Inl[∙[_, _], A, B, Q](l: EdgeSegment[A, B]) extends EdgeSegment[A, B ∙ Q] {
+  sealed trait Sub[X, Y] extends EdgeSegment[X, Y]
+
+  case class Inl[∙[_, _], A, B, Q](l: EdgeSegment[A, B]) extends EdgeSegment.Sub[A, B ∙ Q] {
     override def switch[R](
       caseId: (A =:= (B ∙ Q)) ?=> R,
       caseInl: [∘[_, _], Y1, V] => ((B ∙ Q) =:= (Y1 ∘ V)) ?=> EdgeSegment[A, Y1] => R,
@@ -61,7 +34,7 @@ object EdgeSegment {
       caseInl[∙, B, Q](l)
   }
 
-  case class Inr[∙[_, _], A, B, P](r: EdgeSegment[A, B]) extends EdgeSegment[A, P ∙ B] {
+  case class Inr[∙[_, _], A, B, P](r: EdgeSegment[A, B]) extends EdgeSegment.Sub[A, P ∙ B] {
     override def switch[R](
       caseId: (A =:= (P ∙ B)) ?=> R,
       caseInl: [∘[_, _], Y1, V] => ((P ∙ B) =:= (Y1 ∘ V)) ?=> EdgeSegment[A, Y1] => R,
@@ -73,19 +46,4 @@ object EdgeSegment {
   def pickId[A]: EdgeSegment[A, A] = Id()
   def pickL[∙[_, _], A, B]: EdgeSegment[A, A ∙ B] = Inl(Id[A]())
   def pickR[∙[_, _], A, B]: EdgeSegment[B, A ∙ B] = Inr(Id[B]())
-
-  sealed trait SubWire[Y]
-
-  object SubWire {
-    case class WireOnly[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
-    case class MidPoint[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
-    case class LHalf[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
-    case class RHalf[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
-    case class WireLHalf[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
-    case class WireRHalf[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
-    case class Pre[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
-    case class Post[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
-    case class WireAndPre[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
-    case class WireAndPost[Y](seg: EdgeSegment[Wire, Y]) extends EdgeSegment.SubWire[Y]
-  }
 }

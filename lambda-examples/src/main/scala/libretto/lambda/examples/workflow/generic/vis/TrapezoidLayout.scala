@@ -28,11 +28,11 @@ final case class TrapezoidLayout[I, O](
   def outWireCoords(wire: WirePick[O]): EdgeLayout.WireCoords =
     oLayout.wireCoords(wire).offset(oOffset)
 
-  def inSegmentCoords[S](seg: EdgeSegment[S, I] | EdgeSegment.SubWire[I]): EdgeLayout.SegmentCoords =
-    iLayout.segmentCoords(seg).offset(iOffset)
+  def inSegmentCoords(seg: EdgeStretch[I]): EdgeLayout.SegmentCoords =
+    iLayout.coordsOf(seg).offset(iOffset)
 
-  def outSegmentCoords[S](seg: EdgeSegment[S, O] | EdgeSegment.SubWire[O]): EdgeLayout.SegmentCoords =
-    oLayout.segmentCoords(seg).offset(oOffset)
+  def outSegmentCoords[S](seg: EdgeStretch[O]): EdgeLayout.SegmentCoords =
+    oLayout.coordsOf(seg).offset(oOffset)
 
   def vsplit[X](xLayout: EdgeLayout[X])(
     iLen: Length,
