@@ -400,38 +400,13 @@ object VisualizationToSVG {
     ioLayout: IOLayout[X, Y],
     height: Px,
   ): Option[SVGElem] =
-    val (i, o) = ioLayout.separate
-    renderAmbient(s, i, o, 0.px, 0.px, height)
-
-  @deprecated
-  private def renderAmbient[X, Y](
-    s: AmbientStyle,
-    iLayout: EdgeLayout[X],
-    oLayout: EdgeLayout[Y],
-    iOffset: Px,
-    oOffset: Px,
-    height: Px,
-  ): Option[SVGElem] =
-    renderAmbient(s, EdgeStretch.whole, EdgeStretch.whole, iLayout, oLayout, iOffset, oOffset, height)
+    renderAmbient(s, TrapezoidLayout(ioLayout, height))
 
   private def renderAmbient[X, Y](
     s: AmbientStyle,
     reg: TrapezoidLayout[X, Y],
   ): Option[SVGElem] =
     renderAmbient(s, reg, EdgeStretch.whole, EdgeStretch.whole)
-
-  @deprecated
-  private def renderAmbient[X, Y](
-    s: AmbientStyle,
-    iSeg: EdgeStretch[X],
-    oSeg: EdgeStretch[Y],
-    iLayout: EdgeLayout[X],
-    oLayout: EdgeLayout[Y],
-    iOffset: Px,
-    oOffset: Px,
-    height: Px,
-  ): Option[SVGElem] =
-    renderAmbient(s, TrapezoidLayout(iOffset, oOffset, iLayout, oLayout, height), iSeg, oSeg)
 
   private def renderAmbient[X, Y](
     s: AmbientStyle,
