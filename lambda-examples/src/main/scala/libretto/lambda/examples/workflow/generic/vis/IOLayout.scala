@@ -129,6 +129,7 @@ object IOLayout {
           case SubWire.WireOnly    => SegmentCoords(pre, wire)
           case SubWire.WireAndPre  => SegmentCoords(Px(0), pre + wire)
           case SubWire.WireAndPost => SegmentCoords(pre, wire + post)
+          case SubWire.PaddingMidpoints => SegmentCoords(pre.lHalf, pre.rHalf + wire + post.lHalf)
       }
 
       private[EdgeLayout] def locatePoint(p: EdgeStretch.InnerPointOf.SubWirePoint): Px = {
@@ -138,6 +139,8 @@ object IOLayout {
           case WireBegin => pre
           case WireMid   => pre + wire.lHalf
           case WireEnd   => pre + wire
+          case LPadMid   => pre.lHalf
+          case RPadMid   => pre + wire + post.lHalf
       }
 
       extension (w: Px)

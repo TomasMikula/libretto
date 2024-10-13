@@ -354,7 +354,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
   }
 
   def merge[X](x: EdgeDesc[X]): Visualization[X ++ X, X] =
-    val tgt = EdgeStretch.trimPadding(x)
+    val tgt = EdgeStretch.paddingMidpoints(x)
     Visualization.connectors(
       x ++ x,
       x

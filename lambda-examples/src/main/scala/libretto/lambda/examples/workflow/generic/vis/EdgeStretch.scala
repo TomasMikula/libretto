@@ -38,6 +38,7 @@ object EdgeStretch {
       case WireOnly
       case WireAndPre
       case WireAndPost
+      case PaddingMidpoints
     }
   }
 
@@ -72,9 +73,11 @@ object EdgeStretch {
     }
 
     enum SubWirePoint:
+      case LPadMid
       case WireBegin
       case WireMid
       case WireEnd
+      case RPadMid
   }
 
   import InnerPointOf.*
@@ -154,6 +157,12 @@ object EdgeStretch {
   def wireAndPost: EdgeStretch[Wire] =
     wireAndPost(EdgeSegment.pickId)
 
+  def paddingMidpoints[X](seg: EdgeSegment[Wire, X]): EdgeStretch[X] =
+    EdgeStretch.Line(seg, Demarcation.SubWire.PaddingMidpoints)
+
+  def paddingMidpoints: EdgeStretch[Wire] =
+    paddingMidpoints(EdgeSegment.pickId)
+
   /** Tightest stretch containing all wires. */
   def trimPadding[X](x: EdgeDesc[X]): EdgeStretch[X] =
     x match
@@ -169,9 +178,8 @@ object EdgeStretch {
         )
 
   private def wiresStartPoint[X](x: EdgeDesc[X]): EdgeStretch.InnerPointOf[X] =
-    import EdgeStretch.InnerPointOf.SubWirePoint.WireBegin
     x match
-      case EdgeDesc.SingleWire => EdgeStretch.InnerPointOf.SubWire(EdgeSegment.pickId, WireBegin)
+      case EdgeDesc.SingleWire => EdgeStretch.InnerPointOf.SubWire(EdgeSegment.pickId, SubWirePoint.WireBegin)
       case x: EdgeDesc.Binary[op, x1, x2] => wiresStartPoint(x.x1).inl[op, x2]
 
   private def wiresEndPoint[X](x: EdgeDesc[X]): EdgeStretch.InnerPointOf[X] =
@@ -179,4 +187,27 @@ object EdgeStretch {
     x match
       case EdgeDesc.SingleWire => EdgeStretch.InnerPointOf.SubWire(EdgeSegment.pickId, WireEnd)
       case x: EdgeDesc.Binary[op, x1, x2] => wiresEndPoint(x.x2).inr[op, x1]
+
+  def paddingMidpoints[X](x: EdgeDesc[X]): EdgeStretch[X] =
+    x match
+      case EdgeDesc.SingleWire =>
+        EdgeStretch.paddingMidpoints
+      case x: EdgeDesc.Binary[op, x1, x2] =>
+        EdgeStretch.Line(
+          EdgeSegment.pickId,
+          EdgeStretch.Demarcation.Inner[op, x1, x2](
+            lPadMidpoint(x.x1),
+            rPadMidpoint(x.x2),
+          ),
+        )
+
+  private def lPadMidpoint[X](x: EdgeDesc[X]): EdgeStretch.InnerPointOf[X] =
+    x match
+      case EdgeDesc.SingleWire => EdgeStretch.InnerPointOf.SubWire(EdgeSegment.pickId, SubWirePoint.LPadMid)
+      case x: EdgeDesc.Binary[op, x1, x2] => lPadMidpoint(x.x1).inl[op, x2]
+
+  private def rPadMidpoint[X](x: EdgeDesc[X]): EdgeStretch.InnerPointOf[X] =
+    x match
+      case EdgeDesc.SingleWire => EdgeStretch.InnerPointOf.SubWire(EdgeSegment.pickId, SubWirePoint.RPadMid)
+      case x: EdgeDesc.Binary[op, x1, x2] => rPadMidpoint(x.x2).inr[op, x1]
 }
