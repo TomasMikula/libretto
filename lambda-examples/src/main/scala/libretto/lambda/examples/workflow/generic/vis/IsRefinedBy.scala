@@ -8,7 +8,7 @@ infix sealed trait IsRefinedBy[X, Y] {
   def outDesc: EdgeDesc[Y]
 
   infix def par[∙[_, _], V, W](that: V IsRefinedBy W)(using op: OpTag[∙]): (X ∙ V) IsRefinedBy (Y ∙ W) =
-    IsRefinedBy.Pairwise(op, this, that)
+    IsRefinedBy.par(this, that)
 
   /** Returns the most refined `V` such that `V` is a coarsening of both `X` and `W`. */
   infix def greatestCommonCoarsening[W](
@@ -36,10 +36,12 @@ object IsRefinedBy {
       Exists((that, Id[W](that.inDesc)))
 
     override def morph[W](that: W IsRefinedBy X): Adaptoid[X, W] =
-      Adaptoid.Collapse(that)
+      Adaptoid.collapse(that)
   }
 
-  case class Initial[X](outDesc: EdgeDesc.Composite[X]) extends (Wire IsRefinedBy X) {
+  infix sealed trait IsStrictlyRefinedBy[X, Y] extends IsRefinedBy[X, Y]
+
+  case class Initial[X](outDesc: EdgeDesc.Composite[X]) extends (Wire IsStrictlyRefinedBy X) {
     override def inDesc: EdgeDesc[Wire] = EdgeDesc.SingleWire
 
     override def greatestCommonCoarsening[W](
@@ -48,14 +50,22 @@ object IsRefinedBy {
       Exists((id[Wire], initial[W](that.inDesc)))
 
     override def morph[W](that: W IsRefinedBy X): Adaptoid[Wire, W] =
-      Adaptoid.Expand(initial[W](that.inDesc))
+      Adaptoid.expand(initial[W](that.inDesc))
   }
 
   case class Pairwise[∙[_, _], X1, X2, Y1, Y2](
     op: OpTag[∙],
     f1: X1 IsRefinedBy Y1,
     f2: X2 IsRefinedBy Y2,
-  ) extends IsRefinedBy[X1 ∙ X2, Y1 ∙ Y2] {
+  ) extends IsStrictlyRefinedBy[X1 ∙ X2, Y1 ∙ Y2] {
+    require(
+      (f1, f2) match {
+        case (Id(_), Id(_)) => false
+        case _ => true
+      },
+      "The sides of Pairwise cannot both be Id"
+    )
+
     private given OpTag[∙] = op
 
     override def inDesc: EdgeDesc[X1 ∙ X2] =
@@ -85,7 +95,7 @@ object IsRefinedBy {
     ): Adaptoid[(X1 ∙ X2), W] =
       that match
         case Id(_) => Adaptoid.Expand(this)
-        case Initial(_) => Adaptoid.Collapse(initial(inDesc))
+        case Initial(_) => Adaptoid.collapse(initial(inDesc))
         case Pairwise(_, g1, g2) => morphToBinaryOp(g1, g2)
 
     private def morphToBinaryOp[W1, W2](
@@ -102,6 +112,16 @@ object IsRefinedBy {
     x match
       case w @ EdgeDesc.SingleWire  => Id(w)
       case c: EdgeDesc.Composite[X] => Initial[X](c)
+
+  def par[∙[_, _], X1, X2, Y1, Y2](
+    f1: X1 IsRefinedBy Y1,
+    f2: X2 IsRefinedBy Y2,
+  )(using
+    op: OpTag[∙],
+  ): (X1 ∙ X2) IsRefinedBy (Y1 ∙ Y2) =
+    (f1, f2) match
+      case (Id(x1), Id(x2)) => Id(x1 ∙ x2)
+      case _                => Pairwise(op, f1, f2)
 
   def anythingRefinesWire[X](using EdgeDesc[X]): (Wire IsRefinedBy X) =
     initial[X](summon)

@@ -99,7 +99,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                       z1 coarsenBy w1, // could equivalently use `z2 coarsenBy w2`
                       Visualization.Sequence(
                         Visualization.par[++](vg, vh),
-                        Visualization.Adapt(Adaptoid.par[++](Adaptoid.Collapse(w1), Adaptoid.Collapse(w2))), // TODO: avoid if identity
+                        Visualization.Adapt(Adaptoid.par[++](Adaptoid.collapse(w1), Adaptoid.collapse(w2))), // TODO: avoid if identity
                         merge(w1.inDesc),
                       ),
                     )))

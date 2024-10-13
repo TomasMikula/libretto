@@ -1,6 +1,7 @@
 package libretto.lambda.examples.workflow.generic.vis
 
 import DefaultDimensions.Length
+import IsRefinedBy.IsStrictlyRefinedBy
 
 /** Refine and/or coarsen parts of `X` to get `Y`. */
 sealed trait Adaptoid[X, Y] {
@@ -18,7 +19,7 @@ object Adaptoid {
     override def outDesc: EdgeDesc[X] = desc
   }
 
-  case class Expand[X, Y](f: X IsRefinedBy Y) extends Adaptoid[X, Y] {
+  case class Expand[X, Y](f: X IsStrictlyRefinedBy Y) extends Adaptoid[X, Y] {
     override def invert: Adaptoid[Y, X] =
       Collapse(f)
 
@@ -29,7 +30,7 @@ object Adaptoid {
     override def outDesc: EdgeDesc[Y] = f.outDesc
   }
 
-  case class Collapse[X, Y](f: Y IsRefinedBy X) extends Adaptoid[X, Y] {
+  case class Collapse[X, Y](f: Y IsStrictlyRefinedBy X) extends Adaptoid[X, Y] {
     override def invert: Adaptoid[Y, X] =
       Expand(f)
 
@@ -45,6 +46,13 @@ object Adaptoid {
     f1: Adaptoid[X1, Y1],
     f2: Adaptoid[X2, Y2],
   ) extends Adaptoid[X1 ∙ X2, Y1 ∙ Y2] {
+    require(
+      (f1, f2) match
+        case (Id(_), Id(_)) => false
+        case _              => true,
+      "At least one side of paralled adaptoid must not be Id"
+    )
+
     private given OpTag[∙] = op
 
     override def invert: Adaptoid[Y1 ∙ Y2, X1 ∙ X2] =
@@ -60,6 +68,16 @@ object Adaptoid {
   def id[X](using EdgeDesc[X]): Adaptoid[X, X] =
     Id(summon)
 
+  def expand[X, Y](f: X IsRefinedBy Y): Adaptoid[X, Y] =
+    f match
+      case IsRefinedBy.Id(desc)         => Id(desc)
+      case f: IsStrictlyRefinedBy[X, Y] => Expand(f)
+
+  def collapse[X, Y](f: Y IsRefinedBy X): Adaptoid[X, Y] =
+    f match
+      case IsRefinedBy.Id(desc)         => Id(desc)
+      case f: IsStrictlyRefinedBy[Y, X] => Collapse(f)
+
   def par[∙[_, _]](using OpTag[∙]): ParBuilder[∙] =
     ParBuilder[∙]
 
@@ -68,7 +86,9 @@ object Adaptoid {
       f1: Adaptoid[X1, Y1],
       f2: Adaptoid[X2, Y2],
     ): Adaptoid[X1 ∙ X2, Y1 ∙ Y2] =
-      Par(op, f1, f2)
+      (f1, f2) match
+        case (Id(x1), Id(x2)) => Id(x1 ∙ x2)
+        case _                => Par(op, f1, f2)
 
   private def lengthOf[X, Y](f: X IsRefinedBy Y): Length =
     f match
