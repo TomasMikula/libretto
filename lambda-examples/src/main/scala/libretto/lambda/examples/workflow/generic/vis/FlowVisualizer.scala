@@ -7,8 +7,8 @@ import libretto.lambda.util.Exists.{Some as ∃}
 import Approximates.lump
 import Connector.{Across, NoEntryOut, StudIn, StudOut}
 import DefaultDimensions.Length
+import EdgeDesc.wire
 import IOProportions.EdgeProportions
-import EdgeProportions.unitSize
 import PredefinedFill.{GradientVerticalWhiteBlack, VerticalFadeOutLeft, VerticalFadeOutRight}
 import StyleDefs.{ColorCaseLeft, ColorCaseRight}
 import WirePick.{pickId, pickL, pickR}
@@ -59,8 +59,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[A],
           lump[x] ++ lump[y],
           Visualization.connectors(
-            unitSize,
-            unitSize ∙ unitSize,
+            wire,
+            wire ++ wire,
           )(
             TrapezoidArea(EdgeStretch.wireLHalf, EdgeStretch.pickL, ColorCaseLeft),
             TrapezoidArea(EdgeStretch.wireRHalf, EdgeStretch.pickR, Color.White),
@@ -77,8 +77,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[A],
           lump[x] ++ lump[y],
           Visualization.connectors(
-            unitSize,
-            unitSize ∙ unitSize,
+            wire,
+            wire ++ wire,
           )(
             TrapezoidArea(EdgeStretch.wireRHalf, EdgeStretch.pickR, ColorCaseRight),
             TrapezoidArea(EdgeStretch.wireLHalf, EdgeStretch.pickL, Color.White),
@@ -100,7 +100,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                       Visualization.Sequence(
                         Visualization.par[++](vg, vh),
                         Visualization.Adapt(Adaptoid.par[++](Adaptoid.Collapse(w1), Adaptoid.Collapse(w2))), // TODO: avoid if identity
-                        merge(EdgeProportions.default(w1.inDesc)),
+                        merge(w1.inDesc),
                       ),
                     )))
 
@@ -112,14 +112,14 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
               lump[B],
               Visualization.Sequence(
                 Visualization.connectors(
-                  unitSize,
-                  unitSize ∙ unitSize,
+                  wire,
+                  wire ** wire,
                 )(
                   Connector.Across(pickId, pickR),
                   Connector.LoopOut(pickL, pickR),
                 ),
                 Visualization.par[**](
-                  Visualization.connectors(unitSize, unitSize)(Connector.Across(pickId, pickId)),
+                  Visualization.connectors(wire, wire)(Connector.Across(pickId, pickId)),
                   Visualization.Sequence(
                     Visualization.Adapt(lump[A] adaptTo x),
                     vg,
@@ -127,8 +127,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                   ),
                 ),
                 Visualization.connectors(
-                  unitSize ∙ (unitSize ∙ unitSize),
-                  unitSize,
+                  wire ** (wire ++ wire),
+                  wire,
                 )(
                   Connector.Across(pickR.inr, pickId),
                   Connector.LoopIn(pickL.inr, pickL),
@@ -142,8 +142,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[A],
           lump[B],
           Visualization.connectors(
-            unitSize,
-            unitSize,
+            wire,
+            wire,
           )(
             Across(pickId, pickId),
           )
@@ -156,8 +156,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[x] ** lump[y],
           lump[y] ** lump[x],
           Visualization.connectors(
-            unitSize ∙ unitSize,
-            unitSize ∙ unitSize,
+            wire ** wire,
+            wire ** wire,
           )(
             Across(pickL, pickR),
             Across(pickR, pickL),
@@ -172,8 +172,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           (lump[x] ** lump[y]) ** lump[z],
           lump[x] ** (lump[y] ** lump[z]),
           Visualization.connectors(
-            (unitSize ∙ unitSize) ∙ unitSize,
-            unitSize ∙ (unitSize ∙ unitSize),
+            (wire ** wire) ** wire,
+            wire ** (wire ** wire),
           )(
             Across(pickL.inl, pickL),
             Across(pickR.inl, pickL.inr),
@@ -189,8 +189,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[x] ** (lump[y] ** lump[z]),
           (lump[x] ** lump[y]) ** lump[z],
           Visualization.connectors(
-            unitSize ∙ (unitSize ∙ unitSize),
-            (unitSize ∙ unitSize) ∙ unitSize,
+            wire ** (wire ** wire),
+            (wire ** wire) ** wire,
           )(
             Across(pickL, pickL.inl),
             Across(pickL.inr, pickR.inl),
@@ -206,8 +206,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[x] ** lump[y],
           lump[x],
           Visualization.connectors(
-            unitSize ∙ unitSize,
-            unitSize,
+            wire ** wire,
+            wire,
           )(
             Across(pickL, pickId),
             StudIn(pickR),
@@ -222,8 +222,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[x] ** lump[y],
           lump[y],
           Visualization.connectors(
-            unitSize ∙ unitSize,
-            unitSize,
+            wire ** wire,
+            wire,
           )(
             Across(pickR, pickId),
             StudIn(pickL),
@@ -238,8 +238,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[x],
           lump[Unit] ** lump[x],
           Visualization.connectors(
-            unitSize,
-            unitSize ∙ unitSize,
+            wire,
+            wire ** wire,
           )(
             Across(pickId, pickR),
             StudOut(pickL),
@@ -255,8 +255,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[x] ** lump[x],
           Visualization.connectors(
             back = Visualization.text("Δ")(
-              unitSize,
-              unitSize ∙ unitSize,
+              wire,
+              wire ** wire,
             )
           )(
             Across(pickId, pickL),
@@ -275,8 +275,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
             fill = None,
             stroke = Some(Color.Black),
             Visualization.connectors(
-              unitSize ∙ (unitSize ∙ unitSize),
-              (unitSize ∙ unitSize) ∙ (unitSize ∙ unitSize),
+              wire ** (wire ++ wire),
+              (wire ** wire) ++ (wire ** wire),
             )(
               Across(pickL.inr, pickR.inl),
               Across(pickR.inr, pickR.inr),
@@ -306,8 +306,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[A],
           lump[h] ++ lump[Enum[cases]],
           Visualization.connectors(
-            unitSize,
-            unitSize ∙ unitSize,
+            wire,
+            wire ++ wire,
           )(
             TrapezoidArea(EdgeStretch.wireLHalf, EdgeStretch.pickL, ColorCaseLeft),
             TrapezoidArea(EdgeStretch.wireRHalf, EdgeStretch.pickR, ColorCaseRight),
@@ -324,8 +324,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[h] ++ lump[Enum[cases]],
           lump[B],
           Visualization.connectors(
-            unitSize ∙ unitSize,
-            unitSize,
+            wire ++ wire,
+            wire,
           )(
             TrapezoidArea(EdgeStretch.pickL, EdgeStretch.wireLHalf, ColorCaseLeft),
             TrapezoidArea(EdgeStretch.pickR, EdgeStretch.wireRHalf, ColorCaseRight),
@@ -342,8 +342,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           lump[A],
           lump[B],
           Visualization.connectors(
-            unitSize,
-            unitSize,
+            wire,
+            wire,
           )(
             Across(pickId, pickId)
           )
@@ -353,9 +353,9 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         Visualizer.unimplemented(other.getClass.getSimpleName())
   }
 
-  def merge[∙[_, _], X](x: EdgeProportions[X]): Visualization[X ∙ X, X] =
+  def merge[X](x: EdgeDesc[X]): Visualization[X ++ X, X] =
     Visualization.connectors(
-      EdgeProportions.Binary(x, x),
+      x ++ x,
       x
     )(
       List(
@@ -371,12 +371,10 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         } *
     )
 
-  private def wiresOf[X](x: EdgeProportions[X]): List[WirePick[X]] =
+  private def wiresOf[X](x: EdgeDesc[X]): List[WirePick[X]] =
     x match
-      case EdgeProportions.UnitWire =>
+      case EdgeDesc.SingleWire =>
         WirePick.pickId :: Nil
-      case x: EdgeProportions.Binary[op, x1, x2] =>
+      case x: EdgeDesc.Binary[op, x1, x2] =>
         wiresOf(x.x1).map(_.inl[op, x2]) ++ wiresOf(x.x2).map(_.inr[op, x1])
-      case EdgeProportions.Weighted(_, base) =>
-        wiresOf(base)
 }

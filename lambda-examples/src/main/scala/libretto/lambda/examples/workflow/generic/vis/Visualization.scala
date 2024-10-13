@@ -198,13 +198,13 @@ object Visualization {
       Length.max(a.length, b.length)
 
   case class ConnectorsOverlay[X, Y](
-    base: Either[Visualization.Flexi[X, Y], IOProportions[X, Y]],
+    base: Either[Visualization.Flexi[X, Y], (EdgeDesc[X], EdgeDesc[Y])],
     front: List[Connector[X, Y] | TrapezoidArea[X, Y]],
   ) extends Visualization.Flexi[X, Y] {
     override def ioProportions: IOProportions[X, Y] =
       base match
         case Left(vis) => vis.ioProportions
-        case Right(props) => props
+        case Right((x, y)) => IOProportions.Separate(EdgeProportions.default(x), EdgeProportions.default(y))
 
     override def length: Length =
       base match
@@ -214,10 +214,14 @@ object Visualization {
 
   case class Text[X, Y](
     value: String,
-    ioProportions: IOProportions[X, Y],
+    in: EdgeDesc[X],
+    out: EdgeDesc[Y],
     vpos: VPos,
   ) extends Visualization.Flexi[X, Y] {
     override def length: Length = Length.one
+
+    override def ioProportions: IOProportions[X, Y] =
+      IOProportions.Separate(EdgeProportions.default(in), EdgeProportions.default(out))
   }
 
   def par[∙[_, _]](using OpTag[∙]): ParBuilder[∙] =
@@ -231,13 +235,13 @@ object Visualization {
       Par(op, a, b)
 
   def connectors[X, Y](
-    in: EdgeProportions[X],
-    out: EdgeProportions[Y],
+    in: EdgeDesc[X],
+    out: EdgeDesc[Y],
   )(
     connectors: (Connector[X, Y] | TrapezoidArea[X, Y])*
   ): Visualization.Flexi[X, Y] =
     ConnectorsOverlay(
-      Right(IOProportions.Separate(in, out)),
+      Right((in, out)),
       connectors.toList,
     )
 
@@ -252,9 +256,9 @@ object Visualization {
     )
 
   def text[X, Y](value: String)(
-    iProps: EdgeProportions[X],
-    oProps: EdgeProportions[Y],
+    iDesc: EdgeDesc[X],
+    oDesc: EdgeDesc[Y],
   ): Visualization.Flexi[X, Y] =
-    Text(value, IOProportions.Separate(iProps, oProps), VPos.Bottom)
+    Text(value, iDesc, oDesc, VPos.Bottom)
 }
 

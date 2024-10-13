@@ -38,7 +38,7 @@ object VisualizationToSVG {
             SVGElem.Group(back, conns)
           case Right(props) =>
             conns
-      case Visualization.Text(value, props, vpos) =>
+      case Visualization.Text(value, _, _, vpos) =>
         renderText(value, edges.pixelBreadth, height, 0.6, vpos, Serif)
       case Visualization.LabeledBox(i, o, label, fillOpt) =>
         val width = edges.pixelBreadth
