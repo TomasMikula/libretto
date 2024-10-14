@@ -93,14 +93,16 @@ object Visualization {
     override def ioProportions: IOProportions[X, Y] =
       IOProportions.Separate(inProportions, outProportions)
 
-    def ::[W](head: Visualization.Flexi[W, X]): Sequence.FlexiHead[W, Y] =
-      Sequence.ConsFlexiHead(head, this)
+    def ::[W](head: Visualization.Flexi[W, X]): Sequence.FlexiHead[W, Y]
+    //  =
+    //   Sequence.ConsFlexiHead(head, this)
   }
 
   object Sequence {
     sealed trait FlexiHead[X, Y] extends Sequence[X, Y] {
-      def ::[W](head: Visualization[W, X]): Sequence[W, Y] =
-        Cons(head, this)
+      def ::[W](head: Visualization[W, X]): Sequence[W, Y]
+      //  =
+      //   Cons(head, this)
     }
 
     case class Single[X, Y](
@@ -111,6 +113,13 @@ object Visualization {
 
       override protected def inProportions: EdgeProportions[X] = elem.ioProportions.inEdge
       override protected def outProportions: EdgeProportions[Y] = elem.ioProportions.outEdge
+
+      override def ::[W](head: Visualization.Flexi[W, X]): Sequence.FlexiHead[W, Y] =
+        (head, elem) match
+          case (Adapt(Adaptoid.Id(_)), el: Flexi[X, Y]) => SingleFlexi(el)
+          case (head, Adapt(Adaptoid.Id(_)))            => SingleFlexi(head)
+          case _                                        => ConsFlexiHead(head, this)
+          // TODO: also look if elem is a sequence with flexi head
     }
 
     case class SingleFlexi[X, Y](
@@ -121,6 +130,16 @@ object Visualization {
 
       override protected def inProportions: EdgeProportions[X] = elem.ioProportions.inEdge
       override protected def outProportions: EdgeProportions[Y] = elem.ioProportions.outEdge
+
+      override def ::[W](head: Flexi[W, X]): FlexiHead[W, Y] =
+        head :: Single(elem)
+
+      override def ::[W](head: Visualization[W, X]): Sequence[W, Y] =
+        (head, elem) match
+          case (Adapt(Adaptoid.Id(_)), elem)           => this
+          case (h: Flexi[W, X], Adapt(Adaptoid.Id(_))) => SingleFlexi(h)
+          case _                                       => Cons(head, this)
+          // TODO: also look if head is a sequence with flexi/Adaptoid last elem
     }
 
     sealed trait Multi[X, Y] extends Sequence[X, Y]
@@ -134,6 +153,13 @@ object Visualization {
 
       override protected def inProportions: EdgeProportions[X] = head.ioProportions.inEdge
       override protected def outProportions: EdgeProportions[Z] = tail.outProportions
+
+      override def ::[W](h0: Flexi[W, X]): FlexiHead[W, Z] =
+        (h0, head) match
+          case (Adapt(Adaptoid.Id(_)), h1: Flexi[X, Y]) => ConsFlexiHead(h1, tail)
+          case (h0, Adapt(Adaptoid.Id(_)))              => ConsFlexiHead(h0, tail)
+          case _                                        => ConsFlexiHead(h0, this)
+          // TODO: also look if head is a sequence with flexi/Adaptoid head
     }
 
     case class ConsFlexiHead[X, Y, Z](
@@ -145,19 +171,32 @@ object Visualization {
 
       override protected def inProportions: EdgeProportions[X] = head.ioProportions.inEdge
       override protected def outProportions: EdgeProportions[Z] = tail.outProportions
+
+      override def ::[W](h0: Flexi[W, X]): FlexiHead[W, Z] =
+        (h0, head) match
+          case (Adapt(Adaptoid.Id(_)), _)  => this
+          case (h0, Adapt(Adaptoid.Id(_))) => ConsFlexiHead(h0, tail)
+          case _                           => ConsFlexiHead(h0, this)
+
+      override def ::[W](h0: Visualization[W, X]): Sequence[W, Z] =
+        (h0, head) match
+          case (Adapt(Adaptoid.Id(_)), h1)              => this
+          case (h0: Flexi[W, X], Adapt(Adaptoid.Id(_))) => ConsFlexiHead(h0, tail)
+          case _                                        => Cons(h0, this)
+          // TODO: also look if h0 is a sequence with flexi/Adaptoid last elem
     }
 
     def apply[X, Y, Z](
       v1: Visualization.Flexi[X, Y],
       v2: Visualization[Y, Z],
     ): Sequence.FlexiHead[X, Z] =
-      ConsFlexiHead(v1, Single(v2))
+      v1 :: Single(v2)
 
     def apply[X, Y, Z](
       v1: Visualization[X, Y],
       v2: Visualization.Flexi[Y, Z],
     ): Sequence[X, Z] =
-      Cons(v1, SingleFlexi(v2))
+      v1 :: SingleFlexi(v2)
 
     def apply[W, X, Y, Z](
       v1: Visualization[W, X],
