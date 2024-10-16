@@ -84,25 +84,18 @@ object Visualization {
     def size: Int
     def lengths: List[Length]
 
-    protected def inProportions: EdgeProportions[X]
-    protected def outProportions: EdgeProportions[Y]
-
     override def length: Length =
       Length.cram(lengths*)
 
-    override def ioProportions: IOProportions[X, Y] =
-      IOProportions.Separate(inProportions, outProportions)
+    def head: Visualization[X, ?]
+    def last: Visualization[?, Y]
 
     def ::[W](head: Visualization.Flexi[W, X]): Sequence.FlexiHead[W, Y]
-    //  =
-    //   Sequence.ConsFlexiHead(head, this)
   }
 
   object Sequence {
     sealed trait FlexiHead[X, Y] extends Sequence[X, Y] {
       def ::[W](head: Visualization[W, X]): Sequence[W, Y]
-      //  =
-      //   Cons(head, this)
     }
 
     case class Single[X, Y](
@@ -111,8 +104,11 @@ object Visualization {
       override def size = 1
       override def lengths: List[Length] = List(elem.length)
 
-      override protected def inProportions: EdgeProportions[X] = elem.ioProportions.inEdge
-      override protected def outProportions: EdgeProportions[Y] = elem.ioProportions.outEdge
+      override def ioProportions: IOProportions[X, Y] =
+        elem.ioProportions
+
+      override def head = elem
+      override def last = elem
 
       override def ::[W](head: Visualization.Flexi[W, X]): Sequence.FlexiHead[W, Y] =
         (head, elem) match
@@ -128,8 +124,11 @@ object Visualization {
       override def size = 1
       override def lengths: List[Length] = List(elem.length)
 
-      override protected def inProportions: EdgeProportions[X] = elem.ioProportions.inEdge
-      override protected def outProportions: EdgeProportions[Y] = elem.ioProportions.outEdge
+      override def ioProportions: IOProportions[X, Y] =
+        elem.ioProportions
+
+      override def head = elem
+      override def last = elem
 
       override def ::[W](head: Flexi[W, X]): FlexiHead[W, Y] =
         head :: Single(elem)
@@ -142,7 +141,10 @@ object Visualization {
           // TODO: also look if head is a sequence with flexi/Adaptoid last elem
     }
 
-    sealed trait Multi[X, Y] extends Sequence[X, Y]
+    sealed trait Multi[X, Y] extends Sequence[X, Y] {
+      override def ioProportions: IOProportions[X, Y] =
+        IOProportions.Separate(head.ioProportions.inEdge, last.ioProportions.outEdge)
+    }
 
     case class Cons[X, Y, Z](
       head: Visualization[X, Y],
@@ -151,8 +153,7 @@ object Visualization {
       override lazy val size = 1 + tail.size
       override lazy val lengths: List[Length] = head.length :: tail.lengths
 
-      override protected def inProportions: EdgeProportions[X] = head.ioProportions.inEdge
-      override protected def outProportions: EdgeProportions[Z] = tail.outProportions
+      override def last = tail.last
 
       override def ::[W](h0: Flexi[W, X]): FlexiHead[W, Z] =
         (h0, head) match
@@ -169,8 +170,7 @@ object Visualization {
       override lazy val size = 1 + tail.size
       override lazy val lengths: List[Length] = head.length :: tail.lengths
 
-      override protected def inProportions: EdgeProportions[X] = head.ioProportions.inEdge
-      override protected def outProportions: EdgeProportions[Z] = tail.outProportions
+      override def last = tail.last
 
       override def ::[W](h0: Flexi[W, X]): FlexiHead[W, Z] =
         (h0, head) match
