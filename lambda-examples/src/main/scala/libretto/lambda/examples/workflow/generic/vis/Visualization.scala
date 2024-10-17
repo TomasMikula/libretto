@@ -1,6 +1,8 @@
 package libretto.lambda.examples.workflow.generic.vis
 
 import libretto.lambda.examples.workflow.generic.vis.DefaultDimensions.*
+import libretto.lambda.util.TypeEq
+import libretto.lambda.util.TypeEq.Refl
 import scala.math.Ordering.Implicits.*
 
 import Breadth.given
@@ -21,55 +23,70 @@ sealed trait Visualization[X, Y] {
 
 object Visualization {
   /** Used to mark edges with flexible layout. Uninhabited, used only in phantom positions. */
-  sealed trait Flx
-  /** Used to mark edges with rigid layout. Uninhabited, used only in phantom positions. */
-  sealed trait Rgd
+  opaque type Flx <: Nothing = Nothing
 
   /** Witnesses that at lest one of the type parameters is [[Flx]]. */
-  sealed trait Semiflex[R, S] {
-    def fstBias: Either[R =:= Flx, S =:= Flx] =
+  sealed trait Semiflex[-R, -S] {
+    def tiltFst: Semiflex.OneSided[R, S] =
       this match
-        case Semiflex.Fst() => Semiflex.reflLeft
-        case Semiflex.Both  => Semiflex.reflLeft
-        case Semiflex.Snd() => Semiflex.reflRight
+        case Semiflex.Both  => Semiflex.Fst()
+        case t: Semiflex.OneSided[R, S] => t
 
-    def sndBias: Either[R =:= Flx, S =:= Flx] =
+    def tiltSnd: Semiflex.OneSided[R, S] =
       this match
-        case Semiflex.Snd() => Semiflex.reflRight
-        case Semiflex.Both  => Semiflex.reflRight
-        case Semiflex.Fst() => Semiflex.reflLeft
+        case Semiflex.Both  => Semiflex.Snd()
+        case t: Semiflex.OneSided[R, S] => t
   }
 
   object Semiflex {
-    case class Fst[S]() extends Semiflex[Flx, S]
-    case class Snd[R]() extends Semiflex[R, Flx]
+    sealed trait OneSided[-R, -S] extends Semiflex[R, S]
+
+    case class Fst[S]() extends Semiflex.OneSided[Flx, S]
+    case class Snd[R]() extends Semiflex.OneSided[R, Flx]
     case object Both extends Semiflex[Flx, Flx]
 
     given Semiflex[Flx, Flx] = Both
     given fst[S]: Semiflex[Flx, S] = Fst[S]()
     given snd[R]: Semiflex[R, Flx] = Snd[R]()
-
-    private[Semiflex] val reflLeft:  Either[Flx =:= Flx, Nothing] = Left(summon)
-    private[Semiflex] val reflRight: Either[Nothing, Flx =:= Flx] = Right(summon)
   }
 
   /** Visualization with flexibility markers ([[Flx]] or [[Rgd]]) of each edge (input and output). */
-  sealed trait IVisualization[X, R, S, Y] extends Visualization[X, Y] {
+  sealed trait IVisualization[X, +R, +S, Y] extends Visualization[X, Y] {
+    /** Trim any leading identity adaptation. */
+    def trimIn: Option[Either[X =:= Y, IVisualization[X, ?, S, Y]]]
+
+    /** Trim any trailing identity adaptation. */
+    def trimOut: Option[Either[X =:= Y, IVisualization[X, R, ?, Y]]]
+
+    /** Bring up possibly hidden input flexibility. */
+    def flexiIn: Option[IVisualization[X, Flx, S, Y]]
+
+    /** Bring up possibly hidden output flexibility. */
+    def flexiOut: Option[IVisualization[X, R, Flx, Y]]
+
     override def withBackground(fill: Color, stroke: Option[Color]): Visualization[X, Y] =
       Visualization.WithBackgroundBox(Some(fill), stroke, this)
   }
 
   /** Visualization that is flexible in edge layout of both edges (input and output). */
-  sealed trait Flexi[X, Y] extends IVisualization[X, Flx, Flx, Y]
+  sealed trait Flexi[X, Y] extends IVisualization[X, Flx, Flx, Y] {
+    override def flexiIn: Option[IVisualization[X, Flx, Flx, Y]] = Some(this)
+    override def flexiOut: Option[IVisualization[X, Flx, Flx, Y]] = Some(this)
+  }
 
   /** Visualization that is rigid in edge layout of both edges (input and output). */
-  sealed trait Rigid[X, Y] extends IVisualization[X, Rgd, Rgd, Y]
+  sealed trait Rigid[X, Y] extends IVisualization[X, ?, ?, Y] {
+    override def flexiIn: Option[IVisualization[X, Flx, ?, Y]] = None // TODO: admit reorganization uncovering input flexibitlity
+    override def flexiOut: Option[IVisualization[X, ?, Flx, Y]] = None // TODO: admit reorganization uncovering output flexibitlity
+    override def trimIn: Option[Either[X =:= Y, IVisualization[X, ?, ?, Y]]] = None
+    override def trimOut: Option[Either[X =:= Y, IVisualization[X, ?, ?, Y]]] = None
+  }
 
   case class Unimplemented[X, Y](
     label: String,
     inEdge: EdgeDesc[X],
     outEdge: EdgeDesc[Y],
-  ) extends Visualization.Flexi[X, Y]:
+  ) extends Visualization.Flexi[X, Y] {
     require(label.nonEmpty, "Label must not be empty string")
 
     override def length: Length = Length.one
@@ -80,6 +97,9 @@ object Visualization {
         EdgeProportions.default(outEdge),
       )
 
+    override def trimIn: Option[Either[X =:= Y, IVisualization[X, ?, Flx, Y]]] = None
+    override def trimOut: Option[Either[X =:= Y, IVisualization[X, Flx, ?, Y]]] = None
+  }
   case class WithBackgroundBox[X, R, S, Y](
     fill: Option[Color],
     stroke: Option[Color],
@@ -92,6 +112,18 @@ object Visualization {
 
     override def length: Length =
       front.length
+
+    override def flexiIn: Option[IVisualization[X, Flx, S, Y]] =
+      front.flexiIn.map(WithBackgroundBox(fill, stroke, _))
+
+    override def flexiOut: Option[IVisualization[X, R, Flx, Y]] =
+      front.flexiOut.map(WithBackgroundBox(fill, stroke, _))
+
+    override def trimIn: Option[Either[X =:= Y, IVisualization[X, ?, S, Y]]] =
+      front.trimIn.map(_.map(WithBackgroundBox(fill, stroke, _)))
+
+    override def trimOut: Option[Either[X =:= Y, IVisualization[X, R, ?, Y]]] =
+      front.trimOut.map(_.map(WithBackgroundBox(fill, stroke, _)))
   }
 
   case class LabeledBox[X, Y](
@@ -119,9 +151,14 @@ object Visualization {
       else
         baseProps
     }
+
+    override def trimIn: Option[Either[X =:= Y, IVisualization[X, ?, Flx, Y]]] = None
+    override def trimOut: Option[Either[X =:= Y, IVisualization[X, Flx, ?, Y]]] = None
   }
 
-  sealed trait Sequence[X, R, S, Y] extends IVisualization[X, R, S, Y] {
+  sealed trait Sequence[X, +R, +S, Y] extends IVisualization[X, R, S, Y] {
+    import Sequence.{Cons, Single}
+
     def size: Int
     def lengths: List[Length]
 
@@ -131,9 +168,29 @@ object Visualization {
     def head: Visualization[X, ?]
     def last: Visualization[?, Y]
 
-    def ::[W, P, Q](head: IVisualization[W, P, Q, X])(using Semiflex[Q, R]): Sequence[W, P, S, Y]
+    override def flexiIn: Option[Sequence[X, Flx, S, Y]]
+    override def flexiOut: Option[Sequence[X, R, Flx, Y]]
+    override def trimIn: Option[Either[X =:= Y, Sequence[X, ?, S, Y]]]
+    override def trimOut: Option[Either[X =:= Y, Sequence[X, R, ?, Y]]]
 
-    def ::[W](head: Visualization[W, X])(using ev: R =:= Flx): Sequence[W, ?, S, Y] =
+    def ::[W, P, Q](head: IVisualization[W, P, Q, X])(using Semiflex[Q, R]): Sequence[W, P, S, Y] =
+      head.flexiOut match
+        case None =>
+          Cons(head, summon, this)
+        case Some(h) =>
+          this.trimIn match
+            case Some(Left(TypeEq(Refl()))) => Single(h)
+            case Some(Right(t))             => Cons(h, Semiflex.fst, t)
+            case None =>
+              this.flexiIn match
+                case None => Cons(head, summon, this)
+                case Some(t) =>
+                  h.trimOut match
+                    case None                       => Cons(head, summon, this)
+                    case Some(Left(TypeEq(Refl()))) => t
+                    case Some(Right(h))             => Cons(h, Semiflex.snd, t)
+
+    def ::[W](head: Visualization[W, X])(using ev: R <:< Flx): Sequence[W, ?, S, Y] =
       head match
         case v: IVisualization[W, p, q, X] =>
           given Semiflex[q, R] = ev.substituteContra(Semiflex.Snd[q]())
@@ -154,12 +211,11 @@ object Visualization {
       override def head = elem
       override def last = elem
 
-      override def ::[W, P, Q](head: IVisualization[W, P, Q, X])(using Semiflex[Q, R]): Sequence[W, P, S, Y] =
-        (head, elem) match
-          case (Adapt(Adaptoid.Id(_)), el: Flexi[X, Y])   => Single(el)
-          case (head: Flexi[W, X], Adapt(Adaptoid.Id(_))) => Single(head)
-          case _                                          => Cons(head, summon, this)
-          // TODO: also look if elem is a sequence with flexi head
+      override def trimIn: Option[Either[X =:= Y, Sequence[X, ?, S, Y]]] = elem.trimIn.map(_.map(Single(_)))
+      override def trimOut: Option[Either[X =:= Y, Sequence[X, R, ?, Y]]] = elem.trimOut.map(_.map(Single(_)))
+
+      override def flexiIn: Option[Sequence[X, Flx, S, Y]] = elem.flexiIn.map(Single(_))
+      override def flexiOut: Option[Sequence[X, R, Flx, Y]] = elem.flexiOut.map(Single(_))
     }
 
     case class Cons[X, P, Q, Y, R, S, Z](
@@ -175,12 +231,23 @@ object Visualization {
       override def ioProportions: IOProportions[X, Z] =
         IOProportions.Separate(head.ioProportions.inEdge, last.ioProportions.outEdge)
 
-      override def ::[W, N, O](h0: IVisualization[W, N, O, X])(using Semiflex[O, P]): Sequence[W, N, S, Z] =
-        (h0, head) match
-          case (Adapt(Adaptoid.Id(_)), h1: Flexi[X, Y]) => Cons(h1, Semiflex.fst, tail)
-          case (h0: Flexi[W, X], Adapt(Adaptoid.Id(_))) => Cons(h0, Semiflex.fst, tail)
-          case _                                        => Cons(h0, summon, this)
-          // TODO: also look if head is a sequence with flexi/Adaptoid head
+      override def flexiIn: Option[Sequence[X, Flx, S, Z]] =
+        head.flexiIn.map(Cons(_, flx, tail))
+
+      override def flexiOut: Option[Sequence[X, P, Flx, Z]] =
+        tail.flexiOut.map(Cons(head, flx, _))
+
+      override def trimIn: Option[Either[X =:= Z, Sequence[X, ?, S, Z]]] =
+        head.trimIn match
+          case Some(Left(TypeEq(Refl()))) => Some(Right(tail))
+          case Some(Right(h))             => Some(Right(Cons(h, flx, tail)))
+          case None                       => None
+
+      override def trimOut: Option[Either[X =:= Z, Sequence[X, P, ?, Z]]] =
+        tail.trimOut match
+          case Some(Left(TypeEq(Refl()))) => Some(Right(Single(head)))
+          case Some(Right(t))             => Some(Right(Cons(head, flx, t)))
+          case None                       => None
     }
 
     def apply[X, Y](
@@ -222,6 +289,16 @@ object Visualization {
         EdgeProportions.default(f.inDesc),
         EdgeProportions.default(f.outDesc),
       )
+
+    override def trimIn: Option[Either[X =:= Y, IVisualization[X, ?, Flx, Y]]] =
+      f match
+        case Adaptoid.Id(_) => Some(Left(summon))
+        case _              => None
+
+    override def trimOut: Option[Either[X =:= Y, IVisualization[X, Flx, ?, Y]]] =
+      f match
+        case Adaptoid.Id(_) => Some(Left(summon))
+        case _              => None
   }
 
   case class Par[∙[_, _], X1, X2, Y1, Y2](
@@ -251,6 +328,9 @@ object Visualization {
       base match
         case Left(vis) => Length.max(vis.length, Length.one)
         case Right(props) => Length.one
+
+    override def trimIn: Option[Either[X =:= Y, IVisualization[X, ?, Flx, Y]]] = None
+    override def trimOut: Option[Either[X =:= Y, IVisualization[X, Flx, ?, Y]]] = None
   }
 
   case class Text[X, Y](
@@ -263,6 +343,9 @@ object Visualization {
 
     override def ioProportions: IOProportions[X, Y] =
       IOProportions.Separate(EdgeProportions.default(in), EdgeProportions.default(out))
+
+    override def trimIn: Option[Either[X =:= Y, IVisualization[X, ?, Flx, Y]]] = None
+    override def trimOut: Option[Either[X =:= Y, IVisualization[X, Flx, ?, Y]]] = None
   }
 
   def par[∙[_, _]](using OpTag[∙]): ParBuilder[∙] =

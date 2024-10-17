@@ -6,6 +6,7 @@ import libretto.lambda.examples.workflow.generic.vis.Px.*
 import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily
 import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily.{Monospace, Serif}
 import libretto.lambda.examples.workflow.generic.vis.SVG.{Stroke, TextAnchor}
+import libretto.lambda.examples.workflow.generic.vis.Visualization.Semiflex
 import libretto.lambda.examples.workflow.generic.vis.util.{IntegralProportions, leastCommonMultiple}
 import libretto.lambda.util.TypeEq
 import libretto.lambda.util.TypeEq.Refl
@@ -157,8 +158,8 @@ object VisualizationToSVG {
 
     seq match
       case Visualization.Sequence.Cons(head, flx, tail) =>
-        flx.sndBias match
-          case Right(TypeEq(Refl())) =>
+        flx.tiltSnd match
+          case Semiflex.Snd() =>
             val (k, headLayout) = head.ioProportions.layoutFw(iLayout)
             val yk = yOffset * k
             val h1 = heights.head * k
@@ -166,7 +167,7 @@ object VisualizationToSVG {
             val (l, tailViss) = renderSequenceFlexiHead(tail, headLayout.outEdge, oLayout * k, heights.tail.map(_ * k), yk + h1)
             val hv = if (l == 1) then headVis else headVis.scale(l)
             (k * l, hv :: tailViss)
-          case Left(TypeEq(Refl())) =>
+          case Semiflex.Fst() =>
             val (k, mLayout, tailViss) = renderSequenceBw(tail, oLayout, heights.tail, yOffset + heights.head)
             val headVis = renderSVG(head, IOLayout.Separate(iLayout * k, mLayout), heights.head * k).optTranslateY((yOffset * k).pixels)
             (k, headVis :: tailViss)
@@ -187,8 +188,8 @@ object VisualizationToSVG {
         val yk = yOffset * k
         (k, layout.inEdge, renderSVG(elem, layout, h * k).optTranslateY(yk.pixels) :: Nil)
       case Visualization.Sequence.Cons(head, flx, tail) =>
-        flx.sndBias match
-          case Right(TypeEq(Refl())) =>
+        flx.tiltSnd match
+          case Semiflex.Snd() =>
             // give the preferred layout to the first, potentially non-flexi element
             val (k, headLayout) = head.ioProportions.layout(oLayout.pixelBreadth)
             val h0 = heights(0) * k
@@ -198,7 +199,7 @@ object VisualizationToSVG {
             val (l, tViss) = renderSequenceFlexiHead(tail, headLayout.outEdge, oLayout * k, hs, yk + h0)
             val hv = if (l == 1) then hVis else hVis.scale(l)
             (k * l, headLayout.inEdge * l, hv :: tViss)
-          case Left(TypeEq(Refl())) =>
+          case Semiflex.Fst() =>
             ???
   }
 
