@@ -122,6 +122,10 @@ sealed trait SVGElem extends SVGNode {
   def xmlAttributes: Map[String, String]
   def xmlContent: List[SVGNode]
 
+  def insertComment(comment: SVGNode.Comment): SVGElem
+  def insertComment(comment: String): SVGElem =
+    insertComment(SVGNode.Comment(comment))
+
   override def xmlString: String =
     val content: Option[String] = xmlContent match
       case Nil                  => None
@@ -173,14 +177,17 @@ object SVGElem {
 
   /* An auxiliary node for Scala representation.
    * In xml and DOM, transform is represented as an attribute on another element. */
-  case class Transformed(obj: ElemProper, transforms: NonEmptyList[Transform]) extends SVGElem:
+  case class Transformed(obj: ElemProper, transforms: NonEmptyList[Transform]) extends SVGElem {
     override def xmlTag = obj.xmlTag
 
     override lazy val xmlAttributes =
       obj.xmlAttributes.updated("transform", transforms.map(_.attributeValue).toList.mkString(" "))
 
     override def xmlContent = obj.xmlContent
-  end Transformed
+
+    override def insertComment(comment: SVGNode.Comment): Transformed =
+      copy(obj = obj.insertComment(comment))
+  }
 
   object Transformed:
     def apply(obj: ElemProper, t: Transform): Transformed =
@@ -189,7 +196,7 @@ object SVGElem {
   case class WithClasses(
     obj: ElemProper | Transformed,
     classes: List[String],
-  ) extends SVGElem:
+  ) extends SVGElem {
     override def xmlTag: String = obj.xmlTag
     override def xmlContent: List[SVGNode] = obj.xmlContent
     override def xmlAttributes: Map[String, String] =
@@ -200,12 +207,22 @@ object SVGElem {
           case Some(s) => Some(s"$s $classesStr")
         }
 
-  sealed trait ElemProper extends SVGElem
+    override def insertComment(comment: SVGNode.Comment): SVGElem =
+      copy(obj = obj match {
+        case p: ElemProper  => p.insertComment(comment)
+        case t: Transformed => t.insertComment(comment)
+      })
+  }
+
+  sealed trait ElemProper extends SVGElem {
+    override def insertComment(comment: SVGNode.Comment): ElemProper
+  }
 
   case class Group(children: List[SVGNode]) extends ElemProper:
     override def xmlTag = "g"
     override def xmlAttributes = Map.empty[String, String]
     override def xmlContent = children
+    override def insertComment(comment: SVGNode.Comment): ElemProper = Group(comment :: children)
 
   object Group:
     def apply(children: SVGNode*): Group =
@@ -234,6 +251,9 @@ object SVGElem {
 
     override def xmlContent =
       List(SVGNode.TextContent(value))
+
+    override def insertComment(comment: SVGNode.Comment): ElemProper =
+      Group(comment, this)
 
   case class Rect(
     x: Px,
@@ -268,6 +288,9 @@ object SVGElem {
       ) ++ clipPath.map(p => "clip-path" -> p.cssValue)
         ++ rx.map(rx => "rx" -> rx.toString)
         ++ ry.map(ry => "ry" -> ry.toString)
+
+    override def insertComment(comment: SVGNode.Comment): ElemProper =
+      Group(comment, this)
   }
 
   object Rect {
@@ -298,6 +321,9 @@ object SVGElem {
             "stroke-width" -> s"$width",
           )
       )
+
+    override def insertComment(comment: SVGNode.Comment): ElemProper =
+      Group(comment, this)
   }
 
   case class Path(
@@ -314,6 +340,9 @@ object SVGElem {
         "fill" -> fillCssValue(fill),
         "stroke" -> "none",
       )
+
+    override def insertComment(comment: SVGNode.Comment): ElemProper =
+      Group(comment, this)
   }
 
   object Path {

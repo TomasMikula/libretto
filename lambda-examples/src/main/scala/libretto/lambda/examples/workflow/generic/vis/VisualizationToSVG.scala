@@ -33,16 +33,19 @@ object VisualizationToSVG {
     g match
       case seq: Visualization.Sequence[x, r, s, y] =>
         renderSequence(seq, edges, height)
+          .insertComment("Sequence")
       case par: Visualization.Par[bin, x1, x2, y1, y2] =>
         renderPar(par, edges, height)
+          .insertComment("Par")
       case Visualization.ConnectorsOverlay(base, connectors) =>
         val conns = renderConnectors(connectors, edges, height)
-        base match
+        (base match
           case Left(vis) =>
             val back = renderSVG(vis, edges, height)
             SVGElem.Group(back, conns)
           case Right(props) =>
             conns
+        ).insertComment("ConnectorsOverlay")
       case Visualization.Text(value, _, _, vpos) =>
         renderText(value, edges.pixelBreadth, height, 0.6, vpos, Serif)
       case Visualization.LabeledBox(i, o, label, fillOpt) =>
@@ -52,16 +55,20 @@ object VisualizationToSVG {
         val rect = SVGElem.Rect(0.px, 0.px, width, height, fillOpt, Some(Stroke(strokeWidth, Color.Black)), clipPath = None, rx = Some(r), ry = Some(r))
         val txt = renderText(label, width, height, 0.6, VPos.Middle, Monospace)
         SVGElem.Group(rect, txt)
+          .insertComment("LabeledBox")
       case Visualization.WithBackgroundBox(fillOpt, strokeOpt, front) =>
         val width = edges.pixelBreadth
         val strokeWidth = math.min(width.pixels / 20.0, height.pixels / 20.0)
         val back = SVGElem.Rect(0.px, 0.px, width, height, fillOpt, strokeOpt.map(Stroke(strokeWidth, _)), clipPath = Some(SVG.ClipPath.FillBox))
         SVGElem.Group(back, renderSVG(front, edges, height))
+          .insertComment("WithBackgroundBox")
       case Visualization.Adapt(f) =>
         val (i, o) = edges.separate
         renderAdapt(f, TrapezoidLayout(i, o, height))
+          .insertComment(s"Adapt($f)")
       case Visualization.Unimplemented(label, _, _) =>
         renderUnimplemented(label, edges.pixelBreadth, height)
+          .insertComment("Unimplemented")
 
   private def renderUnimplemented[X, Y](label: String, width: Px, height: Px): SVGElem =
     val text = SVGElem.Text(label, x = 0.px, y = 20.px, Monospace, fontSize = 20.px)
