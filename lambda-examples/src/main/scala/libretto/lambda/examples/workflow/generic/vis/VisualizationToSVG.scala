@@ -6,7 +6,7 @@ import libretto.lambda.examples.workflow.generic.vis.Px.*
 import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily
 import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily.{Monospace, Serif}
 import libretto.lambda.examples.workflow.generic.vis.SVG.{Stroke, TextAnchor}
-import libretto.lambda.examples.workflow.generic.vis.Visualization.Semiflex
+import libretto.lambda.examples.workflow.generic.vis.Visualization.{IVisualization, Semiflex}
 import libretto.lambda.examples.workflow.generic.vis.util.{IntegralProportions, leastCommonMultiple}
 import libretto.lambda.util.TypeEq
 import libretto.lambda.util.TypeEq.Refl
@@ -16,7 +16,7 @@ import IOLayout.EdgeLayout
 import IOProportions.EdgeProportions
 
 object VisualizationToSVG {
-  import Visualization.Flx
+  import Visualization.{Flx, Skw}
 
   def renderSVGToFit(g: Visualization[?, ?], W: Int, H: Int): SVGDocument =
     val edges = g.ioProportions
@@ -37,15 +37,9 @@ object VisualizationToSVG {
       case par: Visualization.Par[bin, x1, x2, y1, y2] =>
         renderPar(par, edges, height)
           .insertComment("Par")
-      case Visualization.ConnectorsOverlay(base, connectors) =>
-        val conns = renderConnectors(connectors, edges, height)
-        (base match
-          case Left(vis) =>
-            val back = renderSVG(vis, edges, height)
-            SVGElem.Group(back, conns)
-          case Right(props) =>
-            conns
-        ).insertComment("ConnectorsOverlay")
+      case co @ Visualization.ConnectorsOverlay(base, connectors) =>
+        renderConnectorsOverlay(co, edges, height)
+          .insertComment("ConnectorsOverlay")
       case Visualization.Text(value, _, _, vpos) =>
         renderText(value, edges.pixelBreadth, height, 0.6, vpos, Serif)
       case Visualization.LabeledBox(i, o, label, fillOpt) =>
@@ -65,10 +59,25 @@ object VisualizationToSVG {
       case Visualization.Adapt(f) =>
         val (i, o) = edges.separate
         renderAdapt(f, TrapezoidLayout(i, o, height))
-          .insertComment(s"Adapt($f)")
+          .insertComment("Adapt")
       case Visualization.Unimplemented(label, _, _) =>
         renderUnimplemented(label, edges.pixelBreadth, height)
           .insertComment("Unimplemented")
+
+  private def renderSkewed[X, Y](
+    vis: IVisualization[X, ?, Skw, ?, Y],
+    layout: TrapezoidLayout[X, Y],
+  ): SVGElem =
+    vis match
+      case p @ Visualization.IPar(op, a, b) => ???
+        renderParSkewed(p, layout)
+          .insertComment("Par")
+      case Visualization.Adapt(f) =>
+        renderAdapt(f, layout)
+          .insertComment("Adapt")
+      case co @ Visualization.ConnectorsOverlay(base, front) =>
+        renderConnectorsOverlaySkewed(co, layout)
+          .insertComment("ConnectorsOverlay")
 
   private def renderUnimplemented[X, Y](label: String, width: Px, height: Px): SVGElem =
     val text = SVGElem.Text(label, x = 0.px, y = 20.px, Monospace, fontSize = 20.px)
@@ -215,7 +224,7 @@ object VisualizationToSVG {
     edges: IOLayout[X1 ∙ X2, Y1 ∙ Y2],
     height: Px,
   ): SVGElem = {
-    val Visualization.Par(op, a, b) = par
+    val Visualization.IPar(op, a, b) = par.indexed
     val lStyle = AmbientStyle.leftOf(op)
     val rStyle = AmbientStyle.rightOf(op)
     edges match
@@ -226,16 +235,57 @@ object VisualizationToSVG {
         val gb = renderSVG(b, lb, height).translate(la.pixelBreadth.pixels, 0.0)
         SVGElem.Group(amb1 ++: amb2 ++: List(ga, gb))
       case other =>
-        throw IllegalArgumentException(s"To render a Par, IOLayout.Par must be used. Was: $other")
+        par.indexed.skewable match
+          case Some(parSk) =>
+            renderParSkewed(parSk, TrapezoidLayout(other, height))
+          case None =>
+            throw IllegalArgumentException(s"To render a non-skewable Par, IOLayout.Par must be used. Was: $other")
   }
 
-  private def renderConnectors[X, Y](
-    connectors: List[Connector[X, Y] | TrapezoidArea[X, Y]],
+  private def renderParSkewed[∙[_, _], X1, X2, Y1, Y2](
+    par: Visualization.IPar[∙, X1, ?, Skw, ?, Y1, X2, ?, Skw, ?, Y2],
+    layout: TrapezoidLayout[X1 ∙ X2, Y1 ∙ Y2],
+  ): SVGElem = {
+    val Visualization.IPar(op, a, b) = par.indexed
+    val lStyle = AmbientStyle.leftOf(op)
+    val rStyle = AmbientStyle.rightOf(op)
+    val layout1 = layout.subSegment(EdgeSegment.pickL, EdgeSegment.pickL)
+    val layout2 = layout.subSegment(EdgeSegment.pickR, EdgeSegment.pickR)
+    val amb1 = renderAmbient(lStyle, layout1)
+    val amb2 = renderAmbient(rStyle, layout2)
+    val ga = renderSkewed(a, layout1)
+    val gb = renderSkewed(b, layout2)
+    SVGElem.Group(amb1 ++: amb2 ++: List(ga, gb))
+  }
+
+  private def renderConnectorsOverlay[X, Y](
+    co: Visualization.ConnectorsOverlay[X, ?, Y],
     boundary: IOLayout[X, Y],
     height: Px,
-  ): SVGElem =
-    val (i, o) = boundary.separate
-    renderConnectors(connectors, TrapezoidLayout(boundary, height))
+  ): SVGElem = {
+    val Visualization.ConnectorsOverlay(base, connectors) = co
+    val conns = renderConnectors(connectors, TrapezoidLayout(boundary, height))
+    base match
+      case Left(vis) =>
+        val back = renderSVG(vis, boundary, height)
+        SVGElem.Group(back, conns)
+      case Right(props) =>
+        conns
+  }
+
+  private def renderConnectorsOverlaySkewed[X, Y](
+    co: Visualization.ConnectorsOverlay[X, Skw, Y],
+    layout: TrapezoidLayout[X, Y],
+  ): SVGElem = {
+    val Visualization.ConnectorsOverlay(base, connectors) = co
+    val conns = renderConnectors(connectors, layout)
+    base match
+      case Left(vis) =>
+        val back = renderSkewed(vis, layout)
+        SVGElem.Group(back, conns)
+      case Right(props) =>
+        conns
+  }
 
   private def renderConnectors[X, Y](
     connectors: List[Connector[X, Y] | TrapezoidArea[X, Y]],

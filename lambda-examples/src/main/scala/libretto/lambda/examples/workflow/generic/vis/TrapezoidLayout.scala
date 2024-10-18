@@ -31,8 +31,17 @@ final case class TrapezoidLayout[I, O](
   def inSegmentCoords(seg: EdgeStretch[I]): EdgeLayout.SegmentCoords =
     iLayout.coordsOf(seg).offset(iOffset)
 
-  def outSegmentCoords[S](seg: EdgeStretch[O]): EdgeLayout.SegmentCoords =
+  def outSegmentCoords(seg: EdgeStretch[O]): EdgeLayout.SegmentCoords =
     oLayout.coordsOf(seg).offset(oOffset)
+
+  def subSegment[X, Y](
+    iSeg: EdgeSegment[X, I],
+    oSeg: EdgeSegment[Y, O],
+  ): TrapezoidLayout[X, Y] = {
+    val (ix, iLay) = iLayout.locate(iSeg)
+    val (ox, oLay) = oLayout.locate(oSeg)
+    TrapezoidLayout(iOffset + ix, oOffset + ox, iLay, oLay, height)
+  }
 
   def vsplit[X](xLayout: EdgeLayout[X])(
     iLen: Length,
