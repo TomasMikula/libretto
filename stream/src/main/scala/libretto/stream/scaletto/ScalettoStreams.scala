@@ -37,6 +37,9 @@ object ScalettoStreams {
       override val puroLib     = lib
       override val scalettoLib = sLib
       override val underlying  = pStreams
+
+      override protected val Tree =
+        BinarySearchTree(dsl, puroLib, scalettoLib)
     }
 }
 
@@ -51,7 +54,7 @@ abstract class ScalettoStreams {
   val scalettoLib: ScalettoLib & libretto.scaletto.ScalettoLib[dsl.type, puroLib.type]
   val underlying: PuroStreams & libretto.stream.puro.PuroStreams[dsl.type, puroLib.type]
 
-  private val Tree = BinarySearchTree(dsl, puroLib, scalettoLib)
+  protected val Tree: BinarySearchTree[dsl.type, puroLib.type, scalettoLib.type]
 
   import dsl.*
   import puroLib.*
