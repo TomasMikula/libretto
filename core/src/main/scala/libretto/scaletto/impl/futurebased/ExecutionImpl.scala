@@ -364,8 +364,8 @@ private class ExecutionImpl(
         case _: Fun.OneOfExtractSingle[lbl, a] =>
           (this: Frontier[OneOf[lbl :: a]]).extractSingle
 
-        case op: Fun.OneOfPeel[lbl, a, cases] =>
-          (this: Frontier[OneOf[cases || (lbl :: a)]])
+        case op: Fun.OneOfPeel[init, lbl, z] =>
+          (this: Frontier[OneOf[init || (lbl :: z)]])
             .narySumPeel
 
         case op: Fun.OneOfUnpeel[lbl, a, cases] =>
@@ -1136,7 +1136,7 @@ private class ExecutionImpl(
     case class Pair[A, B](a: Frontier[A], b: Frontier[B]) extends Frontier[A |*| B]
     case class InjectL[A, B](a: Frontier[A]) extends Frontier[A |+| B]
     case class InjectR[A, B](b: Frontier[B]) extends Frontier[A |+| B]
-    case class OneOfInject[Label, A, Cases](a: Frontier[A], i: Member[[x, y] =>> y || x, ::, Label, A, Cases]) extends Frontier[OneOf[Cases]]
+    case class OneOfInject[Label, A, Cases](a: Frontier[A], i: Member[||, ::, Label, A, Cases]) extends Frontier[OneOf[Cases]]
     case class Choice[A, B](a: () => Frontier[A], b: () => Frontier[B], onError: Throwable => Unit) extends Frontier[A |&| B]
     case class Deferred[A](f: Future[Frontier[A]]) extends Frontier[A]
     case class Pack[F[_]](f: Frontier[F[Rec[F]]]) extends Frontier[Rec[F]]
@@ -1152,9 +1152,9 @@ private class ExecutionImpl(
       def absurd[A]: Frontier[A]
     }
     case class OneOfSingle[Lbl, A](f: Frontier[A]) extends Frontier[OneOf[Lbl :: A]]
-    case class OneOfUnpeel[Label, A, Cases](
-      f: Frontier[A |+| OneOf[Cases]],
-    ) extends Frontier[OneOf[Cases || (Label :: A)]]
+    case class OneOfUnpeel[Init, Label, Z](
+      f: Frontier[OneOf[Init] |+| Z],
+    ) extends Frontier[OneOf[Init || (Label :: Z)]]
 
     case class Value[A](a: A) extends Frontier[Val[A]]
 
@@ -1246,14 +1246,14 @@ private class ExecutionImpl(
     }
 
     extension [Label, A, Cases](f: Frontier[OneOf[Cases || (Label :: A)]]) {
-      def narySumPeel(using ExecutionContext): Frontier[A |+| OneOf[Cases]] =
+      def narySumPeel(using ExecutionContext): Frontier[OneOf[Cases] |+| A] =
         f match
           case OneOfUnpeel(f) => f
           case Deferred(f) => Deferred(f.map(_.narySumPeel))
           case OneOfInject(a, i) =>
             i match
-              case Member.InHead(_) => InjectL(a)
-              case Member.InTail(j) => InjectR(OneOfInject(a, j))
+              case Member.InLast(_) => InjectR(a)
+              case Member.InInit(j) => InjectL(OneOfInject(a, j))
     }
 
     extension [A, B](f: Frontier[A |&| B]) {

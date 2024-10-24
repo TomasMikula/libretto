@@ -298,13 +298,13 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           Visualization.LabeledBox(EdgeDesc.wire, EdgeDesc.wire, i.i.label + "(_)", fill = Some(Color.rgb(200, 200, 200)))
         )))
 
-      case _: FlowAST.Peel[op, lbl, h, cases] =>
-        summon[A =:= Enum[cases || (lbl :: h)]]
-        summon[B =:= (h ++ Enum[cases])]
+      case _: FlowAST.Peel[op, init, lbl, z] =>
+        summon[A =:= Enum[init || (lbl :: z)]]
+        summon[B =:= (Enum[init] ++ z)]
 
         Exists(Exists((
           lump[A],
-          lump[h] ++ lump[Enum[cases]],
+          lump[Enum[init]] ++ lump[z],
           Visualization.connectors(
             wire,
             wire ++ wire,
@@ -316,12 +316,12 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           )
         )))
 
-      case _: FlowAST.Unpeel[op, lbl, h, cases] =>
-        summon[A =:= (h ++ Enum[cases])]
-        summon[B =:= Enum[cases || (lbl :: h)]]
+      case _: FlowAST.Unpeel[op, init, lbl, z] =>
+        summon[A =:= (Enum[init] ++ z)]
+        summon[B =:= Enum[init || (lbl :: z)]]
 
         Exists(Exists((
-          lump[h] ++ lump[Enum[cases]],
+          lump[Enum[init]] ++ lump[z],
           lump[B],
           Visualization.connectors(
             wire ++ wire,

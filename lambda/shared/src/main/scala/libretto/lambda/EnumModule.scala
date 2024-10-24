@@ -8,7 +8,7 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   import EnumModule.*
 
   /** Witnesses that `Cases` is a list :: cases, usable in `Enum`,
-   * i.e. that `Cases` is :: the form `(Name1 :: T1) || ... || (NameN :: TN)`.
+   * i.e. that `Cases` is of the form `(Name1 :: T1) || ... || (NameN :: TN)`.
    */
   type CaseList[Cases]
 
@@ -42,16 +42,16 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   def distRL[B, Cases](using ev: DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[ev.Out]
 
   given singleCaseList[Lbl <: String, A](using label: StaticValue[Lbl]): CaseList[Lbl :: A]
-  given consCaseList[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl], t: CaseList[Tail]): CaseList[(HLbl :: H) || Tail]
+  given snocCaseList[Init, Lbl <: String, A](using init: CaseList[Init], lbl: StaticValue[Lbl]): CaseList[Init || (Lbl :: A)]
 
   given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A })
-  given isHeadCase[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): (IsCaseOf[HLbl, (HLbl :: H) || Tail] with { type Type = H })
-  given isTailCase[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): (IsCaseOf[Lbl, (HLbl :: H) || Tail] with { type Type = j.Type })
+  given isLastCase[Init, Lbl <: String, Z](using StaticValue[Lbl]): (IsCaseOf[Lbl, Init || (Lbl :: Z)] with { type Type = Z })
+  given isInitCase[Lbl, Init, ZLbl, Z](using j: IsCaseOf[Lbl, Init]): (IsCaseOf[Lbl, Init || (ZLbl :: Z)] with { type Type = j.Type })
 
-  given distLRCons[A, Label <: String, H, Tail](using
+  given distLRSnoc[A, Init, Label <: String, Z](using
+    init: DistLR[A, Init],
     label: StaticValue[Label],
-    tail: DistLR[A, Tail]
-  ): (DistLR[A, (Label :: H) || Tail] with { type Out = (Label :: (A ** H)) || tail.Out })
+  ): (DistLR[A, Init || (Label :: Z)] with { type Out = init.Out || (Label :: (A ** Z)) })
 
   given distLRSingle[A, Label <: String, B](using
     label: StaticValue[Label],
@@ -59,10 +59,10 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 
   given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): (DistF[F, Lbl :: A] with { type Out = Lbl :: F[A] })
 
-  given distFCons[F[_], Label <: String, H, Tail](using
+  given distFSnoc[F[_], Init, Label <: String, Z](using
+    init: DistF[F, Init],
     label: StaticValue[Label],
-    tail: DistF[F, Tail],
-  ): (DistF[F, (Label :: H) || Tail] with { type Out = (Label :: F[H]) || tail.Out })
+  ): (DistF[F, Init || (Label :: Z)] with { type Out = init.Out || (Label :: F[Z]) })
 
   val Handlers: HandlersModule
 
@@ -71,10 +71,10 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 
     def single[Lbl, A, R](h: A -> R): Handlers[Lbl :: A, R]
 
-    def cons[HLbl, H, T, R](
-      h: H -> R,
-      t: Handlers[T, R],
-    ): Handlers[(HLbl :: H) || T, R]
+    def snoc[Init, Lbl, Z, R](
+      init: Handlers[Init, R],
+      last: Z -> R,
+    ): Handlers[Init || (Lbl :: Z), R]
 
     def apply[Cases, R]: Builder[Cases, Cases, R]
 
@@ -85,15 +85,15 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
     opaque type InitialBuilder[Cases] =
       Unit
 
-    extension [Cases, HLbl, H, T, R](b: Builder[Cases, (HLbl :: H) || T, R])
-      def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl)(h: H -> R): Builder[Cases, T, R]
+    extension [Cases, Init, ZLbl, Z, R](b: Builder[Cases, Init || (ZLbl :: Z), R])
+      def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= ZLbl)(h: Z -> R): Builder[Cases, Init, R]
 
     extension [Cases, Lbl, A, R](b: Builder[Cases, Lbl :: A, R])
       def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit)(h: A -> R): Handlers[Cases, R]
 
-    extension [HLbl, H, T](b: InitialBuilder[(HLbl :: H) || T])
-      def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl): [R] => (H -> R) => Builder[(HLbl :: H) || T, T, R] =
-        [R] => h => apply[(HLbl :: H) || T, R].caseOf[Lbl](h)
+    extension [Init, ZLbl, Z](b: InitialBuilder[Init || (ZLbl :: Z)])
+      def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= ZLbl): [R] => (Z -> R) => Builder[Init || (ZLbl :: Z), Init, R] =
+        [R] => h => apply[Init || (ZLbl :: Z), R].caseOf[Lbl](h)
 
     extension [Lbl, A](b: InitialBuilder[Lbl :: A])
       def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit): [R] => (A -> R) => Handlers[Lbl :: A, R] =
@@ -130,13 +130,10 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 }
 
 object EnumModule {
-  type LeftAssociative[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] =
-    EnumModule[->, **, Enum, [c1, c2] =>> c2 || c1, ::]
-
   def fromBinarySums[->[_, _], **[_, _], ++[_, _], Enum[_], ||[_, _], ::[_, _]](
     inj: [Label, A, Cases] => Member[||, ::, Label, A, Cases] => (A -> Enum[Cases]),
-    peel: [Label, A, Cases] => DummyImplicit ?=> Enum[(Label :: A) || Cases] -> (A ++ Enum[Cases]),
-    unpeel: [Label, A, Cases] => DummyImplicit ?=> (A ++ Enum[Cases]) -> Enum[(Label :: A) || Cases],
+    peel: [Init, Label, Z] => DummyImplicit ?=> Enum[Init || (Label :: Z)] -> (Enum[Init] ++ Z),
+    unpeel: [Init, Label, Z] => DummyImplicit ?=> (Enum[Init] ++ Z) -> Enum[Init || (Label :: Z)],
     extract: [Label, A] => DummyImplicit ?=> Enum[Label :: A] -> A,
   )(using
     cat: SemigroupalCategory[->, **],
@@ -150,8 +147,8 @@ object EnumModule {
 
 private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enum[_], ||[_, _], ::[_, _]](
   inj: [Label, A, Cases] => Member[||, ::, Label, A, Cases] => (A -> Enum[Cases]),
-  peel: [Label, A, Cases] => DummyImplicit ?=> Enum[(Label :: A) || Cases] -> (A ++ Enum[Cases]),
-  unpeel: [Label, A, Cases] => DummyImplicit ?=> (A ++ Enum[Cases]) -> Enum[(Label :: A) || Cases],
+  peel: [Cases, Label, Z] => DummyImplicit ?=> Enum[Cases || (Label :: Z)] -> (Enum[Cases] ++ Z),
+  unpeel: [Cases, Label, Z] => DummyImplicit ?=> (Enum[Cases] ++ Z) -> Enum[Cases || (Label :: Z)],
   extract: [Label, A] => DummyImplicit ?=> Enum[Label :: A] -> A,
 )(
   cat: SemigroupalCategory[->, **],
@@ -199,21 +196,27 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
 
   override given singleCaseList[Lbl <: String, A](using label: StaticValue[Lbl]): CaseList[Lbl :: A] =
     CaseListImpl.singleCase(label.value)
-  override given consCaseList[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl], t: CaseList[Tail]): CaseList[(HLbl :: H) || Tail] =
-    CaseListImpl.cons(hLbl.value, t)
+  override given snocCaseList[Init, Lbl <: String, A](using init: CaseList[Init], lbl: StaticValue[Lbl]): CaseList[Init || (Lbl :: A)] =
+    CaseListImpl.snoc(init, lbl.value)
 
   override given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A }) =
     Member.Single(label.value)
-  override given isHeadCase[HLbl <: String, H, Tail](using hLbl: StaticValue[HLbl]): (IsCaseOf[HLbl, (HLbl :: H) || Tail] with { type Type = H }) =
-    Member.InHead(hLbl.value)
-  override given isTailCase[Lbl, HLbl, H, Tail](using j: IsCaseOf[Lbl, Tail]): (IsCaseOf[Lbl, (HLbl :: H) || Tail] with { type Type = j.Type }) =
-    Member.InTail(j)
 
-  override given distLRCons[A, Label <: String, H, Tail](using
+  override given isLastCase[Init, Lbl <: String, Z](using
+    lbl: StaticValue[Lbl],
+  ): (IsCaseOf[Lbl, Init || (Lbl :: Z)] with { type Type = Z }) =
+    Member.InLast(lbl.value)
+
+  override given isInitCase[Lbl, Init, ZLbl, Z](using
+    j: IsCaseOf[Lbl, Init],
+  ): (IsCaseOf[Lbl, Init || (ZLbl :: Z)] with { type Type = j.Type }) =
+    Member.InInit(j)
+
+  override given distLRSnoc[A, Init, Label <: String, Z](using
+    init: DistLR[A, Init],
     label: StaticValue[Label],
-    tail: DistLR[A, Tail]
-  ): (DistLR[A, (Label :: H) || Tail] with { type Out = (Label :: (A ** H)) || tail.Out }) =
-    DistLRImpl.cons[A, Label, H, Tail](label.value, tail)
+  ): (DistLR[A, Init || (Label :: Z)] with { type Out = init.Out || (Label :: (A ** Z)) }) =
+    DistLRImpl.snoc[A, Init, Label, Z](init, label.value)
 
   override given distLRSingle[A, Label <: String, B](using
     label: StaticValue[Label],
@@ -222,11 +225,11 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
 
   override given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): (DistF[F, Lbl :: A] with { type Out = Lbl :: F[A] }) =
     DistFImpl.Single(label.value)
-  override given distFCons[F[_], Label <: String, H, Tail](using
+  override given distFSnoc[F[_], Init, Label <: String, Z](using
+    init: DistF[F, Init],
     label: StaticValue[Label],
-    tail: DistF[F, Tail],
-  ): (DistF[F, (Label :: H) || Tail] with { type Out = (Label :: F[H]) || tail.Out }) =
-    DistFImpl.Cons(label.value, tail)
+  ): (DistF[F, Init || (Label :: Z)] with { type Out = init.Out || (Label :: F[Z]) }) =
+    DistFImpl.Snoc(init, label.value)
 
   override object Handlers extends HandlersModule {
 
@@ -236,17 +239,17 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
     override def single[Lbl, A, R](h: A -> R): Handlers[Lbl :: A, R] =
       HandlersImpl.Single(h)
 
-    override def cons[HLbl, H, T, R](
-      h: H -> R,
-      t: Handlers[T, R],
-    ): Handlers[(HLbl :: H) || T, R] =
-      HandlersImpl.Cons(h, t)
+    override def snoc[Init, Lbl, Z, R](
+      init: Handlers[Init, R],
+      last: Z -> R,
+    ): Handlers[Init || (Lbl :: Z), R] =
+      HandlersImpl.Snoc(init, last)
 
     override def apply[Cases, R]: Builder[Cases, Cases, R] =
       HandlersBuilder.Empty()
 
-    extension [Cases, HLbl, H, T, R](b: Builder[Cases, (HLbl :: H) || T, R])
-      def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= HLbl)(h: H -> R): Builder[Cases, T, R] =
+    extension [Cases, Init, ZLbl, Z, R](b: Builder[Cases, Init || (ZLbl :: Z), R])
+      def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= ZLbl)(h: Z -> R): Builder[Cases, Init, R] =
         HandlersBuilder.addHandler(b, h)
 
     extension [Cases, Lbl, A, R](b: Builder[Cases, Lbl :: A, R])
@@ -272,23 +275,23 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       override def distF[F[_]]: DistFImpl[F, Lbl :: A] =
         DistFImpl.Single(lbl)
     }
-    case class ConsCaseList[HLbl <: String, H, Tail](
-      hLbl: HLbl,
-      tail: CaseList[Tail],
-    ) extends CaseListImpl[(HLbl :: H) || Tail] {
-      override def distF[F[_]]: DistFImpl[F, (HLbl :: H) || Tail] =
-        val ft = tail.distF[F]
-        DistFImpl.Cons(hLbl, ft)
+    case class SnocCaseList[Init, Lbl <: String, A](
+      init: CaseList[Init],
+      lbl: Lbl,
+    ) extends CaseListImpl[Init || (Lbl :: A)] {
+      override def distF[F[_]]: DistFImpl[F, Init || (Lbl :: A)] =
+        val fi = init.distF[F]
+        DistFImpl.Snoc(fi, lbl)
     }
     def singleCase[Lbl <: String, A](
       lbl: Lbl,
     ): CaseList[Lbl :: A] =
       SingleCaseList(lbl)
-    def cons[HLbl <: String, H, Tail](
-      hLbl: HLbl,
-      tail: CaseList[Tail],
-    ): CaseList[(HLbl :: H) || Tail] =
-      ConsCaseList(hLbl, tail)
+    def snoc[Init, Lbl <: String, A](
+      init: CaseList[Init],
+      lbl: Lbl,
+    ): CaseList[Init || (Lbl :: A)] =
+      SnocCaseList(init, lbl)
   }
 
   private sealed trait DistLRImpl[A, Cases] { self =>
@@ -296,8 +299,8 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
 
     def compile: (A ** Enum[Cases]) -> Enum[Out]
 
-    def extend[HLbl <: String, H](hLbl: HLbl): DistLRImpl[A, (HLbl :: H) || Cases]{type Out = (HLbl :: (A ** H)) || self.Out} =
-      DistLRImpl.Cons(hLbl, this)
+    def extend[Lbl <: String, Z](lbl: Lbl): DistLRImpl[A, Cases || (Lbl :: Z)]{type Out = self.Out || (Lbl :: (A ** Z))} =
+      DistLRImpl.Snoc(this, lbl)
   }
 
   private object DistLRImpl {
@@ -308,24 +311,24 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
         extract[Lbl, B].inSnd[A] > inj(Member.Single(label))
     }
 
-    case class Cons[A, HLbl <: String, H, Tail, ATail](
-      hLbl: HLbl,
-      tail: DistLRImpl[A, Tail] { type Out = ATail },
-    ) extends DistLRImpl[A, (HLbl :: H) || Tail] {
-      override type Out = (HLbl :: (A ** H)) || ATail
+    case class Snoc[A, Init, Lbl <: String, Z, AInit](
+      init: DistLRImpl[A, Init] { type Out = AInit },
+      lbl: Lbl,
+    ) extends DistLRImpl[A, Init || (Lbl :: Z)] {
+      override type Out = AInit || (Lbl :: (A ** Z))
 
-      override def compile: (A ** Enum[(HLbl :: H) || Tail]) -> Enum[Out] =
-        cat.snd(peel[HLbl, H, Tail]) > distr.distLR > either(
-          inj(Member.InHead(hLbl)),
-          tail.compile > injectR > unpeel[HLbl, A ** H, ATail],
+      override def compile: (A ** Enum[Init || (Lbl :: Z)]) -> Enum[Out] =
+        cat.snd(peel[Init, Lbl, Z]) > distr.distLR > either(
+          init.compile > injectL > unpeel[AInit, Lbl, A ** Z],
+          inj(Member.InLast(lbl)),
         )
     }
 
-    def cons[A, HLbl <: String, H, Tail](
-      hLbl: HLbl,
-      tail: DistLRImpl[A, Tail],
-    ): DistLRImpl[A, (HLbl :: H) || Tail] { type Out = (HLbl :: (A ** H)) || tail.Out } =
-      Cons[A, HLbl, H, Tail, tail.Out](hLbl, tail)
+    def snoc[A, Init, Lbl <: String, Z](
+      init: DistLRImpl[A, Init],
+      lbl: Lbl,
+    ): DistLRImpl[A, Init || (Lbl :: Z)] { type Out = init.Out || (Lbl :: (A ** Z)) } =
+      Snoc[A, Init, Lbl, Z, init.Out](init, lbl)
   }
 
   private sealed trait DistRLImpl[B, Cases] { self =>
@@ -333,8 +336,8 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
 
     def compile: (Enum[Cases] ** B) -> Enum[Out]
 
-    def extend[HLbl <: String, H](hLbl: HLbl): DistRLImpl[B, (HLbl :: H) || Cases]{type Out = (HLbl :: (H ** B)) || self.Out} =
-      DistRLImpl.Cons(hLbl, this)
+    def extend[Lbl <: String, Z](lbl: Lbl): DistRLImpl[B, Cases || (Lbl :: Z)]{type Out = self.Out || (Lbl :: (Z ** B))} =
+      DistRLImpl.Snoc(this, lbl)
   }
 
   private object DistRLImpl {
@@ -347,16 +350,16 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
         extract[Lbl, A].inFst[B] > inj(Member.Single(label))
     }
 
-    case class Cons[B, HLbl <: String, H, Tail, BTail](
-      hLbl: HLbl,
-      tail: DistRLImpl[B, Tail] { type Out = BTail },
-    ) extends DistRLImpl[B, (HLbl :: H) || Tail] {
-      override type Out = (HLbl :: (H ** B)) || BTail
+    case class Snoc[B, Init, Lbl <: String, Z, BInit](
+      init: DistRLImpl[B, Init] { type Out = BInit },
+      lbl: Lbl,
+    ) extends DistRLImpl[B, Init || (Lbl :: Z)] {
+      override type Out = BInit || (Lbl :: (Z ** B))
 
-      override def compile: (Enum[(HLbl :: H) || Tail] ** B) -> Enum[Out] =
-        cat.fst(peel[HLbl, H, Tail]) > distr.distRL > either(
-          inj(Member.InHead(hLbl)),
-          tail.compile > injectR > unpeel[HLbl, H ** B, BTail],
+      override def compile: (Enum[Init || (Lbl :: Z)] ** B) -> Enum[Out] =
+        cat.fst(peel[Init, Lbl, Z]) > distr.distRL > either(
+          init.compile > injectL > unpeel[BInit, Lbl, Z ** B],
+          inj(Member.InLast(lbl)),
         )
     }
   }
@@ -397,24 +400,24 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
           .map(HandlersImpl.Single(_))
     }
 
-    case class Cons[F[_], HLbl <: String, H, Tail, FTail](
-      hLbl: HLbl,
-      tail: DistFImpl[F, Tail] { type Out = FTail },
-    ) extends DistFImpl[F, (HLbl :: H) || Tail] {
-      override type Out = (HLbl :: F[H]) || FTail
-      override def operationalize(f: Focus[**, F]): Operationalized[F, (HLbl :: H) || Tail]{type Out = (HLbl :: F[H]) || FTail} =
-        tail.operationalize(f).extend[HLbl, H](hLbl)
+    case class Snoc[F[_], Init, Lbl <: String, A, FInit](
+      init: DistFImpl[F, Init] { type Out = FInit },
+      lbl: Lbl,
+    ) extends DistFImpl[F, Init || (Lbl :: A)] {
+      override type Out = FInit || (Lbl :: F[A])
+      override def operationalize(f: Focus[**, F]): Operationalized[F, Init || (Lbl :: A)]{type Out = FInit || (Lbl :: F[A])} =
+        init.operationalize(f).extend[Lbl, A](lbl)
       override def handlers[G[_], R](
-        h: [X] => Injector[?, X, (HLbl :: H) || Tail] => G[F[X] -> R],
+        h: [X] => Injector[?, X, Init || (Lbl :: A)] => G[F[X] -> R],
       )(using
         G: Applicative[G],
-      ): G[HandlersImpl[(HLbl :: F[H]) || FTail, R]] =
-        val h0: G[F[H] -> R] =
-          h[H](Member.InHead(hLbl))
-        val ht: [X] => Injector[?, X, Tail] => G[F[X] -> R] =
-          [X] => (i: Injector[?, X, Tail]) =>
-            h[X](i.inTail)
-        G.map2(h0, tail.handlers(ht))(HandlersImpl.Cons(_, _))
+      ): G[HandlersImpl[FInit || (Lbl :: F[A]), R]] =
+        val handleLast: G[F[A] -> R] =
+          h[A](Member.InLast(lbl))
+        val handleInit: [X] => Injector[?, X, Init] => G[F[X] -> R] =
+          [X] => (i: Injector[?, X, Init]) =>
+            h[X](i.inInit)
+        G.map2(init.handlers(handleInit), handleLast)(HandlersImpl.Snoc(_, _))
     }
 
     /** Like [[DistFImpl]], witnesses that distributing `F` into `Cases` yields `Out`.
@@ -424,14 +427,14 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
      */
     sealed trait Operationalized[F[_], Cases] { self =>
       type Out
-      def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[F, (HLbl :: H) || Cases]{type Out = (HLbl :: F[H]) || self.Out}
+      def extend[Lbl <: String, B](lbl: Lbl): Operationalized[F, Cases || (Lbl :: B)]{type Out = self.Out || (Lbl :: F[B])}
       def compile: F[Enum[Cases]] -> Enum[Out]
     }
 
     case class Id[Cases]() extends DistFImpl.Operationalized[[x] =>> x, Cases] {
       override type Out = Cases
-      override def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[[x] =>> x, (HLbl :: H) || Cases]{type Out = (HLbl :: H) || Cases} =
-        Id[(HLbl :: H) || Cases]()
+      override def extend[ZLbl <: String, Z](zLbl: ZLbl): Operationalized[[x] =>> x, Cases || (ZLbl :: Z)]{type Out = Cases || (ZLbl :: Z)} =
+        Id[Cases || (ZLbl :: Z)]()
       override def compile: Enum[Cases] -> Enum[Cases] =
         cat.id[Enum[Cases]]
     }
@@ -441,12 +444,12 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       dist1: DistLRImpl[A, F2Cases] { type Out = Res },
     ) extends DistFImpl.Operationalized[[x] =>> A ** F2[x], Cases] {
       override type Out = Res
-      override def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[[x] =>> A ** F2[x], (HLbl :: H) || Cases]{type Out = (HLbl :: (A ** F2[H])) || Res} =
-        val inner: Operationalized[F2, (HLbl :: H) || Cases]{type Out = (HLbl :: F2[H]) || F2Cases} =
-          distF2.extend[HLbl, H](hLbl)
-        val outer: DistLRImpl[A, (HLbl :: F2[H]) || F2Cases]{type Out = (HLbl :: (A ** F2[H])) || Res} =
-          dist1.extend[HLbl, F2[H]](hLbl)
-        DistFst[A, F2, (HLbl :: H) || Cases, (HLbl :: F2[H]) || F2Cases, (HLbl :: (A ** F2[H])) || Res](
+      override def extend[Lbl <: String, Z](lbl: Lbl): Operationalized[[x] =>> A ** F2[x], Cases || (Lbl :: Z)]{type Out = Res || (Lbl :: (A ** F2[Z]))} =
+        val inner: Operationalized[F2, Cases || (Lbl :: Z)]{type Out = F2Cases || (Lbl :: F2[Z])} =
+          distF2.extend[Lbl, Z](lbl)
+        val outer: DistLRImpl[A, F2Cases || (Lbl :: F2[Z])]{type Out = Res || (Lbl :: (A ** F2[Z]))} =
+          dist1.extend[Lbl, F2[Z]](lbl)
+        DistFst[A, F2, Cases || (Lbl :: Z), F2Cases || (Lbl :: F2[Z]), Res || (Lbl :: (A ** F2[Z]))](
           inner,
           outer,
         )
@@ -466,11 +469,11 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       dist2: DistRLImpl[B, F1Cases] { type Out = Res },
     ) extends DistFImpl.Operationalized[[x] =>> F1[x] ** B, Cases] {
       override type Out = Res
-      override def extend[HLbl <: String, H](hLbl: HLbl): Operationalized[[x] =>> F1[x] ** B, (HLbl :: H) || Cases]{type Out = (HLbl :: (F1[H] ** B)) || Res} =
-        val inner: Operationalized[F1, (HLbl :: H) || Cases]{type Out = (HLbl :: F1[H]) || F1Cases} =
-          distF1.extend[HLbl, H](hLbl)
-        val outer: DistRLImpl[B, (HLbl :: F1[H]) || F1Cases]{type Out = (HLbl :: (F1[H] ** B)) || Res} =
-          dist2.extend[HLbl, F1[H]](hLbl)
+      override def extend[Lbl <: String, Z](lbl: Lbl): Operationalized[[x] =>> F1[x] ** B, Cases || (Lbl :: Z)]{type Out = Res || (Lbl :: (F1[Z] ** B))} =
+        val inner: Operationalized[F1, Cases || (Lbl :: Z)]{type Out = F1Cases || (Lbl :: F1[Z])} =
+          distF1.extend[Lbl, Z](lbl)
+        val outer: DistRLImpl[B, F1Cases || (Lbl :: F1[Z])]{type Out = Res || (Lbl :: (F1[Z] ** B))} =
+          dist2.extend[Lbl, F1[Z]](lbl)
         DistSnd(inner, outer)
       override def compile: (F1[Enum[Cases]] ** B) -> Enum[Res] =
         import cat.{andThen, id, par}
@@ -487,14 +490,14 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
   private sealed trait HandlersBuilder[Cases, RemainingCases, R]
   private object HandlersBuilder {
     case class Empty[Cases, R]() extends HandlersBuilder[Cases, Cases, R]
-    case class Snoc[Cases, HLbl, H, T, R](
-      init: HandlersBuilder[Cases, (HLbl :: H) || T, R],
-      last: H -> R,
-    ) extends HandlersBuilder[Cases, T, R]
-    def addHandler[Cases, HLbl, H, T, R](
-      b: HandlersBuilder[Cases, (HLbl :: H) || T, R],
-      h: H -> R,
-    ): HandlersBuilder[Cases, T, R] =
+    case class Snoc[Cases, Init, Lbl, Z, R](
+      init: HandlersBuilder[Cases, Init || (Lbl :: Z), R],
+      last: Z -> R,
+    ) extends HandlersBuilder[Cases, Init, R]
+    def addHandler[Cases, Init, Lbl, B, R](
+      b: HandlersBuilder[Cases, Init || (Lbl :: B), R],
+      h: B -> R,
+    ): HandlersBuilder[Cases, Init, R] =
       Snoc(b, h)
     def build[Cases, Lbl, Z, R](
       b: HandlersBuilder[Cases, Lbl :: Z, R],
@@ -507,7 +510,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
     ): HandlersImpl[Cases, R] =
       b match
         case Empty()          => acc
-        case Snoc(init, last) => build(init, HandlersImpl.Cons(last, acc))
+        case Snoc(init, last) => build(init, HandlersImpl.Snoc(acc, last))
   }
 
   private sealed trait HandlersImpl[Cases, R] {
@@ -519,12 +522,12 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       override def compile: Enum[Lbl :: A] -> R =
         extract[Lbl, A] > h
     }
-    case class Cons[HLbl, H, T, R](
-      head: H -> R,
-      tail: HandlersImpl[T, R],
-    ) extends HandlersImpl[(HLbl :: H) || T, R] {
-      override def compile: Enum[(HLbl :: H) || T] -> R =
-        peel[HLbl, H, T] > either(head, tail.compile)
+    case class Snoc[Init, Lbl, Z, R](
+      init: HandlersImpl[Init, R],
+      last: Z -> R,
+    ) extends HandlersImpl[Init || (Lbl :: Z), R] {
+      override def compile: Enum[Init || (Lbl :: Z)] -> R =
+        peel[Init, Lbl, Z] > either(init.compile, last)
     }
   }
 

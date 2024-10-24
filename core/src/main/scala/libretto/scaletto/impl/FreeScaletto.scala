@@ -375,11 +375,11 @@ object FreeScaletto extends Scaletto {
       id
   }
 
-  override val OneOf: EnumModule.LeftAssociative[-⚬, |*|, OneOf, ||, ::] =
-    EnumModule.fromBinarySums[-⚬, |*|, |+|, OneOf, [x, y] =>> y || x, ::](
-      inj = [Label, A, Cases] => (i: Member[[x, y] =>> y || x, ::, Label, A, Cases]) => Regular(OneOfInject(i)),
-      peel = [Label, A, Cases] => DummyImplicit ?=> Regular(OneOfPeel()),
-      unpeel = [Label, A, Cases] => DummyImplicit ?=> Regular(OneOfUnpeel()),
+  override val OneOf: EnumModule[-⚬, |*|, OneOf, ||, ::] =
+    EnumModule.fromBinarySums[-⚬, |*|, |+|, OneOf, ||, ::](
+      inj = [Label, A, Cases] => (i: Member[||, ::, Label, A, Cases]) => Regular(OneOfInject(i)),
+      peel = [Init, Label, Z] => DummyImplicit ?=> Regular(OneOfPeel()),
+      unpeel = [Init, Label, Z] => DummyImplicit ?=> Regular(OneOfUnpeel()),
       extract = [Label, A] => DummyImplicit ?=> Regular(OneOfExtractSingle()),
     )(using
       𝒞,
