@@ -50,14 +50,11 @@ class Workflows[Action[_, _]] {
       lift = [X, Y] => (f: Flow[X, Y]) => (f: PartialFlow[X, Y]),
     )
 
-  private given BiInjective[[x, y] =>> y || x] =
-    BiInjective[||].flip
-
   val Enum =
-    EnumModule.fromBinarySums[Flow, **, ++, Enum, [x, y] =>> y || x, ::](
-      inj     = [Label, A, Cases] => (i: Member[[x, y] =>> y || x, ::, Label, A, Cases]) => Flow.inject(i),
-      peel    = [Label, A, Cases] => (_: DummyImplicit) ?=> Flow.peel,
-      unpeel  = [Label, A, Cases] => (_: DummyImplicit) ?=> Flow.unpeel,
+    EnumModule.fromBinarySums[Flow, **, ++, Enum, ||, ::](
+      inj     = [Label, A, Cases] => (i: Member[||, ::, Label, A, Cases]) => Flow.inject(i),
+      peel    = [Init, Label, Z] => (_: DummyImplicit) ?=> Flow.peel,
+      unpeel  = [Init, Label, Z] => (_: DummyImplicit) ?=> Flow.unpeel,
       extract = [Label, A]        => (_: DummyImplicit) ?=> Flow.extract,
     )
 
@@ -146,13 +143,13 @@ class Workflows[Action[_, _]] {
     def either[A, B, C](f: Flow[A, C], g: Flow[B, C]): Flow[A ++ B, C] =
       FlowAST.Either(f, g)
 
-    def inject[Label, A, Cases](i: Member[[x, y] =>> y || x, ::, Label, A, Cases]): Flow[A, Enum[Cases]] =
+    def inject[Label, A, Cases](i: Member[||, ::, Label, A, Cases]): Flow[A, Enum[Cases]] =
       FlowAST.Inject(i)
 
-    def peel[Label, A, Cases]: Flow[Enum[Cases || (Label :: A)], A ++ Enum[Cases]] =
+    def peel[Init, Label, Z]: Flow[Enum[Init || (Label :: Z)], Enum[Init] ++ Z] =
       FlowAST.Peel()
 
-    def unpeel[Label, A, Cases]: Flow[A ++ Enum[Cases], Enum[Cases || (Label :: A)]] =
+    def unpeel[Init, Label, Z]: Flow[Enum[Init] ++ Z, Enum[Init || (Label :: Z)]] =
       FlowAST.Unpeel()
 
     def extract[Label, A]: Flow[Enum[Label :: A], A] =

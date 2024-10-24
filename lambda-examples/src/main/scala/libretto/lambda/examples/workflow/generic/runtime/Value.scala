@@ -17,7 +17,7 @@ enum Value[F[_], A]:
   case Right[F[_], A, B](b: Value[F, B]) extends Value[F, A ++ B]
 
   case Inject[F[_], Label, A, Cases](
-    i: Member[[x, y] =>> y || x, ::, Label, A, Cases],
+    i: Member[||, ::, Label, A, Cases],
     a: Value[F, A],
   ) extends Value[F, Enum[Cases]]
 
@@ -54,7 +54,7 @@ object Value:
     Value.Right(value)
 
   def ofEnum[F[_], Label, A, Cases](
-    i: Member[[x, y] =>> y || x, ::, Label, A, Cases],
+    i: Member[||, ::, Label, A, Cases],
     a: Value[F, A],
   ): Value[F, Enum[Cases]] =
     Value.Inject(i, a)
@@ -63,28 +63,32 @@ object Value:
     ValueOfEnumBuilder[u.A]
 
   class ValueOfEnumBuilder[Cases]:
-    def apply[Lbl](using m: Member[[x, y] =>> y || x, ::, Lbl, ?, Cases]): ValueOfEnumCaseBuilder[Lbl, m.Type, Cases] =
+    def apply[Lbl](using m: Member[||, ::, Lbl, ?, Cases]): ValueOfEnumCaseBuilder[Lbl, m.Type, Cases] =
       ValueOfEnumCaseBuilder[Lbl, m.Type, Cases](m)
 
-  class ValueOfEnumCaseBuilder[Lbl, A, Cases](m: Member[[x, y] =>> y || x, ::, Lbl, A, Cases]):
+  class ValueOfEnumCaseBuilder[Lbl, A, Cases](m: Member[||, ::, Lbl, A, Cases]):
     def apply[F[_]](a: Value[F, A]): Value[F, Enum[Cases]] =
       Value.ofEnum(m, a)
 
-  def peel[F[_], Lbl0, A0, Tail](v: Value[F, Enum[Tail || (Lbl0 :: A0)]])(using Compliant[F]): Value[F, A0 ++ Enum[Tail]] =
+  def peel[F[_], Init, Lbl, Z](
+    v: Value[F, Enum[Init || (Lbl :: Z)]],
+  )(using
+    Compliant[F],
+  ): Value[F, Enum[Init] ++ Z] =
     revealCase(v) match
       case Exists.Some(Exists.Some(inj)) =>
         peelInject(inj)
 
-  private def peelInject[F[_], Lbl, A, Lbl0, A0, Tail](
-    inj: Inject[F, Lbl, A, Tail || (Lbl0 :: A0)]
-  ): Value[F, A0 ++ Enum[Tail]] =
+  private def peelInject[F[_], Lbl, A, Init, LblZ, Z](
+    inj: Inject[F, Lbl, A, Init || (LblZ :: Z)]
+  ): Value[F, Enum[Init] ++ Z] =
     inj.i match
-      case Member.InHead(_) =>
-        summon[Lbl =:= Lbl0]
-        summon[A =:= A0]
-        Value.Left(inj.a)
-      case Member.InTail(i) =>
-        Value.Right(Inject(i, inj.a))
+      case Member.InLast(_) =>
+        summon[Lbl =:= LblZ]
+        summon[A =:= Z]
+        Value.Right(inj.a)
+      case Member.InInit(i) =>
+        Value.Left(Inject(i, inj.a))
       case Member.Single(_) =>
         throw AssertionError(s"Impossible: would mean that `a || b` = `c :: d`")
 

@@ -85,7 +85,7 @@ trait Puro {
 
   type OneOf[Cases]
 
-  val OneOf: EnumModule.LeftAssociative[-⚬, |*|, OneOf, ||, ::]
+  val OneOf: EnumModule[-⚬, |*|, OneOf, ||, ::]
 
   protected val SumPartitioning: libretto.lambda.CoproductPartitioning[-⚬, |*|, |+|]
 
