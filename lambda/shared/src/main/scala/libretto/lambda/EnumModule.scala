@@ -10,7 +10,7 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   /** Witnesses that `Cases` is a list of cases, usable in `Enum`,
    * i.e. that `Cases` is of the form `(Name1 :: T1) || ... || (NameN :: TN)`.
    */
-  type CaseList[Cases]
+  type CaseList[Cases] = ItemList[||, ::, Cases]
 
   type IsCaseOf[Label, Cases] <: AnyRef with { type Type }
   type EnumPartition[Cases, P]
@@ -41,9 +41,6 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   def distLR[A, Cases](using ev: DistLR[A, Cases]): (A ** Enum[Cases]) -> Enum[ev.Out]
 
   def distRL[B, Cases](using ev: DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[ev.Out]
-
-  given singleCaseList[Lbl <: String, A](using label: StaticValue[Lbl]): CaseList[Lbl :: A]
-  given snocCaseList[Init, Lbl <: String, A](using init: CaseList[Init], lbl: StaticValue[Lbl]): CaseList[Init || (Lbl :: A)]
 
   given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A })
   given isLastCase[Init, Lbl <: String, Z](using StaticValue[Lbl]): (IsCaseOf[Lbl, Init || (Lbl :: Z)] with { type Type = Z })
@@ -157,8 +154,6 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
 
   private type Injector[Label, A, Cases] = libretto.lambda.Member[||, ::, Label, A, Cases]
 
-  override opaque type CaseList[Cases] = CaseListImpl[Cases]
-
   override opaque type IsCaseOf[Label, Cases] <: { type Type } = Injector[Label, ?, Cases]
   override opaque type EnumPartition[Cases, P] = Injector[?, P, Cases]
   override opaque type Handlers[Cases, R] = HandlersImpl[Cases, R]
@@ -183,11 +178,6 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
 
   override def distRL[B, Cases](using ev: DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[ev.Out] =
     ev.operationalize(Focus.fst).compile
-
-  override given singleCaseList[Lbl <: String, A](using label: StaticValue[Lbl]): CaseList[Lbl :: A] =
-    CaseListImpl.singleCase(label.value)
-  override given snocCaseList[Init, Lbl <: String, A](using init: CaseList[Init], lbl: StaticValue[Lbl]): CaseList[Init || (Lbl :: A)] =
-    CaseListImpl.snoc(init, lbl.value)
 
   override given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A }) =
     Member.Single(label.value)
@@ -243,30 +233,6 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
     ev: IsCaseOf[C, Cases],
   ): EnumPartition[Cases, ev.Type] =
     ev
-
-  private sealed trait CaseListImpl[Cases]
-
-  private object CaseListImpl {
-    case class SingleCaseList[Lbl <: String, A](
-      lbl: Lbl,
-    ) extends CaseListImpl[Lbl :: A]
-
-    case class SnocCaseList[Init, Lbl <: String, A](
-      init: CaseList[Init],
-      lbl: Lbl,
-    ) extends CaseListImpl[Init || (Lbl :: A)]
-
-    def singleCase[Lbl <: String, A](
-      lbl: Lbl,
-    ): CaseList[Lbl :: A] =
-      SingleCaseList(lbl)
-
-    def snoc[Init, Lbl <: String, A](
-      init: CaseList[Init],
-      lbl: Lbl,
-    ): CaseList[Init || (Lbl :: A)] =
-      SnocCaseList(init, lbl)
-  }
 
   private sealed trait DistLRImpl[A, Cases] { self =>
     type Out
@@ -468,9 +434,9 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
 
     def intoCases[F[_], Cases](cases: CaseList[Cases]): DistF[F, Cases] =
       cases match
-        case s: CaseListImpl.SingleCaseList[lbl, a] =>
+        case s: ItemList.Single[sep, of, lbl, a] =>
           DistFImpl.Single[F, lbl, a](s.lbl)
-        case s: CaseListImpl.SnocCaseList[init, lbl, a] =>
+        case s: ItemList.Snoc[sep, of, init, lbl, a] =>
           val init: DistF[F, init] = intoCases(s.init)
           DistFImpl.Snoc[F, init, lbl, a, init.Out](init, s.lbl)
   }
