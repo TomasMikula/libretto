@@ -15,9 +15,10 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   type IsCaseOf[Label, Cases] <: AnyRef with { type Type }
   type EnumPartition[Cases, P]
   type Handlers[Cases, R]
-  type DistLR[A, Cases] <: { type Out }
-  type DistRL[B, Cases] <: { type Out }
   type DistF[F[_], Cases] <: { type Out }
+
+  type DistLR[A, Cases] = DistF[[x] =>> A ** x, Cases]
+  type DistRL[B, Cases] = DistF[[x] =>> x ** B, Cases]
 
   def inject[Cases](label: String)(using c: IsCaseOf[label.type, Cases]): c.Type -> Enum[Cases]
 
@@ -47,15 +48,6 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A })
   given isLastCase[Init, Lbl <: String, Z](using StaticValue[Lbl]): (IsCaseOf[Lbl, Init || (Lbl :: Z)] with { type Type = Z })
   given isInitCase[Lbl, Init, ZLbl, Z](using j: IsCaseOf[Lbl, Init]): (IsCaseOf[Lbl, Init || (ZLbl :: Z)] with { type Type = j.Type })
-
-  given distLRSnoc[A, Init, Label <: String, Z](using
-    init: DistLR[A, Init],
-    label: StaticValue[Label],
-  ): (DistLR[A, Init || (Label :: Z)] with { type Out = init.Out || (Label :: (A ** Z)) })
-
-  given distLRSingle[A, Label <: String, B](using
-    label: StaticValue[Label],
-  ): (DistLR[A, Label :: B] with { type Out = Label :: (A ** B) })
 
   given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): (DistF[F, Lbl :: A] with { type Out = Lbl :: F[A] })
 
@@ -170,8 +162,6 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
   override opaque type IsCaseOf[Label, Cases] <: { type Type } = Injector[Label, ?, Cases]
   override opaque type EnumPartition[Cases, P] = Injector[?, P, Cases]
   override opaque type Handlers[Cases, R] = HandlersImpl[Cases, R]
-  override opaque type DistLR[A, Cases] <: { type Out } = DistLRImpl[A, Cases]
-  override opaque type DistRL[B, Cases] <: { type Out } = DistRLImpl[B, Cases]
   override opaque type DistF[F[_], Cases] <: { type Out } = DistFImpl[F, Cases]
 
   override opaque type Partitioning[Cases] <: libretto.lambda.Partitioning[->, **, Enum[Cases]] {
@@ -189,10 +179,10 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
     ev.operationalize(F).compile
 
   override def distLR[A, Cases](using ev: DistLR[A, Cases]): (A ** Enum[Cases]) -> Enum[ev.Out] =
-    ev.compile
+    ev.operationalize(Focus.snd).compile
 
   override def distRL[B, Cases](using ev: DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[ev.Out] =
-    ev.compile
+    ev.operationalize(Focus.fst).compile
 
   override given singleCaseList[Lbl <: String, A](using label: StaticValue[Lbl]): CaseList[Lbl :: A] =
     CaseListImpl.singleCase(label.value)
@@ -211,17 +201,6 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
     j: IsCaseOf[Lbl, Init],
   ): (IsCaseOf[Lbl, Init || (ZLbl :: Z)] with { type Type = j.Type }) =
     Member.InInit(j)
-
-  override given distLRSnoc[A, Init, Label <: String, Z](using
-    init: DistLR[A, Init],
-    label: StaticValue[Label],
-  ): (DistLR[A, Init || (Label :: Z)] with { type Out = init.Out || (Label :: (A ** Z)) }) =
-    DistLRImpl.snoc[A, Init, Label, Z](init, label.value)
-
-  override given distLRSingle[A, Label <: String, B](using
-    label: StaticValue[Label],
-  ): (DistLR[A, Label :: B] with { type Out = Label :: (A ** B) }) =
-    DistLRImpl.Single(label.value)
 
   override given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): (DistF[F, Lbl :: A] with { type Out = Lbl :: F[A] }) =
     DistFImpl.Single(label.value)
