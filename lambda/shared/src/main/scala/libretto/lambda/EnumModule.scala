@@ -265,28 +265,23 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
   ): EnumPartition[Cases, ev.Type] =
     ev
 
-  private sealed trait CaseListImpl[Cases] {
-    def distF[F[_]]: DistFImpl[F, Cases]
-  }
+  private sealed trait CaseListImpl[Cases]
+
   private object CaseListImpl {
     case class SingleCaseList[Lbl <: String, A](
       lbl: Lbl,
-    ) extends CaseListImpl[Lbl :: A] {
-      override def distF[F[_]]: DistFImpl[F, Lbl :: A] =
-        DistFImpl.Single(lbl)
-    }
+    ) extends CaseListImpl[Lbl :: A]
+
     case class SnocCaseList[Init, Lbl <: String, A](
       init: CaseList[Init],
       lbl: Lbl,
-    ) extends CaseListImpl[Init || (Lbl :: A)] {
-      override def distF[F[_]]: DistFImpl[F, Init || (Lbl :: A)] =
-        val fi = init.distF[F]
-        DistFImpl.Snoc(fi, lbl)
-    }
+    ) extends CaseListImpl[Init || (Lbl :: A)]
+
     def singleCase[Lbl <: String, A](
       lbl: Lbl,
     ): CaseList[Lbl :: A] =
       SingleCaseList(lbl)
+
     def snoc[Init, Lbl <: String, A](
       init: CaseList[Init],
       lbl: Lbl,
@@ -374,16 +369,6 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
     )(using
       Applicative[G],
     ): G[H[Out]]
-
-    def handlers[G[_], R](
-      h: [X] => Injector[?, X, Cases] => G[F[X] -> R],
-    )(using
-      G: Applicative[G],
-    ): G[Handlers[Out, R]] =
-      foldA[G, HandlersImpl[_, R]](
-        [LblX, X] => (i: Injector[LblX, X, Cases]) => h[X](i).map(HandlersImpl.Single(_)),
-        [FInit, LblX, X] => (init: HandlersImpl[FInit, R], last: HandlersImpl[LblX :: F[X], R]) => HandlersImpl.snoc(init, last),
-      )
   }
 
   private object DistFImpl {
@@ -501,6 +486,14 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
           dist2.compile
         )
     }
+
+    def intoCases[F[_], Cases](cases: CaseList[Cases]): DistF[F, Cases] =
+      cases match
+        case s: CaseListImpl.SingleCaseList[lbl, a] =>
+          DistFImpl.Single[F, lbl, a](s.lbl)
+        case s: CaseListImpl.SnocCaseList[init, lbl, a] =>
+          val init: DistF[F, init] = intoCases(s.init)
+          DistFImpl.Snoc[F, init, lbl, a, init.Out](init, s.lbl)
   }
 
   private sealed trait HandlersBuilder[Cases, RemainingCases, R]
@@ -542,6 +535,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       override def asSingle[LblX, X](using ev: Lbl :: A =:= LblX :: X): X -> R =
         ev match { case BiInjective[::](_, ev) => ev.substituteCo[[a] =>> a -> R](h) }
     }
+
     case class Snoc[Init, Lbl, Z, R](
       init: HandlersImpl[Init, R],
       last: Z -> R,
@@ -558,6 +552,21 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       last: HandlersImpl[Lbl :: Z, R]
     ): HandlersImpl[Init || Lbl :: Z, R] =
       Snoc(init, last.asSingle)
+
+    def ofDist[F[_], Cases, R, G[_]](
+      d: DistF[F, Cases],
+      h: [X] => Injector[?, X, Cases] => G[F[X] -> R],
+    )(using
+      G: Applicative[G],
+    ): G[Handlers[d.Out, R]] =
+      d.foldA[G, HandlersImpl[_, R]](
+        [LblX, X] => (i: Injector[LblX, X, Cases]) => h[X](i).map(HandlersImpl.Single(_)),
+        [FInit, LblX, X] => (
+          init: HandlersImpl[FInit, R],
+          last: HandlersImpl[LblX :: F[X], R],
+        ) =>
+          HandlersImpl.snoc(init, last),
+      )
   }
 
   private class PartitioningImpl[Cases](
@@ -600,9 +609,9 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       Applicative[G],
     ): G[F[Enum[Cases]] -> R] =
       val d: DistF[F, Cases] =
-        cases.distF[F]
+        DistFImpl.intoCases(cases)
       val handlers: G[Handlers[d.Out, R]] =
-        d.handlers[G, R](handleAnyPartition)
+        HandlersImpl.ofDist(d, handleAnyPartition)
       handlers.map { handlers =>
         distF(using pos, d) > handle(handlers)
       }
