@@ -37,7 +37,6 @@ class Workflows[Action[_, _]] {
     patmat.forLambdas(lambdas)(
       isExtractor = [X, Y] => (f: PartialFlow[X, Y]) =>
         f match {
-          // case ExtractorOccurrence(pos, ext) => Some(ext .asInstanceOf[Extractor[X, Y]])
           case o: ExtractorOccurrence[X, Y] => Some(o.extractor)
           case _ => None
         },
@@ -51,12 +50,7 @@ class Workflows[Action[_, _]] {
     )
 
   val Enum =
-    EnumModule.fromBinarySums[Flow, **, ++, Enum, ||, ::](
-      inj     = [Label, A, Cases] => (i: Member[||, ::, Label, A, Cases]) => Flow.inject(i),
-      peel    = [Init, Label, Z] => (_: DummyImplicit) ?=> Flow.peel,
-      unpeel  = [Init, Label, Z] => (_: DummyImplicit) ?=> Flow.unpeel,
-      extract = [Label, A]        => (_: DummyImplicit) ?=> Flow.extract,
-    )
+    EnumModule[Flow, **, Enum, ||, ::]
 
   opaque type Expr[A]       = lambdas.Expr[A]
   opaque type LambdaContext = lambdas.Context

@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.lang
 
-import libretto.lambda.{CocartesianSemigroupalCategory, Distribution, Member, Shuffled, SymmetricSemigroupalCategory}
+import libretto.lambda.{CocartesianNAryCategory, CocartesianSemigroupalCategory, Distribution, DistributionNAry, Member, Shuffled, SinkNAry, SymmetricSemigroupalCategory}
 import libretto.lambda.util.Masked
 
 import scala.concurrent.duration.FiniteDuration
@@ -26,6 +26,7 @@ sealed trait FlowAST[Op[_, _], A, B] {
       case AndThen(f, g)                => AndThen(f.translate(h), g.translate(h))
       case Par(f1, f2)                  => Par(f1.translate(h), f2.translate(h))
       case Either(f, g)                 => Either(f.translate(h), g.translate(h))
+      case Handle(handlers)             => Handle(handlers.translate([x, y] => _.translate(h)))
       case DoWhile(f)                   => DoWhile(f.translate(h))
       case Id()                         => Id()
       case _: Swap[op, x, y]            => Swap[F, x, y]()
@@ -42,6 +43,8 @@ sealed trait FlowAST[Op[_, _], A, B] {
       case Dup()                        => Dup()
       case IntroFst()                   => IntroFst()
       case _: DistributeLR[op, x, y, z] => DistributeLR[F, x, y , z]()
+      case DistributeNAryLR(d)          => DistributeNAryLR(d)
+      case DistributeNAryRL(d)          => DistributeNAryRL(d)
       case _: Read[op, x]               => Read[F, x]()
       case _: ReadAwait[op, x]          => ReadAwait[F, x]()
       case r: ReadAwaitTimeout[op, x]   => ReadAwaitTimeout[F, x](r.duration)
@@ -80,10 +83,17 @@ object FlowAST {
   case class InjectR[Op[_, _], A, B]() extends Work[Op, B, A ++ B]
   case class Either[Op[_, _], A, B, C](f: FlowAST[Op, A, C], g: FlowAST[Op, B, C]) extends Work[Op, A ++ B, C]
   case class Inject[Op[_, _], Label, A, Cases](i: Member[||, ::, Label, A, Cases]) extends Work[Op, A, Enum[Cases]]
+  case class Handle[Op[_, _], Cases, B](handlers: SinkNAry[FlowAST[Op, _, _], ||, ::, Cases, B]) extends Work[Op, Enum[Cases], B]
   case class Peel[Op[_, _], Init, Label, Z]() extends Work[Op, Enum[Init || (Label :: Z)], Enum[Init] ++ Z]
   case class Unpeel[Op[_, _], Init, Label, Z]() extends Work[Op, Enum[Init] ++ Z, Enum[Init || (Label :: Z)]]
   case class Extract[Op[_, _], Label, A]() extends Work[Op, Enum[Label :: A], A]
   case class DistributeLR[Op[_, _], A, B, C]() extends Work[Op, A ** (B ++ C), (A ** B) ++ (A ** C)]
+  case class DistributeNAryLR[Op[_, _], A, Cases, ACases](
+    dist: DistributionNAry.DistLR[**, ||, ::, A, Cases] { type Out = ACases },
+  ) extends Work[Op, A ** Enum[Cases], Enum[ACases]]
+  case class DistributeNAryRL[Op[_, _], B, Cases, BCases](
+    dist: DistributionNAry.DistRL[**, ||, ::, B, Cases] { type Out = BCases },
+  ) extends Work[Op, Enum[Cases] ** B, Enum[BCases]]
   case class DoWhile[Op[_, _], A, B](f: FlowAST[Op, A, A ++ B]) extends Work[Op, A, B]
   case class Delay[Op[_, _], A](duration: FiniteDuration) extends Work[Op, A, A]
 
@@ -111,11 +121,38 @@ object FlowAST {
     override def either[A, B, C](f: FlowAST[Op, A, C], g: FlowAST[Op, B, C]): FlowAST[Op, A ++ B, C] = Either(f, g)
   }
 
+  given cocatN[Op[_, _]]: CocartesianNAryCategory[FlowAST[Op, _, _], Enum, ||, ::] with {
+    override def inject[Label, A, Cases](
+      i: Member[||, ::, Label, A, Cases],
+    ): FlowAST[Op, A, Enum[Cases]] =
+      Inject(i)
+
+    override def handle[Cases, R](
+      handlers: SinkNAry[FlowAST[Op, _, _], ||, ::, Cases, R],
+    ): FlowAST[Op, Enum[Cases], R] =
+      Handle(handlers)
+  }
+
   given distr[Op[_, _]]: Distribution[FlowAST[Op, _, _], **, ++] with {
     override val cat: SymmetricSemigroupalCategory[FlowAST[Op, _, _], **] = ssc[Op]
     import cat.*
     override def distLR[A, B, C]: FlowAST[Op, A ** (B ++ C), A ** B ++ A ** C] = DistributeLR()
     override def distRL[A, B, C]: FlowAST[Op, (A ++ B) ** C, A ** C ++ B ** C] = swap[A ++ B, C] > distLR > cocat[Op].par(Swap(), Swap())
+  }
+
+  given distrN[Op[_, _]]: DistributionNAry[FlowAST[Op, _, _], **, Enum, ||, ::] with {
+    override val cat =
+      ssc[Op]
+
+    override def distLR[A, Cases](
+      witness: DistLR[A, Cases],
+    ): FlowAST[Op, A ** Enum[Cases], Enum[witness.Out]] =
+      DistributeNAryLR(witness)
+
+    override def distRL[B, Cases](
+      witness: DistRL[B, Cases],
+    ): FlowAST[Op, Enum[Cases] ** B, Enum[witness.Out]] =
+      DistributeNAryRL(witness)
   }
 
   def shuffled[Op[_, _]]: Shuffled[Work[Op, _, _], **] =

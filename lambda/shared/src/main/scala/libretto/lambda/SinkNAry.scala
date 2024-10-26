@@ -8,6 +8,7 @@ import libretto.lambda.util.TypeEq.Refl
  * where `||` assiciates to the left.
  */
 sealed trait SinkNAry[->[_, _], ||[_, _], ::[_, _], A, B] {
+  def translate[->>[_, _]](f: [x, y] => (x -> y) => (x ->> y)): SinkNAry[->>, ||, ::, A, B]
   def asSingle[LblX, X](using A =:= (LblX :: X), BiInjective[::]): X -> B
 }
 
@@ -15,6 +16,11 @@ private object SinkNAry {
   case class Single[->[_, _], ||[_, _], ::[_, _], Lbl, A, B](
     h: A -> B,
   ) extends SinkNAry[->, ||, ::, Lbl :: A, B] {
+    override def translate[->>[_, _]](
+      f: [x, y] => (x -> y) => (x ->> y),
+    ): SinkNAry[->>, ||, ::, Lbl :: A, B] =
+      Single(f(h))
+
     override def asSingle[LblX, X](using
       ev: Lbl :: A =:= LblX :: X,
       i: BiInjective[::],
@@ -28,6 +34,14 @@ private object SinkNAry {
     init: SinkNAry[->, ||, ::, Init, R],
     last: Z -> R,
   ) extends SinkNAry[->, ||, ::, Init || (Lbl :: Z), R] {
+    override def translate[->>[_, _]](
+      f: [x, y] => (x -> y) => (x ->> y),
+    ): SinkNAry[->>, ||, ::, Init || Lbl :: Z, R] =
+      Snoc(
+        init.translate(f),
+        f(last),
+      )
+
     override def asSingle[LblX, X](using
       (Init || (Lbl :: Z)) =:= LblX :: X,
       BiInjective[::],
