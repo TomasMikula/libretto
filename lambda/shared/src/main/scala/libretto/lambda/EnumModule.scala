@@ -7,6 +7,8 @@ import libretto.lambda.util.unapply.Unapply
 trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   import EnumModule.*
 
+  val distr: DistributionNAry[->, **, Enum, ||, ::]
+
   /** Witnesses that `Cases` is a list of cases, usable in `Enum`,
    * i.e. that `Cases` is of the form `(Name1 :: T1) || ... || (NameN :: TN)`.
    */
@@ -15,8 +17,8 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   type IsCaseOf[Label, Cases] <: AnyRef with { type Type }
   type EnumPartition[Cases, P]
   type Handlers[Cases, R]
-  type DistF[F[_], Cases] <: { type Out }
 
+  type DistF[F[_], Cases] = distr.DistF[F, Cases]
   type DistLR[A, Cases] = DistF[[x] =>> A ** x, Cases]
   type DistRL[B, Cases] = DistF[[x] =>> x ** B, Cases]
 
@@ -119,6 +121,15 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 }
 
 object EnumModule {
+  def apply[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]](using
+    cat: SemigroupalCategory[->, **],
+    cocat: CocartesianNAryCategory[->, Enum, ||, ::],
+    distr: DistributionNAry[->, **, Enum, ||, ::],
+    i: BiInjective[||],
+    j: BiInjective[::],
+  ): EnumModule[->, **, Enum, ||, ::] =
+    new EnumModuleImpl(cat, cocat, distr)
+
   def fromBinarySums[->[_, _], **[_, _], ++[_, _], Enum[_], ||[_, _], ::[_, _]](
     inj: [Label, A, Cases] => Member[||, ::, Label, A, Cases] => (A -> Enum[Cases]),
     peel: [Init, Label, Z] => DummyImplicit ?=> Enum[Init || (Label :: Z)] -> (Enum[Init] ++ Z),
@@ -130,34 +141,25 @@ object EnumModule {
     distr: Distribution[->, **, ++],
     i: BiInjective[||],
     j: BiInjective[::],
-  ): EnumModule[->, **, Enum, ||, ::] =
-    EnumModuleFromBinarySums[->, **, ++, Enum, ||, ::](inj, peel, unpeel, extract)(cat, cocat, distr)
+  ): EnumModule[->, **, Enum, ||, ::] = {
+    val cocatN: CocartesianNAryCategory[->, Enum, ||, ::] =
+      CocartesianNAryCategory.fromBinary(cocat, inj, extract, peel)
+    val distN =
+      DistributionNAry.fromBinary[->, **, ++, Enum, ||, ::](inj, peel, unpeel, extract)(using cat, cocat, distr)
+    EnumModuleImpl[->, **, Enum, ||, ::](cat, cocatN, distN)
+  }
 }
 
-private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enum[_], ||[_, _], ::[_, _]](
-  inj: [Label, A, Cases] => Member[||, ::, Label, A, Cases] => (A -> Enum[Cases]),
-  peel: [Cases, Label, Z] => DummyImplicit ?=> Enum[Cases || (Label :: Z)] -> (Enum[Cases] ++ Z),
-  unpeel: [Cases, Label, Z] => DummyImplicit ?=> (Enum[Cases] ++ Z) -> Enum[Cases || (Label :: Z)],
-  extract: [Label, A] => DummyImplicit ?=> Enum[Label :: A] -> A,
-)(
+private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]](
   cat: SemigroupalCategory[->, **],
-  cocat: CocartesianSemigroupalCategory[->, ++],
-  distr: Distribution[->, **, ++],
+  cocat: CocartesianNAryCategory[->, Enum, ||, ::],
+  val distr: DistributionNAry[->, **, Enum, ||, ::],
 )(using
   BiInjective[||],
   BiInjective[::],
 ) extends EnumModule[->, **, Enum, ||, ::] {
-  import EnumModule.*
-
-  given SemigroupalCategory[->, **] = cat
-
-  val cocatN: CocartesianNAryCategory[->, Enum, ||, ::] =
-    CocartesianNAryCategory.fromBinary(cocat, inj, extract, peel)
-
-  val distN =
-    DistributionNAry.fromBinary[->, **, ++, Enum, ||, ::](inj, peel, unpeel, extract)(using cat, cocat, distr)
-
-  export distN.DistF
+  import cat.*
+  import distr.DistF
 
   private type Injector[Label, A, Cases] = libretto.lambda.Member[||, ::, Label, A, Cases]
 
@@ -171,10 +173,10 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
     PartitioningImpl[Cases]
 
   override def inject[Cases](label: String)(using c: IsCaseOf[label.type, Cases]): c.Type -> Enum[Cases] =
-    cocatN.inject[label.type, c.Type, Cases](c)
+    cocat.inject[label.type, c.Type, Cases](c)
 
   override def handle[Cases, R](handlers: Handlers[Cases, R]): Enum[Cases] -> R =
-    cocatN.handle(handlers)
+    cocat.handle(handlers)
 
   override def distF[F[_], Cases](using F: Focus[**, F], ev: DistF[F, Cases]): F[Enum[Cases]] -> Enum[ev.Out] =
     ev.operationalize(F).compile
@@ -298,7 +300,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       p.label
 
     override def reinject[P](p: Injector[?, P, Cases]): P -> Enum[Cases] =
-      cocatN.inject(p)
+      cocat.inject(p)
 
     override def isTotal[P](p: Injector[?, P, Cases]): Option[Enum[Cases] -> P] =
       libretto.lambda.UnhandledCase.raise("PartitioningImpl.isTotal")
