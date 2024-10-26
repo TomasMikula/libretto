@@ -148,9 +148,11 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
   BiInjective[::],
 ) extends EnumModule[->, **, Enum, ||, ::] {
   import EnumModule.*
-  import cocat.{either, injectL, injectR}
 
   given SemigroupalCategory[->, **] = cat
+
+  val cocatN: CocartesianNAryCategory[->, Enum, ||, ::] =
+    CocartesianNAryCategory.fromBinary(cocat, inj, extract, peel)
 
   val distN =
     DistributionNAry.fromBinary[->, **, ++, Enum, ||, ::](inj, peel, unpeel, extract)(using cat, cocat, distr)
@@ -161,7 +163,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
 
   override opaque type IsCaseOf[Label, Cases] <: { type Type } = Injector[Label, ?, Cases]
   override opaque type EnumPartition[Cases, P] = Injector[?, P, Cases]
-  override opaque type Handlers[Cases, R] = HandlersImpl[Cases, R]
+  override opaque type Handlers[Cases, R] = SinkNAry[->, ||, ::, Cases, R]
 
   override opaque type Partitioning[Cases] <: libretto.lambda.Partitioning[->, **, Enum[Cases]] {
     type Partition[P] = EnumPartition[Cases, P]
@@ -169,10 +171,10 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
     PartitioningImpl[Cases]
 
   override def inject[Cases](label: String)(using c: IsCaseOf[label.type, Cases]): c.Type -> Enum[Cases] =
-    inj[label.type, c.Type, Cases](c)
+    cocatN.inject[label.type, c.Type, Cases](c)
 
   override def handle[Cases, R](handlers: Handlers[Cases, R]): Enum[Cases] -> R =
-    handlers.compile
+    cocatN.handle(handlers)
 
   override def distF[F[_], Cases](using F: Focus[**, F], ev: DistF[F, Cases]): F[Enum[Cases]] -> Enum[ev.Out] =
     ev.operationalize(F).compile
@@ -210,13 +212,13 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       HandlersBuilder[Cases, RemainingCases, R]
 
     override def single[Lbl, A, R](h: A -> R): Handlers[Lbl :: A, R] =
-      HandlersImpl.Single(h)
+      SinkNAry.Single(h)
 
     override def snoc[Init, Lbl, Z, R](
       init: Handlers[Init, R],
       last: Z -> R,
     ): Handlers[Init || (Lbl :: Z), R] =
-      HandlersImpl.Snoc(init, last)
+      SinkNAry.Snoc(init, last)
 
     override def apply[Cases, R]: Builder[Cases, Cases, R] =
       HandlersBuilder.Empty()
@@ -253,66 +255,34 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
     def build[Cases, Lbl, Z, R](
       b: HandlersBuilder[Cases, Lbl :: Z, R],
       h: Z -> R,
-    ): HandlersImpl[Cases, R] =
-      build[Cases, Lbl :: Z, R](b, HandlersImpl.Single(h))
+    ): Handlers[Cases, R] =
+      build[Cases, Lbl :: Z, R](b, SinkNAry.Single(h))
     def build[Cases, Cases0, R](
       b: HandlersBuilder[Cases, Cases0, R],
-      acc: HandlersImpl[Cases0, R],
-    ): HandlersImpl[Cases, R] =
+      acc: Handlers[Cases0, R],
+    ): Handlers[Cases, R] =
       b match
         case Empty()          => acc
-        case Snoc(init, last) => build(init, HandlersImpl.Snoc(acc, last))
+        case Snoc(init, last) => build(init, SinkNAry.Snoc(acc, last))
   }
 
-  private sealed trait HandlersImpl[Cases, R] {
-    def compile: Enum[Cases] -> R
-    def asSingle[LblX, X](using Cases =:= (LblX :: X)): X -> R
-  }
-
-  private object HandlersImpl {
-    case class Single[Lbl, A, R](h: A -> R) extends HandlersImpl[Lbl :: A, R] {
-      override def compile: Enum[Lbl :: A] -> R =
-        extract[Lbl, A] > h
-
-      override def asSingle[LblX, X](using ev: Lbl :: A =:= LblX :: X): X -> R =
-        ev match { case BiInjective[::](_, ev) => ev.substituteCo[[a] =>> a -> R](h) }
-    }
-
-    case class Snoc[Init, Lbl, Z, R](
-      init: HandlersImpl[Init, R],
-      last: Z -> R,
-    ) extends HandlersImpl[Init || (Lbl :: Z), R] {
-      override def compile: Enum[Init || (Lbl :: Z)] -> R =
-        peel[Init, Lbl, Z] > either(init.compile, last)
-
-      override def asSingle[LblX, X](using (Init || (Lbl :: Z)) =:= LblX :: X): X -> R =
-        throw AssertionError(s"Impossible (A || B) =:= (C :: D), as || and :: are distinct class types.")
-    }
-
-    def snoc[Init, Lbl, Z, R](
-      init: HandlersImpl[Init, R],
-      last: HandlersImpl[Lbl :: Z, R]
-    ): HandlersImpl[Init || Lbl :: Z, R] =
-      Snoc(init, last.asSingle)
-
-    def ofDist[F[_], Cases, R, G[_]](
-      d: DistF[F, Cases],
-      h: [X] => Injector[?, X, Cases] => G[F[X] -> R],
-    )(using
-      G: Applicative[G],
-    ): G[Handlers[d.Out, R]] = {
-      type H[F[_], Cases, Out] = G[HandlersImpl[Out, R]]
-      d.fold[H](
-        [LblX <: String, X] => ev ?=> s => h[X](ev.substituteCo(Member.Single(s.label))).map(Single(_)),
-        [Init, LblX <: String, X, FInit] => ev ?=> s => {
-          val h2: [Y] => Injector[?, Y, Init] => G[F[Y] -> R] =
-            [Y] => i => h[Y](ev.substituteCo(i.inInit))
-          val hLast: G[HandlersImpl[LblX :: F[X], R]] = h[X](ev.substituteCo(Member.InLast(s.lbl))).map(Single(_))
-          val hInit: G[HandlersImpl[FInit, R]]        = ofDist(s.init, h2)
-          G.map2(hInit, hLast)(snoc(_, _))
-        }
-      )
-    }
+  private def distHandlers[F[_], Cases, R, G[_]](
+    d: DistF[F, Cases],
+    h: [X] => Injector[?, X, Cases] => G[F[X] -> R],
+  )(using
+    G: Applicative[G],
+  ): G[Handlers[d.Out, R]] = {
+    type H[F[_], Cases, Out] = G[Handlers[Out, R]]
+    d.fold[H](
+      [LblX <: String, X] => ev ?=> s => h[X](ev.substituteCo(Member.Single(s.label))).map(SinkNAry.Single(_)),
+      [Init, LblX <: String, X, FInit] => ev ?=> s => {
+        val h2: [Y] => Injector[?, Y, Init] => G[F[Y] -> R] =
+          [Y] => i => h[Y](ev.substituteCo(i.inInit))
+        val hLast: G[Handlers[LblX :: F[X], R]] = h[X](ev.substituteCo(Member.InLast(s.lbl))).map(SinkNAry.Single(_))
+        val hInit: G[Handlers[FInit, R]]        = distHandlers(s.init, h2)
+        G.map2(hInit, hLast)(SinkNAry.snoc(_, _))
+      }
+    )
   }
 
   private class PartitioningImpl[Cases](
@@ -328,7 +298,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       p.label
 
     override def reinject[P](p: Injector[?, P, Cases]): P -> Enum[Cases] =
-      inj(p)
+      cocatN.inject(p)
 
     override def isTotal[P](p: Injector[?, P, Cases]): Option[Enum[Cases] -> P] =
       libretto.lambda.UnhandledCase.raise("PartitioningImpl.isTotal")
@@ -357,7 +327,7 @@ private[lambda] class EnumModuleFromBinarySums[->[_, _], **[_, _], ++[_, _], Enu
       val d: DistF[F, Cases] =
         DistF.intoCases(cases)
       val handlers: G[Handlers[d.Out, R]] =
-        HandlersImpl.ofDist(d, handleAnyPartition)
+        distHandlers(d, handleAnyPartition)
       handlers.map { handlers =>
         distF(using pos, d) > handle(handlers)
       }

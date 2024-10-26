@@ -2,7 +2,10 @@ package libretto.lambda
 
 import libretto.lambda.util.{Applicative, Monad}
 
-/** A collection of arrows of the form `Ai --> B`, with `A = A1 <+> ... <+> An`. */
+/** A collection of arrows of the form `Ai --> B`,
+ * where `A` is composed of `Ai`s via binary sums `<+>`,
+ *  e.g. `A = A1 <+> ((A2 <+> A3) <+> A4)`.
+ */
 sealed trait Sink[-->[_, _], <+>[_, _], A, B] {
   import Sink.*
 
