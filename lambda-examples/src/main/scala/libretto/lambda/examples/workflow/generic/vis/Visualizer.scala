@@ -26,4 +26,28 @@ object Visualizer {
       appr.lump[B],
       Visualization.Unimplemented(label, EdgeDesc.wire, EdgeDesc.wire),
     )))
+
+  def labeledBoxes[F[_, _], approximates[_, _]](
+    inDesc: [A, B] => (A `approximates` B) => EdgeDesc[A],
+    describe: [A, B] => F[A, B] => (
+      String, // label
+      Exists[approximates[_, A]],
+      Exists[approximates[_, B]],
+      Color
+    ),
+  ): Visualizer[F, approximates] =
+    new Visualizer[F, approximates] {
+
+      extension [A, B](f: F[A, B])
+        override def visualize: Exists[[X] =>> Exists[[Y] =>> (approximates[X, A], approximates[Y, B], Visualization[X, Y])]] =
+          describe(f) match
+            case (label, Exists.Some(apprA), Exists.Some(apprB), color) =>
+              Exists(Exists((
+                apprA,
+                apprB,
+                Visualization.LabeledBox(inDesc(apprA), inDesc(apprB), label, Some(color)),
+              )))
+
+
+    }
 }
