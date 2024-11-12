@@ -11,6 +11,8 @@ given Visualizer[Activity, Approximates] = {
     [A, B] => (appr: A Approximates B) =>
       appr.inDesc,
     [A, B] => (a: Activity[A, B]) => a match
+        case Activity.RequestApproval =>
+          ("RequestApproval", Exists(lump), Exists(lump), COLOR)
         case Activity.RequestMonitorFromIT =>
           ("RequestMonitorFromIT", Exists(lump), Exists(lump), COLOR)
         case Activity.RequestChairFromOfficeMgmt =>

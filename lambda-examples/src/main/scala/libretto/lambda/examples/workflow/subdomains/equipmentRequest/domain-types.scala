@@ -29,6 +29,11 @@ type Result = Enum
   | "Fulfilled" :: Unit
   ]
 
+object Result:
+  val Declined          = Enum.partition[Result]["Declined"]
+  val FailedFulfillment = Enum.partition[Result]["Declined"]
+  val Fulfilled         = Enum.partition[Result]["Declined"]
+
 type RejectionReason = Enum
   [ "ManagerDeclined" :: Unit
   | "NoBudget" :: Unit
