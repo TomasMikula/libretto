@@ -166,6 +166,9 @@ class Workflows[Action[_, _]] {
     def distributeLR[A, B, C]: Flow[A ** (B ++ C), (A ** B) ++ (A ** C)] =
       FlowAST.DistributeLR()
 
+    def distributeRL[A, B, C]: Flow[(A ++ B) ** C, (A ** C) ++ (B ** C)] =
+      FlowAST.DistributeRL()
+
     def dup[A]: Flow[A, A ** A] =
       FlowAST.Dup()
 

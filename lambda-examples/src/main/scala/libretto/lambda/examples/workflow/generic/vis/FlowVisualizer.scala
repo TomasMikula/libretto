@@ -288,6 +288,30 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           )
         )))
 
+      case _: FlowAST.DistributeRL[op, x, y, z] =>
+        summon[A =:= (x ++ y) ** z]
+        summon[B =:= (x ** z) ++ (y ** z)]
+
+        Exists(Exists((
+          (lump[x] ++ lump[y]) ** lump[z],
+          (lump[x] ** lump[z]) ++ (lump[y] ** lump[z]),
+          Visualization.WithBackgroundBox(
+            fill = None,
+            stroke = Some(Color.Black),
+            Visualization.connectors(
+              (wire ++ wire) ** wire,
+              (wire ** wire) ++ (wire ** wire),
+            )(
+              Across(pickL.inl, pickL.inl),
+              Across(pickR.inl, pickL.inr),
+              TrapezoidArea(EdgeStretch.pickL.inl, EdgeStretch.pickL, ColorCaseLeft),
+              TrapezoidArea(EdgeStretch.pickR.inl, EdgeStretch.pickR, ColorCaseRight),
+              Across(pickR, pickR.inl).fill(GradientVerticalWhiteBlack),
+              Across(pickR, pickR.inr).fill(GradientVerticalWhiteBlack),
+            )
+          )
+        )))
+
       case i: FlowAST.Inject[op, lbl, x, cases] =>
         summon[A =:= x]
         summon[B =:= Enum[cases]]

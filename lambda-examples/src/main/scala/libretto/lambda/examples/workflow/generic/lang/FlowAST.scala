@@ -84,6 +84,7 @@ object FlowAST {
   case class Unpeel[Op[_, _], Init, Label, Z]() extends Work[Op, Enum[Init] ++ Z, Enum[Init || (Label :: Z)]]
   case class Extract[Op[_, _], Label, A]() extends Work[Op, Enum[Label :: A], A]
   case class DistributeLR[Op[_, _], A, B, C]() extends Work[Op, A ** (B ++ C), (A ** B) ++ (A ** C)]
+  case class DistributeRL[Op[_, _], A, B, C]() extends Work[Op, (A ++ B) ** C, (A ** C) ++ (B ** C)]
   case class DoWhile[Op[_, _], A, B](f: FlowAST[Op, A, A ++ B]) extends Work[Op, A, B]
   case class Delay[Op[_, _], A](duration: FiniteDuration) extends Work[Op, A, A]
 
@@ -115,7 +116,7 @@ object FlowAST {
     override val cat: SymmetricSemigroupalCategory[FlowAST[Op, _, _], **] = ssc[Op]
     import cat.*
     override def distLR[A, B, C]: FlowAST[Op, A ** (B ++ C), A ** B ++ A ** C] = DistributeLR()
-    override def distRL[A, B, C]: FlowAST[Op, (A ++ B) ** C, A ** C ++ B ** C] = swap[A ++ B, C] > distLR > cocat[Op].par(Swap(), Swap())
+    override def distRL[A, B, C]: FlowAST[Op, (A ++ B) ** C, A ** C ++ B ** C] = DistributeRL()
   }
 
   def shuffled[Op[_, _]]: Shuffled[Work[Op, _, _], **] =
