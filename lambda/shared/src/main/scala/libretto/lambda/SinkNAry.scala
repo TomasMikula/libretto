@@ -8,13 +8,24 @@ import libretto.lambda.util.TypeEq.Refl
  * where `||` assiciates to the left.
  */
 sealed trait SinkNAry[->[_, _], ||[_, _], ::[_, _], A, B] {
+  def translate[->>[_, _]](f: [x, y] => (x -> y) => (x ->> y)): SinkNAry[->>, ||, ::, A, B]
   def asSingle[LblX, X](using A =:= (LblX :: X), BiInjective[::]): X -> B
+
+  def get[LblX, X](m: Member[||, ::, LblX, X, A])(using
+    BiInjective[||],
+    BiInjective[::],
+  ): X -> B
 }
 
 private object SinkNAry {
   case class Single[->[_, _], ||[_, _], ::[_, _], Lbl, A, B](
     h: A -> B,
   ) extends SinkNAry[->, ||, ::, Lbl :: A, B] {
+    override def translate[->>[_, _]](
+      f: [x, y] => (x -> y) => (x ->> y),
+    ): SinkNAry[->>, ||, ::, Lbl :: A, B] =
+      Single(f(h))
+
     override def asSingle[LblX, X](using
       ev: Lbl :: A =:= LblX :: X,
       i: BiInjective[::],
@@ -22,18 +33,41 @@ private object SinkNAry {
       ev match { case BiInjective[::](_, TypeEq(Refl())) =>
         h
       }
+
+    override def get[LblX, X](m: Member[||, ::, LblX, X, Lbl :: A])(using BiInjective[||], BiInjective[::]): X -> B =
+      Member.asSingle(m) match
+        case (lbl, TypeEq(Refl()), TypeEq(Refl())) =>
+          h
   }
 
   case class Snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl, Z, R](
     init: SinkNAry[->, ||, ::, Init, R],
     last: Z -> R,
   ) extends SinkNAry[->, ||, ::, Init || (Lbl :: Z), R] {
+    override def translate[->>[_, _]](
+      f: [x, y] => (x -> y) => (x ->> y),
+    ): SinkNAry[->>, ||, ::, Init || Lbl :: Z, R] =
+      Snoc(
+        init.translate(f),
+        f(last),
+      )
+
     override def asSingle[LblX, X](using
       (Init || (Lbl :: Z)) =:= LblX :: X,
       BiInjective[::],
     ): X -> R =
       // TODO: require evidence that `||` and `::` cannot possibly be equal.
       throw AssertionError(s"Impossible (A || B) =:= (C :: D), assuming || and :: are distinct class types (are they?).")
+
+    override def get[LblX, X](
+      m: Member[||, ::, LblX, X, Init || Lbl :: Z],
+    )(using
+      BiInjective[||],
+      BiInjective[::],
+    ): X -> R =
+      Member.asMultiple(m) match
+        case Left((lbl, TypeEq(Refl()), TypeEq(Refl()))) => last
+        case Right(m1) => init.get(m1)
   }
 
   def snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl, Z, R](

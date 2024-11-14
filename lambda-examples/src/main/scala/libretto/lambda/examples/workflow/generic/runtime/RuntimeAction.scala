@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{Capture, Focus, Knitted}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++}
+import libretto.lambda.{Capture, DistributionNAry, Focus, Knitted}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, Enum, ||, ::}
 import libretto.lambda.util.Exists
 
 /** An action that might have already captured some of its inputs. */
@@ -17,6 +17,11 @@ enum RuntimeAction[Op[_, _], Val[_], A, B]:
   case DistLR[Op[_, _], Val[_], X, Y, Z](
     x: Value[Val, X],
   ) extends RuntimeAction[Op, Val, Y ++ Z, (X ** Y) ++ (X ** Z)]
+
+  case DistLRNAry[Op[_, _], Val[_], A, Cases, ACases](
+    a: Value[Val, A],
+    d: DistributionNAry.DistLR[**, ||, ::, A, Cases] { type Out = ACases },
+  ) extends RuntimeAction[Op, Val, Enum[Cases], Enum[ACases]]
 
 object RuntimeAction {
   def action[Op[_, _], Val[_], A, B](f: Op[A, B]): RuntimeAction[Op, Val, A, B] =

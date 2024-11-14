@@ -1,52 +1,18 @@
 package libretto.lambda
 
+import libretto.lambda.util.{BiInjective, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
+
 trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
+  import DistributionNAry.*
+
   val cat: SemigroupalCategory[->, **]
+
+  type DistLR[A, Cases] = DistributionNAry.DistLR[**, ||, ::, A, Cases]
+  type DistRL[B, Cases] = DistributionNAry.DistRL[**, ||, ::, B, Cases]
 
   def distLR[A, Cases](ev: DistLR[A, Cases]): (A ** Enum[Cases]) -> Enum[ev.Out]
   def distRL[B, Cases](ev: DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[ev.Out]
-
-  sealed trait DistLR[A, Cases] { self =>
-    type Out
-
-    def extend[Lbl <: String, Z](lbl: Lbl): DistLR[A, Cases || (Lbl :: Z)]{type Out = self.Out || (Lbl :: (A ** Z))} =
-      DistLR.Snoc(this, lbl)
-  }
-
-  object DistLR {
-    case class Single[A, Lbl <: String, B](label: Lbl) extends DistLR[A, Lbl :: B] {
-      override type Out = Lbl :: (A ** B)
-    }
-
-    case class Snoc[A, Init, Lbl <: String, Z, AInit](
-      init: DistLR[A, Init] { type Out = AInit },
-      lbl: Lbl,
-    ) extends DistLR[A, Init || (Lbl :: Z)] {
-      override type Out = AInit || (Lbl :: (A ** Z))
-    }
-  }
-
-  sealed trait DistRL[B, Cases] { self =>
-    type Out
-
-    def extend[Lbl <: String, Z](lbl: Lbl): DistRL[B, Cases || (Lbl :: Z)]{type Out = self.Out || (Lbl :: (Z ** B))} =
-      DistRL.Snoc(this, lbl)
-  }
-
-  object DistRL {
-    case class Single[B, Lbl <: String, A](
-      label: Lbl,
-    ) extends DistRL[B, Lbl :: A] {
-      override type Out = Lbl :: (A ** B)
-    }
-
-    case class Snoc[B, Init, Lbl <: String, Z, BInit](
-      init: DistRL[B, Init] { type Out = BInit },
-      lbl: Lbl,
-    ) extends DistRL[B, Init || (Lbl :: Z)] {
-      override type Out = BInit || (Lbl :: (Z ** B))
-    }
-  }
 
   sealed trait DistF[F[_], Cases] {
     type Out
@@ -179,6 +145,84 @@ trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 }
 
 object DistributionNAry {
+
+  sealed trait DistLR[**[_, _], ||[_, _], ::[_, _], A, Cases] { self =>
+    type Out
+
+    def extend[Lbl <: String, Z](
+      lbl: Lbl,
+    ): DistLR[**, ||, ::, A, Cases || (Lbl :: Z)] { type Out = self.Out || (Lbl :: (A ** Z)) } =
+      DistLR.Snoc(this, lbl)
+
+    def distributeOver[N, I](
+      m: Member[||, ::, N, I, Cases],
+    )(using
+      BiInjective[||],
+      BiInjective[::],
+    ): Member[||, ::, N, A ** I, Out]
+  }
+
+  object DistLR {
+    case class Single[**[_, _], ||[_, _], ::[_, _], A, Lbl <: String, B](
+      label: Lbl,
+    ) extends DistLR[**, ||, ::, A, Lbl :: B] {
+      override type Out = Lbl :: (A ** B)
+
+      override def distributeOver[N, I](
+        m: Member[||, ::, N, I, Lbl :: B],
+      )(using
+        BiInjective[||],
+        BiInjective[::],
+      ): Member[||, ::, N, A ** I, Out] =
+        Member.asSingle(m) match
+          case (lbl, TypeEq(Refl()), TypeEq(Refl())) =>
+            Member.Single(lbl)
+    }
+
+    case class Snoc[**[_, _], ||[_, _], ::[_, _], A, Init, Lbl <: String, Z, AInit](
+      init: DistLR[**, ||, ::, A, Init] { type Out = AInit },
+      lbl: Lbl,
+    ) extends DistLR[**, ||, ::, A, Init || (Lbl :: Z)] {
+      override type Out = AInit || (Lbl :: (A ** Z))
+
+      override def distributeOver[N, I](
+        m: Member[||, ::, N, I, Init || Lbl :: Z],
+      )(using
+        BiInjective[||],
+        BiInjective[::],
+      ): Member[||, ::, N, A ** I, Out] =
+        Member.asMultiple(m) match
+          case Left((lbl, TypeEq(Refl()), TypeEq(Refl()))) =>
+            Member.InLast(lbl)
+          case Right(m1) =>
+            init.distributeOver(m1).inInit
+    }
+  }
+
+  sealed trait DistRL[**[_, _], ||[_, _], ::[_, _], B, Cases] { self =>
+    type Out
+
+    def extend[Lbl <: String, Z](
+      lbl: Lbl,
+    ): DistRL[**, ||, ::, B, Cases || (Lbl :: Z)] { type Out = self.Out || (Lbl :: (Z ** B)) } =
+      DistRL.Snoc(this, lbl)
+  }
+
+  object DistRL {
+    case class Single[**[_, _], ||[_, _], ::[_, _], B, Lbl <: String, A](
+      label: Lbl,
+    ) extends DistRL[**, ||, ::, B, Lbl :: A] {
+      override type Out = Lbl :: (A ** B)
+    }
+
+    case class Snoc[**[_, _], ||[_, _], ::[_, _], B, Init, Lbl <: String, Z, BInit](
+      init: DistRL[**, ||, ::, B, Init] { type Out = BInit },
+      lbl: Lbl,
+    ) extends DistRL[**, ||, ::, B, Init || (Lbl :: Z)] {
+      override type Out = BInit || (Lbl :: (Z ** B))
+    }
+  }
+
   def fromBinary[->[_, _], **[_, _], ++[_, _], Enum[_], ||[_, _], ::[_, _]](
     inj: [Label, A, Cases] => Member[||, ::, Label, A, Cases] => (A -> Enum[Cases]),
     peel: [Init, Label, Z] => DummyImplicit ?=> Enum[Init || (Label :: Z)] -> (Enum[Init] ++ Z),
@@ -195,48 +239,52 @@ object DistributionNAry {
       import cat.*
       import cocat.{either, injectL, injectR}
 
-      override def distLR[A, Cases](d: DistLR[A, Cases]): (A ** Enum[Cases]) -> Enum[d.Out] =
+      override def distLR[A, Cases](d: this.DistLR[A, Cases]): (A ** Enum[Cases]) -> Enum[d.Out] =
         d match
-          case s: (DistLR.Single[a, l, b] & d.type) =>
+          case s: (DistLR.Single[**, ||, ::, a, l, b] & d.type) =>
             summon[Cases =:= (l :: b)]
             val ev = summon[d.Out =:= s.Out]
             val f: (A ** Enum[Cases]) -> Enum[s.Out] = distLRSingle(s)
             f.to(using ev.flip.liftCo[Enum])
-          case s: (DistLR.Snoc[a, init, l, z, aInit] & d.type) =>
+          case s: (DistLR.Snoc[**, ||, ::, a, init, l, z, aInit] & d.type) =>
             summon[Cases =:= (init || l :: z)]
             val ev = summon[d.Out =:= s.Out]
             val f: (A ** Enum[Cases]) -> Enum[s.Out] = distLRSnoc(s)
             f.to(using ev.flip.liftCo[Enum])
 
-      private def distLRSingle[A, Lbl <: String, B](d: DistLR.Single[A, Lbl, B]): (A ** Enum[Lbl :: B]) -> Enum[d.Out] =
+      private def distLRSingle[A, Lbl <: String, B](
+        d: DistLR.Single[**, ||, ::, A, Lbl, B],
+      ): (A ** Enum[Lbl :: B]) -> Enum[d.Out] =
         extract[Lbl, B].inSnd[A] > inj(Member.Single(d.label))
 
       private def distLRSnoc[A, Init, LblZ <: String, Z, AInit](
-        d: DistLR.Snoc[A, Init, LblZ, Z, AInit],
+        d: DistLR.Snoc[**, ||, ::, A, Init, LblZ, Z, AInit],
       ): (A ** Enum[Init || LblZ :: Z]) -> Enum[d.Out] =
         cat.snd(peel[Init, LblZ, Z]) > distr.distLR > either(
           distLR(d.init) > injectL > unpeel[AInit, LblZ, A ** Z],
           inj(Member.InLast(d.lbl)),
         )
 
-      override def distRL[B, Cases](d: DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[d.Out] =
+      override def distRL[B, Cases](d: this.DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[d.Out] =
         d match
-          case s: (DistRL.Single[b, l, a] & d.type) =>
+          case s: (DistRL.Single[**, ||, ::, b, l, a] & d.type) =>
             summon[Cases =:= (l :: a)]
             val ev = summon[d.Out =:= s.Out]
             val f: (Enum[Cases] ** B) -> Enum[s.Out] = distRLSingle(s)
             f.to(using ev.flip.liftCo[Enum])
-          case s: (DistRL.Snoc[b, init, l, z, bInit] & d.type) =>
+          case s: (DistRL.Snoc[**, ||, ::, b, init, l, z, bInit] & d.type) =>
             summon[Cases =:= (init || l :: z)]
             val ev = summon[d.Out =:= s.Out]
             val f: (Enum[Cases] ** B) -> Enum[s.Out] = distRLSnoc(s)
             f.to(using ev.flip.liftCo[Enum])
 
-      private def distRLSingle[B, Lbl <: String, A](d: DistRL.Single[B, Lbl, A]): (Enum[Lbl :: A] ** B) -> Enum[d.Out] =
+      private def distRLSingle[B, Lbl <: String, A](
+        d: DistRL.Single[**, ||, ::, B, Lbl, A],
+      ): (Enum[Lbl :: A] ** B) -> Enum[d.Out] =
         extract[Lbl, A].inFst[B] > inj(Member.Single(d.label))
 
       private def distRLSnoc[B, Init, LblZ <: String, Z, BInit](
-        d: DistRL.Snoc[B, Init, LblZ, Z, BInit],
+        d: DistRL.Snoc[**, ||, ::, B, Init, LblZ, Z, BInit],
       ): (Enum[Init || LblZ :: Z] ** B) -> Enum[d.Out] =
         cat.fst(peel[Init, LblZ, Z]) > distr.distRL > either(
           distRL(d.init) > injectL > unpeel[BInit, LblZ, Z ** B],

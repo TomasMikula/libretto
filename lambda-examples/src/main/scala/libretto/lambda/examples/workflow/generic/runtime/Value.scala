@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{EnumModule, Member, Projection, UnhandledCase, Unzippable, Zippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::, Enum, PortName, Reading}
+import libretto.lambda.{DistributionNAry, EnumModule, Member, Projection, UnhandledCase, Unzippable, Zippable}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::, Enum, PortName, Reading, given}
 import libretto.lambda.util.Exists
 import libretto.lambda.util.unapply.Unapply
 
@@ -129,6 +129,17 @@ object Value:
         F.revealCase(value)
       case One() | Pair(_, _) | Left(_) | Right(_) | PortNameValue(_, _) | ReadingInput(_) =>
         throw AssertionError(s"Impossible for $v to represent an Enum value")
+
+  def distLRNAry[F[_], X, Cases, XCases](
+    x: Value[F, X],
+    enm: Value[F, Enum[Cases]],
+    d: DistributionNAry.DistLR[**, ||, ::, X, Cases] { type Out = XCases },
+  )(using
+    F: Compliant[F],
+  ): Value[F, Enum[XCases]] =
+    revealCase(enm) match
+      case Exists.Some(Exists.Some(Inject(i, a))) =>
+        Inject(d.distributeOver(i), x ** a)
 
   def extractPortId[F[_], A](value: Value[F, Reading[A]])(using F: Compliant[F]): PortId[A] =
     value match

@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{Capture, Focus, Knit, Knitted, Projection, Spine, SymmetricSemigroupalCategory, UnhandledCase, Unzippable}
+import libretto.lambda.{Capture, DistributionNAry, Focus, Knit, Knitted, Projection, Spine, SymmetricSemigroupalCategory, UnhandledCase, Unzippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::, Enum, FlowAST, PortName, Reading, given}
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
@@ -63,6 +63,12 @@ object RuntimeFlows {
 
   def distLR[Op[_, _], Val[_], A, B, C](captured: Value[Val, A]): Flow[Op, Val, B ++ C, (A ** B) ++ (A ** C)] =
     action(RuntimeAction.DistLR(captured))
+
+  def distLRNAry[Op[_, _], Val[_], A, Cases, ACases](
+    captured: Value[Val, A],
+    d: DistributionNAry.DistLR[**, ||, ::, A, Cases] { type Out = ACases },
+  ): Flow[Op, Val, Enum[Cases], Enum[ACases]] =
+    action(RuntimeAction.DistLRNAry(captured, d))
 
   extension [Op[_, _], Val[_], A, B](flow: Flow[Op, Val, A, B])
     def >>>[C](that: Flow[Op, Val, B, C]): Flow[Op, Val, A, C] =
@@ -226,6 +232,19 @@ object RuntimeFlows {
           case other =>
             throw AssertionError(s"Impossible: would mean that `++` = `**`")
 
+      case h: FlowAST.Handle[op, cases, w] =>
+        summon[VA =:= Enum[cases]]
+        summon[W =:= w]
+        v match
+          case Focus.Id() =>
+            val enumValue: Value[Val, Enum[cases]] = value.as[Enum[cases]](using ev.flip)
+            Value.revealCase(enumValue) match
+              case Exists.Some(Exists.Some(inj)) =>
+                val handler = h.handlers.get(inj.i)
+                FeedValueRes.Transformed(Input.Ready(inj.a), handler)
+          case other =>
+            throw AssertionError(s"Impossible: would mean that `Enum` = `**`, which is impossible if they are different class types.")
+
       case p: FlowAST.Peel[op, init, lbl, a] =>
         summon[VA =:= Enum[init || (lbl :: a)]]
         given (V[A] =:= Enum[init || (lbl :: a)]) = ev.flip
@@ -237,7 +256,7 @@ object RuntimeFlows {
           case v: Focus.Proper[**, V] =>
             collectingInput(value, v, p.from[V[A]])
 
-      case f1: FlowAST.DistributeLR[op, x, y, z] =>
+      case _: FlowAST.DistributeLR[op, x, y, z] =>
         summon[VA =:= (x ** (y ++ z))]
         v match
           case v: Focus.Fst[p, v1, yz] =>
@@ -245,6 +264,20 @@ object RuntimeFlows {
               case BiInjective[**](TypeEq(Refl()), TypeEq(Refl())) =>
                 feedDistributeeLR[Action, Val, v1, A, y, z](value, v.i)
           case Focus.Snd(i) =>
+            UnhandledCase.raise(s"propagateValue into $f at $v")
+          case Focus.Id() =>
+            UnhandledCase.raise(s"propagateValue into $f at $v")
+
+      case d: FlowAST.DistributeNAryLR[op, x, cases, xcases] =>
+        summon[VA =:= (x ** Enum[cases])]
+        summon[W =:= Enum[xcases]]
+        v match
+          case v: Focus.Fst[p, v1, enm] =>
+            (summon[(x ** Enum[cases]) =:= VA] andThen ev andThen summon[V[A] =:= (v1[A] ** enm)]) match
+              case BiInjective[**](TypeEq(Refl()), TypeEq(Refl())) =>
+                summon[enm =:= Enum[cases]]
+                feedDistributeeNAryLR[Action, Val, v1, A, cases, xcases](value, v.i, d.dist)
+          case Focus.Snd(_) =>
             UnhandledCase.raise(s"propagateValue into $f at $v")
           case Focus.Id() =>
             UnhandledCase.raise(s"propagateValue into $f at $v")
@@ -328,6 +361,19 @@ object RuntimeFlows {
               case other =>
                 throw AssertionError(s"Impossible, would mean that `++` = `**`")
 
+          case d: RuntimeAction.DistLRNAry[op, val_, x, cases, xCases] =>
+            summon[VA =:= Enum[cases]]
+            summon[W =:= Enum[xCases]]
+            v match
+              case Focus.Id() =>
+                (summon[Enum[cases] =:= VA] andThen ev andThen summon[V[A] =:= A]) match
+                  case TypeEq(Refl()) =>
+                    val res: Value[Val, Enum[xCases]] =
+                      Value.distLRNAry[Val, x, cases, xCases](d.a, value, d.d)
+                    FeedValueRes.Complete(Input.Ready(res))
+              case other =>
+                throw AssertionError(s"Impossible, would mean that `Enum` = `**`")
+
           case RuntimeAction.ValueCollector(f) =>
             v match
               case Focus.Id() =>
@@ -376,6 +422,21 @@ object RuntimeFlows {
             .from[V[A] ** (Y ++ Z)](using ev1.liftCo[[x] =>> x ** (Y ++ Z)])
             .to[(V[A] ** Y) ++ (V[A] ** Z)](using ev1.liftContra[[x] =>> (x ** Y) ++ (x ** Z)])
         FeedValueRes.Transformed(Input.Ready(value), distSeparately1)
+
+  private def feedDistributeeNAryLR[Action[_, _], Val[_], V[_], A, Cases, VACases](
+    value: Value[Val, A],
+    v: Focus[**, V],
+    d: DistributionNAry.DistLR[**, ||, ::, V[A], Cases] { type Out = VACases },
+  ): FeedValueRes[Action, Val, [a] =>> V[a] ** Enum[Cases], Enum[VACases]] =
+    v match
+      case Focus.Id() =>
+        summon[V[A] =:= A]
+        val k: Knitted[**, [a] =>> a ** Enum[Cases], Enum[Cases]] =
+          Knitted.keepSnd[**, Enum[Cases]]
+        val op = RuntimeFlows.distLRNAry[Action, Val, A, Cases, VACases](value, d)
+        FeedValueRes.Absorbed(k, op)
+      case v: Focus.Proper[pr, v] =>
+        UnhandledCase.raise(s"DistributingLR value $value at $v")
 
   private def project[Action[_, _], Val[_], A, B, C](using sh: Shuffled[Action, Val])(
     f: sh.Shuffled[A, B],
