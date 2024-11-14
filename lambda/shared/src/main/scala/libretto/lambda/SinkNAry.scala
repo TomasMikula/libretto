@@ -10,6 +10,11 @@ import libretto.lambda.util.TypeEq.Refl
 sealed trait SinkNAry[->[_, _], ||[_, _], ::[_, _], A, B] {
   def translate[->>[_, _]](f: [x, y] => (x -> y) => (x ->> y)): SinkNAry[->>, ||, ::, A, B]
   def asSingle[LblX, X](using A =:= (LblX :: X), BiInjective[::]): X -> B
+
+  def get[LblX, X](m: Member[||, ::, LblX, X, A])(using
+    BiInjective[||],
+    BiInjective[::],
+  ): X -> B
 }
 
 private object SinkNAry {
@@ -28,6 +33,11 @@ private object SinkNAry {
       ev match { case BiInjective[::](_, TypeEq(Refl())) =>
         h
       }
+
+    override def get[LblX, X](m: Member[||, ::, LblX, X, Lbl :: A])(using BiInjective[||], BiInjective[::]): X -> B =
+      Member.asSingle(m) match
+        case (lbl, TypeEq(Refl()), TypeEq(Refl())) =>
+          h
   }
 
   case class Snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl, Z, R](
@@ -48,6 +58,16 @@ private object SinkNAry {
     ): X -> R =
       // TODO: require evidence that `||` and `::` cannot possibly be equal.
       throw AssertionError(s"Impossible (A || B) =:= (C :: D), assuming || and :: are distinct class types (are they?).")
+
+    override def get[LblX, X](
+      m: Member[||, ::, LblX, X, Init || Lbl :: Z],
+    )(using
+      BiInjective[||],
+      BiInjective[::],
+    ): X -> R =
+      Member.asMultiple(m) match
+        case Left((lbl, TypeEq(Refl()), TypeEq(Refl()))) => last
+        case Right(m1) => init.get(m1)
   }
 
   def snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl, Z, R](
