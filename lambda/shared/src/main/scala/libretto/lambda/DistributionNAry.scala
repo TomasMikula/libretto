@@ -1,5 +1,8 @@
 package libretto.lambda
 
+import libretto.lambda.util.{BiInjective, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
+
 trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   import DistributionNAry.*
 
@@ -150,6 +153,13 @@ object DistributionNAry {
       lbl: Lbl,
     ): DistLR[**, ||, ::, A, Cases || (Lbl :: Z)] { type Out = self.Out || (Lbl :: (A ** Z)) } =
       DistLR.Snoc(this, lbl)
+
+    def distributeOver[N, I](
+      m: Member[||, ::, N, I, Cases],
+    )(using
+      BiInjective[||],
+      BiInjective[::],
+    ): Member[||, ::, N, A ** I, Out]
   }
 
   object DistLR {
@@ -157,6 +167,16 @@ object DistributionNAry {
       label: Lbl,
     ) extends DistLR[**, ||, ::, A, Lbl :: B] {
       override type Out = Lbl :: (A ** B)
+
+      override def distributeOver[N, I](
+        m: Member[||, ::, N, I, Lbl :: B],
+      )(using
+        BiInjective[||],
+        BiInjective[::],
+      ): Member[||, ::, N, A ** I, Out] =
+        Member.asSingle(m) match
+          case (lbl, TypeEq(Refl()), TypeEq(Refl())) =>
+            Member.Single(lbl)
     }
 
     case class Snoc[**[_, _], ||[_, _], ::[_, _], A, Init, Lbl <: String, Z, AInit](
@@ -164,6 +184,18 @@ object DistributionNAry {
       lbl: Lbl,
     ) extends DistLR[**, ||, ::, A, Init || (Lbl :: Z)] {
       override type Out = AInit || (Lbl :: (A ** Z))
+
+      override def distributeOver[N, I](
+        m: Member[||, ::, N, I, Init || Lbl :: Z],
+      )(using
+        BiInjective[||],
+        BiInjective[::],
+      ): Member[||, ::, N, A ** I, Out] =
+        Member.asMultiple(m) match
+          case Left((lbl, TypeEq(Refl()), TypeEq(Refl()))) =>
+            Member.InLast(lbl)
+          case Right(m1) =>
+            init.distributeOver(m1).inInit
     }
   }
 
