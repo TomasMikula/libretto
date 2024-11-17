@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.lang
 
-import libretto.lambda.{CocartesianNAryCategory, CocartesianSemigroupalCategory, Distribution, DistributionNAry, Member, Shuffled, SinkNAry, SymmetricSemigroupalCategory}
+import libretto.lambda.{CocartesianNAryCategory, CocartesianSemigroupalCategory, Distribution, DistributionNAry, Member, Shuffled, SinkNAryNamed, SymmetricSemigroupalCategory}
 import libretto.lambda.util.Masked
 
 import scala.concurrent.duration.FiniteDuration
@@ -83,7 +83,7 @@ object FlowAST {
   case class InjectR[Op[_, _], A, B]() extends Work[Op, B, A ++ B]
   case class Either[Op[_, _], A, B, C](f: FlowAST[Op, A, C], g: FlowAST[Op, B, C]) extends Work[Op, A ++ B, C]
   case class Inject[Op[_, _], Label, A, Cases](i: Member[||, ::, Label, A, Cases]) extends Work[Op, A, Enum[Cases]]
-  case class Handle[Op[_, _], Cases, B](handlers: SinkNAry[FlowAST[Op, _, _], ||, ::, Cases, B]) extends Work[Op, Enum[Cases], B]
+  case class Handle[Op[_, _], Cases, B](handlers: SinkNAryNamed[FlowAST[Op, _, _], ||, ::, Cases, B]) extends Work[Op, Enum[Cases], B]
   case class Peel[Op[_, _], Init, Label, Z]() extends Work[Op, Enum[Init || (Label :: Z)], Enum[Init] ++ Z]
   case class Unpeel[Op[_, _], Init, Label, Z]() extends Work[Op, Enum[Init] ++ Z, Enum[Init || (Label :: Z)]]
   case class Extract[Op[_, _], Label, A]() extends Work[Op, Enum[Label :: A], A]
@@ -129,7 +129,7 @@ object FlowAST {
       Inject(i)
 
     override def handle[Cases, R](
-      handlers: SinkNAry[FlowAST[Op, _, _], ||, ::, Cases, R],
+      handlers: SinkNAryNamed[FlowAST[Op, _, _], ||, ::, Cases, R],
     ): FlowAST[Op, Enum[Cases], R] =
       Handle(handlers)
   }

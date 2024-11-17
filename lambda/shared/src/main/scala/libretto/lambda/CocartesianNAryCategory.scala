@@ -7,7 +7,7 @@ trait CocartesianNAryCategory[->[_, _], Sum[_], ||[_, _], ::[_, _]] {
   ): A -> Sum[Cases]
 
   def handle[Cases, R](
-    h: SinkNAry[->, ||, ::, Cases, R],
+    h: SinkNAryNamed[->, ||, ::, Cases, R],
   ): Sum[Cases] -> R
 }
 
@@ -52,12 +52,12 @@ object CocartesianNAryCategory {
       inj(i)
 
     override def handle[Cases, R](
-      h: SinkNAry[->, ||, ::, Cases, R],
+      h: SinkNAryNamed[->, ||, ::, Cases, R],
     ): Sum[Cases] -> R =
       h match
-        case s: SinkNAry.Single[arr, sep, of, lbl, a, r] =>
+        case s: SinkNAryNamed.Single[arr, sep, of, lbl, a, r] =>
           extract[lbl, a] > s.h
-        case s: SinkNAry.Snoc[arr, sep, of, init, lbl, z, r] =>
+        case s: SinkNAryNamed.Snoc[arr, sep, of, init, lbl, z, r] =>
           peel[init, lbl, z] > either(handle(s.init), s.last)
   }
 }

@@ -5,10 +5,10 @@ import libretto.lambda.util.TypeEq.Refl
 
 /** A collection of arrows `Ai --> B`,
  * where `A = name1 :: A1 || name2 :: A2 || ... || name_n :: An`,
- * where `||` assiciates to the left.
+ * where `||` associates to the left.
  */
-sealed trait SinkNAry[->[_, _], ||[_, _], ::[_, _], A, B] {
-  def translate[->>[_, _]](f: [x, y] => (x -> y) => (x ->> y)): SinkNAry[->>, ||, ::, A, B]
+sealed trait SinkNAryNamed[->[_, _], ||[_, _], ::[_, _], A, B] {
+  def translate[->>[_, _]](f: [x, y] => (x -> y) => (x ->> y)): SinkNAryNamed[->>, ||, ::, A, B]
   def asSingle[LblX, X](using A =:= (LblX :: X), BiInjective[::]): X -> B
 
   def get[LblX, X](m: Member[||, ::, LblX, X, A])(using
@@ -17,13 +17,13 @@ sealed trait SinkNAry[->[_, _], ||[_, _], ::[_, _], A, B] {
   ): X -> B
 }
 
-private object SinkNAry {
+private object SinkNAryNamed {
   case class Single[->[_, _], ||[_, _], ::[_, _], Lbl, A, B](
     h: A -> B,
-  ) extends SinkNAry[->, ||, ::, Lbl :: A, B] {
+  ) extends SinkNAryNamed[->, ||, ::, Lbl :: A, B] {
     override def translate[->>[_, _]](
       f: [x, y] => (x -> y) => (x ->> y),
-    ): SinkNAry[->>, ||, ::, Lbl :: A, B] =
+    ): SinkNAryNamed[->>, ||, ::, Lbl :: A, B] =
       Single(f(h))
 
     override def asSingle[LblX, X](using
@@ -41,12 +41,12 @@ private object SinkNAry {
   }
 
   case class Snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl, Z, R](
-    init: SinkNAry[->, ||, ::, Init, R],
+    init: SinkNAryNamed[->, ||, ::, Init, R],
     last: Z -> R,
-  ) extends SinkNAry[->, ||, ::, Init || (Lbl :: Z), R] {
+  ) extends SinkNAryNamed[->, ||, ::, Init || (Lbl :: Z), R] {
     override def translate[->>[_, _]](
       f: [x, y] => (x -> y) => (x ->> y),
-    ): SinkNAry[->>, ||, ::, Init || Lbl :: Z, R] =
+    ): SinkNAryNamed[->>, ||, ::, Init || Lbl :: Z, R] =
       Snoc(
         init.translate(f),
         f(last),
@@ -71,10 +71,10 @@ private object SinkNAry {
   }
 
   def snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl, Z, R](
-    init: SinkNAry[->, ||, ::, Init, R],
-    last: SinkNAry[->, ||, ::, Lbl :: Z, R]
+    init: SinkNAryNamed[->, ||, ::, Init, R],
+    last: SinkNAryNamed[->, ||, ::, Lbl :: Z, R]
   )(using
     BiInjective[::],
-  ): SinkNAry[->, ||, ::, Init || Lbl :: Z, R] =
+  ): SinkNAryNamed[->, ||, ::, Init || Lbl :: Z, R] =
     Snoc(init, last.asSingle)
 }

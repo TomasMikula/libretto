@@ -165,7 +165,7 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
 
   override opaque type IsCaseOf[Label, Cases] <: { type Type } = Injector[Label, ?, Cases]
   override opaque type EnumPartition[Cases, P] = Injector[?, P, Cases]
-  override opaque type Handlers[Cases, R] = SinkNAry[->, ||, ::, Cases, R]
+  override opaque type Handlers[Cases, R] = SinkNAryNamed[->, ||, ::, Cases, R]
 
   override opaque type Partitioning[Cases] <: libretto.lambda.Partitioning[->, **, Enum[Cases]] {
     type Partition[P] = EnumPartition[Cases, P]
@@ -214,13 +214,13 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
       HandlersBuilder[Cases, RemainingCases, R]
 
     override def single[Lbl, A, R](h: A -> R): Handlers[Lbl :: A, R] =
-      SinkNAry.Single(h)
+      SinkNAryNamed.Single(h)
 
     override def snoc[Init, Lbl, Z, R](
       init: Handlers[Init, R],
       last: Z -> R,
     ): Handlers[Init || (Lbl :: Z), R] =
-      SinkNAry.Snoc(init, last)
+      SinkNAryNamed.Snoc(init, last)
 
     override def apply[Cases, R]: Builder[Cases, Cases, R] =
       HandlersBuilder.Empty()
@@ -258,14 +258,14 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
       b: HandlersBuilder[Cases, Lbl :: Z, R],
       h: Z -> R,
     ): Handlers[Cases, R] =
-      build[Cases, Lbl :: Z, R](b, SinkNAry.Single(h))
+      build[Cases, Lbl :: Z, R](b, SinkNAryNamed.Single(h))
     def build[Cases, Cases0, R](
       b: HandlersBuilder[Cases, Cases0, R],
       acc: Handlers[Cases0, R],
     ): Handlers[Cases, R] =
       b match
         case Empty()          => acc
-        case Snoc(init, last) => build(init, SinkNAry.Snoc(acc, last))
+        case Snoc(init, last) => build(init, SinkNAryNamed.Snoc(acc, last))
   }
 
   private def distHandlers[F[_], Cases, R, G[_]](
@@ -276,13 +276,13 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
   ): G[Handlers[d.Out, R]] = {
     type H[F[_], Cases, Out] = G[Handlers[Out, R]]
     d.fold[H](
-      [LblX <: String, X] => ev ?=> s => h[X](ev.substituteCo(Member.Single(s.label))).map(SinkNAry.Single(_)),
+      [LblX <: String, X] => ev ?=> s => h[X](ev.substituteCo(Member.Single(s.label))).map(SinkNAryNamed.Single(_)),
       [Init, LblX <: String, X, FInit] => ev ?=> s => {
         val h2: [Y] => Injector[?, Y, Init] => G[F[Y] -> R] =
           [Y] => i => h[Y](ev.substituteCo(i.inInit))
-        val hLast: G[Handlers[LblX :: F[X], R]] = h[X](ev.substituteCo(Member.InLast(s.lbl))).map(SinkNAry.Single(_))
+        val hLast: G[Handlers[LblX :: F[X], R]] = h[X](ev.substituteCo(Member.InLast(s.lbl))).map(SinkNAryNamed.Single(_))
         val hInit: G[Handlers[FInit, R]]        = distHandlers(s.init, h2)
-        G.map2(hInit, hLast)(SinkNAry.snoc(_, _))
+        G.map2(hInit, hLast)(SinkNAryNamed.snoc(_, _))
       }
     )
   }
