@@ -3,6 +3,8 @@ package libretto.lambda.examples.workflow.generic.vis
 import libretto.lambda.examples.workflow.generic.vis.DefaultDimensions.*
 import libretto.lambda.util.TypeEq
 import libretto.lambda.util.TypeEq.Refl
+import scala.annotation.tailrec
+import scala.collection.immutable.{:: as NonEmptyList}
 import scala.math.Ordering.Implicits.*
 
 import Breadth.given
@@ -30,7 +32,7 @@ object Visualization {
   /** Used to mark visualizations that can be skewed horixontally. */
   opaque type Skw <: Nothing = Nothing
 
-  /** Witnesses that at lest one of the type parameters is [[Flx]]. */
+  /** Witnesses that at least one of the type parameters is [[Flx]]. */
   sealed trait Semiflex[-R, -S] {
     def tiltFst: Semiflex.OneSided[R, S] =
       this match
@@ -293,10 +295,15 @@ object Visualization {
           case None                            => None
     }
 
+    def apply[X, P, I, Q, Y](
+      v: IVisualization[X, P, I, Q, Y],
+    ): Sequence[X, P, Q, Y] =
+      Single(v)
+
     def apply[X, Y](
       v: Visualization[X, Y],
     ): Sequence[X, ?, ?, Y] =
-      v match { case v: IVisualization[X, r, j, s, Y] => Single(v) }
+      apply(v.indexed)
 
     def apply[X, Y, Z](
       v1: Visualization.Flexi[X, ?, Y],
@@ -429,6 +436,216 @@ object Visualization {
         case (Some(Left(_)), None) => None // cannot report as progress
         case (None, Some(Left(_))) => None // cannot report as progress
         case (None, None) => None
+  }
+
+  case class IParN[Wrap[_], X, P, I, Q, Y](
+    op: OpTag[Wrap],
+    components: IParN.Components[Wrap, X, P, I, Q, Y],
+  ) extends IVisualization[Wrap[X], P, I, Q, Wrap[Y]] {
+    override def ioProportions: IOProportions[Wrap[X], Wrap[Y]] =
+      IOProportions.ParN(components.ioProportions)
+
+    override def length: Length =
+      components.lengths.reduce(Length.max)
+
+    override def flexiIn: Option[IVisualization[Wrap[X], Flx, I, Q, Wrap[Y]]] =
+      components.flexiIn.map(IParN(op, _))
+
+    override def flexiOut: Option[IVisualization[Wrap[X], P, I, Flx, Wrap[Y]]] =
+      components.flexiOut.map(IParN(op, _))
+
+    override def skewable: Option[IParN[Wrap, X, P, Skw, Q, Y]] =
+      components.skewable.map(IParN(op, _))
+
+    override def trimIn: Option[Either[
+      (Wrap[X] =:= Wrap[Y], EdgeDesc[Wrap[Y]]),
+      IVisualization[Wrap[X], ?, I, Q, Wrap[Y]]
+    ]] =
+      components.trimIn.map[Either[
+        (Wrap[X] =:= Wrap[Y], EdgeDesc[Wrap[Y]]),
+        IVisualization[Wrap[X], ?, I, Q, Wrap[Y]]
+      ]] {
+        case Left((TypeEq(Refl()), comps)) => Left((summon, EdgeDesc.TupleN(op, comps)))
+        case Right(comps) => Right(IParN(op, comps))
+      }
+
+    override def trimOut: Option[Either[
+      (Wrap[X] =:= Wrap[Y], EdgeDesc[Wrap[Y]]),
+      IVisualization[Wrap[X], P, I, ?, Wrap[Y]]
+    ]] =
+      components.trimOut.map[Either[
+        (Wrap[X] =:= Wrap[Y], EdgeDesc[Wrap[Y]]),
+        IVisualization[Wrap[X], P, I, ?, Wrap[Y]]
+      ]] {
+        case Left((TypeEq(Refl()), comps)) => Left((summon, EdgeDesc.TupleN(op, comps)))
+        case Right(comps) => Right(IParN(op, comps))
+      }
+  }
+
+  object IParN {
+    sealed trait Components[Wrap[_], X, +P, +I, +Q, Y] {
+      def ioProportions: IOProportions.ParN.Components[Wrap, X, Y]
+
+      def size: Int
+
+      def lengths: NonEmptyList[Length] =
+        lengths(Nil)
+
+      @tailrec
+      private def lengths(tailAcc: List[Length]): NonEmptyList[Length] =
+        this match
+          case Single(vis) => NonEmptyList(vis.length, tailAcc)
+          case Snoc(init, last) => init.lengths(last.length :: tailAcc)
+
+      def flexiIn: Option[Components[Wrap, X, Flx, I, Q, Y]]
+
+      def flexiOut: Option[Components[Wrap, X, P, I, Flx, Y]]
+
+      def skewable: Option[Components[Wrap, X, P, Skw, Q, Y]]
+
+      def trimIn: Option[Either[
+        (X =:= Y, EdgeDesc.TupleN.Components[Wrap, Y]),
+        Components[Wrap, X, ?, I, Q, Y]
+      ]]
+
+      def trimOut: Option[Either[
+        (X =:= Y, EdgeDesc.TupleN.Components[Wrap, Y]),
+        Components[Wrap, X, P, I, ?, Y]
+      ]]
+
+      def inIsNotEmpty(using X =:= EmptyTuple): Nothing
+      def outIsNotEmpty(using Y =:= EmptyTuple): Nothing
+    }
+
+    case class Single[Wrap[_], X, P, I, Q, Y](
+      vis: IVisualization[X, P, I, Q, Y],
+    ) extends Components[Wrap, Only[X], P, I, Q, Only[Y]] {
+      override def ioProportions: IOProportions.ParN.Components[Wrap, Only[X], Only[Y]] =
+        IOProportions.ParN.Single(vis.ioProportions)
+
+      override def size: Int = 1
+
+      override def flexiIn:  Option[Components[Wrap, Only[X], Flx, I, Q, Only[Y]]] = vis.flexiIn.map(Single(_))
+      override def flexiOut: Option[Components[Wrap, Only[X], P, I, Flx, Only[Y]]] = vis.flexiOut.map(Single(_))
+      override def skewable: Option[Components[Wrap, Only[X], P, Skw, Q, Only[Y]]] = vis.skewable.map(Single(_))
+
+      override def trimIn: Option[Either[
+        (Only[X] =:= Only[Y], EdgeDesc.TupleN.Components[Wrap, Only[Y]]),
+        Components[Wrap, Only[X], ?, I, Q, Only[Y]]
+      ]] =
+        vis.trimIn.map {
+          case Left((ev, d)) => Left((ev.liftCo[Only], EdgeDesc.TupleN.Single(d)))
+          case Right(vis)    => Right(Single(vis))
+        }
+
+      override def trimOut: Option[Either[
+        (Only[X] =:= Only[Y], EdgeDesc.TupleN.Components[Wrap, Only[Y]]),
+        Components[Wrap, Only[X], P, I, ?, Only[Y]]
+      ]] =
+        vis.trimOut.map {
+          case Left((ev, d)) => Left((ev.liftCo[Only], EdgeDesc.TupleN.Single(d)))
+          case Right(vis)    => Right(Single(vis))
+        }
+
+      override def inIsNotEmpty(using Only[X] =:= EmptyTuple): Nothing =
+        pairIsNotEmptyTuple[EmptyTuple, X]
+
+      override def outIsNotEmpty(using Only[Y] =:= EmptyTuple): Nothing =
+        pairIsNotEmptyTuple[EmptyTuple, Y]
+    }
+
+    case class Snoc[Wrap[_], X1, P, I, Q, Y1, X2, R, J, S, Y2](
+      init: Components[Wrap, X1, P, I, Q, Y1],
+      last: IVisualization[X2, R, J, S, Y2],
+    ) extends Components[
+      Wrap,
+      (X1, X2),
+      P | R | I | J, // input is flexible if components' inputs are flexible (P, R) and both components are skewable (I, J)
+      I | J,         // skewable if both components are skewable
+      Q | S | I | J, // output is flexible if components' outputs are flexible (Q, S) and both components are skewable (I, J)
+      (Y1, Y2),
+    ] {
+
+      type FlI = P | R | I | J
+      type FlO = Q | S | I | J
+      type Sk  = I | J
+
+      // private given OpTag[∙] = op
+
+      // override def indexed: IPar[∙, X1, P, I, Q, Y1, X2, R, J, S, Y2] = this
+
+      override def ioProportions: IOProportions.ParN.Components[Wrap, (X1, X2), (Y1, Y2)] =
+        IOProportions.ParN.Snoc(
+          init.ioProportions,
+          last.ioProportions,
+        )
+
+      override def size: Int = 1 + init.size
+
+      override def flexiIn: Option[Components[Wrap, (X1, X2), Flx, Sk, FlO, (Y1, Y2)]] =
+        for
+          a <- init.flexiIn.flatMap(_.skewable)
+          b <- last.flexiIn.flatMap(_.skewable)
+        yield
+          Snoc(a, b)
+
+      override def flexiOut: Option[Components[Wrap, (X1, X2), FlI, Sk, Flx, (Y1, Y2)]] =
+        for
+          a <- init.flexiOut.flatMap(_.skewable)
+          b <- last.flexiOut.flatMap(_.skewable)
+        yield
+          Snoc(a, b)
+
+      override def skewable: Option[Components[Wrap,  (X1, X2), FlI, Skw, FlO, (Y1, Y2)]] =
+        for
+          a <- init.skewable
+          b <- last.skewable
+        yield
+          Snoc(a, b)
+
+      override def trimIn: Option[Either[
+        ((X1, X2) =:= (Y1, Y2), EdgeDesc.TupleN.Components[Wrap, (Y1, Y2)]),
+        Components[Wrap, (X1, X2), ?, Sk, FlO, (Y1, Y2)]
+      ]] =
+        (init.trimIn, last.trimIn) match
+          case (Some(Right(a))                 , Some(Right(b)))                  => Some(Right(Snoc(a, b)))
+          case (Some(Right(a))                 , Some(Left((TypeEq(Refl()), d)))) => Some(Right(Snoc(a, Adapt(Adaptoid.Id(d)))))
+          case (Some(Left((TypeEq(Refl()), c))), Some(Right(b)))                  => Some(Right(Snoc(id(c), b)))
+          case (Some(Left((TypeEq(Refl()), c))), Some(Left((TypeEq(Refl()), d)))) => Some(Left((summon, EdgeDesc.TupleN.Snoc(c, d))))
+          case (Some(Right(a))                 , None)                            => Some(Right(Snoc(a, last)))
+          case (None                           , Some(Right(b)))                  => Some(Right(Snoc(init, b)))
+          case (Some(Left(_)), None) => None // cannot report as progress
+          case (None, Some(Left(_))) => None // cannot report as progress
+          case (None, None) => None
+
+      override def trimOut: Option[Either[
+        ((X1, X2) =:= (Y1, Y2), EdgeDesc.TupleN.Components[Wrap, (Y1, Y2)]),
+        Components[Wrap, (X1, X2), FlI, Sk, ?, (Y1, Y2)]
+      ]] =
+        (init.trimOut, last.trimOut) match
+          case (Some(Right(a))                 , Some(Right(b)))                  => Some(Right(Snoc(a, b)))
+          case (Some(Right(a))                 , Some(Left((TypeEq(Refl()), d)))) => Some(Right(Snoc(a, Adapt(Adaptoid.Id(d)))))
+          case (Some(Left((TypeEq(Refl()), c))), Some(Right(b)))                  => Some(Right(Snoc(id(c), b)))
+          case (Some(Left((TypeEq(Refl()), c))), Some(Left((TypeEq(Refl()), d)))) => Some(Left((summon, EdgeDesc.TupleN.Snoc(c, d))))
+          case (Some(Right(a))                 , None)                            => Some(Right(Snoc(a, last)))
+          case (None                           , Some(Right(b)))                  => Some(Right(Snoc(init, b)))
+          case (Some(Left(_)), None) => None // cannot report as progress
+          case (None, Some(Left(_))) => None // cannot report as progress
+          case (None, None) => None
+
+      override def inIsNotEmpty(using (X1, X2) =:= EmptyTuple): Nothing =
+        pairIsNotEmptyTuple[X1, X2]
+
+      override def outIsNotEmpty(using (Y1, Y2) =:= EmptyTuple): Nothing =
+        pairIsNotEmptyTuple[Y1, Y2]
+    }
+
+    def id[Wrap[_], X](desc: EdgeDesc.TupleN.Components[Wrap, X]): Components[Wrap, X, Flx, Skw, Flx, X] =
+      desc match
+        case EdgeDesc.TupleN.Single(d) =>
+          Single(Adapt(Adaptoid.Id(d)))
+        case s: EdgeDesc.TupleN.Snoc[wr, x1, x2] =>
+          Snoc[Wrap, x1, Flx, Skw, Flx, x1, x2, Flx, Skw, Flx, x2](id(s.init), Adapt(Adaptoid.Id(s.last)))
   }
 
   case class ConnectorsOverlay[X, J, Y](

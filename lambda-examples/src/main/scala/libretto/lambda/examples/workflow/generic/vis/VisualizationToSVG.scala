@@ -1,5 +1,6 @@
 package libretto.lambda.examples.workflow.generic.vis
 
+import libretto.lambda.{ParN, TupleN}
 import libretto.lambda.examples.workflow.generic.vis.Color
 import libretto.lambda.examples.workflow.generic.vis.DefaultDimensions.*
 import libretto.lambda.examples.workflow.generic.vis.Px.*
@@ -8,7 +9,7 @@ import libretto.lambda.examples.workflow.generic.vis.SVG.FontFamily.{Monospace, 
 import libretto.lambda.examples.workflow.generic.vis.SVG.{Stroke, TextAnchor}
 import libretto.lambda.examples.workflow.generic.vis.Visualization.{IVisualization, Semiflex}
 import libretto.lambda.examples.workflow.generic.vis.util.{IntegralProportions, leastCommonMultiple}
-import libretto.lambda.util.TypeEq
+import libretto.lambda.util.{Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import scala.math.Ordering.Implicits.*
 
@@ -37,6 +38,9 @@ object VisualizationToSVG {
       case par: Visualization.Par[bin, x1, x2, y1, y2] =>
         renderPar(par, edges, height)
           .insertComment("Par")
+      case parN: Visualization.IParN[wrap, x, p, i, q, y] =>
+        renderParN(parN, edges, height)
+          .insertComment("ParN")
       case co @ Visualization.ConnectorsOverlay(base, connectors) =>
         renderConnectorsOverlay(co, edges, height)
           .insertComment("ConnectorsOverlay")
@@ -224,11 +228,11 @@ object VisualizationToSVG {
     edges: IOLayout[X1 ∙ X2, Y1 ∙ Y2],
     height: Px,
   ): SVGElem = {
-    val Visualization.IPar(op, a, b) = par.indexed
-    val lStyle = AmbientStyle.leftOf(op)
-    val rStyle = AmbientStyle.rightOf(op)
     edges match
       case IOLayout.Par(la, lb) =>
+        val Visualization.IPar(op, a, b) = par.indexed
+        val lStyle = AmbientStyle.leftOf(op)
+        val rStyle = AmbientStyle.rightOf(op)
         val amb1 = renderAmbient(lStyle, la, height)
         val amb2 = renderAmbient(rStyle, lb, height).map(_.translate(la.pixelBreadth.pixels, 0.0))
         val ga = renderSVG(a, la, height)
@@ -257,6 +261,59 @@ object VisualizationToSVG {
     val gb = renderSkewed(b, layout2)
     SVGElem.Group(amb1 ++: amb2 ++: List(ga, gb))
   }
+
+  private def renderParN[Wrap[_], X, Y](
+    parN: Visualization.IParN[Wrap, X, ?, ?, ?, Y],
+    layout: IOLayout[Wrap[X], Wrap[Y]],
+    height: Px,
+  ): SVGElem = {
+    layout match
+      case IOLayout.ParN(layoutComps) =>
+        SVGElem.Group(
+          renderParNComponents(parN.op, parN.components, layoutComps, height, acc = Nil)
+        )
+      case other =>
+        parN.skewable match
+          case Some(parSk) =>
+            SVGElem.Group(
+              renderParNComponentsSkewed(parSk.components, TrapezoidLayout(other, height))
+            )
+          case None =>
+            throw IllegalArgumentException(s"To render a non-skewable ParN, IOLayout.ParN must be used. Was: $other")
+  }
+
+  private def renderParNComponents[Wrap[_], X, Y](
+    op: OpTag[Wrap],
+    comps: Visualization.IParN.Components[Wrap, X, ?, ?, ?, Y],
+    layouts: IOLayout.ParN.Components[Wrap, X, Y],
+    height: Px,
+    acc: List[SVGElem],
+  ): List[SVGElem] =
+    comps match
+      case s: Visualization.IParN.Single[wr, x, p, i, q, y] =>
+        summon[X =:= Only[x]]
+        summon[Y =:= Only[y]]
+        val layout = IOLayout.ParN.asSingle[Wrap, x, y](layouts).value
+        val vis = renderSVG(s.vis, layout, height)
+        val amb = renderAmbient(AmbientStyle.nthOf(op, 0), layout, height)
+        amb ++: (vis :: acc)
+      case s: Visualization.IParN.Snoc[wr, x1, p, i, q, y1, x2, r, j, s, y2] =>
+        summon[X =:= (x1, x2)]
+        summon[Y =:= (y1, y2)]
+        layouts match
+          case IOLayout.ParN.Snoc(layInit, layLast) =>
+            val ambStyle = AmbientStyle.nthOf(op, s.init.size)
+            val ambLast = renderAmbient(ambStyle, layLast, height).map(_.translate(layInit.pixelBreadth.pixels, 0.0))
+            val visLast = renderSVG    (s.last  , layLast, height)      .translate(layInit.pixelBreadth.pixels, 0.0)
+            renderParNComponents(op, s.init, layInit, height, ambLast ++: (visLast :: acc))
+          case IOLayout.ParN.Single(_) =>
+            s.init.inIsNotEmpty(using summon[x1 =:= EmptyTuple])
+
+  private def renderParNComponentsSkewed[Wrap[_], X, Y](
+    comps: Visualization.IParN.Components[Wrap, X, ?, Skw, ?, Y],
+    layouts: TrapezoidLayout[Wrap[X], Wrap[Y]],
+  ): List[SVGElem] =
+    ???
 
   private def renderConnectorsOverlay[X, Y](
     co: Visualization.ConnectorsOverlay[X, ?, Y],
@@ -567,6 +624,118 @@ object VisualizationToSVG {
         renderIdentity[Wire](EdgeDesc.SingleWire, reg)
       case p: EdgeDesc.Binary[op, y1, y2] =>
         renderFanOut(p, reg)
+      case EdgeDesc.TupleN(op, comps) =>
+        renderFanOutNAry(op, comps, reg)
+
+  private def renderFanOutNAry[Wrap[_], Y](
+    op: OpTag[Wrap],
+    components: EdgeDesc.TupleN.Components[Wrap, Y],
+    reg: TrapezoidLayout[Wire, Wrap[Y]],
+  ): SVGElem =
+    vsplitFanOut(components) match
+      case Left(shallow) =>
+        renderFanOutNAryShallow(op, shallow, reg)
+      case Right(Exists.Some(nested)) =>
+        renderFanOutNAryNested(op, nested, reg)
+
+  private def renderFanOutNAryShallow[Wrap[_], Y](
+    op: OpTag[Wrap],
+    components: TupleN[Tuple2, EmptyTuple, [y] =>> y =:= Wire, Y],
+    reg: TrapezoidLayout[Wire, Wrap[Y]],
+  ): SVGElem =
+    renderFanOutNAryShallow(op, components, reg, components.size, Nil, Nil)
+
+  private def renderFanOutNAryShallow[Wrap[_], Y](
+    op: OpTag[Wrap],
+    components: TupleN[Tuple2, EmptyTuple, [y] =>> y =:= Wire, Y],
+    reg: TrapezoidLayout[Wire, Wrap[Y]],
+    n: Int,
+    accAmb: List[SVGElem],
+    accCon: List[SVGElem],
+  ): SVGElem =
+    components match
+      case s: TupleN.Single[p, n, f, y] =>
+        val reg1 = TrapezoidLayout.singleOut[Wire, Wrap, y](reg)
+        val reg2 = s.value.substituteCo(reg1)
+        val amb = renderAmbient(AmbientStyle.nthOf(op, 0), reg2, EdgeStretch.wirePart(0, n), EdgeStretch.whole)
+        val vis = renderConnector[Wire, Wire](
+          Connector.Across(WirePick.pickId, WirePick.pickId),
+          reg2,
+        )
+        SVGElem.Group(amb ++: accAmb ::: vis :: accCon)
+      case s: TupleN.Snoc[p, n, f, y1, y2] =>
+        summon[Y =:= (y1, y2)]
+        s.init.nonEmpty:
+          [y11, y12] => (ev: y1 =:= (y11, y12)) ?=>
+            (ev, s.last) match { case (TypeEq(Refl()), TypeEq(Refl())) =>
+              val (reg1, reg2) = TrapezoidLayout.unsnocOut[Wire, Wrap, y11, y12, y2](reg)
+              val i = s.init.size
+              val amb = renderAmbient(AmbientStyle.nthOf(op, i), reg2, EdgeStretch.wirePart(i, n), EdgeStretch.whole)
+              val vis = renderConnector[Wire, Wire](
+                Connector.Across(WirePick.pickId, WirePick.pickId),
+                reg2,
+              )
+              renderFanOutNAryShallow(op, s.init, reg1, n, amb ++: accAmb, vis :: accCon)
+            }
+
+  private def renderFanOutNAryNested[Wrap[_], X, Y](
+    op: OpTag[Wrap],
+    components: ParN[Tuple2, EmptyTuple, [x, y] =>> (x =:= Wire, EdgeDesc[y]), X, Y],
+    reg: TrapezoidLayout[Wire, Wrap[Y]]
+  ): SVGElem = {
+    val level1: TupleN[Tuple2, EmptyTuple, [x] =>> x =:= Wire, X] =
+      components.inputProjection[[x] =>> x =:= Wire]([x, y] => _._1)
+    val depth2: Length =
+      components.foldCrush([x, y] => _._2.depth, Length.max)
+    val xRefinedByY: Wrap[X] IsRefinedBy Wrap[Y] =
+      IsRefinedBy.ParN(
+        op,
+        components.translate:
+          [x, y] => f => f match { case (TypeEq(Refl()), y) => IsRefinedBy.initial(y) }
+      )
+    val xLayout: EdgeLayout[Wrap[X]] =
+      reg.oLayout.coarsen(xRefinedByY)
+    reg.vsplit(xLayout)(
+      Length.one,
+      depth2,
+    ) match {
+      case (k, iReg, oReg) =>
+        val vis1 = renderFanOutNAryShallow(op, level1, iReg)
+        val vis2 = renderExpand(xRefinedByY, oReg).translate(0.0, iReg.height.pixels)
+        val g = SVGElem.Group(vis1, vis2)
+        if k == 1 then g else g.scale(1.0/k)
+    }
+  }
+
+  private def vsplitFanOut[Wrap[_], Y](
+    components: EdgeDesc.TupleN.Components[Wrap, Y],
+  ): Either[
+    TupleN[Tuple2, EmptyTuple, [y] =>> y =:= Wire, Y],
+    Exists[[X] =>> ParN[Tuple2, EmptyTuple, [x, y] =>> (x =:= Wire, EdgeDesc[y]), X, Y]]
+  ] = {
+    type F[X] = X =:= Wire
+    type G[X, Y] = (F[X], EdgeDesc[Y])
+
+    def h[X](ev: F[X]): G[X, X] = (ev, ev.substituteContra(EdgeDesc.wire))
+
+    components match
+      case s: EdgeDesc.TupleN.Single[wr, y] =>
+        s.value.isComposite match
+          case Left(ev) => Left(TupleN.Single[Tuple2, EmptyTuple, F, y](ev))
+          case Right(y) =>
+            val f: (Wire =:= Wire, EdgeDesc[y]) = (summon[F[Wire]], y)
+            Right(Exists(ParN.Single[Tuple2, EmptyTuple, G, Wire, y](f)))
+      case EdgeDesc.TupleN.Snoc(init, last) =>
+        vsplitFanOut(init) match
+          case Right(Exists.Some(fs)) =>
+            Right(Exists(fs ∙ (summon[F[Wire]], last)))
+          case Left(fs) =>
+            last.isComposite match
+              case Left(ev) => Left(fs ∙ ev)
+              case Right(_) =>
+                val gs = fs.unravel[G]([y] => h(_))
+                Right(Exists(gs ∙ (summon[F[Wire]], last)))
+  }
 
   private def renderFanOut[∙[_, _], Y1, Y2](
     y: EdgeDesc.Binary[∙, Y1, Y2],
@@ -687,6 +856,8 @@ object VisualizationToSVG {
         val g1 = renderExpand(p.f1, reg1)
         val g2 = renderExpand(p.f2, reg2)
         SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
+      case IsRefinedBy.ParN(op, components) =>
+        renderExpandParN(op, components, reg)
 
   private def renderCollapse[X, Y](
     f: Y IsRefinedBy X,
@@ -709,6 +880,36 @@ object VisualizationToSVG {
         val g1 = renderCollapse(p.f1, reg1)
         val g2 = renderCollapse(p.f2, reg2)
         SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
+
+  private def renderExpandParN[Wrap[_], X, Y](
+    op: OpTag[Wrap],
+    components: IsRefinedBy.ParN.Components[X, Y],
+    reg: TrapezoidLayout[Wrap[X], Wrap[Y]],
+  ): SVGElem =
+    renderExpandParN(op, components, reg, Nil)
+
+  private def renderExpandParN[Wrap[_], X, Y](
+    op: OpTag[Wrap],
+    components: IsRefinedBy.ParN.Components[X, Y],
+    reg: TrapezoidLayout[Wrap[X], Wrap[Y]],
+    acc: List[SVGElem],
+  ): SVGElem = {
+    components match
+      case s: ParN.Single[p, n, f, x, y] =>
+        val reg1 = TrapezoidLayout.single[Wrap, x, y](reg)
+        val amb = renderAmbient(AmbientStyle.nthOf(op, 0), reg1)
+        val vis = renderExpand(s.value, reg1)
+        SVGElem.Group(amb ++: (vis :: acc))
+      case s: ParN.Snoc[p, n, f, x1, x2, y1, y2] =>
+        s.init.nonEmpty:
+          [x11, x12, y11, y12] => (evx: x1 =:= (x11, x12), evy: y1 =:= (y11, y12)) ?=>
+            (evx, evy) match { case (TypeEq(Refl()), TypeEq(Refl())) =>
+              val (reg1, reg2) = TrapezoidLayout.unsnoc[Wrap, x11, x12, x2, y11, y12, y2](reg)
+              val amb = renderAmbient(AmbientStyle.nthOf(op, s.init.size), reg2)
+              val vis = renderExpand(s.last, reg2)
+              renderExpandParN(op, s.init, reg1, amb ++: (vis :: acc))
+            }
+  }
 
   private def scaleToFit(srcW: Int, srcH: Int, tgtW: Int, tgtH: Int): Double =
     require(srcW >  0)

@@ -1,11 +1,20 @@
 package libretto.lambda.examples.workflow.generic.vis
 
+import libretto.lambda.NarrowCategory
 import libretto.lambda.util.Exists
 import libretto.lambda.util.Exists.{Some as ∃}
+import libretto.lambda.examples.workflow.generic.vis.EdgeDesc.Composite
 
 infix sealed trait IsRefinedBy[X, Y] {
   def inDesc: EdgeDesc[X]
   def outDesc: EdgeDesc[Y]
+  def isStrict: Boolean
+
+  def outDescComposite(inDesc: EdgeDesc.Composite[X]): EdgeDesc.Composite[Y]
+
+  def asWireIdentity(using Y =:= Wire): X =:= Wire
+
+  infix def andThen[Z](that: Y IsRefinedBy Z): X IsRefinedBy Z
 
   infix def par[∙[_, _], V, W](that: V IsRefinedBy W)(using op: OpTag[∙]): (X ∙ V) IsRefinedBy (Y ∙ W) =
     IsRefinedBy.par(this, that)
@@ -30,6 +39,18 @@ object IsRefinedBy {
     override def outDesc: EdgeDesc[X] =
       desc
 
+    override def isStrict: Boolean =
+      false
+
+    override def outDescComposite(inDesc: EdgeDesc.Composite[X]): EdgeDesc.Composite[X] =
+      inDesc
+
+    override def asWireIdentity(using X =:= Wire): X =:= Wire =
+      summon
+
+    override def andThen[Z](that: X IsRefinedBy Z): X IsRefinedBy Z =
+      that
+
     override def greatestCommonCoarsening[W](
       that: W IsRefinedBy X,
     ): Exists[[V] =>> (V IsRefinedBy X, V IsRefinedBy W)] =
@@ -39,10 +60,25 @@ object IsRefinedBy {
       Adaptoid.collapse(that)
   }
 
-  infix sealed trait IsStrictlyRefinedBy[X, Y] extends IsRefinedBy[X, Y]
+  infix sealed trait IsStrictlyRefinedBy[X, Y] extends IsRefinedBy[X, Y] {
+    override def isStrict: Boolean = true
+  }
 
   case class Initial[X](outDesc: EdgeDesc.Composite[X]) extends (Wire IsStrictlyRefinedBy X) {
     override def inDesc: EdgeDesc[Wire] = EdgeDesc.SingleWire
+
+    override def outDescComposite(
+      inDesc: EdgeDesc.Composite[Wire] // impossible input
+    ): EdgeDesc.Composite[X] =
+      outDesc
+
+    override def asWireIdentity(using
+      X =:= Wire, // impossible input
+    ): Wire =:= Wire =
+      summon
+
+    override def andThen[Z](that: X IsRefinedBy Z): Wire IsRefinedBy Z =
+      Initial(that.outDescComposite(this.outDesc))
 
     override def greatestCommonCoarsening[W](
       that: W IsRefinedBy X,
@@ -73,6 +109,18 @@ object IsRefinedBy {
 
     override def outDesc: EdgeDesc[Y1 ∙ Y2] =
       EdgeDesc.binary(f1.outDesc, f2.outDesc)
+
+    override def outDescComposite(inDesc: EdgeDesc.Composite[X1 ∙ X2]): EdgeDesc.Composite[Y1 ∙ Y2] =
+      EdgeDesc.binary(f1.outDesc, f2.outDesc)
+
+    override def asWireIdentity(using ev: (Y1 ∙ Y2) =:= Wire): (X1 ∙ X2) =:= Wire =
+      Wire.isNotBinary[∙, Y1, Y2](using ev.flip)
+
+    override def andThen[Z](that: (Y1 ∙ Y2) IsRefinedBy Z): (X1 ∙ X2) IsRefinedBy Z =
+      that match
+        case Pairwise(op_, g1, g2) => Pairwise(op, f1 andThen g1, f2 andThen g2)
+        case Id(desc) => this
+        case Initial(outDesc) => throw AssertionError("Impossible Wire =:= (X1 ∙ X2) if `∙` is a class type different from Wire")
 
     override def greatestCommonCoarsening[W](
       that: W IsRefinedBy (Y1 ∙ Y2),
@@ -105,6 +153,36 @@ object IsRefinedBy {
       Adaptoid.par(using op)(f1 morph g1, f2 morph g2)
   }
 
+  case class ParN[Wrap[_], X, Y](
+    op: OpTag[Wrap],
+    components: ParN.Components[X, Y],
+  ) extends (Wrap[X] IsStrictlyRefinedBy Wrap[Y]) {
+    require(
+      components.exists([x, y] => _.isStrict),
+      "At least 1 component of IsRefinedBy.ParN must be *strictly* refining"
+    )
+
+    override def morph[W](that: W IsRefinedBy Wrap[Y]): Adaptoid[Wrap[X], W] = ???
+
+    override def greatestCommonCoarsening[W](that: W IsRefinedBy Wrap[Y]): Exists[[V] =>> (V IsRefinedBy Wrap[X], V IsRefinedBy W)] = ???
+
+    override def inDesc: EdgeDesc[Wrap[X]] = ???
+
+    override def outDescComposite(inDesc: Composite[Wrap[X]]): Composite[Wrap[Y]] = ???
+
+    override def outDesc: EdgeDesc[Wrap[Y]] = ???
+
+    override def andThen[Z](that: Wrap[Y] IsRefinedBy Z): Wrap[X] IsRefinedBy Z = ???
+
+    override def asWireIdentity(using ev: Wrap[Y] =:= Wire): Wrap[X] =:= Wire =
+      Wire.isNotUnary[Wrap, Y](using ev.flip)
+
+  }
+
+  object ParN {
+    type Components[X, Y] = libretto.lambda.ParN[Tuple2, EmptyTuple, IsRefinedBy, X, Y]
+  }
+
   def id[X](using EdgeDesc[X]): (X IsRefinedBy X) =
     Id[X](summon)
 
@@ -123,6 +201,17 @@ object IsRefinedBy {
       case (Id(x1), Id(x2)) => Id(x1 ∙ x2)
       case _                => Pairwise(op, f1, f2)
 
+  def wireIsBottom[X](f: X IsRefinedBy Wire): (X =:= Wire) =
+    f.asWireIdentity
+
   def anythingRefinesWire[X](using EdgeDesc[X]): (Wire IsRefinedBy X) =
     initial[X](summon)
+
+  given NarrowCategory[IsRefinedBy, EdgeDesc] with {
+    override def andThen[A, B, C](f: A IsRefinedBy B, g: B IsRefinedBy C): A IsRefinedBy C =
+      f andThen g
+
+    override def id[A](witness: EdgeDesc[A]): A IsRefinedBy A =
+      Id(witness)
+  }
 }

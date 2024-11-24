@@ -7,9 +7,10 @@ import libretto.lambda.util.TypeEq.Refl
  * Binary tree with leafs holding values of types `F[X]`, `F[Y]`, ...
  * The complete structure of the tree is expressed by the type `A`, using the tags for branches and leafs.
  *
- * @tparam <*> tag for branches
- * @tparam T tag for leafs.
- * @tparam F value type of leafs. Each leaf holds a value of type `F[T]`, for some type `T`.
+ * @tparam <*> tag for branches, as it appears in `A`
+ * @tparam T tag for leafs, as it appears in `A`
+ * @tparam F value type of leafs. Each leaf holds a value of type `F[X]`, for some type `X`
+ *   (but appears in `A` as `T[X]`).
  * @tparam A captures the complete structure of the tree
  */
 sealed trait Bin[<*>[_, _], T[_], F[_], A] {

@@ -87,4 +87,43 @@ object TrapezoidLayout {
       TrapezoidLayout(iOff + i1.pixelBreadth, oOff + o1.pixelBreadth, i2, o2, height)
     )
   }
+
+  def singleOut[I, Wrap[_], O](
+    reg: TrapezoidLayout[I, Wrap[Only[O]]],
+  ): TrapezoidLayout[I, O] =
+    val TrapezoidLayout(iOff, oOff, iLayout, oLayout, height) = reg
+    TrapezoidLayout(iOff, oOff, iLayout, EdgeLayout.single(oLayout), height)
+
+  def single[Wrap[_], I, O](
+    reg: TrapezoidLayout[Wrap[Only[I]], Wrap[Only[O]]]
+  ): TrapezoidLayout[I, O] =
+    val TrapezoidLayout(iOff, oOff, iLayout, oLayout, height) = reg
+    TrapezoidLayout(iOff, oOff, EdgeLayout.single(iLayout), EdgeLayout.single(oLayout), height)
+
+  def unsnocOut[I, Wrap[_], O1, O2, O3](
+    reg: TrapezoidLayout[I, Wrap[((O1, O2), O3)]],
+  ): (
+    TrapezoidLayout[I, Wrap[(O1, O2)]],
+    TrapezoidLayout[I, O3],
+  ) =
+    val TrapezoidLayout(iOff, oOff, iLayout, oLayout, height) = reg
+    val (oLayInit, oLayLast) = EdgeLayout.unsnoc(oLayout)
+    (
+      TrapezoidLayout(iOff, oOff                        , iLayout, oLayInit, height),
+      TrapezoidLayout(iOff, oOff + oLayInit.pixelBreadth, iLayout, oLayLast, height),
+    )
+
+  def unsnoc[Wrap[_], I1, I2, I3, O1, O2, O3](
+    reg: TrapezoidLayout[Wrap[((I1, I2), I3)], Wrap[((O1, O2), O3)]],
+  ): (
+    TrapezoidLayout[Wrap[(I1, I2)], Wrap[(O1, O2)]],
+    TrapezoidLayout[I3, O3],
+  ) =
+    val TrapezoidLayout(iOff, oOff, iLayout, oLayout, height) = reg
+    val (iLayInit, iLayLast) = EdgeLayout.unsnoc(iLayout)
+    val (oLayInit, oLayLast) = EdgeLayout.unsnoc(oLayout)
+    (
+      TrapezoidLayout(iOff                        , oOff                        , iLayInit, oLayInit, height),
+      TrapezoidLayout(iOff + iLayInit.pixelBreadth, oOff + oLayInit.pixelBreadth, iLayLast, oLayLast, height),
+    )
 }

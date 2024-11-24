@@ -28,17 +28,24 @@ object EdgeStretch {
     case class Leading[∙[_, _], X1, X2](to: InnerPointOf[X2]) extends Demarcation[X1 ∙ X2]
     case class Trailing[∙[_, _], X1, X2](from: InnerPointOf[X1]) extends Demarcation[X1 ∙ X2]
     case class Inner[∙[_, _], X1, X2](from: InnerPointOf[X1], to: InnerPointOf[X2]) extends Demarcation[X1 ∙ X2]
-    enum SubWire extends Demarcation[Wire] {
-      case Pre
-      case WireLHalf
-      case WireRHalf
-      case Post
-      case LHalf
-      case RHalf
-      case WireOnly
-      case WireAndPre
-      case WireAndPost
-      case PaddingMidpoints
+    sealed trait SubWire extends Demarcation[Wire]
+    object SubWire {
+      case object Pre              extends SubWire
+      case object WireLHalf        extends SubWire
+      case object WireRHalf        extends SubWire
+      case object Post             extends SubWire
+      case object LHalf            extends SubWire
+      case object RHalf            extends SubWire
+      case object WireOnly         extends SubWire
+      case object WireAndPre       extends SubWire
+      case object WireAndPost      extends SubWire
+      case object PaddingMidpoints extends SubWire
+      case class Fraction(from: Int, to: Int, total: Int) extends SubWire {
+        require(0 <= from)
+        require(from <= to)
+        require(to <= total)
+        require(0 < total)
+      }
     }
   }
 
@@ -120,6 +127,19 @@ object EdgeStretch {
 
   def wireRHalf: EdgeStretch[Wire] =
     wireRHalf(EdgeSegment.pickId)
+
+  def wireFraction[X](from: Int, to: Int, total: Int, seg: EdgeSegment[Wire, X]): EdgeStretch[X] =
+    EdgeStretch.Line(seg, Demarcation.SubWire.Fraction(from, to, total))
+
+  def wireFraction(from: Int, to: Int, total: Int): EdgeStretch[Wire] =
+    wireFraction(from, to, total, EdgeSegment.pickId)
+
+  def wirePart[X](i: Int, n: Int, seg: EdgeSegment[Wire, X]): EdgeStretch[X] =
+    require(i < n)
+    wireFraction(i, i+1, n, seg)
+
+  def wirePart(i: Int, n: Int): EdgeStretch[Wire] =
+    wirePart(i, n, EdgeSegment.pickId)
 
   def wireSegLHalf[X](seg: EdgeSegment[Wire, X]): EdgeStretch[X] =
     EdgeStretch.Line(seg, Demarcation.SubWire.LHalf)

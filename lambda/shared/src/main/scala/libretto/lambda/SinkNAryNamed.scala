@@ -3,7 +3,7 @@ package libretto.lambda
 import libretto.lambda.util.{BiInjective, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
-/** A collection of arrows `Ai --> B`,
+/** A collection of arrows `Ai -> B`,
  * where `A = name1 :: A1 || name2 :: A2 || ... || name_n :: An`,
  * where `||` associates to the left.
  */

@@ -18,6 +18,7 @@ object Px {
     def +(y: Px): Px = Px(x + y)
     def *(k: Int): Px = Px(x * k)
     def /(k: Int): Px = { require(k > 0); Px(x / k) }
+    def halve: (Px, Px) = ((x+1)/2, x/2)
 
   extension (n: Int)
     def px: Px = Px(n)

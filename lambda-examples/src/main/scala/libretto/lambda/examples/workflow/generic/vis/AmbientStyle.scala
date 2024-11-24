@@ -21,4 +21,15 @@ object AmbientStyle {
     op match
       case OpTag.Sum => background(StyleDefs.ColorCaseRight)
       case OpTag.Pair => empty
+
+  def nthOf[Wrap[_]](op: OpTag[Wrap], n: Int): AmbientStyle =
+    op match
+      case OpTag.Enum =>
+        val color =
+          if n % 2 == 0
+            then StyleDefs.ColorCaseLeft
+            else StyleDefs.ColorCaseRight
+        background(color)
+      case _ =>
+        empty
 }

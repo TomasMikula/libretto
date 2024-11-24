@@ -3,6 +3,16 @@ package libretto.lambda
 import libretto.lambda.util.{BiInjective, StaticValue, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
+/**
+  * Witnesses that `Label :: A` is one of `Cases`,
+  * where `Cases` is of the form `(lbl1 :: A1) || (lbl2 :: A2) || ...`
+  * (where `||` associates to the left).
+  *
+  * Similar to [[TupleElem]], but for *named* members.
+  * Unlike [[TupleElem]], `Member` does not need a special "`Nil`" type
+  * to mark the end of the members list: there is no ambiguity in
+  * `Enum["foo" :: (Bar || Baz)]` — it is unambiguously a single-member `Enum`.
+  */
 sealed trait Member[||[_, _], ::[_, _], Label, A, Cases] {
   import Member.*
 

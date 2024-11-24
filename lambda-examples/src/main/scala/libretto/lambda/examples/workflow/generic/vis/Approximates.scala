@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.vis
 
-import libretto.lambda.examples.workflow.generic.lang.{**, ++}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::}
 import libretto.lambda.util.Exists
 import libretto.lambda.util.Exists.{Some as ∃}
 
@@ -29,7 +29,21 @@ infix sealed trait Approximates[X, A] {
     X =:= (X1 ∙ X2),
   ): (W1 ∙ W2) Approximates A
 
-  infix def leastCommonRefinement[Y](that: Y Approximates A): Exists[[Z] =>> (Z Approximates A, X IsRefinedBy Z, Y IsRefinedBy Z)]
+  infix def leastCommonRefinement[Y](
+    that: Y Approximates A,
+  ): Exists[[Z] =>> (
+    Z Approximates A,
+    X IsRefinedBy Z,
+    Y IsRefinedBy Z
+  )]
+
+  infix def greatestCommonCoarsening[Y](
+    that: Y Approximates A,
+  ): Exists[[W] =>> (
+    W IsRefinedBy X,
+    W IsRefinedBy Y,
+    W Approximates A,
+  )]
 }
 
 object Approximates {
@@ -37,8 +51,15 @@ object Approximates {
     override def inDesc: EdgeDesc[Wire] =
       EdgeDesc.SingleWire
 
-    override def leastCommonRefinement[Y](that: Y Approximates A): Exists[[Z] =>> (Z Approximates A, Wire IsRefinedBy Z, Y IsRefinedBy Z)] =
+    override def leastCommonRefinement[Y](
+      that: Y Approximates A
+    ): Exists[[Z] =>> (Z Approximates A, Wire IsRefinedBy Z, Y IsRefinedBy Z)] =
       Exists((that, IsRefinedBy.initial[Y](that.inDesc), IsRefinedBy.Id[Y](that.inDesc)))
+
+    override def greatestCommonCoarsening[Y](
+      that: Y Approximates A,
+    ): Exists[[W] =>> (W IsRefinedBy Wire, W IsRefinedBy Y, W Approximates A)] =
+      Exists((IsRefinedBy.id[Wire], IsRefinedBy.initial[Y](that.inDesc), this))
 
     override protected def coarsenByPair[∙[_, _], W1, W2, X1, X2](
       g1: W1 IsRefinedBy X1,
@@ -85,6 +106,14 @@ object Approximates {
         case (∃((z1, zf1, zg1)), ∃((z2, zf2, zg2))) =>
           Exists((Pairwise(op, z1, z2), zf1 par zf2, zg1 par zg2))
 
+    override def greatestCommonCoarsening[Y](
+      that: Y Approximates (A1 ∙ A2),
+    ): Exists[[W] =>> (
+      W IsRefinedBy (X1 ∙ X2),
+      W IsRefinedBy Y,
+      W Approximates (A1 ∙ A2),
+    )] = ???
+
     override protected def coarsenByPair[∘[_, _], W1, W2, Y1, Y2](
       g1: W1 IsRefinedBy Y1,
       g2: W2 IsRefinedBy Y2,
@@ -92,6 +121,55 @@ object Approximates {
       (X1 ∙ X2) =:= (Y1 ∘ Y2),
     ): (W1 ∘ W2) Approximates (A1 ∙ A2) =
       ???
+  }
+
+  case class ParNDropNames[Wrap[_], X, A](
+    op: OpTag[Wrap],
+    components: ParNDropNames.Components[Wrap, X, A],
+  ) extends Approximates[Wrap[X], Wrap[A]] {
+
+    override def inDesc: EdgeDesc[Wrap[X]] =
+      EdgeDesc.TupleN(op, components.inDesc)
+
+    override protected def coarsenByPair[∙[_$1,_$2], W1, W2, X1, X2](g1: W1 IsRefinedBy X1, g2: W2 IsRefinedBy X2)(using Wrap[X] =:= ∙[X1, X2]): ∙[W1, W2] Approximates Wrap[A] = ???
+
+    override def leastCommonRefinement[Y](
+      that: Y Approximates Wrap[A],
+    ): Exists[[Z] =>> (
+      Z Approximates Wrap[A],
+      Wrap[X] IsRefinedBy Z,
+      Y IsRefinedBy Z,
+    )] = ???
+
+    override def greatestCommonCoarsening[Y](
+      that: Y Approximates Wrap[A],
+    ): Exists[[W] =>> (
+      W IsRefinedBy Wrap[X],
+      W IsRefinedBy Y,
+      W Approximates Wrap[A],
+    )] = ???
+
+  }
+
+  object ParNDropNames {
+    sealed trait Components[Wrap[_], X, A] {
+      def inDesc: EdgeDesc.TupleN.Components[Wrap, X]
+    }
+
+    case class Single[Wrap[_], X, Lbl, A](
+      value: Approximates[X, A]
+    ) extends Components[Wrap, Only[X], Lbl :: A] {
+      override def inDesc: EdgeDesc.TupleN.Components[Wrap, Only[X]] =
+        EdgeDesc.TupleN.Single(value.inDesc)
+    }
+
+    case class Snoc[Wrap[_], X, A, Y, Lbl, B](
+      init: Components[Wrap, X, A],
+      last: Y Approximates B,
+    ) extends Components[Wrap, (X, Y), A || (Lbl :: B)] {
+      override def inDesc: EdgeDesc.TupleN.Components[Wrap, (X, Y)] =
+        EdgeDesc.TupleN.Snoc(init.inDesc, last.inDesc)
+    }
   }
 
   def lump[A]: Wire Approximates A =

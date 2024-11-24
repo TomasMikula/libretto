@@ -1,5 +1,6 @@
 package libretto.lambda.examples.workflow.generic.vis
 
+import libretto.lambda.{SinkNAryNamed, SinkNAry, TupleElem}
 import libretto.lambda.examples.workflow.generic.lang.{++, **, ::, ||, Enum, FlowAST, Workflows}
 import libretto.lambda.util.Exists
 import libretto.lambda.util.Exists.{Some as ∃}
@@ -11,6 +12,7 @@ import EdgeDesc.wire
 import IOProportions.EdgeProportions
 import PredefinedFill.{GradientVerticalWhiteBlack, VerticalFadeOutLeft, VerticalFadeOutRight}
 import StyleDefs.{ColorCaseLeft, ColorCaseRight}
+import Visualization.{Flx, IVisualization, Skw}
 import WirePick.{pickId, pickL, pickR}
 
 object FlowVisualizer {
@@ -103,6 +105,9 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                         merge(w1.inDesc),
                       ),
                     )))
+
+      case FlowAST.Handle(handlers) =>
+        visualizeHandlers(handlers)
 
       case FlowAST.DoWhile(g) =>
         visualizeAst(g) match
@@ -377,7 +382,154 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         Visualizer.unimplemented(other.getClass.getSimpleName())
   }
 
-  def merge[X](x: EdgeDesc[X]): Visualization[X ++ X, X] =
+  private def visualizeHandlers[A, B](
+    handlers: SinkNAryNamed[FlowAST[Op, _, _], ||, ::, A, B],
+  ): Exists[[X] =>> Exists[[Y] =>> (
+    X Approximates Enum[A],
+    Y Approximates B,
+    Visualization[X, Y]
+  )]] =
+    visualizeIndividualHandlers(handlers) match
+      case ∃(∃((x, f, y))) =>
+        visualizeMerge(y) match
+          case ∃((g, z)) =>
+            Exists(Exists((
+              Approximates.ParNDropNames(OpTag[Enum], x),
+              z,
+              Visualization.IParN(OpTag[Enum], f) :: Visualization.Sequence(g)
+            )))
+
+  private def visualizeIndividualHandlers[A, B](
+    handlers: SinkNAryNamed[FlowAST[Op, _, _], ||, ::, A, B],
+  ): Exists[[X] =>> Exists[[Y] =>> (
+    Approximates.ParNDropNames.Components[Enum, X, A],
+    Visualization.IParN.Components[Enum, X, ?, ?, ?, Y],
+    SinkNAry[Approximates, Tuple2, EmptyTuple, Y, B],
+  )]] =
+    handlers match
+      case s: SinkNAryNamed.Single[arr, sep, of, lbl, a, b] =>
+        visualizeAst(s.h) match
+          case ex @ ∃(ey @ ∃((x, y, f))) =>
+            Exists(Exists(
+              Approximates.ParNDropNames.Single[Enum, ex.T, lbl, a](x),
+              Visualization.IParN.Single(f.indexed),
+              SinkNAry.Single(y)
+            ))
+      case s: SinkNAryNamed.Snoc[arr, sep, of, init, lbl, z, b] =>
+        (visualizeIndividualHandlers(s.init), visualizeAst(s.last)) match
+          case (ex1 @ ∃(∃((x1, f1, y1))), ex2 @ ∃(∃((x2, y2, f2)))) =>
+            Exists(Exists(
+              Approximates.ParNDropNames.Snoc[Enum, ex1.T, init, ex2.T, lbl, z](x1, x2),
+              Visualization.IParN.Snoc(f1, f2.indexed),
+              SinkNAry.Snoc(y1, y2)
+            ))
+
+  private def visualizeMerge[X, B](
+    fs: SinkNAry[Approximates, Tuple2, EmptyTuple, X, B],
+  ): Exists[[Y] =>> (IVisualization[Enum[X], Flx, ?, Flx, Y], Y Approximates B)] =
+    fs.pullback(
+      [x, y, b] => (xb, yb) => xb greatestCommonCoarsening yb,
+      [x, y] => xy => xy.inDesc,
+    ) match {
+      case Exists.Some((refinements, appr)) =>
+        Exists((
+          coarsenMerge(refinements.asSink),
+          appr
+        ))
+    }
+
+  private def coarsenMerge[X, Y](
+    fs: SinkNAry[[x, y] =>> y IsRefinedBy x, Tuple2, EmptyTuple, X, Y],
+  ): IVisualization[Enum[X], Flx, ?, Flx, Y] =
+    coarsenings(fs) match
+      case Exists.Some((coarsenings, segments, ysDesc, yDesc)) =>
+        coarsenings :: Visualization.Sequence(
+          merge(
+            ysDesc,
+            yDesc,
+            segments
+          )
+        )
+
+  private def merge[Ys, Y](
+    ysDesc: EdgeDesc[Ys],
+    yDesc: EdgeDesc[Y],
+    segments: List[EdgeSegment[Y, Ys]],
+  ): Visualization.FullyFlexi[Ys, Y] = {
+    val tgtStretch = EdgeStretch.paddingMidpoints(yDesc)
+    val areas =
+      segments.zipWithIndex.map { case (seg, i) =>
+        TrapezoidArea(
+          EdgeStretch.segment(seg),
+          tgtStretch,
+          if i % 2 == 0
+            then VerticalFadeOutLeft
+            else VerticalFadeOutRight
+        )
+      }
+
+    val yWires = wiresOf(yDesc)
+    val wires =
+      for
+        seg  <- segments
+        wire <- yWires
+      yield
+        val inSeg = seg.compose(wire)
+        Connector.Across(inSeg, wire)
+
+    Visualization.connectors(
+      ysDesc,
+      yDesc
+    )((areas ++ wires)*)
+  }
+
+  private def coarsenings[X, Y](
+    fs: SinkNAry[[x, y] =>> y IsRefinedBy x, Tuple2, EmptyTuple, X, Y],
+  ): Exists[[Ys] =>> (
+    Visualization.IVisualization[Enum[X], Flx, Skw, Flx, Enum[Ys]],
+    List[EdgeSegment[Y, Enum[Ys]]],
+    EdgeDesc[Enum[Ys]],
+    EdgeDesc[Y],
+  )] =
+    coarseningComponents[X, Y](fs) match
+      case Exists.Some((visComps, segs, ysComps, yDesc)) =>
+        Exists((
+          Visualization.IParN(OpTag[Enum], visComps),
+          segs.reverse,
+          EdgeDesc.TupleN(OpTag[Enum], ysComps),
+          yDesc,
+        ))
+
+  private def coarseningComponents[X, Y](
+    fs: SinkNAry[[x, y] =>> y IsRefinedBy x, Tuple2, EmptyTuple, X, Y],
+  ): Exists[[Ys] =>> (
+    Visualization.IParN.Components[Enum, X, Flx, Skw, Flx, Ys],
+    List[EdgeSegment.InElem[Enum, Y, Y, Ys]],
+    EdgeDesc.TupleN.Components[Enum, Ys],
+    EdgeDesc[Y],
+  )] =
+    fs match
+      case SinkNAry.Single(f) =>
+        Exists((
+          Visualization.IParN.Single(Visualization.Adapt(Adaptoid.collapse(f))),
+          EdgeSegment.elem(TupleElem.single) :: Nil,
+          EdgeDesc.TupleN.Single(f.inDesc),
+          f.inDesc
+        ))
+      case s: SinkNAry.Snoc[arr, sep, nil, init, z, b] =>
+        summon[X =:= (init, z)]
+        summon[Y =:= b]
+        coarseningComponents[init, Y](s.init) match {
+          case Exists.Some((visInit, segs, ysDesc, yDesc)) =>
+            Exists((
+              Visualization.IParN.Snoc(visInit, Visualization.Adapt(Adaptoid.collapse(s.last))),
+              EdgeSegment.elem(TupleElem.Last()) :: segs.map(_.inInit),
+              EdgeDesc.TupleN.Snoc(ysDesc, s.last.inDesc),
+              yDesc
+            ))
+        }
+
+  private def merge[X](x: EdgeDesc[X]): Visualization[X ++ X, X] =
     val tgt = EdgeStretch.paddingMidpoints(x)
     Visualization.connectors(
       x ++ x,
