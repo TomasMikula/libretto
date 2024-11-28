@@ -132,10 +132,10 @@ object Approximates {
   ) extends Approximates[Wrap[X], Wrap[A]] {
 
     override def inDesc: EdgeDesc[Wrap[X]] =
-      val descComponents: EdgeDesc.TupleN.Components[Wrap, X] =
+      val descComponents: EdgeDesc.TupleN.Components[X] =
         components
           .inputProjection[EdgeDesc]([x, y] => _.inDesc)
-          .foldL[EdgeDesc.TupleN.Components[Wrap, _]](
+          .foldL[EdgeDesc.TupleN.Components](
             [x] => x => EdgeDesc.TupleN.Single(x),
             [x, y] => (x, y) => EdgeDesc.TupleN.Snoc(x, y),
           )

@@ -41,10 +41,11 @@ object IOLayout {
                 l1.coarsen(p.f1),
                 l2.coarsen(p.f2)
               )
-        case IsRefinedBy.ParN(op, refinements) =>
+        case p: IsRefinedBy.ParN[wr, w, x] =>
+          val IsRefinedBy.ParN(op, refinements) = p
           this match
             case EdgeLayout.TupleN(components) =>
-              EdgeLayout.TupleN(components.coarsen(refinements))
+              EdgeLayout.TupleN[wr, w](components.coarsen(refinements))
 
     protected def reallocateToSingleWire: EdgeLayout.SingleWire
 
@@ -130,7 +131,7 @@ object IOLayout {
     }
 
     case class TupleN[Wrap[_], X](
-      components: TupleN.Components[Wrap, X],
+      components: TupleN.Components[X],
     ) extends EdgeLayout[Wrap[X]] {
       override def pixelBreadth: Px =
         components.pixelBreadth
@@ -163,28 +164,28 @@ object IOLayout {
     }
 
     object TupleN {
-      sealed trait Components[Wrap[_], X] {
+      sealed trait Components[X] {
         def pixelBreadth: Px
-        def *(k: Int): Components[Wrap, X]
+        def *(k: Int): Components[X]
         def locateElem[Xi](elem: TupleElem[Tuple2, EmptyTuple, Xi, X]): (Px, EdgeLayout[Xi])
         def nonEmpty(using X =:= EmptyTuple): Nothing
-        def coarsen[W](fs: IsRefinedBy.ParN.Components[W, X]): Components[Wrap, W]
+        def coarsen[W](fs: IsRefinedBy.ParN.Components[W, X]): Components[W]
         def reallocateToSingleWire: EdgeLayout.SingleWire
       }
 
-      case class Single[Wrap[_], X](
+      case class Single[X](
         value: EdgeLayout[X],
-      ) extends Components[Wrap, Only[X]] {
+      ) extends Components[Only[X]] {
         override def nonEmpty(using Only[X] =:= EmptyTuple): Nothing =
           pairIsNotEmptyTuple[EmptyTuple, X]
 
         override def pixelBreadth: Px =
           value.pixelBreadth
 
-        override def *(k: Int): Components[Wrap, (EmptyTuple, X)] =
+        override def *(k: Int): Components[(EmptyTuple, X)] =
           Single(value * k)
 
-        override def coarsen[W](fs: IsRefinedBy.ParN.Components[W, Only[X]]): Components[Wrap, W] =
+        override def coarsen[W](fs: IsRefinedBy.ParN.Components[W, Only[X]]): Components[W] =
           fs match
             case libretto.lambda.ParN.Single(f) =>
               Single(value.coarsen(f))
@@ -206,20 +207,20 @@ object IOLayout {
                   throw AssertionError("Impossible: EmptyTuple =:= (X, Y)")
       }
 
-      case class Snoc[Wrap[_], X1, X2](
-        init: Components[Wrap, X1],
+      case class Snoc[X1, X2](
+        init: Components[X1],
         last: EdgeLayout[X2],
-      ) extends Components[Wrap, (X1, X2)] {
+      ) extends Components[(X1, X2)] {
         override def nonEmpty(using (X1, X2) =:= EmptyTuple): Nothing =
           pairIsNotEmptyTuple[X1, X2]
 
         override def pixelBreadth: Px =
           init.pixelBreadth + last.pixelBreadth
 
-        override def *(k: Int): Components[Wrap, (X1, X2)] =
+        override def *(k: Int): Components[(X1, X2)] =
           Snoc(init * k, last * k)
 
-        override def coarsen[W](fs: IsRefinedBy.ParN.Components[W, (X1, X2)]): Components[Wrap, W] =
+        override def coarsen[W](fs: IsRefinedBy.ParN.Components[W, (X1, X2)]): Components[W] =
           fs match
             case libretto.lambda.ParN.Snoc(fInit, fLast) =>
               Snoc(init.coarsen(fInit), last.coarsen(fLast))
@@ -338,7 +339,7 @@ object IOLayout {
         case TupleN(components) =>
           components match
             case TupleN.Single(x) => x
-            case s: TupleN.Snoc[wr, v, w] => s.init.nonEmpty
+            case s: TupleN.Snoc[v, w] => s.init.nonEmpty
 
     def unsnoc[Wrap[_], X1, X2, X3](
       x: EdgeLayout[Wrap[((X1, X2), X3)]],
@@ -379,7 +380,7 @@ object IOLayout {
   }
 
   case class ParN[Wrap[_], I, O](
-    components: ParN.Components[Wrap, I, O],
+    components: ParN.Components[I, O],
   ) extends IOLayout[Wrap[I], Wrap[O]] {
     override def pixelBreadth: Px =
       components.pixelBreadth
@@ -395,28 +396,28 @@ object IOLayout {
   }
 
   object ParN {
-    sealed trait Components[Wrap[_], I, O] {
+    sealed trait Components[I, O] {
       def pixelBreadth: Px
-      def inEdge: EdgeLayout.TupleN.Components[Wrap, I]
-      def outEdge: EdgeLayout.TupleN.Components[Wrap, O]
-      def *(k: Int): Components[Wrap, I, O]
+      def inEdge: EdgeLayout.TupleN.Components[I]
+      def outEdge: EdgeLayout.TupleN.Components[O]
+      def *(k: Int): Components[I, O]
       def inIsNotEmpty(using I =:= EmptyTuple): Nothing
       def outIsNotEmpty(using O =:= EmptyTuple): Nothing
     }
 
-    case class Single[Wrap[_], I, O](
+    case class Single[I, O](
       value: IOLayout[I, O],
-    ) extends Components[Wrap, Only[I], Only[O]] {
+    ) extends Components[Only[I], Only[O]] {
       override def pixelBreadth: Px =
         value.pixelBreadth
 
-      override def inEdge: EdgeLayout.TupleN.Components[Wrap, Only[I]] =
+      override def inEdge: EdgeLayout.TupleN.Components[Only[I]] =
         EdgeLayout.TupleN.Single(value.inEdge)
 
-      override def outEdge: EdgeLayout.TupleN.Components[Wrap, Only[O]] =
+      override def outEdge: EdgeLayout.TupleN.Components[Only[O]] =
         EdgeLayout.TupleN.Single(value.outEdge)
 
-      override def *(k: Int): Components[Wrap, Only[I], Only[O]] =
+      override def *(k: Int): Components[Only[I], Only[O]] =
         Single(value * k)
 
       override def inIsNotEmpty(using Only[I] =:= EmptyTuple): Nothing =
@@ -426,20 +427,20 @@ object IOLayout {
         pairIsNotEmptyTuple[EmptyTuple, O]
     }
 
-    case class Snoc[Wrap[_], I1, I2, O1, O2](
-      init: Components[Wrap, I1, O1],
+    case class Snoc[I1, I2, O1, O2](
+      init: Components[I1, O1],
       last: IOLayout[I2, O2],
-    ) extends Components[Wrap, (I1, I2), (O1, O2)] {
+    ) extends Components[(I1, I2), (O1, O2)] {
       override def pixelBreadth: Px =
         init.pixelBreadth + last.pixelBreadth
 
-      override def inEdge: EdgeLayout.TupleN.Components[Wrap, (I1, I2)] =
+      override def inEdge: EdgeLayout.TupleN.Components[(I1, I2)] =
         EdgeLayout.TupleN.Snoc(init.inEdge, last.inEdge)
 
-      override def outEdge: EdgeLayout.TupleN.Components[Wrap, (O1, O2)] =
+      override def outEdge: EdgeLayout.TupleN.Components[(O1, O2)] =
         EdgeLayout.TupleN.Snoc(init.outEdge, last.outEdge)
 
-      override def *(k: Int): Components[Wrap, (I1, I2), (O1, O2)] =
+      override def *(k: Int): Components[(I1, I2), (O1, O2)] =
         Snoc(init * k, last * k)
 
       override def inIsNotEmpty(using (I1, I2) =:= EmptyTuple): Nothing =
@@ -449,9 +450,9 @@ object IOLayout {
         pairIsNotEmptyTuple[O1, O2]
     }
 
-    def asSingle[Wrap[_], I, O](comps: Components[Wrap, Only[I], Only[O]]): Single[Wrap, I, O] =
+    def asSingle[Wrap[_], I, O](comps: Components[Only[I], Only[O]]): Single[I, O] =
       comps match
-        case s: Single[wr, i, o]         => s
-        case s: Snoc[wr, i1, i2, o1, o2] => s.init.inIsNotEmpty(using summon[i1 =:= EmptyTuple])
+        case s: Single[i, o]         => s
+        case s: Snoc[i1, i2, o1, o2] => s.init.inIsNotEmpty(using summon[i1 =:= EmptyTuple])
   }
 }

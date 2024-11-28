@@ -284,20 +284,20 @@ object VisualizationToSVG {
 
   private def renderParNComponents[Wrap[_], X, Y](
     op: OpTag[Wrap],
-    comps: Visualization.IParN.Components[Wrap, X, ?, ?, ?, Y],
-    layouts: IOLayout.ParN.Components[Wrap, X, Y],
+    comps: Visualization.IParN.Components[X, ?, ?, ?, Y],
+    layouts: IOLayout.ParN.Components[X, Y],
     height: Px,
     acc: List[SVGElem],
   ): List[SVGElem] =
     comps match
-      case s: Visualization.IParN.Single[wr, x, p, i, q, y] =>
+      case s: Visualization.IParN.Single[x, p, i, q, y] =>
         summon[X =:= Only[x]]
         summon[Y =:= Only[y]]
         val layout = IOLayout.ParN.asSingle[Wrap, x, y](layouts).value
         val vis = renderSVG(s.vis, layout, height)
         val amb = renderAmbient(AmbientStyle.nthOf(op, 0), layout, height)
         amb ++: (vis :: acc)
-      case s: Visualization.IParN.Snoc[wr, x1, p, i, q, y1, x2, r, j, s, y2] =>
+      case s: Visualization.IParN.Snoc[x1, p, i, q, y1, x2, r, j, s, y2] =>
         summon[X =:= (x1, x2)]
         summon[Y =:= (y1, y2)]
         layouts match
@@ -310,7 +310,7 @@ object VisualizationToSVG {
             s.init.inIsNotEmpty(using summon[x1 =:= EmptyTuple])
 
   private def renderParNComponentsSkewed[Wrap[_], X, Y](
-    comps: Visualization.IParN.Components[Wrap, X, ?, Skw, ?, Y],
+    comps: Visualization.IParN.Components[X, ?, Skw, ?, Y],
     layouts: TrapezoidLayout[Wrap[X], Wrap[Y]],
   ): List[SVGElem] =
     ???
@@ -629,7 +629,7 @@ object VisualizationToSVG {
 
   private def renderFanOutNAry[Wrap[_], Y](
     op: OpTag[Wrap],
-    components: EdgeDesc.TupleN.Components[Wrap, Y],
+    components: EdgeDesc.TupleN.Components[Y],
     reg: TrapezoidLayout[Wire, Wrap[Y]],
   ): SVGElem =
     vsplitFanOut(components) match
@@ -707,8 +707,8 @@ object VisualizationToSVG {
     }
   }
 
-  private def vsplitFanOut[Wrap[_], Y](
-    components: EdgeDesc.TupleN.Components[Wrap, Y],
+  private def vsplitFanOut[Y](
+    components: EdgeDesc.TupleN.Components[Y],
   ): Either[
     TupleN[Tuple2, EmptyTuple, [y] =>> y =:= Wire, Y],
     Exists[[X] =>> ParN[Tuple2, EmptyTuple, [x, y] =>> (x =:= Wire, EdgeDesc[y]), X, Y]]
@@ -719,7 +719,7 @@ object VisualizationToSVG {
     def h[X](ev: F[X]): G[X, X] = (ev, ev.substituteContra(EdgeDesc.wire))
 
     components match
-      case s: EdgeDesc.TupleN.Single[wr, y] =>
+      case s: EdgeDesc.TupleN.Single[y] =>
         s.value.isComposite match
           case Left(ev) => Left(TupleN.Single[Tuple2, EmptyTuple, F, y](ev))
           case Right(y) =>

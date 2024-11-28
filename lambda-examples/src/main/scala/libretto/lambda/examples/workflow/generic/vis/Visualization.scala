@@ -440,7 +440,7 @@ object Visualization {
 
   case class IParN[Wrap[_], X, P, I, Q, Y](
     op: OpTag[Wrap],
-    components: IParN.Components[Wrap, X, P, I, Q, Y],
+    components: IParN.Components[X, P, I, Q, Y],
   ) extends IVisualization[Wrap[X], P, I, Q, Wrap[Y]] {
     override def ioProportions: IOProportions[Wrap[X], Wrap[Y]] =
       IOProportions.ParN(components.ioProportions)
@@ -483,8 +483,8 @@ object Visualization {
   }
 
   object IParN {
-    sealed trait Components[Wrap[_], X, +P, +I, +Q, Y] {
-      def ioProportions: IOProportions.ParN.Components[Wrap, X, Y]
+    sealed trait Components[X, +P, +I, +Q, Y] {
+      def ioProportions: IOProportions.ParN.Components[X, Y]
 
       def size: Int
 
@@ -497,41 +497,41 @@ object Visualization {
           case Single(vis) => NonEmptyList(vis.length, tailAcc)
           case Snoc(init, last) => init.lengths(last.length :: tailAcc)
 
-      def flexiIn: Option[Components[Wrap, X, Flx, I, Q, Y]]
+      def flexiIn: Option[Components[X, Flx, I, Q, Y]]
 
-      def flexiOut: Option[Components[Wrap, X, P, I, Flx, Y]]
+      def flexiOut: Option[Components[X, P, I, Flx, Y]]
 
-      def skewable: Option[Components[Wrap, X, P, Skw, Q, Y]]
+      def skewable: Option[Components[X, P, Skw, Q, Y]]
 
       def trimIn: Option[Either[
-        (X =:= Y, EdgeDesc.TupleN.Components[Wrap, Y]),
-        Components[Wrap, X, ?, I, Q, Y]
+        (X =:= Y, EdgeDesc.TupleN.Components[Y]),
+        Components[X, ?, I, Q, Y]
       ]]
 
       def trimOut: Option[Either[
-        (X =:= Y, EdgeDesc.TupleN.Components[Wrap, Y]),
-        Components[Wrap, X, P, I, ?, Y]
+        (X =:= Y, EdgeDesc.TupleN.Components[Y]),
+        Components[X, P, I, ?, Y]
       ]]
 
       def inIsNotEmpty(using X =:= EmptyTuple): Nothing
       def outIsNotEmpty(using Y =:= EmptyTuple): Nothing
     }
 
-    case class Single[Wrap[_], X, P, I, Q, Y](
+    case class Single[X, P, I, Q, Y](
       vis: IVisualization[X, P, I, Q, Y],
-    ) extends Components[Wrap, Only[X], P, I, Q, Only[Y]] {
-      override def ioProportions: IOProportions.ParN.Components[Wrap, Only[X], Only[Y]] =
+    ) extends Components[Only[X], P, I, Q, Only[Y]] {
+      override def ioProportions: IOProportions.ParN.Components[Only[X], Only[Y]] =
         IOProportions.ParN.Single(vis.ioProportions)
 
       override def size: Int = 1
 
-      override def flexiIn:  Option[Components[Wrap, Only[X], Flx, I, Q, Only[Y]]] = vis.flexiIn.map(Single(_))
-      override def flexiOut: Option[Components[Wrap, Only[X], P, I, Flx, Only[Y]]] = vis.flexiOut.map(Single(_))
-      override def skewable: Option[Components[Wrap, Only[X], P, Skw, Q, Only[Y]]] = vis.skewable.map(Single(_))
+      override def flexiIn:  Option[Components[Only[X], Flx, I, Q, Only[Y]]] = vis.flexiIn.map(Single(_))
+      override def flexiOut: Option[Components[Only[X], P, I, Flx, Only[Y]]] = vis.flexiOut.map(Single(_))
+      override def skewable: Option[Components[Only[X], P, Skw, Q, Only[Y]]] = vis.skewable.map(Single(_))
 
       override def trimIn: Option[Either[
-        (Only[X] =:= Only[Y], EdgeDesc.TupleN.Components[Wrap, Only[Y]]),
-        Components[Wrap, Only[X], ?, I, Q, Only[Y]]
+        (Only[X] =:= Only[Y], EdgeDesc.TupleN.Components[Only[Y]]),
+        Components[Only[X], ?, I, Q, Only[Y]]
       ]] =
         vis.trimIn.map {
           case Left((ev, d)) => Left((ev.liftCo[Only], EdgeDesc.TupleN.Single(d)))
@@ -539,8 +539,8 @@ object Visualization {
         }
 
       override def trimOut: Option[Either[
-        (Only[X] =:= Only[Y], EdgeDesc.TupleN.Components[Wrap, Only[Y]]),
-        Components[Wrap, Only[X], P, I, ?, Only[Y]]
+        (Only[X] =:= Only[Y], EdgeDesc.TupleN.Components[Only[Y]]),
+        Components[Only[X], P, I, ?, Only[Y]]
       ]] =
         vis.trimOut.map {
           case Left((ev, d)) => Left((ev.liftCo[Only], EdgeDesc.TupleN.Single(d)))
@@ -554,11 +554,10 @@ object Visualization {
         pairIsNotEmptyTuple[EmptyTuple, Y]
     }
 
-    case class Snoc[Wrap[_], X1, P, I, Q, Y1, X2, R, J, S, Y2](
-      init: Components[Wrap, X1, P, I, Q, Y1],
+    case class Snoc[X1, P, I, Q, Y1, X2, R, J, S, Y2](
+      init: Components[X1, P, I, Q, Y1],
       last: IVisualization[X2, R, J, S, Y2],
     ) extends Components[
-      Wrap,
       (X1, X2),
       P | R | I | J, // input is flexible if components' inputs are flexible (P, R) and both components are skewable (I, J)
       I | J,         // skewable if both components are skewable
@@ -574,7 +573,7 @@ object Visualization {
 
       // override def indexed: IPar[∙, X1, P, I, Q, Y1, X2, R, J, S, Y2] = this
 
-      override def ioProportions: IOProportions.ParN.Components[Wrap, (X1, X2), (Y1, Y2)] =
+      override def ioProportions: IOProportions.ParN.Components[(X1, X2), (Y1, Y2)] =
         IOProportions.ParN.Snoc(
           init.ioProportions,
           last.ioProportions,
@@ -582,21 +581,21 @@ object Visualization {
 
       override def size: Int = 1 + init.size
 
-      override def flexiIn: Option[Components[Wrap, (X1, X2), Flx, Sk, FlO, (Y1, Y2)]] =
+      override def flexiIn: Option[Components[(X1, X2), Flx, Sk, FlO, (Y1, Y2)]] =
         for
           a <- init.flexiIn.flatMap(_.skewable)
           b <- last.flexiIn.flatMap(_.skewable)
         yield
           Snoc(a, b)
 
-      override def flexiOut: Option[Components[Wrap, (X1, X2), FlI, Sk, Flx, (Y1, Y2)]] =
+      override def flexiOut: Option[Components[(X1, X2), FlI, Sk, Flx, (Y1, Y2)]] =
         for
           a <- init.flexiOut.flatMap(_.skewable)
           b <- last.flexiOut.flatMap(_.skewable)
         yield
           Snoc(a, b)
 
-      override def skewable: Option[Components[Wrap,  (X1, X2), FlI, Skw, FlO, (Y1, Y2)]] =
+      override def skewable: Option[Components[ (X1, X2), FlI, Skw, FlO, (Y1, Y2)]] =
         for
           a <- init.skewable
           b <- last.skewable
@@ -604,8 +603,8 @@ object Visualization {
           Snoc(a, b)
 
       override def trimIn: Option[Either[
-        ((X1, X2) =:= (Y1, Y2), EdgeDesc.TupleN.Components[Wrap, (Y1, Y2)]),
-        Components[Wrap, (X1, X2), ?, Sk, FlO, (Y1, Y2)]
+        ((X1, X2) =:= (Y1, Y2), EdgeDesc.TupleN.Components[(Y1, Y2)]),
+        Components[(X1, X2), ?, Sk, FlO, (Y1, Y2)]
       ]] =
         (init.trimIn, last.trimIn) match
           case (Some(Right(a))                 , Some(Right(b)))                  => Some(Right(Snoc(a, b)))
@@ -619,8 +618,8 @@ object Visualization {
           case (None, None) => None
 
       override def trimOut: Option[Either[
-        ((X1, X2) =:= (Y1, Y2), EdgeDesc.TupleN.Components[Wrap, (Y1, Y2)]),
-        Components[Wrap, (X1, X2), FlI, Sk, ?, (Y1, Y2)]
+        ((X1, X2) =:= (Y1, Y2), EdgeDesc.TupleN.Components[(Y1, Y2)]),
+        Components[(X1, X2), FlI, Sk, ?, (Y1, Y2)]
       ]] =
         (init.trimOut, last.trimOut) match
           case (Some(Right(a))                 , Some(Right(b)))                  => Some(Right(Snoc(a, b)))
@@ -646,18 +645,18 @@ object Visualization {
     ): IParN[Wrap, X, ?, ?, ?, Y] =
       IParN(
         op,
-        components.foldL[[x, y] =>> Components[Wrap, x, ?, ?, ?, y]](
+        components.foldL[[x, y] =>> Components[x, ?, ?, ?, y]](
           [x, y] => vis => Single(vis.indexed),
           [x1, x2, y1, y2] => (init, last) => Snoc(init, last.indexed)
         )
       )
 
-    def id[Wrap[_], X](desc: EdgeDesc.TupleN.Components[Wrap, X]): Components[Wrap, X, Flx, Skw, Flx, X] =
+    def id[Wrap[_], X](desc: EdgeDesc.TupleN.Components[X]): Components[X, Flx, Skw, Flx, X] =
       desc match
         case EdgeDesc.TupleN.Single(d) =>
           Single(Adapt(Adaptoid.Id(d)))
-        case s: EdgeDesc.TupleN.Snoc[wr, x1, x2] =>
-          Snoc[Wrap, x1, Flx, Skw, Flx, x1, x2, Flx, Skw, Flx, x2](id(s.init), Adapt(Adaptoid.Id(s.last)))
+        case s: EdgeDesc.TupleN.Snoc[x1, x2] =>
+          Snoc[x1, Flx, Skw, Flx, x1, x2, Flx, Skw, Flx, x2](id(s.init), Adapt(Adaptoid.Id(s.last)))
   }
 
   case class ConnectorsOverlay[X, J, Y](

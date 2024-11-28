@@ -86,7 +86,7 @@ object IOProportions {
     }
 
     case class TupleN[Wrap[_], X](
-      components: TupleN.Components[Wrap, X],
+      components: TupleN.Components[X],
     ) extends EdgeProportions[Wrap[X]] {
       override def totalBreadth: Breadth =
         val b0 :: bs = components.breadths
@@ -103,46 +103,46 @@ object IOProportions {
     }
 
     object TupleN {
-      sealed trait Components[Wrap[_], X] {
+      sealed trait Components[X] {
         def breadths: NonEmptyList[Breadth] =
           breadths(Nil)
 
         private[TupleN] def breadths(tailAcc: List[Breadth]): NonEmptyList[Breadth]
 
         lazy val count =
-          @tailrec def go[V](comps: Components[Wrap, V], acc: Int): Int =
+          @tailrec def go[V](comps: Components[V], acc: Int): Int =
             comps match
               case Single(_) => 1 + acc
               case Snoc(init, _) => go(init, 1 + acc)
           go(this, 0)
 
-        def layout(ws: List[Px]): (Int, EdgeLayout.TupleN.Components[Wrap, X]) =
+        def layout(ws: List[Px]): (Int, EdgeLayout.TupleN.Components[X]) =
           assert(ws.size == count)
           layoutRev(ws.reverse)
 
-        private[TupleN] def layoutRev(revBreadths: List[Px]): (Int, EdgeLayout.TupleN.Components[Wrap, X])
+        private[TupleN] def layoutRev(revBreadths: List[Px]): (Int, EdgeLayout.TupleN.Components[X])
       }
 
-      case class Single[Wrap[_], X](
+      case class Single[X](
         value: EdgeProportions[X],
-      ) extends Components[Wrap, Only[X]] {
+      ) extends Components[Only[X]] {
         override def breadths(tailAcc: List[Breadth]): NonEmptyList[Breadth] =
           NonEmptyList(value.totalBreadth, tailAcc)
 
-        private[TupleN] override def layoutRev(revBreadths: List[Px]): (Int, EdgeLayout.TupleN.Components[Wrap, Only[X]]) =
+        private[TupleN] override def layoutRev(revBreadths: List[Px]): (Int, EdgeLayout.TupleN.Components[Only[X]]) =
           val w :: Nil = revBreadths
           val (k, layout) = value.layout(w)
           (k, EdgeLayout.TupleN.Single(layout))
       }
 
-      case class Snoc[Wrap[_], X1, X2](
-        init: Components[Wrap, X1],
+      case class Snoc[X1, X2](
+        init: Components[X1],
         last: EdgeProportions[X2],
-      ) extends Components[Wrap, (X1, X2)] {
+      ) extends Components[(X1, X2)] {
         override def breadths(tailAcc: List[Breadth]): NonEmptyList[Breadth] =
           init.breadths(last.totalBreadth :: tailAcc)
 
-        private[TupleN] override def layoutRev(revBreadths: List[Px]): (Int, EdgeLayout.TupleN.Components[Wrap, (X1, X2)]) =
+        private[TupleN] override def layoutRev(revBreadths: List[Px]): (Int, EdgeLayout.TupleN.Components[(X1, X2)]) =
           val wLast :: wInit = revBreadths
           val (k, lastLay) = last.layout(wLast)
           val (l, initLay) = init.layoutRev(wInit.map(_ * k))
@@ -164,12 +164,12 @@ object IOProportions {
           UnitWire
         case p: EdgeDesc.Binary[op, x1, x2] =>
           Binary[op, x1, x2](default(p.x1), default(p.x2))
-        case EdgeDesc.TupleN(_, components) =>
-          TupleN(defaultTupleN(components))
+        case t: EdgeDesc.TupleN[wr, x] =>
+          TupleN[wr, x](defaultTupleN(t.components))
 
-    private def defaultTupleN[Wrap[_], X](
-      x: EdgeDesc.TupleN.Components[Wrap, X],
-    ): TupleN.Components[Wrap, X] =
+    private def defaultTupleN[X](
+      x: EdgeDesc.TupleN.Components[X],
+    ): TupleN.Components[X] =
       x match
         case EdgeDesc.TupleN.Single(d) => TupleN.Single(default(d))
         case EdgeDesc.TupleN.Snoc(init, last) => TupleN.Snoc(defaultTupleN(init), default(last))
@@ -243,7 +243,7 @@ object IOProportions {
   }
 
   case class ParN[Wrap[_], X, Y](
-    components: ParN.Components[Wrap, X, Y],
+    components: ParN.Components[X, Y],
   ) extends IOProportions[Wrap[X], Wrap[Y]] {
     override def totalBreadth: Breadth =
       val b :: bs = components.breadths
@@ -286,23 +286,23 @@ object IOProportions {
   }
 
   object ParN {
-    sealed trait Components[Wrap[_], X, Y] {
-      def inEdge: EdgeProportions.TupleN.Components[Wrap, X]
+    sealed trait Components[X, Y] {
+      def inEdge: EdgeProportions.TupleN.Components[X]
 
-      def outEdge: EdgeProportions.TupleN.Components[Wrap, Y]
+      def outEdge: EdgeProportions.TupleN.Components[Y]
 
-      private[ParN] def layoutRev(revBreadths: List[Px]): (Int, IOLayout.ParN.Components[Wrap, X, Y])
+      private[ParN] def layoutRev(revBreadths: List[Px]): (Int, IOLayout.ParN.Components[X, Y])
 
-      def layoutFw(inLayout: EdgeLayout.TupleN.Components[Wrap, X]): (Int, IOLayout.ParN.Components[Wrap, X, Y])
+      def layoutFw(inLayout: EdgeLayout.TupleN.Components[X]): (Int, IOLayout.ParN.Components[X, Y])
 
-      def layoutBw(outLayout: EdgeLayout.TupleN.Components[Wrap, Y]): (Int, IOLayout.ParN.Components[Wrap, X, Y])
+      def layoutBw(outLayout: EdgeLayout.TupleN.Components[Y]): (Int, IOLayout.ParN.Components[X, Y])
 
-      def layout(breadths: List[Px]): (Int, IOLayout.ParN.Components[Wrap, X, Y]) =
+      def layout(breadths: List[Px]): (Int, IOLayout.ParN.Components[X, Y]) =
         assert(breadths.size == count)
         layoutRev(breadths.reverse)
 
       lazy val count =
-        @tailrec def go[V, W](comps: Components[Wrap, V, W], acc: Int): Int =
+        @tailrec def go[V, W](comps: Components[V, W], acc: Int): Int =
           comps match
             case Single(_) => 1 + acc
             case Snoc(init, _) => go(init, 1 + acc)
@@ -317,9 +317,9 @@ object IOProportions {
       def nonEmptyOut(using Y =:= EmptyTuple): Nothing
     }
 
-    case class Single[Wrap[_], X, Y](
+    case class Single[X, Y](
       value: IOProportions[X, Y],
-    ) extends Components[Wrap, Only[X], Only[Y]] {
+    ) extends Components[Only[X], Only[Y]] {
       override def nonEmptyIn(using Only[X] =:= EmptyTuple): Nothing =
         pairIsNotEmptyTuple[EmptyTuple, X]
 
@@ -329,22 +329,22 @@ object IOProportions {
       override def breadths(tail: List[Breadth]): NonEmptyList[Breadth] =
         NonEmptyList(value.totalBreadth, tail)
 
-      override def inEdge: EdgeProportions.TupleN.Components[Wrap, Only[X]] =
+      override def inEdge: EdgeProportions.TupleN.Components[Only[X]] =
         EdgeProportions.TupleN.Single(value.inEdge)
 
-      override def outEdge: EdgeProportions.TupleN.Components[Wrap, Only[Y]] =
+      override def outEdge: EdgeProportions.TupleN.Components[Only[Y]] =
         EdgeProportions.TupleN.Single(value.outEdge)
 
       private[ParN] override def layoutRev(
         revBreadths: List[Px],
-      ): (Int, IOLayout.ParN.Components[Wrap, Only[X], Only[Y]]) =
+      ): (Int, IOLayout.ParN.Components[Only[X], Only[Y]]) =
         val w :: Nil = revBreadths
         val (k, layout) = value.layout(w)
         (k, IOLayout.ParN.Single(layout))
 
       override def layoutFw(
-        inLayout: EdgeLayout.TupleN.Components[Wrap, Only[X]],
-      ): (Int, IOLayout.ParN.Components[Wrap, Only[X], Only[Y]]) =
+        inLayout: EdgeLayout.TupleN.Components[Only[X]],
+      ): (Int, IOLayout.ParN.Components[Only[X], Only[Y]]) =
         inLayout match
           case EdgeLayout.TupleN.Single(inLayout) =>
             val (k, layout) = value.layoutFw(inLayout)
@@ -353,8 +353,8 @@ object IOProportions {
             initLay.nonEmpty
 
       override def layoutBw(
-        outLayout: TupleN.Components[Wrap, Only[Y]],
-      ): (Int, IOLayout.ParN.Components[Wrap, Only[X], Only[Y]]) =
+        outLayout: TupleN.Components[Only[Y]],
+      ): (Int, IOLayout.ParN.Components[Only[X], Only[Y]]) =
         outLayout match
           case EdgeLayout.TupleN.Single(outLayout) =>
             val (k, layout) = value.layoutBw(outLayout)
@@ -363,10 +363,10 @@ object IOProportions {
             initLay.nonEmpty
     }
 
-    case class Snoc[Wrap[_], X1, X2, Y1, Y2](
-      init: Components[Wrap, X1, Y1],
+    case class Snoc[X1, X2, Y1, Y2](
+      init: Components[X1, Y1],
       last: IOProportions[X2, Y2],
-    ) extends Components[Wrap, (X1, X2), (Y1, Y2)] {
+    ) extends Components[(X1, X2), (Y1, Y2)] {
       override def nonEmptyIn(using (X1, X2) =:= EmptyTuple): Nothing =
         pairIsNotEmptyTuple[X1, X2]
 
@@ -376,21 +376,21 @@ object IOProportions {
       override def breadths(tail: List[Breadth]): NonEmptyList[Breadth] =
         init.breadths(last.totalBreadth :: tail)
 
-      override def inEdge: EdgeProportions.TupleN.Components[Wrap, (X1, X2)] =
+      override def inEdge: EdgeProportions.TupleN.Components[(X1, X2)] =
         EdgeProportions.TupleN.Snoc(init.inEdge, last.inEdge)
 
-      override def outEdge: EdgeProportions.TupleN.Components[Wrap, (Y1, Y2)] =
+      override def outEdge: EdgeProportions.TupleN.Components[(Y1, Y2)] =
         EdgeProportions.TupleN.Snoc(init.outEdge, last.outEdge)
 
-      override def layoutRev(revBreadths: List[Px]): (Int, IOLayout.ParN.Components[Wrap, (X1, X2), (Y1, Y2)]) =
+      override def layoutRev(revBreadths: List[Px]): (Int, IOLayout.ParN.Components[(X1, X2), (Y1, Y2)]) =
         val lastW :: initWs = revBreadths
         val (k, lastLay) = last.layout(lastW)
         val (l, initLay) = init.layoutRev(initWs.map(_ * k))
         (k * l, IOLayout.ParN.Snoc(initLay, lastLay * l))
 
       override def layoutFw(
-        inLayout: EdgeLayout.TupleN.Components[Wrap, (X1, X2)],
-      ): (Int, IOLayout.ParN.Components[Wrap, (X1, X2), (Y1, Y2)]) =
+        inLayout: EdgeLayout.TupleN.Components[(X1, X2)],
+      ): (Int, IOLayout.ParN.Components[(X1, X2), (Y1, Y2)]) =
         inLayout match
           case EdgeLayout.TupleN.Snoc(inLayInit, inLayLast) =>
             val (k, layInit) = init.layoutFw(inLayInit)
@@ -400,8 +400,8 @@ object IOProportions {
             init.nonEmptyIn(using summon[X1 =:= EmptyTuple])
 
       override def layoutBw(
-        outLayout: EdgeLayout.TupleN.Components[Wrap, (Y1, Y2)],
-      ): (Int, IOLayout.ParN.Components[Wrap, (X1, X2), (Y1, Y2)]) =
+        outLayout: EdgeLayout.TupleN.Components[(Y1, Y2)],
+      ): (Int, IOLayout.ParN.Components[(X1, X2), (Y1, Y2)]) =
         outLayout match
           case EdgeLayout.TupleN.Snoc(outLayInit, outLayLast) =>
             val (k, layInit) = init.layoutBw(outLayInit)

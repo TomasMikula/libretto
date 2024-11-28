@@ -58,7 +58,7 @@ object EdgeDesc {
 
   case class TupleN[Wrap[_], X](
     op: OpTag[Wrap],
-    components: TupleN.Components[Wrap, X],
+    components: TupleN.Components[X],
   ) extends Composite[Wrap[X]] {
     override def depth: Length =
       Length.cram(
@@ -68,16 +68,16 @@ object EdgeDesc {
   }
 
   object TupleN {
-    sealed trait Components[Wrap[_], X] {
+    sealed trait Components[X] {
       def size: Int
       def depth: Length
 
       def argAsPair[R](f: [X1, X2] => (X =:= (X1, X2)) ?=> R): R
     }
 
-    case class Single[Wrap[_], X](
+    case class Single[X](
       value: EdgeDesc[X],
-    ) extends Components[Wrap, Only[X]] {
+    ) extends Components[Only[X]] {
       override def size: Int = 1
 
       override def depth: Length = value.depth
@@ -86,10 +86,10 @@ object EdgeDesc {
         f[EmptyTuple, X]
     }
 
-    case class Snoc[Wrap[_], X1, X2](
-      init: Components[Wrap, X1],
+    case class Snoc[X1, X2](
+      init: Components[X1],
       last: EdgeDesc[X2],
-    ) extends Components[Wrap, (X1, X2)] {
+    ) extends Components[(X1, X2)] {
       override def size: Int = 1 + init.size
 
       override def depth: Length =
@@ -106,7 +106,7 @@ object EdgeDesc {
     ): Composite[Wrap[X]] =
       TupleN(
         op,
-        components.foldL[Components[Wrap, _]](
+        components.foldL[Components[_]](
           [x] => x => Single(x),
           [x1, x2] => (init, last) => Snoc(init, last)
         )

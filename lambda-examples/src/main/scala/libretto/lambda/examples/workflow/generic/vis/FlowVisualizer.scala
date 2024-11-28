@@ -440,7 +440,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         OpTag[Enum],
         core
           .inputProjection[EdgeDesc]([x, y] => f => f match { case (TypeEq(Refl()), _) => wire })
-          .foldL[[X] =>> EdgeDesc.TupleN.Components[Enum, X]](
+          .foldL[EdgeDesc.TupleN.Components](
             [a] => a => EdgeDesc.TupleN.Single(a),
             [a, b] => (a, b) => EdgeDesc.TupleN.Snoc(a, b),
           )
@@ -450,7 +450,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         OpTag[Enum],
         core
           .outputProjection[EdgeDesc]([x, y] => f => f match { case (_, TypeEq(Refl())) => wire ** wire })
-          .foldL[[Y] =>> EdgeDesc.TupleN.Components[Enum, Y]](
+          .foldL[EdgeDesc.TupleN.Components](
             [a] => a => EdgeDesc.TupleN.Single(a),
             [a, b] => (a, b) => EdgeDesc.TupleN.Snoc(a, b),
           )
@@ -604,9 +604,9 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
   private def coarseningComponents[X, Y](
     fs: SinkNAry[[x, y] =>> y IsRefinedBy x, Tuple2, EmptyTuple, X, Y],
   ): Exists[[Ys] =>> (
-    Visualization.IParN.Components[Enum, X, Flx, Skw, Flx, Ys],
+    Visualization.IParN.Components[X, Flx, Skw, Flx, Ys],
     List[EdgeSegment.InElem[Enum, Y, Y, Ys]],
-    EdgeDesc.TupleN.Components[Enum, Ys],
+    EdgeDesc.TupleN.Components[Ys],
     EdgeDesc[Y],
   )] =
     fs match
