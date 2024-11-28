@@ -1,5 +1,7 @@
 package libretto.lambda
 
+import libretto.lambda.util.Exists
+
 /** An n-ary tuple of arrows `Ai -> Bi`,
  *  where
  *    `A = Nil ∙ A1 ∙ ... ∙ An`,
@@ -19,9 +21,48 @@ trait ParN[∙[_, _], Nil, ->[_, _], A, B] {
     g: [X, Y] => (X -> Y) => G[Y],
   ): TupleN[∙, Nil, G, B]
 
+  def divide[F[_, _], G[_, _]](
+    h: [X, Y] => (X -> Y) => Exists[[Q] =>> (F[X, Q], G[Q, Y])],
+  ): Exists[[Q] =>> (
+    ParN[∙, Nil, F, A, Q],
+    ParN[∙, Nil, G, Q, B]
+  )]
+
+  def divide3[F[_, _], G[_, _], H[_, _]](
+    h: [X, Y] => (X -> Y) => Exists[[P] =>> Exists[[Q] =>> (F[X, P], G[P, Q], H[Q, Y])]]
+  ): Exists[[P] =>> Exists[[Q] =>> (
+    ParN[∙, Nil, F, A, P],
+    ParN[∙, Nil, G, P, Q],
+    ParN[∙, Nil, H, Q, B],
+  )]] = {
+    type GH[P, Y] = Exists[[Q] =>> (G[P, Q], H[Q, Y])]
+    divide[F, GH](
+      [X, Y] => (f: X -> Y) => h(f) match {
+        case Exists.Some(Exists.Some((f, g, h))) =>
+          Exists((f, Exists((g, h))))
+      }
+    ) match {
+      case Exists.Some((fs, ghs)) =>
+        ghs.divide[G, H](
+          [P, Y] => (gh: GH[P, Y]) => gh
+        ) match {
+          case Exists.Some((gs, hs)) =>
+            Exists(Exists((fs, gs, hs)))
+        }
+    }
+
+  }
+
+  def flip: ParN[∙, Nil, [x, y] =>> y -> x, B, A]
+
   def translate[->>[_, _]](
     f: [X, Y] => (X -> Y) => (X ->> Y),
   ): ParN[∙, Nil, ->>, A, B]
+
+  def foldL[G[_, _]](
+    first: [x, y] => (x -> y) => G[Nil ∙ x, Nil ∙ y],
+    snoc: [x1, x2, y1, y2] => (G[x1, y1], x2 -> y2) => G[x1 ∙ x2, y1 ∙ y2],
+  ): G[A, B]
 
   def foldCrush[T](
     crush: [X, Y] => (X -> Y) => T,
@@ -45,6 +86,18 @@ trait ParN[∙[_, _], Nil, ->[_, _], A, B] {
 
   def ∙[C, D](f: C -> D): ParN[∙, Nil, ->, A ∙ C, B ∙ D] =
     ParN.Snoc(this, f)
+
+  type ZippedWithIndex[X, Y] = (X -> Y, TupleElem[∙, Nil, X, A], TupleElem[∙, Nil, Y, B])
+
+  def zipWithIndex: ParN[∙, Nil, ZippedWithIndex, A, B]
+
+  def toList[T](f: [X, Y] => (X -> Y) => T): List[T] =
+    toList(f, Nil)
+
+  protected def toList[T](
+    f: [X, Y] => (X -> Y) => T,
+    acc: List[T],
+  ): List[T]
 }
 
 object ParN {
@@ -61,8 +114,27 @@ object ParN {
     override def outputProjection[G[_]](g: [X, Y] => (X -> Y) => G[Y]): TupleN[∙, Nil, G, Nil ∙ B] =
       TupleN.Single(g(value))
 
+    override def divide[F[_,_], G[_,_]](
+      h: [X, Y] => (X -> Y) => Exists[[Q] =>> (F[X, Q], G[Q, Y])],
+    ): Exists[[Q] =>> (
+      ParN[∙, Nil, F, Nil ∙ A, Q],
+      ParN[∙, Nil, G, Q, Nil ∙ B]
+    )] =
+      h(value) match
+        case Exists.Some((f, g)) =>
+          Exists((Single(f), Single(g)))
+
+    override def flip: ParN[∙, Nil, [x, y] =>> y -> x, Nil ∙ B, Nil ∙ A] =
+      Single(value)
+
     override def translate[->>[_,_]](f: [X, Y] => (X -> Y) => (X ->> Y)): ParN[∙, Nil, ->>, Nil ∙ A, Nil ∙ B] =
       Single(f(value))
+
+    override def foldL[G[_,_]](
+      first: [x, y] => (x -> y) => G[Nil ∙ x, Nil ∙ y],
+      snoc: [x1, x2, y1, y2] => (G[x1, y1], x2 -> y2) => G[x1 ∙ x2, y1 ∙ y2],
+    ): G[Nil ∙ A, Nil ∙ B] =
+      first(value)
 
     override def foldCrush[T](crush: [X, Y] => (X -> Y) => T, reduce: (T, T) => T): T =
       crush(value)
@@ -81,6 +153,12 @@ object ParN {
     ): (Nil ∙ B) =:= Nil => Nothing =
       pairIsNotNil[Nil, B]
 
+    override def zipWithIndex: ParN[∙, Nil, [x, y] =>> (x -> y, TupleElem[∙, Nil, x, Nil ∙ A], TupleElem[∙, Nil, y, Nil ∙ B]), Nil ∙ A, Nil ∙ B] =
+      Single((value, TupleElem.single, TupleElem.single))
+
+    override protected def toList[T](f: [X, Y] => (X -> Y) => T, acc: List[T]): List[T] =
+      f(value) :: acc
+
   }
 
   case class Snoc[∙[_, _], Nil, ->[_, _], A1, A2, B1, B2](
@@ -96,8 +174,27 @@ object ParN {
     override def outputProjection[G[_]](g: [X, Y] => (X -> Y) => G[Y]): TupleN[∙, Nil, G, B1 ∙ B2] =
       TupleN.Snoc(init.outputProjection(g), g(last))
 
+    override def divide[F[_,_], G[_,_]](
+      h: [X, Y] => (X -> Y) => Exists[[Q] =>> (F[X, Q], G[Q, Y])],
+    ): Exists[[Q] =>> (
+      ParN[∙, Nil, F, A1 ∙ A2, Q],
+      ParN[∙, Nil, G, Q, B1 ∙ B2]
+    )] =
+      (init.divide(h), h(last)) match
+        case (Exists.Some((fInit, gInit)), Exists.Some((f, g))) =>
+          Exists((Snoc(fInit, f), Snoc(gInit, g)))
+
+    override def flip: ParN[∙, Nil, [x, y] =>> y -> x, B1 ∙ B2, A1 ∙ A2] =
+      Snoc(init.flip, last)
+
     override def translate[->>[_, _]](f: [X, Y] => (X -> Y) => (X ->> Y)): ParN[∙, Nil, ->>, A1 ∙ A2, B1 ∙ B2] =
       Snoc(init.translate(f), f(last))
+
+    override def foldL[G[_,_]](
+      first: [x, y] => (x -> y) => G[Nil ∙ x, Nil ∙ y],
+      snoc: [x1, x2, y1, y2] => (G[x1, y1], x2 -> y2) => G[x1 ∙ x2, y1 ∙ y2],
+    ): G[A1 ∙ A2, B1 ∙ B2] =
+      snoc(init.foldL(first, snoc), last)
 
     override def foldCrush[T](crush: [X, Y] => (X -> Y) => T, reduce: (T, T) => T): T =
       reduce(init.foldCrush(crush, reduce), crush(last))
@@ -116,6 +213,15 @@ object ParN {
       pairIsNotNil: [x, y] => (x ∙ y) =:= Nil => Nothing
     ): (B1 ∙ B2) =:= Nil => Nothing =
       pairIsNotNil[B1, B2]
+
+    override def zipWithIndex: ParN[∙, Nil, [x, y] =>> (x -> y, TupleElem[∙, Nil, x, A1 ∙ A2], TupleElem[∙, Nil, y, B1 ∙ B2]), A1 ∙ A2, B1 ∙ B2] =
+      init
+        .zipWithIndex
+        .translate[ZippedWithIndex]([x, y] => f => (f._1, f._2.inInit[A2], f._3.inInit[B2]))
+        ∙ (last, TupleElem.Last(), TupleElem.Last())
+
+    override protected def toList[T](f: [X, Y] => (X -> Y) => T, acc: List[T]): List[T] =
+      init.toList(f, f(last) :: acc)
 
   }
 

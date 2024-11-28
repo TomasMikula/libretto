@@ -640,6 +640,18 @@ object Visualization {
         pairIsNotEmptyTuple[Y1, Y2]
     }
 
+    def from[Wrap[_], X, Y](
+      op: OpTag[Wrap],
+      components: libretto.lambda.ParN[Tuple2, EmptyTuple, Visualization, X, Y],
+    ): IParN[Wrap, X, ?, ?, ?, Y] =
+      IParN(
+        op,
+        components.foldL[[x, y] =>> Components[Wrap, x, ?, ?, ?, y]](
+          [x, y] => vis => Single(vis.indexed),
+          [x1, x2, y1, y2] => (init, last) => Snoc(init, last.indexed)
+        )
+      )
+
     def id[Wrap[_], X](desc: EdgeDesc.TupleN.Components[Wrap, X]): Components[Wrap, X, Flx, Skw, Flx, X] =
       desc match
         case EdgeDesc.TupleN.Single(d) =>

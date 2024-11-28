@@ -8,7 +8,7 @@ sealed trait EdgeSegment[X, Y] {
   def inl[∙[_, _], B]: EdgeSegment[X, Y ∙ B] = Inl(this)
   def inr[∙[_, _], A]: EdgeSegment[X, A ∙ Y] = Inr(this)
 
-  def compose[W](that: EdgeSegment[W, X]): EdgeSegment[W, Y]
+  infix def compose[W](that: EdgeSegment[W, X]): EdgeSegment[W, Y]
 
   def switch[R](
     caseId: (X =:= Y) ?=> R,

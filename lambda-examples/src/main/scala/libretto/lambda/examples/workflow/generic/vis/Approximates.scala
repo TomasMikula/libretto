@@ -1,8 +1,10 @@
 package libretto.lambda.examples.workflow.generic.vis
 
+import libretto.lambda.{DropNames, ParN}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::}
-import libretto.lambda.util.Exists
+import libretto.lambda.util.{Exists, Functional, TypeEq}
 import libretto.lambda.util.Exists.{Some as ∃}
+import libretto.lambda.util.TypeEq.Refl
 
 infix sealed trait Approximates[X, A] {
   import Approximates.*
@@ -123,13 +125,21 @@ object Approximates {
       ???
   }
 
-  case class ParNDropNames[Wrap[_], X, A](
+  case class ParNDropNames[Wrap[_], X, A0, A](
     op: OpTag[Wrap],
-    components: ParNDropNames.Components[Wrap, X, A],
+    dropNames: DropNames[||, ::, Tuple2, EmptyTuple, A, A0],
+    components: ParN[Tuple2, EmptyTuple, Approximates, X, A0]
   ) extends Approximates[Wrap[X], Wrap[A]] {
 
     override def inDesc: EdgeDesc[Wrap[X]] =
-      EdgeDesc.TupleN(op, components.inDesc)
+      val descComponents: EdgeDesc.TupleN.Components[Wrap, X] =
+        components
+          .inputProjection[EdgeDesc]([x, y] => _.inDesc)
+          .foldL[EdgeDesc.TupleN.Components[Wrap, _]](
+            [x] => x => EdgeDesc.TupleN.Single(x),
+            [x, y] => (x, y) => EdgeDesc.TupleN.Snoc(x, y),
+          )
+      EdgeDesc.TupleN(op, descComponents)
 
     override protected def coarsenByPair[∙[_$1,_$2], W1, W2, X1, X2](g1: W1 IsRefinedBy X1, g2: W2 IsRefinedBy X2)(using Wrap[X] =:= ∙[X1, X2]): ∙[W1, W2] Approximates Wrap[A] = ???
 
@@ -139,7 +149,45 @@ object Approximates {
       Z Approximates Wrap[A],
       Wrap[X] IsRefinedBy Z,
       Y IsRefinedBy Z,
-    )] = ???
+    )] =
+      that match
+        case Initial() =>
+          Exists((
+            this,
+            IsRefinedBy.id[Wrap[X]](using inDesc),
+            IsRefinedBy.initial(inDesc)
+          ))
+        case ParNDropNames(op1, dropNames1, components1) =>
+          summon[Functional[DropNames[||, ::, Tuple2, EmptyTuple, _, _]]]
+            .uniqueOutputType(dropNames, dropNames1) match
+              case TypeEq(Refl()) =>
+                leastCommonRefinementElementWise(components, components1) match
+                  case Exists.Some((zs, xs, ys)) =>
+                    Exists((
+                      ParNDropNames(op, dropNames, zs),
+                      IsRefinedBy.parN(op, xs),
+                      IsRefinedBy.parN(op, ys)
+                    ))
+        case Pairwise(op, f1, f2) =>
+          throw AssertionError("Impossible if `Wrap` and `∙` are distinct class types")
+
+    private def leastCommonRefinementElementWise[Xs, Ys, As](
+      xs: ParN[Tuple2, EmptyTuple, Approximates, Xs, As],
+      ys: ParN[Tuple2, EmptyTuple, Approximates, Ys, As],
+    ): Exists[[Zs] =>> (
+      ParN[Tuple2, EmptyTuple, Approximates, Zs, As],
+      ParN[Tuple2, EmptyTuple, IsRefinedBy, Xs, Zs],
+      ParN[Tuple2, EmptyTuple, IsRefinedBy, Ys, Zs],
+    )] =
+      (xs, ys) match
+        case (ParN.Single(x), ParN.Single(y)) =>
+          (x leastCommonRefinement y) match
+            case Exists.Some((za, xz, yz)) =>
+              Exists((ParN.Single(za), ParN.Single(xz), ParN.Single(yz)))
+        case (ParN.Snoc(xs, x), ParN.Snoc(ys, y)) =>
+          (leastCommonRefinementElementWise(xs, ys), x leastCommonRefinement y) match
+            case (Exists.Some((zas, xzs, yzs)), Exists.Some((za, xz, yz))) =>
+              Exists((ParN.Snoc(zas, za), ParN.Snoc(xzs, xz), ParN.Snoc(yzs, yz)))
 
     override def greatestCommonCoarsening[Y](
       that: Y Approximates Wrap[A],
@@ -147,29 +195,45 @@ object Approximates {
       W IsRefinedBy Wrap[X],
       W IsRefinedBy Y,
       W Approximates Wrap[A],
-    )] = ???
+    )] =
+      that match
+        case Initial() =>
+          Exists((
+            IsRefinedBy.initial(this.inDesc),
+            IsRefinedBy.initial(that.inDesc),
+            Initial()
+          ))
+        case ParNDropNames(op1, dropNames1, components1) =>
+          summon[Functional[DropNames[||, ::, Tuple2, EmptyTuple, _, _]]]
+            .uniqueOutputType(dropNames, dropNames1) match
+              case TypeEq(Refl()) =>
+                greatestCommonCoarseningElementWise(components, components1) match
+                  case Exists.Some((xs, ys, as)) =>
+                    Exists((
+                      IsRefinedBy.parN(op, xs),
+                      IsRefinedBy.parN(op, ys),
+                      ParNDropNames(op, dropNames, as),
+                    ))
+        case Pairwise(op, f1, f2) =>
+          throw AssertionError("Impossible if `Wrap` and `∙` are distinct class types")
 
-  }
-
-  object ParNDropNames {
-    sealed trait Components[Wrap[_], X, A] {
-      def inDesc: EdgeDesc.TupleN.Components[Wrap, X]
-    }
-
-    case class Single[Wrap[_], X, Lbl, A](
-      value: Approximates[X, A]
-    ) extends Components[Wrap, Only[X], Lbl :: A] {
-      override def inDesc: EdgeDesc.TupleN.Components[Wrap, Only[X]] =
-        EdgeDesc.TupleN.Single(value.inDesc)
-    }
-
-    case class Snoc[Wrap[_], X, A, Y, Lbl, B](
-      init: Components[Wrap, X, A],
-      last: Y Approximates B,
-    ) extends Components[Wrap, (X, Y), A || (Lbl :: B)] {
-      override def inDesc: EdgeDesc.TupleN.Components[Wrap, (X, Y)] =
-        EdgeDesc.TupleN.Snoc(init.inDesc, last.inDesc)
-    }
+    private def greatestCommonCoarseningElementWise[Xs, Ys, As](
+      xs: ParN[Tuple2, EmptyTuple, Approximates, Xs, As],
+      ys: ParN[Tuple2, EmptyTuple, Approximates, Ys, As],
+    ): Exists[[Ws] =>> (
+      ParN[Tuple2, EmptyTuple, IsRefinedBy, Ws, Xs],
+      ParN[Tuple2, EmptyTuple, IsRefinedBy, Ws, Ys],
+      ParN[Tuple2, EmptyTuple, Approximates, Ws, As],
+    )] =
+      (xs, ys) match
+        case (ParN.Single(x), ParN.Single(y)) =>
+          (x greatestCommonCoarsening y) match
+            case Exists.Some((wx, wy, wa)) =>
+              Exists((ParN.Single(wx), ParN.Single(wy), ParN.Single(wa)))
+        case (ParN.Snoc(xs, x), ParN.Snoc(ys, y)) =>
+          (greatestCommonCoarseningElementWise(xs, ys), x greatestCommonCoarsening y) match
+            case (Exists.Some((wxs, wys, was)), Exists.Some((wx, wy, wa))) =>
+              Exists((ParN.Snoc(wxs, wx), ParN.Snoc(wys, wy), ParN.Snoc(was, wa)))
   }
 
   def lump[A]: Wire Approximates A =

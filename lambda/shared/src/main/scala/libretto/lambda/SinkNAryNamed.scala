@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{BiInjective, TypeEq}
+import libretto.lambda.util.{BiInjective, Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
 /** A collection of arrows `Ai -> B`,
@@ -15,6 +15,11 @@ sealed trait SinkNAryNamed[->[_, _], ||[_, _], ::[_, _], A, B] {
     BiInjective[||],
     BiInjective[::],
   ): X -> B
+
+  def dropNames[∙[_, _], Nil]: Exists[[A0] =>> (
+    DropNames[||, ::, ∙, Nil, A, A0],
+    SinkNAry[->, ∙, Nil, A0, B]
+  )]
 }
 
 private object SinkNAryNamed {
@@ -38,6 +43,15 @@ private object SinkNAryNamed {
       Member.asSingle(m) match
         case (lbl, TypeEq(Refl()), TypeEq(Refl())) =>
           h
+
+    override def dropNames[∙[_,_], Nil]: Exists[[A0] =>> (
+      DropNames[||, ::, ∙, Nil, Lbl :: A, A0],
+      SinkNAry[->, ∙, Nil, A0, B]
+    )] =
+      Exists((
+        DropNames.Single(),
+        SinkNAry.Single(h)
+      ))
   }
 
   case class Snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl, Z, R](
@@ -68,6 +82,14 @@ private object SinkNAryNamed {
       Member.asMultiple(m) match
         case Left((lbl, TypeEq(Refl()), TypeEq(Refl()))) => last
         case Right(m1) => init.get(m1)
+
+    override def dropNames[∙[_,_], Nil]: Exists[[A0] =>> (
+      DropNames[||, ::, ∙, Nil, Init || Lbl :: Z, A0],
+      SinkNAry[->, ∙, Nil, A0, R]
+    )] =
+      init.dropNames[∙, Nil] match
+        case Exists.Some((drop0, sink0)) =>
+          Exists((drop0.inInit[Lbl, Z], SinkNAry.Snoc(sink0, last)))
   }
 
   def snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl, Z, R](

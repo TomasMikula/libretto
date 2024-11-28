@@ -98,6 +98,19 @@ object EdgeDesc {
       override def argAsPair[R](f: [x1, x2] => ((X1, X2) =:= (x1, x2)) ?=> R): R =
         f[X1, X2]
     }
+
+    // TODO: becomes redundant after Components is made a type alias for libretto.lambda.TupleN
+    def apply[Wrap[_], X](
+      op: OpTag[Wrap],
+      components: libretto.lambda.TupleN[Tuple2, EmptyTuple, EdgeDesc, X],
+    ): Composite[Wrap[X]] =
+      TupleN(
+        op,
+        components.foldL[Components[Wrap, _]](
+          [x] => x => Single(x),
+          [x1, x2] => (init, last) => Snoc(init, last)
+        )
+      )
   }
 
   given wire: EdgeDesc[Wire] =

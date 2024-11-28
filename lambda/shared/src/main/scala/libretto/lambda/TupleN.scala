@@ -21,6 +21,11 @@ sealed trait TupleN[∙[_, _], Nil, F[_], A] {
 
   def ∙[B](b: F[B]): TupleN[∙, Nil, F, A ∙ B] =
     TupleN.Snoc(this, b)
+
+  def foldL[G[_]](
+    first: [a] => F[a] => G[Nil ∙ a],
+    snoc: [a, b] => (G[a], F[b]) => G[a ∙ b],
+  ): G[A]
 }
 
 object TupleN {
@@ -38,6 +43,12 @@ object TupleN {
     ): ParN[∙, Nil, G, Nil ∙ A, Nil ∙ A] =
       ParN.Single(f(value))
 
+    override def foldL[G[_]](
+      first: [a] => F[a] => G[Nil ∙ a],
+      snoc: [a, b] => (G[a], F[b]) => G[a ∙ b],
+    ): G[Nil ∙ A] =
+      first(value)
+
   }
 
   case class Snoc[∙[_, _], Nil, F[_], Init, Last](
@@ -54,5 +65,11 @@ object TupleN {
       f: [X] => F[X] => G[X, X],
     ): ParN[∙, Nil, G, Init ∙ Last, Init ∙ Last] =
       ParN.Snoc(init.unravel(f), f(last))
+
+    override def foldL[G[_]](
+      first: [a] => (F[a]) => G[Nil ∙ a],
+      snoc: [a, b] => (G[a], F[b]) => G[a ∙ b],
+    ): G[Init ∙ Last] =
+      snoc(init.foldL(first, snoc), last)
   }
 }

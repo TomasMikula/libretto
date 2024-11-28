@@ -1,8 +1,9 @@
 package libretto.lambda.examples.workflow.generic.vis
 
 import libretto.lambda.NarrowCategory
-import libretto.lambda.util.Exists
+import libretto.lambda.util.{Exists, TypeEq}
 import libretto.lambda.util.Exists.{Some as ∃}
+import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.examples.workflow.generic.vis.EdgeDesc.Composite
 
 infix sealed trait IsRefinedBy[X, Y] {
@@ -200,6 +201,32 @@ object IsRefinedBy {
     (f1, f2) match
       case (Id(x1), Id(x2)) => Id(x1 ∙ x2)
       case _                => Pairwise(op, f1, f2)
+
+  def parN[Wrap[_], X, Y](
+    op: OpTag[Wrap],
+    components: ParN.Components[X, Y],
+  ): (Wrap[X] IsRefinedBy Wrap[Y]) =
+    allIdentities(components) match
+      case Some(TypeEq(Refl())) =>
+        Id(EdgeDesc.TupleN(op, components.inputProjection([x, y] => f => f.inDesc)))
+      case None =>
+        ParN(op, components)
+
+  private def allIdentities[X, Y](
+    components: ParN.Components[X, Y],
+  ): Option[X =:= Y] =
+    components match
+      case libretto.lambda.ParN.Single(f) =>
+        f match
+          case IsRefinedBy.Id(_) => Some(summon[X =:= Y])
+          case _                 => None
+      case libretto.lambda.ParN.Snoc(init, last) =>
+        last match
+          case IsRefinedBy.Id(_) =>
+            allIdentities(init)
+              .map { case ev @ TypeEq(Refl()) => summon[X =:= Y] }
+          case _ =>
+            None
 
   def wireIsBottom[X](f: X IsRefinedBy Wire): (X =:= Wire) =
     f.asWireIdentity

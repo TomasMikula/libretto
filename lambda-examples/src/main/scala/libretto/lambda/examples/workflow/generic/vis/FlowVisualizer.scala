@@ -1,9 +1,10 @@
 package libretto.lambda.examples.workflow.generic.vis
 
-import libretto.lambda.{SinkNAryNamed, SinkNAry, TupleElem}
+import libretto.lambda.{DistributionNAry, DropNames, ParN, SinkNAryNamed, SinkNAry, TupleElem}
 import libretto.lambda.examples.workflow.generic.lang.{++, **, ::, ||, Enum, FlowAST, Workflows}
-import libretto.lambda.util.Exists
+import libretto.lambda.util.{Exists, TypeEq}
 import libretto.lambda.util.Exists.{Some as ∃}
+import libretto.lambda.util.TypeEq.Refl
 
 import Approximates.lump
 import Connector.{Across, NoEntryOut, StudIn, StudOut}
@@ -317,6 +318,11 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           )
         )))
 
+      case d: FlowAST.DistributeNAryRL[op, d, cases, yCases] =>
+        summon[A =:= (Enum[cases] ** d)]
+        summon[B =:= Enum[yCases]]
+        visualizeDistNAryRL(d.dist)
+
       case i: FlowAST.Inject[op, lbl, x, cases] =>
         summon[A =:= x]
         summon[B =:= Enum[cases]]
@@ -382,6 +388,115 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         Visualizer.unimplemented(other.getClass.getSimpleName())
   }
 
+  private def visualizeDistNAryRL[D, Cases, DCases](
+    dist: DistributionNAry.DistRL[**, ||, ::, D, Cases] { type Out = DCases },
+  ): Exists[[X] =>> Exists[[Y] =>> (
+    X Approximates (Enum[Cases] ** D),
+    Y Approximates Enum[DCases],
+    Visualization[X, Y],
+  )]] =
+    dist.dropNames[Tuple2, EmptyTuple] match {
+      case Exists.Some(Exists.Some((x, dist, y))) =>
+        visualizeDistNAryRL(x, y, dist)
+    }
+
+  private def visualizeDistNAryRL[D, Cases, DCases, As, Bs](
+    as: DropNames[||, ::, Tuple2, EmptyTuple, Cases, As],
+    bs: DropNames[||, ::, Tuple2, EmptyTuple, DCases, Bs],
+    dist: DistributionNAry.DistRL.Unnamed[**, Tuple2, EmptyTuple, D, As] { type Out = Bs },
+  ): Exists[[X] =>> Exists[[Y] =>> (
+    X Approximates (Enum[Cases] ** D),
+    Y Approximates Enum[DCases],
+    Visualization[X, Y],
+  )]] =
+    dist.kernel.divide3[
+      [A, X] =>> X Approximates A,
+      [X, Y] =>> (X =:= Wire, Y =:= Wire ** Wire),
+      [Y, B] =>> Y Approximates B,
+    ](
+      [A, B] => (ev: (A ** D) =:= B) => ev match { case TypeEq(Refl()) =>
+        Exists(Exists((
+          lump[A],
+          (summon[Wire =:= Wire], summon[Wire ** Wire =:= Wire ** Wire]),
+          lump[A] ** lump[D],
+        )))
+      }
+    ) match {
+      case Exists.Some(Exists.Some((x, core, y))) =>
+        Exists(Exists((
+          Approximates.ParNDropNames(OpTag[Enum], as, x.flip) ** lump[D],
+          Approximates.ParNDropNames(OpTag[Enum], bs, y),
+          visualizeDistNAryRL(core),
+        )))
+    }
+
+  private def visualizeDistNAryRL[Xs, Ys](
+    core: ParN[Tuple2, EmptyTuple, [X, Y] =>> (X =:= Wire, Y =:= Wire ** Wire), Xs, Ys],
+  ): Visualization[Enum[Xs] ** Wire, Enum[Ys]] = {
+    import EdgeSegment.{InElem, elem}
+
+    val dxs: EdgeDesc[Enum[Xs]] =
+      EdgeDesc.TupleN(
+        OpTag[Enum],
+        core
+          .inputProjection[EdgeDesc]([x, y] => f => f match { case (TypeEq(Refl()), _) => wire })
+          .foldL[[X] =>> EdgeDesc.TupleN.Components[Enum, X]](
+            [a] => a => EdgeDesc.TupleN.Single(a),
+            [a, b] => (a, b) => EdgeDesc.TupleN.Snoc(a, b),
+          )
+      )
+    val dys: EdgeDesc[Enum[Ys]] =
+      EdgeDesc.TupleN(
+        OpTag[Enum],
+        core
+          .outputProjection[EdgeDesc]([x, y] => f => f match { case (_, TypeEq(Refl())) => wire ** wire })
+          .foldL[[Y] =>> EdgeDesc.TupleN.Components[Enum, Y]](
+            [a] => a => EdgeDesc.TupleN.Single(a),
+            [a, b] => (a, b) => EdgeDesc.TupleN.Snoc(a, b),
+          )
+      )
+    val elems: List[(
+      TupleElem[Tuple2, EmptyTuple, Wire, Xs],
+      TupleElem[Tuple2, EmptyTuple, Wire ** Wire, Ys],
+    )] =
+      core.zipWithIndex.toList(
+        [x, y] => f => f match {
+          case ((TypeEq(Refl()), TypeEq(Refl())), xi, yi) => (
+            xi: TupleElem[Tuple2, EmptyTuple, Wire, Xs],
+            yi: TupleElem[Tuple2, EmptyTuple, Wire ** Wire, Ys]
+          )
+        }
+      )
+    val (
+      casesConnectors: List[Connector[Enum[Xs] ** Wire, Enum[Ys]]],
+      casesAreas:  List[TrapezoidArea[Enum[Xs] ** Wire, Enum[Ys]]],
+    ) =
+      elems.zipWithIndex.map { case ((x, y), i) =>
+        val segX: EdgeSegment[Wire, Enum[Xs] ** Wire] = elem(x).inl
+        val segY: EdgeSegment[Wire ** Wire, Enum[Ys]] = elem(y)
+        (
+          Across(segX, segY compose pickL),
+          TrapezoidArea(segX, segY, if i % 2 == 0 then ColorCaseLeft else ColorCaseRight),
+        )
+      }
+      .unzip
+    val distributeeConnectors: List[Connector[Enum[Xs] ** Wire, Enum[Ys]]] =
+      elems.map { case (x, y) =>
+        Across(pickR, InElem(pickR, y))
+          .fill(GradientVerticalWhiteBlack)
+      }
+    Visualization.WithBackgroundBox(
+      fill = None,
+      stroke = Some(Color.Black),
+      Visualization.connectors(
+        dxs ** wire,
+        dys,
+      )(
+        (casesConnectors ++ casesAreas ++ distributeeConnectors)*
+      )
+    )
+  }
+
   private def visualizeHandlers[A, B](
     handlers: SinkNAryNamed[FlowAST[Op, _, _], ||, ::, A, B],
   ): Exists[[X] =>> Exists[[Y] =>> (
@@ -389,40 +504,26 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
     Y Approximates B,
     Visualization[X, Y]
   )]] =
-    visualizeIndividualHandlers(handlers) match
-      case ∃(∃((x, f, y))) =>
-        visualizeMerge(y) match
-          case ∃((g, z)) =>
-            Exists(Exists((
-              Approximates.ParNDropNames(OpTag[Enum], x),
-              z,
-              Visualization.IParN(OpTag[Enum], f) :: Visualization.Sequence(g)
-            )))
-
-  private def visualizeIndividualHandlers[A, B](
-    handlers: SinkNAryNamed[FlowAST[Op, _, _], ||, ::, A, B],
-  ): Exists[[X] =>> Exists[[Y] =>> (
-    Approximates.ParNDropNames.Components[Enum, X, A],
-    Visualization.IParN.Components[Enum, X, ?, ?, ?, Y],
-    SinkNAry[Approximates, Tuple2, EmptyTuple, Y, B],
-  )]] =
-    handlers match
-      case s: SinkNAryNamed.Single[arr, sep, of, lbl, a, b] =>
-        visualizeAst(s.h) match
-          case ex @ ∃(ey @ ∃((x, y, f))) =>
-            Exists(Exists(
-              Approximates.ParNDropNames.Single[Enum, ex.T, lbl, a](x),
-              Visualization.IParN.Single(f.indexed),
-              SinkNAry.Single(y)
-            ))
-      case s: SinkNAryNamed.Snoc[arr, sep, of, init, lbl, z, b] =>
-        (visualizeIndividualHandlers(s.init), visualizeAst(s.last)) match
-          case (ex1 @ ∃(∃((x1, f1, y1))), ex2 @ ∃(∃((x2, y2, f2)))) =>
-            Exists(Exists(
-              Approximates.ParNDropNames.Snoc[Enum, ex1.T, init, ex2.T, lbl, z](x1, x2),
-              Visualization.IParN.Snoc(f1, f2.indexed),
-              SinkNAry.Snoc(y1, y2)
-            ))
+    handlers.dropNames[Tuple2, EmptyTuple] match
+      case ∃((dn, hs)) =>
+        hs.divide3[
+          [A, X] =>> X Approximates A,
+          [X, Y] =>> Visualization[X, Y],
+          [Y, B] =>> Y Approximates B,
+        ](
+          [a, b] => f => visualizeAst(f) match {
+            case ∃(∃((x, y, vis))) => Exists(Exists((x, vis, y)))
+          }
+        ) match {
+          case ∃(∃((ax, vs, yb))) =>
+            visualizeMerge(yb) match
+              case ∃((g, z)) =>
+                Exists(Exists((
+                  Approximates.ParNDropNames(OpTag[Enum], dn, ax.flip),
+                  z,
+                  Visualization.IParN.from(OpTag[Enum], vs) :: Visualization.Sequence(g),
+                )))
+        }
 
   private def visualizeMerge[X, B](
     fs: SinkNAry[Approximates, Tuple2, EmptyTuple, X, B],

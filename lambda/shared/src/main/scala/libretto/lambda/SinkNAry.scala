@@ -20,6 +20,21 @@ trait SinkNAry[->[_, _], ||[_, _], Nil, A, B] {
   )(using
     NarrowCategory[->>, Obj],
   ): Exists[[P] =>> (SourceNAry[->>, ||, Nil, P, A], P -> B)]
+
+  def divide[F[_, _], G[_, _]](
+    h: [X, Y] => (X -> Y) => Exists[[Q] =>> (F[X, Q], G[Q, Y])],
+  ): Exists[[Q] =>> (
+    ParN[||, Nil, F, A, Q],
+    SinkNAry[G, ||, Nil, Q, B],
+  )]
+
+  def divide3[F[_, _], G[_, _], H[_, _]](
+    h: [X, Y] => (X -> Y) => Exists[[P] =>> Exists[[Q] =>> (F[X, P], G[P, Q], H[Q, Y])]],
+  ): Exists[[P] =>> Exists[[Q] =>> (
+    ParN[||, Nil, F, A, P],
+    ParN[||, Nil, G, P, Q],
+    SinkNAry[H, ||, Nil, Q, B],
+  )]]
 }
 
 object SinkNAry {
@@ -43,6 +58,27 @@ object SinkNAry {
 
     override def asSource: SourceNAry[[x, y] =>> y -> x, ||, Nil, B, Nil || A] =
       SourceNAry.Single(f)
+
+    override def divide[F[_,_], G[_,_]](
+      h: [X, Y] => (X -> Y) => Exists[[Q] =>> (F[X, Q], G[Q, Y])],
+    ): Exists[[Q] =>> (
+      ParN[||, Nil, F, Nil || A, Q],
+      SinkNAry[G, ||, Nil, Q, B],
+    )] =
+      h(f) match
+        case Exists.Some((f, g)) =>
+          Exists((ParN.Single(f), SinkNAry.Single(g)))
+
+    override def divide3[F[_,_], G[_,_], H[_,_]](
+      h: [X, Y] => (X -> Y) => Exists[[P] =>> Exists[[Q] =>> (F[X, P], G[P, Q], H[Q, Y])]],
+    ): Exists[[P] =>> Exists[[Q] =>> (
+      ParN[||, Nil, F, Nil || A, P],
+      ParN[||, Nil, G, P, Q],
+      SinkNAry[H, ||, Nil, Q, B],
+    )]] =
+      h(f) match
+        case Exists.Some(Exists.Some((f, g, h))) =>
+          Exists(Exists((ParN.Single(f), ParN.Single(g), SinkNAry.Single(h))))
   }
 
   case class Snoc[->[_, _], ||[_, _], Nil, Init, Z, B](
@@ -74,5 +110,26 @@ object SinkNAry {
 
     override def asSource: SourceNAry[[x, y] =>> y -> x, ||, Nil, B, Init || Z] =
       SourceNAry.Snoc(init.asSource, last)
+
+    override def divide[F[_,_], G[_,_]](
+      h: [X, Y] => (X -> Y) => Exists[[Q] =>> (F[X, Q], G[Q, Y])],
+    ): Exists[[Q] =>> (
+      ParN[||, Nil, F, Init || Z, Q],
+      SinkNAry[G, ||, Nil, Q, B],
+    )] =
+      (init.divide(h), h(last)) match
+        case (Exists.Some((fs, gs)), Exists.Some((f, g))) =>
+          Exists((fs ∙ f, SinkNAry.Snoc(gs, g)))
+
+    override def divide3[F[_,_], G[_,_], H[_,_]](
+      h: [X, Y] => (X -> Y) => Exists[[P] =>> Exists[[Q] =>> (F[X, P], G[P, Q], H[Q, Y])]],
+    ): Exists[[P] =>> Exists[[Q] =>> (
+      ParN[||, Nil, F, Init || Z, P],
+      ParN[||, Nil, G, P, Q],
+      SinkNAry[H, ||, Nil, Q, B]
+    )]] =
+      (init.divide3(h), h(last)) match
+        case (Exists.Some(Exists.Some((fs, gs, hs))), Exists.Some(Exists.Some((f, g, h)))) =>
+          Exists(Exists((fs ∙ f, gs ∙ g, SinkNAry.Snoc(hs, h))))
   }
 }
