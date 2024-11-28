@@ -132,14 +132,10 @@ object Approximates {
   ) extends Approximates[Wrap[X], Wrap[A]] {
 
     override def inDesc: EdgeDesc[Wrap[X]] =
-      val descComponents: EdgeDesc.TupleN.Components[X] =
-        components
-          .inputProjection[EdgeDesc]([x, y] => _.inDesc)
-          .foldL[EdgeDesc.TupleN.Components](
-            [x] => x => EdgeDesc.TupleN.Single(x),
-            [x, y] => (x, y) => EdgeDesc.TupleN.Snoc(x, y),
-          )
-      EdgeDesc.TupleN(op, descComponents)
+      EdgeDesc.TupleN.make(
+        op,
+        components.inputProjection[EdgeDesc]([x, y] => _.inDesc),
+      )
 
     override protected def coarsenByPair[∙[_$1,_$2], W1, W2, X1, X2](g1: W1 IsRefinedBy X1, g2: W2 IsRefinedBy X2)(using Wrap[X] =:= ∙[X1, X2]): ∙[W1, W2] Approximates Wrap[A] = ???
 

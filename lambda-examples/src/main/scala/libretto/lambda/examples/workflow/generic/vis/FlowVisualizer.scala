@@ -436,24 +436,14 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
     import EdgeSegment.{InElem, elem}
 
     val dxs: EdgeDesc[Enum[Xs]] =
-      EdgeDesc.TupleN(
+      EdgeDesc.TupleN.make(
         OpTag[Enum],
-        core
-          .inputProjection[EdgeDesc]([x, y] => f => f match { case (TypeEq(Refl()), _) => wire })
-          .foldL[EdgeDesc.TupleN.Components](
-            [a] => a => EdgeDesc.TupleN.Single(a),
-            [a, b] => (a, b) => EdgeDesc.TupleN.Snoc(a, b),
-          )
+        core.inputProjection[EdgeDesc]([x, y] => f => f match { case (TypeEq(Refl()), _) => wire })
       )
     val dys: EdgeDesc[Enum[Ys]] =
-      EdgeDesc.TupleN(
+      EdgeDesc.TupleN.make(
         OpTag[Enum],
-        core
-          .outputProjection[EdgeDesc]([x, y] => f => f match { case (_, TypeEq(Refl())) => wire ** wire })
-          .foldL[EdgeDesc.TupleN.Components](
-            [a] => a => EdgeDesc.TupleN.Single(a),
-            [a, b] => (a, b) => EdgeDesc.TupleN.Snoc(a, b),
-          )
+        core.outputProjection[EdgeDesc]([x, y] => f => f match { case (_, TypeEq(Refl())) => wire ** wire })
       )
     val elems: List[(
       TupleElem[Tuple2, EmptyTuple, Wire, Xs],
@@ -614,7 +604,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         Exists((
           Visualization.IParN.Single(Visualization.Adapt(Adaptoid.collapse(f))),
           EdgeSegment.elem(TupleElem.single) :: Nil,
-          EdgeDesc.TupleN.Single(f.inDesc),
+          EdgeDesc.TupleN.single(f.inDesc),
           f.inDesc
         ))
       case s: SinkNAry.Snoc[arr, sep, nil, init, z, b] =>
@@ -625,7 +615,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
             Exists((
               Visualization.IParN.Snoc(visInit, Visualization.Adapt(Adaptoid.collapse(s.last))),
               EdgeSegment.elem(TupleElem.Last()) :: segs.map(_.inInit),
-              EdgeDesc.TupleN.Snoc(ysDesc, s.last.inDesc),
+              EdgeDesc.TupleN.snoc(ysDesc, s.last.inDesc),
               yDesc
             ))
         }

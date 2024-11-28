@@ -632,7 +632,7 @@ object VisualizationToSVG {
     components: EdgeDesc.TupleN.Components[Y],
     reg: TrapezoidLayout[Wire, Wrap[Y]],
   ): SVGElem =
-    vsplitFanOut(components) match
+    vsplitFanOut(components.unwrap) match
       case Left(shallow) =>
         renderFanOutNAryShallow(op, shallow, reg)
       case Right(Exists.Some(nested)) =>
@@ -708,7 +708,7 @@ object VisualizationToSVG {
   }
 
   private def vsplitFanOut[Y](
-    components: EdgeDesc.TupleN.Components[Y],
+    components: TupleN[Tuple2, EmptyTuple, EdgeDesc, Y],
   ): Either[
     TupleN[Tuple2, EmptyTuple, [y] =>> y =:= Wire, Y],
     Exists[[X] =>> ParN[Tuple2, EmptyTuple, [x, y] =>> (x =:= Wire, EdgeDesc[y]), X, Y]]
@@ -719,13 +719,14 @@ object VisualizationToSVG {
     def h[X](ev: F[X]): G[X, X] = (ev, ev.substituteContra(EdgeDesc.wire))
 
     components match
-      case s: EdgeDesc.TupleN.Single[y] =>
+      case s: TupleN.Single[p, n, d, y] =>
         s.value.isComposite match
           case Left(ev) => Left(TupleN.Single[Tuple2, EmptyTuple, F, y](ev))
           case Right(y) =>
             val f: (Wire =:= Wire, EdgeDesc[y]) = (summon[F[Wire]], y)
             Right(Exists(ParN.Single[Tuple2, EmptyTuple, G, Wire, y](f)))
-      case EdgeDesc.TupleN.Snoc(init, last) =>
+      case s: TupleN.Snoc[p, n, d, y1, y2] =>
+        val TupleN.Snoc(init, last) = s
         vsplitFanOut(init) match
           case Right(Exists.Some(fs)) =>
             Right(Exists(fs ∙ (summon[F[Wire]], last)))

@@ -1,5 +1,6 @@
 package libretto.lambda.examples.workflow.generic.vis
 
+import libretto.{lambda as ll}
 import libretto.lambda.examples.workflow.generic.vis.DefaultDimensions.*
 import libretto.lambda.util.TypeEq
 import libretto.lambda.util.TypeEq.Refl
@@ -534,7 +535,7 @@ object Visualization {
         Components[Only[X], ?, I, Q, Only[Y]]
       ]] =
         vis.trimIn.map {
-          case Left((ev, d)) => Left((ev.liftCo[Only], EdgeDesc.TupleN.Single(d)))
+          case Left((ev, d)) => Left((ev.liftCo[Only], EdgeDesc.TupleN.single(d)))
           case Right(vis)    => Right(Single(vis))
         }
 
@@ -543,7 +544,7 @@ object Visualization {
         Components[Only[X], P, I, ?, Only[Y]]
       ]] =
         vis.trimOut.map {
-          case Left((ev, d)) => Left((ev.liftCo[Only], EdgeDesc.TupleN.Single(d)))
+          case Left((ev, d)) => Left((ev.liftCo[Only], EdgeDesc.TupleN.single(d)))
           case Right(vis)    => Right(Single(vis))
         }
 
@@ -610,7 +611,7 @@ object Visualization {
           case (Some(Right(a))                 , Some(Right(b)))                  => Some(Right(Snoc(a, b)))
           case (Some(Right(a))                 , Some(Left((TypeEq(Refl()), d)))) => Some(Right(Snoc(a, Adapt(Adaptoid.Id(d)))))
           case (Some(Left((TypeEq(Refl()), c))), Some(Right(b)))                  => Some(Right(Snoc(id(c), b)))
-          case (Some(Left((TypeEq(Refl()), c))), Some(Left((TypeEq(Refl()), d)))) => Some(Left((summon, EdgeDesc.TupleN.Snoc(c, d))))
+          case (Some(Left((TypeEq(Refl()), c))), Some(Left((TypeEq(Refl()), d)))) => Some(Left((summon, EdgeDesc.TupleN.snoc(c, d))))
           case (Some(Right(a))                 , None)                            => Some(Right(Snoc(a, last)))
           case (None                           , Some(Right(b)))                  => Some(Right(Snoc(init, b)))
           case (Some(Left(_)), None) => None // cannot report as progress
@@ -625,7 +626,7 @@ object Visualization {
           case (Some(Right(a))                 , Some(Right(b)))                  => Some(Right(Snoc(a, b)))
           case (Some(Right(a))                 , Some(Left((TypeEq(Refl()), d)))) => Some(Right(Snoc(a, Adapt(Adaptoid.Id(d)))))
           case (Some(Left((TypeEq(Refl()), c))), Some(Right(b)))                  => Some(Right(Snoc(id(c), b)))
-          case (Some(Left((TypeEq(Refl()), c))), Some(Left((TypeEq(Refl()), d)))) => Some(Left((summon, EdgeDesc.TupleN.Snoc(c, d))))
+          case (Some(Left((TypeEq(Refl()), c))), Some(Left((TypeEq(Refl()), d)))) => Some(Left((summon, EdgeDesc.TupleN.snoc(c, d))))
           case (Some(Right(a))                 , None)                            => Some(Right(Snoc(a, last)))
           case (None                           , Some(Right(b)))                  => Some(Right(Snoc(init, b)))
           case (Some(Left(_)), None) => None // cannot report as progress
@@ -651,12 +652,16 @@ object Visualization {
         )
       )
 
-    def id[Wrap[_], X](desc: EdgeDesc.TupleN.Components[X]): Components[X, Flx, Skw, Flx, X] =
-      desc match
-        case EdgeDesc.TupleN.Single(d) =>
-          Single(Adapt(Adaptoid.Id(d)))
-        case s: EdgeDesc.TupleN.Snoc[x1, x2] =>
-          Snoc[x1, Flx, Skw, Flx, x1, x2, Flx, Skw, Flx, x2](id(s.init), Adapt(Adaptoid.Id(s.last)))
+    def id[Wrap[_], X](desc: EdgeDesc.TupleN.Components[X]): Components[X, Flx, Skw, Flx, X] = {
+      def go[X](desc: ll.TupleN[Tuple2, EmptyTuple, EdgeDesc, X]): Components[X, Flx, Skw, Flx, X] =
+        desc match
+          case ll.TupleN.Single(d) =>
+            Single(Adapt(Adaptoid.Id(d)))
+          case s: ll.TupleN.Snoc[p, n, f, x1, x2] =>
+            Snoc[x1, Flx, Skw, Flx, x1, x2, Flx, Skw, Flx, x2](go(s.init), Adapt(Adaptoid.Id(s.last)))
+
+      go(desc.unwrap)
+    }
   }
 
   case class ConnectorsOverlay[X, J, Y](

@@ -68,49 +68,32 @@ object EdgeDesc {
   }
 
   object TupleN {
-    sealed trait Components[X] {
-      def size: Int
-      def depth: Length
+    opaque type Components[X] = libretto.lambda.TupleN[Tuple2, EmptyTuple, EdgeDesc, X]
 
-      def argAsPair[R](f: [X1, X2] => (X =:= (X1, X2)) ?=> R): R
+    extension [X](comps: Components[X]) {
+      def unwrap: libretto.lambda.TupleN[Tuple2, EmptyTuple, EdgeDesc, X] =
+        comps
+
+      def depth: Length =
+        comps match
+          case libretto.lambda.TupleN.Single(x) => x.depth
+          case libretto.lambda.TupleN.Snoc(init, last) => Length.max(init.depth, last.depth)
     }
 
-    case class Single[X](
-      value: EdgeDesc[X],
-    ) extends Components[Only[X]] {
-      override def size: Int = 1
+    def single[X](value: EdgeDesc[X]): Components[Only[X]] =
+      libretto.lambda.TupleN.Single(value)
 
-      override def depth: Length = value.depth
-
-      override def argAsPair[R](f: [X1, X2] => (Only[X] =:= (X1, X2)) ?=> R): R =
-        f[EmptyTuple, X]
-    }
-
-    case class Snoc[X1, X2](
+    def snoc[X1, X2](
       init: Components[X1],
       last: EdgeDesc[X2],
-    ) extends Components[(X1, X2)] {
-      override def size: Int = 1 + init.size
+    ): Components[(X1, X2)] =
+      libretto.lambda.TupleN.Snoc(init, last)
 
-      override def depth: Length =
-        Length.max(init.depth, last.depth)
-
-      override def argAsPair[R](f: [x1, x2] => ((X1, X2) =:= (x1, x2)) ?=> R): R =
-        f[X1, X2]
-    }
-
-    // TODO: becomes redundant after Components is made a type alias for libretto.lambda.TupleN
-    def apply[Wrap[_], X](
+    def make[Wrap[_], X](
       op: OpTag[Wrap],
       components: libretto.lambda.TupleN[Tuple2, EmptyTuple, EdgeDesc, X],
     ): Composite[Wrap[X]] =
-      TupleN(
-        op,
-        components.foldL[Components[_]](
-          [x] => x => Single(x),
-          [x1, x2] => (init, last) => Snoc(init, last)
-        )
-      )
+      TupleN(op, components)
   }
 
   given wire: EdgeDesc[Wire] =

@@ -208,7 +208,7 @@ object IsRefinedBy {
   ): (Wrap[X] IsRefinedBy Wrap[Y]) =
     allIdentities(components) match
       case Some(TypeEq(Refl())) =>
-        Id(EdgeDesc.TupleN(op, components.inputProjection([x, y] => f => f.inDesc)))
+        Id(EdgeDesc.TupleN.make(op, components.inputProjection([x, y] => f => f.inDesc)))
       case None =>
         ParN(op, components)
 

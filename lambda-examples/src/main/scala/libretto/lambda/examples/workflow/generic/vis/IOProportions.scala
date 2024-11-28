@@ -1,5 +1,6 @@
 package libretto.lambda.examples.workflow.generic.vis
 
+import libretto.{lambda  as ll}
 import scala.annotation.tailrec
 import scala.collection.immutable.{:: as NonEmptyList}
 
@@ -165,14 +166,14 @@ object IOProportions {
         case p: EdgeDesc.Binary[op, x1, x2] =>
           Binary[op, x1, x2](default(p.x1), default(p.x2))
         case t: EdgeDesc.TupleN[wr, x] =>
-          TupleN[wr, x](defaultTupleN(t.components))
+          TupleN[wr, x](defaultTupleN(t.components.unwrap))
 
     private def defaultTupleN[X](
-      x: EdgeDesc.TupleN.Components[X],
+      x: ll.TupleN[Tuple2, EmptyTuple, EdgeDesc, X],
     ): TupleN.Components[X] =
       x match
-        case EdgeDesc.TupleN.Single(d) => TupleN.Single(default(d))
-        case EdgeDesc.TupleN.Snoc(init, last) => TupleN.Snoc(defaultTupleN(init), default(last))
+        case ll.TupleN.Single(d)        => TupleN.Single(default(d))
+        case ll.TupleN.Snoc(init, last) => TupleN.Snoc(defaultTupleN(init), default(last))
   }
 
   case class Separate[I, O](
