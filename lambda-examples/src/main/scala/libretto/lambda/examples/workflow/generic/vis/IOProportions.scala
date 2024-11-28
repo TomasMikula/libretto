@@ -145,7 +145,7 @@ object IOProportions {
         private[TupleN] override def layoutRev(revBreadths: List[Px]): (Int, EdgeLayout.TupleN.Components[Wrap, (X1, X2)]) =
           val wLast :: wInit = revBreadths
           val (k, lastLay) = last.layout(wLast)
-          val (l, initLay) = init.layoutRev(wInit)
+          val (l, initLay) = init.layoutRev(wInit.map(_ * k))
           (k * l, EdgeLayout.TupleN.Snoc(initLay, lastLay * l))
       }
     }
