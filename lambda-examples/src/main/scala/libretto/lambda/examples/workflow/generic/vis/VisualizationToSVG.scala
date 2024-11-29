@@ -624,9 +624,22 @@ object VisualizationToSVG {
         summon[Y =:= Wire]
         renderIdentity[Wire](EdgeDesc.SingleWire, reg)
       case p: EdgeDesc.Binary[op, y1, y2] =>
-        renderFanOut(p, reg)
+        renderFanOutBinary(p, reg)
       case EdgeDesc.TupleN(op, comps) =>
         renderFanOutNAry(op, comps, reg)
+
+  private def renderFanInOrId[X](
+    x: EdgeDesc[X],
+    reg: TrapezoidLayout[X, Wire],
+  ): SVGElem =
+    x match
+      case EdgeDesc.SingleWire =>
+        summon[X =:= Wire]
+        renderIdentity[Wire](EdgeDesc.SingleWire, reg)
+      case p: EdgeDesc.Binary[op, x1, x2] =>
+        renderFanInBinary(p, reg)
+      case EdgeDesc.TupleN(op, comps) =>
+        ???
 
   private def renderFanOutNAry[Wrap[_], Y](
     op: OpTag[Wrap],
@@ -739,7 +752,7 @@ object VisualizationToSVG {
                 Right(Exists(gs ∙ (summon[F[Wire]], last)))
   }
 
-  private def renderFanOut[∙[_, _], Y1, Y2](
+  private def renderFanOutBinary[∙[_, _], Y1, Y2](
     y: EdgeDesc.Binary[∙, Y1, Y2],
     reg: TrapezoidLayout[Wire, Y1 ∙ Y2],
   ): SVGElem = {
@@ -757,44 +770,29 @@ object VisualizationToSVG {
         val g2 = renderConnector(c2, reg)
         SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
       case _ =>
-        val (o1, o2) = EdgeLayout.split(reg.oLayout)
-        val (i1, w1) = EdgeProportions.unitSize.layout(o1.pixelBreadth)
-        val (i2, w2) = EdgeProportions.unitSize.layout(o2.pixelBreadth)
-        val (ki1, ki2, k) = leastCommonMultiple(i1, i2)
-        val regK = reg * k
-        val wk = EdgeLayout.Par[∙, Wire, Wire](w1 * ki1, w2 * ki2)
-        regK.vsplit(wk)(
+        given OpTag[∙] = y.op
+        val xRefinedByY: (Wire ∙ Wire) IsRefinedBy (Y1 ∙ Y2) =
+          IsRefinedBy.initial(y.x1) par IsRefinedBy.initial(y.x2)
+        val xLayout: EdgeLayout[Wire ∙ Wire] =
+          reg.oLayout.coarsen(xRefinedByY)
+        reg.vsplit(xLayout)(
           Length.one,
           Length.max(y.x1.depth, y.x2.depth)
         ) match
-          case (l, iReg, oReg) =>
-            val (oReg1, oReg2) = TrapezoidLayout.split(oReg)
+          case (k, iReg, oReg) =>
             val h1 = iReg.height.pixels
             val amb1 = renderAmbient(lStyle, iReg, EdgeStretch.wireLHalf, EdgeStretch.wireSegment.inl)
             val amb2 = renderAmbient(rStyle, iReg, EdgeStretch.wireRHalf, EdgeStretch.wireSegment.inr)
             val g1 = renderConnector(c1, iReg)
             val g2 = renderConnector(c2, iReg)
-            val amb3 = renderAmbient(lStyle, oReg1).map(_.translate(0, h1))
-            val amb4 = renderAmbient(rStyle, oReg2).map(_.translate(0, h1))
-            val g3 = renderFanOutOrId(y.x1, oReg1).translate(0, h1)
-            val g4 = renderFanOutOrId(y.x2, oReg2).translate(0, h1)
-            val g = SVGElem.Group(amb1 ++: amb2 ++: amb3 ++: amb4 ++: List(g1, g2, g3, g4))
-            if (k * l == 1) g else g.scale(1.0/(k*l))
+            val vis1 = SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
+            val vis2 = renderExpand(xRefinedByY, oReg).translate(0, iReg.height.pixels)
+            val g = SVGElem.Group(vis1, vis2)
+            if k == 1 then g else g.scale(1.0/k)
     }
   }
 
-  private def renderFanInOrId[X](
-    x: EdgeDesc[X],
-    reg: TrapezoidLayout[X, Wire],
-  ): SVGElem =
-    x match
-      case EdgeDesc.SingleWire =>
-        summon[X =:= Wire]
-        renderIdentity[Wire](EdgeDesc.SingleWire, reg)
-      case p: EdgeDesc.Binary[op, x1, x2] =>
-        renderFanIn(p, reg)
-
-  private def renderFanIn[∙[_, _], X1, X2](
+  private def renderFanInBinary[∙[_, _], X1, X2](
     x: EdgeDesc.Binary[∙, X1, X2],
     reg: TrapezoidLayout[X1 ∙ X2, Wire],
   ): SVGElem = {
@@ -812,29 +810,24 @@ object VisualizationToSVG {
         val g2 = renderConnector(c2, reg)
         SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
       case _ =>
-        val (i1, i2) = EdgeLayout.split(reg.iLayout)
-        val (j1, w1) = EdgeProportions.unitSize.layout(i1.pixelBreadth)
-        val (j2, w2) = EdgeProportions.unitSize.layout(i2.pixelBreadth)
-        val (kj1, kj2, k) = leastCommonMultiple(j1, j2)
-        val regK = reg * k
-        val wk = EdgeLayout.Par[∙, Wire, Wire](w1 * kj1, w2 * kj2)
-        regK.vsplit(wk)(
+        given OpTag[∙] = x.op
+        val yRefinedByX: (Wire ∙ Wire) IsRefinedBy (X1 ∙ X2) =
+          IsRefinedBy.initial(x.x1) par IsRefinedBy.initial(x.x2)
+        val yLayout: EdgeLayout[Wire ∙ Wire] =
+          reg.iLayout.coarsen(yRefinedByX)
+        reg.vsplit(yLayout)(
           Length.max(x.x1.depth, x.x2.depth),
           Length.one,
         ) match
-          case (l, iReg, oReg) =>
-            val (iReg1, iReg2) = TrapezoidLayout.split(iReg)
-            val h1 = iReg.height.pixels
-            val amb1 = renderAmbient(lStyle, oReg, EdgeStretch.wireSegment.inl, EdgeStretch.wireLHalf).map(_.translate(0, h1))
-            val amb2 = renderAmbient(rStyle, oReg, EdgeStretch.wireSegment.inr, EdgeStretch.wireRHalf).map(_.translate(0, h1))
-            val g1 = renderConnector(c1, oReg).translate(0, h1)
-            val g2 = renderConnector(c2, oReg).translate(0, h1)
-            val amb3 = renderAmbient(lStyle, iReg1)
-            val amb4 = renderAmbient(rStyle, iReg2)
-            val g3 = renderFanInOrId(x.x1, iReg1)
-            val g4 = renderFanInOrId(x.x2, iReg2)
-            val g = SVGElem.Group(amb1 ++: amb2 ++: amb3 ++: amb4 ++: List(g1, g2, g3, g4))
-            if (k * l == 1) g else g.scale(1.0/(k*l))
+          case (k, iReg, oReg) =>
+            val vis1 = renderCollapse(yRefinedByX, iReg)
+            val amb1 = renderAmbient(lStyle, oReg, EdgeStretch.wireSegment.inl, EdgeStretch.wireLHalf)//.map(_.translate(0, h1))
+            val amb2 = renderAmbient(rStyle, oReg, EdgeStretch.wireSegment.inr, EdgeStretch.wireRHalf)//.map(_.translate(0, h1))
+            val g1 = renderConnector(c1, oReg)//.translate(0, h1)
+            val g2 = renderConnector(c2, oReg)//.translate(0, h1)
+            val vis2 = SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2)).translate(0, iReg.height.pixels)
+            val g = SVGElem.Group(vis1, vis2)
+            if k == 1 then g else g.scale(1.0/k)
     }
   }
 
