@@ -1,6 +1,8 @@
 package libretto.lambda.examples.workflow.generic.vis
 
 import libretto.{lambda  as ll}
+import libretto.lambda.util.TypeEq
+import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.tailrec
 import scala.collection.immutable.{:: as NonEmptyList}
 
@@ -133,7 +135,7 @@ object IOProportions {
         private[TupleN] override def layoutRev(revBreadths: List[Px]): (Int, EdgeLayout.TupleN.Components[Only[X]]) =
           val w :: Nil = revBreadths
           val (k, layout) = value.layout(w)
-          (k, EdgeLayout.TupleN.Single(layout))
+          (k, EdgeLayout.TupleN.single(layout))
       }
 
       case class Snoc[X1, X2](
@@ -147,7 +149,7 @@ object IOProportions {
           val wLast :: wInit = revBreadths
           val (k, lastLay) = last.layout(wLast)
           val (l, initLay) = init.layoutRev(wInit.map(_ * k))
-          (k * l, EdgeLayout.TupleN.Snoc(initLay, lastLay * l))
+          (k * l, EdgeLayout.TupleN.snoc(initLay, lastLay * l))
       }
     }
 
@@ -314,18 +316,24 @@ object IOProportions {
 
       private[ParN] def breadths(tail: List[Breadth]): NonEmptyList[Breadth]
 
-      def nonEmptyIn(using X =:= EmptyTuple): Nothing
-      def nonEmptyOut(using Y =:= EmptyTuple): Nothing
+      def nonEmptyIn [R](f: [X1, X2] => (X =:= (X1, X2)) ?=> R): R
+      def nonEmptyOut[R](f: [Y1, Y2] => (Y =:= (Y1, Y2)) ?=> R): R
+
+      final def nonEmptyIn(using ev: X =:= EmptyTuple): Nothing =
+        nonEmptyIn[Nothing]([x1, x2] => ev1 ?=> pairIsNotEmptyTuple(using ev1.flip andThen ev))
+
+      final def nonEmptyOut(using ev: Y =:= EmptyTuple): Nothing =
+        nonEmptyOut[Nothing]([y1, y2] => ev1 ?=> pairIsNotEmptyTuple(using ev1.flip andThen ev))
     }
 
     case class Single[X, Y](
       value: IOProportions[X, Y],
     ) extends Components[Only[X], Only[Y]] {
-      override def nonEmptyIn(using Only[X] =:= EmptyTuple): Nothing =
-        pairIsNotEmptyTuple[EmptyTuple, X]
+      override def nonEmptyIn[R](f: [X1, X2] => (Only[X] =:= (X1, X2)) ?=> R): R =
+        f[EmptyTuple, X]
 
-      override def nonEmptyOut(using Only[Y] =:= EmptyTuple): Nothing =
-        pairIsNotEmptyTuple[EmptyTuple, Y]
+      override def nonEmptyOut[R](f: [Y1, Y2] => (Only[Y] =:= (Y1, Y2)) ?=> R): R =
+        f[EmptyTuple, Y]
 
       override def breadths(tail: List[Breadth]): NonEmptyList[Breadth] =
         NonEmptyList(value.totalBreadth, tail)
@@ -341,38 +349,32 @@ object IOProportions {
       ): (Int, IOLayout.ParN.Components[Only[X], Only[Y]]) =
         val w :: Nil = revBreadths
         val (k, layout) = value.layout(w)
-        (k, IOLayout.ParN.Single(layout))
+        (k, IOLayout.ParN.single(layout))
 
       override def layoutFw(
         inLayout: EdgeLayout.TupleN.Components[Only[X]],
       ): (Int, IOLayout.ParN.Components[Only[X], Only[Y]]) =
-        inLayout match
-          case EdgeLayout.TupleN.Single(inLayout) =>
-            val (k, layout) = value.layoutFw(inLayout)
-            (k, IOLayout.ParN.Single(layout))
-          case EdgeLayout.TupleN.Snoc(initLay, _) =>
-            initLay.nonEmpty
+        val inLay = EdgeLayout.TupleN.extractSingle(inLayout)
+        val (k, layout) = value.layoutFw(inLay)
+        (k, IOLayout.ParN.single(layout))
 
       override def layoutBw(
         outLayout: TupleN.Components[Only[Y]],
       ): (Int, IOLayout.ParN.Components[Only[X], Only[Y]]) =
-        outLayout match
-          case EdgeLayout.TupleN.Single(outLayout) =>
-            val (k, layout) = value.layoutBw(outLayout)
-            (k, IOLayout.ParN.Single(layout))
-          case EdgeLayout.TupleN.Snoc(initLay, _) =>
-            initLay.nonEmpty
+        val outLay = EdgeLayout.TupleN.extractSingle(outLayout)
+        val (k, layout) = value.layoutBw(outLay)
+        (k, IOLayout.ParN.single(layout))
     }
 
     case class Snoc[X1, X2, Y1, Y2](
       init: Components[X1, Y1],
       last: IOProportions[X2, Y2],
     ) extends Components[(X1, X2), (Y1, Y2)] {
-      override def nonEmptyIn(using (X1, X2) =:= EmptyTuple): Nothing =
-        pairIsNotEmptyTuple[X1, X2]
+      override def nonEmptyIn[R](f: [x1, x2] => ((X1, X2) =:= (x1, x2)) ?=> R): R =
+        f[X1, X2]
 
-      override def nonEmptyOut(using (Y1, Y2) =:= EmptyTuple): Nothing =
-        pairIsNotEmptyTuple[Y1, Y2]
+      override def nonEmptyOut[R](f: [y1, y2] => ((Y1, Y2) =:= (y1, y2)) ?=> R): R =
+        f[Y1, Y2]
 
       override def breadths(tail: List[Breadth]): NonEmptyList[Breadth] =
         init.breadths(last.totalBreadth :: tail)
@@ -387,29 +389,29 @@ object IOProportions {
         val lastW :: initWs = revBreadths
         val (k, lastLay) = last.layout(lastW)
         val (l, initLay) = init.layoutRev(initWs.map(_ * k))
-        (k * l, IOLayout.ParN.Snoc(initLay, lastLay * l))
+        (k * l, IOLayout.ParN.snoc(initLay, lastLay * l))
 
       override def layoutFw(
         inLayout: EdgeLayout.TupleN.Components[(X1, X2)],
       ): (Int, IOLayout.ParN.Components[(X1, X2), (Y1, Y2)]) =
-        inLayout match
-          case EdgeLayout.TupleN.Snoc(inLayInit, inLayLast) =>
+        init.nonEmptyIn:
+          [x11, x12] => ev ?=> ev match { case TypeEq(Refl()) =>
+            val (inLayInit, inLayLast) = EdgeLayout.TupleN.unsnoc[x11, x12, X2](inLayout)
             val (k, layInit) = init.layoutFw(inLayInit)
             val (l, layLast) = last.layoutFw(inLayLast * k)
-            (k * l, IOLayout.ParN.Snoc(layInit * l, layLast))
-          case EdgeLayout.TupleN.Single(value) =>
-            init.nonEmptyIn(using summon[X1 =:= EmptyTuple])
+            (k * l, IOLayout.ParN.snoc(layInit * l, layLast))
+          }
 
       override def layoutBw(
         outLayout: EdgeLayout.TupleN.Components[(Y1, Y2)],
       ): (Int, IOLayout.ParN.Components[(X1, X2), (Y1, Y2)]) =
-        outLayout match
-          case EdgeLayout.TupleN.Snoc(outLayInit, outLayLast) =>
+        init.nonEmptyOut:
+          [y11, y12] => ev ?=> ev match { case TypeEq(Refl()) =>
+            val (outLayInit, outLayLast) = EdgeLayout.TupleN.unsnoc[y11, y12, Y2](outLayout)
             val (k, layInit) = init.layoutBw(outLayInit)
             val (l, layLast) = last.layoutBw(outLayLast * k)
-            (k * l, IOLayout.ParN.Snoc(layInit * l, layLast))
-          case EdgeLayout.TupleN.Single(value) =>
-            init.nonEmptyOut(using summon[Y1 =:= EmptyTuple])
+            (k * l, IOLayout.ParN.snoc(layInit * l, layLast))
+          }
     }
   }
 

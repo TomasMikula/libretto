@@ -164,85 +164,103 @@ object IOLayout {
     }
 
     object TupleN {
-      sealed trait Components[X] {
-        def pixelBreadth: Px
-        def *(k: Int): Components[X]
-        def locateElem[Xi](elem: TupleElem[Tuple2, EmptyTuple, Xi, X]): (Px, EdgeLayout[Xi])
-        def nonEmpty(using X =:= EmptyTuple): Nothing
-        def coarsen[W](fs: IsRefinedBy.ParN.Components[W, X]): Components[W]
-        def reallocateToSingleWire: EdgeLayout.SingleWire
+      import libretto.lambda.TupleN.{Single, Snoc}
+
+      opaque type Components[X] = libretto.lambda.TupleN[Tuple2, EmptyTuple, EdgeLayout, X]
+
+      extension [X] (thiz: Components[X]) {
+        def pixelBreadth: Px =
+          thiz match
+            case Single(value)    => value.pixelBreadth
+            case Snoc(init, last) => init.pixelBreadth + last.pixelBreadth
+
+        def *(k: Int): Components[X] =
+          thiz match
+            case Single(value)    => Single(value * k)
+            case Snoc(init, last) => Snoc(init * k, last * k)
+
+        def locateElem[Xi](elem: TupleElem[Tuple2, EmptyTuple, Xi, X]): (Px, EdgeLayout[Xi]) =
+          thiz match
+            case Single(value)    => locateElemSingle(value, elem)
+            case Snoc(init, last) => locateElemSnoc(init, last, elem)
+
+        def coarsen[W](fs: IsRefinedBy.ParN.Components[W, X]): Components[W] =
+          thiz match
+            case Single(value)    => coarsenSingle(value, fs)
+            case Snoc(init, last) => coarsenSnoc(init, last, fs)
+
+        def reallocateToSingleWire: EdgeLayout.SingleWire =
+          thiz match
+            case Single(value) =>
+              value.reallocateToSingleWire
+            case Snoc(init, last) =>
+              val SingleWire(pre1, w1, post1) = init.reallocateToSingleWire
+              val SingleWire(pre2, w2, post2) = last.reallocateToSingleWire
+              val w = w1 + w2
+              val (pre, post) = (pre1 + post1 + pre2 + post2).halve
+              SingleWire(pre, w, post)
+
       }
 
-      case class Single[X](
-        value: EdgeLayout[X],
-      ) extends Components[Only[X]] {
-        override def nonEmpty(using Only[X] =:= EmptyTuple): Nothing =
-          pairIsNotEmptyTuple[EmptyTuple, X]
+      def single[X](x: EdgeLayout[X]): Components[Only[X]] =
+        Single(x)
 
-        override def pixelBreadth: Px =
-          value.pixelBreadth
+      def snoc[X1, X2](init: Components[X1], last: EdgeLayout[X2]): Components[(X1, X2)] =
+        Snoc(init, last)
 
-        override def *(k: Int): Components[(EmptyTuple, X)] =
-          Single(value * k)
+      def extractSingle[X](xs: Components[Only[X]]): EdgeLayout[X] =
+        xs match
+          case Single(x) => x
+          case s: Snoc[p, n, f, v, w] => s.init.nonEmpty([x11, x12] => ev ?=> pairIsNotEmptyTuple(using ev.flip))
 
-        override def coarsen[W](fs: IsRefinedBy.ParN.Components[W, Only[X]]): Components[W] =
-          fs match
-            case libretto.lambda.ParN.Single(f) =>
-              Single(value.coarsen(f))
-            case s: libretto.lambda.ParN.Snoc[p, n, f, w1, w2, x1, x2] =>
-              s.init.nonEmptyOut([x, y] => pairIsNotEmptyTuple(using _))(summon[x1 =:= EmptyTuple])
+      def unsnoc[X1, X2, X3](components: Components[((X1, X2), X3)]): (Components[(X1, X2)], EdgeLayout[X3]) =
+        components match
+          case Snoc(init, last) => (init, last)
+          case Single(_) => throw AssertionError(s"Impossible `(X1, X2) =:= EmptyTuple`")
 
-        override def reallocateToSingleWire: SingleWire =
-          value.reallocateToSingleWire
+      private def coarsenSingle[X, W](
+        x: EdgeLayout[X],
+        fs: IsRefinedBy.ParN.Components[W, Only[X]],
+      ): Components[W] =
+        fs match
+          case libretto.lambda.ParN.Single(f) =>
+            Single(x.coarsen(f))
+          case s: libretto.lambda.ParN.Snoc[p, n, f, w1, w2, x1, x2] =>
+            s.init.nonEmptyOut([x, y] => pairIsNotEmptyTuple(using _))(summon[x1 =:= EmptyTuple])
 
-        override def locateElem[Xi](
-          elem: TupleElem[Tuple2, EmptyTuple, Xi, (EmptyTuple, X)],
-        ): (Px, EdgeLayout[Xi]) =
-          elem match
-            case TupleElem.Last() =>
-              (Px(0), value)
-            case TupleElem.InInit(init) =>
-              init.ownerTypeAsTuple:
-                [X, Y] => (ev: EmptyTuple =:= (X, Y)) ?=>
-                  throw AssertionError("Impossible: EmptyTuple =:= (X, Y)")
-      }
-
-      case class Snoc[X1, X2](
+      private def coarsenSnoc[X1, X2, W](
         init: Components[X1],
         last: EdgeLayout[X2],
-      ) extends Components[(X1, X2)] {
-        override def nonEmpty(using (X1, X2) =:= EmptyTuple): Nothing =
-          pairIsNotEmptyTuple[X1, X2]
+        fs: IsRefinedBy.ParN.Components[W, (X1, X2)],
+      ): Components[W] =
+        fs match
+          case libretto.lambda.ParN.Snoc(fInit, fLast) =>
+            Snoc(init.coarsen(fInit), last.coarsen(fLast))
+          case libretto.lambda.ParN.Single(_) =>
+            init.nonEmpty { [x11, x12] => ev ?=> pairIsNotEmptyTuple(using ev.flip) }
 
-        override def pixelBreadth: Px =
-          init.pixelBreadth + last.pixelBreadth
+      private def locateElemSingle[X, Xi](
+        x: EdgeLayout[X],
+        elem: TupleElem[Tuple2, EmptyTuple, Xi, (EmptyTuple, X)],
+      ): (Px, EdgeLayout[Xi]) =
+        elem match
+          case TupleElem.Last() =>
+            (Px(0), x)
+          case TupleElem.InInit(init) =>
+            init.ownerTypeAsTuple:
+              [X, Y] => (ev: EmptyTuple =:= (X, Y)) ?=>
+                throw AssertionError("Impossible: EmptyTuple =:= (X, Y)")
 
-        override def *(k: Int): Components[(X1, X2)] =
-          Snoc(init * k, last * k)
-
-        override def coarsen[W](fs: IsRefinedBy.ParN.Components[W, (X1, X2)]): Components[W] =
-          fs match
-            case libretto.lambda.ParN.Snoc(fInit, fLast) =>
-              Snoc(init.coarsen(fInit), last.coarsen(fLast))
-            case libretto.lambda.ParN.Single(_) =>
-              init.nonEmpty
-
-        override def reallocateToSingleWire: SingleWire =
-          val SingleWire(pre1, w1, post1) = init.reallocateToSingleWire
-          val SingleWire(pre2, w2, post2) = last.reallocateToSingleWire
-          val w = w1 + w2
-          val (pre, post) = (pre1 + post1 + pre2 + post2).halve
-          SingleWire(pre, w, post)
-
-        override def locateElem[Xi](
-          elem: TupleElem[Tuple2, EmptyTuple, Xi, (X1, X2)],
-        ): (Px, EdgeLayout[Xi]) =
-          elem match
-            case TupleElem.Last() =>
-              (init.pixelBreadth, last)
-            case TupleElem.InInit(elem1) =>
-              init.locateElem(elem1)
-      }
+      private def locateElemSnoc[X1, X2, Xi](
+        init: Components[X1],
+        last: EdgeLayout[X2],
+        elem: TupleElem[Tuple2, EmptyTuple, Xi, (X1, X2)],
+      ): (Px, EdgeLayout[Xi]) =
+        elem match
+          case TupleElem.Last() =>
+            (init.pixelBreadth, last)
+          case TupleElem.InInit(elem1) =>
+            init.locateElem(elem1)
     }
 
     case class SingleWire(pre: Px, wire: Px, post: Px) extends EdgeLayout[Wire] {
@@ -337,17 +355,15 @@ object IOLayout {
     def single[Wrap[_], X](x: EdgeLayout[Wrap[(EmptyTuple, X)]]): EdgeLayout[X] =
       x match
         case TupleN(components) =>
-          components match
-            case TupleN.Single(x) => x
-            case s: TupleN.Snoc[v, w] => s.init.nonEmpty
+          TupleN.extractSingle(components)
 
     def unsnoc[Wrap[_], X1, X2, X3](
       x: EdgeLayout[Wrap[((X1, X2), X3)]],
     ): (EdgeLayout[Wrap[(X1, X2)]], EdgeLayout[X3]) =
       x match
         case TupleN(components) =>
-          components match
-            case TupleN.Snoc(init, last) => (TupleN(init), last)
+          val (init, last) = TupleN.unsnoc(components)
+          (TupleN(init), last)
   }
 
   case class Separate[I, O](
@@ -396,63 +412,51 @@ object IOLayout {
   }
 
   object ParN {
-    sealed trait Components[I, O] {
-      def pixelBreadth: Px
-      def inEdge: EdgeLayout.TupleN.Components[I]
-      def outEdge: EdgeLayout.TupleN.Components[O]
-      def *(k: Int): Components[I, O]
-      def inIsNotEmpty(using I =:= EmptyTuple): Nothing
-      def outIsNotEmpty(using O =:= EmptyTuple): Nothing
+    import libretto.lambda.ParN.{Single, Snoc}
+
+    opaque type Components[I, O] = libretto.lambda.ParN[Tuple2, EmptyTuple, IOLayout, I, O]
+
+    extension [I, O] (thiz: Components[I, O]) {
+      def pixelBreadth: Px =
+        thiz match
+          case Single(value) => value.pixelBreadth
+          case Snoc(init, last) => init.pixelBreadth + last.pixelBreadth
+
+      def inEdge: EdgeLayout.TupleN.Components[I] =
+        thiz match
+          case Single(value)    => EdgeLayout.TupleN.single(value.inEdge)
+          case Snoc(init, last) => EdgeLayout.TupleN.snoc(init.inEdge, last.inEdge)
+
+      def outEdge: EdgeLayout.TupleN.Components[O] =
+        thiz match
+          case Single(value)    => EdgeLayout.TupleN.single(value.outEdge)
+          case Snoc(init, last) => EdgeLayout.TupleN.snoc(init.outEdge, last.outEdge)
+
+      def *(k: Int): Components[I, O] =
+        thiz match
+          case Single(value)    => Single(value * k)
+          case Snoc(init, last) => Snoc(init * k, last * k)
     }
 
-    case class Single[I, O](
-      value: IOLayout[I, O],
-    ) extends Components[Only[I], Only[O]] {
-      override def pixelBreadth: Px =
-        value.pixelBreadth
+    def single[I, O](value: IOLayout[I, O]): Components[Only[I], Only[O]] =
+      Single(value)
 
-      override def inEdge: EdgeLayout.TupleN.Components[Only[I]] =
-        EdgeLayout.TupleN.Single(value.inEdge)
-
-      override def outEdge: EdgeLayout.TupleN.Components[Only[O]] =
-        EdgeLayout.TupleN.Single(value.outEdge)
-
-      override def *(k: Int): Components[Only[I], Only[O]] =
-        Single(value * k)
-
-      override def inIsNotEmpty(using Only[I] =:= EmptyTuple): Nothing =
-        pairIsNotEmptyTuple[EmptyTuple, I]
-
-      override def outIsNotEmpty(using Only[O] =:= EmptyTuple): Nothing =
-        pairIsNotEmptyTuple[EmptyTuple, O]
-    }
-
-    case class Snoc[I1, I2, O1, O2](
+    def snoc[I1, I2, O1, O2](
       init: Components[I1, O1],
       last: IOLayout[I2, O2],
-    ) extends Components[(I1, I2), (O1, O2)] {
-      override def pixelBreadth: Px =
-        init.pixelBreadth + last.pixelBreadth
+    ): Components[(I1, I2), (O1, O2)] =
+      Snoc(init, last)
 
-      override def inEdge: EdgeLayout.TupleN.Components[(I1, I2)] =
-        EdgeLayout.TupleN.Snoc(init.inEdge, last.inEdge)
-
-      override def outEdge: EdgeLayout.TupleN.Components[(O1, O2)] =
-        EdgeLayout.TupleN.Snoc(init.outEdge, last.outEdge)
-
-      override def *(k: Int): Components[(I1, I2), (O1, O2)] =
-        Snoc(init * k, last * k)
-
-      override def inIsNotEmpty(using (I1, I2) =:= EmptyTuple): Nothing =
-        pairIsNotEmptyTuple[I1, I2]
-
-      override def outIsNotEmpty(using (O1, O2) =:= EmptyTuple): Nothing =
-        pairIsNotEmptyTuple[O1, O2]
-    }
-
-    def asSingle[Wrap[_], I, O](comps: Components[Only[I], Only[O]]): Single[I, O] =
+    def extractSingle[X, Y](comps: Components[Only[X], Only[Y]]): IOLayout[X, Y] =
       comps match
-        case s: Single[i, o]         => s
-        case s: Snoc[i1, i2, o1, o2] => s.init.inIsNotEmpty(using summon[i1 =:= EmptyTuple])
+        case Single(c) => c
+        case s: Snoc[p, n, f, v1, v2, w1, w2] => s.init.nonEmpty([x11, x12, y11, y12] => (evx, evy) ?=> pairIsNotEmptyTuple(using evx.flip))
+
+    def unsnoc[X1, X2, X3, Y1, Y2, Y3](
+      comps: Components[((X1, X2), X3), ((Y1, Y2), Y3)]
+    ): (Components[(X1, X2), (Y1, Y2)], IOLayout[X3, Y3]) =
+      comps match
+        case Snoc(init, last) => (init, last)
+        case Single(_) => throw AssertionError(s"Impossible `(X1, X2) =:= EmptyTuple`")
   }
 }

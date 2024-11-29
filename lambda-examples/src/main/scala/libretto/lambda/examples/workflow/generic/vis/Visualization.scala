@@ -514,8 +514,19 @@ object Visualization {
         Components[X, P, I, ?, Y]
       ]]
 
-      def inIsNotEmpty(using X =:= EmptyTuple): Nothing
-      def outIsNotEmpty(using Y =:= EmptyTuple): Nothing
+      def nonEmpty[R](f: [x1, x2, y1, y2] => (X =:= (x1, x2), Y =:= (y1, y2)) ?=> R): R
+
+      final def nonEmptyIn [R](f: [x1, x2] => (X =:= (x1, x2)) ?=> R): R =
+        nonEmpty[R]([x1, x2, y1, y2] => (evx, _) ?=> f[x1, x2])
+
+      final def nonEmptyOut[R](f: [y1, y2] => (Y =:= (y1, y2)) ?=> R): R =
+        nonEmpty[R]([x1, x2, y1, y2] => (_, evy) ?=> f[y1, y2])
+
+      def inIsNotEmpty(using ev: X =:= EmptyTuple): Nothing =
+        nonEmptyIn[Nothing] { [x1, x2] => ev1 ?=> pairIsNotEmptyTuple(using ev1.flip andThen ev) }
+
+      def outIsNotEmpty(using ev: Y =:= EmptyTuple): Nothing =
+        nonEmptyOut[Nothing] { [y1, y2] => ev1 ?=> pairIsNotEmptyTuple(using ev1.flip andThen ev) }
     }
 
     case class Single[X, P, I, Q, Y](
@@ -548,11 +559,8 @@ object Visualization {
           case Right(vis)    => Right(Single(vis))
         }
 
-      override def inIsNotEmpty(using Only[X] =:= EmptyTuple): Nothing =
-        pairIsNotEmptyTuple[EmptyTuple, X]
-
-      override def outIsNotEmpty(using Only[Y] =:= EmptyTuple): Nothing =
-        pairIsNotEmptyTuple[EmptyTuple, Y]
+      override def nonEmpty[R](f: [x1, x2, y1, y2] => (Only[X] =:= (x1, x2), Only[Y] =:= (y1, y2)) ?=> R): R =
+        f[EmptyTuple, X, EmptyTuple, Y]
     }
 
     case class Snoc[X1, P, I, Q, Y1, X2, R, J, S, Y2](
@@ -569,10 +577,6 @@ object Visualization {
       type FlI = P | R | I | J
       type FlO = Q | S | I | J
       type Sk  = I | J
-
-      // private given OpTag[∙] = op
-
-      // override def indexed: IPar[∙, X1, P, I, Q, Y1, X2, R, J, S, Y2] = this
 
       override def ioProportions: IOProportions.ParN.Components[(X1, X2), (Y1, Y2)] =
         IOProportions.ParN.Snoc(
@@ -633,11 +637,8 @@ object Visualization {
           case (None, Some(Left(_))) => None // cannot report as progress
           case (None, None) => None
 
-      override def inIsNotEmpty(using (X1, X2) =:= EmptyTuple): Nothing =
-        pairIsNotEmptyTuple[X1, X2]
-
-      override def outIsNotEmpty(using (Y1, Y2) =:= EmptyTuple): Nothing =
-        pairIsNotEmptyTuple[Y1, Y2]
+      override def nonEmpty[R](f: [x1, x2, y1, y2] => ((X1, X2) =:= (x1, x2), (Y1, Y2) =:= (y1, y2)) ?=> R): R =
+        f[X1, X2, Y1, Y2]
     }
 
     def from[Wrap[_], X, Y](

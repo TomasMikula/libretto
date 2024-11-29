@@ -293,21 +293,22 @@ object VisualizationToSVG {
       case s: Visualization.IParN.Single[x, p, i, q, y] =>
         summon[X =:= Only[x]]
         summon[Y =:= Only[y]]
-        val layout = IOLayout.ParN.asSingle[Wrap, x, y](layouts).value
+        val layout = IOLayout.ParN.extractSingle[x, y](layouts)
         val vis = renderSVG(s.vis, layout, height)
         val amb = renderAmbient(AmbientStyle.nthOf(op, 0), layout, height)
         amb ++: (vis :: acc)
       case s: Visualization.IParN.Snoc[x1, p, i, q, y1, x2, r, j, s, y2] =>
         summon[X =:= (x1, x2)]
         summon[Y =:= (y1, y2)]
-        layouts match
-          case IOLayout.ParN.Snoc(layInit, layLast) =>
-            val ambStyle = AmbientStyle.nthOf(op, s.init.size)
-            val ambLast = renderAmbient(ambStyle, layLast, height).map(_.translate(layInit.pixelBreadth.pixels, 0.0))
-            val visLast = renderSVG    (s.last  , layLast, height)      .translate(layInit.pixelBreadth.pixels, 0.0)
-            renderParNComponents(op, s.init, layInit, height, ambLast ++: (visLast :: acc))
-          case IOLayout.ParN.Single(_) =>
-            s.init.inIsNotEmpty(using summon[x1 =:= EmptyTuple])
+        s.init.nonEmpty { [x11, x12, y11, y12] => (evx, evy) ?=>
+          (evx, evy) match
+            case (TypeEq(Refl()), TypeEq(Refl())) =>
+              val (layInit, layLast) = IOLayout.ParN.unsnoc[x11, x12, x2, y11, y12, y2](layouts)
+              val ambStyle = AmbientStyle.nthOf(op, s.init.size)
+              val ambLast = renderAmbient(ambStyle, layLast, height).map(_.translate(layInit.pixelBreadth.pixels, 0.0))
+              val visLast = renderSVG    (s.last  , layLast, height)      .translate(layInit.pixelBreadth.pixels, 0.0)
+              renderParNComponents(op, s.init, layInit, height, ambLast ++: (visLast :: acc))
+        }
 
   private def renderParNComponentsSkewed[Wrap[_], X, Y](
     comps: Visualization.IParN.Components[X, ?, Skw, ?, Y],
