@@ -756,21 +756,13 @@ object VisualizationToSVG {
     y: EdgeDesc.Binary[∙, Y1, Y2],
     reg: TrapezoidLayout[Wire, Y1 ∙ Y2],
   ): SVGElem = {
-    val lStyle = AmbientStyle.leftOf(y.op)
-    val rStyle = AmbientStyle.rightOf(y.op)
-    val c1 = Connector.Across[Wire, Wire ∙ Wire](WirePick.pickId, WirePick.pickL)
-    val c2 = Connector.Across[Wire, Wire ∙ Wire](WirePick.pickId, WirePick.pickR)
+    given OpTag[∙] = y.op
     (y.x1, y.x2) match {
       case (EdgeDesc.SingleWire, EdgeDesc.SingleWire) =>
         summon[Y1 =:= Wire]
         summon[Y2 =:= Wire]
-        val amb1 = renderAmbient(lStyle, reg, EdgeStretch.wireLHalf, EdgeStretch.wireSegment.inl)
-        val amb2 = renderAmbient(rStyle, reg, EdgeStretch.wireRHalf, EdgeStretch.wireSegment.inr)
-        val g1 = renderConnector(c1, reg)
-        val g2 = renderConnector(c2, reg)
-        SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
+        renderFanOutBinaryShallow(OpTag[∙], reg)
       case _ =>
-        given OpTag[∙] = y.op
         val xRefinedByY: (Wire ∙ Wire) IsRefinedBy (Y1 ∙ Y2) =
           IsRefinedBy.initial(y.x1) par IsRefinedBy.initial(y.x2)
         val xLayout: EdgeLayout[Wire ∙ Wire] =
@@ -780,12 +772,7 @@ object VisualizationToSVG {
           Length.max(y.x1.depth, y.x2.depth)
         ) match
           case (k, iReg, oReg) =>
-            val h1 = iReg.height.pixels
-            val amb1 = renderAmbient(lStyle, iReg, EdgeStretch.wireLHalf, EdgeStretch.wireSegment.inl)
-            val amb2 = renderAmbient(rStyle, iReg, EdgeStretch.wireRHalf, EdgeStretch.wireSegment.inr)
-            val g1 = renderConnector(c1, iReg)
-            val g2 = renderConnector(c2, iReg)
-            val vis1 = SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
+            val vis1 = renderFanOutBinaryShallow(OpTag[∙], iReg)
             val vis2 = renderExpand(xRefinedByY, oReg).translate(0, iReg.height.pixels)
             val g = SVGElem.Group(vis1, vis2)
             if k == 1 then g else g.scale(1.0/k)
@@ -796,21 +783,13 @@ object VisualizationToSVG {
     x: EdgeDesc.Binary[∙, X1, X2],
     reg: TrapezoidLayout[X1 ∙ X2, Wire],
   ): SVGElem = {
-    val lStyle = AmbientStyle.leftOf(x.op)
-    val rStyle = AmbientStyle.rightOf(x.op)
-    val c1 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickL, WirePick.pickId)
-    val c2 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickR, WirePick.pickId)
+    given OpTag[∙] = x.op
     (x.x1, x.x2) match {
       case (EdgeDesc.SingleWire, EdgeDesc.SingleWire) =>
         summon[X1 =:= Wire]
         summon[X2 =:= Wire]
-        val amb1 = renderAmbient(lStyle, reg, EdgeStretch.wireSegment.inl, EdgeStretch.wireLHalf)
-        val amb2 = renderAmbient(rStyle, reg, EdgeStretch.wireSegment.inr, EdgeStretch.wireRHalf)
-        val g1 = renderConnector(c1, reg)
-        val g2 = renderConnector(c2, reg)
-        SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
+        renderFanInBinaryShallow(OpTag[∙], reg)
       case _ =>
-        given OpTag[∙] = x.op
         val yRefinedByX: (Wire ∙ Wire) IsRefinedBy (X1 ∙ X2) =
           IsRefinedBy.initial(x.x1) par IsRefinedBy.initial(x.x2)
         val yLayout: EdgeLayout[Wire ∙ Wire] =
@@ -821,14 +800,40 @@ object VisualizationToSVG {
         ) match
           case (k, iReg, oReg) =>
             val vis1 = renderCollapse(yRefinedByX, iReg)
-            val amb1 = renderAmbient(lStyle, oReg, EdgeStretch.wireSegment.inl, EdgeStretch.wireLHalf)//.map(_.translate(0, h1))
-            val amb2 = renderAmbient(rStyle, oReg, EdgeStretch.wireSegment.inr, EdgeStretch.wireRHalf)//.map(_.translate(0, h1))
-            val g1 = renderConnector(c1, oReg)//.translate(0, h1)
-            val g2 = renderConnector(c2, oReg)//.translate(0, h1)
-            val vis2 = SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2)).translate(0, iReg.height.pixels)
+            val vis2 = renderFanInBinaryShallow(OpTag[∙], oReg).translate(0, iReg.height.pixels)
             val g = SVGElem.Group(vis1, vis2)
             if k == 1 then g else g.scale(1.0/k)
     }
+  }
+
+  private def renderFanOutBinaryShallow[∙[_, _]](
+    op: OpTag[∙],
+    reg: TrapezoidLayout[Wire, Wire ∙ Wire],
+  ): SVGElem = {
+    val lStyle = AmbientStyle.leftOf(op)
+    val rStyle = AmbientStyle.rightOf(op)
+    val c1 = Connector.Across[Wire, Wire ∙ Wire](WirePick.pickId, WirePick.pickL)
+    val c2 = Connector.Across[Wire, Wire ∙ Wire](WirePick.pickId, WirePick.pickR)
+    val amb1 = renderAmbient(lStyle, reg, EdgeStretch.wireLHalf, EdgeStretch.wireSegment.inl)
+    val amb2 = renderAmbient(rStyle, reg, EdgeStretch.wireRHalf, EdgeStretch.wireSegment.inr)
+    val g1 = renderConnector(c1, reg)
+    val g2 = renderConnector(c2, reg)
+    SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
+  }
+
+  private def renderFanInBinaryShallow[∙[_, _]](
+    op: OpTag[∙],
+    reg: TrapezoidLayout[Wire ∙ Wire, Wire],
+  ): SVGElem = {
+    val lStyle = AmbientStyle.leftOf(op)
+    val rStyle = AmbientStyle.rightOf(op)
+    val c1 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickL, WirePick.pickId)
+    val c2 = Connector.Across[Wire ∙ Wire, Wire](WirePick.pickR, WirePick.pickId)
+    val amb1 = renderAmbient(lStyle, reg, EdgeStretch.wireSegment.inl, EdgeStretch.wireLHalf)
+    val amb2 = renderAmbient(rStyle, reg, EdgeStretch.wireSegment.inr, EdgeStretch.wireRHalf)
+    val g1 = renderConnector(c1, reg)
+    val g2 = renderConnector(c2, reg)
+    SVGElem.Group(amb1 ++: amb2 ++: List(g1, g2))
   }
 
   private def renderExpand[X, Y](
