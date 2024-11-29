@@ -1,5 +1,7 @@
 package libretto.lambda
 
+import scala.collection.immutable.{:: as NonEmptyList}
+
 /** An n-ary tuple of values `F[Ai]`,
  *  where `A = Nil ∙ A1 ∙ ... ∙ An`
  *  where `∙` associates to the left.
@@ -22,10 +24,17 @@ sealed trait TupleN[∙[_, _], Nil, F[_], A] {
   def ∙[B](b: F[B]): TupleN[∙, Nil, F, A ∙ B] =
     TupleN.Snoc(this, b)
 
+  def translate[G[_]](h: [a] => F[a] => G[a]): TupleN[∙, Nil, G, A]
+
   def foldL[G[_]](
     first: [a] => F[a] => G[Nil ∙ a],
     snoc: [a, b] => (G[a], F[b]) => G[a ∙ b],
   ): G[A]
+
+  def toList[B](f: [a] => F[a] => B): NonEmptyList[B] =
+    toList(f, scala.Nil)
+
+  protected def toList[B](f: [a] => F[a] => B, acc: List[B]): NonEmptyList[B]
 }
 
 object TupleN {
@@ -43,11 +52,20 @@ object TupleN {
     ): ParN[∙, Nil, G, Nil ∙ A, Nil ∙ A] =
       ParN.Single(f(value))
 
+    override def translate[G[_]](h: [a] => F[a] => G[a]): TupleN[∙, Nil, G, Nil ∙ A] =
+      Single(h(value))
+
     override def foldL[G[_]](
       first: [a] => F[a] => G[Nil ∙ a],
       snoc: [a, b] => (G[a], F[b]) => G[a ∙ b],
     ): G[Nil ∙ A] =
       first(value)
+
+    override protected def toList[B](
+      f: [a] => (F[a]) => B,
+      acc: List[B],
+    ): NonEmptyList[B] =
+      NonEmptyList(f(value), acc)
 
   }
 
@@ -66,10 +84,20 @@ object TupleN {
     ): ParN[∙, Nil, G, Init ∙ Last, Init ∙ Last] =
       ParN.Snoc(init.unravel(f), f(last))
 
+    override def translate[G[_]](h: [a] => F[a] => G[a]): TupleN[∙, Nil, G, Init ∙ Last] =
+      Snoc(init.translate(h), h(last))
+
     override def foldL[G[_]](
       first: [a] => (F[a]) => G[Nil ∙ a],
       snoc: [a, b] => (G[a], F[b]) => G[a ∙ b],
     ): G[Init ∙ Last] =
       snoc(init.foldL(first, snoc), last)
+
+    override protected def toList[B](
+      f: [a] => (F[a]) => B,
+      acc: List[B],
+    ): NonEmptyList[B] =
+      init.toList(f, f(last) :: acc)
+
   }
 }
