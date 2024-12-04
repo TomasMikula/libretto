@@ -27,9 +27,6 @@ infix sealed trait IsRefinedBy[X, Y] {
     V IsRefinedBy X,
     V IsRefinedBy W,
   )]
-
-  /** Two (potentially different) coarsenings of `Y` can be morphed into each other. */
-  infix def morph[W](that: W IsRefinedBy Y): Adaptoid[X, W]
 }
 
 object IsRefinedBy {
@@ -56,9 +53,6 @@ object IsRefinedBy {
       that: W IsRefinedBy X,
     ): Exists[[V] =>> (V IsRefinedBy X, V IsRefinedBy W)] =
       Exists((that, Id[W](that.inDesc)))
-
-    override def morph[W](that: W IsRefinedBy X): Adaptoid[X, W] =
-      Adaptoid.collapse(that)
   }
 
   infix sealed trait IsStrictlyRefinedBy[X, Y] extends IsRefinedBy[X, Y] {
@@ -85,9 +79,6 @@ object IsRefinedBy {
       that: W IsRefinedBy X,
     ): Exists[[V] =>> (V IsRefinedBy Wire, V IsRefinedBy W)] =
       Exists((id[Wire], initial[W](that.inDesc)))
-
-    override def morph[W](that: W IsRefinedBy X): Adaptoid[Wire, W] =
-      Adaptoid.expand(initial[W](that.inDesc))
   }
 
   case class Pairwise[∙[_, _], X1, X2, Y1, Y2](
@@ -138,20 +129,6 @@ object IsRefinedBy {
       (f1 greatestCommonCoarsening g1, f2 greatestCommonCoarsening g2) match
         case (∃((wf1, wg1)), ∃((wf2, wg2))) =>
           Exists((Pairwise(op, wf1, wf2), Pairwise(op, wg1, wg2)))
-
-    override def morph[W](
-      that: W IsRefinedBy (Y1 ∙ Y2),
-    ): Adaptoid[(X1 ∙ X2), W] =
-      that match
-        case Id(_) => Adaptoid.Expand(this)
-        case Initial(_) => Adaptoid.collapse(initial(inDesc))
-        case Pairwise(_, g1, g2) => morphToBinaryOp(g1, g2)
-
-    private def morphToBinaryOp[W1, W2](
-      g1: W1 IsRefinedBy Y1,
-      g2: W2 IsRefinedBy Y2,
-    ): Adaptoid[X1 ∙ X2, W1 ∙ W2] =
-      Adaptoid.par(using op)(f1 morph g1, f2 morph g2)
   }
 
   case class ParN[Wrap[_], X, Y](
@@ -162,8 +139,6 @@ object IsRefinedBy {
       components.exists([x, y] => _.isStrict),
       "At least 1 component of IsRefinedBy.ParN must be *strictly* refining"
     )
-
-    override def morph[W](that: W IsRefinedBy Wrap[Y]): Adaptoid[Wrap[X], W] = ???
 
     override def greatestCommonCoarsening[W](that: W IsRefinedBy Wrap[Y]): Exists[[V] =>> (V IsRefinedBy Wrap[X], V IsRefinedBy W)] = ???
 

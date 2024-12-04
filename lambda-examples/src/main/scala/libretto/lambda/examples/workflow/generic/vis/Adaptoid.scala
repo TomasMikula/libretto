@@ -1,5 +1,7 @@
 package libretto.lambda.examples.workflow.generic.vis
 
+import libretto.lambda.UnhandledCase
+
 import DefaultDimensions.Length
 import IsRefinedBy.IsStrictlyRefinedBy
 
@@ -89,6 +91,26 @@ object Adaptoid {
       (f1, f2) match
         case (Id(x1), Id(x2)) => Id(x1 ∙ x2)
         case _                => Par(op, f1, f2)
+
+  /** Two (potentially different) coarsenings (`X`, `Y`) of `Z` can be morphed into each other. */
+  def adapt[X, Y, Z](
+    f: X IsRefinedBy Z,
+    g: Y IsRefinedBy Z,
+  ): Adaptoid[X, Y] =
+    (f, g) match {
+      case (IsRefinedBy.Id(_), g) => Adaptoid.collapse(g)
+      case (f, IsRefinedBy.Id(_)) => Adaptoid.expand(f)
+      case (IsRefinedBy.Initial(_), g) => Adaptoid.expand(IsRefinedBy.initial(g.inDesc))
+      case (f, IsRefinedBy.Initial(_)) => Adaptoid.collapse(IsRefinedBy.initial(f.inDesc))
+      case (IsRefinedBy.Pairwise(fOp, f1, f2), IsRefinedBy.Pairwise(gOp, g1, g2)) =>
+        Adaptoid.par(using fOp)(adapt(f1, g1), adapt(f2, g2))
+      case (IsRefinedBy.ParN(_, _), IsRefinedBy.ParN(_, _)) =>
+        UnhandledCase.raise(s"Adaptoid.adapt($f, $g)")
+      case (IsRefinedBy.Pairwise(binaryOp, _, _), IsRefinedBy.ParN(naryOp, _)) =>
+        throw AssertionError(s"Impossible if $binaryOp and $naryOp are different class types")
+      case (IsRefinedBy.ParN(naryOp, _), IsRefinedBy.Pairwise(binaryOp, _, _)) =>
+        throw AssertionError(s"Impossible if $naryOp and $binaryOp are different class types")
+    }
 
   private def lengthOf[X, Y](f: X IsRefinedBy Y): Length =
     f match
