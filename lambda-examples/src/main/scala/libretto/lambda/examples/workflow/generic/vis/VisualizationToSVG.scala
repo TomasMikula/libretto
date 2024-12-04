@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.vis
 
-import libretto.lambda.{ParN, TupleN}
+import libretto.lambda.{ParN, TupleN, UnhandledCase}
 import libretto.lambda.examples.workflow.generic.vis.Color
 import libretto.lambda.examples.workflow.generic.vis.DefaultDimensions.*
 import libretto.lambda.examples.workflow.generic.vis.Px.*
@@ -181,16 +181,27 @@ object VisualizationToSVG {
         flx.tiltSnd match
           case Semiflex.Snd() =>
             val (k, headLayout) = head.ioProportions.layoutFw(iLayout)
-            val yk = yOffset * k
-            val h1 = heights.head * k
-            val headVis = renderSVG(head, headLayout, h1).optTranslateY(yk.pixels)
-            val (l, tailViss) = renderSequenceFlexiHead(tail, headLayout.outEdge, oLayout * k, heights.tail.map(_ * k), yk + h1)
-            val hv = if (l == 1) then headVis else headVis.scale(l)
-            (k * l, hv :: tailViss)
+            val (l, vs) = renderConsStiffHead(head, tail, headLayout, oLayout * k, heights.map(_ * k), yOffset * k)
+            (k * l, vs)
           case Semiflex.Fst() =>
             val (k, mLayout, tailViss) = renderSequenceBw(tail, oLayout, heights.tail, yOffset + heights.head)
             val headVis = renderSVG(head, IOLayout.Separate(iLayout * k, mLayout), heights.head * k).optTranslateY((yOffset * k).pixels)
             (k, headVis :: tailViss)
+  }
+
+  private def renderConsStiffHead[X, Y, Z](
+    head: Visualization[X, Y],
+    tail: Visualization.Sequence[Y, Flx, ?, Z],
+    hLayout: IOLayout[X, Y],
+    oLayout: EdgeLayout[Z],
+    heights: List[Px],
+    yOffset: Px,
+  ): (Int, List[SVGElem]) = {
+    val h1 = heights.head
+    val headVis = renderSVG(head, hLayout, h1).optTranslateY(yOffset.pixels)
+    val (l, tailViss) = renderSequenceFlexiHead(tail, hLayout.outEdge, oLayout, heights.tail, yOffset + h1)
+    val hv = if (l == 1) then headVis else headVis.scale(l)
+    (l, hv :: tailViss)
   }
 
   private def renderSequenceBw[X, Y](
@@ -212,15 +223,10 @@ object VisualizationToSVG {
           case Semiflex.Snd() =>
             // give the preferred layout to the first, potentially non-flexi element
             val (k, headLayout) = head.ioProportions.layout(oLayout.pixelBreadth)
-            val h0 = heights(0) * k
-            val hs = heights.tail.map(_ * k)
-            val yk = yOffset * k
-            val hVis = renderSVG(head, headLayout, h0).optTranslateY(yk.pixels)
-            val (l, tViss) = renderSequenceFlexiHead(tail, headLayout.outEdge, oLayout * k, hs, yk + h0)
-            val hv = if (l == 1) then hVis else hVis.scale(l)
-            (k * l, headLayout.inEdge * l, hv :: tViss)
+            val (l, vs) = renderConsStiffHead(head, tail, headLayout, oLayout * k, heights.map(_ * k), yOffset * k)
+            (k * l, headLayout.inEdge * l, vs)
           case Semiflex.Fst() =>
-            ???
+            UnhandledCase.raise(s"renderSequenceBw with flexi head")
   }
 
   private def renderPar[∙[_, _], X1, X2, Y1, Y2](
