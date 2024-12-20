@@ -318,9 +318,14 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           )
         )))
 
-      case d: FlowAST.DistributeNAryRL[op, d, cases, yCases] =>
+      case d: FlowAST.DistributeNAryLR[op, d, cases, dCases] =>
+        summon[A =:= (d ** Enum[cases])]
+        summon[B =:= Enum[dCases]]
+        visualizeDistNAryLR(d.dist)
+
+      case d: FlowAST.DistributeNAryRL[op, d, cases, dCases] =>
         summon[A =:= (Enum[cases] ** d)]
-        summon[B =:= Enum[yCases]]
+        summon[B =:= Enum[dCases]]
         visualizeDistNAryRL(d.dist)
 
       case i: FlowAST.Inject[op, lbl, x, cases] =>
@@ -388,6 +393,23 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         Visualizer.unimplemented(other.getClass.getSimpleName())
   }
 
+  private def visualizeDistNAryLR[D, Cases, DCases](
+    dist: DistributionNAry.DistLR[**, ||, ::, D, Cases] { type Out = DCases },
+  ): Exists[[X] =>> Exists[[Y] =>> (
+    X Approximates (D ** Enum[Cases]),
+    Y Approximates Enum[DCases],
+    Visualization[X, Y],
+  )]] =
+    dist.dropNames[Tuple2, EmptyTuple] match {
+      case Exists.Some(Exists.Some((x, dist, y))) =>
+        VisualizeDistNAry[[a, b] =>> b ** a](
+          [X, Y, A, B] => (fx: X Approximates A, fy: Y Approximates B) => fy ** fx,
+          [X, D] => (x: EdgeDesc[X], d: EdgeDesc[D]) => d ** x,
+          [X] => _ ?=> EdgeSegment.pickR,
+          [X] => _ ?=> EdgeSegment.pickL,
+        )(x, y, dist.kernel)
+    }
+
   private def visualizeDistNAryRL[D, Cases, DCases](
     dist: DistributionNAry.DistRL[**, ||, ::, D, Cases] { type Out = DCases },
   ): Exists[[X] =>> Exists[[Y] =>> (
@@ -397,94 +419,108 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
   )]] =
     dist.dropNames[Tuple2, EmptyTuple] match {
       case Exists.Some(Exists.Some((x, dist, y))) =>
-        visualizeDistNAryRL(x, y, dist)
+        VisualizeDistNAry[**](
+          [X, Y, A, B] => (fx: X Approximates A, fy: Y Approximates B) => fx ** fy,
+          [X, D] => (x: EdgeDesc[X], d: EdgeDesc[D]) => x ** d,
+          [X] => _ ?=> EdgeSegment.pickL,
+          [X] => _ ?=> EdgeSegment.pickR,
+        )(x, y, dist.kernel)
     }
 
-  private def visualizeDistNAryRL[D, Cases, DCases, As, Bs](
-    as: DropNames[||, ::, Tuple2, EmptyTuple, Cases, As],
-    bs: DropNames[||, ::, Tuple2, EmptyTuple, DCases, Bs],
-    dist: DistributionNAry.DistRL.Unnamed[**, Tuple2, EmptyTuple, D, As] { type Out = Bs },
-  ): Exists[[X] =>> Exists[[Y] =>> (
-    X Approximates (Enum[Cases] ** D),
-    Y Approximates Enum[DCases],
-    Visualization[X, Y],
-  )]] =
-    dist.kernel.divide3[
-      [A, X] =>> X Approximates A,
-      [X, Y] =>> (X =:= Wire, Y =:= Wire ** Wire),
-      [Y, B] =>> Y Approximates B,
-    ](
-      [A, B] => (ev: (A ** D) =:= B) => ev match { case TypeEq(Refl()) =>
-        Exists(Exists((
-          lump[A],
-          (summon[Wire =:= Wire], summon[Wire ** Wire =:= Wire ** Wire]),
-          lump[A] ** lump[D],
-        )))
+  private class VisualizeDistNAry[<>[_, _]](
+    parApprox: [X, Y, A, B] => (X Approximates A, Y Approximates B) => (X <> Y) Approximates (A <> B),
+    liftEdgeDesc: [X, D] => (EdgeDesc[X], EdgeDesc[D]) => EdgeDesc[X <> D],
+    pickCase: [X] => DummyImplicit ?=> EdgeSegment[X, X <> Wire],
+    pickWire: [X] => DummyImplicit ?=> EdgeSegment[Wire, X <> Wire],
+  ) {
+    def apply[D, Cases, DCases, As, Bs](
+      as: DropNames[||, ::, Tuple2, EmptyTuple, Cases, As],
+      bs: DropNames[||, ::, Tuple2, EmptyTuple, DCases, Bs],
+      distKernel: ParN[Tuple2, EmptyTuple, [x, y] =>> x <> D =:= y, As, Bs]
+    ): Exists[[X] =>> Exists[[Y] =>> (
+      X Approximates (Enum[Cases] <> D),
+      Y Approximates Enum[DCases],
+      Visualization[X, Y],
+    )]] =
+      distKernel.divide3[
+        [A, X] =>> X Approximates A,
+        [X, Y] =>> (X =:= Wire, Y =:= Wire <> Wire),
+        [Y, B] =>> Y Approximates B,
+      ](
+        [A, B] => (ev: (A <> D) =:= B) => ev match { case TypeEq(Refl()) =>
+          Exists(Exists((
+            lump[A],
+            (summon[Wire =:= Wire], summon[Wire <> Wire =:= Wire <> Wire]),
+            parApprox(lump[A], lump[D]),
+          )))
+        }
+      ) match {
+        case ex @ Exists.Some(ey @ Exists.Some((x, core, y))) =>
+          type Xs = ex.T
+          type Ys = ey.T
+          Exists(Exists((
+            parApprox(Approximates.ParNDropNames(OpTag[Enum], as, x.flip), lump[D]),
+            Approximates.ParNDropNames(OpTag[Enum], bs, y),
+            go[Xs, Ys](core),
+          )))
       }
-    ) match {
-      case Exists.Some(Exists.Some((x, core, y))) =>
-        Exists(Exists((
-          Approximates.ParNDropNames(OpTag[Enum], as, x.flip) ** lump[D],
-          Approximates.ParNDropNames(OpTag[Enum], bs, y),
-          visualizeDistNAryRL(core),
-        )))
-    }
 
-  private def visualizeDistNAryRL[Xs, Ys](
-    core: ParN[Tuple2, EmptyTuple, [X, Y] =>> (X =:= Wire, Y =:= Wire ** Wire), Xs, Ys],
-  ): Visualization[Enum[Xs] ** Wire, Enum[Ys]] = {
-    import EdgeSegment.{InElem, elem}
+    private def go[Xs, Ys](
+      core: ParN[Tuple2, EmptyTuple, [X, Y] =>> (X =:= Wire, Y =:= Wire <> Wire), Xs, Ys],
+    ): Visualization[Enum[Xs] <> Wire, Enum[Ys]] = {
+      import EdgeSegment.{InElem, elem}
 
-    val dxs: EdgeDesc[Enum[Xs]] =
-      EdgeDesc.TupleN.make(
-        OpTag[Enum],
-        core.inputProjection[EdgeDesc]([x, y] => f => f match { case (TypeEq(Refl()), _) => wire })
-      )
-    val dys: EdgeDesc[Enum[Ys]] =
-      EdgeDesc.TupleN.make(
-        OpTag[Enum],
-        core.outputProjection[EdgeDesc]([x, y] => f => f match { case (_, TypeEq(Refl())) => wire ** wire })
-      )
-    val elems: List[(
-      TupleElem[Tuple2, EmptyTuple, Wire, Xs],
-      TupleElem[Tuple2, EmptyTuple, Wire ** Wire, Ys],
-    )] =
-      core.zipWithIndex.toList(
-        [x, y] => f => f match {
-          case ((TypeEq(Refl()), TypeEq(Refl())), xi, yi) => (
-            xi: TupleElem[Tuple2, EmptyTuple, Wire, Xs],
-            yi: TupleElem[Tuple2, EmptyTuple, Wire ** Wire, Ys]
+      val dxs: EdgeDesc[Enum[Xs]] =
+        EdgeDesc.TupleN.make(
+          OpTag[Enum],
+          core.inputProjection[EdgeDesc]([x, y] => f => f match { case (TypeEq(Refl()), _) => wire })
+        )
+      val dys: EdgeDesc[Enum[Ys]] =
+        EdgeDesc.TupleN.make(
+          OpTag[Enum],
+          core.outputProjection[EdgeDesc]([x, y] => f => f match { case (_, TypeEq(Refl())) => liftEdgeDesc(wire, wire) })
+        )
+      val elems: List[(
+        TupleElem[Tuple2, EmptyTuple, Wire, Xs],
+        TupleElem[Tuple2, EmptyTuple, Wire <> Wire, Ys],
+      )] =
+        core.zipWithIndex.toList(
+          [x, y] => f => f match {
+            case ((TypeEq(Refl()), TypeEq(Refl())), xi, yi) => (
+              xi: TupleElem[Tuple2, EmptyTuple, Wire, Xs],
+              yi: TupleElem[Tuple2, EmptyTuple, Wire <> Wire, Ys]
+            )
+          }
+        )
+      val (
+        casesConnectors: List[Connector[Enum[Xs] <> Wire, Enum[Ys]]],
+        casesAreas:  List[TrapezoidArea[Enum[Xs] <> Wire, Enum[Ys]]],
+      ) =
+        elems.zipWithIndex.map { case ((x, y), i) =>
+          val segX: EdgeSegment[Wire, Enum[Xs] <> Wire] = pickCase[Enum[Xs]] compose elem(x)
+          val segY: EdgeSegment[Wire <> Wire, Enum[Ys]] = elem(y)
+          (
+            Across(segX, segY compose pickCase[Wire]),
+            TrapezoidArea(segX, segY, if i % 2 == 0 then ColorCaseLeft else ColorCaseRight),
           )
         }
-      )
-    val (
-      casesConnectors: List[Connector[Enum[Xs] ** Wire, Enum[Ys]]],
-      casesAreas:  List[TrapezoidArea[Enum[Xs] ** Wire, Enum[Ys]]],
-    ) =
-      elems.zipWithIndex.map { case ((x, y), i) =>
-        val segX: EdgeSegment[Wire, Enum[Xs] ** Wire] = elem(x).inl
-        val segY: EdgeSegment[Wire ** Wire, Enum[Ys]] = elem(y)
-        (
-          Across(segX, segY compose pickL),
-          TrapezoidArea(segX, segY, if i % 2 == 0 then ColorCaseLeft else ColorCaseRight),
+        .unzip
+      val distributeeConnectors: List[Connector[Enum[Xs] <> Wire, Enum[Ys]]] =
+        elems.map { case (x, y) =>
+          Across(pickWire[Enum[Xs]], InElem(pickWire[Wire], y))
+            .fill(GradientVerticalWhiteBlack)
+        }
+      Visualization.WithBackgroundBox(
+        fill = None,
+        stroke = Some(Color.Black),
+        Visualization.connectors(
+          liftEdgeDesc(dxs, wire),
+          dys,
+        )(
+          (casesConnectors ++ casesAreas ++ distributeeConnectors)*
         )
-      }
-      .unzip
-    val distributeeConnectors: List[Connector[Enum[Xs] ** Wire, Enum[Ys]]] =
-      elems.map { case (x, y) =>
-        Across(pickR, InElem(pickR, y))
-          .fill(GradientVerticalWhiteBlack)
-      }
-    Visualization.WithBackgroundBox(
-      fill = None,
-      stroke = Some(Color.Black),
-      Visualization.connectors(
-        dxs ** wire,
-        dys,
-      )(
-        (casesConnectors ++ casesAreas ++ distributeeConnectors)*
       )
-    )
+    }
   }
 
   private def visualizeHandlers[A, B](

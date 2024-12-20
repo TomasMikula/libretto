@@ -120,5 +120,9 @@ object Adaptoid {
         desc.depth
       case IsRefinedBy.Pairwise(_, f1, f2) =>
         Length.max(lengthOf(f1), lengthOf(f2))
+      case IsRefinedBy.ParN(_, components) =>
+        components
+          .toList([x, y] => f => lengthOf(f))
+          .reduce(Length.max)
 
 }

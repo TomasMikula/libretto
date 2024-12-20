@@ -154,6 +154,12 @@ object DistributionNAry {
     ): DistLR[**, ||, ::, A, Cases || (Lbl :: Z)] { type Out = self.Out || (Lbl :: (A ** Z)) } =
       DistLR.Snoc(this, lbl)
 
+    def dropNames[∙[_, _], Nil]: Exists[[X] =>> Exists[[Y] =>> (
+      DropNames[||, ::, ∙, Nil, Cases, X],
+      DistLR.Unnamed[**, ∙, Nil, A, X] { type Out = Y },
+      DropNames[||, ::, ∙, Nil, Out, Y],
+    )]]
+
     def distributeOver[N, I](
       m: Member[||, ::, N, I, Cases],
     )(using
@@ -167,6 +173,17 @@ object DistributionNAry {
       label: Lbl,
     ) extends DistLR[**, ||, ::, A, Lbl :: B] {
       override type Out = Lbl :: (A ** B)
+
+      override def dropNames[∙[_,_], Nil]: Exists[[X] =>> Exists[[Y] =>> (
+        DropNames[||, ::, ∙, Nil, Lbl :: B, X],
+        DistLR.Unnamed[**, ∙, Nil, A, X] { type Out = Y },
+        DropNames[||, ::, ∙, Nil, Out, Y],
+      )]] =
+        Exists(Exists((
+          DropNames.Single(),
+          DistLR.Unnamed.Single[**, ∙, Nil, A, B](),
+          DropNames.Single(),
+        )))
 
       override def distributeOver[N, I](
         m: Member[||, ::, N, I, Lbl :: B],
@@ -185,6 +202,20 @@ object DistributionNAry {
     ) extends DistLR[**, ||, ::, A, Init || (Lbl :: Z)] {
       override type Out = AInit || (Lbl :: (A ** Z))
 
+      override def dropNames[∙[_,_], Nil]: Exists[[X] =>> Exists[[Y] =>> (
+        DropNames[||, ::, ∙, Nil, Init || Lbl :: Z, X],
+        DistLR.Unnamed[**, ∙, Nil, A, X] { type Out = Y },
+        DropNames[||, ::, ∙, Nil, Out, Y],
+      )]] =
+        init.dropNames[∙, Nil] match {
+          case Exists.Some(Exists.Some((x, d, y))) =>
+            Exists(Exists((
+              x.inInit[Lbl, Z],
+              DistLR.Unnamed.Snoc(d),
+              y.inInit[Lbl, A ** Z],
+            )))
+        }
+
       override def distributeOver[N, I](
         m: Member[||, ::, N, I, Init || Lbl :: Z],
       )(using
@@ -196,6 +227,32 @@ object DistributionNAry {
             Member.InLast(lbl)
           case Right(m1) =>
             init.distributeOver(m1).inInit
+    }
+
+    sealed trait Unnamed[**[_, _], ∙[_, _], Nil, D, Cases] {
+      type Out
+
+      def kernel: ParN[∙, Nil, [x, y] =>> (D ** x) =:= y, Cases, Out]
+    }
+
+    object Unnamed {
+      case class Single[**[_, _], ∙[_, _], Nil, D, A]()
+        extends DistLR.Unnamed[**, ∙, Nil, D, Nil ∙ A] {
+
+        override type Out = Nil ∙ (D ** A)
+
+        override def kernel: ParN[∙, Nil, [x, y] =>> (D ** x) =:= y, Nil ∙ A, Nil ∙ (D ** A)] =
+          ParN.Single(summon[D ** A =:= D ** A])
+      }
+
+      case class Snoc[**[_, _], ∙[_, _], Nil, D, Init, Last, DInit](
+        init: DistLR.Unnamed[**, ∙, Nil, D, Init] { type Out = DInit },
+      ) extends DistLR.Unnamed[**, ∙, Nil, D, Init ∙ Last] {
+        override type Out = DInit ∙ (D ** Last)
+
+        override def kernel: ParN[∙, Nil, [x, y] =>> (D ** x) =:= y, Init ∙ Last, DInit ∙ (D ** Last)] =
+          init.kernel ∙ summon[D ** Last =:= D ** Last]
+      }
     }
   }
 
