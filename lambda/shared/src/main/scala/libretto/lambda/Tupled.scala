@@ -66,7 +66,7 @@ object Tupled {
       dup: [x] => F[x] => x -> (x |*| x),
     )(using
       F: ClampEq[F],
-      shuffled: Shuffled[->, |*|],
+      shuffled: ShuffledModule[->, |*|],
     ): Exists[[X] =>> (Tupled[|*|, F, X], shuffled.Shuffled[X, A])] =
       a.deduplicateLeafs(dup)
 
@@ -74,7 +74,7 @@ object Tupled {
       discardFst: [X, Y] => F[X] => (X |*| Y) -> Y,
     )(using
       F: ClampEq[F],
-      shuffled: Shuffled[->, |*|],
+      shuffled: ShuffledModule[->, |*|],
     ): Exists[[P] =>> (
       Tupled[|*|, F, P],
       shuffled.Shuffled[P, A],

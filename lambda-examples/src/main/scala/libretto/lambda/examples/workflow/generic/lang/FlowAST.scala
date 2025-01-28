@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.lang
 
-import libretto.lambda.{CocartesianNAryCategory, CocartesianSemigroupalCategory, Distribution, DistributionNAry, Member, Shuffled, SinkNAryNamed, SymmetricSemigroupalCategory}
+import libretto.lambda.{CocartesianNAryCategory, CocartesianSemigroupalCategory, Distribution, DistributionNAry, Member, Shuffled, ShuffledModule, SinkNAryNamed, SymmetricSemigroupalCategory}
 import libretto.lambda.util.Masked
 
 import scala.concurrent.duration.FiniteDuration
@@ -51,7 +51,7 @@ sealed trait FlowAST[Op[_, _], A, B] {
       case Delay(duration)              => Delay(duration)
     }
 
-  def toShuffled(using shuffled: Shuffled[FlowAST.Work[Op, _, _], **]): shuffled.Shuffled[A, B] =
+  def toShuffled(using shuffled: ShuffledModule[FlowAST.Work[Op, _, _], **]): shuffled.Shuffled[A, B] =
     this match
       case Id()                    => shuffled.id
       case AndThen(f, g)           => f.toShuffled > g.toShuffled
@@ -156,11 +156,11 @@ object FlowAST {
       DistributeNAryRL(witness)
   }
 
-  def shuffled[Op[_, _]]: Shuffled[Work[Op, _, _], **] =
+  def shuffled[Op[_, _]]: ShuffledModule[Work[Op, _, _], **] =
     Shuffled[Work[Op, _, _], **]
 
   def fromShuffled[Op[_, _], A, B](using
-    shuffled: Shuffled[FlowAST.Work[Op, _, _], **],
+    shuffled: ShuffledModule[FlowAST.Work[Op, _, _], **],
   )(
     f: shuffled.Shuffled[A, B],
   ): FlowAST[Op, A, B] =
@@ -188,6 +188,6 @@ object FlowAST {
   def shakeUp[Op[_, _], A, B](
     f: FlowAST[Op, A, B],
   ): FlowAST[Op, A, B] =
-    given Shuffled[Work[Op, _, _], **] = shuffled[Op]
+    given ShuffledModule[Work[Op, _, _], **] = shuffled[Op]
     fromShuffled(f.toShuffled)
 }

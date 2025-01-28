@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{Capture, Focus, Knitted, Shuffled, Spine, Unzippable}
+import libretto.lambda.{Capture, Focus, Knitted, Spine, Unzippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, PortName, Reading, given}
 import libretto.lambda.examples.workflow.generic.runtime.Input.FindValueRes
 import libretto.lambda.examples.workflow.generic.runtime.{RuntimeFlows as rtf}

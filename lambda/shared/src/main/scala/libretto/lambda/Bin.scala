@@ -145,7 +145,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
   )(using
     leafTest: ClampEq[F],
-    shuffled: Shuffled[->, <*>],
+    shuffled: ShuffledModule[->, <*>],
   ): Exists[[X] =>> (Bin[<*>, T, F, X], shuffled.Shuffled[X, A])] =
     this match {
       case l @ Leaf(_) =>
@@ -162,20 +162,20 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
   )(using
     leafTest: ClampEq[F],
-    shuffled: Shuffled[->, <*>],
+    shuffled: ShuffledModule[->, <*>],
   ): Exists[[X] =>> (Bin[<*>, T, F, X], shuffled.Shuffled[X, A <*> B])] =
     (this mergeIn0 that)(dup) match {
       case MergeRes.Absorbed(x, f) =>
         Exists((x, f))
       case MergeRes.WithRemainder(x, r, f1, g) =>
-        Exists((Branch(x, r), shuffled.fst(f1) > shuffled.Pure(g)))
+        Exists((Branch(x, r), shuffled.fst(f1) > shuffled.pure(g)))
     }
 
   private infix def mergeIn0[B, ->[_, _]](that: Bin[<*>, T, F, B])(
     dup: [x] => F[x] => T[x] -> (T[x] <*> T[x]),
   )(using
     leafTest: ClampEq[F],
-    shuffled: Shuffled[->, <*>],
+    shuffled: ShuffledModule[->, <*>],
   ): MergeRes[A, B, shuffled.shuffle.~⚬, shuffled.Shuffled] = {
     import MergeRes.{Absorbed, WithRemainder}
     import shuffled.{assocRL, fst, id, ix, lift, par, pure, swap, xi}
@@ -226,7 +226,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y,
   )(using
     leafTest: ClampEq[F],
-    shuffled: Shuffled[->, <*>],
+    shuffled: ShuffledModule[->, <*>],
   ): Exists[[P] =>> (
     Bin[<*>, T, F, P],
     shuffled.Shuffled[P, A],
@@ -247,11 +247,11 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y,
   )(using
     leafTest: ClampEq[F],
-    shuffled: Shuffled[->, <*>],
+    shuffled: ShuffledModule[->, <*>],
   ): UnionRes[A, B, shuffled.Shuffled] = {
     import UnionRes.{Absorbed, WithRemainder}
     given shuffled.shuffle.type = shuffled.shuffle
-    import shuffled.{Pure, assocLR, id, lift, par}
+    import shuffled.{assocLR, id, lift, par, pure}
 
     this match {
       case l: Leaf[br, t, f, a] =>
@@ -259,7 +259,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
           case that.FindRes.Total(TypeEq(Refl())) =>
             Absorbed(l, id, id)
           case that.FindRes.Partial(r, f) =>
-            WithRemainder(l, r, id, Pure(f))
+            WithRemainder(l, r, id, pure(f))
           case that.FindRes.NotFound() =>
             WithRemainder(l, that, id, lift(discardFst(l.value)))
       case br: Branch[br, t, f, a1, a2] =>
@@ -294,7 +294,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
     DiscardingAll(discardFst)
 
   private class DiscardingAll[->[_, _]](discardFst: [X, Y] => F[X] => (T[X] <*> Y) -> Y) {
-    def inSnd[P](using shuffled: Shuffled[->, <*>]): shuffled.Shuffled[P <*> A, P] = {
+    def inSnd[P](using shuffled: ShuffledModule[->, <*>]): shuffled.Shuffled[P <*> A, P] = {
       Bin.this match {
         case Leaf(value) => shuffled.swap > shuffled.lift(discardFst(value))
         case Branch(l, r) => shuffled.assocRL > r.discardAll(discardFst).inSnd > l.discardAll(discardFst).inSnd

@@ -7,7 +7,7 @@ import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
 
-class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: Shuffled[->, **]](
+class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
   override val shuffled: SHUFFLED,
   universalSplit  : Option[[X]    => Unit => X -> (X ** X)],
   universalDiscard: Option[[X, Y] => Unit => (X ** Y) -> Y],

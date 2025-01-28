@@ -78,7 +78,7 @@ object RuntimeFlows {
     FlowAST.Work[RuntimeAction[Action, Val, _, _], A, B]
 
   private type Shuffled[Action[_, _], Val[_]] =
-    libretto.lambda.Shuffled[Work[Action, Val, _, _], **]
+    libretto.lambda.ShuffledModule[Work[Action, Val, _, _], **]
 
   private def shuffled[Action[_, _], Val[_]]: Shuffled[Action, Val] =
     FlowAST.shuffled

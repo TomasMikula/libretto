@@ -10,7 +10,7 @@ import scala.annotation.targetName
   * @tparam C information associated with lambda contexts (scopes)
   */
 trait Lambdas[->[_, _], **[_, _], V, C] {
-  val shuffled: Shuffled[->, **]
+  val shuffled: ShuffledModule[->, **]
   import shuffled.{Shuffled as ~>}
 
   final type Tupled[F[_], A] = libretto.lambda.Tupled[**, F, A]
@@ -182,7 +182,7 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
 }
 
 object Lambdas {
-  class LambdasFactory[->[_, _], **[_, _], SHUFFLED <: Shuffled[->, **]](sh: SHUFFLED) {
+  class LambdasFactory[->[_, _], **[_, _], SHUFFLED <: ShuffledModule[->, **]](sh: SHUFFLED) {
     def apply[VarLabel, CtxLabel](
       universalSplit  : Option[[X]    => Unit => X -> (X ** X)] = None,
       universalDiscard: Option[[X, Y] => Unit => (X ** Y) -> Y] = None,
@@ -197,7 +197,7 @@ object Lambdas {
   }
 
   def using[->[_, _], **[_, _]](
-    sh: Shuffled[->, **],
+    sh: ShuffledModule[->, **],
   ): LambdasFactory[->, **, sh.type] =
     LambdasFactory(sh)
 

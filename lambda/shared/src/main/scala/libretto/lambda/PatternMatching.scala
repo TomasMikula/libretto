@@ -151,7 +151,7 @@ class PatternMatching[->[_, _], **[_, _]](using
    * pattern and handler is provided by the caller.
    */
   def detectPatternsAndCompile[->>[_, _], Expr[_], A, R, E >: PatternMatchError](using
-    sh: Shuffled[->>, **],
+    sh: ShuffledModule[->>, **],
   )(
     cases: CapturingFun[[a, b] =>> NonEmptyList[sh.Shuffled[a, b]], **, Expr, A, R],
   )(
@@ -189,7 +189,7 @@ class PatternMatching[->[_, _], **[_, _]](using
   }
 
   private def extractPatternAt[->>[_, _], F[_], A0, B, E >: PatternMatchError](using
-    sh: Shuffled[->>, **],
+    sh: ShuffledModule[->>, **],
   )(
     pos: Focus[**, F],
     f: sh.Shuffled[F[A0], B],

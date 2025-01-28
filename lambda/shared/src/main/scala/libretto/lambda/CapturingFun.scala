@@ -113,7 +113,7 @@ object CapturingFun {
     (C, NonEmptyList[Exists[F]]),
     CapturingFun[[a, b] =>> NonEmptyList[a --> b], |*|, Tupled[|*|, F, _], A, B]
   ] =
-    given sh: Shuffled[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|] =
+    given sh: ShuffledModule[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|] =
       Shuffled[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|]
 
     val discarder = new Discarder[-->, |*|, F](discarderOf)
@@ -136,7 +136,7 @@ object CapturingFun {
       Exists[[X] =>> (Tupled[|*|, F, X], Sink[[a, b] =>> (X |*| a) --> b, <+>, A, B])]
     ]
   ] =
-    given sh: Shuffled[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|] =
+    given sh: ShuffledModule[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|] =
       Shuffled[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|]
 
     val discarder = new Discarder[-->, |*|, F](discarderOf)
@@ -150,7 +150,7 @@ object CapturingFun {
   private def leastCommonCaptureFree[-->[_, _], |*|[_, _], F[_], C, A, B](
     fs: NonEmptyList[(C, CapturingFun[-->, |*|, Tupled[|*|, F, _], A, B])],
   )(using
-    sh: Shuffled[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
+    sh: ShuffledModule[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
     F: ClampEq[F],
   ): CapturingFun[[a, b] =>> NonEmptyList[(C, sh.Shuffled[a, b])], |*|, Tupled[|*|, F, _], A, B] =
 
@@ -179,7 +179,7 @@ object CapturingFun {
   private def leastCommonCaptureFree[-->[_, _], |*|[_, _], <+>[_, _], F[_], C, A, B](
     fs: Sink[[x, y] =>> (C, CapturingFun[-->, |*|, Tupled[|*|, F,_], x, y]), <+>, A, B],
   )(using
-    sh: Shuffled[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
+    sh: ShuffledModule[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
     F: ClampEq[F],
   ): Either[
     Sink[[x, y] =>> (C, sh.Shuffled[x, y]), <+>, A, B], // no capture
@@ -238,7 +238,7 @@ object CapturingFun {
           Valid(g)
 
     def foldNel[C, A, B](using
-      sh: Shuffled[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
+      sh: ShuffledModule[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
       cat: SymmetricSemigroupalCategory[-->, |*|],
     )(
       fs: NonEmptyList[(C, sh.Shuffled[A, B])]
@@ -253,7 +253,7 @@ object CapturingFun {
 
 
     def foldSink[<+>[_, _], C, G[_], A, B](using
-      sh: Shuffled[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
+      sh: ShuffledModule[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
       cat: SymmetricSemigroupalCategory[-->, |*|],
     )(
       fs: Sink[[x, y] =>> (C, sh.Shuffled[G[x], y]), <+>, A, B]
@@ -274,7 +274,7 @@ object CapturingFun {
   }
 
   private def elimFstMany[|*|[_, _], F[_], X, ->>[_, _], Y](
-    sh: Shuffled[->>, |*|],
+    sh: ShuffledModule[->>, |*|],
   )(
     x: Tupled[|*|, F, X],
     inj: [a, b] => Elim[|*|, F, a, b] => (a ->> b),
@@ -290,7 +290,7 @@ object CapturingFun {
     a: Tupled[|*|, F, A],
     b: Tupled[|*|, F, B],
   )(using
-    sh: Shuffled[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
+    sh: ShuffledModule[[x, y] =>> Either[Elim[|*|, F, x, y], x --> y], |*|],
     F: ClampEq[F],
   ): Exists[[S] =>> (Tupled[|*|, F, S], sh.Shuffled[S, A], sh.Shuffled[S, B])] = {
     type GArr[X, Y] = Either[Elim[|*|, F, X, Y], X --> Y]
