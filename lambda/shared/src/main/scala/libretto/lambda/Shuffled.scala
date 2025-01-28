@@ -847,7 +847,7 @@ extends ShuffledModule[->, |*|] {
         ev match { case TypeEq(Refl()) =>
           Impermeable(t.asShuffle, tail, ~⚬.id[B])
             .chaseFw[[x] =>> F[x] |*| Y2, X](i.inFst)
-            .after(i.inFst[A2], [x] => (_: Unit) => (semiHead.asShuffled > Pure(s)).inSnd[F[x]])
+            .after(i.inFst[A2], [x] => _ ?=> (semiHead.asShuffled > Pure(s)).inSnd[F[x]])
         }
 
       override def chaseFwSnd[F[_], X](i: Focus[|*|, F])(using ev: A2 =:= F[X]): ChaseFwRes[[x] =>> A1 |*| F[x], X, B] =
@@ -955,7 +955,7 @@ extends ShuffledModule[->, |*|] {
               .after(init.asShuffled)
               .andThen(
                 i.inFst[B2],
-                [t] => (_: Unit) => (Pure(s) > semiLast.asShuffled).inSnd[G[t]],
+                [t] => _ ?=> (Pure(s) > semiLast.asShuffled).inSnd[G[t]],
               )
         }
 
@@ -1066,7 +1066,7 @@ extends ShuffledModule[->, |*|] {
             .inSnd[B1]
             .after(
               i.inFst[A2],
-              [x] => (_: Unit) => (l.asShuffled > Pure(lt.asShuffle) > Pure(b).inSnd[B1]).inSnd[F[x]] > xi,
+              [x] => _ ?=> (l.asShuffled > Pure(lt.asShuffle) > Pure(b).inSnd[B1]).inSnd[F[x]] > xi,
             )
         }
 
@@ -1082,7 +1082,7 @@ extends ShuffledModule[->, |*|] {
           .inSnd[A1]
           .andThen[[x] =>> G[x] |*| B2](
             i.inFst[B2],
-            [x] => (_: Unit) => xi > snd(Pure(~⚬.snd(b) > rt.asShuffle) > r.asShuffled),
+            [x] => _ ?=> xi > snd(Pure(~⚬.snd(b) > rt.asShuffle) > r.asShuffled),
           )
 
       override def chaseBwSnd[G[_], X](i: Focus[|*|, G])(using B2 =:= G[X]): ChaseBwRes[A1 |*| A2, [x] =>> B1 |*| G[x], X] =
@@ -1500,10 +1500,10 @@ extends ShuffledModule[->, |*|] {
     override def apply[F[_], G[_]](
       F: Focus[|*|, F],
       G: Focus[|*|, G],
-      f: [x] => Unit => Shuffled[F[x], G[x]],
+      f: [x] => DummyImplicit ?=> Shuffled[F[x], G[x]],
     ): Punched[F, G] =
       new Punched[F, G]:
-        override def plug[X]: Shuffled[F[X], G[X]] = f[X](())
+        override def plug[X]: Shuffled[F[X], G[X]] = f[X]
         override val focusIn = F
         override val focusOut = G
 

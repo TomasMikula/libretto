@@ -390,10 +390,10 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           override def focusIn: Focus[|*|, F]  = self.focusIn
           override def focusOut: Focus[|*|, H] = that.focusOut
 
-      def andThen[H[_]](h: Focus[|*|, H], f: [x] => Unit => G[x] ~⚬ H[x]): Punched[F, H] =
+      def andThen[H[_]](h: Focus[|*|, H], f: [x] => DummyImplicit ?=> G[x] ~⚬ H[x]): Punched[F, H] =
         this > Punched(this.focusOut, h, f)
 
-      def after[E[_]](e: Focus[|*|, E], f: [x] => Unit => E[x] ~⚬ F[x]): Punched[E, G] =
+      def after[E[_]](e: Focus[|*|, E], f: [x] => DummyImplicit ?=> E[x] ~⚬ F[x]): Punched[E, G] =
         Punched(e, this.focusIn, f) > this
 
       def inFst[C, D](snd: C ~⚬ D): Punched[[x] =>> F[x] |*| C, [x] =>> G[x] |*| D] =
@@ -413,10 +413,10 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       def apply[F[_], G[_]](
         F: Focus[|*|, F],
         G: Focus[|*|, G],
-        f: [x] => Unit => F[x] ~⚬ G[x],
+        f: [x] => DummyImplicit ?=> F[x] ~⚬ G[x],
       ): Punched[F, G] =
         new Punched[F, G]:
-          override def plug[X]: F[X] ~⚬ G[X]   = f(())
+          override def plug[X]: F[X] ~⚬ G[X]   = f[X]
           override val focusIn: Focus[|*|, F]  = F
           override val focusOut: Focus[|*|, G] = G
 
@@ -429,11 +429,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
     sealed trait ChaseFwRes[F[_], X, B] {
       def andThen[C](g: B ~⚬ C): ChaseFwRes[F, X, C]
-      def after[F0[_]](F0: Focus[|*|, F0], f: [x] => Unit => F0[x] ~⚬ F[x]): ChaseFwRes[F0, X, B]
+      def after[F0[_]](F0: Focus[|*|, F0], f: [x] => DummyImplicit ?=> F0[x] ~⚬ F[x]): ChaseFwRes[F0, X, B]
       def inFst[C, D](snd: C ~⚬ D): ChaseFwRes[[x] =>> F[x] |*| C, X, B |*| D]
       def inSnd[Y, Z](fst: Y ~⚬ Z): ChaseFwRes[[x] =>> Y |*| F[x], X, Z |*| B]
 
-      def after[F0[_]](f: Punched[F0, F]): ChaseFwRes[F0, X, B] = after(f.focusIn, [x] => (_: Unit) => f[x])
+      def after[F0[_]](f: Punched[F0, F]): ChaseFwRes[F0, X, B] = after(f.focusIn, [x] => _ ?=> f[x])
       def inFst[C]: ChaseFwRes[[x] =>> F[x] |*| C, X, B |*| C] = inFst(id[C])
       def inSnd[Z]: ChaseFwRes[[x] =>> Z |*| F[x], X, Z |*| B] = inSnd(id[Z])
 
@@ -462,7 +462,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             case t: Transported[g, x, h, c] => Transported[F, X, h, C](s > t.s, t.ev)
             case Split(ev) => Split(ev)
 
-        override def after[F0[_]](F0: Focus[|*|, F0], f: [x] => Unit => F0[x] ~⚬ F[x]): ChaseFwRes[F0, X, B] =
+        override def after[F0[_]](F0: Focus[|*|, F0], f: [x] => DummyImplicit ?=> F0[x] ~⚬ F[x]): ChaseFwRes[F0, X, B] =
           Transported[F0, X, G, B](s.after(F0, f), ev)
 
         override def thenSnd[B1, B2, C](f: B2 ~⚬ C)(using ev1: B =:= (B1 |*| B2)): ChaseFwRes[F, X, B1 |*| C] =
@@ -487,18 +487,18 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         override def inFst[C, D](snd: C ~⚬ D): ChaseFwRes[[x] =>> F[x] |*| C, X, B |*| D] = Split(ev)
         override def inSnd[Y, Z](fst: Y ~⚬ Z): ChaseFwRes[[x] =>> Y |*| F[x], X, Z |*| B] = Split(ev)
         override def andThen[C](g: B ~⚬ C): ChaseFwRes[F, X, C] = Split(ev)
-        override def after[F0[_]](F0: Focus[|*|, F0], f: [x] => (x: Unit) => F0[x] ~⚬ F[x]): ChaseFwRes[F0, X, B] = Split(ev)
+        override def after[F0[_]](F0: Focus[|*|, F0], f: [x] => DummyImplicit ?=> F0[x] ~⚬ F[x]): ChaseFwRes[F0, X, B] = Split(ev)
         override def thenSnd[B1, B2, C](f: B2 ~⚬ C)(using B =:= (B1 |*| B2)): ChaseFwRes[F, X, B1 |*| C] = Split(ev)
       }
     }
 
     sealed trait ChaseBwRes[A, G[_], X] {
       infix def after[Z](f: Z ~⚬ A): ChaseBwRes[Z, G, X]
-      infix def andThen[H[_]](H: Focus[|*|, H], h: [x] => Unit => G[x] ~⚬ H[x]): ChaseBwRes[A, H, X]
+      infix def andThen[H[_]](H: Focus[|*|, H], h: [x] => DummyImplicit ?=> G[x] ~⚬ H[x]): ChaseBwRes[A, H, X]
       def inFst[B, C](snd: B ~⚬ C): ChaseBwRes[A |*| B, [x] =>> G[x] |*| C, X]
       def inSnd[Y, Z](fst: Y ~⚬ Z): ChaseBwRes[Y |*| A, [x] =>> Z |*| G[x], X]
 
-      infix def andThen[H[_]](h: Punched[G, H]): ChaseBwRes[A, H, X] = andThen(h.focusOut, [x] => (_: Unit) => h[x])
+      infix def andThen[H[_]](h: Punched[G, H]): ChaseBwRes[A, H, X] = andThen(h.focusOut, [x] => _ ?=> h[x])
       def inFst[B]: ChaseBwRes[A |*| B, [x] =>> G[x] |*| B, X] = inFst(id[B])
       def inSnd[Z]: ChaseBwRes[Z |*| A, [x] =>> Z |*| G[x], X] = inSnd(id[Z])
 
@@ -520,7 +520,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             case Transported(ev0, s0) => Transported(ev0, s0 > s)
             case Split(ev) => Split(ev)
 
-        override def andThen[H[_]](H: Focus[|*|, H], h: [x] => (x: Unit) => G[x] ~⚬ H[x]): ChaseBwRes[A, H, X] =
+        override def andThen[H[_]](H: Focus[|*|, H], h: [x] => DummyImplicit ?=> G[x] ~⚬ H[x]): ChaseBwRes[A, H, X] =
           Transported(ev, s.andThen(H, h))
 
         override def inFst[B, C](snd: B ~⚬ C): ChaseBwRes[A |*| B, [x] =>> G[x] |*| C, X] =
@@ -546,7 +546,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     f.i.inSnd[A1].inFst[A3],
                     s.focusOut.inSnd[A1],
-                    [x] => (_: Unit) => assocLR[A1, f1[x], A3] > snd(s[x]),
+                    [x] => _ ?=> assocLR[A1, f1[x], A3] > snd(s[x]),
                   ),
                 )
               }
@@ -557,7 +557,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     f.i.inSnd[A1 |*| A2],
                     s.focusOut.inSnd[A1],
-                    [x] => (_: Unit) => assocLR[A1, A2, f2[x]] > snd(s[x]),
+                    [x] => _ ?=> assocLR[A1, A2, f2[x]] > snd(s[x]),
                   ),
                 )
               }
@@ -574,7 +574,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     f.i.inFst[A2 |*| A3],
                     s.focusOut.inFst[A3],
-                    [t] => (_: Unit) => assocRL[f1[t], A2, A3] > fst(s[t]),
+                    [t] => _ ?=> assocRL[f1[t], A2, A3] > fst(s[t]),
                   ),
                 )
               }
@@ -585,7 +585,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     f.i.inFst[A3].inSnd[A1],
                     s.focusOut.inFst[A3],
-                    [t] => (_: Unit) => assocRL[A1, f2[t], A3] > fst(s.plug[t]),
+                    [t] => _ ?=> assocRL[A1, f2[t], A3] > fst(s.plug[t]),
                   ),
                 )
               }
@@ -602,7 +602,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     j.i.inFst[A2 |*| A3],
                     s.focusOut.inSnd[A2],
-                    [t] => (_: Unit) => xi[f1[t], A2, A3] > snd(s[t]),
+                    [t] => _ ?=> xi[f1[t], A2, A3] > snd(s[t]),
                   ),
                 )
               }
@@ -613,7 +613,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     j.i.inSnd[A2].inSnd[A1],
                     s.focusOut.inSnd[A2],
-                    [t] => (_: Unit) => xi[A1, A2, f2[t]] > snd(s[t]),
+                    [t] => _ ?=> xi[A1, A2, f2[t]] > snd(s[t]),
                   ),
                 )
               }
@@ -630,7 +630,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     f.i.inFst[A2].inFst[A3],
                     s.focusOut.inFst[A2],
-                    [x] => (_: Unit) => ix[f1[x], A2, A3] > fst(s[x]),
+                    [x] => _ ?=> ix[f1[x], A2, A3] > fst(s[x]),
                   ),
                 )
               }
@@ -641,7 +641,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     f.i.inSnd[A1 |*| A2],
                     s.focusOut.inFst[A2],
-                    [x] => (_: Unit) => ix[A1, A2, f2[x]] > fst(s[x]),
+                    [x] => _ ?=> ix[A1, A2, f2[x]] > fst(s[x]),
                   ),
                 )
               }
@@ -658,7 +658,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     f.i.inFst[A2].inFst[A3 |*| A4],
                     s.focusOut.inFst[A2 |*| A4],
-                    [x] => (_: Unit) => ixi[f1[x], A2, A3, A4] > fst(s[x]),
+                    [x] => _ ?=> ixi[f1[x], A2, A3, A4] > fst(s[x]),
                   ),
                 )
               }
@@ -669,7 +669,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     f.i.inFst[A4].inSnd[A1 |*| A2],
                     s.focusOut.inFst[A2 |*| A4],
-                    [x] => (_: Unit) => ixi[A1, A2, f2[x], A4] > fst(s[x]),
+                    [x] => _ ?=> ixi[A1, A2, f2[x], A4] > fst(s[x]),
                   ),
                 )
               }
@@ -686,7 +686,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     f.i.inSnd[A1].inFst[A3 |*| A4],
                     s.focusOut.inSnd[A1 |*| A3],
-                    [x] => (_: Unit) => ixi[A1, f1[x], A3, A4] > snd(s[x]),
+                    [x] => _ ?=> ixi[A1, f1[x], A3, A4] > snd(s[x]),
                   ),
                 )
               }
@@ -697,7 +697,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     f.i.inSnd[A3].inSnd[A1 |*| A2],
                     s.focusOut.inSnd[A1 |*| A3],
-                    [x] => (_: Unit) => ixi[A1, A2, A3, f2[x]] > snd(s[x]),
+                    [x] => _ ?=> ixi[A1, A2, A3, f2[x]] > snd(s[x]),
                   ),
                 )
               }
@@ -706,7 +706,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
 
       case class Split[A, G[_], X, X1, X2](ev: X =:= (X1 |*| X2)) extends ChaseBwRes[A, G, X] {
         override def after[Z](f: Z ~⚬ A): ChaseBwRes[Z, G, X] = Split(ev)
-        override def andThen[H[_]](H: Focus[|*|, H], h: [x] => (x: Unit) => G[x] ~⚬ H[x]): ChaseBwRes[A, H, X] = Split(ev)
+        override def andThen[H[_]](H: Focus[|*|, H], h: [x] => DummyImplicit ?=> G[x] ~⚬ H[x]): ChaseBwRes[A, H, X] = Split(ev)
         override def inFst[B, C](snd: B ~⚬ C): ChaseBwRes[A |*| B, [x] =>> G[x] |*| C, X] = Split(ev)
         override def inSnd[Y, Z](fst: Y ~⚬ Z): ChaseBwRes[Y |*| A, [x] =>> Z |*| G[x], X] = Split(ev)
         override def afterAssocLR[A1, A2, A3](using (A2 |*| A3) =:= A): ChaseBwRes[(A1 |*| A2) |*| A3, [x] =>> A1 |*| G[x], X] = Split(ev)
@@ -833,7 +833,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     i.i.inFst[x2],
                     i.i.inFst[Y2],
-                    [t] => (_: Unit) => par(id[f1[t]], f2),
+                    [t] => _ ?=> par(id[f1[t]], f2),
                   ),
                   summon,
                 )
@@ -850,7 +850,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     i.i.inSnd[x1],
                     i.i.inSnd[Y1],
-                    [t] => (_: Unit) => par(f1, id[f2[t]]),
+                    [t] => _ ?=> par(f1, id[f2[t]]),
                   ),
                   summon,
                 )
@@ -874,7 +874,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     i.i.inFst,
                     i,
-                    [t] => (_: Unit) => par(id[g1[t]], f2),
+                    [t] => _ ?=> par(id[g1[t]], f2),
                   ),
                 )
               case Fst(f1) =>
@@ -891,7 +891,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     i.i.inSnd,
                     i,
-                    [t] => (_: Unit) => par(f1, id[g2[t]]),
+                    [t] => _ ?=> par(f1, id[g2[t]]),
                   ),
                 )
               case Snd(f2) =>
@@ -1302,7 +1302,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             Punched(
               i.inFst[X2],
               i.inSnd[X2],
-              [t] => (_: Unit) => swap[F[t], X2],
+              [t] => _ ?=> swap[F[t], X2],
             ),
             summon,
           )
@@ -1314,7 +1314,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             Punched(
               i.inSnd[X1],
               i.inFst[X1],
-              [t] => (_: Unit) => swap[X1, F[t]],
+              [t] => _ ?=> swap[X1, F[t]],
             ),
             summon,
           )
@@ -1327,7 +1327,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             Punched(
               i.inSnd[X1],
               i.inFst[X1],
-              [t] => (_: Unit) => swap[X1, G[t]],
+              [t] => _ ?=> swap[X1, G[t]],
             ),
           )
         }
@@ -1339,7 +1339,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             Punched(
               i.inFst[X2],
               i.inSnd[X2],
-              [t] => (_: Unit) => swap[G[t], X2],
+              [t] => _ ?=> swap[G[t], X2],
             ),
           )
         }
@@ -1569,7 +1569,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     i.inFst[A3],
                     i.i.inFst[B2 |*| B3],
-                    [t] => (_: Unit) => assocLR[f1[t], A2, A3] > snd(g.asShuffle),
+                    [t] => _ ?=> assocLR[f1[t], A2, A3] > snd(g.asShuffle),
                   ),
                   summon,
                 )
@@ -1578,7 +1578,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
                 g.chaseFwFst[f2, T](i.i)
                   .inSnd[A1]
-                  .after(i.inFst[A3], [t] => (_: Unit) => assocLR[A1, f2[t], A3])
+                  .after(i.inFst[A3], [t] => _ ?=> assocLR[A1, f2[t], A3])
         }
 
       override def chaseFwSnd[F[_], T](i: Focus[|*|, F])(using
@@ -1586,7 +1586,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ): ChaseFwRes[[t] =>> (A1 |*| A2) |*| F[t], T, A1 |*| (B2 |*| B3)] =
         g.chaseFwSnd[F, T](i)
           .inSnd[A1]
-          .after(i.inSnd[A1 |*| A2], [t] => (_: Unit) => assocLR[A1, A2, F[t]])
+          .after(i.inSnd[A1 |*| A2], [t] => _ ?=> assocLR[A1, A2, F[t]])
 
       override def chaseBwFst[G[_], T](i: Focus[|*|, G])(using ev: A1 =:= G[T]): ChaseBwRes[(A1 |*| A2) |*| A3, [t] =>> G[t] |*| (B2 |*| B3), T] =
         ev match { case TypeEq(Refl()) =>
@@ -1595,7 +1595,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             Punched(
               i.inFst[A2].inFst[A3],
               i.inFst[B2 |*| B3],
-              [t] => (_: Unit) => assocLR[G[t], A2, A3] > snd(g.asShuffle),
+              [t] => _ ?=> assocLR[G[t], A2, A3] > snd(g.asShuffle),
             ),
           )
         }
@@ -1843,7 +1843,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         ev match { case TypeEq(Refl()) =>
           g.chaseFw[[t] =>> F[t] |*| A2, T](i.inFst[A2])
             .inFst[A3]
-            .after(i.inFst[A2 |*| A3], [t] => (_: Unit) => assocRL[F[t], A2, A3])
+            .after(i.inFst[A2 |*| A3], [t] => _ ?=> assocRL[F[t], A2, A3])
         }
 
       override def chaseFwSnd[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A2 |*| A3)): ChaseFwRes[[t] =>> A1 |*| F[t], T, (B1 |*| B2) |*| A3] =
@@ -1855,7 +1855,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
                 g.chaseFw[[t] =>> A1 |*| f2[t], T](i.i.inSnd[A1])
                   .inFst[A3]
-                  .after(i.inSnd[A1], [t] => (_: Unit) => assocRL[A1, f2[t], A3])
+                  .after(i.inSnd[A1], [t] => _ ?=> assocRL[A1, f2[t], A3])
           case i: Focus.Snd[pair, f3, a2] =>
             (summon[(a2 |*| f3[T]) =:= F[T]] andThen ev) match
               case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
@@ -1863,7 +1863,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     i.inSnd[A1],
                     i.i.inSnd[B1 |*| B2],
-                    [t] => (_: Unit) => assocRL[A1, A2, f3[t]] > fst(g.asShuffle),
+                    [t] => _ ?=> assocRL[A1, A2, f3[t]] > fst(g.asShuffle),
                   ),
                   summon[((B1 |*| B2) |*| f3[T]) =:= ((B1 |*| B2) |*| A3)],
                 )
@@ -1880,7 +1880,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               Punched(
                 i.inSnd[A2].inSnd[A1],
                 i.inSnd[B1 |*| B2],
-                [t] => (_: Unit) => assocRL[A1, A2, G[t]] > fst(g.asShuffle),
+                [t] => _ ?=> assocRL[A1, A2, G[t]] > fst(g.asShuffle),
               ),
             )
 
@@ -2133,7 +2133,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               summon[(f1[T] |*| a2) =:= (A1 |*| A2)] match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
                 g.chaseFw[[t] =>> f1[t] |*| A3, T](i.i.inFst[A3])
                   .inFst[A2]
-                  .after(i.inFst[A3], [t] => (_: Unit) => ix[f1[t], A2, A3])
+                  .after(i.inFst[A3], [t] => _ ?=> ix[f1[t], A2, A3])
               }
             case i: Focus.Snd[pair, f2, a1] =>
               summon[(a1 |*| f2[T]) =:= (A1 |*| A2)] match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
@@ -2141,7 +2141,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                   Punched(
                     i.inFst[A3],
                     i.i.inSnd[B1 |*| B2],
-                    [t] => (_: Unit) => ix[A1, f2[t], A3] > g.asShuffle.inFst[f2[t]],
+                    [t] => _ ?=> ix[A1, f2[t], A3] > g.asShuffle.inFst[f2[t]],
                   ),
                   summon,
                 )
@@ -2151,7 +2151,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       override def chaseFwSnd[F[_], T](i: Focus[|*|, F])(using F[T] =:= A3): ChaseFwRes[[t] =>> (A1 |*| A2) |*| F[t], T, (B1 |*| B2) |*| A2] =
         g.chaseFwSnd[F, T](i)
           .inFst[A2]
-          .after(i.inSnd[A1 |*| A2], [t] => (_: Unit) => ix[A1, A2, F[t]])
+          .after(i.inSnd[A1 |*| A2], [t] => _ ?=> ix[A1, A2, F[t]])
 
       override def chaseBwFst[G[_], T](i: Focus[|*|, G])(using (B1 |*| B2) =:= G[T]): ChaseBwRes[(A1 |*| A2) |*| A3, [t] =>> G[t] |*| A2, T] =
         g.chaseBw[G, T](i).afterIX
@@ -2163,7 +2163,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             Punched(
               i.inSnd[A1].inFst[A3],
               i.inSnd[B1 |*| B2],
-              [t] => (_: Unit) => ix[A1, G[t], A3] > fst(g.asShuffle),
+              [t] => _ ?=> ix[A1, G[t], A3] > fst(g.asShuffle),
             ),
           )
         }
@@ -2418,7 +2418,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             Punched(
               i.inFst[A2 |*| A3],
               i.inFst[A3].inSnd[A2],
-              [t] => (_: Unit) => xi[F[t], A2, A3],
+              [t] => _ ?=> xi[F[t], A2, A3],
             ),
             summon,
           ).thenSnd[A2, A1 |*| A3, B2 |*| B3](g.asShuffle)
@@ -2436,7 +2436,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
                 Punched(
                   i.inSnd[A1],
                   i.i.inFst[B2 |*| B3],
-                  [t] => (_: Unit) => xi[A1, f1[t], A3] > snd(g.asShuffle),
+                  [t] => _ ?=> xi[A1, f1[t], A3] > snd(g.asShuffle),
                 ),
                 summon,
               )
@@ -2445,7 +2445,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             (summon[(z |*| f2[T]) =:= F[T]] andThen ev)                                               match { case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
               g.chaseFw[[x] =>> A1 |*| f2[x], T](i.i.inSnd[A1])
                 .inSnd[A2]
-                .after(i.inSnd[A1], [x] => (_: Unit) => xi[A1, A2, f2[x]])
+                .after(i.inSnd[A1], [x] => _ ?=> xi[A1, A2, f2[x]])
             }
         }
 
@@ -2456,7 +2456,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             Punched(
               i.inFst[A3].inSnd[A1],
               i.inFst[B2 |*| B3],
-              [t] => (_: Unit) => XI[A1, G[t], A3, B2, B3](g).asShuffle,
+              [t] => _ ?=> XI[A1, G[t], A3, B2, B3](g).asShuffle,
             ),
           )
         }
@@ -2754,13 +2754,13 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
                 g1.chaseFwFst[f1, T](i.i)
                   .inFst(g2.asShuffle)
-                  .after(i.inFst[A3 |*| A4], [t] => (_: Unit) => ixi[f1[t], A2, A3, A4])
+                  .after(i.inFst[A3 |*| A4], [t] => _ ?=> ixi[f1[t], A2, A3, A4])
           case i: Focus.Snd[pair, f2, a1] =>
             (summon[(a1 |*| f2[T]) =:= F[T]] andThen ev) match
               case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
                 g2.chaseFwFst[f2, T](i.i)
                   .inSnd(g1.asShuffle)
-                  .after(i.inFst[A3 |*| A4], [t] => (_: Unit) => ixi[A1, f2[t], A3, A4])
+                  .after(i.inFst[A3 |*| A4], [t] => _ ?=> ixi[A1, f2[t], A3, A4])
         }
 
       override def chaseFwSnd[F[_], T](i: Focus[|*|, F])(using
@@ -2774,24 +2774,24 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
               case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
                 g1.chaseFwSnd[f1, T](i.i)
                   .inFst(g2.asShuffle)
-                  .after(i.inSnd[A1 |*| A2], [t] => (_: Unit) => ixi[A1, A2, f1[t], A4])
+                  .after(i.inSnd[A1 |*| A2], [t] => _ ?=> ixi[A1, A2, f1[t], A4])
           case i: Focus.Snd[pair, f2, a3] =>
             (summon[(a3 |*| f2[T]) =:= F[T]] andThen ev) match
               case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
                 g2.chaseFwSnd[f2, T](i.i)
                   .inSnd(g1.asShuffle)
-                  .after(i.inSnd[A1 |*| A2], [t] => (_: Unit) => ixi[A1, A2, A3, f2[t]])
+                  .after(i.inSnd[A1 |*| A2], [t] => _ ?=> ixi[A1, A2, A3, f2[t]])
         }
 
       override def chaseBwFst[G[_], T](i: Focus[|*|, G])(using (B1 |*| B2) =:= G[T]): ChaseBwRes[A1 |*| A2 |*| (A3 |*| A4), [t] =>> G[t] |*| (B3 |*| B4), T] =
         g1.chaseBw[G, T](i)
           .afterIXI1[A1, A2, A3, A4]
-          .andThen(i.inFst[B3 |*| B4], [t] => (_: Unit) => g2.asShuffle.inSnd[G[t]])
+          .andThen(i.inFst[B3 |*| B4], [t] => _ ?=> g2.asShuffle.inSnd[G[t]])
 
       override def chaseBwSnd[G[_], T](i: Focus[|*|, G])(using (B3 |*| B4) =:= G[T]): ChaseBwRes[A1 |*| A2 |*| (A3 |*| A4), [t] =>> B1 |*| B2 |*| G[t], T] =
         g2.chaseBw[G, T](i)
           .afterIXI2[A1, A2, A3, A4]
-          .andThen(i.inSnd[B1 |*| B2], [t] => (_: Unit) => g1.asShuffle.inFst[G[t]])
+          .andThen(i.inSnd[B1 |*| B2], [t] => _ ?=> g1.asShuffle.inFst[G[t]])
 
       override def thenBi[C1, C2](h1: (B1 |*| B2) ~⚬ C1, h2: (B3 |*| B4) ~⚬ C2): Xfer[A1 |*| A2, A3 |*| A4, ?, ?, C1, C2] =
         (decompose1(g1.asShuffle > h1), decompose1(g2.asShuffle > h2)) match {

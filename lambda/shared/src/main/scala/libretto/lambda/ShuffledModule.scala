@@ -34,11 +34,11 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
     def apply[F[_], G[_]](
       F: Focus[**, F],
       G: Focus[**, G],
-      f: [x] => Unit => Shuffled[F[x], G[x]],
+      f: [x] => DummyImplicit ?=> Shuffled[F[x], G[x]],
     ): Punched[F, G]
 
     def pure[F[_], G[_]](f: shuffle.~⚬.Punched[F, G]): Punched[F, G] =
-      Punched(f.focusIn, f.focusOut, [X] => (_: Unit) => self.pure(f.plug[X]))
+      Punched(f.focusIn, f.focusOut, [X] => _ ?=> self.pure(f.plug[X]))
   }
 
   extension [A, B](f: Shuffled[A, B]) {
@@ -177,11 +177,11 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
   sealed trait ChaseFwRes[F[_], X, B] {
     def andThen[C](that: Shuffled[B, C]): ChaseFwRes[F, X, C]
     def thenSnd[B1, B2, C2](using B =:= (B1 ** B2))(that: Shuffled[B2, C2]): ChaseFwRes[F, X, B1 ** C2]
-    def after[H[_]](H: Focus[**, H], h: [x] => Unit => Shuffled[H[x], F[x]]): ChaseFwRes[H, X, B]
+    def after[H[_]](H: Focus[**, H], h: [x] => DummyImplicit ?=> Shuffled[H[x], F[x]]): ChaseFwRes[H, X, B]
     def inFst[C, D](snd: Shuffled[C, D]): ChaseFwRes[[x] =>> F[x] ** C, X, B ** D]
     def inSnd[P, Q](fst: Shuffled[P, Q]): ChaseFwRes[[x] =>> P ** F[x], X, Q ** B]
 
-    def after[H[_]](h: Punched[H, F]): ChaseFwRes[H, X, B]   = after(h.focusIn, [x] => (_: Unit) => h.plug[x])
+    def after[H[_]](h: Punched[H, F]): ChaseFwRes[H, X, B]   = after(h.focusIn, [x] => _ ?=> h.plug[x])
     def inFst[C]: ChaseFwRes[[x] =>> F[x] ** C, X, B ** C] = inFst(id[C])
     def inSnd[A]: ChaseFwRes[[x] =>> A ** F[x], X, A ** B] = inSnd(id[A])
   }
@@ -191,7 +191,7 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
       s: Punched[F, G],
       ev: G[X] =:= B,
     ) extends ChaseFwRes[F, X, B] {
-      override def after[H[_]](H: Focus[**, H], h: [x] => (x: Unit) => Shuffled[H[x], F[x]]): ChaseFwRes[H, X, B] =
+      override def after[H[_]](H: Focus[**, H], h: [x] => DummyImplicit ?=> Shuffled[H[x], F[x]]): ChaseFwRes[H, X, B] =
         Transported(s.after(H, h), ev)
 
       override def andThen[C](that: Shuffled[B, C]): ChaseFwRes[F, X, C] =
@@ -206,7 +206,7 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
                   Punched(
                     s.focusIn,
                     g.i.inFst[C2],
-                    [x] => (_: Unit) => s.plug[x] > that.inSnd[g1[x]],
+                    [x] => _ ?=> s.plug[x] > that.inSnd[g1[x]],
                   ),
                   summon,
                 )
@@ -227,11 +227,11 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
 
     sealed trait Blocked[F[_], X, B] extends ChaseFwRes[F, X, B] {
       infix def andThen[C](that: Shuffled[B, C]): ChaseFwRes.Blocked[F, X, C]
-      infix def after[H[_]](H: Focus[**, H], h: [x] => Unit => Shuffled[H[x], F[x]]): ChaseFwRes.Blocked[H, X, B]
+      infix def after[H[_]](H: Focus[**, H], h: [x] => DummyImplicit ?=> Shuffled[H[x], F[x]]): ChaseFwRes.Blocked[H, X, B]
       def inFst[C, D](snd: Shuffled[C, D]): ChaseFwRes.Blocked[[x] =>> F[x] ** C, X, B ** D]
       def inSnd[P, Q](fst: Shuffled[P, Q]): ChaseFwRes.Blocked[[x] =>> P ** F[x], X, Q ** B]
 
-      override def after[H[_]](h: Punched[H, F]): ChaseFwRes.Blocked[H, X, B]   = after(h.focusIn, [x] => (_: Unit) => h.plug[x])
+      override def after[H[_]](h: Punched[H, F]): ChaseFwRes.Blocked[H, X, B] = after(h.focusIn, [x] => _ ?=> h.plug[x])
       override def inFst[C]: ChaseFwRes.Blocked[[x] =>> F[x] ** C, X, B ** C] = inFst(id[C])
       override def inSnd[A]: ChaseFwRes.Blocked[[x] =>> A ** F[x], X, A ** B] = inSnd(id[A])
     }
@@ -243,7 +243,7 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
       g: Focus[**, G],
       post: Shuffled[G[W], B],
     ) extends ChaseFwRes.Blocked[F, X, B] {
-      override def after[H[_]](H: Focus[**, H], h: [x] => (x: Unit) => Shuffled[H[x], F[x]]): ChaseFwRes.Blocked[H, X, B] =
+      override def after[H[_]](H: Focus[**, H], h: [x] => DummyImplicit ?=> Shuffled[H[x], F[x]]): ChaseFwRes.Blocked[H, X, B] =
         FedTo(pre.after(H, h), v, f, g, post)
 
       override def andThen[C](that: Shuffled[B, C]): ChaseFwRes.Blocked[F, X, C] =
@@ -272,7 +272,7 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
     }
 
     case class Split[F[_], X, X1, X2, B](ev: X =:= (X1 ** X2)) extends ChaseFwRes.Blocked[F, X, B] {
-      override def after[H[_]](H: Focus[**, H], h: [x] => (x: Unit) => Shuffled[H[x], F[x]]): ChaseFwRes.Blocked[H, X, B] = Split(ev)
+      override def after[H[_]](H: Focus[**, H], h: [x] => DummyImplicit ?=> Shuffled[H[x], F[x]]): ChaseFwRes.Blocked[H, X, B] = Split(ev)
       override def andThen[C](that: Shuffled[B, C]): Blocked[F, X, C] = Split(ev)
       override def thenSnd[B1, B2, C2](using B =:= (B1 ** B2))(that: Shuffled[B2, C2]): ChaseFwRes[F, X, B1 ** C2] = Split(ev)
       override def inFst[C, D](snd: Shuffled[C, D]): Blocked[[x] =>> F[x] ** C, X, B ** D] = Split(ev)
@@ -287,11 +287,11 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
 
   sealed trait ChaseBwRes[A, G[_], X] {
     def after[P](p: Shuffled[P, A]): ChaseBwRes[P, G, X]
-    def andThen[H[_]](H: Focus[**, H], h: [x] => Unit => Shuffled[G[x], H[x]]): ChaseBwRes[A, H, X]
+    def andThen[H[_]](H: Focus[**, H], h: [x] => DummyImplicit ?=> Shuffled[G[x], H[x]]): ChaseBwRes[A, H, X]
     def inFst[P, Q](snd: Shuffled[P, Q]): ChaseBwRes[A ** P, [x] =>> G[x] ** Q, X]
     def inSnd[P, Q](fst: Shuffled[P, Q]): ChaseBwRes[P ** A, [x] =>> Q ** G[x], X]
 
-    def andThen[H[_]](h: Punched[G, H]): ChaseBwRes[A, H, X] = andThen(h.focusOut, [x] => (_: Unit) => h.plug[x])
+    def andThen[H[_]](h: Punched[G, H]): ChaseBwRes[A, H, X] = andThen(h.focusOut, [x] => _ ?=> h.plug[x])
     def inFst[Q]: ChaseBwRes[A ** Q, [x] =>> G[x] ** Q, X] = inFst(id[Q])
     def inSnd[P]: ChaseBwRes[P ** A, [x] =>> P ** G[x], X] = inSnd(id[P])
   }
@@ -304,7 +304,7 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
       override def after[P](p: Shuffled[P, A]): ChaseBwRes[P, G, X] =
         p.chaseBw[F, X](s.focusIn)(using ev).andThen(s)
 
-      override def andThen[H[_]](H: Focus[**, H], h: [x] => (x: Unit) => Shuffled[G[x], H[x]]): ChaseBwRes[A, H, X] =
+      override def andThen[H[_]](H: Focus[**, H], h: [x] => DummyImplicit ?=> Shuffled[G[x], H[x]]): ChaseBwRes[A, H, X] =
         Transported[A, F, H, X](ev, s.andThen(H, h))
 
       override def inFst[P, Q](snd: Shuffled[P, Q]): ChaseBwRes[A ** P, [x] =>> G[x] ** Q, X] =
@@ -322,11 +322,11 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
 
     sealed trait Blocked[A, G[_], X] extends ChaseBwRes[A, G, X] {
       infix override def after[P](p: Shuffled[P, A]): ChaseBwRes.Blocked[P, G, X]
-      infix override def andThen[H[_]](H: Focus[**, H], h: [x] => Unit => Shuffled[G[x], H[x]]): ChaseBwRes.Blocked[A, H, X]
+      infix override def andThen[H[_]](H: Focus[**, H], h: [x] => DummyImplicit ?=> Shuffled[G[x], H[x]]): ChaseBwRes.Blocked[A, H, X]
       override def inFst[P, Q](snd: Shuffled[P, Q]): ChaseBwRes.Blocked[A ** P, [x] =>> G[x] ** Q, X]
       override def inSnd[P, Q](fst: Shuffled[P, Q]): ChaseBwRes.Blocked[P ** A, [x] =>> Q ** G[x], X]
 
-      override def andThen[H[_]](h: Punched[G, H]): ChaseBwRes.Blocked[A, H, X] = andThen(h.focusOut, [x] => (_: Unit) => h.plug[x])
+      override def andThen[H[_]](h: Punched[G, H]): ChaseBwRes.Blocked[A, H, X] = andThen(h.focusOut, [x] => _ ?=> h.plug[x])
       override def inFst[Q]: ChaseBwRes.Blocked[A ** Q, [x] =>> G[x] ** Q, X] = inFst(id[Q])
       override def inSnd[P]: ChaseBwRes.Blocked[P ** A, [x] =>> P ** G[x], X] = inSnd(id[P])
     }
@@ -341,7 +341,7 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
       override def after[P](p: Shuffled[P, A]): ChaseBwRes.Blocked[P, G, X] =
         OriginatesFrom(p > pre, i, f, w, post)
 
-      override def andThen[H[_]](H: Focus[**, H], h: [x] => Unit => Shuffled[G[x], H[x]]): Blocked[A, H, X] =
+      override def andThen[H[_]](H: Focus[**, H], h: [x] => DummyImplicit ?=> Shuffled[G[x], H[x]]): Blocked[A, H, X] =
         OriginatesFrom(pre, i, f, w, post.andThen(H, h))
 
       override def inFst[P, Q](snd: Shuffled[P, Q]): ChaseBwRes.Blocked[A ** P, [x] =>> G[x] ** Q, X] =
@@ -353,7 +353,7 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
 
     case class Split[A, G[_], X, X1, X2](ev: X =:= (X1 ** X2)) extends ChaseBwRes.Blocked[A, G, X] {
       override def after[P](p: Shuffled[P, A]): ChaseBwRes.Blocked[P, G, X] = Split(ev)
-      override def andThen[H[_]](H: Focus[**, H], h: [x] => Unit => Shuffled[G[x], H[x]]): Blocked[A, H, X] = Split(ev)
+      override def andThen[H[_]](H: Focus[**, H], h: [x] => DummyImplicit ?=> Shuffled[G[x], H[x]]): Blocked[A, H, X] = Split(ev)
       override def inFst[P, Q](snd: Shuffled[P, Q]): ChaseBwRes.Blocked[A ** P, [x] =>> G[x] ** Q, X] = Split(ev)
       override def inSnd[P, Q](fst: Shuffled[P, Q]): ChaseBwRes.Blocked[P ** A, [x] =>> Q ** G[x], X] = Split(ev)
     }
@@ -371,25 +371,25 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
     def knitBw(k: Knit[**, G]): Exists[[F0] =>> (Knitted[**, F, F0], Shuffled[F0, k.Res])]
 
     def >[H[_]](that: Punched[G, H]): Punched[F, H] =
-      Punched(p.focusIn, that.focusOut, [X] => (_: Unit) => p.plug[X] > that.plug[X])
+      Punched(p.focusIn, that.focusOut, [X] => _ ?=> p.plug[X] > that.plug[X])
 
-    def andThen[H[_]](H: Focus[**, H], h: [x] => Unit => Shuffled[G[x], H[x]]): Punched[F, H] =
+    def andThen[H[_]](H: Focus[**, H], h: [x] => DummyImplicit ?=> Shuffled[G[x], H[x]]): Punched[F, H] =
       p > Punched(p.focusOut, H, h)
 
-    def after[H[_]](H: Focus[**, H], h: [x] => Unit => Shuffled[H[x], F[x]]): Punched[H, G] =
+    def after[H[_]](H: Focus[**, H], h: [x] => DummyImplicit ?=> Shuffled[H[x], F[x]]): Punched[H, G] =
       Punched(H, p.focusIn, h) > p
 
     def inFst[P, Q](g: Shuffled[P, Q]): Punched[[x] =>> F[x] ** P, [x] =>> G[x] ** Q] =
-      Punched(p.focusIn.inFst[P], p.focusOut.inFst[Q], [X] => (_: Unit) => par(p.plug[X], g))
+      Punched(p.focusIn.inFst[P], p.focusOut.inFst[Q], [X] => _ ?=> par(p.plug[X], g))
 
     def inFst[P]: Punched[[x] =>> F[x] ** P, [x] =>> G[x] ** P] =
-      Punched(p.focusIn.inFst[P], p.focusOut.inFst[P], [X] => (_: Unit) => p.plug[X].inFst)
+      Punched(p.focusIn.inFst[P], p.focusOut.inFst[P], [X] => _ ?=> p.plug[X].inFst)
 
     def inSnd[P, Q](f: Shuffled[P, Q]): Punched[[x] =>> P ** F[x], [x] =>> Q ** G[x]] =
-      Punched(p.focusIn.inSnd[P], p.focusOut.inSnd[Q], [X] => (_: Unit) => par(f, p.plug[X]))
+      Punched(p.focusIn.inSnd[P], p.focusOut.inSnd[Q], [X] => _ ?=> par(f, p.plug[X]))
 
     def inSnd[P]: Punched[[x] =>> P ** F[x], [x] =>> P ** G[x]] =
-      Punched(p.focusIn.inSnd[P], p.focusOut.inSnd[P], [X] => (_: Unit) => p.plug[X].inSnd)
+      Punched(p.focusIn.inSnd[P], p.focusOut.inSnd[P], [X] => _ ?=> p.plug[X].inSnd)
   }
 
 }
