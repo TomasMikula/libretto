@@ -24,7 +24,23 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
     def zip[A, B](a: Expr[A], b: Expr[B])(resultVarName: V)(using Context): Expr[A ** B]
     def zipN[A](a: Tupled[Expr, A])(resultVarName: V)(using Context): Expr[A]
     def unzip[A, B](ab: Expr[A ** B])(varName1: V, varName2: V)(using Context): (Expr[A], Expr[B])
-    def const[A](introduce: [x] => Unit => x -> (A ** x))(varName: V)(using Context): Expr[A]
+    def const[A](
+      introFst: [x] => DummyImplicit ?=> x -> (A ** x),
+      introSnd: [x] => DummyImplicit ?=> x -> (x ** A),
+    )(
+      varName: V
+    )(using
+      Context
+    ): Expr[A]
+
+    def const[A](introFst: [x] => DummyImplicit ?=> x -> (A ** x))(varName: V)(using
+      ctx: Context,
+      cat: SymmetricSemigroupalCategory[->, **],
+    ): Expr[A] =
+      const(
+        introFst,
+        [x] => _ ?=> introFst[x] > cat.swap,
+      )(varName)
 
     def resultVar[A](a: Expr[A]): Var[V, A]
     def initialVars[A](a: Expr[A]): Var.Set[V]
@@ -68,37 +84,62 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
 
     def registerNonLinearOps[A](a: Expr[A])(
       split: Option[A -> (A ** A)],
-      discard: Option[[B] => DummyImplicit ?=> (A ** B) -> B],
+      discard: Option[(
+        [B] => DummyImplicit ?=> (A ** B) -> B,
+        [B] => DummyImplicit ?=> (B ** A) -> B,
+      )],
     )(using
       Context
     ): Unit
 
     def registerConstant[A](v: Var[V, A])(
-      introduce: [x] => Unit => x -> (A ** x),
+      introFst: [x] => DummyImplicit ?=> x -> (A ** x),
+      introSnd: [x] => DummyImplicit ?=> x -> (x ** A),
     )(using ctx: Context): Unit
 
     def getSplit[A](v: Var[V, A])(using Context): Option[A -> (A ** A)]
 
-    def getDiscard[A](v: Var[V, A])(using Context): Option[[B] => DummyImplicit ?=> (A ** B) -> B]
+    def getDiscard[A](v: Var[V, A])(using Context): Option[(
+      [B] => DummyImplicit ?=> (A ** B) -> B,
+      [B] => DummyImplicit ?=> (B ** A) -> B,
+    )]
 
-    def getDiscardSh[A](v: Var[V, A])(using Context): Option[[B] => DummyImplicit ?=> shuffled.Shuffled[A ** B, B]] =
-      getDiscard(v).map { discardFst =>
-        [B] => (_: DummyImplicit) ?=> shuffled.lift(discardFst[B])
+    def getDiscardSh[A](v: Var[V, A])(using Context): Option[(
+      [B] => DummyImplicit ?=> shuffled.Shuffled[A ** B, B],
+      [B] => DummyImplicit ?=> shuffled.Shuffled[B ** A, B],
+    )] =
+      getDiscard(v).map { (discardFst, discardSnd) =>
+        (
+          [B] => (_: DummyImplicit) ?=> shuffled.lift(discardFst[B]),
+          [B] => (_: DummyImplicit) ?=> shuffled.lift(discardSnd[B]),
+        )
       }
 
-    def exprDiscarder(using Context): [X] => Expr[X] => Option[[Y] => DummyImplicit ?=> (X ** Y) -> Y] =
+    def exprDiscarders(using Context): [X] => Expr[X] => Option[(
+      [Y] => DummyImplicit ?=> (X ** Y) -> Y,
+      [Y] => DummyImplicit ?=> (Y ** X) -> Y,
+    )] =
       [X] => x => getDiscard(x.resultVar)
 
-    def exprDiscarderSh(using Context): [X] => Expr[X] => Option[[Y] => DummyImplicit ?=> (X ** Y) ~> Y] =
+    def exprDiscarderSh(using Context): [X] => Expr[X] => Option[(
+      [Y] => DummyImplicit ?=> (X ** Y) ~> Y,
+      [Y] => DummyImplicit ?=> (Y ** X) ~> Y,
+    )] =
       [X] => x => getDiscardSh(x.resultVar)
 
-    def getConstant[A](v: Var[V, A])(using Context): Option[[x] => Unit => x -> (A ** x)]
+    def getConstant[A](v: Var[V, A])(using Context): Option[(
+      [x] => DummyImplicit ?=> x -> (A ** x), // introFst
+      [x] => DummyImplicit ?=> x -> (x ** A), // introSnd
+    )]
 
     def registerSplit[A](a: Expr[A])(split: A -> (A ** A))(using Context): Unit =
       registerNonLinearOps(a)(Some(split), None)
 
-    def registerDiscard[A](a: Expr[A])(discard: [B] => DummyImplicit ?=> (A ** B) -> B)(using Context): Unit =
-      registerNonLinearOps(a)(None, Some(discard))
+    def registerDiscard[A](a: Expr[A])(
+      discardFst: [B] => DummyImplicit ?=> (A ** B) -> B,
+      discardSnd: [B] => DummyImplicit ?=> (B ** A) -> B,
+    )(using Context): Unit =
+      registerNonLinearOps(a)(None, Some((discardFst, discardSnd)))
   }
 
   type LinearityViolation = Lambdas.LinearityViolation[V, C]
@@ -184,8 +225,8 @@ trait Lambdas[->[_, _], **[_, _], V, C] {
 object Lambdas {
   class LambdasFactory[->[_, _], **[_, _], SHUFFLED <: ShuffledModule[->, **]](sh: SHUFFLED) {
     def apply[VarLabel, CtxLabel](
-      universalSplit  : Option[[X]    => Unit => X -> (X ** X)] = None,
-      universalDiscard: Option[[X, Y] => Unit => (X ** Y) -> Y] = None,
+      universalSplit  : Option[[X]    => DummyImplicit ?=> X -> (X ** X)] = None,
+      universalDiscard: Option[[X, Y] => DummyImplicit ?=> ((X ** Y) -> Y, (Y ** X) -> Y)] = None,
     )(using
       inj: BiInjective[**],
     ): Lambdas[->, **, VarLabel, CtxLabel] { val shuffled: SHUFFLED } =
@@ -202,8 +243,8 @@ object Lambdas {
     LambdasFactory(sh)
 
   def apply[->[_, _], **[_, _], VarLabel, CtxLabel](
-    universalSplit  : Option[[X]    => Unit => X -> (X ** X)] = None,
-    universalDiscard: Option[[X, Y] => Unit => (X ** Y) -> Y] = None,
+    universalSplit  : Option[[X]    => DummyImplicit ?=> X -> (X ** X)] = None,
+    universalDiscard: Option[[X, Y] => DummyImplicit ?=> ((X ** Y) -> Y, (Y ** X) -> Y)] = None,
   )(using
     inj: BiInjective[**],
   ): Lambdas[->, **, VarLabel, CtxLabel] =

@@ -144,8 +144,8 @@ object Fun {
 
   private val lambdas: Lambdas[Fun, Tuple2, Object, Unit] =
     Lambdas[Fun, Tuple2, Object, Unit](
-      universalSplit = Some([x] => (_: Unit) => Fun.dup[x]),
-      universalDiscard = Some([x, y] => (_: Unit) => Fun.prj2[x, y]),
+      universalSplit = Some([x] => (_: DummyImplicit) ?=> Fun.dup[x]),
+      universalDiscard = Some([x, y] => (_: DummyImplicit) ?=> (Fun.prj2[x, y], Fun.prj1[y, x])),
     )
 
   opaque type LambdaContext = lambdas.Context
@@ -190,7 +190,7 @@ object Fun {
         .flatMap { case (fa, fb) =>
           val sa = Sink[[x, y] =>> (Unit, CapturingFun[Fun, Tuple2, Tupled[Tuple2, Expr, _], x, y]), Either, A, R](((), fa))
           val sb = Sink[[x, y] =>> (Unit, CapturingFun[Fun, Tuple2, Tupled[Tuple2, Expr, _], x, y]), Either, B, R](((), fb))
-          CapturingFun.compileSink(sa <+> sb)(lambdas.Context.exprDiscarder)
+          CapturingFun.compileSink(sa <+> sb)([X] => x => lambdas.Context.exprDiscarders(x).map(_._1))
         }
         .map {
           case NoCapture(f) => f(x)

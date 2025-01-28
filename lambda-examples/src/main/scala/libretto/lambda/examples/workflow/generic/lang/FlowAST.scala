@@ -42,6 +42,7 @@ sealed trait FlowAST[Op[_, _], A, B] {
       case _: Prj2[op, x, y]            => Prj2[F, x, y]()
       case Dup()                        => Dup()
       case IntroFst()                   => IntroFst()
+      case IntroSnd()                   => IntroSnd()
       case _: DistributeLR[op, x, y, z] => DistributeLR[F, x, y , z]()
       case DistributeNAryLR(d)          => DistributeNAryLR(d)
       case DistributeNAryRL(d)          => DistributeNAryRL(d)
@@ -76,6 +77,7 @@ object FlowAST {
       Masked(this)
   }
   case class IntroFst[Op[_, _], A]() extends Work[Op, A, Unit ** A]
+  case class IntroSnd[Op[_, _], A]() extends Work[Op, A, A ** Unit]
   case class Prj1[Op[_, _], A, B]() extends Work[Op, A ** B, A]
   case class Prj2[Op[_, _], A, B]() extends Work[Op, A ** B, B]
   case class Dup[Op[_, _], A]() extends Work[Op, A, A ** A]

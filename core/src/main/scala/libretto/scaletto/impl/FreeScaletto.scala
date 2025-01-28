@@ -450,7 +450,7 @@ object FreeScaletto extends Scaletto {
 
   override val `$`: $Ops = new $Ops {
     override def one(using pos: SourcePos, ctx: lambdas.Context): $[One] =
-      lambdas.Expr.const([x] => (_: Unit) => introFst[x])(VarOrigin.OneIntro(pos))
+      lambdas.Expr.const([x] => _ ?=> introFst[x])(VarOrigin.OneIntro(pos))
 
     override def map[A, B](a: $[A])(f: A -⚬ B)(pos: SourcePos)(using
       lambdas.Context,
@@ -494,7 +494,10 @@ object FreeScaletto extends Scaletto {
     ): $[A] = {
       lambdas.Context.registerNonLinearOps(a)(
         split,
-        discard.map(f => [B] => (_: DummyImplicit) ?=> elimFst[A, B](f)),
+        discard.map(f => (
+          [B] => (_: DummyImplicit) ?=> elimFst[A, B](f),
+          [B] => (_: DummyImplicit) ?=> elimSnd[B, A](f),
+        )),
       )
       a
     }
@@ -587,7 +590,7 @@ object FreeScaletto extends Scaletto {
     CapturingFun.compileSink[PartialFun, |*|, |+|, lambdas.Expr, ScopeInfo, A, R](
       cases,
     )(
-      lambdas.Context.exprDiscarder,
+      [X] => x => lambdas.Context.exprDiscarders(x).map(_._1),
     ).map {
       case CapturingFun.NoCapture(f)  => lambdas.Expr.map(a, f)(VarOrigin.FunAppRes(pos))
       case CapturingFun.Closure(x, f) => mapTupled(Tupled.zip(x, Tupled.atom(a)), f)(pos)
@@ -738,7 +741,7 @@ object FreeScaletto extends Scaletto {
           val v: Var[X] = x.resultVar
           lambdas.Context.getDiscard(v) match
             case None => invalid(v)
-            case Some(elimFst) =>
+            case Some((elimFst, _)) =>
               elimFst[One] match
                 case ExtractorOccurrence(_, _) => throw AssertionError(s"TODO: make unrepresentable (at ${summon[SourcePos]})")
                 case elimFst: ((X |*| One) -⚬ One) => Valid(andThen(introSnd[X], elimFst))

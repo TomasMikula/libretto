@@ -34,8 +34,8 @@ class Workflows[Action[_, _]] {
 
   private val lambdas: Lambdas[PartialFlow, **, VarOrigin, Unit] =
     Lambdas[PartialFlow, **, VarOrigin, Unit](
-      universalSplit   = Some([X] => (_: Unit) => Flow.dup[X]),
-      universalDiscard = Some([X, Y] => (_: Unit) => Flow.prj2[X, Y]),
+      universalSplit   = Some([X] => (_: DummyImplicit) ?=> Flow.dup[X]),
+      universalDiscard = Some([X, Y] => (_: DummyImplicit) ?=> (Flow.prj2[X, Y], Flow.prj1[Y, X])),
     )
 
   private val patmat =
@@ -127,14 +127,23 @@ class Workflows[Action[_, _]] {
     def swap[A, B]: Flow[A ** B, B ** A] =
       FlowAST.Swap()
 
-    def fst[A1, A2, B1](f: Flow[A1, B1]): Flow[A1 ** A2, B1 ** A2] =
-      par(f, id)
+    def fst[A1, A2, B1](f1: Flow[A1, B1]): Flow[A1 ** A2, B1 ** A2] =
+      par(f1, id)
+
+    def snd[A1, A2, B2](f2: Flow[A2, B2]): Flow[A1 ** A2, A1 ** B2] =
+      par(id, f2)
 
     def introFst[X]: Flow[X, Unit ** X] =
       FlowAST.IntroFst()
 
     def introFst[X, A](f: Flow[Unit, A]): Flow[X, A ** X] =
       introFst[X] >>> fst(f)
+
+    def introSnd[X]: Flow[X, X ** Unit] =
+      FlowAST.IntroSnd()
+
+    def introSnd[X, A](f: Flow[Unit, A]): Flow[X, X ** A] =
+      introSnd[X] >>> snd(f)
 
     def injectL[Op[_, _], A, B]: Flow[A, A ++ B] =
       FlowAST.InjectL()
@@ -203,7 +212,10 @@ class Workflows[Action[_, _]] {
       constant(f)
 
     def constant[A](using pos: SourcePos)(f: Flow[Unit, A])(using LambdaContext): Expr[A] =
-      lambdas.Expr.const([x] => (_: Unit) => Flow.introFst[x, A](f))(VarOrigin.ConstantExpr(pos))
+      lambdas.Expr.const(
+        [x] => _ ?=> Flow.introFst[x, A](f),
+        [x] => _ ?=> Flow.introSnd[x, A](f),
+      )(VarOrigin.ConstantExpr(pos))
   }
 
   class Case[A, R](
@@ -249,7 +261,10 @@ class Workflows[Action[_, _]] {
       //   case Foo(_) => bar
       // knows about the pattern `Foo(_)` and does not treat the case as
       //   case _ => bar
-      lambdas.Context.registerDiscard(b)([Y] => _ ?=> Flow.prj2[B, Y])
+      lambdas.Context.registerDiscard(b)(
+        [Y] => _ ?=> Flow.prj2[B, Y],
+        [Y] => _ ?=> Flow.prj1[Y, B],
+      )
 
       Some(b)
 

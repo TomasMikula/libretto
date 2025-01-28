@@ -11,15 +11,23 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V, C, Expr[_]](
   private case class Entry[A](
     expr: Expr[A],
     split: Option[A -⚬ (A |*| A)],
-    discard: Option[[B] => DummyImplicit ?=> (A |*| B) -⚬ B],
+    discard: Option[Elims[A]],
   )
 
-  private type Intro[A] = [x] => Unit => x -⚬ (A |*| x)
+  private type Intros[A] = (
+    [x] => DummyImplicit ?=> x -⚬ (A |*| x), // introFst
+    [x] => DummyImplicit ?=> x -⚬ (x |*| A), // introSnd
+  )
+
+  private type Elims[A] = (
+    [x] => DummyImplicit ?=> (A |*| x) -⚬ x, // elimFst
+    [x] => DummyImplicit ?=> (x |*| A) -⚬ x, // elimSnd
+  )
 
   private val nonLinearOps: mutable.Map[Var[V, Any], Entry[Any]] =
     mutable.Map.empty
 
-  private val constants: mutable.Map[Var[V, Any], Intro[Any]] =
+  private val constants: mutable.Map[Var[V, Any], Intros[Any]] =
     mutable.Map.empty
 
   def newVar[A](data: V): Var[V, A] =
@@ -30,7 +38,7 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V, C, Expr[_]](
 
   def register[A](expr: Expr[A])(
     split: Option[A -⚬ (A |*| A)],
-    discard: Option[[B] => DummyImplicit ?=> (A |*| B) -⚬ B],
+    discard: Option[Elims[A]],
   ): Unit =
     val v: Var[V, A] = resultVar(expr)
     nonLinearOps.updateWith(
@@ -50,11 +58,12 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V, C, Expr[_]](
     }
 
   def registerConstant[A](v: Var[V, A])(
-    introduce: [x] => Unit => x -⚬ (A |*| x),
+    introFst: [x] => DummyImplicit ?=> x -⚬ (A |*| x),
+    introSnd: [x] => DummyImplicit ?=> x -⚬ (x |*| A),
   ): Unit =
     constants.put(
       v.asInstanceOf[Var[V, Any]],
-      (introduce: Intro[A]).asInstanceOf[Intro[Any]],
+      ((introFst, introSnd): Intros[A]).asInstanceOf[Intros[Any]],
     )
 
   def getSplit[A](v: Var[V, A]): Option[A -⚬ (A |*| A)] =
@@ -62,21 +71,24 @@ class ContextImpl[-⚬[_, _], |*|[_, _], V, C, Expr[_]](
       .flatMap(_.asInstanceOf[Entry[A]].split)
       .orElse(parent.flatMap(_.getSplit(v)))
 
-  def getDiscard[A](v: Var[V, A]): Option[[B] => DummyImplicit ?=> (A |*| B) -⚬ B] =
+  def getDiscard[A](v: Var[V, A]): Option[Elims[A]] =
     nonLinearOps.get(v.asInstanceOf[Var[V, Any]])
       .flatMap(_.asInstanceOf[Entry[A]].discard)
       .orElse(parent.flatMap(_.getDiscard(v)))
 
-  def getConstant[A](v: Var[V, A]): Option[[x] => Unit => x -⚬ (A |*| x)] =
+  def getConstant[A](v: Var[V, A]): Option[(
+    [x] => DummyImplicit ?=> x -⚬ (A |*| x), // introFst
+    [x] => DummyImplicit ?=> x -⚬ (x |*| A), // introSnd
+  )] =
     constants
       .get(v.asInstanceOf[Var[V, Any]])
-      .asInstanceOf[Option[[x] => Unit => x -⚬ (A |*| x)]]
+      .asInstanceOf[Option[Intros[A]]]
       .orElse(parent.flatMap(_.getConstant(v)))
 
-  def registeredDiscarders: Seq[Exists[[A] =>> (Expr[A], [B] => DummyImplicit ?=> (A |*| B) -⚬ B)]] =
+  def registeredDiscarders: Seq[Exists[[A] =>> (Expr[A], Elims[A])]] =
     nonLinearOps
       .valuesIterator
-      .collect[Exists[[A] =>> (Expr[A], [B] => DummyImplicit ?=> (A |*| B) -⚬ B)]] {
+      .collect[Exists[[A] =>> (Expr[A], Elims[A])]] {
         case Entry(expr, _, Some(discard)) =>
           Exists((expr, discard))
       }

@@ -9,8 +9,8 @@ import scala.annotation.{tailrec, targetName}
 
 class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
   override val shuffled: SHUFFLED,
-  universalSplit  : Option[[X]    => Unit => X -> (X ** X)],
-  universalDiscard: Option[[X, Y] => Unit => (X ** Y) -> Y],
+  universalSplit  : Option[[X]    => DummyImplicit ?=> X -> (X ** X)],
+  universalDiscard: Option[[X, Y] => DummyImplicit ?=> ((X ** Y) -> Y, (Y ** X) -> Y)],
 )(using
   inj: BiInjective[**],
 ) extends Lambdas[->, **, V, C] {
@@ -46,22 +46,35 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
 
     override def registerNonLinearOps[A](a: Expr[A])(
       split: Option[A -> (A ** A)],
-      discard: Option[[B] => DummyImplicit ?=> (A ** B) -> B],
+      discard: Option[(
+        [B] => DummyImplicit ?=> (A ** B) -> B,
+        [B] => DummyImplicit ?=> (B ** A) -> B,
+      )],
     )(using ctx: Context): Unit =
       ctx.register(a)(split, discard)
 
     override def registerConstant[A](v: Var[A])(
-      introduce: [x] => Unit => x -> (A ** x),
+      introFst: [x] => DummyImplicit ?=> x -> (A ** x),
+      introSnd: [x] => DummyImplicit ?=> x -> (x ** A),
     )(using ctx: Context): Unit =
-      ctx.registerConstant(v)(introduce)
+      ctx.registerConstant(v)(introFst, introSnd)
 
     override def getSplit[A](v: Var[A])(using ctx: Context): Option[A -> (A ** A)] =
-      ctx.getSplit(v) orElse universalSplit.map(_[A](()))
+      ctx.getSplit(v) orElse universalSplit.map(_[A])
 
-    override def getDiscard[A](v: Var[A])(using ctx: Context): Option[[B] => DummyImplicit ?=> (A ** B) -> B] =
-      ctx.getDiscard(v) orElse universalDiscard.map(f => [B] => (_: DummyImplicit) ?=> f[A, B](()))
+    override def getDiscard[A](v: Var[A])(using ctx: Context): Option[(
+      [B] => DummyImplicit ?=> (A ** B) -> B,
+      [B] => DummyImplicit ?=> (B ** A) -> B,
+    )] =
+      ctx.getDiscard(v) orElse universalDiscard.map(f => (
+        [B] => (_: DummyImplicit) ?=> f[A, B]._1,
+        [B] => (_: DummyImplicit) ?=> f[A, B]._2
+      ))
 
-    override def getConstant[A](v: Var[A])(using ctx: Context): Option[[x] => Unit => x -> (A ** x)] =
+    override def getConstant[A](v: Var[A])(using ctx: Context): Option[(
+      [x] => DummyImplicit ?=> x -> (A ** x), // introFst
+      [x] => DummyImplicit ?=> x -> (x ** A), // introSnd
+    )] =
       ctx.getConstant(v)
 
     override def isDefiningFor[A](v: Var[A])(using ctx: Context): Boolean =
@@ -238,9 +251,12 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
             case (Exists.Some((a1, b1)), Exists.Some((a2, b2))) =>
               Exists((a1 zip a2, b1 zip b2))
 
-    override def const[A](introduce: [x] => Unit => x -> (A ** x))(varName: V)(using Context): Expr[A] = {
+    override def const[A](
+      introFst: [x] => DummyImplicit ?=> x -> (A ** x),
+      introSnd: [x] => DummyImplicit ?=> x -> (x ** A),
+    )(varName: V)(using Context): Expr[A] = {
       val v = Context.newVar[A](varName)
-      Context.registerConstant(v)(introduce)
+      Context.registerConstant(v)(introFst, introSnd)
       Id(v)
     }
 
@@ -288,8 +304,10 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
         case Exists.Some((u, f)) => Exists((f, u))
   }
 
-  private type Discarder[A] =
-    [B] => DummyImplicit ?=> (A ** B) -> B
+  private type Discarders[A] = (
+    [B] => DummyImplicit ?=> (A ** B) -> B, // elimFst
+    [B] => DummyImplicit ?=> (B ** A) -> B, // elimSnd
+  )
 
   override def eliminateLocalVariables[A, B](
     boundVar: Var[A],
@@ -302,17 +320,17 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
 
     var usedVars: Var.Set[V] =
       expr.allVars
-    var toElim: Var.Map[V, [A] =>> (Expr[A], Discarder[A])] =
+    var toElim: Var.Map[V, [A] =>> (Expr[A], Discarders[A])] =
       Var.Map.empty
 
-    ctx.registeredDiscarders.foreach { case Exists.Some((exp, discarder)) =>
+    ctx.registeredDiscarders.foreach { case Exists.Some((exp, discarders)) =>
       if (!usedVars.containsVar(exp.resultVar)) {
         val expVars = exp.allVars
 
         // remove expressions previously thought unused, but they now become used via `exp`
         toElim = toElim -- expVars
 
-        toElim = toElim + (exp.resultVar, (exp, discarder))
+        toElim = toElim + (exp.resultVar, (exp, discarders))
         usedVars = usedVars merge expVars
       }
     }
@@ -328,7 +346,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
 
   private def attachDiscarded[B](
     expr: Expr[B],
-    toElim: List[Exists[[X] =>> (Expr[X], Discarder[X])]],
+    toElim: List[Exists[[X] =>> (Expr[X], Discarders[X])]],
   ): Exists[[A] =>> (Tupled[Expr, A], A ~> B)] = {
 
     val init: Exists[[A] =>> (Tupled[Expr, A], A ~> B)] =
@@ -336,10 +354,10 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
 
     toElim.foldLeft(init) { (acc, ed) =>
       (acc, ed) match {
-        case (e1 @ Exists.Some((acc, g)), e2 @ Exists.Some((exp, discarder))) =>
+        case (e1 @ Exists.Some((acc, g)), e2 @ Exists.Some((exp, (discardFst, _)))) =>
           val acc1: Tupled[Expr, e2.T ** e1.T] =
             Tupled.atom(exp) zip acc
-          Exists((acc1, shuffled.lift(discarder.apply) > g))
+          Exists((acc1, shuffled.lift(discardFst.apply) > g))
       }
     }
   }
@@ -428,12 +446,12 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
         Context.getConstant(v) match {
           case None =>
             bug(s"Unexpected variable that neither derives from λ nor is a constant")
-          case Some(intro) =>
+          case Some((introFst, introSnd)) =>
             eliminateConstants(vs, expr).flatMap {
               case Left(Exists.Some((expr1, f))) =>
                 extractFunctionFromForest(v, expr1).map :
-                  case NoCapture(g)  => Right([B] => (_: Unit) => lift(intro[B](())) > fst(g > f))
-                  case Closure(x, g) => Left(Exists((x, lift(intro(())) > swap > g  > f)))
+                  case NoCapture(g)  => Right([B] => (_: Unit) => lift(introFst[B]) > fst(g > f))
+                  case Closure(x, g) => Left(Exists((x, lift(introSnd.apply) > g > f)))
               case Right(introVs) =>
                 bug(s"Unexpected elimination of the whole expression prior to eliminating constant $v. Expression: $expr")
             }
@@ -494,8 +512,8 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
           }
         case EliminatedFromForest.NotFound() =>
           Context.getDiscard(boundVar) match
-            case Some(discardFst) => Valid(Closure(Forest.unvar(exprs, u), swap > lift(discardFst.apply)))
-            case None             => invalid(LinearityViolation.unusedVar(boundVar, Context.info))
+            case Some((_, discardSnd)) => Valid(Closure(Forest.unvar(exprs, u), lift(discardSnd.apply)))
+            case None                  => invalid(LinearityViolation.unusedVar(boundVar, Context.info))
       }
     }
   }
@@ -694,8 +712,8 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
                   MappedMorphism(
                     SingleVar[a1 ** a2](),
                     Context.getDiscard(op.unusedVar) match {
-                      case Some(discard) => Valid(CapturingFun.noCapture(shuffled.swap > shuffled.lift(discard[a1])))
-                      case None          => invalid(LinearityViolation.unusedVar(op.unusedVar, Context.info))
+                      case Some((_, discardSnd)) => Valid(CapturingFun.noCapture(shuffled.lift(discardSnd[a1])))
+                      case None                  => invalid(LinearityViolation.unusedVar(op.unusedVar, Context.info))
                     },
                     SingleVar[a1](),
                   )
@@ -703,8 +721,8 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
                   MappedMorphism(
                     SingleVar[a1 ** a2](),
                     Context.getDiscard(op.unusedVar) match {
-                      case Some(discard) => Valid(CapturingFun.lift(discard[a2]))
-                      case None          => invalid(LinearityViolation.unusedVar(op.unusedVar, Context.info))
+                      case Some((discardFst, _)) => Valid(CapturingFun.lift(discardFst[a2]))
+                      case None                  => invalid(LinearityViolation.unusedVar(op.unusedVar, Context.info))
                     },
                     SingleVar[a2](),
                   )

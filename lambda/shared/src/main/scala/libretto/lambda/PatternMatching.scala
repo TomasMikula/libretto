@@ -266,7 +266,7 @@ class PatternMatching[->[_, _], **[_, _]](using
 
         // make each case capture the least common superset of captured expressions
         delamN: CapturingFun[[a, b] =>> NonEmptyList[a ~> b], **, Tupled[**, $, _], A, R] <-
-          CapturingFun.leastCommonCapture(delams)(lambdas.Context.exprDiscarderSh)
+          CapturingFun.leastCommonCapture(delams)([X] => x => lambdas.Context.exprDiscarderSh(x).map(_._1))
             .emap { case (c, exprs) => UnusedInBranch(Var.Set.fromList(exprs.toList.map(_.value.resultVar)), c) }
 
         res <-
