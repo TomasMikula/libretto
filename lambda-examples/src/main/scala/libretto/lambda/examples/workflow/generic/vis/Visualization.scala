@@ -103,7 +103,7 @@ object Visualization {
     label: String,
     inEdge: EdgeDesc[X],
     outEdge: EdgeDesc[Y],
-  ) extends Visualization.Flexi[X, ?, Y] {
+  ) extends Visualization.Flexi[X, Any, Y] {
     require(label.nonEmpty, "Label must not be empty string")
 
     override def length: Length = Length.one
@@ -122,7 +122,7 @@ object Visualization {
     fill: Option[Color],
     stroke: Option[Color],
     front: IVisualization[X, R, ?, S, Y]
-  ) extends IVisualization[X, R, ?, S, Y] {
+  ) extends IVisualization[X, R, Any, S, Y] {
     require(fill.nonEmpty || stroke.nonEmpty, "fill and stroke must not both be undefined")
 
     override def ioProportions: IOProportions[X, Y] =
@@ -152,7 +152,7 @@ object Visualization {
     outEdge: EdgeDesc[Y],
     label: String,
     fill: Option[Color],
-  ) extends Visualization.Flexi[X, ?, Y] {
+  ) extends Visualization.Flexi[X, Any, Y] {
     require(label.nonEmpty, "Label must not be empty string")
 
     override def length: Length = Length.one
@@ -178,7 +178,7 @@ object Visualization {
     override def skewable = None
   }
 
-  sealed trait Sequence[X, +R, +S, Y] extends IVisualization[X, R, ?, S, Y] {
+  sealed trait Sequence[X, +R, +S, Y] extends IVisualization[X, R, Any, S, Y] {
     import Sequence.{Cons, Single}
 
     def size: Int
@@ -696,7 +696,7 @@ object Visualization {
     in: EdgeDesc[X],
     out: EdgeDesc[Y],
     vpos: VPos,
-  ) extends Visualization.Flexi[X, ?, Y] {
+  ) extends Visualization.Flexi[X, Any, Y] {
     override def length: Length = Length.one
 
     override def ioProportions: IOProportions[X, Y] =
