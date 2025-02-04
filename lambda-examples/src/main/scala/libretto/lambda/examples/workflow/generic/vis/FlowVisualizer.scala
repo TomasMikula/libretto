@@ -338,57 +338,6 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           Visualization.LabeledBox(EdgeDesc.wire, EdgeDesc.wire, i.i.label + "(_)", fill = Some(Color.rgb(200, 200, 200)))
         )))
 
-      case _: FlowAST.Peel[op, init, lbl, z] =>
-        summon[A =:= Enum[init || (lbl :: z)]]
-        summon[B =:= (Enum[init] ++ z)]
-
-        Exists(Exists((
-          lump[A],
-          lump[Enum[init]] ++ lump[z],
-          Visualization.connectors(
-            wire,
-            wire ++ wire,
-          )(
-            TrapezoidArea(EdgeStretch.wireLHalf, EdgeStretch.pickL, ColorCaseLeft),
-            TrapezoidArea(EdgeStretch.wireRHalf, EdgeStretch.pickR, ColorCaseRight),
-            Across(pickId, pickL),
-            Across(pickId, pickR),
-          )
-        )))
-
-      case _: FlowAST.Unpeel[op, init, lbl, z] =>
-        summon[A =:= (Enum[init] ++ z)]
-        summon[B =:= Enum[init || (lbl :: z)]]
-
-        Exists(Exists((
-          lump[Enum[init]] ++ lump[z],
-          lump[B],
-          Visualization.connectors(
-            wire ++ wire,
-            wire,
-          )(
-            TrapezoidArea(EdgeStretch.pickL, EdgeStretch.wireLHalf, ColorCaseLeft),
-            TrapezoidArea(EdgeStretch.pickR, EdgeStretch.wireRHalf, ColorCaseRight),
-            Across(pickL, pickId),
-            Across(pickR, pickId),
-          )
-        )))
-
-      case _: FlowAST.Extract[op, lbl, h] =>
-        summon[A =:= Enum[lbl :: h]]
-        summon[B =:= h]
-
-        Exists(Exists((
-          lump[A],
-          lump[B],
-          Visualization.connectors(
-            wire,
-            wire,
-          )(
-            Across(pickId, pickId)
-          )
-        )))
-
       case other =>
         Visualizer.unimplemented(other.getClass.getSimpleName())
   }

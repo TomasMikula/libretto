@@ -157,15 +157,6 @@ class Workflows[Action[_, _]] {
     def inject[Label, A, Cases](i: Member[||, ::, Label, A, Cases]): Flow[A, Enum[Cases]] =
       FlowAST.Inject(i)
 
-    def peel[Init, Label, Z]: Flow[Enum[Init || (Label :: Z)], Enum[Init] ++ Z] =
-      FlowAST.Peel()
-
-    def unpeel[Init, Label, Z]: Flow[Enum[Init] ++ Z, Enum[Init || (Label :: Z)]] =
-      FlowAST.Unpeel()
-
-    def extract[Label, A]: Flow[Enum[Label :: A], A] =
-      FlowAST.Extract()
-
     def distributeLR[A, B, C]: Flow[A ** (B ++ C), (A ** B) ++ (A ** C)] =
       FlowAST.DistributeLR()
 

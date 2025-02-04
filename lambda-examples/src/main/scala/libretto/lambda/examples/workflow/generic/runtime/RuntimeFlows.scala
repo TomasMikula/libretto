@@ -245,17 +245,6 @@ object RuntimeFlows {
           case other =>
             throw AssertionError(s"Impossible: would mean that `Enum` = `**`, which is impossible if they are different class types.")
 
-      case p: FlowAST.Peel[op, init, lbl, a] =>
-        summon[VA =:= Enum[init || (lbl :: a)]]
-        given (V[A] =:= Enum[init || (lbl :: a)]) = ev.flip
-        v match
-          case Focus.Id() =>
-            val v: Value[Val, Enum[init || (lbl :: a)]] = value.as[VA]
-            val result = Value.peel(v)
-            FeedValueRes.Complete(Input.Ready(result))
-          case v: Focus.Proper[**, V] =>
-            collectingInput(value, v, p.from[V[A]])
-
       case _: FlowAST.DistributeLR[op, x, y, z] =>
         summon[VA =:= (x ** (y ++ z))]
         v match

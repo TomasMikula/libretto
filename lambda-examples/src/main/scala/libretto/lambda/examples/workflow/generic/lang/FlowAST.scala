@@ -35,9 +35,6 @@ sealed trait FlowAST[Op[_, _], A, B] {
       case _: InjectL[op, x, y]         => InjectL[F, x, y]()
       case _: InjectR[op, x, y]         => InjectR[F, x, y]()
       case i: Inject[op, l, a, cases]   => Inject[F, l, a, cases](i.i)
-      case _: Peel[op, l, a, cases]     => Peel[F, l, a, cases]()
-      case _: Unpeel[op, l, a, cases]   => Unpeel[F, l, a, cases]()
-      case _: Extract[op, l, a]         => Extract[F, l, a]()
       case _: Prj1[op, x, y]            => Prj1[F, x, y]()
       case _: Prj2[op, x, y]            => Prj2[F, x, y]()
       case Dup()                        => Dup()
@@ -86,9 +83,6 @@ object FlowAST {
   case class Either[Op[_, _], A, B, C](f: FlowAST[Op, A, C], g: FlowAST[Op, B, C]) extends Work[Op, A ++ B, C]
   case class Inject[Op[_, _], Label, A, Cases](i: Member[||, ::, Label, A, Cases]) extends Work[Op, A, Enum[Cases]]
   case class Handle[Op[_, _], Cases, B](handlers: SinkNAryNamed[FlowAST[Op, _, _], ||, ::, Cases, B]) extends Work[Op, Enum[Cases], B]
-  case class Peel[Op[_, _], Init, Label, Z]() extends Work[Op, Enum[Init || (Label :: Z)], Enum[Init] ++ Z]
-  case class Unpeel[Op[_, _], Init, Label, Z]() extends Work[Op, Enum[Init] ++ Z, Enum[Init || (Label :: Z)]]
-  case class Extract[Op[_, _], Label, A]() extends Work[Op, Enum[Label :: A], A]
   case class DistributeLR[Op[_, _], A, B, C]() extends Work[Op, A ** (B ++ C), (A ** B) ++ (A ** C)]
   case class DistributeRL[Op[_, _], A, B, C]() extends Work[Op, (A ++ B) ** C, (A ** C) ++ (B ** C)]
   case class DistributeNAryLR[Op[_, _], A, Cases, ACases](
