@@ -95,7 +95,8 @@ object Fun {
 
   def one(using pos: SourcePos, ctx: LambdaContext): $[One] =
     lambdas.Expr.const[One](
-      introduce = [X] => (_: Unit) => introFst[X],
+      introFst = [X] => _ ?=> introFst[X],
+      introSnd = [X] => _ ?=> introSnd[X],
     )(VarDesc("unit", pos))
 
   object ** {
@@ -138,7 +139,7 @@ object Fun {
           val sa = Sink[[x, y] =>> (Unit, CapturingFun[Fun, **, Tupled[**, $, _], x, y]), ++, A, C](((), fa))
           val sb = Sink[[x, y] =>> (Unit, CapturingFun[Fun, **, Tupled[**, $, _], x, y]), ++, B, C](((), fb))
           CapturingFun.compileSink[Fun, **, ++, $, Unit, A ++ B, C](sa <+> sb)(
-            lambdas.Context.exprDiscarder
+            [X] => x => lambdas.Context.exprDiscarders(x).map(_._1)
           ).emap { case ((), vs) => unusedInBranch(vs) }
         }
         .map {
@@ -193,7 +194,10 @@ object Fun {
 
   object ? {
     def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A]): Some[$[A]] = {
-      lambdas.Context.registerDiscard(a)([X] => _ ?=> prj2[A, X])
+      lambdas.Context.registerDiscard(a)(
+        [X] => _ ?=> prj2[A, X],
+        [X] => _ ?=> prj1[X, A],
+      )
       Some(a)
     }
   }
@@ -208,7 +212,10 @@ object Fun {
   object * {
     def unapply[A](using pos: SourcePos)(using LambdaContext)(a: $[A]): Some[$[A]] = {
       lambdas.Context.registerSplit(a)(dup[A])
-      lambdas.Context.registerDiscard(a)([X] => _ ?=> prj2[A, X])
+      lambdas.Context.registerDiscard(a)(
+        [X] => _ ?=> prj2[A, X],
+        [X] => _ ?=> prj1[X, A],
+      )
       Some(a)
     }
   }
