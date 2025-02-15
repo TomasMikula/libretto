@@ -1,6 +1,6 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{Capture, DistributionNAry, Focus, Knit, Knitted, Projection, Spine, SymmetricSemigroupalCategory, UnhandledCase, Unzippable}
+import libretto.lambda.{Capture, DistributionNAry, EnumModule, Focus, Knit, Knitted, ParN, Projection, Spine, SymmetricSemigroupalCategory, UnhandledCase, Unzippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::, Enum, FlowAST, PortName, Reading, given}
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
@@ -38,16 +38,16 @@ object RuntimeFlows {
     FlowAST.Dup()
 
   def inl[Op[_, _], Val[_], A, B]: Flow[Op, Val, A, A ++ B] =
-    FlowAST.InjectL()
+    FlowAST.injectL
 
   def inr[Op[_, _], Val[_], A, B]: Flow[Op, Val, B, A ++ B] =
-    FlowAST.InjectR()
+    FlowAST.injectR
 
   def either[Op[_, _], Val[_], A, B, C](
     f: Flow[Op, Val, A, C],
     g: Flow[Op, Val, B, C],
   ): Flow[Op, Val, A ++ B, C] =
-    FlowAST.Either(f, g)
+    FlowAST.either(f, g)
 
   def eitherBimap[Op[_, _], Val[_], A, B, C, D](
     f: Flow[Op, Val, A, C],
@@ -55,8 +55,16 @@ object RuntimeFlows {
   ): Flow[Op, Val, A ++ B, C ++ D] =
     either(f >>> inl, g >>> inr)
 
+  private def enumModule[Op[_, _], Val[_]]: EnumModule[Flow[Op, Val, _, _], **, Enum, ||, ::] =
+    FlowAST.enumModule[RuntimeAction[Op, Val, _, _]]
+
+  def enumMap[Op[_, _], Val[_], As, Bs](
+    fs: ParN.Named[||, ::, Flow[Op, Val, _, _], As, Bs],
+  ): Flow[Op, Val, Enum[As], Enum[Bs]] =
+    enumModule[Op, Val].nmap(fs)
+
   def distributeLR[Op[_, _], Val[_], A, B, C]: Flow[Op, Val, A ** (B ++ C), (A ** B) ++ (A ** C)] =
-    FlowAST.DistributeLR()
+    FlowAST.distributeLR
 
   def action[Op[_, _], Val[_], A, B](f: RuntimeAction[Op, Val, A, B]): Flow[Op, Val, A, B] =
     FlowAST.Ext(f)
@@ -185,28 +193,6 @@ object RuntimeFlows {
           Projection.discardFst[**, x, y].from(using ev.flip)
         )
 
-      case i: FlowAST.InjectL[op, x, y] =>
-        summon[VA =:= x]
-        summon[W =:= (x ++ y)]
-        given (V[A] =:= x) = ev.flip
-        v match
-          case Focus.Id() =>
-            val result = Input.Ready(Value.left[Val, x, y](value.as[x]))
-            FeedValueRes.Complete(result)
-          case v: Focus.Proper[**, V] =>
-            collectingInput(value, v, i.from[V[A]])
-
-      case i: FlowAST.InjectR[op, x, y] =>
-        summon[VA =:= y]
-        summon[W =:= (x ++ y)]
-        given (V[A] =:= y) = ev.flip
-        v match
-          case Focus.Id() =>
-            val result = Input.Ready(Value.right[Val, x, y](value.as[y]))
-            FeedValueRes.Complete(result)
-          case v: Focus.Proper[**, V] =>
-            collectingInput(value, v, i.from[V[A]])
-
       case i: FlowAST.Inject[op, lbl, a, cases] =>
         summon[VA =:= a]
         summon[W =:= Enum[cases]]
@@ -218,19 +204,6 @@ object RuntimeFlows {
             FeedValueRes.Complete(result)
           case v: Focus.Proper[**, V] =>
             collectingInput(value, v, i.from[V[A]])
-
-      case e: FlowAST.Either[op, x, y, w] =>
-        v match
-          case Focus.Id() =>
-            val axy: A =:= (x ++ y) = summon[A =:= V[A]] andThen ev.flip andThen summon[VA =:= (x ++ y)]
-            val xy: Value[Val, x ++ y] = axy.substituteCo(value)
-            Value.toEither(xy) match
-              case Left(x) =>
-                FeedValueRes.Transformed(Input.Ready(x), e.f)
-              case Right(y) =>
-                FeedValueRes.Transformed(Input.Ready(y), e.g)
-          case other =>
-            throw AssertionError(s"Impossible: would mean that `++` = `**`")
 
       case h: FlowAST.Handle[op, cases, w] =>
         summon[VA =:= Enum[cases]]
@@ -244,18 +217,6 @@ object RuntimeFlows {
                 FeedValueRes.Transformed(Input.Ready(inj.a), handler)
           case other =>
             throw AssertionError(s"Impossible: would mean that `Enum` = `**`, which is impossible if they are different class types.")
-
-      case _: FlowAST.DistributeLR[op, x, y, z] =>
-        summon[VA =:= (x ** (y ++ z))]
-        v match
-          case v: Focus.Fst[p, v1, yz] =>
-            (summon[(x ** (y ++ z)) =:= VA] andThen ev andThen summon[V[A] =:= (v1[A] ** yz)]) match
-              case BiInjective[**](TypeEq(Refl()), TypeEq(Refl())) =>
-                feedDistributeeLR[Action, Val, v1, A, y, z](value, v.i)
-          case Focus.Snd(i) =>
-            UnhandledCase.raise(s"propagateValue into $f at $v")
-          case Focus.Id() =>
-            UnhandledCase.raise(s"propagateValue into $f at $v")
 
       case d: FlowAST.DistributeNAryLR[op, x, cases, xcases] =>
         summon[VA =:= (x ** Enum[cases])]
@@ -295,7 +256,7 @@ object RuntimeFlows {
 
       case FlowAST.DoWhile(body) =>
         ev match { case TypeEq(Refl()) =>
-          val f1 = body >>> FlowAST.Either(FlowAST.DoWhile(body), FlowAST.Id())
+          val f1 = body >>> FlowAST.either(FlowAST.DoWhile(body), FlowAST.Id())
           FeedValueRes.Transformed(Input.Ready(value), f1)
         }
 
@@ -387,31 +348,6 @@ object RuntimeFlows {
       case Exists.Some((collector, k)) =>
         FeedValueRes.Absorbed(k, action(collector) >>> cont)
 
-  private def feedDistributeeLR[Action[_, _], Val[_], V[_], A, Y, Z](using sh: Shuffled[Action, Val])(
-    value: Value[Val, A],
-    v: Focus[**, V],
-  ): FeedValueRes[Action, Val, [a] =>> V[a] ** (Y ++ Z), (V[A] ** Y) ++ (V[A] ** Z)] =
-    v match
-      case Focus.Id() =>
-        summon[V[A] =:= A]
-        val k: Knitted[**, [a] =>> a ** (Y ++ Z), Y ++ Z] =
-          Knitted.keepSnd[**, Y ++ Z]
-        val op = RuntimeFlows.distLR[Action, Val, A, Y, Z](value)
-        FeedValueRes.Absorbed(k, op)
-      case v: Focus.Proper[pr, v] =>
-        val ev = v.provePair[A]
-        type P = ev.T
-        type Q = ev.value.T
-        given ev1: (V[A] =:= (P ** Q)) =
-          ev.value.value
-        val distSeparately: Flow[Action, Val, (P ** Q) ** (Y ++ Z), ((P ** Q) ** Y) ++ ((P ** Q) ** Z)] =
-          assocLR >>> snd(distributeLR) >>> distributeLR >>> eitherBimap(assocRL, assocRL)
-        val distSeparately1: Flow[Action, Val, V[A] ** (Y ++ Z), (V[A] ** Y) ++ (V[A] ** Z)] =
-          distSeparately
-            .from[V[A] ** (Y ++ Z)](using ev1.liftCo[[x] =>> x ** (Y ++ Z)])
-            .to[(V[A] ** Y) ++ (V[A] ** Z)](using ev1.liftContra[[x] =>> (x ** Y) ++ (x ** Z)])
-        FeedValueRes.Transformed(Input.Ready(value), distSeparately1)
-
   private def feedDistributeeNAryLR[Action[_, _], Val[_], V[_], A, Cases, VACases](
     value: Value[Val, A],
     v: Focus[**, V],
@@ -425,7 +361,26 @@ object RuntimeFlows {
         val op = RuntimeFlows.distLRNAry[Action, Val, A, Cases, VACases](value, d)
         FeedValueRes.Absorbed(k, op)
       case v: Focus.Proper[pr, v] =>
-        UnhandledCase.raise(s"DistributingLR value $value at $v")
+        val ev = v.provePair[A]
+        type P = ev.T
+        type Q = ev.value.T
+        given ev1: (V[A] =:= (P ** Q)) =
+          ev.value.value
+        d.separately[P, Q] match
+          case Exists.Some(Exists.Some((dq, dp, assocs))) =>
+            val distSeparately =
+              fst(id[Action, Val, V[A]].to[P ** Q])
+              >>> assocLR[Action, Val, P, Q, Enum[Cases]]
+              >>> snd(FlowAST.DistributeNAryLR(dq))
+              >>> FlowAST.DistributeNAryLR(dp)
+              >>> enumMap(assocs.translate(
+                [X, Y] => (f: Exists[[b] =>> (X =:= (P ** (Q ** b)), ((P ** Q) ** b) =:= Y)]) =>
+                  f match {
+                    case e @ Exists.Some((TypeEq(Refl()), TypeEq(Refl()))) =>
+                      assocRL[Action, Val, P, Q, e.T]
+                  }
+              ))
+            FeedValueRes.Transformed(Input.Ready(value), distSeparately)
 
   private def project[Action[_, _], Val[_], A, B, C](using sh: Shuffled[Action, Val])(
     f: sh.Shuffled[A, B],
@@ -525,7 +480,7 @@ object RuntimeFlows {
       timeout: FiniteDuration,
     ) extends FeedValueRes[Action, Val, [x] =>> x, X ++ Reading[X]]
 
-    case class ActionRequest[Action[_, _], Val[_], F[_], X, Y](
+    case class ActionRequest[Action[_, _], Val[_], X, Y](
       input: Value[Val, X],
       action: Action[X, Y],
     ) extends FeedValueRes[Action, Val, [x] =>> x, Y]

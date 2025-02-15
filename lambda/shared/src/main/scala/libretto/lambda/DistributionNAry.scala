@@ -154,6 +154,12 @@ object DistributionNAry {
     ): DistLR[**, ||, ::, A, Cases || (Lbl :: Z)] { type Out = self.Out || (Lbl :: (A ** Z)) } =
       DistLR.Snoc(this, lbl)
 
+    def separately[A1, A2](using A =:= (A1 ** A2)): Exists[[A2Cases] =>> Exists[[A12Cases] =>> (
+      DistLR[**, ||, ::, A2, Cases] { type Out = A2Cases },
+      DistLR[**, ||, ::, A1, A2Cases] { type Out = A12Cases },
+      ParN.Named[||, ::, [x, y] =>> Exists[[b] =>> (x =:= (A1 ** (A2 ** b)), ((A1 ** A2) ** b) =:= y)], A12Cases, self.Out]
+    )]]
+
     def dropNames[∙[_, _], Nil]: Exists[[X] =>> Exists[[Y] =>> (
       DropNames[||, ::, ∙, Nil, Cases, X],
       DistLR.Unnamed[**, ∙, Nil, A, X] { type Out = Y },
@@ -173,6 +179,19 @@ object DistributionNAry {
       label: Lbl,
     ) extends DistLR[**, ||, ::, A, Lbl :: B] {
       override type Out = Lbl :: (A ** B)
+
+      override def separately[A1, A2](using A =:= (A1 ** A2)): Exists[[A2Cases] =>> Exists[[A12Cases] =>> (
+        DistLR[**, ||, ::, A2, Lbl :: B] { type Out = A2Cases },
+        DistLR[**, ||, ::, A1, A2Cases] { type Out = A12Cases },
+        ParN.Named[||, ::, [x, y] =>> Exists[[b] =>> (x =:= (A1 ** (A2 ** b)), ((A1 ** A2) ** b) =:= y)], A12Cases, Lbl :: (A ** B)],
+      )]] =
+        summon[A =:= (A1 ** A2)] match { case TypeEq(Refl()) =>
+          Exists(Exists((
+            Single(label),
+            Single(label),
+            ParN.Named.Single(label, Exists((summon, summon)))
+          )))
+        }
 
       override def dropNames[∙[_,_], Nil]: Exists[[X] =>> Exists[[Y] =>> (
         DropNames[||, ::, ∙, Nil, Lbl :: B, X],
@@ -201,6 +220,21 @@ object DistributionNAry {
       lbl: Lbl,
     ) extends DistLR[**, ||, ::, A, Init || (Lbl :: Z)] {
       override type Out = AInit || (Lbl :: (A ** Z))
+
+      override def separately[A1, A2](using A =:= A1 ** A2): Exists[[A2Cases] =>> Exists[[A12Cases] =>> (
+        DistLR[**, ||, ::, A2, Init || (Lbl :: Z)] { type Out = A2Cases },
+        DistLR[**, ||, ::, A1, A2Cases] { type Out = A12Cases },
+        ParN.Named[||, ::, [x, y] =>> Exists[[b] =>> (x =:= (A1 ** (A2 ** b)), ((A1 ** A2) ** b) =:= y)], A12Cases, AInit || (Lbl :: (A ** Z))],
+      )]] =
+        init.separately[A1, A2] match
+          case Exists.Some(Exists.Some((d2, d1, assocs))) =>
+            summon[A =:= A1 ** A2] match { case TypeEq(Refl()) =>
+              Exists(Exists((
+                Snoc(d2, lbl),
+                Snoc(d1, lbl),
+                assocs.extend[Lbl, A1 ** (A2 ** Z), (A1 ** A2) ** Z](lbl, Exists((summon, summon)))
+              )))
+            }
 
       override def dropNames[∙[_,_], Nil]: Exists[[X] =>> Exists[[Y] =>> (
         DropNames[||, ::, ∙, Nil, Init || Lbl :: Z, X],

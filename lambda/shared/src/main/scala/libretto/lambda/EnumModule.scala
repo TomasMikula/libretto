@@ -22,7 +22,10 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   type DistLR[A, Cases] = DistF[[x] =>> A ** x, Cases]
   type DistRL[B, Cases] = DistF[[x] =>> x ** B, Cases]
 
-  def inject[Cases](label: String)(using c: IsCaseOf[label.type, Cases]): c.Type -> Enum[Cases]
+  def inject[Lbl, Cases](c: IsCaseOf[Lbl, Cases]): c.Type -> Enum[Cases]
+
+  def inject[Cases](label: String)(using c: IsCaseOf[label.type, Cases]): c.Type -> Enum[Cases] =
+    inject[label.type, Cases](c)
 
   def make[ADT](using u: Unapply[ADT, Enum])(label: String)(using c: IsCaseOf[label.type, u.A]): c.Type -> ADT =
     u.ev.flip.substituteCo(
@@ -44,8 +47,16 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 
   def distRL[B, Cases](using ev: DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[ev.Out]
 
-  given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A })
-  given isLastCase[Init, Lbl <: String, Z](using StaticValue[Lbl]): (IsCaseOf[Lbl, Init || (Lbl :: Z)] with { type Type = Z })
+  def isSingleCase[Lbl <: String, A](label: Lbl): IsCaseOf[Lbl, Lbl :: A] with { type Type = A }
+
+  given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A }) =
+    isSingleCase[Lbl, A](label.value)
+
+  def isLastCase[Init, Lbl <: String, Z](label: Lbl): (IsCaseOf[Lbl, Init || (Lbl :: Z)] with { type Type = Z })
+
+  given isLastCase[Init, Lbl <: String, Z](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Init || (Lbl :: Z)] with { type Type = Z }) =
+    isLastCase[Init, Lbl, Z](label.value)
+
   given isInitCase[Lbl, Init, ZLbl, Z](using j: IsCaseOf[Lbl, Init]): (IsCaseOf[Lbl, Init || (ZLbl :: Z)] with { type Type = j.Type })
 
   given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): (DistF[F, Lbl :: A] with { type Out = Lbl :: F[A] })
@@ -118,6 +129,39 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
     def apply[C](using ev: IsCaseOf[C, Cases]): Extractor[->, **, Enum[Cases], ev.Type] =
       Extractor(p, toPartition(ev))
   }
+
+  def nmap[As, Bs](
+    fs: ParN.Named[||, ::, ->, As, Bs],
+  ): Enum[As] -> Enum[Bs] = {
+    import distr.cat.*
+
+    def go[Xs, Ys](
+      fs: ParN.Named[||, ::, ->, Xs, Ys],
+      nest: [Lbl] => (j: IsCaseOf[Lbl, Ys]) => IsCaseOf[Lbl, Bs] { type Type = j.Type },
+    ): Handlers[Xs, Enum[Bs]] =
+      fs match
+        case s: ParN.Named.Single[sep, of, arr, lbl, a, b] =>
+          summon[Xs =:= (lbl :: a)]
+          val j = isSingleCase[lbl, b](s.label)
+          Handlers.single[lbl, a, Enum[Bs]](
+            s.value > inject[lbl, Bs](nest(j))
+          )
+        case s: ParN.Named.Snoc[sep, of, arr, aInit, bInit, lbl, c, d] =>
+          summon[Xs =:= (aInit || lbl :: c)]
+          summon[Ys =:= (bInit || lbl :: d)]
+          val j = isLastCase[bInit, lbl, d](s.label)
+          Handlers.snoc[aInit, lbl, c, Enum[Bs]](
+            go[aInit, bInit](
+              s.init,
+              [Lbl] => (j: IsCaseOf[Lbl, bInit]) =>
+                val k = isInitCase[Lbl, bInit, lbl, d](using j)
+                nest(k),
+            ),
+            s.last > inject[lbl, Bs](nest(j))
+          )
+
+    handle(go[As, Bs](fs, [Lbl] => (j: IsCaseOf[Lbl, Bs]) => j))
+  }
 }
 
 object EnumModule {
@@ -172,8 +216,8 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
   } =
     PartitioningImpl[Cases]
 
-  override def inject[Cases](label: String)(using c: IsCaseOf[label.type, Cases]): c.Type -> Enum[Cases] =
-    cocat.inject[label.type, c.Type, Cases](c)
+  override def inject[Lbl, Cases](c: IsCaseOf[Lbl, Cases]): c.Type -> Enum[Cases] =
+    cocat.inject[Lbl, c.Type, Cases](c)
 
   override def handle[Cases, R](handlers: Handlers[Cases, R]): Enum[Cases] -> R =
     cocat.handle(handlers)
@@ -187,13 +231,13 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
   override def distRL[B, Cases](using ev: DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[ev.Out] =
     distF[[x] =>> x ** B, Cases](using Focus.fst, ev)
 
-  override given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A }) =
-    Member.Single(label.value)
+  override def isSingleCase[Lbl <: String, A](label: Lbl): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A }) =
+    Member.Single(label)
 
-  override given isLastCase[Init, Lbl <: String, Z](using
-    lbl: StaticValue[Lbl],
+  override def isLastCase[Init, Lbl <: String, Z](using
+    lbl: Lbl,
   ): (IsCaseOf[Lbl, Init || (Lbl :: Z)] with { type Type = Z }) =
-    Member.InLast(lbl.value)
+    Member.InLast(lbl)
 
   override given isInitCase[Lbl, Init, ZLbl, Z](using
     j: IsCaseOf[Lbl, Init],
@@ -226,11 +270,11 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
       HandlersBuilder.Empty()
 
     extension [Cases, Init, ZLbl, Z, R](b: Builder[Cases, Init || (ZLbl :: Z), R])
-      def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= ZLbl)(h: Z -> R): Builder[Cases, Init, R] =
+      override def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= ZLbl)(h: Z -> R): Builder[Cases, Init, R] =
         HandlersBuilder.addHandler(b, h)
 
     extension [Cases, Lbl, A, R](b: Builder[Cases, Lbl :: A, R])
-      def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit)(h: A -> R): Handlers[Cases, R] =
+      override def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit)(h: A -> R): Handlers[Cases, R] =
         HandlersBuilder.build(b, h)
   }
 

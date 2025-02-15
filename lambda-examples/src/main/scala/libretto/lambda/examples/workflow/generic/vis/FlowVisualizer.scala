@@ -7,7 +7,7 @@ import libretto.lambda.util.Exists.{Some as ∃}
 import libretto.lambda.util.TypeEq.Refl
 
 import Approximates.lump
-import Connector.{Across, NoEntryOut, StudIn, StudOut}
+import Connector.{Across, StudIn, StudOut}
 import DefaultDimensions.Length
 import EdgeDesc.wire
 import IOProportions.EdgeProportions
@@ -54,59 +54,6 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           case (∃(∃((x1, y1, vg))), ∃(∃((x2, y2, vh)))) =>
             Exists(Exists((x1 ** x2, y1 ** y2, Visualization.par[**](vg, vh))))
 
-      case _: FlowAST.InjectL[op, x, y] =>
-        summon[A =:= x]
-        summon[B =:= (x ++ y)]
-
-        Exists(Exists((
-          lump[A],
-          lump[x] ++ lump[y],
-          Visualization.connectors(
-            wire,
-            wire ++ wire,
-          )(
-            TrapezoidArea(EdgeStretch.wireLHalf, EdgeStretch.pickL, ColorCaseLeft),
-            TrapezoidArea(EdgeStretch.wireRHalf, EdgeStretch.pickR, Color.White),
-            Across(pickId, pickL),
-            NoEntryOut(pickR),
-          )
-        )))
-
-      case _: FlowAST.InjectR[op, x, y] =>
-        summon[A =:= y]
-        summon[B =:= (x ++ y)]
-
-        Exists(Exists((
-          lump[A],
-          lump[x] ++ lump[y],
-          Visualization.connectors(
-            wire,
-            wire ++ wire,
-          )(
-            TrapezoidArea(EdgeStretch.wireRHalf, EdgeStretch.pickR, ColorCaseRight),
-            TrapezoidArea(EdgeStretch.wireLHalf, EdgeStretch.pickL, Color.White),
-            Across(pickId, pickR),
-            NoEntryOut(pickL),
-          )
-        )))
-
-      case FlowAST.Either(g, h) =>
-        (visualizeAst(g), visualizeAst(h)) match
-          case (∃(∃((x, z1, vg))), ∃(∃((y, z2, vh)))) =>
-            (z1 unify z2) match
-              case ∃((z, zz1, zz2)) =>
-                (zz1 greatestCommonCoarsening zz2) match
-                  case ∃((w1, w2)) =>
-                    Exists(Exists((
-                      x ++ y,
-                      z1 coarsenBy w1, // could equivalently use `z2 coarsenBy w2`
-                      Visualization.Sequence(
-                        Visualization.par[++](vg, vh),
-                        Visualization.Adapt(Adaptoid.par[++](Adaptoid.collapse(w1), Adaptoid.collapse(w2))), // TODO: avoid if identity
-                        merge(w1.inDesc),
-                      ),
-                    )))
-
       case FlowAST.Handle(handlers) =>
         visualizeHandlers(handlers)
 
@@ -136,8 +83,8 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
                   wire ** (wire ++ wire),
                   wire,
                 )(
-                  Connector.Across(pickR.inr, pickId),
-                  Connector.LoopIn(pickL.inr, pickL),
+                  Connector.Across(pickR[++, Wire].inr, pickId),
+                  Connector.LoopIn(pickL[++, Wire].inr, pickL),
                 ),
               )
             )))
@@ -267,54 +214,6 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           )(
             Across(pickId, pickL),
             Across(pickId, pickR),
-          )
-        )))
-
-      case _: FlowAST.DistributeLR[op, x, y, z] =>
-        summon[A =:= x ** (y ++ z)]
-        summon[B =:= (x ** y) ++ (x ** z)]
-
-        Exists(Exists((
-          lump[x] ** (lump[y] ++ lump[z]),
-          (lump[x] ** lump[y]) ++ (lump[x] ** lump[z]),
-          Visualization.WithBackgroundBox(
-            fill = None,
-            stroke = Some(Color.Black),
-            Visualization.connectors(
-              wire ** (wire ++ wire),
-              (wire ** wire) ++ (wire ** wire),
-            )(
-              Across(pickL.inr, pickR.inl),
-              Across(pickR.inr, pickR.inr),
-              TrapezoidArea(EdgeStretch.pickL.inr, EdgeStretch.pickL, ColorCaseLeft),
-              TrapezoidArea(EdgeStretch.pickR.inr, EdgeStretch.pickR, ColorCaseRight),
-              Across(pickL, pickL.inl).fill(GradientVerticalWhiteBlack),
-              Across(pickL, pickL.inr).fill(GradientVerticalWhiteBlack),
-            )
-          )
-        )))
-
-      case _: FlowAST.DistributeRL[op, x, y, z] =>
-        summon[A =:= (x ++ y) ** z]
-        summon[B =:= (x ** z) ++ (y ** z)]
-
-        Exists(Exists((
-          (lump[x] ++ lump[y]) ** lump[z],
-          (lump[x] ** lump[z]) ++ (lump[y] ** lump[z]),
-          Visualization.WithBackgroundBox(
-            fill = None,
-            stroke = Some(Color.Black),
-            Visualization.connectors(
-              (wire ++ wire) ** wire,
-              (wire ** wire) ++ (wire ** wire),
-            )(
-              Across(pickL.inl, pickL.inl),
-              Across(pickR.inl, pickL.inr),
-              TrapezoidArea(EdgeStretch.pickL.inl, EdgeStretch.pickL, ColorCaseLeft),
-              TrapezoidArea(EdgeStretch.pickR.inl, EdgeStretch.pickR, ColorCaseRight),
-              Across(pickR, pickR.inl).fill(GradientVerticalWhiteBlack),
-              Across(pickR, pickR.inr).fill(GradientVerticalWhiteBlack),
-            )
           )
         )))
 
@@ -604,25 +503,6 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
               yDesc
             ))
         }
-
-  private def merge[X](x: EdgeDesc[X]): Visualization[X ++ X, X] =
-    val tgt = EdgeStretch.paddingMidpoints(x)
-    Visualization.connectors(
-      x ++ x,
-      x
-    )(
-      List(
-        TrapezoidArea(EdgeStretch.pickL, tgt, VerticalFadeOutLeft),
-        TrapezoidArea(EdgeStretch.pickR, tgt, VerticalFadeOutRight),
-      ) ++
-      wiresOf(x)
-        .flatMap { i =>
-          List(
-            Connector.Across(i.inl, i),
-            Connector.Across(i.inr, i),
-          )
-        } *
-    )
 
   private def wiresOf[X](x: EdgeDesc[X]): List[WirePick[X]] =
     x match

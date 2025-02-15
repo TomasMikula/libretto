@@ -494,14 +494,6 @@ object VisualizationToSVG {
             ).translate(cx.pixels, hk.pixels - ym)
           )
         if k == 1 then g else g.scale(1.0 / k)
-
-      case Connector.NoEntryOut(tgt) =>
-        val EdgeLayout.WireCoords(segX, pre, w, post) = layout.outWireCoords(tgt)
-        val x = segX + Px(math.max(0, pre.pixels - w.pixels))
-        val w3 = Px(math.min(pre.pixels, w.pixels)) + w + Px(math.min(post.pixels, w.pixels))
-        val h = Px(math.min((height.pixels + 2) / 3, w.pixels))
-        val y = Px(height.pixels - h.pixels)
-        SVGElem.Rect(x, y, w3, h, fill = Some(PredefinedFill.PatternRoadBlock), stroke = None, clipPath = Some(SVG.ClipPath.FillBox))
   }
 
   private def curvyTrapezoid[X, Y](

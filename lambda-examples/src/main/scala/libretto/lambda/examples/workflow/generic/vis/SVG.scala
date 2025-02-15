@@ -33,12 +33,6 @@ case class SVGDocument(contentElem: SVGElem) {
          |    <stop offset="0%" stop-color="${ColorCaseRight.cssValue}"/>
          |    <stop offset="100%" stop-color="${ColorCaseRight.cssValue}" stop-opacity="0"/>
          |  </linearGradient>
-         |  <pattern id="pattern-road-block" width=".25" height="1" patternContentUnits="objectBoundingBox">
-         |    <path fill="yellow" d="M 0 0 L 0 0.5 L 0.125 0 Z"/>
-         |    <path fill="black" d="M 0.125 0 L 0 0.5 L 0 1 L 0.25 0 Z"/>
-         |    <path fill="yellow" d="M 0.25 0 L 0 1 L 0.125 1 L 0.25 0.5 Z"/>
-         |    <path fill="black" d="M 0.25 0.5 L 0.125 1 L 0.25 1 Z"/>
-         |  </pattern>
          |</defs>
          |<rect x="0" y="0" width="${width}px" height="${height}px" fill="rgb(240 240 240)" stroke="black" stroke-width="1px"/>
          |<g id="content">
@@ -432,7 +426,6 @@ object SVG {
       case GradientVerticalWhiteBlack => "url(#gradient-vertical-white-black)"
       case VerticalFadeOutLeft        => "url(#gradient-vertical-fade-out-left)"
       case VerticalFadeOutRight       => "url(#gradient-vertical-fade-out-right)"
-      case PatternRoadBlock           => "url(#pattern-road-block)"
 
   def xmlTextEscape(s: String): String =
     s.replace("<", "&lt;")

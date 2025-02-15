@@ -20,6 +20,11 @@ sealed trait SinkNAryNamed[->[_, _], ||[_, _], ::[_, _], A, B] {
     DropNames[||, ::, ∙, Nil, A, A0],
     SinkNAry[->, ∙, Nil, A0, B]
   )]
+
+  def ||[Lbl, Z](
+    last: Z -> B,
+  ): SinkNAryNamed[->, ||, ::, A || (Lbl :: Z), B] =
+    SinkNAryNamed.Snoc(this, last)
 }
 
 private object SinkNAryNamed {

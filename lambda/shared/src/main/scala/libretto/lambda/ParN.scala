@@ -3,14 +3,14 @@ package libretto.lambda
 import libretto.lambda.util.Exists
 
 /** An n-ary tuple of arrows `Ai -> Bi`,
- *  where
+ *  such that
  *    `A = Nil ∙ A1 ∙ ... ∙ An`,
  *    `B = Nil ∙ B1 ∙ ... ∙ Bn`,
  *  where `∙` associates to the left.
  *
  * An arrowized version of [[TupleN]].
  */
-trait ParN[∙[_, _], Nil, ->[_, _], A, B] {
+sealed trait ParN[∙[_, _], Nil, ->[_, _], A, B] {
   def size: Int
 
   def inputProjection[F[_]](
@@ -223,6 +223,52 @@ object ParN {
     override protected def toList[T](f: [X, Y] => (X -> Y) => T, acc: List[T]): List[T] =
       init.toList(f, f(last) :: acc)
 
+  }
+
+  /** An n-ary tuple of arrows `Ai -> Bi`,
+   *  such that
+   *    `A = "name1" :: A1 || ... || "nameN" :: An`,
+   *    `B = "name1" :: B1 || ... || "nameN" :: Bn`,
+   *  where `||` associates to the left.
+   *
+   * Note that names of members of `B` are the same as those of `A`.
+   *
+   * A named version of [[ParN]].
+   */
+  sealed trait Named[||[_, _], ::[_, _], ->[_, _], A, B] {
+    def extend[Lbl <: String, X, Y](
+      label: Lbl,
+      f: X -> Y,
+    ): ParN.Named[||, ::, ->, A || (Lbl :: X), B || (Lbl :: Y)] =
+      ParN.Named.Snoc(this, label, f)
+
+    def translate[->>[_, _]](
+      f: [X, Y] => (X -> Y) => (X ->> Y),
+    ): ParN.Named[||, ::, ->>, A, B]
+  }
+
+  object Named {
+    case class Single[||[_, _], ::[_, _], ->[_, _], Lbl <: String, A, B](
+      label: Lbl,
+      value: A -> B,
+    ) extends ParN.Named[||, ::, ->, Lbl :: A, Lbl :: B] {
+      override def translate[->>[_, _]](
+        f: [X, Y] => (X -> Y) => (X ->> Y),
+      ): Named[||, ::, ->>, Lbl :: A, Lbl :: B] =
+        Single(label, f(value))
+    }
+
+    case class Snoc[||[_, _], ::[_, _], ->[_, _], AInit, BInit, Lbl <: String, C, D](
+      init: ParN.Named[||, ::, ->, AInit, BInit],
+      label: Lbl,
+      last: C -> D,
+    ) extends ParN.Named[||, ::, ->, AInit || (Lbl :: C), BInit || (Lbl :: D)] {
+
+      override def translate[->>[_, _]](
+        f: [X, Y] => (X -> Y) => (X ->>Y),
+      ): Named[||, ::, ->>, AInit || Lbl :: C, BInit || Lbl :: D] =
+        Snoc(init.translate(f), label, f(last))
+    }
   }
 
 }

@@ -4,5 +4,4 @@ enum PredefinedFill {
   case GradientVerticalWhiteBlack
   case VerticalFadeOutLeft
   case VerticalFadeOutRight
-  case PatternRoadBlock
 }

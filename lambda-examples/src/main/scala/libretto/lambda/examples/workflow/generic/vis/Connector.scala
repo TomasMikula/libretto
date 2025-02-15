@@ -46,8 +46,4 @@ object Connector {
   case class StudOut[X, Y](
     tgt: WirePick[Y],
   ) extends Connector[X, Y]
-
-  case class NoEntryOut[X, Y](
-    tgt: WirePick[Y],
-  ) extends Connector[X, Y]
 }

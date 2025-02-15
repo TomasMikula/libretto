@@ -13,9 +13,6 @@ enum Value[F[_], A]:
     a2: Value[F, A2],
   ) extends Value[F, A1 ** A2]
 
-  case Left [F[_], A, B](a: Value[F, A]) extends Value[F, A ++ B]
-  case Right[F[_], A, B](b: Value[F, B]) extends Value[F, A ++ B]
-
   case Inject[F[_], Label, A, Cases](
     i: Member[||, ::, Label, A, Cases],
     a: Value[F, A],
@@ -48,10 +45,10 @@ object Value:
     Value.One()
 
   def left[F[_], A, B](value: Value[F, A]): Value[F, A ++ B] =
-    Value.Left(value)
+    Value.ofEnum[F, "Left", A, "Left" :: A || "Right" :: B](summon, value)
 
   def right[F[_], A, B](value: Value[F, B]): Value[F, A ++ B] =
-    Value.Right(value)
+    Value.ofEnum[F, "Right", B, "Left" :: A || "Right" :: B](summon, value)
 
   def ofEnum[F[_], Label, A, Cases](
     i: Member[||, ::, Label, A, Cases],
@@ -69,28 +66,6 @@ object Value:
   class ValueOfEnumCaseBuilder[Lbl, A, Cases](m: Member[||, ::, Lbl, A, Cases]):
     def apply[F[_]](a: Value[F, A]): Value[F, Enum[Cases]] =
       Value.ofEnum(m, a)
-
-  def peel[F[_], Init, Lbl, Z](
-    v: Value[F, Enum[Init || (Lbl :: Z)]],
-  )(using
-    Compliant[F],
-  ): Value[F, Enum[Init] ++ Z] =
-    revealCase(v) match
-      case Exists.Some(Exists.Some(inj)) =>
-        peelInject(inj)
-
-  private def peelInject[F[_], Lbl, A, Init, LblZ, Z](
-    inj: Inject[F, Lbl, A, Init || (LblZ :: Z)]
-  ): Value[F, Enum[Init] ++ Z] =
-    inj.i match
-      case Member.InLast(_) =>
-        summon[Lbl =:= LblZ]
-        summon[A =:= Z]
-        Value.Right(inj.a)
-      case Member.InInit(i) =>
-        Value.Left(Inject(i, inj.a))
-      case Member.Single(_) =>
-        throw AssertionError(s"Impossible: would mean that `a || b` = `c :: d`")
 
   def portName[F[_], A](w: WorkflowRef[?], promiseId: PortId[A]): Value[F, PortName[A]] =
     PortNameValue(w, promiseId)
@@ -113,9 +88,25 @@ object Value:
 
   def toEither[F[_], A, B](value: Value[F, A ++ B])(using F: Compliant[F]): Either[Value[F, A], Value[F, B]] =
     value match
-      case Value.Left(a)  => scala.Left(a)
-      case Value.Right(b) => scala.Right(b)
-      case Ext(value)     => F.toEither(value).left.map(Ext(_)).map(Ext(_))
+      case Value.Inject(mem, value) =>
+        toEither(mem, value)
+      case Ext(value) =>
+        F.toEither(value).left.map(Ext(_)).map(Ext(_))
+
+  private def toEither[F[_], Lbl, X, A, B](
+    mem: Member[||, ::, Lbl, X, "Left" :: A || "Right" :: B],
+    value: Value[F, X],
+  ): Either[Value[F, A], Value[F, B]] = {
+    import Member.{InInit, InLast, Single}
+
+    mem match
+      case InLast(_) =>
+        summon[X =:= B]
+        Right(value)
+      case InInit(Single(_)) =>
+        summon[X =:= A]
+        Left(value)
+  }
 
   def revealCase[F[_], Cases](
     v: Value[F, Enum[Cases]]
@@ -127,7 +118,7 @@ object Value:
         Exists(Exists(Inject(i, a)))
       case Ext(value) =>
         F.revealCase(value)
-      case One() | Pair(_, _) | Left(_) | Right(_) | PortNameValue(_, _) | ReadingInput(_) =>
+      case One() | Pair(_, _) | PortNameValue(_, _) | ReadingInput(_) =>
         throw AssertionError(s"Impossible for $v to represent an Enum value")
 
   def distLRNAry[F[_], X, Cases, XCases](

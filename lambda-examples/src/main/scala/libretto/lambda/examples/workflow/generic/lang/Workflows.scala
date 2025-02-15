@@ -57,8 +57,8 @@ class Workflows[Action[_, _]] {
       lift = [X, Y] => (f: Flow[X, Y]) => (f: PartialFlow[X, Y]),
     )
 
-  val Enum =
-    EnumModule[Flow, **, Enum, ||, ::]
+  val Enum: EnumModule[Flow, **, Enum, ||, ::] =
+    FlowAST.enumModule[Action]
 
   opaque type Expr[A]       = lambdas.Expr[A]
   opaque type LambdaContext = lambdas.Context
@@ -145,23 +145,23 @@ class Workflows[Action[_, _]] {
     def introSnd[X, A](f: Flow[Unit, A]): Flow[X, X ** A] =
       introSnd[X] >>> snd(f)
 
-    def injectL[Op[_, _], A, B]: Flow[A, A ++ B] =
-      FlowAST.InjectL()
+    def injectL[A, B]: Flow[A, A ++ B] =
+      FlowAST.injectL[Action, A, B]
 
-    def injectR[Op[_, _], A, B]: Flow[B, A ++ B] =
-      FlowAST.InjectR()
+    def injectR[A, B]: Flow[B, A ++ B] =
+      FlowAST.injectR[Action, A, B]
 
     def either[A, B, C](f: Flow[A, C], g: Flow[B, C]): Flow[A ++ B, C] =
-      FlowAST.Either(f, g)
+      FlowAST.either(f, g)
 
     def inject[Label, A, Cases](i: Member[||, ::, Label, A, Cases]): Flow[A, Enum[Cases]] =
       FlowAST.Inject(i)
 
     def distributeLR[A, B, C]: Flow[A ** (B ++ C), (A ** B) ++ (A ** C)] =
-      FlowAST.DistributeLR()
+      FlowAST.distributeLR
 
     def distributeRL[A, B, C]: Flow[(A ++ B) ** C, (A ** C) ++ (B ** C)] =
-      FlowAST.DistributeRL()
+      FlowAST.distributeRL
 
     def dup[A]: Flow[A, A ** A] =
       FlowAST.Dup()
