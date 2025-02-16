@@ -20,8 +20,8 @@ object Equipment:
   val Monitor = Enum.partition[Equipment]["Monitor"]
   val Chair   = Enum.partition[Equipment]["Chair"]
 
-type DeskLocation
-type DeliveryAddress
+type DeskLocation = Str
+type DeliveryAddress = Str
 
 type Result = Enum
   [ "Declined" :: RejectionReason

@@ -1,12 +1,14 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{DistributionNAry, EnumModule, Member, Projection, UnhandledCase, Unzippable, Zippable}
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::, Enum, PortName, Reading, given}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::, Enum, PortName, Reading, Str, given}
 import libretto.lambda.util.Exists
 import libretto.lambda.util.unapply.Unapply
 
 enum Value[F[_], A]:
   case One[F[_]]() extends Value[F, Unit]
+
+  case StringValue[F[_]](value: String) extends Value[F, Str]
 
   case Pair[F[_], A1, A2](
     a1: Value[F, A1],
@@ -44,6 +46,9 @@ object Value:
   def unit[F[_]]: Value[F, Unit] =
     Value.One()
 
+  def string[F[_]](s: String): Value[F, Str] =
+    Value.StringValue(s)
+
   def left[F[_], A, B](value: Value[F, A]): Value[F, A ++ B] =
     Value.ofEnum[F, "Left", A, "Left" :: A || "Right" :: B](summon, value)
 
@@ -74,6 +79,7 @@ object Value:
     ReadingInput(pa)
 
   trait Compliant[F[_]] extends Unzippable[**, F]:
+    def extractString(value: F[Str]): String
     def toEither[A, B](value: F[A ++ B]): Either[F[A], F[B]]
     def extractPortId[A](value: F[Reading[A]]): PortId[A]
     def revealCase[Cases](value: F[Enum[Cases]]): Exists[[Lbl] =>> Exists[[A] =>> Value.Inject[F, Lbl, A, Cases]]]
@@ -131,6 +137,11 @@ object Value:
     revealCase(enm) match
       case Exists.Some(Exists.Some(Inject(i, a))) =>
         Inject(d.distributeOver(i), x ** a)
+
+  def extractString[F[_]](value: Value[F, Str])(using F: Compliant[F]): String =
+    value match
+      case StringValue(s) => s
+      case Ext(value) => F.extractString(value)
 
   def extractPortId[F[_], A](value: Value[F, Reading[A]])(using F: Compliant[F]): PortId[A] =
     value match

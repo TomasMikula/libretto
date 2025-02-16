@@ -2,7 +2,7 @@ package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
 import libretto.lambda.Unzippable
 import libretto.lambda.examples.workflow.generic
-import libretto.lambda.examples.workflow.generic.lang.{**, ++, Enum, Reading}
+import libretto.lambda.examples.workflow.generic.lang.{**, ++, Enum, Reading, Str}
 import libretto.lambda.examples.workflow.generic.runtime.{PortId, Value}
 import libretto.lambda.examples.workflow.generic.runtime.Value.Ext
 import libretto.lambda.util.Exists
@@ -22,6 +22,8 @@ enum Val[A]:
 
 object Val:
   given Value.Compliant[Val] with
+    override def extractString(value: Val[Str]): String =
+      throw new AssertionError(s"Unexpected value representing a string (`Str`): $value")
     override def unzip[A, B](x: Val[A ** B]): (Val[A], Val[B]) =
       throw new AssertionError(s"Unexpected value representing a pair (`**`): $x")
     override def toEither[A, B](value: Val[A ++ B]): Either[Val[A], Val[B]] =

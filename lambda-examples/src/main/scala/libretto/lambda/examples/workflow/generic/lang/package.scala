@@ -14,11 +14,6 @@ given BiInjective[**] with {
     ev match { case TypeEq(Refl()) => (summon, summon) }
 }
 
-given BiInjective[++] with {
-  override def unapply[A, B, X, Y](ev: A ++ B =:= X ++ Y): (A =:= X, B =:= Y) =
-    ev match { case TypeEq(Refl()) => (summon, summon) }
-}
-
 /** Used for declaring members of an ADT. */
 sealed trait ::[Name, Type]
 
@@ -40,6 +35,14 @@ sealed trait Enum[Cases]
 
 /** Domain-level `Either`. */
 type ++[A, B] = Enum["Left" :: A || "Right" :: B]
+
+given BiInjective[++] with {
+  override def unapply[A, B, X, Y](ev: A ++ B =:= X ++ Y): (A =:= X, B =:= Y) =
+    ev match { case TypeEq(Refl()) => (summon, summon) }
+}
+
+/** Domain-level string. */
+sealed trait Str
 
 /** References an external input port. */
 sealed trait PortName[A]
