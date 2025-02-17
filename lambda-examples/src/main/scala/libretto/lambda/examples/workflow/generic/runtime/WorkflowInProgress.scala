@@ -1,12 +1,11 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{Capture, Focus, Knitted, Spine, Unzippable}
+import libretto.lambda.{Focus, Knitted, Spine, UnhandledCase, Unzippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, FlowAST, PortName, Reading, given}
 import libretto.lambda.examples.workflow.generic.runtime.Input.FindValueRes
 import libretto.lambda.examples.workflow.generic.runtime.{RuntimeFlows as rtf}
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
-import libretto.lambda.UnhandledCase
 import scala.concurrent.duration.FiniteDuration
 
 sealed trait WorkflowInProgress[Action[_, _], Val[_], A] {
@@ -16,9 +15,9 @@ sealed trait WorkflowInProgress[Action[_, _], Val[_], A] {
 
   def resultOpt: Option[WorkflowResult[Val, A]] =
     this match
-      case Completed(result)       => Some(WorkflowResult.Success(result))
-      case IncompleteImpl(_, _, _) => None
-      case Failed(_, _)            => None
+      case Completed(result)    => Some(WorkflowResult.Success(result))
+      case IncompleteImpl(_, _) => None
+      case Failed(_, _)         => None
 
 }
 
@@ -36,47 +35,38 @@ object WorkflowInProgress {
     def crank(using Value.Compliant[Val]): CrankRes[Action, Val, A]
   }
 
-  case class IncompleteImpl[Action[_, _], Val[_], X, Y, A](
+  case class IncompleteImpl[Action[_, _], Val[_], X, Y](
     input: Input[Val, X],
     cont: rtf.Flow[Action, Val, X, Y],
-    resultAcc: Capture[**, Value[Val, _], Y, A],
-  ) extends Incomplete[Action, Val, A] {
+    // resultAcc: Capture[**, Value[Val, _], Y, A],
+  ) extends Incomplete[Action, Val, Y] {
     override def isReducible: Boolean =
       input.isPartiallyReady
 
-    override def crank(using Value.Compliant[Val]): CrankRes[Action, Val, A] =
+    override def crank(using Value.Compliant[Val]): CrankRes[Action, Val, Y] =
       input match
         case i @ Input.Awaiting(_) =>
           CrankRes.AlreadyStuck(this)
         case i =>
           input.findValue match
             case FindValueRes.NotFound(awaiting) =>
-              CrankRes.Progressed(IncompleteImpl(Input.Awaiting(awaiting), cont, resultAcc))
+              CrankRes.Progressed(IncompleteImpl(Input.Awaiting(awaiting), cont))
             case FindValueRes.Found(path, value, TypeEq(Refl())) =>
               import libretto.lambda.examples.workflow.generic.runtime.RuntimeFlows.{PropagateValueRes as pvr}
               rtf.propagateValue(value, path.focus, cont) match
-                case tr: pvr.Transported[op, val_, f, x, g, y] =>
-                  tr.outFocus match
-                    case Focus.Id() =>
-                      val result = resultAcc.complete(tr.outputValue.as(using tr.ev)).fold
-                      CrankRes.Progressed(Completed(result))
-                    case g: Focus.Proper[pr, g] =>
-                      resultAcc.absorb(tr.outputValue, g)(using tr.ev) match
-                        case Capture.Absorbed.Impl(k, resultAcc1) =>
-                          tr.knit(k) match
-                            case Exists.Some((k0, f)) =>
-                              val input1 = path.knitFold(k0)
-                              CrankRes.Progressed(IncompleteImpl(input1, f, resultAcc1))
+                case pvr.Complete(value) =>
+                  // val result = resultAcc.complete(value).fold
+                  CrankRes.Progressed(Completed(value))
                 case pvr.Transformed(newInput, f) =>
-                  CrankRes.Progressed(IncompleteImpl(path.plugFold(newInput), f, resultAcc))
+                  CrankRes.Progressed(IncompleteImpl(path.plugFold(newInput), f))
                 case pvr.Absorbed(k, f) =>
-                  CrankRes.Progressed(IncompleteImpl(path.knitFold(k), f, resultAcc))
+                  CrankRes.Progressed(IncompleteImpl(path.knitFold(k), f))
                 case pvr.Shrunk(newInput, p, f) =>
                   val input1 = path.plugFold(newInput)
                   val input2 = input1.discard(p) // TODO: cancel running actions
-                  CrankRes.Progressed(IncompleteImpl(input2, f, resultAcc))
+                  CrankRes.Progressed(IncompleteImpl(input2, f))
                 case pvr.Read(cont) =>
-                  CrankRes.read(path, cont, resultAcc)
+                  CrankRes.read(path, cont)
                 case pvr.ReadAwaitTimeout(toAwait, timeout, cont) =>
                   val pId = Value.extractPortId(toAwait)
                   CrankRes.SetTimer(
@@ -85,7 +75,6 @@ object WorkflowInProgress {
                       IncompleteImpl(
                         path.plugFold(Input.awaitingInput(pId, timerId)),
                         cont,
-                        resultAcc,
                       )
                     },
                   )
@@ -96,7 +85,6 @@ object WorkflowInProgress {
                     y => IncompleteImpl(
                       path.plugFold(y),
                       cont,
-                      resultAcc,
                     ),
                   )
   }
@@ -108,7 +96,6 @@ object WorkflowInProgress {
     IncompleteImpl(
       Input.Ready(input),
       rtf.pure(wf),
-      Capture.NoCapture(),
     )
 
   enum CrankRes[Action[_, _], Val[_], A]:
@@ -128,13 +115,12 @@ object WorkflowInProgress {
     ) extends CrankRes[Action, Val, A]
 
   object CrankRes:
-    def read[Action[_, _], Val[_], F[_], X, Y, A](
+    def read[Action[_, _], Val[_], F[_], X, Y](
       remainingInput: Spine[**, Input[Val, _], F],
       cont: rtf.Flow[Action, Val, F[PortName[X] ** Reading[X]], Y],
-      resultAcc: Capture[**, Value[Val, _], Y, A],
-    ): CrankRes[Action, Val, A] =
-      CrankRes.Ask[Action, Val, X, A] { (px, rx) =>
+    ): CrankRes[Action, Val, Y] =
+      CrankRes.Ask[Action, Val, X, Y] { (px, rx) =>
         val newInput = remainingInput.plugFold(px ** rx)
-        IncompleteImpl(newInput, cont, resultAcc)
+        IncompleteImpl(newInput, cont)
       }
 }

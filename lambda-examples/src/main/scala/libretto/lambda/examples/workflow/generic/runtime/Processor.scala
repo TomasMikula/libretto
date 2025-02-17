@@ -65,11 +65,11 @@ private[runtime] class Processor[Action[_, _], Val[_]](
     result: Value[Val, A],
   ): Unit =
     persistor.modifyOpt(ref) {
-      case WorkflowInProgress.IncompleteImpl(input, cont, resultAcc) =>
+      case WorkflowInProgress.IncompleteImpl(input, cont) =>
         input
           .supplyValue(id, result)
           .map { input =>
-            WorkflowInProgress.IncompleteImpl(input, cont, resultAcc)
+            WorkflowInProgress.IncompleteImpl(input, cont)
           }
       case WorkflowInProgress.Completed(result) =>
         Console.err.println(s"Supplying promise result to an already completed workflow.")

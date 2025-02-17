@@ -2,7 +2,7 @@ package libretto.lambda.examples.workflow.generic.runtime
 
 import libretto.lambda.{Capture, DistributionNAry, EnumModule, Focus, Knit, Knitted, ParN, Projection, Spine, SymmetricSemigroupalCategory, UnhandledCase, Unzippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::, Enum, FlowAST, PortName, Reading, given}
-import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq}
+import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq, TypeEqK}
 import libretto.lambda.util.TypeEq.Refl
 import scala.concurrent.duration.FiniteDuration
 
@@ -116,8 +116,25 @@ object RuntimeFlows {
     import sh.ChaseFwRes.*
 
     cont.toShuffled.chaseFw(F) match
-      case Transported(s, ev) =>
-        PropagateValueRes.Transported.Impl(s, ev, value)
+      case tr: Transported[f, a, g, b] =>
+        summon[a =:= A]
+        summon[b =:= B]
+        summon[f[a] =:= F[A]]
+        given (g[A] =:= B) = tr.ev
+        tr.s.focusOut match
+          case Focus.Id() =>
+            sh.Punched.proveIdBw(tr.s) match
+              case TypeEqK.Refl() =>
+                PropagateValueRes.Complete(value.as[B])
+          case p: Focus.Proper[pr, g] =>
+            // Note: If in the future we call propagateValue recursively,
+            // make sure value collector is introduced only at the output of the whole workflow
+            // and not in the middle, as it would introduce an uncolicited synchronization point.
+            RuntimeAction.captureValue[Action, Val, g, A](value, p) match
+              case Exists.Some((collector, k)) =>
+                tr.s.knitBw(k) match
+                  case Exists.Some((k1, s1)) =>
+                    PropagateValueRes.Absorbed(k1, fromShuffled(s1) >>> action(collector).to[B])
       case Split(ev) =>
         val (a1, a2) = Value.unpair(ev.substituteCo(value))
         val input = ev.substituteContra(Input.Ready(a1) ** Input.Ready(a2))
@@ -396,25 +413,9 @@ object RuntimeFlows {
   sealed trait PropagateValueRes[Action[_, _], Val[_], F[_], B]
 
   object PropagateValueRes {
-    sealed trait Transported[Action[_, _], Val[_], F[_], X, G[_], B]
-    extends PropagateValueRes[Action, Val, F, B]:
-      def outFocus: Focus[**, G]
-      def ev: G[X] =:= B
-      def outputValue: Value[Val, X]
-      def knit(k: Knit[**, G]): Exists[[F0] =>> (Knitted[**, F, F0], Flow[Action, Val, F0, k.Res])]
-
-    object Transported {
-      class Impl[Action[_, _], Val[_], F[_], X, G[_], B](using sh: Shuffled[Action, Val])(
-        f: sh.Punched[F, G],
-        override val ev: G[X] =:= B,
-        override val outputValue: Value[Val, X],
-      ) extends Transported[Action, Val, F, X, G, B]:
-        override def outFocus: Focus[**, G] =
-          f.focusOut
-        override def knit(k: Knit[**, G]): Exists[[F0] =>> (Knitted[**, F, F0], Flow[Action, Val, F0, k.Res])] =
-          f.knitBw(k) match
-            case Exists.Some((k, f)) => Exists((k, fromShuffled(f)))
-    }
+    case class Complete[Action[_, _], Val[_], B](
+      result: Value[Val, B],
+    ) extends PropagateValueRes[Action, Val, [x] =>> x, B]
 
     case class Transformed[Action[_, _], Val[_], F[_], Y, B](
       newInput: Input[Val, Y],

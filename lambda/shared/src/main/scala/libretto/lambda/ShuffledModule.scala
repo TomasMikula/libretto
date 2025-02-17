@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Applicative, BiInjective, Exists, TypeEq}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, TypeEq, TypeEqK}
 import libretto.lambda.util.TypeEq.Refl
 
 trait ShuffledModule[->[_, _], **[_, _]] { self =>
@@ -39,6 +39,9 @@ trait ShuffledModule[->[_, _], **[_, _]] { self =>
 
     def pure[F[_], G[_]](f: shuffle.~⚬.Punched[F, G]): Punched[F, G] =
       Punched(f.focusIn, f.focusOut, [X] => _ ?=> self.pure(f.plug[X]))
+
+    def proveIdFw[G[_]](f: Punched[[x] =>> x, G]): TypeEqK[[x] =>> x, G]
+    def proveIdBw[F[_]](f: Punched[F, [x] =>> x]): TypeEqK[F, [x] =>> x]
   }
 
   extension [A, B](f: Shuffled[A, B]) {

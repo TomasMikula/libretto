@@ -1,7 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.{Projection as P}
-import libretto.lambda.util.{Applicative, BiInjective, Exists, TypeEq}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, TypeEq, TypeEqK}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.Projection.Proper
 import libretto.lambda.ShuffledModule.With
@@ -1512,6 +1512,16 @@ extends ShuffledModule[->, |*|] {
         override def plug[X]: Shuffled[F[X], F[X]] = Permeable.id[F[X]]
         override val focusIn = f
         override val focusOut = f
+
+    override def proveIdFw[G[_]](f: Punched[[x] =>> x, G]): TypeEqK[[x] =>> x, G] =
+      TypeEqK
+        .refl[[x] =>> x]
+        .asInstanceOf[TypeEqK[[x] =>> x, G]]
+
+    override def proveIdBw[F[_]](f: Punched[F, [x] =>> x]): TypeEqK[F, [x] =>> x] =
+      TypeEqK
+        .refl[[x] =>> x]
+        .asInstanceOf[TypeEqK[F, [x] =>> x]]
   }
 
 }
