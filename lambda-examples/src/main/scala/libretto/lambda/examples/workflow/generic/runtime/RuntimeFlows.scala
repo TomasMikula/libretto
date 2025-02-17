@@ -69,9 +69,6 @@ object RuntimeFlows {
   def action[Op[_, _], Val[_], A, B](f: RuntimeAction[Op, Val, A, B]): Flow[Op, Val, A, B] =
     FlowAST.Ext(f)
 
-  def distLR[Op[_, _], Val[_], A, B, C](captured: Value[Val, A]): Flow[Op, Val, B ++ C, (A ** B) ++ (A ** C)] =
-    action(RuntimeAction.DistLR(captured))
-
   def distLRNAry[Op[_, _], Val[_], A, Cases, ACases](
     captured: Value[Val, A],
     d: DistributionNAry.DistLR[**, ||, ::, A, Cases] { type Out = ACases },
@@ -309,24 +306,6 @@ object RuntimeFlows {
                 case v: Focus.Proper[prod, v] =>
                   collectingInput(value, v, RuntimeFlows.action(a))
             }
-          case d: RuntimeAction.DistLR[op, val_, x, y, z] =>
-            v match
-              case Focus.Id() =>
-                def go[X, Y, Z](
-                  x: Value[Val, X],
-                  yz: Value[Val, Y ++ Z],
-                ): FeedValueRes[Action, Val, [x] =>> x, (X ** Y) ++ (X ** Z)] =
-                  val res: Value[Val, (X ** Y) ++ (X ** Z)] =
-                    Value.toEither(yz) match
-                      case Left(y)  => Value.left(x ** y)
-                      case Right(z) => Value.right(x ** z)
-                  FeedValueRes.Complete(Input.Ready(res))
-
-                val yz: Value[Val, y ++ z] = ev.flip.substituteCo[Value[Val, _]](value)
-                go[x, y, z](d.x, yz)
-
-              case other =>
-                throw AssertionError(s"Impossible, would mean that `++` = `**`")
 
           case d: RuntimeAction.DistLRNAry[op, val_, x, cases, xCases] =>
             summon[VA =:= Enum[cases]]
