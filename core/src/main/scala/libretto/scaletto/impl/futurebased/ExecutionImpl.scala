@@ -361,18 +361,22 @@ private class ExecutionImpl(
         case Fun.Absurd() =>
           this.absurd
 
-        case _: Fun.OneOfExtractSingle[lbl, a] =>
-          (this: Frontier[OneOf[lbl :: a]]).extractSingle
-
-        case op: Fun.OneOfPeel[init, lbl, z] =>
-          (this: Frontier[OneOf[init || (lbl :: z)]])
-            .narySumPeel
-
-        case op: Fun.OneOfUnpeel[lbl, a, cases] =>
-          OneOfUnpeel[lbl, a, cases](this)
-
         case Fun.OneOfInject(i) =>
           OneOfInject(this, i)
+
+        case op: Fun.OneOfHandle[-⚬, cases, b] =>
+          summon[A =:= OneOf[cases]]
+          summon[B =:= b]
+
+          def go(in: Frontier[OneOf[cases]]): Frontier[B] =
+            in match {
+              case OneOfInject(a, i) =>
+                a.extend(op.handlers.get(i))
+              case Deferred(fa) =>
+                Deferred(fa.map(go))
+            }
+
+          go(this)
 
         case _: Fun.ChooseL[a1, a2] =>
           Frontier.chooseL[a1, a2](this)
@@ -564,6 +568,36 @@ private class ExecutionImpl(
                   case Right(z) => InjectR(Pair(x, z))
                 }
           }
+
+        case op: Fun.DistributeNAryLR[d, cases, dCases] =>
+          summon[A =:= (d |*| OneOf[cases])]
+          summon[B =:= OneOf[dCases]]
+
+          val (d, cs) = (this: Frontier[d |*| OneOf[cases]]).splitPair
+
+          def go(cs: Frontier[OneOf[cases]]): Frontier[OneOf[dCases]] =
+            cs match
+              case OneOfInject(a, i) =>
+                OneOfInject(Pair(d, a), op.dist.distributeOver(i))
+              case Deferred(cs) =>
+                Deferred(cs.map(go))
+
+          go(cs)
+
+        case op: Fun.DistributeNAryRL[d, cases, dCases] =>
+          summon[A =:= (OneOf[cases] |*| d)]
+          summon[B =:= OneOf[dCases]]
+
+          val (cs, d) = (this: Frontier[OneOf[cases] |*| d]).splitPair
+
+          def go(cs: Frontier[OneOf[cases]]):Frontier[OneOf[dCases]] =
+            cs match
+              case OneOfInject(a, i) =>
+                OneOfInject(Pair(a, d), op.dist.distributeOver(i))
+              case Deferred(cs) =>
+                Deferred(cs.map(go))
+
+          go(cs)
 
         case _: Fun.CoDistributeL[x, y, z] =>
           // ((x |*| y) |&| (x |*| z)) -⚬ (x |*| (y |&| z))
@@ -1114,10 +1148,6 @@ private class ExecutionImpl(
           fa.map(_.crash(e))
         case Pack(f) =>
           f.crash(e)
-        case OneOfSingle(f) =>
-          f.crash(e)
-        case OneOfUnpeel(f) =>
-          f.crash(e)
         case RecOccurrence(_) | ConstSub(_) =>
           // has not been invoked yet, do nothing
         case ParameterizedSub(p, _, _, rc) =>
@@ -1151,10 +1181,6 @@ private class ExecutionImpl(
     sealed trait Void extends Frontier[dsl.Void] {
       def absurd[A]: Frontier[A]
     }
-    case class OneOfSingle[Lbl, A](f: Frontier[A]) extends Frontier[OneOf[Lbl :: A]]
-    case class OneOfUnpeel[Init, Label, Z](
-      f: Frontier[OneOf[Init] |+| Z],
-    ) extends Frontier[OneOf[Init || (Label :: Z)]]
 
     case class Value[A](a: A) extends Frontier[Val[A]]
 
@@ -1235,25 +1261,6 @@ private class ExecutionImpl(
       def absurd[A](using ExecutionContext): Frontier[A] =
         f match
           case Deferred(f) => Deferred(f.map(_.absurd[A]))
-    }
-
-    extension [Lbl, A](f: Frontier[OneOf[Lbl :: A]]) {
-      def extractSingle(using ExecutionContext): Frontier[A] =
-        f match
-          case OneOfSingle(f) => f
-          case Deferred(f)  => Deferred(f.map(_.extractSingle))
-          case OneOfInject(fa, Member.Single(_)) => fa
-    }
-
-    extension [Label, A, Cases](f: Frontier[OneOf[Cases || (Label :: A)]]) {
-      def narySumPeel(using ExecutionContext): Frontier[OneOf[Cases] |+| A] =
-        f match
-          case OneOfUnpeel(f) => f
-          case Deferred(f) => Deferred(f.map(_.narySumPeel))
-          case OneOfInject(a, i) =>
-            i match
-              case Member.InLast(_) => InjectR(a)
-              case Member.InInit(j) => InjectL(OneOfInject(a, j))
     }
 
     extension [A, B](f: Frontier[A |&| B]) {

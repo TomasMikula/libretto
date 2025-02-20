@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{BiInjective, Exists, TypeEq}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
 /** A collection of arrows `Ai -> B`,
@@ -9,6 +9,11 @@ import libretto.lambda.util.TypeEq.Refl
  */
 sealed trait SinkNAryNamed[->[_, _], ||[_, _], ::[_, _], A, B] {
   def translate[->>[_, _]](f: [x, y] => (x -> y) => (x ->> y)): SinkNAryNamed[->>, ||, ::, A, B]
+  def translateA[->>[_, _], G[_]](f: [x, y] => (x -> y) => G[x ->> y])(using Applicative[G]): G[SinkNAryNamed[->>, ||, ::, A, B]]
+  def foldSemigroup[S](
+    f: [x, y] => (x -> y) => S,
+    g: (S, S) => S,
+  ): S
   def asSingle[LblX, X](using A =:= (LblX :: X), BiInjective[::]): X -> B
 
   def get[LblX, X](m: Member[||, ::, LblX, X, A])(using
@@ -21,20 +26,35 @@ sealed trait SinkNAryNamed[->[_, _], ||[_, _], ::[_, _], A, B] {
     SinkNAry[->, ∙, Nil, A0, B]
   )]
 
-  def ||[Lbl, Z](
+  def snoc[Lbl <: String, Z](
+    label: Lbl,
     last: Z -> B,
   ): SinkNAryNamed[->, ||, ::, A || (Lbl :: Z), B] =
-    SinkNAryNamed.Snoc(this, last)
+    SinkNAryNamed.Snoc(this, label, last)
+
+  def forall(f: [x, y] => (x -> y) => Boolean): Boolean =
+    foldSemigroup[Boolean](f, _ && _)
 }
 
-private object SinkNAryNamed {
-  case class Single[->[_, _], ||[_, _], ::[_, _], Lbl, A, B](
+object SinkNAryNamed {
+  case class Single[->[_, _], ||[_, _], ::[_, _], Lbl <: String, A, B](
+    label: Lbl,
     h: A -> B,
   ) extends SinkNAryNamed[->, ||, ::, Lbl :: A, B] {
     override def translate[->>[_, _]](
       f: [x, y] => (x -> y) => (x ->> y),
     ): SinkNAryNamed[->>, ||, ::, Lbl :: A, B] =
-      Single(f(h))
+      Single(label, f(h))
+
+    override def translateA[->>[_, _], G[_]](
+      f: [x, y] => (x -> y) => G[x ->> y],
+    )(using
+      Applicative[G],
+    ): G[SinkNAryNamed[->>, ||, ::, Lbl :: A, B]] =
+      f(h).map(Single(label, _))
+
+    override def foldSemigroup[S](f: [x, y] => (x -> y) => S, g: (S, S) => S): S =
+      f(h)
 
     override def asSingle[LblX, X](using
       ev: Lbl :: A =:= LblX :: X,
@@ -59,8 +79,9 @@ private object SinkNAryNamed {
       ))
   }
 
-  case class Snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl, Z, R](
+  case class Snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl <: String, Z, R](
     init: SinkNAryNamed[->, ||, ::, Init, R],
+    label: Lbl,
     last: Z -> R,
   ) extends SinkNAryNamed[->, ||, ::, Init || (Lbl :: Z), R] {
     override def translate[->>[_, _]](
@@ -68,8 +89,19 @@ private object SinkNAryNamed {
     ): SinkNAryNamed[->>, ||, ::, Init || Lbl :: Z, R] =
       Snoc(
         init.translate(f),
+        label,
         f(last),
       )
+
+    override def translateA[->>[_, _], G[_]](
+      f: [x, y] => (x -> y) => G[x ->> y],
+    )(using
+      G: Applicative[G],
+    ): G[SinkNAryNamed[->>, ||, ::, Init || Lbl :: Z, R]] =
+      G.map2(init.translateA(f), f(last)) { Snoc(_, label, _) }
+
+    override def foldSemigroup[S](f: [x, y] => (x -> y) => S, g: (S, S) => S): S =
+      g(init.foldSemigroup(f, g), f(last))
 
     override def asSingle[LblX, X](using
       (Init || (Lbl :: Z)) =:= LblX :: X,
@@ -97,11 +129,12 @@ private object SinkNAryNamed {
           Exists((drop0.inInit[Lbl, Z], SinkNAry.Snoc(sink0, last)))
   }
 
-  def snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl, Z, R](
+  def snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl <: String, Z, R](
     init: SinkNAryNamed[->, ||, ::, Init, R],
+    lastLabel: Lbl,
     last: SinkNAryNamed[->, ||, ::, Lbl :: Z, R]
   )(using
     BiInjective[::],
   ): SinkNAryNamed[->, ||, ::, Init || Lbl :: Z, R] =
-    Snoc(init, last.asSingle)
+    Snoc(init, lastLabel, last.asSingle)
 }

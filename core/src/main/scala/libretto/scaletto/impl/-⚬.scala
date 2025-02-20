@@ -1,7 +1,16 @@
 package libretto.scaletto.impl
 
-import libretto.lambda.{ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, Distribution, SemigroupalCategory}
-import libretto.lambda.util.{SourcePos, TypeEq, Validated}
+import libretto.lambda.{
+  ClosedSymmetricMonoidalCategory,
+  CocartesianNAryCategory,
+  CocartesianSemigroupalCategory,
+  Distribution,
+  DistributionNAry,
+  Member,
+  SemigroupalCategory,
+  SinkNAryNamed,
+}
+import libretto.lambda.util.{Exists, SourcePos, TypeEq, Validated}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Validated.{Valid, invalid}
 import scala.annotation.tailrec
@@ -129,6 +138,19 @@ object -⚬ {
       override def either[A, B, C](f: A -⚬ C, g: B -⚬ C): (A |+| B) -⚬ C = Regular(EitherF(f, g))
     }
 
+  val cocatN: CocartesianNAryCategory[-⚬, OneOf, ||, ::] =
+    new CocartesianNAryCategory[-⚬, OneOf, ||, ::] {
+      override def inject[Label, A, Cases](
+        i: Member[||, ::, Label, A, Cases],
+      ): A -⚬ OneOf[Cases] =
+        Regular(OneOfInject(i))
+
+      override def handle[Cases, R](
+        handlers: SinkNAryNamed[-⚬, ||, ::, Cases, R],
+      ): OneOf[Cases] -⚬ R =
+        Regular(OneOfHandle(handlers))
+    }
+
   val distribution: Distribution[-⚬, |*|, |+|] =
     new Distribution[-⚬, |*|, |+|] {
       import cocat.{either, injectL, injectR}
@@ -141,6 +163,22 @@ object -⚬ {
 
       override def distRL[A, B, C]: ((A |+| B) |*| C) -⚬ ((A |*| C) |+| (B |*| C)) =
         (𝒞.swap > distLR) > either(𝒞.swap > injectL, 𝒞.swap > injectR)
+    }
+
+  val distributionN: DistributionNAry[-⚬, |*|, OneOf, ||, ::] =
+    new DistributionNAry[-⚬, |*|, OneOf, ||, ::] {
+      override val cat: SemigroupalCategory[-⚬, |*|] =
+        𝒞
+
+      override def distLR[A, Cases](
+        ev: DistributionNAry.DistLR[|*|, ||, ::, A, Cases],
+      ): (A |*| OneOf[Cases]) -⚬ OneOf[ev.Out] =
+        Regular(DistributeNAryLR(ev))
+
+      override def distRL[B, Cases](
+        ev: DistributionNAry.DistRL[|*|, ||, ::, B, Cases],
+      ): (OneOf[Cases] |*| B) -⚬ OneOf[ev.Out] =
+        Regular(DistributeNAryRL(ev))
     }
 
   import cocat.*
@@ -171,6 +209,7 @@ object -⚬ {
             case AndThen(f, g) => AndThen(fromBlueprint(f), fromBlueprint(g))
             case Par(f, g) => Par(fromBlueprint(f), fromBlueprint(g))
             case EitherF(f, g) => EitherF(fromBlueprint(f), fromBlueprint(g))
+            case OneOfHandle(hs) => OneOfHandle(hs.translate([x, y] => h => fromBlueprint(h)))
             case Choice(f, g) => Choice(fromBlueprint(f), fromBlueprint(g))
             case RecFun(f) => RecFun(fromBlueprint(f))
             case c: CaptureIntoSub[arr, x, a, b] =>
@@ -228,6 +267,44 @@ object -⚬ {
               case (Some(g), None   ) => Some(distLR[SXY, a1, a2] > either(g, 𝒞.elimFst(ignoreSub) > f.g))
               case (None   , Some(h)) => Some(distLR[SXY, a1, a2] > either(𝒞.elimFst(ignoreSub) > f.f, h))
               case (Some(g), Some(h)) => Some(distLR[SXY, a1, a2] > either(g, h))
+          case f: OneOfHandle[arr, cases, r] =>
+            type Arr[P, Q] = Either[P -⚬ Q, (Sub[X, Y] |*| P) -⚬ Q]
+            val hs = f.handlers.translate[Arr]([x, y] => (h: x -⚬ y) => elimSelfRef(ref, h).toRight(h))
+            if (hs.forall([x, y] => h => h.isLeft)) {
+              None
+            } else {
+              val hs1 =
+                hs.translate[[x, y] =>> (Sub[X, Y] |*| x) -⚬ y](
+                  [x, y] => h => h match {
+                    case Right(h) => h
+                    case Left(h) => 𝒞.elimFst(ignoreSub) > h
+                  }
+                )
+
+              def go[Ps](
+                hs: SinkNAryNamed[[p, q] =>> (Sub[X, Y] |*| p) -⚬ q, ||, ::, Ps, B],
+              ): Exists[[Qs] =>> (
+                DistributionNAry.DistLR[|*|, ||, ::, Sub[X, Y], Ps] { type Out = Qs },
+                SinkNAryNamed[-⚬, ||, ::, Qs, B],
+              )] =
+                hs match
+                  case s: SinkNAryNamed.Single[arr, sep, of, l, p, b] =>
+                    Exists((
+                      DistributionNAry.DistLR.Single[|*|, ||, ::, Sub[X, Y], l, p](s.label),
+                      SinkNAryNamed.Single(s.label, s.h)
+                    ))
+                  case s: SinkNAryNamed.Snoc[arr, sep, of, init, l, z, b] =>
+                    go(s.init) match
+                      case Exists.Some((d, init)) =>
+                        Exists((
+                          DistributionNAry.DistLR.Snoc[|*|, ||, ::, Sub[X, Y], init, l, z, d.Out](d, s.label),
+                          SinkNAryNamed.Snoc(init, s.label, s.last)
+                        ))
+
+              go(hs1) match
+                case Exists.Some((d, s)) =>
+                  Some(distributionN.distLR(d) > cocatN.handle(s))
+            }
           case f: Choice[arr, a, b1, b2] =>
             (elimSelfRef(ref, f.f), elimSelfRef(ref, f.g)) match
               case (None   , None   ) => None

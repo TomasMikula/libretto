@@ -1,6 +1,6 @@
 package libretto.scaletto.impl
 
-import libretto.lambda.Member
+import libretto.lambda.{DistributionNAry, Member, SinkNAryNamed}
 import libretto.lambda.util.Applicative
 import scala.concurrent.duration.FiniteDuration
 
@@ -19,6 +19,7 @@ sealed trait Fun[+ ->[_, _], A, B] {
       case AndThen(f, g) => G.map2(h(f), h(g)) { AndThen(_, _) }
       case Par(f1, f2) => G.map2(h(f1), h(f2)) { Par(_, _) }
       case EitherF(f, g) => G.map2(h(f), h(g)) { EitherF(_, _) }
+      case OneOfHandle(hs) => G.map(hs.translateA[->>, G]([x, y] => f => h(f))) { OneOfHandle(_) }
       case Choice(f, g) => G.map2(h(f), h(g)) { Choice(_, _) }
       case c: CaptureIntoSub[arr, x, a, b] => G.map2(h(c.discardCapture), h(c.splitCapture)) { CaptureIntoSub[->>, x, a, b](_, _) }
       case RecFun(f) => h(f).map { RecFun(_) }
@@ -33,6 +34,7 @@ sealed trait Fun[+ ->[_, _], A, B] {
       case AndThen(f, g) => h(f) <> h(g)
       case Par(f1, f2) => h(f1) <> h(f2)
       case EitherF(f, g) => h(f) <> h(g)
+      case OneOfHandle(hs) => hs.foldSemigroup([x, y] => f => h(f), M.combine)
       case Choice(f, g) => h(f) <> h(g)
       case CaptureIntoSub(dis, spl) => h(dis) <> h(spl)
       case RecFun(f) => h(f)
@@ -56,6 +58,10 @@ object Fun {
     f: A -> C,
     g: B -> C,
   ) extends Fun[->, A |+| B, C]
+
+  case class OneOfHandle[->[_, _], Cases, R](
+    handlers: SinkNAryNamed[->, ||, ::, Cases, R]
+  ) extends Fun[->, OneOf[Cases], R]
 
   case class Choice[->[_, _], A, B, C](
     f: A -> B,
@@ -83,9 +89,6 @@ object Fun {
   case class InjectR[A, B]() extends Leaf[B, A |+| B]
   case class Absurd[A]() extends Leaf[Void, A]
   case class OneOfInject[Label, A, Cases](i: Member[||, ::, Label, A, Cases]) extends Leaf[A, OneOf[Cases]]
-  case class OneOfPeel[Init, Label, Z]() extends Leaf[OneOf[Init || (Label :: Z)], OneOf[Init] |+| Z]
-  case class OneOfUnpeel[Init, Label, Z]() extends Leaf[OneOf[Init] |+| Z, OneOf[Init || (Label :: Z)]]
-  case class OneOfExtractSingle[Lbl, A]() extends Leaf[OneOf[Lbl :: A], A]
   case class ChooseL[A, B]() extends Leaf[A |&| B, A]
   case class ChooseR[A, B]() extends Leaf[A |&| B, B]
   case class PingF() extends Leaf[One, Ping]
@@ -110,6 +113,12 @@ object Fun {
   case class NotifyChoice[A, B]() extends Leaf[Pong |*| (A |&| B), A |&| B]
   case class InjectLOnPing[A, B]() extends Leaf[Ping |*| A, A |+| B]
   case class ChooseLOnPong[A, B]() extends Leaf[A |&| B, Pong |*| A]
+  case class DistributeNAryLR[A, Cases, ACases](
+    dist: DistributionNAry.DistLR[|*|, ||, ::, A, Cases] { type Out = ACases },
+  ) extends Leaf[A |*| OneOf[Cases], OneOf[ACases]]
+  case class DistributeNAryRL[B, Cases, BCases](
+    dist: DistributionNAry.DistRL[|*|, ||, ::, B, Cases] { type Out = BCases },
+  ) extends Leaf[OneOf[Cases] |*| B, OneOf[BCases]]
   case class DistributeL[A, B, C]() extends Leaf[A |*| (B |+| C), (A |*| B) |+| (A |*| C)]
   case class CoDistributeL[A, B, C]() extends Leaf[(A |*| B) |&| (A |*| C), A |*| (B |&| C)]
   case class RInvertSignal() extends Leaf[Done |*| Need, One]

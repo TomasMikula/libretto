@@ -42,4 +42,17 @@ object Applicative {
     as match
       case Nil     => F.pure(Nil)
       case a :: as => F.map2(f(a), traverseList(as)(f))(_ :: _)
+
+  given Applicative[Option] with {
+    override def map[A, B](fa: Option[A], f: A => B): Option[B] =
+      fa.map(f)
+
+    override def pure[A](a: A): Option[A] =
+      Some(a)
+
+    override def zip[A, B](fa: Option[A], fb: Option[B]): Option[(A, B)] =
+      (fa, fb) match
+        case (Some(a), Some(b)) => Some((a, b))
+        case _                  => None
+  }
 }

@@ -376,16 +376,7 @@ object FreeScaletto extends Scaletto {
   }
 
   override val OneOf: EnumModule[-⚬, |*|, OneOf, ||, ::] =
-    EnumModule.fromBinarySums[-⚬, |*|, |+|, OneOf, ||, ::](
-      inj = [Label, A, Cases] => (i: Member[||, ::, Label, A, Cases]) => Regular(OneOfInject(i)),
-      peel = [Init, Label, Z] => DummyImplicit ?=> Regular(OneOfPeel()),
-      unpeel = [Init, Label, Z] => DummyImplicit ?=> Regular(OneOfUnpeel()),
-      extract = [Label, A] => DummyImplicit ?=> Regular(OneOfExtractSingle()),
-    )(using
-      𝒞,
-      cocat,
-      distribution,
-    )
+    EnumModule[-⚬, |*|, OneOf, ||, ::](using 𝒞, cocatN, distributionN)
 
   override val SumPartitioning =
     new CoproductPartitioning[-⚬, |*|, |+|]("InL", "InR")(using 𝒞, cocat, distribution)

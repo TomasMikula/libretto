@@ -52,11 +52,11 @@ trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 
     case class Snoc[F[_], Init, Lbl <: String, A, FInit](
       init: DistF[F, Init] { type Out = FInit },
-      lbl: Lbl,
+      label: Lbl,
     ) extends DistF[F, Init || (Lbl :: A)] {
       override type Out = FInit || (Lbl :: F[A])
       override def operationalize(f: Focus[**, F]): Operationalized[F, Init || (Lbl :: A)]{type Out = FInit || (Lbl :: F[A])} =
-        init.operationalize(f).extend[Lbl, A](lbl)
+        init.operationalize(f).extend[Lbl, A](label)
 
       override def fold[H[_[_], _, _]](
         caseSingle: [LblX <: String, X] => ((LblX :: X) =:= (Init || Lbl :: A)) ?=> Single[F, LblX, X] => H[F, LblX :: X, LblX :: F[X]],
@@ -303,6 +303,13 @@ object DistributionNAry {
       DistRL.Unnamed[**, ∙, Nil, B, X] { type Out = Y },
       DropNames[||, ::, ∙, Nil, Out, Y],
     )]]
+
+    def distributeOver[N, I](
+      m: Member[||, ::, N, I, Cases],
+    )(using
+      BiInjective[||],
+      BiInjective[::],
+    ): Member[||, ::, N, I ** B, Out]
   }
 
   object DistRL {
@@ -321,6 +328,18 @@ object DistributionNAry {
           DistRL.Unnamed.Single[**, ∙, Nil, B, A](),
           DropNames.Single(),
         )))
+
+      override def distributeOver[N, I](
+        m: Member[||, ::, N, I, Lbl :: A],
+      )(using
+        BiInjective[||],
+        BiInjective[::],
+      ): Member[||, ::, N, I ** B, Out] =
+        Member.asSingle(m) match
+          case (lbl, TypeEq(Refl()), TypeEq(Refl())) =>
+            summon[N =:= Lbl]
+            summon[I =:= A]
+            Member.Single[||, ::, N, I ** B](lbl)
     }
 
     case class Snoc[**[_, _], ||[_, _], ::[_, _], B, Init, Lbl <: String, Z, BInit](
@@ -342,6 +361,19 @@ object DistributionNAry {
               y.inInit[Lbl, Z ** B],
             )))
         }
+
+      override def distributeOver[N, I](
+        m: Member[||, ::, N, I, Init || Lbl :: Z],
+      )(using
+        BiInjective[||],
+        BiInjective[::],
+      ): Member[||, ::, N, I ** B, Out] =
+        Member.asMultiple(m) match
+          case Left((lbl, TypeEq(Refl()), TypeEq(Refl()))) =>
+            Member.InLast(lbl)
+          case Right(m1) =>
+            init.distributeOver(m1).inInit
+
     }
 
     sealed trait Unnamed[**[_, _], ∙[_, _], Nil, D, Cases] {
