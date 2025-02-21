@@ -20,6 +20,32 @@ class MutualRecursionTests extends ScalatestScalettoTestSuite {
     import puroLib.{*, given}
     import scalettoLib.{*, given}
 
+    def isEven_(
+      isOdd: UInt31 -⚬ Bool,
+    ): UInt31 -⚬ Bool =
+      λ { n =>
+        switch(UInt31.decrement(n))
+          .is { case InR(n0)   => isOdd(n0) }
+          .is { case InL(done) => done |> Bool.constTrue }
+          .end
+      }
+
+    def isOdd_(
+      isEven: UInt31 -⚬ Bool,
+    ): UInt31 -⚬ Bool =
+      λ { n =>
+        switch(UInt31.decrement(n))
+          .is { case InR(n0)   => isEven(n0) }
+          .is { case InL(done) => done |> Bool.constFalse }
+          .end
+      }
+
+    val isEven: UInt31 -⚬ Bool =
+      rec { self => isEven_(isOdd_(self)) }
+
+    val isOdd: UInt31 -⚬ Bool =
+      rec { self => isOdd_(isEven_(self)) }
+
     /** A non-empty list of `A`'s, followed by a terminator of type `T`. */
     type TerminatedNEL[A, T] = Rec[[X] =>> A |*| (T |+| X)]
 
@@ -100,6 +126,13 @@ class MutualRecursionTests extends ScalatestScalettoTestSuite {
       }
 
     List(
+      "isEven(42)" -> TestCase
+        .interactWith { UInt31(42) > isEven > unliftBoolean }
+        .via { port =>
+          port
+            .expectVal
+            .flatMap(Outcome.assertTrue(_))
+        },
       "sigmas (a mutually recursive function)" -> TestCase
         .interactWith[Val[scala.::[String]]] {
           def σ(using SourcePos, LambdaContext)(s: String): $[Val[String]] =
