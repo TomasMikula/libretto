@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-ThisBuild / scalaVersion := "3.6.3"
+ThisBuild / scalaVersion := "3.6.4"
 
 ThisBuild / organization := "dev.continuously.libretto"
 
@@ -52,7 +52,7 @@ releaseProcess := Seq[ReleaseStep](
   pushChanges,
 )
 
-val ScalatestVersion = "3.2.16"
+val ScalatestVersion = "3.2.19"
 val ZioVersion = "2.1.16"
 val ZioJsonVersion = "0.7.39"
 val ZioHttpVersion = "3.0.1"
