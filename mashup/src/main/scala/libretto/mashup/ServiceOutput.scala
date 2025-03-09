@@ -148,62 +148,20 @@ object ServiceOutput {
   extension (zpath: ZPath) {
     def toPath: Path =
       zpath match {
-        case ZPath(segments) =>
-          if (segments.isEmpty) {
-            Path.Empty
-          } else {
-            val segs = segments.head match {
-              case ZPath.Segment.Root => segments.tail
-              case _                  => segments
-            }
-            val revSegs = segs.reverseIterator.toList match {
-              case ZPath.Segment.Text("") :: ZPath.Segment.Root :: t =>
-                ZPath.Segment.Root :: t
-              case ZPath.Segment.Text("") :: t =>
-                ZPath.Segment.Root :: t
-              case other =>
-                other
-            }
-            revSegs match {
-              case Nil =>
-                Path.Empty
-              case last :: revInit =>
-                val (revInit1, lastSegment) =
-                  last match {
-                    case ZPath.Segment.Text(s) =>
-                      // we know that `s` is non-empty
-                      (revInit, Path.LastSegment.NonEmpty(Path.segment(s)))
-                    case ZPath.Segment.Root =>
-                      revInit match {
-                        case Nil | ZPath.Segment.Root :: _ =>
-                          (revInit, Path.LastSegment.SlashTerminated(Path.segment("")))
-                        case ZPath.Segment.Text(s) :: revInit1 =>
-                          (revInit1, Path.LastSegment.SlashTerminated(Path.segment(s)))
-                      }
-                  }
-
-                @scala.annotation.tailrec
-                def go(revInit: List[ZPath.Segment], acc: List[Path.Segment], last: Path.LastSegment): Path.NonEmpty =
-                  revInit match {
-                    case Nil =>
-                      Path.NonEmpty(acc, last)
-                    case seg :: revInit1 =>
-                      seg match {
-                        case ZPath.Segment.Text(s) =>
-                          go(revInit1, Path.segment(s) :: acc, last)
-                        case ZPath.Segment.Root =>
-                          revInit1 match {
-                            case Nil | ZPath.Segment.Root :: _ =>
-                              go(revInit1, Path.segment("") :: acc, last)
-                            case ZPath.Segment.Text(s) :: revInit2 =>
-                              go(revInit2, Path.segment(s) :: acc, last)
-                          }
-                      }
-                  }
-
-                go(revInit1, Nil, lastSegment)
-            }
-          }
+        case ZPath(flags, segments) =>
+          segments.lastOption match
+            case None =>
+              Path.Empty
+            case Some(last) =>
+              val init = segments.init.iterator.map(Path.segment(_)).toList
+              val lastSeg = Path.segment(last)
+              Path.NonEmpty(
+                init,
+                if (zpath.hasTrailingSlash)
+                  Path.LastSegment.SlashTerminated(lastSeg)
+                else
+                  Path.LastSegment.NonEmpty(lastSeg)
+              )
       }
   }
 }

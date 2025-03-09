@@ -8,9 +8,9 @@ import zio.json.ast.Json
 import zio.http.{Client, Request, URL, Method}
 
 sealed trait ServiceInput[A] {
-  def handleRequest(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Any, Throwable, Unit]
+  def handleRequest(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Scope, Throwable, Unit]
 
-  def operate(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[Unlimited[A]]): ZIO[Any, Throwable, Unit] =
+  def operate(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[Unlimited[A]]): ZIO[Scope, Throwable, Unit] =
     ZIO
       .suspend { exn.InPort.unlimitedAwaitChoice(port).toZIO }
       .flatMap {
@@ -42,7 +42,7 @@ object ServiceInput {
     baseUri: String,
     client: Client,
   ) extends ServiceInput[A] {
-    override def handleRequest(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Any, Throwable, Unit] =
+    override def handleRequest(using rt: Runtime, exn: rt.Execution)(port: exn.InPort[A]): ZIO[Scope, Throwable, Unit] =
       api match {
         case RestApi.SingleEndpoint(endpoint) =>
           handleRequestUsingEndpoint(endpoint, port)
@@ -51,7 +51,7 @@ object ServiceInput {
     private def handleRequestUsingEndpoint[I, O](using rt: Runtime, exn: rt.Execution)(
       endpoint: Endpoint[I, O],
       port: exn.InPort[I --> O],
-    ): ZIO[Any, Throwable, Unit] =
+    ): ZIO[Scope, Throwable, Unit] =
       ZIO
         .succeed { exn.InPort.functionInputOutput(port) }
         .flatMap {
@@ -65,7 +65,7 @@ object ServiceInput {
             }
         }
 
-    private def getJson[T](url: String, outputType: JsonType[T])(using rt: Runtime): ZIO[Any, Throwable, rt.Value[T]] =
+    private def getJson[T](url: String, outputType: JsonType[T])(using rt: Runtime): ZIO[Scope, Throwable, rt.Value[T]] =
       for {
         url  <- ZIO.fromEither(URL.decode(url))
         _    <- ZIO.logInfo(s"$id: Requesting $url")
@@ -94,7 +94,7 @@ object ServiceInput {
   class Labeled[N <: String & Singleton, T](label: N, base: ServiceInput[T]) extends ServiceInput[N of T] {
     override def handleRequest(using rt: Runtime, exn: rt.Execution)(
       port: exn.InPort[N of T],
-    ): ZIO[Any, Throwable, Unit] =
+    ): ZIO[Scope, Throwable, Unit] =
       base.handleRequest(
         exn.InPort.labeledGet(port)
       )
@@ -103,7 +103,7 @@ object ServiceInput {
   class BinaryChoice[A, B](a: ServiceInput[A], b: ServiceInput[B]) extends ServiceInput[A |&| B] {
     override def handleRequest(using rt: Runtime, exn: rt.Execution)(
       port: exn.InPort[A |&| B],
-    ): ZIO[Any, Throwable, Unit] =
+    ): ZIO[Scope, Throwable, Unit] =
       exn.InPort.choiceAwait(port).toZIO.flatMap {
         case Success(Left(pa))  => a.handleRequest(pa)
         case Success(Right(pb)) => b.handleRequest(pb)

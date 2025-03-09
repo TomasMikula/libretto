@@ -3,7 +3,6 @@ package libretto.mashup
 import java.net.InetSocketAddress
 import zio.http.*
 import zio.{
-  Fiber,
   Promise,
   Queue,
   Scope,
@@ -21,14 +20,14 @@ object ZioHttpServer {
     tail: RequestStream,
   )
 
-  private def makeApp(addr: String): UIO[(UHttpApp, RequestStream)] =
+  private def makeApp(addr: String): UIO[(Route[Scope, Response], RequestStream)] =
     for {
       queue  <- Queue.bounded[Promise[Nothing, NextRequest]](1)
       output <- Promise.make[Nothing, NextRequest]
       _      <- queue.offer(output)
     } yield {
       val app =
-        Http.collectZIO { (req: Request) =>
+        Route.route(RoutePattern.any)(Handler.fromFunctionZIO[(Path, Request)] { case (_, req) =>
           for {
             _    <- ZIO.logInfo(s"Received request at $addr: ${req.url}")
             resp <- Promise.make[Nothing, Response]
@@ -38,7 +37,7 @@ object ZioHttpServer {
             _    <- out.succeed(NextRequest(req, resp, RequestStream(next.await)))
             resp <- resp.await
           } yield resp
-        }
+        })
       (app, RequestStream(output.await))
     }
 
@@ -46,7 +45,7 @@ object ZioHttpServer {
     makeApp(address.toString).flatMap { case (app, requestStream) =>
       Server
         .serve(app)
-        .provide(
+        .provideSome[Scope](
           ZLayer.succeed(Server.Config.default.binding(address)),
           Server.live,
         )

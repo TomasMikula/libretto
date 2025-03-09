@@ -53,9 +53,9 @@ releaseProcess := Seq[ReleaseStep](
 )
 
 val ScalatestVersion = "3.2.16"
-val ZioVersion = "2.0.15"
-val ZioJsonVersion = "0.6.0"
-val ZioHttpVersion = "3.0.0-RC2"
+val ZioVersion = "2.1.16"
+val ZioJsonVersion = "0.7.39"
+val ZioHttpVersion = "3.0.1"
 
 val commonScalacOptions =
   Seq(
