@@ -4,7 +4,7 @@ import java.net.InetSocketAddress
 import libretto.mashup.dsl.{-->, Fun, Unlimited}
 import libretto.mashup.rest.{Endpoint, Path, RestApi}
 import libretto.mashup.ZioHttpServer.{NextRequest, RequestStream}
-import zio.{Promise, Scope, ZIO}
+import zio.{Promise, Ref, Scope, ZIO}
 import zio.http.{Path as ZPath, Request, Response, Status}
 
 sealed trait ServiceOutput[A] {
@@ -18,9 +18,13 @@ sealed trait ServiceOutput[A] {
 
 object ServiceOutput {
   class Rest[A](
+    ownerServiceName: String,
+    boundAt: InetSocketAddress,
     api: RestApi[A],
     requestStream: RequestStream,
   ) extends ServiceOutput[A] {
+
+    private val id = s"$ownerServiceName REST server @ $boundAt"
 
     override def operate(using
       rt: Runtime,
@@ -36,21 +40,49 @@ object ServiceOutput {
     )(
       requestStream: RequestStream,
       port: exn.OutPort[Unlimited[A]],
-    ): ZIO[Any, Throwable, Nothing] =
-      requestStream.next.flatMap {
-        case NextRequest(req, resp, tail) =>
-          matchRequest(req) match {
-            case Some(requestMatch) =>
-              import requestMatch.{adapt, input, outputType}
-              val (pHead, pTail) = exn.OutPort.unlimitedUncons(port)
-              val (pi, po) = exn.OutPort.functionInputOutput(exn.OutPort.map(pHead)(adapt))
-              input.feedTo(pi)
-              outputType.extractResponse(po).toZIO.flatMap(resp.succeed) &> operate(tail, pTail)
-            case None =>
-              resp.succeed(Response.status(Status.NotFound)) *>
-              operate(tail, port)
-          }
-      }
+    ): ZIO[Any, Throwable, Nothing] = {
+      def loop(
+        requestStream: RequestStream,
+        port: exn.OutPort[Unlimited[A]],
+        requestCounter: Ref[Long],
+      ): ZIO[Any, Throwable, Nothing] =
+        ZIO.logInfo(s"$id: waiting for next request") *>
+        requestStream.next.flatMap {
+          case NextRequest(req, resp, tail) =>
+            requestCounter
+              .updateAndGet(_ + 1)
+              .flatMap { reqNo =>
+                ZIO.logInfo(s"$id: Incoming request no. $reqNo: ${req.url}") *>
+                (matchRequest(req) match {
+                  case Some(requestMatch) =>
+                    import requestMatch.{adapt, input, outputType}
+                    ZIO.logInfo(s"$id: Request $reqNo understood, passing to Mashup Runtime") *>
+                    ZIO.succeed {
+                      val (pHead, pTail) = exn.OutPort.unlimitedUncons(port)
+                      val (pi, po) = exn.OutPort.functionInputOutput(exn.OutPort.map(pHead)(adapt))
+                      input.feedTo(pi)
+                      (outputType.extractResponse(po), pTail)
+                    }
+                      .<* { ZIO.logInfo(s"$id: Awaiting result of request $reqNo from Mashup Runtime and simultaneously accepting new requests.") }
+                      .flatMap { case (asyncResp, pTail) =>
+                        val awaitResult =
+                          asyncResp.toZIO.flatMap { res =>
+                            ZIO.logInfo(s"$id: Request $reqNo: Result received from Mashup Runtime") *>
+                            resp.succeed(res)
+                          }
+                        awaitResult &> loop(tail, pTail, requestCounter)
+                      }
+                  case None =>
+                    ZIO.logInfo(s"$id: Request $reqNo unrecognized, returning ${Status.NotFound}") *>
+                    resp.succeed(Response.status(Status.NotFound)) *>
+                    loop(tail, port, requestCounter)
+                })
+              }
+        }
+
+      Ref.make(0L)
+        .flatMap(loop(requestStream, port, _))
+    }
 
     private def matchRequest(req: Request)(using rt: Runtime): Option[RequestMatch[rt.type, A]] =
       api match {
@@ -100,13 +132,17 @@ object ServiceOutput {
     }
   }
 
-  def initialize[A](blueprint: Output[A]): ZIO[Scope, Throwable, ServiceOutput[A]] =
+  def initialize[A](
+    ownerServiceName: String,
+    blueprint: Output[A],
+  ): ZIO[Scope, Throwable, ServiceOutput[A]] =
     blueprint match {
       case Output.RestApiAt(api, host, port) =>
         for {
           addr          <- ZIO.attemptBlocking(InetSocketAddress(host, port))
           requestStream <- ZioHttpServer.start(addr)
-        } yield Rest(api, requestStream)
+          _             <- ZIO.logInfo(s"$ownerServiceName: Started HTTP server at $addr")
+        } yield Rest(ownerServiceName, addr, api, requestStream)
     }
 
   extension (zpath: ZPath) {

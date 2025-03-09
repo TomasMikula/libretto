@@ -21,7 +21,7 @@ object ZioHttpServer {
     tail: RequestStream,
   )
 
-  private def makeApp: UIO[(UHttpApp, RequestStream)] =
+  private def makeApp(addr: String): UIO[(UHttpApp, RequestStream)] =
     for {
       queue  <- Queue.bounded[Promise[Nothing, NextRequest]](1)
       output <- Promise.make[Nothing, NextRequest]
@@ -30,6 +30,7 @@ object ZioHttpServer {
       val app =
         Http.collectZIO { (req: Request) =>
           for {
+            _    <- ZIO.logInfo(s"Received request at $addr: ${req.url}")
             resp <- Promise.make[Nothing, Response]
             next <- Promise.make[Nothing, NextRequest]
             out  <- queue.take
@@ -42,7 +43,7 @@ object ZioHttpServer {
     }
 
   def start(address: InetSocketAddress): ZIO[Scope, Throwable, RequestStream] =
-    makeApp.flatMap { case (app, requestStream) =>
+    makeApp(address.toString).flatMap { case (app, requestStream) =>
       Server
         .serve(app)
         .provide(

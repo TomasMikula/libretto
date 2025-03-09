@@ -37,6 +37,7 @@ object ServiceInput {
   }
 
   class Rest[A](
+    id: String,
     api: RestApi[A],
     baseUri: String,
     client: Client,
@@ -61,16 +62,20 @@ object ServiceInput {
                   urlStr <- url.fillParamsFrom(argsPort).toZIO.map(_.toEither).absolve
                   result <- getJson(s"$baseUri/$urlStr", outputType)
                 } yield exn.InPort.valueSupply(resultPort, result)
+            }
         }
-      }
 
     private def getJson[T](url: String, outputType: JsonType[T])(using rt: Runtime): ZIO[Any, Throwable, rt.Value[T]] =
       for {
         url  <- ZIO.fromEither(URL.decode(url))
+        _    <- ZIO.logInfo(s"$id: Requesting $url")
         resp <- client.request(Request.get(url))
+                  .tapError { e => ZIO.logError(s"Client failed with: ${e.getMessage()}").as(e) }
         body <- resp.body.asString
+        _    <- ZIO.logInfo(s"$id: Response status=${resp.status}, body=$body")
         json <- parseJson(body)
         rslt <- readJson(outputType, json)
+        _    <- ZIO.logInfo(s"$id: Success decoding response body")
       } yield rslt
 
     private def parseJson(s: String): ZIO[Any, Throwable, Json] =
@@ -106,7 +111,7 @@ object ServiceInput {
       }
   }
 
-  def initialize[A](blueprint: Input[A]): ZIO[Scope, Throwable, ServiceInput[A]] =
+  def initialize[A](id: String, blueprint: Input[A]): ZIO[Scope, Throwable, ServiceInput[A]] =
     blueprint match {
       case Input.Empty =>
         ZIO.succeed(Empty)
@@ -114,11 +119,11 @@ object ServiceInput {
         Client.default
           .build
           .map(_.get[Client])
-          .map(Rest(api, uri, _))
+          .map(Rest(id, api, uri, _))
       case i: Input.SingleChoice[n, t] =>
-        initialize(i.input).map(Labeled[n, t](i.label, _))
+        initialize(id, i.input).map(Labeled[n, t](i.label, _))
       case i: Input.MultiChoice[x, n, y] =>
-        (initialize(i.base) zipWithPar initialize(i.input).map(Labeled[n, y](i.label, _))) {
+        (initialize(s"$id/l", i.base) zipWithPar initialize(s"$id/r", i.input).map(Labeled[n, y](i.label, _))) {
           (init, last) => BinaryChoice[x, n of y](init, last)
         }
     }

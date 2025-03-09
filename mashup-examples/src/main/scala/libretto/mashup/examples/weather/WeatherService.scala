@@ -45,6 +45,7 @@ object WeatherService {
 
   def start(host: String, port: Int)(using Runtime): ZIO[Scope, Throwable, Unit] =
     Service.runSimple(
+      "WeatherService",
       Input.empty,
       Output.restApiAt(
         restApi,

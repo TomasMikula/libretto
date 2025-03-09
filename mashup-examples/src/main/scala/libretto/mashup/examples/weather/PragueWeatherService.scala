@@ -40,6 +40,7 @@ object PragueWeatherService {
     // Input and output descriptions could possibly be generated
     // from OpenAPI spec or similar.
     Service.runStateless(
+      "PragueWeatherService",
       input(weatherService, temperatureConverter),
       output(host, port),
       blueprint,
