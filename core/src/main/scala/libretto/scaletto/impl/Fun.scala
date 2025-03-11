@@ -19,7 +19,7 @@ sealed trait Fun[+ ->[_, _], A, B] {
       case AndThen(f, g) => G.map2(h(f), h(g)) { AndThen(_, _) }
       case Par(f1, f2) => G.map2(h(f1), h(f2)) { Par(_, _) }
       case EitherF(f, g) => G.map2(h(f), h(g)) { EitherF(_, _) }
-      case OneOfHandle(hs) => G.map(hs.translateA[->>, G]([x, y] => f => h(f))) { OneOfHandle(_) }
+      case OneOfHandle(hs) => G.map(hs.translateA[G, ->>]([x, y] => f => h(f))) { OneOfHandle(_) }
       case Choice(f, g) => G.map2(h(f), h(g)) { Choice(_, _) }
       case c: CaptureIntoSub[arr, x, a, b] => G.map2(h(c.discardCapture), h(c.splitCapture)) { CaptureIntoSub[->>, x, a, b](_, _) }
       case RecFun(f) => h(f).map { RecFun(_) }

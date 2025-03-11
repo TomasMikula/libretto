@@ -281,27 +281,28 @@ object -⚬ {
                   }
                 )
 
-              def go[Ps](
-                hs: SinkNAryNamed[[p, q] =>> (Sub[X, Y] |*| p) -⚬ q, ||, ::, Ps, B],
-              ): Exists[[Qs] =>> (
-                DistributionNAry.DistLR[|*|, ||, ::, Sub[X, Y], Ps] { type Out = Qs },
-                SinkNAryNamed[-⚬, ||, ::, Qs, B],
-              )] =
-                hs match
-                  case s: SinkNAryNamed.Single[arr, sep, of, l, p, b] =>
+              type Arr[ps, b] = Exists[[Qs] =>> (
+                DistributionNAry.DistLR[|*|, ||, ::, Sub[X, Y], ps] { type Out = Qs },
+                SinkNAryNamed[-⚬, ||, ::, Qs, b],
+              )]
+
+              val hs2: Arr[cases, B] =
+                hs1.foldMap[Arr](
+                  baseCase = [Lbl <: String, P] => (lbl, f) =>
                     Exists((
-                      DistributionNAry.DistLR.Single[|*|, ||, ::, Sub[X, Y], l, p](s.label),
-                      SinkNAryNamed.Single(s.label, s.h)
-                    ))
-                  case s: SinkNAryNamed.Snoc[arr, sep, of, init, l, z, b] =>
-                    go(s.init) match
+                      DistributionNAry.DistLR.Single[|*|, ||, ::, Sub[X, Y], Lbl, P](lbl),
+                      SinkNAryNamed.single(lbl, f)
+                    )),
+                  snocCase = [Init, Lbl <: String, P] => (init, lbl, f) =>
+                    init match
                       case Exists.Some((d, init)) =>
                         Exists((
-                          DistributionNAry.DistLR.Snoc[|*|, ||, ::, Sub[X, Y], init, l, z, d.Out](d, s.label),
-                          SinkNAryNamed.Snoc(init, s.label, s.last)
+                          DistributionNAry.DistLR.Snoc[|*|, ||, ::, Sub[X, Y], Init, Lbl, P, d.Out](d, lbl),
+                          SinkNAryNamed.snoc(init, lbl, f)
                         ))
+                )
 
-              go(hs1) match
+              hs2 match
                 case Exists.Some((d, s)) =>
                   Some(distributionN.distLR(d) > cocatN.handle(s))
             }

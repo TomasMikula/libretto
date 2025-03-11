@@ -132,4 +132,12 @@ object SinkNAry {
         case (Exists.Some(Exists.Some((fs, gs, hs))), Exists.Some(Exists.Some((f, g, h)))) =>
           Exists(Exists((fs ∙ f, gs ∙ g, SinkNAry.Snoc(hs, h))))
   }
+
+  def fromProduct[->[_, _], ||[_, _], Nil, As, B](
+    p: Items1.Product[||, Nil, [X] =>> X -> B, As],
+  ): SinkNAry[->, ||, Nil, As, B] =
+    p match
+      case Items1.Product.Single(value) => Single(value)
+      case Items1.Product.Snoc(init, last) => Snoc(fromProduct(init), last)
+
 }

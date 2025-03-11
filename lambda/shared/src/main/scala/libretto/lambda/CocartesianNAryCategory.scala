@@ -54,10 +54,11 @@ object CocartesianNAryCategory {
     override def handle[Cases, R](
       h: SinkNAryNamed[->, ||, ::, Cases, R],
     ): Sum[Cases] -> R =
-      h match
-        case s: SinkNAryNamed.Single[arr, sep, of, lbl, a, r] =>
-          extract[lbl, a] > s.h
-        case s: SinkNAryNamed.Snoc[arr, sep, of, init, lbl, z, r] =>
-          peel[init, lbl, z] > either(handle(s.init), s.last)
+      h.foldMap[[x, y] =>> Sum[x] -> y](
+        baseCase = [Lbl <: String, A] => (_, f) =>
+          extract[Lbl, A] > f,
+        snocCase = [Init, Lbl <: String, A] => (init, l, f) =>
+          peel[Init, Lbl, A] > either(init, f)
+      )
   }
 }

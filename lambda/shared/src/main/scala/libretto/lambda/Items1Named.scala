@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{BiInjective, StaticValue, TypeEq}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, StaticValue, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
 /** Data types for working with non-empty heterogeneous lists of named items of the form
@@ -237,4 +237,144 @@ object Items1Named {
 
   }
 
+  /** A data type that holds all items of the `Items`` list, each wrapped in `F[_]`.
+   *
+   * In other words, an n-ary tuple of *named* values `F[Ai]`,
+   * where `Items = "name1" :: A1 || ... || "nameN" :: An`,
+   * where `||` associates to the left.
+   */
+  sealed trait Product[||[_, _], ::[_, _], F[_], Items] {
+    def get[LblX, X](m: Member[||, ::, LblX, X, Items])(using
+      BiInjective[||],
+      BiInjective[::],
+    ): F[X]
+
+    def dropNames[∙[_, _], Nil]: Exists[[Items0] =>> (
+      DropNames[||, ::, ∙, Nil, Items, Items0],
+      Items1.Product[∙, Nil, F, Items0],
+    )]
+
+    def foldMap[G[_]](
+      baseCase: [Lbl <: String, A] => (Lbl, F[A]) => G[Lbl :: A],
+      snocCase: [Init, Lbl <: String, A] => (G[Init], Lbl, F[A]) => G[Init || Lbl :: A],
+    ): G[Items]
+
+    def asSingle[LblX, X](using Items =:= (LblX :: X), BiInjective[::]): F[X]
+
+    def translate[G[_]](h: [X] => F[X] => G[X]): Product[||, ::, G, Items] =
+      foldMap[[X] =>> Product[||, ::, G, X]](
+        [Lbl <: String, A] => (lbl, fa) => Product.Single(lbl, h(fa)),
+        [Init, Lbl <: String, A] => (init, lbl, fa) => Product.Snoc(init, lbl, h(fa)),
+      )
+
+    def translateA[G[_], H[_]](
+      h: [X] => F[X] => G[H[X]],
+    )(using
+      G: Applicative[G],
+    ): G[Product[||, ::, H, Items]] =
+      foldMap[[X] =>> G[Product[||, ::, H, X]]](
+        [Lbl <: String, A] => (lbl, fa) => h(fa).map(Product.Single(lbl, _)),
+        [Init, Lbl <: String, A] => (init, lbl, fa) => G.map2(init, h(fa))(Product.Snoc(_, lbl, _)),
+
+      )
+
+    def forall(p: [X] => F[X] => Boolean): Boolean =
+      this match
+        case Product.Single(_, fa) => p(fa)
+        case Product.Snoc(init, _, fa) => p(fa) && init.forall(p)
+  }
+
+  object Product {
+    case class Single[||[_, _], ::[_, _], F[_], Lbl <: String, A](
+      label: Lbl,
+      value: F[A],
+    ) extends Product[||, ::, F, Lbl :: A] {
+
+      override def get[LblX, X](m: Member[||, ::, LblX, X, Lbl :: A])(using
+        BiInjective[||],
+        BiInjective[::],
+      ): F[X] =
+        Member.asSingle(m) match
+          case (lbl, TypeEq(Refl()), TypeEq(Refl())) =>
+            value
+
+      override def dropNames[∙[_, _], Nil]: Exists[[Items0] =>> (
+        DropNames[||, ::, ∙, Nil, Lbl :: A, Items0],
+        Items1.Product[∙, Nil, F, Items0],
+      )] =
+        Exists((
+          DropNames.Single(),
+          Items1.Product.Single(value)
+        ))
+
+      override def foldMap[G[_]](
+        caseSingle: [Lbl <: String, A] => (Lbl, F[A]) => G[Lbl :: A],
+        caseSnoc: [Init, Lbl <: String, A] => (G[Init], Lbl, F[A]) => G[Init || Lbl :: A],
+      ): G[Lbl :: A] =
+        caseSingle(label, value)
+
+      override def asSingle[LblX, X](using
+        ev: Lbl :: A =:= LblX :: X,
+        inj: BiInjective[::],
+      ): F[X] =
+        ev match { case BiInjective[::](_, TypeEq(Refl())) => value }
+    }
+
+    case class Snoc[||[_, _], ::[_, _], F[_], Init, Lbl <: String, A](
+      init: Product[||, ::, F, Init],
+      lastName: Lbl,
+      lastElem: F[A],
+    ) extends Product[||, ::, F, Init || Lbl :: A] {
+
+      override def get[LblX, X](m: Member[||, ::, LblX, X, Init || Lbl :: A])(using
+        BiInjective[||],
+        BiInjective[::],
+      ): F[X] =
+        Member.asMultiple(m) match
+          case Left((lbl, TypeEq(Refl()), TypeEq(Refl()))) => lastElem
+          case Right(m1) => init.get(m1)
+
+      override def dropNames[∙[_,_], Nil]: Exists[[Items0] =>> (
+        DropNames[||, ::, ∙, Nil, Init || Lbl :: A, Items0],
+        Items1.Product[∙, Nil, F[_], Items0]
+      )] =
+        init.dropNames[∙, Nil] match
+          case Exists.Some((drop0, sink0)) =>
+            Exists((drop0.inInit[Lbl, A], Items1.Product.Snoc(sink0, lastElem)))
+
+      override def foldMap[G[_]](
+        caseSingle: [Lbl <: String, A] => (Lbl, F[A]) => G[Lbl :: A],
+        caseSnoc: [Init, Lbl <: String, A] => (G[Init], Lbl, F[A]) => G[Init || Lbl :: A],
+      ): G[Init || Lbl :: A] =
+        caseSnoc(
+          init.foldMap(caseSingle, caseSnoc),
+          lastName,
+          lastElem
+        )
+
+      override def asSingle[LblX, X](using (Init || Lbl :: A) =:= LblX :: X, BiInjective[::]): F[X] =
+        // TODO: require evidence that `||` and `::` cannot possibly be equal.
+        throw AssertionError(s"Impossible (A || B) =:= (C :: D), assuming || and :: are distinct class types (are they?).")
+    }
+  }
+
+  /** A data type that holds one items of the `Items`` list, wrapped in `F[_]`. */
+  sealed trait Sum[||[_, _], ::[_, _], F[_], Items] {
+    type Label <: String
+    type Case
+
+    def tag: Member[||, ::, Label, Case, Items]
+    def value: F[Case]
+    def label: Label = tag.label
+  }
+
+  object Sum {
+    case class Value[||[_, _], ::[_, _], F[_], Lbl <: String, A, Items](
+      tag: Member[||, ::, Lbl, A, Items],
+      value: F[A],
+    ) extends Sum[||, ::, F, Items] {
+      override type Label = Lbl
+      override type Case = A
+    }
+  }
 }

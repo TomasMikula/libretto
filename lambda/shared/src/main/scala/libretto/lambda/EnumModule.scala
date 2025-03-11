@@ -261,14 +261,14 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
       HandlersBuilder[Cases, RemainingCases, R]
 
     override def single[Lbl <: String, A, R](label: Lbl, h: A -> R): Handlers[Lbl :: A, R] =
-      SinkNAryNamed.Single(label, h)
+      SinkNAryNamed.single(label, h)
 
     override def snoc[Init, Lbl <: String, Z, R](
       init: Handlers[Init, R],
       label: Lbl,
       last: Z -> R,
     ): Handlers[Init || (Lbl :: Z), R] =
-      SinkNAryNamed.Snoc(init, label, last)
+      SinkNAryNamed.snoc(init, label, last)
 
     override def apply[Cases, R]: Builder[Cases, Cases, R] =
       HandlersBuilder.Empty()
@@ -309,7 +309,7 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
       lbl: Lbl,
       h: Z -> R,
     ): Handlers[Cases, R] =
-      build[Cases, Lbl :: Z, R](b, SinkNAryNamed.Single(lbl, h))
+      build[Cases, Lbl :: Z, R](b, SinkNAryNamed.single(lbl, h))
     def build[Cases, Cases0, R](
       b: HandlersBuilder[Cases, Cases0, R],
       acc: Handlers[Cases0, R],
@@ -318,7 +318,7 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
         case Empty() =>
           acc
         case Snoc(init, lbl, last) =>
-          build(init, SinkNAryNamed.Snoc(acc, lbl, last))
+          build(init, SinkNAryNamed.snoc(acc, lbl, last))
   }
 
   private def distHandlers[F[_], Cases, R, G[_]](
@@ -329,11 +329,11 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
   ): G[Handlers[d.Out, R]] = {
     type H[F[_], Cases, Out] = G[Handlers[Out, R]]
     d.fold[H](
-      [LblX <: String, X] => ev ?=> s => h[X](ev.substituteCo(Member.Single(s.label))).map(SinkNAryNamed.Single(s.label, _)),
+      [LblX <: String, X] => ev ?=> s => h[X](ev.substituteCo(Member.Single(s.label))).map(SinkNAryNamed.single(s.label, _)),
       [Init, LblX <: String, X, FInit] => ev ?=> s => {
         val h2: [Y] => Injector[?, Y, Init] => G[F[Y] -> R] =
           [Y] => i => h[Y](ev.substituteCo(i.inInit))
-        val hLast: G[Handlers[LblX :: F[X], R]] = h[X](ev.substituteCo(Member.InLast(s.label))).map(SinkNAryNamed.Single(s.label, _))
+        val hLast: G[Handlers[LblX :: F[X], R]] = h[X](ev.substituteCo(Member.InLast(s.label))).map(SinkNAryNamed.single(s.label, _))
         val hInit: G[Handlers[FInit, R]]        = distHandlers(s.init, h2)
         G.map2(hInit, hLast)(SinkNAryNamed.snoc(_, s.label, _))
       }

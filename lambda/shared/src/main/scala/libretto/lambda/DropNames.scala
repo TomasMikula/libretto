@@ -3,18 +3,18 @@ package libretto.lambda
 import libretto.lambda.util.{Functional, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
-/** Witnesses that field names are removed from
+/** Witnesses that when item names are removed from non-empty item list
  *
- *   `A = name1 :: A1 || ... || nameN :: An`
+ *   `As = name1 :: A1 || ... || nameN :: An`
  *
- * (and field separator changed from `||` to `∙`),
+ * and field separator is changed from `||` to `∙`,
  * we obtain
  *
- *   `B = Nil ∙ B1 ∙ ... ∙ Bn`
+ *   `Bs = Nil ∙ B1 ∙ ... ∙ Bn`
  *
  */
-sealed trait DropNames[||[_, _], ::[_, _], ∙[_, _], Nil, A, B] {
-  def inInit[NameX, X]: DropNames[||, ::, ∙, Nil, A || NameX :: X, B ∙ X] =
+sealed trait DropNames[||[_, _], ::[_, _], ∙[_, _], Nil, As, Bs] {
+  def inInit[NameX, X]: DropNames[||, ::, ∙, Nil, As || NameX :: X, Bs ∙ X] =
     DropNames.Snoc(this)
 }
 
