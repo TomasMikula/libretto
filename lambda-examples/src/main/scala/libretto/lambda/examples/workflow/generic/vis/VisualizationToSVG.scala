@@ -744,7 +744,7 @@ object VisualizationToSVG {
             Right(Exists(fs ∙ (summon[F[Wire]], last)))
           case Left(fs) =>
             last.isComposite match
-              case Left(ev) => Left(fs ∙ ev)
+              case Left(ev) => Left(fs || ev)
               case Right(_) =>
                 val gs = fs.unravel[G]([y] => h(_))
                 Right(Exists(gs ∙ (summon[F[Wire]], last)))

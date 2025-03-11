@@ -8,7 +8,7 @@ import libretto.lambda.util.Exists
  *    `B = Nil ∙ B1 ∙ ... ∙ Bn`,
  *  where `∙` associates to the left.
  *
- * An arrowized version of [[TupleN]].
+ * An arrowized version of [[Items1.Product]].
  */
 sealed trait ParN[∙[_, _], Nil, ->[_, _], A, B] {
   def size: Int
