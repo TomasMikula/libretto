@@ -41,13 +41,13 @@ class DummyActionExecutor(
             case Exists.Some(Exists.Some(Value.Inject(i, a))) =>
               i match
                 case Member.InLast(label) =>
-                  summon[label.type <:< "Chair"]
+                  summon[label.value.type <:< "Chair"]
                   summon[a.type <:< Value[Val, Unit]]
                   Value.ofEnum[Result]["FailedFulfillment"](
                     Value.ofEnum[FulfillmentFailure]["FailedDelivery"](Value.unit[Val])
                   )
                 case Member.InInit(Member.Single(label)) =>
-                  summon[label.type <:< "Monitor"]
+                  summon[label.value.type <:< "Monitor"]
                   summon[a.type <:< Value[Val, Unit]]
                   Value.ofEnum[Result]["Fulfilled"](Value.unit[Val])
       }

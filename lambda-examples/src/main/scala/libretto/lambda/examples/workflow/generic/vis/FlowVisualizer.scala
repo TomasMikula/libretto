@@ -234,7 +234,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         Exists(Exists((
           lump[A],
           lump[B],
-          Visualization.LabeledBox(EdgeDesc.wire, EdgeDesc.wire, i.i.label + "(_)", fill = Some(Color.rgb(200, 200, 200)))
+          Visualization.LabeledBox(EdgeDesc.wire, EdgeDesc.wire, i.i.label.value + "(_)", fill = Some(Color.rgb(200, 200, 200)))
         )))
 
       case other =>

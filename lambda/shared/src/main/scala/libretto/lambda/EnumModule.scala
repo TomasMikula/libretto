@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Applicative, BiInjective, StaticValue, TypeEq, TypeEqK}
+import libretto.lambda.util.{Applicative, BiInjective, SingletonValue, TypeEq, TypeEqK}
 import libretto.lambda.util.TypeEqK.Refl
 import libretto.lambda.util.unapply.Unapply
 
@@ -47,23 +47,17 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 
   def distRL[B, Cases](using ev: DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[ev.Out]
 
-  def isSingleCase[Lbl <: String, A](label: Lbl): IsCaseOf[Lbl, Lbl :: A] with { type Type = A }
+  given isSingleCase[Lbl <: String, A](using label: SingletonValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A })
 
-  given isSingleCase[Lbl <: String, A](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A }) =
-    isSingleCase[Lbl, A](label.value)
-
-  def isLastCase[Init, Lbl <: String, Z](label: Lbl): (IsCaseOf[Lbl, Init || (Lbl :: Z)] with { type Type = Z })
-
-  given isLastCase[Init, Lbl <: String, Z](using label: StaticValue[Lbl]): (IsCaseOf[Lbl, Init || (Lbl :: Z)] with { type Type = Z }) =
-    isLastCase[Init, Lbl, Z](label.value)
+  given isLastCase[Init, Lbl <: String, Z](using label: SingletonValue[Lbl]): (IsCaseOf[Lbl, Init || (Lbl :: Z)] with { type Type = Z })
 
   given isInitCase[Lbl, Init, ZLbl, Z](using j: IsCaseOf[Lbl, Init]): (IsCaseOf[Lbl, Init || (ZLbl :: Z)] with { type Type = j.Type })
 
-  given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): (DistF[F, Lbl :: A] with { type Out = Lbl :: F[A] })
+  given distFSingle[F[_], Lbl <: String, A](using label: SingletonValue[Lbl]): (DistF[F, Lbl :: A] with { type Out = Lbl :: F[A] })
 
   given distFSnoc[F[_], Init, Label <: String, Z](using
     init: DistF[F, Init],
-    label: StaticValue[Label],
+    label: SingletonValue[Label],
   ): (DistF[F, Init || (Label :: Z)] with { type Out = init.Out || (Label :: F[Z]) })
 
   val Handlers: HandlersModule
@@ -71,11 +65,14 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   trait HandlersModule {
     type Builder[Cases, RemainingCases, R]
 
-    def single[Lbl <: String, A, R](label: Lbl, h: A -> R): Handlers[Lbl :: A, R]
+    def single[Lbl <: String, A, R](
+      label: SingletonValue[Lbl],
+      h: A -> R,
+    ): Handlers[Lbl :: A, R]
 
     def snoc[Init, Lbl <: String, Z, R](
       init: Handlers[Init, R],
-      label: Lbl,
+      label: SingletonValue[Lbl],
       last: Z -> R,
     ): Handlers[Init || (Lbl :: Z), R]
 
@@ -89,17 +86,17 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
       Unit
 
     extension [Cases, Init, ZLbl <: String, Z, R](b: Builder[Cases, Init || (ZLbl :: Z), R])
-      def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= ZLbl)(h: Z -> R): Builder[Cases, Init, R]
+      def caseOf[Lbl](using SingletonValue[Lbl], Lbl =:= ZLbl)(h: Z -> R): Builder[Cases, Init, R]
 
     extension [Cases, Lbl <: String, A, R](b: Builder[Cases, Lbl :: A, R])
-      def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit)(h: A -> R): Handlers[Cases, R]
+      def caseOf[L](using SingletonValue[L], L =:= Lbl, DummyImplicit)(h: A -> R): Handlers[Cases, R]
 
     extension [Init, ZLbl <: String, Z](b: InitialBuilder[Init || (ZLbl :: Z)])
-      def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= ZLbl): [R] => (Z -> R) => Builder[Init || (ZLbl :: Z), Init, R] =
+      def caseOf[Lbl](using SingletonValue[Lbl], Lbl =:= ZLbl): [R] => (Z -> R) => Builder[Init || (ZLbl :: Z), Init, R] =
         [R] => h => apply[Init || (ZLbl :: Z), R].caseOf[Lbl](h)
 
     extension [Lbl <: String, A](b: InitialBuilder[Lbl :: A])
-      def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit): [R] => (A -> R) => Handlers[Lbl :: A, R] =
+      def caseOf[L](using SingletonValue[L], L =:= Lbl, DummyImplicit): [R] => (A -> R) => Handlers[Lbl :: A, R] =
        [R] => h => apply[Lbl :: A, R].caseOf[L](h)
   }
 
@@ -143,7 +140,7 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
       fs match
         case s: ParN.Named.Single[sep, of, arr, lbl, a, b] =>
           summon[Xs =:= (lbl :: a)]
-          val j = isSingleCase[lbl, b](s.label)
+          val j = isSingleCase[lbl, b](using s.label)
           Handlers.single[lbl, a, Enum[Bs]](
             s.label,
             s.value > inject[lbl, Bs](nest(j))
@@ -151,7 +148,7 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
         case s: ParN.Named.Snoc[sep, of, arr, aInit, bInit, lbl, c, d] =>
           summon[Xs =:= (aInit || lbl :: c)]
           summon[Ys =:= (bInit || lbl :: d)]
-          val j = isLastCase[bInit, lbl, d](s.label)
+          val j = isLastCase[bInit, lbl, d](using s.label)
           Handlers.snoc[aInit, lbl, c, Enum[Bs]](
             go[aInit, bInit](
               s.init,
@@ -234,11 +231,11 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
   override def distRL[B, Cases](using ev: DistRL[B, Cases]): (Enum[Cases] ** B) -> Enum[ev.Out] =
     distF[[x] =>> x ** B, Cases](using Focus.fst, ev)
 
-  override def isSingleCase[Lbl <: String, A](label: Lbl): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A }) =
+  override def isSingleCase[Lbl <: String, A](using label: SingletonValue[Lbl]): (IsCaseOf[Lbl, Lbl :: A] with { type Type = A }) =
     Member.Single(label)
 
   override def isLastCase[Init, Lbl <: String, Z](using
-    lbl: Lbl,
+    lbl: SingletonValue[Lbl],
   ): (IsCaseOf[Lbl, Init || (Lbl :: Z)] with { type Type = Z }) =
     Member.InLast(lbl)
 
@@ -247,25 +244,25 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
   ): (IsCaseOf[Lbl, Init || (ZLbl :: Z)] with { type Type = j.Type }) =
     Member.InInit(j)
 
-  override given distFSingle[F[_], Lbl <: String, A](using label: StaticValue[Lbl]): (DistF[F, Lbl :: A] with { type Out = Lbl :: F[A] }) =
-    DistF.Single(label.value)
+  override given distFSingle[F[_], Lbl <: String, A](using label: SingletonValue[Lbl]): (DistF[F, Lbl :: A] with { type Out = Lbl :: F[A] }) =
+    DistF.Single(label)
   override given distFSnoc[F[_], Init, Label <: String, Z](using
     init: DistF[F, Init],
-    label: StaticValue[Label],
+    label: SingletonValue[Label],
   ): (DistF[F, Init || (Label :: Z)] with { type Out = init.Out || (Label :: F[Z]) }) =
-    DistF.Snoc(init, label.value)
+    DistF.Snoc(init, label)
 
   override object Handlers extends HandlersModule {
 
     override opaque type Builder[Cases, RemainingCases, R] =
       HandlersBuilder[Cases, RemainingCases, R]
 
-    override def single[Lbl <: String, A, R](label: Lbl, h: A -> R): Handlers[Lbl :: A, R] =
+    override def single[Lbl <: String, A, R](label: SingletonValue[Lbl], h: A -> R): Handlers[Lbl :: A, R] =
       SinkNAryNamed.single(label, h)
 
     override def snoc[Init, Lbl <: String, Z, R](
       init: Handlers[Init, R],
-      label: Lbl,
+      label: SingletonValue[Lbl],
       last: Z -> R,
     ): Handlers[Init || (Lbl :: Z), R] =
       SinkNAryNamed.snoc(init, label, last)
@@ -274,12 +271,13 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
       HandlersBuilder.Empty()
 
     extension [Cases, Init, ZLbl <: String, Z, R](b: Builder[Cases, Init || (ZLbl :: Z), R])
-      override def caseOf[Lbl](using StaticValue[Lbl], Lbl =:= ZLbl)(h: Z -> R): Builder[Cases, Init, R] =
-        HandlersBuilder.addHandler(b, summon[StaticValue[Lbl]].value: ZLbl, h)
+      override def caseOf[Lbl](using SingletonValue[Lbl], Lbl =:= ZLbl)(h: Z -> R): Builder[Cases, Init, R] =
+        HandlersBuilder.addHandler(b, summon[SingletonValue[Lbl]].as[ZLbl], h)
 
     extension [Cases, Lbl <: String, A, R](b: Builder[Cases, Lbl :: A, R])
-      override def caseOf[L](using StaticValue[L], L =:= Lbl, DummyImplicit)(h: A -> R): Handlers[Cases, R] =
-        HandlersBuilder.build(b, summon[StaticValue[L]].value: Lbl, h)
+      override def caseOf[L](using SingletonValue[L], L =:= Lbl, DummyImplicit)(h: A -> R): Handlers[Cases, R] =
+        val lbl: SingletonValue[Lbl] = summon[L =:= Lbl].substituteCo(summon[SingletonValue[L]])
+        HandlersBuilder.build(b, lbl, h)
   }
 
   override def partitioning[Cases](using ev: CaseList[Cases]): Partitioning[Cases] =
@@ -295,18 +293,18 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
     case class Empty[Cases, R]() extends HandlersBuilder[Cases, Cases, R]
     case class Snoc[Cases, Init, Lbl <: String, Z, R](
       init: HandlersBuilder[Cases, Init || (Lbl :: Z), R],
-      label: Lbl,
+      label: SingletonValue[Lbl],
       last: Z -> R,
     ) extends HandlersBuilder[Cases, Init, R]
     def addHandler[Cases, Init, Lbl <: String, B, R](
       b: HandlersBuilder[Cases, Init || (Lbl :: B), R],
-      label: Lbl,
+      label: SingletonValue[Lbl],
       h: B -> R,
     ): HandlersBuilder[Cases, Init, R] =
       Snoc(b, label, h)
     def build[Cases, Lbl <: String, Z, R](
       b: HandlersBuilder[Cases, Lbl :: Z, R],
-      lbl: Lbl,
+      lbl: SingletonValue[Lbl],
       h: Z -> R,
     ): Handlers[Cases, R] =
       build[Cases, Lbl :: Z, R](b, SinkNAryNamed.single(lbl, h))
@@ -350,7 +348,7 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
       Injector[?, A, Cases]
 
     override def showPartition[A](p: Partition[A]): String =
-      p.label
+      p.label.value
 
     override def reinject[P](p: Injector[?, P, Cases]): P -> Enum[Cases] =
       cocat.inject(p)

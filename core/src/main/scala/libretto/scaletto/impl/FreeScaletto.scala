@@ -3,7 +3,7 @@ package libretto.scaletto.impl
 import libretto.scaletto.Scaletto
 import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, CoproductPartitioning, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Member, Partitioning, PatternMatching, SemigroupalCategory, Shuffled, Sink, SymmetricSemigroupalCategory, Tupled, Var}
 import libretto.lambda.Partitioning.SubFun
-import libretto.lambda.util.{Applicative, Exists, NonEmptyList, SourcePos, StaticValue, Validated}
+import libretto.lambda.util.{Applicative, Exists, NonEmptyList, SingletonValue, SourcePos, Validated}
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.util.Monad.monadEither
 import libretto.util.Async

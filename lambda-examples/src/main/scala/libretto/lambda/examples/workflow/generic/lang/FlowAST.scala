@@ -104,7 +104,7 @@ object FlowAST {
   def injectL[Op[_, _], A, B]: FlowAST[Op, A, A ++ B] = Inject(summon)
   def injectR[Op[_, _], A, B]: FlowAST[Op, B, A ++ B] = Inject(summon)
   def either[Op[_, _], A, B, C](f: FlowAST[Op, A, C], g: FlowAST[Op, B, C]): FlowAST[Op, A ++ B, C] =
-      Handle(SinkNAryNamed.single("Left", f).snoc("Right", g))
+      Handle(SinkNAryNamed.single("Left")(f).snoc("Right")(g))
 
   given cocat[Op[_, _]]: CocartesianSemigroupalCategory[FlowAST[Op, _, _], ++] with {
     override def andThen[A, B, C](f: FlowAST[Op, A, B], g: FlowAST[Op, B, C]): FlowAST[Op, A, C] = FlowAST.andThen(f, g)
@@ -128,10 +128,10 @@ object FlowAST {
   }
 
   def distributeLR[Op[_, _], A, B, C]: FlowAST[Op, A ** (B ++ C), A ** B ++ A ** C] =
-    DistributeNAryLR(DistributionNAry.DistLR.Single("Left").extend("Right"))
+    DistributeNAryLR(DistributionNAry.DistLR.single("Left").snoc("Right"))
 
   def distributeRL[Op[_, _], A, B, C]: FlowAST[Op, (A ++ B) ** C, A ** C ++ B ** C] =
-    DistributeNAryRL(DistributionNAry.DistRL.Single("Left").extend("Right"))
+    DistributeNAryRL(DistributionNAry.DistRL.single("Left").snoc("Right"))
 
   given distr[Op[_, _]]: Distribution[FlowAST[Op, _, _], **, ++] with {
     override val cat: SymmetricSemigroupalCategory[FlowAST[Op, _, _], **] = ssc[Op]

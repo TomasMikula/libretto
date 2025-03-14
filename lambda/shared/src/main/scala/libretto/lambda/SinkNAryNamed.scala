@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Applicative, BiInjective, Exists, TypeEq}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, SingletonValue, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.targetName
 
@@ -14,21 +14,35 @@ opaque type SinkNAryNamed[->[_, _], ||[_, _], ::[_, _], As, B] =
 object SinkNAryNamed {
 
   def single[->[_, _], ||[_, _], ::[_, _], Lbl <: String, A, B](
-    label: Lbl,
+    label: SingletonValue[Lbl],
     h: A -> B,
   ): SinkNAryNamed[->, ||, ::, Lbl :: A, B] =
-    Items1Named.Product.Single(label, h)
+    Items1Named.Product.single(label, h)
+
+  def single[->[_, _], ||[_, _], ::[_, _], A, B](
+    label: String,
+  )(
+    h: A -> B,
+  ): SinkNAryNamed[->, ||, ::, label.type :: A, B] =
+    Items1Named.Product.single(label)(h)
 
   def snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl <: String, Z, R](
     init: SinkNAryNamed[->, ||, ::, Init, R],
-    lastLabel: Lbl,
+    lastLabel: SingletonValue[Lbl],
     last: Z -> R,
   ): SinkNAryNamed[->, ||, ::, Init || Lbl :: Z, R] =
     Items1Named.Product.Snoc(init, lastLabel, last)
 
+  def snoc[->[_, _], ||[_, _], ::[_, _], Init, Z, R](
+    init: SinkNAryNamed[->, ||, ::, Init, R],
+    lastLabel: String,
+    last: Z -> R,
+  ): SinkNAryNamed[->, ||, ::, Init || lastLabel.type :: Z, R] =
+    Items1Named.Product.Snoc(init, SingletonValue(lastLabel), last)
+
   def snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl <: String, Z, R](
     init: SinkNAryNamed[->, ||, ::, Init, R],
-    lastLabel: Lbl,
+    lastLabel: SingletonValue[Lbl],
     last: SinkNAryNamed[->, ||, ::, Lbl :: Z, R]
   )(using
     BiInjective[::],
@@ -44,9 +58,17 @@ object SinkNAryNamed {
 
     @targetName("snocExt")
     def snoc[Lbl <: String, Z](
-      label: Lbl,
+      label: SingletonValue[Lbl],
       last: Z -> B,
     ): SinkNAryNamed[->, ||, ::, As || (Lbl :: Z), B] =
+      SinkNAryNamed.snoc(s, label, last)
+
+    @targetName("snocExt")
+    def snoc[Z](
+      label: String,
+    )(
+      last: Z -> B,
+    ): SinkNAryNamed[->, ||, ::, As || (label.type :: Z), B] =
       SinkNAryNamed.snoc(s, label, last)
 
     def dropNames[∙[_, _], Nil]: Exists[[As0] =>> (
@@ -58,8 +80,8 @@ object SinkNAryNamed {
           Exists((d, SinkNAry.fromProduct(p)))
 
     def foldMap[->>[_, _]](
-      baseCase: [Lbl <: String, A] => (Lbl, A -> B) => (Lbl :: A) ->> B,
-      snocCase: [Init, Lbl <: String, A] => (Init ->> B, Lbl, A -> B) => (Init || Lbl :: A) ->> B,
+      baseCase: [Lbl <: String, A] => (SingletonValue[Lbl], A -> B) => (Lbl :: A) ->> B,
+      snocCase: [Init, Lbl <: String, A] => (Init ->> B, SingletonValue[Lbl], A -> B) => (Init || Lbl :: A) ->> B,
     ): As ->> B =
       s.foldMap[[X] =>> X ->> B](baseCase, snocCase)
 

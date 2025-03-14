@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.Exists
+import libretto.lambda.util.{Exists, SingletonValue}
 
 /** An n-ary tuple of arrows `Ai -> Bi`,
  *  such that
@@ -237,7 +237,7 @@ object ParN {
    */
   sealed trait Named[||[_, _], ::[_, _], ->[_, _], A, B] {
     def extend[Lbl <: String, X, Y](
-      label: Lbl,
+      label: SingletonValue[Lbl],
       f: X -> Y,
     ): ParN.Named[||, ::, ->, A || (Lbl :: X), B || (Lbl :: Y)] =
       ParN.Named.Snoc(this, label, f)
@@ -249,7 +249,7 @@ object ParN {
 
   object Named {
     case class Single[||[_, _], ::[_, _], ->[_, _], Lbl <: String, A, B](
-      label: Lbl,
+      label: SingletonValue[Lbl],
       value: A -> B,
     ) extends ParN.Named[||, ::, ->, Lbl :: A, Lbl :: B] {
       override def translate[->>[_, _]](
@@ -260,7 +260,7 @@ object ParN {
 
     case class Snoc[||[_, _], ::[_, _], ->[_, _], AInit, BInit, Lbl <: String, C, D](
       init: ParN.Named[||, ::, ->, AInit, BInit],
-      label: Lbl,
+      label: SingletonValue[Lbl],
       last: C -> D,
     ) extends ParN.Named[||, ::, ->, AInit || (Lbl :: C), BInit || (Lbl :: D)] {
 

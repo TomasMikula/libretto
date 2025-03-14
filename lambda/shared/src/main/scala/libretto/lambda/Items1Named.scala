@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Applicative, BiInjective, Exists, StaticValue, TypeEq}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, SingletonValue, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
 /** Data types for working with non-empty heterogeneous lists of named items of the form
@@ -31,24 +31,24 @@ object Items1Named {
 
   object Witness {
     case class Single[||[_, _], ::[_, _], Lbl <: String, A](
-      lbl: Lbl,
+      lbl: SingletonValue[Lbl],
     ) extends Witness[||, ::, Lbl :: A]
 
     case class Snoc[||[_, _], ::[_, _], Init, Lbl <: String, A](
       init: Witness[||, ::, Init],
-      lbl: Lbl,
+      lbl: SingletonValue[Lbl],
     ) extends Witness[||, ::, Init || (Lbl :: A)]
 
     given single[||[_, _], ::[_, _], Lbl <: String, A](using
-      lbl: StaticValue[Lbl],
+      lbl: SingletonValue[Lbl],
     ): Witness[||, ::, Lbl :: A] =
-      Single(lbl.value)
+      Single(lbl)
 
     given snoc[||[_, _], ::[_, _], Init, Lbl <: String, A](using
       init: Witness[||, ::, Init],
-      lbl: StaticValue[Lbl],
+      lbl: SingletonValue[Lbl],
     ): Witness[||, ::, Init || (Lbl :: A)] =
-      Snoc(init, lbl.value)
+      Snoc(init, lbl)
   }
 
   /**
@@ -61,7 +61,7 @@ object Items1Named {
 
     final type Type = A
 
-    def label: Label & String
+    def label: SingletonValue[Label & String]
 
     def inInit[BLbl, B]: Member[||, ::, Label, A, Cases || (BLbl :: B)] =
       InInit(this)
@@ -72,21 +72,21 @@ object Items1Named {
 
     protected def testEqualToInHead[I, Lbl2, B](using Cases =:= (I || (Lbl2 :: B)), BiInjective[||], BiInjective[::]): Option[A =:= B]
 
-    private[Member] def asSingle[LB, B](using Cases =:= (LB :: B), BiInjective[::]): (Label, Label =:= LB, A =:= B)
+    private[Member] def asSingle[LB, B](using Cases =:= (LB :: B), BiInjective[::]): (SingletonValue[Label], Label =:= LB, A =:= B)
 
     private[Member] def asMultiple[Init, LZ, Z](using
       Cases =:= (Init || LZ :: Z),
       BiInjective[||],
       BiInjective[::],
     ): Either[
-      (Label, Label =:= LZ, A =:= Z),
+      (SingletonValue[Label], Label =:= LZ, A =:= Z),
       Member[||, ::, Label, A, Init]
     ]
   }
 
   object Member {
     case class InLast[||[_, _], ::[_, _], Init, Label <: String, A](
-      label: Label,
+      label: SingletonValue[Label],
     ) extends Member[||, ::, Label, A, Init || (Label :: A)] {
       override def testEqual[Lbl2, B](
         that: Member[||, ::, Lbl2, B, Init || (Label :: A)],
@@ -112,7 +112,7 @@ object Items1Named {
       override def asSingle[LB, B](using
         (Init || (Label :: A)) =:= (LB :: B),
         BiInjective[::],
-      ): (Label, Label =:= LB, A =:= B) =
+      ): (SingletonValue[Label], Label =:= LB, A =:= B) =
         throw new AssertionError("Impossible if `||` and `::` are different class types.")
 
       override def asMultiple[Init1, LZ, Z](using
@@ -120,7 +120,7 @@ object Items1Named {
         i: BiInjective[||],
         j: BiInjective[::],
       ): Either[
-        (Label, Label =:= LZ, A =:= Z),
+        (SingletonValue[Label], Label =:= LZ, A =:= Z),
         Member[||, ::, Label, A, Init1]
       ] =
         ev match
@@ -129,7 +129,7 @@ object Items1Named {
     }
 
     case class Single[||[_, _], ::[_, _], Label <: String, A](
-      label: Label,
+      label: SingletonValue[Label],
     ) extends Member[||, ::, Label, A, Label :: A] {
       override def testEqual[Lbl2, B](that: Member[||, ::, Lbl2, B, Label :: A])(using BiInjective[||], BiInjective[::]): Option[A =:= B] =
         that.testEqualToSingle[Label, A].map(_.flip)
@@ -147,7 +147,10 @@ object Items1Named {
       ): Option[A =:= B] =
         None
 
-      override def asSingle[LB, B](using ev: Label :: A =:= LB :: B, inj: BiInjective[::]): (Label, Label =:= LB, A =:= B) =
+      override def asSingle[LB, B](using
+        ev: (Label :: A) =:= (LB :: B),
+        inj: BiInjective[::],
+      ): (SingletonValue[Label], Label =:= LB, A =:= B) =
         val BiInjective[::](ev1, ev2) = ev
         (label, ev1, ev2)
 
@@ -155,14 +158,14 @@ object Items1Named {
         (Label :: A) =:= (Init || (LZ :: Z)),
         BiInjective[||],
         BiInjective[::],
-      ): Either[(Label, Label =:= LZ, A =:= Z), Member[||, ::, Label, A, Init]] =
+      ): Either[(SingletonValue[Label], Label =:= LZ, A =:= Z), Member[||, ::, Label, A, Init]] =
         throw AssertionError("Impossible if `||` and `::` are two distinct class types.")
     }
 
     case class InInit[||[_, _], ::[_, _], Label, A, Init, BLbl, B](
       i: Member[||, ::, Label, A, Init],
     ) extends Member[||, ::, Label, A, Init || (BLbl :: B)]:
-      override def label: Label & String = i.label
+      override def label: SingletonValue[Label & String] = i.label
 
       override def testEqual[Lbl2, C](
         that: Member[||, ::, Lbl2, C, Init || (BLbl :: B)],
@@ -190,27 +193,27 @@ object Items1Named {
       override def asSingle[LC, C](using
         (Init || (BLbl :: B)) =:= (LC :: C),
         BiInjective[::],
-      ): (Label, Label =:= LC, A =:= C) =
+      ): (SingletonValue[Label], Label =:= LC, A =:= C) =
         throw new AssertionError("Impossible if `||` and `::` are different class types.")
 
       override def asMultiple[Init1, LZ, Z](using
         ev: (Init || BLbl :: B) =:= (Init1 || LZ :: Z),
         i1: BiInjective[||],
         i2: BiInjective[::],
-      ): Either[(Label, Label =:= LZ, A =:= Z), Member[||, ::, Label, A, Init1]] =
+      ): Either[(SingletonValue[Label], Label =:= LZ, A =:= Z), Member[||, ::, Label, A, Init1]] =
         ev match
           case BiInjective[||](TypeEq(Refl()), BiInjective[::](TypeEq(Refl()), TypeEq(Refl()))) =>
             Right(i)
 
     given singleInjector[||[_, _], ::[_, _], Lbl <: String, A](using
-      label: StaticValue[Lbl],
+      label: SingletonValue[Lbl],
     ): Member[||, ::, Lbl, A, Lbl :: A] =
-      Member.Single(label.value)
+      Member.Single(label)
 
     given lastInjector[||[_, _], ::[_, _], Init, Lbl <: String, A](using
-      lbl: StaticValue[Lbl],
+      lbl: SingletonValue[Lbl],
     ): Member[||, ::, Lbl, A, Init || (Lbl :: A)] =
-      Member.InLast(lbl.value)
+      Member.InLast(lbl)
 
     given initInjector[||[_, _], ::[_, _], Lbl, A, Init, BLbl, B](using
       j: Member[||, ::, Lbl, A, Init],
@@ -221,7 +224,7 @@ object Items1Named {
       m: Member[||, ::, LA, A, LB :: B],
     )(using
       BiInjective[::],
-    ): (LA, LA =:= LB, A =:= B) =
+    ): (SingletonValue[LA], LA =:= LB, A =:= B) =
       m.asSingle
 
     def asMultiple[||[_, _], ::[_, _], LA, A, Init, LZ, Z](
@@ -230,7 +233,7 @@ object Items1Named {
       BiInjective[||],
       BiInjective[::],
     ): Either[
-      (LA, LA =:= LZ, A =:= Z),
+      (SingletonValue[LA], LA =:= LZ, A =:= Z),
       Member[||, ::, LA, A, Init]
     ] =
       m.asMultiple
@@ -255,15 +258,15 @@ object Items1Named {
     )]
 
     def foldMap[G[_]](
-      baseCase: [Lbl <: String, A] => (Lbl, F[A]) => G[Lbl :: A],
-      snocCase: [Init, Lbl <: String, A] => (G[Init], Lbl, F[A]) => G[Init || Lbl :: A],
+      baseCase: [Lbl <: String, A] => (SingletonValue[Lbl], F[A]) => G[Lbl :: A],
+      snocCase: [Init, Lbl <: String, A] => (G[Init], SingletonValue[Lbl], F[A]) => G[Init || Lbl :: A],
     ): G[Items]
 
     def asSingle[LblX, X](using Items =:= (LblX :: X), BiInjective[::]): F[X]
 
     def translate[G[_]](h: [X] => F[X] => G[X]): Product[||, ::, G, Items] =
       foldMap[[X] =>> Product[||, ::, G, X]](
-        [Lbl <: String, A] => (lbl, fa) => Product.Single(lbl, h(fa)),
+        [Lbl <: String, A] => (lbl, fa) => Product.single(lbl, h(fa)),
         [Init, Lbl <: String, A] => (init, lbl, fa) => Product.Snoc(init, lbl, h(fa)),
       )
 
@@ -273,7 +276,7 @@ object Items1Named {
       G: Applicative[G],
     ): G[Product[||, ::, H, Items]] =
       foldMap[[X] =>> G[Product[||, ::, H, X]]](
-        [Lbl <: String, A] => (lbl, fa) => h(fa).map(Product.Single(lbl, _)),
+        [Lbl <: String, A] => (lbl, fa) => h(fa).map(Product.single(lbl, _)),
         [Init, Lbl <: String, A] => (init, lbl, fa) => G.map2(init, h(fa))(Product.Snoc(_, lbl, _)),
 
       )
@@ -286,7 +289,7 @@ object Items1Named {
 
   object Product {
     case class Single[||[_, _], ::[_, _], F[_], Lbl <: String, A](
-      label: Lbl,
+      label: SingletonValue[Lbl],
       value: F[A],
     ) extends Product[||, ::, F, Lbl :: A] {
 
@@ -308,8 +311,8 @@ object Items1Named {
         ))
 
       override def foldMap[G[_]](
-        caseSingle: [Lbl <: String, A] => (Lbl, F[A]) => G[Lbl :: A],
-        caseSnoc: [Init, Lbl <: String, A] => (G[Init], Lbl, F[A]) => G[Init || Lbl :: A],
+        caseSingle: [Lbl <: String, A] => (SingletonValue[Lbl], F[A]) => G[Lbl :: A],
+        caseSnoc: [Init, Lbl <: String, A] => (G[Init], SingletonValue[Lbl], F[A]) => G[Init || Lbl :: A],
       ): G[Lbl :: A] =
         caseSingle(label, value)
 
@@ -320,9 +323,22 @@ object Items1Named {
         ev match { case BiInjective[::](_, TypeEq(Refl())) => value }
     }
 
+    def single[||[_, _], ::[_, _], F[_], A](
+      lbl: String,
+    )(
+      value: F[A],
+    ): Single[||, ::, F, lbl.type, A] =
+      single(SingletonValue(lbl), value)
+
+    def single[||[_, _], ::[_, _], F[_], Lbl <: String, A](
+      lbl: SingletonValue[Lbl],
+      value: F[A],
+    ): Single[||, ::, F, Lbl, A] =
+      Single[||, ::, F, Lbl, A](lbl, value)
+
     case class Snoc[||[_, _], ::[_, _], F[_], Init, Lbl <: String, A](
       init: Product[||, ::, F, Init],
-      lastName: Lbl,
+      lastName: SingletonValue[Lbl],
       lastElem: F[A],
     ) extends Product[||, ::, F, Init || Lbl :: A] {
 
@@ -343,8 +359,8 @@ object Items1Named {
             Exists((drop0.inInit[Lbl, A], Items1.Product.Snoc(sink0, lastElem)))
 
       override def foldMap[G[_]](
-        caseSingle: [Lbl <: String, A] => (Lbl, F[A]) => G[Lbl :: A],
-        caseSnoc: [Init, Lbl <: String, A] => (G[Init], Lbl, F[A]) => G[Init || Lbl :: A],
+        caseSingle: [Lbl <: String, A] => (SingletonValue[Lbl], F[A]) => G[Lbl :: A],
+        caseSnoc: [Init, Lbl <: String, A] => (G[Init], SingletonValue[Lbl], F[A]) => G[Init || Lbl :: A],
       ): G[Init || Lbl :: A] =
         caseSnoc(
           init.foldMap(caseSingle, caseSnoc),
@@ -365,7 +381,7 @@ object Items1Named {
 
     def tag: Member[||, ::, Label, Case, Items]
     def value: F[Case]
-    def label: Label = tag.label
+    def label: Label = tag.label.value
   }
 
   object Sum {
