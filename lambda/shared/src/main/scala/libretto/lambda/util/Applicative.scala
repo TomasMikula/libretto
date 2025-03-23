@@ -43,6 +43,12 @@ object Applicative {
       case Nil     => F.pure(Nil)
       case a :: as => F.map2(f(a), traverseList(as)(f))(_ :: _)
 
+  given applicativeId: Applicative[[A] =>> A] with {
+    override def pure[A](a: A): A = a
+    override def map[A, B](a: A, f: A => B): B = f(a)
+    override def zip[A, B](a: A, b: B): (A, B) = (a, b)
+  }
+
   given Applicative[Option] with {
     override def map[A, B](fa: Option[A], f: A => B): Option[B] =
       fa.map(f)
