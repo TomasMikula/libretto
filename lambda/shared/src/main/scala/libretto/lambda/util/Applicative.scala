@@ -26,6 +26,9 @@ trait Applicative[F[_]] { self =>
 
     infix def zipWith[B, C](fb: F[B])(f: (A, B) => C): F[C] =
       self.map2(fa, fb)(f)
+
+    def widen[B >: A]: F[B] =
+      map(identity)
   }
 }
 
@@ -47,6 +50,20 @@ object Applicative {
     override def pure[A](a: A): A = a
     override def map[A, B](a: A, f: A => B): B = f(a)
     override def zip[A, B](a: A, b: B): (A, B) = (a, b)
+
+    extension [A](a: A) {
+      override def widen[B >: A]: B = a
+    }
+  }
+
+  given applicativeFunction0: Applicative[Function0] with {
+    override def pure[A](a: A): () => A = () => a
+    override def map[A, B](fa: () => A, f: A => B): () => B = () => f(fa())
+    override def zip[A, B](fa: () => A, fb: () => B): () => (A, B) = () => (fa(), fb())
+
+    extension [A](fa: () => A) {
+      override def widen[B >: A]: () => B = fa
+    }
   }
 
   given Applicative[Option] with {
@@ -60,5 +77,9 @@ object Applicative {
       (fa, fb) match
         case (Some(a), Some(b)) => Some((a, b))
         case _                  => None
+
+    extension [A](fa: Option[A]) {
+      override def widen[B >: A]: Option[B] = fa
+    }
   }
 }
