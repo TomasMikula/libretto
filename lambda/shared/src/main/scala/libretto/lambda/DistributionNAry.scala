@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{BiInjective, Exists, SingletonValue, TypeEq}
+import libretto.lambda.util.{BiInjective, Exists, SingletonType, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
 trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
@@ -27,7 +27,7 @@ trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 
   object DistF {
     case class Single[F[_], Lbl <: String, A](
-      label: SingletonValue[Lbl],
+      label: SingletonType[Lbl],
     ) extends DistF[F, Lbl :: A] {
       override type Out = Lbl :: F[A]
       override def operationalize(f: Focus[**, F]): Operationalized[F, Lbl :: A]{type Out = Lbl :: F[A]} =
@@ -52,7 +52,7 @@ trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 
     case class Snoc[F[_], Init, Lbl <: String, A, FInit](
       init: DistF[F, Init] { type Out = FInit },
-      label: SingletonValue[Lbl],
+      label: SingletonType[Lbl],
     ) extends DistF[F, Init || (Lbl :: A)] {
       override type Out = FInit || (Lbl :: F[A])
       override def operationalize(f: Focus[**, F]): Operationalized[F, Init || (Lbl :: A)]{type Out = FInit || (Lbl :: F[A])} =
@@ -73,7 +73,7 @@ trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
     sealed trait Operationalized[F[_], Cases] { self =>
       type Out
       def extend[Lbl <: String, B](
-        lbl: SingletonValue[Lbl],
+        lbl: SingletonType[Lbl],
       ): Operationalized[F, Cases || (Lbl :: B)]{type Out = self.Out || (Lbl :: F[B])}
 
       def compile: F[Enum[Cases]] -> Enum[Out]
@@ -83,7 +83,7 @@ trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
 
       case class Id[Cases]() extends DistF.Operationalized[[x] =>> x, Cases] {
         override type Out = Cases
-        override def extend[ZLbl <: String, Z](zLbl: SingletonValue[ZLbl]): Operationalized[[x] =>> x, Cases || (ZLbl :: Z)]{type Out = Cases || (ZLbl :: Z)} =
+        override def extend[ZLbl <: String, Z](zLbl: SingletonType[ZLbl]): Operationalized[[x] =>> x, Cases || (ZLbl :: Z)]{type Out = Cases || (ZLbl :: Z)} =
           Id[Cases || (ZLbl :: Z)]()
         override def compile: Enum[Cases] -> Enum[Cases] =
           cat.id[Enum[Cases]]
@@ -94,7 +94,7 @@ trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
         dist1: DistLR[A, F2Cases] { type Out = Res },
       ) extends DistF.Operationalized[[x] =>> A ** F2[x], Cases] {
         override type Out = Res
-        override def extend[Lbl <: String, Z](lbl: SingletonValue[Lbl]): Operationalized[[x] =>> A ** F2[x], Cases || (Lbl :: Z)]{type Out = Res || (Lbl :: (A ** F2[Z]))} =
+        override def extend[Lbl <: String, Z](lbl: SingletonType[Lbl]): Operationalized[[x] =>> A ** F2[x], Cases || (Lbl :: Z)]{type Out = Res || (Lbl :: (A ** F2[Z]))} =
           val inner: Operationalized[F2, Cases || (Lbl :: Z)]{type Out = F2Cases || (Lbl :: F2[Z])} =
             distF2.extend[Lbl, Z](lbl)
           val outer: DistLR[A, F2Cases || (Lbl :: F2[Z])]{type Out = Res || (Lbl :: (A ** F2[Z]))} =
@@ -120,7 +120,7 @@ trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
       ) extends DistF.Operationalized[[x] =>> F1[x] ** B, Cases] {
         override type Out = Res
         override def extend[Lbl <: String, Z](
-          lbl: SingletonValue[Lbl],
+          lbl: SingletonType[Lbl],
         ): Operationalized[[x] =>> F1[x] ** B, Cases || (Lbl :: Z)]{type Out = Res || (Lbl :: (F1[Z] ** B))} =
           val inner: Operationalized[F1, Cases || (Lbl :: Z)]{type Out = F1Cases || (Lbl :: F1[Z])} =
             distF1.extend[Lbl, Z](lbl)
@@ -155,14 +155,14 @@ object DistributionNAry {
     type Out
 
     def extend[Lbl <: String, Z](
-      lbl: SingletonValue[Lbl],
+      lbl: SingletonType[Lbl],
     ): DistLR[**, ||, ::, A, Cases || (Lbl :: Z)] { type Out = self.Out || (Lbl :: (A ** Z)) } =
       DistLR.Snoc(this, lbl)
 
     def snoc[Z](
       lbl: String,
     ): DistLR[**, ||, ::, A, Cases || (lbl.type :: Z)] { type Out = self.Out || (lbl.type :: (A ** Z)) } =
-      extend(SingletonValue(lbl))
+      extend(SingletonType(lbl))
 
     def separately[A1, A2](using A =:= (A1 ** A2)): Exists[[A2Cases] =>> Exists[[A12Cases] =>> (
       DistLR[**, ||, ::, A2, Cases] { type Out = A2Cases },
@@ -186,7 +186,7 @@ object DistributionNAry {
 
   object DistLR {
     case class Single[**[_, _], ||[_, _], ::[_, _], A, Lbl <: String, B](
-      label: SingletonValue[Lbl],
+      label: SingletonType[Lbl],
     ) extends DistLR[**, ||, ::, A, Lbl :: B] {
       override type Out = Lbl :: (A ** B)
 
@@ -227,7 +227,7 @@ object DistributionNAry {
 
     case class Snoc[**[_, _], ||[_, _], ::[_, _], A, Init, Lbl <: String, Z, AInit](
       init: DistLR[**, ||, ::, A, Init] { type Out = AInit },
-      lbl: SingletonValue[Lbl],
+      lbl: SingletonType[Lbl],
     ) extends DistLR[**, ||, ::, A, Init || (Lbl :: Z)] {
       override type Out = AInit || (Lbl :: (A ** Z))
 
@@ -276,7 +276,7 @@ object DistributionNAry {
     def single[**[_, _], ||[_, _], ::[_, _], A, B](
       label: String
     ): DistLR[**, ||, ::, A, label.type :: B] { type Out = label.type :: (A ** B) } =
-      Single(SingletonValue(label))
+      Single(SingletonType(label))
 
     sealed trait Unnamed[**[_, _], ∙[_, _], Nil, D, Cases] {
       type Out
@@ -309,14 +309,14 @@ object DistributionNAry {
     type Out
 
     def extend[Lbl <: String, Z](
-      lbl: SingletonValue[Lbl],
+      lbl: SingletonType[Lbl],
     ): DistRL[**, ||, ::, B, Cases || (Lbl :: Z)] { type Out = self.Out || (Lbl :: (Z ** B)) } =
       DistRL.Snoc(this, lbl)
 
     def snoc[Z](
       lbl: String,
     ): DistRL[**, ||, ::, B, Cases || (lbl.type :: Z)] { type Out = self.Out || (lbl.type :: (Z ** B)) } =
-      extend(SingletonValue(lbl))
+      extend(SingletonType(lbl))
 
     def dropNames[∙[_, _], Nil]: Exists[[X] =>> Exists[[Y] =>> (
       DropNames[||, ::, ∙, Nil, Cases, X],
@@ -334,7 +334,7 @@ object DistributionNAry {
 
   object DistRL {
     case class Single[**[_, _], ||[_, _], ::[_, _], B, Lbl <: String, A](
-      label: SingletonValue[Lbl],
+      label: SingletonType[Lbl],
     ) extends DistRL[**, ||, ::, B, Lbl :: A] {
       override type Out = Lbl :: (A ** B)
 
@@ -364,7 +364,7 @@ object DistributionNAry {
 
     case class Snoc[**[_, _], ||[_, _], ::[_, _], B, Init, Lbl <: String, Z, BInit](
       init: DistRL[**, ||, ::, B, Init] { type Out = BInit },
-      lbl: SingletonValue[Lbl],
+      lbl: SingletonType[Lbl],
     ) extends DistRL[**, ||, ::, B, Init || (Lbl :: Z)] {
       override type Out = BInit || (Lbl :: (Z ** B))
 
@@ -399,7 +399,7 @@ object DistributionNAry {
     def single[**[_, _], ||[_, _], ::[_, _], B, A](
       label: String,
     ): DistRL[**, ||, ::, B, label.type :: A] { type Out = label.type :: (A ** B) } =
-      Single(SingletonValue(label))
+      Single(SingletonType(label))
 
     sealed trait Unnamed[**[_, _], ∙[_, _], Nil, D, Cases] {
       type Out

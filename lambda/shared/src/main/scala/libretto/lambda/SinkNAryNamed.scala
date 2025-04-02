@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Applicative, BiInjective, Exists, SingletonValue, TypeEq}
+import libretto.lambda.util.{Applicative, BiInjective, Exists, SingletonType, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.targetName
 
@@ -14,7 +14,7 @@ opaque type SinkNAryNamed[->[_, _], ||[_, _], ::[_, _], As, B] =
 object SinkNAryNamed {
 
   def single[->[_, _], ||[_, _], ::[_, _], Lbl <: String, A, B](
-    label: SingletonValue[Lbl],
+    label: SingletonType[Lbl],
     h: A -> B,
   ): SinkNAryNamed[->, ||, ::, Lbl :: A, B] =
     Items1Named.Product.single(label, h)
@@ -28,7 +28,7 @@ object SinkNAryNamed {
 
   def snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl <: String, Z, R](
     init: SinkNAryNamed[->, ||, ::, Init, R],
-    lastLabel: SingletonValue[Lbl],
+    lastLabel: SingletonType[Lbl],
     last: Z -> R,
   ): SinkNAryNamed[->, ||, ::, Init || Lbl :: Z, R] =
     Items1Named.Product.Snoc(init, lastLabel, last)
@@ -38,11 +38,11 @@ object SinkNAryNamed {
     lastLabel: String,
     last: Z -> R,
   ): SinkNAryNamed[->, ||, ::, Init || lastLabel.type :: Z, R] =
-    Items1Named.Product.Snoc(init, SingletonValue(lastLabel), last)
+    Items1Named.Product.Snoc(init, SingletonType(lastLabel), last)
 
   def snoc[->[_, _], ||[_, _], ::[_, _], Init, Lbl <: String, Z, R](
     init: SinkNAryNamed[->, ||, ::, Init, R],
-    lastLabel: SingletonValue[Lbl],
+    lastLabel: SingletonType[Lbl],
     last: SinkNAryNamed[->, ||, ::, Lbl :: Z, R]
   )(using
     BiInjective[::],
@@ -58,7 +58,7 @@ object SinkNAryNamed {
 
     @targetName("snocExt")
     def snoc[Lbl <: String, Z](
-      label: SingletonValue[Lbl],
+      label: SingletonType[Lbl],
       last: Z -> B,
     ): SinkNAryNamed[->, ||, ::, As || (Lbl :: Z), B] =
       SinkNAryNamed.snoc(s, label, last)
@@ -80,8 +80,8 @@ object SinkNAryNamed {
           Exists((d, SinkNAry.fromProduct(p)))
 
     def foldMap[->>[_, _]](
-      baseCase: [Lbl <: String, A] => (SingletonValue[Lbl], A -> B) => (Lbl :: A) ->> B,
-      snocCase: [Init, Lbl <: String, A] => (Init ->> B, SingletonValue[Lbl], A -> B) => (Init || Lbl :: A) ->> B,
+      baseCase: [Lbl <: String, A] => (SingletonType[Lbl], A -> B) => (Lbl :: A) ->> B,
+      snocCase: [Init, Lbl <: String, A] => (Init ->> B, SingletonType[Lbl], A -> B) => (Init || Lbl :: A) ->> B,
     ): As ->> B =
       s.foldMap[[X] =>> X ->> B](baseCase, snocCase)
 
