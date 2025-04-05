@@ -42,9 +42,13 @@ object Validated {
     Invalid(NonEmptyList(e, Nil))
 
   given applicative[E]: Applicative[Validated[E, _]] with {
-    override def map[A, B](fa: Validated[E, A], f: A => B): Validated[E, B] = fa.map(f)
-    override def zip[A, B](fa: Validated[E, A], fb: Validated[E, B]): Validated[E, (A, B)] = fa zip fb
     override def pure[A](a: A): Validated[E, A] = Valid(a)
+
+    extension [A](fa: Validated[E, A]) {
+      override def map[B](f: A => B): Validated[E, B] = fa.map(f)
+      override def zip[B](fb: Validated[E, B]): Validated[E, (A, B)] = fa zip fb
+
+    }
   }
 
   given monad[E]: Monad[Validated[E, _]] with {

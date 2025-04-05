@@ -2,34 +2,26 @@ package libretto.lambda.util
 
 import scala.annotation.targetName
 
-trait Applicative[F[_]] { self =>
+trait Applicative[F[_]] {
   def pure[A](a: A): F[A]
 
-  def map[A, B](fa: F[A], f: A => B): F[B]
-
-  def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)]
-
-  def map2[A, B, R](fa: F[A], fb: F[B])(f: (A, B) => R): F[R] =
-    map(zip(fa, fb), { case (a, b) => f(a, b) })
-
-  def mapN[A, B, C, R](fa: F[A], fb: F[B], fc: F[C])(f: (A, B, C) => R): F[R] =
-    map2(fa, map2(fb, fc)((b, c) => (a: A) => f(a, b, c)))((a, g) => g(a))
-
   extension [A](fa: F[A]) {
-    @targetName("extMap")
-    infix def map[B](f: A => B): F[B] =
-      self.map(fa, f)
+    infix def map[B](f: A => B): F[B]
 
-    @targetName("extZip")
-    infix def zip[B](fb: F[B]): F[(A, B)] =
-      self.zip(fa, fb)
+    infix def zip[B](fb: F[B]): F[(A, B)]
 
     infix def zipWith[B, C](fb: F[B])(f: (A, B) => C): F[C] =
-      self.map2(fa, fb)(f)
+      (fa zip fb).map { case (a, b) => f(a, b) }
 
     def widen[B >: A]: F[B] =
       map(identity)
   }
+
+  def map2[A, B, R](fa: F[A], fb: F[B])(f: (A, B) => R): F[R] =
+    (fa zipWith fb)(f)
+
+  def mapN[A, B, C, R](fa: F[A], fb: F[B], fc: F[C])(f: (A, B, C) => R): F[R] =
+    map2(fa, map2(fb, fc)((b, c) => (a: A) => f(a, b, c)))((a, g) => g(a))
 }
 
 object Applicative {
@@ -48,37 +40,37 @@ object Applicative {
 
   given applicativeId: Applicative[[A] =>> A] with {
     override def pure[A](a: A): A = a
-    override def map[A, B](a: A, f: A => B): B = f(a)
-    override def zip[A, B](a: A, b: B): (A, B) = (a, b)
 
     extension [A](a: A) {
+      override def map[B](f: A => B): B = f(a)
+      override def zip[B](b: B): (A, B) = (a, b)
       override def widen[B >: A]: B = a
     }
   }
 
   given applicativeFunction0: Applicative[Function0] with {
     override def pure[A](a: A): () => A = () => a
-    override def map[A, B](fa: () => A, f: A => B): () => B = () => f(fa())
-    override def zip[A, B](fa: () => A, fb: () => B): () => (A, B) = () => (fa(), fb())
 
     extension [A](fa: () => A) {
+      override def map[B](f: A => B): () => B = () => f(fa())
+      override def zip[B](fb: () => B): () => (A, B) = () => (fa(), fb())
       override def widen[B >: A]: () => B = fa
     }
   }
 
   given Applicative[Option] with {
-    override def map[A, B](fa: Option[A], f: A => B): Option[B] =
-      fa.map(f)
 
     override def pure[A](a: A): Option[A] =
       Some(a)
 
-    override def zip[A, B](fa: Option[A], fb: Option[B]): Option[(A, B)] =
-      (fa, fb) match
-        case (Some(a), Some(b)) => Some((a, b))
-        case _                  => None
-
     extension [A](fa: Option[A]) {
+      override def map[B](f: A => B): Option[B] = fa.map(f)
+
+      override def zip[B](fb: Option[B]): Option[(A, B)] =
+        (fa, fb) match
+          case (Some(a), Some(b)) => Some((a, b))
+          case _                  => None
+
       override def widen[B >: A]: Option[B] = fa
     }
   }
