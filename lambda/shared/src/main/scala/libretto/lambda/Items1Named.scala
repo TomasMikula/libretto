@@ -1,6 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.util.{Applicative, BiInjective, Exists, SingletonType, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 
 /** Data types for working with non-empty heterogeneous lists of named items of the form
@@ -252,6 +253,8 @@ object Items1Named {
       BiInjective[::],
     ): F[X]
 
+    def getOption(item: String): Option[Exists[[X] =>> (Member[||, ::, item.type, X, Items], F[X])]]
+
     def dropNames[∙[_, _], Nil]: Exists[[Items0] =>> (
       DropNames[||, ::, ∙, Nil, Items, Items0],
       Items1.Product[∙, Nil, F, Items0],
@@ -301,6 +304,14 @@ object Items1Named {
           case (lbl, TypeEq(Refl()), TypeEq(Refl())) =>
             value
 
+      override def getOption(item: String): Option[Exists[[X] =>> (Member[||, ::, item.type, X, Lbl :: A], F[X])]] =
+        if (item == label.value)
+          summon[Lbl =:= Lbl].asInstanceOf[item.type =:= Lbl] match
+            case TypeEq(Refl()) =>
+              Some(Exists((Member.Single(label), value)))
+        else
+          None
+
       override def dropNames[∙[_, _], Nil]: Exists[[Items0] =>> (
         DropNames[||, ::, ∙, Nil, Lbl :: A, Items0],
         Items1.Product[∙, Nil, F, Items0],
@@ -349,6 +360,15 @@ object Items1Named {
         Member.asMultiple(m) match
           case Left((lbl, TypeEq(Refl()), TypeEq(Refl()))) => lastElem
           case Right(m1) => init.get(m1)
+
+      override def getOption(item: String): Option[Exists[[X] =>> (Member[||, ::, item.type, X, Init || Lbl :: A], F[X])]] =
+        if (item == lastName.value)
+          summon[Lbl =:= Lbl].asInstanceOf[item.type =:= Lbl] match
+            case TypeEq(Refl()) =>
+              Some(Exists((Member.InLast(lastName), lastElem)))
+        else
+          init.getOption(item)
+            .map { case Indeed((i, a)) => Indeed((i.inInit, a)) }
 
       override def dropNames[∙[_,_], Nil]: Exists[[Items0] =>> (
         DropNames[||, ::, ∙, Nil, Init || Lbl :: A, Items0],
