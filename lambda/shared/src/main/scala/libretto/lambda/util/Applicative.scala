@@ -2,19 +2,14 @@ package libretto.lambda.util
 
 import scala.annotation.targetName
 
-trait Applicative[F[_]] {
+trait Applicative[F[_]] extends Functor[F] {
   def pure[A](a: A): F[A]
 
   extension [A](fa: F[A]) {
-    infix def map[B](f: A => B): F[B]
-
     infix def zip[B](fb: F[B]): F[(A, B)]
 
     infix def zipWith[B, C](fb: F[B])(f: (A, B) => C): F[C] =
-      (fa zip fb).map { case (a, b) => f(a, b) }
-
-    def widen[B >: A]: F[B] =
-      map(identity)
+      (fa zip fb) map { case (a, b) => f(a, b) }
   }
 
   def map2[A, B, R](fa: F[A], fb: F[B])(f: (A, B) => R): F[R] =

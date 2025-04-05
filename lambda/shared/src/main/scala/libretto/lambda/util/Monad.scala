@@ -4,19 +4,19 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.annotation.targetName
 
 /** Witnesses that `F` is a monad in the category of Scala functions. */
-trait Monad[F[_]] {
+trait Monad[F[_]] extends Functor[F] {
   def pure[A](a: A): F[A]
 
   extension [A](fa: F[A]) {
     infix def flatMap[B](f: A => F[B]): F[B]
 
-    infix def map[B](f: A => B): F[B] =
+    override infix def map[B](f: A => B): F[B] =
       flatMap(a => pure(f(a)))
 
-    def *>[B](fb: F[B]): F[B] =
+    infix def *>[B](fb: F[B]): F[B] =
       flatMap(_ => fb)
 
-    def >>[B](fb: => F[B]): F[B] =
+    infix def >>[B](fb: => F[B]): F[B] =
       flatMap(_ => fb)
 
     def void: F[Unit] =
