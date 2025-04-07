@@ -206,17 +206,17 @@ object Items1Named {
           case BiInjective[||](TypeEq(Refl()), BiInjective[::](TypeEq(Refl()), TypeEq(Refl()))) =>
             Right(i)
 
-    given singleInjector[||[_, _], ::[_, _], Lbl <: String, A](using
+    given singleMember[||[_, _], ::[_, _], Lbl <: String, A](using
       label: SingletonType[Lbl],
     ): Member[||, ::, Lbl, A, Lbl :: A] =
       Member.Single(label)
 
-    given lastInjector[||[_, _], ::[_, _], Init, Lbl <: String, A](using
+    given lastMember[||[_, _], ::[_, _], Init, Lbl <: String, A](using
       lbl: SingletonType[Lbl],
     ): Member[||, ::, Lbl, A, Init || (Lbl :: A)] =
       Member.InLast(lbl)
 
-    given initInjector[||[_, _], ::[_, _], Lbl, A, Init, BLbl, B](using
+    given initMember[||[_, _], ::[_, _], Lbl, A, Init, BLbl, B](using
       j: Member[||, ::, Lbl, A, Init],
     ): Member[||, ::, Lbl, A, Init || (BLbl :: B)] =
       Member.InInit(j)
