@@ -64,6 +64,9 @@ object Items1Named {
 
     def label: SingletonType[Label & String]
 
+    given typeWitness: A =:= Type =
+      <:<.refl
+
     def inInit[BLbl, B]: Member[||, ::, Label, A, Cases || (BLbl :: B)] =
       InInit(this)
 
