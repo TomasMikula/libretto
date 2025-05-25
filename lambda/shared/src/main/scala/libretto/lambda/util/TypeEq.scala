@@ -1,13 +1,32 @@
 package libretto.lambda.util
 
 /** Type equality that, unlike Scala's `=:=`, can be pattern matched on. */
-sealed trait TypeEq[A, B]
+sealed trait TypeEq[A, B] {
+  def substUpperBounded[U >: A | B, F[_ <: U]](a: F[A]): F[B]
+
+  def liftUpperBounded[U >: A | B, F[_ <: U]]: TypeEq[F[A], F[B]] =
+    substUpperBounded[U, [x <: U] =>> TypeEq[F[A], F[x]]](TypeEq.refl[F[A]])
+
+  def subst[F[_]](a: F[A]): F[B] =
+    substUpperBounded[Any, F](a)
+
+  def lift[F[_]]: TypeEq[F[A], F[B]] =
+    liftUpperBounded[Any, F]
+
+  def to_=:= : A =:= B =
+    subst[[x] =>> A =:= x](summon[A =:= A])
+}
 
 object TypeEq {
-  case class Refl[T]() extends TypeEq[T, T]
+  case class Refl[T]() extends TypeEq[T, T] {
+    override def substUpperBounded[U >: T, F[_ <: U]](a: F[T]): F[T] = a
+  }
 
   def refl[T]: TypeEq[T, T] =
     Refl()
+
+  def apply[A, B](ev: A =:= B): TypeEq[A, B] =
+    ev.substituteCo[[x] =>> TypeEq[A, x]](refl[A])
 
   def unapply[A, B](ev: A =:= B): Some[TypeEq[A, B]] =
     Some(ev.substituteCo(refl[A]))
