@@ -13,8 +13,15 @@ ThisBuild / scmInfo := Some(
   )
 )
 
-ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
-ThisBuild / publishTo := sonatypePublishTo.value
+import xerial.sbt.Sonatype.sonatypeCentralHost
+ThisBuild / sonatypeCredentialHost := sonatypeCentralHost
+ThisBuild / publishTo := {
+  if (isSnapshot.value)
+    // not sure why this is not returned by sonatypePublishTo.value below
+    Some("central-snapshots" at "https://central.sonatype.com/repository/maven-snapshots/")
+  else
+    sonatypePublishTo.value
+}
 
 ThisBuild / pomExtra := (
   <developers>
