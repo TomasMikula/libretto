@@ -10,6 +10,7 @@ import libretto.lambda.examples.workflow.generic.vis.SVG.{Stroke, TextAnchor}
 import libretto.lambda.examples.workflow.generic.vis.Visualization.{IVisualization, Semiflex}
 import libretto.lambda.examples.workflow.generic.vis.util.{IntegralProportions, leastCommonMultiple}
 import libretto.lambda.util.{Exists, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import scala.math.Ordering.Implicits.*
 
@@ -647,7 +648,7 @@ object VisualizationToSVG {
     vsplitFanOut(components.unwrap) match
       case Left(shallow) =>
         renderFanOutNAryShallow(op, shallow, reg)
-      case Right(Exists.Some(nested)) =>
+      case Right(Indeed(nested)) =>
         renderFanOutNAryNested(op, nested, reg)
 
   private def renderFanOutNAryShallow[Wrap[_], Y](
@@ -740,7 +741,7 @@ object VisualizationToSVG {
       case s: TupleN.Snoc[p, n, d, y1, y2] =>
         val TupleN.Snoc(init, last) = s
         vsplitFanOut(init) match
-          case Right(Exists.Some(fs)) =>
+          case Right(Indeed(fs)) =>
             Right(Exists(fs ∙ (summon[F[Wire]], last)))
           case Left(fs) =>
             last.isComposite match

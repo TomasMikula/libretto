@@ -2,6 +2,7 @@ package libretto.typology.types
 
 import libretto.lambda.{MappedMorphism, MonoidalObjectMap, Projection, Shuffle, SymmetricMonoidalCategory, UnhandledCase}
 import libretto.lambda.util.{Exists, SourcePos, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
 import libretto.typology.types.kindShuffle
@@ -32,9 +33,9 @@ sealed trait Routing[K, L](using
             s.project(q) match
               case ~⚬.ProjectRes.Projected(q, s) =>
                 m.project(q) match
-                  case Exists.Some((q, m)) =>
+                  case Indeed((q, m)) =>
                     n.preShuffle(s) match
-                      case Exists.Some((n, s)) =>
+                      case Indeed((n, s)) =>
                         Impl(p > q, m > n, s > t)
 
   def inFst[Y](using KindN[K], KindN[L], KindN[Y]): Routing[K × Y, L × Y] =
@@ -55,11 +56,11 @@ sealed trait Routing[K, L](using
         UnhandledCase.raise(s"$this.applyTo($f)")
       case Impl(p, m, s) =>
         f.project(p) match
-          case Exists.Some((p, f)) =>
+          case Indeed((p, f)) =>
             f.multiply(m) match
-              case Exists.Some(Exists.Some((m, s1, f))) =>
+              case Indeed(Indeed((m, s1, f))) =>
                 f.shuffle(s) match
-                  case Exists.Some((s2, g)) =>
+                  case Indeed((s2, g)) =>
                     import g.inKind
                     AppRes(Routing(p, m, s1 > s2), g)
 
@@ -170,7 +171,7 @@ object Routing {
 
   def dup[K](using k: KindN[K]): Routing[K, K × K] =
     dup0[K] match
-      case Exists.Some((m, s)) =>
+      case Indeed((m, s)) =>
         Routing.Impl(Projection.Id(), m, s)
 
   private def dup0[K](using k: KindN[K]): Exists[[X] =>> (Multipliers.Proper[K, X], X ~⚬ (K × K))] =
@@ -180,7 +181,7 @@ object Routing {
         Exists((Multipliers.dup[●], ~⚬.id))
       case KindN.Prod(k, l) =>
         (dup0(using k), dup0(using l)) match
-          case (Exists.Some((m1, s1)), Exists.Some((m2, s2))) =>
+          case (Indeed((m1, s1)), Indeed((m2, s2))) =>
             Exists((Multipliers.Par(m1, m2), ~⚬.par(s1, s2) > ~⚬.ixi))
 
   def ixi[K1: KindN, K2: KindN, K3: KindN, K4: KindN]: Routing[(K1 × K2) × (K3 × K4), (K1 × K3) × (K2 × K4)] =

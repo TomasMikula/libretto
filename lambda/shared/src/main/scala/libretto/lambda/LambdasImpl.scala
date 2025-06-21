@@ -3,6 +3,7 @@ package libretto.lambda
 import libretto.{lambda as ll}
 import libretto.lambda.Lambdas.LinearityViolation
 import libretto.lambda.util.{Applicative, BiInjective, Exists, Injective, Masked, NonEmptyList, TypeEq, Validated}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.{tailrec, targetName}
@@ -162,24 +163,24 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
               Exists((Tupled.atom(Left(v)), Id(v)))
             case Map(y, f, v) =>
               y.cutAt(p) match
-                case Exists.Some((x, y)) =>
+                case Indeed((x, y)) =>
                   Exists((x, Map(y, f, v)))
             case Zip(y1, y2, v) =>
               (y1.cutAt(p), y2.cutAt(p)) match
-                case (Exists.Some((x1, y1)), Exists.Some((x2, y2))) =>
+                case (Indeed((x1, y1)), Indeed((x2, y2))) =>
                   Exists((x1 zip x2), Zip(y1, y2, v))
             case ZipN(exprs, v) =>
               Expr.cutManyAt(exprs, p) match
-                case Exists.Some((a, b)) =>
+                case Indeed((a, b)) =>
                   Exists((a, ZipN(b, v)))
             case Prj1(y, v1, v2) =>
               y.cutAt(p) match
-                case Exists.Some((x, y)) =>
-                  Exists.Some((x, Prj1(y, v1, v2)))
+                case Indeed((x, y)) =>
+                  Indeed((x, Prj1(y, v1, v2)))
             case Prj2(y, v1, v2) =>
               y.cutAt(p) match
-                case Exists.Some((x, y)) =>
-                  Exists.Some((x, Prj2(y, v1, v2)))
+                case Indeed((x, y)) =>
+                  Indeed((x, Prj2(y, v1, v2)))
           }
       }
   }
@@ -244,11 +245,11 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
       exprs.asBin match
         case Bin.Leaf(b) =>
           b.cutAt(p) match
-            case Exists.Some((a, b)) =>
+            case Indeed((a, b)) =>
               Exists((a, Tupled.atom(b)))
         case Bin.Branch(b1, b2) =>
           (cutManyAt(fromBin(b1), p), cutManyAt(fromBin(b2), p)) match
-            case (Exists.Some((a1, b1)), Exists.Some((a2, b2))) =>
+            case (Indeed((a1, b1)), Indeed((a2, b2))) =>
               Exists((a1 zip a2, b1 zip b2))
 
     override def const[A](
@@ -273,13 +274,13 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
       b.asBin match {
         case Bin.Leaf(b) =>
           b.cutAt(p) match
-            case Exists.Some((x, b)) =>
+            case Indeed((x, b)) =>
               Exists((x, Tupled.atom(b)))
         case Bin.Branch(l, r) =>
           ( cutAt(Tupled.fromBin(l))(p)
           , cutAt(Tupled.fromBin(r))(p)
           ) match
-            case (Exists.Some((x, b1)), Exists.Some((y, b2))) =>
+            case (Indeed((x, b1)), Indeed((y, b2))) =>
               Exists((x zip y, b1 zip b2))
       }
   }
@@ -301,7 +302,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
         [X] => (_: Unit) => Unvar.SingleVar(),
         [A1, A2, VA1, VA2] => (u1: Unvar[VA1, A1], u2: Unvar[VA2, A2]) => u1 zip u2,
       ) match
-        case Exists.Some((u, f)) => Exists((f, u))
+        case Indeed((u, f)) => Exists((f, u))
   }
 
   private type Discarders[A] = (
@@ -323,7 +324,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
     var toElim: Var.Map[V, [A] =>> (Expr[A], Discarders[A])] =
       Var.Map.empty
 
-    ctx.registeredDiscarders.foreach { case Exists.Some((exp, discarders)) =>
+    ctx.registeredDiscarders.foreach { case Indeed((exp, discarders)) =>
       if (!usedVars.containsVar(exp.resultVar)) {
         val expVars = exp.allVars
 
@@ -336,7 +337,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
     }
 
     attachDiscarded(expr, toElim.values) match
-      case Exists.Some((exprs, discard)) =>
+      case Indeed((exprs, discard)) =>
         eliminateLocalVariablesFromForest(boundVar, exprs)
           .map(_
             .andThen(discard)
@@ -354,7 +355,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
 
     toElim.foldLeft(init) { (acc, ed) =>
       (acc, ed) match {
-        case (e1 @ Exists.Some((acc, g)), e2 @ Exists.Some((exp, (discardFst, _)))) =>
+        case (e1 @ Indeed((acc, g)), e2 @ Indeed((exp, (discardFst, _)))) =>
           val acc1: Tupled[Expr, e2.T ** e1.T] =
             Tupled.atom(exp) zip acc
           Exists((acc1, shuffled.lift(discardFst.apply) > g))
@@ -371,7 +372,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
     extractFunctionFromForest(boundVar, exprs) flatMap {
       case Closure(y, f) =>
         minimizeCapture(y) map :
-          case Left(Exists.Some((x, f0))) =>
+          case Left(Indeed((x, f0))) =>
             Closure(x, fst(f0) > f)
           case Right(intro) =>
             // XXX somewhat arbitrary to take just leading forest.
@@ -379,7 +380,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
             // but after the initial forest will be sufficient to place them after
             // any extractors of a pattern match.
             f.takeLeadingForestAt(Focus.snd) match
-              case Exists.Some((f2, g)) =>
+              case Indeed((f2, g)) =>
                 NoCapture(f2.foldMap([x, y] => lift(_)) > intro(()) > g)
       case f @ NoCapture(_) =>
         Valid(f)
@@ -401,7 +402,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
     Expr.splitAt(captured) { [t] => (v: Var[t]) =>
       !Context.isDefiningFor(v)
     } match {
-      case Exists.Some((x, y)) =>
+      case Indeed((x, y)) =>
         val (supposedConstants, captures) =
           x.toList([x] => x => x).partitionMap(x => x)
 
@@ -417,10 +418,10 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
         eliminateConstants(uniqueConstants, y) flatMap {
           case Right(intro) =>
             Valid(Right(intro))
-          case Left(Exists.Some((x, g))) =>
+          case Left(Indeed((x, g))) =>
             // avoid capturing the same expression multiple times
             deduplicateCaptures(uniqueCaptures, x) map :
-              case Exists.Some((x, f)) =>
+              case Indeed((x, f)) =>
                 Left(Exists((x, f > g)))
         }
     }
@@ -448,7 +449,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
             bug(s"Unexpected variable that neither derives from λ nor is a constant")
           case Some((introFst, introSnd)) =>
             eliminateConstants(vs, expr).flatMap {
-              case Left(Exists.Some((expr1, f))) =>
+              case Left(Indeed((expr1, f))) =>
                 extractFunctionFromForest(v, expr1).map :
                   case NoCapture(g)  => Right([B] => (_: Unit) => lift(introFst[B]) > fst(g > f))
                   case Closure(x, g) => Left(Exists((x, lift(introSnd.apply) > g > f)))
@@ -474,7 +475,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
         Valid(Exists((expr, shuffled.id)))
       case x :: xs =>
         deduplicateCaptures(xs, expr).flatMap {
-          case Exists.Some((expr1, f)) =>
+          case Indeed((expr1, f)) =>
             val v = x.resultVar
             extractFunctionFromForest(v, expr1).map {
               case NoCapture(g)  => Exists((Tupled.atom(x), g > f))
@@ -494,7 +495,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
   ): Validated[LinearityViolation, CapturingFun[A, B]] = {
     import libretto.lambda.CapturingFun.{Closure, NoCapture}
 
-    Forest.upvar(exprs) match { case Exists.Some((exprs, u)) =>
+    Forest.upvar(exprs) match { case Indeed((exprs, u)) =>
       eliminateFromForest(boundVar, exprs) match {
         case EliminatedFromForest.FoundEach(arr) =>
           arr.extract(u).map :
@@ -503,7 +504,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
 
         case EliminatedFromForest.FoundSome(x, arr, s) =>
           s.preShuffle(u) match {
-            case Exists.Some((u, s)) =>
+            case Indeed((u, s)) =>
               Unvar.objectMap.unpair(u) match
                 case Unvar.objectMap.Unpaired.Impl(u1, u2) =>
                   arr.extract(u2).map :
@@ -567,7 +568,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
       case Expr.ZipN(exprs, resultVar) =>
         import EliminatedFromForest.{FoundEach, FoundSome, NotFound}
         Forest.upvar(exprs) match
-          case Exists.Some((f, u)) =>
+          case Indeed((f, u)) =>
             eliminateFromForest(v, f) match
               case FoundEach(g)       => Found(g > HybridArrow.zipN(u, resultVar))
               case FoundSome(x, g, s) => Found(g > HybridArrow.captureN(x, s, u, resultVar))
@@ -690,7 +691,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
                   MappedMorphism(SingleVar[a1 ** a2](), Valid(CapturingFun.id), Par(SingleVar[a1](), SingleVar[a2]()))
                 case (vars, op: Op.CaptureN[vx, va, vb, b]) =>
                   op.s.preShuffle(op.u) match
-                    case Exists.Some((u, s)) =>
+                    case Indeed((u, s)) =>
                       val u12 = Unvar.objectMap.unpair(u)
                       val x = Forest.unvar(op.x, u12.f1)
                       MappedMorphism(
@@ -729,7 +730,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
               }
           },
         ) match {
-          case Exists.Some((t2, u2)) =>
+          case Indeed((t2, u2)) =>
             (u uniqueOutType u2) match {
               case TypeEq(Refl()) =>
                 t2
@@ -1123,7 +1124,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
             case op: Map[t, u]   => InputVarFocus[[x] =>> x, t, Var[u]](op, Focus.id)
             case op: CaptureN[x, a, b, c] =>
               op.s.preShuffle(op.u) match
-                case Exists.Some((u, s)) =>
+                case Indeed((u, s)) =>
                   val u12 = Unvar.objectMap.unpair(u)
                   val ua = u12.f2
                   pickSomeFromUnvar(ua, Focus.id, op)
@@ -1159,9 +1160,9 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
             f gcdSimple g
           case (c: Focus.Fst[p, c1, y], d: Focus.Fst[q, d1, z]) =>
             f.asZipOrCapture[c1[Var[X]], y] match
-              case Exists.Some((zc1, TypeEq(Refl()))) =>
+              case Indeed((zc1, TypeEq(Refl()))) =>
                 g.asZipOrCapture[d1[Var[X]], z] match
-                  case Exists.Some((zc2, TypeEq(Refl()))) =>
+                  case Indeed((zc2, TypeEq(Refl()))) =>
                     (zc1, zc2) match
                       case (Left(z1), Left(z2)) =>
                         gcdZipNs(z1, z2)
@@ -1181,9 +1182,9 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
                         None
           case (c: Focus.Snd[p, c2, y], d: Focus.Snd[q, d2, z]) =>
             f.asZipOrCapture[y, c2[Var[X]]] match
-              case Exists.Some((zc1, TypeEq(Refl()))) =>
+              case Indeed((zc1, TypeEq(Refl()))) =>
                 g.asZipOrCapture[z, d2[Var[X]]] match
-                  case Exists.Some((zc2, TypeEq(Refl()))) =>
+                  case Indeed((zc2, TypeEq(Refl()))) =>
                     (zc1, zc2) match
                       case (Left(z1), Left(z2)) =>
                         gcdZipNs(z1, z2)
@@ -1445,7 +1446,7 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
               f
             case p: Projection.Proper[pair, p, q] =>
               p.startsFromPair match
-                case Exists.Some(Exists.Some(ev)) =>
+                case Indeed(Indeed(ev)) =>
                   varIsNotPair(ev)
     }
   }

@@ -378,7 +378,7 @@ object Items1Named {
         Items1.Product[∙, Nil, F[_], Items0]
       )] =
         init.dropNames[∙, Nil] match
-          case Exists.Some((drop0, sink0)) =>
+          case Indeed((drop0, sink0)) =>
             Exists((drop0.inInit[Lbl, A], Items1.Product.Snoc(sink0, lastElem)))
 
       override def foldMap[G[_]](

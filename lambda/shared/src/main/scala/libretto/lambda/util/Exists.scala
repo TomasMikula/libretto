@@ -14,12 +14,6 @@ object Exists {
 
   def apply[F0[_], A](fa: F0[A]): Exists[F0] =
     Indeed(fa)
-
-  @deprecated("Use Indeed", since = "0.3.4")
-  type Some[F[_], A] = Indeed[F, A]
-
-  @deprecated("Use Indeed", since = "0.3.4")
-  transparent inline def Some = Indeed
 }
 
 sealed trait ExistsK[F[_[_]]] {
@@ -34,10 +28,4 @@ object ExistsK {
 
   def apply[F0[_[_]], A[_]](fa: F0[A]): ExistsK[F0] =
     Indeed(fa)
-
-  @deprecated("Use Indeed", since = "0.3.4")
-  type Some[F[_[_]], A[_]] = Indeed[F, A]
-
-  @deprecated("Use Indeed", since = "0.3.4")
-  transparent inline def Some = Indeed
 }

@@ -1,9 +1,11 @@
 package libretto.scaletto.impl
 
 import libretto.scaletto.Scaletto
-import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, CoproductPartitioning, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Member, Partitioning, PatternMatching, SemigroupalCategory, Shuffled, Sink, SymmetricSemigroupalCategory, Tupled, Var}
+import libretto.lambda.{AForest, CapturingFun, ClosedSymmetricMonoidalCategory, CocartesianSemigroupalCategory, CoproductPartitioning, Distribution, EnumModule, Focus, Lambdas, LambdasImpl, Partitioning, PatternMatching, SemigroupalCategory, Shuffled, Sink, SymmetricSemigroupalCategory, Tupled, Var}
+import libretto.lambda.Items1Named.Member
 import libretto.lambda.Partitioning.SubFun
 import libretto.lambda.util.{Applicative, Exists, NonEmptyList, SingletonType, SourcePos, Validated}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.util.Monad.monadEither
 import libretto.util.Async
@@ -927,7 +929,7 @@ object FreeScaletto extends Scaletto {
   ): $[R] =
     ValDecomposition.from(cases).compile
       .flatMap {
-        case Exists.Some((partition, sink)) =>
+        case Indeed((partition, sink)) =>
           switchSink(
             $.map(a)(partition)(pos),
             sink,

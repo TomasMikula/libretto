@@ -2,6 +2,7 @@ package libretto.exec
 
 import libretto.lambda.Tupled
 import libretto.lambda.util.{Exists, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 
 opaque type ExecutionParams[P[_], A] =
@@ -34,14 +35,14 @@ object ExecutionParams {
           fa.foldMapWith[[T] =>> Exists[[X] =>> (Tupled[Tuple2, Q, X], X => T)]](
             [Y] => py =>
               h(py) match {
-                case Exists.Some((qx, f)) => Exists((Tupled.atom(qx), f))
+                case Indeed((qx, f)) => Exists((Tupled.atom(qx), f))
               },
             [Y1, Y2] => (y1, y2) =>
               (y1, y2) match {
-                case (Exists.Some((qx1, f1)), Exists.Some((qx2, f2))) =>
+                case (Indeed((qx1, f1)), Indeed((qx2, f2))) =>
                   Exists((qx1 zip qx2), (x1, x2) => (f1(x1), f2(x2)))
               },
           ) match
-            case Exists.Some((qa, f)) => Exists((Right(qa), f))
+            case Indeed((qa, f)) => Exists((Right(qa), f))
   }
 }

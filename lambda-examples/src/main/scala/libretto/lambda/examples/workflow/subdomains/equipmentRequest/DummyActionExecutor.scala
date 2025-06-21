@@ -2,8 +2,9 @@ package libretto.lambda.examples.workflow.subdomains.equipmentRequest
 
 import libretto.lambda.examples.workflow.generic.lang.*
 import libretto.lambda.examples.workflow.generic.runtime.{ActionExecutor, Value, WorkflowEngine}
-import libretto.lambda.Member
+import libretto.lambda.Items1Named.Member
 import libretto.lambda.util.Exists
+import libretto.lambda.util.Exists.Indeed
 import scala.util.{Success, Try}
 
 class DummyActionExecutor(
@@ -38,7 +39,7 @@ class DummyActionExecutor(
           val (equipment, addr) = Value.unpair(input: Value[Val, Equipment ** DeliveryAddress])
           val _: String = Value.extractString(addr)
           Value.revealCase(equipment) match
-            case Exists.Some(Exists.Some(Value.Inject(i, a))) =>
+            case Indeed(Indeed(Value.Inject(i, a))) =>
               i match
                 case Member.InLast(label) =>
                   summon[label.value.type <:< "Chair"]

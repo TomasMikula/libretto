@@ -15,5 +15,5 @@ trait Approximation[approximates[_, _]] {
 
     infix def adaptTo[Y](y: Y `approximates` A): Adaptoid[X, Y] =
       (x unify y) match
-        case Exists.Some((_, xz, yz)) => Adaptoid.adapt(xz, yz)
+        case Exists.Indeed((_, xz, yz)) => Adaptoid.adapt(xz, yz)
 }

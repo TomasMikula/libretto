@@ -1,6 +1,7 @@
 package libretto.lambda.examples.workflow.generic.lang
 
-import libretto.lambda.{CapturingFun, CoproductPartitioning, EnumModule, Lambdas, Member, PatternMatching, Sink}
+import libretto.lambda.{CapturingFun, CoproductPartitioning, EnumModule, Lambdas, PatternMatching, Sink}
+import libretto.lambda.Items1Named.Member
 import libretto.lambda.util.{BiInjective, NonEmptyList, SourcePos, Validated}
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 import libretto.lambda.Tupled

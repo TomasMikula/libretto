@@ -2,6 +2,7 @@ package libretto.typology.types
 
 import libretto.lambda.{MonoidalCategory, MonoidalObjectMap, Projection, Tupled, UnhandledCase}
 import libretto.lambda.util.{Exists, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
 import libretto.typology.types.kindShuffle.{~⚬, Transfer}
@@ -99,9 +100,9 @@ sealed trait PartialArgs[F[_, _], K, L] {
         UnhandledCase.raise(s"${this}.foldTranslate")
       case IntroFst(f1, f2) =>
         f1.foldTranslate[G, <*>, One, Φ, One](φ0, φ0, h) match
-          case Exists.Some((g1, φ1)) =>
+          case Indeed((g1, φ1)) =>
             f2.foldTranslate[G, <*>, One, Φ, Q](φ0, φ, h) match
-              case Exists.Some((g2, φ2)) =>
+              case Indeed((g2, φ2)) =>
                 Exists((g2 > G.introFst(g1), Φ.pair(φ1, φ2)))
       case IntroSnd(f1, f2) =>
         UnhandledCase.raise(s"${this}.foldTranslate")
@@ -109,9 +110,9 @@ sealed trait PartialArgs[F[_, _], K, L] {
         summon[K =:= ○]
         val ev: (Q =:= One) = Φ.uniqueOutputType(φ, φ0)
         f1.foldTranslate[G, <*>, One, Φ, One](φ0, φ0, h) match
-          case Exists.Some((g1, φ1)) =>
+          case Indeed((g1, φ1)) =>
             f2.foldTranslate[G, <*>, One, Φ, One](φ0, φ0, h) match
-              case Exists.Some((g2, φ2)) =>
+              case Indeed((g2, φ2)) =>
                 ev match { case TypeEq(Refl()) =>
                   Exists((g1 > G.introSnd(g2), Φ.pair(φ1, φ2)))
                 }
@@ -128,7 +129,7 @@ sealed trait PartialArgs[F[_, _], K, L] {
       case l @ Lift(p) =>
         import l.given
         f(p) match
-          case Exists.Some((g, x, h)) =>
+          case Indeed((g, x, h)) =>
             Exists((Lift(g)(using summon, x), Lift(h)(using Kinds(x))))
       case Par(f1, f2) =>
         UnhandledCase.raise(s"$this.split")
@@ -139,13 +140,13 @@ sealed trait PartialArgs[F[_, _], K, L] {
       case i @ IntroFst(f1, f2) =>
         import i.given
         (f1.split(f), f2.split(f)) match
-          case (Exists.Some((g1, h1)), Exists.Some((g2, h2))) =>
+          case (Indeed((g1, h1)), Indeed((g2, h2))) =>
             Exists((IntroFst(proper(g1), g2), par(h1, h2)(using g1.outKind, g2.outKind)))
       case IntroSnd(f1, f2) =>
         UnhandledCase.raise(s"$this.split")
       case IntroBoth(f1, f2) =>
         (f1.split(f), f2.split(f)) match
-          case (Exists.Some((g1, h1)), Exists.Some((g2, h2))) =>
+          case (Indeed((g1, h1)), Indeed((g2, h2))) =>
             Exists((introBoth(g1, g2), par(h1, h2)(using g1.outKind, g2.outKind)))
 
   def project[M](p: Projection[×, L, M]): Exists[[X] =>> (Projection[×, K, X], PartialArgs[F, X, M])] =
@@ -162,7 +163,7 @@ sealed trait PartialArgs[F[_, _], K, L] {
     this match
       case i @ Id() =>
         Multipliers.dup(i.kind) match
-          case Exists.Some((m, s)) =>
+          case Indeed((m, s)) =>
             Exists(Exists((m, s, Id())))
       case l @ Lift(f) =>
         l.inKind.nonEmpty match
@@ -171,7 +172,7 @@ sealed trait PartialArgs[F[_, _], K, L] {
           case Right(k) =>
             given KindN[K] = k
             Multipliers.dup(k) match
-              case Exists.Some((m, s)) =>
+              case Indeed((m, s)) =>
                 Exists(Exists((m, s, Par(Lift(f), Lift(f)))))
       case Par(f1, f2) =>
         UnhandledCase.raise(s"$this.dup")
@@ -197,12 +198,12 @@ sealed trait PartialArgs[F[_, _], K, L] {
         Exists(Exists(Multipliers.id, ~⚬.id, this))
       case Multiplier.Dup(m1, m2) =>
         this.dup match
-          case Exists.Some(Exists.Some((m0, s0, a))) =>
+          case Indeed(Indeed((m0, s0, a))) =>
             a.multiply(Multipliers.Par(Multipliers.Single(m1), Multipliers.Single(m2))) match
-              case Exists.Some(Exists.Some((m1, s1, a1))) =>
+              case Indeed(Indeed((m1, s1, a1))) =>
                 m1.preShuffle(s0) match
-                  case Exists.Some((m1, s0)) =>
-                    Exists.Some(Exists.Some((m0 > m1, s0 > s1, a1)))
+                  case Indeed((m1, s0)) =>
+                    Indeed(Indeed((m0 > m1, s0 > s1, a1)))
 
   def multiply[LL](
     m: Multipliers[L, LL],
@@ -222,18 +223,18 @@ sealed trait PartialArgs[F[_, _], K, L] {
             import f.given
             import m2.outKind
             f1.multiply(m1) match
-              case Exists.Some(y @ Exists.Some((m1, s1, a1))) =>
+              case Indeed(y @ Indeed((m1, s1, a1))) =>
                 given KindN[y.T] = s1(m1(f.inKind1))
                 Exists(Exists((Multipliers.Par(m1.proper, m2), ~⚬.fst(s1), a1.inFst)))
           case f @ Snd(f2) =>
             import f.given
             f2.multiply(m2) match
-              case Exists.Some(y @ Exists.Some((m2, s2, a2))) =>
+              case Indeed(y @ Indeed((m2, s2, a2))) =>
                 given KindN[y.T] = s2(m2(f.inKind2))
                 Exists(Exists((Multipliers.Par(m1, m2.proper), ~⚬.snd(s2), a2.inSnd)))
           case IntroFst(f1, f2) =>
             (f1.multiply(m1), f2.multiply(m2)) match
-              case (Exists.Some(Exists.Some((m1, s1, a1))), Exists.Some(Exists.Some((m2, s2, a2)))) =>
+              case (Indeed(Indeed((m1, s1, a1))), Indeed(Indeed((m2, s2, a2)))) =>
                 Multipliers.proveId(m1) match
                   case TypeEq(Refl()) =>
                     s1.proveId(Kinds.unitIsNotPair) match
@@ -241,7 +242,7 @@ sealed trait PartialArgs[F[_, _], K, L] {
                         Exists(Exists((m2, s2, PartialArgs.introFst(a1, a2))))
           case IntroSnd(f1, f2) =>
             (f1.multiply(m1), f2.multiply(m2)) match
-              case (Exists.Some(Exists.Some((m1, s1, a1))), Exists.Some(Exists.Some((m2, s2, a2)))) =>
+              case (Indeed(Indeed((m1, s1, a1))), Indeed(Indeed((m2, s2, a2)))) =>
                 Multipliers.proveId(m2) match
                   case TypeEq(Refl()) =>
                     s2.proveId(Kinds.unitIsNotPair) match
@@ -249,7 +250,7 @@ sealed trait PartialArgs[F[_, _], K, L] {
                         Exists(Exists((m1, s1, PartialArgs.introSnd(a1, a2))))
           case IntroBoth(f1, f2) =>
             (f1.multiply(m1), f2.multiply(m2)) match
-              case (Exists.Some(Exists.Some((m1, s1, a1))), Exists.Some(Exists.Some((m2, s2, a2)))) =>
+              case (Indeed(Indeed((m1, s1, a1))), Indeed(Indeed((m2, s2, a2)))) =>
                 Multipliers.proveId(m1) match
                   case TypeEq(Refl()) =>
                     Multipliers.proveId(m2) match
@@ -271,9 +272,9 @@ sealed trait PartialArgs[F[_, _], K, L] {
         UnhandledCase.raise(s"$this.shuffle($s)")
       case x: ~⚬.Xfer[l1, l2, x1, x2, m1, m2] =>
         PartialArgs.biShuffle[F, K, l1, l2, x1, x2](this, x.f1, x.f2) match
-          case Exists.Some((s, f)) =>
+          case Indeed((s, f)) =>
             PartialArgs.transfer(f, x.transfer) match
-              case Exists.Some((t, f)) =>
+              case Indeed((t, f)) =>
                 Exists((s > t, f))
 }
 
@@ -616,19 +617,19 @@ object PartialArgs {
         UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
       case IntroFst(f1, f2) =>
         (f1 shuffle s1, f2 shuffle s2) match
-          case (Exists.Some((s1, f1)), Exists.Some((s2, f2))) =>
+          case (Indeed((s1, f1)), Indeed((s2, f2))) =>
             s1.proveId(Kinds.unitIsNotPair) match
               case TypeEq(Refl()) =>
                 Exists((s2, introFst(f1, f2)))
       case IntroSnd(f1, f2) =>
         (f1 shuffle s1, f2 shuffle s2) match
-          case (Exists.Some((s1, f1)), Exists.Some((s2, f2))) =>
+          case (Indeed((s1, f1)), Indeed((s2, f2))) =>
             s2.proveId(Kinds.unitIsNotPair) match
               case TypeEq(Refl()) =>
                 Exists((s1, introSnd(f1, f2)))
       case IntroBoth(f1, f2) =>
         (f1 shuffle s1, f2 shuffle s2) match
-          case (Exists.Some((s1, f1)), Exists.Some((s2, f2))) =>
+          case (Indeed((s1, f1)), Indeed((s2, f2))) =>
             (s1.proveId(Kinds.unitIsNotPair), s2.proveId(Kinds.unitIsNotPair)) match
               case (TypeEq(Refl()), TypeEq(Refl())) =>
                 Exists((~⚬.id, introBoth(f1, f2)))
@@ -655,7 +656,7 @@ object PartialArgs {
           case lr: Transfer.AssocLR[l11, l12, l2, x2, x3] =>
             val (f11, f12) = unpair(f1.to[l11 × l12])
             introFst(f12, f2).shuffle(lr.g.asShuffle) match
-              case Exists.Some((s, f2)) => Exists((s, introFst(f11, f2)))
+              case Indeed((s, f2)) => Exists((s, introFst(f11, f2)))
           case rl: Transfer.AssocRL[l1, l21, l22, x1, x2] =>
             UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
           case Transfer.IX(g) =>
@@ -674,7 +675,7 @@ object PartialArgs {
           case rl: Transfer.AssocRL[l1, l21, l22, x1, x2] =>
             val (f21, f22) = unpair(f2.to[l21 × l22])
             introSnd(f1, f21).shuffle(rl.g.asShuffle) match
-              case Exists.Some((s, f1)) => Exists((s, introSnd(f1, f22)))
+              case Indeed((s, f1)) => Exists((s, introSnd(f1, f22)))
           case Transfer.IX(g) =>
             UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
           case Transfer.XI(g) =>
@@ -689,7 +690,7 @@ object PartialArgs {
           case lr: Transfer.AssocLR[l11, l12, l2, x2, x3] =>
             val (f11, f12) = unpair(f1.to[l11 × l12])
             introBoth(f12, f2).shuffle(lr.g.asShuffle) match
-              case Exists.Some((s, f2)) =>
+              case Indeed((s, f2)) =>
                 s.proveId(Kinds.unitIsNotPair) match
                   case TypeEq(Refl()) => Exists((~⚬.id[○], introBoth(f11, f2)))
           case rl: Transfer.AssocRL[l1, l21, l22, x1, x2] =>

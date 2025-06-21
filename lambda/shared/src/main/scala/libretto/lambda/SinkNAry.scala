@@ -1,6 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.util.Exists
+import libretto.lambda.util.Exists.Indeed
 
 /** A collection of arrows `Ai -> B`,
  * where `A = Nil || A1 || A2 || ... || An`,
@@ -66,7 +67,7 @@ object SinkNAry {
       SinkNAry[G, ||, Nil, Q, B],
     )] =
       h(f) match
-        case Exists.Some((f, g)) =>
+        case Indeed((f, g)) =>
           Exists((ParN.Single(f), SinkNAry.Single(g)))
 
     override def divide3[F[_,_], G[_,_], H[_,_]](
@@ -77,7 +78,7 @@ object SinkNAry {
       SinkNAry[H, ||, Nil, Q, B],
     )]] =
       h(f) match
-        case Exists.Some(Exists.Some((f, g, h))) =>
+        case Indeed(Indeed((f, g, h))) =>
           Exists(Exists((ParN.Single(f), ParN.Single(g), SinkNAry.Single(h))))
   }
 
@@ -96,9 +97,9 @@ object SinkNAry {
       cat: NarrowCategory[->>, Obj],
     ): Exists[[P] =>> (SourceNAry[->>, ||, Nil, P, Init || Z], P -> B)] =
       init.pullback(binaryPullback, srcData) match {
-        case Exists.Some((initSrc, p)) =>
+        case Indeed((initSrc, p)) =>
           binaryPullback(p, last) match
-            case Exists.Some((f1, f2, g)) =>
+            case Indeed((f1, f2, g)) =>
               Exists((
                 SourceNAry.Snoc(
                   initSrc.after(f1),
@@ -118,7 +119,7 @@ object SinkNAry {
       SinkNAry[G, ||, Nil, Q, B],
     )] =
       (init.divide(h), h(last)) match
-        case (Exists.Some((fs, gs)), Exists.Some((f, g))) =>
+        case (Indeed((fs, gs)), Indeed((f, g))) =>
           Exists((fs ∙ f, SinkNAry.Snoc(gs, g)))
 
     override def divide3[F[_,_], G[_,_], H[_,_]](
@@ -129,7 +130,7 @@ object SinkNAry {
       SinkNAry[H, ||, Nil, Q, B]
     )]] =
       (init.divide3(h), h(last)) match
-        case (Exists.Some(Exists.Some((fs, gs, hs))), Exists.Some(Exists.Some((f, g, h)))) =>
+        case (Indeed(Indeed((fs, gs, hs))), Indeed(Indeed((f, g, h)))) =>
           Exists(Exists((fs ∙ f, gs ∙ g, SinkNAry.Snoc(hs, h))))
   }
 

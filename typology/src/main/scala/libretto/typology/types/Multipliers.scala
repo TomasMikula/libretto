@@ -2,6 +2,7 @@ package libretto.typology.types
 
 import libretto.lambda.{PairwiseRel, Projection, StrongZippable, UnhandledCase}
 import libretto.lambda.util.{Exists, ExistsCo, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
 import libretto.typology.types.kindShuffle.~⚬
@@ -134,15 +135,15 @@ object Multipliers {
           UnhandledCase.raise(s"$this.project($p)")
         case Projection.Fst(p1) =>
           m1.project(p1) match
-            case Exists.Some((p1, m1)) =>
+            case Indeed((p1, m1)) =>
               Exists((p1.inFst, Par(m1, m2)))
         case Projection.Snd(p2) =>
           m2.project(p2) match
-            case Exists.Some((p2, m2)) =>
+            case Indeed((p2, m2)) =>
               Exists((p2.inSnd, Par(m1, m2)))
         case Projection.Both(p1, p2) =>
           (m1.project(p1), m2.project(p2)) match
-            case (Exists.Some((p1, m1)), Exists.Some((p2, m2))) =>
+            case (Indeed((p1, m1)), Indeed((p2, m2))) =>
               Exists((Projection.par(p1, p2), Par(m1, m2)))
   }
 
@@ -174,7 +175,7 @@ object Multipliers {
         Exists((dup[●], ~⚬.id))
       case KindN.Prod(k, l) =>
         (dup(k), dup(l)) match
-          case (Exists.Some((m1, s1)), Exists.Some((m2, s2))) =>
+          case (Indeed((m1, s1)), Indeed((m2, s2))) =>
             Exists((Par(m1, m2), ~⚬.par(s1, s2) > ~⚬.ixi))
 
   given PairwiseRel[×, ×, Multipliers.Proper] with

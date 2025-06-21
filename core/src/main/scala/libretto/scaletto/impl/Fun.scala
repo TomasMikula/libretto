@@ -1,6 +1,7 @@
 package libretto.scaletto.impl
 
-import libretto.lambda.{DistributionNAry, Member, SinkNAryNamed}
+import libretto.lambda.{DistributionNAry, SinkNAryNamed}
+import libretto.lambda.Items1Named.Member
 import libretto.lambda.util.Applicative
 import scala.concurrent.duration.FiniteDuration
 

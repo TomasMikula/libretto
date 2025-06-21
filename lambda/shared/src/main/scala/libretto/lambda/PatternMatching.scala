@@ -1,6 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.util.{Applicative, BiInjective, Exists, NonEmptyList, TypeEq, Validated}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Validated.{Invalid, Valid, invalid}
 
@@ -105,7 +106,7 @@ class PatternMatching[->[_, _], **[_, _]](using
     List[Exists[[Y] =>> (Pattern[F[U], Y], Y -> R)]],
   ] =
     Applicative.traverseList(cases) {
-      case Exists.Some((pattern, handler)) =>
+      case Indeed((pattern, handler)) =>
         positExtractor(ext, pos, pattern, handler)
     }.map(_.flatten)
 
@@ -181,7 +182,7 @@ class PatternMatching[->[_, _], **[_, _]](using
 
           // extend the patterns to the captured expressions
           cases1: NonEmptyList[Exists[[XY] =>> (Pattern[x ** A, XY], XY -> R)]] =
-            cases.map { case Exists.Some((p, h)) => Exists((p.inSnd[x], h)) }
+            cases.map { case Indeed((p, h)) => Exists((p.inSnd[x], h)) }
 
           f <- compilePatternMatch(cases1)
         } yield
@@ -200,7 +201,7 @@ class PatternMatching[->[_, _], **[_, _]](using
       pos,
       isExtractor,
     ) match
-      case Exists.Some((pattern, handler)) =>
+      case Indeed((pattern, handler)) =>
         handler
           .foldMapA[Validated[E, _], ->](compile)
           .map(h => Exists((pattern, h)))

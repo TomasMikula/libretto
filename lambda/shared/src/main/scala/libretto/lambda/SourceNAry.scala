@@ -1,6 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.util.Exists
+import libretto.lambda.util.Exists.Indeed
 
 /** A collection of arrows `A -> Bi`,
  * where `B = Nil || B1 || B2 || ... || Bn`,
@@ -60,9 +61,9 @@ object SourceNAry {
       cat: NarrowCategory[->>, Obj],
     ): Exists[[Q] =>> (SinkNAry[->>, ||, Nil, Init || Z, Q], A -> Q)] =
       init.pushout(binaryPushout, tgtData) match
-        case Exists.Some((initSink, q)) =>
+        case Indeed((initSink, q)) =>
           binaryPushout(q, last) match
-            case Exists.Some((f1, f2, g)) =>
+            case Indeed((f1, f2, g)) =>
               Exists((
                 SinkNAry.Snoc(
                   initSink.andThen(f1),

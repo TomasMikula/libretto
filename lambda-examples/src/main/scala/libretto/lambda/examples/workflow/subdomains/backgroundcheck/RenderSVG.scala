@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.subdomains.backgroundcheck
 
 import libretto.lambda.examples.workflow.generic.vis.*
-import libretto.lambda.util.Exists.{Some as ∃}
+import libretto.lambda.util.Exists.{Indeed as ∃}
 
 object RenderSVG {
   def main(args: Array[String]): Unit =

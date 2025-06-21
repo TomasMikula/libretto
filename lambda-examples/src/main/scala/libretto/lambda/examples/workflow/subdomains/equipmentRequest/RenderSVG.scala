@@ -1,7 +1,7 @@
 package libretto.lambda.examples.workflow.subdomains.equipmentRequest
 
 import libretto.lambda.examples.workflow.generic.vis.*
-import libretto.lambda.util.Exists.{Some as ∃}
+import libretto.lambda.util.Exists.{Indeed as ∃}
 import libretto.lambda.examples.workflow.subdomains.equipmentRequest.equipmentRequest
 
 object RenderSVG {

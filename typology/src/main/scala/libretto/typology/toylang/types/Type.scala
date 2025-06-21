@@ -3,6 +3,7 @@ package libretto.typology.toylang.types
 import libretto.lambda.{MappedMorphism, MonoidalCategory, MonoidalObjectMap, Shuffle, Tupled, UnhandledCase}
 import libretto.lambda.Tupled.*
 import libretto.lambda.util.{Exists, SourcePos, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
 import libretto.typology.types.{MultiTypeFun, OpenTypeExpr, PartialArgs, Routing, TypeExpr, TypeFun, kindShuffle}
@@ -52,13 +53,13 @@ object Type {
     OpenTypeExpr.open(f.expr) match
       case Left(t) =>
         UnhandledCase.raise(s"nothing to fix")
-      case Right(Exists.Some((cpt, opn))) =>
+      case Right(Indeed((cpt, opn))) =>
         fixDecompose(cpt, opn) match
           case Either3.Left(ev) =>
             FixDecomposed.NothingToFix(f.expr.from(using ev.flip))
           case Either3.Middle(nothing) =>
             nothing
-          case Either3.Right(Exists.Some((capt, expr))) =>
+          case Either3.Right(Indeed((capt, expr))) =>
             import expr.inKind2
             val m = Routing.toMultiplier(f.pre)
             FixDecomposed.CapturedArgs(Args(capt), TypeConstructor.PFix(m, expr))
@@ -69,13 +70,13 @@ object Type {
     OpenTypeExpr.open(f.expr) match
       case Left(t) =>
         UnhandledCase.raise(s"nothing to fix")
-      case Right(Exists.Some((cpt, opn))) =>
+      case Right(Indeed((cpt, opn))) =>
         fixDecompose(cpt, opn) match
           case Either3.Left(ev) =>
             PFixDecomposed.NothingToFix(TypeFun(Routing.elim[●], f.expr.from(using ev.flip)))
           case Either3.Middle(x) =>
             x
-          case Either3.Right(Exists.Some((capt, expr))) =>
+          case Either3.Right(Indeed((capt, expr))) =>
             pfixDecompose(capt, f.pre, expr)
 
   private def pfixDecompose[V, X, Y](
@@ -93,7 +94,7 @@ object Type {
       case r: Traced[k1, k2, q1, q2, y1, y2] =>
         summon[Y =:= (y1 × y2)]
         OpenTypeExpr.LTrimmed.ltrimMore(r.tr, expr) match
-          case Exists.Some((args, expr)) =>
+          case Indeed((args, expr)) =>
             val args1 = args.translate([k, l] => (e: OpenTypeExpr[TypeConstructor[V, _, _], k, l]) => e.unopen)
             PFixDecomposed.Decomposed(Args(r.r, PartialArgs.introFst(capt, args1)), TypeConstructor.PFix(r.m, expr))
 
@@ -159,7 +160,7 @@ object Type {
           KindN(x.outKind),
       )
     OpenTypeExpr.ltrim(reorg, opn) match
-      case Exists.Some((captured1, ltrimmed)) =>
+      case Indeed((captured1, ltrimmed)) =>
         val cArgs1 =
           captured1.translate[TypeExpr[TypeConstructor[V, _, _], _, _]](
             [x, y] => (e: OpenTypeExpr[TypeConstructor[V, _, _], x, y]) =>

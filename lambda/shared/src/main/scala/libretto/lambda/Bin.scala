@@ -1,6 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.util.{BiInjective, ClampEq, Exists, Injective, Masked, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 
 /**
@@ -44,7 +45,7 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
         Exists((leafTr[a](()), Leaf(l.value)))
       case b: Branch[p, t, f, a1, a2] =>
         (b.l.relabelLeafs[U, Tr](leafTr, parTr), b.r.relabelLeafs[U, Tr](leafTr, parTr)) match
-          case (Exists.Some((tr1, b1)), Exists.Some((tr2, b2))) =>
+          case (Indeed((tr1, b1)), Indeed((tr2, b2))) =>
             Exists((parTr(tr1, tr2), Branch(b1, b2)))
 
   def relabelLeafs[U[_], Tr[_, _], B](
@@ -152,9 +153,9 @@ sealed trait Bin[<*>[_, _], T[_], F[_], A] {
         Exists((l, shuffled.id))
       case Branch(l, r) =>
         (l.deduplicateLeafs(dup), r.deduplicateLeafs(dup)) match
-          case (Exists.Some((x1, f1)), Exists.Some((x2, f2))) =>
+          case (Indeed((x1, f1)), Indeed((x2, f2))) =>
             (x1 mergeIn x2)(dup) match
-              case Exists.Some((x, f)) =>
+              case Indeed((x, f)) =>
                 Exists((x, f > shuffled.par(f1, f2)))
     }
 

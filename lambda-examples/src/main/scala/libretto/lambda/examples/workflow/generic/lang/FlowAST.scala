@@ -1,6 +1,7 @@
 package libretto.lambda.examples.workflow.generic.lang
 
-import libretto.lambda.{CocartesianNAryCategory, CocartesianSemigroupalCategory, Distribution, DistributionNAry, EnumModule, Member, Shuffled, ShuffledModule, SinkNAryNamed, SymmetricSemigroupalCategory}
+import libretto.lambda.{CocartesianNAryCategory, CocartesianSemigroupalCategory, Distribution, DistributionNAry, EnumModule, Shuffled, ShuffledModule, SinkNAryNamed, SymmetricSemigroupalCategory}
+import libretto.lambda.Items1Named.Member
 import libretto.lambda.util.Masked
 
 import scala.concurrent.duration.FiniteDuration

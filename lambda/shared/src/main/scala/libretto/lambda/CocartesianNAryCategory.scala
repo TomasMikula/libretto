@@ -1,5 +1,7 @@
 package libretto.lambda
 
+import libretto.lambda.Items1Named.Member
+
 /** Category with n-ary coproducts. */
 trait CocartesianNAryCategory[->[_, _], Sum[_], ||[_, _], ::[_, _]] {
   def inject[Label, A, Cases](

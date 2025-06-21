@@ -1,6 +1,8 @@
 package libretto.lambda
 
+import libretto.lambda.Items1Named.Member
 import libretto.lambda.util.{BiInjective, Exists, SingletonType, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 
 trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
@@ -139,11 +141,11 @@ trait DistributionNAry[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
       }
     }
 
-    def intoCases[F[_], Cases](cases: ItemList[||, ::, Cases]): DistF[F, Cases] =
+    def intoCases[F[_], Cases](cases: Items1Named.Witness[||, ::, Cases]): DistF[F, Cases] =
       cases match
-        case s: ItemList.Single[sep, of, lbl, a] =>
+        case s: Items1Named.Witness.Single[sep, of, lbl, a] =>
           DistF.Single[F, lbl, a](s.lbl)
-        case s: ItemList.Snoc[sep, of, init, lbl, a] =>
+        case s: Items1Named.Witness.Snoc[sep, of, init, lbl, a] =>
           val init: DistF[F, init] = intoCases(s.init)
           DistF.Snoc[F, init, lbl, a, init.Out](init, s.lbl)
   }
@@ -237,7 +239,7 @@ object DistributionNAry {
         ParN.Named[||, ::, [x, y] =>> Exists[[b] =>> (x =:= (A1 ** (A2 ** b)), ((A1 ** A2) ** b) =:= y)], A12Cases, AInit || (Lbl :: (A ** Z))],
       )]] =
         init.separately[A1, A2] match
-          case Exists.Some(Exists.Some((d2, d1, assocs))) =>
+          case Indeed(Indeed((d2, d1, assocs))) =>
             summon[A =:= A1 ** A2] match { case TypeEq(Refl()) =>
               Exists(Exists((
                 Snoc(d2, lbl),
@@ -252,7 +254,7 @@ object DistributionNAry {
         DropNames[||, ::, ∙, Nil, Out, Y],
       )]] =
         init.dropNames[∙, Nil] match {
-          case Exists.Some(Exists.Some((x, d, y))) =>
+          case Indeed(Indeed((x, d, y))) =>
             Exists(Exists((
               x.inInit[Lbl, Z],
               DistLR.Unnamed.Snoc(d),
@@ -374,7 +376,7 @@ object DistributionNAry {
         DropNames[||, ::, ∙, Nil, Out, Y],
       )]] =
         init.dropNames[∙, Nil] match {
-          case Exists.Some(Exists.Some((x, d, y))) =>
+          case Indeed(Indeed((x, d, y))) =>
             Exists(Exists((
               x.inInit[Lbl, Z],
               DistRL.Unnamed.Snoc(d),

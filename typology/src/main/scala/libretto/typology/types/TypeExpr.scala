@@ -2,6 +2,7 @@ package libretto.typology.types
 
 import libretto.lambda.{MappedMorphism, MonoidalCategory, MonoidalObjectMap, Semigroupoid, Unzippable}
 import libretto.lambda.util.{Exists, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
 
@@ -81,7 +82,7 @@ sealed abstract class TypeExpr[TC[_, _], K, L](using
         compilePrimitive(fk, op)
       case App(op, args) =>
         args.foldTranslate[==>, <*>, One, F, Q](F.unit, fk, go) match {
-          case Exists.Some((args, fx)) =>
+          case Indeed((args, fx)) =>
             val op1 = compilePrimitive(fx, op)
             MappedMorphism(fk, args > op1.get(fx, op1.tgtMap), op1.tgtMap)
         }

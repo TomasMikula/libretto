@@ -3,7 +3,8 @@ package libretto.lambda.examples.workflow.generic.vis
 import libretto.lambda.{DistributionNAry, DropNames, ParN, SinkNAryNamed, SinkNAry, TupleElem}
 import libretto.lambda.examples.workflow.generic.lang.{++, **, ::, ||, Enum, FlowAST, Workflows}
 import libretto.lambda.util.{Exists, TypeEq}
-import libretto.lambda.util.Exists.{Some as ∃}
+import libretto.lambda.util.Exists.Indeed
+import libretto.lambda.util.Exists.{Indeed as ∃}
 import libretto.lambda.util.TypeEq.Refl
 
 import Approximates.lump
@@ -249,7 +250,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
     Visualization[X, Y],
   )]] =
     dist.dropNames[Tuple2, EmptyTuple] match {
-      case Exists.Some(Exists.Some((x, dist, y))) =>
+      case Indeed(Indeed((x, dist, y))) =>
         VisualizeDistNAry[[a, b] =>> b ** a](
           [X, Y, A, B] => (fx: X Approximates A, fy: Y Approximates B) => fy ** fx,
           [X, D] => (x: EdgeDesc[X], d: EdgeDesc[D]) => d ** x,
@@ -266,7 +267,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
     Visualization[X, Y],
   )]] =
     dist.dropNames[Tuple2, EmptyTuple] match {
-      case Exists.Some(Exists.Some((x, dist, y))) =>
+      case Indeed(Indeed((x, dist, y))) =>
         VisualizeDistNAry[**](
           [X, Y, A, B] => (fx: X Approximates A, fy: Y Approximates B) => fx ** fy,
           [X, D] => (x: EdgeDesc[X], d: EdgeDesc[D]) => x ** d,
@@ -303,7 +304,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
           )))
         }
       ) match {
-        case ex @ Exists.Some(ey @ Exists.Some((x, core, y))) =>
+        case ex @ Indeed(ey @ Indeed((x, core, y))) =>
           type Xs = ex.T
           type Ys = ey.T
           Exists(Exists((
@@ -406,7 +407,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
       [x, y, b] => (xb, yb) => xb greatestCommonCoarsening yb,
       [x, y] => xy => xy.inDesc,
     ) match {
-      case Exists.Some((refinements, appr)) =>
+      case Indeed((refinements, appr)) =>
         Exists((
           coarsenMerge(refinements.asSink),
           appr
@@ -417,7 +418,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
     fs: SinkNAry[[x, y] =>> y IsRefinedBy x, Tuple2, EmptyTuple, X, Y],
   ): IVisualization[Enum[X], Flx, ?, Flx, Y] =
     coarsenings(fs) match
-      case Exists.Some((coarsenings, segments, ysDesc, yDesc)) =>
+      case Indeed((coarsenings, segments, ysDesc, yDesc)) =>
         coarsenings :: Visualization.Sequence(
           merge(
             ysDesc,
@@ -467,7 +468,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
     EdgeDesc[Y],
   )] =
     coarseningComponents[X, Y](fs) match
-      case Exists.Some((visComps, segs, ysComps, yDesc)) =>
+      case Indeed((visComps, segs, ysComps, yDesc)) =>
         Exists((
           Visualization.IParN(OpTag[Enum], visComps),
           segs.reverse,
@@ -495,7 +496,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
         summon[X =:= (init, z)]
         summon[Y =:= b]
         coarseningComponents[init, Y](s.init) match {
-          case Exists.Some((visInit, segs, ysDesc, yDesc)) =>
+          case Indeed((visInit, segs, ysDesc, yDesc)) =>
             Exists((
               Visualization.IParN.Snoc(visInit, Visualization.Adapt(Adaptoid.collapse(s.last))),
               EdgeSegment.elem(TupleElem.Last()) :: segs.map(_.inInit),

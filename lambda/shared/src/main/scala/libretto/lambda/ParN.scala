@@ -1,6 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.util.{Exists, SingletonType}
+import libretto.lambda.util.Exists.Indeed
 
 /** An n-ary tuple of arrows `Ai -> Bi`,
  *  such that
@@ -38,15 +39,15 @@ sealed trait ParN[∙[_, _], Nil, ->[_, _], A, B] {
     type GH[P, Y] = Exists[[Q] =>> (G[P, Q], H[Q, Y])]
     divide[F, GH](
       [X, Y] => (f: X -> Y) => h(f) match {
-        case Exists.Some(Exists.Some((f, g, h))) =>
+        case Indeed(Indeed((f, g, h))) =>
           Exists((f, Exists((g, h))))
       }
     ) match {
-      case Exists.Some((fs, ghs)) =>
+      case Indeed((fs, ghs)) =>
         ghs.divide[G, H](
           [P, Y] => (gh: GH[P, Y]) => gh
         ) match {
-          case Exists.Some((gs, hs)) =>
+          case Indeed((gs, hs)) =>
             Exists(Exists((fs, gs, hs)))
         }
     }
@@ -121,7 +122,7 @@ object ParN {
       ParN[∙, Nil, G, Q, Nil ∙ B]
     )] =
       h(value) match
-        case Exists.Some((f, g)) =>
+        case Indeed((f, g)) =>
           Exists((Single(f), Single(g)))
 
     override def flip: ParN[∙, Nil, [x, y] =>> y -> x, Nil ∙ B, Nil ∙ A] =
@@ -181,7 +182,7 @@ object ParN {
       ParN[∙, Nil, G, Q, B1 ∙ B2]
     )] =
       (init.divide(h), h(last)) match
-        case (Exists.Some((fInit, gInit)), Exists.Some((f, g))) =>
+        case (Indeed((fInit, gInit)), Indeed((f, g))) =>
           Exists((Snoc(fInit, f), Snoc(gInit, g)))
 
     override def flip: ParN[∙, Nil, [x, y] =>> y -> x, B1 ∙ B2, A1 ∙ A2] =

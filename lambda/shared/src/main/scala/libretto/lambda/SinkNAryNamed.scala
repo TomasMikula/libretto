@@ -1,6 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.util.{Applicative, BiInjective, Exists, SingletonType, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import scala.annotation.targetName
 
@@ -76,7 +77,7 @@ object SinkNAryNamed {
       SinkNAry[->, ∙, Nil, As0, B]
     )] =
       s.dropNames[∙, Nil] match
-        case Exists.Some((d, p)) =>
+        case Indeed((d, p)) =>
           Exists((d, SinkNAry.fromProduct(p)))
 
     def foldMap[->>[_, _]](

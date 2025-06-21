@@ -3,6 +3,7 @@ package libretto.lambda.examples.workflow.generic.runtime
 import libretto.lambda.{Capture, DistributionNAry, EnumModule, Focus, Knit, Knitted, ParN, Projection, Spine, SymmetricSemigroupalCategory, UnhandledCase, Unzippable}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::, Enum, FlowAST, PortName, Reading, given}
 import libretto.lambda.util.{BiInjective, Exists, SourcePos, TypeEq, TypeEqK}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import scala.concurrent.duration.FiniteDuration
 
@@ -128,9 +129,9 @@ object RuntimeFlows {
             // make sure value collector is introduced only at the output of the whole workflow
             // and not in the middle, as it would introduce an uncolicited synchronization point.
             RuntimeAction.captureValue[Action, Val, g, A](value, p) match
-              case Exists.Some((collector, k)) =>
+              case Indeed((collector, k)) =>
                 tr.s.knitBw(k) match
-                  case Exists.Some((k1, s1)) =>
+                  case Indeed((k1, s1)) =>
                     PropagateValueRes.Absorbed(k1, fromShuffled(s1) >>> action(collector).to[B])
       case Split(ev) =>
         val (a1, a2) = Value.unpair(ev.substituteCo(value))
@@ -157,7 +158,7 @@ object RuntimeFlows {
         PropagateValueRes.Transformed(newInput, fromShuffled(pre.plug > toShuffled(cont).at(g) > post))
       case FeedValueRes.Absorbed(k, cont) =>
         pre.knitBw(k.at(g)) match
-          case Exists.Some((k1, pre1)) =>
+          case Indeed((k1, pre1)) =>
             PropagateValueRes.Absorbed(k1, fromShuffled(pre1 > toShuffled(cont).at(g) > post))
       case FeedValueRes.Shrunk(newInput, p) =>
         project(pre.plug, p.at(g)) match
@@ -226,7 +227,7 @@ object RuntimeFlows {
           case Focus.Id() =>
             val enumValue: Value[Val, Enum[cases]] = value.as[Enum[cases]](using ev.flip)
             Value.revealCase(enumValue) match
-              case Exists.Some(Exists.Some(inj)) =>
+              case Indeed(Indeed(inj)) =>
                 val handler = h.handlers.get(inj.i)
                 FeedValueRes.Transformed(Input.Ready(inj.a), handler)
           case other =>
@@ -341,7 +342,7 @@ object RuntimeFlows {
     cont: Flow[Action, Val, V[A], W],
   ): FeedValueRes[Action, Val, V, W] =
     RuntimeAction.captureValue[Action, Val, V, A](a, v) match
-      case Exists.Some((collector, k)) =>
+      case Indeed((collector, k)) =>
         FeedValueRes.Absorbed(k, action(collector) >>> cont)
 
   private def feedDistributeeNAryLR[Action[_, _], Val[_], V[_], A, Cases, VACases](
@@ -363,7 +364,7 @@ object RuntimeFlows {
         given ev1: (V[A] =:= (P ** Q)) =
           ev.value.value
         d.separately[P, Q] match
-          case Exists.Some(Exists.Some((dq, dp, assocs))) =>
+          case Indeed(Indeed((dq, dp, assocs))) =>
             val distSeparately =
               fst(id[Action, Val, V[A]].to[P ** Q])
               >>> assocLR[Action, Val, P, Q, Enum[Cases]]
@@ -372,7 +373,7 @@ object RuntimeFlows {
               >>> enumMap(assocs.translate(
                 [X, Y] => (f: Exists[[b] =>> (X =:= (P ** (Q ** b)), ((P ** Q) ** b) =:= Y)]) =>
                   f match {
-                    case e @ Exists.Some((TypeEq(Refl()), TypeEq(Refl()))) =>
+                    case e @ Indeed((TypeEq(Refl()), TypeEq(Refl()))) =>
                       assocRL[Action, Val, P, Q, e.T]
                   }
               ))

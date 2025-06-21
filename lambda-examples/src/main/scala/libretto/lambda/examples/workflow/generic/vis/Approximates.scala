@@ -3,7 +3,7 @@ package libretto.lambda.examples.workflow.generic.vis
 import libretto.lambda.{DropNames, ParN}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::}
 import libretto.lambda.util.{Exists, Functional, TypeEq}
-import libretto.lambda.util.Exists.{Some as ∃}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 
 infix sealed trait Approximates[X, A] {
@@ -105,7 +105,7 @@ object Approximates {
       (Y1 ∙ Y2) IsRefinedBy Z,
     )] =
       (f1 leastCommonRefinement g1, f2 leastCommonRefinement g2) match
-        case (∃((z1, zf1, zg1)), ∃((z2, zf2, zg2))) =>
+        case (Indeed((z1, zf1, zg1)), Indeed((z2, zf2, zg2))) =>
           Exists((Pairwise(op, z1, z2), zf1 par zf2, zg1 par zg2))
 
     override def greatestCommonCoarsening[Y](
@@ -158,7 +158,7 @@ object Approximates {
             .uniqueOutputType(dropNames, dropNames1) match
               case TypeEq(Refl()) =>
                 leastCommonRefinementElementWise(components, components1) match
-                  case Exists.Some((zs, xs, ys)) =>
+                  case Indeed((zs, xs, ys)) =>
                     Exists((
                       ParNDropNames(op, dropNames, zs),
                       IsRefinedBy.parN(op, xs),
@@ -178,11 +178,11 @@ object Approximates {
       (xs, ys) match
         case (ParN.Single(x), ParN.Single(y)) =>
           (x leastCommonRefinement y) match
-            case Exists.Some((za, xz, yz)) =>
+            case Indeed((za, xz, yz)) =>
               Exists((ParN.Single(za), ParN.Single(xz), ParN.Single(yz)))
         case (ParN.Snoc(xs, x), ParN.Snoc(ys, y)) =>
           (leastCommonRefinementElementWise(xs, ys), x leastCommonRefinement y) match
-            case (Exists.Some((zas, xzs, yzs)), Exists.Some((za, xz, yz))) =>
+            case (Indeed((zas, xzs, yzs)), Indeed((za, xz, yz))) =>
               Exists((ParN.Snoc(zas, za), ParN.Snoc(xzs, xz), ParN.Snoc(yzs, yz)))
 
     override def greatestCommonCoarsening[Y](
@@ -204,7 +204,7 @@ object Approximates {
             .uniqueOutputType(dropNames, dropNames1) match
               case TypeEq(Refl()) =>
                 greatestCommonCoarseningElementWise(components, components1) match
-                  case Exists.Some((xs, ys, as)) =>
+                  case Indeed((xs, ys, as)) =>
                     Exists((
                       IsRefinedBy.parN(op, xs),
                       IsRefinedBy.parN(op, ys),
@@ -224,11 +224,11 @@ object Approximates {
       (xs, ys) match
         case (ParN.Single(x), ParN.Single(y)) =>
           (x greatestCommonCoarsening y) match
-            case Exists.Some((wx, wy, wa)) =>
+            case Indeed((wx, wy, wa)) =>
               Exists((ParN.Single(wx), ParN.Single(wy), ParN.Single(wa)))
         case (ParN.Snoc(xs, x), ParN.Snoc(ys, y)) =>
           (greatestCommonCoarseningElementWise(xs, ys), x greatestCommonCoarsening y) match
-            case (Exists.Some((wxs, wys, was)), Exists.Some((wx, wy, wa))) =>
+            case (Indeed((wxs, wys, was)), Indeed((wx, wy, wa))) =>
               Exists((ParN.Snoc(wxs, wx), ParN.Snoc(wys, wy), ParN.Snoc(was, wa)))
   }
 

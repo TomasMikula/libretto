@@ -2,7 +2,7 @@ package libretto.lambda.examples.workflow.generic.vis
 
 import libretto.lambda.NarrowCategory
 import libretto.lambda.util.{Exists, TypeEq}
-import libretto.lambda.util.Exists.{Some as ∃}
+import libretto.lambda.util.Exists.{Indeed as ∃}
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.examples.workflow.generic.vis.EdgeDesc.Composite
 

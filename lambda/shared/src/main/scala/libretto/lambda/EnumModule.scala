@@ -1,5 +1,6 @@
 package libretto.lambda
 
+import libretto.lambda.Items1Named.Member
 import libretto.lambda.util.{Applicative, BiInjective, SingletonType, TypeEq, TypeEqK}
 import libretto.lambda.util.TypeEqK.Refl
 import libretto.lambda.util.unapply.Unapply
@@ -12,7 +13,7 @@ trait EnumModule[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_, _]] {
   /** Witnesses that `Cases` is a list of cases, usable in `Enum`,
    * i.e. that `Cases` is of the form `(Name1 :: T1) || ... || (NameN :: TN)`.
    */
-  type CaseList[Cases] = ItemList[||, ::, Cases]
+  type CaseList[Cases] = Items1Named.Witness[||, ::, Cases]
 
   type IsCaseOf[Label, Cases] <: AnyRef with { type Type }
   type EnumPartition[Cases, P]
@@ -205,7 +206,7 @@ private[lambda] class EnumModuleImpl[->[_, _], **[_, _], Enum[_], ||[_, _], ::[_
   import cat.*
   import distr.DistF
 
-  private type Injector[Label, A, Cases] = libretto.lambda.Member[||, ::, Label, A, Cases]
+  private type Injector[Label, A, Cases] = Member[||, ::, Label, A, Cases]
 
   override opaque type IsCaseOf[Label, Cases] <: { type Type } = Injector[Label, ?, Cases]
   override opaque type EnumPartition[Cases, P] = Injector[?, P, Cases]

@@ -2,7 +2,8 @@ package libretto.scaletto.impl.futurebased
 
 import libretto.exec.Execution
 import libretto.exec.Executor.CancellationReason
-import libretto.lambda.{EnumModule, Member}
+import libretto.lambda.EnumModule
+import libretto.lambda.Items1Named.Member
 import libretto.lambda.util.SourcePos
 import libretto.scaletto.impl.{-⚬, Blueprint, Fun, FreeScaletto, ScalaFunction, bug}
 import libretto.util.{Async, Scheduler}

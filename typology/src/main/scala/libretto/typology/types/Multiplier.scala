@@ -2,6 +2,7 @@ package libretto.typology.types
 
 import libretto.lambda.{Projection, StrongZippable, Zippable}
 import libretto.lambda.util.Exists
+import libretto.lambda.util.Exists.Indeed
 
 sealed trait Multiplier[×[_, _], A, AA] {
   import Multiplier.*
@@ -31,7 +32,7 @@ object Multiplier {
       inputIsAtomic: [x, y] => (x: A =:= x × y) => Nothing,
     ): Multiplier[×, A, B] =
       p.startsFromPair match
-        case Exists.Some(Exists.Some(ev)) => inputIsAtomic(ev)
+        case Indeed(Indeed(ev)) => inputIsAtomic(ev)
   }
 
   case class Dup[×[_, _], A, A1, A2](

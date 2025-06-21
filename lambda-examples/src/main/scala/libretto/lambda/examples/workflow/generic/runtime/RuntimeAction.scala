@@ -3,6 +3,7 @@ package libretto.lambda.examples.workflow.generic.runtime
 import libretto.lambda.{Capture, DistributionNAry, Focus, Knitted}
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, Enum, ||, ::}
 import libretto.lambda.util.Exists
+import libretto.lambda.util.Exists.Indeed
 
 /** An action that might have already captured some of its inputs. */
 enum RuntimeAction[Op[_, _], Val[_], A, B]:
@@ -28,5 +29,5 @@ object RuntimeAction {
     at: Focus.Proper[**, F],
   ): Exists[[F0] =>> (RuntimeAction[Op, Val, F0, F[A]], Knitted[**, F, F0])] =
     Capture.fromFocus(at, value) match
-      case Exists.Some((f, k)) => Exists.Some((ValueCollector(f), k))
+      case Indeed((f, k)) => Indeed((ValueCollector(f), k))
 }

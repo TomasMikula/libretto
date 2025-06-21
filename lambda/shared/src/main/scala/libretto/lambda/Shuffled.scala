@@ -2,6 +2,7 @@ package libretto.lambda
 
 import libretto.lambda.{Projection as P}
 import libretto.lambda.util.{Applicative, BiInjective, Exists, TypeEq, TypeEqK}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.Projection.Proper
 import libretto.lambda.ShuffledModule.With
@@ -99,10 +100,10 @@ extends ShuffledModule[->, |*|] {
           sp.ev match { case TypeEq(Refl()) =>
             type F1[T] = F[T |*| x2]
             takeLeadingForestAtWhile[F1, x1, ->>](pos compose Focus.fst, pred) match
-              case res1 @ Exists.Some((f1, s1)) =>
+              case res1 @ Indeed((f1, s1)) =>
                 type F2[T] = F[res1.T |*| T]
                 s1.takeLeadingForestAtWhile[F2, x2, ->>](pos compose Focus.snd, pred) match
-                  case Exists.Some((f2, s2)) =>
+                  case Indeed((f2, s2)) =>
                     Exists((AForest.par(f1, f2), s2))
           }
         case r: ChaseFwRes.FedTo[f, x, v, w, g, b] =>
@@ -113,8 +114,8 @@ extends ShuffledModule[->, |*|] {
                   Exists((AForest.Empty(), this.from(using ev.flip)))
                 case Some(f0) =>
                   r.post.takeLeadingForestAtWhile[g, w, ->>](r.g, pred) match
-                    case Exists.Some((f1, s)) =>
-                      Exists.Some((AForest.Node(f0, f1), s.after(r.pre.apply)))
+                    case Indeed((f1, s)) =>
+                      Indeed((AForest.Node(f0, f1), s.after(r.pre.apply)))
             case Focus.Fst(_) | Focus.Snd(_) =>
               Exists((AForest.Empty(), this.from(using ev.flip)))
 
@@ -180,11 +181,11 @@ extends ShuffledModule[->, |*|] {
       tgt: libretto.lambda.Shuffled[->>, <*>],
     ): Exists[[T] =>> (tgt.Shuffled[S, T], F[B, T])] = {
       l.translate[<*>, F, S](fa)(om, tgt.shuffle) match
-        case Exists.Some((l1, fx)) =>
+        case Indeed((l1, fx)) =>
           m.translate(fx, om, am) match
-            case Exists.Some((m1, fy)) =>
+            case Indeed((m1, fy)) =>
               r.translate(fy)(om, tgt.shuffle) match
-                case Exists.Some((r1, fb)) =>
+                case Indeed((r1, fb)) =>
                   Exists((tgt.Impermeable(l1, m1, r1), fb))
     }
 
@@ -291,7 +292,7 @@ extends ShuffledModule[->, |*|] {
       tgt: libretto.lambda.Shuffled[->>, <*>],
     ): Exists[[T] =>> (tgt.Shuffled[S, T], F[B, T])] =
       s.translate(fa)(om, tgt.shuffle) match
-        case Exists.Some((s1, fb)) =>
+        case Indeed((s1, fb)) =>
           Exists((tgt.Pure(s1), fb))
 
     override def traverse[G[_], ->>[_,_]](
@@ -649,7 +650,7 @@ extends ShuffledModule[->, |*|] {
         tgt: libretto.lambda.Shuffled[->>, <*>],
       ): Exists[[T] =>> (tgt.Plated[S, T], F[B, T])] = {
         am.map(fa, f)(using om) match
-          case Exists.Some((g, fb)) =>
+          case Indeed((g, fb)) =>
             Exists((tgt.Plated.Solid(g), fb))
       }
 
@@ -739,9 +740,9 @@ extends ShuffledModule[->, |*|] {
         om.unpair(fa12) match
           case om.Unpaired.Impl(fa1, fa2) =>
             f1.translate(fa1, om, am) match
-              case Exists.Some((g1, fb1)) =>
+              case Indeed((g1, fb1)) =>
                 f2.translate(fa2, om, am) match
-                  case Exists.Some((g2, fb2)) =>
+                  case Indeed((g2, fb2)) =>
                     Exists((tgt.Plated.Stacked(g1, g2), om.pair(fb1, fb2)))
       }
     }
@@ -804,11 +805,11 @@ extends ShuffledModule[->, |*|] {
         tgt: libretto.lambda.Shuffled[->>, <*>],
       ): Exists[[T] =>> (tgt.Plated[S, T], F[B, T])] = {
         l.translate(fa, om, am) match
-          case Exists.Some((l1, fx)) =>
+          case Indeed((l1, fx)) =>
             m.translate(fx)(om, tgt.shuffle) match
-              case Exists.Some((m1, fy)) =>
+              case Indeed((m1, fy)) =>
                 r.translate(fy, om, am) match
-                  case Exists.Some((r1, fb)) =>
+                  case Indeed((r1, fb)) =>
                     Exists(tgt.Plated.Sandwich(l1, m1, r1), fb)
       }
     }
@@ -897,13 +898,13 @@ extends ShuffledModule[->, |*|] {
         om.unpair(fa) match
           case om.Unpaired.Impl(fa1, fa2) =>
             semiHead.translate(fa2, om, am) match
-              case Exists.Some((semiHead1, fx2)) =>
+              case Indeed((semiHead1, fx2)) =>
                 s.translate(fx2)(om, tgt.shuffle) match
-                  case Exists.Some((s1, fy2)) =>
+                  case Indeed((s1, fy2)) =>
                     t.translateLR(fa1, fy2)(om)(using tgt.shuffle) match
-                      case Exists.Some(Exists.Some((t1, fz1, fz2))) =>
+                      case Indeed(Indeed((t1, fz1, fz2))) =>
                         tail.translate(om.pair(fz1, fz2), om, am) match
-                          case Exists.Some((tail1, fb)) =>
+                          case Indeed((tail1, fb)) =>
                             Exists((tgt.Plated.SemiCons(semiHead1, s1, t1, tail1), fb))
     }
 
@@ -1000,14 +1001,14 @@ extends ShuffledModule[->, |*|] {
         tgt: libretto.lambda.Shuffled[->>, <*>],
       ): Exists[[T] =>> (tgt.Plated[S, T], F[B1 |*| B2, T])] = {
         init.translate(fa, om, am) match
-          case Exists.Some((init1, fx)) =>
+          case Indeed((init1, fx)) =>
             val ufx = om.unpair(fx)
             t.translate(ufx.f1, ufx.f2, om) match
-              case Exists.Some(Exists.Some((t1, fb1, fy2))) =>
+              case Indeed(Indeed((t1, fb1, fy2))) =>
                 s.translate(fy2)(om, tgt.shuffle) match
-                  case Exists.Some((s1, fz2)) =>
+                  case Indeed((s1, fz2)) =>
                     semiLast.translate(fz2, om, am) match
-                      case Exists.Some((semiLast1, fb2)) =>
+                      case Indeed((semiLast1, fb2)) =>
                         ufx.ev match
                           case TypeEq(Refl()) =>
                             Exists((tgt.Plated.SemiSnoc(init1.to(using ufx.ev), t1, s1, semiLast1), om.pair(fb1, fb2)))
@@ -1135,17 +1136,17 @@ extends ShuffledModule[->, |*|] {
         om.unpair(fa) match
           case om.Unpaired.Impl(fa1, fa2) =>
             l.translate(fa2, om, am) match
-              case Exists.Some((l1, fp)) =>
+              case Indeed((l1, fp)) =>
                 om.unpair(fp) match
                   case v @ om.Unpaired.Impl(fp1, fp2) =>
                     lt.translate(fp1, fp2, om) match
-                      case Exists.Some(Exists.Some((lt1, fb1, fq))) =>
+                      case Indeed(Indeed((lt1, fb1, fq))) =>
                         b.translate(fq)(om, tgt.shuffle) match
-                          case Exists.Some((b1, fr)) =>
+                          case Indeed((b1, fr)) =>
                             rt.translateLR(fa1, fr)(om)(using tgt.shuffle) match
-                              case Exists.Some(Exists.Some((rt1, fs1, fs2))) =>
+                              case Indeed(Indeed((rt1, fs1, fs2))) =>
                                 r.translate(om.pair(fs1, fs2), om, am) match
-                                  case Exists.Some((r1, fb2)) =>
+                                  case Indeed((r1, fb2)) =>
                                     Exists((tgt.Plated.XI(l1.to(using v.ev), lt1, b1, rt1, r1), om.pair(fb1, fb2)))
       }
     }
@@ -1184,7 +1185,7 @@ extends ShuffledModule[->, |*|] {
       tgt: libretto.lambda.Shuffled[->>, <*>],
     ): Exists[[T1] =>> Exists[[T2] =>> (tgt.RevTransferOpt[S1, S2, T1, T2], F[B1, T1], F[B2, T2])]] =
       t.translateRL(fa1, fa2)(om)(using tgt.shuffle) match
-        case Exists.Some(Exists.Some((fb1, fb2, t1))) =>
+        case Indeed(Indeed((fb1, fb2, t1))) =>
           Exists(Exists((tgt.RevTransferOpt(t1), fb1, fb2)))
 
     def apply[F[_]](fa: F[A1 |*| A2])(using StrongZippable[|*|, F]): F[B1 |*| B2] =

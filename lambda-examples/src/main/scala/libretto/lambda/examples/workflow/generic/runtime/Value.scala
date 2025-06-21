@@ -1,8 +1,10 @@
 package libretto.lambda.examples.workflow.generic.runtime
 
-import libretto.lambda.{DistributionNAry, EnumModule, Member, Projection, UnhandledCase, Unzippable, Zippable}
+import libretto.lambda.{DistributionNAry, EnumModule, Projection, UnhandledCase, Unzippable, Zippable}
+import libretto.lambda.Items1Named.Member
 import libretto.lambda.examples.workflow.generic.lang.{**, ++, ||, ::, Enum, PortName, Reading, Str, given}
 import libretto.lambda.util.Exists
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.unapply.Unapply
 
 enum Value[F[_], A]:
@@ -39,7 +41,7 @@ enum Value[F[_], A]:
 
   def discardProper[B](p: Projection.Proper[**, A, B])(using Unzippable[**, F]): Value[F, B] =
     p.startsFromPair match
-      case Exists.Some(Exists.Some(ev)) =>
+      case Indeed(Indeed(ev)) =>
         Value.discardProper(this.as(using ev), p.from(using ev.flip))
 
 object Value:
@@ -135,7 +137,7 @@ object Value:
     F: Compliant[F],
   ): Value[F, Enum[XCases]] =
     revealCase(enm) match
-      case Exists.Some(Exists.Some(Inject(i, a))) =>
+      case Indeed(Indeed(Inject(i, a))) =>
         Inject(d.distributeOver(i), x ** a)
 
   def extractString[F[_]](value: Value[F, Str])(using F: Compliant[F]): String =

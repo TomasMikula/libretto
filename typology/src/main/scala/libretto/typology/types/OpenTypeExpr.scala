@@ -2,6 +2,7 @@ package libretto.typology.types
 
 import libretto.lambda.{Capture, Tupled, UnhandledCase}
 import libretto.lambda.util.{Exists, SourcePos, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import libretto.typology.kinds.*
 import libretto.typology.types.{kindShuffle as sh}
@@ -81,12 +82,12 @@ object OpenTypeExpr {
               case Left(t) =>
                 Exists((Capt.closed(t), KindN(t.outKind), PartialArgs.Id[OpenTypeExpr[TC, _, _], l]()(using KindN(t.outKind))))
                   : Exists[[X] =>> (Capt[TC, k, X], KindN[X], PartialArgs[OpenTypeExpr[TC, _, _], X, l])]
-              case Right(Exists.Some((g, h))) =>
-                Exists.Some((g, h.inKind, PartialArgs(h)(using Kinds(h.inKind), KindN(h.outKind))))
+              case Right(Indeed((g, h))) =>
+                Indeed((g, h.inKind, PartialArgs(h)(using Kinds(h.inKind), KindN(h.outKind))))
                   : Exists[[X] =>> (Capt[TC, k, X], KindN[X], PartialArgs[OpenTypeExpr[TC, _, _], X, l])]
           }
         ) match {
-          case Exists.Some((args0, args1)) =>
+          case Indeed((args0, args1)) =>
             Right(Exists((Capt.foldArgs(args0), OpenTypeExpr.App(f, PartialArgs.flatten(args1))(using args0.outKind))))
         }
 
@@ -136,7 +137,7 @@ object OpenTypeExpr {
             )
           case Lift(f) =>
             ltrim(TransferOpt.None(), f) match
-              case Exists.Some((cap, base)) =>
+              case Indeed((cap, base)) =>
                 Opaque(cap, LTrimmed.Args.Expr(base))
           case Par(f1, f2) =>
             UnhandledCase.raise(s"ltrimArgs($tr, $args)")
@@ -266,7 +267,7 @@ object OpenTypeExpr {
           UnhandledCase.raise(s"ltrimMore($tr, $expr)")
         case RApp(op, args) =>
           Args.SemiTransparent.ltrimMore(tr, args) match
-            case Exists.Some((extruded, args)) =>
+            case Indeed((extruded, args)) =>
               Exists((extruded, RApp(op, args)(using expr.inKind1 × extruded.outKind)))
 
     sealed trait Args[TC[_, _], K1, K2, L] {

@@ -3,6 +3,7 @@ package libretto.testing
 import libretto.exec.{Bridge, ExecutionParams, Executor}
 import libretto.exec.Executor.CancellationReason
 import libretto.lambda.util.Exists
+import libretto.lambda.util.Exists.Indeed
 import libretto.util.Async
 import scala.concurrent.duration.FiniteDuration
 
@@ -155,9 +156,9 @@ object TestExecutor {
         kit,
         adaptParam = [A] => (ka: kit.ExecutionParam[A]) =>
           adaptParam(ka) match
-            case Exists.Some((py, h)) =>
+            case Indeed((py, h)) =>
               f(py) match
-                case Exists.Some((qx, g)) =>
+                case Indeed((qx, g)) =>
                   Exists((qx, g andThen h))
       )
 
@@ -191,7 +192,7 @@ object TestExecutor {
           timeout: FiniteDuration,
         ): TestResult[Unit] =
           params.adapt(adaptParam) match
-            case e @ Exists.Some((params, adaptResult)) =>
+            case e @ Indeed((params, adaptResult)) =>
               runOnExecutor[O, e.T, Y](
                   body,
                   params,

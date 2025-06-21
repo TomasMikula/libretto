@@ -3,6 +3,7 @@ package libretto.lambda
 import libretto.lambda.{Projection as P}
 import libretto.lambda.util.{BiInjective, Exists, TypeEq}
 import libretto.lambda.util.BiInjective.*
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.Projection.Proper
 
@@ -195,7 +196,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F.unpair(f) match
           case F.Unpaired.Impl(f1, f2) =>
             (s1.preShuffle(f1), s2.preShuffle(f2)) match
-              case (Exists.Some((f1, s1)), Exists.Some((f2, s2))) =>
+              case (Indeed((f1, s1)), Indeed((f2, s2))) =>
                 Exists((F.pair(f1, f2), ~⚬.par(s1, s2)))
     }
 
@@ -252,11 +253,11 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F: PairwiseRel[|*|, |*|, F],
       ): Exists[[X] =>> (F[A1 |*| A2, X], X ~⚬ C)] =
         transfer.preShuffle(f) match
-          case Exists.Some((g, s)) =>
+          case Indeed((g, s)) =>
             F.unpair(g) match
               case F.Unpaired.Impl(g1, g2) =>
                 (f1.preShuffle(g1), f2.preShuffle(g2)) match
-                  case (Exists.Some((h1, s1)), Exists.Some((h2, s2))) =>
+                  case (Indeed((h1, s1)), Indeed((h2, s2))) =>
                     Exists((F.pair(h1, h2), par(s1, s2) > s))
 
       override def translate[<*>[_,_], F[_,_], S](
@@ -266,8 +267,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         sh: Shuffle[<*>],
       ): Exists[[t] =>> (sh.~⚬[S, t], F[B1 |*| B2, t])] = {
         m.unpair(fa)                                          match { case m.Unpaired.Impl(fa1, fa2) =>
-        (f1.translate(fa1)(m, sh), f2.translate(fa2)(m, sh))  match { case (Exists.Some(x1), Exists.Some(x2)) =>
-        transfer.translate(m.pair(x1._2, x2._2))(m, sh)       match { case Exists.Some(b) =>
+        (f1.translate(fa1)(m, sh), f2.translate(fa2)(m, sh))  match { case (Indeed(x1), Indeed(x2)) =>
+        transfer.translate(m.pair(x1._2, x2._2))(m, sh)       match { case Indeed(b) =>
         Exists((sh.~⚬.par(x1._1, x2._1) > b._1, b._2))
         }}}
       }
@@ -812,8 +813,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     ): Exists[[t] =>> (sh.~⚬[S, t], F[Y1 |*| Y2, t])] = {
       this                        match { case Par(f1, f2) =>
       m.unpair(fa)                match { case m.Unpaired.Impl(fx1, fx2) =>
-      f1.translate(fx1)(m, sh)    match { case Exists.Some(y1) =>
-      f2.translate(fx2)(m, sh)    match { case Exists.Some(y2) =>
+      f1.translate(fx1)(m, sh)    match { case Indeed(y1) =>
+      f2.translate(fx2)(m, sh)    match { case Indeed(y2) =>
       Exists((
         sh.~⚬.par(y1._1, y2._1),
         m.pair(y1._2, y2._2),
@@ -933,7 +934,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       m.unpair(fa) match
         case m.Unpaired.Impl(fa1, fa2) =>
           translateLR(fa1, fa2)(m)(using tgt) match
-            case Exists.Some(Exists.Some((t, f1, f2))) =>
+            case Indeed(Indeed((t, f1, f2))) =>
               Exists((t.asShuffle, m.pair(f1, f2)))
 
     def translateLR[<*>[_, _], F[_, _], S1, S2](
@@ -1522,7 +1523,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F.unpair(f) match
           case F.Unpaired.Impl(f1, f23) =>
             g.preShuffle(f23) match
-              case Exists.Some((f23, g)) =>
+              case Indeed((f23, g)) =>
                 F.unpair(f23) match
                   case F.Unpaired.Impl(f2, f3) =>
                     Exists((F.pair(F.pair(f1, f2), f3), assocLR > snd(g)))
@@ -1536,7 +1537,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         tgt: Shuffle[<*>],
       ): Exists[[T1] =>> Exists[[T2] =>> (tgt.TransferOpt[S12, S3, T1, T2], F[A1, T1], F[B2 |*| B3, T2])]] = {
         m.unpair(fa12)                        match { case v @ m.Unpaired.Impl(fa1, fa2) =>
-        g.translateLR(fa2, fa3)(m)            match { case e1 @ Exists.Some(e2 @ Exists.Some((g1, fb2, fb3))) =>
+        g.translateLR(fa2, fa3)(m)            match { case e1 @ Indeed(e2 @ Indeed((g1, fb2, fb3))) =>
         Exists(Exists((tgt.Transfer.AssocLR[v.X1, v.X2, S3, e1.T, e2.T](g1), fa1, m.pair(fb2, fb3))))
         }}
       }
@@ -1552,7 +1553,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         m.unpair(fb23) match
           case m.Unpaired.Impl(fb2, fb3) =>
             g.translateRL(fb2, fb3)(m) match
-              case Exists.Some(Exists.Some((fa2, fa3, h))) =>
+              case Indeed(Indeed((fa2, fa3, h))) =>
                 Exists(Exists((m.pair(fa1, fa2), fa3, tgt.Transfer.AssocLR(h))))
       }
 
@@ -1807,7 +1808,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F.unpair(f) match
           case F.Unpaired.Impl(f12, f3) =>
             g.preShuffle(f12) match
-              case Exists.Some((f12, g)) =>
+              case Indeed((f12, g)) =>
                 F.unpair(f12) match
                   case F.Unpaired.Impl(f1, f2) =>
                     Exists((F.pair(f1, F.pair(f2, f3)), assocRL > fst(g)))
@@ -1821,7 +1822,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         tgt: Shuffle[<*>],
       ): Exists[[T1] =>> Exists[[T2] =>> (tgt.TransferOpt[S1, S23, T1, T2], F[B1 |*| B2, T1], F[A3, T2])]] =
         m.unpair(fa23)                        match { case v @ m.Unpaired.Impl(fa2, fa3) =>
-        g.translateLR(fa1, fa2)(m)            match { case e1 @ Exists.Some(e2 @ Exists.Some((g1, fb1, fb2))) =>
+        g.translateLR(fa1, fa2)(m)            match { case e1 @ Indeed(e2 @ Indeed((g1, fb1, fb2))) =>
         Exists(Exists((tgt.Transfer.AssocRL[S1, v.X1, v.X2, e1.T, e2.T](g1), m.pair(fb1, fb2), fa3)))
         }}
 
@@ -1836,7 +1837,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         m.unpair(fb12) match
           case m.Unpaired.Impl(fb1, fb2) =>
             g.translateRL(fb1, fb2)(m) match
-              case Exists.Some(Exists.Some((fa1, fa2, h))) =>
+              case Indeed(Indeed((fa1, fa2, h))) =>
                 Exists(Exists((fa1, m.pair(fa2, fa3), tgt.Transfer.AssocRL(h))))
 
       override def chaseFwFst[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= A1): ChaseFwRes[[t] =>> F[t] |*| (A2 |*| A3), T, (B1 |*| B2) |*| A3] =
@@ -2091,7 +2092,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F.unpair(f) match
           case F.Unpaired.Impl(f12, f3) =>
             g.preShuffle(f12) match
-              case Exists.Some((f12, g)) =>
+              case Indeed((f12, g)) =>
                 F.unpair(f12) match
                   case F.Unpaired.Impl(f1, f2) =>
                     Exists((F.pair(F.pair(f1, f3), f2), ix > fst(g)))
@@ -2107,7 +2108,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         m.unpair(fa12) match
           case v @ m.Unpaired.Impl(fa1, fa2) =>
             g.translateLR(fa1, fa3)(m) match
-              case e1 @ Exists.Some(e2 @ Exists.Some((g1, fb1, fb2))) =>
+              case e1 @ Indeed(e2 @ Indeed((g1, fb1, fb2))) =>
                 Exists(Exists((tgt.Transfer.IX[v.X1, v.X2, S3, e1.T, e2.T](g1), m.pair(fb1, fb2), fa2)))
 
       override def translateRL[<*>[_, _], F[_, _], T1, T2](
@@ -2121,7 +2122,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         m.unpair(fb12) match
           case m.Unpaired.Impl(fb1, fb2) =>
             g.translateRL(fb1, fb2)(m) match
-              case Exists.Some(Exists.Some((fa1, fa3, g1))) =>
+              case Indeed(Indeed((fa1, fa3, g1))) =>
                 Exists(Exists((m.pair(fa1, fa2), fa3, tgt.Transfer.IX(g1))))
 
       override def chaseFwFst[F[_], T](i: Focus[|*|, F])(using ev: F[T] =:= (A1 |*| A2)): ChaseFwRes[[t] =>> F[t] |*| A3, T, (B1 |*| B2) |*| A2] =
@@ -2378,7 +2379,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F.unpair(f) match
           case F.Unpaired.Impl(f1, f23) =>
             g.preShuffle(f23) match
-              case Exists.Some((f23, g)) =>
+              case Indeed((f23, g)) =>
                 F.unpair(f23) match
                   case F.Unpaired.Impl(f2, f3) =>
                     Exists((F.pair(f2, F.pair(f1, f3)), xi > snd(g)))
@@ -2394,7 +2395,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         m.unpair(fa23) match
           case v @ m.Unpaired.Impl(fa2, fa3) =>
             g.translateLR(fa1, fa3)(m) match
-              case e1 @ Exists.Some(e2 @ Exists.Some((g1, fb2, fb3))) =>
+              case e1 @ Indeed(e2 @ Indeed((g1, fb2, fb3))) =>
                 Exists(Exists((tgt.Transfer.XI[S1, v.X1, v.X2, e1.T, e2.T](g1), fa2, m.pair(fb2, fb3))))
 
       override def translateRL[<*>[_, _], F[_, _], T1, T2](
@@ -2408,7 +2409,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         m.unpair(fb23) match {
           case m.Unpaired.Impl(fb2, fb3) =>
             g.translateRL(fb2, fb3)(m) match
-              case Exists.Some(Exists.Some((fa1, fa3, h))) =>
+              case Indeed(Indeed((fa1, fa3, h))) =>
                 Exists(Exists((fa1, m.pair(fb1, fa3), tgt.Transfer.XI(h))))
         }
 
@@ -2700,7 +2701,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         F.unpair(f) match
           case F.Unpaired.Impl(f12, f34) =>
             (g1.preShuffle(f12), g2.preShuffle(f34)) match
-              case (Exists.Some((f12, g1)), Exists.Some((f34, g2))) =>
+              case (Indeed((f12, g1)), Indeed((f34, g2))) =>
                 (F.unpair(f12), F.unpair(f34)) match
                   case (F.Unpaired.Impl(f1, f2), F.Unpaired.Impl(f3, f4)) =>
                     Exists((F.pair(F.pair(f1, f3), F.pair(f2, f4)), ixi > par(g1, g2)))
@@ -2716,8 +2717,8 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ): Exists[[T1] =>> Exists[[T2] =>> (tgt.TransferOpt[S1, S2, T1, T2], F[B1 |*| B2, T1], F[B3 |*| B4, T2])]] =
         m.unpair(fa12)                match { case m.Unpaired.Impl(fa1, fa2) =>
         m.unpair(fa34)                match { case m.Unpaired.Impl(fa3, fa4) =>
-        g1.translateLR(fa1, fa3)(m)   match { case Exists.Some(Exists.Some((h1, fb1, fb2))) =>
-        g2.translateLR(fa2, fa4)(m)   match { case Exists.Some(Exists.Some((h2, fb3, fb4))) =>
+        g1.translateLR(fa1, fa3)(m)   match { case Indeed(Indeed((h1, fb1, fb2))) =>
+        g2.translateLR(fa2, fa4)(m)   match { case Indeed(Indeed((h2, fb3, fb4))) =>
         Exists(Exists((
           tgt.Transfer.IXI(h1, h2),
           m.pair(fb1, fb2),
@@ -2738,9 +2739,9 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
             m.unpair(fb34) match
               case m.Unpaired.Impl(fb3, fb4) =>
                 g1.translateRL(fb1, fb2)(m) match
-                  case Exists.Some(Exists.Some((fa1, fa3, h1))) =>
+                  case Indeed(Indeed((fa1, fa3, h1))) =>
                     g2.translateRL(fb3, fb4)(m) match
-                      case Exists.Some(Exists.Some((fa2, fa4, h2))) =>
+                      case Indeed(Indeed((fa2, fa4, h2))) =>
                         Exists(Exists((m.pair(fa1, fa2), m.pair(fa3, fa4), tgt.Transfer.IXI(h1, h2))))
 
       override def chaseFwFst[F[_], T](i: Focus[|*|, F])(using

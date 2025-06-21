@@ -1,6 +1,7 @@
 package libretto.lambda.examples.workflow.generic.vis
 
 import libretto.lambda.util.Exists
+import libretto.lambda.util.Exists.Indeed
 
 trait Visualizer[F[_, _], approximates[_, _]] {
   extension [A, B](f: F[A, B])
@@ -41,7 +42,7 @@ object Visualizer {
       extension [A, B](f: F[A, B])
         override def visualize: Exists[[X] =>> Exists[[Y] =>> (approximates[X, A], approximates[Y, B], Visualization[X, Y])]] =
           describe(f) match
-            case (label, Exists.Some(apprA), Exists.Some(apprB), color) =>
+            case (label, Indeed(apprA), Indeed(apprB), color) =>
               Exists(Exists((
                 apprA,
                 apprB,

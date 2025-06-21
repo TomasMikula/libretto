@@ -2,6 +2,7 @@ package libretto.lambda
 
 import libretto.lambda.Projection
 import libretto.lambda.util.{BiInjective, Exists, ExistsK, SourcePos, TypeEqK}
+import libretto.lambda.util.Exists.Indeed
 
 sealed trait Knit[**[_, _], F[_]] {
   type Res
@@ -149,7 +150,7 @@ object Knitted {
         None
       case p: Projection.Proper[pr, p, q] =>
         p.startsFromPair match {
-          case Exists.Some(Exists.Some(ev)) =>
+          case Indeed(Indeed(ev)) =>
             fromProjectionProper(ev.substituteCo[[x] =>> Projection.Proper[**, x, Q]](p))
         }
 
@@ -175,14 +176,14 @@ object Knitted {
         p match
           case P.Fst(p1) =>
             fromProjection(p1)
-              .map { case e @ ExistsK.Some(k1) =>
+              .map { case e @ ExistsK.Indeed(k1) =>
                 ExistsK[[f[_]] =>> Knitted[**, f, Q], [x] =>> e.T[x] ** Q2](
                   k1.inFst[Q2].to[Q](using ev.flip)
                 )
               }
           case P.Snd(p2) =>
             fromProjection(p2)
-              .map { case e @ ExistsK.Some(k2) =>
+              .map { case e @ ExistsK.Indeed(k2) =>
                 ExistsK[[f[_]] =>> Knitted[**, f, Q], [x] =>> Q1 ** e.T[x]](
                   k2.inSnd[Q1].to[Q](using ev.flip)
                 )

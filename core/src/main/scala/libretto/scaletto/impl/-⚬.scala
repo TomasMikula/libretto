@@ -6,11 +6,12 @@ import libretto.lambda.{
   CocartesianSemigroupalCategory,
   Distribution,
   DistributionNAry,
-  Member,
   SemigroupalCategory,
   SinkNAryNamed,
 }
+import libretto.lambda.Items1Named.Member
 import libretto.lambda.util.{Exists, SourcePos, TypeEq, Validated}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import libretto.lambda.util.Validated.{Valid, invalid}
 import scala.annotation.tailrec
@@ -295,7 +296,7 @@ object -⚬ {
                     )),
                   snocCase = [Init, Lbl <: String, P] => (init, lbl, f) =>
                     init match
-                      case Exists.Some((d, init)) =>
+                      case Indeed((d, init)) =>
                         Exists((
                           DistributionNAry.DistLR.Snoc[|*|, ||, ::, Sub[X, Y], Init, Lbl, P, d.Out](d, lbl),
                           SinkNAryNamed.snoc(init, lbl, f)
@@ -303,7 +304,7 @@ object -⚬ {
                 )
 
               hs2 match
-                case Exists.Some((d, s)) =>
+                case Indeed((d, s)) =>
                   Some(distributionN.distLR(d) > cocatN.handle(s))
             }
           case f: Choice[arr, a, b1, b2] =>

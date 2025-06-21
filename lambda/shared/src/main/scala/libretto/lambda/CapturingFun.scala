@@ -1,6 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.util.{Applicative, BiInjective, ClampEq, Exists, Monad, NonEmptyList, Validated}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.Validated.{Valid, invalid}
 
 sealed trait CapturingFun[-->[_, _], |*|[_, _], F[_], A, B] {
@@ -95,7 +96,7 @@ object CapturingFun {
 
       case (Closure(x, f), Closure(y, g)) =>
         union(x, y)
-          .map { case Exists.Some((z, p1, p2)) =>
+          .map { case Indeed((z, p1, p2)) =>
             Closure(z, (fst(p1) > f, fst(p2) > g))
           }
     }
@@ -144,7 +145,7 @@ object CapturingFun {
     leastCommonCaptureFree(fs) match
       case Left(fs) =>
         discarder.foldSink[<+>, C, [x] =>> x, A, B](fs).map(Left(_))
-      case Right(Exists.Some((x, fs))) =>
+      case Right(Indeed((x, fs))) =>
         discarder.foldSink(fs).map(fs => Right(Exists((x, fs))))
 
   private def leastCommonCaptureFree[-->[_, _], |*|[_, _], F[_], C, A, B](
@@ -172,7 +173,7 @@ object CapturingFun {
             Closure(x, (c0, sh.lift(Right(f0))) :: fs.map { case (c, f) => (c, f.inSnd > p) })
           case (Closure(x, f0), Closure(y, fs)) =>
             union(x, y) match
-              case Exists.Some((z, p1, p2)) =>
+              case Indeed((z, p1, p2)) =>
                 Closure(z, (c0, sh.fst(p1) > sh.lift(Right(f0))) :: fs.map { case (c, f) => (c, sh.fst(p2) > f) })
     }
 
@@ -216,13 +217,13 @@ object CapturingFun {
         (t1, t2) match
           case (Left(t1), Left(t2)) =>
             Left(t1 <+> t2)
-          case (Left(t1), Right(Exists.Some((y, t2)))) =>
+          case (Left(t1), Right(Indeed((y, t2)))) =>
             Right(Exists((y, thenElim(t1, y) <+> t2)))
-          case (Right(Exists.Some((x, t1))), Left(t2)) =>
+          case (Right(Indeed((x, t1))), Left(t2)) =>
             Right(Exists((x, t1 <+> thenElim(t2, x))))
-          case (Right(Exists.Some((x, t1))), Right(Exists.Some((y, t2)))) =>
+          case (Right(Indeed((x, t1))), Right(Indeed((y, t2)))) =>
             union(x, y) match
-              case Exists.Some((z, p1, p2)) =>
+              case Indeed((z, p1, p2)) =>
                 Right(Exists((z, afterFst(t1, p1) <+> afterFst(t2, p2))))
 
   private class Discarder[-->[_, _], |*|[_, _], F[_]](
@@ -323,7 +324,7 @@ object CapturingFun {
       .map {
         case Left(fs) =>
           NoCapture(fs.reduce([x, y] => either(_, _)))
-        case Right(Exists.Some((x, fs))) =>
+        case Right(Indeed((x, fs))) =>
           Closure(x, fs.reduce([x, y] => (f1, f2) => distLR > either(f1, f2)))
       }
   }

@@ -1,6 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.util.{Exists, SourcePos, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 
 sealed trait Capture[**[_, _], F[_], A, B] {
@@ -31,7 +32,7 @@ sealed trait Capture[**[_, _], F[_], A, B] {
     path: Focus.Proper[**, P],
   )(using P[X] =:= A, Unzippable[**, F]): Absorbed[**, F, P, B] =
     Capture.fromFocus(path, value) match
-      case Exists.Some((f, k)) =>
+      case Indeed((f, k)) =>
         Absorbed.Impl(k, f.to[A] > this)
 
   def exposeCaptured(using sh: Shuffle[**]): Either[A =:= B, Capture.Exposed[sh.type, **, F, A, B]] =
@@ -152,7 +153,7 @@ object Capture {
     x: F[X],
   ): Capture[**, F, k.Res, P[X]] =
     fromFocus(p, x) match
-      case Exists.Some((res, k1)) =>
+      case Indeed((res, k1)) =>
         Knitted.functional(k1, k).substituteCo[Capture[**, F, _, P[X]]](res)
 
   def fromFocus[**[_, _], F[_], P[_], X](
@@ -166,7 +167,7 @@ object Capture {
             Exists((CaptureFst(Tupled.atom(x), NoCapture()), Knitted.keepSnd))
           case p1: Focus.Proper[pr, p1] =>
             fromFocus(p1, x) match
-              case Exists.Some((capt, k)) =>
+              case Indeed((capt, k)) =>
                 Exists((capt.inFst[b], k.inFst[b]))
       case p: Focus.Snd[pr, p2, a] =>
         p.i match
@@ -174,7 +175,7 @@ object Capture {
             Exists((CaptureSnd(NoCapture(), Tupled.atom(x)), Knitted.keepFst))
           case p2: Focus.Proper[pr, p2] =>
             fromFocus(p2, x) match
-              case Exists.Some((capt, k)) =>
+              case Indeed((capt, k)) =>
                 Exists((capt.inSnd[a], k.inSnd[a]))
 
   enum Absorbed[**[_, _], F[_], P[_], B]:
