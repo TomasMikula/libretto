@@ -4,10 +4,8 @@ import scala.quoted.*
 
 private object Reporting {
 
-  // TODO: use report.errorAndAbort after https://github.com/lampepfl/dotty/issues/19851 is fixed
   def errorAndAbort(msg: String)(using Quotes): Nothing =
-    quotes.reflect.report.error(msg)
-    ???
+    quotes.reflect.report.errorAndAbort(msg)
 
   def typeShortCode[T <: AnyKind](using Quotes)(t: Type[T]): String =
     typeShortCode(qr.TypeRepr.of(using t))
