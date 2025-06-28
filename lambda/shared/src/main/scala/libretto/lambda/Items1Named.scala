@@ -464,6 +464,8 @@ object Items1Named {
     def tag: Member[||, ::, Label, Case, Items]
     def value: F[Case]
     def label: Label = tag.label.value
+
+    def getSingle[K, V](using Items =:= (K :: V), BiInjective[::]): F[V]
   }
 
   object Sum {
@@ -473,6 +475,10 @@ object Items1Named {
     ) extends Sum[||, ::, F, Items] {
       override type Label = Lbl
       override type Case = A
+
+      override def getSingle[K, V](using ev: Items =:= K :: V, i: BiInjective[::]): F[V] =
+        val (_, _, ev2) = Member.asSingle(ev.substituteCo(tag))
+        ev2.substituteCo(value)
     }
   }
 }
