@@ -52,6 +52,65 @@ object Items1Named {
       Snoc(init, lbl)
   }
 
+  // TODO: use to implement Member and Sum
+  /** Holds `F[K, V]` for `K :: V` one of `Cases`,
+   * where `Cases` is of the form `(K1 :: V1) || (K2 :: V2) || ...`
+   * (where `||` associates to the left).
+   */
+  sealed trait OneOf[||[_, _], ::[_, _], +F[_, _], Cases] {
+    type Key
+    type Type
+
+    def value: F[Key, Type]
+
+    def aux: this.type & OneOf.Aux[||, ::, F, Cases, Key, Type]
+
+    def inInit[Kn, Vn]: OneOf.Aux[||, ::, F, Cases || Kn :: Vn, Key, Type] =
+      OneOf.InInit(this.aux)
+
+    infix def testMatching[G[_, _]](that: OneOf[||, ::, G, Cases])(using
+      BiInjective[||],
+      BiInjective[::],
+    ): Option[(this.Key =:= that.Key, this.Type =:= that.Type)] =
+      ???
+  }
+
+  object OneOf {
+    sealed trait Aux[||[_, _], ::[_, _], +F[_, _], Cases, K, V] extends OneOf[||, ::, F, Cases] {
+      type Key = K
+      type Type = V
+    }
+
+    case class Single[||[_, _], ::[_, _], F[_, _], K, V](value: F[K, V]) extends OneOf.Aux[||, ::, F, K :: V, K, V]:
+      override def aux: this.type & Aux[||, ::, F, K :: V, K, V] = this
+
+    case class Last[||[_, _], ::[_, _], F[_, _], Init, K, V](value: F[K, V]) extends OneOf.Aux[||, ::, F, Init || K :: V, K, V]:
+      override def aux: this.type & Aux[||, ::, F, Init || K :: V, K, V] = this
+
+    case class InInit[||[_, _], ::[_, _], F[_, _], Ki, Vi, Init, Kn, Vn](
+      init: OneOf.Aux[||, ::, F, Init, Ki, Vi],
+    ) extends OneOf.Aux[||, ::, F, Init || Kn :: Vn, Ki, Vi]:
+      override def aux: this.type & Aux[||, ::, F, Init || Kn :: Vn, Ki, Vi] = this
+      override def value: F[Ki, Vi] = init.value
+
+    def single[||[_, _], ::[_, _], F[_, _], K, V](value: F[K, V]): OneOf.Aux[||, ::, F, K :: V, K, V] =
+      Single(value)
+
+    def last[||[_, _], ::[_, _], F[_, _], Init, K, V](value: F[K, V]): OneOf.Aux[||, ::, F, Init || K :: V, K, V] =
+      Last(value)
+
+    type Member[||[_, _], ::[_, _], K, V, Cases] =
+      Aux[||, ::, [K, V] =>> Any, Cases, K, V]
+
+    object Member {
+      def single[||[_, _], ::[_, _], K, V]: Member[||, ::, K, V, K :: V] =
+        Single[||, ::, [K, V] =>> Unit, K, V](())
+
+      def last[||[_, _], ::[_, _], Init, K, V]: Member[||, ::, K, V, Init || K :: V] =
+        Last[||, ::, [K, V] =>> Unit, Init, K, V](())
+    }
+  }
+
   /**
     * Witnesses that `Label :: A` is one of `Cases`,
     * where `Cases` is of the form `(lbl1 :: A1) || (lbl2 :: A2) || ...`
