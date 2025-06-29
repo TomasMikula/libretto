@@ -57,13 +57,15 @@ object Items1Named {
    * where `Cases` is of the form `(K1 :: V1) || (K2 :: V2) || ...`
    * (where `||` associates to the left).
    */
-  sealed trait OneOf[||[_, _], ::[_, _], +F[_, _], Cases] {
+  sealed trait OneOf[||[_, _], ::[_, _], F[_, _], Cases] {
     type Key
     type Type
 
     def value: F[Key, Type]
 
     def aux: this.type & OneOf.Aux[||, ::, F, Cases, Key, Type]
+
+    def covary[G[x, y] >: F[x, y]]: OneOf[||, ::, G, Cases]
 
     def inInit[Kn, Vn]: OneOf.Aux[||, ::, F, Cases || Kn :: Vn, Key, Type] =
       OneOf.InInit(this.aux)
@@ -76,22 +78,25 @@ object Items1Named {
   }
 
   object OneOf {
-    sealed trait Aux[||[_, _], ::[_, _], +F[_, _], Cases, K, V] extends OneOf[||, ::, F, Cases] {
+    sealed trait Aux[||[_, _], ::[_, _], F[_, _], Cases, K, V] extends OneOf[||, ::, F, Cases] {
       type Key = K
       type Type = V
     }
 
     case class Single[||[_, _], ::[_, _], F[_, _], K, V](value: F[K, V]) extends OneOf.Aux[||, ::, F, K :: V, K, V]:
       override def aux: this.type & Aux[||, ::, F, K :: V, K, V] = this
+      override def covary[G[x,y] >: F[x, y]]: OneOf[||, ::, G, K :: V] = Single(value)
 
     case class Last[||[_, _], ::[_, _], F[_, _], Init, K, V](value: F[K, V]) extends OneOf.Aux[||, ::, F, Init || K :: V, K, V]:
       override def aux: this.type & Aux[||, ::, F, Init || K :: V, K, V] = this
+      override def covary[G[x,y] >: F[x, y]]: OneOf[||, ::, G, Init || K :: V] = Last(value)
 
     case class InInit[||[_, _], ::[_, _], F[_, _], Ki, Vi, Init, Kn, Vn](
       init: OneOf.Aux[||, ::, F, Init, Ki, Vi],
     ) extends OneOf.Aux[||, ::, F, Init || Kn :: Vn, Ki, Vi]:
       override def aux: this.type & Aux[||, ::, F, Init || Kn :: Vn, Ki, Vi] = this
       override def value: F[Ki, Vi] = init.value
+      override def covary[G[x,y] >: F[x, y]]: OneOf[||, ::, G, Init || Kn :: Vn] = InInit(init.covary[G].aux)
 
     def single[||[_, _], ::[_, _], F[_, _], K, V](value: F[K, V]): OneOf.Aux[||, ::, F, K :: V, K, V] =
       Single(value)
@@ -104,10 +109,10 @@ object Items1Named {
 
     object Member {
       def single[||[_, _], ::[_, _], K, V]: Member[||, ::, K, V, K :: V] =
-        Single[||, ::, [K, V] =>> Unit, K, V](())
+        Single[||, ::, [K, V] =>> Any, K, V](())
 
       def last[||[_, _], ::[_, _], Init, K, V]: Member[||, ::, K, V, Init || K :: V] =
-        Last[||, ::, [K, V] =>> Unit, Init, K, V](())
+        Last[||, ::, [K, V] =>> Any, Init, K, V](())
     }
   }
 
@@ -350,6 +355,8 @@ object Items1Named {
       this match
         case Product.Single(_, fa) => p(fa)
         case Product.Snoc(init, _, fa) => p(fa) && init.forall(p)
+
+    def covary[G[x] >: F[x]]: Product[||, ::, G, Items]
   }
 
   object Product {
@@ -357,6 +364,9 @@ object Items1Named {
       label: SingletonType[Lbl],
       value: F[A],
     ) extends Product[||, ::, F, Lbl :: A] {
+
+      override def covary[G[x] >: F[x]]: Product[||, ::, G, Lbl :: A] =
+        Single(label, value)
 
       override def get[LblX, X](m: Member[||, ::, LblX, X, Lbl :: A])(using
         BiInjective[||],
@@ -415,6 +425,9 @@ object Items1Named {
       lastElem: F[A],
     ) extends Product[||, ::, F, Init || Lbl :: A] {
 
+      override def covary[G[x] >: F[x]]: Product[||, ::, G, Init || Lbl :: A] =
+        Snoc(init.covary, lastName, lastElem)
+
       override def get[LblX, X](m: Member[||, ::, LblX, X, Init || Lbl :: A])(using
         BiInjective[||],
         BiInjective[::],
@@ -466,6 +479,8 @@ object Items1Named {
     def label: Label = tag.label.value
 
     def getSingle[K, V](using Items =:= (K :: V), BiInjective[::]): F[V]
+
+    def covary[G[x] >: F[x]]: Sum[||, ::, G, Items]
   }
 
   object Sum {
@@ -479,6 +494,9 @@ object Items1Named {
       override def getSingle[K, V](using ev: Items =:= K :: V, i: BiInjective[::]): F[V] =
         val (_, _, ev2) = Member.asSingle(ev.substituteCo(tag))
         ev2.substituteCo(value)
+
+      override def covary[G[x] >: F[x]]: Sum[||, ::, G, Items] =
+        Value(tag, value)
     }
   }
 }
