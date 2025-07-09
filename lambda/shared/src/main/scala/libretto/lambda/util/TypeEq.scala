@@ -48,6 +48,9 @@ sealed trait TypeEqK[F[_], G[_]]:
   def at[X]: F[X] =:= G[X] =
     this match { case Refl() => summon[F[X] =:= G[X]] }
 
+  def atH[X, Y](using ev: X =:= Y): F[X] =:= G[Y] =
+    this match { case Refl() => ev.liftCo[F] }
+
   def flip: TypeEqK[G, F] =
     subst[[f[_]] =>> TypeEqK[f, F]](refl[F])
 
