@@ -3,9 +3,11 @@ resolvers += Resolver.mavenCentral
 ThisBuild / scalaVersion := "3.7.1"
 
 ThisBuild / organization := "dev.continuously.libretto"
+ThisBuild / organizationHomepage := Some(url("https://continuously.dev"))
 
 ThisBuild / licenses += ("MPL 2.0", url("https://opensource.org/licenses/MPL-2.0"))
 ThisBuild / homepage := Some(url("https://github.com/TomasMikula/libretto"))
+ThisBuild / description := "Declarative concurrency without threads, for Scala"
 ThisBuild / scmInfo := Some(
   ScmInfo(
     url("https://github.com/TomasMikula/libretto"),
@@ -13,25 +15,25 @@ ThisBuild / scmInfo := Some(
   )
 )
 
-import xerial.sbt.Sonatype.sonatypeCentralHost
-ThisBuild / sonatypeCredentialHost := sonatypeCentralHost
+ThisBuild / developers := List(
+  Developer(
+    id = "TomasMikula",
+    name = "Tomas Mikula",
+    email = "tomas.mikula@continuously.dev",
+    url = url("https://continuously.dev")
+  ),
+)
+
+// Remove all additional repository other than Maven Central from POM
+ThisBuild / pomIncludeRepository := { _ => false }
+ThisBuild / publishMavenStyle := true
+
 ThisBuild / publishTo := {
   if (isSnapshot.value)
-    // not sure why this is not returned by sonatypePublishTo.value below
     Some("central-snapshots" at "https://central.sonatype.com/repository/maven-snapshots/")
   else
-    sonatypePublishTo.value
+    localStaging.value
 }
-
-ThisBuild / pomExtra := (
-  <developers>
-    <developer>
-      <id>TomasMikula</id>
-      <name>Tomas Mikula</name>
-      <url>https://continuously.dev</url>
-    </developer>
-  </developers>
-)
 
 // o - write results back to sbt
 // D - show all durations
@@ -53,7 +55,7 @@ releaseProcess := Seq[ReleaseStep](
   commitReleaseVersion,
   tagRelease,
   releaseStepCommand("publishSigned"),
-  releaseStepCommand("sonatypeReleaseAll dev.continuously"),
+  releaseStepCommand("sonaRelease"),
   setNextVersion,
   commitNextVersion,
   pushChanges,
