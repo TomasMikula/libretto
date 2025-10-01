@@ -340,15 +340,30 @@ object Items1Named {
         [Init, Lbl <: String, A] => (init, lbl, fa) => Product.Snoc(init, lbl, h(fa)),
       )
 
-    def translateA[G[_], H[_]](
-      h: [X] => F[X] => G[H[X]],
+    def translateA[M[_], G[_]](
+      h: [X] => F[X] => M[G[X]],
     )(using
-      G: Applicative[G],
-    ): G[Product[||, ::, H, Items]] =
-      foldMap[[X] =>> G[Product[||, ::, H, X]]](
+      M: Applicative[M],
+    ): M[Product[||, ::, G, Items]] =
+      foldMap[[X] =>> M[Product[||, ::, G, X]]](
         [Lbl <: String, A] => (lbl, fa) => h(fa).map(Product.single(lbl, _)),
-        [Init, Lbl <: String, A] => (init, lbl, fa) => G.map2(init, h(fa))(Product.Snoc(_, lbl, _)),
+        [Init, Lbl <: String, A] => (init, lbl, fa) => M.map2(init, h(fa))(Product.Snoc(_, lbl, _)),
+      )
 
+    def wipeTranslate[G[_]](h: [X] => F[X] => Exists[G]): Product[||, ::, G, ?] =
+      foldMap[[X] =>> Product[||, ::, G, ?]](
+        [Lbl <: String, A] => (lbl, fa) => Product.single(lbl, h(fa).value),
+        [Init, Lbl <: String, A] => (init, lbl, fa) => Product.Snoc(init, lbl, h(fa).value),
+      )
+
+    def wipeTranslateA[M[_], G[_]](
+      h: [X] => F[X] => M[Exists[G]],
+    )(using
+      M: Applicative[M],
+    ): M[Product[||, ::, G, ?]] =
+      foldMap[[X] =>> M[Product[||, ::, G, ?]]](
+        [Lbl <: String, A] => (lbl, fa) => h(fa).map(eh => Product.single(lbl, eh.value)),
+        [Init, Lbl <: String, A] => (init, lbl, fa) => M.map2(init, h(fa))((init, fx) => Product.Snoc(init, lbl, fx.value)),
       )
 
     def forall(p: [X] => F[X] => Boolean): Boolean =
