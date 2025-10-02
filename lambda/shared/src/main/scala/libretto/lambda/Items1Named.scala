@@ -366,6 +366,12 @@ object Items1Named {
         [Init, Lbl <: String, A] => (init, lbl, fa) => M.map2(init, h(fa))((init, fx) => Product.Snoc(init, lbl, fx.value)),
       )
 
+    def names: List[String] =
+      foldMap[[X] =>> List[String]](
+        [Lbl <: String, A] => (lbl, fa) => lbl.value :: Nil,
+        [Init, Lbl <: String, A] => (init, lbl, fa) => lbl.value :: init,
+      ).reverse
+
     def forall(p: [X] => F[X] => Boolean): Boolean =
       this match
         case Product.Single(_, fa) => p(fa)
