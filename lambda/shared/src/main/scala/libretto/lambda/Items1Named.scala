@@ -3,6 +3,7 @@ package libretto.lambda
 import libretto.lambda.util.{Applicative, BiInjective, Exists, SingletonType, TypeEq}
 import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
+import scala.collection.immutable.{:: as NonEmptyList}
 
 /** Data types for working with non-empty heterogeneous lists of named items of the form
  *
@@ -378,6 +379,11 @@ object Items1Named {
         case Product.Snoc(init, _, fa) => p(fa) && init.forall(p)
 
     def covary[G[x] >: F[x]]: Product[||, ::, G, Items]
+
+    def toList[B](f: [a] => F[a] => B): NonEmptyList[(String, B)] =
+      toList(f, Nil)
+
+    protected def toList[B](f: [a] => F[a] => B, acc: List[(String, B)]): NonEmptyList[(String, B)]
   }
 
   object Product {
@@ -425,6 +431,9 @@ object Items1Named {
         inj: BiInjective[::],
       ): F[X] =
         ev match { case BiInjective[::](_, TypeEq(Refl())) => value }
+
+      override protected def toList[B](f: [a] => F[a] => B, acc: List[(String, B)]): NonEmptyList[(String, B)] =
+        NonEmptyList((label.value, f(value)), acc)
     }
 
     def single[||[_, _], ::[_, _], F[_], A](
@@ -487,7 +496,32 @@ object Items1Named {
       override def asSingle[LblX, X](using (Init || Lbl :: A) =:= LblX :: X, BiInjective[::]): F[X] =
         // TODO: require evidence that `||` and `::` cannot possibly be equal.
         throw AssertionError(s"Impossible (A || B) =:= (C :: D), assuming || and :: are distinct class types (are they?).")
+
+      override protected def toList[B](f: [a] => F[a] => B, acc: List[(String, B)]): NonEmptyList[(String, B)] =
+        init.toList(f, (lastName.value, f(lastElem)) :: acc)
     }
+
+    def fromList[A](
+      as: NonEmptyList[(String, A)],
+    )[F[_]](
+      f: [R] => (A, [x] => F[x] => R) => R,
+    )[||[_, _], ::[_, _]]: Product[||, ::, F, ?] =
+      val (k, a) :: tail = as
+      val acc = f(a, [x] => fx => single[||, ::, F, x](k)(fx))
+      fromList(acc, tail, f)
+
+    private def fromList[||[_, _], ::[_, _], A, F[_]](
+      acc: Product[||, ::, F, ?],
+      as: List[(String, A)],
+      f: [R] => (A, [a] => F[a] => R) => R,
+    ): Product[||, ::, F, ?] =
+      as match
+        case (k, a) :: tail =>
+          val acc1 = f(a, [x] => fx => Snoc(acc, SingletonType(k), fx))
+          fromList(acc1, tail, f)
+        case Nil =>
+          acc
+
   }
 
   /** A data type that holds one items of the `Items`` list, wrapped in `F[_]`. */
