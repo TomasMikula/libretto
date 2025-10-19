@@ -20,7 +20,7 @@ object ZioHttpServer {
     tail: RequestStream,
   )
 
-  private def makeApp(addr: String): UIO[(Route[Scope, Response], RequestStream)] =
+  private def makeApp(addr: String): UIO[(Route[Any, Response], RequestStream)] =
     for {
       queue  <- Queue.bounded[Promise[Nothing, NextRequest]](1)
       output <- Promise.make[Nothing, NextRequest]
