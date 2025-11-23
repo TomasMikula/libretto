@@ -69,4 +69,14 @@ object Applicative {
       override def widen[B >: A]: Option[B] = fa
     }
   }
+
+  given applicativeEither[E]: Applicative[Either[E, _]] with {
+    override def pure[A](a: A): Either[E, A] = Right(a)
+    extension [A](fa: Either[E, A]) override def map[B](f: A => B): Either[E, B] = fa.map(f)
+    extension [A](fa: Either[E, A]) override def zip[B](fb: Either[E, B]): Either[E, (A, B)] =
+      fa match
+        case Left(e) => Left(e)
+        case Right(a) => fb.map((a, _))
+
+  }
 }
