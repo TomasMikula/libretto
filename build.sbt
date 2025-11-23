@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-ThisBuild / scalaVersion := "3.7.3"
+ThisBuild / scalaVersion := "3.7.4"
 
 ThisBuild / organization := "dev.continuously.libretto"
 ThisBuild / organizationHomepage := Some(url("https://continuously.dev"))
@@ -62,8 +62,8 @@ releaseProcess := Seq[ReleaseStep](
 )
 
 val ScalatestVersion = "3.2.19"
-val ZioVersion = "2.1.21"
-val ZioJsonVersion = "0.7.44"
+val ZioVersion = "2.1.22"
+val ZioJsonVersion = "0.7.45"
 val ZioHttpVersion = "3.5.1"
 
 val commonScalacOptions =
