@@ -41,6 +41,14 @@ object Validated {
   def invalid[E, A](e: E): Validated[E, A] =
     Invalid(NonEmptyList(e, Nil))
 
+  def valid[E, A](a: A): Validated[E, A] =
+    Valid(a)
+
+  def fromEither[E, A](x: Either[E, A]): Validated[E, A] =
+    x match
+      case Right(a) => Valid(a)
+      case Left(e) => invalid(e)
+
   given applicative[E]: Applicative[Validated[E, _]] with {
     override def pure[A](a: A): Validated[E, A] = Valid(a)
 
