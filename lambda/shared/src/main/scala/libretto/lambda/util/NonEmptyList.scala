@@ -37,4 +37,9 @@ case class NonEmptyList[+A](head: A, tail: List[A]) {
 object NonEmptyList {
   def of[A](head: A, tail: A*): NonEmptyList[A] =
     NonEmptyList(head, tail.toList)
+
+  def fromList[A](as: List[A]): Option[NonEmptyList[A]] =
+    as match
+      case head :: tail => Some(NonEmptyList(head, tail))
+      case Nil => None
 }
