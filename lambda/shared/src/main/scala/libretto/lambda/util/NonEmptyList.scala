@@ -10,8 +10,8 @@ case class NonEmptyList[+A](head: A, tail: List[A]) {
   def ++[A0 >: A](that: NonEmptyList[A0]): NonEmptyList[A0] =
     NonEmptyList(head, tail ::: that.toList)
 
-  def toList: List[A] =
-    head :: tail
+  def toList: scala.::[A] =
+    scala.::(head, tail)
 
   def map[B](f: A => B): NonEmptyList[B] =
     NonEmptyList(f(head), tail.map(f))
