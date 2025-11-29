@@ -351,6 +351,42 @@ object Items1Named {
         [Init, Lbl <: String, A] => (init, lbl, fa) => M.map2(init, h(fa))(Product.Snoc(_, lbl, _)),
       )
 
+    def relateTranslate[Rel[_, _], G[_]](
+      h: [X] => F[X] => Exists[[Y] =>> (Rel[X, Y], G[Y])],
+    )(
+      labelRelated : [K, X, Y] => Rel[X, Y] => Rel[K :: X, K :: Y],
+      snocRelated : [X1, X2, Y1, Y2] => (Rel[X1, Y1], Rel[X2, Y2]) => Rel[X1 || X2, Y1 || Y2],
+    ): Exists[[Bs] =>> (Rel[Items, Bs], Product[||, ::, G, Bs])] =
+      foldMap[[Items] =>> Exists[[Bs] =>> (Rel[Items, Bs], Product[||, ::, G, Bs])]](
+        [Lbl <: String, A] => (lbl, fa) => h(fa) match {
+          case Indeed((rel, gb)) =>
+            Indeed((labelRelated(rel), Product.single(lbl, gb)))
+        },
+        [Init, Lbl <: String, A] => (init, lbl, fa) => (init, h(fa)) match {
+          case (Indeed((r1, init1)), Indeed((r2, gb))) =>
+            Indeed((snocRelated(r1, labelRelated(r2)), Product.Snoc(init1, lbl, gb)))
+        },
+      )
+
+    def relateTranslateA[M[_], Rel[_, _], G[_]](
+      h: [X] => F[X] => M[Exists[[Y] =>> (Rel[X, Y], G[Y])]],
+    )(
+      labelRelated : [K, X, Y] => Rel[X, Y] => Rel[K :: X, K :: Y],
+      snocRelated : [X1, X2, Y1, Y2] => (Rel[X1, Y1], Rel[X2, Y2]) => Rel[X1 || X2, Y1 || Y2],
+    )(using
+      M: Applicative[M],
+    ): M[Exists[[Bs] =>> (Rel[Items, Bs], Product[||, ::, G, Bs])]] =
+      foldMap[[Items] =>> M[Exists[[Bs] =>> (Rel[Items, Bs], Product[||, ::, G, Bs])]]](
+        [Lbl <: String, A] => (lbl, fa) => h(fa) map {
+          case Indeed((rel, gb)) =>
+            Indeed((labelRelated(rel), Product.single(lbl, gb)))
+        },
+        [Init, Lbl <: String, A] => (init, lbl, fa) => M.map2(init, h(fa)) {
+          case (Indeed((r1, init1)), Indeed((r2, gb))) =>
+            Indeed((snocRelated(r1, labelRelated(r2)), Product.Snoc(init1, lbl, gb)))
+        },
+      )
+
     def wipeTranslate[G[_]](h: [X] => F[X] => Exists[G]): Product[||, ::, G, ?] =
       foldMap[[X] =>> Product[||, ::, G, ?]](
         [Lbl <: String, A] => (lbl, fa) => Product.single(lbl, h(fa).value),
