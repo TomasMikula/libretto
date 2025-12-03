@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.Exists
+import libretto.lambda.util.{ClampEq, Exists}
 import scala.collection.immutable.{:: as NonEmptyList}
 
 /** Data types for working with non-empty heterogeneous lists of (unnamed) items of the form
@@ -78,6 +78,8 @@ object Items1 {
       toList(f, scala.Nil)
 
     protected def toList[B](f: [a] => F[a] => B, acc: List[B]): NonEmptyList[B]
+
+    infix def isEqualTo[B](that: Items1.Product[||, Nil, F, B])(using ClampEq[F]): Option[A =:= B]
   }
 
   object Product {
@@ -109,6 +111,14 @@ object Items1 {
         acc: List[B],
       ): NonEmptyList[B] =
         NonEmptyList(f(value), acc)
+
+      override def isEqualTo[B](that: Product[||, Nil, F, B])(using F: ClampEq[F]): Option[(Nil || A) =:= B] =
+        that match
+          case Single(fx) =>
+            F.testEqual(value, fx)
+              .map(_.liftCo[[x] =>> Nil || x])
+          case Snoc(_, _) =>
+            None
 
     }
 
@@ -142,6 +152,26 @@ object Items1 {
       ): NonEmptyList[B] =
         init.toList(f, f(last) :: acc)
 
+      override def isEqualTo[B](that: Product[||, Nil, F, B])(using F: ClampEq[F]): Option[(Init || Last) =:= B] =
+        that match
+          case Snoc(bInit, bLast) =>
+            for
+              evInit <- this.init isEqualTo bInit
+              evLast <- F.testEqual(this.last, bLast)
+            yield
+              evInit.liftCo[[init] =>> init || Last] andThen evLast.liftCo
+          case Single(value) =>
+            None
+
     }
+
+    given [||[_, _], Nil, F[_]] => (ClampEq[F]) => ClampEq[Product[||, Nil, F, _]] =
+      new ClampEq {
+        override def testEqual[A, B](
+          a: Product[||, Nil, F, A],
+          b: Product[||, Nil, F, B],
+        ): Option[A =:= B] =
+          a isEqualTo b
+      }
   }
 }

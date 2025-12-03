@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{Applicative, BiInjective, Exists, SingletonType, TypeEq}
+import libretto.lambda.util.{Applicative, BiInjective, ClampEq, Exists, SingletonType, TypeEq}
 import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 import scala.collection.immutable.{:: as NonEmptyList}
@@ -420,6 +420,8 @@ object Items1Named {
       toList(f, Nil)
 
     protected def toList[B](f: [a] => F[a] => B, acc: List[(String, B)]): NonEmptyList[(String, B)]
+
+    infix def isEqualTo[Bs](that: Items1Named.Product[||, ::, F, Bs])(using ClampEq[F]): Option[Items =:= Bs]
   }
 
   object Product {
@@ -470,6 +472,18 @@ object Items1Named {
 
       override protected def toList[B](f: [a] => F[a] => B, acc: List[(String, B)]): NonEmptyList[(String, B)] =
         NonEmptyList((label.value, f(value)), acc)
+
+      override def isEqualTo[Bs](that: Product[||, ::, F, Bs])(using F: ClampEq[F]): Option[(Lbl :: A) =:= Bs] =
+        that match
+          case Single(label, value) =>
+            for
+              evL <- SingletonType.testEqual(this.label, label)
+              evV <- F.testEqual(this.value, value)
+            yield
+              evL.liftCo[[l] =>> l :: A] andThen evV.liftCo
+          case Snoc(_, _, _) =>
+            None
+
     }
 
     def single[||[_, _], ::[_, _], F[_], A](
@@ -535,6 +549,19 @@ object Items1Named {
 
       override protected def toList[B](f: [a] => F[a] => B, acc: List[(String, B)]): NonEmptyList[(String, B)] =
         init.toList(f, (lastName.value, f(lastElem)) :: acc)
+
+      override def isEqualTo[Bs](that: Product[||, ::, F, Bs])(using F: ClampEq[F]): Option[(Init || Lbl :: A) =:= Bs] =
+        that match
+          case that: Snoc[sep, of, f, bInit, bLbl, b] =>
+            for
+              ev1 <- this.init isEqualTo that.init
+              ev2 <- SingletonType.testEqual(this.lastName, that.lastName)
+              ev3 <- F.testEqual(this.lastElem, that.lastElem)
+            yield
+              ev1.liftCo[[init] =>> init || Lbl :: A] andThen ev2.liftCo[[l] =>> bInit || l :: A] andThen ev3.liftCo[[a] =>> bInit || bLbl :: a]
+          case Single(label, value) =>
+            None
+
     }
 
     def fromList[A](
@@ -557,6 +584,14 @@ object Items1Named {
           fromList(acc1, tail, f)
         case Nil =>
           acc
+
+    given [||[_, _], ::[_, _], F[_]] => ClampEq[F] => ClampEq[Items1Named.Product[||, ::, F, _]] =
+      new ClampEq[Items1Named.Product[||, ::, F, _]]:
+        override def testEqual[A, B](
+          a: Product[||, ::, F, A],
+          b: Product[||, ::, F, B],
+        ): Option[A =:= B] =
+          a isEqualTo b
 
   }
 

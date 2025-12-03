@@ -21,4 +21,12 @@ object SingletonType {
         SingletonType(t)
       )
   }
+
+  def testEqual[A <: String, B <: String](
+    a: SingletonType[A],
+    b: SingletonType[B],
+  ): Option[A =:= B] =
+    Option.when(a.value == b.value) {
+      summon[A =:= A].asInstanceOf[A =:= B]
+    }
 }
