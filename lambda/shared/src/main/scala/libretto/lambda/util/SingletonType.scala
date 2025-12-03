@@ -22,7 +22,71 @@ object SingletonType {
       )
   }
 
-  def testEqual[A <: String, B <: String](
+  def testEqualByte[A <: Byte, B <: Byte](
+    a: SingletonType[A],
+    b: SingletonType[B],
+  ): Option[A =:= B] =
+    Option.when(a.value == b.value) {
+      summon[A =:= A].asInstanceOf[A =:= B]
+    }
+
+  def testEqualShort[A <: Short, B <: Short](
+    a: SingletonType[A],
+    b: SingletonType[B],
+  ): Option[A =:= B] =
+    Option.when(a.value == b.value) {
+      summon[A =:= A].asInstanceOf[A =:= B]
+    }
+
+  def testEqualInt[A <: Int, B <: Int](
+    a: SingletonType[A],
+    b: SingletonType[B],
+  ): Option[A =:= B] =
+    Option.when(a.value == b.value) {
+      summon[A =:= A].asInstanceOf[A =:= B]
+    }
+
+  def testEqualLong[A <: Long, B <: Long](
+    a: SingletonType[A],
+    b: SingletonType[B],
+  ): Option[A =:= B] =
+    Option.when(a.value == b.value) {
+      summon[A =:= A].asInstanceOf[A =:= B]
+    }
+
+  def testEqualFloat[A <: Float, B <: Float](
+    a: SingletonType[A],
+    b: SingletonType[B],
+  ): Option[A =:= B] =
+    Option.when(a.value == b.value) {
+      summon[A =:= A].asInstanceOf[A =:= B]
+    }
+
+  def testEqualDouble[A <: Double, B <: Double](
+    a: SingletonType[A],
+    b: SingletonType[B],
+  ): Option[A =:= B] =
+    Option.when(a.value == b.value) {
+      summon[A =:= A].asInstanceOf[A =:= B]
+    }
+
+  def testEqualBoolean[A <: Boolean, B <: Boolean](
+    a: SingletonType[A],
+    b: SingletonType[B],
+  ): Option[A =:= B] =
+    Option.when(a.value == b.value) {
+      summon[A =:= A].asInstanceOf[A =:= B]
+    }
+
+  def testEqualChar[A <: Char, B <: Char](
+    a: SingletonType[A],
+    b: SingletonType[B],
+  ): Option[A =:= B] =
+    Option.when(a.value == b.value) {
+      summon[A =:= A].asInstanceOf[A =:= B]
+    }
+
+  def testEqualString[A <: String, B <: String](
     a: SingletonType[A],
     b: SingletonType[B],
   ): Option[A =:= B] =

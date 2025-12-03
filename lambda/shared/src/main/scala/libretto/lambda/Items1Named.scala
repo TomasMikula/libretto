@@ -477,7 +477,7 @@ object Items1Named {
         that match
           case Single(label, value) =>
             for
-              evL <- SingletonType.testEqual(this.label, label)
+              evL <- SingletonType.testEqualString(this.label, label)
               evV <- F.testEqual(this.value, value)
             yield
               evL.liftCo[[l] =>> l :: A] andThen evV.liftCo
@@ -555,7 +555,7 @@ object Items1Named {
           case that: Snoc[sep, of, f, bInit, bLbl, b] =>
             for
               ev1 <- this.init isEqualTo that.init
-              ev2 <- SingletonType.testEqual(this.lastName, that.lastName)
+              ev2 <- SingletonType.testEqualString(this.lastName, that.lastName)
               ev3 <- F.testEqual(this.lastElem, that.lastElem)
             yield
               ev1.liftCo[[init] =>> init || Lbl :: A] andThen ev2.liftCo[[l] =>> bInit || l :: A] andThen ev3.liftCo[[a] =>> bInit || bLbl :: a]
