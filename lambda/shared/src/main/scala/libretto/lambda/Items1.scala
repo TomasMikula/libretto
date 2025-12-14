@@ -60,6 +60,11 @@ object Items1 {
       k: [A1, A2] => (A =:= (A1 || A2)) ?=> R
     ): R
 
+    def foldMap[G[_]](
+      baseCase: [X] => F[X] => G[Nil || X],
+      snocCase: [Init, X] => (G[Init], F[X]) => G[Init || X],
+    ): G[A]
+
     def unravel[G[_, _]](
       f: [X] => F[X] => G[X, X],
     ): ParN[||, Nil, G, A, A]
@@ -91,6 +96,12 @@ object Items1 {
 
       override def nonEmpty[R](k: [A1, A2] => ((Nil || A) =:= (A1 || A2)) ?=> R): R =
         k[Nil, A]
+
+      override def foldMap[G[_]](
+        baseCase: [X] => F[X] => G[Nil || X],
+        snocCase: [Init, X] => (G[Init], F[X]) => G[Init || X],
+      ): G[Nil || A] =
+        baseCase(value)
 
       override def unravel[G[_, _]](
         f: [X] => F[X] => G[X, X],
@@ -131,6 +142,12 @@ object Items1 {
 
       override def nonEmpty[R](k: [A1, A2] => ((Init || Last) =:= (A1 || A2)) ?=> R): R =
         k[Init, Last]
+
+      override def foldMap[G[_]](
+        baseCase: [X] => F[X] => G[Nil || X],
+        snocCase: [Init, X] => (G[Init], F[X]) => G[Init || X],
+      ): G[Init || Last] =
+        snocCase(init.foldMap(baseCase, snocCase), last)
 
       override def unravel[G[_, _]](
         f: [X] => F[X] => G[X, X],
