@@ -2,19 +2,11 @@ package kindville.lib
 
 import kindville.{::, Box, TNil, decodeExpr}
 
-// TODO: use an opaque type alias when
-// https://github.com/scala/scala3/issues/13461#issuecomment-2002566051
-// is resolved
-class ExistK[K, F <: AnyKind](
-  value: Box[ExistK.Code[K], F :: TNil]
-) {
-  /** Returns `[R] => ([A, ...] => F[A, ...] => R) => R`. */
-  transparent inline def visit: Any =
-    Box.unpack(value)
-}
+opaque type ExistK[K, F <: AnyKind] =
+  Box[ExistK.Code[K], F :: TNil]
 
 object ExistK {
-  private[ExistK] type Code[K] =
+  private[lib] type Code[K] =
     [⋅⋅[_]] =>> [F0[_ <: ⋅⋅[K]]] =>>
       [R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R
 
@@ -24,11 +16,9 @@ object ExistK {
       [⋅⋅[_], F0[_ <: ⋅⋅[K]]] =>
         (pack: ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F :: TNil]) =>
           [A <: ⋅⋅[K]] => (fa: F0[A]) =>
-            new ExistK[K, F](
-              pack(
-                [R] => (f: [X <: ⋅⋅[K]] => F0[X] => R) => f[A](fa)
-              )
-            )
+            pack(
+              [R] => (f: [X <: ⋅⋅[K]] => F0[X] => R) => f[A](fa)
+            ): ExistK[K, F]
     )(Box.pack[Code[K], F :: TNil])
 
 
@@ -44,4 +34,10 @@ object ExistK {
             create[A]
       )(apply[K, F])
   }
+
+  extension [K, F <: AnyKind](ex: ExistK[K, F])
+    /** Returns `[R] => ([A, ...] => F[A, ...] => R) => R`. */
+    transparent inline def visit: Any =
+      Box.unpack(ex)
+
 }

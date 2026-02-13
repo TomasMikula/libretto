@@ -1,5 +1,4 @@
 package kindville
 
-// Defined in separate file, because otherwise macros expand the alias despite being opaque.
-// https://github.com/scala/scala3/issues/13461
+// Defined in separate file, so that the Box macros themselves don't see through the opaque type alias
 opaque type Box[Code[⋅⋅[_]] <: AnyKind, As] = Any

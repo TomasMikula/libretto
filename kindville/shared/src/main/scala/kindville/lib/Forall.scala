@@ -2,13 +2,8 @@ package kindville.lib
 
 import kindville.*
 
-// TODO: use an opaque type alias when
-// https://github.com/scala/scala3/issues/13461#issuecomment-2002566051
-// is resolved.
-// TODO: Perhaps in the meantime, place the opaque type alias to a separate file.
-class Forall[K, F <: AnyKind](
-  private[Forall] val value: Box[Forall.Code[K], F :: TNil]
-)
+opaque type Forall[K, F <: AnyKind] =
+  Box[Forall.Code[K], F :: TNil]
 
 object Forall {
   private[lib] type Code = [K] =>>
@@ -22,14 +17,12 @@ object Forall {
       [⋅⋅[_], F0[_ <: ⋅⋅[K]]] =>
         (pack: ([A <: ⋅⋅[K]] => Unit => F0[A]) => Box[Code[K], F :: TNil]) =>
           (f: [A <: ⋅⋅[K]] => Unit => F0[A]) =>
-            new Forall[K, F](
-              pack(f)
-            )
+            pack(f): Forall[K, F]
     )(
       Box.pacK[(K ->> *) :: TNil, Code[K], F :: TNil]
     )
 
   extension [K, F <: AnyKind](f: Forall[K, F])
     transparent inline def at: Any =
-      Box.unpack(f.value)
+      Box.unpack(f)
 }
