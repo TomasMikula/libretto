@@ -624,7 +624,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     val methSym =
       Symbol.newMethod(
         owner,
-        name = "functionImpl",
+        name = "$anonfun$functionImpl",
         tpe = MethodType(paramNames)(_ => paramTypes, _ => returnType1),
       )
 

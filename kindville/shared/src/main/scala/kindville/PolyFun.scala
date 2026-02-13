@@ -30,7 +30,7 @@ private object PolyFun {
     val methSym =
       Symbol.newMethod(
         owner,
-        name = "polyFunImpl",
+        name = "$anonfun$polyFunImpl",
         tpe = polyFunApplyMethodType(tParamNames, tParamBounds, vParamNames, vParamTypes, returnType)
       )
 
