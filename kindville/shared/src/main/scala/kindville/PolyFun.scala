@@ -51,8 +51,8 @@ private object PolyFun {
   }
 
   def unapply(using Quotes)(expr: qr.Term): Option[(
-    List[(String, Either[qr.TypeBounds, qr.LambdaTypeTree], qr.TypeRef)], // type params: (name, kind, reference)
-    List[(String, qr.TypeTree, qr.TermRef)], // value params
+    List[(name: String, kind: Either[qr.TypeBounds, qr.LambdaTypeTree], ref: qr.TypeRef)], // type params
+    List[(name: String, tpe: qr.TypeTree, ref: qr.TermRef)], // value params
     qr.TypeTree,                             // return type
     qr.Term,                                 // body
   )] = {

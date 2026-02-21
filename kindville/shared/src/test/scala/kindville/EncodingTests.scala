@@ -10,14 +10,14 @@ class EncodingTests extends AnyFunSuite {
     assert(x == 0)
   }
 
-  test("decodeExpr[List :: TNil]([⋅⋅[_], F[_]] => () => 0)()") {
-    val x = decodeExpr[List :: TNil]([⋅⋅[_], F[_]] => () => 0)()
+  test("decodeExpr1[List :: TNil]([⋅⋅[_]] => kuotes ?=> [F[_]] => () => 0)()") {
+    val x = decodeExpr1[List :: TNil]([⋅⋅[_]] => kuotes ?=> [F[_]] => () => 0)()
     assert(x == 0)
   }
 
-  test("decodeExpr[List :: Int :: TNil]([⋅⋅[_], F[_], A] => () => (fa: F[A]) => fa)()") {
+  test("decodeExpr1[List :: Int :: TNil]([⋅⋅[_]] => _ ?=> [F[_], A] => () => (fa: F[A]) => fa)()") {
     val id: List[Int] => List[Int] =
-      decodeExpr[List :: Int :: TNil]([⋅⋅[_], F[_], A] => () => (fa: F[A]) => fa)()
+      decodeExpr1[List :: Int :: TNil]([⋅⋅[_]] => _ ?=> [F[_], A] => () => (fa: F[A]) => fa)()
     assert(id(List(1, 2, 3)) == List(1, 2, 3))
   }
 
@@ -39,9 +39,9 @@ class EncodingTests extends AnyFunSuite {
     assert(fst(List(1, 2, 3), Some(4)) == List(1, 2, 3))
   }
 
-  test("decodeExpr[List :: Option :: Int :: TNil]([⋅⋅[_], F[_], G[_], A] => () => (fa: F[A], f: F[A] => G[A]) => f(fa))()") {
+  test("decodeExpr1[List :: Option :: Int :: TNil]([⋅⋅[_]] => k ?=> [F[_], G[_], A] => () => (fa: F[A], f: F[A] => G[A]) => f(fa))()") {
     val go: (List[Int], List[Int] => Option[Int]) => Option[Int] =
-      decodeExpr[List :: Option :: Int :: TNil]([⋅⋅[_], F[_], G[_], A] => () => (fa: F[A], f: F[A] => G[A]) => f(fa))()
+      decodeExpr1[List :: Option :: Int :: TNil]([⋅⋅[_]] => k ?=> [F[_], G[_], A] => () => (fa: F[A], f: F[A] => G[A]) => f(fa))()
     assert(go(List(1, 2, 3), _.headOption) == Some(1))
   }
 

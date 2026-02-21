@@ -9,8 +9,8 @@ class TypeEqK[K, F <: AnyKind, G <: AnyKind](
     Box.unpack[TypeEqK.Code[K], F :: G :: TNil](value)
 
   transparent inline def andThen[H <: AnyKind](that: TypeEqK[K, G, H]) =
-    decodeExpr[F :: G :: H :: TNil](
-      [⋅⋅[_], F <: ⋅⋅[K], G <: ⋅⋅[K], H <: ⋅⋅[K]] => (
+    decodeExpr1[F :: G :: H :: TNil](
+      [⋅⋅[_]] => kuotes ?=> [F <: ⋅⋅[K], G <: ⋅⋅[K], H <: ⋅⋅[K]] => (
         thiz: TypeEqK[K, F, G],
         subst: [M[X <: ⋅⋅[K]]] => M[G] => M[H]
       ) =>

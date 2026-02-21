@@ -1,6 +1,7 @@
 package kindville.lib
 
-import kindville.{::, Box, TNil, decodeExpr}
+import kindville.{::, Box, TNil, decodeExpr, decodeExpr1}
+import kindville.Kuotes.*
 
 opaque type ExistK[K, F <: AnyKind] =
   Box[ExistK.Code[K], F :: TNil]
@@ -12,15 +13,22 @@ object ExistK {
 
   /** Returns `[A, ...] => F[A, ...] => ExistK[K, F]`. */
   transparent inline def apply[K, F <: AnyKind] =
-    decodeExpr[F :: TNil](
-      [⋅⋅[_], F0[_ <: ⋅⋅[K]]] =>
-        (pack: ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F :: TNil]) =>
+    decodeExpr1[F :: TNil](
+      [⋅⋅[_]] => kuotes ?=> [F0[_ <: ⋅⋅[K]]] =>
+        (/* pack: ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F :: TNil] */) =>
           [A <: ⋅⋅[K]] => (fa: F0[A]) =>
-            pack(
+            // pack(
+            //   [R] => (f: [X <: ⋅⋅[K]] => F0[X] => R) => f[A](fa)
+            // ): ExistK[K, F]
+            kuotes.disguise1(Box.pack[Code[K], F :: TNil])[
+              [F0[_ <: ⋅⋅[K]]] =>> ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F0 :: TNil],
+              F :: TNil,
+              F0 :: TNil,
+              ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F0 :: TNil],
+            ].apply(
               [R] => (f: [X <: ⋅⋅[K]] => F0[X] => R) => f[A](fa)
-            ): ExistK[K, F]
-    )(Box.pack[Code[K], F :: TNil])
-
+            ) : ExistK[K, F0]
+    )(/* Box.pack[Code[K], F :: TNil] */)
 
 
   def types[As]: ExistsTypes[As] =
