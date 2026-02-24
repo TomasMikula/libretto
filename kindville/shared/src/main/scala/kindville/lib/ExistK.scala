@@ -21,9 +21,6 @@ object ExistK {
             //   [R] => (f: [X <: ⋅⋅[K]] => F0[X] => R) => f[A](fa)
             // ): ExistK[K, F]
             kuotes.disguise1(Box.pack[Code[K], F :: TNil])[
-              [F0[_ <: ⋅⋅[K]]] =>> ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F0 :: TNil],
-              F :: TNil,
-              F0 :: TNil,
               ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F0 :: TNil],
             ].apply(
               [R] => (f: [X <: ⋅⋅[K]] => F0[X] => R) => f[A](fa)

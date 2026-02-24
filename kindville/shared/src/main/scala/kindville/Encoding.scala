@@ -563,15 +563,19 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ): Term =
     inside(expr) {
       expr match
-        case TypeApply(Apply(TypeApply(Select(prefix, "disguise"), List(t)), List(arg)), List(code, as, ps, u)) if Some(prefix.tpe) == kuotesOpt =>
-          // matches: kuotes.disguise[T](arg)[Code, As, Ps, U]
-          // TODO: checks
-          //  - as = a0 :: ...
-          //  - ps = p0 :: ...
-          //  - t = 《code》[a0, ...]
-          //  - as ~ ps
-          //  - u = code[p0, ...]
-          arg.changeOwner(owner)
+        // '{ kuotes.disguise[T](arg)[U] }
+        case TypeApply(Apply(TypeApply(Select(prefix, "disguise"), List(t)), List(arg)), List(u)) if Some(prefix.tpe) == kuotesOpt =>
+          // check that arg :《u》, ensuring that arg is usable in place where 《u》 is expected
+          val decodedU =
+            decodeType(marker, ctx, u.tpe)
+          val decodedUType =
+            decodedU.asType.asInstanceOf[Type[Any]]
+          if (arg.asExpr.isExprOf(using decodedUType))
+            arg.changeOwner(owner).asExprOf(using decodedUType).asTerm
+          else
+            given Printer[Tree] = Printer.TreeShortCode
+            given Printer[TypeRepr] = Printer.TypeReprShortCode
+            badUse(s"Got ${arg.show} of type ${t.show}, expected type ${decodedU.show} (which is the decoding of ${u.show})")
         case PolyFun(tparams, params, retTp, body) =>
           decodePolyFun(marker, kuotesOpt, ctx, tparams, params, retTp, body, owner)
         case bl @ Block(List(stmt), Closure(method, optTp)) =>
