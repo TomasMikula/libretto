@@ -295,7 +295,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         if (userTParams.nonEmpty)
           decodePolyFun(marker, None, ctx = Nil, userTParams, params, retTp, body, Symbol.spliceOwner)
         else
-          decodeFun(marker, None, ctx = Nil, params, retTp, body, Symbol.spliceOwner)
+          decodeFun(marker, None, ctx = Nil, params, retTp, body, Symbol.spliceOwner, nameHint = None)
 
       f.asExpr
     }
@@ -318,7 +318,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       decodeTypeParamSubstitutions(marker, userTParams, targs)
 
     val f =
-      decodeFun(marker, None, ctx, params, retTp, body, Symbol.spliceOwner)
+      decodeFun(marker, None, ctx, params, retTp, body, Symbol.spliceOwner, nameHint = None)
 
     Select
       .unique(f, "apply")
@@ -326,6 +326,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       .asExpr
 
   def decodeParameterizedTerm1[As[⋅⋅[_]]](
+    nameHint: Option[String],
     encoded: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any],
     args: List[Expr[Any]],
   )(using
@@ -346,7 +347,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       decodeTypeParamSubstitutions(marker, userTParams, targs)
 
     val f =
-      decodeFun(marker, Some(kuotesParam.ref), ctx, params, retTp, body, Symbol.spliceOwner)
+      decodeFun(marker, Some(kuotesParam.ref), ctx, params, retTp, body, Symbol.spliceOwner, nameHint)
 
     Select
       .unique(f, "apply")
@@ -591,6 +592,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                     retTp,
                     body,
                     owner,
+                    nameHint = None,
                   )
                 case _ =>
                   unsupported(s"Closure variant ${treeShortCode(bl)} (${treeStruct(bl)})")
@@ -731,6 +733,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     returnType: TypeTree,
     body: Term,
     owner: Symbol,
+    nameHint: Option[String],
   )(using
     Reporting.Context,
   ): Term = {
@@ -752,10 +755,13 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ctx1 = paramSubstitutions(newParams) ::: ctx
       decodeTerm(marker, kuotesOpt, ctx1, owner, body)
 
+    val nameSuffix =
+      nameHint.getOrElse(owner.fullName)
+
     val methSym =
       Symbol.newMethod(
         owner,
-        name = "$anonfun$functionImpl",
+        name = "$anonfun$" + nameSuffix,
         tpe = MethodType(paramNames)(_ => paramTypes, _ => returnType1),
       )
 

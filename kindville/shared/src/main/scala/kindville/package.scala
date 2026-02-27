@@ -25,13 +25,16 @@ transparent inline def decodeExpr[As](expr: Any)(inline args: Any*): Any =
   decodeCompositeExpr[[⋅⋅[_]] =>> As](expr)(args*)
 
 transparent inline def decodeExpr1[As](expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
-  decodeCompositeExpr1[[⋅⋅[_]] =>> As](expr)(args*)
+  decodeCompositeExpr1(nameHint = "")[[⋅⋅[_]] =>> As](expr)(args*)
+
+transparent inline def decodeExprNamed(nameHint: String)[As](expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
+  decodeCompositeExpr1(nameHint)[[⋅⋅[_]] =>> As](expr)(args*)
 
 transparent inline def decodeCompositeExpr[As[⋅⋅[_]]](expr: Any)(inline args: Any*): Any =
   ${ decodeCompositeExprImpl[As]('expr, 'args) }
 
-transparent inline def decodeCompositeExpr1[As[⋅⋅[_]]](expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
-  ${ decodeCompositeExprImpl1[As]('expr, 'args) }
+transparent inline def decodeCompositeExpr1(nameHint: String)[As[⋅⋅[_]]](expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
+  ${ decodeCompositeExprImpl1[As]('nameHint, 'expr, 'args) }
 
 private def decodeFunImpl(funcode: Expr[Any])(using Quotes): Expr[Any] =
   insideMacroExpansion:
@@ -46,13 +49,13 @@ private def decodeCompositeExprImpl[As[⋅⋅[_]]](expr: Expr[Any], args: Expr[S
     encoding
       .decodeParameterizedTerm[As](expr, as)
 
-private def decodeCompositeExprImpl1[As[⋅⋅[_]]](expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any], args: Expr[Seq[Any]])(using Quotes, Type[As]): Expr[Any] =
+private def decodeCompositeExprImpl1[As[⋅⋅[_]]](nameHint: Expr[String], expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any], args: Expr[Seq[Any]])(using Quotes, Type[As]): Expr[Any] =
   insideMacroExpansion:
     import quotes.reflect.*
     val encoding = Encoding()
     val as = unVarargs(args).toList
     encoding
-      .decodeParameterizedTerm1[As](expr, as)
+      .decodeParameterizedTerm1[As](Some(nameHint.valueOrAbort).filter(_.nonEmpty), expr, as)
 
 private def unVarargs[T](args: Expr[Seq[T]])(using Quotes, Type[T], Reporting.Context): Seq[Expr[T]] =
   import quotes.reflect.*
@@ -80,9 +83,6 @@ extension (a: Any) {
    */
   inline def polyFunApply[As, Res](bs: Any*): Res =
     ${ polyFunApplyImpl[As, Res]('a, 'bs) }
-
-  transparent inline def polyFunAt[As] =
-    ${ polyFunAtImpl[As]('a) }
 }
 
 private def typecheckImpl[T](a: Expr[Any])(using Quotes, Type[T]): Expr[T] =
@@ -119,12 +119,3 @@ private def polyFunApplyImpl[Ts, R](
       .appliedToArgs(as.map(_.asTerm))
       .asExprOf[R]
   }
-
-private def polyFunAtImpl[Ts](f: Expr[Any])(using Quotes, Type[Ts]): Expr[Any] =
-  import qr.*
-  val ts = Encoding.decodeTypeArgs[Ts](Type.of[Ts]).map(TypeRepr.of(using _))
-  Select
-    .unique(f.asTerm, "apply")
-    .appliedToTypes(ts)
-    .etaExpand(Symbol.spliceOwner)
-    .asExpr

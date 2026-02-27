@@ -8,8 +8,8 @@ sealed trait AListK[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] {
 
   /** Returns `[Z] => F[Z, A] => AListK[K, F, Z, B]`. */
   transparent inline def :: =
-    decodeExpr[F :: A :: B :: TNil](
-      [⋅⋅[_], F[_, _], A, B] => (
+    decodeExprNamed("AListK_::")[F :: A :: B :: TNil](
+      [⋅⋅[_]] => k ?=> [F[_, _], A, B] => (
         thiz: AListK[K, F, A, B],
         cons: [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C],
       ) =>
@@ -145,13 +145,11 @@ object AListK {
   transparent inline def single[K] =
     decodeExpr[TNil](
       [⋅⋅[_]] => (
-        elem:  [F[_, _], A, B]    => F[A, B]                       => Elem[K, F, A, B],
         empty: [F[_, _], A]       => Unit                          => AListK[K, F, A, A],
         cons:  [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C],
       ) =>
         [F[_, _], A, B] => (h: F[A, B]) => cons(h, empty[F, B](()))
     )(
-      elem[K],
       empty[K],
       cons[K],
     )

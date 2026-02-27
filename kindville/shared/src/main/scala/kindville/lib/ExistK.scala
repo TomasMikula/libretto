@@ -1,6 +1,6 @@
 package kindville.lib
 
-import kindville.{::, Box, TNil, decodeExpr, decodeExpr1}
+import kindville.{::, Box, TNil, decodeExprNamed}
 import kindville.Kuotes.*
 
 opaque type ExistK[K, F <: AnyKind] =
@@ -13,7 +13,7 @@ object ExistK {
 
   /** Returns `[A, ...] => F[A, ...] => ExistK[K, F]`. */
   transparent inline def apply[K, F <: AnyKind] =
-    decodeExpr1[F :: TNil](
+    decodeExprNamed("ExistK_apply")[F :: TNil](
       [⋅⋅[_]] => kuotes ?=> [F0[_ <: ⋅⋅[K]]] =>
         (/* pack: ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F :: TNil] */) =>
           [A <: ⋅⋅[K]] => (fa: F0[A]) =>
@@ -33,8 +33,8 @@ object ExistK {
 
   final class ExistsTypes[As] {
     transparent inline def suchThat[K, F <: AnyKind]: Any =
-      decodeExpr[F :: As :: TNil](
-        [⋅⋅[_], F0[_ <: ⋅⋅[K]], A <: ⋅⋅[K]] =>
+      decodeExprNamed("ExistK_suchThat")[F :: As :: TNil](
+        [⋅⋅[_]] => _ ?=> [F0[_ <: ⋅⋅[K]], A <: ⋅⋅[K]] =>
           (create: [X <: ⋅⋅[K]] => F0[X] => ExistK[K, F]) =>
             create[A]
       )(apply[K, F])

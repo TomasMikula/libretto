@@ -9,15 +9,14 @@ class FunctionK[K, F <: AnyKind, G <: AnyKind](
     Box.unpack(value)
 
   transparent inline infix def andThen[H <: AnyKind](that: FunctionK[K, G, H]): Any =
-    decodeExpr[F :: G :: H :: TNil](
-      [⋅⋅[_], F0[_], G0[_], H0[_]] => (
-        make: ([A <: ⋅⋅[K]] => F0[A] => H0[A]) => FunctionK[K, F, H],
+    decodeExprNamed("FunctionK_andThen")[F :: G :: H :: TNil](
+      [⋅⋅[_]] => k ?=> [F0[_], G0[_], H0[_]] => (
         f0: [A <: ⋅⋅[K]] => F0[A] => G0[A],
         g0: [A <: ⋅⋅[K]] => G0[A] => H0[A]
       ) =>
-        make([A <: ⋅⋅[K]] => (fa: F0[A]) => g0(f0(fa)))
+        k.disguise(FunctionK[K, F, H])[([A <: ⋅⋅[K]] => F0[A] => H0[A]) => FunctionK[K, F, H]]
+          .apply([A <: ⋅⋅[K]] => (fa: F0[A]) => g0(f0(fa)))
     )(
-      FunctionK[K, F, H],
       this.apply,
       that.apply,
     )
@@ -32,8 +31,15 @@ object FunctionK {
       [A <: ⋅⋅[K]] => F0[A] => G0[A]
 
   transparent inline def apply[K, F <: AnyKind, G <: AnyKind] =
-    make[K]
-      .polyFunAt[F :: G :: TNil]
+    decodeExprNamed("FunctionK_apply")[F :: G :: TNil](
+      [⋅⋅[_]] => k ?=> [F0[_ <: ⋅⋅[K]], G0[_ <: ⋅⋅[K]]] => () =>
+        (f: [A <: ⋅⋅[K]] => F0[A] => G0[A]) =>
+          new FunctionK[K, F, G](
+            k.disguise(Box.pack[Code[K], F :: G :: TNil])[
+              ([A <: ⋅⋅[K]] => F0[A] => G0[A]) => Box[Code[K], F :: G :: TNil]
+            ](f)
+          )
+    )()
 
   transparent inline def make[K] =
     decodeFun(
