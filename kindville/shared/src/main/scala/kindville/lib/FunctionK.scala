@@ -14,8 +14,9 @@ class FunctionK[K, F <: AnyKind, G <: AnyKind](
         f0: [A <: ⋅⋅[K]] => F0[A] => G0[A],
         g0: [A <: ⋅⋅[K]] => G0[A] => H0[A]
       ) =>
-        k.disguise(FunctionK[K, F, H])[([A <: ⋅⋅[K]] => F0[A] => H0[A]) => FunctionK[K, F, H]]
-          .apply([A <: ⋅⋅[K]] => (fa: F0[A]) => g0(f0(fa)))
+        val make: ([A <: ⋅⋅[K]] => F0[A] => H0[A]) => FunctionK[K, F, H] =
+          k.disguise(FunctionK[K, F, H])
+        make([A <: ⋅⋅[K]] => (fa: F0[A]) => g0(f0(fa)))
     )(
       this.apply,
       that.apply,

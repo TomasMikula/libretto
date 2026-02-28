@@ -15,17 +15,14 @@ object ExistK {
   transparent inline def apply[K, F <: AnyKind] =
     decodeExprNamed("ExistK_apply")[F :: TNil](
       [⋅⋅[_]] => kuotes ?=> [F0[_ <: ⋅⋅[K]]] =>
-        (/* pack: ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F :: TNil] */) =>
+        () =>
+          val pack: ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F0 :: TNil] =
+            kuotes.disguise1(Box.pack[Code[K], F :: TNil])
           [A <: ⋅⋅[K]] => (fa: F0[A]) =>
-            // pack(
-            //   [R] => (f: [X <: ⋅⋅[K]] => F0[X] => R) => f[A](fa)
-            // ): ExistK[K, F]
-            kuotes.disguise1(Box.pack[Code[K], F :: TNil])[
-              ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F0 :: TNil],
-            ].apply(
+            pack(
               [R] => (f: [X <: ⋅⋅[K]] => F0[X] => R) => f[A](fa)
             ) : ExistK[K, F0]
-    )(/* Box.pack[Code[K], F :: TNil] */)
+    )()
 
 
   def types[As]: ExistsTypes[As] =

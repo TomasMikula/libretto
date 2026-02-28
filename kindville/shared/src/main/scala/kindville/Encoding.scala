@@ -598,6 +598,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                   unsupported(s"Closure variant ${treeShortCode(bl)} (${treeStruct(bl)})")
             case _ =>
               unsupported(s"Closure variant ${treeShortCode(bl)} (${treeStruct(bl)})")
+        case Block(stmts, term) =>
+          decodeBlock(marker, kuotesOpt, ctx, owner, stmts, term)
         case Apply(f, as) =>
           val f1 = decodeTerm(marker, kuotesOpt, ctx, owner, f)
           val bs = as.map(decodeTerm(marker, kuotesOpt, ctx, owner, _))
@@ -639,6 +641,46 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case other =>
           unimplemented(s"decodeTerm(${treeStruct(expr)})")
     }
+
+  private def decodeBlock(
+    marker: TypeRef | ParamRef,
+    kuotesOpt: Option[TermRef], // TODO: change to non-optional once we always use Kuotes
+    ctx: List[ContextElem],
+    owner: Symbol,
+    stmts: List[Statement],
+    expr: Term,
+  )(using
+    Reporting.Context,
+  ): Block = {
+    val preprocessedStmts: List[(ContextElem, (fullCtx: List[ContextElem]) => Statement)] =
+      stmts.map { stmt =>
+        inside(stmt) {
+          stmt match
+            case v @ ValDef(name, tpt, Some(body)) =>
+              val oldRef = v.symbol.termRef
+              val newTpe = decodeType(marker, ctx, tpt.tpe) // TODO: ctx to include any definitions earlier in the block
+              val flags = v.symbol.flags
+
+              val newSym = Symbol.newVal(
+                owner,
+                name,
+                newTpe,
+                // v.symbol.flags,  // throws an error (https://github.com/scala/scala3/issues/25412)
+                Flags.EmptyFlags,
+                privateWithin = Symbol.noSymbol,
+              )
+              ( ContextElem.TermSubstitution(oldRef,  Ref.term(newSym.termRef))
+              , ctx => ValDef(newSym, Some(decodeTerm(marker, kuotesOpt, ctx, owner = newSym, body)))
+              )
+            case other =>
+              unimplemented(s"decoding statement ${treeShortCode(other)}\nTree: ${treeStruct(other)}")
+        }
+      }
+
+    val ctx1 = preprocessedStmts.map(_._1) ::: ctx
+    val stmts1 = preprocessedStmts.map(_._2(ctx1))
+    Block(stmts1, decodeTerm(marker, kuotesOpt, ctx1, owner, expr))
+  }
 
   private def decodePolyType(
     marker: TypeRepr,
