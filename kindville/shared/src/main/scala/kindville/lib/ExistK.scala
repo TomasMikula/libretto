@@ -17,7 +17,7 @@ object ExistK {
       [⋅⋅[_]] => kuotes ?=> [F0[_ <: ⋅⋅[K]]] =>
         () =>
           val pack: ([R] => ([A <: ⋅⋅[K]] => F0[A] => R) => R) => Box[Code[K], F0 :: TNil] =
-            kuotes.disguise1(Box.pack[Code[K], F :: TNil])
+            kuotes.disguise(Box.pack[Code[K], F :: TNil])
           [A <: ⋅⋅[K]] => (fa: F0[A]) =>
             pack(
               [R] => (f: [X <: ⋅⋅[K]] => F0[X] => R) => f[A](fa)

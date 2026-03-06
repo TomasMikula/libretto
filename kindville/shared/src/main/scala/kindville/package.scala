@@ -24,16 +24,16 @@ transparent inline def decodeFun(funcode: Any): Any =
 transparent inline def decodeExpr[As](expr: Any)(inline args: Any*): Any =
   decodeCompositeExpr[[⋅⋅[_]] =>> As](expr)(args*)
 
-transparent inline def decodeExpr1[As](expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
+transparent inline def decodeExpr1[As](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
   decodeCompositeExpr1(nameHint = "")[[⋅⋅[_]] =>> As](expr)(args*)
 
-transparent inline def decodeExprNamed(nameHint: String)[As](expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
+transparent inline def decodeExprNamed(nameHint: String)[As](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
   decodeCompositeExpr1(nameHint)[[⋅⋅[_]] =>> As](expr)(args*)
 
 transparent inline def decodeCompositeExpr[As[⋅⋅[_]]](expr: Any)(inline args: Any*): Any =
   ${ decodeCompositeExprImpl[As]('expr, 'args) }
 
-transparent inline def decodeCompositeExpr1(nameHint: String)[As[⋅⋅[_]]](expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
+transparent inline def decodeCompositeExpr1(nameHint: String)[As[⋅⋅[_]]](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
   ${ decodeCompositeExprImpl1[As]('nameHint, 'expr, 'args) }
 
 private def decodeFunImpl(funcode: Expr[Any])(using Quotes): Expr[Any] =

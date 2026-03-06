@@ -10,17 +10,15 @@ class FunctionK[K, F <: AnyKind, G <: AnyKind](
 
   transparent inline infix def andThen[H <: AnyKind](that: FunctionK[K, G, H]): Any =
     decodeExprNamed("FunctionK_andThen")[F :: G :: H :: TNil](
-      [⋅⋅[_]] => k ?=> [F0[_], G0[_], H0[_]] => (
-        f0: [A <: ⋅⋅[K]] => F0[A] => G0[A],
-        g0: [A <: ⋅⋅[K]] => G0[A] => H0[A]
-      ) =>
+      [⋅⋅[_]] => k ?=> [F0[_], G0[_], H0[_]] => () =>
         val make: ([A <: ⋅⋅[K]] => F0[A] => H0[A]) => FunctionK[K, F, H] =
           k.disguise(FunctionK[K, F, H])
+        val f0: [A <: ⋅⋅[K]] => F0[A] => G0[A] =
+          k.disguise(this.apply)
+        val g0: [A <: ⋅⋅[K]] => G0[A] => H0[A] =
+          k.disguise(that.apply)[[A <: ⋅⋅[K]] => G0[A] => H0[A]]
         make([A <: ⋅⋅[K]] => (fa: F0[A]) => g0(f0(fa)))
-    )(
-      this.apply,
-      that.apply,
-    )
+    )()
 
   transparent inline infix def after[E <: AnyKind](that: FunctionK[K, E, F]): Any =
     that andThen this

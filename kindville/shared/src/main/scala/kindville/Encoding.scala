@@ -382,8 +382,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
               assertionFailed("unexpected polymorphic function with 0 type parameters")
             case tparams =>
               badUse("Expected a polymorphic function with a single type parameter [⋅⋅[_]]")
-        case i @ Inlined(_, _, _) =>
-          parseKuoted(i.underlying.asExpr)
+        case i @ Inlined(call, Nil, expansion) =>
+          parseKuoted(expansion.asExpr)
         case other =>
           unsupported(s"Expected a polymorphic function `[⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> ...`, got ${encoded.asTerm.show(using Printer.TreeStructure)}")
     }
@@ -637,7 +637,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             TypeTree.of(using decodeType(marker, ctx, tt.tpe).asType),
           )
         case i @ Inlined(call, bindings, expansion) =>
-          decodeTerm(marker, kuotesOpt, ctx, owner, expansion)
+          Inlined(
+            call,
+            bindings,
+            decodeTerm(marker, kuotesOpt, ctx, owner, expansion),
+          ).changeOwner(owner)
         case other =>
           unimplemented(s"decodeTerm(${treeStruct(expr)})")
     }
