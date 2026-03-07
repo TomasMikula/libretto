@@ -118,10 +118,10 @@ object AListK {
   transparent inline def empty[K] =
     decodeExpr[TNil](
       [⋅⋅[_]] =>
-        (refl: [A <: ⋅⋅[K]] => Unit => TypeEqK[K, A, A]) =>
+        (refl: [A <: ⋅⋅[K]] => () => TypeEqK[K, A, A]) =>
           [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K]] => (_: Unit) =>
             Empty[K, F, A, A](
-              refl[A](())
+              refl[A]()
             )
     )(
       TypeEqK.refl[K],
