@@ -116,16 +116,15 @@ object AListK {
 
   /** Returns `[F[_, _], A] => Unit => AListK[K, F, A, A]` */
   transparent inline def empty[K] =
-    decodeExpr[TNil](
-      [⋅⋅[_]] =>
-        (refl: [A <: ⋅⋅[K]] => () => TypeEqK[K, A, A]) =>
-          [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K]] => (_: Unit) =>
-            Empty[K, F, A, A](
-              refl[A]()
-            )
-    )(
-      TypeEqK.refl[K],
-    )
+    decodeExprNamed0("AListK_empty")(
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
+        val refl: [A <: ⋅⋅[K]] => () => TypeEqK[K, A, A] =
+          k.disguise(TypeEqK.refl[K])
+        [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K]] => (_: Unit) =>
+          Empty[K, F, A, A](
+            refl[A]()
+          )
+    )()
 
   /** Returns `[F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C]` */
   transparent inline def cons[K] =
