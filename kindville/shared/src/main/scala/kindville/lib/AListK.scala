@@ -128,28 +128,23 @@ object AListK {
 
   /** Returns `[F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C]` */
   transparent inline def cons[K] =
-    decodeExpr[TNil](
-      [⋅⋅[_]] =>
-        (elem: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => F[A, B] => Elem[K, F, A, B]) =>
-          [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K], C <: ⋅⋅[K]] => (
-            h: F[A, B],
-            t: AListK[K, F, B, C]
-          ) =>
-            Cons[K, F, A, B, C](elem(h), t)
-    )(
-      elem[K],
-    )
+    decodeExprNamed0("AListK_cons")(
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
+        val elem: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => F[A, B] => Elem[K, F, A, B] =
+          k.disguise(AListK.elem[K])
+        [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K], C <: ⋅⋅[K]] => (
+          h: F[A, B],
+          t: AListK[K, F, B, C]
+        ) =>
+          Cons[K, F, A, B, C](elem(h), t)
+    )()
 
   /** Returns `[F[_, _], A, B] => F[A, B] => AListK[K, F, A, B]` */
   transparent inline def single[K] =
-    decodeExpr[TNil](
-      [⋅⋅[_]] => (
-        empty: [F[_, _], A]       => Unit                          => AListK[K, F, A, A],
-        cons:  [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C],
-      ) =>
-        [F[_, _], A, B] => (h: F[A, B]) => cons(h, empty[F, B](()))
-    )(
-      empty[K],
-      cons[K],
-    )
+    decodeExprNamed0("AListK_single")(
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
+        val empty: [F[_, _], A]       => ()                            => AListK[K, F, A, A] = k.disguise(AListK.empty[K])
+        val cons:  [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C] = k.disguise(AListK.cons[K])
+        [F[_, _], A, B] => (h: F[A, B]) => cons(h, empty[F, B]())
+    )()
 }
