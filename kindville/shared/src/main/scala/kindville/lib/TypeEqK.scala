@@ -47,16 +47,15 @@ object TypeEqK {
   ) extends TypeEqK[K, F, F](subst)
 
   transparent inline def refl[K]: Any =
-    decodeExpr[TNil](
-      [⋅⋅[_]] =>
-        (packer: [F <: ⋅⋅[K], G <: ⋅⋅[K]] => ([H[_ <: ⋅⋅[K]]] => H[F] => H[G]) => Box[Code[K], F :: G :: TNil]) =>
-          [F <: ⋅⋅[K]] => (_: Unit) =>
-            Refl[K, F]()(
-              packer[F, F](
-                [H[_ <: ⋅⋅[K]]] => (hf: H[F]) => hf
-              )
+    decodeExprNamed0("TypeEqK_refl")(
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
+        val packer: [F <: ⋅⋅[K], G <: ⋅⋅[K]] => ([H[_ <: ⋅⋅[K]]] => H[F] => H[G]) => Box[Code[K], F :: G :: TNil] =
+          k.disguise(Box.packer[Code[K]])
+        [F <: ⋅⋅[K]] => (_: Unit) =>
+          Refl[K, F]()(
+            packer[F, F](
+              [H[_ <: ⋅⋅[K]]] => (hf: H[F]) => hf
             )
-    )(
-      Box.packer[Code[K]]
-    )
+          )
+    )()
 }
