@@ -114,13 +114,13 @@ object AListK {
     tail: AListK[K, F, B, C],
   ) extends AListK[K, F, A, C]
 
-  /** Returns `[F[_, _], A] => Unit => AListK[K, F, A, A]` */
+  /** Returns `[F[_, _], A] => () => AListK[K, F, A, A]` */
   transparent inline def empty[K] =
     decodeExprNamed0("AListK_empty")(
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
         val refl: [A <: ⋅⋅[K]] => () => TypeEqK[K, A, A] =
           k.disguise(TypeEqK.refl[K])
-        [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K]] => (_: Unit) =>
+        [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K]] => () =>
           Empty[K, F, A, A](
             refl[A]()
           )

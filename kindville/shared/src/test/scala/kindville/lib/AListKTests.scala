@@ -11,6 +11,6 @@ class AListKTests extends AnyFunSuite {
       ((_: String).split("0")) ::
       ((_: Array[String]).map(_.length)) ::
       ((_: Array[Int]).exists(_ % 2 == 0)) ::
-      AListK.empty[*][Function1, Boolean](())
+      AListK.empty[*][Function1, Boolean]()
   }
 }
