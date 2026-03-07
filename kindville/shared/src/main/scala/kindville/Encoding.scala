@@ -398,20 +398,16 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def parsePolyFun(
     encoded: Expr[Any],
+  )(using
+    Reporting.Context,
   ): PolyFunParseResult =
-    // TODO: use doParsePolyFun
-    encoded.asTerm match
-      case PolyFun(tparams, params, retTp, body) =>
-        if (tparams.isEmpty)
-          assertionFailed("unexpected polymorphic function with 0 type parameters")
-        val (name, kind, typeRef) = tparams.head
-        val userTParams = tparams.tail
-        val marker = typeRef // TODO: check that marker has kind _[_]
-        PolyFunParseResult(marker, userTParams, params, retTp, body)
-      case i @ Inlined(_, _, _) =>
-        parsePolyFun(i.underlying.asExpr)
-      case other =>
-        unsupported(s"Expected a polymorphic function `[⋅⋅[_], ...] => ...`, got ${encoded.asTerm.show(using Printer.TreeStructure)}")
+    val (tparams, params, retTp, body) = doParsePolyFun(encoded.asTerm)
+    if (tparams.isEmpty)
+      assertionFailed("unexpected polymorphic function with 0 type parameters")
+    val (name, kind, typeRef) = tparams.head
+    val userTParams = tparams.tail
+    val marker = typeRef // TODO: check that marker has kind _[_]
+    PolyFunParseResult(marker, userTParams, params, retTp, body)
 
   private def doParsePolyFun(
     expr: Term,
