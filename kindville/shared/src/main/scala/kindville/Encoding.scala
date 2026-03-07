@@ -282,24 +282,6 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           badUse(s"Expected a type lambda, got ${typeShortCode(other)}")
     }
 
-  def decodeFun(
-    encoded: Expr[Any],
-  )(using
-    Reporting.Context,
-  ): Expr[Any] =
-    inside(encoded.asTerm) {
-      val PolyFunParseResult(marker, userTParams, params, retTp, body) =
-        parsePolyFun(encoded)
-
-      val f =
-        if (userTParams.nonEmpty)
-          decodePolyFun(marker, None, ctx = Nil, userTParams, params, retTp, body, Symbol.spliceOwner)
-        else
-          decodeFun(marker, None, ctx = Nil, params, retTp, body, Symbol.spliceOwner, nameHint = None)
-
-      f.asExpr
-    }
-
   def decodeParameterizedTerm[As[⋅⋅[_]]](
     encoded: Expr[Any],
     args: List[Expr[Any]],
@@ -319,6 +301,27 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
     val f =
       decodeFun(marker, None, ctx, params, retTp, body, Symbol.spliceOwner, nameHint = None)
+
+    Select
+      .unique(f, "apply")
+      .appliedToArgs(args.map(_.asTerm))
+      .asExpr
+
+  def decodeParameterizedTerm0(
+    nameHint: Option[String],
+    encoded: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any],
+    args: List[Expr[Any]],
+  )(using
+    Reporting.Context,
+  ): Expr[Any] =
+    val ParseKuotedResult(marker, kuotesParam, _, payload) =
+      parseKuoted(encoded)
+
+    val (params, retTp, body) =
+      doParseFun(payload)
+
+    val f =
+      decodeFun(marker, Some(kuotesParam.ref), ctx = Nil, params, retTp, body, Symbol.spliceOwner, nameHint)
 
     Select
       .unique(f, "apply")
@@ -428,6 +431,53 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case other =>
           badUse(s"Expected a polymorphic function, got ${expr.show(using Printer.TreeStructure)}")
     }
+
+  private def doParseFun(
+    expr: Term,
+  )(using
+    Reporting.Context,
+  ): (
+    params: List[(name: String, tpe: qr.TypeTree, ref: qr.TermRef)],
+    retTp: qr.TypeTree,
+    body: qr.Term,
+  ) =
+    inside(expr) {
+      expr match
+        case Fun(params, retTp, body) =>
+          (params, retTp, body)
+        case i @ Inlined(_, _, _) =>
+          doParseFun(i.underlying)
+        case other =>
+          badUse(s"Expected a function literal (lambda), got ${expr.show(using Printer.TreeStructure)}")
+    }
+
+  object Fun {
+
+    /** Matches a lambda `(a: A, ...) => body` */
+    def unapply(expr: Term): Option[(
+      params: List[(name: String, tpe: TypeTree, ref: TermRef)],
+      retTp: TypeTree,
+      body: Term,
+    )] = {
+      expr match
+        case Block(List(stmt), Closure(method, optTp)) =>
+          (stmt, method) match
+            case (DefDef(name, paramss, retTp, Some(body)), Ident(methodName)) if methodName == name =>
+              paramss match
+                case TermParamClause(params) :: Nil =>
+                  Some((
+                    params.map { case v @ ValDef(name, tpe, _) => (name, tpe, v.symbol.termRef) },
+                    retTp,
+                    body,
+                  ))
+                case _ =>
+                  None
+            case _ =>
+              None
+        case _ =>
+          None
+    }
+  }
 
   private def decodeTypeParamSubstitutions(
     marker: TypeRepr,

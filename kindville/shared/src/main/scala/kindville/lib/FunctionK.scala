@@ -41,15 +41,15 @@ object FunctionK {
     )()
 
   transparent inline def make[K] =
-    decodeFun(
-      [⋅⋅[_], F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] =>
-        (f: [A <: ⋅⋅[K]] => F[A] => G[A]) =>
-          new FunctionK[K, F, G](
-            Box.packer[Code[K]]
-              .polyFunApply[
-                F :: G :: TNil,
-                Box[Code[K], F :: G :: TNil]
-              ](f)
-          )
-    )
+    decodeExprNamed0("FunctionK_mk")(
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
+        [F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] =>
+          (f: [A <: ⋅⋅[K]] => F[A] => G[A]) =>
+            new FunctionK[K, F, G](
+              k.disguise(Box.packer[Code[K]])[
+                [F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] => ([A <: ⋅⋅[K]] => F[A] => G[A]) => Box[Code[K], F :: G :: TNil]
+              ]
+                .apply[F, G](f)
+            )
+    )()
 }
