@@ -21,16 +21,14 @@ class TypeEqK[K, F <: AnyKind, G <: AnyKind](
     )
 
   transparent inline def flip =
-    decodeExpr[F :: G :: TNil](
-      [⋅⋅[_], F <: ⋅⋅[K], G <: ⋅⋅[K]] => (
-        refl: [H <: ⋅⋅[K]] => () => TypeEqK[K, H, H],
-        subst: [M[X <: ⋅⋅[K]]] => M[F] => M[G]
-      ) =>
+    decodeExprNamed("TypeEqK_flip")[F :: G :: TNil](
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> [F <: ⋅⋅[K], G <: ⋅⋅[K]] => () =>
+        val refl: [H <: ⋅⋅[K]] => () => TypeEqK[K, H, H] =
+          k.disguise(TypeEqK.refl[K])
+        val subst: [M[X <: ⋅⋅[K]]] => M[F] => M[G] =
+          k.disguise(this.substituteCo)
         subst[[J <: ⋅⋅[K]] =>> TypeEqK[K, J, F]](refl[F]())
-    )(
-      TypeEqK.refl[K],
-      this.substituteCo
-    )
+    )()
 }
 
 object TypeEqK {
