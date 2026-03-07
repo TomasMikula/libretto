@@ -18,7 +18,7 @@ infix sealed trait ofKinds[As, Ks]
 private transparent inline def qr(using Quotes): quotes.reflect.type =
   quotes.reflect
 
-transparent inline def decodeExpr[As](expr: Any)(inline args: Any*): Any =
+transparent inline def decodeExpr[As](inline expr: Any)(inline args: Any*): Any =
   decodeCompositeExpr[[⋅⋅[_]] =>> As](expr)(args*)
 
 transparent inline def decodeExpr1[As](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
@@ -30,7 +30,7 @@ transparent inline def decodeExprNamed0(nameHint: String)(inline expr: [⋅⋅[_
 transparent inline def decodeExprNamed(nameHint: String)[As](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
   decodeCompositeExpr1(nameHint)[[⋅⋅[_]] =>> As](expr)(args*)
 
-transparent inline def decodeCompositeExpr[As[⋅⋅[_]]](expr: Any)(inline args: Any*): Any =
+transparent inline def decodeCompositeExpr[As[⋅⋅[_]]](inline expr: Any)(inline args: Any*): Any =
   ${ decodeCompositeExprImpl[As]('expr, 'args) }
 
 transparent inline def decodeCompositeExpr1(nameHint: String)[As[⋅⋅[_]]](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =

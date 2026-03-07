@@ -426,8 +426,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       expr match
         case PolyFun(tparams, params, retTp, body) =>
           (tparams, params, retTp, body)
-        case i @ Inlined(_, _, _) =>
-          doParsePolyFun(i.underlying)
+        case Inlined(_, Nil, expansion) =>
+          doParsePolyFun(expansion)
         case other =>
           badUse(s"Expected a polymorphic function, got ${expr.show(using Printer.TreeStructure)}")
     }
@@ -445,8 +445,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       expr match
         case Fun(params, retTp, body) =>
           (params, retTp, body)
-        case i @ Inlined(_, _, _) =>
-          doParseFun(i.underlying)
+        case Inlined(_, Nil, expansion) =>
+          doParseFun(expansion)
         case other =>
           badUse(s"Expected a function literal (lambda), got ${expr.show(using Printer.TreeStructure)}")
     }
