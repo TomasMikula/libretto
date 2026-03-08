@@ -15,13 +15,12 @@ object Box {
     ${ packImpl[Code, As] }
 
   transparent inline def pacK[K, Code[⋅⋅[_]] <: AnyKind, As]: Any =
-    decodeCompositeExpr[[⋅⋅[_]] =>> Code[⋅⋅] :: As :: TNil](
-      [⋅⋅[_], Code0[As <: ⋅⋅[K]], A0 <: ⋅⋅[K]] =>
-        (packer: [X <: ⋅⋅[K]] => Code0[X] => Box[Code, ⋅⋅[X]]) =>
-          packer[A0]
-    )(
-      packer[Code],
-    )
+    decodeCompositeExpr1("Box_pacK")[[⋅⋅[_]] =>> Code[⋅⋅] :: As :: TNil](
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> [Code0[As <: ⋅⋅[K]], A0 <: ⋅⋅[K]] => () =>
+        val packer: [X <: ⋅⋅[K]] => Code0[X] => Box[Code, ⋅⋅[X]] =
+          k.disguise(Box.packer[Code])
+        packer[A0]
+    )()
 
   transparent inline def unpack[Code[⋅⋅[_]] <: AnyKind, As](box: Box[Code, As]): Any =
     ${ unpackImpl[Code, As]('box) }

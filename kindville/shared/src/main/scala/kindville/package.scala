@@ -30,19 +30,8 @@ transparent inline def decodeExprNamed0(nameHint: String)(inline expr: [⋅⋅[_
 transparent inline def decodeExprNamed(nameHint: String)[As](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
   decodeCompositeExpr1(nameHint)[[⋅⋅[_]] =>> As](expr)(args*)
 
-transparent inline def decodeCompositeExpr[As[⋅⋅[_]]](inline expr: Any)(inline args: Any*): Any =
-  ${ decodeCompositeExprImpl[As]('expr, 'args) }
-
 transparent inline def decodeCompositeExpr1(nameHint: String)[As[⋅⋅[_]]](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
   ${ decodeCompositeExprImpl1[As]('nameHint, 'expr, 'args) }
-
-private def decodeCompositeExprImpl[As[⋅⋅[_]]](expr: Expr[Any], args: Expr[Seq[Any]])(using Quotes, Type[As]): Expr[Any] =
-  insideMacroExpansion:
-    import quotes.reflect.*
-    val encoding = Encoding()
-    val as = unVarargs(args).toList
-    encoding
-      .decodeParameterizedTerm[As](expr, as)
 
 private def decodeExprNamed0Impl(nameHint: Expr[String], expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any], args: Expr[Seq[Any]])(using Quotes): Expr[Any] =
   insideMacroExpansion:

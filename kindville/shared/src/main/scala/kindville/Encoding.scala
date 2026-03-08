@@ -282,31 +282,6 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           badUse(s"Expected a type lambda, got ${typeShortCode(other)}")
     }
 
-  def decodeParameterizedTerm[As[⋅⋅[_]]](
-    encoded: Expr[Any],
-    args: List[Expr[Any]],
-  )(using
-    Type[As],
-    Reporting.Context,
-  ): Expr[Any] =
-    val PolyFunParseResult(marker, userTParams, params, retTp, body) =
-      parsePolyFun(encoded)
-
-    val targs =
-      decodeTypeArgs(TypeRepr.of[As].appliedTo(marker).asType)
-        .map(t => TypeRepr.of(using t).dealiasKeepOpaques)
-
-    val ctx =
-      decodeTypeParamSubstitutions(marker, userTParams, targs)
-
-    val f =
-      decodeFun(marker, None, ctx, params, retTp, body, Symbol.spliceOwner, nameHint = None)
-
-    Select
-      .unique(f, "apply")
-      .appliedToArgs(args.map(_.asTerm))
-      .asExpr
-
   def decodeParameterizedTerm0(
     nameHint: Option[String],
     encoded: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any],
@@ -398,19 +373,6 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     retTp: TypeTree,
     body: Term,
   )
-
-  private def parsePolyFun(
-    encoded: Expr[Any],
-  )(using
-    Reporting.Context,
-  ): PolyFunParseResult =
-    val (tparams, params, retTp, body) = doParsePolyFun(encoded.asTerm)
-    if (tparams.isEmpty)
-      assertionFailed("unexpected polymorphic function with 0 type parameters")
-    val (name, kind, typeRef) = tparams.head
-    val userTParams = tparams.tail
-    val marker = typeRef // TODO: check that marker has kind _[_]
-    PolyFunParseResult(marker, userTParams, params, retTp, body)
 
   private def doParsePolyFun(
     expr: Term,
