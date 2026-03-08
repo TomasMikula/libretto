@@ -9,15 +9,13 @@ sealed trait AListK[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] {
   /** Returns `[Z] => F[Z, A] => AListK[K, F, Z, B]`. */
   transparent inline def :: =
     decodeExprNamed("AListK_::")[F :: A :: B :: TNil](
-      [⋅⋅[_]] => k ?=> [F[_, _], A, B] => (
-        thiz: AListK[K, F, A, B],
-        cons: [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C],
-      ) =>
+      [⋅⋅[_]] => k ?=> [F[_, _], A, B] => () =>
+        val thiz: AListK[K, F, A, B] =
+          k.disguise(this)
+        val cons: [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C] =
+          k.disguise(AListK.cons[K])
         [Z] => (h: F[Z, A]) => cons[F, Z, A, B](h, thiz)
-    )(
-      this,
-      AListK.cons[K]
-    )
+    )()
 
   // private type AccBox[G <: AnyKind, X <: AnyKind] =
   //   Box[AccBox.Code, G :: X :: TNil]

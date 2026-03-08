@@ -31,10 +31,11 @@ object ExistK {
   final class ExistsTypes[As] {
     transparent inline def suchThat[K, F <: AnyKind]: Any =
       decodeExprNamed("ExistK_suchThat")[F :: As :: TNil](
-        [⋅⋅[_]] => _ ?=> [F0[_ <: ⋅⋅[K]], A <: ⋅⋅[K]] =>
-          (create: [X <: ⋅⋅[K]] => F0[X] => ExistK[K, F]) =>
-            create[A]
-      )(apply[K, F])
+        [⋅⋅[_]] => kuotes ?=> [F0[_ <: ⋅⋅[K]], A <: ⋅⋅[K]] => () =>
+          val create: [X <: ⋅⋅[K]] => F0[X] => ExistK[K, F] =
+            kuotes.disguise(apply[K, F])
+          create[A]
+      )()
   }
 
   extension [K, F <: AnyKind](ex: ExistK[K, F])

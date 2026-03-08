@@ -10,15 +10,13 @@ class TypeEqK[K, F <: AnyKind, G <: AnyKind](
 
   transparent inline def andThen[H <: AnyKind](that: TypeEqK[K, G, H]) =
     decodeExprNamed("TypeEqK_andThen")[F :: G :: H :: TNil](
-      [⋅⋅[_]] => kuotes ?=> [F <: ⋅⋅[K], G <: ⋅⋅[K], H <: ⋅⋅[K]] => (
-        thiz: TypeEqK[K, F, G],
-        subst: [M[X <: ⋅⋅[K]]] => M[G] => M[H]
-      ) =>
+      [⋅⋅[_]] => kuotes ?=> [F <: ⋅⋅[K], G <: ⋅⋅[K], H <: ⋅⋅[K]] => () =>
+        val thiz: TypeEqK[K, F, G] =
+          kuotes.disguise(this)
+        val subst: [M[X <: ⋅⋅[K]]] => M[G] => M[H] =
+          kuotes.disguise(that.substituteCo)
         subst[[J <: ⋅⋅[K]] =>> TypeEqK[K, F, J]](thiz)
-    )(
-      this,
-      that.substituteCo
-    )
+    )()
 
   transparent inline def flip =
     decodeExprNamed("TypeEqK_flip")[F :: G :: TNil](
