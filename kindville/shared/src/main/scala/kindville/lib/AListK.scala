@@ -8,12 +8,12 @@ sealed trait AListK[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] {
 
   /** Returns `[Z] => F[Z, A] => AListK[K, F, Z, B]`. */
   transparent inline def :: =
-    decodeExprNamed("AListK_::")[F :: A :: B :: TNil](
+    decodeTNamed("AListK_::")[F :: A :: B :: TNil](
       [⋅⋅[_]] => k ?=> [F[_, _], A, B] => () =>
         val thiz: AListK[K, F, A, B] =
-          k.disguise(this)
+          k.splice(this)
         val cons: [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C] =
-          k.disguise(AListK.cons[K])
+          k.splice(AListK.cons[K])
         [Z] => (h: F[Z, A]) => cons[F, Z, A, B](h, thiz)
     )()
 
@@ -114,10 +114,10 @@ object AListK {
 
   /** Returns `[F[_, _], A] => () => AListK[K, F, A, A]` */
   transparent inline def empty[K] =
-    decodeExprNamed0("AListK_empty")(
+    decodeNamed("AListK_empty")(
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
         val refl: [A <: ⋅⋅[K]] => () => TypeEqK[K, A, A] =
-          k.disguise(TypeEqK.refl[K])
+          k.splice(TypeEqK.refl[K])
         [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K]] => () =>
           Empty[K, F, A, A](
             refl[A]()
@@ -126,10 +126,10 @@ object AListK {
 
   /** Returns `[F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C]` */
   transparent inline def cons[K] =
-    decodeExprNamed0("AListK_cons")(
+    decodeNamed("AListK_cons")(
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
         val elem: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => F[A, B] => Elem[K, F, A, B] =
-          k.disguise(AListK.elem[K])
+          k.splice(AListK.elem[K])
         [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K], C <: ⋅⋅[K]] => (
           h: F[A, B],
           t: AListK[K, F, B, C]
@@ -139,10 +139,10 @@ object AListK {
 
   /** Returns `[F[_, _], A, B] => F[A, B] => AListK[K, F, A, B]` */
   transparent inline def single[K] =
-    decodeExprNamed0("AListK_single")(
+    decodeNamed("AListK_single")(
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
-        val empty: [F[_, _], A]       => ()                            => AListK[K, F, A, A] = k.disguise(AListK.empty[K])
-        val cons:  [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C] = k.disguise(AListK.cons[K])
+        val empty: [F[_, _], A]       => ()                            => AListK[K, F, A, A] = k.splice(AListK.empty[K])
+        val cons:  [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C] = k.splice(AListK.cons[K])
         [F[_, _], A, B] => (h: F[A, B]) => cons(h, empty[F, B]())
     )()
 }

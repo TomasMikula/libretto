@@ -13,11 +13,11 @@ object Forall {
 
   /** Returns `([A...] => Unit => F[A...]) => Forall[K, F]`. */
   transparent inline def apply[K, F <: AnyKind]: Any =
-    decodeExprNamed("Forall_apply")[F :: TNil](
+    decodeTNamed("Forall_apply")[F :: TNil](
       [⋅⋅[_]] => k ?=> [F0[_ <: ⋅⋅[K]]] =>
         () =>
           (f: [A <: ⋅⋅[K]] => Unit => F0[A]) =>
-            k.disguise(Box.pack[Code[K], F :: TNil])[
+            k.splice(Box.pack[Code[K], F :: TNil])[
               ([A <: ⋅⋅[K]] => Unit => F0[A]) => Box[Code[K], F :: TNil]
             ](f): Forall[K, F]
     )()

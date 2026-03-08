@@ -572,8 +572,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ): Term =
     inside(expr) {
       expr match
-        // '{ kuotes.disguise[T](arg)[U] }
-        case TypeApply(Apply(TypeApply(Select(prefix, "disguise"), List(t)), List(arg)), List(u)) if Some(prefix.tpe) == kuotesOpt =>
+        // '{ kuotes.splice[T](arg)[U] }
+        case TypeApply(Apply(TypeApply(Select(prefix, "splice"), List(t)), List(arg)), List(u)) if Some(prefix.tpe) == kuotesOpt =>
           // check that arg :《u》, ensuring that arg is usable in place where 《u》 is expected
           val decodedU =
             decodeType(marker, ctx, u.tpe)

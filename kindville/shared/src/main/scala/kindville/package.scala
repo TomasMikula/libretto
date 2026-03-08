@@ -18,22 +18,22 @@ infix sealed trait ofKinds[As, Ks]
 private transparent inline def qr(using Quotes): quotes.reflect.type =
   quotes.reflect
 
-transparent inline def decodeExpr0(inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
-  ${ decodeExprNamed0Impl('{""}, 'expr, 'args) }
+transparent inline def decode(inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
+  ${ decodeNamedImpl('{""}, 'expr, 'args) }
 
-transparent inline def decodeExpr1[As](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
-  decodeCompositeExpr1(nameHint = "")[[⋅⋅[_]] =>> As](expr)(args*)
+transparent inline def decodeT[As](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
+  decodeFull(nameHint = "")[[⋅⋅[_]] =>> As](expr)(args*)
 
-transparent inline def decodeExprNamed0(nameHint: String)(inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
-  ${ decodeExprNamed0Impl('nameHint, 'expr, 'args) }
+transparent inline def decodeNamed(nameHint: String)(inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
+  ${ decodeNamedImpl('nameHint, 'expr, 'args) }
 
-transparent inline def decodeExprNamed(nameHint: String)[As](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
-  decodeCompositeExpr1(nameHint)[[⋅⋅[_]] =>> As](expr)(args*)
+transparent inline def decodeTNamed(nameHint: String)[As](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
+  decodeFull(nameHint)[[⋅⋅[_]] =>> As](expr)(args*)
 
-transparent inline def decodeCompositeExpr1(nameHint: String)[As[⋅⋅[_]]](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
-  ${ decodeCompositeExprImpl1[As]('nameHint, 'expr, 'args) }
+transparent inline def decodeFull(nameHint: String)[As[⋅⋅[_]]](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any)(inline args: Any*): Any =
+  ${ decodeFullImpl[As]('nameHint, 'expr, 'args) }
 
-private def decodeExprNamed0Impl(nameHint: Expr[String], expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any], args: Expr[Seq[Any]])(using Quotes): Expr[Any] =
+private def decodeNamedImpl(nameHint: Expr[String], expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any], args: Expr[Seq[Any]])(using Quotes): Expr[Any] =
   insideMacroExpansion:
     import quotes.reflect.*
     val encoding = Encoding()
@@ -41,7 +41,7 @@ private def decodeExprNamed0Impl(nameHint: Expr[String], expr: Expr[[⋅⋅[_]] 
     encoding
       .decodeParameterizedTerm0(Some(nameHint.valueOrAbort).filter(_.nonEmpty), expr, as)
 
-private def decodeCompositeExprImpl1[As[⋅⋅[_]]](nameHint: Expr[String], expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any], args: Expr[Seq[Any]])(using Quotes, Type[As]): Expr[Any] =
+private def decodeFullImpl[As[⋅⋅[_]]](nameHint: Expr[String], expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any], args: Expr[Seq[Any]])(using Quotes, Type[As]): Expr[Any] =
   insideMacroExpansion:
     import quotes.reflect.*
     val encoding = Encoding()
