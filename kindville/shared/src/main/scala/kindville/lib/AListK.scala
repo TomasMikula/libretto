@@ -86,29 +86,13 @@ sealed trait AListK[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] {
 }
 
 object AListK {
-  type Elem[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] =
-    Box[Elem.Code[K], F :: A :: B :: TNil]
-
-  private object Elem {
-    type Code[K] =
-      [⋅⋅[_]] =>> [
-        F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]],
-        A <: ⋅⋅[K],
-        B <: ⋅⋅[K],
-      ] =>>
-        F[A, B]
-  }
-
-  /** Returns `[F[_, _], A, B] => F[A, B] => Elem[K, F, A, B]` */
-  transparent inline def elem[K] =
-    Box.packer[Elem.Code[K]]
 
   case class Empty[K, F <: AnyKind, A <: AnyKind, B <: AnyKind](
     ev: TypeEqK[K, A, B]
   ) extends AListK[K, F, A, B]
 
   case class Cons[K, F <: AnyKind, A <: AnyKind, B <: AnyKind, C <: AnyKind](
-    head: Elem[K, F, A, B],
+    head: Arrow[K, F, A, B],
     tail: AListK[K, F, B, C],
   ) extends AListK[K, F, A, C]
 
@@ -128,8 +112,8 @@ object AListK {
   transparent inline def cons[K] =
     decodeNamed("AListK_cons")(
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
-        val elem: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => F[A, B] => Elem[K, F, A, B] =
-          k.splice(AListK.elem[K])
+        val elem: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => F[A, B] => Arrow[K, F, A, B] =
+          k.splice(Arrow.packer[K])
         [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K], C <: ⋅⋅[K]] => (
           h: F[A, B],
           t: AListK[K, F, B, C]
@@ -145,4 +129,48 @@ object AListK {
         val cons:  [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C] = k.splice(AListK.cons[K])
         [F[_, _], A, B] => (h: F[A, B]) => cons(h, empty[F, B]())
     )()
+
+  private inline def act[K, G <: AnyKind, F <: AnyKind, A <: AnyKind, B <: AnyKind](
+    action: Action[K, G, F],
+    ga: App[K, G, A],
+    f: Arrow[K, F, A, B],
+  ): App[K, G, B] =
+      decodeT[G :: F :: A :: B :: TNil](
+        [⋅⋅[_]] => kuotes ?=> [G0[_ <: ⋅⋅[K]], F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A0 <: ⋅⋅[K], B0 <: ⋅⋅[K]] => () =>
+          val action0: [X <: ⋅⋅[K], Y <: ⋅⋅[K]] => (G0[X], F0[X, Y]) => G0[Y] =
+            kuotes.splice(Action.unpack(action))
+          val ga0: G0[A0] =
+            kuotes.splice(App.unpack(ga))
+          val f0: F0[A0, B0] =
+            kuotes.splice(Arrow.unpack(f))
+          val gb0: G0[B0] =
+            action0(ga0, f0)
+          val pack: G0[B0] => App[K, G, B] =
+            kuotes.splice(App.pack[K, G, B])
+          pack(gb0)
+      )()
+        .typecheckAs[App[K, G, B]]
+
+  inline def foldLeft[K, G <: AnyKind, F <: AnyKind, A <: AnyKind, B <: AnyKind](
+    ga: App[K, G, A],
+    fs: AListK[K, F, A, B],
+    action: Action[K, G, F],
+  ): App[K, G, B] =
+    def go[X <: AnyKind](acc: App[K, G, X], fs: AListK[K, F, X, B]): App[K, G, B] =
+      fs match
+        case Empty(ev) =>
+          decodeT[F :: G :: X :: B :: TNil](
+            [⋅⋅[_]] => kuotes ?=> [F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], G0[_ <: ⋅⋅[K]], X0 <: ⋅⋅[K], B0 <: ⋅⋅[K]] => () =>
+              val subst: [M[_ <: ⋅⋅[K]]] => M[X0] => M[B0] =
+                kuotes.splice(ev.substituteCo)
+              val acc0: App[K, G0, X0] =
+                kuotes.splice(acc)
+              subst[[T <: ⋅⋅[K]] =>> App[K, G0, T]](acc0) : App[K, G0, B0]
+          )()
+            .typecheckAs[App[K, G, B]]
+        case Cons(f0, fs) =>
+          val acc1 = act(action, acc, f0)
+          go(acc1, fs)
+
+    go(ga, fs)
 }

@@ -1,0 +1,42 @@
+package kindville.lib
+
+import kindville.*
+
+/** Represents `F[A, B]`. */
+opaque type Arrow[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] =
+  Box[Arrow.Code[K], F :: A :: B :: TNil]
+
+object Arrow {
+  type Code[K] =
+    [⋅⋅[_]] =>> [
+      F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]],
+      A <: ⋅⋅[K],
+      B <: ⋅⋅[K],
+    ] =>>
+      F[A, B]
+
+  /** Returns `[F[_, _], A, B] => F[A, B] => Arrow[K, F, A, B]` */
+  transparent inline def packer[K] =
+    // basically just Box.packer[Code[K]], but need the result to formally return `Arrow[K, F, A, B]` instead of `Box`
+    decode(
+      [⋅⋅[_]] => k ?=> () =>
+        val packer: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => F[A, B] => Arrow[K, F, A, B] =
+          k.splice(Box.packer[Code[K]])
+        [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => (f: F[A, B]) =>
+          packer(f)
+    )()
+
+  /** Returns `F[A, B] => Arrow[K, F, A, B]`. */
+  transparent inline def pack[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] =
+    // basically just Box.pack, but need re-encoding for the result to formally return an Arrow instead of Box
+    decodeT[F :: A :: B :: TNil](
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> [F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A0 <: ⋅⋅[K], B0 <: ⋅⋅[K]] => () =>
+        val pack: F0[A0, B0] => Arrow[K, F, A, B] =
+          k.splice(Box.pack[Code[K], F :: A :: B :: TNil])
+        pack
+    )()
+
+  /** Returns `F[A, B]`. */
+  transparent inline def unpack[K, F <: AnyKind, A <: AnyKind, B <: AnyKind](a: Arrow[K, F, A, B]) =
+    Box.unpack(a)
+}

@@ -63,3 +63,10 @@ private def unVarargs[T](args: Expr[Seq[T]])(using Quotes, Type[T], Reporting.Co
         else
           unVarargs(other.asTerm.underlying.asExprOf[Seq[T]])
   }
+
+extension [A](inline a: A)
+  inline def typecheckAs[B]: B =
+    ${ typecheckAsImpl[A, B]('a) }
+
+private def typecheckAsImpl[A, B](a: Expr[A])(using Quotes, Type[B]): Expr[B] =
+  a.asExprOf[B]
