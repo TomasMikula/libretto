@@ -6,13 +6,20 @@ import org.scalatest.funsuite.AnyFunSuite
 class ArrowTests extends AnyFunSuite {
 
   test("pack/unpack Function1") {
-    val x: Arrow[* :: TNil, Function1, String :: TNil, Int :: TNil] =
-      Arrow.pack[* :: TNil, Function1, String :: TNil, Int :: TNil](_.length())
+    val x: Arrow[kindville.*, Function1, String, Int] =
+      Arrow.pack[*, Function1, String, Int](_.length())
+
+    val y: Arrow[kindville.*, Function1, String, Int] =
+      Arrow.packer[*](_.length())
 
     val f: String => Int =
       Arrow.unpack(x)
 
+    val g: String => Int =
+      Arrow.unpack(y)
+
     assert(f("hello") == 5)
+    assert(g("hello") == 5)
   }
 
 }
