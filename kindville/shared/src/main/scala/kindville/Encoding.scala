@@ -282,10 +282,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           badUse(s"Expected a type lambda, got ${typeShortCode(other)}")
     }
 
-  def decodeParameterizedTerm0(
+  def decodeExpr(
     nameHint: Option[String],
     encoded: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any],
-    args: List[Expr[Any]],
   )(using
     Reporting.Context,
   ): Expr[Any] =
@@ -300,13 +299,12 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
     Select
       .unique(f, "apply")
-      .appliedToArgs(args.map(_.asTerm))
+      .appliedToNone
       .asExpr
 
-  def decodeParameterizedTerm1[As[⋅⋅[_]]](
+  def decodeExprT[As[⋅⋅[_]]](
     nameHint: Option[String],
     encoded: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any],
-    args: List[Expr[Any]],
   )(using
     Type[As],
     Reporting.Context,
@@ -329,7 +327,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
     Select
       .unique(f, "apply")
-      .appliedToArgs(args.map(_.asTerm))
+      .appliedToNone
       .asExpr
 
   private case class ParseKuotedResult(

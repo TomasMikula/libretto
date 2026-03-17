@@ -24,7 +24,7 @@ object Arrow {
           k.splice(Box.packer[Code[K]])
         [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => (f: F[A, B]) =>
           packer(f)
-    )()
+    )
 
   /** Returns `F[A, B] => Arrow[K, F, A, B]`. */
   transparent inline def pack[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] =
@@ -34,7 +34,7 @@ object Arrow {
         val pack: F0[A0, B0] => Arrow[K, F, A, B] =
           k.splice(Box.pack[Code[K], F :: A :: B :: TNil])
         pack
-    )()
+    )
 
   /** Returns `F[A, B]`. */
   transparent inline def unpack[K, F <: AnyKind, A <: AnyKind, B <: AnyKind](a: Arrow[K, F, A, B]) =

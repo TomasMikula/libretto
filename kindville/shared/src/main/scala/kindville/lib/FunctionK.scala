@@ -18,7 +18,7 @@ class FunctionK[K, F <: AnyKind, G <: AnyKind](
         val g0: [A <: ⋅⋅[K]] => G0[A] => H0[A] =
           k.splice(that.apply)[[A <: ⋅⋅[K]] => G0[A] => H0[A]]
         make([A <: ⋅⋅[K]] => (fa: F0[A]) => g0(f0(fa)))
-    )()
+    )
 
   transparent inline infix def after[E <: AnyKind](that: FunctionK[K, E, F]): Any =
     that andThen this
@@ -38,7 +38,7 @@ object FunctionK {
               ([A <: ⋅⋅[K]] => F0[A] => G0[A]) => Box[Code[K], F :: G :: TNil]
             ](f)
           )
-    )()
+    )
 
   transparent inline def make[K] =
     decodeNamed("FunctionK_make")(
@@ -51,5 +51,5 @@ object FunctionK {
               ]
                 .apply[F, G](f)
             )
-    )()
+    )
 }

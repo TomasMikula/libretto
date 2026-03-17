@@ -16,7 +16,7 @@ class TypeEqK[K, F <: AnyKind, G <: AnyKind](
         val subst: [M[X <: ⋅⋅[K]]] => M[G] => M[H] =
           kuotes.splice(that.substituteCo)
         subst[[J <: ⋅⋅[K]] =>> TypeEqK[K, F, J]](thiz)
-    )()
+    )
 
   transparent inline def flip =
     decodeTNamed("TypeEqK_flip")[F :: G :: TNil](
@@ -26,7 +26,7 @@ class TypeEqK[K, F <: AnyKind, G <: AnyKind](
         val subst: [M[X <: ⋅⋅[K]]] => M[F] => M[G] =
           k.splice(this.substituteCo)
         subst[[J <: ⋅⋅[K]] =>> TypeEqK[K, J, F]](refl[F]())
-    )()
+    )
 }
 
 object TypeEqK {
@@ -53,5 +53,5 @@ object TypeEqK {
               [H[_ <: ⋅⋅[K]]] => (hf: H[F]) => hf
             )
           )
-    )()
+    )
 }

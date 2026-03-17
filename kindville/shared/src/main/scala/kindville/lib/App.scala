@@ -17,7 +17,7 @@ object App {
         val pack: G0[A0] => App[K, G, A] =
           kuotes.splice(Box.pack[Code[K], G :: A :: TNil])
         pack
-    )()
+    )
 
   /** Returns G[A]. */
   transparent inline def unpack[K, G <: AnyKind, A <: AnyKind](a: App[K, G, A]) =

@@ -18,7 +18,7 @@ object Action {
         val pack: ([X <: ⋅⋅[K], Y <: ⋅⋅[K]] => (G0[X], F0[X, Y]) => G0[Y]) => Action[K, G, F] =
           k.splice(Box.pack[Code[K], G :: F :: TNil])
         pack
-    )()
+    )
 
   /** Returns `[X, Y] => (G[X], F[X, Y]) => G[Y]`. */
   transparent inline def unpack[K, G <: AnyKind, F <: AnyKind](a: Action[K, G, F]) =

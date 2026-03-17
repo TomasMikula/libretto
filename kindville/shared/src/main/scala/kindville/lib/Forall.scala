@@ -20,7 +20,7 @@ object Forall {
             k.splice(Box.pack[Code[K], F :: TNil])[
               ([A <: ⋅⋅[K]] => Unit => F0[A]) => Box[Code[K], F :: TNil]
             ](f): Forall[K, F]
-    )()
+    )
 
   extension [K, F <: AnyKind](f: Forall[K, F])
     transparent inline def at: Any =

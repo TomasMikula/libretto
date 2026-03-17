@@ -22,7 +22,7 @@ object ExistK {
             pack(
               [R] => (f: [X <: ⋅⋅[K]] => F0[X] => R) => f[A](fa)
             ) : ExistK[K, F0]
-    )()
+    )
 
 
   def types[As]: ExistsTypes[As] =
@@ -35,7 +35,7 @@ object ExistK {
           val create: [X <: ⋅⋅[K]] => F0[X] => ExistK[K, F] =
             kuotes.splice(apply[K, F])
           create[A]
-      )()
+      )
   }
 
   extension [K, F <: AnyKind](ex: ExistK[K, F])

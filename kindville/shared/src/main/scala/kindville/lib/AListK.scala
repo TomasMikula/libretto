@@ -15,7 +15,7 @@ sealed trait AListK[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] {
         val cons: [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C] =
           k.splice(AListK.cons[K])
         [Z] => (h: F[Z, A]) => cons[F, Z, A, B](h, thiz)
-    )()
+    )
 
   // private type AccBox[G <: AnyKind, X <: AnyKind] =
   //   Box[AccBox.Code, G :: X :: TNil]
@@ -106,7 +106,7 @@ object AListK {
           Empty[K, F, A, A](
             refl[A]()
           )
-    )()
+    )
 
   /** Returns `[F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C]` */
   transparent inline def cons[K] =
@@ -119,7 +119,7 @@ object AListK {
           t: AListK[K, F, B, C]
         ) =>
           Cons[K, F, A, B, C](elem(h), t)
-    )()
+    )
 
   /** Returns `[F[_, _], A, B] => F[A, B] => AListK[K, F, A, B]` */
   transparent inline def single[K] =
@@ -128,7 +128,7 @@ object AListK {
         val empty: [F[_, _], A]       => ()                            => AListK[K, F, A, A] = k.splice(AListK.empty[K])
         val cons:  [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C] = k.splice(AListK.cons[K])
         [F[_, _], A, B] => (h: F[A, B]) => cons(h, empty[F, B]())
-    )()
+    )
 
   private inline def act[K, G <: AnyKind, F <: AnyKind, A <: AnyKind, B <: AnyKind](
     action: Action[K, G, F],
@@ -148,7 +148,7 @@ object AListK {
           val pack: G0[B0] => App[K, G, B] =
             kuotes.splice(App.pack[K, G, B])
           pack(gb0)
-      )()
+      )
         .typecheckAs[App[K, G, B]]
 
   inline def foldLeft[K, G <: AnyKind, F <: AnyKind, A <: AnyKind, B <: AnyKind](
@@ -166,7 +166,7 @@ object AListK {
               val acc0: App[K, G0, X0] =
                 kuotes.splice(acc)
               subst[[T <: ⋅⋅[K]] =>> App[K, G0, T]](acc0) : App[K, G0, B0]
-          )()
+          )
             .typecheckAs[App[K, G, B]]
         case Cons(f0, fs) =>
           val acc1 = act(action, acc, f0)

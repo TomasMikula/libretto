@@ -20,7 +20,7 @@ object Box {
         val packer: [X <: ⋅⋅[K]] => Code0[X] => Box[Code, ⋅⋅[X]] =
           k.splice(Box.packer[Code])
         packer[A0]
-    )()
+    )
 
   transparent inline def unpack[Code[⋅⋅[_]] <: AnyKind, As](box: Box[Code, As]): Any =
     ${ unpackImpl[Code, As]('box) }
