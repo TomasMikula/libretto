@@ -7,6 +7,18 @@ private object Encoding {
   def apply(using q: Quotes)(): Encoding[q.type] =
     new Encoding[q.type]
 
+  private type OneOrList[A] = Either[A, List[A]]
+
+  extension [A](as: List[A]) {
+    def mapS[S, B](s: S)(f: (S, A) => (S, B)): (S, List[B]) =
+      as match
+        case Nil =>
+          (s, Nil)
+        case a :: as =>
+          val (s1, b) = f(s, a)
+          val (s2, bs) = as.mapS(s1)(f)
+          (s2, b :: bs)
+  }
 
   def encodeTypeArgs(using Quotes)(args: List[quotes.reflect.TypeRepr]): quotes.reflect.TypeRepr =
     import quotes.reflect.*
@@ -847,10 +859,15 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     TParamsFun[(List[TypeBounds], List[ContextElem])]
   ) = {
     enum PostExpansionParam:
-      case Original(name: String, kind: Either[TypeBounds, LambdaTypeTree])
-      case Expanded(params: Either[(String, Kind), List[(String, Kind)]])
+      case Original(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: ParamRef | TypeRef)
+      case Expanded(params: OneOrList[(String, Kind)], originalParamRef: ParamRef | TypeRef)
 
-    def expandParam(name: String, kinds: TypeRepr)(using Reporting.Context): Either[(String, Kind), List[(String, Kind)]] =
+      def expandedSize: Int =
+        this match
+          case Original(_, _, _) => 1
+          case Expanded(ps, _) => ps.fold(_ => 1, _.size)
+
+    def expandParam(name: String, kinds: TypeRepr)(using Reporting.Context): OneOrList[(String, Kind)] =
       decodeKindOrKinds(kinds) match
         case Left(kind)   => Left((name, kind))
         case Right(kinds) => Right(
@@ -860,43 +877,37 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             .map { case (bounds, i) => (name + "$" + i, bounds) }
         )
 
-    def expandParams(
-      i: Int,
-      ps: List[(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: ParamRef | TypeRef)],
-    )(using
-      Reporting.Context,
-    ): List[(PostExpansionParam, TParamsFun[ContextElem])] =
-      inside("TODO: refine (PcXu)") {
-        ps match
-          case Nil =>
-            Nil
-          case (name, Left(bounds @ TypeBounds(lower, AppliedType(f, List(kinds)))), origParam) :: ps if f =:= marker =>
+    val expandedTParams: List[PostExpansionParam] =
+      inside("TODO: refine (bjao)") {
+        tParams.map:
+          case (name, Left(bounds @ TypeBounds(lower, AppliedType(f, List(kinds)))), origParam) if f =:= marker =>
             lower.asType match
               case '[Nothing] =>
                 val expanded = expandParam(name, kinds)
-                val n = expanded.fold(_ => 1, _.size)
-                val replacement: TParamsFun[ContextElem] =
-                  tparams => ContextElem.TypeArgExpansion(origParam, List.range(0, n).map(j => tparams(i + j)))
-                (PostExpansionParam.Expanded(expanded), replacement) :: expandParams(i + n, ps)
+                PostExpansionParam.Expanded(expanded, origParam)
               case other =>
                 badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(marker)}) with a lower bound (${typeShortCode(lower)})")
-          case (name, kind, origParam) :: ps =>
-            ( PostExpansionParam.Original(name, kind)
-            , tps => ContextElem.TypeSubstitution(origParam, tps(i))
-            ) :: expandParams(i + 1, ps)
+          case (name, kind, origParam) =>
+            PostExpansionParam.Original(name, kind, origParam)
       }
 
-    val (expandedTParams, replacements): (List[PostExpansionParam], List[TParamsFun[ContextElem]]) =
-      expandParams(0, tParams).unzip
-
     val newSubstitutions: TParamsFun[List[ContextElem]] =
-      tparams => replacements.map(_(tparams))
+      tps =>
+        expandedTParams
+          .mapS(0) { (j, p) => (j + p.expandedSize, (j, p)) }
+          ._2
+          .map {
+            case (j, p @ PostExpansionParam.Expanded(expParams, origRef)) =>
+              ContextElem.TypeArgExpansion(origRef, List.range(0, p.expandedSize).map(i => tps(j + i)))
+            case (j, PostExpansionParam.Original(_, _, origRef)) =>
+              ContextElem.TypeSubstitution(origRef, tps(j))
+          }
 
     val (names, bounds) =
       expandedTParams.flatMap:
-        case PostExpansionParam.Original(name, bounds) => (name, bounds) :: Nil
-        case PostExpansionParam.Expanded(Left((n, k))) => (n, Left(kindToBounds(k))) :: Nil
-        case PostExpansionParam.Expanded(Right(ps))    => ps.map { case (n, k) => (n, Left(kindToBounds(k))) }
+        case PostExpansionParam.Original(name, bounds, _) => (name, bounds) :: Nil
+        case PostExpansionParam.Expanded(Left((n, k)), _) => (n, Left(kindToBounds(k))) :: Nil
+        case PostExpansionParam.Expanded(Right(ps), _)    => ps.map { case (n, k) => (n, Left(kindToBounds(k))) }
       .unzip
 
     (names, pt => {
