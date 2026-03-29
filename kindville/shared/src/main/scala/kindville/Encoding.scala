@@ -300,19 +300,26 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   )(using
     Reporting.Context,
   ): Expr[Any] =
-    val ParseKuotedResult(marker, kuotesParam, _, payload) =
-      parseKuoted(encoded)
+    inside(encoded.asTerm) {
+      val ParseKuotedResult(marker, kuotesParam, _, payload) =
+        parseKuoted(encoded)
 
-    val (params, retTp, body) =
-      doParseFun(payload)
+      val (params, retTp, body) =
+        doParseFun(payload)
 
-    val f =
-      decodeFun(marker, Some(kuotesParam.ref), ctx = Nil, params, retTp, body, Symbol.spliceOwner, nameHint)
+      if (params.nonEmpty)
+        inside(payload) {
+          badUse(s"Expected a no-arg function literal `() => <body>`, got a function of ${params.size} parameter(s): ${params.map(_.name).mkString(", ")}")
+        }
 
-    Select
-      .unique(f, "apply")
-      .appliedToNone
-      .asExpr
+      val f =
+        decodeFun(marker, Some(kuotesParam.ref), ctx = Nil, params = Nil, retTp, body, Symbol.spliceOwner, nameHint)
+
+      Select
+        .unique(f, "apply")
+        .appliedToNone
+        .asExpr
+    }
 
   def decodeExprT[As[⋅⋅[_]]](
     nameHint: Option[String],
@@ -321,26 +328,33 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     Type[As],
     Reporting.Context,
   ): Expr[Any] =
-    val ParseKuotedResult(marker, kuotesParam, _, payload) =
-      parseKuoted(encoded)
+    inside(encoded.asTerm) {
+      val ParseKuotedResult(marker, kuotesParam, _, payload) =
+        parseKuoted(encoded)
 
-    val (userTParams, params, retTp, body) =
-      doParsePolyFun(payload)
+      val (userTParams, params, retTp, body) =
+        doParsePolyFun(payload)
 
-    val targs =
-      decodeTypeArgs(TypeRepr.of[As].appliedTo(marker).asType)
-        .map(t => TypeRepr.of(using t).dealiasKeepOpaques)
+      if (params.nonEmpty)
+        inside(payload) {
+          badUse(s"Expected a no-value-arg function literal `[...] => () => <body>`, got a function with ${params.size} value parameter(s): ${params.map(_.name).mkString(", ")}")
+        }
 
-    val ctx =
-      decodeTypeParamSubstitutions(marker, userTParams, targs)
+      val targs =
+        decodeTypeArgs(TypeRepr.of[As].appliedTo(marker).asType)
+          .map(t => TypeRepr.of(using t).dealiasKeepOpaques)
 
-    val f =
-      decodeFun(marker, Some(kuotesParam.ref), ctx, params, retTp, body, Symbol.spliceOwner, nameHint)
+      val ctx =
+        decodeTypeParamSubstitutions(marker, userTParams, targs)
 
-    Select
-      .unique(f, "apply")
-      .appliedToNone
-      .asExpr
+      val f =
+        decodeFun(marker, Some(kuotesParam.ref), ctx, params = Nil, retTp, body, Symbol.spliceOwner, nameHint)
+
+      Select
+        .unique(f, "apply")
+        .appliedToNone
+        .asExpr
+    }
 
   private case class ParseKuotedResult(
     marker: TypeRef,
