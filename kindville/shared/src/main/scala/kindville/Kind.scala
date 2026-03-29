@@ -3,11 +3,15 @@ package kindville
 private[kindville] sealed trait Kind:
   type Label
 
+  def show: String
+
 private[kindville] object Kind:
   type Of[K] = Kind { type Label = K }
 
   case object Tp extends Kind {
     override type Label = *
+
+    override def show: String = "*"
   }
 
   case class Arr[Ks, L](
@@ -15,6 +19,9 @@ private[kindville] object Kind:
     outKind: Kind.Of[L],
   ) extends Kind {
     override type Label = Ks ->> L
+
+    override def show: String =
+      paramKinds.toList.map(_.show).appended("TNil").mkString("(", " :: ", ")") + " -> " + outKind.show
   }
 
   def arr(ks: Kinds, l: Kind): Kind.Of[ks.Label ->> l.Label] =
