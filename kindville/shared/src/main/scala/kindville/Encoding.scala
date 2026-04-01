@@ -26,7 +26,7 @@ private object Encoding {
       case Nil => TypeRepr.of[TNil]
       case t :: ts => TypeRepr.of[::].appliedTo(List(t, encodeTypeArgs(ts)))
 
-  def decodeTypeArgs[As <: AnyKind](args: Type[As])(using Quotes): List[Type[?]] =
+  def unbundleTypeArgs[As <: AnyKind](args: Type[As])(using Quotes): List[Type[?]] =
     import quotes.reflect.*
 
     val cons = TypeRepr.of[::]
@@ -41,7 +41,7 @@ private object Encoding {
               case '[::] =>
                 args match
                   case h :: t :: Nil =>
-                    h.asType :: decodeTypeArgs(t.asType)(using quotes)
+                    h.asType :: unbundleTypeArgs(t.asType)(using quotes)
                   case _ =>
                     report.errorAndAbort(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
               case other =>
@@ -272,7 +272,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     Reporting.Context
   ): Type[Any] =
     inside("TODO: refine (xJdr)") {
-      val args = decodeTypeArgs(Type.of[As])
+      val args = unbundleTypeArgs(Type.of[As])
 
       TypeRepr.of[Code].dealiasKeepOpaques match
         case outer @ TypeLambda(auxNames, auxBounds, body) =>
@@ -345,7 +345,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         }
 
       val targs =
-        decodeTypeArgs(TypeRepr.of[As].appliedTo(marker).asType)
+        unbundleTypeArgs(TypeRepr.of[As].appliedTo(marker).asType)
           .map(t => TypeRepr.of(using t).dealiasKeepOpaques)
 
       val ctx =
@@ -496,7 +496,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                             checkKind(t, k)
                             TypeSubstitution(ref, t)
                           case Right(kinds) =>
-                            val ts = decodeTypeArgs(t.asType)
+                            val ts = unbundleTypeArgs(t.asType)
                             val ks = kinds.toList
                             if (ts.size != ks.size)
                               badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${t.show(using Printer.TypeReprShortCode)}")
