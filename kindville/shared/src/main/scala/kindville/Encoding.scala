@@ -148,9 +148,13 @@ private object Encoding {
   def kindsToBounds(ks: Kinds)(using Quotes): List[qr.TypeBounds] =
     import qr.*
 
+    kindsToUpperBounds(ks)
+      .map(TypeBounds(TypeRepr.of[Nothing], _))
+
+  private def kindsToUpperBounds(ks: Kinds)(using Quotes): List[qr.TypeRepr] =
     ks match
       case Kinds.Empty      => Nil
-      case Kinds.Cons(h, t) => kindToBounds(h) :: kindsToBounds(t)
+      case Kinds.Cons(h, t) => kindToUpperBound(h) :: kindsToUpperBounds(t)
 
   private def kindToUpperBound(k: Kind)(using Quotes): qr.TypeRepr =
     import qr.*
@@ -489,11 +493,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                       case '[Nothing] =>
                         decodeKindOrKinds(kinds) match
                           case Left(k) =>
-                            // TODO: check `t` against `k`
+                            checkKind(t, k)
                             TypeSubstitution(ref, t)
-                          case Right(ks) =>
+                          case Right(kinds) =>
                             val ts = decodeTypeArgs(t.asType)
-                            // TODO: check `ts` against `kinds`
+                            val ks = kinds.toList
+                            if (ts.size != ks.size)
+                              badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${t.show(using Printer.TypeReprShortCode)}")
+                            (ks zip ts).foreach { case (k, t) => checkKind(TypeRepr.of(using t), k) }
                             TypeArgExpansion(ref, ts.map(TypeRepr.of(using _)))
                       case other =>
                         badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(marker)}) with a lower bound (${typeShortCode(lower)})")
@@ -511,6 +518,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
               TypeArgExpansion(ref, ts1)
     }
   }
+
+  private def checkKind(t: TypeRepr, k: Kind)(using Reporting.Context): Unit =
+    val expectedUpperBound = kindToUpperBound(k)
+    if (!(t <:< expectedUpperBound))
+      badUse(s"Type ${t.show(using Printer.TypeReprShortCode)} does not have the expected kind ${k.show} (because it is not a subtype of ${expectedUpperBound.show(using Printer.TypeReprShortCode)})")
 
   private def decodeType(
     marker: TypeRepr,
