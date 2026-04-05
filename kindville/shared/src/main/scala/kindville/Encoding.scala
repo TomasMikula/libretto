@@ -939,11 +939,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           }
       newSubstitutions ::: ctx
 
-    def decodedBoundsAndNewContext(
+    def decodedBoundsAndInnerContext(
       actualTypeParams: Int => TypeRepr,
     )(using
       Reporting.Context,
-    ): (List[TypeBounds], List[ContextElem]) =
+    ): (bounds: List[TypeBounds], innerContext: List[ContextElem]) =
       val ctx1 = innerContext(actualTypeParams)
       val bounds1 = bounds0.map(decodeTypeBounds(marker, ctx1, _))
       (bounds1, ctx1)
@@ -953,7 +953,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     )(using
       Reporting.Context,
     ): List[TypeBounds] =
-      decodedBoundsAndNewContext(actualTypeParams)._1
+      decodedBoundsAndInnerContext(actualTypeParams).bounds
   }
 
   private object DecodedTypeParams {
