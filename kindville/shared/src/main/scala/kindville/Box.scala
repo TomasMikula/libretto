@@ -46,16 +46,17 @@ object Box {
 
       val encoding = Encoding()
       import encoding.{TypeLambdaTemplate, decodeTypeLambda}
-      val TypeLambdaTemplate(names, bounds, body) = decodeTypeLambda[Code]
+      val typeLambdaTemplate = decodeTypeLambda[Code]
+      import typeLambdaTemplate.{bodyFn, boundsFnFlat, paramNamesFlat}
 
       def returnType(targs: List[TypeRepr]): TypeRepr =
         boxType(TypeRepr.of[Code], targs)
 
       PolyFun(
-        names,
-        bounds,
+        paramNamesFlat,
+        boundsFnFlat,
         "x" :: Nil,
-        tparams => body(tparams) :: Nil,
+        tparams => bodyFn(tparams) :: Nil,
         tparams => returnType(tparams),
         (targs, args, owner) => {
           returnType(targs).asType match
@@ -75,19 +76,20 @@ object Box {
       inside(TypeRepr.of[Code]) {
         val encoding = Encoding()
         import encoding.{TypeLambdaTemplate, decodeTypeLambda}
-        val TypeLambdaTemplate(names, bounds, body) = decodeTypeLambda[Code]
+        val typeLambdaTemplate = decodeTypeLambda[Code]
+        import typeLambdaTemplate.{bodyFn, boundsFnFlat, paramNamesFlat}
 
         def paramType(targs: List[TypeRepr]): TypeRepr =
           boxType(TypeRepr.of[Code], targs)
 
         PolyFun(
-          names,
-          bounds,
+          paramNamesFlat,
+          boundsFnFlat,
           "x" :: Nil,
           tparams => paramType(tparams) :: Nil,
-          tparams => body(tparams),
+          tparams => bodyFn(tparams),
           (targs, args, owner) => {
-            body(targs).asType match
+            bodyFn(targs).asType match
               case '[t] =>
                 '{ ${args(0).asExpr}.asInstanceOf[t] }.asTerm
           },
