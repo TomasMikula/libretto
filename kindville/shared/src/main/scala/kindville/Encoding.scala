@@ -1,25 +1,12 @@
 package kindville
 
 import kindville.Reporting.*
+import kindville.SingleOrMultiple.{Multiple, Single}
 import scala.quoted.*
 
 private object Encoding {
   def apply(using q: Quotes)(): Encoding[q.type] =
     new Encoding[q.type]
-
-  private type OneOrList[A] = Either[A, List[A]]
-
-  private object OneOrList {
-    def map[A](as: OneOrList[A])[B](f: A => B): OneOrList[B] =
-      as match
-        case Left(a) => Left(f(a))
-        case Right(as) => Right(as.map(f))
-
-    def toList[A](as: OneOrList[A]): List[A] =
-      as match
-        case Left(a) => List(a)
-        case Right(as) => as
-  }
 
   extension [A](as: List[A]) {
     def mapS[S, B](s: S)(f: (S, A) => (S, B)): (S, List[B]) =
@@ -213,15 +200,15 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       ctx.collectFirst { case ContextElem.TypeArgExpansion(src, res) if src =:= p => res }
 
   case class TypeLambdaTemplate(
-    paramNames: List[OneOrList[String]],
-    boundsFn: (tparams: Int => TypeRepr) => List[OneOrList[TypeBounds]],
+    paramNames: List[SingleOrMultiple[String]],
+    boundsFn: (tparams: Int => TypeRepr) => List[SingleOrMultiple[TypeBounds]],
     bodyFn:   (tparams: Int => TypeRepr) => TypeRepr,
   ) {
     def paramNamesFlat: List[String] =
-      paramNames.flatMap(OneOrList.toList)
+      paramNames.flatMap(_.toList)
 
     def boundsFnFlat: (tparams: Int => TypeRepr) => List[TypeBounds] =
-      boundsFn(_).flatMap(OneOrList.toList)
+      boundsFn(_).flatMap(_.toList)
   }
 
   def unsupportedType(using SourcePos, Quotes)(t: qr.TypeRepr): Nothing =
@@ -895,10 +882,10 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   )(using
     Reporting.Context,
   ): DecodedTypeParams = {
-    def expandParam(name: String, kinds: TypeRepr)(using Reporting.Context): OneOrList[(String, Kind)] =
+    def expandParam(name: String, kinds: TypeRepr)(using Reporting.Context): SingleOrMultiple[(String, Kind)] =
       decodeKindOrKinds(kinds) match
-        case Left(kind)   => Left((name, kind))
-        case Right(kinds) => Right(
+        case Left(kind)   => Single((name, kind))
+        case Right(kinds) => Multiple(
           kinds
             .toList
             .zipWithIndex
@@ -924,35 +911,35 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private enum PostExpansionParam:
     case Original(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: ParamRef | TypeRef)
-    case Expanded(params: OneOrList[(String, Kind)], originalParamRef: ParamRef | TypeRef)
+    case Expanded(params: SingleOrMultiple[(String, Kind)], originalParamRef: ParamRef | TypeRef)
 
     def expandedSize: Int =
       this match
         case Original(_, _, _) => 1
-        case Expanded(ps, _) => ps.fold(_ => 1, _.size)
+        case Expanded(ps, _) => ps.size
 
   private class DecodedTypeParams(
     marker: TypeRepr,
     ctx: List[ContextElem],
     expandedTypeParams: List[(index: Int, expanded: PostExpansionParam)],
   ) {
-    private lazy val names0: List[OneOrList[String]] =
+    private lazy val names0: List[SingleOrMultiple[String]] =
       expandedTypeParams.map:
-        case (_, PostExpansionParam.Original(name, _, _))      => Left(name)
-        case (_, PostExpansionParam.Expanded(Left((n, _)), _)) => Left(n)
-        case (_, PostExpansionParam.Expanded(Right(ps), _))    => Right(ps.map { case (n, _) => n })
+        case (_, PostExpansionParam.Original(name, _, _))         => Single(name)
+        case (_, PostExpansionParam.Expanded(Single((n, _)), _))  => Single(n)
+        case (_, PostExpansionParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (n, _) => n })
 
-    private lazy val bounds0: List[OneOrList[Either[q.reflect.TypeBounds, q.reflect.LambdaTypeTree]]] =
+    private lazy val bounds0: List[SingleOrMultiple[Either[q.reflect.TypeBounds, q.reflect.LambdaTypeTree]]] =
       expandedTypeParams.map:
-        case (_, PostExpansionParam.Original(_, bounds, _))    => Left(bounds)
-        case (_, PostExpansionParam.Expanded(Left((_, k)), _)) => Left(Left(kindToBounds(k)))
-        case (_, PostExpansionParam.Expanded(Right(ps), _))    => Right(ps.map { case (_, k) => Left(kindToBounds(k)) })
+        case (_, PostExpansionParam.Original(_, bounds, _))       => Single(bounds)
+        case (_, PostExpansionParam.Expanded(Single((_, k)), _))  => Single(Left(kindToBounds(k)))
+        case (_, PostExpansionParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (_, k) => Left(kindToBounds(k)) })
 
-    def decodedNames: List[OneOrList[String]] =
+    def decodedNames: List[SingleOrMultiple[String]] =
       names0
 
     def decodedNamesFlat: List[String] =
-      decodedNames.flatMap(OneOrList.toList)
+      decodedNames.flatMap(_.toList)
 
     def innerContext(actualTypeParams: Int => TypeRepr): List[ContextElem] =
       val newSubstitutions: List[ContextElem] =
@@ -969,16 +956,16 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       actualTypeParams: Int => TypeRepr,
     )(using
       Reporting.Context,
-    ): (bounds: List[OneOrList[TypeBounds]], innerContext: List[ContextElem]) =
+    ): (bounds: List[SingleOrMultiple[TypeBounds]], innerContext: List[ContextElem]) =
       val ctx1 = innerContext(actualTypeParams)
-      val bounds1 = bounds0.map(OneOrList.map(_)(decodeTypeBounds(marker, ctx1, _)))
+      val bounds1 = bounds0.map(_.map(decodeTypeBounds(marker, ctx1, _)))
       (bounds1, ctx1)
 
     def decodedBounds(
       actualTypeParams: Int => TypeRepr,
     )(using
       Reporting.Context,
-    ): List[OneOrList[TypeBounds]] =
+    ): List[SingleOrMultiple[TypeBounds]] =
       decodedBoundsAndInnerContext(actualTypeParams).bounds
 
     def decodedBoundsFlat(
@@ -987,7 +974,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       Reporting.Context,
     ): List[TypeBounds] =
       decodedBounds(actualTypeParams)
-        .flatMap(OneOrList.toList)
+        .flatMap(_.toList)
   }
 
   private object DecodedTypeParams {
