@@ -59,4 +59,13 @@ class FunctionKTests extends AnyFunSuite {
 
     assert(headOption(reverse(List(1, 2, 3))) == Some(3))
   }
+
+  test("Map#head") {
+    val headOption =
+      FunctionK[* :: * :: TNil, Map, Tuple2](
+        [K, V] => (m: Map[K, V]) => m.head
+      )
+
+    assert(headOption(Map(1 -> "a")) == (1, "a"))
+  }
 }
