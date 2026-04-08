@@ -27,9 +27,9 @@ object Box {
 
   private def boxType(using Quotes)(
     code: qr.TypeRepr,
-    argGroups: List[SingleOrMultiple[qr.TypeRepr]],
+    argGroups: Groups[qr.TypeRepr],
   ): qr.TypeRepr =
-    val bundledGroups = argGroups.map:
+    val bundledGroups = argGroups.mapGroups:
       case SingleOrMultiple.Single(t) => t
       case SingleOrMultiple.Multiple(ts) => Encoding.bundleTypeArgs(ts)
 
@@ -54,10 +54,10 @@ object Box {
       import typeLambdaTemplate.{bodyFn, boundsFnFlat, paramNames, paramNamesFlat}
 
       def returnType(targs: List[TypeRepr]): TypeRepr =
-        val groupedTArgs: List[SingleOrMultiple[TypeRepr]] =
-          SingleOrMultiple
-            .zipManyWithListUnsafe(paramNames, targs)
-            .map(_.map(_._2))
+        val groupedTArgs: Groups[TypeRepr] =
+          paramNames
+            .zipWithListUnsafe(targs)
+            .map(_._2)
         boxType(TypeRepr.of[Code], groupedTArgs)
 
       PolyFun(
@@ -88,10 +88,10 @@ object Box {
         import typeLambdaTemplate.{bodyFn, boundsFnFlat, paramNames, paramNamesFlat}
 
         def paramType(targs: List[TypeRepr]): TypeRepr =
-          val groupedTArgs: List[SingleOrMultiple[TypeRepr]] =
-            SingleOrMultiple
-              .zipManyWithListUnsafe(paramNames, targs)
-              .map(_.map(_._2))
+          val groupedTArgs: Groups[TypeRepr] =
+            paramNames
+              .zipWithListUnsafe(targs)
+              .map(_._2)
           boxType(TypeRepr.of[Code], groupedTArgs)
 
         PolyFun(

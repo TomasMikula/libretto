@@ -200,15 +200,15 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       ctx.collectFirst { case ContextElem.TypeArgExpansion(src, res) if src =:= p => res }
 
   case class TypeLambdaTemplate(
-    paramNames: List[SingleOrMultiple[String]],
-    boundsFn: (tparams: Int => TypeRepr) => List[SingleOrMultiple[TypeBounds]],
+    paramNames: Groups[String],
+    boundsFn: (tparams: Int => TypeRepr) => Groups[TypeBounds],
     bodyFn:   (tparams: Int => TypeRepr) => TypeRepr,
   ) {
     def paramNamesFlat: List[String] =
-      paramNames.flatMap(_.toList)
+      paramNames.toFlatList
 
     def boundsFnFlat: (tparams: Int => TypeRepr) => List[TypeBounds] =
-      boundsFn(_).flatMap(_.toList)
+      boundsFn(_).toFlatList
   }
 
   def unsupportedType(using SourcePos, Quotes)(t: qr.TypeRepr): Nothing =
@@ -923,23 +923,25 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     ctx: List[ContextElem],
     expandedTypeParams: List[(index: Int, expanded: PostExpansionParam)],
   ) {
-    private lazy val names0: List[SingleOrMultiple[String]] =
-      expandedTypeParams.map:
-        case (_, PostExpansionParam.Original(name, _, _))         => Single(name)
-        case (_, PostExpansionParam.Expanded(Single((n, _)), _))  => Single(n)
-        case (_, PostExpansionParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (n, _) => n })
+    private lazy val names0: Groups[String] =
+      Groups.fromList:
+        expandedTypeParams.map:
+          case (_, PostExpansionParam.Original(name, _, _))         => Single(name)
+          case (_, PostExpansionParam.Expanded(Single((n, _)), _))  => Single(n)
+          case (_, PostExpansionParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (n, _) => n })
 
-    private lazy val bounds0: List[SingleOrMultiple[Either[q.reflect.TypeBounds, q.reflect.LambdaTypeTree]]] =
-      expandedTypeParams.map:
-        case (_, PostExpansionParam.Original(_, bounds, _))       => Single(bounds)
-        case (_, PostExpansionParam.Expanded(Single((_, k)), _))  => Single(Left(kindToBounds(k)))
-        case (_, PostExpansionParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (_, k) => Left(kindToBounds(k)) })
+    private lazy val bounds0: Groups[Either[q.reflect.TypeBounds, q.reflect.LambdaTypeTree]] =
+      Groups.fromList:
+        expandedTypeParams.map:
+          case (_, PostExpansionParam.Original(_, bounds, _))       => Single(bounds)
+          case (_, PostExpansionParam.Expanded(Single((_, k)), _))  => Single(Left(kindToBounds(k)))
+          case (_, PostExpansionParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (_, k) => Left(kindToBounds(k)) })
 
-    def decodedNames: List[SingleOrMultiple[String]] =
+    def decodedNames: Groups[String] =
       names0
 
     def decodedNamesFlat: List[String] =
-      decodedNames.flatMap(_.toList)
+      decodedNames.toFlatList
 
     def innerContext(actualTypeParams: Int => TypeRepr): List[ContextElem] =
       val newSubstitutions: List[ContextElem] =
@@ -956,16 +958,16 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       actualTypeParams: Int => TypeRepr,
     )(using
       Reporting.Context,
-    ): (bounds: List[SingleOrMultiple[TypeBounds]], innerContext: List[ContextElem]) =
+    ): (bounds: Groups[TypeBounds], innerContext: List[ContextElem]) =
       val ctx1 = innerContext(actualTypeParams)
-      val bounds1 = bounds0.map(_.map(decodeTypeBounds(marker, ctx1, _)))
+      val bounds1 = bounds0.map(decodeTypeBounds(marker, ctx1, _))
       (bounds1, ctx1)
 
     def decodedBounds(
       actualTypeParams: Int => TypeRepr,
     )(using
       Reporting.Context,
-    ): List[SingleOrMultiple[TypeBounds]] =
+    ): Groups[TypeBounds] =
       decodedBoundsAndInnerContext(actualTypeParams).bounds
 
     def decodedBoundsFlat(
@@ -974,7 +976,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       Reporting.Context,
     ): List[TypeBounds] =
       decodedBounds(actualTypeParams)
-        .flatMap(_.toList)
+        .toFlatList
   }
 
   private object DecodedTypeParams {
