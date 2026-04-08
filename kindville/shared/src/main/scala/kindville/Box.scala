@@ -27,13 +27,17 @@ object Box {
 
   private def boxType(using Quotes)(
     code: qr.TypeRepr,
-    args: List[qr.TypeRepr],
+    argGroups: List[SingleOrMultiple[qr.TypeRepr]],
   ): qr.TypeRepr =
+    val bundledGroups = argGroups.map:
+      case SingleOrMultiple.Single(t) => t
+      case SingleOrMultiple.Multiple(ts) => Encoding.bundleTypeArgs(ts)
+
     qr.TypeRepr
       .of[Box]
       .appliedTo(
         code ::
-        Encoding.encodeTypeArgs(args) ::
+        Encoding.bundleTypeArgs(bundledGroups) ::
         Nil
       )
 
@@ -47,10 +51,14 @@ object Box {
       val encoding = Encoding()
       import encoding.{TypeLambdaTemplate, decodeTypeLambda}
       val typeLambdaTemplate = decodeTypeLambda[Code]
-      import typeLambdaTemplate.{bodyFn, boundsFnFlat, paramNamesFlat}
+      import typeLambdaTemplate.{bodyFn, boundsFnFlat, paramNames, paramNamesFlat}
 
       def returnType(targs: List[TypeRepr]): TypeRepr =
-        boxType(TypeRepr.of[Code], targs)
+        val groupedTArgs: List[SingleOrMultiple[TypeRepr]] =
+          SingleOrMultiple
+            .zipManyWithListUnsafe(paramNames, targs)
+            .map(_.map(_._2))
+        boxType(TypeRepr.of[Code], groupedTArgs)
 
       PolyFun(
         paramNamesFlat,
@@ -77,10 +85,14 @@ object Box {
         val encoding = Encoding()
         import encoding.{TypeLambdaTemplate, decodeTypeLambda}
         val typeLambdaTemplate = decodeTypeLambda[Code]
-        import typeLambdaTemplate.{bodyFn, boundsFnFlat, paramNamesFlat}
+        import typeLambdaTemplate.{bodyFn, boundsFnFlat, paramNames, paramNamesFlat}
 
         def paramType(targs: List[TypeRepr]): TypeRepr =
-          boxType(TypeRepr.of[Code], targs)
+          val groupedTArgs: List[SingleOrMultiple[TypeRepr]] =
+            SingleOrMultiple
+              .zipManyWithListUnsafe(paramNames, targs)
+              .map(_.map(_._2))
+          boxType(TypeRepr.of[Code], groupedTArgs)
 
         PolyFun(
           paramNamesFlat,

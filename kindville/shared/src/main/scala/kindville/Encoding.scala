@@ -19,11 +19,11 @@ private object Encoding {
           (s2, b :: bs)
   }
 
-  def encodeTypeArgs(using Quotes)(args: List[quotes.reflect.TypeRepr]): quotes.reflect.TypeRepr =
+  def bundleTypeArgs(using Quotes)(args: List[quotes.reflect.TypeRepr]): quotes.reflect.TypeRepr =
     import quotes.reflect.*
     args match
       case Nil => TypeRepr.of[TNil]
-      case t :: ts => TypeRepr.of[::].appliedTo(List(t, encodeTypeArgs(ts)))
+      case t :: ts => TypeRepr.of[::].appliedTo(List(t, bundleTypeArgs(ts)))
 
   def unbundleTypeArgs[As <: AnyKind](args: Type[As])(using Quotes): List[Type[?]] =
     import quotes.reflect.*
@@ -1012,7 +1012,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                     case a           => badUse(s"Invalid application of $m in ${typeShortCode(fa)}. Spread operator $m can only be applied to type parameters.")
                   a1 match
                     case ctx.expandsTo(as) =>
-                      encodeTypeArgs(as) :: Nil
+                      bundleTypeArgs(as) :: Nil
                     case a1 =>
                       badUse(s"Invalid application of $m in ${typeShortCode(fa)}. ${typeShortCode(a1)} is not <: $m[<kinds>]")
                 case other =>

@@ -59,7 +59,7 @@ object TypeApp {
 
     fasRepr match
       case AppliedType(f, args) if f =:= fRepr =>
-        val as: TypeRepr = encodeTypeArgs(args)
+        val as: TypeRepr = bundleTypeArgs(args)
         val resultType =
           TypeRepr
             .of[TypeApp]
