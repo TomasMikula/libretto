@@ -65,7 +65,7 @@ private object Encoding {
   private def decodeKind__(using Quotes)(k: qr.TypeRepr): Option[Either[String, Kind]] =
     import qr.*
 
-    k match
+    k.dealiasKeepOpaques match
       case tp if tp =:= TypeRepr.of[*] =>
         Some(Right(Kind.Tp))
       case AppliedType(f, args) if f =:= TypeRepr.of[->>] =>
@@ -663,7 +663,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           try {
             Select.unique(prefix1, name)
           } catch {
-            e => unsupported(s"x.m for overloaded m. In ${treeShortCode(prefix1)}.$name")
+            e => unsupported(s"x.$name for overloaded method $name. In ${treeShortCode(prefix1)}.$name")
           }
         case Typed(x, t) =>
           Typed(

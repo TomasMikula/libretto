@@ -32,4 +32,21 @@ class AppTests extends AnyFunSuite {
     assert(y == Map("foo" -> 3))
   }
 
+  test("pack, unpack of MonadError[Either[String, _], String]") {
+    import kindville.->
+
+    trait MonadError[F[_], E]
+
+    val monadErrorEitherString: MonadError[Either[String, _], String] =
+      new MonadError[Either[String, _], String] {}
+
+    val x: App[(* -> *) :: * :: TNil, MonadError, Either[String, _] :: String :: TNil] =
+      App.pack[(* -> *) :: * :: TNil, MonadError, Either[String, _] :: String :: TNil](monadErrorEitherString)
+
+    val y: MonadError[Either[String, _], String] =
+      App.unpack(x)
+
+    assert(y == x)
+  }
+
 }
