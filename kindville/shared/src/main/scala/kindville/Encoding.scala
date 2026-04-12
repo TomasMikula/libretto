@@ -276,7 +276,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   )(using
     Reporting.Context
   ): Type[Any] =
-    inside("TODO: refine (xJdr)") {
+    inside(s"decoding ${typeShortCode(Type.of[Code])} applied to type arguments ${typeShortCode(Type.of[As])}") {
       val args = unbundleTypeArgs(Type.of[As])
 
       TypeRepr.of[Code].dealiasKeepOpaques match
@@ -488,7 +488,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
     (tparams zip targs) map {
       case ((name, bounds, ref), t) =>
-        inside("TODO: refine (pLdk)"):
+        inside(s"substituting type argument ${typeShortCode(t)} for type parameter ${typeShortCode(ref)} with bounds ${bounds.fold(typeShortCode, treeShortCode)}"):
           val elem: TypeSubstitution | TypeArgExpansion =
             bounds match
               case Left(TypeBounds(lower, upper)) =>
@@ -504,7 +504,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                             val ts = unbundleTypeArgs(t.asType)
                             val ks = kinds.toList
                             if (ts.size != ks.size)
-                              badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${t.show(using Printer.TypeReprShortCode)}")
+                              badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(t)}")
                             (ks zip ts).foreach { case (k, t) => checkKind(TypeRepr.of(using t), k) }
                             TypeArgExpansion(ref, ts.map(TypeRepr.of(using _)))
                       case other =>
