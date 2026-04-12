@@ -841,28 +841,13 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ctx1 = paramSubstitutions(newParams) ::: ctx
       decodeTerm(marker, kuotes, ctx1, owner, body)
 
-    val nameSuffix =
-      owner.fullName
-
-    val methSym =
-      Symbol.newMethod(
-        owner,
-        name = "$anonfun$" + nameSuffix,
-        tpe = MethodType(paramNames)(_ => paramTypes, _ => returnType1),
-      )
-
-    val meth =
-      DefDef(
-        methSym,
-        rhsFn = { case List(argTrees) =>
-          val args = argTrees.map(_.asInstanceOf[Term])
-          Some(body1(args, methSym))
-        }
-      )
-
-    Block(
-      List(meth),
-      Closure(Ident(methSym.termRef), tpe = None),
+    Lambda(
+      owner = owner,
+      tpe = MethodType(paramNames)(_ => paramTypes, _ => returnType1),
+      rhsFn = (sym, argTrees) => {
+        val args = argTrees.map(_.asInstanceOf[Term])
+        body1(args, sym)
+      },
     )
   }
 
