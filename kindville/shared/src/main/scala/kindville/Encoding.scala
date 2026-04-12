@@ -304,7 +304,6 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     }
 
   def decodeExpr(
-    nameHint: Option[String],
     encoded: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any],
   )(using
     Reporting.Context,
@@ -321,17 +320,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           badUse(s"Expected a no-arg function literal `() => <body>`, got a function of ${params.size} parameter(s): ${params.map(_.name).mkString(", ")}")
         }
 
-      val f =
-        decodeFun(marker, kuotesParam.ref, ctx = Nil, params = Nil, retTp, body, Symbol.spliceOwner, nameHint)
-
-      Select
-        .unique(f, "apply")
-        .appliedToNone
+      decodeTerm(marker, kuotesParam.ref, ctx = Nil, Symbol.spliceOwner, body)
         .asExpr
     }
 
   def decodeExprT[As[⋅⋅[_]]](
-    nameHint: Option[String],
     encoded: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any],
   )(using
     Type[As],
@@ -356,12 +349,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ctx =
         decodeTypeParamSubstitutions(marker, userTParams, targs)
 
-      val f =
-        decodeFun(marker, kuotesParam.ref, ctx, params = Nil, retTp, body, Symbol.spliceOwner, nameHint)
-
-      Select
-        .unique(f, "apply")
-        .appliedToNone
+      decodeTerm(marker, kuotesParam.ref, ctx, Symbol.spliceOwner, body)
         .asExpr
     }
 
@@ -644,7 +632,6 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                     retTp,
                     body,
                     owner,
-                    nameHint = None,
                   )
                 case _ =>
                   unsupported(s"Closure variant ${treeShortCode(bl)} (${treeStruct(bl)})")
@@ -833,7 +820,6 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     returnType: TypeTree,
     body: Term,
     owner: Symbol,
-    nameHint: Option[String],
   )(using
     Reporting.Context,
   ): Term = {
@@ -856,7 +842,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       decodeTerm(marker, kuotes, ctx1, owner, body)
 
     val nameSuffix =
-      nameHint.getOrElse(owner.fullName)
+      owner.fullName
 
     val methSym =
       Symbol.newMethod(

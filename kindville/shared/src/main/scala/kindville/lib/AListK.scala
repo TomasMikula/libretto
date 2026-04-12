@@ -8,7 +8,7 @@ sealed trait AListK[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] {
 
   /** Returns `[Z] => F[Z, A] => AListK[K, F, Z, B]`. */
   transparent inline def :: =
-    decodeTNamed("AListK_::")[F :: A :: B :: TNil](
+    decodeT[F :: A :: B :: TNil](
       [⋅⋅[_]] => k ?=> [F[_, _], A, B] => () =>
         val thiz: AListK[K, F, A, B] =
           k.splice(this)
@@ -98,7 +98,7 @@ object AListK {
 
   /** Returns `[F[_, _], A] => () => AListK[K, F, A, A]` */
   transparent inline def empty[K] =
-    decodeNamed("AListK_empty")(
+    decode(
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
         val refl: [A <: ⋅⋅[K]] => () => TypeEqK[K, A, A] =
           k.splice(TypeEqK.refl[K])
@@ -110,7 +110,7 @@ object AListK {
 
   /** Returns `[F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C]` */
   transparent inline def cons[K] =
-    decodeNamed("AListK_cons")(
+    decode(
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
         val elem: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => F[A, B] => Arrow[K, F, A, B] =
           k.splice(Arrow.packer[K])
@@ -123,7 +123,7 @@ object AListK {
 
   /** Returns `[F[_, _], A, B] => F[A, B] => AListK[K, F, A, B]` */
   transparent inline def single[K] =
-    decodeNamed("AListK_single")(
+    decode(
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
         val empty: [F[_, _], A]       => ()                            => AListK[K, F, A, A] = k.splice(AListK.empty[K])
         val cons:  [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C] = k.splice(AListK.cons[K])

@@ -13,7 +13,7 @@ object Forall {
 
   /** Returns `([A...] => Unit => F[A...]) => Forall[K, F]`. */
   transparent inline def apply[K, F <: AnyKind]: Any =
-    decodeTNamed("Forall_apply")[F :: TNil](
+    decodeT[F :: TNil](
       [⋅⋅[_]] => k ?=> [F0[_ <: ⋅⋅[K]]] =>
         () =>
           (f: [A <: ⋅⋅[K]] => Unit => F0[A]) =>

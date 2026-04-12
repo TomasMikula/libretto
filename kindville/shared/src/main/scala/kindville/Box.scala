@@ -15,7 +15,7 @@ object Box {
     ${ packImpl[Code, As] }
 
   transparent inline def pacK[K, Code[⋅⋅[_]] <: AnyKind, As]: Any =
-    decodeFull("Box_pacK")[[⋅⋅[_]] =>> Code[⋅⋅] :: As :: TNil](
+    decodeFull[[⋅⋅[_]] =>> Code[⋅⋅] :: As :: TNil](
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> [Code0[As <: ⋅⋅[K]], A0 <: ⋅⋅[K]] => () =>
         val packer: [X <: ⋅⋅[K]] => Code0[X] => Box[Code, ⋅⋅[X]] =
           k.splice(Box.packer[Code])

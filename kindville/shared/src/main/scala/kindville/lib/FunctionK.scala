@@ -9,7 +9,7 @@ class FunctionK[K, F <: AnyKind, G <: AnyKind](
     Box.unpack(value)
 
   transparent inline infix def andThen[H <: AnyKind](that: FunctionK[K, G, H]): Any =
-    decodeTNamed("FunctionK_andThen")[F :: G :: H :: TNil](
+    decodeT[F :: G :: H :: TNil](
       [⋅⋅[_]] => k ?=> [F0[_], G0[_], H0[_]] => () =>
         val make: ([A <: ⋅⋅[K]] => F0[A] => H0[A]) => FunctionK[K, F, H] =
           k.splice(FunctionK[K, F, H])
@@ -30,7 +30,7 @@ object FunctionK {
       [A <: ⋅⋅[K]] => F0[A] => G0[A]
 
   transparent inline def apply[K, F <: AnyKind, G <: AnyKind] =
-    decodeTNamed("FunctionK_apply")[F :: G :: TNil](
+    decodeT[F :: G :: TNil](
       [⋅⋅[_]] => k ?=> [F0[_ <: ⋅⋅[K]], G0[_ <: ⋅⋅[K]]] => () =>
         (f: [A <: ⋅⋅[K]] => F0[A] => G0[A]) =>
           new FunctionK[K, F, G](
@@ -41,7 +41,7 @@ object FunctionK {
     )
 
   transparent inline def make[K] =
-    decodeNamed("FunctionK_make")(
+    decode(
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
         [F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] =>
           (f: [A <: ⋅⋅[K]] => F[A] => G[A]) =>
