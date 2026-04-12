@@ -5,8 +5,8 @@ import org.scalatest.funsuite.AnyFunSuite
 
 class EncodingTests extends AnyFunSuite {
 
-  test("decodeExpr0([⋅⋅[_]] => _ ?=> () => 0)") {
-    val x = decode([⋅⋅[_]] => _ ?=> () => 0)
+  test("decodeExpr0([⋅⋅[_]] => _ ?=> 0)") {
+    val x = decode([⋅⋅[_]] => _ ?=> 0)
     assert(x == 0)
   }
 

@@ -99,7 +99,7 @@ object AListK {
   /** Returns `[F[_, _], A] => () => AListK[K, F, A, A]` */
   transparent inline def empty[K] =
     decode(
-      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=>
         val refl: [A <: ⋅⋅[K]] => () => TypeEqK[K, A, A] =
           k.splice(TypeEqK.refl[K])
         [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K]] => () =>
@@ -111,7 +111,7 @@ object AListK {
   /** Returns `[F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C]` */
   transparent inline def cons[K] =
     decode(
-      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=>
         val elem: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => F[A, B] => Arrow[K, F, A, B] =
           k.splice(Arrow.packer[K])
         [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K], C <: ⋅⋅[K]] => (
@@ -124,7 +124,7 @@ object AListK {
   /** Returns `[F[_, _], A, B] => F[A, B] => AListK[K, F, A, B]` */
   transparent inline def single[K] =
     decode(
-      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=>
         val empty: [F[_, _], A]       => ()                            => AListK[K, F, A, A] = k.splice(AListK.empty[K])
         val cons:  [F[_, _], A, B, C] => (F[A, B], AListK[K, F, B, C]) => AListK[K, F, A, C] = k.splice(AListK.cons[K])
         [F[_, _], A, B] => (h: F[A, B]) => cons(h, empty[F, B]())

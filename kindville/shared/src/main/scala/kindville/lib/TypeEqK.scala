@@ -44,7 +44,7 @@ object TypeEqK {
 
   transparent inline def refl[K]: Any =
     decode(
-      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=>
         val packer: [F <: ⋅⋅[K], G <: ⋅⋅[K]] => ([H[_ <: ⋅⋅[K]]] => H[F] => H[G]) => Box[Code[K], F :: G :: TNil] =
           k.splice(Box.packer[Code[K]])
         [F <: ⋅⋅[K]] => () =>

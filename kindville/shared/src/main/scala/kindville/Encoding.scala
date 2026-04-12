@@ -312,15 +312,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ParseKuotedResult(marker, kuotesParam, _, payload) =
         parseKuoted(encoded)
 
-      val (params, body) =
-        doParseFun(payload)
-
-      if (params.nonEmpty)
-        inside(payload) {
-          badUse(s"Expected a no-arg function literal `() => <body>`, got a function of ${params.size} parameter(s): ${params.map(_.name).mkString(", ")}")
-        }
-
-      decodeTerm(marker, kuotesParam.ref, ctx = Nil, Symbol.spliceOwner, body)
+      decodeTerm(marker, kuotesParam.ref, ctx = Nil, Symbol.spliceOwner, payload)
         .asExpr
     }
 
@@ -415,28 +407,6 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             doParsePolyFun(expansion)
         case other =>
           badUse(s"Expected a polymorphic function, got ${expr.show(using Printer.TreeStructure)}")
-    }
-
-  private def doParseFun(
-    expr: Term,
-  )(using
-    Reporting.Context,
-  ): (
-    params: List[(name: String, tpe: qr.TypeTree, ref: qr.TermRef)],
-    body: qr.Term,
-  ) =
-    inside(expr) {
-      expr match
-        case Lambda(params, body) =>
-          (
-            params.map { case v @ ValDef(name, tpe, _) => (name, tpe, v.symbol.termRef) },
-            body,
-          )
-        case Inlined(call, Nil, expansion) =>
-          insideInlinedCall(call):
-            doParseFun(expansion)
-        case other =>
-          badUse(s"Expected a function literal (lambda), got ${expr.show(using Printer.TreeStructure)}")
     }
 
   private def decodeTypeParamSubstitutions(

@@ -42,7 +42,7 @@ object FunctionK {
 
   transparent inline def make[K] =
     decode(
-      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> () =>
+      [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=>
         [F[_ <: ⋅⋅[K]], G[_ <: ⋅⋅[K]]] =>
           (f: [A <: ⋅⋅[K]] => F[A] => G[A]) =>
             new FunctionK[K, F, G](

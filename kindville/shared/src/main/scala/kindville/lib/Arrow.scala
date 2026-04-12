@@ -19,7 +19,7 @@ object Arrow {
   transparent inline def packer[K] =
     // basically just Box.packer[Code[K]], but need the result to formally return `Arrow[K, F, A, B]` instead of `Box`
     decode(
-      [⋅⋅[_]] => k ?=> () =>
+      [⋅⋅[_]] => k ?=>
         val packer: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => F[A, B] => Arrow[K, F, A, B] =
           k.splice(Box.packer[Code[K]])
         [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => (f: F[A, B]) =>
