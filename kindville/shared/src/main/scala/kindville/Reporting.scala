@@ -100,6 +100,12 @@ private object Reporting {
   def inside(using q: Quotes, rc: Reporting.Context, reportedFrom: SourcePos)(tree: q.reflect.Tree)[R](f: Reporting.Context ?=> R): R =
     inside(stringify(tree))(f)
 
+  def insideInlinedCall(using q: Quotes, rc: Reporting.Context, reportedFrom: SourcePos)(call: Option[q.reflect.Tree])[R](f: Reporting.Context ?=> R): R =
+    call match {
+      case Some(call) => inside(s"inlined call ${stringify(call)}")(f)
+      case None => inside("inlined code (call unavailable)")(f)
+    }
+
   @targetName("stringifyTerm")
   private def stringify(using q: Quotes)(term: q.reflect.Term): String =
     term.show(using q.reflect.Printer.TreeShortCode)

@@ -393,8 +393,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
               assertionFailed("unexpected polymorphic function with 0 type parameters")
             case tparams =>
               badUse("Expected a polymorphic function with a single type parameter [⋅⋅[_]]")
-        case i @ Inlined(call, Nil, expansion) =>
-          parseKuoted(expansion.asExpr)
+        case Inlined(call, Nil, expansion) =>
+          insideInlinedCall(call):
+            parseKuoted(expansion.asExpr)
         case other =>
           unsupported(s"Expected a polymorphic function `[⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> ...`, got ${encoded.asTerm.show(using Printer.TreeStructure)}")
     }
@@ -421,8 +422,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       expr match
         case PolyFun(tparams, params, retTp, body) =>
           (tparams, params, retTp, body)
-        case Inlined(_, Nil, expansion) =>
-          doParsePolyFun(expansion)
+        case Inlined(call, Nil, expansion) =>
+          insideInlinedCall(call):
+            doParsePolyFun(expansion)
         case other =>
           badUse(s"Expected a polymorphic function, got ${expr.show(using Printer.TreeStructure)}")
     }
@@ -440,8 +442,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       expr match
         case Fun(params, retTp, body) =>
           (params, retTp, body)
-        case Inlined(_, Nil, expansion) =>
-          doParseFun(expansion)
+        case Inlined(call, Nil, expansion) =>
+          insideInlinedCall(call):
+            doParseFun(expansion)
         case other =>
           badUse(s"Expected a function literal (lambda), got ${expr.show(using Printer.TreeStructure)}")
     }
@@ -685,11 +688,13 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             as.map { a => decodeTerm(marker, kuotes, ctx, owner, a) },
             TypeTree.of(using decodeType(marker, ctx, tt.tpe).asType),
           )
-        case i @ Inlined(call, bindings, expansion) =>
+        case Inlined(call, bindings, expansion) =>
           Inlined(
             call,
             bindings,
-            decodeTerm(marker, kuotes, ctx, owner, expansion),
+            insideInlinedCall(call) {
+              decodeTerm(marker, kuotes, ctx, owner, expansion)
+            },
           ).changeOwner(owner)
         case other =>
           unimplemented(s"decodeTerm(${treeStruct(expr)})")
