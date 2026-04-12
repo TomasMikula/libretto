@@ -32,22 +32,27 @@ private object Reporting {
     errorAndAbort(s"Unhandled case: $msg (at $pos).\n\nPlease, request an enhancement.")
 
   def badUse(using Quotes, Reporting.Context)(msg: String): Nothing =
-    val msgInContext = msg + summon[Reporting.Context].stack.map(_.get.replace("\n", "\n  ")).mkString("\nin\n  ", "\nin\n  ", "")
+    val ctxStr =
+      summon[Reporting.Context]
+        .stack
+        .map { case (reportedFrom, msg) => msg.get.replace("\n", "\n  ") + s"\n  (reported from ${reportedFrom.symbolPathLine})"}
+        .mkString("in\n  ", "\nin\n  ", "")
+    val msgInContext = s"$msg\n$ctxStr"
     errorAndAbort(msgInContext)
 
   def assertionFailed(using pos: SourcePos, q: Quotes)(msg: String): Nothing =
     errorAndAbort(s"Assertion failed: $msg (at $pos).\n\nPlease, report a bug.")
 
   case class Context(
-    stack: NonEmptyList[LazyString], // deepest (inner-most) first
+    stack: NonEmptyList[(SourcePos, LazyString)], // deepest (inner-most) first
   ) {
-    def push(nested: => String): Reporting.Context =
-      new Context(NonEmptyList(LazyString(nested), stack))
+    def push(reportedFrom: SourcePos, nested: => String): Reporting.Context =
+      new Context(NonEmptyList((reportedFrom, LazyString(nested)), stack))
   }
 
   object Context {
-    def root(c: => String): Context =
-      new Context(NonEmptyList(new LazyString(c), Nil))
+    def root(reportedFrom: SourcePos, c: => String): Context =
+      new Context(NonEmptyList((reportedFrom, new LazyString(c)), Nil))
   }
 
   class LazyString(value: => String) {
@@ -58,41 +63,41 @@ private object Reporting {
       get
   }
 
-  def insideMacroExpansion(using Quotes)[R](f: Reporting.Context ?=> R): R =
-    insideRoot {
+  def insideMacroExpansion(using q: Quotes, reportedFrom: SourcePos)[R](f: Reporting.Context ?=> R): R =
+    insideRoot(reportedFrom) {
       quotes.reflect.Position.ofMacroExpansion.pipe: pos =>
         pos.sourceCode
           .getOrElse(s"${pos.sourceFile.name}:${pos.startLine}${if pos.endLine != pos.startLine then s"-${pos.endLine}" else ""}")
     }(f)
 
-  def insideRoot(rootContext: => String)[R](f: Reporting.Context ?=> R): R =
-    f(using Context.root(rootContext))
+  def insideRoot(reportedFrom: SourcePos)(rootContext: => String)[R](f: Reporting.Context ?=> R): R =
+    f(using Context.root(reportedFrom, rootContext))
 
   @targetName("insideRootTerm")
-  def insideRoot(using q: Quotes)(term: q.reflect.Term)[R](f: Reporting.Context ?=> R): R =
-    insideRoot(stringify(term))(f)
+  def insideRoot(using q: Quotes, reportedFrom: SourcePos)(term: q.reflect.Term)[R](f: Reporting.Context ?=> R): R =
+    insideRoot(reportedFrom)(stringify(term))(f)
 
   @targetName("insideRootTypeRepr")
-  def insideRoot(using q: Quotes)(tpe: q.reflect.TypeRepr)[R](f: Reporting.Context ?=> R): R =
-    insideRoot(stringify(tpe))(f)
+  def insideRoot(using q: Quotes, reportedFrom: SourcePos)(tpe: q.reflect.TypeRepr)[R](f: Reporting.Context ?=> R): R =
+    insideRoot(reportedFrom)(stringify(tpe))(f)
 
   @targetName("insideRootTree")
-  def insideRoot(using q: Quotes)(tree: q.reflect.Tree)[R](f: Reporting.Context ?=> R): R =
-    insideRoot(stringify(tree))(f)
+  def insideRoot(using q: Quotes, reportedFrom: SourcePos)(tree: q.reflect.Tree)[R](f: Reporting.Context ?=> R): R =
+    insideRoot(reportedFrom)(stringify(tree))(f)
 
-  def inside(using rc: Reporting.Context)(nested: => String)[R](f: Reporting.Context ?=> R): R =
-    f(using rc.push(nested))
+  def inside(using rc: Reporting.Context, reportedFrom: SourcePos)(nested: => String)[R](f: Reporting.Context ?=> R): R =
+    f(using rc.push(reportedFrom, nested))
 
   @targetName("insideTerm")
-  def inside(using q: Quotes, rc: Reporting.Context)(term: q.reflect.Term)[R](f: Reporting.Context ?=> R): R =
+  def inside(using q: Quotes, rc: Reporting.Context, reportedFrom: SourcePos)(term: q.reflect.Term)[R](f: Reporting.Context ?=> R): R =
     inside(stringify(term))(f)
 
   @targetName("insideTypeRepr")
-  def inside(using q: Quotes, rc: Reporting.Context)(tpe: q.reflect.TypeRepr)[R](f: Reporting.Context ?=> R): R =
+  def inside(using q: Quotes, rc: Reporting.Context, reportedFrom: SourcePos)(tpe: q.reflect.TypeRepr)[R](f: Reporting.Context ?=> R): R =
     inside(stringify(tpe))(f)
 
   @targetName("insideTree")
-  def inside(using q: Quotes, rc: Reporting.Context)(tree: q.reflect.Tree)[R](f: Reporting.Context ?=> R): R =
+  def inside(using q: Quotes, rc: Reporting.Context, reportedFrom: SourcePos)(tree: q.reflect.Tree)[R](f: Reporting.Context ?=> R): R =
     inside(stringify(tree))(f)
 
   @targetName("stringifyTerm")
