@@ -177,7 +177,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   enum ContextElem:
     case TypeSubstitution(src: ParamRef | TypeRef, tgt: TypeRepr)
-    case TypeArgExpansion(src: ParamRef | TypeRef, tgt: List[TypeRepr])
+    case TypeArgExpansion(src: ParamRef | TypeRef, tgt: SingleOrMultiple[TypeRepr])
     case TermSubstitution(src: TermRef, tgt: Term)
 
   extension (ctx: List[ContextElem])
@@ -196,7 +196,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       ctx.collectFirst { case ContextElem.TermSubstitution(src, res) if src.termSymbol == i.symbol => res }
 
   class ExpansionExtractor(ctx: List[ContextElem]):
-    def unapply(p: ParamRef | TypeRef): Option[List[TypeRepr]] =
+    def unapply(p: ParamRef | TypeRef): Option[SingleOrMultiple[TypeRepr]] =
       ctx.collectFirst { case ContextElem.TypeArgExpansion(src, res) if src =:= p => res }
 
   case class TypeLambdaTemplate(
@@ -434,14 +434,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                         decodeKindOrKinds(kinds) match
                           case Left(k) =>
                             checkKind(t, k)
-                            TypeSubstitution(ref, t)
+                            TypeArgExpansion(ref, Single(t))
                           case Right(kinds) =>
                             val ts = unbundleTypeArgs(t.asType)
                             val ks = kinds.toList
                             if (ts.size != ks.size)
                               badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(t)}")
                             (ks zip ts).foreach { case (k, t) => checkKind(TypeRepr.of(using t), k) }
-                            TypeArgExpansion(ref, ts.map(TypeRepr.of(using _)))
+                            TypeArgExpansion(ref, Multiple(ts.map(TypeRepr.of(using _))))
                       case other =>
                         badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(marker)}) with a lower bound (${typeShortCode(lower)})")
                   case _ =>
@@ -486,6 +486,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case AppliedType(f, targs) =>
           val f1 = decodeType(marker, ctx, f)
           val targs1 = expandTypeArgs(marker, ctx, targs)
+            .flatMap(_.toList)
           val targs2 = targs1.map(decodeType(marker, ctx, _))
           f1.appliedTo(targs2)
         case l @ TypeLambda(names, bounds, body) =>
@@ -590,6 +591,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case TypeApply(f, ts) =>
           val f1 = decodeTerm(marker, kuotes, ctx, owner, f)
           val ts1 = expandTypeArgs(marker, ctx, ts.map(_.tpe))
+            .flatMap(_.toList)
           val ts2 = ts1.map(decodeType(marker, ctx, _))
           TypeApply(f1, ts2.map(t => TypeTree.of(using t.asType)))
         case Select(prefix, name) =>
@@ -867,8 +869,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val newSubstitutions: List[ContextElem] =
         expandedTypeParams
           .map {
-            case (j, p @ PostExpansionParam.Expanded(_, origRef)) =>
-              ContextElem.TypeArgExpansion(origRef, List.range(0, p.expandedSize).map(i => actualTypeParams(j + i)))
+            case (j, PostExpansionParam.Expanded(ps, origRef)) =>
+              ContextElem.TypeArgExpansion(origRef, ps.zipWithIndex.map { case (_, i) => actualTypeParams(j + i) })
             case (j, PostExpansionParam.Original(_, _, origRef)) =>
               ContextElem.TypeSubstitution(origRef, actualTypeParams(j))
           }
@@ -918,8 +920,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     targs: List[TypeRepr],
   )(using
     Reporting.Context,
-  ): List[TypeRepr] =
-    targs.flatMap { ta =>
+  ): List[SingleOrMultiple[TypeRepr]] =
+    targs.map { ta =>
       inside(ta) {
         ta match {
           case fa @ AppliedType(f, targs) =>
@@ -934,24 +936,26 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                     case a           => badUse(s"Invalid application of $m in ${typeShortCode(fa)}. Spread operator $m can only be applied to type parameters.")
                   a1 match
                     case ctx.expandsTo(as) =>
-                      bundleTypeArgs(as) :: Nil
+                      as match
+                        case Single(a) => Single(a)
+                        case Multiple(as) => Single(bundleTypeArgs(as))
                     case a1 =>
                       badUse(s"Invalid application of $m in ${typeShortCode(fa)}. ${typeShortCode(a1)} is not <: $m[<kinds>]")
                 case other =>
                   assertionFailed(s"Expected 1 type argument to ${typeShortCode(f)}, got ${targs.size} (${targs.map(typeShortCode).mkString(", ")})")
             } else {
-              fa :: Nil
+              Single(fa)
             }
           case p: ParamRef =>
             p match
               case ctx.expandsTo(ps) => ps
-              case _                 => p :: Nil
+              case _                 => Single(p)
           case t: TypeRef =>
             t match
               case ctx.expandsTo(ts) => ts
-              case _                 => t :: Nil
+              case _                 => Single(t)
           case other =>
-            other :: Nil
+            Single(other)
         }
       }
     }

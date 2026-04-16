@@ -19,6 +19,11 @@ private[kindville] enum SingleOrMultiple[A] {
       case Single(_) => 1
       case Multiple(as) => as.size
 
+  def zipWithIndex: SingleOrMultiple[(A, Int)] =
+    this match
+      case Single(a) => Single((a, 0))
+      case Multiple(as) => Multiple(as.zipWithIndex)
+
   def zipWithListUnsafe[B](bs: List[B]): (SingleOrMultiple[(A, B)], List[B]) =
     this match
       case Single(a) =>
