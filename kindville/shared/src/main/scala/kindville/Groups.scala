@@ -9,7 +9,7 @@ private[kindville] object Groups {
     as
 
   extension [A](as: Groups[A]) {
-    def size: Int =
+    def totalSize: Int =
       as.map(_.size).sum
 
     def toList: List[SingleOrMultiple[A]] =
@@ -27,7 +27,7 @@ private[kindville] object Groups {
     def zipWithListUnsafe[B](
       bs: List[B],
     ): Groups[(A, B)] = {
-      val n = as.size
+      val n = as.totalSize
       require(bs.size == n, s"List of size $n required, got a list of size ${bs.size}")
 
       def go(as: List[SingleOrMultiple[A]], bs: List[B]): List[SingleOrMultiple[(A, B)]] =
