@@ -44,4 +44,47 @@ class ArrowTests extends AnyFunSuite {
     assert(gy("hello", 1) == (1, "hello"))
   }
 
+  test("pack/unpack multiple higher-kinded type parameters") {
+    class MyArrowType[
+      A, B[_], C[_[_, _], _],
+      X, Y[_], Z[_[_, _], _],
+    ]
+
+    type Foo[F[_, _], T] = F[T, T]
+
+    val in: MyArrowType[String, List, Foo, Int, Option, Foo] =
+      MyArrowType[String, List, Foo, Int, Option, Foo]
+
+    val x: Arrow[
+      * :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil,
+      MyArrowType,
+      String :: List   :: Foo :: TNil,
+      Int    :: Option :: Foo :: TNil,
+    ] =
+      Arrow.pack[
+        * :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil,
+        MyArrowType,
+        String :: List   :: Foo :: TNil,
+        Int    :: Option :: Foo :: TNil,
+      ](in)
+
+    val y: Arrow[
+      * :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil,
+      MyArrowType,
+      String :: List   :: Foo :: TNil,
+      Int    :: Option :: Foo :: TNil,
+    ] =
+      Arrow.packer[* :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil](in)
+
+    val outx1 = Arrow.unpack(x)
+    val outx2 = Arrow.unpacker[* :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil](x)
+    val outy1 = Arrow.unpack(y)
+    val outy2 = Arrow.unpacker[* :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil](y)
+
+    assert(outx1 == in)
+    assert(outx2 == in)
+    assert(outy1 == in)
+    assert(outy2 == in)
+  }
+
 }
