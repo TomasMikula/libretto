@@ -12,8 +12,8 @@ class ArrowTests extends AnyFunSuite {
     val y: Arrow[kindville.*, Function1, String, Int] =
       Arrow.packer[*](_.length())
 
-    val fx: String => Int = Arrow.unpack(x)
-    val fy: String => Int = Arrow.unpack(y)
+    val fx: String => Int = x.unpack
+    val fy: String => Int = y.unpack
     val gx: String => Int = Arrow.unpacker[*](x)
     val gy: String => Int = Arrow.unpacker[*](y)
 
@@ -33,8 +33,8 @@ class ArrowTests extends AnyFunSuite {
     val y: Arrow[* :: * :: TNil, BiFunction, String :: Int :: TNil, Int :: String :: TNil] =
       Arrow.packer[* :: * :: TNil](BiFunction((a, b) => (b, a)))
 
-    val fx: BiFunction[String, Int, Int, String] = Arrow.unpack(x)
-    val fy: BiFunction[String, Int, Int, String] = Arrow.unpack(y)
+    val fx: BiFunction[String, Int, Int, String] = x.unpack
+    val fy: BiFunction[String, Int, Int, String] = y.unpack
     val gx: BiFunction[String, Int, Int, String] = Arrow.unpacker[* :: * :: TNil](x)
     val gy: BiFunction[String, Int, Int, String] = Arrow.unpacker[* :: * :: TNil](y)
 
@@ -76,9 +76,9 @@ class ArrowTests extends AnyFunSuite {
     ] =
       Arrow.packer[* :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil](in)
 
-    val outx1 = Arrow.unpack(x)
+    val outx1 = x.unpack
     val outx2 = Arrow.unpacker[* :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil](x)
-    val outy1 = Arrow.unpack(y)
+    val outy1 = y.unpack
     val outy2 = Arrow.unpacker[* :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil](y)
 
     assert(outx1 == in)

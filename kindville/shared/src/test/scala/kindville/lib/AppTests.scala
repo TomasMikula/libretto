@@ -18,13 +18,13 @@ class AppTests extends AnyFunSuite {
     val x4: App[* :: TNil, Option, Int :: TNil] =
       App.packer[* :: TNil][Option, Int](Some(1))
 
-    val y11: Option[Int] = App.unpack(x1)
+    val y11: Option[Int] = x1.unpack
     val y12: Option[Int] = App.unpacker[*](x1)
-    val y21: Option[Int] = App.unpack(x2)
+    val y21: Option[Int] = x2.unpack
     val y22: Option[Int] = App.unpacker[* :: TNil](x2)
-    val y31: Option[Int] = App.unpack(x3)
+    val y31: Option[Int] = x3.unpack
     val y32: Option[Int] = App.unpacker[*](x3)
-    val y41: Option[Int] = App.unpack(x4)
+    val y41: Option[Int] = x4.unpack
     val y42: Option[Int] = App.unpacker[* :: TNil](x4)
 
     assert(y11 == Some(1))
@@ -43,9 +43,9 @@ class AppTests extends AnyFunSuite {
     val x2: App[* :: * :: TNil, Map, String :: Int :: TNil] =
       App.packer[* :: * :: TNil][Map, String, Int](Map("foo" -> 3))
 
-    val y11: Map[String, Int] = App.unpack(x1)
+    val y11: Map[String, Int] = x1.unpack
     val y12: Map[String, Int] = App.unpacker[* :: * :: TNil](x1)
-    val y21: Map[String, Int] = App.unpack(x2)
+    val y21: Map[String, Int] = x2.unpack
     val y22: Map[String, Int] = App.unpacker[* :: * :: TNil](x2)
 
     assert(y11 == Map("foo" -> 3))
@@ -68,9 +68,9 @@ class AppTests extends AnyFunSuite {
     val x2: App[(* -> *) :: * :: TNil, MonadError, Either[String, _] :: String :: TNil] =
       App.packer[(* -> *) :: * :: TNil][MonadError, Either[String, _], String](monadErrorEitherString)
 
-    val y11: MonadError[Either[String, _], String] = App.unpack(x1)
+    val y11: MonadError[Either[String, _], String] = x1.unpack
     val y12: MonadError[Either[String, _], String] = App.unpacker[(* -> *) :: * :: TNil](x1)
-    val y21: MonadError[Either[String, _], String] = App.unpack(x2)
+    val y21: MonadError[Either[String, _], String] = x2.unpack
     val y22: MonadError[Either[String, _], String] = App.unpacker[(* -> *) :: * :: TNil](x2)
 
     assert(y11 == monadErrorEitherString)

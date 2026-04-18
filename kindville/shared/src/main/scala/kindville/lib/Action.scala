@@ -20,9 +20,11 @@ object Action {
         pack
     )
 
-  /** Returns `[X, Y] => (G[X], F[X, Y]) => G[Y]`. */
-  transparent inline def unpack[K, G <: AnyKind, F <: AnyKind](a: Action[K, G, F]) =
-    Box.unpack[Code[K], G :: F :: TNil](a)
+  extension [K, G <: AnyKind, F <: AnyKind](a: Action[K, G, F]) {
+    /** Returns `[X, Y] => (G[X], F[X, Y]) => G[Y]`. */
+    transparent inline def unpack =
+      Box.unpack[Code[K], G :: F :: TNil](a)
+  }
 
   extension [K, G <: AnyKind, F <: AnyKind](a: Action[K, G, F]) {
     /** Returns `[A, B] => (G[A], F[A, B]) => G[B]` */

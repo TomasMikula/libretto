@@ -22,8 +22,10 @@ object Box {
         packer[A0]
     )
 
-  transparent inline def unpack[Code[⋅⋅[_]] <: AnyKind, As](box: Box[Code, As]): Any =
-    ${ unpackImpl[Code, As]('box) }
+  extension [Code[⋅⋅[_]] <: AnyKind, As](box: Box[Code, As]) {
+    transparent inline def unpack: Any =
+      ${ unpackImpl[Code, As]('box) }
+  }
 
   private def boxType(using Quotes)(
     code: qr.TypeRepr,

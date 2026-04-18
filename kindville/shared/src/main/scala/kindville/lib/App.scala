@@ -29,9 +29,11 @@ object App {
         packer
     )
 
-  /** Returns G[A]. */
-  transparent inline def unpack[K, G <: AnyKind, A <: AnyKind](a: App[K, G, A]) =
-    Box.unpack(a)
+  extension [K, G <: AnyKind, A <: AnyKind](a: App[K, G, A]) {
+    /** Returns G[A]. */
+    transparent inline def unpack =
+      Box.unpack(a)
+  }
 
   /** Returns `[F[..], A..] => App[K, F, A] => F[A..]`. */
   transparent inline def unpacker[K] =

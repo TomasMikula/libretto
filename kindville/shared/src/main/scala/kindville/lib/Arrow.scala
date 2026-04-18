@@ -45,7 +45,9 @@ object Arrow {
         unpacker
     )
 
-  /** Returns `F[A, B]`. */
-  transparent inline def unpack[K, F <: AnyKind, A <: AnyKind, B <: AnyKind](a: Arrow[K, F, A, B]) =
-    Box.unpack(a)
+  extension [K, F <: AnyKind, A <: AnyKind, B <: AnyKind](a: Arrow[K, F, A, B]) {
+    /** Returns `F[A, B]`. */
+    transparent inline def unpack =
+      Box.unpack(a)
+  }
 }
