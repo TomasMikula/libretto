@@ -12,7 +12,7 @@ object Action {
 
   /** Returns `([X, Y] => (G[X], F[X, Y]) => G[Y]) => Action[K, G, F]`. */
   transparent inline def pack[K, G <: AnyKind, F <: AnyKind] =
-    // basically just `Box.pack`, but need to re-encode to return Action instead of Box
+    // basically just `Box.pack`, but need to the result to return Action instead of Box
     decodeT[G :: F :: TNil](
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> [G0[_ <: ⋅⋅[K]], F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]]] => () =>
         val pack: ([X <: ⋅⋅[K], Y <: ⋅⋅[K]] => (G0[X], F0[X, Y]) => G0[Y]) => Action[K, G, F] =
