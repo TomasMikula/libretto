@@ -8,6 +8,17 @@ class TypeEqK[K, F <: AnyKind, G <: AnyKind](
   transparent inline def substituteCo =
     Box.unpack[TypeEqK.Code[K], F :: G :: TNil](value)
 
+  transparent inline def substituteCoApp[H <: AnyKind](hf: App[K, H, F]): App[K, H, G] =
+    decodeT[F :: G :: H :: TNil](
+      [⋅⋅[_]] => kuotes ?=> [F <: ⋅⋅[K], G <: ⋅⋅[K], H[_ <: ⋅⋅[K]]] => () =>
+        val x: App[K, H, ⋅⋅[F]] =
+          kuotes.splice(hf)
+        val subst: [M[X <: ⋅⋅[K]]] => M[F] => M[G] =
+          kuotes.splice(this.substituteCo)
+        subst[[X <: ⋅⋅[K]] =>> App[K, H, ⋅⋅[X]]](x)
+    )
+      .typecheckAs[App[K, H, G]]
+
   transparent inline def andThen[H <: AnyKind](that: TypeEqK[K, G, H]) =
     decodeT[F :: G :: H :: TNil](
       [⋅⋅[_]] => kuotes ?=> [F <: ⋅⋅[K], G <: ⋅⋅[K], H <: ⋅⋅[K]] => () =>

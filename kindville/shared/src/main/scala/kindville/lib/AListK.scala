@@ -138,15 +138,7 @@ object AListK {
     def go[X <: AnyKind](acc: App[K, G, X], fs: AListK[K, F, X, B]): App[K, G, B] =
       fs match
         case Empty(ev) =>
-          decodeT[F :: G :: X :: B :: TNil](
-            [⋅⋅[_]] => kuotes ?=> [F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], G0[_ <: ⋅⋅[K]], X0 <: ⋅⋅[K], B0 <: ⋅⋅[K]] => () =>
-              val subst: [M[_ <: ⋅⋅[K]]] => M[X0] => M[B0] =
-                kuotes.splice(ev.substituteCo)
-              val acc0: App[K, G0, X0] =
-                kuotes.splice(acc)
-              subst[[T <: ⋅⋅[K]] =>> App[K, G0, T]](acc0) : App[K, G0, B0]
-          )
-            .typecheckAs[App[K, G, B]]
+          ev.substituteCoApp(acc)
         case Cons(f0, fs) =>
           val acc1 = action(acc, f0)
           go(acc1, fs)

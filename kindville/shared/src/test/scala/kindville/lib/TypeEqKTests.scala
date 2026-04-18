@@ -43,9 +43,14 @@ class TypeEqKTests extends AnyFunSuite {
     val ev1 = andThenFlipped(ev, ev)
 
     assert(ev1.substituteCo[Map](m) == m)
+
+    val ma: App[* :: * :: TNil, Map, Int :: String :: TNil] =
+      App.packer[* :: * :: TNil](m)
+
+    assert(ev1.substituteCoApp(ma).unpack == m)
   }
 
-  test("andThen, flip") {
+  test("andThen, flip with higher-kinded type argument") {
     case class Foo[F[_]](value: F[Int])
 
     def andThenFlipped[F[_], G[_], H[_]](
