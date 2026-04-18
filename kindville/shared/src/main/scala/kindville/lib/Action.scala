@@ -12,7 +12,7 @@ object Action {
 
   /** Returns `([X, Y] => (G[X], F[X, Y]) => G[Y]) => Action[K, G, F]`. */
   transparent inline def pack[K, G <: AnyKind, F <: AnyKind] =
-    // basically just `Box.pack`, but need to the result to return Action instead of Box
+    // basically just `Box.pack`, but need the result to return Action instead of Box
     decodeT[G :: F :: TNil](
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> [G0[_ <: ⋅⋅[K]], F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]]] => () =>
         val pack: ([X <: ⋅⋅[K], Y <: ⋅⋅[K]] => (G0[X], F0[X, Y]) => G0[Y]) => Action[K, G, F] =
@@ -28,5 +28,21 @@ object Action {
     /** Returns `[A, B] => (G[A], F[A, B]) => G[B]` */
     transparent inline def act =
       unpack[K, G, F](a)
+
+    /** Returns `[A, B] => (by: F[A, B]) => (on: G[A]) => G[B]` */
+    transparent inline def actBy =
+      decodeT[G :: F :: TNil](
+        [⋅⋅[_]] => k ?=> [G0[_ <: ⋅⋅[K]], F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]]] => () =>
+          [A <: ⋅⋅[K], B <: ⋅⋅[K]] => (f: F0[A, B]) => (on: G0[A]) =>
+            k.splice(a.act)[[A <: ⋅⋅[K], B <: ⋅⋅[K]] => (G0[A], F0[A, B]) => G0[B]][A, B](on, f)
+      )
+
+    /** Returns `[A, B] => (on: G[A]) => (by: F[A, B]) => G[B]` */
+    transparent inline def actOn =
+      decodeT[G :: F :: TNil](
+        [⋅⋅[_]] => k ?=> [G0[_ <: ⋅⋅[K]], F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]]] => () =>
+          [A <: ⋅⋅[K], B <: ⋅⋅[K]] => (on: G0[A]) => (f: F0[A, B]) =>
+            k.splice(a.act)[[A <: ⋅⋅[K], B <: ⋅⋅[K]] => (G0[A], F0[A, B]) => G0[B]][A, B](on, f)
+      )
   }
 }
