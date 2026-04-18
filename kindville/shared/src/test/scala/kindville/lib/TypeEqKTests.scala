@@ -26,6 +26,25 @@ class TypeEqKTests extends AnyFunSuite {
     assert(ev.substituteCo     (Foo(List(1, 2, 3))) == Foo(List(1, 2, 3)))
   }
 
+  test("TypeEqK[* :: * :: TNil, Int :: String :: TNil, Int :: String :: TNil]") {
+    val ev: TypeEqK[* :: * :: TNil, Int :: String :: TNil, Int :: String :: TNil] =
+      TypeEqK.refl[* :: * :: TNil][Int, String]()
+
+    val m = Map(1 -> "foo")
+
+    assert(ev.substituteCo[Map](m) == m)
+
+    def andThenFlipped[A1, A2, B1, B2, C1, C2](
+      ev1: TypeEqK[* :: * :: TNil, A1 :: A2 :: TNil, B1 :: B2 :: TNil],
+      ev2: TypeEqK[* :: * :: TNil, C1 :: C2 :: TNil, B1 :: B2 :: TNil],
+    ): TypeEqK[* :: * :: TNil, A1 :: A2 :: TNil, C1 :: C2 :: TNil] =
+      ev1.andThen(ev2.flip)
+
+    val ev1 = andThenFlipped(ev, ev)
+
+    assert(ev1.substituteCo[Map](m) == m)
+  }
+
   test("andThen, flip") {
     case class Foo[F[_]](value: F[Int])
 

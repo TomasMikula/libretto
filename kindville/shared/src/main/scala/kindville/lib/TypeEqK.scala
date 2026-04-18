@@ -11,21 +11,21 @@ class TypeEqK[K, F <: AnyKind, G <: AnyKind](
   transparent inline def andThen[H <: AnyKind](that: TypeEqK[K, G, H]) =
     decodeT[F :: G :: H :: TNil](
       [⋅⋅[_]] => kuotes ?=> [F <: ⋅⋅[K], G <: ⋅⋅[K], H <: ⋅⋅[K]] => () =>
-        val thiz: TypeEqK[K, F, G] =
+        val thiz: TypeEqK[K, ⋅⋅[F], ⋅⋅[G]] =
           kuotes.splice(this)
         val subst: [M[X <: ⋅⋅[K]]] => M[G] => M[H] =
           kuotes.splice(that.substituteCo)
-        subst[[J <: ⋅⋅[K]] =>> TypeEqK[K, F, J]](thiz)
+        subst[[J <: ⋅⋅[K]] =>> TypeEqK[K, ⋅⋅[F], ⋅⋅[J]]](thiz)
     )
 
   transparent inline def flip =
     decodeT[F :: G :: TNil](
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> [F <: ⋅⋅[K], G <: ⋅⋅[K]] => () =>
-        val refl: [H <: ⋅⋅[K]] => () => TypeEqK[K, H, H] =
+        val refl: [H <: ⋅⋅[K]] => () => TypeEqK[K, ⋅⋅[H], ⋅⋅[H]] =
           k.splice(TypeEqK.refl[K])
         val subst: [M[X <: ⋅⋅[K]]] => M[F] => M[G] =
           k.splice(this.substituteCo)
-        subst[[J <: ⋅⋅[K]] =>> TypeEqK[K, J, F]](refl[F]())
+        subst[[J <: ⋅⋅[K]] =>> TypeEqK[K, ⋅⋅[J], ⋅⋅[F]]](refl[F]())
     )
 }
 
@@ -45,10 +45,10 @@ object TypeEqK {
   transparent inline def refl[K]: Any =
     decode(
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=>
-        val packer: [F <: ⋅⋅[K], G <: ⋅⋅[K]] => ([H[_ <: ⋅⋅[K]]] => H[F] => H[G]) => Box[Code[K], F :: G :: TNil] =
+        val packer: [F <: ⋅⋅[K], G <: ⋅⋅[K]] => ([H[_ <: ⋅⋅[K]]] => H[F] => H[G]) => Box[Code[K], ⋅⋅[F] :: ⋅⋅[G] :: TNil] =
           k.splice(Box.packer[Code[K]])
         [F <: ⋅⋅[K]] => () =>
-          Refl[K, F]()(
+          Refl[K, ⋅⋅[F]]()(
             packer[F, F](
               [H[_ <: ⋅⋅[K]]] => (hf: H[F]) => hf
             )
