@@ -35,6 +35,16 @@ object Arrow {
         pack
     )
 
+  /** Returns `[F[_, _], A, B] => Arrow[K, F, A, B] => F[A, B]`. */
+  transparent inline def unpacker[K] =
+    // basically just Box.unpacker[Code[K]], but need the result to formally take `Arrow[K, F, A, B]` instead of `Box`
+    decode(
+      [⋅⋅[_]] => k ?=>
+        val unpacker: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => Arrow[K, F, A, B] => F[A, B] =
+          k.splice(Box.unpacker[Code[K]])
+        unpacker
+    )
+
   /** Returns `F[A, B]`. */
   transparent inline def unpack[K, F <: AnyKind, A <: AnyKind, B <: AnyKind](a: Arrow[K, F, A, B]) =
     Box.unpack(a)

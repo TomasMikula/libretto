@@ -12,14 +12,15 @@ class ArrowTests extends AnyFunSuite {
     val y: Arrow[kindville.*, Function1, String, Int] =
       Arrow.packer[*](_.length())
 
-    val f: String => Int =
-      Arrow.unpack(x)
+    val fx: String => Int = Arrow.unpack(x)
+    val fy: String => Int = Arrow.unpack(y)
+    val gx: String => Int = Arrow.unpacker[*](x)
+    val gy: String => Int = Arrow.unpacker[*](y)
 
-    val g: String => Int =
-      Arrow.unpack(y)
-
-    assert(f("hello") == 5)
-    assert(g("hello") == 5)
+    assert(fx("hello") == 5)
+    assert(fy("hello") == 5)
+    assert(gx("hello") == 5)
+    assert(gy("hello") == 5)
   }
 
 }
