@@ -46,5 +46,21 @@ object Action {
           [A <: ⋅⋅[K], B <: ⋅⋅[K]] => (on: G0[A]) => (f: F0[A, B]) =>
             k.splice(a.act)[[A <: ⋅⋅[K], B <: ⋅⋅[K]] => (G0[A], F0[A, B]) => G0[B]][A, B](on, f)
       )
+
+    transparent inline def apply[A <: AnyKind, B <: AnyKind](
+      ga: App[K, G, A],
+      f: Arrow[K, F, A, B],
+    ): App[K, G, B] =
+      decodeT[G :: F :: A :: B :: TNil](
+        [⋅⋅[_]] => k ?=> [G0[_ <: ⋅⋅[K]], F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A0 <: ⋅⋅[K], B0 <: ⋅⋅[K]] => () =>
+          val x: G0[A0] =
+            k.splice(App.unpack(ga))
+          val h: F0[A0, B0] =
+            k.splice(Arrow.unpack(f))
+          val y: G0[B0] =
+            k.splice(a.act)[[A <: ⋅⋅[K], B <: ⋅⋅[K]] => (G0[A], F0[A, B]) => G0[B]][A0, B0](x, h)
+          k.splice(App.pack[K, G, B])[G0[B0] => App[K, G, B]](y)
+      )
+        .typecheckAs[App[K, G, B]]
   }
 }
