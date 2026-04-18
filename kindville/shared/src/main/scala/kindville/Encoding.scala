@@ -50,91 +50,76 @@ private object Encoding {
             report.error(s"Cannot decode a list of type arguments from type ${Printer.TypeReprShortCode.show(repr)}")
             Nil
 
+  private enum FastReject[A]:
+    case Success(value: A)
+    case Reject(expectedOneOf: List[String])
+
   def decodeKind(using Quotes, Reporting.Context)(k: qr.TypeRepr): Kind =
-    inside(k):
-      decodeKind_(k) match
-        case Right(k)  => k
-        case Left(msg) => badUse(msg)
-
-  private def decodeKind_(using Quotes)(k: qr.TypeRepr): Either[String, Kind] =
     import qr.*
-    decodeKind__(k) match
-      case Some(res) => res
-      case None      => Left(s"Could not decode ${Printer.TypeReprShortCode.show(k)} as a kind.")
+    inside(k):
+      decodeKind__(k) match
+        case FastReject.Success(res) =>
+          res
+        case FastReject.Reject(expectedOneOf) =>
+          badUse(s"Could not decode ${Printer.TypeReprShortCode.show(k)} as a kind. Expected one of ${expectedOneOf.mkString(", ")}")
 
-  private def decodeKind__(using Quotes)(k: qr.TypeRepr): Option[Either[String, Kind]] =
+  private def decodeKind__(using Quotes, Reporting.Context)(k: qr.TypeRepr): FastReject[Kind] =
     import qr.*
 
     k.dealiasKeepOpaques match
       case tp if tp =:= TypeRepr.of[*] =>
-        Some(Right(Kind.Tp))
+        FastReject.Success(Kind.Tp)
       case AppliedType(f, args) if f =:= TypeRepr.of[->>] =>
         args match
           case inKs :: outK :: Nil =>
-            Some(
-              for
-                in <- decodeKindOrKinds_(inKs)
-                ks = in.left.map(Kinds.single).merge
-                l  <- decodeKind_(outK)
-              yield
-                Kind.arr(ks, l)
-            )
+            FastReject.Success:
+              val in = decodeKindOrKinds(inKs)
+              val ks = in.left.map(Kinds.single).merge
+              val l  = decodeKind(outK)
+              Kind.arr(ks, l)
           case _ =>
             assertionFailed(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
       case other =>
-        None
+        FastReject.Reject(expectedOneOf = List(typeShortCode(TypeRepr.of[*]), typeShortCode(TypeRepr.of[->>])))
 
   def decodeKinds(using Quotes, Reporting.Context)(kinds: qr.TypeRepr): Kinds =
-    inside(kinds):
-      decodeKinds_(kinds) match
-        case Right(ks) => ks
-        case Left(msg) => badUse(msg)
-
-  private def decodeKinds_(using Quotes)(kinds: qr.TypeRepr): Either[String, Kinds] =
     import qr.*
-    decodeKinds__(kinds) match
-      case Some(res) => res
-      case None      => (new Exception).printStackTrace; Left(s"Cannot decode ${Printer.TypeReprShortCode.show(kinds)} as a list of kinds. Expected k1 :: k2 :: ... :: TNil")
+    inside(kinds):
+      decodeKinds__(kinds) match
+        case FastReject.Success(res) =>
+          res
+        case FastReject.Reject(expectedOneOf) =>
+          badUse(s"Cannot decode ${Printer.TypeReprShortCode.show(kinds)} as a list of kinds. Expected one of ${expectedOneOf.mkString(", ")}")
 
-  private def decodeKinds__(using Quotes)(kinds: qr.TypeRepr): Option[Either[String, Kinds]] =
+  private def decodeKinds__(using Quotes, Reporting.Context)(kinds: qr.TypeRepr): FastReject[Kinds] =
     import qr.*
 
     kinds.dealiasKeepOpaques match
       case tnil if tnil =:= TypeRepr.of[TNil] =>
-        Some(Right(Kinds.Empty))
+        FastReject.Success(Kinds.Empty)
       case AppliedType(f, args) if f =:= TypeRepr.of[::] =>
         args match
           case k :: ks :: Nil =>
-            Some(
-              for
-                k  <- decodeKind_(k)
-                ks <- decodeKinds_(ks)
-              yield
-                k :: ks
-            )
+            FastReject.Success:
+              val k1  = decodeKind(k)
+              val ks1 = decodeKinds(ks)
+              k1 :: ks1
           case _ =>
             assertionFailed(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
       case other =>
-        None
+        FastReject.Reject(expectedOneOf = List(typeShortCode[TNil], typeShortCode[::]))
 
   def decodeKindOrKinds(using Quotes, Reporting.Context)(ks: qr.TypeRepr): Either[Kind, Kinds] =
-    inside(ks):
-      decodeKindOrKinds_(ks) match
-        case Right(r) => r
-        case Left(e)  => badUse(e)
-
-  def decodeKindOrKinds_(using Quotes)(ks: qr.TypeRepr): Either[String, Either[Kind, Kinds]] =
     import qr.*
 
-    decodeKind__(ks) match
-      case Some(Right(k)) => Right(Left(k))
-      case Some(Left(e))  => Left(e)
-      case None =>
-        decodeKinds__(ks) match
-          case Some(Right(ks)) => Right(Right(ks))
-          case Some(Left(e))   => Left(e)
-          case None =>
-            Left(s"Could not decode ${Printer.TypeReprShortCode.show(ks)} as a kind(s).")
+    inside(ks):
+      decodeKind__(ks) match
+        case FastReject.Success(k) => Left(k)
+        case FastReject.Reject(expectedOneOf1) =>
+          decodeKinds__(ks) match
+            case FastReject.Success(ks) => Right(ks)
+            case FastReject.Reject(expectedOneOf2) =>
+              badUse(s"Could not decode ${Printer.TypeReprShortCode.show(ks)} as a kind(s). Expected one of ${(expectedOneOf1 ++ expectedOneOf2).mkString(", ")}")
 
   def kindToBounds(k: Kind)(using Quotes): qr.TypeBounds =
     import qr.*
@@ -276,7 +261,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   )(using
     Reporting.Context
   ): Type[Any] =
-    inside(s"decoding ${typeShortCode(Type.of[Code])} applied to type arguments ${typeShortCode(Type.of[As])}") {
+    inside(s"decoding ${typeShortCode[Code]} applied to type arguments ${typeShortCode[As]}") {
       val args = unbundleTypeArgs(Type.of[As])
 
       TypeRepr.of[Code].dealiasKeepOpaques match
