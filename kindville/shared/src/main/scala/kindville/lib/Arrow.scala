@@ -20,7 +20,7 @@ object Arrow {
     // basically just Box.packer[Code[K]], but need the result to formally return `Arrow[K, F, A, B]` instead of `Box`
     decode(
       [⋅⋅[_]] => k ?=>
-        val packer: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => F[A, B] => Arrow[K, F, A, B] =
+        val packer: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => F[A, B] => Arrow[K, F, ⋅⋅[A], ⋅⋅[B]] =
           k.splice(Box.packer[Code[K]])
         packer
     )
@@ -40,7 +40,7 @@ object Arrow {
     // basically just Box.unpacker[Code[K]], but need the result to formally take `Arrow[K, F, A, B]` instead of `Box`
     decode(
       [⋅⋅[_]] => k ?=>
-        val unpacker: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => Arrow[K, F, A, B] => F[A, B] =
+        val unpacker: [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => Arrow[K, F, ⋅⋅[A], ⋅⋅[B]] => F[A, B] =
           k.splice(Box.unpacker[Code[K]])
         unpacker
     )

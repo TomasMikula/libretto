@@ -23,4 +23,25 @@ class ArrowTests extends AnyFunSuite {
     assert(gy("hello") == 5)
   }
 
+  test("pack/unpack BiFunction") {
+    case class BiFunction[A1, A2, B1, B2](f: (A1, A2) => (B1, B2)):
+      def apply(a1: A1, a2: A2): (B1, B2) = f(a1, a2)
+
+    val x: Arrow[* :: * :: TNil, BiFunction, String :: Int :: TNil, Int :: String :: TNil] =
+      Arrow.pack[* :: * :: TNil, BiFunction, String :: Int :: TNil, Int :: String :: TNil](BiFunction((a, b) => (b, a)))
+
+    val y: Arrow[* :: * :: TNil, BiFunction, String :: Int :: TNil, Int :: String :: TNil] =
+      Arrow.packer[* :: * :: TNil](BiFunction((a, b) => (b, a)))
+
+    val fx: BiFunction[String, Int, Int, String] = Arrow.unpack(x)
+    val fy: BiFunction[String, Int, Int, String] = Arrow.unpack(y)
+    val gx: BiFunction[String, Int, Int, String] = Arrow.unpacker[* :: * :: TNil](x)
+    val gy: BiFunction[String, Int, Int, String] = Arrow.unpacker[* :: * :: TNil](y)
+
+    assert(fx("hello", 1) == (1, "hello"))
+    assert(fy("hello", 1) == (1, "hello"))
+    assert(gx("hello", 1) == (1, "hello"))
+    assert(gy("hello", 1) == (1, "hello"))
+  }
+
 }
