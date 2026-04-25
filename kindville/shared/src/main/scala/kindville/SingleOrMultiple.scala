@@ -19,6 +19,11 @@ private[kindville] enum SingleOrMultiple[A] {
       case Single(_) => 1
       case Multiple(as) => as.size
 
+  def mkString(l: String, m: String, r: String): String =
+    this match
+      case Single(a) => a.toString
+      case Multiple(as) => as.mkString(l, m, r)
+
   def zipWithIndex: SingleOrMultiple[(A, Int)] =
     this match
       case Single(a) => Single((a, 0))

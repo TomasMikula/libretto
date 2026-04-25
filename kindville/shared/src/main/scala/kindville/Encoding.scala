@@ -503,12 +503,12 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case p: ParamRef =>
           p match
             case ctx.substitutesTypeTo(q) => q
-            case ctx.expandsTo(ps)        => badUse(s"Invalid use of kind-expanded type argument ${typeShortCode(p)}. It can only be used in type argument position.")
+            case ctx.expandsTo(ps)        => badUse(s"Invalid use of kind-expanded type parameter ${typeShortCode(p)} (which expands to ${ps.map(typeShortCode).mkString("(", ", ", ")")}). It can only be used in type argument position.")
             case p                        => p
         case t @ TypeRef(parent, name) =>
           t match
             case ctx.substitutesTypeTo(u) => u
-            case ctx.expandsTo(ts)        => badUse(s"Invalid use of kind-expanded type argument ${typeShortCode(t)}. It can only be used in type argument position.")
+            case ctx.expandsTo(ts)        => badUse(s"Invalid use of kind-expanded type parameter ${typeShortCode(t)} (which expands to ${ts.map(typeShortCode).mkString("(", ", ", ")")}). It can only be used in type argument position.")
             case t                        => checkNonOccurrence(marker, ctx, parent); t
         case TermRef(prefix, ident) =>
           TermRef(decodeType(marker, ctx, prefix), ident)
