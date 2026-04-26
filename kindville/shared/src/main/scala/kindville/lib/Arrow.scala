@@ -50,4 +50,11 @@ object Arrow {
     transparent inline def unpack =
       Box.unpack(a)
   }
+
+  sealed trait Opt[K, F <: AnyKind, A <: AnyKind, B <: AnyKind]
+
+  object Opt {
+    case class None[K, F <: AnyKind, A <: AnyKind]() extends Opt[K, F, A, A]
+    case class Some[K, F <: AnyKind, A <: AnyKind, B <: AnyKind](arrow: Arrow[K, F, A, B]) extends Opt[K, F, A, B]
+  }
 }

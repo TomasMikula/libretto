@@ -6,10 +6,10 @@ import org.scalatest.funsuite.AnyFunSuite
 class ActionTests extends AnyFunSuite {
 
   test("action of Function1 on Option") {
-    val in = [A, B] => (oa: Option[A], f: A => B) => oa.map(f)
+    val actionRaw = [A, B] => (oa: Option[A], f: A => B) => oa.map(f)
 
     val action: Action[kindville.*, Option, Function1] =
-      Action.pack[*, Option, Function1](in)
+      Action.pack[*, Option, Function1](actionRaw)
 
     val strOpt: App[kindville.*, Option, String] =
       App.packer[*](Some("hello"))
@@ -28,6 +28,28 @@ class ActionTests extends AnyFunSuite {
     assert(out3 == Some(5))
     assert(out4 == Some(5))
     assert(out5 == Some(5))
+  }
+
+  test("applyOpt of Function1 on Option") {
+    val actionRaw = [A, B] => (oa: Option[A], f: A => B) => oa.map(f)
+
+    val action: Action[kindville.*, Option, Function1] =
+      Action.pack[*, Option, Function1](actionRaw)
+
+    val intOpt: App[kindville.*, Option, Int] =
+      App.packer[*](Some(1))
+
+    val intToInt1: Arrow.Opt[kindville.*, Function1, Int, Int] =
+      Arrow.Opt.Some(Arrow.packer[*](_ * 2))
+
+    val intToInt2: Arrow.Opt[kindville.*, Function1, Int, Int] =
+      Arrow.Opt.None()
+
+    val out1 = action.applyOpt(intOpt, intToInt1).unpack
+    val out2 = action.applyOpt(intOpt, intToInt2).unpack
+
+    assert(out1 == Some(2))
+    assert(out2 == Some(1))
   }
 
 }

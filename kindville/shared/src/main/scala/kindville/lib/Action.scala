@@ -62,5 +62,15 @@ object Action {
           k.splice(App.pack[K, G, B])[G0[B0] => App[K, G, B]](y)
       )
         .typecheckAs[App[K, G, B]]
+
+    transparent inline def applyOpt[A <: AnyKind, B <: AnyKind](
+      ga: App[K, G, A],
+      fOpt: Arrow.Opt[K, F, A, B],
+    ): App[K, G, B] =
+      fOpt match
+        case Arrow.Opt.Some(f) =>
+          apply(ga, f)
+        case Arrow.Opt.None() =>
+          ga
   }
 }
