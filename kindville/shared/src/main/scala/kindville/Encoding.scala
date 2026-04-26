@@ -160,29 +160,50 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   import Encoding.*
   import q.reflect.*
 
-  enum ContextElem:
-    case TypeSubstitution(src: ParamRef | TypeRef, tgt: TypeRepr)
-    case TypeArgExpansion(src: ParamRef | TypeRef, tgt: SingleOrMultiple[TypeRepr])
-    case TermSubstitution(src: TermRef, tgt: Term)
+  class DecodingContext(stack: List[DecodingContext.Elem]) {
+    import DecodingContext.*
 
-  extension (ctx: List[ContextElem])
-    def substitutesTypeTo: TypeSubstitutionExtractor = TypeSubstitutionExtractor(ctx)
-    def substitutesTermTo: TermSubstitutionExtractor = TermSubstitutionExtractor(ctx)
-    def expandsTo: ExpansionExtractor = ExpansionExtractor(ctx)
+    def substitutesType(p: ParamRef | TypeRef): Option[TypeRepr] =
+      stack.collectFirst { case Elem.TypeSubstitution(src, res) if src =:= p => res }
 
-  class TypeSubstitutionExtractor(ctx: List[ContextElem]):
-    def unapply(p: ParamRef | TypeRef): Option[TypeRepr] =
-      ctx.collectFirst { case ContextElem.TypeSubstitution(src, res) if src =:= p =>
-        res
-      }
+    def substitutesTerm(i: Ident): Option[Term] =
+      stack.collectFirst { case Elem.TermSubstitution(src, res) if src.termSymbol == i.symbol => res }
 
-  class TermSubstitutionExtractor(ctx: List[ContextElem]):
-    def unapply(i: Ident): Option[Term] =
-      ctx.collectFirst { case ContextElem.TermSubstitution(src, res) if src.termSymbol == i.symbol => res }
+    def expands(p: ParamRef | TypeRef): Option[SingleOrMultiple[TypeRepr]] =
+      stack.collectFirst { case Elem.TypeArgExpansion(src, res) if src =:= p => res }
 
-  class ExpansionExtractor(ctx: List[ContextElem]):
-    def unapply(p: ParamRef | TypeRef): Option[SingleOrMultiple[TypeRepr]] =
-      ctx.collectFirst { case ContextElem.TypeArgExpansion(src, res) if src =:= p => res }
+    def substitutesTypeTo: TypeSubstitutionExtractor = TypeSubstitutionExtractor(this)
+    def substitutesTermTo: TermSubstitutionExtractor = TermSubstitutionExtractor(this)
+    def expandsTo: ExpansionExtractor = ExpansionExtractor(this)
+
+    def push(elem: DecodingContext.Elem): DecodingContext =
+      DecodingContext(elem :: stack)
+
+    def pushAll(elems: List[DecodingContext.Elem]): DecodingContext =
+      DecodingContext(elems reverse_::: stack)
+  }
+
+  object DecodingContext {
+    enum Elem:
+      case TypeSubstitution(src: ParamRef | TypeRef, tgt: TypeRepr)
+      case TypeArgExpansion(src: ParamRef | TypeRef, tgt: SingleOrMultiple[TypeRepr])
+      case TermSubstitution(src: TermRef, tgt: Term)
+
+    class TypeSubstitutionExtractor(ctx: DecodingContext):
+      def unapply(p: ParamRef | TypeRef): Option[TypeRepr] =
+        ctx.substitutesType(p)
+
+    class TermSubstitutionExtractor(ctx: DecodingContext):
+      def unapply(i: Ident): Option[Term] =
+        ctx.substitutesTerm(i)
+
+    class ExpansionExtractor(ctx: DecodingContext):
+      def unapply(p: ParamRef | TypeRef): Option[SingleOrMultiple[TypeRepr]] =
+        ctx.expands(p)
+
+    def empty: DecodingContext =
+      DecodingContext(Nil)
+  }
 
   case class TypeLambdaTemplate(
     paramNames: Groups[String],
@@ -238,7 +259,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
               val decodedTypeParams =
                 decodeTypeParams(
                   marker,
-                  ctx = Nil,
+                  ctx = DecodingContext.empty,
                   params
                 )
               TypeLambdaTemplate(
@@ -297,7 +318,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ParseKuotedResult(marker, kuotesParam, _, payload) =
         parseKuoted(encoded)
 
-      decodeTerm(marker, kuotesParam.ref, ctx = Nil, Symbol.spliceOwner, payload)
+      decodeTerm(marker, kuotesParam.ref, ctx = DecodingContext.empty, Symbol.spliceOwner, payload)
         .asExpr
     }
 
@@ -400,48 +421,49 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     targs: List[TypeRepr],
   )(using
     Reporting.Context,
-  ): List[ContextElem] = {
-    import ContextElem.{TypeSubstitution, TypeArgExpansion}
+  ): DecodingContext = {
+    import DecodingContext.Elem.{TypeSubstitution, TypeArgExpansion}
 
     if (tparams.size != targs.size)
       badUse(s"Expected ${targs.size} custom type parameters matching the arguments ${targs.map(t => typeShortCode(t)).mkString(", ")}. Got ${tparams.map(p => typeShortCode(p.ref)).mkString(", ")}")
 
-    (tparams zip targs) map {
-      case ((name, bounds, ref), t) =>
-        inside(s"substituting type argument ${typeShortCode(t)} for type parameter ${typeShortCode(ref)} with bounds ${bounds.fold(typeShortCode, treeShortCode)}"):
-          val elem: TypeSubstitution | TypeArgExpansion =
-            bounds match
-              case Left(TypeBounds(lower, upper)) =>
-                upper match
-                  case AppliedType(f, List(kinds)) if f =:= marker =>
-                    lower.asType match
-                      case '[Nothing] =>
-                        decodeKindOrKinds(kinds) match
-                          case Left(k) =>
-                            checkKind(t, k)
-                            TypeArgExpansion(ref, Single(t))
-                          case Right(kinds) =>
-                            val ts = unbundleTypeArgs(t.asType)
-                            val ks = kinds.toList
-                            if (ts.size != ks.size)
-                              badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(t)}")
-                            (ks zip ts).foreach { case (k, t) => checkKind(TypeRepr.of(using t), k) }
-                            TypeArgExpansion(ref, Multiple(ts.map(TypeRepr.of(using _))))
-                      case other =>
-                        badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(marker)}) with a lower bound (${typeShortCode(lower)})")
-                  case _ =>
-                    TypeSubstitution(ref, t)
-              case Right(ltt) =>
-                TypeSubstitution(ref, t)
+    DecodingContext:
+      (tparams zip targs) map {
+        case ((name, bounds, ref), t) =>
+          inside(s"substituting type argument ${typeShortCode(t)} for type parameter ${typeShortCode(ref)} with bounds ${bounds.fold(typeShortCode, treeShortCode)}"):
+            val elem: TypeSubstitution | TypeArgExpansion =
+              bounds match
+                case Left(TypeBounds(lower, upper)) =>
+                  upper match
+                    case AppliedType(f, List(kinds)) if f =:= marker =>
+                      lower.asType match
+                        case '[Nothing] =>
+                          decodeKindOrKinds(kinds) match
+                            case Left(k) =>
+                              checkKind(t, k)
+                              TypeArgExpansion(ref, Single(t))
+                            case Right(kinds) =>
+                              val ts = unbundleTypeArgs(t.asType)
+                              val ks = kinds.toList
+                              if (ts.size != ks.size)
+                                badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(t)}")
+                              (ks zip ts).foreach { case (k, t) => checkKind(TypeRepr.of(using t), k) }
+                              TypeArgExpansion(ref, Multiple(ts.map(TypeRepr.of(using _))))
+                        case other =>
+                          badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(marker)}) with a lower bound (${typeShortCode(lower)})")
+                    case _ =>
+                      TypeSubstitution(ref, t)
+                case Right(ltt) =>
+                  TypeSubstitution(ref, t)
 
-          // decode since the provided type args may contain the marker
-          elem match
-            case TypeSubstitution(ref, t) =>
-              TypeSubstitution(ref, decodeType(marker, ctx = Nil, t))
-            case TypeArgExpansion(ref, ts) =>
-              val ts1 = ts.map(decodeType(marker, ctx = Nil, _))
-              TypeArgExpansion(ref, ts1)
-    }
+            // decode since the provided type args may contain the marker
+            elem match
+              case TypeSubstitution(ref, t) =>
+                TypeSubstitution(ref, decodeType(marker, ctx = DecodingContext.empty, t))
+              case TypeArgExpansion(ref, ts) =>
+                val ts1 = ts.map(decodeType(marker, ctx = DecodingContext.empty, _))
+                TypeArgExpansion(ref, ts1)
+      }
   }
 
   private def checkKind(t: TypeRepr, k: Kind)(using Reporting.Context): Unit =
@@ -451,7 +473,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeType(
     marker: TypeRepr,
-    ctx: List[ContextElem],
+    ctx: DecodingContext,
     body: TypeRepr,
   )(using
     Reporting.Context,
@@ -526,7 +548,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   private def decodeTerm(
     marker: TypeRef | ParamRef,
     kuotes: TermRef,
-    ctx: List[ContextElem],
+    ctx: DecodingContext,
     owner: Symbol,
     expr: Term,
   )(using
@@ -621,14 +643,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   private def decodeBlock(
     marker: TypeRef | ParamRef,
     kuotes: TermRef,
-    ctx: List[ContextElem],
+    ctx: DecodingContext,
     owner: Symbol,
     stmts: List[Statement],
     expr: Term,
   )(using
     Reporting.Context,
   ): Block = {
-    val preprocessedStmts: List[(ContextElem, (fullCtx: List[ContextElem]) => Statement)] =
+    val preprocessedStmts: List[(DecodingContext.Elem, (fullCtx: DecodingContext) => Statement)] =
       stmts.map { stmt =>
         inside(stmt) {
           stmt match
@@ -645,7 +667,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                 Flags.EmptyFlags,
                 privateWithin = Symbol.noSymbol,
               )
-              ( ContextElem.TermSubstitution(oldRef,  Ref.term(newSym.termRef))
+              ( DecodingContext.Elem.TermSubstitution(oldRef,  Ref.term(newSym.termRef))
               , ctx => ValDef(newSym, Some(decodeTerm(marker, kuotes, ctx, owner = newSym, body)))
               )
             case other =>
@@ -653,14 +675,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         }
       }
 
-    val ctx1 = preprocessedStmts.map(_._1) ::: ctx
+    val ctx1 = ctx.pushAll(preprocessedStmts.map(_._1))
     val stmts1 = preprocessedStmts.map(_._2(ctx1))
     Block(stmts1, decodeTerm(marker, kuotes, ctx1, owner, expr))
   }
 
   private def decodePolyType(
     marker: TypeRepr,
-    ctx: List[ContextElem],
+    ctx: DecodingContext,
     pt: PolyType,
   )(using
     Reporting.Context,
@@ -691,7 +713,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeMethodType(
     marker: TypeRepr,
-    ctx: List[ContextElem],
+    ctx: DecodingContext,
     methType: MethodType,
   )(using
     Reporting.Context,
@@ -705,7 +727,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   private def decodePolyFun(
     marker: TypeRef | ParamRef,
     kuotes: TermRef,
-    ctx: List[ContextElem],
+    ctx: DecodingContext,
     tparams: List[(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: TypeRef)],
     params: List[(name: String, tpe: TypeTree, ref: TermRef)],
     returnType: TypeTree,
@@ -730,14 +752,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ctx1 = decodedTypeParams.innerContext(tparams)
       decodeType(marker, ctx1, returnType.tpe)
 
-    def paramSubstitutions(newParams: List[Term]): List[ContextElem.TermSubstitution] =
+    def paramSubstitutions(newParams: List[Term]): List[DecodingContext.Elem.TermSubstitution] =
       (params zip newParams).map { case (pOld, pNew) =>
-        ContextElem.TermSubstitution(pOld.ref, pNew)
+        DecodingContext.Elem.TermSubstitution(pOld.ref, pNew)
       }
 
     def body1(newTParams: Int => TypeRepr, newParams: List[Term], owner: Symbol): Term =
       val ctx1 = decodedTypeParams.innerContext(newTParams)
-      val ctx2 = paramSubstitutions(newParams) ::: ctx1
+      val ctx2 = ctx1.pushAll(paramSubstitutions(newParams))
       decodeTerm(marker, kuotes, ctx2, owner, body)
 
     PolyFun(decodedTypeParams.decodedNamesFlat, tParamBounds1, paramNames, paramTypes, returnType1, body1, owner)
@@ -746,7 +768,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   private def decodeFun(
     marker: TypeRef | ParamRef,
     kuotes: TermRef,
-    ctx: List[ContextElem],
+    ctx: DecodingContext,
     params: List[(name: String, tpe: TypeTree, ref: TermRef)],
     returnType: TypeTree,
     body: Term,
@@ -763,13 +785,13 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     val returnType1: TypeRepr =
       decodeType(marker, ctx, returnType.tpe)
 
-    def paramSubstitutions(newParams: List[Term]): List[ContextElem.TermSubstitution] =
+    def paramSubstitutions(newParams: List[Term]): List[DecodingContext.Elem.TermSubstitution] =
       (params zip newParams).map { case (pOld, pNew) =>
-        ContextElem.TermSubstitution(pOld.ref, pNew)
+        DecodingContext.Elem.TermSubstitution(pOld.ref, pNew)
       }
 
     def body1(newParams: List[Term], owner: Symbol): Term =
-      val ctx1 = paramSubstitutions(newParams) ::: ctx
+      val ctx1 = ctx.pushAll(paramSubstitutions(newParams))
       decodeTerm(marker, kuotes, ctx1, owner, body)
 
     Lambda(
@@ -784,7 +806,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeTypeParams(
     marker: TypeRepr,
-    ctx: List[ContextElem],
+    ctx: DecodingContext,
     tParams: List[(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: ParamRef | TypeRef)],
   )(using
     Reporting.Context,
@@ -827,7 +849,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private class DecodedTypeParams(
     marker: TypeRepr,
-    ctx: List[ContextElem],
+    ctx: DecodingContext,
     expandedTypeParams: List[(index: Int, expanded: PostExpansionParam)],
   ) {
     private lazy val names0: Groups[String] =
@@ -850,22 +872,22 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     def decodedNamesFlat: List[String] =
       decodedNames.toFlatList
 
-    def innerContext(actualTypeParams: Int => TypeRepr): List[ContextElem] =
-      val newSubstitutions: List[ContextElem] =
+    def innerContext(actualTypeParams: Int => TypeRepr): DecodingContext =
+      val newSubstitutions: List[DecodingContext.Elem] =
         expandedTypeParams
           .map {
             case (j, PostExpansionParam.Expanded(ps, origRef)) =>
-              ContextElem.TypeArgExpansion(origRef, ps.zipWithIndex.map { case (_, i) => actualTypeParams(j + i) })
+              DecodingContext.Elem.TypeArgExpansion(origRef, ps.zipWithIndex.map { case (_, i) => actualTypeParams(j + i) })
             case (j, PostExpansionParam.Original(_, _, origRef)) =>
-              ContextElem.TypeSubstitution(origRef, actualTypeParams(j))
+              DecodingContext.Elem.TypeSubstitution(origRef, actualTypeParams(j))
           }
-      newSubstitutions ::: ctx
+      ctx.pushAll(newSubstitutions)
 
     def decodedBoundsAndInnerContext(
       actualTypeParams: Int => TypeRepr,
     )(using
       Reporting.Context,
-    ): (bounds: Groups[TypeBounds], innerContext: List[ContextElem]) =
+    ): (bounds: Groups[TypeBounds], innerContext: DecodingContext) =
       val ctx1 = innerContext(actualTypeParams)
       val bounds1 = bounds0.map(decodeTypeBounds(marker, ctx1, _))
       (bounds1, ctx1)
@@ -889,7 +911,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   private object DecodedTypeParams {
     def apply(
       marker: TypeRepr,
-      ctx: List[ContextElem],
+      ctx: DecodingContext,
       expandedTypeParams: List[PostExpansionParam],
     ): DecodedTypeParams =
       val expandedTypeParamsWithIndex: List[(Int, PostExpansionParam)] =
@@ -901,7 +923,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def expandTypeArgs(
     marker: TypeRepr,
-    ctx: List[ContextElem],
+    ctx: DecodingContext,
     targs: List[TypeRepr],
   )(using
     Reporting.Context,
@@ -947,7 +969,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeTypeBounds(
     marker: TypeRepr,
-    ctx: List[ContextElem],
+    ctx: DecodingContext,
     bounds: Either[TypeBounds, LambdaTypeTree],
   )(using
     Reporting.Context,
@@ -999,7 +1021,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def checkNonOccurrence(
     marker: TypeRepr,
-    ctx: List[ContextElem],
+    ctx: DecodingContext,
     body: TypeRepr,
   ): Unit =
     body match
