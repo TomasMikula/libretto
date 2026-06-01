@@ -650,34 +650,49 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   )(using
     Reporting.Context,
   ): Block = {
-    val preprocessedStmts: List[(DecodingContext.Elem, (fullCtx: DecodingContext) => Statement)] =
-      stmts.map { stmt =>
-        inside(stmt) {
-          stmt match
-            case v @ ValDef(name, tpt, Some(body)) =>
-              val oldRef = v.symbol.termRef
-              val newTpe = decodeType(marker, ctx, tpt.tpe) // TODO: ctx to include any definitions earlier in the block
-              val flags = v.symbol.flags
-
-              val newSym = Symbol.newVal(
-                owner,
-                name,
-                newTpe,
-                // v.symbol.flags,  // throws an error (https://github.com/scala/scala3/issues/25412)
-                Flags.EmptyFlags,
-                privateWithin = Symbol.noSymbol,
-              )
-              ( DecodingContext.Elem.TermSubstitution(oldRef,  Ref.term(newSym.termRef))
-              , ctx => ValDef(newSym, Some(decodeTerm(marker, kuotes, ctx, owner = newSym, body)))
-              )
-            case other =>
-              unimplemented(s"decoding statement ${treeShortCode(other)}\nTree: ${treeStruct(other)}")
-        }
+    val (ctx1, stmtFns) =
+      stmts.mapS[DecodingContext, (fullCtx: DecodingContext) => Statement](ctx) {
+        (ctx, stmt) =>
+          inside(stmt) {
+            stmt match
+              case defn: Definition =>
+                val (ctxElem, stmtFn) = decodeDefinition(marker, kuotes, ctx, owner, defn)
+                (ctx.push(ctxElem), stmtFn)
+              case other =>
+                unimplemented(s"decoding statement ${treeShortCode(other)}\nTree: ${treeStruct(other)}")
+          }
       }
-
-    val ctx1 = ctx.pushAll(preprocessedStmts.map(_._1))
-    val stmts1 = preprocessedStmts.map(_._2(ctx1))
+    val stmts1 = stmtFns.map(_(ctx1))
     Block(stmts1, decodeTerm(marker, kuotes, ctx1, owner, expr))
+  }
+
+  private def decodeDefinition(
+    marker: TypeRef | ParamRef,
+    kuotes: TermRef,
+    ctx: DecodingContext,
+    owner: Symbol,
+    defn: Definition,
+  )(using
+    Reporting.Context,
+  ): (DecodingContext.Elem, (fullCtx: DecodingContext) => Statement) = {
+    defn match
+      case v @ ValDef(name, tpt, Some(body)) =>
+        val oldRef = v.symbol.termRef
+        val newTpe = decodeType(marker, ctx, tpt.tpe)
+        val flags = v.symbol.flags
+        val newSym = Symbol.newVal(
+          owner,
+          name,
+          newTpe,
+          // v.symbol.flags,  // throws an error (https://github.com/scala/scala3/issues/25412)
+          Flags.EmptyFlags,
+          privateWithin = Symbol.noSymbol,
+        )
+        ( DecodingContext.Elem.TermSubstitution(oldRef,  Ref.term(newSym.termRef))
+        , ctx => ValDef(newSym, Some(decodeTerm(marker, kuotes, ctx, owner = newSym, body)))
+        )
+      case other =>
+        unimplemented(s"decoding definition ${treeShortCode(other)}\nTree: ${treeStruct(other)}")
   }
 
   private def decodePolyType(
