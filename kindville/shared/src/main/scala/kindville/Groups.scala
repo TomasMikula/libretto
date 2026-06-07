@@ -8,7 +8,13 @@ private[kindville] object Groups {
   def fromList[A](as: List[SingleOrMultiple[A]]): Groups[A] =
     as
 
+  def unapplySeq[A](as: Groups[A]): Option[Seq[SingleOrMultiple[A]]] =
+    Some(as)
+
   extension [A](as: Groups[A]) {
+    def groupCount: Int =
+      as.length
+
     def totalSize: Int =
       as.map(_.size).sum
 

@@ -22,12 +22,14 @@ class ActionTests extends AnyFunSuite {
     val out3 = action.actBy((_: String).length())(Some("hello"))
     val out4 = action.actOn(Some("hello"))(_.length())
     val out5 = action(strOpt, strToInt).unpack
+    val out6 = action.applyDynamic[String, Int](strOpt, strToInt).unpack
 
     assert(out1 == Some(5))
     assert(out2 == Some(5))
     assert(out3 == Some(5))
     assert(out4 == Some(5))
     assert(out5 == Some(5))
+    assert(out6 == Some(5))
   }
 
   test("applyOpt of Function1 on Option") {

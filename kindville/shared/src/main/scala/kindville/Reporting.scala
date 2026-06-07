@@ -28,10 +28,10 @@ private object Reporting {
   def unsupported(using pos: SourcePos, q: Quotes)(msg: String): Nothing =
     errorAndAbort(s"Unsupported: $msg (at $pos).\nIf you have a use case for it, please request an enhancement.")
 
-  def unimplemented(using pos: SourcePos, q: Quotes)(msg: String): Nothing =
-    errorAndAbort(s"Unhandled case: $msg (at $pos).\n\nPlease, request an enhancement.")
+  def unimplemented(using pos: SourcePos, q: Quotes, c: Reporting.Context)(msg: String): Nothing =
+    errorAndAbortWithContext(s"Unhandled case: $msg (at $pos).\n\nPlease, request an enhancement.")
 
-  def badUse(using Quotes, Reporting.Context)(msg: String): Nothing =
+  private def errorAndAbortWithContext(msg: String)(using Quotes, Reporting.Context): Nothing =
     val ctxStr =
       summon[Reporting.Context]
         .stack
@@ -39,6 +39,9 @@ private object Reporting {
         .mkString("in\n  ", "\nin\n  ", "")
     val msgInContext = s"$msg\n$ctxStr"
     errorAndAbort(msgInContext)
+
+  def badUse(using Quotes, Reporting.Context)(msg: String): Nothing =
+    errorAndAbortWithContext(msg)
 
   def assertionFailed(using pos: SourcePos, q: Quotes)(msg: String): Nothing =
     errorAndAbort(s"Assertion failed: $msg (at $pos).\n\nPlease, report a bug.")

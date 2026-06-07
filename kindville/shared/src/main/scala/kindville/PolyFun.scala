@@ -79,6 +79,8 @@ private object PolyFun {
                 None
           case _ =>
             None
+      case Block(Nil, term) =>
+        unapply(term)
       case _ =>
         None
   }

@@ -47,7 +47,7 @@ object Action {
             k.splice(a.act)[[A <: ⋅⋅[K], B <: ⋅⋅[K]] => (G0[A], F0[A, B]) => G0[B]][A, B](on, f)
       )
 
-    transparent inline def apply[A <: AnyKind, B <: AnyKind](
+    inline def apply[A <: AnyKind, B <: AnyKind](
       ga: App[K, G, A],
       f: Arrow[K, F, A, B],
     ): App[K, G, B] =
@@ -63,7 +63,7 @@ object Action {
       )
         .typecheckAs[App[K, G, B]]
 
-    transparent inline def applyOpt[A <: AnyKind, B <: AnyKind](
+    inline def applyOpt[A <: AnyKind, B <: AnyKind](
       ga: App[K, G, A],
       fOpt: Arrow.Opt[K, F, A, B],
     ): App[K, G, B] =
@@ -72,5 +72,26 @@ object Action {
           apply(ga, f)
         case Arrow.Opt.None() =>
           ga
+
+    /** Like [[apply]], but `A` and `B` don't need to be statically known. Instead, this method takes trusted evidence of `A`'s and `B`'s kindedness.
+     *
+     * Note that [[K]], [[G]], [[F]] still need to be statically known).
+     */
+    inline def applyDynamic[A, B](
+      ga: App[K, G, A],
+      f: Arrow[K, F, A, B],
+    )(using
+      A: (A ofKinds K),
+      B: (B ofKinds K),
+    ): App[K, G, B] =
+      A.decode[App[K, G, B]]:
+        [⋅⋅[_]] => () => [A0 <: ⋅⋅[K]] => (eva: ⋅⋅[A0] =~= A) ?=>
+          B.decode[App[K, G, B]]:
+            [⋅⋅⋅[_]] => () => [B0 <: ⋅⋅⋅[K]] => (evb: ⋅⋅⋅[B0] =~= B) ?=>
+              val ga0: App[K, G, ⋅⋅[A0]] = eva.substituteContra(ga)
+              val f0: Arrow[K, F, ⋅⋅[A0], ⋅⋅⋅[B0]] = eva.substituteContra[[X <: AnyKind] =>> Arrow[K, F, X, ⋅⋅⋅[B0]]](evb.substituteContra(f))
+              val gb0: App[K, G, ⋅⋅⋅[B0]] = apply[⋅⋅[A0], ⋅⋅⋅[B0]](ga0, f0)
+              evb.substituteCo(gb0)
+
   }
 }

@@ -3,6 +3,7 @@ package kindville
 import kindville.Reporting.*
 import kindville.SingleOrMultiple.{Multiple, Single}
 import scala.quoted.*
+import scala.util.chaining.*
 
 private object Encoding {
   def apply(using q: Quotes)(): Encoding[q.type] =
@@ -181,6 +182,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
     def pushAll(elems: List[DecodingContext.Elem]): DecodingContext =
       DecodingContext(elems reverse_::: stack)
+
+    override def toString: String =
+      stack.reverse.mkString("\n")
   }
 
   object DecodingContext {
@@ -351,6 +355,61 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         .asExpr
     }
 
+  def decode[Ks, As, R](
+    witness: Expr[As ofKinds Ks], // unused, but guards soundness
+    encoded: Expr[[⋅⋅[_]] => () => [A0s <: ⋅⋅[Ks]] => (⋅⋅[A0s] =~= As) => R],
+  )(using
+    Type[Ks],
+    Type[As], // typically just an abstract type parameter at compile time
+    Type[R],
+    Reporting.Context,
+  ): Expr[R] =
+    inside(encoded.asTerm) {
+      doParsePolyFun(encoded.asTerm) match {
+        case (List(marker), Nil, retTp, body) =>
+          inside(body) {
+            doParsePolyFun(body) match {
+              case (tparams @ List(a0s), params @ List(evParam), retTp, body) =>
+                val decoded =
+                  decodePolyFun(marker.ref, kuotes = null, DecodingContext.empty, tparams, params, retTp, body)
+                decoded.tparamNames match
+                  case Groups(a0s) =>
+                    if (a0s.size == 0)
+                      unsupported(s"Nullary kind list ${typeShortCode[Ks]} not yet supported in this position")
+                    else
+                      val f = decoded.mkTerm(Symbol.spliceOwner)
+                      // f is the decoded polymorphic function
+                      //   [A0 <: ..., ...] => ((A0 :: ... :: TNil) =~= As) ?=> R
+                      // Let's apply it to some type arguments and a forged `=~=` evidence.
+                      // In itself, this is unsound, but should not be misusable at use site.
+                      val (upperBounds, bundledUpperBounds) = decodeKindOrKinds(TypeRepr.of[Ks]) match
+                        case Left(kind) => kindToUpperBound(kind).pipe(ub => (ub :: Nil, ub))
+                        case Right(kinds) => kindsToUpperBounds(kinds).pipe(ubs => (ubs, bundleTypeArgs(ubs)))
+
+                      Select
+                        .unique(f, "apply")
+                        .appliedToTypes(upperBounds)
+                        .appliedTo(
+                          '{ summon[As =~= As] }.asTerm
+                            .changeOwner(Symbol.spliceOwner) // TODO: should not be necessary
+                            .pipe(Select.unique(_, "$asInstanceOf$"))
+                            .appliedToType(
+                              TypeRepr.of[=~=]
+                                .appliedTo(List(bundledUpperBounds, TypeRepr.of[As]))
+                            )
+                        )
+                        .asExprOf[R]
+                  case other =>
+                    assertionFailed(s"Expected a single type parameter group, but got ${other.groupCount}: $other")
+              case _ =>
+                assertionFailed(s"Expected a polymorphic function `[A0s <: ⋅⋅[Ks]] => (⋅⋅[A0s] =~= As) ?=> body`, but got ${treeShortCode(body)}")
+            }
+          }
+        case _ =>
+          assertionFailed(s"Expected a polymorphic function `[⋅⋅[_]] => () => body`, but got ${encoded.show}")
+      }
+    }
+
   private case class ParseKuotedResult(
     marker: TypeRef,
     kuotesParam: (name: String, tpe: TypeTree, ref: TermRef),
@@ -412,7 +471,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           insideInlinedCall(call):
             doParsePolyFun(expansion)
         case other =>
-          badUse(s"Expected a polymorphic function, got ${expr.show(using Printer.TreeStructure)}")
+          badUse(s"Expected a polymorphic function with a single type parameter list, got ${expr.show(using Printer.TreeStructure)}")
     }
 
   private def decodeTypeParamSubstitutions(
@@ -532,8 +591,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             case ctx.substitutesTypeTo(u) => u
             case ctx.expandsTo(ts)        => badUse(s"Invalid use of kind-expanded type parameter ${typeShortCode(t)} (which expands to ${ts.map(typeShortCode).mkString("(", ", ", ")")}). It can only be used in type argument position.")
             case t                        => checkNonOccurrence(marker, ctx, parent); t
-        case TermRef(prefix, ident) =>
-          TermRef(decodeType(marker, ctx, prefix), ident)
+        case t @ TermRef(prefix, ident) =>
+          Ref.term(t) match
+            case ctx.substitutesTermTo(u) =>
+              u.symbol.termRef
+            case _ =>
+              prefix match
+                case NoPrefix() => t
+                case prefix => TermRef(decodeType(marker, ctx, prefix), ident)
         case t: ThisType =>
           t
         case TypeBounds(lo, hi) =>
@@ -541,13 +606,18 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             decodeType(marker, ctx, lo),
             decodeType(marker, ctx, hi),
           )
+        case AndType(l, r) =>
+          AndType(
+            decodeType(marker, ctx, l),
+            decodeType(marker, ctx, r),
+          )
         case other =>
           unsupportedType(other)
     }
 
   private def decodeTerm(
     marker: TypeRef | ParamRef,
-    kuotes: TermRef,
+    kuotes: TermRef | Null,
     ctx: DecodingContext,
     owner: Symbol,
     expr: Term,
@@ -570,7 +640,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             given Printer[TypeRepr] = Printer.TypeReprShortCode
             badUse(s"Got ${arg.show} of type ${t.show}, expected type ${decodedU.show} (which is the decoding of ${u.show})")
         case PolyFun(tparams, params, retTp, body) =>
-          decodePolyFun(marker, kuotes, ctx, tparams, params, retTp, body, owner)
+          decodePolyFun(marker, kuotes, ctx, tparams, params, retTp, body)
+            .mkTerm(owner)
         case bl @ Block(List(stmt), Closure(method, optTp)) =>
           (stmt, method) match
             case (DefDef(name, paramss, retTp, Some(body)), Ident(methodName)) if methodName == name =>
@@ -629,20 +700,28 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             TypeTree.of(using decodeType(marker, ctx, tt.tpe).asType),
           )
         case Inlined(call, bindings, expansion) =>
+          val (ctx1, bindingFns) =
+            bindings.mapS[DecodingContext, (fullCtx: DecodingContext) => Definition](ctx) {
+              (ctx, binding) =>
+                inside(binding) {
+                  val (ctxElem, bindingFn) = decodeDefinition(marker, kuotes, ctx, owner, binding)
+                  (ctx.push(ctxElem), bindingFn)
+                }
+            }
+          val bindings1 = bindingFns.map(_(ctx1))
           Inlined(
             call,
-            bindings,
-            insideInlinedCall(call) {
-              decodeTerm(marker, kuotes, ctx, owner, expansion)
-            },
-          ).changeOwner(owner)
+            bindings1,
+            insideInlinedCall(call):
+              decodeTerm(marker, kuotes, ctx1, owner, expansion),
+          )
         case other =>
           unimplemented(s"decodeTerm(${treeStruct(expr)})")
     }
 
   private def decodeBlock(
     marker: TypeRef | ParamRef,
-    kuotes: TermRef,
+    kuotes: TermRef | Null,
     ctx: DecodingContext,
     owner: Symbol,
     stmts: List[Statement],
@@ -668,13 +747,13 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeDefinition(
     marker: TypeRef | ParamRef,
-    kuotes: TermRef,
+    kuotes: TermRef | Null,
     ctx: DecodingContext,
     owner: Symbol,
     defn: Definition,
   )(using
     Reporting.Context,
-  ): (DecodingContext.Elem, (fullCtx: DecodingContext) => Statement) = {
+  ): (DecodingContext.Elem, (fullCtx: DecodingContext) => Definition) = {
     defn match
       case v @ ValDef(name, tpt, Some(body)) =>
         val oldRef = v.symbol.termRef
@@ -691,6 +770,26 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         ( DecodingContext.Elem.TermSubstitution(oldRef,  Ref.term(newSym.termRef))
         , ctx => ValDef(newSym, Some(decodeTerm(marker, kuotes, ctx, owner = newSym, body)))
         )
+      case t @ TypeDef(name, tree) =>
+        tree match
+          case TypeBoundsTree(lower, upper) =>
+            if (lower.tpe =:= upper.tpe)
+              val tpe = decodeType(marker, ctx, lower.tpe)
+              val sym = Symbol.newTypeAlias(
+                owner,
+                name,
+                // t.symbol.flags, // throws an error
+                Flags.EmptyFlags,
+                tpe,
+                privateWithin = Symbol.noSymbol,
+              )
+              ( DecodingContext.Elem.TypeSubstitution(t.symbol.typeRef, sym.typeRef)
+              , ctx => TypeDef(sym)
+              )
+            else
+              unsupported(s"TypeDef with different lower and upper bound: ${treeShortCode(t)} (${treeStruct(t)})")
+          case other =>
+            unimplemented(s"Type definition with rhs = ${treeShortCode(other)}\nTree: ${treeStruct(other)}")
       case other =>
         unimplemented(s"decoding definition ${treeShortCode(other)}\nTree: ${treeStruct(other)}")
   }
@@ -739,18 +838,29 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       _ => decodeType(marker, ctx, returnType)
     )
 
+  private case class DecodedPolyFun(
+    tparamNames: Groups[String],
+    tparamBounds: (tparams: Int => TypeRepr) => Groups[TypeBounds],
+    paramNames: List[String],
+    paramTypes: (tparams: Int => TypeRepr) => List[TypeRepr],
+    returnType: (tparams: Int => TypeRepr) => TypeRepr,
+    body: (newTParams: Int => TypeRepr, newParams: List[Term], owner: Symbol) => Term,
+  ) {
+    def mkTerm(owner: Symbol): Term =
+      PolyFun(tparamNames.toFlatList, tparamBounds(_).toFlatList, paramNames, paramTypes, returnType, body, owner)
+  }
+
   private def decodePolyFun(
     marker: TypeRef | ParamRef,
-    kuotes: TermRef,
+    kuotes: TermRef | Null,
     ctx: DecodingContext,
     tparams: List[(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: TypeRef)],
     params: List[(name: String, tpe: TypeTree, ref: TermRef)],
     returnType: TypeTree,
     body: Term,
-    owner: Symbol,
   )(using
     Reporting.Context,
-  ): Term = {
+  ): DecodedPolyFun = {
     val decodedTypeParams =
       decodeTypeParams(marker, ctx, tparams)
 
@@ -777,12 +887,12 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ctx2 = ctx1.pushAll(paramSubstitutions(newParams))
       decodeTerm(marker, kuotes, ctx2, owner, body)
 
-    PolyFun(decodedTypeParams.decodedNamesFlat, tParamBounds1, paramNames, paramTypes, returnType1, body1, owner)
+    DecodedPolyFun(decodedTypeParams.decodedNames,  decodedTypeParams.decodedBounds, paramNames, paramTypes, returnType1, body1)
   }
 
   private def decodeFun(
     marker: TypeRef | ParamRef,
-    kuotes: TermRef,
+    kuotes: TermRef | Null,
     ctx: DecodingContext,
     params: List[(name: String, tpe: TypeTree, ref: TermRef)],
     returnType: TypeTree,
