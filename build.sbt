@@ -1,6 +1,6 @@
 resolvers += Resolver.mavenCentral
 
-ThisBuild / scalaVersion := "3.8.3"
+ThisBuild / scalaVersion := "3.8.4"
 
 ThisBuild / organization := "dev.continuously.libretto"
 ThisBuild / organizationHomepage := Some(url("https://continuously.dev"))
