@@ -16,6 +16,26 @@ sealed trait AListK[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] {
           k.splice(AListK.cons[K])
         [Z <: ⋅⋅[K]] => (h: F[Z, A]) => (ev: ⋅⋅[A] ofKinds K) ?=> cons[F, Z, A, B](h, thiz)
     )
+
+  inline def foldLeft[G <: AnyKind](
+    ga: App[K, G, A],
+    action: Action[K, G, F],
+  )(using
+    A ofKinds K,
+    B ofKinds K,
+    G ofKinds (K -> *),
+  ): App[K, G, B] = {
+    def go[X <: AnyKind](acc: App[K, G, X], fs: AListK[K, F, X, B])(using X ofKinds K): App[K, G, B] =
+      fs match
+        case Empty(ev) =>
+          ev.substituteCoAppDynamic[G](acc)
+        case c @ Cons(f0, fs) =>
+          import c.given
+          val acc1 = action.applyDynamic[X, c.Pivot](acc, f0)
+          go[c.Pivot](acc1, fs)
+
+    go(ga, this)
+  }
 }
 
 object AListK {
@@ -68,24 +88,4 @@ object AListK {
         val cons:  [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K], C <: ⋅⋅[K]] => (F[A, B], AListK[K, F, ⋅⋅[B], ⋅⋅[C]]) => (⋅⋅[B] ofKinds K) ?=> AListK[K, F, ⋅⋅[A], ⋅⋅[C]] = k.splice(AListK.cons[K])
         [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K], B <: ⋅⋅[K]] => (h: F[A, B]) => (ev: ⋅⋅[B] ofKinds K) ?=> cons(h, empty[F, B]())
     )
-
-  inline def foldLeft[K, G <: AnyKind, F <: AnyKind, A <: AnyKind, B <: AnyKind](
-    ga: App[K, G, A],
-    fs: AListK[K, F, A, B],
-    action: Action[K, G, F],
-  )(using
-    A ofKinds K,
-    B ofKinds K,
-    G ofKinds (K -> *),
-  ): App[K, G, B] =
-    def go[X <: AnyKind](acc: App[K, G, X], fs: AListK[K, F, X, B])(using X ofKinds K): App[K, G, B] =
-      fs match
-        case Empty(ev) =>
-          ev.substituteCoAppDynamic[G](acc)
-        case c @ Cons(f0, fs) =>
-          import c.given
-          val acc1 = action.applyDynamic[X, c.Pivot](acc, f0)
-          go[c.Pivot](acc1, fs)
-
-    go(ga, fs)
 }
