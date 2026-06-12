@@ -19,6 +19,7 @@ private object PolyFun {
   def apply(using Quotes)(
     tParamNames: List[String],
     tParamBounds: (Int => qr.TypeRepr) => List[qr.TypeBounds],
+    vParamsGiven: Boolean,
     vParamNames: List[String],
     vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
     returnType: List[qr.TypeRepr] => qr.TypeRepr,
@@ -31,7 +32,7 @@ private object PolyFun {
       Symbol.newMethod(
         owner,
         name = "$anonfun$polyFunImpl",
-        tpe = polyFunApplyMethodType(tParamNames, tParamBounds, vParamNames, vParamTypes, returnType)
+        tpe = polyFunApplyMethodType(tParamNames, tParamBounds, vParamsGiven, vParamNames, vParamTypes, returnType)
       )
 
     val meth =
@@ -51,10 +52,11 @@ private object PolyFun {
   }
 
   def unapply(using Quotes)(expr: qr.Term): Option[(
-    List[(name: String, kind: Either[qr.TypeBounds, qr.LambdaTypeTree], ref: qr.TypeRef)], // type params
-    List[(name: String, tpe: qr.TypeTree, ref: qr.TermRef)], // value params
-    qr.TypeTree,                             // return type
-    qr.Term,                                 // body
+    tparams: List[(name: String, kind: Either[qr.TypeBounds, qr.LambdaTypeTree], ref: qr.TypeRef)],
+    params: List[(name: String, tpe: qr.TypeTree, ref: qr.TermRef)],
+    paramsGiven: Boolean,
+    retTp: qr.TypeTree,
+    body: qr.Term,
   )] = {
     import qr.*
 
@@ -63,7 +65,7 @@ private object PolyFun {
         (stmt, method) match
           case (DefDef(name, paramss, retTp, Some(body)), Ident(methodName)) if methodName == name =>
             paramss match
-              case TypeParamClause(tparams) :: TermParamClause(params) :: Nil =>
+              case TypeParamClause(tparams) :: (pc @ TermParamClause(params)) :: Nil =>
                 Some((
                   tparams.map { case t @ TypeDef(name, kind) =>
                     kind match
@@ -72,6 +74,7 @@ private object PolyFun {
                       case other => assertionFailed(s"Unexpected representation of $name's kind: ${treeStruct(kind)}")
                   },
                   params.map { case v @ ValDef(name, tpe, _) => (name, tpe, v.symbol.termRef) },
+                  pc.isGiven,
                   retTp,
                   body,
                 ))
@@ -88,11 +91,14 @@ private object PolyFun {
   private def polyFunApplyMethodType(using Quotes)(
     tParamNames: List[String],
     tParamBounds: (Int => qr.TypeRepr) => List[qr.TypeBounds],
+    vParamsGiven: Boolean,
     vParamNames: List[String],
     vParamTypes: List[qr.TypeRepr] => List[qr.TypeRepr],
     returnType: List[qr.TypeRepr] => qr.TypeRepr,
   ): qr.PolyType = {
     import qr.*
+
+    val paramKind = if vParamsGiven then MethodTypeKind.Contextual else MethodTypeKind.Plain
 
     extension (pt: PolyType)
       def params(n: Int): List[TypeRepr] =
@@ -102,7 +108,7 @@ private object PolyFun {
 
     PolyType(tParamNames)(
       pt => tParamBounds(pt.param),
-      pt => MethodType(
+      pt => MethodType(paramKind)(
         vParamNames,
       )(
         mt => vParamTypes(pt.params(nTypeParams)),

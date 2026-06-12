@@ -19,10 +19,13 @@ object ofKind {
   given [A] => (A ofKind *) =
     new (A ofKind *) {}
 
+  given [F[_]] => (F ofKind (* -> *)) =
+    new (F ofKind (* -> *)) {}
+
   // TODO: provide macro-generated evidence for arbitrary kinds
 }
 
-infix sealed trait ofKinds[As, Ks] {
+infix sealed trait ofKinds[As <: AnyKind, Ks] {
 
   /** Allows kind-polymorphic manipulation of terms involving types `As`, without static knowledge of `As`;
    * static knowledge of `Ks` is still necessary.
@@ -36,14 +39,14 @@ infix sealed trait ofKinds[As, Ks] {
 
 object ofKinds {
 
-  def decodeImpl[Ks, As, R](
+  def decodeImpl[Ks, As <: AnyKind, R](
     witness: Expr[As ofKinds Ks],
     f: Expr[[⋅⋅[_]] => () => [A0s <: ⋅⋅[Ks]] => (⋅⋅[A0s] =~= As) => R],
   )(using Quotes, Type[Ks], Type[As], Type[R]): Expr[R] =
     insideMacroExpansion:
       new Encoding().decode(witness, f)
 
-  given [A, K] => (A ofKind K) => (A ofKinds K) =
+  given [A <: AnyKind, K] => (A ofKind K) => (A ofKinds K) =
     new (A ofKinds K) {}
 
   given (TNil ofKinds TNil) =

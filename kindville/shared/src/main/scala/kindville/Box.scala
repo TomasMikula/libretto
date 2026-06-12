@@ -65,6 +65,7 @@ object Box {
       PolyFun(
         paramNamesFlat,
         boundsFnFlat,
+        vParamsGiven = false,
         "x" :: Nil,
         tparams => bodyFn(tparams) :: Nil,
         tparams => returnType(tparams),
@@ -99,6 +100,7 @@ object Box {
         PolyFun(
           paramNamesFlat,
           boundsFnFlat,
+          vParamsGiven = false,
           "x" :: Nil,
           tparams => paramType(tparams) :: Nil,
           tparams => bodyFn(tparams),

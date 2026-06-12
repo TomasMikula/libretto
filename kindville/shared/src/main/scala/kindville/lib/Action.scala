@@ -77,7 +77,7 @@ object Action {
      *
      * Note that [[K]], [[G]], [[F]] still need to be statically known).
      */
-    inline def applyDynamic[A, B](
+    inline def applyDynamic[A <: AnyKind, B <: AnyKind](
       ga: App[K, G, A],
       f: Arrow[K, F, A, B],
     )(using

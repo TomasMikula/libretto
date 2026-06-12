@@ -336,7 +336,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ParseKuotedResult(marker, kuotesParam, _, payload) =
         parseKuoted(encoded)
 
-      val (userTParams, params, retTp, body) =
+      val (userTParams, params, paramsGiven, retTp, body) =
         doParsePolyFun(payload)
 
       if (params.nonEmpty)
@@ -355,7 +355,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         .asExpr
     }
 
-  def decode[Ks, As, R](
+  def decode[Ks, As <: AnyKind, R](
     witness: Expr[As ofKinds Ks], // unused, but guards soundness
     encoded: Expr[[⋅⋅[_]] => () => [A0s <: ⋅⋅[Ks]] => (⋅⋅[A0s] =~= As) => R],
   )(using
@@ -366,12 +366,12 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ): Expr[R] =
     inside(encoded.asTerm) {
       doParsePolyFun(encoded.asTerm) match {
-        case (List(marker), Nil, retTp, body) =>
+        case (List(marker), Nil, _, retTp, body) =>
           inside(body) {
             doParsePolyFun(body) match {
-              case (tparams @ List(a0s), params @ List(evParam), retTp, body) =>
+              case (tparams @ List(a0s), params @ List(evParam), paramsGiven, retTp, body) =>
                 val decoded =
-                  decodePolyFun(marker.ref, kuotes = null, DecodingContext.empty, tparams, params, retTp, body)
+                  decodePolyFun(marker.ref, kuotes = null, DecodingContext.empty, tparams, params, paramsGiven, retTp, body)
                 decoded.tparamNames match
                   case Groups(a0s) =>
                     if (a0s.size == 0)
@@ -424,16 +424,19 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ): ParseKuotedResult =
     inside(encoded.show) {
       encoded.asTerm match
-        case PolyFun(tparams, params, retTp, body) =>
+        case PolyFun(tparams, params, paramsGiven, retTp, body) =>
           tparams match
             case tparam :: Nil =>
               val (name, kind, typeRef) = tparam
               val marker = typeRef // TODO: check that marker has kind _[_]
               params match
                 case param :: Nil =>
-                  ParseKuotedResult(marker, param, retTp, body)
+                  if (paramsGiven)
+                    ParseKuotedResult(marker, param, retTp, body)
+                  else
+                    badUse(s"Expected a polymorphic function with a given value parameter, but ${param.name} is not given")
                 case _ =>
-                  badUse(s"Expected a polymorphic function with 1 value parameter, but got ${params.size} value paramters")
+                  badUse(s"Expected a polymorphic function with 1 given value parameter, but got ${params.size} value paramters")
             case Nil =>
               assertionFailed("unexpected polymorphic function with 0 type parameters")
             case tparams =>
@@ -460,13 +463,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ): (
     tparams: List[(name: String, kind: Either[qr.TypeBounds, qr.LambdaTypeTree], ref: qr.TypeRef)],
     params: List[(name: String, tpe: qr.TypeTree, ref: qr.TermRef)],
+    paramsGiven: Boolean,
     retTp: qr.TypeTree,
     body: qr.Term,
   ) =
     inside(expr) {
       expr match
-        case PolyFun(tparams, params, retTp, body) =>
-          (tparams, params, retTp, body)
+        case PolyFun(tparams, params, paramsGiven, retTp, body) =>
+          (tparams, params, paramsGiven, retTp, body)
         case Inlined(call, Nil, expansion) =>
           insideInlinedCall(call):
             doParsePolyFun(expansion)
@@ -550,11 +554,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case mt: MethodType =>
           decodeMethodType(marker, ctx, mt)
         case AppliedType(f, targs) =>
-          val f1 = decodeType(marker, ctx, f)
-          val targs1 = expandTypeArgs(marker, ctx, targs)
-            .flatMap(_.toList)
-          val targs2 = targs1.map(decodeType(marker, ctx, _))
-          f1.appliedTo(targs2)
+          if (f =:= marker)
+            expandAndBundleTypeArg(marker, ctx, targs)
+          else
+            val f1 = decodeType(marker, ctx, f)
+            val targs1 = expandTypeArgs(marker, ctx, targs)
+              .flatMap(_.toList)
+            val targs2 = targs1.map(decodeType(marker, ctx, _))
+            f1.appliedTo(targs2)
         case l @ TypeLambda(names, bounds, body) =>
           val decodedTypeParams =
             decodeTypeParams(
@@ -639,18 +646,19 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             given Printer[Tree] = Printer.TreeShortCode
             given Printer[TypeRepr] = Printer.TypeReprShortCode
             badUse(s"Got ${arg.show} of type ${t.show}, expected type ${decodedU.show} (which is the decoding of ${u.show})")
-        case PolyFun(tparams, params, retTp, body) =>
-          decodePolyFun(marker, kuotes, ctx, tparams, params, retTp, body)
+        case PolyFun(tparams, params, paramsGiven, retTp, body) =>
+          decodePolyFun(marker, kuotes, ctx, tparams, params, paramsGiven, retTp, body)
             .mkTerm(owner)
         case bl @ Block(List(stmt), Closure(method, optTp)) =>
           (stmt, method) match
             case (DefDef(name, paramss, retTp, Some(body)), Ident(methodName)) if methodName == name =>
               paramss match
-                case TermParamClause(params) :: Nil => Symbol.noSymbol.termRef
+                case (pc @ TermParamClause(params)) :: Nil => Symbol.noSymbol.termRef
                   decodeFun(
                     marker,
                     kuotes,
                     ctx,
+                    paramsGiven = pc.isGiven,
                     params.map { case v @ ValDef(name, tpe, _) => (name, tpe, v.symbol.termRef) },
                     retTp,
                     body,
@@ -833,7 +841,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     Reporting.Context,
   ): MethodType =
     val MethodType(paramNames, paramTypes, returnType) = methType
-    MethodType(paramNames)(
+    MethodType(methType.methodTypeKind)(paramNames)(
       _ => paramTypes.map(t => decodeType(marker, ctx, t)),
       _ => decodeType(marker, ctx, returnType)
     )
@@ -841,13 +849,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   private case class DecodedPolyFun(
     tparamNames: Groups[String],
     tparamBounds: (tparams: Int => TypeRepr) => Groups[TypeBounds],
+    paramsGiven: Boolean,
     paramNames: List[String],
     paramTypes: (tparams: Int => TypeRepr) => List[TypeRepr],
     returnType: (tparams: Int => TypeRepr) => TypeRepr,
     body: (newTParams: Int => TypeRepr, newParams: List[Term], owner: Symbol) => Term,
   ) {
     def mkTerm(owner: Symbol): Term =
-      PolyFun(tparamNames.toFlatList, tparamBounds(_).toFlatList, paramNames, paramTypes, returnType, body, owner)
+      PolyFun(tparamNames.toFlatList, tparamBounds(_).toFlatList, paramsGiven, paramNames, paramTypes, returnType, body, owner)
   }
 
   private def decodePolyFun(
@@ -856,6 +865,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     ctx: DecodingContext,
     tparams: List[(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: TypeRef)],
     params: List[(name: String, tpe: TypeTree, ref: TermRef)],
+    paramsGiven: Boolean,
     returnType: TypeTree,
     body: Term,
   )(using
@@ -887,13 +897,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ctx2 = ctx1.pushAll(paramSubstitutions(newParams))
       decodeTerm(marker, kuotes, ctx2, owner, body)
 
-    DecodedPolyFun(decodedTypeParams.decodedNames,  decodedTypeParams.decodedBounds, paramNames, paramTypes, returnType1, body1)
+    DecodedPolyFun(decodedTypeParams.decodedNames,  decodedTypeParams.decodedBounds, paramsGiven, paramNames, paramTypes, returnType1, body1)
   }
 
   private def decodeFun(
     marker: TypeRef | ParamRef,
     kuotes: TermRef | Null,
     ctx: DecodingContext,
+    paramsGiven: Boolean,
     params: List[(name: String, tpe: TypeTree, ref: TermRef)],
     returnType: TypeTree,
     body: Term,
@@ -919,9 +930,10 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ctx1 = ctx.pushAll(paramSubstitutions(newParams))
       decodeTerm(marker, kuotes, ctx1, owner, body)
 
+    val paramsKind = if paramsGiven then MethodTypeKind.Contextual else MethodTypeKind.Plain
     Lambda(
       owner = owner,
-      tpe = MethodType(paramNames)(_ => paramTypes, _ => returnType1),
+      tpe = MethodType(paramsKind)(paramNames)(_ => paramTypes, _ => returnType1),
       rhsFn = (sym, argTrees) => {
         val args = argTrees.map(_.asInstanceOf[Term])
         body1(args, sym)
@@ -1057,27 +1069,10 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       inside(ta) {
         ta match {
           case fa @ AppliedType(f, targs) =>
-            if (f =:= marker) {
-              // encode the expanded argument (A --> A1, ...) into a single type A1 :: ...
-              val m = typeShortCode(marker)
-              targs match
-                case a :: Nil =>
-                  val a1: ParamRef | TypeRef = a match
-                    case a: ParamRef => a
-                    case a: TypeRef  => a
-                    case a           => badUse(s"Invalid application of $m in ${typeShortCode(fa)}. Spread operator $m can only be applied to type parameters.")
-                  a1 match
-                    case ctx.expandsTo(as) =>
-                      as match
-                        case Single(a) => Single(a)
-                        case Multiple(as) => Single(bundleTypeArgs(as))
-                    case a1 =>
-                      badUse(s"Invalid application of $m in ${typeShortCode(fa)}. ${typeShortCode(a1)} is not <: $m[<kinds>]")
-                case other =>
-                  assertionFailed(s"Expected 1 type argument to ${typeShortCode(f)}, got ${targs.size} (${targs.map(typeShortCode).mkString(", ")})")
-            } else {
+            if (f =:= marker)
+              Single(expandAndBundleTypeArg(marker, ctx, targs))
+            else
               Single(fa)
-            }
           case p: ParamRef =>
             p match
               case ctx.expandsTo(ps) => ps
@@ -1091,6 +1086,31 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         }
       }
     }
+
+  private def expandAndBundleTypeArg(
+    marker: TypeRepr,
+    ctx: DecodingContext,
+    targs: List[TypeRepr],
+  )(using
+    Reporting.Context,
+  ): TypeRepr =
+    // encode the expanded argument (A --> A1, ...) into a single type A1 :: ...
+    val m = typeShortCode(marker)
+    targs match
+      case a :: Nil =>
+        val a1: ParamRef | TypeRef = a match
+          case a: ParamRef => a
+          case a: TypeRef  => a
+          case a           => badUse(s"Invalid application of $m. Spread operator $m can only be applied to type parameters, but ${typeShortCode(a)} is not one.")
+        a1 match
+          case ctx.expandsTo(as) =>
+            as match
+              case Single(a) => a
+              case Multiple(as) => bundleTypeArgs(as)
+          case a1 =>
+            badUse(s"Invalid application of $m. ${typeShortCode(a1)} is not <: $m[<kinds>]")
+      case other =>
+        assertionFailed(s"Expected 1 type argument to $m, got ${targs.size} (${targs.map(typeShortCode).mkString(", ")})")
 
   private def decodeTypeBounds(
     marker: TypeRepr,

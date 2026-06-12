@@ -3,12 +3,12 @@ package kindville.lib
 import kindville.*
 
 class TypeEqK[K, F <: AnyKind, G <: AnyKind](
-  value: Box[TypeEqK.Code[K], F :: G :: TNil]
+  val value: Box[TypeEqK.Code[K], F :: G :: TNil] // TODO: make private
 ) {
   transparent inline def substituteCo =
     Box.unpack[TypeEqK.Code[K], F :: G :: TNil](value)
 
-  transparent inline def substituteCoApp[H <: AnyKind](hf: App[K, H, F]): App[K, H, G] =
+  inline def substituteCoApp[H <: AnyKind](hf: App[K, H, F]): App[K, H, G] =
     decodeT[F :: G :: H :: TNil](
       [⋅⋅[_]] => kuotes ?=> [F <: ⋅⋅[K], G <: ⋅⋅[K], H[_ <: ⋅⋅[K]]] => () =>
         val x: App[K, H, ⋅⋅[F]] =
@@ -18,6 +18,22 @@ class TypeEqK[K, F <: AnyKind, G <: AnyKind](
         subst[[X <: ⋅⋅[K]] =>> App[K, H, ⋅⋅[X]]](x)
     )
       .typecheckAs[App[K, H, G]]
+
+  inline def substituteCoAppDynamic[H <: AnyKind](hf: App[K, H, F])(using
+    evf: F ofKinds K,
+    evg: G ofKinds K,
+    evh: H ofKinds (K -> *),
+  ): App[K, H, G] =
+    evf.decode:
+      [⋅[_]] => () => [F0 <: ⋅[K]] => (evf: ⋅[F0] =~= F) =>
+        evg.decode:
+          [⋅⋅[_]] => () => [G0 <: ⋅⋅[K]] => (evg: ⋅⋅[G0] =~= G) =>
+            evh.decode:
+              [⋅⋅⋅[_]] => () => [H0 <: ⋅⋅⋅[K -> *]] => (evh: ⋅⋅⋅[H0] =~= H) =>
+                val hf0: App[K, ⋅⋅⋅[H0], ⋅[F0]] = evh.substituteContra[[h <: AnyKind] =>> App[K, h, ⋅[F0]]](evf.substituteContra(hf))
+                val self: TypeEqK[K, ⋅[F0], ⋅⋅[G0]] = evf.substituteContra[[f <: AnyKind] =>> TypeEqK[K, f, ⋅⋅[G0]]](evg.substituteContra(this))
+                val res: App[K, ⋅⋅⋅[H0], ⋅⋅[G0]] = self.substituteCoApp[⋅⋅⋅[H0]](hf0)
+                evh.substituteCo[[h <: AnyKind] =>> App[K, h, G]](evg.substituteCo(res))
 
   transparent inline def andThen[H <: AnyKind](that: TypeEqK[K, G, H]) =
     decodeT[F :: G :: H :: TNil](
@@ -53,7 +69,7 @@ object TypeEqK {
     subst: Box[TypeEqK.Code[K], F :: F :: TNil]
   ) extends TypeEqK[K, F, F](subst)
 
-  transparent inline def refl[K]: Any =
+  transparent inline def refl[K] =
     decode(
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=>
         val packer: [F <: ⋅⋅[K], G <: ⋅⋅[K]] => ([H[_ <: ⋅⋅[K]]] => H[F] => H[G]) => Box[Code[K], ⋅⋅[F] :: ⋅⋅[G] :: TNil] =

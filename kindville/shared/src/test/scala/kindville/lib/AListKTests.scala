@@ -19,5 +19,17 @@ class AListKTests extends AnyFunSuite {
       ((_: String).split("0")) ::
       ((_: Array[String]).map(_.length)) ::
       AListK.single[*]((_: Array[Int]).exists(_ % 2 == 0))
+
+    type Id[A] = A
+    val in: App[kindville.*, Id, Int] =
+      App.packer[*](504030201)
+    val action: Action[kindville.*, Id, Function1] =
+      Action.pack[*, Id, Function1]([A, B] => (a: A, f: A => B) => f(a))
+
+    val out1 = AListK.foldLeft[*, Id, Function1, Int, Boolean](in, f, action).unpack
+    val out2 = AListK.foldLeft[*, Id, Function1, Int, Boolean](in, g, action).unpack
+
+    assert(out1 == false)
+    assert(out2 == false)
   }
 }
