@@ -1,6 +1,7 @@
 package kindville.lib
 
 import kindville.*
+import scala.annotation.tailrec
 
 /** Kind-polymorphic type-aligned list. */
 sealed trait AListK[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] {
@@ -25,6 +26,7 @@ sealed trait AListK[K, F <: AnyKind, A <: AnyKind, B <: AnyKind] {
     B ofKinds K,
     G ofKinds (K -> *),
   ): App[K, G, B] = {
+    @tailrec
     def go[X <: AnyKind](acc: App[K, G, X], fs: AListK[K, F, X, B])(using X ofKinds K): App[K, G, B] =
       fs match
         case Empty(ev) =>
