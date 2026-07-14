@@ -20,11 +20,16 @@ private object Encoding {
           (s2, b :: bs)
   }
 
-  def bundleTypeArgs(using Quotes)(args: List[quotes.reflect.TypeRepr]): quotes.reflect.TypeRepr =
+  def bundleTypeArgs(using Quotes)(args: List[qr.TypeRepr]): qr.TypeRepr =
     import quotes.reflect.*
     args match
       case Nil => TypeRepr.of[TNil]
       case t :: ts => TypeRepr.of[::].appliedTo(List(t, bundleTypeArgs(ts)))
+
+  def bundleTypeArgs(using Quotes)(args: SingleOrMultiple[qr.TypeRepr]): qr.TypeRepr =
+    args match
+      case Single(a) => a
+      case Multiple(as) => bundleTypeArgs(as)
 
   def unbundleTypeArgs[As <: AnyKind](args: Type[As])(using Quotes): List[Type[?]] =
     import quotes.reflect.*
@@ -646,6 +651,21 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             given Printer[Tree] = Printer.TreeShortCode
             given Printer[TypeRepr] = Printer.TypeReprShortCode
             badUse(s"Got ${arg.show} of type ${t.show}, expected type ${decodedU.show} (which is the decoding of ${u.show})")
+        // '{ kuotes.locallyEquals[T, A] }
+        case TypeApply(Select(prefix, "locallyEquals"), List(t, a)) if prefix.tpe == kuotes =>
+          a.tpe match {
+            case ref: TypeRef =>
+              ref match
+                case ctx.expandsTo(as) =>
+                  val bs = bundleTypeArgs(as)
+                  if (t.tpe =:= bs)
+                    given Quotes = owner.asQuotes
+                    t.tpe.asType match { case '[t] => '{ =~=.Refl[t]() }.asTerm }
+                  else
+                    badUse(s"Local type ${typeShortCode(ref)} expands to ${typeShortCode(bs)}, not ${typeShortCode(t.tpe)}")
+            case other =>
+              unsupported(s"The second type argument to locallyEquals must be a TypeRef, but ${typeShortCode(other)} is a ${typeStruct(other)}.")
+          }
         case PolyFun(tparams, params, paramsGiven, retTp, body) =>
           decodePolyFun(marker, kuotes, ctx, tparams, params, paramsGiven, retTp, body)
             .mkTerm(owner)
@@ -1104,9 +1124,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           case a           => badUse(s"Invalid application of $m. Spread operator $m can only be applied to type parameters, but ${typeShortCode(a)} is not one.")
         a1 match
           case ctx.expandsTo(as) =>
-            as match
-              case Single(a) => a
-              case Multiple(as) => bundleTypeArgs(as)
+            bundleTypeArgs(as)
           case a1 =>
             badUse(s"Invalid application of $m. ${typeShortCode(a1)} is not <: $m[<kinds>]")
       case other =>
