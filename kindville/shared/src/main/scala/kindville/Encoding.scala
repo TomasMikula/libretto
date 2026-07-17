@@ -506,17 +506,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                     case AppliedType(f, List(kinds)) if f =:= marker =>
                       lower.asType match
                         case '[Nothing] =>
-                          decodeKindOrKinds(kinds) match
-                            case Left(k) =>
-                              checkKind(t, k)
-                              TypeArgExpansion(ref, Single(t))
-                            case Right(kinds) =>
-                              val ts = unbundleTypeArgs(t.asType)
-                              val ks = kinds.toList
-                              if (ts.size != ks.size)
-                                badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(t)}")
-                              (ks zip ts).foreach { case (k, t) => checkKind(TypeRepr.of(using t), k) }
-                              TypeArgExpansion(ref, Multiple(ts.map(TypeRepr.of(using _))))
+                          matchArgAgainstKinds(ref, kinds, t)
                         case other =>
                           badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(marker)}) with a lower bound (${typeShortCode(lower)})")
                     case _ =>
@@ -534,10 +524,32 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       }
   }
 
+  private def matchArgAgainstKinds(
+    formalTParam: ParamRef | TypeRef,
+    kinds: TypeRepr,
+    tArg: TypeRepr,
+  )(using
+    Reporting.Context,
+  ): DecodingContext.Elem.TypeArgExpansion = {
+    import DecodingContext.Elem.TypeArgExpansion
+
+    decodeKindOrKinds(kinds) match
+      case Left(k) =>
+        checkKind(tArg, k)
+        TypeArgExpansion(formalTParam, Single(tArg))
+      case Right(kinds) =>
+        val ts = unbundleTypeArgs(tArg.asType)
+        val ks = kinds.toList
+        if (ts.size != ks.size)
+          badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(tArg)}")
+        (ks zip ts).foreach { case (k, t) => checkKind(TypeRepr.of(using t), k) }
+        TypeArgExpansion(formalTParam, Multiple(ts.map(TypeRepr.of(using _))))
+  }
+
   private def checkKind(t: TypeRepr, k: Kind)(using Reporting.Context): Unit =
     val expectedUpperBound = kindToUpperBound(k)
     if (!(t <:< expectedUpperBound))
-      badUse(s"Type ${t.show(using Printer.TypeReprShortCode)} does not have the expected kind ${k.show} (because it is not a subtype of ${expectedUpperBound.show(using Printer.TypeReprShortCode)})")
+      badUse(s"Type ${typeShortCode(t)} does not have the expected kind ${k.show} (because it is not a subtype of ${typeShortCode(expectedUpperBound)})")
 
   private def decodeType(
     marker: TypeRepr,
