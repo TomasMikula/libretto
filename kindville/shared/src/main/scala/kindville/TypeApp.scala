@@ -25,13 +25,13 @@ object TypeApp {
     Quotes,
     Type[F],
     Type[As],
-  ): Expr[TypeApp[F, As, ?]] = {
+  ): Expr[TypeApp[F, As, ?]] = Reporting.insideMacroExpansion {
     import quotes.reflect.*
 
     type FAs
     given Type[FAs] =
       TypeRepr.of[F]
-        .appliedTo(unbundleTypeArgs(Type.of[As]).map(TypeRepr.of(using _)))
+        .appliedTo(unbundleTypeArgsOrFail(Type.of[As]).map(TypeRepr.of(using _)))
         .asType
         .asInstanceOf[Type[FAs]]
     val resultType =

@@ -21,7 +21,7 @@ private[kindville] object Kind:
     override type Label = Ks ->> L
 
     override def show: String =
-      paramKinds.toList.map(_.show).appended("TNil").mkString("(", " :: ", ")") + " -> " + outKind.show
+      paramKinds.show + " -> " + outKind.show
   }
 
   def arr(ks: Kinds, l: Kind): Kind.Of[ks.Label ->> l.Label] =
@@ -37,6 +37,9 @@ private[kindville] sealed trait Kinds:
     this match
       case Kinds.Empty      => Nil
       case Kinds.Cons(h, t) => h :: t.toList
+
+  def show: String =
+    toList.map(_.show).appended("TNil").mkString("(", " :: ", ")")
 
 private[kindville] object Kinds:
   type Of[Ks] = Kinds { type Label = Ks }

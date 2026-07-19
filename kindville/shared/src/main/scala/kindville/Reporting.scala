@@ -10,7 +10,7 @@ private object Reporting {
   def errorAndAbort(msg: String)(using Quotes): Nothing =
     quotes.reflect.report.errorAndAbort(msg)
 
-  def typeShortCode[T <: AnyKind](using Quotes, Type[T]): String =
+  def typeShortCode[T <: AnyKind](using Type[T], Quotes): String =
     typeShortCode(qr.TypeRepr.of[T])
 
   def typeShortCode(using Quotes)(t: qr.TypeRepr): String =

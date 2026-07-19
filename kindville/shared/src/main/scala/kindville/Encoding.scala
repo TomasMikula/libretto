@@ -31,13 +31,14 @@ private object Encoding {
       case Single(a) => a
       case Multiple(as) => bundleTypeArgs(as)
 
-  def unbundleTypeArgs[As <: AnyKind](args: Type[As])(using Quotes): List[Type[?]] =
+  def unbundleTypeArgs[As <: AnyKind](args: Type[As])(using Quotes): Either[String, List[Type[?]]] =
     import quotes.reflect.*
 
     val cons = TypeRepr.of[::]
 
     args match
-      case '[TNil] => Nil
+      case '[TNil] =>
+        Right(Nil)
       case other =>
         val repr = TypeRepr.of(using other)
         repr match
@@ -46,15 +47,20 @@ private object Encoding {
               case '[::] =>
                 args match
                   case h :: t :: Nil =>
-                    h.asType :: unbundleTypeArgs(t.asType)(using quotes)
+                    unbundleTypeArgs(t.asType)(using quotes)
+                      .map(h.asType :: _)
                   case _ =>
-                    report.errorAndAbort(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
-              case other =>
-                report.error(s"Cannot decode a list of type arguments from type ${Printer.TypeReprShortCode.show(repr)}")
-                Nil
+                    assertionFailed(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
+              case '[other] =>
+                Left(s"${typeShortCode[other]} is neither ${typeShortCode[TNil]} nor ${typeShortCode[::]}")
           case other =>
-            report.error(s"Cannot decode a list of type arguments from type ${Printer.TypeReprShortCode.show(repr)}")
-            Nil
+            Left(s"${typeShortCode(other)} is neither ${typeShortCode[TNil]} nor ${typeShortCode[::]}")
+
+  def unbundleTypeArgsOrFail[As <: AnyKind](args: Type[As])(using Quotes, Reporting.Context): List[Type[?]] =
+    unbundleTypeArgs(args) match
+      case Right(res) => res
+      case Left(msg) => badUse(s"Cannot decode a list of type arguments from type ${typeShortCode[As](using args)}: $msg")
+
 
   private enum FastReject[A]:
     case Success(value: A)
@@ -175,8 +181,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     def substitutesTerm(i: Ident): Option[Term] =
       stack.collectFirst { case Elem.TermSubstitution(src, res) if src.termSymbol == i.symbol => res }
 
-    def expands(p: ParamRef | TypeRef): Option[SingleOrMultiple[TypeRepr]] =
-      stack.collectFirst { case Elem.TypeArgExpansion(src, res) if src =:= p => res }
+    def expands(p: ParamRef | TypeRef): Option[ParamExpansion] =
+      stack.collectFirst {
+        case Elem.TypeArgExpansion(src, res) if src =:= p => ParamExpansion.StaticallyKnown(res)
+        case Elem.TypeArgForgedExpansion(src, bundled, ks) if src =:= p => ParamExpansion.Forged(bundled, ks)
+      }
 
     def substitutesTypeTo: TypeSubstitutionExtractor = TypeSubstitutionExtractor(this)
     def substitutesTermTo: TermSubstitutionExtractor = TermSubstitutionExtractor(this)
@@ -196,6 +205,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     enum Elem:
       case TypeSubstitution(src: ParamRef | TypeRef, tgt: TypeRepr)
       case TypeArgExpansion(src: ParamRef | TypeRef, tgt: SingleOrMultiple[TypeRepr])
+      case TypeArgForgedExpansion(src: ParamRef | TypeRef, bundledArg: TypeRepr, kind: Either[Kind, Kinds])
       case TermSubstitution(src: TermRef, tgt: Term)
 
     class TypeSubstitutionExtractor(ctx: DecodingContext):
@@ -207,8 +217,17 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         ctx.substitutesTerm(i)
 
     class ExpansionExtractor(ctx: DecodingContext):
-      def unapply(p: ParamRef | TypeRef): Option[SingleOrMultiple[TypeRepr]] =
+      def unapply(p: ParamRef | TypeRef): Option[ParamExpansion] =
         ctx.expands(p)
+
+    enum ParamExpansion:
+      case StaticallyKnown(unbundled: SingleOrMultiple[TypeRepr])
+      case Forged(bundledArg: TypeRepr, kinds: Either[Kind, Kinds])
+
+      def bundled: TypeRepr =
+        this match
+          case StaticallyKnown(unbundled) => bundleTypeArgs(unbundled)
+          case Forged(bundledArg, _) => bundledArg
 
     def empty: DecodingContext =
       DecodingContext(Nil)
@@ -292,7 +311,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     Reporting.Context
   ): Type[Any] =
     inside(s"decoding ${typeShortCode[Code]} applied to type arguments ${typeShortCode[As]}") {
-      val args = unbundleTypeArgs(Type.of[As])
+      val args = unbundleTypeArgsOrFail(Type.of[As])
 
       TypeRepr.of[Code].dealiasKeepOpaques match
         case outer @ TypeLambda(auxNames, auxBounds, body) =>
@@ -350,7 +369,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         }
 
       val targs =
-        unbundleTypeArgs(TypeRepr.of[As].appliedTo(marker).asType)
+        unbundleTypeArgsOrFail(TypeRepr.of[As].appliedTo(marker).asType)
           .map(t => TypeRepr.of(using t).dealiasKeepOpaques)
 
       val ctx =
@@ -490,7 +509,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   )(using
     Reporting.Context,
   ): DecodingContext = {
-    import DecodingContext.Elem.{TypeSubstitution, TypeArgExpansion}
+    import DecodingContext.Elem.{TypeSubstitution, TypeArgExpansion, TypeArgForgedExpansion}
 
     if (tparams.size != targs.size)
       badUse(s"Expected ${targs.size} custom type parameters matching the arguments ${targs.map(t => typeShortCode(t)).mkString(", ")}. Got ${tparams.map(p => typeShortCode(p.ref)).mkString(", ")}")
@@ -499,7 +518,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       (tparams zip targs) map {
         case ((name, bounds, ref), t) =>
           inside(s"substituting type argument ${typeShortCode(t)} for type parameter ${typeShortCode(ref)} with bounds ${bounds.fold(typeShortCode, treeShortCode)}"):
-            val elem: TypeSubstitution | TypeArgExpansion =
+            val elem: TypeSubstitution | TypeArgExpansion | TypeArgForgedExpansion =
               bounds match
                 case Left(TypeBounds(lower, upper)) =>
                   upper match
@@ -519,8 +538,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
               case TypeSubstitution(ref, t) =>
                 TypeSubstitution(ref, decodeType(marker, ctx = DecodingContext.empty, t))
               case TypeArgExpansion(ref, ts) =>
+                // TODO: Why? Shouldn't type argument be free of the marker, since it's provided outside of marker's scope?
                 val ts1 = ts.map(decodeType(marker, ctx = DecodingContext.empty, _))
                 TypeArgExpansion(ref, ts1)
+              case x: TypeArgForgedExpansion =>
+                x
       }
   }
 
@@ -530,26 +552,49 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     tArg: TypeRepr,
   )(using
     Reporting.Context,
-  ): DecodingContext.Elem.TypeArgExpansion = {
-    import DecodingContext.Elem.TypeArgExpansion
+  ): DecodingContext.Elem.TypeArgExpansion | DecodingContext.Elem.TypeArgForgedExpansion = {
+    import DecodingContext.Elem.{TypeArgExpansion, TypeArgForgedExpansion}
 
     decodeKindOrKinds(kinds) match
       case Left(k) =>
-        checkKind(tArg, k)
-        TypeArgExpansion(formalTParam, Single(tArg))
+        val expectedUpperBound = kindToUpperBound(k)
+        if (tArg <:< expectedUpperBound)
+          TypeArgExpansion(formalTParam, Single(tArg))
+        else
+          (tArg.asType, kinds.asType) match
+            case ('[t], '[k]) =>
+              Implicits.search(TypeRepr.of[t ofKinds k]) match
+                case iss: ImplicitSearchSuccess =>
+                  TypeArgForgedExpansion(formalTParam, bundledArg = tArg, Left(k))
+                case e: NoMatchingImplicits =>
+                  badUse(s"No matching implicits for ${typeShortCode[t ofKinds k]}:\n${e.explanation}")
+                case e: AmbiguousImplicits =>
+                  badUse(s"Ambiguous implicits for ${typeShortCode[t ofKinds k]}:\n${e.explanation}")
+                case e: DivergingImplicit =>
+                  badUse(s"Diverging implicit search for ${typeShortCode[t ofKinds k]}:\n${e.explanation}")
+                case e: ImplicitSearchFailure =>
+                  badUse(s"Cannot prove that type ${typeShortCode(tArg)} has the expected kind ${k.show}, because it is neither a subtype of ${typeShortCode(expectedUpperBound)}, nor is there a given instance of ${typeShortCode[t ofKinds k]}:\n${e.explanation}")
+              // Expr.summon[t ofKinds k] match
+              //   case Some(witness) =>
+              //     TypeArgForgedExpansion(formalTParam, bundledArg = tArg, Left(k))
+              //   case None =>
+              //     badUse(s"Cannot prove that type ${typeShortCode(tArg)} has the expected kind ${k.show}, because it is neither a subtype of ${typeShortCode(expectedUpperBound)}, nor is there a given instance of ${typeShortCode[t ofKinds k]}.")
       case Right(kinds) =>
-        val ts = unbundleTypeArgs(tArg.asType)
-        val ks = kinds.toList
-        if (ts.size != ks.size)
-          badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(tArg)}")
-        (ks zip ts).foreach { case (k, t) => checkKind(TypeRepr.of(using t), k) }
-        TypeArgExpansion(formalTParam, Multiple(ts.map(TypeRepr.of(using _))))
+        unbundleTypeArgs(tArg.asType) match
+          case Left(value) =>
+            unimplemented(s"Cannot unbundle ${typeShortCode(tArg)}. TODO: look for a given ofKinds instance")
+          case Right(ts) =>
+            val ks = kinds.toList
+            if (ts.size != ks.size)
+              badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(tArg)}")
+            (ks zip ts).foreach { case (k, t) => checkKind(TypeRepr.of(using t), k) }
+            TypeArgExpansion(formalTParam, Multiple(ts.map(TypeRepr.of(using _))))
   }
 
-  private def checkKind(t: TypeRepr, k: Kind)(using Reporting.Context): Unit =
+  private def checkKind(tArg: TypeRepr, k: Kind)(using Reporting.Context): Unit =
     val expectedUpperBound = kindToUpperBound(k)
-    if (!(t <:< expectedUpperBound))
-      badUse(s"Type ${typeShortCode(t)} does not have the expected kind ${k.show} (because it is not a subtype of ${typeShortCode(expectedUpperBound)})")
+    if (!(tArg <:< expectedUpperBound))
+      badUse(s"Type ${typeShortCode(tArg)} does not have the expected kind ${k.show} (because it is not a subtype of ${typeShortCode(expectedUpperBound)})")
 
   private def decodeType(
     marker: TypeRepr,
@@ -608,13 +653,25 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case p: ParamRef =>
           p match
             case ctx.substitutesTypeTo(q) => q
-            case ctx.expandsTo(ps)        => badUse(s"Invalid use of kind-expanded type parameter ${typeShortCode(p)} (which expands to ${ps.map(typeShortCode).mkString("(", ", ", ")")}). It can only be used in type argument position.")
-            case p                        => p
+            case ctx.expandsTo(x) =>
+              import DecodingContext.ParamExpansion
+              val expansionMsg = x match
+                case ParamExpansion.StaticallyKnown(ts) => s"which expands to ${ts.map(typeShortCode).mkString("(", ", ", ")")}"
+                case ParamExpansion.Forged(bundled, _) => s"which stands for ${typeShortCode(bundled)}"
+              badUse(s"Invalid use of kind-expanded type parameter ${typeShortCode(p)} ($expansionMsg). It can only be used in type argument position.")
+            case p => p
         case t @ TypeRef(parent, name) =>
           t match
             case ctx.substitutesTypeTo(u) => u
-            case ctx.expandsTo(ts)        => badUse(s"Invalid use of kind-expanded type parameter ${typeShortCode(t)} (which expands to ${ts.map(typeShortCode).mkString("(", ", ", ")")}). It can only be used in type argument position.")
-            case t                        => checkNonOccurrence(marker, ctx, parent); t
+            case ctx.expandsTo(x) =>
+              import DecodingContext.ParamExpansion
+              val expansionMsg = x match
+                case ParamExpansion.StaticallyKnown(ts) => s"which expands to ${ts.map(typeShortCode).mkString("(", ", ", ")")}"
+                case ParamExpansion.Forged(bundled, _) => s"which stands for ${typeShortCode(bundled)}"
+              badUse(s"Invalid use of kind-expanded type parameter ${typeShortCode(t)} ($expansionMsg). It can only be used in type argument position.")
+            case t =>
+              checkNonOccurrence(marker, ctx, parent)
+              t
         case t @ TermRef(prefix, ident) =>
           Ref.term(t) match
             case ctx.substitutesTermTo(u) =>
@@ -669,7 +726,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             case ref: TypeRef =>
               ref match
                 case ctx.expandsTo(as) =>
-                  val bs = bundleTypeArgs(as)
+                  val bs = as.bundled
                   if (t.tpe =:= bs)
                     given Quotes = owner.asQuotes
                     t.tpe.asType match { case '[t] => '{ =~=.Refl[t]() }.asTerm }
@@ -1096,7 +1153,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     targs: List[TypeRepr],
   )(using
     Reporting.Context,
-  ): List[SingleOrMultiple[TypeRepr]] =
+  ): List[SingleOrMultiple[TypeRepr]] = {
+    import DecodingContext.ParamExpansion
     targs.map { ta =>
       inside(ta) {
         ta match {
@@ -1107,17 +1165,26 @@ private class Encoding[Q <: Quotes](using val q: Q) {
               Single(fa)
           case p: ParamRef =>
             p match
-              case ctx.expandsTo(ps) => ps
-              case _                 => Single(p)
+              case ctx.expandsTo(x) =>
+                x match
+                  case ParamExpansion.StaticallyKnown(ps) => ps
+                  case ParamExpansion.Forged(bundled, kinds) => badUse(s"Cannot statically determine the expanded form of type parameter ${typeShortCode(p)}. It is only known to stand for ${typeShortCode(bundled)}")
+              case _ =>
+                Single(p)
           case t: TypeRef =>
             t match
-              case ctx.expandsTo(ts) => ts
-              case _                 => Single(t)
+              case ctx.expandsTo(x) =>
+                x match
+                  case ParamExpansion.StaticallyKnown(ts) => ts
+                  case ParamExpansion.Forged(bundled, kinds) => badUse(s"Cannot statically determine the expanded form of type ${typeShortCode(t)}. It is only known to stand for ${typeShortCode(bundled)}")
+              case _ =>
+                Single(t)
           case other =>
             Single(other)
         }
       }
     }
+  }
 
   private def expandAndBundleTypeArg(
     marker: TypeRepr,
@@ -1136,7 +1203,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           case a           => badUse(s"Invalid application of $m. Spread operator $m can only be applied to type parameters, but ${typeShortCode(a)} is not one.")
         a1 match
           case ctx.expandsTo(as) =>
-            bundleTypeArgs(as)
+            as.bundled
           case a1 =>
             badUse(s"Invalid application of $m. ${typeShortCode(a1)} is not <: $m[<kinds>]")
       case other =>
