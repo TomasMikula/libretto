@@ -54,4 +54,29 @@ class ActionTests extends AnyFunSuite {
     assert(out2 == Some(1))
   }
 
+  test("action of polymorphic function on custom higher-kinded data type Foo[F[_]]") {
+    type ~>[F[_], G[_]] = [A] => F[A] => G[A]
+
+    case class Foo[F[_]](value: F[Int])
+
+    val in: App[* -> *, Foo, List] =
+      App.pack[* -> *, Foo, List](Foo(List(1, 2, 3)))
+    val action: Action[* -> *, Foo, ~>] =
+      Action.pack[* -> *, Foo, ~>]([F[_], G[_]] => (x, f) => Foo(f(x.value)))
+    val headOptionArrow: Arrow[* -> *, ~>, List, Option] =
+      Arrow.packer[* -> *]([A] => _.headOption)
+
+    val out1 = action.act(Foo(List(1, 2, 3)), [A] => _.headOption)
+    val out2 = action.actOn(Foo(List(1, 2, 3)))([A] => _.headOption)
+    val out3 = action.actBy[List, Option]([A] => (as: List[A]) => as.headOption)(Foo(List(1, 2, 3)))
+    val out4 = action(in, headOptionArrow).unpack
+    val out5 = action.applyDynamic[List, Option](in, headOptionArrow).unpack
+
+    assert(out1 == Foo(Some(1)))
+    assert(out2 == Foo(Some(1)))
+    assert(out3 == Foo(Some(1)))
+    assert(out4 == Foo(Some(1)))
+    assert(out5 == Foo(Some(1)))
+  }
+
 }
