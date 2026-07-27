@@ -51,6 +51,8 @@ object Action {
       ga: App[K, G, A],
       f: Arrow[K, F, A, B],
     ): App[K, G, B] =
+      compiletimeKindCheck[A, K]
+      compiletimeKindCheck[B, K]
       decodeT[G :: F :: A :: B :: TNil](
         [⋅⋅[_]] => k ?=> [G0[_ <: ⋅⋅[K]], F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A0 <: ⋅⋅[K], B0 <: ⋅⋅[K]] => () =>
           val x: G0[A0] =
@@ -84,14 +86,28 @@ object Action {
       A: (A ofKinds K),
       B: (B ofKinds K),
     ): App[K, G, B] =
-      A.decode[App[K, G, B]]:
-        [⋅⋅[_]] => () => [A0 <: ⋅⋅[K]] => (eva: ⋅⋅[A0] =~= A) ?=>
-          B.decode[App[K, G, B]]:
-            [⋅⋅⋅[_]] => () => [B0 <: ⋅⋅⋅[K]] => (evb: ⋅⋅⋅[B0] =~= B) ?=>
-              val ga0: App[K, G, ⋅⋅[A0]] = eva.substituteContra(ga)
-              val f0: Arrow[K, F, ⋅⋅[A0], ⋅⋅⋅[B0]] = eva.substituteContra[[X <: AnyKind] =>> Arrow[K, F, X, ⋅⋅⋅[B0]]](evb.substituteContra(f))
-              val gb0: App[K, G, ⋅⋅⋅[B0]] = apply[⋅⋅[A0], ⋅⋅⋅[B0]](ga0, f0)
-              evb.substituteCo(gb0)
+      decodeT[G :: F :: A :: B :: TNil](
+        [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> [G0[_ <: ⋅⋅[K]], F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A0 <: ⋅⋅[K], B0 <: ⋅⋅[K]] => () =>
+          val ga0: App[K, G0, ⋅⋅[A0]] = k.splice(ga)
+          val f0: Arrow[K, F0, ⋅⋅[A0], ⋅⋅[B0]] = k.splice(f)
+          val action: [A <: ⋅⋅[K], B <: ⋅⋅[K]] => (G0[A], F0[A, B]) => G0[B] = k.splice(a.act)
+          k.rekindle[App[K, G0, ⋅⋅[B0]]]:
+            [⋅⋅⋅[_]] => (ev: Kuotes.Rekindle[⋅⋅, ⋅⋅⋅]) ?=>
+              val ga1: App[K, G0, ⋅⋅⋅[A0]]           = ev.substituteCo[[⋅[_]] =>> App[K, G0, ⋅[A0]]](ga0)
+              val f1: Arrow[K, F0, ⋅⋅⋅[A0], ⋅⋅⋅[B0]] = ev.substituteCo[[⋅[_]] =>> Arrow[K, F0, ⋅[A0], ⋅[B0]]](f0)
+              val ga2: G0[A0] = ga1.unpackDynamic
+              val f2: F0[A0, B0] = f1.unpackDynamic
+
+              // this is the gist of this method, everything else is boilerplate
+              val gb2: G0[B0] = action[A0, B0](ga2, f2)
+
+              val gb1: App[K, G0, ⋅⋅⋅[B0]] = App.packDynamic(gb2)
+              val gb0: App[K, G0, ⋅⋅[B0]] = ev.substituteContra[[⋅[_]] =>> App[K, G0, ⋅[B0]]](gb1)
+              gb0
+        ,
+        considering = A, B
+      )
+        .typecheckAs[App[K, G, B]]
 
   }
 }

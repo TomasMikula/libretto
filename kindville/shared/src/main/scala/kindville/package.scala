@@ -60,14 +60,27 @@ object ofKinds {
 private transparent inline def qr(using Quotes): quotes.reflect.type =
   quotes.reflect
 
+inline def compiletimeKindCheck[A <: AnyKind, K]: Unit =
+  ${ compiletimeKindCheckImpl[A, K] }
+
+private def compiletimeKindCheckImpl[A <: AnyKind, K](using Type[A], Type[K], Quotes): Expr[Unit] =
+  insideMacroExpansion:
+    new Encoding().compiletimeKindCheck[A, K]
+
 transparent inline def decode(inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any): Any =
   ${ decodeImpl('expr) }
 
-transparent inline def decodeT[As](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any): Any =
-  decodeFull[[⋅⋅[_]] =>> As](expr)
+transparent inline def decodeT[As](
+  inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any,
+  inline considering: (? ofKinds ?)*,
+): Any =
+  decodeFull[[⋅⋅[_]] =>> As](expr, considering*)
 
-transparent inline def decodeFull[As[⋅⋅[_]]](inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any): Any =
-  ${ decodeFullImpl[As]('expr) }
+transparent inline def decodeFull[As[⋅⋅[_]]](
+  inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any,
+  inline considering: (? ofKinds ?)*,
+): Any =
+  ${ decodeFullImpl[As]('expr, 'considering) }
 
 private def decodeImpl(expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any])(using Quotes): Expr[Any] =
   insideMacroExpansion:
@@ -76,12 +89,23 @@ private def decodeImpl(expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any])(using 
     encoding
       .decodeExpr(expr)
 
-private def decodeFullImpl[As[⋅⋅[_]]](expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any])(using Quotes, Type[As]): Expr[Any] =
+private def decodeFullImpl[As[⋅⋅[_]]](
+  expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any],
+  considering: Expr[Seq[? ofKinds ?]],
+)(using
+  Quotes,
+  Type[As],
+): Expr[Any] =
   insideMacroExpansion:
     import quotes.reflect.*
-    val encoding = Encoding()
-    encoding
-      .decodeExprT[As](expr)
+
+    considering match
+      case Varargs(considerings) =>
+        val encoding = Encoding()
+        encoding
+          .decodeExprT[As](expr, considerings)
+      case _ =>
+        report.errorAndAbort("Expected explicit varargs sequence.", considering)
 
 extension [A](inline a: A)
   inline def typecheckAs[B]: B =
