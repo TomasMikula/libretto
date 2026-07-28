@@ -404,61 +404,6 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         .asExpr
     }
 
-  def decode[Ks, As <: AnyKind, R](
-    witness: Expr[As ofKinds Ks], // unused, but guards soundness
-    encoded: Expr[[⋅⋅[_]] => () => [A0s <: ⋅⋅[Ks]] => (⋅⋅[A0s] =~= As) => R],
-  )(using
-    Type[Ks],
-    Type[As], // typically just an abstract type parameter at compile time
-    Type[R],
-    Reporting.Context,
-  ): Expr[R] =
-    inside(encoded.asTerm) {
-      doParsePolyFun(encoded.asTerm) match {
-        case (List(marker), Nil, _, retTp, body) =>
-          inside(body) {
-            doParsePolyFun(body) match {
-              case (tparams @ List(a0s), params @ List(evParam), paramsGiven, retTp, body) =>
-                val decoded =
-                  decodePolyFun(marker.ref, kuotes = null, None, None, DecodingContext.empty, tparams, params, paramsGiven, retTp, body)
-                decoded.tparamNames match
-                  case Groups(a0s) =>
-                    if (a0s.size == 0)
-                      unsupported(s"Nullary kind list ${typeShortCode[Ks]} not yet supported in this position")
-                    else
-                      val f = decoded.mkTerm(Symbol.spliceOwner)
-                      // f is the decoded polymorphic function
-                      //   [A0 <: ..., ...] => ((A0 :: ... :: TNil) =~= As) ?=> R
-                      // Let's apply it to some type arguments and a forged `=~=` evidence.
-                      // In itself, this is unsound, but should not be misusable at use site.
-                      val (upperBounds, bundledUpperBounds) = decodeKindOrKinds(TypeRepr.of[Ks]) match
-                        case Left(kind) => kindToUpperBound(kind).pipe(ub => (ub :: Nil, ub))
-                        case Right(kinds) => kindsToUpperBounds(kinds).pipe(ubs => (ubs, bundleTypeArgs(ubs)))
-
-                      Select
-                        .unique(f, "apply")
-                        .appliedToTypes(upperBounds)
-                        .appliedTo(
-                          '{ summon[As =~= As] }.asTerm
-                            .changeOwner(Symbol.spliceOwner) // TODO: should not be necessary
-                            .pipe(Select.unique(_, "$asInstanceOf$"))
-                            .appliedToType(
-                              TypeRepr.of[=~=]
-                                .appliedTo(List(bundledUpperBounds, TypeRepr.of[As]))
-                            )
-                        )
-                        .asExprOf[R]
-                  case other =>
-                    assertionFailed(s"Expected a single type parameter group, but got ${other.groupCount}: $other")
-              case _ =>
-                assertionFailed(s"Expected a polymorphic function `[A0s <: ⋅⋅[Ks]] => (⋅⋅[A0s] =~= As) ?=> body`, but got ${treeShortCode(body)}")
-            }
-          }
-        case _ =>
-          assertionFailed(s"Expected a polymorphic function `[⋅⋅[_]] => () => body`, but got ${encoded.show}")
-      }
-    }
-
   private case class ParseKuotedResult(
     marker: TypeRef,
     kuotesParam: (name: String, tpe: TypeTree, ref: TermRef),
@@ -611,46 +556,63 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ): DecodingContext.Elem.TypeArgExpansion | DecodingContext.Elem.TypeArgForgedExpansion = {
     import DecodingContext.Elem.{TypeArgExpansion, TypeArgForgedExpansion}
 
-    decodeKindOrKinds(kinds) match
-      case Left(k) =>
-        val expectedUpperBound = kindToUpperBound(k)
-        if (tArg <:< expectedUpperBound)
-          TypeArgExpansion(formalTParam, Single(tArg))
-        else
-          val tOfKindsK = TypeRepr.of[ofKinds].appliedTo(List(tArg, kinds))
-          Implicits.search(tOfKindsK) match
-            case iss: ImplicitSearchSuccess =>
-              TypeArgForgedExpansion(formalTParam, bundledArg = tArg, Single(k))
-            case e: NoMatchingImplicits =>
-              badUse(s"No matching implicits for ${typeShortCode(tOfKindsK)}:\n${e.explanation}")
-            case e: AmbiguousImplicits =>
-              badUse(s"Ambiguous implicits for ${typeShortCode(tOfKindsK)}:\n${e.explanation}")
-            case e: DivergingImplicit =>
-              badUse(s"Diverging implicit search for ${typeShortCode(tOfKindsK)}:\n${e.explanation}")
-            case e: ImplicitSearchFailure =>
-              if (considering.exists(_.isExprOf(using tOfKindsK.asType.asInstanceOf[Type[Any]])))
-                TypeArgForgedExpansion(formalTParam, bundledArg = tArg, Single(k))
-              else
-                badUse:
-                  s"""Cannot prove that type ${typeShortCode(tArg)} has the expected kind ${k.show}, because
-                      | - it is not a subtype of ${typeShortCode(expectedUpperBound)},
-                      | - nor is there an instance of ${typeShortCode(tOfKindsK)} among the ${considering.size} instances provided explicitly to the decoding macro
-                      | - nor is there a given instance of ${typeShortCode(tOfKindsK)} in scope
-                      |   - although this could be a false negative due to https://github.com/scala/scala3/issues/26589,
-                      |     in which case work around it by passing an explicit instance to the decode macro
-                      |   - reported explanation:
-                      |     ${e.explanation.replace("\n", "\n     ")}
-                      |""".stripMargin
-      case Right(kinds) =>
-        unbundleTypeArgs(tArg.asType) match
-          case Left(value) =>
-            unimplemented(s"Cannot unbundle ${typeShortCode(tArg)}. TODO: look for a given ofKinds instance")
-          case Right(ts) =>
-            val ks = kinds.toList
-            if (ts.size != ks.size)
-              badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(tArg)}")
-            (ks zip ts).foreach { case (k, t) => checkKind(TypeRepr.of(using t), k) }
-            TypeArgExpansion(formalTParam, Multiple(ts.map(TypeRepr.of(using _))))
+    val decodedKinds: SingleOrMultiple[Kind] =
+      decodeKindOrKinds(kinds) match
+        case Left(k) => Single(k)
+        case Right(ks) => Multiple(ks.toList)
+
+    val alignedArgsToKinds: Either[String, SingleOrMultiple[(Kind, TypeRepr)]] =
+      decodedKinds match
+        case Single(k) =>
+          Right(Single((k, tArg)))
+        case Multiple(ks) =>
+          unbundleTypeArgs(tArg.asType) match
+            case Left(reason) =>
+              Left(s"Cannot prove that ${typeShortCode(tArg)} is a list of types, because $reason")
+            case Right(ts) =>
+              if (ts.size != ks.size)
+                // fatal, fail without looking for ofKinds evidence
+                badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(tArg)}")
+              Right(Multiple(ks zip ts.map(TypeRepr.of(using _))))
+
+    val kindCheckedArgs: Either[String, SingleOrMultiple[(Kind, TypeRepr)]] = // TODO: is TypeRepr sufficient from here on?
+      alignedArgsToKinds.flatMap(_.traverse {
+        case kt @ (k, t) =>
+          val expectedUpperBound = kindToUpperBound(k)
+          if (t <:< expectedUpperBound)
+            Right(kt)
+          else
+            Left(s"Type ${typeShortCode(t)} does not have the expected kind ${k.show} (because it is not a subtype of ${typeShortCode(expectedUpperBound)})")
+      })
+
+    kindCheckedArgs match
+      case Right(value) =>
+        TypeArgExpansion(formalTParam, value.map(_._2))
+      case Left(msg) =>
+        val tOfKindsK = TypeRepr.of[ofKinds].appliedTo(List(tArg, kinds))
+        Implicits.search(tOfKindsK) match
+          case iss: ImplicitSearchSuccess =>
+            TypeArgForgedExpansion(formalTParam, bundledArg = tArg, decodedKinds)
+          case e: NoMatchingImplicits =>
+            badUse(s"No matching implicits for ${typeShortCode(tOfKindsK)}:\n${e.explanation}")
+          case e: AmbiguousImplicits =>
+            badUse(s"Ambiguous implicits for ${typeShortCode(tOfKindsK)}:\n${e.explanation}")
+          case e: DivergingImplicit =>
+            badUse(s"Diverging implicit search for ${typeShortCode(tOfKindsK)}:\n${e.explanation}")
+          case e: ImplicitSearchFailure =>
+            if (considering.exists(_.isExprOf(using tOfKindsK.asType.asInstanceOf[Type[Any]])))
+              TypeArgForgedExpansion(formalTParam, bundledArg = tArg, decodedKinds)
+            else
+              badUse:
+                s"""Cannot prove that type ${typeShortCode(tArg)} has the expected kind ${decodedKinds.map(_.show).mkString("", " :: ", " :: TNil")}, because
+                    | - $msg,
+                    | - nor is there an instance of ${typeShortCode(tOfKindsK)} among the ${considering.size} instances provided explicitly to the decoding macro
+                    | - nor is there a given instance of ${typeShortCode(tOfKindsK)} in scope
+                    |   - although this could be a false negative due to https://github.com/scala/scala3/issues/26589,
+                    |     in which case work around it by passing an explicit instance to the decode macro
+                    |   - reported explanation:
+                    |     ${e.explanation.replace("\n", "\n     ")}
+                    |""".stripMargin
   }
 
   def compiletimeKindCheck[A <: AnyKind, K](using Type[A], Type[K], Reporting.Context): Expr[Unit] =
@@ -663,11 +625,6 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           badUse(s"${typeShortCode[A]} is not statically known to be of kind ${k.show}, because it is not a subtype of ${{typeShortCode(expectedUpperBound)}}")
       case Right(ks) =>
         unimplemented("Multi-kind compiletimeKindCheck")
-
-  private def checkKind(tArg: TypeRepr, k: Kind)(using Reporting.Context): Unit =
-    val expectedUpperBound = kindToUpperBound(k)
-    if (!(tArg <:< expectedUpperBound))
-      badUse(s"Type ${typeShortCode(tArg)} does not have the expected kind ${k.show} (because it is not a subtype of ${typeShortCode(expectedUpperBound)})")
 
   private def decodeType(
     marker: TypeRepr,
@@ -775,7 +732,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeTerm(
     marker: TypeRef | ParamRef,
-    kuotes: TermRef | Null,
+    kuotes: TermRef,
     localMarker: Option[TypeRef | ParamRef],
     rekindle: Option[TermRef], // Rekindle[marker, localMarker]
     ctx: DecodingContext,
@@ -958,7 +915,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeBlock(
     marker: TypeRef | ParamRef,
-    kuotes: TermRef | Null,
+    kuotes: TermRef,
     localMarker: Option[TypeRef | ParamRef],
     rekindle: Option[TermRef], // ev: Kuotes.Rekindle[marker, localMarker]
     ctx: DecodingContext,
@@ -989,7 +946,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeDefinition(
     marker: TypeRef | ParamRef,
-    kuotes: TermRef | Null,
+    kuotes: TermRef,
     localMarker: Option[TypeRef | ParamRef],
     rekindle: Option[TermRef], // ev: Kuotes.Rekindle[marker, localMarker]
     ctx: DecodingContext,
@@ -1100,7 +1057,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodePolyFun(
     marker: TypeRef | ParamRef,
-    kuotes: TermRef | Null,
+    kuotes: TermRef,
     localMarker: Option[TypeRef | ParamRef],
     rekindle: Option[TermRef], // ev: Kuotes.Rekindle[marker, localMarker]
     ctx: DecodingContext,
@@ -1143,7 +1100,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeFun(
     marker: TypeRef | ParamRef,
-    kuotes: TermRef | Null,
+    kuotes: TermRef,
     localMarker: Option[TypeRef | ParamRef],
     rekindle: Option[TermRef], // ev: Kuotes.Rekindle[marker, localMarker]
     ctx: DecodingContext,

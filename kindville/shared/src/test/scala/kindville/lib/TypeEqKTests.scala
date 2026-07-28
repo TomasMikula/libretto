@@ -48,21 +48,27 @@ class TypeEqKTests extends AnyFunSuite {
       App.packer[* :: * :: TNil](m)
 
     assert(ev1.substituteCoApp(ma).unpack == m)
+    assert(ev1.substituteCoAppDynamic(ma).unpack == m)
   }
 
   test("andThen, flip with higher-kinded type argument") {
     case class Foo[F[_]](value: F[Int])
 
+    val foo = Foo(List(1, 2, 3))
+
     def andThenFlipped[F[_], G[_], H[_]](
-      ev1: TypeEqK[* ->> *, F, G],
-      ev2: TypeEqK[* ->> *, H, G],
-    ): TypeEqK[* ->> *, F, H] =
+      ev1: TypeEqK[* -> *, F, G],
+      ev2: TypeEqK[* -> *, H, G],
+    ): TypeEqK[* -> *, F, H] =
       ev1.andThen(ev2.flip)
 
-    val ev = TypeEqK.refl[* ->> *][List]()
-    val res = andThenFlipped(ev, ev)
-      .substituteCo(Foo(List(1, 2, 3)))
+    val ev = TypeEqK.refl[* -> *][List]()
+    val ev1 = andThenFlipped(ev, ev)
 
-    assert(res == Foo(List(1, 2, 3)))
+    val ma: App[* -> *, Foo, List] = App.pack[* -> *, Foo, List](foo)
+
+    assert(ev1.substituteCo(foo) == foo)
+    assert(ev1.substituteCoApp(ma).unpack == foo)
+    assert(ev1.substituteCoAppDynamic(ma).unpack == foo)
   }
 }

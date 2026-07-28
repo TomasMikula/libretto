@@ -9,6 +9,11 @@ private[kindville] enum SingleOrMultiple[A] {
       case Single(a) => Single(f(a))
       case Multiple(as) => Multiple(as.map(f))
 
+  def traverse[G[_], B](f: A => G[B])(using G: Applicative[G]): G[SingleOrMultiple[B]] =
+    this match
+      case Single(a) => f(a).map(Single(_))
+      case Multiple(as) => as.traverseList(f).map(Multiple(_))
+
   def toList: List[A] =
     this match
       case Single(a) => List(a)
