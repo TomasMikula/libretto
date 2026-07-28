@@ -758,23 +758,6 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             given Printer[TypeRepr] = Printer.TypeReprShortCode
             badUse(s"Got ${arg.show} of type ${t.show}, expected type ${decodedU.show} (which is the decoding of ${u.show})")
 
-        // '{ kuotes.locallyEquals[T, A] }
-        case TypeApply(Select(prefix, "locallyEquals"), List(t, a)) if prefix.tpe == kuotes =>
-          println(s"locallyEquals[${treeShortCode(t)}, ${treeShortCode(a)}]")
-          a.tpe match {
-            case ref: TypeRef =>
-              ref match
-                case ctx.expandsTo(as) =>
-                  val bs = as.bundled(forceExplicitBundle = false)
-                  if (t.tpe =:= bs)
-                    given Quotes = owner.asQuotes
-                    Select.unique('{ =~=.Refl }.asTerm, "apply").appliedToType(t.tpe).appliedToNone
-                  else
-                    badUse(s"Local type ${typeShortCode(ref)} expands to ${typeShortCode(bs)}, not ${typeShortCode(t.tpe)}")
-            case other =>
-              unsupported(s"The second type argument to locallyEquals must be a TypeRef, but ${typeShortCode(other)} is a ${typeStruct(other)}.")
-          }
-
         // '{ kuotes.rekindle[R](f: [⋅⋅⋅[_]] => Rekindle[⋅⋅, ⋅⋅⋅] ?=> R) }
         case Apply(TypeApply(Select(prefix, "rekindle"), List(r)), List(f)) if prefix.tpe == kuotes =>
           if (localMarker.isDefined)

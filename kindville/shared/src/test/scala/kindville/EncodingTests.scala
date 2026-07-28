@@ -33,13 +33,4 @@ class EncodingTests extends AnyFunSuite {
     assert(go(List(1, 2, 3), _.headOption) == Some(1))
   }
 
-  test("locallyEquals[Option :: Int :: TNil, A]") {
-    case class Foo[F[_], A](value: F[A])
-    type K = (* -> *) :: * :: TNil
-
-    decodeT[Foo :: (Option :: Int :: TNil) :: TNil]:
-      [⋅⋅[_]] => k ?=> [F[_ <: ⋅⋅[K]], A <: ⋅⋅[K]] => () =>
-        k.locallyEquals[Option :: Int :: TNil, A]: (Option :: Int :: TNil) =~= ⋅⋅[A]
-  }
-
 }
