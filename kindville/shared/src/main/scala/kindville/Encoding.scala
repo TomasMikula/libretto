@@ -419,22 +419,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     inside(encoded.show) {
       encoded.asTerm match
         case PolyFun(tparams, params, paramsGiven, retTp, body) =>
-          tparams match
-            case tparam :: Nil =>
-              val (name, kind, typeRef) = tparam
-              val marker = typeRef // TODO: check that marker has kind _[_]
-              params match
-                case param :: Nil =>
-                  if (paramsGiven)
-                    ParseKuotedResult(marker, param, retTp, body)
-                  else
-                    badUse(s"Expected a polymorphic function with a given value parameter, but ${param.name} is not given")
-                case _ =>
-                  badUse(s"Expected a polymorphic function with 1 given value parameter, but got ${params.size} value paramters")
-            case Nil =>
-              assertionFailed("unexpected polymorphic function with 0 type parameters")
-            case tparams =>
-              badUse("Expected a polymorphic function with a single type parameter [⋅⋅[_]]")
+          val tparam = tparams.getSingle(otherwise = badUse("Expected a polymorphic function with a *single* type parameter [⋅⋅[_]]"))
+          val (name, kind, typeRef) = tparam
+          val marker = typeRef // TODO: check that marker has kind _[_]
+          val param = params.getSingle(otherwise = badUse(s"Expected a polymorphic function with 1 given value parameter, but got ${params.size} value paramters"))
+          if (paramsGiven)
+            ParseKuotedResult(marker, param, retTp, body)
+          else
+            badUse(s"Expected a polymorphic function with a given value parameter, but ${param.name} is not given")
         case Inlined(call, Nil, expansion) =>
           insideInlinedCall(call):
             parseKuoted(expansion.asExpr)
@@ -1312,19 +1304,16 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ): TypeRepr =
     // encode the expanded argument (A --> A1, ...) into a single type A1 :: ...
     val m = typeShortCode(marker)
-    targs match
-      case a :: Nil =>
-        val a1: ParamRef | TypeRef = a match
-          case a: ParamRef => a
-          case a: TypeRef  => a
-          case a           => badUse(s"Invalid application of $m. Spread operator $m can only be applied to type parameters, but ${typeShortCode(a)} is not one.")
-        a1 match
-          case ctx.expandsTo(as) =>
-            as.bundled(forceExplicitBundle)
-          case a1 =>
-            badUse(s"Invalid application of $m. ${typeShortCode(a1)} is not <: $m[<kinds>]")
-      case other =>
-        assertionFailed(s"Expected 1 type argument to $m, got ${targs.size} (${targs.map(typeShortCode).mkString(", ")})")
+    val a = targs.getSingle(otherwise = assertionFailed(s"Expected 1 type argument to $m, got ${targs.size} (${targs.map(typeShortCode).mkString(", ")})"))
+    val a1: ParamRef | TypeRef = a match
+      case a: ParamRef => a
+      case a: TypeRef  => a
+      case a           => badUse(s"Invalid application of $m. Spread operator $m can only be applied to type parameters, but ${typeShortCode(a)} is not one.")
+    a1 match
+      case ctx.expandsTo(as) =>
+        as.bundled(forceExplicitBundle)
+      case a1 =>
+        badUse(s"Invalid application of $m. ${typeShortCode(a1)} is not <: $m[<kinds>]")
 
   private def decodeTypeBounds(
     marker: TypeRepr,
