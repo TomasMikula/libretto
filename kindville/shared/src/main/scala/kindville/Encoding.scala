@@ -802,6 +802,12 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             targetType.asType match
               case '[t] => '{ ${y1.asExpr}.asInstanceOf[t] }.asTerm
 
+        case k if k.tpe =:= kuotes =>
+          badUse(s"Invalid use of ${treeShortCode(k)} in this position.")
+
+        case r if rekindle.contains(r.tpe) =>
+          badUse(s"Invalid use of ${treeShortCode(r)} in this position.")
+
         case PolyFun(tparams, params, paramsGiven, retTp, body) =>
           decodePolyFun(marker, kuotes, localMarker, rekindle, ctx, tparams, params, paramsGiven, retTp, body)
             .mkTerm(owner)
