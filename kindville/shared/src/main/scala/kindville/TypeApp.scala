@@ -31,7 +31,7 @@ object TypeApp {
     type FAs
     given Type[FAs] =
       TypeRepr.of[F]
-        .appliedTo(unbundleTypeArgsOrFail(Type.of[As]).map(TypeRepr.of(using _)))
+        .appliedTo(unbundleTypeArgsOrFail(TypeRepr.of[As]))
         .asType
         .asInstanceOf[Type[FAs]]
     val resultType =

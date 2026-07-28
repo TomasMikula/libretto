@@ -39,35 +39,32 @@ private object Encoding {
       case Single(a) => a
       case Multiple(as) => bundleTypeArgs(as)
 
-  def unbundleTypeArgs[As <: AnyKind](args: Type[As])(using Quotes): Either[String, List[Type[?]]] =
+  def unbundleTypeArgs(using Quotes)(args: qr.TypeRepr): Either[String, List[qr.TypeRepr]] =
     import quotes.reflect.*
 
     val cons = TypeRepr.of[::]
 
     args match
-      case '[TNil] =>
+      case t if t =:= TypeRepr.of[TNil] =>
         Right(Nil)
+      case AppliedType(f, args) =>
+        f.asType match
+          case '[::] =>
+            args match
+              case h :: t :: Nil =>
+                unbundleTypeArgs(t)
+                  .map(h :: _)
+              case _ =>
+                assertionFailed(s"Unexpected number of type arguments to ${typeShortCode(f)}. Expected 2, got ${args.size}: ${args.map(typeShortCode(_)).mkString(", ")}")
+          case _ =>
+            Left(s"${typeShortCode(f)} is neither ${typeShortCode[TNil]} nor ${typeShortCode[::]}")
       case other =>
-        val repr = TypeRepr.of(using other)
-        repr match
-          case AppliedType(f, args) =>
-            f.asType match
-              case '[::] =>
-                args match
-                  case h :: t :: Nil =>
-                    unbundleTypeArgs(t.asType)(using quotes)
-                      .map(h.asType :: _)
-                  case _ =>
-                    assertionFailed(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
-              case '[other] =>
-                Left(s"${typeShortCode[other]} is neither ${typeShortCode[TNil]} nor ${typeShortCode[::]}")
-          case other =>
-            Left(s"${typeShortCode(other)} is neither ${typeShortCode[TNil]} nor ${typeShortCode[::]}")
+        Left(s"${typeShortCode(other)} is neither ${typeShortCode[TNil]} nor ${typeShortCode[::]}")
 
-  def unbundleTypeArgsOrFail[As <: AnyKind](args: Type[As])(using Quotes, Reporting.Context): List[Type[?]] =
+  def unbundleTypeArgsOrFail(using Quotes, Reporting.Context)(args: qr.TypeRepr): List[qr.TypeRepr] =
     unbundleTypeArgs(args) match
       case Right(res) => res
-      case Left(msg) => badUse(s"Cannot decode a list of type arguments from type ${typeShortCode[As](using args)}: $msg")
+      case Left(msg) => badUse(s"Cannot decode a list of type arguments from type ${typeShortCode(args)}: $msg")
 
 
   private enum FastReject[A]:
@@ -343,7 +340,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     Reporting.Context
   ): TypeRepr =
     inside(s"decoding ${typeShortCode(code)} applied to type arguments ${typeShortCode(bundledArgs)}") {
-      val args = unbundleTypeArgsOrFail(bundledArgs.asType)
+      val args = unbundleTypeArgsOrFail(bundledArgs)
 
       code.dealiasKeepOpaques match
         case outer @ TypeLambda(auxNames, auxBounds, body) =>
@@ -359,7 +356,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                     case other => unexpectedTypeParamType(other)
                 }
               val substitutions =
-                decodeTypeParamSubstitutions(marker, params, args.map(TypeRepr.of(using _)),
+                decodeTypeParamSubstitutions(marker, params, args,
                   considering = Seq.empty, // XXX: might lead to confusing error message, namely invalid suggestion to provide ofKinds witness explicitly
                 )
               decodeType(marker, localMarker = None, substitutions, body)
@@ -402,8 +399,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         }
 
       val targs =
-        unbundleTypeArgsOrFail(TypeRepr.of[As].appliedTo(marker).asType)
-          .map(t => TypeRepr.of(using t).dealiasKeepOpaques)
+        unbundleTypeArgsOrFail(TypeRepr.of[As].appliedTo(marker))
+          .map(_.dealiasKeepOpaques)
 
       val ctx =
         decodeTypeParamSubstitutions(marker, userTParams, targs, considering)
@@ -566,28 +563,28 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case Single(k) =>
           Right(Single((k, tArg)))
         case Multiple(ks) =>
-          unbundleTypeArgs(tArg.asType) match
+          unbundleTypeArgs(tArg) match
             case Left(reason) =>
               Left(s"Cannot prove that ${typeShortCode(tArg)} is a list of types, because $reason")
             case Right(ts) =>
               if (ts.size != ks.size)
                 // fatal, fail without looking for ofKinds evidence
                 badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(tArg)}")
-              Right(Multiple(ks zip ts.map(TypeRepr.of(using _))))
+              Right(Multiple(ks zip ts))
 
-    val kindCheckedArgs: Either[String, SingleOrMultiple[(Kind, TypeRepr)]] = // TODO: is TypeRepr sufficient from here on?
+    val kindCheckedArgs: Either[String, SingleOrMultiple[TypeRepr]] =
       alignedArgsToKinds.flatMap(_.traverse {
-        case kt @ (k, t) =>
+        case (k, t) =>
           val expectedUpperBound = kindToUpperBound(k)
           if (t <:< expectedUpperBound)
-            Right(kt)
+            Right(t)
           else
             Left(s"Type ${typeShortCode(t)} does not have the expected kind ${k.show} (because it is not a subtype of ${typeShortCode(expectedUpperBound)})")
       })
 
     kindCheckedArgs match
-      case Right(value) =>
-        TypeArgExpansion(formalTParam, value.map(_._2))
+      case Right(ts) =>
+        TypeArgExpansion(formalTParam, ts)
       case Left(msg) =>
         val tOfKindsK = TypeRepr.of[ofKinds].appliedTo(List(tArg, kinds))
         Implicits.search(tOfKindsK) match
