@@ -628,7 +628,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeType(
     marker: TypeRepr,
-    localMarker: Option[TypeRef | ParamRef],
+    localMarker: Option[TypeRef],
     ctx: DecodingContext,
     body: TypeRepr,
   )(using
@@ -972,7 +972,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodePolyType(
     marker: TypeRepr,
-    localMarker: Option[ParamRef | TypeRef],
+    localMarker: Option[TypeRef],
     ctx: DecodingContext,
     pt: PolyType,
   )(using
@@ -1005,7 +1005,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeMethodType(
     marker: TypeRepr,
-    localMarker: Option[ParamRef | TypeRef],
+    localMarker: Option[TypeRef],
     ctx: DecodingContext,
     methType: MethodType,
   )(using
@@ -1118,7 +1118,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeTypeParams(
     marker: TypeRepr,
-    localMarker: Option[ParamRef | TypeRef],
+    localMarker: Option[TypeRef],
     ctx: DecodingContext,
     tParams: List[(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: ParamRef | TypeRef)],
   )(using
@@ -1162,7 +1162,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private class DecodedTypeParams(
     marker: TypeRepr,
-    localMarker: Option[TypeRef | ParamRef],
+    localMarker: Option[TypeRef],
     ctx: DecodingContext,
     expandedTypeParams: List[(index: Int, expanded: PostExpansionParam)],
   ) {
@@ -1225,7 +1225,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   private object DecodedTypeParams {
     def apply(
       marker: TypeRepr,
-      localMarker: Option[TypeRef | ParamRef],
+      localMarker: Option[TypeRef],
       ctx: DecodingContext,
       expandedTypeParams: List[PostExpansionParam],
     ): DecodedTypeParams =
@@ -1238,7 +1238,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def expandTypeArgs(
     marker: TypeRepr,
-    localMarker: Option[TypeRef | ParamRef],
+    localMarker: Option[TypeRef],
     ctx: DecodingContext,
     targs: List[TypeRepr],
   )(using
@@ -1304,7 +1304,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private def decodeTypeBounds(
     marker: TypeRepr,
-    localMarker: Option[TypeRef | ParamRef],
+    localMarker: Option[TypeRef],
     ctx: DecodingContext,
     bounds: Either[TypeBounds, LambdaTypeTree],
   )(using
