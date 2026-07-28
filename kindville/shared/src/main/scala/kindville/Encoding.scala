@@ -723,9 +723,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     }
 
   private def decodeTerm(
-    marker: TypeRef | ParamRef,
+    marker: TypeRef,
     kuotes: TermRef,
-    localMarker: Option[TypeRef | ParamRef],
+    localMarker: Option[TypeRef],
     rekindle: Option[TermRef], // Rekindle[marker, localMarker]
     ctx: DecodingContext,
     owner: Symbol,
@@ -889,9 +889,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     }
 
   private def decodeBlock(
-    marker: TypeRef | ParamRef,
+    marker: TypeRef,
     kuotes: TermRef,
-    localMarker: Option[TypeRef | ParamRef],
+    localMarker: Option[TypeRef],
     rekindle: Option[TermRef], // ev: Kuotes.Rekindle[marker, localMarker]
     ctx: DecodingContext,
     owner: Symbol,
@@ -920,9 +920,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   }
 
   private def decodeDefinition(
-    marker: TypeRef | ParamRef,
+    marker: TypeRef,
     kuotes: TermRef,
-    localMarker: Option[TypeRef | ParamRef],
+    localMarker: Option[TypeRef],
     rekindle: Option[TermRef], // ev: Kuotes.Rekindle[marker, localMarker]
     ctx: DecodingContext,
     owner: Symbol,
@@ -1031,9 +1031,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   }
 
   private def decodePolyFun(
-    marker: TypeRef | ParamRef,
+    marker: TypeRef,
     kuotes: TermRef,
-    localMarker: Option[TypeRef | ParamRef],
+    localMarker: Option[TypeRef],
     rekindle: Option[TermRef], // ev: Kuotes.Rekindle[marker, localMarker]
     ctx: DecodingContext,
     tparams: List[(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: TypeRef)],
@@ -1074,9 +1074,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   }
 
   private def decodeFun(
-    marker: TypeRef | ParamRef,
+    marker: TypeRef,
     kuotes: TermRef,
-    localMarker: Option[TypeRef | ParamRef],
+    localMarker: Option[TypeRef],
     rekindle: Option[TermRef], // ev: Kuotes.Rekindle[marker, localMarker]
     ctx: DecodingContext,
     paramsGiven: Boolean,
