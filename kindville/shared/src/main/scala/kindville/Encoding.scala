@@ -246,6 +246,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       DecodingContext(Nil)
   }
 
+  object ParamRefOrTypeRef {
+    def unapply(t: TypeRepr): Option[ParamRef | TypeRef] =
+      t match
+        case ref: ParamRef => Some(ref)
+        case ref: TypeRef => Some(ref)
+        case _ => None
+  }
+
   case class TypeLambdaTemplate(
     paramNames: Groups[String],
     boundsFn: (tparams: Int => TypeRepr) => Groups[TypeBounds],
@@ -676,26 +684,18 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           badUse(s"Cannot use the spread operator here")
         case t if localMarker.exists(_ =:= t) =>
           badUse(s"Cannot use the local spread operator here")
-        case p: ParamRef =>
-          p match
+        case ParamRefOrTypeRef(ref) =>
+          ref match
             case ctx.substitutesTypeTo(q) => q
             case ctx.expandsTo(x) =>
               import DecodingContext.ParamExpansion
               val expansionMsg = x match
                 case ParamExpansion.StaticallyKnown(ts) => s"which expands to ${ts.map(typeShortCode).mkString("(", ", ", ")")}"
                 case ParamExpansion.Forged(bundled, _) => s"which stands for ${typeShortCode(bundled)}"
-              badUse(s"Invalid use of kind-expanded type parameter ${typeShortCode(p)} ($expansionMsg). It can only be used in type argument position.")
-            case p => p
-        case t @ TypeRef(parent, name) =>
-          t match
-            case ctx.substitutesTypeTo(u) => u
-            case ctx.expandsTo(x) =>
-              import DecodingContext.ParamExpansion
-              val expansionMsg = x match
-                case ParamExpansion.StaticallyKnown(ts) => s"which expands to ${ts.map(typeShortCode).mkString("(", ", ", ")")}"
-                case ParamExpansion.Forged(bundled, _) => s"which stands for ${typeShortCode(bundled)}"
-              badUse(s"Invalid use of kind-expanded type parameter ${typeShortCode(t)} ($expansionMsg). It can only be used in type argument position.")
-            case t =>
+              badUse(s"Invalid use of kind-expanded type parameter ${typeShortCode(ref)} ($expansionMsg). It can only be used in type argument position.")
+            case p: ParamRef =>
+              p
+            case t @ TypeRef(parent, name) =>
               checkNonOccurrence(marker, ctx, parent)
               t
         case t @ TermRef(prefix, ident) =>
@@ -1256,8 +1256,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                 expandAndBundleTypeArg(localMarker.get, ctx, targs, forceExplicitBundle = true)
               else
                 fa
-          case p: ParamRef =>
-            p match
+          case ParamRefOrTypeRef(ref) =>
+            ref match
               case ctx.expandsTo(x) =>
                 x match
                   case ParamExpansion.StaticallyKnown(ps) =>
@@ -1266,22 +1266,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                     // can expand to forged types only within rekindle, i.e. when localMarker is defined
                     kinds.map(kindToUpperBound)
                   case ParamExpansion.Forged(bundled, kinds) =>
-                    badUse(s"Cannot statically determine the expanded form of type parameter ${typeShortCode(p)}. It is only known to stand for ${typeShortCode(bundled)}. Hint: Wrap inside `rekindle` to expand such statically unknown types.")
+                    badUse(s"Cannot statically determine the expanded form of type parameter ${typeShortCode(ref)}. It is only known to stand for ${typeShortCode(bundled)}. Hint: Wrap inside `rekindle` to expand such statically unknown types.")
               case _ =>
-                Single(p)
-          case t: TypeRef =>
-            t match
-              case ctx.expandsTo(x) =>
-                x match
-                  case ParamExpansion.StaticallyKnown(ts) =>
-                    ts
-                  case ParamExpansion.Forged(bundled, kinds) if localMarker.isDefined =>
-                    // can expand to forged types only within rekindle, i.e. when localMarker is defined
-                    kinds.map(kindToUpperBound)
-                  case ParamExpansion.Forged(bundled, kinds) =>
-                    badUse(s"Cannot statically determine the expanded form of type ${typeShortCode(t)}. It is only known to stand for ${typeShortCode(bundled)}. Hint: Wrap inside `rekindle` to expand such statically unknown types.")
-              case _ =>
-                Single(t)
+                Single(ref)
           case other =>
             Single(other)
         }
