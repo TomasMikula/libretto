@@ -32,4 +32,24 @@ class AListKTests extends AnyFunSuite {
     assert(out1 == false)
     assert(out2 == false)
   }
+
+  test("list of natural transformations") {
+    type ~>[F[_], G[_]] = [X] => F[X] => G[X]
+    type OfInt[F[_]] = F[Int]
+
+    val f: AListK[* -> *, ~>, List, Option] =
+      // ([X] => (xs: List[X]) => xs.reverse) ::
+      ([X] => (xs: List[X]) => xs.headOption) ::
+      AListK.empty[* -> *][~>, Option]()
+
+    val action: Action[* -> *, OfInt, ~>] =
+      Action.pack[* -> *, OfInt, ~>]([F[_], G[_]] => (a: F[Int], f: F ~> G) => f(a))
+
+    val in: App[* -> *, OfInt, List] =
+      App.packer[* -> *](List(1, 2, 3))
+
+    val out = f.foldLeft[OfInt](in, action)
+
+    assert(out.unpack == Some(1))
+  }
 }
