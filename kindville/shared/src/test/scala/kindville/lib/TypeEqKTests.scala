@@ -17,9 +17,9 @@ class TypeEqKTests extends AnyFunSuite {
     case class Foo[F[_]](value: F[Int])
 
     val ev =
-      TypeEqK.refl[* ->> *][List]()
+      TypeEqK.refl[* -> *][List]()
 
-    val ev1: TypeEqK[* ->> *, List, List] =
+    val ev1: TypeEqK[* -> *, List, List] =
       ev
 
     assert(ev.substituteCo[Foo](Foo(List(1, 2, 3))) == Foo(List(1, 2, 3)))

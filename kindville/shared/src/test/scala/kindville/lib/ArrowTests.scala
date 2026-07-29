@@ -56,30 +56,30 @@ class ArrowTests extends AnyFunSuite {
       MyArrowType[String, List, Foo, Int, Option, Foo]
 
     val x: Arrow[
-      * :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil,
+      * :: (* -> *) :: ((((* :: * :: TNil) -> *) :: * :: TNil) -> *) :: TNil,
       MyArrowType,
       String :: List   :: Foo :: TNil,
       Int    :: Option :: Foo :: TNil,
     ] =
       Arrow.pack[
-        * :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil,
+        * :: (* -> *) :: ((((* :: * :: TNil) -> *) :: * :: TNil) -> *) :: TNil,
         MyArrowType,
         String :: List   :: Foo :: TNil,
         Int    :: Option :: Foo :: TNil,
       ](in)
 
     val y: Arrow[
-      * :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil,
+      * :: (* -> *) :: ((((* :: * :: TNil) -> *) :: * :: TNil) -> *) :: TNil,
       MyArrowType,
       String :: List   :: Foo :: TNil,
       Int    :: Option :: Foo :: TNil,
     ] =
-      Arrow.packer[* :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil](in)
+      Arrow.packer[* :: (* -> *) :: ((((* :: * :: TNil) -> *) :: * :: TNil) -> *) :: TNil](in)
 
     val outx1 = x.unpack
-    val outx2 = Arrow.unpacker[* :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil](x)
+    val outx2 = Arrow.unpacker[* :: (* -> *) :: ((((* :: * :: TNil) -> *) :: * :: TNil) -> *) :: TNil](x)
     val outy1 = y.unpack
-    val outy2 = Arrow.unpacker[* :: (* -> *) :: ((((* :: * :: TNil) ->> *) :: * :: TNil) ->> *) :: TNil](y)
+    val outy2 = Arrow.unpacker[* :: (* -> *) :: ((((* :: * :: TNil) -> *) :: * :: TNil) -> *) :: TNil](y)
 
     assert(outx1 == in)
     assert(outx2 == in)

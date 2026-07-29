@@ -86,18 +86,18 @@ private object Encoding {
     k.dealiasKeepOpaques match
       case tp if tp =:= TypeRepr.of[*] =>
         FastReject.Success(Kind.Tp)
-      case AppliedType(f, args) if f =:= TypeRepr.of[->>] =>
+      case AppliedType(f, args) if f =:= TypeRepr.of[->] =>
         args match
           case inKs :: outK :: Nil =>
             FastReject.Success:
               val in = decodeKindOrKinds(inKs)
-              val ks = in.left.map(Kinds.single).merge
+              val ks = in.left.map(Kinds.single).merge // TODO: Is it really OK to conflate a single-kind (e.g. `*`) with a singleton multi-kind (`* :: TNil`)?
               val l  = decodeKind(outK)
               Kind.arr(ks, l)
           case _ =>
             assertionFailed(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
       case other =>
-        FastReject.Reject(expectedOneOf = List(typeShortCode(TypeRepr.of[*]), typeShortCode(TypeRepr.of[->>])))
+        FastReject.Reject(expectedOneOf = List(typeShortCode(TypeRepr.of[*]), typeShortCode(TypeRepr.of[->])))
 
   def decodeKinds(using Quotes, Reporting.Context)(kinds: qr.TypeRepr): Kinds =
     import qr.*

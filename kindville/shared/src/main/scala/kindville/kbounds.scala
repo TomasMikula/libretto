@@ -15,7 +15,7 @@ package kindville
 type KBound[K] <: AnyKind = K match
   case * =>
     Any
-  case (ks ->> l) =>
+  case (ks -> l) =>
     ks match
       case TNil =>
         KBound[l]
@@ -28,12 +28,13 @@ type KBound[K] <: AnyKind = K match
               case k2 :: t =>
                 t match
                   case TNil => [_ <: KBound[k0], _ <: KBound[k1], _ <: KBound[k2]] =>> KBound[l]
+                  // continue ad infinity ...
 
 type KBounds[K] <: AnyKind = K match
   case * =>
     KBound[kindville.*]
-  case (ks ->> l) =>
-    KBound[ks ->> l]
+  case (ks -> l) =>
+    KBound[ks -> l]
   case _ =>
     KBoundList[K]
 

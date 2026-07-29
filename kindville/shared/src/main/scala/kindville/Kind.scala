@@ -18,13 +18,13 @@ private[kindville] object Kind:
     paramKinds: Kinds.Of[Ks],
     outKind: Kind.Of[L],
   ) extends Kind {
-    override type Label = Ks ->> L
+    override type Label = Ks -> L
 
     override def show: String =
       paramKinds.show + " -> " + outKind.show
   }
 
-  def arr(ks: Kinds, l: Kind): Kind.Of[ks.Label ->> l.Label] =
+  def arr(ks: Kinds, l: Kind): Kind.Of[ks.Label -> l.Label] =
     Arr(ks, l)
 
 private[kindville] sealed trait Kinds:

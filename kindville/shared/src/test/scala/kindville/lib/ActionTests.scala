@@ -79,4 +79,36 @@ class ActionTests extends AnyFunSuite {
     assert(out5 == Foo(Some(1)))
   }
 
+  test("action of polymorphic function on custom higher-kinded data type Foo[F[_, _]]") {
+    type ~~>[F[_, _], G[_, _]] = [A, B] => F[A, B] => G[A, B]
+
+    case class Foo[F[_, _]](value: F[String, Int])
+
+    val foo: Foo[Function] =
+      Foo(_.length)
+    val funToMap: Function ~~> Map =
+      [A, B] => f => Map.empty[A, B].withDefault(f)
+    val in: App[(* :: * :: TNil) -> *, Foo, Function] =
+      App.pack[(* :: * :: TNil) -> *, Foo, Function](foo)
+    val action: Action[(* :: * :: TNil) -> *, Foo, ~~>] =
+      Action.pack[(* :: * :: TNil) -> *, Foo, ~~>]([F[_, _], G[_, _]] => (x, f) => Foo(f(x.value)))
+    val funToMapArrow: Arrow[(* :: * :: TNil) -> *, ~~>, Function, Map] =
+      Arrow.packer[(* :: * :: TNil) -> *](funToMap)
+
+    val out1 = action.act(foo, funToMap)
+    val out2 = action.actOn(foo)(funToMap)
+    val out3 = action.actBy[Function, Map](funToMap)(foo)
+    val out4 = action(in, funToMapArrow).unpack
+    val out5 = action.applyDynamic[Function, Map](in, funToMapArrow).unpack
+
+    def check(actual: Foo[Map]): Unit =
+      assert(actual.value("fooooo") == foo.value("fooooo"))
+
+    check(out1)
+    check(out2)
+    check(out3)
+    check(out4)
+    check(out5)
+  }
+
 }
