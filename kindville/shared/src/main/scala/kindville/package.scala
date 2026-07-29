@@ -27,6 +27,9 @@ object ofKind {
   given [H[_[_]]] => (H ofKind ((* -> *) -> *)) =
     new (H ofKind ((* -> *) -> *)) {}
 
+  given [HA[_, _[_]]] => (HA ofKind ((* :: (* -> *) :: TNil) -> *)) =
+    new (HA ofKind ((* :: (* -> *) :: TNil) -> *)) {}
+
   // TODO: provide macro-generated evidence for arbitrary kinds
 }
 
@@ -40,9 +43,11 @@ object ofKinds {
   given (TNil ofKinds TNil) =
     new (TNil ofKinds TNil) {}
 
-  given [A0, As, K0, Ks] => (A0 ofKind K0, As ofKinds Ks) => ((A0 :: As) ofKinds (K0 :: Ks)) =
+  given [A0 <: AnyKind, As, K0, Ks] => (A0 ofKind K0, As ofKinds Ks) => ((A0 :: As) ofKinds (K0 :: Ks)) =
     new ((A0 :: As) ofKinds (K0 :: Ks)) {}
 
+  // TODO: This should not be allowed (because the lists are not TNil-terminated)
+  summon[(Int :: String) ofKinds (* :: *)]
 }
 
 private transparent inline def qr(using Quotes): quotes.reflect.type =

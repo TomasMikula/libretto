@@ -553,63 +553,59 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ): DecodingContext.Elem.TypeArgExpansion | DecodingContext.Elem.TypeArgForgedExpansion = {
     import DecodingContext.Elem.{TypeArgExpansion, TypeArgForgedExpansion}
 
-    val decodedKinds: SingleOrMultiple[Kind] =
-      decodeKindOrKinds(kinds) match
-        case Left(k) => Single(k)
-        case Right(ks) => Multiple(ks.toList)
+    inside(s"matching type argument ${typeShortCode(tArg)} against the kind(s) ${typeShortCode(kinds)} declared by the corresponding type parameter ${typeShortCode(formalTParam)}") {
+      val decodedKinds: SingleOrMultiple[Kind] =
+        decodeKindOrKinds(kinds) match
+          case Left(k) => Single(k)
+          case Right(ks) => Multiple(ks.toList)
 
-    val alignedArgsToKinds: Either[String, SingleOrMultiple[(Kind, TypeRepr)]] =
-      decodedKinds match
-        case Single(k) =>
-          Right(Single((k, tArg)))
-        case Multiple(ks) =>
-          unbundleTypeArgs(tArg) match
-            case Left(reason) =>
-              Left(s"Cannot prove that ${typeShortCode(tArg)} is a list of types, because $reason")
-            case Right(ts) =>
-              if (ts.size != ks.size)
-                // fatal, fail without looking for ofKinds evidence
-                badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(tArg)}")
-              Right(Multiple(ks zip ts))
+      val alignedArgsToKinds: Either[String, SingleOrMultiple[(Kind, TypeRepr)]] =
+        decodedKinds match
+          case Single(k) =>
+            Right(Single((k, tArg)))
+          case Multiple(ks) =>
+            unbundleTypeArgs(tArg) match
+              case Left(reason) =>
+                Left(s"Cannot prove that ${typeShortCode(tArg)} is a list of types, because $reason")
+              case Right(ts) =>
+                if (ts.size != ks.size)
+                  // fatal, fail without looking for ofKinds evidence
+                  badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(tArg)}")
+                Right(Multiple(ks zip ts))
 
-    val kindCheckedArgs: Either[String, SingleOrMultiple[TypeRepr]] =
-      alignedArgsToKinds.flatMap(_.traverse {
-        case (k, t) =>
-          val expectedUpperBound = kindToUpperBound(k)
-          if (t <:< expectedUpperBound)
-            Right(t)
-          else
-            Left(s"Type ${typeShortCode(t)} does not have the expected kind ${k.show} (because it is not a subtype of ${typeShortCode(expectedUpperBound)})")
-      })
-
-    kindCheckedArgs match
-      case Right(ts) =>
-        TypeArgExpansion(formalTParam, ts)
-      case Left(msg) =>
-        val tOfKindsK = TypeRepr.of[ofKinds].appliedTo(List(tArg, kinds))
-        Implicits.search(tOfKindsK) match
-          case iss: ImplicitSearchSuccess =>
-            TypeArgForgedExpansion(formalTParam, bundledArg = tArg, decodedKinds)
-          case e: NoMatchingImplicits =>
-            badUse(s"No matching implicits for ${typeShortCode(tOfKindsK)}:\n${e.explanation}")
-          case e: AmbiguousImplicits =>
-            badUse(s"Ambiguous implicits for ${typeShortCode(tOfKindsK)}:\n${e.explanation}")
-          case e: DivergingImplicit =>
-            badUse(s"Diverging implicit search for ${typeShortCode(tOfKindsK)}:\n${e.explanation}")
-          case e: ImplicitSearchFailure =>
-            if (considering.exists(_.isExprOf(using tOfKindsK.asType.asInstanceOf[Type[Any]])))
-              TypeArgForgedExpansion(formalTParam, bundledArg = tArg, decodedKinds)
+      val kindCheckedArgs: Either[String, SingleOrMultiple[TypeRepr]] =
+        alignedArgsToKinds.flatMap(_.traverse {
+          case (k, t) =>
+            val expectedUpperBound = kindToUpperBound(k)
+            if (t <:< expectedUpperBound)
+              Right(t)
             else
-              badUse:
-                s"""Cannot prove that type ${typeShortCode(tArg)} has the expected kind ${decodedKinds.map(_.show).mkString("", " :: ", " :: TNil")}, because
-                    | - $msg,
-                    | - nor is there an instance of ${typeShortCode(tOfKindsK)} among the ${considering.size} instances provided explicitly to the decoding macro
-                    | - nor is there a given instance of ${typeShortCode(tOfKindsK)} in scope
-                    |   - although this could be a false negative due to https://github.com/scala/scala3/issues/26589,
-                    |     in which case work around it by passing an explicit instance to the decode macro
-                    |   - reported explanation:
-                    |     ${e.explanation.replace("\n", "\n     ")}
-                    |""".stripMargin
+              Left(s"Type ${typeShortCode(t)} does not have the expected kind ${k.show} (because it is not a subtype of ${typeShortCode(expectedUpperBound)})")
+        })
+
+      kindCheckedArgs match
+        case Right(ts) =>
+          TypeArgExpansion(formalTParam, ts)
+        case Left(msg) =>
+          val tOfKindsK = TypeRepr.of[ofKinds].appliedTo(List(tArg, kinds))
+          Implicits.search(tOfKindsK) match
+            case iss: ImplicitSearchSuccess =>
+              TypeArgForgedExpansion(formalTParam, bundledArg = tArg, decodedKinds)
+            case e: ImplicitSearchFailure =>
+              if (considering.exists(_.isExprOf(using tOfKindsK.asType.asInstanceOf[Type[Any]])))
+                TypeArgForgedExpansion(formalTParam, bundledArg = tArg, decodedKinds)
+              else
+                badUse:
+                  s"""Cannot prove that type ${typeShortCode(tArg)} has the expected kind ${decodedKinds.map(_.show).mkString("", " :: ", " :: TNil")}, because
+                      | - $msg,
+                      | - nor is there an instance of ${typeShortCode(tOfKindsK)} among the ${considering.size} instances provided explicitly to the decoding macro
+                      | - nor is there a given instance of ${typeShortCode(tOfKindsK)} in scope
+                      |   - although this could be a false negative due to https://github.com/scala/scala3/issues/26589,
+                      |     in which case work around it by passing an explicit instance to the decode macro
+                      |   - reported explanation:
+                      |     ${e.explanation.replace("\n", "\n     ")}
+                      |""".stripMargin
+    }
   }
 
   def compiletimeKindCheck[A <: AnyKind, K](using Type[A], Type[K], Reporting.Context): Expr[Unit] =

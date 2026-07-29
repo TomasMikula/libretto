@@ -61,10 +61,10 @@ object AListK {
   transparent inline def empty[K] =
     decode(
       [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=>
-        val refl: [A <: ⋅⋅[K]] => () => TypeEqK[K, A, A] =
+        val refl: [A <: ⋅⋅[K]] => () => TypeEqK[K, ⋅⋅[A], ⋅⋅[A]] =
           k.splice(TypeEqK.refl[K])
         [F[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A <: ⋅⋅[K]] => () =>
-          Empty[K, F, A, A](
+          Empty[K, F, ⋅⋅[A], ⋅⋅[A]](
             refl[A]()
           )
     )

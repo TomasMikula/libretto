@@ -20,6 +20,15 @@ object Action {
         pack
     )
 
+  /** Returns [G[_...], F[_..., _...]] => ([X..., Y...] => (G[X], F[X, Y]) => G[Y]) => Action[K, G, F] */
+  transparent inline def packer[K] =
+    // basically just Box.packer, but need the result to formally return Action instead of Box
+    decode:
+      [⋅⋅[_]] => k ?=>
+        val packer: [G0[_ <: ⋅⋅[K]], F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]]] => ([X <: ⋅⋅[K], Y <: ⋅⋅[K]] => (G0[X], F0[X, Y]) => G0[Y]) => Action[K, G0, F0] =
+          k.splice(Box.packer[Code[K]])
+        packer
+
   extension [K, G <: AnyKind, F <: AnyKind](a: Action[K, G, F]) {
     /** Returns `[X, Y] => (G[X], F[X, Y]) => G[Y]`. */
     transparent inline def unpack =
