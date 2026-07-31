@@ -33,6 +33,18 @@ object ofKind {
   // TODO: provide macro-generated evidence for arbitrary kinds
 }
 
+infix sealed trait ofMultiKind[As, Ks]
+
+object ofMultiKind {
+
+  given (TNil ofMultiKind TNil) =
+    new (TNil ofMultiKind TNil) {}
+
+  given [A0 <: AnyKind, As, K0, Ks] => (A0 ofKind K0, As ofMultiKind Ks) => ((A0 :: As) ofMultiKind (K0 :: Ks)) =
+    new ((A0 :: As) ofMultiKind (K0 :: Ks)) {}
+
+}
+
 infix sealed trait ofKinds[As <: AnyKind, Ks]
 
 object ofKinds {
@@ -40,14 +52,9 @@ object ofKinds {
   given [A <: AnyKind, K] => (A ofKind K) => (A ofKinds K) =
     new (A ofKinds K) {}
 
-  given (TNil ofKinds TNil) =
-    new (TNil ofKinds TNil) {}
+  given [As, Ks] => (As ofMultiKind Ks) => (As ofKinds Ks) =
+    new (As ofKinds Ks) {}
 
-  given [A0 <: AnyKind, As, K0, Ks] => (A0 ofKind K0, As ofKinds Ks) => ((A0 :: As) ofKinds (K0 :: Ks)) =
-    new ((A0 :: As) ofKinds (K0 :: Ks)) {}
-
-  // TODO: This should not be allowed (because the lists are not TNil-terminated)
-  summon[(Int :: String) ofKinds (* :: *)]
 }
 
 private transparent inline def qr(using Quotes): quotes.reflect.type =
