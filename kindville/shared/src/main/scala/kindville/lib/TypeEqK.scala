@@ -12,9 +12,9 @@ class TypeEqK[K, F <: AnyKind, G <: AnyKind](
     decodeT[F :: G :: H :: TNil](
       [⋅⋅[_]] => kuotes ?=> [F <: ⋅⋅[K], G <: ⋅⋅[K], H[_ <: ⋅⋅[K]]] => () =>
         val x: App[K, H, ⋅⋅[F]] =
-          kuotes.splice(hf)
+          hf.spliceAs[App[K, H, ⋅⋅[F]]]
         val subst: [M[X <: ⋅⋅[K]]] => M[F] => M[G] =
-          kuotes.splice(this.substituteCo)
+          this.substituteCo.spliceAs[[M[X <: ⋅⋅[K]]] => M[F] => M[G]]
         subst[[X <: ⋅⋅[K]] =>> App[K, H, ⋅⋅[X]]](x)
     )
       .typecheckAs[App[K, H, G]]
@@ -28,10 +28,10 @@ class TypeEqK[K, F <: AnyKind, G <: AnyKind](
       [⋅⋅[_]] => kuotes ?=> [F0 <: ⋅⋅[K], G0 <: ⋅⋅[K], H0[_ <: ⋅⋅[K]]] => () =>
         kuotes.rekind[App[K, H0, ⋅⋅[G0]]]:
           [⋅⋅⋅[_]] => rekind ?=>
-            val hf1: App[K, H0,  ⋅⋅[F0]] = kuotes.splice(hf)
+            val hf1: App[K, H0,  ⋅⋅[F0]] = hf.spliceAs[App[K, H0,  ⋅⋅[F0]]]
             val hf2: App[K, H0, ⋅⋅⋅[F0]] = rekind.substituteCo[[⋅[_]] =>> App[K, H0, ⋅[F0]]](hf1)
             val hf3: H0[F0] = hf2.unpackDynamic
-            val this1: TypeEqK[K,  ⋅⋅[F0],  ⋅⋅[G0]] = kuotes.splice(this)
+            val this1: TypeEqK[K,  ⋅⋅[F0],  ⋅⋅[G0]] = this.spliceAs[TypeEqK[K,  ⋅⋅[F0],  ⋅⋅[G0]]]
             val this2: TypeEqK[K, ⋅⋅⋅[F0], ⋅⋅⋅[G0]] = rekind.substituteCo[[⋅[_]] =>> TypeEqK[K, ⋅[F0], ⋅[G0]]](this1)
             val subst: [M[_ <: ⋅⋅[K]]] => M[F0] => M[G0] = rekind.unpack(this2.value)
 

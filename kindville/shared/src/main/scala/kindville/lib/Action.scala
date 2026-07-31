@@ -65,12 +65,16 @@ object Action {
       decodeT[G :: F :: A :: B :: TNil](
         [⋅⋅[_]] => k ?=> [G0[_ <: ⋅⋅[K]], F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A0 <: ⋅⋅[K], B0 <: ⋅⋅[K]] => () =>
           val x: G0[A0] =
-            k.splice(App.unpack(ga))
+            App.unpack(ga)
+              .spliceAs[G0[A0]]
           val h: F0[A0, B0] =
-            k.splice(Arrow.unpack(f))
+            Arrow.unpack(f)
+              .spliceAs[F0[A0, B0]]
           val y: G0[B0] =
             k.splice(a.act)[[A <: ⋅⋅[K], B <: ⋅⋅[K]] => (G0[A], F0[A, B]) => G0[B]][A0, B0](x, h)
-          k.splice(App.pack[K, G, B])[G0[B0] => App[K, G, B]](y)
+          App.pack[K, G, B]
+            .spliceAs[G0[B0] => App[K, G, B]]
+            .apply(y)
       )
         .typecheckAs[App[K, G, B]]
 
@@ -97,8 +101,8 @@ object Action {
     ): App[K, G, B] =
       decodeT[G :: F :: A :: B :: TNil](
         [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> [G0[_ <: ⋅⋅[K]], F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A0 <: ⋅⋅[K], B0 <: ⋅⋅[K]] => () =>
-          val ga0: App[K, G0, ⋅⋅[A0]] = k.splice(ga)
-          val f0: Arrow[K, F0, ⋅⋅[A0], ⋅⋅[B0]] = k.splice(f)
+          val ga0: App[K, G0, ⋅⋅[A0]] = ga.spliceAs[App[K, G0, ⋅⋅[A0]]]
+          val f0: Arrow[K, F0, ⋅⋅[A0], ⋅⋅[B0]] = f.spliceAs[Arrow[K, F0, ⋅⋅[A0], ⋅⋅[B0]]]
           val action: [A <: ⋅⋅[K], B <: ⋅⋅[K]] => (G0[A], F0[A, B]) => G0[B] = k.splice(a.act)
           k.rekind[App[K, G0, ⋅⋅[B0]]]:
             [⋅⋅⋅[_]] => (ev: Kuotes.Rekind[⋅⋅, ⋅⋅⋅]) ?=>

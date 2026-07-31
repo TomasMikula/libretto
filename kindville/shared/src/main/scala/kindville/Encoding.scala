@@ -186,25 +186,29 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     * ```
     * [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=>
     *   // ...
-    *     kuotes.rekind:
-    *       [⋅⋅⋅[_]] => (r: Kuotes.Rekind[⋅⋅, ⋅⋅⋅]) ?=>
-    *         // ...
+    *   val k1: k.type = k
+    *   // ...
+    *   kuotes.rekind:
+    *     [⋅⋅⋅[_]] => (r: Kuotes.Rekind[⋅⋅, ⋅⋅⋅]) ?=>
+    *       // ...
     * ```
     *
     * @param spreadAndBundle refers to `⋅⋅`
     * @param kuotes refers to `k`
+    * @param kuotesAliases any aliases of `k`, such as `k1`
     * @param rekind `bundle` refers to `⋅⋅⋅`, `rekind` refers to `r`
     */
   case class TermMarkers(
     spreadAndBundle: TypeRef,
     kuotes: TermRef,
+    kuotesAliases: List[TermRef],
     rekind: Option[(
       bundle: TypeRef,
       rekind: TermRef,
     )],
   ) {
     def isKuotes(k: Term): Boolean =
-      k.tpe =:= kuotes
+      k.tpe =:= kuotes || kuotesAliases.exists(k.tpe =:= _)
 
     def isRekind(r: Term): Boolean =
       rekind.exists(_.rekind == r.tpe)
@@ -212,6 +216,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     def withRekind(rekindedBundle: TypeRef, rekind: TermRef): TermMarkers =
       require(this.rekind.isEmpty, "cannot override rekind")
       copy(rekind = Some((rekindedBundle, rekind)))
+
+    def withKuotesAlias(ref: TermRef): TermMarkers =
+      copy(kuotesAliases = ref :: kuotesAliases)
 
     def typeMarkers: TypeMarkers =
       TypeMarkers(spreadAndBundle, rekind.map(_.bundle))
@@ -428,7 +435,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         parseKuoted(encoded)
 
       val markers =
-        TermMarkers(marker, kuotesParam.ref, rekind = None)
+        TermMarkers(marker, kuotesParam.ref, kuotesAliases = Nil, rekind = None)
 
       decodeTerm(markers, ctx = DecodingContext.empty, Symbol.spliceOwner, payload)
         .asExpr
@@ -446,7 +453,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         parseKuoted(encoded)
 
       val markers =
-        TermMarkers(marker, kuotesParam.ref, rekind = None)
+        TermMarkers(marker, kuotesParam.ref, kuotesAliases = Nil, rekind = None)
 
       val (userTParams, params, paramsGiven, retTp, body) =
         doParsePolyFun(payload)
@@ -920,20 +927,23 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             TypeTree.of(using decodeType(markers.typeMarkers, ctx, tt.tpe).asType),
           )
         case Inlined(call, bindings, expansion) =>
-          val (ctx1, bindingFns) =
-            bindings.mapS[DecodingContext, (fullCtx: DecodingContext) => Definition](ctx) {
-              (ctx, binding) =>
+          val ((markers1, ctx1), bindingFns) =
+            bindings.mapS[(TermMarkers, DecodingContext), Option[(fullCtx: DecodingContext) => Definition]]((markers, ctx)) {
+              case ((markers, ctx), binding) =>
                 inside(binding) {
-                  val (ctxElem, bindingFn) = decodeDefinition(markers, ctx, owner, binding)
-                  (ctx.push(ctxElem), bindingFn)
+                  decodeDefinition(markers, ctx, owner, binding) match
+                    case DecodeDefinitionResult.DecodedDefn(ctxElem, bindingFn) =>
+                      ((markers, ctx.push(ctxElem)), Some(bindingFn))
+                    case DecodeDefinitionResult.KuotesAlias(ref) =>
+                      ((markers.withKuotesAlias(ref), ctx), None)
                 }
             }
-          val bindings1 = bindingFns.map(_(ctx1))
+          val bindings1 = bindingFns.flatten.map(_(ctx1))
           Inlined(
             call,
             bindings1,
             insideInlinedCall(call):
-              decodeTerm(markers, ctx1, owner, expansion),
+              decodeTerm(markers1, ctx1, owner, expansion),
           )
         case other =>
           unimplemented(s"decodeTerm(${treeStruct(expr)})")
@@ -948,24 +958,31 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   )(using
     Reporting.Context,
   ): Block = {
-    val (ctx1, stmtFns) =
-      stmts.mapS[DecodingContext, (fullCtx: DecodingContext) => Statement](ctx) {
-        (ctx, stmt) =>
+    val ((markers1, ctx1), stmtFns) =
+      stmts.mapS[(TermMarkers, DecodingContext), Option[(fullCtx: DecodingContext) => Statement]]((markers, ctx)) {
+        case ((markers, ctx), stmt) =>
           inside(stmt) {
             stmt match
               case defn: Definition =>
-                val (ctxElem, stmtFn) = decodeDefinition(markers, ctx, owner, defn)
-                (ctx.push(ctxElem), stmtFn)
+                decodeDefinition(markers, ctx, owner, defn) match
+                  case DecodeDefinitionResult.DecodedDefn(ctxElem, defnFn) =>
+                    ((markers, ctx.push(ctxElem)), Some(defnFn))
+                  case DecodeDefinitionResult.KuotesAlias(ref) =>
+                    ((markers.withKuotesAlias(ref), ctx), None)
               case term: Term =>
                 val term1 = decodeTerm(markers, ctx, owner, term)
-                (ctx, _ => term1)
+                ((markers, ctx), Some(_ => term1))
               case other =>
                 unimplemented(s"decoding statement ${treeShortCode(other)}\nTree: ${treeStruct(other)}")
           }
       }
-    val stmts1 = stmtFns.map(_(ctx1))
-    Block(stmts1, decodeTerm(markers, ctx1, owner, expr))
+    val stmts1 = stmtFns.flatten.map(_(ctx1))
+    Block(stmts1, decodeTerm(markers1, ctx1, owner, expr))
   }
+
+  private enum DecodeDefinitionResult:
+    case DecodedDefn(substitution: DecodingContext.Elem, decodedDefn: (fullCtx: DecodingContext) => Definition)
+    case KuotesAlias(ref: TermRef)
 
   private def decodeDefinition(
     markers: TermMarkers,
@@ -974,8 +991,16 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     defn: Definition,
   )(using
     Reporting.Context,
-  ): (DecodingContext.Elem, (fullCtx: DecodingContext) => Definition) = {
+  ): DecodeDefinitionResult = {
     defn match
+      // support direct aliases of the Kuotes instance. Needed because compiler tends to generate code like
+      //
+      //     val Kuotes_this: kuotes.type = kuotes
+      //
+      // when passing `kuotes` to an inline call.
+      case v @ ValDef(name, tpt, Some(body)) if markers.isKuotes(body) =>
+        DecodeDefinitionResult.KuotesAlias(v.symbol.termRef)
+
       case v @ ValDef(name, tpt, Some(body)) =>
         val oldRef = v.symbol.termRef
         val newTpe = decodeType(markers.typeMarkers, ctx, tpt.tpe)
@@ -988,9 +1013,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           Flags.EmptyFlags,
           privateWithin = Symbol.noSymbol,
         )
-        ( DecodingContext.Elem.TermSubstitution(oldRef,  Ref.term(newSym.termRef))
-        , ctx => ValDef(newSym, Some(decodeTerm(markers, ctx, owner = newSym, body)))
+        DecodeDefinitionResult.DecodedDefn(
+          DecodingContext.Elem.TermSubstitution(oldRef,  Ref.term(newSym.termRef)),
+          ctx => ValDef(newSym, Some(decodeTerm(markers, ctx, owner = newSym, body))),
         )
+
       case t @ TypeDef(name, tree) =>
         tree match
           case TypeBoundsTree(lower, upper) =>
@@ -1004,8 +1031,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                 tpe,
                 privateWithin = Symbol.noSymbol,
               )
-              ( DecodingContext.Elem.TypeSubstitution(t.symbol.typeRef, sym.typeRef)
-              , ctx => TypeDef(sym)
+              DecodeDefinitionResult.DecodedDefn(
+                DecodingContext.Elem.TypeSubstitution(t.symbol.typeRef, sym.typeRef),
+                ctx => TypeDef(sym),
               )
             else
               unsupported(s"TypeDef with different lower and upper bound: ${treeShortCode(t)} (${treeStruct(t)})")

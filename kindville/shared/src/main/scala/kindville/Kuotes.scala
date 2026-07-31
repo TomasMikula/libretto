@@ -7,9 +7,11 @@ sealed trait Kuotes[⋅⋅[_]] {
    */
   def splice[T](t: T)[U]: U
 
-  // temporary, to test inline expansion to `splice`
-  transparent inline def disguise[T](t: T)[U]: U =
-    splice[T](t)[U]
+  extension [T](inline t: T)
+    // TODO: find out why sometimes not inlined before expansion of the outer `decode`,
+    //   or just pattern match and handle the non-inlined invocation.
+    inline def spliceAs[U]: U =
+      this.splice[T](t)[U]
 
   /** Introduces a local scope in which
     *  - type parameters (like `A0 <: ⋅⋅[K]`) of the surrounding [[decodeT]] can be expanded even without compiletime knowledge of the corresponding type argument `A`.
@@ -22,12 +24,6 @@ sealed trait Kuotes[⋅⋅[_]] {
 }
 
 object Kuotes {
-  extension [⋅⋅[_], T](t: T)(using kuotes: Kuotes[⋅⋅])
-    // TODO: investigate why not inlined
-    inline def spliceAs[U]: U =
-      kuotes.splice[T](t)[U]
-
-
   sealed trait Rekind[⋅⋅[_], ⋅⋅⋅[_]] {
     def substituteCo[H[_[_]]](x: H[⋅⋅]): H[⋅⋅⋅]
     def substituteContra[H[_[_]]](x: H[⋅⋅⋅]): H[⋅⋅]
