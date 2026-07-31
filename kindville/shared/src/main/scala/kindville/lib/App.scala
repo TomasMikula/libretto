@@ -22,7 +22,7 @@ object App {
     /** Pack locally within the scope of [[r]], where parameter [[A0]] can be expanded to (abstract) type(s) of the correct kind(s),
      *  even without compiletime knowledge (hence "dynamic") of the actual type argument(s) it stands for.
      */
-  inline def packDynamic[⋅⋅[_], ⋅⋅⋅[_], K, G0[_ <: ⋅⋅[K]], A0 <: ⋅⋅[K]](ga: G0[A0])(using k: Kuotes.Rekindle[⋅⋅, ⋅⋅⋅]): App[K, G0, ⋅⋅⋅[A0]] =
+  inline def packDynamic[⋅⋅[_], ⋅⋅⋅[_], K, G0[_ <: ⋅⋅[K]], A0 <: ⋅⋅[K]](ga: G0[A0])(using k: Kuotes.Rekind[⋅⋅, ⋅⋅⋅]): App[K, G0, ⋅⋅⋅[A0]] =
     k.pack(ga)[Code[K], G0 :: ⋅⋅⋅[A0] :: TNil]
 
   /** Returns `[F[..], A..] => F[A..] => App[K, F, A]`. */
@@ -41,7 +41,7 @@ object App {
       Box.unpack(a)
   }
 
-  extension [⋅⋅[_], ⋅⋅⋅[_], K, G0[_ <: ⋅⋅[K]], A0 <: ⋅⋅[K]](a: App[K, G0, ⋅⋅⋅[A0]])(using r: Kuotes.Rekindle[⋅⋅, ⋅⋅⋅]) {
+  extension [⋅⋅[_], ⋅⋅⋅[_], K, G0[_ <: ⋅⋅[K]], A0 <: ⋅⋅[K]](a: App[K, G0, ⋅⋅⋅[A0]])(using r: Kuotes.Rekind[⋅⋅, ⋅⋅⋅]) {
 
     /** Unpack locally within the scope of [[r]], where parameter [[A0]] can be expanded to (abstract) type(s) of the correct kind(s),
      *  even without compiletime knowledge (hence "dynamic") of the actual type argument(s) it stands for.

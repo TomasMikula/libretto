@@ -18,7 +18,7 @@ sealed trait Kuotes[⋅⋅[_]] {
     *
     * Note that the return type `R` is unable to refer to `⋅⋅⋅` or to `A0` when `A0` is not known at compiletime, thus preventing leakage of forged types.
     */
-  def rekindle[R](body: [⋅⋅⋅[_]] => Kuotes.Rekindle[⋅⋅, ⋅⋅⋅] ?=> R): R
+  def rekind[R](body: [⋅⋅⋅[_]] => Kuotes.Rekind[⋅⋅, ⋅⋅⋅] ?=> R): R
 }
 
 object Kuotes {
@@ -28,7 +28,7 @@ object Kuotes {
       kuotes.splice[T](t)[U]
 
 
-  sealed trait Rekindle[⋅⋅[_], ⋅⋅⋅[_]] {
+  sealed trait Rekind[⋅⋅[_], ⋅⋅⋅[_]] {
     def substituteCo[H[_[_]]](x: H[⋅⋅]): H[⋅⋅⋅]
     def substituteContra[H[_[_]]](x: H[⋅⋅⋅]): H[⋅⋅]
 

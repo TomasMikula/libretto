@@ -100,8 +100,8 @@ object Action {
           val ga0: App[K, G0, ⋅⋅[A0]] = k.splice(ga)
           val f0: Arrow[K, F0, ⋅⋅[A0], ⋅⋅[B0]] = k.splice(f)
           val action: [A <: ⋅⋅[K], B <: ⋅⋅[K]] => (G0[A], F0[A, B]) => G0[B] = k.splice(a.act)
-          k.rekindle[App[K, G0, ⋅⋅[B0]]]:
-            [⋅⋅⋅[_]] => (ev: Kuotes.Rekindle[⋅⋅, ⋅⋅⋅]) ?=>
+          k.rekind[App[K, G0, ⋅⋅[B0]]]:
+            [⋅⋅⋅[_]] => (ev: Kuotes.Rekind[⋅⋅, ⋅⋅⋅]) ?=>
               val ga1: App[K, G0, ⋅⋅⋅[A0]]           = ev.substituteCo[[⋅[_]] =>> App[K, G0, ⋅[A0]]](ga0)
               val f1: Arrow[K, F0, ⋅⋅⋅[A0], ⋅⋅⋅[B0]] = ev.substituteCo[[⋅[_]] =>> Arrow[K, F0, ⋅[A0], ⋅[B0]]](f0)
               val ga2: G0[A0] = ga1.unpackDynamic

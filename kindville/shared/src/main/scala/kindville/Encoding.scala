@@ -177,6 +177,57 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   import Encoding.*
   import q.reflect.*
 
+  /** Auxiliary markers (types and terms) used to guide decoding in coded expressions.
+    *
+    * The markers themselves are eraased during.
+    *
+    * In
+    *
+    * ```
+    * [⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=>
+    *   // ...
+    *     kuotes.rekind:
+    *       [⋅⋅⋅[_]] => (r: Kuotes.Rekind[⋅⋅, ⋅⋅⋅]) ?=>
+    *         // ...
+    * ```
+    *
+    * @param spreadAndBundle refers to `⋅⋅`
+    * @param kuotes refers to `k`
+    * @param rekind `bundle` refers to `⋅⋅⋅`, `rekind` refers to `r`
+    */
+  case class TermMarkers(
+    spreadAndBundle: TypeRef,
+    kuotes: TermRef,
+    rekind: Option[(
+      bundle: TypeRef,
+      rekind: TermRef,
+    )],
+  ) {
+    def isKuotes(k: Term): Boolean =
+      k.tpe =:= kuotes
+
+    def isRekind(r: Term): Boolean =
+      rekind.exists(_.rekind == r.tpe)
+
+    def withRekind(rekindedBundle: TypeRef, rekind: TermRef): TermMarkers =
+      require(this.rekind.isEmpty, "cannot override rekind")
+      copy(rekind = Some((rekindedBundle, rekind)))
+
+    def typeMarkers: TypeMarkers =
+      TypeMarkers(spreadAndBundle, rekind.map(_.bundle))
+  }
+
+  case class TypeMarkers(
+    spreadAndBundle: TypeRepr, // TODO: Can the type be refined to (ParamRef | TypeRef)?
+    rekindedBundle: Option[TypeRef],
+  ) {
+    def isSpreadOperator(f: TypeRepr): Boolean =
+      f =:= spreadAndBundle
+
+    def isRekindedBundleOperator(f: TypeRepr): Boolean =
+      rekindedBundle.exists(f =:= _)
+  }
+
   class DecodingContext(stack: List[DecodingContext.Elem]) {
     import DecodingContext.*
 
@@ -294,6 +345,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             outer.param(0) match
               case p: ParamRef => p
               case other => assertionFailed(s"Unexpected type of type lambda parameter: ${typeStruct(other)}. Expected ParamRef.")
+          val markers =
+            TypeMarkers(marker, rekindedBundle = None)
           body match
             case inner @ TypeLambda(paramNames, paramBounds, body) =>
               val params =
@@ -304,8 +357,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                 }
               val decodedTypeParams =
                 decodeTypeParams(
-                  marker,
-                  localMarker = None,
+                  markers,
                   ctx = DecodingContext.empty,
                   params
                 )
@@ -314,7 +366,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                 boundsFn = tparams => decodedTypeParams.decodedBounds(tparams),
                 bodyFn   = tparams => {
                   val ctx = decodedTypeParams.innerContext(tparams)
-                  decodeType(marker, localMarker = None, ctx, body)
+                  decodeType(markers, ctx, body)
                 }
               )
             case other =>
@@ -359,7 +411,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                 decodeTypeParamSubstitutions(marker, params, args,
                   considering = Seq.empty, // XXX: might lead to confusing error message, namely invalid suggestion to provide ofKinds witness explicitly
                 )
-              decodeType(marker, localMarker = None, substitutions, body)
+              decodeType(TypeMarkers(marker, rekindedBundle = None), substitutions, body)
             case other =>
               badUse(s"Expected a type lambda, got ${typeShortCode(other)}")
         case other =>
@@ -375,7 +427,10 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ParseKuotedResult(marker, kuotesParam, _, payload) =
         parseKuoted(encoded)
 
-      decodeTerm(marker, kuotesParam.ref, localMarker = None, rekindle = None, ctx = DecodingContext.empty, Symbol.spliceOwner, payload)
+      val markers =
+        TermMarkers(marker, kuotesParam.ref, rekind = None)
+
+      decodeTerm(markers, ctx = DecodingContext.empty, Symbol.spliceOwner, payload)
         .asExpr
     }
 
@@ -389,6 +444,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     inside(encoded.asTerm) {
       val ParseKuotedResult(marker, kuotesParam, _, payload) =
         parseKuoted(encoded)
+
+      val markers =
+        TermMarkers(marker, kuotesParam.ref, rekind = None)
 
       val (userTParams, params, paramsGiven, retTp, body) =
         doParsePolyFun(payload)
@@ -405,7 +463,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ctx =
         decodeTypeParamSubstitutions(marker, userTParams, targs, considering)
 
-      decodeTerm(marker, kuotesParam.ref, localMarker = None, rekindle = None, ctx, Symbol.spliceOwner, body)
+      decodeTerm(markers, ctx, Symbol.spliceOwner, body)
         .asExpr
     }
 
@@ -439,33 +497,33 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           unsupported(s"Expected a polymorphic function `[⋅⋅[_]] => (k: Kuotes[⋅⋅]) ?=> ...`, got ${encoded.asTerm.show(using Printer.TreeStructure)}")
     }
 
-  private case class ParsedRekindleArg(
-    marker: TypeRef,
-    rekindle: (name: String, tpe: TypeTree, ref: TermRef), // Kuotes.Rekindle[⋅⋅, ⋅⋅⋅]
+  private case class ParsedRekindArg(
+    bundle: TypeRef,
+    rekind: (name: String, tpe: TypeTree, ref: TermRef), // Kuotes.Rekind[⋅⋅, ⋅⋅⋅]
     retTp: TypeTree,
     body: Term,
   )
 
-  private def parseRekindleArg(
+  private def parseRekindArg(
     f: Term,
   )(using
     Reporting.Context,
-  ): ParsedRekindleArg =
+  ): ParsedRekindArg =
     inside(treeShortCode(f)) {
       f match
         case PolyFun(tparams, params, paramsGiven, retTp, body) =>
-          val (_, _, localMarker) =
+          val (_, _, rekindedBundle) =
             tparams.getSingle(otherwise = badUse(s"Expected a polymorphic function with 1 type parameter, but got ${tparams.size}"))
-          val rekindle =
+          val rekind =
             params.getSingle(otherwise = badUse(s"Expected a polymorphic function with 1 given value parameter, but got ${params.size} value paramters"))
           if (!paramsGiven)
-            badUse(s"Expected a polymorphic function with a given value parameter, but ${rekindle.name} is not given")
-          ParsedRekindleArg(localMarker, rekindle, retTp, body)
+            badUse(s"Expected a polymorphic function with a given value parameter, but ${rekind.name} is not given")
+          ParsedRekindArg(rekindedBundle, rekind, retTp, body)
         case Inlined(call, Nil, expansion) =>
           insideInlinedCall(call):
-            parseRekindleArg(expansion)
+            parseRekindArg(expansion)
         case other =>
-          unsupported(s"Expected a polymorphic function `[⋅⋅⋅[_]] => (ev: Kuotes.Rekindle[⋅⋅, ⋅⋅⋅]) ?=> ...`, got ${treeStruct(f)}")
+          unsupported(s"Expected a polymorphic function `[⋅⋅⋅[_]] => (ev: Kuotes.Rekind[⋅⋅, ⋅⋅⋅]) ?=> ...`, got ${treeStruct(f)}")
     }
 
   private case class PolyFunParseResult(
@@ -533,10 +591,10 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             // decode since the provided type args may contain the marker
             elem match
               case TypeSubstitution(ref, t) =>
-                TypeSubstitution(ref, decodeType(marker, localMarker = None, ctx = DecodingContext.empty, t))
+                TypeSubstitution(ref, decodeType(TypeMarkers(marker, rekindedBundle = None), ctx = DecodingContext.empty, t))
               case TypeArgExpansion(ref, ts) =>
-                // TODO: Why? Shouldn't type argument be free of the marker, since it's provided outside of marker's scope?
-                val ts1 = ts.map(decodeType(marker, localMarker = None, DecodingContext.empty, _))
+                // TODO: Why? Shouldn't the type argument be already free of the marker, since it's provided outside of marker's scope?
+                val ts1 = ts.map(decodeType(TypeMarkers(marker, rekindedBundle = None), DecodingContext.empty, _))
                 TypeArgExpansion(ref, ts1)
               case x: TypeArgForgedExpansion =>
                 x
@@ -620,8 +678,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         unimplemented("Multi-kind compiletimeKindCheck")
 
   private def decodeType(
-    marker: TypeRepr,
-    localMarker: Option[TypeRef],
+    markers: TypeMarkers,
     ctx: DecodingContext,
     body: TypeRepr,
   )(using
@@ -631,30 +688,29 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       body match
         case r @ Refinement(base, memName, memType) =>
           Refinement(
-            decodeType(marker, localMarker, ctx, base),
+            decodeType(markers, ctx, base),
             memName,
-            decodeType(marker, localMarker, ctx, memType),
+            decodeType(markers, ctx, memType),
           )
         case pt: PolyType =>
-          decodePolyType(marker, localMarker, ctx, pt)
+          decodePolyType(markers, ctx, pt)
         case mt: MethodType =>
-          decodeMethodType(marker, localMarker, ctx, mt)
+          decodeMethodType(markers, ctx, mt)
         case AppliedType(f, targs) =>
-          if (f =:= marker)
-            expandAndBundleTypeArg(marker, ctx, targs, forceExplicitBundle = false)
-          else if (localMarker.exists(f =:= _))
-            expandAndBundleTypeArg(localMarker.get, ctx, targs, forceExplicitBundle = true)
+          if (markers.isSpreadOperator(f))
+            expandAndBundleTypeArg(f, ctx, targs, forceExplicitBundle = false)
+          else if (markers.isRekindedBundleOperator(f))
+            expandAndBundleTypeArg(f, ctx, targs, forceExplicitBundle = true)
           else
-            val f1 = decodeType(marker, localMarker, ctx, f)
-            val targs1 = expandTypeArgs(marker, localMarker, ctx, targs)
+            val f1 = decodeType(markers, ctx, f)
+            val targs1 = expandTypeArgs(markers, ctx, targs)
               .flatMap(_.toList)
-            val targs2 = targs1.map(decodeType(marker, localMarker, ctx, _))
+            val targs2 = targs1.map(decodeType(markers, ctx, _))
             f1.appliedTo(targs2)
         case l @ TypeLambda(names, bounds, body) =>
           val decodedTypeParams =
             decodeTypeParams(
-              marker,
-              localMarker,
+              markers,
               ctx,
               (names zip bounds).zipWithIndex map {
                 case ((n, b), i) =>
@@ -670,13 +726,13 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             tl => decodedTypeParams.decodedBoundsFlat(tl.param),
             tl => {
               val ctx1 = decodedTypeParams.innerContext(tl.param)
-              decodeType(marker, localMarker, ctx1, body)
+              decodeType(markers, ctx1, body)
             },
           )
-        case t if t =:= marker =>
-          badUse(s"Cannot use the spread operator here")
-        case t if localMarker.exists(_ =:= t) =>
-          badUse(s"Cannot use the local spread operator here")
+        case t if markers.isSpreadOperator(t) =>
+          badUse(s"Cannot use the spread operator ${typeShortCode(t)} here")
+        case t if markers.isRekindedBundleOperator(t) =>
+          badUse(s"Cannot use the rekinded bundle operator ${typeShortCode(t)} here")
         case ParamRefOrTypeRef(ref) =>
           ref match
             case ctx.substitutesTypeTo(q) => q
@@ -689,7 +745,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             case p: ParamRef =>
               p
             case t @ TypeRef(parent, name) =>
-              checkNonOccurrence(marker, ctx, parent)
+              checkNonOccurrence(markers.spreadAndBundle, ctx, parent)
+              markers.rekindedBundle.foreach:
+                checkNonOccurrence(_, ctx, parent)
               t
         case t @ TermRef(prefix, ident) =>
           Ref.term(t) match
@@ -698,42 +756,38 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             case _ =>
               prefix match
                 case NoPrefix() => t
-                case prefix => TermRef(decodeType(marker, localMarker, ctx, prefix), ident)
+                case prefix => TermRef(decodeType(markers, ctx, prefix), ident)
         case t: ThisType =>
           t
         case TypeBounds(lo, hi) =>
           TypeBounds(
-            decodeType(marker, localMarker, ctx, lo),
-            decodeType(marker, localMarker, ctx, hi),
+            decodeType(markers, ctx, lo),
+            decodeType(markers, ctx, hi),
           )
         case AndType(l, r) =>
           AndType(
-            decodeType(marker, localMarker, ctx, l),
-            decodeType(marker, localMarker, ctx, r),
+            decodeType(markers, ctx, l),
+            decodeType(markers, ctx, r),
           )
         case other =>
           unsupportedType(other)
     }
 
   private def decodeTerm(
-    marker: TypeRef,
-    kuotes: TermRef,
-    localMarker: Option[TypeRef],
-    rekindle: Option[TermRef], // Rekindle[marker, localMarker]
+    markers: TermMarkers,
     ctx: DecodingContext,
     owner: Symbol,
     expr: Term,
   )(using
     Reporting.Context,
   ): Term =
-    require(localMarker.isDefined == rekindle.isDefined)
     inside(expr) {
       expr match
         // '{ kuotes.splice[T](arg)[U] }
-        case TypeApply(Apply(TypeApply(Select(prefix, "splice"), List(t)), List(arg)), List(u)) if prefix.tpe == kuotes =>
+        case TypeApply(Apply(TypeApply(Select(prefix, "splice"), List(t)), List(arg)), List(u)) if markers.isKuotes(prefix) =>
           // check that arg :《u》, ensuring that arg is usable in place where 《u》 is expected
           val decodedU =
-            decodeType(marker, localMarker, ctx, u.tpe)
+            decodeType(markers.typeMarkers, ctx, u.tpe)
           val decodedUType =
             decodedU.asType.asInstanceOf[Type[Any]]
           if (arg.asExpr.isExprOf(using decodedUType))
@@ -743,69 +797,70 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             given Printer[TypeRepr] = Printer.TypeReprShortCode
             badUse(s"Got ${arg.show} of type ${t.show}, expected type ${decodedU.show} (which is the decoding of ${u.show})")
 
-        // '{ kuotes.rekindle[R](f: [⋅⋅⋅[_]] => Rekindle[⋅⋅, ⋅⋅⋅] ?=> R) }
-        case Apply(TypeApply(Select(prefix, "rekindle"), List(r)), List(f)) if prefix.tpe == kuotes =>
-          if (localMarker.isDefined)
-            unsupported(s"Nested rekindle")
+        // '{ kuotes.rekind[R](f: [⋅⋅⋅[_]] => Rekind[⋅⋅, ⋅⋅⋅] ?=> R) }
+        case Apply(TypeApply(Select(prefix, "rekind"), List(r)), List(f)) if markers.isKuotes(prefix) =>
+          if (markers.rekind.isDefined)
+            unsupported(s"Nested rekind")
           else
-            val targetType = decodeType(marker, localMarker = None, ctx, r.tpe)
-            val ParsedRekindleArg(localMarker, rekindle, retTp, body) = parseRekindleArg(f)
-            val expr = decodeTerm(marker, kuotes, Some(localMarker), Some(rekindle.ref), ctx, owner, body)
+            val targetType = decodeType(markers.typeMarkers, ctx, r.tpe)
+            val ParsedRekindArg(rekindedBundle, rekind, retTp, body) = parseRekindArg(f)
+            val markers1 = markers.withRekind(rekindedBundle, rekind.ref)
+            val expr = decodeTerm(markers1, ctx, owner, body)
             Typed(expr, TypeTree.of(using targetType.asType))
 
-        // '{ rekindle.pack[T](x)[Code, As] }
-        case TypeApply(Apply(TypeApply(Select(prefix, "pack"), List(t)), List(x)), List(code, as)) if rekindle.contains(prefix.tpe) =>
-          val code1 = decodeType(marker, localMarker, ctx, code.tpe)
-          val as1 = decodeType(marker, localMarker, ctx, as.tpe) // this is the key step: expand any ⋅⋅⋅[A] in As into a bundle of forged types of the right kinds
-          val actualType = decodeType(marker, localMarker, ctx, t.tpe)
+        // '{ rekind.pack[T](x)[Code, As] }
+        case TypeApply(Apply(TypeApply(Select(prefix, "pack"), List(t)), List(x)), List(code, as)) if markers.isRekind(prefix) =>
+          val code1 = decodeType(markers.typeMarkers, ctx, code.tpe)
+          val as1 = decodeType(markers.typeMarkers, ctx, as.tpe) // this is the key step: expand any ⋅⋅⋅[A] in As into a bundle of forged types of the right kinds
+          val actualType = decodeType(markers.typeMarkers, ctx, t.tpe)
           val expectedType = decodeParameterizedType(code1, as1)
           if (!(actualType <:< expectedType))
             badUse(s"To pack the box, argument of type ${typeShortCode(expectedType)} is required, but got ${typeShortCode(actualType)}.")
-          val x1 = decodeTerm(marker, kuotes, localMarker, rekindle, ctx, owner, x)
+          val x1 = decodeTerm(markers, ctx, owner, x)
           val targetType = TypeRepr.of[Box].appliedTo(List(code1, as1))
           provided(owner.asQuotes):
             targetType.asType match
               case '[tt] => '{ ${x1.asExpr}.asInstanceOf[tt] }.asTerm
 
-        // '{ rekindle.unpack[Code, As](box)[T] }
-        case TypeApply(Apply(TypeApply(Select(prefix, "unpack"), List(code, as)), List(box)), List(t)) if rekindle.contains(prefix.tpe) =>
-          val code1 = decodeType(marker, localMarker, ctx, code.tpe)
-          val as1 = decodeType(marker, localMarker, ctx, as.tpe) // this is the key step: expand any ⋅⋅⋅[A] in As into a bundle of forged types of the right kinds
-          val expectedType = decodeType(marker, localMarker, ctx, t.tpe)
+        // '{ rekind.unpack[Code, As](box)[T] }
+        case TypeApply(Apply(TypeApply(Select(prefix, "unpack"), List(code, as)), List(box)), List(t)) if markers.isRekind(prefix) =>
+          val code1 = decodeType(markers.typeMarkers, ctx, code.tpe)
+          val as1 = decodeType(markers.typeMarkers, ctx, as.tpe) // this is the key step: expand any ⋅⋅⋅[A] in As into a bundle of *forged* types of the right kinds
+          val expectedType = decodeType(markers.typeMarkers, ctx, t.tpe)
           val actualType = decodeParameterizedType(code1, as1)
           if (!(actualType <:< expectedType))
             badUse(s"The given box unpacks to ${typeShortCode(actualType)}, which is not a subtype of the expected ${typeShortCode(expectedType)}")
-          val box1 = decodeTerm(marker, kuotes, localMarker, rekindle, ctx, owner, box)
+          val box1 = decodeTerm(markers, ctx, owner, box)
           provided(owner.asQuotes):
             expectedType.asType match
               case '[t] => '{ ${box1.asExpr}.asInstanceOf[t] }.asTerm
 
-        // '{ rekindle.substituteCo[H](x) }
-        case Apply(TypeApply(Select(prefix, "substituteCo"), List(h)), List(x)) if rekindle.contains(prefix.tpe) =>
-          val hg = h.tpe.appliedTo(localMarker.get)
-          val targetType = decodeType(marker, localMarker, ctx, hg)
-          val x1 = decodeTerm(marker, kuotes, localMarker, rekindle, ctx, owner, x)
+        // '{ rekind.substituteCo[H](x) }
+        case Apply(TypeApply(Select(prefix, "substituteCo"), List(h)), List(x)) if markers.isRekind(prefix) =>
+          val hg = h.tpe.appliedTo(markers.rekind.get.bundle)
+          val targetType = decodeType(markers.typeMarkers, ctx, hg)
+          val x1 = decodeTerm(markers, ctx, owner, x)
           provided(owner.asQuotes):
             targetType.asType match
               case '[t] => '{ ${x1.asExpr}.asInstanceOf[t] }.asTerm
 
-        // '{ rekindle.substituteContra[H](y) }
-        case Apply(TypeApply(Select(prefix, "substituteContra"), List(h)), List(y)) if rekindle.contains(prefix.tpe) =>
-          val hf = h.tpe.appliedTo(marker)
-          val targetType = decodeType(marker, localMarker, ctx, hf)
-          val y1 = decodeTerm(marker, kuotes, localMarker, rekindle, ctx, owner, y)
+        // '{ rekind.substituteContra[H](y) }
+        case Apply(TypeApply(Select(prefix, "substituteContra"), List(h)), List(y)) if markers.isRekind(prefix) =>
+          val hf = h.tpe.appliedTo(markers.spreadAndBundle)
+          val targetType = decodeType(markers.typeMarkers, ctx, hf)
+          val y1 = decodeTerm(markers, ctx, owner, y)
           provided(owner.asQuotes):
             targetType.asType match
               case '[t] => '{ ${y1.asExpr}.asInstanceOf[t] }.asTerm
 
-        case k if k.tpe =:= kuotes =>
+        case k if markers.isKuotes(k) =>
           badUse(s"Invalid use of ${treeShortCode(k)} in this position.")
 
-        case r if rekindle.contains(r.tpe) =>
+        case r if markers.isRekind(r) =>
           badUse(s"Invalid use of ${treeShortCode(r)} in this position.")
 
         case PolyFun(tparams, params, paramsGiven, retTp, body) =>
-          decodePolyFun(marker, kuotes, localMarker, rekindle, ctx, tparams, params, paramsGiven, retTp, body)
+          decodePolyFun(markers, ctx, tparams, params, paramsGiven, retTp, body)
             .mkTerm(owner)
         case bl @ Block(List(stmt), Closure(method, optTp)) =>
           (stmt, method) match
@@ -813,10 +868,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
               paramss match
                 case (pc @ TermParamClause(params)) :: Nil => Symbol.noSymbol.termRef
                   decodeFun(
-                    marker,
-                    kuotes,
-                    localMarker,
-                    rekindle,
+                    markers,
                     ctx,
                     paramsGiven = pc.isGiven,
                     params.map { case v @ ValDef(name, tpe, _) => (name, tpe, v.symbol.termRef) },
@@ -829,19 +881,19 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             case _ =>
               unsupported(s"Closure variant ${treeShortCode(bl)} (${treeStruct(bl)})")
         case Block(stmts, term) =>
-          decodeBlock(marker, kuotes, localMarker, rekindle, ctx, owner, stmts, term)
+          decodeBlock(markers, ctx, owner, stmts, term)
         case Apply(f, as) =>
-          val f1 = decodeTerm(marker, kuotes, localMarker, rekindle, ctx, owner, f)
-          val bs = as.map(decodeTerm(marker, kuotes, localMarker, rekindle, ctx, owner, _))
+          val f1 = decodeTerm(markers, ctx, owner, f)
+          val bs = as.map(decodeTerm(markers, ctx, owner, _))
           Apply(f1, bs)
         case TypeApply(f, ts) =>
-          val f1 = decodeTerm(marker, kuotes, localMarker, rekindle, ctx, owner, f)
-          val ts1 = expandTypeArgs(marker, localMarker, ctx, ts.map(_.tpe))
+          val f1 = decodeTerm(markers, ctx, owner, f)
+          val ts1 = expandTypeArgs(markers.typeMarkers, ctx, ts.map(_.tpe))
             .flatMap(_.toList)
-          val ts2 = ts1.map(decodeType(marker, localMarker, ctx, _))
+          val ts2 = ts1.map(decodeType(markers.typeMarkers, ctx, _))
           TypeApply(f1, ts2.map(t => TypeTree.of(using t.asType)))
         case Select(prefix, name) =>
-          val prefix1 = decodeTerm(marker, kuotes, localMarker, rekindle, ctx, owner, prefix)
+          val prefix1 = decodeTerm(markers, ctx, owner, prefix)
           try {
             Select.unique(prefix1, name)
           } catch {
@@ -849,13 +901,13 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           }
         case Typed(x, t) =>
           Typed(
-            decodeTerm(marker, kuotes, localMarker, rekindle, ctx, owner, x),
+            decodeTerm(markers, ctx, owner, x),
             TypeTree.of(using
-              decodeType(marker, localMarker, ctx, t.tpe).asType
+              decodeType(markers.typeMarkers, ctx, t.tpe).asType
             ),
           )
         case New(tt) =>
-          New(TypeTree.of(using decodeType(marker, localMarker, ctx, tt.tpe).asType))
+          New(TypeTree.of(using decodeType(markers.typeMarkers, ctx, tt.tpe).asType))
         case i @ Ident(x) =>
           i match
             case ctx.substitutesTermTo(j) => j
@@ -864,15 +916,15 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           l
         case Repeated(as, tt) =>
           Repeated(
-            as.map { a => decodeTerm(marker, kuotes, localMarker, rekindle, ctx, owner, a) },
-            TypeTree.of(using decodeType(marker, localMarker, ctx, tt.tpe).asType),
+            as.map { a => decodeTerm(markers, ctx, owner, a) },
+            TypeTree.of(using decodeType(markers.typeMarkers, ctx, tt.tpe).asType),
           )
         case Inlined(call, bindings, expansion) =>
           val (ctx1, bindingFns) =
             bindings.mapS[DecodingContext, (fullCtx: DecodingContext) => Definition](ctx) {
               (ctx, binding) =>
                 inside(binding) {
-                  val (ctxElem, bindingFn) = decodeDefinition(marker, kuotes, localMarker, rekindle, ctx, owner, binding)
+                  val (ctxElem, bindingFn) = decodeDefinition(markers, ctx, owner, binding)
                   (ctx.push(ctxElem), bindingFn)
                 }
             }
@@ -881,17 +933,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             call,
             bindings1,
             insideInlinedCall(call):
-              decodeTerm(marker, kuotes, localMarker, rekindle, ctx1, owner, expansion),
+              decodeTerm(markers, ctx1, owner, expansion),
           )
         case other =>
           unimplemented(s"decodeTerm(${treeStruct(expr)})")
     }
 
   private def decodeBlock(
-    marker: TypeRef,
-    kuotes: TermRef,
-    localMarker: Option[TypeRef],
-    rekindle: Option[TermRef], // ev: Kuotes.Rekindle[marker, localMarker]
+    markers: TermMarkers,
     ctx: DecodingContext,
     owner: Symbol,
     stmts: List[Statement],
@@ -905,24 +954,21 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           inside(stmt) {
             stmt match
               case defn: Definition =>
-                val (ctxElem, stmtFn) = decodeDefinition(marker, kuotes, localMarker, rekindle, ctx, owner, defn)
+                val (ctxElem, stmtFn) = decodeDefinition(markers, ctx, owner, defn)
                 (ctx.push(ctxElem), stmtFn)
               case term: Term =>
-                val term1 = decodeTerm(marker, kuotes, localMarker, rekindle, ctx, owner, term)
+                val term1 = decodeTerm(markers, ctx, owner, term)
                 (ctx, _ => term1)
               case other =>
                 unimplemented(s"decoding statement ${treeShortCode(other)}\nTree: ${treeStruct(other)}")
           }
       }
     val stmts1 = stmtFns.map(_(ctx1))
-    Block(stmts1, decodeTerm(marker, kuotes, localMarker, rekindle, ctx1, owner, expr))
+    Block(stmts1, decodeTerm(markers, ctx1, owner, expr))
   }
 
   private def decodeDefinition(
-    marker: TypeRef,
-    kuotes: TermRef,
-    localMarker: Option[TypeRef],
-    rekindle: Option[TermRef], // ev: Kuotes.Rekindle[marker, localMarker]
+    markers: TermMarkers,
     ctx: DecodingContext,
     owner: Symbol,
     defn: Definition,
@@ -932,7 +978,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     defn match
       case v @ ValDef(name, tpt, Some(body)) =>
         val oldRef = v.symbol.termRef
-        val newTpe = decodeType(marker, localMarker, ctx, tpt.tpe)
+        val newTpe = decodeType(markers.typeMarkers, ctx, tpt.tpe)
         val flags = v.symbol.flags
         val newSym = Symbol.newVal(
           owner,
@@ -943,13 +989,13 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           privateWithin = Symbol.noSymbol,
         )
         ( DecodingContext.Elem.TermSubstitution(oldRef,  Ref.term(newSym.termRef))
-        , ctx => ValDef(newSym, Some(decodeTerm(marker, kuotes, localMarker, rekindle, ctx, owner = newSym, body)))
+        , ctx => ValDef(newSym, Some(decodeTerm(markers, ctx, owner = newSym, body)))
         )
       case t @ TypeDef(name, tree) =>
         tree match
           case TypeBoundsTree(lower, upper) =>
             if (lower.tpe =:= upper.tpe)
-              val tpe = decodeType(marker, localMarker, ctx, lower.tpe)
+              val tpe = decodeType(markers.typeMarkers, ctx, lower.tpe)
               val sym = Symbol.newTypeAlias(
                 owner,
                 name,
@@ -970,8 +1016,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   }
 
   private def decodePolyType(
-    marker: TypeRepr,
-    localMarker: Option[TypeRef],
+    markers: TypeMarkers,
     ctx: DecodingContext,
     pt: PolyType,
   )(using
@@ -981,8 +1026,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
     val decodedTypeParams =
       decodeTypeParams(
-        marker,
-        localMarker,
+        markers,
         ctx,
         (tParamNames zip tParamBounds).zipWithIndex map {
           case ((n, b), i) =>
@@ -998,13 +1042,12 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       pt => decodedTypeParams.decodedBoundsFlat(pt.param),
       pt => {
         val ctx1 = decodedTypeParams.innerContext(pt.param)
-        decodeType(marker, localMarker, ctx1, body)
+        decodeType(markers, ctx1, body)
       },
     )
 
   private def decodeMethodType(
-    marker: TypeRepr,
-    localMarker: Option[TypeRef],
+    markers: TypeMarkers,
     ctx: DecodingContext,
     methType: MethodType,
   )(using
@@ -1012,8 +1055,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ): MethodType =
     val MethodType(paramNames, paramTypes, returnType) = methType
     MethodType(methType.methodTypeKind)(paramNames)(
-      _ => paramTypes.map(t => decodeType(marker, localMarker, ctx, t)),
-      _ => decodeType(marker, localMarker, ctx, returnType)
+      _ => paramTypes.map(t => decodeType(markers, ctx, t)),
+      _ => decodeType(markers, ctx, returnType)
     )
 
   private case class DecodedPolyFun(
@@ -1030,10 +1073,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   }
 
   private def decodePolyFun(
-    marker: TypeRef,
-    kuotes: TermRef,
-    localMarker: Option[TypeRef],
-    rekindle: Option[TermRef], // ev: Kuotes.Rekindle[marker, localMarker]
+    markers: TermMarkers,
     ctx: DecodingContext,
     tparams: List[(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: TypeRef)],
     params: List[(name: String, tpe: TypeTree, ref: TermRef)],
@@ -1044,7 +1084,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     Reporting.Context,
   ): DecodedPolyFun = {
     val decodedTypeParams =
-      decodeTypeParams(marker, localMarker, ctx, tparams)
+      decodeTypeParams(markers.typeMarkers, ctx, tparams)
 
     def tParamBounds1(tparams: Int => TypeRepr): List[TypeBounds] =
       decodedTypeParams.decodedBoundsFlat(tparams)
@@ -1053,11 +1093,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
     def paramTypes(tparams: Int => TypeRepr): List[TypeRepr] =
       val ctx1 = decodedTypeParams.innerContext(tparams)
-      params.map(t => decodeType(marker, localMarker, ctx1, t.tpe.tpe))
+      params.map(t => decodeType(markers.typeMarkers, ctx1, t.tpe.tpe))
 
     def returnType1(tparams: Int => TypeRepr): TypeRepr =
       val ctx1 = decodedTypeParams.innerContext(tparams)
-      decodeType(marker, localMarker, ctx1, returnType.tpe)
+      decodeType(markers.typeMarkers, ctx1, returnType.tpe)
 
     def paramSubstitutions(newParams: List[Term]): List[DecodingContext.Elem.TermSubstitution] =
       (params zip newParams).map { case (pOld, pNew) =>
@@ -1067,16 +1107,13 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     def body1(newTParams: Int => TypeRepr, newParams: List[Term], owner: Symbol): Term =
       val ctx1 = decodedTypeParams.innerContext(newTParams)
       val ctx2 = ctx1.pushAll(paramSubstitutions(newParams))
-      decodeTerm(marker, kuotes, localMarker, rekindle, ctx2, owner, body)
+      decodeTerm(markers, ctx2, owner, body)
 
     DecodedPolyFun(decodedTypeParams.decodedNames,  decodedTypeParams.decodedBounds, paramsGiven, paramNames, paramTypes, returnType1, body1)
   }
 
   private def decodeFun(
-    marker: TypeRef,
-    kuotes: TermRef,
-    localMarker: Option[TypeRef],
-    rekindle: Option[TermRef], // ev: Kuotes.Rekindle[marker, localMarker]
+    markers: TermMarkers,
     ctx: DecodingContext,
     paramsGiven: Boolean,
     params: List[(name: String, tpe: TypeTree, ref: TermRef)],
@@ -1090,10 +1127,10 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     val paramNames = params.map(_.name)
 
     val paramTypes =
-      params.map(t => decodeType(marker, localMarker, ctx, t.tpe.tpe))
+      params.map(t => decodeType(markers.typeMarkers, ctx, t.tpe.tpe))
 
     val returnType1: TypeRepr =
-      decodeType(marker, localMarker, ctx, returnType.tpe)
+      decodeType(markers.typeMarkers, ctx, returnType.tpe)
 
     def paramSubstitutions(newParams: List[Term]): List[DecodingContext.Elem.TermSubstitution] =
       (params zip newParams).map { case (pOld, pNew) =>
@@ -1102,7 +1139,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
     def body1(newParams: List[Term], owner: Symbol): Term =
       val ctx1 = ctx.pushAll(paramSubstitutions(newParams))
-      decodeTerm(marker, kuotes, localMarker, rekindle, ctx1, owner, body)
+      decodeTerm(markers, ctx1, owner, body)
 
     val paramsKind = if paramsGiven then MethodTypeKind.Contextual else MethodTypeKind.Plain
     Lambda(
@@ -1116,8 +1153,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   }
 
   private def decodeTypeParams(
-    marker: TypeRepr,
-    localMarker: Option[TypeRef],
+    markers: TypeMarkers,
     ctx: DecodingContext,
     tParams: List[(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: ParamRef | TypeRef)],
   )(using
@@ -1136,18 +1172,18 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     val expandedTParams: List[PostExpansionParam] =
       inside("TODO: refine (bjao)") {
         tParams.map:
-          case (name, Left(bounds @ TypeBounds(lower, AppliedType(f, List(kinds)))), origParam) if f =:= marker =>
+          case (name, Left(bounds @ TypeBounds(lower, AppliedType(f, List(kinds)))), origParam) if markers.isSpreadOperator(f) =>
             lower.asType match
               case '[Nothing] =>
                 val expanded = expandParam(name, kinds)
                 PostExpansionParam.Expanded(expanded, origParam)
               case other =>
-                badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(marker)}) with a lower bound (${typeShortCode(lower)})")
+                badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(f)}) with a lower bound (${typeShortCode(lower)})")
           case (name, kind, origParam) =>
             PostExpansionParam.Original(name, kind, origParam)
       }
 
-    DecodedTypeParams(marker, localMarker, ctx, expandedTParams)
+    DecodedTypeParams(markers, ctx, expandedTParams)
   }
 
   private enum PostExpansionParam:
@@ -1160,8 +1196,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case Expanded(ps, _) => ps.size
 
   private class DecodedTypeParams(
-    marker: TypeRepr,
-    localMarker: Option[TypeRef],
+    markers: TypeMarkers,
     ctx: DecodingContext,
     expandedTypeParams: List[(index: Int, expanded: PostExpansionParam)],
   ) {
@@ -1202,7 +1237,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       Reporting.Context,
     ): (bounds: Groups[TypeBounds], innerContext: DecodingContext) =
       val ctx1 = innerContext(actualTypeParams)
-      val bounds1 = bounds0.map(decodeTypeBounds(marker, localMarker, ctx1, _))
+      val bounds1 = bounds0.map(decodeTypeBounds(markers, ctx1, _))
       (bounds1, ctx1)
 
     def decodedBounds(
@@ -1223,8 +1258,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private object DecodedTypeParams {
     def apply(
-      marker: TypeRepr,
-      localMarker: Option[TypeRef],
+      markers: TypeMarkers,
       ctx: DecodingContext,
       expandedTypeParams: List[PostExpansionParam],
     ): DecodedTypeParams =
@@ -1232,27 +1266,27 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         expandedTypeParams
           .mapS(0) { (j, p) => (j + p.expandedSize, (j, p)) }
           ._2
-      new DecodedTypeParams(marker, localMarker, ctx, expandedTypeParamsWithIndex)
+      new DecodedTypeParams(markers, ctx, expandedTypeParamsWithIndex)
   }
 
   private def expandTypeArgs(
-    marker: TypeRepr,
-    localMarker: Option[TypeRef],
+    markers: TypeMarkers,
     ctx: DecodingContext,
     targs: List[TypeRepr],
   )(using
     Reporting.Context,
   ): List[SingleOrMultiple[TypeRepr]] = {
     import DecodingContext.ParamExpansion
+
     targs.map { ta =>
       inside(ta) {
         ta match {
           case fa @ AppliedType(f, targs) =>
             Single:
-              if (f =:= marker)
-                expandAndBundleTypeArg(marker, ctx, targs, forceExplicitBundle = false)
-              else if (localMarker.exists(f =:= _))
-                expandAndBundleTypeArg(localMarker.get, ctx, targs, forceExplicitBundle = true)
+              if (markers.isSpreadOperator(f))
+                expandAndBundleTypeArg(f, ctx, targs, forceExplicitBundle = false)
+              else if (markers.isRekindedBundleOperator(f))
+                expandAndBundleTypeArg(f, ctx, targs, forceExplicitBundle = true)
               else
                 fa
           case ParamRefOrTypeRef(ref) =>
@@ -1261,11 +1295,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                 x match
                   case ParamExpansion.StaticallyKnown(ps) =>
                     ps
-                  case ParamExpansion.Forged(bundled, kinds) if localMarker.isDefined =>
-                    // can expand to forged types only within rekindle, i.e. when localMarker is defined
+                  case ParamExpansion.Forged(bundled, kinds) if markers.rekindedBundle.isDefined =>
+                    // can expand to forged types only within rekind, i.e. when rekindedBundle is defined
                     kinds.map(kindToUpperBound)
                   case ParamExpansion.Forged(bundled, kinds) =>
-                    badUse(s"Cannot statically determine the expanded form of type parameter ${typeShortCode(ref)}. It is only known to stand for ${typeShortCode(bundled)}. Hint: Wrap inside `rekindle` to expand such statically unknown types.")
+                    badUse(s"Cannot statically determine the expanded form of type parameter ${typeShortCode(ref)}. It is only known to stand for ${typeShortCode(bundled)}. Hint: Wrap inside `rekind` to expand such statically unknown types.")
               case _ =>
                 Single(ref)
           case other =>
@@ -1302,8 +1336,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         badUse(s"Invalid application of $m. ${typeShortCode(a1)} is not <: $m[<kinds>]")
 
   private def decodeTypeBounds(
-    marker: TypeRepr,
-    localMarker: Option[TypeRef],
+    markers: TypeMarkers,
     ctx: DecodingContext,
     bounds: Either[TypeBounds, LambdaTypeTree],
   )(using
@@ -1313,8 +1346,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       case Left(tb @ TypeBounds(lo, hi)) =>
         inside(tb):
           TypeBounds(
-            decodeType(marker, localMarker, ctx, lo),
-            decodeType(marker, localMarker, ctx, hi),
+            decodeType(markers, ctx, lo),
+            decodeType(markers, ctx, hi),
           )
       case Right(ltt @ LambdaTypeTree(typeDefs, body)) =>
         inside(ltt) {
@@ -1329,8 +1362,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
               case other => assertionFailed(s"Unexpected body of LambdaTypeTree in bounds position: ${treeStruct(other)}. Expected TypeBoundsTree or LambdaTypeTree.")
           val decodedTypeParams =
             decodeTypeParams(
-              marker,
-              localMarker,
+              markers,
               ctx,
               typeDefs map { case td @ TypeDef(name, tree) =>
                 tree match
@@ -1348,8 +1380,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
               tl => {
                 val ctx1 = decodedTypeParams.innerContext(tl.param)
                 bodyTpe match
-                  case Left(t)    => decodeType(marker, localMarker, ctx1, t)
-                  case Right(ltt) => decodeTypeBounds(marker, localMarker, ctx1, Right(ltt))
+                  case Left(t)    => decodeType(markers, ctx1, t)
+                  case Right(ltt) => decodeTypeBounds(markers, ctx1, Right(ltt))
               }
             ),
           )

@@ -26,20 +26,20 @@ class TypeEqK[K, F <: AnyKind, G <: AnyKind](
   ): App[K, H, G] =
     decodeT[F :: G :: H :: TNil](
       [⋅⋅[_]] => kuotes ?=> [F0 <: ⋅⋅[K], G0 <: ⋅⋅[K], H0[_ <: ⋅⋅[K]]] => () =>
-        kuotes.rekindle[App[K, H0, ⋅⋅[G0]]]:
-          [⋅⋅⋅[_]] => rekindle ?=>
+        kuotes.rekind[App[K, H0, ⋅⋅[G0]]]:
+          [⋅⋅⋅[_]] => rekind ?=>
             val hf1: App[K, H0,  ⋅⋅[F0]] = kuotes.splice(hf)
-            val hf2: App[K, H0, ⋅⋅⋅[F0]] = rekindle.substituteCo[[⋅[_]] =>> App[K, H0, ⋅[F0]]](hf1)
+            val hf2: App[K, H0, ⋅⋅⋅[F0]] = rekind.substituteCo[[⋅[_]] =>> App[K, H0, ⋅[F0]]](hf1)
             val hf3: H0[F0] = hf2.unpackDynamic
             val this1: TypeEqK[K,  ⋅⋅[F0],  ⋅⋅[G0]] = kuotes.splice(this)
-            val this2: TypeEqK[K, ⋅⋅⋅[F0], ⋅⋅⋅[G0]] = rekindle.substituteCo[[⋅[_]] =>> TypeEqK[K, ⋅[F0], ⋅[G0]]](this1)
-            val subst: [M[_ <: ⋅⋅[K]]] => M[F0] => M[G0] = rekindle.unpack(this2.value)
+            val this2: TypeEqK[K, ⋅⋅⋅[F0], ⋅⋅⋅[G0]] = rekind.substituteCo[[⋅[_]] =>> TypeEqK[K, ⋅[F0], ⋅[G0]]](this1)
+            val subst: [M[_ <: ⋅⋅[K]]] => M[F0] => M[G0] = rekind.unpack(this2.value)
 
             // this is the gist, everything else is just boilerplate
             val hg3: H0[G0] = subst[H0](hf3)
 
             val hg2: App[K, H0, ⋅⋅⋅[G0]] = App.packDynamic(hg3)
-            val hg1: App[K, H0,  ⋅⋅[G0]] = rekindle.substituteContra[[⋅[_]] =>> App[K, H0, ⋅[G0]]](hg2)
+            val hg1: App[K, H0,  ⋅⋅[G0]] = rekind.substituteContra[[⋅[_]] =>> App[K, H0, ⋅[G0]]](hg2)
             hg1
       , considering = evf //, evg, evh
     )

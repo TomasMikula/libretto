@@ -51,7 +51,7 @@ object Arrow {
       Box.unpack(a)
   }
 
-  extension [⋅⋅[_], ⋅⋅⋅[_], K, F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A0 <: ⋅⋅[K], B0 <: ⋅⋅[K]](a: Arrow[K, F0, ⋅⋅⋅[A0], ⋅⋅⋅[B0]])(using r: Kuotes.Rekindle[⋅⋅, ⋅⋅⋅]) {
+  extension [⋅⋅[_], ⋅⋅⋅[_], K, F0[_ <: ⋅⋅[K], _ <: ⋅⋅[K]], A0 <: ⋅⋅[K], B0 <: ⋅⋅[K]](a: Arrow[K, F0, ⋅⋅⋅[A0], ⋅⋅⋅[B0]])(using r: Kuotes.Rekind[⋅⋅, ⋅⋅⋅]) {
 
     /** Unpack locally within the scope of [[r]], where parameters [[A0]], [[B0]] can be expanded to (abstract) types of the correct kinds,
      *  even without compiletime knowledge (hence "dynamic") of the actual type arguments they stand for.
