@@ -608,6 +608,46 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       }
   }
 
+  private def matchTypeAgainstKinds(
+    kinds: TypeRepr,
+    tArg: TypeRepr,
+  )(using
+    Reporting.Context,
+  ): Either[
+    (error: String, decodedKinds: SingleOrMultiple[Kind]),
+    SingleOrMultiple[TypeRepr]
+  ] = {
+    val decodedKinds: SingleOrMultiple[Kind] =
+      decodeKindOrKinds(kinds) match
+        case Left(k) => Single(k)
+        case Right(ks) => Multiple(ks.toList)
+
+    val alignedArgsToKinds: Either[String, SingleOrMultiple[(Kind, TypeRepr)]] =
+      decodedKinds match
+        case Single(k) =>
+          Right(Single((k, tArg)))
+        case Multiple(ks) =>
+          unbundleTypeArgs(tArg) match
+            case Left(reason) =>
+              Left(s"Cannot prove that ${typeShortCode(tArg)} is a list of types, because $reason")
+            case Right(ts) =>
+              if (ts.size != ks.size)
+                // fatal, fail without looking for ofKinds evidence
+                badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(tArg)}")
+              Right(Multiple(ks zip ts))
+
+    alignedArgsToKinds
+      .flatMap(_.traverse {
+        case (k, t) =>
+          val expectedUpperBound = kindToUpperBound(k)
+          if (t <:< expectedUpperBound)
+            Right(t)
+          else
+            Left(s"Type ${typeShortCode(t)} does not have the expected kind ${k.show} (because it is not a subtype of ${typeShortCode(expectedUpperBound)})")
+      })
+      .left.map((_, decodedKinds))
+  }
+
   private def matchArgAgainstKinds(
     formalTParam: ParamRef | TypeRef,
     kinds: TypeRepr,
@@ -619,39 +659,10 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     import DecodingContext.Elem.{TypeArgExpansion, TypeArgForgedExpansion}
 
     inside(s"matching type argument ${typeShortCode(tArg)} against the kind(s) ${typeShortCode(kinds)} declared by the corresponding type parameter ${typeShortCode(formalTParam)}") {
-      val decodedKinds: SingleOrMultiple[Kind] =
-        decodeKindOrKinds(kinds) match
-          case Left(k) => Single(k)
-          case Right(ks) => Multiple(ks.toList)
-
-      val alignedArgsToKinds: Either[String, SingleOrMultiple[(Kind, TypeRepr)]] =
-        decodedKinds match
-          case Single(k) =>
-            Right(Single((k, tArg)))
-          case Multiple(ks) =>
-            unbundleTypeArgs(tArg) match
-              case Left(reason) =>
-                Left(s"Cannot prove that ${typeShortCode(tArg)} is a list of types, because $reason")
-              case Right(ts) =>
-                if (ts.size != ks.size)
-                  // fatal, fail without looking for ofKinds evidence
-                  badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(tArg)}")
-                Right(Multiple(ks zip ts))
-
-      val kindCheckedArgs: Either[String, SingleOrMultiple[TypeRepr]] =
-        alignedArgsToKinds.flatMap(_.traverse {
-          case (k, t) =>
-            val expectedUpperBound = kindToUpperBound(k)
-            if (t <:< expectedUpperBound)
-              Right(t)
-            else
-              Left(s"Type ${typeShortCode(t)} does not have the expected kind ${k.show} (because it is not a subtype of ${typeShortCode(expectedUpperBound)})")
-        })
-
-      kindCheckedArgs match
+      matchTypeAgainstKinds(kinds, tArg) match
         case Right(ts) =>
           TypeArgExpansion(formalTParam, ts)
-        case Left(msg) =>
+        case Left((msg, decodedKinds)) =>
           val tOfKindsK = TypeRepr.of[ofKinds].appliedTo(List(tArg, kinds))
           Implicits.search(tOfKindsK) match
             case iss: ImplicitSearchSuccess =>
@@ -674,15 +685,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   }
 
   def compiletimeKindCheck[A <: AnyKind, K](using Type[A], Type[K], Reporting.Context): Expr[Unit] =
-    decodeKindOrKinds(TypeRepr.of[K]) match
-      case Left(k) =>
-        val expectedUpperBound = kindToUpperBound(k)
-        if (TypeRepr.of[A] <:< expectedUpperBound)
-          '{ () }
-        else
-          badUse(s"${typeShortCode[A]} is not statically known to be of kind ${k.show}, because it is not a subtype of ${{typeShortCode(expectedUpperBound)}}")
-      case Right(ks) =>
-        unimplemented("Multi-kind compiletimeKindCheck")
+    matchTypeAgainstKinds(kinds = TypeRepr.of[K], tArg = TypeRepr.of[A]) match
+      case Right(_) => '{ () }
+      case Left((msg, _)) => badUse(msg)
 
   private def decodeType(
     markers: TypeMarkers,
