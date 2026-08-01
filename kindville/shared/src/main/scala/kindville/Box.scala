@@ -1,6 +1,7 @@
 package kindville
 
 import kindville.Reporting.{inside, insideMacroExpansion}
+import kindville.util.{Groups, SingleOrMultiple}
 import scala.quoted.*
 
 object Box {

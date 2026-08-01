@@ -1,4 +1,4 @@
-package kindville
+package kindville.util
 
 trait Applicative[F[_]] {
   def pure[A](a: A): F[A]

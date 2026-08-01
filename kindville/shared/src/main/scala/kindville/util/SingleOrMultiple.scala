@@ -1,4 +1,4 @@
-package kindville
+package kindville.util
 
 private[kindville] enum SingleOrMultiple[A] {
   case Single(value: A)

@@ -1,4 +1,4 @@
-package kindville
+package kindville.util
 
 import scala.annotation.tailrec
 import scala.quoted.*

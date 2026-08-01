@@ -1,6 +1,7 @@
-package kindville
+package kindville.util
 
 import org.scalatest.funsuite.AnyFunSuite
+import kindville.util.=~=
 
 class TypeEqTests extends AnyFunSuite {
 

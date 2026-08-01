@@ -1,5 +1,6 @@
 package kindville
 
+import kindville.util.SourcePos
 import scala.:: as NonEmptyList
 import scala.annotation.targetName
 import scala.quoted.*

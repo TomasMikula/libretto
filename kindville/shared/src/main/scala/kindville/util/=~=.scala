@@ -1,4 +1,4 @@
-package kindville
+package kindville.util
 
 /** Type equality for any-kinded types. */
 trait =~=[A <: AnyKind, B <: AnyKind] {

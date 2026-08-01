@@ -1,7 +1,8 @@
 package kindville
 
 import kindville.Reporting.*
-import kindville.SingleOrMultiple.{Multiple, Single}
+import kindville.util.{Groups, SingleOrMultiple, SourcePos}
+import kindville.util.SingleOrMultiple.{Multiple, Single}
 import scala.quoted.*
 import scala.util.chaining.*
 

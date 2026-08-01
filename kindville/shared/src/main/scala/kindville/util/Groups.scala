@@ -1,4 +1,4 @@
-package kindville
+package kindville.util
 
 private[kindville] opaque type Groups[A] =
   List[SingleOrMultiple[A]]
