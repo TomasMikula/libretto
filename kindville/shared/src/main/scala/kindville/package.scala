@@ -2,60 +2,6 @@ package kindville
 
 import kindville.Reporting.{inside, insideMacroExpansion}
 import scala.quoted.*
-import scala.PolyFunction
-import scala.annotation.experimental
-
-sealed trait *
-sealed trait ->[K, L]
-
-sealed trait ::[H <: AnyKind, T]
-sealed trait TNil
-
-infix sealed trait ofKind[F <: AnyKind, K]
-
-object ofKind {
-
-  given [A] => (A ofKind *) =
-    new (A ofKind *) {}
-
-  given [F[_]] => (F ofKind (* -> *)) =
-    new (F ofKind (* -> *)) {}
-
-  given [F2[_, _]] => (F2 ofKind ((* :: * :: TNil) -> *)) =
-    new (F2 ofKind ((* :: * :: TNil) -> *)) {}
-
-  given [H[_[_]]] => (H ofKind ((* -> *) -> *)) =
-    new (H ofKind ((* -> *) -> *)) {}
-
-  given [HA[_, _[_]]] => (HA ofKind ((* :: (* -> *) :: TNil) -> *)) =
-    new (HA ofKind ((* :: (* -> *) :: TNil) -> *)) {}
-
-  // TODO: provide macro-generated evidence for arbitrary kinds
-}
-
-infix sealed trait ofMultiKind[As, Ks]
-
-object ofMultiKind {
-
-  given (TNil ofMultiKind TNil) =
-    new (TNil ofMultiKind TNil) {}
-
-  given [A0 <: AnyKind, As, K0, Ks] => (A0 ofKind K0, As ofMultiKind Ks) => ((A0 :: As) ofMultiKind (K0 :: Ks)) =
-    new ((A0 :: As) ofMultiKind (K0 :: Ks)) {}
-
-}
-
-infix sealed trait ofKinds[As <: AnyKind, Ks]
-
-object ofKinds {
-
-  given [A <: AnyKind, K] => (A ofKind K) => (A ofKinds K) =
-    new (A ofKinds K) {}
-
-  given [As, Ks] => (As ofMultiKind Ks) => (As ofKinds Ks) =
-    new (As ofKinds Ks) {}
-
-}
 
 private transparent inline def qr(using Quotes): quotes.reflect.type =
   quotes.reflect
