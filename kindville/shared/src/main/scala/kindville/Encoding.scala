@@ -1198,25 +1198,25 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             .map { case (bounds, i) => (name + "$" + i, bounds) }
         )
 
-    val expandedTParams: List[PostExpansionParam] =
+    val decodedTParams: List[DecodedTypeParam] =
       inside("TODO: refine (bjao)") {
         tParams.map:
           case (name, bounds, origParam) =>
             boundsToKinds(markers, bounds) match
               case KindFromBounds.Spread(kinds) =>
                 val expanded = expandParam(name, kinds)
-                PostExpansionParam.Expanded(expanded, origParam)
+                DecodedTypeParam.Expanded(expanded, origParam)
               case KindFromBounds.Single(kind) =>
-                // TODO: update PostExpansionParam to preserve the kind vs. AnyKind
-                PostExpansionParam.Single(name, decodedBound = kindToUpperBound(kind), origParam)
+                // TODO: update DecodedTypeParam to preserve the kind vs. AnyKind
+                DecodedTypeParam.Single(name, decodedBound = kindToUpperBound(kind), origParam)
               case KindFromBounds.AnyKind =>
-                PostExpansionParam.Single(name, decodedBound = TypeRepr.of[AnyKind], origParam)
+                DecodedTypeParam.Single(name, decodedBound = TypeRepr.of[AnyKind], origParam)
       }
 
-    DecodedTypeParams(markers, ctx, expandedTParams)
+    DecodedTypeParams(markers, ctx, decodedTParams)
   }
 
-  private enum PostExpansionParam:
+  private enum DecodedTypeParam:
     case Single(name: String, decodedBound: TypeRepr, originalParamRef: ParamRef | TypeRef)
     case Expanded(params: SingleOrMultiple[(String, Kind)], originalParamRef: ParamRef | TypeRef)
 
@@ -1228,21 +1228,21 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   private class DecodedTypeParams(
     markers: TypeMarkers,
     ctx: DecodingContext,
-    expandedTypeParams: List[(index: Int, expanded: PostExpansionParam)],
+    params: List[(index: Int, expanded: DecodedTypeParam)],
   ) {
     private lazy val names0: Groups[String] =
       Groups.fromList:
-        expandedTypeParams.map:
-          case (_, PostExpansionParam.Single(name, _, _))           => Single(name)
-          case (_, PostExpansionParam.Expanded(Single((n, _)), _))  => Single(n)
-          case (_, PostExpansionParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (n, _) => n })
+        params.map:
+          case (_, DecodedTypeParam.Single(name, _, _))           => Single(name)
+          case (_, DecodedTypeParam.Expanded(Single((n, _)), _))  => Single(n)
+          case (_, DecodedTypeParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (n, _) => n })
 
     private lazy val bounds0: Groups[q.reflect.TypeBounds] =
       Groups.fromList:
-        expandedTypeParams.map:
-          case (_, PostExpansionParam.Single(_, bound, _))          => Single(TypeBounds.upper(bound))
-          case (_, PostExpansionParam.Expanded(Single((_, k)), _))  => Single(kindToBounds(k))
-          case (_, PostExpansionParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (_, k) => kindToBounds(k) })
+        params.map:
+          case (_, DecodedTypeParam.Single(_, bound, _))          => Single(TypeBounds.upper(bound))
+          case (_, DecodedTypeParam.Expanded(Single((_, k)), _))  => Single(kindToBounds(k))
+          case (_, DecodedTypeParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (_, k) => kindToBounds(k) })
 
     def decodedNames: Groups[String] =
       names0
@@ -1252,11 +1252,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
     def innerContext(actualTypeParams: Int => TypeRepr): DecodingContext =
       val newSubstitutions: List[DecodingContext.Elem] =
-        expandedTypeParams
+        params
           .map {
-            case (j, PostExpansionParam.Expanded(ps, origRef)) =>
+            case (j, DecodedTypeParam.Expanded(ps, origRef)) =>
               DecodingContext.Elem.TypeArgExpansion(origRef, ps.zipWithIndex.map { case (_, i) => actualTypeParams(j + i) })
-            case (j, PostExpansionParam.Single(_, _, origRef)) =>
+            case (j, DecodedTypeParam.Single(_, _, origRef)) =>
               DecodingContext.Elem.TypeSubstitution(origRef, actualTypeParams(j))
           }
       ctx.pushAll(newSubstitutions)
@@ -1272,13 +1272,13 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     def apply(
       markers: TypeMarkers,
       ctx: DecodingContext,
-      expandedTypeParams: List[PostExpansionParam],
+      params: List[DecodedTypeParam],
     ): DecodedTypeParams =
-      val expandedTypeParamsWithIndex: List[(Int, PostExpansionParam)] =
-        expandedTypeParams
+      val paramsWithIndex: List[(Int, DecodedTypeParam)] =
+        params
           .mapS(0) { (j, p) => (j + p.expandedSize, (j, p)) }
           ._2
-      new DecodedTypeParams(markers, ctx, expandedTypeParamsWithIndex)
+      new DecodedTypeParams(markers, ctx, paramsWithIndex)
   }
 
   private def expandTypeArgs(
