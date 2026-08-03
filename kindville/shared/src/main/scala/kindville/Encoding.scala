@@ -371,7 +371,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                 )
               TypeLambdaTemplate(
                 decodedTypeParams.decodedNames,
-                boundsFn = tparams => decodedTypeParams.decodedBounds(tparams),
+                boundsFn = tparams => decodedTypeParams.decodedBounds,
                 bodyFn   = tparams => {
                   val ctx = decodedTypeParams.innerContext(tparams)
                   decodeType(markers, ctx, body)
@@ -736,7 +736,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             )
           TypeLambda(
             decodedTypeParams.decodedNamesFlat,
-            tl => decodedTypeParams.decodedBoundsFlat(tl.param),
+            tl => decodedTypeParams.decodedBoundsFlat,
             tl => {
               val ctx1 = decodedTypeParams.innerContext(tl.param)
               decodeType(markers, ctx1, body)
@@ -837,10 +837,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
         // '{ rekind.unpack[Code, As](box)[T] }
         case TypeApply(Apply(TypeApply(Select(prefix, "unpack"), List(code, as)), List(box)), List(t)) if markers.isRekind(prefix) =>
-          val code1 = decodeType(markers.typeMarkers, ctx, code.tpe)
           val as1 = decodeType(markers.typeMarkers, ctx, as.tpe) // this is the key step: expand any ⋅⋅⋅[A] in As into a bundle of *forged* types of the right kinds
           val expectedType = decodeType(markers.typeMarkers, ctx, t.tpe)
-          val actualType = decodeParameterizedType(code1, as1)
+          val actualType = decodeParameterizedType(code.tpe, as1)
           if (!(actualType <:< expectedType))
             badUse(s"The given box unpacks to ${typeShortCode(actualType)}, which is not a subtype of the expected ${typeShortCode(expectedType)}")
           val box1 = decodeTerm(markers, ctx, owner, box)
@@ -1073,7 +1072,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       )
 
     PolyType(decodedTypeParams.decodedNamesFlat)(
-      pt => decodedTypeParams.decodedBoundsFlat(pt.param),
+      pt => decodedTypeParams.decodedBoundsFlat,
       pt => {
         val ctx1 = decodedTypeParams.innerContext(pt.param)
         decodeType(markers, ctx1, body)
@@ -1095,7 +1094,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   private case class DecodedPolyFun(
     tparamNames: Groups[String],
-    tparamBounds: (tparams: Int => TypeRepr) => Groups[TypeBounds],
+    tparamBounds: Groups[TypeBounds],
     paramsGiven: Boolean,
     paramNames: List[String],
     paramTypes: (tparams: Int => TypeRepr) => List[TypeRepr],
@@ -1103,7 +1102,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     body: (newTParams: Int => TypeRepr, newParams: List[Term], owner: Symbol) => Term,
   ) {
     def mkTerm(owner: Symbol): Term =
-      PolyFun(tparamNames.toFlatList, tparamBounds(_).toFlatList, paramsGiven, paramNames, paramTypes, returnType, body, owner)
+      PolyFun(tparamNames.toFlatList, _ => tparamBounds.toFlatList, paramsGiven, paramNames, paramTypes, returnType, body, owner)
   }
 
   private def decodePolyFun(
@@ -1119,9 +1118,6 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ): DecodedPolyFun = {
     val decodedTypeParams =
       decodeTypeParams(markers.typeMarkers, ctx, tparams)
-
-    def tParamBounds1(tparams: Int => TypeRepr): List[TypeBounds] =
-      decodedTypeParams.decodedBoundsFlat(tparams)
 
     val paramNames = params.map(_.name)
 
@@ -1143,7 +1139,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val ctx2 = ctx1.pushAll(paramSubstitutions(newParams))
       decodeTerm(markers, ctx2, owner, body)
 
-    DecodedPolyFun(decodedTypeParams.decodedNames,  decodedTypeParams.decodedBounds, paramsGiven, paramNames, paramTypes, returnType1, body1)
+    DecodedPolyFun(decodedTypeParams.decodedNames, decodedTypeParams.decodedBounds, paramsGiven, paramNames, paramTypes, returnType1, body1)
   }
 
   private def decodeFun(
@@ -1193,12 +1189,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   )(using
     Reporting.Context,
   ): DecodedTypeParams = {
-    def expandParam(name: String, kinds: TypeRepr)(using Reporting.Context): SingleOrMultiple[(String, Kind)] =
-      decodeKindOrKinds(kinds) match
-        case Left(kind)   => Single((name, kind))
-        case Right(kinds) => Multiple(
-          kinds
-            .toList
+    def expandParam(name: String, kinds: SingleOrMultiple[Kind])(using Reporting.Context): SingleOrMultiple[(String, Kind)] =
+      kinds match
+        case Single(k) => Single((name, k))
+        case Multiple(ks) => Multiple(
+          ks
             .zipWithIndex
             .map { case (bounds, i) => (name + "$" + i, bounds) }
         )
@@ -1206,27 +1201,28 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     val expandedTParams: List[PostExpansionParam] =
       inside("TODO: refine (bjao)") {
         tParams.map:
-          case (name, Left(bounds @ TypeBounds(lower, AppliedType(f, List(kinds)))), origParam) if markers.isSpreadOperator(f) =>
-            lower.asType match
-              case '[Nothing] =>
+          case (name, bounds, origParam) =>
+            boundsToKinds(markers, bounds) match
+              case KindFromBounds.Spread(kinds) =>
                 val expanded = expandParam(name, kinds)
                 PostExpansionParam.Expanded(expanded, origParam)
-              case other =>
-                badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(f)}) with a lower bound (${typeShortCode(lower)})")
-          case (name, kind, origParam) =>
-            PostExpansionParam.Original(name, kind, origParam)
+              case KindFromBounds.Single(kind) =>
+                // TODO: update PostExpansionParam to preserve the kind vs. AnyKind
+                PostExpansionParam.Single(name, decodedBound = kindToUpperBound(kind), origParam)
+              case KindFromBounds.AnyKind =>
+                PostExpansionParam.Single(name, decodedBound = TypeRepr.of[AnyKind], origParam)
       }
 
     DecodedTypeParams(markers, ctx, expandedTParams)
   }
 
   private enum PostExpansionParam:
-    case Original(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: ParamRef | TypeRef)
+    case Single(name: String, decodedBound: TypeRepr, originalParamRef: ParamRef | TypeRef)
     case Expanded(params: SingleOrMultiple[(String, Kind)], originalParamRef: ParamRef | TypeRef)
 
     def expandedSize: Int =
       this match
-        case Original(_, _, _) => 1
+        case Single(_, _, _) => 1
         case Expanded(ps, _) => ps.size
 
   private class DecodedTypeParams(
@@ -1237,16 +1233,16 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     private lazy val names0: Groups[String] =
       Groups.fromList:
         expandedTypeParams.map:
-          case (_, PostExpansionParam.Original(name, _, _))         => Single(name)
+          case (_, PostExpansionParam.Single(name, _, _))           => Single(name)
           case (_, PostExpansionParam.Expanded(Single((n, _)), _))  => Single(n)
           case (_, PostExpansionParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (n, _) => n })
 
-    private lazy val bounds0: Groups[Either[q.reflect.TypeBounds, q.reflect.LambdaTypeTree]] =
+    private lazy val bounds0: Groups[q.reflect.TypeBounds] =
       Groups.fromList:
         expandedTypeParams.map:
-          case (_, PostExpansionParam.Original(_, bounds, _))       => Single(bounds)
-          case (_, PostExpansionParam.Expanded(Single((_, k)), _))  => Single(Left(kindToBounds(k)))
-          case (_, PostExpansionParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (_, k) => Left(kindToBounds(k)) })
+          case (_, PostExpansionParam.Single(_, bound, _))          => Single(TypeBounds.upper(bound))
+          case (_, PostExpansionParam.Expanded(Single((_, k)), _))  => Single(kindToBounds(k))
+          case (_, PostExpansionParam.Expanded(Multiple(ps), _))    => Multiple(ps.map { case (_, k) => kindToBounds(k) })
 
     def decodedNames: Groups[String] =
       names0
@@ -1260,34 +1256,16 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           .map {
             case (j, PostExpansionParam.Expanded(ps, origRef)) =>
               DecodingContext.Elem.TypeArgExpansion(origRef, ps.zipWithIndex.map { case (_, i) => actualTypeParams(j + i) })
-            case (j, PostExpansionParam.Original(_, _, origRef)) =>
+            case (j, PostExpansionParam.Single(_, _, origRef)) =>
               DecodingContext.Elem.TypeSubstitution(origRef, actualTypeParams(j))
           }
       ctx.pushAll(newSubstitutions)
 
-    def decodedBoundsAndInnerContext(
-      actualTypeParams: Int => TypeRepr,
-    )(using
-      Reporting.Context,
-    ): (bounds: Groups[TypeBounds], innerContext: DecodingContext) =
-      val ctx1 = innerContext(actualTypeParams)
-      val bounds1 = bounds0.map(decodeTypeBounds(markers, ctx1, _))
-      (bounds1, ctx1)
+    def decodedBounds: Groups[TypeBounds] =
+      bounds0
 
-    def decodedBounds(
-      actualTypeParams: Int => TypeRepr,
-    )(using
-      Reporting.Context,
-    ): Groups[TypeBounds] =
-      decodedBoundsAndInnerContext(actualTypeParams).bounds
-
-    def decodedBoundsFlat(
-      actualTypeParams: Int => TypeRepr,
-    )(using
-      Reporting.Context,
-    ): List[TypeBounds] =
-      decodedBounds(actualTypeParams)
-        .toFlatList
+    def decodedBoundsFlat: List[TypeBounds] =
+      decodedBounds.toFlatList
   }
 
   private object DecodedTypeParams {
@@ -1369,57 +1347,105 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       case a1 =>
         badUse(s"Invalid application of $m. ${typeShortCode(a1)} is not <: $m[<kinds>]")
 
-  private def decodeTypeBounds(
+  private enum KindFromBounds:
+    case Spread(kinds: SingleOrMultiple[Kind]) // kind was declared using the spread operator ( <: ⋅⋅[K] )
+    case Single(kind: Kind) // the kind is a single kind and was not declared using the spread operator at the top level
+    case AnyKind
+
+  private def boundsToKinds(
     markers: TypeMarkers,
-    ctx: DecodingContext,
     bounds: Either[TypeBounds, LambdaTypeTree],
   )(using
     Reporting.Context,
-  ): TypeBounds =
+  ): KindFromBounds =
     bounds match
-      case Left(tb @ TypeBounds(lo, hi)) =>
-        inside(tb):
-          TypeBounds(
-            decodeType(markers, ctx, lo),
-            decodeType(markers, ctx, hi),
-          )
+      case Left(TypeBounds(lo, hi)) =>
+        lo.asType match
+          case '[Nothing] =>
+            upperBoundToKinds(markers, hi)
+          case other =>
+            badUse:
+              s"""Lower bounds not supported in coded expressions, but got lower bound (${typeShortCode(lo)}).
+                 |Only upper bounds that indicate the kind are supported.
+                 |Note: This means the usual bounds of type parameters are not supported at all in coded expressions."""
+                 .stripMargin
       case Right(ltt @ LambdaTypeTree(typeDefs, body)) =>
-        inside(ltt) {
-          val bodyTpe: Either[TypeRepr, LambdaTypeTree] =
-            body match
-              case tb: TypeBoundsTree =>
-                val TypeBounds(lo, hi) = tb.tpe
-                lo.asType match
-                  case '[Nothing] => Left(hi)
-                  case _ => assertionFailed(s"Unexpected lower bound on the body of LambdaTypeTree: ${typeStruct(lo)}")
-              case lt: LambdaTypeTree => Right(lt)
-              case other => assertionFailed(s"Unexpected body of LambdaTypeTree in bounds position: ${treeStruct(other)}. Expected TypeBoundsTree or LambdaTypeTree.")
-          val decodedTypeParams =
-            decodeTypeParams(
-              markers,
-              ctx,
-              typeDefs map { case td @ TypeDef(name, tree) =>
-                tree match
-                  case b: TypeBoundsTree => (name, Left(b.tpe), td.symbol.typeRef)
-                  case l: LambdaTypeTree => (name, Right(l),    td.symbol.typeRef)
-                  case other =>
-                    assertionFailed(s"Unexpected ${treeStruct(other)} as the type/kind of a type param")
-              },
-            )
-          TypeBounds(
-            low = TypeRepr.of[Nothing],
-            hi  = TypeLambda(
-              decodedTypeParams.decodedNamesFlat,
-              tl => decodedTypeParams.decodedBoundsFlat(tl.param),
-              tl => {
-                val ctx1 = decodedTypeParams.innerContext(tl.param)
-                bodyTpe match
-                  case Left(t)    => decodeType(markers, ctx1, t)
-                  case Right(ltt) => decodeTypeBounds(markers, ctx1, Right(ltt))
-              }
-            ),
-          )
-        }
+        ltt.tpe match
+          case TypeBounds(lo, tl: TypeLambda) if lo =:= TypeRepr.of[Nothing] =>
+            KindFromBounds.Single(typeLambdaToKind(markers, tl))
+          case other =>
+            assertionFailed(s"Unexpected type of LambdaTypeTree. Expected TypeBounds(Nothing, TypeLambda(...)), got ${typeShortCode(other)}")
+
+  private def upperBoundToKinds(
+    markers: TypeMarkers,
+    upperBound: TypeRepr,
+  )(using
+    Reporting.Context,
+  ): KindFromBounds =
+    upperBound match
+      case AppliedType(f, List(kinds)) if markers.isSpreadOperator(f) =>
+        KindFromBounds.Spread:
+          decodeKindOrKinds(kinds) match
+            case Left(kind)   => Single(kind)
+            case Right(kinds) => Multiple(kinds.toList)
+      case t if t =:= TypeRepr.of[Any] =>
+        KindFromBounds.Single(Kind.Tp)
+      case tl: TypeLambda =>
+        KindFromBounds.Single(typeLambdaToKind(markers, tl))
+      case t if t =:= TypeRepr.of[AnyKind] =>
+        KindFromBounds.AnyKind
+      case other =>
+        badUse(s"${typeShortCode(other)} is not as supported encoding of a kind or kinds.")
+
+  /** Unlike [[upperBoundToKinds]], this method does not accept a potential multikind
+    * (i.e. doesn't accept upper bound of `<: ⋅⋅[...]`, where ⋅⋅ is the spread operator),
+    * nor does it accept the `<: AnyKind` bound.
+    */
+  private def upperBoundToKind(
+    markers: TypeMarkers,
+    upperBound: TypeRepr,
+  )(using
+    Reporting.Context,
+  ): Kind =
+    upperBound match
+      case t if t =:= TypeRepr.of[Any] =>
+        Kind.Tp
+      case tl: TypeLambda =>
+        typeLambdaToKind(markers, tl)
+      case AppliedType(f, List(kinds)) if markers.isSpreadOperator(f) =>
+        badUse(s"The spread operator (${{typeShortCode(f)}}) not allowed in this position, because it has the potential to expand to multiple kinds, but only a single kind is allowed in this position.")
+      case t if t =:= TypeRepr.of[AnyKind] =>
+        badUse(s"AnyKind bound not allowed in this position.")
+      case other =>
+        badUse(s"${typeShortCode(other)} is not as supported encoding of a kind or kinds.")
+
+  private def typeLambdaToKind(
+    markers: TypeMarkers,
+    tl: TypeLambda,
+  )(using
+    Reporting.Context,
+  ): Kind =
+    inside(tl) {
+      val TypeLambda(paramNames, paramBounds, body) = tl
+
+      val paramKinds: Groups[Kind] =
+        Groups.fromList:
+          paramBounds.map: b =>
+            boundsToKinds(markers, Left(b)) match
+              case KindFromBounds.Spread(kinds) => kinds
+              case KindFromBounds.Single(kind) => Single(kind)
+              case KindFromBounds.AnyKind => badUse("AnyKind bound not supported in type lambda")
+
+
+      val bodyKind: Kind =
+        inside(body):
+          upperBoundToKind(markers, body)
+
+      Kind.arr(
+        paramKinds.toFlatList, // flattening, i.e. losing information, but should be OK here
+        bodyKind,
+      )
+    }
 
   private def checkNonOccurrence(
     marker: TypeRepr,

@@ -79,6 +79,9 @@ private[kindville] object Kind:
   def arr(ks: Kinds, l: Kind): Kind.Of[ks.Label -> l.Label] =
     Arr(ks, l)
 
+  def arr(ks: List[Kind], l: Kind): Kind =
+    arr(Kinds.fromList(ks), l)
+
 private[kindville] sealed trait Kinds:
   type Label
 
@@ -109,3 +112,11 @@ private[kindville] object Kinds:
 
   def single(k: Kind): Kinds.Of[k.Label :: TNil] =
     Cons(k, Kinds.Empty)
+
+  def fromList(ks: List[Kind]): Kinds =
+    ks match
+      case Nil => Empty
+      case h :: t =>
+        val tkinds = fromList(t)
+        Cons(h, tkinds)
+
