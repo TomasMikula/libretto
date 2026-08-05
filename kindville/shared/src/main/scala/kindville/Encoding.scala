@@ -226,7 +226,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   }
 
   case class TypeMarkers(
-    spreadAndBundle: TypeRepr, // TODO: Can the type be refined to (ParamRef | TypeRef)?
+    spreadAndBundle: TypeRepr,
     rekindedBundle: Option[TypeRef],
   ) {
     def isSpreadOperator(f: TypeRepr): Boolean =
@@ -442,7 +442,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         .asExpr
     }
 
-  def decodeExprT[As[⋅⋅[_]]](
+  def decodeExprT[As](
     encoded: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any],
     considering: Seq[Expr[? ofKinds ?]],
   )(using
@@ -465,8 +465,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         }
 
       val targs =
-        unbundleTypeArgsOrFail(TypeRepr.of[As].appliedTo(marker))
-          .map(_.dealiasKeepOpaques)
+        unbundleTypeArgsOrFail(TypeRepr.of[As])
 
       val ctx =
         decodeTypeParamSubstitutions(marker, userTParams, targs, considering)
@@ -581,31 +580,19 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       (tparams zip targs) map {
         case ((name, bounds, ref), t) =>
           inside(s"substituting type argument ${typeShortCode(t)} for type parameter ${typeShortCode(ref)} with bounds ${bounds.fold(typeShortCode, treeShortCode)}"):
-            val elem: TypeSubstitution | TypeArgExpansion | TypeArgForgedExpansion =
-              bounds match
-                case Left(TypeBounds(lower, upper)) =>
-                  upper match
-                    case AppliedType(f, List(kinds)) if f =:= marker =>
-                      lower.asType match
-                        case '[Nothing] =>
-                          matchArgAgainstKinds(ref, kinds, t, considering)
-                        case other =>
-                          badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(marker)}) with a lower bound (${typeShortCode(lower)})")
-                    case _ =>
-                      TypeSubstitution(ref, t)
-                case Right(ltt) =>
-                  TypeSubstitution(ref, t)
-
-            // decode since the provided type args may contain the marker
-            elem match
-              case TypeSubstitution(ref, t) =>
-                TypeSubstitution(ref, decodeType(TypeMarkers(marker, rekindedBundle = None), ctx = DecodingContext.empty, t))
-              case TypeArgExpansion(ref, ts) =>
-                // TODO: Why? Shouldn't the type argument be already free of the marker, since it's provided outside of marker's scope?
-                val ts1 = ts.map(decodeType(TypeMarkers(marker, rekindedBundle = None), DecodingContext.empty, _))
-                TypeArgExpansion(ref, ts1)
-              case x: TypeArgForgedExpansion =>
-                x
+            bounds match
+              case Left(TypeBounds(lower, upper)) =>
+                upper match
+                  case AppliedType(f, List(kinds)) if f =:= marker =>
+                    lower.asType match
+                      case '[Nothing] =>
+                        matchArgAgainstKinds(ref, kinds, t, considering)
+                      case other =>
+                        badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(marker)}) with a lower bound (${typeShortCode(lower)})")
+                  case _ =>
+                    TypeSubstitution(ref, t)
+              case Right(ltt) =>
+                TypeSubstitution(ref, t)
       }
   }
 

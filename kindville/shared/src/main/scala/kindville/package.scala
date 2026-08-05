@@ -20,13 +20,7 @@ transparent inline def decodeT[As](
   inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any,
   inline considering: (? ofKinds ?)*,
 ): Any =
-  decodeFull[[⋅⋅[_]] =>> As](expr, considering*)
-
-transparent inline def decodeFull[As[⋅⋅[_]]](
-  inline expr: [⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any,
-  inline considering: (? ofKinds ?)*,
-): Any =
-  ${ decodeFullImpl[As]('expr, 'considering) }
+  ${ decodeTImpl[As]('expr, 'considering) }
 
 private def decodeImpl(expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any])(using Quotes): Expr[Any] =
   insideMacroExpansion:
@@ -35,7 +29,7 @@ private def decodeImpl(expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any])(using 
     encoding
       .decodeExpr(expr)
 
-private def decodeFullImpl[As[⋅⋅[_]]](
+private def decodeTImpl[As](
   expr: Expr[[⋅⋅[_]] => Kuotes[⋅⋅] ?=> Any],
   considering: Expr[Seq[? ofKinds ?]],
 )(using
