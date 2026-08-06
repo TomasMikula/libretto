@@ -364,7 +364,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                     case other => unexpectedTypeParamType(other)
                 }
               val decodedTypeParams =
-                decodeTypeParams(markers, params)
+                decodeTypeParams(marker, params)
               TypeLambdaTemplate(
                 decodedTypeParams.decodedNames,
                 boundsFn = tparams => decodedTypeParams.decodedBounds,
@@ -706,7 +706,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case l @ TypeLambda(names, bounds, body) =>
           val decodedTypeParams =
             decodeTypeParams(
-              markers,
+              markers.spreadAndBundle,
               (names zip bounds).zipWithIndex map {
                 case ((n, b), i) =>
                   l.param(i) match
@@ -1041,7 +1041,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
     val decodedTypeParams =
       decodeTypeParams(
-        markers,
+        markers.spreadAndBundle,
         (tParamNames zip tParamBounds).zipWithIndex map {
           case ((n, b), i) =>
             pt.param(i) match
@@ -1098,7 +1098,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     Reporting.Context,
   ): DecodedPolyFun = {
     val decodedTypeParams =
-      decodeTypeParams(markers.typeMarkers, tparams)
+      decodeTypeParams(markers.spreadAndBundle, tparams)
 
     val paramNames = params.map(_.name)
 
@@ -1164,7 +1164,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   }
 
   private def decodeTypeParams(
-    markers: TypeMarkers,
+    marker: TypeRepr,
     tParams: List[(name: String, kind: Either[TypeBounds, LambdaTypeTree], ref: ParamRef | TypeRef)],
   )(using
     Reporting.Context,
@@ -1172,7 +1172,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     val decodedTParams: List[DecodedTypeParam] =
       tParams.map:
         case (name, bounds, origParam) =>
-          DecodedTypeParam(name, origParam, boundsToKinds(markers, bounds))
+          DecodedTypeParam(name, origParam, boundsToKinds(marker, bounds))
 
     DecodedTypeParams(decodedTParams)
   }
@@ -1322,7 +1322,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     case AnyKind
 
   private def boundsToKinds(
-    markers: TypeMarkers,
+    marker: TypeRepr,
     bounds: Either[TypeBounds, LambdaTypeTree],
   )(using
     Reporting.Context,
@@ -1332,7 +1332,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case Left(TypeBounds(lo, hi)) =>
           lo.asType match
             case '[Nothing] =>
-              upperBoundToKinds(markers, hi)
+              upperBoundToKinds(marker, hi)
             case other =>
               badUse:
                 s"""Lower bounds not supported in coded expressions, but got lower bound (${typeShortCode(lo)}).
@@ -1342,18 +1342,18 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case Right(ltt @ LambdaTypeTree(typeDefs, body)) =>
           ltt.tpe match
             case TypeBounds(lo, tl: TypeLambda) if lo =:= TypeRepr.of[Nothing] =>
-              KindFromBounds.Single(typeLambdaToKind(markers, tl))
+              KindFromBounds.Single(typeLambdaToKind(marker, tl))
             case other =>
               assertionFailed(s"Unexpected type of LambdaTypeTree. Expected TypeBounds(Nothing, TypeLambda(...)), got ${typeShortCode(other)}")
 
   private def upperBoundToKinds(
-    markers: TypeMarkers,
+    marker: TypeRepr,
     upperBound: TypeRepr,
   )(using
     Reporting.Context,
   ): KindFromBounds =
     upperBound match
-      case AppliedType(f, List(kinds)) if markers.isSpreadOperator(f) =>
+      case AppliedType(f, List(kinds)) if f =:= marker =>
         KindFromBounds.Spread:
           decodeKindOrKinds(kinds) match
             case Left(kind)   => Single(kind)
@@ -1361,7 +1361,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       case t if t =:= TypeRepr.of[Any] =>
         KindFromBounds.Single(Kind.Tp)
       case tl: TypeLambda =>
-        KindFromBounds.Single(typeLambdaToKind(markers, tl))
+        KindFromBounds.Single(typeLambdaToKind(marker, tl))
       case t if t =:= TypeRepr.of[AnyKind] =>
         KindFromBounds.AnyKind
       case other =>
@@ -1372,7 +1372,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     * nor does it accept the `<: AnyKind` bound.
     */
   private def upperBoundToKind(
-    markers: TypeMarkers,
+    marker: TypeRepr,
     upperBound: TypeRepr,
   )(using
     Reporting.Context,
@@ -1381,8 +1381,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       case t if t =:= TypeRepr.of[Any] =>
         Kind.Tp
       case tl: TypeLambda =>
-        typeLambdaToKind(markers, tl)
-      case AppliedType(f, List(kinds)) if markers.isSpreadOperator(f) =>
+        typeLambdaToKind(marker, tl)
+      case AppliedType(f, List(kinds)) if f =:= marker =>
         badUse(s"The spread operator (${{typeShortCode(f)}}) not allowed in this position, because it has the potential to expand to multiple kinds, but only a single kind is allowed in this position.")
       case t if t =:= TypeRepr.of[AnyKind] =>
         badUse(s"AnyKind bound not allowed in this position.")
@@ -1390,7 +1390,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         badUse(s"${typeShortCode(other)} is not as supported encoding of a kind or kinds.")
 
   private def typeLambdaToKind(
-    markers: TypeMarkers,
+    marker: TypeRepr,
     tl: TypeLambda,
   )(using
     Reporting.Context,
@@ -1401,7 +1401,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       val paramKinds: Groups[Kind] =
         Groups.fromList:
           paramBounds.map: b =>
-            boundsToKinds(markers, Left(b)) match
+            boundsToKinds(marker, Left(b)) match
               case KindFromBounds.Spread(kinds) => kinds
               case KindFromBounds.Single(kind) => Single(kind)
               case KindFromBounds.AnyKind => badUse("AnyKind bound not supported in type lambda")
@@ -1409,7 +1409,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
       val bodyKind: Kind =
         inside(body):
-          upperBoundToKind(markers, body)
+          upperBoundToKind(marker, body)
 
       Kind.arr(
         paramKinds.toFlatList, // flattening, i.e. losing information, but should be OK here
