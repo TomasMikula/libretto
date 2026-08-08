@@ -1,5 +1,7 @@
 package kindville
 
+import scala.quoted.{Quotes, Type}
+
 sealed trait *
 sealed trait ->[K, L]
 
@@ -57,6 +59,8 @@ private[kindville] sealed trait Kind:
 
   def show: String
 
+  def labelType(using Quotes): Type[Label]
+
 private[kindville] object Kind:
   type Of[K] = Kind { type Label = K }
 
@@ -64,9 +68,26 @@ private[kindville] object Kind:
     override type Label = *
 
     override def show: String = "*"
+
+    override def labelType(using Quotes): Type[Label] = Type.of[*]
   }
 
-  case class Arr[Ks, L](
+  case class Arr1[K, L](
+    paramKind: Kind.Of[K],
+    outKind: Kind.Of[L],
+  ) extends Kind {
+    override type Label = K -> L
+
+    override def show: String =
+      paramKind.show + " -> " + outKind.show
+
+    override def labelType(using Quotes): Type[Label] =
+      given Type[K] = paramKind.labelType
+      given Type[L] = outKind.labelType
+      Type.of[K -> L]
+  }
+
+  case class ArrN[Ks, L](
     paramKinds: Kinds.Of[Ks],
     outKind: Kind.Of[L],
   ) extends Kind {
@@ -74,10 +95,18 @@ private[kindville] object Kind:
 
     override def show: String =
       paramKinds.show + " -> " + outKind.show
+
+    override def labelType(using Quotes): Type[Label] =
+      given Type[Ks] = paramKinds.labelType
+      given Type[L] = outKind.labelType
+      Type.of[Ks -> L]
   }
 
+  def arr(k: Kind, l: Kind): Kind.Of[k.Label -> l.Label] =
+    Arr1(k, l)
+
   def arr(ks: Kinds, l: Kind): Kind.Of[ks.Label -> l.Label] =
-    Arr(ks, l)
+    ArrN(ks, l)
 
   def arr(ks: List[Kind], l: Kind): Kind =
     arr(Kinds.fromList(ks), l)
@@ -96,11 +125,15 @@ private[kindville] sealed trait Kinds:
   def show: String =
     toList.map(_.show).appended("TNil").mkString("(", " :: ", ")")
 
+  def labelType(using Quotes): Type[Label]
+
 private[kindville] object Kinds:
   type Of[Ks] = Kinds { type Label = Ks }
 
   case object Empty extends Kinds {
     override type Label = TNil
+
+    override def labelType(using Quotes): Type[TNil] = Type.of[TNil]
   }
 
   case class Cons[K, Ks](
@@ -108,6 +141,11 @@ private[kindville] object Kinds:
     tail: Kinds.Of[Ks],
   ) extends Kinds {
     override type Label = K :: Ks
+
+    override def labelType(using Quotes): Type[K :: Ks] =
+      given Type[K] = head.labelType
+      given Type[Ks] = tail.labelType
+      Type.of[K :: Ks]
   }
 
   def single(k: Kind): Kinds.Of[k.Label :: TNil] =

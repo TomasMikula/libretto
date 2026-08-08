@@ -91,10 +91,10 @@ private object Encoding {
         args match
           case inKs :: outK :: Nil =>
             FastReject.Success:
-              val in = decodeKindOrKinds(inKs)
-              val ks = in.left.map(Kinds.single).merge // TODO: Is it really OK to conflate a single-kind (e.g. `*`) with a singleton multi-kind (`* :: TNil`)?
               val l  = decodeKind(outK)
-              Kind.arr(ks, l)
+              decodeKindOrKinds(inKs) match
+                case Left(k) => Kind.arr(k, l)
+                case Right(ks) => Kind.arr(ks, l)
           case _ =>
             assertionFailed(s"Unexpected number of type arguments to ${Printer.TypeReprShortCode.show(f)}. Expected 2, got ${args.size}: ${args.map(Printer.TypeReprShortCode.show(_).mkString(", "))}")
       case other =>
@@ -164,7 +164,15 @@ private object Encoding {
     k match
       case Kind.Tp =>
         TypeRepr.of[Any]
-      case Kind.Arr(as, r) =>
+      case Kind.Arr1(a, r) =>
+        val b = kindToBounds(a)
+        val t = kindToUpperBound(r)
+        TypeLambda(
+          paramNames = List("A"),
+          boundsFn   = _ => List(b),
+          bodyFn     = _ => t,
+        )
+      case Kind.ArrN(as, r) =>
         val bs = kindsToBounds(as)
         val t  = kindToUpperBound(r)
         TypeLambda(
@@ -236,7 +244,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       rekindedBundle.exists(f =:= _)
   }
 
-  class DecodingContext(stack: List[DecodingContext.Elem]) {
+  private class DecodingContext(stack: List[DecodingContext.Elem]) {
     import DecodingContext.*
 
     def substitutesType(p: ParamRef | TypeRef): Option[TypeRepr] =
@@ -265,7 +273,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       stack.reverse.mkString("\n")
   }
 
-  object DecodingContext {
+  private object DecodingContext {
     enum Elem:
       case TypeSubstitution(src: ParamRef | TypeRef, tgt: TypeRepr)
       case TypeArgExpansion(src: ParamRef | TypeRef, tgt: SingleOrMultiple[TypeRepr])
@@ -572,106 +580,147 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     if (tparams.size != targs.size)
       badUse(s"Expected ${targs.size} custom type parameters matching the arguments ${targs.map(t => typeShortCode(t)).mkString(", ")}. Got ${tparams.map(p => typeShortCode(p.ref)).mkString(", ")}")
 
+    val decodedTParams =
+      decodeTypeParams(marker, tparams).toList
+    assert(decodedTParams.size == tparams.size)
+
     DecodingContext:
-      (tparams zip targs) map {
-        case ((name, bounds, ref), t) =>
-          inside(s"substituting type argument ${typeShortCode(t)} for type parameter ${typeShortCode(ref)} with bounds ${bounds.fold(typeShortCode, treeShortCode)}"):
-            bounds match
-              case Left(TypeBounds(lower, upper)) =>
-                upper match
-                  case AppliedType(f, List(kinds)) if f =:= marker =>
-                    lower.asType match
-                      case '[Nothing] =>
-                        matchArgAgainstKinds(ref, kinds, t, considering)
-                      case other =>
-                        badUse(s"Cannot mix the \"spread\" upper bound (${typeShortCode(marker)}) with a lower bound (${typeShortCode(lower)})")
-                  case _ =>
-                    TypeSubstitution(ref, t)
-              case Right(ltt) =>
-                TypeSubstitution(ref, t)
-      }
+      (decodedTParams zip targs) map:
+        case (decodedTypeParam, tArg) =>
+          matchArgAgainstParam(decodedTypeParam, tArg, considering)
+  }
+
+  private def matchTypeAgainstKind(
+    kind: KindFromBounds,
+    t: TypeRepr,
+  )(using
+    Reporting.Context,
+  ): Either[
+    (error: String, properKind: KindFromBounds.Proper),
+    Either[TypeRepr, SingleOrMultiple[TypeRepr]]
+  ] = {
+    val properKind: KindFromBounds.Proper =
+      kind match
+        case p: KindFromBounds.Proper => p
+        case KindFromBounds.AnyKind => badUse("AnyKind bound not supported here")
+
+    matchTypeAgainstProperKind(properKind, t)
+      .left.map((_, properKind))
+  }
+
+  private def matchTypeAgainstProperKind(
+    kind: KindFromBounds.Proper,
+    tArg: TypeRepr,
+  )(using
+    Reporting.Context,
+  ): Either[String, Either[TypeRepr, SingleOrMultiple[TypeRepr]]] =
+    kind match
+      case KindFromBounds.Single(k, _) =>
+        kindCheck(k, tArg).map(Left(_))
+      case KindFromBounds.Spread(ks, _) =>
+        matchTypeAgainstKinds(ks, tArg).map(Right(_))
+
+  private def matchTypeAgainstKinds(
+    kinds: SingleOrMultiple[Kind],
+    t: TypeRepr,
+  )(using
+    Reporting.Context,
+  ): Either[String, SingleOrMultiple[TypeRepr]] = {
+    val alignedArgsToKinds: Either[String, SingleOrMultiple[(Kind, TypeRepr)]] =
+      kinds match
+        case Single(k) =>
+          Right(Single((k, t)))
+        case Multiple(ks) =>
+          unbundleTypeArgs(t) match
+            case Left(reason) =>
+              Left(s"Cannot prove that ${typeShortCode(t)} is a list of types, because $reason")
+            case Right(ts) =>
+              if (ts.size != ks.size)
+                // fatal, fail immediately
+                badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(t)}")
+              Right(Multiple(ks zip ts))
+
+    alignedArgsToKinds
+      .flatMap(_.traverse { case (k, t) => kindCheck(k, t) })
+  }
+
+  private def kindCheck(kind: Kind, tpe: TypeRepr): Either[String, TypeRepr] =
+    val expectedUpperBound = kindToUpperBound(kind)
+    if (tpe <:< expectedUpperBound)
+      Right(tpe)
+    else
+      Left(s"Type ${typeShortCode(tpe)} does not have the expected kind ${kind.show} (because it is not a subtype of ${typeShortCode(expectedUpperBound)})")
+
+  private def matchArgAgainstParam(
+    tParam: DecodedTypeParam,
+    tArg: TypeRepr,
+    considering: Seq[Expr[? ofKinds ?]], // explicitly provided kind witnesses for consideration; workaround for https://github.com/scala/scala3/issues/26589
+  )(using
+    Reporting.Context,
+  ): DecodingContext.Elem.TypeArgExpansion | DecodingContext.Elem.TypeArgForgedExpansion | DecodingContext.Elem.TypeSubstitution = {
+    import DecodingContext.Elem.{TypeArgExpansion, TypeArgForgedExpansion, TypeSubstitution}
+
+    val DecodedTypeParam(_, formalTParam, kind) = tParam
+    inside(s"matching type argument ${typeShortCode(tArg)} against the kind(s) ${kind.show} declared by the corresponding type parameter ${typeShortCode(formalTParam)}") {
+      matchTypeAgainstKind(kind, tArg) match
+        case Right(Left(t)) =>
+          TypeSubstitution(formalTParam, t)
+        case Right(Right(ts)) =>
+          TypeArgExpansion(formalTParam, ts)
+        case Left((msg, properKind)) =>
+          val kindLabelType =
+            properKind match
+              case KindFromBounds.Single(k, _) => k.labelType
+              case KindFromBounds.Spread(Single(k), _) => k.labelType
+              case KindFromBounds.Spread(Multiple(ks), _) => Kinds.fromList(ks).labelType
+          val tOfKindsK =
+            TypeRepr.of[ofKinds].appliedTo(List(tArg, TypeRepr.of(using kindLabelType)))
+          val existsKindednessEvidence: Either[ImplicitSearchFailure, Unit] =
+            Implicits.search(tOfKindsK) match
+              case iss: ImplicitSearchSuccess => Right(())
+              case e: ImplicitSearchFailure =>
+                if (considering.exists(_.isExprOf(using tOfKindsK.asType.asInstanceOf[Type[Any]])))
+                then Right(())
+                else Left(e)
+          existsKindednessEvidence match
+            case Right(()) =>
+              properKind match
+                case KindFromBounds.Spread(kinds, _) =>
+                  TypeArgForgedExpansion(formalTParam, bundledArg = tArg, kinds)
+                case KindFromBounds.Single(kind, _) =>
+                  unimplemented(s"dynamic evidence for non-spread params not yet implemented. Param: ${typeShortCode(formalTParam)}, expected kind: ${kind.show}")
+            case Left(e) =>
+              badUse:
+                s"""Cannot prove that type ${typeShortCode(tArg)} has the expected kind ${properKind.show} (original bound ${typeShortCode(properKind.originalBound)}), because
+                    | - $msg,
+                    | - nor is there an instance of ${typeShortCode(tOfKindsK)} among the ${considering.size} instances provided explicitly to the decoding macro: ${considering.map(ev => s"${treeShortCode(ev.asTerm)} has type ${typeShortCode(ev.asTerm.tpe.widen)}").mkString("\n   - ", "\n   - ", "")}
+                    | - nor is there a given instance of ${typeShortCode(tOfKindsK)} in scope
+                    |   - although this could be a false negative due to https://github.com/scala/scala3/issues/26589,
+                    |     in which case work around it by passing an explicit instance to the decode macro
+                    |   - reported explanation:
+                    |     ${e.explanation.replace("\n", "\n     ")}
+                    |""".stripMargin
+    }
   }
 
   private def matchTypeAgainstKinds(
     kinds: TypeRepr,
-    tArg: TypeRepr,
+    t: TypeRepr,
   )(using
     Reporting.Context,
-  ): Either[
-    (error: String, decodedKinds: SingleOrMultiple[Kind]),
-    SingleOrMultiple[TypeRepr]
-  ] = {
+  ): Either[String, SingleOrMultiple[TypeRepr]] = {
     val decodedKinds: SingleOrMultiple[Kind] =
       decodeKindOrKinds(kinds) match
         case Left(k) => Single(k)
         case Right(ks) => Multiple(ks.toList)
 
-    val alignedArgsToKinds: Either[String, SingleOrMultiple[(Kind, TypeRepr)]] =
-      decodedKinds match
-        case Single(k) =>
-          Right(Single((k, tArg)))
-        case Multiple(ks) =>
-          unbundleTypeArgs(tArg) match
-            case Left(reason) =>
-              Left(s"Cannot prove that ${typeShortCode(tArg)} is a list of types, because $reason")
-            case Right(ts) =>
-              if (ts.size != ks.size)
-                // fatal, fail without looking for ofKinds evidence
-                badUse(s"Expected ${ks.size} type arguments matching kinds ${ks.map(_.show).mkString(", ")}, got ${ts.size}: ${typeShortCode(tArg)}")
-              Right(Multiple(ks zip ts))
-
-    alignedArgsToKinds
-      .flatMap(_.traverse {
-        case (k, t) =>
-          val expectedUpperBound = kindToUpperBound(k)
-          if (t <:< expectedUpperBound)
-            Right(t)
-          else
-            Left(s"Type ${typeShortCode(t)} does not have the expected kind ${k.show} (because it is not a subtype of ${typeShortCode(expectedUpperBound)})")
-      })
-      .left.map((_, decodedKinds))
-  }
-
-  private def matchArgAgainstKinds(
-    formalTParam: ParamRef | TypeRef,
-    kinds: TypeRepr,
-    tArg: TypeRepr,
-    considering: Seq[Expr[? ofKinds ?]], // explicitly provided kind witnesses for consideration; workaround for https://github.com/scala/scala3/issues/26589
-  )(using
-    Reporting.Context,
-  ): DecodingContext.Elem.TypeArgExpansion | DecodingContext.Elem.TypeArgForgedExpansion = {
-    import DecodingContext.Elem.{TypeArgExpansion, TypeArgForgedExpansion}
-
-    inside(s"matching type argument ${typeShortCode(tArg)} against the kind(s) ${typeShortCode(kinds)} declared by the corresponding type parameter ${typeShortCode(formalTParam)}") {
-      matchTypeAgainstKinds(kinds, tArg) match
-        case Right(ts) =>
-          TypeArgExpansion(formalTParam, ts)
-        case Left((msg, decodedKinds)) =>
-          val tOfKindsK = TypeRepr.of[ofKinds].appliedTo(List(tArg, kinds))
-          Implicits.search(tOfKindsK) match
-            case iss: ImplicitSearchSuccess =>
-              TypeArgForgedExpansion(formalTParam, bundledArg = tArg, decodedKinds)
-            case e: ImplicitSearchFailure =>
-              if (considering.exists(_.isExprOf(using tOfKindsK.asType.asInstanceOf[Type[Any]])))
-                TypeArgForgedExpansion(formalTParam, bundledArg = tArg, decodedKinds)
-              else
-                badUse:
-                  s"""Cannot prove that type ${typeShortCode(tArg)} has the expected kind ${decodedKinds.map(_.show).mkString("", " :: ", " :: TNil")}, because
-                      | - $msg,
-                      | - nor is there an instance of ${typeShortCode(tOfKindsK)} among the ${considering.size} instances provided explicitly to the decoding macro
-                      | - nor is there a given instance of ${typeShortCode(tOfKindsK)} in scope
-                      |   - although this could be a false negative due to https://github.com/scala/scala3/issues/26589,
-                      |     in which case work around it by passing an explicit instance to the decode macro
-                      |   - reported explanation:
-                      |     ${e.explanation.replace("\n", "\n     ")}
-                      |""".stripMargin
-    }
+    matchTypeAgainstKinds(decodedKinds, t)
   }
 
   def compiletimeKindCheck[A <: AnyKind, K](using Type[A], Type[K], Reporting.Context): Expr[Unit] =
-    matchTypeAgainstKinds(kinds = TypeRepr.of[K], tArg = TypeRepr.of[A]) match
+    matchTypeAgainstKinds(kinds = TypeRepr.of[K], t = TypeRepr.of[A]) match
       case Right(_) => '{ () }
-      case Left((msg, _)) => badUse(msg)
+      case Left(msg) => badUse(msg)
 
   private def decodeType(
     markers: TypeMarkers,
@@ -1181,23 +1230,23 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
     def expandedSize: Int =
       decodedKind match
-        case KindFromBounds.Single(_) => 1
+        case KindFromBounds.Single(_, _) => 1
         case KindFromBounds.AnyKind => 1
-        case KindFromBounds.Spread(kinds) => kinds.size
+        case KindFromBounds.Spread(kinds, _) => kinds.size
 
     def names: SingleOrMultiple[String] =
       decodedKind match
-        case KindFromBounds.Single(_) => Single(originalName)
+        case KindFromBounds.Single(_, _) => Single(originalName)
         case KindFromBounds.AnyKind => Single(originalName)
-        case KindFromBounds.Spread(kinds) =>
+        case KindFromBounds.Spread(kinds, _) =>
           kinds match
             case Single(k) => Single(originalName)
             case Multiple(ks) => Multiple(ks.zipWithIndex.map { case (_, i) => originalName + "$" + i })
 
     def bounds: SingleOrMultiple[TypeBounds] =
       decodedKind match
-        case KindFromBounds.Spread(kinds) => kinds.map(kindToBounds)
-        case KindFromBounds.Single(kind) => Single(kindToBounds(kind))
+        case KindFromBounds.Spread(kinds, _) => kinds.map(kindToBounds)
+        case KindFromBounds.Single(kind, _) => Single(kindToBounds(kind))
         case KindFromBounds.AnyKind => Single(TypeBounds.upper(TypeRepr.of[AnyKind]))
 
   }
@@ -1225,12 +1274,15 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           .map {
             case (j, DecodedTypeParam(_, origRef, kind)) =>
               kind match
-                case KindFromBounds.Spread(ks) =>
+                case KindFromBounds.Spread(ks, _) =>
                   DecodingContext.Elem.TypeArgExpansion(origRef, ks.zipWithIndex.map { case (_, i) => actualTypeParams(j + i) })
-                case KindFromBounds.Single(_) | KindFromBounds.AnyKind =>
+                case KindFromBounds.Single(_, _) | KindFromBounds.AnyKind =>
                   DecodingContext.Elem.TypeSubstitution(origRef, actualTypeParams(j))
           }
       ctx.pushAll(newSubstitutions)
+
+    def toList: List[DecodedTypeParam] =
+      params.map(_.param)
 
     def decodedBounds: Groups[TypeBounds] =
       bounds0
@@ -1316,10 +1368,31 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       case a1 =>
         badUse(s"Invalid application of $m. ${typeShortCode(a1)} is not <: $m[<kinds>]")
 
-  private enum KindFromBounds:
-    case Spread(kinds: SingleOrMultiple[Kind]) // kind was declared using the spread operator ( <: ⋅⋅[K] )
-    case Single(kind: Kind) // the kind is a single kind and was not declared using the spread operator at the top level
-    case AnyKind
+  private sealed trait KindFromBounds:
+    import KindFromBounds.{Single, *}
+
+    /** Original, undecoded upper bound from which the kind was decoded. */
+    def originalBound: TypeRepr
+
+    def show: String =
+      this match
+        case Spread(Multiple(kinds), _) => Kinds.fromList(kinds).show
+        case Spread(SingleOrMultiple.Single(kind), _) => kind.show
+        case Single(kind, _) => kind.show
+        case AnyKind => "AnyKind"
+
+  private object KindFromBounds:
+    sealed trait Proper extends KindFromBounds
+
+    // kind was declared using the spread operator ( <: ⋅⋅[K] )
+    case class Spread(kinds: SingleOrMultiple[Kind], originalBound: TypeRepr) extends KindFromBounds.Proper
+
+    // the kind is a single kind and was not declared using the spread operator at the top level
+    case class Single(kind: Kind, originalBound: TypeRepr) extends KindFromBounds.Proper
+
+    // TODO: can we eliminate this case? AnyKind is not a proper kind bound, but sometimes leaks into encoded expressions through weird compiler inlining
+    case object AnyKind extends KindFromBounds:
+      override def originalBound: TypeRepr = TypeRepr.of[AnyKind]
 
   private def boundsToKinds(
     marker: TypeRepr,
@@ -1342,7 +1415,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case Right(ltt @ LambdaTypeTree(typeDefs, body)) =>
           ltt.tpe match
             case TypeBounds(lo, tl: TypeLambda) if lo =:= TypeRepr.of[Nothing] =>
-              KindFromBounds.Single(typeLambdaToKind(marker, tl))
+              KindFromBounds.Single(typeLambdaToKind(marker, tl), originalBound = tl)
             case other =>
               assertionFailed(s"Unexpected type of LambdaTypeTree. Expected TypeBounds(Nothing, TypeLambda(...)), got ${typeShortCode(other)}")
 
@@ -1354,14 +1427,17 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   ): KindFromBounds =
     upperBound match
       case AppliedType(f, List(kinds)) if f =:= marker =>
-        KindFromBounds.Spread:
+        KindFromBounds.Spread(
           decodeKindOrKinds(kinds) match
             case Left(kind)   => Single(kind)
             case Right(kinds) => Multiple(kinds.toList)
+          ,
+          originalBound = upperBound
+        )
       case t if t =:= TypeRepr.of[Any] =>
-        KindFromBounds.Single(Kind.Tp)
+        KindFromBounds.Single(Kind.Tp, originalBound = upperBound)
       case tl: TypeLambda =>
-        KindFromBounds.Single(typeLambdaToKind(marker, tl))
+        KindFromBounds.Single(typeLambdaToKind(marker, tl), originalBound = tl)
       case t if t =:= TypeRepr.of[AnyKind] =>
         KindFromBounds.AnyKind
       case other =>
@@ -1402,8 +1478,8 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         Groups.fromList:
           paramBounds.map: b =>
             boundsToKinds(marker, Left(b)) match
-              case KindFromBounds.Spread(kinds) => kinds
-              case KindFromBounds.Single(kind) => Single(kind)
+              case KindFromBounds.Spread(kinds, _) => kinds
+              case KindFromBounds.Single(kind, _) => Single(kind)
               case KindFromBounds.AnyKind => badUse("AnyKind bound not supported in type lambda")
 
 

@@ -26,7 +26,7 @@ class FunctionK[K, F <: AnyKind, G <: AnyKind](
 
 object FunctionK {
   private[FunctionK] type Code[K] =
-    [⋅⋅[_]] =>> [F0[_], G0[_]] =>>
+    [⋅⋅[_]] =>> [F0[_ <: ⋅⋅[K]], G0[_ <: ⋅⋅[K]]] =>>
       [A <: ⋅⋅[K]] => F0[A] => G0[A]
 
   transparent inline def apply[K, F <: AnyKind, G <: AnyKind] =
