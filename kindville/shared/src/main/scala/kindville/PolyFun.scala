@@ -52,7 +52,7 @@ private object PolyFun {
   }
 
   def unapply(using Quotes)(expr: qr.Term): Option[(
-    tparams: List[(name: String, kind: Either[qr.TypeBounds, qr.LambdaTypeTree], ref: qr.TypeRef)],
+    tparams: List[(name: String, bounds: qr.TypeBounds, ref: qr.TypeRef)],
     params: List[(name: String, tpe: qr.TypeTree, ref: qr.TermRef)],
     paramsGiven: Boolean,
     retTp: qr.TypeTree,
@@ -67,11 +67,18 @@ private object PolyFun {
             paramss match
               case TypeParamClause(tparams) :: (pc @ TermParamClause(params)) :: Nil =>
                 Some((
-                  tparams.map { case t @ TypeDef(name, kind) =>
-                    kind match
-                      case b: TypeBoundsTree => (name, Left(b.tpe), t.symbol.typeRef)
-                      case l: LambdaTypeTree => (name, Right(l), t.symbol.typeRef)
-                      case other => assertionFailed(s"Unexpected representation of $name's kind: ${treeStruct(kind)}")
+                  tparams.map { case t @ TypeDef(name, bounds) =>
+                    bounds match
+                      case b: TypeBoundsTree =>
+                        (name, b.tpe, t.symbol.typeRef)
+                      case l: LambdaTypeTree =>
+                        l.tpe match
+                          case b: TypeBounds =>
+                            (name, b, t.symbol.typeRef)
+                          case other =>
+                            assertionFailed(s"Unexpected type of LambdaTypeTree. Expected TypeBounds(Nothing, TypeLambda(...)), got ${typeShortCode(other)}")
+                      case other =>
+                        assertionFailed(s"Unexpected representation of $name's bounds: ${treeStruct(bounds)}")
                   },
                   params.map { case v @ ValDef(name, tpe, _) => (name, tpe, v.symbol.termRef) },
                   pc.isGiven,
