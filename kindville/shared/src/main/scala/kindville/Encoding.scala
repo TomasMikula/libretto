@@ -318,10 +318,10 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case _ => None
   }
 
-  class ParsedTypeCode private[Encoding](
-    marker: ParamRef,
-    decodedTypeParams: DecodedTypeParams,
-    undecodedBody: TypeRepr,
+  case class ParsedTypeCode private[Encoding](
+    private[Encoding] marker: ParamRef,
+    private[Encoding] decodedTypeParams: DecodedTypeParams,
+    private[Encoding] undecodedBody: TypeRepr,
   ) {
     def paramNames: Groups[String] =
       decodedTypeParams.decodedNames
@@ -358,8 +358,13 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     Type[Code],
     Reporting.Context,
   ): ParsedTypeCode =
-    inside(TypeRepr.of[Code]) {
-      TypeRepr.of[Code].dealiasKeepOpaques match
+    parseTypeCode(TypeRepr.of[Code])
+
+  def parseTypeCode(code: TypeRepr)(using
+    Reporting.Context,
+  ): ParsedTypeCode =
+    inside(code) {
+      code.dealiasKeepOpaques match
         case outer @ TypeLambda(auxNames, auxBounds, body) =>
           val List(_) = auxNames
           val List(_) = auxBounds
@@ -403,30 +408,15 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     Reporting.Context
   ): TypeRepr =
     inside(s"decoding ${typeShortCode(code)} applied to type arguments ${typeShortCode(bundledArgs)}") {
-      val args = unbundleTypeArgsOrFail(bundledArgs)
-
-      code.dealiasKeepOpaques match
-        case outer @ TypeLambda(auxNames, auxBounds, body) =>
-          val List(_) = auxNames
-          val List(_) = auxBounds
-          val marker = outer.param(0)
-          body match
-            case inner @ TypeLambda(paramNames, paramBounds, body) =>
-              val params =
-                (paramNames zip paramBounds).zipWithIndex map { case ((n, b), i) =>
-                  inner.param(i) match
-                    case pi @ ParamRef(_, _) => (n, b, pi)
-                    case other => unexpectedTypeParamType(other)
-                }
-              val substitutions =
-                decodeTypeParamSubstitutions(marker, params, args,
-                  considering = Seq.empty, // XXX: might lead to confusing error message, namely invalid suggestion to provide ofKinds witness explicitly
-                )
-              decodeType(TypeMarkers(marker, rekindedBundle = None), substitutions, body)
-            case other =>
-              badUse(s"Expected a type lambda, got ${typeShortCode(other)}")
-        case other =>
-          badUse(s"Expected a type lambda, got ${typeShortCode(other)}")
+      val args =
+        unbundleTypeArgsOrFail(bundledArgs)
+      val ParsedTypeCode(marker, decodedTypeParams, undecodedBody) =
+        parseTypeCode(code)
+      val substitutions =
+        buildTypeParamSubstitutions(decodedTypeParams.toList, args,
+          considering = Seq.empty, // XXX: might lead to confusing error message, namely invalid suggestion to provide ofKinds witness explicitly
+        )
+      decodeType(TypeMarkers(marker), substitutions, undecodedBody)
     }
 
   def decodeExpr(
@@ -583,11 +573,20 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       decodeTypeParams(marker, tparams).toList
     assert(decodedTParams.size == tparams.size)
 
+    buildTypeParamSubstitutions(decodedTParams, targs, considering)
+  }
+
+  private def buildTypeParamSubstitutions(
+    tparams: List[DecodedTypeParam],
+    targs: List[TypeRepr],
+    considering: Seq[Expr[? ofKinds ?]],
+  )(using
+    Reporting.Context,
+  ): DecodingContext =
     DecodingContext:
-      (decodedTParams zip targs) map:
+      (tparams zip targs) map:
         case (decodedTypeParam, tArg) =>
           matchArgAgainstParam(decodedTypeParam, tArg, considering)
-  }
 
   private def matchTypeAgainstKind(
     kind: KindFromBounds,
