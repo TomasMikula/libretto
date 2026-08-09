@@ -235,7 +235,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
 
   case class TypeMarkers(
     spreadAndBundle: TypeRepr,
-    rekindedBundle: Option[TypeRef],
+    rekindedBundle: Option[TypeRef] = None,
   ) {
     def isSpreadOperator(f: TypeRepr): Boolean =
       f =:= spreadAndBundle
@@ -318,16 +318,28 @@ private class Encoding[Q <: Quotes](using val q: Q) {
         case _ => None
   }
 
-  case class TypeLambdaTemplate(
-    paramNames: Groups[String],
-    boundsFn: (tparams: Int => TypeRepr) => Groups[TypeBounds],
-    bodyFn:   (tparams: Int => TypeRepr) => TypeRepr,
+  class ParsedTypeCode private[Encoding](
+    marker: ParamRef,
+    decodedTypeParams: DecodedTypeParams,
+    undecodedBody: TypeRepr,
   ) {
+    def paramNames: Groups[String] =
+      decodedTypeParams.decodedNames
+
+    def decodedBounds: Groups[TypeBounds] =
+      decodedTypeParams.decodedBounds
+
+    def decodedBodyFn(using Reporting.Context): (tparams: Int => TypeRepr) => TypeRepr =
+      tparams => {
+        val ctx = decodedTypeParams.extendContext(DecodingContext.empty, tparams)
+        decodeType(TypeMarkers(marker), ctx, undecodedBody)
+      }
+
     def paramNamesFlat: List[String] =
       paramNames.toFlatList
 
-    def boundsFnFlat: (tparams: Int => TypeRepr) => List[TypeBounds] =
-      boundsFn(_).toFlatList
+    def decodedBoundsFlat: List[TypeBounds] =
+      decodedBounds.toFlatList
   }
 
   def unsupportedType(using SourcePos, Quotes)(t: qr.TypeRepr): Nothing =
@@ -336,22 +348,16 @@ private class Encoding[Q <: Quotes](using val q: Q) {
   def unexpectedTypeParamType(using pos: SourcePos, q: Quotes)(t: qr.TypeRepr): Nothing =
     assertionFailed(s"a type parameter that is not a ParamRef. Was ${qr.Printer.TypeReprStructure.show(t)}")
 
-  /** Takes `Code` of the form
+  /** Parses `Code` of the form
    *
    * ```
    * [⋅⋅[_]] =>> [A <: ⋅⋅[K], F[_ <: ⋅⋅[K]]] =>> Body[A, F]
    * ```
-   *
-   * and returns
-   *
-   * ```
-   * [A..., F[...]] =>> Body[A, F]
-   * ```
    */
-  def decodeTypeLambda[Code <: AnyKind](using
+  def parseTypeCode[Code <: AnyKind](using
     Type[Code],
     Reporting.Context,
-  ): TypeLambdaTemplate =
+  ): ParsedTypeCode =
     inside(TypeRepr.of[Code]) {
       TypeRepr.of[Code].dealiasKeepOpaques match
         case outer @ TypeLambda(auxNames, auxBounds, body) =>
@@ -373,14 +379,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
                 }
               val decodedTypeParams =
                 decodeTypeParams(marker, params)
-              TypeLambdaTemplate(
-                decodedTypeParams.decodedNames,
-                boundsFn = tparams => decodedTypeParams.decodedBounds,
-                bodyFn   = tparams => {
-                  val ctx = decodedTypeParams.extendContext(DecodingContext.empty, tparams)
-                  decodeType(markers, ctx, body)
-                }
-              )
+              ParsedTypeCode(marker, decodedTypeParams, body)
             case other =>
               badUse(s"Expected a type lambda, got ${typeShortCode(other)}")
         case other =>

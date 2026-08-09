@@ -44,9 +44,9 @@ object Box {
       import quotes.reflect.*
 
       val encoding = Encoding()
-      import encoding.{TypeLambdaTemplate, decodeTypeLambda}
-      val typeLambdaTemplate = decodeTypeLambda[Code]
-      import typeLambdaTemplate.{bodyFn, boundsFnFlat, paramNames, paramNamesFlat}
+      import encoding.parseTypeCode
+      val parsedTypeCode = parseTypeCode[Code]
+      import parsedTypeCode.{decodedBodyFn, decodedBoundsFlat, paramNames, paramNamesFlat}
 
       def returnType(targs: List[TypeRepr]): TypeRepr =
         val groupedTArgs: Groups[TypeRepr] =
@@ -57,10 +57,10 @@ object Box {
 
       PolyFun(
         paramNamesFlat,
-        boundsFnFlat,
+        _ => decodedBoundsFlat,
         vParamsGiven = false,
         "x" :: Nil,
-        tparams => bodyFn(tparams) :: Nil,
+        tparams => decodedBodyFn(tparams) :: Nil,
         tparams => returnType(tparams),
         (targs, args, owner) => {
           returnType(targs).asType match
@@ -79,9 +79,9 @@ object Box {
 
       inside(TypeRepr.of[Code]) {
         val encoding = Encoding()
-        import encoding.{TypeLambdaTemplate, decodeTypeLambda}
-        val typeLambdaTemplate = decodeTypeLambda[Code]
-        import typeLambdaTemplate.{bodyFn, boundsFnFlat, paramNames, paramNamesFlat}
+        import encoding.parseTypeCode
+        val parsedTypeCode = parseTypeCode[Code]
+        import parsedTypeCode.{decodedBodyFn, decodedBoundsFlat, paramNames, paramNamesFlat}
 
         def paramType(targs: List[TypeRepr]): TypeRepr =
           val groupedTArgs: Groups[TypeRepr] =
@@ -92,13 +92,13 @@ object Box {
 
         PolyFun(
           paramNamesFlat,
-          boundsFnFlat,
+          _ => decodedBoundsFlat,
           vParamsGiven = false,
           "x" :: Nil,
           tparams => paramType(tparams) :: Nil,
-          tparams => bodyFn(tparams),
+          tparams => decodedBodyFn(tparams),
           (targs, args, owner) => {
-            bodyFn(targs).asType match
+            decodedBodyFn(targs).asType match
               case '[t] =>
                 '{ ${args(0).asExpr}.asInstanceOf[t] }.asTerm
           },
