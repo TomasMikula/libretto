@@ -746,7 +746,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             expandAndBundleTypeArg(f, ctx, targs, forceExplicitBundle = true)
           else
             val f1 = decodeType(markers, ctx, f)
-            val targs1 = expandTypeArgs(markers, ctx, targs)
+            val targs1 = targs.map(expandTypeArg(markers, ctx, _))
               .flatMap(_.toList)
             val targs2 = targs1.map(decodeType(markers, ctx, _))
             f1.appliedTo(targs2)
@@ -929,7 +929,7 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           Apply(f1, bs)
         case TypeApply(f, ts) =>
           val f1 = decodeTerm(markers, ctx, owner, f)
-          val ts1 = expandTypeArgs(markers.typeMarkers, ctx, ts.map(_.tpe))
+          val ts1 = ts.map(t => expandTypeArg(markers.typeMarkers, ctx, t.tpe))
             .flatMap(_.toList)
           val ts2 = ts1.map(decodeType(markers.typeMarkers, ctx, _))
           TypeApply(f1, ts2.map(t => TypeTree.of(using t.asType)))
@@ -1300,44 +1300,41 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       new DecodedTypeParams(paramsWithIndex)
   }
 
-  /** For each given type, expands it if the given [[DecodingContext]] recognizes the type
-    * as a reference to a formal, kind-annotated type parameter, which should be expanded
+  /** Expands the given type if the given [[DecodingContext]] recognizes it
+    * as a reference to a formal, kind-annotated type parameter that should be expanded
     * to potentially multiple actual type arguments (also already recorded in the context).
     *
-    * @param targs
-    *   Should be a list of type arguments (of a type or method). Note that references to
+    * @param targ
+    *   A type in type argument position (of a type or method). Note that references to
     *   kind-annotated type parameters can be used only in type argument positions.
     */
-  private def expandTypeArgs(
+  private def expandTypeArg(
     markers: TypeMarkers,
     ctx: DecodingContext,
-    targs: List[TypeRepr],
+    targ: TypeRepr,
   )(using
     Reporting.Context,
-  ): List[SingleOrMultiple[TypeRepr]] = {
+  ): SingleOrMultiple[TypeRepr] = {
     import DecodingContext.ParamExpansion
 
-    targs.map { ta =>
-      inside(ta) {
-        ta match {
-          case ParamRefOrTypeRef(ref) =>
-            ref match
-              case ctx.expandsTo(x) =>
-                x match
-                  case ParamExpansion.StaticallyKnown(ps) =>
-                    ps
-                  case ParamExpansion.Forged(bundled, kinds) if markers.rekindedBundle.isDefined =>
-                    // can expand to forged types only within rekind, i.e. when rekindedBundle is defined
-                    kinds.map(kindToUpperBound)
-                  case ParamExpansion.Forged(bundled, kinds) =>
-                    badUse(s"Cannot statically determine the expanded form of type parameter ${typeShortCode(ref)}. It is only known to stand for ${typeShortCode(bundled)}. Hint: Wrap inside `rekind` to expand such statically unknown types.")
-              case _ =>
-                Single(ref)
-          case other =>
-            Single(other)
-        }
+    inside(targ):
+      targ match {
+        case ParamRefOrTypeRef(ref) =>
+          ref match
+            case ctx.expandsTo(x) =>
+              x match
+                case ParamExpansion.StaticallyKnown(ps) =>
+                  ps
+                case ParamExpansion.Forged(bundled, kinds) if markers.rekindedBundle.isDefined =>
+                  // can expand to forged types only within rekind, i.e. when rekindedBundle is defined
+                  kinds.map(kindToUpperBound)
+                case ParamExpansion.Forged(bundled, kinds) =>
+                  badUse(s"Cannot statically determine the expanded form of type parameter ${typeShortCode(ref)}. It is only known to stand for ${typeShortCode(bundled)}. Hint: Wrap inside `rekind` to expand such statically unknown types.")
+            case _ =>
+              Single(ref)
+        case other =>
+          Single(other)
       }
-    }
   }
 
   /**
