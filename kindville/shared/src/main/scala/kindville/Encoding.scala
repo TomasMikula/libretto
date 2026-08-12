@@ -746,10 +746,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
             expandAndBundleTypeArg(f, ctx, targs, forceExplicitBundle = true)
           else
             val f1 = decodeType(markers, ctx, f)
-            val targs1 = targs.map(expandTypeArg(markers, ctx, _))
-              .flatMap(_.toList)
-            val targs2 = targs1.map(decodeType(markers, ctx, _))
-            f1.appliedTo(targs2)
+            val targs1 = targs.flatMap: t =>
+              maybeExpandTypeArg(markers, ctx, t)
+                .map(_.toList)
+                .getOrElse { decodeType(markers, ctx, t) :: Nil }
+            f1.appliedTo(targs1)
         case l @ TypeLambda(names, bounds, body) =>
           val decodedTypeParams =
             decodeTypeParams(
@@ -929,10 +930,11 @@ private class Encoding[Q <: Quotes](using val q: Q) {
           Apply(f1, bs)
         case TypeApply(f, ts) =>
           val f1 = decodeTerm(markers, ctx, owner, f)
-          val ts1 = ts.map(t => expandTypeArg(markers.typeMarkers, ctx, t.tpe))
-            .flatMap(_.toList)
-          val ts2 = ts1.map(decodeType(markers.typeMarkers, ctx, _))
-          TypeApply(f1, ts2.map(t => TypeTree.of(using t.asType)))
+          val ts1 = ts.flatMap: t =>
+            maybeExpandTypeArg(markers.typeMarkers, ctx, t.tpe)
+              .map(_.toList)
+              .getOrElse { decodeType(markers.typeMarkers, ctx, t.tpe) :: Nil }
+          TypeApply(f1, ts1.map(t => TypeTree.of(using t.asType)))
         case Select(prefix, name) =>
           val prefix1 = decodeTerm(markers, ctx, owner, prefix)
           try {
@@ -1308,32 +1310,29 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     *   A type in type argument position (of a type or method). Note that references to
     *   kind-annotated type parameters can be used only in type argument positions.
     */
-  private def expandTypeArg(
+  private def maybeExpandTypeArg(
     markers: TypeMarkers,
     ctx: DecodingContext,
     targ: TypeRepr,
   )(using
     Reporting.Context,
-  ): SingleOrMultiple[TypeRepr] = {
+  ): Option[SingleOrMultiple[TypeRepr]] = {
     import DecodingContext.ParamExpansion
 
     inside(targ):
       targ match {
-        case ParamRefOrTypeRef(ref) =>
-          ref match
-            case ctx.expandsTo(x) =>
-              x match
-                case ParamExpansion.StaticallyKnown(ps) =>
-                  ps
-                case ParamExpansion.Forged(bundled, kinds) if markers.rekindedBundle.isDefined =>
-                  // can expand to forged types only within rekind, i.e. when rekindedBundle is defined
-                  kinds.map(kindToUpperBound)
-                case ParamExpansion.Forged(bundled, kinds) =>
-                  badUse(s"Cannot statically determine the expanded form of type parameter ${typeShortCode(ref)}. It is only known to stand for ${typeShortCode(bundled)}. Hint: Wrap inside `rekind` to expand such statically unknown types.")
-            case _ =>
-              Single(ref)
+        case ParamRefOrTypeRef(ref @ ctx.expandsTo(x)) =>
+          Some:
+            x match
+              case ParamExpansion.StaticallyKnown(ps) =>
+                ps
+              case ParamExpansion.Forged(bundled, kinds) if markers.rekindedBundle.isDefined =>
+                // can expand to forged types only within rekind, i.e. when rekindedBundle is defined
+                kinds.map(kindToUpperBound)
+              case ParamExpansion.Forged(bundled, kinds) =>
+                badUse(s"Cannot statically determine the expanded form of type parameter ${typeShortCode(ref)}. It is only known to stand for ${typeShortCode(bundled)}. Hint: Wrap inside `rekind` to expand such statically unknown types.")
         case other =>
-          Single(other)
+          None
       }
   }
 
