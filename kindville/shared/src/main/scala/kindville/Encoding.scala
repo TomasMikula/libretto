@@ -1300,6 +1300,14 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       new DecodedTypeParams(paramsWithIndex)
   }
 
+  /** For each given type, expands it if the given [[DecodingContext]] recognizes the type
+    * as a reference to a formal, kind-annotated type parameter, which should be expanded
+    * to potentially multiple actual type arguments (also already recorded in the context).
+    *
+    * @param targs
+    *   Should be a list of type arguments (of a type or method). Note that references to
+    *   kind-annotated type parameters can be used only in type argument positions.
+    */
   private def expandTypeArgs(
     markers: TypeMarkers,
     ctx: DecodingContext,
@@ -1312,14 +1320,6 @@ private class Encoding[Q <: Quotes](using val q: Q) {
     targs.map { ta =>
       inside(ta) {
         ta match {
-          case fa @ AppliedType(f, targs) =>
-            Single:
-              if (markers.isSpreadOperator(f))
-                expandAndBundleTypeArg(f, ctx, targs, forceExplicitBundle = false)
-              else if (markers.isRekindedBundleOperator(f))
-                expandAndBundleTypeArg(f, ctx, targs, forceExplicitBundle = true)
-              else
-                fa
           case ParamRefOrTypeRef(ref) =>
             ref match
               case ctx.expandsTo(x) =>
