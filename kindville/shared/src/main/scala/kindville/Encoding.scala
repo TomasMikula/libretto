@@ -1447,9 +1447,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       case other =>
         badUse(s"${typeShortCode(other)} is not as supported encoding of a kind or kinds.")
 
-  /** Unlike [[upperBoundToKinds]], this method does not accept a potential multikind
-    * (i.e. doesn't accept upper bound of `<: ⋅⋅[...]`, where ⋅⋅ is the spread operator),
-    * nor does it accept the `<: AnyKind` bound.
+  /** Unlike [[upperBoundToKinds]], this method does not accept a multikind
+    * (i.e. doesn't accept upper bound of `<: ⋅⋅[Ks]`, where ⋅⋅ is the spread operator,
+    * and `Ks` is a list of kinds), nor does it accept the `<: AnyKind` bound.
     */
   private def upperBoundToKind(
     marker: TypeRepr,
@@ -1463,7 +1463,9 @@ private class Encoding[Q <: Quotes](using val q: Q) {
       case tl: TypeLambda =>
         typeLambdaToKind(marker, tl)
       case AppliedType(f, List(kinds)) if f =:= marker =>
-        badUse(s"The spread operator (${{typeShortCode(f)}}) not allowed in this position, because it has the potential to expand to multiple kinds, but only a single kind is allowed in this position.")
+        decodeKindOrKinds(kinds) match
+          case Left(kind)   => kind
+          case Right(kinds) => badUse(s"List of kinds (${typeShortCode(upperBound)}) not allowed in this position; only a single kind is allowed in this position.")
       case t if t =:= TypeRepr.of[AnyKind] =>
         badUse(s"AnyKind bound not allowed in this position.")
       case other =>
