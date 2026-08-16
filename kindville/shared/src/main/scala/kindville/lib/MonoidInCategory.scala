@@ -10,60 +10,44 @@ import kindville.Box.*
   * - monoidal product is `×`;
   * - monoidal unit is `One`.
   */
-opaque type MonoidInCategory[K, Obj <: AnyKind, -> <: AnyKind, × <: AnyKind, One <: AnyKind, M <: AnyKind] =
-  Box[MonoidInCategory.Code[K], Obj :: -> :: × :: One :: M :: TNil]
+case class MonoidInCategory[K, Obj <: AnyKind, -> <: AnyKind, × <: AnyKind, One <: AnyKind, M <: AnyKind](
+  obj: App[K, Obj, M],
+  unitKImpl: Arrow[K, ->, One, M],
+  combineKImpl: Box[MonoidInCategory.CombineCode[K], -> :: × :: M :: TNil],
+) {
+  transparent inline def unitK =
+    decodeT[Obj :: -> :: × :: One :: M :: TNil]:
+      [⋅⋅[_]] => kuotes ?=> [
+        Obj[_ <: ⋅⋅[K]],
+        ->[_ <: ⋅⋅[K], _ <: ⋅⋅[K]],
+        × <: [_ <: ⋅⋅[K], _ <: ⋅⋅[K]] =>> ⋅⋅[K],
+        One <: ⋅⋅[K],
+        M <: ⋅⋅[K],
+      ] => () =>
+        val m: One -> M = kuotes.splice(this.unitKImpl.unpack)
+        m
+
+  transparent inline def combineK =
+    decodeT[Obj :: -> :: × :: One :: M :: TNil]:
+      [⋅⋅[_]] => kuotes ?=> [
+        Obj[_ <: ⋅⋅[K]],
+        ->[_ <: ⋅⋅[K], _ <: ⋅⋅[K]],
+        × <: [_ <: ⋅⋅[K], _ <: ⋅⋅[K]] =>> ⋅⋅[K],
+        One <: ⋅⋅[K],
+        M <: ⋅⋅[K],
+      ] => () =>
+        val m: (M × M) -> M = kuotes.splice(this.combineKImpl.unpack)
+        m
+}
 
 object MonoidInCategory {
-  type Code[K] =
+  type CombineCode[K] =
     [⋅⋅[_]] =>> [
-      Obj[_ <: ⋅⋅[K]],
       ->[_ <: ⋅⋅[K], _ <: ⋅⋅[K]],
       × <: [_ <: ⋅⋅[K], _ <: ⋅⋅[K]] =>> ⋅⋅[K],
-      One <: ⋅⋅[K],
       M <: ⋅⋅[K],
     ] =>>
-      (Obj[M], One -> M, (M × M) -> M)
-
-  transparent inline def apply[K] =
-    decode:
-      [⋅⋅[_]] => k ?=>
-        val packer: [
-          Obj[_ <: ⋅⋅[K]],
-          ->[_ <: ⋅⋅[K], _ <: ⋅⋅[K]],
-          × <: [_ <: ⋅⋅[K], _ <: ⋅⋅[K]] =>> ⋅⋅[K],
-          One <: ⋅⋅[K],
-          M <: ⋅⋅[K],
-        ] => ((Obj[M], One -> M, (M × M) -> M)) => MonoidInCategory[K, Obj, ->, ×, ⋅⋅[One], ⋅⋅[M]] =
-          k.splice(Box.packer[Code[K]])
-        packer
-
-  extension [K, Obj <: AnyKind, -> <: AnyKind, × <: AnyKind, One <: AnyKind, M <: AnyKind](self: MonoidInCategory[K, Obj, ->, ×, One, M]) {
-    transparent inline def unit =
-      decodeT[Obj :: -> :: × :: One :: M :: TNil]:
-        [⋅⋅[_]] => kuotes ?=> [
-          Obj[_ <: ⋅⋅[K]],
-          ->[_ <: ⋅⋅[K], _ <: ⋅⋅[K]],
-          × <: [_ <: ⋅⋅[K], _ <: ⋅⋅[K]] =>> ⋅⋅[K],
-          One <: ⋅⋅[K],
-          M <: ⋅⋅[K],
-        ] => () =>
-          val m: (Obj[M], One -> M, (M × M) -> M) =
-            kuotes.splice(self.unpack)
-          m._2
-
-    transparent inline def combine =
-      decodeT[Obj :: -> :: × :: One :: M :: TNil]:
-        [⋅⋅[_]] => kuotes ?=> [
-          Obj[_ <: ⋅⋅[K]],
-          ->[_ <: ⋅⋅[K], _ <: ⋅⋅[K]],
-          × <: [_ <: ⋅⋅[K], _ <: ⋅⋅[K]] =>> ⋅⋅[K],
-          One <: ⋅⋅[K],
-          M <: ⋅⋅[K],
-        ] => () =>
-          val m: (Obj[M], One -> M, (M × M) -> M) =
-            kuotes.splice(self.unpack)
-          m._3
-  }
+      (M × M) -> M
 }
 
 type ~>[F[_], G[_]] = [A] => F[A] => G[A]
@@ -83,16 +67,20 @@ object Monoid {
     unit: M,
     combine: (M, M) => M,
   ): Monoid[M] =
-    MonoidInCategory.apply[●][Const[Unit], _ => _, (_, _), Unit, M](((), (_: Unit) => unit, combine.tupled))
+    MonoidInCategory[●, Const[Unit], _ => _, (_, _), Unit, M](
+      App.packer[●][Const[Unit], M](()),
+      Arrow.packer[●][_ => _, Unit, M]((_: Unit) => unit),
+      Box.packer[MonoidInCategory.CombineCode[●]][_ => _, (_, _), M](combine.tupled),
+    )
 
   extension [M](self: Monoid[M]) {
     inline def unit(x: Unit): M =
-      MonoidInCategory.unit(self)
+      self.unitK
         .typecheckAs[Unit => M]
         .apply(x)
 
     inline def combine(x: M, y: M): M =
-      MonoidInCategory.combine(self)
+      self.combineK
         .typecheckAs[((M, M)) => M]
         .apply((x, y))
   }
@@ -104,16 +92,20 @@ object Monad {
     pure: Id ~> M,
     flatten: (M ∘ M) ~> M,
   ): Monad[M] =
-    MonoidInCategory.apply[● -> ●][Functor, ~>, ∘, Id, M]((functor, pure, flatten))
+    MonoidInCategory[● -> ●, Functor, ~>, ∘, Id, M](
+      App.packer[● -> ●][Functor, M](functor),
+      Arrow.packer[● -> ●][~>, Id, M](pure),
+      Box.packer[MonoidInCategory.CombineCode[● -> ●]][~>, ∘, M](flatten),
+    )
 
   extension [M[_]](self: Monad[M]) {
     inline def pure[A](a: A): M[A] =
-      MonoidInCategory.unit(self)
+      self.unitK
         .typecheckAs[Id ~> M]
         .apply[A](a)
 
     inline def flatten[A](mma: M[M[A]]): M[A] =
-      MonoidInCategory.combine(self)
+      self.combineK
         .typecheckAs[(M ∘ M) ~> M]
         .apply[A](mma)
   }
