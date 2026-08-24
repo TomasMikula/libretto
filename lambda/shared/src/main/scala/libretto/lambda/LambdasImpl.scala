@@ -21,6 +21,9 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
 
   type Var[A] = libretto.lambda.Var[V, A]
 
+  val unvar = new UnvarModule[**, V](varIsNotPair)
+  import unvar.Unvar
+
   override opaque type Context = ContextImpl[->, **, V, C, Expr]
   override object Context extends Contexts {
     private val getResultVar =
@@ -293,14 +296,14 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
       Tupled.fromBin(
         f.relabelLeafs[[x] =>> x, Unvar, A](
           u,
-          [X, IX] => (u: Unvar[Var[X], IX]) => u.uniqueOutType[X](Unvar.SingleVar[X]()),
+          [X, IX] => (u: Unvar[Var[X], IX]) => Unvar.uniqueOutType(u, Unvar.single[X]),
         )
       )
 
     def upvar[A](exprs: Tupled[Expr, A]): Exists[[VA] =>> (Forest[VA], Unvar[VA, A])] =
       exprs.asBin.relabelLeafs[Var, [a, va] =>> Unvar[va, a]](
-        [X] => (_: Unit) => Unvar.SingleVar(),
-        [A1, A2, VA1, VA2] => (u1: Unvar[VA1, A1], u2: Unvar[VA2, A2]) => u1 zip u2,
+        [X] => (_: Unit) => Unvar.single,
+        [A1, A2, VA1, VA2] => (u1: Unvar[VA1, A1], u2: Unvar[VA2, A2]) => Unvar.par(u1, u2),
       ) match
         case Indeed((u, f)) => Exists((f, u))
   }
@@ -677,18 +680,18 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
 
       val t2: shArr.Shuffled[A, Y] =
         t1.translate[Arr, **, Unvar, A](
-          Unvar.SingleVar[A](),
+          Unvar.single[A],
           Unvar.objectMap,
           new ArrowMap[VarOp, Arr, Unvar] {
-            import Unvar.{Par, SingleVar}
+            import Unvar.{par, single}
             override def map[A, B](op: VarOp[A, B]): Image[A, B] =
               op match {
                 case (vars, op: Op.ZipN[a, y]) =>
-                  MappedMorphism(op.u, Valid(CapturingFun.id), SingleVar[y]())
+                  MappedMorphism(op.u, Valid(CapturingFun.id), single[y])
                 case (vars, op: Op.Map[a, b]) =>
-                  MappedMorphism(SingleVar[a](), Valid(CapturingFun.lift(op.f)), SingleVar[b]())
+                  MappedMorphism(single[a], Valid(CapturingFun.lift(op.f)), single[b])
                 case (vars, _: Op.Unzip[a1, a2]) =>
-                  MappedMorphism(SingleVar[a1 ** a2](), Valid(CapturingFun.id), Par(SingleVar[a1](), SingleVar[a2]()))
+                  MappedMorphism(single[a1 ** a2], Valid(CapturingFun.id), par(single[a1], single[a2]))
                 case (vars, op: Op.CaptureN[vx, va, vb, b]) =>
                   op.s.preShuffle(op.u) match
                     case Indeed((u, s)) =>
@@ -697,41 +700,41 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
                       MappedMorphism(
                         u12.f2,
                         Valid(CapturingFun.captureFst[u12.X1, u12.X2](x) > CapturingFun.fromShuffle(s.from(using u12.ev.flip))),
-                        SingleVar[b](),
+                        single[b],
                       )
                 case (vars, op: Op.DupVar[a]) =>
                   val v = vars.getValue[a]
                   MappedMorphism(
-                    SingleVar[a](),
+                    single[a],
                     Context.getSplit(v) match {
                       case Some(split) => Valid(CapturingFun.lift(split))
                       case None        => invalid(LinearityViolation.overusedVar(v, Context.info))
                     },
-                    Par(SingleVar[a](), SingleVar[a]()),
+                    par(single[a], single[a]),
                   )
                 case (vars, op: Op.Prj1[a1, a2]) =>
                   MappedMorphism(
-                    SingleVar[a1 ** a2](),
+                    single[a1 ** a2],
                     Context.getDiscard(op.unusedVar) match {
                       case Some((_, discardSnd)) => Valid(CapturingFun.noCapture(shuffled.lift(discardSnd[a1])))
                       case None                  => invalid(LinearityViolation.unusedVar(op.unusedVar, Context.info))
                     },
-                    SingleVar[a1](),
+                    single[a1],
                   )
                 case (vars, op: Op.Prj2[a1, a2]) =>
                   MappedMorphism(
-                    SingleVar[a1 ** a2](),
+                    single[a1 ** a2],
                     Context.getDiscard(op.unusedVar) match {
                       case Some((discardFst, _)) => Valid(CapturingFun.lift(discardFst[a2]))
                       case None                  => invalid(LinearityViolation.unusedVar(op.unusedVar, Context.info))
                     },
-                    SingleVar[a2](),
+                    single[a2],
                   )
               }
           },
         ) match {
           case Indeed((t2, u2)) =>
-            (u uniqueOutType u2) match {
+            Unvar.uniqueOutType(u, u2) match {
               case TypeEq(Refl()) =>
                 t2
             }
@@ -829,11 +832,9 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
           Vars.atom(resultVar)
 
         override def gcdSimple[X, C](that: Op.Affine[Var[X], C])(using ev: VA =:= Var[X]): Option[Tail[VA, Var[A] ** C]] =
-          u match
-            case Unvar.SingleVar() =>
+          u.from[Var[X]](using ev.flip).deriveEq match
+            case TypeEq(Refl()) =>
               ev match { case TypeEq(Refl()) => that.zip1_gcd_this[X](this) }
-            case _: Unvar.Par[va1, va2, a1, a2] =>
-              varIsNotPair[X, va1, va2](ev.flip)
 
         override def prj1_gcd_this[T1, T2](that: Prj1[T1, T2])(using ev: VA =:= Var[T1 ** T2]): Option[Tail[Var[T1 ** T2], Var[T1] ** Var[A]]] =
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.prj1_gcd_this")
@@ -848,11 +849,9 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
           UnhandledCase.raise(s"${this.getClass.getSimpleName}.capN_gcd_this")
 
         override def zip1_gcd_this[T](that: ZipN[Var[T], T])(using ev: VA =:= Var[T]): Option[Tail[Var[T], Var[T] ** Var[A]]] =
-          u match
-            case Unvar.SingleVar() =>
+          u.from[Var[T]](using ev.flip).deriveEq match
+            case TypeEq(Refl()) =>
               ev match { case TypeEq(Refl()) => Some(shOp.lift(DupVar[T]())) }
-            case u: Unvar.Par[va1, va2, a1, a2] =>
-              varIsNotPair[T, va1, va2](ev.flip)
 
         override def asZipOrCapture[VP1, VP2](using VA =:= (VP1 ** VP2)): Exists[[B0] =>> (Either[ZipN[VA, B0], CaptureN[?, VA, ?, B0]], Var[A] =:= Var[B0])] =
           Exists((Left(this), summon))
@@ -1127,23 +1126,19 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
                 case Indeed((u, s)) =>
                   val u12 = Unvar.objectMap.unpair(u)
                   val ua = u12.f2
-                  pickSomeFromUnvar(ua, Focus.id, op)
+                  pickSomeFromUnvar(ua, op)
             case op: ZipN[a, b] =>
-              pickSomeFromUnvar(op.u, Focus.id, op)
+              pickSomeFromUnvar(op.u, op)
           }
 
-        private def pickSomeFromUnvar[F[_], VX, X, B](
+        private def pickSomeFromUnvar[VX, X, B](
           u: Unvar[VX, X],
-          f: Focus[**, F],
-          op: Op.Affine[F[VX], B],
-        ): InputVarFocus[F[VX], B] =
-          u match
-            case Unvar.SingleVar() =>
-              summon[VX =:= Var[X]]
-              InputVarFocus[F, X, B](op, f)
-            case u: Unvar.Par[vx1, vx2, x1, x2] =>
-              // arbitrarily picking the first part
-              pickSomeFromUnvar[[x] =>> F[x ** vx2], vx1, x1, B](u.u1, f compose Focus.fst, op)
+          op: Op.Affine[VX, B],
+        ): InputVarFocus[VX, B] =
+          u.focusFirst[InputVarFocus[VX, B]](
+            [F[_], Y] => (f, ev) =>
+              ev match { case TypeEq(Refl()) => InputVarFocus[F, Y, B](op, f) }
+          )
       }
 
       def gcd[C[_], D[_], X, Y, Z](
@@ -1258,16 +1253,16 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
       shOp.lift(Op.Map(f, resultVar))
 
     def captureFst[A, X](x: Expr[X], resultVar: Var[X ** A]): Tail[Var[A], Var[X ** A]] =
-      captureN(Bin.Leaf(x), ~⚬.id[Var[X] ** Var[A]], Unvar.Par(Unvar.SingleVar(), Unvar.SingleVar()), resultVar)
+      captureN(Bin.Leaf(x), ~⚬.id[Var[X] ** Var[A]], Unvar.par(Unvar.single, Unvar.single), resultVar)
 
     def captureSnd[A, X](x: Expr[X], resultVar: Var[A ** X]): Tail[Var[A], Var[A ** X]] =
-      captureN(Bin.Leaf(x), ~⚬.swap[Var[X], Var[A]], Unvar.Par(Unvar.SingleVar(), Unvar.SingleVar()), resultVar)
+      captureN(Bin.Leaf(x), ~⚬.swap[Var[X], Var[A]], Unvar.par(Unvar.single, Unvar.single), resultVar)
 
     def captureN[VX, VA, VB, B](x: Forest[VX], s: (VX ** VA) ~⚬ VB, u: Unvar[VB, B], resultVar: Var[B]): Tail[VA, Var[B]] =
       shOp.lift(Op.CaptureN(x, s, u, resultVar))
 
     def zip[A1, A2](resultVar: Var[A1 ** A2]): Tail[Var[A1] ** Var[A2], Var[A1 ** A2]] =
-      zipN(Unvar.Par(Unvar.SingleVar(), Unvar.SingleVar()), resultVar)
+      zipN(Unvar.par(Unvar.single, Unvar.single), resultVar)
 
     def zipN[VA, A](u: Unvar[VA, A], resultVar: Var[A]): Tail[VA, Var[A]] =
       shOp.lift(Op.ZipN(u, resultVar))
@@ -1449,71 +1444,6 @@ class LambdasImpl[->[_, _], **[_, _], V, C, SHUFFLED <: ShuffledModule[->, **]](
                 case Indeed(Indeed(ev)) =>
                   varIsNotPair(ev)
     }
-  }
-
-  sealed trait Unvar[A, B] {
-    infix def uniqueOutType[C](that: Unvar[A, C]): B =:= C
-
-    infix def zip[C, D](that: Unvar[C, D]): Unvar[A ** C, B ** D] =
-      Unvar.Par(this, that)
-
-    def maskInput: Masked[Unvar[_, B], A] =
-      Masked(this)
-
-    def from[Z](using ev: Z =:= A): Unvar[Z, B] =
-      ev.substituteContra[Unvar[_, B]](this)
-  }
-  object Unvar {
-    case class SingleVar[V]() extends Unvar[Var[V], V] {
-      override def uniqueOutType[C](that: Unvar[Var[V], C]): V =:= C =
-        that.maskInput.visit[V =:= C]([VV] => (that: Unvar[VV, C], ev: VV =:= Var[V]) => {
-          that match {
-            case _: SingleVar[v] =>
-              (summon[Var[v] =:= VV] andThen ev) match { case Injective[Var](TypeEq(Refl())) =>
-                summon[V =:= C]
-              }
-            case p: Par[a1, a2, x1, x2] =>
-              varIsNotPair[V, a1, a2](ev.flip andThen summon[VV =:= (a1 ** a2)])
-          }
-        })
-    }
-
-    case class Par[A1, A2, X1, X2](u1: Unvar[A1, X1], u2: Unvar[A2, X2]) extends Unvar[A1 ** A2, X1 ** X2] {
-      override def uniqueOutType[C](that: Unvar[A1 ** A2, C]): (X1 ** X2) =:= C =
-        that.maskInput.visit[(X1 ** X2) =:= C]([A] => (that: Unvar[A, C], ev: A =:= (A1 ** A2)) => {
-          that match {
-            case p: Par[a1, a2, c1, c2] =>
-              (summon[(a1 ** a2) =:= A] andThen ev)                match { case BiInjective[**](TypeEq(Refl()), TypeEq(Refl())) =>
-                ((u1 uniqueOutType p.u1), (u2 uniqueOutType p.u2))  match { case (TypeEq(Refl()), TypeEq(Refl())) =>
-                  summon[(X1 ** X2) =:= C]
-                }
-              }
-            case _: SingleVar[v] =>
-              varIsNotPair[v, A1, A2](summon[Var[v] =:= A] andThen ev)
-          }
-        })
-    }
-
-    given objectMap: SemigroupalObjectMap[**, **, Unvar] =
-      new SemigroupalObjectMap[**, **, Unvar] {
-        override def uniqueOutputType[A, X, Y](f1: Unvar[A, X], f2: Unvar[A, Y]): X =:= Y =
-          f1 uniqueOutType f2
-
-        override def pair[A1, A2, X1, X2](f1: Unvar[A1, X1], f2: Unvar[A2, X2]): Unvar[A1 ** A2, X1 ** X2] =
-          Unvar.Par(f1, f2)
-
-        override def unpair[A1, A2, X](f: Unvar[A1 ** A2, X]): Unpaired[A1, A2, X] =
-          f.maskInput.visit[Unpaired[A1, A2, X]]([A] => (u: Unvar[A, X], ev: A =:= (A1 ** A2)) => {
-            u match {
-              case p: Par[a1, a2, x1, x2] =>
-                (summon[(a1 ** a2) =:= A] andThen ev) match { case BiInjective[**](TypeEq(Refl()), TypeEq(Refl())) =>
-                  Unpaired.Impl(p.u1, p.u2)
-                }
-              case _: SingleVar[v] =>
-                varIsNotPair[v, A1, A2](summon[Var[v] =:= A] andThen ev)
-            }
-          })
-      }
   }
 
   private given varIsNotPair: ([V, A, B] => (Var[V] =:= (A ** B)) => Nothing) =
