@@ -19,7 +19,7 @@ trait SinkNAry[->[_, _], ||[_, _], Nil, A, B] {
     binaryPullback: [X, Y, Q] => (X -> Q, Y -> Q) => Exists[[P] =>> (P ->> X, P ->> Y, P -> Q)],
     srcData: [X, Y] => (X -> Y) => Obj[X],
   )(using
-    NarrowCategory[->>, Obj],
+    NarrowCategory[Obj, ->>],
   ): Exists[[P] =>> (SourceNAry[->>, ||, Nil, P, A], P -> B)]
 
   def divide[F[_, _], G[_, _]](
@@ -50,7 +50,7 @@ object SinkNAry {
       binaryPullback: [X, Y, Q] => (X -> Q, Y -> Q) => Exists[[P] =>> (P ->> X, P ->> Y, P -> Q)],
       srcData: [X, Y] => (X -> Y) => Obj[X],
     )(using
-      cat: NarrowCategory[->>, Obj],
+      cat: NarrowCategory[Obj, ->>],
     ): Exists[[P] =>> (SourceNAry[->>, ||, Nil, P, Nil || A], P -> B)] =
       Exists((
         SourceNAry.Single(cat.id[A](srcData(f))),
@@ -94,7 +94,7 @@ object SinkNAry {
       binaryPullback: [X, Y, Q] => (X -> Q, Y -> Q) => Exists[[P] =>> (P ->> X, P ->> Y, P -> Q)],
       srcData: [X, Y] => (X -> Y) => Obj[X],
     )(using
-      cat: NarrowCategory[->>, Obj],
+      cat: NarrowCategory[Obj, ->>],
     ): Exists[[P] =>> (SourceNAry[->>, ||, Nil, P, Init || Z], P -> B)] =
       init.pullback(binaryPullback, srcData) match {
         case Indeed((initSrc, p)) =>

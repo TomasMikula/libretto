@@ -19,7 +19,7 @@ trait SourceNAry[->[_, _], ||[_, _], Nil, A, B] {
     binaryPushout: [P, X, Y] => (P -> X, P -> Y) => Exists[[Q] =>> (X ->> Q, Y ->> Q, P -> Q)],
     tgtData: [X, Y] => (X -> Y) => Obj[Y],
   )(using
-    NarrowCategory[->>, Obj],
+    NarrowCategory[Obj, ->>],
   ): Exists[[Q] =>> (SinkNAry[->>, ||, Nil, B, Q], A -> Q)]
 }
 
@@ -35,7 +35,7 @@ object SourceNAry {
       binaryPushout: [P, X, Y] => (P -> X, P -> Y) => Exists[[Q] =>> (X ->> Q, Y ->> Q, P -> Q)],
       tgtData: [X, Y] => (X -> Y) => Obj[Y],
     )(using
-      cat: NarrowCategory[->>, Obj],
+      cat: NarrowCategory[Obj, ->>],
     ): Exists[[Q] =>> (SinkNAry[->>, ||, Nil, Nil || B, Q], A -> Q)] =
       Exists((
         SinkNAry.Single(cat.id[B](tgtData(f))),
@@ -58,7 +58,7 @@ object SourceNAry {
       binaryPushout: [P, X, Y] => (P -> X, P -> Y) => Exists[[Q] =>> (X ->> Q, Y ->> Q, P -> Q)],
       tgtData: [X, Y] => (X -> Y) => Obj[Y],
     )(using
-      cat: NarrowCategory[->>, Obj],
+      cat: NarrowCategory[Obj, ->>],
     ): Exists[[Q] =>> (SinkNAry[->>, ||, Nil, Init || Z, Q], A -> Q)] =
       init.pushout(binaryPushout, tgtData) match
         case Indeed((initSink, q)) =>

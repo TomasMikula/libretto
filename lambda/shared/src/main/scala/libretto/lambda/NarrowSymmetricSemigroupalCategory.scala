@@ -2,12 +2,12 @@ package libretto.lambda
 
 /** A symmetric semigroupal category on a subset of Scala types.
  *
+ * @tparam Obj  witnesses that a Scala type is an object of the category.
  * @tparam ->   morphism of the category
  * @tparam |*|  the monoidal product (tensor)
- * @tparam Obj  witnesses that a Scala type is an object of the category.
  */
-trait NarrowSymmetricSemigroupalCategory[->[_, _], |*|[_, _], Obj[_]]
-  extends NarrowSemigroupalCategory[->, |*|, Obj]
+trait NarrowSymmetricSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
+  extends NarrowSemigroupalCategory[Obj, ->, |*|]
 {
   def swap[A, B](wa: Obj[A], wb: Obj[B]): (A |*| B) -> (B |*| A)
 

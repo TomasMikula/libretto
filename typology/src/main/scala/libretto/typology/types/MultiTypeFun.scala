@@ -97,8 +97,8 @@ object MultiTypeFun {
   def dup[TC[_, _], K](using KindN[K]): MultiTypeFun[TC, K, K × K] =
     Impl(Routing.dup[K], PartialArgs.Id())
 
-  given [TC[_, _]] => NarrowSymmetricSemigroupalCategory[MultiTypeFun[TC, _, _], ×, KindN] =
-    new NarrowSymmetricSemigroupalCategory[MultiTypeFun[TC, _, _], ×, KindN] {
+  given [TC[_, _]] => NarrowSymmetricSemigroupalCategory[KindN, MultiTypeFun[TC, _, _], ×] =
+    new NarrowSymmetricSemigroupalCategory[KindN, MultiTypeFun[TC, _, _], ×] {
       override def id[A](wa: KindN[A]): MultiTypeFun[TC, A, A] =
         given KindN[A] = wa
         MultiTypeFun(Routing.id[A], PartialArgs.Id())

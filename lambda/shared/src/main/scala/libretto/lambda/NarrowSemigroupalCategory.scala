@@ -2,12 +2,12 @@ package libretto.lambda
 
 /** A semigroupal category on a subset of Scala types.
  *
+ * @tparam Obj  witnesses that a Scala type is an object of the category.
  * @tparam ->   morphism of the category
  * @tparam |*|  the monoidal product (tensor)
- * @tparam Obj  witnesses that a Scala type is an object of the category.
  */
-trait NarrowSemigroupalCategory[->[_, _], |*|[_, _], Obj[_]]
-  extends NarrowCategory[->, Obj]
+trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
+  extends NarrowCategory[Obj, ->]
 {
   def par[A1, A2, B1, B2](f1: A1 -> B1, f2: A2 -> B2): (A1 |*| A2) -> (B1 |*| B2)
 

@@ -209,7 +209,7 @@ object IsRefinedBy {
   def anythingRefinesWire[X](using EdgeDesc[X]): (Wire IsRefinedBy X) =
     initial[X](summon)
 
-  given NarrowCategory[IsRefinedBy, EdgeDesc] with {
+  given NarrowCategory[EdgeDesc, IsRefinedBy] with {
     override def andThen[A, B, C](f: A IsRefinedBy B, g: B IsRefinedBy C): A IsRefinedBy C =
       f andThen g
 

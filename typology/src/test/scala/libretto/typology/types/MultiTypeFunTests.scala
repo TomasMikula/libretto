@@ -18,7 +18,7 @@ class MultiTypeFunTests extends AnyFunSuite {
 
   private type MTF = MultiTypeFun[TC, _, _]
 
-  private given c: NarrowSymmetricSemigroupalCategory[MTF, ×, KindN] =
+  private given c: NarrowSymmetricSemigroupalCategory[KindN, MTF, ×] =
     summon
 
   private val kUnit: KindN[●] = KindN.Type
