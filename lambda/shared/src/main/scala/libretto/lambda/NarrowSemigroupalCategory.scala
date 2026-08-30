@@ -17,9 +17,9 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
   def assocLR[A, B, C](a: Obj[A], b: Obj[B], c: Obj[C]): ((A |*| B) |*| C) -> (A |*| (B |*| C))
   def assocRL[A, B, C](a: Obj[A], b: Obj[B], c: Obj[C]): (A |*| (B |*| C)) -> ((A |*| B) |*| C)
 
-  def fst[X, Y, Z](f: X -> Y)(using z: Obj[Z]): (X |*| Z) -> (Y |*| Z) =
+  def fst[X, Y, Z](f: X -> Y, z: Obj[Z]): (X |*| Z) -> (Y |*| Z) =
     par(f, id(z))
 
-  def snd[X, Y, Z](f: Y -> Z)(using x: Obj[X]): (X |*| Y) -> (X |*| Z) =
+  def snd[X, Y, Z](x: Obj[X], f: Y -> Z): (X |*| Y) -> (X |*| Z) =
     par(id(x), f)
 }

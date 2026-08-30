@@ -2,7 +2,10 @@ package libretto.lambda
 
 import libretto.lambda.util.Applicative
 
-trait SymmetricSemigroupalCategory[->[_, _], |*|[_, _]] extends SemigroupalCategory[->, |*|] {
+trait SymmetricSemigroupalCategory[->[_, _], |*|[_, _]]
+  extends NarrowSymmetricSemigroupalCategory[[x] =>> Unit, ->, |*|]
+  with SemigroupalCategory[->, |*|]
+{
   def swap[A, B]: (A |*| B) -> (B |*| A)
 
   def ix[A, B, C]: ((A |*| B) |*| C) -> ((A |*| C) |*| B) =
@@ -13,6 +16,11 @@ trait SymmetricSemigroupalCategory[->[_, _], |*|[_, _]] extends SemigroupalCateg
 
   def ixi[A, B, C, D]: ((A |*| B) |*| (C |*| D)) -> ((A |*| C) |*| (B |*| D)) =
     assocLR > par(id, assocRL > par(swap, id) > assocLR) > assocRL
+
+  override def swap[A, B](wa: Unit, wb: Unit): (A |*| B) -> (B |*| A) = swap[A, B]
+  override def ix[A, B, C](wa: Unit, wb: Unit, wc: Unit): ((A |*| B) |*| C) -> ((A |*| C) |*| B) = ix[A, B, C]
+  override def xi[A, B, C](wa: Unit, wb: Unit, wc: Unit): (A |*| (B |*| C)) -> (B |*| (A |*| C)) = xi[A, B, C]
+  override def ixi[A, B, C, D](wa: Unit, wb: Unit, wc: Unit, wd: Unit): ((A |*| B) |*| (C |*| D)) -> ((A |*| C) |*| (B |*| D)) = ixi[A, B, C, D]
 
   def hoist[G[_]](using Applicative[G]): SymmetricSemigroupalCategory[[a, b] =>> G[a -> b], |*|] =
     new SymmetricSemigroupalCategory.Hoisted[G, ->, |*|] {
