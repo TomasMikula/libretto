@@ -13,7 +13,7 @@ import libretto.typology.types.kindShuffle.{~⚬, Transfer}
  * the resulting kind of the type constructor becomes `K -> M`.
  *
  * The representation is unique:
-  there is only 1 way to represent any given partial type arguments as [[PartialArgs]].
+ * there is only 1 way to represent any given partial type arguments as [[PartialArgs]].
  *
  * A type argument might be provided fully, as `F[○, k]` (for some kind `k`);
  * or itself require further type arguments. For example,
@@ -217,8 +217,17 @@ sealed trait PartialArgs[F[_, _], K, L] {
           case Id() => Exists(Exists((m, ~⚬.id, Id()(using m.outKind))))
           case Lift(f) =>
             UnhandledCase.raise(s"$this.multiply($m)")
-          case Par(f1, f2) =>
-            UnhandledCase.raise(s"$this.multiply($m)")
+          case p @ Par(f1, f2) =>
+            import p.given
+            (f1.multiply(m1), f2.multiply(m2)) match
+              case (Indeed(y1 @ Indeed((q1, s1, a1))), Indeed(y2 @ Indeed((q2, s2, a2)))) =>
+                given xKind1: KindN[y1.T] = a1.inKind.nonEmpty match
+                  case Right(k) => k
+                  case Left(_) => UnhandledCase.raise(s"$this.multiply($m)")
+                given xKind2: KindN[y2.T] = a2.inKind.nonEmpty match
+                  case Right(k) => k
+                  case Left(_) => UnhandledCase.raise(s"$this.multiply($m)")
+                Exists(Exists((Multipliers.Par(q1.proper, q2.proper), ~⚬.par(s1, s2), PartialArgs.par(a1, a2))))
           case f @ Fst(f1) =>
             import f.given
             import m2.outKind
@@ -268,8 +277,9 @@ sealed trait PartialArgs[F[_, _], K, L] {
     s match
       case ~⚬.Id() =>
         Exists((~⚬.id, this))
-      case ~⚬.Bimap(par) =>
-        UnhandledCase.raise(s"$this.shuffle($s)")
+      case b: ~⚬.Bimap[l1, l2, m1, m2] =>
+        val (s1, s2) = b.par.components
+        PartialArgs.biShuffle[F, K, l1, l2, m1, m2](this, s1, s2)
       case x: ~⚬.Xfer[l1, l2, x1, x2, m1, m2] =>
         PartialArgs.biShuffle[F, K, l1, l2, x1, x2](this, x.f1, x.f2) match
           case Indeed((s, f)) =>
@@ -609,8 +619,17 @@ object PartialArgs {
         Exists((s, Id()))
       case Lift(f) =>
         UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
-      case Par(f1, f2) =>
-        UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
+      case p @ Par(f1, f2) =>
+        import p.given
+        (f1.shuffle(s1), f2.shuffle(s2)) match
+          case (y1 @ Indeed((t1, r1)), y2 @ Indeed((t2, r2))) =>
+            given xKind1: KindN[y1.T] = r1.inKind.nonEmpty match
+              case Right(k) => k
+              case Left(_) => UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
+            given xKind2: KindN[y2.T] = r2.inKind.nonEmpty match
+              case Right(k) => k
+              case Left(_) => UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
+            Exists((~⚬.par(t1, t2), PartialArgs.par(r1, r2)))
       case Fst(f) =>
         UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
       case Snd(f) =>
@@ -639,12 +658,19 @@ object PartialArgs {
     tr: Transfer[L1, L2, M1, M2],
   ): Exists[[X] =>> (K ~⚬ X, PartialArgs[F, X, M1 × M2])] =
     a match
-      case Id() =>
-        UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+      case i @ Id() =>
+        val s = tr.asShuffle
+        given KindN[M1 × M2] = s(i.outKind)
+        Exists((s, Id()))
       case Lift(f) =>
         UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
-      case Par(f1, f2) =>
-        UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+      case p @ Par(f1: PartialArgs.Proper[F, x1, L1], f2: PartialArgs.Proper[F, x2, L2]) =>
+        import p.given
+        tr match
+          case Transfer.Swap() =>
+            Exists((~⚬.swap[x1, x2], Par(f2, f1)))
+          case _ =>
+            UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
       case Fst(f) =>
         UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
       case Snd(f) =>

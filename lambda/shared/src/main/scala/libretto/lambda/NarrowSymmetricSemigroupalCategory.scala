@@ -1,0 +1,22 @@
+package libretto.lambda
+
+/** A symmetric semigroupal category on a subset of Scala types.
+ *
+ * @tparam ->   morphism of the category
+ * @tparam |*|  the monoidal product (tensor)
+ * @tparam Obj  witnesses that a Scala type is an object of the category.
+ */
+trait NarrowSymmetricSemigroupalCategory[->[_, _], |*|[_, _], Obj[_]]
+  extends NarrowSemigroupalCategory[->, |*|, Obj]
+{
+  def swap[A, B](wa: Obj[A], wb: Obj[B]): (A |*| B) -> (B |*| A)
+
+  def ix[A, B, C](wa: Obj[A], wb: Obj[B], wc: Obj[C]): ((A |*| B) |*| C) -> ((A |*| C) |*| B) =
+    assocLR(wa, wb, wc) > par(id(wa), swap(wb, wc)) > assocRL(wa, wc, wb)
+
+  def xi[A, B, C](wa: Obj[A], wb: Obj[B], wc: Obj[C]): (A |*| (B |*| C)) -> (B |*| (A |*| C)) =
+    assocRL(wa, wb, wc) > par(swap(wa, wb), id(wc)) > assocLR(wb, wa, wc)
+
+  def ixi[A, B, C, D](wa: Obj[A], wb: Obj[B], wc: Obj[C], wd: Obj[D]): ((A |*| B) |*| (C |*| D)) -> ((A |*| C) |*| (B |*| D)) =
+    assocLR(wa, wb, tensor(wc, wd)) > par(id(wa), assocRL(wb, wc, wd) > par(swap(wb, wc), id(wd)) > assocLR(wc, wb, wd)) > assocRL(wa, wc, tensor(wb, wd))
+}
