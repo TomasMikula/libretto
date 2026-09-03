@@ -10,10 +10,20 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
   extends NarrowCategory[Obj, ->]
   with NarrowWSemigroupalCategory[Obj, ->, [A, B, P] =>> (A |*| B) =:= P]
 {
-  def par[A1, A2, B1, B2](f1: A1 -> B1, f2: A2 -> B2): (A1 |*| A2) -> (B1 |*| B2)
+  def narrowPar[A1, A2, B1, B2](
+    f1: A1 -> B1,
+    f2: A2 -> B2,
+  )(using
+    a1: Obj[A1], a2: Obj[A2],
+    b1: Obj[B1], b2: Obj[B2],
+  ): (A1 |*| A2) -> (B1 |*| B2)
 
   /** Combines the object-witnesses of two objects into an object-witness for their tensor (monoidal product). */
   def tensor[A, B](wa: Obj[A], wb: Obj[B]): Obj[A |*| B]
+
+  /** [[tensor]] provided implicitly. */
+  given [A, B] => (wa: Obj[A], wb: Obj[B]) => Obj[A |*| B] =
+    tensor(wa, wb)
 
   def assocLR[A, B, C](a: Obj[A], b: Obj[B], c: Obj[C]): ((A |*| B) |*| C) -> (A |*| (B |*| C))
   def assocRL[A, B, C](a: Obj[A], b: Obj[B], c: Obj[C]): (A |*| (B |*| C)) -> ((A |*| B) |*| C)
@@ -24,11 +34,14 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
   override def wpar[A1, A2, B1, B2, P, Q](
     f1: A1 -> B1,
     f2: A2 -> B2,
+  )(using
+    a1: Obj[A1], a2: Obj[A2],
+    b1: Obj[B1], b2: Obj[B2],
   )(
     pSrc: (A1 |*| A2) =:= P,
     pTgt: (B1 |*| B2) =:= Q,
   ): P -> Q = {
-    val g: (A1 |*| A2) -> (B1 |*| B2) = par(f1, f2)
+    val g: (A1 |*| A2) -> (B1 |*| B2) = narrowPar(f1, f2)
     pTgt.substituteCo[[X] =>> P -> X](pSrc.substituteCo[[X] =>> X -> (B1 |*| B2)](g))
   }
 
@@ -74,9 +87,11 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
   ): P =:= Q =
     p.flip.andThen(q)
 
-  def fst[X, Y, Z](f: X -> Y, z: Obj[Z]): (X |*| Z) -> (Y |*| Z) =
-    par(f, id(z))
+  def fst[X, Y, Z](f: X -> Y, z: Obj[Z])(using x: Obj[X], y: Obj[Y]): (X |*| Z) -> (Y |*| Z) =
+    given Obj[Z] = z
+    narrowPar(f, id(z))
 
-  def snd[X, Y, Z](x: Obj[X], f: Y -> Z): (X |*| Y) -> (X |*| Z) =
-    par(id(x), f)
+  def snd[X, Y, Z](x: Obj[X], f: Y -> Z)(using y: Obj[Y], z: Obj[Z]): (X |*| Y) -> (X |*| Z) =
+    given Obj[X] = x
+    narrowPar(id(x), f)
 }

@@ -8,6 +8,16 @@ trait SemigroupalCategory[->[_, _], |*|[_, _]]
 
   def assocRL[A, B, C]: (A |*| (B |*| C)) -> ((A |*| B) |*| C)
 
+  def par[A1, A2, B1, B2](f1: A1 -> B1, f2: A2 -> B2): (A1 |*| A2) -> (B1 |*| B2)
+
+  override def narrowPar[A1, A2, B1, B2](
+    f1: A1 -> B1,
+    f2: A2 -> B2,
+  )(using
+    a1: Unit, a2: Unit,
+    b1: Unit, b2: Unit,
+  ): (A1 |*| A2) -> (B1 |*| B2) = par(f1, f2)
+
   def fst[X, Y, Z](f: X -> Y): (X |*| Z) -> (Y |*| Z) = par(f, id)
 
   def snd[X, Y, Z](f: Y -> Z): (X |*| Y) -> (X |*| Z) = par(id, f)
@@ -15,8 +25,8 @@ trait SemigroupalCategory[->[_, _], |*|[_, _]]
   override def tensor[A, B](wa: Unit, wb: Unit): Unit = ()
   override def assocLR[A, B, C](a: Unit, b: Unit, c: Unit): ((A |*| B) |*| C) -> (A |*| (B |*| C)) = assocLR[A, B, C]
   override def assocRL[A, B, C](a: Unit, b: Unit, c: Unit): (A |*| (B |*| C)) -> ((A |*| B) |*| C) = assocRL[A, B, C]
-  override def fst[X, Y, Z](f: X -> Y, z: Unit): (X |*| Z) -> (Y |*| Z) = fst(f)
-  override def snd[X, Y, Z](x: Unit, f: Y -> Z): (X |*| Y) -> (X |*| Z) = snd(f)
+  override def fst[X, Y, Z](f: X -> Y, z: Unit)(using x: Unit, y: Unit): (X |*| Z) -> (Y |*| Z) = fst(f)
+  override def snd[X, Y, Z](x: Unit, f: Y -> Z)(using y: Unit, z: Unit): (X |*| Y) -> (X |*| Z) = snd(f)
 
   extension [A, B](f: A -> B) {
     def inFst[X]: (A |*| X) -> (B |*| X) = fst(f)

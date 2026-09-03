@@ -22,12 +22,27 @@ trait NarrowSymmetricSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
     q.substituteCo[[X] =>> P -> X](p.substituteCo[[X] =>> X -> (B |*| A)](g))
   }
 
-  def ix[A, B, C](wa: Obj[A], wb: Obj[B], wc: Obj[C]): ((A |*| B) |*| C) -> ((A |*| C) |*| B) =
-    assocLR(wa, wb, wc) > par(id(wa), swap(wb, wc)) > assocRL(wa, wc, wb)
+  def ix[A, B, C](wa: Obj[A], wb: Obj[B], wc: Obj[C]): ((A |*| B) |*| C) -> ((A |*| C) |*| B) = {
+    given Obj[A] = wa
+    given Obj[B] = wb
+    given Obj[C] = wc
+    assocLR(wa, wb, wc) > narrowPar(id(wa), swap(wb, wc)) > assocRL(wa, wc, wb)
+  }
 
-  def xi[A, B, C](wa: Obj[A], wb: Obj[B], wc: Obj[C]): (A |*| (B |*| C)) -> (B |*| (A |*| C)) =
-    assocRL(wa, wb, wc) > par(swap(wa, wb), id(wc)) > assocLR(wb, wa, wc)
+  def xi[A, B, C](wa: Obj[A], wb: Obj[B], wc: Obj[C]): (A |*| (B |*| C)) -> (B |*| (A |*| C)) = {
+    given Obj[A] = wa
+    given Obj[B] = wb
+    given Obj[C] = wc
+    assocRL(wa, wb, wc) > narrowPar(swap(wa, wb), id(wc)) > assocLR(wb, wa, wc)
+  }
 
-  def ixi[A, B, C, D](wa: Obj[A], wb: Obj[B], wc: Obj[C], wd: Obj[D]): ((A |*| B) |*| (C |*| D)) -> ((A |*| C) |*| (B |*| D)) =
-    assocLR(wa, wb, tensor(wc, wd)) > par(id(wa), assocRL(wb, wc, wd) > par(swap(wb, wc), id(wd)) > assocLR(wc, wb, wd)) > assocRL(wa, wc, tensor(wb, wd))
+  def ixi[A, B, C, D](wa: Obj[A], wb: Obj[B], wc: Obj[C], wd: Obj[D]): ((A |*| B) |*| (C |*| D)) -> ((A |*| C) |*| (B |*| D)) = {
+    given Obj[A] = wa
+    given Obj[B] = wb
+    given Obj[C] = wc
+    given Obj[D] = wd
+    assocLR(wa, wb, tensor(wc, wd)) >
+      narrowPar(id(wa), assocRL(wb, wc, wd) > narrowPar(swap(wb, wc), id(wd)) > assocLR(wc, wb, wd)) >
+      assocRL(wa, wc, tensor(wb, wd))
+  }
 }

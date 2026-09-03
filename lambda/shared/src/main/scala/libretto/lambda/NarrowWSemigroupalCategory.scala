@@ -21,6 +21,9 @@ trait NarrowWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
   def wpar[A1, A2, B1, B2, P, Q](
     f1: A1 -> B1,
     f2: A2 -> B2,
+  )(using
+    a1: Obj[A1], a2: Obj[A2],
+    b1: Obj[B1], b2: Obj[B2],
   )(
     pSrc: Prd[A1, A2, P],
     pTgt: Prd[B1, B2, Q],
@@ -49,15 +52,17 @@ trait NarrowWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
     */
   def tensorUniq[A, B, P, Q](p: Prd[A, B, P], q: Prd[A, B, Q]): P =:= Q
 
-  def wfst[X, Y, Z, P, Q](f: X -> Y, z: Obj[Z])(
+  def wfst[X, Y, Z, P, Q](f: X -> Y, z: Obj[Z])(using x: Obj[X], y: Obj[Y])(
     pSrc: Prd[X, Z, P],
     pTgt: Prd[Y, Z, Q],
   ): P -> Q =
+    given Obj[Z] = z
     wpar(f, id(z))(pSrc, pTgt)
 
-  def wsnd[X, Y, Z, P, Q](x: Obj[X], f: Y -> Z)(
+  def wsnd[X, Y, Z, P, Q](x: Obj[X], f: Y -> Z)(using y: Obj[Y], z: Obj[Z])(
     pSrc: Prd[X, Y, P],
     pTgt: Prd[X, Z, Q],
   ): P -> Q =
+    given Obj[X] = x
     wpar(id(x), f)(pSrc, pTgt)
 }
