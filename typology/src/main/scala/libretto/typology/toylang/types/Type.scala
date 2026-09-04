@@ -271,9 +271,11 @@ object Type {
       MultiTypeFun(f)
 
     def fst[V, K, L, M](f: Fun[V, K, L])(using KindN[K], KindN[M]): Args[V, K × M, L × M] =
+      given KindN[L] = KindN(f.outKind)
       MultiTypeFun.fst(f)
 
     def snd[V, K, L, M](f: Fun[V, L, M])(using KindN[K], KindN[L]): Args[V, K × L, K × M] =
+      given KindN[M] = KindN(f.outKind)
       MultiTypeFun.snd(f)
 
     def introFst[V, K, L](f: Fun[V, ○, K])(using KindN[L]): Args[V, L, K × L] =
@@ -288,7 +290,9 @@ object Type {
     def introBoth[V, K, L](f: Fun[V, ○, K], g: Fun[V, ○, L]): Args[V, ○, K × L] =
       MultiTypeFun.introBoth(f, g)
 
-    def introBoth[V, K, L](a: Args[V, ○, K], b: Args[V, ○, L]): Args[V, ○, K × L] =
+    def introBoth[V, K, L](a: Args[V, ○, K], b: Args[V, ○, L])(using
+      KindN[K], KindN[L],
+    ): Args[V, ○, K × L] =
       MultiTypeFun.introBoth(a, b)
 
     def dup[V, K](using KindN[K]): Args[V, K, K × K] =
@@ -298,10 +302,10 @@ object Type {
       def feedTo[M](g: Fun[V, L, M]): Fun[V, K, M] =
         f > g
 
-      def inFst[M](using KindN[K], KindN[M]): Args[V, K × M, L × M] =
+      def inFst[M](using KindN[K], KindN[L], KindN[M]): Args[V, K × M, L × M] =
         f.inFst[M]
 
-      def inSnd[J](using KindN[J], KindN[K]): Args[V, J × K, J × L] =
+      def inSnd[J](using KindN[J], KindN[K], KindN[L]): Args[V, J × K, J × L] =
         f.inSnd[J]
     }
   }

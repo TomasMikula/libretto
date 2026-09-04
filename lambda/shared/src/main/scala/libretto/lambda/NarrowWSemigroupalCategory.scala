@@ -29,23 +29,23 @@ trait NarrowWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
     pTgt: Prd[B1, B2, Q],
   ): P -> Q
 
-  def wassocLR[A, B, C, AB, BC, S, T](
+  def wassocLR[A, B, C, AB, AB_C, BC, A_BC](
     a: Obj[A], b: Obj[B], c: Obj[C],
   )(
     pAB: Prd[A, B, AB],
+    pAB_C: Prd[AB, C, AB_C],
     pBC: Prd[B, C, BC],
-    pAB_C: Prd[AB, C, S],
-    pA_BC: Prd[A, BC, T],
-  ): S -> T
+    pA_BC: Prd[A, BC, A_BC],
+  ): AB_C -> A_BC
 
-  def wassocRL[A, B, C, AB, BC, S, T](
+  def wassocRL[A, B, C, BC, A_BC, AB, AB_C](
     a: Obj[A], b: Obj[B], c: Obj[C],
   )(
-    pAB: Prd[A, B, AB],
     pBC: Prd[B, C, BC],
-    pAB_C: Prd[AB, C, S],
-    pA_BC: Prd[A, BC, T],
-  ): T -> S
+    pA_BC: Prd[A, BC, A_BC],
+    pAB: Prd[A, B, AB],
+    pAB_C: Prd[AB, C, AB_C],
+  ): A_BC -> AB_C
 
   /** Given two witnesses that `P` and `Q` are each the tensor of `A` and `B`,
     * prove that `P` and `Q` are equal.

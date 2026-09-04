@@ -22,6 +22,7 @@ class MultiTypeFunTests extends AnyFunSuite {
     summon
 
   private val kUnit: KindN[●] = KindN.Type
+  private val kPair: KindN[● × ●] = kUnit × kUnit
 
   private val pairExpr: TypeExpr[TC, ● × ●, ●] =
     TypeExpr.lift(TC.Pair())
@@ -46,7 +47,7 @@ class MultiTypeFunTests extends AnyFunSuite {
   }
 
   test("par") {
-    c.par(pair, pair)
+    c.narrowPar(pair, pair)(using kPair, kPair, kUnit, kUnit)
   }
 
   test("derived ix, xi, ixi") {
@@ -62,12 +63,12 @@ class MultiTypeFunTests extends AnyFunSuite {
 
   test("andThen nesting and par") {
     val h1: MultiTypeFun[TC, ●, ●] = c.andThen(dup, pair)
-    val h2: MultiTypeFun[TC, ● × ●, ● × ●] = c.par(h1, h1)
+    val h2: MultiTypeFun[TC, ● × ●, ● × ●] = c.narrowPar(h1, h1)(using kUnit, kUnit, kUnit, kUnit)
     c.andThen(h2, c.swap(kUnit, kUnit))
   }
 
   test("composing par and dup") {
-    val p_d: MultiTypeFun[TC, ● × ●, (● × ●) × (● × ●)] = c.par(dup, dup)
-    c.andThen(p_d, c.par(pair, pair))
+    val p_d: MultiTypeFun[TC, ● × ●, (● × ●) × (● × ●)] = c.narrowPar(dup, dup)(using kUnit, kUnit, kPair, kPair)
+    c.andThen(p_d, c.narrowPar(pair, pair)(using kPair, kPair, kUnit, kUnit))
   }
 }

@@ -45,39 +45,39 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
     pTgt.substituteCo[[X] =>> P -> X](pSrc.substituteCo[[X] =>> X -> (B1 |*| B2)](g))
   }
 
-  override def wassocLR[A, B, C, AB, BC, S, T](
+  override def wassocLR[A, B, C, AB, AB_C, BC, A_BC](
     a: Obj[A], b: Obj[B], c: Obj[C],
   )(
     pAB: (A |*| B) =:= AB,
+    pAB_C: (AB |*| C) =:= AB_C,
     pBC: (B |*| C) =:= BC,
-    pAB_C: (AB |*| C) =:= S,
-    pA_BC: (A |*| BC) =:= T,
-  ): S -> T = {
+    pA_BC: (A |*| BC) =:= A_BC,
+  ): AB_C -> A_BC = {
     val g0: ((A |*| B) |*| C) -> (A |*| (B |*| C)) = assocLR(a, b, c)
-    val g1: S -> (A |*| (B |*| C)) =
+    val g1: AB_C -> (A |*| (B |*| C)) =
       pAB_C.substituteCo[[X] =>> X -> (A |*| (B |*| C))](
         pAB.substituteCo[[X] =>> (X |*| C) -> (A |*| (B |*| C))](g0),
       )
-    pA_BC.substituteCo[[X] =>> S -> X](
-      pBC.substituteCo[[X] =>> S -> (A |*| X)](g1),
+    pA_BC.substituteCo[[X] =>> AB_C -> X](
+      pBC.substituteCo[[X] =>> AB_C -> (A |*| X)](g1),
     )
   }
 
-  override def wassocRL[A, B, C, AB, BC, S, T](
+  override def wassocRL[A, B, C, BC, A_BC, AB, AB_C](
     a: Obj[A], b: Obj[B], c: Obj[C],
   )(
-    pAB: (A |*| B) =:= AB,
     pBC: (B |*| C) =:= BC,
-    pAB_C: (AB |*| C) =:= S,
-    pA_BC: (A |*| BC) =:= T,
-  ): T -> S = {
+    pA_BC: (A |*| BC) =:= A_BC,
+    pAB: (A |*| B) =:= AB,
+    pAB_C: (AB |*| C) =:= AB_C,
+  ): A_BC -> AB_C = {
     val g0: (A |*| (B |*| C)) -> ((A |*| B) |*| C) = assocRL(a, b, c)
-    val g1: T -> ((A |*| B) |*| C) =
+    val g1: A_BC -> ((A |*| B) |*| C) =
       pA_BC.substituteCo[[X] =>> X -> ((A |*| B) |*| C)](
         pBC.substituteCo[[X] =>> (A |*| X) -> ((A |*| B) |*| C)](g0),
       )
-    pAB_C.substituteCo[[X] =>> T -> X](
-      pAB.substituteCo[[X] =>> T -> (X |*| C)](g1),
+    pAB_C.substituteCo[[X] =>> A_BC -> X](
+      pAB.substituteCo[[X] =>> A_BC -> (X |*| C)](g1),
     )
   }
 
