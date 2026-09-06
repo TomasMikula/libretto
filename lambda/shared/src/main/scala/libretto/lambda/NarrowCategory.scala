@@ -6,5 +6,5 @@ package libretto.lambda
  * @tparam ->   morphism of the category
  */
 trait NarrowCategory[Obj[_], ->[_, _]] extends Semigroupoid[->] {
-  def id[A](witness: Obj[A]): A -> A
+  def id[A](using witness: Obj[A]): A -> A
 }

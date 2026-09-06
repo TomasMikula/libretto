@@ -16,13 +16,8 @@ class MultiTypeFunTests extends AnyFunSuite {
     case class Pair() extends TC[● × ●, ●]
   }
 
-  private type MTF = MultiTypeFun[TC, _, _]
-
-  private given c: NarrowSymmetricSemigroupalCategory[KindN, MTF, ×] =
+  private val c: NarrowSymmetricSemigroupalCategory[KindN, MultiTypeFun[TC, _, _], ×] =
     summon
-
-  private val kUnit: KindN[●] = KindN.Type
-  private val kPair: KindN[● × ●] = kUnit × kUnit
 
   private val pairExpr: TypeExpr[TC, ● × ●, ●] =
     TypeExpr.lift(TC.Pair())
@@ -34,26 +29,26 @@ class MultiTypeFunTests extends AnyFunSuite {
     MultiTypeFun.dup
 
   test("id") {
-    c.id(kUnit)
+    c.id[●]
   }
 
   test("swap") {
-    c.swap(kUnit, kUnit)
+    c.swap[●, ●]
   }
 
   test("assocLR and assocRL") {
-    c.assocLR(kUnit, kUnit, kUnit)
-    c.assocRL(kUnit, kUnit, kUnit)
+    c.assocLR[●, ●, ●]
+    c.assocRL[●, ●, ●]
   }
 
   test("par") {
-    c.narrowPar(pair, pair)(using kPair, kPair, kUnit, kUnit)
+    c.narrowPar(pair, pair)
   }
 
   test("derived ix, xi, ixi") {
-    c.ix(kUnit, kUnit, kUnit)
-    c.xi(kUnit, kUnit, kUnit)
-    c.ixi(kUnit, kUnit, kUnit, kUnit)
+    c.ix[●, ●, ●]
+    c.xi[●, ●, ●]
+    c.ixi[●, ●, ●, ●]
   }
 
   test("andThen: dup > pair") {
@@ -63,12 +58,12 @@ class MultiTypeFunTests extends AnyFunSuite {
 
   test("andThen nesting and par") {
     val h1: MultiTypeFun[TC, ●, ●] = c.andThen(dup, pair)
-    val h2: MultiTypeFun[TC, ● × ●, ● × ●] = c.narrowPar(h1, h1)(using kUnit, kUnit, kUnit, kUnit)
-    c.andThen(h2, c.swap(kUnit, kUnit))
+    val h2: MultiTypeFun[TC, ● × ●, ● × ●] = c.narrowPar(h1, h1)
+    c.andThen(h2, c.swap[●, ●])
   }
 
   test("composing par and dup") {
-    val p_d: MultiTypeFun[TC, ● × ●, (● × ●) × (● × ●)] = c.narrowPar(dup, dup)(using kUnit, kUnit, kPair, kPair)
-    c.andThen(p_d, c.narrowPar(pair, pair)(using kPair, kPair, kUnit, kUnit))
+    val p_d: MultiTypeFun[TC, ● × ●, (● × ●) × (● × ●)] = c.narrowPar(dup, dup)
+    c.andThen(p_d, c.narrowPar(pair, pair))
   }
 }

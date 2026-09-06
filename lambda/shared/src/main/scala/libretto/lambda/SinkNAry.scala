@@ -53,7 +53,7 @@ object SinkNAry {
       cat: NarrowCategory[Obj, ->>],
     ): Exists[[P] =>> (SourceNAry[->>, ||, Nil, P, Nil || A], P -> B)] =
       Exists((
-        SourceNAry.Single(cat.id[A](srcData(f))),
+        SourceNAry.Single(cat.id[A](using srcData(f))),
         f
       ))
 

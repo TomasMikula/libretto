@@ -368,25 +368,17 @@ object MultiTypeFun {
 
   given [TC[_, _]] => NarrowSymmetricSemigroupalCategory[KindN, MultiTypeFun[TC, _, _], ×] =
     new NarrowSymmetricSemigroupalCategory[KindN, MultiTypeFun[TC, _, _], ×] {
-      override def id[A](wa: KindN[A]): MultiTypeFun[TC, A, A] =
+      override def id[A](using wa: KindN[A]): MultiTypeFun[TC, A, A] =
         given KindN[A] = wa
         RoutingOnly(Routing.id[A])
 
-      override def swap[A, B](wa: KindN[A], wb: KindN[B]): MultiTypeFun[TC, A × B, B × A] =
-        given KindN[A] = wa
-        given KindN[B] = wb
+      override def swap[A, B](using wa: KindN[A], wb: KindN[B]): MultiTypeFun[TC, A × B, B × A] =
         RoutingOnly(Routing.swap[A, B])
 
-      override def assocLR[A, B, C](wa: KindN[A], wb: KindN[B], wc: KindN[C]): MultiTypeFun[TC, (A × B) × C, A × (B × C)] =
-        given KindN[A] = wa
-        given KindN[B] = wb
-        given KindN[C] = wc
+      override def assocLR[A, B, C](using wa: KindN[A], wb: KindN[B], wc: KindN[C]): MultiTypeFun[TC, (A × B) × C, A × (B × C)] =
         RoutingOnly(Routing.assocLR[A, B, C])
 
-      override def assocRL[A, B, C](wa: KindN[A], wb: KindN[B], wc: KindN[C]): MultiTypeFun[TC, A × (B × C), (A × B) × C] =
-        given KindN[A] = wa
-        given KindN[B] = wb
-        given KindN[C] = wc
+      override def assocRL[A, B, C](using wa: KindN[A], wb: KindN[B], wc: KindN[C]): MultiTypeFun[TC, A × (B × C), (A × B) × C] =
         RoutingOnly(Routing.assocRL[A, B, C])
 
       override def tensor[A, B](wa: KindN[A], wb: KindN[B]): KindN[A × B] =
@@ -407,7 +399,7 @@ object MultiTypeFun {
 
   given [TC[_, _]] => NarrowSymmetricWSemigroupalCategory[Kinds, MultiTypeFun[TC, _, _], Kinds.Prod] =
     new NarrowSymmetricWSemigroupalCategory[Kinds, MultiTypeFun[TC, _, _], Kinds.Prod] {
-      override def id[A](wa: Kinds[A]): MultiTypeFun[TC, A, A] =
+      override def id[A](using wa: Kinds[A]): MultiTypeFun[TC, A, A] =
         given Kinds[A] = wa
         RoutingOnly(Routing.id[A])
 

@@ -25,8 +25,8 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
   given [A, B] => (wa: Obj[A], wb: Obj[B]) => Obj[A |*| B] =
     tensor(wa, wb)
 
-  def assocLR[A, B, C](a: Obj[A], b: Obj[B], c: Obj[C]): ((A |*| B) |*| C) -> (A |*| (B |*| C))
-  def assocRL[A, B, C](a: Obj[A], b: Obj[B], c: Obj[C]): (A |*| (B |*| C)) -> ((A |*| B) |*| C)
+  def assocLR[A, B, C](using a: Obj[A], b: Obj[B], c: Obj[C]): ((A |*| B) |*| C) -> (A |*| (B |*| C))
+  def assocRL[A, B, C](using a: Obj[A], b: Obj[B], c: Obj[C]): (A |*| (B |*| C)) -> ((A |*| B) |*| C)
 
   override def wtensor[A, B, P](wa: Obj[A], wb: Obj[B])(p: (A |*| B) =:= P): Obj[P] =
     p.substituteCo[Obj](tensor(wa, wb))
@@ -53,7 +53,7 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
     pBC: (B |*| C) =:= BC,
     pA_BC: (A |*| BC) =:= A_BC,
   ): AB_C -> A_BC = {
-    val g0: ((A |*| B) |*| C) -> (A |*| (B |*| C)) = assocLR(a, b, c)
+    val g0: ((A |*| B) |*| C) -> (A |*| (B |*| C)) = assocLR(using a, b, c)
     val g1: AB_C -> (A |*| (B |*| C)) =
       pAB_C.substituteCo[[X] =>> X -> (A |*| (B |*| C))](
         pAB.substituteCo[[X] =>> (X |*| C) -> (A |*| (B |*| C))](g0),
@@ -71,7 +71,7 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
     pAB: (A |*| B) =:= AB,
     pAB_C: (AB |*| C) =:= AB_C,
   ): A_BC -> AB_C = {
-    val g0: (A |*| (B |*| C)) -> ((A |*| B) |*| C) = assocRL(a, b, c)
+    val g0: (A |*| (B |*| C)) -> ((A |*| B) |*| C) = assocRL(using a, b, c)
     val g1: A_BC -> ((A |*| B) |*| C) =
       pA_BC.substituteCo[[X] =>> X -> ((A |*| B) |*| C)](
         pBC.substituteCo[[X] =>> (A |*| X) -> ((A |*| B) |*| C)](g0),
@@ -87,11 +87,9 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
   ): P =:= Q =
     p.flip.andThen(q)
 
-  def fst[X, Y, Z](f: X -> Y, z: Obj[Z])(using x: Obj[X], y: Obj[Y]): (X |*| Z) -> (Y |*| Z) =
-    given Obj[Z] = z
-    narrowPar(f, id(z))
+  def narrowFst[X, Y](f: X -> Y)[Z](using z: Obj[Z])(using x: Obj[X], y: Obj[Y]): (X |*| Z) -> (Y |*| Z) =
+    narrowPar(f, id[Z])
 
-  def snd[X, Y, Z](x: Obj[X], f: Y -> Z)(using y: Obj[Y], z: Obj[Z]): (X |*| Y) -> (X |*| Z) =
-    given Obj[X] = x
-    narrowPar(id(x), f)
+  def narrowSnd[X](using x: Obj[X])[Y, Z](f: Y -> Z)(using y: Obj[Y], z: Obj[Z]): (X |*| Y) -> (X |*| Z) =
+    narrowPar(id[X], f)
 }

@@ -52,17 +52,15 @@ trait NarrowWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
     */
   def tensorUniq[A, B, P, Q](p: Prd[A, B, P], q: Prd[A, B, Q]): P =:= Q
 
-  def wfst[X, Y, Z](f: X -> Y, z: Obj[Z])(using x: Obj[X], y: Obj[Y])[P, Q](
+  def wfst[X, Y](f: X -> Y)[Z](using z: Obj[Z])(using x: Obj[X], y: Obj[Y])[P, Q](
     pSrc: Prd[X, Z, P],
     pTgt: Prd[Y, Z, Q],
   ): P -> Q =
-    given Obj[Z] = z
-    wpar(f, id(z))(pSrc, pTgt)
+    wpar(f, id[Z])(pSrc, pTgt)
 
-  def wsnd[X, Y, Z](x: Obj[X], f: Y -> Z)(using y: Obj[Y], z: Obj[Z])[P, Q](
+  def wsnd[X](using x: Obj[X])[Y, Z](f: Y -> Z)(using y: Obj[Y], z: Obj[Z])[P, Q](
     pSrc: Prd[X, Y, P],
     pTgt: Prd[X, Z, Q],
   ): P -> Q =
-    given Obj[X] = x
-    wpar(id(x), f)(pSrc, pTgt)
+    wpar(id[X], f)(pSrc, pTgt)
 }

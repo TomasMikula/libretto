@@ -213,7 +213,7 @@ object IsRefinedBy {
     override def andThen[A, B, C](f: A IsRefinedBy B, g: B IsRefinedBy C): A IsRefinedBy C =
       f andThen g
 
-    override def id[A](witness: EdgeDesc[A]): A IsRefinedBy A =
+    override def id[A](using witness: EdgeDesc[A]): A IsRefinedBy A =
       Id(witness)
   }
 }
