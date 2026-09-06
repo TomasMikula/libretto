@@ -12,9 +12,10 @@ trait NarrowSymmetricSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
 {
   def swap[A, B](wa: Obj[A], wb: Obj[B]): (A |*| B) -> (B |*| A)
 
-  override def wswap[A, B, P, Q](
-    wa: Obj[A], wb: Obj[B],
-  )(
+  override def wswap[A, B](
+    wa: Obj[A],
+    wb: Obj[B],
+  )[P, Q](
     p: (A |*| B) =:= P,
     q: (B |*| A) =:= Q,
   ): P -> Q = {

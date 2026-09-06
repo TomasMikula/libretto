@@ -10,7 +10,10 @@ package libretto.lambda
 trait NarrowSymmetricWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
   extends NarrowWSemigroupalCategory[Obj, ->, Prd]
 {
-  def wswap[A, B, P, Q](wa: Obj[A], wb: Obj[B])(
+  def wswap[A, B](
+    wa: Obj[A],
+    wb: Obj[B],
+  )[P, Q](
     p: Prd[A, B, P],
     q: Prd[B, A, Q],
   ): P -> Q

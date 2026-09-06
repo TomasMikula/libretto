@@ -204,9 +204,10 @@ object MultiTypeFun {
               case Left(TypeEq(Refl())) =>
                 MultiTypeFun(Routing.elim[A1 × A2], PartialArgs.introBoth(p1.args, p2.args))
 
-  def wpar[TC[_, _], A1, A2, B1, B2, P, Q](
+  def wpar[TC[_, _], A1, A2, B1, B2](
     f1: MultiTypeFun[TC, A1, B1],
     f2: MultiTypeFun[TC, A2, B2],
+  )[P, Q](
     pSrc: Kinds.Prod[A1, A2, P],
     pTgt: Kinds.Prod[B1, B2, Q],
   ): MultiTypeFun[TC, P, Q] = {
@@ -413,21 +414,21 @@ object MultiTypeFun {
       override def wtensor[A, B, P](wa: Kinds[A], wb: Kinds[B])(p: Kinds.Prod[A, B, P]): Kinds[P] =
         p.outKinds
 
-      override def wpar[A1, A2, B1, B2, P, Q](
+      override def wpar[A1, A2, B1, B2](
         f1: MultiTypeFun[TC, A1, B1],
         f2: MultiTypeFun[TC, A2, B2],
       )(using
         a1: Kinds[A1], a2: Kinds[A2],
         b1: Kinds[B1], b2: Kinds[B2],
-      )(
+      )[P, Q](
         pSrc: Kinds.Prod[A1, A2, P],
         pTgt: Kinds.Prod[B1, B2, Q],
       ): MultiTypeFun[TC, P, Q] =
-        MultiTypeFun.wpar[TC, A1, A2, B1, B2, P, Q](f1, f2, pSrc, pTgt)
+        MultiTypeFun.wpar(f1, f2)(pSrc, pTgt)
 
-      override def wassocLR[A, B, C, AB, AB_C, BC, A_BC](
+      override def wassocLR[A, B, C](
         a: Kinds[A], b: Kinds[B], c: Kinds[C],
-      )(
+      )[AB, AB_C, BC, A_BC](
         pAB: Kinds.Prod[A, B, AB],
         pAB_C: Kinds.Prod[AB, C, AB_C],
         pBC: Kinds.Prod[B, C, BC],
@@ -435,9 +436,9 @@ object MultiTypeFun {
       ): MultiTypeFun[TC, AB_C, A_BC] =
         MultiTypeFun.wassocLR(pAB, pAB_C, pBC, pA_BC)
 
-      override def wassocRL[A, B, C, BC, A_BC, AB, AB_C](
+      override def wassocRL[A, B, C](
         a: Kinds[A], b: Kinds[B], c: Kinds[C],
-      )(
+      )[BC, A_BC, AB, AB_C](
         pBC: Kinds.Prod[B, C, BC],
         pA_BC: Kinds.Prod[A, BC, A_BC],
         pAB: Kinds.Prod[A, B, AB],
@@ -445,9 +446,9 @@ object MultiTypeFun {
       ): MultiTypeFun[TC, A_BC, AB_C] =
         MultiTypeFun.wassocRL(pBC, pA_BC, pAB, pAB_C)
 
-      override def wswap[A, B, P, Q](
+      override def wswap[A, B](
         wa: Kinds[A], wb: Kinds[B],
-      )(
+      )[P, Q](
         p: Kinds.Prod[A, B, P],
         q: Kinds.Prod[B, A, Q],
       ): MultiTypeFun[TC, P, Q] =

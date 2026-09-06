@@ -31,13 +31,13 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
   override def wtensor[A, B, P](wa: Obj[A], wb: Obj[B])(p: (A |*| B) =:= P): Obj[P] =
     p.substituteCo[Obj](tensor(wa, wb))
 
-  override def wpar[A1, A2, B1, B2, P, Q](
+  override def wpar[A1, A2, B1, B2](
     f1: A1 -> B1,
     f2: A2 -> B2,
   )(using
     a1: Obj[A1], a2: Obj[A2],
     b1: Obj[B1], b2: Obj[B2],
-  )(
+  )[P, Q](
     pSrc: (A1 |*| A2) =:= P,
     pTgt: (B1 |*| B2) =:= Q,
   ): P -> Q = {
@@ -45,9 +45,9 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
     pTgt.substituteCo[[X] =>> P -> X](pSrc.substituteCo[[X] =>> X -> (B1 |*| B2)](g))
   }
 
-  override def wassocLR[A, B, C, AB, AB_C, BC, A_BC](
+  override def wassocLR[A, B, C](
     a: Obj[A], b: Obj[B], c: Obj[C],
-  )(
+  )[AB, AB_C, BC, A_BC](
     pAB: (A |*| B) =:= AB,
     pAB_C: (AB |*| C) =:= AB_C,
     pBC: (B |*| C) =:= BC,
@@ -63,9 +63,9 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
     )
   }
 
-  override def wassocRL[A, B, C, BC, A_BC, AB, AB_C](
+  override def wassocRL[A, B, C](
     a: Obj[A], b: Obj[B], c: Obj[C],
-  )(
+  )[BC, A_BC, AB, AB_C](
     pBC: (B |*| C) =:= BC,
     pA_BC: (A |*| BC) =:= A_BC,
     pAB: (A |*| B) =:= AB,
