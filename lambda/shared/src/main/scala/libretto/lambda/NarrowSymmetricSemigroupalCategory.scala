@@ -1,5 +1,7 @@
 package libretto.lambda
 
+import libretto.lambda.NarrowWSemigroupalCategory.×
+
 /** A symmetric semigroupal category on a subset of Scala types.
   *
   * @tparam Obj  witnesses that a Scala type is an object of the category.
@@ -12,15 +14,13 @@ trait NarrowSymmetricSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
 {
   def swap[A, B](using wa: Obj[A], wb: Obj[B]): (A |*| B) -> (B |*| A)
 
-  override def wswap[A, B](
-    wa: Obj[A],
-    wb: Obj[B],
-  )[P, Q](
-    p: (A |*| B) =:= P,
-    q: (B |*| A) =:= Q,
-  ): P -> Q = {
-    val g: (A |*| B) -> (B |*| A) = swap(using wa, wb)
-    q.substituteCo[[X] =>> P -> X](p.substituteCo[[X] =>> X -> (B |*| A)](g))
+  override def iswap[A, B](using a: PrdN.Intension[A], b: PrdN.Intension[B]): (A × B) -×> (B × A) = {
+    inline def go[P, Q](p: PrdN[A, P], q: PrdN[B, Q]): (A × B) -×> (B × A) =
+      val pq: PrdN[A × B, P |*| Q] = PrdN[P, Q, P |*| Q](summon)(p, q)
+      val qp: PrdN[B × A, Q |*| P] = PrdN[Q, P, Q |*| P](summon)(q, p)
+      -×>(pq, qp)(swap[P, Q](using prdNObj(p), prdNObj(q)))
+
+    go(a, b)
   }
 
   def ix[A, B, C](using Obj[A], Obj[B], Obj[C]): ((A |*| B) |*| C) -> ((A |*| C) |*| B) =
