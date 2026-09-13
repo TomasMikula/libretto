@@ -31,8 +31,8 @@ trait NarrowWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
         a
 
       /** Witnesses that any object `A` can be treated as a unary product. */
-      given [A] => (a: Obj[A]) => Intension[\[A]] =
-        Exists(atom[A])
+      given atom: [A] => (a: Obj[A]) => Intension[\[A]] =
+        Exists(PrdN.atom[A])
 
       given [A, B] => (a: Intension[A], b: Intension[B]) => Intension[A × B] =
         (a, b) match
