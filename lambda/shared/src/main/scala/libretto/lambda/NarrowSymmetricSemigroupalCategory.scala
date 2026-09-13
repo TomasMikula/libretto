@@ -1,6 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.NarrowWSemigroupalCategory.×
+import libretto.lambda.util.Exists.Indeed
 
 /** A symmetric semigroupal category on a subset of Scala types.
   *
@@ -20,7 +21,9 @@ trait NarrowSymmetricSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
       val qp: PrdN[B × A, Q |*| P] = PrdN[Q, P, Q |*| P](summon)(q, p)
       -×>(pq, qp)(swap[P, Q](using prdNObj(p), prdNObj(q)))
 
-    go(a, b)
+    (PrdN.Intension.prdN(a), PrdN.Intension.prdN(b)) match
+      case (Indeed(p), Indeed(q)) =>
+        go(p, q)
   }
 
   def ix[A, B, C](using Obj[A], Obj[B], Obj[C]): ((A |*| B) |*| C) -> ((A |*| C) |*| B) =

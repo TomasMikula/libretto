@@ -24,7 +24,7 @@ trait NarrowSymmetricWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
     p: Prd[A, B, P],
     q: Prd[B, A, Q],
   ): P -> Q =
-    iswap[\[A], \[B]](using PrdN.atom[A], PrdN.atom[B])
+    iswap[\[A], \[B]]
       .extract[P, Q](PrdN.lift(p), PrdN.lift(q))
 
   /** Interchange second and third component, ((A×B)×C) -> ((A×C)×B), intensional variant. */
@@ -63,7 +63,7 @@ trait NarrowSymmetricWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
     pAC:   Prd[A, C, AC],
     pAC_B: Prd[AC, B, AC_B],
   ): AB_C -> AC_B =
-    i_ix[\[A], \[B], \[C]](using PrdN.atom[A], PrdN.atom[B], PrdN.atom[C])
+    i_ix[\[A], \[B], \[C]]
       .extract[AB_C, AC_B](
         PrdN(pAB_C)(PrdN.lift(pAB), PrdN.atom[C]),
         PrdN(pAC_B)(PrdN.lift(pAC), PrdN.atom[B]),
@@ -78,7 +78,7 @@ trait NarrowSymmetricWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
     pAC:   Prd[A, C, AC],
     pB_AC: Prd[B, AC, B_AC],
   ): A_BC -> B_AC =
-    i_xi[\[A], \[B], \[C]](using PrdN.atom[A], PrdN.atom[B], PrdN.atom[C])
+    i_xi[\[A], \[B], \[C]]
       .extract[A_BC, B_AC](
         PrdN(pA_BC)(PrdN.atom[A], PrdN.lift(pBC)),
         PrdN(pB_AC)(PrdN.atom[B], PrdN.lift(pAC)),
@@ -95,7 +95,7 @@ trait NarrowSymmetricWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
     pBD:    Prd[B, D, BD],
     pAC_BD: Prd[AC, BD, AC_BD],
   ): AB_CD -> AC_BD =
-    i_ixi[\[A], \[B], \[C], \[D]](using PrdN.atom[A], PrdN.atom[B], PrdN.atom[C], PrdN.atom[D])
+    i_ixi[\[A], \[B], \[C], \[D]]
       .extract[AB_CD, AC_BD](
         PrdN(pAB_CD)(PrdN.lift(pAB), PrdN.lift(pCD)),
         PrdN(pAC_BD)(PrdN.lift(pAC), PrdN.lift(pBD)),

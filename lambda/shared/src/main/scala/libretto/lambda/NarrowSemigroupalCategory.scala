@@ -2,6 +2,7 @@ package libretto.lambda
 
 import libretto.lambda.NarrowWSemigroupalCategory.×
 import libretto.lambda.util.Exists
+import libretto.lambda.util.Exists.Indeed
 
 /** A semigroupal category on a subset of Scala types.
   *
@@ -58,7 +59,9 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
       val p_qr: PrdN[A × (B × C), P |*| (Q |*| R)] = PrdN(summon)(p, PrdN(summon)(q, r))
       -×>(pq_r, p_qr)(assocLR(using prdNObj(p), prdNObj(q), prdNObj(r)))
 
-    go(a, b, c)
+    (PrdN.Intension.prdN(a), PrdN.Intension.prdN(b), PrdN.Intension.prdN(c)) match
+      case (Indeed(p), Indeed(q), Indeed(r)) =>
+        go(p, q, r)
   }
 
   override def iassocRL[A, B, C](using a: PrdN.Intension[A], b: PrdN.Intension[B], c: PrdN.Intension[C]): (A × (B × C)) -×> ((A × B) × C) = {
@@ -67,7 +70,9 @@ trait NarrowSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
       val pq_r: PrdN[(A × B) × C, (P |*| Q) |*| R] = PrdN(summon)(PrdN(summon)(p, q), r)
       -×>(p_qr, pq_r)(assocRL(using prdNObj(p), prdNObj(q), prdNObj(r)))
 
-    go(a, b, c)
+    (PrdN.Intension.prdN(a), PrdN.Intension.prdN(b), PrdN.Intension.prdN(c)) match
+      case (Indeed(p), Indeed(q), Indeed(r)) =>
+        go(p, q, r)
   }
 
   override def tensorUniq[A, B, P, Q](

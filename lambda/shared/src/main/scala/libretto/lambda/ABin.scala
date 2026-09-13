@@ -1,5 +1,8 @@
 package libretto.lambda
 
+import libretto.lambda.util.{BiInjective, Functional2, Injective, Masked, TypeEq}
+import libretto.lambda.util.TypeEq.Refl
+
 /**
  * Type-aligned variant of [[Bin]] (a binary tree), where each node has an associated type
  * and parent node type relates to its chilrd nodes' types through `Rel`.
@@ -30,8 +33,9 @@ package libretto.lambda
  *   Example: `(T[V] <*> T[W]) <*> (T[X] <*> (T[Y] <*> T[Z]))`
  * @tparam R the type associated with the root of the tree.
  */
-trait ABin[<*>[_, _], T[_], Rel[_, _, _], F[_], A, R] {
-
+sealed trait ABin[<*>[_, _], T[_], Rel[_, _, _], F[_], A, R] {
+  def maskShape: Masked[ABin[<*>, T, Rel, F, _, R], A] =
+    Masked(this)
 }
 
 object ABin {
@@ -44,4 +48,50 @@ object ABin {
     r: ABin[<*>, T, Rel, F, B, Q],
     value: Rel[P, Q, R],
   ) extends ABin[<*>, T, Rel, F, A <*> B, R]
+
+  /** Given two trees of the same shape `A`, proves that their root types are equal. */
+  def uniq[<*>[_, _], T[_], Rel[_, _, _], F[_], A, R, S](
+    a: ABin[<*>, T, Rel, F, A, R],
+    b: ABin[<*>, T, Rel, F, A, S],
+  )(using
+    leafIsNotBranch: [x, y, z] => (T[x] =:= (y <*> z)) => Nothing,
+    P: BiInjective[<*>],
+    T: Injective[T],
+    rel: Functional2[Rel],
+  ): R =:= S =
+    a match
+      case la: Leaf[br, lf, rl, f, x] =>
+        val evA = summon[T[x] =:= A]
+        b.maskShape.visit[R =:= S](
+          [X] => (b0: ABin[<*>, T, Rel, F, X, S], evX: X =:= A) =>
+            b0 match
+              case lb: Leaf[br2, lf2, rl2, f2, x2] =>
+                val evB = summon[T[x2] =:= X]
+                (evA andThen evX.flip andThen evB.flip) match
+                  case Injective[T](TypeEq(Refl())) =>
+                    summon[R =:= S]
+              case bb: Branch[br2, lf2, rl2, f2, a2, b2, p2, q2, s2] =>
+                val evB = summon[(a2 <*> b2) =:= X]
+                leafIsNotBranch[x, a2, b2](evA andThen evX.flip andThen evB.flip)
+        )
+      case ba: Branch[br, lf, rl, f, a1, b1, p1, q1, r1] =>
+        val evA = summon[(a1 <*> b1) =:= A]
+        b.maskShape.visit[R =:= S](
+          [X] => (b0: ABin[<*>, T, Rel, F, X, S], evX: X =:= A) =>
+            b0 match
+              case lb: Leaf[br2, lf2, rl2, f2, x2] =>
+                val evB = summon[T[x2] =:= X]
+                leafIsNotBranch[x2, a1, b1]((evA andThen evX.flip andThen evB.flip).flip)
+              case bb: Branch[br2, lf2, rl2, f2, a2, b2, p2, q2, s2] =>
+                val evB = summon[(a2 <*> b2) =:= X]
+                (evA andThen evX.flip andThen evB.flip) match
+                  case BiInjective[<*>](TypeEq(Refl()), TypeEq(Refl())) =>
+                    val evP = uniq(ba.l, bb.l)
+                    val evQ = uniq(ba.r, bb.r)
+                    val rl1: Rel[p1, q1, r1] = ba.value
+                    val rl2: Rel[p2, q2, s2] = bb.value
+                    val rl2a = evP.flip.substituteCo[[C] =>> Rel[C, q2, s2]](rl2)
+                    val rl2b = evQ.flip.substituteCo[[C] =>> Rel[p1, C, s2]](rl2a)
+                    rl1 uniq rl2b
+        )
 }

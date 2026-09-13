@@ -292,11 +292,13 @@ object MultiTypeFun {
   ): cat.`-×>`[A ⊗ B, B ⊗ A] = {
     import cat.{-×>, PrdN}
 
-    (a × b) match
-      case Indeed(pqN, pq) =>
-        wswap_(pq)[TC] match
-          case Indeed((f, q1)) =>
-            `-×>`(pqN, PrdN(q1)(b, a))(f)
+    (PrdN.Intension.prdN(a), PrdN.Intension.prdN(b)) match
+      case (Indeed(pa), Indeed(pb)) =>
+        (pa × pb) match
+          case Indeed(pqN, pq) =>
+            wswap_(pq)[TC] match
+              case Indeed((f, q1)) =>
+                `-×>`(pqN, PrdN(q1)(pb, pa))(f)
   }
 
   private def wassocLR_[A, B, C, AB, AB_C](
@@ -352,13 +354,15 @@ object MultiTypeFun {
   ): cat.`-×>`[(A ⊗ B) ⊗ C, A ⊗ (B ⊗ C)] = {
     import cat.{-×>, PrdN}
 
-    (a × b) match
-      case Indeed((ab, pAB)) =>
-        (ab × c) match
-          case Indeed((src, pAB_C)) =>
-            wassocLR_(pAB, pAB_C)[TC] match
-              case Indeed(Indeed((f, qBC, qA_BC))) =>
-                `-×>`(src, PrdN(qA_BC)(a, PrdN(qBC)(b, c)))(f)
+    (PrdN.Intension.prdN(a), PrdN.Intension.prdN(b), PrdN.Intension.prdN(c)) match
+      case (Indeed(pa), Indeed(pb), Indeed(pc)) =>
+        (pa × pb) match
+          case Indeed((ab, pAB)) =>
+            (ab × pc) match
+              case Indeed((src, pAB_C)) =>
+                wassocLR_(pAB, pAB_C)[TC] match
+                  case Indeed(Indeed((f, qBC, qA_BC))) =>
+                    `-×>`(src, PrdN(qA_BC)(pa, PrdN(qBC)(pb, pc)))(f)
   }
 
   private def wassocRL_[A, B, C, BC, A_BC](
@@ -414,13 +418,15 @@ object MultiTypeFun {
   ): cat.`-×>`[A ⊗ (B ⊗ C), (A ⊗ B) ⊗ C] = {
     import cat.{-×>, PrdN}
 
-    (b × c) match
-      case Indeed((bc, pBC)) =>
-        (a × bc) match
-          case Indeed((src, pA_BC)) =>
-            wassocRL_(pBC, pA_BC)[TC] match
-              case Indeed(Indeed((f, qAB, qABC))) =>
-                `-×>`(src, PrdN(qABC)(PrdN(qAB)(a, b), c))(f)
+    (PrdN.Intension.prdN(a), PrdN.Intension.prdN(b), PrdN.Intension.prdN(c)) match
+      case (Indeed(pa), Indeed(pb), Indeed(pc)) =>
+        (pb × pc) match
+          case Indeed((bc, pBC)) =>
+            (pa × bc) match
+              case Indeed((src, pA_BC)) =>
+                wassocRL_(pBC, pA_BC)[TC] match
+                  case Indeed(Indeed((f, qAB, qABC))) =>
+                    `-×>`(src, PrdN(qABC)(PrdN(qAB)(pa, pb), pc))(f)
   }
 
   def extract[TC[_, _], K](f: MultiTypeFun[TC, ○, K])(using k: KindN[K]): PartialArgs[TypeExpr[TC, _, _], ○, K] =
