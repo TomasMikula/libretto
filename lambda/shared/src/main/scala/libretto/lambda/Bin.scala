@@ -10,7 +10,7 @@ import libretto.lambda.util.TypeEq.Refl
  *
  * @tparam <*> tag for branches, as it appears in `A`
  * @tparam T tag for leafs, as it appears in `A`
- * @tparam F value type of leafs. Each leaf holds a value of type `F[X]`, for some type `X`
+ * @tparam F value type of leaves. Each leaf holds a value of type `F[X]`, for some type `X`
  *   (but appears in `A` as `T[X]`).
  * @tparam A captures the complete structure of the tree
  */
