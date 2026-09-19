@@ -1,6 +1,6 @@
 package libretto.lambda
 
-import libretto.lambda.util.{BiInjective, Functional2, Injective, Masked, TypeEq}
+import libretto.lambda.util.{BiInjective, Functional2, Impossible3, Injective, Masked, TypeEq}
 import libretto.lambda.util.TypeEq.Refl
 
 /**
@@ -54,7 +54,7 @@ object ABin {
     a: ABin[<*>, T, Rel, F, A, R],
     b: ABin[<*>, T, Rel, F, A, S],
   )(using
-    leafIsNotBranch: [x, y, z] => (T[x] =:= (y <*> z)) => Nothing,
+    leafIsNotBranch: Impossible3[[x, y, z] =>> T[x] =:= (y <*> z)],
     P: BiInjective[<*>],
     T: Injective[T],
     rel: Functional2[Rel],
@@ -72,7 +72,7 @@ object ABin {
                     summon[R =:= S]
               case bb: Branch[br2, lf2, rl2, f2, a2, b2, p2, q2, s2] =>
                 val evB = summon[(a2 <*> b2) =:= X]
-                leafIsNotBranch[x, a2, b2](evA andThen evX.flip andThen evB.flip)
+                (evA andThen evX.flip andThen evB.flip).absurd
         )
       case ba: Branch[br, lf, rl, f, a1, b1, p1, q1, r1] =>
         val evA = summon[(a1 <*> b1) =:= A]
@@ -81,7 +81,7 @@ object ABin {
             b0 match
               case lb: Leaf[br2, lf2, rl2, f2, x2] =>
                 val evB = summon[T[x2] =:= X]
-                leafIsNotBranch[x2, a1, b1]((evA andThen evX.flip andThen evB.flip).flip)
+                (evB andThen evX andThen evA.flip).absurd
               case bb: Branch[br2, lf2, rl2, f2, a2, b2, p2, q2, s2] =>
                 val evB = summon[(a2 <*> b2) =:= X]
                 (evA andThen evX.flip andThen evB.flip) match

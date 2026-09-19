@@ -1,7 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.ABin
-import libretto.lambda.util.{BiInjective, Exists, Functional2, Injective, TypeEq}
+import libretto.lambda.util.{BiInjective, Exists, Functional2, Impossible3, Injective, TypeEq}
 import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 
@@ -221,9 +221,6 @@ object NarrowWSemigroupalCategory {
     override def unapply[A, B, X, Y](ev: (A × B) =:= (X × Y)): (A =:= X, B =:= Y) =
       ev match { case TypeEq(Refl()) => (summon, summon) }
 
-  /** `\[x]` (a leaf) can never equal `y × z` (a branch):
-    * the two sealed traits have no common subtypes, so no value of this type can ever be constructed.
-    */
-  given leafIsNotBranch: ([x, y, z] => (\[x] =:= (y × z)) => Nothing) =
-    [x, y, z] => (ev: \[x] =:= (y × z)) => throw AssertionError("Impossible")
+  given leafIsNotBranch: Impossible3[[x, y, z] =>> (\[x] =:= (y × z))] =
+    Impossible3([x, y, z] => (ev: \[x] =:= (y × z)) => throw AssertionError("Impossible"))
 }
