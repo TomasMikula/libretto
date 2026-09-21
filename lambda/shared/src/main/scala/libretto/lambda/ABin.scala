@@ -34,6 +34,8 @@ import libretto.lambda.util.TypeEq.Refl
  * @tparam R the type associated with the root of the tree.
  */
 sealed trait ABin[<*>[_, _], T[_], Rel[_, _, _], F[_], A, R] {
+  def rootValue(using Rel Preserves2 F): F[R]
+
   def maskShape: Masked[ABin[<*>, T, Rel, F, _, R], A] =
     Masked(this)
 }
@@ -41,23 +43,32 @@ sealed trait ABin[<*>[_, _], T[_], Rel[_, _, _], F[_], A, R] {
 object ABin {
   case class Leaf[<*>[_, _], T[_], Rel[_, _, _], F[_], A](
     value: F[A],
-  ) extends ABin[<*>, T, Rel, F, T[A], A]
+  ) extends ABin[<*>, T, Rel, F, T[A], A] {
+    override def rootValue(using Rel Preserves2 F): F[A] =
+      value
+  }
 
   case class Branch[<*>[_, _], T[_], Rel[_, _, _], F[_], A, B, P, Q, R](
     l: ABin[<*>, T, Rel, F, A, P],
     r: ABin[<*>, T, Rel, F, B, Q],
     value: Rel[P, Q, R],
-  ) extends ABin[<*>, T, Rel, F, A <*> B, R]
+  ) extends ABin[<*>, T, Rel, F, A <*> B, R] {
+    override def rootValue(using ev: Rel Preserves2 F): F[R] =
+      ev(value)(using l.rootValue, r.rootValue)
+  }
+
+  def leaf[F[_], A](using fa: F[A])[<*>[_, _], T[_], Rel[_, _, _]]: ABin[<*>, T, Rel, F, T[A], A] =
+    Leaf(fa)
 
   /** Given two trees of the same shape `A`, proves that their root types are equal. */
   def uniq[<*>[_, _], T[_], Rel[_, _, _], F[_], A, R, S](
     a: ABin[<*>, T, Rel, F, A, R],
     b: ABin[<*>, T, Rel, F, A, S],
   )(using
-    leafIsNotBranch: Impossible3[[x, y, z] =>> T[x] =:= (y <*> z)],
-    P: BiInjective[<*>],
-    T: Injective[T],
-    rel: Functional2[Rel],
+    Impossible3[[x, y, z] =>> T[x] =:= (y <*> z)],
+    BiInjective[<*>],
+    Injective[T],
+    Functional2[Rel],
   ): R =:= S =
     a match
       case la: Leaf[br, lf, rl, f, x] =>
