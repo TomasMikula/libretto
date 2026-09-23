@@ -21,7 +21,7 @@ trait NarrowSymmetricSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
       val qp: PrdN[B × A, Q |*| P] = PrdN[Q, P, Q |*| P](summon)(q, p)
       -×>(pq, qp)(swap[P, Q](using prdNObj(p), prdNObj(q)))
 
-    (PrdN.Intension.prdN(a), PrdN.Intension.prdN(b)) match
+    (a.reveal, b.reveal) match
       case (Indeed(p), Indeed(q)) =>
         go(p, q)
   }

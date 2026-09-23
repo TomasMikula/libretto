@@ -3,9 +3,9 @@ package libretto.typology.types
 import libretto.lambda.util.{Exists, TypeEq}
 import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
+import libretto.lambda.{ABinModule, NarrowSymmetricSemigroupalCategory, NarrowSymmetricWSemigroupalCategory, ProppedArrowModule}
+import libretto.lambda.NarrowWSemigroupalCategory.{\, × as ⊗}
 import libretto.typology.kinds.*
-import libretto.lambda.{NarrowSymmetricSemigroupalCategory, NarrowSymmetricWSemigroupalCategory}
-import libretto.lambda.NarrowWSemigroupalCategory.× as ⊗
 
 /** Type function with possibly multiple output types. */
 sealed trait MultiTypeFun[TC[_, _], K, L] {
@@ -237,7 +237,7 @@ object MultiTypeFun {
     f1: cat.`-×>`[A1, B1],
     f2: cat.`-×>`[A2, B2],
   ): cat.`-×>`[A1 ⊗ A2, B1 ⊗ B2] =
-    (f1.src × f2.src, f1.tgt × f2.tgt) match
+    (f1.src ^ f2.src, f1.tgt ^ f2.tgt) match
       case (Indeed((src, pSrc)), Indeed((tgt, pTgt))) =>
         cat.`-×>`(src, tgt)(wpar(f1.underlying, f2.underlying)(pSrc, pTgt))
 
@@ -292,9 +292,9 @@ object MultiTypeFun {
   ): cat.`-×>`[A ⊗ B, B ⊗ A] = {
     import cat.{-×>, PrdN}
 
-    (PrdN.Intension.prdN(a), PrdN.Intension.prdN(b)) match
+    (a.reveal, b.reveal) match
       case (Indeed(pa), Indeed(pb)) =>
-        (pa × pb) match
+        (pa ^ pb) match
           case Indeed(pqN, pq) =>
             wswap_(pq)[TC] match
               case Indeed((f, q1)) =>
@@ -354,11 +354,11 @@ object MultiTypeFun {
   ): cat.`-×>`[(A ⊗ B) ⊗ C, A ⊗ (B ⊗ C)] = {
     import cat.{-×>, PrdN}
 
-    (PrdN.Intension.prdN(a), PrdN.Intension.prdN(b), PrdN.Intension.prdN(c)) match
+    (a.reveal, b.reveal, c.reveal) match
       case (Indeed(pa), Indeed(pb), Indeed(pc)) =>
-        (pa × pb) match
+        (pa ^ pb) match
           case Indeed((ab, pAB)) =>
-            (ab × pc) match
+            (ab ^ pc) match
               case Indeed((src, pAB_C)) =>
                 wassocLR_(pAB, pAB_C)[TC] match
                   case Indeed(Indeed((f, qBC, qA_BC))) =>
@@ -418,11 +418,11 @@ object MultiTypeFun {
   ): cat.`-×>`[A ⊗ (B ⊗ C), (A ⊗ B) ⊗ C] = {
     import cat.{-×>, PrdN}
 
-    (PrdN.Intension.prdN(a), PrdN.Intension.prdN(b), PrdN.Intension.prdN(c)) match
+    (a.reveal, b.reveal, c.reveal) match
       case (Indeed(pa), Indeed(pb), Indeed(pc)) =>
-        (pb × pc) match
+        (pb ^ pc) match
           case Indeed((bc, pBC)) =>
-            (pa × bc) match
+            (pa ^ bc) match
               case Indeed((src, pA_BC)) =>
                 wassocRL_(pBC, pA_BC)[TC] match
                   case Indeed(Indeed((f, qAB, qABC))) =>

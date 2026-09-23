@@ -1,5 +1,6 @@
 package libretto.typology.kinds
 
+import libretto.lambda.{Preserves2, Supports2}
 import libretto.lambda.util.Exists
 
 /** Evidence that `K` represents zero or more kinds. */
@@ -143,5 +144,18 @@ object Kinds {
         k match
           case UnitUnit => (summon, summon)
     }
+  }
+
+  given (Kinds Supports2 Prod) with {
+    override def apply[A, B](
+      a: Kinds[A],
+      b: Kinds[B],
+    ): Exists[[P] =>> Prod[A, B, P]] =
+      Prod(a, b)
+  }
+
+  given (Prod Preserves2 Kinds) with {
+    override def apply[A: Kinds, B: Kinds, C](rel: Prod[A, B, C]): Kinds[C] =
+      rel.outKinds
   }
 }

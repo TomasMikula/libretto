@@ -18,48 +18,11 @@ trait NarrowWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
 {
   import NarrowWSemigroupalCategory.*
 
+  val PrdN: ABinModule[×, \, Prd, Obj] =
+    new ABinModule[×, \, Prd, Obj]
+
   /** Witnesses that `As` is an intensional description of an n-ary product with denotation `P`. */
-  opaque type PrdN[As, P] = ABin[×, \, Prd, Obj, As, P]
-
-  object PrdN {
-
-    /** Witnesses that type `A` formally describes the intent of forming an n-ary product. */
-    opaque type Intension[A] = Exists[[P] =>> PrdN[A, P]]
-
-    object Intension {
-      def prdN[A](a: Intension[A]): Exists[[P] =>> PrdN[A, P]] =
-        a
-
-      /** Witnesses that any object `A` can be treated as a unary product. */
-      given atom: [A] => (a: Obj[A]) => Intension[\[A]] =
-        Exists(PrdN.atom[A])
-
-      given [A, B] => (a: Intension[A], b: Intension[B]) => Intension[A × B] =
-        (a, b) match
-          case (Indeed(pa), Indeed(pb)) =>
-            wtensor(prdNObj(pa), prdNObj(pb)) match
-              case Indeed(p) => Exists(PrdN(p)(pa, pb))
-    }
-
-    def atom[A](using a: Obj[A]): PrdN[\[A], A] =
-      ABin.Leaf(a)
-
-    def lift[A, B, P](p: Prd[A, B, P])(using a: Obj[A], b: Obj[B]): PrdN[\[A] × \[B], P] =
-      ABin.Branch(ABin.Leaf(a), ABin.Leaf(b), p)
-
-    def apply[A, B, P](p: Prd[A, B, P])[As, Bs](as: PrdN[As, A], bs: PrdN[Bs, B]): PrdN[As × Bs, P] =
-      ABin.Branch(as, bs, p)
-
-    extension [As, P](p: PrdN[As, P])
-      infix def uniq[Q](that: PrdN[As, Q]): P =:= Q =
-        ABin.uniq(p, that)
-
-      def ×[Bs, Q](that: PrdN[Bs, Q]): Exists[[R] =>> (PrdN[As × Bs, R], Prd[P, Q, R])] =
-        wtensor(prdNObj(p), prdNObj(that)) match
-          case Indeed(r) => Indeed((PrdN(r)(p, that), r))
-  }
-
-  import PrdN.{uniq, ×}
+  type PrdN[As, P] = PrdN.Construct[As, P]
 
   /** Auxiliary arrow to operate on intensional descriptions of products. */
   sealed trait -×>[As, Bs] {
@@ -115,7 +78,16 @@ trait NarrowWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
     wb: Obj[B],
   ): Exists[[P] =>> Prd[A, B, P]]
 
+  given (Obj Supports2 Prd) with {
+    override def apply[A, B](a: Obj[A], b: Obj[B]): Exists[[R] =>> Prd[A, B, R]] =
+      wtensor(a, b)
+  }
+
   def tensorObj[A: Obj, B: Obj, P](p: Prd[A, B, P]): Obj[P]
+
+  given (Prd Preserves2 Obj) with {
+    override def apply[A: Obj, B: Obj, P](p: Prd[A, B, P]): Obj[P] = tensorObj(p)
+  }
 
   /** Given two witnesses that `P` and `Q` are each the tensor of `A` and `B`,
     * prove that `P` and `Q` are equal.
@@ -127,9 +99,7 @@ trait NarrowWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
       tensorUniq(r, s)
 
   def prdNObj[As, P](p: PrdN[As, P]): Obj[P] =
-    p match
-      case ABin.Leaf(a) => a
-      case ABin.Branch(l, r, pr) => tensorObj(pr)(using prdNObj(l), prdNObj(r))
+    p.rootValue
 
   given [As, P] => (p: PrdN[As, P]) => Obj[P] =
     prdNObj(p)
@@ -141,7 +111,7 @@ trait NarrowWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
     -×>(w, w)(id[P](using prdNObj(w)))
 
   def iid[As](using as: PrdN.Intension[As]): As -×> As =
-    PrdN.Intension.prdN(as) match
+    as.reveal match
       case Indeed(w) => iid_(w)
 
   def ipar[A1, A2, B1, B2](
