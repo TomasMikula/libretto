@@ -15,6 +15,8 @@ import libretto.lambda.util.TypeEq.Refl
 trait NarrowSymmetricWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
   extends NarrowWSemigroupalCategory[Obj, ->, Prd]
 {
+  private given Semigroupoid[->] = this
+
   def iswap[A, B](using PrdN.Intension[A], PrdN.Intension[B]): (A × B) -×> (B × A)
 
   def wswap[A, B](using

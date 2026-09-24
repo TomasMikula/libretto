@@ -1,6 +1,5 @@
 package libretto.lambda
 
-import libretto.lambda.ABin
 import libretto.lambda.util.{BiInjective, Exists, Functional2, Impossible3, Injective, TypeEq}
 import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
@@ -18,60 +17,17 @@ trait NarrowWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
 {
   import NarrowWSemigroupalCategory.*
 
-  val PrdN: ABinModule[×, \, Prd, Obj] =
+  given PrdN: ABinModule[×, \, Prd, Obj] =
     new ABinModule[×, \, Prd, Obj]
 
   /** Witnesses that `As` is an intensional description of an n-ary product with denotation `P`. */
   type PrdN[As, P] = PrdN.Construct[As, P]
 
+  val `-×>`: ProppedArrowModule[->, ×, \, Prd, Obj] =
+    new ProppedArrowModule[->, ×, \, Prd, Obj]
+
   /** Auxiliary arrow to operate on intensional descriptions of products. */
-  sealed trait -×>[As, Bs] {
-    type Src
-    type Tgt
-
-    def underlying: Src -> Tgt
-    def src: PrdN[As, Src]
-    def tgt: PrdN[Bs, Tgt]
-
-    def extract[A, B](a: PrdN[As, A], b: PrdN[Bs, B]): A -> B
-    def >[Cs](that: Bs -×> Cs): As -×> Cs
-  }
-
-  object -×> {
-    case class Impl[As, Bs, P, Q](
-      p: PrdN[As, P],
-      q: PrdN[Bs, Q],
-      f: P -> Q,
-    ) extends (As -×> Bs) {
-      override type Src = P
-      override type Tgt = Q
-
-      override def underlying: Src -> Tgt = f
-      override def src: PrdN[As, P] = p
-      override def tgt: PrdN[Bs, Q] = q
-
-      override def extract[A, B](a: PrdN[As, A], b: PrdN[Bs, B]): A -> B =
-        (p uniq a, q uniq b) match
-          case (TypeEq(Refl()), TypeEq(Refl())) => f
-
-      override def >[Cs](that: Bs -×> Cs): As -×> Cs =
-        that match
-          case Impl(q1, r, g) =>
-            (q uniq q1) match
-              case TypeEq(Refl()) => Impl(p, r, f > g)
-    }
-
-    def apply[As, Bs, P, Q](
-      p: PrdN[As, P],
-      q: PrdN[Bs, Q],
-    )(
-      f: P -> Q,
-    ): (As -×> Bs) =
-      Impl(p, q, f)
-
-    def lift[A: Obj, B: Obj](f: A -> B): \[A] -×> \[B] =
-      Impl(PrdN.atom[A], PrdN.atom[B], f)
-  }
+  type -×>[As, Bs] = `-×>`.`-×>`[As, Bs]
 
   def wtensor[A, B](
     wa: Obj[A],

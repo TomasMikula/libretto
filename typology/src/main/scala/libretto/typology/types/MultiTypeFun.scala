@@ -237,6 +237,8 @@ object MultiTypeFun {
     f1: cat.`-×>`[A1, B1],
     f2: cat.`-×>`[A2, B2],
   ): cat.`-×>`[A1 ⊗ A2, B1 ⊗ B2] =
+    import cat.PrdN
+
     (f1.src ^ f2.src, f1.tgt ^ f2.tgt) match
       case (Indeed((src, pSrc)), Indeed((tgt, pTgt))) =>
         cat.`-×>`(src, tgt)(wpar(f1.underlying, f2.underlying)(pSrc, pTgt))
