@@ -59,6 +59,9 @@ object MultiTypeFun {
           MultiTypeFun(routing.inSnd[J], args.inSnd[J])
   }
 
+  private given kindProducts: ABinModule[⊗, \, Kinds.Prod, Kinds] =
+    new ABinModule[⊗, \, Kinds.Prod, Kinds]
+
   def apply[TC[_, _], J, K, L](
     r: Routing[J, K],
     args: PartialArgs[TypeExpr[TC, _, _], K, L],
@@ -231,17 +234,15 @@ object MultiTypeFun {
           case Both(a1, a2)  => par(f1, f2)(using a1, a2, b1, b2)
   }
 
-  def ipar[TC[_, _], A1, A2, B1, B2](
-    cat: NarrowSymmetricWSemigroupalCategory[Kinds, MultiTypeFun[TC, _, _], Kinds.Prod],
+  def ipar[TC[_, _], A1, A2, B1, B2](using
+    arr: ProppedArrowModule[MultiTypeFun[TC, _, _], ⊗, \, Kinds.Prod, Kinds],
   )(
-    f1: cat.`-×>`[A1, B1],
-    f2: cat.`-×>`[A2, B2],
-  ): cat.`-×>`[A1 ⊗ A2, B1 ⊗ B2] =
-    import cat.PrdN
-
+    f1: arr.`-×>`[A1, B1],
+    f2: arr.`-×>`[A2, B2],
+  ): arr.`-×>`[A1 ⊗ A2, B1 ⊗ B2] =
     (f1.src ^ f2.src, f1.tgt ^ f2.tgt) match
       case (Indeed((src, pSrc)), Indeed((tgt, pTgt))) =>
-        cat.`-×>`(src, tgt)(wpar(f1.underlying, f2.underlying)(pSrc, pTgt))
+        arr(src, tgt)(wpar(f1.underlying, f2.underlying)(pSrc, pTgt))
 
   def andThen[TC[_, _], A, B, C](
     f: MultiTypeFun[TC, A, B],
@@ -287,21 +288,19 @@ object MultiTypeFun {
         (q1 deriveEq q).substituteCo(f)
 
   def iswap[TC[_, _], A, B](using
-    cat: NarrowSymmetricWSemigroupalCategory[Kinds, MultiTypeFun[TC, _, _], Kinds.Prod],
+    prd: ABinModule[⊗, \, Kinds.Prod, Kinds],
+    arr: ProppedArrowModule[MultiTypeFun[TC, _, _], ⊗, \, Kinds.Prod, Kinds],
   )(using
-    a: cat.PrdN.Intension[A],
-    b: cat.PrdN.Intension[B],
-  ): cat.`-×>`[A ⊗ B, B ⊗ A] = {
-    import cat.{-×>, PrdN}
-
+    a: prd.Intension[A],
+    b: prd.Intension[B],
+  ): arr.`-×>`[A ⊗ B, B ⊗ A] =
     (a.reveal, b.reveal) match
       case (Indeed(pa), Indeed(pb)) =>
         (pa ^ pb) match
           case Indeed(pqN, pq) =>
             wswap_(pq)[TC] match
               case Indeed((f, q1)) =>
-                `-×>`(pqN, PrdN(q1)(pb, pa))(f)
-  }
+                arr(pqN, prd(q1)(pb, pa))(f)
 
   private def wassocLR_[A, B, C, AB, AB_C](
     pAB: Kinds.Prod[A, B, AB],
@@ -347,15 +346,14 @@ object MultiTypeFun {
           case TypeEq(Refl()) =>
             f.to[A_BC](using qA_BC.deriveEq(pA_BC))
 
-  def iassocLR[TC[_, _], A, B, C](
-    cat: NarrowSymmetricWSemigroupalCategory[Kinds, MultiTypeFun[TC, _, _], Kinds.Prod],
+  def iassocLR[TC[_, _], A, B, C](using
+    prd: ABinModule[⊗, \, Kinds.Prod, Kinds],
+    arr: ProppedArrowModule[MultiTypeFun[TC, _, _], ⊗, \, Kinds.Prod, Kinds],
   )(using
-    a: cat.PrdN.Intension[A],
-    b: cat.PrdN.Intension[B],
-    c: cat.PrdN.Intension[C],
-  ): cat.`-×>`[(A ⊗ B) ⊗ C, A ⊗ (B ⊗ C)] = {
-    import cat.{-×>, PrdN}
-
+    a: prd.Intension[A],
+    b: prd.Intension[B],
+    c: prd.Intension[C],
+  ): arr.`-×>`[(A ⊗ B) ⊗ C, A ⊗ (B ⊗ C)] =
     (a.reveal, b.reveal, c.reveal) match
       case (Indeed(pa), Indeed(pb), Indeed(pc)) =>
         (pa ^ pb) match
@@ -364,8 +362,7 @@ object MultiTypeFun {
               case Indeed((src, pAB_C)) =>
                 wassocLR_(pAB, pAB_C)[TC] match
                   case Indeed(Indeed((f, qBC, qA_BC))) =>
-                    `-×>`(src, PrdN(qA_BC)(pa, PrdN(qBC)(pb, pc)))(f)
-  }
+                    arr(src, prd(qA_BC)(pa, prd(qBC)(pb, pc)))(f)
 
   private def wassocRL_[A, B, C, BC, A_BC](
     pBC: Kinds.Prod[B, C, BC],
@@ -411,15 +408,14 @@ object MultiTypeFun {
           case TypeEq(Refl()) =>
             f.to[AB_C](using qABC.deriveEq(pAB_C))
 
-  def iassocRL[TC[_, _], A, B, C](
-    cat: NarrowSymmetricWSemigroupalCategory[Kinds, MultiTypeFun[TC, _, _], Kinds.Prod],
+  def iassocRL[TC[_, _], A, B, C](using
+    prd: ABinModule[⊗, \, Kinds.Prod, Kinds],
+    arr: ProppedArrowModule[MultiTypeFun[TC, _, _], ⊗, \, Kinds.Prod, Kinds],
   )(using
-    a: cat.PrdN.Intension[A],
-    b: cat.PrdN.Intension[B],
-    c: cat.PrdN.Intension[C],
-  ): cat.`-×>`[A ⊗ (B ⊗ C), (A ⊗ B) ⊗ C] = {
-    import cat.{-×>, PrdN}
-
+    a: prd.Intension[A],
+    b: prd.Intension[B],
+    c: prd.Intension[C],
+  ): arr.`-×>`[A ⊗ (B ⊗ C), (A ⊗ B) ⊗ C] =
     (a.reveal, b.reveal, c.reveal) match
       case (Indeed(pa), Indeed(pb), Indeed(pc)) =>
         (pb ^ pc) match
@@ -428,8 +424,7 @@ object MultiTypeFun {
               case Indeed((src, pA_BC)) =>
                 wassocRL_(pBC, pA_BC)[TC] match
                   case Indeed(Indeed((f, qAB, qABC))) =>
-                    `-×>`(src, PrdN(qABC)(PrdN(qAB)(pa, pb), pc))(f)
-  }
+                    arr(src, prd(qABC)(prd(qAB)(pa, pb), pc))(f)
 
   def extract[TC[_, _], K](f: MultiTypeFun[TC, ○, K])(using k: KindN[K]): PartialArgs[TypeExpr[TC, _, _], ○, K] =
     f match
@@ -486,23 +481,23 @@ object MultiTypeFun {
         a: PrdN.Intension[A],
         b: PrdN.Intension[B],
       ): (A ⊗ B) -×> (B ⊗ A) =
-        MultiTypeFun.iswap(using this)(using a, b)
+        MultiTypeFun.iswap
 
       override def ipar[A1, A2, B1, B2](
         f1: A1 -×> B1,
         f2: A2 -×> B2,
       ): (A1 ⊗ A2) -×> (B1 ⊗ B2) =
-        MultiTypeFun.ipar(this)(f1, f2)
+        MultiTypeFun.ipar(f1, f2)
 
       override def iassocLR[A, B, C](using
         a: PrdN.Intension[A], b: PrdN.Intension[B], c: PrdN.Intension[C],
       ): ((A ⊗ B) ⊗ C) -×> (A ⊗ (B ⊗ C)) =
-        MultiTypeFun.iassocLR(this)(using a, b, c)
+        MultiTypeFun.iassocLR
 
       override def iassocRL[A, B, C](using
         a: PrdN.Intension[A], b: PrdN.Intension[B], c: PrdN.Intension[C],
       ): (A ⊗ (B ⊗ C)) -×> ((A ⊗ B) ⊗ C) =
-        MultiTypeFun.iassocRL(this)(using a, b, c)
+        MultiTypeFun.iassocRL
 
       override def tensorUniq[A, B, P, Q](p: Kinds.Prod[A, B, P], q: Kinds.Prod[A, B, Q]): P =:= Q =
         p deriveEq q

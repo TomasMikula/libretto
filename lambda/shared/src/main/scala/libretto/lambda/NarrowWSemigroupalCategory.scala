@@ -23,7 +23,7 @@ trait NarrowWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
   /** Witnesses that `As` is an intensional description of an n-ary product with denotation `P`. */
   type PrdN[As, P] = PrdN.Construct[As, P]
 
-  val `-×>`: ProppedArrowModule[->, ×, \, Prd, Obj] =
+  given `-×>`: ProppedArrowModule[->, ×, \, Prd, Obj] =
     new ProppedArrowModule[->, ×, \, Prd, Obj]
 
   /** Auxiliary arrow to operate on intensional descriptions of products. */
