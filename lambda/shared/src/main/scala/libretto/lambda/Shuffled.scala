@@ -38,6 +38,13 @@ extends ShuffledModule[->, |*|] {
     infix def thenShuffle[C](that: B ~⚬ C): Shuffled[A, C]
     infix def afterShuffle[Z](that: Z ~⚬ A): Shuffled[Z, B]
     def foldMap[->>[_, _]](f: [x, y] => (x -> y) => (x ->> y))(using SymmetricSemigroupalCategory[->>, |*|]): A ->> B
+    def foldMapNarrowL[->>[_, _], Obj[_]](
+      wa: Obj[A],
+      f: [x, y] => (Obj[x], x -> y) => ((x ->> y), Obj[y]),
+    )(using
+      ev: NarrowSymmetricSemigroupalCategory[Obj, ->>, |*|],
+      unzip: Unzippable[|*|, Obj],
+    ): (A ->> B, Obj[B])
     def inFst[Y]: Shuffled[A |*| Y, B |*| Y]
     def inSnd[X]: Shuffled[X |*| A, X |*| B]
     def unconsSome: UnconsSomeRes[A, B]
@@ -162,6 +169,19 @@ extends ShuffledModule[->, |*|] {
       ev.andThen(f, ev.andThen(g, h))
     }
 
+    override def foldMapNarrowL[->>[_, _], Obj[_]](
+      wa: Obj[A],
+      f: [x, y] => (Obj[x], x -> y) => ((x ->> y), Obj[y]),
+    )(using
+      ev: NarrowSymmetricSemigroupalCategory[Obj, ->>, |*|],
+      unzip: Unzippable[|*|, Obj],
+    ): (A ->> B, Obj[B]) = {
+      val (l1, wx) = l.foldNarrowL[->>, Obj](wa)
+      val (m1, wy) = m.foldMapNarrowL[->>, Obj](wx, f)
+      val (r1, wb) = r.foldNarrowL[->>, Obj](wy)
+      (ev.andThen(ev.andThen(l1, m1), r1), wb)
+    }
+
     override def inFst[Q]: Shuffled[A |*| Q, B |*| Q] =
       swap > inSnd[Q] > swap
 
@@ -253,6 +273,15 @@ extends ShuffledModule[->, |*|] {
 
     override def foldMap[->>[_,_]](f: [x, y] => (x -> y) => (x ->> y))(using SymmetricSemigroupalCategory[->>, |*|]): A ->> B =
       s.fold
+
+    override def foldMapNarrowL[->>[_, _], Obj[_]](
+      wa: Obj[A],
+      f: [x, y] => (Obj[x], x -> y) => ((x ->> y), Obj[y]),
+    )(using
+      ev: NarrowSymmetricSemigroupalCategory[Obj, ->>, |*|],
+      unzip: Unzippable[|*|, Obj],
+    ): (A ->> B, Obj[B]) =
+      s.foldNarrowL[->>, Obj](wa)
 
     override def inFst[Y]: Shuffled[A |*| Y, B |*| Y] =
       Pure(~⚬.fst(s))
@@ -348,6 +377,22 @@ extends ShuffledModule[->, |*|] {
     ): A ->> (B1 |*| B2) = {
       val (f, g, h, i) = (left.fold, bottom1.foldMap(tr), bottom2.fold, right.fold)
       ev.andThen(f, ev.andThen(ev.snd(ev.andThen(g, h)), i))
+    }
+
+    override def foldMapNarrowL[->>[_, _], Obj[_]](
+      wa: Obj[A],
+      f: [x, y] => (Obj[x], x -> y) => ((x ->> y), Obj[y]),
+    )(using
+      ev: NarrowSymmetricSemigroupalCategory[Obj, ->>, |*|],
+      unzip: Unzippable[|*|, Obj],
+    ): (A ->> (B1 |*| B2), Obj[B1 |*| B2]) = {
+      val (l1, wx12) = left.foldNarrowL[->>, Obj](wa)
+      val (wx1, wx2) = unzip.unzip[X1, X2](wx12)
+      val (b1, wy2) = bottom1.foldMapNarrowL[->>, Obj](wx2, f)
+      val (b2, wz2) = bottom2.foldNarrowL[->>, Obj](wy2)
+      val h = ev.narrowPar(ev.id[X1](using wx1), ev.andThen(b1, b2))(using wx1, wx2, wx1, wz2)
+      val (r1, wb12) = right.foldNarrowL[->>, Obj](wx1, wz2)
+      (ev.andThen(ev.andThen(l1, h), r1), wb12)
     }
 
     override def inFst[Q]: Shuffled[A |*| Q, (B1 |*| B2) |*| Q] =
@@ -486,6 +531,14 @@ extends ShuffledModule[->, |*|] {
       ev: SymmetricSemigroupalCategory[->>, |*|],
     ): A ->> B
 
+    def foldMapNarrowL[->>[_, _], Obj[_]](
+      wa: Obj[A],
+      tr: [x, y] => (Obj[x], x -> y) => ((x ->> y), Obj[y]),
+    )(using
+      ev: NarrowSymmetricSemigroupalCategory[Obj, ->>, |*|],
+      unzip: Unzippable[|*|, Obj],
+    ): (A ->> B, Obj[B])
+
     def fold(using ev: SymmetricSemigroupalCategory[->, |*|]): A -> B =
       foldMap([x, y] => (f: x -> y) => f)
 
@@ -619,6 +672,15 @@ extends ShuffledModule[->, |*|] {
       ): A ->> B =
         tr(f)
 
+      override def foldMapNarrowL[->>[_, _], Obj[_]](
+        wa: Obj[A],
+        tr: [x, y] => (Obj[x], x -> y) => ((x ->> y), Obj[y]),
+      )(using
+        ev: NarrowSymmetricSemigroupalCategory[Obj, ->>, |*|],
+        unzip: Unzippable[|*|, Obj],
+      ): (A ->> B, Obj[B]) =
+        tr(wa, f)
+
       override def unconsSome: UnconsSomeRes[A, B] =
         UnconsSomeRes.Cons(Focus.id, f, id)
 
@@ -674,6 +736,19 @@ extends ShuffledModule[->, |*|] {
         ev: SymmetricSemigroupalCategory[->>, |*|],
       ): (A1 |*| A2) ->> (B1 |*| B2) =
         ev.par(f1.foldMap(tr), f2.foldMap(tr))
+
+      override def foldMapNarrowL[->>[_, _], Obj[_]](
+        wa: Obj[A1 |*| A2],
+        tr: [x, y] => (Obj[x], x -> y) => ((x ->> y), Obj[y]),
+      )(using
+        ev: NarrowSymmetricSemigroupalCategory[Obj, ->>, |*|],
+        unzip: Unzippable[|*|, Obj],
+      ): ((A1 |*| A2) ->> (B1 |*| B2), Obj[B1 |*| B2]) = {
+        val (wa1, wa2) = unzip.unzip[A1, A2](wa)
+        val (g1, wb1) = f1.foldMapNarrowL[->>, Obj](wa1, tr)
+        val (g2, wb2) = f2.foldMapNarrowL[->>, Obj](wa2, tr)
+        (ev.narrowPar(g1, g2)(using wa1, wa2, wb1, wb2), ev.tensor(wb1, wb2))
+      }
 
       override def unconsSome: UnconsSomeRes[A1 |*| A2, B1 |*| B2] =
         f1.unconsSome match
@@ -753,6 +828,19 @@ extends ShuffledModule[->, |*|] {
       ): A ->> B =
         ev.andThen(l.foldMap(tr), ev.andThen(m.fold, r.foldMap(tr)))
 
+      override def foldMapNarrowL[->>[_, _], Obj[_]](
+        wa: Obj[A],
+        tr: [x, y] => (Obj[x], x -> y) => ((x ->> y), Obj[y]),
+      )(using
+        ev: NarrowSymmetricSemigroupalCategory[Obj, ->>, |*|],
+        unzip: Unzippable[|*|, Obj],
+      ): (A ->> B, Obj[B]) = {
+        val (l1, wx) = l.foldMapNarrowL[->>, Obj](wa, tr)
+        val (m1, wy) = m.foldNarrowL[->>, Obj](wx)
+        val (r1, wb) = r.foldMapNarrowL[->>, Obj](wy, tr)
+        (ev.andThen(ev.andThen(l1, m1), r1), wb)
+      }
+
       override def unconsSome: UnconsSomeRes[A, B] =
         l.unconsSome match
           case c: UnconsSomeRes.Cons[f, v, w, x] =>
@@ -824,6 +912,22 @@ extends ShuffledModule[->, |*|] {
         ev: SymmetricSemigroupalCategory[->>, |*|],
       ): (A1 |*| A2) ->> B =
         ev.andThen(ev.andThen(ev.snd(ev.andThen(semiHead.foldMap(tr), s.fold)), t.fold), tail.foldMap(tr))
+
+      override def foldMapNarrowL[->>[_, _], Obj[_]](
+        wa: Obj[A1 |*| A2],
+        tr: [x, y] => (Obj[x], x -> y) => ((x ->> y), Obj[y]),
+      )(using
+        ev: NarrowSymmetricSemigroupalCategory[Obj, ->>, |*|],
+        unzip: Unzippable[|*|, Obj],
+      ): ((A1 |*| A2) ->> B, Obj[B]) = {
+        val (wa1, wa2) = unzip.unzip[A1, A2](wa)
+        val (h1, wx2) = semiHead.foldMapNarrowL[->>, Obj](wa2, tr)
+        val (s1, wy2) = s.foldNarrowL[->>, Obj](wx2)
+        val hs = ev.narrowPar(ev.id[A1](using wa1), ev.andThen(h1, s1))(using wa1, wa2, wa1, wy2)
+        val (t1, wz12) = t.foldNarrowL[->>, Obj](wa1, wy2)
+        val (tail1, wb) = tail.foldMapNarrowL[->>, Obj](wz12, tr)
+        (ev.andThen(ev.andThen(hs, t1), tail1), wb)
+      }
 
       override def unconsSome: UnconsSomeRes[A1 |*| A2, B] =
         semiHead.unconsSome match
@@ -918,6 +1022,22 @@ extends ShuffledModule[->, |*|] {
         ev: SymmetricSemigroupalCategory[->>, |*|],
       ): A ->> (B1 |*| B2) =
         ev.andThen(init.foldMap(tr), ev.andThen(t.fold, ev.snd(ev.andThen(s.fold, semiLast.foldMap(tr)))))
+
+      override def foldMapNarrowL[->>[_, _], Obj[_]](
+        wa: Obj[A],
+        tr: [x, y] => (Obj[x], x -> y) => ((x ->> y), Obj[y]),
+      )(using
+        ev: NarrowSymmetricSemigroupalCategory[Obj, ->>, |*|],
+        unzip: Unzippable[|*|, Obj],
+      ): (A ->> (B1 |*| B2), Obj[B1 |*| B2]) = {
+        val (init1, wx12) = init.foldMapNarrowL[->>, Obj](wa, tr)
+        val (t1, wb1y2) = t.foldMapNarrowL[->>, Obj](wx12)
+        val (wb1, wy2) = unzip.unzip[B1, Y2](wb1y2)
+        val (s1, wz2) = s.foldNarrowL[->>, Obj](wy2)
+        val (sl1, wb2) = semiLast.foldMapNarrowL[->>, Obj](wz2, tr)
+        val h = ev.narrowPar(ev.id[B1](using wb1), ev.andThen(s1, sl1))(using wb1, wy2, wb1, wb2)
+        (ev.andThen(ev.andThen(init1, t1), h), ev.tensor(wb1, wb2))
+      }
 
       override def unconsSome: UnconsSomeRes[A, B1 |*| B2] =
         init.unconsSome match
@@ -1028,6 +1148,28 @@ extends ShuffledModule[->, |*|] {
           ev.snd(l.foldMap(tr) > lt.fold > ev.snd(b.fold)) >
           ev.xi >
           ev.snd(rt.fold > r.foldMap(tr))
+      }
+
+      override def foldMapNarrowL[->>[_, _], Obj[_]](
+        wa: Obj[A1 |*| A2],
+        tr: [x, y] => (Obj[x], x -> y) => ((x ->> y), Obj[y]),
+      )(using
+        ev: NarrowSymmetricSemigroupalCategory[Obj, ->>, |*|],
+        unzip: Unzippable[|*|, Obj],
+      ): ((A1 |*| A2) ->> (B1 |*| B2), Obj[B1 |*| B2]) = {
+        val (wa1, wa2) = unzip.unzip[A1, A2](wa)
+        val (l1, wp12) = l.foldMapNarrowL[->>, Obj](wa2, tr)
+        val (lt1, wb1q) = lt.foldMapNarrowL[->>, Obj](wp12)
+        val (wb1, wq) = unzip.unzip[B1, Q](wb1q)
+        val (b1, wr) = b.foldNarrowL[->>, Obj](wq)
+        val (rt1, ws12) = rt.foldNarrowL[->>, Obj](wa1, wr)
+        val (r1, wb2) = r.foldMapNarrowL[->>, Obj](ws12, tr)
+        val lh = ev.narrowPar(ev.id[B1](using wb1), b1)(using wb1, wq, wb1, wr)
+        val a2b1r = ev.andThen(ev.andThen(l1, lt1), lh)
+        val a1a2b1r = ev.narrowPar(ev.id[A1](using wa1), a2b1r)(using wa1, wa2, wa1, ev.tensor(wb1, wr))
+        val b1a1r = ev.xi[A1, B1, R](using wa1, wb1, wr)
+        val rh = ev.narrowPar(ev.id[B1](using wb1), ev.andThen(rt1, r1))(using wb1, ev.tensor(wa1, wr), wb1, wb2)
+        (ev.andThen(ev.andThen(a1a2b1r, b1a1r), rh), ev.tensor(wb1, wb2))
       }
 
       override def unconsSome: UnconsSomeRes[A1 |*| A2, B1 |*| B2] =
@@ -1167,6 +1309,14 @@ extends ShuffledModule[->, |*|] {
   case class RevTransferOpt[A1, A2, B1, B2](t: TransferOpt[B1, B2, A1, A2]) {
     def fold[->>[_, _]](using ev: SymmetricSemigroupalCategory[->>, |*|]): (A1 |*| A2) ->> (B1 |*| B2) =
       this.asShuffle.fold
+
+    def foldMapNarrowL[->>[_, _], Obj[_]](
+      wa: Obj[A1 |*| A2],
+    )(using
+      ev: NarrowSymmetricSemigroupalCategory[Obj, ->>, |*|],
+      unzip: Unzippable[|*|, Obj],
+    ): ((A1 |*| A2) ->> (B1 |*| B2), Obj[B1 |*| B2]) =
+      asShuffle.foldNarrowL[->>, Obj](wa)
 
     def asShuffle: (A1 |*| A2) ~⚬ (B1 |*| B2) =
       t.asShuffle.invert

@@ -52,6 +52,32 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       }
     }
 
+    def foldNarrowL[->[_, _], Obj[_]](
+      wa: Obj[A],
+    )(using
+      ev: NarrowSymmetricSemigroupalCategory[Obj, ->, |*|],
+      unzip: Unzippable[|*|, Obj],
+    ): (A -> B, Obj[B]) = {
+      import ev.{andThen, id, narrowPar, tensor}
+
+      this match {
+        case f: Id[x] =>
+          (id[x](using wa), wa)
+        case f: Bimap[x1, x2, y1, y2] =>
+          val (wx1, wx2) = unzip.unzip[x1, x2](wa)
+          val (g1, g2) = f.par.components
+          val (g1f, wy1) = g1.foldNarrowL[->, Obj](wx1)
+          val (g2f, wy2) = g2.foldNarrowL[->, Obj](wx2)
+          (narrowPar(g1f, g2f)(using wx1, wx2, wy1, wy2), tensor(wy1, wy2))
+        case f: Xfer[a1, a2, x1, x2, b1, b2] =>
+          val (wa1, wa2) = unzip.unzip[a1, a2](wa)
+          val (f1f, wx1) = f.f1.foldNarrowL[->, Obj](wa1)
+          val (f2f, wx2) = f.f2.foldNarrowL[->, Obj](wa2)
+          val (xferf, wb) = f.transfer.foldNarrowL[->, Obj](wx1, wx2)
+          (andThen(narrowPar(f1f, f2f)(using wa1, wa2, wx1, wx2), xferf), wb)
+      }
+    }
+
     def projectProper[C](p: Projection.Proper[|*|, B, C]): ProjectProperRes[A, C]
     def chaseFw[F[_], X](i: Focus[|*|, F])(using ev: A =:= F[X]): ChaseFwRes[F, X, B]
     def chaseBw[G[_], X](i: Focus[|*|, G])(using ev: B =:= G[X]): ChaseBwRes[A, G, X]
@@ -915,6 +941,14 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
   sealed trait TransferOpt[A1, A2, B1, B2] {
     def fold[->[_, _]](using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (B1 |*| B2)
 
+    def foldNarrowL[->[_, _], Obj[_]](
+      wa1: Obj[A1],
+      wa2: Obj[A2],
+    )(using
+      ev: NarrowSymmetricSemigroupalCategory[Obj, ->, |*|],
+      unzip: Unzippable[|*|, Obj],
+    ): ((A1 |*| A2) -> (B1 |*| B2), Obj[B1 |*| B2])
+
     def apply[F[_]](a: F[A1 |*| A2])(using F: StrongZippable[|*|, F]): F[B1 |*| B2]
     def preShuffle[F[_, _], C](f: F[B1 |*| B2, C])(using PairwiseRel[|*|, |*|, F]): Exists[[Q] =>> (F[A1 |*| A2, Q], Q ~⚬ C)]
     def projectProper[C](p: Projection.Proper[|*|, B1 |*| B2, C]): ProjectProperRes[A1 |*| A2, C]
@@ -998,6 +1032,17 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
     case class None[A1, A2]() extends None0[A1, A2, A1, A2] {
       override def fold[->[_, _]](using ev: SymmetricSemigroupalCategory[->, |*|]): (A1 |*| A2) -> (A1 |*| A2) =
         ev.id
+
+      override def foldNarrowL[->[_, _], Obj[_]](
+        wa1: Obj[A1],
+        wa2: Obj[A2],
+      )(using
+        ev: NarrowSymmetricSemigroupalCategory[Obj, ->, |*|],
+        unzip: Unzippable[|*|, Obj],
+      ): ((A1 |*| A2) -> (A1 |*| A2), Obj[A1 |*| A2]) = {
+        val w = ev.tensor(wa1, wa2)
+        (ev.id[A1 |*| A2](using w), w)
+      }
 
       override def ev1: A1 =:= A1 =
         summon[A1 =:= A1]
@@ -1216,6 +1261,68 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
         case f: IX[x1, x2, x3, y1, y2]              => ix[x1, x2, x3] > par(f.g.fold, id)
         case f: XI[x1, x2, x3, y2, y3]              => xi[x1, x2, x3] > par(id, f.g.fold)
         case f: IXI[x1, x2, x3, x4, y1, y2, y3, y4] => ixi[x1, x2, x3, x4] > par(f.g1.fold, f.g2.fold)
+      }
+    }
+
+    override def foldNarrowL[->[_, _], Obj[_]](
+      wa1: Obj[A1],
+      wa2: Obj[A2],
+    )(using
+      ev: NarrowSymmetricSemigroupalCategory[Obj, ->, |*|],
+      unzip: Unzippable[|*|, Obj],
+    ): ((A1 |*| A2) -> (B1 |*| B2), Obj[B1 |*| B2]) = {
+      import ev.{andThen, assocLR, assocRL, id, ix, xi, ixi, narrowPar, swap, tensor}
+
+      extension [X, Y, Z](f: X -> Y) {
+        def >(g: Y -> Z): X -> Z =
+          andThen(f, g)
+      }
+
+      this match {
+        case Swap() =>
+          (swap[A1, A2](using wa1, wa2), tensor(wa2, wa1))
+        case f: AssocLR[x1, x2, x3, y2, y3] =>
+          val (wx1, wx2) = unzip.unzip[x1, x2](wa1)
+          val (g1, wy23) = f.g.foldNarrowL[->, Obj](wx2, wa2)
+          (
+            assocLR[x1, x2, x3](using wx1, wx2, wa2) >
+              narrowPar(id[x1](using wx1), g1)(using wx1, tensor(wx2, wa2), wx1, wy23),
+            tensor(wx1, wy23),
+          )
+        case f: AssocRL[x1, x2, x3, y1, y2] =>
+          val (wx2, wx3) = unzip.unzip[x2, x3](wa2)
+          val (g1, wy12) = f.g.foldNarrowL[->, Obj](wa1, wx2)
+          (
+            assocRL[x1, x2, x3](using wa1, wx2, wx3) >
+              narrowPar(g1, id[x3](using wx3))(using tensor(wa1, wx2), wx3, wy12, wx3),
+            tensor(wy12, wx3),
+          )
+        case f: IX[x1, x2, x3, y1, y2] =>
+          val (wx1, wx2) = unzip.unzip[x1, x2](wa1)
+          val (g1, wy12) = f.g.foldNarrowL[->, Obj](wx1, wa2)
+          (
+            ix[x1, x2, x3](using wx1, wx2, wa2) >
+              narrowPar(g1, id[x2](using wx2))(using tensor(wx1, wa2), wx2, wy12, wx2),
+            tensor(wy12, wx2),
+          )
+        case f: XI[x1, x2, x3, y2, y3] =>
+          val (wx2, wx3) = unzip.unzip[x2, x3](wa2)
+          val (g1, wy23) = f.g.foldNarrowL[->, Obj](wa1, wx3)
+          (
+            xi[x1, x2, x3](using wa1, wx2, wx3) >
+              narrowPar(id[x2](using wx2), g1)(using wx2, tensor(wa1, wx3), wx2, wy23),
+            tensor(wx2, wy23),
+          )
+        case f: IXI[x1, x2, x3, x4, y1, y2, y3, y4] =>
+          val (wx1, wx2) = unzip.unzip[x1, x2](wa1)
+          val (wx3, wx4) = unzip.unzip[x3, x4](wa2)
+          val (g1, wy12) = f.g1.foldNarrowL[->, Obj](wx1, wx3)
+          val (g2, wy34) = f.g2.foldNarrowL[->, Obj](wx2, wx4)
+          (
+            ixi[x1, x2, x3, x4](using wx1, wx2, wx3, wx4) >
+              narrowPar(g1, g2)(using tensor(wx1, wx3), tensor(wx2, wx4), wy12, wy34),
+            tensor(wy12, wy34),
+          )
       }
     }
 
