@@ -57,19 +57,19 @@ class MultiTypeFunTests extends AnyFunSuite {
   }
 
   test("andThen: dup > pair") {
-    val f: MultiTypeFun[TC, ●, ●] = c.andThen(dup, pair)
+    val f: MultiTypeFun[TC, ●, ●] = c.narrowAndThen(dup, pair)
     f
   }
 
   test("andThen nesting and par") {
-    val h1: MultiTypeFun[TC, ●, ●] = c.andThen(dup, pair)
+    val h1: MultiTypeFun[TC, ●, ●] = c.narrowAndThen(dup, pair)
     val h2: MultiTypeFun[TC, ● × ●, ● × ●] = c.narrowPar(h1, h1)
-    c.andThen(h2, c.swap[●, ●])
+    c.narrowAndThen(h2, c.swap[●, ●])
   }
 
   test("composing par and dup") {
     val p_d: MultiTypeFun[TC, ● × ●, (● × ●) × (● × ●)] = c.narrowPar(dup, dup)
-    c.andThen(p_d, c.narrowPar(pair, pair))
+    c.narrowAndThen(p_d, c.narrowPar(pair, pair))
   }
 
   test("intensional iid, iswap, iassocLR, iassocRL") {

@@ -58,7 +58,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ev: NarrowSymmetricSemigroupalCategory[Obj, ->, |*|],
       unzip: Unzippable[|*|, Obj],
     ): (A -> B, Obj[B]) = {
-      import ev.{andThen, id, narrowPar, tensor}
+      import ev.{id, narrowAndThen, narrowPar, tensor}
 
       this match {
         case f: Id[x] =>
@@ -74,7 +74,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           val (f1f, wx1) = f.f1.foldNarrowL[->, Obj](wa1)
           val (f2f, wx2) = f.f2.foldNarrowL[->, Obj](wa2)
           val (xferf, wb) = f.transfer.foldNarrowL[->, Obj](wx1, wx2)
-          (andThen(narrowPar(f1f, f2f)(using wa1, wa2, wx1, wx2), xferf), wb)
+          (narrowAndThen(narrowPar(f1f, f2f)(using wa1, wa2, wx1, wx2), xferf)(using tensor(wa1, wa2), tensor(wx1, wx2), wb), wb)
       }
     }
 
@@ -1271,12 +1271,7 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
       ev: NarrowSymmetricSemigroupalCategory[Obj, ->, |*|],
       unzip: Unzippable[|*|, Obj],
     ): ((A1 |*| A2) -> (B1 |*| B2), Obj[B1 |*| B2]) = {
-      import ev.{andThen, assocLR, assocRL, id, ix, xi, ixi, narrowPar, swap, tensor}
-
-      extension [X, Y, Z](f: X -> Y) {
-        def >(g: Y -> Z): X -> Z =
-          andThen(f, g)
-      }
+      import ev.{assocLR, assocRL, id, ix, xi, ixi, narrowAndThen, narrowPar, swap, tensor}
 
       this match {
         case Swap() =>
@@ -1285,32 +1280,40 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           val (wx1, wx2) = unzip.unzip[x1, x2](wa1)
           val (g1, wy23) = f.g.foldNarrowL[->, Obj](wx2, wa2)
           (
-            assocLR[x1, x2, x3](using wx1, wx2, wa2) >
+            narrowAndThen(
+              assocLR[x1, x2, x3](using wx1, wx2, wa2),
               narrowPar(id[x1](using wx1), g1)(using wx1, tensor(wx2, wa2), wx1, wy23),
+            )(using tensor(tensor(wx1, wx2), wa2), tensor(wx1, tensor(wx2, wa2)), tensor(wx1, wy23)),
             tensor(wx1, wy23),
           )
         case f: AssocRL[x1, x2, x3, y1, y2] =>
           val (wx2, wx3) = unzip.unzip[x2, x3](wa2)
           val (g1, wy12) = f.g.foldNarrowL[->, Obj](wa1, wx2)
           (
-            assocRL[x1, x2, x3](using wa1, wx2, wx3) >
+            narrowAndThen(
+              assocRL[x1, x2, x3](using wa1, wx2, wx3),
               narrowPar(g1, id[x3](using wx3))(using tensor(wa1, wx2), wx3, wy12, wx3),
+            )(using tensor(wa1, tensor(wx2, wx3)), tensor(tensor(wa1, wx2), wx3), tensor(wy12, wx3)),
             tensor(wy12, wx3),
           )
         case f: IX[x1, x2, x3, y1, y2] =>
           val (wx1, wx2) = unzip.unzip[x1, x2](wa1)
           val (g1, wy12) = f.g.foldNarrowL[->, Obj](wx1, wa2)
           (
-            ix[x1, x2, x3](using wx1, wx2, wa2) >
+            narrowAndThen(
+              ix[x1, x2, x3](using wx1, wx2, wa2),
               narrowPar(g1, id[x2](using wx2))(using tensor(wx1, wa2), wx2, wy12, wx2),
+            )(using tensor(tensor(wx1, wx2), wa2), tensor(tensor(wx1, wa2), wx2), tensor(wy12, wx2)),
             tensor(wy12, wx2),
           )
         case f: XI[x1, x2, x3, y2, y3] =>
           val (wx2, wx3) = unzip.unzip[x2, x3](wa2)
           val (g1, wy23) = f.g.foldNarrowL[->, Obj](wa1, wx3)
           (
-            xi[x1, x2, x3](using wa1, wx2, wx3) >
+            narrowAndThen(
+              xi[x1, x2, x3](using wa1, wx2, wx3),
               narrowPar(id[x2](using wx2), g1)(using wx2, tensor(wa1, wx3), wx2, wy23),
+            )(using tensor(wa1, tensor(wx2, wx3)), tensor(wx2, tensor(wa1, wx3)), tensor(wx2, wy23)),
             tensor(wx2, wy23),
           )
         case f: IXI[x1, x2, x3, x4, y1, y2, y3, y4] =>
@@ -1319,8 +1322,10 @@ class Shuffle[|*|[_, _]](using inj: BiInjective[|*|]) {
           val (g1, wy12) = f.g1.foldNarrowL[->, Obj](wx1, wx3)
           val (g2, wy34) = f.g2.foldNarrowL[->, Obj](wx2, wx4)
           (
-            ixi[x1, x2, x3, x4](using wx1, wx2, wx3, wx4) >
+            narrowAndThen(
+              ixi[x1, x2, x3, x4](using wx1, wx2, wx3, wx4),
               narrowPar(g1, g2)(using tensor(wx1, wx3), tensor(wx2, wx4), wy12, wy34),
+            )(using tensor(tensor(wx1, wx2), tensor(wx3, wx4)), tensor(tensor(wx1, wx3), tensor(wx2, wx4)), tensor(wy12, wy34)),
             tensor(wy12, wy34),
           )
       }

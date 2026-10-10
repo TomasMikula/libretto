@@ -46,6 +46,18 @@ infix sealed trait Approximates[X, A] {
     W IsRefinedBy Y,
     W Approximates A,
   )]
+
+  infix def _greatestCommonCoarsening_[Y](
+    that: Y Approximates A,
+  ): Exists[[W] =>> (
+    EdgeDesc[W],
+    W IsRefinedBy X,
+    W IsRefinedBy Y,
+    W Approximates A,
+  )] =
+    (this greatestCommonCoarsening that) match
+      case Indeed((wx, wy, wa)) =>
+        Indeed((wx.inDesc, wx, wy, wa))
 }
 
 object Approximates {

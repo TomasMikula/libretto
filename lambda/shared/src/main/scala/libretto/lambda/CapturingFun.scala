@@ -328,4 +328,114 @@ object CapturingFun {
           Closure(x, fs.reduce([x, y] => (f1, f2) => distLR > either(f1, f2)))
       }
   }
+
+  given [Obj[_], -->[_, _], |*|[_, _], F[_]](using
+    ev: NarrowSymmetricSemigroupalCategory[Obj, -->, |*|],
+    F: Zippable[|*|, F],
+    capturedObj: [X] => (F[X]) => Obj[X],
+  ): NarrowSymmetricSemigroupalCategory[Obj, CapturingFun[-->, |*|, F, _, _], |*|] =
+    new NarrowSymmetricSemigroupalCategory[Obj, CapturingFun[-->, |*|, F, _, _], |*|] {
+      override def id[A](using witness: Obj[A]): CapturingFun[-->, |*|, F, A, A] =
+        NoCapture(ev.id[A](using witness))
+
+      override def narrowAndThen[A, B, C](
+        f: CapturingFun[-->, |*|, F, A, B],
+        g: CapturingFun[-->, |*|, F, B, C],
+      )(using
+        a: Obj[A], b: Obj[B], c: Obj[C],
+      ): CapturingFun[-->, |*|, F, A, C] =
+        (f, g) match {
+          case (NoCapture(f), NoCapture(g)) =>
+            NoCapture(ev.narrowAndThen(f, g)(using a, b, c))
+          // f: A --> B, g: (Y |*| B) --> C
+          // result: (Y |*| A) --> C  with capture `Y`
+          case (NoCapture(f), Closure(y, g)) =>
+            val wy = capturedObj(y)
+            Closure(
+              y,
+              ev.narrowAndThen(
+                ev.narrowSnd(using wy)(f)(using a, b),
+                g,
+              )(using ev.tensor(wy, a), ev.tensor(wy, b), c),
+            )
+          // f: (X |*| A) --> B, g: B --> C
+          // result: (X |*| A) --> C  with capture `X`
+          case (Closure(x, f), NoCapture(g)) =>
+            Closure(x, ev.narrowAndThen(f, g)(using ev.tensor(capturedObj(x), a), b, c))
+          // f: (X |*| A) --> B, g: (Y |*| B) --> C
+          // result: ((Y |*| X) |*| A) --> C  with capture `Y |*| X`
+          case (Closure(x, f), Closure(y, g)) =>
+            val wx = capturedObj(x)
+            val wy = capturedObj(y)
+            val wyxa = ev.tensor(ev.tensor(wy, wx), a)
+            val wyb = ev.tensor(wy, b)
+            val h0 = ev.narrowAndThen(
+              ev.assocLR(using wy, wx, a),
+              ev.narrowSnd(using wy)(f)(using ev.tensor(wx, a), b),
+            )(using wyxa, ev.tensor(wy, ev.tensor(wx, a)), wyb)
+            Closure(F.zip(y, x), ev.narrowAndThen(h0, g)(using wyxa, wyb, c))
+        }
+
+      override def narrowPar[A1, A2, B1, B2](
+        f1: CapturingFun[-->, |*|, F, A1, B1],
+        f2: CapturingFun[-->, |*|, F, A2, B2],
+      )(using
+        a1: Obj[A1], a2: Obj[A2],
+        b1: Obj[B1], b2: Obj[B2],
+      ): CapturingFun[-->, |*|, F, A1 |*| A2, B1 |*| B2] =
+        (f1, f2) match {
+          case (NoCapture(f1), NoCapture(f2)) =>
+            NoCapture(ev.narrowPar(f1, f2)(using a1, a2, b1, b2))
+          // f1: A1 --> B1, f2: (Y |*| A2) --> B2
+          // result: (Y |*| (A1 |*| A2)) --> (B1 |*| B2)  with capture `Y`
+          case (NoCapture(f1), Closure(y, f2)) =>
+            val wy = capturedObj(y)
+            Closure(
+              y,
+              ev.narrowAndThen(
+                ev.xi(using wy, a1, a2),
+                ev.narrowPar(f1, f2)(using a1, ev.tensor(wy, a2), b1, b2),
+              )(using ev.tensor(wy, ev.tensor(a1, a2)), ev.tensor(a1, ev.tensor(wy, a2))),
+            )
+          // f1: (X |*| A1) --> B1, f2: A2 --> B2
+          // result: (X |*| (A1 |*| A2)) --> (B1 |*| B2)  with capture `X`
+          case (Closure(x, f1), NoCapture(f2)) =>
+            val wx = capturedObj(x)
+            Closure(
+              x,
+              ev.narrowAndThen(
+                ev.assocRL(using wx, a1, a2),
+                ev.narrowPar(f1, f2)(using ev.tensor(wx, a1), a2, b1, b2),
+              )(using ev.tensor(wx, ev.tensor(a1, a2)), ev.tensor(ev.tensor(wx, a1), a2)),
+            )
+          // f1: (X |*| A1) --> B1, f2: (Y |*| A2) --> B2
+          // result: ((X |*| Y) |*| (A1 |*| A2)) --> (B1 |*| B2)  with capture `X |*| Y`
+          case (Closure(x, f1), Closure(y, f2)) =>
+            val wx = capturedObj(x)
+            val wy = capturedObj(y)
+            Closure(
+              F.zip(x, y),
+              ev.narrowAndThen(
+                ev.ixi(using wx, wy, a1, a2),
+                ev.narrowPar(f1, f2)(using ev.tensor(wx, a1), ev.tensor(wy, a2), b1, b2),
+              )(using ev.tensor(ev.tensor(wx, wy), ev.tensor(a1, a2)), ev.tensor(ev.tensor(wx, a1), ev.tensor(wy, a2))),
+            )
+        }
+
+      override def tensor[A, B](wa: Obj[A], wb: Obj[B]): Obj[A |*| B] =
+        ev.tensor(wa, wb)
+
+      override def assocLR[A, B, C](using
+        a: Obj[A], b: Obj[B], c: Obj[C],
+      ): CapturingFun[-->, |*|, F, (A |*| B) |*| C, A |*| (B |*| C)] =
+        NoCapture(ev.assocLR(using a, b, c))
+
+      override def assocRL[A, B, C](using
+        a: Obj[A], b: Obj[B], c: Obj[C],
+      ): CapturingFun[-->, |*|, F, A |*| (B |*| C), (A |*| B) |*| C] =
+        NoCapture(ev.assocRL(using a, b, c))
+
+      override def swap[A, B](using wa: Obj[A], wb: Obj[B]): CapturingFun[-->, |*|, F, A |*| B, B |*| A] =
+        NoCapture(ev.swap(using wa, wb))
+    }
 }

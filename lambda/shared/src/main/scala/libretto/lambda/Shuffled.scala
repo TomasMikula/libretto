@@ -179,7 +179,7 @@ extends ShuffledModule[->, |*|] {
       val (l1, wx) = l.foldNarrowL[->>, Obj](wa)
       val (m1, wy) = m.foldMapNarrowL[->>, Obj](wx, f)
       val (r1, wb) = r.foldNarrowL[->>, Obj](wy)
-      (ev.andThen(ev.andThen(l1, m1), r1), wb)
+      (ev.narrowAndThen(ev.narrowAndThen(l1, m1)(using wa, wx, wy), r1)(using wa, wy, wb), wb)
     }
 
     override def inFst[Q]: Shuffled[A |*| Q, B |*| Q] =
@@ -390,9 +390,10 @@ extends ShuffledModule[->, |*|] {
       val (wx1, wx2) = unzip.unzip[X1, X2](wx12)
       val (b1, wy2) = bottom1.foldMapNarrowL[->>, Obj](wx2, f)
       val (b2, wz2) = bottom2.foldNarrowL[->>, Obj](wy2)
-      val h = ev.narrowPar(ev.id[X1](using wx1), ev.andThen(b1, b2))(using wx1, wx2, wx1, wz2)
+      val x1z2 = ev.tensor(wx1, wz2)
+      val h = ev.narrowPar(ev.id[X1](using wx1), ev.narrowAndThen(b1, b2)(using wx2, wy2, wz2))(using wx1, wx2, wx1, wz2)
       val (r1, wb12) = right.foldNarrowL[->>, Obj](wx1, wz2)
-      (ev.andThen(ev.andThen(l1, h), r1), wb12)
+      (ev.narrowAndThen(ev.narrowAndThen(l1, h)(using wa, wx12, x1z2), r1)(using wa, x1z2, wb12), wb12)
     }
 
     override def inFst[Q]: Shuffled[A |*| Q, (B1 |*| B2) |*| Q] =
@@ -838,7 +839,7 @@ extends ShuffledModule[->, |*|] {
         val (l1, wx) = l.foldMapNarrowL[->>, Obj](wa, tr)
         val (m1, wy) = m.foldNarrowL[->>, Obj](wx)
         val (r1, wb) = r.foldMapNarrowL[->>, Obj](wy, tr)
-        (ev.andThen(ev.andThen(l1, m1), r1), wb)
+        (ev.narrowAndThen(ev.narrowAndThen(l1, m1)(using wa, wx, wy), r1)(using wa, wy, wb), wb)
       }
 
       override def unconsSome: UnconsSomeRes[A, B] =
@@ -923,10 +924,13 @@ extends ShuffledModule[->, |*|] {
         val (wa1, wa2) = unzip.unzip[A1, A2](wa)
         val (h1, wx2) = semiHead.foldMapNarrowL[->>, Obj](wa2, tr)
         val (s1, wy2) = s.foldNarrowL[->>, Obj](wx2)
-        val hs = ev.narrowPar(ev.id[A1](using wa1), ev.andThen(h1, s1))(using wa1, wa2, wa1, wy2)
+        val hs = ev.narrowPar(ev.id[A1](using wa1), ev.narrowAndThen(h1, s1)(using wa2, wx2, wy2))(using wa1, wa2, wa1, wy2)
         val (t1, wz12) = t.foldNarrowL[->>, Obj](wa1, wy2)
         val (tail1, wb) = tail.foldMapNarrowL[->>, Obj](wz12, tr)
-        (ev.andThen(ev.andThen(hs, t1), tail1), wb)
+        (ev.narrowAndThen(
+          ev.narrowAndThen(hs, t1)(using ev.tensor(wa1, wa2), ev.tensor(wa1, wy2), wz12),
+          tail1,
+        )(using ev.tensor(wa1, wa2), wz12, wb), wb)
       }
 
       override def unconsSome: UnconsSomeRes[A1 |*| A2, B] =
@@ -1035,8 +1039,8 @@ extends ShuffledModule[->, |*|] {
         val (wb1, wy2) = unzip.unzip[B1, Y2](wb1y2)
         val (s1, wz2) = s.foldNarrowL[->>, Obj](wy2)
         val (sl1, wb2) = semiLast.foldMapNarrowL[->>, Obj](wz2, tr)
-        val h = ev.narrowPar(ev.id[B1](using wb1), ev.andThen(s1, sl1))(using wb1, wy2, wb1, wb2)
-        (ev.andThen(ev.andThen(init1, t1), h), ev.tensor(wb1, wb2))
+        val h = ev.narrowPar(ev.id[B1](using wb1), ev.narrowAndThen(s1, sl1)(using wy2, wz2, wb2))(using wb1, wy2, wb1, wb2)
+        (ev.narrowAndThen(ev.narrowAndThen(init1, t1)(using wa, wx12, wb1y2), h)(using wa, wb1y2, ev.tensor(wb1, wb2)), ev.tensor(wb1, wb2))
       }
 
       override def unconsSome: UnconsSomeRes[A, B1 |*| B2] =
@@ -1165,11 +1169,19 @@ extends ShuffledModule[->, |*|] {
         val (rt1, ws12) = rt.foldNarrowL[->>, Obj](wa1, wr)
         val (r1, wb2) = r.foldMapNarrowL[->>, Obj](ws12, tr)
         val lh = ev.narrowPar(ev.id[B1](using wb1), b1)(using wb1, wq, wb1, wr)
-        val a2b1r = ev.andThen(ev.andThen(l1, lt1), lh)
+        val a2b1r = ev.narrowAndThen(ev.narrowAndThen(l1, lt1)(using wa2, wp12, wb1q), lh)(using wa2, wb1q, ev.tensor(wb1, wr))
         val a1a2b1r = ev.narrowPar(ev.id[A1](using wa1), a2b1r)(using wa1, wa2, wa1, ev.tensor(wb1, wr))
         val b1a1r = ev.xi[A1, B1, R](using wa1, wb1, wr)
-        val rh = ev.narrowPar(ev.id[B1](using wb1), ev.andThen(rt1, r1))(using wb1, ev.tensor(wa1, wr), wb1, wb2)
-        (ev.andThen(ev.andThen(a1a2b1r, b1a1r), rh), ev.tensor(wb1, wb2))
+        val a1r = ev.tensor(wa1, wr)
+        val a1b1r = ev.tensor(wa1, ev.tensor(wb1, wr))
+        val b1a1r_ = ev.tensor(wb1, a1r)
+        val a1a2 = ev.tensor(wa1, wa2)
+        val b1b2 = ev.tensor(wb1, wb2)
+        val rh = ev.narrowPar(ev.id[B1](using wb1), ev.narrowAndThen(rt1, r1)(using a1r, ws12, wb2))(using wb1, a1r, wb1, wb2)
+        (ev.narrowAndThen(
+          ev.narrowAndThen(a1a2b1r, b1a1r)(using a1a2, a1b1r, b1a1r_),
+          rh,
+        )(using a1a2, b1a1r_, b1b2), b1b2)
       }
 
       override def unconsSome: UnconsSomeRes[A1 |*| A2, B1 |*| B2] =

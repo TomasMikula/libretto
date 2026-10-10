@@ -210,7 +210,9 @@ object IsRefinedBy {
     initial[X](summon)
 
   given NarrowCategory[EdgeDesc, IsRefinedBy] with {
-    override def andThen[A, B, C](f: A IsRefinedBy B, g: B IsRefinedBy C): A IsRefinedBy C =
+    override def narrowAndThen[A, B, C](f: A IsRefinedBy B, g: B IsRefinedBy C)(using
+      a: EdgeDesc[A], b: EdgeDesc[B], c: EdgeDesc[C],
+    ): A IsRefinedBy C =
       f andThen g
 
     override def id[A](using witness: EdgeDesc[A]): A IsRefinedBy A =

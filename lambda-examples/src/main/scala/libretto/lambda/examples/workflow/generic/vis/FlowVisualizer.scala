@@ -404,7 +404,7 @@ class FlowVisualizer[Op[_, _], F[_, _]](using
     fs: SinkNAry[Approximates, Tuple2, EmptyTuple, X, B],
   ): Exists[[Y] =>> (IVisualization[Enum[X], Flx, ?, Flx, Y], Y Approximates B)] =
     fs.pullback(
-      [x, y, b] => (xb, yb) => xb greatestCommonCoarsening yb,
+      [x, y, b] => (xb, yb) => xb _greatestCommonCoarsening_ yb,
       [x, y] => xy => xy.inDesc,
     ) match {
       case Indeed((refinements, appr)) =>

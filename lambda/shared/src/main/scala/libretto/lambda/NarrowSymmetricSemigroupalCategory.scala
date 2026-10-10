@@ -27,13 +27,13 @@ trait NarrowSymmetricSemigroupalCategory[Obj[_], ->[_, _], |*|[_, _]]
   }
 
   def ix[A, B, C](using Obj[A], Obj[B], Obj[C]): ((A |*| B) |*| C) -> ((A |*| C) |*| B) =
-    assocLR[A, B, C] > narrowPar(id[A], swap[B, C]) > assocRL[A, C, B]
+    assocLR[A, B, C] >- narrowPar(id[A], swap[B, C]) >- assocRL[A, C, B]
 
   def xi[A, B, C](using Obj[A], Obj[B], Obj[C]): (A |*| (B |*| C)) -> (B |*| (A |*| C)) =
-    assocRL[A, B, C] > narrowPar(swap[A, B], id[C]) > assocLR[B, A, C]
+    assocRL[A, B, C] >- narrowPar(swap[A, B], id[C]) >- assocLR[B, A, C]
 
   def ixi[A, B, C, D](using Obj[A], Obj[B], Obj[C], Obj[D]): ((A |*| B) |*| (C |*| D)) -> ((A |*| C) |*| (B |*| D)) =
-    assocLR[A, B, C |*| D] >
-      narrowPar(id[A], assocRL[B, C, D] > narrowPar(swap[B, C], id[D]) > assocLR[C, B, D]) >
+    assocLR[A, B, C |*| D] >-
+      narrowPar(id[A], assocRL[B, C, D] >- narrowPar(swap[B, C], id[D]) >- assocLR[C, B, D]) >-
       assocRL[A, C, B |*| D]
 }

@@ -458,7 +458,9 @@ object MultiTypeFun {
       ): MultiTypeFun[TC, A1 × A2, B1 × B2] =
         MultiTypeFun.par[TC, A1, A2, B1, B2](f1, f2)
 
-      override def andThen[A, B, C](f: MultiTypeFun[TC, A, B], g: MultiTypeFun[TC, B, C]): MultiTypeFun[TC, A, C] =
+      override def narrowAndThen[A, B, C](f: MultiTypeFun[TC, A, B], g: MultiTypeFun[TC, B, C])(using
+        a: KindN[A], b: KindN[B], c: KindN[C],
+      ): MultiTypeFun[TC, A, C] =
         MultiTypeFun.andThen[TC, A, B, C](f, g)
     }
 
@@ -502,7 +504,9 @@ object MultiTypeFun {
       override def tensorUniq[A, B, P, Q](p: Kinds.Prod[A, B, P], q: Kinds.Prod[A, B, Q]): P =:= Q =
         p deriveEq q
 
-      override def andThen[A, B, C](f: MultiTypeFun[TC, A, B], g: MultiTypeFun[TC, B, C]): MultiTypeFun[TC, A, C] =
+      override def narrowAndThen[A, B, C](f: MultiTypeFun[TC, A, B], g: MultiTypeFun[TC, B, C])(using
+        a: Kinds[A], b: Kinds[B], c: Kinds[C],
+      ): MultiTypeFun[TC, A, C] =
         MultiTypeFun.andThen[TC, A, B, C](f, g)
     }
 }

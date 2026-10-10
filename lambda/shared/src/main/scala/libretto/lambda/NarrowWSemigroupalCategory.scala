@@ -63,6 +63,16 @@ trait NarrowWSemigroupalCategory[Obj[_], ->[_, _], Prd[_, _, _]]
   extension [As, P](p: PrdN[As, P])
     def obj: Obj[P] = prdNObj(p)
 
+  extension [As, Bs](f: As -×> Bs) {
+    def >[Cs](g: Bs -×> Cs): As -×> Cs =
+      -×>(f.src, g.tgt)(
+        narrowAndThen(
+          f.underlying,
+          (f.tgt uniq g.src).substituteContra[[x] =>> (x -> g.Tgt)](g.underlying),
+        )(using f.src.obj, f.tgt.obj, g.tgt.obj)
+      )
+  }
+
   private def iid_[As, P](w: PrdN[As, P]): As -×> As =
     -×>(w, w)(id[P](using prdNObj(w)))
 

@@ -8,7 +8,13 @@ import libretto.lambda.util.Exists.Indeed
  * where `||` associates to the left.
  */
 trait SinkNAry[->[_, _], ||[_, _], Nil, A, B] {
+  import SinkNAry.to
+
   def andThen[C](g: B -> C)(using Semigroupoid[->]): SinkNAry[->, ||, Nil, A, C]
+
+  def changeTarget[C](f: [X] => (X -> B) => (X -> C)): SinkNAry[->, ||, Nil, A, C]
+
+  def translate[->>[_, _]](f: [X, Y] => (X -> Y) => (X ->> Y)): SinkNAry[->>, ||, Nil, A, B]
 
   def asSource: SourceNAry[[x, y] =>> y -> x, ||, Nil, B, A]
 
@@ -16,11 +22,21 @@ trait SinkNAry[->[_, _], ||[_, _], Nil, A, B] {
    *  of the resulting source (n-ary span) may be of a different type `->>`.
    */
   def pullback[->>[_, _], Obj[_]](
-    binaryPullback: [X, Y, Q] => (X -> Q, Y -> Q) => Exists[[P] =>> (P ->> X, P ->> Y, P -> Q)],
+    binaryPullback: [X, Y, Q] => (X -> Q, Y -> Q) => Exists[[P] =>> (Obj[P], P ->> X, P ->> Y, P -> Q)],
     srcData: [X, Y] => (X -> Y) => Obj[X],
   )(using
     NarrowCategory[Obj, ->>],
-  ): Exists[[P] =>> (SourceNAry[->>, ||, Nil, P, A], P -> B)]
+  ): Exists[[P] =>> (SourceNAry[->>, ||, Nil, P, A], P -> B)] =
+    pullback_(binaryPullback, srcData) match
+      case Indeed((_, source, p)) =>
+        Indeed((source.translate[->>]([X, Y] => f => f._1), p))
+
+  protected def pullback_[->>[_, _], Obj[_]](
+    binaryPullback: [X, Y, Q] => (X -> Q, Y -> Q) => Exists[[P] =>> (Obj[P], P ->> X, P ->> Y, P -> Q)],
+    srcData: [X, Y] => (X -> Y) => Obj[X],
+  )(using
+    NarrowCategory[Obj, ->>],
+  ): Exists[[P] =>> (Obj[P], SourceNAry[->> to Obj, ||, Nil, P, A], P -> B)]
 
   def divide[F[_, _], G[_, _]](
     h: [X, Y] => (X -> Y) => Exists[[Q] =>> (F[X, Q], G[Q, Y])],
@@ -39,6 +55,8 @@ trait SinkNAry[->[_, _], ||[_, _], Nil, A, B] {
 }
 
 object SinkNAry {
+  private[SinkNAry] infix type to[->[_, _], Tgt[_]] = [A, B] =>> (A -> B, Tgt[B])
+
   case class Single[->[_, _], ||[_, _], Nil, A, B](
     f: A -> B,
   ) extends SinkNAry[->, ||, Nil, Nil || A, B] {
@@ -46,14 +64,22 @@ object SinkNAry {
     override def andThen[C](g: B -> C)(using Semigroupoid[->]): SinkNAry[->, ||, Nil, Nil || A, C] =
       Single(f > g)
 
-    override def pullback[->>[_,_], Obj[_]](
-      binaryPullback: [X, Y, Q] => (X -> Q, Y -> Q) => Exists[[P] =>> (P ->> X, P ->> Y, P -> Q)],
+    override def changeTarget[C](g: [X] => (X -> B) => X -> C): SinkNAry[->, ||, Nil, Nil || A, C] =
+      Single(g(f))
+
+    override def translate[->>[_,_]](g: [X, Y] => (X -> Y) => (X ->> Y)): SinkNAry[->>, ||, Nil, Nil || A, B] =
+      Single(g(f))
+
+    override protected def pullback_[->>[_,_], Obj[_]](
+      binaryPullback: [X, Y, Q] => (X -> Q, Y -> Q) => Exists[[P] =>> (Obj[P], P ->> X, P ->> Y, P -> Q)],
       srcData: [X, Y] => (X -> Y) => Obj[X],
     )(using
       cat: NarrowCategory[Obj, ->>],
-    ): Exists[[P] =>> (SourceNAry[->>, ||, Nil, P, Nil || A], P -> B)] =
+    ): Exists[[P] =>> (Obj[P], SourceNAry[->> to Obj, ||, Nil, P, Nil || A], P -> B)] =
+      given a: Obj[A] = srcData(f)
       Exists((
-        SourceNAry.Single(cat.id[A](using srcData(f))),
+        a,
+        SourceNAry.Single((cat.id[A], a)),
         f
       ))
 
@@ -90,20 +116,27 @@ object SinkNAry {
     override def andThen[C](g: B -> C)(using Semigroupoid[->]): SinkNAry[->, ||, Nil, Init || Z, C] =
       Snoc(init.andThen(g), last > g)
 
-    override def pullback[->>[_,_], Obj[_]](
-      binaryPullback: [X, Y, Q] => (X -> Q, Y -> Q) => Exists[[P] =>> (P ->> X, P ->> Y, P -> Q)],
+    override def changeTarget[C](f: [X] => (X -> B) => (X -> C)): SinkNAry[->, ||, Nil, Init || Z, C] =
+      Snoc(init.changeTarget(f), f(last))
+
+    override def translate[->>[_,_]](f: [X, Y] => (X -> Y) => (X ->> Y)): SinkNAry[->>, ||, Nil, Init || Z, B] =
+      Snoc(init.translate(f), f(last))
+
+    override protected def pullback_[->>[_, _], Obj[_]](
+      binaryPullback: [X, Y, Q] => (X -> Q, Y -> Q) => Exists[[P] =>> (Obj[P], P ->> X, P ->> Y, P -> Q)],
       srcData: [X, Y] => (X -> Y) => Obj[X],
     )(using
       cat: NarrowCategory[Obj, ->>],
-    ): Exists[[P] =>> (SourceNAry[->>, ||, Nil, P, Init || Z], P -> B)] =
-      init.pullback(binaryPullback, srcData) match {
-        case Indeed((initSrc, p)) =>
-          binaryPullback(p, last) match
-            case Indeed((f1, f2, g)) =>
+    ): Exists[[P] =>> (Obj[P], SourceNAry[->> to Obj, ||, Nil, P, Init || Z], P -> B)] =
+      init.pullback_(binaryPullback, srcData) match {
+        case Indeed((p, initSrc, f)) =>
+          binaryPullback(f, last) match
+            case Indeed((pp, f1, f2, g)) =>
               Exists((
+                pp,
                 SourceNAry.Snoc(
-                  initSrc.after(f1),
-                  f2
+                  initSrc.changeSource([Y] => y => (cat.narrowAndThen(f1, y._1)(using pp, p, y._2), y._2)),
+                  (f2, srcData(last))
                 ),
                 g
               ))
