@@ -149,13 +149,22 @@ sealed trait PartialArgs[F[_, _], K, L] {
           case (Indeed((g1, h1)), Indeed((g2, h2))) =>
             Exists((introBoth(g1, g2), par(h1, h2)(using g1.outKind, g2.outKind)))
 
-  def project[M](p: Projection[×, L, M]): Exists[[X] =>> (Projection[×, K, X], PartialArgs[F, X, M])] =
+  def project[M](p: Projection[×, L, M]): Projected[F, K, M] =
     p match
-      case Projection.Id() => Exists((Projection.Id(), this))
-      case p: Projection.Proper[pr, l, m] => projectProper(p)
-
-  protected def projectProper[M](p: Projection.Proper[×, L, M]): Exists[[X] =>> (Projection[×, K, X], PartialArgs[F, X, M])] =
-    UnhandledCase.raise(s"$this.projectProper($p)")
+      case Projection.Id() =>
+        inKind.nonEmpty match
+          case Left(TypeEq(Refl())) => Left(PartialArgs.proper(this))
+          case Right(k) => Right(Exists((Projection.Id(), k, this)))
+      case p: Projection.DiscardFst[pr, l1, l2, m] =>
+        PartialArgs.projectFurther(PartialArgs.second[F, K, l1, l2](this.to[l1 × l2]), p.p2)
+      case p: Projection.DiscardSnd[pr, l1, l2, m] =>
+        PartialArgs.projectFurther(PartialArgs.first[F, K, l1, l2](this.to[l1 × l2]), p.p1)
+      case p: Projection.Fst[pr, l1, m1, l2] =>
+        PartialArgs.projectBoth[F, K, l1, l2, m1, l2](this.to[l1 × l2], p.p1, Projection.id)
+      case p: Projection.Snd[pr, l1, l2, m2] =>
+        PartialArgs.projectBoth[F, K, l1, l2, l1, m2](this.to[l1 × l2], Projection.id, p.p2)
+      case p: Projection.Both[pr, l1, l2, m1, m2] =>
+        PartialArgs.projectBoth[F, K, l1, l2, m1, m2](this.to[l1 × l2], p.p1, p.p2)
 
   def dup(using
     Kind[L],
@@ -289,6 +298,91 @@ sealed trait PartialArgs[F[_, _], K, L] {
 }
 
 object PartialArgs {
+  type Projected[F[_, _], K, L] = Either[
+    Proper[F, ○, L], // A projection may eliminate every input, leaving only constant arguments
+    Exists[[X] =>> (Projection[×, K, X], KindN[X], PartialArgs[F, X, L])],
+  ]
+
+  private def first[F[_, _], K, L1, L2](a: PartialArgs[F, K, L1 × L2]): Projected[F, K, L1] =
+    a match
+      case i @ Id() =>
+        val (l1, _) = KindN.unpair[L1, L2](i.kind)
+        Right(Exists((Projection.discardSnd[×, L1, L2], l1, Id()(using l1))))
+      case p: Par[f, k1, k2, l1, l2] => Right(Exists((Projection.discardSnd[×, k1, k2], p.inKind1, p.f1)))
+      case p: Fst[f, k, l, m] => Right(Exists((Projection.discardSnd[×, k, m], p.inKind1, p.f)))
+      case p: Snd[f, k, l, m] => Right(Exists((Projection.discardSnd[×, k, l], p.kind1, Id()(using p.kind1))))
+      case IntroFst(f1, _) => Left(f1)
+      case p @ IntroSnd(f1, _) => Right(Exists((Projection.id, p.inKindProper, f1)))
+      case IntroBoth(f1, _) => Left(f1)
+      case Lift(_) => UnhandledCase.raise(s"PartialArgs.first($a)")
+
+  private def second[F[_, _], K, L1, L2](a: PartialArgs[F, K, L1 × L2]): Projected[F, K, L2] =
+    a match
+      case i @ Id() =>
+        val (_, l2) = KindN.unpair[L1, L2](i.kind)
+        Right(Exists((Projection.discardFst[×, L1, L2], l2, Id()(using l2))))
+      case p: Par[f, k1, k2, l1, l2] => Right(Exists((Projection.discardFst[×, k1, k2], p.inKind2, p.f2)))
+      case p: Fst[f, k, l, m] => Right(Exists((Projection.discardFst[×, k, m], p.kind2, Id()(using p.kind2))))
+      case p: Snd[f, k, l, m] => Right(Exists((Projection.discardFst[×, k, l], p.inKind2, p.f)))
+      case p @ IntroFst(_, f2) => Right(Exists((Projection.id, p.inKindProper, f2)))
+      case IntroSnd(_, f2) => Left(f2)
+      case IntroBoth(_, f2) => Left(f2)
+      case Lift(_) => UnhandledCase.raise(s"PartialArgs.second($a)")
+
+  private def projectConstant[F[_, _], L, M](a: PartialArgs[F, ○, L], p: Projection[×, L, M]): Proper[F, ○, M] =
+    a.project(p) match
+      case Left(a) => a
+      case Right(Indeed((q, x, _))) =>
+        q match
+          case Projection.Id() => KindN.cannotBeUnit(x)
+          case q: Projection.Proper[pr, o, x] =>
+            q.startsFromPair match
+              case Indeed(Indeed(eq)) => Kinds.unitIsNotPair(eq)
+
+  private def projectFurther[F[_, _], K, L, M](a: Projected[F, K, L], p: Projection[×, L, M]): Projected[F, K, M] =
+    a match
+      case Left(a) => Left(projectConstant(a, p))
+      case Right(Indeed((q, _, a))) =>
+        a.project(p) match
+          case Left(a) => Left(a)
+          case Right(Indeed((r, x, a))) => Right(Exists((q > r, x, a)))
+
+  private def projectBoth[F[_, _], K, L1, L2, M1, M2](
+    a: PartialArgs[F, K, L1 × L2],
+    p1: Projection[×, L1, M1],
+    p2: Projection[×, L2, M2],
+  ): Projected[F, K, M1 × M2] =
+    a match
+      case i @ Id() =>
+        val (l1, l2) = KindN.unpair[L1, L2](i.kind)
+        projectSeparate(Id[F, L1]()(using l1).project(p1), Id[F, L2]()(using l2).project(p2))
+      case Par(f1, f2) => projectSeparate(f1.project(p1), f2.project(p2))
+      case p @ Fst(f) => projectSeparate(f.project(p1), Id[F, L2]()(using p.kind2).project(p2))
+      case p @ Snd(f) => projectSeparate(Id[F, L1]()(using p.kind1).project(p1), f.project(p2))
+      case IntroFst(f1, f2) =>
+        val g1 = projectConstant(f1, p1)
+        f2.project(p2) match
+          case Left(g2) => Left(introBoth(g1, g2))
+          case Right(Indeed((q, x, g2))) => Right(Exists((q, x, introFst(g1, g2))))
+      case IntroSnd(f1, f2) =>
+        val g2 = projectConstant(f2, p2)
+        f1.project(p1) match
+          case Left(g1) => Left(introBoth(g1, g2))
+          case Right(Indeed((q, x, g1))) => Right(Exists((q, x, introSnd(g1, g2))))
+      case IntroBoth(f1, f2) => Left(introBoth(projectConstant(f1, p1), projectConstant(f2, p2)))
+      case Lift(_) => UnhandledCase.raise(s"PartialArgs.projectBoth($a, $p1, $p2)")
+
+  private def projectSeparate[F[_, _], K1, K2, L1, L2](
+    a: Projected[F, K1, L1],
+    b: Projected[F, K2, L2],
+  ): Projected[F, K1 × K2, L1 × L2] =
+    (a, b) match
+      case (Left(a), Left(b)) => Left(introBoth(a, b))
+      case (Left(a), Right(Indeed((q, x, b)))) => Right(Exists((Projection.DiscardFst(q), x, introFst(a, b))))
+      case (Right(Indeed((p, x, a))), Left(b)) => Right(Exists((Projection.DiscardSnd(p), x, introSnd(a, b))))
+      case (Right(Indeed((p, x, a))), Right(Indeed((q, y, b)))) =>
+        Right(Exists((Projection.par(p, q), x × y, par(a, b)(using x, y))))
+
   case class Id[F[_, _], K]()(using
     val kind: KindN[K],
   ) extends PartialArgs[F, K, K] {
@@ -357,7 +451,8 @@ object PartialArgs {
     override def composeProper[J](that: Proper[F, J, K1 × K2])(
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
     ): Proper[F, J, L1 × L2] =
-      UnhandledCase.raise(s"$that > $this")
+      val first = Fst[F, K1, L1, K2](f1).composeProper(that)(absorbL)
+      Snd[F, L1, K2, L2](f2)(using f1.outKind, inKind2).composeProper(first)(absorbL)
   }
 
   case class Fst[F[_, _], K, L, M](
@@ -372,7 +467,21 @@ object PartialArgs {
     override def composeProper[J](that: Proper[F, J, K × M])(
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
     ): Proper[F, J, L × M] =
-      UnhandledCase.raise(s"$that > $this")
+      that match
+        case Lift(_) =>
+          UnhandledCase.raise(s"$that > $this")
+        case p @ Par(g1, g2) =>
+          Par(f.composeProper(g1)(absorbL), g2)(using p.inKind1, p.inKind2)
+        case p @ Fst(g) =>
+          Fst(f.composeProper(g)(absorbL))(using p.inKind1, p.kind2)
+        case p @ Snd(g) =>
+          Par(f, g)(using p.kind1, p.inKind2)
+        case IntroFst(g1, g2) =>
+          PartialArgs.introFst((g1 > f)(absorbL), g2)
+        case IntroSnd(g1, g2) =>
+          PartialArgs.introSnd((g1 > f)(absorbL), g2)
+        case IntroBoth(g1, g2) =>
+          introBoth((g1 > f)(absorbL), g2)
   }
 
   case class Snd[F[_, _], K, L, M](
@@ -394,16 +503,16 @@ object PartialArgs {
       that match
         case Lift(f) =>
           UnhandledCase.raise(s"$that")
-        case Par(f1, f2) =>
-          UnhandledCase.raise(s"$that")
-        case Fst(f) =>
-          UnhandledCase.raise(s"$that")
-        case Snd(f) =>
-          UnhandledCase.raise(s"$that")
+        case p @ Par(g1, g2) =>
+          Par(g1, f.composeProper(g2)(absorbL))(using p.inKind1, p.inKind2)
+        case p @ Fst(g) =>
+          Par(g, f)(using p.inKind1, p.kind2)
+        case p @ Snd(g) =>
+          Snd(f.composeProper(g)(absorbL))(using p.kind1, p.inKind2)
         case IntroFst(f1, f2) =>
           PartialArgs.introFst(f1, (f2 > f)(absorbL))
         case IntroSnd(f1, f2) =>
-          UnhandledCase.raise(s"$that")
+          PartialArgs.introSnd(f1, (f2 > f)(absorbL))
         case IntroBoth(f1, f2) =>
           PartialArgs.introBoth(f1, (f2 > f)(absorbL))
   }
@@ -630,10 +739,18 @@ object PartialArgs {
               case Right(k) => k
               case Left(_) => UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
             Exists((~⚬.par(t1, t2), PartialArgs.par(r1, r2)))
-      case Fst(f) =>
-        UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
-      case Snd(f) =>
-        UnhandledCase.raise(s"PartialArgs.biShuffle($a, $s1, $s2)")
+      case p @ Fst(f) =>
+        f.shuffle(s1) match
+          case x @ Indeed((t, g)) =>
+            given KindN[x.T] = t(p.inKind1)
+            given KindN[M2] = s2(p.kind2)
+            Exists((~⚬.par(t, s2), fst[F, x.T, M1, M2](g)))
+      case p @ Snd(f) =>
+        f.shuffle(s2) match
+          case x @ Indeed((t, g)) =>
+            given KindN[x.T] = t(p.inKind2)
+            given KindN[M1] = s1(p.kind1)
+            Exists((~⚬.par(s1, t), snd[F, M1, x.T, M2](g)))
       case IntroFst(f1, f2) =>
         (f1 shuffle s1, f2 shuffle s2) match
           case (Indeed((s1, f1)), Indeed((s2, f2))) =>
@@ -671,10 +788,16 @@ object PartialArgs {
             Exists((~⚬.swap[x1, x2], Par(f2, f1)))
           case _ =>
             UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
-      case Fst(f) =>
-        UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
-      case Snd(f) =>
-        UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+      case p: Fst[f, k, l, m] =>
+        tr match
+          case Transfer.Swap() =>
+            Exists((~⚬.swap[k, m], Snd(p.f)(using p.kind2, p.inKind1)))
+          case _ => UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
+      case p: Snd[f, k, l, m] =>
+        tr match
+          case Transfer.Swap() =>
+            Exists((~⚬.swap[k, l], Fst(p.f)(using p.inKind2, p.kind1)))
+          case _ => UnhandledCase.raise(s"PartialArgs.transfer($a, $tr)")
       case IntroFst(f1, f2) =>
         tr match
           case Transfer.Swap() =>

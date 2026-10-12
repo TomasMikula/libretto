@@ -130,9 +130,11 @@ object Multipliers {
         case Projection.Id() =>
           Exists((Projection.Id(), this))
         case Projection.DiscardFst(p2) =>
-          UnhandledCase.raise(s"$this.project($p)")
+          m2.project(p2) match
+            case Indeed((q, m)) => Exists((Projection.DiscardFst(q), m))
         case Projection.DiscardSnd(p1) =>
-          UnhandledCase.raise(s"$this.project($p)")
+          m1.project(p1) match
+            case Indeed((q, m)) => Exists((Projection.DiscardSnd(q), m))
         case Projection.Fst(p1) =>
           m1.project(p1) match
             case Indeed((p1, m1)) =>

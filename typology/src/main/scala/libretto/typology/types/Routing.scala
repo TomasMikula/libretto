@@ -56,7 +56,18 @@ sealed trait Routing[K, L](using
         UnhandledCase.raise(s"$this.applyTo($f)")
       case Impl(p, m, s) =>
         f.project(p) match
-          case Indeed((p, f)) =>
+          case Left(constants) =>
+            constants.multiply(m) match
+              case Indeed(Indeed((m, s1, args))) =>
+                Multipliers.proveId(m) match
+                  case TypeEq(Refl()) =>
+                    s1.proveId(Kinds.unitIsNotPair) match
+                      case TypeEq(Refl()) =>
+                        args.shuffle(s) match
+                          case Indeed((s2, args)) =>
+                            s2.proveId(Kinds.unitIsNotPair) match
+                              case TypeEq(Refl()) => AppRes(Routing.elim[J], args)
+          case Right(Indeed((p, _, f))) =>
             f.multiply(m) match
               case Indeed(Indeed((m, s1, f))) =>
                 f.shuffle(s) match

@@ -509,4 +509,7 @@ object MultiTypeFun {
       ): MultiTypeFun[TC, A, C] =
         MultiTypeFun.andThen[TC, A, B, C](f, g)
     }
+
+  def lambdaSyntax[TC[_, _]]: MultiTypeFunLambdaSyntax[TC] =
+    new MultiTypeFunLambdaSyntax[TC]
 }
