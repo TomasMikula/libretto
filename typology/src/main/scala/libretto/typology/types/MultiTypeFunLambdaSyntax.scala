@@ -1,6 +1,6 @@
 package libretto.typology.types
 
-import libretto.lambda.{CapturingFun, Lambdas, PreparedArrowModule}
+import libretto.lambda.{ArrowPendingInObj, CapturingFun, Lambdas, pendingIn}
 import libretto.lambda.util.SourcePos
 import libretto.lambda.util.Validated.{Invalid, Valid}
 import libretto.typology.kinds.*
@@ -22,9 +22,11 @@ final class MultiTypeFunLambdaSyntax[TC[_, _]] private[types] () {
     override def toString: String = s"$description at ${pos.filename}:${pos.line}"
   }
 
-  private val prepared: PreparedArrowModule[KindN, MultiTypeFun[TC, _, _], ×] =
-    new PreparedArrowModule[KindN, MultiTypeFun[TC, _, _], ×]
-  import prepared.{Prepared, given}
+  // private val prepared: PreparedArrowModule[KindN, MultiTypeFun[TC, _, _], ×] =
+  //   new PreparedArrowModule[KindN, MultiTypeFun[TC, _, _], ×]
+  type Prepared[A, B] = (MultiTypeFun[TC, _, _] pendingIn KindN)[A, B]
+  def Prepared[A, B] = ArrowPendingInObj[MultiTypeFun[TC, _, _], KindN, A, B]
+  // import prepared.{Prepared, given}
 
   private val lambdas: Lambdas[Prepared, ×, Origin, SourcePos] = Lambdas(
     universalSplit = Some([K] => (_: DummyImplicit) ?=> Prepared[K, K × K] { k =>
@@ -63,7 +65,7 @@ final class MultiTypeFunLambdaSyntax[TC[_, _]] private[types] () {
 
   extension [K, L](f: MultiTypeFun[TC, K, L]) {
     def apply(a: Expr[K])(using ctx: LambdaContext, l: KindN[L], pos: SourcePos): Expr[L] =
-      Expression(lambdas.Expr.map(a.value, prepared.lift(f))(Origin("Function result", pos)), l)
+      Expression(lambdas.Expr.map(a.value, ArrowPendingInObj.const(f))(Origin("Function result", pos)), l)
   }
 
   extension [K, L](f: TypeFun[TC, K, L]) {
@@ -75,7 +77,7 @@ final class MultiTypeFunLambdaSyntax[TC[_, _]] private[types] () {
     def apply(a: Expr[K])(using ctx: LambdaContext, pos: SourcePos): Expr[L] =
       val l = KindN(f.outKind)
       Expression(
-        lambdas.Expr.map(a.value, prepared.lift(MultiTypeFun(f))(using l))(Origin("Type expression result", pos)),
+        lambdas.Expr.map(a.value, ArrowPendingInObj.const(MultiTypeFun(f))(using l))(Origin("Type expression result", pos)),
         l,
       )
   }

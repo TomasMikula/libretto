@@ -5,11 +5,11 @@ import libretto.lambda.Lambdas.LinearityViolation.{Overused, Unused}
 import libretto.lambda.util.Validated.Invalid
 import org.scalatest.funsuite.AnyFunSuite
 
-class PreparedLambdasTests extends AnyFunSuite {
-  import PreparedLambdasTests.*
+class ArrowPendingInObjLambdasTests extends AnyFunSuite {
+  import ArrowPendingInObjLambdasTests.*
 
-  private val prepared = new PreparedArrowModule[Obj, Arr, Tuple2]
-  import prepared.{Prepared, given}
+  type Prepared = (Arr pendingIn Obj)
+  def Prepared[A, B] = ArrowPendingInObj[Arr, Obj, A, B]
 
   private val linear = Lambdas[Prepared, Tuple2, String, String]()
   private val nonlinear = Lambdas[Prepared, Tuple2, String, String](
@@ -38,8 +38,8 @@ class PreparedLambdasTests extends AnyFunSuite {
 
   test("witnesses follow primitive results through existential intermediate types") {
     val f = closed[Int, Int](linear) { a =>
-      val s = linear.Expr.map(a, prepared.lift(Arr.of[Int, String](_.toString)))("string")
-      linear.Expr.map(s, prepared.lift(Arr.of[String, Int](_.length)))("length")
+      val s = linear.Expr.map(a, ArrowPendingInObj.lift(Arr.of[Int, String](_.toString)))("string")
+      linear.Expr.map(s, ArrowPendingInObj.lift(Arr.of[String, Int](_.length)))("length")
     }
     assert(f.run(1234) == 4)
   }
@@ -114,8 +114,8 @@ class PreparedLambdasTests extends AnyFunSuite {
   test("per-expression operations retain an explicitly discarded computation") {
     var evaluated = 0
     val f = closed[Int, Int](linear) { a =>
-      linear.Context.registerSplit(a)(prepared.lift(Arr.of[Int, (Int, Int)](i => (i, i))))
-      val unused = linear.Expr.map(a, prepared.lift(Arr.of[Int, String] { i =>
+      linear.Context.registerSplit(a)(ArrowPendingInObj.lift(Arr.of[Int, (Int, Int)](i => (i, i))))
+      val unused = linear.Expr.map(a, ArrowPendingInObj.lift(Arr.of[Int, String] { i =>
         evaluated += 1
         i.toString
       }))("unused computation")
@@ -161,7 +161,7 @@ class PreparedLambdasTests extends AnyFunSuite {
 
   test("nested scopes inherit registered non-linear operations and constants") {
     val f = closed[Int, (Int, (Int, Boolean))](linear) { a =>
-      linear.Context.registerSplit(a)(prepared.lift(Arr.of[Int, (Int, Int)](i => (i, i))))
+      linear.Context.registerSplit(a)(ArrowPendingInObj.lift(Arr.of[Int, (Int, Int)](i => (i, i))))
       val c = linear.Expr.const[Boolean](
         [X] => (_: DummyImplicit) ?=> Prepared[X, (Boolean, X)] { x =>
           (Arr(x, Obj.Pair(Obj.BoolObj, x), value => (true, value)), Obj.Pair(Obj.BoolObj, x))
@@ -210,7 +210,7 @@ class PreparedLambdasTests extends AnyFunSuite {
   }
 }
 
-object PreparedLambdasTests {
+object ArrowPendingInObjLambdasTests {
   sealed trait Obj[A]
   object Obj {
     case object IntObj extends Obj[Int]
@@ -232,6 +232,11 @@ object PreparedLambdasTests {
   case class Arr[A, B](src: Obj[A], tgt: Obj[B], run: A => B)
   object Arr {
     def of[A: Obj, B: Obj](run: A => B): Arr[A, B] = Arr(summon, summon, run)
+
+    given (Arr Preserves Obj) with {
+      override def apply[A: Obj, B](rel: Arr[A, B]): Obj[B] =
+        rel.tgt
+    }
   }
 
   given NarrowSymmetricSemigroupalCategory[Obj, Arr, Tuple2] with {
