@@ -5,38 +5,20 @@ import libretto.typology.kinds.*
 import libretto.lambda.SymmetricMonoidalCategory
 
 sealed trait TypeFun[TC[_, _], K, L] {
-  type X
   type Expr[k, l] = TypeExpr[TC, k, l]
 
-  val pre: Routing[K, X]
-  val expr: Expr[X, L]
+  given inKind: Kinds[K]
+  given outKind: Kind[L]
 
-  given inKind: Kinds[K] = pre.inKind
-  given outKind: Kind[L] = expr.outKind
+  def ∘[J](that: TypeFun[TC, J, K]): TypeFun[TC, J, L]
 
-  def ∘[J](that: TypeFun[TC, J, K]): TypeFun[TC, J, L] = {
-    import that.pre.outKind
-    import that.expr.outKind
+  def ∘[J](that: Routing[J, K]): TypeFun[TC, J, L]
 
-    this.pre.applyTo[Expr, that.X](PartialArgs(that.expr)) match {
-      case Routing.AppRes.Impl(q, e) =>
-        TypeFun(that.pre > q, this.expr.applyTo(e))
-    }
-  }
+  def apply(t: Expr[○, K]): Expr[○, L]
 
-  def ∘[J](that: Routing[J, K]): TypeFun[TC, J, L] =
-    TypeFun(that > pre, expr)
+  def applyTo[J](args: PartialArgs[Expr, J, K]): TypeFun[TC, J, L]
 
-  def apply(t: Expr[○, K]): Expr[○, L] =
-    TypeFun.toExpr(this ∘ TypeFun.fromExpr(t))
-
-  def applyTo[J](args: PartialArgs[Expr, J, K]): TypeFun[TC, J, L] =
-    this.pre.applyTo(args) match
-      case Routing.AppRes.Impl(p, a) =>
-        TypeFun(p, this.expr.applyTo(a))
-
-  def translate[TC1[_, _]](f: [k, l] => TC[k, l] => TC1[k, l]): TypeFun[TC1, K, L] =
-    TypeFun(pre, expr.translate(f))
+  def translate[TC1[_, _]](f: [k, l] => TC[k, l] => TC1[k, l]): TypeFun[TC1, K, L]
 
   def compile[==>[_, _], <*>[_, _], One, F[_, _], Q](
     fk: F[K, Q],
@@ -45,28 +27,67 @@ sealed trait TypeFun[TC[_, _], K, L] {
   )(using
     tgt: SymmetricMonoidalCategory[==>, <*>, One],
     F: MonoidalObjectMap[F, ×, ○, <*>, One],
-  ): MappedMorphism[==>, F, K, L] = {
-    val pre1: MappedMorphism[==>, F, K, X] =
-      pre.compile[==>, F, <*>, One, Q](fk)(dupTypes)
-    val expr1: MappedMorphism[==>, F, X, L] =
-      expr.compile(pre1.tgtMap, compilePrimitive)
-    pre1 > expr1
-  }
+  ): MappedMorphism[==>, F, K, L]
+
+  protected def thenProper[Q, M](that: TypeFun.Proper[TC, L, Q, M]): TypeFun[TC, K, M]
 }
 
 object TypeFun {
-  def apply[TC[_, _], K, P, L](r: Routing[K, P], f: TypeExpr[TC, P, L]): TypeFun[TC, K, L] =
-    new TypeFun[TC, K, L] {
-      override type X = P
-      override val pre = r
-      override val expr = f
+
+  case class Proper[TC[_, _], K, P, L](
+    pre: Routing[K, P],
+    expr: TypeExpr[TC, P, L],
+  ) extends TypeFun[TC, K, L] {
+
+    override given inKind: Kinds[K] = pre.inKind
+    override given outKind: Kind[L] = expr.outKind
+
+    override def ∘[J](that: TypeFun[TC, J, K]): TypeFun[TC, J, L] =
+      that.thenProper(this)
+
+    override def ∘[J](that: Routing[J, K]): TypeFun[TC, J, L] =
+      Proper(that > pre, expr)
+
+    override def apply(t: Expr[○, K]): Expr[○, L] =
+      TypeFun.toExpr(this ∘ TypeFun.fromExpr(t))
+
+    override def applyTo[J](args: PartialArgs[Expr, J, K]): TypeFun[TC, J, L] =
+      this.pre.applyTo(args) match
+        case Routing.AppRes.Impl(p, a) =>
+          Proper(p, this.expr.applyTo(a))
+
+    override def translate[TC1[_, _]](f: [k, l] => TC[k, l] => TC1[k, l]): TypeFun[TC1, K, L] =
+      Proper(pre, expr.translate(f))
+
+    override def compile[==>[_, _], <*>[_, _], One, F[_, _], Q](
+      fk: F[K, Q],
+      compilePrimitive: [k, l, q] => (F[k, q], TC[k, l]) => MappedMorphism[==>, F, k, l],
+      dupTypes: [k, q] => F[k, q] => (q ==> q <*> q),
+    )(using
+      tgt: SymmetricMonoidalCategory[==>, <*>, One],
+      F: MonoidalObjectMap[F, ×, ○, <*>, One],
+    ): MappedMorphism[==>, F, K, L] = {
+      val pre1: MappedMorphism[==>, F, K, P] =
+        pre.compile[==>, F, <*>, One, Q](fk)(dupTypes)
+      val expr1: MappedMorphism[==>, F, P, L] =
+        expr.compile(pre1.tgtMap, compilePrimitive)
+      pre1 > expr1
     }
 
-  def apply[TC[_, _], K, P, L](r: Routing[K, P], f: TypeFun[TC, P, L]): TypeFun[TC, K, L] =
-    TypeFun(r > f.pre, f.expr)
+    override protected def thenProper[Q, M](that: TypeFun.Proper[TC, L, Q, M]): TypeFun[TC, K, M] = {
+      import pre.outKind
+      import expr.outKind
 
-  def unapply[TC[_, _], K, L](f: TypeFun[TC, K, L]): (Routing[K, f.X], TypeExpr[TC, f.X, L]) =
-    (f.pre, f.expr)
+      that.pre.applyTo[Expr, P](PartialArgs(expr)) match {
+        case Routing.AppRes.Impl(q, e) =>
+          Proper(pre > q, that.expr.applyTo(e))
+      }
+    }
+
+  }
+
+  def apply[TC[_, _], K, P, L](r: Routing[K, P], f: TypeExpr[TC, P, L]): TypeFun[TC, K, L] =
+    Proper(r, f)
 
   def fromExpr[TC[_, _], K, L](e: TypeExpr[TC, K, L]): TypeFun[TC, K, L] = {
     import e.inKind
@@ -74,7 +95,9 @@ object TypeFun {
   }
 
   def toExpr[TC[_, _], L](f: TypeFun[TC, ○, L]): TypeExpr[TC, ○, L] =
-    Routing.proveId(f.pre).substituteCo[TypeExpr[TC, _, L]](f.expr)
+    f match
+      case Proper(pre, expr) =>
+        Routing.proveId(pre).substituteCo[TypeExpr[TC, _, L]](expr)
 
   def composeSnd[TC[_, _], K, L, M, N](g: TypeFun[TC, K × M, N], f: TypeFun[TC, L, M])(using
     KindN[L],
@@ -106,7 +129,7 @@ object TypeFun {
     }
 
     (f, g) match {
-      case (TypeFun(f1, f2), TypeFun(g1, g2)) =>
+      case (TypeFun.Proper(f1, f2), TypeFun.Proper(g1, g2)) =>
         go(f1, f2, g1, g2)
     }
   }
@@ -125,7 +148,7 @@ object TypeFun {
     }
 
     f match {
-      case TypeFun(f1, f2) => go(TypeFun.toExpr(a), f1, f2)
+      case TypeFun.Proper(f1, f2) => go(TypeFun.toExpr(a), f1, f2)
     }
   }
 }

@@ -50,34 +50,38 @@ object Type {
   def fixDecompose[V](
     f: Fun[V, ●, ●],
   ): FixDecomposed[V] =
-    OpenTypeExpr.open(f.expr) match
-      case Left(t) =>
-        UnhandledCase.raise(s"nothing to fix")
-      case Right(Indeed((cpt, opn))) =>
-        fixDecompose(cpt, opn) match
-          case Either3.Left(ev) =>
-            FixDecomposed.NothingToFix(f.expr.from(using ev.flip))
-          case Either3.Middle(nothing) =>
-            nothing
-          case Either3.Right(Indeed((capt, expr))) =>
-            import expr.inKind2
-            val m = Routing.toMultiplier(f.pre)
-            FixDecomposed.CapturedArgs(Args(capt), TypeConstructor.PFix(m, expr))
+    f match
+      case TypeFun.Proper(fPre, fExpr) =>
+        OpenTypeExpr.open(fExpr) match
+          case Left(t) =>
+            UnhandledCase.raise(s"nothing to fix")
+          case Right(Indeed((cpt, opn))) =>
+            fixDecompose(cpt, opn) match
+              case Either3.Left(ev) =>
+                FixDecomposed.NothingToFix(fExpr.from(using ev.flip))
+              case Either3.Middle(nothing) =>
+                nothing
+              case Either3.Right(Indeed((capt, expr))) =>
+                import expr.inKind2
+                val m = Routing.toMultiplier(fPre)
+                FixDecomposed.CapturedArgs(Args(capt), TypeConstructor.PFix(m, expr))
 
   def pfixDecompose[V](
     f: Fun[V, ● × ●, ●],
   ): PFixDecomposed[V] =
-    OpenTypeExpr.open(f.expr) match
-      case Left(t) =>
-        UnhandledCase.raise(s"nothing to fix")
-      case Right(Indeed((cpt, opn))) =>
-        fixDecompose(cpt, opn) match
-          case Either3.Left(ev) =>
-            PFixDecomposed.NothingToFix(TypeFun(Routing.elim[●], f.expr.from(using ev.flip)))
-          case Either3.Middle(x) =>
-            x
-          case Either3.Right(Indeed((capt, expr))) =>
-            pfixDecompose(capt, f.pre, expr)
+    f match
+      case TypeFun.Proper(fPre, fExpr) =>
+        OpenTypeExpr.open(fExpr) match
+          case Left(t) =>
+            UnhandledCase.raise(s"nothing to fix")
+          case Right(Indeed((cpt, opn))) =>
+            fixDecompose(cpt, opn) match
+              case Either3.Left(ev) =>
+                PFixDecomposed.NothingToFix(TypeFun(Routing.elim[●], fExpr.from(using ev.flip)))
+              case Either3.Middle(x) =>
+                x
+              case Either3.Right(Indeed((capt, expr))) =>
+                pfixDecompose(capt, fPre, expr)
 
   private def pfixDecompose[V, X, Y](
     capt: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, X],
