@@ -65,6 +65,8 @@ object Type {
                 import expr.inKind2
                 val m = Routing.toMultiplier(fPre)
                 FixDecomposed.CapturedArgs(Args(capt), TypeConstructor.PFix(m, expr))
+      case TypeFun.RoutingOnly(r, _) =>
+        UnhandledCase.raise(s"attempt to fix Id ($f)")
 
   def pfixDecompose[V](
     f: Fun[V, ● × ●, ●],
@@ -82,6 +84,8 @@ object Type {
                 x
               case Either3.Right(Indeed((capt, expr))) =>
                 pfixDecompose(capt, fPre, expr)
+      case TypeFun.RoutingOnly(r, _) =>
+        UnhandledCase.raise(s"pfixDecompose($f)")
 
   private def pfixDecompose[V, X, Y](
     capt: PartialArgs[TypeExpr[TypeConstructor[V, _, _], _, _], ○, X],

@@ -21,4 +21,7 @@ object Kind {
 
   def cannotBePair[K, L](ab: Kind[K × L]): Nothing =
     throw AssertionError("Impossible")
+
+  def cannotBeUnit(k: Kind[○]): Nothing =
+    throw AssertionError("Impossible")
 }

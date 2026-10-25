@@ -87,14 +87,6 @@ sealed abstract class TypeExpr[TC[_, _], K, L](using
             MappedMorphism(fk, args > op1.get(fx, op1.tgtMap), op1.tgtMap)
         }
   }
-
-  private def absorbArgs[TC[_, _]] =
-    [j, k, l] => (
-      a: PartialArgs[TypeExpr[TC, _, _], j, k],
-      t: TypeExpr[TC, k, l],
-    ) => {
-      t.applyTo(a)
-    }
 }
 
 object TypeExpr {
@@ -134,4 +126,12 @@ object TypeExpr {
     ): (TypeExpr[TC, ○, A], TypeExpr[TC, ○, B]) =
       Kind.cannotBePair(ab.outKind)
   }
+
+  def absorbArgs[TC[_, _]] =
+    [j, k, l] => (
+      a: PartialArgs[TypeExpr[TC, _, _], j, k],
+      t: TypeExpr[TC, k, l],
+    ) => {
+      t.applyTo(a)
+    }
 }

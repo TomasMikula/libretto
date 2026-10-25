@@ -88,6 +88,8 @@ object MultiTypeFun {
         import expr.inKind
         import expr.outKind
         Proper(pre, PartialArgs(expr))
+      case TypeFun.RoutingOnly(r, _) =>
+        RoutingOnly(r)
 
   private def id[TC[_, _], K](using k: Kinds[K]): MultiTypeFun[TC, K, K] =
     RoutingOnly(Routing.id[K])

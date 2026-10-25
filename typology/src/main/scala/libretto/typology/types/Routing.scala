@@ -204,7 +204,7 @@ object Routing {
   def proveId[K](r: Routing[○, K]): K =:= ○ =
     r match
       case Elim() => summon[K =:= ○]
-      case Impl(p, m, s) => UnhandledCase.raise(s"Routing.proveId($r)")
+      case Impl(p, m, s) => KindN.cannotBeUnit(m.from(using p.proveId(Kinds.unitIsNotPair)).inputKind)
 
   def toMultiplier[K, L](r: Routing[K, L])(using
     k: Kind[K],

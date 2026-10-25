@@ -120,6 +120,8 @@ sealed trait PartialArgs[F[_, _], K, L] {
   def extract(using ev: K =:= ○): Tupled[×, F[○, _], L] =
     PartialArgs.extract(this.from[○](using ev.flip))
 
+  def extractSingle(using Kind[L]): Either[K =:= L, F[K, L]]
+
   def split[G[_, _], H[_, _]](
     f: [k, l] => F[k, l] => Exists[[x] =>> (G[k, x], KindN[x], H[x, l])],
   ): Exists[[X] =>> (PartialArgs[G, K, X], PartialArgs[H, X, L])] =
@@ -393,6 +395,9 @@ object PartialArgs {
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
     ): Proper[F, J, K] =
       that
+
+    override def extractSingle(using Kind[K]): Either[K =:= K, F[K, K]] =
+      Left(summon)
   }
 
   sealed trait Proper[F[_, _], K, L] extends PartialArgs[F, K, L] {
@@ -436,6 +441,9 @@ object PartialArgs {
     ): Proper[F, J, L] =
       import that.given
       Lift(absorbL[J, K, L](that, f))
+
+    override def extractSingle(using Kind[L]): Either[K =:= L, F[K, L]] =
+      Right(f)
   }
 
   case class Par[F[_, _], K1, K2, L1, L2](
@@ -453,6 +461,9 @@ object PartialArgs {
     ): Proper[F, J, L1 × L2] =
       val first = Fst[F, K1, L1, K2](f1).composeProper(that)(absorbL)
       Snd[F, L1, K2, L2](f2)(using f1.outKind, inKind2).composeProper(first)(absorbL)
+
+    override def extractSingle(using Kind[L1 × L2]): Either[K1 × K2 =:= L1 × L2, F[K1 × K2, L1 × L2]] =
+      Kind.cannotBePair(Kind[L1 × L2])
   }
 
   case class Fst[F[_, _], K, L, M](
@@ -482,6 +493,9 @@ object PartialArgs {
           PartialArgs.introSnd((g1 > f)(absorbL), g2)
         case IntroBoth(g1, g2) =>
           introBoth((g1 > f)(absorbL), g2)
+
+    override def extractSingle(using Kind[L × M]): Either[K × M =:= L × M, F[K × M, L × M]] =
+      Kind.cannotBePair(Kind[L × M])
   }
 
   case class Snd[F[_, _], K, L, M](
@@ -515,6 +529,9 @@ object PartialArgs {
           PartialArgs.introSnd(f1, (f2 > f)(absorbL))
         case IntroBoth(f1, f2) =>
           PartialArgs.introBoth(f1, (f2 > f)(absorbL))
+
+    override def extractSingle(using Kind[K × M]): Either[K × L =:= K × M, F[K × L, K × M]] =
+      Kind.cannotBePair(Kind[K × M])
   }
 
   case class IntroFst[F[_, _], K, L, M](
@@ -530,6 +547,9 @@ object PartialArgs {
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
     ): Proper[F, J, K × M] =
       PartialArgs.introFst(f1, (that > f2)(absorbL))
+
+    override def extractSingle(using Kind[K × M]): Either[L =:= K × M, F[L, K × M]] =
+      Kind.cannotBePair(Kind[K × M])
   }
 
   case class IntroSnd[F[_, _], K, L, M](
@@ -545,6 +565,9 @@ object PartialArgs {
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
     ): Proper[F, J, L × M] =
       PartialArgs.introSnd((that > f1)(absorbL), f2)
+
+    override def extractSingle(using Kind[L × M]): Either[K =:= L × M, F[K, L × M]] =
+      Kind.cannotBePair(Kind[L × M])
   }
 
   case class IntroBoth[F[_, _], K, L](
@@ -558,6 +581,9 @@ object PartialArgs {
       absorbL: [j, k, l] => (PartialArgs[F, j, k], F[k, l]) => F[j, l],
     ): Proper[F, J, K × L] =
       UnhandledCase.raise(s"$that > $this")
+
+    override def extractSingle(using Kind[K × L]): Either[○ =:= K × L, F[○, K × L]] =
+      Kind.cannotBePair(Kind[K × L])
   }
 
   def apply[F[_, _], K: Kinds, L: KindN](f: F[K, L]): PartialArgs.Proper[F, K, L] =

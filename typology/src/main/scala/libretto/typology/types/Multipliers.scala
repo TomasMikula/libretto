@@ -57,6 +57,12 @@ object Multipliers {
     given inputKind: KindN[A]
     given outKind: KindN[AA]
 
+    override def from[Z](using ev: Z =:= A): Multipliers.Proper[Z, AA] =
+      ev.substituteContra[Multipliers.Proper[_, AA]](this)
+
+    override def to[BB](using ev: AA =:= BB): Multipliers.Proper[A, BB] =
+      ev.substituteCo(this)
+
     override def >[BB](that: Multipliers[AA, BB]): Multipliers.Proper[A, BB]
 
     override def project[BB](

@@ -1,6 +1,7 @@
 package libretto.lambda
 
 import libretto.lambda.util.{BiInjective, Exists, TypeEq}
+import libretto.lambda.util.Exists.Indeed
 import libretto.lambda.util.TypeEq.Refl
 
 sealed trait Projection[|*|[_, _], P, Q] {
@@ -17,6 +18,8 @@ sealed trait Projection[|*|[_, _], P, Q] {
 
   def to[R](using ev: Q =:= R): Projection[|*|, P, R] =
     ev.substituteCo(this)
+
+  def proveId(notPair: [X, Y] => (P =:= (X |*| Y)) => Nothing): P =:= Q
 }
 
 object Projection {
@@ -25,6 +28,7 @@ object Projection {
     override def >[R](that: Projection[|*|, P, R]): Projection[|*|, P, R] = that
     override def inFst[Y]: Projection[|*|, P |*| Y, P |*| Y] = Id()
     override def inSnd[X]: Projection[|*|, X |*| P, X |*| P] = Id()
+    override def proveId(notPair: [X, Y] => (P =:= (X |*| Y)) => Nothing): P =:= P = summon
   }
 
   sealed trait Proper[|*|[_, _], P, Q] extends Projection[|*|, P, Q] {
@@ -98,6 +102,10 @@ object Projection {
             case BiInjective[|*|](TypeEq(Refl()), TypeEq(Refl())) =>
               casePar[q1, q2](p)
       }
+
+    override def proveId(notPair: [X, Y] => (P =:= (X |*| Y)) => Nothing): P =:= Q =
+      startsFromPair match
+        case Indeed(Indeed(ev)) => notPair(ev)
   }
 
   case class DiscardFst[|*|[_, _], A, B, B0](p2: Projection[|*|, B, B0]) extends Proper[|*|, A |*| B, B0] {
