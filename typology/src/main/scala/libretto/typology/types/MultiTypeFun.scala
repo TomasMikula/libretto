@@ -13,6 +13,7 @@ sealed trait MultiTypeFun[TC[_, _], K, L] {
   def >[M](f: TypeFun[TC, L, M]): TypeFun[TC, K, M]
   def inFst[M](using KindN[K], KindN[L], KindN[M]): MultiTypeFun[TC, K × M, L × M]
   def inSnd[J](using KindN[J], KindN[K], KindN[L]): MultiTypeFun[TC, J × K, J × L]
+  def toTypeFun(using Kind[L]): TypeFun[TC, K, L]
 
   def to[M](using L =:= M): MultiTypeFun[TC, K, M] =
     summon[L =:= M].substituteCo(this)
@@ -33,6 +34,9 @@ object MultiTypeFun {
 
     override def inSnd[J](using KindN[J], KindN[K], KindN[L]): MultiTypeFun[TC, J × K, J × L] =
       RoutingOnly(routing.inSnd[J])
+
+    override def toTypeFun(using Kind[L]): TypeFun[TC, K, L] =
+      TypeFun.RoutingOnly(routing, Kind[L])
   }
 
   case class Proper[TC[_, _], K, X, L](
@@ -57,6 +61,9 @@ object MultiTypeFun {
         case Right(x) =>
           given KindN[X] = x
           MultiTypeFun(routing.inSnd[J], args.inSnd[J])
+
+    override def toTypeFun(using Kind[L]): TypeFun[TC, K, L] =
+      TypeFun(routing, args)
   }
 
   private given kindProducts: ABinModule[⊗, \, Kinds.Prod, Kinds] =
