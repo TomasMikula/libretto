@@ -179,6 +179,15 @@ object MultiTypeFun {
   def dup[TC[_, _], K](using KindN[K]): MultiTypeFun[TC, K, K × K] =
     RoutingOnly(Routing.dup[K])
 
+  def swap[TC[_, _], A, B](using KindN[A], KindN[B]): MultiTypeFun[TC, A × B, B × A] =
+    RoutingOnly(Routing.swap[A, B])
+
+  def assocLR[TC[_, _], A, B, C](using KindN[A], KindN[B], KindN[C]): MultiTypeFun[TC, (A × B) × C, A × (B × C)] =
+    RoutingOnly(Routing.assocLR[A, B, C])
+
+  def assocRL[TC[_, _], A, B, C](using KindN[A], KindN[B], KindN[C]): MultiTypeFun[TC, A × (B × C), (A × B) × C] =
+    RoutingOnly(Routing.assocRL[A, B, C])
+
   def par[TC[_, _], A1, A2, B1, B2](
     f1: MultiTypeFun[TC, A1, B1],
     f2: MultiTypeFun[TC, A2, B2],
@@ -218,6 +227,14 @@ object MultiTypeFun {
                 MultiTypeFun(Routing.elimFst[A1, A2] > p2.routing, PartialArgs.introFst(p1.args, p2.args))
               case Left(TypeEq(Refl())) =>
                 MultiTypeFun(Routing.elim[A1 × A2], PartialArgs.introBoth(p1.args, p2.args))
+
+  def par[TC[_, _], A1, A2, B1, B2](
+    f1: TypeFun[TC, A1, B1],
+    f2: TypeFun[TC, A2, B2],
+  )(using
+    KindN[A1], KindN[A2], KindN[B1], KindN[B2],
+  ): MultiTypeFun[TC, A1 × A2, B1 × B2] =
+    MultiTypeFun.par[TC, A1, A2, B1, B2](MultiTypeFun(f1), MultiTypeFun(f2))
 
   def wpar[TC[_, _], A1, A2, B1, B2](
     f1: MultiTypeFun[TC, A1, B1],
@@ -449,13 +466,13 @@ object MultiTypeFun {
         RoutingOnly(Routing.id[A])
 
       override def swap[A, B](using wa: KindN[A], wb: KindN[B]): MultiTypeFun[TC, A × B, B × A] =
-        RoutingOnly(Routing.swap[A, B])
+        MultiTypeFun.swap[TC, A, B]
 
       override def assocLR[A, B, C](using wa: KindN[A], wb: KindN[B], wc: KindN[C]): MultiTypeFun[TC, (A × B) × C, A × (B × C)] =
-        RoutingOnly(Routing.assocLR[A, B, C])
+        MultiTypeFun.assocLR[TC, A, B, C]
 
       override def assocRL[A, B, C](using wa: KindN[A], wb: KindN[B], wc: KindN[C]): MultiTypeFun[TC, A × (B × C), (A × B) × C] =
-        RoutingOnly(Routing.assocRL[A, B, C])
+        MultiTypeFun.assocRL[TC, A, B, C]
 
       override def tensor[A, B](wa: KindN[A], wb: KindN[B]): KindN[A × B] =
         wa × wb
@@ -520,7 +537,4 @@ object MultiTypeFun {
       ): MultiTypeFun[TC, A, C] =
         MultiTypeFun.andThen[TC, A, B, C](f, g)
     }
-
-  def lambdaSyntax[TC[_, _]]: MultiTypeFunLambdaSyntax[TC] =
-    new MultiTypeFunLambdaSyntax[TC]
 }

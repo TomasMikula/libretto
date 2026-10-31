@@ -38,6 +38,7 @@ sealed trait TypeFun[TC[_, _], K, L] {
 }
 
 object TypeFun {
+
   case class RoutingOnly[TC[_, _], K, L](
     routing: Routing[K, L],
     override val outKind: Kind[L],
@@ -136,6 +137,18 @@ object TypeFun {
       Indeed((pre, PartialArgs(expr)(using expr.inKind)))
 
   }
+
+  def lambdaSyntax[TC[_, _]]: TypeFunLambdaSyntax[TC] =
+    new TypeFunLambdaSyntax[TC]
+
+  def id[TC[_, _], K](using k: Kind[K]): TypeFun[TC, K, K] =
+    RoutingOnly(Routing.id[K](using Kinds(k)), k)
+
+  def elimFst[TC[_, _], K, L](using k: KindN[K], l: Kind[L]): TypeFun[TC, K × L, L] =
+    RoutingOnly(Routing.elimFst[K, L], l)
+
+  def elimSnd[TC[_, _], K, L](using k: Kind[K], l: KindN[L]): TypeFun[TC, K × L, K] =
+    RoutingOnly(Routing.elimSnd[K, L], k)
 
   def apply[TC[_, _], K, P, L](r: Routing[K, P], f: TypeExpr[TC, P, L]): TypeFun[TC, K, L] =
     Proper(r, f)

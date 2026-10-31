@@ -7,26 +7,23 @@ import libretto.typology.kinds.*
 
 /** Lambda syntax for type functions between non-empty kinds.
   *
-  * Obtain a module using `MultiTypeFun.lambdaSyntax[TC]` and import its members:
+  * Obtain a module using `TypeFun.lambdaSyntax[TC]` and import its members:
   * {{{
-  * val syntax = MultiTypeFun.lambdaSyntax[TC]
+  * val syntax = TypeFun.lambdaSyntax[TC]
   * import syntax.*
-  * val duplicate = lambda[●, ● × ●] { a => a zip a }
+  * val id = lambda[●, ●] { a => a }
   * }}}
   *
   * Variables may be duplicated or discarded. Closed type functions with input
   * kind `○` can be introduced using `const`; expression kinds themselves are non-empty.
   */
-final class MultiTypeFunLambdaSyntax[TC[_, _]] private[types] () {
+final class TypeFunLambdaSyntax[TC[_, _]] private[types] () {
   private case class Origin(description: String, pos: SourcePos) {
     override def toString: String = s"$description at ${pos.filename}:${pos.line}"
   }
 
-  // private val prepared: PreparedArrowModule[KindN, MultiTypeFun[TC, _, _], ×] =
-  //   new PreparedArrowModule[KindN, MultiTypeFun[TC, _, _], ×]
   type Prepared[A, B] = (MultiTypeFun[TC, _, _] pendingIn KindN)[A, B]
   def Prepared[A, B] = ArrowPendingInObj[MultiTypeFun[TC, _, _], KindN, A, B]
-  // import prepared.{Prepared, given}
 
   private val lambdas: Lambdas[Prepared, ×, Origin, SourcePos] = Lambdas(
     universalSplit = Some([K] => (_: DummyImplicit) ?=> Prepared[K, K × K] { k =>
@@ -48,7 +45,8 @@ final class MultiTypeFunLambdaSyntax[TC[_, _]] private[types] () {
   opaque type Expr[K] = Expression[K]
   opaque type LambdaContext = lambdas.Context
 
-  def lambda[K, L](f: LambdaContext ?=> Expr[K] => Expr[L])(using
+  private def lambdaImpl[K, L](
+    f: LambdaContext ?=> Expr[K] => Expr[L],
     k: KindN[K],
     pos: SourcePos,
   ): MultiTypeFun[TC, K, L] =
@@ -62,6 +60,20 @@ final class MultiTypeFunLambdaSyntax[TC[_, _]] private[types] () {
       case Invalid(errors) =>
         throw IllegalArgumentException(s"$errors")
     }
+
+  def lambdaN[K, L](f: LambdaContext ?=> Expr[K] => Expr[L])(using
+    k: KindN[K],
+    pos: SourcePos,
+  ): MultiTypeFun[TC, K, L] =
+    lambdaImpl[K, L](f, k, pos)
+
+  def lambda[K, L](f: LambdaContext ?=> Expr[K] => Expr[L])(using
+    k: KindN[K],
+    l: Kind[L],
+    pos: SourcePos,
+  ): TypeFun[TC, K, L] =
+    lambdaImpl[K, L](f, k, pos)
+      .toTypeFun(using l)
 
   extension [K, L](f: MultiTypeFun[TC, K, L]) {
     def apply(a: Expr[K])(using ctx: LambdaContext, l: KindN[L], pos: SourcePos): Expr[L] =
