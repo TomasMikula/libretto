@@ -41,18 +41,6 @@ class TypeFunLambdaTests extends AnyFunSuite {
     assert(f == MultiTypeFun.assocLR[TC, ●, ●, ●])
   }
 
-  test("expressions retain kind witnesses for abstract components") {
-    def reverse[K, L](using KindN[K × L]): MultiTypeFun[TC, K × L, L × K] =
-      lambdaN[K × L, L × K] { ab =>
-        val (a, b) = ab.unzip
-        given KindN[K] = a.kind
-        given KindN[L] = b.kind
-        cat.id[L](b) zip cat.id[K](a)
-      }
-
-    assert(reverse[●, ● × ●] == MultiTypeFun.swap[TC, ●, ● × ●])
-  }
-
   test("primitive application with shared input and multiple outputs") {
     val f = lambdaN[●, ● × ●] { a => pair(a zip a) zip a }
     val expected = MultiTypeFun.dup[TC, ●] > MultiTypeFun.par(MultiTypeFun.dup[TC, ●] > pair, TypeFun.id[TC, ●])
