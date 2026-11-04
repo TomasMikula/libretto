@@ -112,20 +112,50 @@ object Projection {
     override def startsFromPair: Exists[[P1] =>> Exists[[P2] =>> (A |*| B) =:= (P1 |*| P2)]] =
       Exists(Exists(summon))
 
-    override protected def discardFst[Q1, Q2](using ev: B0 =:= (Q1 |*| Q2), inj: BiInjective[|*|]): Proper[|*|, A |*| B, Q2] = ???
-    override protected def discardSnd[Q1, Q2](using ev: B0 =:= (Q1 |*| Q2), inj: BiInjective[|*|]): Proper[|*|, A |*| B, Q1] = ???
-    override protected def projectFst[Q1, Q2, R1](using ev: B0 =:= (Q1 |*| Q2), inj: BiInjective[|*|])(p1: Proper[|*|, Q1, R1]): Proper[|*|, A |*| B, R1 |*| Q2] = ???
-    override protected def projectSnd[Q1, Q2, R2](using ev: B0 =:= (Q1 |*| Q2), inj: BiInjective[|*|])(p2: Proper[|*|, Q2, R2]): Proper[|*|, A |*| B, Q1 |*| R2] = ???
+    override protected def discardFst[Q1, Q2](using
+      ev: B0 =:= (Q1 |*| Q2),
+      inj: BiInjective[|*|],
+    ): Proper[|*|, A |*| B, Q2] =
+      DiscardFst(p2.to[Q1 |*| Q2] > DiscardFst(Id()))
+
+    override protected def discardSnd[Q1, Q2](using
+      ev: B0 =:= (Q1 |*| Q2),
+      inj: BiInjective[|*|],
+    ): Proper[|*|, A |*| B, Q1] =
+      DiscardFst(p2.to[Q1 |*| Q2] > DiscardSnd(Id()))
+
+    override protected def projectFst[Q1, Q2, R1](using
+      ev: B0 =:= (Q1 |*| Q2),
+      inj: BiInjective[|*|],
+    )(
+      p1: Proper[|*|, Q1, R1],
+    ): Proper[|*|, A |*| B, R1 |*| Q2] =
+      DiscardFst(p2.to[Q1 |*| Q2] > Fst(p1))
+
+    override protected def projectSnd[Q1, Q2, R2](using
+      ev: B0 =:= (Q1 |*| Q2),
+      inj: BiInjective[|*|],
+    )(
+      q2: Proper[|*|, Q2, R2],
+    ): Proper[|*|, A |*| B, Q1 |*| R2] =
+      DiscardFst(p2.to[Q1 |*| Q2] > Snd(q2))
   }
 
   case class DiscardSnd[|*|[_, _], A, B, A0](p1: Projection[|*|, A, A0]) extends Proper[|*|, A |*| B, A0] {
     override def startsFromPair: Exists[[P1] =>> Exists[[P2] =>> (A |*| B) =:= (P1 |*| P2)]] =
       Exists(Exists(summon))
 
-    override protected def discardFst[Q1, Q2](using ev: A0 =:= (Q1 |*| Q2), inj: BiInjective[|*|]): Proper[|*|, A |*| B, Q2] = ???
-    override protected def discardSnd[Q1, Q2](using ev: A0 =:= (Q1 |*| Q2), inj: BiInjective[|*|]): Proper[|*|, A |*| B, Q1] = ???
-    override protected def projectFst[Q1, Q2, R1](using ev: A0 =:= (Q1 |*| Q2), inj: BiInjective[|*|])(p1: Proper[|*|, Q1, R1]): Proper[|*|, A |*| B, R1 |*| Q2] = ???
-    override protected def projectSnd[Q1, Q2, R2](using ev: A0 =:= (Q1 |*| Q2), inj: BiInjective[|*|])(p2: Proper[|*|, Q2, R2]): Proper[|*|, A |*| B, Q1 |*| R2] = ???
+    override protected def discardFst[Q1, Q2](using ev: A0 =:= (Q1 |*| Q2), inj: BiInjective[|*|]): Proper[|*|, A |*| B, Q2] =
+      DiscardSnd(p1.to[Q1 |*| Q2] > DiscardFst(Id()))
+
+    override protected def discardSnd[Q1, Q2](using ev: A0 =:= (Q1 |*| Q2), inj: BiInjective[|*|]): Proper[|*|, A |*| B, Q1] =
+      DiscardSnd(p1.to[Q1 |*| Q2] > DiscardSnd(Id()))
+
+    override protected def projectFst[Q1, Q2, R1](using ev: A0 =:= (Q1 |*| Q2), inj: BiInjective[|*|])(q1: Proper[|*|, Q1, R1]): Proper[|*|, A |*| B, R1 |*| Q2] =
+      DiscardSnd(p1.to[Q1 |*| Q2] > Fst(q1))
+
+    override protected def projectSnd[Q1, Q2, R2](using ev: A0 =:= (Q1 |*| Q2), inj: BiInjective[|*|])(p2: Proper[|*|, Q2, R2]): Proper[|*|, A |*| B, Q1 |*| R2] =
+      DiscardSnd(p1.to[Q1 |*| Q2] > Snd(p2))
   }
 
   sealed trait Par[|*|[_, _], P1, P2, Q1, Q2] extends Proper[|*|, P1 |*| P2, Q1 |*| Q2] {
@@ -146,9 +176,16 @@ object Projection {
     ): Proper[|*|, P |*| B, Q2] =
       ev match { case inj(TypeEq(Refl()), TypeEq(Refl())) => DiscardFst(Id()) }
 
-    override protected def discardSnd[Q1, Q2](using ev: (Q |*| B) =:= (Q1 |*| Q2), inj: BiInjective[|*|]): Proper[|*|, P |*| B, Q1] = ???
+    override protected def discardSnd[Q1, Q2](using ev: (Q |*| B) =:= (Q1 |*| Q2), inj: BiInjective[|*|]): Proper[|*|, P |*| B, Q1] =
+      ev match { case inj(TypeEq(Refl()), TypeEq(Refl())) => DiscardSnd(p1) }
 
-    override protected def projectFst[Q1, Q2, R1](using ev: (Q |*| B) =:= (Q1 |*| Q2), inj: BiInjective[|*|])(p1: Proper[|*|, Q1, R1]): Proper[|*|, P |*| B, R1 |*| Q2] = ???
+    override protected def projectFst[Q1, Q2, R1](using
+      ev: (Q |*| B) =:= (Q1 |*| Q2),
+      inj: BiInjective[|*|],
+    )(
+      q1: Proper[|*|, Q1, R1],
+    ): Proper[|*|, P |*| B, R1 |*| Q2] =
+      ev match { case inj(TypeEq(Refl()), TypeEq(Refl())) => Fst(p1 > q1) }
 
     override protected def projectSnd[Q1, Q2, R2](using
       ev: (Q |*| B) =:= (Q1 |*| Q2),
@@ -158,7 +195,11 @@ object Projection {
   }
 
   case class Snd[|*|[_, _], A, P, Q](p2: Proper[|*|, P, Q]) extends Par[|*|, A, P, A, Q] {
-    override protected def discardFst[Q1, Q2](using ev: (A |*| Q) =:= (Q1 |*| Q2), inj: BiInjective[|*|]): Proper[|*|, A |*| P, Q2] = ???
+    override protected def discardFst[Q1, Q2](using
+      ev: (A |*| Q) =:= (Q1 |*| Q2),
+      inj: BiInjective[|*|],
+    ): Proper[|*|, A |*| P, Q2] =
+      ev match { case inj(TypeEq(Refl()), TypeEq(Refl())) => DiscardFst(p2) }
 
     override protected def discardSnd[Q1, Q2](using
       ev: (A |*| Q) =:= (Q1 |*| Q2),
@@ -174,17 +215,37 @@ object Projection {
     ): Proper[|*|, A |*| P, R1 |*| Q2] =
       ev match { case inj(TypeEq(Refl()), TypeEq(Refl())) => Both(p1, p2) }
 
-    override protected def projectSnd[Q1, Q2, R2](using ev: (A |*| Q) =:= (Q1 |*| Q2), inj: BiInjective[|*|])(p2: Proper[|*|, Q2, R2]): Proper[|*|, A |*| P, Q1 |*| R2] = ???
+    override protected def projectSnd[Q1, Q2, R2](using
+      ev: (A |*| Q) =:= (Q1 |*| Q2),
+      inj: BiInjective[|*|],
+    )(
+      q2: Proper[|*|, Q2, R2],
+    ): Proper[|*|, A |*| P, Q1 |*| R2] =
+      ev match { case inj(TypeEq(Refl()), TypeEq(Refl())) => Snd(p2 > q2) }
   }
 
   case class Both[|*|[_, _], P1, P2, Q1, Q2](p1: Proper[|*|, P1, Q1], p2: Proper[|*|, P2, Q2]) extends Par[|*|, P1, P2, Q1, Q2] {
-    override protected def discardFst[q1, q2](using ev: (Q1 |*| Q2) =:= (q1 |*| q2), inj: BiInjective[|*|]): Proper[|*|, P1 |*| P2, q2] = ???
+    override protected def discardFst[q1, q2](using ev: (Q1 |*| Q2) =:= (q1 |*| q2), inj: BiInjective[|*|]): Proper[|*|, P1 |*| P2, q2] =
+      ev match { case inj(TypeEq(Refl()), TypeEq(Refl())) => DiscardFst(p2) }
 
-    override protected def discardSnd[q1, q2](using ev: (Q1 |*| Q2) =:= (q1 |*| q2), inj: BiInjective[|*|]): Proper[|*|, P1 |*| P2, q1] = ???
+    override protected def discardSnd[q1, q2](using ev: (Q1 |*| Q2) =:= (q1 |*| q2), inj: BiInjective[|*|]): Proper[|*|, P1 |*| P2, q1] =
+      ev match { case inj(TypeEq(Refl()), TypeEq(Refl())) => DiscardSnd(p1) }
 
-    override protected def projectFst[q1, q2, R1](using ev: (Q1 |*| Q2) =:= (q1 |*| q2), inj: BiInjective[|*|])(p1: Proper[|*|, q1, R1]): Proper[|*|, P1 |*| P2, R1 |*| q2] = ???
+    override protected def projectFst[q1, q2, R1](using
+      ev: (Q1 |*| Q2) =:= (q1 |*| q2),
+      inj: BiInjective[|*|],
+    )(
+      q1: Proper[|*|, q1, R1],
+    ): Proper[|*|, P1 |*| P2, R1 |*| q2] =
+      ev match { case inj(TypeEq(Refl()), TypeEq(Refl())) => Both(p1 > q1, p2) }
 
-    override protected def projectSnd[q1, q2, R2](using ev: (Q1 |*| Q2) =:= (q1 |*| q2), inj: BiInjective[|*|])(p2: Proper[|*|, q2, R2]): Proper[|*|, P1 |*| P2, q1 |*| R2] = ???
+    override protected def projectSnd[q1, q2, R2](using
+      ev: (Q1 |*| Q2) =:= (q1 |*| q2),
+      inj: BiInjective[|*|],
+    )(
+      q2: Proper[|*|, q2, R2],
+    ): Proper[|*|, P1 |*| P2, q1 |*| R2] =
+      ev match { case inj(TypeEq(Refl()), TypeEq(Refl())) => Both(p1, p2 > q2) }
   }
 
   def id[|*|[_, _], P]: Projection[|*|, P, P] = Id()
