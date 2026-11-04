@@ -77,12 +77,8 @@ class TypeFunLambdaTests extends AnyFunSuite {
     assert(f == expected)
   }
 
-  test("a multi-output constant can be introduced and destructured") {
-    val constant = MultiTypeFun.introBoth(intType, stringType)
-    val f = lambdaN[●, ● × ●] { _ =>
-      val (i, s) = const(constant).unzip
-      s zip i
-    }
+  test("a multi-output constant can be formed from individual ones") {
+    val f = lambdaN[●, ● × ●] { _ => const(stringType) zip const(intType) }
     assert(f == (MultiTypeFun.elim[TC, ●] > MultiTypeFun.introBoth(stringType, intType)))
   }
 

@@ -103,19 +103,17 @@ final class TypeFunLambdaSyntax[TC[_, _]] private[types] () {
       ab.unzip
   }
 
-  def const[K](f: MultiTypeFun[TC, ○, K])(using ctx: LambdaContext, k: KindN[K], pos: SourcePos): Expr[K] =
+  def const[K](f: TypeFun[TC, ○, K])(using ctx: LambdaContext, pos: SourcePos): Expr[K] =
+    val k = KindN(f.outKind)
     lambdas.Expr.const[K](
       [X] => (_: DummyImplicit) ?=> Prepared[X, K × X] { x =>
-        (MultiTypeFun.introFst[TC, K, X](f)(using k, x), k × x)
+        (MultiTypeFun.introFst[TC, K, X](f)(using x), k × x)
       },
       [X] => (_: DummyImplicit) ?=> Prepared[X, X × K] { x =>
-        (MultiTypeFun.introSnd[TC, X, K](f)(using x, k), x × k)
+        (MultiTypeFun.introSnd[TC, X, K](f)(using x), x × k)
       },
     )(Origin("Constant", pos))
 
-  def const[K](f: TypeFun[TC, ○, K])(using ctx: LambdaContext, pos: SourcePos): Expr[K] =
-    const(MultiTypeFun(f))(using ctx, KindN(f.outKind), pos)
-
   def const[K](f: TypeExpr[TC, ○, K])(using ctx: LambdaContext, pos: SourcePos): Expr[K] =
-    const(MultiTypeFun(f))(using ctx, KindN(f.outKind), pos)
+    const(TypeFun.fromExpr(f))
 }
