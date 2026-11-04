@@ -72,14 +72,10 @@ final class TypeFunLambdaSyntax[TC[_, _]] private[types] () {
     lambdaImpl[K, L](f, k, pos)
       .toTypeFun(using l)
 
-  extension [K, L](f: MultiTypeFun[TC, K, L]) {
-    def apply(a: Expr[K])(using ctx: LambdaContext, l: KindN[L], pos: SourcePos): Expr[L] =
-      lambdas.Expr.map(a, ArrowPendingInObj.const(f))(Origin("Function result", pos))
-  }
-
   extension [K, L](f: TypeFun[TC, K, L]) {
     def apply(a: Expr[K])(using ctx: LambdaContext, pos: SourcePos): Expr[L] =
-      MultiTypeFun(f).apply(a)(using ctx, KindN(f.outKind), pos)
+      given KindN[L] = KindN(f.outKind)
+      lambdas.Expr.map(a, ArrowPendingInObj.const(MultiTypeFun(f)))(Origin("Function result", pos))
   }
 
   extension [K, L](f: TypeExpr[TC, K, L]) {

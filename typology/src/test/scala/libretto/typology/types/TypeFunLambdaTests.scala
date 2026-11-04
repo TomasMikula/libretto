@@ -58,8 +58,8 @@ class TypeFunLambdaTests extends AnyFunSuite {
     val diagonal = MultiTypeFun.dup[TC, ●] > pair
     val both = MultiTypeFun.par(diagonal, diagonal)
     val f = lambdaN[● × ●, ● × ●] { ab =>
-      val (a, b) = both(ab).unzip
-      pair(a zip a) zip pair(b zip b)
+      val (a, b) = ab.unzip
+      diagonal(pair(a zip a)) zip diagonal(pair(b zip b))
     }
     assert(f == (both > both))
   }
@@ -83,10 +83,10 @@ class TypeFunLambdaTests extends AnyFunSuite {
   }
 
   test("projecting partial arguments can keep both, one, or neither input") {
-    val addConstants = MultiTypeFun.par(
-      MultiTypeFun.introFst[TC, ●, ●](TypeFun.fromExpr(intType)),
-      MultiTypeFun.introSnd[TC, ●, ●](TypeFun.fromExpr(stringType)),
-    )
+    def addConstants(ab: Expr[● × ●])(using LambdaContext): Expr[(● × ●) × (● × ●)] =
+      val (a, b) = ab.unzip
+      (const(intType) zip a) zip (b zip const(stringType))
+
     val keepBoth = lambdaN[● × ●, ● × ●] { ab =>
       val zip(zip(_, a), zip(b, _)) = addConstants(ab)
       a zip b
