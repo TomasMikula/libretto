@@ -5,14 +5,14 @@ import libretto.scaletto.StarterKit.*
 import libretto.typology.inference.Propagator
 import libretto.typology.kinds.●
 import libretto.typology.toylang.terms.{Fun, TypedFun}
-import libretto.typology.toylang.types.{AbstractTypeLabel, Label, Type, TypeConstructor, TypeTag}
+import libretto.typology.toylang.types.{Label, Type, TypeConstructor, TypeTag}
 import libretto.typology.util.{Either3, State}
 
 object TypeInference {
 
-  private given VarGen[State[Int, *], AbstractTypeLabel] with {
-    override def newVar: State[Int, AbstractTypeLabel] =
-      State(n => (n+1, AbstractTypeLabel(n)))
+  private given VarGen[State[Int, *], Label] with {
+    override def newVar: State[Int, Label] =
+      State(n => (n+1, Label(n)))
   }
 
   private given pg: Propagator[NonAbstractType[Label, _], Type[Label], Label] =
@@ -69,7 +69,7 @@ object TypeInference {
   def reconstructTypes[M[_], A, B](f: Fun[A, B])(using
     pg: Propagator[NonAbstractType[Label, _], Type[Label], Label],
   )(using
-    gen: VarGen[M, AbstractTypeLabel],
+    gen: VarGen[M, Label],
     M: Monad[M],
   ): M[One -⚬ (pg.Tp |*| Val[TypedFun[A, B]] |*| pg.Tp)] = {
     import gen.newVar
@@ -82,20 +82,20 @@ object TypeInference {
     def reconstructTypes[A, B](f: Fun[A, B]): M[One -⚬ (npg.Tp |*| Val[TypedFun[A, B]] |*| npg.Tp)] =
       TypeInference.reconstructTypes(f)(using npg)
 
-    def newAbstractType(v: AbstractTypeLabel)(using
+    def newAbstractType(v: Label)(using
       SourcePos,
       LambdaContext,
     ): $[pg.Tp |*| Val[Type[Label]] |*| pg.Tp] =
-      constant(label(Label.Abstr(v))) |> pg.abstractTypeTap > λ { case s |*| t =>
+      constant(label(v)) |> pg.abstractTypeTap > λ { case s |*| t =>
         val s1 |*| s2 = split(s)
         s1 |*| t |*| s2
       }
 
-    def newTypeParam(v: AbstractTypeLabel)(using
+    def newTypeParam(v: Label)(using
       SourcePos,
       LambdaContext,
     ): $[pg.Tp |*| Val[Type[Label]]] =
-      pg.abstractTypeTap(constant(label(Label.Abstr(v))))
+      pg.abstractTypeTap(constant(label(v)))
 
     def liftType(t: Type[Nothing]): One -⚬ Tp =
       NonAbstractType.lift(

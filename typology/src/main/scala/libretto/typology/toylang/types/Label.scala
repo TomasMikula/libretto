@@ -1,8 +1,6 @@
 package libretto.typology.toylang.types
 
-enum Label {
-  case Abstr(value: AbstractTypeLabel)
-}
+final case class Label(value: Int)
 
 object Label {
   given Ordering[Label] with {
@@ -11,6 +9,6 @@ object Label {
       y: Label,
     ): Int =
       (x, y) match
-        case (Abstr(AbstractTypeLabel(x)), Abstr(AbstractTypeLabel(y))) => x.compareTo(y)
+        case (Label(x), Label(y)) => x.compareTo(y)
   }
 }
