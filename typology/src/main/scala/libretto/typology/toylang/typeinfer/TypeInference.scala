@@ -96,7 +96,7 @@ object TypeInference {
     ): $[pg.Tp |*| Val[Type[Label]]] =
       pg.abstractTypeTap(constant(label(Label.Abstr(v))))
 
-    def liftType(t: Type[ScalaTypeParam]): One -⚬ Tp =
+    def liftType(t: Type[Nothing]): One -⚬ Tp =
       NonAbstractType.lift(
         Tp,
         v => label(v) > pg.abstractTypeTap > snd(neglect) > awaitPosSnd,

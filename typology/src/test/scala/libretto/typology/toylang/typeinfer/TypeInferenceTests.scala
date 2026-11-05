@@ -13,9 +13,9 @@ import libretto.typology.types.{PartialArgs, Routing, TypeFun}
 import scala.concurrent.duration.*
 
 class TypeInferenceTests extends ScalatestStarterTestSuite {
-  type Type          = libretto.typology.toylang.types.Type[AbstractTypeLabel]
-  type TypeFun[K, L] = libretto.typology.toylang.types.Type.Fun[AbstractTypeLabel, K, L]
-  type TypeTagF      = libretto.typology.toylang.types.Type.Fun[ScalaTypeParam, ●, ●]
+  type Type          = libretto.typology.toylang.types.Type[Nothing]
+  type TypeFun[K, L] = libretto.typology.toylang.types.Type.Fun[Nothing, K, L]
+  type TypeTagF      = libretto.typology.toylang.types.Type.Fun[Nothing, ●, ●]
 
   def eitherBimap[A, B, C, D](f: Fun[A, C], g: Fun[B, D]): Fun[Either[A, B], Either[C, D]] =
     Fun.either(
@@ -34,12 +34,6 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
     def unfix[A](using TypeTag[A]): Fun[InfiniteList[A], (A, InfiniteList[A])] =
       Fun.unfix[(A, _)]
 
-    def fix_[A]: Fun[(A, InfiniteList[A]), InfiniteList[A]] =
-      fix[A](using TypeTag.ofTypeParam[A])
-
-    def unfix_[A]: Fun[InfiniteList[A], (A, InfiniteList[A])] =
-      unfix[A](using TypeTag.ofTypeParam[A])
-
     def sum: Fun[InfiniteList[Int], Int] =
       Fun.rec(Fun.snd(unfix[Int] > Fun.swap) > Fun.assocRL > Fun.fst(Fun.recur) > Fun.addInts)
 
@@ -50,9 +44,6 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
           fix[B](f(h) <*> map(t))
         }
       }
-
-    def map_[A, B](f: Fun[A, B]): Fun[InfiniteList[A], InfiniteList[B]] =
-      map(f)(using TypeTag.ofTypeParam[A], TypeTag.ofTypeParam[B])
   }
 
   type ListF[A, X] = Either[Unit, (A, X)]
@@ -87,12 +78,6 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
             }
           Fun.fix[ListF[B, *]](using ListF.typeTag[B])(bs)
       }
-
-    def map_[A, B](f: Fun[A, B]): Fun[List[A], List[B]] = {
-      given TypeTag[A] = TypeTag.ofTypeParam[A]
-      given TypeTag[B] = TypeTag.ofTypeParam[B]
-      map(f)
-    }
   }
 
   type NonEmptyTreeF[A, X] = Either[A, (X, X)]
@@ -112,7 +97,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
     def tpe: TypeTagF =
       TypeTag.toTypeFun(typeTag)
 
-    def map_[A, B](f: Fun[A, B])(using TypeTag[A], TypeTag[B]): Fun[NonEmptyTree[A], NonEmptyTree[B]] = {
+    def map[A, B](f: Fun[A, B])(using TypeTag[A], TypeTag[B]): Fun[NonEmptyTree[A], NonEmptyTree[B]] = {
       Fun.rec(fun { case map <*> as =>
         val bs =
           Fun.unfix[NonEmptyTreeF[A, *]](using NonEmptyTreeF.typeTag[A])(as) switch {
@@ -123,13 +108,6 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
           }
         Fun.fix[NonEmptyTreeF[B, *]](using NonEmptyTreeF.typeTag[B])(bs)
       })
-    }
-
-    def map[A, B](f: Fun[A, B]): Fun[NonEmptyTree[A], NonEmptyTree[B]] = {
-      given TypeTag[A] = TypeTag.ofTypeParam[A]
-      given TypeTag[B] = TypeTag.ofTypeParam[B]
-
-      map_[A, B](f)
     }
   }
 
@@ -144,7 +122,7 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
     def tpe: TypeTagF =
       TypeTag.toTypeFun[Tree](typeTag)
 
-    def map[A, B](f: Fun[A, B]): Fun[Tree[A], Tree[B]] = {
+    def map[A, B](f: Fun[A, B])(using TypeTag[A], TypeTag[B]): Fun[Tree[A], Tree[B]] = {
       Fun.either(
         Fun.injectL[Unit, NonEmptyTree[B]],
         NonEmptyTree.map(f) > Fun.injectR[Unit, NonEmptyTree[B]],
@@ -471,21 +449,13 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
           } yield ()
         },
 
-      "infer types of InfiniteList.unfix_[Int] > fst(intToString)" ->
-        testInferredTypes(InfiniteList.unfix_[Int] > Fun.fst(intToString)) { tf =>
+      "infer types of InfiniteList.unfix[Int] > fst(intToString)" ->
+        testInferredTypes(InfiniteList.unfix[Int] > Fun.fst(intToString)) { tf =>
           for {
             _ <- Outcome.assertEquals(tf.outType, Type.pair(Type.string, InfiniteList.tpe(Type.int)))
             _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
           } yield ()
-        }.pending,
-
-      "infer types of InfiniteList.map_(intToString)" ->
-        testInferredTypes(InfiniteList.map_(Fun.intToString)) { tf =>
-          for {
-            _ <- Outcome.assertEquals(tf.inType, InfiniteList.tpe(Type.int))
-            _ <- Outcome.assertEquals(tf.outType, InfiniteList.tpe(Type.string))
-          } yield ()
-        }.pending,
+        },
 
       "infer types of List.map(intToString)" ->
         testInferredTypes(List.map(Fun.intToString)) { tf =>
@@ -495,14 +465,6 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
           } yield ()
         }.withTimeout(3.seconds), // XXX
 
-      "infer types of List.map_(intToString)" ->
-        testInferredTypes(List.map_(Fun.intToString)) { tf =>
-          for {
-            _ <- Outcome.assertEquals(tf.inType, List.tpe(Type.int))
-            _ <- Outcome.assertEquals(tf.outType, List.tpe(Type.string))
-          } yield ()
-        }.pending,
-
       "infer types of List.map(List.map(intToString))" ->
         testInferredTypes(List.map(List.map(Fun.intToString))(using List.tag[Int], List.tag[String])) { tf =>
           for {
@@ -510,14 +472,6 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
             _ <- Outcome.assertEquals(tf.outType, List.tpe(List.tpe(Type.string)))
           } yield ()
         }.withTimeout(8.seconds), // XXX
-
-      "infer types of List.map_(List.map_(intToString))" ->
-        testInferredTypes(List.map_(List.map_(Fun.intToString))) { tf =>
-          for {
-            _ <- Outcome.assertEquals(tf.inType, List.tpe(List.tpe(Type.int)))
-            _ <- Outcome.assertEquals(tf.outType, List.tpe(List.tpe(Type.string)))
-          } yield ()
-        }.pending,
 
       "infer types of nested Fix types: countNils" -> {
         import List.{given TypeTag[List]}
@@ -541,14 +495,6 @@ class TypeInferenceTests extends ScalatestStarterTestSuite {
           } yield ()
         }
       }.withTimeout(7.seconds), // XXX
-
-      "infer types of NonEmptyTree.map_(intToString)" ->
-        testInferredTypes(NonEmptyTree.map_(Fun.intToString)) { tf =>
-          for {
-            _ <- Outcome.assertEquals(tf.inType, NonEmptyTree.tpe(Type.int))
-            _ <- Outcome.assertEquals(tf.outType, NonEmptyTree.tpe(Type.string))
-          } yield ()
-        }.withTimeout(5.seconds).pending,
 
       "infer types of NonEmptyTree.map(intToString)" ->
         testInferredTypes(NonEmptyTree.map(Fun.intToString)) { tf =>
