@@ -14,9 +14,9 @@ object TypeInference {
       State(n => (n+1, AbstractTypeLabel(n)))
   }
 
-  private given pg: Propagator[NonAbstractType[Val[Label], _], Type[Label], Label] =
+  private given pg: Propagator[NonAbstractType[Label, _], Type[Label], Label] =
     import NonAbstractType.given
-    Propagator.instance[NonAbstractType[Val[Label], _], Type[Label], Label](Type.abstractType)
+    Propagator.instance[NonAbstractType[Label, _], Type[Label], Label](Type.abstractType)
 
   {
     def go[F[_], T, L](i: Int, n: Int, pg: Propagator[F, T, L]): Unit =
@@ -66,7 +66,7 @@ object TypeInference {
   }
 
   def reconstructTypes[M[_], A, B](f: Fun[A, B])(using
-    pg: Propagator[NonAbstractType[Val[Label], _], Type[Label], Label],
+    pg: Propagator[NonAbstractType[Label, _], Type[Label], Label],
   )(using
     gen: VarGen[M, AbstractTypeLabel],
     M: Monad[M],
@@ -100,7 +100,7 @@ object TypeInference {
       NonAbstractType.lift(
         Tp,
         v => label(v) > pg.abstractTypeTap > snd(neglect) > awaitPosSnd,
-        t,
+        t.vmap(Label.ScalaTParam(_)),
       )
 
     f match {

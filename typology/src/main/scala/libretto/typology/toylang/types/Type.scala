@@ -256,6 +256,9 @@ object Type {
       F: MonoidalObjectMap[F, ×, ○, <*>, One],
     ): MappedMorphism[==>, F, ○, ●]  =
       (t: TypeExpr[TypeConstructor[V, _, _], ○, ●]).compile[==>, <*>, One, F, Q](fk, compilePrimitive)
+
+    def vmap[W](f: V => W): Type[W] =
+      t.translate[TypeConstructor[W, _, _]]([k, l] => tc => tc.vmap(f))
   }
 
   opaque type Args[V, K, L] = MultiTypeFun[TypeConstructor[V, _, _], K, L]
