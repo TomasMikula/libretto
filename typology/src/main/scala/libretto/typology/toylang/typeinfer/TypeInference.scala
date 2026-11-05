@@ -3,8 +3,9 @@ package libretto.typology.toylang.typeinfer
 import libretto.lambda.util.{Monad, SourcePos}
 import libretto.scaletto.StarterKit.*
 import libretto.typology.inference.Propagator
+import libretto.typology.kinds.●
 import libretto.typology.toylang.terms.{Fun, TypedFun}
-import libretto.typology.toylang.types.{AbstractTypeLabel, Label, ScalaTypeParam, Type, TypeConstructor, TypeTag}
+import libretto.typology.toylang.types.{AbstractTypeLabel, Label, Type, TypeConstructor, TypeTag}
 import libretto.typology.util.{Either3, State}
 
 object TypeInference {
@@ -100,7 +101,7 @@ object TypeInference {
       NonAbstractType.lift(
         Tp,
         v => label(v) > pg.abstractTypeTap > snd(neglect) > awaitPosSnd,
-        t.vmap(Label.ScalaTParam(_)),
+        t.vmap(identity),
       )
 
     f match {
@@ -270,7 +271,7 @@ object TypeInference {
           }
       case f: Fun.FixF[f] =>
         val tf = TypeTag.toTypeFun(f.f)
-        val tg = tf.vmap(Label.ScalaTParam(_))
+        val tg: Type.Fun[Label, ●, ●] = tf.vmap(identity)
         val res: TypedFun[A, B] = TypedFun.fix[f](tg)
         val fixF = Type.fix(tf)
         val fFixF = tf(fixF)
@@ -284,7 +285,7 @@ object TypeInference {
         )
       case f: Fun.UnfixF[f] =>
         val tf = TypeTag.toTypeFun(f.f)
-        val tg = tf.vmap(Label.ScalaTParam(_))
+        val tg: Type.Fun[Label, ●, ●] = tf.vmap(identity)
         val res: TypedFun[A, B] = TypedFun.unfix[f](tg)
         val fixF = Type.fix(tf)
         val fFixF = tf(fixF)
