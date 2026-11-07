@@ -233,9 +233,10 @@ private[typeinfer] object NonAbstractType {
     OneOf.partition[TypeError[V, NonAbstractType[V, T]]]["selfRef"]
 
   def lift[V, T](
+    t: Type[V],
+  )(
     inject: NonAbstractType[V, T] -⚬ T,
     absType: V => (One -⚬ T),
-    t: Type[V],
   ): One -⚬ T = {
     import libretto.typology.toylang.types.{TypeConstructor as TC}
 
@@ -281,6 +282,22 @@ private[typeinfer] object NonAbstractType {
           .is { case Error(ForbiddenSelfRef(v)) => forbiddenSelfReference(v) }
           .end
       }
+    }
+
+  def vmap[V, W, T](f: V => W): NonAbstractType[V, T] -⚬ NonAbstractType[W, T] =
+    λ.rec { self =>
+      switch(_)
+        .is { case Pair(r |*| s) => Pair(r |*| s) }
+        .is { case Either(r |*| s) => Either(r |*| s) }
+        .is { case RecCall(r |*| s) => RecCall(r |*| s) }
+        .is { case RecType(Fix(g)) => fix(g |> mapVal(_.vmap(f))) }
+        .is { case RecType(PFix(g |*| x)) => pfixs(g |> mapVal(_.vmap(f)) |*| x) }
+        .is { case String(d) => String(d) }
+        .is { case Int(d) => Int(d) }
+        .is { case Unit(d) => Unit(d) }
+        .is { case Error(TypeMismatch(x |*| y)) => mismatch(self(x) |*| self(y)) }
+        .is { case Error(ForbiddenSelfRef(v)) => forbiddenSelfReference(mapVal(f)(v)) }
+        .end
     }
 
   def mapWith[V, X, A, B](using

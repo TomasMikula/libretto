@@ -98,10 +98,9 @@ object TypeInference {
       pg.abstractTypeTap(constant(label(v)))
 
     def liftType(t: Type[Nothing]): One -⚬ Tp =
-      NonAbstractType.lift(
-        Tp,
-        v => label(v) > pg.abstractTypeTap > snd(neglect) > awaitPosSnd,
-        t.vmap(identity),
+      NonAbstractType.lift(t)(
+        NonAbstractType.vmap[Nothing, Label, Tp](identity) > Tp,
+        identity,
       )
 
     f match {

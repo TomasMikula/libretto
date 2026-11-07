@@ -34,9 +34,6 @@ trait Propagator[F[_], T, V] {
   }
 
   def nested: Nested
-
-  // TODO: eliminate
-  given junctionPositiveTp: Junction.Positive[Tp]
 }
 
 object Propagator {
@@ -510,7 +507,7 @@ private[inference] class PropagatorImpl[
       }
     }
 
-  override given junctionPositiveTp: Junction.Positive[Tp] =
+  private given junctionPositiveTp: Junction.Positive[Tp] =
     Junction.Positive.from(awaitPosFst)
 
   override lazy val abstractTypeTap: Label -⚬ (Tp |*| Val[T]) =
