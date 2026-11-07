@@ -130,13 +130,13 @@ private[typeinfer] object Types {
     }
 }
 
-private[typeinfer] type FixOrPFix[V, T] = OneOf
-  [ "fix" :: Val[TypeConstructor.Fix[V, ?]]
+private[typeinfer] type FixOrPFix[T] = OneOf
+  [ "fix" :: Val[TypeConstructor.Fix[Nothing, ?]]
 
   // Parameterized fixed point.
   // The nesting of the types must correspond to the kinds of PFix type parameters.
   // Once Libretto has existentials, can use them to ensure well-kindedness statically.
-  | "pfix" :: (Val[TypeConstructor.PFix[V, ?, ?]] |*| Types[T])
+  | "pfix" :: (Val[TypeConstructor.PFix[Nothing, ?, ?]] |*| Types[T])
   ]
 
 private[typeinfer] type NonAbstractTypeF[V, T, X] = OneOf
@@ -144,7 +144,7 @@ private[typeinfer] type NonAbstractTypeF[V, T, X] = OneOf
   | "unit" ::  Done
   | "int" :: Done
   | "string" :: Done
-  | "recType" :: FixOrPFix[V, T]
+  | "recType" :: FixOrPFix[T]
   | "recCall" :: (T |*| T)
   | "either" :: (T |*| T)
   | "pair" :: (T |*| T)
@@ -190,23 +190,23 @@ private[typeinfer] object NonAbstractType {
   def RecCall[V, T]: Extractor[-⚬, |*|, NonAbstractType[V, T], T |*| T] =
     partition[V, T]["recCall"].afterUnpack
 
-  def fix[V, T]: Val[TypeConstructor.Fix[V, ?]] -⚬ NonAbstractType[V, T] =
+  def fix[V, T]: Val[TypeConstructor.Fix[Nothing, ?]] -⚬ NonAbstractType[V, T] =
     RecType.reinject ∘ Fix.reinject
 
-  def pfixs[V, T]: (Val[TypeConstructor.PFix[V, ?, ?]] |*| Types[T]) -⚬ NonAbstractType[V, T] =
+  def pfixs[V, T]: (Val[TypeConstructor.PFix[Nothing, ?, ?]] |*| Types[T]) -⚬ NonAbstractType[V, T] =
     RecType.reinject ∘ PFix.reinject
 
-  def pfix[V, T]: (Val[TypeConstructor.PFix[V, ●, ?]] |*| T) -⚬ NonAbstractType[V, T] =
+  def pfix[V, T]: (Val[TypeConstructor.PFix[Nothing, ●, ?]] |*| T) -⚬ NonAbstractType[V, T] =
     pfixs ∘ par(mapVal(p => p), Types.SingleType[T].reinject)
 
-  def RecType[V, T]: Extractor[-⚬, |*|, NonAbstractType[V, T], FixOrPFix[V, T]] =
+  def RecType[V, T]: Extractor[-⚬, |*|, NonAbstractType[V, T], FixOrPFix[T]] =
     partition[V, T]["recType"].afterUnpack
 
-  def Fix[V, T]: Extractor[-⚬, |*|, FixOrPFix[V, T], Val[TypeConstructor.Fix[V, ?]]] =
-    OneOf.partition[FixOrPFix[V, T]]["fix"]
+  def Fix[T]: Extractor[-⚬, |*|, FixOrPFix[T], Val[TypeConstructor.Fix[Nothing, ?]]] =
+    OneOf.partition[FixOrPFix[T]]["fix"]
 
-  def PFix[V, T]: Extractor[-⚬, |*|, FixOrPFix[V, T], Val[TypeConstructor.PFix[V, ?, ?]] |*| Types[T]] =
-    OneOf.partition[FixOrPFix[V, T]]["pfix"]
+  def PFix[T]: Extractor[-⚬, |*|, FixOrPFix[T], Val[TypeConstructor.PFix[Nothing, ?, ?]] |*| Types[T]] =
+    OneOf.partition[FixOrPFix[T]]["pfix"]
 
   def String[V, T]: Extractor[-⚬, |*|, NonAbstractType[V, T], Done] =
     partition[V, T]["string"].afterUnpack
@@ -232,15 +232,14 @@ private[typeinfer] object NonAbstractType {
   def ForbiddenSelfRef[V, T]: Extractor[-⚬, |*|, TypeError[V, NonAbstractType[V, T]], Val[V]] =
     OneOf.partition[TypeError[V, NonAbstractType[V, T]]]["selfRef"]
 
-  def lift[V, T](
-    t: Type[V],
+  def lift[T](
+    t: Type[Nothing],
   )(
-    inject: NonAbstractType[V, T] -⚬ T,
-    absType: V => (One -⚬ T),
+    inject: NonAbstractType[Nothing, T] -⚬ T,
   ): One -⚬ T = {
     import libretto.typology.toylang.types.{TypeConstructor as TC}
 
-    val ct = new CompilationTarget[V, T](inject, absType)
+    val ct = new CompilationTarget[T](inject)
     import ct.{Map_○, Map_●}
 
     t.compile[-⚬, |*|, One, ct.as, One](
@@ -290,8 +289,8 @@ private[typeinfer] object NonAbstractType {
         .is { case Pair(r |*| s) => Pair(r |*| s) }
         .is { case Either(r |*| s) => Either(r |*| s) }
         .is { case RecCall(r |*| s) => RecCall(r |*| s) }
-        .is { case RecType(Fix(g)) => fix(g |> mapVal(_.vmap(f))) }
-        .is { case RecType(PFix(g |*| x)) => pfixs(g |> mapVal(_.vmap(f)) |*| x) }
+        .is { case RecType(Fix(g)) => fix(g) }
+        .is { case RecType(PFix(g |*| x)) => pfixs(g |*| x) }
         .is { case String(d) => String(d) }
         .is { case Int(d) => Int(d) }
         .is { case Unit(d) => Unit(d) }
@@ -430,11 +429,11 @@ private[typeinfer] object NonAbstractType {
               }
             }
             .is { case RecType(Fix(f)) =>
-              f |> mapVal { f => Type.fix(f) }
+              f |> mapVal { f => Type.fix(f.vmap(identity)) }
             }
             .is { case RecType(PFix(pf |*| p)) =>
               (pf ** Types.output(outputElem)(p)) |> mapVal { case (pf, p) =>
-                Type.Fun.pfixUnsafe(pf, p)
+                Type.Fun.pfixUnsafe(pf.vmap(identity), p)
               }
             }
             .is { case String(x) => x |> constVal(Type.string) }
@@ -495,9 +494,8 @@ private[typeinfer] object NonAbstractType {
       }
     }
 
-  private class CompilationTarget[V, T](
-    lift: NonAbstractType[V, T] -⚬ T,
-    absType: V => (One -⚬ T),
+  private class CompilationTarget[T](
+    lift: NonAbstractType[Nothing, T] -⚬ T,
   ) {
     def toTypes[P, Q](pq: P as Q)(using p: KindN[P]): Q -⚬ Types[T] =
       pq match
@@ -514,7 +512,7 @@ private[typeinfer] object NonAbstractType {
 
     def compilePFix[P, Q, X](
       pq: P as Q,
-      f: TypeConstructor.PFix[V, P, X],
+      f: TypeConstructor.PFix[Nothing, P, X],
     )(using
       KindN[P],
     ): Q -⚬ T =
@@ -524,7 +522,7 @@ private[typeinfer] object NonAbstractType {
 
     def doCompilePrimitive[k, l, q](
       fk: k as q,
-      x: TypeConstructor[V, k, l],
+      x: TypeConstructor[Nothing, k, l],
     ): MappedMorphism[-⚬, as, k, l] = {
       import TypeConstructor.{Pair as _, *}
       x match {
@@ -545,8 +543,8 @@ private[typeinfer] object NonAbstractType {
         case p @ TypeConstructor.PFix(_, _) =>
           import p.g.inKind1
           MappedMorphism(fk, compilePFix(fk, p), Map_●)
-        case AbstractType(label) =>
-          MappedMorphism(Map_○, absType(label), Map_●)
+        case AbstractType(nothing) =>
+          MappedMorphism(Map_○, nothing, Map_●)
         case TypeConstructor.TypeMismatch(a, b) =>
           UnhandledCase.raise(s"TypeMismatch($a, $b)")
         case TypeConstructor.ForbiddenSelfRef(v) =>
@@ -556,11 +554,11 @@ private[typeinfer] object NonAbstractType {
 
     val compilePrimitive: [k, l, q] => (
       k as q,
-      TypeConstructor[V, k, l],
+      TypeConstructor[Nothing, k, l],
     ) => MappedMorphism[-⚬, as, k, l] =
       [k, l, q] => (
         fk: k as q,
-        x: TypeConstructor[V, k, l],
+        x: TypeConstructor[Nothing, k, l],
       ) =>
         doCompilePrimitive[k, l, q](fk, x)
 

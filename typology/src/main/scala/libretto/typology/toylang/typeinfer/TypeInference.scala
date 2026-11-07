@@ -100,7 +100,6 @@ object TypeInference {
     def liftType(t: Type[Nothing]): One -⚬ Tp =
       NonAbstractType.lift(t)(
         NonAbstractType.vmap[Nothing, Label, Tp](identity) > Tp,
-        identity,
       )
 
     f match {
