@@ -367,7 +367,7 @@ private[inference] class PropagatorImpl[
         // preliminary refines the refinement request
         val t1 |*| t2 = split.get(preliminary(bLbl |*| b))
         returning(
-          t1 waitFor labels.neglect(bl2),
+          t1 absorbLabel bl2,
           aReq grant t2,
         )
       }
@@ -409,7 +409,7 @@ private[inference] class PropagatorImpl[
   ): $[Tp] = (merge, split) match { case (?(merge), ?(split)) =>
     switch(b)
       .is { case Request(lbl |*| req) =>
-        val a1 |*| a2 = split.get(TypeFormer(a).waitFor(labels.neglect(lbl)))
+        val a1 |*| a2 = split.get(TypeFormer(a) absorbLabel lbl)
         returning(a1, req grant a2)
       }
       .is { case Preliminary(lbl |*| b) =>
@@ -492,7 +492,7 @@ private[inference] class PropagatorImpl[
     )
   }
 
-  private val awaitPosFst: (Done |*| Tp) -⚬ Tp =
+  private val internalAwaitPosFst: (Done |*| Tp) -⚬ Tp =
     import Negotiation.{Preliminary, Request}
 
     sharedCode {
@@ -507,8 +507,10 @@ private[inference] class PropagatorImpl[
       }
     }
 
-  private given junctionPositiveTp: Junction.Positive[Tp] =
-    Junction.Positive.from(awaitPosFst)
+  extension (t: $[Tp]) {
+    private infix def absorbLabel(lbl: $[Label])(using SourcePos, LambdaContext): $[Tp] =
+      internalAwaitPosFst(labels.neglect(lbl) |*| t)
+  }
 
   override lazy val abstractTypeTap: Label -⚬ (Tp |*| Val[T]) =
     sharedCode {
@@ -541,7 +543,7 @@ private[inference] class PropagatorImpl[
           switch(resp)
             .is { case Granted(t) =>
               // TODO: occurs check for `lbl` in `t`
-              t.waitFor(labels.neglect(l4)) supplyTo nt2
+              (t absorbLabel l4) supplyTo nt2
             }
             .is { case Declined(req1) =>
               val l5 |*| l6 = labels.split(l4)
@@ -550,7 +552,7 @@ private[inference] class PropagatorImpl[
                 switch(resp)
                   .is { case Granted(t) =>
                     // TODO: occurs check for `lbl` in `t`
-                    tap(t waitFor labels.neglect(l6)) supplyTo req1
+                    tap(t absorbLabel l6) supplyTo req1
                   }
                   .is { case Declined(req2) =>
                     val p1 |*| p2 = typeParamLink(l6)
@@ -667,7 +669,7 @@ private[inference] class PropagatorImpl[
                 )
               }
               .is { case propagator.TypeOutlet.Abstract(lbl |*| InR(t)) =>
-                t waitFor nl.labels.neglect(lbl)
+                t absorbLabel nl.lower(lbl)
               }
               .is { case propagator.TypeOutlet.TypeFormer(ft) =>
                 TypeFormer(F.map(self)(ft))
@@ -689,7 +691,7 @@ private[inference] class PropagatorImpl[
         import Negotiation.{Preliminary, Request}
         switch(_)
           .is { case TypeBroker(Request(lbl |*| req))   => req.decline waitFor labels.neglect(lbl) }
-          .is { case TypeBroker(Preliminary(lbl |*| t)) => self(t waitFor labels.neglect(lbl)) }
+          .is { case TypeBroker(Preliminary(lbl |*| t)) => self(t absorbLabel lbl) }
           .is { case TypeFormer(ft)                     => TypeOutlet.TypeFormer(F.map(self)(ft)) }
           .end
       }
